@@ -27,12 +27,12 @@
 #include "third_party/blink/renderer/modules/webaudio/audio_node_input.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_node_options.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_node_output.h"
+#include "third_party/blink/renderer/modules/webaudio/audio_node_wiring.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_param.h"
 #include "third_party/blink/renderer/modules/webaudio/base_audio_context.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/instance_counters.h"
-#include "third_party/blink/renderer/platform/wtf/atomics.h"
 
 #if DEBUG_AUDIONODE_REFERENCES
 #include <stdio.h>
@@ -47,6 +47,7 @@ AudioHandler::AudioHandler(NodeType node_type,
       node_type_(kNodeTypeUnknown),
       node_(&node),
       context_(node.context()),
+      deferred_task_handler_(&context_->GetDeferredTaskHandler()),
       last_processing_time_(-1),
       last_non_silent_time_(0),
       connection_ref_count_(0),
@@ -72,12 +73,11 @@ AudioHandler::AudioHandler(NodeType node_type,
       node_count_[GetNodeType()],
       InstanceCounters::CounterValue(InstanceCounters::kAudioHandlerCounter));
 #endif
+  node.context()->WarnIfContextClosed(this);
 }
 
 AudioHandler::~AudioHandler() {
   DCHECK(IsMainThread());
-  // dispose() should be called.
-  DCHECK(!GetNode());
   InstanceCounters::DecrementCounter(InstanceCounters::kAudioHandlerCounter);
 #if DEBUG_AUDIONODE_REFERENCES
   --node_count_[GetNodeType()];
@@ -104,14 +104,13 @@ void AudioHandler::Uninitialize() {
 
 void AudioHandler::Dispose() {
   DCHECK(IsMainThread());
-  Context()->AssertGraphOwner();
+  deferred_task_handler_->AssertGraphOwner();
 
-  Context()->GetDeferredTaskHandler().RemoveChangedChannelCountMode(this);
-  Context()->GetDeferredTaskHandler().RemoveChangedChannelInterpretation(this);
-  Context()->GetDeferredTaskHandler().RemoveAutomaticPullNode(this);
+  deferred_task_handler_->RemoveChangedChannelCountMode(this);
+  deferred_task_handler_->RemoveChangedChannelInterpretation(this);
+  deferred_task_handler_->RemoveAutomaticPullNode(this);
   for (auto& output : outputs_)
     output->Dispose();
-  node_ = nullptr;
 }
 
 AudioNode* AudioHandler::GetNode() const {
@@ -161,6 +160,12 @@ String AudioHandler::NodeTypeName() const {
       return "DynamicsCompressorNode";
     case kNodeTypeWaveShaper:
       return "WaveShaperNode";
+    case kNodeTypeIIRFilter:
+      return "IIRFilterNode";
+    case kNodeTypeConstantSource:
+      return "ConstantSourceNode";
+    case kNodeTypeAudioWorklet:
+      return "AudioWorkletNode";
     case kNodeTypeUnknown:
     case kNodeTypeEnd:
     default:
@@ -203,7 +208,7 @@ AudioNodeOutput& AudioHandler::Output(unsigned i) {
   return *outputs_[i];
 }
 
-unsigned long AudioHandler::ChannelCount() {
+unsigned AudioHandler::ChannelCount() {
   return channel_count_;
 }
 
@@ -218,7 +223,7 @@ void AudioHandler::SetInternalChannelInterpretation(
   new_channel_interpretation_ = interpretation;
 }
 
-void AudioHandler::SetChannelCount(unsigned long channel_count,
+void AudioHandler::SetChannelCount(unsigned channel_count,
                                    ExceptionState& exception_state) {
   DCHECK(IsMainThread());
   BaseAudioContext::GraphAutoLocker locker(Context());
@@ -316,7 +321,7 @@ void AudioHandler::UpdateChannelsForInputs() {
     input->ChangedOutputs();
 }
 
-void AudioHandler::ProcessIfNecessary(size_t frames_to_process) {
+void AudioHandler::ProcessIfNecessary(uint32_t frames_to_process) {
   DCHECK(Context()->IsAudioThread());
 
   if (!IsInitialized())
@@ -364,7 +369,7 @@ void AudioHandler::ProcessIfNecessary(size_t frames_to_process) {
 
 void AudioHandler::CheckNumberOfChannelsForInput(AudioNodeInput* input) {
   DCHECK(Context()->IsAudioThread());
-  Context()->AssertGraphOwner();
+  deferred_task_handler_->AssertGraphOwner();
 
   DCHECK(inputs_.Contains(input));
   if (!inputs_.Contains(input))
@@ -378,7 +383,7 @@ bool AudioHandler::PropagatesSilence() const {
          Context()->currentTime();
 }
 
-void AudioHandler::PullInputs(size_t frames_to_process) {
+void AudioHandler::PullInputs(uint32_t frames_to_process) {
   DCHECK(Context()->IsAudioThread());
 
   // Process all of the AudioNodes connected to our inputs.
@@ -406,7 +411,7 @@ void AudioHandler::UnsilenceOutputs() {
 
 void AudioHandler::EnableOutputsIfNecessary() {
   DCHECK(IsMainThread());
-  Context()->AssertGraphOwner();
+  deferred_task_handler_->AssertGraphOwner();
 
   // We're enabling outputs for this handler.  Remove this from the tail
   // processing list (if it's there) so that we don't inadvertently disable the
@@ -416,7 +421,7 @@ void AudioHandler::EnableOutputsIfNecessary() {
 #if DEBUG_AUDIONODE_REFERENCES > 1
   fprintf(stderr,
           "[%16p]: %16p: %2d: EnableOutputsIfNecessary: is_disabled %d count "
-          "%d output size %zu\n",
+          "%d output size %u\n",
           Context(), this, GetNodeType(), is_disabled_, connection_ref_count_,
           outputs_.size());
 #endif
@@ -431,7 +436,7 @@ void AudioHandler::EnableOutputsIfNecessary() {
 void AudioHandler::DisableOutputsIfNecessary() {
   // This function calls other functions that require graph ownership,
   // so assert that this needs graph ownership too.
-  Context()->AssertGraphOwner();
+  deferred_task_handler_->AssertGraphOwner();
 
   // Disable outputs if appropriate. We do this if the number of connections is
   // 0 or 1. The case of 0 is from deref() where there are no connections left.
@@ -453,10 +458,8 @@ void AudioHandler::DisableOutputsIfNecessary() {
     // the outputs so that the tail for the node can be output.
     // Otherwise, we can disable the outputs right away.
     if (RequiresTailProcessing()) {
-      if (Context()->ContextState() !=
-          BaseAudioContext::AudioContextState::kClosed) {
-        Context()->GetDeferredTaskHandler().AddTailProcessingHandler(this);
-      }
+      if (deferred_task_handler_->AcceptsTailProcessing())
+        deferred_task_handler_->AddTailProcessingHandler(this);
     } else {
       DisableOutputs();
     }
@@ -470,7 +473,8 @@ void AudioHandler::DisableOutputs() {
 }
 
 void AudioHandler::MakeConnection() {
-  AtomicIncrement(&connection_ref_count_);
+  deferred_task_handler_->AssertGraphOwner();
+  connection_ref_count_++;
 
 #if DEBUG_AUDIONODE_REFERENCES
   fprintf(
@@ -511,9 +515,8 @@ void AudioHandler::BreakConnection() {
 }
 
 void AudioHandler::BreakConnectionWithLock() {
-  Context()->AssertGraphOwner();
-
-  AtomicDecrement(&connection_ref_count_);
+  deferred_task_handler_->AssertGraphOwner();
+  connection_ref_count_--;
 
 #if DEBUG_AUDIONODE_REFERENCES
   fprintf(stderr,
@@ -618,11 +621,11 @@ void AudioNode::Dispose() {
 
   if (context()->HasRealtimeConstraint()) {
     // Add the handler to the orphan list if the context is not
-    // closed. (Nothing will clean up the orphan list if the context
-    // is closed.)  These will get cleaned up in the post render task
+    // uninitialized (Nothing will clean up the orphan list if the context
+    // is uninitialized.)  These will get cleaned up in the post render task
     // if audio thread is running or when the context is colleced (in
     // the worst case).
-    if (context()->ContextState() != BaseAudioContext::kClosed) {
+    if (!context()->IsContextClosed()) {
       context()->GetDeferredTaskHandler().AddRenderingOrphanHandler(
           std::move(handler_));
     }
@@ -648,6 +651,10 @@ void AudioNode::SetHandler(scoped_refptr<AudioHandler> handler) {
 #endif
 }
 
+bool AudioNode::ContainsHandler() const {
+  return handler_.get();
+}
+
 AudioHandler& AudioNode::Handler() const {
   return *handler_;
 }
@@ -659,16 +666,16 @@ void AudioNode::Trace(blink::Visitor* visitor) {
   EventTargetWithInlineData::Trace(visitor);
 }
 
-void AudioNode::HandleChannelOptions(const AudioNodeOptions& options,
+void AudioNode::HandleChannelOptions(const AudioNodeOptions* options,
                                      ExceptionState& exception_state) {
   DCHECK(IsMainThread());
 
-  if (options.hasChannelCount())
-    setChannelCount(options.channelCount(), exception_state);
-  if (options.hasChannelCountMode())
-    setChannelCountMode(options.channelCountMode(), exception_state);
-  if (options.hasChannelInterpretation())
-    setChannelInterpretation(options.channelInterpretation(), exception_state);
+  if (options->hasChannelCount())
+    setChannelCount(options->channelCount(), exception_state);
+  if (options->hasChannelCountMode())
+    setChannelCountMode(options->channelCountMode(), exception_state);
+  if (options->hasChannelInterpretation())
+    setChannelInterpretation(options->channelInterpretation(), exception_state);
 }
 
 BaseAudioContext* AudioNode::context() const {
@@ -682,12 +689,7 @@ AudioNode* AudioNode::connect(AudioNode* destination,
   DCHECK(IsMainThread());
   BaseAudioContext::GraphAutoLocker locker(context());
 
-  if (context()->IsContextClosed()) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kInvalidStateError,
-        "Cannot connect after the context has been closed.");
-    return nullptr;
-  }
+  context()->WarnForConnectionIfContextClosed();
 
   if (!destination) {
     exception_state.ThrowDOMException(DOMExceptionCode::kSyntaxError,
@@ -734,11 +736,12 @@ AudioNode* AudioNode::connect(AudioNode* destination,
     return nullptr;
   }
 
-  destination->Handler()
-      .Input(input_index)
-      .Connect(Handler().Output(output_index));
-  if (!connected_nodes_[output_index])
-    connected_nodes_[output_index] = new HeapHashSet<Member<AudioNode>>();
+  AudioNodeWiring::Connect(Handler().Output(output_index),
+                           destination->Handler().Input(input_index));
+  if (!connected_nodes_[output_index]) {
+    connected_nodes_[output_index] =
+        MakeGarbageCollected<HeapHashSet<Member<AudioNode>>>();
+  }
   connected_nodes_[output_index]->insert(destination);
 
   Handler().UpdatePullStatusIfNeeded();
@@ -752,12 +755,7 @@ void AudioNode::connect(AudioParam* param,
   DCHECK(IsMainThread());
   BaseAudioContext::GraphAutoLocker locker(context());
 
-  if (context()->IsContextClosed()) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kInvalidStateError,
-        "Cannot connect after the context has been closed.");
-    return;
-  }
+  context()->WarnForConnectionIfContextClosed();
 
   if (!param) {
     exception_state.ThrowDOMException(DOMExceptionCode::kSyntaxError,
@@ -782,9 +780,11 @@ void AudioNode::connect(AudioParam* param,
     return;
   }
 
-  param->Handler().Connect(Handler().Output(output_index));
-  if (!connected_params_[output_index])
-    connected_params_[output_index] = new HeapHashSet<Member<AudioParam>>();
+  AudioNodeWiring::Connect(Handler().Output(output_index), param->Handler());
+  if (!connected_params_[output_index]) {
+    connected_params_[output_index] =
+        MakeGarbageCollected<HeapHashSet<Member<AudioParam>>>();
+  }
   connected_params_[output_index]->insert(param);
 
   Handler().UpdatePullStatusIfNeeded();
@@ -803,9 +803,9 @@ bool AudioNode::DisconnectFromOutputIfConnected(
   AudioNodeOutput& output = Handler().Output(output_index);
   AudioNodeInput& input =
       destination.Handler().Input(input_index_of_destination);
-  if (!output.IsConnectedToInput(input))
+  if (!AudioNodeWiring::IsConnected(output, input))
     return false;
-  output.DisconnectInput(input);
+  AudioNodeWiring::Disconnect(output, input);
   connected_nodes_[output_index]->erase(&destination);
   return true;
 }
@@ -813,9 +813,9 @@ bool AudioNode::DisconnectFromOutputIfConnected(
 bool AudioNode::DisconnectFromOutputIfConnected(unsigned output_index,
                                                 AudioParam& param) {
   AudioNodeOutput& output = Handler().Output(output_index);
-  if (!output.IsConnectedToAudioParam(param.Handler()))
+  if (!AudioNodeWiring::IsConnected(output, param.Handler()))
     return false;
-  output.DisconnectAudioParam(param.Handler());
+  AudioNodeWiring::Disconnect(output, param.Handler());
   connected_params_[output_index]->erase(&param);
   return true;
 }
@@ -1024,11 +1024,11 @@ unsigned AudioNode::numberOfOutputs() const {
   return Handler().NumberOfOutputs();
 }
 
-unsigned long AudioNode::channelCount() const {
+unsigned AudioNode::channelCount() const {
   return Handler().ChannelCount();
 }
 
-void AudioNode::setChannelCount(unsigned long count,
+void AudioNode::setChannelCount(unsigned count,
                                 ExceptionState& exception_state) {
   Handler().SetChannelCount(count, exception_state);
 }
@@ -1052,7 +1052,7 @@ void AudioNode::setChannelInterpretation(const String& interpretation,
 }
 
 const AtomicString& AudioNode::InterfaceName() const {
-  return EventTargetNames::AudioNode;
+  return event_target_names::kAudioNode;
 }
 
 ExecutionContext* AudioNode::GetExecutionContext() const {

@@ -196,18 +196,14 @@ class AudioVideoPipelineDeviceTest : public testing::Test {
   void SetUp() override {
     CastMediaShlib::Initialize(
         base::CommandLine::ForCurrentProcess()->argv());
-    if (VolumeControl::Initialize) {
-      VolumeControl::Initialize(base::CommandLine::ForCurrentProcess()->argv());
-    }
+    VolumeControl::Initialize(base::CommandLine::ForCurrentProcess()->argv());
   }
 
   void TearDown() override {
     // Pipeline must be destroyed before finalizing media shlib.
     backend_.reset();
     effects_backends_.clear();
-    if (VolumeControl::Finalize) {
-      VolumeControl::Finalize();
-    }
+    VolumeControl::Finalize();
     CastMediaShlib::Finalize();
   }
 
@@ -563,7 +559,7 @@ std::unique_ptr<BufferFeeder> BufferFeeder::LoadAudio(
   bool success = decoder->SetConfig(config);
   CHECK(success);
 
-  VLOG(2) << "Got " << demux_result.frames.size() << " audio input frames";
+  LOG(INFO) << "Got " << demux_result.frames.size() << " audio input frames";
   std::unique_ptr<BufferFeeder> feeder(new BufferFeeder(eos_cb));
   feeder->audio_config_ = config;
   feeder->Initialize(backend, decoder, demux_result.frames);
@@ -606,7 +602,7 @@ std::unique_ptr<BufferFeeder> BufferFeeder::LoadVideo(
   bool success = decoder->SetConfig(video_config);
   CHECK(success);
 
-  VLOG(2) << "Got " << buffers.size() << " video input frames";
+  LOG(INFO) << "Got " << buffers.size() << " video input frames";
   std::unique_ptr<BufferFeeder> feeder(new BufferFeeder(eos_cb));
   feeder->video_config_ = video_config;
   feeder->Initialize(backend, decoder, buffers);
@@ -626,6 +622,10 @@ AudioVideoPipelineDeviceTest::AudioVideoPipelineDeviceTest()
 AudioVideoPipelineDeviceTest::~AudioVideoPipelineDeviceTest() {}
 
 void AudioVideoPipelineDeviceTest::Initialize() {
+#if defined(ENABLE_VIDEO_WITH_MIXED_AUDIO)
+  VideoDecoderForMixer::InitializeGraphicsForTesting();
+#endif
+
   // Create the media device.
   task_runner_.reset(new TaskRunnerImpl());
   MediaPipelineDeviceParams params(
@@ -886,8 +886,9 @@ void AudioVideoPipelineDeviceTest::MonitorLoop() {
     pause_time_ = base::TimeDelta::FromMicroseconds(backend_->GetCurrentPts());
     RunPlaybackChecks();
 
-    VLOG(2) << "Pausing at " << pause_time_.InMilliseconds() << "ms for " <<
-        pause_pattern_[pause_pattern_idx_].length.InMilliseconds() << "ms";
+    LOG(INFO) << "Pausing at " << pause_time_.InMilliseconds() << "ms for "
+              << pause_pattern_[pause_pattern_idx_].length.InMilliseconds()
+              << "ms";
 
     // Wait for pause finish
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -952,7 +953,7 @@ void AudioVideoPipelineDeviceTest::OnPauseCompleted() {
   pause_time_ = media_time;
   ++pause_pattern_idx_;
 
-  VLOG(2) << "Pause complete, restarting media clock";
+  LOG(INFO) << "Pause complete, restarting media clock";
   RunPlaybackChecks();
 
   // Resume playback and frame feeding.

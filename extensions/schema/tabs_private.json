@@ -12,7 +12,7 @@
         "id": "MediaType",
         "type": "string",
         "description": "The active media type.",
-        "enum": [ "empty", "recording", "capturing", "playing", "muting", "bluetooth", "usb", "pip", "desktop_capturing" ]
+        "enum": [ "empty", "recording", "capturing", "playing", "muting", "bluetooth", "usb", "pip", "desktop_capturing", "vr_presenting_in_headset" ]
       },
       {
         "id": "UpdateTabInfo",
@@ -164,6 +164,29 @@
             "description": "True if the drag was initiated from touch. Default is false."
           }
         ]
+      },
+      {
+        "name": "scrollPage",
+        "type": "function",
+        "description": "Scrolls the page up or down, depending on a parameter",
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "integer",
+            "minimum": 0
+          },
+          {
+            "name": "scrollType",
+            "type": "string",
+            "description": "Whether to scroll up or down, and by how much"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "description": "Callback function used for error handling",
+            "parameters": []
+          }
+        ]
       }
     ],
     "events": [
@@ -221,11 +244,6 @@
         "type": "function",
         "description": "Fires when tab dragging ends.",
         "parameters": [
-          {
-            "$ref": "DragData",
-            "name": "dragData",
-            "description": "The drag data that was passed in on drag start"
-          },
           {
             "name": "dragAborted",
             "type": "boolean",
@@ -292,6 +310,11 @@
             "type": "integer",
             "name": "windowsKeyCode",
             "description": "Value of key that changed"
+          },
+          {
+            "type": "boolean",
+            "name": "afterGesture",
+            "description": "True when the keyboard event completed a mouse or wheel gesture"
           }
         ]
       },
@@ -309,6 +332,174 @@
             "type": "boolean",
             "name": "autoRepeat",
             "description": "True if the shortcut is generated as a result of automatic keyboard repeat"
+          }
+        ]
+      },
+      {
+        "name": "onTabIsDetached",
+        "type": "function",
+        "description": "Fired when a tab that is moved out of a window detaches from the source-window. This is used to make sure two WebViews don't try to use the same WebContents.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 0,
+            "description": "Tab id used for Tabstrip WebContents retrieval."
+          },
+          {
+            "type": "integer",
+            "name": "windowId",
+            "minimum": 0,
+            "description": "Target WindowId that the message is intended. As in not the window it is detached from, but the window it is attached to."
+          }
+        ]
+      },
+      {
+        "name": "onTabIsAttached",
+        "type": "function",
+        "description": "Fired when a WebContents is attached to an embedder. This is used to make sure two WebViews don't try to use the same WebContents.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 0,
+            "description": "Tab id used for Tabstrip WebContents retrieval."
+          },
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "WindowId of the embedder."
+          },
+          {
+            "name": "activeMediaType",
+            "$ref": "MediaType"
+          }
+        ]
+      },
+      {
+        "name": "onMouseGestureDetection",
+        "type": "function",
+        "description": "Fires when we detect a possible start of a mouse-gesture related event",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "Id of the Vivaldi window where the event was originated"
+          }
+        ]
+      },
+      {
+        "name": "onMouseGesture",
+        "type": "function",
+        "description": "Fires when the user triggered a mouse gesture",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "Id of the Vivaldi window where the event was originated"
+          },
+          {
+            "type": "number",
+            "name": "clientX",
+            "description": "X-coordinate of the gesture start point"
+          },
+          {
+            "type": "number",
+            "name": "clientY",
+            "description": "Y-coordinate of the gesture start point"
+          },
+          {
+            "type": "string",
+            "name": "gestureDirections",
+            "description": "Sequence of gesture directions"
+          }
+        ]
+      },
+      {
+        "name": "onTabSwitchEnd",
+        "type": "function",
+        "description": "Fires when the tab switch using mouse wheel terminates",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "Id of the Vivaldi window where the event was originated"
+          }
+        ]
+      },
+      {
+        "name": "onRockerGesture",
+        "type": "function",
+        "description": "Fires when the user triggered a rocker gesture",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "Id of the Vivaldi window where the event was originated"
+          },
+          {
+            "type": "boolean",
+            "name": "isLeft",
+            "description": "True if this is the left rocker gesture"
+          }
+        ]
+      },
+      {
+        "name": "onWebviewClickCheck",
+        "type": "function",
+        "description": "Fires to check if the user clicks on a webview.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "Id of the Vivaldi window where the event was originated"
+          },
+          {
+            "type": "boolean",
+            "name": "mousedown",
+            "description": "true if this is a mousedown event, false for mouseup"
+          },
+          {
+            "type": "integer",
+            "name": "button",
+            "description": "the mouse button that was pressed, the values match DOM's MouseEvent.button"
+          },
+          {
+            "type": "number",
+            "name": "clientX",
+            "description": "X-coordinates of the click"
+          },
+          {
+            "type": "number",
+            "name": "clientY",
+            "description": "Y-coordinates of the click"
+          }
+        ]
+      },
+      {
+        "name": "onPageZoom",
+        "type": "function",
+        "description": "Fires on page zoom events",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "Id of the Vivaldi window where the event was originated"
+          },
+          {
+            "type": "number",
+            "name": "steps",
+            "description": "Number of basic steps to increase or decrease zoom."
+          },
+          {
+            "type": "number",
+            "name": "clientX",
+            "description": "X-coordinates of the pointer position"
+          },
+          {
+            "type": "number",
+            "name": "clientY",
+            "description": "Y-coordinates of the pointer position"
           }
         ]
       }

@@ -19,9 +19,6 @@
 #include "content/public/browser/web_contents.h"
 #include "ui/views/widget/widget.h"
 
-#include "app/vivaldi_apptools.h"
-#include "ui/dragging/drag_tab_handler.h"
-
 ChromeWebContentsViewDelegateViews::ChromeWebContentsViewDelegateViews(
     content::WebContents* web_contents)
     : ContextMenuDelegate(web_contents), web_contents_(web_contents) {
@@ -40,11 +37,7 @@ content::WebDragDestDelegate*
     ChromeWebContentsViewDelegateViews::GetDragDestDelegate() {
   // We install a chrome specific handler to intercept bookmark drags for the
   // bookmark manager/extension API.
-  if (vivaldi::IsVivaldiRunning()) {
-  bookmark_handler_.reset(new vivaldi::DragTabHandler);
-  } else {
   bookmark_handler_.reset(new WebDragBookmarkHandlerAura);
-  }
   return bookmark_handler_.get();
 }
 

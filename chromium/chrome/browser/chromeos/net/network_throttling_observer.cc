@@ -7,8 +7,9 @@
 #include <memory>
 #include <string>
 
+#include "base/bind.h"
 #include "base/macros.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/values.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/network/network_state_handler.h"

@@ -39,11 +39,11 @@
 namespace blink {
 
 InputType* CheckboxInputType::Create(HTMLInputElement& element) {
-  return new CheckboxInputType(element);
+  return MakeGarbageCollected<CheckboxInputType>(element);
 }
 
 const AtomicString& CheckboxInputType::FormControlType() const {
-  return InputTypeNames::checkbox;
+  return input_type_names::kCheckbox;
 }
 
 bool CheckboxInputType::ValueMissing(const String&) const {
@@ -66,7 +66,7 @@ ClickHandlingState* CheckboxInputType::WillDispatchClick() {
   // checking we do here.  The ClickHandlingState object contains what we need
   // to undo what we did here in didDispatchClick.
 
-  ClickHandlingState* state = new ClickHandlingState;
+  ClickHandlingState* state = MakeGarbageCollected<ClickHandlingState>();
 
   state->checked = GetElement().checked();
   state->indeterminate = GetElement().indeterminate();
@@ -74,7 +74,8 @@ ClickHandlingState* CheckboxInputType::WillDispatchClick() {
   if (state->indeterminate)
     GetElement().setIndeterminate(false);
 
-  GetElement().setChecked(!state->checked, kDispatchChangeEvent);
+  GetElement().setChecked(!state->checked,
+                          TextFieldEventBehavior::kDispatchChangeEvent);
   is_in_click_handler_ = true;
   return state;
 }

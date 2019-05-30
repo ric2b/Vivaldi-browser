@@ -44,7 +44,7 @@ class MockFormValidationMessageClient
 
   void DocumentDetached(const Document&) override {}
   void WillBeDestroyed() override {}
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(anchor_);
     ValidationMessageClient::Trace(visitor);
   }
@@ -75,7 +75,7 @@ TEST_F(HTMLFormControlElementTest, customValidationMessageTextDirection) {
   input->setCustomValidity(
       String::FromUTF8("\xD8\xB9\xD8\xB1\xD8\xA8\xD9\x89"));
   input->setAttribute(
-      HTMLNames::titleAttr,
+      html_names::kTitleAttr,
       AtomicString::FromUTF8("\xD8\xB9\xD8\xB1\xD8\xA8\xD9\x89"));
 
   String message = input->validationMessage().StripWhiteSpace();
@@ -117,7 +117,7 @@ TEST_F(HTMLFormControlElementTest, customValidationMessageTextDirection) {
 TEST_F(HTMLFormControlElementTest, UpdateValidationMessageSkippedIfPrinting) {
   SetHtmlInnerHTML("<body><input required id=input></body>");
   ValidationMessageClient* validation_message_client =
-      new MockFormValidationMessageClient();
+      MakeGarbageCollected<MockFormValidationMessageClient>();
   GetPage().SetValidationMessageClientForTesting(validation_message_client);
   Page::OrdinaryPages().insert(&GetPage());
 
@@ -135,8 +135,10 @@ TEST_F(HTMLFormControlElementTest, DoNotUpdateLayoutDuringDOMMutation) {
   GetDocument().documentElement()->SetInnerHTMLFromString("<select></select>");
   HTMLFormControlElement* const select =
       ToHTMLFormControlElement(GetDocument().QuerySelector("select"));
-  auto* const optgroup = GetDocument().CreateRawElement(HTMLNames::optgroupTag);
-  auto* validation_client = new MockFormValidationMessageClient();
+  auto* const optgroup =
+      GetDocument().CreateRawElement(html_names::kOptgroupTag);
+  auto* validation_client =
+      MakeGarbageCollected<MockFormValidationMessageClient>();
   GetDocument().GetPage()->SetValidationMessageClientForTesting(
       validation_client);
 

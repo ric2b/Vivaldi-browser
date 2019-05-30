@@ -8,13 +8,14 @@
 
 #include "base/macros.h"
 #include "base/run_loop.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
+#include "chrome/browser/notifications/system_notification_helper.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/shill_device_client.h"
 #include "chromeos/dbus/shill_service_client.h"
-#include "chromeos/login/login_state.h"
+#include "chromeos/login/login_state/login_state.h"
 #include "chromeos/network/network_connect.h"
 #include "chromeos/network/network_handler.h"
 #include "testing/platform_test.h"
@@ -116,7 +117,9 @@ class NetworkStateNotifierTest : public BrowserWithTestWindowTest {
 };
 
 TEST_F(NetworkStateNotifierTest, ConnectionFailure) {
-  NotificationDisplayServiceTester tester(ProfileHelper::GetSigninProfile());
+  TestingBrowserProcess::GetGlobal()->SetSystemNotificationHelper(
+      std::make_unique<SystemNotificationHelper>());
+  NotificationDisplayServiceTester tester(nullptr /* profile */);
   NetworkConnect::Get()->ConnectToNetworkId(kWiFi1Guid);
   base::RunLoop().RunUntilIdle();
   // Failure should spawn a notification.

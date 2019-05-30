@@ -17,14 +17,15 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/rand_util.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "components/visitedlink/browser/visitedlink_delegate.h"
 #include "components/visitedlink/browser/visitedlink_event_listener.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "url/gurl.h"
 
@@ -479,8 +480,7 @@ void VisitedLinkMaster::DeleteFingerprintsFromCurrentTable(
   bool bulk_write = (fingerprints.size() > kBigDeleteThreshold);
 
   // Delete the URLs from the table.
-  for (std::set<Fingerprint>::const_iterator i = fingerprints.begin();
-       i != fingerprints.end(); ++i)
+  for (auto i = fingerprints.begin(); i != fingerprints.end(); ++i)
     DeleteFingerprint(*i, !bulk_write);
 
   // These deleted fingerprints may make us shrink the table.
@@ -620,8 +620,8 @@ void VisitedLinkMaster::LoadFromFile(
   scoped_refptr<LoadFromFileResult> load_from_file_result;
   bool success = LoadApartFromFile(filename, &load_from_file_result);
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(callback, success, load_from_file_result));
 }
 
@@ -997,7 +997,7 @@ uint32_t VisitedLinkMaster::NewTableSizeForCount(int32_t item_count) const {
   int desired = item_count * 3;
 
   // Find the closest prime.
-  for (size_t i = 0; i < arraysize(table_sizes); i ++) {
+  for (size_t i = 0; i < base::size(table_sizes); i++) {
     if (table_sizes[i] > desired)
       return table_sizes[i];
   }
@@ -1144,8 +1144,8 @@ void VisitedLinkMaster::TableBuilder::OnComplete(bool success) {
 
   // Marshal to the main thread to notify the VisitedLinkMaster that the
   // rebuild is complete.
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&TableBuilder::OnCompleteMainThread, this));
 }
 

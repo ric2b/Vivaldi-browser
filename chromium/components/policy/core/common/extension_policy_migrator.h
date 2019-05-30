@@ -5,7 +5,11 @@
 #ifndef COMPONENTS_POLICY_CORE_COMMON_EXTENSION_POLICY_MIGRATOR_H_
 #define COMPONENTS_POLICY_CORE_COMMON_EXTENSION_POLICY_MIGRATOR_H_
 
+#include <memory>
+
+#include "base/callback.h"
 #include "base/containers/span.h"
+#include "base/values.h"
 #include "components/policy/core/common/policy_bundle.h"
 #include "components/policy/policy_export.h"
 
@@ -19,7 +23,7 @@ namespace policy {
 // |LegacyPoliciesDeprecatingPolicyHandler| instead.
 class POLICY_EXPORT ExtensionPolicyMigrator {
  public:
-  virtual ~ExtensionPolicyMigrator();
+  virtual ~ExtensionPolicyMigrator() {}
 
   // If there are deprecated policies in |bundle|, set the value of the new
   // policies accordingly.
@@ -27,20 +31,25 @@ class POLICY_EXPORT ExtensionPolicyMigrator {
 
   // Indicates how to rename a policy when migrating from the extension domain
   // to the Chrome domain.
-  struct Migration {
+  struct POLICY_EXPORT Migration {
+    using ValueTransform = base::RepeatingCallback<void(base::Value*)>;
+
+    Migration(Migration&&);
+    Migration(const char* old_name_, const char* new_name_);
+    Migration(const char* old_name_,
+              const char* new_name_,
+              ValueTransform transform_);
+    ~Migration();
+
     // Old name for the policy, in the extension domain.
     const char* old_name;
     // New name for the policy, in the Chrome domain.
     const char* new_name;
+    // Function to use to convert values from the old namespace to the new
+    // namespace (e.g. convert value types). It should mutate the Value in
+    // place. By default, it does no transform.
+    ValueTransform transform;
   };
-
- protected:
-  // Helper function intended for implementers who want to rename policies and
-  // copy them from an extension domain to the Chrome domain. If one of the
-  // Chrome domain policies is already set, it is not overridden.
-  void CopyPoliciesIfUnset(PolicyBundle* bundle,
-                           const std::string& extension_id,
-                           base::span<const Migration> migrations);
 };
 
 }  // namespace policy

@@ -12,11 +12,13 @@
 #include <vector>
 
 #include "base/callback_list.h"
+#include "base/feature_list.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "build/build_config.h"
+#include "build/buildflag.h"
 #include "chrome/browser/extensions/api/identity/extension_token_key.h"
 #include "chrome/browser/extensions/api/identity/gaia_web_auth_flow.h"
 #include "chrome/browser/extensions/api/identity/identity_get_accounts_function.h"
@@ -27,11 +29,10 @@
 #include "chrome/browser/extensions/api/identity/identity_remove_cached_auth_token_function.h"
 #include "chrome/browser/extensions/api/identity/web_auth_flow.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
-#include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/browser/signin_buildflags.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
-#include "google_apis/gaia/oauth2_mint_token_flow.h"
-#include "google_apis/gaia/oauth2_token_service.h"
+#include "services/identity/public/cpp/identity_manager.h"
 
 namespace content {
 class BrowserContext;
@@ -40,6 +41,11 @@ class BrowserContext;
 class Profile;
 
 namespace extensions {
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+// Enables all accounts in extensions.
+extern const base::Feature kExtensionsAllAccountsFeature;
+#endif
 
 class IdentityTokenCacheValue {
  public:
@@ -73,8 +79,7 @@ class IdentityTokenCacheValue {
 };
 
 class IdentityAPI : public BrowserContextKeyedAPI,
-                    public AccountTrackerService::Observer,
-                    public OAuth2TokenService::Observer {
+                    public identity::IdentityManager::Observer {
  public:
   typedef std::map<ExtensionTokenKey, IdentityTokenCacheValue> CachedTokens;
 
@@ -112,6 +117,10 @@ class IdentityAPI : public BrowserContextKeyedAPI,
     on_signin_changed_callback_for_testing_ = callback;
   }
 
+  // Whether the chrome.identity API should use all accounts or the primary
+  // account only.
+  bool AreExtensionsRestrictedToPrimaryAccount();
+
  private:
   friend class BrowserContextKeyedAPIFactory<IdentityAPI>;
 
@@ -119,19 +128,13 @@ class IdentityAPI : public BrowserContextKeyedAPI,
   static const char* service_name() { return "IdentityAPI"; }
   static const bool kServiceIsNULLWhileTesting = true;
 
-  // OAuth2TokenService::Observer:
-  void OnRefreshTokenAvailable(const std::string& account_id) override;
-
-  // AccountTrackerService::Observer:
-  // NOTE: This class listens for signout events via this callback (which itself
-  // is triggered by O2TS::OnRefreshTokenRevoked()) rather than directly via
-  // OnRefreshTokenRevoked() in order to obtain the Gaia ID of the signed-out
-  // account, which is needed to send as input to the
-  // chrome.identity.onSigninChanged event. That Gaia ID is not guaranteed to be
-  // available from O2TS::OnRefreshTokenRevoked().
-  // TODO(blundell): Eliminate this kludge by porting this class to interact
-  // with IdentityManager.
-  void OnAccountRemoved(const AccountInfo& info) override;
+  // identity::IdentityManager::Observer:
+  void OnRefreshTokenUpdatedForAccount(
+      const CoreAccountInfo& account_info) override;
+  // NOTE: This class must listen for this callback rather than
+  // OnRefreshTokenRemovedForAccount() to obtain the Gaia ID of the removed
+  // account.
+  void OnExtendedAccountInfoRemoved(const AccountInfo& info) override;
 
   // Fires the chrome.identity.onSignInChanged event.
   void FireOnAccountSignInChanged(const std::string& gaia_id,

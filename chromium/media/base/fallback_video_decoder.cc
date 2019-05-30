@@ -5,6 +5,8 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/fallback_video_decoder.h"
 #include "media/base/video_decoder_config.h"
@@ -18,38 +20,35 @@ FallbackVideoDecoder::FallbackVideoDecoder(
       fallback_decoder_(std::move(fallback)),
       weak_factory_(this) {}
 
-void FallbackVideoDecoder::Initialize(
-    const VideoDecoderConfig& config,
-    bool low_delay,
-    CdmContext* cdm_context,
-    const InitCB& init_cb,
-    const OutputCB& output_cb,
-    const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) {
+void FallbackVideoDecoder::Initialize(const VideoDecoderConfig& config,
+                                      bool low_delay,
+                                      CdmContext* cdm_context,
+                                      const InitCB& init_cb,
+                                      const OutputCB& output_cb,
+                                      const WaitingCB& waiting_cb) {
   // If we've already fallen back, just reinitialize the selected decoder.
   if (selected_decoder_ && did_fallback_) {
     selected_decoder_->Initialize(config, low_delay, cdm_context, init_cb,
-                                  output_cb, waiting_for_decryption_key_cb);
+                                  output_cb, waiting_cb);
     return;
   }
 
   InitCB fallback_initialize_cb = base::BindRepeating(
       &FallbackVideoDecoder::FallbackInitialize, weak_factory_.GetWeakPtr(),
-      config, low_delay, cdm_context, init_cb, output_cb,
-      waiting_for_decryption_key_cb);
+      config, low_delay, cdm_context, init_cb, output_cb, waiting_cb);
 
   preferred_decoder_->Initialize(config, low_delay, cdm_context,
                                  std::move(fallback_initialize_cb), output_cb,
-                                 waiting_for_decryption_key_cb);
+                                 waiting_cb);
 }
 
-void FallbackVideoDecoder::FallbackInitialize(
-    const VideoDecoderConfig& config,
-    bool low_delay,
-    CdmContext* cdm_context,
-    const InitCB& init_cb,
-    const OutputCB& output_cb,
-    const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb,
-    bool success) {
+void FallbackVideoDecoder::FallbackInitialize(const VideoDecoderConfig& config,
+                                              bool low_delay,
+                                              CdmContext* cdm_context,
+                                              const InitCB& init_cb,
+                                              const OutputCB& output_cb,
+                                              const WaitingCB& waiting_cb,
+                                              bool success) {
   // The preferred decoder was successfully initialized.
   if (success) {
     selected_decoder_ = preferred_decoder_.get();
@@ -58,10 +57,16 @@ void FallbackVideoDecoder::FallbackInitialize(
   }
 
   did_fallback_ = true;
-  preferred_decoder_.reset();
+  // Post destruction of |preferred_decoder_| so that we don't destroy the
+  // object during the callback.  DeleteSoon doesn't handle custom deleters, so
+  // we post a do-nothing task instead.
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(base::DoNothing::Once<std::unique_ptr<VideoDecoder>>(),
+                     std::move(preferred_decoder_)));
   selected_decoder_ = fallback_decoder_.get();
   fallback_decoder_->Initialize(config, low_delay, cdm_context, init_cb,
-                                output_cb, waiting_for_decryption_key_cb);
+                                output_cb, waiting_cb);
 }
 
 void FallbackVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,

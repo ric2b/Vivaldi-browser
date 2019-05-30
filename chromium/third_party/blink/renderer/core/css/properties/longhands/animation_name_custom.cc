@@ -10,15 +10,15 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 
 namespace blink {
-namespace CSSLonghand {
+namespace css_longhand {
 
 const CSSValue* AnimationName::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
     const CSSParserLocalContext& local_context) const {
   // Allow quoted name if this is an alias property.
-  return CSSPropertyParserHelpers::ConsumeCommaSeparatedList(
-      CSSParsingUtils::ConsumeAnimationName, range, context,
+  return css_property_parser_helpers::ConsumeCommaSeparatedList(
+      css_parsing_utils::ConsumeAnimationName, range, context,
       local_context.UseAliasParsing());
 }
 
@@ -31,7 +31,7 @@ const CSSValue* AnimationName::CSSValueFromComputedStyleInternal(
   CSSValueList* list = CSSValueList::CreateCommaSeparated();
   const CSSAnimationData* animation_data = style.Animations();
   if (animation_data) {
-    for (size_t i = 0; i < animation_data->NameList().size(); ++i)
+    for (wtf_size_t i = 0; i < animation_data->NameList().size(); ++i)
       list->Append(*CSSCustomIdentValue::Create(animation_data->NameList()[i]));
   } else {
     list->Append(*InitialValue());
@@ -40,10 +40,10 @@ const CSSValue* AnimationName::CSSValueFromComputedStyleInternal(
 }
 
 const CSSValue* AnimationName::InitialValue() const {
-  DEFINE_STATIC_LOCAL(CSSValue, value,
+  DEFINE_STATIC_LOCAL(Persistent<CSSValue>, value,
                       (CSSIdentifierValue::Create(CSSValueNone)));
-  return &value;
+  return value;
 }
 
-}  // namespace CSSLonghand
+}  // namespace css_longhand
 }  // namespace blink

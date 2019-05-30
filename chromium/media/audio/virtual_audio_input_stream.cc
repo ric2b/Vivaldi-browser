@@ -41,8 +41,7 @@ VirtualAudioInputStream::~VirtualAudioInputStream() {
   // output streams be removed before VirtualAudioInputStream is destroyed.
   DCHECK_EQ(0, num_attached_output_streams_);
 
-  for (AudioConvertersMap::iterator it = converters_.begin();
-       it != converters_.end(); ++it) {
+  for (auto it = converters_.begin(); it != converters_.end(); ++it) {
     delete it->second;
   }
 }
@@ -55,8 +54,8 @@ bool VirtualAudioInputStream::Open() {
 void VirtualAudioInputStream::Start(AudioInputCallback* callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   callback_ = callback;
-  fake_worker_.Start(base::Bind(
-      &VirtualAudioInputStream::PumpAudio, base::Unretained(this)));
+  fake_worker_.Start(base::BindRepeating(&VirtualAudioInputStream::PumpAudio,
+                                         base::Unretained(this)));
 }
 
 void VirtualAudioInputStream::Stop() {
@@ -72,7 +71,7 @@ void VirtualAudioInputStream::AddInputProvider(
 
   base::AutoLock scoped_lock(converter_network_lock_);
 
-  AudioConvertersMap::iterator converter = converters_.find(params);
+  auto converter = converters_.find(params);
   if (converter == converters_.end()) {
     std::pair<AudioConvertersMap::iterator, bool> result =
         converters_.insert(std::make_pair(
@@ -100,7 +99,8 @@ void VirtualAudioInputStream::RemoveInputProvider(
   DCHECK_LE(0, num_attached_output_streams_);
 }
 
-void VirtualAudioInputStream::PumpAudio() {
+void VirtualAudioInputStream::PumpAudio(base::TimeTicks ideal_time,
+                                        base::TimeTicks now) {
   DCHECK(worker_task_runner_->BelongsToCurrentThread());
 
   {
@@ -111,7 +111,7 @@ void VirtualAudioInputStream::PumpAudio() {
   }
   // Because the audio is being looped-back, the delay since since it was
   // recorded is zero.
-  callback_->OnData(audio_bus_.get(), base::TimeTicks::Now(), 1.0);
+  callback_->OnData(audio_bus_.get(), ideal_time, 1.0);
 }
 
 void VirtualAudioInputStream::Close() {
@@ -122,7 +122,7 @@ void VirtualAudioInputStream::Close() {
   // If a non-null AfterCloseCallback was provided to the constructor, invoke it
   // here.  The callback is moved to a stack-local first since |this| could be
   // destroyed during Run().
-  if (!after_close_cb_.is_null()) {
+  if (after_close_cb_) {
     const AfterCloseCallback cb = after_close_cb_;
     after_close_cb_.Reset();
     cb.Run(this);

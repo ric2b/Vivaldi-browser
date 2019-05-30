@@ -53,6 +53,7 @@ class CORE_EXPORT CSSRule : public ScriptWrappable {
     kKeyframeRule = 8,
     kNamespaceRule = 10,
     kSupportsRule = 12,
+    kFontFeatureValuesRule = 14,
     kViewportRule = 15,
   };
 
@@ -104,10 +105,6 @@ class CORE_EXPORT CSSRule : public ScriptWrappable {
     CSSStyleSheet* parent_style_sheet_;
   };
 };
-
-#define DEFINE_CSS_RULE_TYPE_CASTS(ToType, TYPE_NAME)                          \
-  DEFINE_TYPE_CASTS(ToType, CSSRule, rule, rule->type() == CSSRule::TYPE_NAME, \
-                    rule.type() == CSSRule::TYPE_NAME)
 
 }  // namespace blink
 

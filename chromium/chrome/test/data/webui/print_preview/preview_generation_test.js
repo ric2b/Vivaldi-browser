@@ -18,6 +18,7 @@ cr.define('preview_generation_test', function() {
     Scaling: 'scaling',
     SelectionOnly: 'selection only',
     Destination: 'destination',
+    ChangeMarginsByPagesPerSheet: 'change margins by pages per sheet',
   };
 
   const suiteName = 'PreviewGenerationTest';
@@ -64,9 +65,10 @@ cr.define('preview_generation_test', function() {
             nativeLayer.whenCalled('getPrinterCapabilities'),
           ])
           .then(function() {
-            if (!page.documentInfo_.isModifiable)
-              page.documentInfo_.updateFitToPageScaling(98);
-            page.documentInfo_.updatePageCount(3);
+            if (!page.documentSettings_.isModifiable) {
+              page.documentSettings_.fitToPageScaling = 98;
+            }
+            page.documentSettings_.pageCount = 3;
             return nativeLayer.whenCalled('getPreview');
           });
     }
@@ -148,6 +150,47 @@ cr.define('preview_generation_test', function() {
           print_preview.ticket_items.MarginsTypeValue.MINIMUM, 'marginsType',
           print_preview.ticket_items.MarginsTypeValue.DEFAULT,
           print_preview.ticket_items.MarginsTypeValue.MINIMUM);
+    });
+
+    /**
+     * Validate changing the pages per sheet updates the preview, and resets
+     * margins to print_preview.ticket_items.MarginsTypeValue.DEFAULT.
+     */
+    test(assert(TestNames.ChangeMarginsByPagesPerSheet), function() {
+      const marginsTypeEnum = print_preview.ticket_items.MarginsTypeValue;
+      return initialize()
+          .then(function(args) {
+            const originalTicket = JSON.parse(args.printTicket);
+            assertEquals(0, originalTicket.requestID);
+            assertEquals(
+                marginsTypeEnum.DEFAULT, originalTicket['marginsType']);
+            assertEquals(
+                marginsTypeEnum.DEFAULT, page.getSettingValue('margins'));
+            assertEquals(1, page.getSettingValue('pagesPerSheet'));
+            assertEquals(1, originalTicket['pagesPerSheet']);
+            nativeLayer.resetResolver('getPreview');
+            page.setSetting('margins', marginsTypeEnum.MINIMUM);
+            return nativeLayer.whenCalled('getPreview');
+          })
+          .then(function(args) {
+            assertEquals(
+                marginsTypeEnum.MINIMUM, page.getSettingValue('margins'));
+            const ticket = JSON.parse(args.printTicket);
+            assertEquals(marginsTypeEnum.MINIMUM, ticket['marginsType']);
+            nativeLayer.resetResolver('getPreview');
+            assertEquals(1, ticket.requestID);
+            page.setSetting('pagesPerSheet', 4);
+            return nativeLayer.whenCalled('getPreview');
+          })
+          .then(function(args) {
+            assertEquals(
+                marginsTypeEnum.DEFAULT, page.getSettingValue('margins'));
+            assertEquals(4, page.getSettingValue('pagesPerSheet'));
+            const ticket = JSON.parse(args.printTicket);
+            assertEquals(marginsTypeEnum.DEFAULT, ticket['marginsType']);
+            assertEquals(4, ticket['pagesPerSheet']);
+            assertEquals(2, ticket.requestID);
+          });
     });
 
     /** Validate changing the paper size updates the preview. */
@@ -234,7 +277,60 @@ cr.define('preview_generation_test', function() {
 
     /** Validate changing the scaling updates the preview. */
     test(assert(TestNames.Scaling), function() {
-      return testSimpleSetting('scaling', '100', '90', 'scaleFactor', 100, 90);
+      return initialize()
+          .then(function(args) {
+            const ticket = JSON.parse(args.printTicket);
+            assertEquals(0, ticket.requestID);
+            assertEquals(100, ticket.scaleFactor);
+            nativeLayer.resetResolver('getPreview');
+            assertEquals('100', page.getSettingValue('scaling'));
+            assertEquals(false, page.getSettingValue('customScaling'));
+            page.setSetting('customScaling', true);
+            // Need to set custom value != 100 for preview to regenerate.
+            page.setSetting('scaling', '90');
+            return nativeLayer.whenCalled('getPreview');
+          })
+          .then(function(args) {
+            const ticket = JSON.parse(args.printTicket);
+            assertEquals(90, ticket.scaleFactor);
+            assertEquals(1, ticket.requestID);
+            nativeLayer.resetResolver('getPreview');
+            assertEquals('90', page.getSettingValue('scaling'));
+            assertEquals(true, page.getSettingValue('customScaling'));
+            // This should regenerate the preview, since the custom value is not
+            // 100.
+            page.setSetting('customScaling', false);
+            return nativeLayer.whenCalled('getPreview');
+          })
+          .then(function(args) {
+            const ticket = JSON.parse(args.printTicket);
+            assertEquals(100, ticket.scaleFactor);
+            assertEquals(2, ticket.requestID);
+            nativeLayer.resetResolver('getPreview');
+            assertEquals('90', page.getSettingValue('scaling'));
+            assertEquals(false, page.getSettingValue('customScaling'));
+            page.setSetting('customScaling', true);
+            return nativeLayer.whenCalled('getPreview');
+          })
+          .then(function(args) {
+            const ticket = JSON.parse(args.printTicket);
+            // Back to custom 90.
+            assertEquals(90, ticket.scaleFactor);
+            assertEquals(3, ticket.requestID);
+            nativeLayer.resetResolver('getPreview');
+            assertEquals('90', page.getSettingValue('scaling'));
+            assertEquals(true, page.getSettingValue('customScaling'));
+            // When custom scaling is set, changing scaling updates preview.
+            page.setSetting('scaling', '80');
+            return nativeLayer.whenCalled('getPreview');
+          })
+          .then(function(args) {
+            const ticket = JSON.parse(args.printTicket);
+            assertEquals(80, ticket.scaleFactor);
+            assertEquals(4, ticket.requestID);
+            assertEquals('80', page.getSettingValue('scaling'));
+            assertEquals(true, page.getSettingValue('customScaling'));
+          });
     });
 
     /**
@@ -258,7 +354,6 @@ cr.define('preview_generation_test', function() {
             const barDestination = new print_preview.Destination(
                 'BarDevice', print_preview.DestinationType.LOCAL,
                 print_preview.DestinationOrigin.LOCAL, 'BarName',
-                false /*isRecent*/,
                 print_preview.DestinationConnectionStatus.ONLINE);
             barDestination.capabilities =
                 print_preview_test_utils.getCddTemplate(barDestination.id)

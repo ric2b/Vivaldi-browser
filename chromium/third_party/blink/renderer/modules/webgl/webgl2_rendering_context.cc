@@ -17,6 +17,7 @@
 #include "third_party/blink/renderer/modules/webgl/ext_color_buffer_float.h"
 #include "third_party/blink/renderer/modules/webgl/ext_disjoint_timer_query_webgl2.h"
 #include "third_party/blink/renderer/modules/webgl/ext_texture_filter_anisotropic.h"
+#include "third_party/blink/renderer/modules/webgl/khr_parallel_shader_compile.h"
 #include "third_party/blink/renderer/modules/webgl/oes_texture_float_linear.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_compressed_texture_astc.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_compressed_texture_etc.h"
@@ -29,6 +30,8 @@
 #include "third_party/blink/renderer/modules/webgl/webgl_debug_renderer_info.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_debug_shaders.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_lose_context.h"
+#include "third_party/blink/renderer/modules/webgl/webgl_multi_draw.h"
+#include "third_party/blink/renderer/modules/webgl/webgl_multi_draw_instanced.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_multiview.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/drawing_buffer.h"
 
@@ -40,7 +43,7 @@ static bool ShouldCreateContext(WebGraphicsContext3DProvider* context_provider,
                                 CanvasRenderingContextHost* host) {
   if (!context_provider) {
     host->HostDispatchEvent(
-        WebGLContextEvent::Create(EventTypeNames::webglcontextcreationerror,
+        WebGLContextEvent::Create(event_type_names::kWebglcontextcreationerror,
                                   "Failed to create a WebGL2 context."));
     return false;
   }
@@ -67,12 +70,13 @@ CanvasRenderingContext* WebGL2RenderingContext::Factory::Create(
           host, attrs, Platform::kWebGL2ContextType, &using_gpu_compositing));
   if (!ShouldCreateContext(context_provider.get(), host))
     return nullptr;
-  WebGL2RenderingContext* rendering_context = new WebGL2RenderingContext(
-      host, std::move(context_provider), using_gpu_compositing, attrs);
+  WebGL2RenderingContext* rendering_context =
+      MakeGarbageCollected<WebGL2RenderingContext>(
+          host, std::move(context_provider), using_gpu_compositing, attrs);
 
   if (!rendering_context->GetDrawingBuffer()) {
     host->HostDispatchEvent(
-        WebGLContextEvent::Create(EventTypeNames::webglcontextcreationerror,
+        WebGLContextEvent::Create(event_type_names::kWebglcontextcreationerror,
                                   "Could not create a WebGL2 context."));
     return nullptr;
   }
@@ -86,7 +90,7 @@ CanvasRenderingContext* WebGL2RenderingContext::Factory::Create(
 void WebGL2RenderingContext::Factory::OnError(HTMLCanvasElement* canvas,
                                               const String& error) {
   canvas->DispatchEvent(*WebGLContextEvent::Create(
-      EventTypeNames::webglcontextcreationerror, error));
+      event_type_names::kWebglcontextcreationerror, error));
 }
 
 WebGL2RenderingContext::WebGL2RenderingContext(
@@ -122,6 +126,8 @@ void WebGL2RenderingContext::RegisterContextExtensions() {
       ext_disjoint_timer_query_web_gl2_);
   RegisterExtension<EXTTextureFilterAnisotropic>(
       ext_texture_filter_anisotropic_);
+  RegisterExtension<KHRParallelShaderCompile>(khr_parallel_shader_compile_,
+                                              kDraftExtension);
   RegisterExtension<OESTextureFloatLinear>(oes_texture_float_linear_);
   RegisterExtension<WebGLCompressedTextureASTC>(webgl_compressed_texture_astc_);
   RegisterExtension<WebGLCompressedTextureETC>(webgl_compressed_texture_etc_);
@@ -134,6 +140,9 @@ void WebGL2RenderingContext::RegisterContextExtensions() {
   RegisterExtension<WebGLDebugRendererInfo>(webgl_debug_renderer_info_);
   RegisterExtension<WebGLDebugShaders>(webgl_debug_shaders_);
   RegisterExtension<WebGLLoseContext>(webgl_lose_context_);
+  RegisterExtension<WebGLMultiDraw>(webgl_multi_draw_, kDraftExtension);
+  RegisterExtension<WebGLMultiDrawInstanced>(webgl_multi_draw_instanced_,
+                                             kDraftExtension);
   RegisterExtension<WebGLMultiview>(webgl_multiview_, kDraftExtension);
 }
 
@@ -141,6 +150,7 @@ void WebGL2RenderingContext::Trace(blink::Visitor* visitor) {
   visitor->Trace(ext_color_buffer_float_);
   visitor->Trace(ext_disjoint_timer_query_web_gl2_);
   visitor->Trace(ext_texture_filter_anisotropic_);
+  visitor->Trace(khr_parallel_shader_compile_);
   visitor->Trace(oes_texture_float_linear_);
   visitor->Trace(webgl_compressed_texture_astc_);
   visitor->Trace(webgl_compressed_texture_etc_);
@@ -151,6 +161,8 @@ void WebGL2RenderingContext::Trace(blink::Visitor* visitor) {
   visitor->Trace(webgl_debug_renderer_info_);
   visitor->Trace(webgl_debug_shaders_);
   visitor->Trace(webgl_lose_context_);
+  visitor->Trace(webgl_multi_draw_);
+  visitor->Trace(webgl_multi_draw_instanced_);
   visitor->Trace(webgl_multiview_);
   WebGL2RenderingContextBase::Trace(visitor);
 }

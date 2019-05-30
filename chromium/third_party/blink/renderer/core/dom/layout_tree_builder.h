@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/core/dom/layout_tree_builder_traversal.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/dom/text.h"
+#include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -63,7 +64,6 @@ class LayoutTreeBuilder {
   LayoutTreeBuilder(NodeType& node, LayoutObject* layout_object_parent)
       : node_(node), layout_object_parent_(layout_object_parent) {
     DCHECK(!node.GetLayoutObject());
-    DCHECK(node.NeedsAttach());
     DCHECK(node.GetDocument().InStyleRecalc());
     DCHECK(node.InActiveDocument());
   }
@@ -74,7 +74,7 @@ class LayoutTreeBuilder {
     // Avoid an O(N^2) walk over the children when reattaching all children of a
     // node.
     if (layout_object_parent_->GetNode() &&
-        layout_object_parent_->GetNode()->NeedsAttach())
+        layout_object_parent_->GetNode()->NeedsReattachLayoutTree())
       return nullptr;
 
     LayoutObject* next =
@@ -86,7 +86,8 @@ class LayoutTreeBuilder {
     // AddChild() implementations to walk up the tree to find the correct
     // layout tree parent/siblings.
     if (next && next->IsText() && next->Parent()->IsAnonymous() &&
-        next->Parent()->IsInline()) {
+        next->Parent()->IsInline() &&
+        !ToLayoutInline(next->Parent())->IsFirstLineAnonymous()) {
       return next->Parent();
     }
     return next;
@@ -105,16 +106,13 @@ class LayoutTreeBuilderForElement : public LayoutTreeBuilder<Element> {
       CreateLayoutObject();
   }
 
-  ComputedStyle* ResolvedStyle() const { return style_.get(); }
-
  private:
   LayoutObject* ParentLayoutObject() const;
   LayoutObject* NextLayoutObject() const;
   bool ShouldCreateLayoutObject() const;
-  ComputedStyle& Style() const;
   void CreateLayoutObject();
 
-  mutable scoped_refptr<ComputedStyle> style_;
+  scoped_refptr<ComputedStyle> style_;
 };
 
 class LayoutTreeBuilderForText : public LayoutTreeBuilder<Text> {
@@ -158,14 +156,14 @@ class CORE_EXPORT ReattachLegacyLayoutObjectList final {
   }
   void ForceLegacyLayoutIfNeeded();
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
  private:
   Member<Document> document_;
 
-  // A list of block formatting context or layout object associated to
-  // document element.
-  Vector<const LayoutObject*> blocks_;
+  // A list of elements establishing a block formatting context which need to
+  // be re-attached to use legacy fallback.
+  HeapVector<Member<Element>> reattach_elements_;
 
   enum class State {
     kInvalid,

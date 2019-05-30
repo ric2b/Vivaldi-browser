@@ -57,11 +57,10 @@ bool IframeSource::GetOrigin(
     std::string* origin) const {
   if (wc_getter.is_null())
     return false;
-  const content::WebContents* contents = wc_getter.Run();
+  content::WebContents* contents = wc_getter.Run();
   if (!contents)
     return false;
-  const content::NavigationEntry* entry =
-      contents->GetController().GetVisibleEntry();
+  content::NavigationEntry* entry = contents->GetController().GetVisibleEntry();
   if (!entry)
     return false;
 

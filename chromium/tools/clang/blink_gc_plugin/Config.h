@@ -68,6 +68,14 @@ class Config {
     return name == "unique_ptr";
   }
 
+  static bool IsTraceWrapperMember(const std::string& name) {
+    return name == "TraceWrapperMember";
+  }
+
+  static bool IsTraceWrapperV8Reference(const std::string& name) {
+    return name == "TraceWrapperV8Reference";
+  }
+
   static bool IsWTFCollection(const std::string& name) {
     return name == "Vector" ||
            name == "Deque" ||
@@ -79,24 +87,10 @@ class Config {
   }
 
   static bool IsGCCollection(const std::string& name) {
-    return name == "HeapVector" ||
-           name == "HeapDeque" ||
-           name == "HeapHashSet" ||
-           name == "HeapListHashSet" ||
-           name == "HeapLinkedHashSet" ||
-           name == "HeapHashCountedSet" ||
-           name == "HeapHashMap" ||
-           IsPersistentGCCollection(name);
-  }
-
-  static bool IsPersistentGCCollection(const std::string& name) {
-    return name == "PersistentHeapVector" ||
-           name == "PersistentHeapDeque" ||
-           name == "PersistentHeapHashSet" ||
-           name == "PersistentHeapListHashSet" ||
-           name == "PersistentHeapLinkedHashSet" ||
-           name == "PersistentHeapHashCountedSet" ||
-           name == "PersistentHeapHashMap";
+    return name == "HeapVector" || name == "HeapDeque" ||
+           name == "HeapHashSet" || name == "HeapListHashSet" ||
+           name == "HeapLinkedHashSet" || name == "HeapHashCountedSet" ||
+           name == "HeapHashMap";
   }
 
   static bool IsGCCollectionWithUnsafeIterator(const std::string& name) {

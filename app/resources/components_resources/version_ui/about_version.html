@@ -36,7 +36,7 @@ about:version template page
 </if>
         <div id="company">$i18n{company}</div>
         <div id="slogan">A Browser For Our Friends</div>
-        <div id="copyright">$i18n{copyright}</div>
+        <div id="copyright"><a href="https://vivaldi.com">$i18n{copyright}</a></div>
         <div id="product-license"></div>
         <div id="product-tos"></div>
       </div>
@@ -61,6 +61,9 @@ about:version template page
             <span>$i18n{os_type}</span>
 <if expr="is_android">
             <span>$i18n{os_version}</span>
+</if>
+<if expr="is_win">
+            <span id="os_version"></span>
 </if>
           </td>
         </tr>
@@ -97,6 +100,5 @@ about:version template page
         </tr>
       </table>
     </div>
-    <script src="chrome://resources/js/i18n_template.js"></script>
   </body>
 </html>

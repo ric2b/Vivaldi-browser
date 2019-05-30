@@ -8,6 +8,7 @@
 #include "base/optional.h"
 #include "third_party/blink/renderer/core/paint/object_paint_properties.h"
 #include "third_party/blink/renderer/platform/graphics/paint/ref_counted_property_tree_state.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 
 namespace blink {
 
@@ -18,6 +19,8 @@ class PaintLayer;
 // FragmentData, and even then only when they are inside of multicol.
 // See README.md.
 class CORE_EXPORT FragmentData {
+  USING_FAST_MALLOC(FragmentData);
+
  public:
   FragmentData* NextFragment() const { return next_fragment_.get(); }
   FragmentData& EnsureNextFragment();
@@ -188,7 +191,7 @@ class CORE_EXPORT FragmentData {
   // overflow clip, scroll translation) that apply to contents.
   PropertyTreeState ContentsProperties() const {
     return PropertyTreeState(PostScrollTranslation(), PostOverflowClip(),
-                             LocalBorderBoxProperties().Effect());
+                             PostIsolationEffect());
   }
 
   // This is the complete set of property nodes that can be used to
@@ -200,15 +203,21 @@ class CORE_EXPORT FragmentData {
     DCHECK(properties->MaskClip());
     DCHECK(properties->ClipPath());
     return PropertyTreeState(properties->MaskClip()->LocalTransformSpace(),
-                             properties->MaskClip(), properties->ClipPath());
+                             *properties->MaskClip(), *properties->ClipPath());
   }
 
-  const TransformPaintPropertyNode* PreTransform() const;
-  const TransformPaintPropertyNode* PostScrollTranslation() const;
-  const ClipPaintPropertyNode* PreClip() const;
-  const ClipPaintPropertyNode* PostOverflowClip() const;
-  const EffectPaintPropertyNode* PreEffect() const;
-  const EffectPaintPropertyNode* PreFilter() const;
+  const TransformPaintPropertyNode& PreTransform() const;
+  const TransformPaintPropertyNode& PostScrollTranslation() const;
+  const ClipPaintPropertyNode& PreClip() const;
+  const ClipPaintPropertyNode& PostOverflowClip() const;
+  const EffectPaintPropertyNode& PreEffect() const;
+  const EffectPaintPropertyNode& PreFilter() const;
+  const EffectPaintPropertyNode& PostIsolationEffect() const;
+
+  // Map a rect from |this|'s local border box space to |fragment|'s local
+  // border box space. Both fragments must have local border box properties.
+  void MapRectToFragment(const FragmentData& fragment, IntRect&) const;
+  void MapRectToFragment(const FragmentData& fragment, LayoutRect&) const;
 
   ~FragmentData() {
     if (next_fragment_)
@@ -221,7 +230,7 @@ class CORE_EXPORT FragmentData {
   void DestroyTail();
 
   // Contains rare data that that is not needed on all fragments.
-  struct RareData {
+  struct CORE_EXPORT RareData {
     USING_FAST_MALLOC(RareData);
 
    public:

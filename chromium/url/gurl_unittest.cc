@@ -4,7 +4,7 @@
 
 #include <stddef.h>
 
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -234,7 +234,7 @@ TEST(GURLTest, IsValid) {
     "http:/path",
     "http:path",
   };
-  for (size_t i = 0; i < arraysize(valid_cases); i++) {
+  for (size_t i = 0; i < base::size(valid_cases); i++) {
     EXPECT_TRUE(GURL(valid_cases[i]).is_valid())
         << "Case: " << valid_cases[i];
   }
@@ -247,7 +247,7 @@ TEST(GURLTest, IsValid) {
     "://google.com",
     "path",
   };
-  for (size_t i = 0; i < arraysize(invalid_cases); i++) {
+  for (size_t i = 0; i < base::size(invalid_cases); i++) {
     EXPECT_FALSE(GURL(invalid_cases[i]).is_valid())
         << "Case: " << invalid_cases[i];
   }
@@ -306,7 +306,7 @@ TEST(GURLTest, Resolve) {
     {"filesystem:http://www.google.com/type/", "../foo.html", true, "filesystem:http://www.google.com/type/foo.html"},
   };
 
-  for (size_t i = 0; i < arraysize(resolve_cases); i++) {
+  for (size_t i = 0; i < base::size(resolve_cases); i++) {
     // 8-bit code path.
     GURL input(resolve_cases[i].base);
     GURL output = input.Resolve(resolve_cases[i].relative);
@@ -329,16 +329,21 @@ TEST(GURLTest, GetOrigin) {
     const char* input;
     const char* expected;
   } cases[] = {
-    {"http://www.google.com", "http://www.google.com/"},
-    {"javascript:window.alert(\"hello,world\");", ""},
-    {"http://user:pass@www.google.com:21/blah#baz", "http://www.google.com:21/"},
-    {"http://user@www.google.com", "http://www.google.com/"},
-    {"http://:pass@www.google.com", "http://www.google.com/"},
-    {"http://:@www.google.com", "http://www.google.com/"},
-    {"filesystem:http://www.google.com/temp/foo?q#b", "http://www.google.com/"},
-    {"filesystem:http://user:pass@google.com:21/blah#baz", "http://google.com:21/"},
+      {"http://www.google.com", "http://www.google.com/"},
+      {"javascript:window.alert(\"hello,world\");", ""},
+      {"http://user:pass@www.google.com:21/blah#baz",
+       "http://www.google.com:21/"},
+      {"http://user@www.google.com", "http://www.google.com/"},
+      {"http://:pass@www.google.com", "http://www.google.com/"},
+      {"http://:@www.google.com", "http://www.google.com/"},
+      {"filesystem:http://www.google.com/temp/foo?q#b",
+       "http://www.google.com/"},
+      {"filesystem:http://user:pass@google.com:21/blah#baz",
+       "http://google.com:21/"},
+      {"blob:null/guid-goes-here", ""},
+      {"blob:http://origin/guid-goes-here", "" /* should be http://origin/ */},
   };
-  for (size_t i = 0; i < arraysize(cases); i++) {
+  for (size_t i = 0; i < base::size(cases); i++) {
     GURL url(cases[i].input);
     GURL origin = url.GetOrigin();
     EXPECT_EQ(cases[i].expected, origin.spec());
@@ -361,7 +366,7 @@ TEST(GURLTest, GetAsReferrer) {
     {"file:///tmp/test.html", ""},
     {"https://www.google.com", "https://www.google.com/"},
   };
-  for (size_t i = 0; i < arraysize(cases); i++) {
+  for (size_t i = 0; i < base::size(cases); i++) {
     GURL url(cases[i].input);
     GURL origin = url.GetAsReferrer();
     EXPECT_EQ(cases[i].expected, origin.spec());
@@ -380,7 +385,7 @@ TEST(GURLTest, GetWithEmptyPath) {
     {"filesystem:file:///temporary/bar.html?baz=22", "filesystem:file:///temporary/"},
   };
 
-  for (size_t i = 0; i < arraysize(cases); i++) {
+  for (size_t i = 0; i < base::size(cases); i++) {
     GURL url(cases[i].input);
     GURL empty_path = url.GetWithEmptyPath();
     EXPECT_EQ(cases[i].expected, empty_path.spec());
@@ -426,7 +431,7 @@ TEST(GURLTest, GetWithoutFilename) {
     {"foobar", ""},
   };
 
-  for (size_t i = 0; i < arraysize(cases); i++) {
+  for (size_t i = 0; i < base::size(cases); i++) {
     GURL url(cases[i].input);
     GURL without_filename = url.GetWithoutFilename();
     EXPECT_EQ(cases[i].expected, without_filename.spec()) << i;
@@ -468,7 +473,7 @@ TEST(GURLTest, Replacements) {
        "filesystem:http://www.google.com/foo/bar.html?foo#bar"},
   };
 
-  for (size_t i = 0; i < arraysize(replace_cases); i++) {
+  for (size_t i = 0; i < base::size(replace_cases); i++) {
     const ReplaceCase& cur = replace_cases[i];
     GURL url(cur.base);
     GURL::Replacements repl;
@@ -532,7 +537,7 @@ TEST(GURLTest, PathForRequest) {
     {"filesystem:http://www.google.com/temporary/foo/bar.html?query", "/foo/bar.html?query", "/temporary"},
   };
 
-  for (size_t i = 0; i < arraysize(cases); i++) {
+  for (size_t i = 0; i < base::size(cases); i++) {
     GURL url(cases[i].input);
     std::string path_request = url.PathForRequest();
     EXPECT_EQ(cases[i].expected, path_request);
@@ -580,7 +585,7 @@ TEST(GURLTest, EffectiveIntPort) {
     {"filesystem:file:///t/foo", PORT_UNSPECIFIED},
   };
 
-  for (size_t i = 0; i < arraysize(port_tests); i++) {
+  for (size_t i = 0; i < base::size(port_tests); i++) {
     GURL url(port_tests[i].spec);
     EXPECT_EQ(port_tests[i].expected_int_port, url.EffectiveIntPort());
   }
@@ -601,7 +606,7 @@ TEST(GURLTest, IPAddress) {
     {"some random input!", false},
   };
 
-  for (size_t i = 0; i < arraysize(ip_tests); i++) {
+  for (size_t i = 0; i < base::size(ip_tests); i++) {
     GURL url(ip_tests[i].spec);
     EXPECT_EQ(ip_tests[i].expected_ip, url.HostIsIPAddress());
   }
@@ -626,7 +631,7 @@ TEST(GURLTest, HostNoBrackets) {
     {"http://]/", "]", "]"},
     {"", "", ""},
   };
-  for (size_t i = 0; i < arraysize(cases); i++) {
+  for (size_t i = 0; i < base::size(cases); i++) {
     GURL url(cases[i].input);
     EXPECT_EQ(cases[i].expected_host, url.host());
     EXPECT_EQ(cases[i].expected_plainhost, url.HostNoBrackets());
@@ -760,13 +765,66 @@ TEST(GURLTest, SchemeIsCryptographic) {
   EXPECT_FALSE(GURL("ws://foo.bar.com/").SchemeIsCryptographic());
 }
 
+TEST(GURLTest, SchemeIsCryptographicStatic) {
+  EXPECT_TRUE(GURL::SchemeIsCryptographic("https"));
+  EXPECT_TRUE(GURL::SchemeIsCryptographic("wss"));
+  EXPECT_FALSE(GURL::SchemeIsCryptographic("http"));
+  EXPECT_FALSE(GURL::SchemeIsCryptographic("ws"));
+  EXPECT_FALSE(GURL::SchemeIsCryptographic("ftp"));
+}
+
 TEST(GURLTest, SchemeIsBlob) {
   EXPECT_TRUE(GURL("BLOB://BAR/").SchemeIsBlob());
   EXPECT_TRUE(GURL("blob://bar/").SchemeIsBlob());
   EXPECT_FALSE(GURL("http://bar/").SchemeIsBlob());
 }
 
-TEST(GURLTest, ContentAndPathForNonStandardURLs) {
+// Tests that the 'content' of the URL is properly extracted. This can be
+// complex in cases such as multiple schemes (view-source:http:) or for
+// javascript URLs. See GURL::GetContent for more details.
+TEST(GURLTest, ContentForNonStandardURLs) {
+  struct TestCase {
+    const char* url;
+    const char* expected;
+  } cases[] = {
+      {"null", ""},
+      {"not-a-standard-scheme:this is arbitrary content",
+       "this is arbitrary content"},
+
+      // When there are multiple schemes, only the first is excluded from the
+      // content. Note also that for e.g. 'http://', the '//' is part of the
+      // content not the scheme.
+      {"view-source:http://example.com/path", "http://example.com/path"},
+      {"blob:http://example.com/GUID", "http://example.com/GUID"},
+      {"blob://http://example.com/GUID", "//http://example.com/GUID"},
+      {"blob:http://user:password@example.com/GUID",
+       "http://user:password@example.com/GUID"},
+
+      // The octothorpe character ('#') marks the end of the URL content, and
+      // the start of the fragment. It should not be included in the content.
+      {"http://www.example.com/GUID#ref", "www.example.com/GUID"},
+      {"http://me:secret@example.com/GUID/#ref", "me:secret@example.com/GUID/"},
+      {"data:text/html,Question?<div style=\"color: #bad\">idea</div>",
+       "text/html,Question?<div style=\"color: "},
+
+      // TODO(mkwst): This seems like a bug. https://crbug.com/513600
+      {"filesystem:http://example.com/path", "/"},
+
+      // Javascript URLs include '#' symbols in their content.
+      {"javascript:#", "#"},
+      {"javascript:alert('#');", "alert('#');"},
+  };
+
+  for (const auto& test : cases) {
+    GURL url(test.url);
+    EXPECT_EQ(test.expected, url.GetContent()) << test.url;
+  }
+}
+
+// Tests that the URL path is properly extracted for unusual URLs. This can be
+// complex in cases such as multiple schemes (view-source:http:) or when
+// octothorpes ('#') are involved.
+TEST(GURLTest, PathForNonStandardURLs) {
   struct TestCase {
     const char* url;
     const char* expected;
@@ -780,6 +838,11 @@ TEST(GURLTest, ContentAndPathForNonStandardURLs) {
       {"blob:http://user:password@example.com/GUID",
        "http://user:password@example.com/GUID"},
 
+      {"http://www.example.com/GUID#ref", "/GUID"},
+      {"http://me:secret@example.com/GUID/#ref", "/GUID/"},
+      {"data:text/html,Question?<div style=\"color: #bad\">idea</div>",
+       "text/html,Question"},
+
       // TODO(mkwst): This seems like a bug. https://crbug.com/513600
       {"filesystem:http://example.com/path", "/"},
   };
@@ -787,7 +850,6 @@ TEST(GURLTest, ContentAndPathForNonStandardURLs) {
   for (const auto& test : cases) {
     GURL url(test.url);
     EXPECT_EQ(test.expected, url.path()) << test.url;
-    EXPECT_EQ(test.expected, url.GetContent()) << test.url;
   }
 }
 

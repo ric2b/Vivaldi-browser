@@ -19,6 +19,7 @@
 <translation id="1274977772557788323">Opslaginstellingen voor Adobe Flash Player</translation>
 <translation id="1297175357211070620">Bestemming</translation>
 <translation id="1303101771013849280">Html-bladwijzerbestand</translation>
+<translation id="1380436189840894976">Privémodus toch stoppen?</translation>
 <translation id="1430915738399379752">Afdrukken</translation>
 <translation id="1433811987160647649">Goedkeuring vragen vóór toegang</translation>
 <translation id="1451375123200651445">Webpagina, één bestand</translation>
@@ -30,13 +31,13 @@
 <translation id="1603914832182249871">(Privé)</translation>
 <translation id="1620510694547887537">Camera</translation>
 <translation id="1635033183663317347">Geïnstalleerd door je ouder/verzorger.</translation>
+<translation id="1682548588986054654">Nieuw privévenster</translation>
 <translation id="1698122934742150150">Alleen huidige privésessie</translation>
 <translation id="1706625117072057435">Zoomniveaus</translation>
 <translation id="1708338024780164500">(Inactief)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
 <translation id="1723824996674794290">&amp;Nieuw venster</translation>
 <translation id="1729533290416704613">Hiermee wordt ook bepaald welke pagina wordt weergegeven wanneer je vanuit het adresveld zoekt.</translation>
-<translation id="1731589410171062430">Totaal: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /> (<ph name="NUMBER_OF_PAGES" /> <ph name="PAGE_OR_PAGES_LABEL" />)</translation>
 <translation id="1744108098763830590">achtergrondpagina</translation>
 <translation id="1805822111539868586">Weergaven bekijken</translation>
 <translation id="1828901632669367785">Afdrukken met systeemdialoogvenster...</translation>
@@ -46,7 +47,6 @@
 <translation id="1901303067676059328">&amp;Alles selecteren</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">Alles verwijderen</translation>
-<translation id="1974060860693918893">Geavanceerd</translation>
 <translation id="1989112275319619282">Verkennen</translation>
 <translation id="1992397118740194946">Niet ingesteld</translation>
 <translation id="1994173015038366702">Website-URL</translation>
@@ -93,9 +93,7 @@
 <translation id="26224892172169984">Niet toestaan dat websites protocollen verwerken</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Opnieuw inschakelen</translation>
-<translation id="2679385451463308372">Afdrukken via het dialoogvenster van het systeem…</translation>
 <translation id="2721037002783622288">Afbeelding &amp;zoeken in <ph name="SEARCH_ENGINE" /></translation>
-<translation id="2726934403674109201">(<ph name="COUNT" /> in totaal)</translation>
 <translation id="2785873697295365461">Bestandsdescriptors</translation>
 <translation id="2809586584051668049">en <ph name="NUMBER_ADDITIONAL_DISABLED" /> andere</translation>
 <translation id="2812989263793994277">Geen afbeeldingen weergeven</translation>
@@ -103,7 +101,6 @@
 <translation id="2850541429955027218">Thema toevoegen</translation>
 <translation id="2861941300086904918">Beveiligingsbeheerder voor Native Client</translation>
 <translation id="2889064240420137087">Link openen met...</translation>
-<translation id="2890678560483811744">Paginaverwijzing valt buiten bereik</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> kan niet communiceren met deze printer. Controleer of de printer is aangesloten en probeer het opnieuw.</translation>
 <translation id="2904456025988372123">Goedkeuring vragen als een website na het eerste bestand probeert aanvullende bestanden automatisch te downloaden</translation>
 <translation id="2913331724188855103">Websites toestaan cookiegegevens op te slaan en te lezen (aanbevolen)</translation>
@@ -130,20 +127,17 @@
 <translation id="3222066309010235055">PreRender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Microfoon</translation>
 <translation id="3241680850019875542">Selecteer de hoofddirectory van de extensie die je wilt inpakken. Als je een extensie wilt bijwerken, selecteer je ook het privésleutelbestand om dit opnieuw te gebruiken.</translation>
-<translation id="3269093882174072735">Afbeelding laden</translation>
 <translation id="3280237271814976245">&amp;Opslaan als...</translation>
 <translation id="3288047731229977326">Extensies die in ontwikkelaarsmodus worden uitgevoerd, kunnen je computer beschadigen. Als je geen ontwikkelaar bent, dien je om veiligheidsredenen zulke extensies uit te schakelen.</translation>
 <translation id="329838636886466101">Herstellen</translation>
 <translation id="3303818374450886607">Aantal</translation>
 <translation id="3305661444342691068">Pdf openen in voorbeeldweergave</translation>
 <translation id="3317459757438853210">Dubbelzijdig</translation>
-<translation id="3319048459796106952">Nieuw pr&amp;ivévenster</translation>
 <translation id="3341703758641437857">Toegang geven tot bestands-URL's</translation>
 <translation id="3347086966102161372">A&amp;dres van afbeelding kopiëren</translation>
 <translation id="3360297538363969800">Afdrukken is mislukt. Controleer de printer en probeer het opnieuw.</translation>
 <translation id="3378503599595235699">Lokale gegevens alleen bewaren totdat je je browser sluit</translation>
 <translation id="3378572629723696641">Deze extensie is mogelijk beschadigd.</translation>
-<translation id="3396331542604645348">De geselecteerde printer is niet beschikbaar of niet correct geïnstalleerd. Controleer de printer of probeer een andere printer te selecteren.</translation>
 <translation id="3432227430032737297">Alle weergegeven verwijderen</translation>
 <translation id="3435896845095436175">Inschakelen</translation>
 <translation id="3440761377721825626">Goedkeuring vragen wanneer een website een plug-in wil gebruiken om toegang tot je computer te krijgen</translation>
@@ -153,6 +147,7 @@
 <translation id="3505030558724226696">Apparaattoegang intrekken</translation>
 <translation id="3523642406908660543">Goedkeuring vragen wanneer een website een plug-in wil gebruiken om toegang tot je computer te krijgen (aanbevolen)</translation>
 <translation id="354068948465830244">Kan websitegegevens lezen en wijzigen</translation>
+<translation id="3574917942258583917">Privémodus toch afsluiten?</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; wil een printer delen &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; met een van je groepen: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Als je akkoord gaat, kunnen alle groepsleden de printer gebruiken voor afdrukken.</translation>
 <translation id="3587482841069643663">Alles</translation>
 <translation id="3627588569887975815">Link openen in privévenster</translation>
@@ -165,6 +160,7 @@
 <translation id="3797900183766075808"><ph name="SEARCH_ENGINE" /> door&amp;zoeken op '<ph name="SEARCH_TERMS" />'</translation>
 <translation id="3798449238516105146">Versie</translation>
 <translation id="3800806661949714323">Alles weergeven (aanbevolen)</translation>
+<translation id="3810973564298564668">Beheren</translation>
 <translation id="383891835335927981">Er zijn geen websites in- of uitgezoomd</translation>
 <translation id="385051799172605136">Vorige</translation>
 <translation id="3855441664322950881">Extensie inpakken</translation>
@@ -210,7 +206,6 @@
 <translation id="4593021220803146968">&amp;Ga naar <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apps en extensies kunnen alleen worden aangepast door de beheerder (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Een extensie heeft de pagina gewijzigd die wordt weergegeven wanneer je een nieuwe tab opent.</translation>
-<translation id="4628314759732363424">Wijzigen...</translation>
 <translation id="4677772697204437347">GPU-geheugen</translation>
 <translation id="4681930562518940301">Open oorspronkelijke &amp;afbeelding in nieuwe tab</translation>
 <translation id="4688541352655220763">Je kunt deze functie gebruiken om het beeld van Vivaldi weer te geven op je tv of andere apparaten.</translation>
@@ -242,17 +237,15 @@
 <translation id="5233736638227740678">&amp;Plakken</translation>
 <translation id="5265562206369321422">Langer dan een week offline</translation>
 <translation id="5269977353971873915">Afdrukken mislukt</translation>
-<translation id="5271549068863921519">Wachtwoord opslaan</translation>
 <translation id="52912272896845572">Privésleutelbestand is ongeldig.</translation>
 <translation id="5301954838959518834">OK</translation>
 <translation id="5317780077021120954">Opslaan</translation>
-<translation id="5329858601952122676">Verwij&amp;deren</translation>
 <translation id="5355926466126177564">De extensie "<ph name="EXTENSION_NAME" />" heeft gewijzigd welke pagina wordt weergegeven wanneer je vanuit het adresveld zoekt.</translation>
 <translation id="5362741141255528695">Selecteer een privésleutelbestand.</translation>
 <translation id="5370819323174483825">&amp;Herladen</translation>
 <translation id="5398572795982417028">Paginaverwijzing valt buiten bereik, limiet is <ph name="MAXIMUM_PAGE" /></translation>
+<translation id="5425042808445046667">Doorgaan met downloaden</translation>
 <translation id="5431318178759467895">Kleur</translation>
-<translation id="5451285724299252438">tekstvak voor paginabereik</translation>
 <translation id="5483785310822538350">Toegang tot bestand en apparaat intrekken</translation>
 <translation id="5485102783864353244">App toevoegen</translation>
 <translation id="5487521232677179737">Gegevens wissen</translation>
@@ -262,7 +255,6 @@
 <translation id="5542132724887566711">Profiel</translation>
 <translation id="5556459405103347317">Opnieuw laden</translation>
 <translation id="5575473780076478375">Privémodusextensie: <ph name="EXTENSION_NAME" /></translation>
-<translation id="5581700288664681403"><ph name="CLOUD_PRINT_NAME" /> laden</translation>
 <translation id="5614553682702429503">Wachtwoord opslaan?</translation>
 <translation id="5623842676595125836">Log</translation>
 <translation id="5627086634964711283">Hiermee wordt ook gecontroleerd welke pagina wordt weergegeven wanneer je op de knop 'Homepage' klikt.</translation>
@@ -273,15 +265,16 @@
 <translation id="5707185214361380026">Fout bij het inladen van de extensie vanaf:</translation>
 <translation id="5715711091495208045">Plug-inbroker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Opslaan als pdf</translation>
+<translation id="5747809636523347288">Pl&amp;akken en naar <ph name="URL" /> gaan</translation>
 <translation id="5759728514498647443">Documenten die je via <ph name="APP_NAME" /> verzendt om af te drukken, kunnen door <ph name="APP_NAME" /> worden gelezen.</translation>
 <translation id="5764483294734785780">Audio op&amp;slaan als...</translation>
 <translation id="577624874850706961">Cookies zoeken</translation>
 <translation id="5780973441651030252">Procesprioriteit</translation>
 <translation id="5804241973901381774">Rechten</translation>
 <translation id="5828633471261496623">Bezig met afdrukken...</translation>
-<translation id="5829401023154985950">Beheren...</translation>
 <translation id="583281660410589416">Onbekend</translation>
 <translation id="5838456317242088717">Huidige privésessie</translation>
+<translation id="5877584842898320529">De geselecteerde printer is niet beschikbaar of niet correct geïnstalleerd.<ph name="BR" />Controleer de printer of probeer een andere printer te selecteren.</translation>
 <translation id="5908769186679515905">Niet toestaan dat websites Flash uitvoeren</translation>
 <translation id="5956585768868398362">Is dit de zoekpagina die je verwachtte?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> piek)</translation>
@@ -321,6 +314,7 @@
 <translation id="6498249116389603658">&amp;Al je talen</translation>
 <translation id="6503077044568424649">Meest bezocht</translation>
 <translation id="6508261954199872201">Applicatie: <ph name="APP_NAME" /></translation>
+<translation id="6516243500644829484">Nieuw privévenster</translation>
 <translation id="6518014396551869914">Afbeelding &amp;kopiëren</translation>
 <translation id="6550675742724504774">Opties</translation>
 <translation id="6612358246767739896">Beveiligde inhoud</translation>
@@ -334,7 +328,6 @@
 <translation id="6787839852456839824">Sneltoetsen</translation>
 <translation id="6788210894632713004">Uitgepakte extensie</translation>
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
-<translation id="6807889908376551050">Alles weergeven...</translation>
 <translation id="6812841287760418429">Wijzigingen behouden</translation>
 <translation id="6817174620439930047">Goedkeuring vragen als een website berichten exclusief voor het systeem wil gebruiken om toegang te krijgen tot MIDI-apparaten (aanbevolen)</translation>
 <translation id="682123305478866682">Bureaublad casten</translation>
@@ -374,6 +367,7 @@
 <translation id="7701040980221191251">Geen</translation>
 <translation id="7704305437604973648">Taak</translation>
 <translation id="7710568461918838723">&amp;Casten...</translation>
+<translation id="7750228210027921155">Beeld-in-beeld</translation>
 <translation id="7751260505918304024">Alles weergeven</translation>
 <translation id="7760004034676677601">Is dit de startpagina die je verwachtte?</translation>
 <translation id="7771452384635174008">Opmaak</translation>
@@ -405,6 +399,7 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="8137559199583651773">Extensies beheren</translation>
 <translation id="8180239481735238521">pagina</translation>
 <translation id="8188120771410500975">Spelling van tekstvelden controleren</translation>
+<translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Download wordt uitgevoerd}other{Downloads worden uitgevoerd}}</translation>
 <translation id="8230134520748321204">Wachtwoord opslaan voor <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Deze extensie wordt niet vermeld in de <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> en is mogelijk zonder je medeweten toegevoegd.</translation>
 <translation id="8270242299912238708">PDF-documenten</translation>
@@ -412,7 +407,6 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="8339059274628563283">Lokaal opgeslagen gegevens voor <ph name="SITE" /></translation>
 <translation id="8351419472474436977">Deze extensie heeft het beheer van je proxyinstellingen overgenomen. Dit betekent dat de extensie alles wat je online doet, kan wijzigen, beschadigen of bekijken. Als je niet zeker weet waarom deze wijziging heeft plaatsgevonden, is het waarschijnlijk een ongewenste wijziging.</translation>
 <translation id="8382913212082956454">&amp;E-mailadres kopiëren</translation>
-<translation id="839736845446313156">Registreren</translation>
 <translation id="8413385045638830869">Eerst vragen (aanbevolen)</translation>
 <translation id="8523849605371521713">Toegevoegd door beleidsregel</translation>
 <translation id="8546306075665861288">Cachegeheugen met afbeeldingen</translation>
@@ -422,8 +416,6 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="8615618338313291042">Privémodustoepassing: <ph name="APP_NAME" /></translation>
 <translation id="8627151598708688654">Selecteer bron</translation>
 <translation id="862750493060684461">CSS-cachegeheugen</translation>
-<translation id="8652487083013326477">keuzerondje voor paginabereik</translation>
-<translation id="8658595122208653918">Printeropties wijzigen...</translation>
 <translation id="8664389313780386848">&amp;Paginabron weergeven</translation>
 <translation id="8708000541097332489">Wissen bij het verlaten</translation>
 <translation id="8714838604780058252">Achtergrondbeelden</translation>
@@ -437,8 +429,8 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8813811964357448561">vel papier</translation>
 <translation id="8823514049557262177">Link&amp;tekst kopiëren</translation>
+<translation id="8823704566850948458">Wachtwoord voorstellen...</translation>
 <translation id="8859174528519900719">Subframe: <ph name="SUBFRAME_SITE" /></translation>
-<translation id="8876309039915144086">Wachtwoord genereren...</translation>
 <translation id="8899851313684471736">Link openen in &amp;nieuw venster</translation>
 <translation id="8910146161325739742">Je scherm delen</translation>
 <translation id="8915370057835397490">Suggesties worden geladen</translation>
@@ -450,6 +442,7 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="9003647077635673607">Toestaan op alle webpagina's</translation>
 <translation id="9056810968620647706">Geen overeenkomsten gevonden.</translation>
 <translation id="9137916601698928395">Link openen als <ph name="USER" /></translation>
+<translation id="916607977885256133">Beeld-in-beeld</translation>
 <translation id="9170848237812810038">Ongedaan &amp;maken</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" toegevoegd</translation>
 <translation id="9218430445555521422">Instellen als standaard</translation>

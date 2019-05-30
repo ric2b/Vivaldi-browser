@@ -34,7 +34,7 @@ import org.chromium.chrome.browser.omnibox.geo.GeolocationHeaderUnitTest.ShadowU
 import org.chromium.chrome.browser.omnibox.geo.GeolocationHeaderUnitTest.ShadowWebsitePreferenceBridge;
 import org.chromium.chrome.browser.omnibox.geo.VisibleNetworks.VisibleCell;
 import org.chromium.chrome.browser.omnibox.geo.VisibleNetworks.VisibleWifi;
-import org.chromium.chrome.browser.preferences.website.ContentSetting;
+import org.chromium.chrome.browser.preferences.website.ContentSettingValues;
 import org.chromium.chrome.browser.preferences.website.WebsitePreferenceBridge;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.UrlUtilities;
@@ -92,8 +92,8 @@ public class GeolocationHeaderUnitTest {
             "CAEQDLoBJAoeChExMToxMToxMToxMToxMToxMRD___________8BGAEgCroBJAoeChExMToxMToxMToxMTox"
             + "MToxMxDi__________8BGAAgHroBEBIKCAMQChgLIAwoDRgBIAq6ARASCggBEBQYFSAWKBcYACAU";
 
-    private static int sRefreshVisibleNetworksRequests = 0;
-    private static int sRefreshLastKnownLocation = 0;
+    private static int sRefreshVisibleNetworksRequests;
+    private static int sRefreshLastKnownLocation;
 
     @Rule
     public TestRule mFeatureProcessor = new Features.JUnitProcessor();
@@ -316,9 +316,9 @@ public class GeolocationHeaderUnitTest {
         }
 
         @Implementation
-        public static int nativeGetGeolocationSettingForOrigin(
+        public static @ContentSettingValues int nativeGetGeolocationSettingForOrigin(
                 String origin, String embedder, boolean isIncognito) {
-            return ContentSetting.ALLOW.toInt();
+            return ContentSettingValues.ALLOW;
         }
     }
 

@@ -220,7 +220,8 @@ bool InputInjectorX11::Core::Init() {
   CHECK(display_);
 
   if (!task_runner_->BelongsToCurrentThread())
-    task_runner_->PostTask(FROM_HERE, base::Bind(&Core::InitClipboard, this));
+    task_runner_->PostTask(FROM_HERE,
+                           base::BindOnce(&Core::InitClipboard, this));
 
   root_window_ = XRootWindow(display_, DefaultScreen(display_));
   if (root_window_ == BadValue) {
@@ -240,7 +241,7 @@ void InputInjectorX11::Core::InjectClipboardEvent(
     const ClipboardEvent& event) {
   if (!task_runner_->BelongsToCurrentThread()) {
     task_runner_->PostTask(
-        FROM_HERE, base::Bind(&Core::InjectClipboardEvent, this, event));
+        FROM_HERE, base::BindOnce(&Core::InjectClipboardEvent, this, event));
     return;
   }
 
@@ -255,7 +256,7 @@ void InputInjectorX11::Core::InjectKeyEvent(const KeyEvent& event) {
 
   if (!task_runner_->BelongsToCurrentThread()) {
     task_runner_->PostTask(FROM_HERE,
-                           base::Bind(&Core::InjectKeyEvent, this, event));
+                           base::BindOnce(&Core::InjectKeyEvent, this, event));
     return;
   }
 
@@ -302,21 +303,9 @@ void InputInjectorX11::Core::InjectKeyEvent(const KeyEvent& event) {
       SetLockStates(caps_lock, num_lock);
     }
 
-    if (pressed_keys_.empty()) {
-      // Disable auto-repeat, if necessary, to avoid triggering auto-repeat
-      // if network congestion delays the key-up event from the client.
-      saved_auto_repeat_enabled_ = IsAutoRepeatEnabled();
-      if (saved_auto_repeat_enabled_)
-        SetAutoRepeatEnabled(false);
-    }
     pressed_keys_.insert(keycode);
   } else {
     pressed_keys_.erase(keycode);
-    if (pressed_keys_.empty()) {
-      // Re-enable auto-repeat, if necessary, when all keys are released.
-      if (saved_auto_repeat_enabled_)
-        SetAutoRepeatEnabled(true);
-    }
   }
 
   XTestFakeKeyEvent(display_, keycode, event.pressed(), x11::CurrentTime);
@@ -326,7 +315,7 @@ void InputInjectorX11::Core::InjectKeyEvent(const KeyEvent& event) {
 void InputInjectorX11::Core::InjectTextEvent(const TextEvent& event) {
   if (!task_runner_->BelongsToCurrentThread()) {
     task_runner_->PostTask(FROM_HERE,
-                           base::Bind(&Core::InjectTextEvent, this, event));
+                           base::BindOnce(&Core::InjectTextEvent, this, event));
     return;
   }
 
@@ -371,6 +360,7 @@ void InputInjectorX11::Core::SetAutoRepeatEnabled(bool mode) {
   XKeyboardControl control;
   control.auto_repeat_mode = mode ? AutoRepeatModeOn : AutoRepeatModeOff;
   XChangeKeyboardControl(display_, KBAutoRepeatMode, &control);
+  XFlush(display_);
 }
 
 bool InputInjectorX11::Core::IsLockKey(KeyCode keycode) {
@@ -427,8 +417,8 @@ void InputInjectorX11::Core::InjectScrollWheelClicks(int button, int count) {
 
 void InputInjectorX11::Core::InjectMouseEvent(const MouseEvent& event) {
   if (!task_runner_->BelongsToCurrentThread()) {
-    task_runner_->PostTask(FROM_HERE,
-                           base::Bind(&Core::InjectMouseEvent, this, event));
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&Core::InjectMouseEvent, this, event));
     return;
   }
 
@@ -634,7 +624,7 @@ void InputInjectorX11::Core::Start(
   if (!task_runner_->BelongsToCurrentThread()) {
     task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&Core::Start, this, base::Passed(&client_clipboard)));
+        base::BindOnce(&Core::Start, this, std::move(client_clipboard)));
     return;
   }
 
@@ -644,16 +634,27 @@ void InputInjectorX11::Core::Start(
 
   character_injector_.reset(
       new X11CharacterInjector(std::make_unique<X11KeyboardImpl>(display_)));
+
+  // Disable auto-repeat, if necessary, to avoid triggering auto-repeat
+  // if network congestion delays the key-up event from the client. This is
+  // done for the duration of the session because some window managers do
+  // not handle changes to this setting efficiently.
+  saved_auto_repeat_enabled_ = IsAutoRepeatEnabled();
+  if (saved_auto_repeat_enabled_)
+    SetAutoRepeatEnabled(false);
 }
 
 void InputInjectorX11::Core::Stop() {
   if (!task_runner_->BelongsToCurrentThread()) {
-    task_runner_->PostTask(FROM_HERE, base::Bind(&Core::Stop, this));
+    task_runner_->PostTask(FROM_HERE, base::BindOnce(&Core::Stop, this));
     return;
   }
 
   clipboard_.reset();
   character_injector_.reset();
+  // Re-enable auto-repeat, if necessary, on disconnect.
+  if (saved_auto_repeat_enabled_)
+    SetAutoRepeatEnabled(true);
 }
 
 }  // namespace

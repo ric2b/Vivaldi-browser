@@ -22,6 +22,10 @@
 - (void)showAccountsSettingsFromViewController:
     (UIViewController*)baseViewController;
 
+// Shows the Google services settings UI, presenting from |baseViewController|.
+- (void)showGoogleServicesSettingsFromViewController:
+    (UIViewController*)baseViewController;
+
 // TODO(crbug.com/779791) : Do not pass baseViewController through dispatcher.
 // Shows the sync settings UI, presenting from |baseViewController|.
 - (void)showSyncSettingsFromViewController:
@@ -35,6 +39,14 @@
 
 // Shows the list of saved passwords in the settings.
 - (void)showSavedPasswordsSettingsFromViewController:
+    (UIViewController*)baseViewController;
+
+// Shows the list of profiles (addresess) in the settings.
+- (void)showProfileSettingsFromViewController:
+    (UIViewController*)baseViewController;
+
+// Shows the list of credit cards in the settings.
+- (void)showCreditCardSettingsFromViewController:
     (UIViewController*)baseViewController;
 
 @end
@@ -75,10 +87,6 @@
 // Shows the TabSwitcher UI.
 - (void)displayTabSwitcher;
 
-// Shows the Clear Browsing Data Settings UI (part of Settings).
-- (void)showClearBrowsingDataSettingsFromViewController:
-    (UIViewController*)baseViewController;
-
 // TODO(crbug.com/779791) : Do not pass baseViewController through dispatcher.
 // Shows the Autofill Settings UI, presenting from |baseViewController|.
 - (void)showAutofillSettingsFromViewController:
@@ -89,6 +97,8 @@
     (UIViewController*)baseViewController;
 
 // Opens the |command| URL in a new tab.
+// TODO(crbug.com/907527): Check if it is possible to merge it with the
+// URLLoader methods.
 - (void)openURLInNewTab:(OpenNewTabCommand*)command;
 
 // TODO(crbug.com/779791) : Do not pass baseViewController through dispatcher.

@@ -35,31 +35,27 @@ SVGFilterPrimitiveStandardAttributes::SVGFilterPrimitiveStandardAttributes(
     const QualifiedName& tag_name,
     Document& document)
     : SVGElement(tag_name, document),
+      // Spec: If the x/y attribute is not specified, the effect is as if a
+      // value of "0%" were specified.
       x_(SVGAnimatedLength::Create(this,
-                                   SVGNames::xAttr,
-                                   SVGLength::Create(SVGLengthMode::kWidth))),
+                                   svg_names::kXAttr,
+                                   SVGLengthMode::kWidth,
+                                   SVGLength::Initial::kPercent0)),
       y_(SVGAnimatedLength::Create(this,
-                                   SVGNames::yAttr,
-                                   SVGLength::Create(SVGLengthMode::kHeight))),
-      width_(
-          SVGAnimatedLength::Create(this,
-                                    SVGNames::widthAttr,
-                                    SVGLength::Create(SVGLengthMode::kWidth))),
-      height_(
-          SVGAnimatedLength::Create(this,
-                                    SVGNames::heightAttr,
-                                    SVGLength::Create(SVGLengthMode::kHeight))),
-      result_(SVGAnimatedString::Create(this, SVGNames::resultAttr)) {
-  // Spec: If the x/y attribute is not specified, the effect is as if a value of
-  // "0%" were specified.
-  x_->SetDefaultValueAsString("0%");
-  y_->SetDefaultValueAsString("0%");
-
-  // Spec: If the width/height attribute is not specified, the effect is as if a
-  // value of "100%" were specified.
-  width_->SetDefaultValueAsString("100%");
-  height_->SetDefaultValueAsString("100%");
-
+                                   svg_names::kYAttr,
+                                   SVGLengthMode::kHeight,
+                                   SVGLength::Initial::kPercent0)),
+      // Spec: If the width/height attribute is not specified, the effect is as
+      // if a value of "100%" were specified.
+      width_(SVGAnimatedLength::Create(this,
+                                       svg_names::kWidthAttr,
+                                       SVGLengthMode::kWidth,
+                                       SVGLength::Initial::kPercent100)),
+      height_(SVGAnimatedLength::Create(this,
+                                        svg_names::kHeightAttr,
+                                        SVGLengthMode::kHeight,
+                                        SVGLength::Initial::kPercent100)),
+      result_(SVGAnimatedString::Create(this, svg_names::kResultAttr)) {
   AddToPropertyMap(x_);
   AddToPropertyMap(y_);
   AddToPropertyMap(width_);
@@ -79,7 +75,7 @@ void SVGFilterPrimitiveStandardAttributes::Trace(blink::Visitor* visitor) {
 bool SVGFilterPrimitiveStandardAttributes::SetFilterEffectAttribute(
     FilterEffect* effect,
     const QualifiedName& attr_name) {
-  DCHECK(attr_name == SVGNames::color_interpolation_filtersAttr);
+  DCHECK(attr_name == svg_names::kColorInterpolationFiltersAttr);
   DCHECK(GetLayoutObject());
   EColorInterpolation color_interpolation =
       GetLayoutObject()->StyleRef().SvgStyle().ColorInterpolationFilters();
@@ -93,9 +89,10 @@ bool SVGFilterPrimitiveStandardAttributes::SetFilterEffectAttribute(
 
 void SVGFilterPrimitiveStandardAttributes::SvgAttributeChanged(
     const QualifiedName& attr_name) {
-  if (attr_name == SVGNames::xAttr || attr_name == SVGNames::yAttr ||
-      attr_name == SVGNames::widthAttr || attr_name == SVGNames::heightAttr ||
-      attr_name == SVGNames::resultAttr) {
+  if (attr_name == svg_names::kXAttr || attr_name == svg_names::kYAttr ||
+      attr_name == svg_names::kWidthAttr ||
+      attr_name == svg_names::kHeightAttr ||
+      attr_name == svg_names::kResultAttr) {
     SVGElement::InvalidationGuard invalidation_guard(this);
     Invalidate();
     return;

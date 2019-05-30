@@ -34,7 +34,7 @@
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
-#include "third_party/blink/renderer/platform/web_task_runner.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 
 namespace blink {
@@ -69,8 +69,8 @@ AudioScheduledSourceHandler::UpdateSchedulingInfo(size_t quantum_frame_size,
   }
 
   DCHECK_EQ(quantum_frame_size,
-            static_cast<size_t>(AudioUtilities::kRenderQuantumFrames));
-  if (quantum_frame_size != AudioUtilities::kRenderQuantumFrames) {
+            static_cast<size_t>(audio_utilities::kRenderQuantumFrames));
+  if (quantum_frame_size != audio_utilities::kRenderQuantumFrames) {
     return std::make_tuple(quantum_frame_offset, non_silent_frames_to_process,
                            start_frame_offset);
   }
@@ -83,12 +83,22 @@ AudioScheduledSourceHandler::UpdateSchedulingInfo(size_t quantum_frame_size,
   // endFrame              : End frame for this source.
   size_t quantum_start_frame = Context()->CurrentSampleFrame();
   size_t quantum_end_frame = quantum_start_frame + quantum_frame_size;
-  size_t start_frame =
-      AudioUtilities::TimeToSampleFrame(start_time_, sample_rate);
-  size_t end_frame =
-      end_time_ == kUnknownTime
-          ? 0
-          : AudioUtilities::TimeToSampleFrame(end_time_, sample_rate);
+
+  // Round up if the start_time isn't on a frame boundary so we don't start too
+  // early.
+  size_t start_frame = audio_utilities::TimeToSampleFrame(
+      start_time_, sample_rate, audio_utilities::kRoundUp);
+  size_t end_frame = 0;
+
+  if (end_time_ == kUnknownTime) {
+    end_frame = 0;
+  } else {
+    // The end frame is the end time rounded up because it is an exclusive upper
+    // bound of the end time.  We also need to take care to handle huge end
+    // times and clamp the corresponding frame to the largest size_t value.
+    end_frame = audio_utilities::TimeToSampleFrame(end_time_, sample_rate,
+                                                   audio_utilities::kRoundUp);
+  }
 
   // If we know the end time and it's already passed, then don't bother doing
   // any more rendering this cycle.
@@ -112,6 +122,8 @@ AudioScheduledSourceHandler::UpdateSchedulingInfo(size_t quantum_frame_size,
     // SCHEDULED_STATE to PLAYING_STATE.
     SetPlaybackState(PLAYING_STATE);
     // Determine the offset of the true start time from the starting frame.
+    // NOTE: start_frame_offset is usually negative, but may not be because of
+    // the rounding that may happen in computing |start_frame| above.
     start_frame_offset = start_time_ * sample_rate - start_frame;
   } else {
     start_frame_offset = 0;
@@ -147,11 +159,13 @@ AudioScheduledSourceHandler::UpdateSchedulingInfo(size_t quantum_frame_size,
     size_t zero_start_frame = end_frame - quantum_start_frame;
     size_t frames_to_zero = quantum_frame_size - zero_start_frame;
 
+    DCHECK_LT(zero_start_frame, quantum_frame_size);
+    DCHECK_LE(frames_to_zero, quantum_frame_size);
+    DCHECK_LE(zero_start_frame + frames_to_zero, quantum_frame_size);
+
     bool is_safe = zero_start_frame < quantum_frame_size &&
                    frames_to_zero <= quantum_frame_size &&
                    zero_start_frame + frames_to_zero <= quantum_frame_size;
-    DCHECK(is_safe);
-
     if (is_safe) {
       if (frames_to_zero > non_silent_frames_to_process)
         non_silent_frames_to_process = 0;
@@ -252,7 +266,7 @@ void AudioScheduledSourceHandler::NotifyEnded() {
   if (!Context() || !Context()->GetExecutionContext())
     return;
   if (GetNode())
-    GetNode()->DispatchEvent(*Event::Create(EventTypeNames::ended));
+    GetNode()->DispatchEvent(*Event::Create(event_type_names::kEnded));
 }
 
 // ----------------------------------------------------------------
@@ -284,22 +298,24 @@ void AudioScheduledSourceNode::stop(double when,
 }
 
 EventListener* AudioScheduledSourceNode::onended() {
-  return GetAttributeEventListener(EventTypeNames::ended);
+  return GetAttributeEventListener(event_type_names::kEnded);
 }
 
 void AudioScheduledSourceNode::setOnended(EventListener* listener) {
-  SetAttributeEventListener(EventTypeNames::ended, listener);
+  SetAttributeEventListener(event_type_names::kEnded, listener);
 }
 
 bool AudioScheduledSourceNode::HasPendingActivity() const {
   // To avoid the leak, a node should be collected regardless of its
   // playback state if the context is closed.
-  if (context()->IsContextClosed())
+  if (context()->ContextState() == BaseAudioContext::kClosed) {
     return false;
+  }
 
   // If a node is scheduled or playing, do not collect the node prematurely
   // even its reference is out of scope. Then fire onended event if assigned.
-  return GetAudioScheduledSourceHandler().IsPlayingOrScheduled();
+  return ContainsHandler() &&
+         GetAudioScheduledSourceHandler().IsPlayingOrScheduled();
 }
 
 }  // namespace blink

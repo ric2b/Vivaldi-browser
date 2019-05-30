@@ -15,6 +15,7 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.download.home.DownloadManagerCoordinator;
 import org.chromium.chrome.browser.download.home.DownloadManagerCoordinatorFactory;
+import org.chromium.chrome.browser.download.home.DownloadManagerUiConfig;
 import org.chromium.chrome.browser.native_page.BasicNativePage;
 import org.chromium.chrome.browser.native_page.NativePageHost;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarManageable;
@@ -41,9 +42,13 @@ public class DownloadPage extends BasicNativePage implements DownloadManagerCoor
     protected void initialize(ChromeActivity activity, final NativePageHost host) {
         ThreadUtils.assertOnUiThread();
 
-        mDownloadCoordinator = DownloadManagerCoordinatorFactory.create(activity,
-                host.isIncognito(), ((SnackbarManageable) activity).getSnackbarManager(),
-                activity.getComponentName(), false /* isSeparateActivity */);
+        DownloadManagerUiConfig config = new DownloadManagerUiConfig.Builder()
+                                                 .setIsOffTheRecord(host.isIncognito())
+                                                 .setIsSeparateActivity(false)
+                                                 .build();
+        mDownloadCoordinator = DownloadManagerCoordinatorFactory.create(activity, config,
+                ((SnackbarManageable) activity).getSnackbarManager(), activity.getComponentName(),
+                activity.getModalDialogManager());
 
         mDownloadCoordinator.addObserver(this);
         mTitle = activity.getString(R.string.menu_downloads);
@@ -94,6 +99,10 @@ public class DownloadPage extends BasicNativePage implements DownloadManagerCoor
     // DownloadManagerCoordinator.Observer implementation.
     @Override
     public void onUrlChanged(String url) {
-        onStateChange(url);
+        // We want to squash consecutive download home URLs having different filters into the one
+        // having the latest filter. This will avoid requiring user to press back button too many
+        // times to exit download home. In the event, chrome gets killed or if user navigates away
+        // from download home, we still will be able to come back to the latest filter.
+        onStateChange(url, true);
     }
 }

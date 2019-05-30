@@ -21,10 +21,10 @@
 #include "base/compiler_specific.h"
 #include "base/format_macros.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"  // For HexEncode.
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"  // For LowerCaseEqualsASCII.
@@ -34,6 +34,7 @@
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "net/base/auth.h"
+#include "net/base/features.h"
 #include "net/base/load_flags.h"
 #include "net/base/load_timing_info.h"
 #include "net/base/trace_constants.h"
@@ -201,7 +202,7 @@ HttpCache::Transaction::Transaction(RequestPriority priority, HttpCache* cache)
       weak_factory_(this) {
   TRACE_EVENT0("io", "HttpCacheTransaction::Transaction");
   static_assert(HttpCache::Transaction::kNumValidationHeaders ==
-                    arraysize(kValidationHeaders),
+                    base::size(kValidationHeaders),
                 "invalid number of validation headers");
 
   io_callback_ = base::BindRepeating(&Transaction::OnIOComplete,
@@ -553,6 +554,8 @@ bool HttpCache::Transaction::GetLoadTimingInfo(
   // This time doesn't make much sense when reading from the cache, so just use
   // the same time as send_start.
   load_timing_info->send_end = first_cache_access_since_;
+  // Provide the time immediately before parsing a cached entry.
+  load_timing_info->receive_headers_start = read_headers_since_;
   return true;
 }
 
@@ -1053,6 +1056,10 @@ int HttpCache::Transaction::DoGetBackendComplete(int result) {
   // function can be invoked multiple times for a transaction.
   mode_ = NONE;
 
+  // Keep track of the fraction of requests that we can double-key.
+  UMA_HISTOGRAM_BOOLEAN("HttpCache.TopFrameOriginPresent",
+                        request_->top_frame_origin.has_value());
+
   if (!ShouldPassThrough()) {
     cache_key_ = cache_->GenerateCacheKey(request_);
 
@@ -1326,8 +1333,8 @@ void HttpCache::Transaction::AddCacheLockTimeoutHandler(ActiveEntry* entry) {
        next_state_ == STATE_FINISH_HEADERS_COMPLETE)) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&HttpCache::Transaction::OnCacheLockTimeout,
-                   weak_factory_.GetWeakPtr(), entry_lock_waiting_since_));
+        base::BindOnce(&HttpCache::Transaction::OnCacheLockTimeout,
+                       weak_factory_.GetWeakPtr(), entry_lock_waiting_since_));
   } else {
     int timeout_milliseconds = 20 * 1000;
     if (partial_ && entry->writers && !entry->writers->IsEmpty() &&
@@ -1353,8 +1360,8 @@ void HttpCache::Transaction::AddCacheLockTimeoutHandler(ActiveEntry* entry) {
     }
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&HttpCache::Transaction::OnCacheLockTimeout,
-                   weak_factory_.GetWeakPtr(), entry_lock_waiting_since_),
+        base::BindOnce(&HttpCache::Transaction::OnCacheLockTimeout,
+                       weak_factory_.GetWeakPtr(), entry_lock_waiting_since_),
         TimeDelta::FromMilliseconds(timeout_milliseconds));
   }
 }
@@ -1460,6 +1467,9 @@ int HttpCache::Transaction::DoCacheReadResponseComplete(int result) {
   TRACE_EVENT0("io", "HttpCacheTransaction::DoCacheReadResponseComplete");
   net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_READ_INFO,
                                     result);
+
+  // Record the time immediately before the cached response is parsed.
+  read_headers_since_ = TimeTicks::Now();
   if (result != io_buf_len_ ||
       !HttpCache::ParseResponseInfo(read_buf_->data(), io_buf_len_, &response_,
                                     &truncated_)) {
@@ -1526,7 +1536,7 @@ int HttpCache::Transaction::DoCacheToggleUnusedSincePrefetch() {
 int HttpCache::Transaction::DoCacheToggleUnusedSincePrefetchComplete(
     int result) {
   TRACE_EVENT0(
-      kNetTracingCategory,
+      NetTracingCategory(),
       "HttpCacheTransaction::DoCacheToggleUnusedSincePrefetchComplete");
   // Restore the original value for this transaction.
   response_.unused_since_prefetch = !response_.unused_since_prefetch;
@@ -1788,7 +1798,7 @@ int HttpCache::Transaction::DoSuccessfulSendRequest() {
   // Invalidate any cached GET with a successful POST.
   if (!(effective_load_flags_ & LOAD_DISABLE_CACHE) && method_ == "POST" &&
       NonErrorResponse(new_response->headers->response_code())) {
-    cache_->DoomMainEntryForUrl(request_->url);
+    cache_->DoomMainEntryForUrl(request_->url, request_->top_frame_origin);
   }
 
   RecordNoStoreHeaderHistogram(request_->load_flags, new_response);
@@ -2029,7 +2039,8 @@ int HttpCache::Transaction::DoPartialHeadersReceived() {
   new_response_ = NULL;
 
   if (!partial_) {
-    if (entry_ && entry_->disk_entry->GetDataSize(kMetadataIndex)) {
+    if (entry_ && entry_->disk_entry->GetDataSize(kMetadataIndex) &&
+        !base::FeatureList::IsEnabled(net::features::kIsolatedCodeCache)) {
       TransitionToState(STATE_CACHE_READ_METADATA);
     } else {
       TransitionToState(STATE_FINISH_HEADERS);
@@ -2128,6 +2139,7 @@ int HttpCache::Transaction::DoCacheReadMetadata() {
   TRACE_EVENT0("io", "HttpCacheTransaction::DoCacheReadMetadata");
   DCHECK(entry_);
   DCHECK(!response_.metadata.get());
+  DCHECK(!base::FeatureList::IsEnabled(net::features::kIsolatedCodeCache));
   TransitionToState(STATE_CACHE_READ_METADATA_COMPLETE);
 
   response_.metadata = base::MakeRefCounted<IOBufferWithSize>(
@@ -2346,7 +2358,7 @@ void HttpCache::Transaction::SetRequest(const NetLogWithSource& net_log) {
   if (request_->extra_headers.HasHeader(HttpRequestHeaders::kRange))
     range_found = true;
 
-  for (size_t i = 0; i < arraysize(kSpecialHeaders); ++i) {
+  for (size_t i = 0; i < base::size(kSpecialHeaders); ++i) {
     if (HeaderMatches(request_->extra_headers, kSpecialHeaders[i].search)) {
       effective_load_flags_ |= kSpecialHeaders[i].load_flag;
       special_headers = true;
@@ -2356,7 +2368,7 @@ void HttpCache::Transaction::SetRequest(const NetLogWithSource& net_log) {
 
   // Check for conditionalization headers which may correspond with a
   // cache validation request.
-  for (size_t i = 0; i < arraysize(kValidationHeaders); ++i) {
+  for (size_t i = 0; i < base::size(kValidationHeaders); ++i) {
     const ValidationHeaderInfo& info = kValidationHeaders[i];
     std::string validation_value;
     if (request_->extra_headers.GetHeader(
@@ -2423,6 +2435,17 @@ bool HttpCache::Transaction::ShouldPassThrough() {
   if (effective_load_flags_ & LOAD_DISABLE_CACHE)
     return true;
 
+  // Prevent resources whose origin is opaque from being cached. Blink's memory
+  // cache should take care of reusing resources within the current page load,
+  // but otherwise a resource with an opaque top-frame origin won’t be used
+  // again. Also, if the request does not have a top frame origin, bypass the
+  // cache otherwise resources from different pages could share a cached entry
+  // in such cases.
+  if (base::FeatureList::IsEnabled(features::kSplitCacheByTopFrameOrigin) &&
+      (!request_->top_frame_origin || request_->top_frame_origin->opaque())) {
+    return true;
+  }
+
   if (method_ == "GET" || method_ == "HEAD")
     return false;
 
@@ -2463,11 +2486,12 @@ int HttpCache::Transaction::BeginCacheRead() {
   if (method_ == "HEAD")
     FixHeadersForHead();
 
-  if (entry_->disk_entry->GetDataSize(kMetadataIndex))
+  if (entry_->disk_entry->GetDataSize(kMetadataIndex) &&
+      !base::FeatureList::IsEnabled(net::features::kIsolatedCodeCache)) {
     TransitionToState(STATE_CACHE_READ_METADATA);
-  else
+  } else {
     TransitionToState(STATE_FINISH_HEADERS);
-
+  }
   return OK;
 }
 
@@ -2509,8 +2533,23 @@ int HttpCache::Transaction::BeginCacheValidation() {
     skip_validation = !partial_->initial_validation();
   }
 
+  // If this is the first request (!reading_) of a 206 entry (is_sparse_) that
+  // doesn't actually cover the entire file (which with !reading would require
+  // partial->IsLastRange()), and the user is requesting the whole thing
+  // (!partial_->range_requested()), make sure to validate the first chunk,
+  // since afterwards it will be too late if it's actually out-of-date (or the
+  // server bungles invalidation). This is limited to the whole-file request
+  // as a targeted fix for https://crbug.com/888742 while avoiding extra
+  // requests in other cases, but the problem can occur more generally as well;
+  // it's just a lot less likely with applications actively using ranges.
+  // See https://crbug.com/902724 for the more general case.
+  bool first_read_of_full_from_partial =
+      is_sparse_ && !reading_ &&
+      (partial_ && !partial_->range_requested() && !partial_->IsLastRange());
+
   if (partial_ && (is_sparse_ || truncated_) &&
-      (!partial_->IsCurrentRangeCached() || invalid_range_)) {
+      (!partial_->IsCurrentRangeCached() || invalid_range_ ||
+       first_read_of_full_from_partial)) {
     // Force revalidation for sparse or truncated entries. Note that we don't
     // want to ignore the regular validation logic just because a byte range was
     // part of the request.
@@ -2595,7 +2634,7 @@ int HttpCache::Transaction::BeginExternallyConditionalizedRequest() {
   DCHECK_EQ(UPDATE, mode_);
   DCHECK(external_validation_.initialized);
 
-  for (size_t i = 0;  i < arraysize(kValidationHeaders); i++) {
+  for (size_t i = 0; i < base::size(kValidationHeaders); i++) {
     if (external_validation_.values[i].empty())
       continue;
     // Retrieve either the cached response's "etag" or "last-modified" header.
@@ -3019,10 +3058,12 @@ int HttpCache::Transaction::DoSetupEntryForRead() {
   if (method_ == "HEAD")
     FixHeadersForHead();
 
-  if (entry_->disk_entry->GetDataSize(kMetadataIndex))
+  if (entry_->disk_entry->GetDataSize(kMetadataIndex) &&
+      !base::FeatureList::IsEnabled(net::features::kIsolatedCodeCache)) {
     TransitionToState(STATE_CACHE_READ_METADATA);
-  else
+  } else {
     TransitionToState(STATE_FINISH_HEADERS);
+  }
   return OK;
 }
 
@@ -3163,6 +3204,11 @@ int HttpCache::Transaction::OnCacheReadError(int result, bool restart) {
                           partial_ != nullptr);
     entry_ = NULL;
     is_sparse_ = false;
+    // It's OK to use PartialData::RestoreHeaders here as |restart| is only set
+    // when the HttpResponseInfo couldn't even be read, at which point it's
+    // too early for range info in |partial_| to have changed.
+    if (partial_)
+      partial_->RestoreHeaders(&custom_request_->extra_headers);
     partial_.reset();
     TransitionToState(STATE_GET_BACKEND);
     return OK;

@@ -5,14 +5,13 @@
 package org.chromium.chrome.browser.preferences;
 
 import android.content.Context;
-import android.content.Intent;
 import android.content.res.Resources;
 import android.os.Build;
-import android.os.Bundle;
 import android.support.annotation.IntDef;
 import android.support.annotation.StringRes;
 import android.text.SpannableString;
 import android.text.TextUtils;
+import android.text.format.DateUtils;
 import android.text.style.ForegroundColorSpan;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -32,7 +31,7 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ContentSettingsType;
 import org.chromium.chrome.browser.locale.LocaleManager;
-import org.chromium.chrome.browser.preferences.website.ContentSetting;
+import org.chromium.chrome.browser.preferences.website.ContentSettingValues;
 import org.chromium.chrome.browser.preferences.website.PermissionInfo;
 import org.chromium.chrome.browser.preferences.website.SingleWebsitePreferences;
 import org.chromium.chrome.browser.preferences.website.WebsitePreferenceBridge;
@@ -49,7 +48,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
 * A custom adapter for listing search engines.
@@ -64,7 +62,7 @@ public class SearchEngineAdapter extends BaseAdapter
     private static final int VIEW_TYPE_COUNT = 2;
 
     public static final int MAX_RECENT_ENGINE_NUM = 3;
-    public static final long MAX_DISPLAY_TIME_SPAN_MS = TimeUnit.DAYS.toMillis(2);
+    public static final long MAX_DISPLAY_TIME_SPAN_MS = DateUtils.DAY_IN_MILLIS * 2;
 
     /**
      * Type for source of search engine. This is needed because if a custom search engine is set as
@@ -131,6 +129,7 @@ public class SearchEngineAdapter extends BaseAdapter
             TemplateUrlService.getInstance().unregisterLoadListener(this);
             mHasLoadObserver = false;
         }
+
         TemplateUrlService.getInstance().removeObserver(this);
     }
 
@@ -475,11 +474,8 @@ public class SearchEngineAdapter extends BaseAdapter
         if (linkBeingShown == R.string.search_engine_system_location_disabled) {
             mContext.startActivity(LocationUtils.getInstance().getSystemLocationSettingsIntent());
         } else {
-            Intent settingsIntent = PreferencesLauncher.createIntentForSettingsPage(
-                    mContext, SingleWebsitePreferences.class.getName());
-            Bundle fragmentArgs = SingleWebsitePreferences.createFragmentArgsForSite(url);
-            settingsIntent.putExtra(Preferences.EXTRA_SHOW_FRAGMENT_ARGUMENTS, fragmentArgs);
-            mContext.startActivity(settingsIntent);
+            PreferencesLauncher.launchSettingsPage(mContext, SingleWebsitePreferences.class,
+                    SingleWebsitePreferences.createFragmentArgsForSite(url));
         }
     }
 
@@ -507,14 +503,14 @@ public class SearchEngineAdapter extends BaseAdapter
 
         PermissionInfo settings =
                 new PermissionInfo(PermissionInfo.Type.NOTIFICATION, url, null, false);
-        boolean notificationsAllowed = settings.getContentSetting() == ContentSetting.ALLOW
+        boolean notificationsAllowed = settings.getContentSetting() == ContentSettingValues.ALLOW
                 && WebsitePreferenceBridge.isPermissionControlledByDSE(
-                           ContentSettingsType.CONTENT_SETTINGS_TYPE_NOTIFICATIONS, url, false);
+                        ContentSettingsType.CONTENT_SETTINGS_TYPE_NOTIFICATIONS, url, false);
 
         settings = new PermissionInfo(PermissionInfo.Type.GEOLOCATION, url, null, false);
-        boolean locationAllowed = settings.getContentSetting() == ContentSetting.ALLOW
+        boolean locationAllowed = settings.getContentSetting() == ContentSettingValues.ALLOW
                 && WebsitePreferenceBridge.isPermissionControlledByDSE(
-                           ContentSettingsType.CONTENT_SETTINGS_TYPE_GEOLOCATION, url, false);
+                        ContentSettingsType.CONTENT_SETTINGS_TYPE_GEOLOCATION, url, false);
 
         boolean systemLocationAllowed =
                 LocationUtils.getInstance().isSystemLocationSettingEnabled();
@@ -569,7 +565,7 @@ public class SearchEngineAdapter extends BaseAdapter
 
         PermissionInfo locationSettings =
                 new PermissionInfo(PermissionInfo.Type.GEOLOCATION, url, null, false);
-        return locationSettings.getContentSetting() == ContentSetting.ALLOW;
+        return locationSettings.getContentSetting() == ContentSettingValues.ALLOW;
     }
 
     private int computeStartIndexForRecentSearchEngines() {

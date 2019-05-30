@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/core/inspector/inspector_resource_content_loader.h"
 
-#include "third_party/blink/public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-shared.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/core/css/css_style_sheet.h"
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
@@ -68,7 +68,8 @@ InspectorResourceContentLoader::InspectorResourceContentLoader(
 void InspectorResourceContentLoader::Start() {
   started_ = true;
   HeapVector<Member<Document>> documents;
-  InspectedFrames* inspected_frames = new InspectedFrames(inspected_frame_);
+  InspectedFrames* inspected_frames =
+      MakeGarbageCollected<InspectedFrames>(inspected_frame_);
   for (LocalFrame* frame : *inspected_frames) {
     documents.push_back(frame->GetDocument());
     documents.AppendVector(InspectorPageAgent::ImportsForFrame(frame));
@@ -86,14 +87,19 @@ void InspectorResourceContentLoader::Start() {
       resource_request = ResourceRequest(document->Url());
       resource_request.SetCacheMode(mojom::FetchCacheMode::kOnlyIfCached);
     }
-    resource_request.SetRequestContext(WebURLRequest::kRequestContextInternal);
+    resource_request.SetRequestContext(mojom::RequestContextType::INTERNAL);
+    if (document->Loader() &&
+        document->Loader()->GetResponse().WasFetchedViaServiceWorker()) {
+      resource_request.SetCacheMode(mojom::FetchCacheMode::kDefault);
+    }
 
     if (!resource_request.Url().GetString().IsEmpty()) {
       urls_to_fetch.insert(resource_request.Url().GetString());
       ResourceLoaderOptions options;
-      options.initiator_info.name = FetchInitiatorTypeNames::internal;
+      options.initiator_info.name = fetch_initiator_type_names::kInternal;
       FetchParameters params(resource_request, options);
-      ResourceClient* resource_client = new ResourceClient(this);
+      ResourceClient* resource_client =
+          MakeGarbageCollected<ResourceClient>(this);
       // Prevent garbage collection by holding a reference to this resource.
       resources_.push_back(
           RawResource::Fetch(params, document->Fetcher(), resource_client));
@@ -110,12 +116,12 @@ void InspectorResourceContentLoader::Start() {
         continue;
       urls_to_fetch.insert(url);
       ResourceRequest resource_request(url);
-      resource_request.SetRequestContext(
-          WebURLRequest::kRequestContextInternal);
+      resource_request.SetRequestContext(mojom::RequestContextType::INTERNAL);
       ResourceLoaderOptions options;
-      options.initiator_info.name = FetchInitiatorTypeNames::internal;
+      options.initiator_info.name = fetch_initiator_type_names::kInternal;
       FetchParameters params(resource_request, options);
-      ResourceClient* resource_client = new ResourceClient(this);
+      ResourceClient* resource_client =
+          MakeGarbageCollected<ResourceClient>(this);
       // Prevent garbage collection by holding a reference to this resource.
       resources_.push_back(CSSStyleSheetResource::Fetch(
           params, document->Fetcher(), resource_client));

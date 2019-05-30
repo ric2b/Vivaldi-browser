@@ -6,6 +6,8 @@
 
 goog.provide('__crWeb.fill');
 
+goog.require('__crWeb.form');
+
 /**
  * @typedef {{
  *   name: string,
@@ -213,8 +215,7 @@ function setInputElementAngularValue_(value, input) {
  */
 __gCrWeb.fill.setInputElementValue = function(
     value, input, callback = undefined) {
-  if (!input)
-    return;
+  if (!input) return;
 
   var activeElement = document.activeElement;
   if (input != activeElement) {
@@ -225,8 +226,7 @@ __gCrWeb.fill.setInputElementValue = function(
   }
 
   setInputElementValue_(value, input);
-  if (callback)
-    callback();
+  if (callback) callback();
 
   if (input != activeElement) {
     __gCrWeb.fill.createAndDispatchHTMLEvent(input, value, 'blur', true, false);
@@ -255,8 +255,7 @@ function setInputElementValue_(value, input) {
   }
 
   // Return early if the value hasn't changed.
-  if (input[propertyName] == value)
-    return;
+  if (input[propertyName] == value) return;
 
   // When the user inputs a value in an HTMLInput field, the property setter is
   // not called. The different frameworks often call it explicitly when
@@ -814,6 +813,10 @@ __gCrWeb.fill.webFormElementToFormData = function(
   form['origin'] =
       __gCrWeb.common.removeQueryAndReferenceFromURL(frame.location.href);
   form['action'] = __gCrWeb.fill.getCanonicalActionForForm(formElement);
+
+  // The raw name and id attributes, which may be empty.
+  form['name_attribute'] = formElement.getAttribute('name') || '';
+  form['id_attribute'] = formElement.getAttribute('id') || '';
 
   // Note different from form_autofill_util.cc version of this method, which
   // computes |form.action| using document.completeURL(form_element.action())
@@ -1899,6 +1902,11 @@ __gCrWeb.fill.webFormControlElementToFormField = function(
   // form data.
   field['identifier'] = __gCrWeb.form.getFieldIdentifier(element);
   field['name'] = __gCrWeb.form.getFieldName(element);
+
+  // The raw name and id attributes, which may be empty.
+  field['name_attribute'] = element.getAttribute('name') || '';
+  field['id_attribute'] = element.getAttribute('id') || '';
+
   field['form_control_type'] = element.type;
   var autocomplete_attribute = element.getAttribute('autocomplete');
   if (autocomplete_attribute) {
@@ -1916,6 +1924,9 @@ __gCrWeb.fill.webFormControlElementToFormField = function(
   if (role_attribute && role_attribute.toLowerCase() == 'presentation') {
     field['role'] = __gCrWeb.fill.ROLE_ATTRIBUTE_PRESENTATION;
   }
+
+  field['aria_label'] = __gCrWeb.fill.getAriaLabel(element);
+  field['aria_description'] = __gCrWeb.fill.getAriaDescription(element);
 
   if (!__gCrWeb.fill.isAutofillableElement(element)) {
     return;
@@ -1975,5 +1986,83 @@ __gCrWeb.fill.webFormControlElementToFormField = function(
   }
   field['value'] = value;
 };
+
+/**
+ * Returns a serialized version of |form| to send to the host on form
+ * submission.
+ * The result string is similar to the result of calling |extractForms| filtered
+ * on |form| (that is why a list is returned).
+ *
+ * @param {FormElement} form The form to serialize.
+ * @return {string} a JSON encoded version of |form|
+ */
+__gCrWeb.fill.autofillSubmissionData = function(form) {
+  var formData = new __gCrWeb['common'].JSONSafeObject;
+  var extractMask =
+      __gCrWeb.fill.EXTRACT_MASK_VALUE | __gCrWeb.fill.EXTRACT_MASK_OPTIONS;
+  __gCrWeb['fill'].webFormElementToFormData(
+      window, form, null, extractMask, formData, null);
+  return __gCrWeb.stringify([formData]);
+}
+
+/**
+ * Returns the coalesced child text of the elements who's ids are found in
+ * the |attribute| of |element|.
+ *
+ * For example, given this document...
+ *
+ *      <div id="billing">Billing</div>
+ *      <div>
+ *        <div id="name">Name</div>
+ *        <input id="field1" type="text" aria-labelledby="billing name"/>
+ *     </div>
+ *     <div>
+ *       <div id="address">Address</div>
+ *       <input id="field2" type="text" aria-labelledby="billing address"/>
+ *     </div>
+ *
+ * The coalesced text by the id_list found in the aria-labelledby attribute
+ * of the field1 input element would be "Billing Name" and for field2 it would
+ * be "Billing Address".
+ */
+function coalesceTextByIdList(element, attribute) {
+  if (!element) {
+    return '';
+  }
+
+  var ids = element.getAttribute(attribute);
+  if (!ids) {
+    return '';
+  }
+
+  return ids.trim()
+            .split(/\s+/)
+            .map(function(i) { return document.getElementById(i); })
+            .filter(function(e) { return e !== null; })
+            .map(function (n) { return __gCrWeb.fill.findChildText(n); })
+            .filter(function (s) { return s.length > 0; })
+            .join(' ')
+            .trim();
+}
+
+/**
+ * Returns the coalesced text referenced by the aria-labelledby attribute
+ * or the value of the aria-label attribute, with priority given to the
+ * aria-labelledby text.
+ */
+__gCrWeb.fill.getAriaLabel = function(element) {
+  var label = coalesceTextByIdList(element, 'aria-labelledby');
+  if (!label) {
+    label = element.getAttribute('aria-label') || '';
+  }
+  return label.trim();
+}
+
+/**
+ * Returns the coalesced text referenced by the aria-describedby attribute.
+ */
+__gCrWeb.fill.getAriaDescription = function(element) {
+  return coalesceTextByIdList(element, 'aria-describedby');
+}
 
 }());  // End of anonymous object

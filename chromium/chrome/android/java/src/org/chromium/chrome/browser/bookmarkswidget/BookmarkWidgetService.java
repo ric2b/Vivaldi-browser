@@ -14,6 +14,7 @@ import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.StrictMode;
 import android.support.annotation.BinderThread;
+import android.support.annotation.Nullable;
 import android.support.annotation.UiThread;
 import android.text.TextUtils;
 import android.widget.RemoteViews;
@@ -45,8 +46,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
-
-import javax.annotation.Nullable;
 
 /**
  * Service to support the bookmarks widget.
@@ -177,7 +176,8 @@ public class BookmarkWidgetService extends RemoteViewsService {
                     Profile.getLastUsedProfile().getOriginalProfile());
             mMinIconSizeDp = (int) res.getDimension(R.dimen.default_favicon_min_size);
             mDisplayedIconSize = res.getDimensionPixelSize(R.dimen.default_favicon_size);
-            mIconGenerator = ViewUtils.createDefaultRoundedIconGenerator(false);
+            mIconGenerator =
+                    ViewUtils.createDefaultRoundedIconGenerator(context.getResources(), false);
 
             mRemainingTaskCount = 1;
             mBookmarkModel = new BookmarkModel();
@@ -288,7 +288,7 @@ public class BookmarkWidgetService extends RemoteViewsService {
             mWidgetId = widgetId;
             mPreferences = getWidgetState(mContext, mWidgetId);
             mIconColor = ApiCompatibilityUtils.getColor(
-                    mContext.getResources(), R.color.default_icon_color);
+                    mContext.getResources(), R.color.default_icon_color_dark);
         }
 
         @UiThread

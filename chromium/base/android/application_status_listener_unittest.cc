@@ -9,9 +9,9 @@
 #include "base/bind.h"
 #include "base/callback_forward.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -45,15 +45,14 @@ class MultiThreadedTest {
       : state_(kInvalidApplicationState),
         event_(WaitableEvent::ResetPolicy::AUTOMATIC,
                WaitableEvent::InitialState::NOT_SIGNALED),
-        thread_("ApplicationStatusTest thread"),
-        main_() {}
+        thread_("ApplicationStatusTest thread") {}
 
   void Run() {
     // Start the thread and tell it to register for events.
     thread_.Start();
     thread_.task_runner()->PostTask(
-        FROM_HERE, base::Bind(&MultiThreadedTest::RegisterThreadForEvents,
-                              base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&MultiThreadedTest::RegisterThreadForEvents,
+                                  base::Unretained(this)));
 
     // Wait for its completion.
     event_.Wait();
@@ -73,13 +72,13 @@ class MultiThreadedTest {
 
  private:
   void ExpectOnThread() {
-    EXPECT_EQ(thread_.message_loop(), base::MessageLoop::current());
+    EXPECT_TRUE(thread_.task_runner()->BelongsToCurrentThread());
   }
 
   void RegisterThreadForEvents() {
     ExpectOnThread();
-    listener_.reset(new ApplicationStatusListener(base::Bind(
-        &MultiThreadedTest::StoreStateAndSignal, base::Unretained(this))));
+    listener_ = ApplicationStatusListener::New(base::BindRepeating(
+        &MultiThreadedTest::StoreStateAndSignal, base::Unretained(this)));
     EXPECT_TRUE(listener_.get());
     event_.Signal();
   }
@@ -93,20 +92,20 @@ class MultiThreadedTest {
   ApplicationState state_;
   base::WaitableEvent event_;
   base::Thread thread_;
-  base::MessageLoop main_;
+  test::ScopedTaskEnvironment scoped_task_environment_;
   std::unique_ptr<ApplicationStatusListener> listener_;
 };
 
 }  // namespace
 
 TEST(ApplicationStatusListenerTest, SingleThread) {
-  MessageLoop message_loop;
+  test::ScopedTaskEnvironment scoped_task_environment;
 
   ApplicationState result = kInvalidApplicationState;
 
   // Create a new listener that stores the new state into |result| on every
   // state change.
-  ApplicationStatusListener listener(
+  auto listener = ApplicationStatusListener::New(
       base::Bind(&StoreStateTo, base::Unretained(&result)));
 
   EXPECT_EQ(kInvalidApplicationState, result);

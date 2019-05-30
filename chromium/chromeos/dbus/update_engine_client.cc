@@ -15,11 +15,11 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chromeos/dbus/dbus_switches.h"
+#include "chromeos/dbus/constants/dbus_switches.h"
 #include "chromeos/dbus/util/version_loader.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
@@ -31,12 +31,13 @@ namespace chromeos {
 
 namespace {
 
+const char kReleaseChannelCanary[] = "canary-channel";
 const char kReleaseChannelDev[] = "dev-channel";
 const char kReleaseChannelBeta[] = "beta-channel";
 const char kReleaseChannelStable[] = "stable-channel";
 
 // List of release channels ordered by stability.
-const char* kReleaseChannelsList[] = {kReleaseChannelDev,
+const char* kReleaseChannelsList[] = {kReleaseChannelCanary, kReleaseChannelDev,
                                       kReleaseChannelBeta,
                                       kReleaseChannelStable};
 
@@ -245,7 +246,7 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
       const std::string& update_version,
       int64_t update_size,
       const UpdateOverCellularOneTimePermissionCallback& callback) override {
-    // TODO(weidongg): Change 'kSetUpdateOverCellularTarget' to
+    // TODO(https://crbug.com/927439): Change 'kSetUpdateOverCellularTarget' to
     // 'kSetUpdateOverCellularOneTimePermission'
     dbus::MethodCall method_call(update_engine::kUpdateEngineInterface,
                                  update_engine::kSetUpdateOverCellularTarget);
@@ -379,6 +380,17 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
       return;
     }
     status.status = UpdateStatusFromString(current_operation);
+    // TODO(hunyadym, https://crbug.com/864672): Add a new DBus call to
+    // determine this based on the Omaha response, and not version comparison.
+    const std::string current_version =
+        version_loader::GetVersion(version_loader::VERSION_SHORT);
+    status.is_rollback =
+        version_loader::IsRollback(current_version, status.new_version);
+    if (status.is_rollback) {
+      LOG(WARNING) << "New image is a rollback from " << current_version
+                   << " to " << status.new_version << ".";
+    }
+
     last_status_ = status;
     for (auto& observer : observers_)
       observer.UpdateStatusChanged(status);
@@ -505,7 +517,7 @@ class UpdateEngineClientImpl : public UpdateEngineClient {
     status.new_version = new_version;
     // TODO(hunyadym, https://crbug.com/864672): Add a new DBus call to
     // determine this based on the Omaha response, and not version comparison.
-    std::string current_version =
+    const std::string current_version =
         version_loader::GetVersion(version_loader::VERSION_SHORT);
     status.is_rollback =
         version_loader::IsRollback(current_version, status.new_version);
@@ -710,10 +722,10 @@ bool UpdateEngineClient::IsTargetChannelMoreStable(
     const std::string& target_channel) {
   const char** cix = std::find(
       kReleaseChannelsList,
-      kReleaseChannelsList + arraysize(kReleaseChannelsList), current_channel);
+      kReleaseChannelsList + base::size(kReleaseChannelsList), current_channel);
   const char** tix = std::find(
       kReleaseChannelsList,
-      kReleaseChannelsList + arraysize(kReleaseChannelsList), target_channel);
+      kReleaseChannelsList + base::size(kReleaseChannelsList), target_channel);
   return tix > cix;
 }
 

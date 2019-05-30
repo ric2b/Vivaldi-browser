@@ -7,7 +7,6 @@
 #include "ash/dbus/display_service_provider.h"
 #include "ash/dbus/liveness_service_provider.h"
 #include "ash/dbus/url_handler_service_provider.h"
-#include "ash/public/cpp/config.h"
 #include "ash/shell.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/services/cros_dbus_service.h"
@@ -18,27 +17,25 @@
 namespace ash {
 
 AshDBusServices::AshDBusServices() {
-  // TODO(stevenjb): Figure out where else the D-Bus thread is getting
-  // initialized and then always init it here when we have the MASH
-  // config after the contention is sorted out.
-  if (!chromeos::DBusThreadManager::IsInitialized()) {
-    chromeos::DBusThreadManager::Initialize(
-        chromeos::DBusThreadManager::kShared);
-    initialized_dbus_thread_ = true;
-  }
+  // DBusThreadManager is initialized in Chrome or in AshService::InitForMash().
+  CHECK(chromeos::DBusThreadManager::IsInitialized());
 
+  dbus::Bus* system_bus =
+      chromeos::DBusThreadManager::Get()->IsUsingFakes()
+          ? nullptr
+          : chromeos::DBusThreadManager::Get()->GetSystemBus();
   display_service_ = chromeos::CrosDBusService::Create(
-      chromeos::kDisplayServiceName,
+      system_bus, chromeos::kDisplayServiceName,
       dbus::ObjectPath(chromeos::kDisplayServicePath),
       chromeos::CrosDBusService::CreateServiceProviderList(
           std::make_unique<DisplayServiceProvider>()));
   liveness_service_ = chromeos::CrosDBusService::Create(
-      chromeos::kLivenessServiceName,
+      system_bus, chromeos::kLivenessServiceName,
       dbus::ObjectPath(chromeos::kLivenessServicePath),
       chromeos::CrosDBusService::CreateServiceProviderList(
           std::make_unique<LivenessServiceProvider>()));
   url_handler_service_ = chromeos::CrosDBusService::Create(
-      chromeos::kUrlHandlerServiceName,
+      system_bus, chromeos::kUrlHandlerServiceName,
       dbus::ObjectPath(chromeos::kUrlHandlerServicePath),
       chromeos::CrosDBusService::CreateServiceProviderList(
           std::make_unique<UrlHandlerServiceProvider>()));
@@ -54,9 +51,6 @@ AshDBusServices::~AshDBusServices() {
   display_service_.reset();
   liveness_service_.reset();
   url_handler_service_.reset();
-  if (initialized_dbus_thread_) {
-    chromeos::DBusThreadManager::Shutdown();
-  }
 }
 
 }  // namespace ash

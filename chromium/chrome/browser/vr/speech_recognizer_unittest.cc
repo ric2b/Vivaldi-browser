@@ -4,20 +4,22 @@
 
 #include "chrome/browser/vr/speech_recognizer.h"
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/mock_timer.h"
 #include "chrome/browser/vr/browser_ui_interface.h"
 #include "chrome/browser/vr/test/mock_browser_ui_interface.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/speech_recognition_event_listener.h"
 #include "content/public/browser/speech_recognition_manager.h"
 #include "content/public/browser/speech_recognition_session_config.h"
 #include "content/public/browser/speech_recognition_session_context.h"
-#include "content/public/test/test_browser_thread_bundle.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -143,8 +145,8 @@ class FakeSpeechRecognitionManager : public content::SpeechRecognitionManager {
 
   void FakeSpeechRecognitionEvent(FakeRecognitionEvent event) {
     if (!content::BrowserThread::CurrentlyOn(content::BrowserThread::IO)) {
-      content::BrowserThread::PostTask(
-          content::BrowserThread::IO, FROM_HERE,
+      base::PostTaskWithTraits(
+          FROM_HERE, {content::BrowserThread::IO},
           base::BindOnce(
               &FakeSpeechRecognitionManager::FakeSpeechRecognitionEvent,
               base::Unretained(this), event));
@@ -269,7 +271,6 @@ class SpeechRecognizerTest : public testing::Test {
   }
 
  protected:
-  content::TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<FakeSpeechRecognitionManager>
       fake_speech_recognition_manager_;
   std::unique_ptr<MockBrowserUiInterface> ui_;

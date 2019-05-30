@@ -319,7 +319,7 @@ void InstallVerifier::RemoveMany(const ExtensionIdSet& ids) {
     return;
 
   bool found_any = false;
-  for (ExtensionIdSet::const_iterator i = ids.begin(); i != ids.end(); ++i) {
+  for (auto i = ids.begin(); i != ids.end(); ++i) {
     if (base::ContainsKey(signature_->ids, *i) ||
         base::ContainsKey(signature_->invalid_ids, *i)) {
       found_any = true;
@@ -477,8 +477,7 @@ void InstallVerifier::MaybeBootstrapSelf() {
   if (signature_.get() == NULL && ShouldFetchSignature()) {
     needs_bootstrap = true;
   } else {
-    for (ExtensionIdSet::const_iterator iter = extension_ids.begin();
-         iter != extension_ids.end();
+    for (auto iter = extension_ids.begin(); iter != extension_ids.end();
          ++iter) {
       if (!IsKnownId(*iter)) {
         needs_bootstrap = true;
@@ -544,7 +543,7 @@ void InstallVerifier::GarbageCollect() {
   prefs_->GetExtensions(&all_ids);
   for (ExtensionIdList::const_iterator i = all_ids.begin();
        i != all_ids.end(); ++i) {
-    ExtensionIdSet::iterator found = leftovers.find(*i);
+    auto found = leftovers.find(*i);
     if (found != leftovers.end())
       leftovers.erase(found);
   }
@@ -572,8 +571,7 @@ void InstallVerifier::BeginFetch() {
     ids_to_sign.insert(signature_->ids.begin(), signature_->ids.end());
   }
   if (operation.type == InstallVerifier::REMOVE) {
-    for (ExtensionIdSet::const_iterator i = operation.ids.begin();
-         i != operation.ids.end(); ++i) {
+    for (auto i = operation.ids.begin(); i != operation.ids.end(); ++i) {
       if (base::ContainsKey(ids_to_sign, *i))
         ids_to_sign.erase(*i);
     }
@@ -585,8 +583,8 @@ void InstallVerifier::BeginFetch() {
       content::BrowserContext::GetDefaultStoragePartition(context_)
           ->GetURLLoaderFactoryForBrowserProcess();
   signer_ = std::make_unique<InstallSigner>(url_loader_factory, ids_to_sign);
-  signer_->GetSignature(base::Bind(&InstallVerifier::SignatureCallback,
-                                   weak_factory_.GetWeakPtr()));
+  signer_->GetSignature(base::BindOnce(&InstallVerifier::SignatureCallback,
+                                       weak_factory_.GetWeakPtr()));
 }
 
 void InstallVerifier::SaveToPrefs() {

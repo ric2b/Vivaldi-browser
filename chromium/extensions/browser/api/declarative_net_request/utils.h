@@ -16,19 +16,20 @@
 #include "base/optional.h"
 
 namespace base {
+class FilePath;
 class ListValue;
+class Token;
 }  // namespace base
 
 namespace service_manager {
 class Connector;
-class Identity;
 }  // namespace service_manager
 
 namespace extensions {
-class Extension;
 struct InstallWarning;
 
 namespace declarative_net_request {
+struct RulesetSource;
 
 struct IndexAndPersistRulesResult {
  public:
@@ -58,23 +59,24 @@ struct IndexAndPersistRulesResult {
   DISALLOW_COPY_AND_ASSIGN(IndexAndPersistRulesResult);
 };
 
-// Indexes and persists the JSON ruleset for for |extension|. This is
-// potentially unsafe since the JSON rules file is parsed in-process. Should
-// only be called for an extension which provided a JSON ruleset.
-// Note: This must be called on a sequence where file IO is allowed.
+// Indexes and persists the JSON ruleset for |source|. This is potentially
+// unsafe since the JSON rules file is parsed in-process. Note: This must be
+// called on a sequence where file IO is allowed.
 IndexAndPersistRulesResult IndexAndPersistRulesUnsafe(
-    const Extension& extension);
+    const RulesetSource& source);
 
 using IndexAndPersistRulesCallback =
     base::OnceCallback<void(IndexAndPersistRulesResult)>;
 // Same as IndexAndPersistRulesUnsafe but parses the JSON rules file out-of-
 // process. |connector| should be a connector to the ServiceManager usable on
-// the current sequence. Optionally clients can pass a valid |identity| to be
-// used when accessing the data decoder service which is used internally to
-// parse JSON. Note: This must be called on a sequence where file IO is allowed.
+// the current sequence. Optionally clients can pass a valid |decoder_batch_id|
+// to be used when accessing the data decoder service, which is used internally
+// to parse JSON.
+//
+// NOTE: This must be called on a sequence where file IO is allowed.
 void IndexAndPersistRules(service_manager::Connector* connector,
-                          service_manager::Identity* identity,
-                          const Extension& extension,
+                          const base::Optional<base::Token>& decoder_batch_id,
+                          RulesetSource source,
                           IndexAndPersistRulesCallback callback);
 
 // Returns true if |data| represents a valid data buffer containing indexed

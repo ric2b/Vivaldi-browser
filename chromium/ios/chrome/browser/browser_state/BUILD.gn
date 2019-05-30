@@ -68,7 +68,6 @@ source_set("browser_state_impl") {
     "//components/metrics",
     "//components/net_log",
     "//components/password_manager/core/browser",
-    "//components/password_manager/sync/browser",
     "//components/pref_registry",
     "//components/prefs",
     "//components/proxy_config",
@@ -85,7 +84,6 @@ source_set("browser_state_impl") {
     "//ios/chrome/browser/browser_state_metrics",
     "//ios/chrome/browser/browsing_data",
     "//ios/chrome/browser/content_settings",
-    "//ios/chrome/browser/desktop_promotion",
     "//ios/chrome/browser/dom_distiller",
     "//ios/chrome/browser/download",
     "//ios/chrome/browser/favicon",
@@ -96,6 +94,7 @@ source_set("browser_state_impl") {
     "//ios/chrome/browser/history",
     "//ios/chrome/browser/invalidation",
     "//ios/chrome/browser/language",
+    "//ios/chrome/browser/metrics",
     "//ios/chrome/browser/net",
     "//ios/chrome/browser/ntp_snippets",
     "//ios/chrome/browser/passwords",
@@ -110,10 +109,7 @@ source_set("browser_state_impl") {
     "//ios/chrome/browser/sync",
     "//ios/chrome/browser/sync/glue",
     "//ios/chrome/browser/translate",
-    "//ios/chrome/browser/ui/browser_list",
-    "//ios/chrome/browser/ui/browser_list:browser_list_impl",
     "//ios/chrome/browser/ui/fullscreen",
-    "//ios/chrome/browser/ui/overlays",
     "//ios/chrome/browser/ui/voice",
     "//ios/chrome/browser/undo",
     "//ios/chrome/browser/unified_consent",
@@ -125,6 +121,8 @@ source_set("browser_state_impl") {
     "//ios/web/net/cookies",
     "//net",
     "//net:extras",
+    "//services/identity/public/cpp",
+    "//services/identity/public/mojom",
   ]
   allow_circular_includes_from = [
     "//ios/chrome/browser",
@@ -157,8 +155,6 @@ source_set("test_support") {
   sources = [
     "test_chrome_browser_state.h",
     "test_chrome_browser_state.mm",
-    "test_chrome_browser_state_isolated_context.h",
-    "test_chrome_browser_state_isolated_context.mm",
     "test_chrome_browser_state_manager.cc",
     "test_chrome_browser_state_manager.h",
   ]

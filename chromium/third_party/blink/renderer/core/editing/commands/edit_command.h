@@ -51,10 +51,10 @@ class CORE_EXPORT EditCommand : public GarbageCollectedFinalized<EditCommand> {
   // The |EditingState*| argument must not be nullptr.
   virtual void DoApply(EditingState*) = 0;
 
-  // |TypingCommand| will return the text of the last |m_commands|.
+  // |TypingCommand| will return the text of the last |commands_|.
   virtual String TextDataForInputEvent() const;
 
-  virtual void Trace(blink::Visitor*);
+  virtual void Trace(Visitor*);
   bool SelectionIsDirectional() const { return selection_is_directional_; }
   void SetSelectionIsDirectional(bool is_directional) {
     selection_is_directional_ = is_directional;

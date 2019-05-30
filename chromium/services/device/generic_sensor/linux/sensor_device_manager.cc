@@ -4,8 +4,9 @@
 
 #include "services/device/generic_sensor/linux/sensor_device_manager.h"
 
+#include "base/bind.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "services/device/generic_sensor/linux/sensor_data_linux.h"
 #include "services/device/public/cpp/generic_sensor/sensor_reading.h"
@@ -33,7 +34,8 @@ SensorDeviceManager::~SensorDeviceManager() {
 
 void SensorDeviceManager::Start(Delegate* delegate) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   DCHECK(!delegate_);
 
   delegate_ = delegate;
@@ -45,8 +47,8 @@ void SensorDeviceManager::Start(Delegate* delegate) {
 
   task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&SensorDeviceManager::Delegate::OnSensorNodesEnumerated,
-                 base::Unretained(delegate_)));
+      base::BindOnce(&SensorDeviceManager::Delegate::OnSensorNodesEnumerated,
+                     base::Unretained(delegate_)));
 }
 
 std::string SensorDeviceManager::GetUdevDeviceGetSubsystem(udev_device* dev) {
@@ -81,9 +83,9 @@ void SensorDeviceManager::OnDeviceAdded(udev_device* dev) {
   if (device_node.empty())
     return;
 
-  const uint32_t first = static_cast<uint32_t>(mojom::SensorType::FIRST);
-  const uint32_t last = static_cast<uint32_t>(mojom::SensorType::LAST);
-  for (uint32_t i = first; i < last; ++i) {
+  const uint32_t first = static_cast<uint32_t>(mojom::SensorType::kMinValue);
+  const uint32_t last = static_cast<uint32_t>(mojom::SensorType::kMaxValue);
+  for (uint32_t i = first; i <= last; ++i) {
     SensorPathsLinux data;
     mojom::SensorType type = static_cast<mojom::SensorType>(i);
     if (!InitSensorData(type, &data))
@@ -142,9 +144,9 @@ void SensorDeviceManager::OnDeviceAdded(udev_device* dev) {
         sensor_offset_value, reporting_mode, data.apply_scaling_func,
         std::move(sensor_file_names)));
     task_runner_->PostTask(
-        FROM_HERE, base::Bind(&SensorDeviceManager::Delegate::OnDeviceAdded,
-                              base::Unretained(delegate_), data.type,
-                              base::Passed(&device)));
+        FROM_HERE, base::BindOnce(&SensorDeviceManager::Delegate::OnDeviceAdded,
+                                  base::Unretained(delegate_), data.type,
+                                  std::move(device)));
 
     // One |dev| can represent more than one sensor.
     // For example, there is an accelerometer and gyroscope represented by one
@@ -169,8 +171,9 @@ void SensorDeviceManager::OnDeviceRemoved(udev_device* dev) {
   sensors_by_node_.erase(sensor);
 
   task_runner_->PostTask(
-      FROM_HERE, base::Bind(&SensorDeviceManager::Delegate::OnDeviceRemoved,
-                            base::Unretained(delegate_), type, device_node));
+      FROM_HERE,
+      base::BindOnce(&SensorDeviceManager::Delegate::OnDeviceRemoved,
+                     base::Unretained(delegate_), type, device_node));
 }
 
 }  // namespace device

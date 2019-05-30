@@ -15,29 +15,43 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
+#include "base/task/post_task.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/loader/detachable_resource_handler.h"
 #include "content/browser/loader/resource_request_info_impl.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/resource_context.h"
-#include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_switches.h"
 #include "net/base/io_buffer.h"
 #include "net/base/mime_sniffer.h"
 #include "net/url_request/url_request.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "services/network/cross_origin_resource_policy.h"
 
 using MimeType = network::CrossOriginReadBlocking::MimeType;
 
 namespace content {
 
 namespace {
+
+// Pre-NetworkService code has to blindly trust the |request_initiator| value
+// provided by the renderer process.
+//
+// TODO(lukasza): It might make sense to use ChildProcessSecurityPolicyImpl's
+// CanAccessDataForOrigin.  We don't do it, because
+// 1) non-NetworkService doesn't protect against content script problems (i.e.
+//    CanAccessDataForOrigin would only plug one hole in the non-NetworkService
+//    world)
+// 2) we hope that NetworkService will ship soon.
+constexpr base::nullopt_t kNonNetworkServiceInitiatorLock = base::nullopt;
 
 // An IOBuffer to enable writing into a existing IOBuffer at a given offset.
 class LocalIoBufferWithOffset : public net::WrappedIOBuffer {
@@ -131,8 +145,8 @@ void CrossSiteDocumentResourceHandler::LogBlockedResponse(
   // time the posted task runs, the WebContents could have been closed and/or
   // navigated to another URL.  This is understood and acceptable - this should
   // be rare enough to not matter for the collected UKM data.
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(
           &CrossSiteDocumentResourceHandler::LogBlockedResponseOnUIThread,
           resource_request_info->GetWebContentsGetterForRequest(),
@@ -166,11 +180,12 @@ class CrossSiteDocumentResourceHandler::Controller : public ResourceController {
     }
   }
 
-  void ResumeForRedirect(const base::Optional<net::HttpRequestHeaders>&
-                             modified_request_headers) override {
-    DCHECK(!modified_request_headers.has_value())
-        << "Redirect with modified headers was not supported yet. "
-           "crbug.com/845683";
+  void ResumeForRedirect(
+      const std::vector<std::string>& removed_headers,
+      const net::HttpRequestHeaders& modified_headers) override {
+    DCHECK(removed_headers.empty() && modified_headers.IsEmpty())
+        << "Redirect with removed or modified headers is not supported yet. "
+           "See https://crbug.com/845683";
     Resume();
   }
 
@@ -208,18 +223,48 @@ class CrossSiteDocumentResourceHandler::Controller : public ResourceController {
 CrossSiteDocumentResourceHandler::CrossSiteDocumentResourceHandler(
     std::unique_ptr<ResourceHandler> next_handler,
     net::URLRequest* request,
-    bool is_nocors_plugin_request)
+    network::mojom::FetchRequestMode fetch_request_mode)
     : LayeredResourceHandler(request, std::move(next_handler)),
       weak_next_handler_(next_handler_.get()),
-      is_nocors_plugin_request_(is_nocors_plugin_request),
+      fetch_request_mode_(fetch_request_mode),
       weak_this_(this) {}
 
 CrossSiteDocumentResourceHandler::~CrossSiteDocumentResourceHandler() {}
+
+void CrossSiteDocumentResourceHandler::OnRequestRedirected(
+    const net::RedirectInfo& redirect_info,
+    network::ResourceResponse* response,
+    std::unique_ptr<ResourceController> controller) {
+  // Enforce the Cross-Origin-Resource-Policy (CORP) header.
+  if (network::CrossOriginResourcePolicy::kBlock ==
+      network::CrossOriginResourcePolicy::Verify(
+          *request(), *response, fetch_request_mode_,
+          kNonNetworkServiceInitiatorLock)) {
+    blocked_read_completed_ = true;
+    blocked_by_cross_origin_resource_policy_ = true;
+    controller->Cancel();
+    return;
+  }
+
+  next_handler_->OnRequestRedirected(redirect_info, response,
+                                     std::move(controller));
+}
 
 void CrossSiteDocumentResourceHandler::OnResponseStarted(
     network::ResourceResponse* response,
     std::unique_ptr<ResourceController> controller) {
   has_response_started_ = true;
+
+  // Enforce the Cross-Origin-Resource-Policy (CORP) header.
+  if (network::CrossOriginResourcePolicy::kBlock ==
+      network::CrossOriginResourcePolicy::Verify(
+          *request(), *response, fetch_request_mode_,
+          kNonNetworkServiceInitiatorLock)) {
+    blocked_read_completed_ = true;
+    blocked_by_cross_origin_resource_policy_ = true;
+    controller->Cancel();
+    return;
+  }
 
   if (request()->initiator().has_value()) {
     const char* initiator_scheme_exception =
@@ -251,6 +296,10 @@ void CrossSiteDocumentResourceHandler::OnWillRead(
     scoped_refptr<net::IOBuffer>* buf,
     int* buf_size,
     std::unique_ptr<ResourceController> controller) {
+  // If a Cross-Origin-Resource Policy (CORP) header blocked this load, it
+  // should cause an error and not get as far as OnWillRead.
+  DCHECK(!blocked_by_cross_origin_resource_policy_);
+
   // For allowed responses, the data is directly streamed to the next handler.
   // Note that OnWillRead may be called before OnResponseStarted (because the
   // MimeSniffingResourceHandler upstream changes the order of the calls) - this
@@ -551,10 +600,16 @@ void CrossSiteDocumentResourceHandler::OnResponseCompleted(
     const net::URLRequestStatus& status,
     std::unique_ptr<ResourceController> controller) {
   if (blocked_read_completed_) {
-    // Report blocked responses as successful, rather than the cancellation
-    // from OnWillRead.
-    next_handler_->OnResponseCompleted(net::URLRequestStatus(),
-                                       std::move(controller));
+    // Most responses blocked by CORB should be reported as successful, rather
+    // than the cancellation from OnWillRead.  OTOH, responses blocked by
+    // Cross-Origin-Resource-Policy should fail with a specific error code.
+    net::URLRequestStatus overriden_status;
+    if (blocked_by_cross_origin_resource_policy_) {
+      overriden_status =
+          net::URLRequestStatus::FromError(net::ERR_BLOCKED_BY_RESPONSE);
+    }
+
+    next_handler_->OnResponseCompleted(overriden_status, std::move(controller));
   } else {
     // Only report CORB status for successful (i.e. non-aborted,
     // non-errored-out) requests.
@@ -562,8 +617,8 @@ void CrossSiteDocumentResourceHandler::OnResponseCompleted(
       analyzer_->LogAllowedResponse();
       if (initiator_scheme_prevented_blocking_ &&
           analyzer_->ShouldReportBlockedResponse() && GetRequestInfo()) {
-        BrowserThread::PostTask(
-            BrowserThread::UI, FROM_HERE,
+        base::PostTaskWithTraits(
+            FROM_HERE, {BrowserThread::UI},
             base::BindOnce(&ContentBrowserClient::
                                LogInitiatorSchemeBypassingDocumentBlocking,
                            base::Unretained(GetContentClient()->browser()),
@@ -604,40 +659,25 @@ bool CrossSiteDocumentResourceHandler::ShouldBlockBasedOnHeaders(
   // Delegate most decisions to CrossOriginReadBlocking::ResponseAnalyzer.
   analyzer_ =
       std::make_unique<network::CrossOriginReadBlocking::ResponseAnalyzer>(
-          *request(), response);
+          *request(), response, kNonNetworkServiceInitiatorLock,
+          fetch_request_mode_);
   if (analyzer_->ShouldAllow())
     return false;
 
-  // Check if the response's site needs to have its documents protected.  By
-  // default, this will usually return false.
-  // TODO(creis): This check can go away once the logic here is made fully
-  // backward compatible and we can enforce it always, regardless of Site
-  // Isolation policy.
-  switch (SiteIsolationPolicy::IsCrossSiteDocumentBlockingEnabled()) {
-    case SiteIsolationPolicy::XSDB_ENABLED_UNCONDITIONALLY:
-      break;
-    case SiteIsolationPolicy::XSDB_ENABLED_IF_ISOLATED: {
-      url::Origin target_origin = url::Origin::Create(request()->url());
-      if (!SiteIsolationPolicy::UseDedicatedProcessesForAllSites() &&
-          !ChildProcessSecurityPolicyImpl::GetInstance()->IsIsolatedOrigin(
-              target_origin)) {
-        return false;
-      }
-      break;
-    }
-    case SiteIsolationPolicy::XSDB_DISABLED:
-      return false;
-  }
+  // --disable-web-security also disables Cross-Origin Read Blocking (CORB).
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableWebSecurity))
+    return false;
 
   // Only block if this is a request made from a renderer process.
-  const ResourceRequestInfoImpl* info = GetRequestInfo();
+  ResourceRequestInfoImpl* info = GetRequestInfo();
   if (!info || info->GetChildID() == -1)
     return false;
 
   // Don't block some plugin requests.
   //
-  // Note that in practice this exception only only matters to Flash and test
-  // plugins (both can issue requests without CORS and both will be covered by
+  // Note that in practice this exception only matters to Flash and test plugins
+  // (both can issue requests without CORS and both will be covered by
   // CORB::ShouldAllowForPlugin below).
   //
   // This exception is not needed for:
@@ -647,7 +687,7 @@ bool CrossSiteDocumentResourceHandler::ShouldBlockBasedOnHeaders(
   //   additionally PDF doesn't _really_ make *cross*-origin requests - it just
   //   seems that way because of the usage of the Chrome extension).
   if (info->GetResourceType() == RESOURCE_TYPE_PLUGIN_RESOURCE &&
-      is_nocors_plugin_request_ &&
+      fetch_request_mode_ == network::mojom::FetchRequestMode::kNoCors &&
       network::CrossOriginReadBlocking::ShouldAllowForPlugin(
           info->GetChildID())) {
     return false;

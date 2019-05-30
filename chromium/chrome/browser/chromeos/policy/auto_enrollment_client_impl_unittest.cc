@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/macros.h"
 #include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -82,8 +81,8 @@ class AutoEnrollmentClientImplTest
   void CreateClient(int power_initial, int power_limit) {
     state_ = AUTO_ENROLLMENT_STATE_PENDING;
     service_.reset(new MockDeviceManagementService());
-    EXPECT_CALL(*service_, StartJob(_, _, _, _, _, _))
-        .WillRepeatedly(SaveArg<5>(&last_request_));
+    EXPECT_CALL(*service_, StartJob(_, _, _, _, _, _, _))
+        .WillRepeatedly(SaveArg<6>(&last_request_));
     auto progress_callback =
         base::BindRepeating(&AutoEnrollmentClientImplTest::ProgressCallback,
                             base::Unretained(this));
@@ -127,15 +126,15 @@ class AutoEnrollmentClientImplTest
             GetParam() == AutoEnrollmentProtocol::kFRE
                 ? hash_full
                 : hash_full.substr(0, kInitialEnrollmentIdHashLength);
-        enrollment_response->mutable_hash()->Add()->assign(hash);
+        enrollment_response->mutable_hashes()->Add()->assign(hash);
       }
     }
     if (with_id_hash) {
       if (GetParam() == AutoEnrollmentProtocol::kFRE) {
-        enrollment_response->mutable_hash()->Add()->assign(
+        enrollment_response->mutable_hashes()->Add()->assign(
             kStateKeyHash, crypto::kSHA256Length);
       } else {
-        enrollment_response->mutable_hash()->Add()->assign(
+        enrollment_response->mutable_hashes()->Add()->assign(
             kInitialEnrollmentIdHash, kInitialEnrollmentIdHashLength);
       }
     }
@@ -162,8 +161,19 @@ class AutoEnrollmentClientImplTest
       case DeviceStateRetrieval::RESTORE_MODE_DISABLED:
         return DeviceInitialEnrollmentState::INITIAL_ENROLLMENT_MODE_NONE;
       case DeviceStateRetrieval::RESTORE_MODE_REENROLLMENT_ZERO_TOUCH:
-        return DeviceInitialEnrollmentState::INITIAL_ENROLLMENT_MODE_NONE;
+        return DeviceInitialEnrollmentState::
+            INITIAL_ENROLLMENT_MODE_ZERO_TOUCH_ENFORCED;
     }
+  }
+
+  std::string MapDeviceRestoreStateToDeviceInitialState(
+      const std::string& restore_state) const {
+    if (restore_state == kDeviceStateRestoreModeReEnrollmentEnforced)
+      return kDeviceStateInitialModeEnrollmentEnforced;
+    if (restore_state == kDeviceStateRestoreModeReEnrollmentZeroTouch)
+      return kDeviceStateInitialModeEnrollmentZeroTouch;
+    NOTREACHED();
+    return "";
   }
 
   void ServerWillSendState(
@@ -255,10 +265,14 @@ class AutoEnrollmentClientImplTest
     if (!expected_restore_mode.empty()) {
       std::string actual_restore_mode;
       EXPECT_TRUE(
-          state_dict->GetString(kDeviceStateRestoreMode, &actual_restore_mode));
-      EXPECT_EQ(expected_restore_mode, actual_restore_mode);
+          state_dict->GetString(kDeviceStateMode, &actual_restore_mode));
+      EXPECT_EQ(GetParam() == AutoEnrollmentProtocol::kFRE
+                    ? expected_restore_mode
+                    : MapDeviceRestoreStateToDeviceInitialState(
+                          expected_restore_mode),
+                actual_restore_mode);
     } else {
-      EXPECT_FALSE(state_dict->HasKey(kDeviceStateRestoreMode));
+      EXPECT_FALSE(state_dict->HasKey(kDeviceStateMode));
     }
 
     std::string actual_disabled_message;
@@ -485,11 +499,7 @@ TEST_P(AutoEnrollmentClientImplTest, ForcedReEnrollment) {
   EXPECT_EQ(AUTO_ENROLLMENT_STATE_TRIGGER_ENROLLMENT, state_);
 }
 
-TEST_P(AutoEnrollmentClientImplTest, ForcedReEnrollmentZeroTouch) {
-  // Zero-Touch is currently not supported in the initial-enrollment exchange.
-  if (GetParam() == AutoEnrollmentProtocol::kInitialEnrollment)
-    return;
-
+TEST_P(AutoEnrollmentClientImplTest, ForcedEnrollmentZeroTouch) {
   ServerWillReply(-1, true, true);
   ServerWillSendState(
       "example.com",
@@ -783,16 +793,16 @@ TEST_P(AutoEnrollmentClientImplTest, NetworkFailureThenRequireUpdatedModulus) {
   InSequence sequence;
   // The default client uploads 4 bits. Make the server ask for 5.
   ServerWillReply(1 << 5, false, false);
-  EXPECT_CALL(*service_, StartJob(_, _, _, _, _, _));
+  EXPECT_CALL(*service_, StartJob(_, _, _, _, _, _, _));
   // Then reply with a valid response and include the hash.
   ServerWillReply(-1, true, true);
-  EXPECT_CALL(*service_, StartJob(_, _, _, _, _, _));
+  EXPECT_CALL(*service_, StartJob(_, _, _, _, _, _, _));
   // State download triggers.
   ServerWillSendState(
       "example.com",
       em::DeviceStateRetrievalResponse::RESTORE_MODE_REENROLLMENT_ENFORCED,
       kDisabledMessage);
-  EXPECT_CALL(*service_, StartJob(_, _, _, _, _, _));
+  EXPECT_CALL(*service_, StartJob(_, _, _, _, _, _, _));
 
   // Trigger a network change event.
   client()->OnConnectionChanged(
@@ -805,10 +815,10 @@ TEST_P(AutoEnrollmentClientImplTest, NetworkFailureThenRequireUpdatedModulus) {
   Mock::VerifyAndClearExpectations(service_.get());
 }
 
-INSTANTIATE_TEST_CASE_P(FRE,
-                        AutoEnrollmentClientImplTest,
-                        testing::Values(AutoEnrollmentProtocol::kFRE));
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(FRE,
+                         AutoEnrollmentClientImplTest,
+                         testing::Values(AutoEnrollmentProtocol::kFRE));
+INSTANTIATE_TEST_SUITE_P(
     InitialEnrollment,
     AutoEnrollmentClientImplTest,
     testing::Values(AutoEnrollmentProtocol::kInitialEnrollment));

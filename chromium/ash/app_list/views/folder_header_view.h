@@ -23,10 +23,9 @@ namespace test {
 class FolderHeaderViewTest;
 }
 
-// FolderHeaderView contains a back button and an editable folder name field.
+// FolderHeaderView contains an editable folder name field.
 class APP_LIST_EXPORT FolderHeaderView : public views::View,
                                          public views::TextfieldController,
-                                         public views::ButtonListener,
                                          public AppListItemObserver {
  public:
   explicit FolderHeaderView(FolderHeaderViewDelegate* delegate);
@@ -37,6 +36,8 @@ class APP_LIST_EXPORT FolderHeaderView : public views::View,
   void OnFolderItemRemoved();
   bool HasTextFocus() const;
   void SetTextFocus();
+  bool is_tablet_mode() const { return is_tablet_mode_; }
+  void set_tablet_mode(bool started) { is_tablet_mode_ = started; }
 
   // Overridden from views::View:
   gfx::Size CalculatePreferredSize() const override;
@@ -73,12 +74,24 @@ class APP_LIST_EXPORT FolderHeaderView : public views::View,
                        const base::string16& new_contents) override;
   bool HandleKeyEvent(views::Textfield* sender,
                       const ui::KeyEvent& key_event) override;
-
-  // views::ButtonListener overrides:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+  void OnBeforeUserAction(views::Textfield* sender) override;
 
   // AppListItemObserver overrides:
   void ItemNameChanged() override;
+
+  // Sets the |previous_cursor_position_|, only for testing use
+  void SetPreviousCursorPositionForTest(const size_t cursor_position);
+
+  // Sets the |previous_folder_name_|, only for testing use
+  void SetPreviousFolderNameForTest(const base::string16& previous_name);
+
+  // Used to restore the folder name if the new folder name is longer than the
+  // max chars folder length allowed
+  base::Optional<base::string16> previous_folder_name_;
+
+  // Used to restore the cursor position to its last known location when
+  // resetting the folder name in textfield
+  base::Optional<size_t> previous_cursor_position_;
 
   AppListFolderItem* folder_item_;  // Not owned.
 
@@ -89,6 +102,8 @@ class APP_LIST_EXPORT FolderHeaderView : public views::View,
   FolderHeaderViewDelegate* delegate_;
 
   bool folder_name_visible_;
+
+  bool is_tablet_mode_;
 
   DISALLOW_COPY_AND_ASSIGN(FolderHeaderView);
 };

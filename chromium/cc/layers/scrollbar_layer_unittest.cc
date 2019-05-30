@@ -62,7 +62,7 @@ class FakeResourceTrackingUIResourceManager : public UIResourceManager {
 
   // Deletes a UI resource.  May safely be called more than once.
   void DeleteUIResource(UIResourceId id) override {
-    UIResourceBitmapMap::iterator iter = ui_resource_bitmap_map_.find(id);
+    auto iter = ui_resource_bitmap_map_.find(id);
     if (iter != ui_resource_bitmap_map_.end()) {
       ui_resource_bitmap_map_.erase(iter);
       total_ui_resource_deleted_++;
@@ -74,14 +74,14 @@ class FakeResourceTrackingUIResourceManager : public UIResourceManager {
   int TotalUIResourceCreated() { return total_ui_resource_created_; }
 
   gfx::Size ui_resource_size(UIResourceId id) {
-    UIResourceBitmapMap::iterator iter = ui_resource_bitmap_map_.find(id);
+    auto iter = ui_resource_bitmap_map_.find(id);
     if (iter != ui_resource_bitmap_map_.end())
       return iter->second.GetSize();
     return gfx::Size();
   }
 
   UIResourceBitmap* ui_resource_bitmap(UIResourceId id) {
-    UIResourceBitmapMap::iterator iter = ui_resource_bitmap_map_.find(id);
+    auto iter = ui_resource_bitmap_map_.find(id);
     if (iter != ui_resource_bitmap_map_.end())
       return &iter->second;
     return nullptr;
@@ -125,8 +125,8 @@ class BaseScrollbarLayerTest : public testing::Test {
             std::make_unique<FakeResourceTrackingUIResourceManager>();
     fake_ui_resource_manager_ = fake_ui_resource_manager.get();
 
-    layer_tree_host_.reset(new FakeLayerTreeHost(
-        &fake_client_, &params, CompositorMode::SINGLE_THREADED));
+    layer_tree_host_ = std::make_unique<FakeLayerTreeHost>(
+        &fake_client_, std::move(params), CompositorMode::SINGLE_THREADED);
     layer_tree_host_->SetUIResourceManagerForTesting(
         std::move(fake_ui_resource_manager));
     layer_tree_host_->InitializeSingleThreaded(
@@ -250,49 +250,6 @@ TEST_F(ScrollbarLayerTest, RepaintOverlayWhenResourceDisposed) {
     EXPECT_TRUE(scrollbar_layer->Update());
     EXPECT_EQ(1u, fake_ui_resource_manager_->UIResourceCount());
   }
-}
-
-TEST_F(ScrollbarLayerTest, ShouldScrollNonOverlayOnMainThread) {
-  // Create and attach a non-overlay scrollbar.
-  std::unique_ptr<Scrollbar> scrollbar(new FakeScrollbar);
-  LayerImpl* layer_impl_tree_root = LayerImplForScrollAreaAndScrollbar(
-      layer_tree_host_.get(), std::move(scrollbar), false, false, 0, 0);
-  PaintedScrollbarLayerImpl* scrollbar_layer_impl =
-      static_cast<PaintedScrollbarLayerImpl*>(
-          layer_impl_tree_root->layer_tree_impl()->LayerById(
-              scrollbar_layer_id_));
-  ScrollTree& scroll_tree =
-      layer_impl_tree_root->layer_tree_impl()->property_trees()->scroll_tree;
-  ScrollNode* scroll_node =
-      scroll_tree.Node(scrollbar_layer_impl->scroll_tree_index());
-
-  // When the scrollbar is not an overlay scrollbar, the scroll should be
-  // responded to on the main thread as the compositor does not yet implement
-  // scrollbar scrolling.
-  InputHandler::ScrollStatus status = layer_tree_host_->host_impl()->TryScroll(
-      gfx::PointF(), InputHandler::TOUCHSCREEN, scroll_tree, scroll_node);
-  EXPECT_EQ(InputHandler::SCROLL_ON_MAIN_THREAD, status.thread);
-  EXPECT_EQ(MainThreadScrollingReason::kScrollbarScrolling,
-            status.main_thread_scrolling_reasons);
-
-  // Create and attach an overlay scrollbar.
-  scrollbar.reset(new FakeScrollbar(false, false, true));
-
-  layer_impl_tree_root = LayerImplForScrollAreaAndScrollbar(
-      layer_tree_host_.get(), std::move(scrollbar), false, false, 0, 0);
-  scrollbar_layer_impl = static_cast<PaintedScrollbarLayerImpl*>(
-      layer_impl_tree_root->layer_tree_impl()->LayerById(scrollbar_layer_id_));
-  scroll_tree =
-      layer_impl_tree_root->layer_tree_impl()->property_trees()->scroll_tree;
-  scroll_node = scroll_tree.Node(scrollbar_layer_impl->scroll_tree_index());
-
-  // The user shouldn't be able to drag an overlay scrollbar and the scroll
-  // may be handled in the compositor.
-  status = layer_tree_host_->host_impl()->TryScroll(
-      gfx::PointF(), InputHandler::TOUCHSCREEN, scroll_tree, scroll_node);
-  EXPECT_EQ(InputHandler::SCROLL_IGNORED, status.thread);
-  EXPECT_EQ(MainThreadScrollingReason::kNotScrollable,
-            status.main_thread_scrolling_reasons);
 }
 
 class FakeNinePatchScrollbar : public FakeScrollbar {
@@ -1342,7 +1299,7 @@ class ScaledScrollbarLayerTestResourceCreation : public ScrollbarLayerTest {
 
     layer_tree_host_->SetViewportSizeAndScale(
         layer_tree_host_->device_viewport_size(), test_scale,
-        layer_tree_host_->local_surface_id_from_parent());
+        layer_tree_host_->local_surface_id_allocation_from_parent());
 
     scrollbar_layer->Update();
 
@@ -1407,7 +1364,7 @@ class ScaledScrollbarLayerTestScaledRasterization : public ScrollbarLayerTest {
 
     layer_tree_host_->SetViewportSizeAndScale(
         layer_tree_host_->device_viewport_size(), test_scale,
-        layer_tree_host_->local_surface_id_from_parent());
+        layer_tree_host_->local_surface_id_allocation_from_parent());
 
     scrollbar_layer->Update();
 

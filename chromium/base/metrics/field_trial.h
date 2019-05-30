@@ -24,7 +24,7 @@
 // the impact of some pruning algorithm.
 // We assume that we already have a histogram of memory usage, such as:
 
-//   UMA_HISTOGRAM_COUNTS("Memory.RendererTotal", count);
+//   UMA_HISTOGRAM_COUNTS_1M("Memory.RendererTotal", count);
 
 // Somewhere in main thread initialization code, we'd probably define an
 // instance of a FieldTrial, with code such as:
@@ -70,9 +70,9 @@
 #include "base/files/file.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/shared_memory.h"
-#include "base/memory/shared_memory_handle.h"
+#include "base/memory/shared_memory_mapping.h"
 #include "base/metrics/persistent_memory_allocator.h"
 #include "base/observer_list_threadsafe.h"
 #include "base/pickle.h"
@@ -82,6 +82,10 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+#include "base/mac/mach_port_rendezvous.h"
+#endif
+
 namespace base {
 
 class FieldTrialList;
@@ -89,9 +93,6 @@ class FieldTrialList;
 class BASE_EXPORT FieldTrial : public RefCounted<FieldTrial> {
  public:
   typedef int Probability;  // Probability type for being selected in a trial.
-
-  // TODO(665129): Make private again after crash has been resolved.
-  typedef SharedPersistentMemoryAllocator::Reference FieldTrialRef;
 
   // Specifies the persistence of the field trial group choice.
   enum RandomizationType {
@@ -279,6 +280,8 @@ class BASE_EXPORT FieldTrial : public RefCounted<FieldTrial> {
 
   friend class RefCounted<FieldTrial>;
 
+  using FieldTrialRef = PersistentMemoryAllocator::Reference;
+
   // This is the group number of the 'default' group when a choice wasn't forced
   // by a call to FieldTrialList::CreateFieldTrial. It is kept private so that
   // consumers don't use it by mistake in cases where the group was forced.
@@ -392,7 +395,7 @@ class BASE_EXPORT FieldTrial : public RefCounted<FieldTrial> {
 // the entire life time of the process.
 class BASE_EXPORT FieldTrialList {
  public:
-  typedef SharedPersistentMemoryAllocator FieldTrialAllocator;
+  using FieldTrialAllocator = PersistentMemoryAllocator;
 
   // Type for function pointer passed to |AllParamsToString| used to escape
   // special characters from |input|.
@@ -459,10 +462,11 @@ class BASE_EXPORT FieldTrialList {
   // |randomization_seed| value (other than 0) should never be the same for two
   // trials, else this would result in correlated group assignments.  Note:
   // Using a custom randomization seed is only supported by the
-  // PermutedEntropyProvider (which is used when UMA is not enabled). If
-  // |override_entropy_provider| is not null, then it will be used for
-  // randomization instead of the provider given when the FieldTrialList was
-  // instantiated.
+  // NormalizedMurmurHashEntropyProvider, which is used when UMA is not enabled
+  // (and is always used in Android WebView, where UMA is enabled
+  // asyncronously). If |override_entropy_provider| is not null, then it will be
+  // used for randomization instead of the provider given when the
+  // FieldTrialList was instantiated.
   static FieldTrial* FactoryGetFieldTrialWithRandomizationSeed(
       const std::string& trial_name,
       FieldTrial::Probability total_probability,
@@ -588,12 +592,20 @@ class BASE_EXPORT FieldTrialList {
       base::HandlesToInheritVector* handles);
 #elif defined(OS_FUCHSIA)
   // TODO(fuchsia): Implement shared-memory configuration (crbug.com/752368).
+#elif defined(OS_MACOSX) && !defined(OS_IOS)
+  // On Mac, the field trial shared memory is accessed via a Mach server, which
+  // the child looks up directly.
+  static void InsertFieldTrialHandleIfNeeded(
+      MachPortsForRendezvous* rendezvous_ports);
 #elif defined(OS_POSIX) && !defined(OS_NACL)
   // On POSIX, we also need to explicitly pass down this file descriptor that
-  // should be shared with the child process. Returns an invalid handle if it
-  // was not initialized properly.
-  static base::SharedMemoryHandle GetFieldTrialHandle();
+  // should be shared with the child process. Returns -1 if it was not
+  // initialized properly. The current process remains the onwer of the passed
+  // descriptor.
+  static int GetFieldTrialDescriptor();
 #endif
+  static base::ReadOnlySharedMemoryRegion
+  DuplicateFieldTrialSharedMemoryForTesting();
 
   // Adds a switch to the command line containing the field trial state as a
   // string (if not using shared memory to share field trial state), or the
@@ -681,25 +693,28 @@ class BASE_EXPORT FieldTrialList {
   FRIEND_TEST_ALL_PREFIXES(FieldTrialListTest, AssociateFieldTrialParams);
   FRIEND_TEST_ALL_PREFIXES(FieldTrialListTest, ClearParamsFromSharedMemory);
   FRIEND_TEST_ALL_PREFIXES(FieldTrialListTest,
-                           SerializeSharedMemoryHandleMetadata);
-  FRIEND_TEST_ALL_PREFIXES(FieldTrialListTest, CheckReadOnlySharedMemoryHandle);
+                           SerializeSharedMemoryRegionMetadata);
+  friend int SerializeSharedMemoryRegionMetadata(void);
+  FRIEND_TEST_ALL_PREFIXES(FieldTrialListTest, CheckReadOnlySharedMemoryRegion);
 
   // Serialization is used to pass information about the handle to child
   // processes. It passes a reference to the relevant OS resource, and it passes
   // a GUID. Serialization and deserialization doesn't actually transport the
   // underlying OS resource - that must be done by the Process launcher.
-  static std::string SerializeSharedMemoryHandleMetadata(
-      const SharedMemoryHandle& shm);
-#if defined(OS_WIN) || defined(OS_FUCHSIA)
-  static SharedMemoryHandle DeserializeSharedMemoryHandleMetadata(
+  static std::string SerializeSharedMemoryRegionMetadata(
+      const base::ReadOnlySharedMemoryRegion& shm);
+#if defined(OS_WIN) || defined(OS_FUCHSIA) || \
+    (defined(OS_MACOSX) && !defined(OS_IOS))
+  static base::ReadOnlySharedMemoryRegion DeserializeSharedMemoryRegionMetadata(
       const std::string& switch_value);
 #elif defined(OS_POSIX) && !defined(OS_NACL)
-  static SharedMemoryHandle DeserializeSharedMemoryHandleMetadata(
+  static base::ReadOnlySharedMemoryRegion DeserializeSharedMemoryRegionMetadata(
       int fd,
       const std::string& switch_value);
 #endif
 
-#if defined(OS_WIN) || defined(OS_FUCHSIA)
+#if defined(OS_WIN) || defined(OS_FUCHSIA) || \
+    (defined(OS_MACOSX) && !defined(OS_IOS))
   // Takes in |handle_switch| from the command line which represents the shared
   // memory handle for field trials, parses it, and creates the field trials.
   // Returns true on success, false on failure.
@@ -714,17 +729,19 @@ class BASE_EXPORT FieldTrialList {
                                          const std::string& switch_value);
 #endif
 
-  // Takes an unmapped SharedMemoryHandle, creates a SharedMemory object from it
-  // and maps it with the correct size.
-  static bool CreateTrialsFromSharedMemoryHandle(SharedMemoryHandle shm_handle);
+  // Takes an unmapped ReadOnlySharedMemoryRegion, maps it with the correct size
+  // and creates field trials via CreateTrialsFromSharedMemoryMapping(). Returns
+  // true if successful and false otherwise.
+  static bool CreateTrialsFromSharedMemoryRegion(
+      const base::ReadOnlySharedMemoryRegion& shm_region);
 
-  // Expects a mapped piece of shared memory |shm| that was created from the
-  // browser process's field_trial_allocator and shared via the command line.
-  // This function recreates the allocator, iterates through all the field
+  // Expects a mapped piece of shared memory |shm_mapping| that was created from
+  // the browser process's field_trial_allocator and shared via the command
+  // line. This function recreates the allocator, iterates through all the field
   // trials in it, and creates them via CreateFieldTrial(). Returns true if
   // successful and false otherwise.
-  static bool CreateTrialsFromSharedMemory(
-      std::unique_ptr<base::SharedMemory> shm);
+  static bool CreateTrialsFromSharedMemoryMapping(
+      base::ReadOnlySharedMemoryMapping shm_mapping);
 
   // Instantiate the field trial allocator, add all existing field trials to it,
   // and duplicates its handle to a read-only handle, which gets stored in
@@ -788,10 +805,10 @@ class BASE_EXPORT FieldTrialList {
   // to start passing more data other than field trials.
   std::unique_ptr<FieldTrialAllocator> field_trial_allocator_ = nullptr;
 
-  // Readonly copy of the handle to the allocator. Needs to be a member variable
+  // Readonly copy of the region to the allocator. Needs to be a member variable
   // because it's needed from both CopyFieldTrialStateToFlags() and
   // AppendFieldTrialHandleIfNeeded().
-  base::SharedMemoryHandle readonly_allocator_handle_;
+  base::ReadOnlySharedMemoryRegion readonly_allocator_region_;
 
   // Tracks whether CreateTrialsFromCommandLine() has been called.
   bool create_trials_from_command_line_called_ = false;

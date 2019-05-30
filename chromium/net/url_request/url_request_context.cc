@@ -35,6 +35,7 @@ URLRequestContext::URLRequestContext()
       channel_id_service_(nullptr),
       http_auth_handler_factory_(nullptr),
       proxy_resolution_service_(nullptr),
+      proxy_delegate_(nullptr),
       ssl_config_service_(nullptr),
       network_delegate_(nullptr),
       http_server_properties_(nullptr),
@@ -74,6 +75,7 @@ void URLRequestContext::CopyFrom(const URLRequestContext* other) {
   set_channel_id_service(other->channel_id_service_);
   set_http_auth_handler_factory(other->http_auth_handler_factory_);
   set_proxy_resolution_service(other->proxy_resolution_service_);
+  set_proxy_delegate(other->proxy_delegate_);
   set_ssl_config_service(other->ssl_config_service_);
   set_network_delegate(other->network_delegate_);
   set_http_server_properties(other->http_server_properties_);
@@ -154,8 +156,6 @@ void URLRequestContext::AssertNoURLRequests() const {
 bool URLRequestContext::OnMemoryDump(
     const base::trace_event::MemoryDumpArgs& args,
     base::trace_event::ProcessMemoryDump* pmd) {
-  SSLClientSocketImpl::DumpSSLClientSessionMemoryStats(pmd);
-
   std::string dump_name =
       base::StringPrintf("net/url_request_context/%s/0x%" PRIxPTR,
                          name_.c_str(), reinterpret_cast<uintptr_t>(this));

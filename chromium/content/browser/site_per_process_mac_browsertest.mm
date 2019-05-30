@@ -6,9 +6,12 @@
 
 #include <Cocoa/Cocoa.h>
 
+#include "base/bind.h"
 #include "base/mac/mac_util.h"
+#include "base/task/post_task.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_mac.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -49,10 +52,10 @@ class TextInputClientMacHelper {
  private:
   void OnResult(const std::string& string, const gfx::Point& point) {
     if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-      BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE,
-          base::Bind(&TextInputClientMacHelper::OnResult,
-                     base::Unretained(this), string, point));
+      base::PostTaskWithTraits(
+          FROM_HERE, {BrowserThread::UI},
+          base::BindOnce(&TextInputClientMacHelper::OnResult,
+                         base::Unretained(this), string, point));
       return;
     }
     word_ = string;
@@ -310,20 +313,19 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
       contents->GetRenderWidgetHostView());
 
   RenderWidgetHostInputEventRouter* router = contents->GetInputEventRouter();
-  EXPECT_EQ(nullptr, router->touchpad_gesture_target_.target);
+  EXPECT_EQ(nullptr, router->touchpad_gesture_target_);
 
   gfx::Point main_frame_point(25, 575);
   gfx::Point child_center(150, 450);
 
   // Send touchpad pinch sequence to main-frame.
   SendMacTouchpadPinchSequenceWithExpectedTarget(
-      rwhv_parent, main_frame_point, router->touchpad_gesture_target_.target,
+      rwhv_parent, main_frame_point, router->touchpad_gesture_target_,
       rwhv_parent);
 
   // Send touchpad pinch sequence to child.
   SendMacTouchpadPinchSequenceWithExpectedTarget(
-      rwhv_parent, child_center, router->touchpad_gesture_target_.target,
-      rwhv_child);
+      rwhv_parent, child_center, router->touchpad_gesture_target_, rwhv_child);
 }
 
 }  // namespace content

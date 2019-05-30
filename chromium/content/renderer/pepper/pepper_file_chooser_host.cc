@@ -6,10 +6,10 @@
 
 #include <stddef.h>
 
+#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "content/public/common/file_chooser_params.h"
 #include "content/public/renderer/renderer_ppapi_host.h"
 #include "content/renderer/pepper/pepper_file_ref_renderer_host.h"
 #include "content/renderer/render_view_impl.h"
@@ -17,41 +17,53 @@
 #include "ppapi/host/dispatch_host_message.h"
 #include "ppapi/host/ppapi_host.h"
 #include "ppapi/proxy/ppapi_messages.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
+#include "third_party/blink/public/platform/file_path_conversion.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_vector.h"
-#include "third_party/blink/public/web/web_file_chooser_completion.h"
 
 namespace content {
 
-class PepperFileChooserHost::CompletionHandler
-    : public blink::WebFileChooserCompletion {
+using blink::mojom::FileChooserParams;
+
+class PepperFileChooserHost::CompletionHandler {
  public:
   explicit CompletionHandler(const base::WeakPtr<PepperFileChooserHost>& host)
       : host_(host) {}
 
-  ~CompletionHandler() override {}
+  ~CompletionHandler() {}
 
-  void DidChooseFile(
-      const blink::WebVector<blink::WebString>& file_names) override {
-    if (host_.get()) {
-      std::vector<PepperFileChooserHost::ChosenFileInfo> files;
-      for (size_t i = 0; i < file_names.size(); i++) {
-        files.push_back(PepperFileChooserHost::ChosenFileInfo(
-            file_names[i].Utf8(), std::string()));
-      }
-      host_->StoreChosenFiles(files);
-    }
-
-    // It is the responsibility of this method to delete the instance.
-    delete this;
+  bool OpenFileChooser(RenderFrameImpl* render_frame,
+                       blink::mojom::FileChooserParamsPtr params) {
+    if (!render_frame)
+      return false;
+    render_frame->GetInterfaceProvider()->GetInterface(&file_chooser_);
+    file_chooser_.set_connection_error_handler(base::BindOnce(
+        &CompletionHandler::OnConnectionError, base::Unretained(this)));
+    file_chooser_->OpenFileChooser(
+        std::move(params), base::BindOnce(&CompletionHandler::DidChooseFiles,
+                                          base::Unretained(this)));
+    return true;
   }
-  void DidChooseFile(
-      const blink::WebVector<SelectedFileInfo>& file_names) override {
+
+  void DidChooseFiles(blink::mojom::FileChooserResultPtr result) {
     if (host_.get()) {
       std::vector<PepperFileChooserHost::ChosenFileInfo> files;
-      for (size_t i = 0; i < file_names.size(); i++) {
-        files.push_back(PepperFileChooserHost::ChosenFileInfo(
-            file_names[i].path.Utf8(), file_names[i].display_name.Utf8()));
+      if (result) {
+        std::vector<blink::mojom::FileChooserFileInfoPtr> mojo_files =
+            std::move(result->files);
+        for (size_t i = 0; i < mojo_files.size(); i++) {
+          base::FilePath file_path =
+              mojo_files[i]->get_native_file()->file_path;
+          // Drop files of which names can not be converted to Unicode. We
+          // can't expose such files in Flash.
+          if (blink::FilePathToWebString(file_path).IsEmpty())
+            continue;
+          files.push_back(PepperFileChooserHost::ChosenFileInfo(
+              file_path, base::UTF16ToUTF8(
+                             mojo_files[i]->get_native_file()->display_name)));
+        }
       }
       host_->StoreChosenFiles(files);
     }
@@ -61,15 +73,23 @@ class PepperFileChooserHost::CompletionHandler
   }
 
  private:
+  void OnConnectionError() {
+    if (host_)
+      host_->StoreChosenFiles(
+          std::vector<PepperFileChooserHost::ChosenFileInfo>());
+    delete this;
+  }
+
   base::WeakPtr<PepperFileChooserHost> host_;
+  blink::mojom::FileChooserPtr file_chooser_;
 
   DISALLOW_COPY_AND_ASSIGN(CompletionHandler);
 };
 
 PepperFileChooserHost::ChosenFileInfo::ChosenFileInfo(
-    const std::string& path,
+    const base::FilePath& file_path,
     const std::string& display_name)
-    : path(path), display_name(display_name) {}
+    : file_path(file_path), display_name(display_name) {}
 
 PepperFileChooserHost::PepperFileChooserHost(RendererPpapiHost* host,
                                              PP_Instance instance,
@@ -96,7 +116,7 @@ void PepperFileChooserHost::StoreChosenFiles(
   std::vector<base::FilePath> file_paths;
   std::vector<std::string> display_names;
   for (size_t i = 0; i < files.size(); i++) {
-    base::FilePath file_path = base::FilePath::FromUTF8Unsafe(files[i].path);
+    base::FilePath file_path = files[i].file_path;
     file_paths.push_back(file_path);
     create_msgs.push_back(PpapiHostMsg_FileRef_CreateForRawFS(file_path));
     display_names.push_back(files[i].display_name);
@@ -135,27 +155,27 @@ int32_t PepperFileChooserHost::OnShow(
     return PP_ERROR_NO_USER_GESTURE;
   }
 
-  FileChooserParams params;
+  auto params = FileChooserParams::New();
   if (save_as) {
-    params.mode = FileChooserParams::Save;
-    params.default_file_name =
+    params->mode = FileChooserParams::Mode::kSave;
+    params->default_file_name =
         base::FilePath::FromUTF8Unsafe(suggested_file_name).BaseName();
   } else {
-    params.mode = open_multiple ? FileChooserParams::OpenMultiple
-                                : FileChooserParams::Open;
+    params->mode = open_multiple ? FileChooserParams::Mode::kOpenMultiple
+                                 : FileChooserParams::Mode::kOpen;
   }
-  params.accept_types.reserve(accept_mime_types.size());
+  params->accept_types.reserve(accept_mime_types.size());
   for (const auto& mime_type : accept_mime_types)
-    params.accept_types.push_back(base::UTF8ToUTF16(mime_type));
-  params.need_local_path = true;
+    params->accept_types.push_back(base::UTF8ToUTF16(mime_type));
+  params->need_local_path = true;
 
-  params.requestor = renderer_ppapi_host_->GetDocumentURL(pp_instance());
+  params->requestor = renderer_ppapi_host_->GetDocumentURL(pp_instance());
 
   handler_ = new CompletionHandler(AsWeakPtr());
   RenderFrameImpl* render_frame = static_cast<RenderFrameImpl*>(
       renderer_ppapi_host_->GetRenderFrameForInstance(pp_instance()));
 
-  if (!render_frame || !render_frame->RunFileChooser(params, handler_)) {
+  if (!handler_->OpenFileChooser(render_frame, std::move(params))) {
     delete handler_;
     handler_ = nullptr;
     return PP_ERROR_NOACCESS;

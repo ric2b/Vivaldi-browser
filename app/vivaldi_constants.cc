@@ -22,10 +22,11 @@ const char kVivaldiAppURLDomain[] = "chrome-extension://" VIVALDI_APP_ID "/";
 const char kVivaldiIncognitoURL[] = "chrome-extension://" VIVALDI_APP_ID
                                  "/components/"
                                  "private-intro/private-intro.html";
+const char kVivaldiGuestSessionURL[] = "chrome-extension://" VIVALDI_APP_ID
+                                       "/components/"
+                                       "guest-intro/guest-intro.html";
 // Defines the URL that should be opened in an empty new tab or window.
-const char kVivaldiNewTabURL[] = "chrome-extension://" VIVALDI_APP_ID
-                                 "/components/"
-                                 "startpage/startpage.html";
+const char kVivaldiNewTabURL[] = "chrome://vivaldi-webui/startpage";
 
 // Error message reported to extensions trying to use Vivaldi reserved APIs
 const char kVivaldiReservedApiError[] =
@@ -34,8 +35,12 @@ const char kVivaldiReservedApiError[] =
 const char kVivaldiUIScheme[] = "vivaldi";
 
 const char kVivaldiUIDataHost[] = "vivaldi-data";
+const char kVivaldiWebUIHost[] = "vivaldi-webui";
+const char kVivaldiThumbDataHost[] = "thumb";
 
 const char kVivaldiUIDataURL[] = "chrome://vivaldi-data/";
+const char kVivaldiWebUIURL[] = "chrome://vivaldi-webui/";
+const char kVivaldiThumbURL[] = "chrome://thumb/";
 
 const char kWindowExtDataKey[] = "extData";
 

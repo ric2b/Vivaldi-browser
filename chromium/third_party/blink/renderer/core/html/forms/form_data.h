@@ -45,7 +45,7 @@ class Blob;
 class HTMLFormElement;
 class ScriptState;
 
-// Typedef from FormData.idl:
+// Typedef from form_data.idl:
 typedef FileOrUSVString FormDataEntryValue;
 
 class CORE_EXPORT FormData final
@@ -54,14 +54,23 @@ class CORE_EXPORT FormData final
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static FormData* Create(HTMLFormElement* form = nullptr) {
-    return new FormData(form);
+  static FormData* Create() { return MakeGarbageCollected<FormData>(); }
+  static FormData* Create(ExceptionState& exception_state) {
+    return MakeGarbageCollected<FormData>();
   }
+  static FormData* Create(HTMLFormElement* form,
+                          ExceptionState& exception_state);
 
   static FormData* Create(const WTF::TextEncoding& encoding) {
-    return new FormData(encoding);
+    return MakeGarbageCollected<FormData>(encoding);
   }
-  void Trace(blink::Visitor*) override;
+
+  explicit FormData(const WTF::TextEncoding&);
+  // Clones form_data.  This clones |form_data.entries_| Vector, but
+  // doesn't clone entries in it because they are immutable.
+  FormData(const FormData& form_data);
+  FormData();
+  void Trace(Visitor*) override;
 
   // FormData IDL interface.
   void append(const String& name, const String& value);
@@ -98,13 +107,11 @@ class CORE_EXPORT FormData final
   scoped_refptr<EncodedFormData> EncodeMultiPartFormData();
 
  private:
-  explicit FormData(const WTF::TextEncoding&);
-  explicit FormData(HTMLFormElement*);
   void SetEntry(const Entry*);
   IterationSource* StartIteration(ScriptState*, ExceptionState&) override;
 
   WTF::TextEncoding encoding_;
-  // Entry pointers in m_entries never be nullptr.
+  // Entry pointers in entries_ never be nullptr.
   HeapVector<Member<const Entry>> entries_;
   bool contains_password_data_ = false;
 };
@@ -116,7 +123,7 @@ class FormData::Entry : public GarbageCollectedFinalized<FormData::Entry> {
  public:
   Entry(const String& name, const String& value);
   Entry(const String& name, Blob* blob, const String& filename);
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
   bool IsString() const { return !blob_; }
   bool isFile() const { return blob_; }

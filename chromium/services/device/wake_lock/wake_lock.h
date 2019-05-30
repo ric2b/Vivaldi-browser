@@ -6,15 +6,18 @@
 #define SERVICES_DEVICE_WAKE_LOCK_WAKE_LOCK_H_
 
 #include <memory>
+#include <string>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/observer_list.h"
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/device/public/mojom/wake_lock.mojom.h"
 #include "services/device/public/mojom/wake_lock_context.mojom.h"
 #include "services/device/wake_lock/power_save_blocker/power_save_blocker.h"
+#include "services/device/wake_lock/wake_lock.h"
 #include "services/device/wake_lock/wake_lock_context.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -30,6 +33,35 @@ class WakeLock : public mojom::WakeLock {
            WakeLockContextCallback native_view_getter,
            scoped_refptr<base::SingleThreadTaskRunner> file_task_runner);
   ~WakeLock() override;
+
+  // This is an interface for classes to be notified of wake lock events.
+  // Observers should register themselves by calling the parent class's
+  // |AddObserver| method.
+  class Observer {
+   public:
+    virtual ~Observer() = default;
+
+    // Called when the tracked wake lock is requested the first time i.e. the
+    // number of holders increases to 1.
+    virtual void OnWakeLockActivated(mojom::WakeLockType type) {}
+
+    // Called when the tracked wake lock is canceled the last time i.e. the
+    // number of holders goes to 0.
+    virtual void OnWakeLockDeactivated(mojom::WakeLockType type) {}
+
+    // Called when the tracked wake lock's type is changed via ChangeType.
+    // |old_type| refers to its old type and new type refers to its new type.
+    virtual void OnWakeLockChanged(mojom::WakeLockType old_type,
+                                   mojom::WakeLockType new_type) {}
+
+    // Called when |WakeLock| has no bindings left.
+    virtual void OnConnectionError(mojom::WakeLockType type,
+                                   WakeLock* wake_lock) {}
+  };
+
+  // For managing |Observer|s.
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
 
   // WakeLockSevice implementation.
   void RequestWakeLock() override;
@@ -71,6 +103,8 @@ class WakeLock : public mojom::WakeLock {
   // client is being added into the BindingSet, we create an unique_ptr<bool>
   // as its context, which records this client's request status.
   mojo::BindingSet<mojom::WakeLock, std::unique_ptr<bool>> binding_set_;
+
+  base::ObserverList<Observer>::Unchecked observers_;
 
   DISALLOW_COPY_AND_ASSIGN(WakeLock);
 };

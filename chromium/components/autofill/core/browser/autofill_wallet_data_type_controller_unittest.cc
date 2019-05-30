@@ -11,9 +11,9 @@
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
@@ -24,18 +24,20 @@
 #include "components/sync/driver/configure_context.h"
 #include "components/sync/driver/data_type_controller_mock.h"
 #include "components/sync/driver/fake_generic_change_processor.h"
-#include "components/sync/driver/fake_sync_client.h"
-#include "components/sync/driver/sync_api_component_factory_mock.h"
+#include "components/sync/driver/fake_sync_service.h"
+#include "components/sync/driver/sync_client_mock.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/model/fake_syncable_service.h"
 #include "components/sync/model/sync_error.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using autofill::AutofillWebDataService;
-
 namespace browser_sync {
 
 namespace {
+
+using autofill::AutofillWebDataService;
+using testing::_;
+using testing::Return;
 
 // Fake WebDataService implementation that stubs out the database loading.
 class FakeWebDataService : public AutofillWebDataService {
@@ -75,24 +77,29 @@ class FakeWebDataService : public AutofillWebDataService {
   DISALLOW_COPY_AND_ASSIGN(FakeWebDataService);
 };
 
-class AutofillWalletDataTypeControllerTest : public testing::Test,
-                                             public syncer::FakeSyncClient {
+class AutofillWalletDataTypeControllerTest : public testing::Test {
  public:
-  AutofillWalletDataTypeControllerTest()
-      : syncer::FakeSyncClient(&profile_sync_factory_),
-        last_type_(syncer::UNSPECIFIED) {}
+  AutofillWalletDataTypeControllerTest() : last_type_(syncer::UNSPECIFIED) {}
   ~AutofillWalletDataTypeControllerTest() override {}
 
   void SetUp() override {
     prefs_.registry()->RegisterBooleanPref(
         autofill::prefs::kAutofillWalletImportEnabled, true);
+    prefs_.registry()->RegisterBooleanPref(
+        autofill::prefs::kAutofillCreditCardEnabled, true);
+
+    ON_CALL(sync_client_, GetPrefService()).WillByDefault(Return(&prefs_));
+    ON_CALL(sync_client_, GetSyncableServiceForType(_))
+        .WillByDefault(Return(syncable_service_.AsWeakPtr()));
 
     web_data_service_ = base::MakeRefCounted<FakeWebDataService>(
         base::ThreadTaskRunnerHandle::Get(),
         base::ThreadTaskRunnerHandle::Get());
     autofill_wallet_dtc_ = std::make_unique<AutofillWalletDataTypeController>(
         syncer::AUTOFILL_WALLET_DATA, base::ThreadTaskRunnerHandle::Get(),
-        base::DoNothing(), this, web_data_service_);
+        base::DoNothing(), &sync_service_, &sync_client_,
+        AutofillWalletDataTypeController::PersonalDataManagerProvider(),
+        web_data_service_);
 
     last_type_ = syncer::UNSPECIFIED;
     last_error_ = syncer::SyncError();
@@ -105,20 +112,12 @@ class AutofillWalletDataTypeControllerTest : public testing::Test,
     syncable_service_.StopSyncing(syncer::AUTOFILL_WALLET_DATA);
   }
 
-  // FakeSyncClient overrides.
-  PrefService* GetPrefService() override { return &prefs_; }
-
-  base::WeakPtr<syncer::SyncableService> GetSyncableServiceForType(
-      syncer::ModelType type) override {
-    return syncable_service_.AsWeakPtr();
-  }
-
  protected:
   void SetStartExpectations() {
     autofill_wallet_dtc_->SetGenericChangeProcessorFactoryForTest(
         std::make_unique<syncer::FakeGenericChangeProcessorFactory>(
             std::make_unique<syncer::FakeGenericChangeProcessor>(
-                syncer::AUTOFILL_WALLET_DATA, this)));
+                syncer::AUTOFILL_WALLET_DATA)));
   }
 
   void Start() {
@@ -140,13 +139,14 @@ class AutofillWalletDataTypeControllerTest : public testing::Test,
     last_error_ = error;
   }
 
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
   TestingPrefServiceSimple prefs_;
+  syncer::FakeSyncService sync_service_;
   syncer::StartCallbackMock start_callback_;
-  syncer::SyncApiComponentFactoryMock profile_sync_factory_;
   syncer::FakeSyncableService syncable_service_;
   std::unique_ptr<AutofillWalletDataTypeController> autofill_wallet_dtc_;
   scoped_refptr<FakeWebDataService> web_data_service_;
+  testing::NiceMock<syncer::SyncClientMock> sync_client_;
 
   syncer::ModelType last_type_;
   syncer::SyncError last_error_;
@@ -166,7 +166,8 @@ TEST_F(AutofillWalletDataTypeControllerTest, StartDatatypeEnabled) {
   EXPECT_EQ(syncer::DataTypeController::RUNNING, autofill_wallet_dtc_->state());
 }
 
-TEST_F(AutofillWalletDataTypeControllerTest, DatatypeDisabledWhileRunning) {
+TEST_F(AutofillWalletDataTypeControllerTest,
+       DatatypeDisabledByWalletImportWhileRunning) {
   SetStartExpectations();
   web_data_service_->LoadDatabase();
   EXPECT_CALL(start_callback_,
@@ -178,15 +179,50 @@ TEST_F(AutofillWalletDataTypeControllerTest, DatatypeDisabledWhileRunning) {
   EXPECT_EQ(syncer::DataTypeController::RUNNING, autofill_wallet_dtc_->state());
   EXPECT_FALSE(last_error_.IsSet());
   EXPECT_EQ(syncer::AUTOFILL_WALLET_DATA, last_type_);
-  autofill::prefs::SetPaymentsIntegrationEnabled(GetPrefService(), false);
+  autofill::prefs::SetPaymentsIntegrationEnabled(&prefs_, false);
+  autofill::prefs::SetCreditCardAutofillEnabled(&prefs_, true);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(last_error_.IsSet());
 }
 
-TEST_F(AutofillWalletDataTypeControllerTest, DatatypeDisabledAtStartup) {
+TEST_F(AutofillWalletDataTypeControllerTest,
+       DatatypeDisabledByCreditCardsWhileRunning) {
   SetStartExpectations();
   web_data_service_->LoadDatabase();
-  autofill::prefs::SetPaymentsIntegrationEnabled(GetPrefService(), false);
+  EXPECT_CALL(start_callback_,
+              Run(syncer::DataTypeController::OK, testing::_, testing::_));
+
+  EXPECT_EQ(syncer::DataTypeController::NOT_RUNNING,
+            autofill_wallet_dtc_->state());
+  Start();
+  EXPECT_EQ(syncer::DataTypeController::RUNNING, autofill_wallet_dtc_->state());
+  EXPECT_FALSE(last_error_.IsSet());
+  EXPECT_EQ(syncer::AUTOFILL_WALLET_DATA, last_type_);
+  autofill::prefs::SetPaymentsIntegrationEnabled(&prefs_, true);
+  autofill::prefs::SetCreditCardAutofillEnabled(&prefs_, false);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(last_error_.IsSet());
+}
+
+TEST_F(AutofillWalletDataTypeControllerTest,
+       DatatypeDisabledByWalletImportAtStartup) {
+  SetStartExpectations();
+  web_data_service_->LoadDatabase();
+  autofill::prefs::SetPaymentsIntegrationEnabled(&prefs_, false);
+  autofill::prefs::SetCreditCardAutofillEnabled(&prefs_, true);
+  EXPECT_EQ(syncer::DataTypeController::NOT_RUNNING,
+            autofill_wallet_dtc_->state());
+  Start();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(last_error_.IsSet());
+}
+
+TEST_F(AutofillWalletDataTypeControllerTest,
+       DatatypeDisabledByCreditCardsAtStartup) {
+  SetStartExpectations();
+  web_data_service_->LoadDatabase();
+  autofill::prefs::SetPaymentsIntegrationEnabled(&prefs_, true);
+  autofill::prefs::SetCreditCardAutofillEnabled(&prefs_, false);
   EXPECT_EQ(syncer::DataTypeController::NOT_RUNNING,
             autofill_wallet_dtc_->state());
   Start();

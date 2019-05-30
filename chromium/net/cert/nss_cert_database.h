@@ -88,10 +88,10 @@ class NET_EXPORT NSSCertDatabase {
     DISTRUSTED_OBJ_SIGN   = 1 << 5,
   };
 
-  typedef base::Callback<void(ScopedCERTCertificateList certs)>
-      ListCertsCallback;
+  using ListCertsCallback =
+      base::OnceCallback<void(ScopedCERTCertificateList certs)>;
 
-  typedef base::Callback<void(bool)> DeleteCertCallback;
+  using DeleteCertCallback = base::OnceCallback<void(bool)>;
 
   // Creates a NSSCertDatabase that will store public information (such as
   // certificates and trust records) in |public_slot|, and private information
@@ -114,15 +114,14 @@ class NET_EXPORT NSSCertDatabase {
   // Asynchronously get a list of unique certificates in the certificate
   // database (one instance of all certificates). Note that the callback may be
   // run even after the database is deleted.
-  virtual void ListCerts(const ListCertsCallback& callback);
+  virtual void ListCerts(ListCertsCallback callback);
 
   // Get a list of certificates in the certificate database of the given slot.
   // Note that the callback may be run even after the database is deleted.
   // Must be called on the IO thread and it calls |callback| on the IO thread.
   // This does not block by retrieving the certs asynchronously on a worker
   // thread. Never calls |callback| synchronously.
-  virtual void ListCertsInSlot(const ListCertsCallback& callback,
-                               PK11SlotInfo* slot);
+  virtual void ListCertsInSlot(ListCertsCallback callback, PK11SlotInfo* slot);
 
 #if defined(OS_CHROMEOS)
   // Get the slot for system-wide key data. May be NULL if the system token was
@@ -132,6 +131,10 @@ class NET_EXPORT NSSCertDatabase {
   // before SetSystemSlot is called and get a NULL result.
   // See https://crbug.com/399554 .
   virtual crypto::ScopedPK11Slot GetSystemSlot() const;
+
+  // Check whether the certificate is stored on the system slot (i.e. is a
+  // device certificate).
+  bool IsCertificateOnSystemSlot(CERTCertificate* cert) const;
 #endif
 
   // Get the default slot for public key data.
@@ -228,20 +231,13 @@ class NET_EXPORT NSSCertDatabase {
   // thread. This must be called on IO thread and it will run |callback| on IO
   // thread. Never calls |callback| synchronously.
   void DeleteCertAndKeyAsync(ScopedCERTCertificate cert,
-                             const DeleteCertCallback& callback);
+                             DeleteCertCallback callback);
 
   // Check whether cert is stored in a readonly slot.
   bool IsReadOnly(const CERTCertificate* cert) const;
 
   // Check whether cert is stored in a hardware slot.
   bool IsHardwareBacked(const CERTCertificate* cert) const;
-
-  // TODO(https://crbug.com/844537): Remove this after we've collected logs that
-  // show device-wide certificates disappearing. Does nothing in the default
-  // implementation, but can be used in subclasses for logging user
-  // certificates. Will be called when the DB has changed. |log_reason| says why
-  // this has been invoked.
-  virtual void LogUserCertificates(const std::string& log_reason) const;
 
  protected:
   // Certificate listing implementation used by |ListCerts*| and
@@ -252,10 +248,6 @@ class NET_EXPORT NSSCertDatabase {
 
   // Broadcasts notifications to all registered observers.
   void NotifyObserversCertDBChanged();
-
-  // TODO(https://crbug.com/844537): Remove this after we've collected logs that
-  // show device-wide certificates disappearing.
-  static std::string GetCertIssuerCommonName(const CERTCertificate* cert);
 
  private:
   // Registers |observer| to receive notifications of certificate changes.  The
@@ -272,8 +264,7 @@ class NET_EXPORT NSSCertDatabase {
 
   // Notifies observers of the removal of a cert and calls |callback| with
   // |success| as argument.
-  void NotifyCertRemovalAndCallBack(const DeleteCertCallback& callback,
-                                    bool success);
+  void NotifyCertRemovalAndCallBack(DeleteCertCallback callback, bool success);
 
   // Certificate removal implementation used by |DeleteCertAndKey*|. Static so
   // it may safely be used on the worker thread.

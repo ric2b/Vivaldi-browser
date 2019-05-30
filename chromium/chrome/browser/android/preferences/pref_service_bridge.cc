@@ -41,6 +41,8 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/pref_names.h"
+#include "components/language/core/browser/pref_names.h"
+#include "components/language/core/common/language_util.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -49,7 +51,6 @@
 #include "components/strings/grit/components_locale_settings.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/browser/translate_prefs.h"
-#include "components/translate/core/common/translate_util.h"
 #include "components/version_info/version_info.h"
 #include "components/web_resource/web_resource_pref_names.h"
 #include "content/public/browser/browser_thread.h"
@@ -301,6 +302,12 @@ static jboolean JNI_PrefServiceBridge_GetBackgroundSyncEnabled(
   return GetBooleanForContentSetting(CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC);
 }
 
+static jboolean JNI_PrefServiceBridge_GetAutomaticDownloadsEnabled(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  return GetBooleanForContentSetting(CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS);
+}
+
 static jboolean JNI_PrefServiceBridge_GetBlockThirdPartyCookiesEnabled(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
@@ -403,12 +410,6 @@ static jboolean JNI_PrefServiceBridge_GetSearchSuggestManaged(
   return GetPrefService()->IsManagedPreference(prefs::kSearchSuggestEnabled);
 }
 
-static jboolean JNI_PrefServiceBridge_IsScoutExtendedReportingActive(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj) {
-  return safe_browsing::IsScout(*GetPrefService());
-}
-
 static jboolean JNI_PrefServiceBridge_GetSafeBrowsingExtendedReportingEnabled(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
@@ -429,7 +430,7 @@ static jboolean JNI_PrefServiceBridge_GetSafeBrowsingExtendedReportingManaged(
     const JavaParamRef<jobject>& obj) {
   PrefService* pref_service = GetPrefService();
   return pref_service->IsManagedPreference(
-      safe_browsing::GetExtendedReportingPrefName(*pref_service));
+      prefs::kSafeBrowsingScoutReportingEnabled);
 }
 
 static jboolean JNI_PrefServiceBridge_GetSafeBrowsingEnabled(
@@ -752,6 +753,17 @@ static void JNI_PrefServiceBridge_SetBackgroundSyncEnabled(
       allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
 }
 
+static void JNI_PrefServiceBridge_SetAutomaticDownloadsEnabled(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jboolean allow) {
+  HostContentSettingsMap* host_content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(GetOriginalProfile());
+  host_content_settings_map->SetDefaultContentSetting(
+      CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
+      allow ? CONTENT_SETTING_ASK : CONTENT_SETTING_BLOCK);
+}
+
 static void JNI_PrefServiceBridge_SetBlockThirdPartyCookiesEnabled(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
@@ -1010,7 +1022,8 @@ static void JNI_PrefServiceBridge_ResetAcceptLanguages(
 
   PrefServiceBridge::PrependToAcceptLanguagesIfNecessary(locale_string,
                                                          &accept_languages);
-  GetPrefService()->SetString(prefs::kAcceptLanguages, accept_languages);
+  GetPrefService()->SetString(language::prefs::kAcceptLanguages,
+                              accept_languages);
 }
 
 // Sends all information about the different versions to Java.
@@ -1171,9 +1184,9 @@ void PrefServiceBridge::GetAndroidPermissionsForContentSetting(
     std::vector<std::string>* out) {
   JNIEnv* env = AttachCurrentThread();
   base::android::AppendJavaStringArrayToStringVector(
-      env, Java_PrefServiceBridge_getAndroidPermissionsForContentSetting(
-               env, content_type)
-               .obj(),
+      env,
+      Java_PrefServiceBridge_getAndroidPermissionsForContentSetting(
+          env, content_type),
       out);
 }
 
@@ -1197,12 +1210,12 @@ static void JNI_PrefServiceBridge_GetChromeAcceptLanguages(
   translate_prefs->GetLanguageInfoList(
       app_locale, translate_prefs->IsTranslateAllowedByPolicy(), &languages);
 
-  translate::ToTranslateLanguageSynonym(&app_locale);
+  language::ToTranslateLanguageSynonym(&app_locale);
   for (const auto& info : languages) {
     // If the language comes from the same language family as the app locale,
     // translate for this language won't be supported on this device.
     std::string lang_code = info.code;
-    translate::ToTranslateLanguageSynonym(&lang_code);
+    language::ToTranslateLanguageSynonym(&lang_code);
     bool supports_translate =
         info.supports_translate && lang_code != app_locale;
 
@@ -1277,11 +1290,11 @@ static jboolean JNI_PrefServiceBridge_IsBlockedLanguage(
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefService());
 
   std::string language_code(ConvertJavaStringToUTF8(env, language));
-  translate::ToTranslateLanguageSynonym(&language_code);
+  language::ToTranslateLanguageSynonym(&language_code);
 
   // Application language is always blocked.
   std::string app_locale = g_browser_process->GetApplicationLocale();
-  translate::ToTranslateLanguageSynonym(&app_locale);
+  language::ToTranslateLanguageSynonym(&app_locale);
   if (app_locale == language_code)
     return true;
 
@@ -1316,11 +1329,9 @@ static void JNI_PrefServiceBridge_SetDownloadAndSaveFileDefaultDirectory(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jstring>& directory) {
-  std::string path(ConvertJavaStringToUTF8(env, directory));
-  GetPrefService()->SetFilePath(prefs::kDownloadDefaultDirectory,
-                                base::FilePath(FILE_PATH_LITERAL(path)));
-  GetPrefService()->SetFilePath(prefs::kSaveFileDefaultDirectory,
-                                base::FilePath(FILE_PATH_LITERAL(path)));
+  base::FilePath path(ConvertJavaStringToUTF8(env, directory));
+  GetPrefService()->SetFilePath(prefs::kDownloadDefaultDirectory, path);
+  GetPrefService()->SetFilePath(prefs::kSaveFileDefaultDirectory, path);
 }
 
 static jint JNI_PrefServiceBridge_GetPromptForDownloadAndroid(

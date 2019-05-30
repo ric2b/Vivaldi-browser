@@ -13,7 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "components/feature_engagement/internal/event_store.h"
 #include "components/feature_engagement/internal/proto/feature_event.pb.h"
-#include "components/leveldb_proto/proto_database.h"
+#include "components/leveldb_proto/public/proto_database.h"
 
 namespace feature_engagement {
 
@@ -23,10 +23,8 @@ namespace feature_engagement {
 // to always save every write during shutdown.
 class PersistentEventStore : public EventStore {
  public:
-  // Builds a PersistentEventStore backed by the ProtoDatabase |db|.  The
-  // database will be loaded and/or created at |storage_dir|.
-  PersistentEventStore(const base::FilePath& storage_dir,
-                       std::unique_ptr<leveldb_proto::ProtoDatabase<Event>> db);
+  // Builds a PersistentEventStore backed by the ProtoDatabase |db|.
+  PersistentEventStore(std::unique_ptr<leveldb_proto::ProtoDatabase<Event>> db);
   ~PersistentEventStore() override;
 
   // EventStore implementation.
@@ -36,7 +34,8 @@ class PersistentEventStore : public EventStore {
   void DeleteEvent(const std::string& event_name) override;
 
  private:
-  void OnInitComplete(const OnLoadedCallback& callback, bool success);
+  void OnInitComplete(const OnLoadedCallback& callback,
+                      leveldb_proto::Enums::InitStatus status);
   void OnLoadComplete(const OnLoadedCallback& callback,
                       bool success,
                       std::unique_ptr<std::vector<Event>> entries);

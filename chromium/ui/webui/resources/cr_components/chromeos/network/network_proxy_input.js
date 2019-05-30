@@ -52,9 +52,10 @@ Polymer({
    * @private
    */
   onValueChange_: function() {
-    var port = parseInt(this.value.Port, 10);
-    if (isNaN(port))
+    let port = parseInt(this.value.Port, 10);
+    if (isNaN(port)) {
       port = 80;
+    }
     this.value.Port = port;
     this.fire('proxy-change', {value: this.value});
   }

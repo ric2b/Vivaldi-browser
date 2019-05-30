@@ -8,7 +8,7 @@
 #include <memory>
 #include "mojo/public/cpp/bindings/binding.h"
 #include "third_party/blink/public/platform/modules/mediasession/media_session.mojom-blink.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_member.h"
@@ -18,6 +18,7 @@
 namespace blink {
 
 class ExecutionContext;
+class ExceptionState;
 class MediaMetadata;
 class V8MediaSessionActionHandler;
 
@@ -32,6 +33,8 @@ class MODULES_EXPORT MediaSession final
  public:
   static MediaSession* Create(ExecutionContext*);
 
+  explicit MediaSession(ExecutionContext*);
+
   void Dispose();
 
   void setPlaybackState(const String&);
@@ -40,7 +43,9 @@ class MODULES_EXPORT MediaSession final
   void setMetadata(MediaMetadata*);
   MediaMetadata* metadata() const;
 
-  void setActionHandler(const String& action, V8MediaSessionActionHandler*);
+  void setActionHandler(const String& action,
+                        V8MediaSessionActionHandler*,
+                        ExceptionState&);
 
   // Called by the MediaMetadata owned by |this| when it has updates. Also used
   // internally when a new MediaMetadata object is set.
@@ -57,12 +62,11 @@ class MODULES_EXPORT MediaSession final
     kActionDisabled,
   };
 
-  explicit MediaSession(ExecutionContext*);
-
   void NotifyActionChange(const String& action, ActionChangeType);
 
   // blink::mojom::blink::MediaSessionClient implementation.
-  void DidReceiveAction(blink::mojom::blink::MediaSessionAction) override;
+  void DidReceiveAction(
+      media_session::mojom::blink::MediaSessionAction) override;
 
   // Returns null when the ExecutionContext is not document.
   mojom::blink::MediaSessionService* GetService();

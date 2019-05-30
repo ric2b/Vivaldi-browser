@@ -7,11 +7,12 @@
 
 #include <IOKit/IOReturn.h>
 
+#include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
-#include "base/containers/hash_tables.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -23,6 +24,7 @@
 #include "device/bluetooth/bluetooth_export.h"
 #include "device/bluetooth/bluetooth_low_energy_advertisement_manager_mac.h"
 #include "device/bluetooth/bluetooth_low_energy_device_mac.h"
+#include "device/bluetooth/bluetooth_low_energy_device_watcher_mac.h"
 #include "device/bluetooth/bluetooth_low_energy_discovery_manager_mac.h"
 #include "device/bluetooth/bluetooth_uuid.h"
 
@@ -104,8 +106,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterMac
   void DeviceConnected(IOBluetoothDevice* device);
 
   // We only use CoreBluetooth when OS X >= 10.10. This because the
-  // CBCentralManager destructor was found to crash on the mac_chromium_rel_ng
-  // builder running 10.9.5. May also cause blued to crash on OS X 10.9.5
+  // CBCentralManager destructor was found to crash on the mac-rel builder
+  // running 10.9.5. May also cause blued to crash on OS X 10.9.5
   // (crbug.com/506287).
   static bool IsLowEnergyAvailable();
 
@@ -120,11 +122,20 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterMac
   void DidFailToConnectPeripheral(CBPeripheral* peripheral, NSError* error);
   void DidDisconnectPeripheral(CBPeripheral* peripheral, NSError* error);
 
+  bool IsBluetoothLowEnergyDeviceSystemPaired(
+      base::StringPiece device_identifier) const;
+
  protected:
+  using GetDevicePairedStatusCallback =
+      base::RepeatingCallback<bool(const std::string& address)>;
+
   // BluetoothAdapter override:
   bool SetPoweredImpl(bool powered) override;
   void RemovePairingDelegateInternal(
       device::BluetoothDevice::PairingDelegate* pairing_delegate) override;
+
+  void UpdateKnownLowEnergyDevices(
+      std::map<std::string, std::string> updated_low_energy_device_info);
 
  private:
   // Struct bundling information about the state of the HostController.
@@ -164,6 +175,14 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterMac
   // Allow the mocking out of setting the controller power state for testing.
   void SetPowerStateFunctionForTesting(
       SetControllerPowerStateFunction power_state_function);
+
+  // Allow the mocking out of BluetoothLowEnergyDeviceWatcher for testing.
+  void SetLowEnergyDeviceWatcherForTesting(
+      scoped_refptr<BluetoothLowEnergyDeviceWatcherMac> watcher);
+
+  // Allow the mocking of out GetDevicePairedStatusCallback for testing.
+  void SetGetDevicePairedStatusCallbackForTesting(
+      GetDevicePairedStatusCallback callback);
 
   // The length of time that must elapse since the last Inquiry response (on
   // Classic devices) or call to BluetoothLowEnergyDevice::Update() (on Low
@@ -283,6 +302,17 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterMac
   base::scoped_nsobject<CBPeripheralManager> low_energy_peripheral_manager_;
   base::scoped_nsobject<BluetoothLowEnergyPeripheralManagerDelegate>
       low_energy_peripheral_manager_delegate_;
+
+  GetDevicePairedStatusCallback device_paired_status_callback_;
+
+  // Watches system file /Library/Preferences/com.apple.Bluetooth.plist to
+  // obtain information about system paired bluetooth devices.
+  scoped_refptr<BluetoothLowEnergyDeviceWatcherMac>
+      bluetooth_low_energy_device_watcher_;
+
+  // Map of UUID formatted device identifiers of paired Bluetooth devices and
+  // corresponding device address.
+  std::map<std::string, std::string> low_energy_devices_info_;
 
   base::WeakPtrFactory<BluetoothAdapterMac> weak_ptr_factory_;
 

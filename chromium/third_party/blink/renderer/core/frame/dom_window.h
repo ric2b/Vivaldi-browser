@@ -8,7 +8,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/serialization/transferables.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
-#include "third_party/blink/renderer/core/frame/dom_window_base64.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_member.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -28,8 +27,14 @@ class SerializedScriptValue;
 class WindowPostMessageOptions;
 class WindowProxyManager;
 
-class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
-                              public DOMWindowBase64 {
+// DOMWindow is an abstract class of Window interface implementations.
+// We have two derived implementation classes;  LocalDOMWindow and
+// RemoteDOMWindow.
+//
+// TODO(tkent): Rename DOMWindow to Window. The class was named as 'DOMWindow'
+// because WebKit already had KJS::Window.  We have no reasons to avoid
+// blink::Window now.
+class CORE_EXPORT DOMWindow : public EventTargetWithInlineData {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -68,6 +73,7 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
   // EventTarget overrides:
   const AtomicString& InterfaceName() const override;
   const DOMWindow* ToDOMWindow() const override;
+  bool IsWindowOrWorkerGlobalScope() const final;
 
   // Cross-origin DOM Level 0
   Location* location() const;
@@ -83,29 +89,30 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
   DOMWindow* parent() const;
   DOMWindow* top() const;
 
-  void focus(LocalDOMWindow* incumbent_window);
+  void focus(v8::Isolate*);
   virtual void blur() = 0;
-  void close(LocalDOMWindow* incumbent_window);
+  void close(v8::Isolate*);
+  void Close(LocalDOMWindow* incumbent_window);
 
-  void postMessage(LocalDOMWindow* incumbent_window,
+  void postMessage(v8::Isolate*,
                    const ScriptValue& message,
                    const String& target_origin,
                    Vector<ScriptValue>& transfer,
                    ExceptionState&);
 
-  void postMessage(LocalDOMWindow* incumbent_window,
+  void postMessage(v8::Isolate*,
                    const ScriptValue& message,
-                   const WindowPostMessageOptions& options,
+                   const WindowPostMessageOptions* options,
                    ExceptionState&);
 
   // Indexed properties
   DOMWindow* AnonymousIndexedGetter(uint32_t index) const;
 
   String SanitizedCrossDomainAccessErrorMessage(
-      const LocalDOMWindow* calling_window) const;
+      const LocalDOMWindow* accessing_window) const;
   String CrossDomainAccessErrorMessage(
-      const LocalDOMWindow* calling_window) const;
-  bool IsInsecureScriptAccess(LocalDOMWindow& calling_window, const KURL&);
+      const LocalDOMWindow* accessing_window) const;
+  bool IsInsecureScriptAccess(LocalDOMWindow& accessing_window, const KURL&);
 
   // FIXME: When this DOMWindow is no longer the active DOMWindow (i.e.,
   // when its document is no longer the document that is displayed in its
@@ -136,7 +143,7 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData,
  private:
   void DoPostMessage(scoped_refptr<SerializedScriptValue> message,
                      const MessagePortArray&,
-                     const WindowPostMessageOptions& options,
+                     const WindowPostMessageOptions* options,
                      LocalDOMWindow* source,
                      ExceptionState&);
 

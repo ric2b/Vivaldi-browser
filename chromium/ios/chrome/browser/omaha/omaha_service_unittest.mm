@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -23,7 +24,10 @@
 #include "ios/public/provider/chrome/browser/omaha/omaha_service_provider.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
 #include "ios/web/public/web_thread.h"
-#include "net/url_request/test_url_fetcher_factory.h"
+#include "net/http/http_status_code.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
+#include "services/network/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
 #include "testing/platform_test.h"
@@ -41,7 +45,10 @@ const char kUserDataDir[] = FILE_PATH_LITERAL(".");
 class OmahaServiceTest : public PlatformTest {
  public:
   OmahaServiceTest()
-      : need_update_(false),
+      : test_shared_url_loader_factory_(
+            base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+                &test_url_loader_factory_)),
+        need_update_(false),
         scoped_browser_state_manager_(
             std::make_unique<TestChromeBrowserStateManager>(
                 base::FilePath(kUserDataDir))) {
@@ -80,6 +87,11 @@ class OmahaServiceTest : public PlatformTest {
         ->GetOmahaServiceProvider()
         ->GetApplicationID();
   }
+
+ protected:
+  network::TestURLLoaderFactory test_url_loader_factory_;
+  scoped_refptr<network::SharedURLLoaderFactory>
+      test_shared_url_loader_factory_;
 
  private:
   bool need_update_;
@@ -171,7 +183,8 @@ TEST_F(OmahaServiceTest, InstallEventMessageTest) {
       base::StringPrintf(kExpectedResultFormat, "" /* previous version */,
                          -1 /* install age */, 2 /* event type */);
   regcomp(&regex, expected_result.c_str(), REG_EXTENDED);
-  int result = regexec(&regex, content.c_str(), arraysize(matches), matches, 0);
+  int result =
+      regexec(&regex, content.c_str(), base::size(matches), matches, 0);
   regfree(&regex);
   EXPECT_EQ(0, result) << "Actual contents: " << content;
   EXPECT_FALSE(NeedUpdate());
@@ -185,7 +198,7 @@ TEST_F(OmahaServiceTest, InstallEventMessageTest) {
   expected_result = base::StringPrintf(kExpectedResultFormat, kPreviousVersion,
                                        0 /* install age */, 3 /* event type */);
   regcomp(&regex, expected_result.c_str(), REG_EXTENDED);
-  result = regexec(&regex, content.c_str(), arraysize(matches), matches, 0);
+  result = regexec(&regex, content.c_str(), base::size(matches), matches, 0);
   regfree(&regex);
   EXPECT_EQ(0, result) << "Actual contents: " << content;
   EXPECT_FALSE(NeedUpdate());
@@ -196,20 +209,16 @@ TEST_F(OmahaServiceTest, SendPingSuccess) {
   OmahaService service(false);
   service.set_upgrade_recommended_callback(
       base::Bind(&OmahaServiceTest::OnNeedUpdate, base::Unretained(this)));
+  service.InitializeURLLoaderFactory(test_shared_url_loader_factory_);
   CleanService(&service, version_info::GetVersionNumber());
-  net::TestURLFetcherFactory factory_;
 
   service.SendPing();
+
   EXPECT_EQ(1, service.number_of_tries_);
   EXPECT_TRUE(service.current_ping_time_.is_null());
   EXPECT_GE(service.next_tries_time_, now + base::TimeDelta::FromMinutes(54));
   EXPECT_LE(service.next_tries_time_, now + base::TimeDelta::FromHours(7));
 
-  net::TestURLFetcher* fetcher = factory_.GetFetcherByID(0);
-  DCHECK(fetcher);
-  DCHECK(fetcher->delegate());
-  fetcher->set_status(net::URLRequestStatus());
-  fetcher->set_response_code(200);
   std::string response =
       std::string(
           "<?xml version=\"1.0\"?><response protocol=\"3.0\" server=\"prod\">"
@@ -218,8 +227,9 @@ TEST_F(OmahaServiceTest, SendPingSuccess) {
       "\" status=\"ok\">"
       "<updatecheck status=\"noupdate\"/><ping status=\"ok\"/>"
       "</app></response>";
-  fetcher->SetResponseString(response);
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
+  auto* pending_request = test_url_loader_factory_.GetPendingRequest(0);
+  test_url_loader_factory_.SimulateResponseForPendingRequest(
+      pending_request->request.url.spec(), response);
 
   EXPECT_EQ(0, service.number_of_tries_);
   EXPECT_FALSE(service.current_ping_time_.is_null());
@@ -233,20 +243,16 @@ TEST_F(OmahaServiceTest, SendInstallEventSuccess) {
   OmahaService service(false);
   service.set_upgrade_recommended_callback(
       base::Bind(&OmahaServiceTest::OnNeedUpdate, base::Unretained(this)));
+  service.InitializeURLLoaderFactory(test_shared_url_loader_factory_);
   CleanService(&service, "");
-  net::TestURLFetcherFactory factory_;
 
   service.SendPing();
+
   EXPECT_EQ(1, service.number_of_tries_);
   EXPECT_TRUE(service.current_ping_time_.is_null());
   EXPECT_GE(service.next_tries_time_, now + base::TimeDelta::FromMinutes(54));
   EXPECT_LE(service.next_tries_time_, now + base::TimeDelta::FromHours(7));
 
-  net::TestURLFetcher* fetcher = factory_.GetFetcherByID(0);
-  DCHECK(fetcher);
-  DCHECK(fetcher->delegate());
-  fetcher->set_status(net::URLRequestStatus());
-  fetcher->set_response_code(200);
   std::string response =
       std::string(
           "<?xml version=\"1.0\"?><response protocol=\"3.0\" server=\"prod\">"
@@ -255,8 +261,9 @@ TEST_F(OmahaServiceTest, SendInstallEventSuccess) {
       "\" status=\"ok\">"
       "<event status=\"ok\"/>"
       "</app></response>";
-  fetcher->SetResponseString(response);
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
+  auto* pending_request = test_url_loader_factory_.GetPendingRequest(0);
+  test_url_loader_factory_.SimulateResponseForPendingRequest(
+      pending_request->request.url.spec(), response);
 
   EXPECT_FALSE(service.current_ping_time_.is_null());
   EXPECT_GT(service.last_sent_time_, now);
@@ -268,20 +275,16 @@ TEST_F(OmahaServiceTest, SendPingReceiveUpdate) {
   OmahaService service(false);
   service.set_upgrade_recommended_callback(
       base::Bind(&OmahaServiceTest::OnNeedUpdate, base::Unretained(this)));
+  service.InitializeURLLoaderFactory(test_shared_url_loader_factory_);
   CleanService(&service, version_info::GetVersionNumber());
-  net::TestURLFetcherFactory factory_;
 
   service.SendPing();
+
   EXPECT_EQ(1, service.number_of_tries_);
   EXPECT_TRUE(service.current_ping_time_.is_null());
   EXPECT_GE(service.next_tries_time_, now + base::TimeDelta::FromMinutes(54));
   EXPECT_LE(service.next_tries_time_, now + base::TimeDelta::FromHours(7));
 
-  net::TestURLFetcher* fetcher = factory_.GetFetcherByID(0);
-  DCHECK(fetcher);
-  DCHECK(fetcher->delegate());
-  fetcher->set_status(net::URLRequestStatus());
-  fetcher->set_response_code(200);
   std::string response =
       std::string(
           "<?xml version=\"1.0\"?><response protocol=\"3.0\" server=\"prod\">"
@@ -301,8 +304,9 @@ TEST_F(OmahaServiceTest, SendPingReceiveUpdate) {
       "</manifest>"
       "</updatecheck><ping status=\"ok\"/>"
       "</app></response>";
-  fetcher->SetResponseString(response);
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
+  auto* pending_request = test_url_loader_factory_.GetPendingRequest(0);
+  test_url_loader_factory_.SimulateResponseForPendingRequest(
+      pending_request->request.url.spec(), response);
 
   EXPECT_EQ(0, service.number_of_tries_);
   EXPECT_FALSE(service.current_ping_time_.is_null());
@@ -316,24 +320,24 @@ TEST_F(OmahaServiceTest, SendPingFailure) {
   OmahaService service(false);
   service.set_upgrade_recommended_callback(
       base::Bind(&OmahaServiceTest::OnNeedUpdate, base::Unretained(this)));
+  service.InitializeURLLoaderFactory(test_shared_url_loader_factory_);
   CleanService(&service, version_info::GetVersionNumber());
-  net::TestURLFetcherFactory factory_;
+
+  service.SendPing();
 
   // Tries with a non 200 result.
-  service.SendPing();
   EXPECT_EQ(1, service.number_of_tries_);
   EXPECT_TRUE(service.current_ping_time_.is_null());
   EXPECT_GE(service.next_tries_time_, now + base::TimeDelta::FromMinutes(54));
   EXPECT_LE(service.next_tries_time_, now + base::TimeDelta::FromHours(7));
   base::Time next_tries_time = service.next_tries_time_;
 
-  net::TestURLFetcher* fetcher = factory_.GetFetcherByID(0);
-  DCHECK(fetcher);
-  DCHECK(fetcher->delegate());
-  fetcher->set_status(net::URLRequestStatus());
-  fetcher->set_response_code(400);
-  fetcher->SetResponseString("");
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
+  auto* pending_request = test_url_loader_factory_.GetPendingRequest(0);
+  auto resource_response_head =
+      network::CreateResourceResponseHead(net::HTTP_BAD_REQUEST);
+  test_url_loader_factory_.SimulateResponseForPendingRequest(
+      pending_request->request.url, network::URLLoaderCompletionStatus(net::OK),
+      resource_response_head, std::string());
 
   EXPECT_EQ(1, service.number_of_tries_);
   EXPECT_TRUE(service.current_ping_time_.is_null());
@@ -343,19 +347,16 @@ TEST_F(OmahaServiceTest, SendPingFailure) {
 
   // Tries with an incorrect xml message.
   service.SendPing();
+
   EXPECT_EQ(2, service.number_of_tries_);
   EXPECT_TRUE(service.current_ping_time_.is_null());
   EXPECT_GE(service.next_tries_time_, now + base::TimeDelta::FromMinutes(54));
   EXPECT_LE(service.next_tries_time_, now + base::TimeDelta::FromHours(7));
   next_tries_time = service.next_tries_time_;
 
-  fetcher = factory_.GetFetcherByID(0);
-  DCHECK(fetcher);
-  DCHECK(fetcher->delegate());
-  fetcher->set_status(net::URLRequestStatus());
-  fetcher->set_response_code(200);
-  fetcher->SetResponseString("Incorrect Message");
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
+  pending_request = test_url_loader_factory_.GetPendingRequest(0);
+  test_url_loader_factory_.SimulateResponseForPendingRequest(
+      pending_request->request.url.spec(), "Incorrect Message");
 
   EXPECT_EQ(2, service.number_of_tries_);
   EXPECT_TRUE(service.current_ping_time_.is_null());
@@ -403,20 +404,16 @@ TEST_F(OmahaServiceTest, ActivePingAfterInstallEventTest) {
   OmahaService service(false);
   service.set_upgrade_recommended_callback(
       base::Bind(&OmahaServiceTest::OnNeedUpdate, base::Unretained(this)));
+  service.InitializeURLLoaderFactory(test_shared_url_loader_factory_);
   CleanService(&service, "");
-  net::TestURLFetcherFactory factory_;
 
   service.SendPing();
+
   EXPECT_EQ(1, service.number_of_tries_);
   EXPECT_TRUE(service.current_ping_time_.is_null());
   EXPECT_GE(service.next_tries_time_, now + base::TimeDelta::FromMinutes(54));
   EXPECT_LE(service.next_tries_time_, now + base::TimeDelta::FromHours(7));
 
-  net::TestURLFetcher* fetcher = factory_.GetFetcherByID(0);
-  DCHECK(fetcher);
-  DCHECK(fetcher->delegate());
-  fetcher->set_status(net::URLRequestStatus());
-  fetcher->set_response_code(200);
   std::string response =
       std::string(
           "<?xml version=\"1.0\"?><response protocol=\"3.0\" server=\"prod\">"
@@ -425,8 +422,9 @@ TEST_F(OmahaServiceTest, ActivePingAfterInstallEventTest) {
       "\" status=\"ok\">"
       "<event status=\"ok\"/>"
       "</app></response>";
-  fetcher->SetResponseString(response);
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
+  auto* pending_request = test_url_loader_factory_.GetPendingRequest(0);
+  test_url_loader_factory_.SimulateResponseForPendingRequest(
+      pending_request->request.url.spec(), response);
 
   EXPECT_EQ(1, service.number_of_tries_);
   EXPECT_LT(service.current_ping_time_ - now, base::TimeDelta::FromMinutes(1));
@@ -440,20 +438,16 @@ TEST_F(OmahaServiceTest, NonSpammingTest) {
   OmahaService service(false);
   service.set_upgrade_recommended_callback(
       base::Bind(&OmahaServiceTest::OnNeedUpdate, base::Unretained(this)));
+  service.InitializeURLLoaderFactory(test_shared_url_loader_factory_);
   CleanService(&service, version_info::GetVersionNumber());
-  net::TestURLFetcherFactory factory_;
 
   service.SendPing();
+
   EXPECT_EQ(1, service.number_of_tries_);
   EXPECT_TRUE(service.current_ping_time_.is_null());
   EXPECT_GE(service.next_tries_time_, now + base::TimeDelta::FromMinutes(54));
   EXPECT_LE(service.next_tries_time_, now + base::TimeDelta::FromHours(7));
 
-  net::TestURLFetcher* fetcher = factory_.GetFetcherByID(0);
-  DCHECK(fetcher);
-  DCHECK(fetcher->delegate());
-  fetcher->set_status(net::URLRequestStatus());
-  fetcher->set_response_code(200);
   std::string response =
       std::string(
           "<?xml version=\"1.0\"?><response protocol=\"3.0\" server=\"prod\">"
@@ -462,8 +456,9 @@ TEST_F(OmahaServiceTest, NonSpammingTest) {
       "\" status=\"ok\">"
       "<updatecheck status=\"noupdate\"/><ping status=\"ok\"/>"
       "</app></response>";
-  fetcher->SetResponseString(response);
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
+  auto* pending_request = test_url_loader_factory_.GetPendingRequest(0);
+  test_url_loader_factory_.SimulateResponseForPendingRequest(
+      pending_request->request.url.spec(), response);
 
   EXPECT_EQ(0, service.number_of_tries_);
   EXPECT_FALSE(service.current_ping_time_.is_null());
@@ -476,8 +471,8 @@ TEST_F(OmahaServiceTest, InstallRetryTest) {
   OmahaService service(false);
   service.set_upgrade_recommended_callback(
       base::Bind(&OmahaServiceTest::OnNeedUpdate, base::Unretained(this)));
+  service.InitializeURLLoaderFactory(test_shared_url_loader_factory_);
   CleanService(&service, "");
-  net::TestURLFetcherFactory factory_;
 
   EXPECT_FALSE(service.IsNextPingInstallRetry());
   std::string id1 = service.GetNextPingRequestId(OmahaService::INSTALL_EVENT);
@@ -485,11 +480,7 @@ TEST_F(OmahaServiceTest, InstallRetryTest) {
   ASSERT_EQ(id1, service.GetNextPingRequestId(OmahaService::INSTALL_EVENT));
 
   service.SendPing();
-  net::TestURLFetcher* fetcher = factory_.GetFetcherByID(0);
-  DCHECK(fetcher);
-  DCHECK(fetcher->delegate());
-  fetcher->set_status(net::URLRequestStatus());
-  fetcher->set_response_code(200);
+
   std::string response =
       std::string(
           "<?xml version=\"1.0\"?><response protocol=\"3.0\" server=\"prod\">"
@@ -498,8 +489,9 @@ TEST_F(OmahaServiceTest, InstallRetryTest) {
       "\" status=\"ok\">"
       "<updatecheck status=\"noupdate\"/><ping status=\"ok\"/>"
       "</app></response>";
-  fetcher->SetResponseString(response);
-  fetcher->delegate()->OnURLFetchComplete(fetcher);
+  auto* pending_request = test_url_loader_factory_.GetPendingRequest(0);
+  test_url_loader_factory_.SimulateResponseForPendingRequest(
+      pending_request->request.url.spec(), response);
 
   EXPECT_FALSE(service.IsNextPingInstallRetry());
   id1 = service.GetNextPingRequestId(OmahaService::USAGE_PING);

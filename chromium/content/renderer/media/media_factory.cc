@@ -7,12 +7,14 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/buildflag.h"
+#include "cc/trees/layer_tree_settings.h"
 #include "content/public/common/content_client.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/renderer/media/audio/audio_device_factory.h"
@@ -35,6 +37,7 @@
 #include "media/blink/webmediaplayer_impl.h"
 #include "media/filters/context_3d.h"
 #include "media/media_buildflags.h"
+#include "media/renderers/decrypting_renderer_factory.h"
 #include "media/renderers/default_decoder_factory.h"
 #include "media/renderers/default_renderer_factory.h"
 #include "media/video/gpu_video_accelerator_factories.h"
@@ -50,12 +53,11 @@
 #include "url/origin.h"
 
 #if defined(OS_ANDROID)
+#include "content/renderer/media/android/flinging_renderer_client_factory.h"
 #include "content/renderer/media/android/media_player_renderer_client_factory.h"
-#include "content/renderer/media/android/renderer_media_player_manager.h"
 #include "content/renderer/media/android/stream_texture_wrapper_impl.h"
 #include "media/base/android/media_codec_util.h"
 #include "media/base/media.h"
-#include "media/renderers/flinging_renderer_client_factory.h"
 #include "url/gurl.h"
 #endif
 
@@ -65,6 +67,8 @@
 
 #if BUILDFLAG(ENABLE_MOJO_CDM)
 #include "media/mojo/clients/mojo_cdm_factory.h"  // nogncheck
+#else
+#include "media/cdm/default_cdm_factory.h"
 #endif
 
 #if BUILDFLAG(ENABLE_MOJO_RENDERER)
@@ -106,21 +110,28 @@ class FrameFetchContext : public media::ResourceFetchContext {
 // establishing a GPUChannelHost, which must be done on the main thread.
 void PostContextProviderToCallback(
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
-    scoped_refptr<viz::ContextProvider> unwanted_context_provider,
+    scoped_refptr<viz::RasterContextProvider> unwanted_context_provider,
     blink::WebSubmitterConfigurationCallback set_context_provider_callback) {
-  main_task_runner->PostTask(
+  // |unwanted_context_provider| needs to be destroyed on the current thread.
+  // Therefore, post a reply-callback that retains a reference to it, so that it
+  // doesn't get destroyed on the main thread.
+  main_task_runner->PostTaskAndReply(
       FROM_HERE,
       base::BindOnce(
-          [](scoped_refptr<viz::ContextProvider> unwanted_context_provider,
+          [](scoped_refptr<viz::RasterContextProvider>
+                 unwanted_context_provider,
              blink::WebSubmitterConfigurationCallback cb) {
             auto* rti = content::RenderThreadImpl::current();
             auto context_provider = rti->GetVideoFrameCompositorContextProvider(
-                unwanted_context_provider);
+                std::move(unwanted_context_provider));
             std::move(cb).Run(!rti->IsGpuCompositingDisabled(),
                               std::move(context_provider));
           },
-          std::move(unwanted_context_provider),
-          media::BindToCurrentLoop(std::move(set_context_provider_callback))));
+          unwanted_context_provider,
+          media::BindToCurrentLoop(std::move(set_context_provider_callback))),
+      base::BindOnce([](scoped_refptr<viz::RasterContextProvider>
+                            unwanted_context_provider) {},
+                     unwanted_context_provider));
 }
 
 }  // namespace
@@ -128,41 +139,24 @@ void PostContextProviderToCallback(
 namespace content {
 
 // static
-media::WebMediaPlayerParams::SurfaceLayerMode
+blink::WebMediaPlayer::SurfaceLayerMode
 MediaFactory::GetVideoSurfaceLayerMode() {
-  // LayoutTests do not support SurfaceLayer by default at the moment.
+  // Web tests do not support SurfaceLayer by default at the moment.
   // See https://crbug.com/838128
   content::RenderThreadImpl* render_thread =
       content::RenderThreadImpl::current();
-  if (render_thread && render_thread->layout_test_mode() &&
-      !render_thread->LayoutTestModeUsesDisplayCompositorPixelDump()) {
-    return media::WebMediaPlayerParams::SurfaceLayerMode::kNever;
+  if (render_thread && render_thread->web_test_mode() &&
+      !render_thread->WebTestModeUsesDisplayCompositorPixelDump()) {
+    return blink::WebMediaPlayer::SurfaceLayerMode::kNever;
   }
 
   if (features::IsMultiProcessMash())
-    return media::WebMediaPlayerParams::SurfaceLayerMode::kNever;
+    return blink::WebMediaPlayer::SurfaceLayerMode::kNever;
 
   if (base::FeatureList::IsEnabled(media::kUseSurfaceLayerForVideo))
-    return media::WebMediaPlayerParams::SurfaceLayerMode::kAlways;
+    return blink::WebMediaPlayer::SurfaceLayerMode::kAlways;
 
-  if (base::FeatureList::IsEnabled(media::kUseSurfaceLayerForVideoPIP))
-    return media::WebMediaPlayerParams::SurfaceLayerMode::kOnDemand;
-
-  return media::WebMediaPlayerParams::SurfaceLayerMode::kNever;
-}
-
-bool MediaFactory::VideoSurfaceLayerEnabledForMS() {
-  // LayoutTests do not support SurfaceLayer by default at the moment.
-  // See https://crbug.com/838128
-  content::RenderThreadImpl* render_thread =
-      content::RenderThreadImpl::current();
-  if (render_thread && render_thread->layout_test_mode() &&
-      !render_thread->LayoutTestModeUsesDisplayCompositorPixelDump()) {
-    return false;
-  }
-
-  return base::FeatureList::IsEnabled(media::kUseSurfaceLayerForVideoMS) &&
-         !features::IsMultiProcessMash();
+  return blink::WebMediaPlayer::SurfaceLayerMode::kOnDemand;
 }
 
 MediaFactory::MediaFactory(
@@ -171,7 +165,20 @@ MediaFactory::MediaFactory(
     : render_frame_(render_frame),
       request_routing_token_cb_(std::move(request_routing_token_cb)) {}
 
-MediaFactory::~MediaFactory() {}
+MediaFactory::~MediaFactory() {
+  // Release the DecoderFactory to the media thread since it may still be in use
+  // there due to pending pipeline Stop() calls. Once each Stop() completes, no
+  // new tasks using the DecoderFactory will execute, so we don't need to worry
+  // about additional posted tasks from Stop().
+  if (decoder_factory_) {
+    // DeleteSoon() shouldn't ever fail, we should always have a RenderThread at
+    // this time and subsequently a media thread. To fail, the media thread must
+    // be dead/dying (which only happens at ~RenderThreadImpl), in which case
+    // the process is about to die anyways.
+    RenderThreadImpl::current()->GetMediaThreadTaskRunner()->DeleteSoon(
+        FROM_HERE, std::move(decoder_factory_));
+  }
+}
 
 void MediaFactory::SetupMojo() {
   // Only do setup once.
@@ -202,14 +209,62 @@ bool UseMediaPlayerRenderer(const GURL& url) {
       return true;
   }
 
-  // Indicates if the Android MediaPlayer should be used instead of WMPI.
-  if (GetContentClient()->renderer()->ShouldUseMediaPlayerForURL(url))
-    return true;
-
   // Otherwise, use the default renderer.
   return false;
 }
 #endif  // defined(OS_ANDROID)
+
+std::unique_ptr<blink::WebVideoFrameSubmitter> MediaFactory::CreateSubmitter(
+    scoped_refptr<base::SingleThreadTaskRunner>*
+        video_frame_compositor_task_runner,
+    const cc::LayerTreeSettings& settings) {
+  blink::WebMediaPlayer::SurfaceLayerMode use_surface_layer_for_video =
+      GetVideoSurfaceLayerMode();
+  content::RenderThreadImpl* render_thread =
+      content::RenderThreadImpl::current();
+  *video_frame_compositor_task_runner = nullptr;
+
+  if (!render_thread)
+    return nullptr;
+
+  bool use_sync_primitives = false;
+  if (use_surface_layer_for_video ==
+      blink::WebMediaPlayer::SurfaceLayerMode::kAlways) {
+    // Run the compositor / frame submitter on its own thread.
+    *video_frame_compositor_task_runner =
+        render_thread->CreateVideoFrameCompositorTaskRunner();
+    // We must use sync primitives on this thread.
+    use_sync_primitives = true;
+  } else {
+    // Run on the cc thread, even if we may switch to SurfaceLayer mode later
+    // if we're in kOnDemand mode.  We do this to avoid switching threads when
+    // switching to SurfaceLayer.
+    *video_frame_compositor_task_runner =
+        render_thread->compositor_task_runner()
+            ? render_thread->compositor_task_runner()
+            : render_frame_->GetTaskRunner(
+                  blink::TaskType::kInternalMediaRealTime);
+
+    // TODO(https://crbug/901513): Remove once kOnDemand is removed.
+    render_thread->SetVideoFrameCompositorTaskRunner(
+        *video_frame_compositor_task_runner);
+  }
+
+  std::unique_ptr<blink::WebVideoFrameSubmitter> submitter;
+
+  if (use_surface_layer_for_video !=
+      blink::WebMediaPlayer::SurfaceLayerMode::kNever) {
+    submitter = blink::WebVideoFrameSubmitter::Create(
+        base::BindRepeating(
+            &PostContextProviderToCallback,
+            RenderThreadImpl::current()->GetCompositorMainThreadTaskRunner()),
+        settings, use_sync_primitives);
+  }
+
+  DCHECK(*video_frame_compositor_task_runner);
+
+  return submitter;
+}
 
 blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
     const blink::WebMediaPlayerSource& source,
@@ -225,8 +280,8 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
   blink::WebMediaStream web_stream =
       GetWebMediaStreamFromWebMediaPlayerSource(source);
   if (!web_stream.IsNull())
-    return CreateWebMediaPlayerForMediaStream(client, sink_id, security_origin,
-                                              web_frame, layer_tree_view);
+    return CreateWebMediaPlayerForMediaStream(
+        client, sink_id, security_origin, web_frame, layer_tree_view, settings);
 
   // If |source| was not a MediaStream, it must be a URL.
   // TODO(guidou): Fix this when support for other srcObject types is added.
@@ -254,15 +309,6 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
       webkit_preferences.embedded_media_experience_enabled;
 #endif  // defined(OS_ANDROID)
 
-  // Enable background optimizations based on field trial for src= content, but
-  // always enable for MSE content. See http://crbug.com/709302.
-  base::TimeDelta max_keyframe_distance_to_disable_background_video =
-      base::TimeDelta::FromMilliseconds(base::GetFieldTrialParamByFeatureAsInt(
-          media::kBackgroundVideoTrackOptimization, "max_keyframe_distance_ms",
-          0));
-  base::TimeDelta max_keyframe_distance_to_disable_background_video_mse =
-      base::TimeDelta::FromSeconds(5);
-
   // When memory pressure based garbage collection is enabled for MSE, the
   // |enable_instant_source_buffer_gc| flag controls whether the GC is done
   // immediately on memory pressure notification or during the next SourceBuffer
@@ -281,7 +327,10 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
   base::WeakPtr<media::MediaObserver> media_observer;
 
   auto factory_selector = CreateRendererFactorySelector(
-      media_log.get(), use_media_player_renderer, GetDecoderFactory(),
+      media_log.get(), use_media_player_renderer,
+      render_frame_->GetRenderFrameMediaPlaybackOptions()
+          .is_mojo_renderer_enabled,
+      GetDecoderFactory(),
       std::make_unique<media::RemotePlaybackClientWrapperImpl>(client),
       &media_observer);
 
@@ -307,36 +356,8 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
 
   scoped_refptr<base::SingleThreadTaskRunner>
       video_frame_compositor_task_runner;
-  std::unique_ptr<blink::WebVideoFrameSubmitter> submitter;
-  media::WebMediaPlayerParams::SurfaceLayerMode use_surface_layer_for_video =
-      GetVideoSurfaceLayerMode();
-  bool use_sync_primitives = false;
-  if (use_surface_layer_for_video ==
-      media::WebMediaPlayerParams::SurfaceLayerMode::kAlways) {
-    // Run the compositor / frame submitter on its own thread.
-    video_frame_compositor_task_runner =
-        render_thread->CreateVideoFrameCompositorTaskRunner();
-    // We must use sync primitives on this thread.
-    use_sync_primitives = true;
-  } else {
-    // Run on the cc thread, even if we may switch to SurfaceLayer mode later
-    // if we're in kOnDemand mode.  We do this to avoid switching threads when
-    // switching to SurfaceLayer.
-    video_frame_compositor_task_runner =
-        render_thread->compositor_task_runner()
-            ? render_thread->compositor_task_runner()
-            : render_frame_->GetTaskRunner(
-                  blink::TaskType::kInternalMediaRealTime);
-  }
-
-  if (use_surface_layer_for_video !=
-      media::WebMediaPlayerParams::SurfaceLayerMode::kNever) {
-    submitter = blink::WebVideoFrameSubmitter::Create(
-        base::BindRepeating(
-            &PostContextProviderToCallback,
-            RenderThreadImpl::current()->GetCompositorMainThreadTaskRunner()),
-        settings, use_sync_primitives);
-  }
+  std::unique_ptr<blink::WebVideoFrameSubmitter> submitter =
+      CreateSubmitter(&video_frame_compositor_task_runner, settings);
 
   DCHECK(layer_tree_view);
   scoped_refptr<base::SingleThreadTaskRunner> media_task_runner =
@@ -367,14 +388,18 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
           base::Bind(&v8::Isolate::AdjustAmountOfExternalAllocatedMemory,
                      base::Unretained(blink::MainThreadIsolate())),
           initial_cdm, request_routing_token_cb_, media_observer,
-          max_keyframe_distance_to_disable_background_video,
-          max_keyframe_distance_to_disable_background_video_mse,
           enable_instant_source_buffer_gc, embedded_media_experience_enabled,
           std::move(metrics_provider),
           base::BindOnce(&blink::WebSurfaceLayerBridge::Create,
                          layer_tree_view),
           RenderThreadImpl::current()->SharedMainThreadContextProvider(),
-          use_surface_layer_for_video));
+          GetVideoSurfaceLayerMode(),
+          render_frame_->GetRenderFrameMediaPlaybackOptions()
+              .is_background_suspend_enabled,
+          render_frame_->GetRenderFrameMediaPlaybackOptions()
+              .is_background_video_playback_enabled,
+          render_frame_->GetRenderFrameMediaPlaybackOptions()
+              .is_background_video_track_optimization_supported));
 
   std::unique_ptr<media::VideoFrameCompositor> vfc =
       std::make_unique<media::VideoFrameCompositor>(
@@ -384,12 +409,6 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
       web_frame, client, encrypted_client, GetWebMediaPlayerDelegate(),
       std::move(factory_selector), url_index_.get(), std::move(vfc),
       std::move(params));
-
-#if defined(OS_ANDROID)  // WMPI_CAST
-  media_player->SetMediaPlayerManager(GetMediaPlayerManager());
-  media_player->SetDeviceScaleFactor(
-      render_frame_->render_view()->GetDeviceScaleFactor());
-#endif  // defined(OS_ANDROID)
 
   return media_player;
 }
@@ -406,6 +425,7 @@ std::unique_ptr<media::RendererFactorySelector>
 MediaFactory::CreateRendererFactorySelector(
     media::MediaLog* media_log,
     bool use_media_player,
+    bool enable_mojo_renderer,
     media::DecoderFactory* decoder_factory,
     std::unique_ptr<media::RemotePlaybackClientWrapper> client_wrapper,
     base::WeakPtr<media::MediaObserver>* out_media_observer) {
@@ -422,7 +442,6 @@ MediaFactory::CreateRendererFactorySelector(
   // MediaPlayerRendererClientFactory setup.
   auto mojo_media_player_renderer_factory =
       std::make_unique<media::MojoRendererFactory>(
-          media::mojom::HostedRendererType::kMediaPlayer,
           media::MojoRendererFactory::GetGpuFactoriesCB(),
           GetMediaInterfaceFactory());
 
@@ -442,30 +461,16 @@ MediaFactory::CreateRendererFactorySelector(
 
   // FlingingRendererClientFactory (FRCF) setup.
   auto mojo_flinging_factory = std::make_unique<media::MojoRendererFactory>(
-      media::mojom::HostedRendererType::kFlinging,
       media::MojoRendererFactory::GetGpuFactoriesCB(),
       GetMediaInterfaceFactory());
 
-  // Save a temp copy of the pointer, before moving it into the FRCF.
-  // The FRCF cannot be aware of the MojoRendererFactory directly, due to
-  // layering issues.
-  media::MojoRendererFactory* temp_mojo_flinging_factory =
-      mojo_flinging_factory.get();
-
-  auto flinging_factory =
-      std::make_unique<media::FlingingRendererClientFactory>(
-          std::move(mojo_flinging_factory), std::move(client_wrapper));
-
-  // base::Unretained is safe here because the FRCF owns the MojoRendererFactory
-  // and is guaranteed to outlive it.
-  temp_mojo_flinging_factory->SetGetTypeSpecificIdCB(base::BindRepeating(
-      &media::FlingingRendererClientFactory::GetActivePresentationId,
-      base::Unretained(flinging_factory.get())));
+  auto flinging_factory = std::make_unique<FlingingRendererClientFactory>(
+      std::move(mojo_flinging_factory), std::move(client_wrapper));
 
   // base::Unretained is safe here because |factory_selector| owns
   // |flinging_factory|.
   factory_selector->SetQueryIsFlingingActiveCB(
-      base::Bind(&media::FlingingRendererClientFactory::IsFlingingActive,
+      base::Bind(&FlingingRendererClientFactory::IsFlingingActive,
                  base::Unretained(flinging_factory.get())));
 
   factory_selector->AddFactory(
@@ -475,21 +480,21 @@ MediaFactory::CreateRendererFactorySelector(
 
   bool use_mojo_renderer_factory = false;
 #if BUILDFLAG(ENABLE_MOJO_RENDERER)
-#if BUILDFLAG(ENABLE_RUNTIME_MEDIA_RENDERER_SELECTION)
-  use_mojo_renderer_factory =
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableMojoRenderer);
-#else
-  use_mojo_renderer_factory = true;
-#endif  // BUILDFLAG(ENABLE_RUNTIME_MEDIA_RENDERER_SELECTION)
+  use_mojo_renderer_factory = enable_mojo_renderer;
   if (use_mojo_renderer_factory) {
+    auto mojo_renderer_factory = std::make_unique<media::MojoRendererFactory>(
+        base::Bind(&RenderThreadImpl::GetGpuFactories,
+                   base::Unretained(render_thread)),
+        GetMediaInterfaceFactory());
+
+    // The "default" MojoRendererFactory can be wrapped by a
+    // DecryptingRendererFactory without changing any behavior.
+    // TODO(tguilbert/xhwang): Add "FactoryType::DECRYPTING" if ever we need to
+    // distinguish between a "pure" and "decrypting" MojoRenderer.
     factory_selector->AddFactory(
         media::RendererFactorySelector::FactoryType::MOJO,
-        std::make_unique<media::MojoRendererFactory>(
-            media::mojom::HostedRendererType::kDefault,
-            base::Bind(&RenderThreadImpl::GetGpuFactories,
-                       base::Unretained(render_thread)),
-            GetMediaInterfaceFactory()));
+        std::make_unique<media::DecryptingRendererFactory>(
+            media_log, std::move(mojo_renderer_factory)));
 
     factory_selector->SetBaseFactoryType(
         media::RendererFactorySelector::FactoryType::MOJO);
@@ -542,7 +547,8 @@ blink::WebMediaPlayer* MediaFactory::CreateWebMediaPlayerForMediaStream(
     const blink::WebString& sink_id,
     const blink::WebSecurityOrigin& security_origin,
     blink::WebLocalFrame* frame,
-    blink::WebLayerTreeView* layer_tree_view) {
+    blink::WebLayerTreeView* layer_tree_view,
+    const cc::LayerTreeSettings& settings) {
   RenderThreadImpl* const render_thread = RenderThreadImpl::current();
 
   scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner =
@@ -551,18 +557,25 @@ blink::WebMediaPlayer* MediaFactory::CreateWebMediaPlayerForMediaStream(
     compositor_task_runner =
         render_frame_->GetTaskRunner(blink::TaskType::kInternalMediaRealTime);
 
+  scoped_refptr<base::SingleThreadTaskRunner>
+      video_frame_compositor_task_runner;
+  std::unique_ptr<blink::WebVideoFrameSubmitter> submitter =
+      CreateSubmitter(&video_frame_compositor_task_runner, settings);
+
   DCHECK(layer_tree_view);
   return new WebMediaPlayerMS(
       frame, client, GetWebMediaPlayerDelegate(),
       std::make_unique<RenderMediaLog>(
           url::Origin(security_origin).GetURL(),
           render_frame_->GetTaskRunner(blink::TaskType::kInternalMedia)),
-      CreateMediaStreamRendererFactory(), render_thread->GetIOTaskRunner(),
-      compositor_task_runner, render_thread->GetMediaThreadTaskRunner(),
+      CreateMediaStreamRendererFactory(),
+      render_frame_->GetTaskRunner(blink::TaskType::kInternalMedia),
+      render_thread->GetIOTaskRunner(), video_frame_compositor_task_runner,
+      render_thread->GetMediaThreadTaskRunner(),
       render_thread->GetWorkerTaskRunner(), render_thread->GetGpuFactories(),
       sink_id,
       base::BindOnce(&blink::WebSurfaceLayerBridge::Create, layer_tree_view),
-      VideoSurfaceLayerEnabledForMS());
+      std::move(submitter), GetVideoSurfaceLayerMode());
 }
 
 media::RendererWebMediaPlayerDelegate*
@@ -574,14 +587,13 @@ MediaFactory::GetWebMediaPlayerDelegate() {
   return media_player_delegate_;
 }
 
-std::unique_ptr<MediaStreamRendererFactory>
+std::unique_ptr<blink::WebMediaStreamRendererFactory>
 MediaFactory::CreateMediaStreamRendererFactory() {
-  std::unique_ptr<MediaStreamRendererFactory> factory =
+  std::unique_ptr<blink::WebMediaStreamRendererFactory> factory =
       GetContentClient()->renderer()->CreateMediaStreamRendererFactory();
   if (factory.get())
     return factory;
-  return std::unique_ptr<MediaStreamRendererFactory>(
-      new MediaStreamRendererFactoryImpl());
+  return std::make_unique<MediaStreamRendererFactoryImpl>();
 }
 
 media::DecoderFactory* MediaFactory::GetDecoderFactory() {
@@ -597,14 +609,6 @@ media::DecoderFactory* MediaFactory::GetDecoderFactory() {
 
   return decoder_factory_.get();
 }
-
-#if defined(OS_ANDROID)
-RendererMediaPlayerManager* MediaFactory::GetMediaPlayerManager() {
-  if (!media_player_manager_)
-    media_player_manager_ = new RendererMediaPlayerManager(render_frame_);
-  return media_player_manager_;
-}
-#endif  // defined(OS_ANDROID)
 
 #if BUILDFLAG(ENABLE_MEDIA_REMOTING)
 media::mojom::RemoterFactory* MediaFactory::GetRemoterFactory() {
@@ -622,6 +626,8 @@ media::CdmFactory* MediaFactory::GetCdmFactory() {
 
 #if BUILDFLAG(ENABLE_MOJO_CDM)
   cdm_factory_.reset(new media::MojoCdmFactory(GetMediaInterfaceFactory()));
+#else
+  cdm_factory_.reset(new media::DefaultCdmFactory());
 #endif  // BUILDFLAG(ENABLE_MOJO_CDM)
 
   return cdm_factory_.get();

@@ -10,6 +10,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "components/payments/content/developer_console_logger.h"
 #include "components/payments/content/payment_request_display_manager.h"
 #include "components/payments/content/payment_request_spec.h"
 #include "components/payments/content/payment_request_state.h"
@@ -43,6 +44,8 @@ class PaymentRequest : public mojom::PaymentRequest,
    public:
     virtual void OnCanMakePaymentCalled() = 0;
     virtual void OnCanMakePaymentReturned() = 0;
+    virtual void OnHasEnrolledInstrumentCalled() = 0;
+    virtual void OnHasEnrolledInstrumentReturned() = 0;
     virtual void OnNotSupportedError() = 0;
     virtual void OnConnectionTerminated() = 0;
     virtual void OnAbortCalled() = 0;
@@ -71,7 +74,8 @@ class PaymentRequest : public mojom::PaymentRequest,
   void NoUpdatedPaymentDetails() override;
   void Abort() override;
   void Complete(mojom::PaymentComplete result) override;
-  void CanMakePayment() override;
+  void CanMakePayment(bool legacy_mode) override;
+  void HasEnrolledInstrument(bool per_method_quota) override;
 
   // PaymentRequestSpec::Observer:
   void OnSpecUpdated() override {}
@@ -80,6 +84,7 @@ class PaymentRequest : public mojom::PaymentRequest,
   void OnPaymentResponseAvailable(mojom::PaymentResponsePtr response) override;
   void OnShippingOptionIdSelected(std::string shipping_option_id) override;
   void OnShippingAddressSelected(mojom::PaymentAddressPtr address) override;
+  void OnPayerInfoSelected(mojom::PayerDetailPtr payer_info) override;
 
   // Called when the user explicitly cancelled the flow. Will send a message
   // to the renderer which will indirectly destroy this object (through
@@ -118,6 +123,15 @@ class PaymentRequest : public mojom::PaymentRequest,
   PaymentRequestState* state() const { return state_.get(); }
 
  private:
+  // Returns true after init() has been called and the mojo connection has been
+  // established. If the mojo connection gets later disconnected, this will
+  // returns false.
+  bool IsInitialized() const;
+
+  // Returns true after show() has been called and the payment sheet is showing.
+  // If the payment sheet is later hidden, this will return false.
+  bool IsThisPaymentRequestShowing() const;
+
   // Returns true if this payment request supports skipping the Payment Sheet.
   // Typically, this means only one payment method is supported, it's a URL
   // based method, and no other info is requested from the user.
@@ -130,20 +144,27 @@ class PaymentRequest : public mojom::PaymentRequest,
 
   // The callback for PaymentRequestState::CanMakePayment. Checks for query
   // quota and may send QUERY_QUOTA_EXCEEDED.
-  void CanMakePaymentCallback(bool can_make_payment);
+  void CanMakePaymentCallback(bool legacy_mode, bool can_make_payment);
+
+  // The callback for PaymentRequestState::HasEnrolledInstrument. Checks for
+  // query quota and may send QUERY_QUOTA_EXCEEDED.
+  void HasEnrolledInstrumentCallback(bool per_method_quota,
+                                     bool has_enrolled_instrument);
 
   // The callback for PaymentRequestState::AreRequestedMethodsSupported.
   void AreRequestedMethodsSupportedCallback(bool methods_supported);
 
-  // Sends either CAN_MAKE_PAYMENT or CANNOT_MAKE_PAYMENT to the renderer,
-  // depending on |can_make_payment| value. Never sends QUERY_QUOTA_EXCEEDED.
-  // Does not check query quota, but does check for incognito mode. If
-  // |warn_localhost_or_file| is true, then sends WARNING_CAN_MAKE_PAYMENT or
-  // WARNING_CANNOT_MAKE_PAYMENT version of the values instead.
-  void RespondToCanMakePaymentQuery(bool can_make_payment,
-                                    bool warn_localhost_or_file);
+  // Sends either HAS_ENROLLED_INSTRUMENT or HAS_NO_ENROLLED_INSTRUMENT to the
+  // renderer, depending on |has_enrolled_instrument| value. Does not check
+  // query quota so never sends QUERY_QUOTA_EXCEEDED. If
+  // |warn_localhost_or_file| is true, then sends
+  // WARNING_HAS_ENROLLED_INSTRUMENT or WARNING_HAS_NO_ENROLLED_INSTRUMENT
+  // version of the values instead.
+  void RespondToHasEnrolledInstrumentQuery(bool has_enrolled_instrument,
+                                           bool warn_localhost_or_file);
 
   content::WebContents* web_contents_;
+  DeveloperConsoleLogger log_;
   std::unique_ptr<ContentPaymentRequestDelegate> delegate_;
   // |manager_| owns this PaymentRequest.
   PaymentRequestWebContentsManager* manager_;
@@ -176,6 +197,13 @@ class PaymentRequest : public mojom::PaymentRequest,
 
   // Whether PaymentRequest.show() was invoked by skipping payment request UI.
   bool skipped_payment_request_ui_ = false;
+
+  // Whether PaymentRequest mojo connection has been initialized from the
+  // renderer.
+  bool is_initialized_ = false;
+
+  // Whether PaymentRequest.show() has been called.
+  bool is_show_called_ = false;
 
   base::WeakPtrFactory<PaymentRequest> weak_ptr_factory_;
 

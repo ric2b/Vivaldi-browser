@@ -77,7 +77,7 @@ void ReleaseBuffer(int* release_buffer_call_count) {
 
 // Instantiate the Boolean which is used to toggle mouse and touch events in
 // the parameterized tests.
-INSTANTIATE_TEST_CASE_P(, SurfaceTest, testing::Values(1.0f, 1.25f, 2.0f));
+INSTANTIATE_TEST_SUITE_P(, SurfaceTest, testing::Values(1.0f, 1.25f, 2.0f));
 
 TEST_P(SurfaceTest, Attach) {
   gfx::Size buffer_size(256, 256);
@@ -221,9 +221,11 @@ TEST_P(SurfaceTest, MAYBE_SetOpaqueRegion) {
         GetFrameFromSurface(shell_surface.get());
     ASSERT_EQ(1u, frame.render_pass_list.size());
     ASSERT_EQ(1u, frame.render_pass_list.back()->quad_list.size());
-    EXPECT_FALSE(frame.render_pass_list.back()
-                     ->quad_list.back()
-                     ->ShouldDrawWithBlending());
+    auto* texture_draw_quad = viz::TextureDrawQuad::MaterialCast(
+        frame.render_pass_list.back()->quad_list.back());
+
+    EXPECT_FALSE(texture_draw_quad->ShouldDrawWithBlending());
+    EXPECT_EQ(SK_ColorBLACK, texture_draw_quad->background_color);
     EXPECT_EQ(ToPixel(gfx::Rect(0, 0, 1, 1)),
               frame.render_pass_list.back()->damage_rect);
   }
@@ -238,9 +240,10 @@ TEST_P(SurfaceTest, MAYBE_SetOpaqueRegion) {
         GetFrameFromSurface(shell_surface.get());
     ASSERT_EQ(1u, frame.render_pass_list.size());
     ASSERT_EQ(1u, frame.render_pass_list.back()->quad_list.size());
-    EXPECT_TRUE(frame.render_pass_list.back()
-                    ->quad_list.back()
-                    ->ShouldDrawWithBlending());
+    auto* texture_draw_quad = viz::TextureDrawQuad::MaterialCast(
+        frame.render_pass_list.back()->quad_list.back());
+    EXPECT_TRUE(texture_draw_quad->ShouldDrawWithBlending());
+    EXPECT_EQ(SK_ColorTRANSPARENT, texture_draw_quad->background_color);
     EXPECT_EQ(ToPixel(gfx::Rect(0, 0, 1, 1)),
               frame.render_pass_list.back()->damage_rect);
   }
@@ -769,7 +772,7 @@ TEST_P(SurfaceTest, OverlayCandidate) {
   gfx::Size buffer_size(1, 1);
   auto buffer = std::make_unique<Buffer>(
       exo_test_helper()->CreateGpuMemoryBuffer(buffer_size), GL_TEXTURE_2D, 0,
-      true, true);
+      true, true, false);
   auto surface = std::make_unique<Surface>();
   auto shell_surface = std::make_unique<ShellSurface>(surface.get());
 
@@ -792,7 +795,7 @@ TEST_P(SurfaceTest, SetAlpha) {
   gfx::Size buffer_size(1, 1);
   auto buffer = std::make_unique<Buffer>(
       exo_test_helper()->CreateGpuMemoryBuffer(buffer_size), GL_TEXTURE_2D, 0,
-      true, true);
+      true, true, false);
   auto surface = std::make_unique<Surface>();
   auto shell_surface = std::make_unique<ShellSurface>(surface.get());
 
@@ -894,6 +897,39 @@ TEST_P(SurfaceTest, DestroyAttachedBuffer) {
   buffer.reset();
   surface->Commit();
   EXPECT_FALSE(surface->content_size().IsEmpty());
+}
+
+TEST_P(SurfaceTest, SetClientSurfaceId) {
+  auto surface = std::make_unique<Surface>();
+  constexpr int kTestId = 42;
+
+  surface->SetClientSurfaceId(kTestId);
+  EXPECT_EQ(kTestId, surface->GetClientSurfaceId());
+}
+
+TEST_P(SurfaceTest, DestroyWithAttachedBufferReleasesBuffer) {
+  gfx::Size buffer_size(1, 1);
+  auto buffer = std::make_unique<Buffer>(
+      exo_test_helper()->CreateGpuMemoryBuffer(buffer_size));
+  auto surface = std::make_unique<Surface>();
+  auto shell_surface = std::make_unique<ShellSurface>(surface.get());
+
+  int release_buffer_call_count = 0;
+  buffer->set_release_callback(base::BindRepeating(
+      &ReleaseBuffer, base::Unretained(&release_buffer_call_count)));
+
+  surface->Attach(buffer.get());
+  surface->Commit();
+  base::RunLoop().RunUntilIdle();
+  // Buffer is still attached at this point.
+  EXPECT_EQ(0, release_buffer_call_count);
+
+  // After the surface is destroyed, we should get a release event for the
+  // attached buffer.
+  shell_surface.reset();
+  surface.reset();
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1, release_buffer_call_count);
 }
 
 }  // namespace

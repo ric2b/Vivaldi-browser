@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/callback.h"
@@ -82,9 +83,23 @@ struct FrameVisualProperties;
 class FrameTreeNode;
 class InterstitialPage;
 class NavigationHandle;
+class NavigationHandleImpl;
 class RenderWidgetHost;
 class RenderWidgetHostView;
 class WebContents;
+
+// Navigates |web_contents| to |url|, blocking until the navigation finishes.
+// Returns true if the page was loaded successfully and the last committed URL
+// matches |url|.  This is a browser-initiated navigation that simulates a user
+// typing |url| into the address bar.
+WARN_UNUSED_RESULT bool NavigateToURL(WebContents* web_contents,
+                                      const GURL& url);
+
+// Navigates |web_contents| to |url|, blocking until the given number of
+// navigations finishes.
+void NavigateToURLBlockUntilNavigationsComplete(WebContents* web_contents,
+                                                const GURL& url,
+                                                int number_of_navigations);
 
 // Navigate a frame with ID |iframe_id| to |url|, blocking until the navigation
 // finishes.  Uses a renderer-initiated navigation from script code in the
@@ -169,6 +184,12 @@ void SimulateRoutedMouseClickAt(WebContents* web_contents,
                                 blink::WebMouseEvent::Button button,
                                 const gfx::Point& point);
 
+// Simulates MouseDown at the center of the given RenderWidgetHost's area.
+// This does not send a corresponding MouseUp.
+void SendMouseDownToWidget(RenderWidgetHost* target,
+                           int modifiers,
+                           blink::WebMouseEvent::Button button);
+
 // Simulates asynchronously a mouse enter/move/leave event.
 void SimulateMouseEvent(WebContents* web_contents,
                         blink::WebInputEvent::Type type,
@@ -178,6 +199,10 @@ void SimulateMouseEvent(WebContents* web_contents,
 // RenderWidgetHostInputEventRouter.
 void SimulateRoutedMouseEvent(WebContents* web_contents,
                               blink::WebInputEvent::Type type,
+                              const gfx::Point& point);
+void SimulateRoutedMouseEvent(WebContents* web_contents,
+                              blink::WebInputEvent::Type type,
+                              blink::WebMouseEvent::Button button,
                               const gfx::Point& point);
 
 // Simulate a mouse wheel event.
@@ -192,6 +217,12 @@ void SimulateMouseWheelCtrlZoomEvent(WebContents* web_contents,
                                      const gfx::Point& point,
                                      bool zoom_in,
                                      blink::WebMouseWheelEvent::Phase phase);
+
+void SimulateTouchscreenPinch(WebContents* web_contents,
+                              const gfx::PointF& anchor,
+                              float scale_change,
+                              base::OnceClosure on_complete);
+
 #endif  // !defined(OS_MACOSX)
 
 // Sends a GesturePinch Begin/Update/End sequence.
@@ -798,7 +829,7 @@ void WaitForInterstitialDetach(content::WebContents* web_contents);
 // destroyed by the time WaitForInterstitialDetach is called (e.g. when waiting
 // for an interstitial detach after closing a tab).
 void RunTaskAndWaitForInterstitialDetach(content::WebContents* web_contents,
-                                         const base::Closure& task);
+                                         base::OnceClosure task);
 
 // Waits until all resources have loaded in the given RenderFrameHost.
 // When the load completes, this function sends a "pageLoadComplete" message
@@ -840,6 +871,12 @@ RenderWidgetHost* GetMouseLockWidget(WebContents* web_contents);
 // Returns the RenderWidgetHost that holds the keyboard lock.
 RenderWidgetHost* GetKeyboardLockWidget(WebContents* web_contents);
 
+// Returns the RenderWidgetHost that holds mouse capture, if any. This is
+// distinct from MouseLock above in that it is a widget that has requested
+// implicit capture, such as during a drag. MouseLock is explicitly gained
+// through the JavaScript API.
+RenderWidgetHost* GetMouseCaptureWidget(WebContents* web_contents);
+
 // Allows tests to drive keyboard lock functionality without requiring access
 // to the RenderWidgetHostImpl header or setting up an HTTP test server.
 // |codes| represents the set of keys to lock.  If |codes| has no value, then
@@ -852,6 +889,10 @@ void CancelKeyboardLock(WebContents* web_contents);
 // Returns true if inner |interstitial_page| is connected to an outer
 // WebContents.
 bool IsInnerInterstitialPageConnected(InterstitialPage* interstitial_page);
+
+// Returns the screen orientation provider that's been set via
+// WebContents::SetScreenOrientationDelegate(). May return null.
+ScreenOrientationDelegate* GetScreenOrientationDelegate();
 
 // Returns all the RenderWidgetHostViews inside the |web_contents| that are
 // registered in the RenderWidgetHostInputEventRouter.
@@ -1080,6 +1121,16 @@ class RenderFrameSubmissionObserver
   // Blocks the browser ui thread until the next
   // OnRenderFrameMetadataChangedAfterActivation.
   void WaitForMetadataChange();
+
+  // Blocks the browser ui thread until RenderFrameMetadata arrives with
+  // page scale factor matching |expected_page_scale_factor|.
+  void WaitForPageScaleFactor(float expected_page_scale_factor,
+                              const float tolerance);
+
+  // Blocks the browser ui thread until RenderFrameMetadata arrives with
+  // external page scale factor matching |expected_external_page_scale_factor|.
+  void WaitForExternalPageScaleFactor(float expected_external_page_scale_factor,
+                                      const float tolerance);
 
   // Blocks the browser ui thread until RenderFrameMetadata arrives where its
   // scroll offset matches |expected_offset|.
@@ -1355,7 +1406,7 @@ class TestNavigationManager : public WebContentsObserver {
   void OnNavigationStateChanged();
 
   const GURL url_;
-  NavigationHandle* handle_;
+  NavigationHandleImpl* handle_;
   bool navigation_paused_;
   NavigationState current_state_;
   NavigationState desired_state_;
@@ -1439,7 +1490,7 @@ class PwnMessageHelper {
                               std::string blob_uuid,
                               int64_t position);
 
-  // Sends ViewHostMsg_LockMouse
+  // Sends WidgetHostMsg_LockMouse
   static void LockMouse(RenderProcessHost* process,
                         int routing_id,
                         bool user_gesture,
@@ -1496,10 +1547,6 @@ class ContextMenuFilter : public content::BrowserMessageFilter {
 
 WebContents* GetEmbedderForGuest(content::WebContents* guest);
 
-// Returns true if the network service is enabled and it's running in the
-// browser process.
-bool IsNetworkServiceRunningInProcess();
-
 // Load the given |url| with |network_context| and return the |net::Error| code.
 int LoadBasicRequest(network::mojom::NetworkContext* network_context,
                      const GURL& url,
@@ -1549,14 +1596,12 @@ class SynchronizeVisualPropertiesMessageFilter
 
  private:
   void OnSynchronizeFrameHostVisualProperties(
-      const viz::SurfaceId& surface_id,
+      const viz::FrameSinkId& frame_sink_id,
       const FrameVisualProperties& visual_properties);
   void OnSynchronizeBrowserPluginVisualProperties(
       int browser_plugin_guest_instance_id,
-      viz::LocalSurfaceId surface_id,
       FrameVisualProperties visual_properties);
   void OnSynchronizeVisualProperties(
-      const viz::LocalSurfaceId& surface_id,
       const viz::FrameSinkId& frame_sink_id,
       const FrameVisualProperties& visual_properties);
   // |rect| is in DIPs.
@@ -1578,6 +1623,30 @@ class SynchronizeVisualPropertiesMessageFilter
   std::unique_ptr<base::RunLoop> surface_id_run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(SynchronizeVisualPropertiesMessageFilter);
+};
+
+// This class allows monitoring of mouse events received by a specific
+// RenderWidgetHost.
+class RenderWidgetHostMouseEventMonitor {
+ public:
+  explicit RenderWidgetHostMouseEventMonitor(RenderWidgetHost* host);
+  ~RenderWidgetHostMouseEventMonitor();
+  bool EventWasReceived() const { return event_received_; }
+  void ResetEventReceived() { event_received_ = false; }
+  const blink::WebMouseEvent& event() const { return event_; }
+
+ private:
+  bool MouseEventCallback(const blink::WebMouseEvent& event) {
+    event_received_ = true;
+    event_ = event;
+    return false;
+  }
+  RenderWidgetHost::MouseEventCallback mouse_callback_;
+  RenderWidgetHost* host_;
+  bool event_received_;
+  blink::WebMouseEvent event_;
+
+  DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostMouseEventMonitor);
 };
 
 }  // namespace content

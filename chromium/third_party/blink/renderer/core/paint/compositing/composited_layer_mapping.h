@@ -45,7 +45,7 @@ class PaintLayerCompositor;
 // A GraphicsLayerPaintInfo contains all the info needed to paint a partial
 // subtree of Layers into a GraphicsLayer.
 struct GraphicsLayerPaintInfo {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
   PaintLayer* paint_layer;
 
   LayoutRect composited_bounds;
@@ -188,14 +188,14 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // Returns true if the assignment actually changed the assigned squashing
   // layer.
   bool UpdateSquashingLayerAssignment(PaintLayer* squashed_layer,
-                                      size_t next_squashed_layer_index);
+                                      wtf_size_t next_squashed_layer_index);
   void RemoveLayerFromSquashingGraphicsLayer(const PaintLayer*);
 #if DCHECK_IS_ON()
   bool VerifyLayerInSquashingVector(const PaintLayer*);
 #endif
 
   void FinishAccumulatingSquashingLayers(
-      size_t next_squashed_layer_index,
+      wtf_size_t next_squashed_layer_index,
       Vector<PaintLayer*>& layers_needing_paint_invalidation);
   void UpdateRenderingContext();
   void UpdateShouldFlattenTransform();
@@ -215,6 +215,7 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   bool ShouldThrottleRendering() const override;
   bool IsTrackingRasterInvalidations() const override;
   void SetOverlayScrollbarsHidden(bool) override;
+  void SetPaintArtifactCompositorNeedsUpdate() const override;
 
 #if DCHECK_IS_ON()
   void VerifyNotPainting() override;
@@ -277,12 +278,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
 
   LayoutSize ContentOffsetInCompositingLayer() const;
 
-  // Returned value does not include any composited scroll offset of
-  // the transform ancestor.
-  LayoutPoint SquashingOffsetFromTransformedAncestor() const {
-    return squashing_layer_offset_from_transformed_ancestor_;
-  }
-
   // If there is a squashed layer painting into this CLM that is an ancestor of
   // the given LayoutObject, return it. Otherwise return nullptr.
   const GraphicsLayerPaintInfo* ContainingSquashedLayer(
@@ -300,11 +295,18 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // the background can scroll with the content). When the background is also
   // opaque this allows us to composite the scroller even on low DPI as we can
   // draw with subpixel anti-aliasing.
-  bool BackgroundPaintsOntoScrollingContentsLayer() {
+  bool BackgroundPaintsOntoScrollingContentsLayer() const {
     return background_paints_onto_scrolling_contents_layer_;
   }
 
-  bool DrawsBackgroundOntoContentLayer() {
+  // Returns true if the background paints onto the main graphics layer.
+  // In some situations, we may paint background on both the main graphics layer
+  // and the scrolling contents layer.
+  bool BackgroundPaintsOntoGraphicsLayer() const {
+    return background_paints_onto_graphics_layer_;
+  }
+
+  bool DrawsBackgroundOntoContentLayer() const {
     return draws_background_onto_content_layer_;
   }
 
@@ -347,7 +349,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
       const PaintLayer* compositing_container,
       const IntPoint& snapped_offset_from_composited_ancestor,
       Vector<GraphicsLayerPaintInfo>& layers,
-      LayoutPoint* offset_from_transformed_ancestor,
       Vector<PaintLayer*>& layers_needing_paint_invalidation);
   void UpdateMainGraphicsLayerGeometry(
       const IntRect& relative_compositing_bounds,
@@ -414,7 +415,7 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   void UpdateScrollParent(const PaintLayer*);
   void UpdateClipParent(const PaintLayer* scroll_parent);
   bool UpdateSquashingLayers(bool needs_squashing_layers);
-  void UpdateDrawsContent();
+  void UpdateDrawsContentAndPaintsHitTest();
   void UpdateChildrenTransform();
   void UpdateCompositedBounds();
   void UpdateOverscrollBehavior();
@@ -455,9 +456,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   Color LayoutObjectBackgroundColor() const;
   void UpdateBackgroundColor();
   void UpdateContentsRect();
-  void UpdateContentsOffsetInCompositingLayer(
-      const IntPoint& snapped_offset_from_composited_ancestor,
-      const IntPoint& graphics_layer_parent_location);
   void UpdateAfterPartResize();
   void UpdateCompositingReasons();
 
@@ -512,7 +510,7 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
 
   // Clear the groupedMapping entry on the layer at the given index, only if
   // that layer does not appear earlier in the set of layers for this object.
-  bool InvalidateLayerIfNoPrecedingEntry(size_t);
+  bool InvalidateLayerIfNoPrecedingEntry(wtf_size_t);
 
   // Main GraphicsLayer of the CLM for the iframe's content document.
   GraphicsLayer* FrameContentsGraphicsLayer() const;
@@ -661,12 +659,9 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // layers paint into.
   std::unique_ptr<GraphicsLayer> squashing_layer_;
   Vector<GraphicsLayerPaintInfo> squashed_layers_;
-  LayoutPoint squashing_layer_offset_from_transformed_ancestor_;
   IntSize squashing_layer_offset_from_layout_object_;
 
   LayoutRect composited_bounds_;
-
-  LayoutSize content_offset_in_compositing_layer_;
 
   // We keep track of the scrolling contents offset, so that when it changes we
   // can notify the ScrollingCoordinator, which passes on main-thread scrolling
@@ -674,8 +669,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   DoubleSize scrolling_contents_offset_;
 
   const PaintLayer* clip_inheritance_ancestor_;
-
-  unsigned content_offset_in_compositing_layer_dirty_ : 1;
 
   unsigned pending_update_scope_ : 2;
   unsigned is_main_frame_layout_view_layer_ : 1;

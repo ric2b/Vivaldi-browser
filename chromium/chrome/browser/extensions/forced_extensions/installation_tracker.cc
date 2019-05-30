@@ -7,8 +7,11 @@
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/values.h"
+#include "chrome/browser/extensions/forced_extensions/installation_reporter.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/install/crx_install_error.h"
 #include "extensions/browser/pref_names.h"
 
 namespace {
@@ -21,10 +24,11 @@ namespace extensions {
 
 InstallationTracker::InstallationTracker(
     ExtensionRegistry* registry,
-    PrefService* pref_service,
+    Profile* profile,
     std::unique_ptr<base::OneShotTimer> timer)
     : registry_(registry),
-      pref_service_(pref_service),
+      profile_(profile),
+      pref_service_(profile->GetPrefs()),
       start_time_(base::Time::Now()),
       observer_(this),
       timer_(std::move(timer)) {
@@ -65,6 +69,13 @@ void InstallationTracker::OnForcedExtensionsPrefChanged() {
     ReportResults(true /* succeeded */);
 }
 
+void InstallationTracker::OnShutdown(ExtensionRegistry*) {
+  InstallationReporter::Clear(profile_);
+  observer_.RemoveAll();
+  pref_change_registrar_.RemoveAll();
+  timer_->Stop();
+}
+
 void InstallationTracker::OnExtensionLoaded(
     content::BrowserContext* browser_context,
     const Extension* extension) {
@@ -81,6 +92,9 @@ void InstallationTracker::ReportResults(bool succeeded) {
     if (succeeded) {
       UMA_HISTOGRAM_LONG_TIMES("Extensions.ForceInstalledLoadTime",
                                base::Time::Now() - start_time_);
+      // TODO(burunduk): Remove VLOGs after resolving crbug/917700 and
+      // crbug/904600.
+      VLOG(2) << "All forced extensions seems to be installed";
     } else {
       size_t enabled_missing_count = pending_forced_extensions_.size();
       auto installed_extensions = registry_->GenerateInstalledExtensionsSet();
@@ -93,9 +107,35 @@ void InstallationTracker::ReportResults(bool succeeded) {
       UMA_HISTOGRAM_COUNTS_100(
           "Extensions.ForceInstalledTimedOutAndNotInstalledCount",
           installed_missing_count);
+      VLOG(2) << "Failed to install " << installed_missing_count
+              << " forced extensions.";
+      for (const auto& extension_id : pending_forced_extensions_) {
+        InstallationReporter::InstallationData installation =
+            InstallationReporter::Get(profile_, extension_id);
+        if (!installation.failure_reason && installation.install_stage) {
+          installation.failure_reason =
+              InstallationReporter::FailureReason::IN_PROGRESS;
+        }
+        InstallationReporter::FailureReason failure_reason =
+            installation.failure_reason.value_or(
+                InstallationReporter::FailureReason::UNKNOWN);
+        UMA_HISTOGRAM_ENUMERATION("Extensions.ForceInstalledFailureReason",
+                                  failure_reason);
+        VLOG(2) << "Forced extension " << extension_id
+                << " failed to install with data="
+                << InstallationReporter::GetFormattedInstallationData(
+                       installation);
+        if (installation.install_error_detail) {
+          CrxInstallErrorDetail detail =
+              installation.install_error_detail.value();
+          UMA_HISTOGRAM_ENUMERATION(
+              "Extensions.ForceInstalledFailureCrxInstallError", detail);
+        }
+      }
     }
   }
   reported_ = true;
+  InstallationReporter::Clear(profile_);
   observer_.RemoveAll();
   pref_change_registrar_.RemoveAll();
   timer_->Stop();

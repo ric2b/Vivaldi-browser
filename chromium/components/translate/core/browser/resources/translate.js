@@ -104,25 +104,28 @@ cr.googleTranslate = (function() {
 
   /**
    * Callback invoked when Translate Element's ready state is known.
-   * @type {Function}
+   * Will only be invoked once to indicate successful or failed initialization.
+   * In the failure case, errorCode() and error() will indicate the reason.
+   * Only used on iOS.
+   * @type {function}
    */
   var readyCallback;
 
   /**
    * Callback invoked when Translate Element's translation result is known.
-   * @type {Function}
+   * Will only be invoked once to indicate successful or failed translation.
+   * In the failure case, errorCode() and error() will indicate the reason.
+   * Only used on iOS.
+   * @type {function}
    */
   var resultCallback;
 
   /**
-   * Listens to security policy violations to set |errorCode|.
+   * Callback invoked when Translate Element requests load of javascript files.
+   * Currently main.js and element_main.js are expected to be loaded.
+   * @type {function(string)}
    */
-  document.addEventListener('securitypolicyviolation', function(event) {
-    if (securityOrigin.startsWith(event.blockedURI)) {
-      errorCode = ERROR['BAD_ORIGIN'];
-      invokeReadyCallback();
-    }
-  });
+  var loadJavascriptCallback;
 
   function checkLibReady() {
     if (lib.isAvailable()) {
@@ -153,6 +156,15 @@ cr.googleTranslate = (function() {
       lib.restore();
       invokeResultCallback();
     }
+    // Translate works differently depending on the prescence of the native
+    // IntersectionObserver APIs.
+    // If it is available, translate will occur incrementally as the user
+    // scrolls elements into view, and this method will be called continuously
+    // with |opt_finished| always set as true.
+    // On the other hand, if it is unavailable, the entire page will be
+    // translated at once in a piece meal manner, and this method may still be
+    // called several times, though only the last call will have |opt_finished|
+    // set as true.
     if (finished) {
       endTime = performance.now();
       invokeResultCallback();
@@ -162,12 +174,14 @@ cr.googleTranslate = (function() {
   function invokeReadyCallback() {
     if (readyCallback) {
       readyCallback();
+      readyCallback = null;
     }
   }
 
   function invokeResultCallback() {
     if (resultCallback) {
       resultCallback();
+      resultCallback = null;
     }
   }
 
@@ -175,7 +189,7 @@ cr.googleTranslate = (function() {
   return {
     /**
      * Setter for readyCallback. No op if already set.
-     * @param {Function} callback The function to be invoked.
+     * @param {function} callback The function to be invoked.
      */
     set readyCallback(callback) {
       if (!readyCallback) {
@@ -185,11 +199,21 @@ cr.googleTranslate = (function() {
 
     /**
      * Setter for resultCallback. No op if already set.
-     * @param {Function} callback The function to be invoked.
+     * @param {function} callback The function to be invoked.
      */
     set resultCallback(callback) {
       if (!resultCallback) {
         resultCallback = callback;
+      }
+    },
+
+    /**
+     * Setter for loadJavascriptCallback. No op if already set.
+     * @param {function(string)} callback The function to be invoked.
+     */
+    set loadJavascriptCallback(callback) {
+      if (!loadJavascriptCallback) {
+        loadJavascriptCallback = callback;
       }
     },
 
@@ -374,6 +398,12 @@ cr.googleTranslate = (function() {
         errorCode = ERROR['BAD_ORIGIN'];
         return;
       }
+
+      if (loadJavascriptCallback) {
+        loadJavascriptCallback(url);
+        return;
+      }
+
       var xhr = new XMLHttpRequest();
       xhr.open('GET', url, true);
       xhr.onreadystatechange = function() {

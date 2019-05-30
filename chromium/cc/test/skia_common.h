@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "cc/base/region.h"
 #include "cc/paint/discardable_image_map.h"
 #include "cc/paint/draw_image.h"
@@ -24,6 +25,8 @@ class Size;
 
 namespace cc {
 class DisplayItemList;
+class PaintWorkletInput;
+class SkottieWrapper;
 
 void DrawDisplayList(unsigned char* buffer,
                      const gfx::Rect& layer_rect,
@@ -37,11 +40,18 @@ Region ImageRectsToRegion(const DiscardableImageMap::Rects& rects);
 
 sk_sp<PaintImageGenerator> CreatePaintImageGenerator(const gfx::Size& size);
 
+PaintImage CreatePaintWorkletPaintImage(scoped_refptr<PaintWorkletInput> input);
+
+SkYUVASizeInfo GetYUV420SizeInfo(const gfx::Size& image_size,
+                                 bool has_alpha = false);
+
 PaintImage CreateDiscardablePaintImage(
     const gfx::Size& size,
     sk_sp<SkColorSpace> color_space = nullptr,
     bool allocate_encoded_memory = true,
-    PaintImage::Id id = PaintImage::kInvalidId);
+    PaintImage::Id id = PaintImage::kInvalidId,
+    SkColorType color_type = kN32_SkColorType,
+    bool is_yuv = false);
 
 DrawImage CreateDiscardableDrawImage(const gfx::Size& size,
                                      sk_sp<SkColorSpace> color_space,
@@ -55,7 +65,13 @@ PaintImage CreateAnimatedImage(
     int repetition_count = kAnimationLoopInfinite,
     PaintImage::Id id = PaintImage::GetNextId());
 
-PaintImage CreateBitmapImage(const gfx::Size& size);
+PaintImage CreateBitmapImage(const gfx::Size& size,
+                             SkColorType color_type = kN32_SkColorType);
+
+scoped_refptr<SkottieWrapper> CreateSkottie(const gfx::Size& size,
+                                            int duration_secs);
+
+PaintImage CreateNonDiscardablePaintImage(const gfx::Size& size);
 
 }  // namespace cc
 

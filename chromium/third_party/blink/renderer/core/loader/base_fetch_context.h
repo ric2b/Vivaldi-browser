@@ -6,16 +6,15 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LOADER_BASE_FETCH_CONTEXT_H_
 
 #include "base/optional.h"
-#include "third_party/blink/public/mojom/net/ip_address_space.mojom-blink.h"
+#include "services/network/public/mojom/referrer_policy.mojom-shared.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/web_feature_forward.h"
-#include "third_party/blink/renderer/core/script/fetch_client_settings_object.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_context.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
-#include "third_party/blink/renderer/platform/weborigin/referrer_policy.h"
 
 namespace blink {
 
@@ -30,17 +29,16 @@ class WebSocketHandshakeThrottle;
 // Frame. This class provides basic default implementation for some methods.
 class CORE_EXPORT BaseFetchContext : public FetchContext {
  public:
-  void AddAdditionalRequestHeaders(ResourceRequest&,
-                                   FetchResourceType) override;
+  void AddAdditionalRequestHeaders(ResourceRequest&) override;
   base::Optional<ResourceRequestBlockedReason> CanRequest(
-      Resource::Type,
+      ResourceType,
       const ResourceRequest&,
       const KURL&,
       const ResourceLoaderOptions&,
       SecurityViolationReportingPolicy,
       ResourceRequest::RedirectStatus) const override;
   base::Optional<ResourceRequestBlockedReason> CheckCSPForRequest(
-      WebURLRequest::RequestContext,
+      mojom::RequestContextType,
       const KURL&,
       const ResourceLoaderOptions&,
       SecurityViolationReportingPolicy,
@@ -48,26 +46,24 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
 
   void Trace(blink::Visitor*) override;
 
-  virtual const FetchClientSettingsObject* GetFetchClientSettingsObject()
-      const = 0;
   virtual KURL GetSiteForCookies() const = 0;
+
+  // Returns the origin of the top frame in the document.
+  virtual scoped_refptr<const SecurityOrigin> GetTopFrameOrigin() const = 0;
+
   virtual SubresourceFilter* GetSubresourceFilter() const = 0;
   virtual PreviewsResourceLoadingHints* GetPreviewsResourceLoadingHints()
       const = 0;
-  virtual void CountUsage(WebFeature) const = 0;
-  virtual void CountDeprecation(WebFeature) const = 0;
   virtual bool ShouldBlockWebSocketByMixedContentCheck(const KURL&) const = 0;
   virtual std::unique_ptr<WebSocketHandshakeThrottle>
   CreateWebSocketHandshakeThrottle() = 0;
 
-  void AddInfoConsoleMessage(const String&, LogSource) const override;
-  void AddWarningConsoleMessage(const String&, LogSource) const override;
-  void AddErrorConsoleMessage(const String&, LogSource) const override;
-  bool IsAdResource(const KURL&,
-                    Resource::Type,
-                    WebURLRequest::RequestContext) const override;
+  bool CalculateIfAdSubresource(const ResourceRequest& resource_request,
+                                ResourceType type) override;
 
  protected:
+  BaseFetchContext() = default;
+
   // Used for security checks.
   virtual bool AllowScriptFromSource(const KURL&) const = 0;
 
@@ -78,11 +74,11 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
   virtual void DispatchDidBlockRequest(const ResourceRequest&,
                                        const FetchInitiatorInfo&,
                                        ResourceRequestBlockedReason,
-                                       Resource::Type) const = 0;
+                                       ResourceType) const = 0;
   virtual bool ShouldBypassMainWorldCSP() const = 0;
   virtual bool IsSVGImageChromeClient() const = 0;
   virtual bool ShouldBlockFetchByMixedContentCheck(
-      WebURLRequest::RequestContext,
+      mojom::RequestContextType,
       network::mojom::RequestContextFrameType,
       ResourceRequest::RedirectStatus,
       const KURL&,
@@ -91,9 +87,9 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
                                                          const KURL&) const = 0;
   virtual const KURL& Url() const = 0;
   virtual const SecurityOrigin* GetParentSecurityOrigin() const = 0;
-  virtual base::Optional<mojom::IPAddressSpace> GetAddressSpace() const = 0;
   virtual const ContentSecurityPolicy* GetContentSecurityPolicy() const = 0;
 
+  // TODO(yhirano): Remove this.
   virtual void AddConsoleMessage(ConsoleMessage*) const = 0;
 
  private:
@@ -102,7 +98,7 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
   // Utility methods that are used in default implement for CanRequest,
   // CanFollowRedirect and AllowResponse.
   base::Optional<ResourceRequestBlockedReason> CanRequestInternal(
-      Resource::Type,
+      ResourceType,
       const ResourceRequest&,
       const KURL&,
       const ResourceLoaderOptions&,
@@ -110,7 +106,7 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
       ResourceRequest::RedirectStatus) const;
 
   base::Optional<ResourceRequestBlockedReason> CheckCSPForRequestInternal(
-      WebURLRequest::RequestContext,
+      mojom::RequestContextType,
       const KURL&,
       const ResourceLoaderOptions&,
       SecurityViolationReportingPolicy,

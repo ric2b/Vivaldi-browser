@@ -136,28 +136,28 @@ DateTimeEditElement*
 MultipleFieldsTemporalInputTypeView::GetDateTimeEditElement() const {
   return ToDateTimeEditElementOrDie(
       GetElement().UserAgentShadowRoot()->getElementById(
-          ShadowElementNames::DateTimeEdit()));
+          shadow_element_names::DateTimeEdit()));
 }
 
 SpinButtonElement* MultipleFieldsTemporalInputTypeView::GetSpinButtonElement()
     const {
   return ToSpinButtonElementOrDie(
       GetElement().UserAgentShadowRoot()->getElementById(
-          ShadowElementNames::SpinButton()));
+          shadow_element_names::SpinButton()));
 }
 
 ClearButtonElement* MultipleFieldsTemporalInputTypeView::GetClearButtonElement()
     const {
   return ToClearButtonElementOrDie(
       GetElement().UserAgentShadowRoot()->getElementById(
-          ShadowElementNames::ClearButton()));
+          shadow_element_names::ClearButton()));
 }
 
 PickerIndicatorElement*
 MultipleFieldsTemporalInputTypeView::GetPickerIndicatorElement() const {
   return ToPickerIndicatorElementOrDie(
       GetElement().UserAgentShadowRoot()->getElementById(
-          ShadowElementNames::PickerIndicator()));
+          shadow_element_names::PickerIndicator()));
 }
 
 inline bool MultipleFieldsTemporalInputTypeView::ContainsFocusedShadowElement()
@@ -202,9 +202,9 @@ void MultipleFieldsTemporalInputTypeView::EditControlValueChanged() {
     GetElement().SetNeedsValidityCheck();
   } else {
     GetElement().SetNonAttributeValueByUserEdit(new_value);
-    GetElement().SetNeedsStyleRecalc(
-        kSubtreeStyleChange,
-        StyleChangeReasonForTracing::Create(StyleChangeReason::kControlValue));
+    GetElement().SetNeedsStyleRecalc(kSubtreeStyleChange,
+                                     StyleChangeReasonForTracing::Create(
+                                         style_change_reason::kControlValue));
     GetElement().DispatchInputEvent();
   }
   GetElement().NotifyFormStateChanged();
@@ -271,7 +271,8 @@ bool MultipleFieldsTemporalInputTypeView::
 void MultipleFieldsTemporalInputTypeView::PickerIndicatorChooseValue(
     const String& value) {
   if (GetElement().IsValidValue(value)) {
-    GetElement().setValue(value, kDispatchInputAndChangeEvent);
+    GetElement().setValue(value,
+                          TextFieldEventBehavior::kDispatchInputAndChangeEvent);
     return;
   }
 
@@ -289,11 +290,14 @@ void MultipleFieldsTemporalInputTypeView::PickerIndicatorChooseValue(
 void MultipleFieldsTemporalInputTypeView::PickerIndicatorChooseValue(
     double value) {
   DCHECK(std::isfinite(value) || std::isnan(value));
-  if (std::isnan(value))
-    GetElement().setValue(g_empty_string, kDispatchInputAndChangeEvent);
-  else
-    GetElement().setValueAsNumber(value, ASSERT_NO_EXCEPTION,
-                                  kDispatchInputAndChangeEvent);
+  if (std::isnan(value)) {
+    GetElement().setValue(g_empty_string,
+                          TextFieldEventBehavior::kDispatchInputAndChangeEvent);
+  } else {
+    GetElement().setValueAsNumber(
+        value, ASSERT_NO_EXCEPTION,
+        TextFieldEventBehavior::kDispatchInputAndChangeEvent);
+  }
 }
 
 Element& MultipleFieldsTemporalInputTypeView::PickerOwnerElement() const {
@@ -317,13 +321,14 @@ MultipleFieldsTemporalInputTypeView::MultipleFieldsTemporalInputTypeView(
 MultipleFieldsTemporalInputTypeView*
 MultipleFieldsTemporalInputTypeView::Create(HTMLInputElement& element,
                                             BaseTemporalInputType& input_type) {
-  return new MultipleFieldsTemporalInputTypeView(element, input_type);
+  return MakeGarbageCollected<MultipleFieldsTemporalInputTypeView>(element,
+                                                                   input_type);
 }
 
 MultipleFieldsTemporalInputTypeView::~MultipleFieldsTemporalInputTypeView() =
     default;
 
-void MultipleFieldsTemporalInputTypeView::Trace(blink::Visitor* visitor) {
+void MultipleFieldsTemporalInputTypeView::Trace(Visitor* visitor) {
   visitor->Trace(input_type_);
   InputTypeView::Trace(visitor);
 }
@@ -351,7 +356,6 @@ MultipleFieldsTemporalInputTypeView::CustomStyleForLayoutObject(
   scoped_refptr<ComputedStyle> style = ComputedStyle::Clone(*original_style);
   style->SetDirection(content_direction);
   style->SetDisplay(new_display);
-  style->SetUnique();
   return style;
 }
 
@@ -550,7 +554,7 @@ void MultipleFieldsTemporalInputTypeView::UpdateView() {
   edit->setAttribute(datetimeformat_attr,
                      AtomicString(layout_parameters.date_time_format),
                      ASSERT_NO_EXCEPTION);
-  const AtomicString pattern = edit->FastGetAttribute(HTMLNames::patternAttr);
+  const AtomicString pattern = edit->FastGetAttribute(html_names::kPatternAttr);
   if (!pattern.IsEmpty())
     layout_parameters.date_time_format = pattern;
 
@@ -618,7 +622,8 @@ bool MultipleFieldsTemporalInputTypeView::
 }
 
 void MultipleFieldsTemporalInputTypeView::ClearValue() {
-  GetElement().setValue("", kDispatchInputAndChangeEvent);
+  GetElement().setValue("",
+                        TextFieldEventBehavior::kDispatchInputAndChangeEvent);
   GetElement().UpdateClearButtonVisibility();
 }
 

@@ -44,7 +44,6 @@
 #include "third_party/blink/renderer/core/html/parser/text_resource_decoder.h"
 #include "third_party/blink/renderer/core/input/context_menu_allowed_scope.h"
 #include "third_party/blink/renderer/core/inspector/inspector_frontend_client.h"
-#include "third_party/blink/renderer/core/layout/layout_theme.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/context_menu_controller.h"
@@ -65,9 +64,13 @@ class FrontendMenuProvider final : public ContextMenuProvider {
  public:
   static FrontendMenuProvider* Create(DevToolsHost* devtools_host,
                                       WebVector<WebMenuItemInfo> items) {
-    return new FrontendMenuProvider(devtools_host, std::move(items));
+    return MakeGarbageCollected<FrontendMenuProvider>(devtools_host,
+                                                      std::move(items));
   }
 
+  FrontendMenuProvider(DevToolsHost* devtools_host,
+                       WebVector<WebMenuItemInfo> items)
+      : devtools_host_(devtools_host), items_(std::move(items)) {}
   ~FrontendMenuProvider() override {
     // Verify that this menu provider has been detached.
     DCHECK(!devtools_host_);
@@ -101,10 +104,6 @@ class FrontendMenuProvider final : public ContextMenuProvider {
   }
 
  private:
-  FrontendMenuProvider(DevToolsHost* devtools_host,
-                       WebVector<WebMenuItemInfo> items)
-      : devtools_host_(devtools_host), items_(std::move(items)) {}
-
   Member<DevToolsHost> devtools_host_;
   WebVector<WebMenuItemInfo> items_;
 };
@@ -134,7 +133,7 @@ void DevToolsHost::EvaluateScript(const String& expression) {
     return;
   ScriptState::Scope scope(script_state);
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      Frame::NotifyUserActivation(frontend_frame_);
+      LocalFrame::NotifyUserActivation(frontend_frame_);
   v8::MicrotasksScope microtasks(script_state->GetIsolate(),
                                  v8::MicrotasksScope::kRunMicrotasks);
   ScriptSourceCode source_code(expression, ScriptSourceLocationType::kInternal,
@@ -213,27 +212,6 @@ void DevToolsHost::ShowContextMenu(LocalFrame* target_frame,
         target_frame, x * zoom, y * zoom, menu_provider);
   }
 }
-
-String DevToolsHost::getSelectionBackgroundColor() {
-  return LayoutTheme::GetTheme().ActiveSelectionBackgroundColor().Serialized();
-}
-
-String DevToolsHost::getSelectionForegroundColor() {
-  return LayoutTheme::GetTheme().ActiveSelectionForegroundColor().Serialized();
-}
-
-String DevToolsHost::getInactiveSelectionBackgroundColor() {
-  return LayoutTheme::GetTheme()
-      .InactiveSelectionBackgroundColor()
-      .Serialized();
-}
-
-String DevToolsHost::getInactiveSelectionForegroundColor() {
-  return LayoutTheme::GetTheme()
-      .InactiveSelectionForegroundColor()
-      .Serialized();
-}
-
 
 bool DevToolsHost::isHostedMode() {
   return false;

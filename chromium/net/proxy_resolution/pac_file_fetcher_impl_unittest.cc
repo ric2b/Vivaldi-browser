@@ -10,12 +10,12 @@
 
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -197,14 +197,16 @@ class BasicNetworkDelegate : public NetworkDelegateImpl {
   }
 
   bool OnCanGetCookies(const URLRequest& request,
-                       const CookieList& cookie_list) override {
-    return true;
+                       const CookieList& cookie_list,
+                       bool allowed_from_caller) override {
+    return allowed_from_caller;
   }
 
   bool OnCanSetCookie(const URLRequest& request,
                       const net::CanonicalCookie& cookie,
-                      CookieOptions* options) override {
-    return true;
+                      CookieOptions* options,
+                      bool allowed_from_caller) override {
+    return allowed_from_caller;
   }
 
   bool OnCanAccessFile(const URLRequest& request,
@@ -439,7 +441,7 @@ TEST_F(PacFileFetcherImplTest, TooLarge) {
 
   // Try fetching URLs that are 101 bytes large. We should abort the request
   // after 50 bytes have been read, and fail with a too large error.
-  for (size_t i = 0; i < arraysize(urls); ++i) {
+  for (size_t i = 0; i < base::size(urls); ++i) {
     const GURL& url = urls[i];
     base::string16 text;
     TestCompletionCallback callback;
@@ -549,6 +551,18 @@ TEST_F(PacFileFetcherImplTest, Encodings) {
     EXPECT_THAT(result, IsError(ERR_IO_PENDING));
     EXPECT_THAT(callback.WaitForResult(), IsOk());
     EXPECT_EQ(ASCIIToUTF16("This was encoded as UTF-16BE.\n"), text);
+  }
+
+  // Test a response that lacks a charset, however starts with a UTF8 BOM.
+  {
+    GURL url(test_server_.GetURL("/utf8_bom"));
+    base::string16 text;
+    TestCompletionCallback callback;
+    int result = pac_fetcher->Fetch(url, &text, callback.callback(),
+                                    TRAFFIC_ANNOTATION_FOR_TESTS);
+    EXPECT_THAT(result, IsError(ERR_IO_PENDING));
+    EXPECT_THAT(callback.WaitForResult(), IsOk());
+    EXPECT_EQ(ASCIIToUTF16("/* UTF8 */\n"), text);
   }
 }
 

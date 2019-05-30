@@ -10,7 +10,6 @@
 #include "build/build_config.h"
 #include "ui/aura/window_observer.h"
 #include "ui/events/gestures/gesture_recognizer.h"
-#include "ui/gfx/path.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_host_root_view.h"
@@ -86,7 +85,7 @@ void TransferGesture(Widget* source, Widget* target) {
 #else   // !defined(OS_MACOSX)
   source->GetGestureRecognizer()->TransferEventsTo(
       source->GetNativeView(), target->GetNativeView(),
-      ui::GestureRecognizer::ShouldCancelTouches::DontCancel);
+      ui::TransferTouchesBehavior::kDontCancel);
 #endif  // defined(OS_MACOSX)
 }
 
@@ -124,7 +123,7 @@ void MenuHost::InitMenuHost(Widget* parent,
   params.opacity = (bubble_border || rounded_border) ?
       Widget::InitParams::TRANSLUCENT_WINDOW :
       Widget::InitParams::OPAQUE_WINDOW;
-  params.parent = parent ? parent->GetNativeView() : NULL;
+  params.parent = parent ? parent->GetNativeView() : gfx::kNullNativeView;
   params.bounds = bounds;
   // If MenuHost has no parent widget, it needs to be marked
   // Activatable, so that calling Show in ShowMenuHost will

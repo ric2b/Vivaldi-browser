@@ -15,7 +15,8 @@ std::vector<BuildSettings::path_mapper> BuildSettings::path_map_;
 BuildSettings::BuildSettings() = default;
 
 BuildSettings::BuildSettings(const BuildSettings& other)
-    : root_path_(other.root_path_),
+    : dotfile_name_(other.dotfile_name_),
+      root_path_(other.root_path_),
       root_path_utf8_(other.root_path_utf8_),
       secondary_source_path_(other.secondary_source_path_),
       python_path_(other.python_path_),

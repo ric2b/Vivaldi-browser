@@ -19,6 +19,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/strings/grit/ui_strings.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
@@ -45,9 +46,7 @@ class CloseButton : public TopShortcutButton, public views::ButtonListener {
 };
 
 CloseButton::CloseButton(UnifiedSystemTrayController* controller)
-    : TopShortcutButton(this,
-                        views::kIcCloseIcon,
-                        IDS_ASH_WINDOW_CONTROL_ACCNAME_CLOSE),
+    : TopShortcutButton(this, views::kIcCloseIcon, IDS_APP_ACCNAME_CLOSE),
       controller_(controller) {}
 
 void CloseButton::ButtonPressed(views::Button* sender, const ui::Event& event) {
@@ -78,8 +77,6 @@ AddUserButton::AddUserButton(UnifiedSystemTrayController* controller)
   auto* icon = new views::ImageView;
   icon->SetImage(
       gfx::CreateVectorIcon(kSystemMenuNewUserIcon, kUnifiedMenuIconColor));
-  icon->SetTooltipText(
-      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SIGN_IN_ANOTHER_ACCOUNT));
   AddChildView(icon);
 
   auto* label = new views::Label(
@@ -121,6 +118,18 @@ class Separator : public views::View {
   DISALLOW_COPY_AND_ASSIGN(Separator);
 };
 
+views::View* CreateAddUserErrorView(const base::string16& message) {
+  auto* label = new views::Label(message);
+  label->SetEnabledColor(kUnifiedMenuTextColor);
+  label->SetAutoColorReadabilityEnabled(false);
+  label->SetSubpixelRenderingEnabled(false);
+  label->SetBorder(
+      views::CreateEmptyBorder(gfx::Insets(kUnifiedTopShortcutSpacing)));
+  label->SetMultiLine(true);
+  label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
+  return label;
+}
+
 }  // namespace
 
 views::View* CreateUserAvatarView(int user_index) {
@@ -148,6 +157,9 @@ base::string16 GetUserItemAccessibleString(int user_index) {
       Shell::Get()->session_controller()->GetUserSession(user_index);
   DCHECK(user_session);
 
+  if (user_session->user_info->type == user_manager::USER_TYPE_GUEST)
+    return l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_GUEST_LABEL);
+
   return l10n_util::GetStringFUTF16(
       IDS_ASH_STATUS_TRAY_USER_INFO_ACCESSIBILITY,
       base::UTF8ToUTF16(user_session->user_info->display_name),
@@ -160,7 +172,9 @@ UserItemButton::UserItemButton(int user_index,
     : Button(this),
       user_index_(user_index),
       controller_(controller),
-      capture_icon_(new views::ImageView) {
+      capture_icon_(new views::ImageView),
+      name_(new views::Label),
+      email_(new views::Label) {
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::kHorizontal, gfx::Insets(0, kUnifiedTopShortcutSpacing),
       kUnifiedTopShortcutSpacing));
@@ -179,19 +193,17 @@ UserItemButton::UserItemButton(int user_index,
   const mojom::UserSession* const user_session =
       Shell::Get()->session_controller()->GetUserSession(user_index);
 
-  auto* name = new views::Label(
-      base::UTF8ToUTF16(user_session->user_info->display_name));
-  name->SetEnabledColor(kUnifiedMenuTextColor);
-  name->SetAutoColorReadabilityEnabled(false);
-  name->SetSubpixelRenderingEnabled(false);
-  vertical_labels->AddChildView(name);
+  name_->SetText(base::UTF8ToUTF16(user_session->user_info->display_name));
+  name_->SetEnabledColor(kUnifiedMenuTextColor);
+  name_->SetAutoColorReadabilityEnabled(false);
+  name_->SetSubpixelRenderingEnabled(false);
+  vertical_labels->AddChildView(name_);
 
-  auto* email = new views::Label(
-      base::UTF8ToUTF16(user_session->user_info->display_email));
-  email->SetEnabledColor(kUnifiedMenuSecondaryTextColor);
-  email->SetAutoColorReadabilityEnabled(false);
-  email->SetSubpixelRenderingEnabled(false);
-  vertical_labels->AddChildView(email);
+  email_->SetText(base::UTF8ToUTF16(user_session->user_info->display_email));
+  email_->SetEnabledColor(kUnifiedMenuSecondaryTextColor);
+  email_->SetAutoColorReadabilityEnabled(false);
+  email_->SetSubpixelRenderingEnabled(false);
+  vertical_labels->AddChildView(email_);
 
   AddChildView(vertical_labels);
   layout->SetFlexForView(vertical_labels, 1);
@@ -234,7 +246,17 @@ void UserItemButton::SetCaptureState(mojom::MediaCaptureState capture_state) {
       break;
   }
   if (res_id)
-    capture_icon_->SetTooltipText(l10n_util::GetStringUTF16(res_id));
+    capture_icon_->set_tooltip_text(l10n_util::GetStringUTF16(res_id));
+}
+
+bool UserItemButton::GetTooltipText(const gfx::Point& p,
+                                    base::string16* tooltip) const {
+  // If both of them are full shown, hide the tooltip.
+  if (name_->GetPreferredSize().width() <= name_->width() &&
+      email_->GetPreferredSize().width() <= email_->width()) {
+    return false;
+  }
+  return views::Button::GetTooltipText(p, tooltip);
 }
 
 void UserItemButton::ButtonPressed(views::Button* sender,
@@ -255,9 +277,24 @@ UserChooserView::UserChooserView(UnifiedSystemTrayController* controller) {
     AddChildView(button);
     AddChildView(new Separator(i < num_users - 1));
   }
-  if (Shell::Get()->session_controller()->GetAddUserPolicy() ==
-      AddUserSessionPolicy::ALLOWED) {
-    AddChildView(new AddUserButton(controller));
+
+  switch (Shell::Get()->session_controller()->GetAddUserPolicy()) {
+    case AddUserSessionPolicy::ALLOWED:
+      AddChildView(new AddUserButton(controller));
+      break;
+    case AddUserSessionPolicy::ERROR_NOT_ALLOWED_PRIMARY_USER:
+      AddChildView(CreateAddUserErrorView(l10n_util::GetStringUTF16(
+          IDS_ASH_STATUS_TRAY_MESSAGE_NOT_ALLOWED_PRIMARY_USER)));
+      break;
+    case AddUserSessionPolicy::ERROR_MAXIMUM_USERS_REACHED:
+      AddChildView(CreateAddUserErrorView(l10n_util::GetStringFUTF16Int(
+          IDS_ASH_STATUS_TRAY_MESSAGE_CANNOT_ADD_USER,
+          session_manager::kMaximumNumberOfUserSessions)));
+      break;
+    case AddUserSessionPolicy::ERROR_NO_ELIGIBLE_USERS:
+      AddChildView(CreateAddUserErrorView(
+          l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_MESSAGE_OUT_OF_USERS)));
+      break;
   }
 
   Shell::Get()->media_controller()->AddObserver(this);

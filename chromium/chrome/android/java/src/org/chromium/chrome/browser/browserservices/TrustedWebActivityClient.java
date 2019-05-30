@@ -4,23 +4,32 @@
 
 package org.chromium.chrome.browser.browserservices;
 
+import static org.chromium.chrome.browser.browserservices.TrustedWebActivityUmaRecorder.DelegatedNotificationSmallIconFallback.FALLBACK_ICON_NOT_PROVIDED;
+import static org.chromium.chrome.browser.browserservices.TrustedWebActivityUmaRecorder.DelegatedNotificationSmallIconFallback.NO_FALLBACK;
+
 import android.app.Notification;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
 import android.net.Uri;
+import android.os.RemoteException;
 import android.support.annotation.Nullable;
+import android.support.customtabs.trusted.TrustedWebActivityService;
 import android.support.customtabs.trusted.TrustedWebActivityServiceConnectionManager;
+import android.support.customtabs.trusted.TrustedWebActivityServiceWrapper;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.UrlConstants;
+import org.chromium.chrome.browser.browserservices.TrustedWebActivityUmaRecorder.DelegatedNotificationSmallIconFallback;
 import org.chromium.chrome.browser.notifications.NotificationBuilderBase;
+import org.chromium.chrome.browser.notifications.NotificationMetadata;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
-import org.chromium.chrome.browser.webapps.WebappLauncherActivity;
 
 import java.util.List;
 import java.util.Set;
@@ -30,13 +39,17 @@ import java.util.Set;
  */
 public class TrustedWebActivityClient {
     private final TrustedWebActivityServiceConnectionManager mConnection;
+    private final TrustedWebActivityUmaRecorder mRecorder;
+    private final NotificationUmaTracker mNotificationUmaTracker;
 
     /**
      * Creates a TrustedWebActivityService.
      */
-    public TrustedWebActivityClient() {
-        mConnection = new TrustedWebActivityServiceConnectionManager(
-                ContextUtils.getApplicationContext());
+    public TrustedWebActivityClient(TrustedWebActivityServiceConnectionManager connection,
+            TrustedWebActivityUmaRecorder recorder, NotificationUmaTracker notificationUmaTracker) {
+        mConnection = connection;
+        mRecorder = recorder;
+        mNotificationUmaTracker = notificationUmaTracker;
     }
 
     /**
@@ -63,24 +76,50 @@ public class TrustedWebActivityClient {
         String channelDisplayName = res.getString(R.string.notification_category_group_general);
 
         mConnection.execute(scope, new Origin(scope).toString(), service -> {
-            if (!builder.hasSmallIconBitmap()) {
-                int smallIconId = service.getSmallIconId();
-                if (smallIconId != -1) {
-                    builder.setSmallIconForRemoteApp(
-                            smallIconId, service.getComponentName().getPackageName());
-                }
-            }
+            fallbackToIconFromServiceIfNecessary(builder, service);
 
-            Notification notification = builder.build();
+            NotificationMetadata metadata = new NotificationMetadata(
+                    NotificationUmaTracker.SystemNotificationType.TRUSTED_WEB_ACTIVITY_SITES,
+                    platformTag, platformId);
+            Notification notification = builder.build(metadata).getNotification();
 
-            boolean success =
-                    service.notify(platformTag, platformId, notification, channelDisplayName);
+            service.notify(platformTag, platformId, notification, channelDisplayName);
 
-            if (success) {
-                NotificationUmaTracker.getInstance().onNotificationShown(
-                        NotificationUmaTracker.SystemNotificationType.SITES, notification);
-            }
+            mNotificationUmaTracker.onNotificationShown(
+                    NotificationUmaTracker.SystemNotificationType.TRUSTED_WEB_ACTIVITY_SITES,
+                    notification);
         });
+    }
+
+    private void fallbackToIconFromServiceIfNecessary(NotificationBuilderBase builder,
+            TrustedWebActivityServiceWrapper service) throws RemoteException {
+        if (builder.hasSmallIconForContent() && builder.hasStatusBarIconBitmap()) {
+            recordFallback(NO_FALLBACK);
+            return;
+        }
+
+        int id = service.getSmallIconId();
+        if (id == TrustedWebActivityService.NO_ID) {
+            recordFallback(FALLBACK_ICON_NOT_PROVIDED);
+            return;
+        }
+
+        recordFallback(builder.hasSmallIconForContent()
+                ? DelegatedNotificationSmallIconFallback.FALLBACK_FOR_STATUS_BAR
+                : DelegatedNotificationSmallIconFallback.FALLBACK_FOR_STATUS_BAR_AND_CONTENT);
+
+        Bitmap bitmap = service.getSmallIconBitmap();
+        if (!builder.hasStatusBarIconBitmap()) {
+            builder.setStatusBarIconForRemoteApp(
+                    id, bitmap, service.getComponentName().getPackageName());
+        }
+        if (!builder.hasSmallIconForContent()) {
+            builder.setContentSmallIconForRemoteApp(bitmap);
+        }
+    }
+
+    private void recordFallback(@DelegatedNotificationSmallIconFallback int fallback) {
+        mRecorder.recordDelegatedNotificationSmallIconFallback(fallback);
     }
 
     /**
@@ -144,7 +183,9 @@ public class TrustedWebActivityClient {
         Intent intent = new Intent();
         intent.setData(Uri.parse(url));
         intent.setAction(Intent.ACTION_VIEW);
-        intent.setFlags(WebappLauncherActivity.getWebappActivityIntentFlags());
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                | ApiCompatibilityUtils.getActivityNewDocumentFlag()
+                | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         intent.setComponent(new ComponentName(twaPackageName, twaActivityName));
         return intent;
     }

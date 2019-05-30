@@ -6,11 +6,12 @@
 
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/model/system_tray_model.h"
+#include "ash/system/network/active_network_icon.h"
 #include "ash/system/network/network_icon.h"
 #include "ash/system/network/network_icon_animation.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chromeos/network/network_connection_handler.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
@@ -34,18 +35,14 @@ bool IsActive() {
 const NetworkState* GetCurrentNetwork() {
   NetworkStateHandler* state_handler =
       NetworkHandler::Get()->network_state_handler();
-  NetworkConnectionHandler* connect_handler =
-      NetworkHandler::Get()->network_connection_handler();
   const NetworkState* connected_network =
       state_handler->ConnectedNetworkByType(NetworkTypePattern::NonVirtual());
   const NetworkState* connecting_network =
       state_handler->ConnectingNetworkByType(NetworkTypePattern::Wireless());
-  // If we are connecting to a network, and there is either no connected
-  // network, or the connection was user requested, or shill triggered a
-  // reconnection, use the connecting network.
+  // If connecting to a network, and there is either no connected network or
+  // the connection was user requested, use the connecting network.
   if (connecting_network &&
-      (!connected_network || connecting_network->IsReconnecting() ||
-       connect_handler->HasConnectingNetwork(connecting_network->path()))) {
+      (!connected_network || connecting_network->connect_requested())) {
     return connecting_network;
   }
 
@@ -89,11 +86,10 @@ void NetworkFeaturePodButton::NetworkStateChanged(bool notify_a11y) {
 }
 
 void NetworkFeaturePodButton::Update() {
-  gfx::ImageSkia image;
   bool animating = false;
-  network_icon::GetDefaultNetworkImageAndLabel(
-      network_icon::ICON_TYPE_DEFAULT_VIEW, &image, nullptr, &animating);
-
+  gfx::ImageSkia image =
+      Shell::Get()->system_tray_model()->active_network_icon()->GetSingleImage(
+          network_icon::ICON_TYPE_DEFAULT_VIEW, &animating);
   if (animating)
     network_icon::NetworkIconAnimation::GetInstance()->AddObserver(this);
   else
@@ -123,7 +119,7 @@ void NetworkFeaturePodButton::Update() {
 
   SetLabel(network_name);
 
-  if (network->IsReconnecting() || network->IsConnectingState()) {
+  if (network->IsConnectingState()) {
     SetSubLabel(l10n_util::GetStringUTF16(
         IDS_ASH_STATUS_TRAY_NETWORK_CONNECTING_SUBLABEL));
     SetTooltipState(l10n_util::GetStringFUTF16(

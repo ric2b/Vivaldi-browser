@@ -5,7 +5,11 @@
 #include "chrome/browser/chromeos/login/screens/welcome_screen.h"
 
 #include <utility>
+#include <vector>
 
+#include "ash/public/interfaces/constants.mojom.h"
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
 #include "chrome/browser/browser_process.h"
@@ -15,7 +19,6 @@
 #include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/screen_manager.h"
 #include "chrome/browser/chromeos/login/screens/base_screen_delegate.h"
-#include "chrome/browser/chromeos/login/screens/screen_exit_code.h"
 #include "chrome/browser/chromeos/login/screens/welcome_view.h"
 #include "chrome/browser/chromeos/login/ui/input_events_blocker.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
@@ -28,15 +31,14 @@
 #include "components/language/core/browser/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/service_manager_connection.h"
+#include "services/service_manager/public/cpp/connector.h"
 
 namespace {
 
 constexpr char kUserActionContinueButtonClicked[] = "continue";
 constexpr char kUserActionConnectDebuggingFeaturesClicked[] =
     "connect-debugging-features";
-constexpr char kContextKeyLocale[] = "locale";
-constexpr char kContextKeyInputMethod[] = "input-method";
-constexpr char kContextKeyTimezone[] = "timezone";
 
 }  // namespace
 
@@ -53,10 +55,12 @@ WelcomeScreen* WelcomeScreen::Get(ScreenManager* manager) {
 
 WelcomeScreen::WelcomeScreen(BaseScreenDelegate* base_screen_delegate,
                              Delegate* delegate,
-                             WelcomeView* view)
+                             WelcomeView* view,
+                             const base::RepeatingClosure& exit_callback)
     : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_OOBE_WELCOME),
       view_(view),
       delegate_(delegate),
+      exit_callback_(exit_callback),
       weak_factory_(this) {
   if (view_)
     view_->Bind(this);
@@ -115,6 +119,41 @@ std::string WelcomeScreen::GetApplicationLocale() {
 
 std::string WelcomeScreen::GetInputMethod() const {
   return input_method_;
+}
+
+void WelcomeScreen::SetApplicationLocale(const std::string& locale) {
+  const std::string& app_locale = g_browser_process->GetApplicationLocale();
+  if (app_locale == locale || locale.empty())
+    return;
+
+  // Block UI while resource bundle is being reloaded.
+  // (InputEventsBlocker will live until callback is finished.)
+  locale_util::SwitchLanguageCallback callback(base::Bind(
+      &WelcomeScreen::OnLanguageChangedCallback, weak_factory_.GetWeakPtr(),
+      base::Owned(new chromeos::InputEventsBlocker), std::string()));
+  locale_util::SwitchLanguage(locale, true /* enableLocaleKeyboardLayouts */,
+                              true /* login_layouts_only */, callback,
+                              ProfileManager::GetActiveUserProfile());
+}
+
+void WelcomeScreen::SetInputMethod(const std::string& input_method) {
+  const std::vector<std::string>& input_methods =
+      input_method::InputMethodManager::Get()
+          ->GetActiveIMEState()
+          ->GetActiveInputMethodIds();
+  if (input_method.empty() ||
+      !base::ContainsValue(input_methods, input_method)) {
+    LOG(WARNING) << "The input method is empty or ineligible!";
+    return;
+  }
+
+  if (input_method_ == input_method)
+    return;
+
+  input_method_ = input_method;
+  input_method::InputMethodManager::Get()
+      ->GetActiveIMEState()
+      ->ChangeInputMethod(input_method_, false /* show_message */);
 }
 
 void WelcomeScreen::SetTimezone(const std::string& timezone_id) {
@@ -180,18 +219,6 @@ void WelcomeScreen::OnUserAction(const std::string& action_id) {
   }
 }
 
-void WelcomeScreen::OnContextKeyUpdated(
-    const ::login::ScreenContext::KeyType& key) {
-  if (key == kContextKeyLocale)
-    SetApplicationLocale(context_.GetString(kContextKeyLocale));
-  else if (key == kContextKeyInputMethod)
-    SetInputMethod(context_.GetString(kContextKeyInputMethod));
-  else if (key == kContextKeyTimezone)
-    SetTimezone(context_.GetString(kContextKeyTimezone));
-  else
-    BaseScreen::OnContextKeyUpdated(key);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // WelcomeScreen, InputMethodManager::Observer implementation:
 
@@ -199,44 +226,14 @@ void WelcomeScreen::InputMethodChanged(
     input_method::InputMethodManager* manager,
     Profile* /* proflie */,
     bool /* show_message */) {
-  GetContextEditor().SetString(
-      kContextKeyInputMethod,
-      manager->GetActiveIMEState()->GetCurrentInputMethod().id());
+  if (view_) {
+    view_->SetInputMethodId(
+        manager->GetActiveIMEState()->GetCurrentInputMethod().id());
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // WelcomeScreen, private:
-
-void WelcomeScreen::SetApplicationLocale(const std::string& locale) {
-  const std::string& app_locale = g_browser_process->GetApplicationLocale();
-  if (app_locale == locale || locale.empty())
-    return;
-
-  // Block UI while resource bundle is being reloaded.
-  // (InputEventsBlocker will live until callback is finished.)
-  locale_util::SwitchLanguageCallback callback(base::Bind(
-      &WelcomeScreen::OnLanguageChangedCallback, weak_factory_.GetWeakPtr(),
-      base::Owned(new chromeos::InputEventsBlocker), std::string()));
-  locale_util::SwitchLanguage(locale, true /* enableLocaleKeyboardLayouts */,
-                              true /* login_layouts_only */, callback,
-                              ProfileManager::GetActiveUserProfile());
-}
-
-void WelcomeScreen::SetInputMethod(const std::string& input_method) {
-  const std::vector<std::string>& input_methods =
-      input_method::InputMethodManager::Get()
-          ->GetActiveIMEState()
-          ->GetActiveInputMethodIds();
-  if (input_method.empty() ||
-      !base::ContainsValue(input_methods, input_method)) {
-    LOG(WARNING) << "The input method is empty or ineligible!";
-    return;
-  }
-  input_method_ = input_method;
-  input_method::InputMethodManager::Get()
-      ->GetActiveIMEState()
-      ->ChangeInputMethod(input_method_, false /* show_message */);
-}
 
 void WelcomeScreen::InitializeTimezoneObserver() {
   timezone_subscription_ = CrosSettings::Get()->AddSettingsObserver(
@@ -248,7 +245,7 @@ void WelcomeScreen::OnContinueButtonPressed() {
   if (view_) {
     view_->StopDemoModeDetection();
   }
-  Finish(ScreenExitCode::WELCOME_CONTINUED);
+  exit_callback_.Run();
 }
 
 void WelcomeScreen::OnLanguageChangedCallback(
@@ -267,6 +264,7 @@ void WelcomeScreen::OnLanguageChangedCallback(
 
   AccessibilityManager::Get()->OnLocaleChanged();
   SetInputMethod(input_method);
+  NotifyLocaleChange();
 }
 
 void WelcomeScreen::ScheduleResolveLanguageList(
@@ -295,9 +293,34 @@ void WelcomeScreen::OnLanguageListResolved(
 }
 
 void WelcomeScreen::OnSystemTimezoneChanged() {
-  std::string current_timezone_id;
-  CrosSettings::Get()->GetString(kSystemTimezone, &current_timezone_id);
-  GetContextEditor().SetString(kContextKeyTimezone, current_timezone_id);
+  if (view_) {
+    std::string current_timezone_id;
+    CrosSettings::Get()->GetString(kSystemTimezone, &current_timezone_id);
+    view_->SetTimezoneId(current_timezone_id);
+  }
+}
+
+void WelcomeScreen::ConnectToLocaleUpdateController() {
+  content::ServiceManagerConnection* connection =
+      content::ServiceManagerConnection::GetForProcess();
+  service_manager::Connector* connector =
+      connection ? connection->GetConnector() : nullptr;
+  // Unit tests may not have a connector.
+  if (!connector)
+    return;
+
+  connector->BindInterface(ash::mojom::kServiceName,
+                           &locale_update_controller_);
+}
+
+void WelcomeScreen::NotifyLocaleChange() {
+  if (!locale_update_controller_)
+    ConnectToLocaleUpdateController();
+
+  DCHECK(locale_update_controller_);
+  locale_update_controller_->OnLocaleChanged(
+      std::string(), std::string(), std::string(),
+      base::DoNothing::Once<ash::mojom::LocaleNotificationResult>());
 }
 
 }  // namespace chromeos

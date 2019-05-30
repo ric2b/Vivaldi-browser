@@ -62,7 +62,7 @@ void LayoutSVGBlock::StyleDidChange(StyleDifference diff,
   // Since layout depends on the bounds of the filter, we need to force layout
   // when the filter changes.
   if (diff.FilterChanged())
-    SetNeedsLayout(LayoutInvalidationReason::kStyleChange);
+    SetNeedsLayout(layout_invalidation_reason::kStyleChange);
 
   if (diff.NeedsFullLayout()) {
     SetNeedsBoundariesUpdate();
@@ -116,7 +116,7 @@ const LayoutObject* LayoutSVGBlock::PushMappingToContainer(
                                                   geometry_map);
 }
 
-LayoutRect LayoutSVGBlock::AbsoluteVisualRect() const {
+LayoutRect LayoutSVGBlock::VisualRectInDocument() const {
   return SVGLayoutSupport::VisualRectInAncestorSpace(*this, *View());
 }
 

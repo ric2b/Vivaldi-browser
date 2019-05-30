@@ -7,8 +7,11 @@ package org.chromium.chrome.browser.vr;
 import android.graphics.PointF;
 import android.os.Build;
 
+import org.junit.runner.Description;
+
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.vr.rules.VrModuleNotInstalled;
 
 /**
  * Class for accessing VrShellDelegate internals for testing purposes.
@@ -19,14 +22,22 @@ import org.chromium.chrome.browser.ChromeActivity;
 public class TestVrShellDelegate extends VrShellDelegate {
     private Runnable mOnVSyncPausedCallback;
     private static TestVrShellDelegate sInstance;
+    private static Description sTestDescription;
     private boolean mDisableVrBrowsing;
     private boolean mExpectingBroadcast;
     private boolean mExpectingIntent;
     private Boolean mAllow2dIntents;
 
     public static void createTestVrShellDelegate(final ChromeActivity activity) {
+        // Cannot make VrShellDelegate if we are faking that the VR module is not installed.
+        if (sTestDescription.getAnnotation(VrModuleNotInstalled.class) != null) return;
         if (sInstance != null) return;
         ThreadUtils.runOnUiThreadBlocking(() -> { sInstance = new TestVrShellDelegate(activity); });
+    }
+
+    // TODO(bsheedy): Maybe remove this and switch to setting a VrShellDelegateFactory instead.
+    public static void setDescription(Description desc) {
+        sTestDescription = desc;
     }
 
     public static TestVrShellDelegate getInstance() {
@@ -94,12 +105,20 @@ public class TestVrShellDelegate extends VrShellDelegate {
         getVrShell().performControllerActionForTesting(elementName, actionType, position);
     }
 
-    public void setUiExpectingActivityForTesting(int quiescenceTimeoutMs, Runnable resultCallback) {
-        getVrShell().setUiExpectingActivityForTesting(quiescenceTimeoutMs, resultCallback);
+    public void performKeyboardInputForTesting(int inputType, String inputString) {
+        getVrShell().performKeyboardInputForTesting(inputType, inputString);
     }
 
-    public int getLastUiActivityResultForTesting() {
-        return getVrShell().getLastUiActivityResultForTesting();
+    public void registerUiOperationCallbackForTesting(VrShell.UiOperationData operationData) {
+        getVrShell().registerUiOperationCallbackForTesting(operationData);
+    }
+
+    public void saveNextFrameBufferToDiskForTesting(String filepathBase) {
+        getVrShell().saveNextFrameBufferToDiskForTesting(filepathBase);
+    }
+
+    public int getLastUiOperationResultForTesting(int actionType) {
+        return getVrShell().getLastUiOperationResultForTesting(actionType);
     }
 
     @Override

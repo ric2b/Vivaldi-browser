@@ -37,8 +37,10 @@ class ImageResource;
 class CORE_EXPORT ImageDocument final : public HTMLDocument {
  public:
   static ImageDocument* Create(const DocumentInit& initializer) {
-    return new ImageDocument(initializer);
+    return MakeGarbageCollected<ImageDocument>(initializer);
   }
+
+  explicit ImageDocument(const DocumentInit&);
 
   ImageResourceContent* CachedImage();
 
@@ -55,11 +57,9 @@ class CORE_EXPORT ImageDocument final : public HTMLDocument {
   void UpdateImageStyle();
   bool ShouldShrinkToFit() const;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
-  explicit ImageDocument(const DocumentInit&);
-
   DocumentParser* CreateParser() override;
 
   void CreateDocumentStructure();
@@ -67,7 +67,7 @@ class CORE_EXPORT ImageDocument final : public HTMLDocument {
   // Calculates how large the div needs to be to properly center the image.
   int CalculateDivWidth();
 
-  // These methods are for m_shrinkToFitMode == Desktop.
+  // These methods are for shrink_to_fit_mode_ == kDesktop.
   void ResizeImageToFit();
   void RestoreImageSize();
   bool ImageFitsInWindow() const;

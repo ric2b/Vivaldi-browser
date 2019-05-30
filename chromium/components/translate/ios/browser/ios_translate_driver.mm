@@ -117,11 +117,11 @@ void IOSTranslateDriver::DidFinishNavigation(
     translate_manager_->set_current_seq_no(page_seq_no_);
   }
 
-  // TODO(droger): support navigation types, like content/ does.
+  // TODO(crbug.com/925320): support navigation types, like content/ does.
   const bool reload = ui::PageTransitionCoreTypeIs(
       navigation_context->GetPageTransition(), ui::PAGE_TRANSITION_RELOAD);
   translate_manager_->GetLanguageState().DidNavigate(
-      navigation_context->IsSameDocument(), true, reload);
+      navigation_context->IsSameDocument(), true, reload, std::string(), false);
 }
 
 void IOSTranslateDriver::WebStateDestroyed(web::WebState* web_state) {
@@ -258,6 +258,7 @@ void IOSTranslateDriver::OnTranslateComplete(
   if (error_type != TranslateErrors::NONE) {
     translate_manager_->PageTranslated(source_language_, target_language_,
                                        error_type);
+    return;
   }
 
   TranslationDidSucceed(source_language_, target_language_,

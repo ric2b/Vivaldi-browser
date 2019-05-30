@@ -9,15 +9,17 @@
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread.h"
 #include "components/invalidation/impl/fake_invalidation_handler.h"
 #include "components/invalidation/impl/invalidation_state_tracker.h"
 #include "components/invalidation/impl/invalidator_test_template.h"
 #include "google/cacheinvalidation/types.pb.h"
+#include "jingle/glue/network_service_config_test_util.h"
 #include "jingle/notifier/base/fake_base_task.h"
 #include "net/url_request/url_request_test_util.h"
+#include "services/network/test/test_network_connection_tracker.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace syncer {
@@ -39,21 +41,21 @@ class NonBlockingInvalidatorTestDelegate {
     base::Thread::Options options;
     options.message_loop_type = base::MessageLoop::TYPE_IO;
     io_thread_.StartWithOptions(options);
-    request_context_getter_ =
-        new net::TestURLRequestContextGetter(io_thread_.task_runner());
+    net_config_helper_ =
+        std::make_unique<jingle_glue::NetworkServiceConfigTestUtil>(
+            base::MakeRefCounted<net::TestURLRequestContextGetter>(
+                io_thread_.task_runner()));
     notifier::NotifierOptions notifier_options;
-    notifier_options.request_context_getter = request_context_getter_;
+    net_config_helper_->FillInNetworkConfig(&notifier_options.network_config);
+    notifier_options.network_connection_tracker =
+        network::TestNetworkConnectionTracker::GetInstance();
     NetworkChannelCreator network_channel_creator =
         NonBlockingInvalidator::MakePushClientChannelCreator(notifier_options);
-    invalidator_.reset(
-        new NonBlockingInvalidator(
-            network_channel_creator,
-            invalidator_client_id,
-            UnackedInvalidationsMap(),
-            initial_state,
-            invalidation_state_tracker.get(),
-            "fake_client_info",
-            request_context_getter_));
+    invalidator_.reset(new NonBlockingInvalidator(
+        network_channel_creator, invalidator_client_id,
+        UnackedInvalidationsMap(), initial_state,
+        invalidation_state_tracker.get(), "fake_client_info",
+        notifier_options.network_config.task_runner));
   }
 
   Invalidator* GetInvalidator() {
@@ -62,7 +64,7 @@ class NonBlockingInvalidatorTestDelegate {
 
   void DestroyInvalidator() {
     invalidator_.reset();
-    request_context_getter_ = nullptr;
+    net_config_helper_ = nullptr;
     io_thread_.Stop();
     base::RunLoop().RunUntilIdle();
   }
@@ -84,14 +86,14 @@ class NonBlockingInvalidatorTestDelegate {
   }
 
  private:
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
   base::Thread io_thread_;
-  scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
+  std::unique_ptr<jingle_glue::NetworkServiceConfigTestUtil> net_config_helper_;
   std::unique_ptr<NonBlockingInvalidator> invalidator_;
 };
 
-INSTANTIATE_TYPED_TEST_CASE_P(
-    NonBlockingInvalidatorTest, InvalidatorTest,
-    NonBlockingInvalidatorTestDelegate);
+INSTANTIATE_TYPED_TEST_SUITE_P(NonBlockingInvalidatorTest,
+                               InvalidatorTest,
+                               NonBlockingInvalidatorTestDelegate);
 
 }  // namespace syncer

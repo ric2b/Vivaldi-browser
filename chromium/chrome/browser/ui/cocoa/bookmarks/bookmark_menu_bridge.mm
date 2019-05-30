@@ -26,7 +26,7 @@
 #include "ui/resources/grit/ui_resources.h"
 
 #include "app/vivaldi_apptools.h"
-#include "ui/cocoa/vivaldi_bookmark_menu_mac.h"
+#include "ui/vivaldi_bookmark_menu_mac.h"
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
@@ -44,6 +44,10 @@ void ClearDelegatesFromSubmenu(NSMenu* menu) {
     if ([item hasSubmenu])
       ClearDelegatesFromSubmenu([item submenu]);
   }
+}
+
+NSString* MenuTitleForNode(const BookmarkNode* node) {
+  return base::SysUTF16ToNSString(node->GetTitle());
 }
 
 }  // namespace
@@ -99,7 +103,7 @@ void BookmarkMenuBridge::BuildRootMenu() {
   if (!folder_image_) {
     ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
     folder_image_.reset(
-        rb.GetNativeImageNamed(IDR_BOOKMARK_BAR_FOLDER).CopyNSImage());
+        [rb.GetNativeImageNamed(IDR_BOOKMARK_BAR_FOLDER).ToNSImage() retain]);
     [folder_image_ setTemplate:YES];
   }
 
@@ -255,7 +259,7 @@ void BookmarkMenuBridge::ClearBookmarkMenu() {
 void BookmarkMenuBridge::AddNodeAsSubmenu(NSMenu* menu,
                                           const BookmarkNode* node,
                                           NSImage* image) {
-  NSString* title = [BookmarkMenuCocoaController menuTitleForNode:node];
+  NSString* title = MenuTitleForNode(node);
   base::scoped_nsobject<NSMenuItem> items(
       [[NSMenuItem alloc] initWithTitle:title action:nil keyEquivalent:@""]);
   [items setImage:image];
@@ -273,8 +277,8 @@ void BookmarkMenuBridge::AddNodeAsSubmenu(NSMenu* menu,
 // TODO(jrg): limit the number of bookmarks in the menubar?
 void BookmarkMenuBridge::AddNodeToMenu(const BookmarkNode* node, NSMenu* menu) {
   if (vivaldi::IsVivaldiRunning()) {
-    vivaldi::AddAddTabToBookmarksMenuItem(node, menu);
-
+    // Call AddAddTabToBookmarksMenuItem here for having it in front
+    [menu addItem:[NSMenuItem separatorItem]];
     std::vector<bookmarks::BookmarkNode*> nodes;
     vivaldi::GetBookmarkNodes(node, nodes);
     for (size_t i = 0; i < nodes.size(); ++i) {
@@ -284,9 +288,8 @@ void BookmarkMenuBridge::AddNodeToMenu(const BookmarkNode* node, NSMenu* menu) {
       } else if (child->is_folder()) {
         AddNodeAsSubmenu(menu, child, folder_image_);
       } else {
-        NSString* title = [BookmarkMenuCocoaController menuTitleForNode:child];
         base::scoped_nsobject<NSMenuItem> item([[NSMenuItem alloc]
-            initWithTitle:title
+            initWithTitle:MenuTitleForNode(child)
                    action:nil
             keyEquivalent:@""]);
         bookmark_nodes_[child] = item;
@@ -294,6 +297,8 @@ void BookmarkMenuBridge::AddNodeToMenu(const BookmarkNode* node, NSMenu* menu) {
         [menu addItem:item];
       }
     }
+    [menu addItem:[NSMenuItem separatorItem]];
+    vivaldi::AddAddTabToBookmarksMenuItem(node, menu);
     return;
   } // vivaldi specific section
 
@@ -313,9 +318,8 @@ void BookmarkMenuBridge::AddNodeToMenu(const BookmarkNode* node, NSMenu* menu) {
     if (child->is_folder()) {
       AddNodeAsSubmenu(menu, child, folder_image_);
     } else {
-      NSString* title = [BookmarkMenuCocoaController menuTitleForNode:child];
       base::scoped_nsobject<NSMenuItem> item([[NSMenuItem alloc]
-          initWithTitle:title
+          initWithTitle:MenuTitleForNode(child)
                  action:nil
           keyEquivalent:@""]);
       bookmark_nodes_[child] = item;
@@ -329,7 +333,7 @@ void BookmarkMenuBridge::ConfigureMenuItem(const BookmarkNode* node,
                                            NSMenuItem* item,
                                            bool set_title) {
   if (set_title)
-    [item setTitle:[BookmarkMenuCocoaController menuTitleForNode:node]];
+    [item setTitle:MenuTitleForNode(node)];
   [item setTarget:controller_];
   [item setAction:@selector(openBookmarkMenuItem:)];
   [item setTag:node->id()];

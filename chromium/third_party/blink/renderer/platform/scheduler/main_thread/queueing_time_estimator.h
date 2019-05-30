@@ -5,15 +5,15 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_SCHEDULER_MAIN_THREAD_QUEUEING_TIME_ESTIMATOR_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_SCHEDULER_MAIN_THREAD_QUEUEING_TIME_ESTIMATOR_H_
 
-#include "base/macros.h"
-#include "base/time/time.h"
-#include "third_party/blink/public/common/page/launching_process_state.h"
-#include "third_party/blink/renderer/platform/platform_export.h"
-#include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_metrics_helper.h"
-#include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_task_queue.h"
-
 #include <array>
 #include <vector>
+
+#include "base/macros.h"
+#include "base/time/time.h"
+#include "third_party/blink/renderer/platform/platform_export.h"
+#include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_task_queue.h"
+#include "third_party/blink/renderer/platform/scheduler/public/frame_status.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 
 namespace blink {
 namespace scheduler {
@@ -21,6 +21,8 @@ namespace scheduler {
 // Records the expected queueing time for a high priority task occurring
 // randomly during each interval of length equal to window's duration.
 class PLATFORM_EXPORT QueueingTimeEstimator {
+  DISALLOW_NEW();
+
  public:
   class PLATFORM_EXPORT Client {
    public:
@@ -37,6 +39,8 @@ class PLATFORM_EXPORT QueueingTimeEstimator {
   };
 
   class RunningAverage {
+    DISALLOW_NEW();
+
    public:
     explicit RunningAverage(int steps_per_window);
     int GetStepsPerWindow() const;
@@ -51,6 +55,8 @@ class PLATFORM_EXPORT QueueingTimeEstimator {
   };
 
   class PLATFORM_EXPORT Calculator {
+    DISALLOW_NEW();
+
    public:
     explicit Calculator(int steps_per_window);
 
@@ -91,14 +97,7 @@ class PLATFORM_EXPORT QueueingTimeEstimator {
     // In this case:
     // |steps_per_window_| = 3, because each window is the length of 3 steps.
     base::TimeDelta step_expected_queueing_time_;
-    RunningAverage step_queueing_times_;
-
-    // Variables to split Expected Queueing Time by task queue type.
-    std::array<base::TimeDelta,
-               static_cast<int>(MainThreadTaskQueue::QueueType::kCount)>
-        eqt_by_queue_type_;
-    MainThreadTaskQueue::QueueType current_queue_type_ =
-        MainThreadTaskQueue::QueueType::kOther;
+    RunningAverage sliding_window_;
 
     // Variables to split Expected Queueing Time by frame type.
     std::array<base::TimeDelta, static_cast<int>(FrameStatus::kCount)>
@@ -108,12 +107,12 @@ class PLATFORM_EXPORT QueueingTimeEstimator {
 
   QueueingTimeEstimator(Client* client,
                         base::TimeDelta window_duration,
-                        int steps_per_window);
+                        int steps_per_window,
+                        bool start_disabled);
 
   void OnExecutionStarted(base::TimeTicks now, MainThreadTaskQueue* queue);
   void OnExecutionStopped(base::TimeTicks now);
-  void OnRendererStateChanged(bool backgrounded,
-                              base::TimeTicks transition_time);
+  void OnRecordingStateChanged(bool disabled, base::TimeTicks transition_time);
 
  private:
   void AdvanceTime(base::TimeTicks current_time);
@@ -127,8 +126,8 @@ class PLATFORM_EXPORT QueueingTimeEstimator {
   bool busy_ = false;
   base::TimeTicks busy_period_start_time_;
 
-  // |renderer_backgrounded_| is the renderer's current status.
-  bool renderer_backgrounded_;
+  // |disabled_| is true iff we want to ignore start/stop events.
+  bool disabled_;
   Calculator calculator_;
 
   DISALLOW_ASSIGN(QueueingTimeEstimator);

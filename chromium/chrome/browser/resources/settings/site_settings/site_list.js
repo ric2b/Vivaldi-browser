@@ -27,6 +27,8 @@ Polymer({
       value: false,
     },
 
+    categoryHeader: String,
+
     /**
      * The site serving as the model for the currently open action menu.
      * @private {?SiteException}
@@ -104,8 +106,22 @@ Polymer({
     lastFocused_: Object,
 
     /** @private */
+    listBlurred_: Boolean,
+
+    /** @private */
     tooltipText_: String,
+
+    searchFilter: String,
   },
+
+  // <if expr="chromeos">
+  /**
+   * Android messages info object containing messages feature state and
+   * exception origin.
+   * @private {?settings.AndroidSmsInfo}
+   */
+  androidSmsInfo_: null,
+  // </if>
 
   /**
    * The element to return focus to, when the currently active dialog is closed.
@@ -122,6 +138,12 @@ Polymer({
         this.siteWithinCategoryChanged_.bind(this));
     this.addWebUIListener(
         'onIncognitoStatusChanged', this.onIncognitoStatusChanged_.bind(this));
+    // <if expr="chromeos">
+    this.addWebUIListener('settings.onAndroidSmsInfoChange', (info) => {
+      this.androidSmsInfo_ = info;
+      this.populateList_();
+    });
+    // </if>
     this.browserProxy.updateIncognitoStatus();
   },
 
@@ -132,8 +154,9 @@ Polymer({
    * @private
    */
   siteWithinCategoryChanged_: function(category, site) {
-    if (category == this.category)
+    if (category == this.category) {
       this.configureWidget_();
+    }
   },
 
   /**
@@ -147,8 +170,9 @@ Polymer({
 
     // The SESSION_ONLY list won't have any incognito exceptions. (Minor
     // optimization, not required).
-    if (this.categorySubtype == settings.ContentSetting.SESSION_ONLY)
+    if (this.categorySubtype == settings.ContentSetting.SESSION_ONLY) {
       return;
+    }
 
     // A change notification is not sent for each site. So we repopulate the
     // whole list when the incognito profile is created or destroyed.
@@ -160,8 +184,9 @@ Polymer({
    * @private
    */
   configureWidget_: function() {
-    if (this.category == undefined)
+    if (this.category == undefined) {
       return;
+    }
 
     // The observer for All Sites fires before the attached/ready event, so
     // initialize this here.
@@ -171,7 +196,14 @@ Polymer({
     }
 
     this.setUpActionMenu_();
+
+    // <if expr="not chromeos">
     this.populateList_();
+    // </if>
+
+    // <if expr="chromeos">
+    this.updateAndroidSmsInfo_().then(this.populateList_.bind(this));
+    // </if>
 
     // The Session permissions are only for cookies.
     if (this.categorySubtype == settings.ContentSetting.SESSION_ONLY) {
@@ -186,7 +218,15 @@ Polymer({
    * @private
    */
   hasSites_: function() {
-    return !!this.sites.length;
+    return this.sites.length > 0;
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  showNoSearchResults_: function() {
+    return this.sites.length > 0 && this.getFilteredSites_().length == 0;
   },
 
   /**
@@ -207,7 +247,7 @@ Polymer({
   /**
    * Need to use common tooltip since the tooltip in the entry is cut off from
    * the iron-list.
-   * @param {!{detail: {target: HTMLElement, text: string}}} e
+   * @param {!CustomEvent<!{target: HTMLElement, text: string}>} e
    * @private
    */
   onShowTooltip_: function(e) {
@@ -215,11 +255,10 @@ Polymer({
     const target = e.detail.target;
     // paper-tooltip normally determines the target from the |for| property,
     // which is a selector. Here paper-tooltip is being reused by multiple
-    // potential targets. Since paper-tooltip does not expose a public property
-    // or method to update the target, the private property |_target| is
-    // updated directly.
-    this.$.tooltip._target = target;
-    /** @type {{updatePosition: Function}} */ (this.$.tooltip).updatePosition();
+    // potential targets.
+    const tooltip = this.$.tooltip;
+    tooltip.target = target;
+    /** @type {{updatePosition: Function}} */ (tooltip).updatePosition();
     const hide = () => {
       this.$.tooltip.hide();
       target.removeEventListener('mouseleave', hide);
@@ -233,6 +272,48 @@ Polymer({
     this.$.tooltip.addEventListener('mouseenter', hide);
     this.$.tooltip.show();
   },
+
+  // <if expr="chromeos">
+  /**
+   * Load android sms info if required and sets it to the |androidSmsInfo_|
+   * property. Returns a promise that resolves when load is complete.
+   * @private
+   */
+  updateAndroidSmsInfo_: function() {
+    // |androidSmsInfo_| is only relevant for NOTIFICATIONS category. Don't
+    // bother fetching it for other categories.
+    if (this.category === settings.ContentSettingsTypes.NOTIFICATIONS &&
+        loadTimeData.valueExists('multideviceAllowedByPolicy') &&
+        loadTimeData.getBoolean('multideviceAllowedByPolicy') &&
+        !this.androidSmsInfo_) {
+      const multideviceSetupProxy =
+          settings.MultiDeviceBrowserProxyImpl.getInstance();
+      return multideviceSetupProxy.getAndroidSmsInfo().then((info) => {
+        this.androidSmsInfo_ = info;
+      });
+    }
+
+    return Promise.resolve();
+  },
+
+  /**
+   * Processes exceptions and adds showAndroidSmsNote field to
+   * the required exception item.
+   * @private
+   */
+  processExceptionsForAndroidSmsInfo_: function(sites) {
+    if (!this.androidSmsInfo_ || !this.androidSmsInfo_.enabled) {
+      return sites;
+    }
+    return sites.map((site) => {
+      if (site.origin === this.androidSmsInfo_.origin) {
+        return Object.assign({showAndroidSmsNote: true}, site);
+      } else {
+        return site;
+      }
+    });
+  },
+  // </if>
 
   /**
    * Populate the sites list for display.
@@ -251,13 +332,21 @@ Polymer({
    * @private
    */
   processExceptions_: function(exceptionList) {
-    const sites =
+    let sites =
         exceptionList
             .filter(
                 site => site.setting != settings.ContentSetting.DEFAULT &&
                     site.setting == this.categorySubtype)
             .map(site => this.expandSiteException(site));
-    this.updateList('sites', x => x.origin, sites);
+
+    // <if expr="not chromeos">
+    this.updateList('sites', (x) => x.origin, sites);
+    // </if>
+
+    // <if expr="chromeos">
+    sites = this.processExceptionsForAndroidSmsInfo_(sites);
+    this.updateList('sites', (x) => x.origin + x.showAndroidSmsNote, sites);
+    // </if>
   },
 
   /**
@@ -283,8 +372,9 @@ Polymer({
     // It makes no sense to show "clear on exit" for exceptions that only apply
     // to incognito. It gives the impression that they might under some
     // circumstances not be cleared on exit, which isn't true.
-    if (!this.actionMenuSite_ || this.actionMenuSite_.incognito)
+    if (!this.actionMenuSite_ || this.actionMenuSite_.incognito) {
       return false;
+    }
 
     return this.showSessionOnlyAction_;
   },
@@ -363,7 +453,27 @@ Polymer({
     this.activeDialogAnchor_ = null;
     const actionMenu =
         /** @type {!CrActionMenuElement} */ (this.$$('cr-action-menu'));
-    if (actionMenu.open)
+    if (actionMenu.open) {
       actionMenu.close();
+    }
+  },
+
+  /**
+   * @return {!Array<!SiteException>}
+   * @private
+   */
+  getFilteredSites_: function() {
+    if (!this.searchFilter) {
+      return this.sites.slice();
+    }
+
+    const propNames = [
+      'displayName',
+      'origin',
+    ];
+    const searchFilter = this.searchFilter.toLowerCase();
+    return this.sites.filter(
+        site => propNames.some(
+            propName => site[propName].toLowerCase().includes(searchFilter)));
   },
 });

@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_VR_MODEL_WEB_VR_MODEL_H_
 #define CHROME_BROWSER_VR_MODEL_WEB_VR_MODEL_H_
 
-#include "chrome/browser/vr/vr_export.h"
+#include "chrome/browser/vr/vr_base_export.h"
 
 namespace vr {
 
@@ -27,13 +27,27 @@ enum WebVrState {
   kWebVrPresenting,
 };
 
-struct VR_EXPORT WebVrModel {
+// Type of permission prompt visible out-of-headset on a desktop display that
+// the user may want to respond to. Currently this can't differentiate between
+// specific permission requests, in the future we may add kPromptBluetooth etc.
+enum class ExternalPromptNotificationType {
+  kPromptNone = 0,
+  kPromptGenericPermission,
+};
+
+struct VR_BASE_EXPORT WebVrModel {
   WebVrState state = kWebVrNoTimeoutPending;
   bool has_received_permissions = false;
   bool showing_hosted_ui = false;
-  bool presenting_web_vr() const {
-    return state == kWebVrPresenting && !showing_hosted_ui;
+  bool IsImmersiveWebXrVisible() const {
+    return state == kWebVrPresenting && !showing_hosted_ui &&
+           external_prompt_notification ==
+               ExternalPromptNotificationType::kPromptNone;
   }
+
+  // Desktop permission requests.
+  ExternalPromptNotificationType external_prompt_notification =
+      ExternalPromptNotificationType::kPromptNone;
 };
 
 }  // namespace vr

@@ -43,9 +43,12 @@ class LocalCardMigrationBubbleViews : public LocalCardMigrationBubble,
   gfx::Size CalculatePreferredSize() const override;
   void AddedToWidget() override;
   bool ShouldShowCloseButton() const override;
+  base::string16 GetWindowTitle() const override;
   void WindowClosing() override;
 
  private:
+  friend class LocalCardMigrationBrowserTest;
+
   ~LocalCardMigrationBubbleViews() override;
 
   // views::BubbleDialogDelegateView:

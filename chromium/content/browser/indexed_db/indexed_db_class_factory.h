@@ -14,8 +14,10 @@
 #include "base/memory/ref_counted.h"
 #include "content/browser/indexed_db/indexed_db_backing_store.h"
 #include "content/browser/indexed_db/indexed_db_database.h"
+#include "content/browser/indexed_db/scopes/scopes_lock_manager.h"
 #include "content/common/content_export.h"
 #include "third_party/blink/public/common/indexeddb/web_idb_types.h"
+#include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom.h"
 
 namespace leveldb {
 class Iterator;
@@ -34,6 +36,8 @@ class LevelDBTransaction;
 
 // Use this factory to create some IndexedDB objects. Exists solely to
 // facilitate tests which sometimes need to inject mock objects into the system.
+// TODO(dmurph): Remove th8s class in favor of dependency injection. This makes
+// it really hard to iterate on the system.
 class CONTENT_EXPORT IndexedDBClassFactory {
  public:
   typedef IndexedDBClassFactory* GetterCallback();
@@ -47,13 +51,14 @@ class CONTENT_EXPORT IndexedDBClassFactory {
       scoped_refptr<IndexedDBBackingStore> backing_store,
       scoped_refptr<IndexedDBFactory> factory,
       std::unique_ptr<IndexedDBMetadataCoding> metadata_coding,
-      const IndexedDBDatabase::Identifier& unique_identifier);
+      const IndexedDBDatabase::Identifier& unique_identifier,
+      ScopesLockManager* transaction_lock_manager);
 
   virtual std::unique_ptr<IndexedDBTransaction> CreateIndexedDBTransaction(
       int64_t id,
       IndexedDBConnection* connection,
       const std::set<int64_t>& scope,
-      blink::WebIDBTransactionMode mode,
+      blink::mojom::IDBTransactionMode mode,
       IndexedDBBackingStore::Transaction* backing_store_transaction);
 
   virtual std::unique_ptr<LevelDBIteratorImpl> CreateIteratorImpl(

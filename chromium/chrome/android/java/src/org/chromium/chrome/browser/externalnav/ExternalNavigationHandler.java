@@ -24,15 +24,16 @@ import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.UrlConstants;
+import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider.LaunchSourceType;
 import org.chromium.chrome.browser.instantapps.InstantAppsHandler;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabRedirectHandler;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.util.UrlUtilities;
-import org.chromium.chrome.browser.webapps.WebappActivity.ActivityType;
 import org.chromium.chrome.browser.webapps.WebappScopePolicy;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.ui.base.PageTransition;
@@ -43,7 +44,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.HashSet;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Logic related to the URL overriding/intercepting functionality.
@@ -157,8 +157,8 @@ public class ExternalNavigationHandler {
         @OverrideUrlLoadingResult
         int result = shouldOverrideUrlLoadingInternal(
                 params, intent, hasBrowserFallbackUrl, browserFallbackUrl);
-        RecordHistogram.recordTimesHistogram("Android.StrictMode.OverrideUrlLoadingTime",
-                SystemClock.elapsedRealtime() - time, TimeUnit.MILLISECONDS);
+        RecordHistogram.recordTimesHistogram(
+                "Android.StrictMode.OverrideUrlLoadingTime", SystemClock.elapsedRealtime() - time);
 
         if (result != OverrideUrlLoadingResult.NO_OVERRIDE) {
             int pageTransitionCore = params.getPageTransition() & PageTransition.CORE_MASK;
@@ -280,10 +280,12 @@ public class ExternalNavigationHandler {
 
         // http://crbug/331571 : Do not override a navigation started from user typing.
         // http://crbug/424029 : Need to stay in Chrome for an intent heading explicitly to Chrome.
+        // http://crbug/881740 : Relax stay in Chrome restriction for Custom Tabs.
         if (params.getRedirectHandler() != null) {
             TabRedirectHandler handler = params.getRedirectHandler();
-            if (handler.shouldStayInChrome(isExternalProtocol)
-                    || handler.shouldNotOverrideUrlLoading()) {
+            boolean shouldStayInChrome = handler.shouldStayInChrome(
+                    isExternalProtocol, mDelegate.isIntentForTrustedCallingApp(intent));
+            if (shouldStayInChrome || handler.shouldNotOverrideUrlLoading()) {
                 // http://crbug.com/659301: Handle redirects to Instant Apps out of Custom Tabs.
                 if (handler.isFromCustomTabIntent() && !isExternalProtocol && incomingIntentRedirect
                         && !handler.shouldNavigationTypeStayInChrome()
@@ -307,6 +309,20 @@ public class ExternalNavigationHandler {
         if (!typedRedirectToExternalProtocol) {
             if (!linkNotFromIntent && !incomingIntentRedirect && !isRedirectFromFormSubmit) {
                 if (DEBUG) Log.i(TAG, "NO_OVERRIDE: Incoming intent (not a redirect)");
+                return OverrideUrlLoadingResult.NO_OVERRIDE;
+            }
+            // http://crbug.com/839751: Require user gestures for form submits to external
+            //                          protocols.
+            // TODO(tedchoc): Remove the ChromeFeatureList check once we verify this change does
+            //                not break the world.
+            if (isRedirectFromFormSubmit && !incomingIntentRedirect && !params.hasUserGesture()
+                    && ChromeFeatureList.isEnabled(
+                            ChromeFeatureList.INTENT_BLOCK_EXTERNAL_FORM_REDIRECT_NO_GESTURE)) {
+                if (DEBUG) {
+                    Log.i(TAG,
+                            "NO_OVERRIDE: Incoming form intent attempting to redirect without "
+                                    + "user gesture");
+                }
                 return OverrideUrlLoadingResult.NO_OVERRIDE;
             }
             if (params.getRedirectHandler() != null
@@ -462,7 +478,7 @@ public class ExternalNavigationHandler {
         // handlers. If webkit can't handle it internally, we need to call
         // startActivityIfNeeded or startActivity.
         if (!isExternalProtocol) {
-            if (mDelegate.countSpecializedHandlers(resolvingInfos, intent) == 0) {
+            if (mDelegate.countSpecializedHandlers(resolvingInfos) == 0) {
                 if (incomingIntentRedirect
                         && mDelegate.maybeLaunchInstantApp(
                                    params.getUrl(), params.getReferrerUrl(), true)) {
@@ -588,7 +604,7 @@ public class ExternalNavigationHandler {
 
         // If the only specialized intent handler is a WebAPK, set the intent's package to
         // launch the WebAPK without showing the intent picker.
-        String targetWebApkPackageName = mDelegate.findWebApkPackageName(resolvingInfos);
+        String targetWebApkPackageName = mDelegate.findFirstWebApkPackageName(resolvingInfos);
 
         // We can't rely on this falling through to startActivityIfNeeded and behaving
         // correctly for WebAPKs. This is because the target of the intent is the WebApk's main
@@ -602,7 +618,7 @@ public class ExternalNavigationHandler {
         }
 
         if (targetWebApkPackageName != null
-                && mDelegate.countSpecializedHandlers(resolvingInfos, null) == 1) {
+                && mDelegate.countSpecializedHandlers(resolvingInfos) == 1) {
             intent.setPackage(targetWebApkPackageName);
         }
 
@@ -770,21 +786,21 @@ public class ExternalNavigationHandler {
         }
 
         int launchSource = IntentUtils.safeGetIntExtra(
-                tab.getActivity().getIntent(), EXTRA_BROWSER_LAUNCH_SOURCE, ActivityType.OTHER);
-        if (launchSource != ActivityType.WEBAPK && launchSource != ActivityType.TWA) return false;
+                tab.getActivity().getIntent(), EXTRA_BROWSER_LAUNCH_SOURCE, LaunchSourceType.OTHER);
+        if (launchSource != LaunchSourceType.WEBAPK) {
+            return false;
+        }
 
         String appId = IntentUtils.safeGetStringExtra(
                 tab.getActivity().getIntent(), Browser.EXTRA_APPLICATION_ID);
         if (appId == null) return false;
 
-        Intent intent;
         try {
-            intent = Intent.parseUri(params.getUrl(), Intent.URI_INTENT_SCHEME);
+            Intent.parseUri(params.getUrl(), Intent.URI_INTENT_SCHEME);
         } catch (URISyntaxException ex) {
             return false;
         }
-        return ExternalNavigationDelegateImpl
-                       .getSpecializedHandlersWithFilter(handlers, appId, null)
+        return ExternalNavigationDelegateImpl.getSpecializedHandlersWithFilter(handlers, appId)
                        .size()
                 > 0;
     }

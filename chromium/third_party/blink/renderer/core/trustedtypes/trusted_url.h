@@ -7,35 +7,25 @@
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
-#include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
-
-class Document;
-class ExceptionState;
-class ScriptState;
-class USVStringOrTrustedURL;
 
 class CORE_EXPORT TrustedURL final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static TrustedURL* Create(const KURL& url) { return new TrustedURL(url); }
+  static TrustedURL* Create(const String& url) {
+    return MakeGarbageCollected<TrustedURL>(url);
+  }
+
+  TrustedURL(const String& url);
 
   // TrustedURL.idl
   String toString() const;
-  static TrustedURL* create(ScriptState*, const String& url);
-  static TrustedURL* unsafelyCreate(ScriptState*, const String& url);
-  static String GetString(USVStringOrTrustedURL,
-                          const Document*,
-                          ExceptionState&);
 
  private:
-  TrustedURL(const KURL&);
-
-  KURL url_;
+  const String url_;
 };
 
 }  // namespace blink

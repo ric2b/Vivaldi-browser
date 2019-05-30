@@ -5,7 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_EDITING_SUGGESTION_TEXT_SUGGESTION_CONTROLLER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_EDITING_SUGGESTION_TEXT_SUGGESTION_CONTROLLER_H_
 
-#include "third_party/blink/public/platform/input_host.mojom-blink.h"
+#include "third_party/blink/public/mojom/input/input_host.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_shutdown_observer.h"
@@ -31,7 +31,7 @@ class CORE_EXPORT TextSuggestionController final
  public:
   explicit TextSuggestionController(LocalFrame&);
 
-  void DocumentAttached(Document*);
+  void DidAttachDocument(Document*);
 
   bool IsMenuOpen() const;
 
@@ -44,9 +44,10 @@ class CORE_EXPORT TextSuggestionController final
   void OnSuggestionMenuClosed();
   void SuggestionMenuTimeoutCallback(size_t max_number_of_suggestions);
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
+  friend class TextSuggestionControllerTest;
   Document& GetDocument() const;
   bool IsAvailable() const;
   LocalFrame& GetFrame() const;

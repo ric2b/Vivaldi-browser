@@ -26,10 +26,10 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
-import org.chromium.base.AsyncTask;
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.consent_auditor.ConsentAuditorFeature;
 import org.chromium.chrome.browser.externalauth.UserRecoverableErrorHandler;
@@ -38,6 +38,7 @@ import org.chromium.components.signin.AccountIdProvider;
 import org.chromium.components.signin.AccountManagerDelegateException;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerResult;
+import org.chromium.components.signin.AccountTrackerService;
 import org.chromium.components.signin.AccountsChangeObserver;
 import org.chromium.components.signin.ChildAccountStatus;
 import org.chromium.components.signin.GmsAvailabilityException;
@@ -49,7 +50,6 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
  * This fragment implements sign-in screen with account picker and descriptions of signin-related
@@ -193,15 +193,6 @@ public abstract class SigninFragmentBase
             boolean settingsClicked, Runnable callback);
 
     /**
-     * Returns the string resource id for the title TextView. This is invoked once from
-     * {@link #onCreateView}. Subclasses may override this method to customize the title text.
-     */
-    @StringRes
-    protected int getTitleTextId() {
-        return R.string.signin_title;
-    }
-
-    /**
      * Returns the string resource id for the negative button. This is invoked once from
      * {@link #onCreateView}.
      */
@@ -329,32 +320,27 @@ public abstract class SigninFragmentBase
     }
 
     private void updateSigninDetailsDescription(boolean addSettingsLink) {
-        final @StringRes int description = mChildAccountStatus == ChildAccountStatus.REGULAR_CHILD
-                ? R.string.signin_details_description_child_account
-                : R.string.signin_details_description;
-        final @Nullable Object settingsLinkSpan =
-                addSettingsLink ? new NoUnderlineClickableSpan(this::onSettingsLinkClicked) : null;
+        final @Nullable Object settingsLinkSpan = addSettingsLink
+                ? new NoUnderlineClickableSpan(getResources(), this::onSettingsLinkClicked)
+                : null;
         final SpanApplier.SpanInfo spanInfo =
                 new SpanApplier.SpanInfo(SETTINGS_LINK_OPEN, SETTINGS_LINK_CLOSE, settingsLinkSpan);
-        mConsentTextTracker.setText(mView.getDetailsDescriptionView(), description,
+        mConsentTextTracker.setText(mView.getDetailsDescriptionView(),
+                R.string.signin_details_description,
                 input -> SpanApplier.applySpans(input.toString(), spanInfo));
     }
 
     /** Sets texts for immutable elements. Accept button text is set by {@link #setHasAccounts}. */
     private void updateConsentText() {
-        mConsentTextTracker.setText(mView.getTitleView(), getTitleTextId());
-        mConsentTextTracker.setText(
-                mView.getSyncDescriptionView(), R.string.signin_sync_description);
+        mConsentTextTracker.setText(mView.getTitleView(), R.string.signin_title);
 
-        final @StringRes int personalizationDescription =
+        mConsentTextTracker.setText(mView.getSyncTitleView(), R.string.signin_sync_title);
+        final @StringRes int syncDescription =
                 mChildAccountStatus == ChildAccountStatus.REGULAR_CHILD
-                ? R.string.signin_personalization_description_child_account
-                : R.string.signin_personalization_description;
-        mConsentTextTracker.setText(
-                mView.getPersonalizationDescriptionView(), personalizationDescription);
+                ? R.string.signin_sync_description_child_account
+                : R.string.signin_sync_description;
+        mConsentTextTracker.setText(mView.getSyncDescriptionView(), syncDescription);
 
-        mConsentTextTracker.setText(mView.getGoogleServicesDescriptionView(),
-                R.string.signin_google_services_description);
         mConsentTextTracker.setText(mView.getRefuseButton(), getNegativeButtonTextId());
         mConsentTextTracker.setText(mView.getMoreButton(), R.string.more);
     }
@@ -431,7 +417,9 @@ public abstract class SigninFragmentBase
         // Ensure that the AccountTrackerService has a fully up to date GAIA id <-> email mapping,
         // as this is needed for the previous account check.
         final long seedingStartTime = SystemClock.elapsedRealtime();
-        if (AccountTrackerService.get().checkAndSeedSystemAccounts()) {
+        final AccountTrackerService accountTrackerService =
+                IdentityServicesProvider.getAccountTrackerService();
+        if (accountTrackerService.checkAndSeedSystemAccounts()) {
             recordAccountTrackerServiceSeedingTime(seedingStartTime);
             runStateMachineAndSignin(settingsClicked);
             return;
@@ -441,7 +429,7 @@ public abstract class SigninFragmentBase
                 new AccountTrackerService.OnSystemAccountsSeededListener() {
                     @Override
                     public void onSystemAccountsSeedingComplete() {
-                        AccountTrackerService.get().removeSystemAccountsSeededListener(this);
+                        accountTrackerService.removeSystemAccountsSeededListener(this);
                         recordAccountTrackerServiceSeedingTime(seedingStartTime);
 
                         // Don't start sign-in if this fragment has been destroyed.
@@ -452,7 +440,7 @@ public abstract class SigninFragmentBase
                     @Override
                     public void onSystemAccountsChanged() {}
                 };
-        AccountTrackerService.get().addSystemAccountsSeededListener(listener);
+        accountTrackerService.addSystemAccountsSeededListener(listener);
     }
 
     private void runStateMachineAndSignin(boolean settingsClicked) {
@@ -483,7 +471,7 @@ public abstract class SigninFragmentBase
 
     private static void recordAccountTrackerServiceSeedingTime(long seedingStartTime) {
         RecordHistogram.recordTimesHistogram("Signin.AndroidAccountSigninViewSeedingTime",
-                SystemClock.elapsedRealtime() - seedingStartTime, TimeUnit.MILLISECONDS);
+                SystemClock.elapsedRealtime() - seedingStartTime);
     }
 
     /**
@@ -547,13 +535,16 @@ public abstract class SigninFragmentBase
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == ADD_ACCOUNT_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
+            if (data == null) return;
+            String addedAccountName = data.getStringExtra(AccountManager.KEY_ACCOUNT_NAME);
+            if (addedAccountName == null) return;
+
+            // Found the account name, dismiss the account picker dialog if it is shown.
             AccountPickerDialogFragment accountPickerFragment = getAccountPickerDialogFragment();
             if (accountPickerFragment != null) {
                 accountPickerFragment.dismiss();
             }
 
-            String addedAccountName = data.getStringExtra(AccountManager.KEY_ACCOUNT_NAME);
-            if (addedAccountName == null) return;
             // Wait for the account cache to be updated and select newly-added account.
             AccountManagerFacade.get().waitForPendingUpdates(() -> {
                 mAccountSelectionPending = true;
@@ -710,7 +701,6 @@ public abstract class SigninFragmentBase
         mGmsIsUpdatingDialog.dismiss();
         mGmsIsUpdatingDialog = null;
         RecordHistogram.recordTimesHistogram("Signin.AndroidGmsUpdatingDialogShownTime",
-                SystemClock.elapsedRealtime() - mGmsIsUpdatingDialogShowTime,
-                TimeUnit.MILLISECONDS);
+                SystemClock.elapsedRealtime() - mGmsIsUpdatingDialogShowTime);
     }
 }

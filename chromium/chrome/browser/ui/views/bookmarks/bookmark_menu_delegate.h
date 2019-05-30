@@ -104,15 +104,15 @@ class BookmarkMenuDelegate : public bookmarks::BaseBookmarkModelObserver,
   bool is_mutating_model() const { return is_mutating_model_; }
 
   // MenuDelegate like methods (see class description for details).
+  void VivaldiSelectionChanged(views::MenuItemView* menu);
   base::string16 GetTooltipText(int id, const gfx::Point& p) const;
   bool IsTriggerableEvent(views::MenuItemView* menu,
                           const ui::Event& e);
   void ExecuteCommand(int id, int mouse_event_flags);
   bool ShouldExecuteCommandWithoutClosingMenu(int id, const ui::Event& e);
-  bool GetDropFormats(
-      views::MenuItemView* menu,
-      int* formats,
-      std::set<ui::Clipboard::FormatType>* format_types);
+  bool GetDropFormats(views::MenuItemView* menu,
+                      int* formats,
+                      std::set<ui::ClipboardFormatType>* format_types);
   bool AreDropTypesRequired(views::MenuItemView* menu);
   bool CanDrop(views::MenuItemView* menu, const ui::OSExchangeData& data);
   int GetDropOperation(views::MenuItemView* item,
@@ -182,6 +182,10 @@ class BookmarkMenuDelegate : public bookmarks::BaseBookmarkModelObserver,
   void AddMenuToMaps(views::MenuItemView* menu,
                      const bookmarks::BookmarkNode* node);
 
+  // Escapes ampersands within |title| if necessary, depending on
+  // |menu_uses_mnemonics_|.
+  base::string16 MaybeEscapeLabel(const base::string16& title);
+
   Browser* const browser_;
   Profile* profile_;
 
@@ -218,6 +222,10 @@ class BookmarkMenuDelegate : public bookmarks::BaseBookmarkModelObserver,
 
   // The location where this bookmark menu will be displayed (for UMA).
   BookmarkLaunchLocation location_;
+
+  // Whether the involved menu uses mnemonics or not. If it does, ampersands
+  // inside bookmark titles need to be escaped.
+  bool menu_uses_mnemonics_;
 
   DISALLOW_COPY_AND_ASSIGN(BookmarkMenuDelegate);
 };

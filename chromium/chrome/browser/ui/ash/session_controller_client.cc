@@ -35,7 +35,7 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/assistant/buildflags.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -100,12 +100,13 @@ ash::mojom::UserSessionPtr UserToUserSession(const User& user) {
   session->user_info->display_email = user.display_email();
   session->user_info->is_ephemeral =
       UserManager::Get()->IsUserNonCryptohomeDataEphemeral(user.GetAccountId());
+  session->user_info->has_gaia_account = user.has_gaia_account();
   const AccountId& owner_id = UserManager::Get()->GetOwnerAccountId();
   session->user_info->is_device_owner =
       owner_id.is_valid() && owner_id == user.GetAccountId();
   if (profile) {
-    session->user_info->service_user_id =
-        content::BrowserContext::GetServiceUserIdFor(profile);
+    session->user_info->service_instance_group =
+        content::BrowserContext::GetServiceInstanceGroupFor(profile);
     session->user_info->is_new_profile = profile->IsNewProfile();
   }
 
@@ -471,10 +472,12 @@ void SessionControllerClient::OnSessionStateChanged() {
 
 #if BUILDFLAG(ENABLE_CROS_ASSISTANT)
     // Assistant is initialized only once when primary user logs in.
+    // Initialize Assistant when browser process restarts.
     if (chromeos::switches::IsAssistantEnabled()) {
       AssistantClient::Get()->MaybeInit(
-          content::BrowserContext::GetConnectorFor(
-              ProfileManager::GetPrimaryUserProfile()));
+          ProfileManager::GetPrimaryUserProfile());
+      if (!chromeos::switches::ShouldSkipOobePostLogin())
+        AssistantClient::Get()->MaybeStartAssistantOptInFlow();
     }
 #endif
   }
@@ -559,10 +562,6 @@ void SessionControllerClient::SendUserSessionForProfile(Profile* profile) {
 }
 
 void SessionControllerClient::ConnectToSessionController() {
-  // Tests may bind to their own SessionController.
-  if (session_controller_)
-    return;
-
   content::ServiceManagerConnection::GetForProcess()
       ->GetConnector()
       ->BindInterface(ash::mojom::kServiceName, &session_controller_);

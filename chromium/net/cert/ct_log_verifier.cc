@@ -108,7 +108,9 @@ bool CTLogVerifier::VerifySignedTreeHead(
     return false;
 
   std::string serialized_data;
-  ct::EncodeTreeHeadSignature(signed_tree_head, &serialized_data);
+  if (!ct::EncodeTreeHeadSignature(signed_tree_head, &serialized_data))
+    return false;
+
   if (VerifySignature(serialized_data,
                       signed_tree_head.signature.signature_data)) {
     if (signed_tree_head.tree_size == 0) {
@@ -177,7 +179,7 @@ bool CTLogVerifier::VerifyConsistencyProof(
   // 1. If "first" is an exact power of 2, then prepend "first_hash" to the
   // "consistency_path" array.
   base::StringPiece first_proof_node = old_tree_hash;
-  std::vector<std::string>::const_iterator iter = proof.nodes.begin();
+  auto iter = proof.nodes.begin();
   if (!IsPowerOfTwo(proof.first_tree_size)) {
     if (iter == proof.nodes.end())
       return false;

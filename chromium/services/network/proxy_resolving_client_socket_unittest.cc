@@ -76,9 +76,9 @@ class ProxyResolvingClientSocketTest
   const bool use_tls_;
 };
 
-INSTANTIATE_TEST_CASE_P(/* no prefix */,
-                        ProxyResolvingClientSocketTest,
-                        ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+                         ProxyResolvingClientSocketTest,
+                         ::testing::Bool());
 
 // Tests that the global socket pool limit
 // (ClientSocketPoolManager::max_sockets_per_group) doesn't apply to this
@@ -326,9 +326,9 @@ TEST_P(ProxyResolvingClientSocketTest, ReadWriteErrors) {
     net::TestCompletionCallback read_write_callback;
     int read_write_result;
     std::string test_data_string("test data");
-    scoped_refptr<net::IOBuffer> read_buffer(new net::IOBufferWithSize(10));
-    scoped_refptr<net::IOBuffer> write_buffer(
-        new net::StringIOBuffer(test_data_string));
+    auto read_buffer = base::MakeRefCounted<net::IOBufferWithSize>(10);
+    auto write_buffer =
+        base::MakeRefCounted<net::StringIOBuffer>(test_data_string);
     if (test.is_read_error) {
       read_write_result =
           socket->Read(read_buffer.get(), 10, read_write_callback.callback());
@@ -817,7 +817,7 @@ const int kProxyTestMockErrors[] = {net::ERR_PROXY_CONNECTION_FAILED,
                                     net::ERR_PROXY_CERTIFICATE_INVALID,
                                     net::ERR_SSL_PROTOCOL_ERROR};
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     /* no prefix */,
     ReconsiderProxyAfterErrorTest,
     testing::Combine(testing::Bool(),

@@ -28,30 +28,27 @@ TEST_F(ModuleCacheTest, MAYBE_ModuleCache) {
   uintptr_t ptr1 = reinterpret_cast<uintptr_t>(&AFunctionForTest);
   uintptr_t ptr2 = ptr1 + 1;
   ModuleCache cache;
-  const ModuleCache::Module& module1 = cache.GetModuleForAddress(ptr1);
-  const ModuleCache::Module& module2 = cache.GetModuleForAddress(ptr2);
-  EXPECT_EQ(&module1, &module2);
-  EXPECT_TRUE(module1.is_valid);
-  EXPECT_GT(module1.size, 0u);
-  EXPECT_LE(module1.base_address, ptr1);
-  EXPECT_GT(module1.base_address + module1.size, ptr2);
+  const ModuleCache::Module* module1 = cache.GetModuleForAddress(ptr1);
+  const ModuleCache::Module* module2 = cache.GetModuleForAddress(ptr2);
+  EXPECT_EQ(module1, module2);
+  EXPECT_NE(nullptr, module1);
+  EXPECT_GT(module1->GetSize(), 0u);
+  EXPECT_LE(module1->GetBaseAddress(), ptr1);
+  EXPECT_GT(module1->GetBaseAddress() + module1->GetSize(), ptr2);
 }
 
 TEST_F(ModuleCacheTest, MAYBE_ModulesList) {
   ModuleCache cache;
   uintptr_t ptr = reinterpret_cast<uintptr_t>(&AFunctionForTest);
-  const ModuleCache::Module& module = cache.GetModuleForAddress(ptr);
-  EXPECT_TRUE(module.is_valid);
+  const ModuleCache::Module* module = cache.GetModuleForAddress(ptr);
+  EXPECT_NE(nullptr, module);
   EXPECT_EQ(1u, cache.GetModules().size());
-  EXPECT_EQ(&module, cache.GetModules().front());
-  cache.Clear();
-  EXPECT_EQ(0u, cache.GetModules().size());
+  EXPECT_EQ(module, cache.GetModules().front());
 }
 
 TEST_F(ModuleCacheTest, InvalidModule) {
   ModuleCache cache;
-  const ModuleCache::Module& invalid_module = cache.GetModuleForAddress(1);
-  EXPECT_FALSE(invalid_module.is_valid);
+  EXPECT_EQ(nullptr, cache.GetModuleForAddress(1));
 }
 
 }  // namespace

@@ -30,13 +30,13 @@
 namespace blink {
 
 IDBVersionChangeEvent::IDBVersionChangeEvent()
-    : data_loss_(kWebIDBDataLossNone) {}
+    : data_loss_(mojom::IDBDataLoss::None) {}
 
 IDBVersionChangeEvent::IDBVersionChangeEvent(
     const AtomicString& event_type,
-    unsigned long long old_version,
-    const base::Optional<unsigned long long>& new_version,
-    WebIDBDataLoss data_loss,
+    uint64_t old_version,
+    const base::Optional<uint64_t>& new_version,
+    mojom::IDBDataLoss data_loss,
     const String& data_loss_message)
     : Event(event_type, Bubbles::kNo, Cancelable::kNo),
       old_version_(old_version),
@@ -46,29 +46,29 @@ IDBVersionChangeEvent::IDBVersionChangeEvent(
 
 IDBVersionChangeEvent::IDBVersionChangeEvent(
     const AtomicString& event_type,
-    const IDBVersionChangeEventInit& initializer)
+    const IDBVersionChangeEventInit* initializer)
     : Event(event_type, Bubbles::kNo, Cancelable::kNo),
-      old_version_(initializer.oldVersion()),
-      data_loss_(kWebIDBDataLossNone) {
-  if (initializer.hasNewVersion())
-    new_version_ = initializer.newVersion();
-  if (initializer.dataLoss() == "total")
-    data_loss_ = kWebIDBDataLossTotal;
+      old_version_(initializer->oldVersion()),
+      data_loss_(mojom::IDBDataLoss::None) {
+  if (initializer->hasNewVersion())
+    new_version_ = initializer->newVersion();
+  if (initializer->dataLoss() == "total")
+    data_loss_ = mojom::IDBDataLoss::Total;
 }
 
-unsigned long long IDBVersionChangeEvent::newVersion(bool& is_null) const {
+uint64_t IDBVersionChangeEvent::newVersion(bool& is_null) const {
   is_null = !new_version_.has_value();
   return new_version_.value_or(0);
 }
 
 const AtomicString& IDBVersionChangeEvent::dataLoss() const {
-  if (data_loss_ == kWebIDBDataLossTotal)
-    return IndexedDBNames::total;
-  return IndexedDBNames::none;
+  if (data_loss_ == mojom::IDBDataLoss::Total)
+    return indexed_db_names::kTotal;
+  return indexed_db_names::kNone;
 }
 
 const AtomicString& IDBVersionChangeEvent::InterfaceName() const {
-  return EventNames::IDBVersionChangeEvent;
+  return event_interface_names::kIDBVersionChangeEvent;
 }
 
 void IDBVersionChangeEvent::Trace(blink::Visitor* visitor) {

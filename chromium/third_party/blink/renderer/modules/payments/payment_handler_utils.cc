@@ -43,7 +43,7 @@ void PaymentHandlerUtils::ReportResponseError(
     case ServiceWorkerResponseError::kBodyLocked:
     case ServiceWorkerResponseError::kRedirectedResponseForNotFollowRequest:
     case ServiceWorkerResponseError::kDataPipeCreationFailed:
-    case ServiceWorkerResponseError::kResponseTypeCORSForRequestModeSameOrigin:
+    case ServiceWorkerResponseError::kResponseTypeCorsForRequestModeSameOrigin:
     case ServiceWorkerResponseError::kResponseBodyBroken:
       NOTREACHED();
       error_message = error_message + "an unexpected error occurred.";
@@ -52,7 +52,7 @@ void PaymentHandlerUtils::ReportResponseError(
 
   DCHECK(execution_context);
   execution_context->AddConsoleMessage(ConsoleMessage::Create(
-      kJSMessageSource, kWarningMessageLevel, error_message));
+      kJSMessageSource, mojom::ConsoleMessageLevel::kWarning, error_message));
 }
 
 }  // namespace blink

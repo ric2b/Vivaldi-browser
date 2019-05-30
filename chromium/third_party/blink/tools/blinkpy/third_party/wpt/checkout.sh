@@ -9,7 +9,7 @@ cd $DIR
 
 TARGET_DIR=$DIR/wpt
 REMOTE_REPO="https://chromium.googlesource.com/external/github.com/web-platform-tests/wpt.git"
-WPT_HEAD=f777ec99a11d0d0522e691a8dab93c70d70941f3
+WPT_HEAD=f759f0b3a8cb7457adbf30dc0734d3a158ce4990
 
 function clone {
   # Remove existing repo if already exists.
@@ -32,7 +32,7 @@ function reduce {
   # xargs on some platforms, so we remove those directories first.
   rm -fr html css
   # Remove all except white-listed.
-  find . -type f | grep -Fxvf ../WPTWhiteList | xargs -n 1 rm
+  comm -23 <(find . -type f | sort) <(cat ../WPTWhiteList | sort) | xargs -n 1 rm
   find . -empty -type d -delete
 }
 

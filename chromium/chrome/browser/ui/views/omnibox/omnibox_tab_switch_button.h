@@ -16,19 +16,18 @@ class SlideAnimation;
 
 class OmniboxTabSwitchButton : public views::MdTextButton {
  public:
-  OmniboxTabSwitchButton(OmniboxPopupContentsView* model,
-                         OmniboxResultView* result_view);
+  OmniboxTabSwitchButton(OmniboxPopupContentsView* popup_contents_view,
+                         OmniboxResultView* result_view,
+                         const base::string16& hint,
+                         const base::string16& hint_short,
+                         const gfx::VectorIcon& icon);
 
   ~OmniboxTabSwitchButton() override;
 
-  // views::View
+  // views::MdTextButton:
   gfx::Size CalculatePreferredSize() const override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
-
-  // views::InkDropHostView
   std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override;
-
-  // views::Button
   void AnimationProgressed(const gfx::Animation* animation) override;
   void StateChanged(ButtonState old_state) override;
 
@@ -42,6 +41,7 @@ class OmniboxTabSwitchButton : public views::MdTextButton {
 
   // Called to indicate button has been focused.
   void ProvideFocusHint();
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
  private:
   // Consults the parent views to see if the button is selected.
@@ -63,8 +63,10 @@ class OmniboxTabSwitchButton : public views::MdTextButton {
   size_t CalculateGoalWidth(size_t parent_width, base::string16* goal_text);
 
   static constexpr int kButtonHeight = 32;
-  OmniboxPopupContentsView* model_;
-  OmniboxResultView* result_view_;
+
+  // The ancestor views.
+  OmniboxPopupContentsView* const popup_contents_view_;
+  OmniboxResultView* const result_view_;
 
   // Only calculate the width of various contents once.
   static bool calculated_widths_;
@@ -79,6 +81,10 @@ class OmniboxTabSwitchButton : public views::MdTextButton {
   // The text to be displayed when we reach |goal_width_|.
   base::string16 goal_text_;
   std::unique_ptr<gfx::SlideAnimation> animation_;
+
+  // Label strings for hint text and its short version (may be same).
+  base::string16 hint_;
+  base::string16 hint_short_;
 
   DISALLOW_COPY_AND_ASSIGN(OmniboxTabSwitchButton);
 };

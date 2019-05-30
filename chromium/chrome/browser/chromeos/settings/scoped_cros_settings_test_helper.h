@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "chrome/browser/chromeos/settings/stub_cros_settings_provider.h"
 #include "chrome/browser/chromeos/settings/stub_install_attributes.h"
+#include "chromeos/dbus/fake_session_manager_client.h"
 #include "chromeos/settings/cros_settings_provider.h"
 
 class Profile;
@@ -25,6 +26,9 @@ class FakeOwnerSettingsService;
 class ScopedTestCrosSettings;
 class ScopedTestDeviceSettingsService;
 
+// Helps in a variety of ways with setting up CrosSettings for testing.
+// This class is overly complex for most use-cases - if possible, prefer to
+// use ScopedTestingCrosSettings for new tests.
 class ScopedCrosSettingsTestHelper {
  public:
   // In some cases it is required to pass |create_settings_service| as false:
@@ -34,17 +38,27 @@ class ScopedCrosSettingsTestHelper {
   explicit ScopedCrosSettingsTestHelper(bool create_settings_service = true);
   ~ScopedCrosSettingsTestHelper();
 
-  // Methods to replace and restore CrosSettingsProvider for the specified
-  // |path|.
-  void ReplaceProvider(const std::string& path);
-  void RestoreProvider();
+  // This replaces the DeviceSettingsProvider with a simple stub that stores
+  // settings in memory unsigned; see StubCrosSettingsProvider for more info.
+  void ReplaceDeviceSettingsProviderWithStub();
+  void RestoreRealDeviceSettingsProvider();
+  bool IsDeviceSettingsProviderStubbed();
 
   // Method to create an owner settings service that uses
   // |stub_settings_provider_| as settings write path.
   std::unique_ptr<FakeOwnerSettingsService> CreateOwnerSettingsService(
       Profile* profile);
 
-  // These methods simply call the according |stub_settings_provider_| method.
+  // Returns the stubbed CrosSettingsProvider - the one that is swapped into
+  // |CrosSettings| once |ReplaceDeviceSettingsProviderWithStub()| is called.
+  // Note that if you want to test the real DeviceSettingsProvider in your test
+  // (not a stub), you should set the settings using the OwnerSettingsService
+  // which uses the current user's private key to sign the settings.
+  StubCrosSettingsProvider* GetStubbedProvider();
+
+  // These methods simply call the appropriate method on |GetStubbedProvider()|.
+  // So if you use them, you need to make sure that a stubbed provider is used
+  // in your test by calling |ReplaceDeviceSettingsProviderWithStub()|.
   void SetTrustedStatus(CrosSettingsProvider::TrustedStatus status);
   void SetCurrentUserIsOwner(bool owner);
   void Set(const std::string& path, const base::Value& in_value);
@@ -56,14 +70,19 @@ class ScopedCrosSettingsTestHelper {
   void SetDouble(const std::string& path, double in_value);
   void SetString(const std::string& path, const std::string& in_value);
 
-  // This may be called before |ReplaceProvider| to copy values currently stored
-  // in the old provider. If the method is called after |ReplaceProvider|, then
-  // the value is retrieved from |real_settings_provider_| for any |path|.
+  // This may be called before or after |ReplaceDeviceSettingsProviderWithStub|
+  // is called. It reads the value for |path| from the original, real,
+  // DeviceSettingsProvider, and copies it to the stub DeviceSettingsProvider.
   void CopyStoredValue(const std::string& path);
 
-  // Write the setting from |path| to local state so that it can be retrieved
-  // later on browser test startup by the device settings service.
+  // Write the setting from |path| in the stub DeviceSettingsProvider to local
+  // state so that it can be retrieved later on browser test startup by the
+  // device settings service.
   void StoreCachedDeviceSetting(const std::string& path);
+
+  // Sets the underlying DeviceSettingsService session manager to a
+  // FakeSessionManagerClient.
+  void SetFakeSessionManager();
 
   // Get the scoped install attributes to change them as needed for the
   // current test.
@@ -71,6 +90,7 @@ class ScopedCrosSettingsTestHelper {
 
  private:
   // Helpers used to mock out cros settings.
+  FakeSessionManagerClient fake_session_manager_client_;
   std::unique_ptr<ScopedStubInstallAttributes> test_install_attributes_;
   std::unique_ptr<ScopedTestDeviceSettingsService>
       test_device_settings_service_;

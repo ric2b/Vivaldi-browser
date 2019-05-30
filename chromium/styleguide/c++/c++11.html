@@ -53,12 +53,12 @@ change this file accordingly, linking to your discussion thread.</p>
 </ol></li>
 <li>Banned Features<ol>
     <li>Language
-      <a href="#core-blacklist">C++11</a>
-      <a href="#core-blacklist-14">C++14</a>
+      <a href="#core-blocklist">C++11</a>
+      <a href="#core-blocklist-14">C++14</a>
     </li>
     <li>Library
-      <a href="#library-blacklist">C++11</a>
-      <a href="#library-blacklist-14">C++14</a>
+      <a href="#library-blocklist">C++11</a>
+      <a href="#library-blocklist-14">C++14</a>
     </li>
 </ol></li>
 <li>To Be Discussed<ol>
@@ -586,11 +586,23 @@ template &lt;typename T&gt;<br/>void Function(T&amp;&amp; t) { ... }</code></td>
 </tr>
 
 <tr>
-<td>Random Number Generators</td>
-<td><code>&lt;random&gt;</code></td>
-<td>Random number generation algorithms and utilities</td>
+<td>Random Number Distributions</td>
+<td>The random number distributions defined in <code>&lt;random&gt;</code> (see separate item for random number engines), e.g.:<br/>
+<code>uniform_int_distribution</code>, <code>uniform_real_distribution</code><br/>
+<code>poisson_distribution</code>, <code>gamma_distribution</code><br/>
+<code>normal_distribution</code>, <code>chi_squared_distribution</code><br/>
+</td>
+<td>Utilities for producing random distributions given a random bit generator.</td>
 <td><a href="http://en.cppreference.com/w/cpp/numeric/random">Pseudo-random number generation</a></td>
 <td>Because the standard does not define precisely how the <code><i>xxx</i>_distribution</code> objects generate output, the same object may produce different output for the same seed across platforms, or even across different versions of the STL. Do not use these objects in any scenario where behavioral consistency is required. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/MLgK9vCE4BA">Discussion thread</a></td>
+</tr>
+
+<tr>
+<td>Reference Wrapper Classes</td>
+<td><code>std::reference_wrapper</code> and <code>std::ref()</code>, <code>std::cref()</code></td>
+<td>Allows you to wrap a reference within a standard object (and use those within containers)</td>
+<td><a href="http://en.cppreference.com/w/cpp/utility/functional/reference_wrapper">std::reference_wrapper</a>, <a href="http://en.cppreference.com/w/cpp/utility/functional/ref">std::ref, std::cref</a></td>
+<td><a href="https://groups.google.com/a/chromium.org/d/msg/cxx/oVdPIhPji3E/sr4Dv0geAgAJ">Discussion thread</a></td>
 </tr>
 
 <tr>
@@ -715,11 +727,11 @@ template &lt;typename T&gt;<br/>void Function(T&amp;&amp; t) { ... }</code></td>
 </tbody>
 </table>
 
-<h2 id="blacklist">C++11 and C++14 Blacklist (Disallowed and Banned Features)</h2>
+<h2 id="blocklist">C++11 and C++14 Disallowed Features</h2>
 
 <p>This section lists features that are not allowed to be used yet.
 
-<h3 id="blacklist_banned"><a name="core-blacklist"></a>C++11 Banned Features</h3>
+<h3 id="blocklist_banned"><a name="core-blocklist"></a>C++11 Banned Features</h3>
 
 <p>This section lists C++11 features that are not allowed in the Chromium codebase.</p>
 
@@ -783,7 +795,7 @@ std::move(t).f();&nbsp;&nbsp;// second</code></td>
 </tbody>
 </table>
 
-<h3 id="blacklist_banned"><a name="core-blacklist-14"></a>C++14 Banned Features</h3>
+<h3 id="blocklist_banned"><a name="core-blocklist-14"></a>C++14 Banned Features</h3>
 
 <p>This section lists C++14 features that are not allowed in the Chromium codebase.</p>
 
@@ -802,11 +814,11 @@ std::move(t).f();&nbsp;&nbsp;// second</code></td>
 </tbody>
 </table>
 
-<h3 id="blacklist_stdlib"><a name="library-blacklist"></a>C++11 Banned Library Features</h3>
+<h3 id="blocklist_stdlib"><a name="library-blocklist"></a>C++11 Banned Library Features</h3>
 
 <p>This section lists C++11 library features that are not allowed in the Chromium codebase.</p>
 
-<table id="blacklist_lib_list" class="unlined striped">
+<table id="blocklist_lib_list" class="unlined striped">
 <tbody>
 
 <tr>
@@ -865,6 +877,18 @@ std::move(t).f();&nbsp;&nbsp;// second</code></td>
 </tr>
 
 <tr>
+<td>Random Number Engines</td>
+<td>The random number engines defined in <code>&lt;random&gt;</code> (see separate item for random number distributions), e.g.:<br/>
+<code>linear_congruential_engine</code>, <code>mersenne_twister_engine</code><br/>
+<code>minstd_rand0</code>, <code>mt19937</code>, <code>ranlinux48</code><br/>
+<code>random_device</code>
+</td>
+<td>Random number generation algorithms and utilities.</td>
+<td><a href="http://en.cppreference.com/w/cpp/numeric/random">Pseudo-random number generation</a></td>
+<td>Do not use any random number engines from <code>&lt;random&gt;</code>. Instead, use <code>base::RandomBitGenerator</code>. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/16Xmw05C-Y0">Discussion thread</a></td>
+</tr>
+
+<tr>
 <td>Ratio Template Class</td>
 <td><code>std::ratio&lt;<i>numerator</i>, <i>denominator</i>&gt;</code></td>
 <td>Provides compile-time rational numbers</td>
@@ -900,11 +924,11 @@ std::move(t).f();&nbsp;&nbsp;// second</code></td>
 </tbody>
 </table>
 
-<h3 id="blacklist_stdlib"><a name="library-blacklist-14"></a>C++14 Banned Library Features</h3>
+<h3 id="blocklist_stdlib"><a name="library-blocklist-14"></a>C++14 Banned Library Features</h3>
 
 <p>This section lists C++14 library features that are not allowed in the Chromium codebase.</p>
 
-<table id="blacklist_lib_list" class="unlined striped">
+<table id="blocklist_lib_list" class="unlined striped">
 <tbody>
 
 <tr>
@@ -926,11 +950,11 @@ std::move(t).f();&nbsp;&nbsp;// second</code></td>
 </tbody>
 </table>
 
-<h3 id="blacklist_review"><a name="core-review"></a>C++11 Features To Be Discussed</h3>
+<h3 id="blocklist_review"><a name="core-review"></a>C++11 Features To Be Discussed</h3>
 
 <p>The following C++ language features are currently disallowed. See the top of this page on how to propose moving a feature from this list into the allowed or banned sections.</p>
 
-<table id="blacklist_review_list" class="unlined striped">
+<table id="blocklist_review_list" class="unlined striped">
 <tbody>
 
 <tr>
@@ -968,11 +992,11 @@ std::move(t).f();&nbsp;&nbsp;// second</code></td>
 </tbody>
 </table>
 
-<h3 id="blacklist_review"><a name="core-review-14"></a>C++14 Features To Be Discussed</h3>
+<h3 id="blocklist_review"><a name="core-review-14"></a>C++14 Features To Be Discussed</h3>
 
 <p>The following C++14 language features are currently disallowed. See the top of this page on how to propose moving a feature from this list into the allowed or banned sections.</p>
 
-<table id="blacklist_review_list" class="unlined striped">
+<table id="blocklist_review_list" class="unlined striped">
 <tbody>
 
 <tr>
@@ -1020,7 +1044,7 @@ something, remove all callers and remove the function instead.</td>
 </tbody>
 </table>
 
-<h3 id="blacklist_stdlib_review"><a name="library-review"></a>C++11 Standard Library Features To Be Discussed</h3>
+<h3 id="blocklist_stdlib_review"><a name="library-review"></a>C++11 Standard Library Features To Be Discussed</h3>
 
 <p>The following C++ library features are currently disallowed. See the top of this page on how to propose moving a feature from this list into the allowed or banned sections.</p>
 
@@ -1116,14 +1140,6 @@ something, remove all callers and remove the function instead.</td>
 </tr>
 
 <tr>
-<td>Reference Wrapper Classes</td>
-<td><code>std::reference_wrapper</code> and <code>std::ref()</code>, <code>std::cref()</code></td>
-<td>Allows you to wrap a reference within a standard object (and use those within containers)</td>
-<td><a href="http://en.cppreference.com/w/cpp/utility/functional/reference_wrapper">std::reference_wrapper</a></td>
-<td></td>
-</tr>
-
-<tr>
 <td>Soft Program Exits</td>
 <td><code>std::at_quick_exit()</code>, <code>std::quick_exit()</code></td>
 <td>Allows registration of functions to be called upon exit, allowing cleaner program exit than <code>abort()</code> or <code>exit</code></td>
@@ -1191,7 +1207,7 @@ something, remove all callers and remove the function instead.</td>
 </tbody>
 </table>
 
-<h3 id="blacklist_stdlib_review"><a name="library-review-14"></a>C++14 Standard Library Features To Be Discussed</h3>
+<h3 id="blocklist_stdlib_review"><a name="library-review-14"></a>C++14 Standard Library Features To Be Discussed</h3>
 
 <p>The following C++14 library features are currently disallowed. See the top of this page on how to propose moving a feature from this list into the allowed or banned sections.</p>
 

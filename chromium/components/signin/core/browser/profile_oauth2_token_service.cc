@@ -4,19 +4,65 @@
 
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 
+#include "base/auto_reset.h"
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/signin/core/browser/device_id_helper.h"
 #include "components/signin/core/browser/signin_pref_names.h"
 
+using signin_metrics::SourceForRefreshTokenOperation;
+
+namespace {
+std::string SourceToString(SourceForRefreshTokenOperation source) {
+  switch (source) {
+    case SourceForRefreshTokenOperation::kUnknown:
+      return "Unknown";
+    case SourceForRefreshTokenOperation::kTokenService_LoadCredentials:
+      return "TokenService::LoadCredentials";
+    case SourceForRefreshTokenOperation::kSupervisedUser_InitSync:
+      return "SupervisedUser::InitSync";
+    case SourceForRefreshTokenOperation::kInlineLoginHandler_Signin:
+      return "InlineLoginHandler::Signin";
+    case SourceForRefreshTokenOperation::kSigninManager_ClearPrimaryAccount:
+      return "SigninManager::ClearPrimaryAccount";
+    case SourceForRefreshTokenOperation::kSigninManager_LegacyPreDiceSigninFlow:
+      return "SigninManager::LegacyPreDiceSigninFlow";
+    case SourceForRefreshTokenOperation::kUserMenu_RemoveAccount:
+      return "UserMenu::RemoveAccount";
+    case SourceForRefreshTokenOperation::kUserMenu_SignOutAllAccounts:
+      return "UserMenu::SignOutAllAccounts";
+    case SourceForRefreshTokenOperation::kSettings_Signout:
+      return "Settings::Signout";
+    case SourceForRefreshTokenOperation::kSettings_PauseSync:
+      return "Settings::PauseSync";
+    case SourceForRefreshTokenOperation::
+        kAccountReconcilor_GaiaCookiesDeletedByUser:
+      return "AccountReconcilor::GaiaCookiesDeletedByUser";
+    case SourceForRefreshTokenOperation::kAccountReconcilor_GaiaCookiesUpdated:
+      return "AccountReconcilor::GaiaCookiesUpdated";
+    case SourceForRefreshTokenOperation::kAccountReconcilor_Reconcile:
+      return "AccountReconcilor::Reconcile";
+    case SourceForRefreshTokenOperation::kDiceResponseHandler_Signin:
+      return "DiceResponseHandler::Signin";
+    case SourceForRefreshTokenOperation::kDiceResponseHandler_Signout:
+      return "DiceResponseHandler::Signout";
+    case SourceForRefreshTokenOperation::kDiceTurnOnSyncHelper_Abort:
+      return "DiceTurnOnSyncHelper::Abort";
+    case SourceForRefreshTokenOperation::kMachineLogon_CredentialProvider:
+      return "MachineLogon::CredentialProvider";
+    case SourceForRefreshTokenOperation::kTokenService_ExtractCredentials:
+      return "TokenService::ExtractCredentials";
+  }
+}
+}  // namespace
+
 ProfileOAuth2TokenService::ProfileOAuth2TokenService(
     PrefService* user_prefs,
     std::unique_ptr<OAuth2TokenServiceDelegate> delegate)
     : OAuth2TokenService(std::move(delegate)),
       user_prefs_(user_prefs),
-      all_credentials_loaded_(false),
-      diagnostics_client_(nullptr) {
+      all_credentials_loaded_(false) {
   DCHECK(user_prefs_);
   AddObserver(this);
 }
@@ -44,6 +90,10 @@ void ProfileOAuth2TokenService::Shutdown() {
 
 void ProfileOAuth2TokenService::LoadCredentials(
     const std::string& primary_account_id) {
+  DCHECK_EQ(SourceForRefreshTokenOperation::kUnknown,
+            update_refresh_token_source_);
+  update_refresh_token_source_ =
+      SourceForRefreshTokenOperation::kTokenService_LoadCredentials;
   GetDelegate()->LoadCredentials(primary_account_id);
 }
 
@@ -53,18 +103,44 @@ bool ProfileOAuth2TokenService::AreAllCredentialsLoaded() {
 
 void ProfileOAuth2TokenService::UpdateCredentials(
     const std::string& account_id,
-    const std::string& refresh_token) {
+    const std::string& refresh_token,
+    SourceForRefreshTokenOperation source) {
+  base::AutoReset<SourceForRefreshTokenOperation> auto_reset(
+      &update_refresh_token_source_, source);
   GetDelegate()->UpdateCredentials(account_id, refresh_token);
 }
 
 void ProfileOAuth2TokenService::RevokeCredentials(
-    const std::string& account_id) {
+    const std::string& account_id,
+    SourceForRefreshTokenOperation source) {
+  base::AutoReset<SourceForRefreshTokenOperation> auto_reset(
+      &update_refresh_token_source_, source);
   GetDelegate()->RevokeCredentials(account_id);
+}
+
+void ProfileOAuth2TokenService::RevokeAllCredentials(
+    SourceForRefreshTokenOperation source) {
+  base::AutoReset<SourceForRefreshTokenOperation> auto_reset(
+      &update_refresh_token_source_, source);
+  CancelAllRequests();
+  ClearCache();
+  GetDelegate()->RevokeAllCredentials();
 }
 
 const net::BackoffEntry* ProfileOAuth2TokenService::GetDelegateBackoffEntry() {
   return GetDelegate()->BackoffEntry();
 }
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+void ProfileOAuth2TokenService::ExtractCredentials(
+    ProfileOAuth2TokenService* to_service,
+    const std::string& account_id) {
+  base::AutoReset<SourceForRefreshTokenOperation> auto_reset(
+      &update_refresh_token_source_,
+      SourceForRefreshTokenOperation::kTokenService_ExtractCredentials);
+  GetDelegate()->ExtractCredentials(to_service, account_id);
+}
+#endif
 
 void ProfileOAuth2TokenService::OnRefreshTokenAvailable(
     const std::string& account_id) {
@@ -78,16 +154,17 @@ void ProfileOAuth2TokenService::OnRefreshTokenAvailable(
     is_valid = false;
   }
 
-  // NOTE: The code executed in the rest of this method does not affect the
-  // state of the accounts in this object, so it doesn't matter whether the
-  // callout to |diagnostics_client_| is made before or after. If that fact ever
-  // changes, it will be necessary to reason about what the ordering should be.
-  if (diagnostics_client_) {
-    diagnostics_client_->WillFireOnRefreshTokenAvailable(account_id, is_valid);
-  }
-
   CancelRequestsForAccount(account_id);
   ClearCacheForAccount(account_id);
+
+  signin_metrics::RecordRefreshTokenUpdatedFromSource(
+      is_valid, update_refresh_token_source_);
+
+  std::string source_string = SourceToString(update_refresh_token_source_);
+  for (auto& diagnostic_observer : GetDiagnicsObservers()) {
+    diagnostic_observer.OnRefreshTokenAvailableFromSource(account_id, is_valid,
+                                                          source_string);
+  }
 }
 
 void ProfileOAuth2TokenService::OnRefreshTokenRevoked(
@@ -95,55 +172,62 @@ void ProfileOAuth2TokenService::OnRefreshTokenRevoked(
   // If this was the last token, recreate the device ID.
   RecreateDeviceIdIfNeeded();
 
-  // NOTE: The code executed in the rest of this method does not affect the
-  // state of the accounts in this object, so it doesn't matter whether the
-  // callout to |diagnostics_client_| is made before or after. If that fact ever
-  // changes, it will be necessary to reason about what the ordering should be.
-  if (diagnostics_client_) {
-    diagnostics_client_->WillFireOnRefreshTokenRevoked(account_id);
-  }
-
   CancelRequestsForAccount(account_id);
   ClearCacheForAccount(account_id);
+
+  signin_metrics::RecordRefreshTokenRevokedFromSource(
+      update_refresh_token_source_);
+  std::string source_string = SourceToString(update_refresh_token_source_);
+  for (auto& diagnostic_observer : GetDiagnicsObservers()) {
+    diagnostic_observer.OnRefreshTokenRevokedFromSource(account_id,
+                                                        source_string);
+  }
 }
 
 void ProfileOAuth2TokenService::OnRefreshTokensLoaded() {
+  DCHECK_NE(OAuth2TokenServiceDelegate::LOAD_CREDENTIALS_NOT_STARTED,
+            GetDelegate()->load_credentials_state());
+  DCHECK_NE(OAuth2TokenServiceDelegate::LOAD_CREDENTIALS_IN_PROGRESS,
+            GetDelegate()->load_credentials_state());
+
+  all_credentials_loaded_ = true;
+
+  // Reset the state for update refresh token operations to Unknown as this
+  // was the original state before LoadCredentials was called.
+  update_refresh_token_source_ = SourceForRefreshTokenOperation::kUnknown;
+
   // Ensure the device ID is not empty, and recreate it if all tokens were
   // cleared during the loading process.
   RecreateDeviceIdIfNeeded();
+}
 
-  all_credentials_loaded_ = true;
+bool ProfileOAuth2TokenService::HasLoadCredentialsFinishedWithNoErrors() {
+  switch (GetDelegate()->load_credentials_state()) {
+    case OAuth2TokenServiceDelegate::LOAD_CREDENTIALS_NOT_STARTED:
+    case OAuth2TokenServiceDelegate::LOAD_CREDENTIALS_IN_PROGRESS:
+      // LoadCredentials has not finished.
+      return false;
+    case OAuth2TokenServiceDelegate::LOAD_CREDENTIALS_FINISHED_WITH_DB_ERRORS:
+    case OAuth2TokenServiceDelegate::
+        LOAD_CREDENTIALS_FINISHED_WITH_DECRYPT_ERRORS:
+    case OAuth2TokenServiceDelegate::
+        LOAD_CREDENTIALS_FINISHED_WITH_UNKNOWN_ERRORS:
+      // LoadCredentials finished, but with errors
+      return false;
+    case OAuth2TokenServiceDelegate::LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS:
+    case OAuth2TokenServiceDelegate::
+        LOAD_CREDENTIALS_FINISHED_WITH_NO_TOKEN_FOR_PRIMARY_ACCOUNT:
+      // Load credentials finished with success.
+      return true;
+  }
 }
 
 void ProfileOAuth2TokenService::RecreateDeviceIdIfNeeded() {
 // On ChromeOS the device ID is not managed by the token service.
 #if !defined(OS_CHROMEOS)
-  // Re-create a new device ID if needed.
-  switch (GetDelegate()->GetLoadCredentialsState()) {
-    case OAuth2TokenServiceDelegate::LOAD_CREDENTIALS_UNKNOWN:
-    case OAuth2TokenServiceDelegate::LOAD_CREDENTIALS_NOT_STARTED:
-    case OAuth2TokenServiceDelegate::LOAD_CREDENTIALS_IN_PROGRESS:
-      // TODO(droger): Add a DCHECK here, because this would mean that the token
-      // service is being used before tokens are loaded. This currently would
-      // fire in tests though.
-      return;
-    case OAuth2TokenServiceDelegate::LOAD_CREDENTIALS_FINISHED_WITH_DB_ERRORS:
-    case OAuth2TokenServiceDelegate::
-        LOAD_CREDENTIALS_FINISHED_WITH_DECRYPT_ERRORS:
-      // Do not recreate a new device ID if Chrome fails to decrypt tokens as it
-      // may successfully load them on the next restart.
-      return;
-    case OAuth2TokenServiceDelegate::LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS:
-    case OAuth2TokenServiceDelegate::
-        LOAD_CREDENTIALS_FINISHED_WITH_NO_TOKEN_FOR_PRIMARY_ACCOUNT:
-    case OAuth2TokenServiceDelegate::
-        LOAD_CREDENTIALS_FINISHED_WITH_UNKNOWN_ERRORS:
-      // this is the only case when we recreate the device ID.
-      if (GetAccounts().empty())
-        signin::RecreateSigninScopedDeviceId(user_prefs_);
-      return;
+  if (AreAllCredentialsLoaded() && HasLoadCredentialsFinishedWithNoErrors() &&
+      GetAccounts().empty()) {
+    signin::RecreateSigninScopedDeviceId(user_prefs_);
   }
-
-  NOTREACHED();
 #endif
 }

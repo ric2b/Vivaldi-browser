@@ -8,15 +8,15 @@ import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.ItemAnimator;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.modelutil.PropertyKey;
-import org.chromium.chrome.browser.modelutil.PropertyModel;
-import org.chromium.chrome.browser.modelutil.PropertyModelChangeProcessor.ViewBinder;
+import org.chromium.ui.modelutil.PropertyKey;
+import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.modelutil.PropertyModelChangeProcessor.ViewBinder;
 
 class ListPropertyViewBinder implements ViewBinder<PropertyModel, RecyclerView, PropertyKey> {
     @Override
     public void bind(PropertyModel model, RecyclerView view, PropertyKey propertyKey) {
         if (propertyKey == ListProperties.ENABLE_ITEM_ANIMATIONS) {
-            if (model.getValue(ListProperties.ENABLE_ITEM_ANIMATIONS)) {
+            if (model.get(ListProperties.ENABLE_ITEM_ANIMATIONS)) {
                 if (view.getItemAnimator() == null) {
                     view.setItemAnimator((ItemAnimator) view.getTag(R.id.item_animator));
                     view.setTag(R.id.item_animator, null);
@@ -35,6 +35,7 @@ class ListPropertyViewBinder implements ViewBinder<PropertyModel, RecyclerView, 
                 || propertyKey == ListProperties.CALLBACK_REMOVE
                 || propertyKey == ListProperties.PROVIDER_VISUALS
                 || propertyKey == ListProperties.CALLBACK_SELECTION
+                || propertyKey == ListProperties.CALLBACK_RENAME
                 || propertyKey == ListProperties.SELECTION_MODE_ACTIVE) {
             view.getAdapter().notifyItemRangeChanged(0, view.getAdapter().getItemCount());
         }

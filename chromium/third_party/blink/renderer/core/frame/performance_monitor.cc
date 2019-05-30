@@ -9,7 +9,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/scheduled_action.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
-#include "third_party/blink/renderer/core/CoreProbeSink.h"
+#include "third_party/blink/renderer/core/core_probe_sink.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event_listener.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -28,7 +28,7 @@ constexpr auto kLongTaskSubTaskThreshold = TimeDelta::FromMilliseconds(12);
 
 void PerformanceMonitor::BypassLongCompileThresholdOnceForTesting() {
   bypass_long_compile_threshold_ = true;
-};
+}
 
 // static
 base::TimeDelta PerformanceMonitor::Threshold(ExecutionContext* context,
@@ -56,9 +56,10 @@ void PerformanceMonitor::ReportGenericViolation(
 // static
 PerformanceMonitor* PerformanceMonitor::Monitor(
     const ExecutionContext* context) {
-  if (!context || !context->IsDocument())
+  const auto* document = DynamicTo<Document>(context);
+  if (!document)
     return nullptr;
-  LocalFrame* frame = ToDocument(context)->GetFrame();
+  LocalFrame* frame = document->GetFrame();
   if (!frame)
     return nullptr;
   return frame->GetPerformanceMonitor();
@@ -74,8 +75,8 @@ PerformanceMonitor* PerformanceMonitor::InstrumentingMonitor(
 PerformanceMonitor::PerformanceMonitor(LocalFrame* local_root)
     : local_root_(local_root) {
   std::fill(std::begin(thresholds_), std::end(thresholds_), base::TimeDelta());
-  Platform::Current()->CurrentThread()->AddTaskTimeObserver(this);
-  local_root_->GetProbeSink()->addPerformanceMonitor(this);
+  Thread::Current()->AddTaskTimeObserver(this);
+  local_root_->GetProbeSink()->AddPerformanceMonitor(this);
 }
 
 PerformanceMonitor::~PerformanceMonitor() {
@@ -88,7 +89,7 @@ void PerformanceMonitor::Subscribe(Violation violation,
   DCHECK(violation < kAfterLast);
   ClientThresholds* client_thresholds = subscriptions_.at(violation);
   if (!client_thresholds) {
-    client_thresholds = new ClientThresholds();
+    client_thresholds = MakeGarbageCollected<ClientThresholds>();
     subscriptions_.Set(violation, client_thresholds);
   }
   client_thresholds->Set(client, threshold);
@@ -106,8 +107,8 @@ void PerformanceMonitor::Shutdown() {
     return;
   subscriptions_.clear();
   UpdateInstrumentation();
-  Platform::Current()->CurrentThread()->RemoveTaskTimeObserver(this);
-  local_root_->GetProbeSink()->removePerformanceMonitor(this);
+  Thread::Current()->RemoveTaskTimeObserver(this);
+  local_root_->GetProbeSink()->RemovePerformanceMonitor(this);
   local_root_ = nullptr;
 }
 
@@ -146,10 +147,11 @@ void PerformanceMonitor::DidExecuteScript() {
 
 void PerformanceMonitor::UpdateTaskAttribution(ExecutionContext* context) {
   // If |context| is not a document, unable to attribute a frame context.
-  if (!context || !context->IsDocument())
+  auto* document = DynamicTo<Document>(context);
+  if (!document)
     return;
 
-  UpdateTaskShouldBeReported(ToDocument(context)->GetFrame());
+  UpdateTaskShouldBeReported(document->GetFrame());
   if (!task_execution_context_)
     task_execution_context_ = context;
   else if (task_execution_context_ != context)
@@ -236,7 +238,7 @@ void PerformanceMonitor::Did(const probe::CallFunction& probe) {
     return;
 
   String name = user_callback->name ? String(user_callback->name)
-                                    : String(user_callback->atomicName);
+                                    : String(user_callback->atomic_name);
   String text = String::Format("'%s' handler took %" PRId64 "ms",
                                name.Utf8().data(), duration.InMilliseconds());
   InnerReportGenericViolation(probe.context, handler_type, text, duration,

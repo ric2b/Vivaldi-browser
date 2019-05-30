@@ -14,6 +14,8 @@ cr.define('custom_margins_test', function() {
     LayoutClearsCustomMargins: 'layout clears custom margins',
     IgnoreDocumentMarginsFromPDF: 'ignore document margins from pdf',
     MediaSizeClearsCustomMarginsPDF: 'media size clears custom margins pdf',
+    RequestScrollToOutOfBoundsTextbox:
+        'request scroll to out of bounds textbox',
   };
 
   const suiteName = 'CustomMarginsTest';
@@ -142,8 +144,9 @@ cr.define('custom_margins_test', function() {
      * @param {number} end The ending position for the control in pixels.
      */
     function dragControl(control, start, end) {
-      if (window.getComputedStyle(control)['pointer-events'] === 'none')
+      if (window.getComputedStyle(control)['pointer-events'] === 'none') {
         return;
+      }
 
       let xStart = 0;
       let yStart = 0;
@@ -195,9 +198,11 @@ cr.define('custom_margins_test', function() {
           Math.round(parseFloat(input) * pointsPerInch);
       assertEquals(
           currentValuePts, container.getSettingValue('customMargins')[key]);
-      controlTextbox = control.$.textbox;
+      controlTextbox = control.$.textbox.inputElement;
       controlTextbox.value = input;
-      controlTextbox.dispatchEvent(new CustomEvent('input'));
+      controlTextbox.dispatchEvent(
+          new CustomEvent('input', {composed: true, bubbles: true}));
+
       return test_util.eventToPromise('text-change', control).then(() => {
         assertEquals(
             newValuePts, container.getSettingValue('customMargins')[key]);
@@ -542,6 +547,64 @@ cr.define('custom_margins_test', function() {
           'mediaSize', {height_microns: 200000, width_microns: 200000});
     });
 
+    function whenAnimationFrameDone() {
+      return new Promise(resolve => window.requestAnimationFrame(resolve));
+    }
+
+    // Test that if the user focuses a textbox that is not visible, the
+    // text-focus event is fired with the correct values to scroll by.
+    test(assert(TestNames.RequestScrollToOutOfBoundsTextbox), function() {
+      return finishSetup()
+          .then(() => {
+            // Wait for the controls to be set up, which occurs in an
+            // animation frame.
+            return whenAnimationFrameDone();
+          })
+          .then(() => {
+            const onTransitionEnd = getAllTransitions(getControls());
+
+            // Controls become visible when margin type CUSTOM is selected.
+            container.set(
+                'settings.margins.value',
+                print_preview.ticket_items.MarginsTypeValue.CUSTOM);
+            container.notifyPath('settings.customMargins.value');
+            Polymer.dom.flush();
+            return onTransitionEnd;
+          })
+          .then(() => {
+            // Zoom in by 2x, so that some margin controls will not be visible.
+            container.updateScaleTransform(pixelsPerInch * 2 / pointsPerInch);
+            Polymer.dom.flush();
+            return whenAnimationFrameDone();
+          })
+          .then(() => {
+            const controls = getControls();
+            assertEquals(4, controls.length);
+
+            // Focus the bottom control, which is currently not visible since
+            // the viewer is showing only the top left quarter of the page.
+            const bottomControl = controls[2];
+            const whenEventFired =
+                test_util.eventToPromise('text-focus-position', container);
+            bottomControl.$.textbox.focus();
+            // Workaround for mac so that this does not need to be an
+            // interactive test: manually fire the focus event from the control.
+            bottomControl.fire('text-focus');
+            return whenEventFired;
+          })
+          .then((args) => {
+            // Shifts left by padding of 50px to ensure that the full textbox is
+            // visible.
+            assertEquals(50, args.detail.x);
+
+            // Offset top will be 2097 = 200 px/in / 72 pts/in * (794pts -
+            // 36ptx) - 9px radius of line
+            // Height of the clip box is 200 px/in * 11in = 2200px
+            // Shifts down by offsetTop = 2097 - height / 2 + padding = 1047px.
+            // This will ensure that the textbox is in the visible area.
+            assertEquals(1047, args.detail.y);
+          });
+    });
   });
 
   return {

@@ -34,7 +34,7 @@ static const int kClientViewIndex = 1;
 // NonClientFrameView, default implementations:
 
 bool NonClientFrameView::GetClientMask(const gfx::Size& size,
-                                       gfx::Path* mask) const {
+                                       SkPath* mask) const {
   return false;
 }
 
@@ -43,7 +43,6 @@ bool NonClientFrameView::GetClientMask(const gfx::Size& size,
 
 NonClientView::NonClientView()
     : client_view_(nullptr),
-      mirror_client_in_rtl_(true),
       overlay_view_(nullptr) {
   SetEventTargeter(
       std::unique_ptr<views::ViewTargeter>(new views::ViewTargeter(this)));
@@ -103,8 +102,7 @@ int NonClientView::NonClientHitTest(const gfx::Point& point) {
   return frame_view_->NonClientHitTest(point);
 }
 
-void NonClientView::GetWindowMask(const gfx::Size& size,
-                                  gfx::Path* window_mask) {
+void NonClientView::GetWindowMask(const gfx::Size& size, SkPath* window_mask) {
   frame_view_->GetWindowMask(size, window_mask);
 }
 
@@ -166,10 +164,6 @@ void NonClientView::Layout() {
   // Then layout the ClientView, using those bounds.
   gfx::Rect client_bounds = frame_view_->GetBoundsForClientView();
 
-  // RTL code will mirror the ClientView in the frame by default.  If this isn't
-  // desired, do a second mirror here to get the standard LTR position.
-  if (base::i18n::IsRTL() && !mirror_client_in_rtl_)
-    client_bounds.set_x(GetMirroredXForRect(client_bounds));
 
   if (client_bounds != client_view_->bounds()) {
     client_view_->SetBoundsRect(client_bounds);
@@ -177,7 +171,7 @@ void NonClientView::Layout() {
     client_view_->Layout();
   }
 
-  gfx::Path client_clip;
+  SkPath client_clip;
   if (frame_view_->GetClientMask(client_view_->size(), &client_clip))
     client_view_->set_clip_path(client_clip);
 
@@ -322,6 +316,10 @@ void NonClientFrameView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 
 const char* NonClientFrameView::GetClassName() const {
   return kViewClassName;
+}
+
+void NonClientFrameView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
+  SchedulePaint();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

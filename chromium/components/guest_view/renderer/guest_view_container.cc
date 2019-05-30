@@ -4,6 +4,7 @@
 
 #include "components/guest_view/renderer/guest_view_container.h"
 
+#include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -189,7 +190,8 @@ void GuestViewContainer::RunDestructionCallback(bool embedder_frame_destroyed) {
     v8::MicrotasksScope microtasks(
         destruction_isolate_, v8::MicrotasksScope::kDoNotRunMicrotasks);
 
-    callback->Call(context->Global(), 0 /* argc */, nullptr);
+    callback->Call(context, context->Global(), 0 /* argc */, nullptr)
+        .FromMaybe(v8::Local<v8::Value>());
   }
 }
 
@@ -277,7 +279,8 @@ void GuestViewContainer::CallElementResizeCallback(
   v8::MicrotasksScope microtasks(
       element_resize_isolate_, v8::MicrotasksScope::kDoNotRunMicrotasks);
 
-  callback->Call(context->Global(), argc, argv);
+  callback->Call(context, context->Global(), argc, argv)
+      .FromMaybe(v8::Local<v8::Value>());
 }
 
 base::WeakPtr<content::BrowserPluginDelegate> GuestViewContainer::GetWeakPtr() {

@@ -23,10 +23,14 @@ struct WebSize;
 class MODULES_EXPORT BackgroundFetchIconLoader final
     : public GarbageCollectedFinalized<BackgroundFetchIconLoader>,
       public ThreadableLoaderClient {
+  USING_GARBAGE_COLLECTED_MIXIN(BackgroundFetchIconLoader);
+
  public:
-  // The bitmap may be empty if the request failed or the image data
-  // could not be decoded.
-  using IconCallback = base::OnceCallback<void(const SkBitmap&)>;
+  // The bitmap may be empty if the request failed or the image data could not
+  // be decoded. The int64_t returned is the scale of the ideal to chosen icon,
+  // before resizing. This is -1 if the ideal icon size is empty, or if no icon
+  // provided was suitable.
+  using IconCallback = base::OnceCallback<void(const SkBitmap&, int64_t)>;
 
   BackgroundFetchIconLoader();
   ~BackgroundFetchIconLoader() override;
@@ -35,7 +39,7 @@ class MODULES_EXPORT BackgroundFetchIconLoader final
   // data, and passes the bitmap to the given callback.
   void Start(BackgroundFetchBridge* bridge,
              ExecutionContext* execution_context,
-             HeapVector<ManifestImageResource> icons,
+             HeapVector<Member<ManifestImageResource>> icons,
              IconCallback icon_callback);
 
   // Cancels the pending load, if there is one. The |icon_callback_| will not
@@ -48,15 +52,16 @@ class MODULES_EXPORT BackgroundFetchIconLoader final
   void DidFail(const ResourceError& error) override;
   void DidFailRedirectCheck() override;
 
-  void Trace(blink::Visitor* visitor) {
+  void Trace(blink::Visitor* visitor) override {
     visitor->Trace(threadable_loader_);
     visitor->Trace(icons_);
+    ThreadableLoaderClient::Trace(visitor);
   }
 
  private:
   friend class BackgroundFetchIconLoaderTest;
 
-  void RunCallback();
+  void RunCallback(int64_t ideal_to_chosen_icon_size_times_hundred);
   void RunCallbackWithEmptyBitmap();
 
   // Callback for BackgroundFetchBridge::GetIconDisplaySize()
@@ -79,7 +84,7 @@ class MODULES_EXPORT BackgroundFetchIconLoader final
   // Called when the image has been decoded and resized on a background thread.
   void DidFinishDecoding();
 
-  HeapVector<ManifestImageResource> icons_;
+  HeapVector<Member<ManifestImageResource>> icons_;
   IconCallback icon_callback_;
 
   Member<ThreadableLoader> threadable_loader_;

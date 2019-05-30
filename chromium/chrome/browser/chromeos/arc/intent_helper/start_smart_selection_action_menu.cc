@@ -5,9 +5,11 @@
 #include "chrome/browser/chromeos/arc/intent_helper/start_smart_selection_action_menu.h"
 
 #include <algorithm>
+#include <string>
 #include <utility>
 
 #include "base/bind.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -18,6 +20,7 @@
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/common/intent_helper.mojom.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
+#include "components/arc/metrics/arc_metrics_constants.h"
 #include "components/renderer_context_menu/render_view_context_menu_proxy.h"
 #include "content/public/common/context_menu_params.h"
 #include "ui/gfx/image/image_skia.h"
@@ -42,7 +45,8 @@ void StartSmartSelectionActionMenu::InitMenu(
   if (!base::FeatureList::IsEnabled(kSmartTextSelectionFeature))
     return;
 
-  if (params.selection_text.empty())
+  const std::string converted_text = base::UTF16ToUTF8(params.selection_text);
+  if (converted_text.empty())
     return;
 
   auto* arc_service_manager = ArcServiceManager::Get();
@@ -56,15 +60,14 @@ void StartSmartSelectionActionMenu::InitMenu(
 
   base::RecordAction(base::UserMetricsAction("Arc.SmartTextSelection.Request"));
   instance->RequestTextSelectionActions(
-      base::UTF16ToUTF8(params.selection_text),
-      mojom::ScaleFactor(ui::GetSupportedScaleFactors().back()),
+      converted_text, mojom::ScaleFactor(ui::GetSupportedScaleFactors().back()),
       base::BindOnce(&StartSmartSelectionActionMenu::HandleTextSelectionActions,
                      weak_ptr_factory_.GetWeakPtr()));
 
   // Add placeholder items.
   for (size_t i = 0; i < kMaxMainMenuCommands; ++i) {
     proxy_->AddMenuItem(IDC_CONTENT_CONTEXT_START_SMART_SELECTION_ACTION1 + i,
-                        /*title=*/base::EmptyString16());
+                        /*title=*/base::string16());
   }
 }
 
@@ -99,6 +102,11 @@ void StartSmartSelectionActionMenu::ExecuteCommand(int command_id) {
 
   instance->HandleIntent(std::move(actions_[index]->action_intent),
                          std::move(actions_[index]->activity));
+
+  UMA_HISTOGRAM_ENUMERATION(
+      "Arc.UserInteraction",
+      arc::UserInteractionType::
+          APP_STARTED_FROM_SMART_TEXT_SELECTION_CONTEXT_MENU);
 }
 
 void StartSmartSelectionActionMenu::HandleTextSelectionActions(

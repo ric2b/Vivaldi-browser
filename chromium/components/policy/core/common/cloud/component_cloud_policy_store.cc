@@ -9,6 +9,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
@@ -21,7 +22,6 @@
 #include "components/policy/core/common/cloud/resource_cache.h"
 #include "components/policy/core/common/external_data_fetcher.h"
 #include "components/policy/core/common/policy_map.h"
-#include "components/policy/core/common/policy_types.h"
 #include "components/policy/proto/chrome_extension_policy.pb.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "crypto/sha2.h"
@@ -86,14 +86,18 @@ ComponentCloudPolicyStore::Delegate::~Delegate() {}
 ComponentCloudPolicyStore::ComponentCloudPolicyStore(
     Delegate* delegate,
     ResourceCache* cache,
-    const std::string& policy_type)
+    const std::string& policy_type,
+    PolicySource policy_source)
     : delegate_(delegate),
       cache_(cache),
-      domain_constants_(GetDomainConstantsForType(policy_type)) {
+      domain_constants_(GetDomainConstantsForType(policy_type)),
+      policy_source_(policy_source) {
   // Allow the store to be created on a different thread than the thread that
   // will end up using it.
   DETACH_FROM_SEQUENCE(sequence_checker_);
   DCHECK(domain_constants_);
+  DCHECK(policy_source == POLICY_SOURCE_CLOUD ||
+         policy_source == POLICY_SOURCE_PRIORITY_CLOUD);
 }
 
 ComponentCloudPolicyStore::~ComponentCloudPolicyStore() {
@@ -122,8 +126,7 @@ bool ComponentCloudPolicyStore::GetPolicyDomain(const std::string& policy_type,
 const std::string& ComponentCloudPolicyStore::GetCachedHash(
     const PolicyNamespace& ns) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  std::map<PolicyNamespace, std::string>::const_iterator it =
-      cached_hashes_.find(ns);
+  auto it = cached_hashes_.find(ns);
   return it == cached_hashes_.end() ? base::EmptyString() : it->second;
 }
 
@@ -150,7 +153,7 @@ void ComponentCloudPolicyStore::Load() {
   // Load cached policy protobuf for the assoicated domain.
   ContentMap protos;
   cache_->LoadAllSubkeys(domain_constants_->proto_cache_key, &protos);
-  for (ContentMap::iterator it = protos.begin(); it != protos.end(); ++it) {
+  for (auto it = protos.begin(); it != protos.end(); ++it) {
     const std::string& id(it->first);
     const PolicyNamespace ns(domain_constants_->domain, id);
 
@@ -172,7 +175,7 @@ void ComponentCloudPolicyStore::Load() {
 
     // The protobuf looks good; load the policy data.
     std::string data;
-    if (!cache_->Load(domain_constants_->data_cache_key, id, &data)) {
+    if (cache_->Load(domain_constants_->data_cache_key, id, &data).empty()) {
       LOG(ERROR) << "Failed to load the cached policy data.";
       Delete(ns);
       continue;
@@ -263,12 +266,12 @@ void ComponentCloudPolicyStore::Purge(const PurgeFilter& filter) {
 
   // Purge cached hashes, so that those namespaces can be fetched again if the
   // policy state changes.
-  std::map<PolicyNamespace, std::string>::iterator it = cached_hashes_.begin();
+  auto it = cached_hashes_.begin();
   while (it != cached_hashes_.end()) {
     const PolicyNamespace ns(it->first);
     DCHECK_EQ(ns.domain, domain_constants_->domain);
     if (filter.Run(domain_constants_->domain, ns.component_id)) {
-      std::map<PolicyNamespace, std::string>::iterator prev = it;
+      auto prev = it;
       ++it;
       cached_hashes_.erase(prev);
       DCHECK(stored_policy_times_.count(ns));
@@ -391,9 +394,10 @@ bool ComponentCloudPolicyStore::ValidateData(const std::string& data,
 bool ComponentCloudPolicyStore::ParsePolicy(const std::string& data,
                                             PolicyMap* policy) {
   std::string json_reader_error_message;
-  std::unique_ptr<base::Value> json = base::JSONReader::ReadAndReturnError(
-      data, base::JSON_PARSE_RFC, nullptr /* error_code_out */,
-      &json_reader_error_message);
+  std::unique_ptr<base::Value> json =
+      base::JSONReader::ReadAndReturnErrorDeprecated(
+          data, base::JSON_PARSE_RFC, nullptr /* error_code_out */,
+          &json_reader_error_message);
   base::DictionaryValue* dict = nullptr;
   if (!json) {
     LOG(ERROR) << "Invalid JSON blob: " << json_reader_error_message;
@@ -432,7 +436,7 @@ bool ComponentCloudPolicyStore::ParsePolicy(const std::string& data,
       level = POLICY_LEVEL_RECOMMENDED;
     }
 
-    policy->Set(it.key(), level, domain_constants_->scope, POLICY_SOURCE_CLOUD,
+    policy->Set(it.key(), level, domain_constants_->scope, policy_source_,
                 std::move(value), nullptr);
   }
 

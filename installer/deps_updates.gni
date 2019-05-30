@@ -5,3 +5,9 @@ if (is_win) {
     deps += ["//vivaldi/installer/win:dpi_aware_exe_manifest"]
   }
 }
+
+if (is_linux && !is_component_build) {
+  update_target("//chrome/installer/linux:linux") {
+    deps -= [":beta"]
+  }
+}

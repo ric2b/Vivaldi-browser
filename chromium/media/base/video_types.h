@@ -5,6 +5,8 @@
 #ifndef MEDIA_BASE_VIDEO_TYPES_H_
 #define MEDIA_BASE_VIDEO_TYPES_H_
 
+#include <stdint.h>
+#include <iosfwd>
 #include <string>
 
 #include "build/build_config.h"
@@ -51,8 +53,9 @@ enum VideoPixelFormat {
   // Plane size = Row pitch * (((height+31)/32)*32)
   PIXEL_FORMAT_MT21 = 15,
 
-  // The P* in the formats below designates the number of bits per pixel. I.e.
-  // P9 is 9-bits per pixel, P10 is 10-bits per pixel, etc.
+  // The P* in the formats below designates the number of bits per pixel
+  // component. I.e. P9 is 9-bits per pixel component, P10 is 10-bits per pixel
+  // component, etc.
   PIXEL_FORMAT_YUV420P9 = 16,
   PIXEL_FORMAT_YUV420P10 = 17,
   PIXEL_FORMAT_YUV422P9 = 18,
@@ -66,26 +69,28 @@ enum VideoPixelFormat {
   /* PIXEL_FORMAT_Y8 = 25, Deprecated */
   PIXEL_FORMAT_Y16 = 26,  // single 16bpp plane.
 
+  PIXEL_FORMAT_ABGR = 27,  // 32bpp RGBA, 1 plane.
+  PIXEL_FORMAT_XBGR = 28,  // 24bpp RGB, 1 plane.
+
+  PIXEL_FORMAT_P016LE = 29,  // 24bpp NV12, 16 bits per channel
+
   // Please update UMA histogram enumeration when adding new formats here.
   PIXEL_FORMAT_MAX =
-      PIXEL_FORMAT_Y16,  // Must always be equal to largest entry logged.
-};
-
-// Color space or color range used for the pixels.
-// Logged to UMA, so never reuse values. Leave gaps if necessary.
-// This enum is deprecated, use VideoColorSpace or gfx::ColorSpace instead.
-enum ColorSpace {
-  COLOR_SPACE_UNSPECIFIED = 0,  // In general this is Rec601.
-  // The JPEG color space is the combination of Rec.601 and full range colors
-  // (aka pc range colors).
-  COLOR_SPACE_JPEG = 1,
-  COLOR_SPACE_HD_REC709 = 2,  // Rec709 "HD" color space.
-  COLOR_SPACE_SD_REC601 = 3,  // Rec601 "SD" color space.
-  COLOR_SPACE_MAX = COLOR_SPACE_SD_REC601,
+      PIXEL_FORMAT_P016LE,  // Must always be equal to largest entry logged.
 };
 
 // Returns the name of a Format as a string.
 MEDIA_EXPORT std::string VideoPixelFormatToString(VideoPixelFormat format);
+
+// Stream operator of Format for logging etc.
+MEDIA_EXPORT std::ostream& operator<<(std::ostream& os,
+                                      VideoPixelFormat format);
+
+// Returns human readable fourcc string.
+// If any of the four characters is non-printable, it outputs
+// "0x<32-bit integer in hex>", e.g. FourccToString(0x66616b00) returns
+// "0x66616b00".
+MEDIA_EXPORT std::string FourccToString(uint32_t fourcc);
 
 // Returns true if |format| is a YUV format with multiple planes.
 MEDIA_EXPORT bool IsYuvPlanar(VideoPixelFormat format);

@@ -8,7 +8,6 @@ jam@chromium.org
 jochen@chromium.org
 kinuko@chromium.org
 nasko@chromium.org
-nick@chromium.org
 pfeldman@chromium.org
 piman@chromium.org
 
@@ -33,5 +32,8 @@ per-file *_mac*=ellyjones@chromium.org
 per-file *_mac*=tapted@chromium.org
 per-file *.mm=ellyjones@chromium.org
 per-file *.mm=tapted@chromium.org
+
+# Translation artifacts:
+per-file *.xtb=file://tools/translation/TRANSLATION_OWNERS
 
 # COMPONENT: Internals>Core

@@ -16,6 +16,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/resource_type.h"
 #include "net/base/host_port_pair.h"
+#include "net/base/ip_endpoint.h"
 #include "services/metrics/public/cpp/ukm_source.h"
 #include "third_party/blink/public/platform/web_input_event.h"
 #include "url/gurl.h"
@@ -105,11 +106,14 @@ struct UserInitiatedInfo {
 
   // Whether the associated action was initiated by a user, according to user
   // gesture tracking in content and Blink, as reported by NavigationHandle.
+  // This is based on the heuristic the popup blocker uses.
   bool user_gesture;
 
-  // Whether the associated action was initiated by a user, based on our
-  // heuristic-driven implementation that tests to see if there was an input
-  // event that happened shortly before the given action.
+  // Whether an input even directly led to the navigation, according to
+  // input start time tracking in the renderer, as reported by NavigationHandle.
+  // Note that this metric is still experimental and may not be fully
+  // implemented. All known issues are blocking crbug.com/889220. Currently
+  // all known gaps affect browser-side navigations.
   bool user_input_event;
 
  private:
@@ -136,6 +140,7 @@ struct PageLoadExtraInfo {
       const base::Optional<base::TimeDelta>& page_end_time,
       const mojom::PageLoadMetadata& main_frame_metadata,
       const mojom::PageLoadMetadata& subframe_metadata,
+      const mojom::PageRenderData& main_frame_render_data,
       ukm::SourceId source_id);
 
   // Simplified version of the constructor, intended for use in tests.
@@ -210,6 +215,8 @@ struct PageLoadExtraInfo {
   // PageLoadMetadata for subframes of the current page load.
   const mojom::PageLoadMetadata subframe_metadata;
 
+  const mojom::PageRenderData main_frame_render_data;
+
   // UKM SourceId for the current page load.
   const ukm::SourceId source_id;
 };
@@ -219,7 +226,7 @@ struct PageLoadExtraInfo {
 struct ExtraRequestCompleteInfo {
   ExtraRequestCompleteInfo(
       const GURL& url,
-      const net::HostPortPair& host_port_pair,
+      const net::IPEndPoint& remote_endpoint,
       int frame_tree_node_id,
       bool was_cached,
       int64_t raw_body_bytes,
@@ -238,7 +245,7 @@ struct ExtraRequestCompleteInfo {
   const GURL url;
 
   // The host (IP address) and port for the request.
-  const net::HostPortPair host_port_pair;
+  const net::IPEndPoint remote_endpoint;
 
   // The frame tree node id that initiated the request.
   const int frame_tree_node_id;
@@ -287,11 +294,26 @@ class PageLoadMetricsObserver {
     STOP_OBSERVING,
   };
 
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class LargestContentType {
+    kImage = 0,
+    kText = 1,
+    kMaxValue = kText,
+  };
+
   using FrameTreeNodeId = int;
 
   virtual ~PageLoadMetricsObserver() {}
 
   static bool IsStandardWebPageMimeType(const std::string& mime_type);
+
+  // Returns true if the out parameters are assigned values.
+  static bool AssignTimeAndSizeForLargestContentfulPaint(
+      const page_load_metrics::mojom::PaintTimingPtr& paint_timing,
+      base::Optional<base::TimeDelta>* largest_content_paint_time,
+      uint64_t* largest_content_paint_size,
+      LargestContentType* largest_content_type);
 
   // The page load started, with the given navigation handle.
   // currently_committed_url contains the URL of the committed page load at the
@@ -318,6 +340,20 @@ class PageLoadMetricsObserver {
   virtual ObservePolicy OnCommit(content::NavigationHandle* navigation_handle,
                                  ukm::SourceId source_id);
 
+  // OnDidInternalNavigationAbort is triggered when the main frame navigation
+  // aborts with HTTP responses that don't commit, such as HTTP 204 responses
+  // and downloads. Note that |navigation_handle| will be destroyed
+  // soon after this call. Don't hold a reference to it.
+  virtual void OnDidInternalNavigationAbort(
+      content::NavigationHandle* navigation_handle) {}
+
+  // ReadyToCommitNextNavigation is triggered when a frame navigation is
+  // ready to commit, but has not yet been committed. This is only called by
+  // a PageLoadTracker for a committed load, meaning that this call signals we
+  // are ready to commit a navigation to a new page.
+  virtual void ReadyToCommitNextNavigation(
+      content::NavigationHandle* navigation_handle) {}
+
   // OnDidFinishSubFrameNavigation is triggered when a sub-frame of the
   // committed page has finished navigating. It has either committed, aborted,
   // was a same document navigation, or has been replaced. It is up to the
@@ -325,7 +361,8 @@ class PageLoadMetricsObserver {
   // that |navigation_handle| will be destroyed soon after this call. Don't
   // hold a reference to it.
   virtual void OnDidFinishSubFrameNavigation(
-      content::NavigationHandle* navigation_handle) {}
+      content::NavigationHandle* navigation_handle,
+      const PageLoadExtraInfo& extra_info) {}
 
   // OnCommitSameDocumentNavigation is triggered when a same-document navigation
   // commits within the main frame of the current page. Note that
@@ -370,9 +407,25 @@ class PageLoadMetricsObserver {
                               const mojom::PageLoadTiming& timing,
                               const PageLoadExtraInfo& extra_info) {}
 
+  // OnRenderDataUpdate is triggered when an updated PageRenderData is available
+  // at the subframe level. This method may be called multiple times over the
+  // course of the page load.
+  virtual void OnSubFrameRenderDataUpdate(
+      content::RenderFrameHost* subframe_rfh,
+      const mojom::PageRenderData& render_data,
+      const PageLoadExtraInfo& extra_info) {}
+
+  // Triggered when an updated CpuTiming is available at the page or subframe
+  // level. This method is intended for monitoring cpu usage and load across
+  // the frames on a page during navigation.
+  virtual void OnCpuTimingUpdate(content::RenderFrameHost* subframe_rfh,
+                                 const mojom::CpuTiming& timing) {}
+
   // OnUserInput is triggered when a new user input is passed in to
-  // web_contents. Contains a TimeDelta from navigation start.
-  virtual void OnUserInput(const blink::WebInputEvent& event) {}
+  // web_contents.
+  virtual void OnUserInput(const blink::WebInputEvent& event,
+                           const mojom::PageLoadTiming& timing,
+                           const PageLoadExtraInfo& extra_info) {}
 
   // The following methods are invoked at most once, when the timing for the
   // associated event first becomes available.
@@ -392,8 +445,6 @@ class PageLoadMetricsObserver {
   // across all frames, is observed.
   virtual void OnFirstPaintInPage(const mojom::PageLoadTiming& timing,
                                   const PageLoadExtraInfo& extra_info) {}
-  virtual void OnFirstTextPaintInPage(const mojom::PageLoadTiming& timing,
-                                      const PageLoadExtraInfo& extra_info) {}
   virtual void OnFirstImagePaintInPage(const mojom::PageLoadTiming& timing,
                                        const PageLoadExtraInfo& extra_info) {}
   virtual void OnFirstContentfulPaintInPage(
@@ -417,19 +468,21 @@ class PageLoadMetricsObserver {
   virtual void OnLoadingBehaviorObserved(const PageLoadExtraInfo& extra_info) {}
 
   // Invoked when new use counter features are observed across all frames.
-  virtual void OnFeaturesUsageObserved(const mojom::PageLoadFeatures& features,
+  virtual void OnFeaturesUsageObserved(content::RenderFrameHost* rfh,
+                                       const mojom::PageLoadFeatures& features,
                                        const PageLoadExtraInfo& extra_info) {}
 
   // Invoked when there is data use for loading a resource on the page
-  // acrosss all frames. This only contains resources that have had new
-  // data use since the last callback.
+  // for a given render frame host. This only contains resources that have had
+  // new data use since the last callback.
   virtual void OnResourceDataUseObserved(
+      FrameTreeNodeId frame_tree_node_id,
       const std::vector<mojom::ResourceDataUpdatePtr>& resources) {}
 
   // Invoked when a media element starts playing.
   virtual void MediaStartedPlaying(
       const content::WebContentsObserver::MediaPlayerInfo& video_type,
-      bool is_in_main_frame) {}
+      content::RenderFrameHost* render_frame_host) {}
 
   // Invoked when the UMA metrics subsystem is persisting metrics as the
   // application goes into the background, on platforms where the browser
@@ -475,6 +528,20 @@ class PageLoadMetricsObserver {
   // to requests with HTTP or HTTPS only schemes.
   virtual void OnLoadedResource(
       const ExtraRequestCompleteInfo& extra_request_complete_info) {}
+
+  virtual void FrameReceivedFirstUserActivation(
+      content::RenderFrameHost* render_frame_host) {}
+
+  // Called when the display property changes on the frame.
+  virtual void FrameDisplayStateChanged(
+      content::RenderFrameHost* render_frame_host,
+      bool is_display_none) {}
+
+  // Called when a frames size changes.
+  virtual void FrameSizeChanged(content::RenderFrameHost* render_frame_host,
+                                const gfx::Size& frame_size) {}
+
+  virtual void OnFrameDeleted(content::RenderFrameHost* render_frame_host) {}
 
   // Called when the event corresponding to |event_key| occurs in this page
   // load.

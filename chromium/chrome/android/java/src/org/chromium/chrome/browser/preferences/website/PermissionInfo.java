@@ -5,6 +5,9 @@
 package org.chromium.chrome.browser.preferences.website;
 
 import android.support.annotation.IntDef;
+import android.support.annotation.Nullable;
+
+import org.chromium.chrome.browser.ContentSettingsType;
 
 import java.io.Serializable;
 import java.lang.annotation.Retention;
@@ -18,8 +21,9 @@ public class PermissionInfo implements Serializable {
             Type.NOTIFICATION, Type.PROTECTED_MEDIA_IDENTIFIER, Type.SENSORS})
     @Retention(RetentionPolicy.SOURCE)
     public @interface Type {
-        // Values used in Website and other places to address permission
-        // array index. Should be enumerated from 0 and can't have gaps.
+        // Values used to address index - should be enumerated from 0 and can't have gaps.
+        // All updates here must also be reflected in {@link #getContentSettingsType(int)
+        // getContentSettingsType} and {@link SingleWebsitePreferences.PERMISSION_PREFERENCE_KEYS}.
         int CAMERA = 0;
         int CLIPBOARD = 1;
         int GEOLOCATION = 2;
@@ -69,39 +73,32 @@ public class PermissionInfo implements Serializable {
     /**
      * Returns the ContentSetting value for this origin.
      */
-    public ContentSetting getContentSetting() {
+    public @ContentSettingValues @Nullable Integer getContentSetting() {
         switch (mType) {
             case Type.CAMERA:
-                return ContentSetting.fromInt(
-                        WebsitePreferenceBridge.nativeGetCameraSettingForOrigin(
-                                mOrigin, getEmbedderSafe(), mIsIncognito));
+                return WebsitePreferenceBridge.nativeGetCameraSettingForOrigin(
+                        mOrigin, getEmbedderSafe(), mIsIncognito);
             case Type.CLIPBOARD:
-                return ContentSetting.fromInt(
-                        WebsitePreferenceBridge.nativeGetClipboardSettingForOrigin(
-                                mOrigin, mIsIncognito));
+                return WebsitePreferenceBridge.nativeGetClipboardSettingForOrigin(
+                        mOrigin, mIsIncognito);
             case Type.GEOLOCATION:
-                return ContentSetting.fromInt(
-                        WebsitePreferenceBridge.nativeGetGeolocationSettingForOrigin(
-                                mOrigin, getEmbedderSafe(), mIsIncognito));
+                return WebsitePreferenceBridge.nativeGetGeolocationSettingForOrigin(
+                        mOrigin, getEmbedderSafe(), mIsIncognito);
             case Type.MICROPHONE:
-                return ContentSetting.fromInt(
-                        WebsitePreferenceBridge.nativeGetMicrophoneSettingForOrigin(
-                                mOrigin, getEmbedderSafe(), mIsIncognito));
+                return WebsitePreferenceBridge.nativeGetMicrophoneSettingForOrigin(
+                        mOrigin, getEmbedderSafe(), mIsIncognito);
             case Type.MIDI:
-                return ContentSetting.fromInt(WebsitePreferenceBridge.nativeGetMidiSettingForOrigin(
-                        mOrigin, getEmbedderSafe(), mIsIncognito));
+                return WebsitePreferenceBridge.nativeGetMidiSettingForOrigin(
+                        mOrigin, getEmbedderSafe(), mIsIncognito);
             case Type.NOTIFICATION:
-                return ContentSetting.fromInt(
-                        WebsitePreferenceBridge.nativeGetNotificationSettingForOrigin(
-                                mOrigin, mIsIncognito));
+                return WebsitePreferenceBridge.nativeGetNotificationSettingForOrigin(
+                        mOrigin, mIsIncognito);
             case Type.PROTECTED_MEDIA_IDENTIFIER:
-                return ContentSetting.fromInt(
-                        WebsitePreferenceBridge.nativeGetProtectedMediaIdentifierSettingForOrigin(
-                                mOrigin, getEmbedderSafe(), mIsIncognito));
+                return WebsitePreferenceBridge.nativeGetProtectedMediaIdentifierSettingForOrigin(
+                        mOrigin, getEmbedderSafe(), mIsIncognito);
             case Type.SENSORS:
-                return ContentSetting.fromInt(
-                        WebsitePreferenceBridge.nativeGetSensorsSettingForOrigin(
-                                mOrigin, getEmbedderSafe(), mIsIncognito));
+                return WebsitePreferenceBridge.nativeGetSensorsSettingForOrigin(
+                        mOrigin, getEmbedderSafe(), mIsIncognito);
             default:
                 assert false;
                 return null;
@@ -111,42 +108,66 @@ public class PermissionInfo implements Serializable {
     /**
      * Sets the native ContentSetting value for this origin.
      */
-    public void setContentSetting(ContentSetting value) {
+    public void setContentSetting(@ContentSettingValues int value) {
         switch (mType) {
             case Type.CAMERA:
                 WebsitePreferenceBridge.nativeSetCameraSettingForOrigin(
-                        mOrigin, value.toInt(), mIsIncognito);
+                        mOrigin, value, mIsIncognito);
                 break;
             case Type.CLIPBOARD:
                 WebsitePreferenceBridge.nativeSetClipboardSettingForOrigin(
-                        mOrigin, value.toInt(), mIsIncognito);
+                        mOrigin, value, mIsIncognito);
                 break;
             case Type.GEOLOCATION:
                 WebsitePreferenceBridge.nativeSetGeolocationSettingForOrigin(
-                        mOrigin, getEmbedderSafe(), value.toInt(), mIsIncognito);
+                        mOrigin, getEmbedderSafe(), value, mIsIncognito);
                 break;
             case Type.MICROPHONE:
                 WebsitePreferenceBridge.nativeSetMicrophoneSettingForOrigin(
-                        mOrigin, value.toInt(), mIsIncognito);
+                        mOrigin, value, mIsIncognito);
                 break;
             case Type.MIDI:
                 WebsitePreferenceBridge.nativeSetMidiSettingForOrigin(
-                        mOrigin, getEmbedderSafe(), value.toInt(), mIsIncognito);
+                        mOrigin, getEmbedderSafe(), value, mIsIncognito);
                 break;
             case Type.NOTIFICATION:
                 WebsitePreferenceBridge.nativeSetNotificationSettingForOrigin(
-                        mOrigin, value.toInt(), mIsIncognito);
+                        mOrigin, value, mIsIncognito);
                 break;
             case Type.PROTECTED_MEDIA_IDENTIFIER:
                 WebsitePreferenceBridge.nativeSetProtectedMediaIdentifierSettingForOrigin(
-                        mOrigin, getEmbedderSafe(), value.toInt(), mIsIncognito);
+                        mOrigin, getEmbedderSafe(), value, mIsIncognito);
                 break;
             case Type.SENSORS:
                 WebsitePreferenceBridge.nativeSetSensorsSettingForOrigin(
-                        mOrigin, getEmbedderSafe(), value.toInt(), mIsIncognito);
+                        mOrigin, getEmbedderSafe(), value, mIsIncognito);
                 break;
             default:
                 assert false;
+        }
+    }
+
+    public static @ContentSettingsType int getContentSettingsType(@Type int type) {
+        switch (type) {
+            case Type.CAMERA:
+                return ContentSettingsType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA;
+            case Type.CLIPBOARD:
+                return ContentSettingsType.CONTENT_SETTINGS_TYPE_CLIPBOARD_READ;
+            case Type.GEOLOCATION:
+                return ContentSettingsType.CONTENT_SETTINGS_TYPE_GEOLOCATION;
+            case Type.MICROPHONE:
+                return ContentSettingsType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC;
+            case Type.MIDI:
+                return ContentSettingsType.CONTENT_SETTINGS_TYPE_MIDI_SYSEX;
+            case Type.NOTIFICATION:
+                return ContentSettingsType.CONTENT_SETTINGS_TYPE_NOTIFICATIONS;
+            case Type.PROTECTED_MEDIA_IDENTIFIER:
+                return ContentSettingsType.CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER;
+            case Type.SENSORS:
+                return ContentSettingsType.CONTENT_SETTINGS_TYPE_SENSORS;
+            default:
+                assert false;
+                return ContentSettingsType.CONTENT_SETTINGS_TYPE_DEFAULT;
         }
     }
 }

@@ -33,16 +33,16 @@ class MockServiceWorkerURLRequestJob : public ServiceWorkerURLRequestJob {
       : ServiceWorkerURLRequestJob(
             nullptr,
             nullptr,
-            "",
             nullptr,
             nullptr,
-            network::mojom::FetchRequestMode::kNoCORS,
+            nullptr,
+            network::mojom::FetchRequestMode::kNoCors,
             network::mojom::FetchCredentialsMode::kOmit,
             network::mojom::FetchRedirectMode::kFollow,
             std::string() /* integrity */,
             false /* keepalive */,
             RESOURCE_TYPE_MAIN_FRAME,
-            REQUEST_CONTEXT_TYPE_HYPERLINK,
+            blink::mojom::RequestContextType::HYPERLINK,
             network::mojom::RequestContextFrameType::kTopLevel,
             scoped_refptr<network::ResourceRequestBody>(),
             delegate),
@@ -86,7 +86,8 @@ class ServiceWorkerDataPipeReaderTest
     registration_ = new ServiceWorkerRegistration(
         options, 1L, helper_->context()->AsWeakPtr());
     version_ = new ServiceWorkerVersion(
-        registration_.get(), GURL("https://example.com/service_worker.js"), 1L,
+        registration_.get(), GURL("https://example.com/service_worker.js"),
+        blink::mojom::ScriptType::kClassic, 1L,
         helper_->context()->AsWeakPtr());
     std::vector<ServiceWorkerDatabase::ResourceRecord> records;
     records.push_back(
@@ -182,7 +183,8 @@ TEST_P(ServiceWorkerDataPipeReaderTestP, SyncRead) {
   data_pipe_reader->Start();
   EXPECT_TRUE(mock_url_request_job()->is_response_started());
   const int buffer_size = sizeof(kTestData);
-  scoped_refptr<net::IOBuffer> buffer = new net::IOBuffer(buffer_size);
+  scoped_refptr<net::IOBuffer> buffer =
+      base::MakeRefCounted<net::IOBuffer>(buffer_size);
   buffer->data()[buffer_size - 1] = '\0';
 
   // Read successfully.
@@ -238,7 +240,8 @@ TEST_P(ServiceWorkerDataPipeReaderTestP, SyncAbort) {
   data_pipe_reader->Start();
   EXPECT_TRUE(mock_url_request_job()->is_response_started());
   const int buffer_size = sizeof(kTestData);
-  scoped_refptr<net::IOBuffer> buffer = new net::IOBuffer(buffer_size);
+  scoped_refptr<net::IOBuffer> buffer =
+      base::MakeRefCounted<net::IOBuffer>(buffer_size);
   buffer->data()[buffer_size - 1] = '\0';
 
   // Read successfully.
@@ -276,7 +279,8 @@ TEST_P(ServiceWorkerDataPipeReaderTestP, AsyncRead) {
   // Start to read.
   data_pipe_reader->Start();
   EXPECT_TRUE(mock_url_request_job()->is_response_started());
-  scoped_refptr<net::IOBuffer> buffer = new net::IOBuffer(sizeof(kTestData));
+  scoped_refptr<net::IOBuffer> buffer =
+      base::MakeRefCounted<net::IOBuffer>(sizeof(kTestData));
   buffer->data()[sizeof(kTestData) - 1] = '\0';
   std::string expected_response;
   std::string retrieved_response;
@@ -349,7 +353,8 @@ TEST_P(ServiceWorkerDataPipeReaderTestP, AsyncAbort) {
   // Start to read.
   data_pipe_reader->Start();
   EXPECT_TRUE(mock_url_request_job()->is_response_started());
-  scoped_refptr<net::IOBuffer> buffer = new net::IOBuffer(sizeof(kTestData));
+  scoped_refptr<net::IOBuffer> buffer =
+      base::MakeRefCounted<net::IOBuffer>(sizeof(kTestData));
   buffer->data()[sizeof(kTestData) - 1] = '\0';
   std::string expected_response;
   std::string retrieved_response;
@@ -409,8 +414,8 @@ TEST_P(ServiceWorkerDataPipeReaderTestP, AsyncAbort) {
             mock_url_request_job()->results()[0]);
 }
 
-INSTANTIATE_TEST_CASE_P(ServiceWorkerDataPipeReaderTest,
-                        ServiceWorkerDataPipeReaderTestP,
-                        testing::Combine(testing::Bool(), testing::Bool()));
+INSTANTIATE_TEST_SUITE_P(ServiceWorkerDataPipeReaderTest,
+                         ServiceWorkerDataPipeReaderTestP,
+                         testing::Combine(testing::Bool(), testing::Bool()));
 
 }  // namespace content

@@ -6,7 +6,7 @@
 
 #include <stddef.h>
 
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -29,7 +29,7 @@ const ui::ScaleFactor FaviconScaleFactor1xAnd2x[] = {
 
 #define SCOPED_FAVICON_SCALE_FACTOR(list)          \
   ui::test::ScopedSetSupportedScaleFactors scoped( \
-      std::vector<ui::ScaleFactor>(list, list + arraysize(list)))
+      std::vector<ui::ScaleFactor>(list, list + base::size(list)))
 
 #define SCOPED_FAVICON_SCALE_FACTOR_1X \
   SCOPED_FAVICON_SCALE_FACTOR(FaviconScaleFactor1x)
@@ -53,8 +53,7 @@ SkBitmap MakeBitmap(SkColor color, int w, int h) {
 
 SkColor GetColor(const gfx::ImageSkia& image, float scale,
                  int x = -1, int y = -1) {
-  const SkBitmap& bitmap =
-      image.GetRepresentation(scale).sk_bitmap();
+  const SkBitmap& bitmap = image.GetRepresentation(scale).GetBitmap();
   if (x == -1)
     x = bitmap.width() / 2;
   if (y == -1)

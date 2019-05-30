@@ -186,6 +186,13 @@ test("cast_base_unittests") {
   ]
 }
 
+if (build_for_android_things_n) {
+  config("absence-no-function-error") {
+    # for n build doesn't use all functions
+    cflags = [ "-Wno-unused-function" ]
+  }
+}
+
 cast_source_set("cast_sys_info") {
   sources = [
     "cast_sys_info_dummy.cc",
@@ -199,12 +206,14 @@ cast_source_set("cast_sys_info") {
       "cast_sys_info_android.h",
       "cast_sys_info_android_factory.cc",
     ]
-
     if (is_android_things) {
       sources += [
         "cast_sys_info_android_things.cc",
         "cast_sys_info_android_things.h",
       ]
+      if (build_for_android_things_n) {
+        configs += [ ":absence-no-function-error" ]
+      }
     }
   }
 
@@ -219,7 +228,7 @@ cast_source_set("cast_sys_info") {
       "//chromecast:chromecast_buildflags",
       "//chromecast/browser:jni_headers",
     ]
-  } else if (chromecast_branding == "public") {
+  } else if (chromecast_branding == "public" || is_fuchsia) {
     sources += [ "cast_sys_info_util_simple.cc" ]
   }
 }
@@ -240,7 +249,7 @@ cast_shared_library("libcast_sys_info_1.0") {
 
 # Note: Android links //chromecast/base:cast_sys_info statically.
 cast_source_set("cast_sys_info_shlib") {
-  if (!is_android) {
+  if (!is_android && !is_fuchsia) {
     sources = [
       "cast_sys_info_util_shlib.cc",
     ]
@@ -313,7 +322,6 @@ if (is_android) {
       "$java_src_dir/org/chromium/chromecast/base/BiFunction.java",
       "$java_src_dir/org/chromium/chromecast/base/BiPredicate.java",
       "$java_src_dir/org/chromium/chromecast/base/Both.java",
-      "$java_src_dir/org/chromium/chromecast/base/CircularBuffer.java",
       "$java_src_dir/org/chromium/chromecast/base/Controller.java",
       "$java_src_dir/org/chromium/chromecast/base/Consumer.java",
       "$java_src_dir/org/chromium/chromecast/base/Function.java",
@@ -322,8 +330,10 @@ if (is_android) {
       "$java_src_dir/org/chromium/chromecast/base/Observer.java",
       "$java_src_dir/org/chromium/chromecast/base/Observers.java",
       "$java_src_dir/org/chromium/chromecast/base/Scope.java",
+      "$java_src_dir/org/chromium/chromecast/base/Scopes.java",
       "$java_src_dir/org/chromium/chromecast/base/Predicate.java",
       "$java_src_dir/org/chromium/chromecast/base/Subscription.java",
+      "$java_src_dir/org/chromium/chromecast/base/Sequencer.java",
       "$java_src_dir/org/chromium/chromecast/base/Supplier.java",
       "$java_src_dir/org/chromium/chromecast/base/Unit.java",
 
@@ -358,7 +368,6 @@ if (is_android) {
     java_files = [
       "$java_test_dir/org/chromium/chromecast/base/BothTest.java",
       "$java_test_dir/org/chromium/chromecast/base/ControllerTest.java",
-      "$java_test_dir/org/chromium/chromecast/base/CircularBufferTest.java",
       "$java_test_dir/org/chromium/chromecast/base/ItertoolsTest.java",
       "$java_test_dir/org/chromium/chromecast/base/ObservableAndTest.java",
       "$java_test_dir/org/chromium/chromecast/base/ObservableAndThenTest.java",
@@ -368,6 +377,7 @@ if (is_android) {
       "$java_test_dir/org/chromium/chromecast/base/ObservableNotTest.java",
       "$java_test_dir/org/chromium/chromecast/base/ReactiveRecorderTest.java",
       "$java_test_dir/org/chromium/chromecast/base/ObserversTest.java",
+      "$java_test_dir/org/chromium/chromecast/base/SequencerTest.java",
       "$java_test_dir/org/chromium/chromecast/base/UnitTest.java",
     ]
     deps = [

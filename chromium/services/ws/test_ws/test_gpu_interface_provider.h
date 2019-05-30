@@ -6,7 +6,7 @@
 #define SERVICES_WS_TEST_WS_TEST_GPU_INTERFACE_PROVIDER_H_
 
 #include "components/discardable_memory/public/interfaces/discardable_shared_memory_manager.mojom.h"
-#include "services/ws/gpu_interface_provider.h"
+#include "services/ws/public/cpp/host/gpu_interface_provider.h"
 #include "services/ws/public/mojom/gpu.mojom.h"
 
 namespace discardable_memory {
@@ -33,8 +33,8 @@ class TestGpuInterfaceProvider : public GpuInterfaceProvider {
   void RegisterGpuInterfaces(
       service_manager::BinderRegistry* registry) override;
 #if defined(USE_OZONE)
-  void RegisterOzoneGpuInterfaces(
-      service_manager::BinderRegistry* registry) override;
+  void BindOzoneGpuInterface(const std::string& interface_name,
+                             mojo::ScopedMessagePipeHandle handle) override;
 #endif
 
  private:

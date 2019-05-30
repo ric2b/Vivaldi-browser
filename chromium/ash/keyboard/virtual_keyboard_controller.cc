@@ -8,13 +8,16 @@
 
 #include "ash/accessibility/accessibility_controller.h"
 #include "ash/ime/ime_controller.h"
-#include "ash/public/cpp/config.h"
+#include "ash/keyboard/ash_keyboard_controller.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_util.h"
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/strings/string_util.h"
 #include "ui/base/emoji/emoji_panel_helper.h"
@@ -24,8 +27,8 @@
 #include "ui/events/devices/input_device_manager.h"
 #include "ui/events/devices/touchscreen_device.h"
 #include "ui/keyboard/keyboard_controller.h"
-#include "ui/keyboard/keyboard_switches.h"
 #include "ui/keyboard/keyboard_util.h"
+#include "ui/keyboard/public/keyboard_switches.h"
 
 namespace ash {
 namespace {
@@ -48,40 +51,12 @@ void ResetVirtualKeyboard() {
       chromeos::input_method::mojom::ImeKeyset::kNone);
 }
 
-void MoveKeyboardToDisplayInternal(const display::Display& display) {
-  // Remove the keyboard from curent root window controller
-  TRACE_EVENT0("vk", "MoveKeyboardToDisplayInternal");
-  RootWindowController::ForWindow(
-      keyboard::KeyboardController::Get()->GetRootWindow())
-      ->DeactivateKeyboard(keyboard::KeyboardController::Get());
-
-  for (RootWindowController* controller :
-       Shell::Get()->GetAllRootWindowControllers()) {
-    if (display::Screen::GetScreen()
-            ->GetDisplayNearestWindow(controller->GetRootWindow())
-            .id() == display.id()) {
-      controller->ActivateKeyboard(keyboard::KeyboardController::Get());
-      break;
-    }
-  }
-}
-
 bool HasTouchableDisplay() {
   for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
     if (display.touch_support() == display::Display::TouchSupport::AVAILABLE)
       return true;
   }
   return false;
-}
-
-void MoveKeyboardToFirstTouchableDisplay() {
-  // Move the keyboard to the first display with touch capability.
-  for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
-    if (display.touch_support() == display::Display::TouchSupport::AVAILABLE) {
-      MoveKeyboardToDisplayInternal(display);
-      return;
-    }
-  }
 }
 
 }  // namespace
@@ -103,6 +78,11 @@ VirtualKeyboardController::VirtualKeyboardController()
       chromeos::input_method::mojom::ImeKeyset::kEmoji));
 
   keyboard::KeyboardController::Get()->AddObserver(this);
+
+  bluetooth_devices_observer_ =
+      std::make_unique<BluetoothDevicesObserver>(base::BindRepeating(
+          &VirtualKeyboardController::OnBluetoothAdapterOrDeviceChanged,
+          base::Unretained(this)));
 }
 
 VirtualKeyboardController::~VirtualKeyboardController() {
@@ -129,12 +109,12 @@ void VirtualKeyboardController::OnTabletModeEventsBlockingChanged() {
   UpdateKeyboardEnabled();
 }
 
-void VirtualKeyboardController::OnTouchscreenDeviceConfigurationChanged() {
-  UpdateDevices();
-}
-
-void VirtualKeyboardController::OnKeyboardDeviceConfigurationChanged() {
-  UpdateDevices();
+void VirtualKeyboardController::OnInputDeviceConfigurationChanged(
+    uint8_t input_device_types) {
+  if (input_device_types & (ui::InputDeviceEventObserver::kKeyboard |
+                            ui::InputDeviceEventObserver::kTouchscreen)) {
+    UpdateDevices();
+  }
 }
 
 void VirtualKeyboardController::ToggleIgnoreExternalKeyboard() {
@@ -142,59 +122,42 @@ void VirtualKeyboardController::ToggleIgnoreExternalKeyboard() {
   UpdateKeyboardEnabled();
 }
 
-void VirtualKeyboardController::MoveKeyboardToDisplay(
+aura::Window* VirtualKeyboardController::GetContainerForDisplay(
     const display::Display& display) {
-  DCHECK(keyboard::KeyboardController::Get()->enabled());
   DCHECK(display.is_valid());
 
-  TRACE_EVENT0("vk", "MoveKeyboardToDisplay");
-
-  aura::Window* keyboard_window =
-      keyboard::KeyboardController::Get()->GetKeyboardWindow();
-  DCHECK(keyboard_window);
-
-  const display::Screen* screen = display::Screen::GetScreen();
-  const display::Display current_display =
-      screen->GetDisplayNearestWindow(keyboard_window);
-
-  if (display.id() != current_display.id())
-    MoveKeyboardToDisplayInternal(display);
+  RootWindowController* controller =
+      Shell::Get()->GetRootWindowControllerWithDisplayId(display.id());
+  aura::Window* container =
+      controller->GetContainer(kShellWindowId_VirtualKeyboardContainer);
+  DCHECK(container);
+  return container;
 }
 
-void VirtualKeyboardController::MoveKeyboardToTouchableDisplay() {
-  DCHECK(keyboard::KeyboardController::Get()->enabled());
-
-  TRACE_EVENT0("vk", "MoveKeyboardToTouchableDisplay");
-
-  aura::Window* keyboard_window =
-      keyboard::KeyboardController::Get()->GetKeyboardWindow();
-  DCHECK(keyboard_window);
-
+aura::Window* VirtualKeyboardController::GetContainerForDefaultDisplay() {
   const display::Screen* screen = display::Screen::GetScreen();
-  const display::Display current_display =
-      screen->GetDisplayNearestWindow(keyboard_window);
 
   if (wm::GetFocusedWindow()) {
-    // Move the virtual keyboard to the focused display if that display has
-    // touch capability or no other display has touch capability.
+    // Return the focused display if that display has touch capability or no
+    // other display has touch capability.
     const display::Display focused_display =
-        display::Screen::GetScreen()->GetDisplayNearestWindow(
-            wm::GetFocusedWindow());
-    if (current_display.id() != focused_display.id() &&
-        focused_display.is_valid() &&
+        screen->GetDisplayNearestWindow(wm::GetFocusedWindow());
+    if (focused_display.is_valid() &&
         (focused_display.touch_support() ==
              display::Display::TouchSupport::AVAILABLE ||
          !HasTouchableDisplay())) {
-      MoveKeyboardToDisplayInternal(focused_display);
-      return;
+      return GetContainerForDisplay(focused_display);
     }
   }
 
-  if (current_display.touch_support() !=
-      display::Display::TouchSupport::AVAILABLE) {
-    // The keyboard is currently on the display without touch capability.
-    MoveKeyboardToFirstTouchableDisplay();
+  // Otherwise, get the first touchable display.
+  for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
+    if (display.touch_support() == display::Display::TouchSupport::AVAILABLE)
+      return GetContainerForDisplay(display);
   }
+
+  // If there are no touchable displays, then just return the primary display.
+  return GetContainerForDisplay(screen->GetPrimaryDisplay());
 }
 
 void VirtualKeyboardController::UpdateDevices() {
@@ -214,8 +177,11 @@ void VirtualKeyboardController::UpdateDevices() {
     ui::InputDeviceType type = device.type;
     if (type == ui::InputDeviceType::INPUT_DEVICE_INTERNAL)
       has_internal_keyboard_ = true;
-    if (type == ui::InputDeviceType::INPUT_DEVICE_EXTERNAL)
+    if (type == ui::InputDeviceType::INPUT_DEVICE_USB ||
+        (type == ui::InputDeviceType::INPUT_DEVICE_BLUETOOTH &&
+         bluetooth_devices_observer_->IsConnectedBluetoothDevice(device))) {
       has_external_keyboard_ = true;
+    }
   }
   // Update keyboard state.
   UpdateKeyboardEnabled();
@@ -256,7 +222,7 @@ void VirtualKeyboardController::SetKeyboardEnabled(bool enabled) {
 void VirtualKeyboardController::ForceShowKeyboard() {
   // If the virtual keyboard is enabled, show the keyboard directly.
   auto* keyboard_controller = keyboard::KeyboardController::Get();
-  if (keyboard_controller->enabled()) {
+  if (keyboard_controller->IsEnabled()) {
     keyboard_controller->ShowKeyboard(false /* locked */);
     return;
   }
@@ -265,15 +231,16 @@ void VirtualKeyboardController::ForceShowKeyboard() {
   DCHECK(!keyboard::GetKeyboardEnabledFromShelf());
   keyboard::SetKeyboardEnabledFromShelf(true);
   Shell::Get()->EnableKeyboard();
-
-  keyboard_controller = keyboard::KeyboardController::Get();
-  DCHECK(keyboard_controller->enabled());
   keyboard_controller->ShowKeyboard(false);
 }
 
-void VirtualKeyboardController::OnKeyboardDisabled() {
-  Shell::Get()->ime_controller()->OverrideKeyboardKeyset(
-      chromeos::input_method::mojom::ImeKeyset::kNone);
+void VirtualKeyboardController::OnKeyboardEnabledChanged(bool is_enabled) {
+  if (!is_enabled) {
+    // TODO(shend/shuchen): Consider moving this logic to ImeController.
+    // https://crbug.com/896284.
+    Shell::Get()->ime_controller()->OverrideKeyboardKeyset(
+        chromeos::input_method::mojom::ImeKeyset::kNone);
+  }
 }
 
 void VirtualKeyboardController::OnKeyboardHidden(bool is_temporary_hide) {
@@ -292,6 +259,17 @@ void VirtualKeyboardController::OnActiveUserSessionChanged(
   // Force on-screen keyboard to reset.
   if (keyboard::IsKeyboardEnabled())
     Shell::Get()->EnableKeyboard();
+}
+
+void VirtualKeyboardController::OnBluetoothAdapterOrDeviceChanged(
+    device::BluetoothDevice* device) {
+  // We only care about keyboard type bluetooth device change.
+  if (!device ||
+      device->GetDeviceType() == device::BluetoothDeviceType::KEYBOARD ||
+      device->GetDeviceType() ==
+          device::BluetoothDeviceType::KEYBOARD_MOUSE_COMBO) {
+    UpdateDevices();
+  }
 }
 
 }  // namespace ash

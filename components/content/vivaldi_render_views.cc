@@ -9,7 +9,7 @@ using blink::WebPoint;
 namespace content {
 
 void RenderViewImpl::OnLoadImageAt(int x, int y) {
-  webview()->LoadImageAt(WebPoint(x, y));
+  webview()->LoadImageAt(gfx::Point(x, y));
 }
 
 void RenderViewImpl::ApplyVivaldiSpecificPreferences() {

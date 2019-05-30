@@ -7,7 +7,7 @@ ANDROID_WHITELISTED_LICENSES = [
   'Android Software Development Kit License',
   'Apache( Version)? 2(\.0)?',
   '(New )?([23]-Clause )?BSD( [23]-Clause)?( with advertising clause)?',
-  'L?GPL ?v?2(\.[01])?( or later)?',
+  'L?GPL ?v?2(\.[01])?( or later)?( with the classpath exception)?',
   'MIT(/X11)?(-like)?',
   'MPL 1\.1 ?/ ?GPL 2(\.0)? ?/ ?LGPL 2\.1',
   'MPL 2(\.0)?',
@@ -18,6 +18,7 @@ ANDROID_WHITELISTED_LICENSES = [
   'SGI Free Software License B',
   'University of Illinois\/NCSA Open Source',
   'X11',
+  'Zlib',
 ]
 
 def LicenseIsCompatibleWithAndroid(input_api, license):

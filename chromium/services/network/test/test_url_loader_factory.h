@@ -10,12 +10,15 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "net/http/http_status_code.h"
 #include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 
 namespace network {
+class WeakWrapperSharedURLLoaderFactory;
 
 // A helper class to ease testing code that uses URLLoader interface. A test
 // would pass this factory instead of the production factory to code, and
@@ -46,6 +49,7 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
   enum ResponseProduceFlags : uint32_t {
     kResponseDefault = 0,
     kResponseOnlyRedirectsNoDestination = 0x1,
+    kSendHeadersOnNetworkError = 0x2,
   };
 
   TestURLLoaderFactory();
@@ -91,6 +95,10 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
   // access. It's recommended that consumers use AddResponse() rather than
   // servicing requests themselves, whenever possible.
   std::vector<PendingRequest>* pending_requests() { return &pending_requests_; }
+
+  // Returns the PendingRequest instance available at the given index |index|
+  // or null if not existing.
+  PendingRequest* GetPendingRequest(size_t index);
 
   // Sends a response for the first (oldest) pending request with URL |url|.
   // Returns false if no such pending request exists.
@@ -140,6 +148,19 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
                                 traffic_annotation) override;
   void Clone(mojom::URLLoaderFactoryRequest request) override;
 
+  // Returns a 'safe' ref-counted weak wrapper around this TestURLLoaderFactory
+  // instance.
+  //
+  // Because this is a weak wrapper, it is possible for the underlying
+  // TestURLLoaderFactory instance to be destroyed while other code still holds
+  // a reference to it.
+  //
+  // The weak wrapper returned by this method is guaranteed to have had
+  // Detach() called before this is destructed, so that any future calls become
+  // no-ops, rather than a crash.
+  scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
+  GetSafeWeakWrapper();
+
  private:
   bool CreateLoaderAndStartInternal(const GURL& url,
                                     mojom::URLLoaderClient* client);
@@ -165,6 +186,8 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
   std::map<GURL, Response> responses_;
 
   std::vector<PendingRequest> pending_requests_;
+
+  scoped_refptr<network::WeakWrapperSharedURLLoaderFactory> weak_wrapper_;
 
   Interceptor interceptor_;
   mojo::BindingSet<network::mojom::URLLoaderFactory> bindings_;

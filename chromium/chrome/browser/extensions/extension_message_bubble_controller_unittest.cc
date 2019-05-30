@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -36,7 +37,6 @@
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/version_info/version_info.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "extensions/browser/api_test_utils.h"
 #include "extensions/browser/extension_pref_value_map.h"
 #include "extensions/browser/extension_pref_value_map_factory.h"
 #include "extensions/browser/extension_prefs.h"
@@ -326,7 +326,7 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
         false);  // is_incognito_enabled.
     extension_prefs_value_map->SetExtensionPref(id, proxy_config::prefs::kProxy,
                                                 kExtensionPrefsScopeRegular,
-                                                new base::Value(id));
+                                                base::Value(id));
 
     if (ExtensionRegistry::Get(profile())->enabled_extensions().GetByID(id))
       return testing::AssertionSuccess();
@@ -343,12 +343,13 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
     service_ = ExtensionSystem::Get(profile())->extension_service();
     service_->Init();
 
-    extensions::ExtensionWebUIOverrideRegistrar::GetFactoryInstance()->
-        SetTestingFactory(profile(), &BuildOverrideRegistrar);
+    extensions::ExtensionWebUIOverrideRegistrar::GetFactoryInstance()
+        ->SetTestingFactory(profile(),
+                            base::BindRepeating(&BuildOverrideRegistrar));
     extensions::ExtensionWebUIOverrideRegistrar::GetFactoryInstance()->Get(
         profile());
     ToolbarActionsModelFactory::GetInstance()->SetTestingFactory(
-        profile(), &BuildToolbarModel);
+        profile(), base::BindRepeating(&BuildToolbarModel));
   }
 
   ~ExtensionMessageBubbleTest() override {}
@@ -396,15 +397,6 @@ class ExtensionMessageBubbleTest : public BrowserWithTestWindowTest {
   }
 
  protected:
-  scoped_refptr<Extension> CreateExtension(
-      Manifest::Location location,
-      const std::string& data,
-      const std::string& id) {
-    std::unique_ptr<base::DictionaryValue> parsed_manifest(
-        api_test_utils::ParseDictionary(data));
-    return api_test_utils::CreateExtension(location, parsed_manifest.get(), id);
-  }
-
   ExtensionService* service_;
 
  private:
@@ -508,8 +500,9 @@ TEST_P(ExtensionMessageBubbleTestWithParam,
   EXPECT_TRUE(controller->ShouldShow());
 }
 
-INSTANTIATE_TEST_CASE_P(ExtensionMessageBubbleTest,
-                        ExtensionMessageBubbleTestWithParam, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(ExtensionMessageBubbleTest,
+                         ExtensionMessageBubbleTestWithParam,
+                         testing::Bool());
 
 // The feature this is meant to test is only enacted on Windows, but it should
 // pass on all platforms.
@@ -735,7 +728,7 @@ TEST_F(ExtensionMessageBubbleTest, ShowDevModeBubbleOncePerOriginalProfile) {
     Profile* off_the_record_profile = profile()->GetOffTheRecordProfile();
 
     ToolbarActionsModelFactory::GetInstance()->SetTestingFactory(
-        off_the_record_profile, &BuildToolbarModel);
+        off_the_record_profile, base::BindRepeating(&BuildToolbarModel));
 
     std::unique_ptr<BrowserWindow> off_the_record_window(CreateBrowserWindow());
     std::unique_ptr<Browser> off_the_record_browser(
@@ -1195,7 +1188,7 @@ TEST_F(ExtensionMessageBubbleTest, ShowNtpBubblePerProfilePerExtensionTest) {
 void SetInstallTime(const std::string& extension_id,
                     const base::Time& time,
                     ExtensionPrefs* prefs) {
-  std::string time_str = base::Int64ToString(time.ToInternalValue());
+  std::string time_str = base::NumberToString(time.ToInternalValue());
   prefs->UpdateExtensionPref(extension_id, "install_time",
                              std::make_unique<base::Value>(time_str));
 }
@@ -1351,7 +1344,7 @@ TEST_F(ExtensionMessageBubbleTest, TestBubbleOutlivesBrowser) {
       new DevModeBubbleDelegate(browser()->profile()), browser());
   controller->SetIsActiveBubble();
   EXPECT_TRUE(controller->ShouldShow());
-  EXPECT_EQ(1u, model->toolbar_items().size());
+  EXPECT_EQ(1u, model->action_ids().size());
   controller->HighlightExtensionsIfNecessary();
   EXPECT_TRUE(model->is_highlighting());
   set_browser(nullptr);
@@ -1386,7 +1379,7 @@ TEST_F(ExtensionMessageBubbleTest,
       new DevModeBubbleDelegate(browser()->profile()), browser());
   controller->SetIsActiveBubble();
   EXPECT_TRUE(controller->ShouldShow());
-  EXPECT_EQ(1u, model->toolbar_items().size());
+  EXPECT_EQ(1u, model->action_ids().size());
   controller->HighlightExtensionsIfNecessary();
   EXPECT_TRUE(model->is_highlighting());
   set_browser(nullptr);
@@ -1413,7 +1406,7 @@ TEST_F(ExtensionMessageBubbleTest,
       new DevModeBubbleDelegate(browser()->profile()), browser());
   controller->SetIsActiveBubble();
   EXPECT_TRUE(controller->ShouldShow());
-  EXPECT_EQ(1u, model->toolbar_items().size());
+  EXPECT_EQ(1u, model->action_ids().size());
   controller->HighlightExtensionsIfNecessary();
   EXPECT_TRUE(model->is_highlighting());
   set_browser(nullptr);

@@ -15,6 +15,7 @@
 #include "build/build_config.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/event.h"
+#include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/strings/grit/ui_strings.h"
 
 #if defined(OS_WIN)
@@ -162,8 +163,11 @@ base::string16 Accelerator::GetShortcutText() const {
       key = static_cast<wchar_t>(key_code_);
     else
       key = LOWORD(::MapVirtualKeyW(key_code_, MAPVK_VK_TO_CHAR));
-    shortcut += key;
-#elif defined(USE_AURA) || defined(OS_MACOSX)
+    // If there is no translation for the given |key_code_| (e.g.
+    // VKEY_UNKNOWN), |::MapVirtualKeyW| returns 0.
+    if (key != 0)
+      shortcut += key;
+#elif defined(USE_AURA) || defined(OS_MACOSX) || defined(OS_ANDROID)
     const uint16_t c = DomCodeToUsLayoutCharacter(
         UsLayoutKeyboardCodeToDomCode(key_code_), false);
     if (c != 0)
@@ -260,6 +264,8 @@ base::string16 Accelerator::ApplyLongFormModifiers(
     shortcut = ApplyModifierToAcceleratorString(shortcut, IDS_APP_COMMAND_KEY);
 #elif defined(OS_CHROMEOS)
     shortcut = ApplyModifierToAcceleratorString(shortcut, IDS_APP_SEARCH_KEY);
+#elif defined(OS_WIN)
+    shortcut = ApplyModifierToAcceleratorString(shortcut, IDS_APP_WINDOWS_KEY);
 #else
     NOTREACHED();
 #endif

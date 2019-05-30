@@ -40,13 +40,13 @@ class HeadersIterationSource final
 
  private:
   Vector<std::pair<String, String>> headers_;
-  size_t current_;
+  wtf_size_t current_;
 };
 
 }  // namespace
 
 Headers* Headers::Create(ExceptionState&) {
-  return new Headers;
+  return MakeGarbageCollected<Headers>();
 }
 
 Headers* Headers::Create(const HeadersInit& init,
@@ -61,7 +61,7 @@ Headers* Headers::Create(const HeadersInit& init,
 }
 
 Headers* Headers::Create(FetchHeaderList* header_list) {
-  return new Headers(header_list);
+  return MakeGarbageCollected<Headers>(header_list);
 }
 
 Headers* Headers::Clone() const {
@@ -95,13 +95,28 @@ void Headers::append(const String& name,
   }
   // "4. Otherwise, if guard is |request| and |name| is a forbidden header
   //     name, return."
-  if (guard_ == kRequestGuard && CORS::IsForbiddenHeaderName(name))
+  if (guard_ == kRequestGuard && cors::IsForbiddenHeaderName(name))
     return;
-  // "5. Otherwise, if guard is |request-no-CORS| and |name|/|value| is not a
-  //     CORS-safelisted header, return."
-  if (guard_ == kRequestNoCORSGuard &&
-      !CORS::IsCORSSafelistedHeader(name, normalized_value)) {
-    return;
+  // 5. Otherwise, if guard is |request-no-cors|:
+  if (guard_ == kRequestNoCorsGuard) {
+    // Let |temporaryValue| be the result of getting name from |headers|’s
+    // header list.
+    String temp;
+    header_list_->Get(name, temp);
+
+    // If |temporaryValue| is null, then set |temporaryValue| to |value|.
+    // Otherwise, set |temporaryValue| to |temporaryValue|, followed by
+    // 0x2C 0x20, followed by |value|.
+    if (temp.IsNull()) {
+      temp = normalized_value;
+    } else {
+      temp = temp + ", " + normalized_value;
+    }
+
+    // If |name|/|temporaryValue| is not a no-CORS-safelisted request-header,
+    // then return.
+    if (!cors::IsNoCorsSafelistedHeader(name, temp))
+      return;
   }
   // "6. Otherwise, if guard is |response| and |name| is a forbidden response
   //     header name, return."
@@ -127,12 +142,14 @@ void Headers::remove(const String& name, ExceptionState& exception_state) {
   }
   // "3. Otherwise, if guard is |request| and |name| is a forbidden header
   //     name, return."
-  if (guard_ == kRequestGuard && CORS::IsForbiddenHeaderName(name))
+  if (guard_ == kRequestGuard && cors::IsForbiddenHeaderName(name))
     return;
-  // "4. Otherwise, if guard is |request-no-CORS| and |name|/`invalid` is not
-  //     a CORS-safelisted header, return."
-  if (guard_ == kRequestNoCORSGuard &&
-      !CORS::IsCORSSafelistedHeader(name, "invalid")) {
+  // "4. Otherwise, if the context object’s guard is |request-no-cors|, |name|
+  //     is not a no-CORS-safelisted request-header name, and |name| is not a
+  //     privileged no-CORS request-header name, return."
+  if (guard_ == kRequestNoCorsGuard &&
+      !cors::IsNoCorsSafelistedHeaderName(name) &&
+      !cors::IsPrivilegedNoCorsHeaderName(name)) {
     return;
   }
   // "5. Otherwise, if guard is |response| and |name| is a forbidden response
@@ -195,12 +212,12 @@ void Headers::set(const String& name,
   }
   // "4. Otherwise, if guard is |request| and |name| is a forbidden header
   //     name, return."
-  if (guard_ == kRequestGuard && CORS::IsForbiddenHeaderName(name))
+  if (guard_ == kRequestGuard && cors::IsForbiddenHeaderName(name))
     return;
   // "5. Otherwise, if guard is |request-no-CORS| and |name|/|value| is not a
-  //     CORS-safelisted header, return."
-  if (guard_ == kRequestNoCORSGuard &&
-      !CORS::IsCORSSafelistedHeader(name, normalized_value)) {
+  //     no-CORS-safelisted header, return."
+  if (guard_ == kRequestNoCorsGuard &&
+      !cors::IsNoCorsSafelistedHeader(name, normalized_value)) {
     return;
   }
   // "6. Otherwise, if guard is |response| and |name| is a forbidden response
@@ -246,7 +263,7 @@ void Headers::FillWith(const Vector<Vector<String>>& object,
   //        TypeError.
   //     2. Append |header|’s first item/|header|’s second item to |headers|.
   //        Rethrow any exception."
-  for (size_t i = 0; i < object.size(); ++i) {
+  for (wtf_size_t i = 0; i < object.size(); ++i) {
     if (object[i].size() != 2) {
       exception_state.ThrowTypeError("Invalid value");
       return;
@@ -282,7 +299,7 @@ void Headers::Trace(blink::Visitor* visitor) {
 PairIterable<String, String>::IterationSource* Headers::StartIteration(
     ScriptState*,
     ExceptionState&) {
-  return new HeadersIterationSource(header_list_);
+  return MakeGarbageCollected<HeadersIterationSource>(header_list_);
 }
 
 }  // namespace blink

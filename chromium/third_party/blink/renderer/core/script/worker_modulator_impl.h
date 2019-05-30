@@ -19,15 +19,16 @@ class WorkerModulatorImpl final : public ModulatorImplBase {
  public:
   static ModulatorImplBase* Create(ScriptState*);
 
+  explicit WorkerModulatorImpl(ScriptState*);
+
   // Implements ModulatorImplBase.
   ModuleScriptFetcher* CreateModuleScriptFetcher(
       ModuleScriptCustomFetchType) override;
 
  private:
-  explicit WorkerModulatorImpl(ScriptState*);
-
   // Implements ModulatorImplBase.
   bool IsDynamicImportForbidden(String* reason) override;
+  V8CacheOptions GetV8CacheOptions() const override;
 };
 
 }  // namespace blink

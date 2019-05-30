@@ -14,6 +14,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -42,7 +43,7 @@ namespace storage {
 static net::HttpResponseHeaders* CreateHttpResponseHeaders() {
   // HttpResponseHeaders expects its input string to be terminated by two NULs.
   static const char kStatus[] = "HTTP/1.1 200 OK\0";
-  static const size_t kStatusLen = arraysize(kStatus);
+  static const size_t kStatusLen = base::size(kStatus);
 
   net::HttpResponseHeaders* headers =
       new net::HttpResponseHeaders(std::string(kStatus, kStatusLen));
@@ -96,8 +97,8 @@ int FileSystemURLRequestJob::ReadRawData(net::IOBuffer* dest, int dest_size) {
     return 0;
 
   const int rv = reader_->Read(dest, dest_size,
-                               base::Bind(&FileSystemURLRequestJob::DidRead,
-                                          weak_factory_.GetWeakPtr()));
+                               base::BindOnce(&FileSystemURLRequestJob::DidRead,
+                                              weak_factory_.GetWeakPtr()));
   if (rv >= 0) {
     remaining_bytes_ -= rv;
     DCHECK_GE(remaining_bytes_, 0);
@@ -162,10 +163,11 @@ void FileSystemURLRequestJob::StartAsync() {
     return;
   }
   file_system_context_->operation_runner()->GetMetadata(
-      url_, FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY |
-                FileSystemOperation::GET_METADATA_FIELD_SIZE,
-      base::Bind(&FileSystemURLRequestJob::DidGetMetadata,
-                 weak_factory_.GetWeakPtr()));
+      url_,
+      FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY |
+          FileSystemOperation::GET_METADATA_FIELD_SIZE,
+      base::BindOnce(&FileSystemURLRequestJob::DidGetMetadata,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void FileSystemURLRequestJob::DidAttemptAutoMount(base::File::Error result) {

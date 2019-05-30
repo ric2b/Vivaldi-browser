@@ -5,8 +5,12 @@
 // This module implements the vivaldi specific public-facing API functions
 // for the <webview> tag.
 
-var WebViewPrivate = require('webViewPrivate').WebViewPrivate;
-var WebViewImpl = require('webView').WebViewImpl;
+var WebViewPrivate = getInternalApi ? getInternalApi("webViewPrivate") : require("webViewPrivate").WebViewPrivate;
+
+//var WebViewPrivate = require('webViewPrivate').WebViewPrivate;
+//var WebViewImpl = require('webView').WebViewImpl;
+
+function RegisterVivaldiWebViewExtensions(WebViewImpl) {
 
 WebViewImpl.prototype.setVisible = function (isVisible) {
   if (!this.guest.getId()) {
@@ -38,12 +42,12 @@ WebViewImpl.prototype.getThumbnailFromService = function (callback) {
 };
 
 WebViewImpl.prototype.addToThumbnailService = function (
-      key, dimensions, callback) {
+      dimensions, callback) {
   if (!this.guest.getId()) {
     return false;
   }
   WebViewPrivate.addToThumbnailService(
-      this.guest.getId(), key, dimensions, callback);
+      this.guest.getId(), dimensions, callback);
 };
 
 WebViewImpl.prototype.setIsFullscreen = function (isFullscreen,
@@ -99,8 +103,8 @@ WebViewImpl.prototype.sendRequest =
       this.guest.getId(), url, wasTyped, usePost, postData, extraHeaders);
   };
 
+}
 // -----------------------------------------------------------------------------
 
-WebViewImpl.getApiMethodsPrivate = function () {
-  return WEB_VIEW_API_METHODS;
-};
+// Exports.
+exports.$set('RegisterVivaldiWebViewExtensions', RegisterVivaldiWebViewExtensions);

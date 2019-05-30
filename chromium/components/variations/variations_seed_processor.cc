@@ -84,12 +84,12 @@ void ForceExperimentState(
     base::FieldTrial* trial) {
   RegisterExperimentParams(study, experiment);
   RegisterVariationIds(experiment, study.name());
-  if (study.activation_type() == Study_ActivationType_ACTIVATION_AUTO) {
+  if (study.activation_type() == Study_ActivationType_ACTIVATE_ON_STARTUP) {
     // This call must happen after all params have been registered for the
     // trial. Otherwise, since we look up params by trial and group name, the
     // params won't be registered under the correct key.
     trial->group();
-    // UI Strings can only be overridden from ACTIVATION_AUTO experiments.
+    // UI Strings can only be overridden from ACTIVATE_ON_STARTUP experiments.
     ApplyUIStringOverrides(experiment, override_callback);
   }
 }
@@ -172,6 +172,7 @@ void VariationsSeedProcessor::CreateTrialsFromSeed(
     base::FeatureList* feature_list) {
   std::vector<ProcessedStudy> filtered_studies;
   FilterAndValidateStudies(seed, client_state, &filtered_studies);
+  SetSeedVersion(seed.version());
 
   for (const ProcessedStudy& study : filtered_studies) {
     CreateTrialFromStudy(study, override_callback, low_entropy_provider,
@@ -296,7 +297,7 @@ void VariationsSeedProcessor::CreateTrialFromStudy(
   if (enables_or_disables_features)
     RegisterFeatureOverrides(processed_study, trial.get(), feature_list);
 
-  if (study.activation_type() == Study_ActivationType_ACTIVATION_AUTO) {
+  if (study.activation_type() == Study_ActivationType_ACTIVATE_ON_STARTUP) {
     // This call must happen after all params have been registered for the
     // trial. Otherwise, since we look up params by trial and group name, the
     // params won't be registered under the correct key.
@@ -307,7 +308,7 @@ void VariationsSeedProcessor::CreateTrialFromStudy(
     if (!has_overrides)
       return;
 
-    // UI Strings can only be overridden from ACTIVATION_AUTO experiments.
+    // UI Strings can only be overridden from ACTIVATE_ON_STARTUP experiments.
     int experiment_index = processed_study.GetExperimentIndexByName(group_name);
     // If the chosen experiment was not found in the study, simply return.
     // Although not normally expected, but could happen in exception cases, see

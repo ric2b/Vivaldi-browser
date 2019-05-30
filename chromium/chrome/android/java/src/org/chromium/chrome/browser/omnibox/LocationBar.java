@@ -9,23 +9,21 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 
+import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.WindowDelegate;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.omnibox.UrlBar.UrlBarDelegate;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.toolbar.Toolbar;
-import org.chromium.chrome.browser.toolbar.ToolbarActionModeCallback;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
-import org.chromium.chrome.browser.widget.ScrimView;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet;
+import org.chromium.chrome.browser.toolbar.top.Toolbar;
+import org.chromium.chrome.browser.toolbar.top.ToolbarActionModeCallback;
 import org.chromium.ui.base.WindowAndroid;
 
 /**
  * Container that holds the {@link UrlBar} and SSL state related with the current {@link Tab}.
  */
 public interface LocationBar extends UrlBarDelegate {
-
     /**
      * Handles native dependent initialization for this class.
      */
@@ -84,17 +82,13 @@ public interface LocationBar extends UrlBarDelegate {
     ToolbarDataProvider getToolbarDataProvider();
 
     /**
-     * Set the bottom sheet for Chrome Home.
-     * @param sheet The bottom sheet for Chrome Home if it exists.
-     */
-    void setBottomSheet(BottomSheet sheet);
-
-    /**
      * Initialize controls that will act as hooks to various functions.
      * @param windowDelegate {@link WindowDelegate} that will provide {@link Window} related info.
      * @param windowAndroid {@link WindowAndroid} that is used by the owning {@link Activity}.
+     * @param provider An {@link ActivityTabProvider} to access the activity's current tab.
      */
-    void initializeControls(WindowDelegate windowDelegate, WindowAndroid windowAndroid);
+    void initializeControls(WindowDelegate windowDelegate, WindowAndroid windowAndroid,
+            ActivityTabProvider provider);
 
     /**
      * Adds a URL focus change listener that will be notified when the URL gains or loses focus.
@@ -142,7 +136,7 @@ public interface LocationBar extends UrlBarDelegate {
     /**
      * Updates the security icon displayed in the LocationBar.
      */
-    void updateSecurityIcon();
+    void updateStatusIcon();
 
     /**
      * @return The {@link ViewGroup} that this container holds.
@@ -150,14 +144,17 @@ public interface LocationBar extends UrlBarDelegate {
     View getContainerView();
 
     /**
+     * TODO(twellington): Try to remove this method. It's only used to return an in-product help
+     *                    bubble anchor view... which should be moved out of tab and perhaps into
+     *                    the status bar icon component.
+     * @return The view containing the security icon.
+     */
+    View getSecurityIconView();
+
+    /**
      * Updates the state of the mic button if there is one.
      */
     void updateMicButtonState();
-
-    /**
-     * Signal to the {@link SuggestionView} populated by us.
-     */
-    void hideSuggestions();
 
     /**
      * Sets the callback to be used by default for text editing action bar.
@@ -166,32 +163,22 @@ public interface LocationBar extends UrlBarDelegate {
     void setDefaultTextEditActionModeCallback(ToolbarActionModeCallback callback);
 
     /**
-     * Returns whether the {@link UrlBar} must be queried for its location on screen when
-     * suggestions are being laid out by {@link SuggestionView}.
-     * TODO(dfalcantara): Revisit this after M58.
-     *
-     * @return Whether or not the {@link UrlBar} has to be explicitly checked for its location.
-     */
-    boolean mustQueryUrlBarLocationForSuggestions();
-
-    /**
-     * @return Whether suggestions are being shown for the location bar.
-     */
-    boolean isSuggestionsListShown();
-
-    /**
-     * @return Whether the location bar is allowed to use Chrome modern design.
-     */
-    boolean useModernDesign();
-
-    /**
      * @return The margin to be applied to the URL bar based on the buttons currently visible next
      *         to it, used to avoid text overlapping the buttons and vice versa.
      */
     int getUrlContainerMarginEnd();
 
     /**
-     * @param scrim The scrim for this location bar to use.
+     * Called to set the width of the location bar when the url bar is not focused.
+     *
+     * Immediately after the animation to transition the URL bar from focused to unfocused finishes,
+     * the layout width returned from #getMeasuredWidth() can differ from the final unfocused width
+     * (e.g. this value) until the next layout pass is complete.
+     *
+     * This value may be used to determine whether optional child views should be visible in the
+     * unfocused location bar.
+     *
+     * @param unfocusedWidth The unfocused location bar width.
      */
-    void setScrim(ScrimView scrim);
+    void setUnfocusedWidth(int unfocusedWidth);
 }

@@ -8,7 +8,7 @@
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_content_adjustment_util.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_mediator.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_model.h"
-#include "ios/chrome/browser/ui/ui_util.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/web/public/web_state/ui/crw_web_view_proxy.h"
 #import "ios/web/public/web_state/ui/crw_web_view_scroll_view_proxy.h"
 
@@ -57,15 +57,11 @@
 
 - (BOOL)webViewScrollViewShouldScrollToTop:
     (CRWWebViewScrollViewProxy*)webViewScrollViewProxy {
-  if (self.model->progress() > 0.05) {
-    // Inform FullscreenUIElements that the content is going to be scrolled to
-    // the top.
-    self.mediator->ScrollToTop();
-    return YES;
-  } else {
-    self.mediator->AnimateModelReset();
-    return NO;
-  }
+  // Exit fullscreen when the status bar is tapped, but don't allow the scroll-
+  // to-top animation to occur if the toolbars are fully collapsed.
+  BOOL scrollToTop = !AreCGFloatsEqual(self.model->progress(), 0.0);
+  self.mediator->ExitFullscreen();
+  return scrollToTop;
 }
 
 @end

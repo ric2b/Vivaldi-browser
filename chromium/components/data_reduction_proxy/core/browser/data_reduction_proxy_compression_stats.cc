@@ -38,12 +38,12 @@ namespace {
 // CONCAT1 provides extra level of indirection so that __LINE__ macro expands.
 #define CONCAT1(a, b) CONCAT(a, b)
 #define UNIQUE_VARNAME CONCAT1(var_, __LINE__)
-// We need to use a macro instead of a method because UMA_HISTOGRAM_COUNTS
+// We need to use a macro instead of a method because UMA_HISTOGRAM_COUNTS_1M
 // requires its first argument to be an inline string and not a variable.
-#define RECORD_INT64PREF_TO_HISTOGRAM(pref, uma)     \
-  int64_t UNIQUE_VARNAME = GetInt64(pref);           \
-  if (UNIQUE_VARNAME > 0) {                          \
-    UMA_HISTOGRAM_COUNTS(uma, UNIQUE_VARNAME >> 10); \
+#define RECORD_INT64PREF_TO_HISTOGRAM(pref, uma)        \
+  int64_t UNIQUE_VARNAME = GetInt64(pref);              \
+  if (UNIQUE_VARNAME > 0) {                             \
+    UMA_HISTOGRAM_COUNTS_1M(uma, UNIQUE_VARNAME >> 10); \
   }
 
 const double kSecondsPerWeek =
@@ -71,7 +71,7 @@ void MaintainContentLengthPrefsWindow(base::ListValue* list, size_t length) {
   // Newly added lists are empty. Add entries to back to fill the window,
   // each initialized to zero.
   while (list->GetSize() < length)
-    list->AppendString(base::Int64ToString(0));
+    list->AppendString(base::NumberToString(0));
   DCHECK_EQ(length, list->GetSize());
 }
 
@@ -83,7 +83,7 @@ void AddInt64ToListPref(size_t index,
                         base::ListValue* list_update) {
   int64_t value = GetInt64PrefValue(*list_update, index) + length;
   list_update->Set(index,
-                   std::make_unique<base::Value>(base::Int64ToString(value)));
+                   std::make_unique<base::Value>(base::NumberToString(value)));
 }
 
 // DailyContentLengthUpdate maintains a data saving pref. The pref is a list
@@ -105,10 +105,9 @@ void RecordDailyContentLengthHistograms(
     return;
 
   // Record metrics in KB.
-  UMA_HISTOGRAM_COUNTS(
-      "Net.DailyOriginalContentLength", original_length >> 10);
-  UMA_HISTOGRAM_COUNTS(
-      "Net.DailyContentLength", received_length >> 10);
+  UMA_HISTOGRAM_COUNTS_1M("Net.DailyOriginalContentLength",
+                          original_length >> 10);
+  UMA_HISTOGRAM_COUNTS_1M("Net.DailyContentLength", received_length >> 10);
 
   int percent = 0;
   // UMA percentage cannot be negative.
@@ -122,12 +121,11 @@ void RecordDailyContentLengthHistograms(
     return;
   }
 
-  UMA_HISTOGRAM_COUNTS(
+  UMA_HISTOGRAM_COUNTS_1M(
       "Net.DailyOriginalContentLength_DataReductionProxyEnabled",
       original_length_with_data_reduction_enabled >> 10);
-  UMA_HISTOGRAM_COUNTS(
-      "Net.DailyContentLength_DataReductionProxyEnabled",
-      received_length_with_data_reduction_enabled >> 10);
+  UMA_HISTOGRAM_COUNTS_1M("Net.DailyContentLength_DataReductionProxyEnabled",
+                          received_length_with_data_reduction_enabled >> 10);
 
   int percent_data_reduction_proxy_enabled = 0;
   // UMA percentage cannot be negative.
@@ -147,7 +145,7 @@ void RecordDailyContentLengthHistograms(
       (100 * received_length_with_data_reduction_enabled) / received_length);
 
   DCHECK_GE(https_length_with_data_reduction_enabled, 0);
-  UMA_HISTOGRAM_COUNTS(
+  UMA_HISTOGRAM_COUNTS_1M(
       "Net.DailyContentLength_DataReductionProxyEnabled_Https",
       https_length_with_data_reduction_enabled >> 10);
   UMA_HISTOGRAM_PERCENTAGE(
@@ -155,7 +153,7 @@ void RecordDailyContentLengthHistograms(
       (100 * https_length_with_data_reduction_enabled) / received_length);
 
   DCHECK_GE(short_bypass_length_with_data_reduction_enabled, 0);
-  UMA_HISTOGRAM_COUNTS(
+  UMA_HISTOGRAM_COUNTS_1M(
       "Net.DailyContentLength_DataReductionProxyEnabled_ShortBypass",
       short_bypass_length_with_data_reduction_enabled >> 10);
   UMA_HISTOGRAM_PERCENTAGE(
@@ -164,7 +162,7 @@ void RecordDailyContentLengthHistograms(
        received_length));
 
   DCHECK_GE(long_bypass_length_with_data_reduction_enabled, 0);
-  UMA_HISTOGRAM_COUNTS(
+  UMA_HISTOGRAM_COUNTS_1M(
       "Net.DailyContentLength_DataReductionProxyEnabled_LongBypass",
       long_bypass_length_with_data_reduction_enabled >> 10);
   UMA_HISTOGRAM_PERCENTAGE(
@@ -173,7 +171,7 @@ void RecordDailyContentLengthHistograms(
        received_length));
 
   DCHECK_GE(unknown_length_with_data_reduction_enabled, 0);
-  UMA_HISTOGRAM_COUNTS(
+  UMA_HISTOGRAM_COUNTS_1M(
       "Net.DailyContentLength_DataReductionProxyEnabled_UnknownBypass",
       unknown_length_with_data_reduction_enabled >> 10);
   UMA_HISTOGRAM_PERCENTAGE(
@@ -182,13 +180,12 @@ void RecordDailyContentLengthHistograms(
        received_length));
 
   DCHECK_GE(original_length_via_data_reduction_proxy, 0);
-  UMA_HISTOGRAM_COUNTS(
+  UMA_HISTOGRAM_COUNTS_1M(
       "Net.DailyOriginalContentLength_ViaDataReductionProxy",
       original_length_via_data_reduction_proxy >> 10);
   DCHECK_GE(received_length_via_data_reduction_proxy, 0);
-  UMA_HISTOGRAM_COUNTS(
-      "Net.DailyContentLength_ViaDataReductionProxy",
-      received_length_via_data_reduction_proxy >> 10);
+  UMA_HISTOGRAM_COUNTS_1M("Net.DailyContentLength_ViaDataReductionProxy",
+                          received_length_via_data_reduction_proxy >> 10);
   UMA_HISTOGRAM_PERCENTAGE(
       "Net.DailyContentPercent_ViaDataReductionProxy",
       (100 * received_length_via_data_reduction_proxy) / received_length);
@@ -230,7 +227,7 @@ void AddToDictionaryPref(PrefService* pref_service,
                          int value) {
   DictionaryPrefUpdate pref_update(pref_service, pref);
   base::DictionaryValue* pref_dict = pref_update.Get();
-  const std::string key_str = base::IntToString(key);
+  const std::string key_str = base::NumberToString(key);
   base::Value* dict_value = pref_dict->FindKey(key_str);
   if (dict_value)
     value += dict_value->GetInt();
@@ -368,7 +365,7 @@ class DataReductionProxyCompressionStats::DailyContentLengthUpdate {
     for (int i = 0;
          i < days_since_last_update && i < static_cast<int>(kNumDaysInHistory);
          ++i) {
-      update_->AppendString(base::Int64ToString(0));
+      update_->AppendString(base::NumberToString(0));
     }
 
     // Entries for new days may have been appended. Maintain the invariant that
@@ -432,8 +429,6 @@ DataReductionProxyCompressionStats::DataReductionProxyCompressionStats(
       pref_service_(prefs),
       delay_(delay),
       data_usage_map_is_dirty_(false),
-      session_total_received_(0),
-      session_total_original_(0),
       current_data_usage_load_status_(NOT_LOADED),
       weak_factory_(this) {
   DCHECK(service);
@@ -531,8 +526,6 @@ void DataReductionProxyCompressionStats::RecordDataUseWithMimeType(
   DCHECK(thread_checker_.CalledOnValidThread());
   TRACE_EVENT0("loader",
                "DataReductionProxyCompressionStats::RecordDataUseWithMimeType")
-  session_total_received_ += data_used;
-  session_total_original_ += original_size;
 
   IncreaseInt64Pref(data_reduction_proxy::prefs::kHttpReceivedContentLength,
                     data_used);
@@ -562,7 +555,7 @@ int64_t DataReductionProxyCompressionStats::GetInt64(const char* pref_path) {
   if (delay_.is_zero())
     return pref_service_->GetInt64(pref_path);
 
-  DataReductionProxyPrefMap::iterator iter = pref_map_.find(pref_path);
+  auto iter = pref_map_.find(pref_path);
   return iter->second;
 }
 
@@ -600,8 +593,7 @@ void DataReductionProxyCompressionStats::WritePrefs() {
   if (delay_.is_zero())
     return;
 
-  for (DataReductionProxyPrefMap::iterator iter = pref_map_.begin();
-       iter != pref_map_.end(); ++iter) {
+  for (auto iter = pref_map_.begin(); iter != pref_map_.end(); ++iter) {
     pref_service_->SetInt64(iter->first, iter->second);
   }
 
@@ -610,34 +602,6 @@ void DataReductionProxyCompressionStats::WritePrefs() {
     TransferList(*(iter->second.get()),
                  ListPrefUpdate(pref_service_, iter->first).Get());
   }
-}
-
-std::unique_ptr<base::Value>
-DataReductionProxyCompressionStats::HistoricNetworkStatsInfoToValue() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  int64_t total_received = GetInt64(prefs::kHttpReceivedContentLength);
-  int64_t total_original = GetInt64(prefs::kHttpOriginalContentLength);
-
-  auto dict = std::make_unique<base::DictionaryValue>();
-  // Use strings to avoid overflow. base::Value only supports 32-bit integers.
-  dict->SetString("historic_received_content_length",
-                  base::Int64ToString(total_received));
-  dict->SetString("historic_original_content_length",
-                  base::Int64ToString(total_original));
-  return std::move(dict);
-}
-
-std::unique_ptr<base::Value>
-DataReductionProxyCompressionStats::SessionNetworkStatsInfoToValue() const {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  auto dict = std::make_unique<base::DictionaryValue>();
-  // Use strings to avoid overflow. base::Value only supports 32-bit integers.
-  dict->SetString("session_received_content_length",
-                  base::Int64ToString(session_total_received_));
-  dict->SetString("session_original_content_length",
-                  base::Int64ToString(session_total_original_));
-  return std::move(dict);
 }
 
 int64_t DataReductionProxyCompressionStats::GetLastUpdateTime() {
@@ -655,8 +619,8 @@ void DataReductionProxyCompressionStats::ResetStatistics() {
   original_update->Clear();
   received_update->Clear();
   for (size_t i = 0; i < kNumDaysInHistory; ++i) {
-    original_update->AppendString(base::Int64ToString(0));
-    received_update->AppendString(base::Int64ToString(0));
+    original_update->AppendString(base::NumberToString(0));
+    received_update->AppendString(base::NumberToString(0));
   }
 }
 

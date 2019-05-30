@@ -38,7 +38,7 @@ class ProgrammaticScrollTest : public testing::Test {
 
  protected:
   void RegisterMockedHttpURLLoad(const std::string& file_name) {
-    URLTestHelpers::RegisterMockedURLLoadFromBase(
+    url_test_helpers::RegisterMockedURLLoadFromBase(
         WebString::FromUTF8(base_url_), test::CoreTestDataPath(),
         WebString::FromUTF8(file_name));
   }
@@ -49,11 +49,12 @@ class ProgrammaticScrollTest : public testing::Test {
 TEST_F(ProgrammaticScrollTest, RestoreScrollPositionAndViewStateWithScale) {
   RegisterMockedHttpURLLoad("long_scroll.html");
 
-  FrameTestHelpers::WebViewHelper web_view_helper;
+  frame_test_helpers::WebViewHelper web_view_helper;
   WebViewImpl* web_view =
       web_view_helper.InitializeAndLoad(base_url_ + "long_scroll.html");
-  web_view->Resize(WebSize(1000, 1000));
-  web_view->UpdateAllLifecyclePhases();
+  web_view->MainFrameWidget()->Resize(WebSize(1000, 1000));
+  web_view->MainFrameWidget()->UpdateAllLifecyclePhases(
+      WebWidget::LifecycleUpdateReason::kTest);
 
   FrameLoader& loader = web_view->MainFrameImpl()->GetFrame()->Loader();
   loader.GetDocumentLoader()->SetLoadType(WebFrameLoadType::kBackForward);
@@ -81,11 +82,12 @@ TEST_F(ProgrammaticScrollTest, RestoreScrollPositionAndViewStateWithScale) {
 TEST_F(ProgrammaticScrollTest, RestoreScrollPositionAndViewStateWithoutScale) {
   RegisterMockedHttpURLLoad("long_scroll.html");
 
-  FrameTestHelpers::WebViewHelper web_view_helper;
+  frame_test_helpers::WebViewHelper web_view_helper;
   WebViewImpl* web_view =
       web_view_helper.InitializeAndLoad(base_url_ + "long_scroll.html");
-  web_view->Resize(WebSize(1000, 1000));
-  web_view->UpdateAllLifecyclePhases();
+  web_view->MainFrameWidget()->Resize(WebSize(1000, 1000));
+  web_view->MainFrameWidget()->UpdateAllLifecyclePhases(
+      WebWidget::LifecycleUpdateReason::kTest);
 
   FrameLoader& loader = web_view->MainFrameImpl()->GetFrame()->Loader();
   loader.GetDocumentLoader()->SetLoadType(WebFrameLoadType::kBackForward);
@@ -107,19 +109,48 @@ TEST_F(ProgrammaticScrollTest, RestoreScrollPositionAndViewStateWithoutScale) {
   EXPECT_EQ(400, web_view->MainFrameImpl()->GetScrollOffset().height);
 }
 
+TEST_F(ProgrammaticScrollTest, SaveScrollStateClearsAnchor) {
+  RegisterMockedHttpURLLoad("long_scroll.html");
+
+  frame_test_helpers::WebViewHelper web_view_helper;
+  WebViewImpl* web_view =
+      web_view_helper.InitializeAndLoad(base_url_ + "long_scroll.html");
+  web_view->MainFrameWidget()->Resize(WebSize(1000, 1000));
+  web_view->MainFrameWidget()->UpdateAllLifecyclePhases(
+      WebWidget::LifecycleUpdateReason::kTest);
+
+  FrameLoader& loader = web_view->MainFrameImpl()->GetFrame()->Loader();
+  loader.GetDocumentLoader()->SetLoadType(WebFrameLoadType::kBackForward);
+
+  web_view->MainFrameImpl()->SetScrollOffset(WebSize(0, 500));
+  loader.GetDocumentLoader()->GetInitialScrollState().was_scrolled_by_user =
+      true;
+  loader.SaveScrollState();
+  loader.SaveScrollAnchor();
+
+  web_view->MainFrameImpl()->SetScrollOffset(WebSize(0, 0));
+  loader.SaveScrollState();
+  loader.GetDocumentLoader()->GetInitialScrollState().was_scrolled_by_user =
+      false;
+
+  loader.RestoreScrollPositionAndViewState();
+
+  EXPECT_EQ(0, web_view->MainFrameImpl()->GetScrollOffset().height);
+}
+
 class ProgrammaticScrollSimTest : public SimTest {};
 
 TEST_F(ProgrammaticScrollSimTest, NavigateToHash) {
-  WebView().Resize(WebSize(800, 600));
+  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
   SimRequest main_resource("https://example.com/test.html#target", "text/html");
-  SimRequest css_resource("https://example.com/test.css", "text/css");
+  SimSubresourceRequest css_resource("https://example.com/test.css",
+                                     "text/css");
 
   LoadURL("https://example.com/test.html#target");
 
   // Finish loading the main document before the stylesheet is loaded so that
   // rendering is blocked when parsing finishes. This will delay closing the
   // document until the load event.
-  main_resource.Start();
   main_resource.Write(
       "<!DOCTYPE html><link id=link rel=stylesheet href=test.css>");
   css_resource.Start();

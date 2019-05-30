@@ -34,18 +34,13 @@ class BrowserProcessPlatformPartBase {
   virtual void StartTearDown();
 
   // Called from AttemptExitInternal().
-  virtual void AttemptExit();
+  virtual void AttemptExit(bool try_to_quit_application);
 
   // Called at the end of BrowserProcessImpl::PreMainMessageLoopRun().
   virtual void PreMainMessageLoopRun();
 
   virtual std::unique_ptr<policy::ChromeBrowserPolicyConnector>
   CreateBrowserPolicyConnector();
-
-  // Called from ChromeContentBrowserClient::RegisterInProcessServices().
-  virtual void RegisterInProcessServices(
-      content::ContentBrowserClient::StaticServiceMap* services,
-      content::ServiceManagerConnection* connection);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(BrowserProcessPlatformPartBase);

@@ -11,6 +11,7 @@
 #include <netinet/in.h>
 #include <sys/ioctl.h>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/containers/stack_container.h"
@@ -167,6 +168,10 @@ const guardid_t kSocketFdGuard = 0xD712BC0BC9A4EAD4;
 
 #endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 
+int GetSocketFDHash(int fd) {
+  return fd ^ 1595649551;
+}
+
 }  // namespace
 
 UDPSocketPosix::UDPSocketPosix(DatagramSocket::BindType bind_type,
@@ -175,6 +180,7 @@ UDPSocketPosix::UDPSocketPosix(DatagramSocket::BindType bind_type,
     : write_async_watcher_(std::make_unique<WriteAsyncWatcher>(this)),
       sender_(new UDPSocketPosixSender()),
       socket_(kInvalidSocket),
+      socket_hash_(0),
       addr_family_(0),
       is_connected_(false),
       socket_options_(SOCKET_OPTION_MULTICAST_LOOP),
@@ -218,6 +224,7 @@ int UDPSocketPosix::Open(AddressFamily address_family) {
   PCHECK(change_fdguard_np(socket_, NULL, 0, &kSocketFdGuard,
                            GUARD_CLOSE | GUARD_DUP, NULL) == 0);
 #endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+  socket_hash_ = GetSocketFDHash(socket_);
   if (!base::SetNonBlocking(socket_)) {
     const int err = MapSystemError(errno);
     Close();
@@ -304,6 +311,9 @@ void UDPSocketPosix::Close() {
   ok = write_socket_watcher_.StopWatchingFileDescriptor();
   DCHECK(ok);
 
+  // Verify that |socket_| hasn't been corrupted. Needed to debug
+  // crbug.com/906005.
+  CHECK_EQ(socket_hash_, GetSocketFDHash(socket_));
 #if defined(OS_MACOSX) && !defined(OS_IOS)
   PCHECK(IGNORE_EINTR(guarded_close_np(socket_, &kSocketFdGuard)) == 0);
 #else
@@ -432,7 +442,7 @@ int UDPSocketPosix::SendToOrWrite(IOBuffer* buf,
   if (!base::MessageLoopCurrentForIO::Get()->WatchFileDescriptor(
           socket_, true, base::MessagePumpForIO::WATCH_WRITE,
           &write_socket_watcher_, &write_watcher_)) {
-    DVLOG(1) << "WatchFileDescriptor failed on write, errno " << errno;
+    DVPLOG(1) << "WatchFileDescriptor failed on write";
     int result = MapSystemError(errno);
     LogWrite(result, NULL, NULL);
     return result;
@@ -452,7 +462,10 @@ int UDPSocketPosix::Connect(const IPEndPoint& address) {
   DCHECK_NE(socket_, kInvalidSocket);
   net_log_.BeginEvent(NetLogEventType::UDP_CONNECT,
                       CreateNetLogUDPConnectCallback(&address, bound_network_));
-  int rv = InternalConnect(address);
+  int rv = SetMulticastOptions();
+  if (rv != OK)
+    return rv;
+  rv = InternalConnect(address);
   net_log_.EndEventWithNetErrorCode(NetLogEventType::UDP_CONNECT, rv);
   is_connected_ = (rv == OK);
   if (rv != OK)
@@ -669,8 +682,32 @@ int UDPSocketPosix::SetBroadcast(bool broadcast) {
   return rv == 0 ? OK : MapSystemError(errno);
 }
 
+int UDPSocketPosix::AllowAddressSharingForMulticast() {
+  DCHECK_NE(socket_, kInvalidSocket);
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(!is_connected());
+
+  int rv = AllowAddressReuse();
+  if (rv != OK)
+    return rv;
+
+#ifdef SO_REUSEPORT
+  // Attempt to set SO_REUSEPORT if available. On some platforms, this is
+  // necessary to allow the address to be fully shared between separate sockets.
+  // On platforms where the option does not exist, SO_REUSEADDR should be
+  // sufficient to share multicast packets if such sharing is at all possible.
+  int value = 1;
+  rv = setsockopt(socket_, SOL_SOCKET, SO_REUSEPORT, &value, sizeof(value));
+  // Ignore errors that the option does not exist.
+  if (rv != 0 && errno != ENOPROTOOPT)
+    return MapSystemError(errno);
+#endif  // SO_REUSEPORT
+
+  return OK;
+}
+
 void UDPSocketPosix::ReadWatcher::OnFileCanReadWithoutBlocking(int) {
-  TRACE_EVENT0(kNetTracingCategory,
+  TRACE_EVENT0(NetTracingCategory(),
                "UDPSocketPosix::ReadWatcher::OnFileCanReadWithoutBlocking");
   if (!socket_->read_callback_.is_null())
     socket_->DidCompleteRead();
@@ -901,6 +938,13 @@ int UDPSocketPosix::SetMulticastOptions() {
   if (multicast_interface_ != 0) {
     switch (addr_family_) {
       case AF_INET: {
+#if defined(OS_FUCHSIA)
+        // setsockopt(IP_MULTICAST_IF) is broken on Fuchsia.
+        // TODO(https://crbug.com/938101) Remove ifdef once the bug is fixed
+        // upstream.
+        return OK;
+#endif
+
 #if defined(OS_MACOSX)
         ip_mreq mreq = {};
         int error = GetIPv4AddressFromIndex(socket_, multicast_interface_,
@@ -1152,17 +1196,12 @@ SendResult UDPSocketPosixSender::InternalSendmmsgBuffers(
     DatagramBuffers buffers) const {
   base::StackVector<struct iovec, kWriteAsyncMaxBuffersThreshold + 1> msg_iov;
   base::StackVector<struct mmsghdr, kWriteAsyncMaxBuffersThreshold + 1> msgvec;
-  int i = 0;
-  for (auto& buffer : buffers) {
-    msg_iov[i].iov_base = const_cast<char*>(buffer->data());
-    msg_iov[i].iov_len = buffer->length();
-    i++;
-  }
-  for (size_t j = 0; j < buffers.size(); j++) {
-    std::memset(&msgvec[j], 0, sizeof(msgvec[j]));
-    msgvec[j].msg_hdr.msg_iov = &msg_iov[j];
-    msgvec[j].msg_hdr.msg_iovlen = 1;
-  }
+  msg_iov->reserve(buffers.size());
+  for (auto& buffer : buffers)
+    msg_iov->push_back({const_cast<char*>(buffer->data()), buffer->length()});
+  msgvec->reserve(buffers.size());
+  for (size_t j = 0; j < buffers.size(); j++)
+    msgvec->push_back({{nullptr, 0, &msg_iov[j], 1, nullptr, 0, 0}, 0});
   int result = HANDLE_EINTR(Sendmmsg(fd, &msgvec[0], buffers.size(), 0));
   SendResult send_result(0, 0, std::move(buffers));
   if (result < 0) {
@@ -1382,7 +1421,7 @@ void UDPSocketPosix::DidSendBuffers(SendResult send_result) {
   if (last_async_result_ == ERR_IO_PENDING) {
     DVLOG(2) << __func__ << " WatchFileDescriptor start";
     if (!WatchFileDescriptor()) {
-      DVLOG(1) << "WatchFileDescriptor failed on write, errno " << errno;
+      DVPLOG(1) << "WatchFileDescriptor failed on write";
       last_async_result_ = MapSystemError(errno);
       LogWrite(last_async_result_, NULL, NULL);
     } else {

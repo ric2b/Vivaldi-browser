@@ -43,15 +43,13 @@ class GLOutputSurface : public OutputSurface {
   gfx::BufferFormat GetOverlayBufferFormat() const override;
   bool HasExternalStencilTest() const override;
   void ApplyExternalStencil() override;
-#if BUILDFLAG(ENABLE_VULKAN)
-  gpu::VulkanSurface* GetVulkanSurface() override;
-#endif
   unsigned UpdateGpuFence() override;
   void SetNeedsSwapSizeNotifications(
       bool needs_swap_size_notifications) override;
 
  protected:
   OutputSurfaceClient* client() const { return client_; }
+  ui::LatencyTracker* latency_tracker() { return &latency_tracker_; }
 
   // Called when a swap completion is signaled from ImageTransportSurface.
   virtual void DidReceiveSwapBuffersAck(gfx::SwapResult result);

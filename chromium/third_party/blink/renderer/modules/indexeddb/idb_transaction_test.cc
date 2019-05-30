@@ -64,15 +64,13 @@ void DeactivateNewTransactions(v8::Isolate* isolate) {
 class FakeIDBDatabaseCallbacks final : public IDBDatabaseCallbacks {
  public:
   static FakeIDBDatabaseCallbacks* Create() {
-    return new FakeIDBDatabaseCallbacks();
+    return MakeGarbageCollected<FakeIDBDatabaseCallbacks>();
   }
+  FakeIDBDatabaseCallbacks() = default;
   void OnVersionChange(int64_t old_version, int64_t new_version) override {}
   void OnForcedClose() override {}
   void OnAbort(int64_t transaction_id, DOMException* error) override {}
   void OnComplete(int64_t transaction_id) override {}
-
- private:
-  FakeIDBDatabaseCallbacks() = default;
 };
 
 class IDBTransactionTest : public testing::Test {
@@ -80,7 +78,7 @@ class IDBTransactionTest : public testing::Test {
   void SetUp() override {
     url_loader_mock_factory_ = platform_->GetURLLoaderMockFactory();
     WebURLResponse response;
-    response.SetURL(KURL("blob:"));
+    response.SetCurrentRequestUrl(KURL("blob:"));
     url_loader_mock_factory_->RegisterURLProtocol(WebString("blob"), response,
                                                   "");
   }
@@ -98,7 +96,7 @@ class IDBTransactionTest : public testing::Test {
     HashSet<String> transaction_scope = {"store"};
     transaction_ = IDBTransaction::CreateNonVersionChange(
         scope.GetScriptState(), kTransactionId, transaction_scope,
-        kWebIDBTransactionModeReadOnly, db_.Get());
+        mojom::IDBTransactionMode::ReadOnly, db_.Get());
 
     IDBKeyPath store_key_path("primaryKey");
     scoped_refptr<IDBObjectStoreMetadata> store_metadata = base::AdoptRef(
@@ -122,11 +120,13 @@ TEST_F(IDBTransactionTest, ContextDestroyedEarlyDeath) {
   EXPECT_CALL(*backend, Close()).Times(1);
   BuildTransaction(scope, std::move(backend));
 
-  PersistentHeapHashSet<WeakMember<IDBTransaction>> live_transactions;
-  live_transactions.insert(transaction_);
+  Persistent<HeapHashSet<WeakMember<IDBTransaction>>> live_transactions =
+      MakeGarbageCollected<HeapHashSet<WeakMember<IDBTransaction>>>();
+  ;
+  live_transactions->insert(transaction_);
 
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(1u, live_transactions.size());
+  EXPECT_EQ(1u, live_transactions->size());
 
   Persistent<IDBRequest> request =
       IDBRequest::Create(scope.GetScriptState(), store_.Get(),
@@ -136,7 +136,7 @@ TEST_F(IDBTransactionTest, ContextDestroyedEarlyDeath) {
 
   request.Clear();  // The transaction is holding onto the request.
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(1u, live_transactions.size());
+  EXPECT_EQ(1u, live_transactions->size());
 
   // This will generate an Abort() call to the back end which is dropped by the
   // fake proxy, so an explicit OnAbort call is made.
@@ -147,7 +147,7 @@ TEST_F(IDBTransactionTest, ContextDestroyedEarlyDeath) {
   store_.Clear();
 
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(0U, live_transactions.size());
+  EXPECT_EQ(0U, live_transactions->size());
 }
 
 TEST_F(IDBTransactionTest, ContextDestroyedAfterDone) {
@@ -156,11 +156,13 @@ TEST_F(IDBTransactionTest, ContextDestroyedAfterDone) {
   EXPECT_CALL(*backend, Close()).Times(1);
   BuildTransaction(scope, std::move(backend));
 
-  PersistentHeapHashSet<WeakMember<IDBTransaction>> live_transactions;
-  live_transactions.insert(transaction_);
+  Persistent<HeapHashSet<WeakMember<IDBTransaction>>> live_transactions =
+      MakeGarbageCollected<HeapHashSet<WeakMember<IDBTransaction>>>();
+  ;
+  live_transactions->insert(transaction_);
 
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(1U, live_transactions.size());
+  EXPECT_EQ(1U, live_transactions->size());
 
   Persistent<IDBRequest> request =
       IDBRequest::Create(scope.GetScriptState(), store_.Get(),
@@ -172,7 +174,7 @@ TEST_F(IDBTransactionTest, ContextDestroyedAfterDone) {
 
   request.Clear();  // The transaction is holding onto the request.
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(1U, live_transactions.size());
+  EXPECT_EQ(1U, live_transactions->size());
 
   // This will generate an Abort() call to the back end which is dropped by the
   // fake proxy, so an explicit OnAbort call is made.
@@ -184,10 +186,10 @@ TEST_F(IDBTransactionTest, ContextDestroyedAfterDone) {
 
   // The request completed, so it has enqueued a success event. Discard the
   // event, so that the transaction can go away.
-  EXPECT_EQ(1U, live_transactions.size());
+  EXPECT_EQ(1U, live_transactions->size());
 
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(0U, live_transactions.size());
+  EXPECT_EQ(0U, live_transactions->size());
 }
 
 TEST_F(IDBTransactionTest, ContextDestroyedWithQueuedResult) {
@@ -196,11 +198,13 @@ TEST_F(IDBTransactionTest, ContextDestroyedWithQueuedResult) {
   EXPECT_CALL(*backend, Close()).Times(1);
   BuildTransaction(scope, std::move(backend));
 
-  PersistentHeapHashSet<WeakMember<IDBTransaction>> live_transactions;
-  live_transactions.insert(transaction_);
+  Persistent<HeapHashSet<WeakMember<IDBTransaction>>> live_transactions =
+      MakeGarbageCollected<HeapHashSet<WeakMember<IDBTransaction>>>();
+  ;
+  live_transactions->insert(transaction_);
 
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(1U, live_transactions.size());
+  EXPECT_EQ(1U, live_transactions->size());
 
   Persistent<IDBRequest> request =
       IDBRequest::Create(scope.GetScriptState(), store_.Get(),
@@ -211,7 +215,7 @@ TEST_F(IDBTransactionTest, ContextDestroyedWithQueuedResult) {
 
   request.Clear();  // The transaction is holding onto the request.
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(1U, live_transactions.size());
+  EXPECT_EQ(1U, live_transactions->size());
 
   // This will generate an Abort() call to the back end which is dropped by the
   // fake proxy, so an explicit OnAbort call is made.
@@ -224,7 +228,7 @@ TEST_F(IDBTransactionTest, ContextDestroyedWithQueuedResult) {
   url_loader_mock_factory_->ServeAsynchronousRequests();
 
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(0U, live_transactions.size());
+  EXPECT_EQ(0U, live_transactions->size());
 }
 
 TEST_F(IDBTransactionTest, ContextDestroyedWithTwoQueuedResults) {
@@ -233,11 +237,13 @@ TEST_F(IDBTransactionTest, ContextDestroyedWithTwoQueuedResults) {
   EXPECT_CALL(*backend, Close()).Times(1);
   BuildTransaction(scope, std::move(backend));
 
-  PersistentHeapHashSet<WeakMember<IDBTransaction>> live_transactions;
-  live_transactions.insert(transaction_);
+  Persistent<HeapHashSet<WeakMember<IDBTransaction>>> live_transactions =
+      MakeGarbageCollected<HeapHashSet<WeakMember<IDBTransaction>>>();
+  ;
+  live_transactions->insert(transaction_);
 
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(1U, live_transactions.size());
+  EXPECT_EQ(1U, live_transactions->size());
 
   Persistent<IDBRequest> request1 =
       IDBRequest::Create(scope.GetScriptState(), store_.Get(),
@@ -253,7 +259,7 @@ TEST_F(IDBTransactionTest, ContextDestroyedWithTwoQueuedResults) {
   request1.Clear();  // The transaction is holding onto the requests.
   request2.Clear();
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(1U, live_transactions.size());
+  EXPECT_EQ(1U, live_transactions->size());
 
   // This will generate an Abort() call to the back end which is dropped by the
   // fake proxy, so an explicit OnAbort call is made.
@@ -266,7 +272,7 @@ TEST_F(IDBTransactionTest, ContextDestroyedWithTwoQueuedResults) {
   url_loader_mock_factory_->ServeAsynchronousRequests();
 
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(0U, live_transactions.size());
+  EXPECT_EQ(0U, live_transactions->size());
 }
 
 TEST_F(IDBTransactionTest, DocumentShutdownWithQueuedAndBlockedResults) {
@@ -277,11 +283,13 @@ TEST_F(IDBTransactionTest, DocumentShutdownWithQueuedAndBlockedResults) {
   EXPECT_CALL(*backend, Close()).Times(1);
   BuildTransaction(scope, std::move(backend));
 
-  PersistentHeapHashSet<WeakMember<IDBTransaction>> live_transactions;
-  live_transactions.insert(transaction_);
+  Persistent<HeapHashSet<WeakMember<IDBTransaction>>> live_transactions =
+      MakeGarbageCollected<HeapHashSet<WeakMember<IDBTransaction>>>();
+  ;
+  live_transactions->insert(transaction_);
 
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(1U, live_transactions.size());
+  EXPECT_EQ(1U, live_transactions->size());
 
   Persistent<IDBRequest> request1 =
       IDBRequest::Create(scope.GetScriptState(), store_.Get(),
@@ -297,7 +305,7 @@ TEST_F(IDBTransactionTest, DocumentShutdownWithQueuedAndBlockedResults) {
   request1.Clear();  // The transaction is holding onto the requests.
   request2.Clear();
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(1U, live_transactions.size());
+  EXPECT_EQ(1U, live_transactions->size());
 
   // This will generate an Abort() call to the back end which is dropped by the
   // fake proxy, so an explicit OnAbort call is made.
@@ -310,32 +318,34 @@ TEST_F(IDBTransactionTest, DocumentShutdownWithQueuedAndBlockedResults) {
   url_loader_mock_factory_->ServeAsynchronousRequests();
 
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(0U, live_transactions.size());
+  EXPECT_EQ(0U, live_transactions->size());
 }
 
 TEST_F(IDBTransactionTest, TransactionFinish) {
   V8TestingScope scope;
   std::unique_ptr<MockWebIDBDatabase> backend = MockWebIDBDatabase::Create();
-  EXPECT_CALL(*backend, Commit(kTransactionId)).Times(1);
+  EXPECT_CALL(*backend, Commit(kTransactionId, 0)).Times(1);
   EXPECT_CALL(*backend, Close()).Times(1);
   BuildTransaction(scope, std::move(backend));
 
-  PersistentHeapHashSet<WeakMember<IDBTransaction>> live_transactions;
-  live_transactions.insert(transaction_);
+  Persistent<HeapHashSet<WeakMember<IDBTransaction>>> live_transactions =
+      MakeGarbageCollected<HeapHashSet<WeakMember<IDBTransaction>>>();
+  ;
+  live_transactions->insert(transaction_);
 
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(1U, live_transactions.size());
+  EXPECT_EQ(1U, live_transactions->size());
 
   DeactivateNewTransactions(scope.GetIsolate());
 
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(1U, live_transactions.size());
+  EXPECT_EQ(1U, live_transactions->size());
 
   transaction_.Clear();
   store_.Clear();
 
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(1U, live_transactions.size());
+  EXPECT_EQ(1U, live_transactions->size());
 
   // Stop the context, so events don't get queued (which would keep the
   // transaction alive).
@@ -348,7 +358,7 @@ TEST_F(IDBTransactionTest, TransactionFinish) {
 
   // OnAbort() should have cleared the transaction's reference to the database.
   ThreadState::Current()->CollectAllGarbage();
-  EXPECT_EQ(0U, live_transactions.size());
+  EXPECT_EQ(0U, live_transactions->size());
 }
 
 }  // namespace

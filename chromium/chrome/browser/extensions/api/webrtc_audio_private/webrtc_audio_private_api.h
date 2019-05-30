@@ -11,7 +11,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/system_monitor/system_monitor.h"
+#include "base/system/system_monitor.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/common/extensions/api/webrtc_audio_private.h"
 #include "content/public/browser/render_process_host.h"
@@ -93,7 +93,7 @@ class WebrtcAudioPrivateGetSinksFunction : public WebrtcAudioPrivateFunction {
   using SinkInfoVector = std::vector<api::webrtc_audio_private::SinkInfo>;
 
   DECLARE_EXTENSION_FUNCTION("webrtcAudioPrivate.getSinks",
-                             WEBRTC_AUDIO_PRIVATE_GET_SINKS);
+                             WEBRTC_AUDIO_PRIVATE_GET_SINKS)
 
   bool RunAsync() override;
 
@@ -113,7 +113,7 @@ class WebrtcAudioPrivateGetAssociatedSinkFunction
 
  private:
   DECLARE_EXTENSION_FUNCTION("webrtcAudioPrivate.getAssociatedSink",
-                             WEBRTC_AUDIO_PRIVATE_GET_ASSOCIATED_SINK);
+                             WEBRTC_AUDIO_PRIVATE_GET_ASSOCIATED_SINK)
 
   // UI thread: Entry point, posts GetInputDeviceDescriptions() to IO thread.
   bool RunAsync() override;
@@ -142,7 +142,7 @@ class WebrtcAudioPrivateSetAudioExperimentsFunction
 
  private:
   DECLARE_EXTENSION_FUNCTION("webrtcAudioPrivate.setAudioExperiments",
-                             WEBRTC_AUDIO_PRIVATE_SET_AUDIO_EXPERIMENTS);
+                             WEBRTC_AUDIO_PRIVATE_SET_AUDIO_EXPERIMENTS)
 
   bool RunAsync() override;
 

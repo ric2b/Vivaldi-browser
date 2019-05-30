@@ -16,8 +16,12 @@
 #include "base/test/bind_test_util.h"
 #include "base/timer/mock_timer.h"
 #include "chrome/browser/extensions/test_extension_system.h"
+#include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/pending_app_manager.h"
+#include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_installation_task.h"
+#include "chrome/browser/web_applications/extensions/bookmark_app_registrar.h"
+#include "chrome/browser/web_applications/test/test_app_registrar.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/crx_file/id_util.h"
@@ -40,34 +44,49 @@ const char kXyzWebAppUrl[] = "https://xyz.example";
 
 const char kWrongUrl[] = "https://foobar.example";
 
-web_app::PendingAppManager::AppInfo GetFooAppInfo() {
-  return web_app::PendingAppManager::AppInfo::Create(
-      GURL(kFooWebAppUrl), web_app::PendingAppManager::LaunchContainer::kTab);
+web_app::PendingAppManager::AppInfo GetFooAppInfo(
+    base::Optional<bool> override_previous_user_uninstall =
+        base::Optional<bool>()) {
+  web_app::PendingAppManager::AppInfo info(
+      GURL(kFooWebAppUrl), web_app::LaunchContainer::kTab,
+      web_app::InstallSource::kExternalPolicy);
+
+  if (override_previous_user_uninstall.has_value())
+    info.override_previous_user_uninstall = *override_previous_user_uninstall;
+
+  return info;
 }
 
 web_app::PendingAppManager::AppInfo GetBarAppInfo() {
-  return web_app::PendingAppManager::AppInfo::Create(
-      GURL(kBarWebAppUrl),
-      web_app::PendingAppManager::LaunchContainer::kWindow);
+  web_app::PendingAppManager::AppInfo info(
+      GURL(kBarWebAppUrl), web_app::LaunchContainer::kWindow,
+      web_app::InstallSource::kExternalPolicy);
+  return info;
 }
 
 web_app::PendingAppManager::AppInfo GetQuxAppInfo() {
-  return web_app::PendingAppManager::AppInfo::Create(
-      GURL(kQuxWebAppUrl),
-      web_app::PendingAppManager::LaunchContainer::kWindow);
+  web_app::PendingAppManager::AppInfo info(
+      GURL(kQuxWebAppUrl), web_app::LaunchContainer::kWindow,
+      web_app::InstallSource::kExternalPolicy);
+  return info;
 }
 
 web_app::PendingAppManager::AppInfo GetXyzAppInfo() {
-  return web_app::PendingAppManager::AppInfo::Create(
-      GURL(kXyzWebAppUrl),
-      web_app::PendingAppManager::LaunchContainer::kWindow);
+  web_app::PendingAppManager::AppInfo info(
+      GURL(kXyzWebAppUrl), web_app::LaunchContainer::kWindow,
+      web_app::InstallSource::kExternalPolicy);
+  return info;
 }
 
-scoped_refptr<Extension> CreateDummyExtension(const std::string& id) {
+scoped_refptr<const Extension> CreateDummyExtension(const std::string& id) {
   return ExtensionBuilder("Dummy name")
-      .SetLocation(Manifest::INTERNAL)
+      .SetLocation(Manifest::EXTERNAL_POLICY)
       .SetID(id)
       .Build();
+}
+
+std::string GenerateFakeAppId(const GURL& url) {
+  return crx_file::id_util::GenerateId("fake_app_id_for:" + url.spec());
 }
 
 class TestExtensionRegistryObserver : public ExtensionRegistryObserver {
@@ -100,30 +119,31 @@ class TestExtensionRegistryObserver : public ExtensionRegistryObserver {
   DISALLOW_COPY_AND_ASSIGN(TestExtensionRegistryObserver);
 };
 
-}  // namespace
-
 class TestBookmarkAppInstallationTask : public BookmarkAppInstallationTask {
  public:
   TestBookmarkAppInstallationTask(Profile* profile,
+                                  web_app::TestAppRegistrar* registrar,
                                   web_app::PendingAppManager::AppInfo app_info,
                                   bool succeeds)
       : BookmarkAppInstallationTask(profile, std::move(app_info)),
         profile_(profile),
-        succeeds_(succeeds) {}
+        registrar_(registrar),
+        succeeds_(succeeds),
+        extension_ids_map_(profile_->GetPrefs()) {}
   ~TestBookmarkAppInstallationTask() override = default;
 
-  void InstallWebAppOrShortcutFromWebContents(
-      content::WebContents* web_contents,
-      BookmarkAppInstallationTask::ResultCallback callback) override {
-    BookmarkAppInstallationTask::ResultCode result_code =
-        BookmarkAppInstallationTask::ResultCode::kInstallationFailed;
+  void Install(content::WebContents* web_contents,
+               BookmarkAppInstallationTask::ResultCallback callback) override {
+    auto result_code = web_app::InstallResultCode::kFailedUnknownReason;
     std::string app_id;
     if (succeeds_) {
-      result_code = BookmarkAppInstallationTask::ResultCode::kSuccess;
-      app_id = crx_file::id_util::GenerateId("fake_app_id_for:" +
-                                             app_info().url.spec());
-      ExtensionRegistry* registry = ExtensionRegistry::Get(profile_);
-      registry->AddEnabled(CreateDummyExtension(app_id));
+      result_code = web_app::InstallResultCode::kSuccess;
+      app_id = GenerateFakeAppId(app_info().url);
+      ExtensionRegistry::Get(profile_)->AddEnabled(
+          CreateDummyExtension(app_id));
+      extension_ids_map_.Insert(app_info().url, app_id,
+                                app_info().install_source);
+      registrar_->AddAsInstalled(app_id);
     }
 
     std::move(on_install_called_).Run();
@@ -137,12 +157,16 @@ class TestBookmarkAppInstallationTask : public BookmarkAppInstallationTask {
 
  private:
   Profile* profile_;
+  web_app::TestAppRegistrar* registrar_;
   bool succeeds_;
+  web_app::ExtensionIdsMap extension_ids_map_;
 
   base::OnceClosure on_install_called_;
 
   DISALLOW_COPY_AND_ASSIGN(TestBookmarkAppInstallationTask);
 };
+
+}  // namespace
 
 class PendingBookmarkAppManagerTest : public ChromeRenderViewHostTestHarness {
  public:
@@ -172,6 +196,8 @@ class PendingBookmarkAppManagerTest : public ChromeRenderViewHostTestHarness {
     test_extension_registry_observer_ =
         std::make_unique<TestExtensionRegistryObserver>(
             ExtensionRegistry::Get(profile()));
+
+    registrar_ = std::make_unique<web_app::TestAppRegistrar>();
   }
 
   void TearDown() override {
@@ -192,11 +218,11 @@ class PendingBookmarkAppManagerTest : public ChromeRenderViewHostTestHarness {
       web_app::PendingAppManager::AppInfo app_info,
       bool succeeds) {
     auto task = std::make_unique<TestBookmarkAppInstallationTask>(
-        profile, std::move(app_info), succeeds);
+        profile, registrar_.get(), std::move(app_info), succeeds);
     auto* task_ptr = task.get();
     task->SetOnInstallCalled(base::BindLambdaForTesting([task_ptr, this]() {
       ++installation_task_run_count_;
-      last_app_info_ = task_ptr->app_info().Clone();
+      last_app_info_ = task_ptr->app_info();
     }));
     return task;
   }
@@ -215,10 +241,9 @@ class PendingBookmarkAppManagerTest : public ChromeRenderViewHostTestHarness {
                                   false /* succeeds */);
   }
 
-  void InstallCallback(const GURL& url,
-                       const base::Optional<std::string>& app_id) {
+  void InstallCallback(const GURL& url, web_app::InstallResultCode code) {
     install_callback_url_ = url;
-    last_app_id_ = app_id;
+    install_callback_code_ = code;
   }
 
   void UninstallCallback(const GURL& url, bool successfully_uninstalled) {
@@ -229,7 +254,7 @@ class PendingBookmarkAppManagerTest : public ChromeRenderViewHostTestHarness {
  protected:
   void ResetResults() {
     install_callback_url_.reset();
-    last_app_id_.reset();
+    install_callback_code_.reset();
     installation_task_run_count_ = 0;
     uninstall_callback_url_.reset();
     last_uninstall_successful_.reset();
@@ -253,7 +278,8 @@ class PendingBookmarkAppManagerTest : public ChromeRenderViewHostTestHarness {
 
   std::unique_ptr<PendingBookmarkAppManager>
   GetPendingBookmarkAppManagerWithTestFactories() {
-    auto manager = std::make_unique<PendingBookmarkAppManager>(profile());
+    auto manager = std::make_unique<PendingBookmarkAppManager>(
+        profile(), registrar_.get());
     manager->SetFactoriesForTesting(test_web_contents_creator(),
                                     successful_installation_task_creator());
     return manager;
@@ -268,14 +294,21 @@ class PendingBookmarkAppManagerTest : public ChromeRenderViewHostTestHarness {
     return web_contents_tester_;
   }
 
-  bool install_succeeded() { return last_app_id_.has_value(); }
+  bool app_installed() {
+    switch (install_callback_code_.value()) {
+      case web_app::InstallResultCode::kSuccess:
+      case web_app::InstallResultCode::kAlreadyInstalled:
+        return true;
+      default:
+        break;
+    }
+    return false;
+  }
 
   const GURL& install_callback_url() { return install_callback_url_.value(); }
 
-  const std::string& last_app_id() { return last_app_id_.value(); }
-
   const web_app::PendingAppManager::AppInfo& last_app_info() {
-    CHECK(last_app_info_.get());
+    CHECK(last_app_info_.has_value());
     return *last_app_info_;
   }
 
@@ -300,11 +333,13 @@ class PendingBookmarkAppManagerTest : public ChromeRenderViewHostTestHarness {
     return test_extension_registry_observer_->uninstalled_extension_ids();
   }
 
+  web_app::TestAppRegistrar* registrar() { return registrar_.get(); }
+
  private:
   content::WebContentsTester* web_contents_tester_ = nullptr;
   base::Optional<GURL> install_callback_url_;
-  base::Optional<std::string> last_app_id_;
-  std::unique_ptr<web_app::PendingAppManager::AppInfo> last_app_info_;
+  base::Optional<web_app::InstallResultCode> install_callback_code_;
+  base::Optional<web_app::PendingAppManager::AppInfo> last_app_info_;
   size_t installation_task_run_count_ = 0;
 
   std::unique_ptr<TestExtensionRegistryObserver>
@@ -315,6 +350,8 @@ class PendingBookmarkAppManagerTest : public ChromeRenderViewHostTestHarness {
   PendingBookmarkAppManager::WebContentsFactory test_web_contents_creator_;
   PendingBookmarkAppManager::TaskFactory successful_installation_task_creator_;
   PendingBookmarkAppManager::TaskFactory failing_installation_task_creator_;
+
+  std::unique_ptr<web_app::TestAppRegistrar> registrar_;
 
   DISALLOW_COPY_AND_ASSIGN(PendingBookmarkAppManagerTest);
 };
@@ -330,7 +367,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_Succeeds) {
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetFooAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
 }
@@ -346,7 +383,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_SerialCallsDifferentApps) {
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetFooAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
   ResetResults();
@@ -360,7 +397,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_SerialCallsDifferentApps) {
   SuccessfullyLoad(GURL(kBarWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetBarAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kBarWebAppUrl), install_callback_url());
 }
@@ -381,7 +418,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_ConcurrentCallsDifferentApps) {
   SuccessfullyLoad(GURL(kBarWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetBarAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kBarWebAppUrl), install_callback_url());
   ResetResults();
@@ -391,7 +428,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_ConcurrentCallsDifferentApps) {
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetFooAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
 }
@@ -415,7 +452,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_PendingSuccessfulTask) {
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetFooAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
   ResetResults();
@@ -425,7 +462,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_PendingSuccessfulTask) {
   SuccessfullyLoad(GURL(kBarWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetBarAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kBarWebAppUrl), install_callback_url());
 }
@@ -450,7 +487,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_PendingFailingTask) {
 
   // The installation didn't run because we loaded the wrong url.
   EXPECT_EQ(0u, installation_task_run_count());
-  EXPECT_FALSE(install_succeeded());
+  EXPECT_FALSE(app_installed());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
   ResetResults();
 
@@ -459,7 +496,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_PendingFailingTask) {
   SuccessfullyLoad(GURL(kBarWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetBarAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kBarWebAppUrl), install_callback_url());
 }
@@ -471,8 +508,8 @@ TEST_F(PendingBookmarkAppManagerTest, Install_ReentrantCallback) {
       GetFooAppInfo(),
       base::BindLambdaForTesting(
           [&](const GURL& provided_url,
-              const base::Optional<std::string>& app_id) {
-            InstallCallback(provided_url, app_id);
+              web_app::InstallResultCode install_result_code) {
+            InstallCallback(provided_url, install_result_code);
             pending_app_manager->Install(
                 GetBarAppInfo(),
                 base::BindOnce(&PendingBookmarkAppManagerTest::InstallCallback,
@@ -484,7 +521,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_ReentrantCallback) {
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetFooAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
   ResetResults();
@@ -493,7 +530,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_ReentrantCallback) {
   SuccessfullyLoad(GURL(kBarWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetBarAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kBarWebAppUrl), install_callback_url());
 }
@@ -509,7 +546,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_SerialCallsSameApp) {
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
   ResetResults();
 
@@ -522,7 +559,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_SerialCallsSameApp) {
 
   // The app is already installed so we shouldn't try to install it again.
   EXPECT_EQ(0u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
 }
 
@@ -541,7 +578,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_ConcurrentCallsSameApp) {
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetFooAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
   ResetResults();
@@ -551,7 +588,44 @@ TEST_F(PendingBookmarkAppManagerTest, Install_ConcurrentCallsSameApp) {
   // The second installation should succeed even though the app is installed
   // already.
   EXPECT_EQ(0u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
+  EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
+}
+
+TEST_F(PendingBookmarkAppManagerTest, Install_AlwaysUpdate) {
+  auto pending_app_manager = GetPendingBookmarkAppManagerWithTestFactories();
+
+  auto get_always_update_info = []() {
+    web_app::PendingAppManager::AppInfo info(
+        GURL(kFooWebAppUrl), web_app::LaunchContainer::kWindow,
+        web_app::InstallSource::kExternalPolicy);
+    info.always_update = true;
+    return info;
+  };
+  pending_app_manager->Install(
+      get_always_update_info(),
+      base::BindOnce(&PendingBookmarkAppManagerTest::InstallCallback,
+                     base::Unretained(this)));
+
+  base::RunLoop().RunUntilIdle();
+  SuccessfullyLoad(GURL(kFooWebAppUrl));
+
+  EXPECT_EQ(1u, installation_task_run_count());
+  EXPECT_TRUE(app_installed());
+  EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
+  ResetResults();
+
+  pending_app_manager->Install(
+      get_always_update_info(),
+      base::BindOnce(&PendingBookmarkAppManagerTest::InstallCallback,
+                     base::Unretained(this)));
+
+  base::RunLoop().RunUntilIdle();
+  SuccessfullyLoad(GURL(kFooWebAppUrl));
+
+  // The app is reinstalled even though it is already installed.
+  EXPECT_EQ(1u, installation_task_run_count());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
 }
 
@@ -566,7 +640,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_FailsLoadIncorrectURL) {
   SuccessfullyLoad(GURL(kWrongUrl));
 
   EXPECT_EQ(0u, installation_task_run_count());
-  EXPECT_FALSE(install_succeeded());
+  EXPECT_FALSE(app_installed());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
 }
 
@@ -584,7 +658,7 @@ TEST_F(PendingBookmarkAppManagerTest, InstallApps_Succeeds) {
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetFooAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
 }
@@ -603,7 +677,7 @@ TEST_F(PendingBookmarkAppManagerTest, InstallApps_Fails) {
   SuccessfullyLoad(GURL(kWrongUrl));
 
   EXPECT_EQ(0u, installation_task_run_count());
-  EXPECT_FALSE(install_succeeded());
+  EXPECT_FALSE(app_installed());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
 }
 
@@ -624,7 +698,7 @@ TEST_F(PendingBookmarkAppManagerTest, InstallApps_Multiple) {
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetFooAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
   ResetResults();
@@ -634,7 +708,7 @@ TEST_F(PendingBookmarkAppManagerTest, InstallApps_Multiple) {
   SuccessfullyLoad(GURL(kBarWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetBarAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kBarWebAppUrl), install_callback_url());
 }
@@ -667,7 +741,7 @@ TEST_F(PendingBookmarkAppManagerTest, InstallApps_PendingInstallApps) {
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetFooAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
   ResetResults();
@@ -677,7 +751,7 @@ TEST_F(PendingBookmarkAppManagerTest, InstallApps_PendingInstallApps) {
   SuccessfullyLoad(GURL(kBarWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetBarAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kBarWebAppUrl), install_callback_url());
 }
@@ -706,7 +780,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_PendingMulitpleInstallApps) {
   SuccessfullyLoad(GURL(kQuxWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetQuxAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kQuxWebAppUrl), install_callback_url());
   ResetResults();
@@ -716,7 +790,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_PendingMulitpleInstallApps) {
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetFooAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
   ResetResults();
@@ -725,7 +799,7 @@ TEST_F(PendingBookmarkAppManagerTest, Install_PendingMulitpleInstallApps) {
   SuccessfullyLoad(GURL(kBarWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetBarAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kBarWebAppUrl), install_callback_url());
 }
@@ -753,7 +827,7 @@ TEST_F(PendingBookmarkAppManagerTest, InstallApps_PendingInstall) {
   SuccessfullyLoad(GURL(kQuxWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetQuxAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kQuxWebAppUrl), install_callback_url());
   ResetResults();
@@ -763,7 +837,7 @@ TEST_F(PendingBookmarkAppManagerTest, InstallApps_PendingInstall) {
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
   EXPECT_EQ(GetFooAppInfo(), last_app_info());
   ResetResults();
@@ -772,7 +846,7 @@ TEST_F(PendingBookmarkAppManagerTest, InstallApps_PendingInstall) {
   SuccessfullyLoad(GURL(kBarWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetBarAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kBarWebAppUrl), install_callback_url());
 }
@@ -796,7 +870,7 @@ TEST_F(PendingBookmarkAppManagerTest, WebContentsLoadTimedOut) {
   SuccessfullyLoad(GURL(kQuxWebAppUrl));
   EXPECT_FALSE(timer->IsRunning());
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GURL(kQuxWebAppUrl), install_callback_url());
   ResetResults();
 
@@ -810,7 +884,7 @@ TEST_F(PendingBookmarkAppManagerTest, WebContentsLoadTimedOut) {
   // Fire the timer to simulate a failed load.
   EXPECT_TRUE(timer->IsRunning());
   timer->Fire();
-  EXPECT_FALSE(install_succeeded());
+  EXPECT_FALSE(app_installed());
   EXPECT_EQ(GURL(kXyzWebAppUrl), install_callback_url());
   ResetResults();
 
@@ -829,7 +903,7 @@ TEST_F(PendingBookmarkAppManagerTest, WebContentsLoadTimedOut) {
   // Fire the timer to simulate a failed load.
   EXPECT_TRUE(timer->IsRunning());
   timer->Fire();
-  EXPECT_FALSE(install_succeeded());
+  EXPECT_FALSE(app_installed());
   EXPECT_EQ(GURL(kFooWebAppUrl), install_callback_url());
   ResetResults();
 
@@ -838,7 +912,7 @@ TEST_F(PendingBookmarkAppManagerTest, WebContentsLoadTimedOut) {
   // Fire the timer to simulate a failed load.
   EXPECT_TRUE(timer->IsRunning());
   timer->Fire();
-  EXPECT_FALSE(install_succeeded());
+  EXPECT_FALSE(app_installed());
   EXPECT_EQ(GURL(kBarWebAppUrl), install_callback_url());
   ResetResults();
 
@@ -854,7 +928,7 @@ TEST_F(PendingBookmarkAppManagerTest, WebContentsLoadTimedOut) {
   SuccessfullyLoad(GURL(kBarWebAppUrl));
   EXPECT_FALSE(timer->IsRunning());
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
   EXPECT_EQ(GetBarAppInfo(), last_app_info());
   EXPECT_EQ(GURL(kBarWebAppUrl), install_callback_url());
 }
@@ -870,14 +944,12 @@ TEST_F(PendingBookmarkAppManagerTest, ExtensionUninstalled) {
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
-
-  const std::string app_id = last_app_id();
+  EXPECT_TRUE(app_installed());
   ResetResults();
 
   // Simulate the extension for the app getting uninstalled.
-  ExtensionRegistry* registry = ExtensionRegistry::Get(profile());
-  registry->RemoveEnabled(app_id);
+  const std::string app_id = GenerateFakeAppId(GURL(kFooWebAppUrl));
+  registrar()->RemoveAsInstalled(app_id);
 
   // Trying to uninstall the app should fail and have no effect.
   pending_app_manager->UninstallApps(
@@ -901,7 +973,7 @@ TEST_F(PendingBookmarkAppManagerTest, ExtensionUninstalled) {
 
   // The extension was uninstalled so a new installation task should run.
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
+  EXPECT_TRUE(app_installed());
 }
 
 TEST_F(PendingBookmarkAppManagerTest, ExternalExtensionUninstalled) {
@@ -915,17 +987,13 @@ TEST_F(PendingBookmarkAppManagerTest, ExternalExtensionUninstalled) {
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
   EXPECT_EQ(1u, installation_task_run_count());
-  EXPECT_TRUE(install_succeeded());
-
-  const std::string app_id = last_app_id();
+  EXPECT_TRUE(app_installed());
   ResetResults();
 
   // Simulate external extension for the app getting uninstalled by the user.
-  ExtensionRegistry* registry = ExtensionRegistry::Get(profile());
-  registry->RemoveEnabled(app_id);
-  ExtensionPrefs::Get(profile())->OnExtensionUninstalled(
-      app_id, Manifest::EXTERNAL_POLICY, false /* external_uninstall */);
-  ResetResults();
+  const std::string app_id = GenerateFakeAppId(GURL(kFooWebAppUrl));
+  registrar()->AddAsExternalAppUninstalledByUser(app_id);
+  registrar()->RemoveAsInstalled(app_id);
 
   // Trying to uninstall the app should fail and have no effect.
   pending_app_manager->UninstallApps(
@@ -937,17 +1005,27 @@ TEST_F(PendingBookmarkAppManagerTest, ExternalExtensionUninstalled) {
   EXPECT_EQ(GURL(kFooWebAppUrl), uninstall_callback_url());
   EXPECT_FALSE(last_uninstall_successful());
   EXPECT_EQ(0u, uninstalls_count());
+  ResetResults();
 
-  pending_app_manager->Install(
-      GetFooAppInfo(),
-      base::BindOnce(&PendingBookmarkAppManagerTest::InstallCallback,
-                     base::Unretained(this)));
-  base::RunLoop().RunUntilIdle();
+  // The extension was uninstalled by the user. Installing again should succeed
+  // or fail depending on whether we set override_previous_user_uninstall. We
+  // try with override_previous_user_uninstall false first, true second.
+  for (unsigned int i = 0; i < 2; i++) {
+    bool override_previous_user_uninstall = i > 0;
 
-  // The extension was uninstalled by the user, we shouldn't try to install it
-  // again.
-  EXPECT_EQ(0u, installation_task_run_count());
-  EXPECT_FALSE(install_succeeded());
+    pending_app_manager->Install(
+        GetFooAppInfo(override_previous_user_uninstall),
+        base::BindOnce(&PendingBookmarkAppManagerTest::InstallCallback,
+                       base::Unretained(this)));
+    base::RunLoop().RunUntilIdle();
+    if (override_previous_user_uninstall) {
+      SuccessfullyLoad(GURL(kFooWebAppUrl));
+    }
+
+    EXPECT_EQ(i, installation_task_run_count());
+    EXPECT_EQ(override_previous_user_uninstall, app_installed());
+    ResetResults();
+  }
 }
 
 TEST_F(PendingBookmarkAppManagerTest, UninstallApps_Succeeds) {
@@ -960,9 +1038,7 @@ TEST_F(PendingBookmarkAppManagerTest, UninstallApps_Succeeds) {
   base::RunLoop().RunUntilIdle();
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
-  EXPECT_TRUE(install_succeeded());
-  const std::string app_id = last_app_id();
-
+  EXPECT_TRUE(app_installed());
   ResetResults();
 
   pending_app_manager->UninstallApps(
@@ -976,7 +1052,8 @@ TEST_F(PendingBookmarkAppManagerTest, UninstallApps_Succeeds) {
   EXPECT_EQ(GURL(kFooWebAppUrl), uninstall_callback_url());
   EXPECT_TRUE(last_uninstall_successful());
   EXPECT_EQ(1u, uninstalls_count());
-  EXPECT_EQ(std::vector<std::string>{app_id}, uninstalled_extension_ids());
+  EXPECT_EQ(std::vector<std::string>{GenerateFakeAppId(GURL(kFooWebAppUrl))},
+            uninstalled_extension_ids());
 }
 
 TEST_F(PendingBookmarkAppManagerTest, UninstallApps_Multiple) {
@@ -994,14 +1071,11 @@ TEST_F(PendingBookmarkAppManagerTest, UninstallApps_Multiple) {
   base::RunLoop().RunUntilIdle();
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
-  const std::string first_app_id = last_app_id();
   ResetResults();
 
   // Finish the second install.
   base::RunLoop().RunUntilIdle();
   SuccessfullyLoad(GURL(kBarWebAppUrl));
-
-  const std::string second_app_id = last_app_id();
 
   ResetResults();
 
@@ -1015,7 +1089,8 @@ TEST_F(PendingBookmarkAppManagerTest, UninstallApps_Multiple) {
 
   EXPECT_TRUE(last_uninstall_successful());
   EXPECT_EQ(2u, uninstalls_count());
-  EXPECT_EQ(std::vector<std::string>({first_app_id, second_app_id}),
+  EXPECT_EQ(std::vector<std::string>({GenerateFakeAppId(GURL(kFooWebAppUrl)),
+                                      GenerateFakeAppId(GURL(kBarWebAppUrl))}),
             uninstalled_extension_ids());
 }
 
@@ -1039,8 +1114,7 @@ TEST_F(PendingBookmarkAppManagerTest, UninstallApps_PendingInstall) {
   base::RunLoop().RunUntilIdle();
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
-  EXPECT_TRUE(install_succeeded());
-  const std::string app_id = last_app_id();
+  EXPECT_TRUE(app_installed());
 }
 
 // Tests that uninstalling an app doesn't remove all previously installed apps.
@@ -1059,14 +1133,11 @@ TEST_F(PendingBookmarkAppManagerTest, UninstallApps_TwoPreviouslyInstalled) {
   base::RunLoop().RunUntilIdle();
   SuccessfullyLoad(GURL(kFooWebAppUrl));
 
-  const std::string first_app_id = last_app_id();
   ResetResults();
 
   // Finish the second install.
   base::RunLoop().RunUntilIdle();
   SuccessfullyLoad(GURL(kBarWebAppUrl));
-
-  const std::string second_app_id = last_app_id();
 
   ResetResults();
 
@@ -1080,7 +1151,7 @@ TEST_F(PendingBookmarkAppManagerTest, UninstallApps_TwoPreviouslyInstalled) {
 
   EXPECT_TRUE(last_uninstall_successful());
   EXPECT_EQ(1u, uninstalls_count());
-  EXPECT_EQ(std::vector<std::string>({first_app_id}),
+  EXPECT_EQ(std::vector<std::string>({GenerateFakeAppId(GURL(kFooWebAppUrl))}),
             uninstalled_extension_ids());
 }
 

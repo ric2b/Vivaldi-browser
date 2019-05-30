@@ -14,8 +14,15 @@ namespace chromeos {
 class MockAutoEnrollmentCheckScreen : public AutoEnrollmentCheckScreen {
  public:
   MockAutoEnrollmentCheckScreen(BaseScreenDelegate* base_screen_delegate,
-                                AutoEnrollmentCheckScreenView* view);
+                                AutoEnrollmentCheckScreenView* view,
+                                const base::RepeatingClosure& exit_callback);
   ~MockAutoEnrollmentCheckScreen() override;
+
+  MOCK_METHOD0(Show, void());
+  MOCK_METHOD0(Hide, void());
+
+  void RealShow();
+  void ExitScreen();
 };
 
 class MockAutoEnrollmentCheckScreenView : public AutoEnrollmentCheckScreenView {
@@ -29,7 +36,7 @@ class MockAutoEnrollmentCheckScreenView : public AutoEnrollmentCheckScreenView {
   MOCK_METHOD0(Show, void());
 
  private:
-  Delegate* screen_;
+  Delegate* screen_ = nullptr;
 };
 
 }  // namespace chromeos

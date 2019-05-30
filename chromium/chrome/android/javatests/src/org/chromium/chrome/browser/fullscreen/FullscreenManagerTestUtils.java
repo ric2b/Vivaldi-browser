@@ -13,13 +13,14 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager.FullscreenListener;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.TouchCommon;
 import org.chromium.content_public.browser.GestureListenerManager;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.content_public.browser.RenderCoordinates;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.TouchCommon;
+import org.chromium.content_public.browser.test.util.WebContentsUtils;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
@@ -45,9 +46,9 @@ public class FullscreenManagerTestUtils {
         // the delay in a scroll start being sent.
         float dragStartY = browserControlsHeight * 3;
         float dragEndY = dragStartY - browserControlsHeight * 2;
-        float expectedPosition = -browserControlsHeight;
+        int expectedPosition = -browserControlsHeight;
         if (show) {
-            expectedPosition = 0f;
+            expectedPosition = 0;
             float tempDragStartY = dragStartY;
             dragStartY = dragEndY;
             dragEndY = tempDragStartY;
@@ -66,12 +67,12 @@ public class FullscreenManagerTestUtils {
      * @param position The desired top controls offset.
      */
     public static void waitForBrowserControlsPosition(
-            ChromeTabbedActivityTestRule testRule, float position) {
+            ChromeTabbedActivityTestRule testRule, int position) {
         final ChromeFullscreenManager fullscreenManager =
                 testRule.getActivity().getFullscreenManager();
-        CriteriaHelper.pollUiThread(Criteria.equals(position, new Callable<Float>() {
+        CriteriaHelper.pollUiThread(Criteria.equals(position, new Callable<Integer>() {
             @Override
-            public Float call() {
+            public Integer call() {
                 return fullscreenManager.getTopControlOffset();
             }
         }));
@@ -104,7 +105,7 @@ public class FullscreenManagerTestUtils {
      */
     public static void waitForBrowserControlsToBeMoveable(
             ChromeTabbedActivityTestRule testRule, final Tab tab) throws InterruptedException {
-        waitForBrowserControlsPosition(testRule, 0f);
+        waitForBrowserControlsPosition(testRule, 0);
 
         final CallbackHelper contentMovedCallback = new CallbackHelper();
         final ChromeFullscreenManager fullscreenManager =
@@ -114,7 +115,7 @@ public class FullscreenManagerTestUtils {
         fullscreenManager.addListener(new FullscreenListener() {
             @Override
             public void onControlsOffsetChanged(
-                    float topOffset, float bottomOffset, boolean needsAnimate) {
+                    int topOffset, int bottomOffset, boolean needsAnimate) {
                 if (fullscreenManager.getTopVisibleContentOffset() != initialVisibleContentOffset) {
                     contentMovedCallback.notifyCalled();
                     fullscreenManager.removeListener(this);
@@ -125,7 +126,7 @@ public class FullscreenManagerTestUtils {
             public void onToggleOverlayVideoMode(boolean enabled) {}
 
             @Override
-            public void onContentOffsetChanged(float offset) {}
+            public void onContentOffsetChanged(int offset) {}
 
             @Override
             public void onBottomControlsHeightChanged(int bottomControlsHeight) {}
@@ -151,7 +152,7 @@ public class FullscreenManagerTestUtils {
 
         };
         GestureListenerManager gestureListenerManager =
-                GestureListenerManager.fromWebContents(webContents);
+                WebContentsUtils.getGestureListenerManager(webContents);
         gestureListenerManager.addListener(scrollEndListener);
 
         for (int i = 0; i < 10; i++) {

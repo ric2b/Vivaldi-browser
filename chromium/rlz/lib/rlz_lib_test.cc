@@ -17,6 +17,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/posix/eintr_wrapper.h"
@@ -49,6 +50,8 @@
 #endif
 
 #if defined(OS_CHROMEOS)
+#include "base/files/important_file_writer.h"
+#include "base/stl_util.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_debug_daemon_client.h"
 #include "rlz/chromeos/lib/rlz_value_store_chromeos.h"
@@ -228,6 +231,78 @@ TEST_F(RlzLibTest, SetAccessPointRlzOnlyOnce) {
   EXPECT_TRUE(rlz_lib::SetAccessPointRlz(rlz_lib::IETB_SEARCH_BOX, "Second"));
   EXPECT_TRUE(rlz_lib::GetAccessPointRlz(rlz_lib::IETB_SEARCH_BOX, rlz_50, 50));
   EXPECT_STREQ("First", rlz_50);
+}
+
+TEST_F(RlzLibTest, UpdateExistingAccessPointRlz) {
+  const std::string json_data = R"({
+   "access_points": {
+      "CA": {
+         "_": "1CANPEC_enUS818"
+      },
+      "CB": {
+         "_": "1CBNPE"
+      },
+      "CC": {
+         "_": "1CANPEC_enUS818"
+      }
+   },
+   "product_events": {
+      "C": {
+         "_": [ "CAS" ]
+      }
+   }
+})";
+  ASSERT_TRUE(base::ImportantFileWriter::WriteFileAtomically(
+      base::FilePath(rlz_lib::testing::RlzStoreFilenameStr()), json_data));
+  // Verify that the initial values are read correctly.
+  char data[50];
+  EXPECT_TRUE(rlz_lib::GetAccessPointRlz(rlz_lib::CHROMEOS_OMNIBOX, data, 50));
+  EXPECT_STREQ("1CANPEC_enUS818", data);
+  EXPECT_TRUE(
+      rlz_lib::GetAccessPointRlz(rlz_lib::CHROMEOS_HOME_PAGE, data, 50));
+  EXPECT_STREQ("1CBNPE", data);
+  EXPECT_TRUE(rlz_lib::GetAccessPointRlz(rlz_lib::CHROMEOS_APP_LIST, data, 50));
+  EXPECT_STREQ("1CANPEC_enUS818", data);
+  EXPECT_TRUE(rlz_lib::GetProductEventsAsCgi(rlz_lib::CHROME, data, 50));
+  EXPECT_STREQ("events=CAS", data);
+
+  // Verify that if the brand code doesn't consist of four letters, none of the
+  // access point RLZ strings is updated.
+  EXPECT_TRUE(rlz_lib::GetAccessPointRlz(rlz_lib::CHROMEOS_OMNIBOX, data, 50));
+  EXPECT_STREQ("1CANPEC_enUS818", data);
+  EXPECT_TRUE(
+      rlz_lib::GetAccessPointRlz(rlz_lib::CHROMEOS_HOME_PAGE, data, 50));
+  EXPECT_STREQ("1CBNPE", data);
+  EXPECT_TRUE(rlz_lib::GetAccessPointRlz(rlz_lib::CHROMEOS_APP_LIST, data, 50));
+  EXPECT_STREQ("1CANPEC_enUS818", data);
+
+  // Update the RLZ strings with a valid brand code. Verify that the RLZ string
+  // is updated if it also has valid format.
+  EXPECT_TRUE(rlz_lib::UpdateExistingAccessPointRlz("BMGD"));
+  EXPECT_TRUE(rlz_lib::GetAccessPointRlz(rlz_lib::CHROMEOS_OMNIBOX, data, 50));
+  EXPECT_STREQ("1CABMGD_enUS818", data);
+  // The RLZ string remains unchanged if it has fewer than seven characters.
+  EXPECT_TRUE(
+      rlz_lib::GetAccessPointRlz(rlz_lib::CHROMEOS_HOME_PAGE, data, 50));
+  EXPECT_STREQ("1CBNPE", data);
+  // The RLZ string remains unchanged if the access point names don't match.
+  EXPECT_TRUE(rlz_lib::GetAccessPointRlz(rlz_lib::CHROMEOS_APP_LIST, data, 50));
+  EXPECT_STREQ("1CANPEC_enUS818", data);
+  // The product events remain unchanged.
+  EXPECT_TRUE(rlz_lib::GetProductEventsAsCgi(rlz_lib::CHROME, data, 50));
+  EXPECT_STREQ("events=CAS", data);
+
+  // Verify a second update is no-op.
+  EXPECT_FALSE(rlz_lib::UpdateExistingAccessPointRlz("BMGD"));
+  EXPECT_TRUE(rlz_lib::GetAccessPointRlz(rlz_lib::CHROMEOS_OMNIBOX, data, 50));
+  EXPECT_STREQ("1CABMGD_enUS818", data);
+  EXPECT_TRUE(
+      rlz_lib::GetAccessPointRlz(rlz_lib::CHROMEOS_HOME_PAGE, data, 50));
+  EXPECT_STREQ("1CBNPE", data);
+  EXPECT_TRUE(rlz_lib::GetAccessPointRlz(rlz_lib::CHROMEOS_APP_LIST, data, 50));
+  EXPECT_STREQ("1CANPEC_enUS818", data);
+  EXPECT_TRUE(rlz_lib::GetProductEventsAsCgi(rlz_lib::CHROME, data, 50));
+  EXPECT_STREQ("events=CAS", data);
 }
 #endif
 
@@ -504,12 +579,9 @@ TEST_F(RlzLibTest, SendFinancialPing) {
 #endif
 
   network::TestURLLoaderFactory test_url_loader_factory;
-  scoped_refptr<network::SharedURLLoaderFactory>
-      test_shared_url_loader_factory =
-          base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
-              &test_url_loader_factory);
 
-  URLLoaderFactoryRAII set_factory(test_shared_url_loader_factory.get());
+  URLLoaderFactoryRAII set_factory(
+      test_url_loader_factory.GetSafeWeakWrapper().get());
 #endif
 
   MachineDealCodeHelper::Clear();
@@ -564,11 +636,8 @@ TEST_F(RlzLibTest, SendFinancialPingDuringShutdown) {
   ASSERT_TRUE(io_thread.StartWithOptions(options));
 
   network::TestURLLoaderFactory test_url_loader_factory;
-  scoped_refptr<network::SharedURLLoaderFactory>
-      test_shared_url_loader_factory =
-          base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
-              &test_url_loader_factory);
-  URLLoaderFactoryRAII set_factory(test_shared_url_loader_factory.get());
+  URLLoaderFactoryRAII set_factory(
+      test_url_loader_factory.GetSafeWeakWrapper().get());
 
   rlz_lib::AccessPoint points[] =
     {rlz_lib::IETB_SEARCH_BOX, rlz_lib::NO_ACCESS_POINT,
@@ -1071,7 +1140,7 @@ TEST_F(RlzLibTest, NoRecordCAFEvent) {
                               rlz_lib::FIRST_SEARCH);
   char cgi[256];
   EXPECT_TRUE(
-      rlz_lib::GetProductEventsAsCgi(rlz_lib::CHROME, cgi, arraysize(cgi)));
+      rlz_lib::GetProductEventsAsCgi(rlz_lib::CHROME, cgi, base::size(cgi)));
   EXPECT_NE(nullptr, strstr(cgi, "CAF"));
 
   // Simulate another user on the machine sending the RLZ ping, so "should send
@@ -1083,7 +1152,7 @@ TEST_F(RlzLibTest, NoRecordCAFEvent) {
   // The first search event should no longer appear, so there are no events
   // to report.
   EXPECT_FALSE(
-      rlz_lib::GetProductEventsAsCgi(rlz_lib::CHROME, cgi, arraysize(cgi)));
+      rlz_lib::GetProductEventsAsCgi(rlz_lib::CHROME, cgi, base::size(cgi)));
 
   // The event should be permanently deleted, so setting the flag back to
   // true should still not return the event.
@@ -1091,7 +1160,7 @@ TEST_F(RlzLibTest, NoRecordCAFEvent) {
       chromeos::system::kShouldSendRlzPingKey,
       chromeos::system::kShouldSendRlzPingValueTrue);
   EXPECT_FALSE(
-      rlz_lib::GetProductEventsAsCgi(rlz_lib::CHROME, cgi, arraysize(cgi)));
+      rlz_lib::GetProductEventsAsCgi(rlz_lib::CHROME, cgi, base::size(cgi)));
 }
 
 TEST_F(RlzLibTest, NoRecordCAFEvent2) {
@@ -1107,7 +1176,7 @@ TEST_F(RlzLibTest, NoRecordCAFEvent2) {
                               rlz_lib::FIRST_SEARCH);
   char cgi[256];
   EXPECT_TRUE(
-      rlz_lib::GetProductEventsAsCgi(rlz_lib::CHROME, cgi, arraysize(cgi)));
+      rlz_lib::GetProductEventsAsCgi(rlz_lib::CHROME, cgi, base::size(cgi)));
   EXPECT_NE(nullptr, strstr(cgi, "CAF"));
   EXPECT_NE(nullptr, strstr(cgi, "CAI"));
 
@@ -1119,7 +1188,7 @@ TEST_F(RlzLibTest, NoRecordCAFEvent2) {
 
   // Only the "CAI" event should appear.
   EXPECT_TRUE(
-      rlz_lib::GetProductEventsAsCgi(rlz_lib::CHROME, cgi, arraysize(cgi)));
+      rlz_lib::GetProductEventsAsCgi(rlz_lib::CHROME, cgi, base::size(cgi)));
   EXPECT_NE(nullptr, strstr(cgi, "CAI"));
 
   // The event should be permanently deleted, so setting the flag back to
@@ -1128,7 +1197,7 @@ TEST_F(RlzLibTest, NoRecordCAFEvent2) {
       chromeos::system::kShouldSendRlzPingKey,
       chromeos::system::kShouldSendRlzPingValueTrue);
   EXPECT_TRUE(
-      rlz_lib::GetProductEventsAsCgi(rlz_lib::CHROME, cgi, arraysize(cgi)));
+      rlz_lib::GetProductEventsAsCgi(rlz_lib::CHROME, cgi, base::size(cgi)));
   EXPECT_NE(nullptr, strstr(cgi, "CAI"));
 }
 #endif

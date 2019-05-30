@@ -8,8 +8,8 @@
 // DO NOT MODIFY!
 
 // clang-format off
-#ifndef V8SVGTestInterface_h
-#define V8SVGTestInterface_h
+#ifndef THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_CORE_V8_SVG_TEST_INTERFACE_H_
+#define THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_CORE_V8_SVG_TEST_INTERFACE_H_
 
 #include "third_party/blink/renderer/bindings/core/v8/generated_code_helper.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits.h"
@@ -24,23 +24,29 @@
 
 namespace blink {
 
+CORE_EXPORT extern const WrapperTypeInfo v8_svg_test_interface_wrapper_type_info;
+
 class V8SVGTestInterface {
   STATIC_ONLY(V8SVGTestInterface);
  public:
-  CORE_EXPORT static bool hasInstance(v8::Local<v8::Value>, v8::Isolate*);
-  static v8::Local<v8::Object> findInstanceInPrototypeChain(v8::Local<v8::Value>, v8::Isolate*);
-  CORE_EXPORT static v8::Local<v8::FunctionTemplate> domTemplate(v8::Isolate*, const DOMWrapperWorld&);
+  CORE_EXPORT static bool HasInstance(v8::Local<v8::Value>, v8::Isolate*);
+  static v8::Local<v8::Object> FindInstanceInPrototypeChain(v8::Local<v8::Value>, v8::Isolate*);
+  CORE_EXPORT static v8::Local<v8::FunctionTemplate> DomTemplate(v8::Isolate*, const DOMWrapperWorld&);
   static SVGTestInterface* ToImpl(v8::Local<v8::Object> object) {
     return ToScriptWrappable(object)->ToImpl<SVGTestInterface>();
   }
   CORE_EXPORT static SVGTestInterface* ToImplWithTypeCheck(v8::Isolate*, v8::Local<v8::Value>);
-  CORE_EXPORT static const WrapperTypeInfo wrapperTypeInfo;
-  static const int internalFieldCount = kV8DefaultWrapperInternalFieldCount;
+
+  CORE_EXPORT static constexpr const WrapperTypeInfo* GetWrapperTypeInfo() {
+    return &v8_svg_test_interface_wrapper_type_info;
+  }
+
+  static constexpr int kInternalFieldCount = kV8DefaultWrapperInternalFieldCount;
 
   // Callback functions
 
-  CORE_EXPORT static void typeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
-  CORE_EXPORT static void typeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void TypeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void TypeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
 
   static void InstallRuntimeEnabledFeaturesOnTemplate(
       v8::Isolate*,
@@ -61,4 +67,4 @@ struct V8TypeOf<SVGTestInterface> {
 
 }  // namespace blink
 
-#endif  // V8SVGTestInterface_h
+#endif  // THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_CORE_V8_SVG_TEST_INTERFACE_H_

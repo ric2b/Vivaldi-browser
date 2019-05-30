@@ -319,6 +319,13 @@ need to be translated for each locale.-->
         <message name="IDS_APP_SAVEAS_ALL_FILES" desc="Save As dialog box default text">
           All Files
         </message>
+      </if>
+      <if expr="is_win">
+        <message name="IDS_APP_SAVEAS_EXTENSION_FORMAT" desc="Save As dialog box extension format text">
+          <ph name="SAVEAS_EXTENSION_TYPE">$1<ex>EXE</ex></ph> File
+        </message>
+      </if>
+      <if expr="is_macosx">
         <message name="IDS_APP_SAVEAS_EXTENSION_FORMAT" desc="Save As dialog box extension format text">
           <ph name="SAVEAS_EXTENSION_TYPE">$1<ex>EXE</ex></ph> File (.<ph name="SAVEAS_EXTENSION_NAME">$2<ex>exe</ex></ph>)
         </message>
@@ -429,6 +436,9 @@ need to be translated for each locale.-->
           Disclosure triangle
         </message>
       </if>
+      <message name="IDS_APP_ACCNAME_BACK" desc="The accessible name for the back button on the window frame.">
+        Back button
+      </message>
       <message name="IDS_APP_ACCNAME_CLOSE" desc="The accessible name for the Close button.">
         Close
       </message>
@@ -443,6 +453,9 @@ need to be translated for each locale.-->
       </message>
       <message name="IDS_APP_ACCNAME_MENU" desc="The accessible name for the Menu button.">
         Menu
+      </message>
+      <message name="IDS_APP_ACCNAME_COLOR_CHOOSER_HEX_INPUT" desc="The accessible name for the color chooser hexadecimal input field">
+        Hex color value
       </message>
 
       <!-- Scroll Bar Context Menu Labels -->
@@ -583,7 +596,7 @@ need to be translated for each locale.-->
       <message name="IDS_APP_COMMA_KEY" desc="Comma key">
         Comma
       </message>
-      <message name="IDS_APP_PERIOD_KEY" desc="Period key">
+      <message name="IDS_APP_PERIOD_KEY" desc="Period key, which is used to denote the end of a sentence (and not an interval of time).">
         Period
       </message>
       <message name="IDS_APP_MEDIA_NEXT_TRACK_KEY" desc="Media next track key">
@@ -613,6 +626,12 @@ need to be translated for each locale.-->
       <message name="IDS_APP_SHIFT_KEY" desc="Shift key">
         Shift
       </message>
+      <if expr="is_win">
+        <message name="IDS_APP_WINDOWS_KEY" desc="This refers to the 'Windows' key on certain
+            keyboards (often between Ctrl and Alt). This may not need to be translated.">
+          Win
+        </message>
+      </if>
 
       <!-- Accelerator format -->
       <message name="IDS_APP_ACCELERATOR_WITH_MODIFIER" desc="Accelerator with a modifier key">
@@ -730,6 +749,9 @@ need to be translated for each locale.-->
       <message name="IDS_MESSAGE_NOTIFICATION_SETTINGS_BUTTON_ACCESSIBLE_NAME" desc="The spoken feedback text for the settings button in a notification. Usually 'button' is suffixed to this text automatically.">
         Notification settings
       </message>
+      <message name="IDS_MESSAGE_NOTIFICATION_SEND_TAB_TO_SELF_DEVICE_INFO_PREFIX" desc="For SEND_TAB_TO_SELF notification, this will be a prefix of device info.">
+        Shared from 
+      </message>
       <if expr="chromeos">
         <message name="IDS_MESSAGE_CENTER_NOTIFIER_SCREENSHOT_NAME" desc="The name of screenshot notifier that is a system component">
           Screenshot
@@ -764,11 +786,23 @@ need to be translated for each locale.-->
       <message name="IDS_ALL_APPS_INDICATOR" desc="Indicator text in the launcher on top of all apps.">
         ALL APPS
       </message>
+      <message name="IDS_APP_LIST_APP_DRAG_LOCATION_ACCESSIBILE_NAME" desc="The spoken feedback which tells the location that a dragged app will drop to.">
+        Move to Page <ph name="PAGE_NUMBER">$1<ex>1</ex></ph>, row <ph name="ROW_NUMBER">$2<ex>4</ex></ph>, column <ph name="COLUMN_NUMBER">$3<ex>2</ex></ph>.
+      </message>
+      <message name="IDS_APP_LIST_APP_DRAG_CREATE_FOLDER_ACCESSIBILE_NAME" desc="The spoken feedback text which describes the app that is currently being dragged over another app, and how to create a folder.">
+        <ph name="DRAGGED_APP_NAME">$1<ex>App Name</ex></ph> on top of <ph name="IN_PLACE_APP">$2<ex>Other App Name</ex></ph>, release to create folder.
+      </message>
+      <message name="IDS_APP_LIST_APP_DRAG_MOVE_TO_FOLDER_ACCESSIBILE_NAME" desc="The spoken feedback given while dragging an app, which describes the folder name the app would drop into if the drag were ended.">
+        Move <ph name="DRAGGED_APP">$1<ex>App Name</ex></ph> to folder <ph name="FOLDER_NAME">$2<ex>Folder Name</ex></ph>.
+      </message>
       <message name="IDS_APP_LIST_BACK" desc="The name of the button that goes to the previous screen in the launcher.">
         Back
       </message>
       <message name="IDS_APP_LIST_FOLDER_NAME_PLACEHOLDER" desc="The placeholder text for app list folder name.">
-        Unnamed Folder
+        Unnamed
+      </message>
+      <message name="IDS_APP_LIST_SEARCH_BOX_AUTOCOMPLETE" desc="The spoken feedback text for when the search box autocompletes a result">
+        <ph name="TEXT">$1<ex>typed text + autocomplete</ex></ph>, Autocomplete
       </message>
       <message name="IDS_APP_LIST_FOLDER_BUTTON_ACCESSIBILE_NAME" desc="The spoken feedback text for navigating to a folder button in top level app list">
         Folder <ph name="folder_name">$1<ex>OEM Apps</ex></ph>
@@ -791,6 +825,33 @@ need to be translated for each locale.-->
       <message name="IDS_APP_LIST_CLEAR_SEARCHBOX" desc="Tooltip for the button that clears all text from the search box in the app list.">
         Clear searchbox text
       </message>
+      <message name="IDS_SHELF_ALIGNMENT_BOTTOM" desc="Accessibility announcement notifying users that the shelf is now placed at the bottom of the screen">
+        Shelf on bottom
+      </message>
+      <message name="IDS_SHELF_ALIGNMENT_LEFT" desc="Accessibility announcement notifying users that the shelf is now placed on the left of the screen">
+        Shelf on left
+      </message>
+      <message name="IDS_SHELF_ALIGNMENT_RIGHT" desc="Accessibility announcement notifying users that the shelf is now placed on the right of the screen">
+        Shelf on right
+      </message>
+      <message name="IDS_SHELF_STATE_ALWAYS_SHOWN" desc="Accessibility announcement notifying users that the shelf is now always being shown">
+        Shelf always shown
+      </message>
+      <message name="IDS_SHELF_STATE_ALWAYS_HIDDEN" desc="Accessibility announcement notifying users that the shelf is now always being hidden">
+        Shelf always hidden
+      </message>
+      <message name="IDS_SHELF_STATE_AUTO_HIDE" desc="Accessibility announcement notifying users that the shelf will now hide itself automatically">
+        Shelf auto hidden
+      </message>
+      <message name="IDS_REMOVE_ZERO_STATE_SUGGESTION_TITLE" desc="Titlebar of removing zero state suggestion confirmation dialog">
+        Remove this suggestion?
+      </message>
+      <message name="IDS_REMOVE_ZERO_STATE_SUGGESTION_DETAILS" desc="Detailed explanation message for removing zero state suggestion">
+        Removing this suggestion will hide it from your account across all your devices.
+      </message>
+      <message name="IDS_REMOVE_SUGGESTION_BUTTON_LABEL" desc="Remove suggestion button label">
+        Remove
+      </message>
       <message name="IDS_APP_LIST_START_ASSISTANT" desc="Tooltip for the button that starts Google Assistant from the search box in the app list.">
         Start Google Assistant
       </message>
@@ -803,7 +864,9 @@ need to be translated for each locale.-->
       <message name="IDS_APP_ACCESSIBILITY_STAR_RATING_ARC" desc="Accessibility text for the star rating of a Play Store app.">
         Star rating <ph name="RATING_SCORE">$1<ex>5.0</ex></ph>
       </message>
-
+      <message name="IDS_APP_ACCESSIBILITY_APP_RECOMMENDATION_ARC" desc="Accessibility text to specify a search result is an app recommendation.">
+        App recommendation
+      </message>
       <!-- Strings describing the touch calibration UX -->
       <message name="IDS_DISPLAY_TOUCH_CALIBRATION_EXIT_LABEL" desc="A message to notify the user about using the escape key to exit the calibration mode.">
         To exit calibration press Esc.
@@ -827,6 +890,37 @@ need to be translated for each locale.-->
       </message>
       <message name="IDS_DISPLAY_NAME_INTERNAL" desc="The name used for internal displays, which is shown in the display settings.">
         Internal Display
+      </message>
+
+      <!-- Crostini app context menu item names, dialog message and button strings -->
+      <message name="IDS_CROSTINI_USE_LOW_DENSITY" desc="The Crostini app Shelf item context menu item to use low display density for app windows.">
+        Use low density
+      </message>
+      <message name="IDS_CROSTINI_USE_HIGH_DENSITY" desc="The Crostini app Shelf item context menu item to use high display density for app windows.">
+        Use high density
+      </message>
+      <message name="IDS_CROSTINI_APP_RESTART_BODY" desc="Description for the Crostini app restart dialog.">
+        To adjust the window display density, restart the app.
+      </message>
+      <message name="IDS_CROSTINI_APP_RESTART_BUTTON" desc="Label for the button in the Crostini app restart dialog to restart an app.">
+        Restart
+      </message>
+      <message name="IDS_CROSTINI_NOT_NOW_BUTTON" desc="Label for the button in the Crostini app restart dialog to dismiss the dialog.">
+        Not now
+      </message>
+
+      <!-- Badging -->
+      <message name="IDS_SATURATED_BADGE_CONTENT" desc="The content to display when the application's badge is too large to display to indicate that the badge is more than a given maximum. This string should be as short as possible, preferably only one character beyond the content">
+        <ph name="MAXIMUM_VALUE">$1<ex>99</ex></ph>+
+      </message>
+      <message name="IDS_BADGE_UNREAD_NOTIFICATIONS_SATURATED" desc="The accessibility text which will be read by a screen reader when the notification count is too large to display (e.g. greater than 99).">
+        {MAX_UNREAD_NOTIFICATIONS, plural, =1 {More than 1 unread notification} other {More than # unread notifications}}
+      </message>
+      <message name="IDS_BADGE_UNREAD_NOTIFICATIONS_UNSPECIFIED" desc="The accessibility text which will be read by a screen reader when there are some unspecified number of notifications, or user attention is required">
+        Unread Notifications
+      </message>
+      <message name="IDS_BADGE_UNREAD_NOTIFICATIONS" desc="The accessibility text which will be read by a screen reader when there are notifcatications">
+        {UNREAD_NOTIFICATIONS, plural, =1 {1 Unread Notification} other {# Unread Notifications}}
       </message>
     </messages>
   </release>

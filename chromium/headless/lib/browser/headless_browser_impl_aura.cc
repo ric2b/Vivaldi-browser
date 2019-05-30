@@ -10,6 +10,8 @@
 #include "content/public/browser/web_contents.h"
 #include "headless/lib/browser/headless_clipboard.h"
 #include "headless/lib/browser/headless_screen.h"
+#include "headless/lib/browser/headless_web_contents_impl.h"
+#include "headless/lib/browser/headless_window_tree_host.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -37,7 +39,8 @@ void HeadlessBrowserImpl::PlatformStart() {
 void HeadlessBrowserImpl::PlatformInitializeWebContents(
     HeadlessWebContentsImpl* web_contents) {
   auto window_tree_host = std::make_unique<HeadlessWindowTreeHost>(
-      gfx::Rect(), web_contents->begin_frame_control_enabled());
+      gfx::Rect(),
+      web_contents->begin_frame_control_enabled() ? web_contents : nullptr);
   window_tree_host->InitHost();
   gfx::NativeWindow parent_window = window_tree_host->window();
   parent_window->Show();
@@ -60,8 +63,8 @@ void HeadlessBrowserImpl::PlatformSetWebContentsBounds(
   gfx::Rect new_host_bounds(
       0, 0, std::max(old_host_bounds.width(), bounds.x() + bounds.width()),
       std::max(old_host_bounds.height(), bounds.y() + bounds.height()));
-  web_contents->window_tree_host()->SetBoundsInPixels(new_host_bounds,
-                                                      viz::LocalSurfaceId());
+  web_contents->window_tree_host()->SetBoundsInPixels(
+      new_host_bounds, viz::LocalSurfaceIdAllocation());
   web_contents->window_tree_host()->window()->SetBounds(new_host_bounds);
 
   gfx::NativeView native_view = web_contents->web_contents()->GetNativeView();

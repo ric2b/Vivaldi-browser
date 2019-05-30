@@ -18,12 +18,14 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/bluetooth_chooser.h"
 #include "content/public/browser/invalidate_type.h"
+#include "content/public/browser/media_stream_request.h"
+#include "content/public/browser/serial_chooser.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/media_stream_request.h"
 #include "content/public/common/previews_state.h"
-#include "content/public/common/window_container_type.mojom.h"
+#include "content/public/common/window_container_type.mojom-forward.h"
 #include "third_party/blink/public/common/manifest/web_display_mode.h"
-#include "third_party/blink/public/mojom/color_chooser/color_chooser.mojom.h"
+#include "third_party/blink/public/common/mediastream/media_stream_request.h"
+#include "third_party/blink/public/mojom/choosers/color_chooser.mojom-forward.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
 #include "third_party/blink/public/platform/web_security_style.h"
 #include "third_party/blink/public/web/web_fullscreen_options.h"
@@ -42,8 +44,15 @@ namespace base {
 class FilePath;
 }
 
+namespace blink {
+namespace mojom {
+class FileChooserParams;
+}
+}  // namespace blink
+
 namespace content {
 class ColorChooser;
+class FileSelectListener;
 class JavaScriptDialogManager;
 class RenderFrameHost;
 class RenderProcessHost;
@@ -53,7 +62,6 @@ class SiteInstance;
 class WebContentsImpl;
 struct ContextMenuParams;
 struct DropData;
-struct FileChooserParams;
 struct NativeWebKeyboardEvent;
 struct Referrer;
 struct SecurityStyleExplanations;
@@ -94,8 +102,8 @@ struct CONTENT_EXPORT DownloadInformation {
   std::string mime_type;
   base::string16 suggested_filename;
 
-  base::Callback<void(bool /* open_when_done */, bool /* ask_for_target */)>
-      open_flags_cb;
+  bool open_when_done = false;
+  bool ask_for_target = false;
 };
 
 // Objects implement this interface to get notified about changes in the
@@ -174,10 +182,10 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual void UpdateTargetURL(WebContents* source,
                                const GURL& url) {}
 
-  virtual void CreateSearch(const base::ListValue & search) {};
+  virtual void CreateSearch(const base::ListValue & search) {}
 
   //Vivaldi PasteAndGo from the addressfield
-  virtual void PasteAndGo(const base::ListValue & search) {};
+  virtual void PasteAndGo(const base::ListValue & search) {}
 
   // Notification that there was a mouse event, along with the type of event.
   // If |motion| is true, this is a normal motion event. If |exited| is true,
@@ -232,7 +240,7 @@ class CONTENT_EXPORT WebContentsDelegate {
   // Sets focus to the location bar or some other place that is appropriate.
   // This is called when the tab wants to encourage user input, like for the
   // new tab page.
-  virtual void SetFocusToLocationBar(bool select_all) {}
+  virtual void SetFocusToLocationBar() {}
 
   // Returns whether the page should be focused when transitioning from crashed
   // to live. Default is true.
@@ -254,13 +262,13 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // Asks the delegate if the given tab can download.
   // Invoking the |callback| synchronously is OK.
-  virtual void CanDownload(
-      const GURL& url,
-      const std::string& request_method,
-      const base::Callback<void(bool)>& callback);
+  virtual void CanDownload(const GURL& url,
+                           const std::string& request_method,
+                           const base::Callback<void(bool)>& callback);
 
   // Returns true if the context menu operation was handled by the delegate.
-  virtual bool HandleContextMenu(const content::ContextMenuParams& params);
+  virtual bool HandleContextMenu(RenderFrameHost* render_frame_host,
+                                 const ContextMenuParams& params);
 
   // Allows delegates to handle keyboard events before sending to the renderer.
   // See enum for description of return values.
@@ -269,9 +277,11 @@ class CONTENT_EXPORT WebContentsDelegate {
       const NativeWebKeyboardEvent& event);
 
   // Allows delegates to handle unhandled keyboard messages coming back from
-  // the renderer.
-  virtual void HandleKeyboardEvent(WebContents* source,
-                                   const NativeWebKeyboardEvent& event) {}
+  // the renderer. Returns true if the event was handled, false otherwise. A
+  // true value means no more processing should happen on the event. The default
+  // return value is false
+  virtual bool HandleKeyboardEvent(WebContents* source,
+                                   const NativeWebKeyboardEvent& event);
 
   // Allows delegates to handle gesture events before sending to the renderer.
   // Returns true if the |event| was handled and thus shouldn't be processed
@@ -341,6 +351,9 @@ class CONTENT_EXPORT WebContentsDelegate {
                                   const GURL& target_url,
                                   WebContents* new_contents) {}
 
+  // Notifies the embedder that a Portal WebContents was created.
+  virtual void PortalWebContentsCreated(WebContents* portal_web_contents) {}
+
   // Notification that one of the frames in the WebContents is hung. |source| is
   // the WebContents that is hung, and |render_widget_host| is the
   // RenderWidgetHost that, while routing events to it, discovered the hang.
@@ -383,15 +396,20 @@ class CONTENT_EXPORT WebContentsDelegate {
       const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions);
 
   // Called when a file selection is to be done.
+  // This function is responsible for calling listener->FileSelected() or
+  // listener->FileSelectionCanceled().
   virtual void RunFileChooser(RenderFrameHost* render_frame_host,
-                              const FileChooserParams& params) {}
+                              std::unique_ptr<FileSelectListener> listener,
+                              const blink::mojom::FileChooserParams& params);
 
   // Request to enumerate a directory.  This is equivalent to running the file
   // chooser in directory-enumeration mode and having the user select the given
   // directory.
+  // This function is responsible for calling listener->FileSelected() or
+  // listener->FileSelectionCanceled().
   virtual void EnumerateDirectory(WebContents* web_contents,
-                                  int request_id,
-                                  const base::FilePath& path) {}
+                                  std::unique_ptr<FileSelectListener> listener,
+                                  const base::FilePath& path);
 
   // Shows a chooser for the user to select a nearby Bluetooth device. The
   // observer must live at least as long as the returned chooser object.
@@ -494,22 +512,23 @@ class CONTENT_EXPORT WebContentsDelegate {
   // request is denied, a call should be made to |callback| with an empty list
   // of devices. |request| has the details of the request (e.g. which of audio
   // and/or video devices are requested, and lists of available devices).
-  virtual void RequestMediaAccessPermission(WebContents* web_contents,
-                                            const MediaStreamRequest& request,
-                                            MediaResponseCallback callback);
+  virtual void RequestMediaAccessPermission(
+      WebContents* web_contents,
+      const MediaStreamRequest& request,
+      content::MediaResponseCallback callback);
 
   // Checks if we have permission to access the microphone or camera. Note that
   // this does not query the user. |type| must be MEDIA_DEVICE_AUDIO_CAPTURE
   // or MEDIA_DEVICE_VIDEO_CAPTURE.
   virtual bool CheckMediaAccessPermission(RenderFrameHost* render_frame_host,
                                           const GURL& security_origin,
-                                          MediaStreamType type);
+                                          blink::MediaStreamType type);
 
   // Returns the ID of the default device for the given media device |type|.
   // If the returned value is an empty string, it means that there is no
   // default device for the given |type|.
   virtual std::string GetDefaultMediaDeviceID(WebContents* web_contents,
-                                              MediaStreamType type);
+                                              blink::MediaStreamType type);
 
 #if defined(OS_ANDROID)
   // Returns true if the given media should be blocked to load.
@@ -519,7 +538,7 @@ class CONTENT_EXPORT WebContentsDelegate {
   // Overlay mode means that we are currently using AndroidOverlays to display
   // video, and that the compositor's surface should support alpha and not be
   // marked as opaque. See media/base/android/android_overlay.h.
-  virtual void SetOverlayMode(bool use_overlay_mode);
+  virtual void SetOverlayMode(bool use_overlay_mode) {}
 #endif
 
   // Requests permission to access the PPAPI broker. The delegate should return
@@ -540,6 +559,10 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // Returns true if the WebContents is never visible.
   virtual bool IsNeverVisible(WebContents* web_contents);
+
+  // Askss |guest_web_contents| to perform the same. If this returns true, the
+  // default behavior is suppressed.
+  virtual bool GuestSaveFrame(WebContents* guest_web_contents);
 
   // Called in response to a request to save a frame. If this returns true, the
   // default behavior is suppressed.
@@ -564,15 +587,12 @@ class CONTENT_EXPORT WebContentsDelegate {
       WebContents* web_contents,
       SecurityStyleExplanations* security_style_explanations);
 
-  // Requests the app banner. This method is called from the DevTools.
-  virtual void RequestAppBannerFromDevTools(content::WebContents* web_contents);
-
   // Called when a suspicious navigation of the main frame has been blocked.
   // Allows the delegate to provide some UI to let the user know about the
   // blocked navigation and give them the option to recover from it. The given
   // URL is the blocked navigation target.
-  virtual void OnDidBlockFramebust(content::WebContents* web_contents,
-                                   const GURL& url) {}
+  virtual void OnDidBlockFramebust(WebContents* web_contents, const GURL& url) {
+  }
 
   // Reports that passive mixed content was found at the specified url.
   virtual void PassiveInsecureContentFound(const GURL& resource_url) {}
@@ -584,6 +604,9 @@ class CONTENT_EXPORT WebContentsDelegate {
                                                  const url::Origin& origin,
                                                  const GURL& resource_url);
 
+  virtual void SetTopControlsShownRatio(WebContents* web_contents,
+                                        float ratio) {}
+
   // Requests to get browser controls info such as the height of the top/bottom
   // controls, and whether they will shrink the Blink's view size.
   // Note that they are not complete in the sense that there is no API to tell
@@ -591,12 +614,18 @@ class CONTENT_EXPORT WebContentsDelegate {
   // needed by embedder because it's always accompanied by view size change.
   virtual int GetTopControlsHeight() const;
   virtual int GetBottomControlsHeight() const;
-  virtual bool DoBrowserControlsShrinkBlinkSize() const;
+  virtual bool DoBrowserControlsShrinkRendererSize(
+      const WebContents* web_contents) const;
+
+  // Propagates to the browser that gesture scrolling has changed state. This is
+  // used by the browser to assist in controlling the behavior of sliding the
+  // top controls as a result of page gesture scrolling while in tablet mode.
+  virtual void SetTopControlsGestureScrollInProgress(bool in_progress) {}
 
   // Give WebContentsDelegates the opportunity to adjust the previews state.
-  virtual void AdjustPreviewsStateForNavigation(
-      content::WebContents* web_contents,
-      PreviewsState* previews_state) {}
+  virtual void AdjustPreviewsStateForNavigation(WebContents* web_contents,
+                                                PreviewsState* previews_state) {
+  }
 
   // Requests to print an out-of-process subframe for the specified WebContents.
   // |rect| is the rectangular area where its content resides in its parent
@@ -613,12 +642,41 @@ class CONTENT_EXPORT WebContentsDelegate {
   // Notifies the Picture-in-Picture controller that there is a new player
   // entering Picture-in-Picture.
   // Returns the size of the Picture-in-Picture window.
-  virtual gfx::Size EnterPictureInPicture(const viz::SurfaceId&,
+  virtual gfx::Size EnterPictureInPicture(WebContents* web_contents,
+                                          const viz::SurfaceId&,
                                           const gfx::Size& natural_size);
 
   // Updates the Picture-in-Picture controller with a signal that
   // Picture-in-Picture mode has ended.
-  virtual void ExitPictureInPicture();
+  virtual void ExitPictureInPicture() {}
+
+#if defined(OS_ANDROID)
+  // Updates information to determine whether a user gesture should carryover to
+  // future navigations. This is needed so navigations within a certain
+  // timeframe of a request initiated by a gesture will be treated as if they
+  // were initiated by a gesture too, otherwise the navigation may be blocked.
+  virtual void UpdateUserGestureCarryoverInfo(WebContents* web_contents) {}
+#endif
+
+  // Returns true if lazy loading of images and frames should be enabled.
+  virtual bool ShouldAllowLazyLoad();
+
+  // Requests the delegate to replace |old_contents| with |new_contents| in the
+  // container that holds |old_contents|. If the  delegate successfully replaces
+  // |old_contents|, the return parameter passes ownership of |old_contents|.
+  // Otherwise, |new_contents| is returned.
+  // |did_finish_load| is true if WebContentsObserver::DidFinishLoad() has
+  // already been called for |new_contents|.
+  virtual std::unique_ptr<WebContents> SwapWebContents(
+      WebContents* old_contents,
+      std::unique_ptr<WebContents> new_contents,
+      bool did_start_load,
+      bool did_finish_load);
+
+  // Returns true if the widget's frame content needs to be stored before
+  // eviction and displayed until a new frame is generated. If false, a white
+  // solid color is displayed instead.
+  virtual bool ShouldShowStaleContentOnEviction(WebContents* source);
 
   // NOTE(andre@vivaldi.com) : This was added to allow WebViewGuests override
   // the ownership of WebContents in subframes. The TabStripModel owns
@@ -628,6 +686,9 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual bool HasOwnerShipOfContents();
 
   void SetDownloadInformation(const content::DownloadInformation& info);
+  content::DownloadInformation* GetDownloadInformation() {
+    return &download_info_;
+  }
 
  protected:
   virtual ~WebContentsDelegate();

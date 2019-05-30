@@ -34,7 +34,7 @@ class ArcTermsOfServiceScreenHandler
       public system::TimezoneSettings::Observer,
       public chromeos::NetworkStateHandlerObserver {
  public:
-  ArcTermsOfServiceScreenHandler();
+  explicit ArcTermsOfServiceScreenHandler(JSCallsContainer* js_calls_container);
   ~ArcTermsOfServiceScreenHandler() override;
 
   // content::WebUIMessageHandler:
@@ -54,7 +54,7 @@ class ArcTermsOfServiceScreenHandler
   // OobeUI::Observer:
   void OnCurrentScreenChanged(OobeScreen current_screen,
                               OobeScreen new_screen) override;
-  void OnScreenInitialized(OobeScreen screen) override{};
+  void OnScreenInitialized(OobeScreen screen) override {}
 
   // system::TimezoneSettings::Observer:
   void TimezoneChanged(const icu::TimeZone& timezone) override;
@@ -77,6 +77,7 @@ class ArcTermsOfServiceScreenHandler
   void HandleSkip(const std::string& tos_content);
   void HandleAccept(bool enable_backup_restore,
                     bool enable_location_services,
+                    bool review_arc_settings,
                     const std::string& tos_content);
   // Loads Play Store ToS content in case default network exists. If
   // |ignore_network_state| is set then network state is not checked.
@@ -119,6 +120,9 @@ class ArcTermsOfServiceScreenHandler
   // To track if optional features are managed preferences.
   bool backup_restore_managed_ = false;
   bool location_services_managed_ = false;
+
+  // To track if a child account is being set up.
+  bool is_child_account_;
 
   std::unique_ptr<arc::ArcOptInPreferenceHandler> pref_handler_;
 

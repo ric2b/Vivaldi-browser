@@ -89,7 +89,6 @@ bool ReadStream::IsEndOfStream() {
 }
 
 int ReadStream::SyncRead(uint8_t* buff, size_t len) {
-
   LOG_IF(WARNING, current_read_.Incomplete())
       << " PROPMEDIA(GPU) : " << __FUNCTION__
       << " Synchronous Read while in an Incomplete Read";
@@ -122,8 +121,7 @@ void ReadStream::Read() {
                      read_cb_);
 }
 
-void ReadStream::FinishRead()
-{
+void ReadStream::FinishRead() {
   size_t total_num_bytes = current_read_.Total();
   current_read_.Reset();
   stream_.UpdateCurrentPosition();
@@ -131,7 +129,6 @@ void ReadStream::FinishRead()
 }
 
 void ReadStream::OnReadData(int bytes_read) {
-
   if(stream_.HasStopped()) {
     LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
                  << " Received on stopped stream bytes " << bytes_read;

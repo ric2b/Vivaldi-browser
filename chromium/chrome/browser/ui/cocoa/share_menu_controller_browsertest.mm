@@ -106,9 +106,6 @@ IN_PROC_BROWSER_TEST_F(ShareMenuControllerTest, PopulatesMenu) {
   // This cancels out, so only decrement if the "More..." item
   // isn't showing.
   NSInteger expected_count = [sharing_services_for_url count];
-  if (![ShareMenuController shouldShowMoreItem]) {
-    --expected_count;
-  }
   EXPECT_EQ([menu numberOfItems], expected_count);
 
   NSSharingService* reading_list_service = [NSSharingService
@@ -131,9 +128,6 @@ IN_PROC_BROWSER_TEST_F(ShareMenuControllerTest, PopulatesMenu) {
 }
 
 IN_PROC_BROWSER_TEST_F(ShareMenuControllerTest, AddsMoreButton) {
-  if (![ShareMenuController shouldShowMoreItem]) {
-    return;
-  }
   base::scoped_nsobject<NSMenu> menu([[NSMenu alloc] initWithTitle:@"Share"]);
   [controller_ menuNeedsUpdate:menu];
 
@@ -172,7 +166,7 @@ IN_PROC_BROWSER_TEST_F(ShareMenuControllerTest, SharingDelegate) {
                    MakeMockSharingService();
 
                NSWindow* browser_window =
-                   browser()->window()->GetNativeWindow();
+                   browser()->window()->GetNativeWindow().GetNativeNSWindow();
                EXPECT_NSNE([controller_ sharingService:mockService
                                sourceFrameOnScreenForShareItem:url],
                            NSZeroRect);

@@ -8,6 +8,7 @@ import "gpu/ipc/common/mailbox_holder.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "mojo/public/mojom/base/values.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
+import "ui/gfx/mojo/color_space.mojom";
 
 // See media/base/audio_codecs.h for descriptions.
 [Native]
@@ -61,6 +62,10 @@ enum VideoPixelFormat;
 [Native]
 enum VideoRotation;
 
+// See media/base/waiting.h for descriptions.
+[Native]
+enum WaitingReason;
+
 // See media/base/watch_time_keys.h for descriptions.
 [Native]
 enum WatchTimeKey;
@@ -72,6 +77,10 @@ enum EncryptionMode;
 // See media/base/container_names.h for descriptions.
 [Native]
 enum MediaContainerName;
+
+// See media/base/media_status.h for description.
+[Native]
+enum MediaStatusState;
 
 // This defines a mojo transport format for media::EncryptionPattern
 // See media/base/encryption_pattern.h for description.
@@ -147,7 +156,6 @@ struct VideoDecoderConfig {
   VideoCodec codec;
   VideoCodecProfile profile;
   VideoPixelFormat format;
-  ColorSpace color_space;
   VideoRotation video_rotation;
   gfx.mojom.Size coded_size;
   gfx.mojom.Rect visible_rect;
@@ -249,6 +257,8 @@ struct VideoFrame {
 
   // Extra properties associated with the VideoFrame.
   mojo_base.mojom.DictionaryValue metadata;
+
+  gfx.mojom.ColorSpace color_space;
 };
 
 // Possible choices for storing VideoFrame data.
@@ -308,6 +318,6 @@ struct PredictionFeatures {
 struct PredictionTargets {
   uint32 frames_decoded = 0;
   uint32 frames_dropped = 0;
-  uint32 frames_decoded_power_efficient = 0;
+  uint32 frames_power_efficient = 0;
 };
 

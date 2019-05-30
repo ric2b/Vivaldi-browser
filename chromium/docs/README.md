@@ -48,6 +48,8 @@ used when committed.
     (on a Linux host)
 *   [Cast for Android Build Instructions](android_cast_build_instructions.md) -
     Cast for Android (on a Linux host)
+*   [Fuchsia Build Instructions](fuchsia_build_instructions.md) - Fuchsia target
+    (on a Linux host)
 *   [iOS Build Instructions](ios/build_instructions.md) - iOS target (on a MacOS
     host)
 *   [Chrome OS Build Instructions](chromeos_build_instructions.md) - Chrome OS
@@ -87,6 +89,8 @@ used when committed.
     to perform refactorings that are AST-aware
 *   [The Clang Static Analyzer](clang_static_analyzer.md) - How to enable static
     analysis at build time
+*   [Clang Code Coverage Wrapper](clang_code_coverage_wrapper.md) - Enable Clang
+    code coverage instrumentation for a subset of source files.
 *   [Writing Clang Plugins](writing_clang_plugins.md) - Don't write a clang
     plugin, but if you do, read this
 *   [Updating Clang](updating_clang.md) - Updating the version of Clang used to
@@ -105,6 +109,8 @@ used when committed.
     builder migration for Chromium
 *   [Tour of Continuous Integration UI](tour_of_luci_ui.md) - A tour of our
     the user interface for LUCI, our continuous integration system
+*   [Parsing Test Results](parsing_test_results.md) - An introduction for how to
+    understand the results emitted by polygerrit and CI builds.
 *   [Closure Compilation](closure_compilation.md) - The _Closure_ JavaScript
     compiler
 *   [Threading and Tasks in Chrome](threading_and_tasks.md) - How to run tasks
@@ -132,32 +138,32 @@ used when committed.
     the window system and low level input and graphics.
 *   [Optimizing Chrome Web UIs](optimizing_web_uis.md) - Notes on making webuis
     more performant
-*   [ES6 Support in Chromium](es6_chromium.md) - Implementation of ECMAScript6
-    features in Chromium
 *   [Adding a new feature flag in chrome://flags](how_to_add_your_feature_flag.md) - Quick
     guide to add a new feature flag to experiment your feature.
 *   [Guidelines for considering branch dates in project planning](release_branch_guidance.md) -
     What to do (and not to do) around branch dates when scheduling your project
     work.
+*   [WebUI Explainer](webui_explainer.md) - An explanation of C++ and JavaScript
+    infrastructural code for Chrome UIs implemented with web technologies (i.e.
+    chrome:// URLs).
 
 ### Testing
-*   [Running and Debugging Layout Tests](testing/layout_tests.md)
-*   [Writing Layout Tests](testing/writing_layout_tests.md) - Layout Tests using
+*   [Running and Debugging Web Tests](testing/web_tests.md)
+*   [Writing Web Tests](testing/writing_web_tests.md) - Web Tests using
     `content_shell`
-*   [Layout Test Expectations and Baselines](testing/layout_test_expectations.md) -
-    Setting expected results of layout tests.
-*   [Layout Tests Tips](testing/layout_tests_tips.md) - Best practices for Layout
-    Tests
-*   [Layout Tests with Manual Fallback](testing/layout_tests_with_manual_fallback.md) -
+*   [Web Test Expectations and Baselines](testing/web_test_expectations.md) -
+    Setting expected results of web tests.
+*   [Web Tests Tips](testing/web_tests_tips.md) - Best practices for web tests
+*   [Web Tests with Manual Fallback](testing/web_tests_with_manual_fallback.md) -
     Writing tests that simulate manual interventions
-*   [Extending the Layout Test Framework](how_to_extend_layout_test_framework.md)
-*   [Fixing Layout Test Flakiness](testing/identifying_tests_that_depend_on_order.md) -
-    Diagnosing and fixing layout test flakiness due to ordering dependencies.
-*   [Running Layout Tests using `content_shell`](testing/layout_tests_in_content_shell.md) -
-    Running layout tests by hand.
+*   [Extending the Web Test Framework](how_to_extend_web_test_framework.md)
+*   [Fixing Web Test Flakiness](testing/identifying_tests_that_depend_on_order.md) -
+    Diagnosing and fixing web test flakiness due to ordering dependencies.
+*   [Running Web Tests using `content_shell`](testing/web_tests_in_content_shell.md) -
+    Running web tests by hand.
 *   [Web Platform Tests](testing/web_platform_tests.md) - Shared tests across
     browser vendors
-*   [Using Breakpad with `content_shell`](testing/using_breakpad_with_content_shell.md) -
+*   [Using Crashpad with `content_shell`](testing/using_crashpad_with_content_shell.md) -
     Capture stack traces on layout test crashes without an attached debugger
 *   [Test Descriptions](test_descriptions.md) - Unit test targets that can be
     built, with associated desciptions.
@@ -213,8 +219,8 @@ used when committed.
     isolate browser components with different privileges.
 *   [Zygote Process](linux_zygote.md) - How the Linux Zygote process, used to
     spawn new processes, works.
-*   [Running Layout Tests on Linux](layout_tests_linux.md) - Linux-specific
-    instructions for running layout tests.
+*   [Running Web Tests on Linux](web_tests_linux.md) - Linux-specific
+    instructions for running web tests.
 *   [Linux Sysroot Images](linux_sysroot.md) - How builds use libraries on Linux
 *   [Linux Hardware Video Decoding](linux_hw_video_decode.md) - Enabling
     hardware video decode codepaths on Linux
@@ -272,12 +278,18 @@ used when committed.
 ### Misc Chrome-OS-Specific Docs
 *   [Chrome Logging on Chrome OS](chrome_os_logging.md)
 
+### Misc WebUI-Specific Docs
+*   [Creating WebUI Interfaces in components/](webui_in_components.md) How to
+    create a new WebUI component in the `components/` directory.
+
 ### Media
 *   [Audio Focus Handling](media/audio_focus.md) - How multiple MediaSession
     audio streams interact
 *   [Autoplay of HTMLMediaElements](media/autoplay.md) - How HTMLMediaElements
     are autoplayed.
 *   [Piranha Plant](piranha_plant.md) - Future architecture of MediaStreams
+*   [Video Decode/Encode Accelerator Tests](media/gpu/vdatest_usage.md) - How to
+    use the accelerated video decoder/encoder test programs.
 
 ### Accessibility
 *   [Accessibility Overview](accessibility/overview.md) - Overview of
@@ -290,7 +302,7 @@ used when committed.
     Enabling spoken feedback (ChromeVox) on desktop Linux.
 *   [Offscreen, Invisible and Size](accessibility/offscreen.md) - How Chrome
     defines offscreen, invisible and size in the accessibility tree.
-*   [Text to Speech](accessibility/tts.md) - Overview of text to speech in 
+*   [Text to Speech](accessibility/tts.md) - Overview of text to speech in
     Chrome and Chrome OS.
 *   [BRLTTY in Chrome OS](accessibility/brltty.md) - Chrome OS integration with
     BRLTTY to support refreshable braille displays
@@ -328,6 +340,22 @@ used when committed.
     install Chromium OS on VMWare.
 *   [User Data Directory](user_data_dir.md) - How the user data and cache
     directories are determined on all platforms.
+
+### Mojo &amp; Services
+*   [Intro to Mojo &amp; Services](mojo_and_services.md) - Quick introduction
+    to Mojo and services in Chromium, with examples
+*   [Mojo API Reference](/mojo/README.md) - Detailed reference documentation for
+    all things Mojo
+*   [The Service Manager &amp; Services](/services/service_manager/README.md) -
+    Services system overview, API references, example services
+*   [Service Development Guidelines](/services/README.md) - Guidelines for
+    service development in the Chromium tree
+*   [Servicifying Chromium Features](servicification.md) - General advice for
+    integrating new and existing subsystems into Chromium as services
+*   [Converting Legacy IPC to Mojo](mojo_ipc_conversion.md) - Tips and common
+    patterns for practical IPC conversion work
+*   [Mojo “Style” Guide](security/mojo.md) - Recommendations for best practices
+    from Mojo and IPC reviewers
 
 ### Probably Obsolete
 *   [TPM Quick Reference](tpm_quick_ref.md) - Trusted Platform Module notes.

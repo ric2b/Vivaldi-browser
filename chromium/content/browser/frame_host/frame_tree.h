@@ -10,6 +10,7 @@
 #include <iterator>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 #include "base/callback.h"
 #include "base/containers/queue.h"
@@ -18,6 +19,7 @@
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/common/content_export.h"
 #include "services/service_manager/public/mojom/interface_provider.mojom.h"
+#include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 
 namespace blink {
 struct FramePolicy;
@@ -102,6 +104,23 @@ class CONTENT_EXPORT FrameTree {
 
   FrameTreeNode* root() const { return root_; }
 
+  // Delegates for RenderFrameHosts, RenderViewHosts, RenderWidgetHosts and
+  // RenderFrameHostManagers. These can be kept centrally on the FrameTree
+  // because they are expected to be the same for all frames on a given
+  // FrameTree.
+  RenderFrameHostDelegate* render_frame_delegate() {
+    return render_frame_delegate_;
+  }
+  RenderViewHostDelegate* render_view_delegate() {
+    return render_view_delegate_;
+  }
+  RenderWidgetHostDelegate* render_widget_delegate() {
+    return render_widget_delegate_;
+  }
+  RenderFrameHostManager::Delegate* manager_delegate() {
+    return manager_delegate_;
+  }
+
   // Returns the FrameTreeNode with the given |frame_tree_node_id| if it is part
   // of this FrameTree.
   FrameTreeNode* FindByID(int frame_tree_node_id);
@@ -130,19 +149,24 @@ class CONTENT_EXPORT FrameTree {
   // interface through which the child RenderFrame can access Mojo services
   // exposed by the corresponding RenderFrameHost. The caller takes care of
   // sending the client end of the interface down to the RenderFrame.
-  bool AddFrame(FrameTreeNode* parent,
-                int process_id,
-                int new_routing_id,
-                service_manager::mojom::InterfaceProviderRequest
-                    interface_provider_request,
-                blink::WebTreeScopeType scope,
-                const std::string& frame_name,
-                const std::string& frame_unique_name,
-                bool is_created_by_script,
-                const base::UnguessableToken& devtools_frame_token,
-                const blink::FramePolicy& frame_policy,
-                const FrameOwnerProperties& frame_owner_properties,
-                bool was_discarded);
+  FrameTreeNode* AddFrame(FrameTreeNode* parent,
+                          int process_id,
+                          int new_routing_id,
+                          service_manager::mojom::InterfaceProviderRequest
+                              interface_provider_request,
+                          blink::mojom::DocumentInterfaceBrokerRequest
+                              document_interface_broker_content_request,
+                          blink::mojom::DocumentInterfaceBrokerRequest
+                              document_interface_broker_blink_request,
+                          blink::WebTreeScopeType scope,
+                          const std::string& frame_name,
+                          const std::string& frame_unique_name,
+                          bool is_created_by_script,
+                          const base::UnguessableToken& devtools_frame_token,
+                          const blink::FramePolicy& frame_policy,
+                          const FrameOwnerProperties& frame_owner_properties,
+                          bool was_discarded,
+                          blink::FrameOwnerElementType owner_type);
 
   // Removes a frame from the frame tree. |child|, its children, and objects
   // owned by their RenderFrameHostManagers are immediately deleted. The root
@@ -207,10 +231,7 @@ class CONTENT_EXPORT FrameTree {
   void UpdateLoadProgress(double progress);
 
   // Returns this FrameTree's total load progress.
-  double load_progress() { return load_progress_; }
-  double loaded_bytes() const { return loaded_bytes_; }
-  double loaded_elements() const { return loaded_elements_; }
-  double total_elements() const { return total_elements_; }
+  double load_progress() const { return load_progress_; }
 
   // Resets the load progress on all nodes in this FrameTree.
   void ResetLoadProgress();
@@ -228,10 +249,15 @@ class CONTENT_EXPORT FrameTree {
   // identified by |instance|.
   void SetPageFocus(SiteInstance* instance, bool is_focused);
 
+	// Vivaldi
+  double loaded_bytes() const { return loaded_bytes_; }
+  double loaded_elements() const { return loaded_elements_; }
+  double total_elements() const { return total_elements_; }
+
  private:
   friend class FrameTreeTest;
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostImplBrowserTest, RemoveFocusedFrame);
-  typedef base::hash_map<int, RenderViewHostImpl*> RenderViewHostMap;
+  typedef std::unordered_map<int, RenderViewHostImpl*> RenderViewHostMap;
 
   // Returns a range to iterate over all FrameTreeNodes in the frame tree in
   // breadth-first traversal order, skipping the subtree rooted at

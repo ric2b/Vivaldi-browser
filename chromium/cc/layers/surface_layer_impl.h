@@ -54,7 +54,12 @@ class CC_EXPORT SurfaceLayerImpl : public LayerImpl {
   }
 
   void SetSurfaceHitTestable(bool surface_hit_testable);
-  bool surface_hit_testable() const { return surface_hit_testable_; }
+  bool ShouldGenerateSurfaceHitTestData() const {
+    return surface_hit_testable_ && !has_pointer_events_none_;
+  }
+
+  void SetHasPointerEventsNone(bool has_pointer_events_none);
+  bool has_pointer_events_none() const { return has_pointer_events_none_; }
 
   // LayerImpl overrides.
   std::unique_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl) override;
@@ -64,6 +69,7 @@ class CC_EXPORT SurfaceLayerImpl : public LayerImpl {
   void AppendQuads(viz::RenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override;
   bool is_surface_layer() const override;
+  gfx::Rect GetEnclosingRectInTargetSpace() const override;
 
  protected:
   SurfaceLayerImpl(LayerTreeImpl* tree_impl, int id, UpdateSubmissionStateCB);
@@ -84,6 +90,7 @@ class CC_EXPORT SurfaceLayerImpl : public LayerImpl {
 
   bool stretch_content_to_fill_bounds_ = false;
   bool surface_hit_testable_ = false;
+  bool has_pointer_events_none_ = false;
   bool will_draw_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(SurfaceLayerImpl);

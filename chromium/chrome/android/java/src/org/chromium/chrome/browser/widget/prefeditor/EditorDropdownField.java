@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.widget.prefeditor;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -20,12 +21,10 @@ import android.widget.TextView;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.preferences.autofill.AutofillProfileBridge.DropdownKeyValue;
-import org.chromium.ui.UiUtils;
+import org.chromium.ui.KeyboardVisibilityDelegate;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import javax.annotation.Nullable;
 
 /**
  * Helper class for creating a dropdown view with a label.
@@ -105,7 +104,6 @@ class EditorDropdownField implements EditorFieldView {
 
         mDropdown = (Spinner) mLayout.findViewById(R.id.spinner);
         mDropdown.setTag(this);
-        mDropdown.setContentDescription(mFieldModel.getLabel());
         mDropdown.setAdapter(mAdapter);
         mDropdown.setSelection(mSelectedIndex);
         mDropdown.setOnItemSelectedListener(new OnItemSelectedListener() {
@@ -179,7 +177,7 @@ class EditorDropdownField implements EditorFieldView {
     }
 
     private void requestFocusAndHideKeyboard() {
-        UiUtils.hideKeyboard(mDropdown);
+        KeyboardVisibilityDelegate.getInstance().hideKeyboard(mDropdown);
         ViewGroup parent = (ViewGroup) mDropdown.getParent();
         if (parent != null) parent.requestChildFocus(mDropdown, mDropdown);
         mDropdown.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED);

@@ -54,12 +54,14 @@ class IndexedDBTestDatabase : public IndexedDBDatabase {
       scoped_refptr<IndexedDBBackingStore> backing_store,
       scoped_refptr<IndexedDBFactory> factory,
       std::unique_ptr<IndexedDBMetadataCoding> metadata_coding,
-      const IndexedDBDatabase::Identifier& unique_identifier)
+      const IndexedDBDatabase::Identifier& unique_identifier,
+      ScopesLockManager* transaction_lock_manager)
       : IndexedDBDatabase(name,
                           backing_store,
                           factory,
                           std::move(metadata_coding),
-                          unique_identifier) {}
+                          unique_identifier,
+                          transaction_lock_manager) {}
 
  protected:
   ~IndexedDBTestDatabase() override {}
@@ -75,7 +77,7 @@ class IndexedDBTestTransaction : public IndexedDBTransaction {
       int64_t id,
       IndexedDBConnection* connection,
       const std::set<int64_t>& scope,
-      blink::WebIDBTransactionMode mode,
+      blink::mojom::IDBTransactionMode mode,
       IndexedDBBackingStore::Transaction* backing_store_transaction)
       : IndexedDBTransaction(id,
                              connection,
@@ -271,10 +273,11 @@ MockBrowserTestIndexedDBClassFactory::CreateIndexedDBDatabase(
     scoped_refptr<IndexedDBBackingStore> backing_store,
     scoped_refptr<IndexedDBFactory> factory,
     std::unique_ptr<IndexedDBMetadataCoding> metadata_coding,
-    const IndexedDBDatabase::Identifier& unique_identifier) {
+    const IndexedDBDatabase::Identifier& unique_identifier,
+    ScopesLockManager* transaction_lock_manager) {
   return new IndexedDBTestDatabase(name, backing_store, factory,
                                    std::move(metadata_coding),
-                                   unique_identifier);
+                                   unique_identifier, transaction_lock_manager);
 }
 
 std::unique_ptr<IndexedDBTransaction>
@@ -282,7 +285,7 @@ MockBrowserTestIndexedDBClassFactory::CreateIndexedDBTransaction(
     int64_t id,
     IndexedDBConnection* connection,
     const std::set<int64_t>& scope,
-    blink::WebIDBTransactionMode mode,
+    blink::mojom::IDBTransactionMode mode,
     IndexedDBBackingStore::Transaction* backing_store_transaction) {
   return std::unique_ptr<IndexedDBTransaction>(new IndexedDBTestTransaction(
       id, connection, scope, mode, backing_store_transaction));

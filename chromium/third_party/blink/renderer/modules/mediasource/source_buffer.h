@@ -34,11 +34,12 @@
 #include <memory>
 #include "third_party/blink/public/platform/web_source_buffer_client.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
-#include "third_party/blink/renderer/core/dom/pausable_object.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/typed_arrays/array_buffer_view_helpers.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/mediasource/track_default_list.h"
-#include "third_party/blink/renderer/platform/async_method_runner.h"
+#include "third_party/blink/renderer/platform/bindings/trace_wrapper_member.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
@@ -56,7 +57,7 @@ class WebSourceBuffer;
 
 class SourceBuffer final : public EventTargetWithInlineData,
                            public ActiveScriptWrappable<SourceBuffer>,
-                           public PausableObject,
+                           public ContextLifecycleObserver,
                            public WebSourceBufferClient {
   USING_GARBAGE_COLLECTED_MIXIN(SourceBuffer);
   DEFINE_WRAPPERTYPEINFO();
@@ -69,6 +70,7 @@ class SourceBuffer final : public EventTargetWithInlineData,
   static const AtomicString& SegmentsKeyword();
   static const AtomicString& SequenceKeyword();
 
+  SourceBuffer(std::unique_ptr<WebSourceBuffer>, MediaSource*, EventQueue*);
   ~SourceBuffer() override;
 
   // SourceBuffer.idl methods
@@ -87,11 +89,11 @@ class SourceBuffer final : public EventTargetWithInlineData,
   void setAppendWindowStart(double, ExceptionState&);
   double appendWindowEnd() const;
   void setAppendWindowEnd(double, ExceptionState&);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(updatestart);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(update);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(updateend);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(error);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(abort);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(updatestart, kUpdatestart)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(update, kUpdate)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(updateend, kUpdateend)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(error, kError)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(abort, kAbort)
   TrackDefaultList* trackDefaults() const { return track_defaults_.Get(); }
   void setTrackDefaults(TrackDefaultList*, ExceptionState&);
 
@@ -104,9 +106,7 @@ class SourceBuffer final : public EventTargetWithInlineData,
   // ScriptWrappable
   bool HasPendingActivity() const final;
 
-  // PausableObject
-  void Pause() override;
-  void Unpause() override;
+  // ContextLifecycleObserver
   void ContextDestroyed(ExecutionContext*) override;
 
   // EventTarget interface
@@ -120,7 +120,6 @@ class SourceBuffer final : public EventTargetWithInlineData,
   void Trace(blink::Visitor*) override;
 
  private:
-  SourceBuffer(std::unique_ptr<WebSourceBuffer>, MediaSource*, EventQueue*);
   void Dispose();
 
   bool IsRemoved() const;
@@ -157,26 +156,34 @@ class SourceBuffer final : public EventTargetWithInlineData,
       const AtomicString& byte_stream_track_id) const;
 
   std::unique_ptr<WebSourceBuffer> web_source_buffer_;
-  Member<MediaSource> source_;
-  Member<TrackDefaultList> track_defaults_;
+
+  // If any portion of an attached HTMLMediaElement (HTMLME) and the MediaSource
+  // Extensions (MSE) API is alive (having pending activity or traceable from a
+  // GC root), the whole group is not GC'ed. Here, using TraceWrapperMember,
+  // instead of Member, because |source_|'s and |track_defaults_|'s wrappers
+  // need to remain alive at least to successfully dispatch any events enqueued
+  // by the behavior of the HTMLME+MSE API. It makes those wrappers remain alive
+  // as long as this SourceBuffer's wrapper is alive.
+  TraceWrapperMember<MediaSource> source_;
+  TraceWrapperMember<TrackDefaultList> track_defaults_;
   Member<EventQueue> async_event_queue_;
 
   AtomicString mode_;
   bool updating_;
   double timestamp_offset_;
-  Member<AudioTrackList> audio_tracks_;
-  Member<VideoTrackList> video_tracks_;
+  TraceWrapperMember<AudioTrackList> audio_tracks_;
+  TraceWrapperMember<VideoTrackList> video_tracks_;
   double append_window_start_;
   double append_window_end_;
   bool first_initialization_segment_received_;
 
   Vector<unsigned char> pending_append_data_;
-  size_t pending_append_data_offset_;
-  Member<AsyncMethodRunner<SourceBuffer>> append_buffer_async_part_runner_;
+  wtf_size_t pending_append_data_offset_;
+  TaskHandle append_buffer_async_task_handle_;
 
   double pending_remove_start_;
   double pending_remove_end_;
-  Member<AsyncMethodRunner<SourceBuffer>> remove_async_part_runner_;
+  TaskHandle remove_async_task_handle_;
 };
 
 }  // namespace blink

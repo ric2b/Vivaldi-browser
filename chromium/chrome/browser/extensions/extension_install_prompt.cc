@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
@@ -53,9 +54,9 @@ using extensions::PermissionSet;
 namespace {
 
 bool AllowWebstoreData(ExtensionInstallPrompt::PromptType type) {
-  return type == ExtensionInstallPrompt::INLINE_INSTALL_PROMPT ||
-         type == ExtensionInstallPrompt::EXTERNAL_INSTALL_PROMPT ||
-         type == ExtensionInstallPrompt::REPAIR_PROMPT;
+  return type == ExtensionInstallPrompt::EXTERNAL_INSTALL_PROMPT ||
+         type == ExtensionInstallPrompt::REPAIR_PROMPT ||
+         type == ExtensionInstallPrompt::WEBSTORE_WIDGET_PROMPT;
 }
 
 // Returns bitmap for the default icon with size equal to the default icon's
@@ -64,8 +65,8 @@ SkBitmap GetDefaultIconBitmapForMaxScaleFactor(bool is_app) {
   const gfx::ImageSkia& image = is_app ?
       extensions::util::GetDefaultAppIcon() :
       extensions::util::GetDefaultExtensionIcon();
-  return image.GetRepresentation(
-      gfx::ImageSkia::GetMaxSupportedScale()).sk_bitmap();
+  return image.GetRepresentation(gfx::ImageSkia::GetMaxSupportedScale())
+      .GetBitmap();
 }
 
 // If auto confirm is enabled then posts a task to proceed with or cancel the
@@ -179,7 +180,7 @@ base::string16 ExtensionInstallPrompt::Prompt::GetDialogTitle() const {
   int id = -1;
   switch (type_) {
     case INSTALL_PROMPT:
-    case INLINE_INSTALL_PROMPT:
+    case WEBSTORE_WIDGET_PROMPT:
       id = IDS_EXTENSION_INSTALL_PROMPT_TITLE;
       break;
     case RE_ENABLE_PROMPT:
@@ -234,7 +235,7 @@ base::string16 ExtensionInstallPrompt::Prompt::GetAcceptButtonLabel() const {
   int id = -1;
   switch (type_) {
     case INSTALL_PROMPT:
-    case INLINE_INSTALL_PROMPT:
+    case WEBSTORE_WIDGET_PROMPT:
       if (extension_->is_app())
         id = IDS_EXTENSION_INSTALL_PROMPT_ACCEPT_BUTTON_APP;
       else if (extension_->is_theme())
@@ -295,7 +296,7 @@ base::string16 ExtensionInstallPrompt::Prompt::GetAbortButtonLabel() const {
   int id = -1;
   switch (type_) {
     case INSTALL_PROMPT:
-    case INLINE_INSTALL_PROMPT:
+    case WEBSTORE_WIDGET_PROMPT:
     case RE_ENABLE_PROMPT:
     case REMOTE_INSTALL_PROMPT:
     case REPAIR_PROMPT:
@@ -323,7 +324,7 @@ base::string16 ExtensionInstallPrompt::Prompt::GetPermissionsHeading() const {
   int id = -1;
   switch (type_) {
     case INSTALL_PROMPT:
-    case INLINE_INSTALL_PROMPT:
+    case WEBSTORE_WIDGET_PROMPT:
     case EXTERNAL_INSTALL_PROMPT:
     case REMOTE_INSTALL_PROMPT:
     case DELEGATED_PERMISSIONS_PROMPT:
@@ -361,13 +362,6 @@ bool ExtensionInstallPrompt::Prompt::ShouldShowPermissions() const {
   return GetPermissionCount() > 0 || type_ == POST_INSTALL_PERMISSIONS_PROMPT;
 }
 
-bool ExtensionInstallPrompt::Prompt::ShouldUseTabModalDialog() const {
-  // For inline install, we want the install prompt to be tab modal so that the
-  // dialog is always clearly associated with the page that made the inline
-  // install request.
-  return type_ == INLINE_INSTALL_PROMPT;
-}
-
 void ExtensionInstallPrompt::Prompt::AppendRatingStars(
     StarAppender appender, void* data) const {
   CHECK(appender);
@@ -400,7 +394,7 @@ void ExtensionInstallPrompt::Prompt::AppendRatingStars(
 base::string16 ExtensionInstallPrompt::Prompt::GetRatingCount() const {
   CHECK(AllowWebstoreData(type_));
   return l10n_util::GetStringFUTF16(IDS_EXTENSION_RATING_COUNT,
-                                    base::IntToString16(rating_count_));
+                                    base::NumberToString16(rating_count_));
 }
 
 base::string16 ExtensionInstallPrompt::Prompt::GetUserCount() const {
@@ -587,8 +581,9 @@ void ExtensionInstallPrompt::ShowDialog(
   LoadImageIfNeeded();
 }
 
-void ExtensionInstallPrompt::OnInstallSuccess(const Extension* extension,
-                                              SkBitmap* icon) {
+void ExtensionInstallPrompt::OnInstallSuccess(
+    scoped_refptr<const Extension> extension,
+    SkBitmap* icon) {
   extension_ = extension;
   SetIcon(icon);
 
@@ -628,8 +623,7 @@ void ExtensionInstallPrompt::LoadImageIfNeeded() {
   }
 
   extensions::ExtensionResource image = extensions::IconsInfo::GetIconResource(
-      extension_,
-      extension_misc::EXTENSION_ICON_LARGE,
+      extension_.get(), extension_misc::EXTENSION_ICON_LARGE,
       ExtensionIconSet::MATCH_BIGGER);
 
   // Load the image asynchronously. The response will be sent to OnImageLoaded.
@@ -641,11 +635,9 @@ void ExtensionInstallPrompt::LoadImageIfNeeded() {
       extensions::ImageLoader::ImageRepresentation::NEVER_RESIZE,
       gfx::Size(),
       ui::SCALE_FACTOR_100P));
-  loader->LoadImagesAsync(
-      extension_,
-      images_list,
-      base::Bind(&ExtensionInstallPrompt::OnImageLoaded,
-                 weak_factory_.GetWeakPtr()));
+  loader->LoadImagesAsync(extension_.get(), images_list,
+                          base::BindOnce(&ExtensionInstallPrompt::OnImageLoaded,
+                                         weak_factory_.GetWeakPtr()));
 }
 
 void ExtensionInstallPrompt::ShowConfirmation() {
@@ -658,14 +650,15 @@ void ExtensionInstallPrompt::ShowConfirmation() {
     // any transformations are correctly reflected in the install prompt.
     extensions::PermissionsUpdater(
         profile_, extensions::PermissionsUpdater::INIT_FLAG_TRANSIENT)
-        .InitializePermissions(extension_);
+        .InitializePermissions(extension_.get());
     permissions_to_display =
         &extension_->permissions_data()->active_permissions();
     // For delegated installs, all optional permissions are pre-approved by the
     // person who triggers the install, so add them to the list.
     if (prompt_->type() == DELEGATED_PERMISSIONS_PROMPT) {
       const PermissionSet& optional_permissions =
-          extensions::PermissionsParser::GetOptionalPermissions(extension_);
+          extensions::PermissionsParser::GetOptionalPermissions(
+              extension_.get());
       permissions_wrapper = PermissionSet::CreateUnion(*permissions_to_display,
                                                        optional_permissions);
       permissions_to_display = permissions_wrapper.get();
@@ -682,7 +675,7 @@ void ExtensionInstallPrompt::ShowConfirmation() {
         message_provider->GetAllPermissionIDs(*permissions_to_display, type)));
   }
 
-  prompt_->set_extension(extension_);
+  prompt_->set_extension(extension_.get());
   prompt_->set_icon(gfx::Image::CreateFrom1xBitmap(icon_));
 
   if (show_params_->WasParentDestroyed()) {

@@ -28,8 +28,8 @@ class PositionWithAffinityTemplate {
   TextAffinity Affinity() const { return affinity_; }
   const PositionTemplate<Strategy>& GetPosition() const { return position_; }
 
-  // Returns true if both |this| and |other| is null or both |m_position|
-  // and |m_affinity| equal.
+  // Returns true if both |this| and |other| is null or both |position_|
+  // and |affinity_| equal.
   bool operator==(const PositionWithAffinityTemplate& other) const;
   bool operator!=(const PositionWithAffinityTemplate& other) const {
     return !operator==(other);
@@ -47,7 +47,7 @@ class PositionWithAffinityTemplate {
   Node* AnchorNode() const { return position_.AnchorNode(); }
   Document* GetDocument() const { return position_.GetDocument(); }
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
  private:
   PositionTemplate<Strategy> position_;

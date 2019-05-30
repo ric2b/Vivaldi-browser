@@ -31,10 +31,10 @@
 
 #include <memory>
 
+#include "base/macros.h"
 #include "third_party/blink/renderer/platform/audio/audio_array.h"
 #include "third_party/blink/renderer/platform/audio/fft_frame.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
-#include "third_party/blink/renderer/platform/wtf/noncopyable.h"
 
 namespace blink {
 
@@ -49,7 +49,6 @@ class DirectConvolver;
 // response.
 class PLATFORM_EXPORT ReverbConvolverStage {
   USING_FAST_MALLOC(ReverbConvolverStage);
-  WTF_MAKE_NONCOPYABLE(ReverbConvolverStage);
 
  public:
   // renderPhase is useful to know so that we can manipulate the pre versus post
@@ -68,10 +67,10 @@ class PLATFORM_EXPORT ReverbConvolverStage {
 
   // WARNING: framesToProcess must be such that it evenly divides the delay
   // buffer size (stage_offset).
-  void Process(const float* source, size_t frames_to_process);
+  void Process(const float* source, uint32_t frames_to_process);
 
   void ProcessInBackground(ReverbConvolver* convolver,
-                           size_t frames_to_process);
+                           uint32_t frames_to_process);
 
   void Reset();
 
@@ -97,6 +96,8 @@ class PLATFORM_EXPORT ReverbConvolverStage {
 
   bool direct_mode_;
   std::unique_ptr<DirectConvolver> direct_convolver_;
+
+  DISALLOW_COPY_AND_ASSIGN(ReverbConvolverStage);
 };
 
 }  // namespace blink

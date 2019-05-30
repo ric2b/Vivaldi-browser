@@ -13,9 +13,6 @@
 #include "components/infobars/core/infobar.h"
 #include "components/language/core/browser/language_model_manager.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync/driver/sync_driver_switches.h"
-#include "components/sync/protocol/user_event_specifics.pb.h"
-#include "components/sync/user_events/user_event_service.h"
 #include "components/translate/core/browser/page_translated_details.h"
 #include "components/translate/core/browser/translate_accept_languages.h"
 #include "components/translate/core/browser/translate_infobar_delegate.h"
@@ -31,19 +28,22 @@
 #include "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #include "ios/chrome/browser/language/language_model_manager_factory.h"
 #include "ios/chrome/browser/pref_names.h"
-#import "ios/chrome/browser/sync/ios_user_event_service_factory.h"
 #import "ios/chrome/browser/translate/after_translate_infobar_controller.h"
 #import "ios/chrome/browser/translate/before_translate_infobar_controller.h"
+#import "ios/chrome/browser/translate/language_selection_handler.h"
 #import "ios/chrome/browser/translate/never_translate_infobar_controller.h"
 #include "ios/chrome/browser/translate/translate_accept_languages_factory.h"
+#import "ios/chrome/browser/translate/translate_infobar_controller.h"
 #import "ios/chrome/browser/translate/translate_message_infobar_controller.h"
+#import "ios/chrome/browser/translate/translate_option_selection_handler.h"
 #include "ios/chrome/browser/translate/translate_ranker_factory.h"
 #include "ios/chrome/browser/translate/translate_service_ios.h"
+#import "ios/chrome/browser/ui/translate/translate_notification_handler.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/navigation_item.h"
 #include "ios/web/public/navigation_manager.h"
-#include "ios/web/public/web_state/web_state.h"
+#import "ios/web/public/web_state/web_state.h"
 #include "third_party/metrics_proto/translate_event.pb.h"
 #include "url/gurl.h"
 
@@ -51,23 +51,17 @@
 #error "This file requires ARC support."
 #endif
 
-DEFINE_WEB_STATE_USER_DATA_KEY(ChromeIOSTranslateClient);
-
 // static
-void ChromeIOSTranslateClient::CreateForWebState(
-    web::WebState* web_state,
-    id<LanguageSelectionHandler> language_selection_handler) {
+void ChromeIOSTranslateClient::CreateForWebState(web::WebState* web_state) {
   DCHECK(web_state);
   if (!FromWebState(web_state)) {
-    web_state->SetUserData(UserDataKey(),
-                           base::WrapUnique(new ChromeIOSTranslateClient(
-                               web_state, language_selection_handler)));
+    web_state->SetUserData(
+        UserDataKey(),
+        base::WrapUnique(new ChromeIOSTranslateClient(web_state)));
   }
 }
 
-ChromeIOSTranslateClient::ChromeIOSTranslateClient(
-    web::WebState* web_state,
-    id<LanguageSelectionHandler> language_selection_handler)
+ChromeIOSTranslateClient::ChromeIOSTranslateClient(web::WebState* web_state)
     : web_state_(web_state),
       translate_manager_(std::make_unique<translate::TranslateManager>(
           this,
@@ -80,9 +74,7 @@ ChromeIOSTranslateClient::ChromeIOSTranslateClient(
               ->GetPrimaryModel())),
       translate_driver_(web_state,
                         web_state->GetNavigationManager(),
-                        translate_manager_.get()),
-      language_selection_handler_(language_selection_handler) {
-  DCHECK(language_selection_handler);
+                        translate_manager_.get()) {
   web_state_->AddObserver(this);
 }
 
@@ -105,6 +97,16 @@ translate::TranslateManager* ChromeIOSTranslateClient::GetTranslateManager() {
 
 std::unique_ptr<infobars::InfoBar> ChromeIOSTranslateClient::CreateInfoBar(
     std::unique_ptr<translate::TranslateInfoBarDelegate> delegate) const {
+  if (base::FeatureList::IsEnabled(translate::kCompactTranslateInfobarIOS)) {
+    TranslateInfoBarController* controller = [[TranslateInfoBarController alloc]
+        initWithInfoBarDelegate:delegate.get()];
+    controller.languageSelectionHandler = language_selection_handler_;
+    controller.translateOptionSelectionHandler =
+        translate_option_selection_handler_;
+    controller.translateNotificationHandler = translate_notification_handler_;
+    return std::make_unique<InfoBarIOS>(controller, std::move(delegate));
+  }
+
   translate::TranslateStep step = delegate->translate_step();
 
   InfoBarController* controller;
@@ -137,31 +139,7 @@ std::unique_ptr<infobars::InfoBar> ChromeIOSTranslateClient::CreateInfoBar(
 }
 
 void ChromeIOSTranslateClient::RecordTranslateEvent(
-    const metrics::TranslateEventProto& translate_event) {
-  if (!base::FeatureList::IsEnabled(switches::kSyncUserTranslationEvents))
-    return;
-
-  syncer::UserEventService* const user_event_service =
-      IOSUserEventServiceFactory::GetForBrowserState(
-          ios::ChromeBrowserState::FromBrowserState(
-              web_state_->GetBrowserState()));
-  const auto* const item =
-      web_state_->GetNavigationManager()->GetLastCommittedItem();
-
-  // If entry is null, we don't record the page.
-  // The navigation entry can be null in situations like download or initial
-  // blank page.
-  if (item == nullptr)
-    return;
-
-  auto specifics = std::make_unique<sync_pb::UserEventSpecifics>();
-  // We only log the event we care about.
-  const bool needs_logging = translate::ConstructTranslateEvent(
-      item->GetTimestamp().ToInternalValue(), translate_event, specifics.get());
-  if (needs_logging) {
-    user_event_service->RecordUserEvent(std::move(specifics));
-  }
-}
+    const metrics::TranslateEventProto& translate_event) {}
 
 bool ChromeIOSTranslateClient::ShowTranslateUI(
     translate::TranslateStep step,
@@ -215,27 +193,7 @@ int ChromeIOSTranslateClient::GetInfobarIconID() const {
 }
 
 void ChromeIOSTranslateClient::RecordLanguageDetectionEvent(
-    const translate::LanguageDetectionDetails& details) const {
-  if (!base::FeatureList::IsEnabled(switches::kSyncUserLanguageDetectionEvents))
-    return;
-
-  syncer::UserEventService* const user_event_service =
-      IOSUserEventServiceFactory::GetForBrowserState(
-          ios::ChromeBrowserState::FromBrowserState(
-              web_state_->GetBrowserState()));
-  const auto* const item =
-      web_state_->GetNavigationManager()->GetLastCommittedItem();
-
-  // If entry is null, we don't record the page.
-  // The navigation entry can be null in situations like download or initial
-  // blank page.
-  if (item != nullptr &&
-      TranslateServiceIOS::IsTranslatableURL(item->GetVirtualURL())) {
-    user_event_service->RecordUserEvent(
-        translate::ConstructLanguageDetectionEvent(
-            item->GetTimestamp().ToInternalValue(), details));
-  }
-}
+    const translate::LanguageDetectionDetails& details) const {}
 
 bool ChromeIOSTranslateClient::IsTranslatableURL(const GURL& url) {
   return TranslateServiceIOS::IsTranslatableURL(url);
@@ -246,15 +204,25 @@ void ChromeIOSTranslateClient::ShowReportLanguageDetectionErrorUI(
   NOTREACHED();
 }
 
+void ChromeIOSTranslateClient::DidStartLoading(web::WebState* web_state) {
+  [language_selection_handler_ dismissLanguageSelector];
+  [translate_option_selection_handler_ dismissTranslateOptionSelector];
+  [translate_notification_handler_ dismissNotification];
+}
+
 void ChromeIOSTranslateClient::WebStateDestroyed(web::WebState* web_state) {
   DCHECK_EQ(web_state_, web_state);
   web_state_->RemoveObserver(this);
   web_state_ = nullptr;
 
   [language_selection_handler_ dismissLanguageSelector];
+  [translate_option_selection_handler_ dismissTranslateOptionSelector];
+  [translate_notification_handler_ dismissNotification];
 
   // Translation process can be interrupted.
   // Destroying the TranslateManager now guarantees that it never has to deal
   // with nullptr WebState.
   translate_manager_.reset();
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(ChromeIOSTranslateClient)

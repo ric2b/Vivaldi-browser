@@ -2,12 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#import <Foundation/Foundation.h>
-
-#import "cwv_export.h"
-
 #ifndef IOS_WEB_VIEW_PUBLIC_CWV_TRANSLATION_CONTROLLER_DELEGATE_H
 #define IOS_WEB_VIEW_PUBLIC_CWV_TRANSLATION_CONTROLLER_DELEGATE_H
+
+#import <Foundation/Foundation.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -15,7 +13,6 @@ NS_ASSUME_NONNULL_BEGIN
 @class CWVTranslationLanguage;
 
 // Updates delegate on translation progress.
-CWV_EXPORT
 @protocol CWVTranslationControllerDelegate<NSObject>
 
 @optional

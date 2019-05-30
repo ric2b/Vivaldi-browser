@@ -10,6 +10,7 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_action_view_delegate_views.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/menu_button.h"
+#include "ui/views/controls/button/menu_button_event_handler.h"
 #include "ui/views/controls/button/menu_button_listener.h"
 #include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/drag_controller.h"
@@ -69,12 +70,10 @@ class ToolbarActionView : public views::MenuButton,
       const override;
   bool IsTriggerableEvent(const ui::Event& event) override;
   SkColor GetInkDropBaseColor() const override;
-  bool ShouldUseFloodFillInkDrop() const override;
   std::unique_ptr<views::InkDrop> CreateInkDrop() override;
-  std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
   std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
       const override;
-  std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override;
+  bool OnKeyPressed(const ui::KeyEvent& event) override;
 
   // ToolbarActionViewDelegateViews:
   content::WebContents* GetCurrentWebContents() const override;
@@ -116,9 +115,9 @@ class ToolbarActionView : public views::MenuButton,
   void OnPopupClosed() override;
 
   // views::ContextMenuController:
-  void ShowContextMenuForView(views::View* source,
-                              const gfx::Point& point,
-                              ui::MenuSourceType source_type) override;
+  void ShowContextMenuForViewImpl(views::View* source,
+                                  const gfx::Point& point,
+                                  ui::MenuSourceType source_type) override;
 
   // Shows the context menu (if one exists) for the toolbar action.
   void DoShowContextMenu(ui::MenuSourceType source_type);
@@ -133,7 +132,7 @@ class ToolbarActionView : public views::MenuButton,
   void OnMenuClosed();
 
   // A lock to keep the MenuButton pressed when a menu or popup is visible.
-  std::unique_ptr<views::MenuButton::PressedLock> pressed_lock_;
+  std::unique_ptr<views::MenuButtonEventHandler::PressedLock> pressed_lock_;
 
   // The controller for this toolbar action view.
   ToolbarActionViewController* view_controller_;
@@ -142,11 +141,11 @@ class ToolbarActionView : public views::MenuButton,
   Delegate* delegate_;
 
   // Used to make sure we only register the command once.
-  bool called_register_command_;
+  bool called_register_command_ = false;
 
   // The cached value of whether or not the action wants to run on the current
   // tab.
-  bool wants_to_run_;
+  bool wants_to_run_ = false;
 
   // Responsible for converting the context menu model into |menu_|.
   std::unique_ptr<views::MenuModelAdapter> menu_adapter_;
@@ -156,12 +155,12 @@ class ToolbarActionView : public views::MenuButton,
 
   // The root MenuItemView for the context menu, or null if no menu is being
   // shown.
-  views::MenuItemView* menu_;
+  views::MenuItemView* menu_ = nullptr;
 
   // The time the popup was last closed.
   base::TimeTicks popup_closed_time_;
 
-  base::WeakPtrFactory<ToolbarActionView> weak_factory_;
+  base::WeakPtrFactory<ToolbarActionView> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(ToolbarActionView);
 };

@@ -93,6 +93,9 @@ void TreeScopeAdopter::MoveShadowTreeToNewDocument(
     Document& old_document,
     Document& new_document) const {
   DCHECK_NE(old_document, new_document);
+  HeapVector<Member<CSSStyleSheet>> empty_vector;
+  shadow_root.SetAdoptedStyleSheets(empty_vector);
+
   if (shadow_root.GetType() == ShadowRootType::V0) {
     new_document.SetShadowCascadeOrder(ShadowCascadeOrder::kShadowCascadeV0);
   } else if (shadow_root.IsV1() && !shadow_root.IsUserAgent()) {
@@ -161,13 +164,12 @@ inline void TreeScopeAdopter::MoveNodeToNewDocument(
   old_document.MoveNodeIteratorsToNewDocument(node, new_document);
 
   if (node.GetCustomElementState() == CustomElementState::kCustom) {
-    Element& element = ToElement(node);
-    CustomElement::EnqueueAdoptedCallback(&element, &old_document,
-                                          &new_document);
+    CustomElement::EnqueueAdoptedCallback(ToElement(node), old_document,
+                                          new_document);
   }
 
-  if (node.IsShadowRoot())
-    ToShadowRoot(node).SetDocument(new_document);
+  if (auto* shadow_root = DynamicTo<ShadowRoot>(node))
+    shadow_root->SetDocument(new_document);
 
 #if DCHECK_IS_ON()
   g_did_move_to_new_document_was_called = false;

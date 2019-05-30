@@ -29,6 +29,7 @@ class Clock;
 
 namespace previews {
 
+// Must remain synchronized with PreviewsEligibilityReason in enums.xml.
 enum class PreviewsEligibilityReason {
   // The preview navigation was allowed.
   ALLOWED = 0,
@@ -63,6 +64,13 @@ enum class PreviewsEligibilityReason {
   COMMITTED = 12,
   // Previews blocked by a Cache-Control:no-transform directive.
   CACHE_CONTROL_NO_TRANSFORM = 13,
+  // The network is faster than the max slow page triggering threshold for the
+  // session.
+  NETWORK_NOT_SLOW_FOR_SESSION = 14,
+  // Device is offline.
+  DEVICE_OFFLINE = 15,
+  // URL contained Basic Authentication, i.e.: a username or password.
+  URL_HAS_BASIC_AUTH = 16,
   LAST,
 };
 

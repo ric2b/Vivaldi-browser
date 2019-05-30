@@ -14,6 +14,7 @@
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/app_mode/fake_cws.h"
@@ -57,14 +58,14 @@ namespace {
 // This is a simple test app that creates an app window and immediately closes
 // it again. Webstore data json is in
 //   chrome/test/data/chromeos/app_mode/webstore/inlineinstall/
-//       detail/ggbflgnkafappblpkiflbgpmkfdpnhhe
-constexpr char kTestKioskApp[] = "ggbflgnkafappblpkiflbgpmkfdpnhhe";
+//       detail/ggaeimfdpnmlhdhpcikgoblffmkckdmn
+constexpr char kTestKioskApp[] = "ggaeimfdpnmlhdhpcikgoblffmkckdmn";
 
 // This is a simple test that only sends an extension message when app launch is
 // requested. Webstore data json is in
 //   chrome/test/data/chromeos/app_mode/webstore/inlineinstall/
-//       detail/mogpelihofihkjnkkfkcchbkchggmcld
-constexpr char kTestNonKioskEnabledApp[] = "mogpelihofihkjnkkfkcchbkchggmcld";
+//       detail/gbcgichpbeeimejckkpgnaighpndpped
+constexpr char kTestNonKioskEnabledApp[] = "gbcgichpbeeimejckkpgnaighpndpped";
 
 // Primary kiosk app that runs tests for chrome.management API.
 // The tests are run on the kiosk app launch event.
@@ -73,22 +74,22 @@ constexpr char kTestNonKioskEnabledApp[] = "mogpelihofihkjnkkfkcchbkchggmcld";
 // in its context as well.
 // The app's CRX is located under:
 //   chrome/test/data/chromeos/app_mode/webstore/downloads/
-//       faiboenfkkoaedoehhkjmenkhidadgje.crx
+//       adinpkdaebaiabdlinlbjmenialdhibc.crx
 // Source from which the CRX is generated is under path:
 //   chrome/test/data/chromeos/app_mode/management_api/primary_app/
 constexpr char kTestManagementApiKioskApp[] =
-    "faiboenfkkoaedoehhkjmenkhidadgje";
+    "adinpkdaebaiabdlinlbjmenialdhibc";
 
 // Secondary kiosk app that runs tests for chrome.management API.
 // The app is loaded alongside |kTestManagementApiKioskApp|. The tests are run
 // in the response to a message sent from |kTestManagementApiKioskApp|.
 // The app's CRX is located under:
 //   chrome/test/data/chromeos/app_mode/webstore/downloads/
-//       lfaidgolgikbpapkmdhoppddflhaocnf.crx
+//       kajpgkhinciaiihghpdamekpjpldgpfi.crx
 // Source from which the CRX is generated is under path:
 //   chrome/test/data/chromeos/app_mode/management_api/secondary_app/
 constexpr char kTestManagementApiSecondaryApp[] =
-    "lfaidgolgikbpapkmdhoppddflhaocnf";
+    "kajpgkhinciaiihghpdamekpjpldgpfi";
 
 constexpr char kTestAccountId[] = "enterprise-kiosk-app@localhost";
 
@@ -131,7 +132,7 @@ class PersistentSessionManagerClient : public FakeSessionManagerClient {
     login_args_ = {{"login-manager", ""}};
 
     extra_args_ = {{switches::kPolicySwitchesBegin, ""}};
-    for (size_t i = 0; i < arraysize(kDefaultPolicySwitches); ++i) {
+    for (size_t i = 0; i < base::size(kDefaultPolicySwitches); ++i) {
       extra_args_.push_back(
           {kDefaultPolicySwitches[i].name, kDefaultPolicySwitches[i].value});
     }
@@ -356,7 +357,14 @@ class AutoLaunchedKioskTest : public extensions::ExtensionApiTest {
   }
 
   void PreRunTestOnMainThread() override {
-    termination_observer_.reset(new TerminationObserver());
+    // Initialize extension test message listener early on, as the test kiosk
+    // app gets launched early in Chrome session setup for CrashRestore test.
+    // Listeners created in IN_PROC_BROWSER_TEST might miss the messages sent
+    // from the kiosk app.
+    app_window_loaded_listener_ =
+        std::make_unique<ExtensionTestMessageListener>("appWindowLoaded",
+                                                       false);
+    termination_observer_ = std::make_unique<TerminationObserver>();
     InProcessBrowserTest::PreRunTestOnMainThread();
   }
 
@@ -369,6 +377,7 @@ class AutoLaunchedKioskTest : public extensions::ExtensionApiTest {
   }
 
   void TearDownOnMainThread() override {
+    app_window_loaded_listener_.reset();
     termination_observer_.reset();
 
     extensions::ExtensionApiTest::TearDownOnMainThread();
@@ -419,6 +428,7 @@ class AutoLaunchedKioskTest : public extensions::ExtensionApiTest {
             .Set("PublicAccounts",
                  extensions::ListBuilder().Append(GetTestAppUserId()).Build())
             .Build();
+    local_state->SetKey(prefs::kOobeComplete, base::Value(true));
 
     JSONFileValueSerializer serializer(
         user_data_path.Append(chrome::kLocalStateFilename));
@@ -469,7 +479,7 @@ class AutoLaunchedKioskTest : public extensions::ExtensionApiTest {
 
   void ExpectCommandLineHasDefaultPolicySwitches(
       const base::CommandLine& cmd_line) {
-    for (size_t i = 0u; i < arraysize(kDefaultPolicySwitches); ++i) {
+    for (size_t i = 0u; i < base::size(kDefaultPolicySwitches); ++i) {
       EXPECT_TRUE(cmd_line.HasSwitch(kDefaultPolicySwitches[i].name))
           << "Missing flag " << kDefaultPolicySwitches[i].name;
       EXPECT_EQ(kDefaultPolicySwitches[i].value,
@@ -479,6 +489,7 @@ class AutoLaunchedKioskTest : public extensions::ExtensionApiTest {
   }
 
  protected:
+  std::unique_ptr<ExtensionTestMessageListener> app_window_loaded_listener_;
   std::unique_ptr<TerminationObserver> termination_observer_;
 
  private:
@@ -506,8 +517,7 @@ IN_PROC_BROWSER_TEST_F(AutoLaunchedKioskTest, PRE_CrashRestore) {
   ExpectCommandLineHasDefaultPolicySwitches(
       *base::CommandLine::ForCurrentProcess());
 
-  ExtensionTestMessageListener listener("appWindowLoaded", false);
-  EXPECT_TRUE(listener.WaitUntilSatisfied());
+  EXPECT_TRUE(app_window_loaded_listener_->WaitUntilSatisfied());
 
   EXPECT_TRUE(IsKioskAppAutoLaunched(kTestKioskApp));
 
@@ -522,8 +532,7 @@ IN_PROC_BROWSER_TEST_F(AutoLaunchedKioskTest, CrashRestore) {
   ExpectCommandLineHasDefaultPolicySwitches(
       *base::CommandLine::ForCurrentProcess());
 
-  ExtensionTestMessageListener listener("appWindowLoaded", false);
-  EXPECT_TRUE(listener.WaitUntilSatisfied());
+  EXPECT_TRUE(app_window_loaded_listener_->WaitUntilSatisfied());
 
   EXPECT_TRUE(IsKioskAppAutoLaunched(kTestKioskApp));
 

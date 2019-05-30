@@ -4,15 +4,22 @@
 
 #include "chrome/browser/plugins/plugin_response_interceptor_url_loader_throttle.h"
 
+#include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/guid.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/extensions/api/streams_private/streams_private_api.h"
 #include "chrome/browser/plugins/plugin_utils.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_utils.h"
 #include "content/public/browser/stream_info.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/common/transferrable_url_loader.mojom.h"
+#include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_attach_helper.h"
+#include "extensions/common/extension.h"
 #include "mojo/public/cpp/system/data_pipe.h"
+#include "services/network/public/cpp/features.h"
 
 PluginResponseInterceptorURLLoaderThrottle::
     PluginResponseInterceptorURLLoaderThrottle(
@@ -36,12 +43,25 @@ void PluginResponseInterceptorURLLoaderThrottle::WillProcessResponse(
     return;
   }
 
+  // Don't intercept if the request went through the legacy resource loading
+  // path, i.e., ResourceDispatcherHost, since that path doesn't need response
+  // interception. ResourceDispatcherHost is only used if network service is
+  // disabled (in which case this throttle was created because
+  // ServiceWorkerServicification was enabled) and a service worker didn't
+  // handle the request.
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService) &&
+      !response_head->was_fetched_via_service_worker) {
+    return;
+  }
+
   std::string extension_id = PluginUtils::GetExtensionIdForMimeType(
       resource_context_, response_head->mime_type);
   if (extension_id.empty())
     return;
 
   std::string view_id = base::GenerateGUID();
+  // The string passed down to the original client with the response body.
+  std::string payload = view_id;
 
   network::mojom::URLLoaderPtr dummy_new_loader;
   mojo::MakeRequest(&dummy_new_loader);
@@ -49,11 +69,18 @@ void PluginResponseInterceptorURLLoaderThrottle::WillProcessResponse(
   network::mojom::URLLoaderClientRequest new_client_request =
       mojo::MakeRequest(&new_client);
 
-  mojo::DataPipe data_pipe(64);
-  uint32_t len = static_cast<uint32_t>(view_id.size());
+  uint32_t data_pipe_size = 64U;
+  // Provide the MimeHandlerView code a chance to override the payload. This is
+  // the case where the resource is handled by frame-based MimeHandlerView.
+  extensions::MimeHandlerViewAttachHelper::OverrideBodyForInterceptedResponse(
+      frame_tree_node_id_, response_url, response_head->mime_type, view_id,
+      &payload, &data_pipe_size);
+
+  mojo::DataPipe data_pipe(data_pipe_size);
+  uint32_t len = static_cast<uint32_t>(payload.size());
   CHECK_EQ(MOJO_RESULT_OK,
            data_pipe.producer_handle->WriteData(
-               view_id.c_str(), &len, MOJO_WRITE_DATA_FLAG_ALL_OR_NONE));
+               payload.c_str(), &len, MOJO_WRITE_DATA_FLAG_ALL_OR_NONE));
 
   new_client->OnStartLoadingResponseBody(std::move(data_pipe.consumer_handle));
 
@@ -79,15 +106,14 @@ void PluginResponseInterceptorURLLoaderThrottle::WillProcessResponse(
   transferrable_loader->url_loader = original_loader.PassInterface();
   transferrable_loader->url_loader_client = std::move(original_client);
   transferrable_loader->head = std::move(deep_copied_response->head);
+  transferrable_loader->head.intercepted_by_plugin = true;
 
-  int64_t expected_content_size = response_head->content_length;
   bool embedded = resource_type_ != content::RESOURCE_TYPE_MAIN_FRAME;
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
       base::BindOnce(
           &extensions::StreamsPrivateAPI::SendExecuteMimeTypeHandlerEvent,
-          expected_content_size, extension_id, view_id, embedded,
-          frame_tree_node_id_, -1 /* render_process_id */,
-          -1 /* render_frame_id */, nullptr /* stream */,
-          std::move(transferrable_loader), response_url));
+          extension_id, view_id, embedded, frame_tree_node_id_,
+          -1 /* render_process_id */, -1 /* render_frame_id */,
+          nullptr /* stream */, std::move(transferrable_loader), response_url));
 }

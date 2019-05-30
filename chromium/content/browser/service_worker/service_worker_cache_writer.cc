@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <string>
 
+#include "base/bind.h"
 #include "content/browser/appcache/appcache_response.h"
 #include "content/browser/service_worker/service_worker_disk_cache.h"
 #include "content/browser/service_worker/service_worker_storage.h"
@@ -117,11 +118,12 @@ int ServiceWorkerCacheWriter::DoLoop(int status) {
 ServiceWorkerCacheWriter::ServiceWorkerCacheWriter(
     std::unique_ptr<ServiceWorkerResponseReader> compare_reader,
     std::unique_ptr<ServiceWorkerResponseReader> copy_reader,
-    std::unique_ptr<ServiceWorkerResponseWriter> writer)
+    std::unique_ptr<ServiceWorkerResponseWriter> writer,
+    bool pause_when_not_identical)
     : state_(STATE_START),
       io_pending_(false),
       comparing_(false),
-      did_replace_(false),
+      pause_when_not_identical_(pause_when_not_identical),
       compare_reader_(std::move(compare_reader)),
       copy_reader_(std::move(copy_reader)),
       writer_(std::move(writer)),
@@ -129,19 +131,56 @@ ServiceWorkerCacheWriter::ServiceWorkerCacheWriter(
 
 ServiceWorkerCacheWriter::~ServiceWorkerCacheWriter() {}
 
+std::unique_ptr<ServiceWorkerCacheWriter>
+ServiceWorkerCacheWriter::CreateForCopy(
+    std::unique_ptr<ServiceWorkerResponseReader> copy_reader,
+    std::unique_ptr<ServiceWorkerResponseWriter> writer) {
+  DCHECK(copy_reader);
+  DCHECK(writer);
+  return base::WrapUnique(new ServiceWorkerCacheWriter(
+      nullptr /* compare_reader */, std::move(copy_reader), std::move(writer),
+      false /* pause_when_not_identical*/));
+}
+
+std::unique_ptr<ServiceWorkerCacheWriter>
+ServiceWorkerCacheWriter::CreateForWriteBack(
+    std::unique_ptr<ServiceWorkerResponseWriter> writer) {
+  DCHECK(writer);
+  return base::WrapUnique(new ServiceWorkerCacheWriter(
+      nullptr /* compare_reader */, nullptr /* copy_reader */,
+      std::move(writer), false /* pause_when_not_identical*/));
+}
+
+std::unique_ptr<ServiceWorkerCacheWriter>
+ServiceWorkerCacheWriter::CreateForComparison(
+    std::unique_ptr<ServiceWorkerResponseReader> compare_reader,
+    std::unique_ptr<ServiceWorkerResponseReader> copy_reader,
+    std::unique_ptr<ServiceWorkerResponseWriter> writer,
+    bool pause_when_not_identical) {
+  // |compare_reader| reads data for the comparison. |copy_reader| reads
+  // data for copy.
+  DCHECK(compare_reader);
+  DCHECK(copy_reader);
+  DCHECK(writer);
+  return base::WrapUnique(new ServiceWorkerCacheWriter(
+      std::move(compare_reader), std::move(copy_reader), std::move(writer),
+      pause_when_not_identical));
+}
+
 net::Error ServiceWorkerCacheWriter::MaybeWriteHeaders(
     HttpResponseInfoIOBuffer* headers,
     OnWriteCompleteCallback callback) {
   DCHECK(!io_pending_);
+  DCHECK(!IsCopying());
 
   headers_to_write_ = headers;
   pending_callback_ = std::move(callback);
-  DCHECK_EQ(state_, STATE_START);
+  DCHECK_EQ(STATE_START, state_);
   int result = DoLoop(net::OK);
 
   // Synchronous errors and successes always go to STATE_DONE.
   if (result != net::ERR_IO_PENDING)
-    DCHECK_EQ(state_, STATE_DONE);
+    DCHECK_EQ(STATE_DONE, state_);
 
   // ERR_IO_PENDING has to have one of the STATE_*_DONE states as the next state
   // (not STATE_DONE itself).
@@ -161,6 +200,7 @@ net::Error ServiceWorkerCacheWriter::MaybeWriteData(
     size_t buf_size,
     OnWriteCompleteCallback callback) {
   DCHECK(!io_pending_);
+  DCHECK(!IsCopying());
 
   data_to_write_ = buf;
   len_to_write_ = buf_size;
@@ -175,7 +215,7 @@ net::Error ServiceWorkerCacheWriter::MaybeWriteData(
 
   // Synchronous completions are always STATE_DONE.
   if (result != net::ERR_IO_PENDING)
-    DCHECK_EQ(state_, STATE_DONE);
+    DCHECK_EQ(STATE_DONE, state_);
 
   // Asynchronous completion means the state machine must be waiting in one of
   // the Done states for an IO operation to complete:
@@ -185,7 +225,41 @@ net::Error ServiceWorkerCacheWriter::MaybeWriteData(
     // STATE_WRITE_HEADERS_FOR_PASSTHROUGH_DONE is excluded because that write
     // is done by MaybeWriteHeaders.
     DCHECK(state_ == STATE_READ_DATA_FOR_COMPARE_DONE ||
+           state_ == STATE_PAUSING ||
            state_ == STATE_READ_HEADERS_FOR_COPY_DONE ||
+           state_ == STATE_READ_DATA_FOR_COPY_DONE ||
+           state_ == STATE_WRITE_HEADERS_FOR_COPY_DONE ||
+           state_ == STATE_WRITE_DATA_FOR_COPY_DONE ||
+           state_ == STATE_WRITE_DATA_FOR_PASSTHROUGH_DONE)
+        << "Unexpected state: " << state_;
+  }
+  return result >= 0 ? net::OK : static_cast<net::Error>(result);
+}
+
+net::Error ServiceWorkerCacheWriter::Resume(OnWriteCompleteCallback callback) {
+  DCHECK(pause_when_not_identical_);
+  DCHECK_EQ(STATE_PAUSING, state_);
+  DCHECK(io_pending_);
+  DCHECK(!IsCopying());
+
+  io_pending_ = false;
+  pending_callback_ = std::move(callback);
+  state_ = STATE_READ_HEADERS_FOR_COPY;
+
+  int result = DoLoop(net::OK);
+
+  // Synchronous completions are always STATE_DONE.
+  if (result != net::ERR_IO_PENDING)
+    DCHECK_EQ(STATE_DONE, state_);
+
+  // Asynchronous completion means the state machine must be waiting in one of
+  // the Done states for an IO operation to complete:
+  if (result == net::ERR_IO_PENDING) {
+    // Note that STATE_READ_HEADERS_FOR_COMPARE_DONE is excluded because the
+    // headers are compared in MaybeWriteHeaders, not here, and
+    // STATE_WRITE_HEADERS_FOR_PASSTHROUGH_DONE is excluded because that write
+    // is done by MaybeWriteHeaders.
+    DCHECK(state_ == STATE_READ_HEADERS_FOR_COPY_DONE ||
            state_ == STATE_READ_DATA_FOR_COPY_DONE ||
            state_ == STATE_WRITE_HEADERS_FOR_COPY_DONE ||
            state_ == STATE_WRITE_DATA_FOR_COPY_DONE ||
@@ -196,11 +270,42 @@ net::Error ServiceWorkerCacheWriter::MaybeWriteData(
   return result >= 0 ? net::OK : static_cast<net::Error>(result);
 }
 
+net::Error ServiceWorkerCacheWriter::StartCopy(
+    OnWriteCompleteCallback callback) {
+  DCHECK(IsCopying());
+  pending_callback_ = std::move(callback);
+
+  int result = DoLoop(net::OK);
+
+  // Synchronous completions are always STATE_DONE.
+  if (result != net::ERR_IO_PENDING)
+    DCHECK_EQ(STATE_DONE, state_);
+
+  // Asynchronous completion means the state machine must be waiting in one of
+  // the Done states for an IO operation to complete:
+  if (result == net::ERR_IO_PENDING) {
+    DCHECK(state_ == STATE_READ_HEADERS_FOR_COPY_DONE ||
+           state_ == STATE_WRITE_HEADERS_FOR_COPY_DONE ||
+           state_ == STATE_READ_DATA_FOR_COPY_DONE ||
+           state_ == STATE_WRITE_DATA_FOR_COPY_DONE)
+        << "Unexpected state: " << state_;
+  }
+
+  return result >= 0 ? net::OK : static_cast<net::Error>(result);
+}
+
+bool ServiceWorkerCacheWriter::IsCopying() const {
+  return !compare_reader_ && copy_reader_;
+}
+
 int ServiceWorkerCacheWriter::DoStart(int result) {
   bytes_written_ = 0;
   if (compare_reader_) {
     state_ = STATE_READ_HEADERS_FOR_COMPARE;
     comparing_ = true;
+  } else if (IsCopying()) {
+    state_ = STATE_READ_HEADERS_FOR_COPY;
+    comparing_ = false;
   } else {
     // No existing reader, just write the headers back directly.
     state_ = STATE_WRITE_HEADERS_FOR_PASSTHROUGH;
@@ -233,7 +338,7 @@ int ServiceWorkerCacheWriter::DoReadDataForCompare(int result) {
   DCHECK_GE(result, 0);
   DCHECK(data_to_write_);
 
-  data_to_read_ = new net::IOBuffer(len_to_write_);
+  data_to_read_ = base::MakeRefCounted<net::IOBuffer>(len_to_write_);
   len_to_read_ = len_to_write_;
   state_ = STATE_READ_DATA_FOR_COMPARE_DONE;
   compare_offset_ = 0;
@@ -259,8 +364,9 @@ int ServiceWorkerCacheWriter::DoReadDataForCompareDone(int result) {
   // compare. Fail the comparison.
   if (result == 0 && len_to_write_ != 0) {
     comparing_ = false;
-    state_ = STATE_READ_HEADERS_FOR_COPY;
-    return net::OK;
+    state_ =
+        pause_when_not_identical_ ? STATE_PAUSING : STATE_READ_HEADERS_FOR_COPY;
+    return pause_when_not_identical_ ? net::ERR_IO_PENDING : net::OK;
   }
 
   // Compare the data from the ServiceWorker script cache to the data from the
@@ -271,8 +377,9 @@ int ServiceWorkerCacheWriter::DoReadDataForCompareDone(int result) {
     // |bytes_compared_| were identical, so copy the first |bytes_compared_|
     // over, then start writing network data back after the changed point.
     comparing_ = false;
-    state_ = STATE_READ_HEADERS_FOR_COPY;
-    return net::OK;
+    state_ =
+        pause_when_not_identical_ ? STATE_PAUSING : STATE_READ_HEADERS_FOR_COPY;
+    return pause_when_not_identical_ ? net::ERR_IO_PENDING : net::OK;
   }
 
   compare_offset_ += result;
@@ -294,8 +401,9 @@ int ServiceWorkerCacheWriter::DoReadDataForCompareDone(int result) {
   // just the prefix.
   if (len_to_read_ == 0 && bytes_compared_ + compare_offset_ < cached_length_) {
     comparing_ = false;
-    state_ = STATE_READ_HEADERS_FOR_COPY;
-    return net::OK;
+    state_ =
+        pause_when_not_identical_ ? STATE_PAUSING : STATE_READ_HEADERS_FOR_COPY;
+    return pause_when_not_identical_ ? net::ERR_IO_PENDING : net::OK;
   }
 
   bytes_compared_ += compare_offset_;
@@ -308,7 +416,7 @@ int ServiceWorkerCacheWriter::DoReadHeadersForCopy(int result) {
   DCHECK(copy_reader_);
   bytes_copied_ = 0;
   headers_to_read_ = new HttpResponseInfoIOBuffer;
-  data_to_copy_ = new net::IOBuffer(kCopyBufferSize);
+  data_to_copy_ = base::MakeRefCounted<net::IOBuffer>(kCopyBufferSize);
   state_ = STATE_READ_HEADERS_FOR_COPY_DONE;
   return ReadInfoHelper(copy_reader_, headers_to_read_.get());
 }
@@ -324,12 +432,14 @@ int ServiceWorkerCacheWriter::DoReadHeadersForCopyDone(int result) {
 
 // Write the just-read headers back to the cache.
 // Note that this *discards* the read headers and replaces them with the net
+// headers if the cache writer is not for copy, otherwise write the read
 // headers.
 int ServiceWorkerCacheWriter::DoWriteHeadersForCopy(int result) {
   DCHECK_GE(result, 0);
   DCHECK(writer_);
   state_ = STATE_WRITE_HEADERS_FOR_COPY_DONE;
-  return WriteInfoHelper(writer_, headers_to_write_.get());
+  return WriteInfoHelper(
+      writer_, IsCopying() ? headers_to_read_.get() : headers_to_write_.get());
 }
 
 int ServiceWorkerCacheWriter::DoWriteHeadersForCopyDone(int result) {
@@ -343,13 +453,22 @@ int ServiceWorkerCacheWriter::DoWriteHeadersForCopyDone(int result) {
 
 int ServiceWorkerCacheWriter::DoReadDataForCopy(int result) {
   DCHECK_GE(result, 0);
-  size_t to_read = std::min(kCopyBufferSize, bytes_compared_ - bytes_copied_);
+
+  // If the cache writer is only for copy, get the total size to read from
+  // header data instead of |bytes_compared_| as no comparison is done.
+  size_t total_size_to_read =
+      IsCopying() ? headers_to_read_->response_data_size : bytes_compared_;
+  size_t to_read =
+      std::min(kCopyBufferSize, total_size_to_read - bytes_copied_);
+
   // At this point, all compared bytes have been read. Currently
-  // |data_to_write_| and |len_to_write_| hold the chunk of network input that
-  // caused the comparison failure, so those need to be written back and this
-  // object needs to go into passthrough mode.
+  // If the cache write is not just for copy, |data_to_write_| and
+  // |len_to_write_| hold the chunk of network input that caused the comparison
+  // failure, so those need to be written back and this object needs to go into
+  // passthrough mode. If the cache writer is just for copy, change state to
+  // STATE_DONE as there is no more data to copy.
   if (to_read == 0) {
-    state_ = STATE_WRITE_DATA_FOR_PASSTHROUGH;
+    state_ = IsCopying() ? STATE_DONE : STATE_WRITE_DATA_FOR_PASSTHROUGH;
     return net::OK;
   }
   state_ = STATE_READ_DATA_FOR_COPY_DONE;
@@ -492,10 +611,15 @@ void ServiceWorkerCacheWriter::AsyncDoLoop(int result) {
   // later invocation of AsyncDoLoop.
   if (result != net::ERR_IO_PENDING) {
     OnWriteCompleteCallback callback = std::move(pending_callback_);
-    pending_callback_.Reset();
     net::Error error = result >= 0 ? net::OK : static_cast<net::Error>(result);
     io_pending_ = false;
     std::move(callback).Run(error);
+    return;
+  }
+  if (state_ == STATE_PAUSING) {
+    DCHECK(pause_when_not_identical_);
+    OnWriteCompleteCallback callback = std::move(pending_callback_);
+    std::move(callback).Run(net::ERR_IO_PENDING);
   }
 }
 

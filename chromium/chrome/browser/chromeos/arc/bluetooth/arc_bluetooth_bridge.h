@@ -15,9 +15,9 @@
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "base/containers/queue.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/chromeos/arc/bluetooth/arc_bluetooth_task_queue.h"
 #include "components/arc/common/bluetooth.mojom.h"
 #include "components/arc/common/intent_helper.mojom.h"
 #include "components/arc/connection_observer.h"
@@ -41,9 +41,7 @@ class BrowserContext;
 namespace arc {
 
 namespace mojom {
-class AppHost;
 class AppInstance;
-class IntentHelperHost;
 class IntentHelperInstance;
 }  // namespace mojom
 
@@ -51,10 +49,11 @@ class ArcBridgeService;
 
 class ArcBluetoothBridge
     : public KeyedService,
-      public ConnectionObserver<mojom::BluetoothInstance>,
       public device::BluetoothAdapter::Observer,
       public device::BluetoothAdapterFactory::AdapterCallback,
       public device::BluetoothLocalGattService::Delegate,
+      public ConnectionObserver<mojom::AppInstance>,
+      public ConnectionObserver<mojom::IntentHelperInstance>,
       public mojom::BluetoothHost {
  public:
   using GattStatusCallback =
@@ -70,10 +69,6 @@ class ArcBluetoothBridge
   ArcBluetoothBridge(content::BrowserContext* context,
                      ArcBridgeService* bridge_service);
   ~ArcBluetoothBridge() override;
-
-  // Overridden from ConnectionObserver<mojom::BluetoothInstance>:
-  void OnConnectionReady() override;
-  void OnConnectionClosed() override;
 
   void OnAdapterInitialized(scoped_refptr<device::BluetoothAdapter> adapter);
 
@@ -98,6 +93,11 @@ class ArcBluetoothBridge
   void DeviceMTUChanged(device::BluetoothAdapter* adapter,
                         device::BluetoothDevice* device,
                         uint16_t mtu) override;
+
+  void DeviceAdvertisementReceived(device::BluetoothAdapter* adapter,
+                                   device::BluetoothDevice* device,
+                                   int16_t rssi,
+                                   const std::vector<uint8_t>& eir) override;
 
   void DeviceRemoved(device::BluetoothAdapter* adapter,
                      device::BluetoothDevice* device) override;
@@ -202,15 +202,6 @@ class ArcBluetoothBridge
   void GetAdapterProperty(mojom::BluetoothPropertyType type) override;
   void SetAdapterProperty(mojom::BluetoothPropertyPtr property) override;
 
-  void GetRemoteDeviceProperty(mojom::BluetoothAddressPtr remote_addr,
-                               mojom::BluetoothPropertyType type) override;
-  void SetRemoteDeviceProperty(mojom::BluetoothAddressPtr remote_addr,
-                               mojom::BluetoothPropertyPtr property) override;
-  void GetRemoteServiceRecord(mojom::BluetoothAddressPtr remote_addr,
-                              const device::BluetoothUUID& uuid) override;
-
-  void GetRemoteServices(mojom::BluetoothAddressPtr remote_addr) override;
-
   void StartDiscovery() override;
   void CancelDiscovery() override;
 
@@ -226,8 +217,6 @@ class ArcBluetoothBridge
   void StopLEScan() override;
   void ConnectLEDevice(mojom::BluetoothAddressPtr remote_addr) override;
   void DisconnectLEDevice(mojom::BluetoothAddressPtr remote_addr) override;
-  void StartLEListen(StartLEListenCallback callback) override;
-  void StopLEListen(StopLEListenCallback callback) override;
   void SearchService(mojom::BluetoothAddressPtr remote_addr) override;
 
   void GetGattDB(mojom::BluetoothAddressPtr remote_addr) override;
@@ -331,13 +320,6 @@ class ArcBluetoothBridge
       ReleaseAdvertisementHandleCallback callback) override;
 
  private:
-  template <typename... Args>
-  void AddAdvertisementTask(
-      base::OnceCallback<void(base::OnceCallback<void(Args...)>)> task,
-      base::OnceCallback<void(Args...)> callback);
-  template <typename... Args>
-  void CompleteAdvertisementTask(base::OnceCallback<void(Args...)> callback,
-                                 Args... args);
   void ReserveAdvertisementHandleImpl(
       ReserveAdvertisementHandleCallback callback);
   void EnableAdvertisementImpl(
@@ -350,8 +332,8 @@ class ArcBluetoothBridge
       int32_t adv_handle,
       ReleaseAdvertisementHandleCallback callback);
 
-  template <typename InstanceType, typename HostType>
-  class ConnectionObserverImpl;
+  void StartDiscoveryImpl(bool le_scan);
+  void CancelDiscoveryImpl();
 
   // Power state change on Bluetooth adapter.
   enum class AdapterPowerState { TURN_OFF, TURN_ON };
@@ -362,7 +344,6 @@ class ArcBluetoothBridge
   void OnPoweredError(AdapterStateCallback callback) const;
   void OnDiscoveryStarted(
       std::unique_ptr<device::BluetoothDiscoverySession> session);
-  void OnDiscoveryStopped();
   void OnDiscoveryError();
   void OnPairing(mojom::BluetoothAddressPtr addr) const;
   void OnPairedDone(mojom::BluetoothAddressPtr addr) const;
@@ -381,23 +362,10 @@ class ArcBluetoothBridge
                           device::BluetoothDevice::ConnectErrorCode error_code);
   void OnGattDisconnected(mojom::BluetoothAddressPtr addr);
 
-  void OnStartLEListenDone(GattStatusCallback callback,
-                           scoped_refptr<device::BluetoothAdvertisement> adv);
-  void OnStartLEListenError(
-      GattStatusCallback callback,
-      device::BluetoothAdvertisement::ErrorCode error_code);
-
-  void OnStopLEListenDone(GattStatusCallback callback);
-  void OnStopLEListenError(
-      GattStatusCallback callback,
-      device::BluetoothAdvertisement::ErrorCode error_code);
-
   void OnGattNotifyStartDone(
       GattStatusCallback callback,
       const std::string char_string_id,
       std::unique_ptr<device::BluetoothGattNotifySession> notify_session);
-
-  bool IsInstanceUp() const { return is_bluetooth_instance_up_; }
 
   // Indicates if a power change is initiated by Chrome / Android.
   bool IsPowerChangeInitiatedByRemote(
@@ -405,8 +373,9 @@ class ArcBluetoothBridge
   bool IsPowerChangeInitiatedByLocal(
       ArcBluetoothBridge::AdapterPowerState powered) const;
 
-  // Sends initial power state when all preconditions are met.
-  void MaybeSendInitialPowerChange();
+  // ConnectionObserver<mojom::AppInstance>:
+  // ConnectionObserver<mojom::IntentHelperInstance>:
+  void OnConnectionReady() override;
 
   // Manages the powered change intents sent to Android.
   void EnqueueLocalPowerChange(AdapterPowerState powered);
@@ -424,8 +393,6 @@ class ArcBluetoothBridge
       mojom::BluetoothPropertyType type) const;
   std::vector<mojom::BluetoothAdvertisingDataPtr> GetAdvertisingData(
       const device::BluetoothDevice* device) const;
-
-  void SendCachedDevicesFound() const;
 
   device::BluetoothRemoteGattCharacteristic* FindGattCharacteristic(
       mojom::BluetoothAddressPtr remote_addr,
@@ -530,9 +497,6 @@ class ArcBluetoothBridge
   // or return false if the advertisement map is full.
   bool GetAdvertisementHandle(int32_t* adv_handle);
 
-  void SendDevice(const device::BluetoothDevice* device,
-                  bool include_cached_device) const;
-
   void OnGattServerPrepareWrite(mojom::BluetoothAddressPtr addr,
                                 bool has_subsequent_write,
                                 const base::Closure& success_callback,
@@ -540,11 +504,6 @@ class ArcBluetoothBridge
                                 mojom::BluetoothGattStatus status);
 
   void SendDevice(const device::BluetoothDevice* device) const;
-
-  // Shows a pairing dialog to handle incoming pairing requests.
-  // Returns the pairing delegate of the dialog UI.
-  device::BluetoothDevice::PairingDelegate* ShowPairingDialog(
-      device::BluetoothDevice* device);
 
   ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager.
 
@@ -585,17 +544,9 @@ class ArcBluetoothBridge
   base::OneShotTimer discovery_off_timer_;
   // Timer to turn adapter discoverable off.
   base::OneShotTimer discoverable_off_timer_;
+  // Adapter discoverable timeout value.
+  uint32_t discoverable_off_timeout_ = 0;
 
-  // This indicates whether the remote Bluetooth ARC instance is ready to
-  // receive events.
-  bool is_bluetooth_instance_up_;
-
-  // Observers to listen the start-up of App and Intent Helper.
-  std::unique_ptr<ConnectionObserverImpl<mojom::AppInstance, mojom::AppHost>>
-      app_observer_;
-  std::unique_ptr<ConnectionObserverImpl<mojom::IntentHelperInstance,
-                                         mojom::IntentHelperHost>>
-      intent_helper_observer_;
   // Queue to track the powered state changes initiated by Android.
   base::queue<AdapterPowerState> remote_power_changes_;
   // Queue to track the powered state changes initiated by Chrome.
@@ -619,7 +570,8 @@ class ArcBluetoothBridge
   enum { kMaxAdvertisements = 1 };
   std::map<int32_t, scoped_refptr<device::BluetoothAdvertisement>>
       advertisements_;
-  base::queue<base::OnceClosure> advertisement_task_queue_;
+  ArcBluetoothTaskQueue advertisement_queue_;
+  ArcBluetoothTaskQueue discovery_queue_;
 
   THREAD_CHECKER(thread_checker_);
 

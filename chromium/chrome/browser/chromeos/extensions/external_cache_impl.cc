@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
-#include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -31,6 +30,7 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/manifest.h"
+#include "extensions/common/verifier_formats.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace chromeos {
@@ -270,7 +270,8 @@ void ExternalCacheImpl::CheckCache() {
   // If url_loader_factory_ is missing we can't download anything.
   if (url_loader_factory_) {
     downloader_ = ChromeExtensionDownloaderFactory::CreateForURLLoaderFactory(
-        url_loader_factory_, this, GetConnector());
+        url_loader_factory_, this, GetConnector(),
+        extensions::GetExternalVerifierFormat());
   }
 
   cached_extensions_->Clear();

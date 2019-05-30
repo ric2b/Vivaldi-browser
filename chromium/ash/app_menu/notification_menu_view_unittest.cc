@@ -6,6 +6,7 @@
 
 #include "ash/app_menu/notification_item_view.h"
 #include "ash/app_menu/notification_menu_view_test_api.h"
+#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -18,6 +19,7 @@
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget_delegate.h"
+#include "ui/views/widget/widget_utils.h"
 
 namespace ash {
 
@@ -46,7 +48,7 @@ class MockNotificationMenuController
     return notification_menu_view_->GetSlideOutLayer();
   }
 
-  void OnSlideChanged() override {}
+  void OnSlideChanged(bool in_progress) override {}
 
   void OnSlideOut() override { slide_out_count_++; }
 
@@ -121,7 +123,7 @@ class NotificationMenuViewTest : public views::ViewsTestBase {
       const base::string16& title,
       const base::string16& message) {
     const message_center::NotifierId notifier_id(
-        message_center::NotifierId::APPLICATION, kTestAppId);
+        message_center::NotifierType::APPLICATION, kTestAppId);
     message_center::Notification notification(
         message_center::NOTIFICATION_TYPE_SIMPLE, notification_id, title,
         message, gfx::Image(), base::ASCIIToUTF16("www.test.org"), GURL(),
@@ -137,7 +139,7 @@ class NotificationMenuViewTest : public views::ViewsTestBase {
       const base::string16& title,
       const base::string16& message) {
     const message_center::NotifierId notifier_id(
-        message_center::NotifierId::APPLICATION, kTestAppId);
+        message_center::NotifierType::APPLICATION, kTestAppId);
     message_center::Notification notification(
         message_center::NOTIFICATION_TYPE_SIMPLE, notification_id, title,
         message, gfx::Image(), base::ASCIIToUTF16("www.test.org"), GURL(),
@@ -173,7 +175,7 @@ class NotificationMenuViewTest : public views::ViewsTestBase {
 
   void DispatchGesture(const ui::GestureEventDetails& details) {
     ui::test::EventGenerator generator(
-        notification_menu_view_->GetWidget()->GetNativeWindow());
+        GetRootWindow(notification_menu_view_->GetWidget()));
 
     ui::GestureEvent event(
         0,
@@ -220,7 +222,7 @@ TEST_F(NotificationMenuViewTest, Basic) {
 
   // The counter should update to 1, and the displayed NotificationItemView
   // should match the notification.
-  EXPECT_EQ(base::IntToString16(1), test_api()->GetCounterViewContents());
+  EXPECT_EQ(base::NumberToString16(1), test_api()->GetCounterViewContents());
   EXPECT_EQ(1, test_api()->GetItemViewCount());
   CheckDisplayedNotification(notification_0);
 
@@ -229,13 +231,13 @@ TEST_F(NotificationMenuViewTest, Basic) {
   const message_center::Notification notification_1 =
       AddNotification("notification_id_1", base::ASCIIToUTF16("title_1"),
                       base::ASCIIToUTF16("message_1"));
-  EXPECT_EQ(base::IntToString16(2), test_api()->GetCounterViewContents());
+  EXPECT_EQ(base::NumberToString16(2), test_api()->GetCounterViewContents());
   EXPECT_EQ(2, test_api()->GetItemViewCount());
   CheckDisplayedNotification(notification_1);
 
   // Remove |notification_1|, |notification_0| should be shown.
   notification_menu_view()->OnNotificationRemoved(notification_1.id());
-  EXPECT_EQ(base::IntToString16(1), test_api()->GetCounterViewContents());
+  EXPECT_EQ(base::NumberToString16(1), test_api()->GetCounterViewContents());
   EXPECT_EQ(1, test_api()->GetItemViewCount());
   CheckDisplayedNotification(notification_0);
 }
@@ -307,7 +309,7 @@ TEST_F(NotificationMenuViewTest, RemoveOlderNotification) {
                       base::ASCIIToUTF16("message_1"));
 
   // The latest notification should be shown.
-  EXPECT_EQ(base::IntToString16(2), test_api()->GetCounterViewContents());
+  EXPECT_EQ(base::NumberToString16(2), test_api()->GetCounterViewContents());
   EXPECT_EQ(2, test_api()->GetItemViewCount());
   CheckDisplayedNotification(notification_1);
 
@@ -315,7 +317,7 @@ TEST_F(NotificationMenuViewTest, RemoveOlderNotification) {
   notification_menu_view()->OnNotificationRemoved(notification_0.id());
 
   // The latest notification, |notification_1|, should be shown.
-  EXPECT_EQ(base::IntToString16(1), test_api()->GetCounterViewContents());
+  EXPECT_EQ(base::NumberToString16(1), test_api()->GetCounterViewContents());
   EXPECT_EQ(1, test_api()->GetItemViewCount());
   CheckDisplayedNotification(notification_1);
 }
@@ -346,6 +348,7 @@ TEST_F(NotificationMenuViewTest, SlideOut) {
   EXPECT_EQ(-200.f, GetSlideAmount());
   // Release the gesture, the notification should slide out.
   EndScroll();
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, mock_notification_menu_controller()->slide_out_count_);
   EXPECT_EQ(0, mock_notification_menu_controller()->activation_count_);
 }
@@ -421,7 +424,7 @@ TEST_F(NotificationMenuViewTest, UpdateNotification) {
 
   // The displayed notification's contents should have changed to match the
   // updated notification.
-  EXPECT_EQ(base::IntToString16(1), test_api()->GetCounterViewContents());
+  EXPECT_EQ(base::NumberToString16(1), test_api()->GetCounterViewContents());
   EXPECT_EQ(1, test_api()->GetItemViewCount());
   CheckDisplayedNotification(updated_notification);
 
@@ -430,7 +433,7 @@ TEST_F(NotificationMenuViewTest, UpdateNotification) {
                      base::ASCIIToUTF16("Bad Message"));
 
   // Test that the displayed notification has not been changed.
-  EXPECT_EQ(base::IntToString16(1), test_api()->GetCounterViewContents());
+  EXPECT_EQ(base::NumberToString16(1), test_api()->GetCounterViewContents());
   EXPECT_EQ(1, test_api()->GetItemViewCount());
   CheckDisplayedNotification(updated_notification);
 }

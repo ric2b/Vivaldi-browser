@@ -63,9 +63,9 @@ int StyleRuleKeyframes::FindKeyframeIndex(const String& key) const {
   std::unique_ptr<Vector<double>> keys = CSSParser::ParseKeyframeKeyList(key);
   if (!keys)
     return -1;
-  for (size_t i = keyframes_.size(); i--;) {
+  for (wtf_size_t i = keyframes_.size(); i--;) {
     if (keyframes_[i]->Keys() == *keys)
-      return i;
+      return static_cast<int>(i);
   }
   return -1;
 }
@@ -162,9 +162,11 @@ CSSKeyframeRule* CSSKeyframesRule::Item(unsigned index) const {
   DCHECK_EQ(child_rule_cssom_wrappers_.size(),
             keyframes_rule_->Keyframes().size());
   Member<CSSKeyframeRule>& rule = child_rule_cssom_wrappers_[index];
-  if (!rule)
-    rule = new CSSKeyframeRule(keyframes_rule_->Keyframes()[index].Get(),
-                               const_cast<CSSKeyframesRule*>(this));
+  if (!rule) {
+    rule = MakeGarbageCollected<CSSKeyframeRule>(
+        keyframes_rule_->Keyframes()[index].Get(),
+        const_cast<CSSKeyframesRule*>(this));
+  }
 
   return rule.Get();
 }
@@ -189,7 +191,7 @@ CSSRuleList* CSSKeyframesRule::cssRules() const {
 
 void CSSKeyframesRule::Reattach(StyleRuleBase* rule) {
   DCHECK(rule);
-  keyframes_rule_ = ToStyleRuleKeyframes(rule);
+  keyframes_rule_ = To<StyleRuleKeyframes>(rule);
 }
 
 void CSSKeyframesRule::Trace(blink::Visitor* visitor) {

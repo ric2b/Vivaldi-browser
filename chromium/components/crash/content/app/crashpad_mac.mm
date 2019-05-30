@@ -107,21 +107,25 @@ void DumpProcessWithoutCrashing(task_t task_port) {
 
 namespace internal {
 
-base::FilePath PlatformCrashpadInitialization(bool initial_client,
-                                              bool browser_process,
-                                              bool embedded_handler,
-                                              const std::string& user_data_dir,
-                                              const base::FilePath& exe_path) {
+base::FilePath PlatformCrashpadInitialization(
+    bool initial_client,
+    bool browser_process,
+    bool embedded_handler,
+    const std::string& user_data_dir,
+    const base::FilePath& exe_path,
+    const std::vector<std::string>& initial_arguments) {
   base::FilePath database_path;  // Only valid in the browser process.
   base::FilePath metrics_path;  // Only valid in the browser process.
   DCHECK(!embedded_handler);  // This is not used on Mac.
   DCHECK(exe_path.empty());   // This is not used on Mac.
+  DCHECK(initial_arguments.empty());
 
   if (initial_client) {
     @autoreleasepool {
       base::FilePath framework_bundle_path = base::mac::FrameworkBundlePath();
       base::FilePath handler_path =
-          framework_bundle_path.Append("Helpers").Append("crashpad_handler");
+          framework_bundle_path.Append("Helpers").Append(
+              "chrome_crashpad_handler");
 
       // Is there a way to recover if this fails?
       CrashReporterClient* crash_reporter_client = GetCrashReporterClient();

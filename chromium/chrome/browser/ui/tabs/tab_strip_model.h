@@ -12,11 +12,15 @@
 #include <vector>
 
 #include "base/containers/span.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/time/time.h"
+#include "chrome/browser/ui/tabs/tab_group_data.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_order_controller.h"
+#include "chrome/browser/ui/tabs/tab_switch_event_latency_recorder.h"
 #include "ui/base/models/list_selection_model.h"
 #include "ui/base/page_transition_types.h"
 
@@ -72,30 +76,23 @@ class TabStripModel {
 
   // Constants used when adding tabs.
   enum AddTabTypes {
-    // Used to indicate nothing special should happen to the newly inserted
-    // tab.
-    ADD_NONE          = 0,
+    // Used to indicate nothing special should happen to the newly inserted tab.
+    ADD_NONE = 0,
 
     // The tab should be active.
-    ADD_ACTIVE        = 1 << 0,
+    ADD_ACTIVE = 1 << 0,
 
     // The tab should be pinned.
-    ADD_PINNED        = 1 << 1,
+    ADD_PINNED = 1 << 1,
 
-    // If not set the insertion index of the WebContents is left up to
-    // the Order Controller associated, so the final insertion index may differ
-    // from the specified index. Otherwise the index supplied is used.
-    ADD_FORCE_INDEX   = 1 << 2,
-
-    // If set the newly inserted tab inherits the group of the currently
-    // selected tab. If not set the tab may still inherit the group under
-    // certain situations.
-    ADD_INHERIT_GROUP = 1 << 3,
+    // If not set the insertion index of the WebContents is left up to the Order
+    // Controller associated, so the final insertion index may differ from the
+    // specified index. Otherwise the index supplied is used.
+    ADD_FORCE_INDEX = 1 << 2,
 
     // If set the newly inserted tab's opener is set to the active tab. If not
-    // set the tab may still inherit the group/opener under certain situations.
-    // NOTE: this is ignored if ADD_INHERIT_GROUP is set.
-    ADD_INHERIT_OPENER = 1 << 4,
+    // set the tab may still inherit the opener under certain situations.
+    ADD_INHERIT_OPENER = 1 << 3,
   };
 
   // Enumerates different ways to open a new tab. Does not apply to opening
@@ -126,6 +123,10 @@ class TabStripModel {
   // Retrieves the TabStripModelDelegate associated with this TabStripModel.
   TabStripModelDelegate* delegate() const { return delegate_; }
 
+  // Sets the TabStripModelObserver used by the UI showing the tabs. As other
+  // observers may query the UI for state, the UI's observer must be first.
+  void SetTabStripUI(TabStripModelObserver* observer);
+
   // Add and remove observers to changes within this TabStripModel.
   void AddObserver(TabStripModelObserver* observer);
   void RemoveObserver(TabStripModelObserver* observer);
@@ -154,7 +155,7 @@ class TabStripModel {
   bool ContainsIndex(int index) const;
 
   // Adds the specified WebContents in the default location. Tabs opened
-  // in the foreground inherit the group of the previously active tab.
+  // in the foreground inherit the opener of the previously active tab.
   void AppendWebContents(std::unique_ptr<content::WebContents> contents,
                          bool foreground);
 
@@ -193,11 +194,27 @@ class TabStripModel {
   // strip). Returns the detached WebContents.
   std::unique_ptr<content::WebContents> DetachWebContentsAt(int index);
 
-  // Makes the tab at the specified index the active tab. |user_gesture| is true
-  // if the user actually clicked on the tab or navigated to it using a keyboard
-  // command, false if the tab was activated as a by-product of some other
-  // action.
-  void ActivateTabAt(int index, bool user_gesture);
+  // User gesture type that triggers ActivateTabAt. kNone indicates that it was
+  // not triggered by a user gesture, but by a by-product of some other action.
+  enum class GestureType { kMouse, kTouch, kWheel, kKeyboard, kOther, kNone };
+
+  // Encapsulates user gesture information for tab activation
+  struct UserGestureDetails {
+    UserGestureDetails(GestureType type,
+                       base::TimeTicks time_stamp = base::TimeTicks::Now())
+        : type(type), time_stamp(time_stamp) {}
+
+    GestureType type;
+    base::TimeTicks time_stamp;
+  };
+
+  // Makes the tab at the specified index the active tab. |gesture_detail.type|
+  // contains the gesture type that triggers the tab activation.
+  // |gesture_detail.time_stamp| contains the timestamp of the user gesture, if
+  // any.
+  void ActivateTabAt(int index,
+                     UserGestureDetails gesture_detail =
+                         UserGestureDetails(GestureType::kNone));
 
   // Move the WebContents at the specified index to another index. This
   // method does NOT send Detached/Attached notifications, rather it moves the
@@ -267,8 +284,8 @@ class TabStripModel {
 
   // To be called when a navigation is about to occur in the specified
   // WebContents. Depending on the tab, and the transition type of the
-  // navigation, the TabStripModel may adjust its selection and grouping
-  // behavior.
+  // navigation, the TabStripModel may adjust its selection behavior and opener
+  // inheritance.
   void TabNavigating(content::WebContents* contents,
                      ui::PageTransition transition);
 
@@ -285,6 +302,14 @@ class TabStripModel {
 
   // Returns true if the tab at |index| is blocked by a tab modal dialog.
   bool IsTabBlocked(int index) const;
+
+  // Returns the group that contains the tab at |index|, or nullptr if it is not
+  // grouped. This feature is in development and gated behind a feature flag.
+  // https://crbug.com/915956.
+  const TabGroupData* GetTabGroupForTab(int index) const;
+
+  // Returns the list of tab groups that contain at least one tab in this strip.
+  std::vector<TabGroupData*> ListTabGroups() const;
 
   // Returns the index of the first tab that is not a pinned tab. This returns
   // |count()| if all of the tabs are pinned tabs, and 0 if none of the tabs are
@@ -326,19 +351,45 @@ class TabStripModel {
   void CloseSelectedTabs();
 
   // Select adjacent tabs
-  void SelectNextTab();
-  void SelectPreviousTab();
+  void SelectNextTab(
+      UserGestureDetails detail = UserGestureDetails(GestureType::kOther));
+  void SelectPreviousTab(
+      UserGestureDetails detail = UserGestureDetails(GestureType::kOther));
 
   // Selects the last tab in the tab strip.
-  void SelectLastTab();
+  void SelectLastTab(
+      UserGestureDetails detail = UserGestureDetails(GestureType::kOther));
 
   // Swap adjacent tabs.
   void MoveTabNext();
   void MoveTabPrevious();
 
+  // Create a new tab group and add the set of tabs pointed to be |indices| to
+  // it. Pins all of the tabs if any of them were pinned, and reorders the tabs
+  // so they are contiguous and do not split an existing group in half.
+  // |indices| must be sorted in ascending order. This feature is in development
+  // and gated behind a feature flag. https://crbug.com/915956.
+  void AddToNewGroup(const std::vector<int>& indices);
+
+  // Add the set of tabs pointed to by |indices| to the tab group |group|. The
+  // tabs take on the pinnedness of the tabs already in the group, and are moved
+  // to immediately follow the tabs already in the group. |indices| must be
+  // sorted in ascending order. This feature is in development and gated behind
+  // a feature flag. https://crbug.com/915956.
+  void AddToExistingGroup(const std::vector<int>& indices,
+                          const TabGroupData* group);
+
+  // Removes the set of tabs pointed to by |indices| from the the groups they
+  // are in, if any. The tabs are moved out of the group if necessary. Returns
+  // the new locations of the tabs formerly located at |indices|. |indices| must
+  // be sorted in ascending order. This feature is in development and gated
+  // behind a feature flag. https://crbug.com/915956.
+  std::vector<int> RemoveFromGroup(const std::vector<int>& indices);
+
   // View API //////////////////////////////////////////////////////////////////
 
-  // Context menu functions.
+  // Context menu functions. Tab groups uses command ids following CommandLast
+  // for entries in the 'Add to existing group' submenu.
   enum ContextMenuCommand {
     CommandFirst,
     CommandNewTab,
@@ -349,11 +400,13 @@ class TabStripModel {
     CommandCloseTabsToRight,
     CommandRestoreTab,
     CommandTogglePinned,
-    CommandToggleTabAudioMuted,
+    CommandFocusMode,
     CommandToggleSiteMuted,
+    CommandSendToMyDevices,
     CommandBookmarkAllTabs,
-    CommandSelectByDomain,
-    CommandSelectByOpener,
+    CommandAddToNewGroup,
+    CommandAddToExistingGroup,
+    CommandRemoveFromGroup,
     CommandLast
   };
 
@@ -368,15 +421,10 @@ class TabStripModel {
   void ExecuteContextMenuCommand(int context_index,
                                  ContextMenuCommand command_id);
 
-  // Returns a vector of indices of the tabs that will close when executing the
-  // command |id| for the tab at |index|. The returned indices are sorted in
-  // descending order.
-  std::vector<int> GetIndicesClosedByCommand(int index,
-                                             ContextMenuCommand id) const;
-
-  // Returns true if 'CommandToggleTabAudioMuted' will mute. |index| is the
-  // index supplied to |ExecuteContextMenuCommand|.
-  bool WillContextMenuMute(int index);
+  // Adds the tab at |context_index| to the given tab group |group|. If
+  // |context_index| is selected the command applies to all selected tabs.
+  void ExecuteAddToExistingGroupCommand(int context_index,
+                                        const TabGroupData* group);
 
   // Returns true if 'CommandToggleSiteMuted' will mute. |index| is the
   // index supplied to |ExecuteContextMenuCommand|.
@@ -396,36 +444,29 @@ class TabStripModel {
   }
 
   // Returns the index of the next WebContents in the sequence of WebContentses
-  // spawned by the specified WebContents after |start_index|. If |use_group| is
-  // true, the group property of the tab is used instead of the opener to find
-  // the next tab. Under some circumstances the group relationship may exist but
-  // the opener may not.
+  // spawned by the specified WebContents after |start_index|.
   int GetIndexOfNextWebContentsOpenedBy(const content::WebContents* opener,
-                                        int start_index,
-                                        bool use_group) const;
+                                        int start_index) const;
 
-  // Forget all Opener relationships that are stored (but _not_ group
-  // relationships!) This is to reduce unpredictable tab switching behavior
-  // in complex session states. The exact circumstances under which this method
-  // is called are left up to the implementation of the selected
-  // TabStripModelOrderController.
+  // Forget all opener relationships, to reduce unpredictable tab switching
+  // behavior in complex session states. The exact circumstances under which
+  // this method is called are left up to TabStripModelOrderController.
   void ForgetAllOpeners();
 
-  // Forgets the group affiliation of the specified WebContents. This
-  // should be called when a WebContents that is part of a logical group
-  // of tabs is moved to a new logical context by the user (e.g. by typing a new
-  // URL or selecting a bookmark). This also forgets the opener, which is
-  // considered a weaker relationship than group.
-  void ForgetGroup(content::WebContents* contents);
+  // Forgets the opener relationship of the specified WebContents.
+  void ForgetOpener(content::WebContents* contents);
 
-  // Returns true if the group/opener relationships present for |contents|
-  // should be reset when _any_ selection change occurs in the model.
-  bool ShouldResetGroupOnSelect(content::WebContents* contents) const;
+  // Returns true if the opener relationships present for |contents| should be
+  // reset when _any_ active tab change occurs (rather than just one outside the
+  // current tree of openers).
+  bool ShouldResetOpenerOnActiveTabChange(content::WebContents* contents) const;
 
   // Get tab ext data at |index|.
   const std::string GetExtData(int index) const;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(TabStripModelTest, GetIndicesClosedByCommand);
+
   class WebContentsData;
   struct DetachedWebContents;
   struct DetachNotifications;
@@ -451,28 +492,22 @@ class TabStripModel {
   //   violated in tests [and possibly in the wild as well].
   void SendDetachWebContentsNotifications(DetachNotifications* notifications);
 
-  bool ContainsWebContents(content::WebContents* contents);
   bool RunUnloadListenerBeforeClosing(content::WebContents* contents);
   bool ShouldRunUnloadListenerBeforeClosing(content::WebContents* contents);
 
   int ConstrainInsertionIndex(int index, bool pinned_tab);
 
-  // Convenience for converting a vector of indices into a vector of
-  // WebContents.
-  std::vector<content::WebContents*> GetWebContentsFromIndices(
-      const std::vector<int>& indices) const;
-
-  // Gets the set of tab indices whose domain matches the tab at |index|.
-  void GetIndicesWithSameDomain(int index, std::vector<int>* indices);
-
-  // Gets the set of tab indices that have the same opener as the tab at
-  // |index|.
-  void GetIndicesWithSameOpener(int index, std::vector<int>* indices);
-
   // If |index| is selected all the selected indices are returned, otherwise a
   // vector with |index| is returned. This is used when executing commands to
-  // determine which indices the command applies to.
+  // determine which indices the command applies to. Indices are sorted in
+  // increasing order.
   std::vector<int> GetIndicesForCommand(int index) const;
+
+  // Returns a vector of indices of the tabs that will close when executing the
+  // command |id| for the tab at |index|. The returned indices are sorted in
+  // descending order.
+  std::vector<int> GetIndicesClosedByCommand(int index,
+                                             ContextMenuCommand id) const;
 
   // Returns true if the specified WebContents is a New Tab at the end of
   // the tabstrip. We check for this because opener relationships are _not_
@@ -511,16 +546,6 @@ class TabStripModel {
   std::vector<content::WebContents*> GetWebContentsesByIndices(
       const std::vector<int>& indices);
 
-  // Notifies the observers if the active tab has changed.
-  void NotifyIfActiveTabChanged(const TabStripSelectionChange& selection);
-
-  // Notifies the observers if the active tab or the tab selection has changed.
-  // |old_model| is a snapshot of |selection_model_| before the change.
-  // Note: This function might end up sending 0 to 2 notifications in the
-  // following order: ActiveTabChanged, TabSelectionChanged.
-  void NotifyIfActiveOrSelectionChanged(
-      const TabStripSelectionChange& selection);
-
   // Sets the selection to |new_model| and notifies any observers.
   // Note: This function might end up sending 0 to 3 notifications in the
   // following order: TabDeactivated, ActiveTabChanged, TabSelectionChanged.
@@ -535,7 +560,7 @@ class TabStripModel {
 
   // Selects either the next tab (|forward| is true), or the previous tab
   // (|forward| is false).
-  void SelectRelativeTab(bool forward);
+  void SelectRelativeTab(bool forward, UserGestureDetails detail);
 
   // Does the work of MoveWebContentsAt. This has no checks to make sure the
   // position is valid, those are done in MoveWebContentsAt.
@@ -547,22 +572,40 @@ class TabStripModel {
   // starting at |start| to |index|. See MoveSelectedTabsTo for more details.
   void MoveSelectedTabsToImpl(int index, size_t start, size_t length);
 
-  // Returns true if the tab represented by the specified data has an opener
-  // that matches the specified one. If |use_group| is true, then this will
-  // fall back to check the group relationship as well.
-  static bool OpenerMatches(const std::unique_ptr<WebContentsData>& data,
-                            const content::WebContents* opener,
-                            bool use_group);
+  // Moves the set of tabs indicated by |indices| to precede the tab at index
+  // |destination_index|, maintaining their order and the order of tabs not
+  // being moved, and adds them to the tab group |group|.
+  void MoveTabsIntoGroup(const std::vector<int>& indices,
+                         int destination_index,
+                         const TabGroupData* group);
 
-  // Sets the group/opener of any tabs that reference the tab at |index| to that
-  // tab's group/opener respectively.
-  void FixOpenersAndGroupsReferencing(int index);
+  // Removes the tab at |index| from the group that contains it, if any. Moves
+  // the tab to the end of the group if necessary to keep the group it was in
+  // contiguous. Returns the new index of the ungrouped tab.
+  int UngroupTab(int index);
+
+  // Ensures all tabs indicated by |indices| are pinned, moving them in the
+  // process if necessary. Returns the new locations of all of those tabs.
+  std::vector<int> SetTabsPinned(const std::vector<int>& indices, bool pinned);
+
+  // Sets the sound content setting for each site at the |indices|.
+  void SetSitesMuted(const std::vector<int>& indices, bool mute) const;
+
+  // Sets the opener of any tabs that reference the tab at |index| to that tab's
+  // opener.
+  void FixOpeners(int index);
 
   // The WebContents data currently hosted within this TabStripModel. This must
   // be kept in sync with |selection_model_|.
   std::vector<std::unique_ptr<WebContentsData>> contents_data_;
 
+  // The tab groups hosted within this TabStripModel.
+  std::vector<std::unique_ptr<TabGroupData>> group_data_;
+
   TabStripModelDelegate* delegate_;
+
+  bool tab_strip_ui_was_set_ = false;
+
   base::ObserverList<TabStripModelObserver>::Unchecked observers_;
 
   // A profile associated with this TabStripModel.
@@ -581,6 +624,9 @@ class TabStripModel {
   // TabStripModel is not re-entrancy safe. This member is used to guard public
   // methods that mutate state of |selection_model_| or |contents_data_|.
   bool reentrancy_guard_ = false;
+
+  // A recorder for recording tab switching input latency to UMA
+  TabSwitchEventLatencyRecorder tab_switch_event_latency_recorder_;
 
   base::WeakPtrFactory<TabStripModel> weak_factory_;
 

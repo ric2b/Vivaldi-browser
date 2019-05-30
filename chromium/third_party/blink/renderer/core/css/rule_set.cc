@@ -38,15 +38,10 @@
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 #include "third_party/blink/renderer/core/html/track/text_track_cue.h"
 #include "third_party/blink/renderer/core/html_names.h"
-#include "third_party/blink/renderer/platform/heap/heap_terminated_array_builder.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 
-#include "third_party/blink/renderer/platform/wtf/terminated_array_builder.h"
-
 namespace blink {
-
-using namespace HTMLNames;
 
 static inline PropertyWhitelistType DeterminePropertyWhitelistType(
     const AddRuleFlags add_rule_flags,
@@ -63,13 +58,27 @@ static inline PropertyWhitelistType DeterminePropertyWhitelistType(
   return kPropertyWhitelistNone;
 }
 
+RuleData* RuleData::MaybeCreate(StyleRule* rule,
+                                unsigned selector_index,
+                                unsigned position,
+                                AddRuleFlags add_rule_flags) {
+  // The selector index field in RuleData is only 13 bits so we can't support
+  // selectors at index 8192 or beyond.
+  // See https://crbug.com/804179
+  if (selector_index >= (1 << RuleData::kSelectorIndexBits))
+    return nullptr;
+  if (position >= (1 << RuleData::kPositionBits))
+    return nullptr;
+  return MakeGarbageCollected<RuleData>(rule, selector_index, position,
+                                        add_rule_flags);
+}
+
 RuleData::RuleData(StyleRule* rule,
                    unsigned selector_index,
                    unsigned position,
                    AddRuleFlags add_rule_flags)
     : rule_(rule),
       selector_index_(selector_index),
-      is_last_in_array_(false),
       position_(position),
       specificity_(Selector().Specificity()),
       link_match_type_(Selector().ComputeLinkMatchType(CSSSelector::kMatchAll)),
@@ -85,11 +94,11 @@ RuleData::RuleData(StyleRule* rule,
 
 void RuleSet::AddToRuleSet(const AtomicString& key,
                            PendingRuleMap& map,
-                           const RuleData& rule_data) {
-  Member<HeapLinkedStack<RuleData>>& rules =
+                           const RuleData* rule_data) {
+  Member<HeapLinkedStack<Member<const RuleData>>>& rules =
       map.insert(key, nullptr).stored_value->value;
   if (!rules)
-    rules = new HeapLinkedStack<RuleData>;
+    rules = MakeGarbageCollected<HeapLinkedStack<Member<const RuleData>>>();
   rules->Push(rule_data);
 }
 
@@ -126,6 +135,7 @@ static void ExtractSelectorValues(const CSSSelector* selector,
         case CSSSelector::kPseudoPart:
         case CSSSelector::kPseudoHost:
         case CSSSelector::kPseudoHostContext:
+        case CSSSelector::kPseudoSpatialNavigationInterest:
           pseudo_type = selector->GetPseudoType();
           break;
         case CSSSelector::kPseudoWebKitCustomElement:
@@ -142,7 +152,7 @@ static void ExtractSelectorValues(const CSSSelector* selector,
 }
 
 bool RuleSet::FindBestRuleSetAndAdd(const CSSSelector& component,
-                                    RuleData& rule_data) {
+                                    RuleData* rule_data) {
   AtomicString id;
   AtomicString class_name;
   AtomicString custom_pseudo_element_name;
@@ -197,13 +207,20 @@ bool RuleSet::FindBestRuleSetAndAdd(const CSSSelector& component,
     case CSSSelector::kPseudoWebkitAnyLink:
       link_pseudo_class_rules_.push_back(rule_data);
       return true;
+    case CSSSelector::kPseudoSpatialNavigationInterest:
+      spatial_navigation_interest_class_rules_.push_back(rule_data);
+      return true;
     case CSSSelector::kPseudoFocus:
       focus_pseudo_class_rules_.push_back(rule_data);
       return true;
     case CSSSelector::kPseudoPlaceholder:
-      AddToRuleSet(AtomicString("-webkit-input-placeholder"),
-                   EnsurePendingRules()->shadow_pseudo_element_rules,
-                   rule_data);
+      if (it->FollowsPart()) {
+        part_pseudo_rules_.push_back(rule_data);
+      } else {
+        AddToRuleSet(AtomicString("-webkit-input-placeholder"),
+                     EnsurePendingRules()->shadow_pseudo_element_rules,
+                     rule_data);
+      }
       return true;
     case CSSSelector::kPseudoHost:
     case CSSSelector::kPseudoHostContext:
@@ -229,17 +246,18 @@ bool RuleSet::FindBestRuleSetAndAdd(const CSSSelector& component,
 void RuleSet::AddRule(StyleRule* rule,
                       unsigned selector_index,
                       AddRuleFlags add_rule_flags) {
-  // The selector index field in RuleData is only 13 bits so we can't support
-  // selectors at index 8192 or beyond.
-  // See https://crbug.com/804179
-  if (selector_index >= 8192)
+  RuleData* rule_data =
+      RuleData::MaybeCreate(rule, selector_index, rule_count_, add_rule_flags);
+  if (!rule_data) {
+    // This can happen if selector_index or position is out of range.
     return;
-  RuleData rule_data(rule, selector_index, rule_count_++, add_rule_flags);
+  }
+  ++rule_count_;
   if (features_.CollectFeaturesFromRuleData(rule_data) ==
       RuleFeatureSet::kSelectorNeverMatches)
     return;
 
-  if (!FindBestRuleSetAndAdd(rule_data.Selector(), rule_data)) {
+  if (!FindBestRuleSetAndAdd(rule_data->Selector(), rule_data)) {
     // If we didn't find a specialized map to stick it in, file under universal
     // rules.
     universal_rules_.push_back(rule_data);
@@ -256,6 +274,11 @@ void RuleSet::AddFontFaceRule(StyleRuleFontFace* rule) {
   font_face_rules_.push_back(rule);
 }
 
+void RuleSet::AddFontFeatureValuesRule(StyleRuleFontFeatureValues* rule) {
+  EnsurePendingRules();
+  font_feature_values_rules_.push_back(rule);
+}
+
 void RuleSet::AddKeyframesRule(StyleRuleKeyframes* rule) {
   EnsurePendingRules();  // So that keyframes_rules_.ShrinkToFit() gets called.
   keyframes_rules_.push_back(rule);
@@ -267,13 +290,11 @@ void RuleSet::AddChildRules(const HeapVector<Member<StyleRuleBase>>& rules,
   for (unsigned i = 0; i < rules.size(); ++i) {
     StyleRuleBase* rule = rules[i].Get();
 
-    if (rule->IsStyleRule()) {
-      StyleRule* style_rule = ToStyleRule(rule);
-
+    if (auto* style_rule = DynamicTo<StyleRule>(rule)) {
       const CSSSelectorList& selector_list = style_rule->SelectorList();
       for (const CSSSelector* selector = selector_list.First(); selector;
            selector = selector_list.Next(*selector)) {
-        size_t selector_index = selector_list.SelectorIndex(*selector);
+        wtf_size_t selector_index = selector_list.SelectorIndex(*selector);
         if (selector->HasDeepCombinatorOrShadowPseudo()) {
           deep_combinator_or_shadow_pseudo_rules_.push_back(
               MinimalRuleData(style_rule, selector_index, add_rule_flags));
@@ -287,23 +308,24 @@ void RuleSet::AddChildRules(const HeapVector<Member<StyleRuleBase>>& rules,
           AddRule(style_rule, selector_index, add_rule_flags);
         }
       }
-    } else if (rule->IsPageRule()) {
-      AddPageRule(ToStyleRulePage(rule));
-    } else if (rule->IsMediaRule()) {
-      StyleRuleMedia* media_rule = ToStyleRuleMedia(rule);
+    } else if (auto* page_rule = DynamicTo<StyleRulePage>(rule)) {
+      AddPageRule(page_rule);
+    } else if (auto* media_rule = DynamicTo<StyleRuleMedia>(rule)) {
       if (!media_rule->MediaQueries() ||
           medium.Eval(*media_rule->MediaQueries(),
                       &features_.ViewportDependentMediaQueryResults(),
                       &features_.DeviceDependentMediaQueryResults()))
         AddChildRules(media_rule->ChildRules(), medium, add_rule_flags);
-    } else if (rule->IsFontFaceRule()) {
-      AddFontFaceRule(ToStyleRuleFontFace(rule));
-    } else if (rule->IsKeyframesRule()) {
-      AddKeyframesRule(ToStyleRuleKeyframes(rule));
-    } else if (rule->IsSupportsRule() &&
-               ToStyleRuleSupports(rule)->ConditionIsSupported()) {
-      AddChildRules(ToStyleRuleSupports(rule)->ChildRules(), medium,
-                    add_rule_flags);
+    } else if (auto* font_face_rule = DynamicTo<StyleRuleFontFace>(rule)) {
+      AddFontFaceRule(font_face_rule);
+    } else if (auto* font_feature_values_rule =
+                   DynamicTo<StyleRuleFontFeatureValues>(rule)) {
+      AddFontFeatureValuesRule(font_feature_values_rule);
+    } else if (auto* keyframes_rule = DynamicTo<StyleRuleKeyframes>(rule)) {
+      AddKeyframesRule(keyframes_rule);
+    } else if (auto* supports_rule = DynamicTo<StyleRuleSupports>(rule)) {
+      if (supports_rule->ConditionIsSupported())
+        AddChildRules(supports_rule->ChildRules(), medium, add_rule_flags);
     }
   }
 }
@@ -331,7 +353,7 @@ void RuleSet::AddRulesFromSheet(StyleSheetContents* sheet,
 }
 
 void RuleSet::AddStyleRule(StyleRule* rule, AddRuleFlags add_rule_flags) {
-  for (size_t selector_index =
+  for (wtf_size_t selector_index =
            rule->SelectorList().SelectorIndex(*rule->SelectorList().First());
        selector_index != kNotFound;
        selector_index =
@@ -342,19 +364,20 @@ void RuleSet::AddStyleRule(StyleRule* rule, AddRuleFlags add_rule_flags) {
 void RuleSet::CompactPendingRules(PendingRuleMap& pending_map,
                                   CompactRuleMap& compact_map) {
   for (auto& item : pending_map) {
-    HeapLinkedStack<RuleData>* pending_rules = item.value.Release();
-    CompactRuleMap::ValueType* compact_rules =
-        compact_map.insert(item.key, nullptr).stored_value;
-
-    HeapTerminatedArrayBuilder<RuleData> builder(
-        compact_rules->value.Release());
-    builder.Grow(pending_rules->size());
+    HeapLinkedStack<Member<const RuleData>>* pending_rules =
+        item.value.Release();
+    Member<HeapVector<Member<const RuleData>>>& rules =
+        compact_map.insert(item.key, nullptr).stored_value->value;
+    if (!rules) {
+      rules = MakeGarbageCollected<HeapVector<Member<const RuleData>>>();
+      rules->ReserveInitialCapacity(pending_rules->size());
+    } else {
+      rules->ReserveCapacity(pending_rules->size());
+    }
     while (!pending_rules->IsEmpty()) {
-      builder.Append(pending_rules->Peek());
+      rules->push_back(pending_rules->Peek());
       pending_rules->Pop();
     }
-
-    compact_rules->value = builder.Release();
   }
 }
 
@@ -369,10 +392,12 @@ void RuleSet::CompactRules() {
   link_pseudo_class_rules_.ShrinkToFit();
   cue_pseudo_rules_.ShrinkToFit();
   focus_pseudo_class_rules_.ShrinkToFit();
+  spatial_navigation_interest_class_rules_.ShrinkToFit();
   universal_rules_.ShrinkToFit();
   shadow_host_rules_.ShrinkToFit();
   page_rules_.ShrinkToFit();
   font_face_rules_.ShrinkToFit();
+  font_feature_values_rules_.ShrinkToFit();
   keyframes_rules_.ShrinkToFit();
   deep_combinator_or_shadow_pseudo_rules_.ShrinkToFit();
   part_pseudo_rules_.ShrinkToFit();
@@ -403,10 +428,12 @@ void RuleSet::Trace(blink::Visitor* visitor) {
   visitor->Trace(link_pseudo_class_rules_);
   visitor->Trace(cue_pseudo_rules_);
   visitor->Trace(focus_pseudo_class_rules_);
+  visitor->Trace(spatial_navigation_interest_class_rules_);
   visitor->Trace(universal_rules_);
   visitor->Trace(shadow_host_rules_);
   visitor->Trace(page_rules_);
   visitor->Trace(font_face_rules_);
+  visitor->Trace(font_feature_values_rules_);
   visitor->Trace(keyframes_rules_);
   visitor->Trace(deep_combinator_or_shadow_pseudo_rules_);
   visitor->Trace(part_pseudo_rules_);
@@ -421,7 +448,7 @@ void RuleSet::Trace(blink::Visitor* visitor) {
 #ifndef NDEBUG
 void RuleSet::Show() const {
   for (const auto& rule : all_rules_)
-    rule.Selector().Show();
+    rule->Selector().Show();
 }
 #endif
 

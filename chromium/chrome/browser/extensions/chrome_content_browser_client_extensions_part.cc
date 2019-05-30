@@ -8,15 +8,19 @@
 
 #include <memory>
 #include <set>
+#include <string>
 #include <vector>
 
-#include "app/vivaldi_apptools.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_web_ui.h"
 #include "chrome/browser/extensions/extension_webkit_preferences.h"
@@ -33,10 +37,11 @@
 #include "components/dom_distiller/core/url_constants.h"
 #include "components/guest_view/browser/guest_view_message_filter.h"
 #include "components/rappor/public/rappor_utils.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/browser_url_handler.h"
-#include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/page_navigator.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/resource_dispatcher_host.h"
@@ -58,6 +63,7 @@
 #include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
 #include "extensions/browser/info_map.h"
 #include "extensions/browser/io_thread_extension_message_filter.h"
+#include "extensions/browser/url_loader_factory_manager.h"
 #include "extensions/browser/url_request_util.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/constants.h"
@@ -74,6 +80,8 @@
 #include "extensions/browser/api/vpn_provider/vpn_service.h"
 #include "extensions/browser/api/vpn_provider/vpn_service_factory.h"
 #endif  // defined(OS_CHROMEOS)
+
+#include "app/vivaldi_apptools.h"
 
 using content::BrowserContext;
 using content::BrowserThread;
@@ -305,31 +313,6 @@ GURL ChromeContentBrowserClientExtensionsPart::GetEffectiveURL(
   // treated as normal URLs.
   if (extension->from_bookmark())
     return url;
-
-  // If |url| corresponds to both an isolated origin and a hosted app,
-  // determine whether to use the effective URL, which also determines whether
-  // the isolated origin should take precedence over a matching hosted app:
-  // - Chrome Web Store should always be resolved to its effective URL, so that
-  //   the CWS process gets proper bindings.
-  // - for other hosted apps, if the isolated origin covers the app's entire
-  //   web extent (i.e., *all* URLs matched by the hosted app will have this
-  //   isolated origin), allow the hosted app to take effect and return an
-  //   effective URL.
-  // - for other cases, disallow effective URLs, as otherwise this would allow
-  //   the isolated origin to share the hosted app process with other origins
-  //   it does not trust, due to https://crbug.com/791796.
-  //
-  // TODO(alexmos): Revisit and possibly remove this once
-  // https://crbug.com/791796 is fixed.
-  url::Origin isolated_origin;
-  auto* policy = content::ChildProcessSecurityPolicy::GetInstance();
-  bool is_isolated_origin = policy->GetMatchingIsolatedOrigin(
-      url::Origin::Create(url), &isolated_origin);
-  if (is_isolated_origin && extension->id() != kWebStoreAppId &&
-      !DoesOriginMatchAllURLsInWebExtent(isolated_origin,
-                                         extension->web_extent())) {
-    return url;
-  }
 
   // If the URL is part of an extension's web extent, convert it to an
   // extension URL.
@@ -611,6 +594,32 @@ ChromeContentBrowserClientExtensionsPart::ShouldTryToUseExistingProcessHost(
 
 // static
 bool ChromeContentBrowserClientExtensionsPart::
+    ShouldSubframesTryToReuseExistingProcess(
+        content::RenderFrameHost* main_frame) {
+  DCHECK(!main_frame->GetParent());
+
+  // Most out-of-process iframes aggressively look for a random same-site
+  // process to reuse if possible, to keep the process count low. Skip this for
+  // web iframes inside extensions (not including hosted apps), since the
+  // workload here tends to be different and we want to avoid slowing down
+  // normal web pages with misbehaving extension-related content.
+  //
+  // Note that this does not prevent process sharing with tabs when over the
+  // process limit, and OOPIFs from tabs (which will aggressively look for
+  // existing processes) may still join the process of an extension's web
+  // iframe.  This mainly reduces the likelihood of problems with main frames
+  // and makes it more likely that the subframe process will be shown near the
+  // extension in Chrome's task manager for blame purposes. See
+  // https://crbug.com/899418.
+  const Extension* extension =
+      ExtensionRegistry::Get(main_frame->GetSiteInstance()->GetBrowserContext())
+          ->enabled_extensions()
+          .GetExtensionOrAppByURL(main_frame->GetSiteInstance()->GetSiteURL());
+  return !extension || !extension->is_extension();
+}
+
+// static
+bool ChromeContentBrowserClientExtensionsPart::
     ShouldSwapBrowsingInstancesForNavigation(SiteInstance* site_instance,
                                              const GURL& current_url,
                                              const GURL& new_url) {
@@ -813,19 +822,6 @@ ChromeContentBrowserClientExtensionsPart::GetVpnServiceProxy(
 }
 
 // static
-bool ChromeContentBrowserClientExtensionsPart::
-    ShouldFrameShareParentSiteInstanceDespiteTopDocumentIsolation(
-        const GURL& subframe_url,
-        content::SiteInstance* parent_site_instance) {
-  const Extension* extension =
-      ExtensionRegistry::Get(parent_site_instance->GetBrowserContext())
-          ->enabled_extensions()
-          .GetExtensionOrAppByURL(parent_site_instance->GetSiteURL());
-
-  return extension && extension->is_hosted_app();
-}
-
-// static
 void ChromeContentBrowserClientExtensionsPart::
     LogInitiatorSchemeBypassingDocumentBlocking(
         const url::Origin& initiator_origin,
@@ -870,6 +866,32 @@ void ChromeContentBrowserClientExtensionsPart::
 }
 
 // static
+network::mojom::URLLoaderFactoryPtrInfo
+ChromeContentBrowserClientExtensionsPart::
+    CreateURLLoaderFactoryForNetworkRequests(
+        content::RenderProcessHost* process,
+        network::mojom::NetworkContext* network_context,
+        network::mojom::TrustedURLLoaderHeaderClientPtrInfo* header_client,
+        const url::Origin& request_initiator) {
+  return URLLoaderFactoryManager::CreateFactory(
+      process, network_context, header_client, request_initiator);
+}
+
+// static
+bool ChromeContentBrowserClientExtensionsPart::IsBuiltinComponent(
+    content::BrowserContext* browser_context,
+    const url::Origin& origin) {
+  if (origin.scheme() != extensions::kExtensionScheme)
+    return false;
+
+  const auto& extension_id = origin.host();
+  return ExtensionSystem::Get(browser_context)
+      ->extension_service()
+      ->component_loader()
+      ->Exists(extension_id);
+}
+
+// static
 void ChromeContentBrowserClientExtensionsPart::RecordShouldAllowOpenURLFailure(
     ShouldAllowOpenURLFailureReason reason,
     const GURL& site_url) {
@@ -901,7 +923,7 @@ void ChromeContentBrowserClientExtensionsPart::RecordShouldAllowOpenURLFailure(
       "last",
   };
 
-  static_assert(arraysize(kSchemeNames) == SCHEME_LAST + 1,
+  static_assert(base::size(kSchemeNames) == SCHEME_LAST + 1,
                 "kSchemeNames should have SCHEME_LAST + 1 elements");
 
   ShouldAllowOpenURLFailureScheme scheme = SCHEME_UNKNOWN;
@@ -914,36 +936,6 @@ void ChromeContentBrowserClientExtensionsPart::RecordShouldAllowOpenURLFailure(
 
   UMA_HISTOGRAM_ENUMERATION("Extensions.ShouldAllowOpenURL.Failure.Scheme",
                             scheme, SCHEME_LAST);
-}
-
-// static
-bool ChromeContentBrowserClientExtensionsPart::
-    DoesOriginMatchAllURLsInWebExtent(const url::Origin& origin,
-                                      const URLPatternSet& web_extent) {
-  // This function assumes |origin| is an isolated origin, which can only have
-  // an HTTP or HTTPS scheme (see IsolatedOriginUtil::IsValidIsolatedOrigin()),
-  // so these are the only schemes allowed to be matched below.
-  DCHECK(origin.scheme() == url::kHttpsScheme ||
-         origin.scheme() == url::kHttpScheme);
-  URLPattern origin_pattern(URLPattern::SCHEME_HTTPS | URLPattern::SCHEME_HTTP);
-  // TODO(alexmos): Temporarily disable precise scheme matching on
-  // |origin_pattern| to allow apps that use *://foo.com/ in their web extent
-  // to still work with isolated origins.  See https://crbug.com/799638.  We
-  // should use SetScheme(origin.scheme()) here once https://crbug.com/791796
-  // is fixed.
-  origin_pattern.SetScheme("*");
-  origin_pattern.SetHost(origin.host());
-  origin_pattern.SetPath("/*");
-  // We allow matching subdomains here because |origin| is the precise origin
-  // retrieved from site isolation policy. Thus, we'll only allow an extent of
-  // foo.example.com and bar.example.com if the isolated origin was
-  // example.com; if the isolated origin is foo.example.com, this will
-  // correctly fail.
-  origin_pattern.SetMatchSubdomains(true);
-
-  URLPatternSet origin_pattern_list;
-  origin_pattern_list.AddPattern(origin_pattern);
-  return origin_pattern_list.Contains(web_extent);
 }
 
 void ChromeContentBrowserClientExtensionsPart::RenderProcessWillLaunch(
@@ -981,8 +973,8 @@ void ChromeContentBrowserClientExtensionsPart::SiteInstanceGotProcess(
                                    site_instance->GetProcess()->GetID(),
                                    site_instance->GetId());
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
       base::BindOnce(&InfoMap::RegisterExtensionProcess,
                      ExtensionSystem::Get(context)->info_map(), extension->id(),
                      site_instance->GetProcess()->GetID(),
@@ -1006,8 +998,8 @@ void ChromeContentBrowserClientExtensionsPart::SiteInstanceDeleting(
                                    site_instance->GetProcess()->GetID(),
                                    site_instance->GetId());
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
       base::BindOnce(&InfoMap::UnregisterExtensionProcess,
                      ExtensionSystem::Get(context)->info_map(), extension->id(),
                      site_instance->GetProcess()->GetID(),

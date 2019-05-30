@@ -63,7 +63,7 @@ class BookmarkModelTypeProcessor : public syncer::ModelTypeProcessor,
   // restored via ModelReadyToSync() below.
   std::string EncodeSyncMetadata() const;
 
-  // It mainly decodes a BookmarkModelMetadata proto seralized in
+  // It mainly decodes a BookmarkModelMetadata proto serialized in
   // |metadata_str|, and uses it to fill in the tracker and the model type state
   // objects. |model| must not be null and must outlive this object. It is used
   // to the retrieve the local node ids, and is stored in the processor to be
@@ -79,7 +79,11 @@ class BookmarkModelTypeProcessor : public syncer::ModelTypeProcessor,
   // before OnSyncStarting() is called. |favicon_service| must not be null.
   void SetFaviconService(favicon::FaviconService* favicon_service);
 
+  // Returns the estimate of dynamically allocated memory in bytes.
+  size_t EstimateMemoryUsage() const;
+
   const SyncedBookmarkTracker* GetTrackerForTest() const;
+  bool IsConnectedForTest() const;
 
   base::WeakPtr<syncer::ModelTypeControllerDelegate> GetWeakPtr();
 
@@ -94,11 +98,24 @@ class BookmarkModelTypeProcessor : public syncer::ModelTypeProcessor,
   // entities.
   void NudgeForCommitIfNeeded();
 
+  // Performs the required clean up when bookmark model is being deleted.
+  void OnBookmarkModelBeingDeleted();
+
   // Instantiates the required objects to track metadata and starts observing
   // changes from the bookmark model.
   void StartTrackingMetadata(
       std::vector<NodeMetadataPair> nodes_metadata,
       std::unique_ptr<sync_pb::ModelTypeState> model_type_state);
+  void StopTrackingMetadata();
+
+  // Creates a DictionaryValue for local and remote debugging information about
+  // |node| and appends it to |all_nodes|. It does the same for child nodes
+  // recursively. |index| is the index of |node| within its parent. |index|
+  // could computed from |node|, however it's much cheaper to pass from outside
+  // since we iterate over child nodes already in the calling sites.
+  void AppendNodeAndChildrenForDebugging(const bookmarks::BookmarkNode* node,
+                                         int index,
+                                         base::ListValue* all_nodes) const;
 
   // Stores the start callback in between OnSyncStarting() and
   // ModelReadyToSync().
@@ -141,6 +158,8 @@ class BookmarkModelTypeProcessor : public syncer::ModelTypeProcessor,
   // GUID string that identifies the sync client and is received from the sync
   // engine.
   std::string cache_guid_;
+
+  syncer::ModelErrorHandler error_handler_;
 
   std::unique_ptr<BookmarkModelObserverImpl> bookmark_model_observer_;
 

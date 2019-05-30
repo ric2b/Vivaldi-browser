@@ -47,7 +47,7 @@ bool DevToolsProtocolTest::DidAddMessageToConsole(
 
 base::DictionaryValue* DevToolsProtocolTest::SendCommand(
     const std::string& method,
-    std::unique_ptr<base::DictionaryValue> params,
+    std::unique_ptr<base::Value> params,
     bool wait) {
   in_dispatch_ = true;
   base::DictionaryValue command;
@@ -232,7 +232,7 @@ void DevToolsProtocolTest::DispatchProtocolMessage(
     const std::string& message) {
   std::unique_ptr<base::DictionaryValue> root(
       static_cast<base::DictionaryValue*>(
-          base::JSONReader::Read(message).release()));
+          base::JSONReader::ReadDeprecated(message).release()));
   int id;
   if (root->GetInteger("id", &id)) {
     result_ids_.push_back(id);

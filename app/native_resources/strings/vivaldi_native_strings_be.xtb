@@ -14,8 +14,9 @@
 <translation id="2972581237482394796">&amp;Вернуць наперад</translation>
 <translation id="2977472760057091832">Адчыніць спасылку ў прыватным акне</translation>
 <translation id="3027988479108856431">На жаль, налады Яндэкс-браўзэру недаступны пад час працуючага браўзэру. Для імпарту гэтых наладаў у Vivaldi, захавайце свае дадзеныя і зачыніце ўсе вокны Яндэкс-браўзэру. Потым націсніце "Працягнуць".</translation>
-<translation id="3259769196742189631">Спраўдіць на W3C</translation>
+<translation id="3259769196742189631">Аналізаваць на W3C</translation>
 <translation id="3270847123878663523">Скасаваць сарціроўку</translation>
+<translation id="3334610655141903168">(без назвы)</translation>
 <translation id="3402602684546832928">Абраць Opera закладак файл</translation>
 <translation id="3427342743765426898">Паўтарыць рэдагаванне</translation>
 <translation id="3542768452570884558">Адчыніць спасылку ў новым акне</translation>
@@ -26,6 +27,7 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Не паказваць зноўку</translation>
 <translation id="4074744496918018786">Адчыніць малюнак у прыватным акне</translation>
+<translation id="443008484043213881">Інструмэнты</translation>
 <translation id="4512900838580567989">Адчыніць спасылку з новай фонавай карткай</translation>
 <translation id="4515472507709384008">Opera версіі 15+</translation>
 <translation id="4548358047305717967">Адчыніць выяву ў новай фонавай картке</translation>
@@ -55,10 +57,9 @@
 <translation id="7715497554424665066">&amp;Прапусціць абнаўленне</translation>
 <translation id="8099620695029051217">Капіяваць адрас старонкі</translation>
 <translation id="8194797478851900357">Скасаваць перамяшканне</translation>
-<translation id="8197810018650377191">Закласці старонку</translation>
+<translation id="8197810018650377191">у Закладкі старонку</translation>
 <translation id="8624587806981488221">Пераладаваць малюнак</translation>
 <translation id="864444594187862076">Opera версіі 15+ (тэставая)</translation>
-<translation id="8647783768664050873">Націсніце тут для абнаўлення Vivaldi да версіі $1.</translation>
 <translation id="8651348004684669199">Дадаць акціўную карту</translation>
 <translation id="867544375504146191">Яндэкс</translation>
 <translation id="8773635261052182196">Вы болей не будзеце атрымліваць паведамленні. Вы можаце ўключыць іх ў наладах vivaldi.</translation>

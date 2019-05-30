@@ -74,8 +74,6 @@
 // Vivaldi constants
 #include "extensions/api/guest_view/vivaldi_web_view_constants.h"
 
-bool extensions::WebViewGuest::gesture_recording_;
-
 using content::WebContents;
 using guest_view::GuestViewEvent;
 using guest_view::GuestViewManager;
@@ -215,36 +213,6 @@ void WebViewGuest::ExtendedLoadProgressChanged(WebContents* source,
   args->SetInteger(webview::kTotalElements, total_elements);
   DispatchEventToView(base::WrapUnique(
       new GuestViewEvent(webview::kEventLoadProgress, std::move(args))));
-}
-
-// Initialize listeners (cannot do it in constructor as RenderViewHost not
-// ready.)
-void WebViewGuest::InitListeners() {
-  content::RenderViewHost* render_view_host =
-      web_contents()->GetRenderViewHost();
-
-  // If any inner web contents are in place we must be in a PDF
-  // or similar and the inner contents must get the mouse events.
-  std::vector<content::WebContentsImpl*> inner_contents =
-      static_cast<content::WebContentsImpl*>(web_contents())
-        ->GetInnerWebContents();
-  if (inner_contents.size() > 0) {
-    render_view_host = inner_contents[0]->GetRenderViewHost();
-  }
-
-  if (render_view_host && current_host_ != render_view_host) {
-    // Add mouse event listener, only one for every new render_view_host
-    mouseevent_callback_ =
-        base::Bind(&WebViewGuest::OnMouseEvent, base::Unretained(this));
-    render_view_host->GetWidget()->AddMouseEventCallback(mouseevent_callback_);
-
-#if defined(OS_MACOSX) || defined(OS_LINUX)
-    content::WebPreferences prefs = render_view_host->GetWebkitPreferences();
-    prefs.context_menu_on_mouse_up = true;
-    render_view_host->UpdateWebkitPreferences(prefs);
-#endif
-    current_host_ = render_view_host;
-  }
 }
 
 void WebViewGuest::ToggleFullscreenModeForTab(
@@ -442,101 +410,6 @@ bool WebViewGuest::IsMouseGesturesEnabled() const {
     return pref_service->GetBoolean(vivaldiprefs::kMouseGesturesEnabled);
   }
   return true;
-}
-
-bool WebViewGuest::IsRockerGesturesEnabled() const {
-  if (web_contents()) {
-    PrefService* pref_service =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext())
-        ->GetPrefs();
-    return pref_service->GetBoolean(vivaldiprefs::kMouseGesturesRockerGesturesEnabled);
-  }
-  return false;
-}
-
-bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
-  // Rocker gestures, a.la Opera
-  if (IsRockerGesturesEnabled()) {
-    if (has_left_mousebutton_down_ &&
-        mouse_event.GetType() == blink::WebInputEvent::kMouseUp &&
-        mouse_event.button == blink::WebMouseEvent::Button::kLeft) {
-      has_left_mousebutton_down_ = false;
-    } else if (mouse_event.GetType() == blink::WebInputEvent::kMouseDown &&
-               mouse_event.button == blink::WebMouseEvent::Button::kLeft) {
-      has_left_mousebutton_down_ = true;
-    }
-
-    if (has_right_mousebutton_down_ &&
-        mouse_event.GetType() == blink::WebInputEvent::kMouseUp &&
-        mouse_event.button == blink::WebMouseEvent::Button::kRight) {
-      has_right_mousebutton_down_ = false;
-    } else if (mouse_event.GetType() == blink::WebInputEvent::kMouseDown &&
-               mouse_event.button == blink::WebMouseEvent::Button::kRight) {
-      has_right_mousebutton_down_ = true;
-    }
-
-    if (mouse_event.button == blink::WebMouseEvent::Button::kNoButton) {
-      has_right_mousebutton_down_ = false;
-      has_left_mousebutton_down_ = false;
-    }
-
-    if (has_left_mousebutton_down_ &&
-        (mouse_event.GetType() == blink::WebInputEvent::kMouseDown &&
-         mouse_event.button == blink::WebMouseEvent::Button::kRight)) {
-      eat_next_right_mouseup_ = true;
-      Go(1);
-      return true;
-    }
-
-    if (has_right_mousebutton_down_ &&
-        (mouse_event.GetType() == blink::WebInputEvent::kMouseDown &&
-         mouse_event.button == blink::WebMouseEvent::Button::kLeft)) {
-      Go(-1);
-      eat_next_right_mouseup_ = true;
-      return true;
-    }
-
-    if (eat_next_right_mouseup_ &&
-        mouse_event.GetType() == blink::WebInputEvent::kMouseUp &&
-        mouse_event.button == blink::WebMouseEvent::Button::kRight) {
-      eat_next_right_mouseup_ = false;
-      return true;
-    }
-  }
-
-  if (!gesture_recording_ &&
-      (mouse_event.GetType() == blink::WebInputEvent::kMouseDown ||
-       mouse_event.GetType() == blink::WebInputEvent::kMouseMove) &&
-      mouse_event.button == blink::WebMouseEvent::Button::kRight &&
-      !(mouse_event.GetModifiers() & blink::WebInputEvent::kLeftButtonDown) &&
-      IsMouseGesturesEnabled()) {
-    gesture_recording_ = true;
-    mousedown_x_ = mouse_event.PositionInWidget().x;
-    mousedown_y_ = mouse_event.PositionInWidget().y;
-    ::vivaldi::SetBlockNextContextMenu(false);
-  } else if (gesture_recording_ &&
-             mouse_event.GetType() == blink::WebInputEvent::kMouseMove) {
-    if (mouse_event.GetModifiers() & blink::WebInputEvent::kRightButtonDown) {
-      if (!::vivaldi::GetBlockNextContextMenu()) {
-        int dx = mouse_event.PositionInWidget().x - mousedown_x_;
-        int dy = mouse_event.PositionInWidget().y - mousedown_y_;
-
-        // If we went over the 5px threshold to cancel the context menu,
-        // the flag is set. It persists if we go under the threshold by
-        // moving the mouse into the original coords, which is expected.
-        if (abs(dx) >= 5 || abs(dy) >= 5) {
-          ::vivaldi::SetBlockNextContextMenu(true);
-        }
-      }
-    } else {
-      // Happens when right mouse button is released outside of webview.
-      gesture_recording_ = false;
-    }
-  } else if (gesture_recording_ &&
-             mouse_event.GetType() == blink::WebInputEvent::kMouseUp) {
-    gesture_recording_ = false;
-  }
-  return false;
 }
 
 void WebViewGuest::UpdateTargetURL(content::WebContents* source,
@@ -787,10 +660,11 @@ void WebViewGuest::ShowRepostFormWarningDialog(WebContents* source) {
                                 source);
 }
 
-gfx::Size WebViewGuest::EnterPictureInPicture(const viz::SurfaceId& surface_id,
+gfx::Size WebViewGuest::EnterPictureInPicture(WebContents* web_contents,
+                                              const viz::SurfaceId& surface_id,
                                               const gfx::Size& natural_size) {
   return PictureInPictureWindowManager::GetInstance()->EnterPictureInPicture(
-      web_contents(), surface_id, natural_size);
+      web_contents, surface_id, natural_size);
 }
 
 void WebViewGuest::ExitPictureInPicture() {
@@ -820,11 +694,25 @@ void WebViewGuest::LoadTabContentsIfNecessary() {
     // Check if we need to make a tab active, this must be done when
     // starting with tabs through the commandline or through start with pages.
     if (viv_startup_data && viv_startup_data->start_as_active()) {
-      tab_strip->ActivateTabAt(tab_index, false);
+      tab_strip->ActivateTabAt(tab_index);
     }
   }
   web_contents()->SetUserData(::vivaldi::kVivaldiStartupTabUserDataKey,
                               nullptr);
+}
+
+WebViewGuest::NewWindowInfo::NewWindowInfo(const GURL& url, const std::string& name)
+  : name(name),
+  url(url),
+  url_changed_via_open_url(false),
+  did_start_navigating_away_from_initial_url(false) {}
+
+WebViewGuest::NewWindowInfo::NewWindowInfo(const WebViewGuest::NewWindowInfo&) =
+    default;
+
+WebViewGuest::NewWindowInfo::~NewWindowInfo() {
+  delete referrer;
+  delete params;
 }
 
 }  // namespace extensions

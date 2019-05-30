@@ -25,60 +25,14 @@ else
   [ -f "$xdg_app_dir/mimeapps.list" ] || touch "$xdg_app_dir/mimeapps.list"
 fi
 
-# Find libffmpeg.so with additional codecs.
-checkffmpeg () {
-  if [ "$VIVALDI_FFMPEG_FOUND" = "NO" ]; then
-    if [[ -n "$2" ]] && [ -e "$2" ] || [[ -z "$2" ]]; then
-      # Chromium's FFMpeg version N-91124-g1d669bcae9 is the oldest known working version
-      # chromium/third_party/ffmpeg/chromium/config/Chromium/linux/x64/libavutil/ffversion.h
-      if [ -r "$1" ]; then
-        if [[ `grep -aom1 'FFmpeg version N-[0-9]\+-' "$1" | cut -f2 -d-` -ge "91124" ]]; then
-          # Check the dependencies are satisfied as the user may have obtained this from
-          # another distro
-          if ! LANGUAGE=en ldd "$1" 2>&1 | grep -qm1 'not \(a dynamic executable\|found\)'; then
-            if [[ -n "$LD_PRELOAD" ]]; then
-              export LD_PRELOAD="$LD_PRELOAD:$1"
-            else
-              export LD_PRELOAD="$1"
-            fi
-            export VIVALDI_FFMPEG_FOUND=YES
-          fi
-        fi
-      fi
-    fi
-  fi
-}
-
-# Account for Debian multiarch directories
-case "`uname -m`" in
-  x86_64) DEBARCH="x86_64-linux-gnu" ;;
-    i?86) DEBARCH="i386-linux-gnu" ;;
-esac
-
-# Check for libs in preferred order.
-# Where possible, use other files/directories to confirm it's the correct variant.
-VIVALDI_FFMPEG_FOUND=NO
-checkffmpeg '/usr/lib/chromium-browser/libffmpeg.so' '/usr/share/doc/chromium-codecs-ffmpeg-extra'
-checkffmpeg "/usr/lib/$DEBARCH/oxide-qt/libffmpeg.so" '/usr/share/doc/oxideqt-codecs-extra'
-checkffmpeg '/usr/lib64/chromium-ffmpeg-extra/libffmpeg.so' '/usr/share/doc/packages/chromium-ffmpeg-extra'
-
-# Check if the user has manually placed suitable libs.
-checkffmpeg "$HOME/.local/lib/vivaldi/libffmpeg.so"
-checkffmpeg "$HERE/libffmpeg.so"
-
-# Warn if proprietary media is not available
-if [ "$VIVALDI_FFMPEG_FOUND" = "NO" ]; then
-cat <<PMWARN >&2
-
-No suitable library for HTML5 MP4 (H.264/AAC) was found,
-therefore only open codecs will play.
-
-For assistance on how to enable proprietary media, visit:
-
-https://help.vivaldi.com/article/html5-mp4-h-264-aac-support-under-linux/
-
-PMWARN
+# Always use our versions of ffmpeg libs.
+# This also makes RPMs find the compatibly-named library symlinks.
+if [[ -n "$LD_LIBRARY_PATH" ]]; then
+  LD_LIBRARY_PATH="$HERE:$HERE/lib:$LD_LIBRARY_PATH"
+else
+  LD_LIBRARY_PATH="$HERE:$HERE/lib"
 fi
+export LD_LIBRARY_PATH
 
 export CHROME_VERSION_EXTRA="@@CHANNEL@@"
 
@@ -92,4 +46,4 @@ exec > >(exec cat)
 exec 2> >(exec cat >&2)
 
 # Note: exec -a below is a bashism.
-exec -a "$0" "$HERE/@@PROGNAME@@"-bin "$@"
+exec -a "$0" "$HERE/@@PROGNAME@@" "$@"

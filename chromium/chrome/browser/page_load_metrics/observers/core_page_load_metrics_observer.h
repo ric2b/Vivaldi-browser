@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_PAGE_LOAD_METRICS_OBSERVERS_CORE_PAGE_LOAD_METRICS_OBSERVER_H_
 #define CHROME_BROWSER_PAGE_LOAD_METRICS_OBSERVERS_CORE_PAGE_LOAD_METRICS_OBSERVER_H_
 
+#include "chrome/browser/page_load_metrics/observers/largest_contentful_paint_handler.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_observer.h"
 #include "services/metrics/public/cpp/ukm_source.h"
 
@@ -20,11 +21,19 @@ extern const char kHistogramFirstInputTimestamp[];
 extern const char kHistogramLongestInputDelay[];
 extern const char kHistogramLongestInputTimestamp[];
 extern const char kHistogramFirstPaint[];
-extern const char kHistogramFirstTextPaint[];
+extern const char kHistogramFirstImagePaint[];
 extern const char kHistogramDomContentLoaded[];
 extern const char kHistogramLoad[];
 extern const char kHistogramFirstContentfulPaint[];
 extern const char kHistogramFirstMeaningfulPaint[];
+extern const char kHistogramLargestImagePaint[];
+extern const char kHistogramLastImagePaint[];
+extern const char kHistogramLargestTextPaint[];
+extern const char kHistogramLastTextPaint[];
+extern const char kHistogramLargestContentPaint[];
+extern const char kHistogramLargestContentPaintContentType[];
+extern const char kHistogramLargestContentPaintAllFrames[];
+extern const char kHistogramLargestContentPaintAllFramesContentType[];
 extern const char kHistogramTimeToInteractive[];
 extern const char kHistogramParseDuration[];
 extern const char kHistogramParseBlockedOnScriptLoad[];
@@ -32,7 +41,7 @@ extern const char kHistogramParseBlockedOnScriptExecution[];
 extern const char kHistogramParseStartToFirstMeaningfulPaint[];
 
 extern const char kBackgroundHistogramFirstLayout[];
-extern const char kBackgroundHistogramFirstTextPaint[];
+extern const char kBackgroundHistogramFirstImagePaint[];
 extern const char kBackgroundHistogramDomContentLoaded[];
 extern const char kBackgroundHistogramLoad[];
 extern const char kBackgroundHistogramFirstPaint[];
@@ -63,6 +72,7 @@ extern const char kHistogramFirstScrollInputAfterFirstPaint[];
 extern const char kHistogramPageLoadTotalBytes[];
 extern const char kHistogramPageLoadNetworkBytes[];
 extern const char kHistogramPageLoadCacheBytes[];
+extern const char kHistogramPageLoadNetworkBytesIncludingHeaders[];
 
 extern const char kHistogramLoadTypeTotalBytesForwardBack[];
 extern const char kHistogramLoadTypeNetworkBytesForwardBack[];
@@ -175,9 +185,6 @@ class CorePageLoadMetricsObserver
   void OnFirstPaintInPage(
       const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
-  void OnFirstTextPaintInPage(
-      const page_load_metrics::mojom::PageLoadTiming& timing,
-      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
   void OnFirstImagePaintInPage(
       const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
@@ -207,9 +214,23 @@ class CorePageLoadMetricsObserver
   ObservePolicy FlushMetricsOnAppEnterBackground(
       const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& info) override;
-  void OnUserInput(const blink::WebInputEvent& event) override;
-  void OnLoadedResource(const page_load_metrics::ExtraRequestCompleteInfo&
-                            extra_request_complete_info) override;
+  void OnUserInput(
+      const blink::WebInputEvent& event,
+      const page_load_metrics::mojom::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
+  void OnResourceDataUseObserved(
+      FrameTreeNodeId frame_tree_node_id,
+      const std::vector<page_load_metrics::mojom::ResourceDataUpdatePtr>&
+          resources) override;
+
+  void OnTimingUpdate(
+      content::RenderFrameHost* subframe_rfh,
+      const page_load_metrics::mojom::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
+
+  void OnDidFinishSubFrameNavigation(
+      content::NavigationHandle* navigation_handle,
+      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
 
  private:
   void RecordTimingHistograms(
@@ -226,16 +247,18 @@ class CorePageLoadMetricsObserver
   ui::PageTransition transition_;
   bool was_no_store_main_resource_;
 
-  // Note: these are only approximations, based on WebContents attribution from
-  // ResourceRequestInfo objects while this is the currently committed load in
-  // the WebContents.
+  // Number of complete resources loaded by the page.
   int num_cache_resources_;
   int num_network_resources_;
 
-  // The number of body (not header) prefilter bytes consumed by requests for
-  // the page.
+  // The number of body (not header) prefilter bytes consumed by completed
+  // requests for the page.
   int64_t cache_bytes_;
   int64_t network_bytes_;
+
+  // The number of prefilter bytes consumed by completed and partial network
+  // requests for the page.
+  int64_t network_bytes_including_headers_;
 
   // Size of the redirect chain, which excludes the first URL.
   int redirect_chain_size_;
@@ -248,6 +271,9 @@ class CorePageLoadMetricsObserver
   bool received_scroll_input_after_first_paint_ = false;
 
   base::TimeTicks first_paint_;
+
+  page_load_metrics::LargestContentfulPaintHandler
+      largest_contentful_paint_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(CorePageLoadMetricsObserver);
 };

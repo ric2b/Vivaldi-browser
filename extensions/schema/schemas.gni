@@ -6,7 +6,9 @@ import("//build/config/features.gni")
 
 # Common sources that are both bundled and compiled.
 schema_sources = [
+  "access_keys.json",
   "autoupdate.json",
+  "bookmark_context_menu.json",
   "bookmarks_private.json",
   "browser_action_utilities.json",
   "calendar.json",
@@ -27,6 +29,7 @@ schema_sources = [
   "sync.json",
   "tabs_private.json",
   "thumbnails.json",
+  "vivaldi_account.json",
   "vivaldi_sessions.json",
   "vivaldi_utilities.json",
   "web_view_private.json",

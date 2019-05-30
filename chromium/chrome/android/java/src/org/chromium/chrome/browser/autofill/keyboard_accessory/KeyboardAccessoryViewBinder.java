@@ -4,7 +4,16 @@
 
 package org.chromium.chrome.browser.autofill.keyboard_accessory;
 
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryProperties.BAR_ITEMS;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryProperties.BOTTOM_OFFSET_PX;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryProperties.KEYBOARD_TOGGLE_VISIBLE;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryProperties.SHEET_TITLE;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryProperties.SHOW_KEYBOARD_CALLBACK;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryProperties.TAB_LAYOUT_ITEM;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryProperties.VISIBLE;
+
 import android.os.Build;
+import android.support.annotation.LayoutRes;
 import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -13,168 +22,108 @@ import android.view.ViewParent;
 import android.widget.TextView;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryData.Action;
-import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryData.Tab;
-import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryModel.PropertyKey;
-import org.chromium.chrome.browser.modelutil.LazyViewBinderAdapter;
-import org.chromium.chrome.browser.modelutil.ListModel;
-import org.chromium.chrome.browser.modelutil.ListModelChangeProcessor;
+import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryProperties.BarItem;
+import org.chromium.ui.modelutil.PropertyKey;
+import org.chromium.ui.modelutil.PropertyModel;
 
 /**
- * Observes {@link KeyboardAccessoryModel} changes (like a newly available tab) and triggers the
- * {@link KeyboardAccessoryViewBinder} which will modify the view accordingly.
+ * Observes {@link KeyboardAccessoryProperties} changes (like a newly available tab) and triggers
+ * the {@link KeyboardAccessoryViewBinder} which will modify the view accordingly.
  */
-class KeyboardAccessoryViewBinder
-        implements LazyViewBinderAdapter.SimpleViewBinder<KeyboardAccessoryModel,
-                KeyboardAccessoryView, PropertyKey> {
-    static class ActionViewHolder extends RecyclerView.ViewHolder {
-        public ActionViewHolder(View actionView) {
-            super(actionView);
+class KeyboardAccessoryViewBinder {
+    public static BarItemViewHolder create(ViewGroup parent, @BarItem.Type int viewType) {
+        switch (viewType) {
+            case BarItem.Type.ACTION_BUTTON:
+                return new BarItemTextViewHolder(parent, R.layout.keyboard_accessory_action);
+            case BarItem.Type.SUGGESTION:
+                return new BarItemTextViewHolder(parent, R.layout.keyboard_accessory_chip);
+            case BarItem.Type.TAB_LAYOUT: // Intentional fallthrough. Not supported.
+            case BarItem.Type.COUNT:
+                assert false : "Type " + viewType + " is not a valid accessory bar action!";
         }
-
-        public static ActionViewHolder create(ViewGroup parent, @AccessoryAction int viewType) {
-            switch (viewType) {
-                case AccessoryAction.GENERATE_PASSWORD_AUTOMATIC:
-                    return new ActionViewHolder(
-                            LayoutInflater.from(parent.getContext())
-                                    .inflate(R.layout.keyboard_accessory_action, parent, false));
-                case AccessoryAction.AUTOFILL_SUGGESTION:
-                    return new ActionViewHolder(
-                            LayoutInflater.from(parent.getContext())
-                                    .inflate(R.layout.keyboard_accessory_chip, parent, false));
-                case AccessoryAction.MANAGE_PASSWORDS: // Intentional fallthrough.
-                case AccessoryAction.COUNT:
-                    assert false : "Type " + viewType + " is not a valid accessory bar action!";
-            }
-            assert false : "Action type " + viewType + " was not handled!";
-            return null;
-        }
-
-        public void bind(Action action) {
-            getView().setText(action.getCaption());
-            getView().setOnClickListener(view -> action.getCallback().onResult(action));
-        }
-
-        private TextView getView() {
-            return (TextView) super.itemView;
-        }
+        assert false : "Action type " + viewType + " was not handled!";
+        return null;
     }
 
-    static class TabViewBinder
-            implements ListModelChangeProcessor.ViewBinder<ListModel<Tab>, KeyboardAccessoryView> {
-        @Override
-        public void onItemsInserted(
-                ListModel<Tab> model, KeyboardAccessoryView view, int index, int count) {
-            assert count > 0 : "Tried to insert invalid amount of tabs - must be at least one.";
-            while (count-- > 0) {
-                Tab tab = model.get(index);
-                view.addTabAt(index, tab.getIcon(), tab.getContentDescription());
-                ++index;
-            }
+    static abstract class BarItemViewHolder<T extends BarItem, V extends View>
+            extends RecyclerView.ViewHolder {
+        BarItemViewHolder(ViewGroup parent, @LayoutRes int layout) {
+            super(LayoutInflater.from(parent.getContext()).inflate(layout, parent, false));
+        }
+
+        @SuppressWarnings("unchecked")
+        void bind(BarItem barItem) {
+            bind((T) barItem, (V) itemView);
+        }
+
+        /**
+         * Called when the ViewHolder is bound.
+         * @param item The {@link BarItem} that this ViewHolder represents.
+         * @param item The {@link View} that this ViewHolder binds the bar item to.
+         */
+        protected abstract void bind(T item, V view);
+
+        /**
+         * The opposite of {@link #bind}. Use this to free expensive resources or reset observers.
+         */
+        protected void recycle() {}
+    }
+
+    static class BarItemTextViewHolder extends BarItemViewHolder<BarItem, TextView> {
+        BarItemTextViewHolder(ViewGroup parent, @LayoutRes int layout) {
+            super(parent, layout);
         }
 
         @Override
-        public void onItemsRemoved(
-                ListModel<Tab> model, KeyboardAccessoryView view, int index, int count) {
-            assert count > 0 : "Tried to remove invalid amount of tabs - must be at least one.";
-            while (count-- > 0) {
-                view.removeTabAt(index++);
-            }
-        }
-
-        @Override
-        public void onItemsChanged(
-                ListModel<Tab> model, KeyboardAccessoryView view, int index, int count) {
-            // TODO(fhorschig): Implement fine-grained, ranged changes should the need arise.
-            updateAllTabs(view, model);
-        }
-
-        void updateAllTabs(KeyboardAccessoryView view, ListModel<Tab> model) {
-            view.clearTabs();
-            for (int i = 0; i < model.size(); ++i) {
-                Tab tab = model.get(i);
-                // Mutate tab icons so we can apply color filters.
-                view.addTabAt(i, tab.getIcon().mutate(), tab.getContentDescription());
-            }
+        public void bind(BarItem barItem, TextView textView) {
+            KeyboardAccessoryData.Action action = barItem.getAction();
+            assert action != null : "Tried to bind item without action. Chose a wrong ViewHolder?";
+            textView.setText(action.getCaption());
+            textView.setOnClickListener(view -> action.getCallback().onResult(action));
         }
     }
 
-    @Override
-    public PropertyKey getVisibilityProperty() {
-        return PropertyKey.VISIBLE;
+    public static void bind(
+            PropertyModel model, KeyboardAccessoryView view, PropertyKey propertyKey) {
+        boolean wasBound = bindInternal(model, view, propertyKey);
+        assert wasBound : "Every possible property update needs to be handled!";
+        requestLayoutPreKitkat(view);
     }
 
-    @Override
-    public boolean isVisible(KeyboardAccessoryModel model) {
-        return model.isVisible();
+    /**
+     * Tries to bind the given property to the given view by using the value in the given model.
+     * @param model       A {@link PropertyModel}.
+     * @param view        A {@link KeyboardAccessoryView}.
+     * @param propertyKey A {@link PropertyKey}.
+     * @return True if the given propertyKey was bound to the given view.
+     */
+    protected static boolean bindInternal(
+            PropertyModel model, KeyboardAccessoryView view, PropertyKey propertyKey) {
+        if (propertyKey == BAR_ITEMS) {
+            view.setBarItemsAdapter(
+                    KeyboardAccessoryCoordinator.createBarItemsAdapter(model.get(BAR_ITEMS)));
+        } else if (propertyKey == VISIBLE) {
+            view.setVisible(model.get(VISIBLE));
+        } else if (propertyKey == BOTTOM_OFFSET_PX) {
+            view.setBottomOffset(model.get(BOTTOM_OFFSET_PX));
+        } else if (propertyKey == SHOW_KEYBOARD_CALLBACK || propertyKey == KEYBOARD_TOGGLE_VISIBLE
+                || propertyKey == SHEET_TITLE || propertyKey == TAB_LAYOUT_ITEM) {
+            // No binding required.
+        } else {
+            return false;
+        }
+        return true;
     }
 
-    @Override
-    public void onInitialInflation(
-            KeyboardAccessoryModel model, KeyboardAccessoryView inflatedView) {
-        for (PropertyKey key : PropertyKey.ALL_PROPERTIES) {
-            bind(model, inflatedView, key);
-        }
-
-        inflatedView.setActionsAdapter(KeyboardAccessoryCoordinator.createActionsAdapter(model));
-        KeyboardAccessoryCoordinator.createTabViewBinder(model, inflatedView)
-                .updateAllTabs(inflatedView, model.getTabList());
-    }
-
-    @Override
-    public void bind(
-            KeyboardAccessoryModel model, KeyboardAccessoryView view, PropertyKey propertyKey) {
-        if (propertyKey == PropertyKey.VISIBLE) {
-            view.setActiveTabColor(model.activeTab());
-            setActiveTabHint(model, view);
-            view.setVisible(model.isVisible());
-            requestLayout(view);
-            return;
-        }
-        if (propertyKey == PropertyKey.ACTIVE_TAB) {
-            view.setActiveTabColor(model.activeTab());
-            setActiveTabHint(model, view);
-            requestLayout(view);
-            return;
-        }
-        if (propertyKey == PropertyKey.BOTTOM_OFFSET) {
-            view.setBottomOffset(model.bottomOffset());
-            requestLayout(view);
-            return;
-        }
-        if (propertyKey == PropertyKey.TAB_SELECTION_CALLBACKS) {
-            // Don't add null as listener. It's a valid state but an invalid argument.
-            if (model.getTabSelectionCallbacks() == null) return;
-            view.setTabSelectionAdapter(model.getTabSelectionCallbacks());
-            requestLayout(view);
-            return;
-        }
-        assert false : "Every possible property update needs to be handled!";
-    }
-
-    private static void requestLayout(KeyboardAccessoryView view) {
-         // Layout requests happen automatically since Kitkat and redundant requests cause warnings.
-        if (view == null || Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) return;
-        view.post(() -> {
-            ViewParent parent = view.getParent();
-            if (parent != null) {
-                parent.requestLayout();
-            }
-        });
-    }
-
-    private static void setActiveTabHint(KeyboardAccessoryModel model, KeyboardAccessoryView view) {
-        int activeTab = -1;
-        if (model.activeTab() != null) {
-            activeTab = model.activeTab();
-        }
-        for (int i = 0; i < model.getTabList().size(); ++i) {
-            Tab tab = model.getTabList().get(i);
-            if (activeTab == i) {
-                view.setTabDescription(i, R.string.keyboard_accessory_sheet_hide);
-            } else {
-                view.setTabDescription(i, tab.getContentDescription());
-            }
+    protected static void requestLayoutPreKitkat(View view) {
+        // Layout requests happen automatically since Kitkat and redundant requests cause warnings.
+        if (view != null && Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
+            view.post(() -> {
+                ViewParent parent = view.getParent();
+                if (parent != null) {
+                    parent.requestLayout();
+                }
+            });
         }
     }
 }

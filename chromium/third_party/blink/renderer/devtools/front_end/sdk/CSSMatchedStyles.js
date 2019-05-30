@@ -38,6 +38,14 @@ SDK.CSSMatchedStyles = class {
     this._nodeForStyle = new Map();
     /** @type {!Set<!SDK.CSSStyleDeclaration>} */
     this._inheritedStyles = new Set();
+
+    for (const result of matchedPayload)
+      cleanUserAgentSelectors(result);
+    for (const inheritedResult of inheritedPayload) {
+      for (const result of inheritedResult.matchedCSSRules)
+        cleanUserAgentSelectors(result);
+    }
+
     this._mainDOMCascade = this._buildMainCascade(inlinePayload, attributesPayload, matchedPayload, inheritedPayload);
     this._pseudoDOMCascades = this._buildPseudoCascades(pseudoPayload);
 
@@ -46,6 +54,18 @@ SDK.CSSMatchedStyles = class {
     for (const domCascade of Array.from(this._pseudoDOMCascades.values()).concat(this._mainDOMCascade)) {
       for (const style of domCascade.styles())
         this._styleToDOMCascade.set(style, domCascade);
+    }
+
+    /**
+     * @param {!Protocol.CSS.RuleMatch} ruleMatch
+     */
+    function cleanUserAgentSelectors(ruleMatch) {
+      const {matchingSelectors, rule} = ruleMatch;
+      if (rule.origin !== 'user-agent' || !matchingSelectors.length)
+        return;
+      rule.selectorList.selectors = rule.selectorList.selectors.filter((item, i) => matchingSelectors.includes(i));
+      rule.selectorList.text = rule.selectorList.selectors.map(item => item.text).join(', ');
+      ruleMatch.matchingSelectors = matchingSelectors.map((item, i) => i);
     }
   }
 
@@ -122,6 +142,8 @@ SDK.CSSMatchedStyles = class {
         this._addMatchingSelectors(parentNode, inheritedRule, inheritedMatchedCSSRules[j].matchingSelectors);
         if (!this._containsInherited(inheritedRule.style))
           continue;
+        if (containsStyle(nodeStyles, inheritedRule.style) || containsStyle(this._inheritedStyles, inheritedRule.style))
+          continue;
         this._nodeForStyle.set(inheritedRule.style, parentNode);
         inheritedStyles.push(inheritedRule.style);
         this._inheritedStyles.add(inheritedRule.style);
@@ -131,6 +153,21 @@ SDK.CSSMatchedStyles = class {
     }
 
     return new SDK.CSSMatchedStyles.DOMInheritanceCascade(nodeCascades);
+
+    /**
+     * @param {!Array<!SDK.CSSStyleDeclaration>|!Set<!SDK.CSSStyleDeclaration>} styles
+     * @param {!SDK.CSSStyleDeclaration} query
+     * @return {boolean}
+     */
+    function containsStyle(styles, query) {
+      if (!query.styleSheetId || !query.range)
+        return false;
+      for (const style of styles) {
+        if (query.styleSheetId === style.styleSheetId && style.range && query.range.equal(style.range))
+          return true;
+      }
+      return false;
+    }
   }
 
   /**

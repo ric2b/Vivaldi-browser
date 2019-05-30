@@ -565,7 +565,7 @@
     this._waitForTargets(2, callback.bind(this));
 
     function callback() {
-      Protocol.InspectorBackend.deprecatedRunAfterPendingDispatches(this.releaseControl.bind(this));
+      Protocol.test.deprecatedRunAfterPendingDispatches(this.releaseControl.bind(this));
     }
   };
 
@@ -576,11 +576,28 @@
     function callback() {
       const debuggerModel = SDK.targetManager.models(SDK.DebuggerModel)[0];
       if (debuggerModel.isPaused()) {
-        this.releaseControl();
+        SDK.consoleModel.addEventListener(SDK.ConsoleModel.Events.MessageAdded, onConsoleMessage, this);
+        debuggerModel.resume();
         return;
       }
-      this._waitForScriptPause(this.releaseControl.bind(this));
+      this._waitForScriptPause(callback.bind(this));
     }
+
+    function onConsoleMessage(event) {
+      const message = event.data.messageText;
+      if (message !== 'connected')
+        this.fail('Unexpected message: ' + message);
+      this.releaseControl();
+    }
+  };
+
+  TestSuite.prototype.testSharedWorkerNetworkPanel = function() {
+    this.takeControl();
+    this.showPanel('network').then(() => {
+      if (!document.querySelector('#network-container'))
+        this.fail('unable to find #network-container');
+      this.releaseControl();
+    });
   };
 
   TestSuite.prototype.enableTouchEmulation = function() {
@@ -1161,7 +1178,7 @@
       browserContextIds.push(browserContextId);
 
       const {targetId} = await targetAgent.invoke_createTarget({url: 'about:blank', browserContextId});
-      await targetAgent.invoke_attachToTarget({targetId});
+      await targetAgent.invoke_attachToTarget({targetId, flatten: true});
 
       const target = SDK.targetManager.targets().find(target => target.id() === targetId);
       const pageAgent = target.pageAgent();
@@ -1233,7 +1250,7 @@
     this.releaseControl();
   };
 
-  TestSuite.prototype.testLoadResourceForFrontend = async function(baseURL) {
+  TestSuite.prototype.testLoadResourceForFrontend = async function(baseURL, fileURL) {
     const test = this;
     const loggedHeaders = new Set(['cache-control', 'pragma']);
     function testCase(url, headers, expectedStatus, expectedHeaders, expectedContent) {
@@ -1269,6 +1286,16 @@
       awaitPromise: true
     });
     await testCase(baseURL + 'echoheader?Cookie', undefined, 200, ['cache-control'], 'devtools-test-cookie=Bar');
+
+    await SDK.targetManager.mainTarget().runtimeAgent().invoke_evaluate({
+      expression: `fetch("/set-cookie?devtools-test-cookie=same-site-cookie;SameSite=Lax",
+                         {credentials: 'include'})`,
+      awaitPromise: true
+    });
+    await testCase(
+        baseURL + 'echoheader?Cookie', undefined, 200, ['cache-control'], 'devtools-test-cookie=same-site-cookie');
+    await testCase('data:text/html,<body>hello</body>', undefined, 200, [], '<body>hello</body>');
+    await testCase(fileURL, undefined, 200, [], '<html>\n<body>\nDummy page.\n</body>\n</html>\n');
 
     this.releaseControl();
   };

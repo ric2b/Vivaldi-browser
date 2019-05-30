@@ -6,16 +6,18 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+#include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "content/public/browser/web_contents.h"
 
 #if defined(OS_MACOSX)
 #include "chrome/browser/ui/browser_commands_mac.h"
+#include "chrome/test/base/interactive_test_utils.h"
 #endif
 
 using views::FocusManager;
@@ -27,21 +29,27 @@ class BrowserViewTest : public InProcessBrowserTest {
   BrowserViewTest() = default;
   ~BrowserViewTest() override = default;
 
- private:
-  test::ScopedMacViewsBrowserMode views_mode_{true};
+  void SetUpOnMainThread() override {
+#if defined(OS_MACOSX)
+    // Set the preference to true so we expect to see the top view in
+    // fullscreen mode.
+    PrefService* prefs = browser()->profile()->GetPrefs();
+    prefs->SetBoolean(prefs::kShowFullscreenToolbar, true);
 
+    // Ensure that the browser window is activated. BrowserView::Show calls
+    // into BridgedNativeWidgetImpl::SetVisibilityState and makeKeyAndOrderFront
+    // there somehow does not change the window's key status on bot.
+    ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
+#endif
+  }
+
+ private:
   DISALLOW_COPY_AND_ASSIGN(BrowserViewTest);
 };
 
 }  // namespace
 
-#if defined(OS_MACOSX)
-// Encounters an internal MacOS assert: http://crbug.com/823490
-#define MAYBE_FullscreenClearsFocus DISABLED_FullscreenClearsFocus
-#else
-#define MAYBE_FullscreenClearsFocus FullscreenClearsFocus
-#endif
-IN_PROC_BROWSER_TEST_F(BrowserViewTest, MAYBE_FullscreenClearsFocus) {
+IN_PROC_BROWSER_TEST_F(BrowserViewTest, FullscreenClearsFocus) {
   BrowserView* browser_view = static_cast<BrowserView*>(browser()->window());
   LocationBarView* location_bar_view = browser_view->GetLocationBarView();
   FocusManager* focus_manager = browser_view->GetFocusManager();
@@ -49,6 +57,7 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, MAYBE_FullscreenClearsFocus) {
   // Focus starts in the location bar or one of its children.
   EXPECT_TRUE(location_bar_view->Contains(focus_manager->GetFocusedView()));
 
+  // Enter into fullscreen mode.
   chrome::ToggleFullscreenMode(browser());
   EXPECT_TRUE(browser_view->IsFullscreen());
 
@@ -60,12 +69,6 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, MAYBE_FullscreenClearsFocus) {
 // correctly in browser fullscreen mode.
 IN_PROC_BROWSER_TEST_F(BrowserViewTest, BrowserFullscreenShowTopView) {
   BrowserView* browser_view = static_cast<BrowserView*>(browser()->window());
-#if defined(OS_MACOSX)
-  // First, set the preference to true so we expect to see the top view in
-  // fullscreen mode.
-  PrefService* prefs = browser()->profile()->GetPrefs();
-  prefs->SetBoolean(prefs::kShowFullscreenToolbar, true);
-#endif
 
   // The top view should always show up in regular mode.
   EXPECT_FALSE(browser_view->IsFullscreen());
@@ -75,9 +78,12 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, BrowserFullscreenShowTopView) {
   chrome::ToggleFullscreenMode(browser());
   EXPECT_TRUE(browser_view->IsFullscreen());
 
+  bool top_view_in_browser_fullscreen = false;
 #if defined(OS_MACOSX)
   // The top view should show up by default.
   EXPECT_TRUE(browser_view->IsTabStripVisible());
+  // The 'Always Show Bookmarks Bar' should be enabled.
+  EXPECT_TRUE(chrome::IsCommandEnabled(browser(), IDC_SHOW_BOOKMARK_BAR));
 
   // Return back to normal mode and toggle to not show the top view in full
   // screen mode.
@@ -89,19 +95,23 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, BrowserFullscreenShowTopView) {
   chrome::ToggleFullscreenMode(browser());
   EXPECT_TRUE(browser_view->IsFullscreen());
   EXPECT_FALSE(browser_view->IsTabStripVisible());
+  // The 'Always Show Bookmarks Bar' should be disabled.
+  EXPECT_FALSE(chrome::IsCommandEnabled(browser(), IDC_SHOW_BOOKMARK_BAR));
 
   // Test toggling toolbar while being in fullscreen mode.
   chrome::ToggleFullscreenToolbar(browser());
   EXPECT_TRUE(browser_view->IsFullscreen());
-  EXPECT_TRUE(browser_view->IsTabStripVisible());
+  top_view_in_browser_fullscreen = true;
 #else
   // In immersive fullscreen mode, the top view should show up; otherwise, it
   // always hides.
   if (browser_view->immersive_mode_controller()->IsEnabled())
-    EXPECT_TRUE(browser_view->IsTabStripVisible());
-  else
-    EXPECT_FALSE(browser_view->IsTabStripVisible());
+    top_view_in_browser_fullscreen = true;
 #endif
+  EXPECT_EQ(top_view_in_browser_fullscreen, browser_view->IsTabStripVisible());
+  // The 'Always Show Bookmarks Bar' should be enabled if top view is shown.
+  EXPECT_EQ(top_view_in_browser_fullscreen,
+            chrome::IsCommandEnabled(browser(), IDC_SHOW_BOOKMARK_BAR));
 
   // Enter into tab fullscreen mode from browser fullscreen mode.
   FullscreenController* controller =
@@ -110,12 +120,28 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, BrowserFullscreenShowTopView) {
       browser()->tab_strip_model()->GetActiveWebContents();
   controller->EnterFullscreenModeForTab(web_contents, GURL());
   EXPECT_TRUE(browser_view->IsFullscreen());
-  if (browser_view->immersive_mode_controller()->IsEnabled())
-    EXPECT_TRUE(browser_view->IsTabStripVisible());
-  else
-    EXPECT_FALSE(browser_view->IsTabStripVisible());
+  bool top_view_in_tab_fullscreen =
+      browser_view->immersive_mode_controller()->IsEnabled() ? true : false;
+  EXPECT_EQ(top_view_in_tab_fullscreen, browser_view->IsTabStripVisible());
+  // The 'Always Show Bookmarks Bar' should be disabled in tab fullscreen mode.
+  EXPECT_EQ(top_view_in_tab_fullscreen,
+            chrome::IsCommandEnabled(browser(), IDC_SHOW_BOOKMARK_BAR));
 
-  // Return back to regular mode.
+  // Return back to browser fullscreen mode.
+  content::NativeWebKeyboardEvent event(
+      blink::WebInputEvent::kKeyDown, blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
+  event.windows_key_code = ui::VKEY_ESCAPE;
+  browser()->exclusive_access_manager()->HandleUserKeyEvent(event);
+  EXPECT_TRUE(browser_view->IsFullscreen());
+  EXPECT_EQ(top_view_in_browser_fullscreen, browser_view->IsTabStripVisible());
+  // This makes sure that the layout was updated accordingly.
+  EXPECT_EQ(top_view_in_browser_fullscreen,
+            browser_view->tabstrip()->visible());
+  EXPECT_EQ(top_view_in_browser_fullscreen,
+            chrome::IsCommandEnabled(browser(), IDC_SHOW_BOOKMARK_BAR));
+
+  // Return to regular mode.
   chrome::ToggleFullscreenMode(browser());
   EXPECT_FALSE(browser_view->IsFullscreen());
   EXPECT_TRUE(browser_view->IsTabStripVisible());

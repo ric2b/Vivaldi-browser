@@ -9,15 +9,15 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationChannelGroup;
 import android.os.Build;
+import android.support.annotation.Nullable;
 
+import org.chromium.chrome.browser.notifications.ChromeNotification;
 import org.chromium.chrome.browser.notifications.NotificationManagerProxy;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
-import javax.annotation.Nullable;
 
 /**
  * Mocked implementation of the NotificationManagerProxy. Imitates behavior of the Android
@@ -45,6 +45,8 @@ public class MockNotificationManagerProxy implements NotificationManagerProxy {
     private final Map<String, NotificationEntry> mNotifications;
 
     private int mMutationCount;
+
+    private boolean mNotificationsEnabled = true;
 
     public MockNotificationManagerProxy() {
         mNotifications = new LinkedHashMap<>();
@@ -76,6 +78,15 @@ public class MockNotificationManagerProxy implements NotificationManagerProxy {
         return mutationCount;
     }
 
+    public void setNotificationsEnabled(boolean enabled) {
+        mNotificationsEnabled = enabled;
+    }
+
+    @Override
+    public boolean areNotificationsEnabled() {
+        return mNotificationsEnabled;
+    }
+
     @Override
     public void cancel(int id) {
         cancel(null /* tag */, id);
@@ -103,6 +114,12 @@ public class MockNotificationManagerProxy implements NotificationManagerProxy {
     public void notify(@Nullable String tag, int id, Notification notification) {
         mNotifications.put(makeKey(id, tag), new NotificationEntry(notification, tag, id));
         mMutationCount++;
+    }
+
+    @Override
+    public void notify(ChromeNotification notification) {
+        notify(notification.getMetadata().tag, notification.getMetadata().id,
+                notification.getNotification());
     }
 
     private static String makeKey(int id, @Nullable String tag) {

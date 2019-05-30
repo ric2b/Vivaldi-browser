@@ -52,6 +52,7 @@ class GattClientManagerImpl
   void GetConnectedDevices(GetConnectDevicesCallback cb) override;
   void GetNumConnected(base::OnceCallback<void(size_t)> cb) const override;
   void NotifyConnect(const bluetooth_v2_shlib::Addr& addr) override;
+  void NotifyBonded(const bluetooth_v2_shlib::Addr& addr) override;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner() override;
 
   // Add a Connect request to the queue. They can only be executed serially.
@@ -60,6 +61,9 @@ class GattClientManagerImpl
   // Add a ReadRemoteRssi request to the queue. They can only be executed
   // serially.
   void EnqueueReadRemoteRssiRequest(const bluetooth_v2_shlib::Addr& addr);
+
+  // True if it is a connected BLE device. Must be called on IO task runner.
+  bool IsConnectedLeDevice(const bluetooth_v2_shlib::Addr& addr);
 
   // TODO(bcf): Should be private and passed into objects which need it (e.g.
   // RemoteDevice, RemoteCharacteristic).
@@ -70,6 +74,9 @@ class GattClientManagerImpl
   void OnConnectChanged(const bluetooth_v2_shlib::Addr& addr,
                         bool status,
                         bool connected) override;
+  void OnBondChanged(const bluetooth_v2_shlib::Addr& addr,
+                     bool status,
+                     bool bonded) override;
   void OnNotification(const bluetooth_v2_shlib::Addr& addr,
                       uint16_t handle,
                       const std::vector<uint8_t>& value) override;

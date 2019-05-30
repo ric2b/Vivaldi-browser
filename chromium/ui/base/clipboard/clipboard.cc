@@ -64,6 +64,24 @@ Clipboard* Clipboard::GetForCurrentThread() {
 }
 
 // static
+std::unique_ptr<Clipboard> Clipboard::TakeForCurrentThread() {
+  base::AutoLock lock(clipboard_map_lock_.Get());
+
+  ClipboardMap* clipboard_map = clipboard_map_.Pointer();
+  base::PlatformThreadId id = base::PlatformThread::CurrentId();
+
+  Clipboard* clipboard = nullptr;
+
+  auto it = clipboard_map->find(id);
+  if (it != clipboard_map->end()) {
+    clipboard = it->second.release();
+    clipboard_map->erase(it);
+  }
+
+  return base::WrapUnique(clipboard);
+}
+
+// static
 void Clipboard::OnPreShutdownForCurrentThread() {
   base::AutoLock lock(clipboard_map_lock_.Get());
   base::PlatformThreadId id = GetAndValidateThreadID();
@@ -80,7 +98,7 @@ void Clipboard::DestroyClipboardForCurrentThread() {
 
   ClipboardMap* clipboard_map = clipboard_map_.Pointer();
   base::PlatformThreadId id = base::PlatformThread::CurrentId();
-  ClipboardMap::iterator it = clipboard_map->find(id);
+  auto it = clipboard_map->find(id);
   if (it != clipboard_map->end())
     clipboard_map->erase(it);
 }
@@ -138,11 +156,9 @@ void Clipboard::DispatchObject(ObjectType type, const ObjectMapParams& params) {
     }
 
     case CBF_DATA:
-      WriteData(
-          FormatType::Deserialize(
-              std::string(&(params[0].front()), params[0].size())),
-          &(params[1].front()),
-          params[1].size());
+      WriteData(ClipboardFormatType::Deserialize(
+                    std::string(&(params[0].front()), params[0].size())),
+                &(params[1].front()), params[1].size());
       break;
 
     default:

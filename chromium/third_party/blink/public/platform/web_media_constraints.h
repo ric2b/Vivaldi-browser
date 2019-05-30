@@ -53,7 +53,10 @@ class BLINK_PLATFORM_EXPORT BaseConstraint {
   explicit BaseConstraint(const char* name);
   virtual ~BaseConstraint();
   virtual bool IsEmpty() const = 0;
-  virtual bool HasMandatory() const = 0;
+  bool HasMandatory() const;
+  virtual bool HasMin() const { return false; }
+  virtual bool HasMax() const { return false; }
+  virtual bool HasExact() const = 0;
   const char* GetName() const { return name_; }
   virtual WebString ToString() const = 0;
 
@@ -89,13 +92,12 @@ class BLINK_PLATFORM_EXPORT LongConstraint : public BaseConstraint {
 
   bool Matches(int32_t value) const;
   bool IsEmpty() const override;
-  bool HasMandatory() const override;
+  bool HasMin() const override { return has_min_; }
+  bool HasMax() const override { return has_max_; }
+  bool HasExact() const override { return has_exact_; }
   WebString ToString() const override;
-  bool HasMin() const { return has_min_; }
   int32_t Min() const { return min_; }
-  bool HasMax() const { return has_max_; }
   int32_t Max() const { return max_; }
-  bool HasExact() const { return has_exact_; }
   int32_t Exact() const { return exact_; }
   bool HasIdeal() const { return has_ideal_; }
   int32_t Ideal() const { return ideal_; }
@@ -142,13 +144,12 @@ class BLINK_PLATFORM_EXPORT DoubleConstraint : public BaseConstraint {
 
   bool Matches(double value) const;
   bool IsEmpty() const override;
-  bool HasMandatory() const override;
+  bool HasMin() const override { return has_min_; }
+  bool HasMax() const override { return has_max_; }
+  bool HasExact() const override { return has_exact_; }
   WebString ToString() const override;
-  bool HasMin() const { return has_min_; }
   double Min() const { return min_; }
-  bool HasMax() const { return has_max_; }
   double Max() const { return max_; }
-  bool HasExact() const { return has_exact_; }
   double Exact() const { return exact_; }
   bool HasIdeal() const { return has_ideal_; }
   double Ideal() const { return ideal_; }
@@ -180,9 +181,8 @@ class BLINK_PLATFORM_EXPORT StringConstraint : public BaseConstraint {
 
   bool Matches(WebString value) const;
   bool IsEmpty() const override;
-  bool HasMandatory() const override;
+  bool HasExact() const override { return !exact_.empty(); }
   WebString ToString() const override;
-  bool HasExact() const { return !exact_.empty(); }
   bool HasIdeal() const { return !ideal_.empty(); }
   const WebVector<WebString>& Exact() const;
   const WebVector<WebString>& Ideal() const;
@@ -210,9 +210,8 @@ class BLINK_PLATFORM_EXPORT BooleanConstraint : public BaseConstraint {
 
   bool Matches(bool value) const;
   bool IsEmpty() const override;
-  bool HasMandatory() const override;
+  bool HasExact() const override { return has_exact_; }
   WebString ToString() const override;
-  bool HasExact() const { return has_exact_; }
   bool HasIdeal() const { return has_ideal_; }
 
  private:
@@ -231,6 +230,7 @@ struct WebMediaTrackConstraintSet {
   DoubleConstraint aspect_ratio;
   DoubleConstraint frame_rate;
   StringConstraint facing_mode;
+  StringConstraint resize_mode;
   DoubleConstraint volume;
   LongConstraint sample_rate;
   LongConstraint sample_size;
@@ -251,7 +251,6 @@ struct WebMediaTrackConstraintSet {
   // the legacy name interface.
   StringConstraint media_stream_source;  // tab, screen, desktop, system
   BooleanConstraint render_to_associated_sink;
-  BooleanConstraint hotword_enabled;
   BooleanConstraint goog_echo_cancellation;
   BooleanConstraint goog_experimental_echo_cancellation;
   BooleanConstraint goog_auto_gain_control;
@@ -285,13 +284,14 @@ struct WebMediaTrackConstraintSet {
   LongConstraint goog_high_start_bitrate;
   BooleanConstraint goog_payload_padding;
   LongConstraint goog_latency_ms;
-  LongConstraint goog_power_line_frequency;
 
   BLINK_PLATFORM_EXPORT bool IsEmpty() const;
   BLINK_PLATFORM_EXPORT bool HasMandatory() const;
   BLINK_PLATFORM_EXPORT bool HasMandatoryOutsideSet(
       const std::vector<std::string>&,
       std::string&) const;
+  BLINK_PLATFORM_EXPORT bool HasMin() const;
+  BLINK_PLATFORM_EXPORT bool HasExact() const;
   BLINK_PLATFORM_EXPORT WebString ToString() const;
 
  private:

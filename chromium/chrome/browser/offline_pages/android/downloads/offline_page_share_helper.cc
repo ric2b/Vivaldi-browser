@@ -9,10 +9,10 @@
 #include "base/callback.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/android/download/download_controller_base.h"
+#include "chrome/browser/android/download/download_utils.h"
 #include "chrome/browser/offline_pages/offline_page_mhtml_archiver.h"
 #include "components/offline_pages/core/offline_page_feature.h"
 #include "components/offline_pages/core/offline_page_model.h"
-#include "jni/DownloadUtils_jni.h"
 
 using OfflineItemShareInfo = offline_items_collection::OfflineItemShareInfo;
 
@@ -30,12 +30,7 @@ content::WebContents* EmptyWebContentGetter() {
 std::unique_ptr<OfflineItemShareInfo> CreateShareInfo(
     const base::FilePath& file_path) {
   auto share_info = std::make_unique<OfflineItemShareInfo>();
-  JNIEnv* env = base::android::AttachCurrentThread();
-  auto uri_jstring = Java_DownloadUtils_getUriStringForPath(
-      env,
-      base::android::ConvertUTF8ToJavaString(env, file_path.AsUTF8Unsafe()));
-  share_info->uri =
-      base::FilePath(base::android::ConvertJavaStringToUTF8(env, uri_jstring));
+  share_info->uri = DownloadUtils::GetUriStringForPath(file_path);
   return share_info;
 }
 
@@ -50,12 +45,6 @@ void OfflinePageShareHelper::GetShareInfo(const ContentId& id,
                                           ResultCallback result_cb) {
   content_id_ = id;
   result_cb_ = std::move(result_cb);
-
-  if (!offline_pages::IsOfflinePagesSharingEnabled()) {
-    // Continue to share without share info.
-    NotifyCompletion(ShareResult::kSuccess, nullptr);
-    return;
-  }
 
   model_->GetPageByGuid(
       content_id_.id, base::BindOnce(&OfflinePageShareHelper::OnPageGetForShare,

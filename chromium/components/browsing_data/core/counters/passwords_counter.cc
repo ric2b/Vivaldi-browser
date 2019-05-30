@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "components/browsing_data/core/pref_names.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/password_store.h"
@@ -54,17 +55,22 @@ void PasswordsCounter::Count() {
   store_->GetAutofillableLogins(this);
 }
 
+std::unique_ptr<BrowsingDataCounter::SyncResult>
+PasswordsCounter::MakeResult() {
+  return std::make_unique<BrowsingDataCounter::SyncResult>(this, num_passwords_,
+                                                           is_sync_active());
+}
+
 void PasswordsCounter::OnGetPasswordStoreResults(
     std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
   base::Time start = GetPeriodStart();
   base::Time end = GetPeriodEnd();
-  int num_passwords = std::count_if(
+  num_passwords_ = std::count_if(
       results.begin(), results.end(),
       [start, end](const std::unique_ptr<autofill::PasswordForm>& form) {
         return (form->date_created >= start && form->date_created < end);
       });
-  ReportResult(std::make_unique<SyncResult>(this, num_passwords,
-                                            sync_tracker_.IsSyncActive()));
+  ReportResult(MakeResult());
 }
 
 void PasswordsCounter::OnLoginsChanged(

@@ -29,6 +29,11 @@ class QuickUnlockPrivateGetAuthTokenFunction
       base::Callback<chromeos::ExtendedAuthenticator*(
           chromeos::AuthStatusConsumer* auth_status_consumer)>;
 
+  class TestObserver {
+   public:
+    virtual void OnGetAuthTokenCalled(const std::string&) = 0;
+  };
+
   QuickUnlockPrivateGetAuthTokenFunction();
 
   // Use the given |allocator| to create an ExtendedAuthenticator instance. This
@@ -36,8 +41,12 @@ class QuickUnlockPrivateGetAuthTokenFunction
   void SetAuthenticatorAllocatorForTesting(
       const AuthenticatorAllocator& allocator);
 
+  // Test API.
+  static void SetTestObserver(
+      QuickUnlockPrivateGetAuthTokenFunction::TestObserver* observer);
+
   DECLARE_EXTENSION_FUNCTION("quickUnlockPrivate.getAuthToken",
-                             QUICKUNLOCKPRIVATE_GETAUTHTOKEN);
+                             QUICKUNLOCKPRIVATE_GETAUTHTOKEN)
 
  protected:
   ~QuickUnlockPrivateGetAuthTokenFunction() override;
@@ -62,7 +71,7 @@ class QuickUnlockPrivateSetLockScreenEnabledFunction
  public:
   QuickUnlockPrivateSetLockScreenEnabledFunction();
   DECLARE_EXTENSION_FUNCTION("quickUnlockPrivate.setLockScreenEnabled",
-                             QUICKUNLOCKPRIVATE_SETLOCKSCREENENABLED);
+                             QUICKUNLOCKPRIVATE_SETLOCKSCREENENABLED)
 
  protected:
   ~QuickUnlockPrivateSetLockScreenEnabledFunction() override;
@@ -81,7 +90,7 @@ class QuickUnlockPrivateGetAvailableModesFunction
  public:
   QuickUnlockPrivateGetAvailableModesFunction();
   DECLARE_EXTENSION_FUNCTION("quickUnlockPrivate.getAvailableModes",
-                             QUICKUNLOCKPRIVATE_GETAVAILABLEMODES);
+                             QUICKUNLOCKPRIVATE_GETAVAILABLEMODES)
 
  protected:
   ~QuickUnlockPrivateGetAvailableModesFunction() override;
@@ -100,7 +109,7 @@ class QuickUnlockPrivateGetActiveModesFunction
  public:
   QuickUnlockPrivateGetActiveModesFunction();
   DECLARE_EXTENSION_FUNCTION("quickUnlockPrivate.getActiveModes",
-                             QUICKUNLOCKPRIVATE_GETACTIVEMODES);
+                             QUICKUNLOCKPRIVATE_GETACTIVEMODES)
 
  protected:
   ~QuickUnlockPrivateGetActiveModesFunction() override;
@@ -122,7 +131,7 @@ class QuickUnlockPrivateCheckCredentialFunction
  public:
   QuickUnlockPrivateCheckCredentialFunction();
   DECLARE_EXTENSION_FUNCTION("quickUnlockPrivate.checkCredential",
-                             QUICKUNLOCKPRIVATE_CHECKCREDENTIAL);
+                             QUICKUNLOCKPRIVATE_CHECKCREDENTIAL)
 
  protected:
   ~QuickUnlockPrivateCheckCredentialFunction() override;
@@ -139,7 +148,7 @@ class QuickUnlockPrivateGetCredentialRequirementsFunction
  public:
   QuickUnlockPrivateGetCredentialRequirementsFunction();
   DECLARE_EXTENSION_FUNCTION("quickUnlockPrivate.getCredentialRequirements",
-                             QUICKUNLOCKPRIVATE_GETCREDENTIALREQUIREMENTS);
+                             QUICKUNLOCKPRIVATE_GETCREDENTIALREQUIREMENTS)
 
  protected:
   ~QuickUnlockPrivateGetCredentialRequirementsFunction() override;
@@ -167,7 +176,7 @@ class QuickUnlockPrivateSetModesFunction : public UIThreadExtensionFunction {
       const ModesChangedEventHandler& handler);
 
   DECLARE_EXTENSION_FUNCTION("quickUnlockPrivate.setModes",
-                             QUICKUNLOCKPRIVATE_SETMODES);
+                             QUICKUNLOCKPRIVATE_SETMODES)
 
  protected:
   ~QuickUnlockPrivateSetModesFunction() override;

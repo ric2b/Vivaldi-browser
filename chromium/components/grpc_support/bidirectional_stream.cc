@@ -13,6 +13,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
@@ -24,8 +25,8 @@
 #include "net/http/http_status_code.h"
 #include "net/http/http_transaction_factory.h"
 #include "net/http/http_util.h"
-#include "net/third_party/spdy/core/spdy_header_block.h"
 #include "net/ssl/ssl_info.h"
+#include "net/third_party/quiche/src/spdy/core/spdy_header_block.h"
 #include "net/url_request/http_user_agent_settings.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -109,8 +110,8 @@ int BidirectionalStream::Start(const char* url,
 bool BidirectionalStream::ReadData(char* buffer, int capacity) {
   if (!buffer)
     return false;
-  scoped_refptr<net::WrappedIOBuffer> read_buffer(
-      new net::WrappedIOBuffer(buffer));
+  scoped_refptr<net::WrappedIOBuffer> read_buffer =
+      base::MakeRefCounted<net::WrappedIOBuffer>(buffer);
 
   PostToNetworkThread(
       FROM_HERE, base::BindOnce(&BidirectionalStream::ReadDataOnNetworkThread,
@@ -124,8 +125,8 @@ bool BidirectionalStream::WriteData(const char* buffer,
   if (!buffer)
     return false;
 
-  scoped_refptr<net::WrappedIOBuffer> write_buffer(
-      new net::WrappedIOBuffer(buffer));
+  scoped_refptr<net::WrappedIOBuffer> write_buffer =
+      base::MakeRefCounted<net::WrappedIOBuffer>(buffer);
 
   PostToNetworkThread(
       FROM_HERE,

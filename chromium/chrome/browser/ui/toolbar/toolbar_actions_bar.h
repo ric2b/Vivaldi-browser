@@ -224,6 +224,10 @@ class ToolbarActionsBar : public ToolbarActionsModel::Observer,
   void ShowToolbarActionBubbleAsync(
       std::unique_ptr<ToolbarActionsBarBubbleDelegate> bubble);
 
+  // Closes the overflow menu, if it was open. Returns whether or not the
+  // overflow menu was closed.
+  bool CloseOverflowMenuIfOpen();
+
   // Returns the underlying toolbar actions, but does not order them. Primarily
   // for use in testing.
   const ToolbarActions& toolbar_actions_unordered() const {
@@ -267,22 +271,28 @@ class ToolbarActionsBar : public ToolbarActionsModel::Observer,
   // are insetted. This defines the amount of paddings around the icon area.
   virtual gfx::Insets GetIconAreaInsets() const;
 
+  // Returns the number of icons that can fit within the given width.
+  size_t WidthToIconCountUnclamped(int width) const;
+
   // ToolbarActionsModel::Observer:
-  void OnToolbarActionAdded(const ToolbarActionsModel::ToolbarItem& item,
+  void OnToolbarActionAdded(const ToolbarActionsModel::ActionId& action_id,
                             int index) override;
-  void OnToolbarActionRemoved(const std::string& action_id) override;
-  void OnToolbarActionMoved(const std::string& action_id, int index) override;
+  void OnToolbarActionRemoved(
+      const ToolbarActionsModel::ActionId& action_id) override;
+  void OnToolbarActionMoved(const ToolbarActionsModel::ActionId& action_id,
+                            int index) override;
   void OnToolbarActionLoadFailed() override;
-  void OnToolbarActionUpdated(const std::string& action_id) override;
+  void OnToolbarActionUpdated(
+      const ToolbarActionsModel::ActionId& action_id) override;
   void OnToolbarVisibleCountChanged() override;
   void OnToolbarHighlightModeChanged(bool is_highlighting) override;
   void OnToolbarModelInitialized() override;
 
   // TabStripModelObserver:
-  void TabInsertedAt(TabStripModel* tab_strip_model,
-                     content::WebContents* contents,
-                     int index,
-                     bool foreground) override;
+  void OnTabStripModelChanged(
+      TabStripModel* tab_strip_model,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override;
 
   // Resizes the delegate (if necessary) to the preferred size using the given
   // |tween_type|.

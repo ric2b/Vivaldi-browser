@@ -9,13 +9,16 @@
 #include "base/logging.h"
 #include "base/numerics/safe_math.h"
 #include "base/strings/string_util.h"
-#include "content/public/common/browser_side_navigation_policy.h"
+#include "content/common/service_worker/service_worker_types.pb.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/origin_util.h"
+#include "net/base/load_flags.h"
 #include "net/http/http_byte_range.h"
 #include "net/http/http_util.h"
 #include "services/network/public/cpp/features.h"
+#include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
 
 namespace content {
 
@@ -39,6 +42,15 @@ bool PathContainsDisallowedCharacter(const GURL& url) {
 }
 
 }  // namespace
+
+// static
+bool ServiceWorkerUtils::IsMainResourceType(ResourceType type) {
+  // When PlzDedicatedWorker is enabled, a dedicated worker script is considered
+  // to be a main resource.
+  if (type == RESOURCE_TYPE_WORKER)
+    return blink::features::IsPlzDedicatedWorkerEnabled();
+  return IsResourceTypeFrame(type) || type == RESOURCE_TYPE_SHARED_WORKER;
+}
 
 // static
 bool ServiceWorkerUtils::ScopeMatches(const GURL& scope, const GURL& url) {
@@ -179,6 +191,121 @@ bool ServiceWorkerUtils::ShouldBypassCacheDueToUpdateViaCache(
   }
   NOTREACHED() << static_cast<int>(cache_mode);
   return false;
+}
+
+// static
+blink::mojom::FetchCacheMode ServiceWorkerUtils::GetCacheModeFromLoadFlags(
+    int load_flags) {
+  if (load_flags & net::LOAD_DISABLE_CACHE)
+    return blink::mojom::FetchCacheMode::kNoStore;
+
+  if (load_flags & net::LOAD_VALIDATE_CACHE)
+    return blink::mojom::FetchCacheMode::kValidateCache;
+
+  if (load_flags & net::LOAD_BYPASS_CACHE) {
+    if (load_flags & net::LOAD_ONLY_FROM_CACHE)
+      return blink::mojom::FetchCacheMode::kUnspecifiedForceCacheMiss;
+    return blink::mojom::FetchCacheMode::kBypassCache;
+  }
+
+  if (load_flags & net::LOAD_SKIP_CACHE_VALIDATION) {
+    if (load_flags & net::LOAD_ONLY_FROM_CACHE)
+      return blink::mojom::FetchCacheMode::kOnlyIfCached;
+    return blink::mojom::FetchCacheMode::kForceCache;
+  }
+
+  if (load_flags & net::LOAD_ONLY_FROM_CACHE) {
+    DCHECK(!(load_flags & net::LOAD_SKIP_CACHE_VALIDATION));
+    DCHECK(!(load_flags & net::LOAD_BYPASS_CACHE));
+    return blink::mojom::FetchCacheMode::kUnspecifiedOnlyIfCachedStrict;
+  }
+  return blink::mojom::FetchCacheMode::kDefault;
+}
+
+// static
+std::string ServiceWorkerUtils::SerializeFetchRequestToString(
+    const blink::mojom::FetchAPIRequest& request) {
+  proto::internal::ServiceWorkerFetchRequest request_proto;
+
+  request_proto.set_url(request.url.spec());
+  request_proto.set_method(request.method);
+  request_proto.mutable_headers()->insert(request.headers.begin(),
+                                          request.headers.end());
+  request_proto.mutable_referrer()->set_url(request.referrer->url.spec());
+  request_proto.mutable_referrer()->set_policy(
+      static_cast<int>(request.referrer->policy));
+  request_proto.set_is_reload(request.is_reload);
+  request_proto.set_mode(static_cast<int>(request.mode));
+  request_proto.set_is_main_resource_load(request.is_main_resource_load);
+  request_proto.set_request_context_type(
+      static_cast<int>(request.request_context_type));
+  request_proto.set_credentials_mode(
+      static_cast<int>(request.credentials_mode));
+  request_proto.set_cache_mode(static_cast<int>(request.cache_mode));
+  request_proto.set_redirect_mode(static_cast<int>(request.redirect_mode));
+  if (request.integrity)
+    request_proto.set_integrity(request.integrity.value());
+  request_proto.set_keepalive(request.keepalive);
+  request_proto.set_is_history_navigation(request.is_history_navigation);
+  return request_proto.SerializeAsString();
+}
+
+// static
+blink::mojom::FetchAPIRequestPtr
+ServiceWorkerUtils::DeserializeFetchRequestFromString(
+    const std::string& serialized) {
+  proto::internal::ServiceWorkerFetchRequest request_proto;
+  if (!request_proto.ParseFromString(serialized)) {
+    return blink::mojom::FetchAPIRequest::New();
+  }
+
+  auto request_ptr = blink::mojom::FetchAPIRequest::New();
+  request_ptr->mode =
+      static_cast<network::mojom::FetchRequestMode>(request_proto.mode());
+  request_ptr->is_main_resource_load = request_proto.is_main_resource_load();
+  request_ptr->request_context_type =
+      static_cast<blink::mojom::RequestContextType>(
+          request_proto.request_context_type());
+  request_ptr->frame_type = network::mojom::RequestContextFrameType::kNone;
+  request_ptr->url = GURL(request_proto.url());
+  request_ptr->method = request_proto.method();
+  request_ptr->headers = {request_proto.headers().begin(),
+                          request_proto.headers().end()};
+  request_ptr->referrer =
+      blink::mojom::Referrer::New(GURL(request_proto.referrer().url()),
+                                  static_cast<network::mojom::ReferrerPolicy>(
+                                      request_proto.referrer().policy()));
+  request_ptr->is_reload = request_proto.is_reload();
+  request_ptr->credentials_mode =
+      static_cast<network::mojom::FetchCredentialsMode>(
+          request_proto.credentials_mode());
+  request_ptr->cache_mode =
+      static_cast<blink::mojom::FetchCacheMode>(request_proto.cache_mode());
+  request_ptr->redirect_mode = static_cast<network::mojom::FetchRedirectMode>(
+      request_proto.redirect_mode());
+  if (request_proto.has_integrity())
+    request_ptr->integrity = request_proto.integrity();
+  request_ptr->keepalive = request_proto.keepalive();
+  request_ptr->is_history_navigation = request_proto.is_history_navigation();
+  return request_ptr;
+}
+
+// static
+const char* ServiceWorkerUtils::FetchResponseSourceToSuffix(
+    network::mojom::FetchResponseSource source) {
+  // Don't change these returned strings. They are used for recording UMAs.
+  switch (source) {
+    case network::mojom::FetchResponseSource::kUnspecified:
+      return ".Unspecified";
+    case network::mojom::FetchResponseSource::kNetwork:
+      return ".Network";
+    case network::mojom::FetchResponseSource::kHttpCache:
+      return ".HttpCache";
+    case network::mojom::FetchResponseSource::kCacheStorage:
+      return ".CacheStorage";
+  }
+  NOTREACHED();
+  return ".Unknown";
 }
 
 bool LongestScopeMatcher::MatchLongest(const GURL& scope) {

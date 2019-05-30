@@ -55,13 +55,21 @@ jumbo_static_library("browser") {
     "../app/vivaldi_command_controller.cpp",
     "../app/vivaldi_command_controller.h",
     "../app/vivaldi_commands.h",
-    "spoof/vivaldi_spoof_tools.cpp",
-    "spoof/vivaldi_spoof_tools.h",
   ]
   if (!is_android) {
     sources += [
+      "menus/vivaldi_menus.cpp",
+      "menus/vivaldi_menus.h",
+      "menus/vivaldi_bookmark_context_menu.cpp",
+      "menus/vivaldi_bookmark_context_menu.h",
       "vivaldi_browser_finder.cc",
       "vivaldi_browser_finder.h",
+      "vivaldi_webcontents_util.cc",
+      "vivaldi_webcontents_util.h",
+      "thumbnails/vivaldi_capture_contents.cc",
+      "thumbnails/vivaldi_capture_contents.h",
+      "thumbnails/vivaldi_thumbnail_utils.cc",
+      "thumbnails/vivaldi_thumbnail_utils.h",
     ]
   }
   if (is_win) {

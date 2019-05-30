@@ -70,8 +70,6 @@ class Method(object):
 # this data throughout chromedriver code (see e.g. http_handler.cc)
 _COMMANDS = {
     "AcceptAlert": (Method.POST, "/session/:sessionId/alert/accept"),
-    "Activate": (Method.POST, "/session/:sessionId/ime/activate"),
-    "Activated": (Method.GET, "/session/:sessionId/ime/activated"),
     "AddCookie": (Method.POST, "/session/:sessionId/cookie"),
     "ClearElement": (Method.POST, "/session/:sessionId/element/:id/clear"),
     "ClearLocalStorage": (Method.DELETE, "/session/:sessionId/local_storage"),
@@ -80,8 +78,6 @@ _COMMANDS = {
     "Click": (Method.POST, "/session/:sessionId/click"),
     "ClickElement": (Method.POST, "/session/:sessionId/element/:id/click"),
     "CloseWindow": (Method.DELETE, "/session/:sessionId/window"),
-    "Deactivate": (Method.POST, "/session/:sessionId/ime/deactivate"),
-    "DeleteActions": (Method.DELETE, "/session/:sessionId/actions"),
     "DeleteAllCookies": (Method.DELETE, "/session/:sessionId/cookie"),
     "DeleteCookie": (Method.DELETE, "/session/:sessionId/cookie/:name"),
     "DeleteNetworkConditions":
@@ -90,11 +86,11 @@ _COMMANDS = {
     (Method.DELETE, "/session/:sessionId/orientation"),
     "DismissAlert": (Method.POST, "/session/:sessionId/dismiss_alert"),
     "DoubleClick": (Method.POST, "/session/:sessionId/doubleclick"),
-    "Drag": (Method.POST, "/session/:sessionId/element/:id/drag"),
+    "ElementScreenshot":
+    (Method.GET, "/session/:sessionId/element/:id/screenshot"),
     "ExecuteAsyncScript": (Method.POST, "/session/:sessionId/execute_async"),
     "ExecuteCDP": (Method.POST, "/session/:sessionId/goog/cdp/execute"),
     "ExecuteScript": (Method.POST, "/session/:sessionId/execute/sync"),
-    "ExecuteSql": (Method.POST, "/session/:sessionId/execute_sql"),
     "FindChildElement":
     (Method.POST, "/session/:sessionId/element/:id/element"),
     "FindChildElements":
@@ -104,15 +100,12 @@ _COMMANDS = {
     "Freeze": (Method.POST, "/session/:sessionId/goog/page/freeze"),
     "FullscreenWindow": (Method.POST, "/session/:sessionId/window/fullscreen"),
     "GetActiveElement": (Method.POST, "/session/:sessionId/element/active"),
-    "GetActiveEngine": (Method.GET, "/session/:sessionId/ime/active_engine"),
     "GetAlertMessage": (Method.GET, "/session/:sessionId/alert_text"),
-    "GetAvailableEngines":
-    (Method.GET, "/session/:sessionId/ime/available_engines"),
-    "GetBrowserConnection":
-    (Method.GET, "/session/:sessionId/browser_connection"),
     "GetCookies": (Method.GET, "/session/:sessionId/cookie"),
     "GetElementAttribute":
     (Method.GET, "/session/:sessionId/element/:id/attribute/:name"),
+    "GetElementProperty":
+    (Method.GET, "/session/:sessionId/element/:id/property/:name"),
     "GetElementCSSProperty":
     (Method.GET, "/session/:sessionId/element/:id/css/:propertyName"),
     "GetElementLocation":
@@ -176,7 +169,6 @@ _COMMANDS = {
     (Method.GET, "/session/:sessionId/element/:id/selected"),
     "IsLoading": (Method.GET, "/session/:sessionId/is_loading"),
     "LaunchApp": (Method.POST, "/session/:sessionId/chromium/launch_app"),
-    "Logs": (Method.POST, "Logs"),
     "MaximizeWindow": (Method.POST, "/session/:sessionId/window/maximize"),
     "MinimizeWindow": (Method.POST, "/session/:sessionId/window/minimize"),
     "MouseDown": (Method.POST, "/session/:sessionId/buttondown"),
@@ -186,6 +178,7 @@ _COMMANDS = {
     "PerformActions": (Method.POST, "/session/:sessionId/actions"),
     "Quit": (Method.DELETE, "/session/:sessionId"),
     "Refresh": (Method.POST, "/session/:sessionId/refresh"),
+    "ReleaseActions": (Method.DELETE, "/session/:sessionId/actions"),
     "RemoveLocalStorageItem":
     (Method.DELETE, "/session/:sessionId/local_storage/key/:key"),
     "RemoveSessionStorageItem":
@@ -197,8 +190,6 @@ _COMMANDS = {
     (Method.POST, "/session/:sessionId/chromium/send_command_and_get_result"),
     "SetAlertPrompt": (Method.POST, "/session/:sessionId/alert_text"),
     "SetAutoReporting": (Method.POST, "/session/:sessionId/autoreport"),
-    "SetBrowserConnection":
-    (Method.POST, "/session/:sessionId/browser_connection"),
     "SetGeolocation": (Method.POST, "/session/:sessionId/location"),
     "SetImplicitWait":
     (Method.POST, "/session/:sessionId/timeouts/implicit_wait"),
@@ -233,8 +224,7 @@ _COMMANDS = {
     "TouchUp": (Method.POST, "/session/:sessionId/touch/up"),
     "Type": (Method.POST, "/session/:sessionId/keys"),
     "TypeElement": (Method.POST, "/session/:sessionId/element/:id/value"),
-    "UploadFile": (Method.POST, "/session/:sessionId/file"),
-    "Visible": (Method.POST, "/session/:sessionId/visible")
+    "UploadFile": (Method.POST, "/session/:sessionId/file")
 }
 
 MULTI_SESSION_COMMANDS = ["GetSessions"]
@@ -363,22 +353,22 @@ def _ReplaceBinary(payload, binary):
     trigger ChromeDriver's mechanism for locating the Chrome binary.
   """
   if ("desiredCapabilities" in payload
-      and "chromeOptions" in payload["desiredCapabilities"]):
+      and "goog:chromeOptions" in payload["desiredCapabilities"]):
     if binary:
-      (payload["desiredCapabilities"]["chromeOptions"]
+      (payload["desiredCapabilities"]["goog:chromeOptions"]
        ["binary"]) = binary
-    elif "binary" in payload["desiredCapabilities"]["chromeOptions"]:
-      del payload["desiredCapabilities"]["chromeOptions"]["binary"]
+    elif "binary" in payload["desiredCapabilities"]["goog:chromeOptions"]:
+      del payload["desiredCapabilities"]["goog:chromeOptions"]["binary"]
 
   elif binary:
     if "desiredCapabilities" not in payload:
       payload["desiredCapabilities"] = {
-          "chromeOptions": {
+          "goog:chromeOptions": {
               "binary": binary
           }
       }
-    elif "chromeOptions" not in payload["desiredCapabilities"]:
-      payload["desiredCapabilities"]["chromeOptions"] = {
+    elif "goog:chromeOptions" not in payload["desiredCapabilities"]:
+      payload["desiredCapabilities"]["goog:chromeOptions"] = {
           "binary": binary
       }
 
@@ -409,7 +399,7 @@ class _Payload(object):
     word InitSession:
     [1532467931.153][INFO]: [<session_id>] COMMAND InitSession {
        "desiredCapabilities": {
-          "chromeOptions": {
+          "goog:chromeOptions": {
              "args": [ "no-sandbox", "disable-gpu" ],
              "binary": "<binary_path>"
           }
@@ -741,6 +731,8 @@ class CommandSequence(object):
         self._id_map, self._binary, self._base_url)
 
     response = self._parser.GetNext()
+    if not response:
+      return command
     if not response.IsResponse():
       raise ReplayException("Command and Response unexpectedly out of order.")
     self._IngestLoggedResponse(response)

@@ -7,6 +7,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/heap/heap_test_utilities.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/heap/sparse_heap_bitmap.h"
 #include "third_party/blink/renderer/platform/wtf/deque.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
@@ -29,7 +30,7 @@ class IntWrapper : public blink::GarbageCollectedFinalized<IntWrapper> {
 
   static IntWrapper* Create(int x, VerifyArenaCompaction verify = NoVerify) {
     did_verify_at_least_once = false;
-    return new IntWrapper(x, verify);
+    return blink::MakeGarbageCollected<IntWrapper>(x, verify);
   }
 
   virtual ~IntWrapper() = default;
@@ -90,7 +91,7 @@ using IntDeque = blink::HeapDeque<blink::Member<IntWrapper>>;
 using IntMap = blink::HeapHashMap<blink::Member<IntWrapper>, int>;
 // TODO(sof): decide if this ought to be a global trait specialization.
 // (i.e., for HeapHash*<T>.)
-WTF_ALLOW_CLEAR_UNUSED_SLOTS_WITH_MEM_FUNCTIONS(IntMap);
+WTF_ALLOW_CLEAR_UNUSED_SLOTS_WITH_MEM_FUNCTIONS(IntMap)
 
 namespace blink {
 
@@ -241,23 +242,23 @@ TEST(HeapCompactTest, CompactVector) {
   ClearOutOldGarbage();
 
   IntWrapper* val = IntWrapper::Create(1, VectorsAreCompacted);
-  Persistent<IntVector> vector = new IntVector(10, val);
+  Persistent<IntVector> vector = MakeGarbageCollected<IntVector>(10, val);
   EXPECT_EQ(10u, vector->size());
 
-  for (size_t i = 0; i < vector->size(); ++i)
-    EXPECT_EQ(val, (*vector)[i]);
+  for (IntWrapper* item : *vector)
+    EXPECT_EQ(val, item);
 
   PerformHeapCompaction();
 
-  for (size_t i = 0; i < vector->size(); ++i)
-    EXPECT_EQ(val, (*vector)[i]);
+  for (IntWrapper* item : *vector)
+    EXPECT_EQ(val, item);
 }
 
 TEST(HeapCompactTest, CompactHashMap) {
   ClearOutOldGarbage();
 
-  Persistent<IntMap> int_map = new IntMap();
-  for (size_t i = 0; i < 100; ++i) {
+  Persistent<IntMap> int_map = MakeGarbageCollected<IntMap>();
+  for (wtf_size_t i = 0; i < 100; ++i) {
     IntWrapper* val = IntWrapper::Create(i, HashTablesAreCompacted);
     int_map->insert(val, 100 - i);
   }
@@ -278,10 +279,11 @@ TEST(HeapCompactTest, CompactVectorPartHashMap) {
 
   using IntMapVector = HeapVector<IntMap>;
 
-  Persistent<IntMapVector> int_map_vector = new IntMapVector();
+  Persistent<IntMapVector> int_map_vector =
+      MakeGarbageCollected<IntMapVector>();
   for (size_t i = 0; i < 10; ++i) {
     IntMap map;
-    for (size_t j = 0; j < 10; ++j) {
+    for (wtf_size_t j = 0; j < 10; ++j) {
       IntWrapper* val = IntWrapper::Create(j, VectorsAreCompacted);
       map.insert(val, 10 - j);
     }
@@ -313,10 +315,11 @@ TEST(HeapCompactTest, CompactHashPartVector) {
 
   using IntVectorMap = HeapHashMap<int, IntVector>;
 
-  Persistent<IntVectorMap> int_vector_map = new IntVectorMap();
-  for (size_t i = 0; i < 10; ++i) {
+  Persistent<IntVectorMap> int_vector_map =
+      MakeGarbageCollected<IntVectorMap>();
+  for (wtf_size_t i = 0; i < 10; ++i) {
     IntVector vector;
-    for (size_t j = 0; j < 10; ++j) {
+    for (wtf_size_t j = 0; j < 10; ++j) {
       vector.push_back(IntWrapper::Create(j, HashTablesAreCompacted));
     }
     int_vector_map->insert(1 + i, vector);
@@ -325,7 +328,7 @@ TEST(HeapCompactTest, CompactHashPartVector) {
   EXPECT_EQ(10u, int_vector_map->size());
   for (const IntVector& int_vector : int_vector_map->Values()) {
     EXPECT_EQ(10u, int_vector.size());
-    for (size_t i = 0; i < int_vector.size(); ++i) {
+    for (wtf_size_t i = 0; i < int_vector.size(); ++i) {
       EXPECT_EQ(static_cast<int>(i), int_vector[i]->Value());
     }
   }
@@ -336,31 +339,32 @@ TEST(HeapCompactTest, CompactHashPartVector) {
   EXPECT_EQ(10u, int_vector_map->size());
   for (const IntVector& int_vector : int_vector_map->Values()) {
     EXPECT_EQ(10u, int_vector.size());
-    for (size_t i = 0; i < int_vector.size(); ++i) {
+    for (wtf_size_t i = 0; i < int_vector.size(); ++i) {
       EXPECT_EQ(static_cast<int>(i), int_vector[i]->Value());
     }
   }
 }
 
 TEST(HeapCompactTest, CompactDeques) {
-  Persistent<IntDeque> deque = new IntDeque;
+  Persistent<IntDeque> deque = MakeGarbageCollected<IntDeque>();
   for (int i = 0; i < 8; ++i) {
     deque->push_front(IntWrapper::Create(i, VectorsAreCompacted));
   }
   EXPECT_EQ(8u, deque->size());
 
-  for (size_t i = 0; i < deque->size(); ++i)
+  for (wtf_size_t i = 0; i < deque->size(); ++i)
     EXPECT_EQ(static_cast<int>(7 - i), deque->at(i)->Value());
 
   PerformHeapCompaction();
   EXPECT_TRUE(IntWrapper::did_verify_at_least_once);
 
-  for (size_t i = 0; i < deque->size(); ++i)
+  for (wtf_size_t i = 0; i < deque->size(); ++i)
     EXPECT_EQ(static_cast<int>(7 - i), deque->at(i)->Value());
 }
 
 TEST(HeapCompactTest, CompactDequeVectors) {
-  Persistent<HeapDeque<IntVector>> deque = new HeapDeque<IntVector>;
+  Persistent<HeapDeque<IntVector>> deque =
+      MakeGarbageCollected<HeapDeque<IntVector>>();
   for (int i = 0; i < 8; ++i) {
     IntWrapper* value = IntWrapper::Create(i, VectorsAreCompacted);
     IntVector vector = IntVector(8, value);
@@ -368,19 +372,19 @@ TEST(HeapCompactTest, CompactDequeVectors) {
   }
   EXPECT_EQ(8u, deque->size());
 
-  for (size_t i = 0; i < deque->size(); ++i)
+  for (wtf_size_t i = 0; i < deque->size(); ++i)
     EXPECT_EQ(static_cast<int>(7 - i), deque->at(i).at(i)->Value());
 
   PerformHeapCompaction();
   EXPECT_TRUE(IntWrapper::did_verify_at_least_once);
 
-  for (size_t i = 0; i < deque->size(); ++i)
+  for (wtf_size_t i = 0; i < deque->size(); ++i)
     EXPECT_EQ(static_cast<int>(7 - i), deque->at(i).at(i)->Value());
 }
 
 TEST(HeapCompactTest, CompactLinkedHashSet) {
   using OrderedHashSet = HeapLinkedHashSet<Member<IntWrapper>>;
-  Persistent<OrderedHashSet> set = new OrderedHashSet;
+  Persistent<OrderedHashSet> set = MakeGarbageCollected<OrderedHashSet>();
   for (int i = 0; i < 13; ++i) {
     IntWrapper* value = IntWrapper::Create(i, HashTablesAreCompacted);
     set->insert(value);
@@ -405,10 +409,10 @@ TEST(HeapCompactTest, CompactLinkedHashSet) {
 
 TEST(HeapCompactTest, CompactLinkedHashSetVector) {
   using OrderedHashSet = HeapLinkedHashSet<Member<IntVector>>;
-  Persistent<OrderedHashSet> set = new OrderedHashSet;
+  Persistent<OrderedHashSet> set = MakeGarbageCollected<OrderedHashSet>();
   for (int i = 0; i < 13; ++i) {
     IntWrapper* value = IntWrapper::Create(i);
-    IntVector* vector = new IntVector(19, value);
+    IntVector* vector = MakeGarbageCollected<IntVector>(19, value);
     set->insert(vector);
   }
   EXPECT_EQ(13u, set->size());
@@ -433,10 +437,10 @@ TEST(HeapCompactTest, CompactLinkedHashSetMap) {
   using Inner = HeapHashSet<Member<IntWrapper>>;
   using OrderedHashSet = HeapLinkedHashSet<Member<Inner>>;
 
-  Persistent<OrderedHashSet> set = new OrderedHashSet;
+  Persistent<OrderedHashSet> set = MakeGarbageCollected<OrderedHashSet>();
   for (int i = 0; i < 13; ++i) {
     IntWrapper* value = IntWrapper::Create(i);
-    Inner* inner = new Inner;
+    Inner* inner = MakeGarbageCollected<Inner>();
     inner->insert(value);
     set->insert(inner);
   }
@@ -464,10 +468,10 @@ TEST(HeapCompactTest, CompactLinkedHashSetNested) {
   using Inner = HeapLinkedHashSet<Member<IntWrapper>>;
   using OrderedHashSet = HeapLinkedHashSet<Member<Inner>>;
 
-  Persistent<OrderedHashSet> set = new OrderedHashSet;
+  Persistent<OrderedHashSet> set = MakeGarbageCollected<OrderedHashSet>();
   for (int i = 0; i < 13; ++i) {
     IntWrapper* value = IntWrapper::Create(i);
-    Inner* inner = new Inner;
+    Inner* inner = MakeGarbageCollected<Inner>();
     inner->insert(value);
     set->insert(inner);
   }
@@ -506,10 +510,11 @@ TEST(HeapCompactTest, CompactInlinedBackingStore) {
   using Value = HeapVector<Member<IntWrapper>, 64>;
   using MapWithInlinedBacking = HeapHashMap<Key, Value>;
 
-  Persistent<MapWithInlinedBacking> map = new MapWithInlinedBacking;
+  Persistent<MapWithInlinedBacking> map =
+      MakeGarbageCollected<MapWithInlinedBacking>();
   {
     // Create a map that is reclaimed during compaction.
-    (new MapWithInlinedBacking)
+    (MakeGarbageCollected<MapWithInlinedBacking>())
         ->insert(IntWrapper::Create(1, HashTablesAreCompacted), Value());
 
     IntWrapper* wrapper = IntWrapper::Create(1, HashTablesAreCompacted);

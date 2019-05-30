@@ -7,30 +7,29 @@
 #include "third_party/blink/renderer/core/css/font_face_cache.h"
 #include "third_party/blink/renderer/core/css/font_face_set_load_event.h"
 #include "third_party/blink/renderer/platform/fonts/font.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
 
 const int FontFaceSet::kDefaultFontSize = 10;
 const char FontFaceSet::kDefaultFontFamily[] = "sans-serif";
 
-void FontFaceSet::Pause() {
-  async_runner_->Pause();
-}
-
-void FontFaceSet::Unpause() {
-  async_runner_->Unpause();
-}
-
-void FontFaceSet::ContextDestroyed(ExecutionContext*) {
-  async_runner_->Stop();
-}
-
 void FontFaceSet::HandlePendingEventsAndPromisesSoon() {
-  // async_runner_ will be automatically stopped on destruction.
-  async_runner_->RunAsync();
+  if (!pending_task_queued_) {
+    if (auto* context = GetExecutionContext()) {
+      pending_task_queued_ = true;
+      context->GetTaskRunner(TaskType::kFontLoading)
+          ->PostTask(FROM_HERE,
+                     WTF::Bind(&FontFaceSet::HandlePendingEventsAndPromises,
+                               WrapPersistent(this)));
+    }
+  }
 }
 
 void FontFaceSet::HandlePendingEventsAndPromises() {
+  pending_task_queued_ = false;
+  if (!GetExecutionContext())
+    return;
   FireLoadingEvent();
   FireDoneEventIfPossible();
 }
@@ -39,7 +38,7 @@ void FontFaceSet::FireLoadingEvent() {
   if (should_fire_loading_event_) {
     should_fire_loading_event_ = false;
     DispatchEvent(
-        *FontFaceSetLoadEvent::CreateForFontFaces(EventTypeNames::loading));
+        *FontFaceSetLoadEvent::CreateForFontFaces(event_type_names::kLoading));
   }
 }
 
@@ -112,13 +111,12 @@ void FontFaceSet::Trace(blink::Visitor* visitor) {
   visitor->Trace(loaded_fonts_);
   visitor->Trace(failed_fonts_);
   visitor->Trace(ready_);
-  visitor->Trace(async_runner_);
-  PausableObject::Trace(visitor);
+  ContextClient::Trace(visitor);
   EventTargetWithInlineData::Trace(visitor);
   FontFace::LoadFontCallback::Trace(visitor);
 }
 
-size_t FontFaceSet::size() const {
+wtf_size_t FontFaceSet::size() const {
   if (!InActiveContext())
     return non_css_connected_faces_.size();
   return CSSConnectedFontFaceList().size() + non_css_connected_faces_.size();
@@ -153,7 +151,7 @@ void FontFaceSet::LoadFontPromiseResolver::LoadFonts() {
     return;
   }
 
-  for (size_t i = 0; i < font_faces_.size(); i++)
+  for (wtf_size_t i = 0; i < font_faces_.size(); i++)
     font_faces_[i]->LoadWithCallback(this);
 }
 
@@ -236,11 +234,11 @@ void FontFaceSet::FireDoneEvent() {
     FontFaceSetLoadEvent* done_event = nullptr;
     FontFaceSetLoadEvent* error_event = nullptr;
     done_event = FontFaceSetLoadEvent::CreateForFontFaces(
-        EventTypeNames::loadingdone, loaded_fonts_);
+        event_type_names::kLoadingdone, loaded_fonts_);
     loaded_fonts_.clear();
     if (!failed_fonts_.IsEmpty()) {
       error_event = FontFaceSetLoadEvent::CreateForFontFaces(
-          EventTypeNames::loadingerror, failed_fonts_);
+          event_type_names::kLoadingerror, failed_fonts_);
       failed_fonts_.clear();
     }
     is_loading_ = false;
@@ -308,7 +306,7 @@ FontFaceSetIterable::IterationSource* FontFaceSet::StartIteration(
     for (const auto& font_face : non_css_connected_faces_)
       font_faces.push_back(font_face);
   }
-  return new IterationSource(font_faces);
+  return MakeGarbageCollected<IterationSource>(font_faces);
 }
 
 }  // namespace blink

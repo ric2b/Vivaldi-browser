@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="hy">
 <translation id="1055184225775184556">Հ&amp;ետ շրջել ավելացումը</translation>
+<translation id="1276145862619442150">Արագ կանչեր</translation>
 <translation id="1411638389238344450">Ուղարկել հղումը փոստով</translation>
 <translation id="1728549374069268714">Փակցնել ու բացել</translation>
 <translation id="1756026472674246267">Բացել հղումը նոր ներդիրում</translation>
@@ -16,6 +17,7 @@
 <translation id="3027988479108856431">Ցավոք՝ Ձեր Yandex-ի կարգավորումները հասանելի չեն, քանի դեռ այդ բրաուզերն աշխատում է։ Այդ կարգավորումները Vivaldi ներկրելու համար պահպանեք Ձեր գործն ու փակեք Yandex-ի բոլոր պատուհանները։ Հետո սեղմեք «Շարունակել»։</translation>
 <translation id="3259769196742189631">Վավերացնել</translation>
 <translation id="3270847123878663523">Հ&amp;ետարկել վերադասավորումը</translation>
+<translation id="3334610655141903168">(անվանում չկա)</translation>
 <translation id="3402602684546832928">Ընտրեք Opera-ի էջանիշերի ֆայլը</translation>
 <translation id="3427342743765426898">&amp;Կրկնել խմբագրումը</translation>
 <translation id="3542768452570884558">Բացել հղումը նոր պատուհանում</translation>
@@ -26,6 +28,7 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">Այլևս ցույց &amp;չտալ</translation>
 <translation id="4074744496918018786">Բացել պատկերը գաղտնի պատուհանում</translation>
+<translation id="443008484043213881">Գործիքներ</translation>
 <translation id="4512900838580567989">Բացել հղումը նոր հետին ներդիրում</translation>
 <translation id="4515472507709384008">Opera 15+</translation>
 <translation id="4548358047305717967">Բացել պատկերը նոր հետին ներդիրում</translation>
@@ -58,7 +61,7 @@
 <translation id="8197810018650377191">Էջը հավելել էջանիշերին</translation>
 <translation id="8624587806981488221">Կրկին բե&amp;ռնել նկարը</translation>
 <translation id="864444594187862076">Opera 15+ (փորձնական)</translation>
-<translation id="8647783768664050873">Սեղմեք այստեղ՝ Vivaldi-ն $1 տարբերակով թարմացնելու համար։</translation>
+<translation id="8651348004684669199">Ավելացնել ակտիվ ներդիրը</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8773635261052182196">Դուք այլևս չեք տեսնի այս ծանուցումները։ Կարող եք կրկին միացնել դրանք Vivaldi-ի կարգավորումներից։</translation>
 <translation id="8894900864683381599">Հղումը հավելել վեբ վահանակին</translation>

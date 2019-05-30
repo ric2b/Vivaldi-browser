@@ -19,11 +19,14 @@
 
 class GURL;
 
+namespace blink {
+struct NotificationResources;
+struct PlatformNotificationData;
+}  // namespace blink
+
 namespace content {
 
 class BrowserContext;
-struct NotificationResources;
-struct PlatformNotificationData;
 
 // The service using which notifications can be presented to the user. There
 // should be a unique instance of the PlatformNotificationService depending
@@ -33,8 +36,8 @@ class CONTENT_EXPORT PlatformNotificationService {
   virtual ~PlatformNotificationService() {}
 
   using DisplayedNotificationsCallback =
-      base::Callback<void(std::unique_ptr<std::set<std::string>>,
-                          bool /* supports synchronization */)>;
+      base::OnceCallback<void(std::set<std::string>,
+                              bool /* supports synchronization */)>;
 
   // Displays the notification described in |notification_data| to the user.
   // This method must be called on the UI thread.
@@ -42,8 +45,8 @@ class CONTENT_EXPORT PlatformNotificationService {
       BrowserContext* browser_context,
       const std::string& notification_id,
       const GURL& origin,
-      const PlatformNotificationData& notification_data,
-      const NotificationResources& notification_resources) = 0;
+      const blink::PlatformNotificationData& notification_data,
+      const blink::NotificationResources& notification_resources) = 0;
 
   // Displays the persistent notification described in |notification_data| to
   // the user. This method must be called on the UI thread.
@@ -52,8 +55,8 @@ class CONTENT_EXPORT PlatformNotificationService {
       const std::string& notification_id,
       const GURL& service_worker_origin,
       const GURL& origin,
-      const PlatformNotificationData& notification_data,
-      const NotificationResources& notification_resources) = 0;
+      const blink::PlatformNotificationData& notification_data,
+      const blink::NotificationResources& notification_resources) = 0;
 
   // Closes the notification identified by |notification_id|. This method must
   // be called on the UI thread.
@@ -70,7 +73,7 @@ class CONTENT_EXPORT PlatformNotificationService {
   // posts |callback| with the result.
   virtual void GetDisplayedNotifications(
       BrowserContext* browser_context,
-      const DisplayedNotificationsCallback& callback) = 0;
+      DisplayedNotificationsCallback callback) = 0;
 
   // Reads the value of the next persistent notification ID from the profile and
   // increments the value, as it is called once per notification write.

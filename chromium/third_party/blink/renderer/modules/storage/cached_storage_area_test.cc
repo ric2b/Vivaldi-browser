@@ -5,7 +5,7 @@
 #include "third_party/blink/renderer/modules/storage/cached_storage_area.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/scheduler/test/fake_renderer_scheduler.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/renderer/modules/storage/testing/fake_area_source.h"
 #include "third_party/blink/renderer/modules/storage/testing/mock_storage_area.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
@@ -15,7 +15,8 @@ namespace blink {
 
 using FormatOption = CachedStorageArea::FormatOption;
 
-class CachedStorageAreaTest : public testing::Test {
+class CachedStorageAreaTest : public testing::Test,
+                              public CachedStorageArea::InspectorEventListener {
  public:
   const scoped_refptr<SecurityOrigin> kOrigin =
       SecurityOrigin::CreateFromString("http://dom_storage/");
@@ -31,18 +32,23 @@ class CachedStorageAreaTest : public testing::Test {
     if (IsSessionStorage()) {
       cached_area_ = CachedStorageArea::CreateForSessionStorage(
           kOrigin, mock_storage_area_.GetAssociatedInterfacePtr(),
-          renderer_scheduler_->IPCTaskRunner());
+          scheduler::GetSingleThreadTaskRunnerForTesting(), this);
     } else {
       cached_area_ = CachedStorageArea::CreateForLocalStorage(
           kOrigin, mock_storage_area_.GetInterfacePtr(),
-          renderer_scheduler_->IPCTaskRunner());
+          scheduler::GetSingleThreadTaskRunnerForTesting(), this);
     }
-    source_area_ = new FakeAreaSource(kPageUrl);
+    source_area_ = MakeGarbageCollected<FakeAreaSource>(kPageUrl);
     source_area_id_ = cached_area_->RegisterSource(source_area_);
     source_ = kPageUrl.GetString() + "\n" + source_area_id_;
-    source_area2_ = new FakeAreaSource(kPageUrl2);
+    source_area2_ = MakeGarbageCollected<FakeAreaSource>(kPageUrl2);
     cached_area_->RegisterSource(source_area2_);
   }
+
+  void DidDispatchStorageEvent(const SecurityOrigin* origin,
+                               const String& key,
+                               const String& old_value,
+                               const String& new_value) override {}
 
   virtual bool IsSessionStorage() { return false; }
 
@@ -92,8 +98,6 @@ class CachedStorageAreaTest : public testing::Test {
   }
 
  protected:
-  std::unique_ptr<scheduler::WebThreadScheduler> renderer_scheduler_ =
-      std::make_unique<scheduler::FakeRendererScheduler>();
   MockStorageArea mock_storage_area_;
   Persistent<FakeAreaSource> source_area_;
   Persistent<FakeAreaSource> source_area2_;
@@ -109,9 +113,9 @@ class CachedStorageAreaTestWithParam
   bool IsSessionStorage() override { return GetParam(); }
 };
 
-INSTANTIATE_TEST_CASE_P(CachedStorageAreaTest,
-                        CachedStorageAreaTestWithParam,
-                        ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(CachedStorageAreaTest,
+                         CachedStorageAreaTestWithParam,
+                         ::testing::Bool());
 
 TEST_P(CachedStorageAreaTestWithParam, Basics) {
   EXPECT_FALSE(IsCacheLoaded());
@@ -471,7 +475,7 @@ namespace {
 class StringEncoding : public CachedStorageAreaTest,
                        public testing::WithParamInterface<FormatOption> {};
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     CachedStorageAreaTest,
     StringEncoding,
     ::testing::Values(FormatOption::kLocalStorageDetectFormat,

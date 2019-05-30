@@ -14,12 +14,17 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "base/system_monitor/system_monitor.h"
+#include "base/system/system_monitor.h"
+#include "base/test/scoped_task_environment.h"
 #include "build/build_config.h"
 #include "media/midi/midi_service.h"
+#include "media/midi/task_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if defined(OS_WIN)
+#include "media/midi/midi_manager_win.h"
+#endif  // defined(OS_WIN)
 
 namespace midi {
 
@@ -33,7 +38,7 @@ class FakeMidiManager : public MidiManager {
   explicit FakeMidiManager(MidiService* service)
       : MidiManager(service), weak_factory_(this) {}
 
-  ~FakeMidiManager() override { DCHECK_EQ(initialized_, finalized_); }
+  ~FakeMidiManager() override = default;
 
   base::WeakPtr<FakeMidiManager> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
@@ -43,11 +48,6 @@ class FakeMidiManager : public MidiManager {
   void StartInitialization() override {
     DCHECK(!initialized_);
     initialized_ = true;
-  }
-  void Finalize() override {
-    DCHECK(initialized_);
-    DCHECK(!finalized_);
-    finalized_ = true;
   }
   void DispatchSendMidiData(MidiManagerClient* client,
                             uint32_t port_index,
@@ -59,19 +59,14 @@ class FakeMidiManager : public MidiManager {
     CompleteInitialization(result);
   }
 
-  size_t GetClientCount() const {
-    return clients_size_for_testing();
-  }
+  size_t GetClientCount() { return GetClientCountForTesting(); }
 
-  size_t GetPendingClientCount() const {
-    return pending_clients_size_for_testing();
-  }
+  size_t GetPendingClientCount() { return GetPendingClientCountForTesting(); }
 
   bool IsInitialized() const { return initialized_; }
 
  private:
   bool initialized_ = false;
-  bool finalized_ = false;
 
   base::WeakPtrFactory<FakeMidiManager> weak_factory_;
 
@@ -119,8 +114,8 @@ class FakeMidiManagerClient : public MidiManagerClient {
   ~FakeMidiManagerClient() override = default;
 
   // MidiManagerClient implementation.
-  void AddInputPort(const MidiPortInfo& info) override {}
-  void AddOutputPort(const MidiPortInfo& info) override {}
+  void AddInputPort(const mojom::PortInfo& info) override {}
+  void AddOutputPort(const mojom::PortInfo& info) override {}
   void SetInputPortState(uint32_t port_index, PortState state) override {}
   void SetOutputPortState(uint32_t port_index, PortState state) override {}
   void CompleteStartSession(Result result) override {
@@ -154,7 +149,7 @@ class FakeMidiManagerClient : public MidiManagerClient {
 
 class MidiManagerTest : public ::testing::Test {
  public:
-  MidiManagerTest() : message_loop_(std::make_unique<base::MessageLoop>()) {
+  MidiManagerTest() {
     std::unique_ptr<FakeMidiManagerFactory> factory =
         std::make_unique<FakeMidiManagerFactory>();
     factory_ = factory->GetWeakPtr();
@@ -227,7 +222,7 @@ class MidiManagerTest : public ::testing::Test {
   base::WeakPtr<FakeMidiManagerFactory> factory() { return factory_; }
 
  private:
-  std::unique_ptr<base::MessageLoop> message_loop_;
+  base::test::ScopedTaskEnvironment env_;
   base::WeakPtr<FakeMidiManagerFactory> factory_;
   std::unique_ptr<MidiService> service_;
 
@@ -325,40 +320,79 @@ TEST_F(MidiManagerTest, AbortSession) {
   run_loop.RunUntilIdle();
 }
 
+class PlatformMidiManagerTest : public ::testing::Test {
+ public:
+  PlatformMidiManagerTest()
+      : client_(std::make_unique<FakeMidiManagerClient>()),
+        service_(std::make_unique<MidiService>()) {
+    //
+  }
+
+  ~PlatformMidiManagerTest() override {
+    service_->Shutdown();
+    base::RunLoop run_loop;
+    run_loop.RunUntilIdle();
+  }
+
+  MidiService* service() { return service_.get(); }
+
+  void StartSession() { service_->StartSession(client_.get()); }
+  void EndSession() { service_->EndSession(client_.get()); }
+  Result WaitForResult() { return client_->WaitForResult(); }
+
+  // This #ifdef needs to be identical to the one in media/midi/midi_manager.cc.
+  // Do not change the condition for disabling this test.
+  bool IsSupported() {
+#if !defined(OS_MACOSX) && !defined(OS_WIN) && \
+    !(defined(USE_ALSA) && defined(USE_UDEV)) && !defined(OS_ANDROID)
+    return false;
+#else
+    return true;
+#endif
+  }
+
+ private:
+  // SystemMonitor is needed on Windows.
+  base::SystemMonitor system_monitor;
+
+  base::test::ScopedTaskEnvironment env_;
+
+  std::unique_ptr<FakeMidiManagerClient> client_;
+  std::unique_ptr<MidiService> service_;
+
+  DISALLOW_COPY_AND_ASSIGN(PlatformMidiManagerTest);
+};
+
 #if defined(OS_ANDROID)
 // The test sometimes fails on Android. https://crbug.com/844027
 #define MAYBE_CreatePlatformMidiManager DISABLED_CreatePlatformMidiManager
 #else
 #define MAYBE_CreatePlatformMidiManager CreatePlatformMidiManager
 #endif
-TEST_F(MidiManagerTest, MAYBE_CreatePlatformMidiManager) {
-  // SystemMonitor is needed on Windows.
-  base::SystemMonitor system_monitor;
+TEST_F(PlatformMidiManagerTest, MAYBE_CreatePlatformMidiManager) {
+  StartSession();
+  Result result = WaitForResult();
 
-  std::unique_ptr<FakeMidiManagerClient> client =
-      std::make_unique<FakeMidiManagerClient>();
-
-  // Use own MidiService instance to construct a real platform dependent
-  // MidiManager instance.
-  std::unique_ptr<MidiService> service = std::make_unique<MidiService>();
-  service->StartSession(client.get());
-
-  Result result = client->WaitForResult();
-  // This #ifdef needs to be identical to the one in media/midi/midi_manager.cc.
-  // Do not change the condition for disabling this test.
-#if !defined(OS_MACOSX) && !defined(OS_WIN) && \
-    !(defined(USE_ALSA) && defined(USE_UDEV)) && !defined(OS_ANDROID)
-  EXPECT_EQ(Result::NOT_SUPPORTED, result);
-#elif defined(USE_ALSA)
+#if defined(USE_ALSA)
   // Temporary until http://crbug.com/371230 is resolved.
   EXPECT_TRUE(result == Result::OK || result == Result::INITIALIZATION_ERROR);
 #else
-  EXPECT_EQ(Result::OK, result);
+  EXPECT_EQ(IsSupported() ? Result::OK : Result::NOT_SUPPORTED, result);
 #endif
+}
 
-  service->Shutdown();
-  base::RunLoop run_loop;
-  run_loop.RunUntilIdle();
+TEST_F(PlatformMidiManagerTest, InstanceIdOverflow) {
+  service()->task_service()->OverflowInstanceIdForTesting();
+#if defined(OS_WIN)
+  MidiManagerWin::OverflowInstanceIdForTesting();
+#endif  // defined(OS_WIN)
+
+  StartSession();
+  EXPECT_EQ(
+      IsSupported() ? Result::INITIALIZATION_ERROR : Result::NOT_SUPPORTED,
+      WaitForResult());
+
+  EndSession();
 }
 
 }  // namespace

@@ -300,9 +300,7 @@ struct VisibleVisitCountToHostResult {
 // Holds the per-URL information of the most visited query.
 struct MostVisitedURL {
   MostVisitedURL();
-  MostVisitedURL(const GURL& url,
-                 const base::string16& title,
-                 base::Time last_forced_time = base::Time());
+  MostVisitedURL(const GURL& url, const base::string16& title);
   MostVisitedURL(const GURL& url,
                  const base::string16& title,
                  const RedirectList& preceding_redirects);
@@ -316,11 +314,6 @@ struct MostVisitedURL {
 
   GURL url;
   base::string16 title;
-
-  // If this is a URL for which we want to force a thumbnail, records the last
-  // time it was forced so we can evict it when more recent URLs are requested.
-  // If it's not a forced thumbnail, keep a time of 0.
-  base::Time last_forced_time;
 
   RedirectList redirects;
 
@@ -411,19 +404,6 @@ struct HistoryAddPageArgs {
 typedef std::vector<MostVisitedURL> MostVisitedURLList;
 typedef std::vector<FilteredURL> FilteredURLList;
 
-// Used by TopSites to store the thumbnails.
-struct Images {
-  Images();
-  Images(const Images& other);
-  ~Images();
-
-  scoped_refptr<base::RefCountedMemory> thumbnail;
-  ThumbnailScore thumbnail_score;
-
-  // TODO(brettw): this will eventually store the favicon.
-  // scoped_refptr<base::RefCountedBytes> favicon;
-};
-
 struct MostVisitedURLWithRank {
   MostVisitedURL url;
   int rank;
@@ -441,36 +421,7 @@ struct TopSitesDelta {
   MostVisitedURLWithRankList moved;
 };
 
-typedef std::map<GURL, scoped_refptr<base::RefCountedBytes>> URLToThumbnailMap;
-
-// Used when migrating most visited thumbnails out of history and into topsites.
-struct ThumbnailMigration {
-  ThumbnailMigration();
-  ~ThumbnailMigration();
-
-  MostVisitedURLList most_visited;
-  URLToThumbnailMap url_to_thumbnail_map;
-};
-
-typedef std::map<GURL, Images> URLToImagesMap;
-
-class MostVisitedThumbnails
-    : public base::RefCountedThreadSafe<MostVisitedThumbnails> {
- public:
-  MostVisitedThumbnails();
-
-  MostVisitedURLList most_visited;
-  URLToImagesMap url_to_images_map;
-
- private:
-  friend class base::RefCountedThreadSafe<MostVisitedThumbnails>;
-  virtual ~MostVisitedThumbnails();
-
-  DISALLOW_COPY_AND_ASSIGN(MostVisitedThumbnails);
-};
-
-// Map from host to visit count, sorted by visit count descending.
-typedef std::vector<std::pair<std::string, int>> TopHostsList;
+typedef base::RefCountedData<MostVisitedURLList> MostVisitedThreadSafe;
 
 // Map from origins to a count of matching URLs and the last visited time to any
 // URL under that origin.
@@ -479,10 +430,11 @@ typedef std::map<GURL, std::pair<int, base::Time>> OriginCountAndLastVisitMap;
 // Statistics -----------------------------------------------------------------
 
 // HistoryCountResult encapsulates the result of a call to
-// HistoryBackend::GetHistoryCount.
+// HistoryBackend::GetHistoryCount or
+// HistoryBackend::CountUniqueHostsVisitedLastMonth.
 struct HistoryCountResult {
-  // Indicates whether the call to HistoryBackend::GetHistoryCount was
-  // successful or not. If false, then |count| is undefined.
+  // Indicates whether the call was successful or not. If false, then |count|
+  // is undefined.
   bool success = false;
   int count = 0;
 };

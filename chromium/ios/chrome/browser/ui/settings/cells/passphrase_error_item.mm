@@ -4,22 +4,11 @@
 
 #import "ios/chrome/browser/ui/settings/cells/passphrase_error_item.h"
 
-#import <UIKit/UIKit.h>
-
-#import "ios/chrome/browser/experimental_flags.h"
-#include "ios/chrome/browser/ui/collection_view/cells/collection_view_cell_constants.h"
-#import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
-#import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
-#import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_cells_constants.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-namespace {
-// Padding used on the leading and trailing edges of the cell.
-const CGFloat kHorizontalPadding = 16;
-}  // namespace
 
 @implementation PassphraseErrorItem
 
@@ -33,9 +22,11 @@ const CGFloat kHorizontalPadding = 16;
   return self;
 }
 
-- (void)configureCell:(PassphraseErrorCell*)cell {
-  [super configureCell:cell];
+- (void)configureCell:(TableViewCell*)cell
+           withStyler:(ChromeTableViewStyler*)styler {
+  [super configureCell:cell withStyler:styler];
   cell.textLabel.text = self.text;
+  cell.selectionStyle = UITableViewCellSelectionStyleNone;
 }
 
 @end
@@ -49,14 +40,17 @@ const CGFloat kHorizontalPadding = 16;
 @synthesize textLabel = _textLabel;
 @synthesize errorImageView = _errorImageView;
 
-- (instancetype)initWithFrame:(CGRect)frame {
-  self = [super initWithFrame:frame];
+- (instancetype)initWithStyle:(UITableViewCellStyle)style
+              reuseIdentifier:(NSString*)reuseIdentifier {
+  self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
   if (self) {
     UIView* contentView = self.contentView;
 
     _textLabel = [[UILabel alloc] init];
     _textLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _textLabel.textColor = [[MDCPalette cr_redPalette] tint500];
+    _textLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+    _textLabel.adjustsFontForContentSizeCategory = YES;
+    _textLabel.textColor = UIColor.redColor;
     [contentView addSubview:_textLabel];
 
     _errorImageView = [[UIImageView alloc] init];
@@ -64,28 +58,26 @@ const CGFloat kHorizontalPadding = 16;
     _errorImageView.image = [UIImage imageNamed:@"encryption_error"];
     [contentView addSubview:_errorImageView];
 
-    // Fonts and colors vary based on the UI reboot experiment.
-    if (experimental_flags::IsSettingsUIRebootEnabled()) {
-      _textLabel.font = [UIFont systemFontOfSize:kUIKitMainFontSize];
-    } else {
-      _textLabel.font = [[MDCTypography fontLoader] mediumFontOfSize:14];
-    }
-
     // Set up the constraints.
     [NSLayoutConstraint activateConstraints:@[
       [_errorImageView.leadingAnchor
           constraintEqualToAnchor:contentView.leadingAnchor
-                         constant:kHorizontalPadding],
+                         constant:kTableViewHorizontalSpacing],
       [_textLabel.leadingAnchor
           constraintEqualToAnchor:_errorImageView.trailingAnchor
-                         constant:kHorizontalPadding],
+                         constant:kTableViewHorizontalSpacing],
       [_textLabel.trailingAnchor
           constraintEqualToAnchor:contentView.trailingAnchor
-                         constant:-kHorizontalPadding],
+                         constant:-kTableViewHorizontalSpacing],
       [_errorImageView.centerYAnchor
           constraintEqualToAnchor:contentView.centerYAnchor],
-      [_textLabel.centerYAnchor
-          constraintEqualToAnchor:contentView.centerYAnchor],
+      [_textLabel.topAnchor
+          constraintEqualToAnchor:contentView.topAnchor
+                         constant:kTableViewOneLabelCellVerticalSpacing],
+      [_textLabel.bottomAnchor
+          constraintEqualToAnchor:contentView.bottomAnchor
+                         constant:-kTableViewOneLabelCellVerticalSpacing],
+
     ]];
 
     [_errorImageView

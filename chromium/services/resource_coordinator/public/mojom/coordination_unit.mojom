@@ -19,6 +19,33 @@ enum CoordinationUnitType {
   kSystem,
 };
 
+// Intervention policy status. This mirrors the definitions used by the
+// InterventionPolicyDatabase defined in
+// chrome/browser/resource_coordinator/intervention_policy_database.proto
+enum InterventionPolicy {
+  // The frame/page policy is yet unknown. This is the state while a frame is
+  // still loading.
+  kUnknown,
+  // The frame/page has explicitly opted-in to an intervention.
+  kOptIn,
+  // The frame/page has explicitly opted-out from an intervention.
+  kOptOut,
+  // The frame/page has neither opted-in or opted-out. The intervention will be
+  // applied usings its own heuristics.
+  kDefault,
+};
+
+// A list of interventions for which policy is communicated from individual
+// frames and propagated through the frame tree. As each frame loads it will
+// communicate the policy state to the associated FrameCoordinationUnit, and
+// these will eventually be aggregated to the parent PageCoordinationUnit and
+// applied to an entire frame tree.
+enum PolicyControlledIntervention {
+  // Page lifecycles is a feature that causes pages to transition through
+  // lifecycle states in an attempt to save/reclaim resources.
+  kPageLifecycleTransitions,
+};
+
 struct CoordinationUnitID {
   CoordinationUnitType type;
   int64 id;
@@ -54,18 +81,22 @@ interface FrameCoordinationUnit {
   // children.
   GetID() => (CoordinationUnitID id);
 
+  // Sets the process hosting this frame.
+  SetProcess(CoordinationUnitID id);
+
   // Add a new binding to an existing FrameCoordinationUnit.
   AddBinding(FrameCoordinationUnit& request);
   AddChildFrame(CoordinationUnitID cu_id);
   RemoveChildFrame(CoordinationUnitID cu_id);
 
   // Property signals.
-  SetAudibility(bool audible);
   SetNetworkAlmostIdle(bool idle);
   SetLifecycleState(LifecycleState state);
+  SetHasNonEmptyBeforeUnload(bool has_nonempty_beforeunload);
+  SetInterventionPolicy(PolicyControlledIntervention intervention,
+                        InterventionPolicy policy);
 
   // Event signals.
-  OnAlertFired();
   OnNonPersistentNotificationCreated();
 };
 
@@ -89,9 +120,12 @@ interface PageCoordinationUnit {
   OnFaviconUpdated();
   OnTitleUpdated();
 
+  // |navigation_committed_time| is the time when the commit occurred.
   // |navigation_id| is the unique ID of the navigation handle that was
   // committed.
-  OnMainFrameNavigationCommitted(int64 navigation_id, string url);
+  OnMainFrameNavigationCommitted(
+      mojo_base.mojom.TimeTicks navigation_committed_time,
+      int64 navigation_id, string url);
 };
 
 interface ProcessCoordinationUnit {
@@ -102,8 +136,6 @@ interface ProcessCoordinationUnit {
 
   // Add a new binding to an existing ProcessCoordinationUnit.
   AddBinding(ProcessCoordinationUnit& request);
-  AddFrame(CoordinationUnitID cu_id);
-  RemoveFrame(CoordinationUnitID cu_id);
 
   // Property signals.
   SetCPUUsage(double cpu_usage);
@@ -111,6 +143,8 @@ interface ProcessCoordinationUnit {
   SetLaunchTime(mojo_base.mojom.Time launch_time);
   SetMainThreadTaskLoadIsLow(bool main_thread_task_load_is_low);
   SetPID(mojo_base.mojom.ProcessId pid);
+  // Called when the process is known to have died or to have failed to start.
+  SetProcessExitStatus(int32 exit_status);
 
   // Event signals.
 

@@ -4,6 +4,7 @@
 
 #include "extensions/browser/api/file_handlers/app_file_handler_util.h"
 
+#include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -38,9 +39,8 @@ namespace {
 
 bool FileHandlerCanHandleFileWithExtension(const FileHandlerInfo& handler,
                                            const base::FilePath& path) {
-  for (std::set<std::string>::const_iterator extension =
-           handler.extensions.begin();
-       extension != handler.extensions.end(); ++extension) {
+  for (auto extension = handler.extensions.cbegin();
+       extension != handler.extensions.cend(); ++extension) {
     if (*extension == "*")
       return true;
 
@@ -68,8 +68,8 @@ bool FileHandlerCanHandleFileWithExtension(const FileHandlerInfo& handler,
 
 bool FileHandlerCanHandleFileWithMimeType(const FileHandlerInfo& handler,
                                           const std::string& mime_type) {
-  for (std::set<std::string>::const_iterator type = handler.types.begin();
-       type != handler.types.end(); ++type) {
+  for (auto type = handler.types.cbegin(); type != handler.types.cend();
+       ++type) {
     if (net::MatchesMimeType(*type, mime_type))
       return true;
   }
@@ -78,8 +78,6 @@ bool FileHandlerCanHandleFileWithMimeType(const FileHandlerInfo& handler,
 
 bool PrepareNativeLocalFileForWritableApp(const base::FilePath& path,
                                           bool is_directory) {
-  base::AssertBlockingAllowed();
-
   // Don't allow links.
   if (base::PathExists(path) && base::IsLink(path))
     return false;
@@ -214,40 +212,58 @@ const FileHandlerInfo* FileHandlerForId(const Extension& app,
   if (!file_handlers)
     return NULL;
 
-  for (FileHandlersInfo::const_iterator i = file_handlers->begin();
-       i != file_handlers->end(); i++) {
+  for (auto i = file_handlers->cbegin(); i != file_handlers->cend(); i++) {
     if (i->id == handler_id)
       return &*i;
   }
   return NULL;
 }
 
-std::vector<const FileHandlerInfo*> FindFileHandlersForEntries(
+std::vector<FileHandlerMatch> FindFileHandlerMatchesForEntries(
     const Extension& app,
-    const std::vector<EntryInfo> entries) {
-  std::vector<const FileHandlerInfo*> handlers;
+    const std::vector<EntryInfo>& entries) {
+  std::vector<FileHandlerMatch> matches;
   if (entries.empty())
-    return handlers;
+    return matches;
 
-  // Look for file handlers which can handle all the MIME types specified.
+  // Look for file handlers which can handle all the MIME types
+  // or file name extensions specified.
   const FileHandlersInfo* file_handlers = FileHandlers::GetFileHandlers(&app);
   if (!file_handlers)
-    return handlers;
+    return matches;
 
-  for (FileHandlersInfo::const_iterator data = file_handlers->begin();
-       data != file_handlers->end(); ++data) {
+  for (const FileHandlerInfo& handler : *file_handlers) {
     bool handles_all_types = true;
-    for (std::vector<EntryInfo>::const_iterator it = entries.begin();
-         it != entries.end(); ++it) {
-      if (!FileHandlerCanHandleEntry(*data, *it)) {
-        handles_all_types = false;
-        break;
+    FileHandlerMatch match;
+
+    // Lifetime of the handler should be the same as usage of the matches
+    // so the pointer shouldn't end up stale.
+    match.handler = &handler;
+    match.matched_mime = match.matched_file_extension = false;
+    for (const auto& entry : entries) {
+      if (entry.is_directory) {
+        if (!handler.include_directories) {
+          handles_all_types = false;
+          break;
+        }
+      } else {
+        match.matched_mime =
+            FileHandlerCanHandleFileWithMimeType(handler, entry.mime_type);
+        if (!match.matched_mime) {
+          match.matched_file_extension =
+              FileHandlerCanHandleFileWithExtension(handler, entry.path);
+          if (!match.matched_file_extension) {
+            handles_all_types = false;
+            break;
+          }
+        }
       }
     }
-    if (handles_all_types)
-      handlers.push_back(&*data);
+    if (handles_all_types) {
+      matches.push_back(match);
+    }
   }
-  return handlers;
+  return matches;
 }
 
 bool FileHandlerCanHandleEntry(const FileHandlerInfo& handler,

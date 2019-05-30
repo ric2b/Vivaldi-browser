@@ -247,9 +247,9 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(const Config& config,
   RETURN_ON_HR_FAILURE(hr, "Couldn't set ProcessMessage", false);
 
   main_client_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&Client::RequireBitstreamBuffers, main_client_,
-                            kNumInputBuffers, input_visible_size_,
-                            bitstream_buffer_size_));
+      FROM_HERE, base::BindOnce(&Client::RequireBitstreamBuffers, main_client_,
+                                kNumInputBuffers, input_visible_size_,
+                                bitstream_buffer_size_));
   return SUCCEEDED(hr);
 }
 
@@ -260,9 +260,10 @@ void MediaFoundationVideoEncodeAccelerator::Encode(
   DCHECK(main_client_task_runner_->BelongsToCurrentThread());
 
   encoder_thread_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&MediaFoundationVideoEncodeAccelerator::EncodeTask,
-                            encoder_task_weak_factory_.GetWeakPtr(), frame,
-                            force_keyframe));
+      FROM_HERE,
+      base::BindOnce(&MediaFoundationVideoEncodeAccelerator::EncodeTask,
+                     encoder_task_weak_factory_.GetWeakPtr(), frame,
+                     force_keyframe));
 }
 
 void MediaFoundationVideoEncodeAccelerator::UseOutputBitstreamBuffer(
@@ -289,7 +290,7 @@ void MediaFoundationVideoEncodeAccelerator::UseOutputBitstreamBuffer(
       new BitstreamBufferRef(buffer.id(), std::move(shm), buffer.size()));
   encoder_thread_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(
+      base::BindOnce(
           &MediaFoundationVideoEncodeAccelerator::UseOutputBitstreamBufferTask,
           encoder_task_weak_factory_.GetWeakPtr(), base::Passed(&buffer_ref)));
 }
@@ -302,10 +303,10 @@ void MediaFoundationVideoEncodeAccelerator::RequestEncodingParametersChange(
   DCHECK(main_client_task_runner_->BelongsToCurrentThread());
 
   encoder_thread_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&MediaFoundationVideoEncodeAccelerator::
-                     RequestEncodingParametersChangeTask,
-                 encoder_task_weak_factory_.GetWeakPtr(), bitrate, framerate));
+      FROM_HERE, base::BindOnce(&MediaFoundationVideoEncodeAccelerator::
+                                    RequestEncodingParametersChangeTask,
+                                encoder_task_weak_factory_.GetWeakPtr(),
+                                bitrate, framerate));
 }
 
 void MediaFoundationVideoEncodeAccelerator::Destroy() {
@@ -318,8 +319,8 @@ void MediaFoundationVideoEncodeAccelerator::Destroy() {
   if (encoder_thread_.IsRunning()) {
     encoder_thread_task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&MediaFoundationVideoEncodeAccelerator::DestroyTask,
-                   encoder_task_weak_factory_.GetWeakPtr()));
+        base::BindOnce(&MediaFoundationVideoEncodeAccelerator::DestroyTask,
+                       encoder_task_weak_factory_.GetWeakPtr()));
     encoder_thread_.Stop();
   }
 
@@ -524,7 +525,7 @@ void MediaFoundationVideoEncodeAccelerator::NotifyError(
          main_client_task_runner_->BelongsToCurrentThread());
 
   main_client_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&Client::NotifyError, main_client_, error));
+      FROM_HERE, base::BindOnce(&Client::NotifyError, main_client_, error));
 }
 
 void MediaFoundationVideoEncodeAccelerator::EncodeTask(
@@ -665,8 +666,9 @@ void MediaFoundationVideoEncodeAccelerator::ProcessOutput() {
 
   main_client_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&Client::BitstreamBufferReady, main_client_, buffer_ref->id,
-                 BitstreamBufferMetadata(size, keyframe, timestamp)));
+      base::BindOnce(&Client::BitstreamBufferReady, main_client_,
+                     buffer_ref->id,
+                     BitstreamBufferMetadata(size, keyframe, timestamp)));
 
   // Keep calling ProcessOutput recursively until MF_E_TRANSFORM_NEED_MORE_INPUT
   // is returned to flush out all the output.
@@ -701,10 +703,11 @@ void MediaFoundationVideoEncodeAccelerator::ReturnBitstreamBuffer(
          encode_output->size());
   main_client_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&Client::BitstreamBufferReady, main_client_, buffer_ref->id,
-                 BitstreamBufferMetadata(encode_output->size(),
-                                         encode_output->keyframe,
-                                         encode_output->capture_timestamp)));
+      base::BindOnce(&Client::BitstreamBufferReady, main_client_,
+                     buffer_ref->id,
+                     BitstreamBufferMetadata(
+                         encode_output->size(), encode_output->keyframe,
+                         encode_output->capture_timestamp)));
 }
 
 void MediaFoundationVideoEncodeAccelerator::RequestEncodingParametersChangeTask(

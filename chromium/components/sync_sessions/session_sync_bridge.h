@@ -12,11 +12,9 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "components/sync/device_info/local_device_info_provider.h"
 #include "components/sync/model/model_error.h"
 #include "components/sync/model/model_type_store.h"
 #include "components/sync/model/model_type_sync_bridge.h"
-#include "components/sync_sessions/abstract_sessions_sync_manager.h"
 #include "components/sync_sessions/favicon_cache.h"
 #include "components/sync_sessions/local_session_event_handler_impl.h"
 #include "components/sync_sessions/open_tabs_ui_delegate_impl.h"
@@ -37,27 +35,19 @@ class SyncSessionsClient;
 // sync server. See
 // https://chromium.googlesource.com/chromium/src/+/lkcr/docs/sync/model_api.md#Implementing-ModelTypeSyncBridge
 // for details.
-class SessionSyncBridge : public AbstractSessionsSyncManager,
-                          public syncer::ModelTypeSyncBridge,
+class SessionSyncBridge : public syncer::ModelTypeSyncBridge,
                           public LocalSessionEventHandlerImpl::Delegate {
  public:
   // Raw pointers must not be null and their pointees must outlive this object.
   SessionSyncBridge(
+      const base::RepeatingClosure& notify_foreign_session_updated_cb,
       SyncSessionsClient* sessions_client,
-      syncer::SessionSyncPrefs* sync_prefs,
-      syncer::LocalDeviceInfoProvider* local_device_info_provider,
-      const syncer::RepeatingModelTypeStoreFactory& store_factory,
-      const base::RepeatingClosure& foreign_sessions_updated_callback,
       std::unique_ptr<syncer::ModelTypeChangeProcessor> change_processor);
   ~SessionSyncBridge() override;
 
-  // AbstractSessionsSyncManager implementation.
-  void ScheduleGarbageCollection() override;
-  FaviconCache* GetFaviconCache() override;
-  SessionsGlobalIdMapper* GetGlobalIdMapper() override;
-  OpenTabsUIDelegate* GetOpenTabsUIDelegate() override;
-  syncer::SyncableService* GetSyncableService() override;
-  syncer::ModelTypeSyncBridge* GetModelTypeSyncBridge() override;
+  FaviconCache* GetFaviconCache();
+  SessionsGlobalIdMapper* GetGlobalIdMapper();
+  OpenTabsUIDelegate* GetOpenTabsUIDelegate();
 
   // ModelTypeSyncBridge implementation.
   void OnSyncStarting(
@@ -74,13 +64,13 @@ class SessionSyncBridge : public AbstractSessionsSyncManager,
   void GetAllDataForDebugging(DataCallback callback) override;
   std::string GetClientTag(const syncer::EntityData& entity_data) override;
   std::string GetStorageKey(const syncer::EntityData& entity_data) override;
-  StopSyncResponse ApplyStopSyncChanges(
-      std::unique_ptr<syncer::MetadataChangeList> delete_metadata_change_list)
-      override;
+  void ApplyStopSyncChanges(std::unique_ptr<syncer::MetadataChangeList>
+                                delete_metadata_change_list) override;
 
   // LocalSessionEventHandlerImpl::Delegate implementation.
   std::unique_ptr<LocalSessionEventHandlerImpl::WriteBatch>
   CreateLocalSessionWriteBatch() override;
+  bool IsTabNodeUnsynced(int tab_node_id) override;
   void TrackLocalNavigationId(base::Time timestamp, int unique_id) override;
   void OnPageFaviconUpdated(const GURL& page_url) override;
   void OnFaviconVisited(const GURL& page_url, const GURL& favicon_url) override;
@@ -92,27 +82,26 @@ class SessionSyncBridge : public AbstractSessionsSyncManager,
       std::unique_ptr<syncer::MetadataBatch> metadata_batch);
   void StartLocalSessionEventHandler();
   void DeleteForeignSessionFromUI(const std::string& tag);
-  void DoGarbageCollection();
+  void DoGarbageCollection(SessionStore::WriteBatch* write_batch);
   std::unique_ptr<SessionStore::WriteBatch> CreateSessionStoreWriteBatch();
   void DeleteForeignSessionWithBatch(const std::string& session_tag,
                                      SessionStore::WriteBatch* batch);
   void ResubmitLocalSession();
   void ReportError(const syncer::ModelError& error);
 
+  const base::RepeatingClosure notify_foreign_session_updated_cb_;
   SyncSessionsClient* const sessions_client_;
   LocalSessionEventRouter* const local_session_event_router_;
-  const base::RepeatingClosure foreign_sessions_updated_callback_;
 
   FaviconCache favicon_cache_;
   SessionsGlobalIdMapper global_id_mapper_;
-  SessionStore::Factory session_store_factory_;
+  std::unique_ptr<SessionStore> store_;
 
   // All data dependent on sync being starting or started.
   struct SyncingState {
     SyncingState();
     ~SyncingState();
 
-    std::unique_ptr<SessionStore> store;
     std::unique_ptr<OpenTabsUIDelegateImpl> open_tabs_ui_delegate;
     std::unique_ptr<LocalSessionEventHandlerImpl> local_session_event_handler;
 
@@ -126,6 +115,7 @@ class SessionSyncBridge : public AbstractSessionsSyncManager,
     bool local_data_out_of_sync = false;
   };
 
+  // TODO(mastiz): We should rather rename this to |syncing_state_|.
   base::Optional<SyncingState> syncing_;
 
   base::WeakPtrFactory<SessionSyncBridge> weak_ptr_factory_;

@@ -13,6 +13,7 @@
 #include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "media/base/limits.h"
 #include "media/base/video_util.h"
+#include "media/capture/mojom/video_capture_types.mojom.h"
 #include "mojo/public/cpp/base/shared_memory_utils.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "ui/gfx/geometry/rect.h"
@@ -48,13 +49,12 @@ LameWindowCapturerChromeOS::~LameWindowCapturerChromeOS() {
 }
 
 void LameWindowCapturerChromeOS::SetFormat(media::VideoPixelFormat format,
-                                           media::ColorSpace color_space) {
+                                           const gfx::ColorSpace& color_space) {
   if (format != media::PIXEL_FORMAT_I420) {
     LOG(DFATAL) << "Invalid pixel format: Only I420 is supported.";
   }
 
-  if (color_space != media::COLOR_SPACE_UNSPECIFIED &&
-      color_space != media::COLOR_SPACE_HD_REC709) {
+  if (color_space.IsValid() && color_space != gfx::ColorSpace::CreateREC709()) {
     LOG(DFATAL) << "Unsupported color space: Only BT.709 is supported.";
   }
 }
@@ -263,12 +263,11 @@ void LameWindowCapturerChromeOS::CaptureNextFrame() {
   DCHECK(frame);
   VideoFrameMetadata* const metadata = frame->metadata();
   metadata->SetTimeTicks(VideoFrameMetadata::CAPTURE_BEGIN_TIME, begin_time);
-  metadata->SetInteger(VideoFrameMetadata::COLOR_SPACE,
-                       media::COLOR_SPACE_HD_REC709);
   metadata->SetTimeDelta(VideoFrameMetadata::FRAME_DURATION, capture_period_);
   metadata->SetDouble(VideoFrameMetadata::FRAME_RATE,
                       1.0 / capture_period_.InSecondsF());
   metadata->SetTimeTicks(VideoFrameMetadata::REFERENCE_TIME, begin_time);
+  frame->set_color_space(gfx::ColorSpace::CreateREC709());
 
   // Compute the region of the VideoFrame that will contain the content. If
   // there is nothing to copy from/to (e.g., the target is gone, or is sized too
@@ -362,7 +361,8 @@ void LameWindowCapturerChromeOS::DeliverFrame(
   info->pixel_format = frame->format();
   info->coded_size = frame->coded_size();
   info->visible_rect = frame->visible_rect();
-  const gfx::Rect update_rect = frame->visible_rect();
+  DCHECK(frame->ColorSpace().IsValid());  // Ensure it was set by this point.
+  info->color_space = frame->ColorSpace();
   const gfx::Rect content_rect = in_flight_frame->content_rect();
 
   // Create a mojo message pipe and bind to the InFlightFrame to wait for the
@@ -373,8 +373,8 @@ void LameWindowCapturerChromeOS::DeliverFrame(
                           mojo::MakeRequest(&callbacks));
 
   // Send the frame to the consumer.
-  consumer_->OnFrameCaptured(std::move(handle), std::move(info), update_rect,
-                             content_rect, std::move(callbacks));
+  consumer_->OnFrameCaptured(std::move(handle), std::move(info), content_rect,
+                             std::move(callbacks));
 }
 
 void LameWindowCapturerChromeOS::OnWindowDestroying(aura::Window* window) {

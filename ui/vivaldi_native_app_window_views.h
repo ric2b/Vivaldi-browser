@@ -37,21 +37,35 @@ namespace views {
 class WebView;
 }
 
+namespace vivaldi {
+class VivaldiQuitConfirmationDialog;
+}
+
 // Make sure we answer correctly for ClientView::CanClose to make sure the exit
 // sequence is started when closing a BrowserWindow. See comment in
 // fast_unload_controller.h.
 class VivaldiAppWindowClientView : public views::ClientView {
  public:
-  VivaldiAppWindowClientView(views::Widget* widget, views::View *contents_view,
-                             VivaldiBrowserWindow *browser_window)
+  VivaldiAppWindowClientView(views::Widget* widget,
+                             views::View* contents_view,
+                             VivaldiBrowserWindow* window)
       : views::ClientView(widget, contents_view),
-      browser_window_(browser_window) {}
+        window_(window) {}
 
   // views::ClientView:
   bool CanClose() override;
 
+ protected:
+  // VivaldiQuitConfirmationDialog::CloseCallback
+  void ContinueQuit(bool close);
+  void ContinueClose(bool close);
+  void ContinueCloseInternal(bool close);
+
  private:
-  VivaldiBrowserWindow* browser_window_;
+  VivaldiBrowserWindow* window_;
+  bool quit_dialog_shown_ = false;
+  bool close_dialog_shown_ = false;
+  vivaldi::VivaldiQuitConfirmationDialog* dialog_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiAppWindowClientView);
 };
@@ -159,7 +173,7 @@ class VivaldiNativeAppWindowViews : public VivaldiNativeAppWindow,
   views::NonClientFrameView* CreateNonClientFrameView(
       views::Widget* widget) override;
   bool WidgetHasHitTestMask() const override;
-  void GetWidgetHitTestMask(gfx::Path* mask) const override;
+  void GetWidgetHitTestMask(SkPath* mask) const override;
   void OnWindowBeginUserBoundsChange() override;
   views::ClientView* CreateClientView(views::Widget* widget) override;
   std::string GetWindowName() const override;
@@ -193,7 +207,7 @@ class VivaldiNativeAppWindowViews : public VivaldiNativeAppWindow,
       const std::vector<extensions::DraggableRegion>& regions) override;
   SkRegion* GetDraggableRegion() override;
   void UpdateShape(std::unique_ptr<ShapeRects> rects) override;
-  void HandleKeyboardEvent(
+  bool HandleKeyboardEvent(
       const content::NativeWebKeyboardEvent& event) override;
   bool IsFrameless() const override;
   bool HasFrameColor() const override;
@@ -210,6 +224,7 @@ class VivaldiNativeAppWindowViews : public VivaldiNativeAppWindow,
   void SetVisibleOnAllWorkspaces(bool always_visible) override;
   void UpdateEventTargeterWithInset() override;
   void SetActivateOnPointer(bool activate_on_pointer) override;
+  void ShowEmojiPanel() override;
 
   // web_modal::WebContentsModalDialogHost implementation.
   gfx::NativeView GetHostView() const override;

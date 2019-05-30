@@ -20,9 +20,10 @@ import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Icon;
 import android.os.Build;
 import android.support.annotation.IntDef;
+import android.support.annotation.Nullable;
 
-import org.chromium.base.PackageUtils;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.widget.RoundedIconGenerator;
 
 import java.lang.annotation.Retention;
@@ -30,8 +31,6 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-
-import javax.annotation.Nullable;
 
 /**
  * Abstract base class for building a notification. Stores all given arguments for later use.
@@ -119,10 +118,20 @@ public abstract class NotificationBuilderBase {
     protected String mChannelId;
     protected CharSequence mTickerText;
     protected Bitmap mImage;
+
     protected int mSmallIconId;
-    protected Bitmap mSmallIconBitmap;
-    protected PendingIntent mContentIntent;
-    protected PendingIntent mDeleteIntent;
+    @Nullable protected Bitmap mSmallIconBitmapForStatusBar;
+    @Nullable protected Bitmap mSmallIconBitmapForContent;
+
+    /**
+     * Package name to use for creating remote package context to be passed to NotificationBuilder.
+     * If null, Chrome's context is used. Currently only used as a workaround for a certain issue,
+     * see {@link #setStatusBarIconForRemoteApp}, {@link #deviceSupportsBitmapStatusBarIcons}.
+     */
+    @Nullable protected String mRemotePackageForBuilderContext;
+
+    protected PendingIntentProvider mContentIntent;
+    protected PendingIntentProvider mDeleteIntent;
     protected List<Action> mActions = new ArrayList<>(MAX_AUTHOR_PROVIDED_ACTION_BUTTONS);
     protected Action mSettingsAction;
     protected int mDefaults;
@@ -143,7 +152,7 @@ public abstract class NotificationBuilderBase {
     /**
      * Combines all of the options that have been set and returns a new Notification object.
      */
-    public abstract Notification build();
+    public abstract ChromeNotification build(NotificationMetadata metadata);
 
     /**
      * Sets the title text of the notification.
@@ -194,61 +203,104 @@ public abstract class NotificationBuilderBase {
     }
 
     /**
-     * Sets the small icon that is shown in the notification and in the status bar. Wherever the
-     * platform supports using a small icon bitmap, and a non-null {@code Bitmap} is provided, it
-     * will take precedence over one specified as a resource id.
+     * Sets the resource id of a small icon that is shown in the notification and in the status bar.
+     * Bitmaps set via {@link #setStatusBarIcon} and {@link #setSmallIconForContent} have precedence
+     * over the resource id.
      */
-    public NotificationBuilderBase setSmallIcon(int iconId) {
+    public NotificationBuilderBase setSmallIconId(int iconId) {
         mSmallIconId = iconId;
         return this;
     }
 
     /**
-     * Sets the small icon that is shown in the notification and in the status bar. Wherever the
-     * platform supports using a small icon bitmap, and a non-null {@code Bitmap} is provided, it
-     * will take precedence over one specified as a resource id.
+     * Sets the small icon that is shown in the status bar. If the platform supports using
+     * a small icon bitmap, it will take precedence over one specified as a resource id.
      */
-    public NotificationBuilderBase setSmallIcon(@Nullable Bitmap iconBitmap) {
-        Bitmap copyOfBitmap = null;
-        if (iconBitmap != null) {
-            copyOfBitmap = iconBitmap.copy(iconBitmap.getConfig(), true /* isMutable */);
-            applyWhiteOverlayToBitmap(copyOfBitmap);
+    public NotificationBuilderBase setStatusBarIcon(@Nullable Bitmap iconBitmap) {
+        if (deviceSupportsBitmapStatusBarIcons()) {
+            mSmallIconBitmapForStatusBar = applyWhiteOverlay(iconBitmap);
         }
-        mSmallIconBitmap = copyOfBitmap;
         return this;
     }
 
     /**
-     * Sets the small icon id for a notification that will be displayed by a different Android app
-     * (eg a Web APK or Trusted Web Activity). Wherever the platform supports using a small icon
-     * bitmap, and a non-null {@code Bitmap} is provided, it will take precedence over one specified
-     * as a resource id.
-     * @param iconId An iconId for a resource in the package that will display the notification.
-     * @param packageName The package name of the package that will display the notification.
-     * @return This NotificationBuilderBase.
+     * Sets the small icon that is shown in the notification. Unlike a bitmap icon in status bar,
+     * this is supported on all devices. The specified Bitmap will take precedence over one
+     * specified as a resource id.
      */
-    public NotificationBuilderBase setSmallIconForRemoteApp(int iconId, String packageName) {
+    public NotificationBuilderBase setSmallIconForContent(@Nullable Bitmap iconBitmap) {
+        mSmallIconBitmapForContent = applyWhiteOverlay(iconBitmap);
+        return this;
+    }
+
+    @Nullable
+    private static Bitmap applyWhiteOverlay(@Nullable Bitmap icon) {
+        Bitmap whitened = null;
+        if (icon != null) {
+            whitened = icon.copy(icon.getConfig(), true /* isMutable */);
+            applyWhiteOverlayToBitmap(whitened);
+        }
+        return whitened;
+    }
+
+    /**
+     * Sets the status bar icon for a notification that will be displayed by a different app.
+     * This is safe to use for any app.
+     * @param iconId An iconId for a resource in the package that will display the notification.
+     * @param iconBitmap The decoded bitmap. Depending on the device we need either id or bitmap.
+     * @param packageName The package name of the package that will display the notification.
+     */
+    public NotificationBuilderBase setStatusBarIconForRemoteApp(
+            int iconId, @Nullable Bitmap iconBitmap, String packageName) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             // On Android M+, the small icon has to be from the resources of the app whose context
-            // is passed to the Notification.Builder constructor.
-            setSmallIcon(PackageUtils.decodeImageResource(packageName, iconId));
+            // is passed to the Notification.Builder constructor. Thus we can't use iconId directly,
+            // and instead use the decoded Bitmap.
+            if (deviceSupportsBitmapStatusBarIcons()) {
+                setStatusBarIcon(iconBitmap);
+            } else if (usingRemoteAppContextAllowed()) {
+                // For blacklisted M devices we can use neither iconId (see comment below), nor
+                // iconBitmap, because that leads to crashes. Here we attempt to work around that by
+                // using remote app context: with that context iconId can be used.
+                mRemotePackageForBuilderContext = packageName;
+                setSmallIconId(iconId);
+            }  // else we're out of luck.
         } else {
             // Pre Android M, the small icon has to be from the resources of the app whose
             // NotificationManager is used in NotificationManager#notify.
-            setSmallIcon(iconId);
+            setSmallIconId(iconId);
         }
         return this;
     }
 
-    /** Returns whether a small icon bitmap was set. */
-    public boolean hasSmallIconBitmap() {
-        return mSmallIconBitmap != null;
+    private static boolean usingRemoteAppContextAllowed() {
+        return ChromeFeatureList.isEnabled(
+                ChromeFeatureList.ALLOW_REMOTE_CONTEXT_FOR_NOTIFICATIONS);
+    }
+
+    /**
+     * Sets the small icon to be shown inside a notification that will be displayed by a different
+     * app. This is safe to use for any app.
+     */
+    public NotificationBuilderBase setContentSmallIconForRemoteApp(@Nullable Bitmap bitmap) {
+        setSmallIconForContent(bitmap);
+        return this;
+    }
+
+    /** Returns whether a there is a small icon bitmap to show in the status bar. */
+    public boolean hasStatusBarIconBitmap() {
+        return mSmallIconBitmapForStatusBar != null;
+    }
+
+    /** Returns whether a there is a small icon bitmap to show in the notification. */
+    public boolean hasSmallIconForContent() {
+        return mSmallIconBitmapForContent != null;
     }
 
     /**
      * Sets the PendingIntent to send when the notification is clicked.
      */
-    public NotificationBuilderBase setContentIntent(@Nullable PendingIntent intent) {
+    public NotificationBuilderBase setContentIntent(@Nullable PendingIntentProvider intent) {
         mContentIntent = intent;
         return this;
     }
@@ -257,7 +309,7 @@ public abstract class NotificationBuilderBase {
      * Sets the PendingIntent to send when the notification is cleared by the user directly from the
      * notification panel.
      */
-    public NotificationBuilderBase setDeleteIntent(@Nullable PendingIntent intent) {
+    public NotificationBuilderBase setDeleteIntent(@Nullable PendingIntentProvider intent) {
         mDeleteIntent = intent;
         return this;
     }
@@ -424,9 +476,11 @@ public abstract class NotificationBuilderBase {
         }
 
         // Use the badge if provided and SDK supports it, else use a generated icon.
-        if (mSmallIconBitmap != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        if (mSmallIconBitmapForStatusBar != null
+                && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             // The Icon class was added in Android M.
-            Bitmap publicIcon = mSmallIconBitmap.copy(mSmallIconBitmap.getConfig(), true);
+            Bitmap publicIcon = mSmallIconBitmapForStatusBar.copy(
+                    mSmallIconBitmapForStatusBar.getConfig(), true);
             builder.setSmallIcon(Icon.createWithBitmap(publicIcon));
         } else if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M && mOrigin != null) {
             // Only set the large icon for L & M because on N(+?) it would add an extra icon on
@@ -450,11 +504,13 @@ public abstract class NotificationBuilderBase {
     /**
      * Sets the small icon on {@code builder} using a {@code Bitmap} if a non-null bitmap is
      * provided and the API level is high enough, otherwise the resource id is used.
+     * @param iconBitmap should be used only on devices that support bitmap icons.
      */
     @TargetApi(Build.VERSION_CODES.M) // For the Icon class.
-    protected static void setSmallIconOnBuilder(
+    protected static void setStatusBarIcon(
             ChromeNotificationBuilder builder, int iconId, @Nullable Bitmap iconBitmap) {
-        if (iconBitmap != null && deviceSupportsBitmapStatusBarIcons()) {
+        if (iconBitmap != null) {
+            assert deviceSupportsBitmapStatusBarIcons();
             builder.setSmallIcon(Icon.createWithBitmap(iconBitmap));
         } else {
             builder.setSmallIcon(iconId);
@@ -470,12 +526,16 @@ public abstract class NotificationBuilderBase {
             // The Icon class was only added in Android M.
             return false;
         }
-        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.M
-                && (Build.MANUFACTURER.equalsIgnoreCase("samsung")
-                           || Build.MANUFACTURER.equalsIgnoreCase("yulong"))) {
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.M) {
             // Updating a notification with a bitmap status bar icon leads to a crash on Samsung
             // and Coolpad (Yulong) devices on Marshmallow, see https://crbug.com/829367.
-            return false;
+            // Also, there are crashes on Lenovo M devices: https://crbug.com/894361.
+            // And some more crashes from Hisense and LeEco devices: https://crbug.com/903268.
+            for (String name : new String[] {"samsung", "yulong", "lenovo", "hisense", "leeco"}) {
+                if (Build.MANUFACTURER.equalsIgnoreCase(name)) {
+                    return false;
+                }
+            }
         }
         return true;
     }

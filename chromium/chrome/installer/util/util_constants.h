@@ -10,6 +10,8 @@
 
 #include <stddef.h>
 
+#include "base/files/file_path.h"
+
 namespace installer {
 
 // Return status of installer. Values in this enum must not change. Always add
@@ -147,6 +149,7 @@ enum InstallerStage {
 
 namespace switches {
 
+extern const char kAllowDowngrade[];
 extern const char kChromeSxS[];
 extern const char kConfigureUserSettings[];
 extern const char kCriticalUpdateVersion[];
@@ -203,9 +206,12 @@ extern const wchar_t kChromeChildDll[];
 extern const wchar_t kChromeExe[];
 extern const wchar_t kChromeNewExe[];
 extern const wchar_t kChromeOldExe[];
+extern const wchar_t kChromeProxyExe[];
+extern const wchar_t kChromeProxyNewExe[];
+extern const wchar_t kChromeProxyOldExe[];
 extern const wchar_t kCmdOnOsUpgrade[];
 extern const wchar_t kCmdStoreDMToken[];
-extern const wchar_t kEULASentinelFile[];
+extern const wchar_t kEulaSentinelFile[];
 extern const wchar_t kInstallBinaryDir[];
 extern const wchar_t kInstallerDir[];
 extern const wchar_t kInstallTempDir[];
@@ -216,8 +222,10 @@ extern const wchar_t kSetupExe[];
 extern const wchar_t kUninstallArgumentsField[];
 extern const wchar_t kUninstallDisplayNameField[];
 extern const wchar_t kUninstallInstallationDate[];
-extern const char kUninstallMetricsName[];
 extern const wchar_t kUninstallStringField[];
+
+// Elevation Service constants.
+extern const base::FilePath::CharType kElevationServiceExe[];
 
 // Google Update installer result API.
 extern const wchar_t kInstallerError[];

@@ -22,7 +22,7 @@ namespace {
 
 class FullscreenMockChromeClient : public EmptyChromeClient {
  public:
-  MOCK_METHOD2(EnterFullscreen, void(LocalFrame&, const FullscreenOptions&));
+  MOCK_METHOD2(EnterFullscreen, void(LocalFrame&, const FullscreenOptions*));
   MOCK_METHOD1(ExitFullscreen, void(LocalFrame&));
 };
 
@@ -34,7 +34,7 @@ using testing::Sequence;
 class HTMLVideoElementPersistentTest : public PageTestBase {
  protected:
   void SetUp() override {
-    chrome_client_ = new FullscreenMockChromeClient();
+    chrome_client_ = MakeGarbageCollected<FullscreenMockChromeClient>();
 
     Page::PageClients clients;
     FillWithEmptyClients(clients);
@@ -102,7 +102,7 @@ TEST_F(HTMLVideoElementPersistentTest, videoIsFullscreen) {
   EXPECT_CALL(GetMockChromeClient(), ExitFullscreen(_)).Times(0);
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      Frame::NotifyUserActivation(GetDocument().GetFrame());
+      LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
   Fullscreen::RequestFullscreen(*VideoElement());
   SimulateDidEnterFullscreen();
   EXPECT_EQ(FullscreenElement(), VideoElement());
@@ -129,7 +129,7 @@ TEST_F(HTMLVideoElementPersistentTest, divIsFullscreen) {
   EXPECT_CALL(GetMockChromeClient(), ExitFullscreen(_)).Times(0);
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      Frame::NotifyUserActivation(GetDocument().GetFrame());
+      LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
   Fullscreen::RequestFullscreen(*DivElement());
   SimulateDidEnterFullscreen();
   EXPECT_EQ(FullscreenElement(), DivElement());
@@ -163,7 +163,7 @@ TEST_F(HTMLVideoElementPersistentTest, exitFullscreenBeforePersistence) {
   EXPECT_CALL(GetMockChromeClient(), ExitFullscreen(_)).Times(1);
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      Frame::NotifyUserActivation(GetDocument().GetFrame());
+      LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
   Fullscreen::RequestFullscreen(*DivElement());
   SimulateDidEnterFullscreen();
   EXPECT_EQ(FullscreenElement(), DivElement());
@@ -209,7 +209,7 @@ TEST_F(HTMLVideoElementPersistentTest, internalPseudoClassOnlyUAStyleSheet) {
   exception_state.ClearException();
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      Frame::NotifyUserActivation(GetDocument().GetFrame());
+      LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
   Fullscreen::RequestFullscreen(*DivElement());
   SimulateDidEnterFullscreen();
   SimulateBecamePersistentVideo(true);
@@ -242,7 +242,7 @@ TEST_F(HTMLVideoElementPersistentTest, removeContainerWhilePersisting) {
   EXPECT_CALL(GetMockChromeClient(), ExitFullscreen(_)).Times(1);
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      Frame::NotifyUserActivation(GetDocument().GetFrame());
+      LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
   Fullscreen::RequestFullscreen(*DivElement());
   SimulateDidEnterFullscreen();
   EXPECT_EQ(FullscreenElement(), DivElement());
@@ -264,7 +264,7 @@ TEST_F(HTMLVideoElementPersistentTest, removeVideoWhilePersisting) {
   EXPECT_CALL(GetMockChromeClient(), ExitFullscreen(_)).Times(0);
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      Frame::NotifyUserActivation(GetDocument().GetFrame());
+      LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
   Fullscreen::RequestFullscreen(*DivElement());
   SimulateDidEnterFullscreen();
   EXPECT_EQ(FullscreenElement(), DivElement());
@@ -282,7 +282,8 @@ TEST_F(HTMLVideoElementPersistentTest, removeVideoWithLayerWhilePersisting) {
   EXPECT_EQ(FullscreenElement(), nullptr);
 
   // Inserting a <span> between the <div> and <video>.
-  Persistent<Element> span = GetDocument().CreateRawElement(HTMLNames::spanTag);
+  Persistent<Element> span =
+      GetDocument().CreateRawElement(html_names::kSpanTag);
   DivElement()->AppendChild(span);
   span->AppendChild(VideoElement());
 
@@ -290,7 +291,7 @@ TEST_F(HTMLVideoElementPersistentTest, removeVideoWithLayerWhilePersisting) {
   EXPECT_CALL(GetMockChromeClient(), ExitFullscreen(_)).Times(0);
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      Frame::NotifyUserActivation(GetDocument().GetFrame());
+      LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
   Fullscreen::RequestFullscreen(*DivElement());
   SimulateDidEnterFullscreen();
   EXPECT_EQ(FullscreenElement(), DivElement());
@@ -312,7 +313,7 @@ TEST_F(HTMLVideoElementPersistentTest, containsPersistentVideoScopedToFS) {
   EXPECT_CALL(GetMockChromeClient(), ExitFullscreen(_)).Times(0);
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      Frame::NotifyUserActivation(GetDocument().GetFrame());
+      LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
   Fullscreen::RequestFullscreen(*DivElement());
   SimulateDidEnterFullscreen();
   EXPECT_EQ(FullscreenElement(), DivElement());

@@ -17,6 +17,8 @@ class GURL;
 
 namespace test_runner {
 
+extern const char* kIllegalString;
+
 inline bool IsASCIIAlpha(char ch) {
   return base::IsAsciiLower(ch | 0x20);
 }
@@ -25,7 +27,7 @@ inline bool IsNotASCIIAlpha(char ch) {
   return !IsASCIIAlpha(ch);
 }
 
-TEST_RUNNER_EXPORT std::string NormalizeLayoutTestURL(const std::string& url);
+TEST_RUNNER_EXPORT std::string NormalizeWebTestURL(const std::string& url);
 
 std::string URLDescription(const GURL& url);
 const char* WebNavigationPolicyToString(

@@ -1,44 +1,58 @@
 // Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
 'use strict';
 
-testcase.mountCrostiniContainer = function() {
-  const fake = '#directory-tree .tree-item [root-type-icon="crostini"]';
-  const real = '#directory-tree .tree-item [volume-type-icon="crostini"]';
-  let appId;
+testcase.mountCrostini = async () => {
+  const fakeLinuxFiles = '#directory-tree [root-type-icon="crostini"]';
+  const realLinxuFiles = '#directory-tree [volume-type-icon="crostini"]';
 
-  StepsRunner.run([
-    function() {
-      setupAndWaitUntilReady(
-          null, RootPath.DOWNLOADS, this.next, [ENTRIES.hello], []);
-    },
-    function(results) {
-      // Add entries to crostini volume, but do not mount.
-      appId = results.windowId;
-      addEntries(['crostini'], BASIC_CROSTINI_ENTRY_SET, this.next);
-    },
-    function() {
-      // Linux files fake root is shown.
-      remoteCall.waitForElement(appId, fake).then(this.next);
-    },
-    function() {
-      // Mount crostini, and ensure real root and files are shown.
-      remoteCall.callRemoteTestUtil('fakeMouseClick', appId, [fake]);
-      remoteCall.waitForElement(appId, real).then(this.next);
-    },
-    function() {
-      const files = TestEntryInfo.getExpectedRows(BASIC_CROSTINI_ENTRY_SET);
-      remoteCall.waitForFiles(appId, files).then(this.next);
-    },
-    function() {
-      // Unmount and ensure fake root is shown.
-      chrome.test.sendMessage(JSON.stringify({name: 'unmountCrostini'}));
-      remoteCall.waitForElement(appId, fake).then(this.next);
-    },
-    function() {
-      checkIfNoErrorsOccured(this.next);
-    },
-  ]);
+  const appId =
+      await setupAndWaitUntilReady(RootPath.DOWNLOADS, [ENTRIES.hello], []);
+
+  await mountCrostini(appId);
+
+  // Unmount and ensure fake root is shown.
+  remoteCall.callRemoteTestUtil('unmount', null, ['crostini']);
+  await remoteCall.waitForElement(appId, fakeLinuxFiles);
+};
+
+testcase.sharePathWithCrostini = async () => {
+  const fakeLinuxFiles = '#directory-tree [root-type-icon="crostini"]';
+  const realLinuxFiles = '#directory-tree [volume-type-icon="crostini"]';
+  const downloads = '#directory-tree [volume-type-icon="downloads"]';
+  const photos = '#file-list [file-name="photos"]';
+  const menuShareWithLinux = '#file-context-menu:not([hidden]) ' +
+      '[command="#share-with-linux"]:not([hidden]):not([disabled])';
+  const menuNoShareWithLinux = '#file-context-menu:not([hidden]) ' +
+      '[command="#share-with-linux"][hidden][disabled="disabled"]';
+
+  const appId =
+      await setupAndWaitUntilReady(RootPath.DOWNLOADS, [ENTRIES.photos], []);
+
+  // Ensure fake Linux files root is shown.
+  await remoteCall.waitForElement(appId, fakeLinuxFiles);
+
+  // Mount crostini, and ensure real root is shown.
+  remoteCall.callRemoteTestUtil('fakeMouseClick', appId, [fakeLinuxFiles]);
+  await remoteCall.waitForElement(appId, realLinuxFiles);
+
+  // Go back to downloads, wait for photos dir to be shown.
+  remoteCall.callRemoteTestUtil('fakeMouseClick', appId, [downloads]);
+  await remoteCall.waitForElement(appId, photos);
+
+  // Right-click 'photos' directory, ensure 'Share with Linux' is shown.
+  remoteCall.callRemoteTestUtil('fakeMouseRightClick', appId, [photos]);
+  await remoteCall.waitForElement(appId, menuShareWithLinux);
+
+  // Click on 'Share with Linux', ensure menu is closed.
+  await remoteCall.callRemoteTestUtil(
+      'fakeMouseClick', appId,
+      ['#file-context-menu [command="#share-with-linux"]']);
+  await remoteCall.waitForElement(appId, '#file-context-menu[hidden]');
+
+  // Right-click 'photos' directory, ensure 'Share with Linux' is not shown.
+  await remoteCall.callRemoteTestUtil(
+      'fakeMouseRightClick', appId, ['#file-list [file-name="photos"']);
+  await remoteCall.waitForElement(appId, menuNoShareWithLinux);
 };

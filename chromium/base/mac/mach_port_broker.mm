@@ -10,12 +10,15 @@
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/mach_logging.h"
+#include "base/mac/scoped_mach_msg_destroy.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 
 namespace base {
 
 namespace {
+
+constexpr mach_msg_id_t kTaskPortMessageId = 'tskp';
 
 // Mach message structure used in the child as a sending message.
 struct MachPortBroker_ChildSendMsg {
@@ -36,23 +39,24 @@ struct MachPortBroker_ParentRecvMsg : public MachPortBroker_ChildSendMsg {
 bool MachPortBroker::ChildSendTaskPortToParent(const std::string& name) {
   // Look up the named MachPortBroker port that's been registered with the
   // bootstrap server.
-  mach_port_t parent_port;
-  kern_return_t kr = bootstrap_look_up(bootstrap_port,
-      const_cast<char*>(GetMachPortName(name, true).c_str()), &parent_port);
+  mac::ScopedMachSendRight parent_port;
+  std::string bootstrap_name = GetMachPortName(name, true);
+  kern_return_t kr = bootstrap_look_up(
+      bootstrap_port, const_cast<char*>(bootstrap_name.c_str()),
+      mac::ScopedMachSendRight::Receiver(parent_port).get());
   if (kr != KERN_SUCCESS) {
-    BOOTSTRAP_LOG(ERROR, kr) << "bootstrap_look_up";
+    BOOTSTRAP_LOG(ERROR, kr) << "bootstrap_look_up " << bootstrap_name;
     return false;
   }
-  base::mac::ScopedMachSendRight scoped_right(parent_port);
 
   // Create the check in message. This will copy a send right on this process'
   // (the child's) task port and send it to the parent.
-  MachPortBroker_ChildSendMsg msg;
-  bzero(&msg, sizeof(msg));
+  MachPortBroker_ChildSendMsg msg{};
   msg.header.msgh_bits = MACH_MSGH_BITS_REMOTE(MACH_MSG_TYPE_COPY_SEND) |
                          MACH_MSGH_BITS_COMPLEX;
-  msg.header.msgh_remote_port = parent_port;
   msg.header.msgh_size = sizeof(msg);
+  msg.header.msgh_remote_port = parent_port.get();
+  msg.header.msgh_id = kTaskPortMessageId;
   msg.body.msgh_descriptor_count = 1;
   msg.child_task_port.name = mach_task_self();
   msg.child_task_port.disposition = MACH_MSG_TYPE_PORT_SEND;
@@ -93,14 +97,14 @@ bool MachPortBroker::Init() {
   DCHECK(server_port_.get() == MACH_PORT_NULL);
 
   // Check in with launchd and publish the service name.
-  mach_port_t port;
+  std::string bootstrap_name = GetMachPortName(name_, false);
   kern_return_t kr = bootstrap_check_in(
-      bootstrap_port, GetMachPortName(name_, false).c_str(), &port);
+      bootstrap_port, bootstrap_name.c_str(),
+      mac::ScopedMachReceiveRight::Receiver(server_port_).get());
   if (kr != KERN_SUCCESS) {
-    BOOTSTRAP_LOG(ERROR, kr) << "bootstrap_check_in";
+    BOOTSTRAP_LOG(ERROR, kr) << "bootstrap_check_in " << bootstrap_name;
     return false;
   }
-  server_port_.reset(port);
 
   // Start the dispatch source.
   std::string queue_name =
@@ -130,8 +134,7 @@ void MachPortBroker::InvalidatePid(base::ProcessHandle pid) {
 }
 
 void MachPortBroker::HandleRequest() {
-  MachPortBroker_ParentRecvMsg msg;
-  bzero(&msg, sizeof(msg));
+  MachPortBroker_ParentRecvMsg msg{};
   msg.header.msgh_size = sizeof(msg);
   msg.header.msgh_local_port = server_port_.get();
 
@@ -151,6 +154,19 @@ void MachPortBroker::HandleRequest() {
     return;
   }
 
+  // Destroy any rights that this class does not take ownership of.
+  ScopedMachMsgDestroy scoped_msg(&msg.header);
+
+  // Validate that the received message is what is expected.
+  if ((msg.header.msgh_bits & MACH_MSGH_BITS_COMPLEX) == 0 ||
+      msg.header.msgh_id != kTaskPortMessageId ||
+      msg.header.msgh_size != sizeof(MachPortBroker_ChildSendMsg) ||
+      msg.child_task_port.disposition != MACH_MSG_TYPE_PORT_SEND ||
+      msg.child_task_port.type != MACH_MSG_PORT_DESCRIPTOR) {
+    LOG(ERROR) << "Received unexpected message";
+    return;
+  }
+
   // Use the kernel audit information to make sure this message is from
   // a task that this process spawned. The kernel audit token contains the
   // unspoofable pid of the task that sent the message.
@@ -160,12 +176,14 @@ void MachPortBroker::HandleRequest() {
   // Take the lock and update the broker information.
   {
     base::AutoLock lock(lock_);
-    FinalizePid(child_pid, child_task_port);
+    if (FinalizePid(child_pid, child_task_port)) {
+      scoped_msg.Disarm();
+    }
   }
   NotifyObservers(child_pid);
 }
 
-void MachPortBroker::FinalizePid(base::ProcessHandle pid,
+bool MachPortBroker::FinalizePid(base::ProcessHandle pid,
                                  mach_port_t task_port) {
   lock_.AssertAcquired();
 
@@ -173,12 +191,16 @@ void MachPortBroker::FinalizePid(base::ProcessHandle pid,
   if (it == mach_map_.end()) {
     // Do nothing for unknown pids.
     LOG(ERROR) << "Unknown process " << pid << " is sending Mach IPC messages!";
-    return;
+    return false;
   }
 
-  DCHECK(it->second == MACH_PORT_NULL);
-  if (it->second == MACH_PORT_NULL)
-    it->second = task_port;
+  if (it->second != MACH_PORT_NULL) {
+    NOTREACHED();
+    return false;
+  }
+
+  it->second = task_port;
+  return true;
 }
 
 }  // namespace base

@@ -15,14 +15,13 @@ import android.view.View.MeasureSpec;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.ImageView;
 import android.widget.ListPopupWindow;
 import android.widget.PopupWindow;
 import android.widget.TextView;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.infobar.TranslateOptions;
-import org.chromium.chrome.browser.widget.TintedImageView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -51,7 +50,7 @@ public class TranslateMenuHelper implements AdapterView.OnItemClickListener {
 
     public TranslateMenuHelper(Context context, View anchorView, TranslateOptions options,
             TranslateMenuListener itemListener, boolean isIncognito) {
-        mContextWrapper = new ContextThemeWrapper(context, R.style.OverflowMenuTheme);
+        mContextWrapper = new ContextThemeWrapper(context, R.style.OverflowMenuThemeOverlay);
         mAnchorView = anchorView;
         mOptions = options;
         mMenuListener = itemListener;
@@ -98,7 +97,7 @@ public class TranslateMenuHelper implements AdapterView.OnItemClickListener {
             // caused an incorrectly drawn background.
             // TODO(martiw): We might need a new menu background here.
             mPopup.setBackgroundDrawable(
-                    ContextCompat.getDrawable(mContextWrapper, R.drawable.popup_bg));
+                    ContextCompat.getDrawable(mContextWrapper, R.drawable.popup_bg_tinted));
 
             mPopup.setOnItemClickListener(this);
 
@@ -135,7 +134,7 @@ public class TranslateMenuHelper implements AdapterView.OnItemClickListener {
 
         // When layout is RTL, set the horizontal offset to align the menu with the left side of the
         // screen.
-        if (ApiCompatibilityUtils.isLayoutRtl(mAnchorView)) {
+        if (mAnchorView.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL) {
             int[] tempLocation = new int[2];
             mAnchorView.getLocationOnScreen(tempLocation);
             mPopup.setHorizontalOffset(-tempLocation[0]);
@@ -287,8 +286,7 @@ public class TranslateMenuHelper implements AdapterView.OnItemClickListener {
                     menuItemView = getItemView(
                             menuItemView, position, parent, R.layout.translate_menu_item_checked);
 
-                    TintedImageView checkboxIcon =
-                            (TintedImageView) menuItemView.findViewById(R.id.menu_item_icon);
+                    ImageView checkboxIcon = menuItemView.findViewById(R.id.menu_item_icon);
                     if (getItem(position).mId == TranslateMenu.ID_OVERFLOW_ALWAYS_TRANSLATE
                             && mOptions.getTranslateState(TranslateOptions.Type.ALWAYS_LANGUAGE)) {
                         checkboxIcon.setVisibility(View.VISIBLE);

@@ -13,12 +13,13 @@
 #include <utility>
 
 #include "base/feature_list.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/win/scoped_co_mem.h"
 #include "base/win/scoped_variant.h"
 #include "media/base/media_switches.h"
 #include "media/base/timestamp_constants.h"
+#include "media/capture/mojom/image_capture_types.h"
 #include "media/capture/video/blob_utils.h"
 #include "media/capture/video/win/metrics.h"
 #include "media/capture/video/win/video_capture_device_utils_win.h"
@@ -339,7 +340,7 @@ VideoPixelFormat VideoCaptureDeviceWin::TranslateMediaSubtypeToPixelFormat(
   }
 #ifndef NDEBUG
   WCHAR guid_str[128];
-  StringFromGUID2(sub_type, guid_str, arraysize(guid_str));
+  StringFromGUID2(sub_type, guid_str, base::size(guid_str));
   DVLOG(2) << "Device (also) supports an unknown media type " << guid_str;
 #endif
   return PIXEL_FORMAT_UNKNOWN;
@@ -653,7 +654,7 @@ void VideoCaptureDeviceWin::GetPhotoState(GetPhotoStateCallback callback) {
       return;
   }
 
-  auto photo_capabilities = mojom::PhotoState::New();
+  auto photo_capabilities = mojo::CreateEmptyPhotoState();
 
   photo_capabilities->exposure_compensation = RetrieveControlRangeAndCurrent(
       [this](auto... args) {

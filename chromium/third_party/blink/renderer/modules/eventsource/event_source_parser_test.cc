@@ -6,6 +6,7 @@
 
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/modules/eventsource/event_source.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_names.h"
 
 #include <string.h>
@@ -24,14 +25,14 @@ struct EventOrReconnectionTimeSetting {
                                  const String& data,
                                  const AtomicString& id)
       : type(kEvent), event(event), data(data), id(id), reconnection_time(0) {}
-  explicit EventOrReconnectionTimeSetting(unsigned long long reconnection_time)
+  explicit EventOrReconnectionTimeSetting(uint64_t reconnection_time)
       : type(kReconnectionTimeSetting), reconnection_time(reconnection_time) {}
 
   const Type type;
   const AtomicString event;
   const String data;
   const AtomicString id;
-  const unsigned long long reconnection_time;
+  const uint64_t reconnection_time;
 };
 
 class Client : public GarbageCollectedFinalized<Client>,
@@ -48,7 +49,7 @@ class Client : public GarbageCollectedFinalized<Client>,
                       const AtomicString& id) override {
     events_.push_back(EventOrReconnectionTimeSetting(event, data, id));
   }
-  void OnReconnectionTimeSet(unsigned long long reconnection_time) override {
+  void OnReconnectionTimeSet(uint64_t reconnection_time) override {
     events_.push_back(EventOrReconnectionTimeSetting(reconnection_time));
   }
 
@@ -72,7 +73,7 @@ class StoppingClient : public GarbageCollectedFinalized<StoppingClient>,
     parser_->Stop();
     events_.push_back(EventOrReconnectionTimeSetting(event, data, id));
   }
-  void OnReconnectionTimeSet(unsigned long long reconnection_time) override {
+  void OnReconnectionTimeSet(uint64_t reconnection_time) override {
     events_.push_back(EventOrReconnectionTimeSetting(reconnection_time));
   }
 
@@ -90,11 +91,14 @@ class EventSourceParserTest : public testing::Test {
  protected:
   using Type = EventOrReconnectionTimeSetting::Type;
   EventSourceParserTest()
-      : client_(new Client),
-        parser_(new EventSourceParser(AtomicString(), client_)) {}
+      : client_(MakeGarbageCollected<Client>()),
+        parser_(
+            MakeGarbageCollected<EventSourceParser>(AtomicString(), client_)) {}
   ~EventSourceParserTest() override = default;
 
-  void Enqueue(const char* data) { parser_->AddBytes(data, strlen(data)); }
+  void Enqueue(const char* data) {
+    parser_->AddBytes(data, static_cast<uint32_t>(strlen(data)));
+  }
   void EnqueueOneByOne(const char* data) {
     const char* p = data;
     while (*p != '\0')
@@ -130,7 +134,7 @@ TEST_F(EventSourceParserTest, DispatchSimpleMessageEvent) {
 }
 
 TEST_F(EventSourceParserTest, ConstructWithLastEventId) {
-  parser_ = new EventSourceParser("hoge", client_);
+  parser_ = MakeGarbageCollected<EventSourceParser>("hoge", client_);
   EXPECT_EQ("hoge", Parser()->LastEventId());
 
   Enqueue("data:hello\n\n");
@@ -372,8 +376,9 @@ TEST_F(EventSourceParserTest, InvalidUTF8Sequence) {
 }
 
 TEST(EventSourceParserStoppingTest, StopWhileParsing) {
-  StoppingClient* client = new StoppingClient();
-  EventSourceParser* parser = new EventSourceParser(AtomicString(), client);
+  StoppingClient* client = MakeGarbageCollected<StoppingClient>();
+  EventSourceParser* parser =
+      MakeGarbageCollected<EventSourceParser>(AtomicString(), client);
   client->SetParser(parser);
 
   const char kInput[] = "data:hello\nid:99\n\nid:44\ndata:bye\n\n";

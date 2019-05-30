@@ -336,13 +336,13 @@ void EventFactoryEvdev::DispatchTouchEvent(const TouchEventParams& params) {
 
   gfx::PointF location = GetTransformedEventLocation(params);
   PointerDetails details = GetTransformedEventPointerDetails(params);
+  details.twist = 0.f;
 
   // params.slot is guaranteed to be < kNumTouchEvdevSlots.
   int input_id = params.device_id * kNumTouchEvdevSlots + params.slot;
   details.id = touch_id_generator_.GetGeneratedID(input_id);
   TouchEvent touch_event(params.type, gfx::Point(), params.timestamp, details,
-                         modifiers_.GetModifierFlags() | params.flags,
-                         /* angle */ 0.f);
+                         modifiers_.GetModifierFlags() | params.flags);
   touch_event.set_location_f(location);
   touch_event.set_root_location_f(location);
   touch_event.set_source_device_id(params.device_id);
@@ -407,7 +407,7 @@ void EventFactoryEvdev::DispatchStylusStateChanged(StylusState stylus_state) {
   TRACE_EVENT0("evdev", "EventFactoryEvdev::DispatchStylusStateChanged");
   DeviceHotplugEventObserver* observer = DeviceDataManager::GetInstance();
   observer->OnStylusStateChanged(stylus_state);
-};
+}
 
 void EventFactoryEvdev::DispatchGamepadDevicesUpdated(
     const std::vector<InputDevice>& devices) {

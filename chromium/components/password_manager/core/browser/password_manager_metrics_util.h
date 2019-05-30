@@ -10,7 +10,6 @@
 #include <string>
 
 #include "components/autofill/core/common/password_form.h"
-#include "components/password_manager/core/browser/password_reuse_defines.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 
 namespace password_manager {
@@ -56,7 +55,7 @@ enum UIDismissalReason {
   CLICKED_CREDENTIAL_OBSOLETE,   // obsolete.
   AUTO_SIGNIN_TOAST_TIMEOUT,
   AUTO_SIGNIN_TOAST_CLICKED_OBSOLETE,  // obsolete.
-  CLICKED_BRAND_NAME,
+  CLICKED_BRAND_NAME_OBSOLETE,         // obsolete.
   CLICKED_PASSWORDS_DASHBOARD,
   NUM_UI_RESPONSES,
 };
@@ -181,13 +180,6 @@ enum ReauthToAccessPasswordInSettingsEvent {
   REAUTH_COUNT
 };
 
-// Metrics: PasswordManager.IE7LookupResult
-enum IE7LookupResultStatus {
-  IE7_RESULTS_ABSENT = 0,
-  IE7_RESULTS_PRESENT = 1,
-  IE7_RESULTS_COUNT
-};
-
 // Specifies the type of PasswordFormManagers and derived classes to distinguish
 // the context in which a PasswordFormManager is being created and used.
 enum class CredentialSourceType {
@@ -199,16 +191,20 @@ enum class CredentialSourceType {
   kCredentialManagementAPI
 };
 
+// Metrics: PasswordManager.DeleteCorruptedPasswordsResult
 // Metrics: PasswordManager.DeleteUndecryptableLoginsReturnValue
-enum class DeleteUndecryptableLoginsReturnValue {
-  // No broken entries were deleted.
+// A passwords is considered corrupted if it's stored locally using lost
+// encryption key.
+enum class DeleteCorruptedPasswordsResult {
+  // No corrupted entries were deleted.
   kSuccessNoDeletions = 0,
-  // There were broken entries that were successfully deleted.
-  kSuccessLoginsDeleted = 1,
-  // Broken entries were found, but failed to be deleted.
+  // There were corrupted entries that were successfully deleted.
+  kSuccessPasswordsDeleted = 1,
+  // There was at least one corrupted entry that failed to be removed (it's
+  // possible that other corrupted entries were deleted).
   kItemFailure = 2,
   // Encryption is unavailable, it's impossible to determine which entries are
-  // broken.
+  // corrupted.
   kEncryptionUnavailable = 3,
   kMaxValue = kEncryptionUnavailable,
 };
@@ -286,10 +282,49 @@ enum class LinuxBackendMigrationStatus {
   // No migration was attempted (this value should not occur).
   kNotAttempted = 0,
   // The last attempt was not completed.
-  kFailed = 1,
+  kDeprecatedFailed = 1,
   // All the data is in the encrypted loginDB.
   kCopiedAll = 2,
-  kMaxValue = kCopiedAll
+  // The standard login database is encrypted.
+  kLoginDBReplaced = 3,
+  // The migration is about to be attempted.
+  kStarted = 4,
+  // No access to the native backend.
+  kPostponed = 5,
+  // Could not create or write into the temporary file. Deprecated and replaced
+  // by more precise errors.
+  kDeprecatedFailedCreatedEncrypted = 6,
+  // Could not read from the native backend.
+  kFailedAccessNative = 7,
+  // Could not replace old database.
+  kFailedReplace = 8,
+  // Could not initialise the temporary encrypted database.
+  kFailedInitEncrypted,
+  // Could not reset th temporary encrypted database.
+  kFailedRecreateEncrypted,
+  // Could not add entries into the temporary encrypted database.
+  kFailedWriteToEncrypted,
+  kMaxValue = kFailedWriteToEncrypted
+};
+
+// Type of the password drop-down shown on focus field.
+enum class PasswordDropdownState {
+  // The passwords are listed and maybe the "Show all" button.
+  kStandard = 0,
+  // The drop down shows passwords and "Generate password" item.
+  kStandardGenerate = 1,
+  kMaxValue = kStandardGenerate
+};
+
+// Type of the item the user selects in the password drop-down.
+enum class PasswordDropdownSelectedOption {
+  // User selected a credential to fill.
+  kPassword = 0,
+  // User decided to open the password list.
+  kShowAll = 1,
+  // User selected to generate a password.
+  kGenerate = 2,
+  kMaxValue = kGenerate
 };
 
 // A version of the UMA_HISTOGRAM_BOOLEAN macro that allows the |name|
@@ -370,28 +405,39 @@ void LogContextOfShowAllSavedPasswordsShown(
 void LogContextOfShowAllSavedPasswordsAccepted(
     ShowAllSavedPasswordsContext context);
 
+// Log the type of the password dropdown when it's shown.
+void LogPasswordDropdownShown(PasswordDropdownState state);
+
+// Log the type of the password dropdown suggestion when chosen.
+void LogPasswordDropdownItemSelected(PasswordDropdownSelectedOption type);
+
 // Log a password successful submission event.
 void LogPasswordSuccessfulSubmissionIndicatorEvent(
-    autofill::PasswordForm::SubmissionIndicatorEvent event);
+    autofill::SubmissionIndicatorEvent event);
 
 // Log a password successful submission event for accepted by user password save
 // or update.
 void LogPasswordAcceptedSaveUpdateSubmissionIndicatorEvent(
-    autofill::PasswordForm::SubmissionIndicatorEvent event);
+    autofill::SubmissionIndicatorEvent event);
 
 // Log a frame of a submitted password form.
 void LogSubmittedFormFrame(SubmittedFormFrame frame);
 
 // Log a return value of LoginDatabase::DeleteUndecryptableLogins method.
 void LogDeleteUndecryptableLoginsReturnValue(
-    DeleteUndecryptableLoginsReturnValue return_value);
+    DeleteCorruptedPasswordsResult result);
+
+// Log a result of removing passwords that couldn't be decrypted with the
+// present encryption key on MacOS.
+void LogDeleteCorruptedPasswordsResult(DeleteCorruptedPasswordsResult result);
 
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
 // Log a save sync password change event.
 void LogSyncPasswordHashChange(SyncPasswordHashChange event);
 
 // Log whether a sync password hash saved.
-void LogIsSyncPasswordHashSaved(IsSyncPasswordHashSaved state);
+void LogIsSyncPasswordHashSaved(IsSyncPasswordHashSaved state,
+                                bool is_under_advanced_protection);
 
 // Log the number of Gaia password hashes saved, and the number of enterprise
 // password hashes saved.

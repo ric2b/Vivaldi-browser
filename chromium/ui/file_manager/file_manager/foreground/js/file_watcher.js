@@ -28,8 +28,9 @@ FileWatcher.prototype.__proto__ = cr.EventTarget.prototype;
 FileWatcher.prototype.dispose = function() {
   chrome.fileManagerPrivate.onDirectoryChanged.removeListener(
       this.onDirectoryChangedBound_);
-  if (this.watchedDirectoryEntry_)
+  if (this.watchedDirectoryEntry_) {
     this.resetWatchedEntry_();
+  }
 };
 
 /**
@@ -38,18 +39,19 @@ FileWatcher.prototype.dispose = function() {
  * @private
  */
 FileWatcher.prototype.onDirectoryChanged_ = function(event) {
-  var fireWatcherDirectoryChanged = function(changedFiles) {
-    var e = new Event('watcher-directory-changed');
+  const fireWatcherDirectoryChanged = changedFiles => {
+    const e = new Event('watcher-directory-changed');
 
-    if (changedFiles)
+    if (changedFiles) {
       e.changedFiles = changedFiles;
+    }
 
     this.dispatchEvent(e);
-  }.bind(this);
+  };
 
   if (this.watchedDirectoryEntry_) {
-    var eventURL = event.entry.toURL();
-    var watchedDirURL = this.watchedDirectoryEntry_.toURL();
+    const eventURL = event.entry.toURL();
+    const watchedDirURL = this.watchedDirectoryEntry_.toURL();
 
     if (eventURL === watchedDirURL) {
       fireWatcherDirectoryChanged(event.changedFiles);
@@ -57,10 +59,10 @@ FileWatcher.prototype.onDirectoryChanged_ = function(event) {
       // When watched directory is deleted by the change in parent directory,
       // notify it as watcher directory changed.
       this.watchedDirectoryEntry_.getDirectory(
-          this.watchedDirectoryEntry_.fullPath,
-          {create: false},
-          null,
-          function() { fireWatcherDirectoryChanged(null); });
+          this.watchedDirectoryEntry_.fullPath, {create: false}, null,
+          () => {
+            fireWatcherDirectoryChanged(null);
+          });
     }
   }
 };
@@ -74,10 +76,11 @@ FileWatcher.prototype.onDirectoryChanged_ = function(event) {
  * @return {!Promise}
  */
 FileWatcher.prototype.changeWatchedDirectory = function(entry) {
-  if (!util.isFakeEntry(entry))
+  if (!util.isFakeEntry(entry)) {
     return this.changeWatchedEntry_(/** @type {!DirectoryEntry} */ (entry));
-  else
+  } else {
     return this.resetWatchedEntry_();
+  }
 };
 
 /**
@@ -87,13 +90,13 @@ FileWatcher.prototype.changeWatchedDirectory = function(entry) {
  */
 FileWatcher.prototype.resetWatchedEntry_ = function() {
   // Run the tasks in the queue to avoid races.
-  return new Promise(function(fulfill, reject) {
-    this.queue_.run(function(callback) {
+  return new Promise((fulfill, reject) => {
+    this.queue_.run(callback => {
       // Release the watched directory.
       if (this.watchedDirectoryEntry_) {
         chrome.fileManagerPrivate.removeFileWatch(
             this.watchedDirectoryEntry_,
-            function(result) {
+            result => {
               if (chrome.runtime.lastError) {
                 console.error('Failed to remove the watcher because of: ' +
                     chrome.runtime.lastError.message);
@@ -103,13 +106,13 @@ FileWatcher.prototype.resetWatchedEntry_ = function() {
               this.watchedDirectoryEntry_ = null;
               fulfill();
               callback();
-            }.bind(this));
+            });
       } else {
         fulfill();
         callback();
       }
-    }.bind(this));
-  }.bind(this));
+    });
+  });
 };
 
 /**
@@ -119,13 +122,13 @@ FileWatcher.prototype.resetWatchedEntry_ = function() {
  * @private
  */
 FileWatcher.prototype.changeWatchedEntry_ = function(entry) {
-  return new Promise(function(fulfill, reject) {
-    var setEntryClosure = function() {
+  return new Promise((fulfill, reject) => {
+    const setEntryClosure = () => {
       // Run the tasks in the queue to avoid races.
-      this.queue_.run(function(callback) {
+      this.queue_.run(callback => {
         chrome.fileManagerPrivate.addFileWatch(
             entry,
-            function(result) {
+            result => {
               if (chrome.runtime.lastError) {
                 // Most probably setting the watcher is not supported on the
                 // file system type.
@@ -138,13 +141,13 @@ FileWatcher.prototype.changeWatchedEntry_ = function(entry) {
                 fulfill();
               }
               callback();
-            }.bind(this));
-      }.bind(this));
-    }.bind(this);
+            });
+      });
+    };
 
     // Reset the watched directory first, then set the new watched directory.
     return this.resetWatchedEntry_().then(setEntryClosure);
-  }.bind(this));
+  });
 };
 
 /**

@@ -5,6 +5,7 @@
 #include "ui/android/overscroll_refresh.h"
 
 #include "base/logging.h"
+#include "cc/input/overscroll_behavior.h"
 #include "ui/android/overscroll_refresh_handler.h"
 
 namespace ui {
@@ -18,6 +19,7 @@ const float kMinFlingVelocityForActivation = -500.f;
 
 OverscrollRefresh::OverscrollRefresh(OverscrollRefreshHandler* handler)
     : scrolled_to_top_(true),
+      top_at_scroll_start_(true),
       overflow_y_hidden_(false),
       scroll_consumption_state_(DISABLED),
       handler_(handler) {
@@ -35,13 +37,15 @@ OverscrollRefresh::~OverscrollRefresh() {
 
 void OverscrollRefresh::Reset() {
   scroll_consumption_state_ = DISABLED;
+  cumulative_scroll_.set_x(0);
+  cumulative_scroll_.set_y(0);
   handler_->PullReset();
 }
 
 void OverscrollRefresh::OnScrollBegin() {
+  top_at_scroll_start_ = scrolled_to_top_;
   ReleaseWithoutActivation();
-  if (scrolled_to_top_ && !overflow_y_hidden_)
-    scroll_consumption_state_ = AWAITING_SCROLL_UPDATE_ACK;
+  scroll_consumption_state_ = AWAITING_SCROLL_UPDATE_ACK;
 }
 
 void OverscrollRefresh::OnScrollEnd(const gfx::Vector2dF& scroll_velocity) {
@@ -49,11 +53,38 @@ void OverscrollRefresh::OnScrollEnd(const gfx::Vector2dF& scroll_velocity) {
   Release(allow_activation);
 }
 
-void OverscrollRefresh::OnOverscrolled() {
+void OverscrollRefresh::OnOverscrolled(const cc::OverscrollBehavior& behavior) {
   if (scroll_consumption_state_ != AWAITING_SCROLL_UPDATE_ACK)
     return;
 
-  scroll_consumption_state_ = handler_->PullStart() ? ENABLED : DISABLED;
+  float ydelta = cumulative_scroll_.y();
+  float xdelta = cumulative_scroll_.x();
+  bool in_y_direction = std::abs(ydelta) > std::abs(xdelta);
+  OverscrollAction type = OverscrollAction::NONE;
+  bool navigate_forward = false;
+  if (ydelta > 0 && in_y_direction) {
+    // Pull-to-refresh. Check overscroll-behavior-y
+    if (behavior.y != cc::OverscrollBehavior::OverscrollBehaviorType::
+                          kOverscrollBehaviorTypeAuto) {
+      Reset();
+      return;
+    }
+    type = OverscrollAction::PULL_TO_REFRESH;
+  } else if (!in_y_direction) {
+    // Swipe-to-navigate. Check overscroll-behavior-x
+    if (behavior.x != cc::OverscrollBehavior::OverscrollBehaviorType::
+                          kOverscrollBehaviorTypeAuto) {
+      Reset();
+      return;
+    }
+    type = OverscrollAction::HISTORY_NAVIGATION;
+    navigate_forward = xdelta < 0;
+  }
+
+  if (type != OverscrollAction::NONE) {
+    scroll_consumption_state_ =
+        handler_->PullStart(type, navigate_forward) ? ENABLED : DISABLED;
+  }
 }
 
 bool OverscrollRefresh::WillHandleScrollUpdate(
@@ -63,13 +94,21 @@ bool OverscrollRefresh::WillHandleScrollUpdate(
       return false;
 
     case AWAITING_SCROLL_UPDATE_ACK:
-      // If the initial scroll motion is downward, never allow activation.
-      if (scroll_delta.y() <= 0)
-        scroll_consumption_state_ = DISABLED;
+      // Check applies for the pull-to-refresh condition only.
+      if (std::abs(scroll_delta.y()) > std::abs(scroll_delta.x())) {
+        // If the initial scroll motion is downward, or we're in other cases
+        // where activation shouldn't have happened, stop here.
+        if (scroll_delta.y() <= 0 || !top_at_scroll_start_ ||
+            overflow_y_hidden_) {
+          scroll_consumption_state_ = DISABLED;
+          return false;
+        }
+      }
+      cumulative_scroll_.Add(scroll_delta);
       return false;
 
     case ENABLED:
-      handler_->PullUpdate(scroll_delta.y());
+      handler_->PullUpdate(scroll_delta.x(), scroll_delta.y());
       return true;
   }
 
@@ -101,6 +140,8 @@ void OverscrollRefresh::Release(bool allow_refresh) {
   if (scroll_consumption_state_ == ENABLED)
     handler_->PullRelease(allow_refresh);
   scroll_consumption_state_ = DISABLED;
+  cumulative_scroll_.set_x(0);
+  cumulative_scroll_.set_y(0);
 }
 
 }  // namespace ui

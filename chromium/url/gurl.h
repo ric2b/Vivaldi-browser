@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 
+#include "base/component_export.h"
 #include "base/debug/alias.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
@@ -18,9 +19,8 @@
 #include "url/url_canon.h"
 #include "url/url_canon_stdstring.h"
 #include "url/url_constants.h"
-#include "url/url_export.h"
 
-// Represents a URL.
+// Represents a URL. GURL is Google's URL parsing library.
 //
 // A parsed canonicalized URL is guaranteed to be UTF-8. Any non-ASCII input
 // characters are UTF-8 encoded and % escaped to ASCII.
@@ -43,7 +43,7 @@
 // path that contains a literal '#'. Using string concatenation will generate a
 // URL with a truncated path and a reference fragment, while ReplaceComponents
 // will know to escape this and produce the desired result.
-class URL_EXPORT GURL {
+class COMPONENT_EXPORT(URL) GURL {
  public:
   typedef url::StringPieceReplacements<std::string> Replacements;
   typedef url::StringPieceReplacements<base::string16> ReplacementsW;
@@ -249,18 +249,23 @@ class URL_EXPORT GURL {
   // is minimally trustworthy. For that, see Chromium's |IsOriginSecure| for a
   // higher-level and more complete semantics. See that function's documentation
   // for more detail.
-  bool SchemeIsCryptographic() const {
-    return SchemeIs(url::kHttpsScheme) || SchemeIs(url::kWssScheme);
-  }
+  bool SchemeIsCryptographic() const;
+
+  // As above, but static. Parameter should be lower-case ASCII.
+  static bool SchemeIsCryptographic(base::StringPiece lower_ascii_scheme);
 
   // Returns true if the scheme is "blob".
   bool SchemeIsBlob() const {
     return SchemeIs(url::kBlobScheme);
   }
 
-  // The "content" of the URL is everything after the scheme (skipping the
-  // scheme delimiting colon). It is an error to get the content of an invalid
-  // URL: the result will be an empty string.
+  // For most URLs, the "content" is everything after the scheme (skipping the
+  // scheme delimiting colon) and before the fragment (skipping the fragment
+  // delimiting octothorpe). For javascript URLs the "content" also includes the
+  // fragment delimiter and fragment.
+  //
+  // It is an error to get the content of an invalid URL: the result will be an
+  // empty string.
   std::string GetContent() const;
 
   // Returns true if the hostname is an IP address. Note: this function isn't
@@ -468,18 +473,23 @@ class URL_EXPORT GURL {
 };
 
 // Stream operator so GURL can be used in assertion statements.
-URL_EXPORT std::ostream& operator<<(std::ostream& out, const GURL& url);
+COMPONENT_EXPORT(URL)
+std::ostream& operator<<(std::ostream& out, const GURL& url);
 
-URL_EXPORT bool operator==(const GURL& x, const GURL& y);
-URL_EXPORT bool operator!=(const GURL& x, const GURL& y);
+COMPONENT_EXPORT(URL) bool operator==(const GURL& x, const GURL& y);
+COMPONENT_EXPORT(URL) bool operator!=(const GURL& x, const GURL& y);
 
 // Equality operator for comparing raw spec_. This should be used in place of
 // url == GURL(spec) where |spec| is known (i.e. constants). This is to prevent
 // needlessly re-parsing |spec| into a temporary GURL.
-URL_EXPORT bool operator==(const GURL& x, const base::StringPiece& spec);
-URL_EXPORT bool operator==(const base::StringPiece& spec, const GURL& x);
-URL_EXPORT bool operator!=(const GURL& x, const base::StringPiece& spec);
-URL_EXPORT bool operator!=(const base::StringPiece& spec, const GURL& x);
+COMPONENT_EXPORT(URL)
+bool operator==(const GURL& x, const base::StringPiece& spec);
+COMPONENT_EXPORT(URL)
+bool operator==(const base::StringPiece& spec, const GURL& x);
+COMPONENT_EXPORT(URL)
+bool operator!=(const GURL& x, const base::StringPiece& spec);
+COMPONENT_EXPORT(URL)
+bool operator!=(const base::StringPiece& spec, const GURL& x);
 
 // DEBUG_ALIAS_FOR_GURL(var_name, url) copies |url| into a new stack-allocated
 // variable named |<var_name>|.  This helps ensure that the value of |url| gets

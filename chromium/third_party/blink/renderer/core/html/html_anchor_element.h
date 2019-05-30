@@ -67,7 +67,11 @@ class CORE_EXPORT HTMLAnchorElement : public HTMLElement, public DOMURLUtils {
  public:
   static HTMLAnchorElement* Create(Document&);
 
+  HTMLAnchorElement(const QualifiedName&, Document&);
   ~HTMLAnchorElement() override;
+
+  // Returns attributes that should be checked against Trusted Types
+  const AttrNameToTrustedType& GetCheckedAttributeTypes() const override;
 
   KURL Href() const;
   void SetHref(const AtomicString&);
@@ -96,11 +100,9 @@ class CORE_EXPORT HTMLAnchorElement : public HTMLElement, public DOMURLUtils {
 
   void SendPings(const KURL& destination_url) const;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  protected:
-  HTMLAnchorElement(const QualifiedName&, Document&);
-
   void ParseAttribute(const AttributeModificationParams&) override;
   bool SupportsFocus() const override;
   bool MatchesEnabledPseudoClass() const override;
@@ -129,9 +131,10 @@ class CORE_EXPORT HTMLAnchorElement : public HTMLElement, public DOMURLUtils {
 };
 
 inline LinkHash HTMLAnchorElement::VisitedLinkHash() const {
-  if (!cached_visited_link_hash_)
+  if (!cached_visited_link_hash_) {
     cached_visited_link_hash_ = blink::VisitedLinkHash(
-        GetDocument().BaseURL(), FastGetAttribute(HTMLNames::hrefAttr));
+        GetDocument().BaseURL(), FastGetAttribute(html_names::kHrefAttr));
+  }
   return cached_visited_link_hash_;
 }
 

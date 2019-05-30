@@ -32,14 +32,12 @@ class FakeSyncScheduler : public SyncScheduler {
       std::unique_ptr<InvalidationInterface> interface,
       const base::Location& nudge_location) override;
   void ScheduleConfiguration(const ConfigurationParams& params) override;
-  void ScheduleClearServerData(const ClearParams& params) override;
 
   void ScheduleInitialSyncNudge(ModelType model_type) override;
   void SetNotificationsEnabled(bool notifications_enabled) override;
 
   void OnCredentialsUpdated() override;
-  void OnConnectionStatusChange(
-      net::NetworkChangeNotifier::ConnectionType type) override;
+  void OnConnectionStatusChange(network::mojom::ConnectionType type) override;
 
   // SyncCycle::Delegate implementation.
   void OnThrottled(const base::TimeDelta& throttle_duration) override;

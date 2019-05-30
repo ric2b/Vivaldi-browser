@@ -7,7 +7,6 @@
 
 #include <stdint.h>
 
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
@@ -37,9 +36,6 @@ class FontLoader : public SkFontConfigInterface,
  public:
   explicit FontLoader(service_manager::Connector* connector);
   ~FontLoader() override;
-
-  // Shuts down the background thread.
-  void Shutdown();
 
   // SkFontConfigInterface:
   bool matchFamilyName(const char family_name[],
@@ -99,7 +95,7 @@ class FontLoader : public SkFontConfigInterface,
   base::Lock lock_;
 
   // Maps font identity ID to the memory-mapped file with font data.
-  base::hash_map<uint32_t, internal::MappedFontFile*> mapped_font_files_;
+  std::unordered_map<uint32_t, internal::MappedFontFile*> mapped_font_files_;
 
   DISALLOW_COPY_AND_ASSIGN(FontLoader);
 };

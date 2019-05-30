@@ -39,8 +39,8 @@ class FakeCommandBufferHelper : public CommandBufferHelper {
 
   // CommandBufferHelper implementation.
   gl::GLContext* GetGLContext() override;
+  bool HasStub() override;
   bool MakeContextCurrent() override;
-  bool IsContextCurrent() const override;
   GLuint CreateTexture(GLenum target,
                        GLenum internal_format,
                        GLsizei width,
@@ -53,6 +53,7 @@ class FakeCommandBufferHelper : public CommandBufferHelper {
                  gl::GLImage* image,
                  bool client_managed) override;
   gpu::Mailbox CreateMailbox(GLuint service_id) override;
+  void ProduceTexture(const gpu::Mailbox& mailbox, GLuint service_id) override;
   void WaitForSyncToken(gpu::SyncToken sync_token,
                         base::OnceClosure done_cb) override;
   void SetWillDestroyStubCB(WillDestroyStubCB will_destroy_stub_cb) override;

@@ -136,9 +136,12 @@ bool ZoomSetVivaldiUIZoomFunction::RunAsync() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
   double zoom_level = content::ZoomFactorToZoomLevel(params->zoom_factor);
   for (auto* browser : *BrowserList::GetInstance()) {
-    WebContents* web_contents =
+    // Avoid crash if we have a undocked devtools window open.
+    if (browser->type() != Browser::TYPE_POPUP) {
+      WebContents* web_contents =
         static_cast<VivaldiBrowserWindow*>(browser->window())->web_contents();
-    SetUIZoomByWebContent(zoom_level, web_contents, extension());
+      SetUIZoomByWebContent(zoom_level, web_contents, extension());
+    }
   }
 
   SendResponse(true);

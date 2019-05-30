@@ -65,12 +65,14 @@ StyleRuleBase* CSSParser::ParseRule(const CSSParserContext* context,
                                   CSSParserImpl::kAllowImportRules);
 }
 
-void CSSParser::ParseSheet(const CSSParserContext* context,
-                           StyleSheetContents* style_sheet,
-                           const String& text,
-                           bool defer_property_parsing) {
-  return CSSParserImpl::ParseStyleSheet(text, context, style_sheet,
-                                        defer_property_parsing);
+ParseSheetResult CSSParser::ParseSheet(
+    const CSSParserContext* context,
+    StyleSheetContents* style_sheet,
+    const String& text,
+    CSSDeferPropertyParsing defer_property_parsing,
+    bool allow_import_rules) {
+  return CSSParserImpl::ParseStyleSheet(
+      text, context, style_sheet, defer_property_parsing, allow_import_rules);
 }
 
 void CSSParser::ParseSheetForInspector(const CSSParserContext* context,
@@ -184,6 +186,14 @@ ImmutableCSSPropertyValueSet* CSSParser::ParseInlineStyleDeclaration(
   return CSSParserImpl::ParseInlineStyleDeclaration(style_string, element);
 }
 
+ImmutableCSSPropertyValueSet* CSSParser::ParseInlineStyleDeclaration(
+    const String& style_string,
+    CSSParserMode parser_mode,
+    SecureContextMode secure_context_mode) {
+  return CSSParserImpl::ParseInlineStyleDeclaration(style_string, parser_mode,
+                                                    secure_context_mode);
+}
+
 std::unique_ptr<Vector<double>> CSSParser::ParseKeyframeKeyList(
     const String& key_list) {
   return CSSParserImpl::ParseKeyframeKeyList(key_list);
@@ -193,7 +203,7 @@ StyleRuleKeyframe* CSSParser::ParseKeyframeRule(const CSSParserContext* context,
                                                 const String& rule) {
   StyleRuleBase* keyframe = CSSParserImpl::ParseRule(
       rule, context, nullptr, CSSParserImpl::kKeyframeRules);
-  return ToStyleRuleKeyframe(keyframe);
+  return To<StyleRuleKeyframe>(keyframe);
 }
 
 bool CSSParser::ParseSupportsCondition(const String& condition,

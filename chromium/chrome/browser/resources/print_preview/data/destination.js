@@ -22,11 +22,24 @@ print_preview.DestinationType = {
 print_preview.DestinationOrigin = {
   LOCAL: 'local',
   COOKIES: 'cookies',
+  // <if expr="chromeos">
   DEVICE: 'device',
+  // </if>
   PRIVET: 'privet',
   EXTENSION: 'extension',
   CROS: 'chrome_os',
 };
+
+/**
+ * Cloud Print origins.
+ * @const {!Array<!print_preview.DestinationOrigin>}
+ */
+print_preview.CloudOrigins = [
+  print_preview.DestinationOrigin.COOKIES,
+  // <if expr="chromeos">
+  print_preview.DestinationOrigin.DEVICE
+  // </if>
+];
 
 /**
  * Enumeration of the connection statuses of printer destinations.
@@ -102,6 +115,8 @@ print_preview.VendorCapability;
 
 /**
  * Capabilities of a print destination represented in a CDD.
+ * Pin capability is not a part of standard CDD description and is defined only
+ * on Chrome OS.
  *
  * @typedef {{
  *   vendor_capability: !Array<!print_preview.VendorCapability>,
@@ -133,11 +148,12 @@ print_preview.VendorCapability;
  *   dpi: ({
  *     option: !Array<{
  *       vendor_id: (string|undefined),
- *       height_microns: number,
- *       width_microns: number,
+ *       horizontal_dpi: number,
+ *       vertical_dpi: number,
  *       is_default: (boolean|undefined)
  *     }>
- *   }|undefined)
+ *   }|undefined),
+ *   pin: ({supported: (boolean|undefined)}|undefined)
  * }}
  */
 print_preview.CddCapabilities;
@@ -163,9 +179,26 @@ print_preview.ColorMode = {
 };
 
 /**
+ * Enumeration of duplex modes used by Chromium.
+ * This has to coincide with |printing::DuplexModeRestriction| as defined in
+ * printing/backend/printing_restrictions.h
+ * @enum {number}
+ */
+print_preview.DuplexModeRestriction = {
+  NONE: 0x0,
+  SIMPLEX: 0x1,
+  LONG_EDGE: 0x2,
+  SHORT_EDGE: 0x4,
+  DUPLEX: 0x6
+};
+
+/**
  * Policies affecting a destination.
  * @typedef {{
- *   allowedColorModes: ?number,
+ *   allowedColorModes: ?print_preview.ColorMode,
+ *   allowedDuplexModes: ?print_preview.DuplexModeRestriction,
+ *   defaultColorMode: ?print_preview.ColorMode,
+ *   defaultDuplexMode: ?print_preview.DuplexModeRestriction,
  * }}
  */
 print_preview.Policies;
@@ -202,6 +235,28 @@ cr.define('print_preview', function() {
     };
   }
 
+  /**
+   * @param {string} id Destination id.
+   * @param {!print_preview.DestinationOrigin} origin Destination origin.
+   * @param {string} account User account destination is registered for.
+   * @return {string} A key that maps to a destination with the selected |id|,
+   *     |origin|, and |account|.
+   */
+  function createDestinationKey(id, origin, account) {
+    return `${id}/${origin}/${account}`;
+  }
+
+  /**
+   * @param {!print_preview.RecentDestination} recentDestination
+   * @return {string} A key that maps to a destination with parameters matching
+   *     |recentDestination|.
+   */
+  function createRecentDestinationKey(recentDestination) {
+    return print_preview.createDestinationKey(
+        recentDestination.id, recentDestination.origin,
+        recentDestination.account);
+  }
+
   class Destination {
     /**
      * Print destination data object that holds data for both local and cloud
@@ -211,7 +266,6 @@ cr.define('print_preview', function() {
      * @param {!print_preview.DestinationOrigin} origin Origin of the
      *     destination.
      * @param {string} displayName Display name of the destination.
-     * @param {boolean} isRecent Whether the destination has been used recently.
      * @param {!print_preview.DestinationConnectionStatus} connectionStatus
      *     Connection status of the print destination.
      * @param {{tags: (Array<string>|undefined),
@@ -231,8 +285,7 @@ cr.define('print_preview', function() {
      *         }=} opt_params Optional
      *     parameters for the destination.
      */
-    constructor(
-        id, type, origin, displayName, isRecent, connectionStatus, opt_params) {
+    constructor(id, type, origin, displayName, connectionStatus, opt_params) {
       /**
        * ID of the destination.
        * @private {string}
@@ -256,12 +309,6 @@ cr.define('print_preview', function() {
        * @private {string}
        */
       this.displayName_ = displayName || '';
-
-      /**
-       * Whether the destination has been used recently.
-       * @private {boolean}
-       */
-      this.isRecent_ = isRecent;
 
       /**
        * Tags associated with the destination.
@@ -407,18 +454,6 @@ cr.define('print_preview', function() {
       return this.displayName_;
     }
 
-    /** @return {boolean} Whether the destination has been used recently. */
-    get isRecent() {
-      return this.isRecent_;
-    }
-
-    /**
-     * @param {boolean} isRecent Whether the destination has been used recently.
-     */
-    set isRecent(isRecent) {
-      this.isRecent_ = isRecent;
-    }
-
     /**
      * @return {boolean} Whether the user owns the destination. Only applies to
      *     cloud-based destinations.
@@ -531,8 +566,9 @@ cr.define('print_preview', function() {
      *     destination.
      */
     set capabilities(capabilities) {
-      if (capabilities)
+      if (capabilities) {
         this.capabilities_ = capabilities;
+      }
     }
 
     /**
@@ -589,12 +625,10 @@ cr.define('print_preview', function() {
 
     /** @return {boolean} Whether the destination is considered offline. */
     get isOffline() {
-      return arrayContains(
-          [
-            print_preview.DestinationConnectionStatus.OFFLINE,
-            print_preview.DestinationConnectionStatus.DORMANT
-          ],
-          this.connectionStatus_);
+      return [
+        print_preview.DestinationConnectionStatus.OFFLINE,
+        print_preview.DestinationConnectionStatus.DORMANT
+      ].includes(this.connectionStatus_);
     }
 
     /**
@@ -615,10 +649,12 @@ cr.define('print_preview', function() {
 
     /**
      * @return {string} Human readable status for a destination that is offline
-     *     or has a bad certificate. */
+     *     or has a bad certificate.
+     */
     get connectionStatusText() {
-      if (!this.isOfflineOrInvalid)
+      if (!this.isOfflineOrInvalid) {
         return '';
+      }
       const offlineDurationMs = Date.now() - this.lastAccessTime_;
       let statusMessageId;
       if (this.shouldShowInvalidCertificateError) {
@@ -643,50 +679,30 @@ cr.define('print_preview', function() {
       return this.lastAccessTime_;
     }
 
-    /** @return {string} Relative URL of the destination's icon. */
-    get iconUrl() {
+    /** @return {string} Path to the SVG for the destination's icon. */
+    get icon() {
       if (this.id_ == Destination.GooglePromotedId.DOCS) {
-        return Destination.IconUrl_.DOCS;
+        return 'print-preview:save-to-drive';
       }
       if (this.id_ == Destination.GooglePromotedId.SAVE_AS_PDF) {
-        return Destination.IconUrl_.PDF;
+        return 'cr:insert-drive-file';
       }
       if (this.isEnterprisePrinter) {
-        return Destination.IconUrl_.ENTERPRISE;
+        return 'print-preview:business';
       }
       if (this.isLocal) {
-        return Destination.IconUrl_.LOCAL_1X;
+        return 'print-preview:print';
       }
       if (this.type_ == print_preview.DestinationType.MOBILE && this.isOwned_) {
-        return Destination.IconUrl_.MOBILE;
+        return 'print-preview:smartphone';
       }
       if (this.type_ == print_preview.DestinationType.MOBILE) {
-        return Destination.IconUrl_.MOBILE_SHARED;
+        return 'print-preview:smartphone';
       }
       if (this.isOwned_) {
-        return Destination.IconUrl_.CLOUD_1X;
+        return 'print-preview:print';
       }
-      return Destination.IconUrl_.CLOUD_SHARED_1X;
-    }
-
-    /**
-     * @return {string} The srcset="" attribute of a destination. Generally used
-     *     for a 2x (e.g. HiDPI) icon. Can be empty or of the format '<url> 2x'.
-     */
-    get srcSet() {
-      let srcSetIcon = '';
-      let iconUrl = this.iconUrl;
-      if (iconUrl == Destination.IconUrl_.LOCAL_1X) {
-        srcSetIcon = Destination.IconUrl_.LOCAL_2X;
-      } else if (iconUrl == Destination.IconUrl_.CLOUD_1X) {
-        srcSetIcon = Destination.IconUrl_.CLOUD_2X;
-      } else if (iconUrl == Destination.IconUrl_.CLOUD_SHARED_1X) {
-        srcSetIcon = Destination.IconUrl_.CLOUD_SHARED_2X;
-      }
-      if (srcSetIcon) {
-        srcSetIcon += ' 2x';
-      }
-      return srcSetIcon;
+      return 'print-preview:printer-shared';
     }
 
     /**
@@ -754,13 +770,21 @@ cr.define('print_preview', function() {
     }
 
     /**
-     * @return {?number} Color mode set by policy. Valid values are |null|,
-           |print_preview.ColorMode.COLOR| and |print_preview.ColorMode.GRAY|.
-     * @private
+     * @return {?print_preview.ColorMode} Color mode set by policy.
      */
-    colorPolicy_() {
+    get colorPolicy() {
       return this.policies && this.policies.allowedColorModes ?
           this.policies.allowedColorModes :
+          null;
+    }
+
+    /**
+     * @return {?print_preview.DuplexModeRestriction} Duplex modes allowed by
+     *     policy.
+     */
+    get duplexPolicy() {
+      return this.policies && this.policies.allowedDuplexModes ?
+          this.policies.allowedDuplexModes :
           null;
     }
 
@@ -770,8 +794,9 @@ cr.define('print_preview', function() {
      */
     get hasColorCapability() {
       const capability = this.colorCapability_();
-      if (!capability || !capability.option)
+      if (!capability || !capability.option) {
         return false;
+      }
       let hasColor = false;
       let hasMonochrome = false;
       capability.option.forEach(option => {
@@ -784,19 +809,19 @@ cr.define('print_preview', function() {
     }
 
     /**
-     * @return {boolean} Whether the printer color mode is set by policy.
+     * @return {?print_preview.ColorMode} Value of default color setting given
+     *     by policy.
      */
-    get isColorManaged() {
-      return !!this.colorPolicy_();
+    get defaultColorPolicy() {
+      return this.policies && this.policies.defaultColorMode;
     }
 
     /**
-     * @return {?boolean} Value for color setting set by policy.
+     * @return {?print_preview.DuplexModeRestriction} Value of default duplex
+     *     setting given by policy.
      */
-    get colorPolicyValue() {
-      return this.colorPolicy_() ?
-          this.colorPolicy_() == print_preview.ColorMode.COLOR :
-          null;
+    get defaultDuplexPolicy() {
+      return this.policies && this.policies.defaultDuplexMode;
     }
 
     /**
@@ -807,14 +832,16 @@ cr.define('print_preview', function() {
       const typesToLookFor =
           isColor ? this.COLOR_TYPES_ : this.MONOCHROME_TYPES_;
       const capability = this.colorCapability_();
-      if (!capability || !capability.option)
+      if (!capability || !capability.option) {
         return null;
+      }
       for (let i = 0; i < typesToLookFor.length; i++) {
         const matchingOptions = capability.option.filter(option => {
           return option.type == typesToLookFor[i];
         });
-        if (matchingOptions.length > 0)
+        if (matchingOptions.length > 0) {
           return matchingOptions[0];
+        }
       }
       return null;
     }
@@ -845,12 +872,18 @@ cr.define('print_preview', function() {
      */
     get defaultColorOption() {
       const capability = this.colorCapability_();
-      if (!capability || !capability.option)
+      if (!capability || !capability.option) {
         return null;
+      }
       const defaultOptions = capability.option.filter(option => {
         return option.is_default;
       });
       return defaultOptions.length != 0 ? defaultOptions[0] : null;
+    }
+
+    /** @return {string} A unique identifier for this destination. */
+    get key() {
+      return `${this.id_}/${this.origin_}/${this.account_}`;
     }
   }
 
@@ -871,28 +904,11 @@ cr.define('print_preview', function() {
     SAVE_AS_PDF: 'Save as PDF'
   };
 
-  /**
-   * Enumeration of relative icon URLs for various types of destinations.
-   * @enum {string}
-   * @private
-   */
-  Destination.IconUrl_ = {
-    CLOUD_1X: 'images/1x/printer.png',
-    CLOUD_2X: 'images/2x/printer.png',
-    CLOUD_SHARED_1X: 'images/1x/printer_shared.png',
-    CLOUD_SHARED_2X: 'images/2x/printer_shared.png',
-    LOCAL_1X: 'images/1x/printer.png',
-    LOCAL_2X: 'images/2x/printer.png',
-    MOBILE: 'images/mobile.png',
-    MOBILE_SHARED: 'images/mobile_shared.png',
-    PDF: 'images/pdf.png',
-    DOCS: 'images/google_doc.png',
-    ENTERPRISE: 'images/business.svg'
-  };
-
   // Export
   return {
     Destination: Destination,
     makeRecentDestination: makeRecentDestination,
+    createDestinationKey: createDestinationKey,
+    createRecentDestinationKey: createRecentDestinationKey,
   };
 });

@@ -35,7 +35,17 @@ public class MockSafeBrowsingApiHandler implements SafeBrowsingApiHandler {
     private HashMap<String, String> mResponseMap;
 
     @Override
+    public String getSafetyNetId() {
+        return "";
+    }
+
+    @Override
     public boolean init(Observer observer) {
+        return init(observer, false);
+    }
+
+    @Override
+    public boolean init(Observer observer, boolean enableLocalBlacklists) {
         mObserver = observer;
         mResponseMap = new HashMap<String, String>(sResponseMap);
         return true;
@@ -47,7 +57,7 @@ public class MockSafeBrowsingApiHandler implements SafeBrowsingApiHandler {
         // clang-format off
         ThreadUtils.runOnUiThread(
                 (Runnable) () -> mObserver.onUrlCheckDone(
-                        callbackId, STATUS_SUCCESS, metadata, DEFAULT_CHECK_DELTA_US));
+                        callbackId, SafeBrowsingResult.SUCCESS, metadata, DEFAULT_CHECK_DELTA_US));
         // clang-format on
     }
 

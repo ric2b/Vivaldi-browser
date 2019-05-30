@@ -33,6 +33,7 @@
 
 #include "base/format_macros.h"
 #include "base/memory/free_deleter.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "gtest/gtest.h"
@@ -79,7 +80,7 @@ TEST(ProcessReaderLinux, SelfBasic) {
   EXPECT_EQ(process_reader.ParentProcessID(), getppid());
 
   static constexpr char kTestMemory[] = "Some test memory";
-  char buffer[arraysize(kTestMemory)];
+  char buffer[base::size(kTestMemory)];
   ASSERT_TRUE(process_reader.Memory()->Read(
       reinterpret_cast<LinuxVMAddress>(kTestMemory),
       sizeof(kTestMemory),
@@ -715,7 +716,7 @@ void ExpectTestModule(ProcessReaderLinux* reader,
       auto dynamic_mapping = reader->GetMemoryMap()->FindMapping(dynamic_addr);
       auto mappings =
           reader->GetMemoryMap()->FindFilePossibleMmapStarts(*dynamic_mapping);
-      EXPECT_EQ(mappings.size(), 2u);
+      EXPECT_EQ(mappings->Count(), 2u);
       return;
     }
   }

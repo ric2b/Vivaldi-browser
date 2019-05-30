@@ -29,8 +29,8 @@
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
 #include "third_party/blink/renderer/core/layout/layout_state.h"
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
+#include "third_party/blink/renderer/platform/graphics/scroll_types.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/pod_free_list_arena.h"
 
 namespace blink {
 
@@ -171,7 +171,7 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   void CalculateScrollbarModes(ScrollbarMode& h_mode,
                                ScrollbarMode& v_mode) const;
 
-  void DispatchFakeMouseMoveEventSoon(EventHandler&) override;
+  void MayUpdateHoverWhenContentUnderMouseChanged(EventHandler&) override;
 
   LayoutState* GetLayoutState() const { return layout_state_; }
 
@@ -237,14 +237,9 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   // It is very likely you do not want to call this method.
   void SetShouldDoFullPaintInvalidationForViewAndAllDescendants();
 
-  void SetShouldDoFullPaintInvalidationOnResizeIfNeeded(bool width_changed,
-                                                        bool height_changed);
-
   bool ShouldPlaceBlockDirectionScrollbarOnLogicalLeft() const override;
 
   LayoutRect DebugRect() const override;
-
-  IntSize ScrolledContentOffset() const override;
 
   // Returns the coordinates of find-in-page scrollbar tickmarks.  These come
   // from DocumentMarkerController, unless overridden by SetTickmarks.
@@ -258,7 +253,24 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   // (which is responsible for painting the tickmarks).
   void InvalidatePaintForTickmarks();
 
-  bool RecalcOverflowAfterStyleChange() override;
+  bool RecalcLayoutOverflow() final;
+
+  // The visible background area, in the local coordinates. The view background
+  // will be painted in this rect. It's also the positioning area of fixed-
+  // attachment backgrounds.
+  LayoutRect BackgroundRect() const { return OverflowClipRect(LayoutPoint()); }
+
+  // The previous BackgroundRect after the previous paint invalidation.
+  LayoutRect PreviousBackgroundRect() const {
+    DCHECK_EQ(GetDocument().Lifecycle().GetState(),
+              DocumentLifecycle::kInPrePaint);
+    return previous_background_rect_;
+  }
+  void SetPreviousBackgroundRect(const LayoutRect& r) const {
+    DCHECK_EQ(GetDocument().Lifecycle().GetState(),
+              DocumentLifecycle::kInPrePaint);
+    previous_background_rect_ = r;
+  }
 
  private:
   void MapLocalToAncestor(
@@ -272,8 +284,6 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   void MapAncestorToLocal(const LayoutBoxModelObject*,
                           TransformState&,
                           MapCoordinatesFlags) const override;
-  void ComputeSelfHitTestRects(Vector<LayoutRect>&,
-                               const LayoutPoint& layer_offset) const override;
 
   bool CanHaveChildren() const override;
 
@@ -328,6 +338,8 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   ScrollbarMode autosize_v_scrollbar_mode_;
 
   Vector<IntRect> tickmarks_override_;
+
+  mutable LayoutRect previous_background_rect_;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutView, IsLayoutView());

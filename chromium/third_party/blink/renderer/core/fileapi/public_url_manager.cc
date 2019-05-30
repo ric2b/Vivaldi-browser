@@ -26,6 +26,7 @@
 
 #include "third_party/blink/renderer/core/fileapi/public_url_manager.h"
 
+#include "base/metrics/histogram_macros.h"
 #include "third_party/blink/public/common/blob/blob_utils.h"
 #include "third_party/blink/public/mojom/blob/blob_registry.mojom-blink.h"
 #include "third_party/blink/renderer/core/fileapi/url_registry.h"
@@ -99,7 +100,7 @@ SecurityOrigin* BlobOriginMap::GetOrigin(const KURL& url) {
 }  // namespace
 
 PublicURLManager* PublicURLManager::Create(ExecutionContext* context) {
-  return new PublicURLManager(context);
+  return MakeGarbageCollected<PublicURLManager>(context);
 }
 
 PublicURLManager::PublicURLManager(ExecutionContext* context)
@@ -118,6 +119,8 @@ String PublicURLManager::RegisterURL(URLRegistrable* registrable) {
   if (BlobUtils::MojoBlobURLsEnabled())
     blob = registrable->AsMojoBlob();
   if (blob) {
+    // Measure how much jank the following synchronous IPC introduces.
+    SCOPED_UMA_HISTOGRAM_TIMER("Storage.Blob.RegisterPublicURLTime");
     if (!url_store_) {
       BlobDataHandle::GetBlobRegistry()->URLStoreForOrigin(
           origin, MakeRequest(&url_store_));
@@ -164,6 +167,9 @@ void PublicURLManager::Revoke(const KURL& url) {
 void PublicURLManager::Resolve(
     const KURL& url,
     network::mojom::blink::URLLoaderFactoryRequest factory_request) {
+  if (is_stopped_)
+    return;
+
   DCHECK(BlobUtils::MojoBlobURLsEnabled());
   DCHECK(url.ProtocolIs("blob"));
   if (!url_store_) {
@@ -176,6 +182,9 @@ void PublicURLManager::Resolve(
 void PublicURLManager::Resolve(
     const KURL& url,
     mojom::blink::BlobURLTokenRequest token_request) {
+  if (is_stopped_)
+    return;
+
   DCHECK(BlobUtils::MojoBlobURLsEnabled());
   DCHECK(url.ProtocolIs("blob"));
   if (!url_store_) {

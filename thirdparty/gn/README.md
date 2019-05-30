@@ -1,14 +1,25 @@
 # GN
 
 GN is a meta-build system that generates build files for
-[Ninja](https://ninja-build.org).
+[Ninja](https://ninja-build.org). There is documentation in
+[docs/](https://gn.googlesource.com/gn/+/master/docs/) and
+[a presentation on it](https://docs.google.com/presentation/d/15Zwb53JcncHfEwHpnG_PoIbbzQ3GQi_cpujYwbpcbZo/edit?usp=sharing).
 
 ## Getting started
+
+You can download the latest version of GN binary for
+[Linux](https://chrome-infra-packages.appspot.com/dl/gn/gn/linux-amd64/+/latest),
+[macOS](https://chrome-infra-packages.appspot.com/dl/gn/gn/mac-amd64/+/latest) and
+[Windows](https://chrome-infra-packages.appspot.com/dl/gn/gn/windows-amd64/+/latest).
+
+Alternatively, you can build GN from source:
 
     git clone https://gn.googlesource.com/gn
     cd gn
     python build/gen.py
     ninja -C out
+    # To run tests:
+    out/gn_unittests
 
 On Windows, it is expected that `cl.exe`, `link.exe`, and `lib.exe` can be found
 in `PATH`, so you'll want to run from a Visual Studio command prompt, or
@@ -17,6 +28,11 @@ similar.
 On Linux and Mac, the default compiler is `clang++`, a recent version is
 expected to be found in `PATH`. This can be overridden by setting `CC`, `CXX`,
 and `AR`.
+
+## Reporting bugs
+
+If you find a bug, you can see if it is known or report it in the [bug
+database](https://bugs.chromium.org/p/gn/issues/list).
 
 ## Sending patches
 

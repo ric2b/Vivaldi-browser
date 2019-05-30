@@ -11,7 +11,7 @@
 
 namespace content {
 
-class FrameTreeNode;
+class RenderFrameHostImpl;
 
 class DevToolsURLLoaderInterceptor {
  public:
@@ -28,12 +28,12 @@ class DevToolsURLLoaderInterceptor {
       const scoped_refptr<net::AuthChallengeInfo>& auth_info,
       HandleAuthRequestCallback callback);
 
-  DevToolsURLLoaderInterceptor(
-      FrameTreeNode* local_root,
+  explicit DevToolsURLLoaderInterceptor(
       DevToolsNetworkInterceptor::RequestInterceptedCallback callback);
   ~DevToolsURLLoaderInterceptor();
 
-  void SetPatterns(std::vector<DevToolsNetworkInterceptor::Pattern> patterns);
+  void SetPatterns(std::vector<DevToolsNetworkInterceptor::Pattern> patterns,
+                   bool handle_auth);
 
   void GetResponseBody(
       const std::string& interception_id,
@@ -51,20 +51,46 @@ class DevToolsURLLoaderInterceptor {
           callback);
 
   bool CreateProxyForInterception(
-      const base::UnguessableToken frame_token,
-      int process_id,  // 0 for navigation
+      RenderFrameHostImpl* rfh,
+      bool is_navigation,
       bool is_download,
-      network::mojom::URLLoaderFactoryRequest* request) const;
+      network::mojom::URLLoaderFactoryRequest* target_factory_request) const;
 
  private:
-  void UpdateSubresourceLoaderFactories();
-
-  FrameTreeNode* const local_root_;
   bool enabled_;
   std::unique_ptr<Impl, base::OnTaskRunnerDeleter> impl_;
   base::WeakPtr<Impl> weak_impl_;
 
   DISALLOW_COPY_AND_ASSIGN(DevToolsURLLoaderInterceptor);
+};
+
+// The purpose of this class is to have a thin wrapper around
+// InterfacePtr<URLLoaderFactory> that is held by the client as
+// unique_ptr<network::mojom::URLLoaderFactory>, since this is the
+// way some clients pass the factory. We prefer wrapping a mojo proxy
+// rather than exposing original DevToolsURLLoaderFactoryProxy because
+// this takes care of thread hopping when necessary.
+class DevToolsURLLoaderFactoryAdapter
+    : public network::mojom::URLLoaderFactory {
+ public:
+  DevToolsURLLoaderFactoryAdapter() = delete;
+  explicit DevToolsURLLoaderFactoryAdapter(
+      network::mojom::URLLoaderFactoryPtr factory);
+  ~DevToolsURLLoaderFactoryAdapter() override;
+
+ private:
+  // network::mojom::URLLoaderFactory implementation
+  void CreateLoaderAndStart(network::mojom::URLLoaderRequest loader,
+                            int32_t routing_id,
+                            int32_t request_id,
+                            uint32_t options,
+                            const network::ResourceRequest& request,
+                            network::mojom::URLLoaderClientPtr client,
+                            const net::MutableNetworkTrafficAnnotationTag&
+                                traffic_annotation) override;
+  void Clone(network::mojom::URLLoaderFactoryRequest request) override;
+
+  network::mojom::URLLoaderFactoryPtr factory_;
 };
 
 }  // namespace content

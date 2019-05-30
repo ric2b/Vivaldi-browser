@@ -11,6 +11,7 @@ import android.graphics.Color;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.support.annotation.Nullable;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -57,7 +58,10 @@ public class CastWebContentsActivity extends Activity {
     private final Controller<CastAudioManager> mAudioManagerState = new Controller<>();
     // Set in unittests to skip some behavior.
     private final Controller<Unit> mIsTestingState = new Controller<>();
+    // Set at creation. Handles destroying SurfaceHelper.
+    private final Controller<CastWebContentsSurfaceHelper> mSurfaceHelperState = new Controller<>();
 
+    @Nullable
     private CastWebContentsSurfaceHelper mSurfaceHelper;
 
     {
@@ -84,13 +88,23 @@ public class CastWebContentsActivity extends Activity {
 
             setContentView(R.layout.cast_web_contents_activity);
 
-            mSurfaceHelper = new CastWebContentsSurfaceHelper(this, /* hostActivity */
-                    CastWebContentsView.onLayoutActivity(this,
+            mSurfaceHelperState.set(new CastWebContentsSurfaceHelper(
+                    CastWebContentsScopes.onLayoutActivity(this,
                             (FrameLayout) findViewById(R.id.web_contents_container),
                             CastSwitches.getSwitchValueColor(
                                     CastSwitches.CAST_APP_BACKGROUND_COLOR, Color.BLACK)),
-                    (Uri uri) -> mIsFinishingState.set("Delayed teardown for URI: " + uri));
+                    (Uri uri) -> mIsFinishingState.set("Delayed teardown for URI: " + uri)));
         }));
+
+        mSurfaceHelperState.subscribe((CastWebContentsSurfaceHelper surfaceHelper) -> {
+            mSurfaceHelper = surfaceHelper;
+            return () -> {
+                surfaceHelper.onDestroy();
+                mSurfaceHelper = null;
+            };
+        });
+
+        mCreatedState.subscribe(Observers.onExit(x -> mSurfaceHelperState.reset()));
 
         mCreatedState.map(x -> getWindow())
                 .and(mGotIntentState)
@@ -123,10 +137,13 @@ public class CastWebContentsActivity extends Activity {
                 .map(CastWebContentsSurfaceHelper.StartParams::fromBundle)
                 // Use the duplicate-filtering functionality of Controller to drop duplicate params.
                 .subscribe(Observers.onEnter(startParamsState::set));
-        startParamsState.subscribe(Observers.onEnter(this ::notifyNewWebContents));
+        mSurfaceHelperState.and(startParamsState)
+                .subscribe(Observers.onEnter(
+                        Both.adapt(CastWebContentsSurfaceHelper::onNewStartParams)));
 
         mIsFinishingState.subscribe(Observers.onEnter((String reason) -> {
             if (DEBUG) Log.d(TAG, "Finishing activity: " + reason);
+            mSurfaceHelperState.reset();
             finish();
         }));
 
@@ -141,8 +158,8 @@ public class CastWebContentsActivity extends Activity {
 
         Observable<?> stoppingBecauseUserLeftState =
                 Observable.not(mStartedState).and(mUserLeftState);
-        stoppingBecauseUserLeftState.subscribe(Observers.onEnter(
-                x -> { mIsFinishingState.set("User left and activity stopped."); }));
+        stoppingBecauseUserLeftState.subscribe(
+                Observers.onEnter(x -> mIsFinishingState.set("User left and activity stopped.")));
     }
 
     @Override
@@ -151,10 +168,11 @@ public class CastWebContentsActivity extends Activity {
         super.onCreate(savedInstanceState);
         mCreatedState.set(Unit.unit());
         mGotIntentState.set(getIntent());
-    }
 
-    private void notifyNewWebContents(CastWebContentsSurfaceHelper.StartParams params) {
-        if (mSurfaceHelper != null) mSurfaceHelper.onNewStartParams(params);
+        // Whenever our app is visible, volume controls should modify the music stream.
+        // For more information read:
+        // http://developer.android.com/training/managing-audio/volume-playback.html
+        setVolumeControlStream(AudioManager.STREAM_MUSIC);
     }
 
     @Override
@@ -194,9 +212,6 @@ public class CastWebContentsActivity extends Activity {
     @Override
     protected void onDestroy() {
         if (DEBUG) Log.d(TAG, "onDestroy");
-        if (mSurfaceHelper != null) {
-            mSurfaceHelper.onDestroy();
-        }
         mCreatedState.reset();
         super.onDestroy();
     }
@@ -228,20 +243,19 @@ public class CastWebContentsActivity extends Activity {
 
         // Similar condition for all single-click events.
         if (action == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
-            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                    || keyCode == KeyEvent.KEYCODE_MEDIA_REWIND
+                    || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                    || keyCode == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD
                     || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
                     || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY
                     || keyCode == KeyEvent.KEYCODE_MEDIA_PAUSE
                     || keyCode == KeyEvent.KEYCODE_MEDIA_STOP
                     || keyCode == KeyEvent.KEYCODE_MEDIA_NEXT
                     || keyCode == KeyEvent.KEYCODE_MEDIA_PREVIOUS) {
-                CastWebContentsComponent.onKeyDown(mSurfaceHelper.getInstanceId(), keyCode);
-
-                // Stop key should end the entire session.
-                if (keyCode == KeyEvent.KEYCODE_MEDIA_STOP) {
-                    mIsFinishingState.set("User pressed STOP key");
+                if (mSurfaceHelper != null) {
+                    CastWebContentsComponent.onKeyDown(mSurfaceHelper.getSessionId(), keyCode);
                 }
-
                 return true;
             }
         }
@@ -264,7 +278,7 @@ public class CastWebContentsActivity extends Activity {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
-        if (mSurfaceHelper.isTouchInputEnabled()) {
+        if (mSurfaceHelper != null && mSurfaceHelper.isTouchInputEnabled()) {
             return super.dispatchTouchEvent(ev);
         } else {
             return false;
@@ -293,6 +307,6 @@ public class CastWebContentsActivity extends Activity {
 
     @RemovableInRelease
     public void setSurfaceHelperForTesting(CastWebContentsSurfaceHelper surfaceHelper) {
-        mSurfaceHelper = surfaceHelper;
+        mSurfaceHelperState.set(surfaceHelper);
     }
 }

@@ -109,6 +109,40 @@ cr.define('settings_main_page', function() {
           });
     });
 
+    function showManagedHeader() {
+      return settingsMain.showManagedHeader_(
+          settingsMain.inSearchMode_, settingsMain.showingSubpage_);
+    }
+
+    test('managed header hides when searching', function() {
+      Polymer.dom.flush();
+
+      assertTrue(showManagedHeader());
+
+      searchManager.setMatchesFound(false);
+      return settingsMain.searchContents('Query1')
+          .then(() => {
+            assertFalse(showManagedHeader());
+
+            searchManager.setMatchesFound(true);
+            return settingsMain.searchContents('Query2');
+          })
+          .then(() => {
+            assertFalse(showManagedHeader());
+          });
+    });
+
+    test('managed header hides when showing subpage', function() {
+      Polymer.dom.flush();
+
+      assertTrue(showManagedHeader());
+
+      const basicPage = settingsMain.$$('settings-basic-page');
+      basicPage.fire('subpage-expand', {});
+
+      assertFalse(showManagedHeader());
+    });
+
     /** @return {!HTMLElement} */
     function getToggleContainer() {
       const page = settingsMain.$$('settings-basic-page');
@@ -125,10 +159,11 @@ cr.define('settings_main_page', function() {
      */
     function assertToggleContainerVisible(expectedVisible) {
       const toggleContainer = getToggleContainer();
-      if (expectedVisible)
+      if (expectedVisible) {
         assertNotEquals('none', toggleContainer.style.display);
-      else
+      } else {
         assertEquals('none', toggleContainer.style.display);
+      }
     }
 
     test('no results page shows and hides', function() {
@@ -229,6 +264,11 @@ cr.define('settings_main_page', function() {
     // "advanced" page, when the search has been initiated from a subpage
     // whose parent is the "advanced" page.
     test('exiting search mode, advanced expanded', function() {
+      // Trigger basic page to be rendered once.
+      settings.navigateTo(settings.routes.APPEARANCE);
+      Polymer.dom.flush();
+
+      // Navigate to an "advanced" subpage.
       settings.navigateTo(settings.routes.SITE_SETTINGS);
       Polymer.dom.flush();
       return assertAdvancedVisibilityAfterSearch('block');
@@ -261,8 +301,11 @@ cr.define('settings_main_page', function() {
 
       const basicPage = settingsMain.$$('settings-basic-page');
       let advancedPage = null;
-      return basicPage.$$('#advancedPageTemplate')
-          .get()
+
+      return test_util.eventToPromise('showing-section', settingsMain)
+          .then(() => {
+            return basicPage.$$('#advancedPageTemplate').get();
+          })
           .then(function(advanced) {
             advancedPage = advanced;
             return assertPageVisibility('block', 'block');
@@ -277,7 +320,6 @@ cr.define('settings_main_page', function() {
                 getToggleContainer().querySelector('#advancedToggle');
             assertTrue(!!advancedToggle);
             advancedToggle.click();
-
             return whenHidden;
           })
           .then(function() {
@@ -314,6 +356,18 @@ cr.define('settings_main_page', function() {
       Polymer.dom.flush();
       assertFalse(basicPage.showChangePassword);
       assertFalse(!!basicPage.$$('settings-change-password-page'));
+    });
+
+    test('updates the title based on current route', function() {
+      settings.navigateTo(settings.routes.BASIC);
+      assertEquals(document.title, loadTimeData.getString('settings'));
+
+      settings.navigateTo(settings.routes.ABOUT);
+      assertEquals(
+          document.title,
+          loadTimeData.getStringF(
+              'settingsAltPageTitle',
+              loadTimeData.getString('aboutPageTitle')));
     });
   });
 });

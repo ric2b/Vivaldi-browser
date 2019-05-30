@@ -10,7 +10,9 @@
 #include "android_webview/browser/aw_contents_io_thread_client.h"
 #include "android_webview/browser/input_stream.h"
 #include "android_webview/browser/net/android_stream_reader_url_request_job.h"
+#include "android_webview/browser/net/aw_web_resource_request.h"
 #include "android_webview/browser/net/aw_web_resource_response.h"
+#include "base/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/supports_user_data.h"
@@ -66,7 +68,7 @@ class StreamReaderJobDelegateImpl
     if (aw_web_resource_response_->GetStatusInfo(
             env, &status_code, &reason_phrase)) {
       std::string status_line("HTTP/1.1 ");
-      status_line.append(base::IntToString(status_code));
+      status_line.append(base::NumberToString(status_code));
       status_line.append(" ");
       status_line.append(reason_phrase);
       headers->ReplaceStatusLine(status_line);
@@ -90,7 +92,7 @@ class ShouldInterceptRequestAdaptor
     callback_ = std::move(callback);
     io_thread_client_->ShouldInterceptRequestAsync(
         // The request is only used while preparing the call, not retained.
-        request,
+        AwWebResourceRequest(*request),
         base::BindOnce(
             &ShouldInterceptRequestAdaptor::WebResourceResponseObtained,
             // The lifetime of the DelegateObtainer is managed by
@@ -127,7 +129,7 @@ std::unique_ptr<AwContentsIoThreadClient> GetCorrespondingIoThreadClient(
   }
 
   if (render_process_id == -1 || render_frame_id == -1) {
-    const content::ResourceRequestInfo* resourceRequestInfo =
+    content::ResourceRequestInfo* resourceRequestInfo =
         content::ResourceRequestInfo::ForRequest(request);
     if (resourceRequestInfo == nullptr) {
       return nullptr;

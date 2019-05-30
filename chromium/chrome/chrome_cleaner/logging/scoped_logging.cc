@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/command_line.h"
 #include "base/file_version_info.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -58,18 +57,10 @@ ScopedLogging::ScopedLogging(base::FilePath::StringPieceType suffix) {
 
   bool success = logging::InitLogging(logging_settings);
   DCHECK(success);
-  LOG(INFO) << "Starting logs for version: " << CHROME_VERSION_STRING;
+  LOG(INFO) << "Starting logs for version: " << CHROME_CLEANER_VERSION_STRING;
 
-#if defined(CHROME_CLEANER_OFFICIAL_BUILD)
-  // Official builds are opt-out, unless no logs upload is specified.
-  bool enable_uploads =
-      chrome_cleaner::Settings::GetInstance()->logs_upload_allowed();
-#else   // if CHROME_CLEANER_OFFICIAL_BUILD
-  // Other builds are opt-in, unless a test logging URL is specified.
-  bool enable_uploads =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(kTestLoggingURLSwitch);
-#endif  // else of if CHROME_CLEANER_OFFICIAL_BUILD
-  logging_service->EnableUploads(enable_uploads, nullptr);
+  logging_service->EnableUploads(
+      chrome_cleaner::Settings::GetInstance()->logs_upload_allowed(), nullptr);
 }
 
 ScopedLogging::~ScopedLogging() {

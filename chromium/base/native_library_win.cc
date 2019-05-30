@@ -11,7 +11,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/threading/scoped_blocking_call.h"
 
 namespace base {
 
@@ -82,7 +82,7 @@ LoadLibraryResult GetLoadLibraryResult(bool are_search_flags_available,
 NativeLibrary LoadNativeLibraryHelper(const FilePath& library_path,
                                       NativeLibraryLoadError* error) {
   // LoadLibrary() opens the file off disk.
-  AssertBlockingAllowed();
+  ScopedBlockingCall scoped_blocking_call(FROM_HERE, BlockingType::MAY_BLOCK);
 
   HMODULE module = nullptr;
 
@@ -95,7 +95,7 @@ NativeLibrary LoadNativeLibraryHelper(const FilePath& library_path,
     // directory as the library may have dependencies on DLLs in this
     // directory.
     module = ::LoadLibraryExW(
-        library_path.value().c_str(), nullptr,
+        as_wcstr(library_path.value()), nullptr,
         LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
     // If LoadLibraryExW succeeds, log this metric and return.
     if (module) {
@@ -109,13 +109,7 @@ NativeLibrary LoadNativeLibraryHelper(const FilePath& library_path,
   }
 
   // If LoadLibraryExW API/flags are unavailable or API call fails, try
-  // LoadLibraryW API.
-  // TODO(chengx): Currently, if LoadLibraryExW API call fails, LoadLibraryW is
-  // still tried. We should strictly prefer the LoadLibraryExW over the
-  // LoadLibraryW if LoadLibraryW is statistically showing no extra benefits. If
-  // UMA metric shows that FAIL_AND_FAIL is the primary failure mode and/or
-  // FAIL_AND_SUCCESS is close to zero, we should remove this fallback.
-  // (http://crbug.com/701944)
+  // LoadLibraryW API. From UMA, this fallback is necessary for many users.
 
   // Switch the current directory to the library directory as the library
   // may have dependencies on DLLs in this directory.
@@ -128,8 +122,7 @@ NativeLibrary LoadNativeLibraryHelper(const FilePath& library_path,
       restore_directory = true;
     }
   }
-
-  module = ::LoadLibraryW(library_path.value().c_str());
+  module = ::LoadLibraryW(as_wcstr(library_path.value()));
 
   // GetLastError() needs to be called immediately after LoadLibraryW call.
   if (!module && error)

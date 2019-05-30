@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/dom/frame_request_callback_collection.h"
 
+#include "third_party/blink/renderer/core/frame/use_counter.h"
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 
@@ -22,21 +23,21 @@ FrameRequestCallbackCollection::RegisterCallback(FrameCallback* callback) {
 
   TRACE_EVENT_INSTANT1("devtools.timeline", "RequestAnimationFrame",
                        TRACE_EVENT_SCOPE_THREAD, "data",
-                       InspectorAnimationFrameEvent::Data(context_, id));
+                       inspector_animation_frame_event::Data(context_, id));
   probe::AsyncTaskScheduledBreakable(context_, "requestAnimationFrame",
                                      callback);
   return id;
 }
 
 void FrameRequestCallbackCollection::CancelCallback(CallbackId id) {
-  for (size_t i = 0; i < callbacks_.size(); ++i) {
+  for (wtf_size_t i = 0; i < callbacks_.size(); ++i) {
     if (callbacks_[i]->Id() == id) {
       probe::AsyncTaskCanceledBreakable(context_, "cancelAnimationFrame",
                                         callbacks_[i]);
       callbacks_.EraseAt(i);
       TRACE_EVENT_INSTANT1("devtools.timeline", "CancelAnimationFrame",
                            TRACE_EVENT_SCOPE_THREAD, "data",
-                           InspectorAnimationFrameEvent::Data(context_, id));
+                           inspector_animation_frame_event::Data(context_, id));
       return;
     }
   }
@@ -46,7 +47,7 @@ void FrameRequestCallbackCollection::CancelCallback(CallbackId id) {
                                         callback);
       TRACE_EVENT_INSTANT1("devtools.timeline", "CancelAnimationFrame",
                            TRACE_EVENT_SCOPE_THREAD, "data",
-                           InspectorAnimationFrameEvent::Data(context_, id));
+                           inspector_animation_frame_event::Data(context_, id));
       callback->SetIsCancelled(true);
       // will be removed at the end of executeCallbacks()
       return;
@@ -63,24 +64,35 @@ void FrameRequestCallbackCollection::ExecuteCallbacks(
   swap(callbacks_to_invoke_, callbacks_);
 
   for (const auto& callback : callbacks_to_invoke_) {
-    if (!callback->IsCancelled()) {
-      TRACE_EVENT1(
-          "devtools.timeline", "FireAnimationFrame", "data",
-          InspectorAnimationFrameEvent::Data(context_, callback->Id()));
-      probe::AsyncTask async_task(context_, callback);
-      probe::UserCallback probe(context_, "requestAnimationFrame",
-                                AtomicString(), true);
-      if (callback->GetUseLegacyTimeBase())
-        callback->Invoke(high_res_now_ms_legacy);
-      else
-        callback->Invoke(high_res_now_ms);
+    // When the ExecutionContext is destroyed (e.g. an iframe is detached),
+    // there is no path to perform wrapper tracing for the callbacks. In such a
+    // case, the callback functions may already have been collected by V8 GC.
+    // Since it's possible that a callback function being invoked detaches an
+    // iframe, we need to check the condition for each callback.
+    if (context_->IsContextDestroyed())
+      break;
+    if (callback->IsCancelled()) {
+      // Another requestAnimationFrame callback already cancelled this one
+      UseCounter::Count(context_,
+                        WebFeature::kAnimationFrameCancelledWithinFrame);
+      continue;
     }
+    TRACE_EVENT1(
+        "devtools.timeline", "FireAnimationFrame", "data",
+        inspector_animation_frame_event::Data(context_, callback->Id()));
+    probe::AsyncTask async_task(context_, callback);
+    probe::UserCallback probe(context_, "requestAnimationFrame",
+                              AtomicString(), true);
+    if (callback->GetUseLegacyTimeBase())
+      callback->Invoke(high_res_now_ms_legacy);
+    else
+      callback->Invoke(high_res_now_ms);
   }
 
   callbacks_to_invoke_.clear();
 }
 
-void FrameRequestCallbackCollection::Trace(blink::Visitor* visitor) {
+void FrameRequestCallbackCollection::Trace(Visitor* visitor) {
   visitor->Trace(callbacks_);
   visitor->Trace(callbacks_to_invoke_);
   visitor->Trace(context_);

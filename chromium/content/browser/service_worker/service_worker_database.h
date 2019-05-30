@@ -72,11 +72,13 @@ class CONTENT_EXPORT ServiceWorkerDatabase {
     // the waiting version. Then transition to the active version. The stored
     // version may be in the ACTIVATED state or in the INSTALLED state.
     GURL script;
+    blink::mojom::ScriptType script_type;
     blink::mojom::ServiceWorkerUpdateViaCache update_via_cache;
     int64_t version_id;
     bool is_active;
     bool has_fetch_handler;
     base::Time last_update_check;
+    base::Time script_response_time;
     base::Optional<blink::TrialTokenValidator::FeatureToTokensMap>
         origin_trial_tokens;
     blink::mojom::NavigationPreloadState navigation_preload_state;
@@ -230,17 +232,27 @@ class CONTENT_EXPORT ServiceWorkerDatabase {
       int64_t registration_id,
       const std::vector<std::string>& user_data_name_prefixes);
 
+  // Removes traces of deleted data on disk.
+  Status RewriteDB();
+
   // Reads user data for all registrations that have data with |user_data_name|
   // from the database. Returns OK if they are successfully read or not found.
   Status ReadUserDataForAllRegistrations(
       const std::string& user_data_name,
       std::vector<std::pair<int64_t, std::string>>* user_data);
 
-  // Reads user data for all registrations that have data with |user_data_name|
-  // from the database. Returns OK if they are successfully read or not found.
+  // Reads user data for all registrations that have data with
+  // |user_data_name_prefix| from the database. Returns OK if they are
+  // successfully read or not found.
   Status ReadUserDataForAllRegistrationsByKeyPrefix(
       const std::string& user_data_name_prefix,
       std::vector<std::pair<int64_t, std::string>>* user_data);
+
+  // Deletes user data for all registrations that have data with
+  // |user_data_name_prefix| from the database. Returns OK if all are
+  // successfully deleted or not found in the database.
+  Status DeleteUserDataForAllRegistrationsByKeyPrefix(
+      const std::string& user_data_name_prefix);
 
   // Resources should belong to one of following resource lists: uncommitted,
   // committed and purgeable.
@@ -394,9 +406,9 @@ class CONTENT_EXPORT ServiceWorkerDatabase {
   int64_t next_avail_version_id_;
 
   enum State {
-    UNINITIALIZED,
-    INITIALIZED,
-    DISABLED,
+    DATABASE_STATE_UNINITIALIZED,
+    DATABASE_STATE_INITIALIZED,
+    DATABASE_STATE_DISABLED,
   };
   State state_;
 

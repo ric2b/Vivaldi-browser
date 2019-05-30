@@ -20,8 +20,12 @@
 
 class AccountId;
 
-namespace policy {
-class TempCertsCacheNSS;
+namespace net {
+class CanonicalCookie;
+}
+
+namespace network {
+class NSSTempCertsCacheChromeOS;
 }
 
 namespace chromeos {
@@ -43,6 +47,7 @@ class GaiaScreenHandler : public BaseScreenHandler,
   };
 
   GaiaScreenHandler(
+      JSCallsContainer* js_calls_container,
       CoreOobeView* core_oobe_view,
       const scoped_refptr<NetworkStateInformer>& network_state_informer,
       ActiveDirectoryPasswordChangeScreenHandler*
@@ -69,6 +74,11 @@ class GaiaScreenHandler : public BaseScreenHandler,
   // been retrieved.
   void LoadGaiaWithPartition(const GaiaContext& context,
                              const std::string& partition_name);
+
+  // Called after the GAPS cookie, if present, is added to the cookie store.
+  void OnSetCookieForLoadGaiaWithPartition(const GaiaContext& context,
+                                           const std::string& partition_name,
+                                           bool success);
 
   // Callback that loads GAIA after version and stat consent information has
   // been retrieved.
@@ -108,10 +118,15 @@ class GaiaScreenHandler : public BaseScreenHandler,
   void HandleCompleteAuthentication(const std::string& gaia_id,
                                     const std::string& email,
                                     const std::string& password,
-                                    const std::string& auth_code,
                                     bool using_saml,
-                                    const std::string& gaps_cookie,
                                     const ::login::StringList& services);
+  void OnGetCookiesForCompleteAuthentication(
+      const std::string& gaia_id,
+      const std::string& email,
+      const std::string& password,
+      bool using_saml,
+      const ::login::StringList& services,
+      const std::vector<net::CanonicalCookie>& cookies);
   void HandleCompleteLogin(const std::string& gaia_id,
                            const std::string& typed_email,
                            const std::string& password,
@@ -138,8 +153,10 @@ class GaiaScreenHandler : public BaseScreenHandler,
                                        const std::string& typed_email,
                                        const std::string& gaia_id);
   void HandleUpdateSigninUIState(int state);
-  void HandleShowGuestForGaiaScreen(bool allow_guest_login,
-                                    bool can_show_for_gaia);
+
+  // Allows WebUI to control the login shelf's guest button visibility during
+  // OOBE.
+  void HandleShowGuestInOobe(bool show);
 
   void OnShowAddUser();
 
@@ -233,6 +250,9 @@ class GaiaScreenHandler : public BaseScreenHandler,
   // Email to pre-populate with.
   std::string populated_email_;
 
+  // Whether the handler has been initialized.
+  bool initialized_ = false;
+
   // True if dns cache cleanup is done.
   bool dns_cleared_ = false;
 
@@ -243,8 +263,8 @@ class GaiaScreenHandler : public BaseScreenHandler,
   bool cookies_cleared_ = false;
 
   // If true, the sign-in screen will be shown when DNS cache and cookie
-  // clean-up finish.
-  bool show_when_dns_and_cookies_cleared_ = false;
+  // clean-up finish, and the handler is initialized (i.e. the web UI is ready).
+  bool show_when_ready_ = false;
 
   // Has Gaia page silent load been started for the current sign-in attempt?
   bool gaia_silent_load_ = false;
@@ -288,7 +308,8 @@ class GaiaScreenHandler : public BaseScreenHandler,
 
   // Makes untrusted authority certificates from device policy available for
   // client certificate discovery.
-  std::unique_ptr<policy::TempCertsCacheNSS> untrusted_authority_certs_cache_;
+  std::unique_ptr<network::NSSTempCertsCacheChromeOS>
+      untrusted_authority_certs_cache_;
 
   base::WeakPtrFactory<GaiaScreenHandler> weak_factory_;
 

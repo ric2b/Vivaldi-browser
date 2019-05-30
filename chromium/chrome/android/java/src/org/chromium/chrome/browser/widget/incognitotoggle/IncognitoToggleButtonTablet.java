@@ -8,10 +8,11 @@ import android.content.Context;
 import android.util.AttributeSet;
 import android.view.View;
 
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
+import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 
@@ -48,6 +49,12 @@ public class IncognitoToggleButtonTablet extends IncognitoToggleButton {
                 }
             }
         });
+    }
+
+    @Override
+    protected void setImage(boolean isIncognitoSelected) {
+        setImageResource(isIncognitoSelected ? R.drawable.btn_tabstrip_switch_incognito
+                                             : R.drawable.btn_tabstrip_switch_normal);
     }
 
     /**

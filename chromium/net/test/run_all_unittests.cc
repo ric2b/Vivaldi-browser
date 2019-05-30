@@ -4,17 +4,14 @@
 
 #include <iostream>
 
+#include "base/bind.h"
 #include "base/build_time.h"
 #include "base/test/launcher/unit_test_launcher.h"
 #include "build/build_config.h"
 #include "crypto/nss_util.h"
 #include "net/socket/client_socket_pool_base.h"
 #include "net/test/net_test_suite.h"
-#include "url/url_features.h"
-
-#if !defined(OS_IOS)
-#include "mojo/core/embedder/embedder.h"  // nogncheck
-#endif
+#include "url/buildflags.h"
 
 using net::internal::ClientSocketPoolBaseHelper;
 
@@ -56,10 +53,6 @@ int main(int argc, char** argv) {
 
   NetTestSuite test_suite(argc, argv);
   ClientSocketPoolBaseHelper::set_connect_backup_jobs_enabled(false);
-
-#if !defined(OS_IOS)
-  mojo::core::Init();
-#endif
 
   return base::LaunchUnitTests(
       argc, argv, base::Bind(&NetTestSuite::Run,

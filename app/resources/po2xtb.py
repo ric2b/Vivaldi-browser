@@ -1,5 +1,7 @@
 # Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
 
+from __future__ import print_function
+
 import sys, os
 import argparse
 import polib
@@ -13,7 +15,7 @@ from grit.node import empty
 from grit.node import include
 from grit.node import structure
 from grit.node import message
-from grit.node import io
+from grit.node import node_io
 from grit.node import misc
 from grit import util
 from grit import tclib
@@ -98,7 +100,7 @@ def main():
     except:
       translations[clique.GetId()] = {"node":node}
 
-  for tid, item in resources.UberClique().additional_translations_.get(locale, {}).iteritems():
+  for tid, item in resources.UberClique().additional_translations_.get(locale, {}).items():
     if tid not in translations:
       translations[tid] = {"translations": item}
 
@@ -108,10 +110,10 @@ def main():
     update_translation(options, resources, translations, entry)
 
   with open(options.xtb_file, "w") as xtbfile:
-    print >>xtbfile, ("""<?xml version="1.0" encoding="utf-8" ?>\n"""
+    print(("""<?xml version="1.0" encoding="utf-8" ?>\n"""
                   """<!DOCTYPE translationbundle>\n"""
-                  """<translationbundle lang="%s">""" % locale)
-    for msgid, nodes in sorted(translations.iteritems()):
+                  """<translationbundle lang="%s">""" % locale), file=xtbfile)
+    for msgid, nodes in sorted(translations.items()):
       if "translations" in nodes and type(nodes["translations"]) is tclib.Translation:
         text = xml_escape(nodes["translations"].GetRealContent())
       else:
@@ -120,13 +122,13 @@ def main():
       # unescape <ph/> and \"
       text = text.replace("&lt;ph", "<ph").replace("/&gt;", "/>").replace('\"', '"')
       try:
-        print >>xtbfile, (u"""<translation id="%s">%s</translation>""" %
-                        (msgid, text)).encode("utf8")
+        print((u"""<translation id="%s">%s</translation>""" %
+                        (msgid, text)).encode("utf8"), file=xtbfile)
       except:
-        print >>sys.stderr, repr(msgid), "|", repr(text), "|",\
-              repr(text.encode("utf8"))
+        print(repr(msgid), "|", repr(text), "|",\
+              repr(text.encode("utf8")), file=sys.stderr)
         raise
-    print >> xtbfile, "</translationbundle>"
+    print("</translationbundle>", file=xtbfile)
 
 if __name__ == "__main__":
   main()

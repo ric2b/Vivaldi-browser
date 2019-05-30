@@ -16,29 +16,35 @@
 
 namespace device {
 
-class OculusRenderLoop;
+class XRCompositorCommon;
 
 class DEVICE_VR_EXPORT OculusDevice
     : public VRDeviceBase,
       public mojom::XRSessionController,
-      public mojom::IsolatedXRGamepadProviderFactory {
+      public mojom::IsolatedXRGamepadProviderFactory,
+      public mojom::XRCompositorHost {
  public:
   explicit OculusDevice();
   ~OculusDevice() override;
+
+  static bool IsHwAvailable();
+  static bool IsApiAvailable();
 
   // VRDeviceBase
   void RequestSession(
       mojom::XRRuntimeSessionOptionsPtr options,
       mojom::XRRuntime::RequestSessionCallback callback) override;
-  void OnMagicWindowFrameDataRequest(
-      mojom::XRFrameDataProvider::GetFrameDataCallback callback) override;
+  void EnsureInitialized(int render_process_id,
+                         int render_frame_id,
+                         EnsureInitializedCallback callback) override;
   void OnRequestSessionResult(mojom::XRRuntime::RequestSessionCallback callback,
                               bool result,
                               mojom::XRSessionPtr session);
 
-  bool IsInitialized() { return !!session_; }
+  bool IsAvailable();
 
   mojom::IsolatedXRGamepadProviderFactoryPtr BindGamepadFactory();
+  mojom::XRCompositorHostPtr BindCompositorHost();
 
  private:
   // XRSessionController
@@ -50,11 +56,18 @@ class DEVICE_VR_EXPORT OculusDevice
   void GetIsolatedXRGamepadProvider(
       mojom::IsolatedXRGamepadProviderRequest provider_request) override;
 
+  // XRCompositorHost
+  void CreateImmersiveOverlay(
+      mojom::ImmersiveOverlayRequest overlay_request) override;
+
   void OnPresentationEnded();
+  bool EnsureValidDisplayInfo();
   void StartOvrSession();
   void StopOvrSession();
 
-  std::unique_ptr<OculusRenderLoop> render_loop_;
+  int outstanding_session_requests_count_ = 0;
+  bool have_real_display_info_ = false;
+  std::unique_ptr<XRCompositorCommon> render_loop_;
   ovrSession session_ = nullptr;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
 
@@ -62,6 +75,9 @@ class DEVICE_VR_EXPORT OculusDevice
   mojo::Binding<mojom::IsolatedXRGamepadProviderFactory>
       gamepad_provider_factory_binding_;
   mojom::IsolatedXRGamepadProviderRequest provider_request_;
+
+  mojo::Binding<mojom::XRCompositorHost> compositor_host_binding_;
+  mojom::ImmersiveOverlayRequest overlay_request_;
 
   base::WeakPtrFactory<OculusDevice> weak_ptr_factory_;
 

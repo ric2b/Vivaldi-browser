@@ -4,14 +4,18 @@
 
 #include "ui/views/controls/menu/menu_controller.h"
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "ui/accessibility/ax_action_data.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/event_handler.h"
@@ -19,6 +23,8 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_controller_delegate.h"
 #include "ui/views/controls/menu/menu_delegate.h"
 #include "ui/views/controls/menu/menu_host.h"
@@ -30,6 +36,7 @@
 #include "ui/views/test/test_views_delegate.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/root_view.h"
+#include "ui/views/widget/widget_utils.h"
 
 #if defined(USE_AURA)
 #include "ui/aura/client/drag_drop_client.h"
@@ -43,6 +50,10 @@
 #if defined(USE_X11)
 #include "ui/events/test/events_test_utils_x11.h"
 #include "ui/gfx/x/x11.h"
+#endif
+
+#if defined(OS_CHROMEOS)
+#include "ui/base/ui_base_features.h"
 #endif
 
 namespace views {
@@ -324,7 +335,7 @@ class MenuControllerTest : public ViewsTestBase {
     set_views_delegate(std::move(views_delegate));
     ViewsTestBase::SetUp();
     Init();
-    ASSERT_TRUE(base::MessageLoopForUI::IsCurrent());
+    ASSERT_TRUE(base::MessageLoopCurrentForUI::IsSet());
   }
 
   void TearDown() override {
@@ -345,15 +356,17 @@ class MenuControllerTest : public ViewsTestBase {
   }
 
   gfx::Rect CalculateMenuBounds(const MenuBoundsOptions& options) {
-    menu_controller_->state_.anchor = options.menu_anchor;
-    menu_controller_->state_.initial_bounds = options.anchor_bounds;
-    menu_controller_->state_.monitor_bounds = options.monitor_bounds;
-    menu_item_->SetActualMenuPosition(options.menu_position);
-    menu_item_->GetSubmenu()->GetScrollViewContainer()->SetPreferredSize(
-        options.menu_size);
-    bool resulting_direction;
+    SetUpMenuControllerForCalculateBounds(options);
+    bool is_leading;
     return menu_controller_->CalculateMenuBounds(menu_item_.get(), true,
-                                                 &resulting_direction);
+                                                 &is_leading);
+  }
+
+  gfx::Rect CalculateBubbleMenuBounds(const MenuBoundsOptions& options) {
+    SetUpMenuControllerForCalculateBounds(options);
+    bool is_leading;
+    return menu_controller_->CalculateBubbleMenuBounds(menu_item_.get(), true,
+                                                       &is_leading);
   }
 
 #if defined(USE_AURA)
@@ -413,6 +426,102 @@ class MenuControllerTest : public ViewsTestBase {
     test_views_delegate_->set_release_ref_callback(base::Bind(
         &MenuControllerTest::DestroyMenuController, base::Unretained(this)));
     menu_controller_->ExitMenu();
+  }
+
+  void TestMenuFitsOnScreen(MenuAnchorPosition menu_anchor_position) {
+    SCOPED_TRACE(
+        base::StringPrintf("MenuAnchorPosition: %d\n", menu_anchor_position));
+    MenuBoundsOptions options;
+    options.menu_anchor = menu_anchor_position;
+    const int display_size = 500;
+    options.monitor_bounds = gfx::Rect(0, 0, display_size, display_size);
+
+    // Simulate a bottom shelf with a tall menu.
+    const int button_size = 50;
+    options.anchor_bounds = gfx::Rect(
+        display_size / 2, display_size - button_size, button_size, button_size);
+    gfx::Rect final_bounds = CalculateBubbleMenuBounds(options);
+
+    // Adjust the final bounds to not include the shadow and border.
+    const gfx::Insets border_and_shadow_insets =
+        BubbleBorder::GetBorderAndShadowInsets(
+            MenuConfig::instance().touchable_menu_shadow_elevation);
+    final_bounds.Inset(border_and_shadow_insets);
+
+    // Test that the menu will show on screen.
+    EXPECT_TRUE(options.monitor_bounds.Contains(final_bounds));
+
+    // Simulate a left shelf with a tall menu.
+    options.anchor_bounds =
+        gfx::Rect(0, display_size / 2, button_size, button_size);
+    final_bounds = CalculateBubbleMenuBounds(options);
+
+    // Adjust the final bounds to not include the shadow and border.
+    final_bounds.Inset(border_and_shadow_insets);
+
+    // Test that the menu will show on screen.
+    EXPECT_TRUE(options.monitor_bounds.Contains(final_bounds));
+
+    // Simulate right shelf with a tall menu.
+    options.anchor_bounds = gfx::Rect(
+        display_size - button_size, display_size / 2, button_size, button_size);
+    final_bounds = CalculateBubbleMenuBounds(options);
+
+    // Adjust the final bounds to not include the shadow and border.
+    final_bounds.Inset(border_and_shadow_insets);
+
+    // Test that the menu will show on screen.
+    EXPECT_TRUE(options.monitor_bounds.Contains(final_bounds));
+  }
+
+  void TestMenuFitsOnScreenSmallAnchor(
+      MenuAnchorPosition menu_anchor_position) {
+    SCOPED_TRACE(
+        base::StringPrintf("MenuAnchorPosition: %d\n", menu_anchor_position));
+    MenuBoundsOptions options;
+    options.menu_anchor = menu_anchor_position;
+    const int display_size = 500;
+    options.monitor_bounds = gfx::Rect(0, 0, display_size, display_size);
+
+    // Simulate a click on the top left corner.
+    options.anchor_bounds = gfx::Rect(0, 0, 0, 0);
+    gfx::Rect final_bounds = CalculateBubbleMenuBounds(options);
+
+    // Adjust the final bounds to not include the shadow and border.
+    const gfx::Insets border_and_shadow_insets =
+        BubbleBorder::GetBorderAndShadowInsets(
+            MenuConfig::instance().touchable_menu_shadow_elevation);
+    final_bounds.Inset(border_and_shadow_insets);
+
+    // Test that the menu is within the monitor bounds.
+    EXPECT_TRUE(options.monitor_bounds.Contains(final_bounds));
+
+    // Simulate a click on the bottom left corner.
+    options.anchor_bounds = gfx::Rect(0, display_size, 0, 0);
+    final_bounds = CalculateBubbleMenuBounds(options);
+    // Adjust the final bounds to not include the shadow and border.
+    final_bounds.Inset(border_and_shadow_insets);
+
+    // Test that the menu is within the monitor bounds.
+    EXPECT_TRUE(options.monitor_bounds.Contains(final_bounds));
+
+    // Simulate a click on the top right corner.
+    options.anchor_bounds = gfx::Rect(display_size, 0, 0, 0);
+    final_bounds = CalculateBubbleMenuBounds(options);
+    // Adjust the final bounds to not include the shadow and border.
+    final_bounds.Inset(border_and_shadow_insets);
+
+    // Test that the menu is within the monitor bounds.
+    EXPECT_TRUE(options.monitor_bounds.Contains(final_bounds));
+
+    // Simulate a click on the bottom right corner.
+    options.anchor_bounds = gfx::Rect(display_size, display_size, 0, 0);
+    final_bounds = CalculateBubbleMenuBounds(options);
+    // Adjust the final bounds to not include the shadow and border.
+    final_bounds.Inset(border_and_shadow_insets);
+
+    // Test that the menu is within the monitor bounds.
+    EXPECT_TRUE(options.monitor_bounds.Contains(final_bounds));
   }
 
  protected:
@@ -496,8 +605,8 @@ class MenuControllerTest : public ViewsTestBase {
     menu_controller_->SetDropMenuItem(target, position);
   }
 
-  void SetIsCombobox(bool is_combobox) {
-    menu_controller_->set_is_combobox(is_combobox);
+  void SetComboboxType(MenuController::ComboboxType combobox_type) {
+    menu_controller_->set_combobox_type(combobox_type);
   }
 
   void SetSelectionOnPointerDown(SubmenuView* source,
@@ -535,6 +644,15 @@ class MenuControllerTest : public ViewsTestBase {
     menu_controller_->state_.item = menu_item()->GetSubmenu()->GetMenuItemAt(0);
     menu_controller_->StartDrag(
         menu_item()->GetSubmenu()->GetMenuItemAt(0)->CreateSubmenu(), location);
+  }
+
+  void SetUpMenuControllerForCalculateBounds(const MenuBoundsOptions& options) {
+    menu_controller_->state_.anchor = options.menu_anchor;
+    menu_controller_->state_.initial_bounds = options.anchor_bounds;
+    menu_controller_->state_.monitor_bounds = options.monitor_bounds;
+    menu_item_->SetActualMenuPosition(options.menu_position);
+    menu_item_->GetSubmenu()->GetScrollViewContainer()->SetPreferredSize(
+        options.menu_size);
   }
 
   GestureTestWidget* owner() { return owner_.get(); }
@@ -598,14 +716,18 @@ class MenuControllerTest : public ViewsTestBase {
     return MenuConfig::instance().arrow_key_selection_wraps;
   }
 
+  void OpenMenu(MenuItemView* parent) {
+    menu_controller_->OpenMenuImpl(parent, true);
+  }
+
  private:
   void Init() {
     owner_ = std::make_unique<GestureTestWidget>();
     Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
     params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
     owner_->Init(params);
-    event_generator_.reset(
-        new ui::test::EventGenerator(owner_->GetNativeWindow()));
+    event_generator_ =
+        std::make_unique<ui::test::EventGenerator>(GetRootWindow(owner()));
     owner_->Show();
 
     SetupMenuItem();
@@ -654,8 +776,7 @@ TEST_F(MenuControllerTest, EventTargeter) {
     // With the aura::NullWindowTargeter instantiated and assigned we expect
     // the menu to not handle the key event.
     aura::ScopedWindowTargeter scoped_targeter(
-        owner()->GetNativeWindow()->GetRootWindow(),
-        std::make_unique<aura::NullWindowTargeter>());
+        GetRootWindow(owner()), std::make_unique<aura::NullWindowTargeter>());
     PressKey(ui::VKEY_ESCAPE);
     EXPECT_EQ(MenuController::EXIT_NONE, menu_exit_type());
   }
@@ -672,8 +793,7 @@ TEST_F(MenuControllerTest, EventTargeter) {
 // details. When the ids aren't managed correctly, we get stuck down touches.
 TEST_F(MenuControllerTest, TouchIdsReleasedCorrectly) {
   TestEventHandler test_event_handler;
-  owner()->GetNativeWindow()->GetRootWindow()->AddPreTargetHandler(
-      &test_event_handler);
+  GetRootWindow(owner())->AddPreTargetHandler(&test_event_handler);
 
   std::vector<int> devices;
   devices.push_back(1);
@@ -692,8 +812,7 @@ TEST_F(MenuControllerTest, TouchIdsReleasedCorrectly) {
   EXPECT_EQ(MenuController::EXIT_ALL, menu_exit_type());
   EXPECT_EQ(0, test_event_handler.outstanding_touches());
 
-  owner()->GetNativeWindow()->GetRootWindow()->RemovePreTargetHandler(
-      &test_event_handler);
+  GetRootWindow(owner())->RemovePreTargetHandler(&test_event_handler);
 }
 #endif  // defined(USE_X11)
 
@@ -777,6 +896,66 @@ TEST_F(MenuControllerTest, InitialSelectedItem) {
   ResetSelection();
 }
 
+// Tests that opening the menu and pressing 'Home' selects the first menu item.
+TEST_F(MenuControllerTest, FirstSelectedItem) {
+  SetPendingStateItem(menu_item()->GetSubmenu()->GetMenuItemAt(0));
+  EXPECT_EQ(1, pending_state_item()->GetCommand());
+
+  // Select the first menu item.
+  DispatchKey(ui::VKEY_HOME);
+  EXPECT_EQ(1, pending_state_item()->GetCommand());
+
+  // Fake initial root item selection and submenu showing.
+  SetPendingStateItem(menu_item());
+  EXPECT_EQ(0, pending_state_item()->GetCommand());
+
+  // Select the first menu item.
+  DispatchKey(ui::VKEY_HOME);
+  EXPECT_EQ(1, pending_state_item()->GetCommand());
+
+  // Select the last item.
+  SetPendingStateItem(menu_item()->GetSubmenu()->GetMenuItemAt(3));
+  EXPECT_EQ(4, pending_state_item()->GetCommand());
+
+  // Select the first menu item.
+  DispatchKey(ui::VKEY_HOME);
+  EXPECT_EQ(1, pending_state_item()->GetCommand());
+
+  // Clear references in menu controller to the menu item that is going away.
+  ResetSelection();
+}
+
+// Tests that opening the menu and pressing 'End' selects the last enabled menu
+// item.
+TEST_F(MenuControllerTest, LastSelectedItem) {
+  // Fake initial root item selection and submenu showing.
+  SetPendingStateItem(menu_item());
+  EXPECT_EQ(0, pending_state_item()->GetCommand());
+
+  // Select the last menu item.
+  DispatchKey(ui::VKEY_END);
+  EXPECT_EQ(4, pending_state_item()->GetCommand());
+
+  // Select the last item.
+  SetPendingStateItem(menu_item()->GetSubmenu()->GetMenuItemAt(3));
+  EXPECT_EQ(4, pending_state_item()->GetCommand());
+
+  // Select the last menu item.
+  DispatchKey(ui::VKEY_END);
+  EXPECT_EQ(4, pending_state_item()->GetCommand());
+
+  // Select the first item.
+  SetPendingStateItem(menu_item()->GetSubmenu()->GetMenuItemAt(0));
+  EXPECT_EQ(1, pending_state_item()->GetCommand());
+
+  // Select the last menu item.
+  DispatchKey(ui::VKEY_END);
+  EXPECT_EQ(4, pending_state_item()->GetCommand());
+
+  // Clear references in menu controller to the menu item that is going away.
+  ResetSelection();
+}
+
 // Tests that opening menu and pressing 'Down' and 'Up' iterates over enabled
 // items.
 TEST_F(MenuControllerTest, NextSelectedItem) {
@@ -842,7 +1021,7 @@ TEST_F(MenuControllerTest, PreviousSelectedItem) {
 
 // Tests that opening menu and calling SelectByChar works correctly.
 TEST_F(MenuControllerTest, SelectByChar) {
-  SetIsCombobox(true);
+  SetComboboxType(MenuController::kReadonlyCombobox);
 
   // Handle null character should do nothing.
   SelectByChar(0);
@@ -903,6 +1082,8 @@ TEST_F(MenuControllerTest, SelectChildButtonView) {
   ui::MouseEvent event(ui::ET_MOUSE_MOVED, location, location,
                        ui::EventTimeForNow(), 0, 0);
   ProcessMouseMoved(sub_menu, event);
+  EXPECT_EQ(button1, GetHotButton());
+  EXPECT_TRUE(button1->IsHotTracked());
 
   // Incrementing selection should move hot tracking to the second button (next
   // after the first button).
@@ -1232,6 +1413,7 @@ TEST_F(MenuControllerTest, PreserveGestureForOwner) {
 // Tests that touch outside menu does not closes the menu when forwarding
 // gesture events to owner.
 TEST_F(MenuControllerTest, NoTouchCloseWhenSendingGesturesToOwner) {
+  views::test::DisableMenuClosureAnimations();
   MenuController* controller = menu_controller();
 
   // Owner wants the gesture events.
@@ -1259,6 +1441,7 @@ TEST_F(MenuControllerTest, NoTouchCloseWhenSendingGesturesToOwner) {
 
   // Touch outside again and menu should be closed.
   controller->OnTouchEvent(sub_menu, &touch_event);
+  views::test::WaitForMenuClosureAnimation();
   EXPECT_FALSE(IsShowing());
   EXPECT_EQ(MenuController::EXIT_ALL, controller->exit_type());
 }
@@ -1267,6 +1450,7 @@ TEST_F(MenuControllerTest, NoTouchCloseWhenSendingGesturesToOwner) {
 // occur outside of the bounds of the menu. Instead a proper shutdown should
 // occur.
 TEST_F(MenuControllerTest, AsynchronousRepostEvent) {
+  views::test::DisableMenuClosureAnimations();
   MenuController* controller = menu_controller();
   TestMenuControllerDelegate* delegate = menu_controller_delegate();
   std::unique_ptr<TestMenuControllerDelegate> nested_delegate(
@@ -1291,6 +1475,7 @@ TEST_F(MenuControllerTest, AsynchronousRepostEvent) {
   // When attempting to select outside of all menus this should lead to a
   // shutdown. This should not crash while attempting to repost the event.
   SetSelectionOnPointerDown(sub_menu, &event);
+  views::test::WaitForMenuClosureAnimation();
 
   EXPECT_EQ(delegate, GetCurrentDelegate());
   EXPECT_EQ(1, delegate->on_menu_closed_called());
@@ -1305,6 +1490,7 @@ TEST_F(MenuControllerTest, AsynchronousRepostEvent) {
 // Tests that an asynchronous menu reposts touch events that occur outside of
 // the bounds of the menu, and that the menu closes.
 TEST_F(MenuControllerTest, AsynchronousTouchEventRepostEvent) {
+  views::test::DisableMenuClosureAnimations();
   MenuController* controller = menu_controller();
   TestMenuControllerDelegate* delegate = menu_controller_delegate();
 
@@ -1319,6 +1505,7 @@ TEST_F(MenuControllerTest, AsynchronousTouchEventRepostEvent) {
       ui::ET_TOUCH_PRESSED, location, ui::EventTimeForNow(),
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
   controller->OnTouchEvent(sub_menu, &event);
+  views::test::WaitForMenuClosureAnimation();
 
   EXPECT_FALSE(IsShowing());
   EXPECT_EQ(1, delegate->on_menu_closed_called());
@@ -1332,6 +1519,7 @@ TEST_F(MenuControllerTest, AsynchronousTouchEventRepostEvent) {
 // Tests that having the MenuController deleted during RepostEvent does not
 // cause a crash. ASAN bots should not detect use-after-free in MenuController.
 TEST_F(MenuControllerTest, AsynchronousRepostEventDeletesController) {
+  views::test::DisableMenuClosureAnimations();
   MenuController* controller = menu_controller();
   std::unique_ptr<TestMenuControllerDelegate> nested_delegate(
       new TestMenuControllerDelegate());
@@ -1358,6 +1546,7 @@ TEST_F(MenuControllerTest, AsynchronousRepostEventDeletesController) {
   // When attempting to select outside of all menus this should lead to a
   // shutdown. This should not crash while attempting to repost the event.
   SetSelectionOnPointerDown(sub_menu, &event);
+  views::test::WaitForMenuClosureAnimation();
 
   // Close to remove observers before test TearDown
   sub_menu->Close();
@@ -1607,6 +1796,20 @@ TEST_F(MenuControllerTest, CalculateMenuBoundsMonitorFitTest) {
   EXPECT_EQ(expected, CalculateMenuBounds(options));
 }
 
+// Test that menus show up on screen with non-zero sized anchors.
+TEST_F(MenuControllerTest, TestMenuFitsOnScreen) {
+  TestMenuFitsOnScreen(MENU_ANCHOR_BUBBLE_TOUCHABLE_ABOVE);
+  TestMenuFitsOnScreen(MENU_ANCHOR_BUBBLE_TOUCHABLE_LEFT);
+  TestMenuFitsOnScreen(MENU_ANCHOR_BUBBLE_TOUCHABLE_RIGHT);
+}
+
+// Test that menus show up on screen with zero sized anchors.
+TEST_F(MenuControllerTest, TestMenuFitsOnScreenSmallAnchor) {
+  TestMenuFitsOnScreenSmallAnchor(MENU_ANCHOR_BUBBLE_TOUCHABLE_ABOVE);
+  TestMenuFitsOnScreenSmallAnchor(MENU_ANCHOR_BUBBLE_TOUCHABLE_LEFT);
+  TestMenuFitsOnScreenSmallAnchor(MENU_ANCHOR_BUBBLE_TOUCHABLE_RIGHT);
+}
+
 // Test that a menu that was originally drawn below the anchor does not get
 // squished or move above the anchor when it grows vertically and horizontally
 // beyond the monitor bounds.
@@ -1642,11 +1845,6 @@ TEST_F(MenuControllerTest, GrowingMenuMovesLaterallyNotVertically) {
 // This tests that mouse moved events from the initial position of the mouse
 // when the menu was shown don't select the menu item at the mouse position.
 TEST_F(MenuControllerTest, MouseAtMenuItemOnShow) {
-  // aura::Window::MoveCursorTo check fails in Mus due to null
-  // window_manager_client_.
-  if (IsMus())
-    return;
-
   // Most tests create an already shown menu but this test needs one that's
   // not shown, so it can show it. The mouse position is remembered when
   // the menu is shown.
@@ -1661,7 +1859,7 @@ TEST_F(MenuControllerTest, MouseAtMenuItemOnShow) {
   // and show the menu.
   gfx::Size item_size = first_item->CalculatePreferredSize();
   gfx::Point location(item_size.width() / 2, item_size.height() / 2);
-  owner()->GetNativeWindow()->GetRootWindow()->MoveCursorTo(location);
+  GetRootWindow(owner())->MoveCursorTo(location);
   menu_controller()->Run(owner(), nullptr, menu_item.get(), gfx::Rect(),
                          MENU_ANCHOR_TOPLEFT, false, false);
 
@@ -1696,9 +1894,15 @@ TEST_F(MenuControllerTest, AsynchronousCancelEvent) {
   EXPECT_EQ(MenuController::EXIT_ALL, controller->exit_type());
 }
 
-// Tests that if a menu is ran without a widget, that MenuPreTargetHandler does
-// not cause a crash.
+// Tests that menus without parent widgets do not crash in MenuPreTargetHandler.
+// This is generally true, except on Chrome OS running with the window service.
+// In that case, a DCHECK fires to ensure menus can consume parents' key events.
 TEST_F(MenuControllerTest, RunWithoutWidgetDoesntCrash) {
+#if defined(OS_CHROMEOS)
+  if (features::IsUsingWindowService())
+    return;
+#endif  // OS_CHROMEOS
+
   ExitMenuRun();
   MenuController* controller = menu_controller();
   controller->Run(nullptr, nullptr, menu_item(), gfx::Rect(),
@@ -1715,12 +1919,8 @@ TEST_F(MenuControllerTest, MenuControllerReplacedDuringDrag) {
   TestDragDropClient drag_drop_client(
       base::Bind(&MenuControllerTest::TestMenuControllerReplacementDuringDrag,
                  base::Unretained(this)));
-  aura::client::SetDragDropClient(menu_item()
-                                      ->GetSubmenu()
-                                      ->GetWidget()
-                                      ->GetNativeWindow()
-                                      ->GetRootWindow(),
-                                  &drag_drop_client);
+  aura::client::SetDragDropClient(
+      GetRootWindow(menu_item()->GetSubmenu()->GetWidget()), &drag_drop_client);
   StartDrag();
 }
 
@@ -1733,12 +1933,8 @@ TEST_F(MenuControllerTest, CancelAllDuringDrag) {
   AddButtonMenuItems();
   TestDragDropClient drag_drop_client(base::Bind(
       &MenuControllerTest::TestCancelAllDuringDrag, base::Unretained(this)));
-  aura::client::SetDragDropClient(menu_item()
-                                      ->GetSubmenu()
-                                      ->GetWidget()
-                                      ->GetNativeWindow()
-                                      ->GetRootWindow(),
-                                  &drag_drop_client);
+  aura::client::SetDragDropClient(
+      GetRootWindow(menu_item()->GetSubmenu()->GetWidget()), &drag_drop_client);
   StartDrag();
 }
 
@@ -1932,6 +2128,210 @@ TEST_F(MenuControllerTest, NoUseAfterFreeWhenMenuCanceledOnMousePress) {
 
   // Close to remove observers before test TearDown.
   sub_menu->Close();
+}
+
+TEST_F(MenuControllerTest, SetSelectionIndices_MenuItemsOnly) {
+  MenuItemView* const item1 = menu_item()->GetSubmenu()->GetMenuItemAt(0);
+  MenuItemView* const item2 = menu_item()->GetSubmenu()->GetMenuItemAt(1);
+  MenuItemView* const item3 = menu_item()->GetSubmenu()->GetMenuItemAt(2);
+  MenuItemView* const item4 = menu_item()->GetSubmenu()->GetMenuItemAt(3);
+  OpenMenu(menu_item());
+
+  ui::AXNodeData data;
+  item1->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(1, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(4, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  item2->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(2, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(4, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  item3->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(3, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(4, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  item4->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(4, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(4, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+}
+
+TEST_F(MenuControllerTest,
+       SetSelectionIndices_MenuItemsOnly_SkipHiddenAndDisabled) {
+  MenuItemView* const item1 = menu_item()->GetSubmenu()->GetMenuItemAt(0);
+  item1->SetEnabled(false);
+  MenuItemView* const item2 = menu_item()->GetSubmenu()->GetMenuItemAt(1);
+  MenuItemView* const item3 = menu_item()->GetSubmenu()->GetMenuItemAt(2);
+  item3->SetVisible(false);
+  MenuItemView* const item4 = menu_item()->GetSubmenu()->GetMenuItemAt(3);
+  OpenMenu(menu_item());
+
+  ui::AXNodeData data;
+  item2->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(1, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(2, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  item4->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(2, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(2, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+}
+
+TEST_F(MenuControllerTest, SetSelectionIndices_Buttons) {
+  AddButtonMenuItems();
+  MenuItemView* const item1 = menu_item()->GetSubmenu()->GetMenuItemAt(0);
+  MenuItemView* const item2 = menu_item()->GetSubmenu()->GetMenuItemAt(1);
+  MenuItemView* const item3 = menu_item()->GetSubmenu()->GetMenuItemAt(2);
+  MenuItemView* const item4 = menu_item()->GetSubmenu()->GetMenuItemAt(3);
+  MenuItemView* const item5 = menu_item()->GetSubmenu()->GetMenuItemAt(4);
+  Button* const button1 = Button::AsButton(item5->child_at(0));
+  Button* const button2 = Button::AsButton(item5->child_at(1));
+  Button* const button3 = Button::AsButton(item5->child_at(2));
+  OpenMenu(menu_item());
+
+  ui::AXNodeData data;
+  item1->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(1, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(7, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  item2->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(2, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(7, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  item3->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(3, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(7, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  item4->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(4, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(7, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  button1->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(5, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(7, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  button2->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(6, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(7, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  button3->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(7, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(7, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+}
+
+TEST_F(MenuControllerTest, SetSelectionIndices_Buttons_SkipHiddenAndDisabled) {
+  AddButtonMenuItems();
+  MenuItemView* const item1 = menu_item()->GetSubmenu()->GetMenuItemAt(0);
+  MenuItemView* const item2 = menu_item()->GetSubmenu()->GetMenuItemAt(1);
+  MenuItemView* const item3 = menu_item()->GetSubmenu()->GetMenuItemAt(2);
+  MenuItemView* const item4 = menu_item()->GetSubmenu()->GetMenuItemAt(3);
+  MenuItemView* const item5 = menu_item()->GetSubmenu()->GetMenuItemAt(4);
+  Button* const button1 = Button::AsButton(item5->child_at(0));
+  button1->SetEnabled(false);
+  Button* const button2 = Button::AsButton(item5->child_at(1));
+  button2->SetVisible(false);
+  Button* const button3 = Button::AsButton(item5->child_at(2));
+  OpenMenu(menu_item());
+
+  ui::AXNodeData data;
+  item1->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(1, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(5, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  item2->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(2, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(5, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  item3->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(3, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(5, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  item4->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(4, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(5, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  button3->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(5, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(5, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+}
+
+TEST_F(MenuControllerTest, SetSelectionIndices_NestedButtons) {
+  class DummyButtonListener : public ButtonListener {
+   public:
+    ~DummyButtonListener() override = default;
+    void ButtonPressed(Button* sender, const ui::Event& event) override {}
+  };
+
+  MenuItemView* const item1 = menu_item()->GetSubmenu()->GetMenuItemAt(0);
+  MenuItemView* const item2 = menu_item()->GetSubmenu()->GetMenuItemAt(1);
+  MenuItemView* const item3 = menu_item()->GetSubmenu()->GetMenuItemAt(2);
+  MenuItemView* const item4 = menu_item()->GetSubmenu()->GetMenuItemAt(3);
+
+  // This simulates how buttons are nested in views in the main app menu.
+  View* const container_view = new View();
+  container_view->GetViewAccessibility().OverrideRole(ax::mojom::Role::kMenu);
+  item4->AddChildView(container_view);
+
+  // There's usually a label before the traversable elements.
+  container_view->AddChildView(new Label());
+
+  // Add two focusable buttons (buttons in menus are always focusable).
+  Button* const button1 =
+      new LabelButton(new DummyButtonListener(), base::string16());
+  button1->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  button1->GetViewAccessibility().OverrideRole(ax::mojom::Role::kMenuItem);
+  container_view->AddChildView(button1);
+  Button* const button2 =
+      new LabelButton(new DummyButtonListener(), base::string16());
+  button2->GetViewAccessibility().OverrideRole(ax::mojom::Role::kMenuItem);
+  button2->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  container_view->AddChildView(button2);
+
+  OpenMenu(menu_item());
+
+  ui::AXNodeData data;
+  item1->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(1, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(5, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  item2->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(2, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(5, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  item3->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(3, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(5, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  data = ui::AXNodeData();
+  button1->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(4, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(5, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+
+  data = ui::AXNodeData();
+  button2->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(5, data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+  EXPECT_EQ(5, data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+}
+
+// Tests that a menu opened asynchronously, will notify its
+// MenuControllerDelegate when accessibility performs a do default action.
+TEST_F(MenuControllerTest, AccessibilityDoDefaultCallsAccept) {
+  views::test::DisableMenuClosureAnimations();
+
+  MenuController* controller = menu_controller();
+  controller->Run(owner(), nullptr, menu_item(), gfx::Rect(),
+                  MENU_ANCHOR_TOPLEFT, false, false);
+  TestMenuControllerDelegate* delegate = menu_controller_delegate();
+  EXPECT_EQ(0, delegate->on_menu_closed_called());
+
+  MenuItemView* accepted = menu_item()->GetSubmenu()->GetMenuItemAt(0);
+  ui::AXActionData data;
+  data.action = ax::mojom::Action::kDoDefault;
+  accepted->HandleAccessibleAction(data);
+  views::test::WaitForMenuClosureAnimation();
+
+  EXPECT_EQ(1, delegate->on_menu_closed_called());
+  EXPECT_EQ(accepted, delegate->on_menu_closed_menu());
+  EXPECT_EQ(internal::MenuControllerDelegate::NOTIFY_DELEGATE,
+            delegate->on_menu_closed_notify_type());
 }
 
 }  // namespace test

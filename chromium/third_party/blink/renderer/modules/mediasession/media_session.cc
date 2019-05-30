@@ -13,14 +13,17 @@
 #include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/use_counter.h"
+#include "third_party/blink/renderer/core/origin_trials/origin_trials.h"
 #include "third_party/blink/renderer/modules/mediasession/media_metadata.h"
 #include "third_party/blink/renderer/modules/mediasession/media_metadata_sanitizer.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 
 namespace blink {
 
 namespace {
 
-using ::blink::mojom::blink::MediaSessionAction;
+using ::media_session::mojom::blink::MediaSessionAction;
 
 const AtomicString& MojomActionToActionName(MediaSessionAction action) {
   DEFINE_STATIC_LOCAL(const AtomicString, play_action_name, ("play"));
@@ -33,20 +36,23 @@ const AtomicString& MojomActionToActionName(MediaSessionAction action) {
                       ("seekbackward"));
   DEFINE_STATIC_LOCAL(const AtomicString, seek_forward_action_name,
                       ("seekforward"));
+  DEFINE_STATIC_LOCAL(const AtomicString, skip_ad_action_name, ("skipad"));
 
   switch (action) {
-    case MediaSessionAction::PLAY:
+    case MediaSessionAction::kPlay:
       return play_action_name;
-    case MediaSessionAction::PAUSE:
+    case MediaSessionAction::kPause:
       return pause_action_name;
-    case MediaSessionAction::PREVIOUS_TRACK:
+    case MediaSessionAction::kPreviousTrack:
       return previous_track_action_name;
-    case MediaSessionAction::NEXT_TRACK:
+    case MediaSessionAction::kNextTrack:
       return next_track_action_name;
-    case MediaSessionAction::SEEK_BACKWARD:
+    case MediaSessionAction::kSeekBackward:
       return seek_backward_action_name;
-    case MediaSessionAction::SEEK_FORWARD:
+    case MediaSessionAction::kSeekForward:
       return seek_forward_action_name;
+    case MediaSessionAction::kSkipAd:
+      return skip_ad_action_name;
     default:
       NOTREACHED();
   }
@@ -56,17 +62,19 @@ const AtomicString& MojomActionToActionName(MediaSessionAction action) {
 base::Optional<MediaSessionAction> ActionNameToMojomAction(
     const String& action_name) {
   if ("play" == action_name)
-    return MediaSessionAction::PLAY;
+    return MediaSessionAction::kPlay;
   if ("pause" == action_name)
-    return MediaSessionAction::PAUSE;
+    return MediaSessionAction::kPause;
   if ("previoustrack" == action_name)
-    return MediaSessionAction::PREVIOUS_TRACK;
+    return MediaSessionAction::kPreviousTrack;
   if ("nexttrack" == action_name)
-    return MediaSessionAction::NEXT_TRACK;
+    return MediaSessionAction::kNextTrack;
   if ("seekbackward" == action_name)
-    return MediaSessionAction::SEEK_BACKWARD;
+    return MediaSessionAction::kSeekBackward;
   if ("seekforward" == action_name)
-    return MediaSessionAction::SEEK_FORWARD;
+    return MediaSessionAction::kSeekForward;
+  if ("skipad" == action_name)
+    return MediaSessionAction::kSkipAd;
 
   NOTREACHED();
   return base::nullopt;
@@ -108,7 +116,7 @@ MediaSession::MediaSession(ExecutionContext* execution_context)
       client_binding_(this) {}
 
 MediaSession* MediaSession::Create(ExecutionContext* execution_context) {
-  return new MediaSession(execution_context);
+  return MakeGarbageCollected<MediaSession>(execution_context);
 }
 
 void MediaSession::Dispose() {
@@ -151,7 +159,19 @@ void MediaSession::OnMetadataChanged() {
 }
 
 void MediaSession::setActionHandler(const String& action,
-                                    V8MediaSessionActionHandler* handler) {
+                                    V8MediaSessionActionHandler* handler,
+                                    ExceptionState& exception_state) {
+  if (action == "skipad") {
+    if (!origin_trials::SkipAdEnabled(GetExecutionContext())) {
+      exception_state.ThrowTypeError(
+          "The provided value 'skipad' is not a valid enum "
+          "value of type MediaSessionAction.");
+      return;
+    }
+
+    UseCounter::Count(GetExecutionContext(), WebFeature::kMediaSessionSkipAd);
+  }
+
   if (handler) {
     auto add_result = action_handlers_.Set(action, handler);
 
@@ -194,20 +214,22 @@ mojom::blink::MediaSessionService* MediaSession::GetService() {
   if (!GetExecutionContext())
     return nullptr;
 
-  DCHECK(GetExecutionContext()->IsDocument())
-      << "MediaSession::getService() is only available from a frame";
-  Document* document = ToDocument(GetExecutionContext());
+  Document* document = To<Document>(GetExecutionContext());
   LocalFrame* frame = document->GetFrame();
   if (!frame)
     return nullptr;
 
-  frame->GetInterfaceProvider().GetInterface(mojo::MakeRequest(&service_));
+  // See https://bit.ly/2S0zRAS for task types.
+  auto task_runner =
+      GetExecutionContext()->GetTaskRunner(TaskType::kMiscPlatformAPI);
+  frame->GetInterfaceProvider().GetInterface(
+      mojo::MakeRequest(&service_, task_runner));
   if (service_.get()) {
     // Record the eTLD+1 of the frame using the API.
     Platform::Current()->RecordRapporURL("Media.Session.APIUsage.Origin",
                                          document->Url());
     blink::mojom::blink::MediaSessionClientPtr client;
-    client_binding_.Bind(mojo::MakeRequest(&client));
+    client_binding_.Bind(mojo::MakeRequest(&client, task_runner), task_runner);
     service_->SetClient(std::move(client));
   }
 
@@ -215,11 +237,11 @@ mojom::blink::MediaSessionService* MediaSession::GetService() {
 }
 
 void MediaSession::DidReceiveAction(
-    blink::mojom::blink::MediaSessionAction action) {
-  DCHECK(GetExecutionContext()->IsDocument());
-  Document* document = ToDocument(GetExecutionContext());
+    media_session::mojom::blink::MediaSessionAction action) {
+  Document* document = To<Document>(GetExecutionContext());
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      Frame::NotifyUserActivation(document ? document->GetFrame() : nullptr);
+      LocalFrame::NotifyUserActivation(document ? document->GetFrame()
+                                                : nullptr);
 
   auto iter = action_handlers_.find(MojomActionToActionName(action));
   if (iter == action_handlers_.end())

@@ -36,25 +36,25 @@ namespace arc {
 // check, so it is ok to access them directly.
 bool IsArcAvailable();
 
-// Returns true if ARC is not installed and the current device is not supported
-// to run ARC.
-bool IsWebstoreSearchEnabled();
-
-// Returns true if ARC image has Play Store package.
-bool IsPlayStoreAvailable();
+// Returns true if ARC VM is enabled.
+bool IsArcVmEnabled();
 
 // Returns true if ARC should always start within the primary user session
 // (opted in user or not), and other supported mode such as guest and Kiosk
 // mode.
 bool ShouldArcAlwaysStart();
 
+// Returns true if ARC should always start with no Play Store availability
+// within the primary user session (opted in user or not), and other supported
+// mode such as guest and Kiosk mode.
+bool ShouldArcAlwaysStartWithNoPlayStore();
+
 // Returns true if ARC OptIn ui needs to be shown for testing.
 bool ShouldShowOptInForTesting();
 
-// Enables to always start ARC for testing, by appending the command line flag.
-// If |bool play_store_available| is not set then flag that disables ARC Play
-// Store UI is added.
-void SetArcAlwaysStartForTesting(bool play_store_available);
+// Enables to always start ARC without Play Store for testing, by appending the
+// command line flag.
+void SetArcAlwaysStartWithoutPlayStoreForTesting();
 
 // Returns true if ARC is installed and running ARC kiosk apps on the current
 // device is officially supported.
@@ -105,8 +105,20 @@ bool IsArcOptInVerificationDisabled();
 // |window| is nullptr, returns false.
 bool IsArcAppWindow(const aura::Window* window);
 
+// Returns true if ARC app icons are forced to cache.
+bool IsArcForceCacheAppIcon();
+
 // Returns true if data clean up is requested for each ARC start.
 bool IsArcDataCleanupOnStartRequested();
+
+// Returns true in case ARC app sync flow is disabled.
+bool IsArcAppSyncFlowDisabled();
+
+// Returns true in case ARC locale sync is disabled.
+bool IsArcLocaleSyncDisabled();
+
+// Returns true in case ARC Play Auto Install flow is disabled.
+bool IsArcPlayAutoInstallDisabled();
 
 // Adjusts the amount of CPU the ARC instance is allowed to use. When
 // |do_restrict| is true, the limit is adjusted so ARC can only use tightly

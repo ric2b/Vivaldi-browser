@@ -25,10 +25,11 @@
 
 #include "third_party/blink/renderer/core/script/pending_script.h"
 
-#include "third_party/blink/public/platform/web_feature.mojom-shared.h"
+#include "third_party/blink/public/mojom/web_feature/web_feature.mojom-shared.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_parser_timing.h"
+#include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
 #include "third_party/blink/renderer/core/script/ignore_destructive_write_count_incrementer.h"
@@ -124,8 +125,9 @@ void PendingScript::MarkParserBlockingLoadStartTime() {
   parser_blocking_load_start_time_ = CurrentTimeTicks();
 }
 
-// https://html.spec.whatwg.org/multipage/scripting.html#execute-the-script-block
+// <specdef href="https://html.spec.whatwg.org/C/#execute-the-script-block">
 void PendingScript::ExecuteScriptBlock(const KURL& document_url) {
+  TRACE_EVENT0("blink", "PendingScript::ExecuteScriptBlock");
   Document* context_document = element_->GetDocument().ContextDocument();
   if (!context_document) {
     Dispose();
@@ -139,7 +141,7 @@ void PendingScript::ExecuteScriptBlock(const KURL& document_url) {
   }
 
   if (OriginalContextDocument() != context_document) {
-    if (GetScriptType() == ScriptType::kModule) {
+    if (GetScriptType() == mojom::ScriptType::kModule) {
       // Do not execute module scripts if they are moved between documents.
       Dispose();
       return;
@@ -147,22 +149,26 @@ void PendingScript::ExecuteScriptBlock(const KURL& document_url) {
 
     // TODO(hiroshige): Also do not execute classic scripts.
     // https://crbug.com/721914
-    UseCounter::Count(frame, WebFeature::kEvaluateScriptMovedBetweenDocuments);
+    UseCounter::Count(context_document,
+                      WebFeature::kEvaluateScriptMovedBetweenDocuments);
   }
 
   Script* script = GetSource(document_url);
 
   if (script && !IsExternal()) {
     bool should_bypass_main_world_csp =
-        frame->GetScriptController().ShouldBypassMainWorldCSP();
+        ContentSecurityPolicy::ShouldBypassMainWorld(&element_->GetDocument());
 
     AtomicString nonce = element_->GetNonceForElement();
     if (!should_bypass_main_world_csp &&
-        !element_->AllowInlineScriptForCSP(
-            nonce, StartingPosition().line_, script->InlineSourceTextForCSP(),
-            ContentSecurityPolicy::InlineType::kBlock)) {
-      // Consider as if "the script's script is null" retrospectively,
-      // if the CSP check fails, which is considered as load failure.
+        !element_->AllowInlineScriptForCSP(nonce, StartingPosition().line_,
+                                           script->InlineSourceTextForCSP())) {
+      // Consider as if:
+      //
+      // <spec step="2">If the script's script is null, ...</spec>
+      //
+      // retrospectively, if the CSP check fails, which is considered as load
+      // failure.
       script = nullptr;
     }
   }
@@ -183,6 +189,7 @@ void PendingScript::ExecuteScriptBlock(const KURL& document_url) {
       parser_blocking_load_start_time, is_controlled_by_script_runner);
 }
 
+// <specdef href="https://html.spec.whatwg.org/C/#execute-the-script-block">
 void PendingScript::ExecuteScriptBlockInternal(
     Script* script,
     ScriptElementBase* element,
@@ -224,7 +231,7 @@ void PendingScript::ExecuteScriptBlockInternal(
     // <spec step="3">If the script is from an external file, or the script's
     // type is "module", ...</spec>
     const bool needs_increment =
-        is_external || script->GetScriptType() == ScriptType::kModule ||
+        is_external || script->GetScriptType() == mojom::ScriptType::kModule ||
         is_imported_script;
     // <spec step="3">... then increment the ignore-destructive-writes counter
     // of the script element's node document. Let neutralized doc be that
@@ -240,29 +247,29 @@ void PendingScript::ExecuteScriptBlockInternal(
 
     // <spec step="5">Switch on the script's type:</spec>
     //
-    // Step 5.A. "classic" [spec text]
+    // <spec step="5.A">"classic"</spec>
     //
     // <spec step="5.A.1">If the script element's root is not a shadow root,
     // then set the script element's node document's currentScript attribute to
     // the script element. Otherwise, set it to null.</spec>
     //
-    // Step 5.B. "module" [spec text]
+    // <spec step="5.B">"module"</spec>
     //
     // <spec step="5.B.1">Set the script element's node document's currentScript
     // attribute to null.</spec>
     ScriptElementBase* current_script = nullptr;
-    if (script->GetScriptType() == ScriptType::kClassic)
+    if (script->GetScriptType() == mojom::ScriptType::kClassic)
       current_script = element;
     context_document->PushCurrentScript(current_script);
 
-    // Step 5.A. "classic" [spec text]
+    // <spec step="5.A">"classic"</spec>
     //
     // <spec step="5.A.2">Run the classic script given by the script's
     // script.</spec>
     //
     // Note: This is where the script is compiled and actually executed.
     //
-    // Step 5.B. "module" [spec text]
+    // <spec step="5.B">"module"</spec>
     //
     // <spec step="5.B.2">Run the module script given by the script's
     // script.</spec>

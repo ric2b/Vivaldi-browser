@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ar">
 <translation id="1002108253973310084">تم اكتشاف إصدار غير متوافق من البروتوكول. يُرجى التأكد من تثبيت أحدث إصدار من البرنامج المُثبت على كلا الجهازين، وإعادة المحاولة.</translation>
+<translation id="1008557486741366299">ليس الآن</translation>
 <translation id="1050693411695664090">ضعيفة</translation>
 <translation id="1152528166145813711">تحديد…</translation>
 <translation id="1199593201721843963">إيقاف الاتصالات عن بُعد</translation>
@@ -23,6 +24,7 @@
 <translation id="1520828917794284345">تغيير حجم سطح المكتب للملاءمة</translation>
 <translation id="154040539590487450">تعذّر بدء خدمة الدخول عن بُعد.</translation>
 <translation id="1546934824884762070">حدث خطأ غير متوقع. يُرجى الإبلاغ عن هذه المشكلة إلى مطوري البرامج.</translation>
+<translation id="1624185583382384493">‏يتوفَّر الآن "سطح المكتب البعيد من Chrome" على موقع الويب. يمكنك تجربة <ph name="LINK_BEGIN" />تطبيق الويب<ph name="LINK_END" />، وهو مجاني وسريع يتوفَّر بمزيد من الميزات، بما في ذلك الدعم المُحسَّن لأدوات مراقبة متعدِّدة.</translation>
 <translation id="1643640058022401035">‏ستؤدي مغادرة هذه الصفحة إلى إنهاء جلسة التوافق مع نظام التشغيل Chrome.</translation>
 <translation id="1654128982815600832">جارٍ تفعيل الاتصالات عن بُعد لهذا الكمبيوتر...</translation>
 <translation id="170207782578677537">تعذّر تسجيل هذا الكمبيوتر.</translation>
@@ -62,8 +64,9 @@
 <translation id="2314101195544969792">جلسة تطبيقك <ph name="APPLICATION_NAME" /> كانت غير نشطة لفترة من الوقت وسيتم إلغاء ربطها قريبًا.</translation>
 <translation id="2317666076142640974">‏اطلع على لمحة سريعة عن <ph name="LINK_BEGIN" />التطبيق الجديد لسطح المكتب البعيد من Chrome على الويب<ph name="LINK_END" />. نود معرفة تعليقاتك.</translation>
 <translation id="2320166752086256636">إخفاء لوحة المفاتيح</translation>
+<translation id="2332192922827071008">فتح الإعدادات المفضَّلة</translation>
 <translation id="2353140552984634198">‏يمكنك الدخول بأمان إلى هذا الكمبيوتر باستخدام تطبيق التوافق مع نظام التشغيل Chrome.</translation>
-<translation id="2359808026110333948">المتابعة</translation>
+<translation id="2359808026110333948">متابعة</translation>
 <translation id="2366718077645204424">يتعذر الوصول إلى المضيف. ربما يرجع ذلك إلى تهيئة الشبكة التي تستخدمها.</translation>
 <translation id="2370754117186920852"><ph name="OPTIONAL_OFFLINE_REASON" />  شوهد متصلاً آخر مرة <ph name="RELATIVE_TIMESTAMP" />.</translation>
 <translation id="2405928220797050937">‏لم يعد هذا التطبيق مدعومًا. للتأكد من حصولك على آخر تحديثات الأمان والميزات، يُرجى استخدام <ph name="LINK_BEGIN" />تطبيق سطح المكتب البعيد من Chrome على الويب<ph name="LINK_END" />.</translation>
@@ -82,6 +85,7 @@
 <translation id="2841013758207633010">الوقت</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
 <translation id="2888969873284818612">حدث خطأ في الشبكة. سنعيد تشغيل التطبيق عندما يتصل جهازك بالإنترنت مرة أخرى.</translation>
+<translation id="2891243864890517178">‏لنظام التشغيل Mac (نظام التشغيل OS X Yosemite 10.10 أو الإصدارات الأحدث منه)</translation>
 <translation id="289405675947420287">‏استمتع بدخول آمن إلى جهاز الكمبيوتر على جهاز iOS. إنه سريع وبسيط ومجاني.
 
 • نزِّل تطبيق سطح المكتب البعيد من Chrome من سوق Chrome الإلكتروني على جهاز الكمبيوتر الذي ترغب في الدخول إليه عن بُعد.
@@ -102,7 +106,6 @@
 <translation id="3171922709365450819">هذا الجهاز لا يعمل مع هذا البرنامج لأنه يتطلب مصادقة جهة خارجية.</translation>
 <translation id="3194245623920924351">‏سطح المكتب البعيد من Chrome</translation>
 <translation id="3197730452537982411">سطح المكتب البعيد</translation>
-<translation id="3212472844831225214">‏• توفير دعم إضافي لنظام Android 9.0 Pie</translation>
 <translation id="324272851072175193">إرسال هذه التعليمات بالبريد الإلكتروني</translation>
 <translation id="3258789396564295715">‏يمكنك الدخول بأمان إلى هذا الكمبيوتر باستخدام سطح المكتب البعيد من Chrome.</translation>
 <translation id="3286521253923406898">‏أداة التحكم في مضيف التوافق مع نظام التشغيل Chrome</translation>
@@ -136,6 +139,7 @@
 <translation id="3989511127559254552">للاستمرار، يجب أولاً منح أذونات موسّعة بالدخول إلى جهاز الكمبيوتر. لن يُطلب منك إجراء ذلك سوى مرة واحدة.</translation>
 <translation id="4006787130661126000">‏يجب تفعيل الاتصالات عن بُعد إذا كنت تريد استخدام سطح المكتب البعيد من Chrome للدخول إلى هذا الكمبيوتر.</translation>
 <translation id="405887016757208221">قد فشل الكمبيوتر البعيد في تهيئة الجلسة. وإذا استمرت المشكلة، يُرجى محاولة تهيئة المضيف مرة أخرى.</translation>
+<translation id="4060747889721220580">تنزيل الملف</translation>
 <translation id="4068946408131579958">جميع الاتصالات</translation>
 <translation id="409800995205263688">ملاحظة: لا تسمح إعدادات السياسة سوى بالاتصال بين أجهزة الكمبيوتر داخل شبكتك.</translation>
 <translation id="4126409073460786861">بعد اكتمال الإعداد، يمكنك إعادة تحميل هذه الصفحة وستتمكّن بعد ذلك من الوصول إلى جهاز الكمبيوتر من خلال اختيار جهازك وإدخال رقم التعريف الشخصي</translation>
@@ -190,6 +194,9 @@
 <translation id="4973800994433240357">‏من خلال تنزيل أداة تثبيت مضيف التوافق مع نظام التشغيل Chrome، توافق على <ph name="LINK_BEGIN" />بنود خدمة<ph name="LINK_END" /> Google.</translation>
 <translation id="4974476491460646149">تم إغلاق الاتصال بـ <ph name="HOSTNAME" /></translation>
 <translation id="4985296110227979402">تحتاج أولاً إلى إعداد جهاز الكمبيوتر لإتاحة الدخول عن بُعد</translation>
+<translation id="5059773780693835145">يجب إجراء خطوة الضبط الإضافية قبل التحكُّم في هذا الجهاز عن بُعد باستخدام <ph name="PRODUCT_NAME" />.
+
+لتفعيل هذه الوظيفة، اختَر '<ph name="BUTTON_NAME" />' لعرض جزء إعدادات الخصوصية والأمان المفضَّلة، ثم ضع علامة على المربَّع بجانب '<ph name="SERVICE_SCRIPT_NAME" />'.</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (في وضع عدم اتصال)</translation>
 <translation id="5070121137485264635">‏يتطلب منك المضيف البعيد مصادقة موقع ويب لجهة خارجية. للمتابعة، يجب منح تطبيق سطح المكتب البعيد من Chrome أذونات إضافية للدخول إلى هذا العنوان:</translation>
 <translation id="507204348399810022">هل تريد فعلًا إيقاف الاتصالات عن بُعد بـ <ph name="HOSTNAME" />؟</translation>
@@ -198,7 +205,7 @@
 <translation id="5170982930780719864">رقم تعريف المضيف غير صالح.</translation>
 <translation id="518094545883702183">ولا تستخدم هذه المعلومات سوى لتشخيص المشكلة التي قدمت عنها التقرير، كما أنها غير متاحة إلا للشخص الذي يحقق في تقريرك، ويتم الاحتفاظ بها لمدة لا تتجاوز 30 يومًا.</translation>
 <translation id="5204575267916639804">الأسئلة الشائعة</translation>
-<translation id="5222676887888702881">الخروج</translation>
+<translation id="5222676887888702881">تسجيل الخروج</translation>
 <translation id="5254120496627797685">‏ستؤدي مغادرة هذه الصفحة إلى إنهاء جلسة سطح المكتب البعيد من Chrome.</translation>
 <translation id="5308380583665731573">اتصال</translation>
 <translation id="533625276787323658">لا يوجد أي جهاز كمبيوتر للاتصال به</translation>
@@ -238,6 +245,7 @@
 <translation id="6198252989419008588">تغيير رقم التعريف الشخصي</translation>
 <translation id="6204583485351780592"><ph name="HOSTNAME" /> (قديم)</translation>
 <translation id="6221358653751391898">‏لم يتم تسجيل دخولك إلى Chrome، يُرجى تسجيل الدخول وإعادة المحاولة.</translation>
+<translation id="6227369581881558336">‏يتوفر الآن "سطح المكتب البعيد من Chrome" على الويب بميزات جديدة، بما في ذلك نقل ملف. يمكنك الاطّلاع على <ph name="LINK_BEGIN" />تطبيق الويب<ph name="LINK_END" />.</translation>
 <translation id="6284412385303060032">‏تم إيقاف المضيف الذي يعمل على شاشة تسجيل لوحة التحكم لدعم الوضع Curtain من خلال التبديل إلى مضيف يعمل في جلسة خاصة بالمستخدم.</translation>
 <translation id="629730747756840877">الحساب</translation>
 <translation id="6304318647555713317">العميل</translation>
@@ -251,7 +259,6 @@
 <translation id="6542902059648396432">الإبلاغ عن مشكلة...</translation>
 <translation id="6550675742724504774">خيارات</translation>
 <translation id="6570205395680337606">إعادة ضبط التطبيق. ستفقد أيّ عمل لم يتم حفظه.</translation>
-<translation id="6572345186230665992">‏لنظام التشغيل Mac‏ (OS X Mavericks 10.9 والإصدارات الأحدث)</translation>
 <translation id="6583902294974160967">الدعم</translation>
 <translation id="6612717000975622067">‏إرسال Ctrl-Alt-Del</translation>
 <translation id="6654753848497929428">مشاركة</translation>
@@ -286,7 +293,6 @@
 <translation id="7434397035092923453">تم رفض دخول العميل: <ph name="CLIENT_USERNAME" />.</translation>
 <translation id="7444276978508498879">العميل المتصل: <ph name="CLIENT_USERNAME" />.</translation>
 <translation id="7526139040829362392">تغيير حساب</translation>
-<translation id="7589941250119944644">‏سينتقل سطح المكتب البعيد من Chrome إلى مكان جديد على الويب. جرّب <ph name="LINK_BEGIN" />تطبيق الويب<ph name="LINK_END" />—فهو سريع ومجاني، ويتضمن جميع الميزات السابقة نفسها.</translation>
 <translation id="7606912958770842224">تفعيل الاتصالات عن بُعد</translation>
 <translation id="7628469622942688817">تذكّر رقم التعريف الشخصي التابع لي على هذا الجهاز.</translation>
 <translation id="7649070708921625228">مساعدة</translation>
@@ -315,6 +321,7 @@
 <translation id="809687642899217504">أجهزة الكمبيوتر الخاصة بي</translation>
 <translation id="811307782653349804">يمكنك الدخول إلى جهاز الكمبيوتر من أي مكان.</translation>
 <translation id="8116630183974937060">حدث خطأ في الشبكة. يُرجى التحقق من اتصال الجهاز بالإنترنت ثم إعادة المحاولة.</translation>
+<translation id="8123581458650016326">السماح للمستخدمين عن بُعد بالتحكُّم في هذا الجهاز</translation>
 <translation id="8178433417677596899">تعد ميزة مشاركة الشاشة من مستخدم إلى مستخدم ميزة مثالية للدعم الفني عن بُعد.</translation>
 <translation id="8187079423890319756">‏حقوق الطبع والنشر لعام 2013 لصالح The Chromium Authors. جميع الحقوق محفوظة.</translation>
 <translation id="8196755618196986400">للسماح لنا بالاتصال بك لمزيد من المعلومات، سيتم تضمين عنوان بريدك الإلكتروني في أيّ تعليقات تقدمها.</translation>
@@ -332,6 +339,8 @@
 <translation id="8525306231823319788">ملء الشاشة</translation>
 <translation id="8548209692293300397">‏لقد سجّلت الدخول سابقًا كالآتي <ph name="USER_NAME" /> (<ph name="USER_EMAIL" />).  للوصول إلى أجهزة الكمبيوتر من خلال هذا الحساب، <ph name="LINK_BEGIN" />سجّل الدخول إلى Google Chrome<ph name="LINK_END" /> بهذا الحساب ثم أعد تثبيت سطح المكتب البعيد من Chrome.</translation>
 <translation id="8642984861538780905">متوسطة</translation>
+<translation id="8705151241155781642">‏• توفير دعم إضافي لنظام Android 9.0 Pie.
+• الدعم من أجل تغيير حجم درجة دقة سطح المكتب البعيد للمطابقة مع شاشة جهاز Android.</translation>
 <translation id="8712909229180978490">‏لا أستطيع أن أرى الملفات المحفوظة على الإنترنت في Google Drive.</translation>
 <translation id="8743328882720071828">هل تريد السماح لـ <ph name="CLIENT_USERNAME" /> برؤية جهاز الكمبيوتر والتحكم فيه؟</translation>
 <translation id="8747048596626351634">‏تعطلت الجلسة أو تعذّر بدء تشغيلها. في حال وجود ~/.chrome-remote-desktop-session على جهاز الكمبيوتر البعيد، تأكد من بدء تشغيلها لعملية مقدمة لفترة زمنية طويلة، مثل بيئة سطح المكتب أو مدير النوافذ.</translation>

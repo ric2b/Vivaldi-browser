@@ -15,7 +15,10 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/timer/timer.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/authpolicy/auth_policy_credentials_manager.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
@@ -24,7 +27,6 @@
 #include "chrome/browser/chromeos/login/screens/mock_base_screen_delegate.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager_test_api.h"
-#include "chrome/browser/chromeos/login/supervised/supervised_user_creation_screen.h"
 #include "chrome/browser/chromeos/login/ui/mock_login_display.h"
 #include "chrome/browser/chromeos/login/ui/mock_login_display_host.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
@@ -35,10 +37,9 @@
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/webui/chromeos/login/supervised_user_creation_screen_handler.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/fake_auth_policy_client.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
 #include "chromeos/dbus/util/tpm_util.h"
@@ -161,6 +162,7 @@ class KerberosFilesChangeWaiter {
 
   // Should be called once.
   void Wait() {
+    base::ScopedAllowBlockingForTesting allow_io;
     loop_.Run();
     config_watcher_.reset();
     creds_watcher_.reset();
@@ -170,6 +172,7 @@ class KerberosFilesChangeWaiter {
   void MaybeStartWatch(std::unique_ptr<base::FilePathWatcher>* watcher,
                        const base::FilePath& path,
                        bool files_must_exist) {
+    base::ScopedAllowBlockingForTesting allow_io;
     (*watcher)->Watch(path, false /* recursive */, watch_callback_);
     if (!files_must_exist && base::PathExists(path)) {
       watch_callback_.Run(path, false /* error */);
@@ -181,6 +184,7 @@ class KerberosFilesChangeWaiter {
 
   base::RepeatingCallback<void(const base::FilePath& path, bool error)>
       watch_callback_;
+
   std::unique_ptr<base::FilePathWatcher> config_watcher_;
   std::unique_ptr<base::FilePathWatcher> creds_watcher_;
 };
@@ -219,7 +223,7 @@ class ExistingUserControllerTest : public policy::DevicePolicyCrosBrowserTest {
         .Times(1)
         .WillOnce(ReturnNull());
     EXPECT_CALL(*mock_login_display_host_, OnPreferencesChanged()).Times(1);
-    EXPECT_CALL(*mock_login_display_, Init(_, false, true, true)).Times(1);
+    EXPECT_CALL(*mock_login_display_, Init(_, true, true, true)).Times(1);
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -397,17 +401,6 @@ IN_PROC_BROWSER_TEST_F(ExistingUserControllerUntrustedTest,
   user_context.SetKey(Key(kPassword));
   user_context.SetUserIDHash(gaia_account_id_.GetUserEmail());
   existing_user_controller()->Login(user_context, SigninSpecifics());
-}
-
-IN_PROC_BROWSER_TEST_F(ExistingUserControllerUntrustedTest,
-                       SupervisedUserCreationForbidden) {
-  MockBaseScreenDelegate mock_base_screen_delegate;
-  SupervisedUserCreationScreenHandler supervised_user_creation_screen_handler;
-  SupervisedUserCreationScreen supervised_user_creation_screen(
-      &mock_base_screen_delegate, &supervised_user_creation_screen_handler);
-
-  supervised_user_creation_screen.AuthenticateManager(gaia_account_id_,
-                                                      kPassword);
 }
 
 MATCHER_P(HasDetails, expected, "") {
@@ -912,6 +905,7 @@ class ExistingUserControllerActiveDirectoryTest
   }
 
   void CheckKerberosFiles(bool enable_dns_cname_lookup) {
+    base::ScopedAllowBlockingForTesting allow_io;
     std::string file_contents;
     EXPECT_TRUE(base::ReadFileToString(
         base::FilePath(GetKerberosConfigFileName()), &file_contents));
@@ -962,7 +956,7 @@ class ExistingUserControllerActiveDirectoryUserWhitelistTest
         .Times(1)
         .WillOnce(ReturnNull());
     EXPECT_CALL(*mock_login_display_host_, OnPreferencesChanged()).Times(1);
-    EXPECT_CALL(*mock_login_display_, Init(_, false, true, false)).Times(1);
+    EXPECT_CALL(*mock_login_display_, Init(_, true, true, false)).Times(1);
   }
 };
 

@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
@@ -118,7 +119,7 @@ void URLFetcherCore::Start() {
   DCHECK(network_task_runner_.get()) << "We need an IO task runner";
 
   network_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&URLFetcherCore::StartOnIOThread, this));
+      FROM_HERE, base::BindOnce(&URLFetcherCore::StartOnIOThread, this));
 }
 
 void URLFetcherCore::Stop() {
@@ -134,7 +135,7 @@ void URLFetcherCore::Stop() {
   } else {
     network_task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&URLFetcherCore::CancelURLRequest, this, ERR_ABORTED));
+        base::BindOnce(&URLFetcherCore::CancelURLRequest, this, ERR_ABORTED));
   }
 }
 
@@ -206,9 +207,8 @@ void URLFetcherCore::AppendChunkToUpload(const std::string& content,
   DCHECK(network_task_runner_.get());
   DCHECK(is_chunked_upload_);
   network_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&URLFetcherCore::CompleteAddingUploadDataChunk, this, content,
-                 is_last_chunk));
+      FROM_HERE, base::BindOnce(&URLFetcherCore::CompleteAddingUploadDataChunk,
+                                this, content, is_last_chunk));
 }
 
 void URLFetcherCore::SetLoadFlags(int load_flags) {
@@ -313,11 +313,11 @@ HttpResponseHeaders* URLFetcherCore::GetResponseHeaders() const {
   return response_headers_.get();
 }
 
-// TODO(panayiotis): socket_address_ is written in the IO thread,
+// TODO(panayiotis): remote_endpoint_ is written in the IO thread,
 // if this is accessed in the UI thread, this could result in a race.
 // Same for response_headers_ above and was_fetched_via_proxy_ below.
-HostPortPair URLFetcherCore::GetSocketAddress() const {
-  return socket_address_;
+IPEndPoint URLFetcherCore::GetSocketAddress() const {
+  return remote_endpoint_;
 }
 
 const ProxyServer& URLFetcherCore::ProxyServerUsed() const {
@@ -360,7 +360,8 @@ void URLFetcherCore::ReceivedContentWasMalformed() {
   DCHECK(delegate_task_runner_->RunsTasksInCurrentSequence());
   if (network_task_runner_.get()) {
     network_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&URLFetcherCore::NotifyMalformedContent, this));
+        FROM_HERE,
+        base::BindOnce(&URLFetcherCore::NotifyMalformedContent, this));
   }
 }
 
@@ -427,7 +428,7 @@ void URLFetcherCore::OnResponseStarted(URLRequest* request, int net_error) {
   if (net_error == OK) {
     response_code_ = request_->GetResponseCode();
     response_headers_ = request_->response_headers();
-    socket_address_ = request_->GetSocketAddress();
+    remote_endpoint_ = request_->GetResponseRemoteEndpoint();
     proxy_server_ = request_->proxy_server();
     was_fetched_via_proxy_ = request_->was_fetched_via_proxy();
     was_cached_ = request_->was_cached();
@@ -574,7 +575,7 @@ void URLFetcherCore::StartURLRequest() {
   request_->SetReferrer(referrer_);
   request_->set_referrer_policy(referrer_policy_);
   request_->set_site_for_cookies(initiator_.has_value() &&
-                                         !initiator_.value().unique()
+                                         !initiator_.value().opaque()
                                      ? initiator_.value().GetURL()
                                      : original_url_);
   request_->set_initiator(initiator_);
@@ -683,7 +684,7 @@ void URLFetcherCore::StartURLRequestWhenAppropriate() {
               GetBackoffReleaseTime());
       if (delay != 0) {
         network_task_runner_->PostDelayedTask(
-            FROM_HERE, base::Bind(&URLFetcherCore::StartURLRequest, this),
+            FROM_HERE, base::BindOnce(&URLFetcherCore::StartURLRequest, this),
             base::TimeDelta::FromMilliseconds(delay));
         return;
       }
@@ -800,7 +801,7 @@ void URLFetcherCore::RetryOrCompleteUrlFetch() {
     // Retry soon, after flushing all the current tasks which may include
     // further network change observers.
     network_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&URLFetcherCore::StartOnIOThread, this));
+        FROM_HERE, base::BindOnce(&URLFetcherCore::StartOnIOThread, this));
     return;
   }
 
@@ -809,8 +810,8 @@ void URLFetcherCore::RetryOrCompleteUrlFetch() {
   url_request_data_key_ = NULL;
   url_request_create_data_callback_.Reset();
   bool posted = delegate_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&URLFetcherCore::OnCompletedURLRequest, this, backoff_delay));
+      FROM_HERE, base::BindOnce(&URLFetcherCore::OnCompletedURLRequest, this,
+                                backoff_delay));
 
   // If the delegate message loop does not exist any more, then the delegate
   // should be gone too.
@@ -821,7 +822,7 @@ void URLFetcherCore::CancelRequestAndInformDelegate(int result) {
   CancelURLRequest(result);
   delegate_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&URLFetcherCore::InformDelegateFetchIsComplete, this));
+      base::BindOnce(&URLFetcherCore::InformDelegateFetchIsComplete, this));
 }
 
 void URLFetcherCore::ReleaseRequest() {
@@ -923,7 +924,7 @@ void URLFetcherCore::InformDelegateUploadProgress() {
       }
       delegate_task_runner_->PostTask(
           FROM_HERE,
-          base::Bind(
+          base::BindOnce(
               &URLFetcherCore::InformDelegateUploadProgressInDelegateSequence,
               this, current, total));
     }
@@ -942,7 +943,7 @@ void URLFetcherCore::InformDelegateDownloadProgress() {
   DCHECK(network_task_runner_->BelongsToCurrentThread());
   delegate_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(
+      base::BindOnce(
           &URLFetcherCore::InformDelegateDownloadProgressInDelegateSequence,
           this, current_response_bytes_, total_response_bytes_,
           request_->GetTotalReceivedBytes()));

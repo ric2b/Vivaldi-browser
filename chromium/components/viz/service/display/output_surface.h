@@ -17,14 +17,8 @@
 #include "components/viz/service/display/software_output_device.h"
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/common/texture_in_use_response.h"
-#include "gpu/vulkan/buildflags.h"
 #include "ui/gfx/color_space.h"
 #include "ui/latency/latency_info.h"
-
-#if BUILDFLAG(ENABLE_VULKAN)
-#include "components/viz/common/gpu/vulkan_context_provider.h"
-#include "gpu/vulkan/vulkan_surface.h"
-#endif
 
 namespace gfx {
 class ColorSpace;
@@ -62,11 +56,6 @@ class VIZ_SERVICE_EXPORT OutputSurface {
   explicit OutputSurface(scoped_refptr<ContextProvider> context_provider);
   // Constructor for software compositing.
   explicit OutputSurface(std::unique_ptr<SoftwareOutputDevice> software_device);
-#if BUILDFLAG(ENABLE_VULKAN)
-  // Constructor for Vulkan-based compositing.
-  explicit OutputSurface(
-      scoped_refptr<VulkanContextProvider> vulkan_context_provider);
-#endif
 
   virtual ~OutputSurface();
 
@@ -77,11 +66,6 @@ class VIZ_SERVICE_EXPORT OutputSurface {
   // In the event of a lost context, the entire output surface should be
   // recreated.
   ContextProvider* context_provider() const { return context_provider_.get(); }
-#if BUILDFLAG(ENABLE_VULKAN)
-  VulkanContextProvider* vulkan_context_provider() const {
-    return vulkan_context_provider_.get();
-  }
-#endif
   SoftwareOutputDevice* software_device() const {
     return software_device_.get();
   }
@@ -101,8 +85,7 @@ class VIZ_SERVICE_EXPORT OutputSurface {
   virtual void BindFramebuffer() = 0;
 
   // Marks that the given rectangle will be drawn to on the default, bound
-  // framebuffer. Only valid for surfaces with dc_layers in the context
-  // capabilities.
+  // framebuffer.
   virtual void SetDrawRectangle(const gfx::Rect& rect) = 0;
 
   // Get the class capable of informing cc of hardware overlay capability.
@@ -135,11 +118,6 @@ class VIZ_SERVICE_EXPORT OutputSurface {
   // after returning from this method in order to unblock the next frame.
   virtual void SwapBuffers(OutputSurfaceFrame frame) = 0;
 
-#if BUILDFLAG(ENABLE_VULKAN)
-  // Gives the Vulkan surface created when enable_vulkan flag is set.
-  virtual gpu::VulkanSurface* GetVulkanSurface() = 0;
-#endif
-
   // Updates the GpuFence associated with this surface. The id of a newly
   // created GpuFence is returned, or if an error occurs, or fences are not
   // supported, the special id of 0 (meaning "no fence") is returned.  In all
@@ -163,9 +141,6 @@ class VIZ_SERVICE_EXPORT OutputSurface {
  protected:
   struct OutputSurface::Capabilities capabilities_;
   scoped_refptr<ContextProvider> context_provider_;
-#if BUILDFLAG(ENABLE_VULKAN)
-  scoped_refptr<VulkanContextProvider> vulkan_context_provider_;
-#endif
   std::unique_ptr<SoftwareOutputDevice> software_device_;
 
  private:

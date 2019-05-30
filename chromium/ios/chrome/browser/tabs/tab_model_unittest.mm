@@ -4,13 +4,17 @@
 
 #import <objc/runtime.h>
 
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state_manager.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/infobars/infobar_manager_impl.h"
+#import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
+#import "ios/chrome/browser/ntp/new_tab_page_tab_helper_delegate.h"
 #include "ios/chrome/browser/sessions/ios_chrome_session_tab_helper.h"
 #import "ios/chrome/browser/sessions/session_ios.h"
 #import "ios/chrome/browser/sessions/session_window_ios.h"
@@ -21,6 +25,7 @@
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/tabs/tab_model_observer.h"
 #import "ios/chrome/browser/tabs/tab_private.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/web/chrome_web_client.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_opener.h"
@@ -29,6 +34,7 @@
 #include "ios/chrome/test/ios_chrome_scoped_testing_chrome_browser_state_manager.h"
 #import "ios/web/navigation/navigation_manager_impl.h"
 #import "ios/web/public/crw_session_storage.h"
+#include "ios/web/public/features.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/referrer.h"
 #import "ios/web/public/serializable_user_data_manager.h"
@@ -72,13 +78,30 @@ namespace {
 const char kURL1[] = "https://www.some.url.com";
 const char kURL2[] = "https://www.some.url2.com";
 
-class TabModelTest : public PlatformTest {
+// TabModelTest is parameterized on this enum to test both
+// LegacyNavigationManager and WKBasedNavigationManager.
+enum class NavigationManagerChoice {
+  LEGACY,
+  WK_BASED,
+};
+
+class TabModelTest
+    : public PlatformTest,
+      public ::testing::WithParamInterface<NavigationManagerChoice> {
  public:
   TabModelTest()
       : scoped_browser_state_manager_(
             std::make_unique<TestChromeBrowserStateManager>(base::FilePath())),
         web_client_(std::make_unique<ChromeWebClient>()) {
     DCHECK_CURRENTLY_ON(web::WebThread::UI);
+
+    if (GetParam() == NavigationManagerChoice::LEGACY) {
+      scoped_feature_list_.InitAndDisableFeature(
+          web::features::kSlimNavigationManager);
+    } else {
+      scoped_feature_list_.InitAndEnableFeature(
+          web::features::kSlimNavigationManager);
+    }
 
     TestChromeBrowserState::Builder test_cbs_builder;
     chrome_browser_state_ = test_cbs_builder.Build();
@@ -119,9 +142,9 @@ class TabModelTest : public PlatformTest {
   TabModel* CreateTabModel(SessionServiceIOS* session_service,
                            SessionWindowIOS* session_window) {
     TabModel* tab_model([[TabModel alloc]
-        initWithSessionWindow:session_window
-               sessionService:session_service
-                 browserState:chrome_browser_state_.get()]);
+        initWithSessionService:session_service
+                  browserState:chrome_browser_state_.get()]);
+    [tab_model restoreSessionWindow:session_window forInitialRestore:YES];
     [tab_model setPrimary:YES];
     return tab_model;
   }
@@ -147,9 +170,10 @@ class TabModelTest : public PlatformTest {
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
   WebStateListWebUsageEnabler* web_usage_enabler_;
   TabModel* tab_model_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-TEST_F(TabModelTest, IsEmpty) {
+TEST_P(TabModelTest, IsEmpty) {
   EXPECT_EQ([tab_model_ count], 0U);
   EXPECT_TRUE([tab_model_ isEmpty]);
   [tab_model_ insertTabWithURL:GURL(kURL1)
@@ -163,7 +187,7 @@ TEST_F(TabModelTest, IsEmpty) {
   EXPECT_FALSE([tab_model_ isEmpty]);
 }
 
-TEST_F(TabModelTest, InsertUrlSingle) {
+TEST_P(TabModelTest, InsertUrlSingle) {
   Tab* tab = [tab_model_ insertTabWithURL:GURL(kURL1)
                                  referrer:web::Referrer()
                                transition:ui::PAGE_TRANSITION_TYPED
@@ -175,7 +199,7 @@ TEST_F(TabModelTest, InsertUrlSingle) {
   EXPECT_NSEQ(tab, [tab_model_ tabAtIndex:0]);
 }
 
-TEST_F(TabModelTest, InsertUrlMultiple) {
+TEST_P(TabModelTest, InsertUrlMultiple) {
   Tab* tab0 = [tab_model_ insertTabWithURL:GURL(kURL1)
                                   referrer:web::Referrer()
                                 transition:ui::PAGE_TRANSITION_TYPED
@@ -204,7 +228,7 @@ TEST_F(TabModelTest, InsertUrlMultiple) {
   EXPECT_NSEQ(tab0, [tab_model_ tabAtIndex:2]);
 }
 
-TEST_F(TabModelTest, AppendUrlSingle) {
+TEST_P(TabModelTest, AppendUrlSingle) {
   Tab* tab = [tab_model_ insertTabWithURL:GURL(kURL1)
                                  referrer:web::Referrer()
                                transition:ui::PAGE_TRANSITION_TYPED
@@ -216,7 +240,7 @@ TEST_F(TabModelTest, AppendUrlSingle) {
   EXPECT_NSEQ(tab, [tab_model_ tabAtIndex:0]);
 }
 
-TEST_F(TabModelTest, AppendUrlMultiple) {
+TEST_P(TabModelTest, AppendUrlMultiple) {
   Tab* tab0 = [tab_model_ insertTabWithURL:GURL(kURL1)
                                   referrer:web::Referrer()
                                 transition:ui::PAGE_TRANSITION_TYPED
@@ -245,7 +269,7 @@ TEST_F(TabModelTest, AppendUrlMultiple) {
   EXPECT_NSEQ(tab2, [tab_model_ tabAtIndex:2]);
 }
 
-TEST_F(TabModelTest, CloseTabAtIndexBeginning) {
+TEST_P(TabModelTest, CloseTabAtIndexBeginning) {
   [tab_model_ insertTabWithURL:GURL(kURL1)
                       referrer:web::Referrer()
                     transition:ui::PAGE_TRANSITION_TYPED
@@ -275,7 +299,7 @@ TEST_F(TabModelTest, CloseTabAtIndexBeginning) {
   EXPECT_NSEQ(tab2, [tab_model_ tabAtIndex:1]);
 }
 
-TEST_F(TabModelTest, CloseTabAtIndexMiddle) {
+TEST_P(TabModelTest, CloseTabAtIndexMiddle) {
   Tab* tab0 = [tab_model_ insertTabWithURL:GURL(kURL1)
                                   referrer:web::Referrer()
                                 transition:ui::PAGE_TRANSITION_TYPED
@@ -305,7 +329,7 @@ TEST_F(TabModelTest, CloseTabAtIndexMiddle) {
   EXPECT_NSEQ(tab2, [tab_model_ tabAtIndex:1]);
 }
 
-TEST_F(TabModelTest, CloseTabAtIndexLast) {
+TEST_P(TabModelTest, CloseTabAtIndexLast) {
   Tab* tab0 = [tab_model_ insertTabWithURL:GURL(kURL1)
                                   referrer:web::Referrer()
                                 transition:ui::PAGE_TRANSITION_TYPED
@@ -335,7 +359,7 @@ TEST_F(TabModelTest, CloseTabAtIndexLast) {
   EXPECT_NSEQ(tab1, [tab_model_ tabAtIndex:1]);
 }
 
-TEST_F(TabModelTest, CloseTabAtIndexOnlyOne) {
+TEST_P(TabModelTest, CloseTabAtIndexOnlyOne) {
   [tab_model_ insertTabWithURL:GURL(kURL1)
                       referrer:web::Referrer()
                     transition:ui::PAGE_TRANSITION_TYPED
@@ -349,7 +373,12 @@ TEST_F(TabModelTest, CloseTabAtIndexOnlyOne) {
   EXPECT_EQ(0U, [tab_model_ count]);
 }
 
-TEST_F(TabModelTest, RestoreSessionOnNTPTest) {
+TEST_P(TabModelTest, RestoreSessionOnNTPTest) {
+  // TODO(crbug.com/888674): migrate this to EG test so it can be tested with
+  // WKBasedNavigationManager.
+  if (web_client_.Get()->IsSlimNavigationManagerEnabled())
+    return;
+
   Tab* tab = [tab_model_ insertTabWithURL:GURL(kChromeUINewTabURL)
                                  referrer:web::Referrer()
                                transition:ui::PAGE_TRANSITION_TYPED
@@ -358,10 +387,16 @@ TEST_F(TabModelTest, RestoreSessionOnNTPTest) {
                                   atIndex:0
                              inBackground:NO];
   web::WebStateImpl* web_state = static_cast<web::WebStateImpl*>(tab.webState);
+
+  // Create NTPTabHelper to ensure VisibleURL is set to kChromeUINewTabURL.
+  if (base::FeatureList::IsEnabled(kBrowserContainerContainsNTP)) {
+    id delegate = OCMProtocolMock(@protocol(NewTabPageTabHelperDelegate));
+    NewTabPageTabHelper::CreateForWebState(web_state, delegate);
+  }
   web_state->GetNavigationManagerImpl().CommitPendingItem();
 
   SessionWindowIOS* window(CreateSessionWindow());
-  [tab_model_ restoreSessionWindow:window];
+  [tab_model_ restoreSessionWindow:window forInitialRestore:NO];
 
   ASSERT_EQ(3U, [tab_model_ count]);
   EXPECT_NSEQ([tab_model_ tabAtIndex:1], [tab_model_ currentTab]);
@@ -370,7 +405,12 @@ TEST_F(TabModelTest, RestoreSessionOnNTPTest) {
   EXPECT_NSNE(tab, [tab_model_ tabAtIndex:2]);
 }
 
-TEST_F(TabModelTest, RestoreSessionOn2NtpTest) {
+TEST_P(TabModelTest, RestoreSessionOn2NtpTest) {
+  // TODO(crbug.com/888674): migrate this to EG test so it can be tested with
+  // WKBasedNavigationManager.
+  if (web_client_.Get()->IsSlimNavigationManagerEnabled())
+    return;
+
   Tab* tab0 = [tab_model_ insertTabWithURL:GURL(kChromeUINewTabURL)
                                   referrer:web::Referrer()
                                 transition:ui::PAGE_TRANSITION_TYPED
@@ -391,7 +431,7 @@ TEST_F(TabModelTest, RestoreSessionOn2NtpTest) {
   web_state->GetNavigationManagerImpl().CommitPendingItem();
 
   SessionWindowIOS* window(CreateSessionWindow());
-  [tab_model_ restoreSessionWindow:window];
+  [tab_model_ restoreSessionWindow:window forInitialRestore:NO];
 
   ASSERT_EQ(5U, [tab_model_ count]);
   EXPECT_NSEQ([tab_model_ tabAtIndex:3], [tab_model_ currentTab]);
@@ -405,7 +445,12 @@ TEST_F(TabModelTest, RestoreSessionOn2NtpTest) {
   EXPECT_NSNE(tab1, [tab_model_ tabAtIndex:4]);
 }
 
-TEST_F(TabModelTest, RestoreSessionOnAnyTest) {
+TEST_P(TabModelTest, RestoreSessionOnAnyTest) {
+  // TODO(crbug.com/888674): migrate this to EG test so it can be tested with
+  // WKBasedNavigationManager.
+  if (web_client_.Get()->IsSlimNavigationManagerEnabled())
+    return;
+
   Tab* tab = [tab_model_ insertTabWithURL:GURL(kURL1)
                                  referrer:web::Referrer()
                                transition:ui::PAGE_TRANSITION_TYPED
@@ -417,7 +462,7 @@ TEST_F(TabModelTest, RestoreSessionOnAnyTest) {
   web_state->GetNavigationManagerImpl().CommitPendingItem();
 
   SessionWindowIOS* window(CreateSessionWindow());
-  [tab_model_ restoreSessionWindow:window];
+  [tab_model_ restoreSessionWindow:window forInitialRestore:NO];
 
   ASSERT_EQ(4U, [tab_model_ count]);
   EXPECT_NSEQ([tab_model_ tabAtIndex:2], [tab_model_ currentTab]);
@@ -427,7 +472,7 @@ TEST_F(TabModelTest, RestoreSessionOnAnyTest) {
   EXPECT_NSNE(tab, [tab_model_ tabAtIndex:3]);
 }
 
-TEST_F(TabModelTest, CloseAllTabs) {
+TEST_P(TabModelTest, CloseAllTabs) {
   [tab_model_ insertTabWithURL:GURL(kURL1)
                       referrer:web::Referrer()
                     transition:ui::PAGE_TRANSITION_TYPED
@@ -455,13 +500,13 @@ TEST_F(TabModelTest, CloseAllTabs) {
   EXPECT_EQ(0U, [tab_model_ count]);
 }
 
-TEST_F(TabModelTest, CloseAllTabsWithNoTabs) {
+TEST_P(TabModelTest, CloseAllTabsWithNoTabs) {
   [tab_model_ closeAllTabs];
 
   EXPECT_EQ(0U, [tab_model_ count]);
 }
 
-TEST_F(TabModelTest, InsertWithSessionController) {
+TEST_P(TabModelTest, InsertWithSessionController) {
   EXPECT_EQ([tab_model_ count], 0U);
   EXPECT_TRUE([tab_model_ isEmpty]);
 
@@ -479,7 +524,7 @@ TEST_F(TabModelTest, InsertWithSessionController) {
   EXPECT_TRUE(current_tab);
 }
 
-TEST_F(TabModelTest, AddWithOrderController) {
+TEST_P(TabModelTest, AddWithOrderController) {
   // Create a few tabs with the controller at the front.
   Tab* parent = [tab_model_ insertTabWithURL:GURL(kURL1)
                                     referrer:web::Referrer()
@@ -559,177 +604,7 @@ TEST_F(TabModelTest, AddWithOrderController) {
   EXPECT_EQ([tab_model_ indexOfTab:tab4], [tab_model_ indexOfTab:tab3] + 1);
 }
 
-TEST_F(TabModelTest, AddWithOrderControllerAndGrouping) {
-  // Create a few tabs with the controller at the front.
-  Tab* parent = [tab_model_ insertTabWithURL:GURL(kURL1)
-                                    referrer:web::Referrer()
-                                  transition:ui::PAGE_TRANSITION_TYPED
-                                      opener:nil
-                                 openedByDOM:NO
-                                     atIndex:[tab_model_ count]
-                                inBackground:NO];
-  // Force the history to update, as it is used to determine grouping.
-  ASSERT_TRUE([parent navigationManagerImpl]);
-  [parent navigationManagerImpl]->CommitPendingItem();
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:[tab_model_ count]
-                  inBackground:NO];
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:[tab_model_ count]
-                  inBackground:NO];
-
-  ASSERT_TRUE(chrome_browser_state_->CreateHistoryService(true));
-
-  // Add a new tab, it should be added behind the parent.
-  Tab* child1 =
-      [tab_model_ insertTabWithURL:GURL(kURL1)
-                          referrer:web::Referrer()
-                        transition:ui::PAGE_TRANSITION_LINK
-                            opener:parent
-                       openedByDOM:NO
-                           atIndex:TabModelConstants::kTabPositionAutomatically
-                      inBackground:NO];
-  EXPECT_EQ([tab_model_ indexOfTab:parent], 0U);
-  EXPECT_EQ([tab_model_ indexOfTab:child1], 1U);
-
-  // Add a second child tab in the background. It should be added behind the
-  // first child.
-  Tab* child2 =
-      [tab_model_ insertTabWithURL:GURL(kURL1)
-                          referrer:web::Referrer()
-                        transition:ui::PAGE_TRANSITION_LINK
-                            opener:parent
-                       openedByDOM:NO
-                           atIndex:TabModelConstants::kTabPositionAutomatically
-                      inBackground:NO];
-  EXPECT_EQ([tab_model_ indexOfTab:child2], 2U);
-
-  // Navigate the parent tab to a new URL.  It should not change any ordering.
-  web::NavigationManager::WebLoadParams parent_params(
-      GURL("http://www.espn.com"));
-  parent_params.transition_type = ui::PAGE_TRANSITION_TYPED;
-  [parent navigationManager]->LoadURLWithParams(parent_params);
-  ASSERT_TRUE([parent navigationManagerImpl]);
-  [parent navigationManagerImpl]->CommitPendingItem();
-  EXPECT_EQ([tab_model_ indexOfTab:parent], 0U);
-
-  // Add a new tab. It should be added behind the parent. It should not be added
-  // after the previous two children.
-  Tab* child3 =
-      [tab_model_ insertTabWithURL:GURL(kURL1)
-                          referrer:web::Referrer()
-                        transition:ui::PAGE_TRANSITION_LINK
-                            opener:parent
-                       openedByDOM:NO
-                           atIndex:TabModelConstants::kTabPositionAutomatically
-                      inBackground:NO];
-  EXPECT_EQ([tab_model_ indexOfTab:child3], 1U);
-
-  // Add a fourt child tab in the background. It should be added behind the
-  // third child.
-  Tab* child4 =
-      [tab_model_ insertTabWithURL:GURL(kURL1)
-                          referrer:web::Referrer()
-                        transition:ui::PAGE_TRANSITION_LINK
-                            opener:parent
-                       openedByDOM:NO
-                           atIndex:TabModelConstants::kTabPositionAutomatically
-                      inBackground:NO];
-  EXPECT_EQ([tab_model_ indexOfTab:child4], 2U);
-
-  // The first two children should have been moved to the right.
-  EXPECT_EQ([tab_model_ indexOfTab:child1], 3U);
-  EXPECT_EQ([tab_model_ indexOfTab:child2], 4U);
-
-  // Now add a non-owned tab and make sure it is added at the end.
-  Tab* nonChild = [tab_model_ insertTabWithURL:GURL(kURL1)
-                                      referrer:web::Referrer()
-                                    transition:ui::PAGE_TRANSITION_TYPED
-                                        opener:nil
-                                   openedByDOM:NO
-                                       atIndex:[tab_model_ count]
-                                  inBackground:NO];
-  EXPECT_EQ([tab_model_ indexOfTab:nonChild], [tab_model_ count] - 1);
-}
-
-TEST_F(TabModelTest, AddWithLinkTransitionAndIndex) {
-  // Create a few tabs with the controller at the front.
-  Tab* parent = [tab_model_ insertTabWithURL:GURL(kURL1)
-                                    referrer:web::Referrer()
-                                  transition:ui::PAGE_TRANSITION_TYPED
-                                      opener:nil
-                                 openedByDOM:NO
-                                     atIndex:[tab_model_ count]
-                                inBackground:NO];
-  // Force the history to update, as it is used to determine grouping.
-  ASSERT_TRUE([parent navigationManagerImpl]);
-  [parent navigationManagerImpl]->CommitPendingItem();
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:[tab_model_ count]
-                  inBackground:NO];
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:[tab_model_ count]
-                  inBackground:NO];
-
-  ASSERT_TRUE(chrome_browser_state_->CreateHistoryService(true));
-
-  // Add a new tab, it should be added before the parent since the index
-  // parameter has been specified with a valid value.
-  Tab* child1 = [tab_model_ insertTabWithURL:GURL(kURL1)
-                                    referrer:web::Referrer()
-                                  transition:ui::PAGE_TRANSITION_LINK
-                                      opener:parent
-                                 openedByDOM:NO
-                                     atIndex:0
-                                inBackground:NO];
-  EXPECT_EQ([tab_model_ indexOfTab:parent], 1U);
-  EXPECT_EQ([tab_model_ indexOfTab:child1], 0U);
-
-  // Add a new tab, it should be added at the beginning of the stack because
-  // the index parameter has been specified with a valid value.
-  Tab* child2 = [tab_model_ insertTabWithURL:GURL(kURL1)
-                                    referrer:web::Referrer()
-                                  transition:ui::PAGE_TRANSITION_LINK
-                                      opener:parent
-                                 openedByDOM:NO
-                                     atIndex:0
-                                inBackground:NO];
-  EXPECT_EQ([tab_model_ indexOfTab:parent], 2U);
-  EXPECT_EQ([tab_model_ indexOfTab:child1], 1U);
-  EXPECT_EQ([tab_model_ indexOfTab:child2], 0U);
-
-  // Add a new tab, it should be added at position 1 because the index parameter
-  // has been specified with a valid value.
-  Tab* child3 = [tab_model_ insertTabWithURL:GURL(kURL1)
-                                    referrer:web::Referrer()
-                                  transition:ui::PAGE_TRANSITION_LINK
-                                      opener:parent
-                                 openedByDOM:NO
-                                     atIndex:1
-                                inBackground:NO];
-  EXPECT_EQ([tab_model_ indexOfTab:parent], 3U);
-  EXPECT_EQ([tab_model_ indexOfTab:child1], 2U);
-  EXPECT_EQ([tab_model_ indexOfTab:child3], 1U);
-  EXPECT_EQ([tab_model_ indexOfTab:child2], 0U);
-}
-
-TEST_F(TabModelTest, MoveTabs) {
+TEST_P(TabModelTest, MoveTabs) {
   Tab* tab0 = [tab_model_ insertTabWithURL:GURL(kURL1)
                                   referrer:web::Referrer()
                                 transition:ui::PAGE_TRANSITION_TYPED
@@ -813,21 +688,7 @@ TEST_F(TabModelTest, MoveTabs) {
   [tab_model_ removeObserver:tab_model_observer];
 }
 
-TEST_F(TabModelTest, ParentTabModel) {
-  std::unique_ptr<web::WebState> web_state = web::WebState::Create(
-      web::WebState::CreateParams(chrome_browser_state_.get()));
-  AttachTabHelpers(web_state.get(), /*for_prerender=*/false);
-
-  Tab* tab = LegacyTabHelper::GetTabForWebState(web_state.get());
-  EXPECT_NSEQ(nil, [tab parentTabModel]);
-
-  [tab_model_ webStateList]->InsertWebState(0, std::move(web_state),
-                                            WebStateList::INSERT_FORCE_INDEX,
-                                            WebStateOpener());
-  EXPECT_NSEQ(tab_model_, [tab parentTabModel]);
-}
-
-TEST_F(TabModelTest, TabCreatedOnInsertion) {
+TEST_P(TabModelTest, TabCreatedOnInsertion) {
   std::unique_ptr<web::WebState> web_state = web::WebState::Create(
       web::WebState::CreateParams(chrome_browser_state_.get()));
 
@@ -840,7 +701,7 @@ TEST_F(TabModelTest, TabCreatedOnInsertion) {
   EXPECT_NSNE(nil, LegacyTabHelper::GetTabForWebState(web_state_ptr));
 }
 
-TEST_F(TabModelTest, PersistSelectionChange) {
+TEST_P(TabModelTest, DISABLED_PersistSelectionChange) {
   NSString* stashPath =
       base::SysUTF8ToNSString(chrome_browser_state_->GetStatePath().value());
 
@@ -898,5 +759,10 @@ TEST_F(TabModelTest, PersistSelectionChange) {
   EXPECT_TRUE([[NSFileManager defaultManager] removeItemAtPath:stashPath
                                                          error:nullptr]);
 }
+
+INSTANTIATE_TEST_SUITE_P(ProgrammaticTabModelTest,
+                         TabModelTest,
+                         ::testing::Values(NavigationManagerChoice::LEGACY,
+                                           NavigationManagerChoice::WK_BASED));
 
 }  // anonymous namespace

@@ -72,12 +72,12 @@ import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.Callback;
+import org.chromium.base.IntStringCallback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MetricsUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.history.HistoryActivity;
 import org.chromium.chrome.browser.history.HistoryManager;
 import org.chromium.chrome.browser.history.StubbedHistoryProvider;
@@ -88,10 +88,9 @@ import org.chromium.chrome.browser.preferences.Preferences;
 import org.chromium.chrome.browser.preferences.PreferencesTest;
 import org.chromium.chrome.browser.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
@@ -128,13 +127,13 @@ public class SavePasswordsPreferencesTest {
 
         // The following three data members are set once {@link #serializePasswords()} is called.
         @Nullable
-        private Callback<Integer> mExportSuccessCallback;
+        private IntStringCallback mExportSuccessCallback;
 
         @Nullable
         private Callback<String> mExportErrorCallback;
 
         @Nullable
-        private String mExportFileName;
+        private String mExportTargetPath;
 
         public void setSavedPasswords(ArrayList<SavedPasswordEntry> savedPasswords) {
             mSavedPasswords = savedPasswords;
@@ -144,7 +143,7 @@ public class SavePasswordsPreferencesTest {
             mSavedPasswordExeptions = savedPasswordExceptions;
         }
 
-        public Callback<Integer> getExportSuccessCallback() {
+        public IntStringCallback getExportSuccessCallback() {
             return mExportSuccessCallback;
         }
 
@@ -152,8 +151,8 @@ public class SavePasswordsPreferencesTest {
             return mExportErrorCallback;
         }
 
-        public String getExportFileName() {
-            return mExportFileName;
+        public String getExportTargetPath() {
+            return mExportTargetPath;
         }
 
         /**
@@ -197,11 +196,11 @@ public class SavePasswordsPreferencesTest {
         }
 
         @Override
-        public void serializePasswords(String targetPath, Callback<Integer> successCallback,
+        public void serializePasswords(String targetPath, IntStringCallback successCallback,
                 Callback<String> errorCallback) {
             mExportSuccessCallback = successCallback;
             mExportErrorCallback = errorCallback;
-            mExportFileName = targetPath;
+            mExportTargetPath = targetPath;
         }
     }
 
@@ -398,6 +397,17 @@ public class SavePasswordsPreferencesTest {
             Thread.sleep(100);
     }
 
+    /**
+     * Create a temporary file in the cache sub-directory for exported passwords, which the test can
+     * try to use for sharing.
+     * @return The {@link File} handle for such temporary file.
+     */
+    private File createFakeExportedPasswordsFile() throws IOException {
+        File passwordsDir = new File(ExportFlow.getTargetDirectory());
+        // Ensure that the directory exists.
+        passwordsDir.mkdir();
+        return File.createTempFile("test", ".csv", passwordsDir);
+    }
 
     /**
      * Ensure that resetting of empty passwords list works.
@@ -542,7 +552,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportMenuDisabled() throws Exception {
         // Ensure there are no saved passwords reported to settings.
         setPasswordSource(null);
@@ -562,7 +571,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportMenuEnabled() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -576,36 +584,11 @@ public class SavePasswordsPreferencesTest {
     }
 
     /**
-     * Check that if "PasswordExport" feature is not explicitly enabled, there is no menu item to
-     * export passwords.
-     */
-    @Test
-    @SmallTest
-    @Feature({"Preferences"})
-    @DisableFeatures("PasswordExport")
-    public void testExportMenuMissing() throws Exception {
-        ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
-
-        final Preferences preferences =
-                PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
-                        SavePasswordsPreferences.class.getName());
-
-        // Ideally this would need the same matcher (Espresso.OVERFLOW_BUTTON_MATCHER) as used
-        // inside Espresso.openActionBarOverflowOrOptionsMenu(), but that is private to Espresso.
-        // Matching the overflow menu with the class name "OverflowMenuButton" won't work on
-        // obfuscated release builds, so matching the description remains. The
-        // OVERFLOW_BUTTON_MATCHER specifies the string directly, not via string resource, so this
-        // is also done below.
-        Espresso.onView(withContentDescription("More options")).check(doesNotExist());
-    }
-
-    /**
      * Check that tapping the export menu requests the passwords to be serialised in the background.
      */
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportTriggersSerialization() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -626,8 +609,8 @@ public class SavePasswordsPreferencesTest {
         Espresso.onView(withText(R.string.save_password_preferences_export_action_title))
                 .perform(click());
 
-        File exportPath = new File(mHandler.getExportFileName());
-        Assert.assertTrue(exportPath.canRead());
+        Assert.assertNotNull(mHandler.getExportTargetPath());
+        Assert.assertFalse(mHandler.getExportTargetPath().isEmpty());
     }
 
     /**
@@ -637,7 +620,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportMenuItem() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -672,7 +654,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportReauthAfterCancel() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -727,7 +708,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportMenuItemNoLock() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -756,7 +736,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportMenuItemReenabledNoLock() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -785,7 +764,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportMenuItemReenabledReauthFailure() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -818,7 +796,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportRequiresReauth() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -858,7 +835,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportIntent() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -873,9 +849,9 @@ public class SavePasswordsPreferencesTest {
         Intents.init();
 
         reauthenticateAndRequestExport(preferences);
-
+        File tempFile = createFakeExportedPasswordsFile();
         // Pretend that passwords have been serialized to go directly to the intent.
-        mHandler.getExportSuccessCallback().onResult(123);
+        mHandler.getExportSuccessCallback().onResult(123, tempFile.getPath());
 
         // Before triggering the sharing intent chooser, stub it out to avoid leaving system UI open
         // after the test is finished.
@@ -903,6 +879,8 @@ public class SavePasswordsPreferencesTest {
 
         Intents.release();
 
+        tempFile.delete();
+
         Assert.assertEquals(1, successDelta.getDelta());
         Assert.assertEquals(1, countDelta.getDelta());
         Assert.assertEquals(1, progressBarDelta.getDelta());
@@ -915,7 +893,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportIntentPaused() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -940,8 +917,9 @@ public class SavePasswordsPreferencesTest {
             }
         });
 
+        File tempFile = createFakeExportedPasswordsFile();
         // Pretend that passwords have been serialized to go directly to the intent.
-        mHandler.getExportSuccessCallback().onResult(56);
+        mHandler.getExportSuccessCallback().onResult(56, tempFile.getPath());
 
         // Before triggering the sharing intent chooser, stub it out to avoid leaving system UI open
         // after the test is finished.
@@ -965,6 +943,8 @@ public class SavePasswordsPreferencesTest {
 
         Intents.release();
 
+        tempFile.delete();
+
         Assert.assertEquals(1, successDelta.getDelta());
         Assert.assertEquals(1, countDelta.getDelta());
     }
@@ -976,7 +956,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportCancelOnWarning() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -1004,7 +983,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportWarningOnResume() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -1045,7 +1023,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportWarningTimeoutOnResume() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -1093,7 +1070,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportCancelOnWarningDismissal() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -1124,7 +1100,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportProgressMinimalTime() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -1160,8 +1135,9 @@ public class SavePasswordsPreferencesTest {
                 "PasswordManager.Android.ExportPasswordsProgressBarUsage",
                 ExportFlow.PROGRESS_HIDDEN_DELAYED);
 
+        File tempFile = createFakeExportedPasswordsFile();
         // Now pretend that passwords have been serialized.
-        mHandler.getExportSuccessCallback().onResult(12);
+        mHandler.getExportSuccessCallback().onResult(12, tempFile.getPath());
 
         // Check that the progress bar is still shown, though, because the timer has not gone off
         // yet.
@@ -1178,6 +1154,9 @@ public class SavePasswordsPreferencesTest {
                         allOf(hasAction(equalTo(Intent.ACTION_SEND)), hasType("text/csv"))))));
 
         Intents.release();
+
+        tempFile.delete();
+
         Assert.assertEquals(1, progressBarDelta.getDelta());
     }
 
@@ -1188,7 +1167,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportProgress() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -1222,9 +1200,11 @@ public class SavePasswordsPreferencesTest {
                 "PasswordManager.Android.ExportPasswordsProgressBarUsage",
                 ExportFlow.PROGRESS_HIDDEN_DIRECTLY);
 
+        File tempFile = createFakeExportedPasswordsFile();
+
         // Now pretend that passwords have been serialized.
         allowProgressBarToBeHidden(preferences);
-        mHandler.getExportSuccessCallback().onResult(12);
+        mHandler.getExportSuccessCallback().onResult(12, tempFile.getPath());
 
         // After simulating the serialized passwords being received, check that the progress bar is
         // hidden.
@@ -1236,6 +1216,9 @@ public class SavePasswordsPreferencesTest {
                         allOf(hasAction(equalTo(Intent.ACTION_SEND)), hasType("text/csv"))))));
 
         Intents.release();
+
+        tempFile.delete();
+
         Assert.assertEquals(1, progressBarDelta.getDelta());
     }
 
@@ -1245,7 +1228,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportCancelOnProgress() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -1291,7 +1273,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportCancelOnError() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -1333,7 +1314,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportRetry() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -1371,7 +1351,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportHelpSite() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -1420,7 +1399,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures("PasswordExport")
     public void testExportErrorUiAfterConfirmation() throws Exception {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
@@ -1517,7 +1495,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures(ChromeFeatureList.PASSWORD_SEARCH)
     @SuppressWarnings("AlwaysShowAction") // We need to ensure the icon is in the action bar.
     public void testSearchIconVisibleInActionBarWithFeature() throws Exception {
         setPasswordSource(null); // Initialize empty preferences.
@@ -1543,7 +1520,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures(ChromeFeatureList.PASSWORD_SEARCH)
     public void testSearchTextInOverflowMenuVisibleWithFeature() throws Exception {
         setPasswordSource(null); // Initialize empty preferences.
         SavePasswordsPreferences f =
@@ -1573,7 +1549,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures(ChromeFeatureList.PASSWORD_SEARCH)
     public void testTriggeringSearchRestoresHelpIcon() throws Exception {
         setPasswordSource(null);
         PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
@@ -1620,27 +1595,11 @@ public class SavePasswordsPreferencesTest {
     }
 
     /**
-     * Check that the search item is not visible if the Feature is disabled.
-     */
-    @Test
-    @SmallTest
-    @Feature({"Preferences"})
-    @DisableFeatures(ChromeFeatureList.PASSWORD_SEARCH)
-    public void testSearchIconGoneWithoutFeature() throws Exception {
-        setPasswordSource(null); // Initialize empty preferences.
-        PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
-                SavePasswordsPreferences.class.getName());
-
-        Espresso.onView(withId(R.id.menu_id_search)).check(doesNotExist());
-    }
-
-    /**
      * Check that the search filters the list by name.
      */
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures(ChromeFeatureList.PASSWORD_SEARCH)
     public void testSearchFiltersByUserName() throws Exception {
         setPasswordSourceWithMultipleEntries(GREEK_GODS);
         PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
@@ -1664,7 +1623,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures(ChromeFeatureList.PASSWORD_SEARCH)
     public void testSearchFiltersByUrl() throws Exception {
         setPasswordSourceWithMultipleEntries(GREEK_GODS);
         PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
@@ -1688,7 +1646,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures(ChromeFeatureList.PASSWORD_SEARCH)
     public void testSearchDisplaysBlankPageIfSearchTurnsUpEmpty() throws Exception {
         setPasswordSourceWithMultipleEntries(GREEK_GODS);
         PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
@@ -1722,7 +1679,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures(ChromeFeatureList.PASSWORD_SEARCH)
     public void testSearchIconClickedHidesExceptionsTemporarily() throws Exception {
         setPasswordExceptions(new String[] {"http://exclu.de", "http://not-inclu.de"});
         final SavePasswordsPreferences savePasswordPreferences =
@@ -1758,7 +1714,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures(ChromeFeatureList.PASSWORD_SEARCH)
     public void testSearchIconClickedHidesGeneralPrefs() throws Exception {
         setPasswordSource(ZEUS_ON_EARTH);
         final SavePasswordsPreferences prefs =
@@ -1806,7 +1761,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures(ChromeFeatureList.PASSWORD_SEARCH)
     public void testSearchBarBackButtonRestoresGeneralPrefs() throws Exception {
         setPasswordSourceWithMultipleEntries(GREEK_GODS);
         PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
@@ -1835,7 +1789,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures(ChromeFeatureList.PASSWORD_SEARCH)
     public void testSearchViewCloseIconExistsOnlyToClearQueries() throws Exception {
         setPasswordSourceWithMultipleEntries(GREEK_GODS);
         PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
@@ -1870,7 +1823,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures(ChromeFeatureList.PASSWORD_SEARCH)
     public void testSearchIconColorAffectsOnlyLocalSearchDrawable() throws Exception {
         // Open the password preferences and remember the applied color filter.
         final SavePasswordsPreferences f =
@@ -1920,16 +1872,14 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures(ChromeFeatureList.PASSWORD_SEARCH)
     public void testSearchResultsPersistAfterEntryInspection() throws Exception {
         setPasswordSourceWithMultipleEntries(GREEK_GODS);
         setPasswordExceptions(new String[] {"http://exclu.de", "http://not-inclu.de"});
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
         ReauthenticationManager.setScreenLockSetUpOverride(
                 ReauthenticationManager.OverrideState.AVAILABLE);
-        final Preferences prefs =
-                PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
-                        SavePasswordsPreferences.class.getName());
+        PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
+                SavePasswordsPreferences.class.getName());
 
         // Open the search and filter all but "Zeus".
         Espresso.onView(withSearchMenuIdOrText()).perform(click());
@@ -1985,7 +1935,6 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures(ChromeFeatureList.PASSWORD_SEARCH)
     public void testSearchIsRecordedInHistograms() throws Exception {
         MetricsUtils.HistogramDelta triggered_delta = new MetricsUtils.HistogramDelta(
                 "PasswordManager.Android.PasswordSearchTriggered", 1);

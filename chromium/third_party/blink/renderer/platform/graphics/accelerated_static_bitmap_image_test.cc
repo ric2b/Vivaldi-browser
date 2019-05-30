@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
 
+#include "base/test/scoped_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
@@ -12,16 +13,17 @@
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/skia/include/core/SkSurface.h"
 
+namespace blink {
+namespace {
+
+using testing::_;
 using testing::ElementsAreArray;
 using testing::InSequence;
 using testing::MatcherCast;
 using testing::Pointee;
-using testing::SetArrayArgument;
 using testing::SetArgPointee;
+using testing::SetArrayArgument;
 using testing::Test;
-using testing::_;
-
-namespace {
 
 class MockGLES2InterfaceWithSyncTokenSupport : public FakeGLES2Interface {
  public:
@@ -40,10 +42,6 @@ GLbyte SyncTokenMatcher(const gpu::SyncToken& token) {
   return reinterpret_cast<const GLbyte*>(&token)[0];
 }
 
-}  // unnamed namespace
-
-namespace blink {
-
 class AcceleratedStaticBitmapImageTest : public Test {
  public:
   void SetUp() override {
@@ -59,6 +57,7 @@ class AcceleratedStaticBitmapImageTest : public Test {
   void TearDown() override { SharedGpuContext::ResetForTesting(); }
 
  protected:
+  base::test::ScopedTaskEnvironment task_environment_;
   MockGLES2InterfaceWithSyncTokenSupport gl_;
 };
 
@@ -155,4 +154,5 @@ TEST_F(AcceleratedStaticBitmapImageTest, CopyToTextureSynchronization) {
   // nullptr;
 }
 
+}  // namespace
 }  // namespace blink

@@ -5,8 +5,9 @@
 import json
 import logging
 
-from blinkpy.common.system.log_testing import LoggingTestCase
 from blinkpy.common.host_mock import MockHost
+from blinkpy.common.system.executive_mock import MockProcess
+from blinkpy.common.system.log_testing import LoggingTestCase
 from blinkpy.web_tests.port import test
 from blinkpy.web_tests.servers.wptserve import WPTServe
 
@@ -36,7 +37,7 @@ class TestWPTServe(LoggingTestCase):
                 '--config',
                 server._config_file,
                 '--doc_root',
-                '/test.checkout/LayoutTests/external/wpt'
+                '/test.checkout/wtests/external/wpt'
             ])
 
     def test_init_gen_config(self):
@@ -69,6 +70,7 @@ class TestWPTServe(LoggingTestCase):
         server = WPTServe(self.port, '/log_file_dir')
         server._pid_file = '/tmp/pidfile'
         server._spawn_process = lambda: 4
+        server._process = MockProcess()
         server._is_server_running_on_all_ports = lambda: True
 
         # Simulate a process that never gets killed.

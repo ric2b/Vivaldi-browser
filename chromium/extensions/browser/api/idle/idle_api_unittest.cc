@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "base/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "extensions/browser/api/idle/idle_api_constants.h"
 #include "extensions/browser/api/idle/idle_manager.h"
@@ -42,8 +43,8 @@ class TestIdleProvider : public IdleManager::IdleTimeProvider {
  public:
   TestIdleProvider();
   ~TestIdleProvider() override;
-  void CalculateIdleState(int idle_threshold, ui::IdleCallback notify) override;
-  void CalculateIdleTime(ui::IdleTimeCallback notify) override;
+  ui::IdleState CalculateIdleState(int idle_threshold) override;
+  int CalculateIdleTime() override;
   bool CheckIdleStateIsLocked() override;
 
   void set_idle_time(int idle_time);
@@ -60,21 +61,18 @@ TestIdleProvider::TestIdleProvider() : idle_time_(0), locked_(false) {
 TestIdleProvider::~TestIdleProvider() {
 }
 
-void TestIdleProvider::CalculateIdleState(int idle_threshold,
-                                          ui::IdleCallback notify) {
+ui::IdleState TestIdleProvider::CalculateIdleState(int idle_threshold) {
   if (locked_) {
-    notify.Run(ui::IDLE_STATE_LOCKED);
+    return ui::IDLE_STATE_LOCKED;
+  } else if (idle_time_ >= idle_threshold) {
+    return ui::IDLE_STATE_IDLE;
   } else {
-    if (idle_time_ >= idle_threshold) {
-      notify.Run(ui::IDLE_STATE_IDLE);
-    } else {
-      notify.Run(ui::IDLE_STATE_ACTIVE);
-    }
+    return ui::IDLE_STATE_ACTIVE;
   }
 }
 
-void TestIdleProvider::CalculateIdleTime(ui::IdleTimeCallback notify) {
-  notify.Run(idle_time_);
+int TestIdleProvider::CalculateIdleTime() {
+  return idle_time_;
 }
 
 bool TestIdleProvider::CheckIdleStateIsLocked() {
@@ -133,8 +131,8 @@ class IdleTest : public ApiUnitTest {
 void IdleTest::SetUp() {
   ApiUnitTest::SetUp();
 
-  IdleManagerFactory::GetInstance()->SetTestingFactory(browser_context(),
-                                                       &IdleManagerTestFactory);
+  IdleManagerFactory::GetInstance()->SetTestingFactory(
+      browser_context(), base::BindRepeating(&IdleManagerTestFactory));
   idle_manager_ = IdleManagerFactory::GetForBrowserContext(browser_context());
 
   idle_provider_ = new TestIdleProvider();
@@ -219,7 +217,7 @@ TEST_F(IdleTest, QueryMinThreshold) {
       SCOPED_TRACE(time);
       idle_provider_->set_idle_time(time);
 
-      std::string args = "[" + base::IntToString(threshold) + "]";
+      std::string args = "[" + base::NumberToString(threshold) + "]";
       std::unique_ptr<base::Value> result(
           RunFunctionAndReturnValue(new IdleQueryStateFunction(), args));
 
@@ -248,7 +246,7 @@ TEST_F(IdleTest, QueryMaxThreshold) {
       SCOPED_TRACE(time);
       idle_provider_->set_idle_time(time);
 
-      std::string args = "[" + base::IntToString(threshold) + "]";
+      std::string args = "[" + base::NumberToString(threshold) + "]";
       std::unique_ptr<base::Value> result(
           RunFunctionAndReturnValue(new IdleQueryStateFunction(), args));
 

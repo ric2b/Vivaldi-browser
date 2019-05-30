@@ -7,10 +7,10 @@
 
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/script/fetch_client_settings_object_snapshot.h"
 #include "third_party/blink/renderer/core/script/modulator.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_member.h"
+#include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object_snapshot.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl_hash.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
@@ -25,38 +25,47 @@ class ModuleTreeLinkerRegistry;
 // a top-level [FDaI] "fetch the descendants of and instantiate", and all the
 // invocations of [IMSGF] and [FD] "fetch the descendants" under that.
 //
+// Modulator represents "a module map settings object" and
+// ResourceFetcher represents "a fetch client settings object"
+// by its |Context()->GetFetchClientSettingsObject()|.
+//
 // Spec links:
 // [IMSGF]
-// https://html.spec.whatwg.org/#internal-module-script-graph-fetching-procedure
+// https://html.spec.whatwg.org/C/#internal-module-script-graph-fetching-procedure
 // [FD]
-// https://html.spec.whatwg.org/#fetch-the-descendants-of-a-module-script
+// https://html.spec.whatwg.org/C/#fetch-the-descendants-of-a-module-script
 // [FDaI]
-// https://html.spec.whatwg.org/#fetch-the-descendants-of-and-instantiate-a-module-script
+// https://html.spec.whatwg.org/C/#fetch-the-descendants-of-and-instantiate-a-module-script
 // [FFPE]
-// https://html.spec.whatwg.org/#finding-the-first-parse-error
+// https://html.spec.whatwg.org/C/#finding-the-first-parse-error
 class CORE_EXPORT ModuleTreeLinker final : public SingleModuleClient {
  public:
-  // https://html.spec.whatwg.org/#fetch-a-module-script-tree
-  static void Fetch(
-      const KURL&,
-      FetchClientSettingsObjectSnapshot* fetch_client_settings_object,
-      WebURLRequest::RequestContext destination,
-      const ScriptFetchOptions&,
-      Modulator*,
-      ModuleScriptCustomFetchType,
-      ModuleTreeLinkerRegistry*,
-      ModuleTreeClient*);
+  // https://html.spec.whatwg.org/C/#fetch-a-module-script-tree
+  static void Fetch(const KURL&,
+                    ResourceFetcher* fetch_client_settings_object_fetcher,
+                    mojom::RequestContextType destination,
+                    const ScriptFetchOptions&,
+                    Modulator*,
+                    ModuleScriptCustomFetchType,
+                    ModuleTreeLinkerRegistry*,
+                    ModuleTreeClient*);
 
   // [FDaI] for an inline script.
   static void FetchDescendantsForInlineScript(
       ModuleScript*,
-      FetchClientSettingsObjectSnapshot* fetch_client_settings_object,
-      WebURLRequest::RequestContext destination,
+      ResourceFetcher* fetch_client_settings_object_fetcher,
+      mojom::RequestContextType destination,
       Modulator*,
       ModuleScriptCustomFetchType,
       ModuleTreeLinkerRegistry*,
       ModuleTreeClient*);
 
+  ModuleTreeLinker(ResourceFetcher* fetch_client_settings_object_fetcher,
+                   mojom::RequestContextType destination,
+                   Modulator*,
+                   ModuleScriptCustomFetchType,
+                   ModuleTreeLinkerRegistry*,
+                   ModuleTreeClient*);
   ~ModuleTreeLinker() override = default;
   void Trace(blink::Visitor*) override;
 
@@ -66,14 +75,6 @@ class CORE_EXPORT ModuleTreeLinker final : public SingleModuleClient {
   bool HasFinished() const { return state_ == State::kFinished; }
 
  private:
-  ModuleTreeLinker(
-      FetchClientSettingsObjectSnapshot* fetch_client_settings_object,
-      WebURLRequest::RequestContext destination,
-      Modulator*,
-      ModuleScriptCustomFetchType,
-      ModuleTreeLinkerRegistry*,
-      ModuleTreeClient*);
-
   enum class State {
     kInitial,
     // Running fetch of the module script corresponding to the target node.
@@ -100,7 +101,7 @@ class CORE_EXPORT ModuleTreeLinker final : public SingleModuleClient {
   // Steps 3--7 of [IMSGF], and [FD]/[FDaI] called from [IMSGF].
   // TODO(hiroshige): Currently
   void NotifyModuleLoadFinished(ModuleScript*) override;
-  void FetchDescendants(ModuleScript*);
+  void FetchDescendants(const ModuleScript*);
 
   // Completion of [FD].
   void FinalizeFetchDescendantsForOneModuleScript();
@@ -109,11 +110,13 @@ class CORE_EXPORT ModuleTreeLinker final : public SingleModuleClient {
   void Instantiate();
 
   // [FFPE]
-  ScriptValue FindFirstParseError(ModuleScript*,
-                                  HeapHashSet<Member<ModuleScript>>*) const;
+  ScriptValue FindFirstParseError(
+      const ModuleScript*,
+      HeapHashSet<Member<const ModuleScript>>*) const;
 
-  const Member<FetchClientSettingsObjectSnapshot> fetch_client_settings_object_;
-  const WebURLRequest::RequestContext destination_;
+  const Member<ResourceFetcher> fetch_client_settings_object_fetcher_;
+
+  const mojom::RequestContextType destination_;
   const Member<Modulator> modulator_;
   const ModuleScriptCustomFetchType custom_fetch_type_;
   HashSet<KURL> visited_set_;
@@ -122,7 +125,7 @@ class CORE_EXPORT ModuleTreeLinker final : public SingleModuleClient {
   State state_ = State::kInitial;
 
   // Correspond to _result_ in
-  // https://html.spec.whatwg.org/multipage/webappapis.html#internal-module-script-graph-fetching-procedure
+  // https://html.spec.whatwg.org/C/#internal-module-script-graph-fetching-procedure
   TraceWrapperMember<ModuleScript> result_;
 
   bool found_parse_error_ = false;

@@ -4,25 +4,24 @@
 
 package org.chromium.chrome.browser.gsa;
 
+import android.support.annotation.Nullable;
 import android.text.TextUtils;
 
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.UrlConstants;
-import org.chromium.chrome.browser.contextualsearch.ContextualSearchObserver;
+import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
+import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 import org.chromium.components.sync.ModelType;
-import org.chromium.components.sync.PassphraseType;
+import org.chromium.components.sync.Passphrase;
 
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import javax.annotation.Nullable;
 
 /**
  * Reports context to GSA for search quality.
@@ -59,7 +58,6 @@ public class ContextReporter {
     private final GSAContextReportDelegate mDelegate;
     private TabModelSelectorTabObserver mSelectorTabObserver;
     private TabModelSelectorTabModelObserver mModelObserver;
-    private ContextualSearchObserver mContextualSearchObserver;
     private boolean mLastContextWasTitleChange;
     private String mLastUrl;
     private String mLastTitle;
@@ -110,19 +108,10 @@ public class ContextReporter {
                 }
             };
         }
-        if (mContextualSearchObserver == null && mActivity.getContextualSearchManager() != null) {
-            mContextualSearchObserver = new ContextualSearchObserver() {
-                @Override
-                public void onShowContextualSearch(GSAContextDisplaySelection contextSelection) {
-                    if (contextSelection != null) reportDisplaySelection(contextSelection);
-                }
-
-                @Override
-                public void onHideContextualSearch() {
-                    reportDisplaySelection(null);
-                }
-            };
-            mActivity.getContextualSearchManager().addObserver(mContextualSearchObserver);
+        ContextualSearchManager manager = mActivity.getContextualSearchManager();
+        if (manager != null) {
+            manager.enableContextReporting(
+                    (selection) -> ContextReporter.this.reportDisplaySelection(selection));
         }
     }
 
@@ -140,9 +129,8 @@ public class ContextReporter {
             mModelObserver.destroy();
             mModelObserver = null;
         }
-        if (mContextualSearchObserver != null && mActivity.getContextualSearchManager() != null) {
-            mActivity.getContextualSearchManager().removeObserver(mContextualSearchObserver);
-            mContextualSearchObserver = null;
+        if (mActivity.getContextualSearchManager() != null) {
+            mActivity.getContextualSearchManager().disableContextReporting();
         }
     }
 
@@ -228,7 +216,7 @@ public class ContextReporter {
             reportStatus(STATUS_SYNC_NOT_INITIALIZED);
         } else if (!syncService.getActiveDataTypes().contains(ModelType.TYPED_URLS)) {
             reportStatus(STATUS_SYNC_NOT_SYNCING_URLS);
-        } else if (!syncService.getPassphraseType().equals(PassphraseType.KEYSTORE_PASSPHRASE)) {
+        } else if (syncService.getPassphraseType() != Passphrase.Type.KEYSTORE) {
             reportStatus(STATUS_SYNC_NOT_KEYSTORE_PASSPHRASE);
         } else {
             reportStatus(STATUS_SYNC_OTHER);

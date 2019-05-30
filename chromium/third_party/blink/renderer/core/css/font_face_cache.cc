@@ -26,6 +26,7 @@
 
 #include "third_party/blink/renderer/core/css/font_face_cache.h"
 
+#include "base/atomic_sequence_num.h"
 #include "third_party/blink/renderer/core/css/css_segmented_font_face.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
 #include "third_party/blink/renderer/core/loader/resource/font_resource.h"
@@ -36,8 +37,6 @@
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 
 namespace blink {
-
-static unsigned g_version = 0;
 
 FontFaceCache::FontFaceCache() : version_(0) {}
 
@@ -52,8 +51,10 @@ void FontFaceCache::AddFontFace(FontFace* font_face, bool css_connected) {
   SegmentedFacesByFamily::AddResult capabilities_result =
       segmented_faces_.insert(font_face->family(), nullptr);
 
-  if (capabilities_result.is_new_entry)
-    capabilities_result.stored_value->value = new CapabilitiesSet();
+  if (capabilities_result.is_new_entry) {
+    capabilities_result.stored_value->value =
+        MakeGarbageCollected<CapabilitiesSet>();
+  }
 
   DCHECK(font_face->GetFontSelectionCapabilities().IsValid() &&
          !font_face->GetFontSelectionCapabilities().IsHashTableDeletedValue());
@@ -116,10 +117,13 @@ void FontFaceCache::RemoveFontFace(FontFace* font_face, bool css_connected) {
   IncrementVersion();
 }
 
-void FontFaceCache::ClearCSSConnected() {
+bool FontFaceCache::ClearCSSConnected() {
+  if (style_rule_to_font_face_.IsEmpty())
+    return false;
   for (const auto& item : style_rule_to_font_face_)
     RemoveFontFace(item.value.Get(), true);
   style_rule_to_font_face_.clear();
+  return true;
 }
 
 void FontFaceCache::ClearAll() {
@@ -134,7 +138,10 @@ void FontFaceCache::ClearAll() {
 }
 
 void FontFaceCache::IncrementVersion() {
-  version_ = ++g_version;
+  // Versions are guaranteed to be monotonically increasing, but not necessary
+  // sequential within a thread.
+  static base::AtomicSequenceNumber g_version;
+  version_ = g_version.GetNext();
 }
 
 CSSSegmentedFontFace* FontFaceCache::Get(
@@ -151,8 +158,8 @@ CSSSegmentedFontFace* FontFaceCache::Get(
   // Either add or retrieve a cache entry in the selection query cache for the
   // specified family.
   FontSelectionQueryCache::AddResult cache_entry_for_family_add =
-      font_selection_query_cache_.insert(family,
-                                         new FontSelectionQueryResult());
+      font_selection_query_cache_.insert(
+          family, MakeGarbageCollected<FontSelectionQueryResult>());
   auto cache_entry_for_family = cache_entry_for_family_add.stored_value->value;
 
   const FontSelectionRequest& request =

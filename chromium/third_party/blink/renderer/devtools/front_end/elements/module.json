@@ -18,7 +18,7 @@
             "className": "Elements.ElementsPanel.ContextMenuProvider"
         },
         {
-            "type": "@Common.Renderer",
+            "type": "@UI.Renderer",
             "contextTypes": [
                 "SDK.DOMNode",
                 "SDK.DeferredDOMNode"
@@ -255,6 +255,13 @@
                     "shortcut": "Meta+Shift+C"
                 }
             ]
+        },
+        {
+            "type": "action",
+            "actionId": "elements.capture-area-screenshot",
+            "className": "Elements.InspectElementModeController.ToggleSearchActionDelegate",
+            "title": "Capture area screenshot",
+            "category": "Screenshot"
         },
         {
             "type": "@UI.ToolbarItem.Provider",

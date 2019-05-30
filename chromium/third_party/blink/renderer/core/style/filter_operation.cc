@@ -27,11 +27,11 @@
 
 #include "third_party/blink/renderer/core/svg/svg_resource.h"
 #include "third_party/blink/renderer/platform/animation/animation_utilities.h"
+#include "third_party/blink/renderer/platform/geometry/length_functions.h"
 #include "third_party/blink/renderer/platform/graphics/filters/fe_drop_shadow.h"
 #include "third_party/blink/renderer/platform/graphics/filters/fe_gaussian_blur.h"
 #include "third_party/blink/renderer/platform/graphics/filters/filter.h"
 #include "third_party/blink/renderer/platform/graphics/filters/filter_effect.h"
-#include "third_party/blink/renderer/platform/length_functions.h"
 
 namespace blink {
 
@@ -57,7 +57,7 @@ FloatRect ReferenceFilterOperation::MapRect(const FloatRect& rect) const {
   return last_effect->MapRect(rect);
 }
 
-ReferenceFilterOperation::ReferenceFilterOperation(const String& url,
+ReferenceFilterOperation::ReferenceFilterOperation(const AtomicString& url,
                                                    SVGResource* resource)
     : FilterOperation(REFERENCE), url_(url), resource_(resource) {}
 
@@ -165,7 +165,7 @@ FloatRect BlurFilterOperation::MapRect(const FloatRect& rect) const {
 
 FilterOperation* BlurFilterOperation::Blend(const FilterOperation* from,
                                             double progress) const {
-  LengthType length_type = std_deviation_.GetType();
+  Length::Type length_type = std_deviation_.GetType();
   if (!from)
     return BlurFilterOperation::Create(std_deviation_.Blend(
         Length(length_type), progress, kValueRangeNonNegative));

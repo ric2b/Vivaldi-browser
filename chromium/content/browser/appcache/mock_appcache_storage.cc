@@ -18,6 +18,7 @@
 #include "content/browser/appcache/appcache_group.h"
 #include "content/browser/appcache/appcache_response.h"
 #include "content/browser/appcache/appcache_service_impl.h"
+#include "third_party/blink/public/mojom/appcache/appcache_info.mojom.h"
 
 // This is a quick and easy 'mock' implementation of the storage interface
 // that doesn't put anything to disk.
@@ -37,7 +38,7 @@ MockAppCacheStorage::MockAppCacheStorage(AppCacheServiceImpl* service)
       simulate_store_group_and_newest_cache_failure_(false),
       simulate_find_main_resource_(false),
       simulate_find_sub_resource_(false),
-      simulated_found_cache_id_(kAppCacheNoCacheId),
+      simulated_found_cache_id_(blink::mojom::kAppCacheNoCacheId),
       simulated_found_group_id_(0),
       simulated_found_network_namespace_(false),
       weak_factory_(this) {
@@ -46,8 +47,7 @@ MockAppCacheStorage::MockAppCacheStorage(AppCacheServiceImpl* service)
   last_response_id_ = 0;
 }
 
-MockAppCacheStorage::~MockAppCacheStorage() {
-}
+MockAppCacheStorage::~MockAppCacheStorage() = default;
 
 void MockAppCacheStorage::GetAllInfo(Delegate* delegate) {
   ScheduleTask(base::BindOnce(
@@ -160,24 +160,29 @@ void MockAppCacheStorage::StoreEvictionTimes(AppCacheGroup* group) {
                      group->first_evictable_error_time());
 }
 
-AppCacheResponseReader* MockAppCacheStorage::CreateResponseReader(
-    const GURL& manifest_url,
-    int64_t response_id) {
+std::unique_ptr<AppCacheResponseReader>
+MockAppCacheStorage::CreateResponseReader(const GURL& manifest_url,
+                                          int64_t response_id) {
   if (simulated_reader_)
-    return simulated_reader_.release();
-  return new AppCacheResponseReader(response_id, disk_cache()->GetWeakPtr());
+    return std::move(simulated_reader_);
+
+  // base::WrapUnique needed due to non-public constructor.
+  return base::WrapUnique(
+      new AppCacheResponseReader(response_id, disk_cache()->GetWeakPtr()));
 }
 
-AppCacheResponseWriter* MockAppCacheStorage::CreateResponseWriter(
-    const GURL& manifest_url) {
-  return new AppCacheResponseWriter(NewResponseId(),
-                                    disk_cache()->GetWeakPtr());
+std::unique_ptr<AppCacheResponseWriter>
+MockAppCacheStorage::CreateResponseWriter(const GURL& manifest_url) {
+  // base::WrapUnique needed due to non-public constructor.
+  return base::WrapUnique(
+      new AppCacheResponseWriter(NewResponseId(), disk_cache()->GetWeakPtr()));
 }
 
-AppCacheResponseMetadataWriter*
+std::unique_ptr<AppCacheResponseMetadataWriter>
 MockAppCacheStorage::CreateResponseMetadataWriter(int64_t response_id) {
-  return new AppCacheResponseMetadataWriter(response_id,
-                                            disk_cache()->GetWeakPtr());
+  // base::WrapUnique needed due to non-public constructor.
+  return base::WrapUnique(new AppCacheResponseMetadataWriter(
+      response_id, disk_cache()->GetWeakPtr()));
 }
 
 void MockAppCacheStorage::DoomResponses(
@@ -266,7 +271,9 @@ struct FoundCandidate {
   bool is_cache_in_use;
 
   FoundCandidate()
-      : cache_id(kAppCacheNoCacheId), group_id(0), is_cache_in_use(false) {}
+      : cache_id(blink::mojom::kAppCacheNoCacheId),
+        group_id(0),
+        is_cache_in_use(false) {}
 };
 
 void MaybeTakeNewNamespaceEntry(
@@ -431,8 +438,8 @@ void MockAppCacheStorage::ProcessFindResponseForMainRequest(
 
   // Didn't find anything.
   delegate_ref->delegate->OnMainResponseFound(
-      url, AppCacheEntry(), GURL(), AppCacheEntry(), kAppCacheNoCacheId, 0,
-      GURL());
+      url, AppCacheEntry(), GURL(), AppCacheEntry(),
+      blink::mojom::kAppCacheNoCacheId, 0, GURL());
 }
 
 void MockAppCacheStorage::ProcessMakeGroupObsolete(

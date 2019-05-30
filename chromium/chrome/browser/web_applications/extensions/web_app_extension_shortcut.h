@@ -5,9 +5,13 @@
 #ifndef CHROME_BROWSER_WEB_APPLICATIONS_EXTENSIONS_WEB_APP_EXTENSION_SHORTCUT_H_
 #define CHROME_BROWSER_WEB_APPLICATIONS_EXTENSIONS_WEB_APP_EXTENSION_SHORTCUT_H_
 
-#include "chrome/browser/web_applications/components/web_app_shortcut.h"
+#include <memory>
 
+#include "base/callback_forward.h"
+#include "base/files/file_path.h"
+#include "base/strings/string16.h"
 #include "build/build_config.h"
+#include "chrome/browser/web_applications/components/web_app_shortcut.h"
 
 class Profile;
 
@@ -17,15 +21,22 @@ class Extension;
 
 namespace web_app {
 
+// Callback made when CreateShortcuts has finished trying to create the
+// platform shortcuts indicating whether or not they were successfully created.
+using CreateShortcutsCallback = base::OnceCallback<void(bool shortcut_created)>;
+
 // Called by GetShortcutInfoForApp after fetching the ShortcutInfo.
-typedef base::OnceCallback<void(std::unique_ptr<ShortcutInfo>)>
-    ShortcutInfoCallback;
+using ShortcutInfoCallback =
+    base::OnceCallback<void(std::unique_ptr<ShortcutInfo>)>;
 
 // Create shortcuts for web application based on given shortcut data.
-// |shortcut_info| contains information about the shortcuts to create, and
-// |locations| contains information about where to create them.
+// |shortcut_info| contains information about the shortcuts to create,
+// |locations| contains information about where to create them, and
+// |callback| is a callback that is made when completed, indicating success
+// or failure of the operation.
 void CreateShortcutsWithInfo(ShortcutCreationReason reason,
                              const ShortcutLocations& locations,
+                             CreateShortcutsCallback callback,
                              std::unique_ptr<ShortcutInfo> shortcut_info);
 
 // Populates a ShortcutInfo for the given |extension| in |profile| and passes
@@ -39,7 +50,7 @@ std::unique_ptr<ShortcutInfo> ShortcutInfoForExtensionAndProfile(
     Profile* profile);
 
 // Whether to create a shortcut for this type of extension.
-bool ShouldCreateShortcutFor(web_app::ShortcutCreationReason reason,
+bool ShouldCreateShortcutFor(ShortcutCreationReason reason,
                              Profile* profile,
                              const extensions::Extension* extension);
 
@@ -54,7 +65,8 @@ base::FilePath GetWebAppDataDirectory(const base::FilePath& profile_path,
 void CreateShortcuts(ShortcutCreationReason reason,
                      const ShortcutLocations& locations,
                      Profile* profile,
-                     const extensions::Extension* app);
+                     const extensions::Extension* app,
+                     CreateShortcutsCallback callback);
 
 // Delete all shortcuts that have been created for the given profile and
 // extension.
@@ -75,22 +87,11 @@ void UpdateAllShortcuts(const base::string16& old_app_title,
 void UpdateShortcutsForAllApps(Profile* profile, base::OnceClosure callback);
 
 #if defined(OS_WIN)
-
 // Update the relaunch details for the given app's window, making the taskbar
 // group's "Pin to the taskbar" button function correctly.
 void UpdateRelaunchDetailsForApp(Profile* profile,
                                  const extensions::Extension* extension,
                                  HWND hwnd);
-
-namespace internals {
-
-// Returns the Windows user-level shortcut paths that are specified in
-// |creation_locations|.
-std::vector<base::FilePath> GetShortcutPaths(
-    const ShortcutLocations& creation_locations);
-
-}  // namespace internals
-
 #endif  // defined(OS_WIN)
 
 }  // namespace web_app

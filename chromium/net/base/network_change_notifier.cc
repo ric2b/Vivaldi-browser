@@ -12,11 +12,12 @@
 #include "base/strings/string_util.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
+#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "net/base/network_change_notifier_factory.h"
 #include "net/base/network_interfaces.h"
 #include "net/base/url_util.h"
-#include "net/dns/dns_config_service.h"
+#include "net/dns/dns_config.h"
 #include "net/url_request/url_request.h"
 #include "url/gurl.h"
 
@@ -32,6 +33,10 @@
 #include "net/base/network_change_notifier_linux.h"
 #elif defined(OS_MACOSX)
 #include "net/base/network_change_notifier_mac.h"
+#elif defined(OS_CHROMEOS)
+#include "net/base/network_change_notifier_posix.h"
+#elif defined(OS_FUCHSIA)
+#include "net/base/network_change_notifier_fuchsia.h"
 #endif
 
 namespace net {
@@ -203,19 +208,18 @@ NetworkChangeNotifier* NetworkChangeNotifier::Create() {
       new NetworkChangeNotifierWin();
   network_change_notifier->WatchForAddressChange();
   return network_change_notifier;
-#elif defined(OS_CHROMEOS) || defined(OS_ANDROID)
-  // ChromeOS and Android builds MUST use their own class factory.
-#if !defined(OS_CHROMEOS)
-  // TODO(oshima): ash_shell do not have access to chromeos'es
-  // notifier yet. Re-enable this when chromeos'es notifier moved to
-  // chromeos root directory. crbug.com/119298.
+#elif defined(OS_ANDROID)
+  // Android builds MUST use their own class factory.
   CHECK(false);
-#endif
   return NULL;
+#elif defined(OS_CHROMEOS)
+  return new NetworkChangeNotifierPosix(CONNECTION_NONE, SUBTYPE_NONE);
 #elif defined(OS_LINUX)
   return new NetworkChangeNotifierLinux(std::unordered_set<std::string>());
 #elif defined(OS_MACOSX)
   return new NetworkChangeNotifierMac();
+#elif defined(OS_FUCHSIA)
+  return new NetworkChangeNotifierFuchsia(0 /* required_features */);
 #else
   NOTIMPLEMENTED();
   return NULL;

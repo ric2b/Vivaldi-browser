@@ -26,11 +26,19 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// https://html.spec.whatwg.org/#worker-locations
+// https://html.spec.whatwg.org/C/#worker-locations
 
 [
     Exposed=Worker
 ] interface WorkerLocation {
+    stringifier readonly attribute USVString href;
+    readonly attribute USVString origin;
+    readonly attribute USVString protocol;
+    readonly attribute USVString host;
+    readonly attribute USVString hostname;
+    readonly attribute USVString port;
+    readonly attribute USVString pathname;
+    readonly attribute USVString search;
+    readonly attribute USVString hash;
 };
 
-WorkerLocation implements URLUtilsReadOnly;

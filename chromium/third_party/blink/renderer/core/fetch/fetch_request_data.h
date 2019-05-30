@@ -7,9 +7,11 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/unguessable_token.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink.h"
+#include "services/network/public/mojom/referrer_policy.mojom-shared.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-blink.h"
-#include "third_party/blink/public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_request.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/core/fetch/body_stream_buffer.h"
@@ -17,7 +19,6 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_priority.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/referrer.h"
-#include "third_party/blink/renderer/platform/weborigin/referrer_policy.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -33,21 +34,24 @@ class WebServiceWorkerRequest;
 class FetchRequestData final
     : public GarbageCollectedFinalized<FetchRequestData> {
  public:
-  enum Tainting { kBasicTainting, kCORSTainting, kOpaqueTainting };
+  enum Tainting { kBasicTainting, kCorsTainting, kOpaqueTainting };
 
   static FetchRequestData* Create();
   static FetchRequestData* Create(ScriptState*, const WebServiceWorkerRequest&);
-  // Call Request::refreshBody() after calling clone() or pass().
+  static FetchRequestData* Create(ScriptState*,
+                                  const mojom::blink::FetchAPIRequest&);
   FetchRequestData* Clone(ScriptState*, ExceptionState&);
   FetchRequestData* Pass(ScriptState*, ExceptionState&);
+
+  FetchRequestData();
   ~FetchRequestData();
 
   void SetMethod(AtomicString method) { method_ = method; }
   const AtomicString& Method() const { return method_; }
   void SetURL(const KURL& url) { url_ = url; }
   const KURL& Url() const { return url_; }
-  WebURLRequest::RequestContext Context() const { return context_; }
-  void SetContext(WebURLRequest::RequestContext context) { context_ = context; }
+  mojom::RequestContextType Context() const { return context_; }
+  void SetContext(mojom::RequestContextType context) { context_ = context; }
   scoped_refptr<const SecurityOrigin> Origin() { return origin_; }
   void SetOrigin(scoped_refptr<const SecurityOrigin> origin) {
     origin_ = std::move(origin);
@@ -58,8 +62,12 @@ class FetchRequestData final
   }
   const AtomicString& ReferrerString() const { return referrer_string_; }
   void SetReferrerString(const AtomicString& s) { referrer_string_ = s; }
-  ReferrerPolicy GetReferrerPolicy() const { return referrer_policy_; }
-  void SetReferrerPolicy(ReferrerPolicy p) { referrer_policy_ = p; }
+  network::mojom::ReferrerPolicy GetReferrerPolicy() const {
+    return referrer_policy_;
+  }
+  void SetReferrerPolicy(network::mojom::ReferrerPolicy p) {
+    referrer_policy_ = p;
+  }
   void SetMode(network::mojom::FetchRequestMode mode) { mode_ = mode; }
   network::mojom::FetchRequestMode Mode() const { return mode_; }
   void SetCredentials(network::mojom::FetchCredentialsMode credentials) {
@@ -87,7 +95,6 @@ class FetchRequestData final
     header_list_ = header_list;
   }
   BodyStreamBuffer* Buffer() const { return buffer_; }
-  // Call Request::refreshBody() after calling setBuffer().
   void SetBuffer(BodyStreamBuffer* buffer) { buffer_ = buffer; }
   String MimeType() const { return mime_type_; }
   void SetMIMEType(const String& type) { mime_type_ = type; }
@@ -106,24 +113,24 @@ class FetchRequestData final
   void SetURLLoaderFactory(network::mojom::blink::URLLoaderFactoryPtr factory) {
     url_loader_factory_ = std::move(factory);
   }
+  const base::UnguessableToken& WindowId() const { return window_id_; }
+  void SetWindowId(const base::UnguessableToken& id) { window_id_ = id; }
 
   void Trace(blink::Visitor*);
 
  private:
-  FetchRequestData();
-
   FetchRequestData* CloneExceptBody();
 
   AtomicString method_;
   KURL url_;
   Member<FetchHeaderList> header_list_;
   // FIXME: Support m_skipServiceWorkerFlag;
-  WebURLRequest::RequestContext context_;
+  mojom::RequestContextType context_;
   scoped_refptr<const SecurityOrigin> origin_;
   // FIXME: Support m_forceOriginHeaderFlag;
   bool same_origin_data_url_flag_;
   AtomicString referrer_string_;
-  ReferrerPolicy referrer_policy_;
+  network::mojom::ReferrerPolicy referrer_policy_;
   // FIXME: Support m_authenticationFlag;
   // FIXME: Support m_synchronousFlag;
   network::mojom::FetchRequestMode mode_;
@@ -148,6 +155,7 @@ class FetchRequestData final
   // Currently used for blob: URLs, to ensure they can still be loaded even if
   // the URL got revoked after creating the request.
   network::mojom::blink::URLLoaderFactoryPtr url_loader_factory_;
+  base::UnguessableToken window_id_;
 
   DISALLOW_COPY_AND_ASSIGN(FetchRequestData);
 };

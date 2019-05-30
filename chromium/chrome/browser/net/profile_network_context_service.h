@@ -5,17 +5,23 @@
 #ifndef CHROME_BROWSER_NET_PROFILE_NETWORK_CONTEXT_SERVICE_H_
 #define CHROME_BROWSER_NET_PROFILE_NETWORK_CONTEXT_SERVICE_H_
 
+#include <memory>
 #include <utility>
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "chrome/browser/net/proxy_config_monitor.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_member.h"
+#include "net/net_buildflags.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 
 class Profile;
+class TrialComparisonCertVerifierController;
 
 namespace user_prefs {
 class PrefRegistrySyncable;
@@ -64,10 +70,18 @@ class ProfileNetworkContextService : public KeyedService,
       network::mojom::NetworkContextRequest* network_context_request,
       network::mojom::NetworkContextParamsPtr* network_context_params);
 
+#if defined(OS_CHROMEOS)
+  void UpdateAdditionalCertificates(
+      const net::CertificateList& all_additional_certificates,
+      const net::CertificateList& trust_anchors);
+#endif
+
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   // Flushes all pending proxy configuration changes.
   void FlushProxyConfigMonitorForTesting();
+
+  static void SetDiscardDomainReliabilityUploadsForTesting(bool value);
 
  private:
   // Checks |quic_allowed_|, and disables QUIC if needed.
@@ -86,11 +100,24 @@ class ProfileNetworkContextService : public KeyedService,
 
   void UpdateReferrersEnabled();
 
+  // Update the CTPolicy for the given NetworkContexts.
+  void UpdateCTPolicyForContexts(
+      const std::vector<network::mojom::NetworkContext*>& contexts);
+
+  // Update the CTPolicy for the all of profiles_'s NetworkContexts.
+  void UpdateCTPolicy();
+
+  void ScheduleUpdateCTPolicy();
+
   // Creates parameters for the NetworkContext. Use |in_memory| instead of
   // |profile_->IsOffTheRecord()| because sometimes normal profiles want off the
   // record partitions (e.g. for webview tag).
   network::mojom::NetworkContextParamsPtr CreateNetworkContextParams(
       bool in_memory,
+      const base::FilePath& relative_partition_path);
+
+  // Returns the path for a given storage partition.
+  base::FilePath GetPartitionPath(
       const base::FilePath& relative_partition_path);
 
   // content_settings::Observer:
@@ -123,8 +150,18 @@ class ProfileNetworkContextService : public KeyedService,
   BooleanPrefMember quic_allowed_;
   StringPrefMember pref_accept_language_;
   BooleanPrefMember block_third_party_cookies_;
-
   BooleanPrefMember enable_referrers_;
+  PrefChangeRegistrar pref_change_registrar_;
+
+  // Used to post schedule CT policy updates
+  base::OneShotTimer ct_policy_update_timer_;
+
+#if BUILDFLAG(TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED)
+  // Controls the cert verification trial. May be null if the trial is disabled
+  // or not allowed for this profile.
+  std::unique_ptr<TrialComparisonCertVerifierController>
+      trial_comparison_cert_verifier_controller_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(ProfileNetworkContextService);
 };

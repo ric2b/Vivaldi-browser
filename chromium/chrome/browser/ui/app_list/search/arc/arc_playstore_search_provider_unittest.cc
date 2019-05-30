@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/arc/icon_decode_request.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -48,7 +49,8 @@ class ArcPlayStoreSearchProviderTest : public AppListTestBase {
         max_results, profile_.get(), controller_.get());
   }
 
-  scoped_refptr<extensions::Extension> CreateExtension(const std::string& id) {
+  scoped_refptr<const extensions::Extension> CreateExtension(
+      const std::string& id) {
     return extensions::ExtensionBuilder("test").SetID(id).Build();
   }
 

@@ -9,17 +9,20 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/browsing_data/core/pref_names.h"
 #include "components/sync/driver/sync_service.h"
+#include "components/sync/driver/sync_user_settings.h"
 
 namespace {
 
 bool IsAutofillSyncEnabled(const syncer::SyncService* sync_service) {
-  return sync_service && sync_service->IsFirstSetupComplete() &&
-         sync_service->IsSyncActive() &&
+  return sync_service &&
+         sync_service->GetUserSettings()->IsFirstSetupComplete() &&
+         sync_service->IsSyncFeatureActive() &&
          sync_service->GetActiveDataTypes().Has(syncer::AUTOFILL);
 }
 

@@ -33,18 +33,18 @@
 
 namespace blink {
 
-using SelectorTextCache =
-    PersistentHeapHashMap<WeakMember<const CSSStyleRule>, String>;
+using SelectorTextCache = HeapHashMap<WeakMember<const CSSStyleRule>, String>;
 
 static SelectorTextCache& GetSelectorTextCache() {
-  DEFINE_STATIC_LOCAL(SelectorTextCache, cache, ());
-  return cache;
+  DEFINE_STATIC_LOCAL(Persistent<SelectorTextCache>, cache,
+                      (MakeGarbageCollected<SelectorTextCache>()));
+  return *cache;
 }
 
 CSSStyleRule::CSSStyleRule(StyleRule* style_rule, CSSStyleSheet* parent)
     : CSSRule(parent),
       style_rule_(style_rule),
-      style_map_(new DeclaredStylePropertyMap(this)) {}
+      style_map_(MakeGarbageCollected<DeclaredStylePropertyMap>(this)) {}
 
 CSSStyleRule::~CSSStyleRule() = default;
 
@@ -103,7 +103,7 @@ String CSSStyleRule::cssText() const {
 
 void CSSStyleRule::Reattach(StyleRuleBase* rule) {
   DCHECK(rule);
-  style_rule_ = ToStyleRule(rule);
+  style_rule_ = To<StyleRule>(rule);
   if (properties_cssom_wrapper_)
     properties_cssom_wrapper_->Reattach(style_rule_->MutableProperties());
 }

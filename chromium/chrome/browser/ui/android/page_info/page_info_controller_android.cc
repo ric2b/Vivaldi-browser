@@ -31,7 +31,6 @@ using base::android::JavaParamRef;
 // static
 static jlong JNI_PageInfoController_Init(
     JNIEnv* env,
-    const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jobject>& java_web_contents) {
   content::WebContents* web_contents =
@@ -100,6 +99,11 @@ void PageInfoControllerAndroid::SetCookieInfo(
   NOTIMPLEMENTED();
 }
 
+void PageInfoControllerAndroid::SetPageFeatureInfo(
+    const PageFeatureInfo& info) {
+  NOTIMPLEMENTED();
+}
+
 void PageInfoControllerAndroid::SetPermissionInfo(
     const PermissionInfoList& permission_info_list,
     ChosenObjectInfoList chosen_object_info_list) {
@@ -118,8 +122,7 @@ void PageInfoControllerAndroid::SetPermissionInfo(
   permissions_to_display.push_back(CONTENT_SETTINGS_TYPE_POPUPS);
   permissions_to_display.push_back(CONTENT_SETTINGS_TYPE_ADS);
   permissions_to_display.push_back(CONTENT_SETTINGS_TYPE_AUTOPLAY);
-  if (base::FeatureList::IsEnabled(features::kSoundContentSetting))
-    permissions_to_display.push_back(CONTENT_SETTINGS_TYPE_SOUND);
+  permissions_to_display.push_back(CONTENT_SETTINGS_TYPE_SOUND);
 
   std::map<ContentSettingsType, ContentSetting>
       user_specified_settings_to_display;

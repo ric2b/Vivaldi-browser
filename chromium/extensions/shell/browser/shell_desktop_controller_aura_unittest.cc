@@ -36,7 +36,6 @@
 #include "ui/gfx/geometry/rect.h"
 
 #if defined(OS_CHROMEOS)
-#include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_power_manager_client.h"
 #endif
 
@@ -44,22 +43,10 @@ namespace extensions {
 
 class ShellDesktopControllerAuraTest : public ShellTestBaseAura {
  public:
-  ShellDesktopControllerAuraTest()
-#if defined(OS_CHROMEOS)
-      : power_manager_client_(NULL)
-#endif
-      {
-  }
-  ~ShellDesktopControllerAuraTest() override {}
+  ShellDesktopControllerAuraTest() = default;
+  ~ShellDesktopControllerAuraTest() override = default;
 
   void SetUp() override {
-#if defined(OS_CHROMEOS)
-    std::unique_ptr<chromeos::DBusThreadManagerSetter> dbus_setter =
-        chromeos::DBusThreadManager::GetSetterForTesting();
-    power_manager_client_ = new chromeos::FakePowerManagerClient();
-    dbus_setter->SetPowerManagerClient(base::WrapUnique(power_manager_client_));
-#endif
-
     ShellTestBaseAura::SetUp();
 
     // Set up a screen with 2 displays.
@@ -72,18 +59,22 @@ class ShellDesktopControllerAuraTest : public ShellTestBaseAura {
         display::Display(200, gfx::Rect(1920, 1080, 800, 600)),
         display::DisplayList::Type::NOT_PRIMARY);
 
+#if defined(OS_CHROMEOS)
+    chromeos::PowerManagerClient::Initialize();
+#endif
+
     controller_ =
         std::make_unique<ShellDesktopControllerAura>(browser_context());
   }
 
   void TearDown() override {
     controller_.reset();
+#if defined(OS_CHROMEOS)
+    chromeos::PowerManagerClient::Shutdown();
+#endif
     screen_.reset();
     display::Screen::SetScreenInstance(nullptr);
     ShellTestBaseAura::TearDown();
-#if defined(OS_CHROMEOS)
-    chromeos::DBusThreadManager::Shutdown();
-#endif
   }
 
  protected:
@@ -98,10 +89,6 @@ class ShellDesktopControllerAuraTest : public ShellTestBaseAura {
   std::unique_ptr<display::ScreenBase> screen_;
   std::unique_ptr<ShellDesktopControllerAura> controller_;
 
-#if defined(OS_CHROMEOS)
-  chromeos::FakePowerManagerClient* power_manager_client_;  // Not owned.
-#endif
-
  private:
   DISALLOW_COPY_AND_ASSIGN(ShellDesktopControllerAuraTest);
 };
@@ -111,21 +98,22 @@ class ShellDesktopControllerAuraTest : public ShellTestBaseAura {
 // button is pressed.
 TEST_F(ShellDesktopControllerAuraTest, PowerButton) {
   // Ignore button releases.
-  power_manager_client_->SendPowerButtonEvent(false /* down */,
-                                              base::TimeTicks());
-  EXPECT_EQ(0, power_manager_client_->num_request_shutdown_calls());
+  auto* power_manager_client = chromeos::FakePowerManagerClient::Get();
+  power_manager_client->SendPowerButtonEvent(false /* down */,
+                                             base::TimeTicks());
+  EXPECT_EQ(0, power_manager_client->num_request_shutdown_calls());
 
   // A button press should trigger a shutdown request.
-  power_manager_client_->SendPowerButtonEvent(true /* down */,
-                                              base::TimeTicks());
-  EXPECT_EQ(1, power_manager_client_->num_request_shutdown_calls());
+  power_manager_client->SendPowerButtonEvent(true /* down */,
+                                             base::TimeTicks());
+  EXPECT_EQ(1, power_manager_client->num_request_shutdown_calls());
 }
 #endif
 
 // Tests that basic input events are handled and forwarded to the host.
 // TODO(michaelpg): Test other types of input.
 TEST_F(ShellDesktopControllerAuraTest, InputEvents) {
-  scoped_refptr<Extension> extension = ExtensionBuilder("Test").Build();
+  scoped_refptr<const Extension> extension = ExtensionBuilder("Test").Build();
   CreateAppWindow(extension.get());
 
   ui::InputMethod* input_method =
@@ -156,7 +144,7 @@ TEST_F(ShellDesktopControllerAuraTest, InputEvents) {
 TEST_F(ShellDesktopControllerAuraTest, CloseAppWindows) {
   const AppWindowRegistry* app_window_registry =
       AppWindowRegistry::Get(browser_context());
-  scoped_refptr<Extension> extension = ExtensionBuilder("Test").Build();
+  scoped_refptr<const Extension> extension = ExtensionBuilder("Test").Build();
   for (int i = 0; i < 3; i++)
     CreateAppWindow(extension.get());
   EXPECT_EQ(3u, app_window_registry->app_windows().size());
@@ -169,7 +157,7 @@ TEST_F(ShellDesktopControllerAuraTest, CloseAppWindows) {
 TEST_F(ShellDesktopControllerAuraTest, OnAppWindowClose) {
   const AppWindowRegistry* app_window_registry =
       AppWindowRegistry::Get(browser_context());
-  scoped_refptr<Extension> extension = ExtensionBuilder("Test").Build();
+  scoped_refptr<const Extension> extension = ExtensionBuilder("Test").Build();
   for (int i = 0; i < 3; i++)
     CreateAppWindow(extension.get());
   EXPECT_EQ(3u, app_window_registry->app_windows().size());
@@ -183,7 +171,7 @@ TEST_F(ShellDesktopControllerAuraTest, OnAppWindowClose) {
 TEST_F(ShellDesktopControllerAuraTest, MultipleDisplays) {
   const AppWindowRegistry* app_window_registry =
       AppWindowRegistry::Get(browser_context());
-  scoped_refptr<Extension> extension = ExtensionBuilder("Test").Build();
+  scoped_refptr<const Extension> extension = ExtensionBuilder("Test").Build();
 
   // Create two apps window on the primary display. Both should be hosted in the
   // same RootWindowController.

@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/i18n/number_formatting.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/media/router/media_router_feature.h"
@@ -95,7 +96,7 @@ WiredDisplayMediaRouteProvider::WiredDisplayMediaRouteProvider(
 }
 
 WiredDisplayMediaRouteProvider::~WiredDisplayMediaRouteProvider() {
-  if (is_observing_displays_ && PresentationReceiverWindowEnabled()) {
+  if (is_observing_displays_) {
     display::Screen::GetScreen()->RemoveObserver(this);
     is_observing_displays_ = false;
   }
@@ -186,20 +187,16 @@ void WiredDisplayMediaRouteProvider::TerminateRoute(
 
 void WiredDisplayMediaRouteProvider::SendRouteMessage(
     const std::string& media_route_id,
-    const std::string& message,
-    SendRouteMessageCallback callback) {
+    const std::string& message) {
   // Messages should be handled by LocalPresentationManager.
   NOTREACHED();
-  std::move(callback).Run(false);
 }
 
 void WiredDisplayMediaRouteProvider::SendRouteBinaryMessage(
     const std::string& media_route_id,
-    const std::vector<uint8_t>& data,
-    SendRouteBinaryMessageCallback callback) {
+    const std::vector<uint8_t>& data) {
   // Messages should be handled by LocalPresentationManager.
   NOTREACHED();
-  std::move(callback).Run(false);
 }
 
 void WiredDisplayMediaRouteProvider::StartObservingMediaSinks(
@@ -208,7 +205,7 @@ void WiredDisplayMediaRouteProvider::StartObservingMediaSinks(
     return;
 
   // Start observing displays if |this| isn't already observing.
-  if (!is_observing_displays_ && PresentationReceiverWindowEnabled()) {
+  if (!is_observing_displays_) {
     display::Screen::GetScreen()->AddObserver(this);
     is_observing_displays_ = true;
   }
@@ -320,8 +317,6 @@ void WiredDisplayMediaRouteProvider::OnDisplayMetricsChanged(
 }
 
 std::vector<Display> WiredDisplayMediaRouteProvider::GetAllDisplays() const {
-  if (!PresentationReceiverWindowEnabled())
-    return {};
   return display::Screen::GetScreen()->GetAllDisplays();
 }
 

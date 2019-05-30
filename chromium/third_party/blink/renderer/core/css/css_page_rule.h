@@ -24,6 +24,7 @@
 
 #include "third_party/blink/renderer/core/css/css_rule.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
 
@@ -38,9 +39,10 @@ class CORE_EXPORT CSSPageRule final : public CSSRule {
 
  public:
   static CSSPageRule* Create(StyleRulePage* rule, CSSStyleSheet* sheet) {
-    return new CSSPageRule(rule, sheet);
+    return MakeGarbageCollected<CSSPageRule>(rule, sheet);
   }
 
+  CSSPageRule(StyleRulePage*, CSSStyleSheet*);
   ~CSSPageRule() override;
 
   String cssText() const override;
@@ -54,15 +56,18 @@ class CORE_EXPORT CSSPageRule final : public CSSRule {
   void Trace(blink::Visitor*) override;
 
  private:
-  CSSPageRule(StyleRulePage*, CSSStyleSheet*);
-
   CSSRule::Type type() const override { return kPageRule; }
 
   Member<StyleRulePage> page_rule_;
   mutable Member<StyleRuleCSSStyleDeclaration> properties_cssom_wrapper_;
 };
 
-DEFINE_CSS_RULE_TYPE_CASTS(CSSPageRule, kPageRule);
+template <>
+struct DowncastTraits<CSSPageRule> {
+  static bool AllowFrom(const CSSRule& rule) {
+    return rule.type() == CSSRule::kPageRule;
+  }
+};
 
 }  // namespace blink
 

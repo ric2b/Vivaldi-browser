@@ -103,12 +103,15 @@ class Client {
   // with byte updates coming in as they are processed by the internal download
   // driver.
   virtual void OnDownloadUpdated(const std::string& guid,
+                                 uint64_t bytes_uploaded,
                                  uint64_t bytes_downloaded) = 0;
 
   // Called when a download failed.  Check FailureReason for a list of possible
   // reasons why this failure occurred.  Note that this will also be called for
-  // cancelled downloads.
+  // cancelled downloads. The CompletionInfo will be provided with the URL chain
+  // and response headers filled in if available.
   virtual void OnDownloadFailed(const std::string& guid,
+                                const download::CompletionInfo& info,
                                 FailureReason reason) = 0;
 
   // Called when a download has been successfully completed.

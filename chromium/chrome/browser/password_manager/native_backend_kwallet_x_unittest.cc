@@ -67,17 +67,16 @@ class TestKWallet {
 
   // Check for presence of a given password in a given password folder.
   bool hasEntry(const std::string& folder, const std::string& key) const {
-    Data::const_iterator it = data_.find(folder);
+    auto it = data_.find(folder);
     return it != data_.end() && it->second.find(key) != it->second.end();
   }
 
   // Get a list of password keys in a given password folder.
   bool entryList(const std::string& folder,
                  std::vector<std::string>* entries) const {
-    Data::const_iterator it = data_.find(folder);
+    auto it = data_.find(folder);
     if (it == data_.end()) return false;
-    for (Folder::const_iterator fit = it->second.begin();
-         fit != it->second.end(); ++fit)
+    for (auto fit = it->second.begin(); fit != it->second.end(); ++fit)
       entries->push_back(fit->first);
     return true;
   }
@@ -85,9 +84,9 @@ class TestKWallet {
   // Read the password data for a given password in a given password folder.
   bool readEntry(const std::string& folder, const std::string& key,
                  Blob* value) const {
-    Data::const_iterator it = data_.find(folder);
+    auto it = data_.find(folder);
     if (it == data_.end()) return false;
-    Folder::const_iterator fit = it->second.find(key);
+    auto fit = it->second.find(key);
     if (fit == it->second.end()) return false;
     *value = fit->second;
     return true;
@@ -102,7 +101,7 @@ class TestKWallet {
 
   // Remove the given password from the given password folder.
   bool removeEntry(const std::string& folder, const std::string& key) {
-    Data::iterator it = data_.find(folder);
+    auto it = data_.find(folder);
     if (it == data_.end()) return false;
     return it->second.erase(key) > 0;
   }
@@ -110,7 +109,7 @@ class TestKWallet {
   // Write the given password data to the given password folder.
   bool writeEntry(const std::string& folder, const std::string& key,
                   const Blob& value) {
-    Data::iterator it = data_.find(folder);
+    auto it = data_.find(folder);
     if (it == data_.end()) return false;
     it->second[key] = value;
     return true;
@@ -1120,10 +1119,11 @@ TEST_P(NativeBackendKWalletTest, GetAllLogins) {
               UnorderedElementsAre(Pointee(form_google_), Pointee(form_isc_)));
 }
 
-INSTANTIATE_TEST_CASE_P(,
-                        NativeBackendKWalletTest,
-                        ::testing::Values(base::nix::DESKTOP_ENVIRONMENT_KDE4,
-                                          base::nix::DESKTOP_ENVIRONMENT_KDE5));
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    NativeBackendKWalletTest,
+    ::testing::Values(base::nix::DESKTOP_ENVIRONMENT_KDE4,
+                      base::nix::DESKTOP_ENVIRONMENT_KDE5));
 
 // TODO(mdm): add more basic tests here at some point.
 // (For example tests for storing >1 password per realm pickle.)

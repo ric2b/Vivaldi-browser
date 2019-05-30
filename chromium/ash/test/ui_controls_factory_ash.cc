@@ -24,7 +24,7 @@ namespace {
 using ui_controls::UIControlsAura;
 using ui_controls::MouseButton;
 
-DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(UIControlsAura, kUIControlsKey, NULL);
+DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(UIControlsAura, kUIControlsKey, NULL)
 
 // Returns the UIControls object for RootWindow.
 // kUIControlsKey is owned property and UIControls object
@@ -118,6 +118,21 @@ class UIControlsAsh : public UIControlsAura {
     gfx::Point p(display::Screen::GetScreen()->GetCursorScreenPoint());
     UIControlsAura* ui_controls = GetUIControlsAt(p);
     return ui_controls && ui_controls->SendMouseClick(type);
+  }
+
+  bool SendTouchEvents(int action, int id, int x, int y) override {
+    UIControlsAura* ui_controls = GetUIControlsAt(gfx::Point(x, y));
+    return ui_controls && ui_controls->SendTouchEvents(action, id, x, y);
+  }
+
+  bool SendTouchEventsNotifyWhenDone(int action,
+                                     int id,
+                                     int x,
+                                     int y,
+                                     base::OnceClosure task) override {
+    UIControlsAura* ui_controls = GetUIControlsAt(gfx::Point(x, y));
+    return ui_controls && ui_controls->SendTouchEventsNotifyWhenDone(
+                              action, id, x, y, std::move(task));
   }
 
  private:

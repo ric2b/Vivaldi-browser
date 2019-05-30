@@ -178,7 +178,8 @@ enum class VideoCaptureError {
   kMacDeckLinkUnsupportedPixelFormat = 112,
   kMacAvFoundationReceivedAVCaptureSessionRuntimeErrorNotification = 113,
   kAndroidApi2ErrorConfiguringCamera = 114,
-  kMaxValue = 114
+  kCrosHalV3DeviceDelegateFailedToFlush = 115,
+  kMaxValue = 115
 };
 
 // WARNING: Do not change the values assigned to the entries. They are used for
@@ -186,7 +187,6 @@ enum class VideoCaptureError {
 enum class VideoCaptureFrameDropReason {
   kNone = 0,
   kDeviceClientFrameHasInvalidFormat = 1,
-  kDeviceClientFailedToReserveBufferFromBufferPool = 2,
   kDeviceClientLibyuvConvertToI420Failed = 3,
   kV4L2BufferErrorFlagWasSet = 4,
   kV4L2InvalidNumberOfBytesInBuffer = 5,
@@ -199,7 +199,19 @@ enum class VideoCaptureFrameDropReason {
   kWinMediaFoundationReceivedSampleIsNull = 12,
   kWinMediaFoundationLockingBufferDelieveredNullptr = 13,
   kWinMediaFoundationGetBufferByIndexReturnedNull = 14,
-  kMaxValue = 14
+  kBufferPoolMaxBufferCountExceeded = 15,
+  kBufferPoolBufferAllocationFailed = 16,
+  kVideoCaptureImplNotInStartedState = 17,
+  kVideoCaptureImplFailedToWrapDataAsMediaVideoFrame = 18,
+  kVideoTrackAdapterHasNoResolutionAdapters = 19,
+  kResolutionAdapterFrameIsNotValid = 20,
+  kResolutionAdapterWrappingFrameForCroppingFailed = 21,
+  kResolutionAdapterTimestampTooCloseToPrevious = 22,
+  kResolutionAdapterFrameRateIsHigherThanRequested = 23,
+  kResolutionAdapterHasNoCallbacks = 24,
+  kVideoTrackFrameDelivererNotEnabledReplacingWithBlackFrame = 25,
+  kRendererSinkFrameDelivererIsNotStarted = 26,
+  kMaxValue = 26
 };
 
 // Assert that the int:frequency mapping is correct.
@@ -290,6 +302,12 @@ struct CAPTURE_EXPORT VideoCaptureParams {
 
   // User-specified power line frequency.
   PowerLineFrequency power_line_frequency;
+
+  // Flag indicating if face detection should be enabled. This is for
+  // allowing the driver to apply appropriate settings for optimal
+  // exposures around the face area. Currently only applicable on
+  // Android platform with Camera2 driver support.
+  bool enable_face_detection;
 };
 
 }  // namespace media

@@ -33,7 +33,7 @@ class VisualRectMappingTest : public PaintTestConfigurations,
     if (object.IsBox())
       ToLayoutBox(object).FlipForWritingMode(rect);
 
-    if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
+    if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
       EXPECT_EQ(&ancestor, &object.ContainerForPaintInvalidation());
 
     CheckVisualRect(object, ancestor, rect, expected_visual_rect_in_ancestor);
@@ -65,7 +65,7 @@ class VisualRectMappingTest : public PaintTestConfigurations,
 
     // The following condition can be false if paintInvalidationContainer is
     // a LayoutView and compositing is not enabled.
-    if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
+    if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
         ancestor.IsPaintInvalidationContainer()) {
       PaintLayer::MapRectInPaintInvalidationContainerToBacking(ancestor,
                                                                slow_map_rect);
@@ -114,7 +114,7 @@ class VisualRectMappingTest : public PaintTestConfigurations,
   }
 };
 
-INSTANTIATE_PAINT_TEST_CASE_P(VisualRectMappingTest);
+INSTANTIATE_PAINT_TEST_SUITE_P(VisualRectMappingTest);
 
 TEST_P(VisualRectMappingTest, LayoutText) {
   SetBodyInnerHTML(R"HTML(
@@ -130,7 +130,7 @@ TEST_P(VisualRectMappingTest, LayoutText) {
   auto* text = GetLayoutObjectByElementId("text")->SlowFirstChild();
 
   container->SetScrollTop(LayoutUnit(50));
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutRect original_rect(0, 60, 20, 80);
   LayoutRect rect = original_rect;
@@ -164,7 +164,7 @@ TEST_P(VisualRectMappingTest, LayoutInline) {
   LayoutObject* leaf = container->LastChild();
 
   container->SetScrollTop(LayoutUnit(50));
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutRect original_rect(0, 60, 20, 80);
   LayoutRect rect = original_rect;
@@ -198,7 +198,7 @@ TEST_P(VisualRectMappingTest, LayoutView) {
   SetChildFrameHTML(
       "<style>body { margin: 0; }</style>"
       "<span><img style='width: 20px; height: 100px'></span>text text text");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutBlock* frame_container =
       ToLayoutBlock(GetLayoutObjectByElementId("frameContainer"));
@@ -210,7 +210,7 @@ TEST_P(VisualRectMappingTest, LayoutView) {
   // rect is 13, so height should be clipped to (50 - 13) == 37.
   ChildDocument().View()->LayoutViewport()->SetScrollOffset(
       ScrollOffset(0, 47), kProgrammaticScroll);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutRect original_rect(4, 60, 20, 80);
   LayoutRect rect = original_rect;
@@ -246,7 +246,7 @@ TEST_P(VisualRectMappingTest, LayoutViewSubpixelRounding) {
         left: 0.5px'></div>
   )HTML");
 
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutBlock* frame_container =
       ToLayoutBlock(GetLayoutObjectByElementId("frameContainer"));
@@ -273,7 +273,7 @@ TEST_P(VisualRectMappingTest, LayoutViewDisplayNone) {
   SetChildFrameHTML(
       "<style>body { margin: 0; }</style>"
       "<div style='width:100px;height:100px;'></div>");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutBlock* frame_container =
       ToLayoutBlock(GetLayoutObjectByElementId("frameContainer"));
@@ -285,7 +285,7 @@ TEST_P(VisualRectMappingTest, LayoutViewDisplayNone) {
   // mapped rect is valid before display:none is set on the iframe.
   ChildDocument().View()->LayoutViewport()->SetScrollOffset(
       ScrollOffset(0, 47), kProgrammaticScroll);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutRect original_rect(4, 60, 20, 80);
   LayoutRect rect = original_rect;
@@ -294,7 +294,7 @@ TEST_P(VisualRectMappingTest, LayoutViewDisplayNone) {
 
   Element* frame_element = GetDocument().getElementById("frame");
   frame_element->SetInlineStyleProperty(CSSPropertyDisplay, "none");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   frame_body = ToLayoutBlock(ChildDocument().body()->GetLayoutObject());
   EXPECT_EQ(nullptr, frame_body);
@@ -395,7 +395,7 @@ TEST_P(VisualRectMappingTest, ContainerOverflowScroll) {
   EXPECT_EQ(LayoutUnit(), container->ScrollLeft());
   container->SetScrollTop(LayoutUnit(7));
   container->SetScrollLeft(LayoutUnit(8));
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutBlock* target = ToLayoutBlock(GetLayoutObjectByElementId("target"));
   LayoutRect target_local_visual_rect = target->LocalVisualRect();
@@ -458,7 +458,7 @@ TEST_P(VisualRectMappingTest, ContainerFlippedWritingModeAndOverflowScroll) {
   container->SetScrollTop(LayoutUnit(7));
   // Scroll to the right by 8 pixels.
   container->SetScrollLeft(LayoutUnit(142));
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutBlock* target = ToLayoutBlock(GetLayoutObjectByElementId("target"));
   LayoutRect target_local_visual_rect = target->LocalVisualRect();
@@ -486,10 +486,14 @@ TEST_P(VisualRectMappingTest, ContainerFlippedWritingModeAndOverflowScroll) {
   // (-2, 3, 140, 100) is first clipped by container's overflow clip, to
   // (40, 10, 50, 80), then is added by container's offset in LayoutView
   // (222, 111).
-  // TODO(crbug.com/600039): rect.X() should be 262 (left + border-left), but is
-  // offset by extra horizontal border-widths because of layout error.
-  CheckPaintInvalidationVisualRect(*target, GetLayoutView(),
-                                   LayoutRect(322, 121, 50, 80));
+
+  LayoutRect expectation(262, 121, 50, 80);
+  if (!RuntimeEnabledFeatures::LayoutNGEnabled()) {
+    // TODO(crbug.com/600039): rect.X() should be 262 (left + border-left), but
+    // is offset by extra horizontal border-widths because of layout error.
+    expectation = LayoutRect(322, 121, 50, 80);
+  }
+  CheckPaintInvalidationVisualRect(*target, GetLayoutView(), expectation);
 
   LayoutRect container_local_visual_rect = container->LocalVisualRect();
   // Because container has overflow clip, its visual overflow doesn't include
@@ -503,11 +507,13 @@ TEST_P(VisualRectMappingTest, ContainerFlippedWritingModeAndOverflowScroll) {
   EXPECT_TRUE(container->MapToVisualRectInAncestorSpace(container, rect));
   EXPECT_EQ(LayoutRect(0, 0, 110, 120), rect);
 
-  // TODO(crbug.com/600039): rect.x() should be 222 (left), but is offset by
-  // extra horizontal
-  // border-widths because of layout error.
-  CheckPaintInvalidationVisualRect(*container, GetLayoutView(),
-                                   LayoutRect(282, 111, 110, 120));
+  expectation = LayoutRect(222, 111, 110, 120);
+  if (!RuntimeEnabledFeatures::LayoutNGEnabled()) {
+    // TODO(crbug.com/600039): rect.x() should be 222 (left), but is offset by
+    // extra horizontal border-widths because of layout error.
+    expectation = LayoutRect(282, 111, 110, 120);
+  }
+  CheckPaintInvalidationVisualRect(*container, GetLayoutView(), expectation);
 }
 
 TEST_P(VisualRectMappingTest, ContainerOverflowHidden) {
@@ -526,7 +532,7 @@ TEST_P(VisualRectMappingTest, ContainerOverflowHidden) {
   EXPECT_EQ(LayoutUnit(), container->ScrollLeft());
   container->SetScrollTop(LayoutUnit(27));
   container->SetScrollLeft(LayoutUnit(28));
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutBlock* target = ToLayoutBlock(GetLayoutObjectByElementId("target"));
   LayoutRect target_local_visual_rect = target->LocalVisualRect();
@@ -563,7 +569,7 @@ TEST_P(VisualRectMappingTest, ContainerFlippedWritingModeAndOverflowHidden) {
   EXPECT_EQ(LayoutUnit(150), container->ScrollLeft());
   container->SetScrollTop(LayoutUnit(7));
   container->SetScrollLeft(LayoutUnit(82));  // Scroll to the right by 8 pixels.
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutBlock* target = ToLayoutBlock(GetLayoutObjectByElementId("target"));
   LayoutRect target_local_visual_rect = target->LocalVisualRect();
@@ -608,7 +614,7 @@ TEST_P(VisualRectMappingTest, ContainerAndTargetDifferentFlippedWritingMode) {
   container->SetScrollTop(LayoutUnit(7));
   container->SetScrollLeft(
       LayoutUnit(142));  // Scroll to the right by 8 pixels.
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutBlock* target = ToLayoutBlock(GetLayoutObjectByElementId("target"));
   LayoutRect target_local_visual_rect = target->LocalVisualRect();
@@ -653,11 +659,11 @@ TEST_P(VisualRectMappingTest,
   LayoutBlock* scroller = ToLayoutBlock(GetLayoutObjectByElementId("scroller"));
   scroller->SetScrollTop(LayoutUnit(77));
   scroller->SetScrollLeft(LayoutUnit(88));
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutBlock* normal_flow =
       ToLayoutBlock(GetLayoutObjectByElementId("normal-flow"));
-  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
+  if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
     EXPECT_EQ(scroller, &normal_flow->ContainerForPaintInvalidation());
 
   LayoutRect normal_flow_visual_rect = normal_flow->LocalVisualRect();
@@ -765,12 +771,23 @@ TEST_P(VisualRectMappingTest, FloatUnderInline) {
 
   LayoutRect rect = target_visual_rect;
   EXPECT_TRUE(target->MapToVisualRectInAncestorSpace(&GetLayoutView(), rect));
-  EXPECT_EQ(LayoutRect(66, 55, 33, 44), rect);
+  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
+    // LayoutNG inline-level floats are children of their inline-level
+    // containers. As such they are positioned relative to their inline-level
+    // container, (and shifted by an additional 200,100 in this case).
+    EXPECT_EQ(LayoutRect(266, 155, 33, 44), rect);
+  } else {
+    EXPECT_EQ(LayoutRect(66, 55, 33, 44), rect);
+  }
   EXPECT_EQ(rect, target->FirstFragment().VisualRect());
 
   rect = target_visual_rect;
 
-  CheckVisualRect(*target, *span, rect, LayoutRect(-200, -100, 33, 44));
+  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
+    CheckVisualRect(*target, *span, rect, LayoutRect(0, 0, 33, 44));
+  } else {
+    CheckVisualRect(*target, *span, rect, LayoutRect(-200, -100, 33, 44));
+  }
 }
 
 TEST_P(VisualRectMappingTest, ShouldAccountForPreserve3d) {
@@ -928,7 +945,7 @@ TEST_P(VisualRectMappingTest, PerspectivePlusScroll) {
   LayoutBlock* container =
       ToLayoutBlock(GetLayoutObjectByElementId("container"));
   ToElement(container->GetNode())->scrollTo(0, 5);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutBlock* target = ToLayoutBlock(GetLayoutObjectByElementId("target"));
   LayoutRect originalRect(0, 0, 100, 100);
@@ -959,7 +976,7 @@ TEST_P(VisualRectMappingTest, FixedContentsInIframe) {
     </div>
   )HTML");
 
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
   auto* fixed = ChildDocument().getElementById("fixed")->GetLayoutObject();
   auto* root_view = fixed->View();
   while (root_view->GetFrame()->OwnerLayoutObject())
@@ -971,7 +988,7 @@ TEST_P(VisualRectMappingTest, FixedContentsInIframe) {
 
   ChildDocument().View()->LayoutViewport()->SetScrollOffset(
       ScrollOffset(0, 50), kProgrammaticScroll);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   // The fixed element should not scroll so the mapped visual rect should not
   // have changed.
@@ -1005,7 +1022,7 @@ TEST_P(VisualRectMappingTest, FixedContentsWithScrollOffset) {
 
   GetDocument().View()->LayoutViewport()->SetScrollOffset(ScrollOffset(0, 50),
                                                           kProgrammaticScroll);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   // The fixed element does not scroll but the ancestor does which changes the
   // visual rect.
@@ -1033,7 +1050,7 @@ TEST_P(VisualRectMappingTest, FixedContentsUnderViewWithScrollOffset) {
 
   GetDocument().View()->LayoutViewport()->SetScrollOffset(ScrollOffset(0, 50),
                                                           kProgrammaticScroll);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   // Results of mapping to ancestor are in absolute coordinates of the
   // ancestor. Therefore a fixed-position element is (reverse) offset by scroll.

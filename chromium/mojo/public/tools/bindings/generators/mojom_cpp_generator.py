@@ -224,7 +224,9 @@ class Generator(generator.Generator):
           mojom.IsAnyHandleKind(kind) or
           mojom.IsInterfaceKind(kind) or
           mojom.IsInterfaceRequestKind(kind) or
-          mojom.IsAssociatedKind(kind)):
+          mojom.IsAssociatedKind(kind) or
+          mojom.IsPendingRemoteKind(kind) or
+          mojom.IsPendingReceiverKind(kind)):
         pass
       elif mojom.IsArrayKind(kind):
         AddKind(kind.kind)
@@ -302,7 +304,7 @@ class Generator(generator.Generator):
       "interfaces": self.module.interfaces,
       "kinds": self.module.kinds,
       "module": self.module,
-      "namespace": self.module.namespace,
+      "module_namespace": self.module.namespace,
       "namespaces_as_array": NamespaceToArray(self.module.namespace),
       "structs": self.module.structs,
       "support_lazy_serialization": self.support_lazy_serialization,
@@ -376,8 +378,16 @@ class Generator(generator.Generator):
   def _GenerateModuleHeader(self):
     return self._GetJinjaExports()
 
+  @UseJinja("module-forward.h.tmpl")
+  def _GenerateModuleForwardHeader(self):
+    return self._GetJinjaExports()
+
   @UseJinja("module.cc.tmpl")
   def _GenerateModuleSource(self):
+    return self._GetJinjaExports()
+
+  @UseJinja("module-import-headers.h.tmpl")
+  def _GenerateModuleImportHeadersHeader(self):
     return self._GetJinjaExports()
 
   @UseJinja("module-shared.h.tmpl")
@@ -396,6 +406,18 @@ class Generator(generator.Generator):
   def _GenerateModuleSharedSource(self):
     return self._GetJinjaExports()
 
+  @UseJinja("module-test-utils.h.tmpl")
+  def _GenerateModuleTestUtilsHeader(self):
+    return self._GetJinjaExports()
+
+  @UseJinja("module-test-utils.cc.tmpl")
+  def _GenerateModuleTestUtilsSource(self):
+    return self._GetJinjaExports()
+
+  @UseJinja("module-params-data.h.tmpl")
+  def _GenerateModuleParamsDataHeader(self):
+    return self._GetJinjaExports()
+
   def GenerateFiles(self, args):
     self.module.Stylize(generator.Stylizer())
 
@@ -410,12 +432,22 @@ class Generator(generator.Generator):
                    "%s-shared-internal.h" % self.module.path)
         self.Write(self._GenerateModuleSharedSource(),
                    "%s-shared.cc" % self.module.path)
+        self.Write(self._GenerateModuleParamsDataHeader(),
+                   "%s-params-data.h" % self.module.path)
     else:
       suffix = "-%s" % self.variant if self.variant else ""
       self.Write(self._GenerateModuleHeader(),
                  "%s%s.h" % (self.module.path, suffix))
+      self.Write(self._GenerateModuleForwardHeader(),
+                 "%s%s-forward.h" % (self.module.path, suffix))
       self.Write(self._GenerateModuleSource(),
                  "%s%s.cc" % (self.module.path, suffix))
+      self.Write(self._GenerateModuleImportHeadersHeader(),
+                 "%s%s-import-headers.h" % (self.module.path, suffix))
+      self.Write(self._GenerateModuleTestUtilsHeader(),
+                 "%s%s-test-utils.h" % (self.module.path, suffix))
+      self.Write(self._GenerateModuleTestUtilsSource(),
+                 "%s%s-test-utils.cc" % (self.module.path, suffix))
 
   def _ConstantValue(self, constant):
     return self._ExpressionToText(constant.value, kind=constant.kind)
@@ -555,6 +587,12 @@ class Generator(generator.Generator):
     if mojom.IsInterfaceRequestKind(kind):
       return "%sRequest" % self._GetNameForKind(
           kind.kind, add_same_module_namespaces=add_same_module_namespaces)
+    if mojom.IsPendingRemoteKind(kind):
+      return "mojo::PendingRemote<%s>" % self._GetNameForKind(
+          kind.kind, add_same_module_namespaces=add_same_module_namespaces)
+    if mojom.IsPendingReceiverKind(kind):
+      return "mojo::PendingReceiver<%s>" % self._GetNameForKind(
+          kind.kind, add_same_module_namespaces=add_same_module_namespaces)
     if mojom.IsAssociatedInterfaceKind(kind):
       return "%sAssociatedPtrInfo" % self._GetNameForKind(
           kind.kind, add_same_module_namespaces=add_same_module_namespaces)
@@ -641,9 +679,9 @@ class Generator(generator.Generator):
       return ("mojo::internal::Pointer<mojo::internal::Map_Data<%s, %s>>" %
               (self._GetCppFieldType(kind.key_kind),
                self._GetCppFieldType(kind.value_kind)))
-    if mojom.IsInterfaceKind(kind):
+    if mojom.IsInterfaceKind(kind) or mojom.IsPendingRemoteKind(kind):
       return "mojo::internal::Interface_Data"
-    if mojom.IsInterfaceRequestKind(kind):
+    if mojom.IsInterfaceRequestKind(kind) or mojom.IsPendingReceiverKind(kind):
       return "mojo::internal::Handle_Data"
     if mojom.IsAssociatedInterfaceKind(kind):
       return "mojo::internal::AssociatedInterface_Data"
@@ -859,6 +897,12 @@ class Generator(generator.Generator):
       return "%sPtrDataView" % _GetName(kind)
     if mojom.IsInterfaceRequestKind(kind):
       return "%sRequestDataView" % _GetName(kind.kind)
+    if mojom.IsPendingRemoteKind(kind):
+      return ("mojo::InterfacePtrDataView<%sInterfaceBase>" %
+              _GetName(kind.kind))
+    if mojom.IsPendingReceiverKind(kind):
+      return ("mojo::InterfaceRequestDataView<%sInterfaceBase>" %
+              _GetName(kind.kind))
     if mojom.IsAssociatedInterfaceKind(kind):
       return "%sAssociatedPtrInfoDataView" % _GetName(kind.kind)
     if mojom.IsAssociatedInterfaceRequestKind(kind):

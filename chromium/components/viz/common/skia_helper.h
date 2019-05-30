@@ -16,14 +16,19 @@
 namespace viz {
 class VIZ_COMMON_EXPORT SkiaHelper {
  public:
-  static sk_sp<SkImage> ApplyImageFilter(sk_sp<SkImage> src_image,
+  // |flush| is necessary for GLRenderer but not SkiaRenderer.
+  static sk_sp<SkImage> ApplyImageFilter(GrContext* context,
+                                         sk_sp<SkImage> src_image,
                                          const gfx::RectF& src_rect,
                                          const gfx::RectF& dst_rect,
                                          const gfx::Vector2dF& scale,
                                          sk_sp<SkImageFilter> filter,
                                          SkIPoint* offset,
                                          SkIRect* subset,
-                                         const gfx::PointF& origin);
+                                         const gfx::PointF& origin,
+                                         bool flush);
+
+  static sk_sp<SkColorFilter> MakeOverdrawColorFilter();
 };
 
 }  // namespace viz

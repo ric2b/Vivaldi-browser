@@ -37,7 +37,12 @@ locally using the currently installed Canary browser:
 
 ```tools/perf/run_benchmark system_health.common_desktop --story-filter="accessibility.*" --browser canary```
 
-See the documentation or command-line help for tools/perf/run_benchmark for
+To run the same set of tests on your own compiled version of Chrome:
+
+```tools/perf/run_benchmark system_health.common_desktop --story-filter="accessibility.*" --browser=exact --browser-executable=out/Release/chrome```
+
+See the [documentation](https://github.com/catapult-project/catapult/blob/master/telemetry/docs/run_benchmarks_locally.md)
+or command-line help for tools/perf/run_benchmark for
 more command-line arguments.
 
 Here's an example command line to run to capture the web page replay for
@@ -60,9 +65,14 @@ in isolation. You can find these tests here:
 
 ```third_party/blink/perf_tests/accessibility/```
 
+Example command line to run these tests locally on your own compiled Chrome:
+
+```tools/perf/run_benchmark blink_perf.accessibility --browser=exact --browser-executable=out/Release/chrome```
+
 ## Results
 
-The results can be found at [chromeperf.appspot.com](chromeperf.appspot.com).
+The results can be found at
+[https://chromeperf.appspot.com](chromeperf.appspot.com).
 Because that site displays graphs, we also maintain a command-line
 script (Google-internal only) as a more accessible alternative way to
 examine the same data via the command line.

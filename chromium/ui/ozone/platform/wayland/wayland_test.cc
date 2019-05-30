@@ -6,24 +6,26 @@
 
 #include "base/run_loop.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
+#include "ui/ozone/platform/wayland/test/mock_surface.h"
 #include "ui/platform_window/platform_window_init_properties.h"
 
 #if BUILDFLAG(USE_XKBCOMMON)
-#include "ui/ozone/platform/wayland/wayland_xkb_keyboard_layout_engine.h"
+#include "ui/events/ozone/layout/xkb/xkb_keyboard_layout_engine.h"
 #else
 #include "ui/events/ozone/layout/stub/stub_keyboard_layout_engine.h"
 #endif
 
-using ::testing::SaveArg;
 using ::testing::_;
+using ::testing::SaveArg;
 
 namespace ui {
 
-WaylandTest::WaylandTest() {
+WaylandTest::WaylandTest()
+    : scoped_task_environment_(
+          base::test::ScopedTaskEnvironment::MainThreadType::UI) {
 #if BUILDFLAG(USE_XKBCOMMON)
   KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
-      std::make_unique<WaylandXkbKeyboardLayoutEngine>(
-          xkb_evdev_code_converter_));
+      std::make_unique<XkbKeyboardLayoutEngine>(xkb_evdev_code_converter_));
 #else
   KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
       std::make_unique<StubKeyboardLayoutEngine>());

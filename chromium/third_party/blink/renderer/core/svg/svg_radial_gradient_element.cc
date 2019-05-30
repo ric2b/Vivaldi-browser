@@ -29,35 +29,35 @@
 namespace blink {
 
 inline SVGRadialGradientElement::SVGRadialGradientElement(Document& document)
-    : SVGGradientElement(SVGNames::radialGradientTag, document),
+    : SVGGradientElement(svg_names::kRadialGradientTag, document),
+      // Spec: If the cx/cy/r attribute is not specified, the effect is as if a
+      // value of "50%" were specified.
       cx_(SVGAnimatedLength::Create(this,
-                                    SVGNames::cxAttr,
-                                    SVGLength::Create(SVGLengthMode::kWidth))),
+                                    svg_names::kCxAttr,
+                                    SVGLengthMode::kWidth,
+                                    SVGLength::Initial::kPercent50)),
       cy_(SVGAnimatedLength::Create(this,
-                                    SVGNames::cyAttr,
-                                    SVGLength::Create(SVGLengthMode::kHeight))),
+                                    svg_names::kCyAttr,
+                                    SVGLengthMode::kHeight,
+                                    SVGLength::Initial::kPercent50)),
       r_(SVGAnimatedLength::Create(this,
-                                   SVGNames::rAttr,
-                                   SVGLength::Create(SVGLengthMode::kOther))),
+                                   svg_names::kRAttr,
+                                   SVGLengthMode::kOther,
+                                   SVGLength::Initial::kPercent50)),
       fx_(SVGAnimatedLength::Create(this,
-                                    SVGNames::fxAttr,
-                                    SVGLength::Create(SVGLengthMode::kWidth))),
+                                    svg_names::kFxAttr,
+                                    SVGLengthMode::kWidth,
+                                    SVGLength::Initial::kPercent50)),
       fy_(SVGAnimatedLength::Create(this,
-                                    SVGNames::fyAttr,
-                                    SVGLength::Create(SVGLengthMode::kHeight))),
+                                    svg_names::kFyAttr,
+                                    SVGLengthMode::kHeight,
+                                    SVGLength::Initial::kPercent50)),
+      // SVG2-Draft Spec: If the fr attribute is not specified, the effect is as
+      // if a value of "0%" were specified.
       fr_(SVGAnimatedLength::Create(this,
-                                    SVGNames::frAttr,
-                                    SVGLength::Create(SVGLengthMode::kOther))) {
-  // Spec: If the cx/cy/r attribute is not specified, the effect is as if a
-  // value of "50%" were specified.
-  cx_->SetDefaultValueAsString("50%");
-  cy_->SetDefaultValueAsString("50%");
-  r_->SetDefaultValueAsString("50%");
-
-  // SVG2-Draft Spec: If the fr attributed is not specified, the effect is as if
-  // a value of "0%" were specified.
-  fr_->SetDefaultValueAsString("0%");
-
+                                    svg_names::kFrAttr,
+                                    SVGLengthMode::kOther,
+                                    SVGLength::Initial::kPercent0)) {
   AddToPropertyMap(cx_);
   AddToPropertyMap(cy_);
   AddToPropertyMap(r_);
@@ -80,12 +80,12 @@ DEFINE_NODE_FACTORY(SVGRadialGradientElement)
 
 void SVGRadialGradientElement::SvgAttributeChanged(
     const QualifiedName& attr_name) {
-  if (attr_name == SVGNames::cxAttr || attr_name == SVGNames::cyAttr ||
-      attr_name == SVGNames::fxAttr || attr_name == SVGNames::fyAttr ||
-      attr_name == SVGNames::rAttr || attr_name == SVGNames::frAttr) {
+  if (attr_name == svg_names::kCxAttr || attr_name == svg_names::kCyAttr ||
+      attr_name == svg_names::kFxAttr || attr_name == svg_names::kFyAttr ||
+      attr_name == svg_names::kRAttr || attr_name == svg_names::kFrAttr) {
     SVGElement::InvalidationGuard invalidation_guard(this);
     UpdateRelativeLengthsInformation();
-    InvalidateGradient(LayoutInvalidationReason::kAttributeChanged);
+    InvalidateGradient(layout_invalidation_reason::kAttributeChanged);
     return;
   }
 

@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
@@ -15,9 +16,9 @@
 #include "chrome/browser/permissions/permission_result.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "chrome/browser/ui/permission_bubble/mock_permission_prompt_factory.h"
-#include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -30,6 +31,7 @@
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom.h"
 
 #if defined(OS_ANDROID)
+#include "base/android/build_info.h"
 #include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/android/mock_location_settings.h"
 #include "chrome/browser/geolocation/geolocation_permission_context_android.h"
@@ -39,10 +41,6 @@ using blink::mojom::PermissionStatus;
 using content::PermissionType;
 
 namespace {
-
-#if defined(OS_ANDROID)
-int kNoPendingOperation = -1;
-#endif
 
 class PermissionManagerTestingProfile final : public TestingProfile {
  public:
@@ -55,6 +53,23 @@ class PermissionManagerTestingProfile final : public TestingProfile {
 
   DISALLOW_COPY_AND_ASSIGN(PermissionManagerTestingProfile);
 };
+
+#if defined(OS_ANDROID)
+// See https://crbug.com/904883.
+auto GetDefaultProtectedMediaIdentifierPermissionStatus() {
+  return base::android::BuildInfo::GetInstance()->sdk_int() >=
+                 base::android::SDK_VERSION_MARSHMALLOW
+             ? PermissionStatus::GRANTED
+             : PermissionStatus::ASK;
+}
+
+auto GetDefaultProtectedMediaIdentifierContentSetting() {
+  return base::android::BuildInfo::GetInstance()->sdk_int() >=
+                 base::android::SDK_VERSION_MARSHMALLOW
+             ? CONTENT_SETTING_ALLOW
+             : CONTENT_SETTING_ASK;
+}
+#endif  // defined(OS_ANDROID)
 
 }  // namespace
 
@@ -212,7 +227,7 @@ TEST_F(PermissionManagerTest, GetPermissionStatusDefault) {
   CheckPermissionStatus(PermissionType::GEOLOCATION, PermissionStatus::ASK);
 #if defined(OS_ANDROID)
   CheckPermissionStatus(PermissionType::PROTECTED_MEDIA_IDENTIFIER,
-                        PermissionStatus::GRANTED);
+                        GetDefaultProtectedMediaIdentifierPermissionStatus());
 #endif
 }
 
@@ -245,7 +260,7 @@ TEST_F(PermissionManagerTest, CheckPermissionResultDefault) {
                         PermissionStatusSource::UNSPECIFIED);
 #if defined(OS_ANDROID)
   CheckPermissionResult(CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER,
-                        CONTENT_SETTING_ALLOW,
+                        GetDefaultProtectedMediaIdentifierContentSetting(),
                         PermissionStatusSource::UNSPECIFIED);
 #endif
 }
@@ -527,36 +542,6 @@ TEST_F(PermissionManagerTest, SubscribeMIDIPermission) {
       subscription_id);
 }
 
-TEST_F(PermissionManagerTest, SuppressPermissionRequests) {
-#if defined(OS_ANDROID)
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(
-      chrome::android::kVrBrowsingNativeAndroidUi);
-
-  content::WebContents* contents = web_contents();
-  vr::VrTabHelper::CreateForWebContents(contents);
-  NavigateAndCommit(url());
-
-  SetPermission(CONTENT_SETTINGS_TYPE_NOTIFICATIONS, CONTENT_SETTING_ALLOW);
-  RequestPermission(PermissionType::NOTIFICATIONS, main_rfh(), url());
-  EXPECT_TRUE(callback_called());
-  EXPECT_EQ(PermissionStatus::GRANTED, callback_result());
-
-  vr::VrTabHelper* vr_tab_helper = vr::VrTabHelper::FromWebContents(contents);
-  vr_tab_helper->SetIsInVr(true);
-  EXPECT_EQ(kNoPendingOperation,
-            RequestPermission(PermissionType::NOTIFICATIONS,
-                              contents->GetMainFrame(), url()));
-  EXPECT_TRUE(callback_called());
-  EXPECT_EQ(PermissionStatus::DENIED, callback_result());
-
-  vr_tab_helper->SetIsInVr(false);
-  RequestPermission(PermissionType::NOTIFICATIONS, main_rfh(), url());
-  EXPECT_TRUE(callback_called());
-  EXPECT_EQ(PermissionStatus::GRANTED, callback_result());
-#endif
-}
-
 TEST_F(PermissionManagerTest, PermissionIgnoredCleanup) {
   content::WebContents* contents = web_contents();
   PermissionRequestManager::CreateForWebContents(contents);
@@ -612,6 +597,7 @@ TEST_F(PermissionManagerTest, GetCanonicalOriginSearch) {
   const GURL remote_ntp = GURL(std::string("chrome-search://") +
                                chrome::kChromeSearchRemoteNtpHost);
   const GURL other_chrome_search = GURL("chrome-search://not-local-ntp");
+  const GURL top_level_ntp(chrome::kChromeUINewTabURL);
 
   // "Normal" URLs are not affected by GetCanonicalOrigin.
   EXPECT_EQ(google_com, GetPermissionControllerDelegate()->GetCanonicalOrigin(
@@ -625,14 +611,16 @@ TEST_F(PermissionManagerTest, GetCanonicalOriginSearch) {
 
   // The local NTP URL gets mapped to the Google base URL.
   EXPECT_EQ(google_base, GetPermissionControllerDelegate()->GetCanonicalOrigin(
-                             local_ntp, local_ntp));
+                             local_ntp, top_level_ntp));
   // However, other chrome-search:// URLs, including the remote NTP URL, are
   // not affected.
   EXPECT_EQ(remote_ntp, GetPermissionControllerDelegate()->GetCanonicalOrigin(
-                            remote_ntp, remote_ntp));
+                            remote_ntp, top_level_ntp));
+  EXPECT_EQ(google_com, GetPermissionControllerDelegate()->GetCanonicalOrigin(
+                            google_com, top_level_ntp));
   EXPECT_EQ(other_chrome_search,
             GetPermissionControllerDelegate()->GetCanonicalOrigin(
-                other_chrome_search, other_chrome_search));
+                other_chrome_search, top_level_ntp));
 }
 
 TEST_F(PermissionManagerTest, GetCanonicalOriginPermissionDelegation) {

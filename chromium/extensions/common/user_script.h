@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_COMMON_USER_SCRIPT_H_
 #define EXTENSIONS_COMMON_USER_SCRIPT_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -39,7 +40,7 @@ class UserScript {
   // canExecuteScriptEverywhere is true, this will return ALL_SCHEMES.
   static int ValidUserScriptSchemes(bool canExecuteScriptEverywhere = false);
 
-  // TODO(rdevlin.cronin) This and RunLocataion don't really belong here, since
+  // TODO(rdevlin.cronin) This and RunLocation don't really belong here, since
   // they are used for more than UserScripts (e.g., tabs.executeScript()).
   // The type of injected script.
   enum InjectionType {
@@ -115,7 +116,7 @@ class UserScript {
     base::FilePath extension_root_;
     base::FilePath relative_path_;
 
-    // The url to this scipt file.
+    // The url to this script file.
     GURL url_;
 
     // The script content. It can be set to either loaded_content_ or
@@ -136,7 +137,7 @@ class UserScript {
   UserScript();
   ~UserScript();
 
-  // Peforms a copy of all fields except file contents.
+  // Performs a copy of all fields except file contents.
   static std::unique_ptr<UserScript> CopyMetadataFrom(const UserScript& other);
 
   const std::string& name_space() const { return name_space_; }
@@ -228,6 +229,13 @@ class UserScript {
   // Returns true if the script should be applied to the specified URL, false
   // otherwise.
   bool MatchesURL(const GURL& url) const;
+
+  // Returns true if the script should be applied to the given
+  // |effective_document_url| (calculated by the caller based on
+  // match_about_blank()| while also taking into account whether the document's
+  // frame |is_subframe| and what the |top_level_origin| is.
+  bool MatchesDocument(const GURL& effective_document_url,
+                       bool is_subframe) const;
 
   // Serializes the UserScript into a pickle. The content of the scripts and
   // paths to UserScript::Files will not be serialized!
@@ -327,7 +335,7 @@ class UserScript {
 // Information we need while removing scripts from a UserScriptLoader.
 struct UserScriptIDPair {
   UserScriptIDPair(int id, const HostID& host_id);
-  UserScriptIDPair(int id);
+  explicit UserScriptIDPair(int id);
 
   int id;
   HostID host_id;

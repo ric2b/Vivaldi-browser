@@ -13,6 +13,7 @@
 #include "ash/public/cpp/ash_switches.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/values.h"
@@ -32,7 +33,7 @@
 #include "ui/display/display_switches.h"
 
 #if defined(OS_CHROMEOS)
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #endif
 
 const CommandLinePrefStore::SwitchToPreferenceMapEntry
@@ -42,7 +43,7 @@ const CommandLinePrefStore::SwitchToPreferenceMapEntry
          data_reduction_proxy::prefs::kDataReductionProxy},
         {switches::kAuthServerWhitelist, prefs::kAuthServerWhitelist},
         {switches::kSSLVersionMin, prefs::kSSLVersionMin},
-        {switches::kTLS13Variant, prefs::kTLS13Variant},
+        {switches::kSSLVersionMax, prefs::kSSLVersionMax},
 #if defined(OS_ANDROID)
         {switches::kAuthAndroidNegotiateAccountType,
          prefs::kAuthAndroidNegotiateAccountType},
@@ -53,6 +54,9 @@ const CommandLinePrefStore::SwitchToPreferenceMapEntry
         // implement this. Refactor enterprise policy and command line handling
         // so that this line isn't necessary, if possible.
         {switches::kIsolateOrigins, prefs::kIsolateOrigins},
+#if defined(OS_CHROMEOS)
+        {switches::kSchedulerConfiguration, prefs::kSchedulerConfiguration},
+#endif
 };
 
 const CommandLinePrefStore::SwitchToPreferenceMapEntry
@@ -125,10 +129,10 @@ bool ChromeCommandLinePrefStore::ValidateProxySwitches() {
 
 void ChromeCommandLinePrefStore::ApplySimpleSwitches() {
   // Look for each switch we know about and set its preference accordingly.
-  ApplyStringSwitches(string_switch_map_, arraysize(string_switch_map_));
-  ApplyPathSwitches(path_switch_map_, arraysize(path_switch_map_));
-  ApplyIntegerSwitches(integer_switch_map_, arraysize(integer_switch_map_));
-  ApplyBooleanSwitches(boolean_switch_map_, arraysize(boolean_switch_map_));
+  ApplyStringSwitches(string_switch_map_, base::size(string_switch_map_));
+  ApplyPathSwitches(path_switch_map_, base::size(path_switch_map_));
+  ApplyIntegerSwitches(integer_switch_map_, base::size(integer_switch_map_));
+  ApplyBooleanSwitches(boolean_switch_map_, base::size(boolean_switch_map_));
 }
 
 void ChromeCommandLinePrefStore::ApplyProxyMode() {
@@ -169,16 +173,6 @@ void ChromeCommandLinePrefStore::ApplySSLSwitches() {
         command_line()->GetSwitchValueASCII(switches::kCipherSuiteBlacklist),
         ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL));
     SetValue(prefs::kCipherSuiteBlacklist, std::move(list_value),
-             WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
-  }
-
-  // If a non-disabled TLS 1.3 variant flag is set, enable TLS 1.3 in
-  // SSLVersionMax.
-  if (command_line()->HasSwitch(switches::kTLS13Variant) &&
-      command_line()->GetSwitchValueASCII(switches::kTLS13Variant) !=
-          switches::kTLS13VariantDisabled) {
-    SetValue(prefs::kSSLVersionMax,
-             std::make_unique<base::Value>(switches::kSSLVersionTLSv13),
              WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
   }
 }

@@ -13,21 +13,21 @@ namespace {
 
 class ThreadControllerForTest : public internal::ThreadControllerImpl {
  public:
-  ThreadControllerForTest(MessageLoop* message_loop,
+  ThreadControllerForTest(MessageLoopBase* message_loop_base,
                           scoped_refptr<SingleThreadTaskRunner> task_runner,
                           const TickClock* time_source)
-      : ThreadControllerImpl(message_loop,
+      : ThreadControllerImpl(message_loop_base,
                              std::move(task_runner),
                              time_source) {}
 
   void AddNestingObserver(RunLoop::NestingObserver* observer) override {
-    if (!message_loop_)
+    if (!message_loop_base_)
       return;
     ThreadControllerImpl::AddNestingObserver(observer);
   }
 
   void RemoveNestingObserver(RunLoop::NestingObserver* observer) override {
-    if (!message_loop_)
+    if (!message_loop_base_)
       return;
     ThreadControllerImpl::RemoveNestingObserver(observer);
   }
@@ -38,29 +38,31 @@ class ThreadControllerForTest : public internal::ThreadControllerImpl {
 }  // namespace
 
 SequenceManagerForTest::SequenceManagerForTest(
-    std::unique_ptr<internal::ThreadController> thread_controller)
-    : SequenceManagerImpl(std::move(thread_controller)) {}
+    std::unique_ptr<internal::ThreadController> thread_controller,
+    SequenceManager::Settings settings)
+    : SequenceManagerImpl(std::move(thread_controller), std::move(settings)) {}
 
 // static
 std::unique_ptr<SequenceManagerForTest> SequenceManagerForTest::Create(
-    MessageLoop* message_loop,
+    MessageLoopBase* message_loop_base,
     scoped_refptr<SingleThreadTaskRunner> task_runner,
-    const TickClock* clock) {
-  std::unique_ptr<SequenceManagerForTest> manager(
-      new SequenceManagerForTest(std::make_unique<ThreadControllerForTest>(
-          message_loop, std::move(task_runner), clock)));
+    const TickClock* clock,
+    SequenceManager::Settings settings) {
+  std::unique_ptr<SequenceManagerForTest> manager(new SequenceManagerForTest(
+      std::make_unique<ThreadControllerForTest>(message_loop_base,
+                                                std::move(task_runner), clock),
+      std::move(settings)));
   manager->BindToCurrentThread();
-  manager->CompleteInitializationOnBoundThread();
   return manager;
 }
 
 // static
 std::unique_ptr<SequenceManagerForTest> SequenceManagerForTest::Create(
-    std::unique_ptr<internal::ThreadController> thread_controller) {
-  std::unique_ptr<SequenceManagerForTest> manager(
-      new SequenceManagerForTest(std::move(thread_controller)));
+    std::unique_ptr<internal::ThreadController> thread_controller,
+    SequenceManager::Settings settings) {
+  std::unique_ptr<SequenceManagerForTest> manager(new SequenceManagerForTest(
+      std::move(thread_controller), std::move(settings)));
   manager->BindToCurrentThread();
-  manager->CompleteInitializationOnBoundThread();
   return manager;
 }
 
@@ -84,7 +86,6 @@ size_t SequenceManagerForTest::QueuesToDeleteCount() const {
 }
 
 size_t SequenceManagerForTest::QueuesToShutdownCount() {
-  TakeQueuesToGracefullyShutdownFromHelper();
   return main_thread_only().queues_to_gracefully_shutdown.size();
 }
 

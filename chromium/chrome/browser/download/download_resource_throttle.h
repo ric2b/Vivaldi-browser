@@ -38,7 +38,6 @@ class DownloadResourceThrottle
             web_contents_getter,
         const GURL& url,
         const std::string& request_method,
-        const content::DownloadInformation &download_info,
         const Callback& continue_callback);
     ~DownloadRequestInfo();
 
@@ -46,7 +45,6 @@ class DownloadResourceThrottle
     content::ResourceRequestInfo::WebContentsGetter web_contents_getter;
     GURL url;
     std::string request_method;
-    content::DownloadInformation download_info;
     Callback continue_callback;
    private:
     DISALLOW_COPY_AND_ASSIGN(DownloadRequestInfo);
@@ -57,9 +55,7 @@ class DownloadResourceThrottle
       const content::ResourceRequestInfo::WebContentsGetter&
           web_contents_getter,
       const GURL& url,
-      const std::string& request_method,
-      const content::DownloadInformation& info =
-          content::DownloadInformation());
+      const std::string& request_method);
   ~DownloadResourceThrottle() override;
 
   // content::ResourceThrottle implementation:

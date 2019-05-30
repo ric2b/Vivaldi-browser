@@ -24,6 +24,7 @@
 #include "net/cert/test_root_certs.h"
 #include "net/cert/x509_certificate.h"
 #include "net/dns/host_resolver.h"
+#include "net/dns/public/dns_query_type.h"
 #include "net/log/net_log_with_source.h"
 #include "net/test/test_data_directory.h"
 #include "url/gurl.h"
@@ -112,15 +113,6 @@ bool GetLocalCertificatesDir(const base::FilePath& certificates_dir,
 
   *local_certificates_dir = src_dir.Append(certificates_dir);
   return true;
-}
-
-std::unique_ptr<base::ListValue> GetTokenBindingParams(
-    std::vector<int> params) {
-  std::unique_ptr<base::ListValue> values(new base::ListValue());
-  for (int param : params) {
-    values->AppendInteger(param);
-  }
-  return values;
 }
 
 std::string OCSPStatusToString(
@@ -363,24 +355,28 @@ bool BaseTestServer::GetAddressList(AddressList* address_list) const {
 
   std::unique_ptr<HostResolver> resolver(
       HostResolver::CreateDefaultResolver(NULL));
-  HostResolver::RequestInfo info(host_port_pair_);
-  // Limit the lookup to IPv4. When started with the default
+
+  // Limit the lookup to IPv4 (DnsQueryType::A). When started with the default
   // address of kLocalhost, testserver.py only supports IPv4.
   // If a custom hostname is used, it's possible that the test
   // server will listen on both IPv4 and IPv6, so this will
   // still work. The testserver does not support explicit
   // IPv6 literal hostnames.
-  info.set_address_family(ADDRESS_FAMILY_IPV4);
+  HostResolver::ResolveHostParameters parameters;
+  parameters.dns_query_type = DnsQueryType::A;
+
+  std::unique_ptr<HostResolver::ResolveHostRequest> request =
+      resolver->CreateRequest(host_port_pair_, NetLogWithSource(), parameters);
+
   TestCompletionCallback callback;
-  std::unique_ptr<HostResolver::Request> request;
-  int rv = resolver->Resolve(info, DEFAULT_PRIORITY, address_list,
-                             callback.callback(), &request, NetLogWithSource());
-  if (rv == ERR_IO_PENDING)
-    rv = callback.WaitForResult();
+  int rv = request->Start(callback.callback());
+  rv = callback.GetResult(rv);
   if (rv != OK) {
     LOG(ERROR) << "Failed to resolve hostname: " << host_port_pair_.host();
     return false;
   }
+
+  *address_list = request->GetAddressResults().value();
   return true;
 }
 
@@ -417,9 +413,7 @@ bool BaseTestServer::GetFilePathWithReplacements(
   std::string new_file_path = original_file_path;
   bool first_query_parameter = true;
   const std::vector<StringPair>::const_iterator end = text_to_replace.end();
-  for (std::vector<StringPair>::const_iterator it = text_to_replace.begin();
-       it != end;
-       ++it) {
+  for (auto it = text_to_replace.begin(); it != end; ++it) {
     const std::string& old_text = it->first;
     const std::string& new_text = it->second;
     std::string base64_old;
@@ -449,15 +443,23 @@ void BaseTestServer::RegisterTestCerts() {
 
 bool BaseTestServer::LoadTestRootCert() const {
   TestRootCerts* root_certs = TestRootCerts::GetInstance();
-  if (!root_certs)
-    return false;
+  DCHECK(root_certs);
 
   // Should always use absolute path to load the root certificate.
   base::FilePath root_certificate_path;
-  if (!GetLocalCertificatesDir(certificates_dir_, &root_certificate_path))
+  if (!GetLocalCertificatesDir(certificates_dir_, &root_certificate_path)) {
+    LOG(ERROR) << "Could not get local certificates directory from "
+               << certificates_dir_ << ".";
     return false;
+  }
 
-  return RegisterRootCertsInternal(root_certificate_path);
+  if (!RegisterRootCertsInternal(root_certificate_path)) {
+    LOG(ERROR) << "Could not register root certificates from "
+               << root_certificate_path << ".";
+    return false;
+  }
+
+  return true;
 }
 
 scoped_refptr<X509Certificate> BaseTestServer::GetCertificate() const {
@@ -505,7 +507,8 @@ bool BaseTestServer::SetAndParseServerData(const std::string& server_data,
                                            int* port) {
   VLOG(1) << "Server data: " << server_data;
   base::JSONReader json_reader;
-  std::unique_ptr<base::Value> value(json_reader.ReadToValue(server_data));
+  std::unique_ptr<base::Value> value(
+      json_reader.ReadToValueDeprecated(server_data));
   if (!value.get() || !value->is_dict()) {
     LOG(ERROR) << "Could not parse server data: "
                << json_reader.GetErrorMessage();
@@ -529,8 +532,10 @@ bool BaseTestServer::SetupWhenServerStarted() {
   DCHECK(host_port_pair_.port());
   DCHECK(!started_);
 
-  if (UsingSSL(type_) && !LoadTestRootCert())
-      return false;
+  if (UsingSSL(type_) && !LoadTestRootCert()) {
+    LOG(ERROR) << "Could not load test root certificate.";
+    return false;
+  }
 
   started_ = true;
   allowed_port_.reset(new ScopedPortException(host_port_pair_.port()));
@@ -682,6 +687,9 @@ bool BaseTestServer::GenerateArguments(base::DictionaryValue* arguments) const {
       arguments->Set("tls-intolerance-type", GetTLSIntoleranceType(
           ssl_options_.tls_intolerance_type));
     }
+    if (ssl_options_.tls_max_version != SSLOptions::TLS_MAX_VERSION_DEFAULT) {
+      arguments->SetInteger("tls-max-version", ssl_options_.tls_max_version);
+    }
     if (ssl_options_.fallback_scsv_enabled)
       arguments->Set("fallback-scsv", std::make_unique<base::Value>());
     if (!ssl_options_.signed_cert_timestamps_tls_ext.empty()) {
@@ -719,12 +727,13 @@ bool BaseTestServer::GenerateArguments(base::DictionaryValue* arguments) const {
       arguments->Set("disable-extended-master-secret",
                      std::make_unique<base::Value>());
     }
-    if (!ssl_options_.supported_token_binding_params.empty()) {
-      std::unique_ptr<base::ListValue> token_binding_params(
-          new base::ListValue());
-      arguments->Set(
-          "token-binding-params",
-          GetTokenBindingParams(ssl_options_.supported_token_binding_params));
+    if (ssl_options_.simulate_tls13_downgrade) {
+      arguments->Set("simulate-tls13-downgrade",
+                     std::make_unique<base::Value>());
+    }
+    if (ssl_options_.simulate_tls12_downgrade) {
+      arguments->Set("simulate-tls12-downgrade",
+                     std::make_unique<base::Value>());
     }
   }
 

@@ -80,10 +80,15 @@ class LayerTreeTest : public testing::Test, public TestHooks {
       SingleKeyframeEffectAnimation* animation_to_receive_animation);
   void PostAddOpacityAnimationToMainThreadDelayed(
       SingleKeyframeEffectAnimation* animation_to_receive_animation);
-  void PostSetLocalSurfaceIdToMainThread(
-      const viz::LocalSurfaceId& local_surface_id);
+  void PostSetLocalSurfaceIdAllocationToMainThread(
+      const viz::LocalSurfaceIdAllocation& local_surface_id_allocation);
   void PostRequestNewLocalSurfaceIdToMainThread();
-  void PostSetDeferCommitsToMainThread(bool defer_commits);
+  void PostGetDeferMainFrameUpdateToMainThread(
+      std::unique_ptr<ScopedDeferMainFrameUpdate>*
+          scoped_defer_main_frame_update);
+  void PostReturnDeferMainFrameUpdateToMainThread(
+      std::unique_ptr<ScopedDeferMainFrameUpdate>
+          scoped_defer_main_frame_update);
   void PostSetNeedsCommitToMainThread();
   void PostSetNeedsUpdateLayersToMainThread();
   void PostSetNeedsRedrawToMainThread();
@@ -153,6 +158,8 @@ class LayerTreeTest : public testing::Test, public TestHooks {
       double refresh_rate,
       scoped_refptr<viz::ContextProvider> compositor_context_provider,
       scoped_refptr<viz::RasterContextProvider> worker_context_provider);
+  std::unique_ptr<viz::SkiaOutputSurface>
+  CreateDisplaySkiaOutputSurfaceOnThread() override;
   // Override this and call the base class to change what viz::ContextProvider
   // will be used, such as to prevent sharing the context with the
   // LayerTreeFrameSink. Or override it and create your own OutputSurface to
@@ -181,9 +188,15 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   virtual void DispatchAddOpacityAnimation(
       SingleKeyframeEffectAnimation* animation_to_receive_animation,
       double animation_duration);
-  void DispatchSetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id);
+  void DispatchSetLocalSurfaceIdAllocation(
+      const viz::LocalSurfaceIdAllocation& local_surface_id_allocation);
   void DispatchRequestNewLocalSurfaceId();
-  void DispatchSetDeferCommits(bool defer_commits);
+  void DispatchGetDeferMainFrameUpdate(
+      std::unique_ptr<ScopedDeferMainFrameUpdate>*
+          scoped_defer_main_frame_update);
+  void DispatchReturnDeferMainFrameUpdate(
+      std::unique_ptr<ScopedDeferMainFrameUpdate>
+          scoped_defer_main_frame_update);
   void DispatchSetNeedsCommit();
   void DispatchSetNeedsUpdateLayers();
   void DispatchSetNeedsRedraw();
@@ -224,7 +237,7 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   std::unique_ptr<base::Thread> image_worker_;
   std::unique_ptr<viz::TestGpuMemoryBufferManager> gpu_memory_buffer_manager_;
   std::unique_ptr<TestTaskGraphRunner> task_graph_runner_;
-  base::CancelableClosure timeout_;
+  base::CancelableOnceClosure timeout_;
   scoped_refptr<viz::TestContextProvider> compositor_contexts_;
   base::WeakPtr<LayerTreeTest> main_thread_weak_ptr_;
   base::WeakPtrFactory<LayerTreeTest> weak_factory_;

@@ -9,9 +9,9 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/component_export.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "chromeos/chromeos_export.h"
 
 namespace base {
 class Thread;
@@ -40,9 +40,9 @@ class DBusClientsBrowser;
 class DBusClientsCommon;
 class DBusThreadManagerSetter;
 class DebugDaemonClient;
+class DiagnosticsdClient;
 class EasyUnlockClient;
 class GsmSMSClient;
-class HammerdClient;
 class ImageBurnerClient;
 class ImageLoaderClient;
 class LorgnetteManagerClient;
@@ -51,7 +51,8 @@ class MediaAnalyticsClient;
 class ModemMessagingClient;
 class OobeConfigurationClient;
 class PermissionBrokerClient;
-class PowerManagerClient;
+class RuntimeProbeClient;
+class SeneschalClient;
 class SessionManagerClient;
 class ShillDeviceClient;
 class ShillIPConfigClient;
@@ -61,7 +62,6 @@ class ShillServiceClient;
 class ShillThirdPartyVpnDriverClient;
 class SmbProviderClient;
 class SMSClient;
-class SystemClockClient;
 class UpdateEngineClient;
 class UpstartClient;
 class VirtualFileProviderClient;
@@ -84,7 +84,7 @@ class VirtualFileProviderClient;
 // WeakPtrFactory when creating callbacks that run on UI thread. See
 // session_manager_client.cc for examples.
 //
-class CHROMEOS_EXPORT DBusThreadManager {
+class COMPONENT_EXPORT(CHROMEOS_DBUS) DBusThreadManager {
  public:
   // Processes for which to create and initialize the D-Bus clients.
   // TODO(jamescook): Move creation of clients into //ash and //chrome/browser.
@@ -146,9 +146,9 @@ class CHROMEOS_EXPORT DBusThreadManager {
   CrosDisksClient* GetCrosDisksClient();
   CryptohomeClient* GetCryptohomeClient();
   DebugDaemonClient* GetDebugDaemonClient();
+  DiagnosticsdClient* GetDiagnosticsdClient();
   EasyUnlockClient* GetEasyUnlockClient();
   GsmSMSClient* GetGsmSMSClient();
-  HammerdClient* GetHammerdClient();
   ImageBurnerClient* GetImageBurnerClient();
   ImageLoaderClient* GetImageLoaderClient();
   LorgnetteManagerClient* GetLorgnetteManagerClient();
@@ -157,7 +157,8 @@ class CHROMEOS_EXPORT DBusThreadManager {
   ModemMessagingClient* GetModemMessagingClient();
   OobeConfigurationClient* GetOobeConfigurationClient();
   PermissionBrokerClient* GetPermissionBrokerClient();
-  PowerManagerClient* GetPowerManagerClient();
+  RuntimeProbeClient* GetRuntimeProbeClient();
+  SeneschalClient* GetSeneschalClient();
   SessionManagerClient* GetSessionManagerClient();
   ShillDeviceClient* GetShillDeviceClient();
   ShillIPConfigClient* GetShillIPConfigClient();
@@ -167,7 +168,6 @@ class CHROMEOS_EXPORT DBusThreadManager {
   ShillThirdPartyVpnDriverClient* GetShillThirdPartyVpnDriverClient();
   SmbProviderClient* GetSmbProviderClient();
   SMSClient* GetSMSClient();
-  SystemClockClient* GetSystemClockClient();
   UpdateEngineClient* GetUpdateEngineClient();
   UpstartClient* GetUpstartClient();
   VirtualFileProviderClient* GetVirtualFileProviderClient();
@@ -200,7 +200,7 @@ class CHROMEOS_EXPORT DBusThreadManager {
 };
 
 // TODO(jamescook): Replace these with FooClient::InitializeForTesting().
-class CHROMEOS_EXPORT DBusThreadManagerSetter {
+class COMPONENT_EXPORT(CHROMEOS_DBUS) DBusThreadManagerSetter {
  public:
   ~DBusThreadManagerSetter();
 
@@ -212,7 +212,14 @@ class CHROMEOS_EXPORT DBusThreadManagerSetter {
   void SetCrosDisksClient(std::unique_ptr<CrosDisksClient> client);
   void SetCryptohomeClient(std::unique_ptr<CryptohomeClient> client);
   void SetDebugDaemonClient(std::unique_ptr<DebugDaemonClient> client);
-  void SetHammerdClient(std::unique_ptr<HammerdClient> client);
+  void SetImageBurnerClient(std::unique_ptr<ImageBurnerClient> client);
+  void SetImageLoaderClient(std::unique_ptr<ImageLoaderClient> client);
+  void SetMediaAnalyticsClient(std::unique_ptr<MediaAnalyticsClient> client);
+  void SetPermissionBrokerClient(
+      std::unique_ptr<PermissionBrokerClient> client);
+  void SetSeneschalClient(std::unique_ptr<SeneschalClient> client);
+  void SetRuntimeProbeClient(std::unique_ptr<RuntimeProbeClient> client);
+  void SetSessionManagerClient(std::unique_ptr<SessionManagerClient> client);
   void SetShillDeviceClient(std::unique_ptr<ShillDeviceClient> client);
   void SetShillIPConfigClient(std::unique_ptr<ShillIPConfigClient> client);
   void SetShillManagerClient(std::unique_ptr<ShillManagerClient> client);
@@ -220,15 +227,7 @@ class CHROMEOS_EXPORT DBusThreadManagerSetter {
   void SetShillProfileClient(std::unique_ptr<ShillProfileClient> client);
   void SetShillThirdPartyVpnDriverClient(
       std::unique_ptr<ShillThirdPartyVpnDriverClient> client);
-  void SetImageBurnerClient(std::unique_ptr<ImageBurnerClient> client);
-  void SetImageLoaderClient(std::unique_ptr<ImageLoaderClient> client);
-  void SetMediaAnalyticsClient(std::unique_ptr<MediaAnalyticsClient> client);
-  void SetPermissionBrokerClient(
-      std::unique_ptr<PermissionBrokerClient> client);
-  void SetPowerManagerClient(std::unique_ptr<PowerManagerClient> client);
-  void SetSessionManagerClient(std::unique_ptr<SessionManagerClient> client);
   void SetSmbProviderClient(std::unique_ptr<SmbProviderClient> client);
-  void SetSystemClockClient(std::unique_ptr<SystemClockClient> client);
   void SetUpdateEngineClient(std::unique_ptr<UpdateEngineClient> client);
   void SetUpstartClient(std::unique_ptr<UpstartClient> client);
 

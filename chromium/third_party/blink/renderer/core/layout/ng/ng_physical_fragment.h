@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_physical_size.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_style_variant.h"
+#include "third_party/blink/renderer/platform/graphics/touch_action.h"
 #include "third_party/blink/renderer/platform/wtf/ref_counted.h"
 
 #include <unicode/ubidi.h>
@@ -22,6 +23,7 @@ namespace blink {
 class ComputedStyle;
 class LayoutObject;
 class Node;
+class NGFragmentBuilder;
 class NGBreakToken;
 class NGInlineItem;
 struct NGPixelSnappedPhysicalBoxStrut;
@@ -50,7 +52,8 @@ class CORE_EXPORT NGPhysicalFragment
   enum NGFragmentType {
     kFragmentBox = 0,
     kFragmentText = 1,
-    kFragmentLineBox = 2
+    kFragmentLineBox = 2,
+    kFragmentRenderedLegend = 3,
     // When adding new values, make sure the bit size of |type_| is large
     // enough to store.
   };
@@ -63,6 +66,7 @@ class CORE_EXPORT NGPhysicalFragment
     kAtomicInline,
     kFloating,
     kOutOfFlowPositioned,
+    kBlockFlowRoot,
     // When adding new values, make sure the bit size of |sub_type_| is large
     // enough to store.
 
@@ -77,11 +81,18 @@ class CORE_EXPORT NGPhysicalFragment
   NGFragmentType Type() const { return static_cast<NGFragmentType>(type_); }
   bool IsContainer() const {
     return Type() == NGFragmentType::kFragmentBox ||
-           Type() == NGFragmentType::kFragmentLineBox;
+           Type() == NGFragmentType::kFragmentLineBox ||
+           Type() == NGFragmentType::kFragmentRenderedLegend;
   }
   bool IsBox() const { return Type() == NGFragmentType::kFragmentBox; }
   bool IsText() const { return Type() == NGFragmentType::kFragmentText; }
   bool IsLineBox() const { return Type() == NGFragmentType::kFragmentLineBox; }
+
+  // Return true if this is the legend child of a fieldset that gets special
+  // treatment (i.e. placed over the block-start border).
+  bool IsRenderedLegend() const {
+    return Type() == NGFragmentType::kFragmentRenderedLegend;
+  }
 
   // Returns the box type of this fragment.
   NGBoxType BoxType() const {
@@ -113,6 +124,12 @@ class CORE_EXPORT NGPhysicalFragment
   }
   bool IsBlockFlow() const;
   bool IsListMarker() const;
+
+  // Return true if this fragment is a container established by a fieldset
+  // element. Such a fragment contains an optional rendered legend fragment and
+  // an optional fieldset contents wrapper fragment (which holds everything
+  // inside the fieldset except the rendered legend).
+  bool IsFieldsetContainer() const { return is_fieldset_container_; }
 
   // Returns whether the fragment is old layout root.
   bool IsOldLayoutRoot() const { return is_old_layout_root_; }
@@ -173,16 +190,24 @@ class CORE_EXPORT NGPhysicalFragment
   // Scrollable overflow. including contents, in the local coordinate.
   NGPhysicalOffsetRect ScrollableOverflow() const;
 
+  // ScrollableOverflow(), with transforms applied wrt container if needed.
+  NGPhysicalOffsetRect ScrollableOverflowForPropagation(
+      const LayoutObject* container) const;
+
   // Unite visual rect to propagate to parent's ContentsVisualRect.
   void PropagateContentsInkOverflow(NGPhysicalOffsetRect*,
                                     NGPhysicalOffset) const;
 
+  // The whitelisted touch action is the union of the effective touch action
+  // (from style) and blocking touch event handlers.
+  TouchAction EffectiveWhitelistedTouchAction() const;
+
   // Returns the bidi level of a text or atomic inline fragment.
-  virtual UBiDiLevel BidiLevel() const;
+  UBiDiLevel BidiLevel() const;
 
   // Returns the resolved direction of a text or atomic inline fragment. Not to
   // be confused with the CSS 'direction' property.
-  virtual TextDirection ResolvedDirection() const;
+  TextDirection ResolvedDirection() const;
 
   String ToString() const;
 
@@ -210,8 +235,11 @@ class CORE_EXPORT NGPhysicalFragment
 #endif
 
  protected:
+  NGPhysicalFragment(NGFragmentBuilder*,
+                     NGFragmentType type,
+                     unsigned sub_type);
+
   NGPhysicalFragment(LayoutObject* layout_object,
-                     const ComputedStyle& style,
                      NGStyleVariant,
                      NGPhysicalSize size,
                      NGFragmentType type,
@@ -221,20 +249,32 @@ class CORE_EXPORT NGPhysicalFragment
   const Vector<NGInlineItem>& InlineItemsOfContainingBlock() const;
 
   LayoutObject* const layout_object_;
-  scoped_refptr<const ComputedStyle> style_;
   const NGPhysicalSize size_;
   scoped_refptr<NGBreakToken> break_token_;
 
   const unsigned type_ : 2;      // NGFragmentType
-  const unsigned sub_type_ : 3;  // Union of NGBoxType and NGTextType
-  unsigned is_old_layout_root_ : 1;
-  unsigned border_edge_ : 4;  // NGBorderEdges::Physical
+  const unsigned sub_type_ : 3;  // NGBoxType, NGTextType, or NGLineBoxType
   const unsigned style_variant_ : 2;  // NGStyleVariant
-  unsigned base_direction_ : 1;  // TextDirection, for NGPhysicalLineBoxFragment
+
+  // The following bitfield is only to be used by NGPhysicalContainerFragment
+  // (it's defined here to save memory, since that class has no bitfields).
+  unsigned has_floating_descendants_ : 1;
+
+  // The following bitfield is only to be used by NGPhysicalLineBoxFragment
+  // (it's defined here to save memory, since that class has no bitfields).
+  unsigned base_direction_ : 1;  // TextDirection
 
   // The following bitfield is only to be used by NGPhysicalBoxFragment (it's
   // defined here to save memory, since that class has no bitfields).
   unsigned children_inline_ : 1;
+  unsigned is_fieldset_container_ : 1;
+  unsigned is_old_layout_root_ : 1;
+  unsigned border_edge_ : 4;  // NGBorderEdges::Physical
+
+  // The following bitfield is only to be used by NGPhysicalTextFragment (it's
+  // defined here to save memory, since that class has no bitfields).
+  unsigned line_orientation_ : 2;  // NGLineOrientation
+  unsigned is_anonymous_text_ : 1;
 
  private:
   friend struct NGPhysicalFragmentTraits;
@@ -243,7 +283,7 @@ class CORE_EXPORT NGPhysicalFragment
 
 // Used for return value of traversing fragment tree.
 struct CORE_EXPORT NGPhysicalFragmentWithOffset {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
 
   scoped_refptr<const NGPhysicalFragment> fragment;
   NGPhysicalOffset offset_to_container_box;

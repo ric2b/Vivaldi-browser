@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/stl_util.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
@@ -83,30 +84,31 @@ EventBindings::EventBindings(ScriptContext* context,
   // It's safe to use base::Unretained here because |context| will always
   // outlive us.
   context->AddInvalidationObserver(
-      base::Bind(&EventBindings::OnInvalidated, base::Unretained(this)));
+      base::BindOnce(&EventBindings::OnInvalidated, base::Unretained(this)));
 }
 
 EventBindings::~EventBindings() {}
 
 void EventBindings::AddRoutes() {
+  RouteHandlerFunction("AttachEvent",
+                       base::BindRepeating(&EventBindings::AttachEventHandler,
+                                           base::Unretained(this)));
+  RouteHandlerFunction("DetachEvent",
+                       base::BindRepeating(&EventBindings::DetachEventHandler,
+                                           base::Unretained(this)));
+  RouteHandlerFunction("AttachFilteredEvent",
+                       base::BindRepeating(&EventBindings::AttachFilteredEvent,
+                                           base::Unretained(this)));
   RouteHandlerFunction(
-      "AttachEvent",
-      base::Bind(&EventBindings::AttachEventHandler, base::Unretained(this)));
-  RouteHandlerFunction(
-      "DetachEvent",
-      base::Bind(&EventBindings::DetachEventHandler, base::Unretained(this)));
-  RouteHandlerFunction(
-      "AttachFilteredEvent",
-      base::Bind(&EventBindings::AttachFilteredEvent, base::Unretained(this)));
-  RouteHandlerFunction("DetachFilteredEvent",
-                       base::Bind(&EventBindings::DetachFilteredEventHandler,
-                                  base::Unretained(this)));
-  RouteHandlerFunction(
-      "AttachUnmanagedEvent",
-      base::Bind(&EventBindings::AttachUnmanagedEvent, base::Unretained(this)));
-  RouteHandlerFunction(
-      "DetachUnmanagedEvent",
-      base::Bind(&EventBindings::DetachUnmanagedEvent, base::Unretained(this)));
+      "DetachFilteredEvent",
+      base::BindRepeating(&EventBindings::DetachFilteredEventHandler,
+                          base::Unretained(this)));
+  RouteHandlerFunction("AttachUnmanagedEvent",
+                       base::BindRepeating(&EventBindings::AttachUnmanagedEvent,
+                                           base::Unretained(this)));
+  RouteHandlerFunction("DetachUnmanagedEvent",
+                       base::BindRepeating(&EventBindings::DetachUnmanagedEvent,
+                                           base::Unretained(this)));
 }
 
 // static
@@ -132,7 +134,7 @@ void EventBindings::DispatchEventInContext(
   };
 
   context->module_system()->CallModuleMethodSafe(
-      kEventBindings, "dispatchEvent", arraysize(v8_args), v8_args);
+      kEventBindings, "dispatchEvent", base::size(v8_args), v8_args);
 }
 
 void EventBindings::AttachEventHandler(

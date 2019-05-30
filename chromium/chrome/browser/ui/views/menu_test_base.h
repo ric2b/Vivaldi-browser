@@ -9,7 +9,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "chrome/test/base/view_event_test_base.h"
+#include "chrome/browser/ui/views/test/view_event_test_base.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/views/controls/button/menu_button_listener.h"
 #include "ui/views/controls/menu/menu_delegate.h"
@@ -42,7 +42,7 @@ class MenuTestBase : public ViewEventTestBase,
   ~MenuTestBase() override;
 
   // Generate a mouse click and run |next| once the event has been processed.
-  virtual void Click(views::View* view, const base::Closure& next);
+  virtual void Click(views::View* view, base::OnceClosure next);
 
   // Generate a keypress and run |next| once the event has been processed.
   void KeyPress(ui::KeyboardCode keycode, base::OnceClosure next);

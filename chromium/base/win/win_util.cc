@@ -121,6 +121,29 @@ bool SetProcessDpiAwarenessWrapper(PROCESS_DPI_AWARENESS value) {
   return false;
 }
 
+// Enable V2 per-monitor high-DPI support for the process. This will cause
+// Windows to scale dialogs, comctl32 controls, context menus, and non-client
+// area owned by this process on a per-monitor basis. If per-monitor V2 is not
+// available (i.e., prior to Windows 10 1703) or fails, returns false.
+// https://docs.microsoft.com/en-us/windows/desktop/hidpi/dpi-awareness-context
+bool EnablePerMonitorV2() {
+  decltype(
+      &::SetProcessDpiAwarenessContext) set_process_dpi_awareness_context_func =
+      reinterpret_cast<decltype(&::SetProcessDpiAwarenessContext)>(
+          ::GetProcAddress(::GetModuleHandle(L"user32.dll"),
+                           "SetProcessDpiAwarenessContext"));
+  if (set_process_dpi_awareness_context_func) {
+    return set_process_dpi_awareness_context_func(
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+  }
+
+  DCHECK_LT(GetVersion(), VERSION_WIN10_RS2)
+      << "SetProcessDpiAwarenessContext should be available on all platforms"
+         " >= Windows 10 Redstone 2";
+
+  return false;
+}
+
 bool* GetDomainEnrollmentStateStorage() {
   static bool state = IsOS(OS_DOMAINMEMBER);
   return &state;
@@ -296,19 +319,20 @@ bool IsKeyboardPresentOnSlate(std::string* reason, HWND hwnd) {
       break;
 
     // Get the device ID.
-    wchar_t device_id[MAX_DEVICE_ID_LEN];
-    CONFIGRET status = CM_Get_Device_ID(device_info_data.DevInst,
-                                        device_id,
-                                        MAX_DEVICE_ID_LEN,
-                                        0);
+    char16 device_id[MAX_DEVICE_ID_LEN];
+    CONFIGRET status =
+        CM_Get_Device_ID(device_info_data.DevInst, as_writable_wcstr(device_id),
+                         MAX_DEVICE_ID_LEN, 0);
     if (status == CR_SUCCESS) {
       // To reduce the scope of the hack we only look for ACPI and HID\\VID
       // prefixes in the keyboard device ids.
-      if (StartsWith(device_id, L"ACPI", CompareCase::INSENSITIVE_ASCII) ||
-          StartsWith(device_id, L"HID\\VID", CompareCase::INSENSITIVE_ASCII)) {
+      if (StartsWith(device_id, STRING16_LITERAL("ACPI"),
+                     CompareCase::INSENSITIVE_ASCII) ||
+          StartsWith(device_id, STRING16_LITERAL("HID\\VID"),
+                     CompareCase::INSENSITIVE_ASCII)) {
         if (reason) {
           *reason += "device: ";
-          *reason += WideToUTF8(device_id);
+          *reason += UTF16ToUTF8(device_id);
           *reason += '\n';
         }
         // The heuristic we are using is to check the count of keyboards and
@@ -370,12 +394,16 @@ bool UserAccountControlIsEnabled() {
   //   http://code.google.com/p/chromium/issues/detail?id=61644
   ThreadRestrictions::ScopedAllowIO allow_io;
 
-  RegKey key(HKEY_LOCAL_MACHINE,
-             L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
-             KEY_READ);
+  RegKey key(
+      HKEY_LOCAL_MACHINE,
+      STRING16_LITERAL(
+          "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System"),
+      KEY_READ);
   DWORD uac_enabled;
-  if (key.ReadValueDW(L"EnableLUA", &uac_enabled) != ERROR_SUCCESS)
+  if (key.ReadValueDW(STRING16_LITERAL("EnableLUA"), &uac_enabled) !=
+      ERROR_SUCCESS) {
     return true;
+  }
   // Users can set the EnableLUA value to something arbitrary, like 2, which
   // Vista will treat as UAC enabled, so we make sure it is not set to 0.
   return (uac_enabled != 0);
@@ -435,7 +463,7 @@ bool SetAppIdForPropertyStore(IPropertyStore* property_store,
 }
 
 static const char16 kAutoRunKeyPath[] =
-    L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+    STRING16_LITERAL("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
 
 bool AddCommandToAutoRun(HKEY root_key, const string16& name,
                          const string16& command) {
@@ -567,16 +595,6 @@ bool IsDeviceRegisteredWithManagement() {
   return *GetRegisteredWithManagementStateStorage();
 }
 
-bool IsEnterpriseManaged() {
-  // TODO(rogerta): this function should really be:
-  //
-  //    return IsEnrolledToDomain() || IsDeviceRegisteredWithManagement();
-  //
-  // However, for now it is decided to collect some UMA metrics about
-  // IsDeviceRegisteredWithMdm() before changing chrome's behavior.
-  return IsEnrolledToDomain();
-}
-
 bool IsUser32AndGdi32Available() {
   static auto is_user32_and_gdi32_available = []() {
     // If win32k syscalls aren't disabled, then user32 and gdi32 are available.
@@ -685,9 +703,13 @@ bool IsProcessPerMonitorDpiAware() {
 }
 
 void EnableHighDPISupport() {
-  // Enable per-monitor DPI for Win10 or above instead of Win8.1 since Win8.1
-  // does not have EnableChildWindowDpiMessage, necessary for correct non-client
-  // area scaling across monitors.
+  // Enable per-monitor V2 if it is available (Win10 1703 or later).
+  if (EnablePerMonitorV2())
+    return;
+
+  // Fall back to per-monitor DPI for older versions of Win10 instead of Win8.1
+  // since Win8.1 does not have EnableChildWindowDpiMessage, necessary for
+  // correct non-client area scaling across monitors.
   PROCESS_DPI_AWARENESS process_dpi_awareness =
       GetVersion() >= VERSION_WIN10 ? PROCESS_PER_MONITOR_DPI_AWARE
                                     : PROCESS_SYSTEM_DPI_AWARE;

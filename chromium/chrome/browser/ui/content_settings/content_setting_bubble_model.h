@@ -14,16 +14,16 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/scoped_observer.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/ui/blocked_content/framebust_block_tab_helper.h"
+#include "chrome/browser/ui/blocked_content/url_list_manager.h"
 #include "chrome/common/custom_handlers/protocol_handler.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
-#include "content/public/common/media_stream_request.h"
+#include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "ui/gfx/image/image.h"
 #include "url/gurl.h"
 
@@ -65,7 +65,7 @@ class ContentSettingFramebustBlockBubbleModel;
 
 // This model provides data for ContentSettingBubble, and also controls
 // the action triggered when the allow / block radio buttons are triggered.
-class ContentSettingBubbleModel : public content::NotificationObserver {
+class ContentSettingBubbleModel {
  public:
   typedef ContentSettingBubbleModelDelegate Delegate;
 
@@ -99,9 +99,12 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
     ~RadioGroup();
 
     GURL url;
-    base::string16 title;
     RadioItems radio_items;
     int default_item;
+
+    // Whether the user can control this radio group. False if controlled by
+    // policy, etc.
+    bool user_managed = true;
   };
 
   struct DomainList {
@@ -119,11 +122,11 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
     ~MediaMenu();
 
     base::string16 label;
-    content::MediaStreamDevice default_device;
-    content::MediaStreamDevice selected_device;
+    blink::MediaStreamDevice default_device;
+    blink::MediaStreamDevice selected_device;
     bool disabled;
   };
-  typedef std::map<content::MediaStreamType, MediaMenu> MediaMenuMap;
+  typedef std::map<blink::MediaStreamType, MediaMenu> MediaMenuMap;
 
   enum class ManageTextStyle {
     // No Manage button or checkbox is displayed.
@@ -142,7 +145,6 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
     base::string16 message;
     ListItems list_items;
     RadioGroup radio_group;
-    bool radio_group_enabled = false;
     std::vector<DomainList> domain_lists;
     base::string16 custom_link;
     bool custom_link_enabled = false;
@@ -162,29 +164,23 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
   // bubbles fit this description.
   // TODO(msramek): Move this to ContentSettingSimpleBubbleModel or remove
   // entirely.
-  static ContentSettingBubbleModel* CreateContentSettingBubbleModel(
-      Delegate* delegate,
-      content::WebContents* web_contents,
-      Profile* profile,
-      ContentSettingsType content_type);
+  static std::unique_ptr<ContentSettingBubbleModel>
+  CreateContentSettingBubbleModel(Delegate* delegate,
+                                  content::WebContents* web_contents,
+                                  ContentSettingsType content_type);
 
-  ~ContentSettingBubbleModel() override;
+  virtual ~ContentSettingBubbleModel();
 
   const BubbleContent& bubble_content() const { return bubble_content_; }
 
   void set_owner(Owner* owner) { owner_ = owner; }
-
-  // content::NotificationObserver:
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
 
   virtual void OnListItemClicked(int index, int event_flags) {}
   virtual void OnCustomLinkClicked() {}
   virtual void OnManageButtonClicked() {}
   virtual void OnManageCheckboxChecked(bool is_checked) {}
   virtual void OnLearnMoreClicked() {}
-  virtual void OnMediaMenuClicked(content::MediaStreamType type,
+  virtual void OnMediaMenuClicked(blink::MediaStreamType type,
                                   const std::string& selected_device_id) {}
 
   // Called by the view code when the bubble is closed
@@ -219,13 +215,13 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
   }
 
  protected:
-  ContentSettingBubbleModel(
-      Delegate* delegate,
-      content::WebContents* web_contents,
-      Profile* profile);
+  // |web_contents| must outlive this.
+  ContentSettingBubbleModel(Delegate* delegate,
+                            content::WebContents* web_contents);
 
+  // Should always be non-nullptr.
   content::WebContents* web_contents() const { return web_contents_; }
-  Profile* profile() const { return profile_; }
+  Profile* GetProfile() const;
   Delegate* delegate() const { return delegate_; }
   int selected_item() const { return owner_->GetSelectedRadioOption(); }
 
@@ -237,9 +233,6 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
   void RemoveListItem(int index);
   void set_radio_group(const RadioGroup& radio_group) {
     bubble_content_.radio_group = radio_group;
-  }
-  void set_radio_group_enabled(bool enabled) {
-    bubble_content_.radio_group_enabled = enabled;
   }
   void add_domain_list(const DomainList& domain_list) {
     bubble_content_.domain_lists.push_back(domain_list);
@@ -256,10 +249,10 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
   void set_manage_text_style(ManageTextStyle manage_text_style) {
     bubble_content_.manage_text_style = manage_text_style;
   }
-  void add_media_menu(content::MediaStreamType type, const MediaMenu& menu) {
+  void add_media_menu(blink::MediaStreamType type, const MediaMenu& menu) {
     bubble_content_.media_menus[type] = menu;
   }
-  void set_selected_device(const content::MediaStreamDevice& device) {
+  void set_selected_device(const blink::MediaStreamDevice& device) {
     bubble_content_.media_menus[device.type].selected_device = device;
   }
   void set_show_learn_more(bool show_learn_more) {
@@ -272,12 +265,9 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
 
  private:
   content::WebContents* web_contents_;
-  Profile* profile_;
   Owner* owner_;
   Delegate* delegate_;
   BubbleContent bubble_content_;
-  // A registrar for listening for WEB_CONTENTS_DESTROYED notifications.
-  content::NotificationRegistrar registrar_;
   // The service used to record Rappor metrics. Can be set for testing.
   rappor::RapporServiceImpl* rappor_service_;
 
@@ -289,7 +279,6 @@ class ContentSettingSimpleBubbleModel : public ContentSettingBubbleModel {
  public:
   ContentSettingSimpleBubbleModel(Delegate* delegate,
                                   content::WebContents* web_contents,
-                                  Profile* profile,
                                   ContentSettingsType content_type);
 
   ContentSettingsType content_type() { return content_type_; }
@@ -318,7 +307,6 @@ class ContentSettingRPHBubbleModel : public ContentSettingSimpleBubbleModel {
  public:
   ContentSettingRPHBubbleModel(Delegate* delegate,
                                content::WebContents* web_contents,
-                               Profile* profile,
                                ProtocolHandlerRegistry* registry);
   ~ContentSettingRPHBubbleModel() override;
 
@@ -343,8 +331,7 @@ class ContentSettingRPHBubbleModel : public ContentSettingSimpleBubbleModel {
 class ContentSettingMediaStreamBubbleModel : public ContentSettingBubbleModel {
  public:
   ContentSettingMediaStreamBubbleModel(Delegate* delegate,
-                                       content::WebContents* web_contents,
-                                       Profile* profile);
+                                       content::WebContents* web_contents);
 
   ~ContentSettingMediaStreamBubbleModel() override;
 
@@ -380,11 +367,11 @@ class ContentSettingMediaStreamBubbleModel : public ContentSettingBubbleModel {
 
   // Updates the camera and microphone default device with the passed |type|
   // and device.
-  void UpdateDefaultDeviceForType(content::MediaStreamType type,
+  void UpdateDefaultDeviceForType(blink::MediaStreamType type,
                                   const std::string& device);
 
   // ContentSettingBubbleModel implementation.
-  void OnMediaMenuClicked(content::MediaStreamType type,
+  void OnMediaMenuClicked(blink::MediaStreamType type,
                           const std::string& selected_device) override;
 
   // The content settings that are associated with the individual radio
@@ -400,9 +387,9 @@ class ContentSettingMediaStreamBubbleModel : public ContentSettingBubbleModel {
 class ContentSettingSubresourceFilterBubbleModel
     : public ContentSettingBubbleModel {
  public:
-  ContentSettingSubresourceFilterBubbleModel(Delegate* delegate,
-                                             content::WebContents* web_contents,
-                                             Profile* profile);
+  ContentSettingSubresourceFilterBubbleModel(
+      Delegate* delegate,
+      content::WebContents* web_contents);
 
   ~ContentSettingSubresourceFilterBubbleModel() override;
 
@@ -427,8 +414,7 @@ class ContentSettingSubresourceFilterBubbleModel
 class ContentSettingDownloadsBubbleModel : public ContentSettingBubbleModel {
  public:
   ContentSettingDownloadsBubbleModel(Delegate* delegate,
-                                     content::WebContents* web_contents,
-                                     Profile* profile);
+                                     content::WebContents* web_contents);
   ~ContentSettingDownloadsBubbleModel() override;
 
   // ContentSettingBubbleModel overrides:
@@ -450,7 +436,6 @@ class ContentSettingSingleRadioGroup : public ContentSettingSimpleBubbleModel {
  public:
   ContentSettingSingleRadioGroup(Delegate* delegate,
                                  content::WebContents* web_contents,
-                                 Profile* profile,
                                  ContentSettingsType content_type);
   ~ContentSettingSingleRadioGroup() override;
 
@@ -477,29 +462,25 @@ class ContentSettingSingleRadioGroup : public ContentSettingSimpleBubbleModel {
 // The model for the blocked Framebust bubble.
 class ContentSettingFramebustBlockBubbleModel
     : public ContentSettingSingleRadioGroup,
-      public FramebustBlockTabHelper::Observer {
+      public UrlListManager::Observer {
  public:
   ContentSettingFramebustBlockBubbleModel(Delegate* delegate,
-                                          content::WebContents* web_contents,
-                                          Profile* profile);
+                                          content::WebContents* web_contents);
 
   ~ContentSettingFramebustBlockBubbleModel() override;
-
-  // content::NotificationObserver:
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
 
   // ContentSettingBubbleModel:
   void OnListItemClicked(int index, int event_flags) override;
   ContentSettingFramebustBlockBubbleModel* AsFramebustBlockBubbleModel()
       override;
 
-  // FramebustBlockTabHelper::Observer:
-  void OnBlockedUrlAdded(const GURL& blocked_url) override;
+  // UrlListManager::Observer:
+  void BlockedUrlAdded(int32_t id, const GURL& blocked_url) override;
 
  private:
   ListItem CreateListItem(const GURL& url);
+
+  ScopedObserver<UrlListManager, UrlListManager::Observer> url_list_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSettingFramebustBlockBubbleModel);
 };

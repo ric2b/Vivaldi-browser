@@ -21,7 +21,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_PLUGINS_DOM_PLUGIN_ARRAY_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_PLUGINS_DOM_PLUGIN_ARRAY_H_
 
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/page/plugins_changed_observer.h"
 #include "third_party/blink/renderer/modules/plugins/dom_plugin.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
@@ -42,8 +42,11 @@ class DOMPluginArray final : public ScriptWrappable,
 
  public:
   static DOMPluginArray* Create(LocalFrame* frame) {
-    return new DOMPluginArray(frame);
+    return MakeGarbageCollected<DOMPluginArray>(frame);
   }
+
+  explicit DOMPluginArray(LocalFrame*);
+
   void UpdatePluginData();
 
   unsigned length() const;
@@ -60,7 +63,6 @@ class DOMPluginArray final : public ScriptWrappable,
   void Trace(blink::Visitor*) override;
 
  private:
-  explicit DOMPluginArray(LocalFrame*);
   PluginData* GetPluginData() const;
   void ContextDestroyed(ExecutionContext*) override;
 

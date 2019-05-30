@@ -10,29 +10,27 @@
 #include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/cpp/service_binding.h"
+#include "services/service_manager/public/mojom/service.mojom.h"
 
 class PrefService;
 class PrefRegistrySimple;
-
-namespace cryptauth {
-class GcmDeviceInfoProvider;
-}  // namespace cryptauth
 
 namespace chromeos {
 
 namespace device_sync {
 class DeviceSyncClient;
+class GcmDeviceInfoProvider;
 }  // namespace device_sync
-
-namespace secure_channel {
-class SecureChannelClient;
-}  // namespace secure_channel
 
 namespace multidevice_setup {
 
 class AndroidSmsAppHelperDelegate;
+class AndroidSmsPairingStateTracker;
 class AuthTokenValidator;
 class MultiDeviceSetupBase;
+class PrivilegedHostDeviceSetterBase;
+class OobeCompletionTracker;
 
 // Service which provides an implementation for mojom::MultiDeviceSetup. This
 // service creates one implementation and shares it among all connection
@@ -40,13 +38,14 @@ class MultiDeviceSetupBase;
 class MultiDeviceSetupService : public service_manager::Service {
  public:
   MultiDeviceSetupService(
+      service_manager::mojom::ServiceRequest request,
       PrefService* pref_service,
       device_sync::DeviceSyncClient* device_sync_client,
-      secure_channel::SecureChannelClient* secure_channel_client,
       AuthTokenValidator* auth_token_validator,
-      std::unique_ptr<AndroidSmsAppHelperDelegate>
-          android_sms_app_helper_delegate,
-      const cryptauth::GcmDeviceInfoProvider* gcm_device_info_provider);
+      OobeCompletionTracker* oobe_completion_tracker,
+      AndroidSmsAppHelperDelegate* android_sms_app_helper_delegate,
+      AndroidSmsPairingStateTracker* android_sms_pairing_state_tracker,
+      const device_sync::GcmDeviceInfoProvider* gcm_device_info_provider);
   ~MultiDeviceSetupService() override;
 
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
@@ -58,7 +57,11 @@ class MultiDeviceSetupService : public service_manager::Service {
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override;
 
+  service_manager::ServiceBinding service_binding_;
+
   std::unique_ptr<MultiDeviceSetupBase> multidevice_setup_;
+  std::unique_ptr<PrivilegedHostDeviceSetterBase>
+      privileged_host_device_setter_;
 
   service_manager::BinderRegistry registry_;
 

@@ -5,6 +5,7 @@
 #include "components/autofill/core/browser/webdata/autofill_sync_bridge_util.h"
 
 #include "base/base64.h"
+#include "base/pickle.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
@@ -113,53 +114,107 @@ CreditCard::CardType CardTypeFromWalletCardClass(
   }
 }
 
+// Creates an AutofillProfile from the specified |address| specifics.
+AutofillProfile ProfileFromSpecifics(
+    const sync_pb::WalletPostalAddress& address) {
+  AutofillProfile profile(AutofillProfile::SERVER_PROFILE, std::string());
+
+  // AutofillProfile stores multi-line addresses with newline separators.
+  std::vector<base::StringPiece> street_address(
+      address.street_address().begin(), address.street_address().end());
+  profile.SetRawInfo(ADDRESS_HOME_STREET_ADDRESS,
+                     base::UTF8ToUTF16(base::JoinString(street_address, "\n")));
+
+  profile.SetRawInfo(COMPANY_NAME, base::UTF8ToUTF16(address.company_name()));
+  profile.SetRawInfo(ADDRESS_HOME_STATE,
+                     base::UTF8ToUTF16(address.address_1()));
+  profile.SetRawInfo(ADDRESS_HOME_CITY, base::UTF8ToUTF16(address.address_2()));
+  profile.SetRawInfo(ADDRESS_HOME_DEPENDENT_LOCALITY,
+                     base::UTF8ToUTF16(address.address_3()));
+  // AutofillProfile doesn't support address_4 ("sub dependent locality").
+  profile.SetRawInfo(ADDRESS_HOME_ZIP,
+                     base::UTF8ToUTF16(address.postal_code()));
+  profile.SetRawInfo(ADDRESS_HOME_SORTING_CODE,
+                     base::UTF8ToUTF16(address.sorting_code()));
+  profile.SetRawInfo(ADDRESS_HOME_COUNTRY,
+                     base::UTF8ToUTF16(address.country_code()));
+  profile.set_language_code(address.language_code());
+
+  // SetInfo instead of SetRawInfo so the constituent pieces will be parsed
+  // for these data types.
+  profile.SetInfo(NAME_FULL, base::UTF8ToUTF16(address.recipient_name()),
+                  profile.language_code());
+  profile.SetInfo(PHONE_HOME_WHOLE_NUMBER,
+                  base::UTF8ToUTF16(address.phone_number()),
+                  profile.language_code());
+
+  profile.GenerateServerProfileIdentifier();
+
+  return profile;
+}
+
+// Creates an AutofillProfile from the specified |card| specifics.
+CreditCard CardFromSpecifics(const sync_pb::WalletMaskedCreditCard& card) {
+  CreditCard result(CreditCard::MASKED_SERVER_CARD, card.id());
+  result.SetNumber(base::UTF8ToUTF16(card.last_four()));
+  result.SetServerStatus(ServerToLocalStatus(card.status()));
+  result.SetNetworkForMaskedCard(CardNetworkFromWalletCardType(card.type()));
+  result.set_card_type(CardTypeFromWalletCardClass(card.card_class()));
+  result.SetRawInfo(CREDIT_CARD_NAME_FULL,
+                    base::UTF8ToUTF16(card.name_on_card()));
+  result.SetExpirationMonth(card.exp_month());
+  result.SetExpirationYear(card.exp_year());
+  result.set_billing_address_id(card.billing_address_id());
+  result.set_bank_name(card.bank_name());
+  return result;
+}
+
+// Creates a PaymentCustomerData object corresponding to the sync datatype
+// |customer_data|.
+PaymentsCustomerData CustomerDataFromSpecifics(
+    const sync_pb::PaymentsCustomerData& customer_data) {
+  return PaymentsCustomerData{/*customer_id=*/customer_data.id()};
+}
+
 }  // namespace
 
-std::string GetBase64EncodedServerId(const std::string& server_id) {
+std::string GetBase64EncodedId(const std::string& id) {
   std::string encoded_id;
-  base::Base64Encode(server_id, &encoded_id);
+  base::Base64Encode(id, &encoded_id);
   return encoded_id;
 }
 
-std::string GetSpecificsIdForEntryServerId(const std::string& server_id) {
-  return GetBase64EncodedServerId(server_id);
+std::string GetBase64DecodedId(const std::string& id) {
+  std::string decoded_id;
+  base::Base64Decode(id, &decoded_id);
+  return decoded_id;
 }
 
-std::string GetStorageKeyForSpecificsId(const std::string& specifics_id) {
-  // We use the base64 encoded |specifics_id| directly as the storage key, this
-  // function only hides this definition from all its call sites.
-  return specifics_id;
-}
-
-std::string GetStorageKeyForEntryServerId(const std::string& server_id) {
-  return GetStorageKeyForSpecificsId(GetSpecificsIdForEntryServerId(server_id));
-}
-
-std::string GetClientTagForSpecificsId(
-    AutofillWalletSpecifics::WalletInfoType type,
-    const std::string& wallet_data_specifics_id) {
-  switch (type) {
-    case AutofillWalletSpecifics::POSTAL_ADDRESS:
-      return "address-" + wallet_data_specifics_id;
-    case AutofillWalletSpecifics::MASKED_CREDIT_CARD:
-      return "card-" + wallet_data_specifics_id;
-    case sync_pb::AutofillWalletSpecifics::CUSTOMER_DATA:
-      return "customer-" + wallet_data_specifics_id;
-    case AutofillWalletSpecifics::UNKNOWN:
-      NOTREACHED();
-      return "";
-  }
+std::string GetStorageKeyForWalletMetadataTypeAndSpecificsId(
+    sync_pb::WalletMetadataSpecifics::Type type,
+    const std::string& specifics_id) {
+  base::Pickle pickle;
+  pickle.WriteInt(static_cast<int>(type));
+  // We use the (base64-encoded) |specifics_id| here.
+  pickle.WriteString(specifics_id);
+  return std::string(static_cast<const char*>(pickle.data()), pickle.size());
 }
 
 void SetAutofillWalletSpecificsFromServerProfile(
     const AutofillProfile& address,
-    AutofillWalletSpecifics* wallet_specifics) {
+    AutofillWalletSpecifics* wallet_specifics,
+    bool enforce_utf8) {
   wallet_specifics->set_type(AutofillWalletSpecifics::POSTAL_ADDRESS);
 
   sync_pb::WalletPostalAddress* wallet_address =
       wallet_specifics->mutable_address();
 
-  wallet_address->set_id(address.server_id());
+  if (enforce_utf8) {
+    wallet_address->set_id(GetBase64EncodedId(address.server_id()));
+  } else {
+    wallet_address->set_id(address.server_id());
+  }
+
   wallet_address->set_language_code(TruncateUTF8(address.language_code()));
 
   if (address.HasRawInfo(NAME_FULL)) {
@@ -204,69 +259,30 @@ void SetAutofillWalletSpecificsFromServerProfile(
   }
 }
 
-std::unique_ptr<EntityData> CreateEntityDataFromAutofillServerProfile(
-    const AutofillProfile& address) {
-  auto entity_data = std::make_unique<EntityData>();
-
-  std::string specifics_id =
-      GetSpecificsIdForEntryServerId(address.server_id());
-  entity_data->non_unique_name = GetClientTagForSpecificsId(
-      AutofillWalletSpecifics::POSTAL_ADDRESS, specifics_id);
-
-  AutofillWalletSpecifics* wallet_specifics =
-      entity_data->specifics.mutable_autofill_wallet();
-
-  SetAutofillWalletSpecificsFromServerProfile(address, wallet_specifics);
-
-  return entity_data;
-}
-
-AutofillProfile ProfileFromSpecifics(
-    const sync_pb::WalletPostalAddress& address) {
-  AutofillProfile profile(AutofillProfile::SERVER_PROFILE, std::string());
-
-  // AutofillProfile stores multi-line addresses with newline separators.
-  std::vector<base::StringPiece> street_address(
-      address.street_address().begin(), address.street_address().end());
-  profile.SetRawInfo(ADDRESS_HOME_STREET_ADDRESS,
-                     base::UTF8ToUTF16(base::JoinString(street_address, "\n")));
-
-  profile.SetRawInfo(COMPANY_NAME, base::UTF8ToUTF16(address.company_name()));
-  profile.SetRawInfo(ADDRESS_HOME_STATE,
-                     base::UTF8ToUTF16(address.address_1()));
-  profile.SetRawInfo(ADDRESS_HOME_CITY, base::UTF8ToUTF16(address.address_2()));
-  profile.SetRawInfo(ADDRESS_HOME_DEPENDENT_LOCALITY,
-                     base::UTF8ToUTF16(address.address_3()));
-  // AutofillProfile doesn't support address_4 ("sub dependent locality").
-  profile.SetRawInfo(ADDRESS_HOME_ZIP,
-                     base::UTF8ToUTF16(address.postal_code()));
-  profile.SetRawInfo(ADDRESS_HOME_SORTING_CODE,
-                     base::UTF8ToUTF16(address.sorting_code()));
-  profile.SetRawInfo(ADDRESS_HOME_COUNTRY,
-                     base::UTF8ToUTF16(address.country_code()));
-  profile.set_language_code(address.language_code());
-
-  // SetInfo instead of SetRawInfo so the constituent pieces will be parsed
-  // for these data types.
-  profile.SetInfo(NAME_FULL, base::UTF8ToUTF16(address.recipient_name()),
-                  profile.language_code());
-  profile.SetInfo(PHONE_HOME_WHOLE_NUMBER,
-                  base::UTF8ToUTF16(address.phone_number()),
-                  profile.language_code());
-
-  profile.GenerateServerProfileIdentifier();
-
-  return profile;
-}
-
 void SetAutofillWalletSpecificsFromServerCard(
     const CreditCard& card,
-    AutofillWalletSpecifics* wallet_specifics) {
+    AutofillWalletSpecifics* wallet_specifics,
+    bool enforce_utf8) {
   wallet_specifics->set_type(AutofillWalletSpecifics::MASKED_CREDIT_CARD);
 
   sync_pb::WalletMaskedCreditCard* wallet_card =
       wallet_specifics->mutable_masked_card();
-  wallet_card->set_id(card.server_id());
+
+  if (enforce_utf8) {
+    wallet_card->set_id(GetBase64EncodedId(card.server_id()));
+    // The billing address id might refer to a local profile guid which doesn't
+    // need to be encoded.
+    if (base::IsStringUTF8(card.billing_address_id())) {
+      wallet_card->set_billing_address_id(card.billing_address_id());
+    } else {
+      wallet_card->set_billing_address_id(
+          GetBase64EncodedId(card.billing_address_id()));
+    }
+  } else {
+    wallet_card->set_id(card.server_id());
+    wallet_card->set_billing_address_id(card.billing_address_id());
+  }
+
   wallet_card->set_status(LocalToServerStatus(card));
   if (card.HasRawInfo(CREDIT_CARD_NAME_FULL)) {
     wallet_card->set_name_on_card(TruncateUTF8(
@@ -276,55 +292,8 @@ void SetAutofillWalletSpecificsFromServerCard(
   wallet_card->set_last_four(base::UTF16ToUTF8(card.LastFourDigits()));
   wallet_card->set_exp_month(card.expiration_month());
   wallet_card->set_exp_year(card.expiration_year());
-  wallet_card->set_billing_address_id(card.billing_address_id());
   wallet_card->set_card_class(WalletCardClassFromCardType(card.card_type()));
   wallet_card->set_bank_name(card.bank_name());
-}
-
-std::unique_ptr<EntityData> CreateEntityDataFromCard(const CreditCard& card) {
-  std::string specifics_id = GetSpecificsIdForEntryServerId(card.server_id());
-
-  auto entity_data = std::make_unique<EntityData>();
-  entity_data->non_unique_name = GetClientTagForSpecificsId(
-      AutofillWalletSpecifics::MASKED_CREDIT_CARD, specifics_id);
-
-  AutofillWalletSpecifics* wallet_specifics =
-      entity_data->specifics.mutable_autofill_wallet();
-
-  SetAutofillWalletSpecificsFromServerCard(card, wallet_specifics);
-
-  return entity_data;
-}
-
-CreditCard CardFromSpecifics(const sync_pb::WalletMaskedCreditCard& card) {
-  CreditCard result(CreditCard::MASKED_SERVER_CARD, card.id());
-  result.SetNumber(base::UTF8ToUTF16(card.last_four()));
-  result.SetServerStatus(ServerToLocalStatus(card.status()));
-  result.SetNetworkForMaskedCard(CardNetworkFromWalletCardType(card.type()));
-  result.set_card_type(CardTypeFromWalletCardClass(card.card_class()));
-  result.SetRawInfo(CREDIT_CARD_NAME_FULL,
-                    base::UTF8ToUTF16(card.name_on_card()));
-  result.SetExpirationMonth(card.exp_month());
-  result.SetExpirationYear(card.exp_year());
-  result.set_billing_address_id(card.billing_address_id());
-  result.set_bank_name(card.bank_name());
-  return result;
-}
-
-std::unique_ptr<EntityData> CreateEntityDataFromPaymentsCustomerData(
-    const PaymentsCustomerData& customer_data) {
-  // We use customer_id as a storage key here.
-  auto entity_data = std::make_unique<EntityData>();
-  entity_data->non_unique_name = GetClientTagForSpecificsId(
-      AutofillWalletSpecifics::CUSTOMER_DATA, customer_data.customer_id);
-
-  AutofillWalletSpecifics* wallet_specifics =
-      entity_data->specifics.mutable_autofill_wallet();
-
-  SetAutofillWalletSpecificsFromPaymentsCustomerData(customer_data,
-                                                     wallet_specifics);
-
-  return entity_data;
 }
 
 void SetAutofillWalletSpecificsFromPaymentsCustomerData(
@@ -335,11 +304,6 @@ void SetAutofillWalletSpecificsFromPaymentsCustomerData(
   sync_pb::PaymentsCustomerData* mutable_customer_data =
       wallet_specifics->mutable_customer_data();
   mutable_customer_data->set_id(customer_data.customer_id);
-}
-
-PaymentsCustomerData CustomerDataFromSpecifics(
-    const sync_pb::PaymentsCustomerData& customer_data) {
-  return PaymentsCustomerData{/*customer_id=*/customer_data.id()};
 }
 
 void CopyRelevantWalletMetadataFromDisk(

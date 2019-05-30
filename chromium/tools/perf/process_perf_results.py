@@ -39,6 +39,24 @@ MACHINE_GROUP_JSON_FILE = os.path.join(
 
 JSON_CONTENT_TYPE = 'application/json'
 
+# Cache of what data format (ChartJSON, Histograms, etc.) each results file is
+# in so that only one disk read is required when checking the format multiple
+# times.
+_data_format_cache = {}
+DATA_FORMAT_GTEST = 'gtest'
+DATA_FORMAT_CHARTJSON = 'chartjson'
+DATA_FORMAT_HISTOGRAMS = 'histograms'
+DATA_FORMAT_UNKNOWN = 'unknown'
+
+# See https://crbug.com/923564.
+# We want to switch over to using histograms for everything, but converting from
+# the format output by gtest perf tests to histograms has introduced several
+# problems. So, only perform the conversion on tests that are whitelisted and
+# are okay with potentially encountering issues.
+GTEST_CONVERSION_WHITELIST = [
+  'xr.vr.common_perftests',
+]
+
 
 def _GetMachineGroup(build_properties):
   machine_group = None
@@ -86,6 +104,20 @@ def _upload_perf_results(json_to_upload, name, configuration_name,
       buildbucket['build'].get('bucket') == 'luci.chrome.ci'):
     is_luci = True
 
+  if is_luci and _is_gtest(json_to_upload) and (
+      name in GTEST_CONVERSION_WHITELIST):
+    path_util.AddTracingToPath()
+    from tracing.value import (  # pylint: disable=no-name-in-module
+        gtest_json_converter)
+    gtest_json_converter.ConvertGtestJsonFile(json_to_upload)
+    _data_format_cache[json_to_upload] = DATA_FORMAT_HISTOGRAMS
+
+  if 'build' in buildbucket:
+    args += [
+      '--project', buildbucket['build'].get('project'),
+      '--buildbucket', buildbucket['build'].get('bucket'),
+    ]
+
   if service_account_file and not is_luci:
     args += ['--service-account-file', service_account_file]
 
@@ -98,11 +130,29 @@ def _upload_perf_results(json_to_upload, name, configuration_name,
   return upload_results_to_perf_dashboard.main(args)
 
 def _is_histogram(json_file):
-  with open(json_file) as f:
-    data = json.load(f)
-    return isinstance(data, list)
-  return False
+  return _determine_data_format(json_file) == DATA_FORMAT_HISTOGRAMS
 
+
+def _is_gtest(json_file):
+  return _determine_data_format(json_file) == DATA_FORMAT_GTEST
+
+
+def _determine_data_format(json_file):
+  if json_file not in _data_format_cache:
+    with open(json_file) as f:
+      data = json.load(f)
+      if isinstance(data, list):
+        _data_format_cache[json_file] = DATA_FORMAT_HISTOGRAMS
+      elif isinstance(data, dict):
+        if 'charts' in data:
+          _data_format_cache[json_file] = DATA_FORMAT_CHARTJSON
+        else:
+          _data_format_cache[json_file] = DATA_FORMAT_GTEST
+      else:
+        _data_format_cache[json_file] = DATA_FORMAT_UNKNOWN
+      return _data_format_cache[json_file]
+    _data_format_cache[json_file] = DATA_FORMAT_UNKNOWN
+  return _data_format_cache[json_file]
 
 def _merge_json_output(output_json, jsons_to_merge, extra_links):
   """Merges the contents of one or more results JSONs.
@@ -138,24 +188,30 @@ def _handle_perf_json_test_results(
       # Obtain the test name we are running
       is_ref = '.reference' in benchmark_name
       enabled = True
-      with open(join(directory, 'test_results.json')) as json_data:
-        json_results = json.load(json_data)
-        if not json_results:
-          # Output is null meaning the test didn't produce any results.
-          # Want to output an error and continue loading the rest of the
-          # test results.
-          print 'No results produced for %s, skipping upload' % directory
-          continue
-        if json_results.get('version') == 3:
-          # Non-telemetry tests don't have written json results but
-          # if they are executing then they are enabled and will generate
-          # chartjson results.
-          if not bool(json_results.get('tests')):
-            enabled = False
-        if not is_ref:
-          # We don't need to upload reference build data to the
-          # flakiness dashboard since we don't monitor the ref build
-          test_results_list.append(json_results)
+      try:
+        with open(join(directory, 'test_results.json')) as json_data:
+          json_results = json.load(json_data)
+          if not json_results:
+            # Output is null meaning the test didn't produce any results.
+            # Want to output an error and continue loading the rest of the
+            # test results.
+            print 'No results produced for %s, skipping upload' % directory
+            continue
+          if json_results.get('version') == 3:
+            # Non-telemetry tests don't have written json results but
+            # if they are executing then they are enabled and will generate
+            # chartjson results.
+            if not bool(json_results.get('tests')):
+              enabled = False
+          if not is_ref:
+            # We don't need to upload reference build data to the
+            # flakiness dashboard since we don't monitor the ref build
+            test_results_list.append(json_results)
+      except IOError as e:
+        # TODO(crbug.com/936602): Figure out how to surface these errors. Should
+        # we have a non-zero exit code if we error out?
+        logging.error('Failed to obtain test results for %s: %s',
+                      benchmark_name, e)
       if not enabled:
         # We don't upload disabled benchmarks or tests that are run
         # as a smoke test
@@ -244,15 +300,16 @@ def process_perf_results(output_json, configuration_name,
       f for f in listdir(task_output_dir)
       if not isfile(join(task_output_dir, f))
   ]
+
   benchmark_directory_list = []
   benchmarks_shard_map_file = None
   for directory in directory_list:
     for f in listdir(join(task_output_dir, directory)):
       path = join(task_output_dir, directory, f)
-      if path.endswith('benchmarks_shard_map.json'):
-        benchmarks_shard_map_file = path
-      else:
+      if os.path.isdir(path):
         benchmark_directory_list.append(path)
+      elif path.endswith('benchmarks_shard_map.json'):
+        benchmarks_shard_map_file = path
 
   # Now create a map of benchmark name to the list of directories
   # the lists were written to.
@@ -325,8 +382,18 @@ def _merge_perf_results(benchmark_name, results_filename, directories):
   collected_results = []
   for directory in directories:
     filename = join(directory, 'perf_results.json')
-    with open(filename) as pf:
-      collected_results.append(json.load(pf))
+    try:
+      with open(filename) as pf:
+        collected_results.append(json.load(pf))
+    except IOError as e:
+      # TODO(crbug.com/936602): Figure out how to surface these errors. Should
+      # we have a non-zero exit code if we error out?
+      logging.error('Failed to obtain perf results from %s: %s',
+                    directory, e)
+  if not collected_results:
+    logging.error('Failed to obtain any perf results from %s.',
+                  benchmark_name)
+    return
 
   # Assuming that multiple shards will only be chartjson or histogram set
   # Non-telemetry benchmarks only ever run on one shard
@@ -426,7 +493,7 @@ def _handle_perf_results(
           benchmark_name, directories, configuration_name,
           build_properties, output_json_file, service_account_file))
 
-    # Kick off the uploads in mutliple processes
+    # Kick off the uploads in multiple processes
     pool = mp.Pool()
     try:
       async_result = pool.map_async(
@@ -434,10 +501,11 @@ def _handle_perf_results(
       results = async_result.get(timeout=2000)
     except mp.TimeoutError:
       logging.error('Failed uploading benchmarks to perf dashboard in parallel')
-      pool.terminate()
       results = []
       for benchmark_name in benchmark_directory_map:
         results.append((benchmark_name, False))
+    finally:
+      pool.terminate()
 
     # Keep a mapping of benchmarks to their upload results
     benchmark_upload_result_map = {}
@@ -528,7 +596,7 @@ def main():
   """ See collect_task.collect_task for more on the merge script API. """
   parser = argparse.ArgumentParser()
   # configuration-name (previously perf-id) is the name of bot the tests run on
-  # For example, buildbot-test is the name of the obbs_fyi bot
+  # For example, buildbot-test is the name of the android-go-perf bot
   # configuration-name and results-url are set in the json file which is going
   # away tools/perf/core/chromium.perf.fyi.extras.json
   parser.add_argument('--configuration-name', help=argparse.SUPPRESS)

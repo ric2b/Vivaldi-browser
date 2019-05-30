@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/browser/media/media_browsertest.h"
 #include "content/common/media/media_player_delegate_messages.h"
@@ -22,15 +23,15 @@ static void SuspendAllMediaPlayersInRenderFrame(RenderFrameHost* rfh) {
 
 // This browser test ensures the force suspend IPC messages are working properly
 // and that players suspended in this way can be resumed. Note: This does not
-// test suspend in various ready states; those tests are handled by layout tests
+// test suspend in various ready states; those tests are handled by web tests
 // for ease of writing and ready state manipulation.
-class MediaSuspendTest : public content::MediaBrowserTest {
+class MediaSuspendTest : public MediaBrowserTest {
  public:
   void RunSuspendTest(const std::string& load_until) {
     base::StringPairs query_params;
     query_params.emplace_back("event", load_until);
 
-    GURL gurl = content::GetFileUrlWithQuery(
+    GURL gurl = GetFileUrlWithQuery(
         media::GetTestDataFilePath("media_suspend_test.html"),
         media::GetURLQueryString(query_params));
 
@@ -74,7 +75,7 @@ class MediaSuspendTest : public content::MediaBrowserTest {
 
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    content::MediaBrowserTest::SetUpCommandLine(command_line);
+    MediaBrowserTest::SetUpCommandLine(command_line);
     command_line->AppendSwitch(switches::kExposeInternalsForTesting);
   }
 };

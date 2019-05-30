@@ -4,8 +4,11 @@
 
 #include "content/browser/renderer_host/render_widget_host_view_event_handler.h"
 
+#include "base/command_line.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "components/viz/common/features.h"
+#include "content/browser/renderer_host/hit_test_debug_key_event_observer.h"
 #include "content/browser/renderer_host/input/touch_selection_controller_client_aura.h"
 #include "content/browser/renderer_host/overscroll_controller.h"
 #include "content/browser/renderer_host/render_view_host_delegate.h"
@@ -20,7 +23,6 @@
 #include "content/public/common/content_features.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/client/focus_client.h"
-#include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/scoped_keyboard_hook.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
@@ -67,19 +69,6 @@ BOOL CALLBACK DismissOwnedPopups(HWND window, LPARAM arg) {
 }
 #endif  // defined(OS_WIN)
 
-gfx::PointF GetScreenLocationFromEvent(const ui::LocatedEvent& event) {
-  aura::Window* root =
-      static_cast<aura::Window*>(event.target())->GetRootWindow();
-  aura::client::ScreenPositionClient* spc =
-      aura::client::GetScreenPositionClient(root);
-  if (!spc)
-    return event.root_location_f();
-
-  gfx::PointF screen_location(event.root_location_f());
-  spc->ConvertPointToScreen(root, &screen_location);
-  return screen_location;
-}
-
 bool IsFractionalScaleFactor(float scale_factor) {
   return (scale_factor - static_cast<int>(scale_factor)) > 0;
 }
@@ -114,7 +103,7 @@ void MarkUnchangedTouchPointsAsStationary(blink::WebTouchEvent* event,
 bool NeedsInputGrab(content::RenderWidgetHostViewBase* view) {
   if (!view)
     return false;
-  return view->GetPopupType() == blink::kWebPopupTypePage;
+  return view->GetWidgetType() == content::WidgetType::kPopup;
 }
 
 }  // namespace
@@ -133,7 +122,6 @@ RenderWidgetHostViewEventHandler::RenderWidgetHostViewEventHandler(
     RenderWidgetHostViewBase* host_view,
     Delegate* delegate)
     : accept_return_character_(false),
-      disable_input_event_router_for_testing_(false),
       mouse_locked_(false),
       pinch_zoom_enabled_(content::IsPinchToZoomEnabled()),
       set_focus_on_mouse_down_or_key_event_(false),
@@ -144,7 +132,10 @@ RenderWidgetHostViewEventHandler::RenderWidgetHostViewEventHandler(
       popup_child_event_handler_(nullptr),
       delegate_(delegate),
       window_(nullptr),
-      mouse_wheel_phase_handler_(host_view) {}
+      mouse_wheel_phase_handler_(host_view),
+      debug_observer_(features::IsVizHitTestingDebugEnabled()
+                          ? std::make_unique<HitTestDebugKeyEventObserver>(host)
+                          : nullptr) {}
 
 RenderWidgetHostViewEventHandler::~RenderWidgetHostViewEventHandler() {}
 
@@ -312,7 +303,7 @@ void RenderWidgetHostViewEventHandler::OnKeyEvent(ui::KeyEvent* event) {
       webkit_event.skip_in_browser = true;
 
     delegate_->ForwardKeyboardEventWithLatencyInfo(
-        webkit_event, *event->latency(), &mark_event_as_handled);
+        webkit_event, *event->latency(), event, &mark_event_as_handled);
   }
   if (mark_event_as_handled)
     event->SetHandled();
@@ -369,14 +360,14 @@ void RenderWidgetHostViewEventHandler::OnMouseEvent(ui::MouseEvent* event) {
     }
 #endif
     blink::WebMouseWheelEvent mouse_wheel_event =
-        ui::MakeWebMouseWheelEvent(static_cast<ui::MouseWheelEvent&>(*event),
-                                   base::Bind(&GetScreenLocationFromEvent));
+        ui::MakeWebMouseWheelEvent(*event->AsMouseWheelEvent());
 
     if (mouse_wheel_event.delta_x != 0 || mouse_wheel_event.delta_y != 0) {
-      bool should_route_event = ShouldRouteEvent(event);
+      const bool should_route_event = ShouldRouteEvents();
       // End the touchpad scrolling sequence (if such exists) before handling
       // a ui::ET_MOUSEWHEEL event.
-      mouse_wheel_phase_handler_.SendWheelEndForTouchpadScrollingIfNeeded();
+      mouse_wheel_phase_handler_.SendWheelEndForTouchpadScrollingIfNeeded(
+          should_route_event);
 
       mouse_wheel_phase_handler_.AddPhaseIfNeededAndScheduleEndEvent(
           mouse_wheel_event, should_route_event);
@@ -396,10 +387,9 @@ void RenderWidgetHostViewEventHandler::OnMouseEvent(ui::MouseEvent* event) {
       if (event->type() == ui::ET_MOUSE_PRESSED)
         FinishImeCompositionSession();
 
-      blink::WebMouseEvent mouse_event = ui::MakeWebMouseEvent(
-          *event, base::Bind(&GetScreenLocationFromEvent));
+      blink::WebMouseEvent mouse_event = ui::MakeWebMouseEvent(*event);
       ModifyEventMovementAndCoords(*event, &mouse_event);
-      if (ShouldRouteEvent(event)) {
+      if (ShouldRouteEvents()) {
         host_->delegate()->GetInputEventRouter()->RouteMouseEvent(
             host_view_, &mouse_event, *event->latency());
       } else {
@@ -431,7 +421,7 @@ void RenderWidgetHostViewEventHandler::OnMouseEvent(ui::MouseEvent* event) {
 
 void RenderWidgetHostViewEventHandler::OnScrollEvent(ui::ScrollEvent* event) {
   TRACE_EVENT0("input", "RenderWidgetHostViewBase::OnScrollEvent");
-  bool should_route_event = ShouldRouteEvent(event);
+  const bool should_route_event = ShouldRouteEvents();
   if (event->type() == ui::ET_SCROLL) {
 #if !defined(OS_WIN)
     // TODO(ananta)
@@ -439,8 +429,8 @@ void RenderWidgetHostViewEventHandler::OnScrollEvent(ui::ScrollEvent* event) {
     if (event->finger_count() != 2)
       return;
 #endif
-    blink::WebMouseWheelEvent mouse_wheel_event = ui::MakeWebMouseWheelEvent(
-        *event, base::Bind(&GetScreenLocationFromEvent));
+    blink::WebMouseWheelEvent mouse_wheel_event =
+        ui::MakeWebMouseWheelEvent(*event);
     mouse_wheel_phase_handler_.AddPhaseIfNeededAndScheduleEndEvent(
         mouse_wheel_event, should_route_event);
 
@@ -467,8 +457,7 @@ void RenderWidgetHostViewEventHandler::OnScrollEvent(ui::ScrollEvent* event) {
     }
   } else if (event->type() == ui::ET_SCROLL_FLING_START ||
              event->type() == ui::ET_SCROLL_FLING_CANCEL) {
-    blink::WebGestureEvent gesture_event = ui::MakeWebGestureEvent(
-        *event, base::Bind(&GetScreenLocationFromEvent));
+    blink::WebGestureEvent gesture_event = ui::MakeWebGestureEvent(*event);
     if (should_route_event) {
       host_->delegate()->GetInputEventRouter()->RouteGestureEvent(
           host_view_, &gesture_event,
@@ -530,7 +519,7 @@ void RenderWidgetHostViewEventHandler::OnTouchEvent(ui::TouchEvent* event) {
   // touchcancel to make sure only send one ack per WebTouchEvent.
   MarkUnchangedTouchPointsAsStationary(&touch_event,
                                        event->pointer_details().id);
-  if (ShouldRouteEvent(event)) {
+  if (ShouldRouteEvents()) {
     host_->delegate()->GetInputEventRouter()->RouteTouchEvent(
         host_view_, &touch_event, *event->latency());
   } else {
@@ -558,15 +547,14 @@ void RenderWidgetHostViewEventHandler::OnGestureEvent(ui::GestureEvent* event) {
   if (event->type() == ui::ET_GESTURE_TAP)
     FinishImeCompositionSession();
 
-  blink::WebGestureEvent gesture =
-      ui::MakeWebGestureEvent(*event, base::Bind(&GetScreenLocationFromEvent));
+  blink::WebGestureEvent gesture = ui::MakeWebGestureEvent(*event);
   if (event->type() == ui::ET_GESTURE_TAP_DOWN) {
     // Webkit does not stop a fling-scroll on tap-down. So explicitly send an
     // event to stop any in-progress flings.
     blink::WebGestureEvent fling_cancel = gesture;
     fling_cancel.SetType(blink::WebInputEvent::kGestureFlingCancel);
     fling_cancel.SetSourceDevice(blink::kWebGestureDeviceTouchscreen);
-    if (ShouldRouteEvent(event)) {
+    if (ShouldRouteEvents()) {
       host_->delegate()->GetInputEventRouter()->RouteGestureEvent(
           host_view_, &fling_cancel,
           ui::LatencyInfo(ui::SourceEventType::TOUCH));
@@ -581,7 +569,8 @@ void RenderWidgetHostViewEventHandler::OnGestureEvent(ui::GestureEvent* event) {
       // wheel based send a synthetic wheel event with kPhaseEnded to cancel
       // the current scroll.
       mouse_wheel_phase_handler_.DispatchPendingWheelEndEvent();
-      mouse_wheel_phase_handler_.SendWheelEndForTouchpadScrollingIfNeeded();
+      mouse_wheel_phase_handler_.SendWheelEndForTouchpadScrollingIfNeeded(
+          ShouldRouteEvents());
     } else if (event->type() == ui::ET_SCROLL_FLING_START) {
       RecordAction(base::UserMetricsAction("TouchscreenScrollFling"));
     }
@@ -596,7 +585,7 @@ void RenderWidgetHostViewEventHandler::OnGestureEvent(ui::GestureEvent* event) {
       mouse_wheel_phase_handler_.ResetTouchpadScrollSequence();
     }
 
-    if (ShouldRouteEvent(event)) {
+    if (ShouldRouteEvents()) {
       host_->delegate()->GetInputEventRouter()->RouteGestureEvent(
           host_view_, &gesture, *event->latency());
     } else {
@@ -747,10 +736,9 @@ void RenderWidgetHostViewEventHandler::HandleMouseEventWhileLocked(
 
   if (event->type() == ui::ET_MOUSEWHEEL) {
     blink::WebMouseWheelEvent mouse_wheel_event =
-        ui::MakeWebMouseWheelEvent(static_cast<ui::MouseWheelEvent&>(*event),
-                                   base::Bind(&GetScreenLocationFromEvent));
+        ui::MakeWebMouseWheelEvent(*event->AsMouseWheelEvent());
     if (mouse_wheel_event.delta_x != 0 || mouse_wheel_event.delta_y != 0) {
-      if (ShouldRouteEvent(event)) {
+      if (ShouldRouteEvents()) {
         host_->delegate()->GetInputEventRouter()->RouteMouseWheelEvent(
             host_view_, &mouse_wheel_event, *event->latency());
       } else {
@@ -770,8 +758,7 @@ void RenderWidgetHostViewEventHandler::HandleMouseEventWhileLocked(
       return;
     }
 
-    blink::WebMouseEvent mouse_event =
-        ui::MakeWebMouseEvent(*event, base::Bind(&GetScreenLocationFromEvent));
+    blink::WebMouseEvent mouse_event = ui::MakeWebMouseEvent(*event);
 
     bool is_move_to_center_event =
         (event->type() == ui::ET_MOUSE_MOVED ||
@@ -811,7 +798,7 @@ void RenderWidgetHostViewEventHandler::HandleMouseEventWhileLocked(
       // Forward event to renderer.
       if (CanRendererHandleEvent(event, mouse_locked_, is_selection_popup) &&
           !(event->flags() & ui::EF_FROM_TOUCH)) {
-        if (ShouldRouteEvent(event)) {
+        if (ShouldRouteEvents()) {
           host_->delegate()->GetInputEventRouter()->RouteMouseEvent(
               host_view_, &mouse_event, *event->latency());
         } else {
@@ -917,28 +904,17 @@ bool RenderWidgetHostViewEventHandler::ShouldMoveToCenter() {
          global_mouse_position_.y() > rect.bottom() - border_y;
 }
 
-bool RenderWidgetHostViewEventHandler::ShouldRouteEvent(
-    const ui::Event* event) const {
-  // We should route an event in two cases:
-  // 1) Mouse events are routed only if cross-process frames are possible.
-  // 2) Touch events are always routed. In the absence of a BrowserPlugin
-  //    we expect the routing to always send the event to this view. If
-  //    one or more BrowserPlugins are present, then the event may be targeted
-  //    to one of them, or this view. This allows GuestViews to have access to
-  //    them while still forcing pinch-zoom to be handled by the top-level
-  //    frame. TODO(wjmaclean): At present, this doesn't work for OOPIF, but
-  //    it should be a simple extension to modify RenderWidgetHostViewChildFrame
-  //    in a similar manner to RenderWidgetHostViewGuest.
-  bool result = host_->delegate() && host_->delegate()->GetInputEventRouter() &&
-                !disable_input_event_router_for_testing_;
+bool RenderWidgetHostViewEventHandler::ShouldRouteEvents() const {
+  if (!host_->delegate())
+    return false;
 
   // Do not route events that are currently targeted to page popups such as
   // <select> element drop-downs, since these cannot contain cross-process
   // frames.
-  if (host_->delegate() && !host_->delegate()->IsWidgetForMainFrame(host_))
+  if (!host_->delegate()->IsWidgetForMainFrame(host_))
     return false;
 
-  return result;
+  return !!host_->delegate()->GetInputEventRouter();
 }
 
 void RenderWidgetHostViewEventHandler::ProcessMouseEvent(

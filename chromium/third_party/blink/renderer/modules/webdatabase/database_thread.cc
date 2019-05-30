@@ -29,6 +29,7 @@
 #include "third_party/blink/renderer/modules/webdatabase/database_thread.h"
 
 #include <memory>
+#include "base/synchronization/waitable_event.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/modules/webdatabase/database.h"
 #include "third_party/blink/renderer/modules/webdatabase/database_task.h"
@@ -36,7 +37,6 @@
 #include "third_party/blink/renderer/modules/webdatabase/sql_transaction_coordinator.h"
 #include "third_party/blink/renderer/modules/webdatabase/storage_log.h"
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
-#include "third_party/blink/renderer/platform/waitable_event.h"
 #include "third_party/blink/renderer/platform/web_thread_supporting_gc.h"
 
 namespace blink {
@@ -60,7 +60,7 @@ void DatabaseThread::Start() {
   if (thread_)
     return;
   thread_ = WebThreadSupportingGC::Create(
-      WebThreadCreationParams(WebThreadType::kDatabaseThread));
+      ThreadCreationParams(WebThreadType::kDatabaseThread));
   thread_->PostTask(FROM_HERE,
                     CrossThreadBind(&DatabaseThread::SetupDatabaseThread,
                                     WrapCrossThreadPersistent(this)));
@@ -69,12 +69,12 @@ void DatabaseThread::Start() {
 void DatabaseThread::SetupDatabaseThread() {
   DCHECK(thread_->IsCurrentThread());
   thread_->InitializeOnThread();
-  transaction_coordinator_ = new SQLTransactionCoordinator();
+  transaction_coordinator_ = MakeGarbageCollected<SQLTransactionCoordinator>();
 }
 
 void DatabaseThread::Terminate() {
   DCHECK(IsMainThread());
-  WaitableEvent sync;
+  base::WaitableEvent sync;
   {
     MutexLocker lock(termination_requested_mutex_);
     DCHECK(!termination_requested_);
@@ -86,7 +86,7 @@ void DatabaseThread::Terminate() {
                                       WrapCrossThreadPersistent(this)));
   }
   sync.Wait();
-  // The WebThread destructor blocks until all the tasks of the database
+  // The Thread destructor blocks until all the tasks of the database
   // thread are processed. However, it shouldn't block at all because
   // the database thread has already finished processing the cleanup task.
   thread_.reset();
@@ -171,7 +171,7 @@ void DatabaseThread::ScheduleTask(std::unique_ptr<DatabaseTask> task) {
     DCHECK(!termination_requested_);
   }
 #endif
-  // WebThread takes ownership of the task.
+  // Thread takes ownership of the task.
   thread_->PostTask(FROM_HERE,
                     CrossThreadBind(&DatabaseTask::Run, std::move(task)));
 }

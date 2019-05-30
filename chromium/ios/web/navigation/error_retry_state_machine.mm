@@ -28,8 +28,12 @@ ErrorRetryState ErrorRetryStateMachine::state() const {
   return state_;
 }
 
-void ErrorRetryStateMachine::SetDisplayingNativeError() {
-  // Native error is displayed in two scenarios:
+void ErrorRetryStateMachine::SetNoNavigationError() {
+  state_ = ErrorRetryState::kNoNavigationError;
+}
+
+void ErrorRetryStateMachine::SetDisplayingWebError() {
+  // Web error is displayed in two scenarios:
   // (1) Placeholder entry for network load error finished loading in web view.
   //     This is the common case.
   // (2) Retry of a previously failed load failed in SSL error. This can happen
@@ -37,12 +41,12 @@ void ErrorRetryStateMachine::SetDisplayingNativeError() {
   //     not normally trigger ErrorRetryStateMachine because the error page is
   //     not to become part of the navigation history. This leaves the item
   //     stuck in the transient kRetryFailedNavigationItem state. So for this
-  //     specific case, treat the SSL interstitial as a native error so that
+  //     specific case, treat the SSL interstitial as a web error so that
   //     error retry works as expected on subsequent back/forward navigations.
   DCHECK(state_ == ErrorRetryState::kReadyToDisplayErrorForFailedNavigation ||
          state_ == ErrorRetryState::kRetryFailedNavigationItem)
       << "Unexpected error retry state: " << static_cast<int>(state_);
-  state_ = ErrorRetryState::kDisplayingNativeErrorForFailedNavigation;
+  state_ = ErrorRetryState::kDisplayingWebErrorForFailedNavigation;
 }
 
 ErrorRetryCommand ErrorRetryStateMachine::DidFailProvisionalNavigation(
@@ -112,7 +116,6 @@ ErrorRetryCommand ErrorRetryStateMachine::DidFinishNavigation(
   switch (state_) {
     case ErrorRetryState::kLoadingPlaceholder:
       // (1) Placeholder load for initial failure succeeded.
-      DCHECK(!web::GetWebClient()->IsAppSpecificURL(url_));
       DCHECK_EQ(web_view_url,
                 wk_navigation_util::CreatePlaceholderUrlForUrl(url_));
       state_ = ErrorRetryState::kReadyToDisplayErrorForFailedNavigation;
@@ -142,6 +145,18 @@ ErrorRetryCommand ErrorRetryStateMachine::DidFinishNavigation(
         // to prepare for retry.
         state_ = ErrorRetryState::kNavigatingToFailedNavigationItem;
         return ErrorRetryCommand::kRewriteWebViewURL;
+      }
+
+      if (wk_navigation_util::IsRestoreSessionUrl(web_view_url)) {
+        GURL target_url;
+        if (wk_navigation_util::ExtractTargetURL(web_view_url, &target_url) &&
+            target_url == url_) {
+          // (10) Back/forward navigation to a restored session entry in offline
+          // mode. It is OK to consider this load succeeded for now because the
+          // failure delegate will be triggered again if the load fails.
+          state_ = ErrorRetryState::kNoNavigationError;
+          return ErrorRetryCommand::kDoNothing;
+        }
       }
 
       // (5) This is either a reload of the original URL that succeeded in

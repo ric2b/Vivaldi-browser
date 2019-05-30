@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/test/values_test_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/router/issue_manager.h"
 #include "chrome/browser/media/router/issues_observer.h"
@@ -37,22 +38,9 @@
 namespace media_router {
 
 // Matcher for objects that uses Equals() member function for equality check.
+// Use only for comparing base::MockCallback.
 MATCHER_P(Equals, other, "") {
   return arg.Equals(other);
-}
-
-// Matcher for a sequence of objects that uses Equals() member function for
-// equality check.
-MATCHER_P(SequenceEquals, other, "") {
-  if (arg.size() != other.size()) {
-    return false;
-  }
-  for (size_t i = 0; i < arg.size(); ++i) {
-    if (!arg[i].Equals(other[i])) {
-      return false;
-    }
-  }
-  return true;
 }
 
 // Matcher for IssueInfo title.
@@ -101,12 +89,10 @@ class MockPresentationConnectionProxy
  public:
   MockPresentationConnectionProxy();
   ~MockPresentationConnectionProxy() override;
-  MOCK_METHOD2(OnMessage,
-               void(blink::mojom::PresentationConnectionMessagePtr,
-                    OnMessageCallback));
+  MOCK_METHOD1(OnMessage, void(blink::mojom::PresentationConnectionMessagePtr));
   MOCK_METHOD1(DidChangeState,
                void(blink::mojom::PresentationConnectionState state));
-  MOCK_METHOD0(RequestClose, void());
+  MOCK_METHOD1(DidClose, void(blink::mojom::PresentationConnectionCloseReason));
 };
 
 #if !defined(OS_ANDROID)
@@ -243,6 +229,11 @@ std::unique_ptr<DialInternalMessage> ParseDialInternalMessage(
     const std::string& message);
 
 #endif  // !defined(OS_ANDROID)
+
+MATCHER_P(IsCastMessage, json, "") {
+  return arg->is_message() && base::test::IsJsonMatcher(json).MatchAndExplain(
+                                  arg->get_message(), result_listener);
+}
 
 }  // namespace media_router
 

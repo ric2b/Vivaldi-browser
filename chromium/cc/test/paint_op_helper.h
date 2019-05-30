@@ -145,6 +145,14 @@ class PaintOpHelper {
             << ", flags=" << PaintOpHelper::FlagsToString(op->flags) << ")";
         break;
       }
+      case PaintOpType::DrawSkottie: {
+        const auto* op = static_cast<const DrawSkottieOp*>(base_op);
+        str << "DrawSkottieOp("
+            << "skottie=" << PaintOpHelper::SkottieToString(op->skottie)
+            << ", dst=" << PaintOpHelper::SkiaTypeToString(op->dst)
+            << ", t=" << op->t << ")";
+        break;
+      }
       case PaintOpType::DrawTextBlob: {
         const auto* op = static_cast<const DrawTextBlobOp*>(base_op);
         str << "DrawTextBlobOp(blob="
@@ -184,7 +192,6 @@ class PaintOpHelper {
         str << "SaveLayerAlphaOp(bounds="
             << PaintOpHelper::SkiaTypeToString(op->bounds)
             << ", alpha=" << static_cast<uint32_t>(op->alpha)
-            << ", preserve_lcd_text_requests=" << op->preserve_lcd_text_requests
             << ")";
         break;
       }
@@ -347,34 +354,6 @@ class PaintOpHelper {
     return "<SkPath>";
   }
 
-  static std::string SkiaTypeToString(PaintFlags::Hinting hinting) {
-    switch (hinting) {
-      case PaintFlags::kNo_Hinting:
-        return "kNo_Hinting";
-      case PaintFlags::kSlight_Hinting:
-        return "kSlight_Hinting";
-      case PaintFlags::kNormal_Hinting:
-        return "kNormal_Hinting";
-      case PaintFlags::kFull_Hinting:
-        return "kFull_Hinting";
-    }
-    return "<unknown PaintFlags::Hinting>";
-  }
-
-  static std::string SkiaTypeToString(PaintFlags::TextEncoding encoding) {
-    switch (encoding) {
-      case PaintFlags::kUTF8_TextEncoding:
-        return "kUTF8_TextEncoding";
-      case PaintFlags::kUTF16_TextEncoding:
-        return "kUTF16_TextEncoding";
-      case PaintFlags::kUTF32_TextEncoding:
-        return "kUTF32_TextEncoding";
-      case PaintFlags::kGlyphID_TextEncoding:
-        return "kGlyphID_TextEncoding";
-    }
-    return "<unknown PaintFlags::TextEncoding>";
-  }
-
   static std::string SkiaTypeToString(SkFilterQuality quality) {
     switch (quality) {
       case kNone_SkFilterQuality:
@@ -411,10 +390,6 @@ class PaintOpHelper {
         return "kBevel_Join";
     }
     return "<unknown PaintFlags::Join>";
-  }
-
-  static std::string SkiaTypeToString(const sk_sp<SkTypeface>& typeface) {
-    return typeface ? "<SkTypeface>" : "(nil)";
   }
 
   static std::string SkiaTypeToString(const sk_sp<SkColorFilter>& filter) {
@@ -485,6 +460,8 @@ class PaintOpHelper {
 
   static std::string EnumToString(PaintShader::Type type) {
     switch (type) {
+      case PaintShader::Type::kEmpty:
+        return "kEmpty";
       case PaintShader::Type::kColor:
         return "kColor";
       case PaintShader::Type::kLinearGradient:
@@ -509,13 +486,24 @@ class PaintOpHelper {
     return "<paint image>";
   }
 
+  static std::string SkottieToString(scoped_refptr<SkottieWrapper> skottie) {
+    std::ostringstream str;
+    str << "<skottie [";
+    str << "duration=" << skottie->duration() << " seconds";
+    str << ", width="
+        << PaintOpHelper::SkiaTypeToString(skottie->size().width());
+    str << ", height="
+        << PaintOpHelper::SkiaTypeToString(skottie->size().height());
+    str << "]";
+    return str.str();
+  }
+
   static std::string RecordToString(const sk_sp<const PaintRecord>& record) {
     return record ? "<paint record>" : "(nil)";
   }
 
-  static std::string TextBlobToString(
-      const scoped_refptr<PaintTextBlob>& blob) {
-    return blob ? "<paint text blob>" : "(nil)";
+  static std::string TextBlobToString(const sk_sp<SkTextBlob>& blob) {
+    return blob ? "<sk text blob>" : "(nil)";
   }
 
   static std::string PaintShaderToString(const PaintShader* shader) {
@@ -587,16 +575,7 @@ class PaintOpHelper {
     str << ", blendMode="
         << PaintOpHelper::SkiaTypeToString(flags.getBlendMode());
     str << ", isAntiAlias=" << flags.isAntiAlias();
-    str << ", isVerticalText=" << flags.isVerticalText();
-    str << ", isSubpixelText=" << flags.isSubpixelText();
-    str << ", isLCDRenderText=" << flags.isLCDRenderText();
-    str << ", hinting=" << PaintOpHelper::SkiaTypeToString(flags.getHinting());
-    str << ", isAutohinted=" << flags.isAutohinted();
     str << ", isDither=" << flags.isDither();
-    str << ", textEncoding="
-        << PaintOpHelper::SkiaTypeToString(flags.getTextEncoding());
-    str << ", textSize="
-        << PaintOpHelper::SkiaTypeToString(flags.getTextSize());
     str << ", filterQuality="
         << PaintOpHelper::SkiaTypeToString(flags.getFilterQuality());
     str << ", strokeWidth="
@@ -607,8 +586,6 @@ class PaintOpHelper {
         << PaintOpHelper::SkiaTypeToString(flags.getStrokeCap());
     str << ", strokeJoin="
         << PaintOpHelper::SkiaTypeToString(flags.getStrokeJoin());
-    str << ", typeface="
-        << PaintOpHelper::SkiaTypeToString(flags.getTypeface());
     str << ", colorFilter="
         << PaintOpHelper::SkiaTypeToString(flags.getColorFilter());
     str << ", maskFilter="

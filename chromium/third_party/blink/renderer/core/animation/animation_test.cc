@@ -113,7 +113,7 @@ class AnimationAnimationTest : public RenderingTest {
 
     // Create a compositable animation; in this case opacity from 1 to 0.
     Timing timing;
-    timing.iteration_duration = 30;
+    timing.iteration_duration = AnimationTimeDelta::FromSecondsD(30);
 
     Persistent<StringKeyframe> start_keyframe = StringKeyframe::Create();
     start_keyframe->SetCSSPropertyValue(CSSPropertyOpacity, "1.0",
@@ -135,7 +135,7 @@ class AnimationAnimationTest : public RenderingTest {
 
     // After creating the animation we need to clean the lifecycle so that the
     // animation can be pushed to the compositor.
-    UpdateAllLifecyclePhases();
+    UpdateAllLifecyclePhasesForTest();
 
     document->GetAnimationClock().UpdateTime(base::TimeTicks());
     document->GetPendingAnimations().Update(base::nullopt, true);
@@ -147,7 +147,7 @@ class AnimationAnimationTest : public RenderingTest {
 
   KeyframeEffect* MakeAnimation(double duration = 30) {
     Timing timing;
-    timing.iteration_duration = duration;
+    timing.iteration_duration = AnimationTimeDelta::FromSecondsD(duration);
     return KeyframeEffect::Create(nullptr, MakeEmptyEffectModel(), timing);
   }
 
@@ -519,7 +519,7 @@ TEST_F(AnimationAnimationTest, FinishDoesNothingWithPlaybackRateZero) {
 
 TEST_F(AnimationAnimationTest, FinishRaisesException) {
   Timing timing;
-  timing.iteration_duration = 1;
+  timing.iteration_duration = AnimationTimeDelta::FromSecondsD(1);
   timing.iteration_count = std::numeric_limits<double>::infinity();
   animation->setEffect(
       KeyframeEffect::Create(nullptr, MakeEmptyEffectModel(), timing));
@@ -672,7 +672,7 @@ TEST_F(AnimationAnimationTest, AnimationsDisassociateFromEffect) {
 TEST_F(AnimationAnimationTest, AnimationsReturnTimeToNextEffect) {
   Timing timing;
   timing.start_delay = 1;
-  timing.iteration_duration = 1;
+  timing.iteration_duration = AnimationTimeDelta::FromSecondsD(1);
   timing.end_delay = 1;
   KeyframeEffect* keyframe_effect =
       KeyframeEffect::Create(nullptr, MakeEmptyEffectModel(), timing);
@@ -869,7 +869,7 @@ TEST_F(AnimationAnimationTest, PauseAfterCancel) {
 }
 
 TEST_F(AnimationAnimationTest, NoCompositeWithoutCompositedElementId) {
-  ScopedSlimmingPaintV2ForTest enable_s_pv2(true);
+  ScopedCompositeAfterPaintForTest enable_cap(true);
 
   SetBodyInnerHTML(
       "<div id='foo' style='position: relative'></div>"
@@ -883,11 +883,11 @@ TEST_F(AnimationAnimationTest, NoCompositeWithoutCompositedElementId) {
   CompositorElementId expected_compositor_element_id =
       CompositorElementIdFromUniqueObjectId(
           ToLayoutBoxModelObject(object_composited)->UniqueId(),
-          CompositorElementIdNamespace::kPrimary);
+          CompositorElementIdNamespace::kPrimaryEffect);
   composited_element_ids->insert(expected_compositor_element_id);
 
   Timing timing;
-  timing.iteration_duration = 30;
+  timing.iteration_duration = AnimationTimeDelta::FromSecondsD(30);
   KeyframeEffect* keyframe_effect_composited = KeyframeEffect::Create(
       ToElement(object_composited->GetNode()), MakeSimpleEffectModel(), timing);
   Animation* animation_composited = timeline->Play(keyframe_effect_composited);

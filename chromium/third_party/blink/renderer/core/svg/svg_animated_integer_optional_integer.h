@@ -52,12 +52,14 @@ class SVGAnimatedIntegerOptionalInteger
   static SVGAnimatedIntegerOptionalInteger* Create(
       SVGElement* context_element,
       const QualifiedName& attribute_name,
-      float initial_first_value = 0,
-      float initial_second_value = 0) {
-    return new SVGAnimatedIntegerOptionalInteger(
-        context_element, attribute_name, initial_first_value,
-        initial_second_value);
+      int initial_value) {
+    return MakeGarbageCollected<SVGAnimatedIntegerOptionalInteger>(
+        context_element, attribute_name, initial_value);
   }
+
+  SVGAnimatedIntegerOptionalInteger(SVGElement* context_element,
+                                    const QualifiedName& attribute_name,
+                                    int initial_value);
 
   void SetAnimatedValue(SVGPropertyBase*) override;
   bool NeedsSynchronizeAttribute() const override;
@@ -69,11 +71,6 @@ class SVGAnimatedIntegerOptionalInteger
   void Trace(blink::Visitor*) override;
 
  protected:
-  SVGAnimatedIntegerOptionalInteger(SVGElement* context_element,
-                                    const QualifiedName& attribute_name,
-                                    float initial_first_value,
-                                    float initial_second_value);
-
   Member<SVGAnimatedInteger> first_integer_;
   Member<SVGAnimatedInteger> second_integer_;
 };

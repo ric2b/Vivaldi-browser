@@ -13,16 +13,14 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
-#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_metrics.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_promo_util.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -32,15 +30,15 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_metrics.h"
+#include "components/signin/core/browser/signin_pref_names.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/page_zoom.h"
 #include "net/base/escape.h"
+#include "services/identity/public/cpp/identity_manager.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -98,17 +96,19 @@ void AppLauncherLoginHandler::RegisterMessages() {
       "initializeSyncLogin",
       base::BindRepeating(&AppLauncherLoginHandler::HandleInitializeSyncLogin,
                           base::Unretained(this)));
+#if !defined(OS_CHROMEOS)
   web_ui()->RegisterMessageCallback(
       "showSyncLoginUI",
       base::BindRepeating(&AppLauncherLoginHandler::HandleShowSyncLoginUI,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "loginMessageSeen",
-      base::BindRepeating(&AppLauncherLoginHandler::HandleLoginMessageSeen,
-                          base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
       "showAdvancedLoginUI",
       base::BindRepeating(&AppLauncherLoginHandler::HandleShowAdvancedLoginUI,
+                          base::Unretained(this)));
+#endif
+  web_ui()->RegisterMessageCallback(
+      "loginMessageSeen",
+      base::BindRepeating(&AppLauncherLoginHandler::HandleLoginMessageSeen,
                           base::Unretained(this)));
 }
 
@@ -117,14 +117,15 @@ void AppLauncherLoginHandler::HandleInitializeSyncLogin(
   UpdateLogin();
 }
 
+#if !defined(OS_CHROMEOS)
 void AppLauncherLoginHandler::HandleShowSyncLoginUI(
     const base::ListValue* args) {
   Profile* profile = Profile::FromWebUI(web_ui());
   if (!signin::ShouldShowPromo(profile))
     return;
 
-  std::string username = SigninManagerFactory::GetForProfile(profile)
-                             ->GetAuthenticatedAccountInfo()
+  std::string username = IdentityManagerFactory::GetForProfile(profile)
+                             ->GetPrimaryAccountInfo()
                              .email;
   if (!username.empty())
     return;
@@ -142,6 +143,7 @@ void AppLauncherLoginHandler::HandleShowSyncLoginUI(
   chrome::ShowBrowserSignin(browser, access_point);
   RecordInHistogram(NTP_SIGN_IN_PROMO_CLICKED);
 }
+#endif
 
 void AppLauncherLoginHandler::RecordInHistogram(NTPSignInPromoBuckets type) {
   DCHECK(type >= NTP_SIGN_IN_PROMO_VIEWED &&
@@ -156,6 +158,7 @@ void AppLauncherLoginHandler::HandleLoginMessageSeen(
       prefs::kSignInPromoShowNTPBubble, false);
 }
 
+#if !defined(OS_CHROMEOS)
 void AppLauncherLoginHandler::HandleShowAdvancedLoginUI(
     const base::ListValue* args) {
   content::WebContents* web_contents = web_ui()->GetWebContents();
@@ -168,6 +171,7 @@ void AppLauncherLoginHandler::HandleShowAdvancedLoginUI(
           : signin_metrics::AccessPoint::ACCESS_POINT_NTP_LINK;
   chrome::ShowBrowserSignin(browser, access_point);
 }
+#endif
 
 void AppLauncherLoginHandler::UpdateLogin() {
   std::string username = profile_info_watcher_->GetAuthenticatedUsername();
@@ -198,9 +202,10 @@ void AppLauncherLoginHandler::UpdateLogin() {
   } else {
 #if !defined(OS_CHROMEOS)
     // Chromeos does not show this status header.
-    SigninManager* signin = SigninManagerFactory::GetForProfile(
-        profile->GetOriginalProfile());
-    if (!profile->IsLegacySupervised() && signin->IsSigninAllowed()) {
+    bool is_signin_allowed =
+        profile->GetOriginalProfile()->GetPrefs()->GetBoolean(
+            prefs::kSigninAllowed);
+    if (!profile->IsLegacySupervised() && is_signin_allowed) {
       base::string16 signed_in_link = l10n_util::GetStringUTF16(
           IDS_SYNC_PROMO_NOT_SIGNED_IN_STATUS_LINK);
       signed_in_link =
@@ -238,8 +243,9 @@ bool AppLauncherLoginHandler::ShouldShow(Profile* profile) {
   // UI and the avatar menu don't exist on that platform.
   return false;
 #else
-  SigninManager* signin = SigninManagerFactory::GetForProfile(profile);
-  return !profile->IsOffTheRecord() && signin && signin->IsSigninAllowed();
+  bool is_signin_allowed =
+      profile->GetPrefs()->GetBoolean(prefs::kSigninAllowed);
+  return !profile->IsOffTheRecord() && is_signin_allowed;
 #endif
 }
 

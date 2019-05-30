@@ -6,14 +6,16 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/consent_auditor/consent_auditor_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/webui/chromeos/user_image_source.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/audio/cras_audio_handler.h"
+#include "chromeos/services/assistant/public/features.h"
 #include "components/arc/arc_prefs.h"
 #include "components/consent_auditor/consent_auditor.h"
-#include "components/signin/core/browser/signin_manager_base.h"
 #include "components/user_manager/user_manager.h"
+#include "services/identity/public/cpp/identity_manager.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 
@@ -107,23 +109,28 @@ base::Value CreateGetMoreData(bool email_optin_needed,
                               const assistant::EmailOptInUi& email_optin_ui) {
   base::Value get_more_data(base::Value::Type::LIST);
 
-  // Process hotword data.
-  base::Value hotword_data(base::Value::Type::DICTIONARY);
-  hotword_data.SetKey(
-      "title",
-      base::Value(l10n_util::GetStringUTF16(IDS_ASSISTANT_HOTWORD_TITLE)));
-  hotword_data.SetKey(
-      "description",
-      base::Value(l10n_util::GetStringUTF16(IDS_ASSISTANT_HOTWORD_DESC)));
-  hotword_data.SetKey("defaultEnabled", base::Value(true));
-  hotword_data.SetKey(
-      "iconUri",
-      base::Value("https://www.gstatic.com/images/icons/material/system/"
-                  "2x/mic_none_grey600_48dp.png"));
-  get_more_data.GetList().push_back(std::move(hotword_data));
+  if (!base::FeatureList::IsEnabled(
+          assistant::features::kAssistantVoiceMatch)) {
+    // Process hotword data.
+    base::Value hotword_data(base::Value::Type::DICTIONARY);
+    hotword_data.SetKey("id", base::Value("hotword"));
+    hotword_data.SetKey(
+        "title",
+        base::Value(l10n_util::GetStringUTF16(IDS_ASSISTANT_HOTWORD_TITLE)));
+    hotword_data.SetKey(
+        "description",
+        base::Value(l10n_util::GetStringUTF16(IDS_ASSISTANT_HOTWORD_DESC)));
+    hotword_data.SetKey("defaultEnabled", base::Value(true));
+    hotword_data.SetKey(
+        "iconUri",
+        base::Value("https://www.gstatic.com/images/icons/material/system/"
+                    "2x/mic_none_grey600_48dp.png"));
+    get_more_data.GetList().push_back(std::move(hotword_data));
+  }
 
   // Process screen context data.
   base::Value context_data(base::Value::Type::DICTIONARY);
+  context_data.SetKey("id", base::Value("context"));
   context_data.SetKey("title", base::Value(l10n_util::GetStringUTF16(
                                    IDS_ASSISTANT_SCREEN_CONTEXT_TITLE)));
   context_data.SetKey("description", base::Value(l10n_util::GetStringUTF16(
@@ -132,12 +139,13 @@ base::Value CreateGetMoreData(bool email_optin_needed,
   context_data.SetKey(
       "iconUri",
       base::Value("https://www.gstatic.com/images/icons/material/system/"
-                  "2x/laptop_chromebook_grey600_24dp.png"));
+                  "2x/screen_search_desktop_grey600_24dp.png"));
   get_more_data.GetList().push_back(std::move(context_data));
 
   // Process email optin data.
   if (email_optin_needed) {
     base::Value data(base::Value::Type::DICTIONARY);
+    data.SetKey("id", base::Value("email"));
     data.SetKey("title", base::Value(email_optin_ui.title()));
     data.SetKey("description", base::Value(email_optin_ui.description()));
     data.SetKey("defaultEnabled",
@@ -158,7 +166,7 @@ base::Value GetSettingsUiStrings(const assistant::SettingsUi& settings_ui,
   auto third_party_disclosure_ui = consent_ui.third_party_disclosure_ui();
   base::Value dictionary(base::Value::Type::DICTIONARY);
 
-  // Add activity controll string constants.
+  // Add activity control string constants.
   if (activity_control_needed) {
     scoped_refptr<base::RefCountedMemory> image =
         chromeos::UserImageSource::GetUserImage(
@@ -192,15 +200,6 @@ base::Value GetSettingsUiStrings(const assistant::SettingsUi& settings_ui,
                     base::Value(third_party_disclosure_ui.button_continue()));
   dictionary.SetKey("thirdPartyFooter", base::Value(consent_ui.tos_pp_links()));
 
-  // Add get more screen string constants.
-  dictionary.SetKey("getMoreTitle", base::Value(l10n_util::GetStringUTF16(
-                                        IDS_ASSISTANT_GET_MORE_SCREEN_TITLE)));
-  dictionary.SetKey("getMoreIntro", base::Value(l10n_util::GetStringUTF16(
-                                        IDS_ASSISTANT_GET_MORE_SCREEN_INTRO)));
-  dictionary.SetKey(
-      "getMoreContinueButton",
-      base::Value(l10n_util::GetStringUTF16(IDS_ASSISTANT_CONTINUE_BUTTON)));
-
   return dictionary;
 }
 
@@ -208,10 +207,9 @@ using sync_pb::UserConsentTypes;
 void RecordActivityControlConsent(Profile* profile,
                                   std::string ui_audit_key,
                                   bool opted_in) {
-  SigninManagerBase* signin_manager =
-      SigninManagerFactory::GetForProfile(profile);
-  DCHECK(signin_manager->IsAuthenticated());
-  std::string account_id = signin_manager->GetAuthenticatedAccountId();
+  auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
+  DCHECK(identity_manager->HasPrimaryAccount());
+  const std::string account_id = identity_manager->GetPrimaryAccountId();
 
   UserConsentTypes::AssistantActivityControlConsent consent;
   consent.set_ui_audit_key(ui_audit_key);
@@ -220,6 +218,17 @@ void RecordActivityControlConsent(Profile* profile,
 
   ConsentAuditorFactory::GetForProfile(profile)
       ->RecordAssistantActivityControlConsent(account_id, consent);
+}
+
+bool IsHotwordDspAvailable() {
+  chromeos::AudioDeviceList devices;
+  chromeos::CrasAudioHandler::Get()->GetAudioDevices(&devices);
+  for (const chromeos::AudioDevice& device : devices) {
+    if (device.type == chromeos::AUDIO_TYPE_HOTWORD) {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace chromeos

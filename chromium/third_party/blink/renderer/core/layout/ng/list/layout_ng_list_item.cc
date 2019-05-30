@@ -58,7 +58,7 @@ void LayoutNGListItem::OrdinalValueChanged() {
     is_marker_text_updated_ = false;
     DCHECK(marker_);
     marker_->SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
-        LayoutInvalidationReason::kListValueChange);
+        layout_invalidation_reason::kListValueChange);
   }
 }
 
@@ -133,8 +133,8 @@ void LayoutNGListItem::UpdateMarker() {
         style, EDisplay::kInline);
     auto margins =
         LayoutListMarker::InlineMarginsForInside(style, IsMarkerImage());
-    marker_style->SetMarginStart(Length(margins.first, kFixed));
-    marker_style->SetMarginEnd(Length(margins.second, kFixed));
+    marker_style->SetMarginStart(Length::Fixed(margins.first));
+    marker_style->SetMarginEnd(Length::Fixed(margins.second));
   } else {
     if (marker_ && !marker_->IsLayoutBlockFlow())
       DestroyMarker();
@@ -178,7 +178,7 @@ LayoutNGListItem::MarkerType LayoutNGListItem::MarkerText(
     case EListStyleType::kCircle:
     case EListStyleType::kSquare:
       // value is ignored for these types
-      text->Append(ListMarkerText::GetText(Style()->ListStyleType(), 0));
+      text->Append(list_marker_text::GetText(Style()->ListStyleType(), 0));
       if (format == kWithSuffix)
         text->Append(' ');
       return kSymbolValue;
@@ -235,9 +235,9 @@ LayoutNGListItem::MarkerType LayoutNGListItem::MarkerText(
     case EListStyleType::kUpperRoman:
     case EListStyleType::kUrdu: {
       int value = Value();
-      text->Append(ListMarkerText::GetText(Style()->ListStyleType(), value));
+      text->Append(list_marker_text::GetText(Style()->ListStyleType(), value));
       if (format == kWithSuffix) {
-        text->Append(ListMarkerText::Suffix(Style()->ListStyleType(), value));
+        text->Append(list_marker_text::Suffix(Style()->ListStyleType(), value));
         text->Append(' ');
       }
       return kOrdinalValue;
@@ -245,6 +245,12 @@ LayoutNGListItem::MarkerType LayoutNGListItem::MarkerText(
   }
   NOTREACHED();
   return kStatic;
+}
+
+String LayoutNGListItem::MarkerTextWithSuffix() const {
+  StringBuilder text;
+  MarkerText(&text, kWithSuffix);
+  return text.ToString();
 }
 
 String LayoutNGListItem::MarkerTextWithoutSuffix() const {

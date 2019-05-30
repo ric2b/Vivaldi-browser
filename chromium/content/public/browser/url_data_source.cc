@@ -7,18 +7,32 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "base/task/post_task.h"
+#include "content/browser/resource_context_impl.h"
 #include "content/browser/webui/url_data_manager.h"
+#include "content/browser/webui/url_data_manager_backend.h"
+#include "content/browser/webui/url_data_source_impl.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/url_constants.h"
 #include "net/url_request/url_request.h"
 
 namespace content {
 
-// static
-void URLDataSource::Add(BrowserContext* browser_context,
-                        URLDataSource* source) {
-  Add(browser_context, base::WrapUnique(source));
+namespace {
+
+URLDataSource* GetSourceForURLHelper(ResourceContext* resource_context,
+                                     const GURL& url) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+
+  URLDataSourceImpl* source =
+      GetURLDataManagerForResourceContext(resource_context)
+          ->GetDataSourceFromURL(url);
+  return source->source();
 }
+
+}  // namespace
 
 // static
 void URLDataSource::Add(BrowserContext* browser_context,
@@ -26,9 +40,21 @@ void URLDataSource::Add(BrowserContext* browser_context,
   URLDataManager::AddDataSource(browser_context, std::move(source));
 }
 
+// static
+void URLDataSource::GetSourceForURL(
+    BrowserContext* browser_context,
+    const GURL& url,
+    base::OnceCallback<void(URLDataSource*)> callback) {
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, {content::BrowserThread::IO},
+      base::BindOnce(&GetSourceForURLHelper,
+                     browser_context->GetResourceContext(), url),
+      std::move(callback));
+}
+
 scoped_refptr<base::SingleThreadTaskRunner>
 URLDataSource::TaskRunnerForRequestPath(const std::string& path) const {
-  return BrowserThread::GetTaskRunnerForThread(BrowserThread::UI);
+  return base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::UI});
 }
 
 bool URLDataSource::ShouldReplaceExistingSource() const {
@@ -87,5 +113,7 @@ std::string URLDataSource::GetAccessControlAllowOriginForOrigin(
 bool URLDataSource::IsGzipped(const std::string& path) const {
   return false;
 }
+
+void URLDataSource::DisablePolymer2ForHost(const std::string& host) {}
 
 }  // namespace content

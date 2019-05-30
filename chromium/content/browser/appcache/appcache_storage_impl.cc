@@ -40,6 +40,7 @@
 #include "storage/browser/quota/quota_client.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
+#include "third_party/blink/public/mojom/appcache/appcache_info.mojom.h"
 #include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 
 namespace content {
@@ -370,13 +371,14 @@ void AppCacheStorageImpl::GetAllInfoTask::Run() {
   std::set<url::Origin> origins;
   database_->FindOriginsWithGroups(&origins);
   for (const url::Origin& origin : origins) {
-    AppCacheInfoVector& infos = info_collection_->infos_by_origin[origin];
+    std::vector<blink::mojom::AppCacheInfo>& infos =
+        info_collection_->infos_by_origin[origin];
     std::vector<AppCacheDatabase::GroupRecord> groups;
     database_->FindGroupsForOrigin(origin, &groups);
     for (const auto& group : groups) {
       AppCacheDatabase::CacheRecord cache_record;
       database_->FindCacheForGroup(group.group_id, &cache_record);
-      AppCacheInfo info;
+      blink::mojom::AppCacheInfo info;
       info.manifest_url = group.manifest_url;
       info.creation_time = group.creation_time;
       info.size = cache_record.cache_size;
@@ -490,7 +492,16 @@ void AppCacheStorageImpl::StoreOrLoadTask::CreateCacheAndGroupFromRecords(
   std::vector<GURL> urls =
       storage_->GetPendingForeignMarkingsForCache(cache->get()->cache_id());
   for (const auto& url : urls) {
-    DCHECK(cache->get()->GetEntry(url));
+    // Skip any entries that were marked as foreign but that don't actually
+    // exist. This shouldn't happen other than with misbehaving renderers, but
+    // we've always just ignored these when the cache already exists when
+    // MarkEntryAsForeign is called, so also ignore them here when the cache
+    // still had to be created.
+    // If AppCache wouldn't be in maintenance mode only, we might want to
+    // (async) ReportBadMessage here and in MarkEntryAsForeign, and deal
+    // with any resulting crashes, but for now just keep the existing behavior.
+    if (!cache->get()->GetEntry(url))
+      continue;
     cache->get()->GetEntry(url)->add_types(AppCacheEntry::FOREIGN);
   }
 
@@ -635,6 +646,8 @@ AppCacheStorageImpl::StoreGroupAndCacheTask::StoreGroupAndCacheTask(
       would_exceed_quota_(false),
       space_available_(-1),
       new_origin_usage_(-1),
+      // TODO(crbug.com/895825): Remove max_appcache_origin_cache_size_ in Feb
+      // 2019.
       max_appcache_origin_cache_size_(kDefaultQuota) {
   group_record_.group_id = group->group_id();
   group_record_.manifest_url = group->manifest_url();
@@ -684,7 +697,7 @@ void AppCacheStorageImpl::StoreGroupAndCacheTask::GetQuotaThenSchedule() {
   // We have to ask the quota manager for the value.
   storage_->pending_quota_queries_.insert(this);
   quota_manager->GetUsageAndQuota(
-      group_record_.origin.GetURL(), blink::mojom::StorageType::kTemporary,
+      group_record_.origin, blink::mojom::StorageType::kTemporary,
       base::BindOnce(&StoreGroupAndCacheTask::OnQuotaCallback, this));
 }
 
@@ -779,8 +792,8 @@ void AppCacheStorageImpl::StoreGroupAndCacheTask::Run() {
     return;
   }
 
-  // Use a user defined value or a simple hard-coded value when not using quota
-  // management.
+  // Use the value in --max-appcache-disk-cache-size-mb (or a hard-coded
+  // default) when no QuotaManager is wired in.
   if (space_available_ == -1) {
     if (new_origin_usage_ > max_appcache_origin_cache_size_) {
       would_exceed_quota_ = true;
@@ -912,9 +925,11 @@ class AppCacheStorageImpl::FindMainResponseTask : public DatabaseTask {
                        const GURL& url,
                        const GURL& preferred_manifest_url,
                        const AppCacheWorkingSet::GroupMap* groups_in_use)
-      : DatabaseTask(storage), url_(url),
+      : DatabaseTask(storage),
+        url_(url),
         preferred_manifest_url_(preferred_manifest_url),
-        cache_id_(kAppCacheNoCacheId), group_id_(0) {
+        cache_id_(blink::mojom::kAppCacheNoCacheId),
+        group_id_(0) {
     if (groups_in_use) {
       for (const auto& pair : *groups_in_use) {
         AppCacheGroup* group = pair.second;
@@ -968,7 +983,7 @@ void AppCacheStorageImpl::FindMainResponseTask::Run() {
   // TODO(michaeln): come up with a 'preferred_manifest_url' in more cases
   // - when navigating a frame whose current contents are from an appcache
   // - when clicking an href in a frame that is appcached
-  int64_t preferred_cache_id = kAppCacheNoCacheId;
+  int64_t preferred_cache_id = blink::mojom::kAppCacheNoCacheId;
   if (!preferred_manifest_url_.is_empty()) {
     AppCacheDatabase::GroupRecord preferred_group;
     AppCacheDatabase::CacheRecord preferred_cache;
@@ -983,14 +998,14 @@ void AppCacheStorageImpl::FindMainResponseTask::Run() {
   if (FindExactMatch(preferred_cache_id) ||
       FindNamespaceMatch(preferred_cache_id)) {
     // We found something.
-    DCHECK(cache_id_ != kAppCacheNoCacheId && !manifest_url_.is_empty() &&
-           group_id_ != 0);
+    DCHECK(cache_id_ != blink::mojom::kAppCacheNoCacheId &&
+           !manifest_url_.is_empty() && group_id_ != 0);
     return;
   }
 
   // We didn't find anything.
-  DCHECK(cache_id_ == kAppCacheNoCacheId && manifest_url_.is_empty() &&
-         group_id_ == 0);
+  DCHECK(cache_id_ == blink::mojom::kAppCacheNoCacheId &&
+         manifest_url_.is_empty() && group_id_ == 0);
 }
 
 bool AppCacheStorageImpl::FindMainResponseTask::FindExactMatch(
@@ -1567,8 +1582,7 @@ void AppCacheStorageImpl::FindResponseForMainRequest(
       working_set()->GetGroupsInOrigin(origin);
   if (groups_in_use) {
     if (!preferred_manifest_url.is_empty()) {
-      AppCacheWorkingSet::GroupMap::const_iterator found =
-          groups_in_use->find(preferred_manifest_url);
+      auto found = groups_in_use->find(preferred_manifest_url);
       if (found != groups_in_use->end() &&
           FindResponseForMainRequestInGroup(
               found->second, *url_ptr, delegate)) {
@@ -1631,10 +1645,9 @@ void AppCacheStorageImpl::DeliverShortCircuitedFindMainResponse(
   if (delegate_ref->delegate) {
     DelegateReferenceVector delegates(1, delegate_ref);
     CallOnMainResponseFound(
-        &delegates, url, found_entry,
-        GURL(), AppCacheEntry(),
-        cache.get() ? cache->cache_id() : kAppCacheNoCacheId,
-        group.get() ? group->group_id() : kAppCacheNoCacheId,
+        &delegates, url, found_entry, GURL(), AppCacheEntry(),
+        cache.get() ? cache->cache_id() : blink::mojom::kAppCacheNoCacheId,
+        group.get() ? group->group_id() : blink::mojom::kAppCacheNoCacheId,
         group.get() ? group->manifest_url() : GURL());
   }
 }
@@ -1684,7 +1697,6 @@ void AppCacheStorageImpl::MarkEntryAsForeign(const GURL& entry_url,
   AppCache* cache = working_set_.GetCache(cache_id);
   if (cache) {
     AppCacheEntry* entry = cache->GetEntry(entry_url);
-    DCHECK(entry);
     if (entry)
       entry->add_types(AppCacheEntry::FOREIGN);
   }
@@ -1710,23 +1722,26 @@ void AppCacheStorageImpl::StoreEvictionTimes(AppCacheGroup* group) {
   task->Schedule();
 }
 
-AppCacheResponseReader* AppCacheStorageImpl::CreateResponseReader(
-    const GURL& manifest_url,
-    int64_t response_id) {
-  return new AppCacheResponseReader(
-      response_id, is_disabled_ ? nullptr : disk_cache()->GetWeakPtr());
+std::unique_ptr<AppCacheResponseReader>
+AppCacheStorageImpl::CreateResponseReader(const GURL& manifest_url,
+                                          int64_t response_id) {
+  // base::WrapUnique needed due to non-public constructor.
+  return base::WrapUnique(new AppCacheResponseReader(
+      response_id, is_disabled_ ? nullptr : disk_cache()->GetWeakPtr()));
 }
 
-AppCacheResponseWriter* AppCacheStorageImpl::CreateResponseWriter(
-    const GURL& manifest_url) {
-  return new AppCacheResponseWriter(
-      NewResponseId(), is_disabled_ ? nullptr : disk_cache()->GetWeakPtr());
+std::unique_ptr<AppCacheResponseWriter>
+AppCacheStorageImpl::CreateResponseWriter(const GURL& manifest_url) {
+  // base::WrapUnique needed due to non-public constructor.
+  return base::WrapUnique(new AppCacheResponseWriter(
+      NewResponseId(), is_disabled_ ? nullptr : disk_cache()->GetWeakPtr()));
 }
 
-AppCacheResponseMetadataWriter*
+std::unique_ptr<AppCacheResponseMetadataWriter>
 AppCacheStorageImpl::CreateResponseMetadataWriter(int64_t response_id) {
-  return new AppCacheResponseMetadataWriter(
-      response_id, is_disabled_ ? nullptr : disk_cache()->GetWeakPtr());
+  // base::WrapUnique needed due to non-public constructor.
+  return base::WrapUnique(new AppCacheResponseMetadataWriter(
+      response_id, is_disabled_ ? nullptr : disk_cache()->GetWeakPtr()));
 }
 
 void AppCacheStorageImpl::DoomResponses(
@@ -1806,8 +1821,8 @@ void AppCacheStorageImpl::DeleteOneResponse() {
   // TODO(michaeln): add group_id to DoomEntry args
   int64_t id = deletable_response_ids_.front();
   int rv = disk_cache()->DoomEntry(
-      id, base::Bind(&AppCacheStorageImpl::OnDeletedOneResponse,
-                     base::Unretained(this)));
+      id, base::BindOnce(&AppCacheStorageImpl::OnDeletedOneResponse,
+                         base::Unretained(this)));
   if (rv != net::ERR_IO_PENDING)
     OnDeletedOneResponse(rv);
 }
@@ -1843,7 +1858,7 @@ void AppCacheStorageImpl::OnDeletedOneResponse(int rv) {
 
 AppCacheStorageImpl::CacheLoadTask*
 AppCacheStorageImpl::GetPendingCacheLoadTask(int64_t cache_id) {
-  PendingCacheLoads::iterator found = pending_cache_loads_.find(cache_id);
+  auto found = pending_cache_loads_.find(cache_id);
   if (found != pending_cache_loads_.end())
     return found->second;
   return nullptr;
@@ -1851,7 +1866,7 @@ AppCacheStorageImpl::GetPendingCacheLoadTask(int64_t cache_id) {
 
 AppCacheStorageImpl::GroupLoadTask*
 AppCacheStorageImpl::GetPendingGroupLoadTask(const GURL& manifest_url) {
-  PendingGroupLoads::iterator found = pending_group_loads_.find(manifest_url);
+  auto found = pending_group_loads_.find(manifest_url);
   if (found != pending_group_loads_.end())
     return found->second;
   return nullptr;
@@ -1891,18 +1906,18 @@ AppCacheDiskCache* AppCacheStorageImpl::disk_cache() {
     if (is_incognito_) {
       rv = disk_cache_->InitWithMemBackend(
           kMaxAppCacheMemDiskCacheSize,
-          base::Bind(&AppCacheStorageImpl::OnDiskCacheInitialized,
-                     base::Unretained(this)));
+          base::BindOnce(&AppCacheStorageImpl::OnDiskCacheInitialized,
+                         base::Unretained(this)));
     } else {
       expecting_cleanup_complete_on_disable_ = true;
 
       const base::CommandLine& command_line =
           *base::CommandLine::ForCurrentProcess();
-      unsigned int max_appcache_disk_cache_size = kMaxAppCacheDiskCacheSize;
+      int64_t max_appcache_disk_cache_size = kMaxAppCacheDiskCacheSize;
       if (command_line.HasSwitch(switches::kMaxAppCacheDiskCacheSizeMb)) {
-        if (base::StringToUint(command_line.GetSwitchValueASCII(
-                                   switches::kMaxAppCacheDiskCacheSizeMb),
-                               &max_appcache_disk_cache_size)) {
+        if (base::StringToInt64(command_line.GetSwitchValueASCII(
+                                    switches::kMaxAppCacheDiskCacheSizeMb),
+                                &max_appcache_disk_cache_size)) {
           max_appcache_disk_cache_size *= kMB;
         }
       }
@@ -1912,8 +1927,8 @@ AppCacheDiskCache* AppCacheStorageImpl::disk_cache() {
           max_appcache_disk_cache_size, false,
           base::BindOnce(&AppCacheStorageImpl::OnDiskCacheCleanupComplete,
                          weak_factory_.GetWeakPtr()),
-          base::Bind(&AppCacheStorageImpl::OnDiskCacheInitialized,
-                     base::Unretained(this)));
+          base::BindOnce(&AppCacheStorageImpl::OnDiskCacheInitialized,
+                         base::Unretained(this)));
     }
 
     if (rv != net::ERR_IO_PENDING)

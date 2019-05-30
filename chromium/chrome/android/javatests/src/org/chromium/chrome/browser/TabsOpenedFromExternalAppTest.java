@@ -31,7 +31,6 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
-import org.chromium.blink_public.web.WebReferrerPolicy;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -40,13 +39,16 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.DOMUtils;
-import org.chromium.content.browser.test.util.JavaScriptUtils;
-import org.chromium.content.browser.test.util.TouchCommon;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
+import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.DOMUtils;
+import org.chromium.content_public.browser.test.util.JavaScriptUtils;
+import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.net.test.EmbeddedTestServer;
+import org.chromium.network.mojom.ReferrerPolicy;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeoutException;
@@ -342,9 +344,8 @@ public class TabsOpenedFromExternalAppTest {
     @Feature({"Navigation"})
     public void testReferrerPolicyHttpsReferrerPolicyOrigin() throws InterruptedException {
         String url = mTestServer.getURL("/chrome/test/data/android/about.html");
-        launchAndVerifyReferrerWithPolicy(url, mActivityTestRule,
-                WebReferrerPolicy.ORIGIN, HTTPS_REFERRER_WITH_PATH,
-                HTTPS_REFERRER);
+        launchAndVerifyReferrerWithPolicy(url, mActivityTestRule, ReferrerPolicy.ORIGIN,
+                HTTPS_REFERRER_WITH_PATH, HTTPS_REFERRER);
     }
 
     /**
@@ -359,8 +360,7 @@ public class TabsOpenedFromExternalAppTest {
             throws InterruptedException {
         String url = mTestServer.getURL("/chrome/test/data/android/about.html");
         launchAndVerifyReferrerWithPolicy(url, mActivityTestRule,
-                WebReferrerPolicy.ORIGIN_WHEN_CROSS_ORIGIN,
-                HTTPS_REFERRER_WITH_PATH, HTTPS_REFERRER);
+                ReferrerPolicy.ORIGIN_WHEN_CROSS_ORIGIN, HTTPS_REFERRER_WITH_PATH, HTTPS_REFERRER);
     }
 
     /**
@@ -372,8 +372,8 @@ public class TabsOpenedFromExternalAppTest {
     @Feature({"Navigation"})
     public void testReferrerPolicyHttpsReferrerPolicyStrictOrigin() throws InterruptedException {
         String url = mTestServer.getURL("/chrome/test/data/android/about.html");
-        launchAndVerifyReferrerWithPolicy(url, mActivityTestRule,
-                WebReferrerPolicy.STRICT_ORIGIN, HTTPS_REFERRER, "");
+        launchAndVerifyReferrerWithPolicy(
+                url, mActivityTestRule, ReferrerPolicy.STRICT_ORIGIN, HTTPS_REFERRER, "");
     }
 
     /**
@@ -785,9 +785,11 @@ public class TabsOpenedFromExternalAppTest {
      */
     @Test
     @MediumTest
-    @CommandLineFlags.
-    Add({"enable-spdy-proxy-auth", "enable-features=DataReductionProxyDecidesTransform"})
-    public void testLaunchWebLiteURL() throws InterruptedException {
+    @CommandLineFlags.Add("enable-spdy-proxy-auth")
+    @EnableFeatures(
+            {"DataReductionProxyDecidesTransform", "DataReductionProxyEnabledWithNetworkService"})
+    public void
+    testLaunchWebLiteURL() throws InterruptedException {
         mActivityTestRule.startMainActivityFromLauncher();
 
         String url = mTestServer.getURL("/chrome/test/data/android/about.html");
@@ -806,8 +808,8 @@ public class TabsOpenedFromExternalAppTest {
      */
     @Test
     @MediumTest
-    @CommandLineFlags.
-    Add({"enable-spdy-proxy-auth", "disable-features=DataReductionProxyDecidesTransform"})
+    @CommandLineFlags.Add("enable-spdy-proxy-auth")
+    @DisableFeatures("DataReductionProxyDecidesTransform")
     public void testLaunchWebLiteURLNoPreviews() throws InterruptedException {
         mActivityTestRule.startMainActivityFromLauncher();
 

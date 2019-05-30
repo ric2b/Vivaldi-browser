@@ -61,7 +61,8 @@ CORE_EXPORT bool DictionaryHelper::Get(const Dictionary& dictionary,
   if (!dictionary.Get(key, v8_value))
     return false;
 
-  return v8_value->BooleanValue(dictionary.V8Context()).To(&value);
+  value = v8_value->BooleanValue(dictionary.GetIsolate());
+  return true;
 }
 
 template <>
@@ -129,43 +130,41 @@ bool GetNumericType(const Dictionary& dictionary,
 template <>
 bool DictionaryHelper::Get(const Dictionary& dictionary,
                            const StringView& key,
-                           short& value) {
-  return GetNumericType<short>(dictionary, key, value);
+                           int16_t& value) {
+  return GetNumericType<int16_t>(dictionary, key, value);
 }
 
 template <>
 CORE_EXPORT bool DictionaryHelper::Get(const Dictionary& dictionary,
                                        const StringView& key,
-                                       unsigned short& value) {
-  return GetNumericType<unsigned short>(dictionary, key, value);
+                                       uint16_t& value) {
+  return GetNumericType<uint16_t>(dictionary, key, value);
 }
 
 template <>
 bool DictionaryHelper::Get(const Dictionary& dictionary,
                            const StringView& key,
-                           unsigned& value) {
-  return GetNumericType<unsigned>(dictionary, key, value);
+                           uint32_t& value) {
+  return GetNumericType<uint32_t>(dictionary, key, value);
 }
 
 template <>
 bool DictionaryHelper::Get(const Dictionary& dictionary,
                            const StringView& key,
-                           unsigned long& value) {
+                           int64_t& value) {
   v8::Local<v8::Value> v8_value;
   if (!dictionary.Get(key, v8_value))
     return false;
 
-  int64_t int64_value;
-  if (!v8_value->IntegerValue(dictionary.V8Context()).To(&int64_value))
+  if (!v8_value->IntegerValue(dictionary.V8Context()).To(&value))
     return false;
-  value = int64_value;
   return true;
 }
 
 template <>
 bool DictionaryHelper::Get(const Dictionary& dictionary,
                            const StringView& key,
-                           unsigned long long& value) {
+                           uint64_t& value) {
   v8::Local<v8::Value> v8_value;
   if (!dictionary.Get(key, v8_value))
     return false;
@@ -205,7 +204,7 @@ bool DictionaryHelper::Get(const Dictionary& dictionary,
 
     // FIXME: this will need to be changed so it can also return an AudioTrack
     // or a VideoTrack once we add them.
-    v8::Local<v8::Object> track = V8TextTrack::findInstanceInPrototypeChain(
+    v8::Local<v8::Object> track = V8TextTrack::FindInstanceInPrototypeChain(
         wrapper, dictionary.GetIsolate());
     if (!track.IsEmpty())
       source = V8TextTrack::ToImpl(track);
@@ -226,7 +225,7 @@ CORE_EXPORT bool DictionaryHelper::Get(const Dictionary& dictionary,
     return false;
 
   v8::Local<v8::Array> v8_array = v8::Local<v8::Array>::Cast(v8_value);
-  for (size_t i = 0; i < v8_array->Length(); ++i) {
+  for (uint32_t i = 0; i < v8_array->Length(); ++i) {
     v8::Local<v8::Value> indexed_value;
     if (!v8_array
              ->Get(dictionary.V8Context(),

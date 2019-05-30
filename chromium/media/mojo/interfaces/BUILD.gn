@@ -21,6 +21,7 @@ mojom("interfaces") {
     "content_decryption_module.mojom",
     "decryptor.mojom",
     "demuxer_stream.mojom",
+    "display_media_information.mojom",
     "interface_factory.mojom",
     "jpeg_decode_accelerator.mojom",
     "jpeg_encode_accelerator.mojom",
@@ -65,6 +66,15 @@ mojom("interfaces") {
     # TODO(xhwang): Ideally media should not worry about sandbox. Find a way to
     # remove this dependency.
     public_deps += [ "//sandbox/mac/mojom" ]
+  }
+
+  # Windows component builds require this to avoid link errors related to URL
+  # classes. Enabling this for other builds would result in ODR violations.
+  # TODO(crbug.com/921170): Remove this once the issue is resolved.
+  if (is_win && is_component_build) {
+    export_class_attribute_blink = "PLATFORM_EXPORT"
+    export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+    export_header_blink = "third_party/blink/public/platform/web_common.h"
   }
 }
 
@@ -115,6 +125,7 @@ source_set("unit_tests") {
 
   sources = [
     "audio_decoder_config_struct_traits_unittest.cc",
+    "cdm_key_information_mojom_traits_unittest.cc",
     "encryption_scheme_struct_traits_unittest.cc",
     "video_decoder_config_struct_traits_unittest.cc",
     "video_frame_struct_traits_unittest.cc",

@@ -7,10 +7,14 @@
 
 #include <string>
 
+#include "base/process/process_handle.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
 namespace resource_coordinator {
+
+class PageSignalReceiver;
+class TabLifecycleUnitSource;
 
 // Serialize an Origin into the representation used by the different databases
 // that need it.
@@ -19,6 +23,16 @@ std::string SerializeOriginIntoDatabaseKey(const url::Origin& origin);
 // Indicates if |url| should have an entry in the local site characteristics
 // database.
 bool URLShouldBeStoredInLocalDatabase(const GURL& url);
+
+// Get the private memory footprint (in KB) for the process.
+int GetPrivateMemoryKB(base::ProcessHandle handle);
+
+// Returns the TabLifecycleUnitSource indirectly owned by g_browser_process.
+TabLifecycleUnitSource* GetTabLifecycleUnitSource();
+
+// Returns the PageSignalReceiver indirectly owned by g_browser_process. This
+// can be null if the service isn't enabled.
+PageSignalReceiver* GetPageSignalReceiver();
 
 }  // namespace resource_coordinator
 

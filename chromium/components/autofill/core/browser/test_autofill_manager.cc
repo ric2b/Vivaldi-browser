@@ -7,9 +7,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/field_types.h"
-#include "components/autofill/core/browser/payments/payments_client.h"
-#include "components/autofill/core/browser/payments/test_payments_client.h"
-#include "components/autofill/core/browser/test_form_data_importer.h"
+#include "components/autofill/core/browser/mock_autocomplete_history_manager.h"
 #include "components/autofill/core/browser/test_form_structure.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -17,38 +15,16 @@
 
 namespace autofill {
 
-TestAutofillManager::TestAutofillManager(AutofillDriver* driver,
-                                         AutofillClient* client,
-                                         TestPersonalDataManager* personal_data)
-    : AutofillManager(driver, client, personal_data),
-      personal_data_(personal_data),
-      url_loader_factory_(driver->GetURLLoaderFactory()),
-      client_(client) {
-  set_payments_client(new payments::PaymentsClient(
-      url_loader_factory_, client->GetPrefs(), client->GetIdentityManager(),
-      personal_data));
-}
-
 TestAutofillManager::TestAutofillManager(
     AutofillDriver* driver,
     AutofillClient* client,
     TestPersonalDataManager* personal_data,
-    std::unique_ptr<CreditCardSaveManager> credit_card_save_manager,
-    payments::TestPaymentsClient* payments_client,
-    std::unique_ptr<LocalCardMigrationManager> local_card_migration_manager)
-    : AutofillManager(driver, client, personal_data),
-      personal_data_(personal_data),
-      test_form_data_importer_(
-          new TestFormDataImporter(client,
-                                   payments_client,
-                                   std::move(credit_card_save_manager),
-                                   personal_data,
-                                   "en-US",
-                                   std::move(local_card_migration_manager))),
-      client_(client) {
-  set_payments_client(payments_client);
-  set_form_data_importer(test_form_data_importer_);
-}
+    MockAutocompleteHistoryManager* autocomplete_history_manager)
+    : AutofillManager(driver,
+                      client,
+                      personal_data,
+                      autocomplete_history_manager),
+      personal_data_(personal_data) {}
 
 TestAutofillManager::~TestAutofillManager() {}
 
@@ -74,11 +50,10 @@ void TestAutofillManager::UploadFormData(const FormStructure& submitted_form,
 
 bool TestAutofillManager::MaybeStartVoteUploadProcess(
     std::unique_ptr<FormStructure> form_structure,
-    const base::TimeTicks& timestamp,
     bool observed_submission) {
   run_loop_ = std::make_unique<base::RunLoop>();
-  if (AutofillManager::MaybeStartVoteUploadProcess(
-          std::move(form_structure), timestamp, observed_submission)) {
+  if (AutofillManager::MaybeStartVoteUploadProcess(std::move(form_structure),
+                                                   observed_submission)) {
     run_loop_->Run();
     return true;
   }
@@ -87,7 +62,6 @@ bool TestAutofillManager::MaybeStartVoteUploadProcess(
 
 void TestAutofillManager::UploadFormDataAsyncCallback(
     const FormStructure* submitted_form,
-    const base::TimeTicks& load_time,
     const base::TimeTicks& interaction_time,
     const base::TimeTicks& submission_time,
     bool observed_submission) {
@@ -108,8 +82,7 @@ void TestAutofillManager::UploadFormDataAsyncCallback(
           submitted_form->field(i)->possible_types();
       EXPECT_EQ(expected_submitted_field_types_[i].size(),
                 possible_types.size());
-      for (ServerFieldTypeSet::const_iterator it =
-               expected_submitted_field_types_[i].begin();
+      for (auto it = expected_submitted_field_types_[i].begin();
            it != expected_submitted_field_types_[i].end(); ++it) {
         EXPECT_TRUE(possible_types.count(*it))
             << "Expected type: " << AutofillType(*it).ToString();
@@ -118,8 +91,7 @@ void TestAutofillManager::UploadFormDataAsyncCallback(
   }
 
   AutofillManager::UploadFormDataAsyncCallback(
-      submitted_form, load_time, interaction_time, submission_time,
-      observed_submission);
+      submitted_form, interaction_time, submission_time, observed_submission);
 }
 
 int TestAutofillManager::GetPackedCreditCardID(int credit_card_id) {
@@ -143,8 +115,7 @@ void TestAutofillManager::AddSeenForm(
   form_structure->SetFieldTypes(heuristic_types, server_types);
   AddSeenFormStructure(std::move(form_structure));
 
-  form_interactions_ukm_logger()->OnFormsParsed(form.main_frame_origin.GetURL(),
-                                                client_->GetUkmSourceId());
+  form_interactions_ukm_logger()->OnFormsParsed(client()->GetUkmSourceId());
 }
 
 void TestAutofillManager::AddSeenFormStructure(

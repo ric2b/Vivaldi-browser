@@ -4,7 +4,7 @@
 
 #include "ios/web_view/internal/signin/web_view_oauth2_token_service_factory.h"
 
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
@@ -13,7 +13,6 @@
 #include "ios/web_view/internal/signin/web_view_account_tracker_service_factory.h"
 #include "ios/web_view/internal/signin/web_view_profile_oauth2_token_service_ios_provider_impl.h"
 #include "ios/web_view/internal/signin/web_view_signin_client_factory.h"
-#include "ios/web_view/internal/signin/web_view_signin_error_controller_factory.h"
 #include "ios/web_view/internal/web_view_browser_state.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -28,7 +27,6 @@ WebViewOAuth2TokenServiceFactory::WebViewOAuth2TokenServiceFactory()
           BrowserStateDependencyManager::GetInstance()) {
   DependsOn(WebViewAccountTrackerServiceFactory::GetInstance());
   DependsOn(WebViewSigninClientFactory::GetInstance());
-  DependsOn(WebViewSigninErrorControllerFactory::GetInstance());
 }
 
 ProfileOAuth2TokenService* WebViewOAuth2TokenServiceFactory::GetForBrowserState(
@@ -40,7 +38,8 @@ ProfileOAuth2TokenService* WebViewOAuth2TokenServiceFactory::GetForBrowserState(
 // static
 WebViewOAuth2TokenServiceFactory*
 WebViewOAuth2TokenServiceFactory::GetInstance() {
-  return base::Singleton<WebViewOAuth2TokenServiceFactory>::get();
+  static base::NoDestructor<WebViewOAuth2TokenServiceFactory> instance;
+  return instance.get();
 }
 
 void WebViewOAuth2TokenServiceFactory::RegisterBrowserStatePrefs(
@@ -56,11 +55,11 @@ WebViewOAuth2TokenServiceFactory::BuildServiceInstanceFor(
   IOSWebViewSigninClient* signin_client =
       WebViewSigninClientFactory::GetForBrowserState(browser_state);
   auto token_service_provider =
-      std::make_unique<WebViewProfileOAuth2TokenServiceIOSProviderImpl>();
+      std::make_unique<WebViewProfileOAuth2TokenServiceIOSProviderImpl>(
+          signin_client);
   auto delegate = std::make_unique<ProfileOAuth2TokenServiceIOSDelegate>(
       signin_client, std::move(token_service_provider),
-      WebViewAccountTrackerServiceFactory::GetForBrowserState(browser_state),
-      WebViewSigninErrorControllerFactory::GetForBrowserState(browser_state));
+      WebViewAccountTrackerServiceFactory::GetForBrowserState(browser_state));
   return std::make_unique<ProfileOAuth2TokenService>(browser_state->GetPrefs(),
                                                      std::move(delegate));
 }

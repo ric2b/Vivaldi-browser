@@ -10,6 +10,7 @@
 #include "ash/login/ui/hover_notifier.h"
 #include "ash/login/ui/login_display_style.h"
 #include "ash/login/ui/views_utils.h"
+#include "base/bind.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/views/layout/box_layout.h"
 
@@ -40,6 +41,15 @@ constexpr int kNonEmptyWidth = 1;
 constexpr int kArrowButtonFadeAnimationDurationMs = 180;
 
 }  // namespace
+
+LoginPublicAccountUserView::TestApi::TestApi(LoginPublicAccountUserView* view)
+    : view_(view) {}
+
+LoginPublicAccountUserView::TestApi::~TestApi() = default;
+
+views::View* LoginPublicAccountUserView::TestApi::arrow_button() const {
+  return view_->arrow_button_;
+}
 
 LoginPublicAccountUserView::Callbacks::Callbacks() = default;
 

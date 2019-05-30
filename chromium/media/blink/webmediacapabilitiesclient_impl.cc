@@ -7,19 +7,19 @@
 #include <string>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "media/base/audio_codecs.h"
-#include "media/base/decode_capabilities.h"
+#include "media/base/key_system_names.h"
 #include "media/base/mime_util.h"
+#include "media/base/supported_types.h"
 #include "media/base/video_codecs.h"
 #include "media/base/video_color_space.h"
-#include "media/filters/stream_parser_factory.h"
+#include "media/blink/webcontentdecryptionmoduleaccess_impl.h"
 #include "media/mojo/interfaces/media_types.mojom.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "third_party/blink/public/platform/modules/media_capabilities/web_audio_configuration.h"
 #include "third_party/blink/public/platform/modules/media_capabilities/web_media_capabilities_info.h"
-#include "third_party/blink/public/platform/modules/media_capabilities/web_media_configuration.h"
+#include "third_party/blink/public/platform/modules/media_capabilities/web_media_decoding_configuration.h"
 #include "third_party/blink/public/platform/modules/media_capabilities/web_video_configuration.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scoped_web_callbacks.h"
@@ -33,32 +33,6 @@ void BindToHistoryService(mojom::VideoDecodePerfHistoryPtr* history_ptr) {
 
   connector->BindInterface(platform->GetBrowserServiceName(),
                            mojo::MakeRequest(history_ptr));
-}
-
-bool CheckAudioSupport(const blink::WebAudioConfiguration& audio_config) {
-  bool audio_supported = false;
-  AudioCodec audio_codec = kUnknownAudioCodec;
-  bool is_audio_codec_ambiguous = true;
-
-  if (!ParseAudioCodecString(audio_config.mime_type.Ascii(),
-                             audio_config.codec.Ascii(),
-                             &is_audio_codec_ambiguous, &audio_codec)) {
-    // TODO(chcunningham): Replace this and other DVLOGs here with MEDIA_LOG.
-    // MediaCapabilities may need its own tab in chrome://media-internals.
-    DVLOG(2) << __func__ << " Failed to parse audio contentType: "
-             << audio_config.mime_type.Ascii()
-             << "; codecs=" << audio_config.codec.Ascii();
-    audio_supported = false;
-  } else if (is_audio_codec_ambiguous) {
-    DVLOG(2) << __func__ << " Invalid (ambiguous) audio codec string:"
-             << audio_config.codec.Ascii();
-    audio_supported = false;
-  } else {
-    AudioConfig audio_config = {audio_codec};
-    audio_supported = IsSupportedAudioConfig(audio_config);
-  }
-
-  return audio_supported;
 }
 
 bool CheckVideoSupport(const blink::WebVideoConfiguration& video_config,
@@ -82,59 +56,11 @@ bool CheckVideoSupport(const blink::WebVideoConfiguration& video_config,
              << video_config.codec.Ascii();
     video_supported = false;
   } else {
-    video_supported = IsSupportedVideoConfig(
+    video_supported = IsSupportedVideoType(
         {video_codec, *out_video_profile, video_level, video_color_space});
   }
 
   return video_supported;
-}
-
-bool CheckMseSupport(const blink::WebMediaConfiguration& configuration) {
-  DCHECK_EQ(blink::MediaConfigurationType::kMediaSource, configuration.type);
-
-  // For MSE queries, we assume the queried audio and video streams will be
-  // placed into separate source buffers.
-  // TODO(chcunningham): Clarify this assumption in the spec.
-
-  // Media MIME API expects a vector of codec strings. We query audio and video
-  // separately, so |codec_string|.size() should always be 1 or 0 (when no
-  // codecs parameter is required for the given mime type).
-  std::vector<std::string> codec_vector;
-
-  if (configuration.audio_configuration) {
-    const blink::WebAudioConfiguration& audio_config =
-        configuration.audio_configuration.value();
-
-    if (!audio_config.codec.Ascii().empty())
-      codec_vector.push_back(audio_config.codec.Ascii());
-
-    if (!media::StreamParserFactory::IsTypeSupported(
-            audio_config.mime_type.Ascii(), codec_vector)) {
-      DVLOG(2) << __func__ << " MSE does not support audio config: "
-               << audio_config.mime_type.Ascii() << " "
-               << (codec_vector.empty() ? "" : codec_vector[1]);
-      return false;
-    }
-  }
-
-  if (configuration.video_configuration) {
-    const blink::WebVideoConfiguration& video_config =
-        configuration.video_configuration.value();
-
-    codec_vector.clear();
-    if (!video_config.codec.Ascii().empty())
-      codec_vector.push_back(video_config.codec.Ascii());
-
-    if (!media::StreamParserFactory::IsTypeSupported(
-            video_config.mime_type.Ascii(), codec_vector)) {
-      DVLOG(2) << __func__ << " MSE does not support video config: "
-               << video_config.mime_type.Ascii() << " "
-               << (codec_vector.empty() ? "" : codec_vector[1]);
-      return false;
-    }
-  }
-
-  return true;
 }
 
 WebMediaCapabilitiesClientImpl::WebMediaCapabilitiesClientImpl() = default;
@@ -143,9 +69,9 @@ WebMediaCapabilitiesClientImpl::~WebMediaCapabilitiesClientImpl() = default;
 
 namespace {
 void VideoPerfInfoCallback(
-    blink::ScopedWebCallbacks<blink::WebMediaCapabilitiesQueryCallbacks>
+    blink::ScopedWebCallbacks<blink::WebMediaCapabilitiesDecodingInfoCallbacks>
         scoped_callbacks,
-    std::unique_ptr<blink::WebMediaCapabilitiesInfo> info,
+    std::unique_ptr<blink::WebMediaCapabilitiesDecodingInfo> info,
     bool is_smooth,
     bool is_power_efficient) {
   DCHECK(info->supported);
@@ -155,43 +81,19 @@ void VideoPerfInfoCallback(
 }
 
 void OnGetPerfInfoError(
-    std::unique_ptr<blink::WebMediaCapabilitiesQueryCallbacks> callbacks) {
+    std::unique_ptr<blink::WebMediaCapabilitiesDecodingInfoCallbacks>
+        callbacks) {
   callbacks->OnError();
 }
 }  // namespace
 
 void WebMediaCapabilitiesClientImpl::DecodingInfo(
-    const blink::WebMediaConfiguration& configuration,
-    std::unique_ptr<blink::WebMediaCapabilitiesQueryCallbacks> callbacks) {
-  std::unique_ptr<blink::WebMediaCapabilitiesInfo> info(
-      new blink::WebMediaCapabilitiesInfo());
+    const blink::WebMediaDecodingConfiguration& configuration,
+    std::unique_ptr<blink::WebMediaCapabilitiesDecodingInfoCallbacks>
+        callbacks) {
+  std::unique_ptr<blink::WebMediaCapabilitiesDecodingInfo> info(
+      new blink::WebMediaCapabilitiesDecodingInfo());
 
-  // MSE support is cheap to check (regex matching). Do it first.
-  if (configuration.type == blink::MediaConfigurationType::kMediaSource &&
-      !CheckMseSupport(configuration)) {
-    info->supported = info->smooth = info->power_efficient = false;
-    callbacks->OnSuccess(std::move(info));
-    return;
-  }
-
-  bool audio_supported = true;
-  if (configuration.audio_configuration)
-    audio_supported =
-        CheckAudioSupport(configuration.audio_configuration.value());
-
-  // No need to check video capabilities if video not included in configuration
-  // or when audio is already known to be unsupported.
-  if (!audio_supported || !configuration.video_configuration) {
-    // Supported audio-only configurations are always considered smooth and
-    // power efficient.
-    info->supported = info->smooth = info->power_efficient = audio_supported;
-    callbacks->OnSuccess(std::move(info));
-    return;
-  }
-
-  // Audio is supported and video configuration is provided in the query; all
-  // that remains is to check video support and performance.
-  DCHECK(audio_supported);
   DCHECK(configuration.video_configuration);
   const blink::WebVideoConfiguration& video_config =
       configuration.video_configuration.value();
@@ -201,6 +103,27 @@ void WebMediaCapabilitiesClientImpl::DecodingInfo(
   // Return early for unsupported configurations.
   if (!video_supported) {
     info->supported = info->smooth = info->power_efficient = video_supported;
+    callbacks->OnSuccess(std::move(info));
+    return;
+  }
+
+  // TODO(907909): this is a mock implementation of Encrypted Media support to
+  // have a form of end-to-end implementation.
+  if (configuration.key_system_configuration.has_value()) {
+    auto key_system_configuration = configuration.key_system_configuration;
+
+    if (!media::IsClearKey(key_system_configuration->key_system.Utf8())) {
+      info->supported = info->smooth = info->power_efficient = false;
+      callbacks->OnSuccess(std::move(info));
+      return;
+    }
+
+    info->supported = info->smooth = info->power_efficient = true;
+    info->content_decryption_module_access =
+        base::WrapUnique(WebContentDecryptionModuleAccessImpl::Create(
+            key_system_configuration->key_system, blink::WebSecurityOrigin(),
+            blink::WebMediaKeySystemConfiguration(), {}, nullptr));
+
     callbacks->OnSuccess(std::move(info));
     return;
   }

@@ -15,19 +15,15 @@ namespace base {
 class RefCountedString;
 }  // namespace base
 
-namespace chromeos {
-class DebugDaemonClient;
-}  // namespace chromeos
-
-namespace service_manager {
-class Connector;
-}  // namespace service_manager
-
 namespace content {
 
+class CrOSSystemTracingSession;
+
+// TODO(crbug.com/839086): Remove once we have replaced the legacy tracing
+// service with perfetto.
 class CrOSTracingAgent : public tracing::BaseAgent {
  public:
-  explicit CrOSTracingAgent(service_manager::Connector* connector);
+  CrOSTracingAgent();
 
  private:
   friend std::default_delete<CrOSTracingAgent>;
@@ -41,13 +37,10 @@ class CrOSTracingAgent : public tracing::BaseAgent {
   void StopAndFlush(tracing::mojom::RecorderPtr recorder) override;
 
   void StartTracingCallbackProxy(Agent::StartTracingCallback callback,
-                                 const std::string& agent_name,
                                  bool success);
-  void RecorderProxy(const std::string& event_name,
-                     const std::string& events_label,
-                     const scoped_refptr<base::RefCountedString>& events);
+  void RecorderProxy(const scoped_refptr<base::RefCountedString>& events);
 
-  chromeos::DebugDaemonClient* debug_daemon_ = nullptr;
+  std::unique_ptr<CrOSSystemTracingSession> session_;
   tracing::mojom::RecorderPtr recorder_;
 
   DISALLOW_COPY_AND_ASSIGN(CrOSTracingAgent);

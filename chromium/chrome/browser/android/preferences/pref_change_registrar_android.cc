@@ -6,6 +6,7 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
+#include "base/bind.h"
 #include "chrome/browser/android/preferences/pref_service_bridge.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "jni/PrefChangeRegistrar_jni.h"
@@ -38,6 +39,13 @@ void PrefChangeRegistrarAndroid::Add(JNIEnv* env,
       PrefServiceBridge::GetPrefNameExposedToJava(j_pref_index),
       base::Bind(&PrefChangeRegistrarAndroid::OnPreferenceChange,
                  base::Unretained(this), j_pref_index));
+}
+
+void PrefChangeRegistrarAndroid::Remove(JNIEnv* env,
+                                        const JavaParamRef<jobject>& obj,
+                                        const jint j_pref_index) {
+  pref_change_registrar_.Remove(
+      PrefServiceBridge::GetPrefNameExposedToJava(j_pref_index));
 }
 
 void PrefChangeRegistrarAndroid::OnPreferenceChange(const int pref_index) {

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/android/compositor/layer/tab_layer.h"
 
+#include <vector>
+
 #include "base/i18n/rtl.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_collections.h"
@@ -13,6 +15,7 @@
 #include "cc/resources/scoped_ui_resource.h"
 #include "chrome/browser/android/compositor/decoration_title.h"
 #include "chrome/browser/android/compositor/layer/content_layer.h"
+#include "chrome/browser/android/compositor/layer/tabgroup_content_layer.h"
 #include "chrome/browser/android/compositor/layer/toolbar_layer.h"
 #include "chrome/browser/android/compositor/layer_title_cache.h"
 #include "chrome/browser/android/compositor/tab_content_manager.h"
@@ -92,8 +95,8 @@ static void PositionPadding(scoped_refptr<cc::SolidColorLayer> padding_layer,
 }
 
 void TabLayer::SetProperties(int id,
+                             const std::vector<int>& ids,
                              bool can_use_live_layer,
-                             bool modern_design_enabled,
                              int toolbar_resource_id,
                              int close_button_resource_id,
                              int shadow_resource_id,
@@ -126,6 +129,7 @@ void TabLayer::SetProperties(int id,
                              float saturation,
                              float brightness,
                              float close_btn_width,
+                             float close_btn_asset_size,
                              float static_to_view_blend,
                              float content_width,
                              float content_height,
@@ -225,19 +229,13 @@ void TabLayer::SetProperties(int id,
   //--------------------------------------------------------------------------
 
   // TODO(kkimlabs): Tab switcher doesn't show the progress bar.
-  toolbar_layer_->PushResource(toolbar_resource_id,
-                               toolbar_background_color,
-                               anonymize_toolbar,
-                               toolbar_textbox_background_color,
-                               toolbar_textbox_resource_id,
-                               toolbar_textbox_alpha,
-                               view_height,
-                               // TODO(mdjones): Feels odd to pass 0 here when
-                               // we have access to toolbar_y_offset.
-                               0,
-                               false,
-                               false,
-                               modern_design_enabled);
+  toolbar_layer_->PushResource(
+      toolbar_resource_id, toolbar_background_color, anonymize_toolbar,
+      toolbar_textbox_background_color, toolbar_textbox_resource_id,
+      toolbar_textbox_alpha, view_height,
+      // TODO(mdjones): Feels odd to pass 0 here when
+      // we have access to toolbar_y_offset.
+      0, false, false);
   toolbar_layer_->UpdateProgressBar(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
   float toolbar_impact_height = 0;
@@ -334,10 +332,9 @@ void TabLayer::SetProperties(int id,
   // Center Specific Assets in the Rects
   //----------------------------------------------------------------------------
   close_button_position.Offset(
-      (close_button_size.width() - close_btn_resource->size().width()) / 2.f,
-      (close_button_size.height() - close_btn_resource->size().height()) / 2.f);
-  close_button_size.SetSize(close_btn_resource->size().width(),
-                            close_btn_resource->size().height());
+      (close_button_size.width() - close_btn_asset_size) / 2.f,
+      (close_button_size.height() - close_btn_asset_size) / 2.f);
+  close_button_size.SetSize(close_btn_asset_size, close_btn_asset_size);
 
   //----------------------------------------------------------------------------
   // Handle Insetting the Top Border Component
@@ -350,13 +347,13 @@ void TabLayer::SetProperties(int id,
                                          inset_diff * content_scale);
     shadow_size.set_height(shadow_size.height() - inset_diff);
     border_size.set_height(border_size.height() - inset_diff);
-    border_inner_shadow_size.set_height(
-        border_inner_shadow_size.height() - inset_diff);
+    border_inner_shadow_size.set_height(border_inner_shadow_size.height() -
+                                        inset_diff);
     contour_size.set_height(contour_size.height() - inset_diff);
     shadow_position.set_y(shadow_position.y() + inset_diff);
     border_position.set_y(border_position.y() + inset_diff);
-    border_inner_shadow_position.set_y(
-        border_inner_shadow_position.y() + inset_diff);
+    border_inner_shadow_position.set_y(border_inner_shadow_position.y() +
+                                       inset_diff);
     contour_position.set_y(contour_position.y() + inset_diff);
     close_button_position.set_y(close_button_position.y() + inset_diff);
     title_position.set_y(title_position.y() + inset_diff);
@@ -448,9 +445,11 @@ void TabLayer::SetProperties(int id,
         round(desired_content_size.width()),
         round(desired_content_size.height()));
 
-    content_->SetProperties(id, can_use_live_layer, static_to_view_blend,
-                            true, alpha, saturation,
-                            true, rounded_descaled_content_area);
+    SetContentProperties(
+        id, ids, can_use_live_layer, static_to_view_blend, true, alpha,
+        saturation, true, rounded_descaled_content_area,
+        border_inner_shadow_resource, border_inner_shadow_alpha);
+
   } else if (back_logo_resource) {
     back_logo_->SetUIResourceId(back_logo_resource->ui_resource()->id());
   }
@@ -496,7 +495,7 @@ void TabLayer::SetProperties(int id,
     transform.Translate(toolbar_position.x(), toolbar_position.y());
     toolbar_layer_->layer()->SetTransformOrigin(gfx::Point3F(0.f, 0.f, 0.f));
     toolbar_layer_->layer()->SetTransform(transform);
-    toolbar_layer_->layer()->SetOpacity(toolbar_alpha);
+    toolbar_layer_->SetOpacity(toolbar_alpha);
 
     toolbar_layer_->layer()->SetMasksToBounds(
         toolbar_layer_->layer()->bounds() != toolbar_size);
@@ -625,6 +624,7 @@ TabLayer::TabLayer(bool incognito,
                    TabContentManager* tab_content_manager)
     : incognito_(incognito),
       resource_manager_(resource_manager),
+      tab_content_manager_(tab_content_manager),
       layer_title_cache_(layer_title_cache),
       layer_(cc::Layer::Create()),
       toolbar_layer_(ToolbarLayer::Create(resource_manager)),
@@ -681,6 +681,39 @@ void TabLayer::SetTitle(DecorationTitle* title) {
 
   if (title)
     title->SetUIResourceIds();
+}
+
+void TabLayer::SetContentProperties(
+    int id,
+    const std::vector<int>& tab_ids,
+    bool can_use_live_layer,
+    float static_to_view_blend,
+    bool should_override_content_alpha,
+    float content_alpha_override,
+    float saturation,
+    bool should_clip,
+    const gfx::Rect& clip,
+    ui::NinePatchResource* inner_shadow_resource,
+    float inner_shadow_alpha) {
+  if (tab_ids.size() == 0) {
+    content_->SetProperties(id, can_use_live_layer, static_to_view_blend,
+                            should_override_content_alpha,
+                            content_alpha_override, saturation, should_clip,
+                            clip);
+  } else {
+    scoped_refptr<TabGroupContentLayer> tabgroup_content_layer =
+        TabGroupContentLayer::Create(tab_content_manager_);
+    layer_->ReplaceChild(content_->layer().get(),
+                         tabgroup_content_layer->layer());
+    content_ = tabgroup_content_layer;
+
+    tabgroup_content_layer->SetProperties(
+        id, tab_ids, can_use_live_layer, static_to_view_blend,
+        should_override_content_alpha, content_alpha_override, saturation,
+        should_clip, clip, inner_shadow_resource, inner_shadow_alpha);
+
+    front_border_inner_shadow_->SetIsDrawable(false);
+  }
 }
 
 }  //  namespace android

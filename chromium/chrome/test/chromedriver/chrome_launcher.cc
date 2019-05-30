@@ -35,6 +35,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_result_codes.h"
 #include "chrome/test/chromedriver/chrome/chrome_android_impl.h"
 #include "chrome/test/chromedriver/chrome/chrome_desktop_impl.h"
 #include "chrome/test/chromedriver/chrome/chrome_finder.h"
@@ -51,9 +52,9 @@
 #include "chrome/test/chromedriver/log_replay/chrome_replay_impl.h"
 #include "chrome/test/chromedriver/log_replay/replay_http_client.h"
 #include "chrome/test/chromedriver/net/net_util.h"
-#include "chrome/test/chromedriver/net/url_request_context_getter.h"
 #include "crypto/rsa_private_key.h"
 #include "crypto/sha2.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "third_party/zlib/google/zip.h"
 #include "url/gurl.h"
 
@@ -71,7 +72,6 @@ namespace {
 // that support the Security DevTools domain on the browser target.
 const char* const kCommonSwitches[] = {
     "disable-popup-blocking", "enable-automation", "ignore-certificate-errors",
-    "metrics-recording-only",
 };
 
 const char* const kDesktopSwitches[] = {
@@ -89,6 +89,11 @@ const char* const kDesktopSwitches[] = {
     "use-mock-keychain",
     "test-type=webdriver",
     "force-fieldtrials=SiteIsolationExtensions/Control",
+    // TODO(yoichio): This is temporary switch to support chrome internal
+    // components migration from the old web APIs.
+    // After completion of the migration, we should remove this.
+    // See crbug.com/911943 for detail.
+    "enable-blink-features=ShadowDOMV0",
 };
 
 const char* const kAndroidSwitches[] = {
@@ -158,8 +163,11 @@ Status PrepareDesktopCommandLine(const Capabilities& capabilities,
     LOG(WARNING) << "excluding remote-debugging-port switch is not supported";
   }
   if (switches.HasSwitch("user-data-dir")) {
-    *user_data_dir =
-        base::FilePath(switches.GetSwitchValueNative("user-data-dir"));
+    base::FilePath::StringType userDataDir =
+      switches.GetSwitchValueNative("user-data-dir");
+    if (userDataDir.empty())
+      return Status(kInvalidArgument, "user data dir can not be empty");
+    *user_data_dir = base::FilePath(userDataDir);
   } else {
     command.AppendArg("data:,");
     if (!user_data_dir_temp_dir->CreateUniqueTempDir())
@@ -197,11 +205,12 @@ Status PrepareDesktopCommandLine(const Capabilities& capabilities,
 
 Status WaitForDevToolsAndCheckVersion(
     const NetAddress& address,
-    URLRequestContextGetter* context_getter,
+    network::mojom::URLLoaderFactory* factory,
     const SyncWebSocketFactory& socket_factory,
     const Capabilities* capabilities,
     int wait_time,
-    std::unique_ptr<DevToolsHttpClient>* user_client) {
+    std::unique_ptr<DevToolsHttpClient>* user_client,
+    bool* retry) {
   std::unique_ptr<DeviceMetrics> device_metrics;
   if (capabilities && capabilities->device_metrics)
     device_metrics.reset(new DeviceMetrics(*capabilities->device_metrics));
@@ -221,12 +230,12 @@ Status WaitForDevToolsAndCheckVersion(
         cmd_line->GetSwitchValueNative("devtools-replay");
     base::FilePath log_file_path(log_path);
     client.reset(
-        new ReplayHttpClient(address, context_getter, socket_factory,
+        new ReplayHttpClient(address, factory, socket_factory,
                              std::move(device_metrics), std::move(window_types),
                              capabilities->page_load_strategy, log_file_path));
   } else {
     client.reset(new DevToolsHttpClient(
-        address, context_getter, socket_factory, std::move(device_metrics),
+        address, factory, socket_factory, std::move(device_metrics),
         std::move(window_types), capabilities->page_load_strategy));
   }
 
@@ -245,14 +254,33 @@ Status WaitForDevToolsAndCheckVersion(
                           browser_info->android_package.c_str()));
   }
 
+  *retry = true;
   if (cmd_line->HasSwitch("disable-build-check")) {
     LOG(WARNING) << "You are using an unsupported command-line switch: "
                     "--disable-build-check. Please don't report bugs that "
                     "cannot be reproduced with this switch removed.";
-  } else if (browser_info->build_no < kMinimumSupportedChromeBuildNo) {
-    return Status(
-        kSessionNotCreated,
-        "Chrome version must be >= " + GetMinimumSupportedChromeVersion());
+  } else if (browser_info->major_version != kSupportedChromeMajorVersion) {
+    if (browser_info->major_version == 0) {
+      // TODO(https://crbug.com/932013): Content Shell doesn't report a version
+      // number. Skip version checking with a warning.
+      LOG(WARNING) << "Unable to retrieve Chrome version. "
+                      "Unable to verify browser compatibility.";
+    } else if (browser_info->major_version ==
+               kSupportedChromeMajorVersion + 1) {
+      // TODO(https://crbug.com/chromedriver/2656): Since we don't currently
+      // release ChromeDriver for dev or canary channels, allow using
+      // ChromeDriver version n (e.g., Beta) with Chrome version n+1 (e.g., Dev
+      // or Canary), with a warning.
+      LOG(WARNING) << "This version of ChromeDriver has not been tested with "
+                   << "Chrome version " << browser_info->major_version << ".";
+    } else {
+      *retry = false;
+      return Status(
+          kSessionNotCreated,
+          base::StringPrintf(
+              "This version of ChromeDriver only supports Chrome version %d",
+              kSupportedChromeMajorVersion));
+    }
   }
 
   while (base::TimeTicks::Now() < deadline) {
@@ -306,7 +334,7 @@ Status CreateBrowserwideDevToolsClientAndConnect(
 }
 
 Status LaunchRemoteChromeSession(
-    URLRequestContextGetter* context_getter,
+    network::mojom::URLLoaderFactory* factory,
     const SyncWebSocketFactory& socket_factory,
     const Capabilities& capabilities,
     std::vector<std::unique_ptr<DevToolsEventListener>>
@@ -314,9 +342,10 @@ Status LaunchRemoteChromeSession(
     std::unique_ptr<Chrome>* chrome) {
   Status status(kOk);
   std::unique_ptr<DevToolsHttpClient> devtools_http_client;
+  bool retry = true;
   status = WaitForDevToolsAndCheckVersion(
-      capabilities.debugger_address, context_getter, socket_factory,
-      &capabilities, 60, &devtools_http_client);
+      capabilities.debugger_address, factory, socket_factory, &capabilities, 60,
+      &devtools_http_client, &retry);
   if (status.IsError()) {
     return Status(kUnknownError, "cannot connect to chrome at " +
                       capabilities.debugger_address.ToString(),
@@ -340,7 +369,7 @@ Status LaunchRemoteChromeSession(
   return Status(kOk);
 }
 
-Status LaunchDesktopChrome(URLRequestContextGetter* context_getter,
+Status LaunchDesktopChrome(network::mojom::URLLoaderFactory* factory,
                            const SyncWebSocketFactory& socket_factory,
                            const Capabilities& capabilities,
                            std::vector<std::unique_ptr<DevToolsEventListener>>
@@ -354,6 +383,7 @@ Status LaunchDesktopChrome(URLRequestContextGetter* context_getter,
   Status status = Status(kOk);
   std::vector<std::string> extension_bg_pages;
   int devtools_port = 0;
+  bool retry = true;
 
   if (capabilities.switches.HasSwitch("remote-debugging-port")) {
     std::string port_switch =
@@ -451,8 +481,11 @@ Status LaunchDesktopChrome(URLRequestContextGetter* context_getter,
     }
     if (status.IsOk()) {
       status = WaitForDevToolsAndCheckVersion(
-          NetAddress(devtools_port), context_getter, socket_factory,
-          &capabilities, 1, &devtools_http_client);
+          NetAddress(devtools_port), factory, socket_factory, &capabilities, 1,
+          &devtools_http_client, &retry);
+      if (!retry) {
+        break;
+      }
     }
     if (status.IsOk()) {
       break;
@@ -460,6 +493,16 @@ Status LaunchDesktopChrome(URLRequestContextGetter* context_getter,
     // Check to see if Chrome has crashed.
     chrome_status = base::GetTerminationStatus(process.Handle(), &exit_code);
     if (chrome_status != base::TERMINATION_STATUS_STILL_RUNNING) {
+#if defined(OS_WIN)
+      if (exit_code == chrome::RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED)
+#else
+      if (WEXITSTATUS(exit_code) ==
+          chrome::RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED)
+#endif
+        return Status(kInvalidArgument,
+                      "user data directory is already in use, "
+                      "please specify a unique value for --user-data-dir "
+                      "argument, or don't use --user-data-dir");
       std::string termination_reason =
           internal::GetTerminationReason(chrome_status);
       Status failure_status = Status(
@@ -534,7 +577,7 @@ Status LaunchDesktopChrome(URLRequestContextGetter* context_getter,
   return Status(kOk);
 }
 
-Status LaunchAndroidChrome(URLRequestContextGetter* context_getter,
+Status LaunchAndroidChrome(network::mojom::URLLoaderFactory* factory,
                            const SyncWebSocketFactory& socket_factory,
                            const Capabilities& capabilities,
                            std::vector<std::unique_ptr<DevToolsEventListener>>
@@ -571,9 +614,10 @@ Status LaunchAndroidChrome(URLRequestContextGetter* context_getter,
   }
 
   std::unique_ptr<DevToolsHttpClient> devtools_http_client;
-  status = WaitForDevToolsAndCheckVersion(
-      NetAddress(devtools_port), context_getter, socket_factory, &capabilities,
-      60, &devtools_http_client);
+  bool retry = true;
+  status = WaitForDevToolsAndCheckVersion(NetAddress(devtools_port), factory,
+                                          socket_factory, &capabilities, 60,
+                                          &devtools_http_client, &retry);
   if (status.IsError()) {
     device->TearDown();
     return status;
@@ -597,7 +641,7 @@ Status LaunchAndroidChrome(URLRequestContextGetter* context_getter,
   return Status(kOk);
 }
 
-Status LaunchReplayChrome(URLRequestContextGetter* context_getter,
+Status LaunchReplayChrome(network::mojom::URLLoaderFactory* factory,
                           const SyncWebSocketFactory& socket_factory,
                           const Capabilities& capabilities,
                           std::vector<std::unique_ptr<DevToolsEventListener>>
@@ -625,10 +669,10 @@ Status LaunchReplayChrome(URLRequestContextGetter* context_getter,
 #endif
 
   std::unique_ptr<DevToolsHttpClient> devtools_http_client;
-  status = WaitForDevToolsAndCheckVersion(NetAddress(0), context_getter,
+  bool retry = true;
+  status = WaitForDevToolsAndCheckVersion(NetAddress(0), factory,
                                           socket_factory, &capabilities, 1,
-                                          &devtools_http_client);
-
+                                          &devtools_http_client, &retry);
   std::unique_ptr<DevToolsClient> devtools_websocket_client;
   status = CreateBrowserwideDevToolsClientAndConnect(
       NetAddress(0), capabilities.perf_logging_prefs, socket_factory,
@@ -669,7 +713,7 @@ Status LaunchReplayChrome(URLRequestContextGetter* context_getter,
 
 }  // namespace
 
-Status LaunchChrome(URLRequestContextGetter* context_getter,
+Status LaunchChrome(network::mojom::URLLoaderFactory* factory,
                     const SyncWebSocketFactory& socket_factory,
                     DeviceManager* device_manager,
                     const Capabilities& capabilities,
@@ -680,21 +724,21 @@ Status LaunchChrome(URLRequestContextGetter* context_getter,
   if (capabilities.IsRemoteBrowser()) {
     // TODO(johnchen): Clean up naming for ChromeDriver sessions created
     // by connecting to an already-running Chrome at a given debuggerAddress.
-    return LaunchRemoteChromeSession(
-        context_getter, socket_factory, capabilities,
-        std::move(devtools_event_listeners), chrome);
+    return LaunchRemoteChromeSession(factory, socket_factory, capabilities,
+                                     std::move(devtools_event_listeners),
+                                     chrome);
   }
   const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
   if (capabilities.IsAndroid()) {
-    return LaunchAndroidChrome(context_getter, socket_factory, capabilities,
+    return LaunchAndroidChrome(factory, socket_factory, capabilities,
                                std::move(devtools_event_listeners),
                                device_manager, chrome);
   } else if (cmd_line->HasSwitch("devtools-replay")) {
-    return LaunchReplayChrome(context_getter, socket_factory, capabilities,
+    return LaunchReplayChrome(factory, socket_factory, capabilities,
                               std::move(devtools_event_listeners), chrome,
                               w3c_compliant);
   } else {
-    return LaunchDesktopChrome(context_getter, socket_factory, capabilities,
+    return LaunchDesktopChrome(factory, socket_factory, capabilities,
                                std::move(devtools_event_listeners), chrome,
                                w3c_compliant);
   }
@@ -809,7 +853,7 @@ Status ProcessExtension(const std::string& extension,
   if (!base::ReadFileToString(manifest_path, &manifest_data))
     return Status(kUnknownError, "cannot read manifest");
   std::unique_ptr<base::Value> manifest_value =
-      base::JSONReader::Read(manifest_data);
+      base::JSONReader::ReadDeprecated(manifest_data);
   base::DictionaryValue* manifest;
   if (!manifest_value || !manifest_value->GetAsDictionary(&manifest))
     return Status(kUnknownError, "invalid manifest");
@@ -918,8 +962,8 @@ Status WritePrefsFile(
   int code;
   std::string error_msg;
   std::unique_ptr<base::Value> template_value =
-      base::JSONReader::ReadAndReturnError(template_string, 0, &code,
-                                           &error_msg);
+      base::JSONReader::ReadAndReturnErrorDeprecated(template_string, 0, &code,
+                                                     &error_msg);
   base::DictionaryValue* prefs;
   if (!template_value || !template_value->GetAsDictionary(&prefs)) {
     return Status(kUnknownError,

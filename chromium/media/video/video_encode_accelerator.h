@@ -21,6 +21,7 @@
 #include "media/base/video_bitrate_allocation.h"
 #include "media/base/video_decoder_config.h"
 #include "media/base/video_frame.h"
+#include "media/video/h264_parser.h"
 
 namespace media {
 
@@ -70,6 +71,10 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
   // Specification of an encoding profile supported by an encoder.
   struct MEDIA_EXPORT SupportedProfile {
     SupportedProfile();
+    SupportedProfile(VideoCodecProfile profile,
+                     const gfx::Size& max_resolution,
+                     uint32_t max_framerate_numerator = 0u,
+                     uint32_t max_framerate_denominator = 1u);
     ~SupportedProfile();
     VideoCodecProfile profile;
     gfx::Size max_resolution;
@@ -93,11 +98,21 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
     kErrorMax = kPlatformFailureError
   };
 
+  // Unified default values for all VEA implementations.
+  enum {
+    kDefaultFramerate = 30,
+    kDefaultH264Level = H264SPS::kLevelIDC4p0,
+  };
+
   // Parameters required for VEA initialization.
   struct MEDIA_EXPORT Config {
     // Indicates if video content should be treated as a "normal" camera feed
     // or as generated (e.g. screen capture).
     enum class ContentType { kCamera, kDisplay };
+    // Indicates the storage type of a video frame provided on Encode().
+    // kShmem if a video frame is mapped in user space.
+    // kDmabuf if a video frame is referred by dmabuf.
+    enum class StorageType { kShmem, kDmabuf };
 
     Config();
     Config(const Config& config);
@@ -108,6 +123,7 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
            uint32_t initial_bitrate,
            base::Optional<uint32_t> initial_framerate = base::nullopt,
            base::Optional<uint8_t> h264_output_level = base::nullopt,
+           base::Optional<StorageType> storage_type = base::nullopt,
            ContentType content_type = ContentType::kCamera);
 
     ~Config();
@@ -129,15 +145,23 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
     uint32_t initial_bitrate;
 
     // Initial encoding framerate in frames per second. This is optional and
-    // VideoEncodeAccelerator should use default framerate if not given.
+    // VideoEncodeAccelerator should use |kDefaultFramerate| if not given.
     base::Optional<uint32_t> initial_framerate;
 
     // Codec level of encoded output stream for H264 only. This value should
     // be aligned to the H264 standard definition of SPS.level_idc. The only
     // exception is in Main and Baseline profile we still use
     // |h264_output_level|=9 for Level 1b, which should set level_idc to 11 and
-    // constraint_set3_flag to 1. (Spec A.3.1 and A.3.2)
+    // constraint_set3_flag to 1 (Spec A.3.1 and A.3.2). This is optional and
+    // use |kDefaultH264Level| if not given.
     base::Optional<uint8_t> h264_output_level;
+
+    // The storage type of video frame provided on Encode().
+    // If no value is set, VEA doesn't check the storage type of video frame on
+    // Encode().
+    // This is kShmem iff a video frame is mapped in user space.
+    // This is kDmabuf iff a video frame has dmabuf.
+    base::Optional<StorageType> storage_type;
 
     // Indicates captured video (from a camera) or generated (screen grabber).
     // Screen content has a number of special properties such as lack of noise,
@@ -208,6 +232,9 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
   virtual bool Initialize(const Config& config, Client* client) = 0;
 
   // Encodes the given frame.
+  // The storage type of |frame| must be the |storage_type| if it is specified
+  // in Initialize().
+  // TODO(crbug.com/895230): Raise an error if the storage types are mismatch.
   // Parameters:
   //  |frame| is the VideoFrame that is to be encoded.
   //  |force_keyframe| forces the encoding of a keyframe for this frame.
@@ -253,6 +280,10 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
   // or destruction. The client should not invoke Flush() or Encode() while the
   // previous Flush() is not finished yet.
   virtual void Flush(FlushCallback flush_callback);
+
+  // Returns true if the encoder support flush. This method must be called after
+  // VEA has been initialized.
+  virtual bool IsFlushSupported();
 
  protected:
   // Do not delete directly; use Destroy() or own it with a scoped_ptr, which

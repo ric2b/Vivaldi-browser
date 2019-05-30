@@ -9,22 +9,28 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/offline_pages/core/prefetch/prefetch_dispatcher.h"
-#include "components/offline_pages/core/task_queue.h"
+#include "components/offline_pages/core/prefetch/suggestions_provider.h"
+#include "components/offline_pages/core/prefetch/tasks/get_thumbnail_info_task.h"
+#include "components/offline_pages/task/task_queue.h"
 #include "components/version_info/channel.h"
 #include "net/url_request/url_request_context_getter.h"
 
+class PrefService;
+
 namespace offline_pages {
 class PrefetchService;
+struct PrefetchSuggestion;
 
 class PrefetchDispatcherImpl : public PrefetchDispatcher,
                                public TaskQueue::Delegate {
  public:
-  PrefetchDispatcherImpl();
+  explicit PrefetchDispatcherImpl(PrefService* pref_service);
   ~PrefetchDispatcherImpl() override;
 
   // PrefetchDispatcher implementation:
@@ -34,6 +40,9 @@ class PrefetchDispatcherImpl : public PrefetchDispatcher,
   void AddCandidatePrefetchURLs(
       const std::string& name_space,
       const std::vector<PrefetchURL>& prefetch_urls) override;
+  void NewSuggestionsAvailable(
+      SuggestionsProvider* suggestions_provider) override;
+  void RemoveSuggestion(const GURL& url) override;
   void RemoveAllUnprocessedPrefetchURLs(const std::string& name_space) override;
   void RemovePrefetchURLsByClientId(const ClientId& client_id) override;
   void BeginBackgroundTask(
@@ -56,6 +65,10 @@ class PrefetchDispatcherImpl : public PrefetchDispatcher,
 
  private:
   friend class PrefetchDispatcherTest;
+
+  base::WeakPtr<PrefetchDispatcherImpl> GetWeakPtr() {
+    return weak_factory_.GetWeakPtr();
+  }
 
   void DisposeTask();
 
@@ -82,6 +95,9 @@ class PrefetchDispatcherImpl : public PrefetchDispatcher,
   // wakeup (when BeginBackgroundTask() is called) or any time TaskQueue
   // becomes idle and any task called SchedulePipelineProcessing() before.
   void QueueActionTasks();
+  // Adds a list of PrefetchSuggestions to the queue of suggestions to be
+  // prefetched.
+  void AddSuggestions(std::vector<PrefetchSuggestion> suggestions);
 
   // The methods below control the  downloading of thumbnails for the provided
   // prefetch items IDs. They are called multiple times for the same article,
@@ -102,11 +118,16 @@ class PrefetchDispatcherImpl : public PrefetchDispatcher,
                                  std::unique_ptr<IdsVector> remaining_ids,
                                  bool is_first_attempt,
                                  bool thumbnail_exists);
+  void ThumbnailInfoReceived(const int64_t offline_id,
+                             std::unique_ptr<IdsVector> remaining_ids,
+                             bool is_first_attempt,
+                             GetThumbnailInfoTask::Result result);
   void ThumbnailFetchComplete(const int64_t offline_id,
                               std::unique_ptr<IdsVector> remaining_ids,
                               bool is_first_attempt,
                               const std::string& image_data);
 
+  PrefService* pref_service_;
   PrefetchService* service_;
   TaskQueue task_queue_;
   bool needs_pipeline_processing_ = false;

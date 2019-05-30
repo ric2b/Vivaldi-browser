@@ -4,13 +4,14 @@
 
 #include "chrome/browser/feature_engagement/incognito_window/incognito_window_tracker.h"
 
+#include "base/bind.h"
 #include "base/run_loop.h"
 #include "chrome/browser/feature_engagement/incognito_window/incognito_window_tracker_factory.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/views/feature_promos/incognito_window_promo_bubble_view.h"
+#include "chrome/browser/ui/views/feature_promos/feature_promo_bubble_view.h"
 #include "chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
@@ -47,7 +48,7 @@ class IncognitoWindowTrackerBrowserTest : public InProcessBrowserTest {
 
   void SetUpOnMainThread() override {
     TrackerFactory::GetInstance()->SetTestingFactoryAndUse(
-        browser()->profile(), &BuildTestTrackerFactory);
+        browser()->profile(), base::BindRepeating(&BuildTestTrackerFactory));
 
     // Ensure all initialization is finished.
     base::RunLoop().RunUntilIdle();

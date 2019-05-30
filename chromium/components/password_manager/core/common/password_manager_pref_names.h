@@ -46,10 +46,10 @@ extern const char kOsPasswordLastChanged[];
 // database. Stores a value from MigrationStatus.
 extern const char kKeychainMigrationStatus[];
 
-// The date of when passwords were recovered for MacOS Sync users who
-// previously lost access to their password because of encryption key
-// modification in Keychain.
-extern const char kSyncUsersPasswordRecovery[];
+// The date of when passwords were cleaned up for MacOS users who previously
+// lost access to their password because of encryption key modification in
+// Keychain.
+extern const char kPasswordRecovery[];
 #endif
 
 // Boolean that indicated whether first run experience for the auto sign-in
@@ -70,8 +70,9 @@ extern const char kSyncPasswordHash[];
 // int>.<16 char salt>".
 extern const char kSyncPasswordLengthAndHashSalt[];
 
-// Whether Chrome deleted blacklisted credentials that were duplicated.
-extern const char kDuplicatedBlacklistedCredentialsRemoved[];
+// Indicates the time (in seconds) when last cleaning of obsolete HTTP
+// credentials was performed.
+extern const char kLastTimeObsoleteHttpCredentialsRemoved[];
 
 // List that contains captured password hashes.
 extern const char kPasswordHashDataList[];

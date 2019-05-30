@@ -10,8 +10,6 @@
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/debug/alias.h"
-#include "base/lazy_instance.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/weak_ptr.h"
@@ -19,9 +17,11 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/post_task.h"
 #include "base/trace_event/trace_event.h"
 #include "ios/web/public/browser_state.h"
 #import "ios/web/public/web_client.h"
+#include "ios/web/public/web_task_traits.h"
 #include "ios/web/public/web_thread.h"
 #include "ios/web/webui/shared_resources_data_source_ios.h"
 #include "ios/web/webui/url_data_source_ios_impl.h"
@@ -49,10 +49,9 @@ namespace web {
 
 namespace {
 
-// TODO(tsepez) remove unsafe-eval when bidichecker_packaged.js fixed.
 const char kChromeURLContentSecurityPolicyHeaderBase[] =
     "Content-Security-Policy: script-src chrome://resources "
-    "'self' 'unsafe-eval'; ";
+    "'self'; ";
 
 const char kChromeURLXFrameOptionsHeader[] = "X-Frame-Options: DENY";
 
@@ -369,7 +368,7 @@ int URLRequestChromeJob::ReadRawData(net::IOBuffer* buf, int buf_size) {
 int URLRequestChromeJob::CompleteRead(net::IOBuffer* buf, int buf_size) {
   // http://crbug.com/373841
   char url_buf[128];
-  base::strlcpy(url_buf, request_->url().spec().c_str(), arraysize(url_buf));
+  base::strlcpy(url_buf, request_->url().spec().c_str(), base::size(url_buf));
   base::debug::Alias(url_buf);
 
   int remaining = data_->size() - data_offset_;
@@ -393,9 +392,10 @@ void GetMimeTypeOnUI(URLDataSourceIOSImpl* source,
                      const base::WeakPtr<URLRequestChromeJob>& job) {
   DCHECK_CURRENTLY_ON(WebThread::UI);
   std::string mime_type = source->source()->GetMimeType(path);
-  WebThread::PostTask(WebThread::IO, FROM_HERE,
-                      base::Bind(&URLRequestChromeJob::MimeTypeAvailable, job,
-                                 base::RetainedRef(source), mime_type));
+  base::PostTaskWithTraits(
+      FROM_HERE, {WebThread::IO},
+      base::BindOnce(&URLRequestChromeJob::MimeTypeAvailable, job,
+                     base::RetainedRef(source), mime_type));
 }
 
 }  // namespace
@@ -512,14 +512,15 @@ bool URLDataManagerIOSBackend::StartRequest(const net::URLRequest* request,
   // message loop before request for data. And correspondingly their
   // replies are put on the IO thread in the same order.
   scoped_refptr<base::SingleThreadTaskRunner> target_runner =
-      web::WebThread::GetTaskRunnerForThread(web::WebThread::UI);
+      base::CreateSingleThreadTaskRunnerWithTraits({web::WebThread::UI});
   target_runner->PostTask(
-      FROM_HERE, base::Bind(&GetMimeTypeOnUI, base::RetainedRef(source), path,
-                            job->weak_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&GetMimeTypeOnUI, base::RetainedRef(source),
+                                path, job->weak_factory_.GetWeakPtr()));
 
   target_runner->PostTask(
-      FROM_HERE, base::Bind(&URLDataManagerIOSBackend::CallStartRequest,
-                            base::WrapRefCounted(source), path, request_id));
+      FROM_HERE,
+      base::BindOnce(&URLDataManagerIOSBackend::CallStartRequest,
+                     base::WrapRefCounted(source), path, request_id));
   return true;
 }
 

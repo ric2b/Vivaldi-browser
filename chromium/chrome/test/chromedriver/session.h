@@ -21,7 +21,9 @@
 #include "chrome/test/chromedriver/command_listener.h"
 
 static const char kAccept[] = "accept";
+static const char kAcceptAndNotify[] = "accept and notify";
 static const char kDismiss[] = "dismiss";
+static const char kDismissAndNotify[] = "dismiss and notify";
 static const char kIgnore[] = "ignore";
 
 // Controls whether ChromeDriver operates in W3C mode (when true) or legacy
@@ -47,7 +49,22 @@ struct FrameInfo {
   std::string chromedriver_frame_id;
 };
 
+struct InputCancelListEntry {
+  InputCancelListEntry(base::DictionaryValue* input_state,
+                       const MouseEvent* mouse_event,
+                       const TouchEvent* touch_event,
+                       const KeyEvent* key_event);
+  InputCancelListEntry(InputCancelListEntry&& other);
+  ~InputCancelListEntry();
+
+  base::DictionaryValue* input_state;
+  std::unique_ptr<MouseEvent> mouse_event;
+  std::unique_ptr<TouchEvent> touch_event;
+  std::unique_ptr<KeyEvent> key_event;
+};
+
 struct Session {
+  static const base::TimeDelta kDefaultImplicitWaitTimeout;
   static const base::TimeDelta kDefaultPageLoadTimeout;
   static const base::TimeDelta kDefaultScriptTimeout;
 
@@ -75,10 +92,12 @@ struct Session {
   int sticky_modifiers;
   // List of input sources for each active input. Everytime a new input source
   // is added, there must be a corresponding entry made in input_state_table.
-  std::unique_ptr<base::ListValue> active_input_sources;
+  base::ListValue active_input_sources;
   // Map between input id and input source state for the corresponding input
   // source. One entry for each item in active_input_sources
-  std::unique_ptr<base::DictionaryValue> input_state_table;
+  base::DictionaryValue input_state_table;
+  // List of actions for Release Actions command.
+  std::vector<InputCancelListEntry> input_cancel_list;
   // List of |FrameInfo|s for each frame to the current target frame from the
   // first frame element in the root document. If target frame is window.top,
   // this list will be empty.
@@ -104,7 +123,8 @@ struct Session {
   // |CommandListener|s might be |CommandListenerProxy|s that forward to
   // |DevToolsEventListener|s owned by |chrome|.
   std::vector<std::unique_ptr<CommandListener>> command_listeners;
-  std::string unexpected_alert_behaviour;
+  bool strict_file_interactability;
+  std::string unhandled_prompt_behavior;
 };
 
 Session* GetThreadLocalSession();

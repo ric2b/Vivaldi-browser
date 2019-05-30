@@ -12,7 +12,7 @@
 
 #include "base/feature_list.h"
 #include "base/macros.h"
-#include "base/time/tick_clock.h"
+#include "base/time/clock.h"
 #include "base/time/time.h"
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
@@ -71,6 +71,26 @@ class NET_EXPORT NetworkErrorLoggingService {
     int reporting_upload_depth;
   };
 
+  // The details of a signed exchange report.
+  struct NET_EXPORT SignedExchangeReportDetails {
+    SignedExchangeReportDetails();
+    SignedExchangeReportDetails(const SignedExchangeReportDetails& other);
+    ~SignedExchangeReportDetails();
+
+    bool success;
+    std::string type;
+    GURL outer_url;
+    GURL inner_url;
+    GURL cert_url;
+    std::string referrer;
+    IPAddress server_ip_address;
+    std::string protocol;
+    std::string method;
+    int32_t status_code;
+    base::TimeDelta elapsed_time;
+    std::string user_agent;
+  };
+
   static const char kHeaderName[];
 
   static const char kReportType[];
@@ -89,12 +109,70 @@ class NET_EXPORT NetworkErrorLoggingService {
   static const char kPhaseKey[];
   static const char kTypeKey[];
 
+  static const char kSignedExchangePhaseValue[];
+  static const char kSignedExchangeBodyKey[];
+  static const char kOuterUrlKey[];
+  static const char kInnerUrlKey[];
+  static const char kCertUrlKey[];
+
+  // Maximum number of NEL policies to store before evicting.
+  static const size_t kMaxPolicies;
+
+  // Histograms.  These are mainly used in test cases to verify that interesting
+  // events occurred.
+
+  static const char kHeaderOutcomeHistogram[];
+  static const char kRequestOutcomeHistogram[];
+  static const char kSignedExchangeRequestOutcomeHistogram[];
+
+  enum class HeaderOutcome {
+    DISCARDED_NO_NETWORK_ERROR_LOGGING_SERVICE = 0,
+    DISCARDED_INVALID_SSL_INFO = 1,
+    DISCARDED_CERT_STATUS_ERROR = 2,
+
+    DISCARDED_INSECURE_ORIGIN = 3,
+
+    DISCARDED_JSON_TOO_BIG = 4,
+    DISCARDED_JSON_INVALID = 5,
+    DISCARDED_NOT_DICTIONARY = 6,
+    DISCARDED_TTL_MISSING = 7,
+    DISCARDED_TTL_NOT_INTEGER = 8,
+    DISCARDED_TTL_NEGATIVE = 9,
+    DISCARDED_REPORT_TO_MISSING = 10,
+    DISCARDED_REPORT_TO_NOT_STRING = 11,
+
+    REMOVED = 12,
+    SET = 13,
+
+    DISCARDED_MISSING_REMOTE_ENDPOINT = 14,
+
+    MAX
+  };
+
+  enum class RequestOutcome {
+    kDiscardedNoNetworkErrorLoggingService = 0,
+
+    kDiscardedNoReportingService = 1,
+    kDiscardedInsecureOrigin = 2,
+    kDiscardedNoOriginPolicy = 3,
+    kDiscardedUnmappedError = 4,
+    kDiscardedReportingUpload = 5,
+    kDiscardedUnsampledSuccess = 6,
+    kDiscardedUnsampledFailure = 7,
+    kQueued = 8,
+    kDiscardedNonDNSSubdomainReport = 9,
+    kDiscardedIPAddressMismatch = 10,
+
+    kMaxValue = kDiscardedIPAddressMismatch
+  };
+
   static void RecordHeaderDiscardedForNoNetworkErrorLoggingService();
   static void RecordHeaderDiscardedForInvalidSSLInfo();
   static void RecordHeaderDiscardedForCertStatusError();
   static void RecordHeaderDiscardedForMissingRemoteEndpoint();
 
   static void RecordRequestDiscardedForNoNetworkErrorLoggingService();
+  static void RecordRequestDiscardedForInsecureOrigin();
 
   static std::unique_ptr<NetworkErrorLoggingService> Create(
       std::unique_ptr<NetworkErrorLoggingDelegate> delegate);
@@ -117,8 +195,13 @@ class NET_EXPORT NetworkErrorLoggingService {
   //
   // Note that Network Error Logging can report a fraction of successful
   // requests as well (to calculate error rates), so this should be called on
-  // *all* requests.
+  // *all* secure requests. NEL is only available to secure origins, so this is
+  // not called on any insecure requests.
   virtual void OnRequest(RequestDetails details) = 0;
+
+  // Queues a Signed Exchange report.
+  virtual void QueueSignedExchangeReport(
+      const SignedExchangeReportDetails& details) = 0;
 
   // Removes browsing data (origin policies) associated with any origin for
   // which |origin_filter| returns true.
@@ -134,21 +217,29 @@ class NET_EXPORT NetworkErrorLoggingService {
   // |reporting_service| must outlive the NetworkErrorLoggingService.
   void SetReportingService(ReportingService* reporting_service);
 
-  // Sets a base::TickClock (used to track policy expiration) for tests.
-  // |tick_clock| must outlive the NetworkErrorLoggingService, and cannot be
-  // nullptr.
-  void SetTickClockForTesting(const base::TickClock* tick_clock);
+  // Shuts down the NEL service so that no more requests or headers are
+  // processed and no more reports are queued.
+  void OnShutdown();
 
+  // Sets a base::Clock (used to track policy expiration) for tests.
+  // |clock| must outlive the NetworkErrorLoggingService, and cannot be
+  // nullptr.
+  void SetClockForTesting(const base::Clock* clock);
+
+  // Dumps info about all the currently stored policies, including expired ones.
+  // Used to display information about NEL policies on the NetLog Reporting tab.
   virtual base::Value StatusAsValue() const;
 
+  // Gets the origins of all currently stored policies, including expired ones.
   virtual std::set<url::Origin> GetPolicyOriginsForTesting();
 
  protected:
   NetworkErrorLoggingService();
 
   // Unowned:
-  const base::TickClock* tick_clock_;
+  const base::Clock* clock_;
   ReportingService* reporting_service_;
+  bool shut_down_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(NetworkErrorLoggingService);

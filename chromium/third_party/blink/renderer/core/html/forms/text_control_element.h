@@ -42,7 +42,7 @@ enum TextFieldSelectionDirection {
   kSelectionHasForwardDirection,
   kSelectionHasBackwardDirection
 };
-enum TextFieldEventBehavior {
+enum class TextFieldEventBehavior {
   kDispatchNoEvent,
   kDispatchChangeEvent,
   kDispatchInputAndChangeEvent
@@ -123,7 +123,7 @@ class CORE_EXPORT TextControlElement : public HTMLFormControlElementWithState {
   virtual String value() const = 0;
   virtual void setValue(
       const String&,
-      TextFieldEventBehavior = kDispatchNoEvent,
+      TextFieldEventBehavior = TextFieldEventBehavior::kDispatchNoEvent,
       TextControlSetValueSelection =
           TextControlSetValueSelection::kSetSelectionToEnd) = 0;
 
@@ -190,6 +190,7 @@ class CORE_EXPORT TextControlElement : public HTMLFormControlElementWithState {
                          WebFocusType,
                          InputDeviceCapabilities* source_capabilities) final;
   void ScheduleSelectEvent();
+  void DisabledOrReadonlyAttributeChanged(const QualifiedName&);
 
   // Returns true if user-editable value is empty. Used to check placeholder
   // visibility.
@@ -214,9 +215,9 @@ class CORE_EXPORT TextControlElement : public HTMLFormControlElementWithState {
   // creating a number of TreeScope data structures to track elements by ID.
   Member<TextControlInnerEditorElement> inner_editor_;
 
-  // In m_valueBeforeFirstUserEdit, we distinguish a null String and zero-length
-  // String. Null String means the field doesn't have any data yet, and
-  // zero-length String is a valid data.
+  // In value_before_first_user_edit_, we distinguish a null String and
+  // zero-length String. Null String means the field doesn't have any data yet,
+  // and zero-length String is a valid data.
   String value_before_first_user_edit_;
   bool last_change_was_user_edit_;
 
@@ -264,6 +265,7 @@ DEFINE_TEXT_CONTROL_CASTS(const TextControlElement, const Node);
 #undef DEFINE_TEXT_CONTROL_CASTS
 
 TextControlElement* EnclosingTextControl(const Position&);
+TextControlElement* EnclosingTextControl(const PositionInFlatTree&);
 TextControlElement* EnclosingTextControl(const Node*);
 
 }  // namespace blink

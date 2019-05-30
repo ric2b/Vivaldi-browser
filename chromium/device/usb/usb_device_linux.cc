@@ -32,11 +32,13 @@ UsbDeviceLinux::UsbDeviceLinux(const std::string& device_path,
                                const std::string& manufacturer_string,
                                const std::string& product_string,
                                const std::string& serial_number,
-                               uint8_t active_configuration)
+                               uint8_t active_configuration,
+                               uint32_t bus_number, uint32_t port_number)
     : UsbDevice(descriptor,
                 base::UTF8ToUTF16(manufacturer_string),
                 base::UTF8ToUTF16(product_string),
-                base::UTF8ToUTF16(serial_number)),
+                base::UTF8ToUTF16(serial_number),
+                bus_number, port_number),
       device_path_(device_path) {
   ActiveConfigurationChanged(active_configuration);
 }
@@ -46,7 +48,7 @@ UsbDeviceLinux::~UsbDeviceLinux() = default;
 #if defined(OS_CHROMEOS)
 
 void UsbDeviceLinux::CheckUsbAccess(ResultCallback callback) {
-  DCHECK(sequence_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   chromeos::PermissionBrokerClient* client =
       chromeos::DBusThreadManager::Get()->GetPermissionBrokerClient();
   DCHECK(client) << "Could not get permission broker client.";
@@ -57,7 +59,7 @@ void UsbDeviceLinux::CheckUsbAccess(ResultCallback callback) {
 #endif  // defined(OS_CHROMEOS)
 
 void UsbDeviceLinux::Open(OpenCallback callback) {
-  DCHECK(sequence_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
 #if defined(OS_CHROMEOS)
   chromeos::PermissionBrokerClient* client =
@@ -125,7 +127,7 @@ void UsbDeviceLinux::Opened(
     base::ScopedFD fd,
     OpenCallback callback,
     scoped_refptr<base::SequencedTaskRunner> blocking_task_runner) {
-  DCHECK(sequence_checker_.CalledOnValidSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   scoped_refptr<UsbDeviceHandle> device_handle =
       new UsbDeviceHandleUsbfs(this, std::move(fd), blocking_task_runner);
   handles().push_back(device_handle.get());

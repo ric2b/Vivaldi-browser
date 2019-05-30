@@ -69,14 +69,12 @@ bool chrome_logging_failed_ = false;
 // Assertion handler for logging errors that occur when dialogs are
 // silenced.  To record a new error, pass the log string associated
 // with that error in the str parameter.
-MSVC_DISABLE_OPTIMIZE();
-void SilentRuntimeAssertHandler(const char* file,
-                                int line,
-                                const base::StringPiece message,
-                                const base::StringPiece stack_trace) {
+NOINLINE void SilentRuntimeAssertHandler(const char* file,
+                                         int line,
+                                         const base::StringPiece message,
+                                         const base::StringPiece stack_trace) {
   base::debug::BreakDebugger();
 }
-MSVC_ENABLE_OPTIMIZE();
 
 // Suppresses error/assertion dialogs and enables the logging of
 // those errors into silenced_errors_.
@@ -324,8 +322,9 @@ bool BrowserMonitor::StartWatching(
   }
 
   if (!background_thread_.task_runner()->PostTask(
-          FROM_HERE, base::Bind(&BrowserMonitor::Watch, base::Unretained(this),
-                                base::Passed(&on_initialized_event)))) {
+          FROM_HERE,
+          base::BindOnce(&BrowserMonitor::Watch, base::Unretained(this),
+                         std::move(on_initialized_event)))) {
     background_thread_.Stop();
     return false;
   }
@@ -357,8 +356,9 @@ void BrowserMonitor::Watch(base::win::ScopedHandle on_initialized_event) {
   // Note that the browser has exited.
   browser_exited_.Signal();
 
-  main_thread_->PostTask(FROM_HERE,
-      base::Bind(&BrowserMonitor::BrowserExited, base::Unretained(this)));
+  main_thread_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&BrowserMonitor::BrowserExited, base::Unretained(this)));
 }
 
 void BrowserMonitor::BrowserExited() {

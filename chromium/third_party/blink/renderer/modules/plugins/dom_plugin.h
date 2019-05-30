@@ -21,7 +21,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_PLUGINS_DOM_PLUGIN_H_
 
 #include "base/memory/scoped_refptr.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/plugins/dom_mime_type.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -37,8 +37,10 @@ class DOMPlugin final : public ScriptWrappable, public ContextClient {
 
  public:
   static DOMPlugin* Create(LocalFrame* frame, const PluginInfo& plugin_info) {
-    return new DOMPlugin(frame, plugin_info);
+    return MakeGarbageCollected<DOMPlugin>(frame, plugin_info);
   }
+
+  DOMPlugin(LocalFrame*, const PluginInfo&);
 
   String name() const;
   String filename() const;
@@ -54,8 +56,6 @@ class DOMPlugin final : public ScriptWrappable, public ContextClient {
   void Trace(blink::Visitor*) override;
 
  private:
-  DOMPlugin(LocalFrame*, const PluginInfo&);
-
   Member<const PluginInfo> plugin_info_;
 };
 

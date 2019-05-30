@@ -37,10 +37,10 @@
 #include "chrome/chrome_cleaner/proto/shared_pup_enums.pb.h"
 #include "chrome/chrome_cleaner/pup_data/pup_data.h"
 #include "chrome/chrome_cleaner/test/test_file_util.h"
-#include "chrome/chrome_cleaner/test/test_name_helper.h"
 #include "chrome/chrome_cleaner/test/test_settings_util.h"
 #include "chrome/chrome_cleaner/test/test_task_scheduler.h"
 #include "components/chrome_cleaner/public/constants/constants.h"
+#include "components/chrome_cleaner/test/test_name_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/protobuf/src/google/protobuf/repeated_field.h"
 
@@ -88,7 +88,7 @@ const wchar_t kMatchedFileToStringExpectedString[] =
     L"product_short_name = 'PNShort', internal_name = 'Internal Name', "
     L"original_filename = 'Something_Original.tmp', file_description = 'Very "
     L"descriptive', file_version = '42.1.2', active_file = '0', removal_status "
-    L"= 0";
+    L"= 0, quarantine_status = 0";
 
 const wchar_t kMatchedRegistryEntryKey[] = L"123";
 const wchar_t kMatchedRegistryEntryValueName[] = L"Value Name";
@@ -389,7 +389,7 @@ TEST(LoggingServiceUtilTest, GetCleanerStartupFromCommandLine) {
        flag_value <= ChromeCleanerReport::CleanerStartup_MAX; ++flag_value) {
     command_line.InitFromArgv(command_line.argv());
     command_line.AppendSwitchASCII(kChromePromptSwitch,
-                                   base::IntToString(flag_value));
+                                   base::NumberToString(flag_value));
     if (flag_value == ChromeCleanerReport::CLEANER_STARTUP_UNSPECIFIED ||
         flag_value == ChromeCleanerReport::CLEANER_STARTUP_NOT_PROMPTED) {
       EXPECT_EQ(ChromeCleanerReport::CLEANER_STARTUP_UNKNOWN,
@@ -1074,10 +1074,17 @@ TEST_P(CleanerLoggingServiceTest, AddInstalledExtension) {
   ASSERT_TRUE(report.ParseFromString(logging_service_->RawReportContent()));
   ASSERT_EQ(report.system_report().installed_extensions_size(), 0);
 
+  internal::FileInformation file1, file2;
+  const base::string16 kFilePath1 = L"path/file1";
+  const base::string16 kFilePath2 = L"path/file2";
+  file1.path = kFilePath1;
+  file2.path = kFilePath2;
   logging_service_->AddInstalledExtension(
-      kExtensionId, ExtensionInstallMethod::POLICY_EXTENSION_FORCELIST);
+      kExtensionId, ExtensionInstallMethod::POLICY_EXTENSION_FORCELIST,
+      {file1});
   logging_service_->AddInstalledExtension(
-      kExtensionId2, ExtensionInstallMethod::POLICY_MASTER_PREFERENCES);
+      kExtensionId2, ExtensionInstallMethod::POLICY_MASTER_PREFERENCES,
+      {file1, file2});
 
   ASSERT_TRUE(report.ParseFromString(logging_service_->RawReportContent()));
   ASSERT_EQ(report.system_report().installed_extensions_size(), 2);
@@ -1087,12 +1094,23 @@ TEST_P(CleanerLoggingServiceTest, AddInstalledExtension) {
   EXPECT_EQ(base::WideToUTF8(kExtensionId), installed_extension.extension_id());
   EXPECT_EQ(ExtensionInstallMethod::POLICY_EXTENSION_FORCELIST,
             installed_extension.install_method());
+  ASSERT_EQ(installed_extension.extension_files().size(), 1);
+  EXPECT_EQ(installed_extension.extension_files(0).path(),
+            base::UTF16ToUTF8(kFilePath1));
 
   installed_extension = report.system_report().installed_extensions(1);
   EXPECT_EQ(base::WideToUTF8(kExtensionId2),
             installed_extension.extension_id());
   EXPECT_EQ(ExtensionInstallMethod::POLICY_MASTER_PREFERENCES,
             installed_extension.install_method());
+  ASSERT_EQ(installed_extension.extension_files().size(), 2);
+
+  std::vector<std::string> reported_files = {
+      installed_extension.extension_files(0).path(),
+      installed_extension.extension_files(1).path()};
+  EXPECT_THAT(reported_files, testing::UnorderedElementsAreArray(
+                                  {base::UTF16ToUTF8(kFilePath1),
+                                   base::UTF16ToUTF8(kFilePath2)}));
 }
 
 TEST_P(CleanerLoggingServiceTest, AddScheduledTask) {
@@ -1165,6 +1183,7 @@ void AddFileToUwS(const base::FilePath& path, UwS* uws) {
   file->mutable_file_information()->set_active_file(
       PathHasActiveExtension(path));
   file->set_removal_status(REMOVAL_STATUS_MATCHED_ONLY);
+  file->set_quarantine_status(QUARANTINE_STATUS_UNSPECIFIED);
 }
 
 // Add a matched folder entry to |uws| with path given by SanitizePath(|path|)
@@ -1185,6 +1204,19 @@ void ExpectRemovalStatus(const ChromeCleanerReport& report,
       EXPECT_EQ(expected_status, file.removal_status());
     for (const MatchedFolder& folder : uws.folders())
       EXPECT_EQ(expected_status, folder.removal_status());
+  }
+}
+
+// Checks that all files for all UwS entries in |report| have quarantine status
+// |expected_status|.
+void ExpectQuarantineStatus(const ChromeCleanerReport& report,
+                            QuarantineStatus expected_status) {
+  for (const UwS& uws : report.detected_uws()) {
+    for (const MatchedFile& file : uws.files())
+      EXPECT_EQ(expected_status, file.quarantine_status());
+
+    // We should not quarantine any folder.
+    EXPECT_TRUE(uws.folders().empty());
   }
 }
 
@@ -1289,6 +1321,52 @@ TEST_P(CleanerLoggingServiceTest, UpdateRemovalStatus) {
       logging_service_->Terminate();
       logging_service_->Initialize(registry_logger_.get());
     }
+  }
+}
+
+TEST_P(CleanerLoggingServiceTest, UpdateQuarantineStatus) {
+  const base::FilePath kFile1(L"C:\\Program Files\\My Dear UwS\\File1.exe");
+
+  // Creates a vector of all QuarantineStatus enum values to improve readability
+  // of loops in this test and ensure that all QuarantineStatus enumerators are
+  // checked.
+  std::vector<QuarantineStatus> all_quarantine_status;
+  for (int i = QuarantineStatus_MIN; i <= QuarantineStatus_MAX; ++i) {
+    // Status cannot be set to QUARANTINE_STATUS_UNSPECIFIED - this is guarded
+    // by an assert.
+    QuarantineStatus status = static_cast<QuarantineStatus>(i);
+    if (QuarantineStatus_IsValid(status) &&
+        status != QUARANTINE_STATUS_UNSPECIFIED)
+      all_quarantine_status.push_back(status);
+  }
+
+  FileRemovalStatusUpdater* removal_status_updater =
+      FileRemovalStatusUpdater::GetInstance();
+  for (QuarantineStatus status : all_quarantine_status) {
+    logging_service_->EnableUploads(true, registry_logger_.get());
+
+    UwS uws;
+    uws.set_id(1);
+    AddFileToUwS(kFile1, &uws);
+    logging_service_->AddDetectedUwS(uws);
+
+    ChromeCleanerReport report;
+    // The default quarantine status should be |QUARANTINE_STATUS_UNSPECIFIED|.
+    EXPECT_TRUE(report.ParseFromString(logging_service_->RawReportContent()));
+    ExpectQuarantineStatus(report, QUARANTINE_STATUS_UNSPECIFIED);
+
+    // Removal status has to be updated with a valid status.
+    removal_status_updater->UpdateRemovalStatus(kFile1,
+                                                REMOVAL_STATUS_MATCHED_ONLY);
+    removal_status_updater->UpdateQuarantineStatus(kFile1, status);
+    // It should always succeed to override |QUARANTINE_STATUS_UNSPECIFIED|.
+    EXPECT_TRUE(report.ParseFromString(logging_service_->RawReportContent()));
+    ExpectQuarantineStatus(report, status);
+
+    // Reset the logging service, so one the current test doesn't interfere with
+    // the next one.
+    logging_service_->Terminate();
+    logging_service_->Initialize(registry_logger_.get());
   }
 }
 
@@ -1423,15 +1501,46 @@ TEST_P(CleanerLoggingServiceTest, AllExpectedRemovalsConfirmed) {
   uws4.set_id(4);
   uws4.set_state(UwS::REMOVABLE);
   AddFileToUwS(kFile1, &uws4);
+  logging_service_->AddDetectedUwS(uws4);
   EXPECT_TRUE(logging_service_->AllExpectedRemovalsConfirmed());
+}
+
+TEST_P(CleanerLoggingServiceTest, AddShortcutData) {
+  const base::string16 kLnkPath = L"C:\\Users\\SomeUser";
+  const base::string16 kExecutablePath1 =
+      L"C:\\executable_path\\executable.exe";
+  const base::string16 kExecutablePath2 = L"C:\\executable_path\\bad_file.exe";
+  const std::string kHash = "HASHSTRING";
+  const std::vector<base::string16> kCommandLineArguments = {
+      L"some-argument", L"-ha", L"-ha", L"-ha"};
+
+  logging_service_->AddShortcutData(kLnkPath, kExecutablePath1, kHash, {});
+  logging_service_->AddShortcutData(kLnkPath, kExecutablePath2, kHash,
+                                    kCommandLineArguments);
+
+  ChromeCleanerReport report;
+  ASSERT_TRUE(report.ParseFromString(logging_service_->RawReportContent()));
+  ASSERT_EQ(report.system_report().shortcut_data().size(), 2);
+  ChromeCleanerReport_SystemReport_ShortcutData shortcut1, shortcut2;
+  shortcut1 = report.system_report().shortcut_data(0);
+  shortcut2 = report.system_report().shortcut_data(1);
+
+  EXPECT_EQ(shortcut1.lnk_path(), base::UTF16ToUTF8(kLnkPath));
+  EXPECT_EQ(shortcut2.lnk_path(), base::UTF16ToUTF8(kLnkPath));
+  EXPECT_EQ(shortcut1.executable_path(), base::UTF16ToUTF8(kExecutablePath1));
+  EXPECT_EQ(shortcut2.executable_path(), base::UTF16ToUTF8(kExecutablePath2));
+  EXPECT_EQ(shortcut1.executable_hash(), kHash);
+  EXPECT_EQ(shortcut2.executable_hash(), kHash);
+  EXPECT_EQ(shortcut1.command_line_arguments().size(), 0);
+  EXPECT_EQ(shortcut2.command_line_arguments().size(), 4);
 }
 
 // TODO(csharp) add multi-thread tests.
 
-INSTANTIATE_TEST_CASE_P(All,
-                        CleanerLoggingServiceTest,
-                        testing::Values(ExecutionMode::kScanning,
-                                        ExecutionMode::kCleanup),
-                        GetParamNameForTest());
+INSTANTIATE_TEST_SUITE_P(All,
+                         CleanerLoggingServiceTest,
+                         testing::Values(ExecutionMode::kScanning,
+                                         ExecutionMode::kCleanup),
+                         GetParamNameForTest());
 
 }  // namespace chrome_cleaner

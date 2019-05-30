@@ -4,14 +4,15 @@
 
 #include "chrome/browser/page_load_metrics/observers/data_saver_site_breakdown_metrics_observer.h"
 
-#include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
-#include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings_factory.h"
+#include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings.h"
+#include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings_factory.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_service.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
+#include "services/network/public/cpp/features.h"
 #include "url/gurl.h"
 
 DataSaverSiteBreakdownMetricsObserver::DataSaverSiteBreakdownMetricsObserver() =
@@ -36,11 +37,16 @@ DataSaverSiteBreakdownMetricsObserver::OnCommit(
   // will be called is in MetricsWebContentsObserver's destructor, which is
   // called in WebContents destructor.
   browser_context_ = navigation_handle->GetWebContents()->GetBrowserContext();
-  committed_host_ = navigation_handle->GetURL().HostNoBrackets();
+
+  // Use Virtual URL instead of actual host.
+  committed_host_ = navigation_handle->GetWebContents()
+                        ->GetLastCommittedURL()
+                        .HostNoBrackets();
   return CONTINUE_OBSERVING;
 }
 
 void DataSaverSiteBreakdownMetricsObserver::OnResourceDataUseObserved(
+    FrameTreeNodeId frame_tree_node_id,
     const std::vector<page_load_metrics::mojom::ResourceDataUpdatePtr>&
         resources) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -64,5 +70,26 @@ void DataSaverSiteBreakdownMetricsObserver::OnResourceDataUseObserved(
             received_data_length,
             received_data_length + data_reduction_proxy_bytes_saved,
             committed_host_);
+    if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+      // TODO(rajendrant): Fix the |request_type| and |mime_type| sent below or
+      // remove the respective histograms.
+      data_reduction_proxy_settings->data_reduction_proxy_service()
+          ->UpdateContentLengths(
+              received_data_length,
+              received_data_length + data_reduction_proxy_bytes_saved,
+              data_reduction_proxy_settings->IsDataReductionProxyEnabled(),
+              data_reduction_proxy::VIA_DATA_REDUCTION_PROXY,
+              std::string() /* mime_type */, true /*is_user_traffic*/,
+              data_use_measurement::DataUseUserData::OTHER, 0);
+    }
   }
+}
+
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+DataSaverSiteBreakdownMetricsObserver::ShouldObserveMimeType(
+    const std::string& mime_type) const {
+  // Observe all MIME types. We still only use actual data usage, so strange
+  // cases (e.g., data:// URLs) will still record the right amount of data
+  // usage.
+  return CONTINUE_OBSERVING;
 }

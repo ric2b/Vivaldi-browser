@@ -2855,6 +2855,7 @@ void Parse(struct lemon *gp)
   filebuf = (char *)malloc( filesize+1 );
   if( filesize>100000000 || filebuf==0 ){
     ErrorMsg(ps.filename,0,"Input file too large.");
+    free(filebuf);
     gp->errorcnt++;
     fclose(fp);
     return;
@@ -4589,13 +4590,20 @@ void ReportTable(
   tplt_print(out,lemp,lemp->overflow,&lineno);
   tplt_xfer(lemp->name,in,out,&lineno);
 
-  /* Generate the table of rule information
+  /* Generate the tables of rule information.  yyRuleInfoLhs[] and
+  ** yyRuleInfoNRhs[].
   **
   ** Note: This code depends on the fact that rules are number
   ** sequentually beginning with 0.
   */
   for(i=0, rp=lemp->rule; rp; rp=rp->next, i++){
-    fprintf(out,"  { %4d, %4d }, /* (%d) ",rp->lhs->index,-rp->nrhs,i);
+    fprintf(out,"  %4d,  /* (%d) ", rp->lhs->index, i);
+     rule_print(out, rp);
+    fprintf(out," */\n"); lineno++;
+  }
+  tplt_xfer(lemp->name,in,out,&lineno);
+  for(i=0, rp=lemp->rule; rp; rp=rp->next, i++){
+    fprintf(out,"  %3d,  /* (%d) ", -rp->nrhs, i);
     rule_print(out, rp);
     fprintf(out," */\n"); lineno++;
   }
@@ -4666,6 +4674,7 @@ void ReportTable(
   /* Append any addition code the user desires */
   tplt_print(out,lemp,lemp->extracode,&lineno);
 
+  acttab_free(pActtab);
   fclose(in);
   fclose(out);
   return;

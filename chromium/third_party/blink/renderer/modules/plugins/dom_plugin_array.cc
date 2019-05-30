@@ -25,9 +25,9 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/navigator.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/page/plugin_data.h"
 #include "third_party/blink/renderer/modules/plugins/dom_mime_type_array.h"
 #include "third_party/blink/renderer/modules/plugins/navigator_plugins.h"
-#include "third_party/blink/renderer/platform/plugins/plugin_data.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -69,7 +69,8 @@ DOMPlugin* DOMPluginArray::namedItem(const AtomicString& property_name) {
 
   for (const Member<PluginInfo>& plugin_info : data->Plugins()) {
     if (plugin_info->Name() == property_name) {
-      size_t index = &plugin_info - &data->Plugins()[0];
+      unsigned index =
+          static_cast<unsigned>(&plugin_info - &data->Plugins()[0]);
       return item(index);
     }
   }
@@ -104,9 +105,10 @@ void DOMPluginArray::refresh(bool reload) {
 
   for (Frame* frame = GetFrame()->GetPage()->MainFrame(); frame;
        frame = frame->Tree().TraverseNext()) {
-    if (!frame->IsLocalFrame())
+    auto* local_frame = DynamicTo<LocalFrame>(frame);
+    if (!local_frame)
       continue;
-    Navigator& navigator = *ToLocalFrame(frame)->DomWindow()->navigator();
+    Navigator& navigator = *local_frame->DomWindow()->navigator();
     NavigatorPlugins::plugins(navigator)->UpdatePluginData();
     NavigatorPlugins::mimeTypes(navigator)->UpdatePluginData();
   }
@@ -138,7 +140,8 @@ void DOMPluginArray::UpdatePluginData() {
     if (plugin) {
       for (const Member<PluginInfo>& plugin_info : data->Plugins()) {
         if (plugin->name() == plugin_info->Name()) {
-          size_t index = &plugin_info - &data->Plugins()[0];
+          unsigned index =
+              static_cast<unsigned>(&plugin_info - &data->Plugins()[0]);
           dom_plugins_[index] = plugin;
         }
       }

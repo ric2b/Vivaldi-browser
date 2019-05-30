@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <string>
 #include <vector>
 
 #include "base/callback.h"
@@ -21,9 +22,7 @@
 #include "content/public/browser/notification_registrar.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
-#include "third_party/blink/public/common/manifest/manifest.h"
 
-class WebAppIconDownloader;
 struct InstallableData;
 class InstallableManager;
 class Profile;
@@ -33,6 +32,11 @@ namespace content {
 class WebContents;
 }  // namespace content
 
+namespace web_app {
+enum class ForInstallableSite;
+class WebAppIconDownloader;
+}  // namespace web_app
+
 namespace extensions {
 class CrxInstaller;
 class Extension;
@@ -41,12 +45,6 @@ class ExtensionService;
 // A helper class for creating bookmark apps from a WebContents.
 class BookmarkAppHelper : public content::NotificationObserver {
  public:
-  enum class ForInstallableSite {
-    kYes,
-    kNo,
-    kUnknown,
-  };
-
   typedef base::Callback<void(const Extension*, const WebApplicationInfo&)>
       CreateBookmarkAppCallback;
 
@@ -62,11 +60,6 @@ class BookmarkAppHelper : public content::NotificationObserver {
                     content::WebContents* contents,
                     WebappInstallSource install_source);
   ~BookmarkAppHelper() override;
-
-  // Update the given WebApplicationInfo with information from the manifest.
-  static void UpdateWebAppInfoFromManifest(const blink::Manifest& manifest,
-                                           WebApplicationInfo* web_app_info,
-                                           ForInstallableSite installable_site);
 
   // It is important that the linked app information in any extension that
   // gets created from sync matches the linked app information that came from
@@ -96,10 +89,31 @@ class BookmarkAppHelper : public content::NotificationObserver {
 
   bool is_default_app() { return is_default_app_; }
 
+  // If called, the installed extension will be considered system installed.
+  void set_is_system_app() { is_system_app_ = true; }
+
+  bool is_system_app() { return is_system_app_; }
+
+  void set_is_no_network_install() { is_no_network_install_ = true; }
+
+  bool is_no_network_install() { return is_no_network_install_; }
+
   // If called, desktop shortcuts will not be created.
   void set_skip_shortcut_creation() { create_shortcuts_ = false; }
 
   bool create_shortcuts() const { return create_shortcuts_; }
+
+  // If called, the installability check won't test for a service worker.
+  void set_bypass_service_worker_check() {
+    DCHECK(is_default_app() || is_system_app());
+    bypass_service_worker_check_ = true;
+  }
+
+  // If called, the installation will only succeed if a manifest is found.
+  void set_require_manifest() {
+    DCHECK(is_default_app());
+    require_manifest_ = true;
+  }
 
   // If called, the installed app will launch in |launch_type|. User might still
   // be able to change the launch type depending on the type of app.
@@ -125,7 +139,7 @@ class BookmarkAppHelper : public content::NotificationObserver {
 
   // Downloads icons from the given WebApplicationInfo using the given
   // WebContents.
-  std::unique_ptr<WebAppIconDownloader> web_app_icon_downloader_;
+  std::unique_ptr<web_app::WebAppIconDownloader> web_app_icon_downloader_;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(BookmarkAppHelperTest,
@@ -139,6 +153,10 @@ class BookmarkAppHelper : public content::NotificationObserver {
   // Called when the installation of the app is complete to perform the final
   // installation steps.
   void FinishInstallation(const Extension* extension);
+
+  // Called when shortcut creation is complete.
+  void OnShortcutCreationCompleted(const std::string& extension_id,
+                                   bool shortcut_created);
 
   // Overridden from content::NotificationObserver:
   void Observe(int type,
@@ -164,7 +182,7 @@ class BookmarkAppHelper : public content::NotificationObserver {
 
   InstallableManager* installable_manager_;
 
-  ForInstallableSite for_installable_site_ = ForInstallableSite::kUnknown;
+  web_app::ForInstallableSite for_installable_site_;
 
   base::Optional<LaunchType> forced_launch_type_;
 
@@ -174,7 +192,17 @@ class BookmarkAppHelper : public content::NotificationObserver {
 
   bool is_default_app_ = false;
 
+  bool is_system_app_ = false;
+
+  // If true, means that |web_app_info_| holds all the data needed for
+  // installation and we should not try to fetch a manifest.
+  bool is_no_network_install_ = false;
+
   bool create_shortcuts_ = true;
+
+  bool bypass_service_worker_check_ = false;
+
+  bool require_manifest_ = false;
 
   // The mechanism via which the app creation was triggered.
   WebappInstallSource install_source_;
@@ -190,9 +218,6 @@ class BookmarkAppHelper : public content::NotificationObserver {
 void CreateOrUpdateBookmarkApp(ExtensionService* service,
                                WebApplicationInfo* web_app_info,
                                bool is_locally_installed);
-
-// Returns whether the given |url| is a valid bookmark app url.
-bool IsValidBookmarkAppUrl(const GURL& url);
 
 }  // namespace extensions
 

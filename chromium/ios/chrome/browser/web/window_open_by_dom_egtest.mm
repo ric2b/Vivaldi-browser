@@ -18,6 +18,7 @@
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
+#include "ios/net/url_test_util.h"
 #import "ios/web/public/test/earl_grey/web_view_actions.h"
 #import "ios/web/public/test/earl_grey/web_view_matchers.h"
 #include "ios/web/public/test/element_selector.h"
@@ -138,7 +139,7 @@ id<GREYMatcher> PopupBlocker() {
   [[EarlGrey selectElementWithMatcher:test_page_matcher]
       performAction:link_tap];
   [ChromeEarlGrey waitForMainTabCount:2];
-  chrome_test_util::OpenNewTab();
+  [ChromeEarlGrey openNewTab];
   [ChromeEarlGrey waitForMainTabCount:3];
   chrome_test_util::SelectTabAtIndexInCurrentMode(0);
   [[EarlGrey selectElementWithMatcher:test_page_matcher]
@@ -165,7 +166,9 @@ id<GREYMatcher> PopupBlocker() {
   // Ensure that the resulting tab is updated as expected.
   const GURL targetURL =
       HttpServer::MakeUrl(std::string(kTestURL) + "#assigned");
-  [[EarlGrey selectElementWithMatcher:OmniboxText(targetURL.GetContent())]
+  const std::string targetOmniboxText =
+      net::GetContentAndFragmentForUrl(targetURL);
+  [[EarlGrey selectElementWithMatcher:OmniboxText(targetOmniboxText)]
       assertWithMatcher:grey_notNil()];
 }
 
@@ -180,7 +183,9 @@ id<GREYMatcher> PopupBlocker() {
   // Ensure that the resulting tab is updated as expected.
   const GURL targetURL =
       HttpServer::MakeUrl(std::string(kTestURL) + "#updated");
-  [[EarlGrey selectElementWithMatcher:OmniboxText(targetURL.GetContent())]
+  const std::string targetOmniboxText =
+      net::GetContentAndFragmentForUrl(targetURL);
+  [[EarlGrey selectElementWithMatcher:OmniboxText(targetOmniboxText)]
       assertWithMatcher:grey_notNil()];
 }
 
@@ -218,6 +223,24 @@ id<GREYMatcher> PopupBlocker() {
   [ChromeEarlGrey waitForMainTabCount:2];
 }
 
+// Tests that the correct URL is displayed for a child window opened with the
+// script window.open('', '').location.replace('about:blank#hash').
+// This is a regression test for crbug.com/866142.
+- (void)testLocationReplaceInWindowOpenWithEmptyTarget {
+  GREYAssert(TapWebViewElementWithId(
+                 "webScenarioLocationReplaceInWindowOpenWithEmptyTarget"),
+             @"Failed to tap "
+             @"\"webScenarioLocationReplaceInWindowOpenWithEmptyTarget\"");
+  [ChromeEarlGrey waitForMainTabCount:2];
+  // WebKit doesn't parse 'about:blank#hash' as about:blank with URL fragment.
+  // Instead, it percent encodes '#hash' and considers 'blank%23hash' as the
+  // resource identifier. Nevertheless, the '#' is significant in triggering the
+  // edge case in the bug. TODO(crbug.com/885249): Change back to '#'.
+  const GURL URL("about:blank%23hash");
+  [[EarlGrey selectElementWithMatcher:OmniboxText("about:blank%23hash")]
+      assertWithMatcher:grey_notNil()];
+}
+
 // Tests a link with JavaScript in the href.
 + (void)testWindowOpenWithJavaScriptInHref {
   GREYAssert(
@@ -243,23 +266,9 @@ id<GREYMatcher> PopupBlocker() {
   [ChromeEarlGrey waitForMainTabCount:2];
 
   // Ensure that the starting tab hasn't navigated.
-  chrome_test_util::CloseCurrentTab();
+  [ChromeEarlGrey closeCurrentTab];
   const GURL URL = HttpServer::MakeUrl(kTestURL);
   [[EarlGrey selectElementWithMatcher:OmniboxText(URL.GetContent())]
-      assertWithMatcher:grey_notNil()];
-}
-
-// Tests opening a child window using the following link
-// <a href="data:text/html,<script>window.location='about:newtab';</script>"
-//    target="_blank">
-- (void)testWindowOpenWithAboutNewTabScript {
-  const char ID[] = "webScenarioWindowOpenWithAboutNewTabScript";
-  [[EarlGrey selectElementWithMatcher:WebViewInWebState(GetCurrentWebState())]
-      performAction:web::WebViewTapElement(
-                        GetCurrentWebState(),
-                        ElementSelector::ElementSelectorId(ID))];
-  [ChromeEarlGrey waitForMainTabCount:2];
-  [[EarlGrey selectElementWithMatcher:OmniboxText("about:newtab")]
       assertWithMatcher:grey_notNil()];
 }
 

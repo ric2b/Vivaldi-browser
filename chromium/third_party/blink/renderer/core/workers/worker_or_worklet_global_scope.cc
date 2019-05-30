@@ -5,30 +5,175 @@
 #include "third_party/blink/renderer/core/workers/worker_or_worklet_global_scope.h"
 
 #include "third_party/blink/public/platform/task_type.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_abstract_event_listener.h"
+#include "third_party/blink/public/platform/web_worker_fetch_context.h"
 #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
 #include "third_party/blink/renderer/core/dom/events/event_queue.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/core/loader/loader_factory_for_worker.h"
 #include "third_party/blink/renderer/core/loader/modulescript/module_script_fetch_request.h"
+#include "third_party/blink/renderer/core/loader/subresource_filter.h"
 #include "third_party/blink/renderer/core/loader/worker_fetch_context.h"
+#include "third_party/blink/renderer/core/loader/worker_resource_fetcher_properties.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
-#include "third_party/blink/renderer/core/workers/main_thread_worklet_global_scope.h"
+#include "third_party/blink/renderer/core/script/fetch_client_settings_object_impl.h"
+#include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/core/workers/worker_reporting_proxy.h"
 #include "third_party/blink/renderer/core/workers/worker_thread.h"
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
+#include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object_snapshot.h"
+#include "third_party/blink/renderer/platform/loader/fetch/null_resource_fetcher_properties.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
 
+namespace {
+
+// This is the implementation of ContentSecurityPolicyDelegate for the
+// outsideSettings fetch.
+// This lives on the worker thread.
+//
+// Unlike the ContentSecurityPolicy bound to ExecutionContext (which is
+// used for insideSettings fetch), OutsideSettingsCSPDelegate shouldn't
+// access WorkerOrWorkletGlobalScope (except for logging).
+//
+// For details of outsideSettings/insideSettings fetch, see README.md.
+class OutsideSettingsCSPDelegate final
+    : public GarbageCollected<OutsideSettingsCSPDelegate>,
+      public ContentSecurityPolicyDelegate {
+  USING_GARBAGE_COLLECTED_MIXIN(OutsideSettingsCSPDelegate);
+
+ public:
+  OutsideSettingsCSPDelegate(
+      const FetchClientSettingsObject& outside_settings_object,
+      WorkerOrWorkletGlobalScope& global_scope_for_logging)
+      : outside_settings_object_(&outside_settings_object),
+        global_scope_for_logging_(&global_scope_for_logging) {
+    DCHECK(global_scope_for_logging_->IsContextThread());
+  }
+
+  void Trace(blink::Visitor* visitor) override {
+    visitor->Trace(global_scope_for_logging_);
+    visitor->Trace(outside_settings_object_);
+  }
+
+  const KURL& Url() const override {
+    DCHECK(global_scope_for_logging_->IsContextThread());
+    return outside_settings_object_->GlobalObjectUrl();
+  }
+
+  const SecurityOrigin* GetSecurityOrigin() override {
+    DCHECK(global_scope_for_logging_->IsContextThread());
+    return outside_settings_object_->GetSecurityOrigin();
+  }
+
+  // We don't have to do anything here, as we don't want to update
+  // SecurityContext of either parent context or WorkerOrWorkletGlobalScope.
+  // TODO(hiroshige): Revisit the relationship of ContentSecurityPolicy,
+  // SecurityContext and FetchClientSettingsObject, e.g. when doing
+  // off-the-main-thread shared worker/service worker top-level script fetch.
+  // https://crbug.com/924041 https://crbug.com/924043
+  void SetSandboxFlags(SandboxFlags) override {}
+  void SetAddressSpace(mojom::IPAddressSpace) override {}
+  void SetRequireTrustedTypes() override {}
+  void AddInsecureRequestPolicy(WebInsecureRequestPolicy) override {}
+  void DisableEval(const String& error_message) override {}
+
+  std::unique_ptr<SourceLocation> GetSourceLocation() override {
+    DCHECK(global_scope_for_logging_->IsContextThread());
+    // https://w3c.github.io/webappsec-csp/#create-violation-for-global
+    // Step 2. If the user agent is currently executing script, and can extract
+    // a source file's URL, line number, and column number from the global, set
+    // violation's source file, line number, and column number accordingly.
+    // [spec text]
+    //
+    // We can assume the user agent is not executing script during fetching the
+    // top-level worker script, so return nullptr.
+    return nullptr;
+  }
+
+  base::Optional<uint16_t> GetStatusCode() override {
+    DCHECK(global_scope_for_logging_->IsContextThread());
+    // TODO(crbug/928965): Plumb the status code of the parent Document if any.
+    return base::nullopt;
+  }
+
+  String GetDocumentReferrer() override {
+    DCHECK(global_scope_for_logging_->IsContextThread());
+    // TODO(crbug/928965): Plumb the referrer from the parent context.
+    return String();
+  }
+
+  void DispatchViolationEvent(const SecurityPolicyViolationEventInit&,
+                              Element*) override {
+    DCHECK(global_scope_for_logging_->IsContextThread());
+    // TODO(crbug/928964): Fire an event on the parent context.
+    // Before OutsideSettingsCSPDelegate was introduced, the event had been
+    // fired on WorkerGlobalScope, which had been virtually no-op because
+    // there can't be no event handlers yet.
+    // Currently, no events are fired.
+  }
+
+  void PostViolationReport(const SecurityPolicyViolationEventInit&,
+                           const String& stringified_report,
+                           bool is_frame_ancestors_violation,
+                           const Vector<String>& report_endpoints,
+                           bool use_reporting_api) override {
+    // TODO(crbug/929370): Support POSTing violation reports from a Worker.
+    DCHECK(global_scope_for_logging_->IsContextThread());
+  }
+
+  void Count(WebFeature feature) override {
+    DCHECK(global_scope_for_logging_->IsContextThread());
+    global_scope_for_logging_->CountFeature(feature);
+  }
+
+  void AddConsoleMessage(ConsoleMessage* message) override {
+    DCHECK(global_scope_for_logging_->IsContextThread());
+    global_scope_for_logging_->AddConsoleMessage(message);
+  }
+
+  void ReportBlockedScriptExecutionToInspector(
+      const String& directive_text) override {
+    // This shouldn't be called during top-level worker script fetch.
+    NOTREACHED();
+  }
+
+  void DidAddContentSecurityPolicies(
+      const blink::WebVector<WebContentSecurityPolicy>&) override {
+    DCHECK(global_scope_for_logging_->IsContextThread());
+    // We do nothing here, because if the added policies should be reported to
+    // LocalFrameClient, then they are already reported on the parent
+    // Document.
+    // ExecutionContextCSPDelegate::DidAddContentSecurityPolicies() does
+    // nothing for workers/worklets.
+  }
+
+ private:
+  const Member<const FetchClientSettingsObject> outside_settings_object_;
+
+  // |global_scope_for_logging_| should be used only for CountFeature and
+  // console messages.
+  const Member<WorkerOrWorkletGlobalScope> global_scope_for_logging_;
+};
+
+}  // namespace
+
 WorkerOrWorkletGlobalScope::WorkerOrWorkletGlobalScope(
     v8::Isolate* isolate,
+    const String& name,
+    V8CacheOptions v8_cache_options,
     WorkerClients* worker_clients,
+    scoped_refptr<WebWorkerFetchContext> web_worker_fetch_context,
     WorkerReportingProxy& reporting_proxy)
-    : worker_clients_(worker_clients),
+    : ExecutionContext(isolate),
+      name_(name),
+      worker_clients_(worker_clients),
+      web_worker_fetch_context_(std::move(web_worker_fetch_context)),
       script_controller_(
           WorkerOrWorkletScriptController::Create(this, isolate)),
+      v8_cache_options_(v8_cache_options),
       reporting_proxy_(reporting_proxy),
       used_features_(static_cast<int>(WebFeature::kNumberOfFeatures)) {
   if (worker_clients_)
@@ -89,25 +234,103 @@ void WorkerOrWorkletGlobalScope::CountDeprecation(WebFeature feature) {
 
   // Adds a deprecation message to the console.
   DCHECK(!Deprecation::DeprecationMessage(feature).IsEmpty());
-  AddConsoleMessage(
-      ConsoleMessage::Create(kDeprecationMessageSource, kWarningMessageLevel,
-                             Deprecation::DeprecationMessage(feature)));
+  AddConsoleMessage(ConsoleMessage::Create(
+      kDeprecationMessageSource, mojom::ConsoleMessageLevel::kWarning,
+      Deprecation::DeprecationMessage(feature)));
   ReportingProxy().CountDeprecation(feature);
+}
+
+void WorkerOrWorkletGlobalScope::InitializeWebFetchContextIfNeeded() {
+  if (web_fetch_context_initialized_)
+    return;
+  web_fetch_context_initialized_ = true;
+
+  if (!web_worker_fetch_context_)
+    return;
+
+  DCHECK(!subresource_filter_);
+  web_worker_fetch_context_->InitializeOnWorkerThread(navigator());
+  std::unique_ptr<blink::WebDocumentSubresourceFilter> web_filter =
+      web_worker_fetch_context_->TakeSubresourceFilter();
+  if (web_filter) {
+    subresource_filter_ =
+        SubresourceFilter::Create(*this, std::move(web_filter));
+  }
 }
 
 ResourceFetcher* WorkerOrWorkletGlobalScope::EnsureFetcher() {
   DCHECK(IsContextThread());
-  if (resource_fetcher_)
-    return resource_fetcher_;
-  WorkerFetchContext* fetch_context = WorkerFetchContext::Create(*this);
-  resource_fetcher_ = ResourceFetcher::Create(fetch_context);
-  DCHECK(resource_fetcher_);
-  return resource_fetcher_;
+  if (inside_settings_resource_fetcher_)
+    return inside_settings_resource_fetcher_;
+
+  // Because CSP is initialized inside the WorkerGlobalScope or
+  // WorkletGlobalScope constructor, GetContentSecurityPolicy() should be
+  // non-null here.
+  DCHECK(GetContentSecurityPolicy());
+
+  inside_settings_resource_fetcher_ = CreateFetcherInternal(
+      *MakeGarbageCollected<FetchClientSettingsObjectImpl>(*this),
+      *GetContentSecurityPolicy());
+  return inside_settings_resource_fetcher_;
 }
+
+ResourceFetcher* WorkerOrWorkletGlobalScope::CreateFetcherInternal(
+    const FetchClientSettingsObject& fetch_client_settings_object,
+    ContentSecurityPolicy& content_security_policy) {
+  DCHECK(IsContextThread());
+  InitializeWebFetchContextIfNeeded();
+  ResourceFetcherProperties* properties = nullptr;
+  FetchContext* context = nullptr;
+  ResourceFetcher::LoaderFactory* loader_factory = nullptr;
+  if (web_worker_fetch_context_) {
+    properties = MakeGarbageCollected<WorkerResourceFetcherProperties>(
+        *this, fetch_client_settings_object, web_worker_fetch_context_);
+    context = MakeGarbageCollected<WorkerFetchContext>(
+        *this, web_worker_fetch_context_, subresource_filter_,
+        content_security_policy);
+    loader_factory = MakeGarbageCollected<LoaderFactoryForWorker>(
+        *this, web_worker_fetch_context_);
+  } else {
+    // This code path is for unittests.
+    properties = MakeGarbageCollected<NullResourceFetcherProperties>();
+    context = &FetchContext::NullInstance();
+  }
+  ResourceFetcherInit init(*properties, context,
+                           GetTaskRunner(TaskType::kNetworking), loader_factory,
+                           *this);
+  auto* resource_fetcher = MakeGarbageCollected<ResourceFetcher>(init);
+  if (IsContextPaused())
+    resource_fetcher->SetDefersLoading(true);
+  resource_fetchers_.insert(resource_fetcher);
+  return resource_fetcher;
+}
+
 ResourceFetcher* WorkerOrWorkletGlobalScope::Fetcher() const {
   DCHECK(IsContextThread());
-  DCHECK(resource_fetcher_);
-  return resource_fetcher_;
+  DCHECK(inside_settings_resource_fetcher_);
+  return inside_settings_resource_fetcher_;
+}
+
+ResourceFetcher* WorkerOrWorkletGlobalScope::CreateOutsideSettingsFetcher(
+    const FetchClientSettingsObject& outside_settings_object) {
+  DCHECK(IsContextThread());
+
+  ContentSecurityPolicy* content_security_policy =
+      ContentSecurityPolicy::Create();
+  for (const auto& policy_and_type :
+       outside_content_security_policy_parsed_headers_) {
+    content_security_policy->DidReceiveHeader(
+        policy_and_type.first, policy_and_type.second,
+        kContentSecurityPolicyHeaderSourceHTTP);
+  }
+
+  OutsideSettingsCSPDelegate* csp_delegate =
+      MakeGarbageCollected<OutsideSettingsCSPDelegate>(outside_settings_object,
+                                                       *this);
+  content_security_policy->BindToDelegate(*csp_delegate);
+
+  return CreateFetcherInternal(outside_settings_object,
+                               *content_security_policy);
 }
 
 bool WorkerOrWorkletGlobalScope::IsJSExecutionForbidden() const {
@@ -131,9 +354,9 @@ void WorkerOrWorkletGlobalScope::Dispose() {
   script_controller_->Dispose();
   script_controller_.Clear();
 
-  if (resource_fetcher_) {
-    resource_fetcher_->StopFetching();
-    resource_fetcher_->ClearContext();
+  for (ResourceFetcher* resource_fetcher : resource_fetchers_) {
+    resource_fetcher->StopFetching();
+    resource_fetcher->ClearContext();
   }
 }
 
@@ -154,6 +377,7 @@ WorkerOrWorkletGlobalScope::GetTaskRunner(TaskType type) {
 
 void WorkerOrWorkletGlobalScope::InitContentSecurityPolicyFromVector(
     const Vector<CSPHeaderAndType>& headers) {
+  outside_content_security_policy_parsed_headers_ = headers;
   if (!GetContentSecurityPolicy()) {
     ContentSecurityPolicy* csp = ContentSecurityPolicy::Create();
     SetContentSecurityPolicy(csp);
@@ -167,16 +391,17 @@ void WorkerOrWorkletGlobalScope::InitContentSecurityPolicyFromVector(
 
 void WorkerOrWorkletGlobalScope::BindContentSecurityPolicyToExecutionContext() {
   DCHECK(IsContextThread());
-  GetContentSecurityPolicy()->BindToExecutionContext(GetExecutionContext());
+  GetContentSecurityPolicy()->BindToDelegate(
+      GetContentSecurityPolicyDelegate());
 }
 
 // Implementation of the "fetch a module worker script graph" algorithm in the
 // HTML spec:
-// https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-module-worker-script-tree
+// https://html.spec.whatwg.org/C/#fetch-a-module-worker-script-tree
 void WorkerOrWorkletGlobalScope::FetchModuleScript(
     const KURL& module_url_record,
-    FetchClientSettingsObjectSnapshot* fetch_client_settings_object,
-    WebURLRequest::RequestContext destination,
+    const FetchClientSettingsObjectSnapshot& fetch_client_settings_object,
+    mojom::RequestContextType destination,
     network::mojom::FetchCredentialsMode credentials_mode,
     ModuleScriptCustomFetchType custom_fetch_type,
     ModuleTreeClient* client) {
@@ -189,18 +414,40 @@ void WorkerOrWorkletGlobalScope::FetchModuleScript(
   ParserDisposition parser_state = kNotParserInserted;
   // credentials mode is credentials mode, and referrer policy is the empty
   // string."
+  // TODO(domfarolino): Module worker scripts are fetched with kImportanceAuto.
+  // Priority Hints is currently non-standard, but we can assume "fetch a module
+  // worker script tree" sets the script fetch options struct's "importance" to
+  // "auto". See https://github.com/whatwg/html/issues/3670 and
+  // https://crbug.com/821464.
   ScriptFetchOptions options(nonce, IntegrityMetadataSet(), integrity_attribute,
                              parser_state, credentials_mode,
-                             kReferrerPolicyDefault);
+                             network::mojom::ReferrerPolicy::kDefault,
+                             mojom::FetchImportanceMode::kImportanceAuto);
 
   Modulator* modulator = Modulator::From(ScriptController()->GetScriptState());
   // Step 3. "Perform the internal module script graph fetching procedure ..."
-  modulator->FetchTree(module_url_record, fetch_client_settings_object,
-                       destination, options, custom_fetch_type, client);
+  modulator->FetchTree(
+      module_url_record,
+      CreateOutsideSettingsFetcher(fetch_client_settings_object), destination,
+      options, custom_fetch_type, client);
+}
+
+void WorkerOrWorkletGlobalScope::TasksWerePaused() {
+  ExecutionContext::TasksWerePaused();
+  for (ResourceFetcher* resource_fetcher : resource_fetchers_)
+    resource_fetcher->SetDefersLoading(true);
+}
+
+void WorkerOrWorkletGlobalScope::TasksWereUnpaused() {
+  ExecutionContext::TasksWereUnpaused();
+  for (ResourceFetcher* resource_fetcher : resource_fetchers_)
+    resource_fetcher->SetDefersLoading(false);
 }
 
 void WorkerOrWorkletGlobalScope::Trace(blink::Visitor* visitor) {
-  visitor->Trace(resource_fetcher_);
+  visitor->Trace(inside_settings_resource_fetcher_);
+  visitor->Trace(resource_fetchers_);
+  visitor->Trace(subresource_filter_);
   visitor->Trace(script_controller_);
   visitor->Trace(modulator_);
   EventTargetWithInlineData::Trace(visitor);

@@ -35,7 +35,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_event.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_event_listener_or_event_handler.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_html_collection.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_node.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
@@ -46,6 +45,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/location.h"
+#include "third_party/blink/renderer/core/frame/remote_dom_window.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
 #include "third_party/blink/renderer/core/html/html_collection.h"
@@ -59,12 +59,11 @@
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_private_property.h"
-#include "third_party/blink/renderer/platform/layout_test_support.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 
 namespace blink {
 
-void V8Window::locationAttributeGetterCustom(
+void V8Window::LocationAttributeGetterCustom(
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   v8::Isolate* isolate = info.GetIsolate();
   v8::Local<v8::Object> holder = info.Holder();
@@ -83,17 +82,17 @@ void V8Window::locationAttributeGetterCustom(
   // whether or not |window| is cross-origin. If |window| is local, the
   // |location| property must always return the same wrapper, even if the
   // cross-origin status changes by changing properties like |document.domain|.
-  if (window->IsRemoteDOMWindow()) {
+  if (IsA<RemoteDOMWindow>(window)) {
     DOMWrapperWorld& world = DOMWrapperWorld::Current(isolate);
-    const auto* wrapper_type_info = location->GetWrapperTypeInfo();
+    const auto* location_wrapper_type = location->GetWrapperTypeInfo();
     v8::Local<v8::Object> new_wrapper =
-        wrapper_type_info->domTemplate(isolate, world)
+        location_wrapper_type->DomTemplate(isolate, world)
             ->NewRemoteInstance()
             .ToLocalChecked();
 
     DCHECK(!DOMDataStore::ContainsWrapper(location, isolate));
     wrapper = V8DOMWrapper::AssociateObjectWithWrapper(
-        isolate, location, wrapper_type_info, new_wrapper);
+        isolate, location, location_wrapper_type, new_wrapper);
   } else {
     wrapper = ToV8(location, holder, isolate);
   }
@@ -101,9 +100,9 @@ void V8Window::locationAttributeGetterCustom(
   V8SetReturnValue(info, wrapper);
 }
 
-void V8Window::eventAttributeGetterCustom(
+void V8Window::EventAttributeGetterCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  LocalDOMWindow* impl = ToLocalDOMWindow(V8Window::ToImpl(info.Holder()));
+  LocalDOMWindow* impl = To<LocalDOMWindow>(V8Window::ToImpl(info.Holder()));
   v8::Isolate* isolate = info.GetIsolate();
   ExceptionState exception_state(isolate, ExceptionState::kGetterContext,
                                  "Window", "event");
@@ -137,9 +136,9 @@ void V8Window::eventAttributeGetterCustom(
   V8SetReturnValue(info, js_event);
 }
 
-void V8Window::frameElementAttributeGetterCustom(
+void V8Window::FrameElementAttributeGetterCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  LocalDOMWindow* impl = ToLocalDOMWindow(V8Window::ToImpl(info.Holder()));
+  LocalDOMWindow* impl = To<LocalDOMWindow>(V8Window::ToImpl(info.Holder()));
   Element* frameElement = impl->frameElement();
 
   if (!BindingSecurity::ShouldAllowAccessTo(
@@ -162,7 +161,7 @@ void V8Window::frameElementAttributeGetterCustom(
   V8SetReturnValue(info, wrapper);
 }
 
-void V8Window::openerAttributeSetterCustom(
+void V8Window::OpenerAttributeSetterCustom(
     v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info) {
   v8::Isolate* isolate = info.GetIsolate();
@@ -177,7 +176,7 @@ void V8Window::openerAttributeSetterCustom(
     // impl->frame() has to be a non-null LocalFrame.  Otherwise, the
     // same-origin check would have failed.
     DCHECK(impl->GetFrame());
-    ToLocalFrame(impl->GetFrame())->Loader().SetOpener(nullptr);
+    To<LocalFrame>(impl->GetFrame())->Loader().SetOpener(nullptr);
   }
 
   // Delete the accessor from the inner object.
@@ -198,7 +197,7 @@ void V8Window::openerAttributeSetterCustom(
   }
 }
 
-void V8Window::namedPropertyGetterCustom(
+void V8Window::NamedPropertyGetterCustom(
     const AtomicString& name,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   DOMWindow* window = V8Window::ToImpl(info.Holder());
@@ -212,11 +211,11 @@ void V8Window::namedPropertyGetterCustom(
 
   // Note that named access on WindowProxy is allowed in the cross-origin case.
   // 7.4.5 [[GetOwnProperty]] (P), step 6.
-  // https://html.spec.whatwg.org/multipage/browsers.html#windowproxy-getownproperty
+  // https://html.spec.whatwg.org/C/#windowproxy-getownproperty
   //
   // 7.3.3 Named access on the Window object
   // The document-tree child browsing context name property set
-  // https://html.spec.whatwg.org/multipage/browsers.html#document-tree-child-browsing-context-name-property-set
+  // https://html.spec.whatwg.org/C/#document-tree-child-browsing-context-name-property-set
   Frame* child = frame->Tree().ScopedChild(name);
   if (child) {
     UseCounter::Count(CurrentExecutionContext(info.GetIsolate()),
@@ -236,13 +235,16 @@ void V8Window::namedPropertyGetterCustom(
         CurrentExecutionContext(info.GetIsolate()),
         WebFeature::
             kNamedAccessOnWindow_ChildBrowsingContext_CrossOriginNameMismatch);
-    // In addition to the above spec'ed case, we return the child window
-    // regardless of step 3 due to crbug.com/701489 for the time being.
-    // TODO(yukishiino): Makes iframe.name update the browsing context name
-    // appropriately and makes the new name available in the named access on
-    // window.  Then, removes the following two lines.
-    V8SetReturnValueFast(info, child->DomWindow(), window);
-    return;
+    if (!RuntimeEnabledFeatures::
+            IgnoreCrossOriginWindowWhenNamedAccessOnWindowEnabled()) {
+      // In addition to the above spec'ed case, we return the child window
+      // regardless of step 3 due to crbug.com/701489 for the time being.
+      // TODO(yukishiino): Makes iframe.name update the browsing context name
+      // appropriately and makes the new name available in the named access on
+      // window.  Then, removes the following two lines.
+      V8SetReturnValueFast(info, child->DomWindow(), window);
+      return;
+    }
   }
 
   // This is a cross-origin interceptor. Check that the caller has access to the
@@ -251,7 +253,7 @@ void V8Window::namedPropertyGetterCustom(
           CurrentDOMWindow(info.GetIsolate()), window,
           BindingSecurity::ErrorReportOption::kDoNotReport)) {
     // HTML 7.2.3.3 CrossOriginGetOwnPropertyHelper ( O, P )
-    // https://html.spec.whatwg.org/multipage/browsers.html#crossorigingetownpropertyhelper-(-o,-p-)
+    // https://html.spec.whatwg.org/C/#crossorigingetownpropertyhelper-(-o,-p-)
     // step 3. If P is "then", @@toStringTag, @@hasInstance, or
     //   @@isConcatSpreadable, then return PropertyDescriptor{ [[Value]]:
     //   undefined, [[Writable]]: false, [[Enumerable]]: false,
@@ -267,7 +269,7 @@ void V8Window::namedPropertyGetterCustom(
   }
 
   // Search named items in the document.
-  Document* doc = ToLocalFrame(frame)->GetDocument();
+  Document* doc = To<LocalFrame>(frame)->GetDocument();
   if (!doc || !doc->IsHTMLDocument())
     return;
 

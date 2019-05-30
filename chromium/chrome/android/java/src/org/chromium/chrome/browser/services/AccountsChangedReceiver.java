@@ -10,15 +10,15 @@ import android.content.Context;
 import android.content.Intent;
 
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.AsyncTask;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.library_loader.ProcessInitException;
+import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.init.BrowserParts;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.init.EmptyBrowserParts;
-import org.chromium.chrome.browser.signin.AccountTrackerService;
+import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.SigninHelper;
 
 /**
@@ -37,7 +37,7 @@ public class AccountsChangedReceiver extends BroadcastReceiver {
         AsyncTask<Void> task = new AsyncTask<Void>() {
             @Override
             protected Void doInBackground() {
-                SigninHelper.updateAccountRenameData(appContext);
+                SigninHelper.updateAccountRenameData();
                 return null;
             }
 
@@ -50,14 +50,12 @@ public class AccountsChangedReceiver extends BroadcastReceiver {
     }
 
     private void continueHandleAccountChangeIfNeeded(final Context context) {
-        AccountTrackerService.get().invalidateAccountSeedStatus(
-                false /* don't refresh right now */);
         boolean isChromeVisible = ApplicationStatus.hasVisibleActivities();
         if (isChromeVisible) {
             startBrowserIfNeededAndValidateAccounts(context);
         } else {
             // Notify SigninHelper of changed accounts (via shared prefs).
-            SigninHelper.markAccountsChangedPref(context);
+            SigninHelper.markAccountsChangedPref();
         }
     }
 
@@ -68,7 +66,10 @@ public class AccountsChangedReceiver extends BroadcastReceiver {
                 ThreadUtils.runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        SigninHelper.get(context).validateAccountSettings(true);
+                        // TODO(bsazonov): Check whether invalidateAccountSeedStatus is needed here.
+                        IdentityServicesProvider.getAccountTrackerService()
+                                .invalidateAccountSeedStatus(false /* don't refresh right now */);
+                        SigninHelper.get().validateAccountSettings(true);
                     }
                 });
             }
@@ -77,7 +78,7 @@ public class AccountsChangedReceiver extends BroadcastReceiver {
             public void onStartupFailure() {
                 // Startup failed. So notify SigninHelper of changed accounts via
                 // shared prefs.
-                SigninHelper.markAccountsChangedPref(context);
+                SigninHelper.markAccountsChangedPref();
             }
         };
         try {

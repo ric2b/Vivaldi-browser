@@ -21,6 +21,8 @@ import sys
 import tempfile
 import time
 
+import chrome_helper
+
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.join(THIS_DIR, '..', '..', '..')
 WEBDRIVER_PATH = os.path.join(
@@ -56,6 +58,38 @@ def CreateChromedriver(args):
         time.sleep(0.5)
     raise
 
+  def CollectCrashReports(user_data_dir, output_dir):
+    """Searches for Chrome crash reports, collecting them for analysis.
+
+    Args:
+      user_data_dir: The full path of the User Data dir.
+      output_dir: If not None, a path to which collected crash reports are to be
+        moved.
+
+    Returns:
+      The number of crash reports found.
+    """
+    report_dir = os.path.join(user_data_dir, 'Crashpad', 'reports')
+    dumps = []
+    try:
+      dumps = os.listdir(report_dir)
+    except OSError:
+      # Assume this is file not found, meaning no crash reports.
+      return 0
+    for dump in dumps:
+      dump_path = os.path.join(report_dir, dump)
+      if (output_dir):
+        target_path = os.path.join(output_dir, dump)
+        try:
+          shutil.copyfile(dump_path, target_path)
+          logging.error('Saved Chrome crash dump to %s', target_path)
+        except OSError:
+          logging.exception('Failed to copy Chrome crash dump from %s to %s',
+                            dump_path, target_path)
+      else:
+        logging.error('Found Chrome crash dump at %s', dump_path)
+    return len(dumps)
+
   driver = None
   user_data_dir = tempfile.mkdtemp()
   fd, log_file = tempfile.mkstemp()
@@ -66,20 +100,39 @@ def CreateChromedriver(args):
   chrome_options.add_argument('log-file=' + log_file)
   chrome_options.add_argument('enable-logging')
   chrome_options.add_argument('v=1')
+  emit_log = False
   try:
     driver = webdriver.Chrome(
       args.chromedriver_path,
       chrome_options=chrome_options)
     yield driver
   except:
-    with open(log_file) as fh:
-      logging.error(fh.read())
+    emit_log = True
     raise
   finally:
     if driver:
       driver.quit()
-    DeleteWithRetry(log_file, os.remove)
-    DeleteWithRetry(user_data_dir, shutil.rmtree)
+    chrome_helper.WaitForChromeExit(args.chrome_path)
+    report_count = CollectCrashReports(user_data_dir, args.output_dir)
+    if report_count:
+      emit_log = True
+    try:
+      DeleteWithRetry(user_data_dir, shutil.rmtree)
+    except:
+      emit_log = True
+      raise
+    finally:
+      if emit_log:
+        with open(log_file) as fh:
+          logging.error(fh.read())
+        if args.output_dir:
+          target = os.path.join(args.output_dir, os.path.basename(log_file))
+          shutil.copyfile(log_file, target)
+          logging.error('Saved Chrome log to %s', target)
+      DeleteWithRetry(log_file, os.remove)
+    if report_count:
+      raise Exception('Failing test due to %s crash reports found' %
+                      report_count)
 
 
 def main():
@@ -91,6 +144,9 @@ def main():
   parser.add_argument(
     '--chromedriver-path', default='chromedriver.exe', metavar='FILENAME',
     help='Path to chromedriver')
+  parser.add_argument('--output-dir', metavar='DIR',
+                      help='Directory into which crash dumps and other output '
+                      ' files are to be written')
   parser.add_argument(
     'chrome_path', metavar='FILENAME', help='Path to chrome installer')
   args = parser.parse_args()

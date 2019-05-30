@@ -13,7 +13,7 @@
 #include "base/process/launch.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
-#include "third_party/google_toolbox_for_mac/src/Foundation/GTMServiceManagement.h"
+#include "chrome/common/mac/service_management.h"
 
 namespace {
 
@@ -87,16 +87,18 @@ void Launchd::SetInstance(Launchd* instance) {
 
 Launchd::~Launchd() { }
 
-CFDictionaryRef Launchd::CopyJobDictionary(CFStringRef label) {
-  return GTMSMJobCopyDictionary(label);
+bool Launchd::GetJobInfo(const std::string& label,
+                         mac::services::JobInfo* info) {
+  return mac::services::GetJobInfo(label, info);
 }
 
-CFDictionaryRef Launchd::CopyDictionaryByCheckingIn(CFErrorRef* error) {
-  return GTMSMCopyJobCheckInDictionary(error);
+bool Launchd::CheckIn(const std::string& socket_key,
+                      mac::services::JobCheckinInfo* info) {
+  return mac::services::CheckIn(socket_key, info);
 }
 
-bool Launchd::RemoveJob(CFStringRef label, CFErrorRef* error) {
-  return GTMSMJobRemove(label, error);
+bool Launchd::RemoveJob(const std::string& label) {
+  return mac::services::RemoveJob(label);
 }
 
 bool Launchd::RestartJob(Domain domain,

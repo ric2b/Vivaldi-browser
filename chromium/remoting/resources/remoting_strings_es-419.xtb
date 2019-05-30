@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="es-419">
 <translation id="1002108253973310084">Se detectó una versión de protocolo incompatible. Asegúrate de que tienes instalada la última versión del software en ambas computadoras y vuelve a intentarlo.</translation>
+<translation id="1008557486741366299">Ahora no</translation>
 <translation id="1050693411695664090">Mala</translation>
 <translation id="1152528166145813711">Selecciona...</translation>
 <translation id="1199593201721843963">Inhabilitar conexiones remotas</translation>
@@ -23,6 +24,7 @@ Para obtener más información sobre la privacidad, consulta la política de pri
 <translation id="1520828917794284345">Ajustar el tamaño del escritorio</translation>
 <translation id="154040539590487450">No se pudo iniciar el servicio de acceso remoto.</translation>
 <translation id="1546934824884762070">Se produjo un error inesperado. Informa este problema a los programadores.</translation>
+<translation id="1624185583382384493">Escritorio remoto de Chrome ahora está disponible en la Web. Prueba nuestra <ph name="LINK_BEGIN" />aplicación web<ph name="LINK_END" />; es rápida y gratuita, con más funciones, como la capacidad mejorada de conectarse a varios monitores.</translation>
 <translation id="1643640058022401035">Al abandonar esta página, se cerrará tu sesión en Chromoting.</translation>
 <translation id="1654128982815600832">Habilitando conexiones remotas para esta computadora…</translation>
 <translation id="170207782578677537">No se pudo registrar esta computadora.</translation>
@@ -62,6 +64,7 @@ Para obtener más información sobre la privacidad, consulta la política de pri
 <translation id="2314101195544969792">La sesión de <ph name="APPLICATION_NAME" /> estuvo inactiva por un tiempo y se desconectará en breve.</translation>
 <translation id="2317666076142640974">Obtén un adelanto de la nueva <ph name="LINK_BEGIN" />app web de Escritorio remoto de Chrome<ph name="LINK_END" />. Nos encantaría conocer tus comentarios.</translation>
 <translation id="2320166752086256636">Ocultar el teclado</translation>
+<translation id="2332192922827071008">Abrir preferencias</translation>
 <translation id="2353140552984634198">Puedes acceder a esta computadora sin correr ningún riesgo a través de Chromoting.</translation>
 <translation id="2359808026110333948">Continuar</translation>
 <translation id="2366718077645204424">No se puede establecer la conexión con el host. Probablemente esto se deba a la configuración de la red que usas.</translation>
@@ -82,6 +85,7 @@ Para obtener más información sobre la privacidad, consulta la política de pri
 <translation id="2841013758207633010">Hora</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
 <translation id="2888969873284818612">Se produjo un error en la red. Reiniciaremos la aplicación cuando el dispositivo esté en línea nuevamente.</translation>
+<translation id="2891243864890517178">Para Mac (OS X Yosemite 10.10 y versiones posteriores)</translation>
 <translation id="289405675947420287">Accede de forma segura a tu computadora desde tu dispositivo iOS. Es rápido, simple y gratuito.
 
 • Descarga la app de Escritorio remoto de Chrome desde Chrome Web Store en la computadora en la que quieras acceder de forma remota.
@@ -102,7 +106,6 @@ Para obtener más información sobre la privacidad, consulta la política de pri
 <translation id="3171922709365450819">Este cliente no admite este dispositivo porque requiere autenticación de terceros.</translation>
 <translation id="3194245623920924351">Escritorio remoto de Chrome</translation>
 <translation id="3197730452537982411">Escritorio remoto</translation>
-<translation id="3212472844831225214">• Se agregó compatibilidad con Android 9.0 Pie.</translation>
 <translation id="324272851072175193">Enviar estas instrucciones por correo electrónico</translation>
 <translation id="3258789396564295715">Puedes acceder a esta computadora sin correr riesgos a través del Escritorio remoto de Chrome.</translation>
 <translation id="3286521253923406898">Controlador del host de Chromoting</translation>
@@ -136,6 +139,7 @@ Para obtener más información sobre la privacidad, consulta la política de pri
 <translation id="3989511127559254552">Para continuar, primero debes extender los permisos de acceso a tu computadora. Solo tienes que hacerlo una vez.</translation>
 <translation id="4006787130661126000">Debes habilitar las conexiones remotas si deseas usar Escritorio remoto de Chrome para acceder a esta computadora.</translation>
 <translation id="405887016757208221">La computadora remota no pudo inicializar la sesión. Si el problema persiste, intenta volver a configurar el host.</translation>
+<translation id="4060747889721220580">Descargar archivo</translation>
 <translation id="4068946408131579958">Todas las conexiones</translation>
 <translation id="409800995205263688">NOTA: La configuración de la política solo permite conexiones entre computadoras que estén dentro de tu red.</translation>
 <translation id="4126409073460786861">Después de completar la configuración, actualiza esta página. Luego, para acceder a la computadora, deberás elegir tu dispositivo y escribir el PIN.</translation>
@@ -189,6 +193,9 @@ PC</translation>
 <translation id="4973800994433240357">Al descargar el instalador del host de Chromoting, aceptas las <ph name="LINK_BEGIN" />Condiciones del servicio<ph name="LINK_END" /> de Google.</translation>
 <translation id="4974476491460646149">Conexión cerrada para <ph name="HOSTNAME" /></translation>
 <translation id="4985296110227979402">Para obtener acceso remoto, primero debes configurar la computadora</translation>
+<translation id="5059773780693835145">Para poder controlar esta máquina de forma remota con <ph name="PRODUCT_NAME" />, se necesita un paso adicional de configuración.
+
+Para habilitar esta funcionalidad, selecciona "<ph name="BUTTON_NAME" />". Se mostrará el panel de preferencias de Seguridad y privacidad. Luego, marca la casilla correspondiente a "<ph name="SERVICE_SCRIPT_NAME" />".</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (sin conexión)</translation>
 <translation id="5070121137485264635">El host remoto requiere la autenticación de un sitio web de terceros. Para continuar, debes otorgar permisos adicionales al Escritorio remoto de Chrome para acceder a la siguiente dirección:</translation>
 <translation id="507204348399810022">¿Seguro que deseas inhabilitar las conexiones remotas a <ph name="HOSTNAME" />?</translation>
@@ -237,6 +244,7 @@ PC</translation>
 <translation id="6198252989419008588">Cambiar PIN</translation>
 <translation id="6204583485351780592"><ph name="HOSTNAME" /> (desactualizado)</translation>
 <translation id="6221358653751391898">No accediste a Chrome. Accede y vuelve a intentarlo.</translation>
+<translation id="6227369581881558336">Escritorio remoto de Chrome ahora está disponible en la Web, con nuevas funciones, como la transferencia de archivos. Échale un vistazo a nuestra <ph name="LINK_BEGIN" />aplicación web<ph name="LINK_END" />.</translation>
 <translation id="6284412385303060032">Se cerró el host que se ejecuta en la pantalla de acceso de la consola para poder admitir el modo de cortina. Por lo tanto, se cambió a un host que se ejecuta en una sesión específica de usuario.</translation>
 <translation id="629730747756840877">Cuenta</translation>
 <translation id="6304318647555713317">Cliente</translation>
@@ -250,7 +258,6 @@ PC</translation>
 <translation id="6542902059648396432">Informar un problema</translation>
 <translation id="6550675742724504774">Opciones</translation>
 <translation id="6570205395680337606">Restablece la aplicación. Perderás todo el trabajo que no se haya guardado.</translation>
-<translation id="6572345186230665992">Para Mac (OS X Mavericks 10.9 y versiones posteriores)</translation>
 <translation id="6583902294974160967">Asistencia</translation>
 <translation id="6612717000975622067">Enviar Ctrl-Alt-Supr</translation>
 <translation id="6654753848497929428">Compartir</translation>
@@ -285,7 +292,6 @@ PC</translation>
 <translation id="7434397035092923453">Acceso rechazado para cliente: <ph name="CLIENT_USERNAME" /></translation>
 <translation id="7444276978508498879">Cliente conectado: <ph name="CLIENT_USERNAME" /></translation>
 <translation id="7526139040829362392">Cambiar cuenta</translation>
-<translation id="7589941250119944644">Escritorio remoto de Chrome llega a la Web. Prueba nuestra <ph name="LINK_BEGIN" />app web<ph name="LINK_END" />. Es rápida y gratuita, y cuenta con las mismas funciones que antes.</translation>
 <translation id="7606912958770842224">Habilitar conexiones remotas</translation>
 <translation id="7628469622942688817">Recordar mi PIN en este dispositivo</translation>
 <translation id="7649070708921625228">Ayuda</translation>
@@ -314,6 +320,7 @@ PC</translation>
 <translation id="809687642899217504">Mis computadoras</translation>
 <translation id="811307782653349804">Accede a tu computadora desde cualquier lugar.</translation>
 <translation id="8116630183974937060">Se produjo un error de red. Comprueba que el dispositivo esté conectado a Internet y vuelve a intentarlo.</translation>
+<translation id="8123581458650016326">Permite que usuarios remotos controlen esta máquina</translation>
 <translation id="8178433417677596899">Uso compartido de la pantalla entre usuarios, ideal para recibir asistencia técnica remota</translation>
 <translation id="8187079423890319756">Copyright 2013 Los autores de Chromium. Todos los derechos reservados.</translation>
 <translation id="8196755618196986400">Para que podamos comunicarnos contigo y brindarte más información, se incluirá tu dirección de correo electrónico en todos los comentarios que envíes.</translation>
@@ -331,6 +338,8 @@ PC</translation>
 <translation id="8525306231823319788">Pantalla completa</translation>
 <translation id="8548209692293300397">Accediste previamente como <ph name="USER_NAME" /> (<ph name="USER_EMAIL" />). Para acceder a las computadoras en esa cuenta, <ph name="LINK_BEGIN" />accede a Google Chrome<ph name="LINK_END" /> con esa cuenta y vuelve a instalar Escritorio remoto de Chrome.</translation>
 <translation id="8642984861538780905">Aceptable</translation>
+<translation id="8705151241155781642">• Se agregó compatibilidad con Android 9.0 Pie.
+• Compatibilidad con el cambio de resolución del escritorio remoto para adaptarse a la pantalla de tu dispositivo Android.</translation>
 <translation id="8712909229180978490">No puedo ver mis archivos guardados en línea en Google Drive.</translation>
 <translation id="8743328882720071828">¿Deseas permitir que <ph name="CLIENT_USERNAME" /> vea y controle tu computadora?</translation>
 <translation id="8747048596626351634">La sesión se bloqueó o no pudo iniciarse. Si la computadora remota cuenta con el script ~/.chrome-remote-desktop-session, asegúrate de que este inicia un proceso de ejecución prolongada en primer plano, como un entorno de escritorio o un administrador de ventanas.</translation>

@@ -95,7 +95,7 @@ class DiskCacheTestWithCache : public DiskCacheTest {
 
   void SetMask(uint32_t mask) { mask_ = mask; }
 
-  void SetMaxSize(int size);
+  void SetMaxSize(int64_t size, bool should_succeed = true);
 
   // Returns value last given to SetMaxSize (or 0).
   int MaxSize() const { return size_; }
@@ -132,6 +132,11 @@ class DiskCacheTestWithCache : public DiskCacheTest {
   }
 
   // Utility methods to access the cache and wait for each operation to finish.
+  int OpenOrCreateEntry(const std::string& key,
+                        disk_cache::EntryWithOpened* entry_struct);
+  int OpenOrCreateEntryWithPriority(const std::string& key,
+                                    net::RequestPriority request_priority,
+                                    disk_cache::EntryWithOpened* entry_struct);
   int OpenEntry(const std::string& key, disk_cache::Entry** entry);
   int OpenEntryWithPriority(const std::string& key,
                             net::RequestPriority request_priority,
@@ -144,9 +149,9 @@ class DiskCacheTestWithCache : public DiskCacheTest {
   int DoomAllEntries();
   int DoomEntriesBetween(const base::Time initial_time,
                          const base::Time end_time);
-  int CalculateSizeOfAllEntries();
-  int CalculateSizeOfEntriesBetween(const base::Time initial_time,
-                                    const base::Time end_time);
+  int64_t CalculateSizeOfAllEntries();
+  int64_t CalculateSizeOfEntriesBetween(const base::Time initial_time,
+                                        const base::Time end_time);
   int DoomEntriesSince(const base::Time initial_time);
   std::unique_ptr<TestIterator> CreateIterator();
   void FlushQueueForTest();
@@ -187,7 +192,7 @@ class DiskCacheTestWithCache : public DiskCacheTest {
   disk_cache::MemBackendImpl* mem_cache_;
 
   uint32_t mask_;
-  int size_;
+  int64_t size_;
   net::CacheType type_;
   bool memory_only_;
   bool simple_cache_mode_;

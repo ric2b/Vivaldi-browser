@@ -5,14 +5,13 @@
 #include "extensions/api/show_menu/show_menu_api.h"
 
 #include <map>
+#include <math.h>
 #include <memory>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include "app/vivaldi_resources.h"
 #include "base/base64.h"
-#include "base/i18n/string_compare.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -20,6 +19,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "browser/menus/bookmark_sorter.h"
+#include "browser/menus/bookmark_support.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/platform_apps/app_load_service.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -40,12 +41,15 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/manifest_constants.h"
+#include "extensions/schema/show_menu.h"
+#include "extensions/tools/vivaldi_tools.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/vivaldi_context_menu.h"
 #include "ui/vivaldi_main_menu.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #define BOOKMARK_ID_BASE 100000
 
@@ -219,324 +223,205 @@ ui::Accelerator ParseShortcut(const std::string& accelerator,
 
 }  // namespace
 
-BookmarkSorter::BookmarkSorter(show_menu::SortField sort_field,
-                               show_menu::SortOrder sort_order,
-                               bool group_folders)
-  :sort_field_(sort_field)
-  ,sort_order_(sort_order)
-  ,group_folders_(group_folders) {
-
-  if (sort_order_ == show_menu::SORT_ORDER_NONE)
-    sort_field_ = show_menu::SORT_FIELD_NONE;
-
-  UErrorCode error = U_ZERO_ERROR;
-  collator_.reset(icu::Collator::createInstance(error));
-  if (U_FAILURE(error)) {
-    collator_.reset(nullptr);
-  }
-};
-
-BookmarkSorter::~BookmarkSorter() {
+// static
+void ShowMenuAPI::SendCommandExecuted(Profile* profile,
+                                      int window_id,
+                                      int command_id,
+                                      const std::string& parameter) {
+  ::vivaldi::BroadcastEvent(
+      show_menu::OnMainMenuCommand::kEventName,
+      show_menu::OnMainMenuCommand::Create(window_id, command_id, parameter),
+      profile);
 }
-
-void BookmarkSorter::sort(std::vector<bookmarks::BookmarkNode*>& vector) {
-  switch (sort_field_) {
-    case show_menu::SORT_FIELD_TITLE:
-      std::sort(vector.begin(), vector.end(),
-          [this](bookmarks::BookmarkNode *b1, bookmarks::BookmarkNode *b2) {
-        if ((b1->type() == b2->type()) || !group_folders_) {
-          const icu::Collator* collator = collator_.get();
-
-          int l1 = b1->GetTitle().length();
-          int l2 = b2->GetTitle().length();
-          if (l1 == 0 || l2 == 0) {
-            return fallbackToTitleSort(collator, b1, b2, l1, l2);
-          }
-
-          if (sort_order_ == show_menu::SORT_ORDER_ASCENDING) {
-            return base::i18n::CompareString16WithCollator(
-                *collator, b1->GetTitle(), b2->GetTitle()) == UCOL_LESS;
-          } else {
-            return base::i18n::CompareString16WithCollator(
-                *collator, b2->GetTitle(), b1->GetTitle()) == UCOL_LESS;
-          }
-        }
-        return b1->is_folder();
-      });
-      break;
-    case show_menu::SORT_FIELD_URL:
-      std::sort(vector.begin(), vector.end(),
-          [this](bookmarks::BookmarkNode *b1, bookmarks::BookmarkNode *b2) {
-        if ((b1->type() == b2->type()) || !group_folders_) {
-
-          int l1 = b1->url().spec().length();
-          int l2 = b2->url().spec().length();
-          if (l1 == 0 || l2 == 0) {
-            return fallbackToTitleSort(collator_.get(), b1, b2, l1, l2);
-          }
-
-          if (sort_order_ == show_menu::SORT_ORDER_ASCENDING) {
-            return b1->url().spec() < b2->url().spec();
-          } else {
-            return b2->url().spec() < b1->url().spec();
-          }
-        }
-        return b1->is_folder();
-      });
-      break;
-    case show_menu::SORT_FIELD_NICKNAME:
-      std::sort(vector.begin(), vector.end(),
-          [this](bookmarks::BookmarkNode *b1, bookmarks::BookmarkNode *b2) {
-        if ((b1->type() == b2->type()) || !group_folders_) {
-          const icu::Collator* collator = collator_.get();
-
-          int l1 = b1->GetNickName().length();
-          int l2 = b2->GetNickName().length();
-          if (l1 == 0 || l2 == 0) {
-            return fallbackToTitleSort(collator, b1, b2, l1, l2);
-          }
-
-          if (sort_order_ == show_menu::SORT_ORDER_ASCENDING) {
-            return base::i18n::CompareString16WithCollator(
-                *collator, b1->GetNickName(), b2->GetNickName()) == UCOL_LESS;
-          } else {
-            return base::i18n::CompareString16WithCollator(
-                *collator, b2->GetNickName(), b1->GetNickName()) == UCOL_LESS;
-          }
-        }
-        return b1->is_folder();
-      });
-      break;
-    case show_menu::SORT_FIELD_DESCRIPTION:
-      std::sort(vector.begin(), vector.end(),
-          [this](bookmarks::BookmarkNode *b1, bookmarks::BookmarkNode *b2) {
-        if ((b1->type() == b2->type()) || !group_folders_) {
-          const icu::Collator* collator = collator_.get();
-
-          int l1 = b1->GetDescription().length();
-          int l2 = b2->GetDescription().length();
-          if (l1 == 0 || l2 == 0) {
-            return fallbackToTitleSort(collator, b1, b2, l1, l2);
-          }
-
-          if (sort_order_ == show_menu::SORT_ORDER_ASCENDING) {
-            return base::i18n::CompareString16WithCollator(
-                *collator, b1->GetDescription(), b2->GetDescription())
-                    == UCOL_LESS;
-          } else {
-            return base::i18n::CompareString16WithCollator(
-                *collator, b2->GetDescription(), b1->GetDescription())
-                    == UCOL_LESS;
-          }
-        }
-        return b1->is_folder();
-      });
-      break;
-    case show_menu::SORT_FIELD_DATEADDED:
-      std::sort(vector.begin(), vector.end(),
-          [this](bookmarks::BookmarkNode *b1, bookmarks::BookmarkNode *b2) {
-        if ((b1->type() == b2->type()) || !group_folders_) {
-          if (sort_order_ == show_menu::SORT_ORDER_ASCENDING) {
-            return b1->date_added() < b2->date_added();
-          } else {
-            return b2->date_added() < b1->date_added();
-          }
-        }
-        return b1->is_folder();
-      });
-      break;
-    // Keep compiler happy.
-    case show_menu::SORT_FIELD_NONE:
-      break;
-  }
-}
-
-bool BookmarkSorter::fallbackToTitleSort(const icu::Collator* collator,
-                                         bookmarks::BookmarkNode *b1,
-                                         bookmarks::BookmarkNode *b2,
-                                         int l1,
-                                         int l2) {
-  if (l1 == 0 && l2 == 0) {
-    l1 = b1->GetTitle().length();
-    l2 = b2->GetTitle().length();
-    if (l1 == 0 || l2 == 0) {
-      // Sort by date if there is missing title information
-      return fallbackToDateSort(b1, b2, l1, l2);
-    }
-    if (sort_order_ == show_menu::SORT_ORDER_ASCENDING) {
-      return base::i18n::CompareString16WithCollator(
-          *collator, b1->GetTitle(), b2->GetTitle()) == UCOL_LESS;
-    } else {
-      return base::i18n::CompareString16WithCollator(
-          *collator, b2->GetTitle(), b1->GetTitle()) == UCOL_LESS;
-    }
-  } else if (l1 == 0) {
-    return sort_order_ == show_menu::SORT_ORDER_ASCENDING ? false : true;
-  } else {
-    return sort_order_ == show_menu::SORT_ORDER_ASCENDING ? true : false;
-  }
-}
-
-bool BookmarkSorter::fallbackToDateSort(bookmarks::BookmarkNode *b1,
-                                        bookmarks::BookmarkNode *b2,
-                                        int l1,
-                                        int l2) {
-  if (l1 == 0 && l2 == 0) {
-    if (sort_order_ == show_menu::SORT_ORDER_ASCENDING) {
-      return b1->date_added() < b2->date_added();
-    } else {
-      return b2->date_added() < b1->date_added();
-    }
-  } else if (l1 == 0) {
-    return sort_order_ == show_menu::SORT_ORDER_ASCENDING ? false : true;
-  } else {
-    return sort_order_ == show_menu::SORT_ORDER_ASCENDING ? true : false;
-  }
-}
-
-CommandEventRouter::CommandEventRouter(Profile* profile)
-    : browser_context_(profile) {}
-
-CommandEventRouter::~CommandEventRouter() {}
-
-void CommandEventRouter::DispatchEvent(
-    const std::string& event_name,
-    std::unique_ptr<base::ListValue> event_args) {
-  EventRouter* event_router = EventRouter::Get(browser_context_);
-  if (event_router) {
-    event_router->BroadcastEvent(base::WrapUnique(
-        new extensions::Event(extensions::events::VIVALDI_EXTENSION_EVENT,
-                              event_name, std::move(event_args))));
-  }
-}
-
-ShowMenuAPI::ShowMenuAPI(BrowserContext* context) : browser_context_(context) {
-  EventRouter* event_router = EventRouter::Get(browser_context_);
-  event_router->RegisterObserver(this,
-                                 show_menu::OnMainMenuCommand::kEventName);
-  event_router->RegisterObserver(this, show_menu::OnOpen::kEventName);
-  event_router->RegisterObserver(this, show_menu::OnUrlHighlighted::kEventName);
-  event_router->RegisterObserver(this,
-                                 show_menu::OnBookmarkActivated::kEventName);
-  event_router->RegisterObserver(this,
-                                 show_menu::OnAddBookmark::kEventName);
-}
-
-ShowMenuAPI::~ShowMenuAPI() {}
-
-void ShowMenuAPI::Shutdown() {
-  EventRouter::Get(browser_context_)->UnregisterObserver(this);
-}
-
-void ShowMenuAPI::CommandExecuted(int command_id,
-                                  const std::string& parameter) {
-  if (command_event_router_) {
-    command_event_router_->DispatchEvent(
-        show_menu::OnMainMenuCommand::kEventName,
-        show_menu::OnMainMenuCommand::Create(command_id, parameter));
-  }
-}
-
-void ShowMenuAPI::OnOpen() {
-  if (command_event_router_) {
-    command_event_router_->DispatchEvent(show_menu::OnOpen::kEventName,
-                                         show_menu::OnOpen::Create());
-  }
-}
-
-void ShowMenuAPI::OnUrlHighlighted(const std::string& url) {
-  if (command_event_router_) {
-    command_event_router_->DispatchEvent(
-        show_menu::OnUrlHighlighted::kEventName,
-        show_menu::OnUrlHighlighted::Create(url));
-  }
-}
-
-void ShowMenuAPI::OnBookmarkActivated(int id, int event_flags) {
-  if (command_event_router_) {
-
-    show_menu::Response response;
-    response.id = id;
-    response.ctrl = event_flags & ui::EF_CONTROL_DOWN ? true : false;
-    response.shift = event_flags & ui::EF_SHIFT_DOWN ? true : false;
-    response.alt = event_flags & ui::EF_ALT_DOWN ? true : false;
-    response.command = event_flags & ui::EF_COMMAND_DOWN ? true : false;
-    response.left = event_flags & ui::EF_LEFT_MOUSE_BUTTON ? true : false;
-    response.right = event_flags & ui::EF_RIGHT_MOUSE_BUTTON ? true : false;
-    response.center = event_flags & ui::EF_MIDDLE_MOUSE_BUTTON ? true : false;
-
-    command_event_router_->DispatchEvent(
-        show_menu::OnBookmarkActivated::kEventName,
-        show_menu::OnBookmarkActivated::Create(response));
-  }
-}
-
-void ShowMenuAPI::OnAddBookmark(int id) {
-  if (command_event_router_) {
-    command_event_router_->DispatchEvent(
-        show_menu::OnAddBookmark::kEventName,
-        show_menu::OnAddBookmark::Create(id));
-  }
-}
-
-static base::LazyInstance<BrowserContextKeyedAPIFactory<ShowMenuAPI>>::
-    DestructorAtExit g_factory_menu = LAZY_INSTANCE_INITIALIZER;
 
 // static
-BrowserContextKeyedAPIFactory<ShowMenuAPI>* ShowMenuAPI::GetFactoryInstance() {
-  return g_factory_menu.Pointer();
+void ShowMenuAPI::SendOpen(Profile* profile) {
+  ::vivaldi::BroadcastEvent(show_menu::OnOpen::kEventName,
+                            show_menu::OnOpen::Create(), profile);
 }
 
-void ShowMenuAPI::OnListenerAdded(const EventListenerInfo& details) {
-  command_event_router_.reset(
-      new CommandEventRouter(Profile::FromBrowserContext(browser_context_)));
-  EventRouter::Get(browser_context_)->UnregisterObserver(this);
+// static
+void ShowMenuAPI::SendClose(Profile* profile) {
+  ::vivaldi::BroadcastEvent(show_menu::OnClose::kEventName,
+                            show_menu::OnClose::Create(), profile);
 }
 
-VivaldiMenuController::BookmarkSupport::BookmarkSupport()
-  :icons(kMax), observer_enabled(false) {}
-VivaldiMenuController::BookmarkSupport::~BookmarkSupport() {}
-
-const gfx::Image& VivaldiMenuController::BookmarkSupport::iconForNode(
-    const bookmarks::BookmarkNode* node) const {
-  if (node->is_folder()) {
-    return node->GetSpeeddial() ? icons[kSpeeddial]
-                                : icons[kFolder];
-  }
-  return icons[kUrl];
+// static
+void ShowMenuAPI::SendUrlHighlighted(Profile* profile, const std::string& url) {
+  ::vivaldi::BroadcastEvent(show_menu::OnUrlHighlighted::kEventName,
+                            show_menu::OnUrlHighlighted::Create(url), profile);
 }
+
+// static
+void ShowMenuAPI::SendBookmarkActivated(Profile* profile,
+                                        int id,
+                                        int event_flags) {
+  show_menu::Response response;
+  response.id = id;
+  response.ctrl = event_flags & ui::EF_CONTROL_DOWN ? true : false;
+  response.shift = event_flags & ui::EF_SHIFT_DOWN ? true : false;
+  response.alt = event_flags & ui::EF_ALT_DOWN ? true : false;
+  response.command = event_flags & ui::EF_COMMAND_DOWN ? true : false;
+  response.left = event_flags & ui::EF_LEFT_MOUSE_BUTTON ? true : false;
+  response.right = event_flags & ui::EF_RIGHT_MOUSE_BUTTON ? true : false;
+  response.center = event_flags & ui::EF_MIDDLE_MOUSE_BUTTON ? true : false;
+
+  ::vivaldi::BroadcastEvent(show_menu::OnBookmarkActivated::kEventName,
+                            show_menu::OnBookmarkActivated::Create(response),
+                            profile);
+}
+
+// static
+void ShowMenuAPI::SendAddBookmark(Profile* profile, int id) {
+  ::vivaldi::BroadcastEvent(show_menu::OnAddBookmark::kEventName,
+                            show_menu::OnAddBookmark::Create(id), profile);
+}
+
+namespace {
+
+namespace ShowContextMenu = vivaldi::show_menu::ShowContextMenu;
+
+class VivaldiMenuController : public ui::SimpleMenuModel::Delegate,
+                              public bookmarks::BookmarkModelObserver {
+ public:
+  struct BookmarkFolder {
+    int node_id;
+    int menu_id;
+    bool complete;
+  };
+
+  VivaldiMenuController(content::WebContents* web_contents,
+                        scoped_refptr<ShowMenuShowContextMenuFunction> fun,
+                        std::unique_ptr<ShowContextMenu::Params> params);
+  ~VivaldiMenuController() override;
+
+  void Show();
+
+  // ui::SimpleMenuModel::Delegate
+  bool IsCommandIdChecked(int command_id) const override;
+  bool IsCommandIdEnabled(int command_id) const override;
+  bool IsItemForCommandIdDynamic(int command_id) const override;
+  base::string16 GetLabelForCommandId(int command_id) const override;
+  bool GetAcceleratorForCommandId(int command_id,
+                                  ui::Accelerator* accelerator) const override;
+  bool GetIconForCommandId(int command_id, gfx::Image* icon) const override;
+  void VivaldiCommandIdHighlighted(int command_id) override;
+  void ExecuteCommand(int command_id, int event_flags) override;
+  void OnMenuWillShow(ui::SimpleMenuModel* source) override;
+  void MenuClosed(ui::SimpleMenuModel* source) override;
+
+  // bookmarks::BookmarkModelObserver
+  void BookmarkModelLoaded(bookmarks::BookmarkModel* model,
+                           bool ids_reassigned) override {}
+  void BookmarkNodeMoved(bookmarks::BookmarkModel* model,
+                                 const bookmarks::BookmarkNode* old_parent,
+                                 int old_index,
+                                 const bookmarks::BookmarkNode* new_parent,
+                                 int new_index) override {}
+  void BookmarkNodeAdded(bookmarks::BookmarkModel* model,
+                                 const bookmarks::BookmarkNode* parent,
+                                 int index) override {}
+  void BookmarkNodeRemoved(
+      bookmarks::BookmarkModel* model,
+      const bookmarks::BookmarkNode* parent,
+      int old_index,
+      const bookmarks::BookmarkNode* node,
+      const std::set<GURL>& no_longer_bookmarked) override {}
+  void BookmarkNodeChanged(bookmarks::BookmarkModel* model,
+      const bookmarks::BookmarkNode* node) override {}
+  void BookmarkNodeFaviconChanged(bookmarks::BookmarkModel* model,
+                                  const bookmarks::BookmarkNode* node) override;
+  void BookmarkNodeChildrenReordered(bookmarks::BookmarkModel* model,
+      const bookmarks::BookmarkNode* node) override {}
+  void BookmarkAllUserNodesRemoved(bookmarks::BookmarkModel* model,
+                                const std::set<GURL>& removed_urls) override {}
+
+ private:
+  const vivaldi::show_menu::MenuItem* getItemByCommandId(int command_id) const;
+  void PopulateModel(const vivaldi::show_menu::MenuItem* menuitem,
+                     ui::SimpleMenuModel* menu_model,
+                     int parent_id);
+  void SanitizeModel(ui::SimpleMenuModel* menu_model);
+  void AddAddTabToBookmarksMenuItem(ui::SimpleMenuModel* menu_model, int id);
+  void SetupBookmarkFolder(const bookmarks::BookmarkNode* node,
+                           bookmarks::BookmarkModel* model,
+                           int parent_id,
+                           bool is_top_folder,
+                           int offset_in_folder,
+                           ui::SimpleMenuModel* menu_model);
+  void PopulateBookmarkFolder(ui::SimpleMenuModel* menu_model,
+                              int node_id,
+                              int offset);
+  bookmarks::BookmarkModel* GetBookmarkModel();
+  void EnableBookmarkObserver(bool enable);
+  bool IsBookmarkSeparator(const bookmarks::BookmarkNode* node);
+  bool HasDeveloperTools();
+  bool IsDeveloperTools(int command_id) const;
+  void HandleDeveloperToolsCommand(int command_id);
+  const Extension* GetExtension() const;
+  void LoadFavicon(int command_id, const std::string& url);
+  void OnFaviconDataAvailable(
+      int command_id,
+      const favicon_base::FaviconImageResult& image_result);
+  void SendMenuResult(int command_id, int event_flags);
+
+  content::WebContents* web_contents_;  // Not owned by us.
+  Profile* profile_;  // Not owned by us.
+  scoped_refptr<ShowMenuShowContextMenuFunction> fun_;
+  std::unique_ptr<ShowContextMenu::Params> params_;
+  int menu_x;
+  int menu_y;
+
+  // Loading favicons
+  base::CancelableTaskTracker cancelable_task_tracker_;
+  favicon::FaviconService* favicon_service_;
+
+  ui::SimpleMenuModel menu_model_;
+  std::unique_ptr<::vivaldi::VivaldiContextMenu> menu_;
+  std::vector<std::unique_ptr<ui::SimpleMenuModel>> models_;
+  base::string16 separator_;
+  base::string16 separator_description_;
+  std::unique_ptr<::vivaldi::BookmarkSorter> bookmark_sorter_;
+  std::map<int, std::string*> url_map_;
+  std::map<ui::SimpleMenuModel*, BookmarkFolder> bookmark_menu_model_map_;
+  // State variables to reduce lookups in url_map_
+  int current_highlighted_id_;
+  bool is_url_highlighted_;
+  // Initial selection
+  int initial_selected_id_;
+  bool is_shown_;
+  ::vivaldi::BookmarkSupport bookmark_support_;
+};
 
 VivaldiMenuController::VivaldiMenuController(
-    Delegate* delegate,
-    std::vector<show_menu::MenuItem>* menu_items)
-    : favicon_service_(nullptr),
-      delegate_(delegate),
-      menu_items_(menu_items),
+    content::WebContents* web_contents,
+    scoped_refptr<ShowMenuShowContextMenuFunction> fun,
+    std::unique_ptr<ShowContextMenu::Params> params)
+    : web_contents_(web_contents),
+      profile_(Profile::FromBrowserContext(web_contents_->GetBrowserContext())),
+      fun_(std::move(fun)),
+      params_(std::move(params)),
+      favicon_service_(nullptr),
       menu_model_(this),
-      web_contents_(nullptr),
-      profile_(nullptr),
       current_highlighted_id_(-1),
       is_url_highlighted_(false),
       initial_selected_id_(-1),
-      is_shown_(false) {}
+      is_shown_(false) {
+  blink::WebFloatPoint p(params_->properties.left, params_->properties.top);
+  p = ::vivaldi::FromUICoordinates(web_contents, p);
+  menu_x = round(p.x);
+  menu_y = round(p.y);
+}
 
 VivaldiMenuController::~VivaldiMenuController() {
   EnableBookmarkObserver(false);
 }
 
-void VivaldiMenuController::Show(
-    content::WebContents* web_contents,
-    const content::ContextMenuParams& menu_params) {
-  web_contents_ = web_contents;
-  menu_params_ = menu_params;
-
-  content::BrowserContext* browser_context = web_contents_->GetBrowserContext();
-  profile_ = Profile::FromBrowserContext(browser_context);
-
+void VivaldiMenuController::Show() {
   // Populate menu
   for (std::vector<show_menu::MenuItem>::const_iterator it =
-           menu_items_->begin();
-       it != menu_items_->end(); ++it) {
+           params_->items.begin();
+       it != params_->items.end(); ++it) {
     const show_menu::MenuItem& menuitem = *it;
     PopulateModel(&menuitem, &menu_model_, -1);
   }
@@ -557,9 +442,12 @@ void VivaldiMenuController::Show(
 
   SanitizeModel(&menu_model_);
 
+  content::ContextMenuParams menu_params;
+  menu_params.x = menu_x;
+  menu_params.y = menu_y;
   menu_.reset(::vivaldi::CreateVivaldiContextMenu(
-      web_contents, &menu_model_, menu_params));
-  ShowMenuAPI::GetFactoryInstance()->Get(profile_)->OnOpen();
+      web_contents_, &menu_model_, menu_params));
+  ShowMenuAPI::SendOpen(profile_);
   menu_->Show();
 }
 
@@ -581,7 +469,14 @@ void VivaldiMenuController::OnMenuWillShow(ui::SimpleMenuModel* source) {
       PopulateBookmarkFolder(source, folder.node_id, -1);
       menu_->UpdateMenu(source, folder.menu_id);
       if (source->GetItemCount() > 0) {
-        menu_->SetSelectedItem(source->GetCommandIdAt(0));
+        // Only auto select the first time in the sub menu if it is not a
+        // bookmark item (otherwise we will break keyboard navigation) and it
+        // is not a sub folder (in that case we could end up recursively opening
+        // its first child etc).
+        if (source->GetTypeAt(0) != ui::MenuModel::TYPE_SUBMENU &&
+          source->GetCommandIdAt(0) < BOOKMARK_ID_BASE) {
+          menu_->SetSelectedItem(source->GetCommandIdAt(0));
+        }
       }
     }
   }
@@ -590,22 +485,17 @@ void VivaldiMenuController::OnMenuWillShow(ui::SimpleMenuModel* source) {
 void VivaldiMenuController::MenuClosed(ui::SimpleMenuModel* source) {
   source->SetMenuModelDelegate(nullptr);
   if (source == &menu_model_) {
-    if (delegate_) {
-      delegate_->OnMenuCanceled();
-    }
+    SendMenuResult(-1, 0);
+    ShowMenuAPI::SendClose(profile_);
     delete this;
   }
 }
 
 bool VivaldiMenuController::HasDeveloperTools() {
-  if (!web_contents_) {
-    return false;
-  } else {
-    const extensions::Extension* platform_app = GetExtension();
-    return extensions::Manifest::IsUnpackedLocation(platform_app->location()) ||
-           base::CommandLine::ForCurrentProcess()->HasSwitch(
-               switches::kDebugPackedApps);
-  }
+  const extensions::Extension* platform_app = GetExtension();
+  return extensions::Manifest::IsUnpackedLocation(platform_app->location()) ||
+          base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kDebugPackedApps);
 }
 
 bool VivaldiMenuController::IsDeveloperTools(int command_id) const {
@@ -617,13 +507,11 @@ bool VivaldiMenuController::IsDeveloperTools(int command_id) const {
 
 void VivaldiMenuController::HandleDeveloperToolsCommand(int command_id) {
   const extensions::Extension* platform_app = GetExtension();
-  content::BrowserContext* browser_context = web_contents_->GetBrowserContext();
-  Profile* profile = Profile::FromBrowserContext(browser_context);
 
   switch (command_id) {
     case IDC_CONTENT_CONTEXT_RELOAD_PACKAGED_APP:
       if (platform_app && platform_app->is_platform_app()) {
-        extensions::ExtensionSystem::Get(browser_context)
+        extensions::ExtensionSystem::Get(profile_)
             ->extension_service()
             ->ReloadExtension(platform_app->id());
       }
@@ -633,13 +521,13 @@ void VivaldiMenuController::HandleDeveloperToolsCommand(int command_id) {
       if (platform_app && platform_app->is_platform_app()) {
         extensions::DevtoolsConnectorAPI* api =
           extensions::DevtoolsConnectorAPI::GetFactoryInstance()->Get(
-            Profile::FromBrowserContext(browser_context));
+            Profile::FromBrowserContext(profile_));
         DCHECK(api);
         api->CloseAllDevtools();
 
         extensions::VivaldiUtilitiesAPI* utils_api =
-          extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(
-            browser_context);
+            extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(
+                profile_);
         DCHECK(utils_api);
         utils_api->CloseAllThumbnailWindows();
 
@@ -649,25 +537,21 @@ void VivaldiMenuController::HandleDeveloperToolsCommand(int command_id) {
 
     case IDC_CONTENT_CONTEXT_INSPECTELEMENT: {
       DevToolsWindow::InspectElement(web_contents_->GetMainFrame(),
-                                     menu_params_.x, menu_params_.y);
+                                     menu_x, menu_y);
     } break;
 
     case IDC_CONTENT_CONTEXT_INSPECTBACKGROUNDPAGE:
       if (platform_app && platform_app->is_platform_app()) {
-        extensions::devtools_util::InspectBackgroundPage(platform_app, profile);
+        extensions::devtools_util::InspectBackgroundPage(platform_app,
+                                                         profile_);
       }
       break;
   }
 }
 
 const Extension* VivaldiMenuController::GetExtension() const {
-  if (!web_contents_) {
-    return nullptr;
-  } else {
-    ProcessManager* process_manager =
-        ProcessManager::Get(web_contents_->GetBrowserContext());
-    return process_manager->GetExtensionForWebContents(web_contents_);
-  }
+  ProcessManager* process_manager = ProcessManager::Get(profile_);
+  return process_manager->GetExtensionForWebContents(web_contents_);
 }
 
 void VivaldiMenuController::PopulateModel(const show_menu::MenuItem* item,
@@ -688,25 +572,51 @@ void VivaldiMenuController::PopulateModel(const show_menu::MenuItem* item,
     bookmark_support_.add_label = label;
 
     // Get default icons
-    if (item->container_icons &&
-        item->container_icons->size() == BookmarkSupport::Icons::kMax) {
-      for (int i = 0; i <  BookmarkSupport::Icons::kMax; i++) {
-        std::string png_data;
-        if (base::Base64Decode(item->container_icons->at(i), &png_data)) {
-          bookmark_support_.icons[i] = gfx::Image::CreateFrom1xPNGBytes(
-            reinterpret_cast<const unsigned char*>(png_data.c_str()),
-            png_data.length());
-        }
-      }
+    if (item->container_icons) {
+      bookmark_support_.initIcons(*item->container_icons);
     }
 
     // Folder grouping for first menu level
     bool group_folders = item->container_group_folders ?
       *item->container_group_folders : true;
 
-    bookmark_sorter_.reset(new BookmarkSorter(item->container_sort_field,
-                                              item->container_sort_order,
-                                              group_folders));
+    ::vivaldi::BookmarkSorter::SortField sortField;
+    switch (item->container_sort_field) {
+      case show_menu::SORT_FIELD_NONE:
+        sortField = ::vivaldi::BookmarkSorter::FIELD_NONE;
+        break;
+      case show_menu::SORT_FIELD_TITLE:
+        sortField = ::vivaldi::BookmarkSorter::FIELD_TITLE;
+        break;
+      case show_menu::SORT_FIELD_URL:
+        sortField = ::vivaldi::BookmarkSorter::FIELD_URL;
+        break;
+      case show_menu::SORT_FIELD_NICKNAME:
+        sortField = ::vivaldi::BookmarkSorter::FIELD_NICKNAME;
+        break;
+      case show_menu::SORT_FIELD_DESCRIPTION:
+        sortField = ::vivaldi::BookmarkSorter::FIELD_DESCRIPTION;
+        break;
+      case show_menu::SORT_FIELD_DATEADDED:
+        sortField = ::vivaldi::BookmarkSorter::FIELD_DATEADDED;
+        break;
+    }
+
+    ::vivaldi::BookmarkSorter::SortOrder sortOrder;
+    switch (item->container_sort_order) {
+      case show_menu::SORT_ORDER_NONE:
+        sortOrder = ::vivaldi::BookmarkSorter::ORDER_NONE;
+        break;
+      case show_menu::SORT_ORDER_ASCENDING:
+        sortOrder = ::vivaldi::BookmarkSorter::ORDER_ASCENDING;
+        break;
+      case show_menu::SORT_ORDER_DESCENDING:
+        sortOrder = ::vivaldi::BookmarkSorter::ORDER_DESCENDING;
+        break;
+    }
+
+    bookmark_sorter_.reset(new ::vivaldi::BookmarkSorter(sortField, sortOrder,
+        group_folders));
 
     // Select root node
     int id = 0;
@@ -725,7 +635,7 @@ void VivaldiMenuController::PopulateModel(const show_menu::MenuItem* item,
           model, id);
       if (node) {
         int offset = item->container_offset ? *item->container_offset : -1;
-        PopulateBookmarks(node, model, parent_id, true, offset, menu_model);
+        SetupBookmarkFolder(node, model, parent_id, true, offset, menu_model);
       }
     }
 
@@ -781,8 +691,7 @@ void VivaldiMenuController::PopulateModel(const show_menu::MenuItem* item,
 }
 
 bookmarks::BookmarkModel* VivaldiMenuController::GetBookmarkModel() {
-  return BookmarkModelFactory::GetForBrowserContext(
-      web_contents_->GetBrowserContext());
+  return BookmarkModelFactory::GetForBrowserContext(profile_);
 }
 
 void VivaldiMenuController::EnableBookmarkObserver(bool enable) {
@@ -798,7 +707,15 @@ void VivaldiMenuController::EnableBookmarkObserver(bool enable) {
   }
 }
 
-void VivaldiMenuController::PopulateBookmarks(
+void VivaldiMenuController::AddAddTabToBookmarksMenuItem(
+    ui::SimpleMenuModel* menu_model,
+    int id) {
+  if (!bookmark_support_.add_label.empty()) {
+    menu_model->AddItem(id, bookmark_support_.add_label);
+  }
+}
+
+void VivaldiMenuController::SetupBookmarkFolder(
     const bookmarks::BookmarkNode* node,
     bookmarks::BookmarkModel* model,
     int parent_id,
@@ -806,10 +723,13 @@ void VivaldiMenuController::PopulateBookmarks(
     int offset_in_folder,
     ui::SimpleMenuModel* menu_model) {
 
-  // Mac does not yet support progressive loading yet. For Mac this code will
-  // only be used in the bookmark bar making less of a problem.
-#if !defined(OS_MACOSX)
+  // We only support adding items from a folder
   if (node->is_folder()) {
+#if defined(OS_MACOSX)
+    // Mac does not yet support progressive loading. This code will only be used
+    // in the bookmark bar making less of a problem.
+    PopulateBookmarkFolder(menu_model, node->id(), offset_in_folder);
+#else
     if (parent_id == -1) {
       // No parent. We must populate now
       PopulateBookmarkFolder(menu_model, node->id(), offset_in_folder);
@@ -821,73 +741,28 @@ void VivaldiMenuController::PopulateBookmarks(
       folder.complete = false;
       bookmark_menu_model_map_[menu_model] = folder;
     }
-  }
-#else
-  int id = BOOKMARK_ID_BASE + node->id();
-  if (IsBookmarkSeparator(node)) {
-    if (bookmark_sorter_->isManualOrder()) {
-      menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
-    }
-  } else if (node->is_url()) {
-    menu_model->AddItem(id, node->GetTitle());
-    const gfx::Image& image = model->GetFavicon(node);
-    menu_model->SetIcon(menu_model->GetIndexOfCommandId(id),
-        image.IsEmpty() ? bookmark_support_.iconForNode(node) : image);
-
-  } else if (node->is_folder()) {
-    // The topmost content shall always be placed in the calling model.
-    ui::SimpleMenuModel* child_menu_model;
-    if (is_top_folder) {
-      child_menu_model = menu_model;
-    } else {
-      child_menu_model = new ui::SimpleMenuModel(this);
-      models_.push_back(base::WrapUnique(child_menu_model));
-    }
-
-    std::vector<bookmarks::BookmarkNode*> nodes;
-    nodes.reserve(node->child_count());
-    for (int i = 0; i < node->child_count(); ++i) {
-      nodes.push_back(const_cast<bookmarks::BookmarkNode*>(node->GetChild(i)));
-    }
-    bookmark_sorter_->sort(nodes);
-    bookmark_sorter_->setGroupFolders(true); // Always grouping in sub menus.
-
-    // Never a label in an extender menu (which sets the offset)
-    if (!bookmark_support_.add_label.empty() && offset_in_folder < 0) {
-      child_menu_model->AddItem(id, bookmark_support_.add_label);
-      child_menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
-    }
-    for (size_t i = offset_in_folder < 0 ? 0 : offset_in_folder;
-        i < nodes.size(); ++i) {
-      PopulateBookmarks(nodes[i], model, id, false, -1, child_menu_model);
-    }
-    if (!is_top_folder) {
-      const base::string16 label = node->GetTitle().length() == 0
-        ? l10n_util::GetStringUTF16(IDS_VIV_NO_TITLE) : node->GetTitle();
-      menu_model->AddSubMenu(id, label, child_menu_model);
-      menu_model->SetIcon(menu_model->GetIndexOfCommandId(id),
-          bookmark_support_.iconForNode(node));
-    }
-  }
 #endif
+  }
 }
 
 void VivaldiMenuController::PopulateBookmarkFolder(
     ui::SimpleMenuModel* menu_model, int node_id, int offset) {
-  bookmarks::BookmarkModel* model =
-      BookmarkModelFactory::GetForBrowserContext(
-          web_contents_->GetBrowserContext());
+  bookmarks::BookmarkModel* model = GetBookmarkModel();
   const bookmarks::BookmarkNode* node = bookmarks::GetBookmarkNodeByID(
       model, node_id);
+  // Strings for escaping of '&' to prevent it from underlining.
+  const base::char16 s1[2] = {'&', 0};
+  const base::string16 s2 = base::UTF8ToUTF16("&&");
+#if defined(OS_MACOSX)
+  bool underline_letter = false;
+#else
+  bool underline_letter = profile_->GetPrefs()->GetBoolean(
+        vivaldiprefs::kBookmarksUnderlineMenuLetter);
+#endif
+
   if (node && node->is_folder()) {
 
-    // Never a label in an extender menu (which sets the offset)
-    if (offset < 0) {
-      menu_model->AddItem(BOOKMARK_ID_BASE + node_id,
-          bookmark_support_.add_label);
-      menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
-    }
-
+    // Call AddAddTabToBookmarksMenuItem() here for in front of bookmarks.
     std::vector<bookmarks::BookmarkNode*> nodes;
     nodes.reserve(node->child_count());
     for (int i = 0; i < node->child_count(); ++i) {
@@ -896,6 +771,7 @@ void VivaldiMenuController::PopulateBookmarkFolder(
     bookmark_sorter_->sort(nodes);
     bookmark_sorter_->setGroupFolders(true); // Always grouping in sub menus.
 
+    menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
     for (size_t i = offset < 0 ? 0 : offset; i < nodes.size(); ++i) {
       const bookmarks::BookmarkNode* child = nodes[i];
       if (IsBookmarkSeparator(child)) {
@@ -904,27 +780,48 @@ void VivaldiMenuController::PopulateBookmarkFolder(
         }
       } else if (child->is_url()) {
         int id = BOOKMARK_ID_BASE + child->id();
-        menu_model->AddItem(id, child->GetTitle());
+
+        base::string16 title(child->GetTitle());
+        if (!underline_letter) {
+          base::ReplaceChars(title, s1, s2, &title);
+        }
+        menu_model->AddItem(id, title);
         const gfx::Image& image = model->GetFavicon(child);
         menu_model->SetIcon(menu_model->GetIndexOfCommandId(id),
-            image.IsEmpty() ? bookmark_support_.iconForNode(child) : image);
+               image.IsEmpty() ? bookmark_support_.iconForNode(child) : image);
       }
       else if (child->is_folder()) {
         ui::SimpleMenuModel* child_menu_model;
         child_menu_model = new ui::SimpleMenuModel(this);
+
+        int menu_id = BOOKMARK_ID_BASE + child->id();
+#if defined(OS_MACOSX)
+        PopulateBookmarkFolder(child_menu_model, child->id(), -1);
+#else
         BookmarkFolder folder;
         folder.node_id = child->id();
-        folder.menu_id = BOOKMARK_ID_BASE + child->id();
+        folder.menu_id = menu_id;
         folder.complete = false;
         bookmark_menu_model_map_[child_menu_model] = folder;
+#endif
         models_.push_back(base::WrapUnique(child_menu_model));
-        const base::string16 label = child->GetTitle().length() == 0
-          ? l10n_util::GetStringUTF16(IDS_VIV_NO_TITLE) : child->GetTitle();
-        menu_model->AddSubMenu(folder.menu_id, label, child_menu_model);
-        menu_model->SetIcon(menu_model->GetIndexOfCommandId(folder.menu_id),
+        base::string16 title(child->GetTitle());
+        if (!underline_letter) {
+          base::ReplaceChars(title, s1, s2, &title);
+        }
+        const base::string16 label = title.length() == 0
+          ? l10n_util::GetStringUTF16(IDS_VIV_NO_TITLE) : title;
+        menu_model->AddSubMenu(menu_id, label, child_menu_model);
+        menu_model->SetIcon(menu_model->GetIndexOfCommandId(menu_id),
             bookmark_support_.iconForNode(child));
       }
     }
+    menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
+
+    if (offset < 0) {
+      AddAddTabToBookmarksMenuItem(menu_model, BOOKMARK_ID_BASE + node_id);
+    }
+
   }
 }
 
@@ -1034,7 +931,7 @@ bool VivaldiMenuController::GetIconForCommandId(int command_id,
   return false;
 }
 
-void VivaldiMenuController::CommandIdHighlighted(int command_id) {
+void VivaldiMenuController::VivaldiCommandIdHighlighted(int command_id) {
   if (current_highlighted_id_ != command_id) {
     current_highlighted_id_ = command_id;
     bool was_highlighted = is_url_highlighted_;
@@ -1045,20 +942,18 @@ void VivaldiMenuController::CommandIdHighlighted(int command_id) {
       const bookmarks::BookmarkNode* node = bookmarks::GetBookmarkNodeByID(
           model, id);
       if (node) {
-        ShowMenuAPI::GetFactoryInstance()->Get(profile_)->OnUrlHighlighted(
-          node->url().spec());
+        ShowMenuAPI::SendUrlHighlighted(profile_, node->url().spec());
       }
       is_url_highlighted_ = true;
     } else {
       std::map<int, std::string*>::iterator it = url_map_.find(command_id);
       if (it != url_map_.end()) {
-        ShowMenuAPI::GetFactoryInstance()->Get(profile_)->OnUrlHighlighted(
-            *it->second);
+        ShowMenuAPI::SendUrlHighlighted(profile_, *it->second);
         is_url_highlighted_ = true;
       }
     }
     if (was_highlighted && !is_url_highlighted_) {
-      ShowMenuAPI::GetFactoryInstance()->Get(profile_)->OnUrlHighlighted("");
+      ShowMenuAPI::SendUrlHighlighted(profile_, "");
     }
   }
 }
@@ -1068,72 +963,65 @@ void VivaldiMenuController::ExecuteCommand(int command_id, int event_flags) {
     // These are the commands we only get when running with npm.
     // For JS, this menu has been canceled since we handle the actions here.
     HandleDeveloperToolsCommand(command_id);
-    delegate_->OnMenuCanceled();
+    SendMenuResult(-1, 0);
   } else if (command_id >= BOOKMARK_ID_BASE) {
     int id = command_id - BOOKMARK_ID_BASE;
 
-    bookmarks::BookmarkModel* model =
-        BookmarkModelFactory::GetForBrowserContext(
-            web_contents_->GetBrowserContext());
+    bookmarks::BookmarkModel* model = GetBookmarkModel();
     const bookmarks::BookmarkNode* node = bookmarks::GetBookmarkNodeByID(
           model, id);
     if (node && node->is_folder()) {
-      ShowMenuAPI::GetFactoryInstance()->Get(profile_)->OnAddBookmark(id);
+      ShowMenuAPI::SendAddBookmark(profile_, id);
     } else {
-      ShowMenuAPI::GetFactoryInstance()->Get(profile_)->OnBookmarkActivated(id,
-          event_flags);
+      ShowMenuAPI::SendBookmarkActivated(profile_, id, event_flags);
     }
-    delegate_->OnMenuCanceled();
+    SendMenuResult(-1, 0);
   } else {
-    delegate_->OnMenuActivated(command_id, event_flags);
+    SendMenuResult(command_id, event_flags);
   }
   EnableBookmarkObserver(false);
-  delegate_ = nullptr;
 }
 
 const show_menu::MenuItem* VivaldiMenuController::getItemByCommandId(
     int command_id) const {
-  return GetMenuItemById(menu_items_, TranslateCommandIdToMenuId(command_id));
+  return GetMenuItemById(&params_->items, TranslateCommandIdToMenuId(command_id));
 }
 
-namespace Create = vivaldi::show_menu::Create;
-
-bool ShowMenuCreateFunction::RunAsync() {
-  params_ = Create::Params::Create(*args_);
-  EXTENSION_FUNCTION_VALIDATE(params_.get());
-
-  if (params_->create_properties.mode == "context") {
-    content::ContextMenuParams menu_params;
-    menu_params.x = params_->create_properties.left;
-    menu_params.y = params_->create_properties.top;
-
-    // Balanced in OnMenuActivated / OnMenuClosed
-    AddRef();
-    // Menu is deallocated when main menu model is closed.
-    VivaldiMenuController* menu =
-        new VivaldiMenuController(this, &params_->create_properties.items);
-    menu->Show(dispatcher()->GetAssociatedWebContents(), menu_params);
-#if defined(OS_MACOSX)
-  } else {
-    // Mac needs to update the menu even with no open windows. So we allow
-    // a nullptr profile when calling the api.
-    Profile* profile = nullptr;
-    if (dispatcher()->GetAssociatedWebContents()) {
-      content::BrowserContext* browser_context =
-          dispatcher()->GetAssociatedWebContents()->GetBrowserContext();
-      profile = Profile::FromBrowserContext(browser_context);
-    }
-    ::vivaldi::CreateVivaldiMainMenu(profile, &params_->create_properties.items,
-                                     params_->create_properties.mode);
-#endif
+void VivaldiMenuController::SendMenuResult(int command_id, int event_flags) {
+  if (fun_) {
+    fun_->SendResult(command_id, event_flags);
+    fun_.reset();
   }
-  AddRef();
-  return true;
 }
 
-void ShowMenuCreateFunction::OnMenuActivated(int command_id, int event_flags) {
-  int id = TranslateCommandIdToMenuId(command_id);
+}  // namespace
 
+ExtensionFunction::ResponseAction ShowMenuShowContextMenuFunction::Run() {
+  auto params = vivaldi::show_menu::ShowContextMenu::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  content::WebContents* web_contents = GetSenderWebContents();
+  DCHECK(web_contents);
+  if (!web_contents)
+    return RespondNow(Error("Missing WebContents"));
+
+  if (web_contents->IsShowingContextMenu()) {
+    return RespondNow(
+        Error("Attempt to show a Vivaldi context menu while Chromium "
+              "context menu is running. Check that oncontextmenu is set "
+              "and call preventDefault() to block the standard menu"));
+  }
+
+  // Menu is deallocated when the main menu model is closed.
+  VivaldiMenuController* menu =
+      new VivaldiMenuController(web_contents, this, std::move(params));
+  menu->Show();
+  return RespondLater();
+}
+
+void ShowMenuShowContextMenuFunction::SendResult(int command_id,
+                                                 int event_flags) {
+  int id = (command_id < 0) ? -1 : TranslateCommandIdToMenuId(command_id);
   show_menu::Response response;
   response.id = id;
   response.ctrl = event_flags & ui::EF_CONTROL_DOWN ? true : false;
@@ -1143,23 +1031,25 @@ void ShowMenuCreateFunction::OnMenuActivated(int command_id, int event_flags) {
   response.left = event_flags & ui::EF_LEFT_MOUSE_BUTTON ? true : false;
   response.right = event_flags & ui::EF_RIGHT_MOUSE_BUTTON ? true : false;
   response.center = event_flags & ui::EF_MIDDLE_MOUSE_BUTTON ? true : false;
-  Respond(ArgumentList(vivaldi::show_menu::Create::Results::Create(response)));
-  Release();
+  Respond(ArgumentList(vivaldi::show_menu::ShowContextMenu::Results::Create(response)));
 }
 
-void ShowMenuCreateFunction::OnMenuCanceled() {
-  show_menu::Response response;
-  response.id = -1;
-  response.ctrl = response.shift = response.alt = response.command = false;
-  response.left = response.right = response.center = false;
-  Respond(ArgumentList(vivaldi::show_menu::Create::Results::Create(response)));
-  Release();
-}
-
-ShowMenuCreateFunction::ShowMenuCreateFunction() {
-}
-
-ShowMenuCreateFunction::~ShowMenuCreateFunction() {
+ExtensionFunction::ResponseAction ShowMenuSetupMainMenuFunction::Run() {
+  auto params = vivaldi::show_menu::SetupMainMenu::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+#if defined(OS_MACOSX)
+  if (params->mode == "menubar" || params->mode == "tabs" ||
+      params->mode == "update" || params->mode == "bookmarks") {
+    // Mac needs to update the menu even with no open windows. So we allow
+    // a nullptr profile when calling the api.
+    Profile* profile = Profile::FromBrowserContext(browser_context());
+    ::vivaldi::CreateVivaldiMainMenu(profile, &params->items, params->mode);
+    return RespondNow(NoArguments());
+  }
+  return RespondNow(Error("Invalid mode - " + params->mode));
+#else
+  return RespondNow(Error("NOT IMPLEMENTED"));
+#endif  // defined(OS_MACOSX)
 }
 
 }  // namespace extensions

@@ -65,13 +65,15 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
     return AUTH_REQUIRED_RESPONSE_NO_ACTION;
   }
   bool OnCanGetCookies(const URLRequest& request,
-                       const CookieList& cookie_list) override {
-    return true;
+                       const CookieList& cookie_list,
+                       bool allowed_from_caller) override {
+    return allowed_from_caller;
   }
   bool OnCanSetCookie(const URLRequest& request,
                       const net::CanonicalCookie& cookie,
-                      CookieOptions* options) override {
-    return true;
+                      CookieOptions* options,
+                      bool allowed_from_caller) override {
+    return allowed_from_caller;
   }
   bool OnCanAccessFile(const URLRequest& request,
                        const base::FilePath& original_path,
@@ -92,8 +94,9 @@ TEST(NetworkDelegateErrorObserverTest, CallOnThread) {
   NetworkDelegateErrorObserver observer(
       &network_delegate, base::ThreadTaskRunnerHandle::Get().get());
   thread.task_runner()->PostTask(
-      FROM_HERE, base::Bind(&NetworkDelegateErrorObserver::OnPACScriptError,
-                            base::Unretained(&observer), 42, base::string16()));
+      FROM_HERE,
+      base::BindOnce(&NetworkDelegateErrorObserver::OnPACScriptError,
+                     base::Unretained(&observer), 42, base::string16()));
   thread.Stop();
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(network_delegate.got_pac_error());
@@ -107,8 +110,9 @@ TEST(NetworkDelegateErrorObserverTest, NoDelegate) {
   NetworkDelegateErrorObserver observer(
       NULL, base::ThreadTaskRunnerHandle::Get().get());
   thread.task_runner()->PostTask(
-      FROM_HERE, base::Bind(&NetworkDelegateErrorObserver::OnPACScriptError,
-                            base::Unretained(&observer), 42, base::string16()));
+      FROM_HERE,
+      base::BindOnce(&NetworkDelegateErrorObserver::OnPACScriptError,
+                     base::Unretained(&observer), 42, base::string16()));
   thread.Stop();
   base::RunLoop().RunUntilIdle();
   // Shouldn't have crashed until here...

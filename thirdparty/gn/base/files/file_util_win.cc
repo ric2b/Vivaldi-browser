@@ -91,121 +91,6 @@ void AppendModeCharacter(base::char16 mode_char, base::string16* mode) {
                1, mode_char);
 }
 
-bool DoCopyFile(const FilePath& from_path,
-                const FilePath& to_path,
-                bool fail_if_exists) {
-  if (from_path.ReferencesParent() || to_path.ReferencesParent())
-    return false;
-
-  // NOTE: I suspect we could support longer paths, but that would involve
-  // analyzing all our usage of files.
-  if (from_path.value().length() >= MAX_PATH ||
-      to_path.value().length() >= MAX_PATH) {
-    return false;
-  }
-
-  // Unlike the posix implementation that copies the file manually and discards
-  // the ACL bits, CopyFile() copies the complete SECURITY_DESCRIPTOR and access
-  // bits, which is usually not what we want. We can't do much about the
-  // SECURITY_DESCRIPTOR but at least remove the read only bit.
-  const wchar_t* dest = to_path.value().c_str();
-  if (!::CopyFile(from_path.value().c_str(), dest, fail_if_exists)) {
-    // Copy failed.
-    return false;
-  }
-  DWORD attrs = GetFileAttributes(dest);
-  if (attrs == INVALID_FILE_ATTRIBUTES) {
-    return false;
-  }
-  if (attrs & FILE_ATTRIBUTE_READONLY) {
-    SetFileAttributes(dest, attrs & ~FILE_ATTRIBUTE_READONLY);
-  }
-  return true;
-}
-
-bool DoCopyDirectory(const FilePath& from_path,
-                     const FilePath& to_path,
-                     bool recursive,
-                     bool fail_if_exists) {
-  // NOTE: I suspect we could support longer paths, but that would involve
-  // analyzing all our usage of files.
-  if (from_path.value().length() >= MAX_PATH ||
-      to_path.value().length() >= MAX_PATH) {
-    return false;
-  }
-
-  // This function does not properly handle destinations within the source.
-  FilePath real_to_path = to_path;
-  if (PathExists(real_to_path)) {
-    real_to_path = MakeAbsoluteFilePath(real_to_path);
-    if (real_to_path.empty())
-      return false;
-  } else {
-    real_to_path = MakeAbsoluteFilePath(real_to_path.DirName());
-    if (real_to_path.empty())
-      return false;
-  }
-  FilePath real_from_path = MakeAbsoluteFilePath(from_path);
-  if (real_from_path.empty())
-    return false;
-  if (real_to_path == real_from_path || real_from_path.IsParent(real_to_path))
-    return false;
-
-  int traverse_type = FileEnumerator::FILES;
-  if (recursive)
-    traverse_type |= FileEnumerator::DIRECTORIES;
-  FileEnumerator traversal(from_path, recursive, traverse_type);
-
-  if (!PathExists(from_path)) {
-    DLOG(ERROR) << "CopyDirectory() couldn't stat source directory: "
-                << from_path.value().c_str();
-    return false;
-  }
-  // TODO(maruel): This is not necessary anymore.
-  DCHECK(recursive || DirectoryExists(from_path));
-
-  FilePath current = from_path;
-  bool from_is_dir = DirectoryExists(from_path);
-  bool success = true;
-  FilePath from_path_base = from_path;
-  if (recursive && DirectoryExists(to_path)) {
-    // If the destination already exists and is a directory, then the
-    // top level of source needs to be copied.
-    from_path_base = from_path.DirName();
-  }
-
-  while (success && !current.empty()) {
-    // current is the source path, including from_path, so append
-    // the suffix after from_path to to_path to create the target_path.
-    FilePath target_path(to_path);
-    if (from_path_base != current) {
-      if (!from_path_base.AppendRelativePath(current, &target_path)) {
-        success = false;
-        break;
-      }
-    }
-
-    if (from_is_dir) {
-      if (!DirectoryExists(target_path) &&
-          !::CreateDirectory(target_path.value().c_str(), NULL)) {
-        DLOG(ERROR) << "CopyDirectory() couldn't create directory: "
-                    << target_path.value().c_str();
-        success = false;
-      }
-    } else if (!DoCopyFile(current, target_path, fail_if_exists)) {
-      DLOG(ERROR) << "CopyDirectory() couldn't create file: "
-                  << target_path.value().c_str();
-      success = false;
-    }
-
-    current = traversal.Next();
-    if (!current.empty())
-      from_is_dir = traversal.GetInfo().IsDirectory();
-  }
-
-  return success;
-}
-
 // Returns ERROR_SUCCESS on success, or a Windows error code on failure.
 DWORD DoDeleteFile(const FilePath& path, bool recursive) {
   if (path.empty())
@@ -356,18 +241,6 @@ bool ReplaceFile(const FilePath& from_path,
   return false;
 }
 
-bool CopyDirectory(const FilePath& from_path,
-                   const FilePath& to_path,
-                   bool recursive) {
-  return DoCopyDirectory(from_path, to_path, recursive, false);
-}
-
-bool CopyDirectoryExcl(const FilePath& from_path,
-                       const FilePath& to_path,
-                       bool recursive) {
-  return DoCopyDirectory(from_path, to_path, recursive, true);
-}
-
 bool PathExists(const FilePath& path) {
   return (GetFileAttributes(path.value().c_str()) != INVALID_FILE_ATTRIBUTES);
 }
@@ -401,23 +274,6 @@ bool GetTempDir(FilePath* path) {
   // when everyone is using the appropriate FilePath APIs.
   *path = FilePath(temp_path).StripTrailingSeparators();
   return true;
-}
-
-FilePath GetHomeDir() {
-  char16 result[MAX_PATH];
-  if (SUCCEEDED(SHGetFolderPath(NULL, CSIDL_PROFILE, NULL, SHGFP_TYPE_CURRENT,
-                                result)) &&
-      result[0]) {
-    return FilePath(result);
-  }
-
-  // Fall back to the temporary directory on failure.
-  FilePath temp;
-  if (GetTempDir(&temp))
-    return temp;
-
-  // Last resort.
-  return FilePath(L"C:\\");
 }
 
 bool CreateTemporaryFile(FilePath* path) {
@@ -831,10 +687,6 @@ int GetMaximumPathComponentLength(const FilePath& path) {
   return std::min(whole_path_limit, static_cast<int>(max_length));
 }
 
-bool CopyFile(const FilePath& from_path, const FilePath& to_path) {
-  return DoCopyFile(from_path, to_path, false);
-}
-
 bool SetNonBlocking(int fd) {
   unsigned long nonblocking = 1;
   if (ioctlsocket(fd, FIONBIO, &nonblocking) == 0)
@@ -842,55 +694,4 @@ bool SetNonBlocking(int fd) {
   return false;
 }
 
-// -----------------------------------------------------------------------------
-
-namespace internal {
-
-bool MoveUnsafe(const FilePath& from_path, const FilePath& to_path) {
-  // NOTE: I suspect we could support longer paths, but that would involve
-  // analyzing all our usage of files.
-  if (from_path.value().length() >= MAX_PATH ||
-      to_path.value().length() >= MAX_PATH) {
-    return false;
-  }
-  if (MoveFileEx(from_path.value().c_str(), to_path.value().c_str(),
-                 MOVEFILE_COPY_ALLOWED | MOVEFILE_REPLACE_EXISTING) != 0)
-    return true;
-
-  // Keep the last error value from MoveFileEx around in case the below
-  // fails.
-  bool ret = false;
-  DWORD last_error = ::GetLastError();
-
-  if (DirectoryExists(from_path)) {
-    // MoveFileEx fails if moving directory across volumes. We will simulate
-    // the move by using Copy and Delete. Ideally we could check whether
-    // from_path and to_path are indeed in different volumes.
-    ret = internal::CopyAndDeleteDirectory(from_path, to_path);
-  }
-
-  if (!ret) {
-    // Leave a clue about what went wrong so that it can be (at least) picked
-    // up by a PLOG entry.
-    ::SetLastError(last_error);
-  }
-
-  return ret;
-}
-
-bool CopyAndDeleteDirectory(const FilePath& from_path,
-                            const FilePath& to_path) {
-  if (CopyDirectory(from_path, to_path, true)) {
-    if (DeleteFile(from_path, true))
-      return true;
-
-    // Like Move, this function is not transactional, so we just
-    // leave the copied bits behind if deleting from_path fails.
-    // If to_path exists previously then we have already overwritten
-    // it by now, we don't get better off by deleting the new bits.
-  }
-  return false;
-}
-
-}  // namespace internal
 }  // namespace base

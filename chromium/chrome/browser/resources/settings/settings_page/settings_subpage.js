@@ -12,10 +12,8 @@ Polymer({
   is: 'settings-subpage',
 
   behaviors: [
-    // TODO(michaelpg): phase out NeonAnimatableBehavior.
-    Polymer.NeonAnimatableBehavior,
+    FindShortcutBehavior,
     Polymer.IronResizableBehavior,
-    settings.FindShortcutBehavior,
     settings.RouteObserverBehavior,
   ],
 
@@ -58,9 +56,15 @@ Polymer({
     },
   },
 
+  /** @private {boolean} */
+  lastActiveValue_: false,
+
+  // Override FindShortcutBehavior property.
+  findShortcutListenOnAttach: false,
+
   /** @override */
   attached: function() {
-    if (!!this.searchLabel) {
+    if (this.searchLabel) {
       // |searchLabel| should not change dynamically.
       this.listen(this, 'clear-subpage-search', 'onClearSubpageSearch_');
     }
@@ -68,7 +72,7 @@ Polymer({
 
   /** @override */
   detached: function() {
-    if (!!this.searchLabel) {
+    if (this.searchLabel) {
       // |searchLabel| should not change dynamically.
       this.unlisten(this, 'clear-subpage-search', 'onClearSubpageSearch_');
     }
@@ -87,13 +91,30 @@ Polymer({
 
   /** @private */
   onActiveChanged_: function() {
-    if (!this.searchLabel)
+    if (this.lastActiveValue_ == this.active_) {
       return;
+    }
+    this.lastActiveValue_ = this.active_;
 
-    if (this.active_)
+    if (this.active_ && this.pageTitle) {
+      document.title =
+          loadTimeData.getStringF('settingsAltPageTitle', this.pageTitle);
+    }
+
+    if (!this.searchLabel) {
+      return;
+    }
+
+    const searchField = this.$$('cr-search-field');
+    if (searchField) {
+      searchField.setValue('');
+    }
+
+    if (this.active_) {
       this.becomeActiveFindShortcutListener();
-    else
+    } else {
       this.removeSelfAsFindShortcutListener();
+    }
   },
 
   /**
@@ -102,7 +123,7 @@ Polymer({
    */
   onClearSubpageSearch_: function(e) {
     e.stopPropagation();
-    this.$$('settings-subpage-search').setValue('');
+    this.$$('cr-search-field').setValue('');
   },
 
   /** @private */
@@ -115,14 +136,18 @@ Polymer({
     this.searchTerm = e.detail;
   },
 
-  // Override settings.FindShortcutBehavior methods.
+  // Override FindShortcutBehavior methods.
   handleFindShortcut: function(modalContextOpen) {
-    if (modalContextOpen)
+    if (modalContextOpen) {
       return false;
-    const subpageSearch = this.$$('settings-subpage-search');
-    const searchInput = subpageSearch.getSearchInput();
-    if (searchInput != subpageSearch.shadowRoot.activeElement)
-      searchInput.focus();
+    }
+    this.$$('cr-search-field').getSearchInput().focus();
     return true;
+  },
+
+  // Override FindShortcutBehavior methods.
+  searchInputHasFocus: function() {
+    const field = this.$$('cr-search-field');
+    return field.getSearchInput() == field.shadowRoot.activeElement;
   },
 });

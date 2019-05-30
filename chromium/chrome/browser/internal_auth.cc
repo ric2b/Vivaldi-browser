@@ -128,7 +128,7 @@ bool IsValueSane(const std::string& value) {
 bool IsVarValueMapSane(const VarValueMap& map) {
   if (map.size() > kVarsLimit)
     return false;
-  for (VarValueMap::const_iterator it = map.begin(); it != map.end(); ++it) {
+  for (auto it = map.begin(); it != map.end(); ++it) {
     const std::string& var = it->first;
     const std::string& value = it->second;
     if (!IsVarSane(var) || !IsValueSane(value))
@@ -140,7 +140,7 @@ bool IsVarValueMapSane(const VarValueMap& map) {
 void ConvertVarValueMapToBlob(const VarValueMap& map, std::string* out) {
   out->clear();
   DCHECK(IsVarValueMapSane(map));
-  for (VarValueMap::const_iterator it = map.begin(); it != map.end(); ++it)
+  for (auto it = map.begin(); it != map.end(); ++it)
     *out += it->first + kVarValueSeparator + it->second + kItemSeparator;
 }
 
@@ -161,7 +161,7 @@ void CreatePassport(const std::string& domain,
   blob = domain + kItemSeparator;
   std::string tmp;
   ConvertVarValueMapToBlob(map, &tmp);
-  blob += tmp + kItemSeparator + base::Int64ToString(tick);
+  blob += tmp + kItemSeparator + base::NumberToString(tick);
 
   std::string hmac;
   unsigned char* hmac_data = reinterpret_cast<unsigned char*>(
@@ -179,7 +179,7 @@ void CreatePassport(const std::string& domain,
   DCHECK(hmac_base64.size() < result.size());
   std::copy(hmac_base64.begin(), hmac_base64.end(), result.begin());
 
-  std::string tick_decimal = base::Int64ToString(tick);
+  std::string tick_decimal = base::NumberToString(tick);
   DCHECK(tick_decimal.size() <= kTickStringLength);
   std::copy(
       tick_decimal.begin(),

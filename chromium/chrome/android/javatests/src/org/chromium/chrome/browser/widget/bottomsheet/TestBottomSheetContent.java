@@ -12,11 +12,12 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.BottomSheetContent;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.ContentPriority;
 
 /** A simple sheet content to test with. This only displays two empty white views. */
-class TestBottomSheetContent implements BottomSheetContent {
+public class TestBottomSheetContent implements BottomSheetContent {
     /** Empty view that represents the toolbar. */
     private View mToolbarView;
 
@@ -26,12 +27,18 @@ class TestBottomSheetContent implements BottomSheetContent {
     /** This content's priority. */
     private @ContentPriority int mPriority;
 
+    /** Whether this content is browser specific. */
+    private boolean mHasCustomLifecycle;
+
     /**
      * @param context A context to inflate views with.
      * @param priority The content's priority.
+     * @param hasCustomLifecycle Whether the content is browser specific.
      */
-    public TestBottomSheetContent(Context context, @ContentPriority int priority) {
+    public TestBottomSheetContent(
+            Context context, @ContentPriority int priority, boolean hasCustomLifecycle) {
         mPriority = priority;
+        mHasCustomLifecycle = hasCustomLifecycle;
         ThreadUtils.runOnUiThreadBlocking(() -> {
             mToolbarView = new View(context);
             ViewGroup.LayoutParams params =
@@ -82,7 +89,27 @@ class TestBottomSheetContent implements BottomSheetContent {
     }
 
     @Override
-    public boolean useSlimPeek() {
-        return false;
+    public boolean hasCustomLifecycle() {
+        return mHasCustomLifecycle;
+    }
+
+    @Override
+    public int getSheetContentDescriptionStringId() {
+        return R.string.contextual_suggestions_button_description;
+    }
+
+    @Override
+    public int getSheetHalfHeightAccessibilityStringId() {
+        return R.string.contextual_suggestions_sheet_opened_half;
+    }
+
+    @Override
+    public int getSheetFullHeightAccessibilityStringId() {
+        return R.string.contextual_suggestions_sheet_opened_full;
+    }
+
+    @Override
+    public int getSheetClosedAccessibilityStringId() {
+        return R.string.contextual_suggestions_sheet_closed;
     }
 }

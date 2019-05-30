@@ -375,10 +375,11 @@ public class DataReductionStatsPreference extends Preference {
                     }
                 };
 
-                new AlertDialog.Builder(getContext(), R.style.AlertDialogTheme)
-                        .setTitle(R.string.data_reduction_usage_reset_statistics_confirmation_title)
-                        .setMessage(
-                                R.string.data_reduction_usage_reset_statistics_confirmation_dialog)
+                new AlertDialog.Builder(getContext(), R.style.Theme_Chromium_AlertDialog)
+                        .setTitle(DataReductionBrandingResourceProvider.getDataSaverBrandedString(
+                                R.string.data_reduction_usage_reset_statistics_confirmation_title))
+                        .setMessage(DataReductionBrandingResourceProvider.getDataSaverBrandedString(
+                                R.string.data_reduction_usage_reset_statistics_confirmation_dialog))
                         .setPositiveButton(
                                 R.string.data_reduction_usage_reset_statistics_confirmation_button,
                                 dialogListener)
@@ -407,7 +408,7 @@ public class DataReductionStatsPreference extends Preference {
         final long compressedTotalBytes = mReceivedNetworkStatsHistory.getTotalBytes();
         mReceivedTotalPhrase = FileSizeUtil.formatFileSize(context, compressedTotalBytes);
         final long originalTotalBytes = mOriginalNetworkStatsHistory.getTotalBytes();
-        final long savingsTotalBytes = originalTotalBytes - compressedTotalBytes;
+        final long savingsTotalBytes = Math.max(originalTotalBytes - compressedTotalBytes, 0);
         mSavingsTotalPhrase = FileSizeUtil.formatFileSize(context, savingsTotalBytes);
         if (mIsFirstDayChart) {
             // Only show the current date on the left hand side for the single-day-chart.

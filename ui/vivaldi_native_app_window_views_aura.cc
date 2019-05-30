@@ -91,7 +91,7 @@ VivaldiNativeAppWindowViewsAura::CreateNonStandardAppFrame() {
   // handle the event in Linux.
   window->SetEventTargeter(
       std::unique_ptr<aura::WindowTargeter>(new AppWindowEasyResizeWindowTargeter(
-          window, gfx::Insets(frame->resize_inside_bounds_size()), this)));
+          gfx::Insets(frame->resize_inside_bounds_size()), this)));
 
   return frame;
 }

@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/devtools/device/usb/android_rsa.h"
@@ -57,7 +58,8 @@ void OpenedForCommand(const UsbDeviceProvider::CommandCallback& callback,
     callback.Run(result, std::string());
     return;
   }
-  scoped_refptr<net::IOBuffer> buffer = new net::IOBuffer(kBufferSize);
+  scoped_refptr<net::IOBuffer> buffer =
+      base::MakeRefCounted<net::IOBuffer>(kBufferSize);
   result = socket->Read(
       buffer.get(),
       kBufferSize,
@@ -80,15 +82,9 @@ void RunCommand(scoped_refptr<AndroidUsbDevice> device,
     callback.Run(result, std::string());
 }
 
-} // namespace
+}  // namespace
 
-// static
-void UsbDeviceProvider::CountDevices(
-    const base::Callback<void(int)>& callback) {
-  AndroidUsbDevice::CountDevices(callback);
-}
-
-UsbDeviceProvider::UsbDeviceProvider(Profile* profile){
+UsbDeviceProvider::UsbDeviceProvider(Profile* profile) {
   rsa_key_ = AndroidRSAPrivateKey(profile);
 }
 
@@ -100,7 +96,7 @@ void UsbDeviceProvider::QueryDevices(const SerialsCallback& callback) {
 
 void UsbDeviceProvider::QueryDeviceInfo(const std::string& serial,
                                         const DeviceInfoCallback& callback) {
-  UsbDeviceMap::iterator it = device_map_.find(serial);
+  auto it = device_map_.find(serial);
   if (it == device_map_.end() || !it->second->is_connected()) {
     AndroidDeviceManager::DeviceInfo offline_info;
     callback.Run(offline_info);
@@ -113,7 +109,7 @@ void UsbDeviceProvider::QueryDeviceInfo(const std::string& serial,
 void UsbDeviceProvider::OpenSocket(const std::string& serial,
                                    const std::string& name,
                                    const SocketCallback& callback) {
-  UsbDeviceMap::iterator it = device_map_.find(serial);
+  auto it = device_map_.find(serial);
   if (it == device_map_.end()) {
     callback.Run(net::ERR_CONNECTION_FAILED,
                  base::WrapUnique<net::StreamSocket>(NULL));
@@ -143,12 +139,10 @@ void UsbDeviceProvider::EnumeratedDevices(const SerialsCallback& callback,
                                           const AndroidUsbDevices& devices) {
   std::vector<std::string> result;
   device_map_.clear();
-  for (AndroidUsbDevices::const_iterator it = devices.begin();
-       it != devices.end(); ++it) {
+  for (auto it = devices.begin(); it != devices.end(); ++it) {
     result.push_back((*it)->serial());
     device_map_[(*it)->serial()] = *it;
     (*it)->InitOnCallerThread();
   }
   callback.Run(result);
 }
-

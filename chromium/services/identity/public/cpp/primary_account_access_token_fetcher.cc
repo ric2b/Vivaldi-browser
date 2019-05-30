@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "services/identity/public/cpp/identity_manager.h"
 
@@ -14,7 +15,7 @@ namespace identity {
 PrimaryAccountAccessTokenFetcher::PrimaryAccountAccessTokenFetcher(
     const std::string& oauth_consumer_name,
     IdentityManager* identity_manager,
-    const OAuth2TokenService::ScopeSet& scopes,
+    const identity::ScopeSet& scopes,
     AccessTokenFetcher::TokenCallback callback,
     Mode mode)
     : oauth_consumer_name_(oauth_consumer_name),
@@ -62,8 +63,7 @@ void PrimaryAccountAccessTokenFetcher::StartAccessTokenRequest() {
   // token available. AccessTokenFetcher used in
   // |kWaitUntilRefreshTokenAvailable| mode would guarantee only the latter.
   access_token_fetcher_ = identity_manager_->CreateAccessTokenFetcherForAccount(
-      identity_manager_->GetPrimaryAccountInfo().account_id,
-      oauth_consumer_name_, scopes_,
+      identity_manager_->GetPrimaryAccountId(), oauth_consumer_name_, scopes_,
       base::BindOnce(
           &PrimaryAccountAccessTokenFetcher::OnAccessTokenFetchComplete,
           base::Unretained(this)),
@@ -71,13 +71,12 @@ void PrimaryAccountAccessTokenFetcher::StartAccessTokenRequest() {
 }
 
 void PrimaryAccountAccessTokenFetcher::OnPrimaryAccountSet(
-    const AccountInfo& primary_account_info) {
+    const CoreAccountInfo& primary_account_info) {
   ProcessSigninStateChange();
 }
 
 void PrimaryAccountAccessTokenFetcher::OnRefreshTokenUpdatedForAccount(
-    const AccountInfo& account_info,
-    bool is_valid) {
+    const CoreAccountInfo& account_info) {
   ProcessSigninStateChange();
 }
 

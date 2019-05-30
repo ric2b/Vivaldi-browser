@@ -22,24 +22,27 @@ using CWVAutofillSuggestionTest = PlatformTest;
 // Tests CWVAutofillSuggestion initialization.
 TEST_F(CWVAutofillSuggestionTest, Initialization) {
   NSString* formName = @"TestFormName";
-  NSString* fieldName = @"TestFieldName";
   NSString* fieldIdentifier = @"TestFieldIdentifier";
+  NSString* frameID = @"TestFrameID";
   FormSuggestion* formSuggestion =
       [FormSuggestion suggestionWithValue:@"TestValue"
                        displayDescription:@"TestDisplayDescription"
                                      icon:@"TestIcon"
-                               identifier:0];
+                               identifier:1337];
   CWVAutofillSuggestion* suggestion =
       [[CWVAutofillSuggestion alloc] initWithFormSuggestion:formSuggestion
                                                    formName:formName
-                                                  fieldName:fieldName
-                                            fieldIdentifier:fieldIdentifier];
+                                            fieldIdentifier:fieldIdentifier
+                                                    frameID:frameID
+                                       isPasswordSuggestion:NO];
   EXPECT_NSEQ(formName, suggestion.formName);
-  EXPECT_NSEQ(fieldName, suggestion.fieldName);
   EXPECT_NSEQ(fieldIdentifier, suggestion.fieldIdentifier);
+  EXPECT_NSEQ(frameID, suggestion.frameID);
   EXPECT_NSEQ(formSuggestion.displayDescription, suggestion.displayDescription);
   EXPECT_NSEQ(formSuggestion.value, suggestion.value);
+  EXPECT_EQ(1337, suggestion.uniqueIdentifier);
   EXPECT_EQ(formSuggestion, suggestion.formSuggestion);
+  EXPECT_FALSE([suggestion isPasswordSuggestion]);
 }
 
 }  // namespace ios_web_view

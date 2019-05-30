@@ -4,7 +4,13 @@
 
 #include "content/renderer/loader/child_url_loader_factory_bundle.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "base/logging.h"
+#include "content/public/common/resource_type.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
@@ -24,14 +30,18 @@ class URLLoaderRelay : public network::mojom::URLLoaderClient,
         client_sink_(std::move(client_sink)) {}
 
   // network::mojom::URLLoader implementation:
-  void FollowRedirect(const base::Optional<std::vector<std::string>>&
-                          to_be_removed_request_headers,
-                      const base::Optional<net::HttpRequestHeaders>&
-                          modified_request_headers) override {
-    DCHECK(!modified_request_headers.has_value())
-        << "Redirect with modified headers was not supported yet. "
+  void FollowRedirect(const std::vector<std::string>& removed_headers,
+                      const net::HttpRequestHeaders& modified_request_headers,
+                      const base::Optional<GURL>& new_url) override {
+    DCHECK(removed_headers.empty() && modified_request_headers.IsEmpty())
+        << "Redirect with removed or modified headers was not supported yet. "
            "crbug.com/845683";
-    loader_sink_->FollowRedirect(base::nullopt, base::nullopt);
+    DCHECK(!new_url.has_value())
+        << "Redirect with modified URL was not supported yet. "
+           "crbug.com/845683";
+    loader_sink_->FollowRedirect({} /* removed_headers */,
+                                 {} /* modified_headers */,
+                                 base::nullopt /* new_url */);
   }
 
   void ProceedWithResponse() override { loader_sink_->ProceedWithResponse(); }
@@ -89,26 +99,49 @@ class URLLoaderRelay : public network::mojom::URLLoaderClient,
   network::mojom::URLLoaderClientPtr client_sink_;
 };
 
+template <typename TKey>
+static std::map<TKey, network::mojom::URLLoaderFactoryPtrInfo>
+PassInterfacePtrMapToPtrInfoMap(
+    std::map<TKey, network::mojom::URLLoaderFactoryPtr> input) {
+  std::map<TKey, network::mojom::URLLoaderFactoryPtrInfo> output;
+  for (auto& it : input) {
+    const TKey& key = it.first;
+    network::mojom::URLLoaderFactoryPtr& factory = it.second;
+    output.emplace(key, factory.PassInterface());
+  }
+  return output;
+}
+
 }  // namespace
 
 ChildURLLoaderFactoryBundleInfo::ChildURLLoaderFactoryBundleInfo() = default;
 
 ChildURLLoaderFactoryBundleInfo::ChildURLLoaderFactoryBundleInfo(
     std::unique_ptr<URLLoaderFactoryBundleInfo> base_info)
-    : URLLoaderFactoryBundleInfo(std::move(base_info->default_factory_info()),
-                                 std::move(base_info->factories_info()),
-                                 base_info->bypass_redirect_checks()) {}
+    : URLLoaderFactoryBundleInfo(
+          std::move(base_info->default_factory_info()),
+          std::move(base_info->scheme_specific_factory_infos()),
+          std::move(base_info->initiator_specific_factory_infos()),
+          base_info->bypass_redirect_checks()) {
+  appcache_factory_info_ = std::move(base_info->appcache_factory_info());
+}
 
 ChildURLLoaderFactoryBundleInfo::ChildURLLoaderFactoryBundleInfo(
     network::mojom::URLLoaderFactoryPtrInfo default_factory_info,
-    std::map<std::string, network::mojom::URLLoaderFactoryPtrInfo>
-        factories_info,
+    network::mojom::URLLoaderFactoryPtrInfo appcache_factory_info,
+    SchemeMap scheme_specific_factory_infos,
+    OriginMap initiator_specific_factory_infos,
     PossiblyAssociatedURLLoaderFactoryPtrInfo direct_network_factory_info,
+    network::mojom::URLLoaderFactoryPtrInfo prefetch_loader_factory_info,
     bool bypass_redirect_checks)
     : URLLoaderFactoryBundleInfo(std::move(default_factory_info),
-                                 std::move(factories_info),
+                                 std::move(scheme_specific_factory_infos),
+                                 std::move(initiator_specific_factory_infos),
                                  bypass_redirect_checks),
-      direct_network_factory_info_(std::move(direct_network_factory_info)) {}
+      direct_network_factory_info_(std::move(direct_network_factory_info)),
+      prefetch_loader_factory_info_(std::move(prefetch_loader_factory_info)) {
+  appcache_factory_info_ = std::move(appcache_factory_info);
+}
 
 ChildURLLoaderFactoryBundleInfo::~ChildURLLoaderFactoryBundleInfo() = default;
 
@@ -116,8 +149,14 @@ scoped_refptr<network::SharedURLLoaderFactory>
 ChildURLLoaderFactoryBundleInfo::CreateFactory() {
   auto other = std::make_unique<ChildURLLoaderFactoryBundleInfo>();
   other->default_factory_info_ = std::move(default_factory_info_);
-  other->factories_info_ = std::move(factories_info_);
+  other->appcache_factory_info_ = std::move(appcache_factory_info_);
+  other->scheme_specific_factory_infos_ =
+      std::move(scheme_specific_factory_infos_);
+  other->initiator_specific_factory_infos_ =
+      std::move(initiator_specific_factory_infos_);
   other->direct_network_factory_info_ = std::move(direct_network_factory_info_);
+  other->prefetch_loader_factory_info_ =
+      std::move(prefetch_loader_factory_info_);
   other->bypass_redirect_checks_ = bypass_redirect_checks_;
 
   return base::MakeRefCounted<ChildURLLoaderFactoryBundle>(std::move(other));
@@ -129,7 +168,7 @@ ChildURLLoaderFactoryBundle::ChildURLLoaderFactoryBundle() = default;
 
 ChildURLLoaderFactoryBundle::ChildURLLoaderFactoryBundle(
     std::unique_ptr<ChildURLLoaderFactoryBundleInfo> info) {
-  Update(std::move(info), base::nullopt);
+  Update(std::move(info));
 }
 
 ChildURLLoaderFactoryBundle::ChildURLLoaderFactoryBundle(
@@ -139,14 +178,12 @@ ChildURLLoaderFactoryBundle::ChildURLLoaderFactoryBundle(
 
 ChildURLLoaderFactoryBundle::~ChildURLLoaderFactoryBundle() = default;
 
-network::mojom::URLLoaderFactory* ChildURLLoaderFactoryBundle::GetFactoryForURL(
-    const GURL& url) {
-  auto it = factories_.find(url.scheme());
-  if (it != factories_.end())
-    return it->second.get();
-
-  if (default_factory_)
-    return default_factory_.get();
+network::mojom::URLLoaderFactory* ChildURLLoaderFactoryBundle::GetFactory(
+    const network::ResourceRequest& request) {
+  network::mojom::URLLoaderFactory* base_result =
+      URLLoaderFactoryBundle::GetFactory(request);
+  if (base_result)
+    return base_result;
 
   InitDirectNetworkFactoryIfNecessary();
   DCHECK(direct_network_factory_);
@@ -179,38 +216,56 @@ void ChildURLLoaderFactoryBundle::CreateLoaderAndStart(
     return;
   }
 
-  network::mojom::URLLoaderFactory* factory_ptr = GetFactoryForURL(request.url);
+  // Use |prefetch_loader_factory_| for prefetch requests to send the requests
+  // to the PrefetchURLLoaderService in the browser process and triger the
+  // special prefetch handling.
+  // TODO(horo): Move this routing logic to network service, when we will have
+  // the special prefetch handling in network service.
+  if ((request.resource_type == RESOURCE_TYPE_PREFETCH) &&
+      prefetch_loader_factory_) {
+    prefetch_loader_factory_->CreateLoaderAndStart(
+        std::move(loader), routing_id, request_id, options, request,
+        std::move(client), traffic_annotation);
+    return;
+  }
 
-  factory_ptr->CreateLoaderAndStart(std::move(loader), routing_id, request_id,
-                                    options, request, std::move(client),
-                                    traffic_annotation);
+  URLLoaderFactoryBundle::CreateLoaderAndStart(
+      std::move(loader), routing_id, request_id, options, request,
+      std::move(client), traffic_annotation);
 }
 
 std::unique_ptr<network::SharedURLLoaderFactoryInfo>
 ChildURLLoaderFactoryBundle::Clone() {
-  return CloneInternal(true /* include_default */);
+  return CloneInternal(true /* include_appcache */);
 }
 
 std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-ChildURLLoaderFactoryBundle::CloneWithoutDefaultFactory() {
-  return CloneInternal(false /* include_default */);
+ChildURLLoaderFactoryBundle::CloneWithoutAppCacheFactory() {
+  return CloneInternal(false /* include_appcache */);
 }
 
 void ChildURLLoaderFactoryBundle::Update(
-    std::unique_ptr<ChildURLLoaderFactoryBundleInfo> info,
-    base::Optional<std::vector<mojom::TransferrableURLLoaderPtr>>
-        subresource_overrides) {
+    std::unique_ptr<ChildURLLoaderFactoryBundleInfo> info) {
   if (info->direct_network_factory_info()) {
     direct_network_factory_.Bind(
         std::move(info->direct_network_factory_info()));
   }
-  URLLoaderFactoryBundle::Update(std::move(info));
-
-  if (subresource_overrides) {
-    for (auto& element : *subresource_overrides) {
-      subresource_overrides_[element->url] = std::move(element);
-    }
+  if (info->prefetch_loader_factory_info()) {
+    prefetch_loader_factory_.Bind(
+        std::move(info->prefetch_loader_factory_info()));
   }
+  URLLoaderFactoryBundle::Update(std::move(info));
+}
+
+void ChildURLLoaderFactoryBundle::UpdateSubresourceOverrides(
+    std::vector<mojom::TransferrableURLLoaderPtr>* subresource_overrides) {
+  for (auto& element : *subresource_overrides)
+    subresource_overrides_[element->url] = std::move(element);
+}
+
+void ChildURLLoaderFactoryBundle::SetPrefetchLoaderFactory(
+    network::mojom::URLLoaderFactoryPtr prefetch_loader_factory) {
+  prefetch_loader_factory_ = std::move(prefetch_loader_factory);
 }
 
 bool ChildURLLoaderFactoryBundle::IsHostChildURLLoaderFactoryBundle() const {
@@ -229,19 +284,16 @@ void ChildURLLoaderFactoryBundle::InitDirectNetworkFactoryIfNecessary() {
 }
 
 std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-ChildURLLoaderFactoryBundle::CloneInternal(bool include_default) {
+ChildURLLoaderFactoryBundle::CloneInternal(bool include_appcache) {
   InitDirectNetworkFactoryIfNecessary();
 
   network::mojom::URLLoaderFactoryPtrInfo default_factory_info;
-  if (include_default && default_factory_)
+  if (default_factory_)
     default_factory_->Clone(mojo::MakeRequest(&default_factory_info));
 
-  std::map<std::string, network::mojom::URLLoaderFactoryPtrInfo> factories_info;
-  for (auto& factory : factories_) {
-    network::mojom::URLLoaderFactoryPtrInfo factory_info;
-    factory.second->Clone(mojo::MakeRequest(&factory_info));
-    factories_info.emplace(factory.first, std::move(factory_info));
-  }
+  network::mojom::URLLoaderFactoryPtrInfo appcache_factory_info;
+  if (appcache_factory_ && include_appcache)
+    appcache_factory_->Clone(mojo::MakeRequest(&appcache_factory_info));
 
   network::mojom::URLLoaderFactoryPtrInfo direct_network_factory_info;
   if (direct_network_factory_) {
@@ -249,12 +301,21 @@ ChildURLLoaderFactoryBundle::CloneInternal(bool include_default) {
         mojo::MakeRequest(&direct_network_factory_info));
   }
 
+  network::mojom::URLLoaderFactoryPtrInfo prefetch_loader_factory_info;
+  if (prefetch_loader_factory_) {
+    prefetch_loader_factory_->Clone(
+        mojo::MakeRequest(&prefetch_loader_factory_info));
+  }
+
   // Currently there is no need to override subresources from workers,
   // therefore |subresource_overrides| are not shared with the clones.
 
   return std::make_unique<ChildURLLoaderFactoryBundleInfo>(
-      std::move(default_factory_info), std::move(factories_info),
-      std::move(direct_network_factory_info), bypass_redirect_checks_);
+      std::move(default_factory_info), std::move(appcache_factory_info),
+      ClonePtrMapToPtrInfoMap(scheme_specific_factories_),
+      ClonePtrMapToPtrInfoMap(initiator_specific_factories_),
+      std::move(direct_network_factory_info),
+      std::move(prefetch_loader_factory_info), bypass_redirect_checks_);
 }
 
 std::unique_ptr<ChildURLLoaderFactoryBundleInfo>
@@ -265,10 +326,9 @@ ChildURLLoaderFactoryBundle::PassInterface() {
   if (default_factory_)
     default_factory_info = default_factory_.PassInterface();
 
-  std::map<std::string, network::mojom::URLLoaderFactoryPtrInfo> factories_info;
-  for (auto& factory : factories_) {
-    factories_info.emplace(factory.first, factory.second.PassInterface());
-  }
+  network::mojom::URLLoaderFactoryPtrInfo appcache_factory_info;
+  if (appcache_factory_)
+    appcache_factory_info = appcache_factory_.PassInterface();
 
   PossiblyAssociatedInterfacePtrInfo<network::mojom::URLLoaderFactory>
       direct_network_factory_info;
@@ -276,9 +336,17 @@ ChildURLLoaderFactoryBundle::PassInterface() {
     direct_network_factory_info = direct_network_factory_.PassInterface();
   }
 
+  network::mojom::URLLoaderFactoryPtrInfo prefetch_loader_factory_info;
+  if (prefetch_loader_factory_) {
+    prefetch_loader_factory_info = prefetch_loader_factory_.PassInterface();
+  }
+
   return std::make_unique<ChildURLLoaderFactoryBundleInfo>(
-      std::move(default_factory_info), std::move(factories_info),
-      std::move(direct_network_factory_info), bypass_redirect_checks_);
+      std::move(default_factory_info), std::move(appcache_factory_info),
+      PassInterfacePtrMapToPtrInfoMap(std::move(scheme_specific_factories_)),
+      PassInterfacePtrMapToPtrInfoMap(std::move(initiator_specific_factories_)),
+      std::move(direct_network_factory_info),
+      std::move(prefetch_loader_factory_info), bypass_redirect_checks_);
 }
 
 }  // namespace content

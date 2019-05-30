@@ -13,9 +13,12 @@ import android.support.v7.widget.RecyclerView.State;
 import android.view.View;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.modelutil.ListModel;
-import org.chromium.chrome.browser.modelutil.RecyclerViewAdapter;
-import org.chromium.chrome.browser.modelutil.SimpleRecyclerViewMcp;
+import org.chromium.chrome.browser.download.home.metrics.UmaUtils;
+import org.chromium.ui.modelutil.ListModel;
+import org.chromium.ui.modelutil.RecyclerViewAdapter;
+import org.chromium.ui.modelutil.SimpleRecyclerViewMcp;
+
+import java.util.List;
 
 /**
  * The coordinator responsible for managing a list of chips.  To get the {@link View} that
@@ -64,7 +67,9 @@ public class ChipsCoordinator implements ChipsProvider.Observer {
     // ChipsProvider.Observer implementation.
     @Override
     public void onChipsChanged() {
-        mModel.set(mProvider.getChips());
+        List<Chip> chips = mProvider.getChips();
+        mModel.set(chips);
+        UmaUtils.recordChipStats(chips.size());
     }
 
     private static RecyclerView createView(Context context) {
@@ -77,10 +82,15 @@ public class ChipsCoordinator implements ChipsProvider.Observer {
     }
 
     private static class SpaceItemDecoration extends ItemDecoration {
-        private final int mPaddingPx;
+        private final int mInterPaddingPx;
+        private final int mSidePaddingPx;
 
         public SpaceItemDecoration(Context context) {
-            mPaddingPx = (int) context.getResources().getDimension(R.dimen.chip_list_padding);
+            mInterPaddingPx = (int) context.getResources().getDimensionPixelSize(
+                    R.dimen.chip_list_inter_chip_padding);
+            mSidePaddingPx = (int) context.getResources().getDimensionPixelSize(
+                    R.dimen.chip_list_side_padding);
+            ;
         }
 
         @Override
@@ -89,8 +99,8 @@ public class ChipsCoordinator implements ChipsProvider.Observer {
             boolean isFirst = position == 0;
             boolean isLast = position == parent.getAdapter().getItemCount() - 1;
 
-            outRect.left = isFirst ? 2 * mPaddingPx : mPaddingPx;
-            outRect.right = isLast ? 2 * mPaddingPx : mPaddingPx;
+            outRect.left = isFirst ? mSidePaddingPx : mInterPaddingPx;
+            outRect.right = isLast ? mSidePaddingPx : mInterPaddingPx;
         }
     }
 }

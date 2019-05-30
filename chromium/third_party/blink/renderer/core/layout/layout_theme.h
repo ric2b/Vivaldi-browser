@@ -25,11 +25,13 @@
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
+#include "third_party/blink/renderer/core/scroll/scroll_types.h"
 #include "third_party/blink/renderer/platform/fonts/font_selection_types.h"
+#include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
-#include "third_party/blink/renderer/platform/layout_unit.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_types.h"
+#include "third_party/blink/renderer/platform/graphics/color_scheme.h"
 #include "third_party/blink/renderer/platform/theme_types.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/ref_counted.h"
 #include "third_party/blink/renderer/platform/wtf/time.h"
@@ -50,6 +52,8 @@ class Theme;
 class ThemePainter;
 
 class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
+  USING_FAST_MALLOC(LayoutTheme);
+
  protected:
   explicit LayoutTheme(Theme*);
 
@@ -152,10 +156,19 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   Color PlatformTextSearchHighlightColor(bool active_match) const;
   Color PlatformTextSearchColor(bool active_match) const;
 
+  bool IsFocusRingOutset() const;
+  void SetIsFocusRingOutset(bool is_outset);
+  float MinimumStrokeWidthForFocusRing() const;
+  void SetMinimumStrokeWidthForFocusRing(float stroke_width);
   Color FocusRingColor() const;
   virtual Color PlatformFocusRingColor() const { return Color(0, 0, 0); }
   void SetCustomFocusRingColor(const Color&);
   static Color TapHighlightColor();
+
+  // Root element text color. It can be different from the initial color in
+  // other color schemes than the light theme.
+  Color RootElementColor(ColorScheme) const;
+
   virtual Color PlatformTapHighlightColor() const {
     return LayoutTheme::kDefaultTapHighlightColor;
   }
@@ -294,6 +307,8 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   // implementation to hand back the appropriate platform theme.
   static LayoutTheme& NativeTheme();
 
+  bool is_focus_ring_outset_ = false;
+  float minimum_width_for_focus_ring_ = 1.0f;
   Color custom_focus_ring_color_;
   bool has_custom_focus_ring_color_;
   TimeDelta caret_blink_interval_ = TimeDelta::FromMilliseconds(500);

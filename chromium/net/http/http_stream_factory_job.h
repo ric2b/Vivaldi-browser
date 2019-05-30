@@ -26,6 +26,7 @@
 #include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/quic/quic_stream_factory.h"
 #include "net/socket/client_socket_handle.h"
+#include "net/socket/client_socket_pool.h"
 #include "net/socket/client_socket_pool_manager.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/ssl_client_socket.h"
@@ -83,15 +84,18 @@ class HttpStreamFactory::Job {
                                 int status,
                                 const SSLConfig& used_ssl_config) = 0;
 
+    // Invoked when |job| fails on the default network.
+    virtual void OnFailedOnDefaultNetwork(Job* job) = 0;
+
     // Invoked when |job| has a certificate error for the HttpStreamRequest.
     virtual void OnCertificateError(Job* job,
                                     int status,
                                     const SSLConfig& used_ssl_config,
                                     const SSLInfo& ssl_info) = 0;
 
-    // Invoked when |job| has a failure of the CONNECT request through an HTTPS
-    // proxy.
-    virtual void OnHttpsProxyTunnelResponse(
+    // Invoked when |job| has a failure of the CONNECT request (due to a 302
+    // redirect) through an HTTPS proxy.
+    virtual void OnHttpsProxyTunnelResponseRedirect(
         Job* job,
         const HttpResponseInfo& response_info,
         const SSLConfig& used_ssl_config,
@@ -277,8 +281,6 @@ class HttpStreamFactory::Job {
     STATE_INIT_CONNECTION,
     STATE_INIT_CONNECTION_COMPLETE,
     STATE_WAITING_USER_ACTION,
-    STATE_RESTART_TUNNEL_AUTH,
-    STATE_RESTART_TUNNEL_AUTH_COMPLETE,
     STATE_CREATE_STREAM,
     STATE_CREATE_STREAM_COMPLETE,
     STATE_DRAIN_BODY_FOR_AUTH_RESTART,
@@ -297,10 +299,12 @@ class HttpStreamFactory::Job {
   void OnStreamFailedCallback(int result);
   void OnCertificateErrorCallback(int result, const SSLInfo& ssl_info);
   void OnNeedsProxyAuthCallback(const HttpResponseInfo& response_info,
-                                HttpAuthController* auth_controller);
+                                HttpAuthController* auth_controller,
+                                base::OnceClosure restart_with_auth_callback);
   void OnNeedsClientAuthCallback(SSLCertRequestInfo* cert_info);
-  void OnHttpsProxyTunnelResponseCallback(const HttpResponseInfo& response_info,
-                                          std::unique_ptr<HttpStream> stream);
+  void OnHttpsProxyTunnelResponseRedirectCallback(
+      const HttpResponseInfo& response_info,
+      std::unique_ptr<HttpStream> stream);
   void OnPreconnectsComplete();
 
   void OnIOComplete(int result);
@@ -316,6 +320,9 @@ class HttpStreamFactory::Job {
   // resolution, not the result of host resolution itself.
   void OnQuicHostResolution(int result);
 
+  // Invoked when the underlying connection fails on the default network.
+  void OnFailedOnDefaultNetwork(int result);
+
   // Each of these methods corresponds to a State value.  Those with an input
   // argument receive the result from the previous state.  If a method returns
   // ERR_IO_PENDING, then the result from OnIOComplete will be passed to the
@@ -329,8 +336,6 @@ class HttpStreamFactory::Job {
   int DoWaitingUserAction(int result);
   int DoCreateStream();
   int DoCreateStreamComplete(int result);
-  int DoRestartTunnelAuth();
-  int DoRestartTunnelAuthComplete(int result);
 
   void ResumeInitConnection();
   // Creates a SpdyHttpStream or a BidirectionalStreamImpl from the given values
@@ -375,8 +380,7 @@ class HttpStreamFactory::Job {
   int ReconsiderProxyAfterError(int error);
 
   // Called to handle a certificate error.  Stores the certificate in the
-  // allowed_bad_certs list, and checks if the error can be ignored.  Returns
-  // OK if it can be ignored, or the error code otherwise.
+  // allowed_bad_certs list. Returns the error code.
   int HandleCertificateError(int error);
 
   // Called to handle a client certificate request.
@@ -512,6 +516,8 @@ class HttpStreamFactory::Job {
 
   // Whether Job has continued to DoInitConnection().
   bool init_connection_already_resumed_;
+
+  base::OnceClosure restart_with_auth_callback_;
 
   NetErrorDetails net_error_details_;
 

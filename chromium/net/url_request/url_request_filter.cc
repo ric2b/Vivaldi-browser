@@ -29,9 +29,9 @@ bool OnMessageLoopForInterceptorAddition() {
 
 // When removing interceptors, DCHECK that this function returns true.
 bool OnMessageLoopForInterceptorRemoval() {
-  // Checking for a MessageLoopForIO is a best effort at determining whether the
-  // current thread is a networking thread.
-  return base::MessageLoopForIO::IsCurrent();
+  // Checking for a MessageLoopCurrentForIO is a best effort at determining
+  // whether the current thread is a networking thread.
+  return base::MessageLoopCurrentForIO::IsSet();
 }
 
 }  // namespace
@@ -123,8 +123,7 @@ URLRequestJob* URLRequestFilter::MaybeInterceptRequest(
   const std::string scheme = request->url().scheme();
 
   {
-    HostnameInterceptorMap::const_iterator it =
-        hostname_interceptor_map_.find(make_pair(scheme, hostname));
+    auto it = hostname_interceptor_map_.find(make_pair(scheme, hostname));
     if (it != hostname_interceptor_map_.end())
       job = it->second->MaybeInterceptRequest(request, network_delegate);
   }
@@ -132,7 +131,7 @@ URLRequestJob* URLRequestFilter::MaybeInterceptRequest(
   if (!job) {
     // Not in the hostname map, check the url map.
     const std::string& url = request->url().spec();
-    URLInterceptorMap::const_iterator it = url_interceptor_map_.find(url);
+    auto it = url_interceptor_map_.find(url);
     if (it != url_interceptor_map_.end())
       job = it->second->MaybeInterceptRequest(request, network_delegate);
   }

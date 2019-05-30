@@ -15,18 +15,8 @@
 #include "chrome/install_static/test/scoped_install_details.h"
 #endif
 
-#if defined(VIVALDI_BUILD)
-#include "extraparts/vivaldi_unit_test_suite.h"
-#endif
-
 int main(int argc, char **argv) {
-  content::UnitTestTestSuite test_suite(
-#if defined(VIVALDI_BUILD)
-        new VivaldiChromeUnitTestSuite(argc, argv)
-#else
-        new ChromeUnitTestSuite(argc, argv)
-#endif
-        );
+  content::UnitTestTestSuite test_suite(new ChromeUnitTestSuite(argc, argv));
 
   base::TestIOThread test_io_thread(base::TestIOThread::kAutoStart);
   mojo::core::ScopedIPCSupport ipc_support(

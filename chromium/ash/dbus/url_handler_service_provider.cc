@@ -18,8 +18,9 @@
 
 namespace ash {
 namespace {
-constexpr const char* kUrlSchemes[] = {url::kFtpScheme, url::kHttpScheme,
-                                       url::kHttpsScheme, url::kMailToScheme};
+constexpr const char* kUrlSchemes[] = {url::kFileScheme, url::kFtpScheme,
+                                       url::kHttpScheme, url::kHttpsScheme,
+                                       url::kMailToScheme};
 
 // Called from ExportedObject when OpenUrl() is exported as a D-Bus method or
 // failed to be exported.
@@ -69,7 +70,8 @@ void UrlHandlerServiceProvider::OpenUrl(
     return;
   }
 
-  ash::Shell::Get()->new_window_controller()->NewTabWithUrl(gurl);
+  ash::Shell::Get()->new_window_controller()->NewTabWithUrl(
+      gurl, false /* from_user_interaction */);
   response_sender.Run(dbus::Response::FromMethodCall(method_call));
 }
 

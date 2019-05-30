@@ -19,12 +19,12 @@ import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.download.DownloadItem;
 import org.chromium.chrome.browser.download.DownloadManagerService.DownloadObserver;
 import org.chromium.chrome.browser.download.DownloadSharedPreferenceHelper;
 import org.chromium.chrome.browser.download.DownloadUtils;
+import org.chromium.chrome.browser.download.home.metrics.FileExtensions;
 import org.chromium.chrome.browser.download.home.storage.StorageSummaryProvider;
 import org.chromium.chrome.browser.download.ui.BackendProvider.DownloadDelegate;
 import org.chromium.chrome.browser.download.ui.DownloadHistoryItemWrapper.DownloadItemWrapper;
@@ -32,11 +32,11 @@ import org.chromium.chrome.browser.download.ui.DownloadHistoryItemWrapper.Offlin
 import org.chromium.chrome.browser.widget.DateDividedAdapter;
 import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
+import org.chromium.chrome.download.R;
 import org.chromium.components.download.DownloadState;
 import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.components.offline_items_collection.OfflineContentProvider;
 import org.chromium.components.offline_items_collection.OfflineItem;
-import org.chromium.components.offline_items_collection.OfflineItemFilter;
 import org.chromium.components.offline_items_collection.OfflineItemState;
 import org.chromium.components.variations.VariationsAssociatedData;
 
@@ -235,24 +235,27 @@ public class DownloadHistoryAdapter
 
     /**
      * Initializes the adapter.
+     * @param context The {@link Context} used for inflating views.
      * @param provider The {@link BackendProvider} that provides classes needed by the adapter.
      * @param uiConfig The UiConfig used to observe display style changes.
      */
-    public void initialize(BackendProvider provider, @Nullable UiConfig uiConfig) {
+    public void initialize(Context context, BackendProvider provider, @Nullable UiConfig uiConfig) {
         mBackendProvider = provider;
         mUiConfig = uiConfig;
 
-        generateHeaderItems();
+        generateHeaderItems(context);
 
         DownloadItemSelectionDelegate selectionDelegate =
                 (DownloadItemSelectionDelegate) mBackendProvider.getSelectionDelegate();
         selectionDelegate.initialize(this);
 
-        // Get all regular and (if necessary) off the record downloads.
-        DownloadDelegate downloadManager = getDownloadDelegate();
-        downloadManager.addDownloadObserver(this);
-        downloadManager.getAllDownloads(false);
-        if (mShowOffTheRecord) downloadManager.getAllDownloads(true);
+        if (!useNewDownloadPath()) {
+            // Get all regular and (if necessary) off the record downloads.
+            DownloadDelegate downloadManager = getDownloadDelegate();
+            downloadManager.addDownloadObserver(this);
+            downloadManager.getAllDownloads(false);
+            if (mShowOffTheRecord) downloadManager.getAllDownloads(true);
+        }
 
         // Fetch all Offline Items from OfflineContentProvider (Pages, Background Fetches etc).
         getAllOfflineItems();
@@ -272,6 +275,7 @@ public class DownloadHistoryAdapter
 
     @Override
     public void onAllDownloadsRetrieved(List<DownloadItem> result, boolean isOffTheRecord) {
+        if (useNewDownloadPath()) return;
         if (isOffTheRecord && !mShowOffTheRecord) return;
 
         BackendItems list = getDownloadItemList(isOffTheRecord);
@@ -292,8 +296,7 @@ public class DownloadHistoryAdapter
                 if (!isOffTheRecord && wrapper.getFilterType() == DownloadFilter.Type.OTHER) {
                     RecordHistogram.recordEnumeratedHistogram(
                             "Android.DownloadManager.OtherExtensions.InitialCount",
-                            wrapper.getFileExtensionType(),
-                            DownloadHistoryItemWrapper.FileExtension.NUM_ENTRIES);
+                            wrapper.getFileExtensionType(), FileExtensions.Type.NUM_ENTRIES);
                 }
             }
         }
@@ -407,20 +410,20 @@ public class DownloadHistoryAdapter
     @Override
     protected void bindViewHolderForHeaderItem(ViewHolder viewHolder, HeaderItem headerItem) {
         super.bindViewHolderForHeaderItem(viewHolder, headerItem);
-        mSpaceDisplay.onChanged();
+        updateStorageSummary();
     }
 
     /**
      * Initialize space display view in storage info header and generate header item for it.
+     * @param context The {@link Context} used for inflating views.
      */
-    private void generateHeaderItems() {
-        mSpaceDisplay = new SpaceDisplay(null, this);
+    private void generateHeaderItems(Context context) {
+        mSpaceDisplay = new SpaceDisplay(context, null, this);
         View view = mSpaceDisplay.getViewContainer();
         registerAdapterDataObserver(mSpaceDisplay);
         mSpaceDisplayHeaderItem = new HeaderItem(0, view);
 
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOADS_LOCATION_CHANGE)) {
-            Context context = ContextUtils.getApplicationContext();
             View storageSummaryView =
                     LayoutInflater.from(context).inflate(R.layout.download_storage_summary, null);
             mStorageSummaryProvider =
@@ -437,6 +440,8 @@ public class DownloadHistoryAdapter
     /** Called when a new DownloadItem has been created by the native DownloadManager. */
     @Override
     public void onDownloadItemCreated(DownloadItem item) {
+        if (useNewDownloadPath()) return;
+
         boolean isOffTheRecord = item.getDownloadInfo().isOffTheRecord();
         if (isOffTheRecord && !mShowOffTheRecord) return;
 
@@ -453,6 +458,8 @@ public class DownloadHistoryAdapter
     /** Updates the list when new information about a download comes in. */
     @Override
     public void onDownloadItemUpdated(DownloadItem item) {
+        if (useNewDownloadPath()) return;
+
         DownloadItemWrapper newWrapper = createDownloadItemWrapper(item);
         if (newWrapper.isOffTheRecord() && !mShowOffTheRecord) return;
 
@@ -500,7 +507,7 @@ public class DownloadHistoryAdapter
                     if (TextUtils.equals(item.getId(), wrapper.getId())) {
                         view.displayItem(mBackendProvider, existingWrapper);
                         if (item.getDownloadInfo().state() == DownloadState.COMPLETE) {
-                            mSpaceDisplay.onChanged();
+                            updateStorageSummary();
                         }
                     }
                 }
@@ -517,6 +524,8 @@ public class DownloadHistoryAdapter
      */
     @Override
     public void onDownloadItemRemoved(String guid, boolean isOffTheRecord) {
+        if (useNewDownloadPath()) return;
+
         if (isOffTheRecord && !mShowOffTheRecord) return;
         if (getDownloadItemList(isOffTheRecord).removeItem(guid) != null) {
             filter(mFilter);
@@ -764,6 +773,7 @@ public class DownloadHistoryAdapter
     }
 
     private DownloadItemWrapper createDownloadItemWrapper(DownloadItem item) {
+        assert !useNewDownloadPath();
         return new DownloadItemWrapper(item, mBackendProvider, mParentComponent);
     }
 
@@ -817,17 +827,34 @@ public class DownloadHistoryAdapter
     }
 
     private void recordOfflineItemCountHistograms() {
-        int[] itemCounts = new int[OfflineItemFilter.FILTER_BOUNDARY];
-        for (DownloadHistoryItemWrapper item : mOfflineItems) {
-            OfflineItemWrapper offlineItem = (OfflineItemWrapper) item;
-            if (offlineItem.isOffTheRecord()) continue;
-            itemCounts[offlineItem.getOfflineItemFilter()]++;
+        int offlinePageCount = 0;
+        int viewedOfflinePageCount = 0;
+        int prefetchedOfflinePageCount = 0;
+        int viewedPrefetchedOfflinePageCount = 0;
+
+        for (DownloadHistoryItemWrapper itemWrapper : mOfflineItems) {
+            if (itemWrapper.isOffTheRecord()) continue;
+            OfflineItemWrapper offlineItemWrapper = (OfflineItemWrapper) itemWrapper;
+            boolean hasBeenViewed = DownloadUtils.isOfflineItemViewed(offlineItemWrapper.getItem());
+            if (offlineItemWrapper.isSuggested()) {
+                prefetchedOfflinePageCount++;
+                if (hasBeenViewed) viewedPrefetchedOfflinePageCount++;
+            } else {
+                offlinePageCount++;
+                if (hasBeenViewed) viewedOfflinePageCount++;
+            }
         }
 
-        // TODO(shaktisahu): UMA for initial counts of offline pages, regular downloads and download
-        // file types and file extensions.
-        RecordHistogram.recordCountHistogram("Android.DownloadManager.InitialCount.OfflinePage",
-                itemCounts[OfflineItemFilter.FILTER_PAGE]);
+        RecordHistogram.recordCountHistogram(
+                "Android.DownloadManager.InitialCount.OfflinePage", offlinePageCount);
+        RecordHistogram.recordCountHistogram(
+                "Android.DownloadManager.InitialCount.Viewed.OfflinePage", viewedOfflinePageCount);
+        RecordHistogram.recordCountHistogram(
+                "Android.DownloadManager.InitialCount.PrefetchedOfflinePage",
+                prefetchedOfflinePageCount);
+        RecordHistogram.recordCountHistogram(
+                "Android.DownloadManager.InitialCount.Viewed.PrefetchedOfflinePage",
+                viewedPrefetchedOfflinePageCount);
     }
 
     @Override
@@ -901,7 +928,7 @@ public class DownloadHistoryAdapter
                     if (TextUtils.equals(item.id.id, view.getItem().getId())) {
                         view.displayItem(mBackendProvider, existingWrapper);
                         if (item.state == OfflineItemState.COMPLETE) {
-                            mSpaceDisplay.onChanged();
+                            updateStorageSummary();
                         }
                     }
                 }
@@ -909,6 +936,10 @@ public class DownloadHistoryAdapter
                 for (TestObserver observer : mObservers) observer.onOfflineItemUpdated(item);
             }
         }
+    }
+
+    private static boolean useNewDownloadPath() {
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOAD_OFFLINE_CONTENT_PROVIDER);
     }
 
     private DownloadHistoryItemWrapper createDownloadHistoryItemWrapper(OfflineItem item) {
@@ -928,5 +959,12 @@ public class DownloadHistoryAdapter
         }
 
         return mTimeThresholdForRecentBadgeMs;
+    }
+
+    private void updateStorageSummary() {
+        if (mSpaceDisplay != null) mSpaceDisplay.onChanged();
+        if (mStorageSummaryProvider != null) {
+            mStorageSummaryProvider.setUsedStorage(getTotalDownloadSize());
+        }
     }
 }

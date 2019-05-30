@@ -26,11 +26,11 @@ class CONTENT_EXPORT MediaSessionUmaHelper {
     UI = 2,
     CONTENT = 3,
     SystemTransientDuck = 4,
-    Count // Leave at the end.
+    kMaxValue = SystemTransientDuck,
   };
 
-  // Extended enum to blink::mojom::MediaSessionAction, distinguishing default
-  // action handling.
+  // Extended enum to media_session::mojom::MediaSessionAction, distinguishing
+  // default action handling.
   enum class MediaSessionUserAction {
     Play = 0,
     PlayDefault = 1,
@@ -41,13 +41,15 @@ class CONTENT_EXPORT MediaSessionUmaHelper {
     NextTrack = 6,
     SeekBackward = 7,
     SeekForward = 8,
-    Count  // Leave at the end.
+    SkipAd = 9,
+    kMaxValue = SkipAd,
   };
 
   MediaSessionUmaHelper();
   ~MediaSessionUmaHelper();
 
-  static void RecordMediaSessionUserAction(MediaSessionUserAction action);
+  static void RecordMediaSessionUserAction(MediaSessionUserAction action,
+                                           bool focused);
 
   void RecordSessionSuspended(MediaSessionSuspendedSource source) const;
 

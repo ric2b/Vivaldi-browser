@@ -15,8 +15,8 @@
 namespace blink {
 
 CustomElementUpgradeSorter::CustomElementUpgradeSorter()
-    : elements_(new HeapHashSet<Member<Element>>()),
-      parent_child_map_(new ParentChildMap()) {}
+    : elements_(MakeGarbageCollected<HeapHashSet<Member<Element>>>()),
+      parent_child_map_(MakeGarbageCollected<ParentChildMap>()) {}
 
 static HTMLLinkElement* GetLinkElementForImport(const Document& import) {
   if (HTMLImportLoader* loader = import.ImportLoader())
@@ -33,7 +33,7 @@ CustomElementUpgradeSorter::AddToParentChildMap(Node* parent, Node* child) {
     return kParentAlreadyExistsInMap;
   }
 
-  ChildSet* child_set = new ChildSet();
+  ChildSet* child_set = MakeGarbageCollected<ChildSet>();
   child_set->insert(child);
   result.stored_value->value = child_set;
   return kParentAddedToMap;
@@ -50,8 +50,8 @@ void CustomElementUpgradeSorter::Add(Element* element) {
     // Create parent-child link between <link rel="import"> and its imported
     // document so that the content of the imported document be visited as if
     // the imported document were inserted in the link element.
-    if (parent->IsDocumentNode()) {
-      Element* link = GetLinkElementForImport(*ToDocument(parent));
+    if (auto* document = DynamicTo<Document>(parent)) {
+      Element* link = GetLinkElementForImport(*document);
       if (!link ||
           AddToParentChildMap(link, parent) == kParentAlreadyExistsInMap)
         break;

@@ -18,7 +18,8 @@
 #include "base/scoped_observer.h"
 #include "device/usb/public/mojom/device_manager.mojom.h"
 #include "device/usb/usb_service.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/interface_ptr_set.h"
 
 namespace device {
 
@@ -31,23 +32,43 @@ namespace usb {
 class DeviceManagerImpl : public mojom::UsbDeviceManager,
                           public UsbService::Observer {
  public:
-  static void Create(mojom::UsbDeviceManagerRequest request);
-
+  DeviceManagerImpl();
   ~DeviceManagerImpl() override;
 
- private:
-  explicit DeviceManagerImpl(UsbService* usb_service);
+  void AddBinding(mojom::UsbDeviceManagerRequest request);
 
+ private:
   // DeviceManager implementation:
+  void EnumerateDevicesAndSetClient(
+      mojom::UsbDeviceManagerClientAssociatedPtrInfo client,
+      EnumerateDevicesAndSetClientCallback callback) override;
   void GetDevices(mojom::UsbEnumerationOptionsPtr options,
                   GetDevicesCallback callback) override;
   void GetDevice(const std::string& guid,
                  mojom::UsbDeviceRequest device_request,
                  mojom::UsbDeviceClientPtr device_client) override;
-  void SetClient(mojom::UsbDeviceManagerClientPtr client) override;
+
+#if defined(OS_CHROMEOS)
+  void CheckAccess(const std::string& guid,
+                   CheckAccessCallback callback) override;
+
+  void OpenFileDescriptor(const std::string& guid,
+                          OpenFileDescriptorCallback callback) override;
+
+  void OnOpenFileDescriptor(OpenFileDescriptorCallback callback,
+                            base::ScopedFD fd);
+
+  void OnOpenFileDescriptorError(OpenFileDescriptorCallback callback,
+                                 const std::string& error_name,
+                                 const std::string& message);
+#endif  // defined(OS_CHROMEOS)
+
+  void SetClient(
+      mojom::UsbDeviceManagerClientAssociatedPtrInfo client) override;
 
   // Callbacks to handle the async responses from the underlying UsbService.
   void OnGetDevices(mojom::UsbEnumerationOptionsPtr options,
+                    mojom::UsbDeviceManagerClientAssociatedPtrInfo client,
                     GetDevicesCallback callback,
                     const std::vector<scoped_refptr<UsbDevice>>& devices);
 
@@ -58,11 +79,11 @@ class DeviceManagerImpl : public mojom::UsbDeviceManager,
 
   void MaybeRunDeviceChangesCallback();
 
-  mojo::StrongBindingPtr<mojom::UsbDeviceManager> binding_;
-
   UsbService* usb_service_;
   ScopedObserver<UsbService, UsbService::Observer> observer_;
-  mojom::UsbDeviceManagerClientPtr client_;
+
+  mojo::BindingSet<mojom::UsbDeviceManager> bindings_;
+  mojo::AssociatedInterfacePtrSet<mojom::UsbDeviceManagerClient> clients_;
 
   base::WeakPtrFactory<DeviceManagerImpl> weak_factory_;
 

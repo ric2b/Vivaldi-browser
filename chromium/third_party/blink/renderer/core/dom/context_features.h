@@ -57,13 +57,13 @@ class ContextFeatures final : public GarbageCollectedFinalized<ContextFeatures>,
   static bool PagePopupEnabled(Document*);
   static bool MutationEventsEnabled(Document*);
 
+  explicit ContextFeatures(std::unique_ptr<ContextFeaturesClient> client)
+      : client_(std::move(client)) {}
+
   bool IsEnabled(Document*, FeatureType, bool) const;
   void UrlDidChange(Document*);
 
  private:
-  explicit ContextFeatures(std::unique_ptr<ContextFeaturesClient> client)
-      : client_(std::move(client)) {}
-
   std::unique_ptr<ContextFeaturesClient> client_;
 };
 
@@ -89,7 +89,7 @@ void ProvideContextFeaturesToDocumentFrom(Document&, Page&);
 
 inline ContextFeatures* ContextFeatures::Create(
     std::unique_ptr<ContextFeaturesClient> client) {
-  return new ContextFeatures(std::move(client));
+  return MakeGarbageCollected<ContextFeatures>(std::move(client));
 }
 
 inline bool ContextFeatures::IsEnabled(Document* document,
@@ -103,12 +103,12 @@ inline bool ContextFeatures::IsEnabled(Document* document,
 inline void ContextFeatures::UrlDidChange(Document* document) {
   // FIXME: The original code, commented out below, is obviously
   // wrong, but the seemingly correct fix of negating the test to
-  // the more logical 'if (!m_client)' crashes the renderer.
+  // the more logical 'if (!client_)' crashes the renderer.
   // See issue 294180
   //
-  // if (m_client)
-  //     return;
-  // m_client->urlDidChange(document);
+  // if (client_)
+  //   return;
+  // client_->UrlDidChange(document);
 }
 
 }  // namespace blink

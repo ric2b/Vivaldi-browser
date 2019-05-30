@@ -22,6 +22,7 @@ namespace enterprise_reporting {
 extern const char kInvalidInputErrorMessage[];
 extern const char kUploadFailed[];
 extern const char kDeviceNotEnrolled[];
+extern const char kDeviceIdNotFound[];
 
 }  // namespace enterprise_reporting
 
@@ -30,7 +31,7 @@ class EnterpriseReportingPrivateUploadChromeDesktopReportFunction
  public:
   DECLARE_EXTENSION_FUNCTION(
       "enterprise.reportingPrivate.uploadChromeDesktopReport",
-      ENTERPRISEREPORTINGPRIVATE_UPLOADCHROMEDESKTOPREPORT);
+      ENTERPRISEREPORTINGPRIVATE_UPLOADCHROMEDESKTOPREPORT)
   EnterpriseReportingPrivateUploadChromeDesktopReportFunction();
 
   // ExtensionFunction
@@ -62,6 +63,22 @@ class EnterpriseReportingPrivateUploadChromeDesktopReportFunction
 
   DISALLOW_COPY_AND_ASSIGN(
       EnterpriseReportingPrivateUploadChromeDesktopReportFunction);
+};
+
+class EnterpriseReportingPrivateGetDeviceIdFunction
+    : public UIThreadExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("enterprise.reportingPrivate.getDeviceId",
+                             ENTERPRISEREPORTINGPRIVATE_GETDEVICEID)
+  EnterpriseReportingPrivateGetDeviceIdFunction();
+
+  // ExtensionFunction
+  ExtensionFunction::ResponseAction Run() override;
+
+ private:
+  ~EnterpriseReportingPrivateGetDeviceIdFunction() override;
+
+  DISALLOW_COPY_AND_ASSIGN(EnterpriseReportingPrivateGetDeviceIdFunction);
 };
 
 }  // namespace extensions

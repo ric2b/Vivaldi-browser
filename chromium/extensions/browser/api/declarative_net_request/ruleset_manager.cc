@@ -8,14 +8,18 @@
 #include <tuple>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
+#include "base/task/post_task.h"
 #include "components/web_cache/browser/web_cache_manager.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_request_info.h"
 #include "extensions/browser/api/declarative_net_request/ruleset_matcher.h"
+#include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/api/web_request/web_request_info.h"
 #include "extensions/browser/api/web_request/web_request_permissions.h"
 #include "extensions/browser/info_map.h"
@@ -29,6 +33,7 @@ namespace declarative_net_request {
 namespace {
 
 namespace flat_rule = url_pattern_index::flat;
+using PageAccess = PermissionsData::PageAccess;
 
 // Describes the different cases pertaining to initiator checks to find the main
 // frame url for a main frame subresource.
@@ -49,6 +54,7 @@ flat_rule::ElementType GetElementType(content::ResourceType type) {
     case content::RESOURCE_TYPE_LAST_TYPE:
     case content::RESOURCE_TYPE_PREFETCH:
     case content::RESOURCE_TYPE_SUB_RESOURCE:
+    case content::RESOURCE_TYPE_NAVIGATION_PRELOAD:
       return flat_rule::ElementType_OTHER;
     case content::RESOURCE_TYPE_MAIN_FRAME:
       return flat_rule::ElementType_MAIN_FRAME;
@@ -94,7 +100,7 @@ flat_rule::ElementType GetElementType(const WebRequestInfo& request) {
 // Returns whether the request to |url| is third party to its |document_origin|.
 // TODO(crbug.com/696822): Look into caching this.
 bool IsThirdPartyRequest(const GURL& url, const url::Origin& document_origin) {
-  if (document_origin.unique())
+  if (document_origin.opaque())
     return true;
 
   return !net::registry_controlled_domains::SameDomainOrHost(
@@ -111,8 +117,8 @@ void ClearRendererCacheOnNavigation() {
   if (content::BrowserThread::CurrentlyOn(content::BrowserThread::UI)) {
     ClearRendererCacheOnUI();
   } else {
-    content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                     base::BindOnce(&ClearRendererCacheOnUI));
+    base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                             base::BindOnce(&ClearRendererCacheOnUI));
   }
 }
 
@@ -237,6 +243,13 @@ bool ShouldCollapseResourceType(flat_rule::ElementType type) {
          type == flat_rule::ElementType_SUBDOCUMENT;
 }
 
+void NotifyRequestWithheld(const ExtensionId& extension_id,
+                           const WebRequestInfo& request) {
+  DCHECK(ExtensionsAPIClient::Get());
+  ExtensionsAPIClient::Get()->NotifyWebRequestWithheld(
+      request.render_process_id, request.frame_id, extension_id);
+}
+
 }  // namespace
 
 RulesetManager::RulesetManager(const InfoMap* info_map) : info_map_(info_map) {
@@ -328,17 +341,28 @@ RulesetManager::Action RulesetManager::EvaluateRequest(
   if (!ShouldEvaluateRequest(request))
     return Action::NONE;
 
-  SCOPED_UMA_HISTOGRAM_TIMER(
-      "Extensions.DeclarativeNetRequest.EvaluateRequestTime.AllExtensions");
-
   if (test_observer_)
     test_observer_->OnEvaluateRequest(request, is_incognito_context);
+
+  if (rulesets_.empty())
+    return Action::NONE;
+
+  SCOPED_UMA_HISTOGRAM_TIMER(
+      "Extensions.DeclarativeNetRequest.EvaluateRequestTime.AllExtensions2");
 
   const GURL& url = request.url;
   const url::Origin first_party_origin =
       request.initiator.value_or(url::Origin());
   const flat_rule::ElementType element_type = GetElementType(request);
   const bool is_third_party = IsThirdPartyRequest(url, first_party_origin);
+  const int tab_id = request.frame_data ? request.frame_data->tab_id
+                                        : extension_misc::kUnknownTabId;
+
+  // |crosses_incognito| is used to ensure that a split mode extension process
+  // can't intercept requests from a cross browser context. Since declarative
+  // net request API doesn't use event listeners in a background process, it is
+  // irrelevant here.
+  const bool crosses_incognito = false;
 
   std::vector<bool> should_evaluate_rulesets_for_request(rulesets_.size());
 
@@ -351,8 +375,17 @@ RulesetManager::Action RulesetManager::EvaluateRequest(
       // |ShouldEvaluateRulesetForRequest|.
       should_evaluate_rulesets_for_request[i] = ShouldEvaluateRulesetForRequest(
           *ruleset_data, request, is_incognito_context);
-
       if (!should_evaluate_rulesets_for_request[i])
+        continue;
+
+      // Now check if the extension has access to the request. Note: the
+      // extension does not require host permissions to block network requests.
+      PageAccess page_access = WebRequestPermissions::CanExtensionAccessURL(
+          info_map_, ruleset_data->extension_id, request.url, tab_id,
+          crosses_incognito, WebRequestPermissions::DO_NOT_CHECK_HOST,
+          request.initiator, request.type);
+      DCHECK_NE(PageAccess::kWithheld, page_access);
+      if (page_access != PageAccess::kAllowed)
         continue;
 
       if (ruleset_data->matcher->ShouldBlockRequest(
@@ -379,6 +412,20 @@ RulesetManager::Action RulesetManager::EvaluateRequest(
     for (; ruleset_data != rulesets_.end(); ++ruleset_data, ++i) {
       if (!should_evaluate_rulesets_for_request[i])
         continue;
+
+      // Redirecting a request requires host permissions to the request url and
+      // its initiator.
+      PageAccess page_access = WebRequestPermissions::CanExtensionAccessURL(
+          info_map_, ruleset_data->extension_id, request.url, tab_id,
+          crosses_incognito,
+          WebRequestPermissions::REQUIRE_HOST_PERMISSION_FOR_URL_AND_INITIATOR,
+          request.initiator, request.type);
+
+      if (page_access != PageAccess::kAllowed) {
+        if (page_access == PageAccess::kWithheld)
+          NotifyRequestWithheld(ruleset_data->extension_id, request);
+        continue;
+      }
 
       if (ruleset_data->matcher->ShouldRedirectRequest(
               url, first_party_origin, element_type, is_third_party,
@@ -413,11 +460,10 @@ operator=(ExtensionRulesetData&& other) = default;
 
 bool RulesetManager::ExtensionRulesetData::operator<(
     const ExtensionRulesetData& other) const {
-  // Sort based on descending installation time, using extension id to break
+  // Sort based on *descending* installation time, using extension id to break
   // ties.
-  return (extension_install_time != other.extension_install_time)
-             ? (extension_install_time > other.extension_install_time)
-             : (extension_id < other.extension_id);
+  return std::tie(extension_install_time, extension_id) >
+         std::tie(other.extension_install_time, other.extension_id);
 }
 
 bool RulesetManager::ShouldEvaluateRequest(
@@ -456,23 +502,7 @@ bool RulesetManager::ShouldEvaluateRulesetForRequest(
   if (IsRequestPageAllowed(request, ruleset.allowed_pages))
     return false;
 
-  const int tab_id = request.frame_data ? request.frame_data->tab_id
-                                        : extension_misc::kUnknownTabId;
-
-  // We have already checked that the extension has access to the request as far
-  // as the browser context is concerned. Since there is nothing special that we
-  // have to do for split mode incognito extensions, pass false for
-  // |crosses_incognito|.
-  const bool crosses_incognito = false;
-  PermissionsData::PageAccess result =
-      WebRequestPermissions::CanExtensionAccessURL(
-          info_map_, ruleset.extension_id, request.url, tab_id,
-          crosses_incognito,
-          WebRequestPermissions::REQUIRE_HOST_PERMISSION_FOR_URL_AND_INITIATOR,
-          request.initiator);
-
-  // TODO(crbug.com/809680): Handle ACCESS_WITHHELD.
-  return result == PermissionsData::PageAccess::kAllowed;
+  return true;
 }
 
 }  // namespace declarative_net_request

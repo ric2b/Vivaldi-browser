@@ -35,6 +35,11 @@ ui::PageTransition
   return ui::PAGE_TRANSITION_LINK;
 }
 
+base::TimeTicks TestBrowserWindow::TestLocationBar::GetMatchSelectionTimestamp()
+    const {
+  return base::TimeTicks();
+}
+
 const OmniboxView* TestBrowserWindow::TestLocationBar::GetOmniboxView() const {
   return NULL;
 }
@@ -66,6 +71,22 @@ bool TestBrowserWindow::IsAlwaysOnTop() const {
 gfx::NativeWindow TestBrowserWindow::GetNativeWindow() const {
   return NULL;
 }
+
+void TestBrowserWindow::SetTopControlsShownRatio(
+    content::WebContents* web_contents,
+    float ratio) {}
+
+bool TestBrowserWindow::DoBrowserControlsShrinkRendererSize(
+    const content::WebContents* contents) const {
+  return false;
+}
+
+int TestBrowserWindow::GetTopControlsHeight() const {
+  return 0;
+}
+
+void TestBrowserWindow::SetTopControlsGestureScrollInProgress(
+    bool in_progress) {}
 
 StatusBubble* TestBrowserWindow::GetStatusBubble() {
   return NULL;
@@ -116,7 +137,7 @@ LocationBar* TestBrowserWindow::GetLocationBar() const {
 }
 
 PageActionIconContainer* TestBrowserWindow::GetPageActionIconContainer() {
-  return nullptr;
+  return &page_action_icon_container_;
 }
 
 ToolbarActionsBar* TestBrowserWindow::GetToolbarActionsBar() {
@@ -127,6 +148,11 @@ content::KeyboardEventProcessingResult
 TestBrowserWindow::PreHandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
   return content::KeyboardEventProcessingResult::NOT_HANDLED;
+}
+
+bool TestBrowserWindow::HandleKeyboardEvent(
+    const content::NativeWebKeyboardEvent& event) {
+  return false;
 }
 
 bool TestBrowserWindow::IsBookmarkBarVisible() const {
@@ -152,6 +178,8 @@ bool TestBrowserWindow::IsToolbarShowing() const {
 ShowTranslateBubbleResult TestBrowserWindow::ShowTranslateBubble(
     content::WebContents* contents,
     translate::TranslateStep step,
+    const std::string& source_language,
+    const std::string& target_language,
     translate::TranslateErrors::Type error_type,
     bool is_user_gesture) {
   return ShowTranslateBubbleResult::SUCCESS;

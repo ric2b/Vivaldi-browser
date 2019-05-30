@@ -16,13 +16,15 @@
 #include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "components/network_session_configurator/browser/network_session_configurator.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "content/public/common/content_switches.h"
+#include "content/shell/browser/shell_content_browser_client.h"
 #include "content/shell/browser/shell_network_delegate.h"
-#include "content/shell/common/layout_test/layout_test_switches.h"
 #include "content/shell/common/shell_content_client.h"
 #include "content/shell/common/shell_switches.h"
+#include "content/shell/common/web_test/web_test_switches.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/ct_policy_status.h"
@@ -33,8 +35,6 @@
 #include "net/net_buildflags.h"
 #include "net/proxy_resolution/proxy_config_service.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
-#include "net/ssl/channel_id_service.h"
-#include "net/ssl/default_channel_id_store.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
 #include "services/network/public/cpp/features.h"
@@ -166,12 +166,7 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
     builder.set_network_delegate(CreateNetworkDelegate());
     std::unique_ptr<net::CookieStore> cookie_store =
         CreateCookieStore(CookieStoreConfig(), net_log_);
-    std::unique_ptr<net::ChannelIDService> channel_id_service =
-        std::make_unique<net::ChannelIDService>(
-            new net::DefaultChannelIDStore(nullptr));
-    cookie_store->SetChannelIDServiceID(channel_id_service->GetUniqueID());
-    builder.SetCookieAndChannelIdStores(std::move(cookie_store),
-                                        std::move(channel_id_service));
+    builder.SetCookieStore(std::move(cookie_store));
     builder.set_accept_language(GetAcceptLanguages());
     builder.set_user_agent(GetShellUserAgent());
 
@@ -236,7 +231,7 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
           net::ReportingPolicy::Create();
       if (command_line.HasSwitch(switches::kRunWebTests))
         reporting_policy->delivery_interval =
-            base::TimeDelta::FromMilliseconds(100);
+            kReportingDeliveryIntervalTimeForWebTests;
       builder.set_reporting_policy(std::move(reporting_policy));
     }
 
@@ -254,7 +249,7 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
 
 scoped_refptr<base::SingleThreadTaskRunner>
     ShellURLRequestContextGetter::GetNetworkTaskRunner() const {
-  return BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
+  return base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO});
 }
 
 }  // namespace content

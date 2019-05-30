@@ -5,6 +5,7 @@
 #ifndef UI_VIEWS_CONTROLS_TABLE_TABLE_VIEW_VIEWS_H_
 #define UI_VIEWS_CONTROLS_TABLE_TABLE_VIEW_VIEWS_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
@@ -12,8 +13,16 @@
 #include "ui/base/models/table_model.h"
 #include "ui/base/models/table_model_observer.h"
 #include "ui/gfx/font_list.h"
+#include "ui/views/controls/focus_ring.h"
 #include "ui/views/view.h"
 #include "ui/views/views_export.h"
+
+namespace ui {
+
+struct AXActionData;
+struct AXNodeData;
+
+}  // namespace ui
 
 // A TableView is a view that displays multiple rows with any number of columns.
 // TableView is driven by a TableModel. The model returns the contents
@@ -32,6 +41,8 @@
 // sort by way of overriding TableModel::CompareValues().
 namespace views {
 
+class AXVirtualView;
+class FocusRing;
 struct GroupRange;
 class TableGrouper;
 class TableHeader;
@@ -53,6 +64,14 @@ class VIEWS_EXPORT TableView
  public:
   // Internal class name.
   static const char kViewClassName[];
+
+  // Used by AdvanceActiveVisibleColumn(), AdvanceSelection() and
+  // ResizeColumnViaKeyboard() to determine the direction to change the
+  // selection.
+  enum AdvanceDirection {
+    ADVANCE_DECREMENT,
+    ADVANCE_INCREMENT,
+  };
 
   // Used to track a visible column. Useful only for the header.
   struct VIEWS_EXPORT VisibleColumn {
@@ -132,8 +151,19 @@ class VIEWS_EXPORT TableView
   // or not).
   bool HasColumn(int id) const;
 
+  // Returns whether an active row and column have been set.
+  bool HasFocusIndicator() const;
+
+  // Moves the focus ring to its new location if the active cell has changed, or
+  // hides the focus ring if the table is not focused.
+  void ResetFocusIndicator();
+
   void set_observer(TableViewObserver* observer) { observer_ = observer; }
   TableViewObserver* observer() const { return observer_; }
+
+  int GetActiveVisibleColumnIndex() const;
+
+  void SetActiveVisibleColumnIndex(int index);
 
   const std::vector<VisibleColumn>& visible_columns() const {
     return visible_columns_;
@@ -181,6 +211,7 @@ class VIEWS_EXPORT TableView
   bool GetTooltipTextOrigin(const gfx::Point& p,
                             gfx::Point* loc) const override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+  bool HandleAccessibleAction(const ui::AXActionData& action_data) override;
 
   // ui::TableModelObserver overrides:
   void OnModelChanged() override;
@@ -213,13 +244,6 @@ class VIEWS_EXPORT TableView
     int max_row;
     int min_column;
     int max_column;
-  };
-
-  // Used by AdvanceSelection() to determine the direction to change the
-  // selection.
-  enum AdvanceDirection {
-    ADVANCE_DECREMENT,
-    ADVANCE_INCREMENT,
   };
 
   // Returns the horizontal margin between the bounds of a cell and its
@@ -275,6 +299,10 @@ class VIEWS_EXPORT TableView
   // Returns the TableColumn matching the specified id.
   ui::TableColumn FindColumnByID(int id) const;
 
+  // Advances the active visible column (from the active visible column index)
+  // in the specified direction.
+  void AdvanceActiveVisibleColumn(AdvanceDirection direction);
+
   // Sets the selection to the specified index (in terms of the view).
   void SelectByViewIndex(int view_index);
 
@@ -307,6 +335,24 @@ class VIEWS_EXPORT TableView
                       base::string16* tooltip,
                       gfx::Point* tooltip_origin) const;
 
+  // Updates a set of accessibility views that expose the visible table contents
+  // to assistive software.
+  void UpdateVirtualAccessibilityChildren();
+
+  // Updates the internal accessibility state and fires the required
+  // accessibility events to indicate to assistive software which row is active
+  // and which cell is focused, if any.
+  void UpdateAccessibilityFocus();
+
+  // Returns the virtual accessibility view corresponding to the specified row.
+  // |row| should be a view index, not a model index.
+  AXVirtualView* GetVirtualAccessibilityRow(int row);
+
+  // Returns the virtual accessibility view corresponding to the specified cell.
+  // |row| should be a view index, not a model index.
+  // |visible_column_index| indexes into |visible_columns_|.
+  AXVirtualView* GetVirtualAccessibilityCell(int row, int visible_column_index);
+
   ui::TableModel* model_;
 
   std::vector<ui::TableColumn> columns_;
@@ -314,6 +360,13 @@ class VIEWS_EXPORT TableView
   // The set of visible columns. The values of these point to |columns_|. This
   // may contain a subset of |columns_|.
   std::vector<VisibleColumn> visible_columns_;
+
+  // The active visible column. Used for keyboard access to functionality such
+  // as sorting and resizing. -1 if no visible column is active.
+  int active_visible_column_index_;
+
+  // Used to draw a focus indicator around the active cell.
+  std::unique_ptr<FocusRing> focus_ring_;
 
   // The header. This is only created if more than one column is specified or
   // the first column has a non-empty title.

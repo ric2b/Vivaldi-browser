@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_PAYMENTS_PAYMENT_APP_SERVICE_WORKER_REGISTRATION_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_PAYMENTS_PAYMENT_APP_SERVICE_WORKER_REGISTRATION_H_
 
+#include "base/macros.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_registration.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
@@ -19,12 +20,13 @@ class PaymentAppServiceWorkerRegistration final
     : public GarbageCollectedFinalized<PaymentAppServiceWorkerRegistration>,
       public Supplement<ServiceWorkerRegistration> {
   USING_GARBAGE_COLLECTED_MIXIN(PaymentAppServiceWorkerRegistration);
-  WTF_MAKE_NONCOPYABLE(PaymentAppServiceWorkerRegistration);
 
  public:
   static const char kSupplementName[];
 
+  explicit PaymentAppServiceWorkerRegistration(ServiceWorkerRegistration*);
   virtual ~PaymentAppServiceWorkerRegistration();
+
   static PaymentAppServiceWorkerRegistration& From(ServiceWorkerRegistration&);
 
   static PaymentManager* paymentManager(ScriptState*,
@@ -34,10 +36,10 @@ class PaymentAppServiceWorkerRegistration final
   void Trace(blink::Visitor*) override;
 
  private:
-  explicit PaymentAppServiceWorkerRegistration(ServiceWorkerRegistration*);
-
   Member<ServiceWorkerRegistration> registration_;
   Member<PaymentManager> payment_manager_;
+
+  DISALLOW_COPY_AND_ASSIGN(PaymentAppServiceWorkerRegistration);
 };
 
 }  // namespace blink

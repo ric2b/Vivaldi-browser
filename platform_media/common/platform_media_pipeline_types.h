@@ -25,7 +25,7 @@ enum PlatformMediaDataType {
   PLATFORM_MEDIA_DATA_TYPE_COUNT  // Always keep this as the last one.
 };
 
-enum MediaDataStatus {
+enum class MediaDataStatus {
   kOk,
   kEOS,
   kMediaError,

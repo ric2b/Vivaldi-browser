@@ -30,6 +30,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_CSS_SUPPORTS_RULE_H_
 
 #include "third_party/blink/renderer/core/css/css_condition_rule.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
 
@@ -41,20 +42,24 @@ class CSSSupportsRule final : public CSSConditionRule {
  public:
   static CSSSupportsRule* Create(StyleRuleSupports* rule,
                                  CSSStyleSheet* sheet) {
-    return new CSSSupportsRule(rule, sheet);
+    return MakeGarbageCollected<CSSSupportsRule>(rule, sheet);
   }
 
+  CSSSupportsRule(StyleRuleSupports*, CSSStyleSheet*);
   ~CSSSupportsRule() override = default;
 
   String cssText() const override;
 
  private:
-  CSSSupportsRule(StyleRuleSupports*, CSSStyleSheet*);
-
   CSSRule::Type type() const override { return kSupportsRule; }
 };
 
-DEFINE_CSS_RULE_TYPE_CASTS(CSSSupportsRule, kSupportsRule);
+template <>
+struct DowncastTraits<CSSSupportsRule> {
+  static bool AllowFrom(const CSSRule& rule) {
+    return rule.type() == CSSRule::kSupportsRule;
+  }
+};
 
 }  // namespace blink
 

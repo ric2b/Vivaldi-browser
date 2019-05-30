@@ -44,6 +44,9 @@ class AutofillDriver {
   // Returns whether the user is currently operating in an incognito context.
   virtual bool IsIncognito() const = 0;
 
+  // Returns whether AutofillDriver instance is associated to the main frame.
+  virtual bool IsInMainFrame() const = 0;
+
   // Returns the URL request context information associated with this driver.
   virtual net::URLRequestContextGetter* GetURLRequestContext() = 0;
 
@@ -99,10 +102,6 @@ class AutofillDriver {
   // renderers cannot do this transformation themselves.
   virtual gfx::RectF TransformBoundingBoxToViewportCoordinates(
       const gfx::RectF& bounding_box) = 0;
-
-  // Called when the user interacted with a credit card form, so that
-  // the current page's security state can be updated appropriately.
-  virtual void DidInteractWithCreditCardForm() = 0;
 };
 
 }  // namespace autofill

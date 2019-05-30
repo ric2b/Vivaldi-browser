@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
+#include "components/subresource_filter/content/renderer/ad_resource_tracker.h"
 #include "components/subresource_filter/core/common/document_subresource_filter.h"
 #include "components/url_pattern_index/proto/rules.pb.h"
 #include "third_party/blink/public/platform/web_document_subresource_filter.h"
@@ -18,7 +19,6 @@
 namespace subresource_filter {
 
 class MemoryMappedRuleset;
-
 // Performs filtering of subresource loads in the scope of a given document.
 class WebDocumentSubresourceFilterImpl
     : public blink::WebDocumentSubresourceFilter,
@@ -29,21 +29,19 @@ class WebDocumentSubresourceFilterImpl
   class BuilderImpl : public blink::WebDocumentSubresourceFilter::Builder {
    public:
     BuilderImpl(url::Origin document_origin,
-                ActivationState activation_state,
+                mojom::ActivationState activation_state,
                 base::File ruleset_file,
-                base::OnceClosure first_disallowed_load_callback,
-                bool is_associated_with_ad_subframe);
+                base::OnceClosure first_disallowed_load_callback);
     ~BuilderImpl() override;
 
     std::unique_ptr<blink::WebDocumentSubresourceFilter> Build() override;
 
    private:
     url::Origin document_origin_;
-    ActivationState activation_state_;
+    mojom::ActivationState activation_state_;
     base::File ruleset_file_;
     base::OnceClosure first_disallowed_load_callback_;
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
-    bool is_associated_with_ad_subframe_;
 
     DISALLOW_COPY_AND_ASSIGN(BuilderImpl);
   };
@@ -54,10 +52,9 @@ class WebDocumentSubresourceFilterImpl
   // reportDisallowedLoad() call.
   WebDocumentSubresourceFilterImpl(
       url::Origin document_origin,
-      ActivationState activation_state,
+      mojom::ActivationState activation_state,
       scoped_refptr<const MemoryMappedRuleset> ruleset,
-      base::OnceClosure first_disallowed_load_callback,
-      bool is_associated_with_ad_subframe);
+      base::OnceClosure first_disallowed_load_callback);
 
   ~WebDocumentSubresourceFilterImpl() override;
 
@@ -65,15 +62,19 @@ class WebDocumentSubresourceFilterImpl
 
   // blink::WebDocumentSubresourceFilter:
   LoadPolicy GetLoadPolicy(const blink::WebURL& resourceUrl,
-                           blink::WebURLRequest::RequestContext) override;
+                           blink::mojom::RequestContextType) override;
   LoadPolicy GetLoadPolicyForWebSocketConnect(
       const blink::WebURL& url) override;
   void ReportDisallowedLoad() override;
   bool ShouldLogToConsole() override;
-  bool GetIsAssociatedWithAdSubframe() const override;
+  void ReportAdRequestId(int request_id) override;
 
-  const ActivationState& activation_state() const {
+  const mojom::ActivationState& activation_state() const {
     return filter_.activation_state();
+  }
+
+  void set_ad_resource_tracker(AdResourceTracker* ad_resource_tracker) {
+    ad_resource_tracker_ = ad_resource_tracker;
   }
 
  private:
@@ -81,10 +82,14 @@ class WebDocumentSubresourceFilterImpl
       const blink::WebURL& url,
       url_pattern_index::proto::ElementType element_type);
 
-  ActivationState activation_state_;
+  mojom::ActivationState activation_state_;
   DocumentSubresourceFilter filter_;
   base::OnceClosure first_disallowed_load_callback_;
-  bool is_associated_with_ad_subframe_;
+
+  // Manages all AdResource observers. Only non-null for the
+  // WebDocumentSubresourceFilter most recently created by the
+  // SubresourceFilterAgent.
+  AdResourceTracker* ad_resource_tracker_;
 
   DISALLOW_COPY_AND_ASSIGN(WebDocumentSubresourceFilterImpl);
 };

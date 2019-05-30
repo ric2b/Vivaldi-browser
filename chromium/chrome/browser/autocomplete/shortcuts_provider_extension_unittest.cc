@@ -8,9 +8,10 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
+#include "base/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_provider_client.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
@@ -40,7 +41,7 @@ struct TestShortcutData shortcut_test_db[] = {
     {"BD85DBA2-8C29-49F9-84AE-48E1E90880F1", "echo echo", "echo echo",
      "chrome-extension://cedabbhfglmiikkmdgcpjdkocfcmbkee/?q=echo",
      "Run Echo command: echo", "0,0", "Echo", "0,4", ui::PAGE_TRANSITION_TYPED,
-     AutocompleteMatchType::EXTENSION_APP_DEPRECATED, "echo", 1, 1},
+     AutocompleteMatchType::EXTENSION_APP_DEPRECATED, "", 1, 1},
 };
 
 }  // namespace
@@ -67,14 +68,16 @@ ShortcutsProviderExtensionTest::ShortcutsProviderExtensionTest()
 
 void ShortcutsProviderExtensionTest::SetUp() {
   ShortcutsBackendFactory::GetInstance()->SetTestingFactoryAndUse(
-      &profile_, &ShortcutsBackendFactory::BuildProfileNoDatabaseForTesting);
+      &profile_,
+      base::BindRepeating(
+          &ShortcutsBackendFactory::BuildProfileNoDatabaseForTesting));
   backend_ = ShortcutsBackendFactory::GetForProfile(&profile_);
   ASSERT_TRUE(backend_.get());
   ASSERT_TRUE(profile_.CreateHistoryService(true, false));
   provider_ = new ShortcutsProvider(&client_);
   PopulateShortcutsBackendWithTestData(client_.GetShortcutsBackend(),
                                        shortcut_test_db,
-                                       arraysize(shortcut_test_db));
+                                       base::size(shortcut_test_db));
 }
 
 void ShortcutsProviderExtensionTest::TearDown() {

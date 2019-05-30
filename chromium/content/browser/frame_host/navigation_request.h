@@ -12,6 +12,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "base/strings/string_util.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/initiator_csp_context.h"
 #include "content/browser/loader/navigation_url_loader_delegate.h"
@@ -32,7 +33,6 @@ namespace content {
 
 class FrameNavigationEntry;
 class FrameTreeNode;
-class NavigationControllerImpl;
 class NavigationHandleImpl;
 class NavigationURLLoader;
 class NavigationData;
@@ -80,19 +80,19 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   };
 
   // Creates a request for a browser-intiated navigation.
+  // Note: this is sometimes called for renderer-initiated navigations going
+  // through the OpenURL path. |browser_initiated| should be false in that case.
+  // TODO(clamy): Rename this function and consider merging it with
+  // CreateRendererInitiated.
   static std::unique_ptr<NavigationRequest> CreateBrowserInitiated(
       FrameTreeNode* frame_tree_node,
-      const GURL& dest_url,
-      const Referrer& dest_referrer,
+      const CommonNavigationParams& common_params,
+      const CommitNavigationParams& commit_params,
+      bool browser_initiated,
+      const std::string& extra_headers,
       const FrameNavigationEntry& frame_entry,
-      const NavigationEntryImpl& entry,
-      FrameMsg_Navigate_Type::Value navigation_type,
-      PreviewsState previews_state,
-      bool is_same_document_history_load,
-      bool is_history_navigation_in_new_child,
+      NavigationEntryImpl* entry,
       const scoped_refptr<network::ResourceRequestBody>& post_body,
-      const base::TimeTicks& navigation_start,
-      NavigationControllerImpl* controller,
       std::unique_ptr<NavigationUIData> navigation_ui_data);
 
   // Creates a request for a renderer-intiated navigation.
@@ -109,7 +109,21 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
       int current_history_list_length,
       bool override_user_agent,
       scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
-      mojom::NavigationClientAssociatedPtrInfo navigation_client);
+      mojom::NavigationClientAssociatedPtrInfo navigation_client,
+      blink::mojom::NavigationInitiatorPtr navigation_initiator);
+
+  // Creates a request at commit time. This should only be used for
+  // renderer-initiated same-document navigations, and navigations whose
+  // original NavigationRequest has been destroyed by race-conditions.
+  // TODO(clamy): Eventually, this should only be called for same-document
+  // renderer-initiated navigations.
+  static std::unique_ptr<NavigationRequest> CreateForCommit(
+      FrameTreeNode* frame_tree_node,
+      RenderFrameHostImpl* render_frame_host,
+      NavigationEntryImpl* entry,
+      const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
+      bool is_renderer_initiated,
+      bool is_same_document);
 
   ~NavigationRequest() override;
 
@@ -123,9 +137,7 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
     return begin_params_.get();
   }
 
-  const RequestNavigationParams& request_params() const {
-    return request_params_;
-  }
+  const CommitNavigationParams& commit_params() const { return commit_params_; }
 
   // Updates the navigation start time.
   void set_navigation_start_time(const base::TimeTicks& time) {
@@ -146,11 +158,15 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
     return dest_site_instance_.get();
   }
 
-  RestoreType restore_type() const { return restore_type_; };
+  RestoreType restore_type() const { return restore_type_; }
 
-  bool is_view_source() const { return is_view_source_; };
+  bool is_view_source() const { return is_view_source_; }
 
-  int bindings() const { return bindings_; };
+  int bindings() const { return bindings_; }
+
+  SiteInstanceImpl* starting_site_instance() const {
+    return starting_site_instance_.get();
+  }
 
   bool browser_initiated() const { return browser_initiated_ ; }
 
@@ -163,7 +179,7 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
     associated_site_instance_type_ = type;
   }
 
-  void set_was_discarded() { request_params_.was_discarded = true; }
+  void set_was_discarded() { commit_params_.was_discarded = true; }
 
   NavigationHandleImpl* navigation_handle() const {
     return navigation_handle_.get();
@@ -171,19 +187,43 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
 
   int net_error() { return net_error_; }
 
+  const std::string& GetMimeType() {
+    return response_ ? response_->head.mime_type : base::EmptyString();
+  }
+
+  // The RenderFrameHost that will commit the navigation or an error page.
+  // This is computed when the response is received, or when the navigation
+  // fails and error page should be displayed.
+  RenderFrameHostImpl* render_frame_host() const { return render_frame_host_; }
+
+  const network::ResourceResponse* response() { return response_.get(); }
+  const GlobalRequestID& request_id() const { return request_id_; }
+  bool is_download() const { return is_download_; }
+  const base::Optional<net::SSLInfo>& ssl_info() { return ssl_info_; }
+
   void SetWaitingForRendererResponse();
 
   // Creates a NavigationHandle. This should be called after any previous
-  // NavigationRequest for the FrameTreeNode has been destroyed.
-  void CreateNavigationHandle();
-
-  // Returns ownership of the navigation handle.
-  std::unique_ptr<NavigationHandleImpl> TakeNavigationHandle();
+  // NavigationRequest for the FrameTreeNode has been destroyed. |is_for_commit|
+  // should only be true when creating a NavigationHandle at commit time (this
+  // happens for renderer-initiated same-document navigations).
+  void CreateNavigationHandle(bool is_for_commit);
 
   void set_on_start_checks_complete_closure_for_testing(
       const base::Closure& closure) {
     on_start_checks_complete_closure_ = closure;
   }
+
+  // Sets ID of the RenderProcessHost we expect the navigation to commit in.
+  // This is used to inform the RenderProcessHost to expect a navigation to the
+  // url we're navigating to.
+  void SetExpectedProcess(RenderProcessHost* expected_process);
+
+  // Updates the destination site URL for this navigation. This is called on
+  // redirects. |post_redirect_process| is the renderer process that should
+  // handle the navigation following the redirect if it can be handled by an
+  // existing RenderProcessHost. Otherwise, it should be null.
+  void UpdateSiteURL(RenderProcessHost* post_redirect_process);
 
   int nav_entry_id() const { return nav_entry_id_; }
 
@@ -209,22 +249,37 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   void RegisterSubresourceOverride(
       mojom::TransferrableURLLoaderPtr transferrable_loader);
 
-  // Returns the NavigationClient held by this navigation request that is ready
-  // to commit, or nullptr if there isn't any.
-  // Only used with PerNavigationMojoInterface enabled.
+  // Lazily initializes and returns the mojo::NavigationClient interface used
+  // for commit. Only used with PerNavigationMojoInterface enabled.
   mojom::NavigationClient* GetCommitNavigationClient();
+
+  void SetOriginPolicy(const std::string& policy);
+
+  void set_transition(ui::PageTransition transition) {
+    common_params_.transition = transition;
+  }
+
+  void set_has_user_gesture(bool has_user_gesture) {
+    common_params_.has_user_gesture = has_user_gesture;
+  }
+
+  // Ignores any interface disconnect that might happen to the
+  // navigation_client used to commit.
+  void IgnoreCommitInterfaceDisconnection();
 
  private:
   NavigationRequest(FrameTreeNode* frame_tree_node,
                     const CommonNavigationParams& common_params,
                     mojom::BeginNavigationParamsPtr begin_params,
-                    const RequestNavigationParams& request_params,
+                    const CommitNavigationParams& commit_params,
                     bool browser_initiated,
                     bool from_begin_navigation,
+                    bool is_for_commit,
                     const FrameNavigationEntry* frame_navigation_entry,
-                    const NavigationEntryImpl* navitation_entry,
+                    NavigationEntryImpl* navitation_entry,
                     std::unique_ptr<NavigationUIData> navigation_ui_data,
-                    mojom::NavigationClientAssociatedPtrInfo navigation_client);
+                    mojom::NavigationClientAssociatedPtrInfo navigation_client,
+                    blink::mojom::NavigationInitiatorPtr navigation_initiator);
 
   // NavigationURLLoaderDelegate implementation.
   void OnRequestRedirected(
@@ -236,8 +291,8 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
       std::unique_ptr<NavigationData> navigation_data,
       const GlobalRequestID& request_id,
       bool is_download,
+      NavigationDownloadPolicy download_policy,
       bool is_stream,
-      PreviewsState previews_state,
       base::Optional<SubresourceLoaderParams> subresource_loader_params)
       override;
   void OnRequestFailed(
@@ -264,16 +319,14 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   // NavigationHandle.
   void OnStartChecksComplete(NavigationThrottle::ThrottleCheckResult result);
   void OnRedirectChecksComplete(NavigationThrottle::ThrottleCheckResult result);
-  void OnFailureChecksComplete(RenderFrameHostImpl* render_frame_host,
-                               NavigationThrottle::ThrottleCheckResult result);
+  void OnFailureChecksComplete(NavigationThrottle::ThrottleCheckResult result);
   void OnWillProcessResponseChecksComplete(
       NavigationThrottle::ThrottleCheckResult result);
 
   // Called either by OnFailureChecksComplete() or OnRequestFailed() directly.
   // |error_page_content| contains the content of the error page (i.e. flattened
   // HTML, JS, CSS).
-  void CommitErrorPage(RenderFrameHostImpl* render_frame_host,
-                       const base::Optional<std::string>& error_page_content);
+  void CommitErrorPage(const base::Optional<std::string>& error_page_content);
 
   // Have a RenderFrameHost commit the navigation. The NavigationRequest will
   // be destroyed after this call.
@@ -284,7 +337,7 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   // and navigate-to checks.
   bool IsAllowedByCSPDirective(CSPContext* context,
                                CSPDirective::Name directive,
-                               bool is_redirect,
+                               bool has_followed_redirect,
                                bool url_upgraded_after_redirect,
                                bool is_response_check,
                                CSPContext::CheckCSPDisposition disposition);
@@ -294,7 +347,7 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   // Returns net::OK if the checks pass, and net::ERR_ABORTED or
   // net::ERR_BLOCKED_BY_CLIENT depending on which checks fail.
   net::Error CheckCSPDirectives(RenderFrameHostImpl* parent,
-                                bool is_redirect,
+                                bool has_followed_redirect,
                                 bool url_upgraded_after_redirect,
                                 bool is_response_check,
                                 CSPContext::CheckCSPDisposition disposition);
@@ -305,7 +358,7 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   //   a report will be sent.
   // - The navigation request may be upgraded from HTTP to HTTPS if a CSP is
   //   configured to upgrade insecure requests.
-  net::Error CheckContentSecurityPolicy(bool is_redirect,
+  net::Error CheckContentSecurityPolicy(bool has_followed_redirect,
                                         bool url_upgraded_after_redirect,
                                         bool is_response_check);
 
@@ -334,22 +387,33 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
       const;
 
   // Called before a commit. Updates the history index and length held in
-  // RequestNavigationParams. This is used to update this shared state with the
+  // CommitNavigationParams. This is used to update this shared state with the
   // renderer process.
-  void UpdateRequestNavigationParamsHistory();
+  void UpdateCommitNavigationParamsHistory();
 
   // Called when an ongoing renderer-initiated navigation is aborted.
   // Only used with PerNavigationMojoInterface enabled.
   void OnRendererAbortedNavigation();
 
-  // When called, this NavigationRequest will no longer interpret the pipe
+  // Binds the given error_handler to be called when an interface disconnection
+  // happens on the renderer side.
+  // Only used with PerNavigationMojoInterface enabled.
+  void HandleInterfaceDisconnection(mojom::NavigationClientAssociatedPtr*,
+                                    base::OnceClosure error_handler);
+
+  // When called, this NavigationRequest will no longer interpret the interface
   // disconnection on the renderer side as an AbortNavigation.
   // TODO(ahemery): remove this function when NavigationRequest properly handles
-  // pipe disconnection in all cases. Only used with PerNavigationMojoInterface
-  // enabled.
-  void IgnorePipeDisconnection();
+  // interface disconnection in all cases.
+  // Only used with PerNavigationMojoInterface enabled.
+  void IgnoreInterfaceDisconnection();
+
+  // Inform the RenderProcessHost to no longer expect a navigation.
+  void ResetExpectedProcess();
 
   FrameTreeNode* frame_tree_node_;
+
+  RenderFrameHostImpl* render_frame_host_ = nullptr;
 
   // Initialized on creation of the NavigationRequest. Sent to the renderer when
   // the navigation is ready to commit.
@@ -358,11 +422,11 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   // redirects.
   // Note: |common_params_| and |begin_params_| are not const as they can be
   // modified during redirects.
-  // Note: |request_params_| is not const because service_worker_provider_id
+  // Note: |commit_params_| is not const because service_worker_provider_id
   // and should_create_service_worker will be set in OnResponseStarted.
   CommonNavigationParams common_params_;
   mojom::BeginNavigationParamsPtr begin_params_;
-  RequestNavigationParams request_params_;
+  CommitNavigationParams commit_params_;
   const bool browser_initiated_;
 
   // Stores the NavigationUIData for this navigation until the NavigationHandle
@@ -393,6 +457,8 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   int bindings_;
   int nav_entry_id_ = 0;
 
+  scoped_refptr<SiteInstanceImpl> starting_site_instance_;
+
   // Whether the navigation should be sent to a renderer a process. This is
   // true, except for 204/205 responses and downloads.
   bool response_should_be_rendered_;
@@ -417,13 +483,22 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   // completed, these objects will be used to continue the navigation.
   scoped_refptr<network::ResourceResponse> response_;
   network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints_;
-  net::SSLInfo ssl_info_;
-  bool is_download_;
+  base::Optional<net::SSLInfo> ssl_info_;
+  bool is_download_ = false;
+  bool is_stream_ = false;
+  GlobalRequestID request_id_;
 
   // Holds information for the navigation while the WillFailRequest
   // checks are performed by the NavigationHandle.
   bool has_stale_copy_in_cache_;
   int net_error_;
+
+  // Identifies in which RenderProcessHost this navigation is expected to
+  // commit.
+  int expected_render_process_host_id_;
+
+  // The site URL of this navigation, as obtained from SiteInstance::GetSiteURL.
+  GURL site_url_;
 
   std::unique_ptr<InitiatorCSPContext> initiator_csp_context_;
 

@@ -37,6 +37,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/single_thread_task_runner.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
+#include "services/network/public/mojom/data_pipe_getter.mojom-blink.h"
 #include "third_party/blink/public/mojom/blob/blob_registry.mojom-blink.h"
 #include "third_party/blink/public/platform/file_path_conversion.h"
 #include "third_party/blink/public/platform/interface_provider.h"
@@ -46,10 +47,9 @@
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
-#include "third_party/blink/renderer/platform/text/line_ending.h"
 #include "third_party/blink/renderer/platform/uuid.h"
-#include "third_party/blink/renderer/platform/web_task_runner.h"
 #include "third_party/blink/renderer/platform/wtf/text/cstring.h"
+#include "third_party/blink/renderer/platform/wtf/text/line_ending.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_encoding.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -215,8 +215,7 @@ void BlobData::AppendText(const String& text,
                           bool do_normalize_line_endings_to_native) {
   DCHECK_EQ(file_composition_, FileCompositionStatus::NO_UNKNOWN_SIZE_FILES)
       << "Blobs with a unknown-size file cannot have other items.";
-  CString utf8_text =
-      UTF8Encoding().Encode(text, WTF::kEntitiesForUnencodables);
+  CString utf8_text = UTF8Encoding().Encode(text, WTF::kNoUnencodables);
 
   if (do_normalize_line_endings_to_native) {
     if (utf8_text.length() >
@@ -267,7 +266,7 @@ void BlobData::AppendDataInternal(base::span<const char> data,
   DCHECK_EQ(file_composition_, FileCompositionStatus::NO_UNKNOWN_SIZE_FILES)
       << "Blobs with a unknown-size file cannot have other items.";
   // Skip zero-byte items, as they don't matter for the contents of the blob.
-  if (data.size() == 0)
+  if (data.empty())
     return;
   bool should_embed_bytes = current_memory_population_ + data.size() <=
                             DataElementBytes::kMaximumEmbeddedDataSize;

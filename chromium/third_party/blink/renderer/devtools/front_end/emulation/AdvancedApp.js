@@ -62,10 +62,8 @@ Emulation.AdvancedApp = class {
     if (this._toolboxWindow)
       return;
 
-    // NOTE(pettern@vivaldi.com): Causes a crash when undocking due to guest
-    // view hosting not dealing with the toolbox webcontents.
-//    const url = window.location.href.replace('devtools_app.html', 'toolbox.html');
-//    this._toolboxWindow = window.open(url, undefined);
+    const url = window.location.href.replace('devtools_app.html', 'toolbox.html');
+    this._toolboxWindow = window.open(url, undefined);
   }
 
   /**

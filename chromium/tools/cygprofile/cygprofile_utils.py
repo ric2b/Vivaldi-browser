@@ -9,6 +9,10 @@ import logging
 import os
 import re
 
+
+START_OF_TEXT_SYMBOL = 'linker_script_start_of_text'
+
+
 class WarningCollector(object):
   """Collects warnings, but limits the number printed to a set value."""
   def __init__(self, max_warnings, level=logging.WARNING):
@@ -28,18 +32,6 @@ class WarningCollector(object):
     if self._warnings > self._max_warnings:
       logging.log(self._level, '%d more warnings for: %s' % (
           self._warnings - self._max_warnings, message))
-
-
-def DetectArchitecture(default='arm'):
-  """Detects the architecture by looking for target_arch in GYP_DEFINES.
-  If not not found, returns default.
-  """
-  gyp_defines = os.environ.get('GYP_DEFINES', '')
-  match = re.match('target_arch=(\S+)', gyp_defines)
-  if match and len(match.groups()) == 1:
-    return match.group(1)
-  else:
-    return default
 
 
 def InvertMapping(x_to_ys):

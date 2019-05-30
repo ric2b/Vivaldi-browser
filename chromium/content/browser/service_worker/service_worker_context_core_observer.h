@@ -20,6 +20,8 @@ namespace content {
 
 enum class EmbeddedWorkerStatus;
 
+struct ConsoleMessage;
+
 class ServiceWorkerContextCoreObserver {
  public:
   struct ErrorInfo {
@@ -41,25 +43,8 @@ class ServiceWorkerContextCoreObserver {
     const int column_number;
     const GURL source_url;
   };
-  struct ConsoleMessage {
-    ConsoleMessage(int source_identifier,
-                   int message_level,
-                   const base::string16& message,
-                   int line_number,
-                   const GURL& source_url)
-        : source_identifier(source_identifier),
-          message_level(message_level),
-          message(message),
-          line_number(line_number),
-          source_url(source_url) {}
-    const int source_identifier;
-    const int message_level;
-    const base::string16 message;
-    const int line_number;
-    const GURL source_url;
-  };
   virtual void OnNewLiveRegistration(int64_t registration_id,
-                                     const GURL& pattern) {}
+                                     const GURL& scope) {}
   virtual void OnNewLiveVersion(const ServiceWorkerVersionInfo& version_info) {}
   virtual void OnRunningStateChanged(int64_t version_id,
                                      EmbeddedWorkerStatus running_status) {}
@@ -90,16 +75,16 @@ class ServiceWorkerContextCoreObserver {
   // storage. The implementation cannot assume that the ServiceWorkerContextCore
   // will find the registration at this point.
   virtual void OnRegistrationCompleted(int64_t registration_id,
-                                       const GURL& pattern) {}
+                                       const GURL& scope) {}
   // Called after a service worker registration is persisted to storage.
   //
   // This happens after OnRegistrationCompleted(). The implementation can assume
   // that ServiceWorkerContextCore will find the registration, and can safely
   // add user data to the registration.
   virtual void OnRegistrationStored(int64_t registration_id,
-                                    const GURL& pattern) {}
+                                    const GURL& scope) {}
   virtual void OnRegistrationDeleted(int64_t registration_id,
-                                     const GURL& pattern) {}
+                                     const GURL& scope) {}
 
   // Notified when the storage corruption recovery is completed and all stored
   // data is wiped out.

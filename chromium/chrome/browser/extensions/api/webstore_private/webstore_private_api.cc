@@ -26,13 +26,12 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/app_list/app_list_util.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "components/crx_file/id_util.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/gpu_feature_checker.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
@@ -42,6 +41,7 @@
 #include "extensions/common/extension.h"
 #include "net/base/load_flags.h"
 #include "net/url_request/url_request.h"
+#include "services/identity/public/cpp/identity_manager.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
@@ -67,7 +67,6 @@ namespace IsPendingCustodianApproval =
 namespace IsInIncognitoMode = api::webstore_private::IsInIncognitoMode;
 namespace LaunchEphemeralApp = api::webstore_private::LaunchEphemeralApp;
 namespace SetStoreLogin = api::webstore_private::SetStoreLogin;
-namespace GetReferrerChain = api::webstore_private::GetReferrerChain;
 
 namespace {
 
@@ -102,8 +101,7 @@ void PendingApprovals::PushApproval(
 std::unique_ptr<WebstoreInstaller::Approval> PendingApprovals::PopApproval(
     Profile* profile,
     const std::string& id) {
-  for (ApprovalList::iterator iter = approvals_.begin();
-       iter != approvals_.end(); ++iter) {
+  for (auto iter = approvals_.begin(); iter != approvals_.end(); ++iter) {
     if (iter->get()->extension_id == id &&
         profile->IsSameProfile(iter->get()->profile)) {
       std::unique_ptr<WebstoreInstaller::Approval> approval = std::move(*iter);
@@ -254,10 +252,10 @@ WebstorePrivateBeginInstallWithManifest3Function::Run() {
 void WebstorePrivateBeginInstallWithManifest3Function::OnWebstoreParseSuccess(
     const std::string& id,
     const SkBitmap& icon,
-    base::DictionaryValue* parsed_manifest) {
+    std::unique_ptr<base::DictionaryValue> parsed_manifest) {
   CHECK_EQ(details().id, id);
   CHECK(parsed_manifest);
-  parsed_manifest_.reset(parsed_manifest);
+  parsed_manifest_ = std::move(parsed_manifest);
   icon_ = icon;
 
   std::string localized_name =
@@ -282,8 +280,9 @@ void WebstorePrivateBeginInstallWithManifest3Function::OnWebstoreParseSuccess(
   // Check the management policy before the installation process begins.
   Profile* profile = chrome_details_.GetProfile();
   base::string16 policy_error;
-  bool allow = ExtensionSystem::Get(profile)->
-      management_policy()->UserMayLoad(dummy_extension_.get(), &policy_error);
+  bool allow =
+      ExtensionSystem::Get(profile)->management_policy()->UserMayInstall(
+          dummy_extension_.get(), &policy_error);
   if (!allow) {
     bool blocked_for_child = false;
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
@@ -526,9 +525,9 @@ WebstorePrivateGetBrowserLoginFunction::
 ExtensionFunction::ResponseAction
 WebstorePrivateGetBrowserLoginFunction::Run() {
   GetBrowserLogin::Results::Info info;
-  info.login = SigninManagerFactory::GetForProfile(
+  info.login = IdentityManagerFactory::GetForProfile(
                    chrome_details_.GetProfile()->GetOriginalProfile())
-                   ->GetAuthenticatedAccountInfo()
+                   ->GetPrimaryAccountInfo()
                    .email;
   return RespondNow(ArgumentList(GetBrowserLogin::Results::Create(info)));
 }
@@ -684,12 +683,14 @@ ExtensionFunction::ResponseAction
 WebstorePrivateGetReferrerChainFunction::Run() {
   Profile* profile = chrome_details_.GetProfile();
   if (!SafeBrowsingNavigationObserverManager::IsEnabledAndReady(profile))
-    return RespondNow(ArgumentList(GetReferrerChain::Results::Create("")));
+    return RespondNow(ArgumentList(
+        api::webstore_private::GetReferrerChain::Results::Create("")));
 
   content::WebContents* web_contents = GetSenderWebContents();
   if (!web_contents) {
-    return RespondNow(ErrorWithArguments(GetReferrerChain::Results::Create(""),
-                                         kWebstoreUserCancelledError));
+    return RespondNow(ErrorWithArguments(
+        api::webstore_private::GetReferrerChain::Results::Create(""),
+        kWebstoreUserCancelledError));
   }
 
   scoped_refptr<SafeBrowsingNavigationObserverManager>
@@ -722,8 +723,9 @@ WebstorePrivateGetReferrerChainFunction::Run() {
   // Base64 encode the proto to avoid issues with base::Value rejecting strings
   // which are not valid UTF8.
   base::Base64Encode(serialized_referrer_proto, &serialized_referrer_proto);
-  return RespondNow(ArgumentList(
-      GetReferrerChain::Results::Create(serialized_referrer_proto)));
+  return RespondNow(
+      ArgumentList(api::webstore_private::GetReferrerChain::Results::Create(
+          serialized_referrer_proto)));
 }
 
 }  // namespace extensions

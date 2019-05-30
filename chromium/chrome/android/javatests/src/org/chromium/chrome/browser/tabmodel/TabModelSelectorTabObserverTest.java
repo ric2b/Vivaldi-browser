@@ -17,9 +17,9 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ObserverList;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabBuilder;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tab.TabTestUtils;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.content_public.browser.LoadUrlParams;
 
 /**
@@ -42,7 +42,7 @@ public class TabModelSelectorTabObserverTest {
                 new TestTabModelSelectorTabObserver(mTestRule.getSelector());
         Tab tab = createTestTab(false);
         assertTabDoesNotHaveObserver(tab, observer);
-        mTestRule.getNormalTabModel().addTab(tab, 0, TabModel.TabLaunchType.FROM_LINK);
+        mTestRule.getNormalTabModel().addTab(tab, 0, TabLaunchType.FROM_LINK);
         assertTabHasObserver(tab, observer);
     }
 
@@ -53,7 +53,7 @@ public class TabModelSelectorTabObserverTest {
         TestTabModelSelectorTabObserver observer =
                 new TestTabModelSelectorTabObserver(mTestRule.getSelector());
         Tab tab = createTestTab(false);
-        mTestRule.getNormalTabModel().addTab(tab, 0, TabModel.TabLaunchType.FROM_LINK);
+        mTestRule.getNormalTabModel().addTab(tab, 0, TabLaunchType.FROM_LINK);
         assertTabHasObserver(tab, observer);
         mTestRule.getNormalTabModel().closeTab(tab);
         assertTabDoesNotHaveObserver(tab, observer);
@@ -66,7 +66,7 @@ public class TabModelSelectorTabObserverTest {
         TestTabModelSelectorTabObserver observer =
                 new TestTabModelSelectorTabObserver(mTestRule.getSelector());
         Tab tab = createTestTab(false);
-        mTestRule.getNormalTabModel().addTab(tab, 0, TabModel.TabLaunchType.FROM_LINK);
+        mTestRule.getNormalTabModel().addTab(tab, 0, TabLaunchType.FROM_LINK);
         assertTabHasObserver(tab, observer);
         mTestRule.getNormalTabModel().removeTab(tab);
         assertTabDoesNotHaveObserver(tab, observer);
@@ -77,14 +77,14 @@ public class TabModelSelectorTabObserverTest {
     @SmallTest
     public void testPreExistingTabs() {
         Tab normalTab1 = createTestTab(false);
-        mTestRule.getNormalTabModel().addTab(normalTab1, 0, TabModel.TabLaunchType.FROM_LINK);
+        mTestRule.getNormalTabModel().addTab(normalTab1, 0, TabLaunchType.FROM_LINK);
         Tab normalTab2 = createTestTab(false);
-        mTestRule.getNormalTabModel().addTab(normalTab2, 1, TabModel.TabLaunchType.FROM_LINK);
+        mTestRule.getNormalTabModel().addTab(normalTab2, 1, TabLaunchType.FROM_LINK);
 
         Tab incognitoTab1 = createTestTab(true);
-        mTestRule.getIncognitoTabModel().addTab(incognitoTab1, 0, TabModel.TabLaunchType.FROM_LINK);
+        mTestRule.getIncognitoTabModel().addTab(incognitoTab1, 0, TabLaunchType.FROM_LINK);
         Tab incognitoTab2 = createTestTab(true);
-        mTestRule.getIncognitoTabModel().addTab(incognitoTab2, 1, TabModel.TabLaunchType.FROM_LINK);
+        mTestRule.getIncognitoTabModel().addTab(incognitoTab2, 1, TabLaunchType.FROM_LINK);
 
         TestTabModelSelectorTabObserver observer =
                 new TestTabModelSelectorTabObserver(mTestRule.getSelector());
@@ -99,9 +99,9 @@ public class TabModelSelectorTabObserverTest {
     @SmallTest
     public void testDestroyRemovesObserver() {
         Tab normalTab1 = createTestTab(false);
-        mTestRule.getNormalTabModel().addTab(normalTab1, 0, TabModel.TabLaunchType.FROM_LINK);
+        mTestRule.getNormalTabModel().addTab(normalTab1, 0, TabLaunchType.FROM_LINK);
         Tab incognitoTab1 = createTestTab(true);
-        mTestRule.getIncognitoTabModel().addTab(incognitoTab1, 0, TabModel.TabLaunchType.FROM_LINK);
+        mTestRule.getIncognitoTabModel().addTab(incognitoTab1, 0, TabLaunchType.FROM_LINK);
 
         TestTabModelSelectorTabObserver observer =
                 new TestTabModelSelectorTabObserver(mTestRule.getSelector());
@@ -129,16 +129,19 @@ public class TabModelSelectorTabObserverTest {
         selector.initialize(false, mTestRule.getNormalTabModel(), mTestRule.getIncognitoTabModel());
 
         Tab normalTab1 = createTestTab(false);
-        mTestRule.getNormalTabModel().addTab(normalTab1, 0, TabModel.TabLaunchType.FROM_LINK);
+        mTestRule.getNormalTabModel().addTab(normalTab1, 0, TabLaunchType.FROM_LINK);
         assertTabHasObserver(normalTab1, observer);
 
         Tab incognitoTab1 = createTestTab(true);
-        mTestRule.getIncognitoTabModel().addTab(incognitoTab1, 0, TabModel.TabLaunchType.FROM_LINK);
+        mTestRule.getIncognitoTabModel().addTab(incognitoTab1, 0, TabLaunchType.FROM_LINK);
         assertTabHasObserver(incognitoTab1, observer);
     }
 
     private Tab createTestTab(boolean incognito) {
-        Tab testTab = new Tab(Tab.INVALID_TAB_ID, incognito, mTestRule.getWindowAndroid());
+        Tab testTab = new TabBuilder()
+                              .setIncognito(incognito)
+                              .setWindow(mTestRule.getWindowAndroid())
+                              .build();
         testTab.initializeNative();
         return testTab;
     }

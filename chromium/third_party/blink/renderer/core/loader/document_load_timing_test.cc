@@ -19,7 +19,8 @@ TEST_F(DocumentLoadTimingTest, ensureValidNavigationStartAfterEmbedder) {
 
   double delta = -1000;
   double embedder_navigation_start = CurrentTimeTicksInSeconds() + delta;
-  timing.SetNavigationStart(TimeTicksFromSeconds(embedder_navigation_start));
+  timing.SetNavigationStart(base::TimeTicks() + base::TimeDelta::FromSecondsD(
+                                                    embedder_navigation_start));
 
   double real_wall_time = CurrentTime();
   TimeDelta adjusted_wall_time =
@@ -37,7 +38,8 @@ TEST_F(DocumentLoadTimingTest, correctTimingDeltas) {
   double embedder_navigation_start =
       current_monotonic_time + navigation_start_delta;
 
-  timing.SetNavigationStart(TimeTicksFromSeconds(embedder_navigation_start));
+  timing.SetNavigationStart(base::TimeTicks() + base::TimeDelta::FromSecondsD(
+                                                    embedder_navigation_start));
 
   // Super quick load! Expect the wall time reported by this event to be
   // dominated by the navigationStartDelta, but similar to currentTime().
@@ -56,4 +58,40 @@ TEST_F(DocumentLoadTimingTest, correctTimingDeltas) {
       -navigation_start_delta, .001);
 }
 
+TEST_F(DocumentLoadTimingTest, ensureRedirectEndExcludesNextFetch) {
+  // Regression test for https://crbug.com/823254.
+
+  std::unique_ptr<DummyPageHolder> dummy_page = DummyPageHolder::Create();
+  DocumentLoadTiming timing(*(dummy_page->GetDocument().Loader()));
+
+  base::TimeTicks origin;
+  auto t1 = base::TimeDelta::FromSeconds(5);
+  auto t2 = base::TimeDelta::FromSeconds(10);
+
+  // Start a navigation to |url_that_redirects|.
+  timing.SetNavigationStart(origin);
+
+  // Simulate a redirect taking |t1| seconds.
+  timing.SetRedirectStart(origin);
+  origin += t1;
+  timing.SetRedirectEnd(origin);
+
+  // Start fetching |url_that_loads|.
+  timing.SetFetchStart(origin);
+
+  // Track the redirection.
+  KURL url_that_redirects("some_url");
+  KURL url_that_loads("some_other_url");
+  timing.AddRedirect(url_that_redirects, url_that_loads);
+
+  // Simulate |t2| seconds elapsing between fetchStart and responseEnd.
+  origin += t2;
+  timing.SetResponseEnd(origin);
+
+  // The bug was causing |redirectEnd| - |redirectStart| ~= |t1| + |t2| when it
+  // should be just |t1|.
+  double redirect_time_ms =
+      (timing.RedirectEnd() - timing.RedirectStart()).InMillisecondsF();
+  EXPECT_NEAR(redirect_time_ms, t1.InMillisecondsF(), 1.0);
+}
 }  // namespace blink

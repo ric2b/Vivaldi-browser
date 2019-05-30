@@ -6,10 +6,11 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/run_loop.h"
 #include "content/browser/browser_main_loop.h"
-#include "content/common/gpu_stream_constants.h"
+#include "content/public/common/gpu_stream_constants.h"
 #include "gpu/command_buffer/client/shared_memory_limits.h"
 #include "gpu/command_buffer/common/context_creation_attribs.h"
 #include "gpu/ipc/client/gpu_channel_host.h"

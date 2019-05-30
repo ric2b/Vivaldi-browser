@@ -5,10 +5,12 @@
 #include "content/browser/devtools/protocol/service_worker_handler.h"
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/containers/flat_set.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "content/browser/background_sync/background_sync_context.h"
+#include "base/task/post_task.h"
+#include "content/browser/background_sync/background_sync_context_impl.h"
 #include "content/browser/background_sync/background_sync_manager.h"
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 #include "content/browser/devtools/service_worker_devtools_manager.h"
@@ -22,6 +24,7 @@
 #include "content/browser/storage_partition_impl_map.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -89,8 +92,8 @@ void GetDevToolsRouteInfoOnIO(
     const base::Callback<void(int, int)>& callback) {
   if (content::ServiceWorkerVersion* version =
           context->GetLiveVersion(version_id)) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(
             callback, version->embedded_worker()->process_id(),
             version->embedded_worker()->worker_devtools_agent_route_id()));
@@ -110,7 +113,7 @@ Response CreateInvalidVersionIdErrorResponse() {
 }
 
 void DidFindRegistrationForDispatchSyncEventOnIO(
-    scoped_refptr<BackgroundSyncContext> sync_context,
+    scoped_refptr<BackgroundSyncContextImpl> sync_context,
     const std::string& tag,
     bool last_chance,
     blink::ServiceWorkerStatusCode status,
@@ -131,12 +134,13 @@ void DidFindRegistrationForDispatchSyncEventOnIO(
                      std::move(registration)));
 }
 
-void DispatchSyncEventOnIO(scoped_refptr<ServiceWorkerContextWrapper> context,
-                           scoped_refptr<BackgroundSyncContext> sync_context,
-                           const GURL& origin,
-                           int64_t registration_id,
-                           const std::string& tag,
-                           bool last_chance) {
+void DispatchSyncEventOnIO(
+    scoped_refptr<ServiceWorkerContextWrapper> context,
+    scoped_refptr<BackgroundSyncContextImpl> sync_context,
+    const GURL& origin,
+    int64_t registration_id,
+    const std::string& tag,
+    bool last_chance) {
   context->FindReadyRegistrationForId(
       registration_id, origin,
       base::BindOnce(&DidFindRegistrationForDispatchSyncEventOnIO, sync_context,
@@ -173,6 +177,7 @@ void ServiceWorkerHandler::SetRenderer(int process_host_id,
   storage_partition_ =
       static_cast<StoragePartitionImpl*>(process_host->GetStoragePartition());
   DCHECK(storage_partition_);
+  browser_context_ = process_host->GetBrowserContext();
   context_ = static_cast<ServiceWorkerContextWrapper*>(
       storage_partition_->GetServiceWorkerContext());
 }
@@ -243,8 +248,9 @@ Response ServiceWorkerHandler::StopWorker(const std::string& version_id) {
   int64_t id = 0;
   if (!base::StringToInt64(version_id, &id))
     return CreateInvalidVersionIdErrorResponse();
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::BindOnce(&StopServiceWorkerOnIO, context_, id));
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
+      base::BindOnce(&StopServiceWorkerOnIO, context_, id));
   return Response::OK();
 }
 
@@ -281,8 +287,8 @@ Response ServiceWorkerHandler::InspectWorker(const std::string& version_id) {
   int64_t id = blink::mojom::kInvalidServiceWorkerVersionId;
   if (!base::StringToInt64(version_id, &id))
     return CreateInvalidVersionIdErrorResponse();
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
       base::BindOnce(&GetDevToolsRouteInfoOnIO, context_, id,
                      base::Bind(&ServiceWorkerHandler::OpenNewDevToolsWindow,
                                 weak_factory_.GetWeakPtr())));
@@ -331,13 +337,13 @@ Response ServiceWorkerHandler::DispatchSyncEvent(
   if (!base::StringToInt64(registration_id, &id))
     return CreateInvalidVersionIdErrorResponse();
 
-  BackgroundSyncContext* sync_context =
+  BackgroundSyncContextImpl* sync_context =
       storage_partition_->GetBackgroundSyncContext();
 
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::BindOnce(&DispatchSyncEventOnIO, context_,
-                                         base::WrapRefCounted(sync_context),
-                                         GURL(origin), id, tag, last_chance));
+  base::PostTaskWithTraits(FROM_HERE, {BrowserThread::IO},
+                           base::BindOnce(&DispatchSyncEventOnIO, context_,
+                                          base::WrapRefCounted(sync_context),
+                                          GURL(origin), id, tag, last_chance));
   return Response::OK();
 }
 
@@ -358,12 +364,12 @@ void ServiceWorkerHandler::OnWorkerRegistrationUpdated(
       protocol::Array<Registration>::create();
   for (const auto& registration : registrations) {
     result->addItem(Registration::Create()
-        .SetRegistrationId(
-            base::Int64ToString(registration.registration_id))
-        .SetScopeURL(registration.pattern.spec())
-        .SetIsDeleted(registration.delete_flag ==
-                      ServiceWorkerRegistrationInfo::IS_DELETED)
-        .Build());
+                        .SetRegistrationId(
+                            base::NumberToString(registration.registration_id))
+                        .SetScopeURL(registration.scope.spec())
+                        .SetIsDeleted(registration.delete_flag ==
+                                      ServiceWorkerRegistrationInfo::IS_DELETED)
+                        .Build());
   }
   frontend_->WorkerRegistrationUpdated(std::move(result));
 }
@@ -399,20 +405,18 @@ void ServiceWorkerHandler::OnWorkerVersionUpdated(
     for (auto& c : client_set)
       clients->addItem(c);
 
-    std::unique_ptr<Version> version_value = Version::Create()
-        .SetVersionId(base::Int64ToString(version.version_id))
-        .SetRegistrationId(
-            base::Int64ToString(version.registration_id))
-        .SetScriptURL(version.script_url.spec())
-        .SetRunningStatus(
-            GetVersionRunningStatusString(version.running_status))
-        .SetStatus(GetVersionStatusString(version.status))
-        .SetScriptLastModified(
-            version.script_last_modified.ToDoubleT())
-        .SetScriptResponseTime(
-            version.script_response_time.ToDoubleT())
-        .SetControlledClients(std::move(clients))
-        .Build();
+    std::unique_ptr<Version> version_value =
+        Version::Create()
+            .SetVersionId(base::NumberToString(version.version_id))
+            .SetRegistrationId(base::NumberToString(version.registration_id))
+            .SetScriptURL(version.script_url.spec())
+            .SetRunningStatus(
+                GetVersionRunningStatusString(version.running_status))
+            .SetStatus(GetVersionStatusString(version.status))
+            .SetScriptLastModified(version.script_last_modified.ToDoubleT())
+            .SetScriptResponseTime(version.script_response_time.ToDoubleT())
+            .SetControlledClients(std::move(clients))
+            .Build();
     scoped_refptr<DevToolsAgentHostImpl> host(
         ServiceWorkerDevToolsManager::GetInstance()
             ->GetDevToolsAgentHostForWorker(
@@ -432,8 +436,8 @@ void ServiceWorkerHandler::OnErrorReported(
   frontend_->WorkerErrorReported(
       ServiceWorker::ServiceWorkerErrorMessage::Create()
           .SetErrorMessage(base::UTF16ToUTF8(info.error_message))
-          .SetRegistrationId(base::Int64ToString(registration_id))
-          .SetVersionId(base::Int64ToString(version_id))
+          .SetRegistrationId(base::NumberToString(registration_id))
+          .SetVersionId(base::NumberToString(version_id))
           .SetSourceURL(info.source_url.spec())
           .SetLineNumber(info.line_number)
           .SetColumnNumber(info.column_number)

@@ -6,10 +6,12 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/process_resource_usage.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -19,6 +21,7 @@
 #include "chrome/grit/theme_resources.h"
 #include "components/nacl/common/nacl_process_type.h"
 #include "content/public/browser/browser_child_process_host.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/common/child_process_host.h"
@@ -130,11 +133,10 @@ void ConnectResourceReporterOnIOThread(
 ProcessResourceUsage* CreateProcessResourcesSampler(
     int unique_child_process_id) {
   content::mojom::ResourceUsageReporterPtr usage_reporter;
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&ConnectResourceReporterOnIOThread,
-                     unique_child_process_id,
-                     mojo::MakeRequest(&usage_reporter)));
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::IO},
+                           base::BindOnce(&ConnectResourceReporterOnIOThread,
+                                          unique_child_process_id,
+                                          mojo::MakeRequest(&usage_reporter)));
   return new ProcessResourceUsage(std::move(usage_reporter));
 }
 
@@ -158,7 +160,7 @@ ChildProcessTask::ChildProcessTask(const content::ChildProcessData& data)
     : Task(GetLocalizedTitle(data.name, data.process_type),
            base::UTF16ToUTF8(data.name),
            FetchIcon(IDR_PLUGINS_FAVICON, &s_icon_),
-           data.GetHandle()),
+           data.GetProcess().Handle()),
       process_resources_sampler_(CreateProcessResourcesSampler(data.id)),
       v8_memory_allocated_(-1),
       v8_memory_used_(-1),

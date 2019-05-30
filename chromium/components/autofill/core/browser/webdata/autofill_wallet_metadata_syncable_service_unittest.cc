@@ -19,6 +19,7 @@
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_backend.h"
+#include "components/autofill/core/browser/webdata/mock_autofill_webdata_backend.h"
 #include "components/sync/model/sync_change.h"
 #include "components/sync/model/sync_change_processor_wrapper_for_test.h"
 #include "components/sync/model/sync_error_factory_mock.h"
@@ -145,35 +146,21 @@ class MockService : public AutofillWalletMetadataSyncableService {
   DISALLOW_COPY_AND_ASSIGN(MockService);
 };
 
-class NoOpWebData : public AutofillWebDataBackend {
- public:
-  NoOpWebData() {}
-  ~NoOpWebData() override {}
-
- private:
-  // AutofillWebDataBackend implementation.
-  WebDatabase* GetDatabase() override { return nullptr; }
-  void AddObserver(
-      AutofillWebDataServiceObserverOnDBSequence* observer) override {}
-  void RemoveObserver(
-      AutofillWebDataServiceObserverOnDBSequence* observer) override {}
-  void RemoveExpiredFormElements() override {}
-  void NotifyOfMultipleAutofillChanges() override {}
-  void NotifyThatSyncHasStarted(syncer::ModelType /* model_type */) override {}
-
-  DISALLOW_COPY_AND_ASSIGN(NoOpWebData);
-};
-
 class AutofillWalletMetadataSyncableServiceTest : public Test {
  public:
   AutofillWalletMetadataSyncableServiceTest()
-      : local_(&no_op_web_data_), remote_(&no_op_web_data_) {}
+      : local_(&backend_), remote_(&backend_) {}
   ~AutofillWalletMetadataSyncableServiceTest() override {}
 
-  // Outlives local_ and remote_.
-  NoOpWebData no_op_web_data_;
+  void SetUp() {
+    local_.OnWalletDataTrackingStateChanged(true);
+    remote_.OnWalletDataTrackingStateChanged(true);
+  }
 
-  // Outlived by no_op_web_data_.
+  // Outlives local_ and remote_.
+  NiceMock<MockAutofillWebDataBackend> backend_;
+
+  // Outlived by backend_.
   NiceMock<MockService> local_;
   NiceMock<MockService> remote_;
 
@@ -317,6 +304,45 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest, DeleteFromServerOnMerge) {
   MergeMetadata(&local_, &remote_);
 }
 
+// Verify that remote data without local counterpart is kept when we're not
+// tracking wallet data.
+TEST_F(AutofillWalletMetadataSyncableServiceTest,
+       DeleteFromServerOnMerge_NotWhenNotTracking) {
+  local_.OnWalletDataTrackingStateChanged(false);
+
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+
+  EXPECT_CALL(local_, UpdateAddressStats(_)).Times(0);
+  EXPECT_CALL(local_, UpdateCardStats(_)).Times(0);
+  EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
+
+  MergeMetadata(&local_, &remote_);
+}
+
+// Verify that remote data without local counterpart is deleted when we start
+// tracking wallet data after the initial merge happened.
+TEST_F(AutofillWalletMetadataSyncableServiceTest,
+       DeleteFromServerOnMerge_MergeBeforeTracking) {
+  local_.OnWalletDataTrackingStateChanged(false);
+
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+
+  EXPECT_CALL(local_, UpdateAddressStats(_)).Times(0);
+  EXPECT_CALL(local_, UpdateCardStats(_)).Times(0);
+  EXPECT_CALL(
+      local_,
+      SendChangesToSyncServer(UnorderedElementsAre(
+          SyncChangeMatches(syncer::SyncChange::ACTION_DELETE, kAddr1SyncTag),
+          SyncChangeMatches(syncer::SyncChange::ACTION_DELETE,
+                            kCard1SyncTag))));
+
+  MergeMetadata(&local_, &remote_);
+
+  local_.OnWalletDataTrackingStateChanged(true);
+}
+
 MATCHER_P7(SyncAddressChangeAndDataMatch,
            change_type,
            sync_tag,
@@ -450,8 +476,8 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
   MergeMetadata(&local_, &remote_);
 }
 
-// Verify that lower values of metadata are not sent to the sync server when
-// local metadata is updated.
+// Verify that lower or equal values of metadata are not sent to the sync server
+// when local metadata is updated.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        DontSendLowerValueToServerOnSingleChange) {
   local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
@@ -459,8 +485,8 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
   remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
   remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
-  AutofillProfile address = BuildAddress(kAddr1, 0, 0, false);
-  CreditCard card = BuildCard(kCard1, 0, 0, kAddr2);
+  AutofillProfile address = BuildAddress(kAddr1, 0, 0, true);
+  CreditCard card = BuildCard(kCard1, 3, 4, kAddr1);
 
   EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
 
@@ -491,6 +517,35 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
               SendChangesToSyncServer(ElementsAre(SyncCardChangeAndDataMatch(
                   syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
                   sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 30, 40,
+                  kAddr2Utf8))));
+
+  local_.AutofillProfileChanged(AutofillProfileChange(
+      AutofillProfileChange::UPDATE, address.guid(), &address));
+  local_.CreditCardChanged(
+      CreditCardChange(CreditCardChange::UPDATE, card.guid(), &card));
+}
+
+// Verify that other changed metadata elements are sent to the sync server when
+// local metadata is updated.
+TEST_F(AutofillWalletMetadataSyncableServiceTest,
+       SendChangedMetadataToServerOnLocalSingleChange) {
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, false));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, false));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  MergeMetadata(&local_, &remote_);
+  AutofillProfile address = BuildAddress(kAddr1, 1, 2, true);
+  CreditCard card = BuildCard(kCard1, 3, 4, kAddr2);
+
+  EXPECT_CALL(
+      local_,
+      SendChangesToSyncServer(ElementsAre(SyncAddressChangeAndDataMatch(
+          syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
+          sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 1, 2, true))));
+  EXPECT_CALL(local_,
+              SendChangesToSyncServer(ElementsAre(SyncCardChangeAndDataMatch(
+                  syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+                  sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 3, 4,
                   kAddr2Utf8))));
 
   local_.AutofillProfileChanged(AutofillProfileChange(
@@ -609,6 +664,50 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
                             kCard1SyncTag))));
 
   local_.AutofillMultipleChanged();
+}
+
+// Verify that erased local metadata is not erased from the sync server when
+// the service is not tracking Wallet data.
+TEST_F(AutofillWalletMetadataSyncableServiceTest,
+       DeleteFromServerOnMultiChange_NotWhenNotTracking) {
+  local_.OnWalletDataTrackingStateChanged(false);
+
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  MergeMetadata(&local_, &remote_);
+  // This method dooes not trigger notifications or sync:
+  local_.ClearServerData();
+
+  EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
+
+  local_.AutofillMultipleChanged();
+}
+
+// Verify that erased local metadata is also erased from the sync server when
+// we start tracking Wallet data after multiple metadata values change at once.
+TEST_F(AutofillWalletMetadataSyncableServiceTest,
+       DeleteFromServerOnMultiChange_ChangeBeforeTracking) {
+  local_.OnWalletDataTrackingStateChanged(false);
+
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  MergeMetadata(&local_, &remote_);
+  // This method dooes not trigger notifications or sync:
+  local_.ClearServerData();
+
+  EXPECT_CALL(
+      local_,
+      SendChangesToSyncServer(UnorderedElementsAre(
+          SyncChangeMatches(syncer::SyncChange::ACTION_DELETE, kAddr1SyncTag),
+          SyncChangeMatches(syncer::SyncChange::ACTION_DELETE,
+                            kCard1SyncTag))));
+
+  local_.AutofillMultipleChanged();
+  local_.OnWalletDataTrackingStateChanged(true);
 }
 
 // Verify that empty sync change from the sync server does not trigger writing
@@ -1229,6 +1328,38 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest, NewLocalCard) {
   EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
 
   MergeMetadata(&local_, &remote_);
+}
+
+// Tests that processing remote changes does not trigger a merge. This is a
+// specific test for reflection blocking in notifications.
+TEST_F(AutofillWalletMetadataSyncableServiceTest,
+       RemoteChangesDoNotTriggerMerge) {
+  // Make the backend broadcast back the notifications it receives
+  ON_CALL(backend_, NotifyOfMultipleAutofillChanges())
+      .WillByDefault(
+          DoAll(Invoke(&local_, &MockService::AutofillMultipleChanged),
+                Invoke(&remote_, &MockService::AutofillMultipleChanged)));
+
+  // Get initial data from |remote_| into |local_|.
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 5, 6, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 2, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 5, 6, kAddr1));
+  MergeMetadata(&local_, &remote_);
+
+  // Silently update local card in the DB.
+  local_.UpdateCardStats(BuildCard(kCard1, 7, 8, kAddr1));
+
+  // Receive a remote update of the address.
+  syncer::SyncChangeList changes;
+  changes.push_back(BuildAddressChange(
+      syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
+      sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 10, 20, true));
+
+  // Processing remote change should not trigger a commit of the local change.
+  EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
+
+  local_.ProcessSyncChanges(FROM_HERE, changes);
 }
 
 }  // namespace

@@ -6,8 +6,10 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "components/metrics/metrics_service.h"
 #include "components/metrics/metrics_service_client.h"
 #include "components/metrics/metrics_state_manager.h"
@@ -33,7 +35,7 @@ MetricsServicesManager::~MetricsServicesManager() {}
 
 std::unique_ptr<const base::FieldTrial::EntropyProvider>
 MetricsServicesManager::CreateEntropyProvider() {
-  return client_->CreateEntropyProvider();
+  return client_->GetMetricsStateManager()->CreateDefaultEntropyProvider();
 }
 
 metrics::MetricsService* MetricsServicesManager::GetMetricsService() {
@@ -88,13 +90,13 @@ void MetricsServicesManager::UpdatePermissions(bool current_may_record,
                                                bool current_consent_given,
                                                bool current_may_upload) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  // If the user has opted out of metrics, delete local UKM state. We Only check
+  // If the user has opted out of metrics, delete local UKM state. We only check
   // consent for UKM.
   if (consent_given_ && !current_consent_given) {
     ukm::UkmService* ukm = GetUkmService();
     if (ukm) {
       ukm->Purge();
-      ukm->ResetClientId();
+      ukm->ResetClientState(ukm::ResetReason::kUpdatePermissions);
     }
   }
 
@@ -141,9 +143,10 @@ void MetricsServicesManager::UpdateUkmService() {
     return;
 
   bool listeners_active =
-      GetMetricsServiceClient()->AreNotificationListenersEnabledOnAllProfiles();
-  bool sync_enabled = client_->IsMetricsReportingForceEnabled() ||
-                      metrics_service_client_->SyncStateAllowsUkm();
+      metrics_service_client_->AreNotificationListenersEnabledOnAllProfiles();
+  bool sync_enabled =
+      metrics_service_client_->IsMetricsReportingForceEnabled() ||
+      metrics_service_client_->SyncStateAllowsUkm();
   bool is_incognito = client_->IsIncognitoSessionActive();
 
   if (consent_given_ && listeners_active && sync_enabled && !is_incognito) {
@@ -161,7 +164,7 @@ void MetricsServicesManager::UpdateUkmService() {
 }
 
 void MetricsServicesManager::UpdateUploadPermissions(bool may_upload) {
-  if (client_->IsMetricsReportingForceEnabled()) {
+  if (metrics_service_client_->IsMetricsReportingForceEnabled()) {
     UpdatePermissions(true, true, true);
     return;
   }

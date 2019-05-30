@@ -5,7 +5,10 @@
 // Namespace
 var importer = importer || {};
 
-/** @enum {string} */
+/**
+ * @enum {string}
+ * @suppress {checkTypes}
+ */
 importer.ImportHistoryState = {
   'COPIED': 'copied',
   'IMPORTED': 'imported'
@@ -50,37 +53,37 @@ importer.DummyImportHistory.prototype.wasImported =
 
 /** @override */
 importer.DummyImportHistory.prototype.markCopied =
-    function(entry, destination, destinationUrl) {
+    (entry, destination, destinationUrl) => {
   return Promise.resolve();
 };
 
 /** @override */
 importer.DummyImportHistory.prototype.listUnimportedUrls =
-    function(destination) {
+    destination => {
   return Promise.resolve([]);
 };
 
 /** @override */
 importer.DummyImportHistory.prototype.markImported =
-    function(entry, destination) {
+    (entry, destination) => {
   return Promise.resolve();
 };
 
 /** @override */
 importer.DummyImportHistory.prototype.markImportedByUrl =
-    function(destinationUrl) {
+    destinationUrl => {
   return Promise.resolve();
 };
 
 /** @override */
 importer.DummyImportHistory.prototype.addHistoryLoadedListener =
-    function(listener) {};
+    listener => {};
 
 /** @override */
-importer.DummyImportHistory.prototype.addObserver = function(observer) {};
+importer.DummyImportHistory.prototype.addObserver = observer => {};
 
 /** @override */
-importer.DummyImportHistory.prototype.removeObserver = function(observer) {};
+importer.DummyImportHistory.prototype.removeObserver = observer => {};
 
 /**
  * @private @enum {number}
@@ -157,13 +160,13 @@ importer.PersistentImportHistory = function(hashGenerator, storage) {
 importer.PersistentImportHistory.prototype.load_ = function() {
   return this.storage_.readAll(this.updateInMemoryRecord_.bind(this))
       .then(
-          (/**
-           * @return {!importer.PersistentImportHistory}
-           * @this {importer.PersistentImportHistory}
-           */
-          function() {
+          /**
+          * @return {!importer.PersistentImportHistory}
+          * @this {importer.PersistentImportHistory}
+          */
+          () => {
             return this;
-          }).bind(this))
+          })
       .catch(importer.getLogger().catcher('import-history-load'));
 };
 
@@ -272,15 +275,14 @@ importer.PersistentImportHistory.prototype.wasCopied =
   return this.whenReady_
       .then(this.createKey_.bind(this, entry))
       .then(
-          (/**
-           * @param {string} key
-           * @return {boolean}
-           * @this {importer.PersistentImportHistory}
-           */
-          function(key) {
+          /**
+          * @param {string} key
+          * @return {boolean}
+          */
+          key => {
             return key in this.copiedEntries_ &&
                 destination in this.copiedEntries_[key];
-          }).bind(this))
+          })
       .catch(importer.getLogger().catcher('import-history-was-imported'));
 };
 
@@ -290,14 +292,13 @@ importer.PersistentImportHistory.prototype.wasImported =
   return this.whenReady_
       .then(this.createKey_.bind(this, entry))
       .then(
-          (/**
-           * @param {string} key
-           * @return {boolean}
-           * @this {importer.PersistentImportHistory}
-           */
-          function(key) {
+          /**
+          * @param {string} key
+          * @return {boolean}
+          */
+          key => {
             return this.getDestinations_(key).indexOf(destination) >= 0;
-          }).bind(this))
+          })
       .catch(importer.getLogger().catcher('import-history-was-imported'));
 };
 
@@ -306,19 +307,18 @@ importer.PersistentImportHistory.prototype.markCopied = function(
     entry, destination, destinationUrl) {
   return this.whenReady_.then(this.createKey_.bind(this, entry))
       .then(
-          (/**
-           * @param {string} key
-           * @return {!Promise<?>}
-           * @this {importer.ImportHistory}
-           */
-          function(key) {
+          /**
+          * @param {string} key
+          * @return {!Promise<?>}
+          */
+          key => {
             return this.storeRecord_([
                 importer.RecordType_.COPY,
                 key,
                 destination,
                 importer.deflateAppUrl(entry.toURL()),
                 importer.deflateAppUrl(destinationUrl)]);
-          }).bind(this))
+          })
       .then(this.notifyObservers_.bind(
           this, importer.ImportHistoryState.COPIED, entry, destination,
           destinationUrl))
@@ -329,22 +329,22 @@ importer.PersistentImportHistory.prototype.markCopied = function(
 importer.PersistentImportHistory.prototype.listUnimportedUrls =
     function(destination) {
   return this.whenReady_.then(
-      function() {
+      () => {
         // TODO(smckay): Merge copy and sync records for simpler
         // unimported file discovery.
-        var unimported = [];
-        for (var key in this.copiedEntries_) {
-          var imported = this.importedEntries_[key];
-          for (var destination in this.copiedEntries_[key]) {
+        const unimported = [];
+        for (const key in this.copiedEntries_) {
+          const imported = this.importedEntries_[key];
+          for (const destination in this.copiedEntries_[key]) {
             if (!imported || imported.indexOf(destination) === -1) {
-              var url = importer.inflateAppUrl(
+              const url = importer.inflateAppUrl(
                   this.copiedEntries_[key][destination].destinationUrl);
               unimported.push(url);
             }
           }
         }
         return unimported;
-      }.bind(this))
+      })
       .catch(
           importer.getLogger().catcher('import-history-list-unimported-urls'));
 };
@@ -354,17 +354,16 @@ importer.PersistentImportHistory.prototype.markImported = function(
     entry, destination) {
   return this.whenReady_.then(this.createKey_.bind(this, entry))
       .then(
-          (/**
-           * @param {string} key
-           * @return {!Promise<?>}
-           * @this {importer.ImportHistory}
-           */
-          function(key) {
+          /**
+          * @param {string} key
+          * @return {!Promise<?>}
+          */
+          key => {
             return this.storeRecord_([
                 importer.RecordType_.IMPORT,
                 key,
                 destination]);
-          }).bind(this))
+          })
       .then(this.notifyObservers_.bind(
           this, importer.ImportHistoryState.IMPORTED, entry, destination))
       .catch(importer.getLogger().catcher('import-history-mark-imported'));
@@ -373,48 +372,46 @@ importer.PersistentImportHistory.prototype.markImported = function(
 /** @override */
 importer.PersistentImportHistory.prototype.markImportedByUrl =
     function(destinationUrl) {
-  var deflatedUrl = importer.deflateAppUrl(destinationUrl);
-  var key = this.copyKeyIndex_[deflatedUrl];
+  const deflatedUrl = importer.deflateAppUrl(destinationUrl);
+  const key = this.copyKeyIndex_[deflatedUrl];
   if (!!key) {
-    var copyData = this.copiedEntries_[key];
+    const copyData = this.copiedEntries_[key];
 
     // We could build an index of this as well, but it seems
     // unnecessary given the fact that there will almost always
     // be just one destination for a file (assumption).
-    for (var destination in copyData) {
+    for (const destination in copyData) {
       if (copyData[destination].destinationUrl === deflatedUrl) {
         return this.storeRecord_([
           importer.RecordType_.IMPORT,
           key,
           destination])
             .then(
-                (/** @this {importer.PersistentImportHistory} */
-                function() {
-                  var sourceUrl = importer.inflateAppUrl(
+                () => {
+                  const sourceUrl = importer.inflateAppUrl(
                       copyData[destination].sourceUrl);
                   // Here we try to create an Entry for the source URL.
                   // This will allow observers to update the UI if the
                   // source entry is in view.
                   util.urlToEntry(sourceUrl).then(
-                      (/**
-                       * @param {Entry} entry
-                       * @this {importer.PersistentImportHistory}
-                       */
-                      function(entry) {
+                      /**
+                      * @param {Entry} entry
+                      */
+                      entry => {
                         if (entry.isFile) {
                           this.notifyObservers_(
                               importer.ImportHistoryState.IMPORTED,
                               /** @type {!FileEntry} */ (entry), destination);
                         }
-                      }).bind(this),
-                      function() {
+                      },
+                      () => {
                         console.log(
                             'Unable to find original entry for: ' + sourceUrl);
                         return;
                       })
                       .catch(importer.getLogger().catcher(
                           'notify-listeners-on-import'));
-                }).bind(this))
+                })
             .catch(importer.getLogger().catcher('mark-imported-by-url'));
       }
     }
@@ -433,7 +430,7 @@ importer.PersistentImportHistory.prototype.addObserver =
 /** @override */
 importer.PersistentImportHistory.prototype.removeObserver =
     function(observer) {
-  var index = this.observers_.indexOf(observer);
+  const index = this.observers_.indexOf(observer);
   if (index > -1) {
     this.observers_.splice(index, 1);
   } else {
@@ -451,18 +448,18 @@ importer.PersistentImportHistory.prototype.removeObserver =
 importer.PersistentImportHistory.prototype.notifyObservers_ =
     function(state, entry, destination, opt_destinationUrl) {
   this.observers_.forEach(
-      (/**
-       * @param {!importer.ImportHistory.Observer} observer
-       * @this {importer.PersistentImportHistory}
-       */
-      function(observer) {
+      /**
+      * @param {!importer.ImportHistory.Observer} observer
+      * @this {importer.PersistentImportHistory}
+      */
+      observer => {
         observer({
           state: state,
           entry: entry,
           destination: destination,
           destinationUrl: opt_destinationUrl
         });
-      }).bind(this));
+      });
 };
 
 /**
@@ -495,9 +492,8 @@ importer.PersistentImportHistory.prototype.getDestinations_ = function(key) {
  * @struct
  *
  * @param {function(): !Promise<!Array<!FileEntry>>} filesProvider
- * @param {!analytics.Tracker} tracker
  */
-importer.SynchronizedHistoryLoader = function(filesProvider, tracker) {
+importer.SynchronizedHistoryLoader = function(filesProvider) {
   /**
    * @return {!Promise<!Array<!FileEntry>>} History files. Will always
    *     have at least one file (the "primary file"). When other devices
@@ -507,9 +503,6 @@ importer.SynchronizedHistoryLoader = function(filesProvider, tracker) {
    * @private
    */
   this.getHistoryFiles_ = filesProvider;
-
-  /** @private {!analytics.Tracker} */
-  this.tracker_ = tracker;
 
   /** @private {boolean} */
   this.needsInitialization_ = true;
@@ -523,25 +516,19 @@ importer.SynchronizedHistoryLoader.prototype.getHistory = function() {
   if (this.needsInitialization_) {
     this.needsInitialization_ = false;
     this.getHistoryFiles_()
-        .then(
-            (/**
-             * @param {!Array<!FileEntry>} fileEntries
-             * @this {importer.SynchronizedHistoryLoader}
-             */
-            function(fileEntries) {
-              var storage = new importer.FileBasedRecordStorage(
-                  fileEntries,
-                  this.tracker_);
-              var history = new importer.PersistentImportHistory(
-                  importer.createMetadataHashcode,
-                  storage);
-              new importer.DriveSyncWatcher(history);
-              history.whenReady().then(
-                  (/** @this {importer.SynchronizedHistoryLoader} */
-                  function() {
-                    this.historyResolver_.resolve(history);
-                  }).bind(this));
-            }).bind(this))
+        .then(/**
+     * @param {!Array<!FileEntry>} fileEntries
+     */
+    fileEntries => {
+      const storage = new importer.FileBasedRecordStorage(fileEntries);
+      const history = new importer.PersistentImportHistory(
+          importer.createMetadataHashcode, storage);
+      new importer.DriveSyncWatcher(history);
+      history.whenReady().then(
+          () => {
+            this.historyResolver_.resolve(history);
+          });
+    })
         .catch(importer.getLogger().catcher('history-load-chain'));
   }
 
@@ -587,19 +574,14 @@ importer.RecordStorage.prototype.readAll;
  * @constructor
  * @implements {importer.RecordStorage}
  * @struct
- *
- * @param {!analytics.Tracker} tracker
  */
-importer.FileBasedRecordStorage = function(fileEntries, tracker) {
+importer.FileBasedRecordStorage = function(fileEntries) {
   /** @private {!Array<!importer.PromisingFileEntry>} */
   this.inputFiles_ = fileEntries.map(
       importer.PromisingFileEntry.create);
 
   /** @private {!importer.PromisingFileEntry} */
   this.outputFile_ = this.inputFiles_[0];
-
-  /** @private {!analytics.Tracker} */
-  this.tracker_ = tracker;
 
   /**
    * Serializes all writes and reads on the primary file.
@@ -612,13 +594,12 @@ importer.FileBasedRecordStorage = function(fileEntries, tracker) {
 importer.FileBasedRecordStorage.prototype.write = function(record) {
   return this.latestOperation_ = this.latestOperation_
       .then(
-          (/**
-           * @param {?} ignore
-           * @this {importer.FileBasedRecordStorage}
-           */
-          function(ignore) {
+          /**
+          * @param {?} ignore
+          */
+          ignore => {
             return this.outputFile_.createWriter();
-          }).bind(this))
+          })
       .then(this.writeRecord_.bind(this, record))
       .catch(importer.getLogger().catcher('file-record-store-write'));
 };
@@ -633,95 +614,77 @@ importer.FileBasedRecordStorage.prototype.write = function(record) {
  */
 importer.FileBasedRecordStorage.prototype.writeRecord_ =
     function(record, writer) {
-  var blob = new Blob(
+  const blob = new Blob(
       [JSON.stringify(record) + ',\n'],
       {type: 'text/plain; charset=UTF-8'});
 
   return new Promise(
-      (/**
-       * @param {function()} resolve
-       * @param {function()} reject
-       * @this {importer.FileBasedRecordStorage}
-       */
-      function(resolve, reject) {
+      /**
+      * @param {function()} resolve
+      * @param {function()} reject
+      * @this {importer.FileBasedRecordStorage}
+      */
+      (resolve, reject) => {
         writer.onwriteend = resolve;
         writer.onerror = reject;
 
         writer.seek(writer.length);
         writer.write(blob);
-      }).bind(this));
+      });
 };
 
 /** @override */
 importer.FileBasedRecordStorage.prototype.readAll = function(recordCallback) {
-  var processTiming = this.tracker_.startTiming(
-      metrics.Categories.ACQUISITION,
-      metrics.timing.Variables.HISTORY_LOAD);
-
   return this.latestOperation_ = this.latestOperation_
       .then(
-          (/**
-           * @param {?} ignored
-           * @this {importer.FileBasedRecordStorage}
-           */
-          function(ignored) {
-            var filePromises = this.inputFiles_.map(
+          /**
+          * @param {?} ignored
+          */
+          ignored => {
+            const filePromises = this.inputFiles_.map(
                 /**
                  * @param {!importer.PromisingFileEntry} entry
                  * @this {importer.FileBasedRecordStorage}
                  */
-                function(entry) {
+                entry => {
                   return entry.file();
                 });
             return Promise.all(filePromises);
-          }).bind(this))
+          })
       .then(
-          (/**
-           * @return {!Promise<!Array<string>>}
-           * @this {importer.FileBasedRecordStorage}
-           */
-          function(files) {
-            var contentPromises = files.map(
+          /**
+          * @return {!Promise<!Array<string>>}
+          */
+          files => {
+            const contentPromises = files.map(
                 this.readFileAsText_.bind(this));
             return Promise.all(contentPromises);
-          }).bind(this),
-          (/**
-           * @return {string}
-           * @this {importer.FileBasedRecordStorage}
-           */
-          function() {
+          },
+          /**
+          * @return {string}
+          */
+          () => {
             console.error('Unable to read from one of history files.');
             return '';
-          }).bind(this))
+          })
       .then(
-          (/**
-           * @param {!Array<string>} fileContents
-           * @this {importer.FileBasedRecordStorage}
-           */
-          function(fileContents) {
-            var parsePromises = fileContents.map(
+          /**
+          * @param {!Array<string>} fileContents
+          */
+          fileContents => {
+            const parsePromises = fileContents.map(
                 this.parse_.bind(this));
             return Promise.all(parsePromises);
-          }).bind(this))
+          })
       .then(
-          (/** @param {!Array<!Array<*>>} parsedContents */
-          function(parsedContents) {
+          /** @param {!Array<!Array<*>>} parsedContents */
+          parsedContents => {
             parsedContents.forEach(
                 /** @param {!Array<!Array<*>>} recordSet */
-                function(recordSet) {
+                recordSet => {
                   recordSet.forEach(recordCallback);
                 });
-
-            processTiming.send();
-
-            var fileCount = this.inputFiles_.length;
-            this.tracker_.send(
-                metrics.ImportEvents.HISTORY_LOADED
-                    .value(fileCount)
-                    .dimension(fileCount === 1
-                        ? metrics.Dimensions.MACHINE_USE_SINGLE
-                        : metrics.Dimensions.MACHINE_USE_MULTIPLE));
-          }).bind(this))
+          })
       .catch(importer.getLogger().catcher('file-record-store-read-all'));
 };
 
@@ -734,25 +697,25 @@ importer.FileBasedRecordStorage.prototype.readAll = function(recordCallback) {
  */
 importer.FileBasedRecordStorage.prototype.readFileAsText_ = function(file) {
   return new Promise(
-      function(resolve, reject) {
-        var reader = new FileReader();
+      (resolve, reject) => {
+        const reader = new FileReader();
 
-        reader.onloadend = function() {
+        reader.onloadend = () => {
           if (reader.error) {
             console.error(reader.error);
             reject();
           } else {
             resolve(reader.result);
           }
-        }.bind(this);
+        };
 
-        reader.onerror = function(error) {
+        reader.onerror = error => {
           console.error(error);
           reject(error);
-        }.bind(this);
+        };
 
         reader.readAsText(file);
-      }.bind(this))
+      })
       .catch(importer.getLogger().catcher(
       'file-record-store-read-file-as-text'));
 };
@@ -764,7 +727,7 @@ importer.FileBasedRecordStorage.prototype.readFileAsText_ = function(file) {
  * @return {!Array<!Array<*>>}
  * @private
  */
-importer.FileBasedRecordStorage.prototype.parse_ = function(text) {
+importer.FileBasedRecordStorage.prototype.parse_ = text => {
   if (text.length === 0) {
     return [];
   } else {
@@ -775,7 +738,7 @@ importer.FileBasedRecordStorage.prototype.parse_ = function(text) {
     //   2) Surround the whole string in brackets.
     // NOTE: JSON.parse is WAY faster than parsing this
     // ourselves in javascript.
-    var json = '[' + text.substring(0, text.length - 2) + ']';
+    const json = '[' + text.substring(0, text.length - 2) + ']';
     return /** @type {!Array<!Array<*>>} */ (JSON.parse(json));
   }
 };
@@ -798,12 +761,12 @@ importer.DriveSyncWatcher = function(history) {
 
   this.history_.whenReady()
       .then(
-          function() {
+          () => {
             this.history_.listUnimportedUrls(importer.Destination.GOOGLE_DRIVE)
                 .then(this.updateSyncStatus_.bind(
                     this,
                     importer.Destination.GOOGLE_DRIVE));
-          }.bind(this))
+          })
       .catch(importer.getLogger().catcher('drive-sync-watcher-constructor'));
 
   // Listener is only registered once the history object is initialized.
@@ -828,12 +791,12 @@ importer.DriveSyncWatcher.prototype.updateSyncStatus_ =
   // blocking interactive tasks. For now, we just defer the update
   // for a few seconds.
   setTimeout(
-      function() {
+      () => {
         unimportedUrls.forEach(
-            function(url) {
+            url => {
               this.checkSyncStatus_(destination, url);
-            }.bind(this));
-      }.bind(this),
+            });
+      },
       importer.DriveSyncWatcher.UPDATE_DELAY_MS);
 };
 
@@ -880,11 +843,10 @@ importer.DriveSyncWatcher.prototype.checkSyncStatus_ =
 
   this.getSyncStatus_(url)
       .then(
-          (/**
-           * @param {boolean} synced True if file is synced
-           * @this {importer.DriveSyncWatcher}
-           */
-          function(synced) {
+          /**
+          * @param {boolean} synced True if file is synced
+          */
+          synced => {
             if (synced) {
               if (opt_entry) {
                 this.history_.markImported(opt_entry, destination);
@@ -892,7 +854,7 @@ importer.DriveSyncWatcher.prototype.checkSyncStatus_ =
                 this.history_.markImportedByUrl(url);
               }
             }
-          }).bind(this))
+          })
       .catch(
           importer.getLogger().catcher(
               'drive-sync-watcher-check-sync-status'));
@@ -904,39 +866,40 @@ importer.DriveSyncWatcher.prototype.checkSyncStatus_ =
  *     file has been synced to the named destination.
  * @private
  */
-importer.DriveSyncWatcher.prototype.getSyncStatus_ = function(url) {
+importer.DriveSyncWatcher.prototype.getSyncStatus_ = url => {
   return util.URLsToEntries([url])
-    .then(
-        function(results) {
-          if (results.entries.length !== 1)
-            return Promise.reject();
-          return new Promise(
-              (/** @this {importer.DriveSyncWatcher} */
-              function(resolve, reject) {
-                // TODO(smckay): User Metadata Cache...once it is available
-                // in the background.
-                chrome.fileManagerPrivate.getEntryProperties(
-                    [results.entries[0]], ['dirty'],
-                    (/**
-                      * @param
-                      * {!Array<!chrome.fileManagerPrivate.EntryProperties>|undefined}
-                      * propertiesList
-                      * @this {importer.DriveSyncWatcher}
-                      */
-                     function(propertiesList) {
-                       console.assert(
-                           propertiesList.length === 1,
-                           'Got an unexpected number of results.');
-                       if (chrome.runtime.lastError) {
-                         reject(chrome.runtime.lastError);
-                       } else {
-                         var data = propertiesList[0];
-                         resolve(!data['dirty']);
-                       }
-                     }).bind(this));
-              }).bind(this));
-        })
-    .catch(importer.getLogger().catcher('drive-sync-watcher-get-sync-status'));
+      .then(function(results) {
+        if (results.entries.length !== 1) {
+          return Promise.reject();
+        }
+        return new Promise(
+            /** @this {importer.DriveSyncWatcher} */
+            (resolve, reject) => {
+              // TODO(smckay): User Metadata Cache...once it is available
+              // in the background.
+              chrome.fileManagerPrivate.getEntryProperties(
+                  [results.entries[0]], ['dirty'],
+                  /**
+                   * @param
+                   * {!Array<!chrome.fileManagerPrivate.EntryProperties>|undefined}
+                   * propertiesList
+                   * @this {importer.DriveSyncWatcher}
+                   */
+                  propertiesList => {
+                    console.assert(
+                        propertiesList.length === 1,
+                        'Got an unexpected number of results.');
+                    if (chrome.runtime.lastError) {
+                      reject(chrome.runtime.lastError);
+                    } else {
+                      const data = propertiesList[0];
+                      resolve(!data['dirty']);
+                    }
+                  });
+            });
+      })
+      .catch(
+          importer.getLogger().catcher('drive-sync-watcher-get-sync-status'));
 };
 
 /**
@@ -949,16 +912,11 @@ importer.DriveSyncWatcher.prototype.getSyncStatus_ = function(url) {
  * @constructor
  * @implements {importer.HistoryLoader}
  * @struct
- *
- * @param {!analytics.Tracker} tracker
  */
-importer.RuntimeHistoryLoader = function(tracker) {
-
+importer.RuntimeHistoryLoader = function() {
   /** @return {!importer.HistoryLoader} */
-  this.createRealHistoryLoader_ = function() {
-    return new importer.SynchronizedHistoryLoader(
-        importer.getHistoryFiles,
-        tracker);
+  this.createRealHistoryLoader_ = () => {
+    return new importer.SynchronizedHistoryLoader(importer.getHistoryFiles);
   };
 
   /** @private {boolean} */
@@ -974,20 +932,21 @@ importer.RuntimeHistoryLoader.prototype.getHistory = function() {
     this.needsInitialization_ = false;
     importer.importEnabled()
         .then(
-            (/**
-             * @param {boolean} enabled
-             * @return {!importer.HistoryLoader}
-             * @this {importer.RuntimeHistoryLoader}
-             */
-            function(enabled) {
+            /**
+            * @param {boolean} enabled
+            * @return {!importer.HistoryLoader}
+            */
+            enabled => {
               return enabled ?
                   this.createRealHistoryLoader_() :
                   new importer.DummyImportHistory(false);
-            }).bind(this))
+            })
         .then(
-            function(loader) {
-              return this.historyResolver_.resolve(loader.getHistory());
-            }.bind(this))
+            loader => {
+              return this.historyResolver_.resolve(
+                  /** @type {!importer.ImportHistory} */
+                      (loader.getHistory()));
+            })
         .catch(
             importer.getLogger().catcher(
                 'runtime-history-loader-get-history'));
@@ -1009,23 +968,22 @@ importer.RuntimeHistoryLoader.prototype.addHistoryLoadedListener =
  */
 importer.createMetadataHashcode = function(fileEntry) {
   return new Promise(
-             function(resolve, reject) {
+             (resolve, reject) => {
                metadataProxy.getEntryMetadata(fileEntry).then(
-                   (/**
-                    * @param {!Object} metadata
-                    * @this {importer.PersistentImportHistory}
-                    */
-                   function(metadata) {
+                   /**
+                   * @param {!Object} metadata
+                   */
+                   metadata => {
                      if (!('modificationTime' in metadata)) {
                        reject('File entry missing "modificationTime" field.');
                      } else if (!('size' in metadata)) {
                        reject('File entry missing "size" field.');
                      } else {
-                       var secondsSinceEpoch = importer.toSecondsFromEpoch(
+                       const secondsSinceEpoch = importer.toSecondsFromEpoch(
                            metadata.modificationTime);
                        resolve(secondsSinceEpoch + '_' + metadata.size);
                      }
-                   }).bind(this));
-             }.bind(this))
+                   });
+             })
       .catch(importer.getLogger().catcher('importer-common-create-hashcode'));
 };

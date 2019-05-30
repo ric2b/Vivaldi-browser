@@ -5,6 +5,8 @@
 #ifndef ASH_EVENTS_SPOKEN_FEEDBACK_EVENT_REWRITER_H_
 #define ASH_EVENTS_SPOKEN_FEEDBACK_EVENT_REWRITER_H_
 
+#include <memory>
+
 #include "ash/ash_export.h"
 #include "ash/public/interfaces/event_rewriter_controller.mojom.h"
 #include "base/macros.h"
@@ -31,18 +33,22 @@ class ASH_EXPORT SpokenFeedbackEventRewriter : public ui::EventRewriter {
   void OnUnhandledSpokenFeedbackEvent(std::unique_ptr<ui::Event> event) const;
 
   void set_capture_all_keys(bool value) { capture_all_keys_ = value; }
+  void set_send_mouse_events(bool value) { send_mouse_events_ = value; }
 
  private:
   // ui::EventRewriter:
-  ui::EventRewriteStatus RewriteEvent(
+  ui::EventDispatchDetails RewriteEvent(
       const ui::Event& event,
-      std::unique_ptr<ui::Event>* new_event) override;
-  ui::EventRewriteStatus NextDispatchEvent(
-      const ui::Event& last_event,
-      std::unique_ptr<ui::Event>* new_event) override;
+      const Continuation continuation) override;
+
+  // Continuation saved for OnUnhandledSpokenFeedbackEvent().
+  Continuation continuation_;
 
   // The delegate used to send key events to the ChromeVox extension.
   mojom::SpokenFeedbackEventRewriterDelegatePtr delegate_;
+
+  // Whether to send mouse events to the ChromeVox extension.
+  bool send_mouse_events_ = false;
 
   // Whether to capture all keys.
   bool capture_all_keys_ = false;

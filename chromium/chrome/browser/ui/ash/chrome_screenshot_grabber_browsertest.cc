@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "ash/shell.h"
+#include "base/bind.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
@@ -66,7 +68,8 @@ class ChromeScreenshotGrabberBrowserTest
 
   bool IsImageClipboardAvailable() {
     return ui::Clipboard::GetForCurrentThread()->IsFormatAvailable(
-        ui::Clipboard::GetBitmapFormatType(), ui::CLIPBOARD_TYPE_COPY_PASTE);
+        ui::ClipboardFormatType::GetBitmapType(),
+        ui::CLIPBOARD_TYPE_COPY_PASTE);
   }
 
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
@@ -85,8 +88,6 @@ IN_PROC_BROWSER_TEST_F(ChromeScreenshotGrabberBrowserTest, TakeScreenshot) {
   ChromeScreenshotGrabber* chrome_screenshot_grabber =
       ChromeScreenshotGrabber::Get();
   SetTestObserver(chrome_screenshot_grabber, this);
-  base::ScopedTempDir directory;
-  ASSERT_TRUE(directory.CreateUniqueTempDir());
   EXPECT_TRUE(chrome_screenshot_grabber->CanTakeScreenshot());
 
   chrome_screenshot_grabber->HandleTakeWindowScreenshot(
@@ -102,7 +103,10 @@ IN_PROC_BROWSER_TEST_F(ChromeScreenshotGrabberBrowserTest, TakeScreenshot) {
   EXPECT_TRUE(display_service_->GetNotification(std::string("screenshot")));
 
   EXPECT_EQ(ui::ScreenshotResult::SUCCESS, screenshot_result_);
-  EXPECT_TRUE(base::PathExists(screenshot_path_));
+  {
+    base::ScopedAllowBlockingForTesting allow_io;
+    EXPECT_TRUE(base::PathExists(screenshot_path_));
+  }
 
   EXPECT_FALSE(IsImageClipboardAvailable());
   ui::ClipboardMonitor::GetInstance()->AddObserver(this);

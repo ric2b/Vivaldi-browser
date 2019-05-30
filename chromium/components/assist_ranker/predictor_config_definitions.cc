@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "components/assist_ranker/predictor_config_definitions.h"
+#include "components/assist_ranker/base_predictor.h"
 
 namespace assist_ranker {
 
@@ -28,6 +29,15 @@ GetContextualSearchRankerUrlFeatureParam() {
   return kContextualSearchRankerUrl;
 }
 
+float GetContextualSearchRankerThresholdFeatureParam() {
+  static auto* kContextualSearchRankerThreshold =
+      new base::FeatureParam<double>(
+          &kContextualSearchRankerQuery,
+          "contextual-search-ranker-predict-threshold",
+          kNoPredictThresholdReplacement);
+  return static_cast<float>(kContextualSearchRankerThreshold->Get());
+}
+
 // NOTE: This list needs to be kept in sync with tools/metrics/ukm/ukm.xml!
 // Only features within this list will be logged to UKM.
 // TODO(chrome-ranker-team) Deprecate the whitelist once it is available through
@@ -50,6 +60,7 @@ const base::flat_set<std::string>* GetContextualSearchFeatureWhitelist() {
                                        "OpenCount",
                                        "OutcomeRankerDidPredict",
                                        "OutcomeRankerPrediction",
+                                       "OutcomeRankerPredictionScore",
                                        "OutcomeWasCardsDataShown",
                                        "OutcomeWasPanelOpened",
                                        "OutcomeWasQuickActionClicked",
@@ -77,7 +88,8 @@ const PredictorConfig GetContextualSearchPredictorConfig() {
       kContextualSearchModelName, kContextualSearchLoggingName,
       kContextualSearchUmaPrefixName, LOG_UKM,
       GetContextualSearchFeatureWhitelist(), &kContextualSearchRankerQuery,
-      GetContextualSearchRankerUrlFeatureParam()));
+      GetContextualSearchRankerUrlFeatureParam(),
+      GetContextualSearchRankerThresholdFeatureParam()));
   return kContextualSearchPredictorConfig;
 }
 #endif  // OS_ANDROID

@@ -8,9 +8,14 @@
 
 #include "ui/vivaldi_native_app_window_views.h"
 
+#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/stl_util.h"
+#include "browser/vivaldi_browser_finder.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
+#include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window_state.h"
@@ -20,13 +25,16 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/keep_alive_registry/keep_alive_registry.h"
+#include "components/prefs/pref_service.h"
 #include "components/zoom/page_zoom.h"
 #include "components/zoom/zoom_controller.h"
+#include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_view_host.h"
-#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
+#include "extensions/api/window/window_private_api.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/image_loader.h"
@@ -35,13 +43,14 @@
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/image/image_family.h"
-#include "ui/gfx/path.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/non_client_view.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
+#include "ui/vivaldi_quit_confirmation_dialog.h"
 #include "ui/wm/core/easy_resize_window_targeter.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #if defined(USE_AURA)
 #include "ui/aura/window.h"
@@ -49,7 +58,6 @@
 
 #if defined(OS_WIN)
 #include "browser/win/vivaldi_utils.h"
-#include "chrome/browser/lifetime/browser_shutdown.h"
 #endif  // defined(OS_WIN)
 
 using extensions::AppWindow;
@@ -61,8 +69,8 @@ const int kMinPanelHeight = 100;
 const int kDefaultPanelWidth = 200;
 const int kDefaultPanelHeight = 300;
 
-const int kLargeIconSize = 256;
-const int kSmallIconSize = 16;
+const int kLargeIconSizeViv = 256;
+const int kSmallIconSizeViv = 16;
 
 struct AcceleratorMapping {
   ui::KeyboardCode keycode;
@@ -107,29 +115,26 @@ void AddAcceleratorsFromMapping(const AcceleratorMapping mapping[],
 
 const std::map<ui::Accelerator, int>& GetAcceleratorTable() {
   typedef std::map<ui::Accelerator, int> AcceleratorMap;
-  CR_DEFINE_STATIC_LOCAL(AcceleratorMap, accelerators, ());
+  static base::NoDestructor<AcceleratorMap> accelerators;
   if (!chrome::IsRunningInForcedAppMode()) {
-    if (accelerators.empty()) {
-      AddAcceleratorsFromMapping(
-          kAppWindowAcceleratorMap,
-          arraysize(kAppWindowAcceleratorMap),
-          &accelerators);
+    if (accelerators->empty()) {
+      AddAcceleratorsFromMapping(kAppWindowAcceleratorMap,
+                                 base::size(kAppWindowAcceleratorMap),
+                                 accelerators.get());
     }
-    return accelerators;
+    return *accelerators;
   }
 
-  CR_DEFINE_STATIC_LOCAL(AcceleratorMap, app_mode_accelerators, ());
-  if (app_mode_accelerators.empty()) {
-    AddAcceleratorsFromMapping(
-        kAppWindowAcceleratorMap,
-        arraysize(kAppWindowAcceleratorMap),
-        &app_mode_accelerators);
-    AddAcceleratorsFromMapping(
-        kAppWindowKioskAppModeAcceleratorMap,
-        arraysize(kAppWindowKioskAppModeAcceleratorMap),
-        &app_mode_accelerators);
+  static base::NoDestructor<AcceleratorMap> app_mode_accelerators;
+  if (app_mode_accelerators->empty()) {
+    AddAcceleratorsFromMapping(kAppWindowAcceleratorMap,
+                               base::size(kAppWindowAcceleratorMap),
+                               app_mode_accelerators.get());
+    AddAcceleratorsFromMapping(kAppWindowKioskAppModeAcceleratorMap,
+                               base::size(kAppWindowKioskAppModeAcceleratorMap),
+                               app_mode_accelerators.get());
   }
-  return app_mode_accelerators;
+  return *app_mode_accelerators;
 }
 
 }  // namespace
@@ -226,8 +231,8 @@ void VivaldiNativeAppWindowViews::InitializeDefaultWindow(
   // registered. This CHECK catches the case.
   CHECK(!is_kiosk_app_mode ||
         accelerator_table.size() ==
-        arraysize(kAppWindowAcceleratorMap) +
-        arraysize(kAppWindowKioskAppModeAcceleratorMap));
+            base::size(kAppWindowAcceleratorMap) +
+                base::size(kAppWindowKioskAppModeAcceleratorMap));
 
   // Ensure there is a ZoomController in kiosk mode, otherwise the processing
   // of the accelerators will cause a crash. Note CHECK here because DCHECK
@@ -267,7 +272,8 @@ void VivaldiNativeAppWindowViews::InitializeDefaultWindow(
 
 void VivaldiNativeAppWindowViews::InitializePanelWindow(
   const AppWindow::CreateParams& create_params) {
-  views::Widget::InitParams params(views::Widget::InitParams::TYPE_PANEL);
+  views::Widget::InitParams params(
+      views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   params.delegate = this;
 
   gfx::Rect initial_window_bounds =
@@ -327,7 +333,7 @@ void VivaldiNativeAppWindowViews::UpdateEventTargeterWithInset() {
   // in Linux.
   std::unique_ptr<ui::EventTargeter> old_eventtarget =
     window->SetEventTargeter(std::unique_ptr<aura::WindowTargeter>(
-      new wm::EasyResizeWindowTargeter(window, inset, inset)));
+      new wm::EasyResizeWindowTargeter(inset, inset)));
   delete old_eventtarget.release();
 #endif
 }
@@ -426,32 +432,6 @@ bool VivaldiNativeAppWindowViews::IsVisible() const {
   return widget_->IsVisible();
 }
 
-void VivaldiNativeAppWindowViews::Close() {
-  // NOTE(pettern): This will abort the currently open thumbnail
-  // generating windows, but if this is not the last window,
-  // the rest will continue.  This is not ideal, but avoids
-  // lingering processes until AppWindows are no longer used
-  // for thumbnail generation. See VB-38712.
-  extensions::VivaldiUtilitiesAPI* utils_api =
-    extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(
-      window_->GetProfile());
-  DCHECK(utils_api);
-  utils_api->CloseAllThumbnailWindows();
-
-#if defined(OS_WIN)
-  // This must be as early as possible.
-  bool should_quit_if_last_browser =
-    browser_shutdown::IsTryingToQuit() ||
-    KeepAliveRegistry::GetInstance()->IsKeepingAliveOnlyByBrowserOrigin();
-  if (should_quit_if_last_browser) {
-    vivaldi::OnShutdownStarted();
-  }
-#endif  // defined(OS_WIN)
-  if (widget_) {
-    widget_->Close();
-  }
-}
-
 void VivaldiNativeAppWindowViews::Activate() {
   widget_->Activate();
 }
@@ -525,7 +505,7 @@ gfx::ImageSkia VivaldiNativeAppWindowViews::GetWindowAppIcon() {
     return gfx::ImageSkia();
   }
   const gfx::Image* img =
-      icon_family_.GetBest(kLargeIconSize, kLargeIconSize);
+      icon_family_.GetBest(kLargeIconSizeViv, kLargeIconSizeViv);
   return img ? *img->ToImageSkia() : gfx::ImageSkia();
 }
 
@@ -533,8 +513,8 @@ gfx::ImageSkia VivaldiNativeAppWindowViews::GetWindowIcon() {
   if (icon_family_.empty()) {
     return gfx::ImageSkia();
   }
-  const gfx::Image* img = icon_family_.GetBest(kSmallIconSize,
-                                               kSmallIconSize);
+  const gfx::Image* img = icon_family_.GetBest(kSmallIconSizeViv,
+                                               kSmallIconSizeViv);
   return img ? *img->ToImageSkia() : gfx::ImageSkia();
 }
 
@@ -562,7 +542,7 @@ bool VivaldiNativeAppWindowViews::WidgetHasHitTestMask() const {
   return shape_ != NULL;
 }
 
-void VivaldiNativeAppWindowViews::GetWidgetHitTestMask(gfx::Path* mask) const {
+void VivaldiNativeAppWindowViews::GetWidgetHitTestMask(SkPath* mask) const {
   shape_->getBoundaryPath(mask);
 }
 
@@ -571,38 +551,6 @@ void VivaldiNativeAppWindowViews::OnWindowBeginUserBoundsChange() {
   if (!web_contents)
     return;
   web_contents->GetRenderViewHost()->NotifyMoveOrResizeStarted();
-}
-
-// Similar to |BrowserView::CanClose|
-bool VivaldiAppWindowClientView::CanClose() {
-  Browser *browser = browser_window_->browser();
-
-  // This adds a quick hide code path to avoid VB-33480, but
-  // must be removed when beforeunload dialogs are implemented.
-  int count;
-  if (browser->OkToCloseWithInProgressDownloads(&count) ==
-      Browser::DOWNLOAD_CLOSE_OK) {
-    browser_window_->Hide();
-  }
-  if (!browser->ShouldCloseWindow()) {
-    return false;
-  }
-  bool fast_tab_closing_enabled =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableFastUnload);
-
-  if (!browser->tab_strip_model()->empty()) {
-    browser_window_->Hide();
-    browser->OnWindowClosing();
-    if (fast_tab_closing_enabled)
-      browser->tab_strip_model()->CloseAllTabs();
-    return false;
-  } else if (fast_tab_closing_enabled &&
-             !browser->HasCompletedUnloadProcessing()) {
-    browser_window_->Hide();
-    return false;
-  }
-  return true;
 }
 
 void VivaldiNativeAppWindowViews::OnWidgetMove() {
@@ -910,9 +858,9 @@ SkRegion* VivaldiNativeAppWindowViews::GetDraggableRegion() {
   return draggable_region_.get();
 }
 
-void VivaldiNativeAppWindowViews::HandleKeyboardEvent(
+bool VivaldiNativeAppWindowViews::HandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
-  unhandled_keyboard_event_handler_.HandleKeyboardEvent(event,
+  return unhandled_keyboard_event_handler_.HandleKeyboardEvent(event,
                                                         GetFocusManager());
 }
 
@@ -980,3 +928,151 @@ void VivaldiNativeAppWindowViews::SetVisibleOnAllWorkspaces(
 
 void VivaldiNativeAppWindowViews::SetActivateOnPointer(
     bool activate_on_pointer) {}
+
+void VivaldiNativeAppWindowViews::Close() {
+  // NOTE(pettern): This will abort the currently open thumbnail
+  // generating windows, but if this is not the last window,
+  // the rest will continue.  This is not ideal, but avoids
+  // lingering processes until AppWindows are no longer used
+  // for thumbnail generation. See VB-38712.
+  extensions::VivaldiUtilitiesAPI* utils_api =
+    extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(
+      window_->GetProfile());
+  DCHECK(utils_api);
+  utils_api->CloseAllThumbnailWindows();
+
+  extensions::DevtoolsConnectorAPI* api =
+    extensions::DevtoolsConnectorAPI::GetFactoryInstance()->Get(
+      window_->GetProfile());
+  DCHECK(api);
+  api->CloseDevtoolsForBrowser(window_->browser());
+
+#if defined(OS_WIN)
+  // This must be as early as possible.
+  bool should_quit_if_last_browser =
+    browser_shutdown::IsTryingToQuit() ||
+    KeepAliveRegistry::GetInstance()->IsKeepingAliveOnlyByBrowserOrigin();
+  if (should_quit_if_last_browser) {
+    vivaldi::OnShutdownStarted();
+  }
+#endif  // defined(OS_WIN)
+  if (widget_) {
+    widget_->Close();
+  }
+}
+
+void VivaldiNativeAppWindowViews::ShowEmojiPanel() {
+  GetWidget()->ShowEmojiPanel();
+}
+
+void VivaldiAppWindowClientView::ContinueQuit(bool close) {
+  PrefService* prefs = window_->GetProfile()->GetPrefs();
+  prefs->SetBoolean(vivaldiprefs::kSystemShowExitConfirmationDialog,
+    dialog_ && !dialog_->IsChecked());
+
+  quit_dialog_shown_ = close;
+
+  ContinueCloseInternal(close);
+}
+
+void VivaldiAppWindowClientView::ContinueClose(bool close) {
+  PrefService* prefs = window_->GetProfile()->GetPrefs();
+  prefs->SetBoolean(vivaldiprefs::kWindowsShowWindowCloseConfirmationDialog,
+    dialog_ && !dialog_->IsChecked());
+
+  close_dialog_shown_ = close;
+
+  ContinueCloseInternal(close);
+}
+
+void VivaldiAppWindowClientView::ContinueCloseInternal(bool close) {
+  if (close) {
+    window_->Close();
+  } else {
+    // Notify about the cancellation of window close so
+    // events can be sent to the web ui.
+    content::NotificationService::current()->Notify(
+      chrome::NOTIFICATION_BROWSER_CLOSE_CANCELLED,
+      content::Source<Browser>(window_->browser()),
+      content::NotificationService::NoDetails());
+  }
+  // The dialog will delete itself when closing.
+  dialog_ = nullptr;
+}
+
+// Similar to |BrowserView::CanClose|
+bool VivaldiAppWindowClientView::CanClose() {
+  Browser* browser = window_->browser();
+
+#if !defined(OS_MACOSX)
+  extensions::VivaldiWindowsAPI* api =
+    extensions::VivaldiWindowsAPI::GetFactoryInstance()->Get(
+      window_->GetProfile());
+  // Is window closing due to a profile being closed?
+  bool closed_due_to_profile = api->IsWindowClosingBecauseProfileClose(browser);
+
+  int tabbed_windows_cnt = vivaldi::GetBrowserCountOfType(Browser::TYPE_TABBED);
+  const PrefService* prefs = window_->GetProfile()->GetPrefs();
+  // Don't show exit dialog if the user explicitly selected exit
+  // from the menu.
+  if (!browser_shutdown::IsTryingToQuit() &&
+      !window_->GetProfile()->IsGuestSession()) {
+    if (prefs->GetBoolean(vivaldiprefs::kSystemShowExitConfirmationDialog)) {
+      if (!quit_dialog_shown_ &&
+          browser->type() == Browser::TYPE_TABBED &&
+          tabbed_windows_cnt == 1) {
+        if (window_->IsMinimized()) {
+          // Dialog is not visible if the window is minimized, so restore it
+          // now.
+          window_->Restore();
+        }
+        dialog_ = new vivaldi::VivaldiQuitConfirmationDialog(
+            base::Bind(&VivaldiAppWindowClientView::ContinueQuit,
+                       base::Unretained(this)),
+            nullptr, window_->GetNativeWindow(),
+            new vivaldi::VivaldiDialogQuitDelegate());
+        return false;
+      }
+    }
+  }
+  // If all tabs are gone there is no need to show a confirmation dialog. This
+  // is most likely a window that has been the source window of a move-tab
+  // operation.
+  if (!browser->tab_strip_model()->empty() &&
+      !window_->GetProfile()->IsGuestSession() && !closed_due_to_profile) {
+    if (prefs->GetBoolean(
+            vivaldiprefs::kWindowsShowWindowCloseConfirmationDialog)) {
+      if (!close_dialog_shown_ && !browser_shutdown::IsTryingToQuit() &&
+          browser->type() == Browser::TYPE_TABBED && tabbed_windows_cnt > 1) {
+        if (window_->IsMinimized()) {
+          // Dialog is not visible if the window is minimized, so restore it
+          // now.
+          window_->Restore();
+        }
+        dialog_ = new vivaldi::VivaldiQuitConfirmationDialog(
+          base::Bind(&VivaldiAppWindowClientView::ContinueClose,
+            base::Unretained(this)),
+          nullptr, window_->GetNativeWindow(),
+          new vivaldi::VivaldiDialogCloseWindowDelegate());
+        return false;
+      }
+    }
+  }
+#endif  // !defined(OS_MAC)
+  // This adds a quick hide code path to avoid VB-33480, but
+  // must be removed when beforeunload dialogs are implemented.
+  int count;
+  if (browser->OkToCloseWithInProgressDownloads(&count) ==
+    Browser::DOWNLOAD_CLOSE_OK) {
+    window_->Hide();
+  }
+  if (!browser->ShouldCloseWindow()) {
+    return false;
+  }
+  if (!browser->tab_strip_model()->empty()) {
+    window_->Hide();
+    browser->OnWindowClosing();
+    return false;
+  }
+  return true;
+}

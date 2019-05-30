@@ -19,7 +19,7 @@
 namespace views {
 namespace test {
 
-typedef ViewsTestBase RootViewTest;
+using RootViewTest = ViewsTestBase;
 
 class DeleteOnKeyEventView : public View {
  public:
@@ -44,7 +44,7 @@ class DeleteOnKeyEventView : public View {
 TEST_F(RootViewTest, DeleteViewDuringKeyEventDispatch) {
   Widget widget;
   Widget::InitParams init_params =
-      CreateParams(Widget::InitParams::TYPE_POPUP);
+      CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   widget.Init(init_params);
   widget.Show();
@@ -94,9 +94,9 @@ class TestContextMenuController : public ContextMenuController {
   }
 
   // ContextMenuController:
-  void ShowContextMenuForView(View* source,
-                              const gfx::Point& point,
-                              ui::MenuSourceType source_type) override {
+  void ShowContextMenuForViewImpl(View* source,
+                                  const gfx::Point& point,
+                                  ui::MenuSourceType source_type) override {
     show_context_menu_calls_++;
     menu_source_view_ = source;
     menu_source_type_ = source_type;
@@ -119,7 +119,7 @@ TEST_F(RootViewTest, ContextMenuFromKeyEvent) {
 #endif
   Widget widget;
   Widget::InitParams init_params =
-      CreateParams(Widget::InitParams::TYPE_POPUP);
+      CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   widget.Init(init_params);
   widget.Show();
@@ -582,11 +582,15 @@ TEST_F(RootViewTest, SingleLayoutDuringInit) {
       DialogDelegate::CreateDialogWidget(delegate, GetContext(), nullptr);
   EXPECT_EQ(1, delegate->layout_count());
   widget->CloseNow();
+}
 
-  // Also test Aura desktop Widget codepaths.
-  test_views_delegate()->set_use_desktop_native_widgets(true);
-  delegate = new RootViewTestDialogDelegate();
-  widget = DialogDelegate::CreateDialogWidget(delegate, GetContext(), nullptr);
+using RootViewDesktopNativeWidgetTest = ViewsTestWithDesktopNativeWidget;
+
+// Also test Aura desktop Widget codepaths.
+TEST_F(RootViewDesktopNativeWidgetTest, SingleLayoutDuringInit) {
+  RootViewTestDialogDelegate* delegate = new RootViewTestDialogDelegate();
+  Widget* widget =
+      DialogDelegate::CreateDialogWidget(delegate, GetContext(), nullptr);
   EXPECT_EQ(1, delegate->layout_count());
   widget->CloseNow();
 }

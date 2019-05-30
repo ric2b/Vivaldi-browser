@@ -14,7 +14,9 @@ mojom("mojo") {
     "gpu_fence_handle.mojom",
     "overlay_transform.mojom",
     "presentation_feedback.mojom",
+    "rrect_f.mojom",
     "selection_bound.mojom",
+    "swap_result.mojom",
     "transform.mojom",
   ]
 
@@ -22,6 +24,10 @@ mojom("mojo") {
     "//mojo/public/mojom/base",
     "//ui/gfx/geometry/mojo",
   ]
+
+  if (is_linux || is_chromeos) {
+    enabled_features = [ "supports_native_pixmap" ]
+  }
 }
 
 mojom("test_interfaces") {

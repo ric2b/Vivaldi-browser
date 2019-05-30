@@ -5,15 +5,17 @@
 #ifndef CHROMEOS_SERVICES_DEVICE_SYNC_DEVICE_SYNC_IMPL_H_
 #define CHROMEOS_SERVICES_DEVICE_SYNC_DEVICE_SYNC_IMPL_H_
 
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/unguessable_token.h"
+#include "chromeos/services/device_sync/cryptauth_enrollment_manager.h"
+#include "chromeos/services/device_sync/cryptauth_gcm_manager.h"
 #include "chromeos/services/device_sync/device_sync_base.h"
+#include "chromeos/services/device_sync/network_request_error.h"
 #include "chromeos/services/device_sync/public/mojom/device_sync.mojom.h"
-#include "components/cryptauth/cryptauth_enrollment_manager.h"
-#include "components/cryptauth/cryptauth_gcm_manager.h"
-#include "components/cryptauth/network_request_error.h"
-#include "components/cryptauth/remote_device_provider.h"
+#include "chromeos/services/device_sync/remote_device_provider.h"
 #include "components/signin/core/browser/account_info.h"
 #include "services/preferences/public/cpp/pref_service_factory.h"
 #include "services/preferences/public/mojom/preferences.mojom.h"
@@ -22,14 +24,8 @@ class PrefService;
 
 namespace base {
 class Clock;
+class OneShotTimer;
 }  // namespace base
-
-namespace cryptauth {
-class CryptAuthClientFactory;
-class CryptAuthDeviceManager;
-class GcmDeviceInfoProvider;
-class SoftwareFeatureManager;
-}  // namespace cryptauth
 
 namespace gcm {
 class GCMDriver;
@@ -51,6 +47,11 @@ namespace chromeos {
 
 namespace device_sync {
 
+class CryptAuthClientFactory;
+class CryptAuthDeviceManager;
+class GcmDeviceInfoProvider;
+class SoftwareFeatureManager;
+
 // Concrete DeviceSync implementation. When DeviceSyncImpl is constructed, it
 // starts an initialization flow with the following steps:
 // (1) Verify that the primary user is logged in with a valid account ID.
@@ -59,26 +60,25 @@ namespace device_sync {
 // (4) Check enrollment state; if not yet enrolled, enroll the device.
 // (5) When enrollment is valid, listen for device sync updates.
 class DeviceSyncImpl : public DeviceSyncBase,
-                       public cryptauth::CryptAuthEnrollmentManager::Observer,
-                       public cryptauth::RemoteDeviceProvider::Observer {
+                       public CryptAuthEnrollmentManager::Observer,
+                       public RemoteDeviceProvider::Observer {
  public:
   class Factory {
    public:
-    static std::unique_ptr<DeviceSyncBase> NewInstance(
-        identity::IdentityManager* identity_manager,
-        gcm::GCMDriver* gcm_driver,
-        service_manager::Connector* connector,
-        const cryptauth::GcmDeviceInfoProvider* gcm_device_info_provider,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
+    static Factory* Get();
     static void SetInstanceForTesting(Factory* test_factory);
 
     virtual ~Factory();
+
+    // Note: |timer| should be a newly-created base::OneShotTimer object; this
+    // parameter only exists for testing via dependency injection.
     virtual std::unique_ptr<DeviceSyncBase> BuildInstance(
         identity::IdentityManager* identity_manager,
         gcm::GCMDriver* gcm_driver,
         service_manager::Connector* connector,
-        const cryptauth::GcmDeviceInfoProvider* gcm_device_info_provider,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
+        const GcmDeviceInfoProvider* gcm_device_info_provider,
+        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+        std::unique_ptr<base::OneShotTimer> timer);
 
    private:
     static Factory* test_factory_instance_;
@@ -94,18 +94,18 @@ class DeviceSyncImpl : public DeviceSyncBase,
   void GetSyncedDevices(GetSyncedDevicesCallback callback) override;
   void SetSoftwareFeatureState(
       const std::string& device_public_key,
-      cryptauth::SoftwareFeature software_feature,
+      multidevice::SoftwareFeature software_feature,
       bool enabled,
       bool is_exclusive,
       SetSoftwareFeatureStateCallback callback) override;
-  void FindEligibleDevices(cryptauth::SoftwareFeature software_feature,
+  void FindEligibleDevices(multidevice::SoftwareFeature software_feature,
                            FindEligibleDevicesCallback callback) override;
   void GetDebugInfo(GetDebugInfoCallback callback) override;
 
-  // cryptauth::CryptAuthEnrollmentManager::Observer:
+  // CryptAuthEnrollmentManager::Observer:
   void OnEnrollmentFinished(bool success) override;
 
-  // cryptauth::RemoteDeviceProvider::Observer:
+  // RemoteDeviceProvider::Observer:
   void OnSyncDeviceListChanged() override;
 
  private:
@@ -132,31 +132,61 @@ class DeviceSyncImpl : public DeviceSyncBase,
         prefs::ConnectCallback callback);
   };
 
+  class PendingSetSoftwareFeatureRequest {
+   public:
+    PendingSetSoftwareFeatureRequest(
+        const std::string& device_public_key,
+        multidevice::SoftwareFeature software_feature,
+        bool enabled,
+        RemoteDeviceProvider* remote_device_provider,
+        SetSoftwareFeatureStateCallback callback);
+    ~PendingSetSoftwareFeatureRequest();
+
+    // Whether the request has been fulfilled (i.e., whether the requested
+    // feature has been set according to the parameters used).
+    bool IsFulfilled() const;
+
+    void InvokeCallback(mojom::NetworkRequestResult result);
+
+    multidevice::SoftwareFeature software_feature() const {
+      return software_feature_;
+    }
+
+    bool enabled() const { return enabled_; }
+
+   private:
+    std::string device_public_key_;
+    multidevice::SoftwareFeature software_feature_;
+    bool enabled_;
+    RemoteDeviceProvider* remote_device_provider_;
+    SetSoftwareFeatureStateCallback callback_;
+  };
+
   DeviceSyncImpl(
       identity::IdentityManager* identity_manager,
       gcm::GCMDriver* gcm_driver,
       service_manager::Connector* connector,
-      const cryptauth::GcmDeviceInfoProvider* gcm_device_info_provider,
+      const GcmDeviceInfoProvider* gcm_device_info_provider,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       base::Clock* clock,
-      std::unique_ptr<PrefConnectionDelegate> pref_connection_delegate);
+      std::unique_ptr<PrefConnectionDelegate> pref_connection_delegate,
+      std::unique_ptr<base::OneShotTimer> timer);
 
-  void ProcessPrimaryAccountInfo(const AccountInfo& primary_account_info);
+  // DeviceSyncBase:
+  void Shutdown() override;
+
+  void ProcessPrimaryAccountInfo(const CoreAccountInfo& primary_account_info);
   void ConnectToPrefStore();
   void OnConnectedToPrefService(std::unique_ptr<PrefService> pref_service);
   void InitializeCryptAuthManagementObjects();
   void CompleteInitializationAfterSuccessfulEnrollment();
 
-  base::Optional<cryptauth::RemoteDevice> GetSyncedDeviceWithPublicKey(
+  base::Optional<multidevice::RemoteDevice> GetSyncedDeviceWithPublicKey(
       const std::string& public_key) const;
 
-  void OnSetSoftwareFeatureStateSuccess(
-      const base::RepeatingCallback<void(mojom::NetworkRequestResult)>&
-          callback);
-  void OnSetSoftwareFeatureStateError(
-      const base::RepeatingCallback<void(mojom::NetworkRequestResult)>&
-          callback,
-      cryptauth::NetworkRequestError error);
+  void OnSetSoftwareFeatureStateSuccess();
+  void OnSetSoftwareFeatureStateError(const base::UnguessableToken& request_id,
+                                      NetworkRequestError error);
   void OnFindEligibleDevicesSuccess(
       const base::RepeatingCallback<
           void(mojom::NetworkRequestResult,
@@ -167,7 +197,12 @@ class DeviceSyncImpl : public DeviceSyncBase,
       const base::RepeatingCallback<
           void(mojom::NetworkRequestResult,
                mojom::FindEligibleDevicesResponsePtr)>& callback,
-      cryptauth::NetworkRequestError error);
+      NetworkRequestError error);
+
+  // Note: If the timer is already running, StartSetSoftwareFeatureTimer()
+  // restarts it.
+  void StartSetSoftwareFeatureTimer();
+  void OnSetSoftwareFeatureTimerFired();
 
   void SetPrefConnectionDelegateForTesting(
       std::unique_ptr<PrefConnectionDelegate> pref_connection_delegate);
@@ -175,22 +210,25 @@ class DeviceSyncImpl : public DeviceSyncBase,
   identity::IdentityManager* identity_manager_;
   gcm::GCMDriver* gcm_driver_;
   service_manager::Connector* connector_;
-  const cryptauth::GcmDeviceInfoProvider* gcm_device_info_provider_;
+  const GcmDeviceInfoProvider* gcm_device_info_provider_;
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
   base::Clock* clock_;
   std::unique_ptr<PrefConnectionDelegate> pref_connection_delegate_;
+  std::unique_ptr<base::OneShotTimer> set_software_feature_timer_;
 
   Status status_;
-  AccountInfo primary_account_info_;
+  CoreAccountInfo primary_account_info_;
   std::unique_ptr<PrefService> pref_service_;
+  base::flat_map<base::UnguessableToken,
+                 std::unique_ptr<PendingSetSoftwareFeatureRequest>>
+      id_to_pending_set_software_feature_request_map_;
 
-  std::unique_ptr<cryptauth::CryptAuthGCMManager> cryptauth_gcm_manager_;
-  std::unique_ptr<cryptauth::CryptAuthClientFactory> cryptauth_client_factory_;
-  std::unique_ptr<cryptauth::CryptAuthEnrollmentManager>
-      cryptauth_enrollment_manager_;
-  std::unique_ptr<cryptauth::CryptAuthDeviceManager> cryptauth_device_manager_;
-  std::unique_ptr<cryptauth::RemoteDeviceProvider> remote_device_provider_;
-  std::unique_ptr<cryptauth::SoftwareFeatureManager> software_feature_manager_;
+  std::unique_ptr<CryptAuthGCMManager> cryptauth_gcm_manager_;
+  std::unique_ptr<CryptAuthClientFactory> cryptauth_client_factory_;
+  std::unique_ptr<CryptAuthEnrollmentManager> cryptauth_enrollment_manager_;
+  std::unique_ptr<CryptAuthDeviceManager> cryptauth_device_manager_;
+  std::unique_ptr<RemoteDeviceProvider> remote_device_provider_;
+  std::unique_ptr<SoftwareFeatureManager> software_feature_manager_;
 
   base::WeakPtrFactory<DeviceSyncImpl> weak_ptr_factory_;
 

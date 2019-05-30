@@ -20,7 +20,7 @@ import org.chromium.android_webview.AwBrowserContext;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwContents.DependencyFactory;
 import org.chromium.android_webview.AwContents.InternalAccessDelegate;
-import org.chromium.android_webview.AwContents.NativeDrawGLFunctorFactory;
+import org.chromium.android_webview.AwContents.NativeDrawFunctorFactory;
 import org.chromium.android_webview.AwContentsClient;
 import org.chromium.android_webview.AwRenderProcessGoneDetail;
 import org.chromium.android_webview.AwSettings;
@@ -31,10 +31,11 @@ import org.chromium.android_webview.test.OnlyRunIn;
 import org.chromium.android_webview.test.RenderProcessGoneHelper;
 import org.chromium.android_webview.test.TestAwContents;
 import org.chromium.android_webview.test.TestAwContentsClient;
-import org.chromium.base.ThreadUtils;
+import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.common.ContentUrlConstants;
 
 import java.util.concurrent.TimeUnit;
@@ -78,11 +79,10 @@ public class VisualStateCallbackTest {
         public VisualStateCallbackTestAwContents(AwBrowserContext browserContext,
                 ViewGroup containerView, Context context,
                 InternalAccessDelegate internalAccessAdapter,
-                NativeDrawGLFunctorFactory nativeDrawGLFunctorFactory,
-                AwContentsClient contentsClient, AwSettings settings,
-                DependencyFactory dependencyFactory) {
+                NativeDrawFunctorFactory nativeDrawFunctorFactory, AwContentsClient contentsClient,
+                AwSettings settings, DependencyFactory dependencyFactory) {
             super(browserContext, containerView, context, internalAccessAdapter,
-                    nativeDrawGLFunctorFactory, contentsClient, settings, dependencyFactory);
+                    nativeDrawFunctorFactory, contentsClient, settings, dependencyFactory);
             mVisualStateCallbackHelper = new VisualStateCallbackHelper();
         }
 
@@ -100,7 +100,8 @@ public class VisualStateCallbackTest {
 
         public void doInvokeVisualStateCallbackOnUiThread() {
             final VisualStateCallbackTestAwContents awContents = this;
-            ThreadUtils.runOnUiThread(() -> awContents.doInvokeVisualStateCallback());
+            PostTask.runOrPostTask(
+                    UiThreadTaskTraits.DEFAULT, () -> awContents.doInvokeVisualStateCallback());
         }
 
         private void doInvokeVisualStateCallback() {
@@ -113,11 +114,10 @@ public class VisualStateCallbackTest {
         @Override
         public AwContents createAwContents(AwBrowserContext browserContext, ViewGroup containerView,
                 Context context, InternalAccessDelegate internalAccessAdapter,
-                NativeDrawGLFunctorFactory nativeDrawGLFunctorFactory,
-                AwContentsClient contentsClient, AwSettings settings,
-                DependencyFactory dependencyFactory) {
+                NativeDrawFunctorFactory nativeDrawFunctorFactory, AwContentsClient contentsClient,
+                AwSettings settings, DependencyFactory dependencyFactory) {
             return new VisualStateCallbackTestAwContents(browserContext, containerView, context,
-                    internalAccessAdapter, nativeDrawGLFunctorFactory, contentsClient, settings,
+                    internalAccessAdapter, nativeDrawFunctorFactory, contentsClient, settings,
                     dependencyFactory);
         }
     }

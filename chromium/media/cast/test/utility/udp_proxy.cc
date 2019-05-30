@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/containers/circular_deque.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -16,6 +17,7 @@
 #include "base/rand_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
 #include "net/base/io_buffer.h"
@@ -65,7 +67,7 @@ class Buffer : public PacketPipe {
   void Send(std::unique_ptr<Packet> packet) final {
     if (packet->size() + buffer_size_ <= max_buffer_size_) {
       buffer_size_ += packet->size();
-      buffer_.push_back(linked_ptr<Packet>(packet.release()));
+      buffer_.push_back(std::move(packet));
       if (buffer_.size() == 1) {
         Schedule();
       }
@@ -80,7 +82,7 @@ class Buffer : public PacketPipe {
     int64_t microseconds = static_cast<int64_t>(seconds * 1E6);
     task_runner_->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&Buffer::ProcessBuffer, weak_factory_.GetWeakPtr()),
+        base::BindOnce(&Buffer::ProcessBuffer, weak_factory_.GetWeakPtr()),
         base::TimeDelta::FromMicroseconds(microseconds));
   }
 
@@ -94,7 +96,7 @@ class Buffer : public PacketPipe {
     while (!buffer_.empty() &&
            static_cast<int64_t>(buffer_.front()->size()) <= bytes_to_send) {
       CHECK(!buffer_.empty());
-      std::unique_ptr<Packet> packet(buffer_.front().release());
+      std::unique_ptr<Packet> packet = std::move(buffer_.front());
       bytes_to_send -= packet->size();
       buffer_size_ -= packet->size();
       buffer_.pop_front();
@@ -105,7 +107,7 @@ class Buffer : public PacketPipe {
     }
   }
 
-  base::circular_deque<linked_ptr<Packet>> buffer_;
+  base::circular_deque<std::unique_ptr<Packet>> buffer_;
   base::TimeTicks last_schedule_;
   size_t buffer_size_;
   size_t max_buffer_size_;
@@ -145,8 +147,8 @@ class SimpleDelayBase : public PacketPipe {
     double seconds = GetDelay();
     task_runner_->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&SimpleDelayBase::SendInternal, weak_factory_.GetWeakPtr(),
-                   base::Passed(&packet)),
+        base::BindOnce(&SimpleDelayBase::SendInternal,
+                       weak_factory_.GetWeakPtr(), std::move(packet)),
         base::TimeDelta::FromMicroseconds(static_cast<int64_t>(seconds * 1E6)));
   }
  protected:
@@ -222,7 +224,7 @@ class RandomSortedDelay : public PacketPipe {
         weak_factory_(this) {}
 
   void Send(std::unique_ptr<Packet> packet) final {
-    buffer_.push_back(linked_ptr<Packet>(packet.release()));
+    buffer_.push_back(std::move(packet));
     if (buffer_.size() == 1) {
       next_send_ = std::max(
           clock_->NowTicks() +
@@ -246,8 +248,8 @@ class RandomSortedDelay : public PacketPipe {
     int64_t microseconds = static_cast<int64_t>(seconds * 1E6);
     task_runner_->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&RandomSortedDelay::CauseExtraDelay,
-                   weak_factory_.GetWeakPtr()),
+        base::BindOnce(&RandomSortedDelay::CauseExtraDelay,
+                       weak_factory_.GetWeakPtr()),
         base::TimeDelta::FromMicroseconds(microseconds));
   }
 
@@ -265,7 +267,7 @@ class RandomSortedDelay : public PacketPipe {
   void ProcessBuffer() {
     base::TimeTicks now = clock_->NowTicks();
     while (!buffer_.empty() && next_send_ <= now) {
-      std::unique_ptr<Packet> packet(buffer_.front().release());
+      std::unique_ptr<Packet> packet = std::move(buffer_.front());
       pipe_->Send(std::move(packet));
       buffer_.pop_front();
 
@@ -276,14 +278,14 @@ class RandomSortedDelay : public PacketPipe {
     if (!buffer_.empty()) {
       task_runner_->PostDelayedTask(
           FROM_HERE,
-          base::Bind(&RandomSortedDelay::ProcessBuffer,
-                     weak_factory_.GetWeakPtr()),
+          base::BindOnce(&RandomSortedDelay::ProcessBuffer,
+                         weak_factory_.GetWeakPtr()),
           next_send_ - now);
     }
   }
 
   base::TimeTicks block_until_;
-  base::circular_deque<linked_ptr<Packet>> buffer_;
+  base::circular_deque<std::unique_ptr<Packet>> buffer_;
   double random_delay_;
   double extra_delay_;
   double seconds_between_extra_delay_;
@@ -328,7 +330,7 @@ class NetworkGlitchPipe : public PacketPipe {
     int64_t microseconds = static_cast<int64_t>(seconds * 1E6);
     task_runner_->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&NetworkGlitchPipe::Flip, weak_factory_.GetWeakPtr()),
+        base::BindOnce(&NetworkGlitchPipe::Flip, weak_factory_.GetWeakPtr()),
         base::TimeDelta::FromMicroseconds(microseconds));
   }
 
@@ -362,7 +364,7 @@ class InterruptedPoissonProcess::InternalBuffer : public PacketPipe {
     if (stored_size_ >= stored_limit_)
       return;
     stored_size_ += packet->size();
-    buffer_.push_back(linked_ptr<Packet>(packet.release()));
+    buffer_.push_back(std::move(packet));
     buffer_time_.push_back(clock_->NowTicks());
     DCHECK(buffer_.size() == buffer_time_.size());
   }
@@ -377,7 +379,7 @@ class InterruptedPoissonProcess::InternalBuffer : public PacketPipe {
   }
 
   void SendOnePacket() {
-    std::unique_ptr<Packet> packet(buffer_.front().release());
+    std::unique_ptr<Packet> packet = std::move(buffer_.front());
     stored_size_ -= packet->size();
     buffer_.pop_front();
     buffer_time_.pop_front();
@@ -403,7 +405,7 @@ class InterruptedPoissonProcess::InternalBuffer : public PacketPipe {
   const base::WeakPtr<InterruptedPoissonProcess> ipp_;
   size_t stored_size_;
   const size_t stored_limit_;
-  base::circular_deque<linked_ptr<Packet>> buffer_;
+  base::circular_deque<std::unique_ptr<Packet>> buffer_;
   base::circular_deque<base::TimeTicks> buffer_time_;
   const base::TickClock* clock_;
   base::WeakPtrFactory<InternalBuffer> weak_factory_;
@@ -485,8 +487,8 @@ void InterruptedPoissonProcess::UpdateRates() {
   rate_index_ = (rate_index_ + 1) % average_rates_.size();
   task_runner_->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&InterruptedPoissonProcess::UpdateRates,
-                 weak_factory_.GetWeakPtr()),
+      base::BindOnce(&InterruptedPoissonProcess::UpdateRates,
+                     weak_factory_.GetWeakPtr()),
       base::TimeDelta::FromSeconds(1));
 }
 
@@ -494,8 +496,8 @@ void InterruptedPoissonProcess::SwitchOff() {
   on_state_ = false;
   task_runner_->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&InterruptedPoissonProcess::SwitchOn,
-                 weak_factory_.GetWeakPtr()),
+      base::BindOnce(&InterruptedPoissonProcess::SwitchOn,
+                     weak_factory_.GetWeakPtr()),
       NextEvent(switch_on_rate_));
 }
 
@@ -503,16 +505,16 @@ void InterruptedPoissonProcess::SwitchOn() {
   on_state_ = true;
   task_runner_->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&InterruptedPoissonProcess::SwitchOff,
-                 weak_factory_.GetWeakPtr()),
+      base::BindOnce(&InterruptedPoissonProcess::SwitchOff,
+                     weak_factory_.GetWeakPtr()),
       NextEvent(switch_off_rate_));
 }
 
 void InterruptedPoissonProcess::SendPacket() {
   task_runner_->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&InterruptedPoissonProcess::SendPacket,
-                 weak_factory_.GetWeakPtr()),
+      base::BindOnce(&InterruptedPoissonProcess::SendPacket,
+                     weak_factory_.GetWeakPtr()),
       NextEvent(send_rate_));
 
   // If OFF then don't send.
@@ -693,29 +695,26 @@ class UDPProxyImpl : public UDPProxy {
         from_dest_pipe_(std::move(from_dest_pipe)),
         blocked_(false),
         weak_factory_(this) {
+    base::ScopedAllowBlockingForTesting allow_blocking;
     proxy_thread_.StartWithOptions(
         base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
     base::WaitableEvent start_event(
         base::WaitableEvent::ResetPolicy::AUTOMATIC,
         base::WaitableEvent::InitialState::NOT_SIGNALED);
     proxy_thread_.task_runner()->PostTask(
-        FROM_HERE,
-        base::Bind(&UDPProxyImpl::Start,
-                   base::Unretained(this),
-                   base::Unretained(&start_event),
-                   net_log));
+        FROM_HERE, base::BindOnce(&UDPProxyImpl::Start, base::Unretained(this),
+                                  base::Unretained(&start_event), net_log));
     start_event.Wait();
   }
 
   ~UDPProxyImpl() final {
+    base::ScopedAllowBlockingForTesting allow_blocking;
     base::WaitableEvent stop_event(
         base::WaitableEvent::ResetPolicy::AUTOMATIC,
         base::WaitableEvent::InitialState::NOT_SIGNALED);
     proxy_thread_.task_runner()->PostTask(
-        FROM_HERE,
-        base::Bind(&UDPProxyImpl::Stop,
-                   base::Unretained(this),
-                   base::Unretained(&stop_event)));
+        FROM_HERE, base::BindOnce(&UDPProxyImpl::Stop, base::Unretained(this),
+                                  base::Unretained(&stop_event)));
     stop_event.Wait();
     proxy_thread_.Stop();
   }
@@ -730,8 +729,8 @@ class UDPProxyImpl : public UDPProxy {
     VLOG(1) << "Sending packet, len = " << packet->size();
     // We ignore all problems, callbacks and errors.
     // If it didn't work we just drop the packet at and call it a day.
-    scoped_refptr<net::IOBuffer> buf =
-        new net::WrappedIOBuffer(reinterpret_cast<char*>(&packet->front()));
+    auto buf = base::MakeRefCounted<net::WrappedIOBuffer>(
+        reinterpret_cast<char*>(&packet->front()));
     size_t buf_size = packet->size();
     int result;
     if (destination.address().empty()) {
@@ -814,8 +813,8 @@ class UDPProxyImpl : public UDPProxy {
   void PollRead() {
     while (true) {
       packet_.reset(new Packet(kMaxPacketSize));
-      scoped_refptr<net::IOBuffer> recv_buf =
-          new net::WrappedIOBuffer(reinterpret_cast<char*>(&packet_->front()));
+      auto recv_buf = base::MakeRefCounted<net::WrappedIOBuffer>(
+          reinterpret_cast<char*>(&packet_->front()));
       int len = socket_->RecvFrom(
           recv_buf.get(),
           kMaxPacketSize,

@@ -9,7 +9,7 @@
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/skia_texture_holder.h"
-#include "third_party/blink/renderer/platform/web_task_runner.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 
 namespace blink {
@@ -79,7 +79,7 @@ void MailboxTextureHolder::Sync(MailboxSyncMode mode) {
     return;
   }
 
-  if (!ContextProviderWrapper() || IsAbandoned())
+  if (!ContextProviderWrapper())
     return;
 
   TRACE_EVENT0("blink", "MailboxTextureHolder::Sync");
@@ -118,7 +118,7 @@ void MailboxTextureHolder::Sync(MailboxSyncMode mode) {
 }
 
 void MailboxTextureHolder::InitCommon() {
-  WebThread* thread = Platform::Current()->CurrentThread();
+  Thread* thread = Thread::Current();
   thread_id_ = thread->ThreadId();
   texture_thread_task_runner_ = thread->GetTaskRunner();
 }
@@ -129,11 +129,11 @@ bool MailboxTextureHolder::IsValid() const {
     // Just assume valid. Potential problem will be detected later.
     return true;
   }
-  return !IsAbandoned() && !!ContextProviderWrapper();
+  return !!ContextProviderWrapper();
 }
 
 bool MailboxTextureHolder::IsCrossThread() const {
-  return thread_id_ != Platform::Current()->CurrentThread()->ThreadId();
+  return thread_id_ != Thread::Current()->ThreadId();
 }
 
 MailboxTextureHolder::~MailboxTextureHolder() {
@@ -141,20 +141,18 @@ MailboxTextureHolder::~MailboxTextureHolder() {
       new gpu::SyncToken(sync_token_));
   std::unique_ptr<gpu::Mailbox> passed_mailbox(new gpu::Mailbox(mailbox_));
 
-  if (!IsAbandoned()) {
-    if (texture_thread_task_runner_ &&
-        thread_id_ != Platform::Current()->CurrentThread()->ThreadId()) {
-      PostCrossThreadTask(
-          *texture_thread_task_runner_, FROM_HERE,
-          CrossThreadBind(&ReleaseTexture, is_converted_from_skia_texture_,
-                          texture_id_, WTF::Passed(std::move(passed_mailbox)),
-                          WTF::Passed(ContextProviderWrapper()),
-                          WTF::Passed(std::move(passed_sync_token))));
-    } else {
-      ReleaseTexture(is_converted_from_skia_texture_, texture_id_,
-                     std::move(passed_mailbox), ContextProviderWrapper(),
-                     std::move(passed_sync_token));
-    }
+  if (texture_thread_task_runner_ &&
+      thread_id_ != Thread::Current()->ThreadId()) {
+    PostCrossThreadTask(
+        *texture_thread_task_runner_, FROM_HERE,
+        CrossThreadBind(&ReleaseTexture, is_converted_from_skia_texture_,
+                        texture_id_, WTF::Passed(std::move(passed_mailbox)),
+                        WTF::Passed(ContextProviderWrapper()),
+                        WTF::Passed(std::move(passed_sync_token))));
+  } else {
+    ReleaseTexture(is_converted_from_skia_texture_, texture_id_,
+                   std::move(passed_mailbox), ContextProviderWrapper(),
+                   std::move(passed_sync_token));
   }
 
   texture_id_ = 0u;  // invalidate the texture.

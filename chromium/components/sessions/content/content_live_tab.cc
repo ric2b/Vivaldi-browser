@@ -46,12 +46,12 @@ int ContentLiveTab::GetPendingEntryIndex() {
 
 sessions::SerializedNavigationEntry ContentLiveTab::GetEntryAtIndex(int index) {
   return sessions::ContentSerializedNavigationBuilder::FromNavigationEntry(
-      index, *navigation_controller().GetEntryAtIndex(index));
+      index, navigation_controller().GetEntryAtIndex(index));
 }
 
 sessions::SerializedNavigationEntry ContentLiveTab::GetPendingEntry() {
   return sessions::ContentSerializedNavigationBuilder::FromNavigationEntry(
-      GetPendingEntryIndex(), *navigation_controller().GetPendingEntry());
+      GetPendingEntryIndex(), navigation_controller().GetPendingEntry());
 }
 
 int ContentLiveTab::GetEntryCount() {
@@ -64,7 +64,7 @@ ContentLiveTab::GetPlatformSpecificTabData() {
       web_contents());
 }
 
-const std::string& ContentLiveTab::GetUserAgentOverride() const {
+const std::string& ContentLiveTab::GetUserAgentOverride() {
   return web_contents()->GetUserAgentOverride();
 }
 

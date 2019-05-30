@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/crostini/crostini_uninstaller_view.h"
 
+#include "base/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
@@ -31,15 +32,16 @@ constexpr char kCrostiniUninstallSourceHistogram[] = "Crostini.UninstallSource";
 
 }  // namespace
 
-void ShowCrostiniUninstallerView(Profile* profile,
-                                 CrostiniUISurface ui_surface) {
+void crostini::ShowCrostiniUninstallerView(
+    Profile* profile,
+    crostini::CrostiniUISurface ui_surface) {
   base::UmaHistogramEnumeration(kCrostiniUninstallSourceHistogram, ui_surface,
-                                CrostiniUISurface::kCount);
+                                crostini::CrostiniUISurface::kCount);
   return CrostiniUninstallerView::Show(profile);
 }
 
 void CrostiniUninstallerView::Show(Profile* profile) {
-  DCHECK(IsCrostiniUIAllowedForProfile(profile));
+  DCHECK(crostini::IsCrostiniUIAllowedForProfile(profile));
   if (!g_crostini_uninstaller_view) {
     g_crostini_uninstaller_view = new CrostiniUninstallerView(profile);
     views::DialogDelegate::CreateDialogWidget(g_crostini_uninstaller_view,
@@ -84,8 +86,8 @@ bool CrostiniUninstallerView::Accept() {
       l10n_util::GetStringUTF16(IDS_CROSTINI_UNINSTALLER_UNINSTALLING_MESSAGE));
 
   // Kick off the Crostini Remove sequence.
-  crostini::CrostiniManager::GetInstance()->RemoveCrostini(
-      profile_, kCrostiniDefaultVmName, kCrostiniDefaultContainerName,
+  crostini::CrostiniManager::GetForProfile(profile_)->RemoveCrostini(
+      crostini::kCrostiniDefaultVmName,
       base::BindOnce(&CrostiniUninstallerView::UninstallCrostiniFinished,
                      weak_ptr_factory_.GetWeakPtr()));
 
@@ -154,8 +156,8 @@ void CrostiniUninstallerView::HandleError(const base::string16& error_message) {
 }
 
 void CrostiniUninstallerView::UninstallCrostiniFinished(
-    crostini::ConciergeClientResult result) {
-  if (result != crostini::ConciergeClientResult::SUCCESS) {
+    crostini::CrostiniResult result) {
+  if (result != crostini::CrostiniResult::SUCCESS) {
     HandleError(l10n_util::GetStringUTF16(IDS_CROSTINI_UNINSTALLER_ERROR));
     return;
   } else {

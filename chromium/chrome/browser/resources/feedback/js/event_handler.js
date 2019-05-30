@@ -2,30 +2,30 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// <include src="data.js">
+// <include src="feedback_util.js">
 
 /**
  * @type {number}
  * @const
  */
-var FEEDBACK_WIDTH = 500;
+const FEEDBACK_WIDTH = 500;
 /**
  * @type {number}
  * @const
  */
-var FEEDBACK_HEIGHT = 610;
+const FEEDBACK_HEIGHT = 610;
 
 /**
  * @type {string}
  * @const
  */
-var FEEDBACK_DEFAULT_WINDOW_ID = 'default_window';
+const FEEDBACK_DEFAULT_WINDOW_ID = 'default_window';
 
 // To generate a hashed extension ID, use a sha-1 hash, all in lower case.
 // Example:
 //   echo -n 'abcdefghijklmnopqrstuvwxyzabcdef' | sha1sum | \
 //       awk '{print toupper($1)}'
-var whitelistedExtensionIds = [
+const whitelistedExtensionIds = [
   '12E618C3C6E97495AAECF2AC12DEB082353241C6',  // QuickOffice
   '3727DD3E564B6055387425027AD74C58784ACC15',  // QuickOffice
   '2FC374607C2DF285634B67C64A2E356C607091C3',  // QuickOffice
@@ -79,13 +79,17 @@ var whitelistedExtensionIds = [
   '3BC3740BFC58F06088B300274B4CFBEA20136342',  // http://crbug.com/541769
   '2B6C6A4A5940017146F3E58B7F90116206E84685',  // http://crbug.com/642141
   '96FF2FFA5C9173C76D47184B3E86D267B37781DE',  // http://crbug.com/642141
+  'A3E3DE9E9F16B41D4A2FAD106BD6CA76B94A0C94',  // http://crbug.com/908458
+  'C2ABD68C33A5B485971C9638B80D6A2E9CBA78C4',  // http://crbug.com/908458
+  'B41E7F08E1179CC03CBD1F49E57CF353A40ADE07',  // http://crbug.com/908458
+  'A948368FC53BE437A55FEB414106E207925482F5',  // ChromeOS Files App.
 ];
 
 /**
  * Used to generate unique IDs for FeedbackRequest objects.
  * @type {number}
  */
-var lastUsedId = 0;
+let lastUsedId = 0;
 
 /**
  * A FeedbackRequest object represents a unique feedback report, requested by an
@@ -145,7 +149,7 @@ class FeedbackRequest {
 
     this.onSystemInfoReadyCallback_ = callback;
     // The C++ side must reply to the callback specific to this object.
-    var boundCallback = this.getSystemInformationCallback.bind(this);
+    const boundCallback = this.getSystemInformationCallback.bind(this);
     chrome.feedbackPrivate.getSystemInformation(boundCallback);
   }
 
@@ -176,14 +180,14 @@ class FeedbackRequest {
       this.feedbackInfo_.systemInformation = null;
     }
 
-    /** @const */ var ID = this.id_;
-    /** @const */ var FLOW = this.feedbackInfo_.flow;
+    /** @const */ const ID = this.id_;
+    /** @const */ const FLOW = this.feedbackInfo_.flow;
     chrome.feedbackPrivate.sendFeedback(
         this.feedbackInfo_, function(result, landingPageType) {
           if (result == chrome.feedbackPrivate.Status.SUCCESS) {
             console.log('Feedback: Report sent for request with ID ' + ID);
             if (FLOW != chrome.feedbackPrivate.FeedbackFlow.LOGIN) {
-              var landingPage = landingPageType ==
+              const landingPage = landingPageType ==
                       chrome.feedbackPrivate.LandingPageType.NORMAL ?
                   FEEDBACK_LANDING_PAGE :
                   FEEDBACK_LANDING_PAGE_TECHSTOP;
@@ -202,8 +206,9 @@ class FeedbackRequest {
    * FeedbackRequest instance is closed.
    */
   onWindowClosed() {
-    if (!this.reportIsBeingSent_)
+    if (!this.reportIsBeingSent_) {
       this.isRequestCanceled_ = true;
+    }
   }
 }
 
@@ -220,15 +225,16 @@ class FeedbackRequest {
 function senderWhitelisted(id, startFeedbackCallback, feedbackInfo) {
   crypto.subtle.digest('SHA-1', new TextEncoder().encode(id))
       .then(function(hashBuffer) {
-        var hashString = '';
-        var hashView = new Uint8Array(hashBuffer);
-        for (var i = 0; i < hashView.length; ++i) {
-          var n = hashView[i];
+        let hashString = '';
+        const hashView = new Uint8Array(hashBuffer);
+        for (let i = 0; i < hashView.length; ++i) {
+          const n = hashView[i];
           hashString += n < 0x10 ? '0' : '';
           hashString += n.toString(16);
         }
-        if (whitelistedExtensionIds.indexOf(hashString.toUpperCase()) != -1)
+        if (whitelistedExtensionIds.indexOf(hashString.toUpperCase()) != -1) {
           startFeedbackCallback(feedbackInfo);
+        }
       });
 }
 
@@ -240,8 +246,9 @@ function senderWhitelisted(id, startFeedbackCallback, feedbackInfo) {
  * @param {function(Object)} sendResponse Callback for sending a response.
  */
 function feedbackReadyHandler(request, sender, sendResponse) {
-  if (request.ready)
+  if (request.ready) {
     chrome.runtime.sendMessage({sentFromEventPage: true});
+  }
 }
 
 /**
@@ -251,8 +258,9 @@ function feedbackReadyHandler(request, sender, sendResponse) {
  * @param {function(Object)} sendResponse Callback for sending a response.
  */
 function requestFeedbackHandler(request, sender, sendResponse) {
-  if (request.requestFeedback)
+  if (request.requestFeedback) {
     senderWhitelisted(sender.id, startFeedbackUI, request.feedbackInfo);
+  }
 }
 
 /**
@@ -260,7 +268,7 @@ function requestFeedbackHandler(request, sender, sendResponse) {
  * @param {Object} feedbackInfo Object containing any initial feedback info.
  */
 function startFeedbackUI(feedbackInfo) {
-  var win = chrome.app.window.get(FEEDBACK_DEFAULT_WINDOW_ID);
+  const win = chrome.app.window.get(FEEDBACK_DEFAULT_WINDOW_ID);
   if (win) {
     win.show();
     return;
@@ -277,7 +285,7 @@ function startFeedbackUI(feedbackInfo) {
         resizable: false
       },
       function(appWindow) {
-        var request = new FeedbackRequest(feedbackInfo);
+        const request = new FeedbackRequest(feedbackInfo);
 
         // The feedbackInfo member of the new window should refer to the one in
         // its corresponding FeedbackRequest object to avoid copying and

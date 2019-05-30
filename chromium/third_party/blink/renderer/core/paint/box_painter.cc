@@ -19,22 +19,24 @@
 #include "third_party/blink/renderer/core/paint/nine_piece_image_painter.h"
 #include "third_party/blink/renderer/core/paint/object_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
-#include "third_party/blink/renderer/core/paint/paint_info_with_offset.h"
+#include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/core/paint/scoped_paint_state.h"
 #include "third_party/blink/renderer/core/paint/svg_foreign_object_painter.h"
 #include "third_party/blink/renderer/core/paint/theme_painter.h"
 #include "third_party/blink/renderer/platform/geometry/layout_point.h"
+#include "third_party/blink/renderer/platform/geometry/length_functions.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context_state_saver.h"
 #include "third_party/blink/renderer/platform/graphics/paint/display_item_cache_skipper.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
+#include "third_party/blink/renderer/platform/graphics/paint/hit_test_display_item.h"
 #include "third_party/blink/renderer/platform/graphics/paint/scoped_paint_chunk_properties.h"
-#include "third_party/blink/renderer/platform/length_functions.h"
 
 namespace blink {
 
 void BoxPainter::Paint(const PaintInfo& paint_info) {
   // Default implementation. Just pass paint through to the children.
-  PaintInfoWithOffset paint_info_with_offset(layout_box_, paint_info);
-  PaintChildren(paint_info_with_offset.GetPaintInfo());
+  ScopedPaintState paint_state(layout_box_, paint_info);
+  PaintChildren(paint_state.GetPaintInfo());
 }
 
 void BoxPainter::PaintChildren(const PaintInfo& paint_info) {
@@ -53,53 +55,65 @@ void BoxPainter::PaintChildren(const PaintInfo& paint_info) {
 void BoxPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info,
                                               const LayoutPoint& paint_offset) {
   LayoutRect paint_rect;
-  base::Optional<ScopedPaintChunkProperties> scoped_scroll_property;
-  if (BoxModelObjectPainter::
-          IsPaintingBackgroundOfPaintContainerIntoScrollingContentsLayer(
-              &layout_box_, paint_info)) {
+  const DisplayItemClient* background_client = nullptr;
+  base::Optional<ScopedBoxContentsPaintState> contents_paint_state;
+  if (BoxModelObjectPainter::IsPaintingScrollingBackground(&layout_box_,
+                                                           paint_info)) {
     // For the case where we are painting the background into the scrolling
     // contents layer of a composited scroller we need to include the entire
     // overflow rect.
     paint_rect = layout_box_.PhysicalLayoutOverflowRect();
-
-    if (const auto* fragment = paint_info.FragmentToPaint(layout_box_)) {
-      scoped_scroll_property.emplace(
-          paint_info.context.GetPaintController(),
-          fragment->ContentsProperties(), layout_box_,
-          DisplayItem::PaintPhaseToScrollType(paint_info.phase));
-    }
+    contents_paint_state.emplace(paint_info, paint_offset, layout_box_);
+    paint_rect.MoveBy(contents_paint_state->PaintOffset());
 
     // The background painting code assumes that the borders are part of the
-    // paintRect so we expand the paintRect by the border size when painting the
-    // background into the scrolling contents layer.
+    // paint_rect so we expand the paint_rect by the border size when painting
+    // the background into the scrolling contents layer.
     paint_rect.Expand(layout_box_.BorderBoxOutsets());
+
+    background_client = &layout_box_.GetScrollableArea()
+                             ->GetScrollingBackgroundDisplayItemClient();
   } else {
     paint_rect = layout_box_.BorderBoxRect();
+    paint_rect.MoveBy(paint_offset);
+    background_client = &layout_box_;
   }
 
-  paint_rect.MoveBy(paint_offset);
-  PaintBoxDecorationBackgroundWithRect(paint_info, paint_rect);
+  // Paint the background if we're visible and this block has a box decoration
+  // (background, border, appearance, or box shadow).
+  const ComputedStyle& style = layout_box_.StyleRef();
+  if (style.Visibility() == EVisibility::kVisible &&
+      layout_box_.HasBoxDecorationBackground()) {
+    PaintBoxDecorationBackgroundWithRect(
+        contents_paint_state ? contents_paint_state->GetPaintInfo()
+                             : paint_info,
+        paint_rect, *background_client);
+  }
+
+  RecordHitTestData(paint_info, paint_rect, *background_client);
 }
 
-LayoutRect BoxPainter::BoundsForDrawingRecorder(
-    const PaintInfo& paint_info,
-    const LayoutPoint& paint_offset) {
-  LayoutRect bounds =
-      BoxModelObjectPainter::
-              IsPaintingBackgroundOfPaintContainerIntoScrollingContentsLayer(
-                  &layout_box_, paint_info)
-          ? layout_box_.LayoutOverflowRect()
-          : layout_box_.SelfVisualOverflowRect();
-  bounds.MoveBy(paint_offset);
-  return bounds;
+bool BoxPainter::BackgroundIsKnownToBeOpaque(const PaintInfo& paint_info) {
+  // If the box has multiple fragments, its VisualRect is the bounding box of
+  // all fragments' visual rects, which is likely to cover areas that are not
+  // covered by painted background.
+  if (layout_box_.FirstFragment().NextFragment())
+    return false;
+
+  LayoutRect bounds = BoxModelObjectPainter::IsPaintingScrollingBackground(
+                          &layout_box_, paint_info)
+                          ? layout_box_.LayoutOverflowRect()
+                          : layout_box_.SelfVisualOverflowRect();
+  return layout_box_.BackgroundIsKnownToBeOpaqueInRect(bounds);
 }
 
 void BoxPainter::PaintBoxDecorationBackgroundWithRect(
     const PaintInfo& paint_info,
-    const LayoutRect& paint_rect) {
-  bool painting_overflow_contents = BoxModelObjectPainter::
-      IsPaintingBackgroundOfPaintContainerIntoScrollingContentsLayer(
-          &layout_box_, paint_info);
+    const LayoutRect& paint_rect,
+    const DisplayItemClient& background_client) {
+  bool painting_scrolling_background =
+      BoxModelObjectPainter::IsPaintingScrollingBackground(&layout_box_,
+                                                           paint_info);
   const ComputedStyle& style = layout_box_.StyleRef();
 
   base::Optional<DisplayItemCacheSkipper> cache_skipper;
@@ -115,36 +129,32 @@ void BoxPainter::PaintBoxDecorationBackgroundWithRect(
     cache_skipper.emplace(paint_info.context);
   }
 
-  const DisplayItemClient& display_item_client =
-      painting_overflow_contents ? static_cast<const DisplayItemClient&>(
-                                       *layout_box_.Layer()
-                                            ->GetCompositedLayerMapping()
-                                            ->ScrollingContentsLayer())
-                                 : layout_box_;
   if (DrawingRecorder::UseCachedDrawingIfPossible(
-          paint_info.context, display_item_client,
+          paint_info.context, background_client,
           DisplayItem::kBoxDecorationBackground))
     return;
 
-  DrawingRecorder recorder(paint_info.context, display_item_client,
+  DrawingRecorder recorder(paint_info.context, background_client,
                            DisplayItem::kBoxDecorationBackground);
   BoxDecorationData box_decoration_data(layout_box_);
   GraphicsContextStateSaver state_saver(paint_info.context, false);
 
-  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
       LayoutRect(EnclosingIntRect(paint_rect)) == paint_rect &&
-      // TODO(wkorman): Rename BoundsForDrawingRecorder as it's used
-      // here for another purpose.
-      layout_box_.BackgroundIsKnownToBeOpaqueInRect(
-          BoundsForDrawingRecorder(paint_info, LayoutPoint())))
+      BackgroundIsKnownToBeOpaque(paint_info))
     recorder.SetKnownToBeOpaque();
 
+  const auto skip_background = layout_box_.BackgroundTransfersToView() ||
+                               (paint_info.SkipRootBackground() &&
+                                paint_info.PaintContainer() == &layout_box_);
+
   bool needs_end_layer = false;
-  if (!painting_overflow_contents) {
+  if (!painting_scrolling_background) {
     // FIXME: Should eventually give the theme control over whether the box
     // shadow should paint, since controls could have custom shadows of their
     // own.
-    BoxPainterBase::PaintNormalBoxShadow(paint_info, paint_rect, style);
+    BoxPainterBase::PaintNormalBoxShadow(paint_info, paint_rect, style, true,
+                                         true, skip_background);
 
     if (BleedAvoidanceIsClipping(box_decoration_data.bleed_avoidance)) {
       state_saver.Save();
@@ -166,10 +176,7 @@ void BoxPainter::PaintBoxDecorationBackgroundWithRect(
   bool theme_painted =
       box_decoration_data.has_appearance &&
       !theme_painter.Paint(layout_box_, paint_info, snapped_paint_rect);
-  bool should_paint_background =
-      !theme_painted && (!paint_info.SkipRootBackground() ||
-                         paint_info.PaintContainer() != &layout_box_);
-  if (should_paint_background) {
+  if (!theme_painted && !skip_background) {
     PaintBackground(paint_info, paint_rect,
                     box_decoration_data.background_color,
                     box_decoration_data.bleed_avoidance);
@@ -181,7 +188,7 @@ void BoxPainter::PaintBoxDecorationBackgroundWithRect(
     }
   }
 
-  if (!painting_overflow_contents) {
+  if (!painting_scrolling_background) {
     BoxPainterBase::PaintInsetBoxShadowWithBorderRect(paint_info, paint_rect,
                                                       style);
 
@@ -208,9 +215,7 @@ void BoxPainter::PaintBackground(const PaintInfo& paint_info,
                                  const LayoutRect& paint_rect,
                                  const Color& background_color,
                                  BackgroundBleedAvoidance bleed_avoidance) {
-  if (layout_box_.IsDocumentElement())
-    return;
-  if (layout_box_.BackgroundStolenForBeingBody())
+  if (layout_box_.BackgroundTransfersToView())
     return;
   if (layout_box_.BackgroundIsKnownToBeObscured())
     return;
@@ -251,6 +256,26 @@ void BoxPainter::PaintMaskImages(const PaintInfo& paint_info,
   painter.PaintMaskImages(paint_info, paint_rect, layout_box_, geometry,
                           include_logical_left_edge,
                           include_logical_right_edge);
+}
+
+void BoxPainter::RecordHitTestData(const PaintInfo& paint_info,
+                                   const LayoutRect& paint_rect,
+                                   const DisplayItemClient& background_client) {
+  // Hit test display items are only needed for compositing. This flag is used
+  // for for printing and drag images which do not need hit testing.
+  if (paint_info.GetGlobalPaintFlags() & kGlobalPaintFlattenCompositingLayers)
+    return;
+
+  // If an object is not visible, it does not participate in hit testing.
+  if (layout_box_.StyleRef().Visibility() != EVisibility::kVisible)
+    return;
+
+  auto touch_action = layout_box_.EffectiveWhitelistedTouchAction();
+  if (touch_action == TouchAction::kTouchActionAuto)
+    return;
+
+  HitTestDisplayItem::Record(paint_info.context, background_client,
+                             HitTestRect(paint_rect, touch_action));
 }
 
 }  // namespace blink

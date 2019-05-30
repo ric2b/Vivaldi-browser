@@ -34,7 +34,7 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/frame/page_scale_constraints.h"
 #include "third_party/blink/renderer/platform/geometry/float_size.h"
-#include "third_party/blink/renderer/platform/length.h"
+#include "third_party/blink/renderer/platform/geometry/length.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 
 namespace blink {
@@ -96,7 +96,7 @@ struct CORE_EXPORT ViewportDescription {
 
   // All arguments are in CSS units.
   PageScaleConstraints Resolve(const FloatSize& initial_viewport_size,
-                               Length legacy_fallback_width) const;
+                               const Length& legacy_fallback_width) const;
 
   // When --use-zoom-for-dsf is enabled, if the type is kFixed, these Length
   // values (i.e., |min_width|, |max_width|, |min_height|, and |max_height|)

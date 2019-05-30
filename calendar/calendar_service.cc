@@ -380,9 +380,7 @@ void CalendarService::Cleanup() {
         base::Bind(&CalendarBackend::Closing, calendar_backend_);
     ScheduleTask(closing_task);
     closing_task.Reset();
-    CalendarBackend* raw_ptr = calendar_backend_.get();
-    calendar_backend_ = nullptr;
-    backend_task_runner_->ReleaseSoon(FROM_HERE, raw_ptr);
+    backend_task_runner_->ReleaseSoon(FROM_HERE, std::move(calendar_backend_));
   }
 
   // Clear |backend_task_runner_| to make sure it's not used after Cleanup().

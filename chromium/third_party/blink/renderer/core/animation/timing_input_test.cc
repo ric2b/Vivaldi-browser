@@ -49,7 +49,8 @@ Timing AnimationTimingInputTest::ApplyTimingInputNumber(
   DummyExceptionStateForTesting exception_state;
   Timing result;
   if (is_keyframeeffectoptions) {
-    KeyframeEffectOptions timing_input_dictionary;
+    KeyframeEffectOptions* timing_input_dictionary =
+        KeyframeEffectOptions::Create();
     V8KeyframeEffectOptions::ToImpl(isolate, timing_input,
                                     timing_input_dictionary, exception_state);
     UnrestrictedDoubleOrKeyframeEffectOptions timing_input =
@@ -57,7 +58,8 @@ Timing AnimationTimingInputTest::ApplyTimingInputNumber(
             timing_input_dictionary);
     result = TimingInput::Convert(timing_input, GetDocument(), exception_state);
   } else {
-    KeyframeAnimationOptions timing_input_dictionary;
+    KeyframeAnimationOptions* timing_input_dictionary =
+        KeyframeAnimationOptions::Create();
     V8KeyframeAnimationOptions::ToImpl(
         isolate, timing_input, timing_input_dictionary, exception_state);
     UnrestrictedDoubleOrKeyframeAnimationOptions timing_input =
@@ -82,7 +84,8 @@ Timing AnimationTimingInputTest::ApplyTimingInputString(
   DummyExceptionStateForTesting exception_state;
   Timing result;
   if (is_keyframeeffectoptions) {
-    KeyframeEffectOptions timing_input_dictionary;
+    KeyframeEffectOptions* timing_input_dictionary =
+        KeyframeEffectOptions::Create();
     V8KeyframeEffectOptions::ToImpl(isolate, timing_input,
                                     timing_input_dictionary, exception_state);
     UnrestrictedDoubleOrKeyframeEffectOptions timing_input =
@@ -90,7 +93,8 @@ Timing AnimationTimingInputTest::ApplyTimingInputString(
             timing_input_dictionary);
     result = TimingInput::Convert(timing_input, GetDocument(), exception_state);
   } else {
-    KeyframeAnimationOptions timing_input_dictionary;
+    KeyframeAnimationOptions* timing_input_dictionary =
+        KeyframeAnimationOptions::Create();
     V8KeyframeAnimationOptions::ToImpl(
         isolate, timing_input, timing_input_dictionary, exception_state);
     UnrestrictedDoubleOrKeyframeAnimationOptions timing_input =
@@ -270,20 +274,20 @@ TEST_F(AnimationTimingInputTest, TimingInputIterationDuration) {
   V8TestingScope scope;
   bool success;
   EXPECT_EQ(
-      1.1, ApplyTimingInputNumber(scope.GetIsolate(), "duration", 1100, success)
-               .iteration_duration);
+      AnimationTimeDelta::FromSecondsD(1.1),
+      ApplyTimingInputNumber(scope.GetIsolate(), "duration", 1100, success)
+          .iteration_duration);
   EXPECT_TRUE(success);
 
   Timing timing =
       ApplyTimingInputNumber(scope.GetIsolate(), "duration",
                              std::numeric_limits<double>::infinity(), success);
   EXPECT_TRUE(success);
-  EXPECT_TRUE(std::isinf(timing.iteration_duration));
-  EXPECT_GT(timing.iteration_duration, 0);
+  EXPECT_TRUE(timing.iteration_duration->is_max());
 
-  EXPECT_TRUE(std::isnan(
+  EXPECT_FALSE(
       ApplyTimingInputString(scope.GetIsolate(), "duration", "auto", success)
-          .iteration_duration));
+          .iteration_duration);
   EXPECT_TRUE(success);
 
   ApplyTimingInputString(scope.GetIsolate(), "duration", "1000", success);
@@ -376,12 +380,6 @@ TEST_F(AnimationTimingInputTest, TimingInputTimingFunction) {
            .timing_function);
   EXPECT_TRUE(success);
   EXPECT_EQ(
-      *StepsTimingFunction::Preset(StepsTimingFunction::StepPosition::MIDDLE),
-      *ApplyTimingInputString(scope.GetIsolate(), "easing", "step-middle",
-                              success)
-           .timing_function);
-  EXPECT_TRUE(success);
-  EXPECT_EQ(
       *StepsTimingFunction::Preset(StepsTimingFunction::StepPosition::END),
       *ApplyTimingInputString(scope.GetIsolate(), "easing", "step-end", success)
            .timing_function);
@@ -396,12 +394,6 @@ TEST_F(AnimationTimingInputTest, TimingInputTimingFunction) {
       *ApplyTimingInputString(scope.GetIsolate(), "easing", "steps(3, start)",
                               success)
            .timing_function);
-  EXPECT_TRUE(success);
-  EXPECT_EQ(*StepsTimingFunction::Create(
-                5, StepsTimingFunction::StepPosition::MIDDLE),
-            *ApplyTimingInputString(scope.GetIsolate(), "easing",
-                                    "steps(5, middle)", success)
-                 .timing_function);
   EXPECT_TRUE(success);
   EXPECT_EQ(
       *StepsTimingFunction::Create(5, StepsTimingFunction::StepPosition::END),
@@ -441,7 +433,7 @@ TEST_F(AnimationTimingInputTest, TimingInputEmpty) {
   Timing control_timing;
   UnrestrictedDoubleOrKeyframeEffectOptions timing_input =
       UnrestrictedDoubleOrKeyframeEffectOptions::FromKeyframeEffectOptions(
-          KeyframeEffectOptions());
+          KeyframeEffectOptions::Create());
   Timing updated_timing =
       TimingInput::Convert(timing_input, nullptr, exception_state);
   EXPECT_FALSE(exception_state.HadException());
@@ -450,7 +442,7 @@ TEST_F(AnimationTimingInputTest, TimingInputEmpty) {
   EXPECT_EQ(control_timing.fill_mode, updated_timing.fill_mode);
   EXPECT_EQ(control_timing.iteration_start, updated_timing.iteration_start);
   EXPECT_EQ(control_timing.iteration_count, updated_timing.iteration_count);
-  EXPECT_TRUE(std::isnan(updated_timing.iteration_duration));
+  EXPECT_FALSE(updated_timing.iteration_duration);
   EXPECT_EQ(control_timing.direction, updated_timing.direction);
   EXPECT_EQ(*control_timing.timing_function, *updated_timing.timing_function);
 }
@@ -460,7 +452,7 @@ TEST_F(AnimationTimingInputTest, TimingInputEmptyKeyframeAnimationOptions) {
   Timing control_timing;
   UnrestrictedDoubleOrKeyframeAnimationOptions input_timing =
       UnrestrictedDoubleOrKeyframeAnimationOptions::
-          FromKeyframeAnimationOptions(KeyframeAnimationOptions());
+          FromKeyframeAnimationOptions(KeyframeAnimationOptions::Create());
   Timing updated_timing =
       TimingInput::Convert(input_timing, nullptr, exception_state);
   EXPECT_FALSE(exception_state.HadException());
@@ -469,7 +461,7 @@ TEST_F(AnimationTimingInputTest, TimingInputEmptyKeyframeAnimationOptions) {
   EXPECT_EQ(control_timing.fill_mode, updated_timing.fill_mode);
   EXPECT_EQ(control_timing.iteration_start, updated_timing.iteration_start);
   EXPECT_EQ(control_timing.iteration_count, updated_timing.iteration_count);
-  EXPECT_TRUE(std::isnan(updated_timing.iteration_duration));
+  EXPECT_FALSE(updated_timing.iteration_duration);
   EXPECT_EQ(control_timing.direction, updated_timing.direction);
   EXPECT_EQ(*control_timing.timing_function, *updated_timing.timing_function);
 }

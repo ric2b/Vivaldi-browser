@@ -31,6 +31,8 @@
 #include "third_party/blink/renderer/core/loader/text_resource_decoder_builder.h"
 
 #include <memory>
+
+#include "base/stl_util.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_implementation.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -78,7 +80,7 @@ static const WTF::TextEncoding GetEncodingFromDomain(const KURL& url) {
   url.Host().Split(".", tokens);
   if (!tokens.IsEmpty()) {
     auto tld = tokens.back();
-    for (size_t i = 0; i < arraysize(kEncodings); i++) {
+    for (size_t i = 0; i < base::size(kEncodings); i++) {
       if (tld == kEncodings[i].domain)
         return WTF::TextEncoding(kEncodings[i].encoding);
     }
@@ -108,8 +110,8 @@ std::unique_ptr<TextResourceDecoder> BuildTextResourceDecoderFor(
 
   LocalFrame* frame = document->GetFrame();
   LocalFrame* parent_frame = nullptr;
-  if (frame && frame->Tree().Parent() && frame->Tree().Parent()->IsLocalFrame())
-    parent_frame = ToLocalFrame(frame->Tree().Parent());
+  if (frame)
+    parent_frame = DynamicTo<LocalFrame>(frame->Tree().Parent());
 
   // Set the hint encoding to the parent frame encoding only if the parent and
   // the current frames share the security origin. We impose this condition
@@ -119,7 +121,7 @@ std::unique_ptr<TextResourceDecoder> BuildTextResourceDecoderFor(
   // could be an attack vector.
   // FIXME: This might be too cautious for non-7bit-encodings and we may
   // consider relaxing this later after testing.
-  const bool use_hint_encoding =
+  bool use_hint_encoding =
       frame && CanReferToParentFrameEncoding(frame, parent_frame);
 
   std::unique_ptr<TextResourceDecoder> decoder;
@@ -134,9 +136,11 @@ std::unique_ptr<TextResourceDecoder> BuildTextResourceDecoderFor(
     if (DOMImplementation::IsXMLMIMEType(mime_type)) {
       decoder = TextResourceDecoder::Create(TextResourceDecoderOptions(
           TextResourceDecoderOptions::kXMLContent, default_encoding));
+      use_hint_encoding = false;
     } else if (DOMImplementation::IsJSONMIMEType(mime_type)) {
       decoder = TextResourceDecoder::Create(TextResourceDecoderOptions(
           TextResourceDecoderOptions::kJSONContent, default_encoding));
+      use_hint_encoding = false;
     } else {
       WTF::TextEncoding hint_encoding;
       if (use_hint_encoding &&

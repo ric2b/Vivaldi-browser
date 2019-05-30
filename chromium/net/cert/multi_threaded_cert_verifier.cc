@@ -15,7 +15,6 @@
 #include "base/containers/linked_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/sha1.h"
 #include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
@@ -102,10 +101,8 @@ std::unique_ptr<base::Value> CertVerifyResultCallback(
                                              capture_mode));
 
   std::unique_ptr<base::ListValue> hashes(new base::ListValue());
-  for (std::vector<HashValue>::const_iterator it =
-           verify_result.public_key_hashes.begin();
-       it != verify_result.public_key_hashes.end();
-       ++it) {
+  for (auto it = verify_result.public_key_hashes.begin();
+       it != verify_result.public_key_hashes.end(); ++it) {
     hashes->AppendString(it->ToString());
   }
   results->Set("public_key_hashes", std::move(hashes));
@@ -204,7 +201,7 @@ std::unique_ptr<ResultHelper> DoVerifyOnWorkerThread(
     int flags,
     const scoped_refptr<CRLSet>& crl_set,
     const CertificateList& additional_trust_anchors) {
-  TRACE_EVENT0(kNetTracingCategory, "DoVerifyOnWorkerThread");
+  TRACE_EVENT0(NetTracingCategory(), "DoVerifyOnWorkerThread");
   auto verify_result = std::make_unique<ResultHelper>();
   MultiThreadedCertVerifierScopedAllowBaseSyncPrimitives
       allow_base_sync_primitives;
@@ -248,6 +245,7 @@ class CertVerifierJob {
       flags &= ~CertVerifyProc::VERIFY_REV_CHECKING_ENABLED;
       flags &= ~CertVerifyProc::VERIFY_REV_CHECKING_REQUIRED_LOCAL_ANCHORS;
     }
+    DCHECK(config.crl_set);
     base::PostTaskWithTraitsAndReplyWithResult(
         FROM_HERE,
         {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
@@ -314,7 +312,7 @@ class CertVerifierJob {
 
   void OnJobCompleted(uint32_t config_id,
                       std::unique_ptr<ResultHelper> verify_result) {
-    TRACE_EVENT0(kNetTracingCategory, "CertVerifierJob::OnJobCompleted");
+    TRACE_EVENT0(NetTracingCategory(), "CertVerifierJob::OnJobCompleted");
     std::unique_ptr<CertVerifierJob> keep_alive =
         cert_verifier_->RemoveJob(this);
 
@@ -353,7 +351,12 @@ class CertVerifierJob {
 
 MultiThreadedCertVerifier::MultiThreadedCertVerifier(
     scoped_refptr<CertVerifyProc> verify_proc)
-    : requests_(0), inflight_joins_(0), verify_proc_(verify_proc) {}
+    : config_id_(0),
+      requests_(0),
+      inflight_joins_(0),
+      verify_proc_(verify_proc) {
+  config_.crl_set = CRLSet::BuiltinCRLSet();
+}
 
 MultiThreadedCertVerifier::~MultiThreadedCertVerifier() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -413,6 +416,8 @@ int MultiThreadedCertVerifier::Verify(const RequestParams& params,
 void MultiThreadedCertVerifier::SetConfig(const CertVerifier::Config& config) {
   ++config_id_;
   config_ = config;
+  if (!config_.crl_set)
+    config_.crl_set = CRLSet::BuiltinCRLSet();
 
   // In C++17, this would be a .merge() call to combine |joinable_| into
   // |inflight_|.
@@ -431,12 +436,10 @@ MultiThreadedCertVerifier::MultiThreadedCertVerifier(
     scoped_refptr<CertVerifyProc> verify_proc,
     VerifyCompleteCallback verify_complete_callback,
     bool should_record_histograms)
-    : config_id_(0),
-      requests_(0),
-      inflight_joins_(0),
-      verify_proc_(verify_proc),
-      verify_complete_callback_(std::move(verify_complete_callback)),
-      should_record_histograms_(should_record_histograms) {}
+    : MultiThreadedCertVerifier(verify_proc) {
+  verify_complete_callback_ = std::move(verify_complete_callback);
+  should_record_histograms_ = should_record_histograms;
+}
 
 std::unique_ptr<CertVerifierJob> MultiThreadedCertVerifier::RemoveJob(
     CertVerifierJob* job) {

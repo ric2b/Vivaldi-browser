@@ -25,10 +25,10 @@ namespace device {
 template <class Response>
 class FidoRequestHandler : public FidoRequestHandlerBase {
  public:
-  using CompletionCallback =
-      base::OnceCallback<void(FidoReturnCode status_code,
-                              base::Optional<Response> response_data,
-                              FidoTransportProtocol transport_used)>;
+  using CompletionCallback = base::OnceCallback<void(
+      FidoReturnCode status_code,
+      base::Optional<Response> response_data,
+      base::Optional<FidoTransportProtocol> transport_used)>;
 
   // The |available_transports| should be the intersection of transports
   // supported by the client and allowed by the relying party.
@@ -41,7 +41,7 @@ class FidoRequestHandler : public FidoRequestHandlerBase {
 
   ~FidoRequestHandler() override {
     if (!is_complete())
-      CancelOngoingTasks();
+      CancelActiveAuthenticators();
   }
 
   bool is_complete() const { return completion_callback_.is_null(); }
@@ -72,11 +72,13 @@ class FidoRequestHandler : public FidoRequestHandlerBase {
 
     // Once response has been passed to the relying party, cancel all other on
     // going requests.
-    CancelOngoingTasks(authenticator->GetId());
+    CancelActiveAuthenticators(authenticator->GetId());
     std::move(completion_callback_)
         .Run(*return_code, std::move(response_data),
              authenticator->AuthenticatorTransport());
   }
+
+  CompletionCallback completion_callback_;
 
  private:
   static base::Optional<FidoReturnCode>
@@ -119,8 +121,6 @@ class FidoRequestHandler : public FidoRequestHandlerBase {
         return base::nullopt;
     }
   }
-
-  CompletionCallback completion_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(FidoRequestHandler);
 };

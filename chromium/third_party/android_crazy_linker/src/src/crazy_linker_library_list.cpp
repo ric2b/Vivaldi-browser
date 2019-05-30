@@ -17,12 +17,13 @@
 #include "crazy_linker_system_linker.h"
 #include "crazy_linker_util.h"
 
+#ifdef __ANDROID__
+#include "crazy_linker_system_android.h"
+#endif
+
 namespace crazy {
 
 namespace {
-
-// From android.os.Build.VERSION_CODES.LOLLIPOP.
-static const int SDK_VERSION_CODE_LOLLIPOP = 21;
 
 // A helper struct used when looking up symbols in libraries.
 struct SymbolLookupState {
@@ -55,10 +56,8 @@ struct SymbolLookupState {
 }  // namespace
 
 LibraryList::LibraryList() {
-  // NOTE: This constructor is called from the Globals::Globals() constructor,
-  // hence it is important that Globals::sdk_build_version is a static member
-  // that can be set before Globals::Get() is called for the first time.
-  const int sdk_build_version = Globals::sdk_build_version;
+#ifdef __ANDROID__
+  const int sdk_build_version = GetAndroidDeviceApiLevel();
 
   // If SDK version is Lollipop or earlier, we need to load anything
   // listed in LD_PRELOAD explicitly, because dlsym() on the main executable
@@ -77,8 +76,9 @@ LibraryList::LibraryList() {
   //
   // For more, see:
   //   https://code.google.com/p/android/issues/detail?id=74255
-  if (sdk_build_version <= SDK_VERSION_CODE_LOLLIPOP)
+  if (sdk_build_version <= ANDROID_SDK_VERSION_CODE_LOLLIPOP)
     LoadPreloads();
+#endif  // __ANDROID__
 }
 
 LibraryList::~LibraryList() {
@@ -266,7 +266,9 @@ void LibraryList::UnloadLibrary(LibraryView* wrap) {
       head_ = lib->list_next_;
 
     // Call JNI_OnUnload, if necessary, then the destructors.
+    LOG("Running JNI_OnUnload() for %s", wrap->GetName());
     lib->CallJniOnUnload();
+    LOG("Running destructors for %s", wrap->GetName());
     lib->CallDestructors();
 
     // Unload the dependencies recursively.
@@ -291,8 +293,6 @@ void LibraryList::UnloadLibrary(LibraryView* wrap) {
 LibraryView* LibraryList::LoadLibraryWithSystemLinker(const char* lib_name,
                                                       int dlopen_mode,
                                                       Error* error) {
-  LOG("lib_name='%s'", lib_name);
-
   // First check whether a library with the same base name was
   // already loaded.
   LibraryView* view = FindKnownLibrary(lib_name);
@@ -301,7 +301,6 @@ LibraryView* LibraryList::LoadLibraryWithSystemLinker(const char* lib_name,
     return view;
   }
 
-  LOG("Loading system library '%s'", lib_name);
   void* system_lib = SystemLinker::Open(lib_name, dlopen_mode);
   if (!system_lib) {
     error->Format("Can't load system library %s: %s", lib_name,
@@ -314,7 +313,6 @@ LibraryView* LibraryList::LoadLibraryWithSystemLinker(const char* lib_name,
   known_libraries_.PushBack(view);
 
   LOG("System library %s loaded at %p", lib_name, view);
-  LOG("  name=%s\n", view->GetName());
   return view;
 }
 
@@ -328,17 +326,17 @@ LibraryView* LibraryList::LoadLibrary(const char* lib_name,
 
   // First check whether a library with the same base name was
   // already loaded.
-  LibraryView* wrap = FindKnownLibrary(base_name);
-  if (wrap) {
+  LibraryView* view = FindKnownLibrary(base_name);
+  if (view) {
     if (load_address) {
       // Check that this is a crazy library and that is was loaded at
       // the correct address.
-      if (!wrap->IsCrazy()) {
+      if (!view->IsCrazy()) {
         error->Format("System library can't be loaded at fixed address %08x",
                       load_address);
         return nullptr;
       }
-      uintptr_t actual_address = wrap->GetCrazy()->load_address();
+      uintptr_t actual_address = view->GetCrazy()->load_address();
       if (actual_address != load_address) {
         error->Format("Library already loaded at @%08x, can't load it at @%08x",
                       actual_address,
@@ -346,8 +344,8 @@ LibraryView* LibraryList::LoadLibrary(const char* lib_name,
         return nullptr;
       }
     }
-    wrap->AddRef();
-    return wrap;
+    view->AddRef();
+    return view;
   }
 
   // Find the full library path.
@@ -361,7 +359,11 @@ LibraryView* LibraryList::LoadLibrary(const char* lib_name,
   }
   LOG("Found library: path %s @ 0x%x", probe.path.c_str(), probe.offset);
 
-  // Load the library
+  if (IsSystemLibraryPath(probe.path.c_str())) {
+    return LoadLibraryWithSystemLinker(probe.path.c_str(), RTLD_NOW, error);
+  }
+
+  // Load the library with the crazy linker.
   ScopedPtr<SharedLibrary> lib(new SharedLibrary());
   if (!lib->Load(probe.path.c_str(), load_address, probe.offset, error))
     return nullptr;
@@ -410,18 +412,25 @@ LibraryView* LibraryList::LoadLibrary(const char* lib_name,
   head_ = lib.Get();
 
   // Then create a new LibraryView for it.
-  wrap = new LibraryView(lib.Get());
-  known_libraries_.PushBack(wrap);
+  view = new LibraryView(lib.Release());
+  known_libraries_.PushBack(view);
 
   LOG("Running constructors for %s", base_name);
-
   // Now run the constructors.
-  lib->CallConstructors();
+  view->GetCrazy()->CallConstructors();
+
+  // Then try to call JNI_OnLoad() if necessary.
+  LOG("Running JNI_OnLoad() for %s", base_name);
+  Globals* globals = Globals::Get();
+  if (!view->GetCrazy()->CallJniOnLoad(globals->java_vm(),
+                                       globals->minimum_jni_version(), error)) {
+    LOG("Error on JNI_OnLoad(): %s", error->c_str());
+    UnloadLibrary(view);
+    return nullptr;
+  }
 
   LOG("Done loading %s", base_name);
-  lib.Release();
-
-  return wrap;
+  return view;
 }
 
 void LibraryList::AddLibrary(LibraryView* wrap) {

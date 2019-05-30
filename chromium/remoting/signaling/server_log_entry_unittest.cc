@@ -9,9 +9,9 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/libjingle_xmpp/xmllite/xmlelement.h"
 
-using buzz::QName;
-using buzz::XmlAttr;
-using buzz::XmlElement;
+using jingle_xmpp::QName;
+using jingle_xmpp::XmlAttr;
+using jingle_xmpp::XmlElement;
 
 namespace remoting {
 
@@ -68,8 +68,7 @@ bool VerifyStanza(
     }
     const std::string& key = attr->Name().LocalPart();
     const std::string& value = attr->Value();
-    std::map<std::string, std::string>::const_iterator iter =
-        key_value_pairs.find(key);
+    auto iter = key_value_pairs.find(key);
     if (iter == key_value_pairs.end()) {
       if (keys.find(key) == keys.end()) {
         *error = "unexpected attribute " + key;

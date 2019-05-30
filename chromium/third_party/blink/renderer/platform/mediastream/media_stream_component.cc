@@ -52,23 +52,26 @@ int MediaStreamComponent::GenerateUniqueId() {
 }
 
 MediaStreamComponent* MediaStreamComponent::Create(MediaStreamSource* source) {
-  return new MediaStreamComponent(CreateCanonicalUUIDString(), source);
+  return MakeGarbageCollected<MediaStreamComponent>(CreateCanonicalUUIDString(),
+                                                    source);
 }
 
 MediaStreamComponent* MediaStreamComponent::Create(const String& id,
                                                    MediaStreamSource* source) {
-  return new MediaStreamComponent(id, source);
+  return MakeGarbageCollected<MediaStreamComponent>(id, source);
 }
 
 MediaStreamComponent::MediaStreamComponent(const String& id,
                                            MediaStreamSource* source)
     : source_(source), id_(id), unique_id_(GenerateUniqueId()) {
   DCHECK(id_.length());
+  DCHECK(source_);
 }
 
 MediaStreamComponent* MediaStreamComponent::Clone() const {
   MediaStreamComponent* cloned_component =
-      new MediaStreamComponent(CreateCanonicalUUIDString(), Source());
+      MakeGarbageCollected<MediaStreamComponent>(CreateCanonicalUUIDString(),
+                                                 Source());
   cloned_component->SetEnabled(enabled_);
   cloned_component->SetMuted(muted_);
   cloned_component->SetContentHint(content_hint_);
@@ -77,7 +80,7 @@ MediaStreamComponent* MediaStreamComponent::Clone() const {
 }
 
 void MediaStreamComponent::Dispose() {
-  track_data_.reset();
+  platform_track_.reset();
 }
 
 void MediaStreamComponent::AudioSourceProviderImpl::Wrap(
@@ -88,9 +91,9 @@ void MediaStreamComponent::AudioSourceProviderImpl::Wrap(
 
 void MediaStreamComponent::GetSettings(
     WebMediaStreamTrack::Settings& settings) {
-  DCHECK(track_data_);
+  DCHECK(platform_track_);
   source_->GetSettings(settings);
-  track_data_->GetSettings(settings);
+  platform_track_->GetSettings(settings);
 }
 
 void MediaStreamComponent::SetContentHint(
@@ -117,7 +120,7 @@ void MediaStreamComponent::SetContentHint(
 
 void MediaStreamComponent::AudioSourceProviderImpl::ProvideInput(
     AudioBus* bus,
-    size_t frames_to_process) {
+    uint32_t frames_to_process) {
   DCHECK(bus);
   if (!bus)
     return;
@@ -129,9 +132,9 @@ void MediaStreamComponent::AudioSourceProviderImpl::ProvideInput(
   }
 
   // Wrap the AudioBus channel data using WebVector.
-  size_t n = bus->NumberOfChannels();
+  uint32_t n = bus->NumberOfChannels();
   WebVector<float*> web_audio_data(n);
-  for (size_t i = 0; i < n; ++i)
+  for (uint32_t i = 0; i < n; ++i)
     web_audio_data[i] = bus->Channel(i)->MutableData();
 
   web_audio_source_provider_->ProvideInput(web_audio_data, frames_to_process);

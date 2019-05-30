@@ -8,67 +8,57 @@
 
 #include "base/logging.h"
 #include "ios/chrome/browser/infobars/infobar_controller_delegate.h"
-#import "ios/chrome/browser/ui/infobars/infobar_view_sizing.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-@interface InfoBarController () {
-  UIView<InfoBarViewSizing>* _infoBarView;
-}
+@interface InfoBarController ()
 @end
 
 @implementation InfoBarController
 
+@synthesize view = _view;
 @synthesize delegate = _delegate;
+@synthesize infoBarDelegate = _infoBarDelegate;
+@synthesize presented = _presented;
+
+#pragma mark - Public
+
+- (instancetype)initWithInfoBarDelegate:
+    (infobars::InfoBarDelegate*)infoBarDelegate {
+  self = [super init];
+  if (self) {
+    _infoBarDelegate = infoBarDelegate;
+    _presented = NO;
+    _view = [self infobarView];
+  }
+  return self;
+}
 
 - (void)dealloc {
-  [_infoBarView removeFromSuperview];
-}
-
-- (int)barHeight {
-  return CGRectGetHeight([_infoBarView frame]);
-}
-
-- (void)layoutForFrame:(CGRect)bounds {
-  if (!_infoBarView) {
-    _infoBarView = [self viewForFrame:bounds];
-    [_infoBarView setSizingDelegate:self];
-  } else {
-    [_infoBarView setFrame:bounds];
-  }
-}
-
-- (UIView<InfoBarViewSizing>*)viewForFrame:(CGRect)bounds {
-  NOTREACHED() << "Must be overriden in subclasses.";
-  return _infoBarView;
-}
-
-- (void)onHeightRecalculated:(int)newHeight {
-  [_infoBarView setVisibleHeight:newHeight];
-}
-
-- (UIView<InfoBarViewSizing>*)view {
-  return _infoBarView;
+  [_view removeFromSuperview];
 }
 
 - (void)removeView {
-  [_infoBarView removeFromSuperview];
+  [_view removeFromSuperview];
 }
 
 - (void)detachView {
-  [_infoBarView setSizingDelegate:nil];
   _delegate = nullptr;
+  _infoBarDelegate = nullptr;
 }
 
-#pragma mark - InfoBarViewDelegate
+#pragma mark - Protected
 
-- (void)didSetInfoBarTargetHeight:(CGFloat)height {
-  if (!_delegate)
-    return;
+- (UIView*)infobarView {
+  NOTREACHED() << "Must be overriden in subclasses.";
+  return _view;
+}
 
-  _delegate->SetInfoBarTargetHeight(height);
+- (BOOL)shouldIgnoreUserInteraction {
+  // Ignore user interaction if view is already detached or is about to.
+  return !_delegate || !_delegate->IsOwned() || !_infoBarDelegate;
 }
 
 @end

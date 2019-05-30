@@ -32,8 +32,6 @@
 #error "This file requires ARC support."
 #endif
 
-DEFINE_WEB_STATE_USER_DATA_KEY(ios_web_view::WebViewTranslateClient);
-
 namespace ios_web_view {
 
 WebViewTranslateClient::WebViewTranslateClient(web::WebState* web_state)
@@ -149,5 +147,7 @@ void WebViewTranslateClient::WebStateDestroyed(web::WebState* web_state) {
   // with nullptr WebState.
   translate_manager_.reset();
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(WebViewTranslateClient)
 
 }  // namespace ios_web_view

@@ -4,6 +4,7 @@
 
 #include "components/download/internal/background_service/in_memory_download.h"
 
+#include "base/bind.h"
 #include "base/guid.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -18,6 +19,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+using testing::_;
 using testing::NiceMock;
 
 namespace download {
@@ -26,6 +28,14 @@ namespace {
 const char kTestDownloadData[] =
     "In earlier tellings, the dog had a better reputation than the cat, "
     "however the president veto it.";
+
+MATCHER_P2(InMemoryDownloadMatcher,
+           response_headers,
+           url_chain,
+           "Verify in memory download.") {
+  return arg->response_headers()->raw_headers() == response_headers &&
+         arg->url_chain() == url_chain;
+}
 
 // Dummy callback used for IO_PENDING state in blob operations, this is not
 // called when the blob operation is done, but called when chained with other
@@ -46,10 +56,12 @@ class MockDelegate : public InMemoryDownload::Delegate {
 
   // InMemoryDownload::Delegate implementation.
   MOCK_METHOD1(OnDownloadProgress, void(InMemoryDownload*));
+  MOCK_METHOD1(OnDownloadStarted, void(InMemoryDownload*));
   void OnDownloadComplete(InMemoryDownload* download) override {
     if (run_loop_.running())
       run_loop_.Quit();
   }
+  MOCK_METHOD1(OnUploadProgress, void(InMemoryDownload*));
 
  private:
   base::RunLoop run_loop_;
@@ -94,8 +106,8 @@ class InMemoryDownloadTest : public testing::Test {
   // Helper method to create a download with request_params.
   void CreateDownload(const RequestParams& request_params) {
     download_ = std::make_unique<InMemoryDownloadImpl>(
-        base::GenerateGUID(), request_params, TRAFFIC_ANNOTATION_FOR_TESTS,
-        delegate(), &url_loader_factory_,
+        base::GenerateGUID(), request_params, /* request_body= */ nullptr,
+        TRAFFIC_ANNOTATION_FOR_TESTS, delegate(), &url_loader_factory_,
         base::BindRepeating(&BlobStorageContextGetter,
                             blob_storage_context_.get()),
         io_thread_->task_runner());
@@ -126,7 +138,8 @@ class InMemoryDownloadTest : public testing::Test {
     DCHECK(blob);
     int bytes_read = 0;
     int async_bytes_read = 0;
-    scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(expected.size()));
+    scoped_refptr<net::IOBuffer> buffer =
+        base::MakeRefCounted<net::IOBuffer>(expected.size());
 
     auto blob_reader = blob->CreateReader();
 
@@ -169,6 +182,8 @@ TEST_F(InMemoryDownloadTest, DownloadTest) {
   CreateDownload(request_params);
   url_loader_factory()->AddResponse(request_params.url.spec(),
                                     kTestDownloadData);
+
+  EXPECT_CALL(*delegate(), OnDownloadStarted(_));
   // TODO(xingliu): More tests on pause/resume.
   download()->Start();
   delegate()->WaitForCompletion();
@@ -201,14 +216,19 @@ TEST_F(InMemoryDownloadTest, RedirectResponseHeaders) {
   url_loader_factory()->AddResponse(request_params.url, response_head,
                                     kTestDownloadData, status, redirects);
 
+  std::vector<GURL> expected_url_chain = {request_params.url,
+                                          redirect_info.new_url};
+
+  EXPECT_CALL(*delegate(),
+              OnDownloadStarted(InMemoryDownloadMatcher(
+                  response_head.headers->raw_headers(), expected_url_chain)));
+
   download()->Start();
   delegate()->WaitForCompletion();
   EXPECT_EQ(InMemoryDownload::State::COMPLETE, download()->state());
 
   // Verify the response headers and URL chain. The URL chain should contain
   // the original URL and redirect URL, and should not contain the final URL.
-  std::vector<GURL> expected_url_chain = {request_params.url,
-                                          redirect_info.new_url};
   EXPECT_EQ(download()->url_chain(), expected_url_chain);
   EXPECT_EQ(download()->response_headers()->raw_headers(),
             response_head.headers->raw_headers());

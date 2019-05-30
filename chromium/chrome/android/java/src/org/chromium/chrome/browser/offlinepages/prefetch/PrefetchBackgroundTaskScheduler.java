@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.offlinepages.prefetch;
 
 import android.os.Bundle;
+import android.text.format.DateUtils;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.CalledByNative;
@@ -12,8 +13,6 @@ import org.chromium.base.annotations.JNINamespace;
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
 import org.chromium.components.background_task_scheduler.TaskIds;
 import org.chromium.components.background_task_scheduler.TaskInfo;
-
-import java.util.concurrent.TimeUnit;
 
 /**
  * Handles scheduling background task for offline pages prefetching.
@@ -49,11 +48,11 @@ public class PrefetchBackgroundTaskScheduler {
                 TaskInfo.createOneOffTask(TaskIds.OFFLINE_PAGES_PREFETCH_JOB_ID,
                                 PrefetchBackgroundTask.class,
                                 // Minimum time to wait
-                                TimeUnit.SECONDS.toMillis(minimumTimeSeconds),
+                                DateUtils.SECOND_IN_MILLIS * minimumTimeSeconds,
                                 // Maximum time to wait.  After this interval the event will fire
                                 // regardless of whether the conditions are right.
-                                TimeUnit.DAYS.toMillis(7))
-                        .setRequiredNetworkType(TaskInfo.NETWORK_TYPE_UNMETERED)
+                                DateUtils.DAY_IN_MILLIS * 7)
+                        .setRequiredNetworkType(TaskInfo.NetworkType.UNMETERED)
                         .setIsPersisted(true)
                         .setUpdateCurrent(true);
         /* Limitless prefetching eliminates the default wait time but still complies with backoff
@@ -61,7 +60,7 @@ public class PrefetchBackgroundTaskScheduler {
          * type.
          */
         if (limitlessPrefetching) {
-            taskInfoBuilder.setRequiredNetworkType(TaskInfo.NETWORK_TYPE_ANY);
+            taskInfoBuilder.setRequiredNetworkType(TaskInfo.NetworkType.ANY);
             Bundle bundle = new Bundle(1);
             bundle.putBoolean(PrefetchBackgroundTask.LIMITLESS_BUNDLE_KEY, true);
             taskInfoBuilder.setExtras(bundle);

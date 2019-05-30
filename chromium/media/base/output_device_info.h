@@ -26,7 +26,7 @@ enum OutputDeviceStatus {
   OUTPUT_DEVICE_STATUS_MAX = OUTPUT_DEVICE_STATUS_ERROR_INTERNAL
 };
 
-using OutputDeviceStatusCB = base::Callback<void(OutputDeviceStatus)>;
+using OutputDeviceStatusCB = base::OnceCallback<void(OutputDeviceStatus)>;
 
 // Output device information returned by
 // AudioRendererSink::GetOutputDeviceInfo()
@@ -57,7 +57,7 @@ class MEDIA_EXPORT OutputDeviceInfo {
   // Returns the device's audio output parameters.
   // The return value is undefined if the device status (as returned by
   // device_status()) is different from OUTPUT_DEVICE_STATUS_OK.
-  const AudioParameters& output_params() const { return output_params_; };
+  const AudioParameters& output_params() const { return output_params_; }
 
   // Returns a human-readable string describing |*this|.  For debugging & test
   // output only.

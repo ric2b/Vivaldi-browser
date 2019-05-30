@@ -4,6 +4,7 @@
 
 #include "ash/system/power/battery_notification.h"
 
+#include "ash/public/cpp/notification_utils.h"
 #include "ash/public/cpp/power_utils.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -68,40 +69,39 @@ std::unique_ptr<Notification> CreateNotification(
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_BATTERY_PERCENT),
       static_cast<double>(status.GetRoundedBatteryPercent()) / 100.0);
 
-  const base::TimeDelta time = status.IsBatteryCharging()
-                                   ? status.GetBatteryTimeToFull()
-                                   : status.GetBatteryTimeToEmpty();
+  const base::Optional<base::TimeDelta> time =
+      status.IsBatteryCharging() ? status.GetBatteryTimeToFull()
+                                 : status.GetBatteryTimeToEmpty();
   base::string16 time_message;
   if (status.IsUsbChargerConnected()) {
     time_message = l10n_util::GetStringUTF16(
         IDS_ASH_STATUS_TRAY_BATTERY_CHARGING_UNRELIABLE);
-  } else if (power_utils::ShouldDisplayBatteryTime(time) &&
+  } else if (time && power_utils::ShouldDisplayBatteryTime(*time) &&
              !status.IsBatteryDischargingOnLinePower()) {
     if (status.IsBatteryCharging()) {
       base::string16 duration;
-      if (!TimeDurationFormat(time, base::DURATION_WIDTH_NARROW, &duration))
-        LOG(ERROR) << "Failed to format duration " << time;
+      if (!TimeDurationFormat(*time, base::DURATION_WIDTH_NARROW, &duration))
+        LOG(ERROR) << "Failed to format duration " << *time;
       time_message = l10n_util::GetStringFUTF16(
           IDS_ASH_STATUS_TRAY_BATTERY_TIME_UNTIL_FULL, duration);
     } else {
       // This is a low battery warning prompting the user in minutes.
       time_message = ui::TimeFormat::Simple(ui::TimeFormat::FORMAT_REMAINING,
-                                            ui::TimeFormat::LENGTH_LONG, time);
+                                            ui::TimeFormat::LENGTH_LONG, *time);
     }
   }
 
   if (!time_message.empty())
     message = message + base::ASCIIToUTF16("\n") + time_message;
 
-  std::unique_ptr<Notification> notification =
-      Notification::CreateSystemNotification(
-          message_center::NOTIFICATION_TYPE_SIMPLE, kBatteryNotificationId,
-          base::string16(), message, base::string16(), GURL(),
-          message_center::NotifierId(
-              message_center::NotifierId::SYSTEM_COMPONENT, kNotifierBattery),
-          message_center::RichNotificationData(), nullptr,
-          GetBatteryImageMD(notification_state),
-          GetWarningLevelMD(notification_state));
+  std::unique_ptr<Notification> notification = ash::CreateSystemNotification(
+      message_center::NOTIFICATION_TYPE_SIMPLE, kBatteryNotificationId,
+      base::string16(), message, base::string16(), GURL(),
+      message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
+                                 kNotifierBattery),
+      message_center::RichNotificationData(), nullptr,
+      GetBatteryImageMD(notification_state),
+      GetWarningLevelMD(notification_state));
   notification->SetSystemPriority();
   return notification;
 }

@@ -48,6 +48,7 @@ enum FeedbackSource {
   kFeedbackSourceProfileErrorDialog,
   kFeedbackSourceSadTabPage,
   kFeedbackSourceSupervisedUserInterstitial,
+  kFeedbackSourceAssistant,
 
   // Must be last.
   kFeedbackSourceCount,
@@ -108,7 +109,7 @@ void ShowImportDialog(Browser* browser);
 void ShowAboutChrome(Browser* browser);
 void ShowSearchEngineSettings(Browser* browser);
 
-#if !defined(OS_ANDROID)
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
 // Initiates signin in a new browser tab.
 void ShowBrowserSignin(Browser* browser,
                        signin_metrics::AccessPoint access_point);

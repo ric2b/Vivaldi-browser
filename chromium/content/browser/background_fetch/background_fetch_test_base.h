@@ -12,8 +12,8 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "content/browser/background_fetch/background_fetch_embedded_worker_test_helper.h"
 #include "content/browser/background_fetch/background_fetch_test_browser_context.h"
+#include "content/browser/background_fetch/background_fetch_test_service_worker.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -45,28 +45,31 @@ class BackgroundFetchTestBase : public ::testing::Test {
   // ServiceWorkerRegistration will be kept alive for the test's lifetime.
   int64_t RegisterServiceWorker();
 
+  // `RegisterServiceWorker` but for the provided |origin|.
+  int64_t RegisterServiceWorkerForOrigin(const url::Origin& origin);
+
   // Unregisters the test Service Worker and verifies that the unregistration
   // succeeded.
-  void UnregisterServiceWorker();
+  void UnregisterServiceWorker(int64_t service_worker_registration_id);
 
-  // Creates a ServiceWorkerFetchRequest instance for the given details and
+  // Creates a FetchAPIRequestPtr instance for the given details and
   // provides a faked |response|.
-  ServiceWorkerFetchRequest CreateRequestWithProvidedResponse(
+  blink::mojom::FetchAPIRequestPtr CreateRequestWithProvidedResponse(
       const std::string& method,
       const GURL& url,
       std::unique_ptr<TestResponse> response);
 
-  // Creates a BackgroundFetchRegistration object.
-  std::unique_ptr<BackgroundFetchRegistration>
+  // Creates a blink::mojom::BackgroundFetchRegistrationPtr object.
+  blink::mojom::BackgroundFetchRegistrationPtr
   CreateBackgroundFetchRegistration(
       const std::string& developer_id,
       const std::string& unique_id,
-      blink::mojom::BackgroundFetchState state,
+      blink::mojom::BackgroundFetchResult result,
       blink::mojom::BackgroundFetchFailureReason failure_reason);
 
   // Returns the embedded worker test helper instance, which can be used to
   // influence the behavior of the Service Worker events.
-  BackgroundFetchEmbeddedWorkerTestHelper* embedded_worker_test_helper() {
+  EmbeddedWorkerTestHelper* embedded_worker_test_helper() {
     return &embedded_worker_test_helper_;
   }
 
@@ -87,11 +90,13 @@ class BackgroundFetchTestBase : public ::testing::Test {
 
   MockBackgroundFetchDelegate* delegate_;
 
-  BackgroundFetchEmbeddedWorkerTestHelper embedded_worker_test_helper_;
+  EmbeddedWorkerTestHelper embedded_worker_test_helper_;
 
   url::Origin origin_;
 
   StoragePartition* storage_partition_;
+
+  int next_pattern_id_ = 0;
 
   // Vector of ServiceWorkerRegistration instances that have to be kept alive
   // for the lifetime of this test.

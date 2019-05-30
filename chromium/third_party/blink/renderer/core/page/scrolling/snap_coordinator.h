@@ -6,6 +6,8 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_PAGE_SCROLLING_SNAP_COORDINATOR_H_
 
 #include "base/macros.h"
+#include "cc/input/scroll_snap_data.h"
+#include "cc/input/snap_selection_strategy.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value_mappings.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -31,41 +33,48 @@ class CORE_EXPORT SnapCoordinator final
     : public GarbageCollectedFinalized<SnapCoordinator> {
  public:
   static SnapCoordinator* Create();
+
+  explicit SnapCoordinator();
   ~SnapCoordinator();
   void Trace(blink::Visitor* visitor) {}
 
-  void SnapContainerDidChange(LayoutBox&, ScrollSnapType);
-  void SnapAreaDidChange(LayoutBox&, ScrollSnapAlign);
+  void SnapContainerDidChange(LayoutBox&, cc::ScrollSnapType);
+  void SnapAreaDidChange(LayoutBox&, cc::ScrollSnapAlign);
 
   // Returns the SnapContainerData if the snap container has one.
-  base::Optional<SnapContainerData> GetSnapContainerData(
+  base::Optional<cc::SnapContainerData> GetSnapContainerData(
       const LayoutBox& snap_container) const;
 
   // Calculate the SnapAreaData for the specific snap area in its snap
   // container.
-  SnapAreaData CalculateSnapAreaData(const LayoutBox& snap_area,
-                                     const LayoutBox& snap_container);
+  cc::SnapAreaData CalculateSnapAreaData(const LayoutBox& snap_area,
+                                         const LayoutBox& snap_container);
 
   // Called by LocalFrameView::PerformPostLayoutTasks(), so that the snap data
   // are updated whenever a layout happens.
   void UpdateAllSnapContainerData();
   void UpdateSnapContainerData(const LayoutBox&);
 
-  // Called by ScrollManager::HandleGestureScrollEnd() to animate to the snap
-  // position for the current scroll on the specific direction if there is
-  // a valid snap position.
-  void PerformSnapping(const LayoutBox& snap_container,
-                       bool did_scroll_x,
-                       bool did_scroll_y);
-  base::Optional<FloatPoint> GetSnapPositionForPoint(
+  // SnapAtCurrentPosition(), SnapForEndPosition(), SnapForDirection(), and
+  // SnapForEndAndDirection() return true if snapping was performed, and false
+  // otherwise.
+  // SnapAtCurrentPosition() calls SnapForEndPosition() with the current scroll
+  // position.
+  bool SnapAtCurrentPosition(const LayoutBox& snap_container,
+                             bool scrolled_x,
+                             bool scrolled_y) const;
+  bool SnapForEndPosition(const LayoutBox& snap_container,
+                          const FloatPoint& end_position,
+                          bool scrolled_x,
+                          bool scrolled_y) const;
+  bool SnapForDirection(const LayoutBox& snap_container,
+                        const ScrollOffset& delta) const;
+  bool SnapForEndAndDirection(const LayoutBox& snap_container,
+                              const ScrollOffset& delta) const;
+
+  base::Optional<FloatPoint> GetSnapPosition(
       const LayoutBox& snap_container,
-      const FloatPoint& natural_position,
-      bool did_scroll_x,
-      bool did_scroll_y);
-  bool GetSnapFlingInfo(const LayoutBox& snap_container,
-                        const gfx::Vector2dF& natural_displacement,
-                        gfx::Vector2dF* out_initial_offset,
-                        gfx::Vector2dF* out_target_offset);
+      const cc::SnapSelectionStrategy& strategy) const;
 
 #ifndef NDEBUG
   void ShowSnapAreaMap();
@@ -75,9 +84,10 @@ class CORE_EXPORT SnapCoordinator final
 
  private:
   friend class SnapCoordinatorTest;
-  explicit SnapCoordinator();
+  bool PerformSnapping(const LayoutBox& snap_container,
+                       const cc::SnapSelectionStrategy& strategy) const;
 
-  HashMap<const LayoutBox*, SnapContainerData> snap_container_map_;
+  HashMap<const LayoutBox*, cc::SnapContainerData> snap_container_map_;
   DISALLOW_COPY_AND_ASSIGN(SnapCoordinator);
 };
 

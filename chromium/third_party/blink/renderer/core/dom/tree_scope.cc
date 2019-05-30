@@ -57,7 +57,7 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 TreeScope::TreeScope(ContainerNode& root_node, Document& document)
     : root_node_(&root_node),
@@ -127,12 +127,12 @@ Element* TreeScope::getElementById(const AtomicString& element_id) const {
 
 const HeapVector<Member<Element>>& TreeScope::GetAllElementsById(
     const AtomicString& element_id) const {
-  DEFINE_STATIC_LOCAL(HeapVector<Member<Element>>, empty_vector,
-                      (new HeapVector<Member<Element>>));
+  DEFINE_STATIC_LOCAL(Persistent<HeapVector<Member<Element>>>, empty_vector,
+                      (MakeGarbageCollected<HeapVector<Member<Element>>>()));
   if (element_id.IsEmpty())
-    return empty_vector;
+    return *empty_vector;
   if (!elements_by_id_)
-    return empty_vector;
+    return *empty_vector;
   return elements_by_id_->GetAllElementsById(element_id, *this);
 }
 
@@ -188,8 +188,10 @@ HTMLMapElement* TreeScope::GetImageMap(const String& url) const {
     return nullptr;
   if (!image_maps_by_name_)
     return nullptr;
-  size_t hash_pos = url.find('#');
-  String name = hash_pos == kNotFound ? url : url.Substring(hash_pos + 1);
+  wtf_size_t hash_pos = url.find('#');
+  if (hash_pos == kNotFound)
+    return nullptr;
+  String name = url.Substring(hash_pos + 1);
   return ToHTMLMapElement(
       image_maps_by_name_->GetElementByMapName(AtomicString(name), *this));
 }
@@ -266,7 +268,7 @@ Element* TreeScope::HitTestPointInternal(Node* node,
   if (!element)
     return nullptr;
   if (type == HitTestPointType::kWebExposed)
-    return Retarget(*element);
+    return &Retarget(*element);
   return element;
 }
 
@@ -329,9 +331,47 @@ HeapVector<Member<Element>> TreeScope::ElementsFromPoint(double x,
 }
 
 SVGTreeScopeResources& TreeScope::EnsureSVGTreeScopedResources() {
-  if (!svg_tree_scoped_resources_)
-    svg_tree_scoped_resources_ = new SVGTreeScopeResources(this);
+  if (!svg_tree_scoped_resources_) {
+    svg_tree_scoped_resources_ =
+        MakeGarbageCollected<SVGTreeScopeResources>(this);
+  }
   return *svg_tree_scoped_resources_;
+}
+
+bool TreeScope::HasAdoptedStyleSheets() const {
+  return adopted_style_sheets_.size() > 0;
+}
+
+const HeapVector<Member<CSSStyleSheet>>& TreeScope::AdoptedStyleSheets() {
+  return adopted_style_sheets_;
+}
+
+void TreeScope::SetAdoptedStyleSheets(
+    HeapVector<Member<CSSStyleSheet>>& adopted_style_sheets,
+    ExceptionState& exception_state) {
+  for (CSSStyleSheet* sheet : adopted_style_sheets) {
+    if (!sheet->IsConstructed()) {
+      exception_state.ThrowDOMException(
+          DOMExceptionCode::kNotAllowedError,
+          "Can't adopt non-constructed stylesheets.");
+      return;
+    }
+    Document* associated_document = sheet->AssociatedDocument();
+    if (associated_document && *associated_document != GetDocument()) {
+      exception_state.ThrowDOMException(DOMExceptionCode::kNotAllowedError,
+                                        "Sharing constructed stylesheets in "
+                                        "multiple documents is not allowed");
+      return;
+    }
+  }
+  SetAdoptedStyleSheets(adopted_style_sheets);
+}
+
+void TreeScope::SetAdoptedStyleSheets(
+    HeapVector<Member<CSSStyleSheet>>& adopted_style_sheets) {
+  GetDocument().GetStyleEngine().AdoptedStyleSheetsWillChange(
+      *this, adopted_style_sheets_, adopted_style_sheets);
+  adopted_style_sheets_ = adopted_style_sheets;
 }
 
 DOMSelection* TreeScope::GetSelection() const {
@@ -385,10 +425,10 @@ void TreeScope::AdoptIfNeeded(Node& node) {
 // This retargets |target| against the root of |this|.
 // The steps are different with the spec for performance reasons,
 // but the results should be the same.
-Element* TreeScope::Retarget(const Element& target) const {
+Element& TreeScope::Retarget(const Element& target) const {
   const TreeScope& target_scope = target.GetTreeScope();
   if (!target_scope.RootNode().IsShadowRoot())
-    return const_cast<Element*>(&target);
+    return const_cast<Element&>(target);
 
   HeapVector<Member<const TreeScope>> target_ancestor_scopes;
   HeapVector<Member<const TreeScope>> context_ancestor_scopes;
@@ -409,10 +449,10 @@ Element* TreeScope::Retarget(const Element& target) const {
   }
 
   if (target_ancestor_riterator == target_ancestor_scopes.rend())
-    return const_cast<Element*>(&target);
+    return const_cast<Element&>(target);
   Node& first_different_scope_root =
       (*target_ancestor_riterator).Get()->RootNode();
-  return &ToShadowRoot(first_different_scope_root).host();
+  return To<ShadowRoot>(first_different_scope_root).host();
 }
 
 Element* TreeScope::AdjustedFocusedElementInternal(
@@ -441,7 +481,7 @@ Element* TreeScope::AdjustedFocusedElement() const {
     return nullptr;
   }
 
-  EventPath* event_path = new EventPath(*element);
+  EventPath* event_path = MakeGarbageCollected<EventPath>(*element);
   for (const auto& context : event_path->NodeEventContexts()) {
     if (context.GetNode() == RootNode()) {
       // context.target() is one of the followings:
@@ -472,7 +512,7 @@ Element* TreeScope::AdjustedElement(const Element& target) const {
   return nullptr;
 }
 
-unsigned short TreeScope::ComparePosition(const TreeScope& other_scope) const {
+uint16_t TreeScope::ComparePosition(const TreeScope& other_scope) const {
   if (other_scope == this)
     return Node::kDocumentPositionEquivalent;
 
@@ -554,7 +594,7 @@ Element* TreeScope::GetElementByAccessKey(const String& key) const {
   Element* result = nullptr;
   Node& root = RootNode();
   for (Element& element : ElementTraversal::DescendantsOf(root)) {
-    if (DeprecatedEqualIgnoringCase(element.FastGetAttribute(accesskeyAttr),
+    if (DeprecatedEqualIgnoringCase(element.FastGetAttribute(kAccesskeyAttr),
                                     key))
       result = &element;
     if (ShadowRoot* shadow_root = element.GetShadowRoot()) {
@@ -571,14 +611,15 @@ void TreeScope::SetNeedsStyleRecalcForViewportUnits() {
     if (ShadowRoot* root = element->GetShadowRoot())
       root->SetNeedsStyleRecalcForViewportUnits();
     const ComputedStyle* style = element->GetComputedStyle();
-    if (style && style->HasViewportUnits())
+    if (style && style->HasViewportUnits()) {
       element->SetNeedsStyleRecalc(kLocalStyleChange,
                                    StyleChangeReasonForTracing::Create(
-                                       StyleChangeReason::kViewportUnits));
+                                       style_change_reason::kViewportUnits));
+    }
   }
 }
 
-void TreeScope::Trace(blink::Visitor* visitor) {
+void TreeScope::Trace(Visitor* visitor) {
   visitor->Trace(root_node_);
   visitor->Trace(document_);
   visitor->Trace(parent_tree_scope_);
@@ -589,6 +630,7 @@ void TreeScope::Trace(blink::Visitor* visitor) {
   visitor->Trace(scoped_style_resolver_);
   visitor->Trace(radio_button_group_scope_);
   visitor->Trace(svg_tree_scoped_resources_);
+  visitor->Trace(adopted_style_sheets_);
 }
 
 }  // namespace blink

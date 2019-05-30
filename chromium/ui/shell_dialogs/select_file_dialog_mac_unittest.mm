@@ -6,10 +6,11 @@
 
 #include <vector>
 
+#include "base/files/file_util.h"
 #import "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -381,7 +382,7 @@ TEST_F(SelectFileDialogMacTest, SelectionType) {
        HAS_ACCESSORY_VIEW | PICK_FILES | MULTIPLE_SELECTION, "Open"},
   };
 
-  for (size_t i = 0; i < arraysize(test_cases); i++) {
+  for (size_t i = 0; i < base::size(test_cases); i++) {
     SCOPED_TRACE(
         base::StringPrintf("i=%lu file_dialog_type=%d", i, test_cases[i].type));
     args.type = test_cases[i].type;
@@ -442,9 +443,8 @@ TEST_F(SelectFileDialogMacTest, MultipleDialogs) {
 
 // Verify that the default_path argument is respected.
 TEST_F(SelectFileDialogMacTest, DefaultPath) {
-  const std::string fake_path = "/fake_directory/filename.txt";
   FileDialogArguments args(GetDefaultArguments());
-  args.default_path = base::FilePath(FILE_PATH_LITERAL(fake_path));
+  args.default_path = base::GetHomeDir().AppendASCII("test.txt");
 
   SelectFileWithParams(args);
   NSSavePanel* panel = GetPanel();

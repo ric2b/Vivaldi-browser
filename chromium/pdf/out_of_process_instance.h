@@ -19,13 +19,9 @@
 #include "pdf/paint_manager.h"
 #include "pdf/pdf_engine.h"
 #include "pdf/preview_mode_client.h"
-#include "ppapi/c/private/ppb_pdf.h"
 #include "ppapi/c/private/ppp_pdf.h"
 #include "ppapi/cpp/dev/printing_dev.h"
-#include "ppapi/cpp/dev/scriptable_object_deprecated.h"
-#include "ppapi/cpp/graphics_2d.h"
 #include "ppapi/cpp/image_data.h"
-#include "ppapi/cpp/input_event.h"
 #include "ppapi/cpp/instance.h"
 #include "ppapi/cpp/private/find_private.h"
 #include "ppapi/cpp/private/uma_private.h"
@@ -135,7 +131,6 @@ class OutOfProcessInstance : public pp::Instance,
   std::vector<SearchStringResult> SearchString(const base::char16* string,
                                                const base::char16* term,
                                                bool case_sensitive) override;
-  void DocumentPaintOccurred() override;
   void DocumentLoadComplete(
       const PDFEngine::DocumentFeatures& document_features,
       uint32_t file_size) override;
@@ -185,6 +180,11 @@ class OutOfProcessInstance : public pp::Instance,
   // Creates a URL loader and allows it to access all urls, i.e. not just the
   // frame's origin.
   pp::URLLoader CreateURLLoaderInternal();
+
+  bool ShouldSaveEdits() const;
+  void SaveToFile(const std::string& token);
+  void SaveToBuffer(const std::string& token);
+  void ConsumeSaveToken(const std::string& token);
 
   void FormDidOpen(int32_t result);
 
@@ -426,6 +426,8 @@ class OutOfProcessInstance : public pp::Instance,
 
   // Annotation types that were already counted for this document.
   std::set<int> annotation_types_counted_;
+
+  bool edit_mode_ = false;
 
   // The current state of accessibility: either off, enabled but waiting
   // for the document to load, or fully loaded.

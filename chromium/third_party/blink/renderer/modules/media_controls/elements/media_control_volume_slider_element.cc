@@ -5,10 +5,12 @@
 #include "third_party/blink/renderer/modules/media_controls/elements/media_control_volume_slider_element.h"
 
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/renderer/core/dom/dom_token_list.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
+#include "third_party/blink/renderer/modules/media_controls/elements/media_control_consts.h"
 #include "third_party/blink/renderer/modules/media_controls/elements/media_control_elements_helper.h"
 #include "third_party/blink/renderer/modules/media_controls/media_controls_impl.h"
 
@@ -16,10 +18,17 @@ namespace blink {
 
 MediaControlVolumeSliderElement::MediaControlVolumeSliderElement(
     MediaControlsImpl& media_controls)
-    : MediaControlSliderElement(media_controls, kMediaVolumeSlider) {
-  setAttribute(HTMLNames::maxAttr, "1");
+    : MediaControlSliderElement(media_controls, kMediaIgnore) {
+  setAttribute(html_names::kMaxAttr, "1");
+  setAttribute(html_names::kAriaValuemaxAttr, "100");
+  setAttribute(html_names::kAriaValueminAttr, "0");
+  setAttribute(html_names::kAriaLabelAttr, "volume");
   SetShadowPseudoId(AtomicString("-webkit-media-controls-volume-slider"));
   SetVolumeInternal(MediaElement().volume());
+
+  // The slider starts closed in modern media controls.
+  if (MediaControlsImpl::IsModern())
+    CloseSlider();
 }
 
 void MediaControlVolumeSliderElement::SetVolume(double volume) {
@@ -28,6 +37,14 @@ void MediaControlVolumeSliderElement::SetVolume(double volume) {
 
   setValue(String::Number(volume));
   SetVolumeInternal(volume);
+}
+
+void MediaControlVolumeSliderElement::OpenSlider() {
+  classList().Remove(kClosedCSSClass);
+}
+
+void MediaControlVolumeSliderElement::CloseSlider() {
+  classList().Add(kClosedCSSClass);
 }
 
 bool MediaControlVolumeSliderElement::WillRespondToMouseMoveEvents() {
@@ -59,27 +76,36 @@ void MediaControlVolumeSliderElement::DefaultEventHandler(Event& event) {
     MaybeRecordInteracted();
   }
 
-  if (event.type() == EventTypeNames::pointerdown) {
+  if (event.type() == event_type_names::kPointerdown) {
     Platform::Current()->RecordAction(
         UserMetricsAction("Media.Controls.VolumeChangeBegin"));
   }
 
-  if (event.type() == EventTypeNames::pointerup) {
+  if (event.type() == event_type_names::kPointerup) {
     Platform::Current()->RecordAction(
         UserMetricsAction("Media.Controls.VolumeChangeEnd"));
   }
 
-  if (event.type() == EventTypeNames::input) {
+  if (event.type() == event_type_names::kInput) {
     double volume = value().ToDouble();
     MediaElement().setVolume(volume);
     MediaElement().setMuted(false);
     SetVolumeInternal(volume);
   }
+
+  if (event.type() == event_type_names::kFocus)
+    GetMediaControls().OpenVolumeSliderIfNecessary();
+
+  if (event.type() == event_type_names::kBlur)
+    GetMediaControls().CloseVolumeSliderIfNecessary();
 }
 
 void MediaControlVolumeSliderElement::SetVolumeInternal(double volume) {
   SetupBarSegments();
   SetAfterSegmentPosition(MediaControlSliderElement::Position(0, volume));
+  int percent_vol = 100 * volume;
+  setAttribute(html_names::kAriaValuenowAttr,
+               WTF::AtomicString::Number(percent_vol));
 }
 
 bool MediaControlVolumeSliderElement::KeepEventInNode(

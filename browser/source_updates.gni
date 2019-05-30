@@ -6,7 +6,6 @@ update_template_instance("//chrome/browser:browser") {
     "//vivaldi/browser/shell_integration/vivaldi_shell_integration_linux.cc",
     "//vivaldi/browser/shell_integration/vivaldi_shell_integration_mac.mm",
     "//vivaldi/browser/shell_integration/vivaldi_shell_integration_win.cc",
-    "//vivaldi/browser/vivaldi_thumbnail_service_impl.cc",
   ]
   if (is_mac) {
     sources += [
@@ -18,9 +17,21 @@ update_template_instance("//chrome/browser:browser") {
   }
   if (!is_android) {
     sources += [
-      "//vivaldi/browser/menus/vivaldi_menus.cpp",
-      "//vivaldi/browser/menus/vivaldi_menus.h",
+      "//vivaldi/browser/history/top_sites_convert.cc",
+      "//vivaldi/browser/history/top_sites_convert.h",
+      "//vivaldi/browser/menus/bookmark_sorter.cc",
+      "//vivaldi/browser/menus/bookmark_sorter.h",
+      "//vivaldi/browser/menus/bookmark_support.cc",
+      "//vivaldi/browser/menus/bookmark_support.h",
       "//vivaldi/browser/vivaldi_session_service.cc",
+    ]
+  }
+  if (is_android) {
+    if (!defined(jumbo_excluded_sources)) {
+      jumbo_excluded_sources = []
+    }
+    jumbo_excluded_sources += [
+      "android/explore_sites/explore_sites_service_impl.cc",
     ]
   }
 }
@@ -54,16 +65,6 @@ update_template_instance("//chrome/browser/ui:ui") {
       "//vivaldi/browser/ui/viv_page_info_bubble_view.cc",
     ]
   }
-  if (use_aura) {
-    sources += [
-      "//vivaldi/browser/ui/viv_web_drag_bookmark_handler_aura.cc",
-    ]
-  }
-  if (is_mac) {
-    sources += [
-      "//vivaldi/browser/ui/viv_web_drag_bookmark_handler_mac.cc",
-    ]
-  }
   if (!defined(jumbo_excluded_sources)) {
     jumbo_excluded_sources = []
   }
@@ -84,5 +85,6 @@ update_target("//chrome/common:constants") {
 update_template_instance("//content/public/browser:browser_sources") {
   sources += [
     "//vivaldi/browser/renderer_host/vivaldi_render_widget_host_input_event_router.cc",
+    "//vivaldi/browser/renderer_host/devtools/protocol/vivaldi_emulation_handler.cc",
   ]
 }

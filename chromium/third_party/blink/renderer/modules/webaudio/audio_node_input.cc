@@ -30,83 +30,24 @@
 
 #include "base/memory/ptr_util.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_node_output.h"
+#include "third_party/blink/renderer/modules/webaudio/audio_node_wiring.h"
 
 namespace blink {
 
-inline AudioNodeInput::AudioNodeInput(AudioHandler& handler)
+AudioNodeInput::AudioNodeInput(AudioHandler& handler)
     : AudioSummingJunction(handler.Context()->GetDeferredTaskHandler()),
       handler_(handler) {
   // Set to mono by default.
   internal_summing_bus_ =
-      AudioBus::Create(1, AudioUtilities::kRenderQuantumFrames);
+      AudioBus::Create(1, audio_utilities::kRenderQuantumFrames);
+}
+
+AudioNodeInput::~AudioNodeInput() {
+  AudioNodeWiring::WillBeDestroyed(*this);
 }
 
 std::unique_ptr<AudioNodeInput> AudioNodeInput::Create(AudioHandler& handler) {
   return base::WrapUnique(new AudioNodeInput(handler));
-}
-
-void AudioNodeInput::Connect(AudioNodeOutput& output) {
-  GetDeferredTaskHandler().AssertGraphOwner();
-
-  // Check if we're already connected to this output.
-  if (outputs_.Contains(&output))
-    return;
-
-  output.AddInput(*this);
-  outputs_.insert(&output);
-  ChangedOutputs();
-}
-
-void AudioNodeInput::Disconnect(AudioNodeOutput& output) {
-  GetDeferredTaskHandler().AssertGraphOwner();
-
-  // First try to disconnect from "active" connections.
-  if (outputs_.Contains(&output)) {
-    outputs_.erase(&output);
-    ChangedOutputs();
-    output.RemoveInput(*this);
-    // Note: it's important to return immediately after removeInput() calls
-    // since the node may be deleted.
-    return;
-  }
-
-  // Otherwise, try to disconnect from disabled connections.
-  if (disabled_outputs_.Contains(&output)) {
-    disabled_outputs_.erase(&output);
-    output.RemoveInput(*this);
-    // Note: it's important to return immediately after all removeInput() calls
-    // since the node may be deleted.
-    return;
-  }
-
-  NOTREACHED();
-}
-
-void AudioNodeInput::Disable(AudioNodeOutput& output) {
-  GetDeferredTaskHandler().AssertGraphOwner();
-  DCHECK(outputs_.Contains(&output));
-
-  disabled_outputs_.insert(&output);
-  outputs_.erase(&output);
-  ChangedOutputs();
-
-  // Propagate disabled state to outputs.
-  Handler().DisableOutputsIfNecessary();
-}
-
-void AudioNodeInput::Enable(AudioNodeOutput& output) {
-  GetDeferredTaskHandler().AssertGraphOwner();
-
-  // Move output from disabled list to active list.
-  outputs_.insert(&output);
-  if (disabled_outputs_.size() > 0) {
-    DCHECK(disabled_outputs_.Contains(&output));
-    disabled_outputs_.erase(&output);
-  }
-  ChangedOutputs();
-
-  // Propagate enabled state to outputs.
-  Handler().EnableOutputsIfNecessary();
 }
 
 void AudioNodeInput::DidUpdate() {
@@ -123,7 +64,7 @@ void AudioNodeInput::UpdateInternalBus() {
     return;
 
   internal_summing_bus_ = AudioBus::Create(
-      number_of_input_channels, AudioUtilities::kRenderQuantumFrames);
+      number_of_input_channels, audio_utilities::kRenderQuantumFrames);
 }
 
 unsigned AudioNodeInput::NumberOfChannels() const {
@@ -168,7 +109,7 @@ AudioBus* AudioNodeInput::InternalSummingBus() {
 }
 
 void AudioNodeInput::SumAllConnections(AudioBus* summing_bus,
-                                       size_t frames_to_process) {
+                                       uint32_t frames_to_process) {
   DCHECK(GetDeferredTaskHandler().IsAudioThread());
 
   // We shouldn't be calling this method if there's only one connection, since
@@ -198,7 +139,7 @@ void AudioNodeInput::SumAllConnections(AudioBus* summing_bus,
 }
 
 AudioBus* AudioNodeInput::Pull(AudioBus* in_place_bus,
-                               size_t frames_to_process) {
+                               uint32_t frames_to_process) {
   DCHECK(GetDeferredTaskHandler().IsAudioThread());
 
   // Handle single connection case.

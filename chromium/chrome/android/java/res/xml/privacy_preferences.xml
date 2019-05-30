@@ -18,10 +18,6 @@
         android:summary="@string/search_suggestions_summary"
         android:defaultValue="true" />
     <org.chromium.chrome.browser.preferences.ChromeBaseCheckBoxPreference
-        android:key="safe_browsing_extended_reporting"
-        android:title="@string/safe_browsing_extended_reporting_title"
-        android:summary="@string/safe_browsing_extended_reporting_summary" />
-    <org.chromium.chrome.browser.preferences.ChromeBaseCheckBoxPreference
         android:key="safe_browsing_scout_reporting"
         android:title="@string/safe_browsing_scout_reporting_title"
         android:summary="@string/safe_browsing_scout_reporting_summary" />
@@ -38,6 +34,10 @@
         android:key="can_make_payment"
         android:title="@string/can_make_payment_title"
         android:summary="@string/settings_can_make_payment_toggle_label" />
+    <org.chromium.chrome.browser.preferences.ChromeBasePreference
+        android:key="usage_stats_reporting"
+        android:title="@string/usage_stats_setting_title"
+        android:persistent="false" />
     <Preference
         android:key="usage_and_crash_reports"
         android:title="@string/usage_and_crash_reports_title_legacy"

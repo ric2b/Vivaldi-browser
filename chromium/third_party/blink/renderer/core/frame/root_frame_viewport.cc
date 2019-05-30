@@ -4,17 +4,19 @@
 
 #include "third_party/blink/renderer/core/frame/root_frame_viewport.h"
 
+#include "cc/input/snap_selection_strategy.h"
 #include "third_party/blink/public/platform/web_scroll_into_view_params.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/scroll_anchor.h"
+#include "third_party/blink/renderer/core/page/scrolling/snap_coordinator.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/core/scroll/scroll_alignment.h"
 #include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
 #include "third_party/blink/renderer/core/scroll/smooth_scroll_sequencer.h"
 #include "third_party/blink/renderer/platform/geometry/double_rect.h"
 #include "third_party/blink/renderer/platform/geometry/float_rect.h"
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_alignment.h"
 
 namespace blink {
 namespace {
@@ -292,6 +294,19 @@ LayoutRect RootFrameViewport::ScrollIntoView(
           params.GetScrollAlignmentY(), GetScrollOffset()));
   if (params.GetScrollType() == kUserScroll)
     new_scroll_offset = ClampToUserScrollableOffset(new_scroll_offset);
+
+  FloatPoint end_point = ScrollOffsetToPosition(new_scroll_offset);
+  std::unique_ptr<cc::SnapSelectionStrategy> strategy =
+      cc::SnapSelectionStrategy::CreateForEndPosition(
+          gfx::ScrollOffset(end_point), true, true);
+  if (GetLayoutBox()) {
+    end_point = GetLayoutBox()
+                    ->GetDocument()
+                    .GetSnapCoordinator()
+                    ->GetSnapPosition(*GetLayoutBox(), *strategy)
+                    .value_or(end_point);
+    new_scroll_offset = ScrollPositionToOffset(end_point);
+  }
 
   if (new_scroll_offset != GetScrollOffset()) {
     if (params.is_for_scroll_sequence) {

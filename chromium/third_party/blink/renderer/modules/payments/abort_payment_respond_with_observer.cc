@@ -27,7 +27,7 @@ void AbortPaymentRespondWithObserver::OnResponseRejected(
                                            "AbortPaymentEvent", error);
 
   ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
-      ->RespondToAbortPaymentEvent(event_id_, false, event_dispatch_time_);
+      ->RespondToAbortPaymentEvent(event_id_, false);
 }
 
 void AbortPaymentRespondWithObserver::OnResponseFulfilled(
@@ -38,8 +38,8 @@ void AbortPaymentRespondWithObserver::OnResponseFulfilled(
   DCHECK(GetExecutionContext());
   ExceptionState exception_state(value.GetIsolate(), context_type,
                                  interface_name, property_name);
-  bool response = ToBoolean(ToIsolate(GetExecutionContext()), value.V8Value(),
-                            exception_state);
+  bool response =
+      ToBoolean(value.GetIsolate(), value.V8Value(), exception_state);
   if (exception_state.HadException()) {
     exception_state.ClearException();
     OnResponseRejected(blink::mojom::ServiceWorkerResponseError::kNoV8Instance);
@@ -47,13 +47,13 @@ void AbortPaymentRespondWithObserver::OnResponseFulfilled(
   }
 
   ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
-      ->RespondToAbortPaymentEvent(event_id_, response, event_dispatch_time_);
+      ->RespondToAbortPaymentEvent(event_id_, response);
 }
 
 void AbortPaymentRespondWithObserver::OnNoResponse() {
   DCHECK(GetExecutionContext());
   ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
-      ->RespondToAbortPaymentEvent(event_id_, false, event_dispatch_time_);
+      ->RespondToAbortPaymentEvent(event_id_, false);
 }
 
 void AbortPaymentRespondWithObserver::Trace(blink::Visitor* visitor) {

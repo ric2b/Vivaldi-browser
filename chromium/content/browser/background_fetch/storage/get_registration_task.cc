@@ -4,6 +4,7 @@
 
 #include "content/browser/background_fetch/storage/get_registration_task.h"
 
+#include "base/bind.h"
 #include "content/browser/background_fetch/background_fetch.pb.h"
 #include "content/browser/background_fetch/storage/database_helpers.h"
 #include "content/browser/background_fetch/storage/get_metadata_task.h"
@@ -44,13 +45,13 @@ void GetRegistrationTask::DidGetMetadata(
 
 void GetRegistrationTask::FinishWithError(
     blink::mojom::BackgroundFetchError error) {
-  BackgroundFetchRegistration registration;
+  auto registration = blink::mojom::BackgroundFetchRegistration::New();
 
   if (error == blink::mojom::BackgroundFetchError::NONE) {
     DCHECK(metadata_proto_);
 
     bool converted =
-        ToBackgroundFetchRegistration(*metadata_proto_, &registration);
+        ToBackgroundFetchRegistration(*metadata_proto_, registration.get());
     if (!converted) {
       // Database corrupted.
       SetStorageErrorAndFinish(
@@ -61,7 +62,7 @@ void GetRegistrationTask::FinishWithError(
 
   ReportStorageError();
 
-  std::move(callback_).Run(error, registration);
+  std::move(callback_).Run(error, std::move(registration));
   Finished();  // Destroys |this|.
 }
 

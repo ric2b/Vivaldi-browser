@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/shadow_root_v0.h"
+#include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_request.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_test.h"
@@ -36,12 +37,12 @@ bool HasSelectorForAttributeInShadow(Element* host,
       .HasSelectorForAttribute(attribute_name);
 }
 
-class ShadowDOMVTest : public SimTest {};
+class ShadowDOMV0Test : public SimTest {};
 
-TEST_F(ShadowDOMVTest, FeatureSetId) {
+TEST_F(ShadowDOMV0Test, FeatureSetId) {
   LoadURL("about:blank");
-  auto* host = GetDocument().CreateRawElement(HTMLNames::divTag);
-  auto* content = GetDocument().CreateRawElement(HTMLNames::contentTag);
+  auto* host = GetDocument().CreateRawElement(html_names::kDivTag);
+  auto* content = GetDocument().CreateRawElement(html_names::kContentTag);
   content->setAttribute("select", "#foo");
   host->CreateV0ShadowRootForTesting().AppendChild(content);
   EXPECT_TRUE(HasSelectorForIdInShadow(host, "foo"));
@@ -55,10 +56,10 @@ TEST_F(ShadowDOMVTest, FeatureSetId) {
   EXPECT_FALSE(HasSelectorForIdInShadow(host, "foo"));
 }
 
-TEST_F(ShadowDOMVTest, FeatureSetClassName) {
+TEST_F(ShadowDOMV0Test, FeatureSetClassName) {
   LoadURL("about:blank");
-  auto* host = GetDocument().CreateRawElement(HTMLNames::divTag);
-  auto* content = GetDocument().CreateRawElement(HTMLNames::contentTag);
+  auto* host = GetDocument().CreateRawElement(html_names::kDivTag);
+  auto* content = GetDocument().CreateRawElement(html_names::kContentTag);
   content->setAttribute("select", ".foo");
   host->CreateV0ShadowRootForTesting().AppendChild(content);
   EXPECT_TRUE(HasSelectorForClassInShadow(host, "foo"));
@@ -72,10 +73,10 @@ TEST_F(ShadowDOMVTest, FeatureSetClassName) {
   EXPECT_FALSE(HasSelectorForClassInShadow(host, "foo"));
 }
 
-TEST_F(ShadowDOMVTest, FeatureSetAttributeName) {
+TEST_F(ShadowDOMV0Test, FeatureSetAttributeName) {
   LoadURL("about:blank");
-  auto* host = GetDocument().CreateRawElement(HTMLNames::divTag);
-  auto* content = GetDocument().CreateRawElement(HTMLNames::contentTag);
+  auto* host = GetDocument().CreateRawElement(html_names::kDivTag);
+  auto* content = GetDocument().CreateRawElement(html_names::kContentTag);
   content->setAttribute("select", "div[foo]");
   host->CreateV0ShadowRootForTesting().AppendChild(content);
   EXPECT_TRUE(HasSelectorForAttributeInShadow(host, "foo"));
@@ -89,10 +90,10 @@ TEST_F(ShadowDOMVTest, FeatureSetAttributeName) {
   EXPECT_FALSE(HasSelectorForAttributeInShadow(host, "foo"));
 }
 
-TEST_F(ShadowDOMVTest, FeatureSetMultipleSelectors) {
+TEST_F(ShadowDOMV0Test, FeatureSetMultipleSelectors) {
   LoadURL("about:blank");
-  auto* host = GetDocument().CreateRawElement(HTMLNames::divTag);
-  auto* content = GetDocument().CreateRawElement(HTMLNames::contentTag);
+  auto* host = GetDocument().CreateRawElement(html_names::kDivTag);
+  auto* content = GetDocument().CreateRawElement(html_names::kContentTag);
   content->setAttribute("select", "#foo,.bar,div[baz]");
   host->CreateV0ShadowRootForTesting().AppendChild(content);
   EXPECT_TRUE(HasSelectorForIdInShadow(host, "foo"));
@@ -106,9 +107,9 @@ TEST_F(ShadowDOMVTest, FeatureSetMultipleSelectors) {
   EXPECT_TRUE(HasSelectorForAttributeInShadow(host, "baz"));
 }
 
-TEST_F(ShadowDOMVTest, FeatureSetSubtree) {
+TEST_F(ShadowDOMV0Test, FeatureSetSubtree) {
   LoadURL("about:blank");
-  auto* host = GetDocument().CreateRawElement(HTMLNames::divTag);
+  auto* host = GetDocument().CreateRawElement(html_names::kDivTag);
   host->CreateV0ShadowRootForTesting().SetInnerHTMLFromString(R"HTML(
     <div>
       <div></div>
@@ -124,14 +125,14 @@ TEST_F(ShadowDOMVTest, FeatureSetSubtree) {
   EXPECT_FALSE(HasSelectorForAttributeInShadow(host, "piyo"));
 }
 
-TEST_F(ShadowDOMVTest, FeatureSetMultipleShadowRoots) {
+TEST_F(ShadowDOMV0Test, FeatureSetMultipleShadowRoots) {
   LoadURL("about:blank");
-  auto* host = GetDocument().CreateRawElement(HTMLNames::divTag);
+  auto* host = GetDocument().CreateRawElement(html_names::kDivTag);
   auto& host_shadow = host->CreateV0ShadowRootForTesting();
   host_shadow.SetInnerHTMLFromString("<content select='#foo'></content>");
-  auto* child = GetDocument().CreateRawElement(HTMLNames::divTag);
+  auto* child = GetDocument().CreateRawElement(html_names::kDivTag);
   auto& child_root = child->CreateV0ShadowRootForTesting();
-  auto* child_content = GetDocument().CreateRawElement(HTMLNames::contentTag);
+  auto* child_content = GetDocument().CreateRawElement(html_names::kContentTag);
   child_content->setAttribute("select", "#bar");
   child_root.AppendChild(child_content);
   host_shadow.AppendChild(child);
@@ -142,6 +143,31 @@ TEST_F(ShadowDOMVTest, FeatureSetMultipleShadowRoots) {
   EXPECT_TRUE(HasSelectorForIdInShadow(host, "foo"));
   EXPECT_FALSE(HasSelectorForIdInShadow(host, "bar"));
   EXPECT_TRUE(HasSelectorForIdInShadow(host, "baz"));
+}
+
+TEST_F(ShadowDOMV0Test, ReattachNonDistributedElements) {
+  LoadURL("about:blank");
+
+  auto* host = GetDocument().CreateRawElement(html_names::kDivTag);
+  auto* inner_host = GetDocument().CreateRawElement(html_names::kDivTag);
+  auto* span = GetDocument().CreateRawElement(html_names::kSpanTag);
+
+  GetDocument().body()->appendChild(host);
+  host->appendChild(inner_host);
+  inner_host->appendChild(span);
+
+  GetDocument().View()->UpdateAllLifecyclePhases(
+      DocumentLifecycle::LifecycleUpdateReason::kTest);
+
+  host->CreateV0ShadowRootForTesting();
+  inner_host->CreateV0ShadowRootForTesting();
+  inner_host->SetInlineStyleProperty(CSSPropertyDisplay, CSSValueInlineBlock);
+  span->SetInlineStyleProperty(CSSPropertyDisplay, CSSValueBlock);
+
+  GetDocument().View()->UpdateAllLifecyclePhases(
+      DocumentLifecycle::LifecycleUpdateReason::kTest);
+
+  EXPECT_FALSE(span->NeedsReattachLayoutTree());
 }
 
 }  // namespace

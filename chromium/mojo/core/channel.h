@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/process/process_handle.h"
@@ -32,6 +33,16 @@ constexpr bool IsAlignedForChannelMessage(size_t n) {
 class MOJO_SYSTEM_IMPL_EXPORT Channel
     : public base::RefCountedThreadSafe<Channel> {
  public:
+  enum class HandlePolicy {
+    // If a Channel is constructed in this mode, it will accept messages with
+    // platform handle attachements.
+    kAcceptHandles,
+
+    // If a Channel is constructed in this mode, it will reject messages with
+    // platform handle attachments and treat them as malformed messages.
+    kRejectHandles,
+  };
+
   struct Message;
 
   using MessagePtr = std::unique_ptr<Message>;
@@ -114,12 +125,8 @@ class MOJO_SYSTEM_IMPL_EXPORT Channel
                   "sizeof(MachPortsExtraHeader) must be 2 bytes");
 #elif defined(OS_FUCHSIA)
     struct HandleInfoEntry {
-      // The FDIO type associated with one or more handles, or zero for handles
-      // that do not belong to FDIO.
-      uint8_t type;
-      // Zero for non-FDIO handles, otherwise the number of handles to consume
-      // to generate an FDIO file-descriptor wrapper.
-      uint8_t count;
+      // True if the handle represents an FDIO file-descriptor, false otherwise.
+      bool is_file_descriptor;
     };
 #elif defined(OS_WIN)
     struct HandleEntry {
@@ -142,6 +149,8 @@ class MOJO_SYSTEM_IMPL_EXPORT Channel
             size_t payload_size,
             MessageType message_type);
     ~Message();
+
+    static MessagePtr CreateRawForFuzzing(base::span<const unsigned char> data);
 
     // Constructs a Message from serialized message data, optionally coming from
     // a known remote process.
@@ -197,6 +206,8 @@ class MOJO_SYSTEM_IMPL_EXPORT Channel
     void SetVersionForTest(uint16_t version_number);
 
    private:
+    Message();
+
     // The message data buffer.
     char* data_ = nullptr;
 
@@ -263,7 +274,11 @@ class MOJO_SYSTEM_IMPL_EXPORT Channel
   static scoped_refptr<Channel> Create(
       Delegate* delegate,
       ConnectionParams connection_params,
+      HandlePolicy handle_policy,
       scoped_refptr<base::TaskRunner> io_task_runner);
+
+  // Allows the caller to change the Channel's HandlePolicy after construction.
+  void set_handle_policy(HandlePolicy policy) { handle_policy_ = policy; }
 
   // Request that the channel be shut down. This should always be called before
   // releasing the last reference to a Channel to ensure that it's cleaned up
@@ -297,7 +312,7 @@ class MOJO_SYSTEM_IMPL_EXPORT Channel
   virtual void LeakHandle() = 0;
 
  protected:
-  explicit Channel(Delegate* delegate);
+  Channel(Delegate* delegate, HandlePolicy handle_policy);
   virtual ~Channel();
 
   Delegate* delegate() const { return delegate_; }
@@ -356,6 +371,7 @@ class MOJO_SYSTEM_IMPL_EXPORT Channel
   class ReadBuffer;
 
   Delegate* delegate_;
+  HandlePolicy handle_policy_;
   const std::unique_ptr<ReadBuffer> read_buffer_;
 
   // Handle to the process on the other end of this Channel, iff known.

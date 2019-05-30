@@ -2,9 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "storage/browser/quota/storage_observer.h"
+
 #include <stdint.h>
 
-#include "storage/browser/quota/storage_observer.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom-shared.h"
 
 namespace storage {
 
@@ -14,7 +16,7 @@ StorageObserver::Filter::Filter()
     : storage_type(blink::mojom::StorageType::kUnknown) {}
 
 StorageObserver::Filter::Filter(blink::mojom::StorageType storage_type,
-                                const GURL& origin)
+                                const url::Origin& origin)
     : storage_type(storage_type), origin(origin) {}
 
 bool StorageObserver::Filter::operator==(const Filter& other) const {
@@ -30,7 +32,7 @@ StorageObserver::MonitorParams::MonitorParams()
 
 StorageObserver::MonitorParams::MonitorParams(
     blink::mojom::StorageType storage_type,
-    const GURL& origin,
+    const url::Origin& origin,
     const base::TimeDelta& rate,
     bool get_initial_state)
     : filter(storage_type, origin),

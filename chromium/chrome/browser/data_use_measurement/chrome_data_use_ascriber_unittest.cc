@@ -12,7 +12,6 @@
 #include "build/build_config.h"
 #include "components/data_use_measurement/core/data_use_recorder.h"
 #include "content/public/browser/resource_request_info.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/common/process_type.h"
 #include "content/public/test/mock_resource_context.h"
@@ -53,8 +52,7 @@ namespace data_use_measurement {
 class ChromeDataUseAscriberTest : public testing::Test {
  protected:
   ChromeDataUseAscriberTest()
-      : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP),
-        resource_context_(new content::MockResourceContext(&context_)) {}
+      : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP) {}
 
   void SetUp() override {}
 
@@ -62,6 +60,8 @@ class ChromeDataUseAscriberTest : public testing::Test {
 
   void CreateAscriber() {
     ascriber_ = std::make_unique<ChromeDataUseAscriber>();
+    // Enable ascriber for tests.
+    ascriber_->disable_ascriber_ = false;
   }
 
   std::list<ChromeDataUseRecorder>& recorders() {
@@ -69,10 +69,6 @@ class ChromeDataUseAscriberTest : public testing::Test {
   }
 
   net::TestURLRequestContext* context() { return &context_; }
-
-  content::MockResourceContext* resource_context() {
-    return resource_context_.get();
-  }
 
   ChromeDataUseAscriber* ascriber() { return ascriber_.get(); }
 
@@ -88,9 +84,9 @@ class ChromeDataUseAscriberTest : public testing::Test {
         request.get(),
         is_main_frame ? content::RESOURCE_TYPE_MAIN_FRAME
                       : content::RESOURCE_TYPE_SCRIPT,
-        resource_context(), render_process_id,
+        /*resource_context*/ nullptr, render_process_id,
         /*render_view_id=*/-1, render_frame_id, is_main_frame,
-        /*allow_download=*/false,
+        content::ResourceInterceptPolicy::kAllowNone,
         /*is_async=*/true, content::PREVIEWS_OFF,
         /*navigation_ui_data*/ nullptr);
     return request;
@@ -100,7 +96,6 @@ class ChromeDataUseAscriberTest : public testing::Test {
   content::TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<ChromeDataUseAscriber> ascriber_;
   net::TestURLRequestContext context_;
-  std::unique_ptr<content::MockResourceContext> resource_context_;
 };
 
 TEST_F(ChromeDataUseAscriberTest, NoRecorderWithoutFrame) {

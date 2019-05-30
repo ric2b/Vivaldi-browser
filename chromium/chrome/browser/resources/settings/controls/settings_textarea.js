@@ -32,12 +32,6 @@ Polymer({
     'aria-disabled': 'false',
   },
 
-  listeners: {
-    'input.focus': 'onInputFocusChange_',
-    'input.blur': 'onInputFocusChange_',
-    'input.change': 'onInputChange_',
-  },
-
   /**
    * 'change' event fires when <input> value changes and user presses 'Enter'.
    * This function helps propagate it to host since change events don't
@@ -52,9 +46,10 @@ Polymer({
   // focused_ is used instead of :focus-within, so focus on elements within the
   // suffix slot does not trigger a change in input styles.
   onInputFocusChange_: function() {
-    if (this.shadowRoot.activeElement == this.$.input)
+    if (this.shadowRoot.activeElement == this.$.input) {
       this.setAttribute('focused_', '');
-    else
+    } else {
       this.removeAttribute('focused_');
+    }
   },
 });

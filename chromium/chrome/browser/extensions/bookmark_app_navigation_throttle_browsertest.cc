@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
@@ -386,7 +388,7 @@ class BookmarkAppNavigationThrottleExperimentalTransitionBrowserTest
       public ::testing::WithParamInterface<
           std::tuple<std::string, ui::PageTransition>> {};
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     /* no prefix */,
     BookmarkAppNavigationThrottleExperimentalTransitionBrowserTest,
     testing::Combine(
@@ -1148,7 +1150,7 @@ IN_PROC_BROWSER_TEST_P(
       base::BindOnce(&WindowOpenAndWait, app_web_contents, target_url));
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     /* no prefix */,
     BookmarkAppNavigationThrottleExperimentalWindowOpenBrowserTest,
     testing::Values(BookmarkAppNavigationBrowserTest::GetAppUrlHost(),
@@ -1249,7 +1251,7 @@ IN_PROC_BROWSER_TEST_F(BookmarkAppNavigationThrottleExperimentalBrowserTest,
         1}});
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     /* no prefix */,
     BookmarkAppNavigationThrottleExperimentalLinkBrowserTest,
     testing::Values("", "noopener", "noreferrer", "nofollow"));
@@ -1260,14 +1262,19 @@ class BookmarkAppNavigationThrottleBaseCommonBrowserTest
     : public BookmarkAppNavigationBrowserTest {
  protected:
   void EnableFeaturesForTest(bool should_enable_link_capturing) {
+    // These tests expect that navigation to an out of scope URL will open in a
+    // new window, however, this behaviour is in the process of being changed
+    // (with the flag desktop-pwas-stay-in-window), so until the change is made
+    // permanent and these tests are removed, explicitly disable the flag.
     if (should_enable_link_capturing) {
       scoped_feature_list_.InitWithFeatures(
           {features::kDesktopPWAWindowing, features::kDesktopPWAsLinkCapturing},
-          {});
+          {features::kDesktopPWAsStayInWindow});
     } else {
       scoped_feature_list_.InitWithFeatures(
           {features::kDesktopPWAWindowing},
-          {features::kDesktopPWAsLinkCapturing});
+          {features::kDesktopPWAsLinkCapturing,
+           features::kDesktopPWAsStayInWindow});
     }
   }
 
@@ -1450,7 +1457,7 @@ IN_PROC_BROWSER_TEST_P(BookmarkAppNavigationThrottleCommonBrowserTest,
 }
 #endif  // OS_CHROMEOS
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     /* no prefix */,
     BookmarkAppNavigationThrottleCommonBrowserTest,
     testing::Bool());
@@ -1573,7 +1580,7 @@ IN_PROC_BROWSER_TEST_P(
         1}});
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     /* no prefix */,
     BookmarkAppNavigationThrottleCommonFormSubmissionBrowserTest,
     testing::Combine(
@@ -1655,7 +1662,7 @@ IN_PROC_BROWSER_TEST_P(BookmarkAppNavigationThrottleCommonLinkBrowserTest,
         1}});
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     /* no prefix */,
     BookmarkAppNavigationThrottleCommonLinkBrowserTest,
     testing::Combine(

@@ -4,6 +4,7 @@
 
 #include "content/browser/media/video_decoder_proxy.h"
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "content/public/common/service_manager_connection.h"
 #include "media/mojo/interfaces/constants.mojom.h"
@@ -40,9 +41,18 @@ void VideoDecoderProxy::CreateVideoDecoder(
     factory->CreateVideoDecoder(std::move(request));
 }
 
-void VideoDecoderProxy::CreateRenderer(media::mojom::HostedRendererType type,
-                                       const std::string& type_specific_id,
-                                       media::mojom::RendererRequest request) {}
+void VideoDecoderProxy::CreateDefaultRenderer(
+    const std::string& audio_device_id,
+    media::mojom::RendererRequest request) {}
+
+#if defined(OS_ANDROID)
+void VideoDecoderProxy::CreateFlingingRenderer(
+    const std::string& audio_device_id,
+    media::mojom::RendererRequest request) {}
+
+void VideoDecoderProxy::CreateMediaPlayerRenderer(
+    media::mojom::RendererRequest request) {}
+#endif  // defined(OS_ANDROID)
 
 void VideoDecoderProxy::CreateCdm(
     const std::string& key_system,
@@ -52,7 +62,7 @@ void VideoDecoderProxy::CreateDecryptor(
     int cdm_id,
     media::mojom::DecryptorRequest request) {}
 
-void VideoDecoderProxy::CreateCdmProxy(const std::string& cdm_guid,
+void VideoDecoderProxy::CreateCdmProxy(const base::Token& cdm_guid,
                                        media::mojom::CdmProxyRequest request) {}
 
 media::mojom::InterfaceFactory* VideoDecoderProxy::GetMediaInterfaceFactory() {

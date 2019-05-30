@@ -178,14 +178,12 @@ void TabSpecificContentSettings::WebDatabaseAccessed(
     int render_process_id,
     int render_frame_id,
     const GURL& url,
-    const base::string16& name,
-    const base::string16& display_name,
     bool blocked_by_policy) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   TabSpecificContentSettings* settings = GetForFrame(
       render_process_id, render_frame_id);
   if (settings)
-    settings->OnWebDatabaseAccessed(url, name, display_name, blocked_by_policy);
+    settings->OnWebDatabaseAccessed(url, blocked_by_policy);
 }
 
 // static
@@ -206,13 +204,12 @@ void TabSpecificContentSettings::IndexedDBAccessed(
     int render_process_id,
     int render_frame_id,
     const GURL& url,
-    const base::string16& description,
     bool blocked_by_policy) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   TabSpecificContentSettings* settings = GetForFrame(
       render_process_id, render_frame_id);
   if (settings)
-    settings->OnIndexedDBAccessed(url, description, blocked_by_policy);
+    settings->OnIndexedDBAccessed(url, blocked_by_policy);
 }
 
 // static
@@ -288,19 +285,6 @@ bool TabSpecificContentSettings::IsContentBlocked(
   return false;
 }
 
-bool TabSpecificContentSettings::IsBlockageIndicated(
-    ContentSettingsType content_type) const {
-  const auto& it = content_settings_status_.find(content_type);
-  if (it != content_settings_status_.end())
-    return it->second.blockage_indicated_to_user;
-  return false;
-}
-
-void TabSpecificContentSettings::SetBlockageHasBeenIndicated(
-    ContentSettingsType content_type) {
-  content_settings_status_[content_type].blockage_indicated_to_user = true;
-}
-
 bool TabSpecificContentSettings::IsContentAllowed(
     ContentSettingsType content_type) const {
   DCHECK_NE(CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS, content_type)
@@ -351,17 +335,6 @@ void TabSpecificContentSettings::OnContentBlockedWithDetail(
 #endif
 
   ContentSettingsStatus& status = content_settings_status_[type];
-
-#if defined(OS_ANDROID)
-  if (type == CONTENT_SETTINGS_TYPE_POPUPS) {
-    // For Android we do not have a persistent button that will always be
-    // visible for blocked popups.  Instead we have info bars which could be
-    // dismissed.  Have to clear the blocked state so we properly notify the
-    // relevant pieces again.
-    status.blocked = false;
-    status.blockage_indicated_to_user = false;
-  }
-#endif
 
   if (!status.blocked) {
     status.blocked = true;
@@ -455,17 +428,13 @@ void TabSpecificContentSettings::OnCookieChange(
   NotifySiteDataObservers();
 }
 
-void TabSpecificContentSettings::OnIndexedDBAccessed(
-    const GURL& url,
-    const base::string16& description,
-    bool blocked_by_policy) {
+void TabSpecificContentSettings::OnIndexedDBAccessed(const GURL& url,
+                                                     bool blocked_by_policy) {
   if (blocked_by_policy) {
-    blocked_local_shared_objects_.indexed_dbs()->AddIndexedDB(
-        url, description);
+    blocked_local_shared_objects_.indexed_dbs()->Add(url::Origin::Create(url));
     OnContentBlocked(CONTENT_SETTINGS_TYPE_COOKIES);
   } else {
-    allowed_local_shared_objects_.indexed_dbs()->AddIndexedDB(
-        url, description);
+    allowed_local_shared_objects_.indexed_dbs()->Add(url::Origin::Create(url));
     OnContentAllowed(CONTENT_SETTINGS_TYPE_COOKIES);
   }
 
@@ -480,7 +449,7 @@ void TabSpecificContentSettings::OnLocalStorageAccessed(
       blocked_local_shared_objects_ : allowed_local_shared_objects_;
   CannedBrowsingDataLocalStorageHelper* helper =
       local ? container.local_storages() : container.session_storages();
-  helper->AddLocalStorage(url);
+  helper->Add(url::Origin::Create(url));
 
   if (blocked_by_policy)
     OnContentBlocked(CONTENT_SETTINGS_TYPE_COOKIES);
@@ -496,11 +465,11 @@ void TabSpecificContentSettings::OnServiceWorkerAccessed(
     bool blocked_by_policy_cookie) {
   DCHECK(scope.is_valid());
   if (blocked_by_policy_javascript || blocked_by_policy_cookie) {
-    blocked_local_shared_objects_.service_workers()->AddServiceWorker(
-        scope.GetOrigin(), std::vector<GURL>(1, scope));
+    blocked_local_shared_objects_.service_workers()->Add(
+        url::Origin::Create(scope));
   } else {
-    allowed_local_shared_objects_.service_workers()->AddServiceWorker(
-        scope.GetOrigin(), std::vector<GURL>(1, scope));
+    allowed_local_shared_objects_.service_workers()->Add(
+        url::Origin::Create(scope));
   }
 
   if (blocked_by_policy_javascript) {
@@ -534,16 +503,12 @@ void TabSpecificContentSettings::OnSharedWorkerAccessed(
 
 void TabSpecificContentSettings::OnWebDatabaseAccessed(
     const GURL& url,
-    const base::string16& name,
-    const base::string16& display_name,
     bool blocked_by_policy) {
   if (blocked_by_policy) {
-    blocked_local_shared_objects_.databases()->AddDatabase(
-        url, base::UTF16ToUTF8(name), base::UTF16ToUTF8(display_name));
+    blocked_local_shared_objects_.databases()->Add(url::Origin::Create(url));
     OnContentBlocked(CONTENT_SETTINGS_TYPE_COOKIES);
   } else {
-    allowed_local_shared_objects_.databases()->AddDatabase(
-        url, base::UTF16ToUTF8(name), base::UTF16ToUTF8(display_name));
+    allowed_local_shared_objects_.databases()->Add(url::Origin::Create(url));
     OnContentAllowed(CONTENT_SETTINGS_TYPE_COOKIES);
   }
 
@@ -553,13 +518,14 @@ void TabSpecificContentSettings::OnWebDatabaseAccessed(
 void TabSpecificContentSettings::OnFileSystemAccessed(
     const GURL& url,
     bool blocked_by_policy) {
+  // Note that all sandboxed file system access is recorded here as
+  // kTemporary; the distinction between temporary (default) and persistent
+  // storage is not made in the UI that presents this data.
   if (blocked_by_policy) {
-    blocked_local_shared_objects_.file_systems()->AddFileSystem(
-        url, storage::kFileSystemTypeTemporary, 0);
+    blocked_local_shared_objects_.file_systems()->Add(url::Origin::Create(url));
     OnContentBlocked(CONTENT_SETTINGS_TYPE_COOKIES);
   } else {
-    allowed_local_shared_objects_.file_systems()->AddFileSystem(
-        url, storage::kFileSystemTypeTemporary, 0);
+    allowed_local_shared_objects_.file_systems()->Add(url::Origin::Create(url));
     OnContentAllowed(CONTENT_SETTINGS_TYPE_COOKIES);
   }
 
@@ -697,7 +663,6 @@ ClearContentSettingsExceptForNavigationRelatedSettings() {
         status.first == CONTENT_SETTINGS_TYPE_JAVASCRIPT)
       continue;
     status.second.blocked = false;
-    status.second.blockage_indicated_to_user = false;
     status.second.allowed = false;
   }
   microphone_camera_state_ = MICROPHONE_CAMERA_NOT_ACCESSED;
@@ -716,7 +681,6 @@ void TabSpecificContentSettings::ClearNavigationRelatedContentSettings() {
     ContentSettingsStatus& status =
         content_settings_status_[type];
     status.blocked = false;
-    status.blockage_indicated_to_user = false;
     status.allowed = false;
   }
   content::NotificationService::current()->Notify(
@@ -730,11 +694,10 @@ void TabSpecificContentSettings::FlashDownloadBlocked() {
                              base::UTF8ToUTF16(content::kFlashPluginName));
 }
 
-void TabSpecificContentSettings::SetPopupsBlocked(bool blocked) {
+void TabSpecificContentSettings::ClearPopupsBlocked() {
   ContentSettingsStatus& status =
       content_settings_status_[CONTENT_SETTINGS_TYPE_POPUPS];
-  status.blocked = blocked;
-  status.blockage_indicated_to_user = false;
+  status.blocked = false;
   content::NotificationService::current()->Notify(
       chrome::NOTIFICATION_WEB_CONTENT_SETTINGS_CHANGED,
       content::Source<WebContents>(web_contents()),
@@ -743,24 +706,6 @@ void TabSpecificContentSettings::SetPopupsBlocked(bool blocked) {
 
 void TabSpecificContentSettings::OnAudioBlocked() {
   OnContentBlocked(CONTENT_SETTINGS_TYPE_SOUND);
-}
-
-void TabSpecificContentSettings::OnFramebustBlocked(
-    const GURL& blocked_url,
-    FramebustBlockTabHelper::ClickCallback click_callback) {
-#if !defined(OS_ANDROID)
-  FramebustBlockTabHelper* framebust_block_tab_helper =
-      FramebustBlockTabHelper::FromWebContents(web_contents());
-  if (!framebust_block_tab_helper)
-    return;
-
-  framebust_block_tab_helper->AddBlockedUrl(blocked_url,
-                                            std::move(click_callback));
-  content::NotificationService::current()->Notify(
-      chrome::NOTIFICATION_WEB_CONTENT_SETTINGS_CHANGED,
-      content::Source<WebContents>(web_contents()),
-      content::NotificationService::NoDetails());
-#endif  // !defined(OS_ANDROID)
 }
 
 void TabSpecificContentSettings::SetPepperBrokerAllowed(bool allowed) {
@@ -983,3 +928,5 @@ bool TabSpecificContentSettings::HasContentSettingChangedViaPageInfo(
   return content_settings_changed_via_page_info_.find(type) !=
          content_settings_changed_via_page_info_.end();
 }
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(TabSpecificContentSettings)

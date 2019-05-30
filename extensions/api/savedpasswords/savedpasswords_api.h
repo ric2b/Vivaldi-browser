@@ -9,8 +9,9 @@
 
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
-#include "chrome/browser/ui/passwords/password_manager_presenter.h"
-#include "chrome/browser/ui/passwords/password_ui_view.h"
+#include "chrome/browser/ui/passwords/settings/password_ui_view.h"
+#include "chrome/browser/ui/passwords/settings/password_manager_presenter.h"
+#include "chrome/browser/password_manager/reauth_purpose.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/schema/savedpasswords.h"
 
@@ -39,17 +40,12 @@ class SavedpasswordsGetListFunction : public ChromeAsyncExtensionFunction,
 
   // PasswordUIView implementation.
   Profile* GetProfile() override;
-  void ShowPassword(size_t index,
-                    const base::string16& password_value) override;
   void SetPasswordList(
       const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list)
       override;
   void SetPasswordExceptionList(
       const std::vector<std::unique_ptr<autofill::PasswordForm>>&
           password_exception_list) override;
-#if !defined(OS_ANDROID)
-  gfx::NativeWindow GetNativeWindow() const override;
-#endif
 
   DISALLOW_COPY_AND_ASSIGN(SavedpasswordsGetListFunction);
 };
@@ -76,17 +72,12 @@ class SavedpasswordsRemoveFunction : public ChromeAsyncExtensionFunction,
 
   // PasswordUIView implementation.
   Profile* GetProfile() override;
-  void ShowPassword(size_t index,
-                    const base::string16& password_value) override;
   void SetPasswordList(
       const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list)
       override;
   void SetPasswordExceptionList(
       const std::vector<std::unique_ptr<autofill::PasswordForm>>&
           password_exception_list) override;
-#if !defined(OS_ANDROID)
-  gfx::NativeWindow GetNativeWindow() const override;
-#endif
 
   DISALLOW_COPY_AND_ASSIGN(SavedpasswordsRemoveFunction);
 };
@@ -132,6 +123,19 @@ class SavedpasswordsDeleteFunction : public ChromeAsyncExtensionFunction {
   bool RunAsync() override;
 
   DISALLOW_COPY_AND_ASSIGN(SavedpasswordsDeleteFunction);
+};
+
+class SavedpasswordsAuthenticateFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("savedpasswords.authenticate",
+                             SAVEDPASSWORDS_AUTHENTICATE)
+  SavedpasswordsAuthenticateFunction();
+
+ private:
+  ~SavedpasswordsAuthenticateFunction() override;
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(SavedpasswordsAuthenticateFunction);
 };
 
 }  // namespace extensions

@@ -4,6 +4,8 @@
 
 #include "components/domain_reliability/quic_error_mapping.h"
 
+#include "base/stl_util.h"
+
 namespace domain_reliability {
 
 namespace {
@@ -289,17 +291,31 @@ const struct QuicErrorMapping {
     {quic::QUIC_INVALID_PATH_CHALLENGE_DATA,
      "quic.invalid.path_challenge_data"},
     {quic::QUIC_INVALID_PATH_RESPONSE_DATA, "quic.invalid.path_response_data"},
+    {quic::QUIC_INVALID_MESSAGE_DATA, "quic.invalid.message_data"},
+    {quic::IETF_QUIC_PROTOCOL_VIOLATION, "quic.ietf.protocol_violation"},
+    {quic::QUIC_INVALID_NEW_TOKEN, "quic.invalid_new_token"},
+    {quic::QUIC_DATA_RECEIVED_ON_WRITE_UNIDIRECTIONAL_STREAM,
+     "quic.data.received.on.write.unidirectional.stream"},
+    {quic::QUIC_TRY_TO_WRITE_DATA_ON_READ_UNIDIRECTIONAL_STREAM,
+     "quic.try.to.write.data.on.read.unidirectional.stream"},
+    {quic::QUIC_INVALID_RETIRE_CONNECTION_ID_DATA,
+     "quic.invalid.retire.connection.id.data"},
+    {quic::QUIC_STREAM_ID_BLOCKED_ERROR,
+     "quic.stream.id.in.stream_id_blocked.frame"},
+    {quic::QUIC_MAX_STREAM_ID_ERROR, "quic.stream.id.in.max_stream_id.frame"},
+    {quic::QUIC_HTTP_DECODER_ERROR, "quic.http.decoder.error"},
+    {quic::QUIC_STALE_CONNECTION_CANCELLED, "quic.stale.connection.cancelled"},
 
     // No error. Used as bound while iterating.
     {quic::QUIC_LAST_ERROR, "quic.last_error"}};
 
 // Must be updated any time a quic::QuicErrorCode is deprecated in
-// net/quic/core/quic_packets.h.
+// net/third_party/quic/core/quic_error_codes.h.
 const int kDeprecatedQuicErrorCount = 5;
 const int kActiveQuicErrorCount =
     quic::QUIC_LAST_ERROR - kDeprecatedQuicErrorCount;
 
-static_assert(arraysize(kQuicErrorMap) == kActiveQuicErrorCount,
+static_assert(base::size(kQuicErrorMap) == kActiveQuicErrorCount,
               "quic_error_map is not in sync with quic protocol!");
 
 }  // namespace
@@ -310,7 +326,7 @@ bool GetDomainReliabilityBeaconQuicError(quic::QuicErrorCode quic_error,
   if (quic_error != quic::QUIC_NO_ERROR) {
     // Convert a QUIC error.
     // TODO(juliatuttle): Consider sorting and using binary search?
-    for (size_t i = 0; i < arraysize(kQuicErrorMap); i++) {
+    for (size_t i = 0; i < base::size(kQuicErrorMap); i++) {
       if (kQuicErrorMap[i].quic_error == quic_error) {
         *beacon_quic_error_out = kQuicErrorMap[i].beacon_quic_error;
         return true;

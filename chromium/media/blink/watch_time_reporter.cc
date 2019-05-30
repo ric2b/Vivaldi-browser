@@ -4,6 +4,7 @@
 
 #include "media/blink/watch_time_reporter.h"
 
+#include "base/bind.h"
 #include "base/power_monitor/power_monitor.h"
 #include "media/base/watch_time_keys.h"
 
@@ -69,7 +70,7 @@ WatchTimeReporter::WatchTimeReporter(
       initial_natural_size_(initial_natural_size),
       get_media_time_cb_(std::move(get_media_time_cb)),
       reporting_timer_(tick_clock) {
-  DCHECK(!get_media_time_cb_.is_null());
+  DCHECK(get_media_time_cb_);
   DCHECK(properties_->has_audio || properties_->has_video);
   DCHECK_EQ(is_background, properties_->is_background);
 

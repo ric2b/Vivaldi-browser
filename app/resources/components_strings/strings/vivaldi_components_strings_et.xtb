@@ -4,9 +4,9 @@
 <translation id="1110994991967754504"><ph name="PERMISSION_NAME" /></translation>
 <translation id="1152921474424827756">Vaata aadressi <ph name="URL" /> <ph name="BEGIN_LINK" />puhverdatud koopiat<ph name="END_LINK" /></translation>
 <translation id="1158211211994409885">Host <ph name="HOST_NAME" /> sulges ootamatult ühenduse.</translation>
+<translation id="1175364870820465910">Prindi...</translation>
 <translation id="1375198122581997741">Teave versiooni kohta</translation>
 <translation id="139305205187523129">Host <ph name="HOST_NAME" /> ei saatnud andmeid.</translation>
-<translation id="1506687042165942984">Lehe salvestatud (s.t teadaolevalt aegunud) koopia kuvamine.</translation>
 <translation id="1559528461873125649">Pole sellist faili või kataloogi</translation>
 <translation id="1620510694547887537">Kaamera</translation>
 <translation id="1710259589646384581">OS</translation>
@@ -25,6 +25,7 @@
 <translation id="2317259163369394535"><ph name="DOMAIN" /> küsib kasutajanime ja parooli.</translation>
 <translation id="2355395290879513365">Ründajatel võib õnnestuda näha pilte, mida sel saidil vaatad, ja neid sinu ärapetmiseks muuta.</translation>
 <translation id="2356070529366658676">Küsitakse</translation>
+<translation id="2359808026110333948">Jätka</translation>
 <translation id="2482878487686419369">Märguanded</translation>
 <translation id="2539524384386349900">Tuvastatakse</translation>
 <translation id="255002559098805027">Host <ph name="HOST_NAME" /> saatis sobimatu vastuse.</translation>
@@ -47,6 +48,7 @@
 <translation id="3422472998109090673">Hostiga <ph name="HOST_NAME" /> ei saa praegu ühendust.</translation>
 <translation id="3427092606871434483">Lubatud (vaikimisi)</translation>
 <translation id="3447661539832366887">Seadme omanik lülitas dinosaurusemängu välja.</translation>
+<translation id="3447884698081792621">Näita sertifikaati (väljastaja: <ph name="ISSUER" />)</translation>
 <translation id="3566021033012934673">See ühendus ei ole privaatne</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" />, <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Peida üksikasjad</translation>
@@ -62,6 +64,7 @@
 <translation id="4116663294526079822">Sellel saidil alati lubatud</translation>
 <translation id="4151403195736952345">Üldreegli järgi (tuvastatakse)</translation>
 <translation id="4165986682804962316">Saidi seaded</translation>
+<translation id="4203896806696719780"><ph name="BEGIN_LINK" />Kontrolli tulemüüri ja viirusetõrje seadeid<ph name="END_LINK" /></translation>
 <translation id="4235360514405112390">Kehtiv</translation>
 <translation id="4250431568374086873">Osaliselt ebaturvaline ühendus</translation>
 <translation id="4265872034478892965">Administraatori poolt lubatud</translation>
@@ -72,13 +75,15 @@
 <translation id="4522570452068850558">Üksikasjad</translation>
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4708268264240856090">Ühendus katkes</translation>
+<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Käivita Windowsi võrgudiagnostika<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Täitmistee</translation>
 <translation id="4750917950439032686">Sinu andmed (nt paroolid või krediitkaardinumbrid) on sellele saidile edastamise ajal privaatsed.</translation>
 <translation id="4764776831041365478">Veebileht aadressil <ph name="URL" /> võib olla ajutiselt maas või jäädavalt uuele veebiaadressile teisaldatud.</translation>
-<translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
 <translation id="5023310440958281426">Tutvu administraatori reeglitega</translation>
 <translation id="5039804452771397117">Lubatud</translation>
+<translation id="5070335125961472645"><ph name="BEGIN_LINK" />Kontrolli puhverserveri aadressi<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bitine)</translation>
+<translation id="5287240709317226393">Näita küpsiseid</translation>
 <translation id="5431657950005405462">Teie faili ei leitud</translation>
 <translation id="5452270690849572955">Seda lehte saidilt <ph name="HOST_NAME" /> ei leita</translation>
 <translation id="5457113250005438886">Kehtetu</translation>
@@ -96,7 +101,6 @@
 <translation id="5778550464785688721">Täielik ligipääs MIDI-seadmetele</translation>
 <translation id="5838278095973806738">Sellel saidil ei tohiks kuhugi sisestada tundlikke andmeid (nt paroole või krediitkaardi numbreid), kuna ründajad võivad need varastada.</translation>
 <translation id="5869405914158311789">Selle saidiga ei saa ühendust</translation>
-<translation id="5920262536204764679">{NUM_COOKIES, plural, =1 {1 kasutusel} other {# kasutusel}}</translation>
 <translation id="5990559369517809815">Laiendus blokeeris serverisse saadetavad päringud.</translation>
 <translation id="6146055958333702838">Kontrolli kaableid ning taaskäivita ruuter, modem või muu võrguseade,
     mida kasutad.</translation>
@@ -110,6 +114,7 @@
 <translation id="6328786501058569169">See on petusait</translation>
 <translation id="6433595998831338502">Host <ph name="HOST_NAME" /> keeldus ühendamast.</translation>
 <translation id="6447842834002726250">Küpsised</translation>
+<translation id="6451458296329894277">Vormi andmete taassisestamise kinnitus</translation>
 <translation id="6569060085658103619">See on laienduse leht</translation>
 <translation id="6657585470893396449">Parool</translation>
 <translation id="6711464428925977395">Puhverserveriga on midagi valesti või aadress on vale.</translation>
@@ -118,6 +123,7 @@
 <translation id="7053983685419859001">Blokeeritud</translation>
 <translation id="7079718277001814089">See sait sisaldab pahavara</translation>
 <translation id="7108819624672055576">Laienduse poolt lubatud</translation>
+<translation id="7111012039238467737">(kehtiv)</translation>
 <translation id="7210863904660874423">Host <ph name="HOST_NAME" /> ei pea turvastandarditest kinni.</translation>
 <translation id="7353601530677266744">Käsurida</translation>
 <translation id="7419106976560586862">Profiilikaust</translation>
@@ -126,32 +132,42 @@
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7549584377607005141">See veebileht vajab korralikult kuvamiseks varem sisestatud andmeid. Võite need andmed uuesti saata, kuid seda tehes kordate lehe iga eelnevat toimingut.</translation>
 <translation id="759889825892636187">Host <ph name="HOST_NAME" /> ei saa praegu seda taotlust töödelda.</translation>
+<translation id="7663736086183791259">Sertifikaat <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7669271284792375604">Selle saidi taga peituvad ründajad võivad üritada sind ära petta, et installiksid mõne programmi, mis rikub veebi kasutuskogemust (nt muudab ära avalehe või näitab külastatavatel saititel lisareklaame).</translation>
 <translation id="7714464543167945231">Sertifikaat</translation>
 <translation id="7716147886133743102">Administraatori poolt blokeeritud</translation>
 <translation id="7716424297397655342">Seda saiti ei saa vahemälust laadida</translation>
 <translation id="7758069387465995638">Tulemüür või viirusetõrjetarkvara võis ühenduse blokeerida.</translation>
+<translation id="7802523362929240268">See on usaldusväärne sait</translation>
+<translation id="7878562273885520351">Sinu parool võib olla lekkinud</translation>
 <translation id="7951415247503192394">(32-bitine)</translation>
 <translation id="8025119109950072390">Selle saidi taga peituvad ründajad võivad üritada sind ära petta, et installiksid ohtlikku tarkvara või avaldaksid oma isiklikke andmeid (nt paroole, telefoninumbreid, krediitkaardi numbreid).</translation>
 <translation id="8037357227543935929">Küsitakse (vaikimisi)</translation>
 <translation id="8041940743680923270">Üldreegli järgi (küsitakse)</translation>
+<translation id="808894953321890993">Muuda parooli</translation>
 <translation id="8142868475871995937">Mine aadressile &lt;strong&gt;vivaldi://policy&lt;/strong&gt;, et näha mustas nimekirjas olevate URL-ide loendit ja teisi süsteemiadministraatori jõustatud reegleid.</translation>
 <translation id="8149426793427495338">Teie arvuti lülitus unerežiimile.</translation>
 <translation id="8150722005171944719">Fail <ph name="URL" /> ei ole loetav. Võimalik, et see on eemaldatud, teisaldatud või faili load takistavad juurdepääsu.</translation>
 <translation id="8184538546369750125">Üldreegli järgi (lubatud)</translation>
+<translation id="8211406090763984747">Turvaline ühendus</translation>
 <translation id="8225771182978767009">Arvuti seadistanud inimene blokeeris selle saidi.</translation>
+<translation id="8241707690549784388">Otsitav leht kasutas sinu sisestatud andmeid. Lehele naasmine võib põhjustab seal viimati tehtud toimingu kordamist. Kas soovid jätkata?</translation>
 <translation id="8241712895048303527">Sellel saidil blokeeritud</translation>
+<translation id="8288807391153049143">Näita sertifikaati</translation>
 <translation id="8289355894181816810">Kui sa ei tea, mida see tähendab, võta ühendust oma võrguadministraatoriga.</translation>
 <translation id="8332188693563227489">Juurdepääs hostile <ph name="HOST_NAME" /> blokeeriti</translation>
 <translation id="8498891568109133222">Saidil <ph name="HOST_NAME" /> kulus vastamiseks liiga kaua aega.</translation>
 <translation id="8503813439785031346">Kasutajanimi</translation>
 <translation id="8740359287975076522">Saidi <ph name="HOST_NAME" /> &lt;abbr id="dnsDefinition"&gt;DNS-aadressi&lt;/abbr&gt; ei leitud. Probleemi diagnoositakse.</translation>
 <translation id="9001074447101275817">Proksi <ph name="DOMAIN" /> küsib kasutajanime ja parooli.</translation>
+<translation id="9008201768610948239">Eira</translation>
 <translation id="9011424611726486705">Ava saidi seaded</translation>
+<translation id="9025348182339809926">(kehtetu)</translation>
 <translation id="9069693763241529744">Laienduse poolt blokeeritud</translation>
 <translation id="9169664750068251925">Sellel saidil alati blokeeritud</translation>
 <translation id="9183425211371246419">Host <ph name="HOST_NAME" /> kasutab toetamata protokolli.</translation>
 <translation id="9219103736887031265">Pildid</translation>
+<translation id="936602727769022409">Võid kaotada ligipääsu oma Google’i-kontole. Soovitatav on oma parooli kohe muuta. Selleks palutakse sul sisse logida.</translation>
 <translation id="969892804517981540">ametlik järk</translation>
 <translation id="988159990683914416">arendusjärk</translation>
 </translationbundle>

@@ -14,9 +14,12 @@
 
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/singleton.h"
+#include "base/stl_util.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_util.h"
 #include "base/synchronization/lock.h"
+#include "build/build_config.h"
 
 namespace base {
 namespace debug {
@@ -109,8 +112,8 @@ long WINAPI StackDumpExceptionFilter(EXCEPTION_POINTERS* info) {
 }
 
 FilePath GetExePath() {
-  wchar_t system_buffer[MAX_PATH];
-  GetModuleFileName(NULL, system_buffer, MAX_PATH);
+  char16 system_buffer[MAX_PATH];
+  GetModuleFileName(NULL, as_writable_wcstr(system_buffer), MAX_PATH);
   system_buffer[MAX_PATH - 1] = L'\0';
   return FilePath(system_buffer);
 }
@@ -139,22 +142,21 @@ bool InitializeSymbols() {
   // into the executable will get off. To still retrieve symbols correctly,
   // add the directory of the executable to symbol search path.
   // All following errors are non-fatal.
-  const size_t kSymbolsArraySize = 1024;
-  std::unique_ptr<wchar_t[]> symbols_path(new wchar_t[kSymbolsArraySize]);
+  static constexpr size_t kSymbolsArraySize = 1024;
+  char16 symbols_path[kSymbolsArraySize];
 
   // Note: The below function takes buffer size as number of characters,
   // not number of bytes!
-  if (!SymGetSearchPathW(GetCurrentProcess(),
-                         symbols_path.get(),
+  if (!SymGetSearchPathW(GetCurrentProcess(), as_writable_wcstr(symbols_path),
                          kSymbolsArraySize)) {
     g_init_error = GetLastError();
     DLOG(WARNING) << "SymGetSearchPath failed: " << g_init_error;
     return false;
   }
 
-  std::wstring new_path(std::wstring(symbols_path.get()) +
-                        L";" + GetExePath().DirName().value());
-  if (!SymSetSearchPathW(GetCurrentProcess(), new_path.c_str())) {
+  string16 new_path = StrCat(
+      {symbols_path, STRING16_LITERAL(";"), GetExePath().DirName().value()});
+  if (!SymSetSearchPathW(GetCurrentProcess(), as_wcstr(new_path))) {
     g_init_error = GetLastError();
     DLOG(WARNING) << "SymSetSearchPath failed." << g_init_error;
     return false;
@@ -199,8 +201,9 @@ class SymbolContext {
   // extensible like PathService since that can in turn fire CHECKs.
   void OutputTraceToStream(const void* const* trace,
                            size_t count,
-                           std::ostream* os) {
-    base::AutoLock lock(lock_);
+                           std::ostream* os,
+                           const char* prefix_string) {
+    AutoLock lock(lock_);
 
     for (size_t i = 0; (i < count) && os->good(); ++i) {
       const int kMaxNameLength = 256;
@@ -231,6 +234,8 @@ class SymbolContext {
                                            &line_displacement, &line);
 
       // Output the backtrace line.
+      if (prefix_string)
+        (*os) << prefix_string;
       (*os) << "\t";
       if (has_symbol) {
         (*os) << symbol->Name << " [0x" << trace[i] << "+"
@@ -253,7 +258,7 @@ class SymbolContext {
     InitializeSymbols();
   }
 
-  base::Lock lock_;
+  Lock lock_;
   DISALLOW_COPY_AND_ASSIGN(SymbolContext);
 };
 
@@ -270,25 +275,10 @@ bool EnableInProcessStackDumping() {
   return InitializeSymbols();
 }
 
-// Disable optimizations for the StackTrace::StackTrace function. It is
-// important to disable at least frame pointer optimization ("y"), since
-// that breaks CaptureStackBackTrace() and prevents StackTrace from working
-// in Release builds (it may still be janky if other frames are using FPO,
-// but at least it will make it further).
-#if defined(COMPILER_MSVC)
-#pragma optimize("", off)
-#endif
-
-StackTrace::StackTrace(size_t count) {
-  count = std::min(arraysize(trace_), count);
-
+NOINLINE size_t CollectStackTrace(void** trace, size_t count) {
   // When walking our own stack, use CaptureStackBackTrace().
-  count_ = CaptureStackBackTrace(0, count, trace_, NULL);
+  return CaptureStackBackTrace(0, count, trace, NULL);
 }
-
-#if defined(COMPILER_MSVC)
-#pragma optimize("", on)
-#endif
 
 StackTrace::StackTrace(EXCEPTION_POINTERS* exception_pointers) {
   InitTrace(exception_pointers->ContextRecord);
@@ -312,52 +302,56 @@ void StackTrace::InitTrace(const CONTEXT* context_record) {
   // Initialize stack walking.
   STACKFRAME64 stack_frame;
   memset(&stack_frame, 0, sizeof(stack_frame));
-#if defined(_WIN64)
+#if defined(ARCH_CPU_X86_64)
   int machine_type = IMAGE_FILE_MACHINE_AMD64;
   stack_frame.AddrPC.Offset = context_record->Rip;
   stack_frame.AddrFrame.Offset = context_record->Rbp;
   stack_frame.AddrStack.Offset = context_record->Rsp;
-#else
+#elif defined(ARCH_CPU_ARM64)
+  int machine_type = IMAGE_FILE_MACHINE_ARM64;
+  stack_frame.AddrPC.Offset = context_record->Pc;
+  stack_frame.AddrFrame.Offset = context_record->Fp;
+  stack_frame.AddrStack.Offset = context_record->Sp;
+#elif defined(ARCH_CPU_X86)
   int machine_type = IMAGE_FILE_MACHINE_I386;
   stack_frame.AddrPC.Offset = context_record->Eip;
   stack_frame.AddrFrame.Offset = context_record->Ebp;
   stack_frame.AddrStack.Offset = context_record->Esp;
+#else
+#error Unsupported Windows Arch
 #endif
   stack_frame.AddrPC.Mode = AddrModeFlat;
   stack_frame.AddrFrame.Mode = AddrModeFlat;
   stack_frame.AddrStack.Mode = AddrModeFlat;
-  while (StackWalk64(machine_type,
-                     GetCurrentProcess(),
-                     GetCurrentThread(),
-                     &stack_frame,
-                     &context_copy,
-                     NULL,
-                     &SymFunctionTableAccess64,
-                     &SymGetModuleBase64,
-                     NULL) &&
-         count_ < arraysize(trace_)) {
+  while (StackWalk64(machine_type, GetCurrentProcess(), GetCurrentThread(),
+                     &stack_frame, &context_copy, NULL,
+                     &SymFunctionTableAccess64, &SymGetModuleBase64, NULL) &&
+         count_ < size(trace_)) {
     trace_[count_++] = reinterpret_cast<void*>(stack_frame.AddrPC.Offset);
   }
 
-  for (size_t i = count_; i < arraysize(trace_); ++i)
+  for (size_t i = count_; i < size(trace_); ++i)
     trace_[i] = NULL;
 }
 
-void StackTrace::Print() const {
-  OutputToStream(&std::cerr);
+void StackTrace::PrintWithPrefix(const char* prefix_string) const {
+  OutputToStreamWithPrefix(&std::cerr, prefix_string);
 }
 
-void StackTrace::OutputToStream(std::ostream* os) const {
+void StackTrace::OutputToStreamWithPrefix(std::ostream* os,
+                                          const char* prefix_string) const {
   SymbolContext* context = SymbolContext::GetInstance();
   if (g_init_error != ERROR_SUCCESS) {
     (*os) << "Error initializing symbols (" << g_init_error
           << ").  Dumping unresolved backtrace:\n";
     for (size_t i = 0; (i < count_) && os->good(); ++i) {
+      if (prefix_string)
+        (*os) << prefix_string;
       (*os) << "\t" << trace_[i] << "\n";
     }
   } else {
     (*os) << "Backtrace:\n";
-    context->OutputTraceToStream(trace_, count_, os);
+    context->OutputTraceToStream(trace_, count_, os, prefix_string);
   }
 }
 

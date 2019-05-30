@@ -29,17 +29,14 @@
 
 #include "base/feature_list.h"
 #include "base/memory/scoped_refptr.h"
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database.h"
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_key.h"
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_key_range.h"
+#include "base/numerics/safe_conversions.h"
 #include "third_party/blink/public/platform/web_blob_info.h"
-#include "third_party/blink/public/platform/web_data.h"
-#include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value_factory.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_for_core.h"
 #include "third_party/blink/renderer/bindings/modules/v8/to_v8_for_modules.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_binding_for_modules.h"
 #include "third_party/blink/renderer/core/dom/dom_string_list.h"
+#include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_any.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_cursor_with_value.h"
@@ -48,16 +45,12 @@
 #include "third_party/blink/renderer/modules/indexeddb/idb_key_path.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_tracing.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_value_wrapping.h"
+#include "third_party/blink/renderer/modules/indexeddb/web_idb_database.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/histogram.h"
 #include "third_party/blink/renderer/platform/shared_buffer.h"
 #include "v8/include/v8.h"
-
-using blink::WebBlobInfo;
-using blink::WebIDBCallbacks;
-using blink::WebIDBCursor;
-using blink::WebIDBDatabase;
 
 namespace blink {
 
@@ -305,7 +298,7 @@ IDBRequest* IDBObjectStore::getAllKeys(ScriptState* script_state,
   return request;
 }
 
-static WebVector<WebIDBKey> GenerateIndexKeysForValue(
+static Vector<std::unique_ptr<IDBKey>> GenerateIndexKeysForValue(
     v8::Isolate* isolate,
     const IDBIndexMetadata& index_metadata,
     const ScriptValue& object_value) {
@@ -313,30 +306,30 @@ static WebVector<WebIDBKey> GenerateIndexKeysForValue(
   std::unique_ptr<IDBKey> index_key = ScriptValue::To<std::unique_ptr<IDBKey>>(
       isolate, object_value, exception_state, index_metadata.key_path);
   if (!index_key)
-    return WebVector<WebIDBKey>();
+    return Vector<std::unique_ptr<IDBKey>>();
 
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       EnumerationHistogram, key_type_histogram,
       ("WebCore.IndexedDB.ObjectStore.IndexEntry.KeyType",
-       static_cast<int>(IDBKey::kTypeEnumMax)));
+       static_cast<int>(mojom::IDBKeyType::kMaxValue)));
 
   if (!index_metadata.multi_entry ||
-      index_key->GetType() != IDBKey::kArrayType) {
+      index_key->GetType() != mojom::IDBKeyType::Array) {
     if (!index_key->IsValid())
-      return WebVector<WebIDBKey>();
+      return Vector<std::unique_ptr<IDBKey>>();
 
-    WebVector<WebIDBKey> index_keys;
-    index_keys.reserve(1);
+    Vector<std::unique_ptr<IDBKey>> index_keys;
+    index_keys.ReserveInitialCapacity(1);
     index_keys.emplace_back(std::move(index_key));
-    key_type_histogram.Count(static_cast<int>(index_keys[0].View().KeyType()));
-    return WebVector<WebIDBKey>(std::move(index_keys));
+    key_type_histogram.Count(static_cast<int>(index_keys[0]->GetType()));
+    return index_keys;
   } else {
     DCHECK(index_metadata.multi_entry);
-    DCHECK_EQ(index_key->GetType(), IDBKey::kArrayType);
-    WebVector<WebIDBKey> index_keys =
+    DCHECK_EQ(index_key->GetType(), mojom::IDBKeyType::Array);
+    Vector<std::unique_ptr<IDBKey>> index_keys =
         IDBKey::ToMultiEntryArray(std::move(index_key));
-    for (const WebIDBKey& key : index_keys)
-      key_type_histogram.Count(static_cast<int>(key.View().KeyType()));
+    for (std::unique_ptr<IDBKey>& key : index_keys)
+      key_type_histogram.Count(static_cast<int>(key->GetType()));
     return index_keys;
   }
 }
@@ -347,7 +340,7 @@ IDBRequest* IDBObjectStore::add(ScriptState* script_state,
                                 ExceptionState& exception_state) {
   IDB_TRACE1("IDBObjectStore::addRequestSetup", "store_name",
              metadata_->name.Utf8());
-  return DoPut(script_state, kWebIDBPutModeAddOnly, value, key,
+  return DoPut(script_state, mojom::IDBPutMode::AddOnly, value, key,
                exception_state);
 }
 
@@ -357,12 +350,12 @@ IDBRequest* IDBObjectStore::put(ScriptState* script_state,
                                 ExceptionState& exception_state) {
   IDB_TRACE1("IDBObjectStore::putRequestSetup", "store_name",
              metadata_->name.Utf8());
-  return DoPut(script_state, kWebIDBPutModeAddOrUpdate, value, key,
+  return DoPut(script_state, mojom::IDBPutMode::AddOrUpdate, value, key,
                exception_state);
 }
 
 IDBRequest* IDBObjectStore::DoPut(ScriptState* script_state,
-                                  WebIDBPutMode put_mode,
+                                  mojom::IDBPutMode put_mode,
                                   const ScriptValue& value,
                                   const ScriptValue& key_value,
                                   ExceptionState& exception_state) {
@@ -379,20 +372,20 @@ IDBRequest* IDBObjectStore::DoPut(ScriptState* script_state,
 }
 
 IDBRequest* IDBObjectStore::DoPut(ScriptState* script_state,
-                                  WebIDBPutMode put_mode,
+                                  mojom::IDBPutMode put_mode,
                                   const IDBRequest::Source& source,
                                   const ScriptValue& value,
                                   const IDBKey* key,
                                   ExceptionState& exception_state) {
   const char* tracing_name = nullptr;
   switch (put_mode) {
-    case kWebIDBPutModeAddOrUpdate:
+    case mojom::IDBPutMode::AddOrUpdate:
       tracing_name = "IDBObjectStore::put";
       break;
-    case kWebIDBPutModeAddOnly:
+    case mojom::IDBPutMode::AddOnly:
       tracing_name = "IDBObjectStore::add";
       break;
-    case kWebIDBPutModeCursorUpdate:
+    case mojom::IDBPutMode::CursorUpdate:
       tracing_name = "IDBCursor::update";
       break;
   }
@@ -437,7 +430,7 @@ IDBRequest* IDBObjectStore::DoPut(ScriptState* script_state,
   const bool uses_in_line_keys = !key_path.IsNull();
   const bool has_key_generator = autoIncrement();
 
-  if (put_mode != kWebIDBPutModeCursorUpdate && uses_in_line_keys && key) {
+  if (put_mode != mojom::IDBPutMode::CursorUpdate && uses_in_line_keys && key) {
     exception_state.ThrowDOMException(DOMExceptionCode::kDataError,
                                       "The object store uses in-line keys and "
                                       "the key parameter was provided.");
@@ -450,7 +443,7 @@ IDBRequest* IDBObjectStore::DoPut(ScriptState* script_state,
 
   // This test logically belongs in IDBCursor, but must operate on the cloned
   // value.
-  if (put_mode == kWebIDBPutModeCursorUpdate && uses_in_line_keys) {
+  if (put_mode == mojom::IDBPutMode::CursorUpdate && uses_in_line_keys) {
     DCHECK(key);
     DCHECK(clone.IsEmpty());
     value_wrapper.Clone(script_state, &clone);
@@ -481,7 +474,7 @@ IDBRequest* IDBObjectStore::DoPut(ScriptState* script_state,
   if (uses_in_line_keys) {
     if (clone.IsEmpty()) {
       // For an IDBCursor.update(), the value should have been cloned above.
-      DCHECK(put_mode != kWebIDBPutModeCursorUpdate);
+      DCHECK(put_mode != mojom::IDBPutMode::CursorUpdate);
       value_wrapper.Clone(script_state, &clone);
 
       DCHECK(!key_path_key);
@@ -499,7 +492,7 @@ IDBRequest* IDBObjectStore::DoPut(ScriptState* script_state,
     } else {
       // The clone was created in the large if block above. The block should
       // have thrown if key_path_key is not valid.
-      DCHECK(put_mode == kWebIDBPutModeCursorUpdate);
+      DCHECK(put_mode == mojom::IDBPutMode::CursorUpdate);
       DCHECK(key_path_key && key_path_key->IsValid());
     }
 
@@ -553,23 +546,24 @@ IDBRequest* IDBObjectStore::DoPut(ScriptState* script_state,
     DEFINE_THREAD_SAFE_STATIC_LOCAL(
         EnumerationHistogram, key_type_histogram,
         ("WebCore.IndexedDB.ObjectStore.Record.KeyType",
-         static_cast<int>(IDBKey::kTypeEnumMax)));
+         static_cast<int>(mojom::IDBKeyType::kMaxValue)));
     key_type_histogram.Count(static_cast<int>(key->GetType()));
   }
 
-  Vector<int64_t> index_ids;
-  WebVector<WebVector<WebIDBKey>> index_keys;
-  index_keys.reserve(Metadata().indexes.size());
+  Vector<IDBIndexKeys> index_keys;
+  index_keys.ReserveInitialCapacity(Metadata().indexes.size());
   for (const auto& it : Metadata().indexes) {
     if (clone.IsEmpty())
       value_wrapper.Clone(script_state, &clone);
-    index_ids.push_back(it.key);
-    index_keys.emplace_back(GenerateIndexKeysForValue(
-        script_state->GetIsolate(), *it.value, clone));
+    index_keys.emplace_back(
+        it.key, GenerateIndexKeysForValue(script_state->GetIsolate(), *it.value,
+                                          clone));
   }
   // Records 1KB to 1GB.
-  UMA_HISTOGRAM_COUNTS_1M("WebCore.IndexedDB.PutValueSize2",
-                          value_wrapper.DataLengthBeforeWrapInBytes() / 1024);
+  UMA_HISTOGRAM_COUNTS_1M(
+      "WebCore.IndexedDB.PutValueSize2",
+      base::saturated_cast<base::HistogramBase::Sample>(
+          value_wrapper.DataLengthBeforeWrapInBytes() / 1024));
 
   IDBRequest* request = IDBRequest::Create(
       script_state, source, transaction_.Get(), std::move(metrics));
@@ -579,13 +573,13 @@ IDBRequest* IDBObjectStore::DoPut(ScriptState* script_state,
   if (base::FeatureList::IsEnabled(kIndexedDBLargeValueWrapping))
     value_wrapper.WrapIfBiggerThan(IDBValueWrapper::kWrapThreshold);
 
+  std::unique_ptr<IDBValue> idb_value = IDBValue::Create(
+      value_wrapper.TakeWireBytes(), value_wrapper.TakeBlobInfo());
+
   request->transit_blob_handles() = value_wrapper.TakeBlobDataHandles();
   BackendDB()->Put(
-      transaction_->Id(), Id(), WebData(value_wrapper.TakeWireBytes()),
-      value_wrapper.TakeBlobInfo(), WebIDBKeyView(key),
-      static_cast<WebIDBPutMode>(put_mode),
-      request->CreateWebCallbacks().release(), index_ids,
-      WebVector<WebIDBDatabase::WebIndexKeys>(std::move(index_keys)));
+      transaction_->Id(), Id(), std::move(idb_value), IDBKey::Clone(key),
+      put_mode, request->CreateWebCallbacks().release(), std::move(index_keys));
 
   return request;
 }
@@ -646,6 +640,17 @@ IDBRequest* IDBObjectStore::deleteFunction(
   return request;
 }
 
+IDBRequest* IDBObjectStore::getKeyGeneratorCurrentNumber(
+    ScriptState* script_state,
+    IDBRequest::AsyncTraceState metrics) {
+  IDBRequest* request = IDBRequest::Create(
+      script_state, this, transaction_.Get(), std::move(metrics));
+
+  BackendDB()->GetKeyGeneratorCurrentNumber(
+      transaction_->Id(), Id(), request->CreateWebCallbacks().release());
+  return request;
+}
+
 IDBRequest* IDBObjectStore::clear(ScriptState* script_state,
                                   ExceptionState& exception_state) {
   IDB_TRACE("IDBObjectStore::clearRequestSetup");
@@ -687,7 +692,7 @@ namespace {
 // the object store. It only needs to be kept alive by virtue of being
 // a listener on an IDBRequest object, in the same way that JavaScript
 // cursor success handlers are kept alive.
-class IndexPopulator final : public EventListener {
+class IndexPopulator final : public NativeEventListener {
  public:
   static IndexPopulator* Create(
       ScriptState* script_state,
@@ -695,28 +700,17 @@ class IndexPopulator final : public EventListener {
       int64_t transaction_id,
       int64_t object_store_id,
       scoped_refptr<const IDBIndexMetadata> index_metadata) {
-    return new IndexPopulator(script_state, database, transaction_id,
-                              object_store_id, std::move(index_metadata));
+    return MakeGarbageCollected<IndexPopulator>(script_state, database,
+                                                transaction_id, object_store_id,
+                                                std::move(index_metadata));
   }
 
-  bool operator==(const EventListener& other) const override {
-    return this == &other;
-  }
-
-  void Trace(blink::Visitor* visitor) override {
-    visitor->Trace(script_state_);
-    visitor->Trace(database_);
-    EventListener::Trace(visitor);
-  }
-
- private:
   IndexPopulator(ScriptState* script_state,
                  IDBDatabase* database,
                  int64_t transaction_id,
                  int64_t object_store_id,
                  scoped_refptr<const IDBIndexMetadata> index_metadata)
-      : EventListener(kCPPEventListenerType),
-        script_state_(script_state),
+      : script_state_(script_state),
         database_(database),
         transaction_id_(transaction_id),
         object_store_id_(object_store_id),
@@ -724,15 +718,22 @@ class IndexPopulator final : public EventListener {
     DCHECK(index_metadata_.get());
   }
 
+  void Trace(blink::Visitor* visitor) override {
+    visitor->Trace(script_state_);
+    visitor->Trace(database_);
+    NativeEventListener::Trace(visitor);
+  }
+
+ private:
   const IDBIndexMetadata& IndexMetadata() const { return *index_metadata_; }
 
-  void handleEvent(ExecutionContext* execution_context, Event* event) override {
+  void Invoke(ExecutionContext* execution_context, Event* event) override {
     if (!script_state_->ContextIsValid())
       return;
-    IDB_TRACE("IDBObjectStore::IndexPopulator::handleEvent");
+    IDB_TRACE("IDBObjectStore::IndexPopulator::Invoke");
 
     DCHECK_EQ(ExecutionContext::From(script_state_), execution_context);
-    DCHECK_EQ(event->type(), EventTypeNames::success);
+    DCHECK_EQ(event->type(), event_type_names::kSuccess);
     EventTarget* target = event->target();
     IDBRequest* request = static_cast<IDBRequest*>(target);
 
@@ -746,8 +747,6 @@ class IndexPopulator final : public EventListener {
     if (cursor_any->GetType() == IDBAny::kIDBCursorWithValueType)
       cursor = cursor_any->IdbCursorWithValue();
 
-    Vector<int64_t> index_ids;
-    index_ids.push_back(IndexMetadata().id);
     if (cursor && !cursor->IsDeleted()) {
       cursor->Continue(nullptr, nullptr, IDBRequest::AsyncTraceState(),
                        ASSERT_NO_EXCEPTION);
@@ -755,18 +754,21 @@ class IndexPopulator final : public EventListener {
       const IDBKey* primary_key = cursor->IdbPrimaryKey();
       ScriptValue value = cursor->value(script_state_);
 
-      WebVector<WebVector<WebIDBKey>> index_keys_list;
-      index_keys_list.reserve(1);
-      index_keys_list.emplace_back(GenerateIndexKeysForValue(
-          script_state_->GetIsolate(), IndexMetadata(), value));
+      Vector<IDBIndexKeys> index_keys;
+      index_keys.ReserveInitialCapacity(1);
+      index_keys.emplace_back(
+          IndexMetadata().id,
+          GenerateIndexKeysForValue(script_state_->GetIsolate(),
+                                    IndexMetadata(), value));
 
-      database_->Backend()->SetIndexKeys(
-          transaction_id_, object_store_id_, WebIDBKeyView(primary_key),
-          index_ids,
-          WebVector<WebIDBDatabase::WebIndexKeys>(std::move(index_keys_list)));
+      database_->Backend()->SetIndexKeys(transaction_id_, object_store_id_,
+                                         IDBKey::Clone(primary_key),
+                                         std::move(index_keys));
     } else {
       // Now that we are done indexing, tell the backend to go
       // back to processing tasks of type NormalTask.
+      Vector<int64_t> index_ids;
+      index_ids.push_back(IndexMetadata().id);
       database_->Backend()->SetIndexesReady(transaction_id_, object_store_id_,
                                             index_ids);
       database_.Clear();
@@ -784,7 +786,7 @@ class IndexPopulator final : public EventListener {
 IDBIndex* IDBObjectStore::createIndex(ScriptState* script_state,
                                       const String& name,
                                       const IDBKeyPath& key_path,
-                                      const IDBIndexParameters& options,
+                                      const IDBIndexParameters* options,
                                       ExceptionState& exception_state) {
   IDB_TRACE1("IDBObjectStore::createIndexRequestSetup", "store_name",
              metadata_->name.Utf8());
@@ -818,7 +820,8 @@ IDBIndex* IDBObjectStore::createIndex(ScriptState* script_state,
         "The keyPath argument contains an invalid key path.");
     return nullptr;
   }
-  if (key_path.GetType() == IDBKeyPath::kArrayType && options.multiEntry()) {
+  if (key_path.GetType() == mojom::IDBKeyPathType::Array &&
+      options->multiEntry()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidAccessError,
         "The keyPath argument was an array and the multiEntry option is true.");
@@ -833,13 +836,13 @@ IDBIndex* IDBObjectStore::createIndex(ScriptState* script_state,
   int64_t index_id = metadata_->max_index_id + 1;
   DCHECK_NE(index_id, IDBIndexMetadata::kInvalidId);
   BackendDB()->CreateIndex(transaction_->Id(), Id(), index_id, name, key_path,
-                           options.unique(), options.multiEntry());
+                           options->unique(), options->multiEntry());
 
   ++metadata_->max_index_id;
 
   scoped_refptr<IDBIndexMetadata> index_metadata =
       base::AdoptRef(new IDBIndexMetadata(
-          name, index_id, key_path, options.unique(), options.multiEntry()));
+          name, index_id, key_path, options->unique(), options->multiEntry()));
   IDBIndex* index = IDBIndex::Create(index_metadata, this, transaction_.Get());
   index_map_.Set(name, index);
   metadata_->indexes.Set(index_id, index_metadata);
@@ -849,8 +852,8 @@ IDBIndex* IDBObjectStore::createIndex(ScriptState* script_state,
     return nullptr;
 
   IDBRequest* index_request =
-      openCursor(script_state, nullptr, kWebIDBCursorDirectionNext,
-                 kWebIDBTaskTypePreemptive, std::move(metrics));
+      openCursor(script_state, nullptr, mojom::IDBCursorDirection::Next,
+                 mojom::IDBTaskType::Preemptive, std::move(metrics));
   index_request->PreventPropagation();
 
   // This is kept alive by being the success handler of the request, which is in
@@ -964,7 +967,7 @@ IDBRequest* IDBObjectStore::openCursor(ScriptState* script_state,
     return nullptr;
   }
 
-  WebIDBCursorDirection direction =
+  mojom::IDBCursorDirection direction =
       IDBCursor::StringToDirection(direction_string);
   IDBKeyRange* key_range = IDBKeyRange::FromScriptValue(
       ExecutionContext::From(script_state), range, exception_state);
@@ -977,18 +980,18 @@ IDBRequest* IDBObjectStore::openCursor(ScriptState* script_state,
     return nullptr;
   }
 
-  return openCursor(script_state, key_range, direction, kWebIDBTaskTypeNormal,
-                    std::move(metrics));
+  return openCursor(script_state, key_range, direction,
+                    mojom::IDBTaskType::Normal, std::move(metrics));
 }
 
 IDBRequest* IDBObjectStore::openCursor(ScriptState* script_state,
                                        IDBKeyRange* range,
-                                       WebIDBCursorDirection direction,
-                                       WebIDBTaskType task_type,
+                                       mojom::IDBCursorDirection direction,
+                                       mojom::IDBTaskType task_type,
                                        IDBRequest::AsyncTraceState metrics) {
   IDBRequest* request = IDBRequest::Create(
       script_state, this, transaction_.Get(), std::move(metrics));
-  request->SetCursorDetails(IndexedDB::kCursorKeyAndValue, direction);
+  request->SetCursorDetails(indexed_db::kCursorKeyAndValue, direction);
 
   BackendDB()->OpenCursor(transaction_->Id(), Id(),
                           IDBIndexMetadata::kInvalidId, range, direction, false,
@@ -1016,7 +1019,7 @@ IDBRequest* IDBObjectStore::openKeyCursor(ScriptState* script_state,
     return nullptr;
   }
 
-  WebIDBCursorDirection direction =
+  mojom::IDBCursorDirection direction =
       IDBCursor::StringToDirection(direction_string);
   IDBKeyRange* key_range = IDBKeyRange::FromScriptValue(
       ExecutionContext::From(script_state), range, exception_state);
@@ -1031,11 +1034,11 @@ IDBRequest* IDBObjectStore::openKeyCursor(ScriptState* script_state,
 
   IDBRequest* request = IDBRequest::Create(
       script_state, this, transaction_.Get(), std::move(metrics));
-  request->SetCursorDetails(IndexedDB::kCursorKeyOnly, direction);
+  request->SetCursorDetails(indexed_db::kCursorKeyOnly, direction);
 
   BackendDB()->OpenCursor(transaction_->Id(), Id(),
                           IDBIndexMetadata::kInvalidId, key_range, direction,
-                          true, kWebIDBTaskTypeNormal,
+                          true, mojom::IDBTaskType::Normal,
                           request->CreateWebCallbacks().release());
   return request;
 }

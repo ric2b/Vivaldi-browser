@@ -1,5 +1,5 @@
 // VIVALDI
 
-exports.$set(
-    'WebViewPrivate',
-    require('binding').Binding.create('webViewPrivate').generate());
+if (!apiBridge) {
+  exports.$set('WebViewPrivate', require('binding').Binding.create('webViewPrivate').generate());
+}

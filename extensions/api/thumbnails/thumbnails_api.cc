@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "app/vivaldi_apptools.h"
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
@@ -17,21 +18,24 @@
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/string_piece.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/time/time.h"
 #include "base/values.h"
+#include "browser/thumbnails/vivaldi_capture_contents.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/thumbnails/thumbnail_service.h"
-#include "chrome/browser/thumbnails/thumbnail_service_factory.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/common/chrome_paths.h"
+#include "components/datasource/vivaldi_data_source_api.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/common/api/extension_types.h"
@@ -56,6 +60,7 @@ using vivaldi::ui_tools::SmartCropAndSize;
 namespace {
 
 const int kMaximumPageHeight = 30000;
+const int kMaximumFilenameLength = 100;
 
 void ReleaseSharedMemoryPixels(void* addr, void* context) {
   delete reinterpret_cast<base::SharedMemory*>(context);
@@ -64,27 +69,172 @@ void ReleaseSharedMemoryPixels(void* addr, void* context) {
 
 namespace extensions {
 
+/*
+Patterns supported:
+
+$timestamp - Long date in YYY-MM-DD HH.MM.SS format
+$year - Year in YYYY format
+$month - Month in MM format
+$day - Day in DD format
+$hour - Hour in HH format
+$minute - Minute in MM format
+$second - Second in SS format
+$ms - Millisecond in MMM format
+$longid - GUID in standard format
+$shortid - Short GUID, only the last 12 characters
+$host - Hostname of the active tab, eg. www.vivaldi.com
+
+*/
+
+enum class CaptureFilePatternType {
+  TIMESTAMP,
+  YEAR,
+  MONTH,
+  DAY,
+  HOUR,
+  MINUTE,
+  SECOND,
+  MILLISECOND,
+  LONGID,
+  SHORTID,
+  HOST,
+  TITLE,
+};
+
+struct CaptureFilePattern {
+  const char* pattern;
+  CaptureFilePatternType pattern_id;
+};
+
+struct CaptureFilePattern file_patterns[] = {
+  {"$timestamp", CaptureFilePatternType::TIMESTAMP},
+  {"$year",     CaptureFilePatternType::YEAR},
+  {"$month",    CaptureFilePatternType::MONTH},
+  {"$day",      CaptureFilePatternType::DAY},
+  {"$hour",     CaptureFilePatternType::HOUR},
+  {"$minute",   CaptureFilePatternType::MINUTE},
+  {"$second",   CaptureFilePatternType::SECOND},
+  {"$ms",       CaptureFilePatternType::MILLISECOND},
+  {"$longid",   CaptureFilePatternType::LONGID},
+  {"$shortid",  CaptureFilePatternType::SHORTID},
+  {"$host",     CaptureFilePatternType::HOST},
+  {"$title",    CaptureFilePatternType::TITLE},
+};
+
+std::string ConstructCaptureArgument(CaptureFilePatternType type,
+                                     const GURL& url,
+                                     const base::Time::Exploded& now,
+                                     const std::string& title) {
+  switch (type) {
+    case CaptureFilePatternType::TIMESTAMP:
+      return base::StringPrintf("%d-%02d-%02d %02d.%02d.%02d", now.year,
+                                now.month, now.day_of_month, now.hour,
+                                now.minute, now.second);
+    case CaptureFilePatternType::YEAR:
+      return base::StringPrintf("%d", now.year);
+    case CaptureFilePatternType::MONTH:
+      return base::StringPrintf("%02d", now.month);
+    case CaptureFilePatternType::DAY:
+      return base::StringPrintf("%02d", now.day_of_month);
+    case CaptureFilePatternType::HOUR:
+      return base::StringPrintf("%02d", now.hour);
+    case CaptureFilePatternType::MINUTE:
+      return base::StringPrintf("%02d", now.minute);
+    case CaptureFilePatternType::SECOND:
+      return base::StringPrintf("%02d", now.second);
+    case CaptureFilePatternType::MILLISECOND:
+      return base::StringPrintf("%02d", now.millisecond);
+    case CaptureFilePatternType::LONGID:
+      return base::GenerateGUID();
+    case CaptureFilePatternType::SHORTID: {
+      std::string short_id = base::GenerateGUID();
+      short_id.erase(0, short_id.length() - 12);
+      return short_id;
+    }
+    case CaptureFilePatternType::HOST: {
+      std::string host = url.host();
+      // Special case the vivaldi app id.
+      if (::vivaldi::IsVivaldiApp(host)) {
+        host = "vivaldi";
+      }
+      return host;
+    }
+    case CaptureFilePatternType::TITLE: {
+      return title;
+    }
+    default:
+      break;
+  }
+  return std::string();
+}
+
+base::FilePath ConstructCaptureFilename(
+    base::FilePath& base_path,
+    const std::string& pattern,
+    const GURL& url,
+    const std::string& title,
+    const base::FilePath::StringPieceType& extension) {
+  if (pattern.empty()) {
+    base_path = base_path.AppendASCII(base::GenerateGUID());
+  } else {
+    // Function might replace in-place
+    std::string new_string = pattern;
+    base::Time::Exploded now;
+    base::Time::Now().LocalExplode(&now);
+
+    for (CaptureFilePattern& pattern : file_patterns) {
+      base::ReplaceSubstringsAfterOffset(
+          &new_string, 0, pattern.pattern,
+          ConstructCaptureArgument(pattern.pattern_id, url, now, title));
+    }
+    // Strip invalid characters from the generated filename.
+    // Windows is the strictest OS so we use the list from
+    // https://docs.microsoft.com/en-us/windows/desktop/FileIO/naming-a-file
+    // This is not performance sensitive code so brute force it.
+    std::string special_file_chars = "\\/?%*:|\"<>\n\r";
+    for (int i = 0; i < 32; i++) {
+      special_file_chars += static_cast<char>(i);
+    }
+
+    base::ReplaceChars(new_string, special_file_chars, "_", &new_string);
+
+    // Trim the maximum filename length.
+    if (new_string.length() > kMaximumFilenameLength) {
+      std::string truncated;
+      base::TruncateUTF8ToByteSize(new_string, kMaximumFilenameLength,
+                                   &truncated);
+      new_string = truncated;
+    }
+
+#if defined(OS_POSIX)
+    base_path = base_path.Append(new_string);
+#elif defined(OS_WIN)
+    base_path = base_path.Append(base::UTF8ToUTF16(new_string));
+#endif
+    base_path = base_path.AddExtension(extension);
+  }
+  // Ensure unique filename.
+  int unique_number = base::GetUniquePathNumber(
+    base_path, base::FilePath::StringType());
+  if (unique_number > 0) {
+    base_path = base_path.InsertBeforeExtensionASCII(
+      base::StringPrintf(" (%d)", unique_number));
+  }
+  return base_path;
+}
+
 bool ThumbnailsIsThumbnailAvailableFunction::RunAsync() {
   std::unique_ptr<vivaldi::thumbnails::IsThumbnailAvailable::Params> params(
-      vivaldi::thumbnails::IsThumbnailAvailable::Params::Create(*args_));
+    vivaldi::thumbnails::IsThumbnailAvailable::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  scoped_refptr<thumbnails::ThumbnailService> service(
-      ThumbnailServiceFactory::GetForProfile(profile));
-  GURL url;
-  if (!params->bookmark_id.empty()) {
-    std::string url_str = "http://bookmark_thumbnail/" + params->bookmark_id;
-    GURL local(url_str);
-    url.Swap(&local);
-  } else if (!params->url.empty()) {
-    GURL local(params->url);
-    url.Swap(&local);
-  }
-  bool has_thumbnail = service->HasPageThumbnail(url);
+  extensions::VivaldiDataSourcesAPI* api =
+      extensions::VivaldiDataSourcesAPI::GetFactoryInstance()->Get(
+          GetProfile());
   vivaldi::thumbnails::ThumbnailQueryResult result;
-  result.has_thumbnail = has_thumbnail;
-  result.thumbnail_url = "chrome://thumb/" + url.spec();
+  result.has_thumbnail = api->HasBookmarkThumbnail(params->bookmark_id);
+  result.thumbnail_url = base::StringPrintf(
+      "chrome://vivaldi-data/local-image/%d", params->bookmark_id);
 
   results_ = vivaldi::thumbnails::IsThumbnailAvailable::Results::Create(result);
 
@@ -94,13 +244,13 @@ bool ThumbnailsIsThumbnailAvailableFunction::RunAsync() {
 }
 
 ThumbnailsIsThumbnailAvailableFunction::
-    ThumbnailsIsThumbnailAvailableFunction() {}
+  ThumbnailsIsThumbnailAvailableFunction() {}
 
 ThumbnailsIsThumbnailAvailableFunction::
-    ~ThumbnailsIsThumbnailAvailableFunction() {}
+  ~ThumbnailsIsThumbnailAvailableFunction() {}
 
 void ThumbnailsCaptureUIFunction::CopyFromBackingStoreComplete(
-    const SkBitmap& bitmap) {
+  const SkBitmap& bitmap) {
   if (!bitmap.drawsNothing()) {
     OnCaptureSuccess(bitmap);
     return;
@@ -109,9 +259,9 @@ void ThumbnailsCaptureUIFunction::CopyFromBackingStoreComplete(
 }
 
 bool ThumbnailsCaptureUIFunction::CaptureAsync(
-    content::WebContents* web_contents,
-    const gfx::Rect& capture_area,
-    base::OnceCallback<void(const SkBitmap&)> callback) {
+  content::WebContents* web_contents,
+  const gfx::Rect& capture_area,
+  base::OnceCallback<void(const SkBitmap&)> callback) {
   if (!web_contents)
     return false;
 
@@ -129,7 +279,7 @@ bool ThumbnailsCaptureUIFunction::CaptureAsync(
     const gfx::NativeView native_view = view->GetNativeView();
     display::Screen* const screen = display::Screen::GetScreen();
     const float scale =
-        screen->GetDisplayNearestView(native_view).device_scale_factor();
+      screen->GetDisplayNearestView(native_view).device_scale_factor();
     if (scale > 1.0f)
       bitmap_size = gfx::ScaleToCeiledSize(bitmap_size, scale);
 
@@ -140,13 +290,16 @@ bool ThumbnailsCaptureUIFunction::CaptureAsync(
 
 bool ThumbnailsCaptureUIFunction::RunAsync() {
   std::unique_ptr<vivaldi::thumbnails::CaptureUI::Params> params(
-      vivaldi::thumbnails::CaptureUI::Params::Create(*args_));
+    vivaldi::thumbnails::CaptureUI::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
+  if (params->params.save_file_pattern) {
+    save_file_pattern_ = *params->params.save_file_pattern;
+  }
   if (params->params.encode_format.get()) {
     image_format_ = *params->params.encode_format == "jpg"
-                        ? ImageFormat::IMAGE_FORMAT_JPEG
-                        : ImageFormat::IMAGE_FORMAT_PNG;
+      ? ImageFormat::IMAGE_FORMAT_JPEG
+      : ImageFormat::IMAGE_FORMAT_PNG;
   }
   if (params->params.encode_quality.get()) {
     encode_quality_ = *params->params.encode_quality.get();
@@ -160,7 +313,7 @@ bool ThumbnailsCaptureUIFunction::RunAsync() {
     }
     const PrefService* user_prefs = GetProfile()->GetPrefs();
     save_folder_ =
-        user_prefs->GetString(vivaldiprefs::kWebpagesCaptureDirectory);
+      user_prefs->GetString(vivaldiprefs::kWebpagesCaptureDirectory);
   }
   if (params->params.encode_to_data_url.get()) {
     encode_to_data_url_ = *params->params.encode_to_data_url;
@@ -172,13 +325,18 @@ bool ThumbnailsCaptureUIFunction::RunAsync() {
   for (Browser* browser : *BrowserList::GetInstance()) {
     if (browser->session_id().id() == window_id) {
       gfx::Rect rect(params->params.pos_x, params->params.pos_y,
-                     params->params.width, params->params.height);
+        params->params.width, params->params.height);
+      content::WebContents* tab = browser->tab_strip_model()->GetActiveWebContents();
+      if (tab) {
+        url_ = tab->GetVisibleURL();
+        title_ = base::UTF16ToUTF8(tab->GetTitle());
+      }
       content::WebContents* contents =
-          static_cast<VivaldiBrowserWindow*>(browser->window())->web_contents();
+        static_cast<VivaldiBrowserWindow*>(browser->window())->web_contents();
       return CaptureAsync(
-          contents, rect,
-          base::Bind(&ThumbnailsCaptureUIFunction::CopyFromBackingStoreComplete,
-                     this));
+        contents, rect,
+        base::Bind(&ThumbnailsCaptureUIFunction::CopyFromBackingStoreComplete,
+          this));
     }
   }
   // Wrong id given.
@@ -230,12 +388,12 @@ void ThumbnailsCaptureUIFunction::OnCaptureSuccess(const SkBitmap& bitmap) {
     if (!base::PathExists(path)) {
       base::CreateDirectory(path);
     }
-    path = path.AppendASCII(base::GenerateGUID());
+    base::FilePath::StringPieceType ext = FILE_PATH_LITERAL(".jpg");
     if (image_format_ == ImageFormat::IMAGE_FORMAT_PNG) {
-      path = path.AddExtension(FILE_PATH_LITERAL(".png"));
-    } else {
-      path = path.AddExtension(FILE_PATH_LITERAL(".jpg"));
+      ext = FILE_PATH_LITERAL(".png");
     }
+    path =
+        ConstructCaptureFilename(path, save_file_pattern_, url_, title_, ext);
 #if defined(OS_POSIX)
     return_data.assign(path.value());
 #elif defined(OS_WIN)
@@ -287,6 +445,9 @@ bool ThumbnailsCaptureTabFunction::RunAsync() {
       vivaldi::thumbnails::CaptureTab::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
+  if (params->params.save_file_pattern) {
+    save_file_pattern_ = *params->params.save_file_pattern;
+  }
   if (params->params.encode_format.get()) {
     image_format_ = *params->params.encode_format == "jpg"
                         ? ImageFormat::IMAGE_FORMAT_JPEG
@@ -328,6 +489,8 @@ bool ThumbnailsCaptureTabFunction::RunAsync() {
     content::WebContents* tabstrip_contents =
         ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id, GetProfile());
     if (tabstrip_contents) {
+      url_ = tabstrip_contents->GetVisibleURL();
+      title_ = base::UTF16ToUTF8(tabstrip_contents->GetTitle());
       extensions::VivaldiPrivateTabObserver* private_tabs =
           extensions::VivaldiPrivateTabObserver::FromWebContents(
               tabstrip_contents);
@@ -397,8 +560,8 @@ void ThumbnailsCaptureTabFunction::ScaleAndConvertImage(
 
   std::string return_data;
   if (copy_to_clipboard_) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::Bind(
             &ThumbnailsCaptureTabFunction::ScaleAndConvertImageDoneOnUIThread,
             this, bitmap, return_data, callback_id));
@@ -436,12 +599,12 @@ void ThumbnailsCaptureTabFunction::ScaleAndConvertImage(
     if (!base::PathExists(path)) {
       base::CreateDirectory(path);
     }
-    path = path.AppendASCII(base::GenerateGUID());
+    base::FilePath::StringPieceType ext = FILE_PATH_LITERAL(".jpg");
     if (image_format_ == ImageFormat::IMAGE_FORMAT_PNG) {
-      path = path.AddExtension(FILE_PATH_LITERAL(".png"));
-    } else {
-      path = path.AddExtension(FILE_PATH_LITERAL(".jpg"));
+      ext = FILE_PATH_LITERAL(".png");
     }
+    path =
+        ConstructCaptureFilename(path, save_file_pattern_, url_, title_, ext);
 #if defined(OS_POSIX)
     return_data.assign(path.value());
 #elif defined(OS_WIN)
@@ -450,16 +613,16 @@ void ThumbnailsCaptureTabFunction::ScaleAndConvertImage(
     file_path_ = path;
     base::WriteFile(path, reinterpret_cast<const char*>(&data[0]), data.size());
   }
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::Bind(
           &ThumbnailsCaptureTabFunction::ScaleAndConvertImageDoneOnUIThread,
           this, bitmap, return_data, callback_id));
 }
 
 void ThumbnailsCaptureTabFunction::DispatchError(const std::string& error_msg) {
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::Bind(&ThumbnailsCaptureTabFunction::DispatchErrorOnUIThread, this,
                  error_msg));
 }
@@ -495,6 +658,61 @@ void ThumbnailsCaptureTabFunction::ScaleAndConvertImageDoneOnUIThread(
   if (show_file_in_path_ && !image_data.empty() && !copy_to_clipboard_) {
     platform_util::ShowItemInFolder(GetProfile(), file_path_);
   }
+}
+
+ThumbnailsCaptureUrlFunction::ThumbnailsCaptureUrlFunction()
+    : capture_page_(base::MakeRefCounted<::vivaldi::ThumbnailCaptureContents>(
+          browser_context())) {
+}
+
+ThumbnailsCaptureUrlFunction::~ThumbnailsCaptureUrlFunction() {
+
+}
+
+ExtensionFunction::ResponseAction ThumbnailsCaptureUrlFunction::Run() {
+  using vivaldi::thumbnails::CaptureUrl::Params;
+
+  std::unique_ptr<Params> params(Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  capture_page_->set_browser_context(browser_context());
+
+  bookmark_id_ = params->params.bookmark_id;
+  gfx::Size initial_size(params->params.width, params->params.height);
+  gfx::Size scaled_size(params->params.scaled_width,
+                        params->params.scaled_height);
+
+  capture_page_->Start(
+      GURL(params->params.url), initial_size, scaled_size,
+      base::Bind(&ThumbnailsCaptureUrlFunction::OnCapturedAndScaled, this));
+
+  return RespondLater();
+}
+
+void ThumbnailsCaptureUrlFunction::OnCapturedAndScaled(const SkBitmap& bitmap,
+                                                       bool success) {
+  using vivaldi::thumbnails::CaptureUrl::Results::Create;
+  if (!success) {
+    // Unsuccessful capture, might be an error page.
+    Respond(ArgumentList(Create(bookmark_id_, false, std::string())));
+    return;
+  }
+  VivaldiDataSourcesAPI* api =
+      VivaldiDataSourcesAPI::GetFactoryInstance()->Get(browser_context());
+  std::unique_ptr<SkBitmap> bitmap_ptr(new SkBitmap(bitmap));
+
+  api->AddImageDataForBookmark(
+      bookmark_id_, std::move(bitmap_ptr),
+      base::Bind(&ThumbnailsCaptureUrlFunction::OnBookmarkThumbnailStored,
+                 this));
+}
+
+void ThumbnailsCaptureUrlFunction::OnBookmarkThumbnailStored(
+    int bookmark_id,
+    std::string& image_url) {
+  using vivaldi::thumbnails::CaptureUrl::Results::Create;
+
+  Respond(ArgumentList(Create(bookmark_id, !image_url.empty(), image_url)));
 }
 
 }  // namespace extensions

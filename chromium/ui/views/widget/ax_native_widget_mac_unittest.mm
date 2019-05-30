@@ -16,6 +16,7 @@
 #include "ui/accessibility/ax_node_data.h"
 #import "ui/accessibility/platform/ax_platform_node_mac.h"
 #include "ui/base/ime/text_input_type.h"
+#include "ui/base/models/combobox_model.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/combobox/combobox.h"
@@ -96,6 +97,11 @@ class TestWidgetDelegate : public test::TestDesktopWidgetDelegate {
 
 constexpr char TestWidgetDelegate::kAccessibleWindowTitle[];
 
+// This test framework uses the deprecated NSObject accessibility APIs - see
+// https://crbug.com/921109.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
 class AXNativeWidgetMacTest : public test::WidgetTest {
  public:
   AXNativeWidgetMacTest() {}
@@ -115,8 +121,8 @@ class AXNativeWidgetMacTest : public test::WidgetTest {
     // Accessibility hit tests come in Cocoa screen coordinates.
     NSPoint midpoint_in_screen_ = gfx::ScreenPointToNSPoint(
         widget()->GetWindowBoundsInScreen().CenterPoint());
-    return
-        [widget()->GetNativeWindow() accessibilityHitTest:midpoint_in_screen_];
+    return [widget()->GetNativeWindow().GetNativeNSWindow()
+        accessibilityHitTest:midpoint_in_screen_];
   }
 
   id AttributeValueAtMidpoint(NSString* attribute) {
@@ -304,10 +310,10 @@ TEST_F(AXNativeWidgetMacTest, FocusableElementsAreLeafNodes) {
       1u,
       [[button->GetNativeViewAccessible()
           accessibilityAttributeValue:NSAccessibilityChildrenAttribute] count]);
-  EXPECT_EQ(button->label()->GetNativeViewAccessible(),
-            [[button->GetNativeViewAccessible()
-                accessibilityAttributeValue:NSAccessibilityChildrenAttribute]
-                objectAtIndex:0]);
+  EXPECT_EQ(
+      button->label()->GetNativeViewAccessible(),
+      [button->GetNativeViewAccessible()
+          accessibilityAttributeValue:NSAccessibilityChildrenAttribute][0]);
 
   // If the child is disabled, it should still be traversable.
   button->label()->SetEnabled(false);
@@ -315,10 +321,10 @@ TEST_F(AXNativeWidgetMacTest, FocusableElementsAreLeafNodes) {
       1u,
       [[button->GetNativeViewAccessible()
           accessibilityAttributeValue:NSAccessibilityChildrenAttribute] count]);
-  EXPECT_EQ(button->label()->GetNativeViewAccessible(),
-            [[button->GetNativeViewAccessible()
-                accessibilityAttributeValue:NSAccessibilityChildrenAttribute]
-                objectAtIndex:0]);
+  EXPECT_EQ(
+      button->label()->GetNativeViewAccessible(),
+      [button->GetNativeViewAccessible()
+          accessibilityAttributeValue:NSAccessibilityChildrenAttribute][0]);
 }
 
 // Test for NSAccessibilityChildrenAttribute, and ensure it excludes ignored
@@ -411,7 +417,7 @@ TEST_F(AXNativeWidgetMacTest, NativeWindowProperties) {
   // Make sure it's |view| in the hit test by checking its accessibility role.
   EXPECT_EQ(NSAccessibilityGroupRole, AXRoleString());
 
-  NSWindow* window = widget()->GetNativeWindow();
+  NSWindow* window = widget()->GetNativeWindow().GetNativeNSWindow();
   EXPECT_NSEQ(window, AttributeValueAtMidpoint(NSAccessibilityWindowAttribute));
   EXPECT_NSEQ(window, AttributeValueAtMidpoint(
                           NSAccessibilityTopLevelUIElementAttribute));
@@ -558,7 +564,7 @@ TEST_F(AXNativeWidgetMacTest, ViewWritableAttributes) {
       [AttributeValueAtMidpoint(NSAccessibilityFocusedAttribute) boolValue]);
   EXPECT_TRUE([ax_node
       accessibilityIsAttributeSettable:NSAccessibilityFocusedAttribute]);
-  [ax_node accessibilitySetValue:[NSNumber numberWithBool:YES]
+  [ax_node accessibilitySetValue:@YES
                     forAttribute:NSAccessibilityFocusedAttribute];
   EXPECT_TRUE(
       [AttributeValueAtMidpoint(NSAccessibilityFocusedAttribute) boolValue]);
@@ -747,7 +753,8 @@ TEST_F(AXNativeWidgetMacTest, ProtectedTextfields) {
 
   // Get the Textfield accessibility object.
   NSPoint midpoint = gfx::ScreenPointToNSPoint(GetWidgetBounds().CenterPoint());
-  id ax_node = [widget()->GetNativeWindow() accessibilityHitTest:midpoint];
+  id ax_node = [widget()->GetNativeWindow().GetNativeNSWindow()
+      accessibilityHitTest:midpoint];
   EXPECT_TRUE(ax_node);
 
   // Create a native Cocoa NSSecureTextField to compare against.
@@ -925,3 +932,5 @@ TEST_F(AXNativeWidgetMacTest, Combobox) {
 }
 
 }  // namespace views
+
+#pragma clang diagnostic pop

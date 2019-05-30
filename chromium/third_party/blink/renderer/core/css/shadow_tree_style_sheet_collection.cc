@@ -40,8 +40,6 @@
 
 namespace blink {
 
-using namespace HTMLNames;
-
 ShadowTreeStyleSheetCollection::ShadowTreeStyleSheetCollection(
     ShadowRoot& shadow_root)
     : TreeScopeStyleSheetCollection(shadow_root) {}
@@ -59,10 +57,20 @@ void ShadowTreeStyleSheetCollection::CollectStyleSheets(
 
     collection.AppendSheetForList(sheet);
     if (candidate.CanBeActivated(g_null_atom)) {
-      CSSStyleSheet* css_sheet = ToCSSStyleSheet(sheet);
+      CSSStyleSheet* css_sheet = To<CSSStyleSheet>(sheet);
       collection.AppendActiveStyleSheet(
           std::make_pair(css_sheet, master_engine.RuleSetForSheet(*css_sheet)));
     }
+  }
+  if (!GetTreeScope().HasAdoptedStyleSheets())
+    return;
+
+  for (CSSStyleSheet* sheet : GetTreeScope().AdoptedStyleSheets()) {
+    if (!sheet || !sheet->CanBeActivated(g_null_atom))
+      continue;
+    DCHECK_EQ(GetTreeScope().GetDocument(), sheet->AssociatedDocument());
+    collection.AppendActiveStyleSheet(
+        std::make_pair(sheet, master_engine.RuleSetForSheet(*sheet)));
   }
 }
 

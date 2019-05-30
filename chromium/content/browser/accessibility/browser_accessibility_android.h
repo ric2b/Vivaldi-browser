@@ -10,6 +10,7 @@
 
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
+#include "base/timer/elapsed_timer.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 
@@ -27,6 +28,8 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   base::string16 GetValue() const override;
 
   bool PlatformIsLeaf() const override;
+  // Android needs events even on objects that are trimmed away.
+  bool CanFireEvents() const override;
 
   bool IsCheckable() const;
   bool IsChecked() const;
@@ -81,6 +84,8 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   base::string16 GetHint() const;
 
   std::string GetRoleString() const;
+
+  base::string16 GetContentInvalidErrorMessage() const;
 
   base::string16 GetRoleDescription() const;
 
@@ -145,6 +150,11 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   void GetWordBoundaries(std::vector<int32_t>* word_starts,
                          std::vector<int32_t>* word_ends,
                          int offset);
+
+  // Used to keep track of when to stop reporting content_invalid.
+  // Timer only applies if node has focus.
+  void ResetContentInvalidTimer();
+  base::ElapsedTimer content_invalid_timer_ = base::ElapsedTimer();
 
  private:
   // This gives BrowserAccessibility::Create access to the class constructor.

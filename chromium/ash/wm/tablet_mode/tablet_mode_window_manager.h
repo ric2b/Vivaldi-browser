@@ -12,6 +12,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/shell_observer.h"
+#include "ash/wm/overview/overview_observer.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/window_state.h"
 #include "base/macros.h"
@@ -40,6 +41,7 @@ class ASH_EXPORT TabletModeWindowManager
     : public aura::WindowObserver,
       public display::DisplayObserver,
       public ShellObserver,
+      public OverviewObserver,
       public SplitViewController::Observer {
  public:
   // This should only be deleted by the creator (ash::Shell).
@@ -58,9 +60,12 @@ class ASH_EXPORT TabletModeWindowManager
   void WindowStateDestroyed(aura::Window* window);
 
   // ShellObserver:
-  void OnOverviewModeStarting() override;
-  void OnOverviewModeEnded() override;
   void OnSplitViewModeEnded() override;
+
+  // OverviewObserver:
+  void OnOverviewModeStarting() override;
+  void OnOverviewModeEnding(OverviewSession* overview_session) override;
+  void OnOverviewModeEnded() override;
 
   // aura::WindowObserver:
   void OnWindowDestroying(aura::Window* window) override;
@@ -77,8 +82,6 @@ class ASH_EXPORT TabletModeWindowManager
   // display::DisplayObserver:
   void OnDisplayAdded(const display::Display& display) override;
   void OnDisplayRemoved(const display::Display& display) override;
-  void OnDisplayMetricsChanged(const display::Display& display,
-                               uint32_t metrics) override;
 
   // SplitViewController::Observer:
   void OnSplitViewStateChanged(SplitViewController::State previous_state,
@@ -94,24 +97,29 @@ class ASH_EXPORT TabletModeWindowManager
   TabletModeWindowManager();
 
  private:
+  friend class TabletModeControllerTestApi;
+
   using WindowToState = std::map<aura::Window*, TabletModeWindowState*>;
 
-  // Maximize all windows and restore their current state.
-  void MaximizeAllWindows();
+  // Maximize all windows, except that a snapped active window shall become
+  // represented in split view, along with the previously active window if it is
+  // snapped to the opposite side.
+  void ArrangeWindowsForTabletMode();
 
-  // Restore all windows to their previous state.
-  void RestoreAllWindows();
+  // Revert all windows to how they were arranged before tablet mode.
+  void ArrangeWindowsForDesktopMode();
 
   // Set whether to defer bounds updates for |window|. When set to false bounds
   // will be updated as they may be stale.
   void SetDeferBoundsUpdates(aura::Window* window, bool defer_bounds_updates);
 
-  // If the given window should be handled by us, this function will maximize it
-  // and add it to the list of known windows (remembering the initial show
-  // state).
+  // If the given window should be handled by us, this function will add it to
+  // the list of known windows (remembering the initial show state).
   // Note: If the given window cannot be handled by us the function will return
   // immediately.
-  void MaximizeAndTrackWindow(aura::Window* window);
+  void TrackWindow(aura::Window* window,
+                   bool snap = false,
+                   bool animate_bounds_on_attach = true);
 
   // Remove a window from our tracking list. If the window is going to be
   // destroyed, do not restore its old previous window state object as it will
@@ -147,6 +155,9 @@ class ASH_EXPORT TabletModeWindowManager
   std::unordered_set<aura::Window*> added_windows_;
 
   std::unique_ptr<wm::TabletModeEventHandler> event_handler_;
+
+  // True if overview exit type is |kWindowDragged|.
+  bool exit_overview_by_window_drag_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TabletModeWindowManager);
 };

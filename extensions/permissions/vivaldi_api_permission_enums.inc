@@ -9,7 +9,9 @@
 
     // remember to add new permissions to PermissionsTest.PermissionMessages in
     // chrome/common/extensions/permissions/permission_set_unittest.cc
+    kAccessKeys,
     kAutoUpdate,
+    kBookmarkContextMenu,
     kBookmarksPrivate,
     kCalendar,
     kContacts,
@@ -32,6 +34,7 @@
     kTabsPrivate,
     kThumbnails,
     kUtilities,
+    kVivaldiAccount,
     kWebViewPrivate,
     kWindowPrivate,
 

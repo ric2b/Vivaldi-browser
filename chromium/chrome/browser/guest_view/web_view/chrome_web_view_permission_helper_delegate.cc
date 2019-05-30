@@ -7,6 +7,7 @@
 #include <map>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/metrics/user_metrics.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/permissions/permission_manager.h"
@@ -23,8 +24,11 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "ppapi/buildflags/buildflags.h"
 
+#include "base/task/post_task.h"
 #include "chrome/browser/notifications/notification_permission_context.h"
 #include "components/guest_view/vivaldi_guest_view_constants.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/permission_type.h"
 
 namespace extensions {
@@ -106,30 +110,26 @@ void ChromeWebViewPermissionHelperDelegate::CanDownload(
   request_info.SetString(guest_view::kMimeType, download_info_.mime_type);
   request_info.SetString(guest_view::kSuggestedFilename,
                          download_info_.suggested_filename);
-
   web_view_permission_helper()->RequestPermission(
-      WEB_VIEW_PERMISSION_TYPE_DOWNLOAD,
-      request_info,
-      base::Bind(
-          &ChromeWebViewPermissionHelperDelegate::OnDownloadPermissionResponse,
-          weak_factory_.GetWeakPtr(),
-          callback,
-          download_info_.open_flags_cb),
-      false /* allowed_by_default */);
+    WEB_VIEW_PERMISSION_TYPE_DOWNLOAD, request_info,
+    base::BindOnce(
+      &ChromeWebViewPermissionHelperDelegate::OnDownloadPermissionResponse,
+      weak_factory_.GetWeakPtr(), std::move(callback)),
+    false /* allowed_by_default */);
 }
 
 void ChromeWebViewPermissionHelperDelegate::OnDownloadPermissionResponse(
     const base::Callback<void(bool)>& callback,
-    const base::Callback<void(bool,bool)>& open_flags_cb,
     bool allow,
     const std::string& user_input) {
   bool open_when_done = user_input == "open";
   bool ask_for_target = user_input == "saveas";
-  if (!open_flags_cb.is_null()) {
-    content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::Bind(open_flags_cb, open_when_done, ask_for_target));
-  }
+
+  content::WebContents* web_contents = web_view_guest()->web_contents();
+  content::DownloadInformation* downloadinfo =
+      web_contents->GetDelegate()->GetDownloadInformation();
+  downloadinfo->open_when_done = open_when_done;
+  downloadinfo->ask_for_target = ask_for_target;
 
   callback.Run(allow && web_view_guest()->attached());
 }
@@ -304,8 +304,7 @@ void ChromeWebViewPermissionHelperDelegate::CancelNotificationPermissionRequest(
 }
 
 int ChromeWebViewPermissionHelperDelegate::RemoveBridgeID(int bridge_id) {
-  std::map<int, int>::iterator bridge_itr =
-      bridge_id_to_request_id_map_.find(bridge_id);
+  auto bridge_itr = bridge_id_to_request_id_map_.find(bridge_id);
   if (bridge_itr == bridge_id_to_request_id_map_.end())
     return webview::kInvalidPermissionRequestID;
 

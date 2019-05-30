@@ -14,11 +14,13 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/post_task.h"
 #include "content/browser/media/capture/desktop_capture_device_uma_types.h"
 #include "content/browser/media/capture/web_contents_audio_input_stream.h"
 #include "content/browser/media/media_internals.h"
 #include "content/browser/renderer_host/media/audio_input_device_manager.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents_media_capture_id.h"
@@ -65,8 +67,8 @@ class AudioInputDelegateImpl::ControllerEventHandler
       : stream_id_(stream_id), weak_delegate_(std::move(weak_delegate)) {}
 
   void OnCreated(bool initially_muted) override {
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::IO},
         base::BindOnce(&AudioInputDelegateImpl::SendCreatedNotification,
                        weak_delegate_, initially_muted));
   }
@@ -76,8 +78,8 @@ class AudioInputDelegateImpl::ControllerEventHandler
     // we log it here.
     LogMessage(stream_id_,
                base::StringPrintf("AIC reports error_code=%d", error_code));
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::IO},
         base::BindOnce(&AudioInputDelegateImpl::OnError, weak_delegate_));
   }
 
@@ -88,9 +90,9 @@ class AudioInputDelegateImpl::ControllerEventHandler
   void OnMuted(bool is_muted) override {
     LogMessage(stream_id_, is_muted ? "OnMuted: State changed to muted"
                                     : "OnMuted: State changed to not muted");
-    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            base::BindOnce(&AudioInputDelegateImpl::OnMuted,
-                                           weak_delegate_, is_muted));
+    base::PostTaskWithTraits(FROM_HERE, {BrowserThread::IO},
+                             base::BindOnce(&AudioInputDelegateImpl::OnMuted,
+                                            weak_delegate_, is_muted));
   }
 
  private:
@@ -116,7 +118,7 @@ std::unique_ptr<media::AudioInputDelegate> AudioInputDelegateImpl::Create(
     const media::AudioParameters& audio_parameters,
     EventHandler* subscriber) {
   // Check if we have the permission to open the device and which device to use.
-  const MediaStreamDevice* device =
+  const blink::MediaStreamDevice* device =
       audio_input_device_manager->GetOpenedDeviceById(session_id);
   if (!device) {
     LogMessage(stream_id, "Permission for stream not granted.");
@@ -168,7 +170,7 @@ AudioInputDelegateImpl::AudioInputDelegateImpl(
     int stream_id,
     bool automatic_gain_control,
     EventHandler* subscriber,
-    const MediaStreamDevice* device,
+    const blink::MediaStreamDevice* device,
     std::unique_ptr<media::AudioInputSyncWriter> writer,
     std::unique_ptr<base::CancelableSyncSocket> foreign_socket)
     : subscriber_(subscriber),
@@ -182,8 +184,8 @@ AudioInputDelegateImpl::AudioInputDelegateImpl(
       render_process_id_(render_process_id),
       weak_factory_(this) {
   // Prevent process backgrounding while audio input is active:
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&NotifyProcessHostStreamAdded, render_process_id_));
 
   controller_event_handler_ = std::make_unique<ControllerEventHandler>(
@@ -206,7 +208,7 @@ AudioInputDelegateImpl::AudioInputDelegateImpl(
         writer_.get(), user_input_monitor);
     DCHECK(controller_);
     // Only count for captures from desktop media picker dialog.
-    if (device->type == MEDIA_GUM_DESKTOP_AUDIO_CAPTURE)
+    if (device->type == blink::MEDIA_GUM_DESKTOP_AUDIO_CAPTURE)
       IncrementDesktopCaptureCounter(TAB_AUDIO_CAPTURER_CREATED);
   } else {
     controller_ = media::AudioInputController::Create(
@@ -216,7 +218,7 @@ AudioInputDelegateImpl::AudioInputDelegateImpl(
 
     // Only count for captures from desktop media picker dialog and system loop
     // back audio.
-    if (device->type == MEDIA_GUM_DESKTOP_AUDIO_CAPTURE &&
+    if (device->type == blink::MEDIA_GUM_DESKTOP_AUDIO_CAPTURE &&
         (media::AudioDeviceDescription::IsLoopbackDevice(device_id))) {
       IncrementDesktopCaptureCounter(SYSTEM_LOOPBACK_AUDIO_CAPTURER_CREATED);
     }
@@ -231,8 +233,8 @@ AudioInputDelegateImpl::~AudioInputDelegateImpl() {
   audio_log_->OnClosed();
   LogMessage(stream_id_, "Closing stream");
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&NotifyProcessHostStreamRemoved, render_process_id_));
 
   // We pass |controller_event_handler_| and |writer_| in here to make sure they

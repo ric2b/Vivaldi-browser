@@ -30,7 +30,7 @@ TestInterfaces::TestInterfaces()
       test_runner_(new TestRunner(this)),
       delegate_(nullptr),
       main_view_(nullptr) {
-  blink::SetLayoutTestMode(true);
+  blink::SetWebTestMode(true);
   // NOTE: please don't put feature specific enable flags here,
   // instead add them to runtime_enabled_features.json5
 
@@ -58,15 +58,15 @@ void TestInterfaces::SetDelegate(WebTestDelegate* delegate) {
 
 void TestInterfaces::BindTo(blink::WebLocalFrame* frame) {
   gamepad_controller_->Install(frame);
-  GCController::Install(frame);
+  GCController::Install(this, frame);
 }
 
 void TestInterfaces::ResetTestHelperControllers() {
   gamepad_controller_->Reset();
   blink::WebCache::Clear();
 
-  for (WebViewTestProxyBase* web_view_test_proxy_base : window_list_)
-    web_view_test_proxy_base->Reset();
+  for (WebViewTestProxy* web_view_test_proxy : window_list_)
+    web_view_test_proxy->Reset();
 }
 
 void TestInterfaces::ResetAll() {
@@ -83,17 +83,27 @@ void TestInterfaces::SetTestIsRunning(bool running) {
 }
 
 void TestInterfaces::ConfigureForTestWithURL(const blink::WebURL& test_url,
-                                             bool generate_pixels,
-                                             bool initial_configuration) {
+                                             bool protocol_mode) {
   std::string spec = GURL(test_url).spec();
-  size_t path_start = spec.rfind("LayoutTests/");
+  size_t path_start = spec.rfind("web_tests/");
   if (path_start != std::string::npos)
     spec = spec.substr(path_start);
+
   bool is_devtools_test = spec.find("/devtools/") != std::string::npos;
   if (is_devtools_test) {
     test_runner_->SetDumpConsoleMessages(false);
   }
-  test_runner_->setShouldGeneratePixelResults(generate_pixels);
+
+  // In protocol mode (see TestInfo::protocol_mode), we dump layout only when
+  // requested by the test. In non-protocol mode, we dump layout by default
+  // because the layout may be the only interesting thing to the user while
+  // we don't dump non-human-readable binary data. In non-protocol mode, we
+  // still generate pixel results (though don't dump them) to let the renderer
+  // execute the same code regardless of the protocol mode, e.g. for ease of
+  // debugging a web test issue.
+  if (!protocol_mode)
+    test_runner_->setShouldDumpAsLayout(true);
+
   // For http/tests/loading/, which is served via httpd and becomes /loading/.
   if (spec.find("/loading/") != std::string::npos)
     test_runner_->setShouldDumpFrameLoadCallbacks(true);
@@ -113,18 +123,14 @@ void TestInterfaces::ConfigureForTestWithURL(const blink::WebURL& test_url,
       spec.find("://web-platform.test") != std::string::npos ||
       spec.find("/harness-tests/wpt/") != std::string::npos)
     test_runner_->set_is_web_platform_tests_mode();
-
-  // The actions below should only be done *once* per test.
-  if (!initial_configuration)
-    return;
 }
 
-void TestInterfaces::WindowOpened(WebViewTestProxyBase* proxy) {
+void TestInterfaces::WindowOpened(WebViewTestProxy* proxy) {
   window_list_.push_back(proxy);
 }
 
-void TestInterfaces::WindowClosed(WebViewTestProxyBase* proxy) {
-  std::vector<WebViewTestProxyBase*>::iterator pos =
+void TestInterfaces::WindowClosed(WebViewTestProxy* proxy) {
+  std::vector<WebViewTestProxy*>::iterator pos =
       std::find(window_list_.begin(), window_list_.end(), proxy);
   if (pos == window_list_.end()) {
     NOTREACHED();
@@ -132,7 +138,7 @@ void TestInterfaces::WindowClosed(WebViewTestProxyBase* proxy) {
   }
   window_list_.erase(pos);
 
-  if (proxy->web_view() == main_view_)
+  if (proxy->webview() == main_view_)
     SetMainView(nullptr);
 }
 
@@ -144,7 +150,7 @@ WebTestDelegate* TestInterfaces::GetDelegate() {
   return delegate_;
 }
 
-const std::vector<WebViewTestProxyBase*>& TestInterfaces::GetWindowList() {
+const std::vector<WebViewTestProxy*>& TestInterfaces::GetWindowList() {
   return window_list_;
 }
 

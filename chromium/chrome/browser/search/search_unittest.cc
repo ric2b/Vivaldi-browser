@@ -10,7 +10,8 @@
 #include <string>
 #include <utility>
 
-#include "base/macros.h"
+#include "base/bind.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/search/instant_service.h"
@@ -27,6 +28,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/navigation_simulator.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
@@ -63,7 +65,8 @@ class SearchTest : public BrowserWithTestWindowTest {
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
     TemplateURLServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-        profile(), &TemplateURLServiceFactory::BuildInstanceFor);
+        profile(),
+        base::BindRepeating(&TemplateURLServiceFactory::BuildInstanceFor));
     TemplateURLService* template_url_service =
         TemplateURLServiceFactory::GetForProfile(profile());
     search_test_utils::WaitForTemplateURLServiceToLoad(template_url_service);
@@ -87,7 +90,7 @@ class SearchTest : public BrowserWithTestWindowTest {
     template_url_service->SetUserSelectedDefaultSearchProvider(template_url);
   }
 
-  bool InInstantProcess(const content::WebContents* contents) {
+  bool InInstantProcess(content::WebContents* contents) {
     InstantService* instant_service =
         InstantServiceFactory::GetForProfile(profile());
     return instant_service->IsInstantProcess(
@@ -114,7 +117,7 @@ TEST_F(SearchTest, ShouldAssignURLToInstantRenderer) {
       {"https://foo.com/", false, "Instant support was removed"},
   };
 
-  for (size_t i = 0; i < arraysize(kTestCases); ++i) {
+  for (size_t i = 0; i < base::size(kTestCases); ++i) {
     const SearchTestCase& test = kTestCases[i];
     EXPECT_EQ(test.expected_result,
               ShouldAssignURLToInstantRenderer(GURL(test.url), profile()))
@@ -139,7 +142,7 @@ TEST_F(SearchTest, ShouldUseProcessPerSiteForInstantURL) {
       {"https://foo.com/", false, "Non-exact path"},
   };
 
-  for (size_t i = 0; i < arraysize(kTestCases); ++i) {
+  for (size_t i = 0; i < base::size(kTestCases); ++i) {
     const SearchTestCase& test = kTestCases[i];
     EXPECT_EQ(test.expected_result,
               ShouldUseProcessPerSiteForInstantURL(GURL(test.url), profile()))
@@ -176,10 +179,10 @@ const struct ProcessIsolationTestCase {
 };
 
 TEST_F(SearchTest, ProcessIsolation) {
-  for (size_t i = 0; i < arraysize(kProcessIsolationTestCases); ++i) {
+  for (size_t i = 0; i < base::size(kProcessIsolationTestCases); ++i) {
     const ProcessIsolationTestCase& test = kProcessIsolationTestCases[i];
     AddTab(browser(), GURL("chrome://blank"));
-    const content::WebContents* contents =
+    content::WebContents* contents =
         browser()->tab_strip_model()->GetActiveWebContents();
 
     // Navigate to start URL.
@@ -213,7 +216,7 @@ TEST_F(SearchTest, ProcessIsolation) {
 }
 
 TEST_F(SearchTest, ProcessIsolation_RendererInitiated) {
-  for (size_t i = 0; i < arraysize(kProcessIsolationTestCases); ++i) {
+  for (size_t i = 0; i < base::size(kProcessIsolationTestCases); ++i) {
     const ProcessIsolationTestCase& test = kProcessIsolationTestCases[i];
     AddTab(browser(), GURL("chrome://blank"));
     content::WebContents* contents =
@@ -233,14 +236,9 @@ TEST_F(SearchTest, ProcessIsolation_RendererInitiated) {
         contents->GetRenderViewHost();
 
     // Navigate to end URL via a renderer-initiated navigation.
-    content::NavigationController* controller = &contents->GetController();
-    content::NavigationController::LoadURLParams load_params(
-        GURL(test.end_url));
-    load_params.is_renderer_initiated = true;
-    load_params.transition_type = ui::PAGE_TRANSITION_LINK;
+    content::NavigationSimulator::NavigateAndCommitFromDocument(
+        GURL(test.end_url), contents->GetMainFrame());
 
-    controller->LoadURLWithParams(load_params);
-    CommitPendingLoad(controller);
     EXPECT_EQ(test.end_in_instant_process, InInstantProcess(contents))
         << test.description;
 
@@ -276,7 +274,7 @@ TEST_F(SearchTest, InstantNTPExtendedEnabled) {
   AddTab(browser(), GURL("chrome://blank"));
   for (const SearchTestCase& test : kInstantNTPTestCases) {
     NavigateAndCommitActiveTab(GURL(test.url));
-    const content::WebContents* contents =
+    content::WebContents* contents =
         browser()->tab_strip_model()->GetWebContentsAt(0);
     EXPECT_EQ(test.expected_result, IsInstantNTP(contents))
         << test.url << " " << test.comment;

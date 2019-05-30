@@ -59,7 +59,8 @@ HRESULT SourceReaderWorker::ReadSampleAsync(DWORD index) {
 HRESULT SourceReaderWorker::SetCurrentPosition(AutoPropVariant & position) {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
 
-  HRESULT hr = source_reader_->SetCurrentPosition(GUID_NULL, position.get_ref());
+  HRESULT hr =
+      source_reader_->SetCurrentPosition(GUID_NULL, position.get_ref());
 
   LOG_IF(ERROR, FAILED(hr))
       << " PROPMEDIA(GPU) : " << __FUNCTION__
@@ -105,7 +106,8 @@ HRESULT SourceReaderWorker::GetNativeMediaType(
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << ": index " << index;
 
-  HRESULT hr = source_reader_->GetNativeMediaType(index, 0, media_type.GetAddressOf());
+  HRESULT hr =
+      source_reader_->GetNativeMediaType(index, 0, media_type.GetAddressOf());
 
   LOG_IF(ERROR, FAILED(hr))
       << " PROPMEDIA(GPU) : " << __FUNCTION__

@@ -21,10 +21,10 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_PLUGINS_DOM_MIME_TYPE_H_
 
 #include "base/memory/scoped_refptr.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/page/plugin_data.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/plugins/plugin_data.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 
 namespace blink {
@@ -39,8 +39,10 @@ class DOMMimeType final : public ScriptWrappable, public ContextClient {
  public:
   static DOMMimeType* Create(LocalFrame* frame,
                              const MimeClassInfo& mime_class_info) {
-    return new DOMMimeType(frame, mime_class_info);
+    return MakeGarbageCollected<DOMMimeType>(frame, mime_class_info);
   }
+
+  DOMMimeType(LocalFrame*, const MimeClassInfo&);
 
   const String& type() const;
   String suffixes() const;
@@ -50,8 +52,6 @@ class DOMMimeType final : public ScriptWrappable, public ContextClient {
   void Trace(blink::Visitor*) override;
 
  private:
-  DOMMimeType(LocalFrame*, const MimeClassInfo&);
-
   Member<const MimeClassInfo> mime_class_info_;
 };
 

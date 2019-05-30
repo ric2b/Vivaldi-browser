@@ -9,12 +9,15 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
 #include "content/browser/webrtc/webrtc_internals_ui_observer.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/web_contents.h"
@@ -30,12 +33,6 @@
 #include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "ui/shell_dialogs/select_file_policy.h"
-
-#if defined(OS_WIN)
-#define IntToStringType base::IntToString16
-#else
-#define IntToStringType base::IntToString
-#endif
 
 using base::ProcessId;
 using std::string;
@@ -102,7 +99,7 @@ WebRTCInternals::WebRTCInternals(int aggregate_updates_ms,
           base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
               switches::kWebRtcLocalEventLogging)),
       event_log_recordings_(false),
-      num_open_connections_(0),
+      num_connected_connections_(0),
       should_block_power_saving_(should_block_power_saving),
       aggregate_updates_ms_(aggregate_updates_ms),
       weak_factory_(this) {
@@ -178,13 +175,12 @@ void WebRTCInternals::OnAddPeerConnection(int render_process_id,
   dict->SetString("constraints", constraints);
   dict->SetString("url", url);
   dict->SetBoolean("isOpen", true);
+  dict->SetBoolean("connected", false);
 
   if (observers_.might_have_observers())
     SendUpdate("addPeerConnection", dict->CreateDeepCopy());
 
   peer_connection_data_.Append(std::move(dict));
-  ++num_open_connections_;
-  UpdateWakeLock();
 
   if (render_process_id_set_.insert(render_process_id).second) {
     RenderProcessHost* host = RenderProcessHost::FromID(render_process_id);
@@ -219,8 +215,16 @@ void WebRTCInternals::OnUpdatePeerConnection(
   if (!record)
     return;
 
-  if (type == "stop")
+  if (type == "iceConnectionStateChange") {
+    if (value == "connected" || value == "checking" || value == "completed") {
+      MaybeMarkPeerConnectionAsConnected(record);
+    } else if (value == "failed" || value == "disconnected" ||
+               value == "closed" || value == "new") {
+      MaybeMarkPeerConnectionAsNotConnected(record);
+    }
+  } else if (type == "stop") {
     MaybeClosePeerConnection(record);
+  }
 
   // Don't update entries if there aren't any observers.
   if (!observers_.might_have_observers())
@@ -421,8 +425,8 @@ void WebRTCInternals::SendUpdate(const char* command,
   pending_updates_.push(PendingUpdate(command, std::move(value)));
 
   if (queue_was_empty) {
-    BrowserThread::PostDelayedTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostDelayedTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&WebRTCInternals::ProcessPendingUpdates,
                        weak_factory_.GetWeakPtr()),
         base::TimeDelta::FromMilliseconds(aggregate_updates_ms_));
@@ -554,9 +558,30 @@ void WebRTCInternals::MaybeClosePeerConnection(base::DictionaryValue* record) {
     return;
 
   record->SetBoolean("isOpen", false);
-  --num_open_connections_;
-  DCHECK_GE(num_open_connections_, 0);
-  UpdateWakeLock();
+  MaybeMarkPeerConnectionAsNotConnected(record);
+}
+
+void WebRTCInternals::MaybeMarkPeerConnectionAsConnected(
+    base::DictionaryValue* record) {
+  bool was_connected = true;
+  record->GetBoolean("connected", &was_connected);
+  if (!was_connected) {
+    ++num_connected_connections_;
+    record->SetBoolean("connected", true);
+    UpdateWakeLock();
+  }
+}
+
+void WebRTCInternals::MaybeMarkPeerConnectionAsNotConnected(
+    base::DictionaryValue* record) {
+  bool was_connected = false;
+  record->GetBoolean("connected", &was_connected);
+  if (was_connected) {
+    record->SetBoolean("connected", false);
+    --num_connected_connections_;
+    DCHECK_GE(num_connected_connections_, 0);
+    UpdateWakeLock();
+  }
 }
 
 void WebRTCInternals::UpdateWakeLock() {
@@ -564,12 +589,13 @@ void WebRTCInternals::UpdateWakeLock() {
   if (!should_block_power_saving_)
     return;
 
-  if (num_open_connections_ == 0) {
+  if (num_connected_connections_ == 0) {
     DVLOG(1)
         << ("Cancel the wake lock on application suspension since no "
             "PeerConnections are active anymore.");
     GetWakeLock()->CancelWakeLock();
-  } else if (num_open_connections_ != 0) {
+  } else {
+    DCHECK_GT(num_connected_connections_, 0);
     DVLOG(1) << ("Preventing the application from being suspended while one or "
                  "more PeerConnections are active.");
     GetWakeLock()->RequestWakeLock();

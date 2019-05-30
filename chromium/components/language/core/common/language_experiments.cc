@@ -19,6 +19,8 @@ const base::Feature kOverrideTranslateTriggerInIndia{
     "OverrideTranslateTriggerInIndia", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kExplicitLanguageAsk{"ExplicitLanguageAsk",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kImprovedGeoLanguageData{"ImprovedGeoLanguageData",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Params:
 const char kBackoffThresholdKey[] = "backoff_threshold";
@@ -26,6 +28,7 @@ const char kOverrideModelKey[] = "override_model";
 const char kEnforceRankerKey[] = "enforce_ranker";
 const char kOverrideModelHeuristicValue[] = "heuristic";
 const char kOverrideModelGeoValue[] = "geo";
+const char kOverrideModelDefaultValue[] = "default";
 
 OverrideLanguageModel GetOverrideLanguageModel() {
   std::map<std::string, std::string> params;

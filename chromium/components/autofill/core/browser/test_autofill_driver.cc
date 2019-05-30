@@ -23,6 +23,10 @@ bool TestAutofillDriver::IsIncognito() const {
   return is_incognito_;
 }
 
+bool TestAutofillDriver::IsInMainFrame() const {
+  return is_in_main_frame_;
+}
+
 net::URLRequestContextGetter* TestAutofillDriver::GetURLRequestContext() {
   return url_request_context_;
 }
@@ -74,20 +78,12 @@ gfx::RectF TestAutofillDriver::TransformBoundingBoxToViewportCoordinates(
   return bounding_box;
 }
 
-void TestAutofillDriver::DidInteractWithCreditCardForm() {
-  did_interact_with_credit_card_form_ = true;
-}
-
-void TestAutofillDriver::ClearDidInteractWithCreditCardForm() {
-  did_interact_with_credit_card_form_ = false;
-}
-
-bool TestAutofillDriver::GetDidInteractWithCreditCardForm() const {
-  return did_interact_with_credit_card_form_;
-}
-
 void TestAutofillDriver::SetIsIncognito(bool is_incognito) {
   is_incognito_ = is_incognito;
+}
+
+void TestAutofillDriver::SetIsInMainFrame(bool is_in_main_frame) {
+  is_in_main_frame_ = is_in_main_frame;
 }
 
 void TestAutofillDriver::SetURLRequestContext(

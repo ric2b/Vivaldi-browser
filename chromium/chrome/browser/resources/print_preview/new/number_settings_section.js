@@ -19,6 +19,7 @@ Polymer({
     inputValid: {
       type: Boolean,
       notify: true,
+      reflectToAttribute: true,
       value: true,
     },
 
@@ -37,6 +38,8 @@ Polymer({
 
     inputLabel: String,
 
+    inputAriaLabel: String,
+
     hintMessage: String,
 
     disabled: Boolean,
@@ -46,17 +49,17 @@ Polymer({
     'input-change': 'onInputChange_',
   },
 
-  /** @return {!HTMLInputElement} The input field element for InputBehavior. */
+  /** @return {!CrInputElement} The cr-input field element for InputBehavior. */
   getInput: function() {
     return this.$.userValue;
   },
 
   /**
-   * @param {!CustomEvent} e Contains the new input value.
+   * @param {!CustomEvent<string>} e Contains the new input value.
    * @private
    */
   onInputChange_: function(e) {
-    this.inputString_ = /** @type {string} */ (e.detail);
+    this.inputString_ = e.detail;
   },
 
   /**
@@ -71,16 +74,24 @@ Polymer({
    * @param {!KeyboardEvent} e The keyboard event
    */
   onKeydown_: function(e) {
-    if (e.key == '.' || e.key == 'e' || e.key == '-')
+    if (['.', 'e', 'E', '-', '+'].includes(e.key)) {
       e.preventDefault();
+      return;
+    }
+
+    if (e.key == 'Enter') {
+      this.onBlur_();
+    }
   },
 
   /** @private */
   onBlur_: function() {
-    if (this.inputString_ == '')
+    if (this.inputString_ == '') {
       this.set('inputString_', this.defaultValue);
-    if (this.$.userValue.value == '')
+    }
+    if (this.$.userValue.value == '') {
       this.$.userValue.value = this.defaultValue;
+    }
   },
 
   /** @private */
@@ -97,20 +108,12 @@ Polymer({
 
   /**
    * @return {boolean} Whether input value represented by inputString_ is
-   *     valid.
+   *     valid and non-empty, so that it can be used to update the setting.
    * @private
    */
   computeValid_: function() {
     // Make sure value updates first, in case inputString_ was updated by JS.
     this.$.userValue.value = this.inputString_;
-    return this.$.userValue.validity.valid && this.inputString_ != '';
-  },
-
-  /**
-   * @return {boolean} Whether error message should be hidden.
-   * @private
-   */
-  hintHidden_: function() {
-    return this.inputValid || this.inputString_ == '';
+    return !this.$.userValue.invalid;
   },
 });

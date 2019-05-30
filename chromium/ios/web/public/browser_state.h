@@ -12,10 +12,12 @@
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/proxy_resolving_socket.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
-#include "services/service_manager/embedder/embedded_service_info.h"
+#include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/mojom/service.mojom.h"
 
 namespace base {
 class FilePath;
+class Token;
 }
 
 namespace net {
@@ -23,8 +25,6 @@ class URLRequestContextGetter;
 }
 
 namespace network {
-class NetworkChangeManager;
-class NetworkConnectionTracker;
 class SharedURLLoaderFactory;
 class WeakWrapperSharedURLLoaderFactory;
 }  // namespace network
@@ -70,9 +70,6 @@ class BrowserState : public base::SupportsUserData {
   // Returns a CookieManager that is backed by GetRequestContext.
   network::mojom::CookieManager* GetCookieManager();
 
-  // Returns the NetworkConnectionTracker instance for this BrowserState.
-  network::NetworkConnectionTracker* GetNetworkConnectionTracker();
-
   // Binds a ProxyResolvingSocketFactory request to NetworkContext.
   void GetProxyResolvingSocketFactory(
       network::mojom::ProxyResolvingSocketFactoryRequest request);
@@ -86,11 +83,12 @@ class BrowserState : public base::SupportsUserData {
   static BrowserState* FromSupportsUserData(
       base::SupportsUserData* supports_user_data);
 
-  // Returns a Service User ID associated with this BrowserState. This ID is
-  // not persistent across runs. See
+  // Returns a service instance group associated with this BrowserState. This ID
+  // is not persistent across runs. See
   // services/service_manager/public/mojom/connector.mojom. By default,
-  // this user id is randomly generated when Initialize() is called.
-  static const std::string& GetServiceUserIdFor(BrowserState* browser_state);
+  // this instance group ID is randomly generated when Initialize() is called.
+  static const base::Token& GetServiceInstanceGroupFor(
+      BrowserState* browser_state);
 
   // Returns a Connector associated with this BrowserState, which can be used
   // to connect to service instances bound as this user.
@@ -102,18 +100,17 @@ class BrowserState : public base::SupportsUserData {
   static ServiceManagerConnection* GetServiceManagerConnectionFor(
       BrowserState* browser_state);
 
-  using StaticServiceMap =
-      std::map<std::string, service_manager::EmbeddedServiceInfo>;
-
-  // Registers per-browser-state services to be loaded by the Service Manager.
-  virtual void RegisterServices(StaticServiceMap* services) {}
+  // Handles an incoming request for a per-browser-state service.
+  virtual std::unique_ptr<service_manager::Service> HandleServiceRequest(
+      const std::string& service_name,
+      service_manager::mojom::ServiceRequest request);
 
  protected:
   BrowserState();
 
-  // Makes the Service Manager aware of this BrowserState, and assigns a user
-  // ID number to it. Must be called for each BrowserState created. |path|
-  // should be the same path that would be returned by GetStatePath().
+  // Makes the Service Manager aware of this BrowserState, and assigns an
+  // instance group ID to it. Must be called for each BrowserState created.
+  // |path| should be the same path that would be returned by GetStatePath().
   static void Initialize(BrowserState* browser_state,
                          const base::FilePath& path);
 
@@ -134,12 +131,6 @@ class BrowserState : public base::SupportsUserData {
   scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
       shared_url_loader_factory_;
   network::mojom::NetworkContextPtr network_context_;
-
-  // Acts as a proxy between the NetworkChangeNotifier and
-  // NetworkConnectionTracker.
-  std::unique_ptr<network::NetworkChangeManager> network_change_manager_;
-  std::unique_ptr<network::NetworkConnectionTracker>
-      network_connection_tracker_;
 
   // Owns the network::NetworkContext that backs |url_loader_factory_|. Created
   // on the UI thread, destroyed on the IO thread.

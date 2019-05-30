@@ -49,11 +49,11 @@ class PLATFORM_EXPORT AudioSourceProvider {
 
   // provideInput() gets called repeatedly to render time-slices of a continuous
   // audio stream.
-  virtual void ProvideInput(AudioBus* bus, size_t frames_to_process) = 0;
+  virtual void ProvideInput(AudioBus* bus, uint32_t frames_to_process) = 0;
 
   // If a client is set, we call it back when the audio format is available or
   // changes.
-  virtual void SetClient(AudioSourceProviderClient*){};
+  virtual void SetClient(AudioSourceProviderClient*) {}
 
   virtual ~AudioSourceProvider() = default;
 };

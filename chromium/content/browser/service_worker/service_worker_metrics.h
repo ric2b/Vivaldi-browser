@@ -14,10 +14,10 @@
 #include "content/browser/service_worker/service_worker_context_request_handler.h"
 #include "content/browser/service_worker/service_worker_database.h"
 #include "content/browser/service_worker/service_worker_installed_script_reader.h"
-#include "content/common/service_worker/embedded_worker.mojom.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/browser/service_worker_context.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/embedded_worker.mojom.h"
 #include "ui/base/page_transition_types.h"
 
 class GURL;
@@ -28,46 +28,6 @@ enum class EmbeddedWorkerStatus;
 
 class ServiceWorkerMetrics {
  public:
-  // Used for UMA. Append-only.
-  enum class MainResourceRequestDestination {
-    // The request was routed to the service worker. Fetch event dispatching
-    // possibly succeeded or failed.
-    // ServiceWorker.FetchEvent.MainResource.Status was logged with the result
-    // of the dispatch.
-    kServiceWorker = 0,
-
-    // The request was routed to network for the specified reason.
-    kNetworkBecauseNoActiveVersion = 1,
-    kNetworkBecauseNoActiveVersionAfterContinuing = 2,
-    kNetworkBecauseNoContext = 3,
-    kNetworkBecauseNoFetchEventHandler = 4,
-    kNetworkBecauseNoProvider = 5,
-    kNetworkBecauseNoProviderAfterContinuing = 6,
-    kNetworkBecauseNoRegistration = 7,
-    kNetworkBecauseNotAllowed = 8,
-    kNetworkBecauseNotSecure = 9,
-
-    // The loader couldn't dispatch the fetch event because there was no active
-    // worker.
-    kErrorNoActiveWorkerFromDelegate = 10,
-    // The loader couldn't dispatch the fetch event because the request body
-    // failed.
-    kErrorRequestBodyFailed = 11,
-
-    // The request was being routed to the service worker, but the handler was
-    // destroyed before the result of the fetch event dispatch was received.
-    kAbortedWhileDispatchingFetchEvent = 12,
-    // The handler was destroyed without dispatching a fetch event to the
-    // service
-    // worker.
-    kAbortedWithoutDispatchingFetchEvent = 13,
-
-    // The request was not routed because it was cancelled.
-    kJobWasCancelled = 14,
-
-    kMaxValue = 14,
-  };
-
   // Used for UMA. Append-only.
   enum ReadResponseResult {
     READ_OK,
@@ -406,12 +366,6 @@ class ServiceWorkerMetrics {
                                   base::TimeDelta time,
                                   bool was_handled);
 
-  // Records the time taken between sending an event IPC from the browser
-  // process to a Service Worker and executing the event handler in the Service
-  // Worker.
-  static void RecordEventDispatchingDelay(EventType event,
-                                          base::TimeDelta time);
-
   // Records the result of dispatching a fetch event to a service worker.
   static void RecordFetchEventStatus(bool is_main_resource,
                                      blink::ServiceWorkerStatusCode status);
@@ -473,20 +427,12 @@ class ServiceWorkerMetrics {
 
   static void RecordRuntime(base::TimeDelta time);
 
-  // Records when an installed service worker imports a script that was not
-  // previously installed.
-  // TODO(falken): Remove after this is deprecated. https://crbug.com/737044
-  static void RecordUninstalledScriptImport(const GURL& url);
-
   // Records the result of starting service worker for a navigation hint.
   static void RecordStartServiceWorkerForNavigationHintResult(
       StartServiceWorkerForNavigationHintResult result);
 
   // Records the number of origins with a registered service worker.
   static void RecordRegisteredOriginCount(size_t origin_count);
-
-  static void RecordMainResourceRequestDestination(
-      MainResourceRequestDestination destination);
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(ServiceWorkerMetrics);

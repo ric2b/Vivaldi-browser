@@ -6,23 +6,30 @@
 #define UI_VIEWS_COCOA_BRIDGED_NATIVE_WIDGET_HOST_IMPL_H_
 
 #include <memory>
+#include <vector>
 
+#include "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
 #include "ui/accelerated_widget_mac/accelerated_widget_mac.h"
 #include "ui/accelerated_widget_mac/display_link_mac.h"
+#include "ui/base/cocoa/accessibility_focus_overrider.h"
+#include "ui/base/cocoa/ns_view_ids.h"
 #include "ui/base/ime/input_method_delegate.h"
 #include "ui/compositor/layer_owner.h"
-#include "ui/views/cocoa/bridged_native_widget_host.h"
+#include "ui/views/cocoa/bridge_factory_host.h"
+#include "ui/views/cocoa/drag_drop_client_mac.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/views_export.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_observer.h"
+#include "ui/views_bridge_mac/bridged_native_widget_host_helper.h"
+#include "ui/views_bridge_mac/mojo/bridged_native_widget.mojom.h"
+#include "ui/views_bridge_mac/mojo/bridged_native_widget_host.mojom.h"
 
-namespace views_bridge_mac {
-namespace mojom {
-class BridgedNativeWidget;
-}  // namespace mojom
-}  // namespace views_bridge_mac
+@class NativeWidgetMacNSWindow;
+@class NSAccessibilityRemoteUIElement;
+@class NSView;
 
 namespace ui {
 class RecyclableCompositorMac;
@@ -30,32 +37,98 @@ class RecyclableCompositorMac;
 
 namespace views {
 
-class BridgedNativeWidget;
+class BridgedNativeWidgetImpl;
 class NativeWidgetMac;
+class TextInputHost;
 
 // The portion of NativeWidgetMac that lives in the browser process. This
-// communicates to the BridgedNativeWidget, which interacts with the Cocoa
+// communicates to the BridgedNativeWidgetImpl, which interacts with the Cocoa
 // APIs, and which may live in an app shim process.
 class VIEWS_EXPORT BridgedNativeWidgetHostImpl
-    : public BridgedNativeWidgetHost,
+    : public views_bridge_mac::BridgedNativeWidgetHostHelper,
+      public BridgeFactoryHost::Observer,
+      public views_bridge_mac::mojom::BridgedNativeWidgetHost,
       public DialogObserver,
       public FocusChangeListener,
       public ui::internal::InputMethodDelegate,
+      public ui::AccessibilityFocusOverrider::Client,
       public ui::LayerDelegate,
       public ui::LayerOwner,
       public ui::AcceleratedWidgetMacNSView {
  public:
-  // Creates one side of the bridge. |parent| must not be NULL.
-  explicit BridgedNativeWidgetHostImpl(NativeWidgetMac* parent);
+  // Retrieves the bridge host associated with the given NativeWindow. Returns
+  // null if the supplied handle has no associated Widget.
+  static BridgedNativeWidgetHostImpl* GetFromNativeWindow(
+      gfx::NativeWindow window);
+  static BridgedNativeWidgetHostImpl* GetFromNativeView(gfx::NativeView view);
+
+  // Unique integer id handles are used to bridge between the
+  // BridgedNativeWidgetHostImpl in one process and the BridgedNativeWidgetHost
+  // potentially in another.
+  static BridgedNativeWidgetHostImpl* GetFromId(
+      uint64_t bridged_native_widget_id);
+  uint64_t bridged_native_widget_id() const { return widget_id_; }
+
+  // Creates one side of the bridge. |owner| must not be NULL.
+  explicit BridgedNativeWidgetHostImpl(NativeWidgetMac* owner);
   ~BridgedNativeWidgetHostImpl() override;
 
-  // Provide direct access to the BridgedNativeWidget that this is hosting.
-  // TODO(ccameron): Remove all accesses to this member, and replace them
-  // with methods that may be sent across processes.
-  BridgedNativeWidget* bridge_impl() const { return bridge_impl_.get(); }
+  // The NativeWidgetMac that owns |this|.
+  views::NativeWidgetMac* native_widget_mac() const {
+    return native_widget_mac_;
+  }
+  BridgedNativeWidgetHostImpl* parent() const { return parent_; }
+  std::vector<BridgedNativeWidgetHostImpl*> children() const {
+    return children_;
+  }
+
+  // The bridge factory that was used to create the true NSWindow for this
+  // widget. This is nullptr for in-process windows.
+  BridgeFactoryHost* bridge_factory_host() const {
+    return bridge_factory_host_;
+  }
+
+  TextInputHost* text_input_host() const { return text_input_host_.get(); }
+
+  // A NSWindow that is guaranteed to exist in this process. If the bridge
+  // object for this host is in this process, then this points to the bridge's
+  // NSWindow. Otherwise, it mirrors the id and bounds of the child window.
+  NativeWidgetMacNSWindow* GetLocalNSWindow() const;
+
+  // Return the accessibility object for the content NSView.
+  gfx::NativeViewAccessible GetNativeViewAccessibleForNSView() const;
+
+  // Return the accessibility object for the NSWindow.
+  gfx::NativeViewAccessible GetNativeViewAccessibleForNSWindow() const;
+
+  // The mojo interface through which to communicate with the underlying
+  // NSWindow and NSView.
   views_bridge_mac::mojom::BridgedNativeWidget* bridge() const;
 
+  // Direct access to the BridgedNativeWidgetImpl that this is hosting.
+  // TODO(ccameron): Remove all accesses to this member, and replace them
+  // with methods that may be sent across processes.
+  BridgedNativeWidgetImpl* bridge_impl() const { return bridge_impl_.get(); }
+
+  TooltipManager* tooltip_manager() { return tooltip_manager_.get(); }
+
+  DragDropClientMac* drag_drop_client() const {
+    return drag_drop_client_.get();
+  }
+
+  // Create and set the bridge object to be in this process.
+  void CreateLocalBridge(base::scoped_nsobject<NativeWidgetMacNSWindow> window);
+
+  // Create and set the bridge object to be potentially in another process.
+  void CreateRemoteBridge(
+      BridgeFactoryHost* bridge_factory_host,
+      views_bridge_mac::mojom::CreateWindowParamsPtr window_create_params);
+
   void InitWindow(const Widget::InitParams& params);
+
+  // Close the window immediately. This function may result in |this| being
+  // deleted.
+  void CloseWindowNow();
 
   // Changes the bounds of the window and the hosted layer if present. The
   // origin is a location in screen coordinates except for "child" windows,
@@ -75,6 +148,9 @@ class VIEWS_EXPORT BridgedNativeWidgetHostImpl
   // Set the root view (set during initialization and un-set during teardown).
   void SetRootView(views::View* root_view);
 
+  // Return the id through which the NSView for |root_view_| may be looked up.
+  uint64_t GetRootViewNSViewId() const { return root_view_id_; }
+
   // Initialize the ui::Compositor and ui::Layer.
   void CreateCompositor(const Widget::InitParams& params);
 
@@ -93,14 +169,12 @@ class VIEWS_EXPORT BridgedNativeWidgetHostImpl
 
   // Geometry of the window, in DIPs.
   const gfx::Rect& GetWindowBoundsInScreen() const {
-    DCHECK(has_received_window_geometry_);
     return window_bounds_in_screen_;
   }
 
   // Geometry of the content area of the window, in DIPs. Note that this is not
   // necessarily the same as the views::View's size.
   const gfx::Rect& GetContentBoundsInScreen() const {
-    DCHECK(has_received_window_geometry_);
     return content_bounds_in_screen_;
   }
 
@@ -111,42 +185,79 @@ class VIEWS_EXPORT BridgedNativeWidgetHostImpl
   // fullscreen or transitioning between fullscreen states.
   gfx::Rect GetRestoredBounds() const;
 
+  // Set |parent_| and update the old and new parents' |children_|. It is valid
+  // to set |new_parent| to nullptr. Propagate this to the BridgedNativeWidget.
+  void SetParent(BridgedNativeWidgetHostImpl* new_parent);
+
+  // Properties set and queried by views. Not actually native.
+  void SetNativeWindowProperty(const char* name, void* value);
+  void* GetNativeWindowProperty(const char* name) const;
+
+  // Updates |associated_views_| on NativeViewHost::Attach()/Detach().
+  void SetAssociationForView(const views::View* view, NSView* native_view);
+  void ClearAssociationForView(const views::View* view);
+
+  // Sorts child NSViews according to NativeViewHosts order in views hierarchy.
+  void ReorderChildViews();
+
   bool IsVisible() const { return is_visible_; }
   bool IsMiniaturized() const { return is_miniaturized_; }
   bool IsWindowKey() const { return is_window_key_; }
   bool IsMouseCaptureActive() const { return is_mouse_capture_active_; }
 
+  // Used by NativeWidgetPrivate::GetGlobalCapture.
+  static NSView* GetGlobalCaptureView();
+
  private:
-  gfx::Vector2d GetBoundsOffsetForParent() const;
+  friend class TextInputHost;
+
   void UpdateCompositorProperties();
   void DestroyCompositor();
+  void RankNSViewsRecursive(View* view, std::map<NSView*, int>* rank) const;
 
-  // views::BridgedNativeWidgetHost:
-  NSView* GetNativeViewAccessible() override;
-  void OnVisibilityChanged(bool visible) override;
-  void SetViewSize(const gfx::Size& new_size) override;
-  void SetKeyboardAccessible(bool enabled) override;
-  void SetIsFirstResponder(bool is_first_responder) override;
-  void OnMouseCaptureActiveChanged(bool capture_is_active) override;
-  void OnScrollEvent(const ui::ScrollEvent& const_event) override;
-  void OnMouseEvent(const ui::MouseEvent& const_event) override;
-  void OnGestureEvent(const ui::GestureEvent& const_event) override;
-  void DispatchKeyEvent(const ui::KeyEvent& const_event,
-                        bool* event_handled) override;
-  void DispatchKeyEventToMenuController(const ui::KeyEvent& const_event,
-                                        bool* event_swallowed,
-                                        bool* event_handled) override;
-  void GetHasMenuController(bool* has_menu_controller) override;
-  void GetIsDraggableBackgroundAt(const gfx::Point& location_in_content,
-                                  bool* is_draggable_background) override;
-  void GetTooltipTextAt(const gfx::Point& location_in_content,
-                        base::string16* new_tooltip_text) override;
+  // If we are accessing the BridgedNativeWidget through mojo, then
+  // |local_window_| is not the true window that is resized. This function
+  // updates the frame of |local_window_| to keep it in sync for any native
+  // calls that may use it (e.g, for context menu positioning).
+  void UpdateLocalWindowFrame(const gfx::Rect& frame);
+
+  // BridgedNativeWidgetHostHelper:
+  id GetNativeViewAccessible() override;
+  void DispatchKeyEvent(ui::KeyEvent* event) override;
+  bool DispatchKeyEventToMenuController(ui::KeyEvent* event) override;
   void GetWordAt(const gfx::Point& location_in_content,
                  bool* found_word,
                  gfx::DecoratedText* decorated_word,
                  gfx::Point* baseline_point) override;
-  void GetWidgetIsModal(bool* widget_is_modal) override;
-  void GetIsFocusedViewTextual(bool* is_textual) override;
+  views_bridge_mac::DragDropClient* GetDragDropClient() override;
+  ui::TextInputClient* GetTextInputClient() override;
+
+  // BridgeFactoryHost::Observer:
+  void OnBridgeFactoryHostDestroying(BridgeFactoryHost* host) override;
+
+  // views_bridge_mac::mojom::BridgedNativeWidgetHost:
+  void OnVisibilityChanged(bool visible) override;
+  void OnWindowNativeThemeChanged() override;
+  void OnViewSizeChanged(const gfx::Size& new_size) override;
+  bool GetSheetOffsetY(int32_t* offset_y) override;
+  void SetKeyboardAccessible(bool enabled) override;
+  void OnIsFirstResponderChanged(bool is_first_responder) override;
+  void OnMouseCaptureActiveChanged(bool capture_is_active) override;
+  void OnScrollEvent(std::unique_ptr<ui::Event> event) override;
+  void OnMouseEvent(std::unique_ptr<ui::Event> event) override;
+  void OnGestureEvent(std::unique_ptr<ui::Event> event) override;
+  bool DispatchKeyEventRemote(std::unique_ptr<ui::Event> event,
+                              bool* event_handled) override;
+  bool DispatchKeyEventToMenuControllerRemote(std::unique_ptr<ui::Event> event,
+                                              bool* event_swallowed,
+                                              bool* event_handled) override;
+  bool GetHasMenuController(bool* has_menu_controller) override;
+  bool GetIsDraggableBackgroundAt(const gfx::Point& location_in_content,
+                                  bool* is_draggable_background) override;
+  bool GetTooltipTextAt(const gfx::Point& location_in_content,
+                        base::string16* new_tooltip_text) override;
+  bool GetWidgetIsModal(bool* widget_is_modal) override;
+  bool GetIsFocusedViewTextual(bool* is_textual) override;
   void OnWindowGeometryChanged(
       const gfx::Rect& window_bounds_in_screen_dips,
       const gfx::Rect& content_bounds_in_screen_dips) override;
@@ -161,22 +272,91 @@ class VIEWS_EXPORT BridgedNativeWidgetHostImpl
                                 bool is_content_first_responder,
                                 bool full_keyboard_access_enabled) override;
   void DoDialogButtonAction(ui::DialogButton button) override;
-  void GetDialogButtonInfo(ui::DialogButton type,
+  bool GetDialogButtonInfo(ui::DialogButton type,
                            bool* button_exists,
                            base::string16* button_label,
                            bool* is_button_enabled,
                            bool* is_button_default) override;
-  void GetDoDialogButtonsExist(bool* buttons_exist) override;
+  bool GetDoDialogButtonsExist(bool* buttons_exist) override;
+  bool GetShouldShowWindowTitle(bool* should_show_window_title) override;
+  bool GetCanWindowBecomeKey(bool* can_window_become_key) override;
+  bool GetAlwaysRenderWindowAsKey(bool* always_render_as_key) override;
+  bool GetCanWindowClose(bool* can_window_close) override;
+  bool GetWindowFrameTitlebarHeight(bool* override_titlebar_height,
+                                    float* titlebar_height) override;
+  void OnFocusWindowToolbar() override;
+  void SetRemoteAccessibilityTokens(
+      const std::vector<uint8_t>& window_token,
+      const std::vector<uint8_t>& view_token) override;
+  bool GetRootViewAccessibilityToken(int64_t* pid,
+                                     std::vector<uint8_t>* token) override;
+  bool ValidateUserInterfaceItem(
+      int32_t command,
+      views_bridge_mac::mojom::ValidateUserInterfaceItemResultPtr* out_result)
+      override;
+  bool ExecuteCommand(int32_t command,
+                      WindowOpenDisposition window_open_disposition,
+                      bool is_before_first_responder,
+                      bool* was_executed) override;
+  bool HandleAccelerator(const ui::Accelerator& accelerator,
+                         bool require_priority_handler,
+                         bool* was_handled) override;
+
+  // views_bridge_mac::mojom::BridgedNativeWidgetHost, synchronous callbacks:
+  void GetSheetOffsetY(GetSheetOffsetYCallback callback) override;
+  void DispatchKeyEventRemote(std::unique_ptr<ui::Event> event,
+                              DispatchKeyEventRemoteCallback callback) override;
+  void DispatchKeyEventToMenuControllerRemote(
+      std::unique_ptr<ui::Event> event,
+      DispatchKeyEventToMenuControllerRemoteCallback callback) override;
+  void GetHasMenuController(GetHasMenuControllerCallback callback) override;
+  void GetIsDraggableBackgroundAt(
+      const gfx::Point& location_in_content,
+      GetIsDraggableBackgroundAtCallback callback) override;
+  void GetTooltipTextAt(const gfx::Point& location_in_content,
+                        GetTooltipTextAtCallback callback) override;
+  void GetWidgetIsModal(GetWidgetIsModalCallback callback) override;
+  void GetIsFocusedViewTextual(
+      GetIsFocusedViewTextualCallback callback) override;
+  void GetDialogButtonInfo(ui::DialogButton button,
+                           GetDialogButtonInfoCallback callback) override;
+  void GetDoDialogButtonsExist(
+      GetDoDialogButtonsExistCallback callback) override;
+  void GetShouldShowWindowTitle(
+      GetShouldShowWindowTitleCallback callback) override;
+  void GetCanWindowBecomeKey(GetCanWindowBecomeKeyCallback callback) override;
+  void GetAlwaysRenderWindowAsKey(
+      GetAlwaysRenderWindowAsKeyCallback callback) override;
+  void GetCanWindowClose(GetCanWindowCloseCallback callback) override;
+  void GetWindowFrameTitlebarHeight(
+      GetWindowFrameTitlebarHeightCallback callback) override;
+  void GetRootViewAccessibilityToken(
+      GetRootViewAccessibilityTokenCallback callback) override;
+  void ValidateUserInterfaceItem(
+      int32_t command,
+      ValidateUserInterfaceItemCallback callback) override;
+  void ExecuteCommand(int32_t command,
+                      WindowOpenDisposition window_open_disposition,
+                      bool is_before_first_responder,
+                      ExecuteCommandCallback callback) override;
+  void HandleAccelerator(const ui::Accelerator& accelerator,
+                         bool require_priority_handler,
+                         HandleAcceleratorCallback callback) override;
 
   // DialogObserver:
-  void OnDialogModelChanged() override;
+  void OnDialogChanged() override;
 
   // FocusChangeListener:
   void OnWillChangeFocus(View* focused_before, View* focused_now) override;
   void OnDidChangeFocus(View* focused_before, View* focused_now) override;
 
   // ui::internal::InputMethodDelegate:
-  ui::EventDispatchDetails DispatchKeyEventPostIME(ui::KeyEvent* key) override;
+  ui::EventDispatchDetails DispatchKeyEventPostIME(
+      ui::KeyEvent* key,
+      DispatchKeyEventPostIMECallback callback) override;
+
+  // ui::AccessibilityFocusOverrider::Client:
+  id GetAccessibilityFocusedUIElement() override;
 
   // ui::LayerDelegate:
   void OnPaintLayer(const ui::PaintContext& context) override;
@@ -186,18 +366,56 @@ class VIEWS_EXPORT BridgedNativeWidgetHostImpl
   // ui::AcceleratedWidgetMacNSView:
   void AcceleratedWidgetCALayerParamsUpdated() override;
 
+  // The id that this bridge may be looked up from.
+  const uint64_t widget_id_;
   views::NativeWidgetMac* const native_widget_mac_;  // Weak. Owns |this_|.
+
+  // Parent and child widgets.
+  BridgedNativeWidgetHostImpl* parent_ = nullptr;
+  std::vector<BridgedNativeWidgetHostImpl*> children_;
+
+  // The factory that was used to create |bridge_ptr_|. This must be the same
+  // as |parent_->bridge_factory_host_|.
+  BridgeFactoryHost* bridge_factory_host_ = nullptr;
 
   Widget::InitParams::Type widget_type_ = Widget::InitParams::TYPE_WINDOW;
 
-  views::View* root_view_ = nullptr;  // Weak. Owned by |native_widget_mac_|.
+  // The id that may be used to look up the NSView for |root_view_|.
+  const uint64_t root_view_id_;
 
-  // TODO(ccameron): Rather than instantiate a BridgedNativeWidget here,
-  // we will instantiate a mojo BridgedNativeWidget interface to a Cocoa
+  // Weak. Owned by |native_widget_mac_|.
+  views::View* root_view_ = nullptr;
+
+  std::unique_ptr<DragDropClientMac> drag_drop_client_;
+
+  // The mojo pointer to a BridgedNativeWidget, which may exist in another
+  // process.
+  views_bridge_mac::mojom::BridgedNativeWidgetAssociatedPtr bridge_ptr_;
+
+  // Remote accessibility objects corresponding to the NSWindow and its root
+  // NSView.
+  base::scoped_nsobject<NSAccessibilityRemoteUIElement>
+      remote_window_accessible_;
+  base::scoped_nsobject<NSAccessibilityRemoteUIElement> remote_view_accessible_;
+
+  // Used to force the NSApplication's focused accessibility element to be the
+  // views::Views accessibility tree when the NSView for this is focused.
+  ui::AccessibilityFocusOverrider accessibility_focus_overrider_;
+
+  // TODO(ccameron): Rather than instantiate a BridgedNativeWidgetImpl here,
+  // we will instantiate a mojo BridgedNativeWidgetImpl interface to a Cocoa
   // instance that may be in another process.
-  std::unique_ptr<BridgedNativeWidget> bridge_impl_;
+  std::unique_ptr<BridgedNativeWidgetImpl> bridge_impl_;
 
+  // Window that is guaranteed to exist in this process (see GetLocalNSWindow).
+  base::scoped_nsobject<NativeWidgetMacNSWindow> local_window_;
+
+  // Id mapping for |local_window_|'s content NSView.
+  std::unique_ptr<ui::ScopedNSViewIdMapping> local_view_id_mapping_;
+
+  std::unique_ptr<TooltipManager> tooltip_manager_;
   std::unique_ptr<ui::InputMethod> input_method_;
+  std::unique_ptr<TextInputHost> text_input_host_;
   FocusManager* focus_manager_ = nullptr;  // Weak. Owned by our Widget.
 
   base::string16 window_title_;
@@ -208,8 +426,13 @@ class VIEWS_EXPORT BridgedNativeWidgetHostImpl
   // Display link for getting vsync info for |display_|.
   scoped_refptr<ui::DisplayLinkMac> display_link_;
 
+  // Structure to avoid sending IOSurface mach ports over mojo.
+  // https://crbug.com/942213
+  class IOSurfaceToRemoteLayerInterceptor;
+  std::unique_ptr<IOSurfaceToRemoteLayerInterceptor>
+      io_surface_to_remote_layer_interceptor_;
+
   // The geometry of the window and its contents view, in screen coordinates.
-  bool has_received_window_geometry_ = false;
   gfx::Rect window_bounds_in_screen_;
   gfx::Rect content_bounds_in_screen_;
   bool is_visible_ = false;
@@ -222,6 +445,14 @@ class VIEWS_EXPORT BridgedNativeWidgetHostImpl
 
   std::unique_ptr<ui::RecyclableCompositorMac> compositor_;
 
+  // Properties used by Set/GetNativeWindowProperty.
+  std::map<std::string, void*> native_window_properties_;
+
+  // Contains NativeViewHost->gfx::NativeView associations.
+  std::map<const views::View*, NSView*> associated_views_;
+
+  mojo::AssociatedBinding<views_bridge_mac::mojom::BridgedNativeWidgetHost>
+      host_mojo_binding_;
   DISALLOW_COPY_AND_ASSIGN(BridgedNativeWidgetHostImpl);
 };
 

@@ -67,11 +67,7 @@ component("crypto") {
     "signature_verifier.h",
     "symmetric_key.cc",
     "symmetric_key.h",
-    "wincrypt_shim.h",
   ]
-
-  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
   deps = [
     ":platform",
@@ -154,8 +150,6 @@ test("crypto_unittests") {
       "nss_util_unittest.cc",
     ]
   }
-
-  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
   deps = [
     ":crypto",

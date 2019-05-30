@@ -18,8 +18,6 @@ const int kSampleRate = 48000;
 const int kInputPacketSize = 48;
 const int kOutputPacketSize = 24;
 
-#if GTEST_HAS_COMBINE
-
 class AudioShifterTest :
       public ::testing::TestWithParam<::testing::tuple<int, int, int, bool> > {
  public:
@@ -199,14 +197,11 @@ TEST_P(AudioShifterTest, UnderOverFlow) {
 
 // Note: First argument is optional and intentionally left blank.
 // (it's a prefix for the generated test cases)
-INSTANTIATE_TEST_CASE_P(
-    ,
-    AudioShifterTest,
-    ::testing::Combine(::testing::Range(0, 3),
-                       ::testing::Range(0, 3),
-                       ::testing::Range(0, 3),
-                       ::testing::Bool()));
-
-#endif
+INSTANTIATE_TEST_SUITE_P(,
+                         AudioShifterTest,
+                         ::testing::Combine(::testing::Range(0, 3),
+                                            ::testing::Range(0, 3),
+                                            ::testing::Range(0, 3),
+                                            ::testing::Bool()));
 
 }  // namespace media

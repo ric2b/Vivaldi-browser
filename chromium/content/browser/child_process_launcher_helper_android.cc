@@ -7,14 +7,17 @@
 #include "base/android/apk_assets.h"
 #include "base/android/application_status_listener.h"
 #include "base/android/jni_array.h"
+#include "base/bind.h"
 #include "base/i18n/icu_util.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
+#include "base/task/post_task.h"
 #include "content/browser/child_process_launcher.h"
 #include "content/browser/child_process_launcher_helper.h"
 #include "content/browser/child_process_launcher_helper_posix.h"
 #include "content/browser/posix_file_descriptor_info_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_launcher_utils.h"
 #include "content/public/browser/render_process_host.h"
@@ -95,6 +98,7 @@ ChildProcessLauncherHelper::Process
 ChildProcessLauncherHelper::LaunchProcessOnLauncherThread(
     const base::LaunchOptions& options,
     std::unique_ptr<PosixFileDescriptorInfo> files_to_register,
+    bool can_use_warm_up_connection,
     bool* is_synchronous_launch,
     int* launch_result) {
   *is_synchronous_launch = false;
@@ -121,22 +125,24 @@ ChildProcessLauncherHelper::LaunchProcessOnLauncherThread(
     int id = files_to_register->GetIDAt(i);
     const auto& region = files_to_register->GetRegionAt(i);
     bool auto_close = files_to_register->OwnsFD(fd);
+    if (auto_close) {
+      ignore_result(files_to_register->ReleaseFD(fd).release());
+    }
+
     ScopedJavaLocalRef<jobject> j_file_info =
         Java_ChildProcessLauncherHelperImpl_makeFdInfo(
             env, id, fd, auto_close, region.offset, region.size);
     PCHECK(j_file_info.obj());
     env->SetObjectArrayElement(j_file_infos.obj(), i, j_file_info.obj());
-    if (auto_close) {
-      ignore_result(files_to_register->ReleaseFD(fd).release());
-    }
   }
 
   java_peer_.Reset(Java_ChildProcessLauncherHelperImpl_createAndStart(
-      env, reinterpret_cast<intptr_t>(this), j_argv, j_file_infos));
+      env, reinterpret_cast<intptr_t>(this), j_argv, j_file_infos,
+      can_use_warm_up_connection));
   AddRef();  // Balanced by OnChildProcessStarted.
-  BrowserThread::PostTask(
-      client_thread_id_, FROM_HERE,
-      base::Bind(
+  base::PostTaskWithTraits(
+      FROM_HERE, {client_thread_id_},
+      base::BindOnce(
           &ChildProcessLauncherHelper::set_java_peer_available_on_client_thread,
           this));
 
@@ -155,7 +161,7 @@ ChildProcessTerminationInfo ChildProcessLauncherHelper::GetTerminationInfo(
   if (!java_peer_avaiable_on_client_thread_)
     return info;
 
-  Java_ChildProcessLauncherHelperImpl_getTerminationInfo(
+  Java_ChildProcessLauncherHelperImpl_getTerminationInfoAndStop(
       AttachCurrentThread(), java_peer_, reinterpret_cast<intptr_t>(&info));
 
   base::android::ApplicationState app_state =
@@ -178,10 +184,10 @@ ChildProcessTerminationInfo ChildProcessLauncherHelper::GetTerminationInfo(
 
 static void JNI_ChildProcessLauncherHelperImpl_SetTerminationInfo(
     JNIEnv* env,
-    const JavaParamRef<jclass>&,
     jlong termination_info_ptr,
     jint binding_state,
     jboolean killed_by_us,
+    jboolean clean_exit,
     jint remaining_process_with_strong_binding,
     jint remaining_process_with_moderate_binding,
     jint remaining_process_with_waived_binding) {
@@ -190,6 +196,7 @@ static void JNI_ChildProcessLauncherHelperImpl_SetTerminationInfo(
   info->binding_state =
       static_cast<base::android::ChildBindingState>(binding_state);
   info->was_killed_intentionally_by_browser = killed_by_us;
+  info->clean_exit = clean_exit;
   info->remaining_process_with_strong_binding =
       remaining_process_with_strong_binding;
   info->remaining_process_with_moderate_binding =
@@ -222,15 +229,15 @@ void ChildProcessLauncherHelper::SetProcessPriorityOnLauncherThread(
   DCHECK(env);
   return Java_ChildProcessLauncherHelperImpl_setPriority(
       env, java_peer_, process.Handle(), priority.visible,
-      priority.has_media_stream, priority.frame_depth,
-      priority.intersects_viewport, priority.boost_for_pending_views,
-      static_cast<jint>(priority.importance));
+      priority.has_media_stream, priority.has_foreground_service_worker,
+      priority.frame_depth, priority.intersects_viewport,
+      priority.boost_for_pending_views, static_cast<jint>(priority.importance));
 }
 
 // static
 void ChildProcessLauncherHelper::SetRegisteredFilesForService(
     const std::string& service_name,
-    catalog::RequiredFileMap required_files) {
+    std::map<std::string, base::FilePath> required_files) {
   SetFilesToShareForServicePosix(service_name, std::move(required_files));
 }
 
@@ -243,6 +250,14 @@ void ChildProcessLauncherHelper::ResetRegisteredFilesForTesting() {
 base::File OpenFileToShare(const base::FilePath& path,
                            base::MemoryMappedFile::Region* region) {
   return base::File(base::android::OpenApkAsset(path.value(), region));
+}
+
+void ChildProcessLauncherHelper::DumpProcessStack(
+    const base::Process& process) {
+  JNIEnv* env = AttachCurrentThread();
+  DCHECK(env);
+  return Java_ChildProcessLauncherHelperImpl_dumpProcessStack(env, java_peer_,
+                                                              process.Handle());
 }
 
 // Called from ChildProcessLauncher.java when the ChildProcess was started.

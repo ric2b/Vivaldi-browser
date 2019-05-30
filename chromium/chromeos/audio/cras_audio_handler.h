@@ -11,6 +11,7 @@
 #include <queue>
 #include <vector>
 
+#include "base/component_export.h"
 #include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -36,14 +37,16 @@ class AudioDevicesPrefHandler;
 
 // This class is not thread safe. The public functions should be called on
 // browser main thread.
-class CHROMEOS_EXPORT CrasAudioHandler : public CrasAudioClient::Observer,
-                                         public AudioPrefObserver,
-                                         public media::VideoCaptureObserver {
+class COMPONENT_EXPORT(CHROMEOS_AUDIO) CrasAudioHandler
+    : public CrasAudioClient::Observer,
+      public AudioPrefObserver,
+      public media::VideoCaptureObserver {
  public:
   typedef std::
       priority_queue<AudioDevice, std::vector<AudioDevice>, AudioDeviceCompare>
           AudioDevicePriorityQueue;
   typedef std::vector<uint64_t> NodeIdList;
+  static constexpr int32_t kSystemAecGroupIdNotAvailable = -1;
 
   class AudioObserver {
    public:
@@ -274,10 +277,12 @@ class CHROMEOS_EXPORT CrasAudioHandler : public CrasAudioClient::Observer,
   // the use case. It should be called from a user initiated action.
   void SwitchToFrontOrRearMic();
 
-  // All Chrome OS boards support this feature. Web applications will need
-  // to opt into original trial to use experimental native echo cancellation.
-  // Check crbug.com/853196 for usage.
-  bool system_aec_supported() const { return true; };
+  // Returns if system AEC is supported in CRAS.
+  bool system_aec_supported() const;
+
+  // Returns the system AEC group ID. If no group ID is specified, -1 is
+  // returned.
+  int32_t system_aec_group_id() const;
 
  protected:
   explicit CrasAudioHandler(
@@ -480,6 +485,24 @@ class CHROMEOS_EXPORT CrasAudioHandler : public CrasAudioClient::Observer,
   // Handle dbus callback for GetDefaultOutputBufferSize.
   void HandleGetDefaultOutputBufferSize(base::Optional<int> buffer_size);
 
+  // Calling dbus to get system AEC supported flag.
+  void GetSystemAecSupported();
+
+  // Calling dbus to get system AEC supported flag on main thread.
+  void GetSystemAecSupportedOnMainThread();
+
+  // Handle dbus callback for GetSystemAecSupported.
+  void HandleGetSystemAecSupported(base::Optional<bool> system_aec_supported);
+
+  // Calling dbus to get the system AEC group id if available.
+  void GetSystemAecGroupId();
+
+  // Calling dbus to get any available system AEC group id on main thread.
+  void GetSystemAecGroupIdOnMainThread();
+
+  // Handle dbus callback for GetSystemAecGroupId.
+  void HandleGetSystemAecGroupId(base::Optional<int32_t> system_aec_group_id);
+
   void OnVideoCaptureStartedOnMainThread(media::VideoFacingMode facing);
   void OnVideoCaptureStoppedOnMainThread(media::VideoFacingMode facing);
 
@@ -525,6 +548,9 @@ class CHROMEOS_EXPORT CrasAudioHandler : public CrasAudioClient::Observer,
 
   // Default output buffer size in frames.
   int32_t default_output_buffer_size_;
+
+  bool system_aec_supported_ = false;
+  int32_t system_aec_group_id_ = kSystemAecGroupIdNotAvailable;
 
   int num_active_output_streams_ = 0;
 

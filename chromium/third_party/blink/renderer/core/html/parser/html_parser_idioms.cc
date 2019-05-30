@@ -36,7 +36,7 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 template <typename CharType>
 static String StripLeadingAndTrailingHTMLSpaces(String string,
@@ -199,12 +199,12 @@ static WTF::NumberParsingResult ParseHTMLNonNegativeIntegerInternal(
     const CharacterType* end,
     unsigned& value) {
   // This function is an implementation of the following algorithm:
-  // https://html.spec.whatwg.org/multipage/infrastructure.html#rules-for-parsing-non-negative-integers
+  // https://html.spec.whatwg.org/C/#rules-for-parsing-non-negative-integers
   // However, in order to support integers >= 2^31, we fold [1] into this.
   // 'Step N' in the following comments refers to [1].
   //
   // [1]
-  // https://html.spec.whatwg.org/multipage/infrastructure.html#rules-for-parsing-integers
+  // https://html.spec.whatwg.org/C/#rules-for-parsing-integers
 
   // Step 4: Skip whitespace.
   SkipWhile<CharacterType, IsHTMLSpace<CharacterType>>(position, end);
@@ -241,7 +241,7 @@ static WTF::NumberParsingResult ParseHTMLNonNegativeIntegerInternal(
   return ParseHTMLNonNegativeIntegerInternal(start, start + length, value);
 }
 
-// https://html.spec.whatwg.org/multipage/infrastructure.html#rules-for-parsing-non-negative-integers
+// https://html.spec.whatwg.org/C/#rules-for-parsing-non-negative-integers
 bool ParseHTMLNonNegativeInteger(const String& input, unsigned& value) {
   return ParseHTMLNonNegativeIntegerInternal(input, value) ==
          WTF::NumberParsingResult::kSuccess;
@@ -301,7 +301,7 @@ static Vector<double> ParseHTMLListOfFloatingPointNumbersInternal(
   return numbers;
 }
 
-// https://html.spec.whatwg.org/multipage/infrastructure.html#rules-for-parsing-a-list-of-floating-point-numbers
+// https://html.spec.whatwg.org/C/#rules-for-parsing-a-list-of-floating-point-numbers
 Vector<double> ParseHTMLListOfFloatingPointNumbers(const String& input) {
   unsigned length = input.length();
   if (!length || input.Is8Bit())
@@ -314,7 +314,7 @@ Vector<double> ParseHTMLListOfFloatingPointNumbers(const String& input) {
 static const char kCharsetString[] = "charset";
 static const size_t kCharsetLength = sizeof("charset") - 1;
 
-// https://html.spec.whatwg.org/multipage/infrastructure.html#extracting-character-encodings-from-meta-elements
+// https://html.spec.whatwg.org/C/#extracting-character-encodings-from-meta-elements
 String ExtractCharset(const String& value) {
   wtf_size_t pos = 0;
   unsigned length = value.length();
@@ -380,14 +380,14 @@ WTF::TextEncoding EncodingFromMetaAttributes(
     const String& attribute_name = html_attribute.first;
     const AtomicString& attribute_value = AtomicString(html_attribute.second);
 
-    if (ThreadSafeMatch(attribute_name, http_equivAttr)) {
+    if (ThreadSafeMatch(attribute_name, kHttpEquivAttr)) {
       if (DeprecatedEqualIgnoringCase(attribute_value, "content-type"))
         got_pragma = true;
-    } else if (ThreadSafeMatch(attribute_name, charsetAttr)) {
+    } else if (ThreadSafeMatch(attribute_name, kCharsetAttr)) {
       has_charset = true;
       charset = attribute_value;
       mode = MetaAttribute::kCharset;
-    } else if (!has_charset && ThreadSafeMatch(attribute_name, contentAttr)) {
+    } else if (!has_charset && ThreadSafeMatch(attribute_name, kContentAttr)) {
       charset = ExtractCharset(attribute_value);
       if (charset.length())
         mode = MetaAttribute::kPragma;

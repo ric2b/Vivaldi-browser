@@ -29,19 +29,42 @@ int GetDestination(views::Widget* target) {
 
 // Find the input type, form factor and destination combination of the down
 // event. Used to get the UMA histogram bucket.
-DownEventMetric FindCombination(DownEventSource input_type,
-                                DownEventFormFactor form_factor,
-                                int destination) {
+DownEventMetric FindCombinationDeprecated(DownEventSource input_type,
+                                          DownEventFormFactor form_factor,
+                                          int destination) {
+  if (destination == static_cast<int>(AppType::CROSTINI_APP))
+    destination = static_cast<int>(AppType::OTHERS);
+  constexpr int kAppCountDeprecated = kAppCount - 1;
   int num_combination_per_input =
-      kAppCount * static_cast<int>(DownEventFormFactor::kFormFactorCount);
+      kAppCountDeprecated *
+      static_cast<int>(DownEventFormFactor::kFormFactorCount);
   int result = static_cast<int>(input_type) * num_combination_per_input +
-               static_cast<int>(form_factor) * kAppCount + destination;
+               static_cast<int>(form_factor) * kAppCountDeprecated +
+               destination;
   DCHECK(result >= 0 &&
          result < static_cast<int>(DownEventMetric::kCombinationCount));
   return static_cast<DownEventMetric>(result);
 }
 
-void RecordUMA(ui::EventPointerType type, views::Widget* target) {
+DownEventMetric2 FindCombination(int destination,
+                                 DownEventSource input_type,
+                                 DownEventFormFactor form_factor) {
+  constexpr int kNumCombinationPerDestination =
+      static_cast<int>(DownEventSource::kSourceCount) *
+      static_cast<int>(DownEventFormFactor::kFormFactorCount);
+  int result = destination * kNumCombinationPerDestination +
+               static_cast<int>(DownEventFormFactor::kFormFactorCount) *
+                   static_cast<int>(input_type) +
+               static_cast<int>(form_factor);
+  DCHECK(result >= 0 &&
+         result <= static_cast<int>(DownEventMetric2::kMaxValue));
+  return static_cast<DownEventMetric2>(result);
+}
+
+void RecordUMA(ui::EventPointerType type, ui::EventTarget* event_target) {
+  DCHECK_NE(type, ui::EventPointerType::POINTER_TYPE_UNKNOWN);
+  views::Widget* target = views::Widget::GetTopLevelWidgetForNativeView(
+      static_cast<aura::Window*>(event_target));
   DownEventFormFactor form_factor = DownEventFormFactor::kClamshell;
   if (Shell::Get()
           ->tablet_mode_controller()
@@ -59,8 +82,7 @@ void RecordUMA(ui::EventPointerType type, views::Widget* target) {
   DownEventSource input_type = DownEventSource::kUnknown;
   switch (type) {
     case ui::EventPointerType::POINTER_TYPE_UNKNOWN:
-      input_type = DownEventSource::kUnknown;
-      break;
+      return;
     case ui::EventPointerType::POINTER_TYPE_MOUSE:
       input_type = DownEventSource::kMouse;
       break;
@@ -77,27 +99,33 @@ void RecordUMA(ui::EventPointerType type, views::Widget* target) {
 
   UMA_HISTOGRAM_ENUMERATION(
       "Event.DownEventCount.PerInputFormFactorDestinationCombination",
-      FindCombination(input_type, form_factor, GetDestination(target)),
+      FindCombinationDeprecated(input_type, form_factor,
+                                GetDestination(target)),
       DownEventMetric::kCombinationCount);
+
+  UMA_HISTOGRAM_ENUMERATION(
+      "Event.DownEventCount.PerInputFormFactorDestinationCombination2",
+      FindCombination(GetDestination(target), input_type, form_factor));
 }
 
 }  // namespace
 
 PointerMetricsRecorder::PointerMetricsRecorder() {
-  Shell::Get()->AddPointerWatcher(this, views::PointerWatcherEventTypes::BASIC);
+  Shell::Get()->AddPreTargetHandler(this);
 }
 
 PointerMetricsRecorder::~PointerMetricsRecorder() {
-  Shell::Get()->RemovePointerWatcher(this);
+  Shell::Get()->RemovePreTargetHandler(this);
 }
 
-void PointerMetricsRecorder::OnPointerEventObserved(
-    const ui::PointerEvent& event,
-    const gfx::Point& location_in_screen,
-    gfx::NativeView target) {
-  if (event.type() == ui::ET_POINTER_DOWN)
-    RecordUMA(event.pointer_details().pointer_type,
-              views::Widget::GetTopLevelWidgetForNativeView(target));
+void PointerMetricsRecorder::OnMouseEvent(ui::MouseEvent* event) {
+  if (event->type() == ui::ET_MOUSE_PRESSED)
+    RecordUMA(event->pointer_details().pointer_type, event->target());
+}
+
+void PointerMetricsRecorder::OnTouchEvent(ui::TouchEvent* event) {
+  if (event->type() == ui::ET_TOUCH_PRESSED)
+    RecordUMA(event->pointer_details().pointer_type, event->target());
 }
 
 }  // namespace ash

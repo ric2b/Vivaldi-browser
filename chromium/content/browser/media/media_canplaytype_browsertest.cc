@@ -15,7 +15,6 @@
 #include "content/shell/browser/shell.h"
 #include "media/base/media_switches.h"
 #include "media/media_buildflags.h"
-#include "third_party/libaom/av1_buildflags.h"
 #include "ui/display/display_switches.h"
 
 #if defined(OS_ANDROID)
@@ -579,20 +578,7 @@ class MediaCanPlayTypeTest : public MediaBrowserTest {
 };
 
 #if BUILDFLAG(ENABLE_AV1_DECODER)
-class AV1MediaCanPlayTypeTest : public MediaCanPlayTypeTest {
- public:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    scoped_feature_list_.InitAndEnableFeature(media::kAv1Decoder);
-    MediaCanPlayTypeTest::SetUpCommandLine(command_line);
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-// Note: This must be a separate test since features can not be changed after
-// the initial navigation.
-IN_PROC_BROWSER_TEST_F(AV1MediaCanPlayTypeTest, CodecSupportTest_av1) {
+IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_av1) {
   // Fully qualified codec strings are required. These tests are not exhaustive
   // since codec string parsing is exhaustively tested elsewhere.
   EXPECT_EQ(kNot, CanPlay("'video/webm; codecs=\"av1\"'"));
@@ -1344,12 +1330,11 @@ IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_AvcLevels) {
   EXPECT_EQ(kPropMaybe,    CanPlay("'video/mp4; codecs=\"avc1.42E041\"'"));
   EXPECT_EQ(kPropMaybe,    CanPlay("'video/mp4; codecs=\"avc1.42E042\"'"));
 
-  // Levels 5 (0x32), 5.1 (0x33).
-  // Note: Level 5.2 (0x34) is not considered valid (crbug.com/460376).
+  // Levels 5 (0x32), 5.1 (0x33), 5.2 (0x34).
   EXPECT_EQ(kPropMaybe,    CanPlay("'video/mp4; codecs=\"avc1.42E031\"'"));
   EXPECT_EQ(kPropProbably, CanPlay("'video/mp4; codecs=\"avc1.42E032\"'"));
   EXPECT_EQ(kPropProbably, CanPlay("'video/mp4; codecs=\"avc1.42E033\"'"));
-  EXPECT_EQ(kPropMaybe,    CanPlay("'video/mp4; codecs=\"avc1.42E034\"'"));
+  EXPECT_EQ(kPropProbably, CanPlay("'video/mp4; codecs=\"avc1.42E034\"'"));
   EXPECT_EQ(kPropMaybe,    CanPlay("'video/mp4; codecs=\"avc1.42E035\"'"));
   // Verify that decimal representations of levels are not supported.
   EXPECT_EQ(kPropMaybe,    CanPlay("'video/mp4; codecs=\"avc1.42E005\"'"));

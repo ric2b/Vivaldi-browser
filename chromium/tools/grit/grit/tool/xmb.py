@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # Copyright (c) 2012 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -8,6 +7,7 @@
 
 import getopt
 import os
+import sys
 
 from xml.sax import saxutils
 
@@ -177,7 +177,7 @@ Other options:
     limit_file_dir = None
     limit_untranslated_lang = False
     print_all_strings = False
-    own_opts, args = getopt.getopt(args, 'l:D:E:ihLa')
+    own_opts, args = getopt.getopt(args, 'l:D:E:ihLa', ('help',))
     for key, val in own_opts:
       if key == '-l':
         limit_file = open(val, 'r')
@@ -199,6 +199,9 @@ Other options:
       elif key == '-E':
         (env_name, env_value) = val.split('=', 1)
         os.environ[env_name] = env_value
+      elif key == '--help':
+        self.ShowUsage()
+        sys.exit(0)
     if not len(args) == 1 and not limit_untranslated_lang:
       print ('grit xmb takes exactly one argument, the path to the XMB file '
              'to output.')

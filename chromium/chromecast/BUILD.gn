@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//base/android/jni_generator/jni_exception_list.gni")
 import("//build/buildflag_header.gni")
 import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
@@ -22,12 +21,6 @@ declare_args() {
   cast_test_extra_flags = ""
 }
 
-config("playready_config") {
-  if (use_playready) {
-    defines = [ "PLAYREADY_CDM_AVAILABLE" ]
-  }
-}
-
 # Depends on all non-test targets that should be built by the Chromecast
 # internal build infrastructure.
 group("all") {
@@ -43,6 +36,9 @@ group("all") {
   }
   if (chromecast_branding != "public") {
     deps += [ "//chromecast/internal:all" ]
+  }
+  if (enable_external_mojo_services) {
+    deps += [ "//chromecast/external_mojo/external_service_support:standalone_mojo_broker" ]
   }
 
   # No other targets should depend on this target, since it's just a convenience
@@ -92,6 +88,7 @@ cast_test_group("cast_tests") {
   if (is_linux) {
     tests += [
       "//chromecast/crash:cast_crash_unittests",
+      "//components/exo:exo_unittests",
       "//sandbox/linux:sandbox_linux_unittests",
     ]
   }
@@ -122,6 +119,10 @@ cast_test_group("cast_tests") {
     cast_media_unittests_filter = {
       test_name = "cast_media_unittests"
 
+      # TODO(almasrymina) : Track this test as a separate bug
+      #   (internal : b/115400220)
+      gtest_excludes = [ "AudioVideoPipelineDeviceTest.Mp4Playback" ]
+
       # --test-launcher-jobs=1 => so internal code can bind to port
       args = [ "--test-launcher-jobs=1" ]
     }
@@ -137,6 +138,15 @@ cast_test_group("cast_tests") {
         "--enable-local-file-accesses",
         "--test-launcher-jobs=1",
       ]
+
+      gtest_excludes = []
+
+      # TODO(b/112440248): This test was failing:
+      #   * On v1 and Cast Audio devices since 2017-03-15.
+      #   * On desktop builds since 2018-08-22
+      # Also see: b/36238710, b/36239051, hotlist/461351
+      gtest_excludes += [ "RendererPrelauncherTest.ReusedRenderer" ]
+
       if (!is_cast_desktop_build) {
         args += [ "--use-gpu-in-tests" ]
 
@@ -144,19 +154,10 @@ cast_test_group("cast_tests") {
         #    Once all of the CastMediaBlockerTest.* have been un-DISABLEd and
         #    are running successfully, revisit these tests and see if they pass
         #    on devices. (crbug/665118, internal b/32023194)
-        gtest_excludes = [
+        gtest_excludes += [
           "CastMediaBlockerBrowserTest.Video_BlockUnblock",
           "CastMediaBlockerBrowserTest.Audio_BlockUnblock",
         ]
-
-        # TODO(mbjorge): The ReusedRenderer test is failing on v1 and cast audio
-        # devices. Temporarily disable them as part of an effort_to re-green
-        # the unittests. Current failures (2017-03-15) are being disabled to get
-        # back to a green state. Re-enable once the tests have been fixed.
-        # Limitations in the build mean this unfortunately is getting disabled
-        # across all devices, even though it is only failing on some.
-        # b/36238710, b/36239051, hotlist/461351
-        gtest_excludes += [ "RendererPrelauncherTest.ReusedRenderer" ]
       }
 
       if (!is_cast_desktop_build && !is_cast_audio_only && !enable_assistant) {
@@ -204,11 +205,8 @@ cast_test_group("cast_tests") {
     gtest_excludes = []
     if (target_os == "linux") {
       if (is_cast_desktop_build) {
-        # Disable PartitionAllocDeathTest.Repeated*ReturnNullDirect (b/67975693)
-        gtest_excludes += [
-          "PartitionAllocDeathTest.RepeatedAllocReturnNullDirect",
-          "PartitionAllocDeathTest.RepeatedReallocReturnNullDirect",
-        ]
+        # Disable PartitionAllocDeathTest.* (b/67975693)
+        gtest_excludes += [ "PartitionAllocDeathTest.*" ]
       } else {
         # Disable ProcessMetricsTest.GetNumberOfThreads (b/15610509)
         # Disable ProcessUtilTest.* (need to define OS_ANDROID)
@@ -237,11 +235,15 @@ cast_test_group("cast_tests") {
 
   cc_unittests_filter = {
     test_name = "cc_unittests"
+
+    # Temporarily disable all test cases (b/113324890)
+    gtest_excludes = [ "*" ]
+
     if (!is_cast_desktop_build) {
       #Disable ToColorSpace/ColorTransformPixelTest*  (b/64346790)
       #Disable ImageBackgroundFilter* (b/64346875)
       #Disable LayerTreeHostTilesTestPartialInvalidation* (b/65844132)
-      gtest_excludes = [
+      gtest_excludes += [
         "ToColorSpace/ColorTransformPixelTest.*",
         "ImageBackgroundFilter.*",
         "LayerTreeHostTilesTestPartialInvalidation.*",
@@ -257,6 +259,10 @@ cast_test_group("cast_tests") {
     # the cast IsSupporedVideoConfigs ignore the transfer function parameter.
     # (b/36984215).
     gtest_excludes = [ "*.IsSupportedVideoConfig_VP9TransferFunctions" ]
+    if (is_android_things) {
+      gtest_excludes +=
+          [ "FontUniqueNameLookupTest.TestMatchPostScriptNameTtc" ]
+    }
     if (target_os == "linux" && !is_cast_desktop_build) {
       # DesktopCaptureDeviceTest.*: No capture device on Eureka
       # Disable PepperGamepadHostTest.WaitForReply (pepper not supported on Eureka)
@@ -463,6 +469,7 @@ if (is_fuchsia) {
   fuchsia_package("cast_shell_pkg") {
     binary = ":cast_shell"
     package_name_override = "cast_shell"
+    sandbox_policy = "//chromecast/cast_shell_sandbox_policy"
 
     if (chromecast_branding != "public") {
       deps = [
@@ -480,7 +487,6 @@ if (is_fuchsia) {
 repack("cast_shell_pak") {
   sources = [
     "$root_gen_dir/chromecast/app/shell_resources.pak",
-    "$root_gen_dir/chromecast/browser/cast_browser_resources.pak",
     "$root_gen_dir/content/app/resources/content_resources_100_percent.pak",
     "$root_gen_dir/content/app/strings/content_strings_en-US.pak",
     "$root_gen_dir/content/content_resources.pak",
@@ -498,7 +504,6 @@ repack("cast_shell_pak") {
 
   deps = [
     "//chromecast/app:resources",
-    "//chromecast/browser:resources",
     "//content:resources",
     "//content/app/resources",
     "//content/app/strings",
@@ -572,28 +577,34 @@ group("chromecast_locales_pak") {
 buildflag_header("chromecast_buildflags") {
   header = "chromecast_buildflags.h"
   flags = [
+    "DEFAULT_COMMAND_LINE_FLAGS=\"$default_command_line_flags\"",
+    "DISABLE_SECURE_FLAC_OPUS_DECODING=$disable_secure_flac_and_opus_decoding",
     "ENABLE_ASSISTANT=$enable_assistant",
+    "ENABLE_CAST_FRAGMENT=$enable_cast_fragment",
+    "ENABLE_CAST_WAYLAND_SERVER=$enable_cast_wayland_server",
+    "ENABLE_CHROMECAST_EXTENSIONS=$enable_chromecast_extensions",
+    "ENABLE_EXTERNAL_MOJO_SERVICES=$enable_external_mojo_services",
+    "ENABLE_HEADLESS_MUSIC_MODE=$enable_headless_music_mode",
+    "ENABLE_PLAYREADY=$enable_playready",
+    "ENABLE_VIDEO_CAPTURE_SERVICE=$enable_video_capture_service",
     "ENABLE_VOLUME_TABLES_ACCESS=$enable_volume_tables_access",
     "IS_ANDROID_THINGS=$is_android_things",
+    "IS_ANDROID_THINGS_NON_PUBLIC=$is_android_things_non_public",
     "IS_CAST_AUDIO_ONLY=$is_cast_audio_only",
     "IS_CAST_DESKTOP_BUILD=$is_cast_desktop_build",
     "IS_CAST_USING_CMA_BACKEND=$is_cast_using_cma_backend",
-    "SUPPORTS_MULTIZONE=$supports_multizone",
-    "ENABLE_HEADLESS_MUSIC_MODE=$enable_headless_music_mode",
-    "ENABLE_CHROMECAST_EXTENSIONS=$enable_chromecast_extensions",
-    "ENABLE_CAST_FRAGMENT=$enable_cast_fragment",
-    "IS_ANDROID_THINGS_NON_PUBLIC=$is_android_things_non_public",
     "IS_SINGLE_VOLUME=$is_single_volume",
+    "SUPPORTS_MULTIZONE=$supports_multizone",
     "USE_ANDROID_USER_AGENT=$use_android_user_agent",
     "USE_CHROMECAST_CDMS=$use_chromecast_cdms",
+    "USE_ANDROID_THINGS_N=$build_for_android_things_n",
   ]
 }
 
 if (is_android) {
   generate_jni_registration("cast_shell_jni_registration") {
     target = ":cast_shell_apk"
-    output = "$root_gen_dir/chromecast/android/${target_name}.h"
-    exception_files = jni_exception_files
+    header_output = "$root_gen_dir/chromecast/android/${target_name}.h"
   }
 
   android_assets("cast_shell_apk_assets") {
@@ -641,7 +652,10 @@ if (is_android) {
       "//base:base_java",
       "//chromecast/android:libcast_shell_android",
       "//chromecast/browser/android:cast_shell_java",
+      "//third_party/crashpad/crashpad/handler:crashpad_handler_named_as_so",
     ]
+
+    loadable_modules = [ "$root_out_dir/libcrashpad_handler.so" ]
 
     command_line_flags_file = "castshell-command-line"
   }

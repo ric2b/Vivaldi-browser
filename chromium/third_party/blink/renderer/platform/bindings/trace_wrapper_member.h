@@ -18,7 +18,7 @@ class Member;
 // TraceWrapperMember fields must be traced in the class' |Trace| method.
 template <class T>
 class TraceWrapperMember : public Member<T> {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
 
  public:
   TraceWrapperMember() : Member<T>(nullptr) {}
@@ -60,30 +60,6 @@ class TraceWrapperMember : public Member<T> {
     return *this;
   }
 };
-
-// Swaps two HeapVectors specialized for TraceWrapperMember. The custom swap
-// function is required as TraceWrapperMember potentially requires emitting a
-// write barrier.
-template <typename T>
-void swap(HeapVector<TraceWrapperMember<T>>& a,
-          HeapVector<TraceWrapperMember<T>>& b) {
-  // HeapVector<Member<T>> and HeapVector<TraceWrapperMember<T>> have the
-  // same size and semantics.
-  HeapVector<Member<T>>& a_ = reinterpret_cast<HeapVector<Member<T>>&>(a);
-  HeapVector<Member<T>>& b_ = reinterpret_cast<HeapVector<Member<T>>&>(b);
-  a_.swap(b_);
-  if (ThreadState::IsAnyWrapperTracing() &&
-      ThreadState::Current()->IsWrapperTracing()) {
-    // If incremental marking is enabled we need to emit the write barrier since
-    // the swap was performed on HeapVector<Member<T>>.
-    for (auto item : a) {
-      ScriptWrappableMarkingVisitor::WriteBarrier(item.Get());
-    }
-    for (auto item : b) {
-      ScriptWrappableMarkingVisitor::WriteBarrier(item.Get());
-    }
-  }
-}
 
 // HeapVectorBacking<TraceWrapperMember<T>> need to map to
 // HeapVectorBacking<Member<T>> for performing the swap method below.

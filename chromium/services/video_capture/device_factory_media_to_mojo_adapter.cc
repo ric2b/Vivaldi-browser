@@ -5,7 +5,9 @@
 #include "services/video_capture/device_factory_media_to_mojo_adapter.h"
 
 #include <sstream>
+#include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
@@ -13,6 +15,7 @@
 #include "media/capture/video/video_capture_device_info.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/video_capture/device_media_to_mojo_adapter.h"
+#include "services/video_capture/public/mojom/producer.mojom.h"
 #include "services/video_capture/public/uma/video_capture_service_event.h"
 
 namespace {
@@ -77,18 +80,21 @@ DeviceFactoryMediaToMojoAdapter::ActiveDeviceEntry::operator=(
     DeviceFactoryMediaToMojoAdapter::ActiveDeviceEntry&& other) = default;
 
 DeviceFactoryMediaToMojoAdapter::DeviceFactoryMediaToMojoAdapter(
-    std::unique_ptr<service_manager::ServiceContextRef> service_ref,
     std::unique_ptr<media::VideoCaptureSystem> capture_system,
     media::MojoJpegDecodeAcceleratorFactoryCB jpeg_decoder_factory_callback,
     scoped_refptr<base::SequencedTaskRunner> jpeg_decoder_task_runner)
-    : service_ref_(std::move(service_ref)),
-      capture_system_(std::move(capture_system)),
+    : capture_system_(std::move(capture_system)),
       jpeg_decoder_factory_callback_(std::move(jpeg_decoder_factory_callback)),
       jpeg_decoder_task_runner_(std::move(jpeg_decoder_task_runner)),
       has_called_get_device_infos_(false),
       weak_factory_(this) {}
 
 DeviceFactoryMediaToMojoAdapter::~DeviceFactoryMediaToMojoAdapter() = default;
+
+void DeviceFactoryMediaToMojoAdapter::SetServiceRef(
+    std::unique_ptr<service_manager::ServiceContextRef> service_ref) {
+  service_ref_ = std::move(service_ref);
+}
 
 void DeviceFactoryMediaToMojoAdapter::GetDeviceInfos(
     GetDeviceInfosCallback callback) {
@@ -129,6 +135,7 @@ void DeviceFactoryMediaToMojoAdapter::CreateDevice(
   capture_system_->GetDeviceInfosAsync(
       base::Bind(&DiscardDeviceInfosAndCallContinuation,
                  base::Passed(&create_and_add_new_device_cb)));
+  has_called_get_device_infos_ = true;
 }
 
 void DeviceFactoryMediaToMojoAdapter::AddSharedMemoryVirtualDevice(
@@ -145,10 +152,17 @@ void DeviceFactoryMediaToMojoAdapter::AddTextureVirtualDevice(
   NOTIMPLEMENTED();
 }
 
+void DeviceFactoryMediaToMojoAdapter::RegisterVirtualDevicesChangedObserver(
+    mojom::DevicesChangedObserverPtr observer,
+    bool raise_event_if_virtual_devices_already_present) {
+  NOTIMPLEMENTED();
+}
+
 void DeviceFactoryMediaToMojoAdapter::CreateAndAddNewDevice(
     const std::string& device_id,
     mojom::DeviceRequest device_request,
     CreateDeviceCallback callback) {
+  DCHECK(service_ref_);
   std::unique_ptr<media::VideoCaptureDevice> media_device =
       capture_system_->CreateDevice(device_id);
   if (media_device == nullptr) {
@@ -180,5 +194,14 @@ void DeviceFactoryMediaToMojoAdapter::OnClientConnectionErrorOrClose(
   active_devices_by_id_[device_id].device->Stop();
   active_devices_by_id_.erase(device_id);
 }
+
+#if defined(OS_CHROMEOS)
+void DeviceFactoryMediaToMojoAdapter::BindCrosImageCaptureRequest(
+    cros::mojom::CrosImageCaptureRequest request) {
+  CHECK(capture_system_);
+
+  capture_system_->BindCrosImageCaptureRequest(std::move(request));
+}
+#endif  // defined(OS_CHROMEOS)
 
 }  // namespace video_capture

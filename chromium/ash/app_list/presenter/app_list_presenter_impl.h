@@ -9,10 +9,12 @@
 
 #include <memory>
 
+#include "ash/app_list/app_list_metrics.h"
 #include "ash/app_list/model/app_list_view_state.h"
 #include "ash/app_list/pagination_model_observer.h"
 #include "ash/app_list/presenter/app_list_presenter_delegate.h"
 #include "ash/app_list/presenter/app_list_presenter_export.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -22,10 +24,6 @@
 #include "ui/display/display.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/widget/widget_observer.h"
-
-namespace ui {
-class AnimationMetricsReporter;
-}
 
 namespace app_list {
 class AppListView;
@@ -43,7 +41,8 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
   // UpdateYPositionAndOpacityForHomeLauncher so different callers can do
   // similar animations with different settings.
   using UpdateHomeLauncherAnimationSettingsCallback =
-      base::RepeatingCallback<void(ui::ScopedLayerAnimationSettings* settings)>;
+      base::RepeatingCallback<void(ui::ScopedLayerAnimationSettings* settings,
+                                   bool observe)>;
 
   explicit AppListPresenterImpl(
       std::unique_ptr<AppListPresenterDelegate> delegate);
@@ -54,6 +53,7 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
 
   // Returns app list view if one exists, or NULL otherwise.
   AppListView* GetView() { return view_; }
+  const AppListView* GetView() const { return view_; }
 
   // Show the app list window on the display with the given id. If
   // |event_time_stamp| is not 0, it means |Show()| was triggered by one of the
@@ -72,7 +72,9 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
   // Show the app list if it is visible, hide it if it is hidden. If
   // |event_time_stamp| is not 0, it means |ToggleAppList()| was triggered by
   // one of the AppListShowSources: kSearchKey or kShelfButton.
-  void ToggleAppList(int64_t display_id, base::TimeTicks event_time_stamp);
+  ash::ShelfAction ToggleAppList(int64_t display_id,
+                                 app_list::AppListShowSource show_source,
+                                 base::TimeTicks event_time_stamp);
 
   // Returns current visibility of the app list.
   bool IsVisible() const;
@@ -86,10 +88,10 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
                                  float background_opacity);
 
   // Ends the drag of app list from shelf.
-  void EndDragFromShelf(app_list::AppListViewState app_list_state);
+  void EndDragFromShelf(AppListViewState app_list_state);
 
   // Passes a MouseWheelEvent from the shelf to the AppListView.
-  void ProcessMouseWheelOffset(int y_scroll_offset);
+  void ProcessMouseWheelOffset(const gfx::Vector2d& scroll_offset_vector);
 
   // Updates the y position and opacity of the full screen app list. The changes
   // are slightly different than UpdateYPositionAndOpacity. If |callback| is non
@@ -102,7 +104,19 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
   // Schedules animation for app list when overview mode starts or ends.
   void ScheduleOverviewModeAnimation(bool start, bool animate);
 
+  // Shows or hides the Assistant page.
+  // |show| is true to show and false to hide.
+  void ShowEmbeddedAssistantUI(bool show);
+
+  // Returns current visibility of the Assistant page.
+  bool IsShowingEmbeddedAssistantUI() const;
+
+  // Show/hide the expand arrow view button.
+  void SetExpandArrowViewVisibility(bool show);
+
  private:
+  class OverviewAnimationMetricsReporter;
+
   // Sets the app list view and attempts to show it.
   void SetView(AppListView* view);
 
@@ -118,6 +132,9 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
 
   void NotifyVisibilityChanged(bool visible, int64_t display_id);
   void NotifyTargetVisibilityChanged(bool visible);
+  void NotifyHomeLauncherTargetPositionChanged(bool showing,
+                                               int64_t display_id);
+  void NotifyHomeLauncherAnimationComplete(bool shown, int64_t display_id);
 
   // aura::client::FocusChangeObserver overrides:
   void OnWindowFocused(aura::Window* gained_focus,
@@ -128,6 +145,7 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
 
   // views::WidgetObserver overrides:
   void OnWidgetDestroying(views::Widget* widget) override;
+  void OnWidgetDestroyed(views::Widget* widget) override;
   void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
 
   // PaginationModelObserver overrides:
@@ -158,9 +176,9 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
   // Cached bounds of |view_| for snapping back animation after over-scroll.
   gfx::Rect view_bounds_;
 
-  // Metric reporter for state change animations.
-  const std::unique_ptr<ui::AnimationMetricsReporter>
-      state_animation_metrics_reporter_;
+  // Metric reporter for entering/exiting overview.
+  const std::unique_ptr<OverviewAnimationMetricsReporter>
+      overview_animation_metrics_reporter_;
 
   // The last target visibility change.
   bool last_target_visible_ = false;

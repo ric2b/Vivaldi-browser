@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -20,30 +21,23 @@
 #include "content/common/input/input_handler.mojom.h"
 #include "content/common/input/web_touch_event_traits.h"
 #include "content/common/input_messages.h"
-#include "content/common/view_messages.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/input_event_ack_state.h"
 #include "ipc/ipc_sender.h"
 #include "ui/events/blink/blink_event_util.h"
+#include "ui/events/blink/blink_features.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 #include "app/vivaldi_apptools.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
-#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
-
-// NOTE(igor@vivaldi.com): Include implementation so it can access
-// anonymous functions.
-#include "browser/renderer_host/vivaldi_input_router_helper.cc"
+#include "ui/content/vivaldi_event_hooks.h"
 
 namespace content {
 
-using base::Time;
-using base::TimeDelta;
-using base::TimeTicks;
 using blink::WebGestureEvent;
 using blink::WebInputEvent;
 using blink::WebKeyboardEvent;
@@ -83,7 +77,6 @@ InputRouterImpl::InputRouterImpl(
     : client_(client),
       disposition_handler_(disposition_handler),
       frame_tree_node_id_(-1),
-      active_renderer_fling_count_(0),
       touch_scroll_started_sent_(false),
       wheel_event_queue_(this),
       touch_event_queue_(this, config.touch_config),
@@ -93,6 +86,8 @@ InputRouterImpl::InputRouterImpl(
                            fling_scheduler_client,
                            config.gesture_config),
       device_scale_factor_(1.f),
+      compositor_touch_action_enabled_(
+          base::FeatureList::IsEnabled(features::kCompositorTouchAction)),
       host_binding_(this),
       frame_host_binding_(this),
       weak_ptr_factory_(this) {
@@ -107,17 +102,21 @@ InputRouterImpl::InputRouterImpl(
 InputRouterImpl::~InputRouterImpl() {}
 
 void InputRouterImpl::SendMouseEvent(
-    const MouseEventWithLatencyInfo& mouse_event) {
-  if (mouse_event.event.GetType() == WebInputEvent::kMouseDown &&
-      gesture_event_queue_.GetTouchpadTapSuppressionController()
-          ->ShouldSuppressMouseDown(mouse_event))
+    const MouseEventWithLatencyInfo& mouse_event,
+    MouseEventCallback event_result_callback) {
+  if ((mouse_event.event.GetType() == WebInputEvent::kMouseDown &&
+       gesture_event_queue_.GetTouchpadTapSuppressionController()
+           ->ShouldSuppressMouseDown(mouse_event)) ||
+      (mouse_event.event.GetType() == WebInputEvent::kMouseUp &&
+       gesture_event_queue_.GetTouchpadTapSuppressionController()
+           ->ShouldSuppressMouseUp())) {
+    std::move(event_result_callback)
+        .Run(mouse_event, InputEventAckSource::BROWSER,
+             INPUT_EVENT_ACK_STATE_IGNORED);
     return;
-  if (mouse_event.event.GetType() == WebInputEvent::kMouseUp &&
-      gesture_event_queue_.GetTouchpadTapSuppressionController()
-          ->ShouldSuppressMouseUp())
-    return;
+  }
 
-  SendMouseEventImmediately(mouse_event);
+  SendMouseEventImmediately(mouse_event, std::move(event_result_callback));
 }
 
 void InputRouterImpl::SendWheelEvent(
@@ -126,11 +125,12 @@ void InputRouterImpl::SendWheelEvent(
 }
 
 void InputRouterImpl::SendKeyboardEvent(
-    const NativeWebKeyboardEventWithLatencyInfo& key_event) {
+    const NativeWebKeyboardEventWithLatencyInfo& key_event,
+    KeyboardEventCallback event_result_callback) {
   gesture_event_queue_.StopFling();
-  gesture_event_queue_.FlingHasBeenHalted();
-  mojom::WidgetInputHandler::DispatchEventCallback callback = base::BindOnce(
-      &InputRouterImpl::KeyboardEventHandled, weak_this_, key_event);
+  mojom::WidgetInputHandler::DispatchEventCallback callback =
+      base::BindOnce(&InputRouterImpl::KeyboardEventHandled, weak_this_,
+                     key_event, std::move(event_result_callback));
   FilterAndSendWebInputEvent(key_event.event, key_event.latency,
                              std::move(callback));
 }
@@ -149,7 +149,22 @@ void InputRouterImpl::SendGestureEvent(
     return;
   }
 
-  if (touch_action_filter_.FilterGestureEvent(&gesture_event.event) ==
+  FilterGestureEventResult result =
+      touch_action_filter_.FilterGestureEvent(&gesture_event.event);
+  if (compositor_touch_action_enabled_ &&
+      result == FilterGestureEventResult::kFilterGestureEventDelayed) {
+    gesture_event_queue_.QueueDeferredEvents(gesture_event);
+    return;
+  }
+  SendGestureEventWithoutQueueing(gesture_event, result);
+}
+
+void InputRouterImpl::SendGestureEventWithoutQueueing(
+    GestureEventWithLatencyInfo& gesture_event,
+    const FilterGestureEventResult& existing_result) {
+  DCHECK_NE(existing_result,
+            FilterGestureEventResult::kFilterGestureEventDelayed);
+  if (existing_result ==
       FilterGestureEventResult::kFilterGestureEventFiltered) {
     disposition_handler_->OnGestureEventAck(gesture_event,
                                             InputEventAckSource::BROWSER,
@@ -177,14 +192,13 @@ void InputRouterImpl::SendGestureEvent(
     touch_event_queue_.OnGestureScrollEvent(gesture_event);
   }
 
-  if (blink::WebInputEvent::IsPinchGestureEventType(
-          gesture_event.event.GetType()) &&
+  if (gesture_event.event.IsTouchpadZoomEvent() &&
       gesture_event.event.NeedsWheelEvent()) {
     touchpad_pinch_event_queue_.QueueEvent(gesture_event);
     return;
   }
 
-  if (!gesture_event_queue_.DebounceOrQueueEvent(gesture_event)) {
+  if (!gesture_event_queue_.DebounceOrForwardEvent(gesture_event)) {
     disposition_handler_->OnGestureEventAck(gesture_event,
                                             InputEventAckSource::BROWSER,
                                             INPUT_EVENT_ACK_STATE_CONSUMED);
@@ -193,10 +207,10 @@ void InputRouterImpl::SendGestureEvent(
 
 void InputRouterImpl::SendTouchEvent(
     const TouchEventWithLatencyInfo& touch_event) {
-  TouchEventWithLatencyInfo updatd_touch_event = touch_event;
-  SetMovementXYForTouchPoints(&updatd_touch_event.event);
-  input_stream_validator_.Validate(updatd_touch_event.event);
-  touch_event_queue_.QueueEvent(updatd_touch_event);
+  TouchEventWithLatencyInfo updated_touch_event = touch_event;
+  SetMovementXYForTouchPoints(&updated_touch_event.event);
+  input_stream_validator_.Validate(updated_touch_event.event);
+  touch_event_queue_.QueueEvent(updated_touch_event);
 }
 
 void InputRouterImpl::NotifySiteIsMobileOptimized(bool is_mobile_optimized) {
@@ -206,8 +220,7 @@ void InputRouterImpl::NotifySiteIsMobileOptimized(bool is_mobile_optimized) {
 bool InputRouterImpl::HasPendingEvents() const {
   return !touch_event_queue_.Empty() || !gesture_event_queue_.empty() ||
          wheel_event_queue_.has_pending() ||
-         touchpad_pinch_event_queue_.has_pending() ||
-         active_renderer_fling_count_ > 0;
+         touchpad_pinch_event_queue_.has_pending();
 }
 
 void InputRouterImpl::SetDeviceScaleFactor(float device_scale_factor) {
@@ -245,15 +258,41 @@ bool InputRouterImpl::FlingCancellationIsDeferred() {
   return gesture_event_queue_.FlingCancellationIsDeferred();
 }
 
-void InputRouterImpl::CancelTouchTimeout() {
+void InputRouterImpl::ProcessDeferredGestureEventQueue() {
+  GestureEventQueue::GestureQueue deferred_gesture_events =
+      gesture_event_queue_.TakeDeferredEvents();
+  for (auto& it : deferred_gesture_events) {
+    FilterGestureEventResult result =
+        touch_action_filter_.FilterGestureEvent(&(it.event));
+    SendGestureEventWithoutQueueing(it, result);
+  }
+}
+
+void InputRouterImpl::SetTouchActionFromMain(cc::TouchAction touch_action) {
+  if (compositor_touch_action_enabled_) {
+    touch_action_filter_.OnSetTouchAction(touch_action);
+    touch_event_queue_.StopTimeoutMonitor();
+    ProcessDeferredGestureEventQueue();
+  }
   UpdateTouchAckTimeoutEnabled();
 }
 
 void InputRouterImpl::SetWhiteListedTouchAction(cc::TouchAction touch_action,
                                                 uint32_t unique_touch_event_id,
                                                 InputEventAckState state) {
+  DCHECK(!compositor_touch_action_enabled_);
+  OnSetWhiteListedTouchAction(touch_action);
+}
+
+void InputRouterImpl::OnSetWhiteListedTouchAction(
+    cc::TouchAction touch_action) {
   touch_action_filter_.OnSetWhiteListedTouchAction(touch_action);
   client_->OnSetWhiteListedTouchAction(touch_action);
+  if (compositor_touch_action_enabled_) {
+    if (touch_action == cc::kTouchActionAuto)
+      FlushDeferredGestureQueue();
+    UpdateTouchAckTimeoutEnabled();
+  }
 }
 
 void InputRouterImpl::DidOverscroll(const ui::DidOverscrollParams& params) {
@@ -280,18 +319,6 @@ void InputRouterImpl::ImeCompositionRangeChanged(
 
 void InputRouterImpl::SetMouseCapture(bool capture) {
   client_->SetMouseCapture(capture);
-}
-
-bool InputRouterImpl::OnMessageReceived(const IPC::Message& message) {
-  // TODO(dtapuska): Move these to mojo
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP(InputRouterImpl, message)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_HasTouchEventHandlers,
-                        OnHasTouchEventHandlers)
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-
-  return handled;
 }
 
 void InputRouterImpl::SetMovementXYForTouchPoints(blink::WebTouchEvent* event) {
@@ -325,9 +352,11 @@ void InputRouterImpl::SetMovementXYForTouchPoints(blink::WebTouchEvent* event) {
 // Forwards MouseEvent without passing it through
 // TouchpadTapSuppressionController.
 void InputRouterImpl::SendMouseEventImmediately(
-    const MouseEventWithLatencyInfo& mouse_event) {
-  mojom::WidgetInputHandler::DispatchEventCallback callback = base::BindOnce(
-      &InputRouterImpl::MouseEventHandled, weak_this_, mouse_event);
+    const MouseEventWithLatencyInfo& mouse_event,
+    MouseEventCallback event_result_callback) {
+  mojom::WidgetInputHandler::DispatchEventCallback callback =
+      base::BindOnce(&InputRouterImpl::MouseEventHandled, weak_this_,
+                     mouse_event, std::move(event_result_callback));
   FilterAndSendWebInputEvent(mouse_event.event, mouse_event.latency,
                              std::move(callback));
 }
@@ -340,24 +369,39 @@ void InputRouterImpl::SendTouchEventImmediately(
                              std::move(callback));
 }
 
+void InputRouterImpl::FlushDeferredGestureQueue() {
+  touch_action_filter_.OnSetTouchAction(cc::kTouchActionAuto);
+  ProcessDeferredGestureEventQueue();
+}
+
 void InputRouterImpl::OnTouchEventAck(const TouchEventWithLatencyInfo& event,
                                       InputEventAckSource ack_source,
                                       InputEventAckState ack_result) {
-  // Touchstart events sent to the renderer indicate a new touch sequence, but
-  // in some cases we may filter out sending the touchstart - catch those here.
-  if (WebTouchEventTraits::IsTouchSequenceStart(event.event) &&
-      ack_result == INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS) {
+  if (WebTouchEventTraits::IsTouchSequenceStart(event.event)) {
     touch_action_filter_.AppendToGestureSequenceForDebugging("T");
-    // Touch action must be auto when there is no consumer
-    touch_action_filter_.OnSetTouchAction(cc::kTouchActionAuto);
-    touch_action_filter_.SetActiveTouchInProgress(true);
-    UpdateTouchAckTimeoutEnabled();
+    touch_action_filter_.AppendToGestureSequenceForDebugging(
+        base::NumberToString(ack_result).c_str());
+    touch_action_filter_.AppendToGestureSequenceForDebugging(
+        base::NumberToString(event.event.unique_touch_event_id).c_str());
+    touch_action_filter_.IncreaseActiveTouches();
+    // In certain corner cases, the ack for the touch start may not come with a
+    // touch action, then we should set the touch actions to Auto.
+    if (!compositor_touch_action_enabled_ &&
+        !touch_action_filter_.allowed_touch_action().has_value()) {
+      touch_action_filter_.OnSetTouchAction(cc::kTouchActionAuto);
+      if (compositor_touch_action_enabled_)
+        touch_event_queue_.StopTimeoutMonitor();
+      UpdateTouchAckTimeoutEnabled();
+    }
   }
   disposition_handler_->OnTouchEventAck(event, ack_source, ack_result);
 
   if (WebTouchEventTraits::IsTouchSequenceEnd(event.event)) {
+    touch_action_filter_.AppendToGestureSequenceForDebugging("E");
+    touch_action_filter_.AppendToGestureSequenceForDebugging(
+        base::NumberToString(event.event.unique_touch_event_id).c_str());
+    touch_action_filter_.DecreaseActiveTouches();
     touch_action_filter_.ReportAndResetTouchAction();
-    touch_action_filter_.SetActiveTouchInProgress(false);
     UpdateTouchAckTimeoutEnabled();
   }
 }
@@ -438,6 +482,10 @@ bool InputRouterImpl::IsWheelScrollInProgress() {
   return client_->IsWheelScrollInProgress();
 }
 
+bool InputRouterImpl::IsAutoscrollInProgress() {
+  return client_->IsAutoscrollInProgress();
+}
+
 void InputRouterImpl::FilterAndSendWebInputEvent(
     const WebInputEvent& input_event,
     const ui::LatencyInfo& latency_info,
@@ -484,6 +532,7 @@ void InputRouterImpl::FilterAndSendWebInputEvent(
 
 void InputRouterImpl::KeyboardEventHandled(
     const NativeWebKeyboardEventWithLatencyInfo& event,
+    KeyboardEventCallback event_result_callback,
     InputEventAckSource source,
     const ui::LatencyInfo& latency,
     InputEventAckState state,
@@ -496,7 +545,7 @@ void InputRouterImpl::KeyboardEventHandled(
   if (source != InputEventAckSource::BROWSER)
     client_->DecrementInFlightEventCount(source);
   event.latency.AddNewLatencyFrom(latency);
-  disposition_handler_->OnKeyboardEventAck(event, source, state);
+  std::move(event_result_callback).Run(event, source, state);
 
   // WARNING: This InputRouterImpl can be deallocated at this point
   // (i.e.  in the case of Ctrl+W, where the call to
@@ -506,6 +555,7 @@ void InputRouterImpl::KeyboardEventHandled(
 
 void InputRouterImpl::MouseEventHandled(
     const MouseEventWithLatencyInfo& event,
+    MouseEventCallback event_result_callback,
     InputEventAckSource source,
     const ui::LatencyInfo& latency,
     InputEventAckState state,
@@ -518,7 +568,7 @@ void InputRouterImpl::MouseEventHandled(
   if (source != InputEventAckSource::BROWSER)
     client_->DecrementInFlightEventCount(source);
   event.latency.AddNewLatencyFrom(latency);
-  disposition_handler_->OnMouseEventAck(event, source, state);
+  std::move(event_result_callback).Run(event, source, state);
 }
 
 void InputRouterImpl::TouchEventHandled(
@@ -538,12 +588,27 @@ void InputRouterImpl::TouchEventHandled(
   // The SetTouchAction IPC occurs on a different channel so always
   // send it in the input event ack to ensure it is available at the
   // time the ACK is handled.
-  if (touch_action.has_value())
-    OnSetTouchAction(touch_action.value());
+  if (touch_action.has_value()) {
+    if (!compositor_touch_action_enabled_) {
+      OnSetTouchAction(touch_action.value());
+    } else {
+      if (source == InputEventAckSource::COMPOSITOR_THREAD)
+        OnSetWhiteListedTouchAction(touch_action.value());
+      else if (source == InputEventAckSource::MAIN_THREAD)
+        OnSetTouchAction(touch_action.value());
+      else
+        NOTREACHED();
+    }
+  }
 
+  bool should_stop_timeout_monitor =
+      !compositor_touch_action_enabled_ ||
+      (compositor_touch_action_enabled_ &&
+       touch_action_filter_.allowed_touch_action().has_value());
   // |touch_event_queue_| will forward to OnTouchEventAck when appropriate.
   touch_event_queue_.ProcessTouchAck(source, state, latency,
-                                     touch_event.event.unique_touch_event_id);
+                                     touch_event.event.unique_touch_event_id,
+                                     should_stop_timeout_monitor);
 }
 
 void InputRouterImpl::GestureEventHandled(
@@ -577,19 +642,6 @@ void InputRouterImpl::MouseWheelEventHandled(
     InputEventAckState state,
     const base::Optional<ui::DidOverscrollParams>& overscroll,
     const base::Optional<cc::TouchAction>& touch_action) {
-  MouseWheelEventHandledWithRedirect(event, false, nullptr, source, latency,
-                                     state, overscroll, touch_action);
-}
-
-void InputRouterImpl::MouseWheelEventHandledWithRedirect(
-    const MouseWheelEventWithLatencyInfo& event,
-    bool root_redirect,
-    base::WeakPtr<InputRouterImpl> child_router,
-    InputEventAckSource source,
-    const ui::LatencyInfo& latency,
-    InputEventAckState state,
-    const base::Optional<ui::DidOverscrollParams>& overscroll,
-    const base::Optional<cc::TouchAction>& touch_action) {
   TRACE_EVENT2("input", "InputRouterImpl::MouseWheelEventHandled", "type",
                WebInputEvent::GetName(event.event.GetType()), "ack",
                InputEventAckStateToString(state));
@@ -600,108 +652,33 @@ void InputRouterImpl::MouseWheelEventHandledWithRedirect(
   if (overscroll)
     DidOverscroll(overscroll.value());
 
-  // NOTE(igor@vivaldi.com): We received an ack that the wheel event
-  // was processed in the render process potentially running through JS
-  // eventhandlers. Before we pass the event to wheel and touchpad
-  // queues for processing in the native code but after we accounted for its
-  // in-flight status, latency, overscroll forward the event to our root view so
-  // Vivaldi UI can react to the event as well. When we receive an ack from this
-  // forwarding for the root view the root_redirect is true and child_router
-  // points to the original router.
-  InputRouterImpl* ack_receiver = this;
-  if (!vivaldi::IsVivaldiRunning()) {
-    DCHECK(!root_redirect);
-    DCHECK(!child_router);
-  } else if (root_redirect) {
-    if (!child_router) {
-      // The child was destroyed when event was being dispatched.
-      return;
-    }
-    ack_receiver = child_router.get();
-  } else {
-    DCHECK(!child_router);
-
-    // TODO(igor@vivaldi.com) Ideally we should forwards any wheel event to UI
-    // view and let the JS code there to decide if it handles the event or not.
-    // But to minimize the risk of regressions for now we only forward the
-    // events when we know for sure that UI may handle it like the page zoom and
-    // the tab switch. Also, as PDF viewer handles zooming later in the native
-    // code, we should not forward the zoom directed towards it. So consider to
-    // call JS function in the UI directly and pass the event and any extra
-    // information there so the JS code can decide on its own what to do.
+  if (::vivaldi::IsVivaldiRunning()) {
     do {
-      // Check if the page called event.preventDefault().
+      if (source == InputEventAckSource::BROWSER)
+        break;
       if (state == INPUT_EVENT_ACK_STATE_CONSUMED)
         break;
-
-      int zoom_modifier =
-#if defined(OS_MACOSX)
-          blink::WebInputEvent::kMetaKey
-#else
-          blink::WebInputEvent::kControlKey
-#endif
-          ;
-      int tab_scroll_modifier = blink::WebInputEvent::kAltKey;
-      int all_key_modifier_mask =
-          blink::WebInputEvent::kShiftKey | blink::WebInputEvent::kControlKey |
-          blink::WebInputEvent::kAltKey | blink::WebInputEvent::kMetaKey;
-      int modifiers = event.event.GetModifiers();
-      int pressed_key_modifiers = modifiers & all_key_modifier_mask;
-      bool zoom = pressed_key_modifiers == zoom_modifier;
-      bool tab_switch = pressed_key_modifiers == tab_scroll_modifier ||
-                        (modifiers & blink::WebInputEvent::kRightButtonDown);
-      if (!zoom && !tab_switch)
-        break;
-
-      // Root view with UI will look at the event. Find its router.
       RenderWidgetHostImpl* host =
           static_cast<RenderWidgetHostImpl*>(disposition_handler_);
-      RenderWidgetHostViewBase* view_base = host->GetView();
-      if (!view_base || !view_base->IsRenderWidgetHostViewChildFrame())
+      RenderWidgetHostViewBase* view = host->GetView();
+      if (!view)
         break;
-
-      // Check if it is a PDF viewer zoom.
-      if (zoom && view_base->IsRenderWidgetHostViewGuest())
-        break;
-
-      RenderWidgetHostViewChildFrame* view =
-          static_cast<RenderWidgetHostViewChildFrame*>(view_base);
-      RenderWidgetHostViewBase* root_view = view->GetRootRenderWidgetHostView();
-      if (!root_view)
-        break;
-
-      // Check if the view is already the root view.
+      RenderWidgetHostViewBase* root_view = view->GetRootView();
       if (root_view == view)
         break;
-      RenderWidgetHostImpl* root_host = root_view->host();
-      if (!root_host)
+      VivaldiEventHooks* h = VivaldiEventHooks::FromRootView(root_view);
+      if (!h || !h->HandleWheelEventAfterChild(root_view, view, event.event))
         break;
-      InputRouter* root_router_base = root_host->input_router();
-      if (!root_router_base)
-        break;
-      InputRouterImpl* root_router =
-          static_cast<InputRouterImpl*>(root_router_base);
 
-      blink::WebMouseWheelEvent wheel_event(event.event);
-      const gfx::PointF root_point =
-          view->TransformPointToRootCoordSpaceF(wheel_event.PositionInWidget());
-      wheel_event.SetPositionInWidget(root_point);
-
-      // Send via the root router but pass this router as an argument.
-      mojom::WidgetInputHandler::DispatchEventCallback callback =
-          base::BindOnce(&InputRouterImpl::MouseWheelEventHandledWithRedirect,
-                         root_router->weak_this_, event, true, weak_this_);
-      root_router->FilterAndSendWebInputEvent(
-          wheel_event, ui::LatencyInfo(ui::SourceEventType::WHEEL),
-          std::move(callback));
-      return;
+      // As the root view will do the real processing on the copy of the event,
+      // mark this as consumed to prevent any default actions.
+      state = INPUT_EVENT_ACK_STATE_CONSUMED;
     } while (false);
   }
 
-  ack_receiver->wheel_event_queue_.ProcessMouseWheelAck(source, state,
-                                                        event.latency);
-  ack_receiver->touchpad_pinch_event_queue_.ProcessMouseWheelAck(source, state,
-                                                                 event.latency);
+  wheel_event_queue_.ProcessMouseWheelAck(source, state, event.latency);
+  touchpad_pinch_event_queue_.ProcessMouseWheelAck(source, state,
+                                                   event.latency);
 }
 
 void InputRouterImpl::OnHasTouchEventHandlers(bool has_handlers) {
@@ -710,17 +687,28 @@ void InputRouterImpl::OnHasTouchEventHandlers(bool has_handlers) {
 
   touch_action_filter_.OnHasTouchEventHandlers(has_handlers);
   touch_event_queue_.OnHasTouchEventHandlers(has_handlers);
-  client_->OnHasTouchEventHandlers(has_handlers);
+}
+
+void InputRouterImpl::WaitForInputProcessed(base::OnceClosure callback) {
+  // TODO(bokan): Some kinds of input is queued in one of the various queues
+  // available in this class. To be truly robust, we should wait until those
+  // queues are flushed before issuing this message. This will be done in a
+  // follow-up. https://crbug.com/902446.
+  client_->GetWidgetInputHandler()->WaitForInputProcessed(std::move(callback));
 }
 
 void InputRouterImpl::ForceSetTouchActionAuto() {
   touch_action_filter_.AppendToGestureSequenceForDebugging("F");
   touch_action_filter_.OnSetTouchAction(cc::kTouchActionAuto);
-  touch_action_filter_.SetActiveTouchInProgress(true);
+  if (compositor_touch_action_enabled_) {
+    // TODO(xidachen): Call FlushDeferredGestureQueue when this flag is enabled.
+    touch_event_queue_.StopTimeoutMonitor();
+    ProcessDeferredGestureEventQueue();
+  }
 }
 
-void InputRouterImpl::OnHasTouchEventHandlersForTest(bool has_handlers) {
-  touch_action_filter_.OnHasTouchEventHandlers(has_handlers);
+void InputRouterImpl::ForceResetTouchActionForTest() {
+  touch_action_filter_.ForceResetTouchActionForTest();
 }
 
 void InputRouterImpl::OnSetTouchAction(cc::TouchAction touch_action) {
@@ -734,9 +722,10 @@ void InputRouterImpl::OnSetTouchAction(cc::TouchAction touch_action) {
 
   touch_action_filter_.AppendToGestureSequenceForDebugging("S");
   touch_action_filter_.AppendToGestureSequenceForDebugging(
-      std::to_string(touch_action).c_str());
+      base::NumberToString(touch_action).c_str());
   touch_action_filter_.OnSetTouchAction(touch_action);
-  touch_action_filter_.SetActiveTouchInProgress(true);
+  if (compositor_touch_action_enabled_)
+    touch_event_queue_.StopTimeoutMonitor();
 
   // kTouchActionNone should disable the touch ack timeout.
   UpdateTouchAckTimeoutEnabled();
@@ -746,9 +735,15 @@ void InputRouterImpl::UpdateTouchAckTimeoutEnabled() {
   // kTouchActionNone will prevent scrolling, in which case the timeout serves
   // little purpose. It's also a strong signal that touch handling is critical
   // to page functionality, so the timeout could do more harm than good.
-  const bool touch_ack_timeout_enabled =
-      touch_action_filter_.allowed_touch_action() != cc::kTouchActionNone;
-  touch_event_queue_.SetAckTimeoutEnabled(touch_ack_timeout_enabled);
+  base::Optional<cc::TouchAction> allowed_touch_action =
+      touch_action_filter_.allowed_touch_action();
+  cc::TouchAction white_listed_touch_action =
+      touch_action_filter_.white_listed_touch_action();
+  const bool touch_ack_timeout_disabled =
+      (allowed_touch_action.has_value() &&
+       allowed_touch_action.value() == cc::kTouchActionNone) ||
+      (white_listed_touch_action == cc::kTouchActionNone);
+  touch_event_queue_.SetAckTimeoutEnabled(!touch_ack_timeout_disabled);
 }
 
 }  // namespace content

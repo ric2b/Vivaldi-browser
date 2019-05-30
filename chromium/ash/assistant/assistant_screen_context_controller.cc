@@ -4,6 +4,9 @@
 
 #include "ash/assistant/assistant_screen_context_controller.h"
 
+#include <utility>
+#include <vector>
+
 #include "ash/assistant/assistant_controller.h"
 #include "ash/assistant/assistant_interaction_controller.h"
 #include "ash/assistant/assistant_ui_controller.h"
@@ -13,6 +16,7 @@
 #include "ash/shell.h"
 #include "ash/voice_interaction/voice_interaction_controller.h"
 #include "ash/wm/mru_window_tracker.h"
+#include "ash/wm/overview/overview_controller.h"
 #include "base/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/stl_util.h"
@@ -47,7 +51,7 @@ std::vector<uint8_t> DownsampleAndEncodeImage(gfx::Image image) {
 }
 
 void EncodeScreenshotAndRunCallback(
-    mojom::AssistantController::RequestScreenshotCallback callback,
+    mojom::AssistantScreenContextController::RequestScreenshotCallback callback,
     std::unique_ptr<ui::LayerTreeOwner> layer_owner,
     gfx::Image image) {
   base::PostTaskWithTraitsAndReplyWithResult(
@@ -81,10 +85,14 @@ std::unique_ptr<ui::LayerTreeOwner> CreateLayerForAssistantSnapshot(
 
   aura::Window* app_list_container =
       ash::Shell::GetContainer(root_window, kShellWindowId_AppListContainer);
+  aura::Window* app_list_tablet_mode_container = ash::Shell::GetContainer(
+      root_window, kShellWindowId_AppListTabletModeContainer);
 
   // Ignore app list to prevent interfering with app list animations.
   if (app_list_container)
     excluded_layers.insert(app_list_container->layer());
+  if (app_list_tablet_mode_container)
+    excluded_layers.insert(app_list_tablet_mode_container->layer());
 
   MruWindowTracker::WindowList windows =
       Shell::Get()->mru_window_tracker()->BuildMruWindowList();
@@ -129,12 +137,18 @@ std::unique_ptr<ui::LayerTreeOwner> CreateLayerForAssistantSnapshot(
 AssistantScreenContextController::AssistantScreenContextController(
     AssistantController* assistant_controller)
     : assistant_controller_(assistant_controller),
+      binding_(this),
       screen_context_request_factory_(this) {
   assistant_controller_->AddObserver(this);
 }
 
 AssistantScreenContextController::~AssistantScreenContextController() {
   assistant_controller_->RemoveObserver(this);
+}
+
+void AssistantScreenContextController::BindRequest(
+    mojom::AssistantScreenContextControllerRequest request) {
+  binding_.Bind(std::move(request));
 }
 
 void AssistantScreenContextController::SetAssistant(
@@ -144,17 +158,25 @@ void AssistantScreenContextController::SetAssistant(
 
 void AssistantScreenContextController::AddModelObserver(
     AssistantScreenContextModelObserver* observer) {
-  assistant_screen_context_model_.AddObserver(observer);
+  model_.AddObserver(observer);
 }
 
 void AssistantScreenContextController::RemoveModelObserver(
     AssistantScreenContextModelObserver* observer) {
-  assistant_screen_context_model_.RemoveObserver(observer);
+  model_.RemoveObserver(observer);
 }
 
 void AssistantScreenContextController::RequestScreenshot(
     const gfx::Rect& rect,
-    mojom::AssistantController::RequestScreenshotCallback callback) {
+    mojom::AssistantScreenContextController::RequestScreenshotCallback
+        callback) {
+  // http://crbug.com/941276
+  // We need to avoid requesting screenshot in known situations that will break.
+  if (Shell::Get()->overview_controller()->IsSelecting() ||
+      Shell::Get()->overview_controller()->IsCompletingShutdownAnimations()) {
+    std::move(callback).Run(std::vector<uint8_t>());
+    return;
+  }
   aura::Window* root_window = Shell::Get()->GetRootWindowForNewWindows();
 
   std::unique_ptr<ui::LayerTreeOwner> layer_owner =
@@ -190,13 +212,14 @@ void AssistantScreenContextController::OnAssistantControllerDestroying() {
 void AssistantScreenContextController::OnUiVisibilityChanged(
     AssistantVisibility new_visibility,
     AssistantVisibility old_visibility,
-    AssistantSource source) {
+    base::Optional<AssistantEntryPoint> entry_point,
+    base::Optional<AssistantExitPoint> exit_point) {
   // We only initiate a contextual query for caching if the UI is being shown.
   // Otherwise, we abort any requests in progress and reset state.
   if (new_visibility != AssistantVisibility::kVisible) {
     screen_context_request_factory_.InvalidateWeakPtrs();
-    assistant_screen_context_model_.SetRequestState(
-        ScreenContextRequestState::kIdle);
+    model_.SetRequestState(ScreenContextRequestState::kIdle);
+    assistant_->ClearScreenContextCache();
     return;
   }
 
@@ -210,8 +233,7 @@ void AssistantScreenContextController::OnUiVisibilityChanged(
 
   // Abort any request in progress and update request state.
   screen_context_request_factory_.InvalidateWeakPtrs();
-  assistant_screen_context_model_.SetRequestState(
-      ScreenContextRequestState::kInProgress);
+  model_.SetRequestState(ScreenContextRequestState::kInProgress);
 
   // Cache screen context for the entire screen.
   assistant_->CacheScreenContext(base::BindOnce(
@@ -220,8 +242,7 @@ void AssistantScreenContextController::OnUiVisibilityChanged(
 }
 
 void AssistantScreenContextController::OnScreenContextRequestFinished() {
-  assistant_screen_context_model_.SetRequestState(
-      ScreenContextRequestState::kIdle);
+  model_.SetRequestState(ScreenContextRequestState::kIdle);
 }
 
 std::unique_ptr<ui::LayerTreeOwner>

@@ -298,7 +298,7 @@ static struct SynchEvent {     // this is a trivial hash table for the events
 // set "bits" in the word there (waiting until lockbit is clear before doing
 // so), and return a refcounted reference that will remain valid until
 // UnrefSynchEvent() is called.  If a new SynchEvent is allocated,
-// the std::string name is copied into it.
+// the string name is copied into it.
 // When used with a mutex, the caller should also ensure that kMuEvent
 // is set in the mutex word, and similarly for condition variables and kCVEvent.
 static SynchEvent *EnsureSynchEvent(std::atomic<intptr_t> *addr,
@@ -1079,7 +1079,7 @@ void Mutex::TryRemove(PerThreadSynch *s) {
 // if the wait extends past the absolute time specified, even if "s" is still
 // on the mutex queue.  In this case, remove "s" from the queue and return
 // true, otherwise return false.
-void Mutex::Block(PerThreadSynch *s) {
+ABSL_XRAY_LOG_ARGS(1) void Mutex::Block(PerThreadSynch *s) {
   while (s->state.load(std::memory_order_acquire) == PerThreadSynch::kQueued) {
     if (!DecrementSynchSem(this, s, s->waitp->timeout)) {
       // After a timeout, we go into a spin loop until we remove ourselves
@@ -1827,8 +1827,8 @@ bool Mutex::LockSlowWithDeadline(MuHow how, const Condition *cond,
          cond == nullptr || EvalConditionAnnotated(cond, this, true, how);
 }
 
-// RAW_CHECK_FMT() takes a condition, a printf-style format std::string, and
-// the printf-style argument list.   The format std::string must be a literal.
+// RAW_CHECK_FMT() takes a condition, a printf-style format string, and
+// the printf-style argument list.   The format string must be a literal.
 // Arguments after the first are not evaluated unless the condition is true.
 #define RAW_CHECK_FMT(cond, ...)                                   \
   do {                                                             \
@@ -1841,7 +1841,7 @@ static void CheckForMutexCorruption(intptr_t v, const char* label) {
   // Test for either of two situations that should not occur in v:
   //   kMuWriter and kMuReader
   //   kMuWrWait and !kMuWait
-  const intptr_t w = v ^ kMuWait;
+  const uintptr_t w = v ^ kMuWait;
   // By flipping that bit, we can now test for:
   //   kMuWriter and kMuReader in w
   //   kMuWrWait and kMuWait in w
@@ -1975,7 +1975,7 @@ void Mutex::LockSlowLoop(SynchWaitParams *waitp, int flags) {
 // Unlock this mutex, which is held by the current thread.
 // If waitp is non-zero, it must be the wait parameters for the current thread
 // which holds the lock but is not runnable because its condition is false
-// or it n the process of blocking on a condition variable; it must requeue
+// or it is in the process of blocking on a condition variable; it must requeue
 // itself on the mutex/condvar to wait for its condition to become true.
 void Mutex::UnlockSlow(SynchWaitParams *waitp) {
   intptr_t v = mu_.load(std::memory_order_relaxed);

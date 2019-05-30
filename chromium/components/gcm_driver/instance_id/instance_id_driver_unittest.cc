@@ -125,7 +125,7 @@ void InstanceIDDriverTest::SetUp() {
 void InstanceIDDriverTest::TearDown() {
   driver_.reset();
   gcm_driver_.reset();
-  // |gcm_driver_| owns a GCMKeyStore that owns a ProtoDatabaseImpl whose
+  // |gcm_driver_| owns a GCMKeyStore that owns a ProtoDatabase whose
   // destructor deletes the underlying LevelDB on the task runner.
   base::RunLoop().RunUntilIdle();
 }
@@ -180,11 +180,10 @@ std::string InstanceIDDriverTest::GetToken(
   token_.clear();
   result_ = InstanceID::UNKNOWN_ERROR;
   instance_id->GetToken(
-      authorized_entity,
-      scope,
-      options,
-      base::Bind(&InstanceIDDriverTest::GetTokenCompleted,
-                 base::Unretained(this)));
+      authorized_entity, scope, options,
+      /*is_lazy=*/false,
+      base::BindRepeating(&InstanceIDDriverTest::GetTokenCompleted,
+                          base::Unretained(this)));
   WaitForAsyncOperation();
   return token_;
 }

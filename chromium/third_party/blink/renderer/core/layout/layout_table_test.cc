@@ -30,13 +30,14 @@ TEST_F(LayoutTableTest, OverflowViaOutline) {
   auto* target = GetTableByElementId("target");
   EXPECT_EQ(LayoutRect(0, 0, 100, 200), target->SelfVisualOverflowRect());
   ToElement(target->GetNode())
-      ->setAttribute(HTMLNames::styleAttr, "outline: 2px solid black");
+      ->setAttribute(html_names::kStyleAttr, "outline: 2px solid black");
 
   auto* child = GetTableByElementId("child");
   ToElement(child->GetNode())
-      ->setAttribute(HTMLNames::styleAttr, "outline: 2px solid black");
+      ->setAttribute(html_names::kStyleAttr, "outline: 2px solid black");
 
-  target->GetFrameView()->UpdateAllLifecyclePhases();
+  target->GetFrameView()->UpdateAllLifecyclePhases(
+      DocumentLifecycle::LifecycleUpdateReason::kTest);
   EXPECT_EQ(LayoutRect(-2, -2, 104, 204), target->SelfVisualOverflowRect());
 
   EXPECT_EQ(LayoutRect(-2, -2, 104, 204), child->SelfVisualOverflowRect());
@@ -316,6 +317,24 @@ TEST_F(LayoutTableTest, OutOfOrderHeadFootAndBody) {
             table->BottomSection());
   EXPECT_EQ(ToLayoutTableSection(GetLayoutObjectByElementId("foot")),
             table->BottomNonEmptySection());
+}
+
+TEST_F(LayoutTableTest, VisualOverflowCleared) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      #table {
+        width: 50px; height: 50px; box-shadow: 5px 5px 5px black;
+      }
+    </style>
+    <table id='table' style='width: 50px; height: 50px'></table>
+  )HTML");
+  auto* table = GetTableByElementId("table");
+  EXPECT_EQ(LayoutRect(-3, -3, 66, 66), table->SelfVisualOverflowRect());
+  ToElement(table->GetNode())
+      ->setAttribute(html_names::kStyleAttr, "box-shadow: initial");
+  GetDocument().View()->UpdateAllLifecyclePhases(
+      DocumentLifecycle::LifecycleUpdateReason::kTest);
+  EXPECT_EQ(LayoutRect(0, 0, 50, 50), table->SelfVisualOverflowRect());
 }
 
 }  // anonymous namespace

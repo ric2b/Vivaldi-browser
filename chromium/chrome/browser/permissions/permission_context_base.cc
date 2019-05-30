@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
@@ -24,6 +25,7 @@
 #include "chrome/browser/permissions/permission_uma_util.h"
 #include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ssl/origin_util.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -32,10 +34,10 @@
 #include "components/prefs/pref_service.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
-#include "content/public/common/origin_util.h"
 #include "extensions/common/constants.h"
 #include "url/gurl.h"
 
@@ -158,9 +160,18 @@ void PermissionContextBase::RequestPermission(
   // |Window|. Done this way because of the difference between permission
   // handling in webviews and regular tabbed webcontents.
   // PermissionRequestManager::PermissionRequestManager owns
+
+  // NOTE(andre@vivaldi.com): Do not signal access for notifications in
+  // incognito as it is blocked automatically. See
+  // NotificationPermissionContext::DecidePermission for context.
+  bool permission_is_blocked_by_default =
+      (profile()->IsOffTheRecord() &&
+       content_settings_type_ == CONTENT_SETTINGS_TYPE_NOTIFICATIONS);
+
   extensions::VivaldiPrivateTabObserver* private_tab =
-      extensions::VivaldiPrivateTabObserver::FromWebContents(web_contents);
-  if (private_tab) {
+    extensions::VivaldiPrivateTabObserver::FromWebContents(web_contents);
+
+  if (private_tab && !permission_is_blocked_by_default) {
     private_tab->OnPermissionAccessed(
         content_settings_type_, embedding_origin.spec(),
         result.content_setting);
@@ -196,6 +207,7 @@ void PermissionContextBase::RequestPermission(
         break;
       case PermissionStatusSource::INSECURE_ORIGIN:
       case PermissionStatusSource::UNSPECIFIED:
+      case PermissionStatusSource::VIRTUAL_URL_DIFFERENT_ORIGIN:
         break;
     }
 
@@ -234,7 +246,7 @@ PermissionResult PermissionContextBase::GetPermissionStatus(
   }
 
   if (IsRestrictedToSecureOrigins()) {
-    if (!content::IsOriginSecure(requesting_origin)) {
+    if (!IsOriginSecure(requesting_origin, profile()->GetPrefs())) {
       return PermissionResult(CONTENT_SETTING_BLOCK,
                               PermissionStatusSource::INSECURE_ORIGIN);
     }
@@ -245,7 +257,7 @@ PermissionResult PermissionContextBase::GetPermissionStatus(
     // the top level and requesting origins. Note: chrome-extension:// origins
     // are currently exempt from checking the embedder chain. crbug.com/530507.
     if (!requesting_origin.SchemeIs(extensions::kExtensionScheme) &&
-        !content::IsOriginSecure(embedding_origin)) {
+        !IsOriginSecure(embedding_origin, profile()->GetPrefs())) {
       return PermissionResult(CONTENT_SETTING_BLOCK,
                               PermissionStatusSource::INSECURE_ORIGIN);
     }
@@ -257,6 +269,31 @@ PermissionResult PermissionContextBase::GetPermissionStatus(
       !PermissionAllowedByFeaturePolicy(render_frame_host)) {
     return PermissionResult(CONTENT_SETTING_BLOCK,
                             PermissionStatusSource::FEATURE_POLICY);
+  }
+
+  if (render_frame_host) {
+    content::WebContents* web_contents =
+        content::WebContents::FromRenderFrameHost(render_frame_host);
+
+    // Automatically deny all HTTP or HTTPS requests where the virtual URL and
+    // the loaded URL are for different origins. The loaded URL is the one
+    // actually in the renderer, but the virtual URL is the one
+    // seen by the user. This may be very confusing for a user to see in a
+    // permissions request.
+    content::NavigationEntry* entry =
+        web_contents->GetController().GetLastCommittedEntry();
+    if (entry) {
+      const GURL virtual_url = entry->GetVirtualURL();
+      const GURL loaded_url = entry->GetURL();
+      if (virtual_url.SchemeIsHTTPOrHTTPS() &&
+          loaded_url.SchemeIsHTTPOrHTTPS() &&
+          !url::Origin::Create(virtual_url)
+               .IsSameOriginWith(url::Origin::Create(loaded_url))) {
+        return PermissionResult(
+            CONTENT_SETTING_BLOCK,
+            PermissionStatusSource::VIRTUAL_URL_DIFFERENT_ORIGIN);
+      }
+    }
   }
 
   ContentSetting content_setting = GetPermissionStatusInternal(
@@ -346,6 +383,9 @@ void PermissionContextBase::DecidePermission(
         break;
       case CONTENT_SETTINGS_TYPE_NOTIFICATIONS:
         helper_permission_type = WEB_VIEW_PERMISSION_TYPE_NOTIFICATION;
+        break;
+      case CONTENT_SETTINGS_TYPE_PLUGINS:
+        helper_permission_type = WEB_VIEW_PERMISSION_TYPE_LOAD_PLUGIN;
         break;
       default:
         break;

@@ -8,48 +8,88 @@
 #include <string>
 
 #include "sync/vivaldi_syncmanager.h"
+#include "vivaldi_account/vivaldi_account_manager.h"
 
 namespace vivaldi {
 
+namespace {
+GoogleServiceAuthError ToGoogleServiceAuthError(
+    VivaldiAccountManager::FetchError error) {
+  switch (error.type) {
+    case VivaldiAccountManager::NONE:
+      return GoogleServiceAuthError(GoogleServiceAuthError::NONE);
+    case VivaldiAccountManager::NETWORK_ERROR:
+      return GoogleServiceAuthError::FromConnectionError(error.error_code);
+    case VivaldiAccountManager::SERVER_ERROR:
+      return GoogleServiceAuthError(GoogleServiceAuthError::SERVICE_ERROR);
+    case VivaldiAccountManager::INVALID_CREDENTIALS:
+      return GoogleServiceAuthError::FromInvalidGaiaCredentialsReason(
+          GoogleServiceAuthError::InvalidGaiaCredentialsReason::
+              CREDENTIALS_REJECTED_BY_SERVER);
+    default:
+      NOTREACHED();
+  }
+}
+
+syncer::SyncAccountInfo ToSyncAccountInfo(
+    VivaldiAccountManager::AccountInfo account_info) {
+  CoreAccountInfo chromium_account_info;
+  // Email is the closest thing to a username that the chromium account info
+  // takes. It isn't really used for anything else than disply purposes anyway.
+  chromium_account_info.email = account_info.username;
+  chromium_account_info.account_id = account_info.account_id;
+
+  return syncer::SyncAccountInfo(chromium_account_info, true);
+}
+}  // anonymous namespace
+
 VivaldiSyncAuthManager::VivaldiSyncAuthManager(
-    syncer::SyncPrefs* sync_prefs,
     identity::IdentityManager* identity_manager,
     const AccountStateChangedCallback& account_state_changed,
     const CredentialsChangedCallback& credentials_changed,
-    const NotifyTokenRequestedCallback& notify_token_requested,
-    const std::string& saved_username)
-    : SyncAuthManager(sync_prefs,
-                      identity_manager,
+    VivaldiAccountManager* account_manager)
+    : SyncAuthManager(identity_manager,
                       account_state_changed,
                       credentials_changed),
-      notify_token_requested_(notify_token_requested) {
-  account_info_.account_info.account_id = saved_username;
-  account_info_.account_info.email = saved_username;
-  account_info_.is_primary = true;
+      account_manager_(account_manager) {}
+
+VivaldiSyncAuthManager::~VivaldiSyncAuthManager() {
+  if (registered_for_account_notifications_)
+    account_manager_->RemoveObserver(this);
 }
 
-VivaldiSyncAuthManager::~VivaldiSyncAuthManager() {}
+void VivaldiSyncAuthManager::RegisterForAuthNotifications() {
+  account_manager_->AddObserver(this);
+  registered_for_account_notifications_ = true;
 
-void VivaldiSyncAuthManager::RegisterForAuthNotifications() {}
+  sync_account_ = ToSyncAccountInfo(account_manager_->account_info());
+}
 
-browser_sync::SyncAuthManager::SyncAccountInfo VivaldiSyncAuthManager::GetActiveAccountInfo() const {
-  return account_info_;
+syncer::SyncTokenStatus VivaldiSyncAuthManager::GetSyncTokenStatus() const {
+  syncer::SyncTokenStatus token_status;
+  token_status.connection_status_update_time =
+      partial_token_status_.connection_status_update_time;
+  token_status.connection_status = partial_token_status_.connection_status;
+  token_status.token_request_time = account_manager_->GetTokenRequestTime();
+  token_status.token_receive_time = account_manager_->token_received_time();
+  token_status.has_token = !account_manager_->access_token().empty();
+  token_status.next_token_request_time =
+      account_manager_->GetNextTokenRequestTime();
+  token_status.last_get_token_error =
+      ToGoogleServiceAuthError(account_manager_->last_token_fetch_error());
+
+  return token_status;
 }
 
 void VivaldiSyncAuthManager::ConnectionStatusChanged(
     syncer::ConnectionStatus status) {
-  token_status_.connection_status_update_time = base::Time::Now();
-  token_status_.connection_status = status;
+  partial_token_status_.connection_status_update_time = base::Time::Now();
+  partial_token_status_.connection_status = status;
 
   switch (status) {
     case syncer::CONNECTION_AUTH_ERROR:
       access_token_.clear();
-
-      token_status_.token_request_time = base::Time::Now();
-      token_status_.token_receive_time = base::Time();
-      token_status_.next_token_request_time = base::Time();
-
-      notify_token_requested_.Run();
+      account_manager_->RequestNewToken();
       break;
     case syncer::CONNECTION_OK:
       last_auth_error_ = GoogleServiceAuthError::AuthErrorNone();
@@ -65,29 +105,40 @@ void VivaldiSyncAuthManager::ConnectionStatusChanged(
   }
 }
 
-void VivaldiSyncAuthManager::SetLoginInfo(const std::string& username,
-                                          const std::string& access_token) {
-  auto error = GoogleServiceAuthError(GoogleServiceAuthError::NONE);
-  access_token_ = access_token;
-  token_status_.last_get_token_error = error;
-  token_status_.token_receive_time = base::Time::Now();
+void VivaldiSyncAuthManager::OnVivaldiAccountUpdated() {
+  syncer::SyncAccountInfo new_account =
+      ToSyncAccountInfo(account_manager_->account_info());
+  if (new_account.account_info.account_id == sync_account_.account_info.account_id)
+    return;
 
-  account_info_.account_info.account_id = username;
-  account_info_.account_info.email = username;
-  account_info_.is_primary = true;
+  if (!sync_account_.account_info.account_id.empty()) {
+    sync_account_ = syncer::SyncAccountInfo();
+    ConnectionClosed();
+    account_state_changed_callback_.Run();
+  }
 
-  sync_prefs_->SetSyncAuthError(false);
+  if (!new_account.account_info.account_id.empty()) {
+    sync_account_ = new_account;
+    account_state_changed_callback_.Run();
+  }
+}
+
+void VivaldiSyncAuthManager::OnTokenFetchSucceeded() {
   last_auth_error_ = GoogleServiceAuthError::AuthErrorNone();
+  access_token_ = account_manager_->access_token();
   credentials_changed_callback_.Run();
 }
 
-void VivaldiSyncAuthManager::ResetLoginInfo() {
-  access_token_ = "";
-  account_info_ = SyncAccountInfo();
+void VivaldiSyncAuthManager::OnTokenFetchFailed() {
+  if (account_manager_->last_token_fetch_error().type !=
+      VivaldiAccountManager::INVALID_CREDENTIALS)
+    return;
 
-  token_status_.token_request_time = base::Time();
-  token_status_.token_receive_time = base::Time();
-  token_status_.next_token_request_time = base::Time();
+  last_auth_error_ =
+      ToGoogleServiceAuthError(account_manager_->last_token_fetch_error());
+  credentials_changed_callback_.Run();
 }
+
+void VivaldiSyncAuthManager::OnVivaldiAccountShutdown() {}
 
 }  // namespace vivaldi

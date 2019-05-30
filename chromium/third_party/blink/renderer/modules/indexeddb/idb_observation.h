@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "third_party/blink/public/common/indexeddb/web_idb_types.h"
+#include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -17,19 +18,25 @@ namespace blink {
 class IDBAny;
 class IDBKeyRange;
 class ScriptState;
-struct WebIDBObservation;
 
 class IDBObservation final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static WebIDBOperationType StringToOperationType(const String&);
+  static mojom::IDBOperationType StringToOperationType(const String&);
 
-  // Consumes the WebIDBObservation.
-  static IDBObservation* Create(WebIDBObservation, v8::Isolate*);
+  static IDBObservation* Create(int64_t object_store_id,
+                                mojom::IDBOperationType type,
+                                IDBKeyRange* key_range,
+                                std::unique_ptr<IDBValue> value);
 
+  IDBObservation(int64_t object_store_id,
+                 mojom::IDBOperationType type,
+                 IDBKeyRange* key_range,
+                 std::unique_ptr<IDBValue> value);
   ~IDBObservation() override;
 
+  void SetIsolate(v8::Isolate* isolate);
   void Trace(blink::Visitor*) override;
 
   // Implement the IDL
@@ -37,12 +44,14 @@ class IDBObservation final : public ScriptWrappable {
   ScriptValue value(ScriptState*);
   const String& type() const;
 
- private:
-  IDBObservation(WebIDBObservation, v8::Isolate*);
+  // Helpers.
+  int64_t object_store_id() const { return object_store_id_; }
 
+ private:
+  int64_t object_store_id_;
+  const mojom::IDBOperationType operation_type_;
   Member<IDBKeyRange> key_range_;
   Member<IDBAny> value_;
-  const WebIDBOperationType operation_type_;
 };
 
 }  // namespace blink

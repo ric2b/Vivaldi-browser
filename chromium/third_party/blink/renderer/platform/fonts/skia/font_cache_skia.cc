@@ -43,9 +43,8 @@
 #include "third_party/blink/renderer/platform/fonts/font_description.h"
 #include "third_party/blink/renderer/platform/fonts/font_face_creation_params.h"
 #include "third_party/blink/renderer/platform/fonts/font_global_context.h"
-#include "third_party/blink/renderer/platform/fonts/font_unique_name_lookup.h"
 #include "third_party/blink/renderer/platform/fonts/simple_font_data.h"
-#include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
+#include "third_party/blink/renderer/platform/fonts/skia/sktypeface_factory.h"
 #include "third_party/blink/renderer/platform/language.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
@@ -56,25 +55,6 @@
 #include "third_party/skia/include/core/SkTypeface.h"
 
 namespace blink {
-
-#if defined(OS_ANDROID)
-namespace {
-
-static PaintTypeface CreateTypefaceFromUniqueName(
-    const FontFaceCreationParams& creation_params,
-    CString& name) {
-  FontUniqueNameLookup* unique_name_lookup =
-      FontGlobalContext::Get()->GetFontUniqueNameLookup();
-  DCHECK(unique_name_lookup);
-  sk_sp<SkTypeface> uniquely_identified_font =
-      unique_name_lookup->MatchUniqueName(creation_params.Family());
-  if (uniquely_identified_font) {
-    return PaintTypeface::FromSkTypeface(uniquely_identified_font);
-  }
-  return PaintTypeface();
-}
-}  // namespace
-#endif
 
 AtomicString ToAtomicString(const SkString& str) {
   return AtomicString::FromUTF8(str.c_str(), str.size());
@@ -98,9 +78,9 @@ AtomicString FontCache::GetFamilyNameForCharacter(
     FontFallbackPriority fallback_priority) {
   DCHECK(fm);
 
-  const size_t kMaxLocales = 4;
+  const int kMaxLocales = 4;
   const char* bcp47_locales[kMaxLocales];
-  size_t locale_count = 0;
+  int locale_count = 0;
 
   // Fill in the list of locales in the reverse priority order.
   // Skia expects the highest array index to be the first priority.
@@ -166,14 +146,14 @@ scoped_refptr<SimpleFontData> FontCache::GetLastResortFallbackFont(
   if (!font_platform_data) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
                                     sans_creation_params,
-                                    (FontFamilyNames::Sans));
+                                    (font_family_names::kSans));
     font_platform_data = GetFontPlatformData(description, sans_creation_params,
                                              AlternateFontName::kLastResort);
   }
   if (!font_platform_data) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
                                     arial_creation_params,
-                                    (FontFamilyNames::Arial));
+                                    (font_family_names::kArial));
     font_platform_data = GetFontPlatformData(description, arial_creation_params,
                                              AlternateFontName::kLastResort);
   }
@@ -182,7 +162,7 @@ scoped_refptr<SimpleFontData> FontCache::GetLastResortFallbackFont(
   if (!font_platform_data) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
                                     msuigothic_creation_params,
-                                    (FontFamilyNames::MS_UI_Gothic));
+                                    (font_family_names::kMSUIGothic));
     font_platform_data =
         GetFontPlatformData(description, msuigothic_creation_params,
                             AlternateFontName::kLastResort);
@@ -190,7 +170,7 @@ scoped_refptr<SimpleFontData> FontCache::GetLastResortFallbackFont(
   if (!font_platform_data) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
                                     mssansserif_creation_params,
-                                    (FontFamilyNames::Microsoft_Sans_Serif));
+                                    (font_family_names::kMicrosoftSansSerif));
     font_platform_data =
         GetFontPlatformData(description, mssansserif_creation_params,
                             AlternateFontName::kLastResort);
@@ -198,21 +178,21 @@ scoped_refptr<SimpleFontData> FontCache::GetLastResortFallbackFont(
   if (!font_platform_data) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
                                     segoeui_creation_params,
-                                    (FontFamilyNames::Segoe_UI));
+                                    (font_family_names::kSegoeUI));
     font_platform_data = GetFontPlatformData(
         description, segoeui_creation_params, AlternateFontName::kLastResort);
   }
   if (!font_platform_data) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
                                     calibri_creation_params,
-                                    (FontFamilyNames::Calibri));
+                                    (font_family_names::kCalibri));
     font_platform_data = GetFontPlatformData(
         description, calibri_creation_params, AlternateFontName::kLastResort);
   }
   if (!font_platform_data) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
                                     timesnewroman_creation_params,
-                                    (FontFamilyNames::Times_New_Roman));
+                                    (font_family_names::kTimesNewRoman));
     font_platform_data =
         GetFontPlatformData(description, timesnewroman_creation_params,
                             AlternateFontName::kLastResort);
@@ -220,7 +200,7 @@ scoped_refptr<SimpleFontData> FontCache::GetLastResortFallbackFont(
   if (!font_platform_data) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
                                     couriernew_creation_params,
-                                    (FontFamilyNames::Courier_New));
+                                    (font_family_names::kCourierNew));
     font_platform_data =
         GetFontPlatformData(description, couriernew_creation_params,
                             AlternateFontName::kLastResort);
@@ -231,7 +211,7 @@ scoped_refptr<SimpleFontData> FontCache::GetLastResortFallbackFont(
   return FontDataFromFontPlatformData(font_platform_data, should_retain);
 }
 
-PaintTypeface FontCache::CreateTypeface(
+sk_sp<SkTypeface> FontCache::CreateTypeface(
     const FontDescription& font_description,
     const FontFaceCreationParams& creation_params,
     CString& name) {
@@ -240,16 +220,16 @@ PaintTypeface FontCache::CreateTypeface(
 
   if (creation_params.CreationType() == kCreateFontByFciIdAndTtcIndex) {
     if (Platform::Current()->GetSandboxSupport()) {
-      return PaintTypeface::FromFontConfigInterfaceIdAndTtcIndex(
+      return SkTypeface_Factory::FromFontConfigInterfaceIdAndTtcIndex(
           creation_params.FontconfigInterfaceId(), creation_params.TtcIndex());
     }
-    return PaintTypeface::FromFilenameAndTtcIndex(
+    return SkTypeface_Factory::FromFilenameAndTtcIndex(
         creation_params.Filename().data(), creation_params.TtcIndex());
   }
 #endif
 
   AtomicString family = creation_params.Family();
-  DCHECK_NE(family, FontFamilyNames::system_ui);
+  DCHECK_NE(family, font_family_names::kSystemUi);
   // If we're creating a fallback font (e.g. "-webkit-monospace"), convert the
   // name into the fallback name (like "monospace") that fontconfig understands.
   if (!family.length() || family.StartsWith("-webkit-")) {
@@ -262,10 +242,10 @@ PaintTypeface FontCache::CreateTypeface(
 #if defined(OS_WIN)
   // TODO(vmpstr): Deal with paint typeface here.
   if (sideloaded_fonts_) {
-    HashMap<String, sk_sp<SkTypeface>>::iterator sideloaded_font =
-        sideloaded_fonts_->find(name.data());
+    HashMap<String, sk_sp<SkTypeface>, CaseFoldingHash>::iterator
+        sideloaded_font = sideloaded_fonts_->find(name.data());
     if (sideloaded_font != sideloaded_fonts_->end())
-      return PaintTypeface::FromSkTypeface(sideloaded_font->value);
+      return sideloaded_font->value;
   }
 #endif
 
@@ -275,18 +255,15 @@ PaintTypeface FontCache::CreateTypeface(
   // SkTypeface::CreateFromName which may redirect the call to the default font
   // Manager.  On Windows the font manager is always present.
   if (font_manager_) {
-    // TODO(vmpstr): Handle creating paint typefaces here directly. We need to
-    // figure out whether it's safe to give |font_manager_| to PaintTypeface and
-    // what that means on the GPU side.
     auto tf = sk_sp<SkTypeface>(font_manager_->matchFamilyStyle(
         name.data(), font_description.SkiaFontStyle()));
-    return PaintTypeface::FromSkTypeface(std::move(tf));
+    return tf;
   }
 #endif
 
   // FIXME: Use m_fontManager, matchFamilyStyle instead of
   // legacyCreateTypeface on all platforms.
-  return PaintTypeface::FromFamilyNameAndFontStyle(
+  return SkTypeface_Factory::FromFamilyNameAndFontStyle(
       name.data(), font_description.SkiaFontStyle());
 }
 
@@ -298,36 +275,35 @@ std::unique_ptr<FontPlatformData> FontCache::CreateFontPlatformData(
     AlternateFontName alternate_name) {
   CString name;
 
-  PaintTypeface paint_tf;
-#if defined(OS_ANDROID)
+  sk_sp<SkTypeface> typeface;
+#if defined(OS_ANDROID) || defined(OS_LINUX)
   if (alternate_name == AlternateFontName::kLocalUniqueFace &&
       RuntimeEnabledFeatures::FontSrcLocalMatchingEnabled()) {
-    paint_tf = CreateTypefaceFromUniqueName(creation_params, name);
+    typeface = CreateTypefaceFromUniqueName(creation_params, name);
   } else {
-    paint_tf = CreateTypeface(font_description, creation_params, name);
+    typeface = CreateTypeface(font_description, creation_params, name);
   }
 #else
-  paint_tf = CreateTypeface(font_description, creation_params, name);
+  typeface = CreateTypeface(font_description, creation_params, name);
 #endif
 
-  if (!paint_tf)
+  if (!typeface)
     return nullptr;
 
-  const auto& tf = paint_tf.ToSkTypeface();
   std::unique_ptr<FontPlatformData> font_platform_data =
       std::make_unique<FontPlatformData>(
-          paint_tf, name, font_size,
+          typeface, name, font_size,
           (font_description.Weight() >
                FontSelectionValue(200) +
-                   FontSelectionValue(tf->fontStyle().weight()) ||
+                   FontSelectionValue(typeface->fontStyle().weight()) ||
            font_description.IsSyntheticBold()),
           ((font_description.Style() == ItalicSlopeValue()) &&
-           !tf->isItalic()) ||
+           !typeface->isItalic()) ||
               font_description.IsSyntheticItalic(),
           font_description.Orientation());
 
   font_platform_data->SetAvoidEmbeddedBitmaps(
-      BitmapGlyphsBlacklist::AvoidEmbeddedBitmapsForTypeface(tf.get()));
+      BitmapGlyphsBlacklist::AvoidEmbeddedBitmapsForTypeface(typeface.get()));
 
   return font_platform_data;
 }

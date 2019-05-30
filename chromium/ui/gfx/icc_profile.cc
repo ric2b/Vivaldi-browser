@@ -12,7 +12,7 @@
 #include "base/lazy_instance.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/synchronization/lock.h"
-#include "third_party/skia/include/core/SkColorSpaceXform.h"
+#include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/third_party/skcms/skcms.h"
 #include "ui/gfx/skia_color_space_util.h"
 
@@ -97,8 +97,8 @@ ICCProfile::Internals::AnalyzeResult ICCProfile::Internals::Initialize() {
   DCHECK(sk_color_space_);
 
   // Extract the primary matrix and transfer function
-  to_XYZD50_.set3x3RowMajorf(&profile.toXYZD50.vals[0][0]);
-  memcpy(&transfer_fn_, &profile.trc[0].parametric, sizeof(transfer_fn_));
+  to_XYZD50_ = profile.toXYZD50;
+  transfer_fn_ = profile.trc[0].parametric;
 
   // We assume that if we accurately approximated the profile, then the
   // single-curve version (which may have higher error) is also okay. If we
@@ -163,7 +163,6 @@ ICCProfile ICCProfile::FromDataWithId(const void* data_as_void,
   }
 
   // Insert the profile into all caches.
-  ColorSpace color_space = icc_profile.GetColorSpace();
   if (icc_profile.internals_->id_)
     g_id_to_profile_cache.Get().Put(icc_profile.internals_->id_, icc_profile);
   g_data_to_profile_cache.Get().Put(icc_profile.internals_->data_, icc_profile);
@@ -207,14 +206,14 @@ ICCProfile ICCProfile::FromParametricColorSpace(const ColorSpace& color_space) {
     return ICCProfile();
   }
 
-  SkMatrix44 to_XYZD50_matrix;
+  skcms_Matrix3x3 to_XYZD50_matrix;
   color_space.GetPrimaryMatrix(&to_XYZD50_matrix);
-  SkColorSpaceTransferFn fn;
+  skcms_TransferFunction fn;
   if (!color_space.GetTransferFunction(&fn)) {
     DLOG(ERROR) << "Failed to get ColorSpace transfer function for ICCProfile.";
     return ICCProfile();
   }
-  sk_sp<SkData> data = SkICC::WriteToICC(fn, to_XYZD50_matrix);
+  sk_sp<SkData> data = SkWriteICCProfile(fn, to_XYZD50_matrix);
   if (!data) {
     DLOG(ERROR) << "Failed to create SkICC.";
     return ICCProfile();

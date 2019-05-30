@@ -33,8 +33,11 @@ void IOSChromePasswordManagerDriver::InformNoSavedCredentials() {
 }
 
 void IOSChromePasswordManagerDriver::FormsEligibleForGenerationFound(
-    const std::vector<autofill::PasswordFormGenerationData>& forms) {
-  // TODO(crbug.com/569579): Implement.
+    const std::vector<autofill::PasswordFormGenerationData>& forms) {}
+
+void IOSChromePasswordManagerDriver::FormEligibleForGenerationFound(
+    const autofill::NewPasswordFormGenerationData& form) {
+  [delegate_ formEligibleForGenerationFound:form];
 }
 
 void IOSChromePasswordManagerDriver::GeneratedPasswordAccepted(
@@ -66,7 +69,7 @@ void IOSChromePasswordManagerDriver::ClearPreviewedForm() {
 
 PasswordGenerationManager*
 IOSChromePasswordManagerDriver::GetPasswordGenerationManager() {
-  return nullptr;
+  return [delegate_ passwordGenerationManager];
 }
 
 PasswordManager* IOSChromePasswordManagerDriver::GetPasswordManager() {
@@ -84,10 +87,6 @@ IOSChromePasswordManagerDriver::GetPasswordAutofillManager() {
   return nullptr;
 }
 
-void IOSChromePasswordManagerDriver::ForceSavePassword() {
-  NOTIMPLEMENTED();
-}
-
 autofill::AutofillDriver* IOSChromePasswordManagerDriver::GetAutofillDriver() {
   NOTIMPLEMENTED();
   return nullptr;
@@ -96,4 +95,8 @@ autofill::AutofillDriver* IOSChromePasswordManagerDriver::GetAutofillDriver() {
 bool IOSChromePasswordManagerDriver::IsMainFrame() const {
   // On IOS only processing of password forms in main frame is implemented.
   return true;
+}
+
+GURL IOSChromePasswordManagerDriver::GetLastCommittedURL() const {
+  return delegate_.lastCommittedURL;
 }

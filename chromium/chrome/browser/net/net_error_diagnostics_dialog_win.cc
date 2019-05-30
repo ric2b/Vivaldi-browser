@@ -24,6 +24,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner.h"
 #include "base/threading/thread.h"
+#include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/shell_dialogs/base_shell_dialog_win.h"
@@ -47,13 +48,16 @@ class NetErrorDiagnosticsDialog : public ui::BaseShellDialogImpl {
     if (IsRunningDialogForOwner(parent))
       return;
 
-    RunState run_state = BeginRun(parent);
-    run_state.dialog_thread->task_runner()->PostTaskAndReply(
+    std::unique_ptr<RunState> run_state = BeginRun(parent);
+
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+        run_state->dialog_task_runner;
+    task_runner->PostTaskAndReply(
         FROM_HERE,
-        base::Bind(&NetErrorDiagnosticsDialog::ShowDialogOnPrivateThread,
-                   base::Unretained(this), parent, failed_url),
-        base::Bind(&NetErrorDiagnosticsDialog::DiagnosticsDone,
-                   base::Unretained(this), run_state, callback));
+        base::BindOnce(&NetErrorDiagnosticsDialog::ShowDialogOnPrivateThread,
+                       base::Unretained(this), parent, failed_url),
+        base::BindOnce(&NetErrorDiagnosticsDialog::DiagnosticsDone,
+                       base::Unretained(this), std::move(run_state), callback));
   }
 
  private:
@@ -68,8 +72,9 @@ class NetErrorDiagnosticsDialog : public ui::BaseShellDialogImpl {
     NdfCloseIncident(incident_handle);
   }
 
-  void DiagnosticsDone(RunState run_state, const base::Closure& callback) {
-    EndRun(run_state);
+  void DiagnosticsDone(std::unique_ptr<RunState> run_state,
+                       const base::Closure& callback) {
+    EndRun(std::move(run_state));
     callback.Run();
   }
 
@@ -78,13 +83,17 @@ class NetErrorDiagnosticsDialog : public ui::BaseShellDialogImpl {
 
 }  // namespace
 
-bool CanShowNetworkDiagnosticsDialog() {
-  return true;
+bool CanShowNetworkDiagnosticsDialog(content::WebContents* web_contents) {
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  // The Windows diagnostic tool logs URLs it's run with, so it shouldn't be
+  // used with incognito or guest profiles.  See https://crbug.com/929141
+  return !profile->IsOffTheRecord() && !profile->IsGuestSession();
 }
 
 void ShowNetworkDiagnosticsDialog(content::WebContents* web_contents,
                                   const std::string& failed_url) {
-  DCHECK(CanShowNetworkDiagnosticsDialog());
+  DCHECK(CanShowNetworkDiagnosticsDialog(web_contents));
 
   NetErrorDiagnosticsDialog* dialog = new NetErrorDiagnosticsDialog();
   dialog->Show(

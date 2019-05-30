@@ -12,10 +12,11 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.content.browser.test.util.Coordinates;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.test.util.Coordinates;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.ui.base.PageTransition;
 
 import java.util.Locale;
@@ -50,12 +51,12 @@ public class TabLoadObserver extends EmptyTabObserver {
     }
 
     @Override
-    public void onPageLoadFinished(Tab tab) {
+    public void onPageLoadFinished(Tab tab, String url) {
         mTabLoadFinishedCallback.notifyCalled();
     }
 
     @Override
-    public void onCrash(Tab tab, boolean sadTabShown) {
+    public void onCrash(Tab tab) {
         Assert.fail("Tab crashed; test results will be invalid.  Failing.");
     }
 
@@ -95,7 +96,7 @@ public class TabLoadObserver extends EmptyTabObserver {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                if (!mTab.isLoadingAndRenderingDone()) {
+                if (!ChromeTabUtils.isLoadingAndRenderingDone(mTab)) {
                     updateFailureReason("load and rendering never completed");
                     return false;
                 }

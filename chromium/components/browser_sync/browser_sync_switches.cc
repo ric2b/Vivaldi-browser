@@ -4,6 +4,8 @@
 
 #include "components/browser_sync/browser_sync_switches.h"
 
+#include "base/command_line.h"
+
 namespace switches {
 
 // Disables syncing browser data to a Google Account.
@@ -16,9 +18,6 @@ const char kDisableSync[] = "disable-sync";
 // --disable-synctypes='Typed URLs, Bookmarks, Autofill Profiles'
 const char kDisableSyncTypes[] = "disable-sync-types";
 
-// Enables synchronizing WiFi credentials across devices, using Chrome Sync.
-const char kEnableWifiCredentialSync[] = "enable-wifi-credential-sync";
-
 // Enabled the local sync backend implemented by the LoopbackServer.
 const char kEnableLocalSyncBackend[] = "enable-local-sync-backend";
 
@@ -26,5 +25,14 @@ const char kEnableLocalSyncBackend[] = "enable-local-sync-backend";
 // user-data-dir etc. This flag only matters if the enable-local-sync-backend
 // flag is present.
 const char kLocalSyncBackendDir[] = "local-sync-backend-dir";
+
+// If enabled, the sync engine will be shut down in the "paused" state.
+const base::Feature kStopSyncInPausedState{"StopSyncInPausedState",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsSyncAllowedByFlag() {
+  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kDisableSync);
+}
 
 }  // namespace switches

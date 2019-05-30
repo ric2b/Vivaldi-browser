@@ -10,15 +10,18 @@ namespace cc {
 
 ClientRawMemoryTransferCacheEntry::ClientRawMemoryTransferCacheEntry(
     std::vector<uint8_t> data)
-    : id_(s_next_id_.GetNext()), data_(std::move(data)) {}
+    : id_(s_next_id_.GetNext()), data_(std::move(data)) {
+  DCHECK_LE(data_.size(), UINT32_MAX);
+}
+
 ClientRawMemoryTransferCacheEntry::~ClientRawMemoryTransferCacheEntry() =
     default;
 
 // static
 base::AtomicSequenceNumber ClientRawMemoryTransferCacheEntry::s_next_id_;
 
-size_t ClientRawMemoryTransferCacheEntry::SerializedSize() const {
-  return data_.size();
+uint32_t ClientRawMemoryTransferCacheEntry::SerializedSize() const {
+  return static_cast<uint32_t>(data_.size());
 }
 
 uint32_t ClientRawMemoryTransferCacheEntry::Id() const {
@@ -27,10 +30,10 @@ uint32_t ClientRawMemoryTransferCacheEntry::Id() const {
 
 bool ClientRawMemoryTransferCacheEntry::Serialize(
     base::span<uint8_t> data) const {
-  if (data.size() != data_.size())
+  if (data.size() < data_.size())
     return false;
 
-  memcpy(data.data(), data_.data(), data.size());
+  memcpy(data.data(), data_.data(), data_.size());
   return true;
 }
 

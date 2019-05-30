@@ -50,15 +50,15 @@ bool WebInputElement::IsTextField() const {
 
 bool WebInputElement::IsText() const {
   return ConstUnwrap<HTMLInputElement>()->IsTextField() &&
-         ConstUnwrap<HTMLInputElement>()->type() != InputTypeNames::number;
+         ConstUnwrap<HTMLInputElement>()->type() != input_type_names::kNumber;
 }
 
 bool WebInputElement::IsEmailField() const {
-  return ConstUnwrap<HTMLInputElement>()->type() == InputTypeNames::email;
+  return ConstUnwrap<HTMLInputElement>()->type() == input_type_names::kEmail;
 }
 
 bool WebInputElement::IsPasswordField() const {
-  return ConstUnwrap<HTMLInputElement>()->type() == InputTypeNames::password;
+  return ConstUnwrap<HTMLInputElement>()->type() == input_type_names::kPassword;
 }
 
 bool WebInputElement::IsPasswordFieldForAutofill() const {
@@ -67,19 +67,19 @@ bool WebInputElement::IsPasswordFieldForAutofill() const {
     return true;
   }
 
-  return ConstUnwrap<HTMLInputElement>()->type() == InputTypeNames::password;
+  return ConstUnwrap<HTMLInputElement>()->type() == input_type_names::kPassword;
 }
 
 bool WebInputElement::IsImageButton() const {
-  return ConstUnwrap<HTMLInputElement>()->type() == InputTypeNames::image;
+  return ConstUnwrap<HTMLInputElement>()->type() == input_type_names::kImage;
 }
 
 bool WebInputElement::IsRadioButton() const {
-  return ConstUnwrap<HTMLInputElement>()->type() == InputTypeNames::radio;
+  return ConstUnwrap<HTMLInputElement>()->type() == input_type_names::kRadio;
 }
 
 bool WebInputElement::IsCheckbox() const {
-  return ConstUnwrap<HTMLInputElement>()->type() == InputTypeNames::checkbox;
+  return ConstUnwrap<HTMLInputElement>()->type() == input_type_names::kCheckbox;
 }
 
 int WebInputElement::MaxLength() const {
@@ -105,8 +105,9 @@ bool WebInputElement::IsValidValue(const WebString& value) const {
 
 void WebInputElement::SetChecked(bool now_checked, bool send_events) {
   Unwrap<HTMLInputElement>()->setChecked(
-      now_checked,
-      send_events ? kDispatchInputAndChangeEvent : kDispatchNoEvent);
+      now_checked, send_events
+                       ? TextFieldEventBehavior::kDispatchInputAndChangeEvent
+                       : TextFieldEventBehavior::kDispatchNoEvent);
 }
 
 bool WebInputElement::IsChecked() const {
@@ -143,7 +144,7 @@ WebInputElement::WebInputElement(HTMLInputElement* elem)
     : WebFormControlElement(elem) {}
 
 DEFINE_WEB_NODE_TYPE_CASTS(WebInputElement,
-                           IsHTMLInputElement(ConstUnwrap<Node>()));
+                           IsHTMLInputElement(ConstUnwrap<Node>()))
 
 WebInputElement& WebInputElement::operator=(HTMLInputElement* elem) {
   private_ = elem;

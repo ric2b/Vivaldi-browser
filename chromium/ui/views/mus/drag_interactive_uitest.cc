@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "services/ws/public/mojom/constants.mojom.h"
@@ -15,7 +16,7 @@
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/views/mus/mus_client.h"
-#include "ui/views/test/widget_test.h"
+#include "ui/views/test/views_interactive_ui_test_base.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #include "ui/views/widget/widget.h"
 
@@ -60,7 +61,7 @@ class TargetView : public views::View {
   // views::View overrides:
   bool GetDropFormats(
       int* formats,
-      std::set<ui::Clipboard::FormatType>* format_types) override {
+      std::set<ui::ClipboardFormatType>* format_types) override {
     *formats = ui::OSExchangeData::STRING;
     return true;
   }
@@ -86,29 +87,29 @@ class TargetView : public views::View {
   DISALLOW_COPY_AND_ASSIGN(TargetView);
 };
 
-std::unique_ptr<ui::PointerEvent> CreateMouseMoveEvent(int x, int y) {
-  return std::make_unique<ui::PointerEvent>(ui::MouseEvent(
+std::unique_ptr<ui::MouseEvent> CreateMouseMoveEvent(int x, int y) {
+  return std::make_unique<ui::MouseEvent>(
       ui::ET_MOUSE_MOVED, gfx::Point(x, y), gfx::Point(x, y),
-      ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, ui::EF_NONE));
+      ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, ui::EF_NONE);
 }
 
-std::unique_ptr<ui::PointerEvent> CreateMouseDownEvent(int x, int y) {
-  return std::make_unique<ui::PointerEvent>(
-      ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(x, y), gfx::Point(x, y),
-                     ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
-                     ui::EF_LEFT_MOUSE_BUTTON));
+std::unique_ptr<ui::MouseEvent> CreateMouseDownEvent(int x, int y) {
+  return std::make_unique<ui::MouseEvent>(
+      ui::ET_MOUSE_PRESSED, gfx::Point(x, y), gfx::Point(x, y),
+      ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
+      ui::EF_LEFT_MOUSE_BUTTON);
 }
 
-std::unique_ptr<ui::PointerEvent> CreateMouseUpEvent(int x, int y) {
-  return std::make_unique<ui::PointerEvent>(
-      ui::MouseEvent(ui::ET_MOUSE_RELEASED, gfx::Point(x, y), gfx::Point(x, y),
-                     ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
-                     ui::EF_LEFT_MOUSE_BUTTON));
+std::unique_ptr<ui::MouseEvent> CreateMouseUpEvent(int x, int y) {
+  return std::make_unique<ui::MouseEvent>(
+      ui::ET_MOUSE_RELEASED, gfx::Point(x, y), gfx::Point(x, y),
+      ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
+      ui::EF_LEFT_MOUSE_BUTTON);
 }
 
 }  // namespace
 
-using DragTestInteractive = WidgetTest;
+using DragTestInteractive = ViewsInteractiveUITestBase;
 
 // Dispatch of events is asynchronous so most of DragTestInteractive.DragTest
 // consists of callback functions which will perform an action after the
@@ -151,23 +152,27 @@ TEST_F(DragTestInteractive, DragTest) {
   ws::mojom::EventInjectorPtr event_injector;
   MusClient::Get()->window_tree_client()->connector()->BindInterface(
       ws::mojom::kServiceName, &event_injector);
-  Widget* source_widget = CreateTopLevelFramelessPlatformWidget();
+
+  Widget* source_widget = new Widget;
+  source_widget->Init(CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS));
   View* source_view = new DraggableView;
   source_widget->SetContentsView(source_view);
   source_widget->Show();
 
   aura::test::ChangeCompletionWaiter source_waiter(aura::ChangeType::BOUNDS,
-                                                   false);
+                                                   true);
   source_widget->SetBounds(gfx::Rect(0, 0, 20, 20));
   ASSERT_TRUE(source_waiter.Wait());
 
-  Widget* target_widget = CreateTopLevelFramelessPlatformWidget();
+  Widget* target_widget = new Widget;
+  target_widget->Init(CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS));
+
   TargetView* target_view = new TargetView;
   target_widget->SetContentsView(target_view);
   target_widget->Show();
 
   aura::test::ChangeCompletionWaiter target_waiter(aura::ChangeType::BOUNDS,
-                                                   false);
+                                                   true);
   target_widget->SetBounds(gfx::Rect(20, 20, 20, 20));
   ASSERT_TRUE(target_waiter.Wait());
 

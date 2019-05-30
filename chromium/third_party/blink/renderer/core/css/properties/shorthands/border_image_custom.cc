@@ -13,7 +13,7 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 
 namespace blink {
-namespace CSSShorthand {
+namespace css_shorthand {
 
 bool BorderImage::ParseShorthand(
     bool important,
@@ -27,41 +27,44 @@ bool BorderImage::ParseShorthand(
   CSSValue* outset = nullptr;
   CSSValue* repeat = nullptr;
 
-  if (!CSSParsingUtils::ConsumeBorderImageComponents(
+  if (!css_parsing_utils::ConsumeBorderImageComponents(
           range, context, source, slice, width, outset, repeat,
-          CSSParsingUtils::DefaultFill::kNoFill)) {
+          css_parsing_utils::DefaultFill::kNoFill)) {
     return false;
   }
 
-  CSSPropertyParserHelpers::AddProperty(
+  css_property_parser_helpers::AddProperty(
       CSSPropertyBorderImageSource, CSSPropertyBorderImage,
-      source ? *source
-             : *ToLonghand(&GetCSSPropertyBorderImageSource())->InitialValue(),
-      important, CSSPropertyParserHelpers::IsImplicitProperty::kNotImplicit,
+      source
+          ? *source
+          : *To<Longhand>(&GetCSSPropertyBorderImageSource())->InitialValue(),
+      important, css_property_parser_helpers::IsImplicitProperty::kNotImplicit,
       properties);
-  CSSPropertyParserHelpers::AddProperty(
+  css_property_parser_helpers::AddProperty(
       CSSPropertyBorderImageSlice, CSSPropertyBorderImage,
       slice ? *slice
-            : *ToLonghand(&GetCSSPropertyBorderImageSlice())->InitialValue(),
-      important, CSSPropertyParserHelpers::IsImplicitProperty::kNotImplicit,
+            : *To<Longhand>(&GetCSSPropertyBorderImageSlice())->InitialValue(),
+      important, css_property_parser_helpers::IsImplicitProperty::kNotImplicit,
       properties);
-  CSSPropertyParserHelpers::AddProperty(
+  css_property_parser_helpers::AddProperty(
       CSSPropertyBorderImageWidth, CSSPropertyBorderImage,
       width ? *width
-            : *ToLonghand(&GetCSSPropertyBorderImageWidth())->InitialValue(),
-      important, CSSPropertyParserHelpers::IsImplicitProperty::kNotImplicit,
+            : *To<Longhand>(&GetCSSPropertyBorderImageWidth())->InitialValue(),
+      important, css_property_parser_helpers::IsImplicitProperty::kNotImplicit,
       properties);
-  CSSPropertyParserHelpers::AddProperty(
+  css_property_parser_helpers::AddProperty(
       CSSPropertyBorderImageOutset, CSSPropertyBorderImage,
-      outset ? *outset
-             : *ToLonghand(&GetCSSPropertyBorderImageOutset())->InitialValue(),
-      important, CSSPropertyParserHelpers::IsImplicitProperty::kNotImplicit,
+      outset
+          ? *outset
+          : *To<Longhand>(&GetCSSPropertyBorderImageOutset())->InitialValue(),
+      important, css_property_parser_helpers::IsImplicitProperty::kNotImplicit,
       properties);
-  CSSPropertyParserHelpers::AddProperty(
+  css_property_parser_helpers::AddProperty(
       CSSPropertyBorderImageRepeat, CSSPropertyBorderImage,
-      repeat ? *repeat
-             : *ToLonghand(&GetCSSPropertyBorderImageRepeat())->InitialValue(),
-      important, CSSPropertyParserHelpers::IsImplicitProperty::kNotImplicit,
+      repeat
+          ? *repeat
+          : *To<Longhand>(&GetCSSPropertyBorderImageRepeat())->InitialValue(),
+      important, css_property_parser_helpers::IsImplicitProperty::kNotImplicit,
       properties);
 
   return true;
@@ -76,5 +79,5 @@ const CSSValue* BorderImage::CSSValueFromComputedStyleInternal(
   return ComputedStyleUtils::ValueForNinePieceImage(style.BorderImage(), style);
 }
 
-}  // namespace CSSShorthand
+}  // namespace css_shorthand
 }  // namespace blink

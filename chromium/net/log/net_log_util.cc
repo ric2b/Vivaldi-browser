@@ -282,10 +282,8 @@ std::unique_ptr<base::DictionaryValue> GetNetConstants() {
         base::TimeTicks::Now() - base::TimeTicks();
     int64_t tick_to_unix_time_ms =
         (time_since_epoch - reference_time_ticks).InMilliseconds();
-
-    // Pass it as a string, since it may be too large to fit in an integer.
-    constants_dict->SetString("timeTickOffset",
-                              base::Int64ToString(tick_to_unix_time_ms));
+    constants_dict->SetKey("timeTickOffset",
+                           NetLogNumberValue(tick_to_unix_time_ms));
   }
 
   // TODO(eroman): Is this needed?
@@ -343,8 +341,7 @@ NET_EXPORT std::unique_ptr<base::DictionaryValue> GetNetInfo(
 
     auto list = std::make_unique<base::ListValue>();
 
-    for (ProxyRetryInfoMap::const_iterator it = bad_proxies_map.begin();
-         it != bad_proxies_map.end(); ++it) {
+    for (auto it = bad_proxies_map.begin(); it != bad_proxies_map.end(); ++it) {
       const std::string& proxy_uri = it->first;
       const ProxyRetryInfo& retry_info = it->second;
 

@@ -11,7 +11,7 @@ DEPS = [
 
 
 def RunSteps(api):
-  with api.windows_sdk(enabled=api.platform.is_win):
+  with api.windows_sdk():
     api.step('gn', ['gn', 'gen', 'out/Release'])
     api.step('ninja', ['ninja', '-C', 'out/Release'])
 

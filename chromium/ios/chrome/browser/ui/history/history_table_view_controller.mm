@@ -23,7 +23,6 @@
 #include "ios/chrome/browser/ui/history/history_entry_inserter.h"
 #import "ios/chrome/browser/ui/history/history_entry_item.h"
 #import "ios/chrome/browser/ui/history/history_entry_item_delegate.h"
-#import "ios/chrome/browser/ui/history/history_image_data_source.h"
 #include "ios/chrome/browser/ui/history/history_local_commands.h"
 #import "ios/chrome/browser/ui/history/history_ui_constants.h"
 #include "ios/chrome/browser/ui/history/history_util.h"
@@ -32,11 +31,13 @@
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_link_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_url_item.h"
+#import "ios/chrome/browser/ui/table_view/table_view_favicon_data_source.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_constants.h"
 #import "ios/chrome/browser/ui/url_loader.h"
 #import "ios/chrome/browser/ui/util/pasteboard_util.h"
 #import "ios/chrome/browser/ui/util/top_view_controller.h"
 #import "ios/chrome/common/favicon/favicon_view.h"
+#import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/navigation_manager.h"
 #import "ios/web/public/referrer.h"
@@ -63,21 +64,17 @@ const NSInteger kEntriesStatusSectionIdentifier = kSectionIdentifierEnumZero;
 const int kMaxFetchCount = 100;
 // Separation space between sections.
 const CGFloat kSeparationSpaceBetweenSections = 9;
-// The Alpha value used by the SearchBar when disabled.
-const CGFloat kAlphaForDisabledSearchBar = 0.5;
 // The default UIButton font size used by UIKit.
 const CGFloat kButtonDefaultFontSize = 15.0;
 // Horizontal width representing UIButton's padding.
 const CGFloat kButtonHorizontalPadding = 30.0;
-// Vertical offset from the top, to center search bar and cancel button in the
-// header.
-const CGFloat kVerticalOffsetForSearchHeader = 6.0f;
 }  // namespace
 
 @interface HistoryTableViewController ()<HistoryEntriesStatusItemDelegate,
                                          HistoryEntryInserterDelegate,
                                          HistoryEntryItemDelegate,
                                          TableViewTextLinkCellDelegate,
+                                         UISearchControllerDelegate,
                                          UISearchResultsUpdating,
                                          UISearchBarDelegate> {
   // Closure to request next page of history.
@@ -86,8 +83,6 @@ const CGFloat kVerticalOffsetForSearchHeader = 6.0f;
 
 // Object to manage insertion of history entries into the table view model.
 @property(nonatomic, strong) HistoryEntryInserter* entryInserter;
-// Coordinator for displaying context menus for history entries.
-@property(nonatomic, strong) ContextMenuCoordinator* contextMenuCoordinator;
 // The current query for visible history entries.
 @property(nonatomic, copy) NSString* currentQuery;
 // The current status message for the tableView, it might be nil.
@@ -117,6 +112,8 @@ const CGFloat kVerticalOffsetForSearchHeader = 6.0f;
 @property(nonatomic, strong) UIBarButtonItem* clearBrowsingDataButton;
 @property(nonatomic, strong) UIBarButtonItem* deleteButton;
 @property(nonatomic, strong) UIBarButtonItem* editButton;
+// Scrim when search box in focused.
+@property(nonatomic, strong) UIControl* scrimView;
 @end
 
 @implementation HistoryTableViewController
@@ -128,6 +125,7 @@ const CGFloat kVerticalOffsetForSearchHeader = 6.0f;
 @synthesize currentStatusMessage = _currentStatusMessage;
 @synthesize deleteButton = _deleteButton;
 @synthesize editButton = _editButton;
+@synthesize scrimView = _scrimView;
 @synthesize empty = _empty;
 @synthesize entryInserter = _entryInserter;
 @synthesize filteredOutEntriesIndexPaths = _filteredOutEntriesIndexPaths;
@@ -149,6 +147,30 @@ const CGFloat kVerticalOffsetForSearchHeader = 6.0f;
 - (instancetype)init {
   return [super initWithTableViewStyle:UITableViewStylePlain
                            appBarStyle:ChromeTableViewControllerStyleNoAppBar];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+  [super viewWillAppear:animated];
+
+  // Center search bar's cancel button vertically so it looks centered.
+  // We change the cancel button proxy styles, so we will return it to
+  // default in viewDidDisappear.
+  UIOffset offset =
+      UIOffsetMake(0.0f, kTableViewNavigationVerticalOffsetForSearchHeader);
+  UIBarButtonItem* cancelButton = [UIBarButtonItem
+      appearanceWhenContainedInInstancesOfClasses:@[ [UISearchBar class] ]];
+  [cancelButton setTitlePositionAdjustment:offset
+                             forBarMetrics:UIBarMetricsDefault];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+  [super viewWillDisappear:animated];
+
+  // Restore to default origin offset for cancel button proxy style.
+  UIBarButtonItem* cancelButton = [UIBarButtonItem
+      appearanceWhenContainedInInstancesOfClasses:@[ [UISearchBar class] ]];
+  [cancelButton setTitlePositionAdjustment:UIOffsetZero
+                             forBarMetrics:UIBarMetricsDefault];
 }
 
 - (void)viewDidLoad {
@@ -204,24 +226,27 @@ const CGFloat kVerticalOffsetForSearchHeader = 6.0f;
   // SearchController is active will fail.
   self.definesPresentationContext = YES;
 
-  // For iOS 11 and later, place the search bar in the navigation bar. Otherwise
-  // place the search bar in the table view's header.
-  if (@available(iOS 11, *)) {
-    self.navigationItem.searchController = self.searchController;
-    self.navigationItem.hidesSearchBarWhenScrolling = NO;
+  self.scrimView = [[UIControl alloc] init];
+  self.scrimView.alpha = 0.0f;
+  self.scrimView.backgroundColor =
+      [UIColor colorWithWhite:0
+                        alpha:kTableViewNavigationWhiteAlphaForSearchScrim];
+  self.scrimView.translatesAutoresizingMaskIntoConstraints = NO;
+  self.scrimView.accessibilityIdentifier = kHistorySearchScrimIdentifier;
+  [self.scrimView addTarget:self
+                     action:@selector(dismissSearchController:)
+           forControlEvents:UIControlEventTouchUpInside];
 
-    // Center search bar and cancel button vertically so it looks centered
-    // in the header when searching.
-    UIOffset offset = UIOffsetMake(0.0f, kVerticalOffsetForSearchHeader);
-    self.searchController.searchBar.searchFieldBackgroundPositionAdjustment =
-        offset;
-    UIBarButtonItem* cancelButton = [UIBarButtonItem
-        appearanceWhenContainedInInstancesOfClasses:@[ [UISearchBar class] ]];
-    [cancelButton setTitlePositionAdjustment:offset
-                               forBarMetrics:UIBarMetricsDefault];
-  } else {
-    self.tableView.tableHeaderView = self.searchController.searchBar;
-  }
+  // Place the search bar in the navigation bar.
+  self.navigationItem.searchController = self.searchController;
+  self.navigationItem.hidesSearchBarWhenScrolling = NO;
+
+  // Center search bar and cancel button vertically so it looks centered
+  // in the header when searching.
+  UIOffset offset =
+      UIOffsetMake(0.0f, kTableViewNavigationVerticalOffsetForSearchHeader);
+  self.searchController.searchBar.searchFieldBackgroundPositionAdjustment =
+      offset;
 }
 
 #pragma mark - TableViewModel
@@ -439,7 +464,25 @@ const CGFloat kVerticalOffsetForSearchHeader = 6.0f;
 - (void)updateSearchResultsForSearchController:
     (UISearchController*)searchController {
   DCHECK_EQ(self.searchController, searchController);
-  [self showHistoryMatchingQuery:searchController.searchBar.text];
+  NSString* text = searchController.searchBar.text;
+
+  if (text.length == 0 && self.searchController.active) {
+    [self showScrim];
+  } else {
+    [self hideScrim];
+  }
+
+  [self showHistoryMatchingQuery:text];
+}
+
+#pragma mark UISearchControllerDelegate
+
+- (void)willPresentSearchController:(UISearchController*)searchController {
+  [self showScrim];
+}
+
+- (void)didDismissSearchController:(UISearchController*)searchController {
+  [self hideScrim];
 }
 
 #pragma mark UISearchBarDelegate
@@ -482,25 +525,15 @@ const CGFloat kVerticalOffsetForSearchHeader = 6.0f;
   }
   self.historyService->RemoveVisits(entries);
 
-  // Delete items from |self.tableView|.
-  // If iOS11+ use performBatchUpdates: instead of beginUpdates/endUpdates.
-  if (@available(iOS 11, *)) {
-    [self.tableView performBatchUpdates:^{
-      [self deleteItemsFromTableViewModelWithIndex:toDeleteIndexPaths
-                          deleteItemsFromTableView:YES];
-    }
-        completion:^(BOOL) {
-          [self updateTableViewAfterDeletingEntries];
-          [self configureViewsForNonEditModeWithAnimation:YES];
-        }];
-  } else {
-    [self.tableView beginUpdates];
+  // Delete items from |self.tableView| using performBatchUpdates.
+  [self.tableView performBatchUpdates:^{
     [self deleteItemsFromTableViewModelWithIndex:toDeleteIndexPaths
                         deleteItemsFromTableView:YES];
-    [self updateTableViewAfterDeletingEntries];
-    [self configureViewsForNonEditModeWithAnimation:YES];
-    [self.tableView endUpdates];
   }
+      completion:^(BOOL) {
+        [self updateTableViewAfterDeletingEntries];
+        [self configureViewsForNonEditModeWithAnimation:YES];
+      }];
   base::RecordAction(base::UserMetricsAction("HistoryPage_RemoveSelected"));
 }
 
@@ -763,14 +796,7 @@ const CGFloat kVerticalOffsetForSearchHeader = 6.0f;
 
   // If there's any tableUpdates, run them.
   if (tableUpdates) {
-    // If iOS11+ use performBatchUpdates: instead of beginUpdates/endUpdates.
-    if (@available(iOS 11, *)) {
-      [self.tableView performBatchUpdates:tableUpdates completion:nil];
-    } else {
-      [self.tableView beginUpdates];
-      tableUpdates();
-      [self.tableView endUpdates];
-    }
+    [self.tableView performBatchUpdates:tableUpdates completion:nil];
   }
   self.currentStatusMessage = newStatusMessage;
 }
@@ -851,6 +877,51 @@ const CGFloat kVerticalOffsetForSearchHeader = 6.0f;
   }
 }
 
+// Dismisses the search controller when there's a touch event on the scrim.
+- (void)dismissSearchController:(UIControl*)sender {
+  if (self.searchController.active) {
+    self.searchController.active = NO;
+  }
+}
+
+// Shows scrim overlay and hide toolbar.
+- (void)showScrim {
+  if (self.scrimView.alpha < 1.0f) {
+    self.navigationController.toolbarHidden = YES;
+    self.scrimView.alpha = 0.0f;
+    [self.tableView addSubview:self.scrimView];
+    // We attach our constraints to the superview because the tableView is
+    // a scrollView and it seems that we get an empty frame when attaching to
+    // it.
+    AddSameConstraints(self.scrimView, self.view.superview);
+    self.tableView.scrollEnabled = NO;
+    [UIView animateWithDuration:kTableViewNavigationScrimFadeDuration
+                     animations:^{
+                       self.scrimView.alpha = 1.0f;
+                       [self.view layoutIfNeeded];
+                     }];
+  }
+}
+
+// Hides scrim and restore toolbar.
+- (void)hideScrim {
+  if (self.scrimView.alpha > 0.0f) {
+    self.navigationController.toolbarHidden = NO;
+    [UIView animateWithDuration:kTableViewNavigationScrimFadeDuration
+        animations:^{
+          self.scrimView.alpha = 0.0f;
+        }
+        completion:^(BOOL finished) {
+          [self.scrimView removeFromSuperview];
+          self.tableView.scrollEnabled = YES;
+        }];
+  }
+}
+
+- (BOOL)scrimIsVisible {
+  return self.scrimView.superview ? YES : NO;
+}
+
 #pragma mark Navigation Toolbar Configuration
 
 // Animates the view configuration after flipping the current status of |[self
@@ -889,7 +960,8 @@ const CGFloat kVerticalOffsetForSearchHeader = 6.0f;
   [self setToolbarItems:@[ self.deleteButton, spaceButton, self.cancelButton ]
                animated:animated];
   [self.searchController.searchBar setUserInteractionEnabled:NO];
-  self.searchController.searchBar.alpha = kAlphaForDisabledSearchBar;
+  self.searchController.searchBar.alpha =
+      kTableViewNavigationAlphaForDisabledSearchBar;
   [self updateToolbarButtons];
 }
 
@@ -907,6 +979,10 @@ const CGFloat kVerticalOffsetForSearchHeader = 6.0f;
     (UILongPressGestureRecognizer*)gestureRecognizer {
   if (gestureRecognizer.numberOfTouches != 1 || self.editing ||
       gestureRecognizer.state != UIGestureRecognizerStateBegan) {
+    return;
+  }
+  if ([self scrimIsVisible]) {
+    self.searchController.active = NO;
     return;
   }
 
@@ -932,17 +1008,10 @@ const CGFloat kVerticalOffsetForSearchHeader = 6.0f;
       base::SysUTF16ToNSString(url_formatter::FormatUrl(entry.URL));
   params.menu_title = [menuTitle copy];
 
-  // Present sheet/popover using controller that is added to view hierarchy.
-  // TODO(crbug.com/754642): Remove TopPresentedViewController().
-  UIViewController* topController =
-      top_view_controller::TopPresentedViewController();
+  self.contextMenuCoordinator = [[ContextMenuCoordinator alloc]
+      initWithBaseViewController:self.navigationController
+                          params:params];
 
-  self.contextMenuCoordinator =
-      [[ContextMenuCoordinator alloc] initWithBaseViewController:topController
-                                                          params:params];
-
-  // TODO(crbug.com/606503): Refactor context menu creation code to be shared
-  // with BrowserViewController.
   // Add "Open in New Tab" option.
   NSString* openInNewTabTitle =
       l10n_util::GetNSStringWithFixup(IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB);
@@ -1009,8 +1078,9 @@ const CGFloat kVerticalOffsetForSearchHeader = 6.0f;
                                  new_tab_page_uma::ACTION_OPENED_HISTORY_ENTRY);
   web::NavigationManager::WebLoadParams params(URL);
   params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
+  ChromeLoadParams chromeParams(params);
   [self.localDispatcher dismissHistoryWithCompletion:^{
-    [self.loader loadURLWithParams:params];
+    [self.loader loadURLWithParams:chromeParams];
     [self.presentationDelegate showActiveRegularTabFromHistory];
   }];
 }

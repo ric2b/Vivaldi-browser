@@ -10,7 +10,6 @@
 
 namespace extensions {
 class Dispatcher;
-class Extension;
 class ExtensionBindingsSystem;
 class ModuleSystem;
 class NativeExtensionBindingsSystem;
@@ -24,11 +23,6 @@ class DispatcherDelegate {
  public:
   virtual ~DispatcherDelegate() {}
 
-  // Adds any allowlisted entries for cross-origin communication for a newly
-  // created extension context.
-  virtual void AddOriginAccessPermissions(const Extension& extension,
-                                          bool is_extension_active) {}
-
   // Includes additional native handlers in a ScriptContext's ModuleSystem.
   virtual void RegisterNativeHandlers(Dispatcher* dispatcher,
                                       ModuleSystem* module_system,
@@ -38,8 +32,9 @@ class DispatcherDelegate {
   // Includes additional source resources into the resource map.
   virtual void PopulateSourceMap(ResourceBundleSourceMap* source_map) {}
 
-  // Requires additional modules within an extension context's module system.
-  virtual void RequireAdditionalModules(ScriptContext* context) {}
+  // Requires modules for defining <webview> within an extension context's
+  // module system.
+  virtual void RequireWebViewModules(ScriptContext* context);
 
   // Allows the delegate to respond to an updated set of active extensions in
   // the Dispatcher.

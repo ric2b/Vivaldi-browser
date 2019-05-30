@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
@@ -33,13 +34,15 @@ PageTimingMetricsSender::PageTimingMetricsSender(
     : sender_(std::move(sender)),
       timer_(std::move(timer)),
       last_timing_(std::move(initial_timing)),
+      last_cpu_timing_(mojom::CpuTiming::New()),
       metadata_(mojom::PageLoadMetadata::New()),
       new_features_(mojom::PageLoadFeatures::New()),
+      render_data_(),
       buffer_timer_delay_ms_(kBufferTimerDelayMillis) {
   page_resource_data_use_.emplace(
       std::piecewise_construct,
       std::forward_as_tuple(initial_request->resource_id()),
-      std::forward_as_tuple(*initial_request));
+      std::forward_as_tuple(std::move(initial_request)));
   buffer_timer_delay_ms_ = base::GetFieldTrialParamByFeatureAsInt(
       kPageLoadMetricsTimerDelayFeature, "BufferTimerDelayMillis",
       kBufferTimerDelayMillis /* default value */);
@@ -90,22 +93,31 @@ void PageTimingMetricsSender::DidObserveNewCssPropertyUsage(int css_property,
   }
 }
 
+void PageTimingMetricsSender::DidObserveLayoutJank(double jank_fraction) {
+  DCHECK(jank_fraction > 0);
+  render_data_.layout_jank_score += jank_fraction;
+  EnsureSendTimer();
+}
+
 void PageTimingMetricsSender::DidStartResponse(
+    const GURL& response_url,
     int resource_id,
-    const network::ResourceResponseHead& response_head) {
+    const network::ResourceResponseHead& response_head,
+    content::ResourceType resource_type) {
   DCHECK(!base::ContainsKey(page_resource_data_use_, resource_id));
 
   auto resource_it = page_resource_data_use_.emplace(
       std::piecewise_construct, std::forward_as_tuple(resource_id),
-      std::forward_as_tuple());
-  resource_it.first->second.DidStartResponse(resource_id, response_head);
+      std::forward_as_tuple(std::make_unique<PageResourceDataUse>()));
+  resource_it.first->second->DidStartResponse(response_url, resource_id,
+                                              response_head, resource_type);
 }
 
 void PageTimingMetricsSender::DidReceiveTransferSizeUpdate(
     int resource_id,
     int received_data_length) {
   // Transfer size updates are called in a throttled manner.
-  const auto& resource_it = page_resource_data_use_.find(resource_id);
+  auto resource_it = page_resource_data_use_.find(resource_id);
 
   // It is possible that resources are not in the map, if response headers were
   // not received or for failed/cancelled resources.
@@ -113,8 +125,8 @@ void PageTimingMetricsSender::DidReceiveTransferSizeUpdate(
     return;
   }
 
-  resource_it->second.DidReceiveTransferSizeUpdate(received_data_length);
-  modified_resources_.insert(&resource_it->second);
+  resource_it->second->DidReceiveTransferSizeUpdate(received_data_length);
+  modified_resources_.insert(resource_it->second.get());
   EnsureSendTimer();
 }
 
@@ -129,14 +141,14 @@ void PageTimingMetricsSender::DidCompleteResponse(
   if (resource_it == page_resource_data_use_.end()) {
     auto new_resource_it = page_resource_data_use_.emplace(
         std::piecewise_construct, std::forward_as_tuple(resource_id),
-        std::forward_as_tuple());
+        std::forward_as_tuple(std::make_unique<PageResourceDataUse>()));
     resource_it = new_resource_it.first;
   }
 
-  if (resource_it->second.DidCompleteResponse(status)) {
+  if (resource_it->second->DidCompleteResponse(status)) {
     EnsureSendTimer();
   }
-  modified_resources_.insert(&resource_it->second);
+  modified_resources_.insert(resource_it->second.get());
 }
 
 void PageTimingMetricsSender::DidCancelResponse(int resource_id) {
@@ -144,7 +156,21 @@ void PageTimingMetricsSender::DidCancelResponse(int resource_id) {
   if (resource_it == page_resource_data_use_.end()) {
     return;
   }
-  resource_it->second.DidCancelResponse();
+  resource_it->second->DidCancelResponse();
+}
+
+void PageTimingMetricsSender::UpdateResourceMetadata(
+    int resource_id,
+    bool reported_as_ad_resource,
+    bool is_main_frame_resource) {
+  auto it = page_resource_data_use_.find(resource_id);
+  if (it == page_resource_data_use_.end())
+    return;
+  // This can get called multiple times for resources, and this
+  // flag will only be true once.
+  if (reported_as_ad_resource)
+    it->second->SetReportedAsAdResource(reported_as_ad_resource);
+  it->second->SetIsMainFrameResource(is_main_frame_resource);
 }
 
 void PageTimingMetricsSender::Send(mojom::PageLoadTimingPtr timing) {
@@ -161,6 +187,11 @@ void PageTimingMetricsSender::Send(mojom::PageLoadTimingPtr timing) {
   }
 
   last_timing_ = std::move(timing);
+  EnsureSendTimer();
+}
+
+void PageTimingMetricsSender::UpdateCpuTiming(base::TimeDelta task_time) {
+  last_cpu_timing_->task_time += task_time;
   EnsureSendTimer();
 }
 
@@ -186,8 +217,9 @@ void PageTimingMetricsSender::SendNow() {
     }
   }
   sender_->SendTiming(last_timing_, metadata_, std::move(new_features_),
-                      std::move(resources));
+                      std::move(resources), render_data_, last_cpu_timing_);
   new_features_ = mojom::PageLoadFeatures::New();
+  last_cpu_timing_->task_time = base::TimeDelta();
   modified_resources_.clear();
 }
 

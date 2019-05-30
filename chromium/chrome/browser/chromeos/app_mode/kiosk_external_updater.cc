@@ -5,7 +5,6 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_external_updater.h"
 
 #include "base/bind.h"
-#include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/location.h"
@@ -20,6 +19,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/sandboxed_unpacker.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/verifier_formats.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -274,7 +274,8 @@ void KioskExternalUpdater::ProcessParsedManifest(
       NOTREACHED();
     }
     update.external_crx = extensions::CRXFileInfo(
-        app_id, external_update_path_.AppendASCII(external_crx_str));
+        app_id, extensions::GetExternalVerifierFormat(),
+        external_update_path_.AppendASCII(external_crx_str));
     update.update_status = PENDING;
     external_updates_[app_id] = update;
   }

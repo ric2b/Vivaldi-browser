@@ -21,6 +21,7 @@
 #include "base/containers/mru_cache.h"
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/load_timing_info.h"
 #include "net/base/net_error_details.h"
@@ -58,10 +59,6 @@ class SSLConfigService;
 class SSLInfo;
 class TransportSecurityState;
 
-using TokenBindingSignatureMap =
-    base::MRUCache<std::pair<TokenBindingType, std::string>,
-                   std::vector<uint8_t>>;
-
 namespace test {
 class QuicChromiumClientSessionPeer;
 }  // namespace test
@@ -84,7 +81,7 @@ enum class ConnectionMigrationMode {
 
 // Cause of connection migration.
 enum ConnectionMigrationCause {
-  UNKNOWN,
+  UNKNOWN_CAUSE,
   ON_NETWORK_CONNECTED,                // No probing.
   ON_NETWORK_DISCONNECTED,             // No probing.
   ON_WRITE_ERROR,                      // No probing.
@@ -110,6 +107,7 @@ enum QuicConnectionMigrationStatus {
   MIGRATION_STATUS_TIMEOUT,
   MIGRATION_STATUS_ON_WRITE_ERROR_DISABLED,
   MIGRATION_STATUS_PATH_DEGRADING_BEFORE_HANDSHAKE_CONFIRMED,
+  MIGRATION_STATUS_IDLE_MIGRATION_TIMEOUT,
   MIGRATION_STATUS_MAX
 };
 
@@ -191,12 +189,6 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
     // Returns the connection timing for the handshake of this session.
     const LoadTimingInfo::ConnectTiming& GetConnectTiming();
-
-    // Signs the exported keying material used for Token Binding using key
-    // |*key| and puts the signature in |*out|. Returns a net error code.
-    Error GetTokenBindingSignature(crypto::ECPrivateKey* key,
-                                   TokenBindingType tb_type,
-                                   std::vector<uint8_t>* out);
 
     // Returns true if |other| is a handle to the same session as this handle.
     bool SharesSameSession(const Handle& other) const;
@@ -383,13 +375,16 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
       bool require_confirmation,
       bool migrate_sesion_early_v2,
       bool migrate_session_on_network_change_v2,
-      bool go_away_on_path_degrading,
       NetworkChangeNotifier::NetworkHandle default_network,
+      quic::QuicTime::Delta retransmittable_on_wire_timeout,
+      bool migrate_idle_session,
+      base::TimeDelta idle_migration_period,
       base::TimeDelta max_time_on_non_default_network,
       int max_migrations_to_non_default_network_on_write_error,
       int max_migrations_to_non_default_network_on_path_degrading,
       int yield_after_packets,
       quic::QuicTime::Delta yield_after_duration,
+      bool go_away_on_path_degrading,
       bool headers_include_h2_stream_dependency,
       int cert_verify_flags,
       const quic::QuicConfig& config,
@@ -399,6 +394,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
       base::TimeTicks dns_resolution_end_time,
       quic::QuicClientPushPromiseIndex* push_promise_index,
       ServerPushDelegate* push_delegate,
+      const base::TickClock* tick_clock,
       base::SequencedTaskRunner* task_runner,
       std::unique_ptr<SocketPerformanceWatcher> socket_performance_watcher,
       NetLog* net_log);
@@ -443,22 +439,23 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   void OnWriteUnblocked() override;
 
   // QuicConnectivityProbingManager::Delegate override.
-  void OnProbeNetworkSucceeded(
+  void OnProbeSucceeded(
       NetworkChangeNotifier::NetworkHandle network,
+      const quic::QuicSocketAddress& peer_address,
       const quic::QuicSocketAddress& self_address,
       std::unique_ptr<DatagramClientSocket> socket,
       std::unique_ptr<QuicChromiumPacketWriter> writer,
       std::unique_ptr<QuicChromiumPacketReader> reader) override;
 
-  void OnProbeNetworkFailed(
-      NetworkChangeNotifier::NetworkHandle network) override;
+  void OnProbeFailed(NetworkChangeNotifier::NetworkHandle network,
+                     const quic::QuicSocketAddress& peer_address) override;
 
   bool OnSendConnectivityProbingPacket(
       QuicChromiumPacketWriter* writer,
       const quic::QuicSocketAddress& peer_address) override;
 
   // quic::QuicSpdySession methods:
-  size_t WriteHeaders(
+  size_t WriteHeadersOnHeadersStream(
       quic::QuicStreamId id,
       spdy::SpdyHeaderBlock headers,
       bool fin,
@@ -471,7 +468,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
   // quic::QuicSession methods:
   void OnStreamFrame(const quic::QuicStreamFrame& frame) override;
-  QuicChromiumClientStream* CreateOutgoingDynamicStream() override;
+  QuicChromiumClientStream* CreateOutgoingBidirectionalStream() override;
+  QuicChromiumClientStream* CreateOutgoingUnidirectionalStream() override;
   const quic::QuicCryptoClientStream* GetCryptoStream() const override;
   quic::QuicCryptoClientStream* GetMutableCryptoStream() override;
   void CloseStream(quic::QuicStreamId stream_id) override;
@@ -485,6 +483,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
       const quic::CryptoHandshakeMessage& message) override;
   void OnGoAway(const quic::QuicGoAwayFrame& frame) override;
   void OnRstStream(const quic::QuicRstStreamFrame& frame) override;
+  void OnCanCreateNewOutgoingStream() override;
 
   // QuicClientSessionBase methods:
   void OnConfigNegotiated() override;
@@ -503,7 +502,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
       const quic::QuicSocketAddress& self_address,
       const quic::QuicSocketAddress& peer_address) override;
   void OnPathDegrading() override;
-  bool HasOpenDynamicStreams() const override;
+  bool ShouldKeepConnectionAlive() const override;
 
   // QuicChromiumPacketReader::Visitor methods:
   void OnReadError(int result, const DatagramClientSocket* socket) override;
@@ -514,9 +513,6 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // MultiplexedSession methods:
   bool GetRemoteEndpoint(IPEndPoint* endpoint) override;
   bool GetSSLInfo(SSLInfo* ssl_info) const override;
-  Error GetTokenBindingSignature(crypto::ECPrivateKey* key,
-                                 TokenBindingType tb_type,
-                                 std::vector<uint8_t>* out) override;
 
   // Performs a crypto handshake with the server.
   int CryptoConnect(CompletionOnceCallback callback);
@@ -527,11 +523,19 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
   // Close the session because of |net_error| and notifies the factory
   // that this session has been closed, which will delete the session.
-  void CloseSessionOnError(int net_error, quic::QuicErrorCode quic_error);
+  // |behavior| will suggest whether we should send connection close packets
+  // when closing the connection.
+  void CloseSessionOnError(int net_error,
+                           quic::QuicErrorCode quic_error,
+                           quic::ConnectionCloseBehavior behavior);
 
   // Close the session because of |net_error| and notifies the factory
   // that this session has been closed later, which will delete the session.
-  void CloseSessionOnErrorLater(int net_error, quic::QuicErrorCode quic_error);
+  // |behavior| will suggest whether we should send connection close packets
+  // when closing the connection.
+  void CloseSessionOnErrorLater(int net_error,
+                                quic::QuicErrorCode quic_error,
+                                quic::ConnectionCloseBehavior behavior);
 
   std::unique_ptr<base::Value> GetInfoAsValue(
       const std::set<HostPortPair>& aliases);
@@ -648,11 +652,14 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
  protected:
   // quic::QuicSession methods:
-  bool ShouldCreateIncomingDynamicStream(quic::QuicStreamId id) override;
-  bool ShouldCreateOutgoingDynamicStream() override;
+  bool ShouldCreateIncomingStream(quic::QuicStreamId id) override;
+  bool ShouldCreateOutgoingBidirectionalStream() override;
+  bool ShouldCreateOutgoingUnidirectionalStream() override;
 
-  QuicChromiumClientStream* CreateIncomingDynamicStream(
+  QuicChromiumClientStream* CreateIncomingStream(
       quic::QuicStreamId id) override;
+  QuicChromiumClientStream* CreateIncomingStream(
+      quic::PendingStream pending) override;
 
  private:
   friend class test::QuicChromiumClientSessionPeer;
@@ -667,10 +674,11 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   QuicChromiumClientStream* CreateIncomingReliableStreamImpl(
       quic::QuicStreamId id,
       const NetworkTrafficAnnotationTag& traffic_annotation);
+  QuicChromiumClientStream* CreateIncomingReliableStreamImpl(
+      quic::PendingStream pending,
+      const NetworkTrafficAnnotationTag& traffic_annotation);
   // A completion callback invoked when a read completes.
   void OnReadComplete(int result);
-
-  void OnClosedStream();
 
   void CloseAllStreams(int net_error);
   void CloseAllHandles(int net_error);
@@ -678,25 +686,41 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   void NotifyRequestsOfConfirmation(int net_error);
 
   ProbingResult StartProbeNetwork(NetworkChangeNotifier::NetworkHandle network,
-                                  IPEndPoint peer_address,
+                                  const quic::QuicSocketAddress& peer_address,
                                   const NetLogWithSource& migration_net_log);
 
   // Called when there is only one possible working network: |network|, If any
-  // error encountered, this session will be cloed. When the migration succeeds:
-  //  - If we are no longer on the default interface, migrate back to default
-  //    network timer will be set.
-  //  - If we are now on the default interface, migrate back to default network
-  //    timer will be cancelled.
-  void MigrateImmediately(NetworkChangeNotifier::NetworkHandle network);
+  // error encountered, this session will be closed.
+  // When the migration succeeds:
+  //  - If no longer on the default network, set timer to migrate back to the
+  //    default network;
+  //  - If now on the default network, cancel timer to migrate back to default
+  //    network.
+  void MigrateNetworkImmediately(NetworkChangeNotifier::NetworkHandle network);
+
+  // Called when probe |network| succeeded.
+  void OnProbeNetworkSucceeded(
+      NetworkChangeNotifier::NetworkHandle network,
+      const quic::QuicSocketAddress& peer_address,
+      const quic::QuicSocketAddress& self_address,
+      std::unique_ptr<DatagramClientSocket> socket,
+      std::unique_ptr<QuicChromiumPacketWriter> writer,
+      std::unique_ptr<QuicChromiumPacketReader> reader);
+  // Called when probe |network| failed.
+  void OnProbeNetworkFailed(NetworkChangeNotifier::NetworkHandle network,
+                            const quic::QuicSocketAddress& peer_address);
 
   void StartMigrateBackToDefaultNetworkTimer(base::TimeDelta delay);
   void CancelMigrateBackToDefaultNetworkTimer();
   void TryMigrateBackToDefaultNetwork(base::TimeDelta timeout);
   void MaybeRetryMigrateBackToDefaultNetwork();
 
-  // Returns true if session is migratable. If not, a task is posted to
-  // close the session later if |close_session_if_not_migratable| is true.
-  bool IsSessionMigratable(bool close_session_if_not_migratable);
+  // If migrate idle session is enabled, returns true and post a task to close
+  // the connection if session's idle time exceeds the |idle_migration_period_|.
+  // If migrate idle session is not enabled, returns true and posts a task to
+  // close the connection if session doesn't have outstanding streams.
+  bool CheckIdleTimeExceedsIdleMigrationPeriod();
+
   // Close non-migratable streams in both directions by sending reset stream to
   // peer when connection migration attempts to migrate to the alternate
   // network.
@@ -729,7 +753,9 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   bool require_confirmation_;
   bool migrate_session_early_v2_;
   bool migrate_session_on_network_change_v2_;
-  bool go_away_on_path_degrading_;
+  bool migrate_idle_session_;
+  // Session can be migrated if its idle time is within this period.
+  base::TimeDelta idle_migration_period_;
   base::TimeDelta max_time_on_non_default_network_;
   // Maximum allowed number of migrations to non-default network triggered by
   // packet write error per default network.
@@ -742,9 +768,12 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   quic::QuicClock* clock_;  // Unowned.
   int yield_after_packets_;
   quic::QuicTime::Delta yield_after_duration_;
+  bool go_away_on_path_degrading_;
 
   base::TimeTicks most_recent_path_degrading_timestamp_;
   base::TimeTicks most_recent_network_disconnected_timestamp_;
+  const base::TickClock* tick_clock_;
+  base::TimeTicks most_recent_stream_close_time_;
 
   int most_recent_write_error_;
   base::TimeTicks most_recent_write_error_timestamp_;
@@ -775,7 +804,6 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   bool going_away_;
   // True when the session receives a go away from server due to port migration.
   bool port_migration_detected_;
-  TokenBindingSignatureMap token_binding_signatures_;
   // Not owned. |push_delegate_| outlives the session and handles server pushes
   // received by session.
   ServerPushDelegate* push_delegate_;

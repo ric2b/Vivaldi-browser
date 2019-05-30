@@ -13,11 +13,12 @@ suite('network-config', function() {
     CrOncTest.overrideCrOncStrings();
   });
 
-  function setNetworkConfig(networkProperties) {
+  function setNetworkConfig(properties) {
     PolymerTest.clearBody();
     networkConfig = document.createElement('network-config');
     networkConfig.networkingPrivate = api_;
-    networkConfig.networkProperties = networkProperties;
+    networkConfig.managedProperties =
+        CrOncTest.convertToManagedProperties(properties);
   }
 
   function initNetworkConfig() {
@@ -73,8 +74,10 @@ suite('network-config', function() {
 
     test('Default', function() {
       return flushAsync().then(() => {
-        assertEquals('someguid', networkConfig.networkProperties.GUID);
-        assertEquals('somename', networkConfig.networkProperties.Name);
+        assertEquals('someguid', networkConfig.managedProperties.GUID);
+        assertEquals(
+            'somename',
+            CrOnc.getActiveValue(networkConfig.managedProperties.Name));
         assertFalse(!!networkConfig.$$('#share'));
         assertTrue(!!networkConfig.$$('#ssid'));
         assertTrue(!!networkConfig.$$('#security'));
@@ -109,6 +112,16 @@ suite('network-config', function() {
       networkConfig.shareAllowEnable = true;
       // Authenticated networks default to not shared.
       networkConfig.shareDefault = false;
+    }
+
+    function setCertificatesForTest() {
+      const kHash1 = 'TESTHASH1', kHash2 = 'TESTHASH2';
+      var clientCert = {hash: kHash1, hardwareBacked: true, deviceWide: false};
+      var caCert = {hash: kHash2, hardwareBacked: true, deviceWide: true};
+      api_.setCertificatesForTest(
+          {serverCaCertificates: [caCert], userCertificates: [clientCert]});
+      this.selectedUserCertHash_ = kHash1;
+      this.selectedServerCaHash_ = kHash2;
     }
 
     test('New Config: Login or guest', function() {
@@ -225,12 +238,55 @@ suite('network-config', function() {
         assertEquals('WPA-EAP', networkConfig.security_);
         assertEquals(
             'PEAP',
-            networkConfig.get(
-                'Ethernet.EAP.Outer', networkConfig.networkProperties));
+            CrOnc.getActiveValue(
+                /** @type {chrome.networkingPrivate.ManagedDOMString|undefined} */
+                (networkConfig.get(
+                    'Ethernet.EAP.Outer', networkConfig.managedProperties))));
         let outer = networkConfig.$$('#outer');
         assertTrue(!!outer);
         assertTrue(!outer.disabled);
         assertEquals('PEAP', outer.value);
+      });
+    });
+
+    test('WiFi EAP TLS', function() {
+      var network = {
+        GUID: 'eaptlsguid',
+        Name: '',
+        Type: 'WiFi',
+        WiFi: {Security: 'WPA-EAP', EAP: {Outer: 'EAP-TLS'}}
+      };
+      api_.addNetworksForTest([network]);
+      setNetworkConfig({GUID: 'eaptlsguid', Name: '', Type: 'WiFi'});
+      setCertificatesForTest();
+      setAuthenticated();
+      initNetworkConfig();
+      return flushAsync().then(() => {
+        let outer = networkConfig.$$('#outer');
+        assertEquals('EAP-TLS', outer.value);
+
+        // check that a valid client user certificate is selected
+        let clientCert = networkConfig.$$('#userCert').$$('select').value;
+        assertTrue(!!clientCert);
+        let caCert = networkConfig.$$('#serverCa').$$('select').value;
+        assertTrue(!!caCert);
+
+        let share = networkConfig.$$('#share');
+        assertTrue(!!share);
+        // share the EAP TLS network
+        share.checked = true;
+        // trigger the onShareChanged_ event
+        var event = new Event('change');
+        share.dispatchEvent(event);
+        // check that share is enabled
+        assertTrue(share.checked);
+
+        // check that client certificate selection is empty
+        clientCert = networkConfig.$$('#userCert').$$('select').value;
+        assertFalse(!!clientCert);
+        // check that ca device-wide cert is still selected
+        caCert = networkConfig.$$('#serverCa').$$('select').value;
+        assertTrue(!!caCert);
       });
     });
 

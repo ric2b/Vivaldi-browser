@@ -25,4 +25,7 @@
   <message name="IDS_BOOKMARK_BAR_TRASH_FOLDER_NAME" desc="Name shown in the tree for the trash bookmarks folder">
     Trash
   </message>
+  <message name="IDS_SPEEDDIALS" desc="The name of the speed dial custom category of the jumplist (Windows)">
+    Speed Dials
+  </message>
 </grit-part>

@@ -110,6 +110,12 @@ unpacker.app = {
   mountProcessCounter: 0,
 
   /**
+   * The number of pack requests received with no inputs.
+   * @type {number}
+   */
+  invalidPackInputs_: 0,
+
+  /**
    * Function called on receiving a message from NaCl module. Registered by
    * common.js.
    * Process pack message by getting compressor and passing the message to it.
@@ -182,13 +188,15 @@ unpacker.app = {
     if (chrome.extension.inIncognitoContext)
       return;
 
-    chrome.storage.local.get([unpacker.app.STORAGE_KEY], function(result) {
-      if (result[unpacker.app.STORAGE_KEY]) {
-        chrome.storage.local.clear(function() {
-          console.info('Cleaned up archive mount info from older versions.');
-        });
-      }
-    });
+    if (chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get([unpacker.app.STORAGE_KEY], function(result) {
+        if (result[unpacker.app.STORAGE_KEY]) {
+          chrome.storage.local.clear(function() {
+            console.info('Cleaned up archive mount info from older versions.');
+          });
+        }
+      });
+    }
   },
 
   /**
@@ -342,6 +350,51 @@ unpacker.app = {
         unpacker.app.naclModule = document.querySelector('#' + moduleId);
         fulfill();
       }, true);
+      elementDiv.addEventListener('crash', () => {
+        // The title for notifications is usually the file name of the
+        // operation. Since there are potentially multiple operations in
+        // progress, use the first one as the notification title.
+        let crashTitle = '';
+
+        // Need to cancel and clean up any pending operations.
+        for (let fileSystemId in unpacker.app.volumes) {
+          if (crashTitle == '')
+            crashTitle = fileSystemId;
+          unpacker.app.unmountVolume(fileSystemId, true /* forceUnmount */);
+        }
+        // Force unmounting volumes doesn't remove them from the volumes map.
+        // Since all volumes have been forcably unmounted, explicitly clear this
+        // map.
+        unpacker.app.volumes = {};
+
+        for (let compressorId in unpacker.app.compressors) {
+          if (crashTitle == '')
+            crashTitle =
+                unpacker.app.compressors[compressorId].getArchiveName();
+          unpacker.app.cleanupCompressor(
+              compressorId, true /* hasError */, false /* canceled */);
+        }
+
+        // Reset the NaCl module state so that a future operation will load the
+        // module.
+        // TODO(crbug.com/907956): NaCl module state management is scattered
+        // throughout several different functions, making it difficult to
+        // reason. Refactor into a couple of functions that take care of all
+        // state management.
+        unpacker.app.unloadNaclModule();
+        unpacker.app.mountProcessCounter = 0;
+
+        unpacker.app.stringDataLoadedPromise.then((stringData) => {
+          chrome.notifications.create(
+              crashTitle, {
+                type: 'basic',
+                iconUrl: chrome.runtime.getManifest().icons[128],
+                title: crashTitle,
+                message: stringData['ZIP_ARCHIVER_CRASH_ERROR_MESSAGE'],
+              },
+              function() {});
+        });
+      }, true);
 
       elementDiv.addEventListener('message', unpacker.app.handleMessage_, true);
 
@@ -365,8 +418,10 @@ unpacker.app = {
    * Unloads the NaCl module.
    */
   unloadNaclModule: function() {
-    var naclModuleParentNode = unpacker.app.naclModule.parentNode;
-    naclModuleParentNode.parentNode.removeChild(naclModuleParentNode);
+    if (unpacker.app.naclModule) {
+      var naclModuleParentNode = unpacker.app.naclModule.parentNode;
+      naclModuleParentNode.parentNode.removeChild(naclModuleParentNode);
+    }
     unpacker.app.naclModule = null;
     unpacker.app.moduleLoadedPromise = null;
   },
@@ -384,7 +439,7 @@ unpacker.app = {
     if (Object.keys(unpacker.app.volumes).length === 0 &&
         unpacker.app.mountProcessCounter === 0) {
       unpacker.app.unloadNaclModule();
-    } else {
+    } else if (unpacker.app.naclModule) {
       unpacker.app.naclModule.postMessage(
           unpacker.request.createCloseVolumeRequest(fileSystemId));
     }
@@ -618,6 +673,28 @@ unpacker.app = {
                 function() {});
           }, unpacker.app.PACKING_NOTIFICATION_DELAY);
 
+          var progressNotificationCreated = false;
+          // If notification is closed while packing is in progress, flag to
+          // create/update is reset.
+          var onNotificationClosed = function(notificationId) {
+            if (notificationId === compressorId.toString())
+              progressNotificationCreated = false;
+          };
+          var onNotificationButtonClicked = function(
+              notificationId, buttonIndex) {
+            if (notificationId === compressorId.toString())
+              compressor.sendCancelArchiveRequest();
+          };
+          chrome.notifications.onClosed.addListener(onNotificationClosed);
+          chrome.notifications.onButtonClicked.addListener(
+              onNotificationButtonClicked);
+          var clearNotifications = function(compressorId) {
+            chrome.notifications.clear(compressorId.toString(), function() {});
+            chrome.notifications.onClosed.removeListener(onNotificationClosed);
+            chrome.notifications.onButtonClicked.removeListener(
+                onNotificationButtonClicked);
+          };
+
           var onError = function(compressorId) {
             clearTimeout(deferredNotificationTimer);
             chrome.notifications.create(
@@ -643,8 +720,7 @@ unpacker.app = {
             // content of a zip file is small it will flash the notification.
             // Thus we clear the notification with a delay to avoid flashing.
             setTimeout(function() {
-              chrome.notifications.clear(
-                  compressorId.toString(), function() {});
+              clearNotifications(compressorId);
             }, unpacker.app.PACKING_NOTIFICATION_CLEAR_DELAY);
             unpacker.app.cleanupCompressor(
                 compressorId, false /* hasError */, false /* canceled */);
@@ -652,12 +728,11 @@ unpacker.app = {
 
           var onCancel = function(compressorId) {
             clearTimeout(deferredNotificationTimer);
-            chrome.notifications.clear(compressorId.toString(), function() {});
+            clearNotifications(compressorId);
             unpacker.app.cleanupCompressor(
                 compressorId, false /* hasError */, true /* canceled */);
           };
 
-          var progressNotificationCreated = false;
           var progressValue = -1;
           var onProgress = function(compressorId, progress) {
             clearTimeout(deferredNotificationTimer);
@@ -697,17 +772,6 @@ unpacker.app = {
           };
 
           compressor.compress(onSuccess, onError, onProgress, onCancel);
-
-          // If notification is closed while packing is in progress, flag to
-          // create/update is reset.
-          chrome.notifications.onClosed.addListener(function() {
-            progressNotificationCreated = false;
-          });
-          chrome.notifications.onButtonClicked.addListener(function(
-              notificationId, buttonIndex) {
-            if (notificationId === compressorId.toString())
-              compressor.sendCancelArchiveRequest();
-          });
         });
   },
 
@@ -871,6 +935,20 @@ unpacker.app = {
    */
   onLaunched: function(launchData, opt_onSuccess, opt_onError) {
     if (launchData.items == null) {
+      if (launchData.id === 'pack' || launchData.id === 'pack_using_tmp') {
+        unpacker.app.stringDataLoadedPromise.then((stringData) => {
+          chrome.notifications.create(
+              'invalid-pack-' + unpacker.app.invalidPackInputs_++, {
+                type: 'basic',
+                iconUrl: chrome.runtime.getManifest().icons[128],
+                title: unpacker.Compressor.DEFAULT_ARCHIVE_NAME,
+                message: stringData['ZIP_ARCHIVER_PACKING_ERROR_MESSAGE']
+              },
+              function() {});
+        });
+        return;
+      }
+
       // The user tried to launch us directly.
       console.log('Ignoring launch request w/out items field', {launchData});
       return;

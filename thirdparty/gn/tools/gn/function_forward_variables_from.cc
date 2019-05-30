@@ -117,6 +117,13 @@ const char kForwardVariablesFrom_Help[] =
 
 Examples
 
+  # forward_variables_from(invoker, ["foo"])
+  # is equivalent to:
+  assert(!defined(foo))
+  if (defined(invoker.foo)) {
+    foo = invoker.foo
+  }
+
   # This is a common action template. It would invoke a script with some given
   # parameters, and wants to use the various types of deps and the visibility
   # from the invoker if it's defined. It also injects an additional dependency

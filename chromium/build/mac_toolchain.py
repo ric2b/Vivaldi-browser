@@ -25,11 +25,12 @@ import sys
 
 # This can be changed after running:
 #    mac_toolchain upload -xcode-path path/to/Xcode.app
-MAC_TOOLCHAIN_VERSION = '8E2002'
+MAC_TOOLCHAIN_VERSION = '9E501'
 
 # The toolchain will not be downloaded if the minimum OS version is not met.
-# 16 is the major version number for macOS 10.12.
-MAC_MINIMUM_OS_VERSION = 16
+# 17 is the major version number for macOS 10.13.
+# 9E145 (Xcode 9.3) only runs on 10.13.2 and newer.
+MAC_MINIMUM_OS_VERSION = 17
 
 MAC_TOOLCHAIN_INSTALLER = 'mac_toolchain'
 
@@ -46,7 +47,8 @@ STAMP_FILE = os.path.join(TOOLCHAIN_ROOT, 'toolchain_build_revision')
 
 
 def PlatformMeetsHermeticXcodeRequirements():
-  return int(platform.release().split('.')[0]) >= MAC_MINIMUM_OS_VERSION
+  major_version = int(platform.release().split('.')[0])
+  return major_version >= MAC_MINIMUM_OS_VERSION
 
 
 def _UseHermeticToolchain():

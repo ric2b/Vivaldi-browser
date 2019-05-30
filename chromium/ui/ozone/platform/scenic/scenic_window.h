@@ -5,18 +5,21 @@
 #ifndef UI_OZONE_PLATFORM_SCENIC_SCENIC_WINDOW_H_
 #define UI_OZONE_PLATFORM_SCENIC_SCENIC_WINDOW_H_
 
+#include <fuchsia/ui/gfx/cpp/fidl.h>
 #include <fuchsia/ui/input/cpp/fidl.h>
-#include <fuchsia/ui/viewsv1/cpp/fidl.h>
+#include <lib/ui/scenic/cpp/resources.h>
+#include <lib/ui/scenic/cpp/session.h>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
+#include "ui/events/fuchsia/input_event_dispatcher.h"
+#include "ui/events/fuchsia/input_event_dispatcher_delegate.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/ozone/ozone_export.h"
-#include "ui/ozone/platform/scenic/scenic_session.h"
 #include "ui/platform_window/platform_window.h"
 
 namespace ui {
@@ -25,27 +28,18 @@ class ScenicWindowManager;
 class PlatformWindowDelegate;
 
 class OZONE_EXPORT ScenicWindow : public PlatformWindow,
-                                  public ScenicSessionListener,
-                                  public fuchsia::ui::viewsv1::ViewListener,
-                                  public fuchsia::ui::input::InputListener {
+                                  public InputEventDispatcherDelegate {
  public:
   // Both |window_manager| and |delegate| must outlive the ScenicWindow.
-  // |view_owner_request| is passed to the view managed when creating the
-  // underlying view. In order for the View to be displayed the ViewOwner must
-  // be used to add the view to a ViewContainer.
+  // |view_token| is passed to Scenic to attach the view to the view tree.
   ScenicWindow(ScenicWindowManager* window_manager,
                PlatformWindowDelegate* delegate,
-               fidl::InterfaceRequest<fuchsia::ui::viewsv1token::ViewOwner>
-                   view_owner_request);
+               fuchsia::ui::gfx::ExportToken view_token);
   ~ScenicWindow() override;
 
-  ScenicSession* scenic_session() { return &scenic_session_; }
-  ScenicSession::ResourceId node_id() const { return node_id_; }
-  float device_pixel_ratio() const { return device_pixel_ratio_; }
+  scenic::Session* scenic_session() { return &scenic_session_; }
 
-  // Overrides texture of the window. This is used by ScenicWindowCanvas.
-  // TODO(spang): Deprecate software rendering on fuchsia.
-  void SetTexture(ScenicSession::ResourceId texture);
+  void ExportRenderingEntity(fuchsia::ui::gfx::ExportToken export_token);
 
   // PlatformWindow implementation.
   gfx::Rect GetBounds() override;
@@ -71,68 +65,53 @@ class OZONE_EXPORT ScenicWindow : public PlatformWindow,
   gfx::Rect GetRestoredBoundsInPixels() const override;
 
  private:
-  // views::ViewListener interface.
-  void OnPropertiesChanged(fuchsia::ui::viewsv1::ViewProperties properties,
-                           OnPropertiesChangedCallback callback) override;
+  // Callbacks for |scenic_session_|.
+  void OnScenicError(zx_status_t status);
+  void OnScenicEvents(std::vector<fuchsia::ui::scenic::Event> events);
 
-  // fuchsia::ui::input::InputListener interface.
-  void OnEvent(fuchsia::ui::input::InputEvent event,
-               OnEventCallback callback) override;
+  // Called from OnScenicEvents() to handle view properties and metrics changes.
+  void OnViewProperties(const fuchsia::ui::gfx::ViewProperties& properties);
+  void OnViewMetrics(const fuchsia::ui::gfx::Metrics& metrics);
 
-  // ScenicSessionListener interface.
-  void OnScenicError(const std::string& error) override;
-  void OnScenicEvents(
-      const std::vector<fuchsia::ui::scenic::Event>& events) override;
+  // Called from OnScenicEvents() to handle input events.
+  void OnInputEvent(const fuchsia::ui::input::InputEvent& event);
 
-  // Error handler for |view_|. This error normally indicates the View was
-  // destroyed (e.g. dropping ViewOwner).
-  void OnViewError();
+  // InputEventDispatcher::Delegate interface.
+  void DispatchEvent(ui::Event* event) override;
 
   void UpdateSize();
-
-  // Handlers for Fuchsia input event specializations.
-  bool OnMouseEvent(const fuchsia::ui::input::PointerEvent& event);
-  bool OnKeyboardEvent(const fuchsia::ui::input::KeyboardEvent& event);
-  bool OnTouchEvent(const fuchsia::ui::input::PointerEvent& event);
-  bool OnFocusEvent(const fuchsia::ui::input::FocusEvent& event);
 
   ScenicWindowManager* const manager_;
   PlatformWindowDelegate* const delegate_;
   gfx::AcceleratedWidget const window_id_;
 
-  // Underlying View in the view_manager.
-  fuchsia::ui::viewsv1::ViewPtr view_;
-  fidl::Binding<fuchsia::ui::viewsv1::ViewListener> view_listener_binding_;
+  // Dispatches Scenic input events as Chrome ui::Events.
+  InputEventDispatcher event_dispatcher_;
 
   // Scenic session used for all drawing operations in this View.
-  ScenicSession scenic_session_;
+  scenic::Session scenic_session_;
 
-  // Node ID in |scenic_session_| for the parent view.
-  ScenicSession::ResourceId parent_node_id_;
+  // The view resource in |scenic_session_|.
+  scenic::View view_;
 
-  // Node ID in |scenic_session_| for the view.
-  ScenicSession::ResourceId node_id_;
+  // Entity node for the |view_|.
+  scenic::EntityNode node_;
 
-  // Shape and material resource ids for the view in the context of the scenic
-  // session for the window. They are used to set shape and texture for the view
-  // node.
-  ScenicSession::ResourceId shape_id_;
-  ScenicSession::ResourceId material_id_;
+  // Node in |scenic_session_| for receiving input that hits within our View.
+  scenic::ShapeNode input_node_;
+
+  // Node in |scenic_session_| for rendering (hit testing disabled).
+  scenic::EntityNode render_node_;
+
+  // The ratio used for translating device-independent coordinates to absolute
+  // pixel coordinates.
+  float device_pixel_ratio_ = 0.f;
 
   // Current view size in DIPs.
   gfx::SizeF size_dips_;
 
   // Current view size in device pixels.
   gfx::Size size_pixels_;
-
-  // Device pixel ratio for the current device. Initialized in
-  // OnPropertiesChanged().
-  float device_pixel_ratio_ = 0.0;
-
-  // InputConnection and InputListener binding used to receive input events from
-  // the view.
-  fuchsia::ui::input::InputConnectionPtr input_connection_;
-  fidl::Binding<fuchsia::ui::input::InputListener> input_listener_binding_;
 
   DISALLOW_COPY_AND_ASSIGN(ScenicWindow);
 };

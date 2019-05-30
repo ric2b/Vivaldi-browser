@@ -320,9 +320,17 @@ class BluetoothTestBase : public testing::Test {
   // Simulates GattConnection disconnecting.
   virtual void SimulateGattDisconnection(BluetoothDevice* device) {}
 
+  // Simulates Error in GattConnection disconnecting.
+  virtual void SimulateGattDisconnectionError(BluetoothDevice* device) {}
+
   // Simulates an event where the OS breaks the Gatt connection. Defaults to
   // SimulateGattDisconnection(device).
   virtual void SimulateDeviceBreaksConnection(BluetoothDevice* device);
+
+  // Simulates a device changing its name property while a GATT connection is
+  // open.
+  virtual void SimulateGattNameChange(BluetoothDevice* device,
+                                      const std::string& new_name) {}
 
   // Simulates success of discovering services. |uuids| is used to create a
   // service for each UUID string. Multiple UUIDs with the same value produce
@@ -537,6 +545,11 @@ class BluetoothTestBase : public testing::Test {
 
   // Simulates a Descriptor Write operation failing with a GattErrorCode.
   virtual void SimulateGattDescriptorWriteError(
+      BluetoothRemoteGattDescriptor* descriptor,
+      BluetoothRemoteGattService::GattErrorCode) {}
+
+  // Simulates a Descriptor Update operation failing with a GattErrorCode.
+  virtual void SimulateGattDescriptorUpdateError(
       BluetoothRemoteGattDescriptor* descriptor,
       BluetoothRemoteGattService::GattErrorCode) {}
 

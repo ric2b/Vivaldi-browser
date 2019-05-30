@@ -37,10 +37,12 @@ class APIBindingPerfBrowserTest
 
   void SetUp() override {
     if (GetParam() == NATIVE_BINDINGS) {
-      scoped_feature_list_.InitAndEnableFeature(features::kNativeCrxBindings);
+      scoped_feature_list_.InitAndEnableFeature(
+          extensions_features::kNativeCrxBindings);
     } else {
       DCHECK_EQ(JAVASCRIPT_BINDINGS, GetParam());
-      scoped_feature_list_.InitAndDisableFeature(features::kNativeCrxBindings);
+      scoped_feature_list_.InitAndDisableFeature(
+          extensions_features::kNativeCrxBindings);
     }
     ExtensionBrowserTest::SetUp();
   }
@@ -124,12 +126,12 @@ IN_PROC_BROWSER_TEST_P(APIBindingPerfBrowserTest,
   LOG(INFO) << "Executed in " << time_elapsed.InMillisecondsF() << " ms";
 }
 
-INSTANTIATE_TEST_CASE_P(Native,
-                        APIBindingPerfBrowserTest,
-                        ::testing::Values(NATIVE_BINDINGS));
-INSTANTIATE_TEST_CASE_P(JavaScript,
-                        APIBindingPerfBrowserTest,
-                        ::testing::Values(JAVASCRIPT_BINDINGS));
+INSTANTIATE_TEST_SUITE_P(Native,
+                         APIBindingPerfBrowserTest,
+                         ::testing::Values(NATIVE_BINDINGS));
+INSTANTIATE_TEST_SUITE_P(JavaScript,
+                         APIBindingPerfBrowserTest,
+                         ::testing::Values(JAVASCRIPT_BINDINGS));
 
 }  // namespace
 }  // namespace extensions

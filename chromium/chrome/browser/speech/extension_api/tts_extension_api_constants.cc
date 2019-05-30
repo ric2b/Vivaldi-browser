@@ -7,6 +7,7 @@
 namespace tts_extension_api_constants {
 
 const char kCharIndexKey[] = "charIndex";
+const char kLengthKey[] = "length";
 const char kDesiredEventTypesKey[] = "desiredEventTypes";
 const char kEnqueueKey[] = "enqueue";
 const char kErrorMessageKey[] = "errorMessage";
@@ -25,9 +26,6 @@ const char kSrcIdKey[] = "srcId";
 const char kVoiceNameKey[] = "voiceName";
 const char kVolumeKey[] = "volume";
 
-const char kGenderFemale[] = "female";
-const char kGenderMale[] = "male";
-
 const char kEventTypeCancelled[] = "cancelled";
 const char kEventTypeEnd[] = "end";
 const char kEventTypeError[] = "error";
@@ -40,7 +38,6 @@ const char kEventTypeStart[] = "start";
 const char kEventTypeWord[] = "word";
 
 const char kErrorExtensionIdMismatch[] = "Extension id mismatch.";
-const char kErrorInvalidGender[] = "Invalid gender.";
 const char kErrorInvalidLang[] = "Invalid lang.";
 const char kErrorInvalidPitch[] = "Invalid pitch.";
 const char kErrorInvalidRate[] = "Invalid rate.";

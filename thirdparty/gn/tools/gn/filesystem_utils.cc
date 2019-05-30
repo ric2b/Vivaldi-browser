@@ -428,9 +428,14 @@ base::FilePath MakeAbsoluteFilePathRelativeIfPossible(
   target.GetComponents(&target_components);
 #if defined(OS_WIN)
   // On Windows, it's impossible to have a relative path from C:\foo to D:\bar,
-  // so return the target as an aboslute path instead.
+  // so return the target as an absolute path instead.
   if (base_components[0] != target_components[0])
     return target;
+
+  // GetComponents() returns the first slash after the root. Set it to the
+  // same value in both component lists so that relative paths between
+  // "C:/foo/..." and "C:\foo\..." are computed correctly.
+  target_components[1] = base_components[1];
 #endif
   size_t i;
   for (i = 0; i < base_components.size() && i < target_components.size(); i++) {

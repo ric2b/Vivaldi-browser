@@ -133,7 +133,7 @@ void ChromiumProfileImporter::ReadProfiles(std::vector<ChromeProfileInfo>* cp,
   ReadFileToString(profileFileName, &input);
 
   base::JSONReader reader;
-  std::unique_ptr<base::Value> root(reader.ReadToValue(input));
+  base::Optional<base::Value> root(reader.ReadToValue(input));
 
   base::DictionaryValue* dict = NULL;
   if (!root->GetAsDictionary(&dict)) {

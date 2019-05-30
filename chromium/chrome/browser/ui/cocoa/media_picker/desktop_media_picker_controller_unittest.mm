@@ -95,13 +95,15 @@ class DesktopMediaPickerControllerTest : public CocoaTest {
         base::Bind(&DesktopMediaPickerControllerTest::OnResult,
                    base::Unretained(this));
 
+    DesktopMediaPicker::Params params;
+    params.app_name = base::ASCIIToUTF16("Screenshare Test");
+    params.target_name = base::ASCIIToUTF16("https://foo.com");
+    params.request_audio = true;
+    params.approve_audio_by_default = true;
     controller_.reset([[DesktopMediaPickerController alloc]
         initWithSourceLists:std::move(source_lists)
-                     parent:nil
                    callback:callback
-                    appName:base::ASCIIToUTF16("Screenshare Test")
-                 targetName:base::ASCIIToUTF16("https://foo.com")
-               requestAudio:true]);
+                     params:params]);
   }
 
   void TearDown() override {
@@ -171,6 +173,12 @@ TEST_F(DesktopMediaPickerControllerTest, ShowAndDismiss) {
   EXPECT_TRUE([[items objectAtIndex:1] imageRepresentation] != nil);
 }
 
+TEST_F(DesktopMediaPickerControllerTest, CancelIsDefault) {
+  [controller_ showWindow:nil];
+  EXPECT_EQ([[controller_ window] defaultButtonCell],
+            [[controller_ cancelButton] cell]);
+}
+
 TEST_F(DesktopMediaPickerControllerTest, ClickShareScreen) {
   [controller_ showWindow:nil];
   ChangeType(DesktopMediaID::TYPE_SCREEN);
@@ -178,17 +186,22 @@ TEST_F(DesktopMediaPickerControllerTest, ClickShareScreen) {
   EXPECT_FALSE([[controller_ shareButton] isEnabled]);
   AddScreen(0);
   screen_list_->SetSourceThumbnail(0);
-  // First screen will be automatically selected.
-  EXPECT_TRUE([[controller_ shareButton] isEnabled]);
+  // Nothing should be selected automatically.
+  EXPECT_FALSE([[controller_ shareButton] isEnabled]);
 
   AddScreen(1);
   screen_list_->SetSourceThumbnail(1);
 
   EXPECT_EQ(2U, [[controller_ screenItems] count]);
 
+  NSIndexSet* index_set = [NSIndexSet indexSetWithIndex:1];
+  [[controller_ screenBrowser] setSelectionIndexes:index_set
+                              byExtendingSelection:NO];
+  EXPECT_TRUE([[controller_ shareButton] isEnabled]);
+
   [[controller_ shareButton] performClick:nil];
   EXPECT_TRUE(WaitForCallback());
-  EXPECT_EQ(screen_list_->GetSource(0).id, source_reported_);
+  EXPECT_EQ(screen_list_->GetSource(1).id, source_reported_);
 }
 
 TEST_F(DesktopMediaPickerControllerTest, ClickShareWindow) {

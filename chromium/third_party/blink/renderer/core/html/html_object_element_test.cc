@@ -5,7 +5,9 @@
 #include "third_party/blink/renderer/core/html/html_object_element.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 
@@ -34,16 +36,18 @@ TEST_F(HTMLObjectElementTest, FallbackRecalcForReattach) {
   Node* slot = object->GetShadowRoot()->firstChild();
   ASSERT_TRUE(slot);
 
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  GetDocument().View()->UpdateAllLifecyclePhases(
+      DocumentLifecycle::LifecycleUpdateReason::kTest);
 
-  object->RenderFallbackContent();
+  object->RenderFallbackContent(nullptr);
   GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
-  GetDocument().documentElement()->RecalcStyle(kForce);
-
+  StyleRecalcChange change;
+  change = change.ForceRecalcDescendants();
+  GetDocument().GetStyleEngine().RecalcStyle(change);
   EXPECT_TRUE(IsHTMLSlotElement(slot));
   EXPECT_TRUE(object->UseFallbackContent());
-  EXPECT_TRUE(object->GetNonAttachedStyle());
-  EXPECT_TRUE(slot->GetNonAttachedStyle());
+  EXPECT_TRUE(object->GetComputedStyle());
+  EXPECT_TRUE(slot->GetComputedStyle());
 }
 
 }  // namespace blink

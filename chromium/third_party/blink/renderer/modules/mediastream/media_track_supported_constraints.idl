@@ -13,6 +13,7 @@ dictionary MediaTrackSupportedConstraints {
     boolean aspectRatio = true;
     boolean frameRate = true;
     boolean facingMode = true;
+    boolean resizeMode = true;
     boolean volume = true;
     boolean sampleRate = true;
     boolean sampleSize = true;
@@ -46,12 +47,14 @@ dictionary MediaTrackSupportedConstraints {
     boolean focusMode = true;
     boolean pointsOfInterest = true;
     boolean exposureCompensation = true;
+    boolean exposureTime = true;
     boolean colorTemperature = true;
     boolean iso = true;
     boolean brightness = true;
     boolean contrast = true;
     boolean saturation = true;
     boolean sharpness = true;
+    boolean focusDistance = true;
     boolean zoom = true;
     boolean torch = true;
 };

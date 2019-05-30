@@ -17,6 +17,7 @@
 #include "media/video/mock_video_decode_accelerator.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
+#include "third_party/webrtc/media/base/vp9_profile.h"
 
 #if defined(OS_WIN)
 #include "base/command_line.h"
@@ -70,7 +71,9 @@ class RTCVideoDecoderTest
     capabilities_.supported_profiles.push_back(supported_profile);
     supported_profile.profile = media::VP8PROFILE_ANY;
     capabilities_.supported_profiles.push_back(supported_profile);
-    supported_profile.profile = media::VP9PROFILE_MIN;
+    supported_profile.profile = media::VP9PROFILE_PROFILE0;
+    capabilities_.supported_profiles.push_back(supported_profile);
+    supported_profile.profile = media::VP9PROFILE_PROFILE2;
     capabilities_.supported_profiles.push_back(supported_profile);
 
     EXPECT_CALL(*mock_gpu_factories_.get(), GetTaskRunner())
@@ -108,11 +111,15 @@ class RTCVideoDecoderTest
     return WEBRTC_VIDEO_CODEC_OK;
   }
 
-  void CreateDecoder(webrtc::VideoCodecType codec_type) {
+  void CreateDecoder(const webrtc::SdpVideoFormat& format) {
     DVLOG(2) << "CreateDecoder";
-    codec_.codecType = codec_type;
-    rtc_decoder_ =
-        RTCVideoDecoder::Create(codec_type, mock_gpu_factories_.get());
+    codec_.codecType = webrtc::PayloadStringToCodecType(format.name);
+    rtc_decoder_ = RTCVideoDecoder::Create(format, mock_gpu_factories_.get());
+  }
+
+  void CreateDecoder(webrtc::VideoCodecType codec_type) {
+    CreateDecoder(
+        webrtc::SdpVideoFormat(webrtc::CodecTypeToPayloadString(codec_type)));
   }
 
   void Initialize() {
@@ -196,7 +203,7 @@ class RTCVideoDecoderTest
 TEST_F(RTCVideoDecoderTest, CreateReturnsNullOnUnsupportedCodec) {
   CreateDecoder(webrtc::kVideoCodecVP8);
   std::unique_ptr<RTCVideoDecoder> null_rtc_decoder(RTCVideoDecoder::Create(
-      webrtc::kVideoCodecI420, mock_gpu_factories_.get()));
+      webrtc::SdpVideoFormat("I420"), mock_gpu_factories_.get()));
   EXPECT_EQ(nullptr, null_rtc_decoder.get());
 }
 
@@ -342,6 +349,14 @@ TEST_F(RTCVideoDecoderTest, MultipleTexturesPerBuffer) {
   }
 }
 
+TEST_F(RTCVideoDecoderTest, ParsesVP9CodecProfile) {
+  webrtc::SdpVideoFormat sdp_format(
+      "VP9", {{webrtc::kVP9FmtpProfileId,
+               webrtc::VP9ProfileToString(webrtc::VP9Profile::kProfile2)}});
+  CreateDecoder(sdp_format);
+  EXPECT_EQ(media::VP9PROFILE_PROFILE2, rtc_decoder_->vda_codec_profile_);
+}
+
 // Tests/Verifies that |rtc_encoder_| drops incoming frames and its error
 // counter is increased when decoder implementation calls NotifyError().
 TEST_P(RTCVideoDecoderTest, GetVDAErrorCounterForNotifyError) {
@@ -350,11 +365,13 @@ TEST_P(RTCVideoDecoderTest, GetVDAErrorCounterForNotifyError) {
   Initialize();
 
   webrtc::EncodedImage input_image;
+  uint8_t buffer[kMinResolutionWidth * kMaxResolutionHeight];
   input_image._completeFrame = true;
   input_image._encodedWidth = 0;
   input_image._encodedHeight = 0;
   input_image._frameType = webrtc::kVideoFrameDelta;
-  input_image._length = kMinResolutionWidth * kMaxResolutionHeight;
+  input_image.set_buffer(buffer, sizeof(buffer));
+  input_image.set_size(sizeof(buffer));
   EXPECT_EQ(WEBRTC_VIDEO_CODEC_ERROR,
             rtc_decoder_->Decode(input_image, false, nullptr, 0));
   RunUntilIdle();
@@ -386,12 +403,12 @@ TEST_P(RTCVideoDecoderTest, GetVDAErrorCounterForRunningOutOfPendingBuffers) {
 
   webrtc::EncodedImage input_image;
   uint8_t buffer[1];
-  input_image._buffer = buffer;
   input_image._completeFrame = true;
   input_image._encodedWidth = 640;
   input_image._encodedHeight = 480;
   input_image._frameType = webrtc::kVideoFrameKey;
-  input_image._length = sizeof(buffer);
+  input_image.set_buffer(buffer, sizeof(buffer));
+  input_image.set_size(sizeof(buffer));
 
   EXPECT_CALL(*mock_vda_, Decode(_)).Times(AtLeast(1));
 
@@ -416,6 +433,30 @@ TEST_P(RTCVideoDecoderTest, GetVDAErrorCounterForRunningOutOfPendingBuffers) {
   ASSERT_TRUE(false);
 }
 
+// Tests/Verifies that |rtc_decoder_| increases its error counter when it keeps
+// getting frames with no size set.
+TEST_P(RTCVideoDecoderTest, GetVDAErrorCounterForSendingFramesWithoutSize) {
+  const webrtc::VideoCodecType codec_type = GetParam();
+  CreateDecoder(codec_type);
+  Initialize();
+
+  webrtc::EncodedImage input_image;
+  uint8_t buffer[1];
+  input_image._completeFrame = true;
+  input_image._encodedWidth = 0;
+  input_image._encodedHeight = 0;
+  input_image._frameType = webrtc::kVideoFrameKey;
+  input_image.set_buffer(buffer, sizeof(buffer));
+  input_image.set_size(sizeof(buffer));
+  const int kNumDecodeRequests = 3;
+  for (int i = 0; i < kNumDecodeRequests; i++) {
+    const int32_t result = rtc_decoder_->Decode(input_image, false, nullptr, 0);
+    RunUntilIdle();
+    EXPECT_EQ(WEBRTC_VIDEO_CODEC_ERROR, result);
+    EXPECT_EQ(i + 1, rtc_decoder_->GetVDAErrorCounterForTesting());
+  }
+}
+
 TEST_P(RTCVideoDecoderTest, Reinitialize) {
   const webrtc::VideoCodecType codec_type = GetParam();
   CreateDecoder(codec_type);
@@ -423,12 +464,12 @@ TEST_P(RTCVideoDecoderTest, Reinitialize) {
 
   webrtc::EncodedImage input_image;
   uint8_t buffer[1];
-  input_image._buffer = buffer;
   input_image._completeFrame = true;
   input_image._encodedWidth = 640;
   input_image._encodedHeight = 480;
   input_image._frameType = webrtc::kVideoFrameKey;
-  input_image._length = sizeof(buffer);
+  input_image.set_buffer(buffer, sizeof(buffer));
+  input_image.set_size(sizeof(buffer));
   EXPECT_CALL(*mock_vda_, Decode(_)).Times(1);
   EXPECT_EQ(WEBRTC_VIDEO_CODEC_OK,
             rtc_decoder_->Decode(input_image, false, nullptr, 0));
@@ -442,9 +483,9 @@ TEST_P(RTCVideoDecoderTest, Reinitialize) {
             rtc_decoder_->Decode(input_image, false, nullptr, 0));
 }
 
-INSTANTIATE_TEST_CASE_P(CodecProfiles,
-                        RTCVideoDecoderTest,
-                        Values(webrtc::kVideoCodecVP8,
-                               webrtc::kVideoCodecH264));
+INSTANTIATE_TEST_SUITE_P(CodecProfiles,
+                         RTCVideoDecoderTest,
+                         Values(webrtc::kVideoCodecVP8,
+                                webrtc::kVideoCodecH264));
 
 }  // content

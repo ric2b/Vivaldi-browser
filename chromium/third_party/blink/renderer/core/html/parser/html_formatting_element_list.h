@@ -48,7 +48,7 @@ class HTMLFormattingElementList {
   // between the HTMLFormattingElementList and HTMLElementStack and needs access
   // to Entry::isMarker() and Entry::replaceElement() to do so.
   class Entry {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+    DISALLOW_NEW();
 
    public:
     // Inline because they're hot and Vector<T> uses them.
@@ -61,8 +61,8 @@ class HTMLFormattingElementList {
 
     HTMLStackItem* StackItem() const { return item_; }
     Element* GetElement() const {
-      // The fact that !m_item == isMarker() is an implementation detail callers
-      // should check isMarker() before calling element().
+      // The fact that !item_ == IsMarker() is an implementation detail callers
+      // should check IsMarker() before calling GetElement().
       DCHECK(item_);
       return item_->GetElement();
     }
@@ -76,7 +76,7 @@ class HTMLFormattingElementList {
       return !item_ ? !!element : item_->GetElement() != element;
     }
 
-    void Trace(blink::Visitor* visitor) { visitor->Trace(item_); }
+    void Trace(Visitor* visitor) { visitor->Trace(item_); }
 
    private:
     Member<HTMLStackItem> item_;
@@ -102,7 +102,7 @@ class HTMLFormattingElementList {
   };
 
   bool IsEmpty() const { return !size(); }
-  size_t size() const { return entries_.size(); }
+  wtf_size_t size() const { return entries_.size(); }
 
   Element* ClosestElementInScopeWithName(const AtomicString&);
 
@@ -118,10 +118,10 @@ class HTMLFormattingElementList {
   // clearToLastMarker also clears the marker (per the HTML5 spec).
   void ClearToLastMarker();
 
-  const Entry& at(size_t i) const { return entries_[i]; }
-  Entry& at(size_t i) { return entries_[i]; }
+  const Entry& at(wtf_size_t i) const { return entries_[i]; }
+  Entry& at(wtf_size_t i) { return entries_[i]; }
 
-  void Trace(blink::Visitor* visitor) { visitor->Trace(entries_); }
+  void Trace(Visitor* visitor) { visitor->Trace(entries_); }
 
 #ifndef NDEBUG
   void Show();
@@ -146,6 +146,6 @@ class HTMLFormattingElementList {
 }  // namespace blink
 
 WTF_ALLOW_MOVE_AND_INIT_WITH_MEM_FUNCTIONS(
-    blink::HTMLFormattingElementList::Entry);
+    blink::HTMLFormattingElementList::Entry)
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_HTML_PARSER_HTML_FORMATTING_ELEMENT_LIST_H_

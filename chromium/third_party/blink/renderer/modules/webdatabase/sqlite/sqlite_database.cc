@@ -47,9 +47,6 @@ SQLiteDatabase::SQLiteDatabase()
     : db_(nullptr),
       page_size_(-1),
       transaction_in_progress_(false),
-#if DCHECK_IS_ON()
-      sharable_(false),
-#endif
       opening_thread_(0),
       open_error_(SQLITE_ERROR),
       open_error_message_(),
@@ -78,6 +75,19 @@ bool SQLiteDatabase::Open(const String& filename) {
   if (open_error_ != SQLITE_OK) {
     open_error_message_ = sqlite3_errmsg(db_);
     DLOG(ERROR) << "SQLite database error when enabling extended errors - "
+                << open_error_message_.data();
+    sqlite3_close(db_);
+    db_ = nullptr;
+    return false;
+  }
+
+  // Defensive mode is a layer of defense in depth for applications that must
+  // run SQL queries from an untrusted source, such as WebDatabase. Refuse to
+  // proceed if this layer cannot be enabled.
+  open_error_ = sqlite3_db_config(db_, SQLITE_DBCONFIG_DEFENSIVE, 1, nullptr);
+  if (open_error_ != SQLITE_OK) {
+    open_error_message_ = sqlite3_errmsg(db_);
+    DLOG(ERROR) << "SQLite database error when enabling defensive mode - "
                 << open_error_message_.data();
     sqlite3_close(db_);
     db_ = nullptr;
@@ -314,14 +324,13 @@ int SQLiteDatabase::AuthorizerFunction(void* user_data,
     case SQLITE_UPDATE:
       return auth->AllowUpdate(parameter1, parameter2);
     case SQLITE_ATTACH:
-      return auth->AllowAttach(parameter1);
+      return kSQLAuthDeny;
     case SQLITE_DETACH:
-      return auth->AllowDetach(parameter1);
+      return kSQLAuthDeny;
     case SQLITE_ALTER_TABLE:
       return auth->AllowAlterTable(parameter1, parameter2);
     case SQLITE_REINDEX:
       return auth->AllowReindex(parameter1);
-#if SQLITE_VERSION_NUMBER >= 3003013
     case SQLITE_ANALYZE:
       return auth->AllowAnalyze(parameter1);
     case SQLITE_CREATE_VTABLE:
@@ -330,11 +339,13 @@ int SQLiteDatabase::AuthorizerFunction(void* user_data,
       return auth->DropVTable(parameter1, parameter2);
     case SQLITE_FUNCTION:
       return auth->AllowFunction(parameter2);
-#endif
-    default:
-      NOTREACHED();
+    case SQLITE_SAVEPOINT:
+      return kSQLAuthDeny;
+    case SQLITE_RECURSIVE:
       return kSQLAuthDeny;
   }
+  NOTREACHED();
+  return kSQLAuthDeny;
 }
 
 void SQLiteDatabase::SetAuthorizer(DatabaseAuthorizer* auth) {

@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/css/cssom/css_numeric_value.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
 
@@ -28,6 +29,11 @@ class CORE_EXPORT CSSUnitValue final : public CSSNumericValue {
       CSSPrimitiveValue::UnitType = CSSPrimitiveValue::UnitType::kNumber);
   static CSSUnitValue* FromCSSValue(const CSSPrimitiveValue&);
 
+  CSSUnitValue(double value, CSSPrimitiveValue::UnitType unit)
+      : CSSNumericValue(CSSNumericValueType(unit)),
+        value_(value),
+        unit_(unit) {}
+
   // Setters and getters for attributes defined in the IDL.
   void setValue(double new_value) { value_ = new_value; }
   double value() const { return value_; }
@@ -46,15 +52,12 @@ class CORE_EXPORT CSSUnitValue final : public CSSNumericValue {
   // From CSSStyleValue.
   StyleValueType GetType() const final;
   const CSSPrimitiveValue* ToCSSValue() const final;
-  const CSSPrimitiveValue* ToCSSValueWithProperty(CSSPropertyID) const final;
+  const CSSPrimitiveValue* ToCSSValueWithProperty(
+      CSSPropertyID,
+      const CSSSyntaxComponent*) const final;
   CSSCalcExpressionNode* ToCalcExpressionNode() const final;
 
  private:
-  CSSUnitValue(double value, CSSPrimitiveValue::UnitType unit)
-      : CSSNumericValue(CSSNumericValueType(unit)),
-        value_(value),
-        unit_(unit) {}
-
   double ConvertFixedLength(CSSPrimitiveValue::UnitType) const;
   double ConvertAngle(CSSPrimitiveValue::UnitType) const;
 
@@ -69,11 +72,12 @@ class CORE_EXPORT CSSUnitValue final : public CSSNumericValue {
   DISALLOW_COPY_AND_ASSIGN(CSSUnitValue);
 };
 
-DEFINE_TYPE_CASTS(CSSUnitValue,
-                  CSSNumericValue,
-                  value,
-                  value->IsUnitValue(),
-                  value.IsUnitValue());
+template <>
+struct DowncastTraits<CSSUnitValue> {
+  static bool AllowFrom(const CSSStyleValue& value) {
+    return value.GetType() == CSSStyleValue::StyleValueType::kUnitType;
+  }
+};
 
 }  // namespace blink
 

@@ -9,7 +9,6 @@
 #include <sys/stat.h>
 
 #include "base/files/file_util.h"
-#include "base/numerics/checked_math.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 
@@ -110,6 +109,16 @@ PlatformSharedMemoryRegion PlatformSharedMemoryRegion::Take(
 }
 
 // static
+PlatformSharedMemoryRegion PlatformSharedMemoryRegion::Take(
+    ScopedFD handle,
+    Mode mode,
+    size_t size,
+    const UnguessableToken& guid) {
+  CHECK_NE(mode, Mode::kWritable);
+  return Take(ScopedFDPair(std::move(handle), ScopedFD()), mode, size, guid);
+}
+
+// static
 PlatformSharedMemoryRegion
 PlatformSharedMemoryRegion::TakeFromSharedMemoryHandle(
     const SharedMemoryHandle& handle,
@@ -173,18 +182,10 @@ bool PlatformSharedMemoryRegion::ConvertToUnsafe() {
   return true;
 }
 
-bool PlatformSharedMemoryRegion::MapAt(off_t offset,
-                                       size_t size,
-                                       void** memory,
-                                       size_t* mapped_size) const {
-  if (!IsValid())
-    return false;
-
-  size_t end_byte;
-  if (!CheckAdd(offset, size).AssignIfValid(&end_byte) || end_byte > size_) {
-    return false;
-  }
-
+bool PlatformSharedMemoryRegion::MapAtInternal(off_t offset,
+                                               size_t size,
+                                               void** memory,
+                                               size_t* mapped_size) const {
   bool write_allowed = mode_ != Mode::kReadOnly;
   *memory = mmap(nullptr, size, PROT_READ | (write_allowed ? PROT_WRITE : 0),
                  MAP_SHARED, handle_.fd.get(), offset);
@@ -196,8 +197,6 @@ bool PlatformSharedMemoryRegion::MapAt(off_t offset,
   }
 
   *mapped_size = size;
-  DCHECK_EQ(0U,
-            reinterpret_cast<uintptr_t>(*memory) & (kMapMinimumAlignment - 1));
   return true;
 }
 
@@ -309,24 +308,8 @@ bool PlatformSharedMemoryRegion::CheckPlatformHandlePermissionsCorrespondToMode(
   return true;
 #else
   // fcntl(_, F_GETFL) is not implemented on NaCl.
-  void* temp_memory = nullptr;
-  temp_memory =
-      mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, handle.fd, 0);
-
-  bool mmap_succeeded = temp_memory && temp_memory != MAP_FAILED;
-  if (mmap_succeeded)
-    munmap(temp_memory, size);
-
-  bool is_read_only = !mmap_succeeded;
-  bool expected_read_only = mode == Mode::kReadOnly;
-
-  if (is_read_only != expected_read_only) {
-    DLOG(ERROR) << "Descriptor has a wrong access mode: it is"
-                << (is_read_only ? " " : " not ") << "read-only but it should"
-                << (expected_read_only ? " " : " not ") << "be";
-    return false;
-  }
-
+  // We also cannot try to mmap() a region as writable and look at the return
+  // status because the plugin process crashes if system mmap() fails.
   return true;
 #endif  // !defined(OS_NACL)
 }

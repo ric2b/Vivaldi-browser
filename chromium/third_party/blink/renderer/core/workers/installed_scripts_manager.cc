@@ -13,7 +13,7 @@ namespace blink {
 InstalledScriptsManager::ScriptData::ScriptData(
     const KURL& script_url,
     String source_text,
-    std::unique_ptr<Vector<char>> meta_data,
+    std::unique_ptr<Vector<uint8_t>> meta_data,
     std::unique_ptr<CrossThreadHTTPHeaderMapData> header_data)
     : script_url_(script_url),
       source_text_(std::move(source_text)),
@@ -27,13 +27,13 @@ InstalledScriptsManager::ScriptData::GetContentSecurityPolicyResponseHeaders() {
 }
 
 String InstalledScriptsManager::ScriptData::GetReferrerPolicy() {
-  return headers_.Get(HTTPNames::Referrer_Policy);
+  return headers_.Get(http_names::kReferrerPolicy);
 }
 
 std::unique_ptr<Vector<String>>
 InstalledScriptsManager::ScriptData::CreateOriginTrialTokens() {
   return OriginTrialContext::ParseHeaderValue(
-      headers_.Get(HTTPNames::Origin_Trial));
+      headers_.Get(http_names::kOriginTrial));
 }
 
 }  // namespace blink

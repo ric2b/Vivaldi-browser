@@ -6,11 +6,11 @@
 
 #include <memory>
 
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/power_monitor_test_base.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/download/internal/background_service/scheduler/battery_status_listener_impl.h"
-#include "components/download/internal/background_service/scheduler/network_status_listener_impl.h"
+#include "components/download/network/network_status_listener_impl.h"
 #include "services/network/test/test_network_connection_tracker.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -63,15 +63,25 @@ class TestDeviceStatusListener : public DeviceStatusListener {
                              std::move(battery_listener),
                              std::move(network_listener)) {}
 
+  // DeviceStatusListener implementation.
+  void Start(const base::TimeDelta& start_delay) override {
+    // Cache the start delay for verification.
+    start_delay_ = start_delay;
+    DeviceStatusListener::Start(start_delay);
+  }
+
+  base::TimeDelta start_delay() const { return start_delay_; }
+
  private:
   friend class DeviceStatusListenerTest;
+  base::TimeDelta start_delay_;
+
   DISALLOW_COPY_AND_ASSIGN(TestDeviceStatusListener);
 };
 
 class DeviceStatusListenerTest : public testing::Test {
  public:
-  DeviceStatusListenerTest()
-      : network_connection_tracker_(true, ConnectionType::CONNECTION_UNKNOWN) {}
+  DeviceStatusListenerTest() {}
 
   void SetUp() override {
     auto power_source = std::make_unique<base::PowerMonitorTestSource>();
@@ -83,10 +93,11 @@ class DeviceStatusListenerTest : public testing::Test {
     test_battery_listener_ = battery_listener.get();
 
     auto network_listener = std::make_unique<NetworkStatusListenerImpl>(
-        &network_connection_tracker_);
+        network::TestNetworkConnectionTracker::GetInstance());
 
     listener_ = std::make_unique<TestDeviceStatusListener>(
         std::move(battery_listener), std::move(network_listener));
+    listener_->SetObserver(&mock_observer_);
   }
 
   void TearDown() override { listener_.reset(); }
@@ -101,14 +112,15 @@ class DeviceStatusListenerTest : public testing::Test {
     EXPECT_CALL(mock_observer_, OnDeviceStatusChanged(_))
         .Times(1)
         .RetiresOnSaturation();
-    listener_->Start(&mock_observer_);
+    listener_->Start(base::TimeDelta());
     base::RunLoop().RunUntilIdle();
   }
 
   // Simulates a network change call, the event will be broadcasted
   // asynchronously.
   void ChangeNetworkType(ConnectionType type) {
-    network_connection_tracker_.SetConnectionType(type);
+    network::TestNetworkConnectionTracker::GetInstance()->SetConnectionType(
+        type);
   }
 
   // Simulates a network change call, the event will be sent to client
@@ -132,8 +144,7 @@ class DeviceStatusListenerTest : public testing::Test {
   MockObserver mock_observer_;
 
   // Needed for network change notifier and power monitor.
-  base::MessageLoop message_loop_;
-  network::TestNetworkConnectionTracker network_connection_tracker_;
+  base::test::ScopedTaskEnvironment task_environment_;
   std::unique_ptr<base::PowerMonitor> power_monitor_;
   base::PowerMonitorTestSource* power_source_;
   TestBatteryStatusListener* test_battery_listener_;
@@ -146,7 +157,8 @@ TEST_F(DeviceStatusListenerTest, InitialNoOptState) {
   EXPECT_EQ(DeviceStatus(), listener_->CurrentDeviceStatus());
 
   const int kInitialBatteryPercentage = 45;
-  listener_->Start(&mock_observer_);
+  listener_->Start(base::TimeDelta());
+
   ChangeBatteryPercentage(kInitialBatteryPercentage);
 
   // We are in no opt state, notify the observer.
@@ -158,6 +170,20 @@ TEST_F(DeviceStatusListenerTest, InitialNoOptState) {
   EXPECT_EQ(NetworkStatus::DISCONNECTED, status.network_status);
 }
 
+// Verifies two Start() call will only do initialization for once, and the start
+// delay should be refreshed based on a later Start() call.
+TEST_F(DeviceStatusListenerTest, DuplicateStart) {
+  ChangeNetworkType(ConnectionType::CONNECTION_NONE);
+  SimulateBatteryChange(true); /* Not charging. */
+  EXPECT_EQ(DeviceStatus(), listener_->CurrentDeviceStatus());
+  const auto acutual_delay = base::TimeDelta::FromSeconds(0);
+  listener_->Start(base::TimeDelta::FromSeconds(1));
+  listener_->Start(acutual_delay);
+  EXPECT_CALL(mock_observer_, OnDeviceStatusChanged(_)).Times(1);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(listener_->start_delay(), acutual_delay);
+}
+
 TEST_F(DeviceStatusListenerTest, TestValidStateChecks) {
   ChangeNetworkType(ConnectionType::CONNECTION_NONE);
   SimulateBatteryChange(true);
@@ -165,7 +191,7 @@ TEST_F(DeviceStatusListenerTest, TestValidStateChecks) {
 
   {
     EXPECT_CALL(mock_observer_, OnDeviceStatusChanged(_)).Times(0);
-    listener_->Start(&mock_observer_);
+    listener_->Start(base::TimeDelta());
     EXPECT_FALSE(listener_->is_valid_state());
   }
 
@@ -197,7 +223,7 @@ TEST_F(DeviceStatusListenerTest, TestValidStateChecks) {
 
 // Ensures the observer is notified when network condition changes.
 TEST_F(DeviceStatusListenerTest, NotifyObserverNetworkChange) {
-  listener_->Start(&mock_observer_);
+  listener_->Start(base::TimeDelta());
 
   // Initial states check.
   EXPECT_EQ(NetworkStatus::DISCONNECTED,
@@ -241,7 +267,7 @@ TEST_F(DeviceStatusListenerTest, NotifyObserverBatteryChange) {
   SimulateBatteryChange(false); /* Charging. */
   EXPECT_EQ(DeviceStatus(), listener_->CurrentDeviceStatus());
 
-  listener_->Start(&mock_observer_);
+  listener_->Start(base::TimeDelta());
 
   EXPECT_CALL(mock_observer_, OnDeviceStatusChanged(
                                   BatteryStatusEqual(BatteryStatus::CHARGING)))
@@ -266,7 +292,7 @@ TEST_F(DeviceStatusListenerTest, NotifyObserverBatteryChange) {
             listener_->CurrentDeviceStatus().battery_percentage);
 
   listener_->Stop();
-};
+}
 
 // Verify a sequence of offline->online->offline network state changes.
 TEST_F(DeviceStatusListenerTest, OfflineOnlineOffline) {

@@ -8,9 +8,12 @@
 #include <string>
 
 #include "apps/launcher.h"
+#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/task/post_task.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
@@ -140,8 +143,8 @@ AppSorting* ShellExtensionSystem::app_sorting() {
 void ShellExtensionSystem::RegisterExtensionWithRequestContexts(
     const Extension* extension,
     const base::Closure& callback) {
-  BrowserThread::PostTaskAndReply(
-      BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraitsAndReply(
+      FROM_HERE, {BrowserThread::IO},
       base::Bind(&InfoMap::AddExtension, info_map(),
                  base::RetainedRef(extension), base::Time::Now(), false, false),
       callback);

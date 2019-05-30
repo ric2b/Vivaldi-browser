@@ -56,20 +56,21 @@ WebInputEventResult MouseWheelEventManager::HandleWheelEvent(
     return WebInputEventResult::kNotHandled;
   }
 
+  // Synthetic wheel events generated from GestureDoubleTap are phaseless.
+  // Wheel events generated from plugin and tests may not have phase info.
   bool has_phase_info = event.phase != WebMouseWheelEvent::kPhaseNone ||
                         event.momentum_phase != WebMouseWheelEvent::kPhaseNone;
-  if (!has_phase_info) {
-    // Wheel events generated from plugin and tests may not have phase info.
-    // Send these events to the target under the cursor.
-    wheel_target_ = FindTargetNode(event, doc, view);
-  } else if (event.phase == WebMouseWheelEvent::kPhaseBegan || !wheel_target_) {
-    // Find and save the wheel_target_, this target will be used for the rest
-    // of the current scrolling sequence.
+
+  // Find and save the wheel_target_, this target will be used for the rest
+  // of the current scrolling sequence. In the absence of phase info, send the
+  // event to the target under the cursor.
+  if (event.phase == WebMouseWheelEvent::kPhaseBegan || !wheel_target_ ||
+      !has_phase_info) {
     wheel_target_ = FindTargetNode(event, doc, view);
   }
 
   LocalFrame* subframe =
-      EventHandlingUtil::SubframeForTargetNode(wheel_target_.Get());
+      event_handling_util::SubframeForTargetNode(wheel_target_.Get());
   if (subframe) {
     WebInputEventResult result =
         subframe->GetEventHandler().HandleWheelEvent(event);
@@ -89,15 +90,9 @@ WebInputEventResult MouseWheelEventManager::HandleWheelEvent(
       // Reset the target if the dom event is cancelled to make sure that new
       // targeting happens for the next wheel event.
       wheel_target_ = nullptr;
-      // TODO(ekaramad): This does not seem correct. The behavior of shift +
-      // scrolling seems different on Mac vs Linux/Windows. We need this done
-      // properly and perhaps even tag WebMouseWheelEvent with a scrolling
-      // direction (https://crbug.com/853292).
-      // When using shift + mouse scroll (to horizontally scroll), the expected
-      // value of |delta_x| is exactly zero.
-      bool is_vertical =
-          (std::abs(dom_event->deltaX()) < std::abs(dom_event->deltaY())) &&
-          (!dom_event->shiftKey() || dom_event->deltaX() != 0);
+
+      bool is_vertical = dom_event->NativeEvent().event_action ==
+                         WebMouseWheelEvent::EventAction::kScrollVertical;
       // TODO(ekaramad): If the only wheel handlers on the page are from such
       // disabled frames we should simply start scrolling on CC and the events
       // must get here as passive (https://crbug.com/853059).
@@ -105,7 +100,7 @@ WebInputEventResult MouseWheelEventManager::HandleWheelEvent(
       // blocked by disabled frames.
       return (should_enforce_vertical_scroll && is_vertical)
                  ? WebInputEventResult::kNotHandled
-                 : EventHandlingUtil::ToWebInputEventResult(dom_event_result);
+                 : event_handling_util::ToWebInputEventResult(dom_event_result);
     }
   }
 

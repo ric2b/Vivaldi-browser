@@ -9,6 +9,7 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
 import android.view.View;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.chrome.R;
 
@@ -39,19 +40,18 @@ public class ViewHighlighter {
                 : false;
         if (highlighted) return;
 
-        PulseDrawable pulseDrawable = circular
-                ? PulseDrawable.createCircle(ContextUtils.getApplicationContext())
-                : PulseDrawable.createHighlight();
+        PulseDrawable pulseDrawable = circular ? PulseDrawable.createCircle(view.getContext())
+                                               : PulseDrawable.createHighlight(view.getContext());
 
-        Resources resources = ContextUtils.getApplicationContext().getResources();
+        Resources resources = view.getContext().getResources();
         Drawable background = (Drawable) view.getBackground();
         if (background != null) {
             background = background.getConstantState().newDrawable(resources);
         }
 
-        LayerDrawable drawable =
-                new LayerDrawable(background == null ? new Drawable[] {pulseDrawable}
-                                                     : new Drawable[] {background, pulseDrawable});
+        LayerDrawable drawable = ApiCompatibilityUtils.createLayerDrawable(background == null
+                        ? new Drawable[] {pulseDrawable}
+                        : new Drawable[] {background, pulseDrawable});
         view.setBackground(drawable);
         view.setTag(R.id.highlight_state, true);
 

@@ -7,19 +7,21 @@
 
 #include <wayland-client.h>
 
+#include <map>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "ui/ozone/platform/wayland/wayland_object.h"
-#include "ui/ozone/public/clipboard_delegate.h"
+#include "ui/ozone/public/platform_clipboard.h"
 
 namespace ui {
 
+class OSExchangeData;
 class WaylandConnection;
+class WaylandWindow;
 
 // The WaylandDataSource object represents the source side of a
 // WaylandDataOffer. It is created by the source client in a data
@@ -28,8 +30,11 @@ class WaylandConnection;
 // transfer the data (OnSend listener).
 class WaylandDataSource {
  public:
+  using DragDataMap = std::map<std::string, std::string>;
+
   // Takes ownership of data_source.
-  explicit WaylandDataSource(wl_data_source* data_source);
+  explicit WaylandDataSource(wl_data_source* data_source,
+                             WaylandConnection* connection);
   ~WaylandDataSource();
 
   void set_connection(WaylandConnection* connection) {
@@ -37,8 +42,13 @@ class WaylandDataSource {
     connection_ = connection;
   }
 
-  void WriteToClipboard(const ClipboardDelegate::DataMap& data_map);
-  void UpdataDataMap(const ClipboardDelegate::DataMap& data_map);
+  void WriteToClipboard(const PlatformClipboard::DataMap& data_map);
+  void UpdateDataMap(const PlatformClipboard::DataMap& data_map);
+  void Offer(const ui::OSExchangeData& data);
+  void SetAction(int operation);
+  void SetDragData(const DragDataMap& data_map);
+
+  const wl_data_source* data_source() const { return data_source_.get(); }
 
  private:
   static void OnTarget(void* data,
@@ -49,14 +59,22 @@ class WaylandDataSource {
                      const char* mime_type,
                      int32_t fd);
   static void OnCancel(void* data, wl_data_source* source);
+  static void OnDnDDropPerformed(void* data, wl_data_source* source);
+  static void OnDnDFinished(void* data, wl_data_source* source);
+  static void OnAction(void* data, wl_data_source* source, uint32_t dnd_action);
 
   void GetClipboardData(const std::string& mime_type,
                         base::Optional<std::vector<uint8_t>>* data);
+  void GetDragData(const std::string& mime_type, std::string* contents);
 
   wl::Object<wl_data_source> data_source_;
   WaylandConnection* connection_ = nullptr;
+  WaylandWindow* source_window_ = nullptr;
 
-  ClipboardDelegate::DataMap data_map_;
+  PlatformClipboard::DataMap data_map_;
+  DragDataMap drag_data_map_;
+  // Action selected by the compositor
+  uint32_t dnd_action_;
 
   DISALLOW_COPY_AND_ASSIGN(WaylandDataSource);
 };

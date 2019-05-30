@@ -9,13 +9,13 @@
 
 #include <memory>
 
+#include "base/component_export.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "storage/browser/fileapi/quota/quota_reservation_manager.h"
-#include "storage/browser/storage_browser_export.h"
 #include "storage/common/fileapi/file_system_types.h"
 
 namespace url {
@@ -28,17 +28,17 @@ class QuotaReservationBuffer;
 class OpenFileHandle;
 
 // Represents a unit of quota reservation.
-class STORAGE_EXPORT QuotaReservation
+class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaReservation
     : public base::RefCounted<QuotaReservation> {
  public:
-  using StatusCallback = base::Callback<void(base::File::Error error)>;
+  using StatusCallback = base::OnceCallback<void(base::File::Error error)>;
 
   // Reclaims unused quota and reserves another |size| of quota.  So that the
   // resulting new |remaining_quota_| will be same as |size| as far as available
   // space is enough.  |remaining_quota_| may be less than |size| if there is
   // not enough space available.
   // Invokes |callback| upon completion.
-  void RefreshReservation(int64_t size, const StatusCallback& callback);
+  void RefreshReservation(int64_t size, StatusCallback callback);
 
   // Associates |platform_path| to the QuotaReservation instance.
   // Returns an OpenFileHandle instance that represents a quota managed file.
@@ -76,11 +76,11 @@ class STORAGE_EXPORT QuotaReservation
   static bool AdaptDidUpdateReservedQuota(
       const base::WeakPtr<QuotaReservation>& reservation,
       int64_t previous_size,
-      const StatusCallback& callback,
+      StatusCallback callback,
       base::File::Error error,
       int64_t delta);
   bool DidUpdateReservedQuota(int64_t previous_size,
-                              const StatusCallback& callback,
+                              StatusCallback callback,
                               base::File::Error error,
                               int64_t delta);
 

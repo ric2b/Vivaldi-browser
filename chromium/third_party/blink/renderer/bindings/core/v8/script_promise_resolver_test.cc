@@ -7,7 +7,6 @@
 #include <memory>
 
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
@@ -15,6 +14,7 @@
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/platform/bindings/script_forbidden_scope.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -25,14 +25,15 @@ class TestHelperFunction : public ScriptFunction {
  public:
   static v8::Local<v8::Function> CreateFunction(ScriptState* script_state,
                                                 String* value) {
-    TestHelperFunction* self = new TestHelperFunction(script_state, value);
+    TestHelperFunction* self =
+        MakeGarbageCollected<TestHelperFunction>(script_state, value);
     return self->BindToV8Function();
   }
 
- private:
   TestHelperFunction(ScriptState* script_state, String* value)
       : ScriptFunction(script_state), value_(value) {}
 
+ private:
   ScriptValue Call(ScriptValue value) override {
     DCHECK(!value.IsEmpty());
     *value_ = ToCoreString(value.V8Value()
@@ -201,22 +202,17 @@ TEST_F(ScriptPromiseResolverTest, stop) {
 class ScriptPromiseResolverKeepAlive : public ScriptPromiseResolver {
  public:
   static ScriptPromiseResolverKeepAlive* Create(ScriptState* script_state) {
-    ScriptPromiseResolverKeepAlive* resolver =
-        new ScriptPromiseResolverKeepAlive(script_state);
-    resolver->PauseIfNeeded();
-    return resolver;
+    return MakeGarbageCollected<ScriptPromiseResolverKeepAlive>(script_state);
   }
 
+  explicit ScriptPromiseResolverKeepAlive(ScriptState* script_state)
+      : ScriptPromiseResolver(script_state) {}
   ~ScriptPromiseResolverKeepAlive() override { destructor_calls_++; }
 
   static void Reset() { destructor_calls_ = 0; }
   static bool IsAlive() { return !destructor_calls_; }
 
   static int destructor_calls_;
-
- private:
-  explicit ScriptPromiseResolverKeepAlive(ScriptState* script_state)
-      : ScriptPromiseResolver(script_state) {}
 };
 
 int ScriptPromiseResolverKeepAlive::destructor_calls_ = 0;
@@ -320,7 +316,7 @@ TEST_F(ScriptPromiseResolverTest, suspend) {
       BlinkGC::kEagerSweeping, BlinkGC::GCReason::kForcedGC);
   ASSERT_TRUE(ScriptPromiseResolverKeepAlive::IsAlive());
 
-  GetExecutionContext()->PausePausableObjects();
+  GetExecutionContext()->SetLifecycleState(mojom::FrameLifecycleState::kFrozen);
   resolver->Resolve("hello");
   ThreadState::Current()->CollectGarbage(
       BlinkGC::kNoHeapPointersOnStack, BlinkGC::kAtomicMarking,

@@ -68,6 +68,7 @@ class CORE_EXPORT AXObjectCache
   virtual void ListboxActiveIndexChanged(HTMLSelectElement*) = 0;
   virtual void LocationChanged(LayoutObject*) = 0;
   virtual void RadiobuttonRemovedFromGroup(HTMLInputElement*) = 0;
+  virtual void ImageLoaded(LayoutObject*) = 0;
 
   virtual void Remove(AccessibleNode*) = 0;
   virtual void Remove(LayoutObject*) = 0;
@@ -103,6 +104,11 @@ class CORE_EXPORT AXObjectCache
   virtual void HandleLayoutComplete(Document*) = 0;
   virtual void HandleClicked(Node*) = 0;
   virtual void HandleAutofillStateChanged(Element*, bool) = 0;
+  virtual void HandleValidationMessageVisibilityChanged(
+      const Element* form_control) = 0;
+
+  // Handle any notifications which arrived while layout was dirty.
+  virtual void ProcessUpdatesAfterLayout(Document&) = 0;
 
   // Changes to virtual Accessibility Object Model nodes.
   virtual void HandleAttributeChanged(const QualifiedName& attr_name,
@@ -122,6 +128,10 @@ class CORE_EXPORT AXObjectCache
   virtual void HandleLayoutComplete(LayoutObject*) = 0;
   virtual void HandleScrolledToAnchor(const Node* anchor_node) = 0;
 
+  // Called when the frame rect changes, which can sometimes happen
+  // without producing any layout or other notifications.
+  virtual void HandleFrameRectsChanged(Document&) = 0;
+
   virtual const AtomicString& ComputedRoleForNode(Node*) = 0;
   virtual String ComputedNameForNode(Node*) = 0;
 
@@ -136,10 +146,10 @@ class CORE_EXPORT AXObjectCache
   // Static helper functions.
   static bool IsInsideFocusableElementOrARIAWidget(const Node&);
 
- protected:
+ private:
+  friend class AXObjectCacheBase;
   AXObjectCache(Document&);
 
- private:
   static AXObjectCacheCreateFunction create_function_;
   DISALLOW_COPY_AND_ASSIGN(AXObjectCache);
 };

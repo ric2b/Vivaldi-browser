@@ -11,7 +11,6 @@
 <translation id="1375198122581997741">Informácie o verzii</translation>
 <translation id="139305205187523129">Web <ph name="HOST_NAME" /> neodoslal žiadne údaje.</translation>
 <translation id="14171126816530869">Identita spoločnosti <ph name="ORGANIZATION" /> so sídlom <ph name="LOCALITY" /> bola overená spoločnosťou <ph name="ISSUER" />.</translation>
-<translation id="1506687042165942984">Zobrazí sa uložená (t. j. neaktuálna) kópia tejto stránky.</translation>
 <translation id="1559528461873125649">Neexistuje žiadny takýto súbor ani priečinok</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1640244768702815859">Skúste <ph name="BEGIN_LINK" />navštíviť domovskú stránku webu<ph name="END_LINK" />.</translation>
@@ -38,6 +37,7 @@
 <translation id="2337852623177822836">Nastavenie ovládané správcom</translation>
 <translation id="2355395290879513365">Útočníci môžu vidieť obrázky, ktoré si prehliadate na tejto stránke, a môžu vás napadnúť tým, že ich podvodným spôsobom upravia.</translation>
 <translation id="2356070529366658676">Opýtať sa</translation>
+<translation id="2359808026110333948">Pokračovať</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Spustiť diagnostiku siete<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Upozornenia</translation>
 <translation id="2539524384386349900">Rozpoznávať</translation>
@@ -71,7 +71,6 @@
 <translation id="3586931643579894722">Skryť podrobnosti</translation>
 <translation id="3630155396527302611">Ak je už uvedený ako program s prístupom k sieti, skúste ho odstrániť zo zoznamu a znova ho pridať.</translation>
 <translation id="3658742229777143148">Verzia</translation>
-<translation id="366094926047009040">Môžete stratiť prístup do účtu Vivaldi alebo vám môže ukradnúť identitu. Vivaldi odporúča, aby ste si ihneď zmenili heslo.</translation>
 <translation id="3681007416295224113">Informácie o certifikáte</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Skontrolovať proxy server, bránu firewall a konfiguráciu DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Ak používate server proxy...</translation>
@@ -105,7 +104,6 @@
 <translation id="4744603770635761495">Spustiteľná cesta</translation>
 <translation id="4750917950439032686">Vaše informácie (napríklad heslá alebo čísla kreditných kariet) sú pri odoslaní na túto stránku súkromné.</translation>
 <translation id="4764776831041365478">Webové stránky na adrese <ph name="URL" /> môžu byť dočasne nedostupné alebo sa mohli natrvalo premiestniť na novú webovú adresu.</translation>
-<translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
 <translation id="4974590756084640048">Opätovne aktivovať upozornenia</translation>
 <translation id="5023310440958281426">Skontrolujte pravidlá správcu</translation>
 <translation id="5039804452771397117">Povoliť</translation>
@@ -134,7 +132,7 @@
 <translation id="5810442152076338065">Vaše pripojenie k doméne <ph name="DOMAIN" /> je šifrované pomocou zastaranej šifrovacej súpravy.</translation>
 <translation id="5838278095973806738">Na tejto stránke by ste nemali zadávať citlivé informácie (napríklad heslá alebo čísla kreditných kariet), pretože by ich mohli ukradnúť útočníci.</translation>
 <translation id="5869405914158311789">K tomuto webu sa nedá pripojiť</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{Používa sa 1}few{Používajú sa #}many{Používa sa #}other{Používa sa #}}</translation>
+<translation id="5932224571077948991">Stránka zobrazuje obťažujúce alebo zavádzajúce reklamy</translation>
 <translation id="5990559369517809815">Žiadosti odoslané serveru boli zablokované rozšírením.</translation>
 <translation id="6051221802930200923">Web <ph name="SITE" /> momentálne nemôžete navštíviť, pretože používa pripínanie certifikátov. Chyby siete a útoky sú zvyčajne dočasné, takže by táto stránka mala neskôr pravdepodobne fungovať.</translation>
 <translation id="6146055958333702838">Skontrolujte všetky káble a reštartujte všetky používané smerovače, modemy alebo iné sieťové zariadenia.</translation>
@@ -152,6 +150,7 @@
 <translation id="6417515091412812850">Nie je možné skontrolovať, či bol certifikát odmietnutý.</translation>
 <translation id="6433595998831338502">Web <ph name="HOST_NAME" /> zamietol pripojenie.</translation>
 <translation id="6447842834002726250">Súbory cookie</translation>
+<translation id="6451458296329894277">Potvrdiť opätovné odoslanie formulára</translation>
 <translation id="6569060085658103619">Prezeráte si stránku s rozšíreniami</translation>
 <translation id="6657585470893396449">Heslo</translation>
 <translation id="6685834062052613830">Odhláste sa a dokončite nastavenie</translation>
@@ -189,13 +188,14 @@
 <translation id="8025119109950072390">Útočníci na tejto stránke sa vás môžu pokúsiť naviesť vykonať niečo nebezpečné, ako je inštalovanie softvéru alebo odhalenie osobných informácií (napríklad hesiel, telefónnych čísel alebo čísel kreditných kariet).</translation>
 <translation id="8037357227543935929">Opýtať sa (predvolené)</translation>
 <translation id="8041940743680923270">Použiť predvolené všeobecné nastavenie (Opýtať sa)</translation>
+<translation id="808894953321890993">Zmeniť heslo</translation>
 <translation id="8142868475871995937">Na stránke &lt;strong&gt;vivaldi://policy&lt;/strong&gt; nájdete zoznam zakázaných webových adries a ďalšie pravidlá vynútené vaším správcom systému.</translation>
 <translation id="8149426793427495338">Váš počítač prešiel do režimu spánku.</translation>
 <translation id="8150722005171944719">Súbor na adrese <ph name="URL" /> nie je možné prečítať. Je možné, že bol odstránený, presunutý alebo môžu v prístupe brániť povolenia súboru.</translation>
 <translation id="8184538546369750125">Použiť predvolené všeobecné nastavenie (Povoliť)</translation>
-<translation id="8205463626947051446">Stránka zvykne zobrazovať obťažujúce reklamy</translation>
 <translation id="8211406090763984747">Pripojenie je bezpečné</translation>
 <translation id="8225771182978767009">Osoba, ktorá nastavila tento počítač, sa rozhodla daný web blokovať.</translation>
+<translation id="8241707690549784388">Vami hľadaná stránka použila informácie, ktoré ste zadali. Návrat na túto stránku môže spôsobiť zopakovanie akcie, ktorú ste vykonali. Chcete pokračovať?</translation>
 <translation id="8241712895048303527">Blokovať na tejto stránke</translation>
 <translation id="8288807391153049143">Zobraziť certifikát</translation>
 <translation id="8289355894181816810">Ak neviete, čo to znamená, kontaktujte správcu siete.</translation>
@@ -211,10 +211,10 @@
 <translation id="9025348182339809926">(Neplatný)</translation>
 <translation id="9039213469156557790">Táto stránka obsahuje aj iné zdroje, ktoré nie sú zabezpečené. Tieto zdroje môžu pri prenose vidieť ostatní používatelia a útočník ich môže upraviť tak, aby zmenil správanie stránky.</translation>
 <translation id="9069693763241529744">Blokované rozšírením</translation>
-<translation id="910908805481542201">Pomôžte mi to vyriešiť</translation>
 <translation id="9169664750068251925">Vždy blokovať na tejto stránke</translation>
 <translation id="9183425211371246419">Web <ph name="HOST_NAME" /> využíva nepodporovaný protokol.</translation>
 <translation id="9219103736887031265">Obrázky</translation>
+<translation id="936602727769022409">Môžete stratiť prístup do účtu Google. Odporúčame, aby ste si ihneď zmenili heslo. Znovu sa zobrazí výzva na prihlásenie.</translation>
 <translation id="969892804517981540">Oficiálne zostavenie</translation>
 <translation id="988159990683914416">Zostavenie pre vývojárov</translation>
 </translationbundle>

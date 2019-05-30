@@ -83,11 +83,19 @@ class CC_EXPORT RasterBufferProvider {
   // have a pending callback, 0 should be passed for |pending_callback_id|.
   virtual uint64_t SetReadyToDrawCallback(
       const std::vector<const ResourcePool::InUsePoolResource*>& resources,
-      const base::Callback<void()>& callback,
+      base::OnceClosure callback,
       uint64_t pending_callback_id) const = 0;
 
   // Shutdown for doing cleanup.
   virtual void Shutdown() = 0;
+
+  // Checks whether GPU side queries issued for previous raster work have been
+  // finished. Note that this will acquire the worker context lock so it can be
+  // used from any thread. But usage from the compositor thread should be
+  // avoided to prevent contention with worker threads.
+  // Returns true if there are pending queries that could not be completed in
+  // this check.
+  virtual bool CheckRasterFinishedQueries() = 0;
 };
 
 }  // namespace cc

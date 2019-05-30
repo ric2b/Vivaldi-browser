@@ -12,9 +12,11 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/sync_socket.h"
+#include "base/task/post_task.h"
 #include "cc/base/math_util.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/common/media/renderer_audio_output_stream_factory.mojom.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
@@ -47,9 +49,9 @@ const int kRenderProcessId = 42;
 const int kRenderFrameId = 24;
 const float kWaveFrequency = 440.f;
 const int kChannels = 1;
-const int kBuffers = 1000;
-const int kSampleFrequency = 44100;
-const int kSamplesPerBuffer = kSampleFrequency / 100;
+const int kBuffers = 100;
+const int kSampleFrequency = 8000;
+const int kSamplesPerBuffer = kSampleFrequency / 10;
 
 std::unique_ptr<media::AudioOutputStream::AudioSourceCallback>
 GetTestAudioSource() {
@@ -79,7 +81,7 @@ void SyncWithAllThreads() {
   // least one task will be run. 20 iterations should be enough for our code.
   for (int i = 0; i < 20; ++i) {
     base::RunLoop(base::RunLoop::Type::kNestableTasksAllowed).RunUntilIdle();
-    SyncWith(BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+    SyncWith(base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}));
     SyncWith(media::AudioManager::Get()->GetWorkerTaskRunner());
   }
 }
@@ -203,6 +205,7 @@ class RendererAudioOutputStreamFactoryIntegrationTest : public Test {
       factory_context_;
 };
 
+// It's flaky on the buildbot, http://crbug.com/761214.
 TEST_F(RendererAudioOutputStreamFactoryIntegrationTest, StreamIntegrationTest) {
   // Sets up the factory on the IO thread and runs client code on the UI thread.
   // Send a sine wave from the client and makes sure it's received by the output
@@ -231,8 +234,7 @@ TEST_F(RendererAudioOutputStreamFactoryIntegrationTest, StreamIntegrationTest) {
 
   base::Thread renderer_side_ipc_thread("Renderer IPC thread");
   ASSERT_TRUE(renderer_side_ipc_thread.Start());
-  auto renderer_ipc_task_runner =
-      renderer_side_ipc_thread.message_loop()->task_runner();
+  auto renderer_ipc_task_runner = renderer_side_ipc_thread.task_runner();
 
   // Bind |stream_factory| to |renderer_ipc_task_runner|.
   mojom::RendererAudioOutputStreamFactory* factory_ptr;

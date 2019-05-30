@@ -4,6 +4,7 @@
 
 #include "ui/views/controls/webview/web_dialog_view.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/strings/utf_string_conversions.h"
@@ -38,9 +39,9 @@ namespace views {
 
 WebDialogView::WebDialogView(content::BrowserContext* context,
                              WebDialogDelegate* delegate,
-                             WebContentsHandler* handler)
+                             std::unique_ptr<WebContentsHandler> handler)
     : ClientView(nullptr, nullptr),
-      WebDialogWebContentsDelegate(context, handler),
+      WebDialogWebContentsDelegate(context, std::move(handler)),
       delegate_(delegate),
       web_view_(new views::WebView(context)) {
   web_view_->set_allow_accelerators(true);
@@ -116,7 +117,7 @@ bool WebDialogView::CanClose() {
   if (!is_attempting_close_dialog_) {
     // Fire beforeunload event when user attempts to close the dialog.
     is_attempting_close_dialog_ = true;
-    web_view_->web_contents()->DispatchBeforeUnload();
+    web_view_->web_contents()->DispatchBeforeUnload(false /* auto_cancel */);
   }
   return false;
 }
@@ -138,6 +139,12 @@ base::string16 WebDialogView::GetWindowTitle() const {
   if (delegate_)
     return delegate_->GetDialogTitle();
   return base::string16();
+}
+
+base::string16 WebDialogView::GetAccessibleWindowTitle() const {
+  if (delegate_)
+    return delegate_->GetAccessibleDialogTitle();
+  return GetWindowTitle();
 }
 
 std::string WebDialogView::GetWindowName() const {
@@ -262,10 +269,12 @@ bool WebDialogView::ShouldShowDialogTitle() const {
 }
 
 bool WebDialogView::HandleContextMenu(
+    content::RenderFrameHost* render_frame_host,
     const content::ContextMenuParams& params) {
   if (delegate_)
-    return delegate_->HandleContextMenu(params);
-  return WebDialogWebContentsDelegate::HandleContextMenu(params);
+    return delegate_->HandleContextMenu(render_frame_host, params);
+  return WebDialogWebContentsDelegate::HandleContextMenu(render_frame_host,
+                                                         params);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -281,12 +290,13 @@ void WebDialogView::SetContentsBounds(WebContents* source,
 // A simplified version of BrowserView::HandleKeyboardEvent().
 // We don't handle global keyboard shortcuts here, but that's fine since
 // they're all browser-specific. (This may change in the future.)
-void WebDialogView::HandleKeyboardEvent(content::WebContents* source,
+bool WebDialogView::HandleKeyboardEvent(content::WebContents* source,
                                         const NativeWebKeyboardEvent& event) {
   if (!event.os_event)
-    return;
+    return false;
 
-  GetWidget()->native_widget_private()->RepostNativeEvent(event.os_event);
+  return unhandled_keyboard_event_handler_.HandleKeyboardEvent(
+      event, GetFocusManager());
 }
 
 void WebDialogView::CloseContents(WebContents* source) {

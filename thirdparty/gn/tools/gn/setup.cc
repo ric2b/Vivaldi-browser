@@ -18,7 +18,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "tools/gn/command_format.h"
 #include "tools/gn/commands.h"
@@ -71,7 +70,8 @@ Variables
   check_targets [optional]
       A list of labels and label patterns that should be checked when running
       "gn check" or "gn gen --check". If unspecified, all targets will be
-      checked. If it is the empty list, no targets will be checked.
+      checked. If it is the empty list, no targets will be checked. To
+      bypass this list, request an explicit check of targets, like "//*".
 
       The format of this list is identical to that of "visibility" so see "gn
       help visibility" for examples.
@@ -195,6 +195,24 @@ void DecrementWorkCount() {
 
 #if defined(OS_WIN)
 
+std::wstring SysMultiByteToWide(base::StringPiece mb) {
+  if (mb.empty())
+    return std::wstring();
+
+  int mb_length = static_cast<int>(mb.length());
+  // Compute the length of the buffer.
+  int charcount =
+      MultiByteToWideChar(CP_ACP, 0, mb.data(), mb_length, NULL, 0);
+  if (charcount == 0)
+    return std::wstring();
+
+  std::wstring wide;
+  wide.resize(charcount);
+  MultiByteToWideChar(CP_ACP, 0, mb.data(), mb_length, &wide[0], charcount);
+
+  return wide;
+}
+
 // Given the path to a batch file that runs Python, extracts the name of the
 // executable actually implementing Python. Generally people write a batch file
 // to put something named "python" on the path, which then just redirects to
@@ -220,7 +238,7 @@ base::FilePath PythonBatToExe(const base::FilePath& bat_path) {
     base::TrimWhitespaceASCII(python_path, base::TRIM_ALL, &python_path);
 
     // Python uses the system multibyte code page for sys.executable.
-    base::FilePath exe_path(base::SysNativeMBToWide(python_path));
+    base::FilePath exe_path(SysMultiByteToWide(python_path));
 
     // Check for reasonable output, cmd may have output an error message.
     if (base::PathExists(exe_path))
@@ -302,20 +320,25 @@ Setup::Setup()
 Setup::~Setup() = default;
 
 bool Setup::DoSetup(const std::string& build_dir, bool force_create) {
-  base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
+  return DoSetup(build_dir, force_create,
+                 *base::CommandLine::ForCurrentProcess());
+}
 
-  scheduler_.set_verbose_logging(cmdline->HasSwitch(switches::kVerbose));
-  if (cmdline->HasSwitch(switches::kTime) ||
-      cmdline->HasSwitch(switches::kTracelog))
+bool Setup::DoSetup(const std::string& build_dir,
+                    bool force_create,
+                    const base::CommandLine& cmdline) {
+  scheduler_.set_verbose_logging(cmdline.HasSwitch(switches::kVerbose));
+  if (cmdline.HasSwitch(switches::kTime) ||
+      cmdline.HasSwitch(switches::kTracelog))
     EnableTracing();
 
   ScopedTrace setup_trace(TraceItem::TRACE_SETUP, "DoSetup");
 
-  if (!FillSourceDir(*cmdline))
+  if (!FillSourceDir(cmdline))
     return false;
   if (!RunConfigFile())
     return false;
-  if (!FillOtherConfig(*cmdline))
+  if (!FillOtherConfig(cmdline))
     return false;
 
   // Must be after FillSourceDir to resolve.
@@ -331,10 +354,10 @@ bool Setup::DoSetup(const std::string& build_dir, bool force_create) {
   }
 
   if (fill_arguments_) {
-    if (!FillArguments(*cmdline))
+    if (!FillArguments(cmdline))
       return false;
   }
-  if (!FillPythonPath(*cmdline))
+  if (!FillPythonPath(cmdline))
     return false;
 
   // Check for unused variables in the .gn file.
@@ -348,10 +371,14 @@ bool Setup::DoSetup(const std::string& build_dir, bool force_create) {
 }
 
 bool Setup::Run() {
+  return Run(*base::CommandLine::ForCurrentProcess());
+}
+
+bool Setup::Run(const base::CommandLine& cmdline) {
   RunPreMessageLoop();
   if (!scheduler_.Run())
     return false;
-  return RunPostMessageLoop();
+  return RunPostMessageLoop(cmdline);
 }
 
 SourceFile Setup::GetBuildArgFile() const {
@@ -366,7 +393,7 @@ void Setup::RunPreMessageLoop() {
   loader_->Load(root_build_file_, LocationRange(), Label());
 }
 
-bool Setup::RunPostMessageLoop() {
+bool Setup::RunPostMessageLoop(const base::CommandLine& cmdline) {
   Err err;
   if (!builder_.CheckForBadItems(&err)) {
     err.PrintToStdout();
@@ -375,8 +402,7 @@ bool Setup::RunPostMessageLoop() {
 
   if (!build_settings_.build_args().VerifyAllOverridesUsed(&err) ||
       !Scope::VerifyAllUpdatesUsed(&err)) {
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kFailOnUnusedArgs)) {
+    if (cmdline.HasSwitch(switches::kFailOnUnusedArgs)) {
       err.PrintToStdout();
       return false;
     }
@@ -398,17 +424,16 @@ bool Setup::RunPostMessageLoop() {
     }
 
     if (!commands::CheckPublicHeaders(&build_settings_, all_targets, to_check,
-                                      false)) {
+                                      false, false)) {
       return false;
     }
   }
 
   // Write out tracing and timing if requested.
-  const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
-  if (cmdline->HasSwitch(switches::kTime))
+  if (cmdline.HasSwitch(switches::kTime))
     PrintLongHelp(SummarizeTraces());
-  if (cmdline->HasSwitch(switches::kTracelog))
-    SaveTraces(cmdline->GetSwitchValuePath(switches::kTracelog));
+  if (cmdline.HasSwitch(switches::kTracelog))
+    SaveTraces(cmdline.GetSwitchValuePath(switches::kTracelog));
 
   return true;
 }
@@ -508,7 +533,7 @@ bool Setup::SaveArgsToFile() {
   base::CreateDirectory(build_arg_file.DirName());
 
   std::string contents = args_input_file_->contents();
-  commands::FormatStringToString(contents, false, &contents);
+  commands::FormatStringToString(contents, commands::TreeDumpMode::kInactive, &contents);
 #if defined(OS_WIN)
   // Use Windows lineendings for this file since it will often open in
   // Notepad which can't handle Unix ones.
@@ -549,19 +574,21 @@ bool Setup::FillSourceDir(const base::CommandLine& cmdline) {
     // When --root is specified, an alternate --dotfile can also be set.
     // --dotfile should be a real file path and not a "//foo" source-relative
     // path.
-    base::FilePath dot_file_path =
+    base::FilePath dotfile_path =
         cmdline.GetSwitchValuePath(switches::kDotfile);
-    if (dot_file_path.empty()) {
+    if (dotfile_path.empty()) {
       dotfile_name_ = root_path.Append(kGnFile);
     } else {
-      dotfile_name_ = base::MakeAbsoluteFilePath(dot_file_path);
+      dotfile_name_ = base::MakeAbsoluteFilePath(dotfile_path);
       if (dotfile_name_.empty()) {
         Err(Location(), "Could not load dotfile.",
-            "The file \"" + FilePathToUTF8(dot_file_path) +
+            "The file \"" + FilePathToUTF8(dotfile_path) +
                 "\" couldn't be loaded.")
             .PrintToStdout();
         return false;
       }
+      // Only set dotfile_name if it was passed explicitly.
+      build_settings_.set_dotfile_name(dotfile_name_);
     }
   } else {
     // In the default case, look for a dotfile and that also tells us where the
@@ -701,6 +728,12 @@ bool Setup::RunConfigFile() {
     return false;
   }
 
+  // Add a dependency on the build arguments file. If this changes, we want
+  // to re-generate the build. This causes the dotfile to make it into
+  // build.ninja.d.
+  g_scheduler->AddGenDependency(dotfile_name_);
+
+  // Also add a build dependency to the scope, which is used by `gn analyze`.
   dotfile_scope_.AddBuildDependencyFile(SourceFile("//.gn"));
   dotfile_root_->Execute(&dotfile_scope_, &err);
   if (err.has_error()) {

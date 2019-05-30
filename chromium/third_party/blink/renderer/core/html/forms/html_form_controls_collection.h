@@ -44,6 +44,7 @@ class HTMLFormControlsCollection final : public HTMLCollection {
  public:
   static HTMLFormControlsCollection* Create(ContainerNode&, CollectionType);
 
+  explicit HTMLFormControlsCollection(ContainerNode&);
   ~HTMLFormControlsCollection() override;
 
   HTMLElement* item(unsigned offset) const {
@@ -53,11 +54,9 @@ class HTMLFormControlsCollection final : public HTMLCollection {
   HTMLElement* namedItem(const AtomicString& name) const override;
   void namedGetter(const AtomicString& name, RadioNodeListOrElement&);
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
-  explicit HTMLFormControlsCollection(ContainerNode&);
-
   void UpdateIdNameCache() const override;
   void SupportedPropertyNames(Vector<String>& names) override;
 

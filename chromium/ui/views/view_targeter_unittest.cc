@@ -6,10 +6,10 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "third_party/skia/include/core/SkPath.h"
 #include "ui/events/event_targeter.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
-#include "ui/gfx/path.h"
 #include "ui/views/masked_targeter_delegate.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/view_targeter.h"
@@ -61,7 +61,7 @@ class TestMaskedView : public View, public MaskedTargeterDelegate {
 
  private:
   // MaskedTargeterDelegate:
-  bool GetHitTestMask(gfx::Path* mask) const override {
+  bool GetHitTestMask(SkPath* mask) const override {
     DCHECK(mask);
     SkScalar w = SkIntToScalar(width());
     SkScalar h = SkIntToScalar(height());
@@ -122,7 +122,7 @@ gfx::Rect ConvertRectFromWidgetToView(View* view, const gfx::Rect& r) {
 TEST_F(ViewTargeterTest, ViewTargeterForKeyEvents) {
   Widget widget;
   Widget::InitParams init_params =
-      CreateParams(Widget::InitParams::TYPE_POPUP);
+      CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   widget.Init(init_params);
   widget.Show();

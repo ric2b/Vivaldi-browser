@@ -4,6 +4,7 @@
 
 #include "components/gcm_driver/account_tracker.h"
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
@@ -45,12 +46,10 @@ void AccountTracker::RemoveObserver(Observer* observer) {
 
 std::vector<AccountIds> AccountTracker::GetAccounts() const {
   const std::string active_account_id =
-      identity_manager_->GetPrimaryAccountInfo().account_id;
+      identity_manager_->GetPrimaryAccountId();
   std::vector<AccountIds> accounts;
 
-  for (std::map<std::string, AccountState>::const_iterator it =
-           accounts_.begin();
-       it != accounts_.end(); ++it) {
+  for (auto it = accounts_.begin(); it != accounts_.end(); ++it) {
     const AccountState& state = it->second;
     bool is_visible = state.is_signed_in && !state.ids.gaia.empty();
 
@@ -68,8 +67,7 @@ std::vector<AccountIds> AccountTracker::GetAccounts() const {
 }
 
 void AccountTracker::OnRefreshTokenUpdatedForAccount(
-    const AccountInfo& account_info,
-    bool is_valid) {
+    const CoreAccountInfo& account_info) {
   TRACE_EVENT1("identity", "AccountTracker::OnRefreshTokenUpdatedForAccount",
                "account_id", account_info.account_id);
 
@@ -82,16 +80,16 @@ void AccountTracker::OnRefreshTokenUpdatedForAccount(
 }
 
 void AccountTracker::OnRefreshTokenRemovedForAccount(
-    const AccountInfo& account_info) {
+    const std::string& account_id) {
   TRACE_EVENT1("identity", "AccountTracker::OnRefreshTokenRemovedForAccount",
-               "account_id", account_info.account_id);
+               "account_id", account_id);
 
-  DVLOG(1) << "REVOKED " << account_info.account_id;
-  UpdateSignInState(account_info.account_id, /*is_signed_in=*/false);
+  DVLOG(1) << "REVOKED " << account_id;
+  UpdateSignInState(account_id, /*is_signed_in=*/false);
 }
 
 void AccountTracker::OnPrimaryAccountSet(
-    const AccountInfo& primary_account_info) {
+    const CoreAccountInfo& primary_account_info) {
   TRACE_EVENT0("identity", "AccountTracker::OnPrimaryAccountSet");
 
   std::vector<AccountInfo> accounts =
@@ -105,7 +103,7 @@ void AccountTracker::OnPrimaryAccountSet(
 }
 
 void AccountTracker::OnPrimaryAccountCleared(
-    const AccountInfo& previous_primary_account_info) {
+    const CoreAccountInfo& previous_primary_account_info) {
   TRACE_EVENT0("identity", "AccountTracker::OnPrimaryAccountCleared");
   DVLOG(1) << "LOGOUT";
   StopTrackingAllAccounts();
@@ -221,7 +219,7 @@ AccountIdFetcher::~AccountIdFetcher() {
 }
 
 void AccountIdFetcher::Start() {
-  OAuth2TokenService::ScopeSet scopes;
+  identity::ScopeSet scopes;
   scopes.insert("https://www.googleapis.com/auth/userinfo.profile");
   access_token_fetcher_ = identity_manager_->CreateAccessTokenFetcherForAccount(
       account_key_, "gaia_account_tracker", scopes,

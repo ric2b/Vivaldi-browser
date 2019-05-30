@@ -10,6 +10,7 @@
 #include <tuple>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -18,6 +19,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind_test_util.h"
 #include "base/test/null_task_runner.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
@@ -62,6 +64,7 @@
 #include "content/common/input_messages.h"
 #include "content/common/text_input_state.h"
 #include "content/common/view_messages.h"
+#include "content/common/widget_messages.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents_view_delegate.h"
@@ -138,14 +141,23 @@ using blink::WebTouchPoint;
 using ui::WebInputEventTraits;
 using viz::FrameEvictionManager;
 
+#define EXPECT_EVICTED(view)                   \
+  {                                            \
+    EXPECT_FALSE((view)->HasPrimarySurface()); \
+    EXPECT_FALSE((view)->HasSavedFrame());     \
+  }
+
+#define EXPECT_HAS_FRAME(view)                \
+  {                                           \
+    EXPECT_TRUE((view)->HasPrimarySurface()); \
+    EXPECT_TRUE((view)->HasSavedFrame());     \
+  }
+
 namespace content {
 
 void InstallDelegatedFrameHostClient(
     RenderWidgetHostViewAura* render_widget_host_view,
     std::unique_ptr<DelegatedFrameHostClient> delegated_frame_host_client);
-
-constexpr uint64_t kFrameIndexStart =
-    viz::CompositorFrameSinkSupport::kFrameIndexStart;
 
 const viz::LocalSurfaceId kArbitraryLocalSurfaceId(
     1,
@@ -298,6 +310,10 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
 
   bool HasFallbackSurface() const override {
     return GetDelegatedFrameHost()->HasFallbackSurface();
+  }
+
+  bool HasSavedFrame() const {
+    return GetDelegatedFrameHost()->HasSavedFrame();
   }
 
   void ReclaimResources(const std::vector<viz::ReturnedResource>& resources) {
@@ -586,7 +602,6 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
   }
 
   void SetUp() override {
-    SetFeatureList();
     SetUpEnvironment();
   }
 
@@ -618,11 +633,6 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
   }
 
   const ui::MotionEventAura& pointer_state() { return view_->pointer_state(); }
-
-  void SetFeatureList() {
-    vsync_feature_list_.InitAndEnableFeature(
-        features::kVsyncAlignedInputEvents);
-  }
 
  protected:
   BrowserContext* browser_context() { return browser_context_.get(); }
@@ -687,7 +697,6 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
 
   IPC::TestSink* sink_;
   base::test::ScopedFeatureList mojo_feature_list_;
-  base::test::ScopedFeatureList vsync_feature_list_;
   base::test::ScopedFeatureList feature_list_;
 
   viz::ParentLocalSurfaceIdAllocator parent_local_surface_id_allocator_;
@@ -805,7 +814,6 @@ class RenderWidgetHostViewAuraOverscrollTest
   void SetUpOverscrollEnvironment() { SetUpOverscrollEnvironmentImpl(0); }
 
   void SetUpOverscrollEnvironmentImpl(int debounce_interval_in_ms) {
-    SetFeatureList();
     scoped_feature_list_.InitAndEnableFeature(
         features::kTouchpadOverscrollHistoryNavigation);
 
@@ -1123,6 +1131,7 @@ TEST_F(RenderWidgetHostViewAuraTest, PositionChildPopup) {
 
   // Verify that when the popup is initialized for the first time, it correctly
   // treats the input bounds as screen coordinates.
+  view_->SetWidgetType(WidgetType::kPopup);
   view_->InitAsPopup(parent_view_, bounds_in_screen);
 
   gfx::Rect final_bounds_in_screen = view_->GetViewBounds();
@@ -1171,36 +1180,38 @@ TEST_F(RenderWidgetHostViewAuraTest, ParentMovementUpdatesScreenRect) {
 
   // Flush the state after initial setup is done.
   widget_host_->OnMessageReceived(
-      ViewHostMsg_UpdateScreenRects_ACK(widget_host_->GetRoutingID()));
+      WidgetHostMsg_UpdateScreenRects_ACK(widget_host_->GetRoutingID()));
   widget_host_->OnMessageReceived(
-      ViewHostMsg_UpdateScreenRects_ACK(widget_host_->GetRoutingID()));
+      WidgetHostMsg_UpdateScreenRects_ACK(widget_host_->GetRoutingID()));
   sink_->ClearMessages();
 
   // Move parents.
   parent2->SetBounds(gfx::Rect(20, 20, 200, 200));
   ASSERT_EQ(1U, sink_->message_count());
   const IPC::Message* msg = sink_->GetMessageAt(0);
-  ASSERT_EQ(static_cast<uint32_t>(ViewMsg_UpdateScreenRects::ID), msg->type());
-  ViewMsg_UpdateScreenRects::Param params;
-  ViewMsg_UpdateScreenRects::Read(msg, &params);
+  ASSERT_EQ(static_cast<uint32_t>(WidgetMsg_UpdateScreenRects::ID),
+            msg->type());
+  WidgetMsg_UpdateScreenRects::Param params;
+  WidgetMsg_UpdateScreenRects::Read(msg, &params);
   EXPECT_EQ(gfx::Rect(24, 24, 100, 100), std::get<0>(params));
   EXPECT_EQ(gfx::Rect(1, 1, 300, 300), std::get<1>(params));
   sink_->ClearMessages();
   widget_host_->OnMessageReceived(
-      ViewHostMsg_UpdateScreenRects_ACK(widget_host_->GetRoutingID()));
+      WidgetHostMsg_UpdateScreenRects_ACK(widget_host_->GetRoutingID()));
   // There should not be any pending update.
   EXPECT_EQ(0U, sink_->message_count());
 
   parent1->SetBounds(gfx::Rect(10, 10, 300, 300));
   ASSERT_EQ(1U, sink_->message_count());
   msg = sink_->GetMessageAt(0);
-  ASSERT_EQ(static_cast<uint32_t>(ViewMsg_UpdateScreenRects::ID), msg->type());
-  ViewMsg_UpdateScreenRects::Read(msg, &params);
+  ASSERT_EQ(static_cast<uint32_t>(WidgetMsg_UpdateScreenRects::ID),
+            msg->type());
+  WidgetMsg_UpdateScreenRects::Read(msg, &params);
   EXPECT_EQ(gfx::Rect(33, 33, 100, 100), std::get<0>(params));
   EXPECT_EQ(gfx::Rect(10, 10, 300, 300), std::get<1>(params));
   sink_->ClearMessages();
   widget_host_->OnMessageReceived(
-      ViewHostMsg_UpdateScreenRects_ACK(widget_host_->GetRoutingID()));
+      WidgetHostMsg_UpdateScreenRects_ACK(widget_host_->GetRoutingID()));
   // There should not be any pending update.
   EXPECT_EQ(0U, sink_->message_count());
 }
@@ -1228,6 +1239,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DestroyFullscreenOnBlur) {
   view_ = nullptr;
 }
 
+#if defined(OS_CHROMEOS)
 // Checks that a popup view is destroyed when a user clicks outside of the popup
 // view and focus does not change. This is the case when the user clicks on the
 // desktop background on Chrome OS.
@@ -1236,11 +1248,12 @@ TEST_F(RenderWidgetHostViewAuraTest, DestroyPopupClickOutsidePopup) {
   parent_view_->Focus();
   EXPECT_TRUE(parent_view_->HasFocus());
 
+  view_->SetWidgetType(WidgetType::kPopup);
   view_->InitAsPopup(parent_view_, gfx::Rect(10, 10, 100, 100));
   aura::Window* window = view_->GetNativeView();
   ASSERT_TRUE(window != nullptr);
 
-  gfx::Point click_point;
+  gfx::Point click_point(0, 0);
   EXPECT_FALSE(window->GetBoundsInRootWindow().Contains(click_point));
   aura::Window* parent_window = parent_view_->GetNativeView();
   EXPECT_FALSE(parent_window->GetBoundsInRootWindow().Contains(click_point));
@@ -1263,11 +1276,12 @@ TEST_F(RenderWidgetHostViewAuraTest, DestroyPopupTapOutsidePopup) {
   parent_view_->Focus();
   EXPECT_TRUE(parent_view_->HasFocus());
 
+  view_->SetWidgetType(WidgetType::kPopup);
   view_->InitAsPopup(parent_view_, gfx::Rect(10, 10, 100, 100));
   aura::Window* window = view_->GetNativeView();
   ASSERT_TRUE(window != nullptr);
 
-  gfx::Point tap_point;
+  gfx::Point tap_point(0, 0);
   EXPECT_FALSE(window->GetBoundsInRootWindow().Contains(tap_point));
   aura::Window* parent_window = parent_view_->GetNativeView();
   EXPECT_FALSE(parent_window->GetBoundsInRootWindow().Contains(tap_point));
@@ -1281,9 +1295,9 @@ TEST_F(RenderWidgetHostViewAuraTest, DestroyPopupTapOutsidePopup) {
   widget_host_ = nullptr;
   view_ = nullptr;
 }
+#endif
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-
 // On Desktop Linux, select boxes need mouse capture in order to work. Test that
 // when a select box is opened via a mouse press that it retains mouse capture
 // after the mouse is released.
@@ -1296,7 +1310,7 @@ TEST_F(RenderWidgetHostViewAuraTest, PopupRetainsCaptureAfterMouseRelease) {
       parent_view_->GetNativeView()->GetRootWindow(), gfx::Point(300, 300));
   generator.PressLeftButton();
 
-  view_->SetPopupType(blink::kWebPopupTypePage);
+  view_->SetWidgetType(WidgetType::kPopup);
   view_->InitAsPopup(parent_view_, gfx::Rect(10, 10, 100, 100));
   ASSERT_TRUE(view_->NeedsMouseCapture());
   aura::Window* window = view_->GetNativeView();
@@ -1314,7 +1328,7 @@ TEST_F(RenderWidgetHostViewAuraTest, PopupClosesWhenParentLosesFocus) {
   parent_view_->Focus();
   EXPECT_TRUE(parent_view_->HasFocus());
 
-  view_->SetPopupType(blink::kWebPopupTypePage);
+  view_->SetWidgetType(WidgetType::kPopup);
   view_->InitAsPopup(parent_view_, gfx::Rect(10, 10, 100, 100));
 
   aura::Window* popup_window = view_->GetNativeView();
@@ -1477,7 +1491,8 @@ TEST_F(RenderWidgetHostViewAuraTest, TouchEventState) {
   view_->Show();
 
   // Start with no touch-event handler in the renderer.
-  widget_host_->OnMessageReceived(ViewHostMsg_HasTouchEventHandlers(0, false));
+  widget_host_->OnMessageReceived(
+      WidgetHostMsg_HasTouchEventHandlers(0, false));
 
   ui::TouchEvent press(
       ui::ET_TOUCH_PRESSED, gfx::Point(30, 30), ui::EventTimeForNow(),
@@ -1517,7 +1532,7 @@ TEST_F(RenderWidgetHostViewAuraTest, TouchEventState) {
   // Now install some touch-event handlers and do the same steps. The touch
   // events should now be consumed. However, the touch-event state should be
   // updated as before.
-  widget_host_->OnMessageReceived(ViewHostMsg_HasTouchEventHandlers(0, true));
+  widget_host_->OnMessageReceived(WidgetHostMsg_HasTouchEventHandlers(0, true));
 
   view_->OnTouchEvent(&press);
   base::RunLoop().RunUntilIdle();
@@ -1526,6 +1541,7 @@ TEST_F(RenderWidgetHostViewAuraTest, TouchEventState) {
   EXPECT_TRUE(press.synchronous_handling_disabled());
   EXPECT_EQ(ui::MotionEvent::Action::DOWN, pointer_state().GetAction());
   EXPECT_EQ(1U, pointer_state().GetPointerCount());
+  widget_host_->input_router()->OnSetTouchAction(cc::kTouchActionAuto);
 
   view_->OnTouchEvent(&move);
   base::RunLoop().RunUntilIdle();
@@ -1545,7 +1561,8 @@ TEST_F(RenderWidgetHostViewAuraTest, TouchEventState) {
   events = GetAndResetDispatchedMessages();
   EXPECT_EQ(3U, events.size());
 
-  widget_host_->OnMessageReceived(ViewHostMsg_HasTouchEventHandlers(0, false));
+  widget_host_->OnMessageReceived(
+      WidgetHostMsg_HasTouchEventHandlers(0, false));
 
   // All outstanding events should have already been sent but no new events
   // should get sent.
@@ -1741,8 +1758,7 @@ TEST_F(RenderWidgetHostViewAuraTest,
   parent_view_->Focus();
   ASSERT_TRUE(parent_view_->HasFocus());
 
-  // kWebPopupTypePage means the child view (popup) will receive input.
-  view_->SetPopupType(blink::kWebPopupTypePage);
+  view_->SetWidgetType(WidgetType::kPopup);
   view_->InitAsPopup(parent_view_, gfx::Rect(10, 10, 100, 100));
   ASSERT_NE(nullptr, view_->GetNativeView());
   view_->Show();
@@ -1797,66 +1813,6 @@ TEST_F(RenderWidgetHostViewAuraTest,
     ASSERT_FALSE(child_events.empty())
         << "Failed for DomCode: "
         << ui::KeycodeConverter::DomCodeToCodeString(dom_code);
-  }
-}
-
-TEST_F(RenderWidgetHostViewAuraTest,
-       KeyEventRoutingKeyboardLockAndChildPopupWithoutInputGrab) {
-  parent_view_->SetBounds(gfx::Rect(10, 10, 400, 400));
-  parent_view_->Focus();
-  ASSERT_TRUE(parent_view_->HasFocus());
-
-  // kWebPopupTypeNone means the child view (popup) will not receive input.
-  view_->SetPopupType(blink::kWebPopupTypeNone);
-  view_->InitAsPopup(parent_view_, gfx::Rect(10, 10, 100, 100));
-  ASSERT_NE(nullptr, view_->GetNativeView());
-  view_->Show();
-
-  // The parent view owns the KeyboardLock for this test.
-  auto test_hook = std::make_unique<TestScopedKeyboardHook>();
-  test_hook->LockAllKeys();
-  parent_view_->event_handler()->scoped_keyboard_hook_ = std::move(test_hook);
-
-  // These keys will be handled by the parent view and will not be sent through
-  // the prehandler input pipeline.
-  std::vector<ui::DomCode> dom_codes = {ui::DomCode::US_A, ui::DomCode::ENTER,
-                                        ui::DomCode::TAB, ui::DomCode::ALT_LEFT,
-                                        ui::DomCode::US_Z};
-  MockRenderWidgetHostImpl* parent_host =
-      static_cast<MockRenderWidgetHostImpl*>(parent_host_);
-  for (ui::DomCode dom_code : dom_codes) {
-    ui::KeyEvent key_event(ui::ET_KEY_PRESSED,
-                           ui::DomCodeToUsLayoutKeyboardCode(dom_code),
-                           dom_code, ui::EF_NONE);
-    parent_view_->OnKeyEvent(&key_event);
-    const NativeWebKeyboardEvent* child_event =
-        render_widget_host_delegate()->last_event();
-    ASSERT_FALSE(child_event)
-        << "Failed for DomCode: "
-        << ui::KeycodeConverter::DomCodeToCodeString(dom_code);
-    // Run the runloop to ensure input messages are dispatched.  Otherwise the
-    // result of GetAndResetDispatchedMessages() will not be valid.
-    base::RunLoop().RunUntilIdle();
-    auto child_events = GetAndResetDispatchedMessages();
-    ASSERT_TRUE(child_events.empty())
-        << "Failed for DomCode: "
-        << ui::KeycodeConverter::DomCodeToCodeString(dom_code);
-
-    const NativeWebKeyboardEvent* parent_event = delegates_[0]->last_event();
-    ASSERT_FALSE(parent_event)
-        << "Failed for DomCode: "
-        << ui::KeycodeConverter::DomCodeToCodeString(dom_code);
-    auto events = parent_host->input_handler()->GetAndResetDispatchedMessages();
-    ASSERT_FALSE(events.empty());
-    const NativeWebKeyboardEvent* native_key_event =
-        static_cast<const NativeWebKeyboardEvent*>(
-            events.back()->ToEvent()->Event()->web_event.get());
-    ASSERT_TRUE(native_key_event)
-        << "Failed for DomCode: "
-        << ui::KeycodeConverter::DomCodeToCodeString(dom_code);
-    ASSERT_EQ(key_event.key_code(), native_key_event->windows_key_code);
-    ASSERT_EQ(ui::KeycodeConverter::DomCodeToNativeKeycode(key_event.code()),
-              native_key_event->native_key_code);
   }
 }
 
@@ -2613,7 +2569,7 @@ TEST_F(RenderWidgetHostViewAuraTest, TouchEventSyncAsync) {
   view_->InitAsChild(nullptr);
   view_->Show();
 
-  widget_host_->OnMessageReceived(ViewHostMsg_HasTouchEventHandlers(0, true));
+  widget_host_->OnMessageReceived(WidgetHostMsg_HasTouchEventHandlers(0, true));
 
   ui::TouchEvent press(
       ui::ET_TOUCH_PRESSED, gfx::Point(30, 30), ui::EventTimeForNow(),
@@ -2657,14 +2613,14 @@ TEST_F(RenderWidgetHostViewAuraTest, CompositorViewportPixelSizeWithScale) {
   view_->SetSize(gfx::Size(100, 100));
   EXPECT_EQ("100x100", view_->GetCompositorViewportPixelSize().ToString());
   EXPECT_EQ(1u, sink_->message_count());
-  EXPECT_EQ(static_cast<uint32_t>(ViewMsg_SynchronizeVisualProperties::ID),
+  EXPECT_EQ(static_cast<uint32_t>(WidgetMsg_SynchronizeVisualProperties::ID),
             sink_->GetMessageAt(0)->type());
   {
     const IPC::Message* msg = sink_->GetMessageAt(0);
-    EXPECT_EQ(static_cast<uint32_t>(ViewMsg_SynchronizeVisualProperties::ID),
+    EXPECT_EQ(static_cast<uint32_t>(WidgetMsg_SynchronizeVisualProperties::ID),
               msg->type());
-    ViewMsg_SynchronizeVisualProperties::Param params;
-    ViewMsg_SynchronizeVisualProperties::Read(msg, &params);
+    WidgetMsg_SynchronizeVisualProperties::Param params;
+    WidgetMsg_SynchronizeVisualProperties::Read(msg, &params);
     EXPECT_EQ("100x100", std::get<0>(params).new_size.ToString());  // dip size
     EXPECT_EQ("100x100",
               std::get<0>(params)
@@ -2679,10 +2635,10 @@ TEST_F(RenderWidgetHostViewAuraTest, CompositorViewportPixelSizeWithScale) {
   // Extra ScreenInfoChanged message for |parent_view_|.
   // Changing the device scale factor triggers the
   // RenderWidgetHostViewAura::OnDisplayMetricsChanged() observer callback,
-  // which sends a ViewMsg_SynchronizeVisualProperties::ID message to the
+  // which sends a WidgetMsg_SynchronizeVisualProperties::ID message to the
   // renderer.
   EXPECT_EQ(1u, sink_->message_count());
-  EXPECT_EQ(static_cast<uint32_t>(ViewMsg_SynchronizeVisualProperties::ID),
+  EXPECT_EQ(static_cast<uint32_t>(WidgetMsg_SynchronizeVisualProperties::ID),
             sink_->GetMessageAt(0)->type());
 
   widget_host_->ResetSentVisualProperties();
@@ -2691,51 +2647,58 @@ TEST_F(RenderWidgetHostViewAuraTest, CompositorViewportPixelSizeWithScale) {
   aura_test_helper_->test_screen()->SetDeviceScaleFactor(1.0f);
   // Extra ScreenInfoChanged message for |parent_view_|.
   EXPECT_EQ(1u, sink_->message_count());
-  EXPECT_EQ(static_cast<uint32_t>(ViewMsg_SynchronizeVisualProperties::ID),
+  EXPECT_EQ(static_cast<uint32_t>(WidgetMsg_SynchronizeVisualProperties::ID),
             sink_->GetMessageAt(0)->type());
   EXPECT_EQ("100x100", view_->GetCompositorViewportPixelSize().ToString());
 }
 
 // This test verifies that in AutoResize mode a new
-// ViewMsg_SynchronizeVisualProperties message is sent when ScreenInfo
+// WidgetMsg_SynchronizeVisualProperties message is sent when ScreenInfo
 // changes and that message contains the latest ScreenInfo.
 TEST_F(RenderWidgetHostViewAuraTest, AutoResizeWithScale) {
   view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
-  viz::LocalSurfaceId local_surface_id1(view_->GetLocalSurfaceId());
-  EXPECT_TRUE(local_surface_id1.is_valid());
+  viz::LocalSurfaceIdAllocation local_surface_id_allocation1(
+      view_->GetLocalSurfaceIdAllocation());
+  EXPECT_TRUE(local_surface_id_allocation1.IsValid());
 
   sink_->ClearMessages();
   view_->EnableAutoResize(gfx::Size(50, 50), gfx::Size(100, 100));
 
-  viz::LocalSurfaceId local_surface_id2;
+  viz::LocalSurfaceIdAllocation local_surface_id_allocation2;
   ASSERT_EQ(1u, sink_->message_count());
   {
     const IPC::Message* msg = sink_->GetMessageAt(0);
-    EXPECT_EQ(static_cast<uint32_t>(ViewMsg_SynchronizeVisualProperties::ID),
+    EXPECT_EQ(static_cast<uint32_t>(WidgetMsg_SynchronizeVisualProperties::ID),
               msg->type());
-    ViewMsg_SynchronizeVisualProperties::Param params;
-    ViewMsg_SynchronizeVisualProperties::Read(msg, &params);
+    WidgetMsg_SynchronizeVisualProperties::Param params;
+    WidgetMsg_SynchronizeVisualProperties::Read(msg, &params);
     VisualProperties visual_properties = std::get<0>(params);
     EXPECT_EQ("50x50", visual_properties.min_size_for_auto_resize.ToString());
     EXPECT_EQ("100x100", visual_properties.max_size_for_auto_resize.ToString());
     EXPECT_EQ(1, visual_properties.screen_info.device_scale_factor);
-    local_surface_id2 =
-        visual_properties.local_surface_id.value_or(viz::LocalSurfaceId());
-    EXPECT_EQ(local_surface_id1, local_surface_id2);
-    EXPECT_TRUE(local_surface_id2.is_valid());
+    local_surface_id_allocation2 =
+        visual_properties.local_surface_id_allocation.value_or(
+            viz::LocalSurfaceIdAllocation());
+    EXPECT_EQ(local_surface_id_allocation1, local_surface_id_allocation2);
+    EXPECT_TRUE(local_surface_id_allocation2.IsValid());
   }
 
-  viz::LocalSurfaceId local_surface_id(
-      local_surface_id1.parent_sequence_number(),
-      local_surface_id1.child_sequence_number() + 1,
-      local_surface_id1.embed_token());
+  viz::LocalSurfaceIdAllocation local_surface_id_allocation(
+      viz::LocalSurfaceId(
+          local_surface_id_allocation1.local_surface_id()
+              .parent_sequence_number(),
+          local_surface_id_allocation1.local_surface_id()
+                  .child_sequence_number() +
+              1,
+          local_surface_id_allocation1.local_surface_id().embed_token()),
+      base::TimeTicks::Now());
   {
     cc::RenderFrameMetadata metadata;
     metadata.viewport_size_in_pixels = gfx::Size(75, 75);
-    metadata.local_surface_id = local_surface_id;
+    metadata.local_surface_id_allocation = local_surface_id_allocation;
     widget_host_->DidUpdateVisualProperties(metadata);
   }
 
@@ -2745,84 +2708,94 @@ TEST_F(RenderWidgetHostViewAuraTest, AutoResizeWithScale) {
   {
     // TODO(samans): There should be only one message in the sink, but some
     // testers are seeing two (crrev.com/c/839580). Investigate why.
-    const IPC::Message* msg =
-        sink_->GetFirstMessageMatching(ViewMsg_SynchronizeVisualProperties::ID);
+    const IPC::Message* msg = sink_->GetFirstMessageMatching(
+        WidgetMsg_SynchronizeVisualProperties::ID);
     ASSERT_TRUE(msg);
-    ViewMsg_SynchronizeVisualProperties::Param params;
-    ViewMsg_SynchronizeVisualProperties::Read(msg, &params);
+    WidgetMsg_SynchronizeVisualProperties::Param params;
+    WidgetMsg_SynchronizeVisualProperties::Read(msg, &params);
     VisualProperties visual_properties = std::get<0>(params);
     EXPECT_EQ("50x50", visual_properties.min_size_for_auto_resize.ToString());
     EXPECT_EQ("100x100", visual_properties.max_size_for_auto_resize.ToString());
     EXPECT_EQ(2, visual_properties.screen_info.device_scale_factor);
-    EXPECT_NE(local_surface_id1, visual_properties.local_surface_id.value_or(
-                                     viz::LocalSurfaceId()));
-    EXPECT_NE(local_surface_id2, visual_properties.local_surface_id.value_or(
-                                     viz::LocalSurfaceId()));
+    EXPECT_NE(local_surface_id_allocation1,
+              visual_properties.local_surface_id_allocation.value_or(
+                  viz::LocalSurfaceIdAllocation()));
+    EXPECT_NE(local_surface_id_allocation2,
+              visual_properties.local_surface_id_allocation.value_or(
+                  viz::LocalSurfaceIdAllocation()));
   }
 }
 
 // This test verifies that in AutoResize mode a new
-// ViewMsg_SynchronizeVisualProperties message is sent when size changes.
+// WidgetMsg_SynchronizeVisualProperties message is sent when size changes.
 TEST_F(RenderWidgetHostViewAuraTest, AutoResizeWithBrowserInitiatedResize) {
   view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
-  viz::LocalSurfaceId local_surface_id1(view_->GetLocalSurfaceId());
-  EXPECT_TRUE(local_surface_id1.is_valid());
+  viz::LocalSurfaceIdAllocation local_surface_id_allocation1(
+      view_->GetLocalSurfaceIdAllocation());
+  EXPECT_TRUE(local_surface_id_allocation1.IsValid());
 
   sink_->ClearMessages();
   view_->EnableAutoResize(gfx::Size(50, 50), gfx::Size(100, 100));
 
-  viz::LocalSurfaceId local_surface_id2;
+  viz::LocalSurfaceIdAllocation local_surface_id_allocation2;
   ASSERT_EQ(1u, sink_->message_count());
   {
     const IPC::Message* msg = sink_->GetMessageAt(0);
-    EXPECT_EQ(static_cast<uint32_t>(ViewMsg_SynchronizeVisualProperties::ID),
+    EXPECT_EQ(static_cast<uint32_t>(WidgetMsg_SynchronizeVisualProperties::ID),
               msg->type());
-    ViewMsg_SynchronizeVisualProperties::Param params;
-    ViewMsg_SynchronizeVisualProperties::Read(msg, &params);
+    WidgetMsg_SynchronizeVisualProperties::Param params;
+    WidgetMsg_SynchronizeVisualProperties::Read(msg, &params);
     VisualProperties visual_properties = std::get<0>(params);
     EXPECT_EQ("50x50", visual_properties.min_size_for_auto_resize.ToString());
     EXPECT_EQ("100x100", visual_properties.max_size_for_auto_resize.ToString());
     EXPECT_EQ(1, visual_properties.screen_info.device_scale_factor);
-    local_surface_id2 =
-        visual_properties.local_surface_id.value_or(viz::LocalSurfaceId());
-    EXPECT_TRUE(local_surface_id2.is_valid());
-    EXPECT_EQ(local_surface_id1, local_surface_id2);
+    local_surface_id_allocation2 =
+        visual_properties.local_surface_id_allocation.value_or(
+            viz::LocalSurfaceIdAllocation());
+    EXPECT_TRUE(local_surface_id_allocation2.IsValid());
+    EXPECT_EQ(local_surface_id_allocation1, local_surface_id_allocation2);
   }
 
-  viz::LocalSurfaceId local_surface_id(
-      local_surface_id1.parent_sequence_number(),
-      local_surface_id1.child_sequence_number() + 1,
-      local_surface_id1.embed_token());
+  viz::LocalSurfaceIdAllocation local_surface_id_allocation(
+      viz::LocalSurfaceId(
+          local_surface_id_allocation1.local_surface_id()
+              .parent_sequence_number(),
+          local_surface_id_allocation1.local_surface_id()
+                  .child_sequence_number() +
+              1,
+          local_surface_id_allocation1.local_surface_id().embed_token()),
+      base::TimeTicks::Now());
   {
     cc::RenderFrameMetadata metadata;
     metadata.viewport_size_in_pixels = gfx::Size(75, 75);
-    metadata.local_surface_id = local_surface_id;
+    metadata.local_surface_id_allocation = local_surface_id_allocation;
     widget_host_->DidUpdateVisualProperties(metadata);
   }
 
   sink_->ClearMessages();
 
   view_->SetSize(gfx::Size(120, 120));
-  viz::LocalSurfaceId local_surface_id3;
+  viz::LocalSurfaceIdAllocation local_surface_id_allocation3;
   ASSERT_EQ(1u, sink_->message_count());
   {
     const IPC::Message* msg = sink_->GetMessageAt(0);
-    EXPECT_EQ(static_cast<uint32_t>(ViewMsg_SynchronizeVisualProperties::ID),
+    EXPECT_EQ(static_cast<uint32_t>(WidgetMsg_SynchronizeVisualProperties::ID),
               msg->type());
-    ViewMsg_SynchronizeVisualProperties::Param params;
-    ViewMsg_SynchronizeVisualProperties::Read(msg, &params);
+    WidgetMsg_SynchronizeVisualProperties::Param params;
+    WidgetMsg_SynchronizeVisualProperties::Read(msg, &params);
     VisualProperties visual_properties = std::get<0>(params);
     EXPECT_EQ("50x50", visual_properties.min_size_for_auto_resize.ToString());
     EXPECT_EQ("100x100", visual_properties.max_size_for_auto_resize.ToString());
     EXPECT_EQ(1, visual_properties.screen_info.device_scale_factor);
-    local_surface_id3 =
-        visual_properties.local_surface_id.value_or(viz::LocalSurfaceId());
-    EXPECT_TRUE(local_surface_id3.is_valid());
-    EXPECT_NE(local_surface_id1, local_surface_id3);
-    EXPECT_NE(local_surface_id2, local_surface_id3);
+    local_surface_id_allocation3 =
+        visual_properties.local_surface_id_allocation.value_or(
+            viz::LocalSurfaceIdAllocation());
+    EXPECT_TRUE(local_surface_id_allocation3.IsValid());
+    EXPECT_NE(local_surface_id_allocation1, local_surface_id_allocation3);
+    EXPECT_NE(local_surface_id_allocation2, local_surface_id_allocation3);
   }
 }
 
@@ -2834,24 +2807,28 @@ TEST_F(RenderWidgetHostViewAuraTest, ChildAllocationAcceptedInParent) {
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
   sink_->ClearMessages();
-  viz::LocalSurfaceId local_surface_id1(view_->GetLocalSurfaceId());
-  EXPECT_TRUE(local_surface_id1.is_valid());
+  viz::LocalSurfaceIdAllocation local_surface_id_allocation1(
+      view_->GetLocalSurfaceIdAllocation());
+  EXPECT_TRUE(local_surface_id_allocation1.IsValid());
 
   widget_host_->SetAutoResize(true, gfx::Size(50, 50), gfx::Size(100, 100));
   viz::ChildLocalSurfaceIdAllocator child_allocator;
-  child_allocator.UpdateFromParent(local_surface_id1);
-  viz::LocalSurfaceId local_surface_id2 = child_allocator.GenerateId();
+  child_allocator.UpdateFromParent(local_surface_id_allocation1);
+  child_allocator.GenerateId();
+  viz::LocalSurfaceIdAllocation local_surface_id_allocation2 =
+      child_allocator.GetCurrentLocalSurfaceIdAllocation();
 
   {
     cc::RenderFrameMetadata metadata;
     metadata.viewport_size_in_pixels = gfx::Size(75, 75);
-    metadata.local_surface_id = local_surface_id2;
+    metadata.local_surface_id_allocation = local_surface_id_allocation2;
     widget_host_->DidUpdateVisualProperties(metadata);
   }
 
-  viz::LocalSurfaceId local_surface_id3(view_->GetLocalSurfaceId());
-  EXPECT_NE(local_surface_id1, local_surface_id3);
-  EXPECT_EQ(local_surface_id2, local_surface_id3);
+  viz::LocalSurfaceIdAllocation local_surface_id_allocation3(
+      view_->GetLocalSurfaceIdAllocation());
+  EXPECT_NE(local_surface_id_allocation1, local_surface_id_allocation3);
+  EXPECT_EQ(local_surface_id_allocation2, local_surface_id_allocation3);
 }
 
 // This test verifies that when the child and parent both allocate their own
@@ -2862,34 +2839,38 @@ TEST_F(RenderWidgetHostViewAuraTest, ConflictingAllocationsResolve) {
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
   sink_->ClearMessages();
-  viz::LocalSurfaceId local_surface_id1(view_->GetLocalSurfaceId());
-  EXPECT_TRUE(local_surface_id1.is_valid());
+  viz::LocalSurfaceIdAllocation local_surface_id_allocation1(
+      view_->GetLocalSurfaceIdAllocation());
+  EXPECT_TRUE(local_surface_id_allocation1.IsValid());
 
   widget_host_->SetAutoResize(true, gfx::Size(50, 50), gfx::Size(100, 100));
   viz::ChildLocalSurfaceIdAllocator child_allocator;
-  child_allocator.UpdateFromParent(local_surface_id1);
-  viz::LocalSurfaceId local_surface_id2 = child_allocator.GenerateId();
+  child_allocator.UpdateFromParent(local_surface_id_allocation1);
+  child_allocator.GenerateId();
+  viz::LocalSurfaceIdAllocation local_surface_id_allocation2 =
+      child_allocator.GetCurrentLocalSurfaceIdAllocation();
 
   {
     cc::RenderFrameMetadata metadata;
     metadata.viewport_size_in_pixels = gfx::Size(75, 75);
-    metadata.local_surface_id = local_surface_id2;
+    metadata.local_surface_id_allocation = local_surface_id_allocation2;
     widget_host_->DidUpdateVisualProperties(metadata);
   }
 
   // Cause a conflicting viz::LocalSurfaceId allocation
   aura_test_helper_->test_screen()->SetDeviceScaleFactor(2.0f);
-  viz::LocalSurfaceId local_surface_id3(view_->GetLocalSurfaceId());
-  EXPECT_NE(local_surface_id1, local_surface_id3);
-
-  viz::LocalSurfaceId local_surface_id4(view_->GetLocalSurfaceId());
-  EXPECT_NE(local_surface_id1, local_surface_id4);
-  EXPECT_NE(local_surface_id2, local_surface_id4);
-  viz::LocalSurfaceId merged_local_surface_id(
-      local_surface_id2.parent_sequence_number() + 1,
-      local_surface_id2.child_sequence_number(),
-      local_surface_id2.embed_token());
-  EXPECT_EQ(local_surface_id4, merged_local_surface_id);
+  viz::LocalSurfaceIdAllocation merged_local_surface_id_allocation(
+      view_->GetLocalSurfaceIdAllocation());
+  EXPECT_NE(local_surface_id_allocation1, merged_local_surface_id_allocation);
+  EXPECT_NE(local_surface_id_allocation2, merged_local_surface_id_allocation);
+  EXPECT_GT(
+      merged_local_surface_id_allocation.local_surface_id()
+          .parent_sequence_number(),
+      local_surface_id_allocation2.local_surface_id().parent_sequence_number());
+  EXPECT_EQ(
+      merged_local_surface_id_allocation.local_surface_id()
+          .child_sequence_number(),
+      local_surface_id_allocation2.local_surface_id().child_sequence_number());
 }
 
 // Checks that WidgetInputHandler::CursorVisibilityChange IPC messages are
@@ -3042,7 +3023,7 @@ viz::CompositorFrame MakeDelegatedFrame(float scale_factor,
 // This test verifies that returned resources do not require a pending ack.
 TEST_F(RenderWidgetHostViewAuraTest, ReturnedResources) {
   // TODO: fix for mash.
-  if (features::IsUsingWindowService())
+  if (features::IsMultiProcessMash())
     return;
 
   gfx::Size view_size(100, 100);
@@ -3075,8 +3056,8 @@ TEST_F(RenderWidgetHostViewAuraTest, ReturnedResources) {
 TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
   // TODO(jonross): Delete this test once Viz launches as it will be obsolete.
   // https://crbug.com/844469
-  if (base::FeatureList::IsEnabled(features::kVizDisplayCompositor) ||
-      features::IsUsingWindowService()) {
+  if (features::IsVizDisplayCompositorEnabled() ||
+      features::IsMultiProcessMash()) {
     return;
   }
 
@@ -3112,7 +3093,7 @@ TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
 
   // Submit another frame. The resources for the previous frame belong to the
   // old RendererCompositorFrameSink and should not be returned.
-  view_->SubmitCompositorFrame(parent_local_surface_id_allocator_.GenerateId(),
+  view_->SubmitCompositorFrame(view_->surface_id().local_surface_id(),
                                MakeDelegatedFrame(1.f, view_size, view_rect),
                                base::nullopt);
   EXPECT_EQ(0u, sink_->message_count());
@@ -3121,7 +3102,7 @@ TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
   view_->renderer_compositor_frame_sink_->Reset();
   viz::Surface* surface = manager->GetSurfaceForId(view_->surface_id());
   EXPECT_TRUE(surface);
-  surface->RunDrawCallback();
+  surface->SendAckToClient();
   view_->renderer_compositor_frame_sink_->Flush();
   EXPECT_TRUE(view_->renderer_compositor_frame_sink_->did_receive_ack());
 
@@ -3143,10 +3124,10 @@ TEST_F(RenderWidgetHostViewAuraTest, DISABLED_FullscreenResize) {
   {
     // 0 is CreatingNew message.
     const IPC::Message* msg = sink_->GetMessageAt(0);
-    EXPECT_EQ(static_cast<uint32_t>(ViewMsg_SynchronizeVisualProperties::ID),
+    EXPECT_EQ(static_cast<uint32_t>(WidgetMsg_SynchronizeVisualProperties::ID),
               msg->type());
-    ViewMsg_SynchronizeVisualProperties::Param params;
-    ViewMsg_SynchronizeVisualProperties::Read(msg, &params);
+    WidgetMsg_SynchronizeVisualProperties::Param params;
+    WidgetMsg_SynchronizeVisualProperties::Read(msg, &params);
     EXPECT_EQ(
         "0,0 800x600",
         std::get<0>(params).screen_info.available_rect.ToString());
@@ -3171,10 +3152,10 @@ TEST_F(RenderWidgetHostViewAuraTest, DISABLED_FullscreenResize) {
   EXPECT_EQ(1u, sink_->message_count());
   {
     const IPC::Message* msg = sink_->GetMessageAt(0);
-    EXPECT_EQ(static_cast<uint32_t>(ViewMsg_SynchronizeVisualProperties::ID),
+    EXPECT_EQ(static_cast<uint32_t>(WidgetMsg_SynchronizeVisualProperties::ID),
               msg->type());
-    ViewMsg_SynchronizeVisualProperties::Param params;
-    ViewMsg_SynchronizeVisualProperties::Read(msg, &params);
+    WidgetMsg_SynchronizeVisualProperties::Param params;
+    WidgetMsg_SynchronizeVisualProperties::Read(msg, &params);
     EXPECT_EQ(
         "0,0 1600x1200",
         std::get<0>(params).screen_info.available_rect.ToString());
@@ -3191,8 +3172,10 @@ TEST_F(RenderWidgetHostViewAuraTest, DISABLED_FullscreenResize) {
 
 TEST_F(RenderWidgetHostViewAuraTest, ZeroSizeStillGetsLocalSurfaceId) {
   gfx::Size frame_size;
+  parent_local_surface_id_allocator_.GenerateId();
   viz::LocalSurfaceId local_surface_id =
-      parent_local_surface_id_allocator_.GenerateId();
+      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
+          .local_surface_id();
 
   view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
@@ -3206,24 +3189,26 @@ TEST_F(RenderWidgetHostViewAuraTest, ZeroSizeStillGetsLocalSurfaceId) {
   EXPECT_EQ(2u, sink_->message_count());
   {
     const IPC::Message* msg = sink_->GetMessageAt(1);
-    EXPECT_EQ(static_cast<uint32_t>(ViewMsg_SynchronizeVisualProperties::ID),
+    EXPECT_EQ(static_cast<uint32_t>(WidgetMsg_SynchronizeVisualProperties::ID),
               msg->type());
-    ViewMsg_SynchronizeVisualProperties::Param params;
-    ViewMsg_SynchronizeVisualProperties::Read(msg, &params);
+    WidgetMsg_SynchronizeVisualProperties::Param params;
+    WidgetMsg_SynchronizeVisualProperties::Read(msg, &params);
     EXPECT_EQ(frame_size.ToString(), std::get<0>(params).new_size.ToString());
-    ASSERT_TRUE(std::get<0>(params).local_surface_id.has_value());
-    EXPECT_TRUE(std::get<0>(params).local_surface_id->is_valid());
+    ASSERT_TRUE(std::get<0>(params).local_surface_id_allocation.has_value());
+    EXPECT_TRUE(std::get<0>(params).local_surface_id_allocation->IsValid());
   }
 }
 
 TEST_F(RenderWidgetHostViewAuraTest, BackgroundColorMatchesCompositorFrame) {
   // TODO: fix for mash.
-  if (features::IsUsingWindowService())
+  if (features::IsMultiProcessMash())
     return;
 
   gfx::Size frame_size(100, 100);
+  parent_local_surface_id_allocator_.GenerateId();
   viz::LocalSurfaceId local_surface_id =
-      parent_local_surface_id_allocator_.GenerateId();
+      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
+          .local_surface_id();
 
   view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
@@ -3270,9 +3255,18 @@ TEST_F(RenderWidgetHostViewAuraTest, DISABLED_Resize) {
   gfx::Size size1(100, 100);
   gfx::Size size2(200, 200);
   gfx::Size size3(300, 300);
-  viz::LocalSurfaceId id1 = parent_local_surface_id_allocator_.GenerateId();
-  viz::LocalSurfaceId id2 = parent_local_surface_id_allocator_.GenerateId();
-  viz::LocalSurfaceId id3 = parent_local_surface_id_allocator_.GenerateId();
+  parent_local_surface_id_allocator_.GenerateId();
+  viz::LocalSurfaceId id1 =
+      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
+          .local_surface_id();
+  parent_local_surface_id_allocator_.GenerateId();
+  viz::LocalSurfaceId id2 =
+      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
+          .local_surface_id();
+  parent_local_surface_id_allocator_.GenerateId();
+  viz::LocalSurfaceId id3 =
+      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
+          .local_surface_id();
 
   aura::Window* root_window = parent_view_->GetNativeView()->GetRootWindow();
   view_->InitAsChild(nullptr);
@@ -3287,7 +3281,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DISABLED_Resize) {
   {
     cc::RenderFrameMetadata metadata;
     metadata.viewport_size_in_pixels = size1;
-    metadata.local_surface_id = base::nullopt;
+    metadata.local_surface_id_allocation = base::nullopt;
     widget_host_->DidUpdateVisualProperties(metadata);
   }
   sink_->ClearMessages();
@@ -3300,17 +3294,17 @@ TEST_F(RenderWidgetHostViewAuraTest, DISABLED_Resize) {
   EXPECT_EQ(1u, sink_->message_count());
   {
     const IPC::Message* msg = sink_->GetMessageAt(0);
-    EXPECT_EQ(static_cast<uint32_t>(ViewMsg_SynchronizeVisualProperties::ID),
+    EXPECT_EQ(static_cast<uint32_t>(WidgetMsg_SynchronizeVisualProperties::ID),
               msg->type());
-    ViewMsg_SynchronizeVisualProperties::Param params;
-    ViewMsg_SynchronizeVisualProperties::Read(msg, &params);
+    WidgetMsg_SynchronizeVisualProperties::Param params;
+    WidgetMsg_SynchronizeVisualProperties::Read(msg, &params);
     EXPECT_EQ(size2.ToString(), std::get<0>(params).new_size.ToString());
   }
   // Send resize ack to observe new Resize messages.
   {
     cc::RenderFrameMetadata metadata;
     metadata.viewport_size_in_pixels = size2;
-    metadata.local_surface_id = base::nullopt;
+    metadata.local_surface_id_allocation = base::nullopt;
     widget_host_->DidUpdateVisualProperties(metadata);
   }
   sink_->ClearMessages();
@@ -3356,10 +3350,10 @@ TEST_F(RenderWidgetHostViewAuraTest, DISABLED_Resize) {
   for (uint32_t i = 0; i < sink_->message_count(); ++i) {
     const IPC::Message* msg = sink_->GetMessageAt(i);
     switch (msg->type()) {
-      case ViewMsg_SynchronizeVisualProperties::ID: {
+      case WidgetMsg_SynchronizeVisualProperties::ID: {
         EXPECT_FALSE(has_resize);
-        ViewMsg_SynchronizeVisualProperties::Param params;
-        ViewMsg_SynchronizeVisualProperties::Read(msg, &params);
+        WidgetMsg_SynchronizeVisualProperties::Param params;
+        WidgetMsg_SynchronizeVisualProperties::Read(msg, &params);
         EXPECT_EQ(size3.ToString(), std::get<0>(params).new_size.ToString());
         has_resize = true;
         break;
@@ -3373,106 +3367,16 @@ TEST_F(RenderWidgetHostViewAuraTest, DISABLED_Resize) {
   {
     cc::RenderFrameMetadata metadata;
     metadata.viewport_size_in_pixels = size3;
-    metadata.local_surface_id = base::nullopt;
+    metadata.local_surface_id_allocation = base::nullopt;
     widget_host_->DidUpdateVisualProperties(metadata);
   }
   sink_->ClearMessages();
 }
 
-TEST_F(RenderWidgetHostViewAuraTest, OutputSurfaceIdChange) {
-  // TODO(jonross): Delete this test once Viz launches as it will be obsolete.
-  // https://crbug.com/844469
-  if (base::FeatureList::IsEnabled(features::kVizDisplayCompositor) ||
-      features::IsUsingWindowService()) {
-    return;
-  }
-
-  gfx::Rect view_rect(100, 100);
-  gfx::Size frame_size = view_rect.size();
-
-  view_->InitAsChild(nullptr);
-  aura::client::ParentWindowWithContext(
-      view_->GetNativeView(),
-      parent_view_->GetNativeView()->GetRootWindow(),
-      gfx::Rect());
-  view_->SetSize(view_rect.size());
-
-  // Swap a frame.
-  view_->SubmitCompositorFrame(kArbitraryLocalSurfaceId,
-                               MakeDelegatedFrame(1.f, frame_size, view_rect),
-                               base::nullopt);
-  EXPECT_EQ(kFrameIndexStart + 1, FrameIndexForView(view_));
-  EXPECT_EQ(view_rect, DamageRectForView(view_));
-  view_->RunOnCompositingDidCommit();
-
-  // Signal that a new RendererCompositorFrameSink was created.
-  view_->CreateNewRendererCompositorFrameSink();
-
-  // Submit a frame from the new RendererCompositorFrameSink.
-  view_->SubmitCompositorFrame(parent_local_surface_id_allocator_.GenerateId(),
-                               MakeDelegatedFrame(1.f, frame_size, view_rect),
-                               base::nullopt);
-  EXPECT_EQ(kFrameIndexStart + 1, FrameIndexForView(view_));
-  EXPECT_EQ(view_rect, DamageRectForView(view_));
-  view_->RunOnCompositingDidCommit();
-
-  // Signal that a new RendererCompositorFrameSink was created.
-  view_->CreateNewRendererCompositorFrameSink();
-
-  // Submit a frame from the new RendererCompositorFrameSink.
-  view_->SubmitCompositorFrame(parent_local_surface_id_allocator_.GenerateId(),
-                               MakeDelegatedFrame(1.f, frame_size, view_rect),
-                               base::nullopt);
-  EXPECT_EQ(kFrameIndexStart + 1, FrameIndexForView(view_));
-  EXPECT_EQ(view_rect, DamageRectForView(view_));
-  view_->RunOnCompositingDidCommit();
-
-  // Signal that a new RendererCompositorFrameSink was created.
-  view_->CreateNewRendererCompositorFrameSink();
-
-  // Swap another frame, with a different surface id.
-  view_->SubmitCompositorFrame(parent_local_surface_id_allocator_.GenerateId(),
-                               MakeDelegatedFrame(1.f, frame_size, view_rect),
-                               base::nullopt);
-  EXPECT_EQ(kFrameIndexStart + 1, FrameIndexForView(view_));
-  EXPECT_EQ(view_rect, DamageRectForView(view_));
-  view_->RunOnCompositingDidCommit();
-}
-
-// This test verifies that if a fallback surface activates on a hidden view
-// then the fallback is dropped.
-TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
-       DropFallbackWhenHidden) {
-  // Early out because DelegatedFrameHost is not used in mash.
-  if (features::IsUsingWindowService())
-    return;
-
-  view_->InitAsChild(nullptr);
-  aura::client::ParentWindowWithContext(
-      view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
-      gfx::Rect());
-
-  view_->window_->layer()->SetShowSolidColorContent();
-  EXPECT_FALSE(view_->HasPrimarySurface());
-  ASSERT_TRUE(view_->delegated_frame_host_);
-
-  view_->Hide();
-  view_->SetSize(gfx::Size(300, 300));
-  EXPECT_FALSE(view_->HasPrimarySurface());
-
-  // Submitting a CompositorFrame should not update the fallback SurfaceId
-  viz::SurfaceId surface_id(view_->GetFrameSinkId(), kArbitraryLocalSurfaceId);
-  view_->delegated_frame_host_->OnFirstSurfaceActivation(
-      viz::SurfaceInfo(surface_id, 1.f, gfx::Size(400, 400)));
-  EXPECT_FALSE(view_->HasPrimarySurface());
-  EXPECT_FALSE(view_->HasFallbackSurface());
-}
-
-// This test verifies that the primary SurfaceId is populated on resize and
-// the fallback SurfaceId is populated in OnFirstSurfaceActivation.
+// This test verifies that the primary SurfaceId is populated on resize.
 TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest, SurfaceChanges) {
   // Early out because DelegatedFrameHost is not used in mash.
-  if (features::IsUsingWindowService())
+  if (features::IsMultiProcessMash())
     return;
 
   view_->InitAsChild(nullptr);
@@ -3485,25 +3389,8 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest, SurfaceChanges) {
   view_->SetSize(gfx::Size(300, 300));
   ASSERT_TRUE(view_->HasPrimarySurface());
   EXPECT_EQ(gfx::Size(300, 300), view_->window_->layer()->size());
-  EXPECT_FALSE(view_->HasFallbackSurface());
   EXPECT_EQ(gfx::Size(300, 300),
             view_->delegated_frame_host_->CurrentFrameSizeInDipForTesting());
-
-  // Resizing should update the primary SurfaceId.
-  view_->SetSize(gfx::Size(400, 400));
-  EXPECT_EQ(gfx::Size(400, 400), view_->window_->layer()->size());
-  EXPECT_EQ(nullptr, view_->window_->layer()->GetFallbackSurfaceId());
-  EXPECT_EQ(gfx::Size(400, 400),
-            view_->delegated_frame_host_->CurrentFrameSizeInDipForTesting());
-
-  // Fallback SurfaceId should be updated in OnFirstSurfaceActivation.
-  // Submitting a CompositorFrame should update the fallback SurfaceId
-  viz::SurfaceId surface_id(view_->GetFrameSinkId(),
-                            view_->GetLocalSurfaceId());
-  view_->delegated_frame_host_->OnFirstSurfaceActivation(
-      viz::SurfaceInfo(surface_id, 1.f, gfx::Size(400, 400)));
-  EXPECT_EQ(gfx::Size(400, 400), view_->window_->layer()->size());
-  EXPECT_EQ(surface_id, *view_->window_->layer()->GetFallbackSurfaceId());
 }
 
 // This test verifies that the primary SurfaceId is updated on device scale
@@ -3511,7 +3398,7 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest, SurfaceChanges) {
 TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
        DeviceScaleFactorChanges) {
   // TODO: fix for mash.
-  if (features::IsUsingWindowService())
+  if (features::IsMultiProcessMash())
     return;
 
   view_->InitAsChild(nullptr);
@@ -3522,14 +3409,12 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
   view_->SetSize(gfx::Size(300, 300));
   ASSERT_TRUE(view_->HasPrimarySurface());
   EXPECT_EQ(gfx::Size(300, 300), view_->window_->layer()->size());
-  viz::SurfaceId initial_surface_id =
-      *view_->window_->layer()->GetPrimarySurfaceId();
-  EXPECT_EQ(nullptr, view_->window_->layer()->GetFallbackSurfaceId());
+  viz::SurfaceId initial_surface_id = *view_->window_->layer()->GetSurfaceId();
+  EXPECT_EQ(nullptr, view_->window_->layer()->GetOldestAcceptableFallback());
 
   // Resizing should update the primary SurfaceId.
   aura_test_helper_->test_screen()->SetDeviceScaleFactor(2.0f);
-  viz::SurfaceId new_surface_id =
-      *view_->window_->layer()->GetPrimarySurfaceId();
+  viz::SurfaceId new_surface_id = *view_->window_->layer()->GetSurfaceId();
   EXPECT_NE(new_surface_id, initial_surface_id);
   EXPECT_EQ(gfx::Size(300, 300), view_->window_->layer()->bounds().size());
 }
@@ -3540,8 +3425,8 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
        CompositorFrameSinkChange) {
   // TODO(jonross): Delete this test once Viz launches as it will be obsolete.
   // https://crbug.com/844469
-  if (base::FeatureList::IsEnabled(features::kVizDisplayCompositor) ||
-      features::IsUsingWindowService()) {
+  if (features::IsVizDisplayCompositorEnabled() ||
+      features::IsMultiProcessMash()) {
     return;
   }
 
@@ -3564,9 +3449,11 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
   view_->CreateNewRendererCompositorFrameSink();
 
   // Submit a frame from the new RendererCompositorFrameSink.
-  view_->SubmitCompositorFrame(parent_local_surface_id_allocator_.GenerateId(),
-                               MakeDelegatedFrame(1.f, frame_size, view_rect),
-                               base::nullopt);
+  parent_local_surface_id_allocator_.GenerateId();
+  view_->SubmitCompositorFrame(
+      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
+          .local_surface_id(),
+      MakeDelegatedFrame(1.f, frame_size, view_rect), base::nullopt);
   view_->RunOnCompositingDidCommit();
 }
 
@@ -3576,17 +3463,21 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
 TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
        DiscardDelegatedFrames) {
   // Early out because DelegatedFrameHost is not used in mash.
-  if (features::IsUsingWindowService())
+  if (features::IsMultiProcessMash())
     return;
 
-  view_->InitAsChild(nullptr);
+  // Make sure |parent_view_| is evicted to avoid interfering with the code
+  // below.
+  parent_view_->Hide();
+  static_cast<viz::FrameEvictorClient*>(
+      parent_view_->delegated_frame_host_.get())
+      ->EvictDelegatedFrame();
 
   size_t max_renderer_frames =
       FrameEvictionManager::GetInstance()->GetMaxNumberOfSavedFrames();
   ASSERT_LE(2u, max_renderer_frames);
   size_t renderer_count = max_renderer_frames + 1;
   gfx::Rect view_rect(100, 100);
-  gfx::Size frame_size = view_rect.size();
 
   std::unique_ptr<RenderWidgetHostImpl* []> hosts(
       new RenderWidgetHostImpl*[renderer_count]);
@@ -3611,174 +3502,76 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
         views[i]->GetNativeView(),
         parent_view_->GetNativeView()->GetRootWindow(), gfx::Rect());
     views[i]->SetSize(view_rect.size());
-    ASSERT_TRUE(views[i]->HasPrimarySurface());
+#ifdef OS_CHROMEOS
+    viz::SurfaceId surface_id(
+        views[i]->GetFrameSinkId(),
+        views[i]->GetLocalSurfaceIdAllocation().local_surface_id());
+    views[i]->delegated_frame_host_->OnFirstSurfaceActivation(
+        viz::SurfaceInfo(surface_id, 1.f, view_rect.size()));
+#endif
+    EXPECT_HAS_FRAME(views[i]);
   }
 
   // Make each renderer visible, and swap a frame on it, then make it invisible.
   for (size_t i = 0; i < renderer_count; ++i) {
     views[i]->Show();
-    ASSERT_TRUE(views[i]->HasPrimarySurface());
-    ASSERT_FALSE(views[i]->HasFallbackSurface());
-    viz::SurfaceId surface_id(views[i]->GetFrameSinkId(),
-                              views[i]->GetLocalSurfaceId());
-    views[i]->delegated_frame_host_->OnFirstSurfaceActivation(
-        viz::SurfaceInfo(surface_id, 1.f, frame_size));
-    ASSERT_TRUE(views[i]->HasPrimarySurface());
-    EXPECT_TRUE(views[i]->HasFallbackSurface());
+    EXPECT_HAS_FRAME(views[i]);
     views[i]->Hide();
   }
 
   // There should be max_renderer_frames with a frame in it, and one without it.
   // Since the logic is LRU eviction, the first one should be without.
-  EXPECT_FALSE(views[0]->HasFallbackSurface());
+  EXPECT_EVICTED(views[0]);
   for (size_t i = 1; i < renderer_count; ++i)
-    EXPECT_TRUE(views[i]->HasFallbackSurface());
+    EXPECT_HAS_FRAME(views[i]);
 
-  // LRU renderer is [0], make it visible, it shouldn't evict anything yet.
+  // LRU renderer is [0], make it visible, it should evict the next LRU [1].
   views[0]->Show();
-  EXPECT_FALSE(views[0]->HasFallbackSurface());
-  EXPECT_TRUE(views[1]->HasFallbackSurface());
-
-  // Swap a frame on it, it should evict the next LRU [1].
-  viz::SurfaceId surface_id0(views[0]->GetFrameSinkId(),
-                             views[0]->GetLocalSurfaceId());
-  views[0]->delegated_frame_host_->OnFirstSurfaceActivation(
-      viz::SurfaceInfo(surface_id0, 1.f, frame_size));
-  EXPECT_TRUE(views[0]->HasFallbackSurface());
-  EXPECT_FALSE(views[1]->HasFallbackSurface());
+  EXPECT_HAS_FRAME(views[0]);
+  EXPECT_EVICTED(views[1]);
   views[0]->Hide();
 
   // LRU renderer is [1], which is still hidden. Showing it and submitting a
   // CompositorFrame to it should evict the next LRU [2].
   views[1]->Show();
-  viz::SurfaceId surface_id1(views[1]->GetFrameSinkId(),
-                             views[1]->GetLocalSurfaceId());
-  views[1]->delegated_frame_host_->OnFirstSurfaceActivation(
-      viz::SurfaceInfo(surface_id1, 1.f, frame_size));
-  EXPECT_TRUE(views[0]->HasFallbackSurface());
-  EXPECT_TRUE(views[1]->HasFallbackSurface());
-  EXPECT_FALSE(views[2]->HasFallbackSurface());
+  EXPECT_HAS_FRAME(views[0]);
+  EXPECT_HAS_FRAME(views[1]);
+  EXPECT_EVICTED(views[2]);
   for (size_t i = 3; i < renderer_count; ++i)
-    EXPECT_TRUE(views[i]->HasFallbackSurface());
+    EXPECT_HAS_FRAME(views[i]);
 
   // Make all renderers but [0] visible and swap a frame on them, keep [0]
   // hidden, it becomes the LRU.
   for (size_t i = 1; i < renderer_count; ++i) {
     views[i]->Show();
-    // The renderers who don't have a frame should be waiting. The ones that
-    // have a frame should not.
-    viz::SurfaceId surface_id(views[i]->GetFrameSinkId(),
-                              views[i]->GetLocalSurfaceId());
-    views[i]->delegated_frame_host_->OnFirstSurfaceActivation(
-        viz::SurfaceInfo(surface_id, 1.f, frame_size));
-    EXPECT_TRUE(views[i]->HasFallbackSurface());
+    EXPECT_HAS_FRAME(views[i]);
   }
-  EXPECT_FALSE(views[0]->HasFallbackSurface());
-
-  // Swap a frame on [0], it should be evicted immediately.
-  views[0]->delegated_frame_host_->OnFirstSurfaceActivation(
-      viz::SurfaceInfo(surface_id0, 1.f, frame_size));
-  EXPECT_FALSE(views[0]->HasFallbackSurface());
+  EXPECT_EVICTED(views[0]);
 
   // Make [0] visible, and swap a frame on it. Nothing should be evicted
   // although we're above the limit.
   views[0]->Show();
-  views[0]->delegated_frame_host_->OnFirstSurfaceActivation(
-      viz::SurfaceInfo(surface_id0, 1.f, frame_size));
   for (size_t i = 0; i < renderer_count; ++i)
-    EXPECT_TRUE(views[i]->HasFallbackSurface()) << i;
+    EXPECT_HAS_FRAME(views[i]);
 
   // Make [0] hidden, it should evict its frame.
   views[0]->Hide();
-  EXPECT_FALSE(views[0]->HasFallbackSurface());
+  EXPECT_EVICTED(views[0]);
 
   // Make [0] visible, don't give it a frame, it should be waiting.
   views[0]->Show();
   // Make [0] hidden, it should stop waiting.
   views[0]->Hide();
 
-  // Make [1] hidden, resize it. It should drop its frame.
+  // Make [1] hidden, resize it. It should advance its fallback.
   views[1]->Hide();
-  EXPECT_TRUE(views[1]->HasFallbackSurface());
   gfx::Size size2(200, 200);
   views[1]->SetSize(size2);
-  EXPECT_FALSE(views[1]->HasFallbackSurface());
   // Show it, it should block until we give it a frame.
   views[1]->Show();
-  views[1]->delegated_frame_host_->OnFirstSurfaceActivation(
-      viz::SurfaceInfo(surface_id1, 1.f, frame_size));
-
-  for (size_t i = 0; i < renderer_count; ++i) {
-    views[i]->Destroy();
-    delete hosts[i];
-  }
-}
-
-TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithLocking) {
-  // Early out because DelegatedFrameHost is not used in mash.
-  if (features::IsUsingWindowService())
-    return;
-
-  view_->InitAsChild(nullptr);
-
-  size_t max_renderer_frames =
-      FrameEvictionManager::GetInstance()->GetMaxNumberOfSavedFrames();
-  ASSERT_LE(2u, max_renderer_frames);
-  size_t renderer_count = max_renderer_frames + 1;
-  gfx::Rect view_rect(100, 100);
-  gfx::Size frame_size = view_rect.size();
-
-  std::unique_ptr<RenderWidgetHostImpl* []> hosts(
-      new RenderWidgetHostImpl*[renderer_count]);
-  std::unique_ptr<FakeRenderWidgetHostViewAura* []> views(
-      new FakeRenderWidgetHostViewAura*[renderer_count]);
-
-  // Create a bunch of renderers.
-  for (size_t i = 0; i < renderer_count; ++i) {
-    int32_t routing_id = process_host_->GetNextRoutingID();
-    delegates_.push_back(base::WrapUnique(new MockRenderWidgetHostDelegate));
-    hosts[i] = MockRenderWidgetHostImpl::Create(delegates_.back().get(),
-                                                process_host_, routing_id);
-    delegates_.back()->set_widget_host(hosts[i]);
-    hosts[i]->Init();
-    views[i] = new FakeRenderWidgetHostViewAura(hosts[i], false);
-    views[i]->InitAsChild(nullptr);
-    aura::client::ParentWindowWithContext(
-        views[i]->GetNativeView(),
-        parent_view_->GetNativeView()->GetRootWindow(),
-        gfx::Rect());
-    views[i]->SetSize(view_rect.size());
-  }
-
-  // Make each renderer visible and swap a frame on it. No eviction should
-  // occur because all frames are visible.
-  for (size_t i = 0; i < renderer_count; ++i) {
-    views[i]->Show();
-    viz::SurfaceId surface_id(views[i]->GetFrameSinkId(),
-                              views[i]->GetLocalSurfaceId());
-    views[i]->delegated_frame_host_->OnFirstSurfaceActivation(
-        viz::SurfaceInfo(surface_id, 1.f, frame_size));
-    EXPECT_TRUE(views[i]->HasFallbackSurface());
-  }
-
-  // If we hide [0], then [0] should be evicted.
-  views[0]->Hide();
-  EXPECT_FALSE(views[0]->HasFallbackSurface());
-
-  // If we lock [0] before hiding it, then [0] should not be evicted.
-  views[0]->Show();
-  viz::SurfaceId surface_id(views[0]->GetFrameSinkId(),
-                            views[0]->GetLocalSurfaceId());
-  views[0]->delegated_frame_host_->OnFirstSurfaceActivation(
-      viz::SurfaceInfo(surface_id, 1.f, frame_size));
-  EXPECT_TRUE(views[0]->HasFallbackSurface());
-  views[0]->GetDelegatedFrameHost()->LockResources();
-  views[0]->Hide();
-  EXPECT_TRUE(views[0]->HasFallbackSurface());
-
-  // If we unlock [0] now, then [0] should be evicted.
-  views[0]->GetDelegatedFrameHost()->UnlockResources();
-  EXPECT_FALSE(views[0]->HasFallbackSurface());
+  ASSERT_TRUE(views[1]->window_->layer()->GetOldestAcceptableFallback());
+  EXPECT_EQ(*views[1]->window_->layer()->GetOldestAcceptableFallback(),
+            *views[1]->window_->layer()->GetSurfaceId());
 
   for (size_t i = 0; i < renderer_count; ++i) {
     views[i]->Destroy();
@@ -3790,10 +3583,15 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithLocking) {
 // only applies to ChromeOS.
 TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithMemoryPressure) {
   // Early out because DelegatedFrameHost is not used in mash.
-  if (features::IsUsingWindowService())
+  if (features::IsMultiProcessMash())
     return;
 
-  view_->InitAsChild(nullptr);
+  // Make sure |parent_view_| is evicted to avoid interfering with the code
+  // below.
+  parent_view_->Hide();
+  static_cast<viz::FrameEvictorClient*>(
+      parent_view_->delegated_frame_host_.get())
+      ->EvictDelegatedFrame();
 
   // The test logic below relies on having max_renderer_frames > 2.  By default,
   // this value is calculated from total physical memory and causes the test to
@@ -3804,7 +3602,6 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithMemoryPressure) {
 
   size_t renderer_count = kMaxRendererFrames;
   gfx::Rect view_rect(100, 100);
-  gfx::Size frame_size = view_rect.size();
 
   std::unique_ptr<RenderWidgetHostImpl* []> hosts(
       new RenderWidgetHostImpl*[renderer_count]);
@@ -3827,37 +3624,35 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithMemoryPressure) {
         parent_view_->GetNativeView()->GetRootWindow(),
         gfx::Rect());
     views[i]->SetSize(view_rect.size());
-  }
-
-  // Make each renderer visible and swap a frame on it. No eviction should
-  // occur because all frames are visible.
-  for (size_t i = 0; i < renderer_count; ++i) {
     views[i]->Show();
-    viz::SurfaceId surface_id(views[i]->GetFrameSinkId(),
-                              kArbitraryLocalSurfaceId);
+#ifdef OS_CHROMEOS
+    viz::SurfaceId surface_id(
+        views[i]->GetFrameSinkId(),
+        views[i]->GetLocalSurfaceIdAllocation().local_surface_id());
     views[i]->delegated_frame_host_->OnFirstSurfaceActivation(
-        viz::SurfaceInfo(surface_id, 1.f, frame_size));
-    EXPECT_TRUE(views[i]->HasFallbackSurface());
+        viz::SurfaceInfo(surface_id, 1.f, view_rect.size()));
+#endif
+    EXPECT_HAS_FRAME(views[i]);
   }
 
   // If we hide one, it should not get evicted.
   views[0]->Hide();
   base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(views[0]->HasFallbackSurface());
+  EXPECT_HAS_FRAME(views[0]);
   // Using a lesser memory pressure event however, should evict.
   SimulateMemoryPressure(
       base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE);
   base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(views[0]->HasFallbackSurface());
+  EXPECT_EVICTED(views[0]);
 
   // Check the same for a higher pressure event.
   views[1]->Hide();
   base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(views[1]->HasFallbackSurface());
+  EXPECT_HAS_FRAME(views[1]);
   SimulateMemoryPressure(
       base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL);
   base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(views[1]->HasFallbackSurface());
+  EXPECT_EVICTED(views[1]);
 
   for (size_t i = 0; i < renderer_count; ++i) {
     views[i]->Destroy();
@@ -3896,8 +3691,8 @@ TEST_F(RenderWidgetHostViewAuraTest, SourceEventTypeExistsInLatencyInfo) {
 TEST_F(RenderWidgetHostViewAuraTest, ForwardsBeginFrameAcks) {
   // TODO(jonross): Delete this test once Viz launches as it will be obsolete.
   // https://crbug.com/844469
-  if (base::FeatureList::IsEnabled(features::kVizDisplayCompositor) ||
-      features::IsUsingWindowService()) {
+  if (features::IsVizDisplayCompositorEnabled() ||
+      features::IsMultiProcessMash()) {
     return;
   }
 
@@ -3964,11 +3759,11 @@ TEST_F(RenderWidgetHostViewAuraTest, VisibleViewportTest) {
   EXPECT_EQ(60, view_->GetVisibleViewportSize().height());
 
   const IPC::Message* message =
-      sink_->GetFirstMessageMatching(ViewMsg_SynchronizeVisualProperties::ID);
+      sink_->GetFirstMessageMatching(WidgetMsg_SynchronizeVisualProperties::ID);
   ASSERT_TRUE(message != nullptr);
 
-  ViewMsg_SynchronizeVisualProperties::Param params;
-  ViewMsg_SynchronizeVisualProperties::Read(message, &params);
+  WidgetMsg_SynchronizeVisualProperties::Param params;
+  WidgetMsg_SynchronizeVisualProperties::Read(message, &params);
   EXPECT_EQ(60, std::get<0>(params).visible_viewport_size.height());
 }
 
@@ -4737,7 +4532,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
 // gesture deals with them correctly.
 TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollWithTouchEvents) {
   SetUpOverscrollEnvironmentWithDebounce(10);
-  widget_host_->OnMessageReceived(ViewHostMsg_HasTouchEventHandlers(0, true));
+  widget_host_->OnMessageReceived(WidgetHostMsg_HasTouchEventHandlers(0, true));
 
   // The test sends an intermingled sequence of touch and gesture events.
   PressTouchPoint(0, 1);
@@ -4861,7 +4656,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollWithTouchEvents) {
 TEST_F(RenderWidgetHostViewAuraOverscrollTest,
        TouchGestureEndDispatchedAfterOverscrollComplete) {
   SetUpOverscrollEnvironmentWithDebounce(10);
-  widget_host_->OnMessageReceived(ViewHostMsg_HasTouchEventHandlers(0, true));
+  widget_host_->OnMessageReceived(WidgetHostMsg_HasTouchEventHandlers(0, true));
 
   PressAndSetTouchActionAuto();
   // Start scrolling. Receive ACK as it being processed.
@@ -5444,7 +5239,7 @@ TEST_F(RenderWidgetHostViewAuraTest,
   view_->InitAsChild(nullptr);
   view_->Show();
 
-  widget_host_->OnMessageReceived(ViewHostMsg_HasTouchEventHandlers(0, true));
+  widget_host_->OnMessageReceived(WidgetHostMsg_HasTouchEventHandlers(0, true));
 
   ui::TouchEvent press(
       ui::ET_TOUCH_PRESSED, gfx::Point(30, 30), ui::EventTimeForNow(),
@@ -5508,6 +5303,108 @@ TEST_F(RenderWidgetHostViewAuraTest, KeyEventsHandled) {
   EXPECT_FALSE(key_event2.handled());
 }
 
+TEST_F(RenderWidgetHostViewAuraTest, KeyEventAsyncHandled) {
+  view_->InitAsChild(nullptr);
+  view_->Show();
+  bool async_callback_run = false;
+  bool async_callback_handled_result = false;
+  bool async_callback_stopped_propagation_result = false;
+  ui::KeyEvent key_event1(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::EF_NONE);
+  ui::KeyEvent::KeyDispatcherApi(&key_event1)
+      .set_async_callback(base::BindLambdaForTesting(
+          [&](bool handled, bool stopped_propagation) {
+            async_callback_handled_result = handled;
+            async_callback_stopped_propagation_result = stopped_propagation;
+            async_callback_run = true;
+          }));
+  view_->OnKeyEvent(&key_event1);
+  // Normally event should be handled.
+  EXPECT_TRUE(key_event1.handled());
+  // The async-callback should have been obtained, but not run yet.
+  EXPECT_FALSE(key_event1.HasAsyncCallback());
+  EXPECT_FALSE(async_callback_run);
+  widget_host_->FlushForTesting();
+
+  // Run the event callback, which should result in running the callback
+  // attached to the event.
+  MockWidgetInputHandler::MessageVector events =
+      GetAndResetDispatchedMessages();
+  ASSERT_EQ(1u, events.size());
+  EXPECT_EQ("RawKeyDown", GetMessageNames(events));
+  events[0]->ToEvent()->CallCallback(INPUT_EVENT_ACK_STATE_CONSUMED);
+  EXPECT_TRUE(async_callback_run);
+  EXPECT_TRUE(async_callback_handled_result);
+  // |async_callback_stopped_propagation_result| should always be false.
+  EXPECT_FALSE(async_callback_stopped_propagation_result);
+}
+
+TEST_F(RenderWidgetHostViewAuraTest, KeyEventAsyncUnhandled) {
+  view_->InitAsChild(nullptr);
+  view_->Show();
+  bool async_callback_run = false;
+  bool async_callback_handled_result = false;
+  bool async_callback_stopped_propagation_result = false;
+  ui::KeyEvent key_event1(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::EF_NONE);
+  ui::KeyEvent::KeyDispatcherApi(&key_event1)
+      .set_async_callback(base::BindLambdaForTesting(
+          [&](bool handled, bool stopped_propagation) {
+            async_callback_handled_result = handled;
+            async_callback_stopped_propagation_result = stopped_propagation;
+            async_callback_run = true;
+          }));
+  view_->OnKeyEvent(&key_event1);
+  // Normally event should be handled.
+  EXPECT_TRUE(key_event1.handled());
+  // The async-callback should have been obtained, but not run yet.
+  EXPECT_FALSE(key_event1.HasAsyncCallback());
+  EXPECT_FALSE(async_callback_run);
+  widget_host_->FlushForTesting();
+
+  // Run the event callback, which should result in running the callback
+  // attached to the event.
+  MockWidgetInputHandler::MessageVector events =
+      GetAndResetDispatchedMessages();
+  ASSERT_EQ(1u, events.size());
+  EXPECT_EQ("RawKeyDown", GetMessageNames(events));
+  events[0]->ToEvent()->CallCallback(INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  EXPECT_TRUE(async_callback_run);
+  EXPECT_FALSE(async_callback_handled_result);
+  // |async_callback_stopped_propagation_result| should always be false.
+  EXPECT_FALSE(async_callback_stopped_propagation_result);
+}
+
+TEST_F(RenderWidgetHostViewAuraTest, KeyEventAsyncNotifiedWhenRouterChanges) {
+  view_->InitAsChild(nullptr);
+  view_->Show();
+  bool async_callback_run = false;
+  bool async_callback_handled_result = false;
+  bool async_callback_stopped_propagation_result = false;
+  ui::KeyEvent key_event1(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::EF_NONE);
+  ui::KeyEvent::KeyDispatcherApi(&key_event1)
+      .set_async_callback(base::BindLambdaForTesting(
+          [&](bool handled, bool stopped_propagation) {
+            async_callback_handled_result = handled;
+            async_callback_stopped_propagation_result = stopped_propagation;
+            async_callback_run = true;
+          }));
+  view_->OnKeyEvent(&key_event1);
+  // Normally event should be handled.
+  EXPECT_TRUE(key_event1.handled());
+  // The async-callback should have been obtained, but not run yet.
+  EXPECT_FALSE(key_event1.HasAsyncCallback());
+  EXPECT_FALSE(async_callback_run);
+
+  // RendererExited() should result in running the callback.
+  widget_host_->RendererExited(base::TERMINATION_STATUS_PROCESS_CRASHED, -1);
+  EXPECT_TRUE(async_callback_run);
+  EXPECT_FALSE(async_callback_handled_result);
+  // |async_callback_stopped_propagation_result| should always be false.
+  EXPECT_FALSE(async_callback_stopped_propagation_result);
+
+  // RendererExited() results in destroying the view.
+  view_ = nullptr;
+}
+
 TEST_F(RenderWidgetHostViewAuraTest, SetCanScrollForWebMouseWheelEvent) {
   view_->InitAsChild(nullptr);
   view_->Show();
@@ -5527,7 +5424,8 @@ TEST_F(RenderWidgetHostViewAuraTest, SetCanScrollForWebMouseWheelEvent) {
           events[0]->ToEvent()->Event()->web_event.get());
   // Check if scroll is caused when ctrl-scroll is generated from
   // mouse wheel event.
-  EXPECT_FALSE(WebInputEventTraits::CanCauseScroll(*wheel_event));
+  EXPECT_EQ(blink::WebMouseWheelEvent::EventAction::kPageZoom,
+            wheel_event->event_action);
 
   // Ack'ing the outstanding event should flush the pending event queue.
   events[0]->ToEvent()->CallCallback(INPUT_EVENT_ACK_STATE_CONSUMED);
@@ -5551,7 +5449,8 @@ TEST_F(RenderWidgetHostViewAuraTest, SetCanScrollForWebMouseWheelEvent) {
   // mouse wheel event.
   wheel_event = static_cast<const WebMouseWheelEvent*>(
       events[1]->ToEvent()->Event()->web_event.get());
-  EXPECT_TRUE(WebInputEventTraits::CanCauseScroll(*wheel_event));
+  EXPECT_NE(blink::WebMouseWheelEvent::EventAction::kPageZoom,
+            wheel_event->event_action);
 
   events[1]->ToEvent()->CallCallback(INPUT_EVENT_ACK_STATE_CONSUMED);
 
@@ -5572,7 +5471,8 @@ TEST_F(RenderWidgetHostViewAuraTest, SetCanScrollForWebMouseWheelEvent) {
   // from scroll event.
   wheel_event = static_cast<const WebMouseWheelEvent*>(
       events[1]->ToEvent()->Event()->web_event.get());
-  EXPECT_TRUE(WebInputEventTraits::CanCauseScroll(*wheel_event));
+  EXPECT_NE(blink::WebMouseWheelEvent::EventAction::kPageZoom,
+            wheel_event->event_action);
 }
 
 // Ensures that the mapping from ui::TouchEvent to blink::WebTouchEvent doesn't
@@ -5752,9 +5652,9 @@ class TouchpadRenderWidgetHostViewAuraTest
   DISALLOW_COPY_AND_ASSIGN(TouchpadRenderWidgetHostViewAuraTest);
 };
 
-INSTANTIATE_TEST_CASE_P(,
-                        TouchpadRenderWidgetHostViewAuraTest,
-                        testing::Bool());
+INSTANTIATE_TEST_SUITE_P(,
+                         TouchpadRenderWidgetHostViewAuraTest,
+                         testing::Bool());
 
 // Test that we elide touchpad pinch gesture steams consisting of only begin
 // and end events.
@@ -5837,8 +5737,8 @@ TEST_F(RenderWidgetHostViewAuraTest, GestureTapFromStylusHasPointerType) {
 TEST_F(RenderWidgetHostViewAuraTest, HitTestRegionListSubmitted) {
   // TODO(jonross): Delete this test once Viz launches as it will be obsolete.
   // https://crbug.com/844469
-  if (base::FeatureList::IsEnabled(features::kVizDisplayCompositor) ||
-      features::IsUsingWindowService()) {
+  if (features::IsVizDisplayCompositorEnabled() ||
+      features::IsMultiProcessMash()) {
     return;
   }
 
@@ -5880,7 +5780,7 @@ TEST_F(RenderWidgetHostViewAuraTest, HitTestRegionListSubmitted) {
 TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
        NewContentRenderingTimeout) {
   // TODO: fix for mash.
-  if (features::IsUsingWindowService())
+  if (features::IsMultiProcessMash())
     return;
 
   constexpr base::TimeDelta kTimeout = base::TimeDelta::FromMicroseconds(10);
@@ -5892,13 +5792,18 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
 
   widget_host_->set_new_content_rendering_delay_for_testing(kTimeout);
 
-  viz::LocalSurfaceId id0 = view_->GetLocalSurfaceId();
+  viz::LocalSurfaceId id0 =
+      view_->GetLocalSurfaceIdAllocation().local_surface_id();
   EXPECT_TRUE(id0.is_valid());
 
+  // No LocalSurfaceId will be allocated if the view is hidden during
+  // naviagtion.
+  view_->Show();
   // No new LocalSurfaceId should be allocated for the first navigation and the
   // timer should not fire.
   widget_host_->DidNavigate(1);
-  viz::LocalSurfaceId id1 = view_->GetLocalSurfaceId();
+  viz::LocalSurfaceId id1 =
+      view_->GetLocalSurfaceIdAllocation().local_surface_id();
   EXPECT_EQ(id0, id1);
   {
     base::RunLoop run_loop;
@@ -5912,15 +5817,13 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
 
   // Start the timer. Verify that a new LocalSurfaceId is allocated.
   widget_host_->DidNavigate(5);
-  viz::LocalSurfaceId id2 = view_->GetLocalSurfaceId();
+  viz::LocalSurfaceId id2 =
+      view_->GetLocalSurfaceIdAllocation().local_surface_id();
   EXPECT_TRUE(id2.is_valid());
   EXPECT_LT(id1.parent_sequence_number(), id2.parent_sequence_number());
 
   // The renderer submits a frame to the old LocalSurfaceId. The timer should
   // still fire.
-  auto frame = viz::CompositorFrameBuilder().AddDefaultRenderPass().Build();
-  view_->delegated_frame_host_->OnFirstSurfaceActivation(viz::SurfaceInfo(
-      viz::SurfaceId(view_->GetFrameSinkId(), id1), 1, gfx::Size(20, 20)));
   {
     base::RunLoop run_loop;
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -5935,7 +5838,7 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
 TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
        AllocateLocalSurfaceIdOnEviction) {
   // TODO: fix for mash.
-  if (features::IsUsingWindowService())
+  if (features::IsMultiProcessMash())
     return;
 
   view_->InitAsChild(nullptr);
@@ -5943,13 +5846,21 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
   view_->Show();
-  viz::LocalSurfaceId id1 = view_->GetLocalSurfaceId();
+  viz::LocalSurfaceId id1 =
+      view_->GetLocalSurfaceIdAllocation().local_surface_id();
   view_->Hide();
-  view_->delegated_frame_host_->OnFirstSurfaceActivation(viz::SurfaceInfo(
-      viz::SurfaceId(view_->GetFrameSinkId(), id1), 1, gfx::Size(20, 20)));
-  view_->ClearCompositorFrame();
+#ifdef OS_CHROMEOS
+  viz::SurfaceId surface_id(
+      view_->GetFrameSinkId(),
+      view_->GetLocalSurfaceIdAllocation().local_surface_id());
+  view_->delegated_frame_host_->OnFirstSurfaceActivation(
+      viz::SurfaceInfo(surface_id, 1.f, gfx::Size(10, 10)));
+#endif
+  static_cast<viz::FrameEvictorClient*>(view_->delegated_frame_host_.get())
+      ->EvictDelegatedFrame();
   view_->Show();
-  viz::LocalSurfaceId id2 = view_->GetLocalSurfaceId();
+  viz::LocalSurfaceId id2 =
+      view_->GetLocalSurfaceIdAllocation().local_surface_id();
   EXPECT_NE(id1, id2);
 }
 
@@ -5958,7 +5869,7 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
 TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
        DropFallbackIfResizedWhileHidden) {
   // Early out because DelegatedFrameHost is not used in mash.
-  if (features::IsUsingWindowService())
+  if (features::IsMultiProcessMash())
     return;
 
   view_->InitAsChild(nullptr);
@@ -5966,14 +5877,12 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
   view_->Show();
-  viz::LocalSurfaceId id1 = view_->GetLocalSurfaceId();
-  view_->delegated_frame_host_->OnFirstSurfaceActivation(viz::SurfaceInfo(
-      viz::SurfaceId(view_->GetFrameSinkId(), id1), 1, gfx::Size(20, 20)));
-  EXPECT_TRUE(view_->window_->layer()->GetFallbackSurfaceId()->is_valid());
   view_->Hide();
   view_->SetSize(gfx::Size(54, 32));
   view_->Show();
-  EXPECT_EQ(nullptr, view_->window_->layer()->GetFallbackSurfaceId());
+  ASSERT_TRUE(view_->window_->layer()->GetOldestAcceptableFallback());
+  EXPECT_EQ(*view_->window_->layer()->GetOldestAcceptableFallback(),
+            *view_->window_->layer()->GetSurfaceId());
 }
 
 // If a tab is hidden and shown without being resized in the meantime, the
@@ -5981,7 +5890,7 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
 TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
        DontDropFallbackIfNotResizedWhileHidden) {
   // Early out because DelegatedFrameHost is not used in mash.
-  if (features::IsUsingWindowService())
+  if (features::IsMultiProcessMash())
     return;
 
   view_->InitAsChild(nullptr);
@@ -5989,13 +5898,18 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
   view_->Show();
-  viz::LocalSurfaceId id1 = view_->GetLocalSurfaceId();
-  view_->delegated_frame_host_->OnFirstSurfaceActivation(viz::SurfaceInfo(
-      viz::SurfaceId(view_->GetFrameSinkId(), id1), 1, gfx::Size(20, 20)));
-  EXPECT_TRUE(view_->window_->layer()->GetFallbackSurfaceId()->is_valid());
+  viz::LocalSurfaceId id1 =
+      view_->GetLocalSurfaceIdAllocation().local_surface_id();
+  // Force fallback being set.
+  view_->DidNavigate();
+  view_->ResetFallbackToFirstNavigationSurface();
+  ASSERT_TRUE(view_->window_->layer()->GetOldestAcceptableFallback());
+  viz::SurfaceId fallback =
+      *view_->window_->layer()->GetOldestAcceptableFallback();
   view_->Hide();
   view_->Show();
-  EXPECT_TRUE(view_->window_->layer()->GetFallbackSurfaceId()->is_valid());
+  ASSERT_TRUE(view_->window_->layer()->GetOldestAcceptableFallback());
+  EXPECT_EQ(fallback, *view_->window_->layer()->GetSurfaceId());
 }
 
 // Check that TakeFallbackContentFrom() copies the fallback SurfaceId and
@@ -6003,7 +5917,7 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
 TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
        TakeFallbackContent) {
   // Early out because DelegatedFrameHost is not used in mash.
-  if (features::IsUsingWindowService())
+  if (features::IsMultiProcessMash())
     return;
 
   // Initialize the first view.
@@ -6020,17 +5934,11 @@ TEST_F(RenderWidgetHostViewAuraSurfaceSynchronizationTest,
       view2->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
 
-  // Set fallback for the first view.
-  viz::LocalSurfaceId id = view_->GetLocalSurfaceId();
-  view_->delegated_frame_host_->OnFirstSurfaceActivation(viz::SurfaceInfo(
-      viz::SurfaceId(view_->GetFrameSinkId(), id), 1, gfx::Size(20, 20)));
-  EXPECT_TRUE(view_->window_->layer()->GetFallbackSurfaceId()->is_valid());
-
-  // Call TakeFallbackContentFrom(). The second view should now have the same
-  // fallback as the first view.
+  // Call TakeFallbackContentFrom(). The second view should obtain a fallback
+  // from the first view.
   view2->TakeFallbackContentFrom(view_);
-  EXPECT_EQ(*view_->window_->layer()->GetFallbackSurfaceId(),
-            *view2->window_->layer()->GetFallbackSurfaceId());
+  EXPECT_EQ(view_->window_->layer()->GetSurfaceId()->ToSmallestId(),
+            *view2->window_->layer()->GetOldestAcceptableFallback());
 
   DestroyView(view2);
 }
@@ -6430,7 +6338,7 @@ TEST_F(InputMethodResultAuraTest, ChangeTextDirectionAndLayoutAlignment) {
     ActivateViewForTextInputManager(views_[index], ui::TEXT_INPUT_TYPE_TEXT);
     EXPECT_TRUE(!!RunAndReturnIPCSent(ime_finish_session_call,
                                       processes_[index],
-                                      ViewMsg_SetTextDirection::ID));
+                                      WidgetMsg_SetTextDirection::ID));
   }
 }
 
@@ -6465,7 +6373,7 @@ class InputMethodStateAuraTest : public InputMethodAuraTestBase {
 // This test is for caret bounds which are calculated based on the tracked value
 // for selection bounds.
 TEST_F(InputMethodStateAuraTest, GetCaretBounds) {
-  ViewHostMsg_SelectionBounds_Params params;
+  WidgetHostMsg_SelectionBounds_Params params;
   params.is_anchor_first = true;
   params.anchor_dir = blink::kWebTextDirectionLeftToRight;
   params.focus_dir = blink::kWebTextDirectionLeftToRight;
@@ -6532,45 +6440,85 @@ TEST_F(InputMethodStateAuraTest, GetSelectedText) {
 
 // This test is for text range.
 TEST_F(InputMethodStateAuraTest, GetTextRange) {
-  base::string16 text = base::ASCIIToUTF16("some text of length 22");
-  size_t offset = 0U;
-  gfx::Range selection_range;
+  const base::string16 text = base::ASCIIToUTF16("some text of length 22");
 
   for (auto index : active_view_sequence_) {
-    render_widget_host_delegate()->set_focused_widget(
-        RenderWidgetHostImpl::From(views_[index]->GetRenderWidgetHost()));
-    gfx::Range expected_range(offset, offset + text.length());
-    views_[index]->SelectionChanged(text, offset, selection_range);
+    ActivateViewForTextInputManager(views_[index], ui::TEXT_INPUT_TYPE_TEXT);
+    TextInputState state;
+    state.type = ui::TEXT_INPUT_TYPE_TEXT;
+    state.value = text;
+    gfx::Range expected_range(0, 22);
+    views_[index]->TextInputStateChanged(state);
     gfx::Range range_from_client;
 
     // For aura this always returns true.
     EXPECT_TRUE(text_input_client()->GetTextRange(&range_from_client));
     EXPECT_EQ(expected_range, range_from_client);
+  }
+}
 
-    // Changing offset to make sure that the next view has a different text
-    // selection.
-    offset++;
+TEST_F(InputMethodStateAuraTest, GetCompositionTextRange) {
+  // Initially, there should be no range.
+  gfx::Range range_from_client;
+  EXPECT_FALSE(
+      text_input_client()->GetCompositionTextRange(&range_from_client));
+
+  for (auto index : active_view_sequence_) {
+    ActivateViewForTextInputManager(views_[index], ui::TEXT_INPUT_TYPE_TEXT);
+    gfx::Range expected_range(1, 2 + index);
+    TextInputState state;
+    state.type = ui::TEXT_INPUT_TYPE_TEXT;
+    state.composition_start = expected_range.start();
+    state.composition_end = expected_range.end();
+    views_[index]->TextInputStateChanged(state);
+    gfx::Range range_from_client;
+
+    EXPECT_TRUE(
+        text_input_client()->GetCompositionTextRange(&range_from_client));
+    EXPECT_EQ(expected_range, range_from_client);
   }
 }
 
 // This test is for selection range.
-TEST_F(InputMethodStateAuraTest, GetSelectionRange) {
-  base::string16 text;
+TEST_F(InputMethodStateAuraTest, GetEditableSelectionRange) {
   gfx::Range expected_range(0U, 1U);
 
   for (auto index : active_view_sequence_) {
-    render_widget_host_delegate()->set_focused_widget(
-        RenderWidgetHostImpl::From(views_[index]->GetRenderWidgetHost()));
-    views_[index]->SelectionChanged(text, 0U, expected_range);
+    ActivateViewForTextInputManager(views_[index], ui::TEXT_INPUT_TYPE_TEXT);
+    TextInputState state_with_selection;
+    state_with_selection.type = ui::TEXT_INPUT_TYPE_TEXT;
+    state_with_selection.selection_start = expected_range.start();
+    state_with_selection.selection_end = expected_range.end();
+    views_[index]->TextInputStateChanged(state_with_selection);
     gfx::Range range_from_client;
 
     // This method always returns true.
-    EXPECT_TRUE(text_input_client()->GetSelectionRange(&range_from_client));
+    EXPECT_TRUE(
+        text_input_client()->GetEditableSelectionRange(&range_from_client));
     EXPECT_EQ(expected_range, range_from_client);
 
     // Changing range to make sure that the next view has a different text
     // selection.
     expected_range.set_end(expected_range.end() + 1U);
+  }
+}
+
+TEST_F(InputMethodStateAuraTest, GetTextFromRange) {
+  const base::string16 text = base::ASCIIToUTF16("some text of length 22");
+
+  for (auto index : active_view_sequence_) {
+    ActivateViewForTextInputManager(views_[index], ui::TEXT_INPUT_TYPE_TEXT);
+    TextInputState state;
+    state.type = ui::TEXT_INPUT_TYPE_TEXT;
+    state.value = text;
+    views_[index]->TextInputStateChanged(state);
+
+    gfx::Range request_range(std::min(index, text.length() - 1),
+                             std::min(index + 3, text.length() - 1));
+    base::string16 result;
+    EXPECT_TRUE(text_input_client()->GetTextFromRange(request_range, &result));
+    EXPECT_EQ(text.substr(request_range.start(), request_range.length()),
+              result);
   }
 }
 
@@ -6711,6 +6659,68 @@ TEST_F(RenderWidgetHostViewAuraTest, FocusReasonMultipleEventsOnSameNode) {
             parent_view_->GetFocusReason());
 }
 
+class RenderWidgetHostViewAuraInputMethodTest
+    : public RenderWidgetHostViewAuraTest,
+      public ui::InputMethodObserver {
+ public:
+  RenderWidgetHostViewAuraInputMethodTest() = default;
+  ~RenderWidgetHostViewAuraInputMethodTest() override {}
+  void SetUp() override {
+    input_method_ = new ui::MockInputMethod(nullptr);
+    // transfers ownership.
+    ui::SetUpInputMethodForTesting(input_method_);
+    SetUpEnvironment();
+    text_input_client_ = nullptr;
+  }
+
+  // Override from ui::InputMethodObserver.
+  void OnFocus() override {}
+  void OnBlur() override {}
+  void OnCaretBoundsChanged(const ui::TextInputClient* client) override {
+    text_input_client_ = client;
+  }
+  void OnTextInputStateChanged(const ui::TextInputClient* client) override {}
+  void OnInputMethodDestroyed(const ui::InputMethod* input_method) override {}
+  void OnShowVirtualKeyboardIfEnabled() override {}
+
+ protected:
+  // Not owned.
+  ui::MockInputMethod* input_method_ = nullptr;
+  const ui::TextInputClient* text_input_client_;
+
+  DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewAuraInputMethodTest);
+};
+
+// This test is for notifying InputMethod for surrounding text changes.
+TEST_F(RenderWidgetHostViewAuraInputMethodTest, OnCaretBoundsChanged) {
+  ui::InputMethod* input_method = parent_view_->GetInputMethod();
+  if (input_method != input_method_) {
+    // Some platform doesn't support mocking input method. e.g. InputMethodMus.
+    // In that case, ignore this test.
+    // TODO(shuchen): support mocking InputMethodMus, http://crbug.com/905518.
+    return;
+  }
+  ActivateViewForTextInputManager(parent_view_, ui::TEXT_INPUT_TYPE_TEXT);
+  input_method->SetFocusedTextInputClient(parent_view_);
+  input_method->AddObserver(this);
+
+  parent_view_->SelectionChanged(base::string16(), 0, gfx::Range());
+  EXPECT_EQ(parent_view_, text_input_client_);
+
+  text_input_client_ = nullptr;
+
+  WidgetHostMsg_SelectionBounds_Params params;
+  params.is_anchor_first = true;
+  params.anchor_dir = blink::kWebTextDirectionLeftToRight;
+  params.focus_dir = blink::kWebTextDirectionLeftToRight;
+  params.anchor_rect = gfx::Rect(0, 0, 10, 10);
+  params.focus_rect = gfx::Rect(10, 10, 10, 10);
+  parent_view_->SelectionBoundsChanged(params);
+  EXPECT_EQ(parent_view_, text_input_client_);
+
+  input_method->RemoveObserver(this);
+}
+
 #if defined(OS_WIN)
 class MockInputMethodKeyboardController final
     : public ui::InputMethodKeyboardController {
@@ -6762,7 +6772,7 @@ class RenderWidgetHostViewAuraKeyboardTest
     : public RenderWidgetHostViewAuraTest {
  public:
   RenderWidgetHostViewAuraKeyboardTest() = default;
-  ~RenderWidgetHostViewAuraKeyboardTest() override{};
+  ~RenderWidgetHostViewAuraKeyboardTest() override {}
   void SetUp() override {
     input_method_ = new RenderWidgetHostViewAuraKeyboardMockInputMethod();
     // transfers ownership.

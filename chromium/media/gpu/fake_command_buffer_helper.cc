@@ -10,7 +10,7 @@ namespace media {
 
 FakeCommandBufferHelper::FakeCommandBufferHelper(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner)
-    : task_runner_(std::move(task_runner)) {
+    : CommandBufferHelper(task_runner), task_runner_(std::move(task_runner)) {
   DVLOG(1) << __func__;
 }
 
@@ -64,14 +64,14 @@ gl::GLContext* FakeCommandBufferHelper::GetGLContext() {
   return nullptr;
 }
 
+bool FakeCommandBufferHelper::HasStub() {
+  return has_stub_;
+}
+
 bool FakeCommandBufferHelper::MakeContextCurrent() {
   DVLOG(3) << __func__;
   DCHECK(task_runner_->BelongsToCurrentThread());
   is_context_current_ = !is_context_lost_;
-  return is_context_current_;
-}
-
-bool FakeCommandBufferHelper::IsContextCurrent() const {
   return is_context_current_;
 }
 
@@ -119,6 +119,13 @@ gpu::Mailbox FakeCommandBufferHelper::CreateMailbox(GLuint service_id) {
   if (!has_stub_)
     return gpu::Mailbox();
   return gpu::Mailbox::Generate();
+}
+
+void FakeCommandBufferHelper::ProduceTexture(const gpu::Mailbox& mailbox,
+                                             GLuint service_id) {
+  DVLOG(2) << __func__ << "(" << service_id << ")";
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(service_ids_.count(service_id));
 }
 
 void FakeCommandBufferHelper::WaitForSyncToken(gpu::SyncToken sync_token,

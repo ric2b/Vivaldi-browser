@@ -5,19 +5,26 @@
 #include "third_party/blink/renderer/modules/wake_lock/wake_lock.h"
 
 #include "services/device/public/mojom/constants.mojom-blink.h"
+#include "services/device/public/mojom/wake_lock.mojom-blink.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/mojom/wake_lock/wake_lock.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/modules/wake_lock/wake_lock_request.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 
 namespace blink {
 
 WakeLock* WakeLock::CreateScreenWakeLock(ScriptState* script_state) {
-  return new WakeLock(script_state, LockType::kScreen);
+  return MakeGarbageCollected<WakeLock>(script_state, LockType::kScreen);
+}
+
+WakeLock* WakeLock::CreateSystemWakeLock(ScriptState* script_state) {
+  return MakeGarbageCollected<WakeLock>(script_state, LockType::kSystem);
 }
 
 WakeLock::~WakeLock() = default;
@@ -25,14 +32,13 @@ WakeLock::~WakeLock() = default;
 WakeLock::WakeLock(ScriptState* script_state, LockType type)
     : ContextLifecycleObserver(blink::ExecutionContext::From(script_state)),
       PageVisibilityObserver(
-          ToDocument(blink::ExecutionContext::From(script_state))->GetPage()),
+          To<Document>(blink::ExecutionContext::From(script_state))->GetPage()),
       type_(type) {
-  DCHECK(type == LockType::kScreen);
 }
 
 ScriptPromise WakeLock::GetPromise(ScriptState* script_state) {
   if (!wake_lock_property_) {
-    wake_lock_property_ = new WakeLockProperty(
+    wake_lock_property_ = MakeGarbageCollected<WakeLockProperty>(
         ExecutionContext::From(script_state), this, WakeLockProperty::kReady);
     wake_lock_property_->Resolve(this);
   }
@@ -70,7 +76,7 @@ void WakeLock::ChangeActiveStatus(bool active) {
     wake_lock_service_->CancelWakeLock();
 
   active_ = active;
-  EnqueueEvent(*Event::Create(EventTypeNames::activechange),
+  EnqueueEvent(*Event::Create(event_type_names::kActivechange),
                TaskType::kMiscPlatformAPI);
 }
 
@@ -78,11 +84,31 @@ void WakeLock::BindToServiceIfNeeded() {
   if (wake_lock_service_)
     return;
 
-  LocalFrame* frame = ToDocument(GetExecutionContext())->GetFrame();
-  frame->GetInterfaceProvider().GetInterface(
-      mojo::MakeRequest(&wake_lock_service_));
+  device::mojom::blink::WakeLockType type;
+  switch (type_) {
+    case LockType::kSystem:
+      type = device::mojom::blink::WakeLockType::kPreventAppSuspension;
+      break;
+    case LockType::kScreen:
+      type = device::mojom::blink::WakeLockType::kPreventDisplaySleep;
+      break;
+  }
+
+  if (!GetDocument() || !GetDocument()->GetFrame())
+    return;
+
+  blink::mojom::blink::WakeLockServicePtr service;
+  GetDocument()->GetFrame()->GetInterfaceProvider().GetInterface(
+      mojo::MakeRequest(&service));
+  service->GetWakeLock(type, device::mojom::blink::WakeLockReason::kOther,
+                       "Blink Wake Lock",
+                       mojo::MakeRequest(&wake_lock_service_));
   wake_lock_service_.set_connection_error_handler(
       WTF::Bind(&WakeLock::OnConnectionError, WrapWeakPersistent(this)));
+}
+
+Document* WakeLock::GetDocument() {
+  return To<Document>(GetExecutionContext());
 }
 
 WakeLockRequest* WakeLock::createRequest() {
@@ -90,7 +116,7 @@ WakeLockRequest* WakeLock::createRequest() {
     ChangeActiveStatus(true);
 
   request_counter_++;
-  return new WakeLockRequest(this);
+  return MakeGarbageCollected<WakeLockRequest>(this);
 }
 
 void WakeLock::CancelRequest() {
@@ -102,7 +128,7 @@ void WakeLock::CancelRequest() {
 }
 
 const WTF::AtomicString& WakeLock::InterfaceName() const {
-  return EventTargetNames::WakeLock;
+  return event_target_names::kWakeLock;
 }
 
 ExecutionContext* WakeLock::GetExecutionContext() const {

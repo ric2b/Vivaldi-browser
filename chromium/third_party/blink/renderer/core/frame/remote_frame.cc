@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/frame/remote_frame.h"
 
+#include "cc/layers/surface_layer.h"
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy_manager.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -12,15 +13,16 @@
 #include "third_party/blink/renderer/core/frame/remote_frame_client.h"
 #include "third_party/blink/renderer/core/frame/remote_frame_view.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
+#include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/page/plugin_script_forbidden_scope.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_timing_info.h"
-#include "third_party/blink/renderer/platform/plugins/plugin_script_forbidden_scope.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 
 namespace blink {
@@ -38,7 +40,7 @@ inline RemoteFrame::RemoteFrame(RemoteFrameClient* client,
 RemoteFrame* RemoteFrame::Create(RemoteFrameClient* client,
                                  Page& page,
                                  FrameOwner* owner) {
-  RemoteFrame* frame = new RemoteFrame(client, page, owner);
+  RemoteFrame* frame = MakeGarbageCollected<RemoteFrame>(client, page, owner);
   PageScheduler* page_scheduler = page.GetPageScheduler();
   if (frame->IsMainFrame() && page_scheduler)
     page_scheduler->SetIsMainFrameLocal(false);
@@ -57,19 +59,29 @@ void RemoteFrame::Trace(blink::Visitor* visitor) {
 
 void RemoteFrame::ScheduleNavigation(Document& origin_document,
                                      const KURL& url,
-                                     bool replace_current_item,
+                                     WebFrameLoadType frame_load_type,
                                      UserGestureStatus user_gesture_status) {
+  if (!origin_document.GetSecurityOrigin()->CanDisplay(url)) {
+    origin_document.AddConsoleMessage(ConsoleMessage::Create(
+        kSecurityMessageSource, mojom::ConsoleMessageLevel::kError,
+        "Not allowed to load local resource: " + url.ElidedString()));
+    return;
+  }
+
   FrameLoadRequest frame_request(&origin_document, ResourceRequest(url));
-  frame_request.SetReplacesCurrentItem(replace_current_item);
   frame_request.GetResourceRequest().SetHasUserGesture(
       user_gesture_status == UserGestureStatus::kActive);
   frame_request.GetResourceRequest().SetFrameType(
       IsMainFrame() ? network::mojom::RequestContextFrameType::kTopLevel
                     : network::mojom::RequestContextFrameType::kNested);
-  Navigate(frame_request);
+  Navigate(frame_request, frame_load_type);
 }
 
-void RemoteFrame::Navigate(const FrameLoadRequest& passed_request) {
+void RemoteFrame::Navigate(const FrameLoadRequest& passed_request,
+                           WebFrameLoadType frame_load_type) {
+  if (!navigation_rate_limiter().CanProceed())
+    return;
+
   FrameLoadRequest frame_request(passed_request);
 
   // The process where this frame actually lives won't have sufficient
@@ -79,14 +91,24 @@ void RemoteFrame::Navigate(const FrameLoadRequest& passed_request) {
   FrameLoader::UpgradeInsecureRequest(frame_request.GetResourceRequest(),
                                       frame_request.OriginDocument());
 
+  Document* document = frame_request.OriginDocument();
+  bool is_opener_navigation = document && document->GetFrame() &&
+                              document->GetFrame()->Client()->Opener() == this;
+
+  bool prevent_sandboxed_download =
+      GetSecurityContext() &&
+      GetSecurityContext()->IsSandboxed(kSandboxDownloads) &&
+      !frame_request.GetResourceRequest().HasUserGesture() &&
+      RuntimeEnabledFeatures::
+          BlockingDownloadsInSandboxWithoutUserActivationEnabled();
+
   Client()->Navigate(frame_request.GetResourceRequest(),
-                     frame_request.ReplacesCurrentItem(),
+                     frame_load_type == WebFrameLoadType::kReplaceCurrentItem,
+                     is_opener_navigation, prevent_sandboxed_download,
                      frame_request.GetBlobURLToken());
 }
 
-void RemoteFrame::Detach(FrameDetachType type) {
-  lifecycle_.AdvanceTo(FrameLifecycle::kDetaching);
-
+void RemoteFrame::DetachImpl(FrameDetachType type) {
   PluginScriptForbiddenScope forbid_plugin_destructor_scripting;
   DetachChildren();
   if (!Client())
@@ -103,10 +125,9 @@ void RemoteFrame::Detach(FrameDetachType type) {
   // That combined with wrappers (owned and kept alive by RemoteFrame) keeping
   // persistent strong references to RemoteDOMWindow will prevent the GCing
   // of all these objects. Break the cycle by notifying of detachment.
-  ToRemoteDOMWindow(dom_window_)->FrameDetached();
+  To<RemoteDOMWindow>(dom_window_.Get())->FrameDetached();
   if (cc_layer_)
-    SetCcLayer(nullptr, false);
-  Frame::Detach(type);
+    SetCcLayer(nullptr, false, false);
 }
 
 bool RemoteFrame::PrepareForCommit() {
@@ -155,10 +176,9 @@ bool RemoteFrame::BubbleLogicalScrollFromChildFrame(
     ScrollDirection direction,
     ScrollGranularity granularity,
     Frame* child) {
-  DCHECK(child->IsLocalFrame());
   DCHECK(child->Client());
-  ToLocalFrame(child)->Client()->BubbleLogicalScrollInParentFrame(direction,
-                                                                  granularity);
+  To<LocalFrame>(child)->Client()->BubbleLogicalScrollInParentFrame(
+      direction, granularity);
   return false;
 }
 
@@ -186,17 +206,39 @@ RemoteFrameClient* RemoteFrame::Client() const {
   return static_cast<RemoteFrameClient*>(Frame::Client());
 }
 
+void RemoteFrame::PointerEventsChanged() {
+  if (!cc_layer_ || !is_surface_layer_)
+    return;
+
+  static_cast<cc::SurfaceLayer*>(cc_layer_)->SetHasPointerEventsNone(
+      IsIgnoredForHitTest());
+}
+
+bool RemoteFrame::IsIgnoredForHitTest() const {
+  HTMLFrameOwnerElement* owner = DeprecatedLocalOwner();
+  if (!owner || !owner->GetLayoutObject())
+    return false;
+  return owner->OwnerType() == FrameOwnerElementType::kPortal ||
+         (owner->GetLayoutObject()->Style()->PointerEvents() ==
+          EPointerEvents::kNone);
+}
+
 void RemoteFrame::SetCcLayer(cc::Layer* cc_layer,
-                             bool prevent_contents_opaque_changes) {
+                             bool prevent_contents_opaque_changes,
+                             bool is_surface_layer) {
+  DCHECK(Owner());
+
   if (cc_layer_)
     GraphicsLayer::UnregisterContentsLayer(cc_layer_);
   cc_layer_ = cc_layer;
   prevent_contents_opaque_changes_ = prevent_contents_opaque_changes;
-  if (cc_layer_)
+  is_surface_layer_ = is_surface_layer;
+  if (cc_layer_) {
     GraphicsLayer::RegisterContentsLayer(cc_layer_);
+    PointerEventsChanged();
+  }
 
-  DCHECK(Owner());
-  ToHTMLFrameOwnerElement(Owner())->SetNeedsCompositingUpdate();
+  To<HTMLFrameOwnerElement>(Owner())->SetNeedsCompositingUpdate();
 }
 
 void RemoteFrame::AdvanceFocus(WebFocusType type, LocalFrame* source) {

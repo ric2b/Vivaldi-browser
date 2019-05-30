@@ -52,7 +52,9 @@ class FilterData final : public GarbageCollected<FilterData> {
     kPaintingFilterCycleDetected
   };
 
-  static FilterData* Create() { return new FilterData(); }
+  static FilterData* Create() { return MakeGarbageCollected<FilterData>(); }
+
+  FilterData() : state_(kInitial) {}
 
   void Dispose();
 
@@ -61,9 +63,6 @@ class FilterData final : public GarbageCollected<FilterData> {
   Member<FilterEffect> last_effect;
   Member<SVGFilterGraphNodeMap> node_map;
   FilterDataState state_;
-
- private:
-  FilterData() : state_(kInitial) {}
 };
 
 class LayoutSVGResourceFilter final : public LayoutSVGResourceContainer {
@@ -82,7 +81,7 @@ class LayoutSVGResourceFilter final : public LayoutSVGResourceContainer {
   void RemoveAllClientsFromCache(bool mark_for_invalidation = true) override;
   bool RemoveClientFromCache(SVGResourceClient&) override;
 
-  FloatRect ResourceBoundingBox(const LayoutObject*);
+  FloatRect ResourceBoundingBox(const FloatRect& reference_box) const;
 
   SVGUnitTypes::SVGUnitType FilterUnits() const;
   SVGUnitTypes::SVGUnitType PrimitiveUnits() const;
@@ -94,11 +93,11 @@ class LayoutSVGResourceFilter final : public LayoutSVGResourceContainer {
   LayoutSVGResourceType ResourceType() const override { return kResourceType; }
 
   FilterData* GetFilterDataForClient(const SVGResourceClient* client) {
-    return filter_.at(const_cast<SVGResourceClient*>(client));
+    return filter_->at(const_cast<SVGResourceClient*>(client));
   }
   void SetFilterDataForClient(const SVGResourceClient* client,
                               FilterData* filter_data) {
-    filter_.Set(const_cast<SVGResourceClient*>(client), filter_data);
+    filter_->Set(const_cast<SVGResourceClient*>(client), filter_data);
   }
 
  protected:
@@ -107,9 +106,8 @@ class LayoutSVGResourceFilter final : public LayoutSVGResourceContainer {
  private:
   void DisposeFilterMap();
 
-  using FilterMap =
-      PersistentHeapHashMap<Member<SVGResourceClient>, Member<FilterData>>;
-  FilterMap filter_;
+  using FilterMap = HeapHashMap<Member<SVGResourceClient>, Member<FilterData>>;
+  Persistent<FilterMap> filter_;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutSVGResourceFilter, IsSVGResourceFilter());

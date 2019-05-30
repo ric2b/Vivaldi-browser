@@ -37,14 +37,14 @@ class InsertIntoTextNodeCommand final : public SimpleEditCommand {
   static InsertIntoTextNodeCommand* Create(Text* node,
                                            unsigned offset,
                                            const String& text) {
-    return new InsertIntoTextNodeCommand(node, offset, text);
+    return MakeGarbageCollected<InsertIntoTextNodeCommand>(node, offset, text);
   }
 
-  void Trace(blink::Visitor*) override;
-
- private:
   InsertIntoTextNodeCommand(Text* node, unsigned offset, const String& text);
 
+  void Trace(Visitor*) override;
+
+ private:
   void DoApply(EditingState*) override;
   void DoUnapply() override;
 

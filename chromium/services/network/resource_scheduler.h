@@ -22,6 +22,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "net/base/priority_queue.h"
 #include "net/base/request_priority.h"
 #include "net/nqe/effective_connection_type.h"
@@ -29,6 +30,7 @@
 
 namespace base {
 class SequencedTaskRunner;
+class TickClock;
 }
 
 namespace net {
@@ -81,7 +83,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) ResourceScheduler {
     base::OnceClosure resume_callback_;
   };
 
-  explicit ResourceScheduler(bool enabled);
+  explicit ResourceScheduler(bool enabled,
+                             const base::TickClock* tick_clock = nullptr);
   ~ResourceScheduler();
 
   // Requests that this ResourceScheduler schedule, and eventually loads, the
@@ -97,33 +100,15 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) ResourceScheduler {
 
   // Called when a renderer is created. |network_quality_estimator| is allowed
   // to be null.
-  void OnClientCreated(
-      int child_id,
-      int route_id,
-      const net::NetworkQualityEstimator* const network_quality_estimator);
+  void OnClientCreated(int child_id,
+                       int route_id,
+                       net::NetworkQualityEstimator* network_quality_estimator);
 
   // Called when a renderer is destroyed.
   void OnClientDeleted(int child_id, int route_id);
 
-  // Called when a renderer stops or restarts loading.
-  // Do not call this function when the network service is enabled.
-  void DeprecatedOnLoadingStateChanged(int child_id,
-                                       int route_id,
-                                       bool is_loaded);
-
-  // Signals from IPC messages directly from the renderers:
-
-  // Called when a client navigates to a new main document.
-  // Do not call this function when the network service is enabled.
-  void DeprecatedOnNavigate(int child_id, int route_id);
-
-  // Signals from the IO thread:
 
   // Client functions:
-
-  // Returns true if at least one client is currently loading.
-  // Do not call this function when the network service is enabled.
-  bool DeprecatedHasLoadingClients() const;
 
   // Updates the priority for |request|. Modifies request->priority(), and may
   // start the request loading if it wasn't already started.
@@ -136,29 +121,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) ResourceScheduler {
   void ReprioritizeRequest(net::URLRequest* request,
                            net::RequestPriority new_priority);
 
-  bool priority_requests_delayable() const {
-    return priority_requests_delayable_;
-  }
-  bool head_priority_requests_delayable() const {
-    return head_priority_requests_delayable_;
-  }
-  bool yielding_scheduler_enabled() const {
-    return yielding_scheduler_enabled_;
-  }
-  int max_requests_before_yielding() const {
-    return max_requests_before_yielding_;
-  }
-  base::TimeDelta yield_time() const { return yield_time_; }
+  // Returns true if the timer that dispatches long queued requests is running.
+  bool IsLongQueuedRequestsDispatchTimerRunning() const;
+
   base::SequencedTaskRunner* task_runner() { return task_runner_.get(); }
 
   // Testing setters
-  void SetMaxRequestsBeforeYieldingForTesting(
-      int max_requests_before_yielding) {
-    max_requests_before_yielding_ = max_requests_before_yielding;
-  }
-  void SetYieldTimeForTesting(base::TimeDelta yield_time) {
-    yield_time_ = yield_time;
-  }
   void SetTaskRunnerForTesting(
       scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner) {
     task_runner_ = std::move(sequenced_task_runner);
@@ -168,6 +136,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) ResourceScheduler {
 
   void SetResourceSchedulerParamsManagerForTests(
       const ResourceSchedulerParamsManager& resource_scheduler_params_manager);
+
+  // Dispatch requests that have been queued for too long to network.
+  void DispatchLongQueuedRequestsForTesting();
 
  private:
   class Client;
@@ -187,32 +158,31 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) ResourceScheduler {
   void RemoveRequest(ScheduledResourceRequestImpl* request);
 
   // Returns the client ID for the given |child_id| and |route_id| combo.
-  ClientId MakeClientId(int child_id, int route_id);
+  ClientId MakeClientId(int child_id, int route_id) const;
 
   // Returns the client for the given |child_id| and |route_id| combo.
   Client* GetClient(int child_id, int route_id);
 
+  // May start the timer that dispatches long queued requests
+  void StartLongQueuedRequestsDispatchTimerIfNeeded();
+
+  // Called when |long_queued_requests_dispatch_timer_| is fired. May start any
+  // pending requests that can be started.
+  void OnLongQueuedRequestsDispatchTimerFired();
+
   ClientMap client_map_;
   RequestSet unowned_requests_;
+
+  // Guaranteed to be non-null.
+  const base::TickClock* tick_clock_;
+
+  // Timer to dispatch requests that may have been queued for too long.
+  base::OneShotTimer long_queued_requests_dispatch_timer_;
 
   // Whether or not to enable ResourceScheduling. This will almost always be
   // enabled, except for some C++ headless embedders who may implement their own
   // resource scheduling via protocol handlers.
   const bool enabled_;
-
-  // True if requests to servers that support priorities (e.g., H2/QUIC) can
-  // be delayed.
-  bool priority_requests_delayable_;
-
-  // True if requests to servers that support priorities (e.g., H2/QUIC) can
-  // be delayed while the parser is in head.
-  bool head_priority_requests_delayable_;
-
-  // True if the scheduler should yield between several successive calls to
-  // start resource requests.
-  bool yielding_scheduler_enabled_;
-  int max_requests_before_yielding_;
-  base::TimeDelta yield_time_;
 
   ResourceSchedulerParamsManager resource_scheduler_params_manager_;
 

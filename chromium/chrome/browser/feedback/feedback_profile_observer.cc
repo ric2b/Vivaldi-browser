@@ -4,6 +4,7 @@
 
 #include "chrome/browser/feedback/feedback_profile_observer.h"
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/task/post_task.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -12,6 +13,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/feedback/feedback_report.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 
@@ -51,8 +53,8 @@ void FeedbackProfileObserver::Observe(
 void FeedbackProfileObserver::QueueSingleReport(
     feedback::FeedbackUploader* uploader,
     std::unique_ptr<std::string> data) {
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&FeedbackUploaderChrome::QueueReport,
                      uploader->AsWeakPtr(), std::move(data)));
 }

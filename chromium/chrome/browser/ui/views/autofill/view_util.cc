@@ -63,7 +63,10 @@ TitleWithIconAndSeparatorView::TitleWithIconAndSeparatorView(
   // kGooglePayLogoIcon is square, and CreateTiledImage() will clip it whereas
   // setting the icon size would rescale it incorrectly.
   gfx::ImageSkia image = gfx::ImageSkiaOperations::CreateTiledImage(
-      gfx::CreateVectorIcon(kGooglePayLogoIcon, gfx::kPlaceholderColor),
+      gfx::CreateVectorIcon(kGooglePayLogoIcon,
+                            GetNativeTheme()->SystemDarkModeEnabled()
+                                ? gfx::kGoogleGrey200
+                                : gfx::kGoogleGrey700),
       /*x=*/0, /*y=*/0, kGooglePayLogoWidth, kGooglePayLogoHeight);
   auto* icon_view = new views::ImageView();
   icon_view->SetImage(&image);
@@ -158,9 +161,8 @@ LegalMessageView::CreateLegalMessageLineLabel(
   return label;
 }
 
-void LegalMessageView::OnLinkClicked(views::StyledLabel* label,
-                                     const gfx::Range& range,
-                                     content::WebContents* web_contents) {
+const GURL LegalMessageView::GetUrlForLink(views::StyledLabel* label,
+                                           const gfx::Range& range) {
   // Index of |label| within its parent's view hierarchy is the same as the
   // legal message line index. DCHECK this assumption to guard against future
   // layout changes.
@@ -171,15 +173,12 @@ void LegalMessageView::OnLinkClicked(views::StyledLabel* label,
       legal_message_lines_[label->parent()->GetIndexOf(label)].links();
   for (const LegalMessageLine::Link& link : links) {
     if (link.range == range) {
-      web_contents->OpenURL(content::OpenURLParams(
-          link.url, content::Referrer(),
-          WindowOpenDisposition::NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_LINK,
-          /*is_renderer_initiated=*/false));
-      return;
+      return link.url;
     }
   }
   // |range| was not found.
   NOTREACHED();
+  return GURL();
 }
 
 }  // namespace autofill

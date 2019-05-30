@@ -34,13 +34,11 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "util/build_config.h"
 
 #if defined(OS_MACOSX)
 #include <AvailabilityMacros.h>
-#include "base/mac/foundation_util.h"
 #endif
 
 #if !defined(OS_IOS)
@@ -111,15 +109,7 @@ bool VerifySpecificPathControlledByUser(const FilePath& path,
 }
 
 std::string TempFileName() {
-#if defined(OS_MACOSX)
-  return StringPrintf(".%s.XXXXXX", base::mac::BaseBundleID());
-#endif
-
-#if defined(GOOGLE_CHROME_BUILD)
-  return std::string(".com.google.Chrome.XXXXXX");
-#else
   return std::string(".org.chromium.Chromium.XXXXXX");
-#endif
 }
 
 #if defined(OS_LINUX) || defined(OS_AIX)
@@ -188,143 +178,6 @@ bool CopyFileContents(File* infile, File* outfile) {
 
   NOTREACHED();
   return false;
-}
-
-bool DoCopyDirectory(const FilePath& from_path,
-                     const FilePath& to_path,
-                     bool recursive,
-                     bool open_exclusive) {
-  // Some old callers of CopyDirectory want it to support wildcards.
-  // After some discussion, we decided to fix those callers.
-  // Break loudly here if anyone tries to do this.
-  DCHECK(to_path.value().find('*') == std::string::npos);
-  DCHECK(from_path.value().find('*') == std::string::npos);
-
-  if (from_path.value().size() >= PATH_MAX) {
-    return false;
-  }
-
-  // This function does not properly handle destinations within the source
-  FilePath real_to_path = to_path;
-  if (PathExists(real_to_path))
-    real_to_path = MakeAbsoluteFilePath(real_to_path);
-  else
-    real_to_path = MakeAbsoluteFilePath(real_to_path.DirName());
-  if (real_to_path.empty())
-    return false;
-
-  FilePath real_from_path = MakeAbsoluteFilePath(from_path);
-  if (real_from_path.empty())
-    return false;
-  if (real_to_path == real_from_path || real_from_path.IsParent(real_to_path))
-    return false;
-
-  int traverse_type = FileEnumerator::FILES | FileEnumerator::SHOW_SYM_LINKS;
-  if (recursive)
-    traverse_type |= FileEnumerator::DIRECTORIES;
-  FileEnumerator traversal(from_path, recursive, traverse_type);
-
-  // We have to mimic windows behavior here. |to_path| may not exist yet,
-  // start the loop with |to_path|.
-  struct stat from_stat;
-  FilePath current = from_path;
-  if (stat(from_path.value().c_str(), &from_stat) < 0) {
-    DPLOG(ERROR) << "CopyDirectory() couldn't stat source directory: "
-                 << from_path.value();
-    return false;
-  }
-  FilePath from_path_base = from_path;
-  if (recursive && DirectoryExists(to_path)) {
-    // If the destination already exists and is a directory, then the
-    // top level of source needs to be copied.
-    from_path_base = from_path.DirName();
-  }
-
-  // The Windows version of this function assumes that non-recursive calls
-  // will always have a directory for from_path.
-  // TODO(maruel): This is not necessary anymore.
-  DCHECK(recursive || S_ISDIR(from_stat.st_mode));
-
-  do {
-    // current is the source path, including from_path, so append
-    // the suffix after from_path to to_path to create the target_path.
-    FilePath target_path(to_path);
-    if (from_path_base != current &&
-        !from_path_base.AppendRelativePath(current, &target_path)) {
-      return false;
-    }
-
-    if (S_ISDIR(from_stat.st_mode)) {
-      mode_t mode = (from_stat.st_mode & 01777) | S_IRUSR | S_IXUSR | S_IWUSR;
-      if (mkdir(target_path.value().c_str(), mode) == 0)
-        continue;
-      if (errno == EEXIST && !open_exclusive)
-        continue;
-
-      DPLOG(ERROR) << "CopyDirectory() couldn't create directory: "
-                   << target_path.value();
-      return false;
-    }
-
-    if (!S_ISREG(from_stat.st_mode)) {
-      DLOG(WARNING) << "CopyDirectory() skipping non-regular file: "
-                    << current.value();
-      continue;
-    }
-
-    // Add O_NONBLOCK so we can't block opening a pipe.
-    File infile(open(current.value().c_str(), O_RDONLY | O_NONBLOCK));
-    if (!infile.IsValid()) {
-      DPLOG(ERROR) << "CopyDirectory() couldn't open file: " << current.value();
-      return false;
-    }
-
-    struct stat stat_at_use;
-    if (fstat(infile.GetPlatformFile(), &stat_at_use) < 0) {
-      DPLOG(ERROR) << "CopyDirectory() couldn't stat file: " << current.value();
-      return false;
-    }
-
-    if (!S_ISREG(stat_at_use.st_mode)) {
-      DLOG(WARNING) << "CopyDirectory() skipping non-regular file: "
-                    << current.value();
-      continue;
-    }
-
-    int open_flags = O_WRONLY | O_CREAT;
-    // If |open_exclusive| is set then we should always create the destination
-    // file, so O_NONBLOCK is not necessary to ensure we don't block on the
-    // open call for the target file below, and since the destination will
-    // always be a regular file it wouldn't affect the behavior of the
-    // subsequent write calls anyway.
-    if (open_exclusive)
-      open_flags |= O_EXCL;
-    else
-      open_flags |= O_TRUNC | O_NONBLOCK;
-// Each platform has different default file opening modes for CopyFile which
-// we want to replicate here. On OS X, we use copyfile(3) which takes the
-// source file's permissions into account. On the other platforms, we just
-// use the base::File constructor. On Chrome OS, base::File uses a different
-// set of permissions than it does on other POSIX platforms.
-#if defined(OS_MACOSX)
-    int mode = 0600 | (stat_at_use.st_mode & 0177);
-#else
-    int mode = 0600;
-#endif
-    File outfile(open(target_path.value().c_str(), open_flags, mode));
-    if (!outfile.IsValid()) {
-      DPLOG(ERROR) << "CopyDirectory() couldn't create file: "
-                   << target_path.value();
-      return false;
-    }
-
-    if (!CopyFileContents(&infile, &outfile)) {
-      DLOG(ERROR) << "CopyDirectory() couldn't copy file: " << current.value();
-      return false;
-    }
-  } while (AdvanceEnumeratorWithStat(&traversal, &current, &from_stat));
-
-  return true;
 }
 #endif  // !defined(OS_NACL_NONSFI)
 
@@ -397,18 +250,6 @@ bool ReplaceFile(const FilePath& from_path,
   if (error)
     *error = File::GetLastFileError();
   return false;
-}
-
-bool CopyDirectory(const FilePath& from_path,
-                   const FilePath& to_path,
-                   bool recursive) {
-  return DoCopyDirectory(from_path, to_path, recursive, false);
-}
-
-bool CopyDirectoryExcl(const FilePath& from_path,
-                       const FilePath& to_path,
-                       bool recursive) {
-  return DoCopyDirectory(from_path, to_path, recursive, true);
 }
 #endif  // !defined(OS_NACL_NONSFI)
 
@@ -578,8 +419,6 @@ bool ExecutableExistsInPath(Environment* env,
 
 #endif  // !OS_FUCHSIA
 
-#if !defined(OS_MACOSX)
-// This is implemented in file_util_mac.mm for Mac.
 bool GetTempDir(FilePath* path) {
   const char* tmp = getenv("TMPDIR");
   if (tmp) {
@@ -590,7 +429,6 @@ bool GetTempDir(FilePath* path) {
   *path = FilePath("/tmp");
   return true;
 }
-#endif  // !defined(OS_MACOSX)
 
 #if !defined(OS_MACOSX)  // Mac implementation is in file_util_mac.mm.
 FilePath GetHomeDir() {
@@ -944,34 +782,6 @@ bool CopyFile(const FilePath& from_path, const FilePath& to_path) {
   return CopyFileContents(&infile, &outfile);
 }
 #endif  // !defined(OS_MACOSX)
-
-// -----------------------------------------------------------------------------
-
-namespace internal {
-
-bool MoveUnsafe(const FilePath& from_path, const FilePath& to_path) {
-  // Windows compatibility: if |to_path| exists, |from_path| and |to_path|
-  // must be the same type, either both files, or both directories.
-  stat_wrapper_t to_file_info;
-  if (CallStat(to_path.value().c_str(), &to_file_info) == 0) {
-    stat_wrapper_t from_file_info;
-    if (CallStat(from_path.value().c_str(), &from_file_info) != 0)
-      return false;
-    if (S_ISDIR(to_file_info.st_mode) != S_ISDIR(from_file_info.st_mode))
-      return false;
-  }
-
-  if (rename(from_path.value().c_str(), to_path.value().c_str()) == 0)
-    return true;
-
-  if (!CopyDirectory(from_path, to_path, true))
-    return false;
-
-  DeleteFile(from_path, true);
-  return true;
-}
-
-}  // namespace internal
 
 #endif  // !defined(OS_NACL_NONSFI)
 }  // namespace base

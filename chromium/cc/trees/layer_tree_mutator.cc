@@ -12,28 +12,34 @@ AnimationWorkletInput::AddAndUpdateState::AddAndUpdateState(
     WorkletAnimationId worklet_animation_id,
     std::string name,
     double current_time,
-    std::unique_ptr<AnimationOptions> options)
+    std::unique_ptr<AnimationOptions> options,
+    int num_effects)
     : worklet_animation_id(worklet_animation_id),
       name(name),
       current_time(current_time),
-      options(std::move(options)) {}
+      options(std::move(options)),
+      num_effects(num_effects) {}
 AnimationWorkletInput::AddAndUpdateState::AddAndUpdateState(
     AddAndUpdateState&&) = default;
 AnimationWorkletInput::AddAndUpdateState::~AddAndUpdateState() = default;
 
 #if DCHECK_IS_ON()
-bool AnimationWorkletInput::ValidateScope(int scope_id) const {
+bool AnimationWorkletInput::ValidateId(int worklet_id) const {
   return std::all_of(added_and_updated_animations.cbegin(),
                      added_and_updated_animations.cend(),
-                     [scope_id](auto& it) {
-                       return it.worklet_animation_id.scope_id == scope_id;
+                     [worklet_id](auto& it) {
+                       return it.worklet_animation_id.worklet_id == worklet_id;
                      }) &&
          std::all_of(updated_animations.cbegin(), updated_animations.cend(),
-                     [scope_id](auto& it) {
-                       return it.worklet_animation_id.scope_id == scope_id;
+                     [worklet_id](auto& it) {
+                       return it.worklet_animation_id.worklet_id == worklet_id;
                      }) &&
-         std::all_of(removed_animations.cbegin(), removed_animations.cend(),
-                     [scope_id](auto& it) { return it.scope_id == scope_id; });
+         std::all_of(
+             removed_animations.cbegin(), removed_animations.cend(),
+             [worklet_id](auto& it) { return it.worklet_id == worklet_id; }) &&
+         std::all_of(
+             peeked_animations.cbegin(), peeked_animations.cend(),
+             [worklet_id](auto& it) { return it.worklet_id == worklet_id; });
 }
 #endif
 
@@ -60,23 +66,29 @@ AnimationWorkletInput& MutatorInputState::EnsureWorkletEntry(int id) {
 
 void MutatorInputState::Add(AnimationWorkletInput::AddAndUpdateState&& state) {
   AnimationWorkletInput& worklet_input =
-      EnsureWorkletEntry(state.worklet_animation_id.scope_id);
+      EnsureWorkletEntry(state.worklet_animation_id.worklet_id);
   worklet_input.added_and_updated_animations.push_back(std::move(state));
 }
 void MutatorInputState::Update(AnimationWorkletInput::UpdateState&& state) {
   AnimationWorkletInput& worklet_input =
-      EnsureWorkletEntry(state.worklet_animation_id.scope_id);
+      EnsureWorkletEntry(state.worklet_animation_id.worklet_id);
   worklet_input.updated_animations.push_back(std::move(state));
 }
 void MutatorInputState::Remove(WorkletAnimationId worklet_animation_id) {
   AnimationWorkletInput& worklet_input =
-      EnsureWorkletEntry(worklet_animation_id.scope_id);
+      EnsureWorkletEntry(worklet_animation_id.worklet_id);
   worklet_input.removed_animations.push_back(worklet_animation_id);
 }
 
+void MutatorInputState::Peek(WorkletAnimationId worklet_animation_id) {
+  AnimationWorkletInput& worklet_input =
+      EnsureWorkletEntry(worklet_animation_id.worklet_id);
+  worklet_input.peeked_animations.push_back(worklet_animation_id);
+}
+
 std::unique_ptr<AnimationWorkletInput> MutatorInputState::TakeWorkletState(
-    int scope_id) {
-  auto it = inputs_.find(scope_id);
+    int worklet_id) {
+  auto it = inputs_.find(worklet_id);
   if (it == inputs_.end())
     return nullptr;
 
@@ -88,11 +100,10 @@ std::unique_ptr<AnimationWorkletInput> MutatorInputState::TakeWorkletState(
 AnimationWorkletOutput::AnimationWorkletOutput() = default;
 AnimationWorkletOutput::~AnimationWorkletOutput() = default;
 
-AnimationWorkletOutput::AnimationState::AnimationState(
-    WorkletAnimationId id,
-    base::Optional<base::TimeDelta> time)
-    : worklet_animation_id(id), local_time(time) {}
+AnimationWorkletOutput::AnimationState::AnimationState(WorkletAnimationId id)
+    : worklet_animation_id(id) {}
 AnimationWorkletOutput::AnimationState::AnimationState(const AnimationState&) =
     default;
+AnimationWorkletOutput::AnimationState::~AnimationState() = default;
 
 }  // namespace cc

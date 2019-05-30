@@ -4,14 +4,20 @@
 
 #import "ios/chrome/browser/ui/omnibox/omnibox_view_controller.h"
 
+#include "base/strings/sys_string_conversions.h"
+#include "components/omnibox/browser/omnibox_field_trial.h"
+#include "components/open_from_clipboard/clipboard_recent_content.h"
 #include "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/load_query_commands.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_constants.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_container_view.h"
-#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/omnibox_focuser.h"
-#include "ios/chrome/browser/ui/ui_util.h"
-#include "ios/chrome/browser/ui/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
+#include "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -30,15 +36,15 @@ const CGFloat kClearButtonSize = 28.0f;
 // Override of UIViewController's view with a different type.
 @property(nonatomic, strong) OmniboxContainerView* view;
 
+// Whether the default search engine supports search-by-image. This controls the
+// edit menu option to do an image search.
+@property(nonatomic, assign) BOOL searchByImageEnabled;
+
 @property(nonatomic, assign) BOOL incognito;
 
 @end
 
 @implementation OmniboxViewController
-@synthesize incognito = _incognito;
-@synthesize dispatcher = _dispatcher;
-@synthesize defaultLeadingImage = _defaultLeadingImage;
-@synthesize emptyTextLeadingImage = _emptyTextLeadingImage;
 @dynamic view;
 
 - (instancetype)initWithIncognito:(BOOL)isIncognito {
@@ -63,8 +69,6 @@ const CGFloat kClearButtonSize = 28.0f;
 
   self.view = [[OmniboxContainerView alloc]
       initWithFrame:CGRectZero
-               font:[UIFont systemFontOfSize:kLocationBarFontSize]
-         largerFont:[UIFont systemFontOfSize:kLocationBarRegularRegularFontSize]
           textColor:textColor
       textFieldTint:textFieldTintColor
            iconTint:iconTintColor];
@@ -79,10 +83,24 @@ const CGFloat kClearButtonSize = 28.0f;
 
   // Add Paste and Go option to the editing menu
   UIMenuController* menu = [UIMenuController sharedMenuController];
-  UIMenuItem* pasteAndGo = [[UIMenuItem alloc]
-      initWithTitle:l10n_util::GetNSString(IDS_IOS_PASTE_AND_GO)
-             action:NSSelectorFromString(@"pasteAndGo:")];
-  [menu setMenuItems:@[ pasteAndGo ]];
+  if (base::FeatureList::IsEnabled(kCopiedContentBehavior)) {
+    UIMenuItem* searchCopiedImage = [[UIMenuItem alloc]
+        initWithTitle:l10n_util::GetNSString(IDS_IOS_SEARCH_COPIED_IMAGE)
+               action:@selector(searchCopiedImage:)];
+    UIMenuItem* visitCopiedLink = [[UIMenuItem alloc]
+        initWithTitle:l10n_util::GetNSString(IDS_IOS_VISIT_COPIED_LINK)
+               action:@selector(visitCopiedLink:)];
+    UIMenuItem* searchCopiedText = [[UIMenuItem alloc]
+        initWithTitle:l10n_util::GetNSString(IDS_IOS_SEARCH_COPIED_TEXT)
+               action:@selector(searchCopiedText:)];
+    [menu
+        setMenuItems:@[ searchCopiedImage, visitCopiedLink, searchCopiedText ]];
+  } else {
+    UIMenuItem* pasteAndGo = [[UIMenuItem alloc]
+        initWithTitle:l10n_util::GetNSString(IDS_IOS_PASTE_AND_GO)
+               action:NSSelectorFromString(@"pasteAndGo:")];
+    [menu setMenuItems:@[ pasteAndGo ]];
+  }
 
   self.textField.placeholderTextColor = [self placeholderAndClearButtonColor];
   self.textField.placeholder = l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT);
@@ -101,6 +119,13 @@ const CGFloat kClearButtonSize = 28.0f;
            object:self.textField];
 }
 
+- (void)viewWillDisappear:(BOOL)animated {
+  [super viewWillDisappear:animated];
+  self.textField.selectedTextRange =
+      [self.textField textRangeFromPosition:self.textField.beginningOfDocument
+                                 toPosition:self.textField.beginningOfDocument];
+}
+
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
   [self updateLeadingImageVisibility];
@@ -116,6 +141,10 @@ const CGFloat kClearButtonSize = 28.0f;
 
 - (void)updateAutocompleteIcon:(UIImage*)icon {
   [self.view setLeadingImage:icon];
+}
+
+- (void)updateSearchByImageSupported:(BOOL)searchByImageSupported {
+  self.searchByImageEnabled = searchByImageSupported;
 }
 
 #pragma mark - EditViewAnimatee
@@ -142,8 +171,9 @@ const CGFloat kClearButtonSize = 28.0f;
 
 // Tint color for the textfield placeholder and the clear button.
 - (UIColor*)placeholderAndClearButtonColor {
-  return self.incognito ? [UIColor colorWithWhite:1 alpha:0.5]
-                        : [UIColor colorWithWhite:0 alpha:0.3];
+  return self.incognito
+             ? [UIColor colorWithWhite:1 alpha:0.5]
+             : [UIColor colorWithWhite:0 alpha:kOmniboxPlaceholderAlpha];
 }
 
 #pragma mark notification callbacks
@@ -231,17 +261,69 @@ const CGFloat kClearButtonSize = 28.0f;
 #pragma mark - UIMenuItem
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
-  if (UIPasteboard.generalPasteboard.string.length > 0 && action == @selector
-                                                              (pasteAndGo:)) {
-    return YES;
+  // Remove with flag kCopiedContentBehavior
+  if (action == @selector(pasteAndGo:)) {
+    DCHECK(!base::FeatureList::IsEnabled(kCopiedContentBehavior));
+    return UIPasteboard.generalPasteboard.string.length > 0;
   }
 
+  if (action == @selector(searchCopiedImage:) ||
+      action == @selector(visitCopiedLink:) ||
+      action == @selector(searchCopiedText:)) {
+    ClipboardRecentContent* clipboardRecentContent =
+        ClipboardRecentContent::GetInstance();
+    if (self.searchByImageEnabled &&
+        clipboardRecentContent->GetRecentImageFromClipboard().has_value()) {
+      return action == @selector(searchCopiedImage:);
+    }
+    if (clipboardRecentContent->GetRecentURLFromClipboard().has_value()) {
+      return action == @selector(visitCopiedLink:);
+    }
+    if (clipboardRecentContent->GetRecentTextFromClipboard().has_value()) {
+      return action == @selector(searchCopiedText:);
+    }
+    return NO;
+  }
   return NO;
 }
 
+- (void)searchCopiedImage:(id)sender {
+  DCHECK(base::FeatureList::IsEnabled(kCopiedContentBehavior));
+  if (base::Optional<gfx::Image> optionalImage =
+          ClipboardRecentContent::GetInstance()
+              ->GetRecentImageFromClipboard()) {
+    UIImage* image = optionalImage.value().ToUIImage();
+    [self.dispatcher searchByImage:image];
+    [self.dispatcher cancelOmniboxEdit];
+  }
+}
+
+- (void)visitCopiedLink:(id)sender {
+  [self pasteAndGo:sender];
+}
+
+- (void)searchCopiedText:(id)sender {
+  [self pasteAndGo:sender];
+}
+
+// Both actions are performed the same, but need to be enabled differently,
+// so we need two different selectors.
 - (void)pasteAndGo:(id)sender {
-  [self.dispatcher loadQuery:UIPasteboard.generalPasteboard.string
-                 immediately:YES];
+  NSString* query;
+  if (base::FeatureList::IsEnabled(kCopiedContentBehavior)) {
+    ClipboardRecentContent* clipboardRecentContent =
+        ClipboardRecentContent::GetInstance();
+    if (base::Optional<GURL> optionalUrl =
+            clipboardRecentContent->GetRecentURLFromClipboard()) {
+      query = base::SysUTF8ToNSString(optionalUrl.value().spec());
+    } else if (base::Optional<base::string16> optionalText =
+                   clipboardRecentContent->GetRecentTextFromClipboard()) {
+      query = base::SysUTF16ToNSString(optionalText.value());
+    }
+  } else {
+    query = UIPasteboard.generalPasteboard.string;
+  }
+  [self.dispatcher loadQuery:query immediately:YES];
   [self.dispatcher cancelOmniboxEdit];
 }
 

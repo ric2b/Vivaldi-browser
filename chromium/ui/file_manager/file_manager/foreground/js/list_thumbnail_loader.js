@@ -12,7 +12,7 @@
  *
  * @param {!DirectoryModel} directoryModel A directory model.
  * @param {!ThumbnailModel} thumbnailModel Thumbnail metadata model.
- * @param {!VolumeManagerWrapper} volumeManager Volume manager.
+ * @param {!VolumeManager} volumeManager Volume manager.
  * @param {Function=} opt_thumbnailLoaderConstructor A constructor of thumbnail
  *     loader. This argument is used for testing.
  * @struct
@@ -33,7 +33,7 @@ function ListThumbnailLoader(
   this.thumbnailModel_ = thumbnailModel;
 
   /**
-   * @private {!VolumeManagerWrapper}
+   * @private {!VolumeManager}
    */
   this.volumeManager_ = volumeManager;
 
@@ -192,10 +192,11 @@ ListThumbnailLoader.prototype.onSorted_ = function(event) {
  */
 ListThumbnailLoader.prototype.onChange_ = function(event) {
   // Mark the thumbnail in cache as invalid.
-  var entry = this.dataModel_.item(event.index);
-  var cachedThumbnail = this.cache_.peek(entry.toURL());
-  if (cachedThumbnail)
+  const entry = this.dataModel_.item(event.index);
+  const cachedThumbnail = this.cache_.peek(entry.toURL());
+  if (cachedThumbnail) {
     cachedThumbnail.outdated = true;
+  }
 
   this.cursor_ = this.beginIndex_;
   this.continue_();
@@ -209,8 +210,9 @@ ListThumbnailLoader.prototype.onChange_ = function(event) {
  */
 ListThumbnailLoader.prototype.setHighPriorityRange = function(
     beginIndex, endIndex) {
-  if (!(beginIndex < endIndex))
+  if (!(beginIndex < endIndex)) {
     return;
+  }
 
   this.beginIndex_ = beginIndex;
   this.endIndex_ = endIndex;
@@ -238,13 +240,14 @@ ListThumbnailLoader.prototype.getThumbnailFromCache = function(entry) {
 ListThumbnailLoader.prototype.continue_ = function() {
   // If directory scan is running or all items are scanned, do nothing.
   if (this.directoryModel_.isScanning() ||
-      !(this.cursor_ < this.dataModel_.length))
+      !(this.cursor_ < this.dataModel_.length)) {
     return;
+  }
 
-  var entry = /** @type {Entry} */ (this.dataModel_.item(this.cursor_));
+  const entry = /** @type {Entry} */ (this.dataModel_.item(this.cursor_));
 
   // Check volume type for optimizing the parameters.
-  var volumeInfo = this.volumeManager_.getVolumeInfo(assert(entry));
+  const volumeInfo = this.volumeManager_.getVolumeInfo(assert(entry));
   this.currentVolumeType_ = volumeInfo ? volumeInfo.volumeType : null;
 
   // If tasks are running full or all items are scanned, do nothing.
@@ -254,7 +257,7 @@ ListThumbnailLoader.prototype.continue_ = function() {
   }
 
   // If the entry is a directory, already in cache as valid or fetching, skip.
-  var thumbnail = this.cache_.get(entry.toURL());
+  const thumbnail = this.cache_.get(entry.toURL());
   if (entry.isDirectory ||
       (thumbnail && !thumbnail.outdated) ||
       this.active_[entry.toURL()]) {
@@ -275,19 +278,19 @@ ListThumbnailLoader.prototype.continue_ = function() {
  * @param {!Entry} entry An entry.
  */
 ListThumbnailLoader.prototype.enqueue_ = function(index, entry) {
-  var task = new ListThumbnailLoader.Task(
+  const task = new ListThumbnailLoader.Task(
       entry, this.volumeManager_, this.thumbnailModel_,
       this.thumbnailLoaderConstructor_);
 
-  var url = entry.toURL();
+  const url = entry.toURL();
   this.active_[url] = task;
 
-  task.fetch().then(function(thumbnail) {
+  task.fetch().then(thumbnail => {
     delete this.active_[url];
     this.cache_.put(url, thumbnail);
     this.dispatchThumbnailLoaded_(index, thumbnail);
     this.continue_();
-  }.bind(this));
+  });
 };
 
 /**
@@ -300,10 +303,10 @@ ListThumbnailLoader.prototype.dispatchThumbnailLoaded_ = function(
     index, thumbnail) {
   // Update index if it's already invalid, i.e. index may be invalid if some
   // change had happened in the data model during thumbnail fetch.
-  var item = this.dataModel_.item(index);
+  const item = this.dataModel_.item(index);
   if (item && item.toURL() !== thumbnail.fileUrl) {
     index = -1;
-    for (var i = 0; i < this.dataModel_.length; i++) {
+    for (let i = 0; i < this.dataModel_.length; i++) {
       if (this.dataModel_.item(i).toURL() === thumbnail.fileUrl) {
         index = i;
         break;
@@ -326,7 +329,7 @@ ListThumbnailLoader.prototype.dispatchThumbnailLoaded_ = function(
  * @struct
  */
 ListThumbnailLoader.ThumbnailLoadedEvent = function(index, thumbnail) {
-  var event = new Event('thumbnailLoaded');
+  const event = new Event('thumbnailLoaded');
 
   /** @type {number} */
   event.index = index;
@@ -386,7 +389,7 @@ ListThumbnailLoader.ThumbnailData = function(fileUrl, dataUrl, width, height) {
  * A task to load thumbnail.
  *
  * @param {!Entry} entry An entry.
- * @param {!VolumeManagerWrapper} volumeManager Volume manager.
+ * @param {!VolumeManager} volumeManager Volume manager.
  * @param {!ThumbnailModel} thumbnailModel Metadata cache.
  * @param {!Function} thumbnailLoaderConstructor A constructor of thumbnail
  *     loader.
@@ -417,8 +420,8 @@ ListThumbnailLoader.Task.EXIF_IO_ERROR_DELAY = 3000;
  *     error.
  */
 ListThumbnailLoader.Task.prototype.fetch = function() {
-  var ioError = false;
-  return this.thumbnailModel_.get([this.entry_]).then(function(metadatas) {
+  let ioError = false;
+  return this.thumbnailModel_.get([this.entry_]).then(metadatas => {
     // When it failed to read exif header with an IO error, do not generate
     // thumbnail at this time since it may success in the second try. If it
     // failed to read at 0 byte, it would be an IO error.
@@ -429,8 +432,8 @@ ListThumbnailLoader.Task.prototype.fetch = function() {
       return Promise.reject();
     }
     return metadatas[0];
-  }.bind(this)).then(function(metadata) {
-    var loadTargets = [
+  }).then(metadata => {
+    const loadTargets = [
       ThumbnailLoader.LoadTarget.CONTENT_METADATA,
       ThumbnailLoader.LoadTarget.EXTERNAL_METADATA
     ];
@@ -438,7 +441,7 @@ ListThumbnailLoader.Task.prototype.fetch = function() {
     // If the file is on a provided file system which is based on network, then
     // don't generate thumbnails from file entry, as it could cause very high
     // network traffic.
-    var volumeInfo = this.volumeManager_.getVolumeInfo(this.entry_);
+    const volumeInfo = this.volumeManager_.getVolumeInfo(this.entry_);
     if (volumeInfo && (volumeInfo.volumeType !==
         VolumeManagerCommon.VolumeType.PROVIDED ||
         volumeInfo.source !== VolumeManagerCommon.Source.NETWORK)) {
@@ -449,22 +452,22 @@ ListThumbnailLoader.Task.prototype.fetch = function() {
         this.entry_, ThumbnailLoader.LoaderType.IMAGE, metadata,
         undefined /* opt_mediaType */, loadTargets)
         .loadAsDataUrl(ThumbnailLoader.FillMode.OVER_FILL);
-  }.bind(this)).then(function(result) {
+  }).then(result => {
     return new ListThumbnailLoader.ThumbnailData(
         this.entry_.toURL(), result.data, result.width, result.height);
-  }.bind(this)).catch(function() {
+  }).catch(() => {
     // If an error happens during generating of a thumbnail, then return
     // an empty object, so we don't retry the thumbnail over and over
     // again.
-    var thumbnailData = new ListThumbnailLoader.ThumbnailData(
+    const thumbnailData = new ListThumbnailLoader.ThumbnailData(
           this.entry_.toURL(), null, null, null);
     if (ioError) {
       // If fetching a thumbnail from EXIF fails due to an IO error, then try to
       // refetch it in the future, but not earlier than in 3 second.
-      setTimeout(function() {
+      setTimeout(() => {
         thumbnailData.outdated = true;
       }, ListThumbnailLoader.Task.EXIF_IO_ERROR_DELAY);
     }
     return thumbnailData;
-  }.bind(this));
+  });
 };

@@ -10,20 +10,17 @@
 #include "base/logging.h"
 #include "content/common/content_export.h"
 #include "content/renderer/media/stream/media_stream_audio_processor_options.h"
+#include "content/renderer/media/stream/media_stream_constraints_util_sets.h"
 #include "content/renderer/media/stream/video_track_adapter.h"
 #include "media/base/video_facing.h"
 #include "media/capture/video_capture_types.h"
-#include "third_party/blink/public/platform/modules/mediastream/media_devices.mojom.h"
+#include "third_party/blink/public/mojom/mediastream/media_devices.mojom.h"
 #include "third_party/blink/public/platform/web_media_constraints.h"
 #include "third_party/blink/public/platform/web_media_stream_source.h"
 
 namespace content {
 
-namespace media_constraints {
-class ResolutionSet;
-template <typename T>
-class NumericRangeSet;
-}  // namespace media_constraints
+extern const double kMinDeviceCaptureFrameRate;
 
 // This class represents the output the SelectSettings algorithm for video
 // constraints (see https://w3c.github.io/mediacapture-main/#dfn-selectsettings)
@@ -36,8 +33,8 @@ class NumericRangeSet;
 // The following fields are used to control MediaStreamVideoSource objects:
 //   * device_id: used for device selection and obtained from the deviceId
 //   * capture_params: used to initialize video capture. Its values are obtained
-//     from the width, height, aspectRatio, frame_rate, googPowerLineFrequency,
-//     and googNoiseReduction constraints.
+//     from the width, height, aspectRatio, frame_rate, and googNoiseReduction
+//     constraints.
 // The following fields are used to control MediaStreamVideoTrack objects:
 //   * track_adapter_settings: All track objects use a VideoTrackAdapter object
 //     that may perform cropping and frame-rate adjustment. This field contains
@@ -104,10 +101,6 @@ class CONTENT_EXPORT VideoCaptureSettings {
     DCHECK(HasValue());
     return capture_params_.resolution_change_policy;
   }
-  media::PowerLineFrequency PowerLineFrequency() const {
-    DCHECK(HasValue());
-    return capture_params_.power_line_frequency;
-  }
 
   // Other accessors.
   const char* failed_constraint_name() const { return failed_constraint_name_; }
@@ -164,7 +157,6 @@ class CONTENT_EXPORT VideoCaptureSettings {
 //     getSettings() for device-related properties such as sampleRate and
 //     channelCount.
 // The following fields are used to control various audio features:
-//   * hotword_enabled
 //   * disable_local_echo
 //   * render_to_associated_sink
 // The audio_properties field is used to control the audio-processing module,
@@ -174,6 +166,17 @@ class CONTENT_EXPORT VideoCaptureSettings {
 // constraints that could not be satisfied.
 class CONTENT_EXPORT AudioCaptureSettings {
  public:
+  enum class ProcessingType {
+    // System echo cancellation can be enabled, but all other processing is
+    // disabled.
+    kUnprocessed,
+    // System echo cancellation and audio mirroring can be enabled, but all
+    // other processing is disabled.
+    kNoApmProcessed,
+    // Processing is performed through WebRTC.
+    kApmProcessed
+  };
+
   // Creates an object without value and with an empty failed constraint name.
   AudioCaptureSettings();
 
@@ -186,8 +189,6 @@ class CONTENT_EXPORT AudioCaptureSettings {
   // Creates an object with the given values.
   explicit AudioCaptureSettings(
       std::string device_id,
-      const media::AudioParameters& audio_parameters,
-      bool enable_hotword,
       bool disable_local_echo,
       bool enable_automatic_output_device_selection,
       const AudioProcessingProperties& audio_processing_properties);
@@ -203,15 +204,6 @@ class CONTENT_EXPORT AudioCaptureSettings {
   const std::string& device_id() const {
     DCHECK(HasValue());
     return device_id_;
-  }
-  // This field is meaningless in content capture.
-  const media::AudioParameters& device_parameters() const {
-    DCHECK(HasValue());
-    return audio_parameters_;
-  }
-  bool hotword_enabled() const {
-    DCHECK(HasValue());
-    return hotword_enabled_;
   }
   bool disable_local_echo() const {
     DCHECK(HasValue());
@@ -229,8 +221,6 @@ class CONTENT_EXPORT AudioCaptureSettings {
  private:
   const char* failed_constraint_name_;
   std::string device_id_;
-  media::AudioParameters audio_parameters_;
-  bool hotword_enabled_;
   bool disable_local_echo_;
   bool render_to_associated_sink_;
   AudioProcessingProperties audio_processing_properties_;
@@ -239,7 +229,7 @@ class CONTENT_EXPORT AudioCaptureSettings {
 // Method to get boolean value of constraint with |name| from constraints.
 // Returns true if the constraint is specified in either mandatory or optional
 // constraints.
-bool CONTENT_EXPORT GetConstraintValueAsBoolean(
+CONTENT_EXPORT bool GetConstraintValueAsBoolean(
     const blink::WebMediaConstraints& constraints,
     const blink::BooleanConstraint blink::WebMediaTrackConstraintSet::*picker,
     bool* value);
@@ -247,17 +237,17 @@ bool CONTENT_EXPORT GetConstraintValueAsBoolean(
 // Method to get int value of constraint with |name| from constraints.
 // Returns true if the constraint is specified in either mandatory or Optional
 // constraints.
-bool CONTENT_EXPORT GetConstraintValueAsInteger(
+CONTENT_EXPORT bool GetConstraintValueAsInteger(
     const blink::WebMediaConstraints& constraints,
     const blink::LongConstraint blink::WebMediaTrackConstraintSet::*picker,
     int* value);
 
-bool CONTENT_EXPORT GetConstraintMinAsInteger(
+CONTENT_EXPORT bool GetConstraintMinAsInteger(
     const blink::WebMediaConstraints& constraints,
     const blink::LongConstraint blink::WebMediaTrackConstraintSet::*picker,
     int* value);
 
-bool CONTENT_EXPORT GetConstraintMaxAsInteger(
+CONTENT_EXPORT bool GetConstraintMaxAsInteger(
     const blink::WebMediaConstraints& constraints,
     const blink::LongConstraint blink::WebMediaTrackConstraintSet::*picker,
     int* value);
@@ -265,17 +255,17 @@ bool CONTENT_EXPORT GetConstraintMaxAsInteger(
 // Method to get double precision value of constraint with |name| from
 // constraints. Returns true if the constraint is specified in either mandatory
 // or Optional constraints.
-bool CONTENT_EXPORT GetConstraintValueAsDouble(
+CONTENT_EXPORT bool GetConstraintValueAsDouble(
     const blink::WebMediaConstraints& constraints,
     const blink::DoubleConstraint blink::WebMediaTrackConstraintSet::*picker,
     double* value);
 
-bool CONTENT_EXPORT GetConstraintMinAsDouble(
+CONTENT_EXPORT bool GetConstraintMinAsDouble(
     const blink::WebMediaConstraints& constraints,
     const blink::DoubleConstraint blink::WebMediaTrackConstraintSet::*picker,
     double* value);
 
-bool CONTENT_EXPORT GetConstraintMaxAsDouble(
+CONTENT_EXPORT bool GetConstraintMaxAsDouble(
     const blink::WebMediaConstraints& constraints,
     const blink::DoubleConstraint blink::WebMediaTrackConstraintSet::*picker,
     double* value);
@@ -283,34 +273,10 @@ bool CONTENT_EXPORT GetConstraintMaxAsDouble(
 // Method to get std::string value of constraint with |name| from constraints.
 // Returns true if the constraint is specified in either mandatory or Optional
 // constraints.
-bool CONTENT_EXPORT GetConstraintValueAsString(
+CONTENT_EXPORT bool GetConstraintValueAsString(
     const blink::WebMediaConstraints& constraints,
     const blink::StringConstraint blink::WebMediaTrackConstraintSet::*picker,
     std::string* value);
-
-template <typename ConstraintType>
-bool ConstraintHasMax(const ConstraintType& constraint) {
-  return constraint.HasMax() || constraint.HasExact();
-}
-
-template <typename ConstraintType>
-bool ConstraintHasMin(const ConstraintType& constraint) {
-  return constraint.HasMin() || constraint.HasExact();
-}
-
-template <typename ConstraintType>
-auto ConstraintMax(const ConstraintType& constraint)
-    -> decltype(constraint.Max()) {
-  DCHECK(ConstraintHasMax(constraint));
-  return constraint.HasExact() ? constraint.Exact() : constraint.Max();
-}
-
-template <typename ConstraintType>
-auto ConstraintMin(const ConstraintType& constraint)
-    -> decltype(constraint.Min()) {
-  DCHECK(ConstraintHasMin(constraint));
-  return constraint.HasExact() ? constraint.Exact() : constraint.Min();
-}
 
 // If |value| is outside the range of |constraint|, returns the name of the
 // failed constraint. Otherwise, returns nullptr. The return value converts to
@@ -331,30 +297,34 @@ bool IsDeviceCapture(const blink::WebMediaConstraints& constraints);
 // This function selects track settings from a set of candidate resolutions and
 // frame rates, given the source video-capture format and ideal values.
 // The output are settings for a VideoTrackAdapter, which can adjust the
-// resolution and frame rate of the source, and consist of maximum (or
-// target) width, height and frame rate, and minimum and maximum aspect ratio.
+// resolution and frame rate of the source, and consist of
+// target width, height and frame rate, and minimum and maximum aspect ratio.
 // * Minimum and maximum aspect ratios are taken from |resolution_set| and are
 //   not affected by ideal values.
 // * The selected frame rate is always the value within the |frame_rate_set|
-//   range that is closest to the ideal frame rate (or the source frame rate
-//   if no ideal is supplied). If the chosen frame rate is greater than or equal
-//   to the source's frame rate, a value of 0.0 is returned, which means that
-//   there will be no frame-rate adjustment.
-// * Width and height are selected using the
-//   ResolutionSet::SelectClosestPointToIdeal function, using ideal values from
+//   range that is closest to the ideal frame rate (or closest to the source
+//   frame rate if no ideal is supplied). If the chosen frame rate is greater
+//   than or equal to the source's frame rate, a value of 0.0 is returned, which
+//   means that there will be no frame-rate adjustment.
+// * If |enable_rescale| is false, no target width and height are computed.
+// * If |enable_rescale| is true, the target width and height are selected using
+//   the ResolutionSet::SelectClosestPointToIdeal function, using ideal values
+//   for the width, height and aspectRatio properties from
 //   |basic_constraint_set| and using the source's width and height as the
 //   default resolution. The width and height returned by
 //   SelectClosestPointToIdeal are rounded to the nearest int. For more details,
 //   see the documentation for ResolutionSet::SelectClosestPointToIdeal.
 // Note that this function ignores the min/max/exact values from
-// |basic_constraint_set|. Only its ideal values are used.
+// |basic_constraint_set|. Only the ideal values for the width, height,
+// aspectRatio and frameRate are used.
 // This function has undefined behavior if any of |resolution_set| or
 // |frame_rate_set| are empty.
-VideoTrackAdapterSettings CONTENT_EXPORT SelectVideoTrackAdapterSettings(
+CONTENT_EXPORT VideoTrackAdapterSettings SelectVideoTrackAdapterSettings(
     const blink::WebMediaTrackConstraintSet& basic_constraint_set,
     const media_constraints::ResolutionSet& resolution_set,
     const media_constraints::NumericRangeSet<double>& frame_rate_set,
-    const media::VideoCaptureFormat& source_format);
+    const media::VideoCaptureFormat& source_format,
+    bool enable_rescale);
 
 // Generic distance function between two values for numeric constraints. Based
 // on the fitness-distance function described in
@@ -369,7 +339,7 @@ double StringConstraintFitnessDistance(
 
 // This method computes capabilities for a video source based on the given
 // |formats|. |facing_mode| is valid only in case of video device capture.
-blink::WebMediaStreamSource::Capabilities CONTENT_EXPORT
+CONTENT_EXPORT blink::WebMediaStreamSource::Capabilities
 ComputeCapabilitiesForVideoSource(
     const blink::WebString& device_id,
     const media::VideoCaptureFormats& formats,

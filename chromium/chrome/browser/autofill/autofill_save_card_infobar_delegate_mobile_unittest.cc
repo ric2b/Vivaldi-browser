@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -50,7 +51,15 @@ class AutofillSaveCardInfoBarDelegateMobileTest
   std::unique_ptr<TestPersonalDataManager> personal_data_;
 
  private:
-  void UploadSaveCardCallback(const base::string16& cardholder_name) {
+  void LocalSaveCardPromptCallback(
+      AutofillClient::SaveCardOfferUserDecision user_decision) {
+    personal_data_.get()->SaveImportedCreditCard(credit_card_to_save_);
+  }
+
+  void UploadSaveCardPromptCallback(
+      AutofillClient::SaveCardOfferUserDecision user_decision,
+      const AutofillClient::UserProvidedCardDetails&
+          user_provided_card_details) {
     personal_data_.get()->SaveImportedCreditCard(credit_card_to_save_);
   }
 
@@ -68,7 +77,8 @@ AutofillSaveCardInfoBarDelegateMobileTest::
 void AutofillSaveCardInfoBarDelegateMobileTest::SetUp() {
   ChromeRenderViewHostTestHarness::SetUp();
 
-  PersonalDataManagerFactory::GetInstance()->SetTestingFactory(profile(), NULL);
+  PersonalDataManagerFactory::GetInstance()->SetTestingFactory(
+      profile(), BrowserContextKeyedServiceFactory::TestingFactory());
 
   personal_data_.reset(new TestPersonalDataManager());
   personal_data_->SetPrefService(profile()->GetPrefs());
@@ -102,7 +112,7 @@ AutofillSaveCardInfoBarDelegateMobileTest::CreateDelegateWithLegalMessage(
   std::unique_ptr<base::DictionaryValue> legal_message;
   if (!legal_message_string.empty()) {
     std::unique_ptr<base::Value> value(
-        base::JSONReader::Read(legal_message_string));
+        base::JSONReader::ReadDeprecated(legal_message_string));
     EXPECT_TRUE(value);
     base::DictionaryValue* dictionary;
     EXPECT_TRUE(value->GetAsDictionary(&dictionary));
@@ -116,26 +126,28 @@ AutofillSaveCardInfoBarDelegateMobileTest::CreateDelegateWithLegalMessage(
     credit_card_to_save_ = credit_card;
     std::unique_ptr<ConfirmInfoBarDelegate> delegate(
         new AutofillSaveCardInfoBarDelegateMobile(
-            is_uploading, credit_card, std::move(legal_message),
+            is_uploading, AutofillClient::SaveCreditCardOptions(), credit_card,
+            std::move(legal_message),
             /*upload_save_card_callback=*/
             base::BindOnce(&AutofillSaveCardInfoBarDelegateMobileTest::
-                               UploadSaveCardCallback,
+                               UploadSaveCardPromptCallback,
                            base::Unretained(this)),
-            /*local_save_card_callback=*/base::Closure(),
-            profile()->GetPrefs()));
+            /*local_save_card_callback=*/{}, profile()->GetPrefs(),
+            /*is_off_the_record=*/false));
     return delegate;
   }
   // Local save infobar delegate:
+  credit_card_to_save_ = credit_card;
   std::unique_ptr<ConfirmInfoBarDelegate> delegate(
       new AutofillSaveCardInfoBarDelegateMobile(
-          is_uploading, credit_card, std::move(legal_message),
-          /*upload_save_card_callback=*/
-          base::OnceCallback<void(const base::string16&)>(),
+          is_uploading, AutofillClient::SaveCreditCardOptions(), credit_card,
+          std::move(legal_message),
+          /*upload_save_card_callback=*/{},
           /*local_save_card_callback=*/
-          base::Bind(base::IgnoreResult(
-                         &TestPersonalDataManager::SaveImportedCreditCard),
-                     base::Unretained(personal_data_.get()), credit_card),
-          profile()->GetPrefs()));
+          base::BindOnce(&AutofillSaveCardInfoBarDelegateMobileTest::
+                             LocalSaveCardPromptCallback,
+                         base::Unretained(this)),
+          profile()->GetPrefs(), /*is_off_the_record=*/false));
   return delegate;
 }
 

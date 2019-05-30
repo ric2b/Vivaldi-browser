@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ca">
+<translation id="1158503667684816647">No mostris més aquesta confirmació</translation>
 <translation id="1411638389238344450">Envia l'Enllaç per Correu</translation>
 <translation id="1728549374069268714">Enganxa i vés-hi</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -14,6 +15,7 @@
 <translation id="3732157130969736834">Guarda l'Enllaç als Marcadors</translation>
 <translation id="3914946330804881301">Importat des de l'Opera</translation>
 <translation id="4073157431025461511">&amp;No ho vull veure més</translation>
+<translation id="4420816922321010053">Esteu segur de voler sortir?</translation>
 <translation id="4515472507709384008">Opera versió 15+</translation>
 <translation id="4636708767492582204">Envia per Correu</translation>
 <translation id="5014281392052865061">Marcadors Ràpids importats</translation>
@@ -21,6 +23,7 @@
 <translation id="5238244642230426581">Marcadors importats</translation>
 <translation id="5388358297987318779">Obre la imatge</translation>
 <translation id="5416008465899576639">Una nova versió del Vivaldi està disponible.</translation>
+<translation id="5497042274492038489">Finestra de confirmació de tancament</translation>
 <translation id="5615637589913244581">Opera versió 15+ (Beta)</translation>
 <translation id="5916080360077521750">Malauradament, la teva configuració del Chrome no està disponible mentre aquest estigui obert. Per a importar la configuració, guardeu la vostra feina i tanqueu totes les finestres del Chrome. Aleshores, cliqueu Continua.</translation>
 <translation id="6229528619562190452">Fes clic aquí per a actualitzar el Vivaldi.</translation>
@@ -32,9 +35,9 @@
 <translation id="6804831687363620480">Malauradament, la teva configuració de l'Opera 15+ no està disponible mentre aquest estigui obert. Per a importar la configuració, guardeu la vostra feina i tanqueu totes les finestres de l'Opera 15+. Aleshores, cliqueu Continua.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7715497554424665066">&amp;Ignora l'actualització</translation>
+<translation id="7865983598101744945">Confirma la sortida</translation>
 <translation id="8197810018650377191">Guarda als Marcadors</translation>
 <translation id="864444594187862076">Opera version 15+ (Desenvolupador)</translation>
-<translation id="8647783768664050873">Fes clic aquí per a actualitzar el Vivaldi a la versió $1.</translation>
 <translation id="8651348004684669199">Afegeix la Pestanya Activa</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8773635261052182196">No tornaràs a veure aquestes notificacions. Pots activar-les de nou des de la Configuració del Vivaldi.</translation>

@@ -6,10 +6,12 @@
 #define CHROME_BROWSER_EXTENSIONS_API_STORAGE_SYNC_VALUE_STORE_CACHE_H_
 
 #include <memory>
+#include <string>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "components/sync/model/syncable_service.h"
 #include "extensions/browser/api/storage/settings_observer.h"
 #include "extensions/browser/api/storage/value_store_cache.h"
@@ -31,11 +33,12 @@ class ValueStoreFactory;
 // another for extensions. Each backend takes care of persistence and syncing.
 class SyncValueStoreCache : public ValueStoreCache {
  public:
-  SyncValueStoreCache(const scoped_refptr<ValueStoreFactory>& factory,
-                      const scoped_refptr<SettingsObserverList>& observers,
+  SyncValueStoreCache(scoped_refptr<ValueStoreFactory> factory,
+                      scoped_refptr<SettingsObserverList> observers,
                       const base::FilePath& profile_path);
   ~SyncValueStoreCache() override;
 
+  base::WeakPtr<SyncValueStoreCache> AsWeakPtr();
   syncer::SyncableService* GetSyncableService(syncer::ModelType type) const;
 
   // ValueStoreCache implementation:
@@ -45,13 +48,14 @@ class SyncValueStoreCache : public ValueStoreCache {
   void DeleteStorageSoon(const std::string& extension_id) override;
 
  private:
-  void InitOnBackend(const scoped_refptr<ValueStoreFactory>& factory,
-                     const scoped_refptr<SettingsObserverList>& observers,
+  void InitOnBackend(scoped_refptr<ValueStoreFactory> factory,
+                     scoped_refptr<SettingsObserverList> observers,
                      const base::FilePath& profile_path);
 
   bool initialized_;
   std::unique_ptr<SyncStorageBackend> app_backend_;
   std::unique_ptr<SyncStorageBackend> extension_backend_;
+  base::WeakPtrFactory<SyncValueStoreCache> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SyncValueStoreCache);
 };

@@ -102,8 +102,7 @@ class ModuleDatabase : public ModuleDatabaseEventSource {
   void OnModuleLoad(content::ProcessType process_type,
                     const base::FilePath& module_path,
                     uint32_t module_size,
-                    uint32_t module_time_date_stamp,
-                    uintptr_t module_load_address);
+                    uint32_t module_time_date_stamp);
 
   void OnModuleBlocked(const base::FilePath& module_path,
                        uint32_t module_size,
@@ -140,6 +139,15 @@ class ModuleDatabase : public ModuleDatabaseEventSource {
   // Returns false if third-party modules blocking is disabled via
   // administrative policy.
   static bool IsThirdPartyBlockingPolicyEnabled();
+
+  // Disables the blocking of third-party modules in the browser process. It is
+  // safe to invoke this function from any thread.
+  // This function is meant to be used only as a workaround for the in-process
+  // printing code that may require that third-party DLLs be successfully
+  // loaded into the process to work correctly.
+  // TODO(pmonette): Remove this workaround when printing is moved to a utility
+  //                 process. See https://crbug.com/892294.
+  static void DisableThirdPartyBlocking();
 
   // Accessor for the third party conflicts manager.
   // Returns null if both the tracking of incompatible applications and the
@@ -190,9 +198,8 @@ class ModuleDatabase : public ModuleDatabaseEventSource {
   void OnRegisteredModulesEnumerated();
 
   // Callback for ModuleInspector.
-  void OnModuleInspected(
-      const ModuleInfoKey& module_key,
-      std::unique_ptr<ModuleInspectionResult> inspection_result);
+  void OnModuleInspected(const ModuleInfoKey& module_key,
+                         ModuleInspectionResult inspection_result);
 
   // If the ModuleDatabase is truly idle, calls EnterIdleState().
   void OnDelayExpired();

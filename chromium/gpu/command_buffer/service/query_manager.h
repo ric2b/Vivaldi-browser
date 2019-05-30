@@ -8,6 +8,8 @@
 #include <stdint.h>
 
 #include <memory>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "base/atomicops.h"
@@ -78,6 +80,9 @@ class GPU_GLES2_EXPORT QueryManager {
     virtual void Resume() = 0;
 
     virtual void Destroy(bool have_context) = 0;
+
+    virtual void BeginProcessingCommands() {}
+    virtual void EndProcessingCommands() {}
 
     void AddCallback(base::OnceClosure callback);
 
@@ -202,6 +207,9 @@ class GPU_GLES2_EXPORT QueryManager {
   void PauseQueries();
   void ResumeQueries();
 
+  void BeginProcessingCommands();
+  void EndProcessingCommands();
+
   // Processes pending queries. Returns false if any queries are pointing
   // to invalid shared memory. |did_finish| is true if this is called as
   // a result of calling glFinish().
@@ -239,10 +247,10 @@ class GPU_GLES2_EXPORT QueryManager {
   unsigned query_count_;
 
   // Info for each query in the system.
-  using QueryMap = base::hash_map<GLuint, scoped_refptr<Query>>;
+  using QueryMap = std::unordered_map<GLuint, scoped_refptr<Query>>;
   QueryMap queries_;
 
-  using GeneratedQueryIds = base::hash_set<GLuint>;
+  using GeneratedQueryIds = std::unordered_set<GLuint>;
   GeneratedQueryIds generated_query_ids_;
 
   // A map of targets -> Query for current active queries.

@@ -193,7 +193,7 @@ FileSystemURL ExternalMountPoints::CrackURL(const GURL& url) const {
 }
 
 FileSystemURL ExternalMountPoints::CreateCrackedFileSystemURL(
-    const GURL& origin,
+    const url::Origin& origin,
     FileSystemType type,
     const base::FilePath& path) const {
   return CrackFileSystemURL(FileSystemURL(origin, type, path));
@@ -236,8 +236,7 @@ FileSystemURL ExternalMountPoints::CreateExternalFileSystemURL(
     const std::string& mount_name,
     const base::FilePath& path) const {
   return CreateCrackedFileSystemURL(
-      origin,
-      storage::kFileSystemTypeExternal,
+      url::Origin::Create(origin), storage::kFileSystemTypeExternal,
       // Avoid using FilePath::Append as path may be an absolute path.
       base::FilePath(CreateVirtualRootPath(mount_name).value() +
                      base::FilePath::kSeparators[0] + path.value()));
@@ -329,8 +328,7 @@ bool ExternalMountPoints::ValidateNewMountPoint(const std::string& mount_name,
       }
     }
 
-    std::map<base::FilePath, std::string>::iterator potential_child =
-        path_to_name_map_.upper_bound(path);
+    auto potential_child = path_to_name_map_.upper_bound(path);
     if (potential_child != path_to_name_map_.end()) {
       if (potential_child->first == path ||
           path.IsParent(potential_child->first)) {

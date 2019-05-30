@@ -16,7 +16,6 @@
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
@@ -29,12 +28,12 @@
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/buildflags.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/data_pack.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
-#include "ui/base/ui_features.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/codec/jpeg_codec.h"
@@ -51,7 +50,7 @@
 #endif
 
 #if defined(OS_CHROMEOS)
-#include "ui/gfx/platform_font_linux.h"
+#include "ui/gfx/platform_font_skia.h"
 #endif
 
 #if defined(OS_WIN)
@@ -154,23 +153,28 @@ class ResourceBundle::ResourceBundleImageSource : public gfx::ImageSkiaSource {
 };
 
 struct ResourceBundle::FontKey {
-  FontKey(int in_size_delta,
+  FontKey(const std::string& typeface,
+          int in_size_delta,
           gfx::Font::FontStyle in_style,
           gfx::Font::Weight in_weight)
-      : size_delta(in_size_delta), style(in_style), weight(in_weight) {}
+      : typeface(typeface),
+        size_delta(in_size_delta),
+        style(in_style),
+        weight(in_weight) {}
 
   ~FontKey() {}
 
   bool operator==(const FontKey& rhs) const {
-    return std::tie(size_delta, style, weight) ==
-           std::tie(rhs.size_delta, rhs.style, rhs.weight);
+    return std::tie(typeface, size_delta, style, weight) ==
+           std::tie(rhs.typeface, rhs.size_delta, rhs.style, rhs.weight);
   }
 
   bool operator<(const FontKey& rhs) const {
-    return std::tie(size_delta, style, weight) <
-           std::tie(rhs.size_delta, rhs.style, rhs.weight);
+    return std::tie(typeface, size_delta, style, weight) <
+           std::tie(rhs.typeface, rhs.size_delta, rhs.style, rhs.weight);
   }
 
+  std::string typeface;
   int size_delta;
   gfx::Font::FontStyle style;
   gfx::Font::Weight weight;
@@ -243,6 +247,7 @@ void ResourceBundle::LoadSecondaryLocaleDataWithPakFileRegion(
 }
 
 #if !defined(OS_ANDROID)
+// static
 bool ResourceBundle::LocaleDataPakExists(const std::string& locale) {
   bool locale_file_path_exists = !GetLocaleFilePath(locale, true).empty();
   if (!locale_file_path_exists) {
@@ -251,18 +256,6 @@ bool ResourceBundle::LocaleDataPakExists(const std::string& locale) {
   return locale_file_path_exists;
 }
 #endif  // !defined(OS_ANDROID)
-
-void ResourceBundle::AddDataPack(std::unique_ptr<DataPack> data_pack) {
-#if DCHECK_IS_ON()
-  data_pack->CheckForDuplicateResources(data_packs_);
-#endif
-
-  if (GetScaleForScaleFactor(data_pack->GetScaleFactor()) >
-      GetScaleForScaleFactor(max_scale_factor_))
-    max_scale_factor_ = data_pack->GetScaleFactor();
-
-  data_packs_.push_back(std::move(data_pack));
-}
 
 void ResourceBundle::AddDataPackFromPath(const base::FilePath& path,
                                          ScaleFactor scale_factor) {
@@ -305,6 +298,7 @@ void ResourceBundle::AddDataPackFromFileRegion(
 }
 
 #if !defined(OS_MACOSX)
+// static
 base::FilePath ResourceBundle::GetLocaleFilePath(const std::string& app_locale,
                                                  bool test_file_exists) {
   if (app_locale.empty())
@@ -333,9 +327,14 @@ base::FilePath ResourceBundle::GetLocaleFilePath(const std::string& app_locale,
 #endif
   }
 
-  if (delegate_) {
-    locale_file_path =
-        delegate_->GetPathForLocalePack(locale_file_path, app_locale);
+  // Note: The delegate GetPathForLocalePack() override is currently only used
+  // by CastResourceDelegate, which does not call this function prior to
+  // initializing the ResourceBundle. This called earlier than that by the
+  // variations code which also has a CHECK that an inconsistent value does not
+  // get returned via VariationsService::EnsureLocaleEquals().
+  if (HasSharedInstance() && GetSharedInstance().delegate_) {
+    locale_file_path = GetSharedInstance().delegate_->GetPathForLocalePack(
+        locale_file_path, app_locale);
   }
 
   // Don't try to load empty values or values that are not absolute paths.
@@ -414,9 +413,9 @@ void ResourceBundle::OverrideLocalePakForTest(const base::FilePath& pak_path) {
 }
 
 void ResourceBundle::OverrideLocaleStringResource(
-    int message_id,
+    int resource_id,
     const base::string16& string) {
-  overridden_locale_strings_[message_id] = string;
+  overridden_locale_strings_[resource_id] = string;
 }
 
 const base::FilePath& ResourceBundle::GetOverriddenPakPath() {
@@ -568,62 +567,16 @@ base::StringPiece ResourceBundle::GetRawDataResourceForScale(
   return base::StringPiece();
 }
 
-base::string16 ResourceBundle::GetLocalizedString(int message_id) {
-  base::string16 string;
-  if (delegate_ && delegate_->GetLocalizedString(message_id, &string))
-    return MaybeMangleLocalizedString(string);
-
-  // Ensure that ReloadLocaleResources() doesn't drop the resources while
-  // we're using them.
-  base::AutoLock lock_scope(*locale_resources_data_lock_);
-
-  IdToStringMap::const_iterator it =
-      overridden_locale_strings_.find(message_id);
-  if (it != overridden_locale_strings_.end())
-    return MaybeMangleLocalizedString(it->second);
-
-  // If for some reason we were unable to load the resources , return an empty
-  // string (better than crashing).
-  if (!locale_resources_data_.get()) {
-    LOG(WARNING) << "locale resources are not loaded";
-    return base::string16();
+base::string16 ResourceBundle::GetLocalizedString(int resource_id) {
+#if DCHECK_IS_ON()
+  {
+    base::AutoLock lock_scope(*locale_resources_data_lock_);
+    // Overriding locale strings isn't supported if the first string resource
+    // has already been queried.
+    can_override_locale_string_resources_ = false;
   }
-
-  base::StringPiece data;
-  ResourceHandle::TextEncodingType encoding =
-      locale_resources_data_->GetTextEncodingType();
-  if (!locale_resources_data_->GetStringPiece(static_cast<uint16_t>(message_id),
-                                              &data)) {
-    if (secondary_locale_resources_data_.get() &&
-        secondary_locale_resources_data_->GetStringPiece(
-            static_cast<uint16_t>(message_id), &data)) {
-      // Fall back on the secondary locale pak if it exists.
-      encoding = secondary_locale_resources_data_->GetTextEncodingType();
-    } else {
-      // Fall back on the main data pack (shouldn't be any strings here except
-      // in unittests).
-      data = GetRawDataResource(message_id);
-      if (data.empty()) {
-        LOG(WARNING) << "unable to find resource: " << message_id;
-        NOTREACHED();
-        return base::string16();
-      }
-    }
-  }
-
-  // Strings should not be loaded from a data pack that contains binary data.
-  DCHECK(encoding == ResourceHandle::UTF16 || encoding == ResourceHandle::UTF8)
-      << "requested localized string from binary pack file";
-
-  // Data pack encodes strings as either UTF8 or UTF16.
-  base::string16 msg;
-  if (encoding == ResourceHandle::UTF16) {
-    msg = base::string16(reinterpret_cast<const base::char16*>(data.data()),
-                         data.length() / 2);
-  } else if (encoding == ResourceHandle::UTF8) {
-    msg = base::UTF8ToUTF16(data);
-  }
-  return MaybeMangleLocalizedString(msg);
+#endif
+  return GetLocalizedStringImpl(resource_id);
 }
 
 base::RefCountedMemory* ResourceBundle::LoadLocalizedResourceBytes(
@@ -654,16 +607,34 @@ const gfx::FontList& ResourceBundle::GetFontListWithDelta(
     int size_delta,
     gfx::Font::FontStyle style,
     gfx::Font::Weight weight) {
+  return GetFontListWithTypefaceAndDelta(/*typeface=*/std::string(), size_delta,
+                                         style, weight);
+}
+
+const gfx::FontList& ResourceBundle::GetFontListWithTypefaceAndDelta(
+    const std::string& typeface,
+    int size_delta,
+    gfx::Font::FontStyle style,
+    gfx::Font::Weight weight) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  const FontKey styled_key(size_delta, style, weight);
+  const FontKey styled_key(typeface, size_delta, style, weight);
 
   auto found = font_cache_.find(styled_key);
   if (found != font_cache_.end())
     return found->second;
 
-  const FontKey base_key(0, gfx::Font::NORMAL, gfx::Font::Weight::NORMAL);
-  gfx::FontList& base = font_cache_[base_key];
+  const FontKey base_key(typeface, 0, gfx::Font::NORMAL,
+                         gfx::Font::Weight::NORMAL);
+  gfx::FontList default_font_list = gfx::FontList();
+  gfx::FontList base_font_list =
+      typeface.empty()
+          ? default_font_list
+          : gfx::FontList({typeface}, default_font_list.GetFontStyle(),
+                          default_font_list.GetFontSize(),
+                          default_font_list.GetFontWeight());
+  font_cache_.insert({base_key, base_font_list});
+  gfx::FontList& base = font_cache_.find(base_key)->second;
   if (styled_key == base_key)
     return base;
 
@@ -671,15 +642,16 @@ const gfx::FontList& ResourceBundle::GetFontListWithDelta(
   // Cache the unstyled font by first inserting a default-constructed font list.
   // Then, derive it for the initial insertion, or use the iterator that points
   // to the existing entry that the insertion collided with.
-  const FontKey sized_key(size_delta, gfx::Font::NORMAL,
+  const FontKey sized_key(typeface, size_delta, gfx::Font::NORMAL,
                           gfx::Font::Weight::NORMAL);
-  auto sized = font_cache_.insert(std::make_pair(sized_key, gfx::FontList()));
+  auto sized = font_cache_.insert(std::make_pair(sized_key, base_font_list));
   if (sized.second)
     sized.first->second = base.DeriveWithSizeDelta(size_delta);
-  if (styled_key == sized_key)
+  if (styled_key == sized_key) {
     return sized.first->second;
+  }
 
-  auto styled = font_cache_.insert(std::make_pair(styled_key, gfx::FontList()));
+  auto styled = font_cache_.insert(std::make_pair(styled_key, base_font_list));
   DCHECK(styled.second);  // Otherwise font_cache_.find(..) would have found it.
   styled.first->second = sized.first->second.Derive(
       0, sized.first->second.GetFontStyle() | style, weight);
@@ -745,6 +717,13 @@ bool ResourceBundle::IsScaleFactorSupported(ScaleFactor scale_factor) {
   return base::ContainsValue(supported_scale_factors, scale_factor);
 }
 
+void ResourceBundle::CheckCanOverrideStringResources() {
+#if DCHECK_IS_ON()
+  base::AutoLock lock_scope(*locale_resources_data_lock_);
+  DCHECK(can_override_locale_string_resources_);
+#endif
+}
+
 ResourceBundle::ResourceBundle(Delegate* delegate)
     : delegate_(delegate),
       locale_resources_data_lock_(new base::Lock),
@@ -762,7 +741,7 @@ ResourceBundle::~ResourceBundle() {
 void ResourceBundle::InitSharedInstance(Delegate* delegate) {
   DCHECK(g_shared_instance_ == NULL) << "ResourceBundle initialized twice";
   g_shared_instance_ = new ResourceBundle(delegate);
-  static std::vector<ScaleFactor> supported_scale_factors;
+  std::vector<ScaleFactor> supported_scale_factors;
 #if defined(OS_IOS)
   display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
   if (display.device_scale_factor() > 2.0) {
@@ -829,16 +808,32 @@ void ResourceBundle::AddDataPackFromPathInternal(
   }
 }
 
+void ResourceBundle::AddDataPack(std::unique_ptr<DataPack> data_pack) {
+#if DCHECK_IS_ON()
+  data_pack->CheckForDuplicateResources(data_packs_);
+#endif
+
+  if (GetScaleForScaleFactor(data_pack->GetScaleFactor()) >
+      GetScaleForScaleFactor(max_scale_factor_))
+    max_scale_factor_ = data_pack->GetScaleFactor();
+
+  data_packs_.push_back(std::move(data_pack));
+}
+
 void ResourceBundle::InitDefaultFontList() {
 #if defined(OS_CHROMEOS)
-  std::string font_family = base::UTF16ToUTF8(
-      GetLocalizedString(IDS_UI_FONT_FAMILY_CROS));
+  // InitDefaultFontList() is called earlier than overriding the locale strings.
+  // So we call the |GetLocalizedStringImpl()| which doesn't set the flag
+  // |can_override_locale_string_resources_| to false. This is okay, because the
+  // font list doesn't need to be overridden by variations.
+  std::string font_family =
+      base::UTF16ToUTF8(GetLocalizedStringImpl(IDS_UI_FONT_FAMILY_CROS));
   gfx::FontList::SetDefaultFontDescription(font_family);
 
   // TODO(yukishiino): Remove SetDefaultFontDescription() once the migration to
   // the font list is done.  We will no longer need SetDefaultFontDescription()
   // after every client gets started using a FontList instead of a Font.
-  gfx::PlatformFontLinux::SetDefaultFontDescription(font_family);
+  gfx::PlatformFontSkia::SetDefaultFontDescription(font_family);
 #else
   // Use a single default font as the default font list.
   gfx::FontList::SetDefaultFontDescription(std::string());
@@ -919,15 +914,73 @@ gfx::Image& ResourceBundle::GetEmptyImage() {
   return empty_image_;
 }
 
+base::string16 ResourceBundle::GetLocalizedStringImpl(int resource_id) {
+  base::string16 string;
+  if (delegate_ && delegate_->GetLocalizedString(resource_id, &string))
+    return MaybeMangleLocalizedString(string);
+
+  // Ensure that ReloadLocaleResources() doesn't drop the resources while
+  // we're using them.
+  base::AutoLock lock_scope(*locale_resources_data_lock_);
+
+  IdToStringMap::const_iterator it =
+      overridden_locale_strings_.find(resource_id);
+  if (it != overridden_locale_strings_.end())
+    return MaybeMangleLocalizedString(it->second);
+
+  // If for some reason we were unable to load the resources , return an empty
+  // string (better than crashing).
+  if (!locale_resources_data_.get()) {
+    LOG(WARNING) << "locale resources are not loaded";
+    return base::string16();
+  }
+
+  base::StringPiece data;
+  ResourceHandle::TextEncodingType encoding =
+      locale_resources_data_->GetTextEncodingType();
+  if (!locale_resources_data_->GetStringPiece(
+          static_cast<uint16_t>(resource_id), &data)) {
+    if (secondary_locale_resources_data_.get() &&
+        secondary_locale_resources_data_->GetStringPiece(
+            static_cast<uint16_t>(resource_id), &data)) {
+      // Fall back on the secondary locale pak if it exists.
+      encoding = secondary_locale_resources_data_->GetTextEncodingType();
+    } else {
+      // Fall back on the main data pack (shouldn't be any strings here except
+      // in unittests).
+      data = GetRawDataResource(resource_id);
+      if (data.empty()) {
+        LOG(WARNING) << "unable to find resource: " << resource_id;
+        NOTREACHED();
+        return base::string16();
+      }
+    }
+  }
+
+  // Strings should not be loaded from a data pack that contains binary data.
+  DCHECK(encoding == ResourceHandle::UTF16 || encoding == ResourceHandle::UTF8)
+      << "requested localized string from binary pack file";
+
+  // Data pack encodes strings as either UTF8 or UTF16.
+  base::string16 msg;
+  if (encoding == ResourceHandle::UTF16) {
+    msg = base::string16(reinterpret_cast<const base::char16*>(data.data()),
+                         data.length() / 2);
+  } else if (encoding == ResourceHandle::UTF8) {
+    msg = base::UTF8ToUTF16(data);
+  }
+  return MaybeMangleLocalizedString(msg);
+}
+
 // static
 bool ResourceBundle::PNGContainsFallbackMarker(const unsigned char* buf,
                                                size_t size) {
-  if (size < arraysize(kPngMagic) ||
-      memcmp(buf, kPngMagic, arraysize(kPngMagic)) != 0) {
+  if (size < base::size(kPngMagic) ||
+      memcmp(buf, kPngMagic, base::size(kPngMagic)) != 0) {
     // Data invalid or a JPEG.
     return false;
   }
-  size_t pos = arraysize(kPngMagic);
+  size_t pos = base::size(kPngMagic);
 
   // Scan for custom chunks until we find one, find the IDAT chunk, or run out
   // of chunks.
@@ -938,13 +991,12 @@ bool ResourceBundle::PNGContainsFallbackMarker(const unsigned char* buf,
     base::ReadBigEndian(reinterpret_cast<const char*>(buf + pos), &length);
     if (size - pos - kPngChunkMetadataSize < length)
       break;
-    if (length == 0 &&
-        memcmp(buf + pos + sizeof(uint32_t), kPngScaleChunkType,
-               arraysize(kPngScaleChunkType)) == 0) {
+    if (length == 0 && memcmp(buf + pos + sizeof(uint32_t), kPngScaleChunkType,
+                              base::size(kPngScaleChunkType)) == 0) {
       return true;
     }
     if (memcmp(buf + pos + sizeof(uint32_t), kPngDataChunkType,
-               arraysize(kPngDataChunkType)) == 0) {
+               base::size(kPngDataChunkType)) == 0) {
       // Stop looking for custom chunks, any custom chunks should be before an
       // IDAT chunk.
       break;

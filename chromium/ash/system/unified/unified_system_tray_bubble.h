@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "ash/shelf/shelf_observer.h"
 #include "ash/system/screen_layout_observer.h"
 #include "ash/system/tray/time_to_click_recorder.h"
 #include "ash/system/tray/tray_bubble_base.h"
@@ -38,10 +39,12 @@ class UnifiedSystemTrayView;
 class UnifiedSystemTrayBubble : public TrayBubbleBase,
                                 public ash::ScreenLayoutObserver,
                                 public views::WidgetObserver,
+                                public ShelfObserver,
                                 public ::wm::ActivationChangeObserver,
                                 public TimeToClickRecorder::Delegate,
                                 public TabletModeObserver {
  public:
+
   explicit UnifiedSystemTrayBubble(UnifiedSystemTray* tray, bool show_by_click);
   ~UnifiedSystemTrayBubble() override;
 
@@ -74,7 +77,7 @@ class UnifiedSystemTrayBubble : public TrayBubbleBase,
 
   // TrayBubbleBase:
   TrayBackgroundView* GetTray() const override;
-  views::TrayBubbleView* GetBubbleView() const override;
+  TrayBubbleView* GetBubbleView() const override;
   views::Widget* GetBubbleWidget() const override;
 
   // ash::ScreenLayoutObserver:
@@ -94,6 +97,9 @@ class UnifiedSystemTrayBubble : public TrayBubbleBase,
   // TabletModeObserver:
   void OnTabletModeStarted() override;
   void OnTabletModeEnded() override;
+
+  // ShelfObserver:
+  void OnAutoHideStateChanged(ShelfAutoHideState new_state) override;
 
  private:
   friend class UnifiedSystemTrayTestApi;
@@ -132,7 +138,7 @@ class UnifiedSystemTrayBubble : public TrayBubbleBase,
   // Background blur layer that is used during animation.
   std::unique_ptr<ui::LayerOwner> blur_layer_;
 
-  views::TrayBubbleView* bubble_view_ = nullptr;
+  TrayBubbleView* bubble_view_ = nullptr;
   UnifiedSystemTrayView* unified_view_ = nullptr;
 
  private:

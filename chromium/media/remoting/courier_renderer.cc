@@ -21,6 +21,7 @@
 #include "media/base/media_resource.h"
 #include "media/base/renderer_client.h"
 #include "media/base/video_renderer_sink.h"
+#include "media/base/waiting.h"
 #include "media/remoting/demuxer_stream_adapter.h"
 #include "media/remoting/proto_enum_utils.h"
 #include "media/remoting/proto_utils.h"
@@ -90,8 +91,8 @@ CourierRenderer::~CourierRenderer() {
 
   // Post task on main thread to unregister message receiver.
   main_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&RpcBroker::UnregisterMessageReceiverCallback,
-                            rpc_broker_, rpc_handle_));
+      FROM_HERE, base::BindOnce(&RpcBroker::UnregisterMessageReceiverCallback,
+                                rpc_broker_, rpc_handle_));
 
   if (video_renderer_sink_) {
     video_renderer_sink_->PaintSingleFrame(
@@ -109,7 +110,7 @@ void CourierRenderer::Initialize(MediaResource* media_resource,
 
   if (state_ != STATE_UNINITIALIZED) {
     media_task_runner_->PostTask(
-        FROM_HERE, base::Bind(init_cb, PIPELINE_ERROR_INVALID_STATE));
+        FROM_HERE, base::BindOnce(init_cb, PIPELINE_ERROR_INVALID_STATE));
     return;
   }
 
@@ -143,7 +144,7 @@ void CourierRenderer::Initialize(MediaResource* media_resource,
       FROM_HERE,
       base::BindOnce(
           &RendererController::StartDataPipe, controller_,
-          base::Passed(&audio_data_pipe), base::Passed(&video_data_pipe),
+          std::move(audio_data_pipe), std::move(video_data_pipe),
           base::BindOnce(&CourierRenderer::OnDataPipeCreatedOnMainThread,
                          media_task_runner_, weak_factory_.GetWeakPtr(),
                          rpc_broker_)));
@@ -160,7 +161,7 @@ void CourierRenderer::SetCdm(CdmContext* cdm_context,
 void CourierRenderer::Flush(const base::Closure& flush_cb) {
   VLOG(2) << __func__;
   DCHECK(media_task_runner_->BelongsToCurrentThread());
-  DCHECK(flush_cb_.is_null());
+  DCHECK(!flush_cb_);
 
   if (state_ != STATE_PLAYING) {
     DCHECK_EQ(state_, STATE_ERROR);
@@ -294,13 +295,13 @@ void CourierRenderer::OnDataPipeCreatedOnMainThread(
     mojo::ScopedDataPipeProducerHandle video_handle) {
   media_task_runner->PostTask(
       FROM_HERE,
-      base::Bind(&CourierRenderer::OnDataPipeCreated, self,
-                 base::Passed(&audio), base::Passed(&video),
-                 base::Passed(&audio_handle), base::Passed(&video_handle),
-                 rpc_broker ? rpc_broker->GetUniqueHandle()
-                            : RpcBroker::kInvalidHandle,
-                 rpc_broker ? rpc_broker->GetUniqueHandle()
-                            : RpcBroker::kInvalidHandle));
+      base::BindOnce(&CourierRenderer::OnDataPipeCreated, self,
+                     std::move(audio), std::move(video),
+                     std::move(audio_handle), std::move(video_handle),
+                     rpc_broker ? rpc_broker->GetUniqueHandle()
+                                : RpcBroker::kInvalidHandle,
+                     rpc_broker ? rpc_broker->GetUniqueHandle()
+                                : RpcBroker::kInvalidHandle));
 }
 
 void CourierRenderer::OnDataPipeCreated(
@@ -369,9 +370,9 @@ void CourierRenderer::OnMessageReceivedOnMainThread(
     scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
     base::WeakPtr<CourierRenderer> self,
     std::unique_ptr<pb::RpcMessage> message) {
-  media_task_runner->PostTask(FROM_HERE,
-                              base::Bind(&CourierRenderer::OnReceivedRpc, self,
-                                         base::Passed(&message)));
+  media_task_runner->PostTask(
+      FROM_HERE, base::BindOnce(&CourierRenderer::OnReceivedRpc, self,
+                                std::move(message)));
 }
 
 void CourierRenderer::OnReceivedRpc(std::unique_ptr<pb::RpcMessage> message) {
@@ -421,7 +422,7 @@ void CourierRenderer::OnReceivedRpc(std::unique_ptr<pb::RpcMessage> message) {
       break;
     case pb::RpcMessage::RPC_RC_ONWAITINGFORDECRYPTIONKEY:
       VLOG(2) << __func__ << ": Received RPC_RC_ONWAITINGFORDECRYPTIONKEY.";
-      client_->OnWaitingForDecryptionKey();
+      client_->OnWaiting(WaitingReason::kNoDecryptionKey);
       break;
     case pb::RpcMessage::RPC_RC_ONDURATIONCHANGE:
       OnDurationChange(std::move(message));
@@ -436,8 +437,8 @@ void CourierRenderer::SendRpcToRemote(std::unique_ptr<pb::RpcMessage> message) {
   DCHECK(media_task_runner_->BelongsToCurrentThread());
   DCHECK(main_task_runner_);
   main_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&RpcBroker::SendMessageToRemote, rpc_broker_,
-                            base::Passed(&message)));
+      FROM_HERE, base::BindOnce(&RpcBroker::SendMessageToRemote, rpc_broker_,
+                                std::move(message)));
 }
 
 void CourierRenderer::AcquireRendererDone(
@@ -503,14 +504,14 @@ void CourierRenderer::InitializeCallback(
   metrics_recorder_.OnRendererInitialized();
 
   state_ = STATE_PLAYING;
-  base::ResetAndReturn(&init_workflow_done_callback_).Run(PIPELINE_OK);
+  std::move(init_workflow_done_callback_).Run(PIPELINE_OK);
 }
 
 void CourierRenderer::FlushUntilCallback() {
   DCHECK(media_task_runner_->BelongsToCurrentThread());
   VLOG(2) << __func__ << ": Received RPC_R_FLUSHUNTIL_CALLBACK";
 
-  if (state_ != STATE_FLUSHING || flush_cb_.is_null()) {
+  if (state_ != STATE_FLUSHING || !flush_cb_) {
     LOG(WARNING) << "Unexpected flushuntil callback RPC.";
     OnFatalError(PEERS_OUT_OF_SYNC);
     return;
@@ -521,7 +522,7 @@ void CourierRenderer::FlushUntilCallback() {
     audio_demuxer_stream_adapter_->SignalFlush(false);
   if (video_demuxer_stream_adapter_)
     video_demuxer_stream_adapter_->SignalFlush(false);
-  base::ResetAndReturn(&flush_cb_).Run();
+  std::move(flush_cb_).Run();
   ResetMeasurements();
 }
 
@@ -724,8 +725,8 @@ void CourierRenderer::OnFatalError(StopTrigger stop_trigger) {
   if (state_ != STATE_ERROR) {
     state_ = STATE_ERROR;
     main_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&RendererController::OnRendererFatalError,
-                              controller_, stop_trigger));
+        FROM_HERE, base::BindOnce(&RendererController::OnRendererFatalError,
+                                  controller_, stop_trigger));
   }
 
   data_flow_poll_timer_.Stop();
@@ -733,17 +734,17 @@ void CourierRenderer::OnFatalError(StopTrigger stop_trigger) {
   // This renderer will be shut down shortly. To prevent breaking the pipeline,
   // just run the callback without reporting error.
   if (!init_workflow_done_callback_.is_null()) {
-    base::ResetAndReturn(&init_workflow_done_callback_).Run(PIPELINE_OK);
+    std::move(init_workflow_done_callback_).Run(PIPELINE_OK);
     return;
   }
 
-  if (!flush_cb_.is_null())
-    base::ResetAndReturn(&flush_cb_).Run();
+  if (flush_cb_)
+    std::move(flush_cb_).Run();
 }
 
 void CourierRenderer::OnMediaTimeUpdated() {
   DCHECK(media_task_runner_->BelongsToCurrentThread());
-  if (!flush_cb_.is_null())
+  if (flush_cb_)
     return;  // Don't manage and check the queue when Flush() is on-going.
   if (receiver_is_blocked_on_local_demuxers_)
     return;  // Don't manage and check the queue when buffering is on-going.
@@ -785,7 +786,7 @@ void CourierRenderer::OnMediaTimeUpdated() {
 void CourierRenderer::UpdateVideoStatsQueue(int video_frames_decoded,
                                             int video_frames_dropped) {
   DCHECK(media_task_runner_->BelongsToCurrentThread());
-  if (!flush_cb_.is_null())
+  if (flush_cb_)
     return;  // Don't manage and check the queue when Flush() is on-going.
 
   if (!stats_updated_) {

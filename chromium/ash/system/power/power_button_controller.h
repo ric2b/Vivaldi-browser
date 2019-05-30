@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "ash/accelerometer/accelerometer_reader.h"
 #include "ash/ash_export.h"
 #include "ash/system/power/backlights_forced_off_setter.h"
 #include "ash/wm/lock_state_observer.h"
@@ -14,7 +15,6 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
-#include "chromeos/accelerometer/accelerometer_reader.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "ui/display/manager/display_configurator.h"
 
@@ -42,7 +42,7 @@ class PowerButtonScreenshotController;
 class ASH_EXPORT PowerButtonController
     : public display::DisplayConfigurator::Observer,
       public chromeos::PowerManagerClient::Observer,
-      public chromeos::AccelerometerReader::Observer,
+      public AccelerometerReader::Observer,
       public BacklightsForcedOffSetter::Observer,
       public TabletModeObserver,
       public LockStateObserver {
@@ -114,6 +114,9 @@ class ASH_EXPORT PowerButtonController
   // Dismisses the menu.
   void DismissMenu();
 
+  // Do not force backlights to be turned off.
+  void StopForcingBacklightsOff();
+
   // display::DisplayConfigurator::Observer:
   void OnDisplayModeChanged(
       const display::DisplayConfigurator::DisplayStateList& outputs) override;
@@ -133,9 +136,9 @@ class ASH_EXPORT PowerButtonController
 
   // TODO(minch): Remove this if/when all applicable devices expose a tablet
   // mode switch: https://crbug.com/798646.
-  // chromeos::AccelerometerReader::Observer:
+  // AccelerometerReader::Observer:
   void OnAccelerometerUpdated(
-      scoped_refptr<const chromeos::AccelerometerUpdate> update) override;
+      scoped_refptr<const AccelerometerUpdate> update) override;
 
   // BacklightsForcedOffSetter::Observer:
   void OnBacklightsForcedOffChanged(bool forced_off) override;
@@ -153,6 +156,10 @@ class ASH_EXPORT PowerButtonController
   class ActiveWindowWidgetController;
   friend class PowerButtonControllerTestApi;
 
+  // Returns true if tablet power button behavior (i.e. tapping the button turns
+  // the screen off) should currently be used.
+  bool UseTabletBehavior() const;
+
   // Stops |power_button_menu_timer_|, |shutdown_timer_| and dismisses the power
   // button menu.
   void StopTimersAndDismissMenu();
@@ -165,8 +172,8 @@ class ASH_EXPORT PowerButtonController
   // animation.
   void OnPreShutdownTimeout();
 
-  // Updates |button_type_| and |force_clamshell_power_button_| based on the
-  // current command line.
+  // Updates |button_type_| and power button position info based on the current
+  // command line.
   void ProcessCommandLine();
 
   // Initializes tablet power button behavior related member
@@ -214,9 +221,9 @@ class ASH_EXPORT PowerButtonController
   // mode.
   bool observe_accelerometer_events_ = false;
 
-  // True if the device should use non-tablet-style power button behavior even
-  // if it is a convertible device.
-  bool force_clamshell_power_button_ = false;
+  // True if the kForceTabletPowerButton flag is set. This forces tablet power
+  // button behavior even while in laptop mode.
+  bool force_tablet_power_button_ = false;
 
   // True if the device has tablet mode switch.
   bool has_tablet_mode_switch_ = false;
@@ -229,9 +236,6 @@ class ASH_EXPORT PowerButtonController
 
   // True if the next button release event should force the display off.
   bool force_off_on_button_up_ = false;
-
-  // Whether FocusManager can handle arrow key before showing the power menu.
-  const bool arrow_key_traversal_initially_enabled_;
 
   // Used to force backlights off, when needed.
   BacklightsForcedOffSetter* backlights_forced_off_setter_;  // Not owned.

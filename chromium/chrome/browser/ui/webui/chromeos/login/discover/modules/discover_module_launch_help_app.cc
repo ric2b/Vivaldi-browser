@@ -18,7 +18,8 @@ namespace {
 
 class DiscoverModuleLaunchHelpAppHandler : public DiscoverHandler {
  public:
-  DiscoverModuleLaunchHelpAppHandler();
+  explicit DiscoverModuleLaunchHelpAppHandler(
+      JSCallsContainer* js_calls_container);
   ~DiscoverModuleLaunchHelpAppHandler() override = default;
 
  private:
@@ -34,8 +35,10 @@ class DiscoverModuleLaunchHelpAppHandler : public DiscoverHandler {
   DISALLOW_COPY_AND_ASSIGN(DiscoverModuleLaunchHelpAppHandler);
 };
 
-DiscoverModuleLaunchHelpAppHandler::DiscoverModuleLaunchHelpAppHandler()
-    : DiscoverHandler(DiscoverModuleLaunchHelpApp::kModuleName) {}
+DiscoverModuleLaunchHelpAppHandler::DiscoverModuleLaunchHelpAppHandler(
+    JSCallsContainer* js_calls_container)
+    : DiscoverHandler(DiscoverModuleLaunchHelpApp::kModuleName,
+                      js_calls_container) {}
 
 void DiscoverModuleLaunchHelpAppHandler::DeclareLocalizedValues(
     ::login::LocalizedValuesBuilder* builder) {
@@ -45,8 +48,8 @@ void DiscoverModuleLaunchHelpAppHandler::DeclareLocalizedValues(
 void DiscoverModuleLaunchHelpAppHandler::Initialize() {}
 
 void DiscoverModuleLaunchHelpAppHandler::RegisterMessages() {
-  AddPrefixedCallback("handleLaunchHelpApp",
-                      &DiscoverModuleLaunchHelpAppHandler::HandleLaunchHelpApp);
+  AddCallback("discover.launch-help-app.handleLaunchHelpApp",
+              &DiscoverModuleLaunchHelpAppHandler::HandleLaunchHelpApp);
 }
 
 void DiscoverModuleLaunchHelpAppHandler::HandleLaunchHelpApp() {
@@ -70,8 +73,10 @@ bool DiscoverModuleLaunchHelpApp::IsCompleted() const {
 }
 
 std::unique_ptr<DiscoverHandler>
-DiscoverModuleLaunchHelpApp::CreateWebUIHandler() const {
-  return std::make_unique<DiscoverModuleLaunchHelpAppHandler>();
+DiscoverModuleLaunchHelpApp::CreateWebUIHandler(
+    JSCallsContainer* js_calls_container) {
+  return std::make_unique<DiscoverModuleLaunchHelpAppHandler>(
+      js_calls_container);
 }
 
 }  // namespace chromeos

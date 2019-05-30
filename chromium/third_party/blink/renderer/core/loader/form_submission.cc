@@ -51,7 +51,7 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 static int64_t GenerateFormDataIdentifier() {
   // Initialize to the current time to reduce the likelihood of generating
@@ -70,7 +70,8 @@ static void AppendMailtoPostFormDataToURL(KURL& url,
     // Convention seems to be to decode, and s/&/\r\n/. Also, spaces are encoded
     // as %20.
     body = DecodeURLEscapeSequences(
-        body.Replace('&', "\r\n").Replace('+', ' ') + "\r\n");
+        body.Replace('&', "\r\n").Replace('+', ' ') + "\r\n",
+        DecodeURLMode::kUTF8OrIsomorphic);
   }
 
   Vector<char> body_data;
@@ -181,24 +182,26 @@ FormSubmission* FormSubmission::Create(HTMLFormElement* form,
   copied_attributes.CopyFrom(attributes);
   if (submit_button) {
     AtomicString attribute_value;
-    if (!(attribute_value = submit_button->FastGetAttribute(formactionAttr))
+    if (!(attribute_value = submit_button->FastGetAttribute(kFormactionAttr))
              .IsNull())
       copied_attributes.ParseAction(attribute_value);
-    if (!(attribute_value = submit_button->FastGetAttribute(formenctypeAttr))
+    if (!(attribute_value = submit_button->FastGetAttribute(kFormenctypeAttr))
              .IsNull())
       copied_attributes.UpdateEncodingType(attribute_value);
-    if (!(attribute_value = submit_button->FastGetAttribute(formmethodAttr))
+    if (!(attribute_value = submit_button->FastGetAttribute(kFormmethodAttr))
              .IsNull())
       copied_attributes.UpdateMethodType(attribute_value);
-    if (!(attribute_value = submit_button->FastGetAttribute(formtargetAttr))
+    if (!(attribute_value = submit_button->FastGetAttribute(kFormtargetAttr))
              .IsNull())
       copied_attributes.SetTarget(attribute_value);
   }
 
   if (copied_attributes.Method() == kDialogMethod) {
-    if (submit_button)
-      return new FormSubmission(submit_button->ResultForDialogSubmit());
-    return new FormSubmission("");
+    if (submit_button) {
+      return MakeGarbageCollected<FormSubmission>(
+          submit_button->ResultForDialogSubmit());
+    }
+    return MakeGarbageCollected<FormSubmission>("");
   }
 
   Document& document = form->GetDocument();
@@ -232,9 +235,9 @@ FormSubmission* FormSubmission::Create(HTMLFormElement* form,
           ? UTF8Encoding()
           : FormDataEncoder::EncodingFromAcceptCharset(
                 copied_attributes.AcceptCharset(), document.Encoding());
-  FormData* dom_form_data =
-      FormData::Create(data_encoding.EncodingForFormSubmission());
-  form->ConstructFormDataSet(submit_button, *dom_form_data);
+  FormData* dom_form_data = form->ConstructEntryList(
+      submit_button, data_encoding.EncodingForFormSubmission());
+  DCHECK(dom_form_data);
 
   scoped_refptr<EncodedFormData> form_data;
   String boundary;
@@ -259,9 +262,9 @@ FormSubmission* FormSubmission::Create(HTMLFormElement* form,
   AtomicString target_or_base_target = copied_attributes.Target().IsEmpty()
                                            ? document.BaseTarget()
                                            : copied_attributes.Target();
-  return new FormSubmission(copied_attributes.Method(), action_url,
-                            target_or_base_target, encoding_type, form,
-                            std::move(form_data), boundary, event);
+  return MakeGarbageCollected<FormSubmission>(
+      copied_attributes.Method(), action_url, target_or_base_target,
+      encoding_type, form, std::move(form_data), boundary, event);
 }
 
 void FormSubmission::Trace(blink::Visitor* visitor) {
@@ -285,7 +288,7 @@ FrameLoadRequest FormSubmission::CreateFrameLoadRequest(
     frame_request.SetFrameName(target_);
 
   if (method_ == FormSubmission::kPostMethod) {
-    frame_request.GetResourceRequest().SetHTTPMethod(HTTPNames::POST);
+    frame_request.GetResourceRequest().SetHTTPMethod(http_names::kPOST);
     frame_request.GetResourceRequest().SetHTTPBody(form_data_);
 
     // construct some user headers if necessary

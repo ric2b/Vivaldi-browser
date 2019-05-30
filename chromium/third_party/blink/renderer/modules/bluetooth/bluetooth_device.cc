@@ -24,19 +24,11 @@ BluetoothDevice::BluetoothDevice(ExecutionContext* context,
                                  mojom::blink::WebBluetoothDevicePtr device,
                                  Bluetooth* bluetooth)
     : ContextLifecycleObserver(context),
-      attribute_instance_map_(new BluetoothAttributeInstanceMap(this)),
+      attribute_instance_map_(
+          MakeGarbageCollected<BluetoothAttributeInstanceMap>(this)),
       device_(std::move(device)),
       gatt_(BluetoothRemoteGATTServer::Create(context, this)),
       bluetooth_(bluetooth) {}
-
-// static
-BluetoothDevice* BluetoothDevice::Take(
-    ScriptPromiseResolver* resolver,
-    mojom::blink::WebBluetoothDevicePtr device,
-    Bluetooth* bluetooth) {
-  return new BluetoothDevice(resolver->GetExecutionContext(), std::move(device),
-                             bluetooth);
-}
 
 BluetoothRemoteGATTService* BluetoothDevice::GetOrCreateRemoteGATTService(
     mojom::blink::WebBluetoothRemoteGATTServicePtr service,
@@ -79,11 +71,12 @@ bool BluetoothDevice::IsValidDescriptor(const String& descriptor_instance_id) {
 
 void BluetoothDevice::ClearAttributeInstanceMapAndFireEvent() {
   attribute_instance_map_->Clear();
-  DispatchEvent(*Event::CreateBubble(EventTypeNames::gattserverdisconnected));
+  DispatchEvent(
+      *Event::CreateBubble(event_type_names::kGattserverdisconnected));
 }
 
 const WTF::AtomicString& BluetoothDevice::InterfaceName() const {
-  return EventTargetNames::BluetoothDevice;
+  return event_target_names::kBluetoothDevice;
 }
 
 ExecutionContext* BluetoothDevice::GetExecutionContext() const {
@@ -103,7 +96,7 @@ void BluetoothDevice::AddedEventListener(
     RegisteredEventListener& registered_listener) {
   EventTargetWithInlineData::AddedEventListener(event_type,
                                                 registered_listener);
-  if (event_type == EventTypeNames::gattserverdisconnected) {
+  if (event_type == event_type_names::kGattserverdisconnected) {
     UseCounter::Count(GetExecutionContext(),
                       WebFeature::kGATTServerDisconnectedEvent);
   }

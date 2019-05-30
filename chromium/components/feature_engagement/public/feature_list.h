@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/feature_list.h"
+#include "base/stl_util.h"
 #include "build/build_config.h"
 #include "components/feature_engagement/buildflags.h"
 #include "components/feature_engagement/public/feature_constants.h"
@@ -40,13 +41,15 @@ namespace {
 #define VARIATION_ENTRY(base_feature)                                \
   {                                                                  \
     base_feature##Variation[0].param_value, base_feature##Variation, \
-        arraysize(base_feature##Variation), nullptr                  \
+        base::size(base_feature##Variation), nullptr                 \
   }
 
 // Defines a flags_ui::FeatureEntry::FeatureParam for each feature.
 DEFINE_VARIATION_PARAM(kIPHDummyFeature, "IPH_Dummy");
 #if defined(OS_ANDROID)
 DEFINE_VARIATION_PARAM(kIPHDataSaverDetailFeature, "IPH_DataSaverDetail");
+DEFINE_VARIATION_PARAM(kIPHDataSaverMilestonePromoFeature,
+                       "IPH_DataSaverMilestonePromo");
 DEFINE_VARIATION_PARAM(kIPHDataSaverPreviewFeature, "IPH_DataSaverPreview");
 DEFINE_VARIATION_PARAM(kIPHDownloadHomeFeature, "IPH_DownloadHome");
 DEFINE_VARIATION_PARAM(kIPHDownloadPageFeature, "IPH_DownloadPage");
@@ -56,7 +59,6 @@ DEFINE_VARIATION_PARAM(kIPHChromeDuetFeature, "IPH_ChromeDuet");
 DEFINE_VARIATION_PARAM(kIPHChromeHomeExpandFeature, "IPH_ChromeHomeExpand");
 DEFINE_VARIATION_PARAM(kIPHChromeHomePullToRefreshFeature,
                        "IPH_ChromeHomePullToRefresh");
-DEFINE_VARIATION_PARAM(kIPHMediaDownloadFeature, "IPH_MediaDownload");
 DEFINE_VARIATION_PARAM(kIPHContextualSearchWebSearchFeature,
                        "IPH_ContextualSearchWebSearch");
 DEFINE_VARIATION_PARAM(kIPHContextualSearchPromoteTapFeature,
@@ -75,11 +77,21 @@ DEFINE_VARIATION_PARAM(kIPHDownloadInfoBarDownloadsAreFasterFeature,
 DEFINE_VARIATION_PARAM(kIPHHomePageButtonFeature, "IPH_HomePageButton");
 DEFINE_VARIATION_PARAM(kIPHHomepageTileFeature, "IPH_HomepageTile");
 DEFINE_VARIATION_PARAM(kIPHNewTabPageButtonFeature, "IPH_NewTabPageButton");
+DEFINE_VARIATION_PARAM(kIPHPreviewsOmniboxUIFeature, "IPH_PreviewsOmniboxUI");
+DEFINE_VARIATION_PARAM(kIPHTabGroupsQuicklyComparePagesFeature,
+                       "IPH_TabGroupsQuicklyComparePages");
+DEFINE_VARIATION_PARAM(kIPHTabGroupsTapToSeeAnotherTabFeature,
+                       "IPH_TabGroupsTapToSeeAnotherTab");
+DEFINE_VARIATION_PARAM(kIPHTabGroupsYourTabsAreTogetherFeature,
+                       "IPH_TabGroupsYourTabsTogether");
+DEFINE_VARIATION_PARAM(kIPHTranslateMenuButtonFeature,
+                       "IPH_TranslateMenuButton");
 #endif  // defined(OS_ANDROID)
 #if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
 DEFINE_VARIATION_PARAM(kIPHBookmarkFeature, "IPH_Bookmark");
 DEFINE_VARIATION_PARAM(kIPHIncognitoWindowFeature, "IPH_IncognitoWindow");
 DEFINE_VARIATION_PARAM(kIPHNewTabFeature, "IPH_NewTab");
+DEFINE_VARIATION_PARAM(kIPHReopenTabFeature, "IPH_ReopenTab");
 #endif  // BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
 #if defined(OS_IOS)
 DEFINE_VARIATION_PARAM(kIPHBottomToolbarTipFeature, "IPH_BottomToolbarTip");
@@ -99,6 +111,7 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
     kIPHDemoModeChoiceVariations[] = {
 #if defined(OS_ANDROID)
         VARIATION_ENTRY(kIPHDataSaverDetailFeature),
+        VARIATION_ENTRY(kIPHDataSaverMilestonePromoFeature),
         VARIATION_ENTRY(kIPHDataSaverPreviewFeature),
         VARIATION_ENTRY(kIPHDownloadHomeFeature),
         VARIATION_ENTRY(kIPHDownloadPageFeature),
@@ -106,7 +119,6 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHChromeDuetFeature),
         VARIATION_ENTRY(kIPHChromeHomeExpandFeature),
         VARIATION_ENTRY(kIPHChromeHomePullToRefreshFeature),
-        VARIATION_ENTRY(kIPHMediaDownloadFeature),
         VARIATION_ENTRY(kIPHContextualSearchWebSearchFeature),
         VARIATION_ENTRY(kIPHContextualSearchPromoteTapFeature),
         VARIATION_ENTRY(kIPHContextualSearchPromotePanelOpenFeature),
@@ -118,10 +130,16 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHHomePageButtonFeature),
         VARIATION_ENTRY(kIPHHomepageTileFeature),
         VARIATION_ENTRY(kIPHNewTabPageButtonFeature),
+        VARIATION_ENTRY(kIPHPreviewsOmniboxUIFeature),
+        VARIATION_ENTRY(kIPHTabGroupsQuicklyComparePagesFeature),
+        VARIATION_ENTRY(kIPHTabGroupsTapToSeeAnotherTabFeature),
+        VARIATION_ENTRY(kIPHTabGroupsYourTabsAreTogetherFeature),
+        VARIATION_ENTRY(kIPHTranslateMenuButtonFeature),
 #elif BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
         VARIATION_ENTRY(kIPHBookmarkFeature),
         VARIATION_ENTRY(kIPHIncognitoWindowFeature),
         VARIATION_ENTRY(kIPHNewTabFeature),
+        VARIATION_ENTRY(kIPHReopenTabFeature),
 #elif defined(OS_IOS)
         VARIATION_ENTRY(kIPHBottomToolbarTipFeature),
         VARIATION_ENTRY(kIPHLongPressToolbarTipFeature),

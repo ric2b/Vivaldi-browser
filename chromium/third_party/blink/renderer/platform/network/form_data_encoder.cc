@@ -39,7 +39,7 @@ static inline void Append(Vector<char>& buffer, char string) {
 }
 
 static inline void Append(Vector<char>& buffer, const char* string) {
-  buffer.Append(string, strlen(string));
+  buffer.Append(string, static_cast<wtf_size_t>(strlen(string)));
 }
 
 static inline void Append(Vector<char>& buffer, const CString& string) {
@@ -180,7 +180,7 @@ void FormDataEncoder::AddFilenameToMultiPartHeader(
   //
   // See also:
   //
-  // https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#multipart-form-data
+  // https://html.spec.whatwg.org/C/#multipart-form-data
   // https://www.chromestatus.com/features/5634575908732928
   // https://crbug.com/661819
   // https://encoding.spec.whatwg.org/#concept-encoding-process

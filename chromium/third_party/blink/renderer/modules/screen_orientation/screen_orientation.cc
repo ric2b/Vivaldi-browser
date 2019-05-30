@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/stl_util.h"
 #include "third_party/blink/public/common/screen_orientation/web_screen_orientation_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -58,7 +59,7 @@ static ScreenOrientationInfo* OrientationsMap(unsigned& length) {
       {portrait, kWebScreenOrientationLockPortrait},
       {landscape, kWebScreenOrientationLockLandscape},
       {natural, kWebScreenOrientationLockNatural}};
-  length = arraysize(orientation_map);
+  length = base::size(orientation_map);
 
   return orientation_map;
 }
@@ -100,7 +101,8 @@ ScreenOrientation* ScreenOrientation::Create(LocalFrame* frame) {
   if (!ScreenOrientationControllerImpl::From(*frame))
     return nullptr;
 
-  ScreenOrientation* orientation = new ScreenOrientation(frame);
+  ScreenOrientation* orientation =
+      MakeGarbageCollected<ScreenOrientation>(frame);
   DCHECK(orientation->Controller());
   // FIXME: ideally, we would like to provide the ScreenOrientationController
   // the case where it is not defined but for the moment, it is eagerly
@@ -119,7 +121,7 @@ ScreenOrientation::ScreenOrientation(LocalFrame* frame)
 ScreenOrientation::~ScreenOrientation() = default;
 
 const WTF::AtomicString& ScreenOrientation::InterfaceName() const {
-  return EventTargetNames::ScreenOrientation;
+  return event_target_names::kScreenOrientation;
 }
 
 ExecutionContext* ScreenOrientation::GetExecutionContext() const {
@@ -132,7 +134,7 @@ String ScreenOrientation::type() const {
   return OrientationTypeToString(type_);
 }
 
-unsigned short ScreenOrientation::angle() const {
+uint16_t ScreenOrientation::angle() const {
   return angle_;
 }
 
@@ -140,7 +142,7 @@ void ScreenOrientation::SetType(WebScreenOrientationType type) {
   type_ = type;
 }
 
-void ScreenOrientation::SetAngle(unsigned short angle) {
+void ScreenOrientation::SetAngle(uint16_t angle) {
   angle_ = angle;
 }
 

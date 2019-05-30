@@ -37,7 +37,6 @@
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
-#include "third_party/blink/renderer/platform/web_task_runner.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_position.h"
 #include "third_party/blink/renderer/platform/wtf/time.h"
@@ -66,8 +65,6 @@ static const size_t kPendingTokenLimit = 1000;
 static_assert(kOutstandingTokenLimit > kPendingTokenLimit,
               "Outstanding token limit is applied after pending token limit.");
 
-using namespace HTMLNames;
-
 base::WeakPtr<BackgroundHTMLParser> BackgroundHTMLParser::Create(
     std::unique_ptr<Configuration> config,
     scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner) {
@@ -79,11 +76,12 @@ base::WeakPtr<BackgroundHTMLParser> BackgroundHTMLParser::Create(
 void BackgroundHTMLParser::Init(
     const KURL& document_url,
     std::unique_ptr<CachedDocumentParameters> cached_document_parameters,
-    const MediaValuesCached::MediaValuesCachedData& media_values_cached_data) {
+    const MediaValuesCached::MediaValuesCachedData& media_values_cached_data,
+    bool priority_hints_origin_trial_enabled) {
   preload_scanner_.reset(new TokenPreloadScanner(
       document_url, std::move(cached_document_parameters),
-      media_values_cached_data,
-      TokenPreloadScanner::ScannerType::kMainDocument));
+      media_values_cached_data, TokenPreloadScanner::ScannerType::kMainDocument,
+      priority_hints_origin_trial_enabled));
 }
 
 BackgroundHTMLParser::Configuration::Configuration() {}
@@ -233,7 +231,7 @@ void BackgroundHTMLParser::PumpTokenizer() {
       // Break chunks before a script tag is inserted and flag the chunk as
       // starting a script so the main parser can decide if it should yield
       // before processing the chunk.
-      if (simulated_token == HTMLTreeBuilderSimulator::kScriptStart) {
+      if (simulated_token == HTMLTreeBuilderSimulator::kValidScriptStart) {
         EnqueueTokenizedChunk();
         starting_script_ = true;
       }
@@ -249,6 +247,7 @@ void BackgroundHTMLParser::PumpTokenizer() {
     if (simulated_token == HTMLTreeBuilderSimulator::kScriptEnd ||
         simulated_token == HTMLTreeBuilderSimulator::kStyleEnd ||
         simulated_token == HTMLTreeBuilderSimulator::kLink ||
+        simulated_token == HTMLTreeBuilderSimulator::kCustomElementBegin ||
         pending_tokens_.size() >= kPendingTokenLimit) {
       EnqueueTokenizedChunk();
 

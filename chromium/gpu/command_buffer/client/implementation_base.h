@@ -45,11 +45,11 @@ class GLES2_IMPL_EXPORT ImplementationBase
       public GpuControlClient {
  public:
   // The maximum result size from simple GL get commands.
-  static const size_t kMaxSizeOfSimpleResult =
+  static const uint32_t kMaxSizeOfSimpleResult =
       16 * sizeof(uint32_t);  // NOLINT.
 
   // used for testing only. If more things are reseved add them here.
-  static const unsigned int kStartingOffset = kMaxSizeOfSimpleResult;
+  static const uint32_t kStartingOffset = kMaxSizeOfSimpleResult;
 
   // Alignment of allocations.
   static const unsigned int kAlignment = 16;
@@ -97,13 +97,11 @@ class GLES2_IMPL_EXPORT ImplementationBase
 
   // Gets the value of the result.
   template <typename T>
-  T GetResultAs() {
-    return static_cast<T>(GetResultBuffer());
+  ScopedResultPtr<T> GetResultAs() {
+    return ScopedResultPtr<T>(transfer_buffer_);
   }
 
-  void* GetResultBuffer();
   int32_t GetResultShmId();
-  uint32_t GetResultShmOffset();
 
   // TODO(gman): These bucket functions really seem like they belong in
   // CommandBufferHelper (or maybe BucketHelper?). Unfortunately they need
@@ -113,7 +111,7 @@ class GLES2_IMPL_EXPORT ImplementationBase
   bool GetBucketContents(uint32_t bucket_id, std::vector<int8_t>* data);
 
   // Sets the contents of a bucket.
-  void SetBucketContents(uint32_t bucket_id, const void* data, size_t size);
+  void SetBucketContents(uint32_t bucket_id, const void* data, uint32_t size);
 
   // Sets the contents of a bucket as a string.
   void SetBucketAsCString(uint32_t bucket_id, const char* str);

@@ -103,8 +103,7 @@ class ResourceRequestDetectorTest : public testing::Test {
         /*render_process_id=*/0,
         /*render_view_id=*/0,
         /*render_frame_id=*/MSG_ROUTING_NONE,
-        /*is_main_frame=*/true,
-        /*allow_download=*/true,
+        /*is_main_frame=*/true, content::ResourceInterceptPolicy::kAllowAll,
         /*is_async=*/false, content::PREVIEWS_OFF,
         /*navigation_ui_data*/ nullptr);
 
@@ -173,13 +172,15 @@ class ResourceRequestDetectorTest : public testing::Test {
     EXPECT_EQ(expected_type, script_request_incident.type());
   }
 
+ protected:
+  content::TestBrowserThreadBundle thread_bundle_;
+
+ public:
   StrictMock<safe_browsing::MockIncidentReceiver>* mock_incident_receiver_;
   scoped_refptr<MockSafeBrowsingDatabaseManager> mock_database_manager_;
   std::unique_ptr<FakeResourceRequestDetector> fake_resource_request_detector_;
 
  private:
-  // UrlRequest requires a message loop. This provides one.
-  content::TestBrowserThreadBundle thread_bundle_;
   net::TestURLRequestContext context_;
 };
 

@@ -38,7 +38,6 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_abstract_event_listener.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_node.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_script_runner.h"
@@ -52,6 +51,7 @@
 #include "third_party/blink/renderer/platform/heap/heap_stats_collector.h"
 #include "third_party/blink/renderer/platform/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
@@ -75,76 +75,23 @@ Node* V8GCController::OpaqueRootForGC(v8::Isolate*, Node* node) {
   return node;
 }
 
+namespace {
+
 bool IsDOMWrapperClassId(uint16_t class_id) {
   return class_id == WrapperTypeInfo::kNodeClassId ||
          class_id == WrapperTypeInfo::kObjectClassId ||
          class_id == WrapperTypeInfo::kCustomWrappableId;
 }
 
-class MinorGCUnmodifiedWrapperVisitor : public v8::PersistentHandleVisitor {
- public:
-  explicit MinorGCUnmodifiedWrapperVisitor(v8::Isolate* isolate)
-      : isolate_(isolate) {}
-
-  void VisitPersistentHandle(v8::Persistent<v8::Value>* value,
-                             uint16_t class_id) override {
-    if (!IsDOMWrapperClassId(class_id))
-      return;
-
-    if (class_id == WrapperTypeInfo::kCustomWrappableId) {
-      v8::Persistent<v8::Object>::Cast(*value).MarkActive();
-      return;
-    }
-
-    // MinorGC does not collect objects because it may be expensive to
-    // update references during minorGC
-    if (class_id == WrapperTypeInfo::kObjectClassId) {
-      v8::Persistent<v8::Object>::Cast(*value).MarkActive();
-      return;
-    }
-
-    v8::Local<v8::Object> wrapper = v8::Local<v8::Object>::New(
-        isolate_, v8::Persistent<v8::Object>::Cast(*value));
-    DCHECK(V8DOMWrapper::HasInternalFieldsSet(wrapper));
-    if (ToWrapperTypeInfo(wrapper)->IsActiveScriptWrappable() &&
-        ToScriptWrappable(wrapper)->HasPendingActivity()) {
-      v8::Persistent<v8::Object>::Cast(*value).MarkActive();
-      return;
-    }
-
-    if (class_id == WrapperTypeInfo::kNodeClassId) {
-      DCHECK(V8Node::hasInstance(wrapper, isolate_));
-      Node* node = V8Node::ToImpl(wrapper);
-      if (node->HasEventListeners()) {
-        v8::Persistent<v8::Object>::Cast(*value).MarkActive();
-        return;
-      }
-      // FIXME: Remove the special handling for SVG elements.
-      // We currently can't collect SVG Elements from minor gc, as we have
-      // strong references from SVG property tear-offs keeping context SVG
-      // element alive.
-      if (node->IsSVGElement()) {
-        v8::Persistent<v8::Object>::Cast(*value).MarkActive();
-        return;
-      }
-    }
-  }
-
- private:
-  v8::Isolate* isolate_;
-};
-
-static unsigned long long UsedHeapSize(v8::Isolate* isolate) {
+size_t UsedHeapSize(v8::Isolate* isolate) {
   v8::HeapStatistics heap_statistics;
   isolate->GetHeapStatistics(&heap_statistics);
   return heap_statistics.used_heap_size();
 }
 
-namespace {
-
-void VisitWeakHandlesForMinorGC(v8::Isolate* isolate) {
-  MinorGCUnmodifiedWrapperVisitor visitor(isolate);
-  isolate->VisitWeakHandles(&visitor);
+bool IsNestedInV8GC(ThreadState* thread_state, v8::GCType type) {
+  return thread_state && (type == v8::kGCTypeMarkSweepCompact ||
+                          type == v8::kGCTypeIncrementalMarking);
 }
 
 }  // namespace
@@ -153,6 +100,10 @@ void V8GCController::GcPrologue(v8::Isolate* isolate,
                                 v8::GCType type,
                                 v8::GCCallbackFlags flags) {
   RUNTIME_CALL_TIMER_SCOPE(isolate, RuntimeCallStats::CounterId::kGcPrologue);
+  ThreadHeapStatsCollector::BlinkGCInV8Scope nested_scope(
+      IsNestedInV8GC(ThreadState::Current(), type)
+          ? ThreadState::Current()->Heap().stats_collector()
+          : nullptr);
   ScriptForbiddenScope::Enter();
 
   // Attribute garbage collection to the all frames instead of a specific
@@ -172,7 +123,8 @@ void V8GCController::GcPrologue(v8::Isolate* isolate,
     case v8::kGCTypeScavenge:
       TRACE_EVENT_BEGIN1("devtools.timeline,v8", "MinorGC",
                          "usedHeapSizeBefore", UsedHeapSize(isolate));
-      VisitWeakHandlesForMinorGC(isolate);
+      if (ThreadState::Current())
+        ThreadState::Current()->WillStartV8GC(BlinkGC::kV8MinorGC);
       break;
     case v8::kGCTypeMarkSweepCompact:
       if (ThreadState::Current())
@@ -210,12 +162,64 @@ void UpdateCollectedPhantomHandles(v8::Isolate* isolate) {
   stats_collector->IncreaseCollectedWrapperCount(count);
 }
 
+void ScheduleFollowupGCs(ThreadState* thread_state,
+                         v8::GCCallbackFlags flags,
+                         bool is_unified) {
+  DCHECK(!thread_state->IsGCForbidden());
+  // Schedules followup garbage collections. Such garbage collections may be
+  // needed when:
+  // 1. GC is not precise because it has to scan on-stack pointers.
+  // 2. GC needs to reclaim chains persistent handles.
+
+  // v8::kGCCallbackFlagForced is used for testing GCs that need to verify
+  // that objects indeed died.
+  if (flags & v8::kGCCallbackFlagForced) {
+    if (!is_unified) {
+      thread_state->CollectGarbage(
+          BlinkGC::kHeapPointersOnStack, BlinkGC::kAtomicMarking,
+          BlinkGC::kEagerSweeping, BlinkGC::GCReason::kForcedGC);
+    }
+
+    // Forces a precise GC at the end of the current event loop.
+    thread_state->ScheduleFullGC();
+  }
+
+  // In the unified world there is little need to schedule followup garbage
+  // collections as the current GC already computed the whole transitive
+  // closure. We ignore chains of persistent handles here. Cleanup of such
+  // handle chains requires GC loops at the caller side, e.g., see thread
+  // termination.
+  if (is_unified)
+    return;
+
+  if ((flags & v8::kGCCallbackFlagCollectAllAvailableGarbage) ||
+      (flags & v8::kGCCallbackFlagCollectAllExternalMemory)) {
+    // This single GC is not enough. See the above comment.
+    thread_state->CollectGarbage(
+        BlinkGC::kHeapPointersOnStack, BlinkGC::kAtomicMarking,
+        BlinkGC::kEagerSweeping, BlinkGC::GCReason::kForcedGC);
+
+    // The conservative GC might have left floating garbage. Schedule
+    // precise GC to ensure that we collect all available garbage.
+    thread_state->SchedulePreciseGC();
+  }
+
+  // Schedules a precise GC for the next idle time period.
+  if (flags & v8::kGCCallbackScheduleIdleGarbageCollection) {
+    thread_state->ScheduleIdleGC();
+  }
+}
+
 }  // namespace
 
 void V8GCController::GcEpilogue(v8::Isolate* isolate,
                                 v8::GCType type,
                                 v8::GCCallbackFlags flags) {
   RUNTIME_CALL_TIMER_SCOPE(isolate, RuntimeCallStats::CounterId::kGcEpilogue);
+  ThreadHeapStatsCollector::BlinkGCInV8Scope nested_scope(
+      IsNestedInV8GC(ThreadState::Current(), type)
+          ? ThreadState::Current()->Heap().stats_collector()
+          : nullptr);
   UpdateCollectedPhantomHandles(isolate);
   switch (type) {
     case v8::kGCTypeScavenge:
@@ -254,97 +258,72 @@ void V8GCController::GcEpilogue(v8::Isolate* isolate,
 
   ThreadState* current_thread_state = ThreadState::Current();
   if (current_thread_state && !current_thread_state->IsGCForbidden()) {
-    // v8::kGCCallbackFlagForced forces a Blink heap garbage collection
-    // when a garbage collection was forced from V8. This is either used
-    // for tests that force GCs from JavaScript to verify that objects die
-    // when expected.
-    if (flags & v8::kGCCallbackFlagForced) {
-      // This single GC is not enough for two reasons:
-      //   (1) The GC is not precise because the GC scans on-stack pointers
-      //       conservatively.
-      //   (2) One GC is not enough to break a chain of persistent handles. It's
-      //       possible that some heap allocated objects own objects that
-      //       contain persistent handles pointing to other heap allocated
-      //       objects. To break the chain, we need multiple GCs.
-      //
-      // Regarding (1), we force a precise GC at the end of the current event
-      // loop. So if you want to collect all garbage, you need to wait until the
-      // next event loop.  Regarding (2), it would be OK in practice to trigger
-      // only one GC per gcEpilogue, because GCController.collectAll() forces
-      // multiple V8's GC.
-      current_thread_state->CollectGarbage(
-          BlinkGC::kHeapPointersOnStack, BlinkGC::kAtomicMarking,
-          BlinkGC::kEagerSweeping, BlinkGC::GCReason::kForcedGC);
-
-      // Forces a precise GC at the end of the current event loop.
-      current_thread_state->ScheduleFullGC();
-    }
-
-    // v8::kGCCallbackFlagCollectAllAvailableGarbage is used when V8 handles
-    // low memory notifications.
-    if ((flags & v8::kGCCallbackFlagCollectAllAvailableGarbage) ||
-        (flags & v8::kGCCallbackFlagCollectAllExternalMemory)) {
-      // This single GC is not enough. See the above comment.
-      current_thread_state->CollectGarbage(
-          BlinkGC::kHeapPointersOnStack, BlinkGC::kAtomicMarking,
-          BlinkGC::kEagerSweeping, BlinkGC::GCReason::kForcedGC);
-
-      // The conservative GC might have left floating garbage. Schedule
-      // precise GC to ensure that we collect all available garbage.
-      current_thread_state->SchedulePreciseGC();
-    }
-
-    // Schedules a precise GC for the next idle time period.
-    if (flags & v8::kGCCallbackScheduleIdleGarbageCollection) {
-      current_thread_state->ScheduleIdleGC();
-    }
+    ScheduleFollowupGCs(
+        ThreadState::Current(), flags,
+        RuntimeEnabledFeatures::HeapUnifiedGarbageCollectionEnabled());
   }
 
   TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"),
                        "UpdateCounters", TRACE_EVENT_SCOPE_THREAD, "data",
-                       InspectorUpdateCountersEvent::Data());
+                       inspector_update_counters_event::Data());
 }
 
-void V8GCController::CollectGarbage(v8::Isolate* isolate, bool only_minor_gc) {
-  v8::HandleScope handle_scope(isolate);
-  ScriptState* script_state = ScriptState::Create(
-      v8::Context::New(isolate),
-      DOMWrapperWorld::Create(isolate,
-                              DOMWrapperWorld::WorldType::kGarbageCollector));
-  ScriptState::Scope scope(script_state);
-  StringBuilder builder;
-  builder.Append("if (gc) gc(");
-  builder.Append(only_minor_gc ? "true" : "false");
-  builder.Append(");");
-  V8ScriptRunner::CompileAndRunInternalScript(
-      isolate, script_state,
-      ScriptSourceCode(builder.ToString(), ScriptSourceLocationType::kInternal,
-                       nullptr, KURL(), TextPosition()));
-  script_state->DisposePerContextData();
-}
+void V8GCController::CollectAllGarbageForTesting(
+    v8::Isolate* isolate,
+    v8::EmbedderHeapTracer::EmbedderStackState stack_state) {
+  constexpr unsigned kNumberOfGCs = 5;
 
-void V8GCController::CollectAllGarbageForTesting(v8::Isolate* isolate) {
-  for (unsigned i = 0; i < 5; i++)
+  if (stack_state != v8::EmbedderHeapTracer::EmbedderStackState::kUnknown) {
+    V8PerIsolateData* data = V8PerIsolateData::From(isolate);
+    v8::EmbedderHeapTracer* tracer =
+        RuntimeEnabledFeatures::HeapUnifiedGarbageCollectionEnabled()
+            ? static_cast<v8::EmbedderHeapTracer*>(
+                  data->GetUnifiedHeapController())
+            : static_cast<v8::EmbedderHeapTracer*>(
+                  data->GetScriptWrappableMarkingVisitor());
+    // Passing a stack state is only supported when either wrapper tracing or
+    // unified heap is enabled.
+    CHECK(tracer);
+    for (unsigned i = 0; i < kNumberOfGCs; i++)
+      tracer->GarbageCollectionForTesting(stack_state);
+    return;
+  }
+
+  for (unsigned i = 0; i < kNumberOfGCs; i++)
     isolate->RequestGarbageCollectionForTesting(
         v8::Isolate::kFullGarbageCollection);
 }
 
 namespace {
 
-// Traces all DOM persistent handles using the provided visitor.
-class DOMWrapperTracer final : public v8::PersistentHandleVisitor {
+// Visitor forwarding all DOM wrapper handles to the provided Blink visitor.
+class DOMWrapperForwardingVisitor final
+    : public v8::PersistentHandleVisitor,
+      public v8::EmbedderHeapTracer::TracedGlobalHandleVisitor {
  public:
-  explicit DOMWrapperTracer(Visitor* visitor) : visitor_(visitor) {
+  explicit DOMWrapperForwardingVisitor(Visitor* visitor) : visitor_(visitor) {
     DCHECK(visitor_);
   }
 
   void VisitPersistentHandle(v8::Persistent<v8::Value>* value,
                              uint16_t class_id) final {
+    // TODO(mlippautz): There should be no more v8::Persistent that have a class
+    // id set.
+    VisitHandle(value, class_id);
+  }
+
+  void VisitTracedGlobalHandle(const v8::TracedGlobal<v8::Value>& value) final {
+    VisitHandle(&value, value.WrapperClassId());
+  }
+
+ private:
+  template <typename T>
+  void VisitHandle(T* value, uint16_t class_id) {
     if (!IsDOMWrapperClassId(class_id))
       return;
 
     WrapperTypeInfo* wrapper_type_info = const_cast<WrapperTypeInfo*>(
-        ToWrapperTypeInfo(v8::Persistent<v8::Object>::Cast(*value)));
+        ToWrapperTypeInfo(value->template As<v8::Object>()));
 
     // WrapperTypeInfo pointer may have been cleared before termination GCs on
     // worker threads.
@@ -352,50 +331,24 @@ class DOMWrapperTracer final : public v8::PersistentHandleVisitor {
       return;
 
     wrapper_type_info->Trace(
-        visitor_, ToUntypedWrappable(v8::Persistent<v8::Object>::Cast(*value)));
+        visitor_, ToUntypedWrappable(value->template As<v8::Object>()));
   }
 
- private:
   Visitor* const visitor_;
-};
-
-// Purges all DOM persistent handles.
-class DOMWrapperPurger final : public v8::PersistentHandleVisitor {
- public:
-  explicit DOMWrapperPurger(v8::Isolate* isolate)
-      : isolate_(isolate), scope_(isolate) {}
-
-  void VisitPersistentHandle(v8::Persistent<v8::Value>* value,
-                             uint16_t class_id) final {
-    if (!IsDOMWrapperClassId(class_id))
-      return;
-
-    // Clear out wrapper type information, essentially disconnecting the Blink
-    // wrappable from the V8 wrapper. This way, V8 cannot find the C++ object
-    // anymore.
-    int indices[] = {kV8DOMWrapperObjectIndex, kV8DOMWrapperTypeIndex};
-    void* values[] = {nullptr, nullptr};
-    v8::Local<v8::Object> wrapper = v8::Local<v8::Object>::New(
-        isolate_, v8::Persistent<v8::Object>::Cast(*value));
-    wrapper->SetAlignedPointerInInternalFields(base::size(indices), indices,
-                                               values);
-  }
-
- private:
-  v8::Isolate* isolate_;
-  v8::HandleScope scope_;
 };
 
 }  // namespace
 
-void V8GCController::TraceDOMWrappers(v8::Isolate* isolate, Visitor* visitor) {
-  DOMWrapperTracer tracer(visitor);
-  isolate->VisitHandlesWithClassIds(&tracer);
-}
-
-void V8GCController::ClearDOMWrappers(v8::Isolate* isolate) {
-  DOMWrapperPurger purger(isolate);
-  isolate->VisitHandlesWithClassIds(&purger);
+void V8GCController::TraceDOMWrappers(v8::Isolate* isolate,
+                                      Visitor* parent_visitor) {
+  DOMWrapperForwardingVisitor visitor(parent_visitor);
+  isolate->VisitHandlesWithClassIds(&visitor);
+  v8::EmbedderHeapTracer* tracer =
+      V8PerIsolateData::From(isolate)->GetEmbedderHeapTracer();
+  // There may be no tracer during tear down garbage collections.
+  // Not all threads have a tracer attached.
+  if (tracer)
+    tracer->IterateTracedGlobalHandles(&visitor);
 }
 
 }  // namespace blink

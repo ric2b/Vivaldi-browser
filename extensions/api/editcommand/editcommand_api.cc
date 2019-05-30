@@ -61,6 +61,8 @@ bool EditcommandExecuteFunction::RunAsync() {
       web_contents->Paste();
     else if (params->command == "selectAll")
       web_contents->SelectAll();
+    else if (params->command == "pasteAndMatchStyle")
+      web_contents->PasteAndMatchStyle();
   }
 
   SendResponse(true);

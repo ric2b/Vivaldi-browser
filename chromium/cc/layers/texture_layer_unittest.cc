@@ -83,7 +83,7 @@ class MockLayerTreeHost : public LayerTreeHost {
     params.mutator_host = mutator_host;
     LayerTreeSettings settings;
     params.settings = &settings;
-    return base::WrapUnique(new MockLayerTreeHost(&params));
+    return base::WrapUnique(new MockLayerTreeHost(std::move(params)));
   }
 
   MOCK_METHOD0(SetNeedsCommit, void());
@@ -91,8 +91,8 @@ class MockLayerTreeHost : public LayerTreeHost {
   MOCK_METHOD0(StopRateLimiter, void());
 
  private:
-  explicit MockLayerTreeHost(LayerTreeHost::InitParams* params)
-      : LayerTreeHost(params, CompositorMode::SINGLE_THREADED) {
+  explicit MockLayerTreeHost(LayerTreeHost::InitParams params)
+      : LayerTreeHost(std::move(params), CompositorMode::SINGLE_THREADED) {
     InitializeSingleThreaded(&single_thread_client_,
                              base::ThreadTaskRunnerHandle::Get());
   }
@@ -123,11 +123,11 @@ struct CommonResourceObjects {
                      gpu::CommandBufferId::FromUnsafeValue(0x234),
                      2) {
     release_callback1_ =
-        base::Bind(&MockReleaseCallback::Release,
-                   base::Unretained(&mock_callback_), mailbox_name1_);
+        base::BindRepeating(&MockReleaseCallback::Release,
+                            base::Unretained(&mock_callback_), mailbox_name1_);
     release_callback2_ =
-        base::Bind(&MockReleaseCallback::Release,
-                   base::Unretained(&mock_callback_), mailbox_name2_);
+        base::BindRepeating(&MockReleaseCallback::Release,
+                            base::Unretained(&mock_callback_), mailbox_name2_);
     const uint32_t arbitrary_target1 = GL_TEXTURE_2D;
     const uint32_t arbitrary_target2 = GL_TEXTURE_EXTERNAL_OES;
     resource1_ = viz::TransferableResource::MakeGL(
@@ -136,9 +136,9 @@ struct CommonResourceObjects {
         mailbox_name2_, GL_LINEAR, arbitrary_target2, sync_token2_);
     gfx::Size size(128, 128);
     shared_bitmap_id_ = viz::SharedBitmap::GenerateId();
-    sw_release_callback_ =
-        base::Bind(&MockReleaseCallback::Release2,
-                   base::Unretained(&mock_callback_), shared_bitmap_id_);
+    sw_release_callback_ = base::BindRepeating(
+        &MockReleaseCallback::Release2, base::Unretained(&mock_callback_),
+        shared_bitmap_id_);
     sw_resource_ = viz::TransferableResource::MakeSoftware(
         shared_bitmap_id_, size, viz::RGBA_8888);
   }
@@ -175,7 +175,7 @@ class TextureLayerTest : public testing::Test {
         &fake_client_, &task_graph_runner_, animation_host_.get());
     EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(AnyNumber());
     layer_tree_host_->SetViewportSizeAndScale(gfx::Size(10, 10), 1.f,
-                                              viz::LocalSurfaceId());
+                                              viz::LocalSurfaceIdAllocation());
     Mock::VerifyAndClearExpectations(layer_tree_host_.get());
   }
 
@@ -248,8 +248,8 @@ TEST_F(TextureLayerTest, ShutdownWithResource) {
     LayerTreeSettings settings;
     params.settings = &settings;
     params.main_task_runner = base::ThreadTaskRunnerHandle::Get();
-    auto host =
-        LayerTreeHost::CreateSingleThreaded(&single_thread_client, &params);
+    auto host = LayerTreeHost::CreateSingleThreaded(&single_thread_client,
+                                                    std::move(params));
 
     client.SetLayerTreeHost(host.get());
     client.SetUseSoftwareCompositing(!gpu);
@@ -268,7 +268,7 @@ TEST_F(TextureLayerTest, ShutdownWithResource) {
     }
 
     host->SetViewportSizeAndScale(gfx::Size(10, 10), 1.f,
-                                  viz::LocalSurfaceId());
+                                  viz::LocalSurfaceIdAllocation());
     host->SetVisible(true);
     host->SetRootLayer(layer);
 
@@ -683,7 +683,7 @@ class TextureLayerImplWithMailboxThreadedCallback : public LayerTreeTest {
   void SetMailbox(char mailbox_char) {
     EXPECT_EQ(true, main_thread_.CalledOnValidThread());
     std::unique_ptr<viz::SingleReleaseCallback> callback =
-        viz::SingleReleaseCallback::Create(base::Bind(
+        viz::SingleReleaseCallback::Create(base::BindOnce(
             &TextureLayerImplWithMailboxThreadedCallback::ReleaseCallback,
             base::Unretained(this), mailbox_char));
 
@@ -710,7 +710,7 @@ class TextureLayerImplWithMailboxThreadedCallback : public LayerTreeTest {
     root_->AddChild(layer_);
     layer_tree_host()->SetRootLayer(root_);
     layer_tree_host()->SetViewportSizeAndScale(bounds, 1.f,
-                                               viz::LocalSurfaceId());
+                                               viz::LocalSurfaceIdAllocation());
     SetMailbox('1');
     EXPECT_EQ(0, callback_count_);
 
@@ -761,7 +761,7 @@ class TextureLayerMailboxIsActivatedDuringCommit : public LayerTreeTest {
     const gpu::SyncToken sync_token =
         SyncTokenFromUInt(static_cast<uint32_t>(mailbox_char));
     std::unique_ptr<viz::SingleReleaseCallback> callback =
-        viz::SingleReleaseCallback::Create(base::Bind(
+        viz::SingleReleaseCallback::Create(base::BindOnce(
             &TextureLayerMailboxIsActivatedDuringCommit::ReleaseCallback,
             base::Unretained(this), sync_token));
     auto resource = viz::TransferableResource::MakeGL(
@@ -781,7 +781,7 @@ class TextureLayerMailboxIsActivatedDuringCommit : public LayerTreeTest {
     root_->AddChild(layer_);
     layer_tree_host()->SetRootLayer(root_);
     layer_tree_host()->SetViewportSizeAndScale(bounds, 1.f,
-                                               viz::LocalSurfaceId());
+                                               viz::LocalSurfaceIdAllocation());
     SetMailbox('1');
 
     PostSetNeedsCommitToMainThread();
@@ -1027,9 +1027,9 @@ class TextureLayerNoExtraCommitForMailboxTest
     *resource = viz::TransferableResource::MakeGL(MailboxFromChar('1'),
                                                   GL_LINEAR, GL_TEXTURE_2D,
                                                   SyncTokenFromUInt(0x123));
-    *release_callback = viz::SingleReleaseCallback::Create(
-        base::Bind(&TextureLayerNoExtraCommitForMailboxTest::ResourceReleased,
-                   base::Unretained(this)));
+    *release_callback = viz::SingleReleaseCallback::Create(base::BindOnce(
+        &TextureLayerNoExtraCommitForMailboxTest::ResourceReleased,
+        base::Unretained(this)));
     return true;
   }
 
@@ -1101,9 +1101,9 @@ class TextureLayerChangeInvisibleMailboxTest
     if (!resource_changed_)
       return false;
     *resource = resource_;
-    *release_callback = viz::SingleReleaseCallback::Create(
-        base::Bind(&TextureLayerChangeInvisibleMailboxTest::ResourceReleased,
-                   base::Unretained(this)));
+    *release_callback = viz::SingleReleaseCallback::Create(base::BindOnce(
+        &TextureLayerChangeInvisibleMailboxTest::ResourceReleased,
+        base::Unretained(this)));
     return true;
   }
 
@@ -1220,8 +1220,8 @@ class TextureLayerReleaseResourcesBase
     *resource = viz::TransferableResource::MakeGL(
         MailboxFromChar('1'), GL_LINEAR, GL_TEXTURE_2D, SyncTokenFromUInt(1));
     *release_callback = viz::SingleReleaseCallback::Create(
-        base::Bind(&TextureLayerReleaseResourcesBase::ResourceReleased,
-                   base::Unretained(this)));
+        base::BindOnce(&TextureLayerReleaseResourcesBase::ResourceReleased,
+                       base::Unretained(this)));
     return true;
   }
 
@@ -1291,7 +1291,7 @@ class TextureLayerWithResourceMainThreadDeleted : public LayerTreeTest {
   void SetMailbox(char mailbox_char) {
     EXPECT_EQ(true, main_thread_.CalledOnValidThread());
     std::unique_ptr<viz::SingleReleaseCallback> callback =
-        viz::SingleReleaseCallback::Create(base::Bind(
+        viz::SingleReleaseCallback::Create(base::BindOnce(
             &TextureLayerWithResourceMainThreadDeleted::ReleaseCallback,
             base::Unretained(this)));
     auto resource = viz::TransferableResource::MakeGL(
@@ -1312,7 +1312,7 @@ class TextureLayerWithResourceMainThreadDeleted : public LayerTreeTest {
     root_->AddChild(layer_);
     layer_tree_host()->SetRootLayer(root_);
     layer_tree_host()->SetViewportSizeAndScale(bounds, 1.f,
-                                               viz::LocalSurfaceId());
+                                               viz::LocalSurfaceIdAllocation());
   }
 
   void BeginTest() override {
@@ -1361,7 +1361,7 @@ class TextureLayerWithResourceImplThreadDeleted : public LayerTreeTest {
   void SetMailbox(char mailbox_char) {
     EXPECT_EQ(true, main_thread_.CalledOnValidThread());
     std::unique_ptr<viz::SingleReleaseCallback> callback =
-        viz::SingleReleaseCallback::Create(base::Bind(
+        viz::SingleReleaseCallback::Create(base::BindOnce(
             &TextureLayerWithResourceImplThreadDeleted::ReleaseCallback,
             base::Unretained(this)));
     auto resource = viz::TransferableResource::MakeGL(
@@ -1382,7 +1382,7 @@ class TextureLayerWithResourceImplThreadDeleted : public LayerTreeTest {
     root_->AddChild(layer_);
     layer_tree_host()->SetRootLayer(root_);
     layer_tree_host()->SetViewportSizeAndScale(bounds, 1.f,
-                                               viz::LocalSurfaceId());
+                                               viz::LocalSurfaceIdAllocation());
   }
 
   void BeginTest() override {
@@ -1664,7 +1664,8 @@ class SoftwareTextureLayerPurgeMemoryTest : public SoftwareTextureLayerTest {
     // Call OnPurgeMemory() to ensure that the same SharedBitmapId doesn't get
     // registered again on the next draw.
     if (step_ == 1)
-      static_cast<base::MemoryCoordinatorClient*>(host_impl)->OnPurgeMemory();
+      base::MemoryPressureListener::SimulatePressureNotification(
+          base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL);
   }
 
   void DisplayReceivedCompositorFrameOnThread(

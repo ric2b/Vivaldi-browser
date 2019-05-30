@@ -43,11 +43,11 @@
 #include "base/debug/debugger.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/free_deleter.h"
 #include "base/memory/singleton.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/posix/eintr_wrapper.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
@@ -156,14 +156,18 @@ void OutputFrameId(intptr_t frame_id, BacktraceOutputHandler* handler) {
 }
 #endif  // defined(USE_SYMBOLIZE)
 
-void ProcessBacktrace(void *const *trace,
+void ProcessBacktrace(void* const* trace,
                       size_t size,
+                      const char* prefix_string,
                       BacktraceOutputHandler* handler) {
-  // NOTE: This code MUST be async-signal safe (it's used by in-process
-  // stack dumping signal handler). NO malloc or stdio is allowed here.
+// NOTE: This code MUST be async-signal safe (it's used by in-process
+// stack dumping signal handler). NO malloc or stdio is allowed here.
 
 #if defined(USE_SYMBOLIZE)
   for (size_t i = 0; i < size; ++i) {
+    if (prefix_string)
+      handler->HandleOutput(prefix_string);
+
     OutputFrameId(i, handler);
     handler->HandleOutput(" ");
     OutputPointer(trace[i], handler);
@@ -193,6 +197,8 @@ void ProcessBacktrace(void *const *trace,
       for (size_t i = 0; i < size; ++i) {
         std::string trace_symbol = trace_symbols.get()[i];
         DemangleSymbols(&trace_symbol);
+        if (prefix_string)
+          handler->HandleOutput(prefix_string);
         handler->HandleOutput(trace_symbol.c_str());
         handler->HandleOutput("\n");
       }
@@ -394,7 +400,7 @@ void StackDumpSignalHandler(int signal, siginfo_t* info, void* void_context) {
   const int kRegisterPadding = 16;
 #endif
 
-  for (size_t i = 0; i < arraysize(registers); i++) {
+  for (size_t i = 0; i < base::size(registers); i++) {
     PrintToStderr(registers[i].label);
     internal::itoa_r(registers[i].value, buf, sizeof(buf),
                      16, kRegisterPadding);
@@ -571,10 +577,10 @@ class SandboxSymbolizeHelper {
     //   it cannot be called before the singleton is created.
     SandboxSymbolizeHelper* instance = GetInstance();
 
-    // The assumption here is that iterating over
-    // std::vector<MappedMemoryRegion> using a const_iterator does not allocate
-    // dynamic memory, hence it is async-signal-safe.
-    for (const MappedMemoryRegion& region : instance->regions_) {
+    // Cannot use STL iterators here, since debug iterators use locks.
+    // NOLINTNEXTLINE(modernize-loop-convert)
+    for (size_t i = 0; i < instance->regions_.size(); ++i) {
+      const MappedMemoryRegion& region = instance->regions_[i];
       if (region.start <= pc && pc < region.end) {
         start_address = region.start;
         base_address = region.base;
@@ -802,35 +808,34 @@ void SetStackDumpFirstChanceCallback(bool (*handler)(int, void*, void*)) {
   try_handle_signal = handler;
 }
 
-StackTrace::StackTrace(size_t count) {
-// NOTE: This code MUST be async-signal safe (it's used by in-process
-// stack dumping signal handler). NO malloc or stdio is allowed here.
-
-#if !defined(__UCLIBC__) && !defined(_AIX)
-  count = std::min(arraysize(trace_), count);
-
-  // Though the backtrace API man page does not list any possible negative
-  // return values, we take no chance.
-  count_ = base::saturated_cast<size_t>(backtrace(trace_, count));
-#else
-  count_ = 0;
-#endif
-}
-
-void StackTrace::Print() const {
+size_t CollectStackTrace(void** trace, size_t count) {
   // NOTE: This code MUST be async-signal safe (it's used by in-process
   // stack dumping signal handler). NO malloc or stdio is allowed here.
 
 #if !defined(__UCLIBC__) && !defined(_AIX)
+  // Though the backtrace API man page does not list any possible negative
+  // return values, we take no chance.
+  return base::saturated_cast<size_t>(backtrace(trace, count));
+#else
+  return 0;
+#endif
+}
+
+void StackTrace::PrintWithPrefix(const char* prefix_string) const {
+// NOTE: This code MUST be async-signal safe (it's used by in-process
+// stack dumping signal handler). NO malloc or stdio is allowed here.
+
+#if !defined(__UCLIBC__) && !defined(_AIX)
   PrintBacktraceOutputHandler handler;
-  ProcessBacktrace(trace_, count_, &handler);
+  ProcessBacktrace(trace_, count_, prefix_string, &handler);
 #endif
 }
 
 #if !defined(__UCLIBC__) && !defined(_AIX)
-void StackTrace::OutputToStream(std::ostream* os) const {
+void StackTrace::OutputToStreamWithPrefix(std::ostream* os,
+                                          const char* prefix_string) const {
   StreamBacktraceOutputHandler handler(os);
-  ProcessBacktrace(trace_, count_, &handler);
+  ProcessBacktrace(trace_, count_, prefix_string, &handler);
 }
 #endif
 

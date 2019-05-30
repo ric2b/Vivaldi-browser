@@ -8,8 +8,8 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/timer/elapsed_timer.h"
@@ -109,9 +109,9 @@ void SetExportsProperty(
   v8::Local<v8::Object> obj = args.This();
   CHECK_EQ(2, args.Length());
   CHECK(args[0]->IsString());
-  v8::Maybe<bool> result = obj->DefineOwnProperty(
-      args.GetIsolate()->GetCurrentContext(),
-      args[0]->ToString(args.GetIsolate()), args[1], v8::ReadOnly);
+  v8::Maybe<bool> result =
+      obj->DefineOwnProperty(args.GetIsolate()->GetCurrentContext(),
+                             args[0].As<v8::String>(), args[1], v8::ReadOnly);
   if (!result.FromMaybe(false))
     LOG(ERROR) << "Failed to set private property on the export.";
 }
@@ -122,7 +122,7 @@ bool ContextNeedsMojoBindings(ScriptContext* context) {
   //
   // Prefer to use Mojo from C++ if possible rather than adding to this list.
   static const char* const kApisRequiringMojo[] = {
-      "mimeHandlerPrivate", "mojoPrivate",
+      "mediaPerceptionPrivate", "mimeHandlerPrivate", "mojoPrivate",
   };
 
   for (const auto* api : kApisRequiringMojo) {
@@ -171,8 +171,8 @@ ModuleSystem::ModuleSystem(ScriptContext* context, const SourceMap* source_map)
       source_map_(source_map),
       natives_enabled_(0),
       exception_handler_(new DefaultExceptionHandler(context)),
-      lazily_initialize_handlers_(
-          base::FeatureList::IsEnabled(features::kNativeCrxBindings)) {
+      lazily_initialize_handlers_(base::FeatureList::IsEnabled(
+          extensions_features::kNativeCrxBindings)) {
   v8::Local<v8::Object> global(context->v8_context()->Global());
   v8::Isolate* isolate = context->isolate();
   SetPrivate(global, kModulesField, v8::Object::New(isolate));
@@ -189,14 +189,17 @@ ModuleSystem::~ModuleSystem() {
 }
 
 void ModuleSystem::AddRoutes() {
-  RouteHandlerFunction("require", base::Bind(&ModuleSystem::RequireForJs,
-                                             base::Unretained(this)));
-  RouteHandlerFunction("requireNative", base::Bind(&ModuleSystem::RequireNative,
-                                                   base::Unretained(this)));
-  RouteHandlerFunction("loadScript", base::Bind(&ModuleSystem::LoadScript,
-                                                base::Unretained(this)));
   RouteHandlerFunction(
-      "privates", base::Bind(&ModuleSystem::Private, base::Unretained(this)));
+      "require",
+      base::BindRepeating(&ModuleSystem::RequireForJs, base::Unretained(this)));
+  RouteHandlerFunction("requireNative",
+                       base::BindRepeating(&ModuleSystem::RequireNative,
+                                           base::Unretained(this)));
+  RouteHandlerFunction(
+      "loadScript",
+      base::BindRepeating(&ModuleSystem::LoadScript, base::Unretained(this)));
+  RouteHandlerFunction("privates", base::BindRepeating(&ModuleSystem::Private,
+                                                       base::Unretained(this)));
 }
 
 void ModuleSystem::Invalidate() {
@@ -612,7 +615,7 @@ v8::MaybeLocal<v8::Object> ModuleSystem::RequireNativeFromString(
     return value.As<v8::Object>();
   }
 
-  NativeHandlerMap::iterator i = native_handler_map_.find(native_name);
+  auto i = native_handler_map_.find(native_name);
   if (i == native_handler_map_.end()) {
     Fatal(context_,
           "Couldn't find native for requireNative(" + native_name + ")");
@@ -798,7 +801,7 @@ v8::Local<v8::Value> ModuleSystem::LoadModuleWithNativeAPIBridge(
   {
     v8::TryCatch try_catch(GetIsolate());
     try_catch.SetCaptureMessage(true);
-    context_->SafeCallFunction(func, arraysize(args), args);
+    context_->SafeCallFunction(func, base::size(args), args);
     if (try_catch.HasCaught()) {
       HandleException(try_catch);
       return v8::Undefined(GetIsolate());
@@ -808,7 +811,7 @@ v8::Local<v8::Value> ModuleSystem::LoadModuleWithNativeAPIBridge(
 }
 
 void ModuleSystem::ClobberExistingNativeHandler(const std::string& name) {
-  NativeHandlerMap::iterator existing_handler = native_handler_map_.find(name);
+  auto existing_handler = native_handler_map_.find(name);
   if (existing_handler != native_handler_map_.end()) {
     clobbered_native_handlers_.push_back(std::move(existing_handler->second));
     native_handler_map_.erase(existing_handler);

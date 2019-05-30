@@ -18,8 +18,8 @@
 #include "ash/app_list/views/apps_grid_view.h"
 #include "ash/app_list/views/contents_view.h"
 #include "ash/app_list/views/search_box_view.h"
+#include "ash/app_list/views/search_result_base_view.h"
 #include "ash/app_list/views/search_result_page_view.h"
-#include "ash/public/cpp/app_list/app_list_constants.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -28,14 +28,13 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/string_util.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "ui/aura/window.h"
 #include "ui/chromeos/search_box/search_box_view_base.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/textfield/textfield.h"
-#include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/public/activation_client.h"
@@ -53,8 +52,11 @@ AppListMainView::AppListMainView(AppListViewDelegate* delegate,
       search_box_view_(nullptr),
       contents_view_(nullptr),
       app_list_view_(app_list_view) {
-  SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::kVertical, gfx::Insets(), 0));
+  // We need a layer to apply transform to in small display so that the apps
+  // grid fits in the display.
+  SetPaintToLayer();
+  layer()->SetFillsBoundsOpaquely(false);
+
   model_->AddObserver(this);
 }
 
@@ -77,13 +79,11 @@ void AppListMainView::AddContentsViews() {
   DCHECK(search_box_view_);
   contents_view_ = new ContentsView(app_list_view_);
   contents_view_->Init(model_);
+  contents_view_->SetPaintToLayer(ui::LAYER_NOT_DRAWN);
+  contents_view_->layer()->SetMasksToBounds(true);
   AddChildView(contents_view_);
 
   search_box_view_->set_contents_view(contents_view_);
-
-  contents_view_->SetPaintToLayer();
-  contents_view_->layer()->SetFillsBoundsOpaquely(false);
-  contents_view_->layer()->SetMasksToBounds(true);
 
   // Clear the old query and start search.
   search_box_view_->ClearSearch();
@@ -96,7 +96,7 @@ void AppListMainView::ShowAppListWhenReady() {
       wm::GetActivationClient(
           app_list_view_->GetWidget()->GetNativeView()->GetRootWindow())
           ->GetActiveWindow();
-  if (app_list_view_->IsHomeLauncherEnabledInTabletMode() && active_window)
+  if (app_list_view_->is_tablet_mode() && active_window)
     GetWidget()->ShowInactive();
   else
     GetWidget()->Show();
@@ -149,6 +149,12 @@ const char* AppListMainView::GetClassName() const {
   return "AppListMainView";
 }
 
+void AppListMainView::Layout() {
+  gfx::Rect rect = GetContentsBounds();
+  if (!rect.IsEmpty())
+    contents_view_->SetBoundsRect(rect);
+}
+
 void AppListMainView::ActivateApp(AppListItem* item, int event_flags) {
   // TODO(jennyz): Activate the folder via AppListModel notification.
   if (item->GetItemType() == AppListFolderItem::kItemType) {
@@ -181,7 +187,7 @@ void AppListMainView::QueryChanged(search_box::SearchBoxViewBase* sender) {
   base::string16 query;
   base::TrimWhitespace(raw_query, base::TRIM_ALL, &query);
   bool should_show_search =
-      features::IsZeroStateSuggestionsEnabled()
+      app_list_features::IsZeroStateSuggestionsEnabled()
           ? search_box_view_->is_search_box_active() || !query.empty()
           : !query.empty();
   contents_view_->ShowSearchResults(should_show_search);
@@ -190,7 +196,7 @@ void AppListMainView::QueryChanged(search_box::SearchBoxViewBase* sender) {
 }
 
 void AppListMainView::ActiveChanged(search_box::SearchBoxViewBase* sender) {
-  if (!features::IsZeroStateSuggestionsEnabled())
+  if (!app_list_features::IsZeroStateSuggestionsEnabled())
     return;
 
   if (search_box_view_->is_search_box_active()) {
@@ -205,6 +211,22 @@ void AppListMainView::ActiveChanged(search_box::SearchBoxViewBase* sender) {
     // Close the search results page if the search box is inactive.
     contents_view_->ShowSearchResults(false);
   }
+}
+
+void AppListMainView::SearchBoxFocusChanged(
+    search_box::SearchBoxViewBase* sender) {
+  // A fake focus (highlight) is always set on the first search result. When the
+  // user moves focus from the search box textfield (e.g. to close button or
+  // last search result), the fake focus should be removed.
+  if (sender->search_box()->HasFocus())
+    return;
+
+  SearchResultBaseView* first_result_view =
+      contents_view_->search_results_page_view()->first_result_view();
+  if (!first_result_view || !first_result_view->background_highlighted())
+    return;
+
+  first_result_view->SetBackgroundHighlighted(false);
 }
 
 void AppListMainView::AssistantButtonPressed() {

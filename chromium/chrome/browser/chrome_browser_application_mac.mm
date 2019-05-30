@@ -4,10 +4,10 @@
 
 #import "chrome/browser/chrome_browser_application_mac.h"
 
-#include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/mac/call_with_eh_frame.h"
+#include "base/mac/sdk_forward_declarations.h"
 #include "base/observer_list.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
@@ -26,7 +26,12 @@ namespace chrome_browser_application_mac {
 
 void RegisterBrowserCrApp() {
   [BrowserCrApplication sharedApplication];
-};
+
+  // If there was an invocation to NSApp prior to this method, then the NSApp
+  // will not be a BrowserCrApplication, but will instead be an NSApplication.
+  // This is undesirable and we must enforce that this doesn't happen.
+  CHECK([NSApp isKindOfClass:[BrowserCrApplication class]]);
+}
 
 void Terminate() {
   [NSApp terminate:nil];
@@ -94,12 +99,6 @@ std::string DescriptionForNSEvent(NSEvent* event) {
 
 }  // namespace
 
-// Method exposed for the purposes of overriding.
-// Used to determine when a Panel window can become the key window.
-@interface NSApplication (PanelsCanBecomeKey)
-- (void)_cycleWindowsReversed:(BOOL)arg1;
-@end
-
 @interface BrowserCrApplication ()<NativeEventProcessor> {
   base::ObserverList<content::NativeEventProcessorObserver>::Unchecked
       observers_;
@@ -116,20 +115,6 @@ std::string DescriptionForNSEvent(NSEvent* event) {
   chrome::InstallObjcExceptionPreprocessor();
 
   cocoa_l10n_util::ApplyForcedRTL();
-}
-
-- (id)init {
-  self = [super init];
-
-  // Sanity check to alert if overridden methods are not supported.
-  DCHECK([NSApplication
-      instancesRespondToSelector:@selector(_cycleWindowsReversed:)]);
-  DCHECK([NSApplication
-      instancesRespondToSelector:@selector(_removeWindow:)]);
-  DCHECK([NSApplication
-      instancesRespondToSelector:@selector(_setKeyWindow:)]);
-
-  return self;
 }
 
 // Initialize NSApplication using the custom subclass.  Check whether NSApp
@@ -353,15 +338,6 @@ std::string DescriptionForNSEvent(NSEvent* event) {
       accessibility_state->DisableAccessibility();
   }
   return [super accessibilitySetValue:value forAttribute:attribute];
-}
-
-- (void)_cycleWindowsReversed:(BOOL)arg1 {
-  base::AutoReset<BOOL> pin(&cyclingWindows_, YES);
-  [super _cycleWindowsReversed:arg1];
-}
-
-- (BOOL)isCyclingWindows {
-  return cyclingWindows_;
 }
 
 - (void)addNativeEventProcessorObserver:

@@ -11,26 +11,22 @@
 #include "third_party/blink/renderer/platform/wtf/text/cstring.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
-namespace WTF {
-
-// CString version of SetTraceValue so that trace arguments can be strings.
-static inline void SetTraceValue(const CString& arg,
-                                 unsigned char* type,
-                                 unsigned long long* value) {
-  trace_event_internal::TraceValueUnion type_value;
-  type_value.as_string = arg.data();
-  *type = TRACE_VALUE_TYPE_COPY_STRING;
-  *value = type_value.as_uint;
-}
-
-}  // namespace WTF
+// Conversion from CString to TraceValue so that trace arguments can be strings.
+template <>
+struct base::trace_event::TraceValue::Helper<WTF::CString> {
+  static constexpr unsigned char kType = TRACE_VALUE_TYPE_COPY_STRING;
+  static inline void SetValue(TraceValue* v, const WTF::CString& value) {
+    v->as_string = value.data();
+  }
+};
 
 namespace blink {
-namespace TraceEvent {
+namespace trace_event {
 
 using base::trace_event::TraceScopedTrackableObject;
 using AsyncEnabledStateObserver =
     base::trace_event::TraceLog::AsyncEnabledStateObserver;
+using EnabledStateObserver = base::trace_event::TraceLog::EnabledStateObserver;
 
 inline base::TimeTicks ToTraceTimestamp(double seconds) {
   return base::TimeTicks() + base::TimeDelta::FromSecondsD(seconds);
@@ -47,7 +43,10 @@ PLATFORM_EXPORT void AddAsyncEnabledStateObserver(
 PLATFORM_EXPORT void RemoveAsyncEnabledStateObserver(
     AsyncEnabledStateObserver*);
 
-}  // namespace TraceEvent
+PLATFORM_EXPORT void AddEnabledStateObserver(EnabledStateObserver*);
+PLATFORM_EXPORT void RemoveEnabledStateObserver(EnabledStateObserver*);
+
+}  // namespace trace_event
 }  // namespace blink
 
 #endif

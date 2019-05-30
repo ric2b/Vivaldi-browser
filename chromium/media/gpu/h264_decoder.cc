@@ -8,17 +8,23 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
-#include "base/macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
 #include "media/gpu/h264_decoder.h"
+#include "media/video/h264_level_limits.h"
 
 namespace media {
 
 H264Decoder::H264Accelerator::H264Accelerator() = default;
 
 H264Decoder::H264Accelerator::~H264Accelerator() = default;
+
+H264Decoder::H264Accelerator::Status H264Decoder::H264Accelerator::SetStream(
+    base::span<const uint8_t> stream,
+    const DecryptConfig* decrypt_config) {
+  return H264Decoder::H264Accelerator::Status::kNotSupported;
+}
 
 H264Decoder::H264Decoder(std::unique_ptr<H264Accelerator> accelerator,
                          const VideoColorSpace& container_color_space)
@@ -714,7 +720,7 @@ H264Decoder::H264Accelerator::Status H264Decoder::StartNewFrame(
 
 bool H264Decoder::HandleMemoryManagementOps(scoped_refptr<H264Picture> pic) {
   // 8.2.5.4
-  for (size_t i = 0; i < arraysize(pic->ref_pic_marking); ++i) {
+  for (size_t i = 0; i < base::size(pic->ref_pic_marking); ++i) {
     // Code below does not support interlaced stream (per-field pictures).
     H264DecRefPicMarking* ref_pic_marking = &pic->ref_pic_marking[i];
     scoped_refptr<H264Picture> to_mark;
@@ -921,7 +927,7 @@ bool H264Decoder::FinishPicture(scoped_refptr<H264Picture> pic) {
   // in DPB afterwards would at least be equal to max_num_reorder_frames.
   // If the outputted picture is not a reference picture, it doesn't have
   // to remain in the DPB and can be removed.
-  H264Picture::Vector::iterator output_candidate = not_outputted.begin();
+  auto output_candidate = not_outputted.begin();
   size_t num_remaining = not_outputted.size();
   while (num_remaining > max_num_reorder_frames_ ||
          // If the condition below is used, this is an invalid stream. We should
@@ -962,42 +968,6 @@ bool H264Decoder::FinishPicture(scoped_refptr<H264Picture> pic) {
   }
 
   return true;
-}
-
-static int LevelToMaxDpbMbs(int level) {
-  // See table A-1 in spec.
-  switch (level) {
-    case 10:
-      return 396;
-    case 11:
-      return 900;
-    case 12:  //  fallthrough
-    case 13:  //  fallthrough
-    case 20:
-      return 2376;
-    case 21:
-      return 4752;
-    case 22:  //  fallthrough
-    case 30:
-      return 8100;
-    case 31:
-      return 18000;
-    case 32:
-      return 20480;
-    case 40:  //  fallthrough
-    case 41:
-      return 32768;
-    case 42:
-      return 34816;
-    case 50:
-      return 110400;
-    case 51:  //  fallthrough
-    case 52:
-      return 184320;
-    default:
-      DVLOG(1) << "Invalid codec level (" << level << ")";
-      return 0;
-  }
 }
 
 bool H264Decoder::UpdateMaxNumReorderFrames(const H264SPS* sps) {
@@ -1066,8 +1036,17 @@ bool H264Decoder::ProcessSPS(int sps_id, bool* need_new_buffers) {
     return false;
   }
 
-  int level = sps->level_idc;
-  int max_dpb_mbs = LevelToMaxDpbMbs(level);
+  // Spec A.3.1 and A.3.2
+  // For Baseline, Constrained Baseline and Main profile, the indicated level is
+  // Level 1b if level_idc is equal to 11 and constraint_set3_flag is equal to 1
+  uint8_t level = base::checked_cast<uint8_t>(sps->level_idc);
+  if ((sps->profile_idc == H264SPS::kProfileIDCBaseline ||
+       sps->profile_idc == H264SPS::kProfileIDCConstrainedBaseline ||
+       sps->profile_idc == H264SPS::kProfileIDCMain) &&
+      level == 11 && sps->constraint_set3_flag) {
+    level = 9;  // Level 1b
+  }
+  int max_dpb_mbs = base::checked_cast<int>(H264LevelToMaxDpbMbs(level));
   if (max_dpb_mbs == 0)
     return false;
 
@@ -1230,18 +1209,19 @@ H264Decoder::H264Accelerator::Status H264Decoder::ProcessCurrentSlice() {
     return H264Decoder::kDecodeError;  \
   } while (0)
 
-#define CHECK_ACCELERATOR_RESULT(func)           \
-  do {                                           \
-    H264Accelerator::Status result = (func);     \
-    switch (result) {                            \
-      case H264Accelerator::Status::kOk:         \
-        break;                                   \
-      case H264Accelerator::Status::kTryAgain:   \
-        DVLOG(1) << #func " needs to try again"; \
-        return H264Decoder::kTryAgain;           \
-      case H264Accelerator::Status::kFail:       \
-        SET_ERROR_AND_RETURN();                  \
-    }                                            \
+#define CHECK_ACCELERATOR_RESULT(func)             \
+  do {                                             \
+    H264Accelerator::Status result = (func);       \
+    switch (result) {                              \
+      case H264Accelerator::Status::kOk:           \
+        break;                                     \
+      case H264Accelerator::Status::kTryAgain:     \
+        DVLOG(1) << #func " needs to try again";   \
+        return H264Decoder::kTryAgain;             \
+      case H264Accelerator::Status::kFail:         \
+      case H264Accelerator::Status::kNotSupported: \
+        SET_ERROR_AND_RETURN();                    \
+    }                                              \
   } while (0)
 
 void H264Decoder::SetStream(int32_t id,
@@ -1254,6 +1234,9 @@ void H264Decoder::SetStream(int32_t id,
   DVLOG(4) << "New input stream id: " << id << " at: " << (void*)ptr
            << " size: " << size;
   stream_id_ = id;
+  current_stream_ = ptr;
+  current_stream_size_ = size;
+  current_stream_has_been_changed_ = true;
   if (decrypt_config) {
     parser_.SetEncryptedStream(ptr, size, decrypt_config->subsamples());
     current_decrypt_config_ = decrypt_config->Clone();
@@ -1267,6 +1250,30 @@ H264Decoder::DecodeResult H264Decoder::Decode() {
   if (state_ == kError) {
     DVLOG(1) << "Decoder in error state";
     return kDecodeError;
+  }
+
+  if (current_stream_has_been_changed_) {
+    // Calling H264Accelerator::SetStream() here instead of when the stream is
+    // originally set in case the accelerator needs to return kTryAgain.
+    H264Accelerator::Status result = accelerator_->SetStream(
+        base::span<const uint8_t>(current_stream_, current_stream_size_),
+        current_decrypt_config_.get());
+    switch (result) {
+      case H264Accelerator::Status::kOk:
+      case H264Accelerator::Status::kNotSupported:
+        // kNotSupported means the accelerator can't handle this stream,
+        // so everything will be done through the parser.
+        break;
+      case H264Accelerator::Status::kTryAgain:
+        DVLOG(1) << "SetStream() needs to try again";
+        return H264Decoder::kTryAgain;
+      case H264Accelerator::Status::kFail:
+        SET_ERROR_AND_RETURN();
+    }
+
+    // Reset the flag so that this is only called again next time SetStream()
+    // is called.
+    current_stream_has_been_changed_ = false;
   }
 
   while (1) {
@@ -1306,14 +1313,12 @@ H264Decoder::DecodeResult H264Decoder::Decode() {
         // the call that failed previously. If it succeeds (it may not if no
         // additional key has been provided, for example), then the remaining
         // steps will be executed.
-
         if (!curr_slice_hdr_) {
           curr_slice_hdr_.reset(new H264SliceHeader());
           par_res =
               parser_.ParseSliceHeader(*curr_nalu_, curr_slice_hdr_.get());
           if (par_res != H264Parser::kOk)
             SET_ERROR_AND_RETURN();
-
           state_ = kTryPreprocessCurrentSlice;
         }
 
@@ -1413,7 +1418,13 @@ gfx::Size H264Decoder::GetPicSize() const {
 }
 
 size_t H264Decoder::GetRequiredNumOfPictures() const {
-  return dpb_.max_num_pics() + kPicsInPipeline;
+  constexpr size_t kPicsInPipeline = limits::kMaxVideoFrames + 1;
+  return GetNumReferenceFrames() + kPicsInPipeline;
+}
+
+size_t H264Decoder::GetNumReferenceFrames() const {
+  // Use the maximum number of pictures in the Decoded Picture Buffer.
+  return dpb_.max_num_pics();
 }
 
 // static

@@ -13,15 +13,17 @@
 namespace test_runner {
 
 MockWebDocumentSubresourceFilter::MockWebDocumentSubresourceFilter(
-    const std::vector<std::string>& disallowed_path_suffixes)
-    : disallowed_path_suffixes_(disallowed_path_suffixes) {}
+    const std::vector<std::string>& disallowed_path_suffixes,
+    bool block_subresources)
+    : disallowed_path_suffixes_(disallowed_path_suffixes),
+      block_subresources_(block_subresources) {}
 
 MockWebDocumentSubresourceFilter::~MockWebDocumentSubresourceFilter() {}
 
 blink::WebDocumentSubresourceFilter::LoadPolicy
 MockWebDocumentSubresourceFilter::GetLoadPolicy(
     const blink::WebURL& resource_url,
-    blink::WebURLRequest::RequestContext) {
+    blink::mojom::RequestContextType) {
   return getLoadPolicyImpl(resource_url);
 }
 
@@ -41,17 +43,13 @@ MockWebDocumentSubresourceFilter::getLoadPolicyImpl(const blink::WebURL& url) {
                                               base::CompareCase::SENSITIVE);
                       }) == disallowed_path_suffixes_.end()
              ? kAllow
-             : kDisallow;
+             : (block_subresources_ ? kDisallow : kWouldDisallow);
 }
 
 void MockWebDocumentSubresourceFilter::ReportDisallowedLoad() {}
 
 bool MockWebDocumentSubresourceFilter::ShouldLogToConsole() {
   return true;
-}
-
-bool MockWebDocumentSubresourceFilter::GetIsAssociatedWithAdSubframe() const {
-  return false;
 }
 
 }  // namespace test_runner

@@ -24,6 +24,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/service_manager_connection.h"
 #include "extensions/browser/extension_system.h"
@@ -35,6 +36,7 @@
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/manifest_handlers/kiosk_mode_info.h"
+#include "extensions/common/verifier_formats.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -150,7 +152,13 @@ class KioskAppData::CrxLoader : public extensions::SandboxedUnpackerClient {
         std::move(connector), extensions::Manifest::INTERNAL,
         extensions::Extension::NO_FLAGS, temp_dir_.GetPath(),
         task_runner_.get(), this);
-    unpacker->StartWithCrx(extensions::CRXFileInfo(crx_file_));
+    // Temporary allow CRX2 for kiosk apps.
+    // See https://crbug.com/960428. Note that we don't have user policies at
+    // this stage, so we have to explicitly allow CRX2 extension archive format.
+    // TODO(crbug.com/740715): remove in M77.
+    unpacker->StartWithCrx(extensions::CRXFileInfo(
+        crx_file_, extensions::GetPolicyVerifierFormat(
+                       true /* insecure_updates_enabled */)));
   }
 
   void NotifyFinishedInThreadPool() {
@@ -161,8 +169,8 @@ class KioskAppData::CrxLoader : public extensions::SandboxedUnpackerClient {
                    << temp_dir_.GetPath().value();
     }
 
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&CrxLoader::NotifyFinishedOnUIThread, this));
   }
 
@@ -220,13 +228,12 @@ class KioskAppData::WebstoreDataParser
   }
 
   // WebstoreInstallHelper::Delegate overrides:
-  void OnWebstoreParseSuccess(const std::string& id,
-                              const SkBitmap& icon,
-                              base::DictionaryValue* parsed_manifest) override {
-    // Takes ownership of |parsed_manifest|.
-    extensions::Manifest manifest(
-        extensions::Manifest::INVALID_LOCATION,
-        std::unique_ptr<base::DictionaryValue>(parsed_manifest));
+  void OnWebstoreParseSuccess(
+      const std::string& id,
+      const SkBitmap& icon,
+      std::unique_ptr<base::DictionaryValue> parsed_manifest) override {
+    extensions::Manifest manifest(extensions::Manifest::INVALID_LOCATION,
+                                  std::move(parsed_manifest));
 
     if (!IsValidKioskAppManifest(manifest)) {
       ReportFailure();
@@ -309,8 +316,8 @@ void KioskAppData::LoadFromInstalledApp(Profile* profile,
       app, kIconSize, ExtensionIconSet::MATCH_BIGGER);
   extensions::ImageLoader::Get(profile)->LoadImageAsync(
       app, image, gfx::Size(kIconSize, kIconSize),
-      base::Bind(&KioskAppData::OnExtensionIconLoaded,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&KioskAppData::OnExtensionIconLoaded,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void KioskAppData::SetCachedCrx(const base::FilePath& crx_file) {

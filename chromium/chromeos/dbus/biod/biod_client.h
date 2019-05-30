@@ -10,9 +10,9 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/component_export.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "chromeos/chromeos_export.h"
 #include "chromeos/dbus/biod/constants.pb.h"
 #include "chromeos/dbus/dbus_client.h"
 #include "chromeos/dbus/dbus_client_implementation_type.h"
@@ -30,7 +30,7 @@ using AuthScanMatches =
 
 // BiodClient is used to communicate with a biod D-Bus manager
 // interface.
-class CHROMEOS_EXPORT BiodClient : public DBusClient {
+class COMPONENT_EXPORT(CHROMEOS_DBUS) BiodClient : public DBusClient {
  public:
   // Interface for observing changes from the biometrics manager.
   class Observer {
@@ -49,7 +49,7 @@ class CHROMEOS_EXPORT BiodClient : public DBusClient {
 
     // Called when an authentication scan is performed. If the scan is
     // successful, |matches| will equal all the enrollment IDs that match the
-    // scan, and the labels of the matched fingeprints.
+    // scan, and the labels of the matched fingerprints.
     virtual void BiodAuthScanDoneReceived(biod::ScanResult scan_result,
                                           const AuthScanMatches& matches) {}
 
@@ -79,7 +79,7 @@ class CHROMEOS_EXPORT BiodClient : public DBusClient {
 
   // BiometricTypeCallback is used for the GetType method. It receives
   // one argument which states the type of biometric.
-  using BiometricTypeCallback = base::Callback<void(uint32_t)>;
+  using BiometricTypeCallback = base::OnceCallback<void(biod::BiometricType)>;
 
   // LabelCallback is for the RequestRecordLabel method.
   using LabelCallback = base::OnceCallback<void(const std::string& label)>;
@@ -109,7 +109,7 @@ class CHROMEOS_EXPORT BiodClient : public DBusClient {
 
   // Requests the type of biometric. |callback| is called with the biometric
   // type after the method succeeds.
-  virtual void RequestType(const BiometricTypeCallback& callback) = 0;
+  virtual void RequestType(BiometricTypeCallback callback) = 0;
 
   // Cancels the enroll session.
   // |callback| is called asynchronously with the result.

@@ -11,7 +11,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_frame_request_callback.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
-#include "third_party/blink/renderer/core/dom/pausable_object.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_state_observer.h"
 #include "third_party/blink/renderer/modules/vr/vr_display_capabilities.h"
 #include "third_party/blink/renderer/modules/vr/vr_layer_init.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/xr_frame_transport.h"
@@ -45,8 +45,13 @@ class SessionClientBinding
     : public GarbageCollectedFinalized<SessionClientBinding>,
       public device::mojom::blink::XRSessionClient {
  public:
+  enum class SessionBindingType {
+    kImmersive = 0,
+    kNonImmersive = 1,
+  };
+
   SessionClientBinding(VRDisplay* display,
-                       bool is_immersive,
+                       SessionBindingType immersive,
                        device::mojom::blink::XRSessionClientRequest request);
   ~SessionClientBinding() override;
   void Close();
@@ -70,13 +75,22 @@ enum VREye { kVREyeNone, kVREyeLeft, kVREyeRight };
 
 class VRDisplay final : public EventTargetWithInlineData,
                         public ActiveScriptWrappable<VRDisplay>,
-                        public PausableObject,
+                        public ContextLifecycleStateObserver,
                         public device::mojom::blink::VRDisplayClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(VRDisplay);
   USING_PRE_FINALIZER(VRDisplay, Dispose);
 
  public:
+  static VRDisplay* Create(NavigatorVR* navigator,
+                           device::mojom::blink::XRDevicePtr device) {
+    VRDisplay* display =
+        MakeGarbageCollected<VRDisplay>(navigator, std::move(device));
+    display->UpdateStateIfNeeded();
+    return display;
+  }
+
+  VRDisplay(NavigatorVR*, device::mojom::blink::XRDevicePtr);
   ~VRDisplay() override;
 
   // We hand out at most one VRDisplay, so hardcode displayId to 1.
@@ -104,10 +118,10 @@ class VRDisplay final : public EventTargetWithInlineData,
   void cancelAnimationFrame(int id);
 
   ScriptPromise requestPresent(ScriptState*,
-                               const HeapVector<VRLayerInit>& layers);
+                               const HeapVector<Member<VRLayerInit>>& layers);
   ScriptPromise exitPresent(ScriptState*);
 
-  HeapVector<VRLayerInit> getLayers();
+  HeapVector<Member<VRLayerInit>> getLayers();
 
   void submitFrame();
 
@@ -124,9 +138,8 @@ class VRDisplay final : public EventTargetWithInlineData,
   // ScriptWrappable implementation.
   bool HasPendingActivity() const final;
 
-  // PausableObject:
-  void Pause() override;
-  void Unpause() override;
+  // ContextLifecycleStateObserver:
+  void ContextLifecycleStateChanged(mojom::FrameLifecycleState) override;
 
   void OnChanged(device::mojom::blink::VRDisplayInfoPtr, bool is_immersive);
   void OnExitPresent(bool is_immersive);
@@ -142,8 +155,6 @@ class VRDisplay final : public EventTargetWithInlineData,
 
  protected:
   friend class VRController;
-
-  VRDisplay(NavigatorVR*, device::mojom::blink::XRDevicePtr);
 
   void Update(const device::mojom::blink::VRDisplayInfoPtr&);
 
@@ -214,7 +225,7 @@ class VRDisplay final : public EventTargetWithInlineData,
   // VR compositor so that it knows which poses to use, when to apply bounds
   // updates, etc.
   int16_t vr_frame_id_ = -1;
-  VRLayerInit layer_;
+  Member<VRLayerInit> layer_;
   double depth_near_ = 0.01;
   double depth_far_ = 10000.0;
 
@@ -248,6 +259,7 @@ class VRDisplay final : public EventTargetWithInlineData,
   bool did_log_getFrameData_ = false;
   bool did_log_requestPresent_ = false;
 
+  bool non_immersive_session_initialized_ = false;
   device::mojom::blink::XRFrameDataProviderPtr non_immersive_provider_;
 
   device::mojom::blink::XRDevicePtr device_ptr_;
@@ -265,21 +277,28 @@ class VRDisplay final : public EventTargetWithInlineData,
 
 using VRDisplayVector = HeapVector<Member<VRDisplay>>;
 
+// When adding values, insert them before Max and add them to
+// VRPresentationResult in enums.xml. Do not reuse values.
+// Also, remove kPlaceholderForPreviousHighValue.
+// When values become obsolete, comment them out here and mark them deprecated
+// in enums.xml.
 enum class PresentationResult {
   kRequested = 0,
   kSuccess = 1,
   kSuccessAlreadyPresenting = 2,
   kVRDisplayCannotPresent = 3,
   kPresentationNotSupportedByDisplay = 4,
-  kVRDisplayNotFound = 5,
+  // kVRDisplayNotFound = 5,
   kNotInitiatedByUserGesture = 6,
   kInvalidNumberOfLayers = 7,
   kInvalidLayerSource = 8,
   kLayerSourceMissingWebGLContext = 9,
   kInvalidLayerBounds = 10,
-  kServiceInactive = 11,
-  kRequestDenied = 12,
-  kFullscreenNotEnabled = 13,
+  // kServiceInactive = 11,
+  // kRequestDenied = 12,
+  // kFullscreenNotEnabled = 13,
+  // TODO(ddorwin): Remove this placeholder when adding a new value.
+  kPlaceholderForPreviousHighValue = 13,
   kPresentationResultMax,  // Must be last member of enum.
 };
 

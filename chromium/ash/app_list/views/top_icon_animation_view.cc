@@ -6,7 +6,6 @@
 
 #include "ash/app_list/views/app_list_item_view.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
-#include "ash/public/cpp/app_list/app_list_constants.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/image/image_skia_operations.h"
@@ -73,7 +72,7 @@ void TopIconAnimationView::TransformView() {
   // Transform used for scaling down the icon and move it back inside to the
   // original folder icon. The transform's origin is this view's origin.
   gfx::Transform transform;
-  transform.Translate(scaled_rect_.x() - bounds().x(),
+  transform.Translate(scaled_rect_.x() - GetMirroredX(),
                       scaled_rect_.y() - bounds().y());
   transform.Scale(
       static_cast<double>(scaled_rect_.width()) / bounds().width(),
@@ -92,8 +91,8 @@ void TopIconAnimationView::TransformView() {
   ui::ScopedLayerAnimationSettings settings(layer()->GetAnimator());
   settings.AddObserver(this);
   settings.SetTweenType(gfx::Tween::FAST_OUT_SLOW_IN);
-  settings.SetTransitionDuration(
-      base::TimeDelta::FromMilliseconds(kFolderTransitionInDurationMs));
+  settings.SetTransitionDuration(base::TimeDelta::FromMilliseconds(
+      AppListConfig::instance().folder_transition_in_duration_ms()));
   layer()->SetTransform(open_folder_ ? gfx::Transform() : transform);
   if (!item_in_folder_icon_)
     layer()->SetOpacity(open_folder_ ? 1.0f : 0.0f);
@@ -104,8 +103,8 @@ void TopIconAnimationView::TransformView() {
     ui::ScopedLayerAnimationSettings title_settings(
         title_->layer()->GetAnimator());
     title_settings.SetTweenType(gfx::Tween::FAST_OUT_SLOW_IN);
-    title_settings.SetTransitionDuration(
-        base::TimeDelta::FromMilliseconds(kFolderTransitionInDurationMs));
+    title_settings.SetTransitionDuration(base::TimeDelta::FromMilliseconds(
+        AppListConfig::instance().folder_transition_in_duration_ms()));
     title_->layer()->SetOpacity(open_folder_ ? 1.0f : 0.0f);
   }
 }

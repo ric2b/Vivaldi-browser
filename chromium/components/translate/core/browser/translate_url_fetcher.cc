@@ -4,6 +4,7 @@
 
 #include "components/translate/core/browser/translate_url_fetcher.h"
 
+#include "base/bind.h"
 #include "base/memory/ref_counted.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/translate/core/browser/translate_download_manager.h"
@@ -98,10 +99,10 @@ bool TranslateURLFetcher::Request(const GURL& url,
   resource_request->load_flags =
       net::LOAD_DO_NOT_SEND_COOKIES | net::LOAD_DO_NOT_SAVE_COOKIES;
   if (!extra_request_header_.empty())
-    resource_request->headers.AddHeadersFromString(extra_request_header_);
+    resource_request->headers.AddHeaderFromString(extra_request_header_);
 
   simple_loader_ =
-      variations::CreateSimpleURLLoaderWithVariationsHeadersUnknownSignedIn(
+      variations::CreateSimpleURLLoaderWithVariationsHeaderUnknownSignedIn(
           std::move(resource_request),
           is_incognito ? variations::InIncognito::kYes
                        : variations::InIncognito::kNo,

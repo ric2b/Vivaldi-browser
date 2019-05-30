@@ -59,6 +59,8 @@ class TestSafeBrowsingService : public SafeBrowsingService,
   const scoped_refptr<SafeBrowsingDatabaseManager>& database_manager()
       const override;
   void UseV4LocalDatabaseManager();
+  std::unique_ptr<SafeBrowsingService::StateSubscription> RegisterStateCallback(
+      const base::Callback<void(void)>& callback) override;
 
  protected:
   // SafeBrowsingService overrides
@@ -80,14 +82,14 @@ class TestSafeBrowsingService : public SafeBrowsingService,
   std::unique_ptr<V4ProtocolConfig> v4_protocol_config_;
   std::string serialized_download_report_;
   scoped_refptr<SafeBrowsingDatabaseManager> test_database_manager_;
-  bool use_v4_local_db_manager_;
+  bool use_v4_local_db_manager_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TestSafeBrowsingService);
 };
 
 class TestSafeBrowsingServiceFactory : public SafeBrowsingServiceFactory {
  public:
-  explicit TestSafeBrowsingServiceFactory();
+  TestSafeBrowsingServiceFactory();
   ~TestSafeBrowsingServiceFactory() override;
 
   // Creates test safe browsing service, and configures test UI manager,

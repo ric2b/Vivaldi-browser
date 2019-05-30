@@ -73,6 +73,9 @@ public class ToolbarSwipeLayout extends Layout {
     private ScrollingBottomViewSceneLayer mLeftBottomToolbarSceneLayer;
     private ScrollingBottomViewSceneLayer mRightBottomToolbarSceneLayer;
 
+    /** Whether the bottom bar scene layers should be shown. */
+    private boolean mShowBottomToolbarSceneLayers;
+
     /**
      * @param context             The current Android's context.
      * @param updateHost          The {@link LayoutUpdateHost} view for this layout.
@@ -131,7 +134,6 @@ public class ToolbarSwipeLayout extends Layout {
         prepareLayoutTabForSwipe(mFromTab, false);
     }
 
-    @Override
     public void swipeStarted(long time, @ScrollDirection int direction, float x, float y) {
         if (mTabModelSelector == null || mToTab != null || direction == ScrollDirection.DOWN) {
             return;
@@ -203,13 +205,11 @@ public class ToolbarSwipeLayout extends Layout {
         layoutTab.setAnonymizeToolbar(anonymizeToolbar && ANONYMIZE_NON_FOCUSED_TAB);
     }
 
-    @Override
     public void swipeUpdated(long time, float x, float y, float dx, float dy, float tx, float ty) {
         mOffsetTarget = MathUtils.clamp(mOffsetStart + tx, 0, getWidth()) - mOffsetStart;
         requestUpdate();
     }
 
-    @Override
     public void swipeFlingOccurred(
             long time, float x, float y, float tx, float ty, float vx, float vy) {
         // Use the velocity to add on final step which simulate a fling.
@@ -220,7 +220,6 @@ public class ToolbarSwipeLayout extends Layout {
         swipeUpdated(time, x, y, 0, 0, tx + kickX, ty + kickY);
     }
 
-    @Override
     public void swipeFinished(long time) {
         if (mFromTab == null || mTabModelSelector == null) return;
 
@@ -250,18 +249,14 @@ public class ToolbarSwipeLayout extends Layout {
         if (duration > 0) {
             CompositorAnimator offsetAnimation =
                     CompositorAnimator.ofFloat(getAnimationHandler(), start, end, duration, null);
-            offsetAnimation.addUpdateListener(new CompositorAnimator.AnimatorUpdateListener() {
-                @Override
-                public void onAnimationUpdate(CompositorAnimator animator) {
-                    mOffset = animator.getAnimatedValue();
-                    mOffsetTarget = mOffset;
-                }
+            offsetAnimation.addUpdateListener(animator -> {
+                mOffset = animator.getAnimatedValue();
+                mOffsetTarget = mOffset;
             });
             offsetAnimation.start();
         }
     }
 
-    @Override
     public void swipeCancelled(long time) {
         swipeFinished(time);
     }
@@ -312,8 +307,12 @@ public class ToolbarSwipeLayout extends Layout {
             mLeftTab.setX(leftX);
             needUpdate = mLeftTab.updateSnap(dt) || needUpdate;
             if (mLeftBottomToolbarSceneLayer != null) {
-                mLeftBottomToolbarSceneLayer.setIsVisible(true);
-                mLeftBottomToolbarSceneLayer.setXOffset((int) (mLeftTab.getX() * mDpToPx));
+                if (mShowBottomToolbarSceneLayers) {
+                    mLeftBottomToolbarSceneLayer.setIsVisible(true);
+                    mLeftBottomToolbarSceneLayer.setXOffset((int) (mLeftTab.getX() * mDpToPx));
+                } else {
+                    mLeftBottomToolbarSceneLayer.setIsVisible(false);
+                }
             }
         } else if (mLeftBottomToolbarSceneLayer != null) {
             mLeftBottomToolbarSceneLayer.setIsVisible(false);
@@ -323,8 +322,12 @@ public class ToolbarSwipeLayout extends Layout {
             mRightTab.setX(rightX);
             needUpdate = mRightTab.updateSnap(dt) || needUpdate;
             if (mRightBottomToolbarSceneLayer != null) {
-                mRightBottomToolbarSceneLayer.setIsVisible(true);
-                mRightBottomToolbarSceneLayer.setXOffset((int) (mRightTab.getX() * mDpToPx));
+                if (mShowBottomToolbarSceneLayers) {
+                    mRightBottomToolbarSceneLayer.setIsVisible(true);
+                    mRightBottomToolbarSceneLayer.setXOffset((int) (mRightTab.getX() * mDpToPx));
+                } else {
+                    mRightBottomToolbarSceneLayer.setIsVisible(false);
+                }
             }
         } else if (mRightBottomToolbarSceneLayer != null) {
             mRightBottomToolbarSceneLayer.setIsVisible(false);
@@ -338,12 +341,16 @@ public class ToolbarSwipeLayout extends Layout {
      * in this layout.
      * @param left The toolbar to draw with the left tab.
      * @param right The toolbar to draw with the right tab.
+     * @param showBottomToolbarSceneLayers Whether to show the bottom bar scene layers.
      */
-    public void setBottomToolbarSceneLayers(
-            ScrollingBottomViewSceneLayer left, ScrollingBottomViewSceneLayer right) {
+    public void setBottomToolbarSceneLayers(ScrollingBottomViewSceneLayer left,
+            ScrollingBottomViewSceneLayer right, boolean showBottomToolbarSceneLayers) {
+        mShowBottomToolbarSceneLayers = showBottomToolbarSceneLayers;
         mLeftBottomToolbarSceneLayer = left;
+        mLeftBottomToolbarSceneLayer.setIsVisible(showBottomToolbarSceneLayers);
         addSceneOverlay(mLeftBottomToolbarSceneLayer);
         mRightBottomToolbarSceneLayer = right;
+        mRightBottomToolbarSceneLayer.setIsVisible(showBottomToolbarSceneLayers);
         addSceneOverlay(mRightBottomToolbarSceneLayer);
     }
 
@@ -395,5 +402,12 @@ public class ToolbarSwipeLayout extends Layout {
         // contentViewport is intentionally passed for both parameters below.
         mSceneLayer.pushLayers(getContext(), contentViewport, contentViewport, this,
                 layerTitleCache, tabContentManager, resourceManager, fullscreenManager);
+    }
+
+    /**
+     * @param showBottomToolbarSceneLayers Whether the bottom toolbar scene layers should be shown.
+     */
+    public void setBottomToolbarSceneLayersVisibility(boolean showBottomToolbarSceneLayers) {
+        mShowBottomToolbarSceneLayers = showBottomToolbarSceneLayers;
     }
 }

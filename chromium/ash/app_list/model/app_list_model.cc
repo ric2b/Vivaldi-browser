@@ -40,7 +40,13 @@ void AppListModel::SetStatus(ash::AppListModelStatus status) {
 }
 
 void AppListModel::SetState(ash::AppListState state) {
+  if (state_ == state)
+    return;
+
+  auto old_state = state_;
   state_ = state;
+  for (auto& observer : observers_)
+    observer.OnAppListStateChanged(state_, old_state);
 }
 
 void AppListModel::SetStateFullscreen(AppListViewState state) {
@@ -274,17 +280,27 @@ void AppListModel::DeleteUninstalledItem(const std::string& id) {
   const std::string folder_id = item->folder_id();
   DeleteItem(id);
 
-  // crbug.com/368111: Upon uninstall of 2nd-to-last folder item, reparent last
-  // item to top; this will remove the folder.
+  // crbug.com/368111: Deleting a child item may cause the parent folder to be
+  // auto-removed. Further, if an auto-removed folder has an item in it, that
+  // item needs to be reparented first.
   AppListFolderItem* folder = FindFolderItem(folder_id);
-  if (folder && folder->ChildItemCount() == 1u) {
+  if (folder && folder->ShouldAutoRemove() &&
+      folder->item_list()->item_count() == 1) {
     AppListItem* last_item = folder->item_list()->item_at(0);
     MoveItemToFolderAt(last_item, "", folder->position());
   }
 }
 
 void AppListModel::DeleteAllItems() {
-  top_level_item_list_->DeleteAllItems();
+  while (top_level_item_list_->item_count() > 0) {
+    AppListItem* item = top_level_item_list_->item_at(0);
+    const std::string id = item->id();
+    for (auto& observer : observers_)
+      observer.OnAppListItemWillBeDeleted(item);
+    top_level_item_list_->DeleteItemAt(0);
+    for (auto& observer : observers_)
+      observer.OnAppListItemDeleted(id);
+  }
 }
 
 // Private methods

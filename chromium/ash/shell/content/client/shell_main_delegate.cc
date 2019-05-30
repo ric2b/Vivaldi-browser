@@ -4,18 +4,18 @@
 
 #include "ash/shell/content/client/shell_main_delegate.h"
 
-#include "ash/components/quick_launch/public/mojom/constants.mojom.h"
-#include "ash/components/quick_launch/quick_launch_application.h"
 #include "ash/components/shortcut_viewer/public/mojom/shortcut_viewer.mojom.h"
 #include "ash/components/shortcut_viewer/shortcut_viewer_application.h"
-#include "ash/components/tap_visualizer/public/mojom/constants.mojom.h"
+#include "ash/components/tap_visualizer/public/mojom/tap_visualizer.mojom.h"
 #include "ash/components/tap_visualizer/tap_visualizer_app.h"
 #include "ash/shell/content/client/shell_content_browser_client.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "content/public/utility/content_utility_client.h"
+#include "content/public/utility/utility_thread.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/ws/ime/test_ime_driver/public/mojom/constants.mojom.h"
 #include "services/ws/ime/test_ime_driver/test_ime_application.h"
@@ -26,24 +26,26 @@ namespace ash {
 namespace shell {
 namespace {
 
-std::unique_ptr<service_manager::Service> CreateQuickLaunch() {
-  logging::SetLogPrefix("quick");
-  return std::make_unique<quick_launch::QuickLaunchApplication>();
+void TerminateThisProcess() {
+  content::UtilityThread::Get()->ReleaseProcess();
 }
 
-std::unique_ptr<service_manager::Service> CreateShortcutViewer() {
+std::unique_ptr<service_manager::Service> CreateShortcutViewer(
+    service_manager::mojom::ServiceRequest request) {
   logging::SetLogPrefix("shortcut");
-  return std::make_unique<
-      keyboard_shortcut_viewer::ShortcutViewerApplication>();
+  return std::make_unique<keyboard_shortcut_viewer::ShortcutViewerApplication>(
+      std::move(request));
 }
 
-std::unique_ptr<service_manager::Service> CreateTapVisualizer() {
+std::unique_ptr<service_manager::Service> CreateTapVisualizer(
+    service_manager::mojom::ServiceRequest request) {
   logging::SetLogPrefix("tap");
-  return std::make_unique<tap_visualizer::TapVisualizerApp>();
+  return std::make_unique<tap_visualizer::TapVisualizerApp>(std::move(request));
 }
 
-std::unique_ptr<service_manager::Service> CreateTestImeDriver() {
-  return std::make_unique<ws::test::TestIMEApplication>();
+std::unique_ptr<service_manager::Service> CreateTestImeDriver(
+    service_manager::mojom::ServiceRequest request) {
+  return std::make_unique<ws::test::TestIMEApplication>(std::move(request));
 }
 
 class ShellContentUtilityClient : public content::ContentUtilityClient {
@@ -51,28 +53,24 @@ class ShellContentUtilityClient : public content::ContentUtilityClient {
   ShellContentUtilityClient() = default;
   ~ShellContentUtilityClient() override = default;
 
-  // ContentUtilityClient:
-  void RegisterServices(StaticServiceMap* services) override {
-    {
-      service_manager::EmbeddedServiceInfo info;
-      info.factory = base::BindRepeating(&CreateQuickLaunch);
-      (*services)[quick_launch::mojom::kServiceName] = info;
+  // content::ContentUtilityClient:
+  bool HandleServiceRequest(
+      const std::string& service_name,
+      service_manager::mojom::ServiceRequest request) override {
+    std::unique_ptr<service_manager::Service> service;
+    if (service_name == test_ime_driver::mojom::kServiceName)
+      service = CreateTestImeDriver(std::move(request));
+    else if (service_name == shortcut_viewer::mojom::kServiceName)
+      service = CreateShortcutViewer(std::move(request));
+    else if (service_name == tap_visualizer::mojom::kServiceName)
+      service = CreateTapVisualizer(std::move(request));
+
+    if (service) {
+      service_manager::Service::RunAsyncUntilTermination(
+          std::move(service), base::BindOnce(&TerminateThisProcess));
+      return true;
     }
-    {
-      service_manager::EmbeddedServiceInfo info;
-      info.factory = base::BindRepeating(&CreateShortcutViewer);
-      (*services)[shortcut_viewer::mojom::kServiceName] = info;
-    }
-    {
-      service_manager::EmbeddedServiceInfo info;
-      info.factory = base::BindRepeating(&CreateTapVisualizer);
-      (*services)[tap_visualizer::mojom::kServiceName] = info;
-    }
-    {
-      service_manager::EmbeddedServiceInfo info;
-      info.factory = base::BindRepeating(&CreateTestImeDriver);
-      (*services)[test_ime_driver::mojom::kServiceName] = info;
-    }
+    return false;
   }
 
  private:

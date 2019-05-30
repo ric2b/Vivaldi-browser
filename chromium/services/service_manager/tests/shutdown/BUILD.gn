@@ -2,10 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//services/catalog/public/tools/catalog.gni")
-import("//services/service_manager/public/cpp/service.gni")
-import("//services/service_manager/public/service_manifest.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
+import("//services/service_manager/public/cpp/service_executable.gni")
 import("//testing/test.gni")
 
 source_set("shutdown") {
@@ -20,9 +18,11 @@ source_set("shutdown") {
     ":shutdown_service",
     "//base",
     "//base/test:test_config",
+    "//base/test:test_support",
     "//services/service_manager/public/cpp",
-    "//services/service_manager/public/cpp:service_test_support",
+    "//services/service_manager/public/cpp/test:test_support",
     "//services/service_manager/public/mojom",
+    "//testing/gtest",
   ]
 
   data_deps = [
@@ -32,22 +32,13 @@ source_set("shutdown") {
 }
 
 mojom("interfaces") {
+  testonly = true
   sources = [
-    "shutdown_unittest.mojom",
+    "shutdown.test-mojom",
   ]
 }
 
-service_manifest("shutdown_unittest_manifest") {
-  name = "shutdown_unittest"
-  source = "shutdown_unittest_manifest.json"
-}
-
-service_manifest("shutdown_service_manifest") {
-  name = "shutdown_service"
-  source = "shutdown_service_manifest.json"
-}
-
-service("shutdown_service") {
+service_executable("shutdown_service") {
   testonly = true
   sources = [
     "shutdown_service_app.cc",
@@ -60,12 +51,7 @@ service("shutdown_service") {
   ]
 }
 
-service_manifest("shutdown_client_manifest") {
-  name = "shutdown_client"
-  source = "shutdown_client_manifest.json"
-}
-
-service("shutdown_client") {
+service_executable("shutdown_client") {
   testonly = true
   sources = [
     "shutdown_client_app.cc",
@@ -75,14 +61,5 @@ service("shutdown_client") {
     "//base",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/mojom",
-  ]
-}
-
-catalog("catalog") {
-  embedded_services = [ ":shutdown_unittest_manifest" ]
-
-  standalone_services = [
-    ":shutdown_client_manifest",
-    ":shutdown_service_manifest",
   ]
 }

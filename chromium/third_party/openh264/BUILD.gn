@@ -10,11 +10,12 @@ import("//third_party/yasm/yasm_assemble.gni")
 # Config shared by all openh264 targets.
 config("config") {
   cflags = []
+  defines = []
 
   if (is_chromeos && target_cpu == "arm") {
     # HAVE_NEON and __chromeos__ are needed for enabling NEON on ChromeOS
     # devices.
-    defines = [
+    defines += [
       "HAVE_NEON",
       "__chromeos__",
     ]
@@ -45,7 +46,7 @@ config("config") {
 # MSAN builds are flaky with assembler. crbug.com/685168
 
 use_assembler = (is_win || is_linux) &&
-                (target_cpu == "x86" || target_cpu == "x64") && !is_msan
+                ((!is_linux && target_cpu == "x86") || target_cpu == "x64") && !is_msan
 
 # This IF statement will make the targets visible only on specific builds,
 # which will lead to failures on other platforms if accidentally invoked.

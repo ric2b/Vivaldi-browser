@@ -25,7 +25,9 @@ from devil.android import device_errors
 from devil.android import device_utils
 from devil.android import flag_changer
 from devil.android import forwarder
+from devil.android.ndk import abis
 from devil.android.sdk import intent
+from devil.android.sdk import version_codes
 
 sys.path.append(os.path.join(_SRC_PATH, 'build', 'android'))
 import devil_chromium
@@ -186,7 +188,7 @@ class AndroidProfileTool(object):
   # order to keep devices tidy.
   _LEGACY_PROFILE_DIRS = ['/data/local/tmp/chrome/cyglog']
 
-  TEST_URL = 'https://www.google.com/#hl=en&q=science'
+  TEST_URL = 'http://en.m.wikipedia.org/wiki/Science'
   _WPR_ARCHIVE = os.path.join(
       os.path.dirname(__file__), 'memory_top_10_mobile_000.wprgo')
 
@@ -204,8 +206,17 @@ class AndroidProfileTool(object):
     """
     if device is None:
       devices = device_utils.DeviceUtils.HealthyDevices()
-      assert len(devices) == 1, 'Expected exactly one connected device'
-      self._device = devices[0]
+      assert devices, 'Expected at least one connected device'
+      # Favor device running Android version[K,L] if exists.
+      # Code ordering is not yet supported on Monochrome.
+      preferred_device = None
+      for device in devices:
+        device_version = device.build_version_sdk
+        if (device_version >= version_codes.KITKAT
+            and device_version <= version_codes.LOLLIPOP_MR1):
+         preferred_device = device
+         break
+      self._device = preferred_device if preferred_device else devices[0]
     else:
       self._device = device_utils.DeviceUtils(device)
     self._cygprofile_tests = os.path.join(
@@ -217,6 +228,7 @@ class AndroidProfileTool(object):
     self._SetUpDevice()
     self._pregenerated_profiles = None
 
+
   def SetPregeneratedProfiles(self, files):
     """Set pregenerated profiles.
 
@@ -226,6 +238,7 @@ class AndroidProfileTool(object):
     Args:
       files: ([str]) List of pregenerated files.
     """
+    logging.info('Using pregenerated profiles')
     self._pregenerated_profiles = files
 
   def RunCygprofileTests(self):
@@ -264,6 +277,7 @@ class AndroidProfileTool(object):
       logging.info('Using pregenerated profiles instead of running profile')
       logging.info('Profile files: %s', '\n'.join(self._pregenerated_profiles))
       return self._pregenerated_profiles
+    self._device.adb.Logcat(clear=True)
     self._Install(apk)
     try:
       changer = self._SetChromeFlags(package_info)
@@ -274,6 +288,11 @@ class AndroidProfileTool(object):
           self._RunProfileCollection(package_info, self._simulate_user)
       else:
         self._RunProfileCollection(package_info, self._simulate_user)
+    except device_errors.CommandFailedError as exc:
+      logging.error('Exception %s; dumping logcat', exc)
+      for logcat_line in self._device.adb.Logcat(dump=True):
+        logging.error(logcat_line)
+      raise
     finally:
       self._RestoreChromeFlags(changer)
 
@@ -293,6 +312,12 @@ class AndroidProfileTool(object):
     Raises:
       NoProfileDataError: No data was found on the device.
     """
+    if self._pregenerated_profiles:
+      logging.info('Using pregenerated profiles instead of running '
+                   'system health profile')
+      logging.info('Profile files: %s', '\n'.join(self._pregenerated_profiles))
+      return self._pregenerated_profiles
+    logging.info('Running system health profile')
     self._SetUpDeviceFolders()
     self._RunCommand(['tools/perf/run_benchmark',
                       '--device={}'.format(self._device.serial),
@@ -350,6 +375,7 @@ class AndroidProfileTool(object):
         _SimulateSwipe(self._device, 200, 700, 200, 1000)
         _SimulateSwipe(self._device, 200, 700, 200, 1000)
       time.sleep(30)
+      self._AssertRunning(package_info)
       self._KillChrome(package_info)
 
   def Cleanup(self):
@@ -418,8 +444,13 @@ class AndroidProfileTool(object):
                       extras={'create_new_tab': True}),
         blocking=True, force_stop=True)
 
+  def _AssertRunning(self, package_info):
+    assert self._device.GetApplicationPids(package_info.package), (
+        'Expected at least one pid associated with {} but found none'.format(
+            package_info.package))
+
   def _KillChrome(self, package_info):
-    self._device.KillAll(package_info.package)
+    self._device.ForceStop(package_info.package)
 
   def _DeleteHostData(self):
     """Clears out profile storage locations on the host."""
@@ -440,7 +471,8 @@ class AndroidProfileTool(object):
     """
     print 'Pulling profile data...'
     self._SetUpHostFolders()
-    self._device.PullFile(self._DEVICE_PROFILE_DIR, self._host_profile_dir)
+    self._device.PullFile(self._DEVICE_PROFILE_DIR, self._host_profile_dir,
+                          timeout=300)
 
     # Temporary workaround/investigation: if (for unknown reason) 'adb pull' of
     # the directory 'orderfile' '.../Release/profile_data' produces
@@ -454,12 +486,12 @@ class AndroidProfileTool(object):
         files.extend(os.path.join(profile_dir, f)
                      for f in os.listdir(profile_dir))
       else:
-        files.append(root_file)
+        files.append(os.path.join(self._host_profile_dir, root_file))
 
     if len(files) == 0:
       raise NoProfileDataError('No profile data was collected')
 
-    return [os.path.join(profile_dir, x) for x in files]
+    return files
 
 
 def AddProfileCollectionArguments(parser):

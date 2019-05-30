@@ -6,6 +6,9 @@
 #define ASH_APP_LIST_VIEWS_SEARCH_RESULT_ANSWER_CARD_VIEW_H_
 
 #include "ash/app_list/views/search_result_container_view.h"
+#include "base/memory/ref_counted.h"
+#include "base/strings/string16.h"
+#include "net/http/http_response_headers.h"
 
 namespace app_list {
 
@@ -28,14 +31,22 @@ class APP_LIST_EXPORT SearchResultAnswerCardView
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   SearchResultBaseView* GetFirstResultView() override;
 
-  views::View* GetSearchAnswerContainerViewForTest() const;
+  views::View* GetAnswerCardResultViewForTest() const;
+
+  static scoped_refptr<net::HttpResponseHeaders>
+  CreateAnswerCardResponseHeadersForTest(const std::string& query,
+                                         const std::string& title);
 
  private:
-  class SearchAnswerContainerView;
+  class AnswerCardResultView;
 
   // Pointer to the container of the search answer; owned by the view hierarchy.
   // It's visible iff we have a search answer result.
-  SearchAnswerContainerView* const search_answer_container_view_;
+  AnswerCardResultView* const search_answer_container_view_;
+
+  // Tracks the last known card title so we can update the accessibility
+  // framework if the title changes while the card has focus.
+  base::string16 last_known_card_title_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchResultAnswerCardView);
 };

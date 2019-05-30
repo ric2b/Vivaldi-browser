@@ -9,12 +9,45 @@
 
 # Unknown failure.
 -BrowserTabRestoreTest.*
-
-# Extensive use of ash::WindowState.
--InitiallyMaximized/AcceleratorCommandsFullscreenBrowserTest.*
--InitiallyMaximized/AcceleratorCommandsPlatformAppFullscreenBrowserTest.*
--InitiallyRestored/AcceleratorCommandsFullscreenBrowserTest.*
--InitiallyRestored/AcceleratorCommandsPlatformAppFullscreenBrowserTest.*
+-ExtensionApiTest.IdleGetAutoLockDelay
+-MediaRouterIntegrationOneUABrowserTest.Basic
+-MediaRouterIntegrationOneUABrowserTest.Fail_SendMessage
+-MediaRouterIntegrationOneUABrowserTest.ReconnectSession
+-MediaRouterIntegrationOneUABrowserTest.ReconnectSessionSameTab
+-MediaRouterIntegrationOneUANoReceiverBrowserTest.Basic
+-MediaRouterIntegrationOneUANoReceiverBrowserTest.Fail_SendMessage
+-MediaRouterIntegrationOneUANoReceiverBrowserTest.ReconnectSession
+-MediaRouterIntegrationOneUANoReceiverBrowserTest.ReconnectSessionSameTab
+-MediaSessionPictureInPictureWindowControllerBrowserTest.SkipAdButtonVisibility
+-MediaSessionPictureInPictureWindowControllerBrowserTest.SkipAdHandlerCalled
+-NoBestEffortTasksTest.LoadAndPaintAboutBlank
+-NoBestEffortTasksTest.LoadAndPaintFromNetwork
+-ProcessMemoryMetricsEmitterTest.FetchDuringTrace
+-ScreenLockerTest.FingerprintAuthWhenAuthDisabled
+-ScreenLockerTest.PasswordAuthWhenAuthDisabled
+-ScreenLockerTest.TestBadThenGoodPassword
+-ScreenLockerTest.TestShowTwice
+-SwitchAccessAutoScanManagerTest.RestartIfRunningMultiple
+-SwitchAccessAutoScanManagerTest.SetEnabledMultiple
+-SwitchAccessAutoScanManagerTest.SetEnabled
+-SwitchAccessAutoScanManagerTest.RestartIfRunningWhenOff
+-SwitchAccessAutoScanManagerTest.EnableAndDisable
+-SwitchAccessAutoScanManagerTest.SetScanTime
+-SwitchAccessNavigationManagerTest.MoveForward
+-SwitchAccessNavigationManagerTest.MoveBackward
+-SwitchAccessNavigationManagerTest.MoveBackAndForth
+-SwitchAccessNavigationManagerTest.SelectButton
+-SwitchAccessPredicateTest.IsActionable
+-SwitchAccessPredicateTest.IsGroup
+-SwitchAccessPredicateTest.IsInterestingSubtree
+-SwitchAccessPredicateTest.IsInteresting
+-SwitchAccessPredicateTest.LeafPredicate
+-SwitchAccessPredicateTest.RootPredicate
+-SwitchAccessPredicateTest.VisitPredicate
+-TrayAccessibilityLoginTestInstance/TrayAccessibilityLoginTest.ShowMenuWithShowOnLoginScreen/0
+-TrayAccessibilityLoginTestInstance/TrayAccessibilityLoginTest.ShowMenuWithShowOnLoginScreen/1
+-WebRtcGetDisplayMediaBrowserTestWithFakeUI.GetDisplayMedia/2
+-WebRtcGetDisplayMediaBrowserTestWithFakeUI.GetDisplayMediaWithConstraints/2
 
 # Volume adjustment fails.
 -WizardControllerTest.*ChromeVox
@@ -33,22 +66,17 @@
 -AutomationApiTestWithDeviceScaleFactor.*
 -AutomationManagerAuraBrowserTest.*
 
-# The browser frame is a work in progress.
--BrowserNonClientFrameViewAshTest.AvatarDisplayOnTeleportedWindow/*
--BrowserNonClientFrameViewAshTest.HeaderHeightForSnappedBrowserInSplitView/*
--BrowserNonClientFrameViewAshTest.ImmersiveModeTopViewInset/*
--BrowserNonClientFrameViewAshTest.TopViewInset/*
+# ChromeVox and Select-to-Speak not yet supported. https://crbug.com/594887
+-ChromeVox*
+-SelectToSpeak*
 
-# Direct access to ash window frames, tablet mode, overview mode, etc.
--NonHomeLauncherBrowserNonClientFrameViewAshTest.*
-
-# Fix immersive fullscreen mode in mash. https://crbug.com/844748.
-# Needs EventGenerator to work across window tree hosts. crbug.com/814675
--ImmersiveModeBrowserViewTest.TestCaptionButtonsReceiveEventsInAppImmersiveMode*
--ImmersiveModeBrowserViewTest.TestCaptionButtonsReceiveEventsInBrowserImmersiveMode*
-
-# Null immersive_fullscreen_controller_.
--ChromeNativeAppWindowViewsAuraAshBrowserTest.*
+# Touch gestures don't work in webcontents. https://crbug.com/866991.
+-TopControlsSlideControllerTest.TestScrollingMaximizedPageBeforeGoingToTabletMode
+-TopControlsSlideControllerTest.TestScrollingPage
+-TopControlsSlideControllerTest.TestScrollingPageAndSwitchingToNTP
+-TopControlsSlideControllerTest.TestClosingATab
+-TopControlsSlideControllerTest.TestFocusEditableElements
+-TopControlsSlideControllerTest.DisplayRotation
 
 # ash::Shell access from ChromeViewsDelegate::CreateDefaultNonClientFrameView()
 # e.g. from chromeos::CaptivePortalWindowProxy::Show().
@@ -101,10 +129,6 @@
 # TODO: Very slow (>25 seconds) and occasional timeouts.
 -ExecuteScriptApiTest/DestructiveScriptTest.*
 
-# Fails: immersive_controller->IsRevealed() returns false.
-# http://crbug.com/791148
--ZoomBubbleBrowserTest.*
-
 # ozone_platform.cc(61) Check failed: instance_. OzonePlatform is not initialized
 -ExtensionWebstoreGetWebGLStatusTest.*
 
@@ -121,14 +145,7 @@
 # ash::Shell::display_manager() to get display state.
 # http://crbug.com/831826
 -PolicyTest.UnifiedDesktopEnabledByDefault
-
-# IME accesses ash::Shell for root window.
--InputMethodEngineBrowserTest/InputMethodEngineBrowserTest.*
--InputMethodEngineComponentExtensionBrowserTest/InputMethodEngineBrowserTest.*
--InputMethodEngineIncognitoBrowserTest/InputMethodEngineBrowserTest.*
-
-# KeyboardOverlayUI uses ash::Shell.
--KeyboardOverlayUIBrowserTest.*
+-PolicyDeviceDisplayResolution/*
 
 # Kiosk mode has a variety of failures:
 # termination_observer_->terminated() is false.
@@ -145,12 +162,6 @@
 # Panel state lookup failures for window active, item running, etc.
 -LauncherPlatformAppBrowserTest.PanelAttentionStatus
 -LauncherPlatformAppBrowserTest.PanelItemClickBehavior
-
-# JS failure: hasAccessToCurrentWindow: FAIL (no message)
--LockScreenNoteTakingTest.*
-
-# desktop_window_tree_host_mus.cc(796) Check failed: !window->GetRootWindow() || this->window() == window->GetRootWindow().
--LoginFeedbackTest.*
 
 # Missing magnification manager and also RefCounted check failed:
 # CalledOnValidSequence() from SchedulerWorkerDelegate::OnMainExit
@@ -179,14 +190,19 @@
 # http://crbug.com/831826
 -ShelfAppBrowserTest.LaunchAppFromDisplayWithoutFocus*
 
+# Test fails. https://crbug.com/899867
+-ShelfAppBrowserTest.SettingsAndTaskManagerWindows
+
 # content::WaitForChildFrameSurfaceReady hangs.
 -SitePerProcessDevToolsSanityTest.InputDispatchEventsToOOPIF
--WebViewGuestTouchFocusBrowserPluginSpecificTest.TouchFocusesBrowserPluginInEmbedder
+-ChromeMimeHandlerViewBrowserPluginTest.TouchFocusesBrowserPluginInEmbedder
 
 # Function under test uses ash::Shell for window list.
 -SortWindowsByZIndexBrowserTest.*
 
-# Timeout.
+# Timeout because first non-empty paint isn't triggered.
+# https://crbug.com/885318
+-NoBackgroundTasksTest.FirstNonEmptyPaintWithoutBackgroundTasks
 -StartupMetricsTest.*
 
 # ash::Shell access in test for StatusAreaWidget.
@@ -205,20 +221,46 @@
 -PrerenderBrowserTest.*
 -SitePerProcess/TaskManagerOOPIFBrowserTest.*
 -TaskManagerBrowserTest.*
--TaskManagerMemoryCoordinatorBrowserTest.*
 -TaskManagerUtilityProcessBrowserTest.*
 
 # ash::Shell access in test.
 -TrayAccessibilityTestInstance/TrayAccessibilityTest.*
 
-# Virtual keyboard not supported.
--AccessibilityManagerLoginTest.ResumeSavedPref
--DefaultKeyboardExtensionBrowserTest.*
--KeyboardEndToEndTest.*
--KioskVirtualKeyboardTest.*
--VirtualKeyboardAppWindowTest.*
--VirtualKeyboardStateTest.*
--VirtualKeyboardWebContentTest.*
+# Changing the Chrome keyboard window size does not change the Ash keyboard
+# window size. These tests may require a test mojo interface for Mash.
+# https://crbug.com/843332.
+-KeyboardControllerAppWindowTest.DisableOverscrollForImeWindow
+-KeyboardEndToEndOverscrollTest.ToggleKeyboardOnMaximizedWindowAffectsViewport
+
+# Keyboard window does not move browser windows. https://crbug.com/906888.
+-KeyboardEndToEndOverscrollTest.ToggleKeyboardOnShortOverlappingWindowMovesWindowUpwards
+-KeyboardEndToEndOverscrollTest.ToggleKeyboardOnTallOverlappingWindowMovesWindowUpwardsAndAffectsViewport
+
+# Mouse move events are not handled correctly in tests.
+# TODO(stevenjb): Determine why this works in practice but fails in the test.
+-KeyboardControllerWebContentTest.CanDragFloatingKeyboardWithMouse
+
+# RemoteTextInputClient is not forwarding focus requests to show/hide the
+# virtual keyboard: https://crbug.com/631527
+-KeyboardEndToEndFormTest.ChangeInputModeToNoneHidesKeyboard
+-KeyboardEndToEndFocusTest.TriggerAsyncInputFocusFromUserGestureAfterBlurShowsKeyboard
+
+# These tests succeed in SingleProcessMash but time out in Mash. They rely on
+# focusing an input element to show the virtual keyboard.
+# https://crbug.com/912233
+-KeyboardEndToEndFocusTest.*
+-KeyboardEndToEndFormTest.*
+-KeyboardEndToEndOverscrollTest.*
+-SelectFileDialogExtensionBrowserTest.SelectFileVirtualKeyboard_TabletMode
+-SelectFileDialogExtensionBrowserTest/SelectFileDialogExtensionBrowserTest.SelectFileVirtualKeyboard_TabletMode/1
+-SelectFileDialogExtensionBrowserTest/SelectFileDialogExtensionBrowserTest.SelectFileVirtualKeyboard_TabletMode/0
+
+# Chrome keyboard window -> root -> host -> input method is null in Mash.
+# https://crbug.com/756059
+-KeyboardControllerWebContentTest.EnableIMEInDifferentExtension
+
+# Uses ash::LockWindow. https://crbug.com/899862
+-ShutdownPolicyLockerTest.*
 
 # Timeouts in content::WaitForChildFrameSurfaceReady()
 # Crashes in viz::HostFrameSinkManager::RegisterFrameSinkId()
@@ -236,28 +278,17 @@
 -PowerPolicyLoginScreenBrowserTest.SetDevicePolicy
 -EnterpriseEnrollmentTest.TestActiveDirectoryEnrollment_Success
 
-# Needs EventGenerator to work across window tree hosts. crbug.com/814675
--RoundedOmniboxPopupContentsViewTest.ClickOmnibox*
-
 # HostedAppMenu needs porting to BrowserNonClientFrameViewMash crbug.com/813666
 -HostedAppPWAOnlyTest.AppInfoOpensPageInfo*
 
 # DCHECK in DelegatedFrameHost
 -SafeBrowsingTriggeredPopupBlockerBrowserTest.NoFeature_NoMessages
 
-# https://crbug.com/815379
--WindowOpenApiTest.RemoveLockedFullscreenFromWindow
--WindowOpenApiTest.RemoveLockedFullscreenFromWindowWithoutPermission
-
 # App list code flake: https://crbug.com/847154 https://crbug.com/843429
 -MultiProfileFileManagerBrowserTest.*
 
 # Flaky segfaults: https://crbug.com/818147
 -ExtensionApiTest.BookmarkManager
-
-# Segfaults after massive recursion setting ash::kWindowStateTypeKey:
-# crbug.com/824458
--PresentationReceiverWindowViewBrowserTest.ChromeOSHardwareFullscreenButton
 
 # RenderFrameMetadata observation not supported: https://crbug.com/820974
 -WebViewFocusBrowserPluginSpecificTest.*
@@ -277,31 +308,31 @@
 # disabled.
 # https://crbug.com/827327
 -PictureInPictureWindowControllerBrowserTest.*
--ControlPictureInPictureWindowControllerBrowserTest.*
 -BrowserActionApiTest.TestPictureInPictureOnBrowserActionIconClick
 -PlatformAppBrowserTest.PictureInPicture
 -PictureInPictureLazyBackgroundPageApiTest.PictureInPictureInBackgroundPage
-
-# These started failing with the switch to ws2.
-# https:://crbug.com/855767
--AppWindowApiTest.OnRestoredEvent
--BrowserActionApiTest.BrowserActionPopupWithIframe
--FirstRunUIBrowserTest.ModalWindowDoesNotBlock
--LauncherPlatformAppBrowserTest.AltNumberAppsTabbing
--LauncherPlatformAppBrowserTest.PackagedAppClickBehaviorInMinimizeMode
--LoginWebDialogTest.CannotMinimize
--LoginWebDialogTest.CloseDialogByAccelerator
--ShelfAppBrowserTest.AltNumberTabsTabbing
--ShelfAppBrowserTestNoDefaultBrowser.AltNumberBrowserTabbing
--ShelfAppBrowserTestNoDefaultBrowser.BrowserShortcutLauncherItemController
-
-# Excluded from Mash because pointer events from EventGenerator aren't seen.
-# https://crbug.com/814675
--ChromeOSInfoPrivateTest.StylusSeen
 
 # Has become super flaky on linux-chromeos-rel bot. Note that the test itself
 # is also flaky on Windows and Mac even without "mash":
 # https://crbug.com/671891
 -SiteDetailsBrowserTest.IsolateExtensions
+
+# Often timing out. https://crbug.com/899860
+-TopControlsSlideControllerTest.*
+
+# Crashing. https://crbug.com/899864
+-ExtensionDialogBoundsTest.*
+
+# Crashing. https://crbug.com/899865
+-MemoryTracingBrowserTest.TestMemoryInfra
+
+# Use of Shell. https://crbug.com/899869
+-AutotestPrivateApiTest.AutotestPrivate
+
+# https://crbug.com/918876
+-SwitchAccessPredicateTest.IsActionableFocusableElements
+
+# Flaky. https://crbug.com/919256
+-PDFAnnotationsTest.AnnotationsFeatureEnabled
 
 # See comment at top of file regarding adding test exclusions.

@@ -10,16 +10,17 @@
 #include <vector>
 
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/mock_password_store.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
+using autofill::FormFieldData;
 using autofill::PasswordForm;
 using base::ASCIIToUTF16;
 using base::StringPiece;
@@ -62,7 +63,8 @@ class FormSaverImplTest : public testing::Test {
   ~FormSaverImplTest() override { mock_store_->ShutdownOnUIThread(); }
 
  protected:
-  base::MessageLoop message_loop_;  // For the MockPasswordStore.
+  // For the MockPasswordStore.
+  base::test::ScopedTaskEnvironment task_environment_;
   scoped_refptr<StrictMock<MockPasswordStore>> mock_store_;
   FormSaverImpl form_saver_;
 
@@ -528,6 +530,41 @@ TEST_F(FormSaverImplTest, PresaveGeneratedPassword_CloneSurvives) {
   original.reset();
   EXPECT_CALL(*mock_store_, UpdateLoginWithPrimaryKey(_, _));
   clone->PresaveGeneratedPassword(generated);
+}
+
+// Check that on saving the pending form |form_data| is sanitized.
+TEST_F(FormSaverImplTest, FormDataSanitized) {
+  PasswordForm pending = CreatePending("nameofuser", "wordToP4a55");
+  FormFieldData field;
+  field.name = ASCIIToUTF16("name");
+  field.form_control_type = "password";
+  field.value = ASCIIToUTF16("value");
+  field.label = ASCIIToUTF16("label");
+  field.placeholder = ASCIIToUTF16("placeholder");
+  field.id_attribute = ASCIIToUTF16("id");
+  field.name_attribute = field.name;
+  field.css_classes = ASCIIToUTF16("css_classes");
+  pending.form_data.fields.push_back(field);
+
+  for (bool presave : {false, true}) {
+    PasswordForm saved;
+    EXPECT_CALL(*mock_store_, AddLogin(_)).WillOnce(SaveArg<0>(&saved));
+    if (presave)
+      form_saver_.PresaveGeneratedPassword(pending);
+    else
+      form_saver_.Save(pending, {});
+
+    ASSERT_EQ(1u, saved.form_data.fields.size());
+    const FormFieldData& saved_field = saved.form_data.fields[0];
+    EXPECT_EQ(ASCIIToUTF16("name"), saved_field.name);
+    EXPECT_EQ("password", saved_field.form_control_type);
+    EXPECT_TRUE(saved_field.value.empty());
+    EXPECT_TRUE(saved_field.label.empty());
+    EXPECT_TRUE(saved_field.placeholder.empty());
+    EXPECT_TRUE(saved_field.id_attribute.empty());
+    EXPECT_TRUE(saved_field.name_attribute.empty());
+    EXPECT_TRUE(saved_field.css_classes.empty());
+  }
 }
 
 }  // namespace password_manager

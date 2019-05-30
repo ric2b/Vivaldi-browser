@@ -146,7 +146,8 @@ def _OnStaleMd5(lint_path, config_path, processed_config_path,
         src_dir = _NewTempSubdir('SRC_ROOT')
         src_dirs.append(src_dir)
         cmd.extend(['--sources', _RebasePath(src_dir)])
-      os.symlink(os.path.abspath(src), PathInDir(src_dir, src))
+      if os.path.abspath(src) != PathInDir(src_dir, src):
+        os.symlink(os.path.abspath(src), PathInDir(src_dir, src))
 
     if srcjars:
       srcjar_paths = build_utils.ParseGnList(srcjars)
@@ -226,22 +227,12 @@ def _OnStaleMd5(lint_path, config_path, processed_config_path,
           print 'File contents:'
           with open(result_path) as f:
             print f.read()
-        if not can_fail_build:
+          if can_fail_build:
+            traceback.print_exc()
+        if can_fail_build:
+          raise
+        else:
           return
-
-      if can_fail_build and not silent:
-        traceback.print_exc()
-
-      # There are actual lint issues
-      try:
-        num_issues = _ParseAndShowResultFile()
-      except Exception: # pylint: disable=broad-except
-        if not silent:
-          print 'Lint created unparseable xml file...'
-          print 'File contents:'
-          with open(result_path) as f:
-            print f.read()
-        raise
 
       _ProcessResultFile()
       if num_issues == 0 and include_unexpected:
@@ -379,7 +370,7 @@ def main():
     disable = build_utils.ParseGnList(args.disable)
     input_strings.extend(disable)
 
-  output_paths = [ args.result_path ]
+  output_paths = [args.result_path, args.processed_config_path]
 
   build_utils.CallAndWriteDepfileIfStale(
       lambda: _OnStaleMd5(args.lint_path,

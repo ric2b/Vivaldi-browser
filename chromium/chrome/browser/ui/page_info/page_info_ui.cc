@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/command_line.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/permissions/permission_manager.h"
@@ -22,7 +22,6 @@
 #include "components/strings/grit/components_strings.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "url/gurl.h"
 
 #if defined(OS_ANDROID)
@@ -63,7 +62,7 @@ const int kPermissionButtonTextIDPolicyManaged[] = {
     IDS_PAGE_INFO_PERMISSION_ASK_BY_POLICY,
     kInvalidResourceID,
     kInvalidResourceID};
-static_assert(arraysize(kPermissionButtonTextIDPolicyManaged) ==
+static_assert(base::size(kPermissionButtonTextIDPolicyManaged) ==
                   CONTENT_SETTING_NUM_SETTINGS,
               "kPermissionButtonTextIDPolicyManaged array size is incorrect");
 
@@ -76,7 +75,7 @@ const int kPermissionButtonTextIDExtensionManaged[] = {
     IDS_PAGE_INFO_PERMISSION_ASK_BY_EXTENSION,
     kInvalidResourceID,
     kInvalidResourceID};
-static_assert(arraysize(kPermissionButtonTextIDExtensionManaged) ==
+static_assert(base::size(kPermissionButtonTextIDExtensionManaged) ==
                   CONTENT_SETTING_NUM_SETTINGS,
               "kPermissionButtonTextIDExtensionManaged array size is "
               "incorrect");
@@ -90,7 +89,7 @@ const int kPermissionButtonTextIDUserManaged[] = {
     IDS_PAGE_INFO_BUTTON_TEXT_ASK_BY_USER,
     kInvalidResourceID,
     IDS_PAGE_INFO_BUTTON_TEXT_DETECT_IMPORTANT_CONTENT_BY_USER};
-static_assert(arraysize(kPermissionButtonTextIDUserManaged) ==
+static_assert(base::size(kPermissionButtonTextIDUserManaged) ==
                   CONTENT_SETTING_NUM_SETTINGS,
               "kPermissionButtonTextIDUserManaged array size is incorrect");
 
@@ -219,8 +218,8 @@ PageInfoUI::PermissionInfo::PermissionInfo()
 
 PageInfoUI::ChosenObjectInfo::ChosenObjectInfo(
     const PageInfo::ChooserUIInfo& ui_info,
-    std::unique_ptr<base::DictionaryValue> object)
-    : ui_info(ui_info), object(std::move(object)) {}
+    std::unique_ptr<ChooserContextBase::Object> chooser_object)
+    : ui_info(ui_info), chooser_object(std::move(chooser_object)) {}
 
 PageInfoUI::ChosenObjectInfo::~ChosenObjectInfo() {}
 
@@ -231,6 +230,9 @@ PageInfoUI::IdentityInfo::IdentityInfo()
       show_change_password_buttons(false) {}
 
 PageInfoUI::IdentityInfo::~IdentityInfo() {}
+
+PageInfoUI::PageFeatureInfo::PageFeatureInfo()
+    : is_vr_presentation_in_headset(false) {}
 
 std::unique_ptr<PageInfoUI::SecurityDescription>
 PageInfoUI::GetSecurityDescription(const IdentityInfo& identity_info) const {
@@ -336,7 +338,7 @@ base::string16 PageInfoUI::PermissionActionToUIString(
       if (setting == CONTENT_SETTING_DEFAULT) {
 #if !defined(OS_ANDROID)
         if (type == CONTENT_SETTINGS_TYPE_SOUND &&
-            base::FeatureList::IsEnabled(media::kAutoplaySoundSettings)) {
+            base::FeatureList::IsEnabled(media::kAutoplayWhitelistSettings)) {
           // If the block autoplay enabled preference is enabled and the
           // sound default setting is ALLOW, we will return a custom string
           // indicating that Chrome is controlling autoplay and sound
@@ -360,7 +362,7 @@ base::string16 PageInfoUI::PermissionActionToUIString(
     case content_settings::SETTING_SOURCE_EXTENSION:
 #if !defined(OS_ANDROID)
       if (type == CONTENT_SETTINGS_TYPE_SOUND &&
-          base::FeatureList::IsEnabled(media::kAutoplaySoundSettings)) {
+          base::FeatureList::IsEnabled(media::kAutoplayWhitelistSettings)) {
         button_text_ids = kSoundPermissionButtonTextIDUserManaged;
         break;
       }
@@ -429,7 +431,7 @@ SkColor PageInfoUI::GetSecondaryTextColor() {
 base::string16 PageInfoUI::ChosenObjectToUIString(
     const ChosenObjectInfo& object) {
   base::string16 name;
-  object.object->GetString(object.ui_info.ui_name_key, &name);
+  object.chooser_object->value.GetString(object.ui_info.ui_name_key, &name);
   return name;
 }
 
@@ -576,9 +578,21 @@ const gfx::ImageSkia PageInfoUI::GetChosenObjectIcon(
     const ChosenObjectInfo& object,
     bool deleted,
     SkColor related_text_color) {
-  DCHECK_EQ(CONTENT_SETTINGS_TYPE_USB_CHOOSER_DATA,
-            object.ui_info.content_settings_type);
-  const gfx::VectorIcon* icon = &vector_icons::kUsbIcon;
+  const gfx::VectorIcon* icon = &gfx::kNoneIcon;
+  switch (object.ui_info.content_settings_type) {
+    case CONTENT_SETTINGS_TYPE_USB_CHOOSER_DATA:
+      icon = &vector_icons::kUsbIcon;
+      break;
+    case CONTENT_SETTINGS_TYPE_SERIAL_CHOOSER_DATA:
+      icon = &vector_icons::kSerialPortIcon;
+      break;
+    default:
+      // All other content settings types do not represent chosen object
+      // permissions.
+      NOTREACHED();
+      break;
+  }
+
   if (deleted) {
     return gfx::CreateVectorIconWithBadge(
         *icon, kVectorIconSize,
@@ -603,6 +617,13 @@ const gfx::ImageSkia PageInfoUI::GetSiteSettingsIcon(
     const SkColor related_text_color) {
   return gfx::CreateVectorIcon(
       kSettingsIcon, kVectorIconSize,
+      color_utils::DeriveDefaultIconColor(related_text_color));
+}
+
+// static
+const gfx::ImageSkia PageInfoUI::GetVrSettingsIcon(SkColor related_text_color) {
+  return gfx::CreateVectorIcon(
+      kVrHeadsetIcon, kVectorIconSize,
       color_utils::DeriveDefaultIconColor(related_text_color));
 }
 #endif

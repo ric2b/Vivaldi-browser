@@ -16,7 +16,8 @@ namespace content {
 // static
 ServiceWorkerDevToolsManager* ServiceWorkerDevToolsManager::GetInstance() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return base::Singleton<ServiceWorkerDevToolsManager>::get();
+  static base::NoDestructor<ServiceWorkerDevToolsManager> instance;
+  return &*instance;
 }
 
 ServiceWorkerDevToolsAgentHost*
@@ -91,6 +92,7 @@ void ServiceWorkerDevToolsManager::WorkerCreated(
 void ServiceWorkerDevToolsManager::WorkerReadyForInspection(
     int worker_process_id,
     int worker_route_id,
+    blink::mojom::DevToolsAgentHostAssociatedRequest host_request,
     blink::mojom::DevToolsAgentAssociatedPtrInfo devtools_agent_ptr_info) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   const WorkerId worker_id(worker_process_id, worker_route_id);
@@ -98,7 +100,8 @@ void ServiceWorkerDevToolsManager::WorkerReadyForInspection(
   if (it == live_hosts_.end())
     return;
   scoped_refptr<ServiceWorkerDevToolsAgentHost> host = it->second;
-  host->WorkerReadyForInspection(std::move(devtools_agent_ptr_info));
+  host->WorkerReadyForInspection(std::move(host_request),
+                                 std::move(devtools_agent_ptr_info));
   // Bring up UI for the ones not picked by other clients.
   if (debug_service_worker_on_start_ && !host->IsAttached())
     host->Inspect();
@@ -205,7 +208,7 @@ void ServiceWorkerDevToolsManager::NavigationPreloadResponseReceived(
     return;
   for (auto* network : protocol::NetworkHandler::ForAgentHost(it->second.get()))
     network->ResponseReceived(request_id, std::string(), url,
-                              protocol::Page::ResourceTypeEnum::Other, head,
+                              protocol::Network::ResourceTypeEnum::Other, head,
                               protocol::Maybe<std::string>());
 }
 
@@ -219,8 +222,8 @@ void ServiceWorkerDevToolsManager::NavigationPreloadCompleted(
   if (it == live_hosts_.end())
     return;
   for (auto* network : protocol::NetworkHandler::ForAgentHost(it->second.get()))
-    network->LoadingComplete(request_id,
-                             protocol::Page::ResourceTypeEnum::Other, status);
+    network->LoadingComplete(
+        request_id, protocol::Network::ResourceTypeEnum::Other, status);
 }
 
 }  // namespace content

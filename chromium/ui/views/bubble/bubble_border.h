@@ -182,6 +182,12 @@ class VIEWS_EXPORT BubbleBorder : public Border {
     md_shadow_color_ = shadow_color;
   }
 
+  // Set a flag to avoid the bubble's shadow overlapping the anchor.
+  void set_avoid_shadow_overlap(bool value) { avoid_shadow_overlap_ = value; }
+
+  // Sets an explicit insets value to be used.
+  void set_insets(const gfx::Insets& insets) { insets_ = insets; }
+
   // Get the desired widget bounds (in screen coordinates) given the anchor rect
   // and bubble content size; calculated from shadow and arrow image dimensions.
   virtual gfx::Rect GetBounds(const gfx::Rect& anchor_rect,
@@ -229,6 +235,9 @@ class VIEWS_EXPORT BubbleBorder : public Border {
   // to make the window shape based on insets and GetBorderCornerRadius().
   void PaintNoAssets(const View& view, gfx::Canvas* canvas);
 
+  // Paint for the NO_SHADOW shadow type. This paints a simple line border.
+  void PaintNoShadow(const View& view, gfx::Canvas* canvas);
+
   Arrow arrow_;
   int arrow_offset_;
   // Corner radius for the bubble border. If supplied the border will use
@@ -242,6 +251,8 @@ class VIEWS_EXPORT BubbleBorder : public Border {
   SkColor md_shadow_color_ = SK_ColorBLACK;
   SkColor background_color_;
   bool use_theme_background_color_;
+  bool avoid_shadow_overlap_ = false;
+  base::Optional<gfx::Insets> insets_;
 
   DISALLOW_COPY_AND_ASSIGN(BubbleBorder);
 };

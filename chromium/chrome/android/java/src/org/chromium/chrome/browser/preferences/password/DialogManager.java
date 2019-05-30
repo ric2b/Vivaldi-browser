@@ -9,7 +9,8 @@ import android.app.FragmentManager;
 import android.support.annotation.IntDef;
 import android.support.annotation.Nullable;
 
-import org.chromium.base.ThreadUtils;
+import org.chromium.base.task.PostTask;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -93,10 +94,7 @@ public final class DialogManager {
         mDialogFragment.show(fragmentManager, null);
         // Initiate the barrier closure, expecting 2 runs: one automatic but delayed, and one
         // explicit, to hide the dialog.
-        // TODO(crbug.com/821377) -- remove clang-format pragmas
-        // clang-format off
         mBarrierClosure = new SingleThreadBarrierClosure(2, this::hideImmediately);
-        // clang-format on
         // This is the automatic but delayed signal.
         mDelayer.delay(mBarrierClosure);
     }
@@ -138,7 +136,7 @@ public final class DialogManager {
         if (mDialogFragment != null) mDialogFragment.dismiss();
         // Post the callback to ensure that it is always run asynchronously, even if hide() took a
         // shortcut for a missing shown().
-        if (mCallback != null) ThreadUtils.postOnUiThread(mCallback);
+        if (mCallback != null) PostTask.postTask(UiThreadTaskTraits.DEFAULT, mCallback);
         reset();
     }
 

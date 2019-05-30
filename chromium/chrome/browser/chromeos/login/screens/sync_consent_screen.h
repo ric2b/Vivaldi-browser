@@ -55,10 +55,11 @@ class SyncConsentScreen : public BaseScreen,
 
   // Launches the sync consent settings dialog if the user requested to review
   // them after completing OOBE.
-  static void MaybeLaunchSyncConstentSettings(Profile* profile);
+  static void MaybeLaunchSyncConsentSettings(Profile* profile);
 
   SyncConsentScreen(BaseScreenDelegate* base_screen_delegate,
-                    SyncConsentScreenView* view);
+                    SyncConsentScreenView* view,
+                    const base::RepeatingClosure& exit_callback);
   ~SyncConsentScreen() override;
 
   // BaseScreen:
@@ -110,6 +111,7 @@ class SyncConsentScreen : public BaseScreen,
   SyncScreenBehavior behavior_ = UNKNOWN;
 
   SyncConsentScreenView* const view_;
+  base::RepeatingClosure exit_callback_;
 
   // Primary user ind his Profile (if screen is shown).
   const user_manager::User* user_ = nullptr;

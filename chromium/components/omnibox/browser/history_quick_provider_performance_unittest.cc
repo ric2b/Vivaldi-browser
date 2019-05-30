@@ -8,8 +8,9 @@
 #include <random>
 #include <string>
 
-#include "base/macros.h"
+#include "base/no_destructor.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_task_environment.h"
 #include "components/history/core/browser/history_backend.h"
@@ -30,15 +31,15 @@ namespace {
 std::string GenerateFakeHashedString(size_t sym_count) {
   static constexpr char kSyms[] =
       "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,/=+?#";
-  CR_DEFINE_STATIC_LOCAL(std::mt19937, engine, ());
+  static base::NoDestructor<std::mt19937> engine;
   std::uniform_int_distribution<size_t> index_distribution(
-      0, arraysize(kSyms) - 2 /* trailing \0 */);
+      0, base::size(kSyms) - 2 /* trailing \0 */);
 
   std::string res;
   res.reserve(sym_count);
 
   std::generate_n(std::back_inserter(res), sym_count, [&index_distribution] {
-    return kSyms[index_distribution(engine)];
+    return kSyms[index_distribution(*engine)];
   });
 
   return res;

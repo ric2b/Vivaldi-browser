@@ -4,25 +4,40 @@
 
 #include "components/omnibox/browser/test_omnibox_view.h"
 
+#include <algorithm>
+
 #include "ui/gfx/native_widget_types.h"
+
+void TestOmniboxView::SetModel(std::unique_ptr<OmniboxEditModel> model) {
+  model_ = std::move(model);
+}
 
 base::string16 TestOmniboxView::GetText() const {
   return text_;
 }
 
-void TestOmniboxView::SetUserText(const base::string16& text,
-                                  bool update_popup) {
-  text_ = text;
-}
 void TestOmniboxView::SetWindowTextAndCaretPos(const base::string16& text,
                                                size_t caret_pos,
                                                bool update_popup,
                                                bool notify_text_changed) {
   text_ = text;
+  selection_ = gfx::Range(caret_pos);
 }
 
 bool TestOmniboxView::IsSelectAll() const {
-  return false;
+  return selection_.EqualsIgnoringDirection(gfx::Range(0, text_.size()));
+}
+
+void TestOmniboxView::GetSelectionBounds(size_t* start, size_t* end) const {
+  *start = selection_.start();
+  *end = selection_.end();
+}
+
+void TestOmniboxView::SelectAll(bool reversed) {
+  if (reversed)
+    selection_ = gfx::Range(text_.size(), 0);
+  else
+    selection_ = gfx::Range(0, text_.size());
 }
 
 void TestOmniboxView::OnTemporaryTextMaybeChanged(
@@ -39,6 +54,12 @@ bool TestOmniboxView::OnInlineAutocompleteTextMaybeChanged(
   const bool text_changed = text_ != display_text;
   text_ = display_text;
   inline_autocomplete_text_ = display_text.substr(user_text_length);
+
+  // Just like the Views control, only change the selection if the text has
+  // actually changed.
+  if (text_changed)
+    selection_ = gfx::Range(text_.size(), user_text_length);
+
   return text_changed;
 }
 
@@ -58,22 +79,10 @@ gfx::NativeView TestOmniboxView::GetRelativeWindowForPopup() const {
   return nullptr;
 }
 
-int TestOmniboxView::GetTextWidth() const {
-  return 0;
-}
-
-int TestOmniboxView::GetWidth() const {
-  return 0;
-}
-
 bool TestOmniboxView::IsImeComposing() const {
   return false;
 }
 
 int TestOmniboxView::GetOmniboxTextLength() const {
   return 0;
-}
-
-void TestOmniboxView::SetModel(OmniboxEditModel* model) {
-  model_.reset(model);
 }

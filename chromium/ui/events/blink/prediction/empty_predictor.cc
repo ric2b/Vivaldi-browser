@@ -8,9 +8,13 @@ namespace ui {
 
 EmptyPredictor::EmptyPredictor() {
   Reset();
-};
+}
 
 EmptyPredictor::~EmptyPredictor() = default;
+
+const char* EmptyPredictor::GetName() const {
+  return "Empty";
+}
 
 void EmptyPredictor::Reset() {
   last_input_.time_stamp = base::TimeTicks();
@@ -25,6 +29,7 @@ bool EmptyPredictor::HasPrediction() const {
 }
 
 bool EmptyPredictor::GeneratePrediction(base::TimeTicks frame_time,
+                                        bool is_resampling,
                                         InputData* result) const {
   if (!last_input_.time_stamp.is_null()) {
     result->pos = last_input_.pos;

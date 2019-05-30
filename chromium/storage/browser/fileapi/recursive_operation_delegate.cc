@@ -33,19 +33,20 @@ void RecursiveOperationDelegate::Cancel() {
 void RecursiveOperationDelegate::StartRecursiveOperation(
     const FileSystemURL& root,
     ErrorBehavior error_behavior,
-    const StatusCallback& callback) {
+    StatusCallback callback) {
   DCHECK(pending_directory_stack_.empty());
   DCHECK(pending_files_.empty());
 
   error_behavior_ = error_behavior;
-  callback_ = callback;
+  callback_ = std::move(callback);
 
   TryProcessFile(root);
 }
 
 void RecursiveOperationDelegate::TryProcessFile(const FileSystemURL& root) {
-  ProcessFile(root, base::Bind(&RecursiveOperationDelegate::DidTryProcessFile,
-                               AsWeakPtr(), root));
+  ProcessFile(root,
+              base::BindOnce(&RecursiveOperationDelegate::DidTryProcessFile,
+                             AsWeakPtr(), root));
 }
 
 FileSystemOperationRunner* RecursiveOperationDelegate::operation_runner() {
@@ -79,9 +80,8 @@ void RecursiveOperationDelegate::ProcessNextDirectory() {
   const FileSystemURL& url = pending_directory_stack_.top().front();
 
   ProcessDirectory(
-      url,
-      base::Bind(
-          &RecursiveOperationDelegate::DidProcessDirectory, AsWeakPtr()));
+      url, base::BindOnce(&RecursiveOperationDelegate::DidProcessDirectory,
+                          AsWeakPtr()));
 }
 
 void RecursiveOperationDelegate::DidProcessDirectory(
@@ -115,8 +115,7 @@ void RecursiveOperationDelegate::DidReadDirectory(const FileSystemURL& parent,
 
   for (size_t i = 0; i < entries.size(); i++) {
     FileSystemURL url = file_system_context_->CreateCrackedFileSystemURL(
-        parent.origin(),
-        parent.mount_type(),
+        parent.origin().GetURL(), parent.mount_type(),
         parent.virtual_path().Append(entries[i].name));
     if (entries[i].type == filesystem::mojom::FsFileType::DIRECTORY)
       pending_directory_stack_.top().push(url);
@@ -149,10 +148,11 @@ void RecursiveOperationDelegate::ProcessPendingFiles() {
   if (!pending_files_.empty()) {
     current_task_runner->PostTask(
         FROM_HERE,
-        base::BindOnce(&RecursiveOperationDelegate::ProcessFile, AsWeakPtr(),
-                       pending_files_.front(),
-                       base::Bind(&RecursiveOperationDelegate::DidProcessFile,
-                                  AsWeakPtr(), pending_files_.front())));
+        base::BindOnce(
+            &RecursiveOperationDelegate::ProcessFile, AsWeakPtr(),
+            pending_files_.front(),
+            base::BindOnce(&RecursiveOperationDelegate::DidProcessFile,
+                           AsWeakPtr(), pending_files_.front())));
     pending_files_.pop();
   }
 }
@@ -200,8 +200,8 @@ void RecursiveOperationDelegate::ProcessSubDirectory() {
   DCHECK(!pending_directory_stack_.top().empty());
   PostProcessDirectory(
       pending_directory_stack_.top().front(),
-      base::Bind(&RecursiveOperationDelegate::DidPostProcessDirectory,
-                 AsWeakPtr()));
+      base::BindOnce(&RecursiveOperationDelegate::DidPostProcessDirectory,
+                     AsWeakPtr()));
 }
 
 void RecursiveOperationDelegate::DidPostProcessDirectory(
@@ -221,13 +221,13 @@ void RecursiveOperationDelegate::DidPostProcessDirectory(
 
 void RecursiveOperationDelegate::Done(base::File::Error error) {
   if (canceled_ && error == base::File::FILE_OK) {
-    callback_.Run(base::File::FILE_ERROR_ABORT);
+    std::move(callback_).Run(base::File::FILE_ERROR_ABORT);
   } else {
     if (error_behavior_ == FileSystemOperation::ERROR_BEHAVIOR_SKIP &&
         failed_some_operations_)
-      callback_.Run(base::File::FILE_ERROR_FAILED);
+      std::move(callback_).Run(base::File::FILE_ERROR_FAILED);
     else
-      callback_.Run(error);
+      std::move(callback_).Run(error);
   }
 }
 

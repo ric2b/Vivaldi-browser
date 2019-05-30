@@ -14,7 +14,7 @@ import org.chromium.components.background_task_scheduler.TaskParameters;
 /**
  * An implementation of BackgroundTask that is responsible for resuming any in-progress downloads.
  * This class currently just starts the {@link DownloadNotificationService} or calls
- * {@link DownloadNotificationService2}, which handles the actual resumption.
+ * {@link DownloadNotificationService}, which handles the actual resumption.
  */
 public class DownloadResumptionBackgroundTask extends NativeBackgroundTask {
     // NativeBackgroundTask implementation.
@@ -41,6 +41,11 @@ public class DownloadResumptionBackgroundTask extends NativeBackgroundTask {
         // The task is not necessary once started, so no need to auto-resume here.  The started
         // service will handle rescheduling the job if necessary.
         return false;
+    }
+
+    @Override
+    protected boolean supportsServiceManagerOnly() {
+        return DownloadUtils.shouldStartServiceManagerOnly();
     }
 
     @Override

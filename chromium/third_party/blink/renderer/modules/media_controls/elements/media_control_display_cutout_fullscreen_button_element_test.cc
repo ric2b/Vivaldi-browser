@@ -15,6 +15,7 @@
 #include "third_party/blink/renderer/modules/media_controls/media_controls_impl.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
+#include "third_party/blink/renderer/platform/text/platform_locale.h"
 
 namespace blink {
 
@@ -23,7 +24,7 @@ namespace {
 class MockDisplayCutoutChromeClient : public EmptyChromeClient {
  public:
   // ChromeClient overrides:
-  void EnterFullscreen(LocalFrame& frame, const FullscreenOptions&) override {
+  void EnterFullscreen(LocalFrame& frame, const FullscreenOptions*) override {
     Fullscreen::DidEnterFullscreen(*frame.GetDocument());
   }
   void ExitFullscreen(LocalFrame& frame) override {
@@ -36,10 +37,12 @@ class MockDisplayCutoutChromeClient : public EmptyChromeClient {
 class MediaControlDisplayCutoutFullscreenButtonElementTest
     : public PageTestBase {
  public:
-  static TouchEventInit GetValidTouchEventInit() { return TouchEventInit(); }
+  static TouchEventInit* GetValidTouchEventInit() {
+    return TouchEventInit::Create();
+  }
 
   void SetUp() override {
-    chrome_client_ = new MockDisplayCutoutChromeClient();
+    chrome_client_ = MakeGarbageCollected<MockDisplayCutoutChromeClient>();
 
     Page::PageClients clients;
     FillWithEmptyClients(clients);
@@ -50,7 +53,7 @@ class MediaControlDisplayCutoutFullscreenButtonElementTest
 
     video_ = HTMLVideoElement::Create(GetDocument());
     GetDocument().body()->AppendChild(video_);
-    controls_ = new MediaControlsImpl(*video_);
+    controls_ = MakeGarbageCollected<MediaControlsImpl>(*video_);
     controls_->InitializeControls();
     display_cutout_fullscreen_button_ =
         controls_->display_cutout_fullscreen_button_;
@@ -63,7 +66,7 @@ class MediaControlDisplayCutoutFullscreenButtonElementTest
   void SimulateEnterFullscreen() {
     {
       std::unique_ptr<UserGestureIndicator> gesture =
-          Frame::NotifyUserActivation(GetDocument().GetFrame());
+          LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
       Fullscreen::RequestFullscreen(*video_);
     }
 
@@ -88,6 +91,14 @@ class MediaControlDisplayCutoutFullscreenButtonElementTest
       display_cutout_fullscreen_button_;
   Persistent<MediaControlsImpl> controls_;
 };
+
+TEST_F(MediaControlDisplayCutoutFullscreenButtonElementTest,
+       Fullscreen_ButtonAccessibility) {
+  EXPECT_EQ(display_cutout_fullscreen_button_->GetLocale().QueryString(
+                WebLocalizedString::kAXMediaDisplayCutoutFullscreenButton),
+            display_cutout_fullscreen_button_->getAttribute(
+                html_names::kAriaLabelAttr));
+}
 
 TEST_F(MediaControlDisplayCutoutFullscreenButtonElementTest,
        Fullscreen_ButtonVisiblilty) {

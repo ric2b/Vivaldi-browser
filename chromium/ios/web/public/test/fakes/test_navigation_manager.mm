@@ -119,11 +119,11 @@ bool TestNavigationManager::RemoveItemAtIndex(int index) {
 }
 
 bool TestNavigationManager::CanGoBack() const {
-  return false;
+  return items_index_ > 0;
 }
 
 bool TestNavigationManager::CanGoForward() const {
-  return false;
+  return items_index_ < GetItemCount() - 1;
 }
 
 bool TestNavigationManager::CanGoToOffset(int offset) const {
@@ -132,11 +132,11 @@ bool TestNavigationManager::CanGoToOffset(int offset) const {
 }
 
 void TestNavigationManager::GoBack() {
-  NOTREACHED();
+  items_index_--;
 }
 
 void TestNavigationManager::GoForward() {
-  NOTREACHED();
+  items_index_++;
 }
 
 void TestNavigationManager::GoToIndex(int index) {
@@ -154,18 +154,25 @@ void TestNavigationManager::ReloadWithUserAgentType(
 }
 
 NavigationItemList TestNavigationManager::GetBackwardItems() const {
-  NOTREACHED();
   return NavigationItemList();
 }
 
 NavigationItemList TestNavigationManager::GetForwardItems() const {
-  NOTREACHED();
   return NavigationItemList();
 }
 
 void TestNavigationManager::Restore(
     int last_committed_item_index,
     std::vector<std::unique_ptr<NavigationItem>> items) {
+  NOTREACHED();
+}
+
+bool TestNavigationManager::IsRestoreSessionInProgress() const {
+  return false;
+}
+
+void TestNavigationManager::AddRestoreCompletionCallback(
+    base::OnceClosure callback) {
   NOTREACHED();
 }
 

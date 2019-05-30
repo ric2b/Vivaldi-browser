@@ -6,6 +6,7 @@
 
 #include "base/strings/string_util.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/ax_tree_manager_map.h"
 
 namespace ui {
 
@@ -33,13 +34,13 @@ base::string16 AXNodePosition::GetInnerText() const {
 }
 
 void AXNodePosition::AnchorChild(int child_index,
-                                 int* tree_id,
+                                 AXTreeID* tree_id,
                                  int32_t* child_id) const {
   DCHECK(tree_id);
   DCHECK(child_id);
 
   if (!GetAnchor() || child_index < 0 || child_index >= AnchorChildCount()) {
-    *tree_id = INVALID_TREE_ID;
+    *tree_id = AXTreeIDUnknown();
     *child_id = INVALID_ANCHOR_ID;
     return;
   }
@@ -58,12 +59,12 @@ int AXNodePosition::AnchorIndexInParent() const {
   return GetAnchor() ? GetAnchor()->index_in_parent() : INVALID_INDEX;
 }
 
-void AXNodePosition::AnchorParent(int* tree_id, int32_t* parent_id) const {
+void AXNodePosition::AnchorParent(AXTreeID* tree_id, int32_t* parent_id) const {
   DCHECK(tree_id);
   DCHECK(parent_id);
 
   if (!GetAnchor() || !GetAnchor()->parent()) {
-    *tree_id = INVALID_TREE_ID;
+    *tree_id = AXTreeIDUnknown();
     *parent_id = INVALID_ANCHOR_ID;
     return;
   }
@@ -73,10 +74,19 @@ void AXNodePosition::AnchorParent(int* tree_id, int32_t* parent_id) const {
   *parent_id = parent->id();
 }
 
-AXNode* AXNodePosition::GetNodeInTree(int tree_id, int32_t node_id) const {
-  if (!tree_ || node_id == INVALID_ANCHOR_ID)
+AXNode* AXNodePosition::GetNodeInTree(AXTreeID tree_id, int32_t node_id) const {
+  if (node_id == INVALID_ANCHOR_ID)
     return nullptr;
-  return AXNodePosition::tree_->GetFromId(node_id);
+
+  // Used for testing via AXNodePosition::SetTreeForTesting
+  if (AXNodePosition::tree_)
+    return AXNodePosition::tree_->GetFromId(node_id);
+
+  AXTreeManager* manager = AXTreeManagerMap::GetInstance().GetManager(tree_id);
+  if (manager)
+    return manager->GetNodeFromTree(tree_id, node_id);
+
+  return nullptr;
 }
 
 int AXNodePosition::MaxTextOffset() const {

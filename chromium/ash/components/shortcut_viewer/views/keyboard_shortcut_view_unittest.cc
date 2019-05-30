@@ -10,10 +10,12 @@
 #include "ash/components/shortcut_viewer/views/keyboard_shortcut_item_view.h"
 #include "ash/components/shortcut_viewer/views/ksv_search_box_view.h"
 #include "ash/test/ash_test_base.h"
+#include "base/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "services/ws/public/cpp/input_devices/input_device_client_test_api.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/window.h"
+#include "ui/compositor/test/test_utils.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/test/event_generator.h"
@@ -91,12 +93,7 @@ TEST_F(KeyboardShortcutViewTest, ShowAndClose) {
 
 TEST_F(KeyboardShortcutViewTest, StartupTimeHistogram) {
   views::Widget* widget = Toggle();
-  base::RunLoop runloop;
-  widget->GetCompositor()->RequestPresentationTimeForNextFrame(base::BindOnce(
-      [](base::RepeatingClosure closure,
-         const gfx::PresentationFeedback& feedback) { closure.Run(); },
-      runloop.QuitClosure()));
-  runloop.Run();
+  ui::WaitForNextFrameToBePresented(widget->GetCompositor());
   histograms_.ExpectTotalCount("Keyboard.ShortcutViewer.StartupTime", 1);
   widget->CloseNow();
 }

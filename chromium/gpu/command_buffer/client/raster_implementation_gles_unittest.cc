@@ -13,8 +13,8 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
-#include "cc/paint/color_space_transfer_cache_entry.h"
 #include "cc/paint/display_item_list.h"
+#include "cc/paint/image_provider.h"
 #include "components/viz/common/resources/resource_format_utils.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/client_test_helper.h"
@@ -122,8 +122,6 @@ class RasterMockGLES2Interface : public gles2::GLES2InterfaceStub {
                     GLint border,
                     GLsizei imageSize,
                     const void* data));
-  MOCK_METHOD2(CompressedCopyTextureCHROMIUM,
-               void(GLuint source_id, GLuint dest_id));
   MOCK_METHOD5(TexStorage2DEXT,
                void(GLenum target,
                     GLsizei levels,
@@ -208,7 +206,7 @@ class ContextSupportStub : public ContextSupport {
       uint32_t texture_id) override {
     return false;
   }
-  void* MapTransferCacheEntry(size_t serialized_size) override {
+  void* MapTransferCacheEntry(uint32_t serialized_size) override {
     mapped_transfer_cache_entry_.reset(new char[serialized_size]);
     return mapped_transfer_cache_entry_.get();
   }
@@ -234,9 +232,8 @@ class ContextSupportStub : public ContextSupport {
 class ImageProviderStub : public cc::ImageProvider {
  public:
   ~ImageProviderStub() override {}
-  ScopedDecodedDrawImage GetDecodedDrawImage(
-      const cc::DrawImage& draw_image) override {
-    return ScopedDecodedDrawImage();
+  ScopedResult GetRasterContent(const cc::DrawImage& draw_image) override {
+    return ScopedResult();
   }
 };
 
@@ -245,18 +242,11 @@ class RasterImplementationGLESTest : public testing::Test {
   RasterImplementationGLESTest() {}
 
   void SetUp() override {
-    gl_.reset(new RasterMockGLES2Interface());
-
-    ri_.reset(new RasterImplementationGLES(gl_.get(), &command_buffer_,
-                                           gpu::Capabilities()));
+    gl_ = std::make_unique<RasterMockGLES2Interface>();
+    ri_ = std::make_unique<RasterImplementationGLES>(gl_.get());
   }
 
   void TearDown() override {}
-
-  void SetUpWithCapabilities(const gpu::Capabilities& capabilities) {
-    ri_.reset(new RasterImplementationGLES(gl_.get(), &command_buffer_,
-                                           capabilities));
-  }
 
   void ExpectBindTexture(GLenum target, GLuint texture_id) {
     if (bound_texture_ != texture_id) {
@@ -265,19 +255,7 @@ class RasterImplementationGLESTest : public testing::Test {
     }
   }
 
-  void AllocTextureId(bool use_buffer,
-                      gfx::BufferUsage buffer_usage,
-                      viz::ResourceFormat format,
-                      GLuint texture_id) {
-    GLuint ret_id = 0;
-
-    EXPECT_CALL(*gl_, GenTextures(1, _)).WillOnce(SetArgPointee<1>(texture_id));
-    ret_id = ri_->CreateTexture(use_buffer, buffer_usage, format);
-    EXPECT_EQ(ret_id, texture_id);
-  }
-
   ContextSupportStub support_;
-  MockClientCommandBuffer command_buffer_;
   std::unique_ptr<RasterMockGLES2Interface> gl_;
   std::unique_ptr<RasterImplementationGLES> ri_;
 
@@ -302,13 +280,6 @@ TEST_F(RasterImplementationGLESTest, ShallowFlushCHROMIUM) {
 TEST_F(RasterImplementationGLESTest, OrderingBarrierCHROMIUM) {
   EXPECT_CALL(*gl_, OrderingBarrierCHROMIUM()).Times(1);
   ri_->OrderingBarrierCHROMIUM();
-}
-
-TEST_F(RasterImplementationGLESTest, GenSyncTokenCHROMIUM) {
-  GLbyte sync_token_data[GL_SYNC_TOKEN_SIZE_CHROMIUM] = {};
-
-  EXPECT_CALL(*gl_, GenSyncTokenCHROMIUM(sync_token_data)).Times(1);
-  ri_->GenSyncTokenCHROMIUM(sync_token_data);
 }
 
 TEST_F(RasterImplementationGLESTest, GenUnverifiedSyncTokenCHROMIUM) {
@@ -350,16 +321,6 @@ TEST_F(RasterImplementationGLESTest, GetGraphicsResetStatusKHR) {
       .WillOnce(Return(kGraphicsResetStatus));
   GLenum status = ri_->GetGraphicsResetStatusKHR();
   EXPECT_EQ(kGraphicsResetStatus, status);
-}
-
-TEST_F(RasterImplementationGLESTest, GetIntegerv) {
-  const GLint kActiveTexture = 3;
-  GLint active_texture = 0;
-
-  EXPECT_CALL(*gl_, GetIntegerv(GL_ACTIVE_TEXTURE, &active_texture))
-      .WillOnce(SetArgPointee<1>(kActiveTexture));
-  ri_->GetIntegerv(GL_ACTIVE_TEXTURE, &active_texture);
-  EXPECT_EQ(kActiveTexture, active_texture);
 }
 
 TEST_F(RasterImplementationGLESTest, LoseContextCHROMIUM) {
@@ -411,227 +372,29 @@ TEST_F(RasterImplementationGLESTest, GetQueryObjectuivEXT) {
   ri_->GetQueryObjectuivEXT(kQueryId, kQueryParam, &result);
 }
 
-TEST_F(RasterImplementationGLESTest, DeleteTextures) {
-  const GLsizei kNumTextures = 2;
-  GLuint texture_ids[kNumTextures] = {2, 3};
-
-  AllocTextureId(false, gfx::BufferUsage::GPU_READ, viz::RGBA_8888,
-                 texture_ids[0]);
-  AllocTextureId(false, gfx::BufferUsage::GPU_READ, viz::RGBA_8888,
-                 texture_ids[1]);
-  EXPECT_CALL(*gl_, DeleteTextures(kNumTextures, texture_ids)).Times(1);
-  ri_->DeleteTextures(kNumTextures, texture_ids);
-}
-
-TEST_F(RasterImplementationGLESTest, SetColorSpaceMetadata) {
-  const GLuint kTextureId = 23;
-  gfx::ColorSpace color_space;
-
-  AllocTextureId(true, gfx::BufferUsage::SCANOUT, viz::RGBA_8888, kTextureId);
-
-  EXPECT_CALL(*gl_,
-              SetColorSpaceMetadataCHROMIUM(
-                  kTextureId, reinterpret_cast<GLColorSpace>(&color_space)))
-      .Times(1);
-  ri_->SetColorSpaceMetadata(kTextureId,
-                             reinterpret_cast<GLColorSpace>(&color_space));
-}
-
-TEST_F(RasterImplementationGLESTest, TexParameteri) {
-  const GLenum kTarget = GL_TEXTURE_2D;
-  const GLuint kTextureId = 23;
-  const GLenum kPname = GL_TEXTURE_MIN_FILTER;
-  const GLint kParam = GL_NEAREST;
-
-  AllocTextureId(false, gfx::BufferUsage::GPU_READ, viz::RGBA_8888, kTextureId);
-  ExpectBindTexture(kTarget, kTextureId);
-  EXPECT_CALL(*gl_, TexParameteri(kTarget, kPname, kParam)).Times(1);
-  ri_->TexParameteri(kTextureId, kPname, kParam);
-}
-
-TEST_F(RasterImplementationGLESTest, ProduceTextureDirect) {
-  const GLuint kTextureId = 23;
+TEST_F(RasterImplementationGLESTest, DeleteGpuRasterTexture) {
+  GLuint texture_id = 3;
   gpu::Mailbox mailbox;
 
-  AllocTextureId(false, gfx::BufferUsage::GPU_READ, viz::RGBA_8888, kTextureId);
+  EXPECT_CALL(*gl_, CreateAndConsumeTextureCHROMIUM(mailbox.name))
+      .WillOnce(Return(texture_id))
+      .RetiresOnSaturation();
 
-  EXPECT_CALL(*gl_, ProduceTextureDirectCHROMIUM(kTextureId, mailbox.name))
-      .Times(1);
+  EXPECT_EQ(texture_id, ri_->CreateAndConsumeForGpuRaster(mailbox.name));
 
-  ri_->ProduceTextureDirect(kTextureId, mailbox.name);
+  EXPECT_CALL(*gl_, DeleteTextures(1, _)).Times(1);
+  ri_->DeleteGpuRasterTexture(texture_id);
 }
 
-TEST_F(RasterImplementationGLESTest, CreateAndConsumeTexture) {
+TEST_F(RasterImplementationGLESTest, CreateAndConsumeForGpuRaster) {
   const GLuint kTextureId = 23;
   GLuint texture_id = 0;
   gpu::Mailbox mailbox;
 
   EXPECT_CALL(*gl_, CreateAndConsumeTextureCHROMIUM(mailbox.name))
       .WillOnce(Return(kTextureId));
-  texture_id = ri_->CreateAndConsumeTexture(false, gfx::BufferUsage::GPU_READ,
-                                            viz::RGBA_8888, mailbox.name);
+  texture_id = ri_->CreateAndConsumeForGpuRaster(mailbox.name);
   EXPECT_EQ(kTextureId, texture_id);
-}
-
-TEST_F(RasterImplementationGLESTest, CreateImageCHROMIUM) {
-  const GLsizei kWidth = 256;
-  const GLsizei kHeight = 128;
-  const GLenum kInternalFormat = GL_RGBA;
-  const GLint kImageId = 23;
-  const ClientBuffer client_buffer = 0;
-  GLint image_id = 0;
-
-  EXPECT_CALL(*gl_, CreateImageCHROMIUM(client_buffer, kWidth, kHeight,
-                                        kInternalFormat))
-      .WillOnce(Return(kImageId));
-  image_id =
-      ri_->CreateImageCHROMIUM(client_buffer, kWidth, kHeight, kInternalFormat);
-  EXPECT_EQ(kImageId, image_id);
-}
-
-TEST_F(RasterImplementationGLESTest, BindTexImage2DCHROMIUM) {
-  const GLenum kTarget = GL_TEXTURE_2D;
-  const GLint kTextureId = 22;
-  const GLint kImageId = 23;
-
-  AllocTextureId(false, gfx::BufferUsage::SCANOUT, viz::RGBA_8888, kTextureId);
-  EXPECT_CALL(*gl_, BindTexImage2DCHROMIUM(kTarget, kImageId)).Times(1);
-  ri_->BindTexImage2DCHROMIUM(kTextureId, kImageId);
-}
-
-TEST_F(RasterImplementationGLESTest, ReleaseTexImage2DCHROMIUM) {
-  const GLenum kTarget = GL_TEXTURE_2D;
-  const GLint kTextureId = 22;
-  const GLint kImageId = 23;
-
-  AllocTextureId(false, gfx::BufferUsage::SCANOUT, viz::RGBA_8888, kTextureId);
-  EXPECT_CALL(*gl_, ReleaseTexImage2DCHROMIUM(kTarget, kImageId)).Times(1);
-  ri_->ReleaseTexImage2DCHROMIUM(kTextureId, kImageId);
-}
-
-TEST_F(RasterImplementationGLESTest, DestroyImageCHROMIUM) {
-  const GLint kImageId = 23;
-
-  EXPECT_CALL(*gl_, DestroyImageCHROMIUM(kImageId)).Times(1);
-  ri_->DestroyImageCHROMIUM(kImageId);
-}
-
-TEST_F(RasterImplementationGLESTest, CompressedCopyTextureCHROMIUM) {
-  const GLuint source_id = 23;
-  const GLuint dest_id = 24;
-
-  AllocTextureId(false, gfx::BufferUsage::GPU_READ, viz::RGBA_8888, source_id);
-  AllocTextureId(false, gfx::BufferUsage::GPU_READ, viz::RGBA_8888, dest_id);
-
-  EXPECT_CALL(*gl_, CompressedCopyTextureCHROMIUM(source_id, dest_id)).Times(1);
-  ri_->CompressedCopyTextureCHROMIUM(source_id, dest_id);
-}
-
-TEST_F(RasterImplementationGLESTest, TexStorage2D) {
-  const GLenum kTarget = GL_TEXTURE_2D;
-  const GLsizei kWidth = 2;
-  const GLsizei kHeight = 8;
-  const int kNumTestFormats = 11;
-  viz::ResourceFormat test_formats[kNumTestFormats] = {
-      viz::RGBA_8888,   viz::RGBA_4444, viz::BGRA_8888, viz::ALPHA_8,
-      viz::LUMINANCE_8, viz::RGB_565,   viz::RED_8,     viz::LUMINANCE_F16,
-      viz::RGBA_F16,    viz::R16_EXT};
-
-  for (int i = 0; i < kNumTestFormats; i++) {
-    const GLuint kTextureId = 23 + i;
-    viz::ResourceFormat format = test_formats[i];
-    AllocTextureId(false, gfx::BufferUsage::GPU_READ, format, kTextureId);
-    ExpectBindTexture(kTarget, kTextureId);
-    EXPECT_CALL(*gl_, TexImage2D(kTarget, 0, viz::GLInternalFormat(format),
-                                 kWidth, kHeight, 0, viz::GLDataFormat(format),
-                                 viz::GLDataType(format), nullptr))
-        .Times(1);
-    ri_->TexStorage2D(kTextureId, kWidth, kHeight);
-  }
-}
-
-TEST_F(RasterImplementationGLESTest, TexStorage2DTexStorage2DEXT) {
-  gpu::Capabilities capabilities;
-  capabilities.texture_storage = true;
-  SetUpWithCapabilities(capabilities);
-
-  const GLenum kTarget = GL_TEXTURE_2D;
-  const GLsizei kWidth = 2;
-  const GLsizei kHeight = 8;
-  const int kNumTestFormats = 10;
-  const int kLevels = 1;
-  viz::ResourceFormat test_formats[kNumTestFormats] = {
-      viz::RGBA_8888,   viz::RGBA_4444, viz::BGRA_8888, viz::ALPHA_8,
-      viz::LUMINANCE_8, viz::RGB_565,   viz::RED_8,     viz::LUMINANCE_F16,
-      viz::RGBA_F16,    viz::R16_EXT};
-
-  for (int i = 0; i < kNumTestFormats; i++) {
-    const GLuint kTextureId = 23 + i;
-    viz::ResourceFormat format = test_formats[i];
-    AllocTextureId(false, gfx::BufferUsage::GPU_READ, format, kTextureId);
-    ExpectBindTexture(kTarget, kTextureId);
-    EXPECT_CALL(*gl_, TexStorage2DEXT(kTarget, kLevels,
-                                      viz::TextureStorageFormat(format), kWidth,
-                                      kHeight))
-        .Times(1);
-    ri_->TexStorage2D(kTextureId, kWidth, kHeight);
-  }
-}
-
-TEST_F(RasterImplementationGLESTest, TexStorage2DOverlay) {
-  gpu::Capabilities capabilities;
-  capabilities.texture_storage_image = true;
-  SetUpWithCapabilities(capabilities);
-
-  const GLenum kTarget = GL_TEXTURE_2D;
-  const GLsizei kWidth = 2;
-  const GLsizei kHeight = 8;
-  const int kNumTestFormats = 6;
-  viz::ResourceFormat test_formats[kNumTestFormats] = {
-      viz::RGBA_8888, viz::RGBA_4444, viz::BGRA_8888,
-      viz::RED_8,     viz::RGBA_F16,  viz::R16_EXT};
-
-  for (int i = 0; i < kNumTestFormats; i++) {
-    const GLuint kTextureId = 23 + i;
-    viz::ResourceFormat format = test_formats[i];
-    AllocTextureId(true, gfx::BufferUsage::SCANOUT, format, kTextureId);
-    ExpectBindTexture(kTarget, kTextureId);
-    EXPECT_CALL(*gl_, TexStorage2DImageCHROMIUM(
-                          kTarget, viz::TextureStorageFormat(format),
-                          GL_SCANOUT_CHROMIUM, kWidth, kHeight))
-        .Times(1);
-    ri_->TexStorage2D(kTextureId, kWidth, kHeight);
-  }
-}
-
-TEST_F(RasterImplementationGLESTest, TexStorage2DOverlayNative) {
-  const GLenum target = gpu::GetPlatformSpecificTextureTarget();
-  const GLsizei kWidth = 2;
-  const GLsizei kHeight = 8;
-  const int kNumTestFormats = 6;
-  viz::ResourceFormat test_formats[kNumTestFormats] = {
-      viz::RGBA_8888, viz::RGBA_4444, viz::BGRA_8888,
-      viz::RED_8,     viz::RGBA_F16,  viz::R16_EXT};
-
-  gpu::Capabilities capabilities;
-  capabilities.texture_storage_image = true;
-  for (int i = 0; i < kNumTestFormats; i++) {
-    capabilities.texture_target_exception_list.emplace_back(
-        gfx::BufferUsage::SCANOUT, viz::BufferFormat(test_formats[i]));
-  }
-  SetUpWithCapabilities(capabilities);
-
-  for (int i = 0; i < kNumTestFormats; i++) {
-    const GLuint kTextureId = 23 + i;
-    viz::ResourceFormat format = test_formats[i];
-    AllocTextureId(true, gfx::BufferUsage::SCANOUT, format, kTextureId);
-    ExpectBindTexture(target, kTextureId);
-    EXPECT_CALL(*gl_, TexStorage2DImageCHROMIUM(
-                          target, viz::TextureStorageFormat(format),
-                          GL_SCANOUT_CHROMIUM, kWidth, kHeight))
-        .Times(1);
-    ri_->TexStorage2D(kTextureId, kWidth, kHeight);
-  }
 }
 
 TEST_F(RasterImplementationGLESTest, BeginGpuRaster) {

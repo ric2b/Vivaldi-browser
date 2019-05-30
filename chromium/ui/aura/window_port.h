@@ -13,6 +13,8 @@
 #include "base/callback.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
+#include "base/time/time.h"
+#include "components/viz/common/surfaces/local_surface_id_allocation.h"
 #include "components/viz/common/surfaces/scoped_surface_id_allocator.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "ui/aura/aura_export.h"
@@ -40,7 +42,21 @@ class WindowObserver;
 // Env::CreateWindowPort() is used to create the WindowPort.
 class AURA_EXPORT WindowPort {
  public:
+  // Corresponds to the concrete implementation of this interface.
+  enum class Type {
+    // WindowPortLocal.
+    kLocal,
+
+    // WindowPortMus.
+    kMus,
+
+    // WindowPortForShutdown.
+    kShutdown,
+  };
+
   virtual ~WindowPort() {}
+
+  Type type() const { return type_; }
 
   // Called from Window::Init().
   virtual void OnPreInit(Window* window) = 0;
@@ -91,10 +107,6 @@ class AURA_EXPORT WindowPort {
   // that does not involve a resize or a device scale factor change.
   virtual void AllocateLocalSurfaceId() = 0;
 
-  // When a child-allocated viz::LocalSurfaceId is being processed, this returns
-  // true.
-  virtual bool IsLocalSurfaceIdAllocationSuppressed() const = 0;
-
   // When a ScopedSurfaceIdAllocator is alive, it prevents the
   // allocator from actually allocating. Instead, it triggers its
   // |allocation_task| upon destruction. This allows us to issue only one
@@ -103,26 +115,44 @@ class AURA_EXPORT WindowPort {
   virtual viz::ScopedSurfaceIdAllocator GetSurfaceIdAllocator(
       base::OnceCallback<void()> allocation_task) = 0;
 
-  virtual void UpdateLocalSurfaceIdFromEmbeddedClient(
-      const viz::LocalSurfaceId& embedded_client_local_surface_id) = 0;
+  // Marks the current viz::LocalSurfaceId as invalid. AllocateLocalSurfaceId
+  // must be called before submitting new CompositorFrames.
+  virtual void InvalidateLocalSurfaceId() = 0;
 
-  // Gets the current viz::LocalSurfaceId. The viz::LocalSurfaceId is allocated
-  // lazily on call, and will be updated on changes to size or device scale
-  // factor.
-  virtual const viz::LocalSurfaceId& GetLocalSurfaceId() = 0;
+  virtual void UpdateLocalSurfaceIdFromEmbeddedClient(
+      const viz::LocalSurfaceIdAllocation&
+          embedded_client_local_surface_id_allocation) = 0;
+
+  // Gets the current viz::LocalSurfaceIdAllocation which incorporates both
+  // the viz::LocalSurfaceId and its allocation time.
+  virtual const viz::LocalSurfaceIdAllocation&
+  GetLocalSurfaceIdAllocation() = 0;
 
   virtual void OnEventTargetingPolicyChanged() = 0;
 
   // See description of function with same name in transient_window_client.
   virtual bool ShouldRestackTransientChildren() = 0;
 
+  // Called to register/unregister an embedded FramesSinkId. This is only called
+  // if SetEmbedFrameSinkId() is called on the associated Window.
+  virtual void RegisterFrameSinkId(const viz::FrameSinkId& frame_sink_id) {}
+  virtual void UnregisterFrameSinkId(const viz::FrameSinkId& frame_sink_id) {}
+
+  // Called to start occlusion state tracking.
+  virtual void TrackOcclusionState() {}
+
  protected:
+  explicit WindowPort(Type type);
+
   // Returns the WindowPort associated with a Window.
   static WindowPort* Get(Window* window);
 
   // Returns the ObserverList of a Window.
-  static base::ObserverList<WindowObserver, true>::Unchecked* GetObservers(
+  static base::ReentrantObserverList<WindowObserver, true>* GetObservers(
       Window* window);
+
+ private:
+  const Type type_;
 };
 
 }  // namespace aura

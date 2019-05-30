@@ -21,7 +21,7 @@ WebGLExtensionName WebGLMultiview::GetName() const {
 }
 
 WebGLMultiview* WebGLMultiview::Create(WebGLRenderingContextBase* context) {
-  return new WebGLMultiview(context);
+  return MakeGarbageCollected<WebGLMultiview>(context);
 }
 
 void WebGLMultiview::framebufferTextureMultiviewWEBGL(GLenum target,
@@ -33,13 +33,9 @@ void WebGLMultiview::framebufferTextureMultiviewWEBGL(GLenum target,
   WebGLExtensionScopedContext scoped(this);
   if (scoped.IsLost())
     return;
-  if (texture &&
-      !texture->Validate(scoped.Context()->ContextGroup(), scoped.Context())) {
-    scoped.Context()->SynthesizeGLError(
-        GL_INVALID_OPERATION, "framebufferTextureMultiviewWEBGL",
-        "texture does not belong to this context");
+  if (!scoped.Context()->ValidateNullableWebGLObject(
+          "framebufferTextureMultiviewWEBGL", texture))
     return;
-  }
   GLenum textarget = texture ? texture->GetTarget() : 0;
   if (texture) {
     if (textarget != GL_TEXTURE_2D_ARRAY) {

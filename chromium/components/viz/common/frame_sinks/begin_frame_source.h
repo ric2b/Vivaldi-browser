@@ -8,12 +8,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <set>
 #include <string>
 
+#include "base/containers/flat_set.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
 
@@ -61,6 +62,13 @@ class VIZ_COMMON_EXPORT BeginFrameObserver {
 
   // Whether the observer also wants to receive animate_only BeginFrames.
   virtual bool WantsAnimateOnlyBeginFrames() const = 0;
+
+  // Indicates whether this observer is the root frame sink. This helps in
+  // a workaround for input jank, allowing us to deliver BeginFrames to the
+  // root last, avoiding a race.
+  // TODO(ericrk): Remove this once we have a longer-term fix.
+  // https://crbug.com/947717
+  virtual bool IsRoot() const;
 };
 
 // Simple base class which implements a BeginFrameObserver which checks the
@@ -130,6 +138,10 @@ class VIZ_COMMON_EXPORT BeginFrameSource {
   // BeginFrames created by other sources, with different IDs.
   uint64_t source_id() const { return source_id_; }
 
+  // Sets whether the gpu is busy or not. See below the documentation for
+  // RequestCallbackOnGpuAvailable() for more details.
+  void SetIsGpuBusy(bool busy);
+
   // BeginFrameObservers use DidFinishFrame to provide back pressure to a frame
   // source about frame processing (rather than toggling SetNeedsBeginFrames
   // every frame). For example, the BackToBackFrameSource uses them to make sure
@@ -147,11 +159,26 @@ class VIZ_COMMON_EXPORT BeginFrameSource {
 
   virtual void AsValueInto(base::trace_event::TracedValue* state) const;
 
+ protected:
+  // Returns whether begin-frames to clients should be withheld (because the gpu
+  // is still busy, for example). If this returns true, then OnGpuNoLongerBusy()
+  // will be called once the gpu becomes available and the begin-frames can be
+  // dispatched to clients again.
+  bool RequestCallbackOnGpuAvailable();
+  virtual void OnGpuNoLongerBusy() = 0;
+
  private:
   // The higher 32 bits are used for a process restart id that changes if a
   // process allocating BeginFrameSources has been restarted. The lower 32 bits
   // are allocated from an atomic sequence.
   const uint64_t source_id_;
+
+  // The BeginFrameSource should not send the begin-frame messages to clients if
+  // gpu is busy.
+  bool is_gpu_busy_ = false;
+  // Keeps track of whether a begin-frame was paused, and whether
+  // OnGpuNoLongerBusy() should be invoked when the gpu is no longer busy.
+  bool request_notification_on_gpu_availability_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(BeginFrameSource);
 };
@@ -165,6 +192,7 @@ class VIZ_COMMON_EXPORT StubBeginFrameSource : public BeginFrameSource {
   void AddObserver(BeginFrameObserver* obs) override {}
   void RemoveObserver(BeginFrameObserver* obs) override {}
   bool IsThrottled() const override;
+  void OnGpuNoLongerBusy() override {}
 };
 
 // A frame source which ticks itself independently.
@@ -175,8 +203,6 @@ class VIZ_COMMON_EXPORT SyntheticBeginFrameSource : public BeginFrameSource {
 
   virtual void OnUpdateVSyncParameters(base::TimeTicks timebase,
                                        base::TimeDelta interval) = 0;
-  // This overrides any past or future interval from updating vsync parameters.
-  virtual void SetAuthoritativeVSyncInterval(base::TimeDelta interval) = 0;
 };
 
 // A frame source which calls BeginFrame (at the next possible time) as soon as
@@ -194,19 +220,19 @@ class VIZ_COMMON_EXPORT BackToBackBeginFrameSource
   void RemoveObserver(BeginFrameObserver* obs) override;
   void DidFinishFrame(BeginFrameObserver* obs) override;
   bool IsThrottled() const override;
+  void OnGpuNoLongerBusy() override;
 
   // SyntheticBeginFrameSource implementation.
   void OnUpdateVSyncParameters(base::TimeTicks timebase,
                                base::TimeDelta interval) override {}
-  void SetAuthoritativeVSyncInterval(base::TimeDelta interval) override {}
 
   // DelayBasedTimeSourceClient implementation.
   void OnTimerTick() override;
 
  private:
   std::unique_ptr<DelayBasedTimeSource> time_source_;
-  std::unordered_set<BeginFrameObserver*> observers_;
-  std::unordered_set<BeginFrameObserver*> pending_begin_frame_observers_;
+  base::flat_set<BeginFrameObserver*> observers_;
+  base::flat_set<BeginFrameObserver*> pending_begin_frame_observers_;
   uint64_t next_sequence_number_;
   base::WeakPtrFactory<BackToBackBeginFrameSource> weak_factory_;
 
@@ -228,22 +254,23 @@ class VIZ_COMMON_EXPORT DelayBasedBeginFrameSource
   void RemoveObserver(BeginFrameObserver* obs) override;
   void DidFinishFrame(BeginFrameObserver* obs) override {}
   bool IsThrottled() const override;
+  void OnGpuNoLongerBusy() override;
 
   // SyntheticBeginFrameSource implementation.
   void OnUpdateVSyncParameters(base::TimeTicks timebase,
                                base::TimeDelta interval) override;
-  void SetAuthoritativeVSyncInterval(base::TimeDelta interval) override;
 
   // DelayBasedTimeSourceClient implementation.
   void OnTimerTick() override;
 
  private:
   BeginFrameArgs CreateBeginFrameArgs(base::TimeTicks frame_time);
+  void IssueBeginFrameToObserver(BeginFrameObserver* obs,
+                                 const BeginFrameArgs& args);
 
   std::unique_ptr<DelayBasedTimeSource> time_source_;
-  std::unordered_set<BeginFrameObserver*> observers_;
+  base::flat_set<BeginFrameObserver*> observers_;
   base::TimeTicks last_timebase_;
-  base::TimeDelta authoritative_interval_;
   BeginFrameArgs last_begin_frame_args_;
   uint64_t next_sequence_number_;
 
@@ -275,9 +302,16 @@ class VIZ_COMMON_EXPORT ExternalBeginFrameSource : public BeginFrameSource {
   void DidFinishFrame(BeginFrameObserver* obs) override {}
   bool IsThrottled() const override;
   void AsValueInto(base::trace_event::TracedValue* state) const override;
+  void OnGpuNoLongerBusy() override;
 
   void OnSetBeginFrameSourcePaused(bool paused);
   void OnBeginFrame(const BeginFrameArgs& args);
+
+#if defined(OS_ANDROID)
+  // Notifies when the refresh rate of the display is updated. |refresh_rate| is
+  // the rate in frames per second.
+  virtual void UpdateRefreshRate(float refresh_rate) {}
+#endif
 
  protected:
   // Called on AddObserver and gets missed BeginFrameArgs for the given
@@ -286,11 +320,13 @@ class VIZ_COMMON_EXPORT ExternalBeginFrameSource : public BeginFrameSource {
   virtual BeginFrameArgs GetMissedBeginFrameArgs(BeginFrameObserver* obs);
 
   BeginFrameArgs last_begin_frame_args_;
-  std::unordered_set<BeginFrameObserver*> observers_;
+  base::flat_set<BeginFrameObserver*> observers_;
   ExternalBeginFrameSourceClient* client_;
   bool paused_ = false;
 
  private:
+  BeginFrameArgs pending_begin_frame_args_;
+
   DISALLOW_COPY_AND_ASSIGN(ExternalBeginFrameSource);
 };
 

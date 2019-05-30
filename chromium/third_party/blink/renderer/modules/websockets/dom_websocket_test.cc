@@ -6,8 +6,10 @@
 
 #include <memory>
 
+#include "base/test/scoped_feature_list.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/web_insecure_request_policy.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
@@ -42,7 +44,7 @@ typedef testing::StrictMock<testing::MockFunction<void(int)>>
 class MockWebSocketChannel : public WebSocketChannel {
  public:
   static MockWebSocketChannel* Create() {
-    return new testing::StrictMock<MockWebSocketChannel>();
+    return MakeGarbageCollected<testing::StrictMock<MockWebSocketChannel>>();
   }
 
   ~MockWebSocketChannel() override = default;
@@ -64,9 +66,12 @@ class MockWebSocketChannel : public WebSocketChannel {
   }
   MOCK_CONST_METHOD0(BufferedAmount, unsigned());
   MOCK_METHOD2(Close, void(int, const String&));
-  MOCK_METHOD3(FailMock, void(const String&, MessageLevel, SourceLocation*));
+  MOCK_METHOD3(FailMock,
+               void(const String&,
+                    mojom::ConsoleMessageLevel,
+                    SourceLocation*));
   void Fail(const String& reason,
-            MessageLevel level,
+            mojom::ConsoleMessageLevel level,
             std::unique_ptr<SourceLocation> location) override {
     FailMock(reason, level, location.get());
   }
@@ -79,10 +84,15 @@ class DOMWebSocketWithMockChannel final : public DOMWebSocket {
  public:
   static DOMWebSocketWithMockChannel* Create(ExecutionContext* context) {
     DOMWebSocketWithMockChannel* websocket =
-        new DOMWebSocketWithMockChannel(context);
-    websocket->PauseIfNeeded();
+        MakeGarbageCollected<DOMWebSocketWithMockChannel>(context);
+    websocket->UpdateStateIfNeeded();
     return websocket;
   }
+
+  explicit DOMWebSocketWithMockChannel(ExecutionContext* context)
+      : DOMWebSocket(context),
+        channel_(MockWebSocketChannel::Create()),
+        has_created_channel_(false) {}
 
   MockWebSocketChannel* Channel() { return channel_.Get(); }
 
@@ -99,16 +109,13 @@ class DOMWebSocketWithMockChannel final : public DOMWebSocket {
   }
 
  private:
-  explicit DOMWebSocketWithMockChannel(ExecutionContext* context)
-      : DOMWebSocket(context),
-        channel_(MockWebSocketChannel::Create()),
-        has_created_channel_(false) {}
-
   Member<MockWebSocketChannel> channel_;
   bool has_created_channel_;
 };
 
 class DOMWebSocketTestScope {
+  STACK_ALLOCATED();
+
  public:
   explicit DOMWebSocketTestScope(ExecutionContext* execution_context)
       : websocket_(DOMWebSocketWithMockChannel::Create(execution_context)) {}
@@ -265,6 +272,28 @@ TEST(DOMWebSocketTest, insecureRequestsDoNotUpgrade) {
   EXPECT_FALSE(scope.GetExceptionState().HadException());
   EXPECT_EQ(DOMWebSocket::kConnecting, websocket_scope.Socket().readyState());
   EXPECT_EQ(KURL("ws://example.com/endpoint"), websocket_scope.Socket().url());
+}
+
+TEST(DOMWebSocketTest, mixedContentAutoUpgrade) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kMixedContentAutoupgrade);
+  V8TestingScope scope;
+  DOMWebSocketTestScope websocket_scope(scope.GetExecutionContext());
+  {
+    InSequence s;
+    EXPECT_CALL(websocket_scope.Channel(),
+                Connect(KURL("wss://example.com/endpoint"), String()))
+        .WillOnce(Return(true));
+  }
+  scope.GetDocument().SetSecurityOrigin(
+      SecurityOrigin::Create(KURL("https://example.com")));
+  scope.GetDocument().SetInsecureRequestPolicy(kLeaveInsecureRequestsAlone);
+  websocket_scope.Socket().Connect("ws://example.com/endpoint",
+                                   Vector<String>(), scope.GetExceptionState());
+
+  EXPECT_FALSE(scope.GetExceptionState().HadException());
+  EXPECT_EQ(DOMWebSocket::kConnecting, websocket_scope.Socket().readyState());
+  EXPECT_EQ(KURL("wss://example.com/endpoint"), websocket_scope.Socket().url());
 }
 
 TEST(DOMWebSocketTest, channelConnectSuccess) {
@@ -459,7 +488,7 @@ TEST(DOMWebSocketTest, closeWhenConnecting) {
         websocket_scope.Channel(),
         FailMock(
             String("WebSocket is closed before the connection is established."),
-            kWarningMessageLevel, _));
+            mojom::ConsoleMessageLevel::kWarning, _));
   }
   websocket_scope.Socket().Connect("ws://example.com/", Vector<String>(),
                                    scope.GetExceptionState());
@@ -910,8 +939,7 @@ TEST(DOMWebSocketTest, binaryType) {
 
 // FIXME: We should add tests for suspend / resume.
 
-class DOMWebSocketValidClosingTest
-    : public testing::TestWithParam<unsigned short> {};
+class DOMWebSocketValidClosingTest : public testing::TestWithParam<uint16_t> {};
 
 TEST_P(DOMWebSocketValidClosingTest, test) {
   V8TestingScope scope;
@@ -935,12 +963,12 @@ TEST_P(DOMWebSocketValidClosingTest, test) {
   EXPECT_EQ(DOMWebSocket::kClosing, websocket_scope.Socket().readyState());
 }
 
-INSTANTIATE_TEST_CASE_P(DOMWebSocketValidClosing,
-                        DOMWebSocketValidClosingTest,
-                        testing::Values(1000, 3000, 3001, 4998, 4999));
+INSTANTIATE_TEST_SUITE_P(DOMWebSocketValidClosing,
+                         DOMWebSocketValidClosingTest,
+                         testing::Values(1000, 3000, 3001, 4998, 4999));
 
 class DOMWebSocketInvalidClosingCodeTest
-    : public testing::TestWithParam<unsigned short> {};
+    : public testing::TestWithParam<uint16_t> {};
 
 TEST_P(DOMWebSocketInvalidClosingCodeTest, test) {
   V8TestingScope scope;
@@ -969,7 +997,7 @@ TEST_P(DOMWebSocketInvalidClosingCodeTest, test) {
   EXPECT_EQ(DOMWebSocket::kConnecting, websocket_scope.Socket().readyState());
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     DOMWebSocketInvalidClosingCode,
     DOMWebSocketInvalidClosingCodeTest,
     testing::Values(0, 1, 998, 999, 1001, 2999, 5000, 9999, 65535));

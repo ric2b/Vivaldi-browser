@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
@@ -20,11 +21,12 @@
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/login_policy_test_base.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
+#include "chrome/browser/chromeos/settings/scoped_testing_cros_settings.h"
+#include "chrome/browser/chromeos/settings/stub_cros_settings_provider.h"
 #include "chrome/browser/chromeos/settings/stub_install_attributes.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
@@ -227,7 +229,7 @@ class SiteIsolationFlagHandlingTest
     : public policy::LoginPolicyTestBase,
       public ::testing::WithParamInterface<Params> {
  protected:
-  SiteIsolationFlagHandlingTest() : settings_helper_(false) {}
+  SiteIsolationFlagHandlingTest() = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     policy::LoginPolicyTestBase::SetUpCommandLine(command_line);
@@ -289,9 +291,8 @@ class SiteIsolationFlagHandlingTest
     policy::LoginPolicyTestBase::SetUpOnMainThread();
 
     // Write ephemeral users status directly into CrosSettings.
-    settings_helper_.ReplaceProvider(kAccountsPrefEphemeralUsersEnabled);
-    settings_helper_.SetBoolean(kAccountsPrefEphemeralUsersEnabled,
-                                GetParam().ephemeral_users);
+    scoped_testing_cros_settings_.device_settings()->SetBoolean(
+        kAccountsPrefEphemeralUsersEnabled, GetParam().ephemeral_users);
 
     // This makes the user manager reload CrosSettings.
     GetChromeUserManager()->OwnershipStatusChanged();
@@ -314,8 +315,6 @@ class SiteIsolationFlagHandlingTest
                 &SiteIsolationFlagHandlingTest::UserSessionStarted,
                 base::Unretained(this)));
   }
-
-  void TearDownOnMainThread() override { settings_helper_.RestoreProvider(); }
 
   ChromeUserManagerImpl* GetChromeUserManager() const {
     return static_cast<ChromeUserManagerImpl*>(
@@ -360,7 +359,7 @@ class SiteIsolationFlagHandlingTest
   // Unowned pointer - owned by DBusThreadManager.
   FakeSessionManagerClient* fake_session_manager_client_;
   policy::MockConfigurationPolicyProvider provider_;
-  ScopedCrosSettingsTestHelper settings_helper_;
+  chromeos::ScopedTestingCrosSettings scoped_testing_cros_settings_;
   DISALLOW_COPY_AND_ASSIGN(SiteIsolationFlagHandlingTest);
 };
 
@@ -402,8 +401,8 @@ IN_PROC_BROWSER_TEST_P(SiteIsolationFlagHandlingTest, FlagHandlingTest) {
   EXPECT_EQ(GetParam().expected_flags_for_user, flags_for_user);
 }
 
-INSTANTIATE_TEST_CASE_P(,
-                        SiteIsolationFlagHandlingTest,
-                        ::testing::ValuesIn(kTestCases));
+INSTANTIATE_TEST_SUITE_P(,
+                         SiteIsolationFlagHandlingTest,
+                         ::testing::ValuesIn(kTestCases));
 
 }  // namespace chromeos

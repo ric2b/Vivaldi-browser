@@ -32,7 +32,7 @@ class OmniboxPopupModel {
   enum LineState {
     NORMAL = 0,
     KEYWORD,
-    TAB_SWITCH
+    BUTTON_FOCUSED
   };
 
   OmniboxPopupModel(OmniboxPopupView* popup_view, OmniboxEditModel* edit_model);
@@ -141,9 +141,17 @@ class OmniboxPopupModel {
                           SkColor vector_icon_color);
 #endif
 
+  // Helper function to see if the current selection specifically has a
+  // tab switch button.
+  bool SelectedLineHasTabMatch();
+
   // Helper function to see if current selection has button and can accept
   // the tab key.
-  bool SelectedLineHasTabMatch();
+  bool SelectedLineHasButton();
+
+  // If |closes| is set true, the popup will close when the omnibox is blurred.
+  bool popup_closes_on_blur() const { return popup_closes_on_blur_; }
+  void set_popup_closes_on_blur(bool closes) { popup_closes_on_blur_ = closes; }
 
   // The token value for selected_line_ and functions dealing with a "line
   // number" that indicates "no line".
@@ -176,6 +184,10 @@ class OmniboxPopupModel {
 
   // The user has manually selected a match.
   bool has_selected_match_;
+
+  // True if the popup should close on omnibox blur. This defaults to true, and
+  // is only false while a bubble related to the popup contents is shown.
+  bool popup_closes_on_blur_ = true;
 
   // Observers.
   base::ObserverList<OmniboxPopupModelObserver>::Unchecked observers_;

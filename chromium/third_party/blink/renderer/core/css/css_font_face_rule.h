@@ -24,6 +24,7 @@
 
 #include "third_party/blink/renderer/core/css/css_rule.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
 
@@ -37,9 +38,10 @@ class CSSFontFaceRule final : public CSSRule {
  public:
   static CSSFontFaceRule* Create(StyleRuleFontFace* rule,
                                  CSSStyleSheet* sheet) {
-    return new CSSFontFaceRule(rule, sheet);
+    return MakeGarbageCollected<CSSFontFaceRule>(rule, sheet);
   }
 
+  CSSFontFaceRule(StyleRuleFontFace*, CSSStyleSheet* parent);
   ~CSSFontFaceRule() override;
 
   String cssText() const override;
@@ -52,15 +54,18 @@ class CSSFontFaceRule final : public CSSRule {
   void Trace(blink::Visitor*) override;
 
  private:
-  CSSFontFaceRule(StyleRuleFontFace*, CSSStyleSheet* parent);
-
   CSSRule::Type type() const override { return kFontFaceRule; }
 
   Member<StyleRuleFontFace> font_face_rule_;
   mutable Member<StyleRuleCSSStyleDeclaration> properties_cssom_wrapper_;
 };
 
-DEFINE_CSS_RULE_TYPE_CASTS(CSSFontFaceRule, kFontFaceRule);
+template <>
+struct DowncastTraits<CSSFontFaceRule> {
+  static bool AllowFrom(const CSSRule& rule) {
+    return rule.type() == CSSRule::kFontFaceRule;
+  }
+};
 
 }  // namespace blink
 

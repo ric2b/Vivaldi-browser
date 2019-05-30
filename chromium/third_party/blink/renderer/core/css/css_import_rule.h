@@ -24,6 +24,7 @@
 
 #include "third_party/blink/renderer/core/css/css_rule.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
 
@@ -35,9 +36,10 @@ class CSSImportRule final : public CSSRule {
 
  public:
   static CSSImportRule* Create(StyleRuleImport* rule, CSSStyleSheet* sheet) {
-    return new CSSImportRule(rule, sheet);
+    return MakeGarbageCollected<CSSImportRule>(rule, sheet);
   }
 
+  CSSImportRule(StyleRuleImport*, CSSStyleSheet*);
   ~CSSImportRule() override;
 
   String cssText() const override;
@@ -50,8 +52,6 @@ class CSSImportRule final : public CSSRule {
   void Trace(blink::Visitor*) override;
 
  private:
-  CSSImportRule(StyleRuleImport*, CSSStyleSheet*);
-
   CSSRule::Type type() const override { return kImportRule; }
 
   Member<StyleRuleImport> import_rule_;
@@ -59,7 +59,12 @@ class CSSImportRule final : public CSSRule {
   mutable Member<CSSStyleSheet> style_sheet_cssom_wrapper_;
 };
 
-DEFINE_CSS_RULE_TYPE_CASTS(CSSImportRule, kImportRule);
+template <>
+struct DowncastTraits<CSSImportRule> {
+  static bool AllowFrom(const CSSRule& rule) {
+    return rule.type() == CSSRule::kImportRule;
+  }
+};
 
 }  // namespace blink
 

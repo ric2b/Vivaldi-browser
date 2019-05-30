@@ -133,10 +133,8 @@ void CastContentRendererClient::RenderViewCreated(
     content::RenderView* render_view) {
   blink::WebView* webview = render_view->GetWebView();
   if (webview) {
-    if (auto* web_frame_widget = render_view->GetWebFrameWidget())
-      web_frame_widget->SetBaseBackgroundColor(chromecast::GetSwitchValueColor(
-          switches::kCastAppBackgroundColor, SK_ColorBLACK));
-
+    webview->SetBaseBackgroundColor(chromecast::GetSwitchValueColor(
+        switches::kCastAppBackgroundColor, SK_ColorBLACK));
     // Disable application cache as Chromecast doesn't support off-line
     // application running.
     webview->GetSettings()->SetOfflineWebApplicationCacheEnabled(false);
@@ -206,16 +204,16 @@ void CastContentRendererClient::AddSupportedKeySystems(
                                  false /* force_software_crypto */);
 }
 
-bool CastContentRendererClient::IsSupportedAudioConfig(
-    const ::media::AudioConfig& config) {
+bool CastContentRendererClient::IsSupportedAudioType(
+    const ::media::AudioType& type) {
 #if defined(OS_ANDROID)
   // No ATV device we know of has (E)AC3 decoder, so it relies on the audio sink
   // device.
-  if (config.codec == ::media::kCodecEAC3)
+  if (type.codec == ::media::kCodecEAC3)
     return kBitstreamAudioCodecEac3 & supported_bitstream_audio_codecs_;
-  if (config.codec == ::media::kCodecAC3)
+  if (type.codec == ::media::kCodecAC3)
     return kBitstreamAudioCodecAc3 & supported_bitstream_audio_codecs_;
-  if (config.codec == ::media::kCodecMpegHAudio)
+  if (type.codec == ::media::kCodecMpegHAudio)
     return kBitstreamAudioCodecMpegHAudio & supported_bitstream_audio_codecs_;
 
   // TODO(sanfin): Implement this for Android.
@@ -223,11 +221,11 @@ bool CastContentRendererClient::IsSupportedAudioConfig(
 #else
   // If the HDMI sink supports bitstreaming the codec, then the vendor backend
   // does not need to support it.
-  if (IsSupportedBitstreamAudioCodec(config.codec)) {
+  if (IsSupportedBitstreamAudioCodec(type.codec)) {
     return true;
   }
 
-  media::AudioCodec codec = media::ToCastAudioCodec(config.codec);
+  media::AudioCodec codec = media::ToCastAudioCodec(type.codec);
   // Cast platform implements software decoding of Opus and FLAC, so only PCM
   // support is necessary in order to support Opus and FLAC.
   if (codec == media::kCodecOpus || codec == media::kCodecFLAC)
@@ -240,17 +238,17 @@ bool CastContentRendererClient::IsSupportedAudioConfig(
 #endif
 }
 
-bool CastContentRendererClient::IsSupportedVideoConfig(
-    const ::media::VideoConfig& config) {
+bool CastContentRendererClient::IsSupportedVideoType(
+    const ::media::VideoType& type) {
 // TODO(servolk): make use of eotf.
 #if defined(OS_ANDROID)
   return supported_profiles_->IsSupportedVideoConfig(
-      media::ToCastVideoCodec(config.codec, config.profile),
-      media::ToCastVideoProfile(config.profile), config.level);
+      media::ToCastVideoCodec(type.codec, type.profile),
+      media::ToCastVideoProfile(type.profile), type.level);
 #else
   return media::MediaCapabilitiesShlib::IsSupportedVideoConfig(
-      media::ToCastVideoCodec(config.codec, config.profile),
-      media::ToCastVideoProfile(config.profile), config.level);
+      media::ToCastVideoCodec(type.codec, type.profile),
+      media::ToCastVideoProfile(type.profile), type.level);
 #endif
 }
 
@@ -286,13 +284,6 @@ bool CastContentRendererClient::RunWhenInForeground(
 
 bool CastContentRendererClient::IsIdleMediaSuspendEnabled() {
   return false;
-}
-
-bool CastContentRendererClient::IsBackgroundMediaSuspendEnabled(
-    content::RenderFrame* render_frame) {
-  auto* playback_options = CastMediaPlaybackOptions::Get(render_frame);
-  DCHECK(playback_options);
-  return playback_options->IsBackgroundSuspendEnabled();
 }
 
 void CastContentRendererClient::

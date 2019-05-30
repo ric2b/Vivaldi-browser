@@ -14,11 +14,11 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/test/simple_test_clock.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -44,10 +44,8 @@ class TestOptOutBlacklistDelegate : public blacklist::OptOutBlacklistDelegate {
   // blacklist::OptOutBlacklistDelegate:
   void OnNewBlacklistedHost(const std::string& host, base::Time time) override {
   }
-  void OnUserBlacklistedStatusChange(bool blacklisted) override {
-  }
-  void OnBlacklistCleared(base::Time time) override {
-  }
+  void OnUserBlacklistedStatusChange(bool blacklisted) override {}
+  void OnBlacklistCleared(base::Time time) override {}
 };
 
 class TestPreviewsBlackList : public PreviewsBlackList {
@@ -125,36 +123,36 @@ class PreviewsBlackListTest : public testing::Test {
 
   void SetHostThresholdParam(int per_host_threshold) {
     params_["per_host_opt_out_threshold"] =
-        base::IntToString(per_host_threshold);
+        base::NumberToString(per_host_threshold);
   }
 
   void SetHostIndifferentThresholdParam(int host_indifferent_threshold) {
     params_["host_indifferent_opt_out_threshold"] =
-        base::IntToString(host_indifferent_threshold);
+        base::NumberToString(host_indifferent_threshold);
   }
 
   void SetHostDurationParam(int duration_in_days) {
     params_["per_host_black_list_duration_in_days"] =
-        base::IntToString(duration_in_days);
+        base::NumberToString(duration_in_days);
   }
 
   void SetHostIndifferentDurationParam(int duration_in_days) {
     params_["host_indifferent_black_list_duration_in_days"] =
-        base::IntToString(duration_in_days);
+        base::NumberToString(duration_in_days);
   }
 
   void SetSingleOptOutDurationParam(int single_opt_out_duration) {
     params_["single_opt_out_duration_in_seconds"] =
-        base::IntToString(single_opt_out_duration);
+        base::NumberToString(single_opt_out_duration);
   }
 
   void SetMaxHostInBlackListParam(size_t max_hosts_in_blacklist) {
     params_["max_hosts_in_blacklist"] =
-        base::IntToString(max_hosts_in_blacklist);
+        base::NumberToString(max_hosts_in_blacklist);
   }
 
  protected:
-  base::MessageLoop loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
 
   // Observer to |black_list_|.
   TestOptOutBlacklistDelegate blacklist_delegate_;
@@ -179,9 +177,11 @@ TEST_F(PreviewsBlackListTest, AddPreviewUMA) {
   black_list_->AddPreviewNavigation(url, false, PreviewsType::OFFLINE);
   histogram_tester.ExpectUniqueSample("Previews.OptOut.UserOptedOut.Offline", 0,
                                       1);
+  histogram_tester.ExpectUniqueSample("Previews.OptOut.UserOptedOut", 0, 1);
   black_list_->AddPreviewNavigation(url, true, PreviewsType::OFFLINE);
   histogram_tester.ExpectBucketCount("Previews.OptOut.UserOptedOut.Offline", 1,
                                      1);
+  histogram_tester.ExpectBucketCount("Previews.OptOut.UserOptedOut", 1, 1);
 }
 
 TEST_F(PreviewsBlackListTest, SessionParams) {

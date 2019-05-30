@@ -6,7 +6,9 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/run_loop.h"
+#include "base/task/post_task.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -14,7 +16,7 @@
 #include "content/browser/service_worker/service_worker_provider_host.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/common/service_worker/service_worker_utils.h"
-#include "content/public/common/request_context_type.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
@@ -26,11 +28,10 @@
 #include "storage/browser/blob/blob_storage_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/service_worker/service_worker_utils.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
 
 namespace content {
 namespace service_worker_request_handler_unittest {
-
-int kMockProviderId = 1;
 
 class ServiceWorkerRequestHandlerTest : public testing::Test {
  public:
@@ -51,20 +52,16 @@ class ServiceWorkerRequestHandlerTest : public testing::Test {
  protected:
   void InitializeProviderHostForWindow() {
     // An empty host.
-    std::unique_ptr<ServiceWorkerProviderHost> host =
-        CreateProviderHostForWindow(helper_->mock_render_process_id(),
-                                    kMockProviderId,
-                                    true /* is_parent_frame_secure */,
-                                    context()->AsWeakPtr(), &remote_endpoint_);
-    provider_host_ = host->AsWeakPtr();
-    context()->AddProviderHost(std::move(host));
+    provider_host_ = CreateProviderHostForWindow(
+        helper_->mock_render_process_id(), true /* is_parent_frame_secure */,
+        context()->AsWeakPtr(), &remote_endpoint_);
   }
 
   static std::unique_ptr<ServiceWorkerNavigationHandleCore>
   CreateNavigationHandleCore(ServiceWorkerContextWrapper* context_wrapper) {
     std::unique_ptr<ServiceWorkerNavigationHandleCore> navigation_handle_core;
-    BrowserThread::PostTaskAndReplyWithResult(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraitsAndReplyWithResult(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(
             [](ServiceWorkerContextWrapper* wrapper) {
               return std::make_unique<ServiceWorkerNavigationHandleCore>(
@@ -96,12 +93,12 @@ class ServiceWorkerRequestHandlerTest : public testing::Test {
                          ResourceType resource_type) {
     ServiceWorkerRequestHandler::InitializeHandler(
         request, context_wrapper(), &blob_storage_context_,
-        helper_->mock_render_process_id(), kMockProviderId, skip_service_worker,
-        network::mojom::FetchRequestMode::kNoCORS,
+        helper_->mock_render_process_id(), provider_host_->provider_id(),
+        skip_service_worker, network::mojom::FetchRequestMode::kNoCors,
         network::mojom::FetchCredentialsMode::kOmit,
         network::mojom::FetchRedirectMode::kFollow,
         std::string() /* integrity */, false /* keepalive */, resource_type,
-        REQUEST_CONTEXT_TYPE_HYPERLINK,
+        blink::mojom::RequestContextType::HYPERLINK,
         network::mojom::RequestContextFrameType::kTopLevel, nullptr);
   }
 
@@ -130,7 +127,7 @@ class ServiceWorkerRequestHandlerTest : public testing::Test {
     InitializeHandler(request.get(), skip_service_worker, resource_type);
     ASSERT_TRUE(GetHandler(request.get()));
     MaybeCreateJob(request.get());
-    EXPECT_EQ(url, provider_host_->document_url().spec());
+    EXPECT_EQ(url, provider_host_->url().spec());
   }
 
   void InitializeHandlerForNavigationSimpleTest(const std::string& url,
@@ -155,7 +152,7 @@ class ServiceWorkerRequestHandlerTest : public testing::Test {
     ServiceWorkerRequestHandler::InitializeForNavigation(
         request.get(), navigation_handle_core.get(), &blob_storage_context_,
         false /* skip_service_worker */, RESOURCE_TYPE_MAIN_FRAME,
-        REQUEST_CONTEXT_TYPE_HYPERLINK,
+        blink::mojom::RequestContextType::HYPERLINK,
         network::mojom::RequestContextFrameType::kTopLevel,
         true /* is_parent_frame_secure */, nullptr /* body */,
         base::RepeatingCallback<WebContents*(void)>());
@@ -167,15 +164,17 @@ class ServiceWorkerRequestHandlerTest : public testing::Test {
       bool expected_handler_created) {
     std::unique_ptr<ServiceWorkerNavigationHandleCore> navigation_handle_core =
         CreateNavigationHandleCore(helper_->context_wrapper());
+    base::WeakPtr<ServiceWorkerProviderHost> service_worker_provider_host;
     std::unique_ptr<NavigationLoaderInterceptor> interceptor =
         ServiceWorkerRequestHandler::InitializeForNavigationNetworkService(
             GURL(url), nullptr /* resource_context */,
             navigation_handle_core.get(), &blob_storage_context_,
             false /* skip_service_worker */, RESOURCE_TYPE_MAIN_FRAME,
-            REQUEST_CONTEXT_TYPE_HYPERLINK,
+            blink::mojom::RequestContextType::HYPERLINK,
             network::mojom::RequestContextFrameType::kTopLevel,
             true /* is_parent_frame_secure */, nullptr /* body */,
-            base::RepeatingCallback<WebContents*(void)>());
+            base::RepeatingCallback<WebContents*(void)>(),
+            &service_worker_provider_host);
     return !!interceptor.get();
   }
 
@@ -235,12 +234,13 @@ TEST_F(ServiceWorkerRequestHandlerTest, InitializeHandler_HTTPS_SKIP) {
 TEST_F(ServiceWorkerRequestHandlerTest, InitializeHandler_IMAGE) {
   InitializeProviderHostForWindow();
   // Check provider host's URL after initializing a handler for an image.
-  provider_host_->SetDocumentUrl(GURL("https://host/scope/doc"));
+  provider_host_.get()->UpdateUrls(GURL("https://host/scope/doc"),
+                                   GURL("https://host/scope/doc"));
   std::unique_ptr<net::URLRequest> request =
       CreateRequest("https://host/scope/image", "GET");
   InitializeHandler(request.get(), true, RESOURCE_TYPE_IMAGE);
   ASSERT_FALSE(GetHandler(request.get()));
-  EXPECT_EQ(GURL("https://host/scope/doc"), provider_host_->document_url());
+  EXPECT_EQ(GURL("https://host/scope/doc"), provider_host_->url());
 }
 
 TEST_F(ServiceWorkerRequestHandlerTest, InitializeForNavigation_HTTP) {

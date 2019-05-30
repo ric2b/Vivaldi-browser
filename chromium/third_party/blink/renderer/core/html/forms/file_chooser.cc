@@ -28,17 +28,22 @@
 
 #include "third_party/blink/renderer/core/html/forms/file_chooser.h"
 
-#include "third_party/blink/public/web/web_local_frame_client.h"
-#include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/platform/file_path_conversion.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/page/chrome_client_impl.h"
-#include "third_party/blink/renderer/platform/wtf/date_math.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
+
+using mojom::blink::FileChooserFileInfo;
+using mojom::blink::FileChooserFileInfoPtr;
+using mojom::blink::NativeFileInfo;
 
 FileChooserClient::~FileChooserClient() = default;
 
 FileChooser* FileChooserClient::NewFileChooser(
-    const WebFileChooserParams& params) {
+    const mojom::blink::FileChooserParams& params) {
   if (chooser_)
     chooser_->DisconnectClient();
 
@@ -52,12 +57,12 @@ void FileChooserClient::DisconnectFileChooser() {
 }
 
 inline FileChooser::FileChooser(FileChooserClient* client,
-                                const WebFileChooserParams& params)
-    : client_(client), params_(params) {}
+                                const mojom::blink::FileChooserParams& params)
+    : client_(client), params_(params.Clone()) {}
 
 scoped_refptr<FileChooser> FileChooser::Create(
     FileChooserClient* client,
-    const WebFileChooserParams& params) {
+    const mojom::blink::FileChooserParams& params) {
   return base::AdoptRef(new FileChooser(client, params));
 }
 
@@ -68,50 +73,58 @@ bool FileChooser::OpenFileChooser(ChromeClientImpl& chrome_client_impl) {
   if (!frame)
     return false;
   chrome_client_impl_ = chrome_client_impl;
+  frame->GetInterfaceProvider().GetInterface(
+      &file_chooser_, frame->GetTaskRunner(TaskType::kInternalDefault));
+  file_chooser_.set_connection_error_handler(
+      WTF::Bind(&FileChooser::DidCloseChooser, WTF::Unretained(this)));
+  file_chooser_->OpenFileChooser(
+      params_.Clone(),
+      WTF::Bind(&FileChooser::DidChooseFiles, WTF::Unretained(this)));
 
-  WebLocalFrameClient* client =
-      frame ? WebLocalFrameImpl::FromFrame(frame)->Client() : nullptr;
-  if (!client || !client->RunFileChooser(params_, this))
-    return false;
-
-  // Should be released on file choosing.
+  // Should be released on file choosing or connection error.
   AddRef();
   chrome_client_impl.RegisterPopupOpeningObserver(client_);
   return true;
 }
 
-void FileChooser::DidChooseFile(const WebVector<WebString>& file_names) {
-  Vector<FileChooserFileInfo> file_info;
-  for (size_t i = 0; i < file_names.size(); ++i)
-    file_info.push_back(FileChooserFileInfo(file_names[i]));
-  ChooseFiles(file_info);
+void FileChooser::EnumerateChosenDirectory() {
+  DCHECK_EQ(params_->selected_files.size(), 1u);
+  LocalFrame* frame = FrameOrNull();
+  if (!frame)
+    return;
+  DCHECK(!chrome_client_impl_);
+  frame->GetInterfaceProvider().GetInterface(
+      &file_chooser_, frame->GetTaskRunner(TaskType::kInternalDefault));
+  file_chooser_.set_connection_error_handler(
+      WTF::Bind(&FileChooser::DidCloseChooser, WTF::Unretained(this)));
+  file_chooser_->EnumerateChosenDirectory(
+      std::move(params_->selected_files[0]),
+      WTF::Bind(&FileChooser::DidChooseFiles, WTF::Unretained(this)));
+
+  // Should be released on file choosing or connection error.
+  AddRef();
 }
 
-void FileChooser::DidChooseFile(const WebVector<SelectedFileInfo>& files) {
-  Vector<FileChooserFileInfo> file_info;
-  for (size_t i = 0; i < files.size(); ++i) {
-    if (files[i].file_system_url.IsEmpty()) {
-      file_info.push_back(
-          FileChooserFileInfo(files[i].path, files[i].display_name));
-    } else {
-      FileMetadata metadata;
-      metadata.modification_time = files[i].modification_time * kMsPerSecond;
-      metadata.length = files[i].length;
-      metadata.type = files[i].is_directory ? FileMetadata::kTypeDirectory
-                                            : FileMetadata::kTypeFile;
-      file_info.push_back(
-          FileChooserFileInfo(files[i].file_system_url, metadata));
-    }
-  }
-  ChooseFiles(file_info);
-}
-
-void FileChooser::ChooseFiles(const Vector<FileChooserFileInfo>& files) {
+void FileChooser::DidChooseFiles(mojom::blink::FileChooserResultPtr result) {
+  // TODO(tkent): If |result| is nullptr, we should not clear the
+  // already-selected files in <input type=file> like other browsers.
+  FileChooserFileInfoList files;
+  if (result)
+    files = std::move(result->files);
   // FIXME: This is inelegant. We should not be looking at params_ here.
-  if (params_.selected_files.size() == files.size()) {
+  if (params_->selected_files.size() == files.size()) {
     bool was_changed = false;
     for (unsigned i = 0; i < files.size(); ++i) {
-      if (String(params_.selected_files[i]) != files[i].path) {
+      // TODO(tkent): If a file system URL was already selected, and new
+      // chooser session selects the same one, a |change| event is
+      // dispatched unexpectedly.
+      // |selected_files| is created by FileList::
+      // PathsForUserVisibleFiles(), and it returns File::name() for
+      // file system URLs. Comparing File::name() doesn't make
+      // sense. We should compare file system URLs.
+      if (!files[i]->is_native_file() ||
+          params_->selected_files[i] !=
+              files[i]->get_native_file()->file_path) {
         was_changed = true;
         break;
       }
@@ -122,18 +135,41 @@ void FileChooser::ChooseFiles(const Vector<FileChooserFileInfo>& files) {
     }
   }
 
-  if (client_)
-    client_->FilesChosen(files);
+  if (client_) {
+    client_->FilesChosen(std::move(files),
+                         result ? result->base_directory : base::FilePath());
+  }
   DidCloseChooser();
 }
 
 void FileChooser::DidCloseChooser() {
+  // Close the binding explicitly to avoid this function is called again as a
+  // connection error handler.
+  file_chooser_.reset();
+
+  // Some cleanup for OpenFileChooser() path.
   if (chrome_client_impl_) {
     chrome_client_impl_->DidCompleteFileChooser(*this);
     if (client_)
       chrome_client_impl_->UnregisterPopupOpeningObserver(client_);
   }
+
   Release();
+}
+
+FileChooserFileInfoPtr CreateFileChooserFileInfoNative(
+    const String& path,
+    const String& display_name) {
+  return FileChooserFileInfo::NewNativeFile(
+      NativeFileInfo::New(StringToFilePath(path), display_name));
+}
+
+FileChooserFileInfoPtr CreateFileChooserFileInfoFileSystem(
+    const KURL& url,
+    base::Time modification_time,
+    int64_t length) {
+  return FileChooserFileInfo::NewFileSystem(
+      mojom::blink::FileSystemFileInfo::New(url, modification_time, length));
 }
 
 }  // namespace blink

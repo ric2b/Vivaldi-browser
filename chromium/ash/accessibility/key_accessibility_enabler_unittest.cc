@@ -7,7 +7,6 @@
 #include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility/accessibility_observer.h"
 #include "ash/shell.h"
-#include "ash/system/message_center/notification_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/run_loop.h"
@@ -23,7 +22,6 @@ class KeyAccessibilityEnablerTest : public AshTestBase,
   KeyAccessibilityEnablerTest() {}
 
   void SetUp() override {
-    NotificationTray::DisableAnimationsForTest(true);
     ui::SetEventTickClockForTesting(&clock_);
     AshTestBase::SetUp();
     Shell::Get()->accessibility_controller()->AddObserver(this);
@@ -70,18 +68,18 @@ TEST_F(KeyAccessibilityEnablerTest, TwoVolumeKeyDown) {
   AccessibilityController* controller =
       Shell::Get()->accessibility_controller();
 
-  ASSERT_FALSE(controller->IsSpokenFeedbackEnabled());
+  ASSERT_FALSE(controller->spoken_feedback_enabled());
   SendKeyEvent(&vol_down_press);
   SendKeyEvent(&vol_up_press);
   WaitForAccessibilityStatusChanged();
-  ASSERT_TRUE(controller->IsSpokenFeedbackEnabled());
+  ASSERT_TRUE(controller->spoken_feedback_enabled());
   SendKeyEvent(&vol_down_release);
   SendKeyEvent(&vol_up_release);
 
   SendKeyEvent(&vol_down_press);
   SendKeyEvent(&vol_up_press);
   WaitForAccessibilityStatusChanged();
-  ASSERT_FALSE(controller->IsSpokenFeedbackEnabled());
+  ASSERT_FALSE(controller->spoken_feedback_enabled());
 }
 
 }  // namespace ash

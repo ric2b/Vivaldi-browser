@@ -51,17 +51,16 @@ const int kAutoFlushBig = 2;     // 1/2 of the buffer
 //
 // helper.WaitForToken(token);  // this doesn't return until the first two
 //                              // commands have been executed.
-class GPU_EXPORT CommandBufferHelper
-    : public base::trace_event::MemoryDumpProvider {
+class GPU_EXPORT CommandBufferHelper {
  public:
   explicit CommandBufferHelper(CommandBuffer* command_buffer);
-  ~CommandBufferHelper() override;
+  virtual ~CommandBufferHelper();
 
   // Initializes the CommandBufferHelper.
   // Parameters:
   //   ring_buffer_size: The size of the ring buffer portion of the command
   //       buffer.
-  gpu::ContextResult Initialize(int32_t ring_buffer_size);
+  gpu::ContextResult Initialize(uint32_t ring_buffer_size);
 
   // Sets whether the command buffer should automatically flush periodically
   // to try to increase performance. Defaults to true.
@@ -267,9 +266,8 @@ class GPU_EXPORT CommandBufferHelper
 
   bool usable() const { return usable_; }
 
-  // Overridden from base::trace_event::MemoryDumpProvider:
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
-                    base::trace_event::ProcessMemoryDump* pmd) override;
+                    base::trace_event::ProcessMemoryDump* pmd);
 
   int32_t GetPutOffsetForTest() const { return put_; }
 
@@ -295,7 +293,7 @@ class GPU_EXPORT CommandBufferHelper
 
   CommandBuffer* const command_buffer_;
   int32_t ring_buffer_id_ = -1;
-  int32_t ring_buffer_size_ = 0;
+  uint32_t ring_buffer_size_ = 0;
   scoped_refptr<gpu::Buffer> ring_buffer_;
   CommandBufferEntry* entries_ = nullptr;
   int32_t total_entry_count_ = 0;  // the total number of entries

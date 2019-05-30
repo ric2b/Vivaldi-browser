@@ -18,17 +18,17 @@ class LayoutTableSectionTest : public RenderingTest {
   }
 
   LayoutTableSection* CreateSection(unsigned rows, unsigned columns) {
-    auto* table = GetDocument().CreateRawElement(HTMLNames::tableTag);
+    auto* table = GetDocument().CreateRawElement(html_names::kTableTag);
     GetDocument().body()->appendChild(table);
-    auto* section = GetDocument().CreateRawElement(HTMLNames::tbodyTag);
+    auto* section = GetDocument().CreateRawElement(html_names::kTbodyTag);
     table->appendChild(section);
     for (unsigned i = 0; i < rows; ++i) {
-      auto* row = GetDocument().CreateRawElement(HTMLNames::trTag);
+      auto* row = GetDocument().CreateRawElement(html_names::kTrTag);
       section->appendChild(row);
       for (unsigned i = 0; i < columns; ++i)
-        row->appendChild(GetDocument().CreateRawElement(HTMLNames::tdTag));
+        row->appendChild(GetDocument().CreateRawElement(html_names::kTdTag));
     }
-    GetDocument().View()->UpdateAllLifecyclePhases();
+    UpdateAllLifecyclePhasesForTest();
     return ToLayoutTableSection(section->GetLayoutObject());
   }
 };
@@ -316,8 +316,10 @@ TEST_F(LayoutTableSectionTest, VisualOverflowWithCollapsedBorders) {
 }
 
 static void SetCellsOverflowInRow(LayoutTableRow* row) {
-  for (auto* cell = row->FirstCell(); cell; cell = cell->NextCell())
-    ToElement(cell->GetNode())->setAttribute(HTMLNames::classAttr, "overflow");
+  for (auto* cell = row->FirstCell(); cell; cell = cell->NextCell()) {
+    ToElement(cell->GetNode())
+        ->setAttribute(html_names::kClassAttr, "overflow");
+  }
 }
 
 TEST_F(LayoutTableSectionTest, OverflowingCells) {
@@ -330,7 +332,7 @@ TEST_F(LayoutTableSectionTest, OverflowingCells) {
 
   LayoutRect paint_rect(50, 50, 50, 50);
   auto* small_section = CreateSection(20, 20);
-  EXPECT_FALSE(small_section->HasOverflowingCell());
+  EXPECT_FALSE(small_section->HasVisuallyOverflowingCell());
   CellSpan rows;
   CellSpan columns;
   small_section->DirtiedRowsAndEffectiveColumns(paint_rect, rows, columns);
@@ -338,25 +340,25 @@ TEST_F(LayoutTableSectionTest, OverflowingCells) {
   EXPECT_NE(small_section->FullTableEffectiveColumnSpan(), columns);
 
   auto* big_section = CreateSection(80, 80);
-  EXPECT_FALSE(big_section->HasOverflowingCell());
+  EXPECT_FALSE(big_section->HasVisuallyOverflowingCell());
   big_section->DirtiedRowsAndEffectiveColumns(paint_rect, rows, columns);
   EXPECT_NE(big_section->FullSectionRowSpan(), rows);
   EXPECT_NE(big_section->FullTableEffectiveColumnSpan(), columns);
 
   SetCellsOverflowInRow(small_section->FirstRow());
   SetCellsOverflowInRow(big_section->FirstRow());
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   // Small sections with overflowing cells always use the full paint path.
-  EXPECT_TRUE(small_section->HasOverflowingCell());
-  EXPECT_EQ(0u, small_section->OverflowingCells().size());
+  EXPECT_TRUE(small_section->HasVisuallyOverflowingCell());
+  EXPECT_EQ(0u, small_section->VisuallyOverflowingCells().size());
   small_section->DirtiedRowsAndEffectiveColumns(paint_rect, rows, columns);
   EXPECT_EQ(small_section->FullSectionRowSpan(), rows);
   EXPECT_EQ(small_section->FullTableEffectiveColumnSpan(), columns);
 
   // Big sections with small number of overflowing cells use partial paint path.
-  EXPECT_TRUE(big_section->HasOverflowingCell());
-  EXPECT_EQ(80u, big_section->OverflowingCells().size());
+  EXPECT_TRUE(big_section->HasVisuallyOverflowingCell());
+  EXPECT_EQ(80u, big_section->VisuallyOverflowingCells().size());
   big_section->DirtiedRowsAndEffectiveColumns(paint_rect, rows, columns);
   EXPECT_NE(big_section->FullSectionRowSpan(), rows);
   EXPECT_NE(big_section->FullTableEffectiveColumnSpan(), columns);
@@ -365,19 +367,19 @@ TEST_F(LayoutTableSectionTest, OverflowingCells) {
     SetCellsOverflowInRow(row);
   for (auto* row = big_section->FirstRow(); row; row = row->NextRow())
     SetCellsOverflowInRow(row);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   // Small sections with overflowing cells always use the full paint path.
-  EXPECT_TRUE(small_section->HasOverflowingCell());
-  EXPECT_EQ(0u, small_section->OverflowingCells().size());
+  EXPECT_TRUE(small_section->HasVisuallyOverflowingCell());
+  EXPECT_EQ(0u, small_section->VisuallyOverflowingCells().size());
   small_section->DirtiedRowsAndEffectiveColumns(paint_rect, rows, columns);
   EXPECT_EQ(small_section->FullSectionRowSpan(), rows);
   EXPECT_EQ(small_section->FullTableEffectiveColumnSpan(), columns);
 
   // Big sections with too many overflowing cells are forced to use the full
   // paint path.
-  EXPECT_TRUE(big_section->HasOverflowingCell());
-  EXPECT_EQ(0u, big_section->OverflowingCells().size());
+  EXPECT_TRUE(big_section->HasVisuallyOverflowingCell());
+  EXPECT_EQ(0u, big_section->VisuallyOverflowingCells().size());
   big_section->DirtiedRowsAndEffectiveColumns(paint_rect, rows, columns);
   EXPECT_EQ(big_section->FullSectionRowSpan(), rows);
   EXPECT_EQ(big_section->FullTableEffectiveColumnSpan(), columns);

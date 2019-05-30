@@ -12,10 +12,15 @@ class GURL;
 class Profile;
 
 namespace content {
+class DOMMessageQueue;
+class RenderFrameHost;
 class WebContents;
 }  // namespace content
 
 namespace local_ntp_test_utils {
+
+// Tests that dark mode styling is properly applied to the local NTP.
+// class BaseDarkModeTest;
 
 content::WebContents* OpenNewTab(Browser* browser, const GURL& url);
 
@@ -25,6 +30,20 @@ content::WebContents* OpenNewTab(Browser* browser, const GURL& url);
 // tiles asynchronously. Optionally, a delay may be introduced to wait an
 // additional amount of time after the page reports as loaded.
 void NavigateToNTPAndWaitUntilLoaded(Browser* browser, int delay = 0);
+
+// Executes a script on the NTP, verifies it executes successfully, and waits
+// until the NTP tiles are reloaded. Note that simply waiting for the script
+// execution to complete is not enough, since the MV iframe receives the tiles
+// asynchronously.
+void ExecuteScriptOnNTPAndWaitUntilLoaded(content::RenderFrameHost* host,
+                                          const std::string& script);
+
+// Waits until the NTP tiles are loaded after a |delay|. |msg_queue| must be
+// initialized with |active_tab| before calling this function, otherwise we may
+// miss the 'loaded' message.
+void WaitUntilTilesLoaded(content::WebContents* active_tab,
+                          content::DOMMessageQueue* msg_queue,
+                          int delay);
 
 // Switches the browser language to French, and returns true iff successful.
 bool SwitchBrowserLanguageToFrench();

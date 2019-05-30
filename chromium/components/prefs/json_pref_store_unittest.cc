@@ -14,19 +14,18 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_task_environment.h"
-#include "base/test/simple_test_clock.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread.h"
 #include "base/values.h"
@@ -58,12 +57,6 @@ const char kWriteGolden[] =
      "\"long_int\":{\"pref\":\"214748364842\"},"
      "\"some_directory\":\"/usr/sbin/\","
      "\"tabs\":{\"max_tabs\":10,\"new_windows_in_tabs\":false}}";
-
-// Set the time on the given SimpleTestClock to the given time in minutes.
-void SetCurrentTimeInMinutes(double minutes, base::SimpleTestClock* clock) {
-  const int32_t kBaseTimeMins = 100;
-  clock->SetNow(base::Time::FromDoubleT((kBaseTimeMins + minutes) * 60));
-}
 
 // A PrefFilter that will intercept all calls to FilterOnLoad() and hold on
 // to the |prefs| until explicitly asked to release them.
@@ -215,8 +208,8 @@ TEST_P(JsonPrefStoreTest, NonExistentFile) {
 // Test fallback behavior for an invalid file.
 TEST_P(JsonPrefStoreTest, InvalidFile) {
   base::FilePath invalid_file = temp_dir_.GetPath().AppendASCII("invalid.json");
-  ASSERT_LT(0, base::WriteFile(invalid_file,
-                               kInvalidJson, arraysize(kInvalidJson) - 1));
+  ASSERT_LT(0, base::WriteFile(invalid_file, kInvalidJson,
+                               base::size(kInvalidJson) - 1));
 
   auto pref_store = base::MakeRefCounted<JsonPrefStore>(invalid_file);
   EXPECT_EQ(PersistentPrefStore::PREF_READ_ERROR_JSON_PARSE,
@@ -292,7 +285,7 @@ void RunBasicJsonPrefStoreTest(
 
   pref_store->SetValue(
       kLongIntPref,
-      std::make_unique<Value>(base::Int64ToString(214748364842LL)),
+      std::make_unique<Value>(base::NumberToString(214748364842LL)),
       WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
   EXPECT_TRUE(pref_store->GetValue(kLongIntPref, &actual));
   EXPECT_TRUE(actual->GetAsString(&string_value));
@@ -312,8 +305,8 @@ void RunBasicJsonPrefStoreTest(
 
 TEST_P(JsonPrefStoreTest, Basic) {
   base::FilePath input_file = temp_dir_.GetPath().AppendASCII("write.json");
-  ASSERT_LT(0, base::WriteFile(input_file,
-                               kReadJson, arraysize(kReadJson) - 1));
+  ASSERT_LT(0,
+            base::WriteFile(input_file, kReadJson, base::size(kReadJson) - 1));
 
   // Test that the persistent value can be loaded.
   ASSERT_TRUE(PathExists(input_file));
@@ -338,8 +331,8 @@ TEST_P(JsonPrefStoreTest, Basic) {
 
 TEST_P(JsonPrefStoreTest, BasicAsync) {
   base::FilePath input_file = temp_dir_.GetPath().AppendASCII("write.json");
-  ASSERT_LT(0, base::WriteFile(input_file,
-                               kReadJson, arraysize(kReadJson) - 1));
+  ASSERT_LT(0,
+            base::WriteFile(input_file, kReadJson, base::size(kReadJson) - 1));
 
   // Test that the persistent value can be loaded.
   auto pref_store = base::MakeRefCounted<JsonPrefStore>(input_file);
@@ -444,8 +437,8 @@ TEST_P(JsonPrefStoreTest, AsyncNonExistingFile) {
 
 TEST_P(JsonPrefStoreTest, ReadWithInterceptor) {
   base::FilePath input_file = temp_dir_.GetPath().AppendASCII("write.json");
-  ASSERT_LT(0, base::WriteFile(input_file,
-                               kReadJson, arraysize(kReadJson) - 1));
+  ASSERT_LT(0,
+            base::WriteFile(input_file, kReadJson, base::size(kReadJson) - 1));
 
   std::unique_ptr<InterceptingPrefFilter> intercepting_pref_filter(
       new InterceptingPrefFilter());
@@ -486,8 +479,8 @@ TEST_P(JsonPrefStoreTest, ReadWithInterceptor) {
 
 TEST_P(JsonPrefStoreTest, ReadAsyncWithInterceptor) {
   base::FilePath input_file = temp_dir_.GetPath().AppendASCII("write.json");
-  ASSERT_LT(0, base::WriteFile(input_file,
-                               kReadJson, arraysize(kReadJson) - 1));
+  ASSERT_LT(0,
+            base::WriteFile(input_file, kReadJson, base::size(kReadJson) - 1));
 
   std::unique_ptr<InterceptingPrefFilter> intercepting_pref_filter(
       new InterceptingPrefFilter());
@@ -545,164 +538,15 @@ TEST_P(JsonPrefStoreTest, ReadAsyncWithInterceptor) {
                             &scoped_task_environment_);
 }
 
-TEST_P(JsonPrefStoreTest, WriteCountHistogramTestBasic) {
-  base::HistogramTester histogram_tester;
-
-  SimpleTestClock* test_clock = new SimpleTestClock;
-  SetCurrentTimeInMinutes(0, test_clock);
-  JsonPrefStore::WriteCountHistogram histogram(
-      base::TimeDelta::FromSeconds(10),
-      base::FilePath(FILE_PATH_LITERAL("/tmp/Local State")),
-      std::unique_ptr<base::Clock>(test_clock));
-  int32_t report_interval =
-      JsonPrefStore::WriteCountHistogram::kHistogramWriteReportIntervalMins;
-
-  histogram.RecordWriteOccured();
-
-  SetCurrentTimeInMinutes(1.5 * report_interval, test_clock);
-  histogram.ReportOutstandingWrites();
-  std::unique_ptr<HistogramSamples> samples =
-      histogram.GetHistogram()->SnapshotSamples();
-
-  std::string histogram_name = histogram.GetHistogram()->histogram_name();
-  histogram_tester.ExpectBucketCount(histogram_name, 1, 1);
-  histogram_tester.ExpectTotalCount(histogram_name, 1);
-
-  ASSERT_EQ("Settings.JsonDataWriteCount.Local_State",
-            std::string(histogram.GetHistogram()->histogram_name()));
-  ASSERT_TRUE(histogram.GetHistogram()->HasConstructionArguments(1, 30, 31));
-}
-
-TEST_P(JsonPrefStoreTest, WriteCountHistogramTestSinglePeriod) {
-  base::HistogramTester histogram_tester;
-
-  SimpleTestClock* test_clock = new SimpleTestClock;
-  SetCurrentTimeInMinutes(0, test_clock);
-  JsonPrefStore::WriteCountHistogram histogram(
-      base::TimeDelta::FromSeconds(10),
-      base::FilePath(FILE_PATH_LITERAL("/tmp/Local State")),
-      std::unique_ptr<base::Clock>(test_clock));
-  int32_t report_interval =
-      JsonPrefStore::WriteCountHistogram::kHistogramWriteReportIntervalMins;
-
-  histogram.RecordWriteOccured();
-  SetCurrentTimeInMinutes(0.5 * report_interval, test_clock);
-  histogram.RecordWriteOccured();
-  SetCurrentTimeInMinutes(0.7 * report_interval, test_clock);
-  histogram.RecordWriteOccured();
-
-  // Nothing should be recorded until the report period has elapsed.
-  std::string histogram_name = histogram.GetHistogram()->histogram_name();
-  histogram_tester.ExpectTotalCount(histogram_name, 0);
-
-  SetCurrentTimeInMinutes(1.3 * report_interval, test_clock);
-  histogram.RecordWriteOccured();
-
-  // Now the report period has elapsed.
-  histogram_tester.ExpectBucketCount(histogram_name, 3, 1);
-  histogram_tester.ExpectTotalCount(histogram_name, 1);
-
-  // The last write won't be recorded because the second count period hasn't
-  // fully elapsed.
-  SetCurrentTimeInMinutes(1.5 * report_interval, test_clock);
-  histogram.ReportOutstandingWrites();
-
-  histogram_tester.ExpectBucketCount(histogram_name, 3, 1);
-  histogram_tester.ExpectTotalCount(histogram_name, 1);
-}
-
-TEST_P(JsonPrefStoreTest, WriteCountHistogramTestMultiplePeriods) {
-  base::HistogramTester histogram_tester;
-
-  SimpleTestClock* test_clock = new SimpleTestClock;
-  SetCurrentTimeInMinutes(0, test_clock);
-  JsonPrefStore::WriteCountHistogram histogram(
-      base::TimeDelta::FromSeconds(10),
-      base::FilePath(FILE_PATH_LITERAL("/tmp/Local State")),
-      std::unique_ptr<base::Clock>(test_clock));
-  int32_t report_interval =
-      JsonPrefStore::WriteCountHistogram::kHistogramWriteReportIntervalMins;
-
-  histogram.RecordWriteOccured();
-  SetCurrentTimeInMinutes(0.5 * report_interval, test_clock);
-  histogram.RecordWriteOccured();
-  SetCurrentTimeInMinutes(0.7 * report_interval, test_clock);
-  histogram.RecordWriteOccured();
-  SetCurrentTimeInMinutes(1.3 * report_interval, test_clock);
-  histogram.RecordWriteOccured();
-  SetCurrentTimeInMinutes(1.5 * report_interval, test_clock);
-  histogram.RecordWriteOccured();
-  SetCurrentTimeInMinutes(2.1 * report_interval, test_clock);
-  histogram.RecordWriteOccured();
-  SetCurrentTimeInMinutes(2.5 * report_interval, test_clock);
-  histogram.RecordWriteOccured();
-  SetCurrentTimeInMinutes(2.7 * report_interval, test_clock);
-  histogram.RecordWriteOccured();
-  SetCurrentTimeInMinutes(3.3 * report_interval, test_clock);
-  histogram.RecordWriteOccured();
-
-  // The last write won't be recorded because the second count period hasn't
-  // fully elapsed
-  SetCurrentTimeInMinutes(3.5 * report_interval, test_clock);
-  histogram.ReportOutstandingWrites();
-  std::string histogram_name = histogram.GetHistogram()->histogram_name();
-  histogram_tester.ExpectBucketCount(histogram_name, 3, 2);
-  histogram_tester.ExpectBucketCount(histogram_name, 2, 1);
-  histogram_tester.ExpectTotalCount(histogram_name, 3);
-}
-
-TEST_P(JsonPrefStoreTest, WriteCountHistogramTestPeriodWithGaps) {
-  base::HistogramTester histogram_tester;
-
-  SimpleTestClock* test_clock = new SimpleTestClock;
-  SetCurrentTimeInMinutes(0, test_clock);
-  JsonPrefStore::WriteCountHistogram histogram(
-      base::TimeDelta::FromSeconds(10),
-      base::FilePath(FILE_PATH_LITERAL("/tmp/Local State")),
-      std::unique_ptr<base::Clock>(test_clock));
-  int32_t report_interval =
-      JsonPrefStore::WriteCountHistogram::kHistogramWriteReportIntervalMins;
-
-  // 1 write in the first period.
-  histogram.RecordWriteOccured();
-
-  // No writes in the second and third periods.
-
-  // 2 writes in the fourth period.
-  SetCurrentTimeInMinutes(3.1 * report_interval, test_clock);
-  histogram.RecordWriteOccured();
-  SetCurrentTimeInMinutes(3.3 * report_interval, test_clock);
-  histogram.RecordWriteOccured();
-
-  // No writes in the fifth period.
-
-  // 3 writes in the sixth period.
-  SetCurrentTimeInMinutes(5.1 * report_interval, test_clock);
-  histogram.RecordWriteOccured();
-  SetCurrentTimeInMinutes(5.3 * report_interval, test_clock);
-  histogram.RecordWriteOccured();
-  SetCurrentTimeInMinutes(5.5 * report_interval, test_clock);
-  histogram.RecordWriteOccured();
-
-  SetCurrentTimeInMinutes(6.1 * report_interval, test_clock);
-  histogram.ReportOutstandingWrites();
-  std::string histogram_name = histogram.GetHistogram()->histogram_name();
-  histogram_tester.ExpectBucketCount(histogram_name, 0, 3);
-  histogram_tester.ExpectBucketCount(histogram_name, 1, 1);
-  histogram_tester.ExpectBucketCount(histogram_name, 2, 1);
-  histogram_tester.ExpectBucketCount(histogram_name, 3, 1);
-  histogram_tester.ExpectTotalCount(histogram_name, 6);
-}
-
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     WithoutCallback,
     JsonPrefStoreTest,
     ::testing::Values(CommitPendingWriteMode::WITHOUT_CALLBACK));
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     WithCallback,
     JsonPrefStoreTest,
     ::testing::Values(CommitPendingWriteMode::WITH_CALLBACK));
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     WithSynchronousCallback,
     JsonPrefStoreTest,
     ::testing::Values(CommitPendingWriteMode::WITH_SYNCHRONOUS_CALLBACK));
@@ -850,15 +694,15 @@ TEST_P(JsonPrefStoreLossyWriteTest, ScheduleLossyWrite) {
   ASSERT_EQ("{\"lossy\":\"lossy\"}", GetTestFileContents());
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     WithoutCallback,
     JsonPrefStoreLossyWriteTest,
     ::testing::Values(CommitPendingWriteMode::WITHOUT_CALLBACK));
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     WithReply,
     JsonPrefStoreLossyWriteTest,
     ::testing::Values(CommitPendingWriteMode::WITH_CALLBACK));
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     WithNotify,
     JsonPrefStoreLossyWriteTest,
     ::testing::Values(CommitPendingWriteMode::WITH_SYNCHRONOUS_CALLBACK));
@@ -1007,7 +851,7 @@ class JsonPrefStoreCallbackTest : public testing::Test {
 TEST_F(JsonPrefStoreCallbackTest, TestSerializeDataCallbacks) {
   base::FilePath input_file = temp_dir_.GetPath().AppendASCII("write.json");
   ASSERT_LT(0,
-            base::WriteFile(input_file, kReadJson, arraysize(kReadJson) - 1));
+            base::WriteFile(input_file, kReadJson, base::size(kReadJson) - 1));
 
   std::unique_ptr<InterceptingPrefFilter> intercepting_pref_filter(
       new InterceptingPrefFilter(write_callback_observer_.GetCallbackPair()));

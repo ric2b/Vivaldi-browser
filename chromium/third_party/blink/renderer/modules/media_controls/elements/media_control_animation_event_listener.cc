@@ -11,23 +11,18 @@ namespace blink {
 
 MediaControlAnimationEventListener::MediaControlAnimationEventListener(
     Observer* observer)
-    : EventListener(EventListener::kCPPEventListenerType), observer_(observer) {
+    : observer_(observer) {
   observer_->WatchedAnimationElement().addEventListener(
-      EventTypeNames::animationend, this, false);
+      event_type_names::kAnimationend, this, false);
   observer_->WatchedAnimationElement().addEventListener(
-      EventTypeNames::animationiteration, this, false);
+      event_type_names::kAnimationiteration, this, false);
 }
 
 void MediaControlAnimationEventListener::Detach() {
   observer_->WatchedAnimationElement().removeEventListener(
-      EventTypeNames::animationend, this, false);
+      event_type_names::kAnimationend, this, false);
   observer_->WatchedAnimationElement().removeEventListener(
-      EventTypeNames::animationiteration, this, false);
-}
-
-bool MediaControlAnimationEventListener::operator==(
-    const EventListener& other) const {
-  return this == &other;
+      event_type_names::kAnimationiteration, this, false);
 }
 
 void MediaControlAnimationEventListener::Trace(Visitor* visitor) {
@@ -35,13 +30,13 @@ void MediaControlAnimationEventListener::Trace(Visitor* visitor) {
   EventListener::Trace(visitor);
 }
 
-void MediaControlAnimationEventListener::handleEvent(ExecutionContext* context,
-                                                     Event* event) {
-  if (event->type() == EventTypeNames::animationend) {
+void MediaControlAnimationEventListener::Invoke(ExecutionContext* context,
+                                                Event* event) {
+  if (event->type() == event_type_names::kAnimationend) {
     observer_->OnAnimationEnd();
     return;
   }
-  if (event->type() == EventTypeNames::animationiteration) {
+  if (event->type() == event_type_names::kAnimationiteration) {
     observer_->OnAnimationIteration();
     return;
   }

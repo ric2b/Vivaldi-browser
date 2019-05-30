@@ -8,11 +8,11 @@
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
@@ -34,7 +34,6 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/omnibox/browser/omnibox_edit_controller.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
@@ -128,9 +127,9 @@ class BrowserFocusTest : public InProcessBrowserTest {
             content::NotificationService::AllSources()));
       }
 
-      for (size_t j = 0; j < arraysize(kExpectedIDs); ++j) {
+      for (size_t j = 0; j < base::size(kExpectedIDs); ++j) {
         SCOPED_TRACE(base::StringPrintf("focus inner loop %" PRIuS, j));
-        const size_t index = reverse ? arraysize(kExpectedIDs) - 1 - j : j;
+        const size_t index = reverse ? base::size(kExpectedIDs) - 1 - j : j;
         // The details are the node's editable state, i.e. true for "textEdit".
         bool is_editable_node = index == 0;
 
@@ -176,9 +175,6 @@ class BrowserFocusTest : public InProcessBrowserTest {
       }
     }
   }
-
- private:
-  test::ScopedMacViewsBrowserMode views_mode_{true};
 };
 
 // A test interstitial page with typical HTML contents.
@@ -291,7 +287,8 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, TabsRememberFocus) {
   for (int i = 0; i < 3; i++) {
     for (int j = 0; j < 5; j++) {
       // Activate the tab.
-      browser()->tab_strip_model()->ActivateTabAt(j, true);
+      browser()->tab_strip_model()->ActivateTabAt(
+          j, {TabStripModel::GestureType::kOther});
 
       // Activate the location bar or the page.
       if (kFocusPage[i][j]) {
@@ -304,13 +301,15 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, TabsRememberFocus) {
     // Now come back to the tab and check the right view is focused.
     for (int j = 0; j < 5; j++) {
       // Activate the tab.
-      browser()->tab_strip_model()->ActivateTabAt(j, true);
+      browser()->tab_strip_model()->ActivateTabAt(
+          j, {TabStripModel::GestureType::kOther});
 
       ViewID vid = kFocusPage[i][j] ? VIEW_ID_TAB_CONTAINER : VIEW_ID_OMNIBOX;
       ASSERT_TRUE(IsViewFocused(vid));
     }
 
-    browser()->tab_strip_model()->ActivateTabAt(0, true);
+    browser()->tab_strip_model()->ActivateTabAt(
+        0, {TabStripModel::GestureType::kOther});
     // Try the above, but with ctrl+tab. Since tab normally changes focus,
     // this has regressed in the past. Loop through several times to be sure.
     for (int j = 0; j < 15; j++) {
@@ -323,7 +322,8 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, TabsRememberFocus) {
     }
 
     // As above, but with ctrl+shift+tab.
-    browser()->tab_strip_model()->ActivateTabAt(4, true);
+    browser()->tab_strip_model()->ActivateTabAt(
+        4, {TabStripModel::GestureType::kOther});
     for (int j = 14; j >= 0; --j) {
       ViewID vid = kFocusPage[i][j % 5] ? VIEW_ID_TAB_CONTAINER :
                                           VIEW_ID_OMNIBOX;
@@ -358,16 +358,19 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, TabsRememberFocusFindInPage) {
 
   // Select 1st tab, focus should still be on the location-bar.
   // (bug http://crbug.com/23296)
-  browser()->tab_strip_model()->ActivateTabAt(0, true);
+  browser()->tab_strip_model()->ActivateTabAt(
+      0, {TabStripModel::GestureType::kOther});
   ASSERT_TRUE(IsViewFocused(VIEW_ID_OMNIBOX));
 
   // Now open the find box again, switch to another tab and come back, the focus
   // should return to the find box.
   chrome::Find(browser());
   ASSERT_TRUE(IsViewFocused(VIEW_ID_FIND_IN_PAGE_TEXT_FIELD));
-  browser()->tab_strip_model()->ActivateTabAt(1, true);
+  browser()->tab_strip_model()->ActivateTabAt(
+      1, {TabStripModel::GestureType::kOther});
   ASSERT_TRUE(IsViewFocused(VIEW_ID_TAB_CONTAINER));
-  browser()->tab_strip_model()->ActivateTabAt(0, true);
+  browser()->tab_strip_model()->ActivateTabAt(
+      0, {TabStripModel::GestureType::kOther});
   ASSERT_TRUE(IsViewFocused(VIEW_ID_FIND_IN_PAGE_TEXT_FIELD));
 }
 
@@ -656,8 +659,9 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, NavigateFromOmniboxIntoNewTab) {
 
   // Simulate an alt-enter.
   controller->OnAutocompleteAccept(
-      url2, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui::PAGE_TRANSITION_TYPED, AutocompleteMatchType::URL_WHAT_YOU_TYPED);
+      url2, nullptr, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui::PAGE_TRANSITION_TYPED, AutocompleteMatchType::URL_WHAT_YOU_TYPED,
+      base::TimeTicks());
 
   // Make sure the second tab is selected.
   EXPECT_EQ(1, browser()->tab_strip_model()->active_index());

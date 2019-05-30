@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/debug/leak_annotations.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/gtest_util.h"
@@ -18,7 +19,7 @@
 #include "content/common/frame_messages.h"
 #include "content/common/frame_owner_properties.h"
 #include "content/common/renderer.mojom.h"
-#include "content/common/view_messages.h"
+#include "content/common/widget_messages.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/renderer/content_renderer_client.h"
@@ -28,17 +29,19 @@
 #include "content/public/test/test_utils.h"
 #include "content/renderer/loader/web_url_loader_impl.h"
 #include "content/renderer/mojo/blink_interface_registry_impl.h"
-#include "content/renderer/navigation_state_impl.h"
+#include "content/renderer/navigation_state.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_frame_proxy.h"
 #include "content/renderer/render_view_impl.h"
 #include "content/test/fake_compositor_dependencies.h"
 #include "content/test/frame_host_test_interface.mojom.h"
+#include "content/test/test_document_interface_broker.h"
 #include "content/test/test_render_frame.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/public/mojom/interface_provider.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/frame/frame_host_test_interface.mojom.h"
 #include "third_party/blink/public/platform/web_effective_connection_type.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -64,6 +67,8 @@ constexpr int32_t kEmbeddedSubframeRouteId = 23;
 const char kParentFrameHTML[] = "Parent frame <iframe name='frame'></iframe>";
 
 const char kAutoplayTestOrigin[] = "https://www.google.com";
+
+constexpr char kGetNameTestResponse[] = "TestName";
 
 }  // namespace
 
@@ -101,8 +106,19 @@ class RenderFrameImplTest : public RenderViewTest {
 
     service_manager::mojom::InterfaceProviderPtr stub_interface_provider;
     mojo::MakeRequest(&stub_interface_provider);
+
+    blink::mojom::DocumentInterfaceBrokerPtr
+        stub_document_interface_broker_content;
+    mojo::MakeRequest(&stub_document_interface_broker_content);
+
+    blink::mojom::DocumentInterfaceBrokerPtr
+        stub_document_interface_broker_blink;
+    mojo::MakeRequest(&stub_document_interface_broker_blink);
+
     RenderFrameImpl::CreateFrame(
-        kSubframeRouteId, std::move(stub_interface_provider), MSG_ROUTING_NONE,
+        kSubframeRouteId, std::move(stub_interface_provider),
+        std::move(stub_document_interface_broker_content),
+        std::move(stub_document_interface_broker_blink), MSG_ROUTING_NONE,
         MSG_ROUTING_NONE, kFrameProxyRouteId, MSG_ROUTING_NONE,
         base::UnguessableToken::Create(), frame_replication_state,
         &compositor_deps_, widget_params, FrameOwnerProperties(),
@@ -200,18 +216,20 @@ TEST_F(RenderFrameImplTest, FrameResize) {
   visual_properties.browser_controls_shrink_blink_size = false;
   visual_properties.is_fullscreen_granted = false;
 
-  ViewMsg_SynchronizeVisualProperties resize_message(0, visual_properties);
+  WidgetMsg_SynchronizeVisualProperties resize_message(0, visual_properties);
   frame_widget()->OnMessageReceived(resize_message);
 
   EXPECT_EQ(frame_widget()->GetWebWidget()->Size(), blink::WebSize(size));
-  EXPECT_EQ(view_->GetWebView()->Size(), blink::WebSize(size));
+  EXPECT_EQ(view_->GetWebView()->MainFrameWidget()->Size(),
+            blink::WebSize(size));
 }
 
 // Verify a subframe RenderWidget properly processes a WasShown message.
 TEST_F(RenderFrameImplTest, FrameWasShown) {
   RenderFrameTestObserver observer(frame());
 
-  ViewMsg_WasShown was_shown_message(0, true, base::TimeTicks());
+  WidgetMsg_WasShown was_shown_message(0, base::TimeTicks(),
+                                       false /* was_evicted */);
   frame_widget()->OnMessageReceived(was_shown_message);
 
   EXPECT_FALSE(frame_widget()->is_hidden());
@@ -224,24 +242,32 @@ TEST_F(RenderFrameImplTest, LocalChildFrameWasShown) {
   service_manager::mojom::InterfaceProviderPtr stub_interface_provider;
   mojo::MakeRequest(&stub_interface_provider);
 
+  blink::mojom::DocumentInterfaceBrokerPtr stub_document_interface_broker;
+  mojo::MakeRequest(&stub_document_interface_broker);
+
   // Create and initialize a local child frame of the simulated OOPIF, which
   // is a grandchild of the remote main frame.
-  RenderFrameImpl* grandchild = RenderFrameImpl::Create(
-      frame()->render_view(), kEmbeddedSubframeRouteId,
-      std::move(stub_interface_provider), base::UnguessableToken::Create());
+  RenderFrameImpl* grandchild =
+      RenderFrameImpl::Create(frame()->render_view(), kEmbeddedSubframeRouteId,
+                              std::move(stub_interface_provider),
+                              std::move(stub_document_interface_broker),
+                              base::UnguessableToken::Create());
   blink::WebLocalFrame* parent_web_frame = frame()->GetWebFrame();
 
   parent_web_frame->CreateLocalChild(
       blink::WebTreeScopeType::kDocument, grandchild,
-      grandchild->blink_interface_registry_.get());
+      grandchild->blink_interface_registry_.get(),
+      mojo::MakeRequest(&stub_document_interface_broker).PassMessagePipe());
   grandchild->in_frame_tree_ = true;
   grandchild->Initialize();
 
-  EXPECT_EQ(grandchild->GetRenderWidget(), frame()->GetRenderWidget());
+  EXPECT_EQ(grandchild->GetLocalRootRenderWidget(),
+            frame()->GetLocalRootRenderWidget());
 
   RenderFrameTestObserver observer(grandchild);
 
-  ViewMsg_WasShown was_shown_message(0, true, base::TimeTicks());
+  WidgetMsg_WasShown was_shown_message(0, base::TimeTicks(),
+                                       false /* was_evicted */);
   frame_widget()->OnMessageReceived(was_shown_message);
 
   EXPECT_FALSE(frame_widget()->is_hidden());
@@ -251,10 +277,11 @@ TEST_F(RenderFrameImplTest, LocalChildFrameWasShown) {
 // Ensure that a RenderFrameImpl does not crash if the RenderView receives
 // a WasShown message after the frame's widget has been closed.
 TEST_F(RenderFrameImplTest, FrameWasShownAfterWidgetClose) {
-  ViewMsg_Close close_message(0);
+  WidgetMsg_Close close_message(0);
   frame_widget()->OnMessageReceived(close_message);
 
-  ViewMsg_WasShown was_shown_message(0, true, base::TimeTicks());
+  WidgetMsg_WasShown was_shown_message(0, base::TimeTicks(),
+                                       false /* was_evicted */);
   // Test passes if this does not crash.
   RenderWidget* render_widget =
       static_cast<RenderViewImpl*>(view_)->GetWidget();
@@ -275,34 +302,33 @@ TEST_F(RenderFrameImplTest, LoFiNotUpdatedOnSubframeCommits) {
   // The main frame's and subframe's LoFi states should stay the same on
   // same-document navigations.
   frame()->DidFinishSameDocumentNavigation(item, blink::kWebStandardCommit,
-                                           true);
+                                           false /* content_initiated */);
   EXPECT_EQ(SERVER_LOFI_ON, frame()->GetPreviewsState());
   GetMainRenderFrame()->DidFinishSameDocumentNavigation(
-      item, blink::kWebStandardCommit, true);
+      item, blink::kWebStandardCommit, false /* content_initiated */);
   EXPECT_EQ(SERVER_LOFI_ON, GetMainRenderFrame()->GetPreviewsState());
 
   // The subframe's LoFi state should not be reset on commit.
-  DocumentState* document_state = DocumentState::FromDocumentLoader(
+  NavigationState* navigation_state = NavigationState::FromDocumentLoader(
       frame()->GetWebFrame()->GetDocumentLoader());
-  static_cast<NavigationStateImpl*>(document_state->navigation_state())
-      ->set_was_within_same_document(false);
+  navigation_state->set_was_within_same_document(false);
 
+  blink::mojom::DocumentInterfaceBrokerPtr stub_document_interface_broker;
   frame()->DidCommitProvisionalLoad(
       item, blink::kWebStandardCommit,
-      blink::WebGlobalObjectReusePolicy::kCreateNew);
+      mojo::MakeRequest(&stub_document_interface_broker).PassMessagePipe());
   EXPECT_EQ(SERVER_LOFI_ON, frame()->GetPreviewsState());
 
   // The main frame's LoFi state should be reset to off on commit.
-  document_state = DocumentState::FromDocumentLoader(
+  navigation_state = NavigationState::FromDocumentLoader(
       GetMainRenderFrame()->GetWebFrame()->GetDocumentLoader());
-  static_cast<NavigationStateImpl*>(document_state->navigation_state())
-      ->set_was_within_same_document(false);
+  navigation_state->set_was_within_same_document(false);
 
   // Calling didCommitProvisionalLoad is not representative of a full navigation
   // but serves the purpose of testing the LoFi state logic.
   GetMainRenderFrame()->DidCommitProvisionalLoad(
       item, blink::kWebStandardCommit,
-      blink::WebGlobalObjectReusePolicy::kCreateNew);
+      mojo::MakeRequest(&stub_document_interface_broker).PassMessagePipe());
   EXPECT_EQ(PREVIEWS_UNSPECIFIED, GetMainRenderFrame()->GetPreviewsState());
   // The subframe would be deleted here after a cross-document navigation. It
   // happens to be left around in this test because this does not simulate the
@@ -323,7 +349,7 @@ TEST_F(RenderFrameImplTest, EffectiveConnectionType) {
                {blink::WebEffectiveConnectionType::kType2G},
                {blink::WebEffectiveConnectionType::kType4G}};
 
-  for (size_t i = 0; i < arraysize(tests); ++i) {
+  for (size_t i = 0; i < base::size(tests); ++i) {
     SetEffectionConnectionType(GetMainRenderFrame(), tests[i].type);
     SetEffectionConnectionType(frame(), tests[i].type);
 
@@ -337,32 +363,31 @@ TEST_F(RenderFrameImplTest, EffectiveConnectionType) {
     // The main frame's and subframe's effective connection type should stay the
     // same on same-document navigations.
     frame()->DidFinishSameDocumentNavigation(item, blink::kWebStandardCommit,
-                                             true);
+                                             false /* content_initiated */);
     EXPECT_EQ(tests[i].type, frame()->GetEffectiveConnectionType());
     GetMainRenderFrame()->DidFinishSameDocumentNavigation(
-        item, blink::kWebStandardCommit, true);
+        item, blink::kWebStandardCommit, false /* content_initiated */);
     EXPECT_EQ(tests[i].type, frame()->GetEffectiveConnectionType());
 
     // The subframe's effective connection type should not be reset on commit.
-    DocumentState* document_state = DocumentState::FromDocumentLoader(
+    NavigationState* navigation_state = NavigationState::FromDocumentLoader(
         frame()->GetWebFrame()->GetDocumentLoader());
-    static_cast<NavigationStateImpl*>(document_state->navigation_state())
-        ->set_was_within_same_document(false);
+    navigation_state->set_was_within_same_document(false);
 
+    blink::mojom::DocumentInterfaceBrokerPtr stub_document_interface_broker;
     frame()->DidCommitProvisionalLoad(
         item, blink::kWebStandardCommit,
-        blink::WebGlobalObjectReusePolicy::kCreateNew);
+        mojo::MakeRequest(&stub_document_interface_broker).PassMessagePipe());
     EXPECT_EQ(tests[i].type, frame()->GetEffectiveConnectionType());
 
     // The main frame's effective connection type should be reset on commit.
-    document_state = DocumentState::FromDocumentLoader(
+    navigation_state = NavigationState::FromDocumentLoader(
         GetMainRenderFrame()->GetWebFrame()->GetDocumentLoader());
-    static_cast<NavigationStateImpl*>(document_state->navigation_state())
-        ->set_was_within_same_document(false);
+    navigation_state->set_was_within_same_document(false);
 
     GetMainRenderFrame()->DidCommitProvisionalLoad(
         item, blink::kWebStandardCommit,
-        blink::WebGlobalObjectReusePolicy::kCreateNew);
+        mojo::MakeRequest(&stub_document_interface_broker).PassMessagePipe());
     EXPECT_EQ(blink::WebEffectiveConnectionType::kTypeUnknown,
               GetMainRenderFrame()->GetEffectiveConnectionType());
 
@@ -462,7 +487,7 @@ TEST_F(RenderFrameImplTest, ZoomLimit) {
   common_params.url = GURL("data:text/html,min_zoomlimit_test");
   common_params.navigation_type = FrameMsg_Navigate_Type::DIFFERENT_DOCUMENT;
   GetMainRenderFrame()->SetHostZoomLevel(common_params.url, kMinZoomLevel);
-  GetMainRenderFrame()->Navigate(common_params, RequestNavigationParams());
+  GetMainRenderFrame()->Navigate(common_params, CommitNavigationParams());
   base::RunLoop().RunUntilIdle();
   EXPECT_DOUBLE_EQ(kMinZoomLevel, view_->GetWebView()->ZoomLevel());
 
@@ -471,7 +496,7 @@ TEST_F(RenderFrameImplTest, ZoomLimit) {
                                          ZoomFactorToZoomLevel(1.0));
   common_params.url = GURL("data:text/html,max_zoomlimit_test");
   GetMainRenderFrame()->SetHostZoomLevel(common_params.url, kMaxZoomLevel);
-  GetMainRenderFrame()->Navigate(common_params, RequestNavigationParams());
+  GetMainRenderFrame()->Navigate(common_params, CommitNavigationParams());
   base::RunLoop().RunUntilIdle();
   EXPECT_DOUBLE_EQ(kMaxZoomLevel, view_->GetWebView()->ZoomLevel());
 }
@@ -480,9 +505,9 @@ TEST_F(RenderFrameImplTest, ZoomLimit) {
 // text finding, and then delete the frame immediately before the text finding
 // returns any text match.
 TEST_F(RenderFrameImplTest, NoCrashWhenDeletingFrameDuringFind) {
-  blink::WebFindOptions options;
-  options.force = true;
-  frame()->GetWebFrame()->Find(1, "foo", options, false);
+  frame()->GetWebFrame()->FindForTesting(
+      1, "foo", true /* match_case */, true /* forward */,
+      false /* find_next */, true /* force */, false /* wrap_within_frame */);
 
   FrameMsg_Delete delete_message(0);
   frame()->OnMessageReceived(delete_message);
@@ -679,6 +704,87 @@ TEST_F(RenderFrameImplTest, FileUrlPathAlias) {
   }
 }
 
+// Used to annotate the source of an interface request.
+struct SourceAnnotation {
+  // The URL of the active document in the frame, at the time the interface was
+  // requested by the RenderFrame.
+  GURL document_url;
+
+  // The RenderFrameObserver event in response to which the interface is
+  // requested by the RenderFrame.
+  std::string render_frame_event;
+
+  bool operator==(const SourceAnnotation& rhs) const {
+    return document_url == rhs.document_url &&
+           render_frame_event == rhs.render_frame_event;
+  }
+};
+
+// TODO(crbug.com/718652): this is a blink version of the FrameHostTestInterface
+// implementation. The non-blink one will be removed when all clients are
+// converted to use DocumentInterfaceBroker.
+class BlinkFrameHostTestInterfaceImpl
+    : public blink::mojom::FrameHostTestInterface {
+ public:
+  BlinkFrameHostTestInterfaceImpl() : binding_(this) {}
+  ~BlinkFrameHostTestInterfaceImpl() override {}
+
+  void BindAndFlush(blink::mojom::FrameHostTestInterfaceRequest request) {
+    binding_.Bind(std::move(request));
+    binding_.WaitForIncomingMethodCall();
+  }
+
+  const base::Optional<SourceAnnotation>& ping_source() const {
+    return ping_source_;
+  }
+
+ protected:
+  // blink::mojom::FrameHostTestInterface
+  void Ping(const GURL& url, const std::string& event) override {
+    ping_source_ = SourceAnnotation{url, event};
+  }
+  void GetName(GetNameCallback callback) override {
+    std::move(callback).Run(kGetNameTestResponse);
+  }
+
+ private:
+  mojo::Binding<blink::mojom::FrameHostTestInterface> binding_;
+  base::Optional<SourceAnnotation> ping_source_;
+
+  DISALLOW_COPY_AND_ASSIGN(BlinkFrameHostTestInterfaceImpl);
+};
+
+class FrameHostTestDocumentInterfaceBroker
+    : public TestDocumentInterfaceBroker {
+ public:
+  FrameHostTestDocumentInterfaceBroker(
+      blink::mojom::DocumentInterfaceBroker* document_interface_broker,
+      blink::mojom::DocumentInterfaceBrokerRequest request)
+      : TestDocumentInterfaceBroker(document_interface_broker,
+                                    std::move(request)) {}
+
+  void GetFrameHostTestInterface(
+      blink::mojom::FrameHostTestInterfaceRequest request) override {
+    BlinkFrameHostTestInterfaceImpl impl;
+    impl.BindAndFlush(std::move(request));
+  }
+};
+
+TEST_F(RenderFrameImplTest, TestDocumentInterfaceBrokerOverride) {
+  blink::mojom::DocumentInterfaceBrokerPtr doc;
+  FrameHostTestDocumentInterfaceBroker frame_interface_broker(
+      frame()->GetDocumentInterfaceBroker(), mojo::MakeRequest(&doc));
+  frame()->SetDocumentInterfaceBrokerForTesting(std::move(doc));
+
+  blink::mojom::FrameHostTestInterfacePtr frame_test;
+  frame()->GetDocumentInterfaceBroker()->GetFrameHostTestInterface(
+      mojo::MakeRequest(&frame_test));
+  frame_test->GetName(base::BindOnce([](const std::string& result) {
+    EXPECT_EQ(result, kGetNameTestResponse);
+  }));
+  frame_interface_broker.Flush();
+}
+
 // RenderFrameRemoteInterfacesTest ------------------------------------
 
 namespace {
@@ -740,25 +846,33 @@ class TestSimpleInterfaceProviderImpl
   DISALLOW_COPY_AND_ASSIGN(TestSimpleInterfaceProviderImpl);
 };
 
-// Used to annotate the source of an interface request.
-struct SourceAnnotation {
-  // The URL of the active document in the frame, at the time the interface was
-  // requested by the RenderFrame.
-  GURL document_url;
-
-  // The RenderFrameObserver event in response to which the interface is
-  // requested by the RenderFrame.
-  std::string render_frame_event;
-
-  bool operator==(const SourceAnnotation& rhs) const {
-    return document_url == rhs.document_url &&
-           render_frame_event == rhs.render_frame_event;
+class TestSimpleDocumentInterfaceBrokerImpl
+    : public blink::mojom::DocumentInterfaceBroker {
+ public:
+  using BinderCallback = base::RepeatingCallback<void(
+      blink::mojom::FrameHostTestInterfaceRequest)>;
+  TestSimpleDocumentInterfaceBrokerImpl(BinderCallback binder_callback)
+      : binding_(this), binder_callback_(binder_callback) {}
+  void BindAndFlush(blink::mojom::DocumentInterfaceBrokerRequest request) {
+    ASSERT_FALSE(binding_.is_bound());
+    binding_.Bind(std::move(request));
+    binding_.FlushForTesting();
   }
-};
 
-std::ostream& operator<<(std::ostream& os, const SourceAnnotation& a) {
-  return os << "[" << a.document_url << ", " << a.render_frame_event << "]";
-}
+ private:
+  // blink::mojom::DocumentInterfaceBroker
+  void GetFrameHostTestInterface(
+      blink::mojom::FrameHostTestInterfaceRequest request) override {
+    binder_callback_.Run(std::move(request));
+  }
+  void GetAudioContextManager(
+      blink::mojom::AudioContextManagerRequest) override {}
+
+  mojo::Binding<blink::mojom::DocumentInterfaceBroker> binding_;
+  BinderCallback binder_callback_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestSimpleDocumentInterfaceBrokerImpl);
+};
 
 class FrameHostTestInterfaceImpl : public mojom::FrameHostTestInterface {
  public:
@@ -803,6 +917,16 @@ class FrameHostTestInterfaceRequestIssuer : public RenderFrameObserver {
     ptr->Ping(
         !document.IsNull() ? GURL(document.Url()) : GURL(kNoDocumentMarkerURL),
         event);
+
+    blink::mojom::FrameHostTestInterfacePtr blink_ptr;
+    blink::mojom::DocumentInterfaceBroker* document_interface_broker =
+        render_frame()->GetDocumentInterfaceBroker();
+    DCHECK(document_interface_broker);
+    document_interface_broker->GetFrameHostTestInterface(
+        mojo::MakeRequest(&blink_ptr));
+    blink_ptr->Ping(
+        !document.IsNull() ? GURL(document.Url()) : GURL(kNoDocumentMarkerURL),
+        event);
   }
 
  private:
@@ -821,13 +945,8 @@ class FrameHostTestInterfaceRequestIssuer : public RenderFrameObserver {
     RequestTestInterfaceOnFrameEvent(kFrameEventWillCommitProvisionalLoad);
   }
 
-  void DidStartProvisionalLoad(
-      blink::WebDocumentLoader* document_loader) override {}
-
-  void DidFailProvisionalLoad(const blink::WebURLError& error) override {}
-
-  void DidCommitProvisionalLoad(bool is_new_navigation,
-                                bool is_same_document_navigation) override {
+  void DidCommitProvisionalLoad(bool is_same_document_navigation,
+                                ui::PageTransition transition) override {
     RequestTestInterfaceOnFrameEvent(is_same_document_navigation
                                          ? kFrameEventDidCommitSameDocumentLoad
                                          : kFrameEventDidCommitProvisionalLoad);
@@ -852,8 +971,8 @@ class FrameCommitWaiter : public RenderFrameObserver {
   // RenderFrameObserver:
   void OnDestruct() override {}
 
-  void DidCommitProvisionalLoad(bool is_new_navigation,
-                                bool is_same_document_navigation) override {
+  void DidCommitProvisionalLoad(bool is_same_document_navigation,
+                                ui::PageTransition transition) override {
     did_commit_ = true;
     run_loop_.Quit();
   }
@@ -899,9 +1018,10 @@ class ScopedNewFrameInterfaceProviderExerciser {
  public:
   explicit ScopedNewFrameInterfaceProviderExerciser(
       FrameCreationObservingRendererClient* frame_creation_observer,
-      const base::Optional<GURL>& url_override_for_first_load = base::nullopt)
+      const base::Optional<std::string>& html_override_for_first_load =
+          base::nullopt)
       : frame_creation_observer_(frame_creation_observer),
-        url_override_for_first_load_(url_override_for_first_load) {
+        html_override_for_first_load_(html_override_for_first_load) {
     frame_creation_observer_->set_callback(base::BindRepeating(
         &ScopedNewFrameInterfaceProviderExerciser::OnFrameCreated,
         base::Unretained(this)));
@@ -922,16 +1042,30 @@ class ScopedNewFrameInterfaceProviderExerciser {
 
     interface_request_for_first_document_ =
         frame_->TakeLastInterfaceProviderRequest();
+
+    document_interface_broker_request_for_first_document_ =
+        frame_->TakeLastDocumentInterfaceBrokerRequest();
   }
 
   service_manager::mojom::InterfaceProviderRequest
   interface_request_for_initial_empty_document() {
     return std::move(interface_request_for_initial_empty_document_);
-  };
+  }
+
+  blink::mojom::DocumentInterfaceBrokerRequest
+  document_interface_broker_request_for_initial_empty_document() {
+    return std::move(
+        document_interface_broker_request_for_initial_empty_document_);
+  }
 
   service_manager::mojom::InterfaceProviderRequest
   interface_request_for_first_document() {
     return std::move(interface_request_for_first_document_);
+  }
+
+  blink::mojom::DocumentInterfaceBrokerRequest
+  document_interface_broker_request_for_first_document() {
+    return std::move(document_interface_broker_request_for_first_document_);
   }
 
  private:
@@ -940,9 +1074,9 @@ class ScopedNewFrameInterfaceProviderExerciser {
     frame_ = frame;
     frame_commit_waiter_.emplace(frame);
 
-    if (url_override_for_first_load_.has_value()) {
-      frame_->SetURLOverrideForNextWebURLRequest(
-          std::move(url_override_for_first_load_).value());
+    if (html_override_for_first_load_.has_value()) {
+      frame_->SetHTMLOverrideForNextNavigation(
+          std::move(html_override_for_first_load_).value());
     }
 
     // The FrameHostTestInterfaceRequestIssuer needs to stay alive even after
@@ -954,12 +1088,14 @@ class ScopedNewFrameInterfaceProviderExerciser {
 
     interface_request_for_initial_empty_document_ =
         frame->TakeLastInterfaceProviderRequest();
+    document_interface_broker_request_for_initial_empty_document_ =
+        frame->TakeLastDocumentInterfaceBrokerRequest();
     EXPECT_TRUE(frame->current_history_item().IsNull());
   }
 
   FrameCreationObservingRendererClient* frame_creation_observer_;
   TestRenderFrame* frame_ = nullptr;
-  base::Optional<GURL> url_override_for_first_load_;
+  base::Optional<std::string> html_override_for_first_load_;
   GURL first_committed_url_;
 
   base::Optional<FrameCommitWaiter> frame_commit_waiter_;
@@ -970,6 +1106,11 @@ class ScopedNewFrameInterfaceProviderExerciser {
   service_manager::mojom::InterfaceProviderRequest
       interface_request_for_first_document_;
 
+  blink::mojom::DocumentInterfaceBrokerRequest
+      document_interface_broker_request_for_initial_empty_document_;
+  blink::mojom::DocumentInterfaceBrokerRequest
+      document_interface_broker_request_for_first_document_;
+
   DISALLOW_COPY_AND_ASSIGN(ScopedNewFrameInterfaceProviderExerciser);
 };
 
@@ -979,6 +1120,8 @@ class ScopedNewFrameInterfaceProviderExerciser {
 // FrameHostTestInterface requests.
 void ExpectPendingInterfaceRequestsFromSources(
     service_manager::mojom::InterfaceProviderRequest interface_provider_request,
+    blink::mojom::DocumentInterfaceBrokerRequest
+        document_interface_broker_request,
     std::vector<SourceAnnotation> expected_sources) {
   std::vector<SourceAnnotation> sources;
   ASSERT_TRUE(interface_provider_request.is_pending());
@@ -994,6 +1137,20 @@ void ExpectPendingInterfaceRequestsFromSources(
           }));
   provider.BindAndFlush(std::move(interface_provider_request));
   EXPECT_THAT(sources, ::testing::ElementsAreArray(expected_sources));
+
+  std::vector<SourceAnnotation> document_interface_broker_sources;
+  ASSERT_TRUE(document_interface_broker_request.is_pending());
+  TestSimpleDocumentInterfaceBrokerImpl broker(base::BindLambdaForTesting(
+      [&document_interface_broker_sources](
+          blink::mojom::FrameHostTestInterfaceRequest request) {
+        BlinkFrameHostTestInterfaceImpl impl;
+        impl.BindAndFlush(std::move(request));
+        ASSERT_TRUE(impl.ping_source().has_value());
+        document_interface_broker_sources.push_back(impl.ping_source().value());
+      }));
+  broker.BindAndFlush(std::move(document_interface_broker_request));
+  EXPECT_THAT(document_interface_broker_sources,
+              ::testing::ElementsAreArray(expected_sources));
 }
 
 }  // namespace
@@ -1041,6 +1198,9 @@ class RenderFrameRemoteInterfacesTest : public RenderViewTest {
 
 // Expect that |remote_interfaces_| is bound before the first committed load in
 // a child frame, and then re-bound on the first commit.
+// TODO(crbug.com/718652): when all clients are converted to use
+// DocumentInterfaceBroker, InterfaceProviderRequest-related code will be
+// removed.
 TEST_F(RenderFrameRemoteInterfacesTest, ChildFrameAtFirstCommittedLoad) {
   constexpr struct {
     const char* main_frame_url_override;
@@ -1071,6 +1231,8 @@ TEST_F(RenderFrameRemoteInterfacesTest, ChildFrameAtFirstCommittedLoad) {
     const GURL initial_empty_url(kAboutBlankURL);
     ExpectPendingInterfaceRequestsFromSources(
         child_frame_exerciser.interface_request_for_initial_empty_document(),
+        child_frame_exerciser
+            .document_interface_broker_request_for_initial_empty_document(),
         {{GURL(kNoDocumentMarkerURL), kFrameEventDidCreateNewFrame},
          {initial_empty_url, kFrameEventDidCreateNewDocument},
          {initial_empty_url, kFrameEventDidCreateDocumentElement},
@@ -1081,6 +1243,8 @@ TEST_F(RenderFrameRemoteInterfacesTest, ChildFrameAtFirstCommittedLoad) {
          {child_frame_url, kFrameEventDidCreateNewDocument}});
     ExpectPendingInterfaceRequestsFromSources(
         child_frame_exerciser.interface_request_for_first_document(),
+        child_frame_exerciser
+            .document_interface_broker_request_for_first_document(),
         {{child_frame_url, kFrameEventDidCommitProvisionalLoad},
          {child_frame_url, kFrameEventDidCreateDocumentElement}});
   }
@@ -1088,6 +1252,9 @@ TEST_F(RenderFrameRemoteInterfacesTest, ChildFrameAtFirstCommittedLoad) {
 
 // Expect that |remote_interfaces_| is bound before the first committed load in
 // the main frame of an opened window, and then re-bound on the first commit.
+// TODO(crbug.com/718652): when all clients are converted to use
+// DocumentInterfaceBroker, InterfaceProviderRequest-related code will be
+// removed.
 TEST_F(RenderFrameRemoteInterfacesTest,
        MainFrameOfOpenedWindowAtFirstCommittedLoad) {
   constexpr struct {
@@ -1106,7 +1273,7 @@ TEST_F(RenderFrameRemoteInterfacesTest,
 
     const GURL new_window_url(test_case.new_window_url);
     ScopedNewFrameInterfaceProviderExerciser main_frame_exerciser(
-        frame_creation_observer(), new_window_url);
+        frame_creation_observer(), std::string("foo"));
     const std::string html =
         base::StringPrintf("<script>window.open(\"%s\", \"_blank\")</script>",
                            test_case.new_window_url);
@@ -1131,11 +1298,15 @@ TEST_F(RenderFrameRemoteInterfacesTest,
     const GURL initial_empty_url;
     ExpectPendingInterfaceRequestsFromSources(
         main_frame_exerciser.interface_request_for_initial_empty_document(),
+        main_frame_exerciser
+            .document_interface_broker_request_for_initial_empty_document(),
         {{initial_empty_url, kFrameEventDidCreateNewFrame},
          {initial_empty_url, kFrameEventWillCommitProvisionalLoad},
          {new_window_url, kFrameEventDidCreateNewDocument}});
     ExpectPendingInterfaceRequestsFromSources(
         main_frame_exerciser.interface_request_for_first_document(),
+        main_frame_exerciser
+            .document_interface_broker_request_for_first_document(),
         {{new_window_url, kFrameEventDidCommitProvisionalLoad},
          {new_window_url, kFrameEventDidCreateDocumentElement}});
   }
@@ -1161,6 +1332,9 @@ TEST_F(RenderFrameRemoteInterfacesTest,
 //
 // TODO(https://crbug.com/778318): Once the Window object inheritance is fixed,
 // add a similar test for: <iframe src="javascript:'html'"></iframe>.
+// TODO(crbug.com/718652): when all clients are converted to use
+// DocumentInterfaceBroker, InterfaceProviderRequest-related code will be
+// removed.
 TEST_F(RenderFrameRemoteInterfacesTest,
        ChildFrameReusingWindowOfInitialDocument) {
   const GURL main_frame_url(kTestFirstURL);
@@ -1170,16 +1344,18 @@ TEST_F(RenderFrameRemoteInterfacesTest,
   // Override the URL for the first navigation in the newly created frame to
   // |child_frame_url|.
   ScopedNewFrameInterfaceProviderExerciser child_frame_exerciser(
-      frame_creation_observer(), child_frame_url);
+      frame_creation_observer(), std::string("foo"));
 
-  constexpr char kHTML[] = "<iframe srcdoc=\"Foo\"></iframe>";
-  LoadHTMLWithUrlOverride(kHTML, main_frame_url.spec().c_str());
+  std::string html = "<iframe src='" + child_frame_url.spec() + "'></iframe>";
+  LoadHTMLWithUrlOverride(html.c_str(), main_frame_url.spec().c_str());
 
   ASSERT_NO_FATAL_FAILURE(
       child_frame_exerciser.ExpectNewFrameAndWaitForLoad(child_frame_url));
 
   ExpectPendingInterfaceRequestsFromSources(
       child_frame_exerciser.interface_request_for_initial_empty_document(),
+      child_frame_exerciser
+          .document_interface_broker_request_for_initial_empty_document(),
       {{GURL(kNoDocumentMarkerURL), kFrameEventDidCreateNewFrame},
        {initial_empty_url, kFrameEventDidCreateNewDocument},
        {initial_empty_url, kFrameEventDidCreateDocumentElement},
@@ -1190,15 +1366,25 @@ TEST_F(RenderFrameRemoteInterfacesTest,
 
   auto request = child_frame_exerciser.interface_request_for_first_document();
   ASSERT_FALSE(request.is_pending());
+  auto document_interface_broker_request =
+      child_frame_exerciser
+          .document_interface_broker_request_for_first_document();
+  ASSERT_FALSE(document_interface_broker_request.is_pending());
 }
 
 // Expect that |remote_interfaces_| is bound to a new pipe on cross-document
 // navigations.
+// TODO(crbug.com/718652): when all clients are converted to use
+// DocumentInterfaceBroker, InterfaceProviderRequest-related code will be
+// removed.
 TEST_F(RenderFrameRemoteInterfacesTest, ReplacedOnNonSameDocumentNavigation) {
   LoadHTMLWithUrlOverride("", kTestFirstURL);
 
   auto interface_provider_request_for_first_document =
       GetMainRenderFrame()->TakeLastInterfaceProviderRequest();
+
+  auto document_interface_broker_request_for_first_document =
+      GetMainRenderFrame()->TakeLastDocumentInterfaceBrokerRequest();
 
   FrameHostTestInterfaceRequestIssuer requester(GetMainRenderFrame());
   requester.RequestTestInterfaceOnFrameEvent(kFrameEventAfterCommit);
@@ -1208,16 +1394,27 @@ TEST_F(RenderFrameRemoteInterfacesTest, ReplacedOnNonSameDocumentNavigation) {
   auto interface_provider_request_for_second_document =
       GetMainRenderFrame()->TakeLastInterfaceProviderRequest();
 
+  auto document_interface_broker_request_for_second_document =
+      GetMainRenderFrame()->TakeLastDocumentInterfaceBrokerRequest();
+
   ASSERT_TRUE(interface_provider_request_for_first_document.is_pending());
+  ASSERT_TRUE(
+      document_interface_broker_request_for_first_document.is_pending());
+
   ExpectPendingInterfaceRequestsFromSources(
       std::move(interface_provider_request_for_first_document),
+      std::move(document_interface_broker_request_for_first_document),
       {{GURL(kTestFirstURL), kFrameEventAfterCommit},
        {GURL(kTestFirstURL), kFrameEventWillCommitProvisionalLoad},
        {GURL(kTestSecondURL), kFrameEventDidCreateNewDocument}});
 
   ASSERT_TRUE(interface_provider_request_for_second_document.is_pending());
+  ASSERT_TRUE(
+      document_interface_broker_request_for_second_document.is_pending());
+
   ExpectPendingInterfaceRequestsFromSources(
       std::move(interface_provider_request_for_second_document),
+      std::move(document_interface_broker_request_for_second_document),
       {{GURL(kTestSecondURL), kFrameEventDidCommitProvisionalLoad},
        {GURL(kTestSecondURL), kFrameEventDidCreateDocumentElement}});
 }
@@ -1225,22 +1422,34 @@ TEST_F(RenderFrameRemoteInterfacesTest, ReplacedOnNonSameDocumentNavigation) {
 // Expect that |remote_interfaces_| is not bound to a new pipe on same-document
 // navigations, i.e. the existing InterfaceProvider connection is continued to
 // be used.
+// TODO(crbug.com/718652): when all clients are converted to use
+// DocumentInterfaceBroker, InterfaceProviderRequest-related code will be
+// removed.
 TEST_F(RenderFrameRemoteInterfacesTest, ReusedOnSameDocumentNavigation) {
   LoadHTMLWithUrlOverride("", kTestFirstURL);
 
   auto interface_provider_request =
       GetMainRenderFrame()->TakeLastInterfaceProviderRequest();
 
+  auto document_interface_broker =
+      GetMainRenderFrame()->TakeLastDocumentInterfaceBrokerRequest();
+
   FrameHostTestInterfaceRequestIssuer requester(GetMainRenderFrame());
-  OnSameDocumentNavigation(GetMainFrame(), true /* is_new_navigation */,
-                           true /* is_contenet_initiated */);
+  OnSameDocumentNavigation(GetMainFrame(), true /* is_new_navigation */);
 
   EXPECT_FALSE(
       GetMainRenderFrame()->TakeLastInterfaceProviderRequest().is_pending());
 
+  EXPECT_FALSE(GetMainRenderFrame()
+                   ->TakeLastDocumentInterfaceBrokerRequest()
+                   .is_pending());
+
   ASSERT_TRUE(interface_provider_request.is_pending());
+  ASSERT_TRUE(document_interface_broker.is_pending());
+
   ExpectPendingInterfaceRequestsFromSources(
       std::move(interface_provider_request),
+      std::move(document_interface_broker),
       {{GURL(kTestFirstURL), kFrameEventDidCommitSameDocumentLoad}});
 }
 

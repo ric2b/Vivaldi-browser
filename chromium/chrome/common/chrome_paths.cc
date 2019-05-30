@@ -5,21 +5,20 @@
 #include "chrome/common/chrome_paths.h"
 
 #include "base/files/file_util.h"
-#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/native_library.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths_internal.h"
-#include "media/cdm/cdm_paths.h"
 #include "media/media_buildflags.h"
-#include "third_party/widevine/cdm/widevine_cdm_common.h"
+#include "third_party/widevine/cdm/buildflags.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/path_utils.h"
@@ -42,7 +41,10 @@
 #include "base/win/registry.h"
 #endif
 
-#include "widevine_cdm_version.h"  // In SHARED_INTERMEDIATE_DIR.
+#if BUILDFLAG(ENABLE_WIDEVINE) && BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#include "media/cdm/cdm_paths.h"                           // nogncheck
+#include "third_party/widevine/cdm/widevine_cdm_common.h"  // nogncheck
+#endif
 
 namespace {
 
@@ -80,8 +82,10 @@ const base::FilePath::CharType kChromeOSTPMFirmwareUpdateSRKVulnerableROCA[] =
     FILE_PATH_LITERAL("/run/tpm_firmware_update_srk_vulnerable_roca");
 #endif  // defined(OS_CHROMEOS)
 
-static base::LazyInstance<base::FilePath>::DestructorAtExit
-    g_invalid_specified_user_data_dir = LAZY_INSTANCE_INITIALIZER;
+base::FilePath& GetInvalidSpecifiedUserDataDirInternal() {
+  static base::NoDestructor<base::FilePath> s;
+  return *s;
+}
 
 // Gets the path for internal plugins.
 bool GetInternalPluginsDirectory(base::FilePath* result) {
@@ -233,7 +237,7 @@ bool PathProvider(int key, base::FilePath* result) {
       if (!GetDefaultUserDataDirectory(&cur))
         return false;
 #endif
-#if defined(OS_MACOSX) || defined(OS_WIN)
+#if defined(OS_MACOSX) || defined(OS_WIN) || defined(OS_ANDROID)
       cur = cur.Append(FILE_PATH_LITERAL("Crashpad"));
 #else
       cur = cur.Append(FILE_PATH_LITERAL("Crash Reports"));
@@ -375,7 +379,7 @@ bool PathProvider(int key, base::FilePath* result) {
 #endif
       cur = cur.Append(FILE_PATH_LITERAL("pnacl"));
       break;
-#if defined(WIDEVINE_CDM_AVAILABLE) && BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#if BUILDFLAG(ENABLE_WIDEVINE) && BUILDFLAG(ENABLE_LIBRARY_CDMS)
     // TODO(crbug.com/663554): Remove this after component updated CDM is
     // supported on Linux and ChromeOS.
     case chrome::FILE_WIDEVINE_CDM:
@@ -386,7 +390,7 @@ bool PathProvider(int key, base::FilePath* result) {
                  media::GetPlatformSpecificDirectory(kWidevineCdmBaseDirectory))
               .AppendASCII(base::GetNativeLibraryName(kWidevineCdmLibraryName));
       break;
-#endif  // defined(WIDEVINE_CDM_AVAILABLE) && BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#endif  // BUILDFLAG(ENABLE_WIDEVINE) && BUILDFLAG(ENABLE_LIBRARY_CDMS)
     case chrome::FILE_RESOURCES_PACK:
 #if defined(OS_MACOSX)
       cur = base::mac::FrameworkBundlePath();
@@ -422,15 +426,6 @@ bool PathProvider(int key, base::FilePath* result) {
       break;
 #endif
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#if defined(OS_LINUX)
-    case chrome::DIR_SUPERVISED_USERS_DEFAULT_APPS:
-      if (!base::PathService::Get(chrome::DIR_STANDALONE_EXTERNAL_EXTENSIONS,
-                                  &cur)) {
-        return false;
-      }
-      cur = cur.Append(FILE_PATH_LITERAL("managed_users"));
-      break;
-#endif
     case chrome::DIR_SUPERVISED_USER_INSTALLED_WHITELISTS:
       if (!base::PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
@@ -577,13 +572,6 @@ bool PathProvider(int key, base::FilePath* result) {
       cur = base::FilePath(kChromeOSComponentFlash);
       create_dir = false;
       break;
-    case chrome::DIR_CHILD_USERS_DEFAULT_APPS:
-      if (!base::PathService::Get(chrome::DIR_STANDALONE_EXTERNAL_EXTENSIONS,
-                                  &cur)) {
-        return false;
-      }
-      cur = cur.Append(FILE_PATH_LITERAL("child_users"));
-      break;
     case chrome::FILE_CHROME_OS_TPM_FIRMWARE_UPDATE_LOCATION:
       cur = base::FilePath(kChromeOSTPMFirmwareUpdateLocation);
       create_dir = false;
@@ -615,11 +603,11 @@ void RegisterPathProvider() {
 }
 
 void SetInvalidSpecifiedUserDataDir(const base::FilePath& user_data_dir) {
-  g_invalid_specified_user_data_dir.Get() = user_data_dir;
+  GetInvalidSpecifiedUserDataDirInternal() = user_data_dir;
 }
 
 const base::FilePath& GetInvalidSpecifiedUserDataDir() {
-  return g_invalid_specified_user_data_dir.Get();
+  return GetInvalidSpecifiedUserDataDirInternal();
 }
 
 }  // namespace chrome

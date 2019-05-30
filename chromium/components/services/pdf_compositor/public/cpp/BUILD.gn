@@ -22,13 +22,15 @@ source_set("factory") {
   ]
 }
 
-source_set("utils") {
+source_set("manifest") {
   sources = [
-    "pdf_service_mojo_utils.cc",
-    "pdf_service_mojo_utils.h",
+    "manifest.cc",
+    "manifest.h",
   ]
 
-  public_deps = [
-    "//mojo/public/cpp/system:system",
+  deps = [
+    "//base",
+    "//components/services/pdf_compositor/public/interfaces",
+    "//services/service_manager/public/cpp",
   ]
 }

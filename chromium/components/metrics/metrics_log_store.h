@@ -25,8 +25,11 @@ class MetricsLogStore : public LogStore {
  public:
   // Constructs a MetricsLogStore that persists data into |local_state|.
   // If max_log_size is non-zero, it will not persist ongoing logs larger than
-  // |max_ongoing_log_size| bytes.
-  MetricsLogStore(PrefService* local_state, size_t max_ongoing_log_size);
+  // |max_ongoing_log_size| bytes. |signing_key| is used to generate a signature
+  // of a log, which will be uploaded to validate data integrity.
+  MetricsLogStore(PrefService* local_state,
+                  size_t max_ongoing_log_size,
+                  const std::string& signing_key);
   ~MetricsLogStore();
 
   // Registers local state prefs used by this class.
@@ -40,6 +43,7 @@ class MetricsLogStore : public LogStore {
   bool has_staged_log() const override;
   const std::string& staged_log() const override;
   const std::string& staged_log_hash() const override;
+  const std::string& staged_log_signature() const override;
   void StageNextLog() override;
   void DiscardStagedLog() override;
   void PersistUnsentLogs() const override;

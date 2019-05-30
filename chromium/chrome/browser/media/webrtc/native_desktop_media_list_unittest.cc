@@ -19,7 +19,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/media/webrtc/desktop_media_list_observer.h"
 #include "chrome/test/views/chrome_views_test_base.h"
-#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
@@ -69,7 +68,6 @@ class FakeScreenCapturer : public webrtc::DesktopCapturer {
     DCHECK(callback_);
     std::unique_ptr<webrtc::DesktopFrame> frame(
         new webrtc::BasicDesktopFrame(webrtc::DesktopSize(10, 10)));
-    memset(frame->data(), 0, frame->stride() * frame->size().height());
     callback_->OnCaptureResult(webrtc::DesktopCapturer::Result::SUCCESS,
                                std::move(frame));
   }
@@ -117,8 +115,7 @@ class FakeWindowCapturer : public webrtc::DesktopCapturer {
 
     base::AutoLock lock(frame_values_lock_);
 
-    std::map<SourceId, int8_t>::iterator it =
-        frame_values_.find(selected_window_id_);
+    auto it = frame_values_.find(selected_window_id_);
     int8_t value = (it != frame_values_.end()) ? it->second : 0;
     std::unique_ptr<webrtc::DesktopFrame> frame(
         new webrtc::BasicDesktopFrame(webrtc::DesktopSize(10, 10)));
@@ -215,9 +212,9 @@ class NativeDesktopMediaListTest : public ChromeViewsTestBase {
 #endif
 
     // Get the aura window's id.
-    DesktopMediaID aura_id = DesktopMediaID::RegisterAuraWindow(
+    DesktopMediaID aura_id = DesktopMediaID::RegisterNativeWindow(
         DesktopMediaID::TYPE_WINDOW, aura_window);
-    native_aura_id_map_[window.id] = aura_id.aura_id;
+    native_aura_id_map_[window.id] = aura_id.window_id;
 
     window_list_.push_back(window);
   }
@@ -310,7 +307,7 @@ class NativeDesktopMediaListTest : public ChromeViewsTestBase {
       EXPECT_EQ(model_->GetSource(i).id.id, native_id);
 #if defined(USE_AURA)
       if (i >= aura_window_first_index)
-        EXPECT_EQ(model_->GetSource(i).id.aura_id,
+        EXPECT_EQ(model_->GetSource(i).id.window_id,
                   native_aura_id_map_[native_id]);
 #endif
     }
@@ -318,8 +315,6 @@ class NativeDesktopMediaListTest : public ChromeViewsTestBase {
   }
 
  protected:
-  content::TestBrowserThreadBundle test_browser_thread_bundle_;
-
   // Must be listed before |model_|, so it's destroyed last.
   MockObserver observer_;
 
@@ -407,7 +402,7 @@ TEST_F(NativeDesktopMediaListTest, AddAuraWindow) {
   int native_id = window_list_.back().id;
   EXPECT_EQ(model_->GetSource(index).id.type, DesktopMediaID::TYPE_WINDOW);
   EXPECT_EQ(model_->GetSource(index).id.id, native_id);
-  EXPECT_EQ(model_->GetSource(index).id.aura_id,
+  EXPECT_EQ(model_->GetSource(index).id.window_id,
             native_aura_id_map_[native_id]);
 }
 #endif  // defined(ENABLE_AURA_WINDOW_TESTS)
@@ -520,4 +515,37 @@ TEST_F(NativeDesktopMediaListTest, MoveWindow) {
   window_capturer_->SetWindowList(window_list_);
 
   run_loop.Run();
+}
+
+// This test verifies that webrtc::DesktopCapturer::CaptureFrame() is not
+// called when the thumbnail size is empty.
+TEST_F(NativeDesktopMediaListTest, EmptyThumbnail) {
+  window_capturer_ = new FakeWindowCapturer();
+  model_ = std::make_unique<NativeDesktopMediaList>(
+      DesktopMediaID::TYPE_WINDOW, base::WrapUnique(window_capturer_));
+  model_->SetThumbnailSize(gfx::Size());
+
+  // Set update period to reduce the time it takes to run tests.
+  model_->SetUpdatePeriod(base::TimeDelta::FromMilliseconds(20));
+
+  base::RunLoop run_loop;
+
+  EXPECT_CALL(observer_, OnSourceAdded(model_.get(), 0))
+      .WillOnce(
+          DoAll(CheckListSize(model_.get(), 1),
+                QuitRunLoop(base::ThreadTaskRunnerHandle::Get(), &run_loop)));
+  // Called upon webrtc::DesktopCapturer::CaptureFrame() call.
+  ON_CALL(observer_, OnSourceThumbnailChanged(_, _))
+      .WillByDefault(testing::InvokeWithoutArgs([]() { NOTREACHED(); }));
+
+  model_->StartUpdating(&observer_);
+
+  AddNativeWindow(0);
+  window_capturer_->SetWindowList(window_list_);
+
+  run_loop.Run();
+
+  EXPECT_EQ(model_->GetSource(0).id.type, DesktopMediaID::TYPE_WINDOW);
+  EXPECT_EQ(model_->GetSource(0).id.id, 0);
+  EXPECT_EQ(model_->GetSource(0).thumbnail.size(), gfx::Size());
 }

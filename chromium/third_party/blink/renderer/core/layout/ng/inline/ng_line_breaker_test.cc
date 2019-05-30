@@ -8,15 +8,16 @@
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_line_breaker.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_box_fragment_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space_builder.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_fragment_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_positioned_float.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_unpositioned_float.h"
+#include "third_party/blink/renderer/platform/fonts/shaping/shape_result_view.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
 namespace blink {
 
-class NGLineBreakerTest : public NGBaseLayoutAlgorithmTest {
+class NGLineBreakerTest : public NGLayoutTest {
  protected:
   NGInlineNode CreateInlineNode(const String& html_content) {
     SetBodyInnerHTML(html_content);
@@ -27,45 +28,54 @@ class NGLineBreakerTest : public NGBaseLayoutAlgorithmTest {
   }
 
   // Break lines using the specified available width.
-  Vector<NGInlineItemResults> BreakLines(NGInlineNode node,
-                                         LayoutUnit available_width) {
+  Vector<NGLineInfo> BreakToLineInfo(NGInlineNode node,
+                                     LayoutUnit available_width) {
     DCHECK(node);
 
     node.PrepareLayoutIfNeeded();
 
-    scoped_refptr<NGConstraintSpace> space =
+    NGConstraintSpace space =
         NGConstraintSpaceBuilder(
-            WritingMode::kHorizontalTb,
-            /* icb_size */ {NGSizeIndefinite, NGSizeIndefinite})
+            WritingMode::kHorizontalTb, WritingMode::kHorizontalTb,
+            /* is_new_fc */ false)
             .SetAvailableSize({available_width, NGSizeIndefinite})
-            .ToConstraintSpace(WritingMode::kHorizontalTb);
-
-    Vector<NGPositionedFloat> positioned_floats;
-    NGUnpositionedFloatVector unpositioned_floats;
+            .ToConstraintSpace();
 
     scoped_refptr<NGInlineBreakToken> break_token;
 
-    Vector<NGInlineItemResults> lines;
+    Vector<NGLineInfo> line_infos;
+    trailing_whitespaces_.resize(0);
     NGExclusionSpace exclusion_space;
+    NGPositionedFloatVector leading_floats;
     NGLineLayoutOpportunity line_opportunity(available_width);
     while (!break_token || !break_token->IsFinished()) {
-      NGLineInfo line_info;
-      NGLineBreaker line_breaker(node, NGLineBreakerMode::kContent, *space,
-                                 &positioned_floats, &unpositioned_floats,
-                                 /* container_builder */ nullptr,
-                                 &exclusion_space, 0u, line_opportunity,
-                                 break_token.get());
+      NGLineInfo& line_info = line_infos.emplace_back();
+      NGLineBreaker line_breaker(node, NGLineBreakerMode::kContent, space,
+                                 line_opportunity, leading_floats, 0u,
+                                 break_token.get(), &exclusion_space);
       line_breaker.NextLine(&line_info);
+      trailing_whitespaces_.push_back(
+          line_breaker.TrailingWhitespaceForTesting());
 
       if (line_info.Results().IsEmpty())
         break;
 
-      break_token = line_breaker.CreateBreakToken(line_info, nullptr);
-      lines.push_back(std::move(line_info.Results()));
+      break_token = line_breaker.CreateBreakToken(line_info);
     }
 
+    return line_infos;
+  }
+
+  Vector<NGInlineItemResults> BreakLines(NGInlineNode node,
+                                         LayoutUnit available_width) {
+    Vector<NGLineInfo> line_infos = BreakToLineInfo(node, available_width);
+    Vector<NGInlineItemResults> lines;
+    for (NGLineInfo& line_info : line_infos)
+      lines.push_back(std::move(line_info.Results()));
     return lines;
   }
+
+  Vector<NGLineBreaker::WhitespaceState> trailing_whitespaces_;
 };
 
 namespace {
@@ -129,6 +139,51 @@ TEST_F(NGLineBreakerTest, OverflowWord) {
   lines = BreakLines(node, LayoutUnit(20));
   EXPECT_EQ(2u, lines.size());
   EXPECT_EQ("12345", ToString(lines[0], node));
+  EXPECT_EQ("678", ToString(lines[1], node));
+}
+
+TEST_F(NGLineBreakerTest, OverflowTab) {
+  LoadAhem();
+  NGInlineNode node = CreateInlineNode(R"HTML(
+    <!DOCTYPE html>
+    <style>
+    #container {
+      font: 10px/1 Ahem;
+      tab-size: 8;
+      white-space: pre-wrap;
+      width: 10ch;
+    }
+    </style>
+    <div id=container>12345&#9;&#9;678</div>
+  )HTML");
+
+  Vector<NGInlineItemResults> lines;
+  lines = BreakLines(node, LayoutUnit(100));
+  EXPECT_EQ(2u, lines.size());
+  EXPECT_EQ("12345\t\t", ToString(lines[0], node));
+  EXPECT_EQ("678", ToString(lines[1], node));
+}
+
+TEST_F(NGLineBreakerTest, OverflowTabBreakWord) {
+  LoadAhem();
+  NGInlineNode node = CreateInlineNode(R"HTML(
+    <!DOCTYPE html>
+    <style>
+    #container {
+      font: 10px/1 Ahem;
+      tab-size: 8;
+      white-space: pre-wrap;
+      width: 10ch;
+      word-wrap: break-word;
+    }
+    </style>
+    <div id=container>12345&#9;&#9;678</div>
+  )HTML");
+
+  Vector<NGInlineItemResults> lines;
+  lines = BreakLines(node, LayoutUnit(100));
+  EXPECT_EQ(2u, lines.size());
+  EXPECT_EQ("12345\t\t", ToString(lines[0], node));
   EXPECT_EQ("678", ToString(lines[1], node));
 }
 
@@ -209,6 +264,29 @@ TEST_F(NGLineBreakerTest, OverflowMargin) {
   EXPECT_EQ("789", ToString(lines[2], node));
 }
 
+TEST_F(NGLineBreakerTest, OverflowAfterSpacesAcrossElements) {
+  LoadAhem();
+  NGInlineNode node = CreateInlineNode(R"HTML(
+    <!DOCTYPE html>
+    <style>
+    div {
+      font: 10px/1 Ahem;
+      white-space: pre-wrap;
+      width: 10ch;
+      word-wrap: break-word;
+    }
+    </style>
+    <div id=container><span>12345 </span> 1234567890123</div>
+  )HTML");
+
+  Vector<NGInlineItemResults> lines;
+  lines = BreakLines(node, LayoutUnit(100));
+  EXPECT_EQ(3u, lines.size());
+  EXPECT_EQ("12345  ", ToString(lines[0], node));
+  EXPECT_EQ("1234567890", ToString(lines[1], node));
+  EXPECT_EQ("123", ToString(lines[2], node));
+}
+
 // Tests when the last word in a node wraps, and another node continues.
 TEST_F(NGLineBreakerTest, WrapLastWord) {
   LoadAhem();
@@ -286,6 +364,158 @@ TEST_F(NGLineBreakerTest, BoundaryInFirstWord) {
   EXPECT_EQ(2u, lines.size());
   EXPECT_EQ("123456", ToString(lines[0], node));
   EXPECT_EQ("789", ToString(lines[1], node));
+}
+
+struct WhitespaceStateTestData {
+  const char* html;
+  const char* white_space;
+  NGLineBreaker::WhitespaceState expected;
+} whitespace_state_test_data[] = {
+    // The most common cases.
+    {"12", "normal", NGLineBreaker::WhitespaceState::kNone},
+    {"1234 5678", "normal", NGLineBreaker::WhitespaceState::kCollapsed},
+    // |NGInlineItemsBuilder| collapses trailing spaces of a block, so
+    // |NGLineBreaker| computes to `none`.
+    {"12 ", "normal", NGLineBreaker::WhitespaceState::kNone},
+    // pre/pre-wrap should preserve trailing spaces if exists.
+    {"1234 5678", "pre-wrap", NGLineBreaker::WhitespaceState::kPreserved},
+    {"12 ", "pre", NGLineBreaker::WhitespaceState::kPreserved},
+    {"12 ", "pre-wrap", NGLineBreaker::WhitespaceState::kPreserved},
+    {"12", "pre", NGLineBreaker::WhitespaceState::kNone},
+    {"12", "pre-wrap", NGLineBreaker::WhitespaceState::kNone},
+    // Empty/space-only cases.
+    {"", "normal", NGLineBreaker::WhitespaceState::kLeading},
+    {" ", "pre", NGLineBreaker::WhitespaceState::kPreserved},
+    {" ", "pre-wrap", NGLineBreaker::WhitespaceState::kPreserved},
+    // Cases needing to rewind.
+    {"12 34<span>56</span>", "normal",
+     NGLineBreaker::WhitespaceState::kCollapsed},
+    {"12 34<span>56</span>", "pre-wrap",
+     NGLineBreaker::WhitespaceState::kPreserved},
+    // Atomic inlines.
+    {"12 <span style='display: inline-block'></span>", "normal",
+     NGLineBreaker::WhitespaceState::kNone},
+    // fast/text/whitespace/inline-whitespace-wrapping-4.html
+    {"<span style='white-space: nowrap'>1234  </span>"
+     "<span style='white-space: normal'>  5678</span>",
+     "pre", NGLineBreaker::WhitespaceState::kCollapsed},
+};
+
+std::ostream& operator<<(std::ostream& os,
+                         const WhitespaceStateTestData& data) {
+  return os << static_cast<int>(data.expected) << " for '" << data.html
+            << "' with 'white-space: " << data.white_space << "'";
+}
+
+class NGWhitespaceStateTest
+    : public NGLineBreakerTest,
+      public testing::WithParamInterface<WhitespaceStateTestData> {};
+
+INSTANTIATE_TEST_SUITE_P(NGLineBreakerTest,
+                         NGWhitespaceStateTest,
+                         testing::ValuesIn(whitespace_state_test_data));
+
+TEST_P(NGWhitespaceStateTest, WhitespaceState) {
+  const auto& data = GetParam();
+  LoadAhem();
+  NGInlineNode node = CreateInlineNode(String(R"HTML(
+    <!DOCTYPE html>
+    <style>
+    #container {
+      font: 10px/1 Ahem;
+      width: 50px;
+      white-space: )HTML") + data.white_space +
+                                       R"HTML(
+    }
+    </style>
+    <div id=container>)HTML" + data.html +
+                                       R"HTML(</div>
+  )HTML");
+
+  Vector<NGLineInfo> line_infos = BreakToLineInfo(node, LayoutUnit(50));
+  EXPECT_EQ(trailing_whitespaces_[0], data.expected);
+}
+
+struct TrailingSpaceWidthTestData {
+  const char* html;
+  const char* white_space;
+  unsigned trailing_space_width;
+} trailing_space_width_test_data[] = {
+    {" ", "pre", 1},
+    {"   ", "pre", 3},
+    {"1 ", "pre", 1},
+    {"1  ", "pre", 2},
+    {"1<span> </span>", "pre", 1},
+    {"<span>1 </span> ", "pre", 2},
+    {"1<span> </span> ", "pre", 2},
+    {"1 <span> </span> ", "pre", 3},
+    {"1 \t", "pre", 3},
+    {"1  \n", "pre", 2},
+    {"1  <br>", "pre", 2},
+
+    {" ", "pre-wrap", 1},
+    {"   ", "pre-wrap", 3},
+    {"1 ", "pre-wrap", 1},
+    {"1  ", "pre-wrap", 2},
+    {"1<span> </span>", "pre-wrap", 1},
+    {"<span>1 </span> ", "pre-wrap", 2},
+    {"1<span> </span> ", "pre-wrap", 2},
+    {"1 <span> </span> ", "pre-wrap", 3},
+    {"1 \t", "pre-wrap", 3},
+    {"1  <br>", "pre-wrap", 2},
+    {"12 1234", "pre-wrap", 1},
+    {"12  1234", "pre-wrap", 2},
+};
+
+class NGTrailingSpaceWidthTest
+    : public NGLineBreakerTest,
+      public testing::WithParamInterface<TrailingSpaceWidthTestData> {};
+
+INSTANTIATE_TEST_SUITE_P(NGLineBreakerTest,
+                         NGTrailingSpaceWidthTest,
+                         testing::ValuesIn(trailing_space_width_test_data));
+
+TEST_P(NGTrailingSpaceWidthTest, TrailingSpaceWidth) {
+  const auto& data = GetParam();
+  LoadAhem();
+  NGInlineNode node = CreateInlineNode(String(R"HTML(
+    <!DOCTYPE html>
+    <style>
+    #container {
+      font: 10px/1 Ahem;
+      width: 50px;
+      tab-size: 2;
+      white-space: )HTML") + data.white_space +
+                                       R"HTML(;
+    }
+    </style>
+    <div id=container>)HTML" + data.html +
+                                       R"HTML(</div>
+  )HTML");
+
+  Vector<NGLineInfo> line_infos = BreakToLineInfo(node, LayoutUnit(50));
+  EXPECT_EQ(line_infos[0].ComputeTrailingSpaceWidth(),
+            LayoutUnit(10) * data.trailing_space_width);
+}
+
+TEST_F(NGLineBreakerTest, MinMaxWithTrailingSpaces) {
+  LoadAhem();
+  NGInlineNode node = CreateInlineNode(R"HTML(
+    <!DOCTYPE html>
+    <style>
+    #container {
+      font: 10px/1 Ahem;
+      white-space: pre-wrap;
+    }
+    </style>
+    <div id=container>12345 6789 </div>
+  )HTML");
+
+  auto size = node.ComputeMinMaxSize(
+      WritingMode::kHorizontalTb,
+      MinMaxSizeInput(/* percentage_resolution_block_size */ (LayoutUnit())));
+  EXPECT_EQ(size.min_size, LayoutUnit(60));
+  EXPECT_EQ(size.max_size, LayoutUnit(110));
 }
 
 #undef MAYBE_OverflowAtomicInline

@@ -33,7 +33,9 @@ class SurfaceChooserHelperTest : public testing::Test {
 
   void TearDown() override {}
 
-  void ReplaceHelper(bool is_overlay_required, bool promote_aggressively) {
+  void ReplaceHelper(bool is_overlay_required,
+                     bool promote_aggressively,
+                     bool always_use_texture_owner = false) {
     // Advance the clock so that time 0 isn't recent.
     tick_clock_.Advance(TimeDelta::FromSeconds(10000));
 
@@ -45,7 +47,7 @@ class SurfaceChooserHelperTest : public testing::Test {
     aggregator_ = aggregator.get();
     helper_ = std::make_unique<SurfaceChooserHelper>(
         std::move(chooser), is_overlay_required, promote_aggressively,
-        std::move(aggregator), &tick_clock_);
+        always_use_texture_owner, std::move(aggregator), &tick_clock_);
   }
 
   // Convenience function.
@@ -82,6 +84,16 @@ TEST_F(SurfaceChooserHelperTest, SetVideoRotation) {
   helper_->SetVideoRotation(VIDEO_ROTATION_90);
   UpdateChooserState();
   ASSERT_EQ(chooser_->current_state_.video_rotation, VIDEO_ROTATION_90);
+}
+
+TEST_F(SurfaceChooserHelperTest, SetIsPersistentVideo) {
+  helper_->SetIsPersistentVideo(true);
+  UpdateChooserState();
+  ASSERT_TRUE(chooser_->current_state_.is_persistent_video);
+
+  helper_->SetIsPersistentVideo(false);
+  UpdateChooserState();
+  ASSERT_FALSE(chooser_->current_state_.is_persistent_video);
 }
 
 TEST_F(SurfaceChooserHelperTest, SetIsOverlayRequired) {
@@ -148,6 +160,15 @@ TEST_F(SurfaceChooserHelperTest, SetPromoteAggressively) {
   ReplaceHelper(false, true);
   UpdateChooserState();
   ASSERT_TRUE(chooser_->current_state_.promote_aggressively);
+}
+
+TEST_F(SurfaceChooserHelperTest, SetAlwaysUseTextureOwner) {
+  UpdateChooserState();
+  ASSERT_FALSE(chooser_->current_state_.always_use_texture_owner);
+
+  ReplaceHelper(false, true, true);
+  UpdateChooserState();
+  ASSERT_TRUE(chooser_->current_state_.always_use_texture_owner);
 }
 
 TEST_F(SurfaceChooserHelperTest, PromotionHintsForwardsHint) {

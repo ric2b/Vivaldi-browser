@@ -7,8 +7,8 @@ package org.chromium.chrome.browser.tabmodel;
 import android.support.annotation.Nullable;
 
 import org.chromium.base.VisibleForTesting;
+import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.content_public.browser.LoadUrlParams;
 
 import java.util.List;
@@ -42,6 +42,12 @@ public interface TabModelSelector {
      * @return Never returns null.  Returns a stub when real model is uninitialized.
      */
     TabModel getModel(boolean incognito);
+
+    /**
+     * Get the {@link TabModelFilterProvider} that provides {@link TabModelFilter}.
+     * @return  Never returns null. Returns a stub when real model is uninitialized.
+     */
+    TabModelFilterProvider getTabModelFilterProvider();
 
     /**
      * @return a list for the underlying models
@@ -157,6 +163,13 @@ public interface TabModelSelector {
      * @param delegate The delegate to be used.
      */
     void setCloseAllTabsDelegate(CloseAllTabsDelegate delegate);
+
+    /**
+     * Sets the {@link OverviewModeBehavior} that should be used to determine
+     * when the app is in overview mode or not.
+     * @param overviewModeBehavior The {@link OverviewModeBehavior} to use.
+     */
+    void setOverviewModeBehavior(OverviewModeBehavior overviewModeBehavior);
 
     /**
      * @return Whether the tab state for this {@link TabModelSelector} has been initialized.

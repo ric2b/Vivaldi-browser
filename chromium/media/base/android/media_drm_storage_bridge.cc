@@ -18,10 +18,13 @@
 #include "base/unguessable_token.h"
 #include "jni/MediaDrmStorageBridge_jni.h"
 #include "media/base/android/android_util.h"
+#include "media/base/android/media_drm_bridge.h"
+#include "media/base/android/media_drm_key_type.h"
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaByteArrayToByteVector;
+using base::android::JavaByteArrayToString;
 using base::android::JavaParamRef;
 using base::android::RunBooleanCallbackAndroid;
 using base::android::RunObjectCallbackAndroid;
@@ -36,7 +39,7 @@ MediaDrmStorageBridge::MediaDrmStorageBridge()
 MediaDrmStorageBridge::~MediaDrmStorageBridge() = default;
 
 void MediaDrmStorageBridge::Initialize(const CreateStorageCB& create_storage_cb,
-                                       base::OnceClosure init_cb) {
+                                       InitCB init_cb) {
   DCHECK(create_storage_cb);
   impl_ = create_storage_cb.Run();
 
@@ -69,7 +72,8 @@ void MediaDrmStorageBridge::OnLoadInfo(
     // Callback<PersistentInfo>
     const JavaParamRef<jobject>& j_callback) {
   DCHECK(impl_);
-  std::string session_id = JavaBytesToString(env, j_session_id);
+  std::string session_id;
+  JavaByteArrayToString(env, j_session_id, &session_id);
   task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(
@@ -90,21 +94,30 @@ void MediaDrmStorageBridge::OnSaveInfo(
   DCHECK(impl_);
   std::vector<uint8_t> key_set_id;
   JavaByteArrayToByteVector(
-      env, Java_PersistentInfo_keySetId(env, j_persist_info).obj(),
-      &key_set_id);
+      env, Java_PersistentInfo_keySetId(env, j_persist_info), &key_set_id);
 
   std::string mime = ConvertJavaStringToUTF8(
       env, Java_PersistentInfo_mimeType(env, j_persist_info));
 
-  std::string session_id = JavaBytesToString(
-      env, Java_PersistentInfo_emeId(env, j_persist_info).obj());
+  std::string session_id;
+  JavaByteArrayToString(env, Java_PersistentInfo_emeId(env, j_persist_info),
+                        &session_id);
+
+  // This function should only be called for licenses needs persistent storage
+  // (e.g. persistent license). STREAMING license doesn't require persistent
+  // storage support.
+  auto key_type = static_cast<MediaDrmKeyType>(
+      Java_PersistentInfo_keyType(env, j_persist_info));
+  DCHECK(key_type == MediaDrmKeyType::OFFLINE ||
+         key_type == MediaDrmKeyType::RELEASE);
 
   task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(
           &MediaDrmStorage::SavePersistentSession, impl_->AsWeakPtr(),
           session_id,
-          MediaDrmStorage::SessionData(std::move(key_set_id), std::move(mime)),
+          MediaDrmStorage::SessionData(std::move(key_set_id), std::move(mime),
+                                       key_type),
           base::BindOnce(&MediaDrmStorageBridge::RunAndroidBoolCallback,
                          weak_factory_.GetWeakPtr(),
                          base::Passed(CreateJavaObjectPtr(j_callback.obj())))));
@@ -117,11 +130,13 @@ void MediaDrmStorageBridge::OnClearInfo(
     // Callback<Boolean>
     const JavaParamRef<jobject>& j_callback) {
   DCHECK(impl_);
+  std::string session_id;
+  JavaByteArrayToString(env, j_session_id, &session_id);
   task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(
           &MediaDrmStorage::RemovePersistentSession, impl_->AsWeakPtr(),
-          JavaBytesToString(env, j_session_id),
+          std::move(session_id),
           base::BindOnce(&MediaDrmStorageBridge::RunAndroidBoolCallback,
                          weak_factory_.GetWeakPtr(),
                          base::Passed(CreateJavaObjectPtr(j_callback.obj())))));
@@ -133,14 +148,31 @@ void MediaDrmStorageBridge::RunAndroidBoolCallback(JavaObjectPtr j_callback,
 }
 
 void MediaDrmStorageBridge::OnInitialized(
-    base::OnceClosure init_cb,
-    const base::UnguessableToken& origin_id) {
-  DCHECK(origin_id_.empty());
+    InitCB init_cb,
+    bool success,
+    const MediaDrmStorage::MediaDrmOriginId& origin_id) {
+  if (!success) {
+    DCHECK(!origin_id);
+    std::move(init_cb).Run(false);
+    return;
+  }
 
-  if (origin_id)
-    origin_id_ = origin_id.ToString();
+  // Note: It's possible that |success| is true but |origin_id| is empty,
+  // to indicate per-device provisioning. If so, do not set |origin_id_|
+  // so that it remains the empty string.
+  if (origin_id && origin_id.value()) {
+    origin_id_ = origin_id->ToString();
+  } else {
+    // |origin_id| is empty. However, if per-application provisioning is
+    // supported, the empty string is not allowed.
+    DCHECK(origin_id_.empty());
+    if (MediaDrmBridge::IsPerApplicationProvisioningSupported()) {
+      std::move(init_cb).Run(false);
+      return;
+    }
+  }
 
-  std::move(init_cb).Run();
+  std::move(init_cb).Run(true);
 }
 
 void MediaDrmStorageBridge::OnSessionDataLoaded(
@@ -153,15 +185,16 @@ void MediaDrmStorageBridge::OnSessionDataLoaded(
   }
 
   JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jbyteArray> j_eme_id = StringToJavaBytes(env, session_id);
+  ScopedJavaLocalRef<jbyteArray> j_eme_id = ToJavaByteArray(env, session_id);
   ScopedJavaLocalRef<jbyteArray> j_key_set_id = ToJavaByteArray(
       env, session_data->key_set_id.data(), session_data->key_set_id.size());
   ScopedJavaLocalRef<jstring> j_mime =
       ConvertUTF8ToJavaString(env, session_data->mime_type);
 
-  RunObjectCallbackAndroid(
-      *j_callback,
-      Java_PersistentInfo_create(env, j_eme_id, j_key_set_id, j_mime));
+  RunObjectCallbackAndroid(*j_callback,
+                           Java_PersistentInfo_create(
+                               env, j_eme_id, j_key_set_id, j_mime,
+                               static_cast<uint32_t>(session_data->key_type)));
 }
 
 }  // namespace media

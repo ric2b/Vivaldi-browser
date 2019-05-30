@@ -6,7 +6,7 @@
 #define NGLineHeightMetrics_h
 
 #include "third_party/blink/renderer/platform/fonts/font_baseline.h"
-#include "third_party/blink/renderer/platform/layout_unit.h"
+#include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 
 namespace blink {
 
@@ -22,6 +22,9 @@ struct NGLineHeightMetrics {
       : ascent(LayoutUnit::Min()), descent(LayoutUnit::Min()) {}
   NGLineHeightMetrics(LayoutUnit initial_ascent, LayoutUnit initial_descent)
       : ascent(initial_ascent), descent(initial_descent) {}
+  static NGLineHeightMetrics Zero() {
+    return NGLineHeightMetrics(LayoutUnit(), LayoutUnit());
+  }
 
   // Compute from ComputedStyle, using the font metrics of the prikmary font.
   // The leading is not included.
@@ -62,6 +65,8 @@ struct NGLineHeightMetrics {
  private:
   void Initialize(const FontMetrics&, FontBaseline);
 };
+
+std::ostream& operator<<(std::ostream&, const NGLineHeightMetrics&);
 
 }  // namespace blink
 

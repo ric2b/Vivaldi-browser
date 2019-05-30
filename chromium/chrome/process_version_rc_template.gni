@@ -60,7 +60,6 @@ template("process_version_rc_template") {
   ]
   if (defined(is_vivaldi) && is_vivaldi) {
     _sources += [
-      lastchange_vivaldi_path,
       vivaldi_version_path,
     ]
     _extra_args += [

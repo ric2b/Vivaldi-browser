@@ -41,8 +41,10 @@ class NodeIterator final : public ScriptWrappable, public NodeIteratorBase {
   static NodeIterator* Create(Node* root_node,
                               unsigned what_to_show,
                               V8NodeFilter* filter) {
-    return new NodeIterator(root_node, what_to_show, filter);
+    return MakeGarbageCollected<NodeIterator>(root_node, what_to_show, filter);
   }
+
+  NodeIterator(Node*, unsigned what_to_show, V8NodeFilter*);
 
   Node* nextNode(ExceptionState&);
   Node* previousNode(ExceptionState&);
@@ -56,11 +58,9 @@ class NodeIterator final : public ScriptWrappable, public NodeIteratorBase {
   // This function is called before any node is removed from the document tree.
   void NodeWillBeRemoved(Node&);
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
-  NodeIterator(Node*, unsigned what_to_show, V8NodeFilter*);
-
   class NodePointer {
     DISALLOW_NEW();
 
@@ -75,7 +75,7 @@ class NodeIterator final : public ScriptWrappable, public NodeIteratorBase {
     Member<Node> node;
     bool is_pointer_before_node;
 
-    void Trace(blink::Visitor* visitor) { visitor->Trace(node); }
+    void Trace(Visitor* visitor) { visitor->Trace(node); }
   };
 
   void UpdateForNodeRemoval(Node& node_to_be_removed, NodePointer&) const;

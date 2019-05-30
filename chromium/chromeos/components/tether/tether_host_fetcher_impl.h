@@ -9,16 +9,11 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "chromeos/components/multidevice/remote_device_ref.h"
 #include "chromeos/components/tether/tether_host_fetcher.h"
 #include "chromeos/services/device_sync/public/cpp/device_sync_client.h"
 #include "chromeos/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
 #include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
-#include "components/cryptauth/remote_device_provider.h"
-#include "components/cryptauth/remote_device_ref.h"
-
-namespace cryptauth {
-class RemoteDeviceProvider;
-}  // namespace cryptauth
 
 namespace chromeos {
 
@@ -28,24 +23,18 @@ namespace tether {
 // prototypes, callbacks are invoked synchronously.
 //
 // Note: TetherHostFetcherImpl, and the Tether feature as a whole, is currently
-// in the middle of a migration from using RemoteDeviceProvider to
-// DeviceSyncClient and eventually to MultiDeviceSetupClient. Its constructor
-// accepts all three objects, but expects only of one of them to be valid, and
-// the others null. (This is controlled at a higher level by
-// features::kMultiDeviceApi and features::kEnableUnifiedMultiDeviceSetup.).
-// Once Tether has been fully migrated, RemoteDeviceProvider and eventually
-// DeviceSyncClient will be ripped out of this class. See
-// https://crbug.com/848956.
+// in the middle of a migration from using DeviceSyncClient and eventually to
+// MultiDeviceSetupClient. Its constructor accepts both objects, but either may
+// be null. Once Tether has been fully migrated, DeviceSyncClient will be ripped
+// out of this class. See https://crbug.com/848956.
 class TetherHostFetcherImpl
     : public TetherHostFetcher,
-      public cryptauth::RemoteDeviceProvider::Observer,
       public device_sync::DeviceSyncClient::Observer,
       public multidevice_setup::MultiDeviceSetupClient::Observer {
  public:
   class Factory {
    public:
     static std::unique_ptr<TetherHostFetcher> NewInstance(
-        cryptauth::RemoteDeviceProvider* remote_device_provider,
         device_sync::DeviceSyncClient* device_sync_client,
         chromeos::multidevice_setup::MultiDeviceSetupClient*
             multidevice_setup_client);
@@ -54,7 +43,6 @@ class TetherHostFetcherImpl
 
    protected:
     virtual std::unique_ptr<TetherHostFetcher> BuildInstance(
-        cryptauth::RemoteDeviceProvider* remote_device_provider,
         device_sync::DeviceSyncClient* device_sync_client,
         chromeos::multidevice_setup::MultiDeviceSetupClient*
             multidevice_setup_client);
@@ -71,11 +59,9 @@ class TetherHostFetcherImpl
   void FetchTetherHost(const std::string& device_id,
                        const TetherHostCallback& callback) override;
 
-  // cryptauth::RemoteDeviceProvider::Observer:
-  void OnSyncDeviceListChanged() override;
-
   // device_sync::DeviceSyncClient::Observer:
   void OnNewDevicesSynced() override;
+  void OnReady() override;
 
   // multidevice_setup::MultiDeviceSetupClient::Observer:
   void OnHostStatusChanged(
@@ -86,23 +72,19 @@ class TetherHostFetcherImpl
           feature_states_map) override;
 
  protected:
-  // TODO(crbug.com/848956): Remove RemoteDeviceProvider once all clients have
-  // migrated to the DeviceSync Mojo API.
-  TetherHostFetcherImpl(cryptauth::RemoteDeviceProvider* remote_device_provider,
-                        device_sync::DeviceSyncClient* device_sync_client,
+  TetherHostFetcherImpl(device_sync::DeviceSyncClient* device_sync_client,
                         chromeos::multidevice_setup::MultiDeviceSetupClient*
                             multidevice_setup_client_);
 
  private:
   void CacheCurrentTetherHosts();
-  cryptauth::RemoteDeviceRefList GenerateHostDeviceList();
+  multidevice::RemoteDeviceRefList GenerateHostDeviceList();
 
-  cryptauth::RemoteDeviceProvider* remote_device_provider_;
   device_sync::DeviceSyncClient* device_sync_client_;
   chromeos::multidevice_setup::MultiDeviceSetupClient*
       multidevice_setup_client_;
 
-  cryptauth::RemoteDeviceRefList current_remote_device_list_;
+  multidevice::RemoteDeviceRefList current_remote_device_list_;
   base::WeakPtrFactory<TetherHostFetcherImpl> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(TetherHostFetcherImpl);

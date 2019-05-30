@@ -8,6 +8,7 @@
 
 #include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/compositor/test/test_image_transport_factory.h"
@@ -21,9 +22,10 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/common/navigation_policy.h"
 #include "content/public/test/browser_side_navigation_test_utils.h"
 #include "content/public/test/mock_render_process_host.h"
+#include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/test/content_browser_sanity_checker.h"
 #include "content/test/test_render_frame_host.h"
@@ -34,7 +36,7 @@
 #include "content/test/test_web_contents.h"
 #include "net/base/network_change_notifier.h"
 #include "ui/base/material_design/material_design_controller.h"
-#include "ui/base/test/material_design_controller_test_api.h"
+#include "ui/events/devices/input_device_manager.h"
 
 #if defined(OS_ANDROID)
 #include "ui/android/dummy_screen_android.h"
@@ -47,6 +49,7 @@
 
 #if defined(USE_AURA)
 #include "ui/aura/test/aura_test_helper.h"
+#include "ui/aura/test/aura_test_utils.h"
 #include "ui/compositor/test/context_factories_for_test.h"
 #include "ui/wm/core/default_activation_client.h"
 #endif
@@ -75,42 +78,12 @@ void RenderFrameHostTester::CommitPendingLoad(
     NavigationController* controller) {
   // This function is currently used by BrowserWithTestWindowTest. It would be
   // ideal to instead make the users of that class create TestWebContents
-  // (rather than WebContentsImpl directly). This would allow the implementation
-  // of PrepareForCommitIfNecessary() to live directly in
-  // TestWebContents::CommitPendingNavigation() which could then be the only
-  // place to handle this simulation. Unfortunately, it is not trivial to make
-  // that change, so for now we have this extra simulation for
+  // (rather than WebContentsImpl directly). It is not trivial to make
+  // that change, so for now we have this extra function for
   // non-TestWebContents.
-  TestRenderFrameHost* old_rfh = static_cast<TestRenderFrameHost*>(
-      controller->GetWebContents()->GetMainFrame());
-  NavigationRequest* request = old_rfh->frame_tree_node()->navigation_request();
-  old_rfh->PrepareForCommitIfNecessary();
-
-  WebContentsImpl* web_contents =
-      static_cast<WebContentsImpl*>(controller->GetWebContents());
-  TestRenderFrameHost* pending_rfh = static_cast<TestRenderFrameHost*>(
-      web_contents->GetRenderManagerForTesting()
-          ->speculative_render_frame_host_.get());
-
-  // Commit on the pending_rfh, if one exists.
-  TestRenderFrameHost* test_rfh = pending_rfh ? pending_rfh : old_rfh;
-  if (request && !request->navigation_handle()->IsSameDocument()) {
-    test_rfh->SimulateCommitProcessed(
-        request->navigation_handle()->GetNavigationId(),
-        true /* was successful */);
-  }
-
-  if (controller->GetPendingEntryIndex() >= 0) {
-    test_rfh->SendNavigateWithTransition(
-        controller->GetPendingEntry()->GetUniqueID(), false,
-        controller->GetPendingEntry()->GetURL(),
-        controller->GetPendingEntry()->GetTransitionType());
-  } else {
-    test_rfh->SendNavigateWithTransition(
-        controller->GetPendingEntry()->GetUniqueID(), true,
-        controller->GetPendingEntry()->GetURL(),
-        controller->GetPendingEntry()->GetTransitionType());
-  }
+  auto navigation =
+      NavigationSimulator::CreateFromPending(controller->GetWebContents());
+  navigation->Commit();
 }
 
 // RenderViewHostTester -------------------------------------------------------
@@ -121,10 +94,10 @@ RenderViewHostTester* RenderViewHostTester::For(RenderViewHost* host) {
 }
 
 // static
-bool RenderViewHostTester::TestOnMessageReceived(RenderViewHost* rvh,
-                                                 const IPC::Message& msg) {
-  return static_cast<RenderViewHostImpl*>(rvh)->GetWidget()->OnMessageReceived(
-      msg);
+void RenderViewHostTester::SimulateFirstPaint(RenderViewHost* rvh) {
+  static_cast<RenderViewHostImpl*>(rvh)
+      ->GetWidget()
+      ->OnFirstVisuallyNonEmptyPaint();
 }
 
 // static
@@ -147,7 +120,7 @@ RenderViewHostTestEnabler::RenderViewHostTestEnabler()
   // means tests must ensure any MessageLoop they make is created before
   // the RenderViewHostTestEnabler.
   if (!base::MessageLoopCurrent::Get())
-    message_loop_ = std::make_unique<base::MessageLoop>();
+    task_environment_ = std::make_unique<base::test::ScopedTaskEnvironment>();
 #if !defined(OS_ANDROID)
   ImageTransportFactory::SetFactory(
       std::make_unique<TestImageTransportFactory>());
@@ -160,6 +133,9 @@ RenderViewHostTestEnabler::RenderViewHostTestEnabler()
   if (base::ThreadTaskRunnerHandle::IsSet())
     ui::WindowResizeHelperMac::Get()->Init(base::ThreadTaskRunnerHandle::Get());
 #endif  // OS_MACOSX
+#if defined(USE_AURA)
+  input_device_client_ = aura::test::CreateTestInputDeviceManager();
+#endif
 }
 
 RenderViewHostTestEnabler::~RenderViewHostTestEnabler() {
@@ -177,10 +153,6 @@ RenderViewHostTestEnabler::~RenderViewHostTestEnabler() {
 
 
 // RenderViewHostTestHarness --------------------------------------------------
-
-RenderViewHostTestHarness::RenderViewHostTestHarness(int thread_bundle_options)
-    : thread_bundle_(
-          std::make_unique<TestBrowserThreadBundle>(thread_bundle_options)) {}
 
 RenderViewHostTestHarness::~RenderViewHostTestHarness() {
 }
@@ -266,9 +238,6 @@ void RenderViewHostTestHarness::SetUp() {
   // tests.
   network_change_notifier_.reset(net::NetworkChangeNotifier::CreateMock());
 
-  // ContentTestSuiteBase might have already initialized
-  // MaterialDesignController in unit_tests suite.
-  ui::test::MaterialDesignControllerTestAPI::Uninitialize();
   ui::MaterialDesignController::Initialize();
 
   rvh_test_enabler_.reset(new RenderViewHostTestEnabler);
@@ -295,15 +264,11 @@ void RenderViewHostTestHarness::SetUp() {
   browser_context_.reset(CreateBrowserContext());
 
   SetContents(CreateTestWebContents());
-
-  if (IsBrowserSideNavigationEnabled())
-    BrowserSideNavigationSetUp();
+  BrowserSideNavigationSetUp();
 }
 
 void RenderViewHostTestHarness::TearDown() {
-  if (IsBrowserSideNavigationEnabled())
-    BrowserSideNavigationTearDown();
-
+  BrowserSideNavigationTearDown();
   DeleteContents();
 #if defined(USE_AURA)
   aura_test_helper_->TearDown();
@@ -356,5 +321,9 @@ void RenderViewHostTestHarness::SetRenderProcessHostFactory(
   else
     factory_ = factory;
 }
+
+RenderViewHostTestHarness::RenderViewHostTestHarness(
+    std::unique_ptr<TestBrowserThreadBundle> thread_bundle)
+    : thread_bundle_(std::move(thread_bundle)) {}
 
 }  // namespace content

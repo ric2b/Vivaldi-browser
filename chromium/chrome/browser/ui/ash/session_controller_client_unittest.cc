@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ash/public/cpp/ash_pref_names.h"
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
@@ -18,24 +19,26 @@
 #include "chrome/browser/chromeos/login/users/multi_profile_user_controller.h"
 #include "chrome/browser/chromeos/policy/policy_cert_service.h"
 #include "chrome/browser/chromeos/policy/policy_cert_service_factory.h"
-#include "chrome/browser/chromeos/policy/policy_cert_verifier.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#include "chrome/browser/ui/ash/test_session_controller.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "chromeos/login/login_state.h"
+#include "chromeos/login/login_state/login_state.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_service_manager_context.h"
 #include "net/cert/x509_certificate.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
+#include "services/network/cert_verifier_with_trust_anchors.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using chromeos::FakeChromeUserManager;
@@ -46,9 +49,10 @@ namespace {
 constexpr char kUser[] = "user@test.com";
 constexpr char kUserGaiaId[] = "0123456789";
 
-// Weak ptr to PolicyCertVerifier - object is freed in test destructor once
-// we've ensured the profile has been shut down.
-policy::PolicyCertVerifier* g_policy_cert_verifier_for_factory = nullptr;
+// Weak ptr to network::CertVerifierWithTrustAnchors - object is freed in test
+// destructor once we've ensured the profile has been shut down.
+network::CertVerifierWithTrustAnchors* g_policy_cert_verifier_for_factory =
+    nullptr;
 
 std::unique_ptr<KeyedService> CreateTestPolicyCertService(
     content::BrowserContext* context) {
@@ -99,78 +103,6 @@ class TestChromeUserManager : public FakeChromeUserManager {
   DISALLOW_COPY_AND_ASSIGN(TestChromeUserManager);
 };
 
-// A session controller interface implementation that tracks sessions and users.
-class TestSessionController : public ash::mojom::SessionController {
- public:
-  TestSessionController() : binding_(this) {}
-  ~TestSessionController() override {}
-
-  ash::mojom::SessionControllerPtr CreateInterfacePtrAndBind() {
-    ash::mojom::SessionControllerPtr ptr;
-    binding_.Bind(mojo::MakeRequest(&ptr));
-    return ptr;
-  }
-
-  ash::mojom::SessionInfo* last_session_info() {
-    return last_session_info_.get();
-  }
-
-  ash::mojom::UserSession* last_user_session() {
-    return last_user_session_.get();
-  }
-
-  int update_user_session_count() { return update_user_session_count_; }
-
-  // ash::mojom::SessionController:
-  void SetClient(ash::mojom::SessionControllerClientPtr client) override {}
-  void SetSessionInfo(ash::mojom::SessionInfoPtr info) override {
-    last_session_info_ = info->Clone();
-  }
-  void UpdateUserSession(ash::mojom::UserSessionPtr user_session) override {
-    last_user_session_ = user_session->Clone();
-    update_user_session_count_++;
-  }
-  void SetUserSessionOrder(
-      const std::vector<uint32_t>& user_session_order) override {}
-  void PrepareForLock(PrepareForLockCallback callback) override {}
-  void StartLock(StartLockCallback callback) override {}
-  void NotifyChromeLockAnimationsComplete() override {}
-  void RunUnlockAnimation(RunUnlockAnimationCallback callback) override {}
-  void NotifyChromeTerminating() override {}
-  void SetSessionLengthLimit(base::TimeDelta length_limit,
-                             base::TimeTicks start_time) override {
-    last_session_length_limit_ = length_limit;
-    last_session_start_time_ = start_time;
-  }
-  void CanSwitchActiveUser(CanSwitchActiveUserCallback callback) override {
-    std::move(callback).Run(true);
-  }
-  void ShowMultiprofilesIntroDialog(
-      ShowMultiprofilesIntroDialogCallback callback) override {
-    std::move(callback).Run(true, false);
-  }
-  void ShowTeleportWarningDialog(
-      ShowTeleportWarningDialogCallback callback) override {
-    std::move(callback).Run(true, false);
-  }
-  void ShowMultiprofilesSessionAbortedDialog(
-      const std::string& user_email) override {}
-  void AddSessionActivationObserverForAccountId(
-      const AccountId& account_id,
-      ash::mojom::SessionActivationObserverPtr observer) override {}
-
-  base::TimeDelta last_session_length_limit_;
-  base::TimeTicks last_session_start_time_;
-
- private:
-  mojo::Binding<ash::mojom::SessionController> binding_;
-
-  ash::mojom::SessionInfoPtr last_session_info_;
-  ash::mojom::UserSessionPtr last_user_session_;
-  int update_user_session_count_ = 0;
-
-  DISALLOW_COPY_AND_ASSIGN(TestSessionController);
-};
 
 }  // namespace
 
@@ -199,14 +131,14 @@ class SessionControllerClientTest : public testing::Test {
   void TearDown() override {
     user_manager_enabler_.reset();
     user_manager_ = nullptr;
-    // Clear our cached pointer to the PolicyCertVerifier.
+    // Clear our cached pointer to the network::CertVerifierWithTrustAnchors.
     g_policy_cert_verifier_for_factory = nullptr;
     profile_manager_.reset();
 
-    // We must ensure that the PolicyCertVerifier outlives the
-    // PolicyCertService so shutdown the profile here. Additionally, we need
+    // We must ensure that the network::CertVerifierWithTrustAnchors outlives
+    // the PolicyCertService so shutdown the profile here. Additionally, we need
     // to run the message loop between freeing the PolicyCertService and
-    // freeing the PolicyCertVerifier (see
+    // freeing the network::CertVerifierWithTrustAnchors (see
     // PolicyCertService::OnTrustAnchorsChanged() which is called from
     // PolicyCertService::Shutdown()).
     base::RunLoop().RunUntilIdle();
@@ -259,7 +191,8 @@ class SessionControllerClientTest : public testing::Test {
   }
 
   content::TestBrowserThreadBundle threads_;
-  std::unique_ptr<policy::PolicyCertVerifier> cert_verifier_;
+  content::TestServiceManagerContext context_;
+  std::unique_ptr<network::CertVerifierWithTrustAnchors> cert_verifier_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
   session_manager::SessionManager session_manager_;
 
@@ -292,7 +225,6 @@ TEST_F(SessionControllerClientTest, CyclingThreeUsers) {
   // Create an object to test and connect it to our test interface.
   SessionControllerClient client;
   TestSessionController session_controller;
-  client.session_controller_ = session_controller.CreateInterfacePtrAndBind();
   client.Init();
 
   const AccountId first_user =
@@ -389,11 +321,12 @@ TEST_F(SessionControllerClientTest,
   user_manager()->LoginUser(account_id);
   EXPECT_EQ(ash::AddUserSessionPolicy::ALLOWED,
             SessionControllerClient::GetAddUserSessionPolicy());
-  cert_verifier_.reset(new policy::PolicyCertVerifier(base::Closure()));
+  cert_verifier_.reset(
+      new network::CertVerifierWithTrustAnchors(base::Closure()));
   g_policy_cert_verifier_for_factory = cert_verifier_.get();
   ASSERT_TRUE(
       policy::PolicyCertServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-          user_profile, CreateTestPolicyCertService));
+          user_profile, base::BindRepeating(&CreateTestPolicyCertService)));
   policy::PolicyCertService* service =
       policy::PolicyCertServiceFactory::GetForProfile(user_profile);
   ASSERT_TRUE(service);
@@ -472,7 +405,6 @@ TEST_F(SessionControllerClientTest, SendUserSession) {
   // Create an object to test and connect it to our test interface.
   SessionControllerClient client;
   TestSessionController session_controller;
-  client.session_controller_ = session_controller.CreateInterfacePtrAndBind();
   client.Init();
   SessionControllerClient::FlushForTesting();
 
@@ -495,8 +427,9 @@ TEST_F(SessionControllerClientTest, SendUserSession) {
   // User session was sent.
   EXPECT_EQ(1, session_controller.update_user_session_count());
   ASSERT_TRUE(session_controller.last_user_session());
-  EXPECT_EQ(content::BrowserContext::GetServiceUserIdFor(user_profile),
-            session_controller.last_user_session()->user_info->service_user_id);
+  EXPECT_EQ(content::BrowserContext::GetServiceInstanceGroupFor(user_profile),
+            session_controller.last_user_session()
+                ->user_info->service_instance_group.value());
 
   // Simulate a request for an update where nothing changed.
   client.SendUserSession(*user_manager()->GetLoggedInUsers()[0]);
@@ -510,7 +443,6 @@ TEST_F(SessionControllerClientTest, SupervisedUser) {
   // Create an object to test and connect it to our test interface.
   SessionControllerClient client;
   TestSessionController session_controller;
-  client.session_controller_ = session_controller.CreateInterfacePtrAndBind();
   client.Init();
   SessionControllerClient::FlushForTesting();
 
@@ -573,7 +505,6 @@ TEST_F(SessionControllerClientTest, DeviceOwner) {
   // Create an object to test and connect it to our test interface.
   SessionControllerClient client;
   TestSessionController session_controller;
-  client.session_controller_ = session_controller.CreateInterfacePtrAndBind();
   client.Init();
 
   const AccountId owner =
@@ -596,7 +527,6 @@ TEST_F(SessionControllerClientTest, UserBecomesDeviceOwner) {
   // Create an object to test and connect it to our test interface.
   SessionControllerClient client;
   TestSessionController session_controller;
-  client.session_controller_ = session_controller.CreateInterfacePtrAndBind();
   client.Init();
 
   const AccountId owner =
@@ -617,7 +547,6 @@ TEST_F(SessionControllerClientTest, UserPrefsChange) {
   // Create an object to test and connect it to our test interface.
   SessionControllerClient client;
   TestSessionController session_controller;
-  client.session_controller_ = session_controller.CreateInterfacePtrAndBind();
   client.Init();
   SessionControllerClient::FlushForTesting();
 
@@ -646,7 +575,6 @@ TEST_F(SessionControllerClientTest, UserPrefsChange) {
   user_prefs->SetBoolean(ash::prefs::kAllowScreenLock, false);
   SessionControllerClient::FlushForTesting();
   EXPECT_FALSE(session_controller.last_session_info()->can_lock_screen);
-
   user_prefs->SetBoolean(ash::prefs::kEnableAutoScreenLock, true);
   SessionControllerClient::FlushForTesting();
   EXPECT_TRUE(
@@ -661,13 +589,12 @@ TEST_F(SessionControllerClientTest, SessionLengthLimit) {
   // Create an object to test and connect it to our test interface.
   SessionControllerClient client;
   TestSessionController session_controller;
-  client.session_controller_ = session_controller.CreateInterfacePtrAndBind();
   client.Init();
   SessionControllerClient::FlushForTesting();
 
   // By default there is no session length limit.
-  EXPECT_TRUE(session_controller.last_session_length_limit_.is_zero());
-  EXPECT_TRUE(session_controller.last_session_start_time_.is_null());
+  EXPECT_TRUE(session_controller.last_session_length_limit().is_zero());
+  EXPECT_TRUE(session_controller.last_session_start_time().is_null());
 
   // Setting a session length limit in local state sends it to ash.
   const base::TimeDelta length_limit = base::TimeDelta::FromHours(1);
@@ -677,6 +604,6 @@ TEST_F(SessionControllerClientTest, SessionLengthLimit) {
                           length_limit.InMilliseconds());
   local_state->SetInt64(prefs::kSessionStartTime, start_time.ToInternalValue());
   SessionControllerClient::FlushForTesting();
-  EXPECT_EQ(length_limit, session_controller.last_session_length_limit_);
-  EXPECT_EQ(start_time, session_controller.last_session_start_time_);
+  EXPECT_EQ(length_limit, session_controller.last_session_length_limit());
+  EXPECT_EQ(start_time, session_controller.last_session_start_time());
 }

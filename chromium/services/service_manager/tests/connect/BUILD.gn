@@ -2,10 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//services/catalog/public/tools/catalog.gni")
-import("//services/service_manager/public/cpp/service.gni")
-import("//services/service_manager/public/service_manifest.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
+import("//services/service_manager/public/cpp/service_executable.gni")
 import("//testing/test.gni")
 
 source_set("connect") {
@@ -18,9 +16,10 @@ source_set("connect") {
     "//base",
     "//base/test:test_support",
     "//services/service_manager/public/cpp",
-    "//services/service_manager/public/cpp:service_test_support",
+    "//services/service_manager/public/cpp/test:test_support",
     "//services/service_manager/public/mojom",
     "//services/service_manager/tests:util",
+    "//testing/gtest",
   ]
 
   data_deps = [
@@ -33,35 +32,17 @@ source_set("connect") {
 }
 
 mojom("interfaces") {
+  testonly = true
   sources = [
-    "connect_test.mojom",
+    "connect.test-mojom",
   ]
   deps = [
+    "//mojo/public/mojom/base",
     "//services/service_manager/public/mojom",
   ]
 }
 
-service_manifest("manifest") {
-  name = "connect_unittests"
-  source = "connect_unittests_manifest.json"
-}
-
-service_manifest("connect_test_a_manifest") {
-  name = "connect_test_a"
-  source = "connect_test_app_a_manifest.json"
-}
-
-service_manifest("connect_test_b_manifest") {
-  name = "connect_test_b"
-  source = "connect_test_app_b_manifest.json"
-}
-
-service_manifest("connect_test_sandboxed_manifest") {
-  name = "connect_test_sandboxed_app"
-  source = "connect_test_sandboxed_app_manifest.json"
-}
-
-service("connect_test_package") {
+service_executable("connect_test_package") {
   testonly = true
   sources = [
     "connect_test_package.cc",
@@ -75,17 +56,7 @@ service("connect_test_package") {
   ]
 }
 
-service_manifest("connect_test_package_manifest") {
-  name = "connect_test_package"
-  source = "connect_test_package_manifest.json"
-  packaged_services = [
-    ":connect_test_a_manifest",
-    ":connect_test_b_manifest",
-    ":connect_test_sandboxed_manifest",
-  ]
-}
-
-service("connect_test_app") {
+service_executable("connect_test_app") {
   testonly = true
   sources = [
     "connect_test_app.cc",
@@ -99,12 +70,7 @@ service("connect_test_app") {
   ]
 }
 
-service_manifest("connect_test_app_manifest") {
-  name = "connect_test_app"
-  source = "connect_test_app_manifest.json"
-}
-
-service("connect_test_class_app") {
+service_executable("connect_test_class_app") {
   testonly = true
   sources = [
     "connect_test_class_app.cc",
@@ -118,12 +84,7 @@ service("connect_test_class_app") {
   ]
 }
 
-service_manifest("connect_test_class_app_manifest") {
-  name = "connect_test_class_app"
-  source = "connect_test_class_app_manifest.json"
-}
-
-service("connect_test_singleton_app") {
+service_executable("connect_test_singleton_app") {
   testonly = true
   sources = [
     "connect_test_singleton_app.cc",
@@ -133,11 +94,6 @@ service("connect_test_singleton_app") {
     "//mojo/public/cpp/system",
     "//services/service_manager/public/cpp",
   ]
-}
-
-service_manifest("connect_test_singleton_app_manifest") {
-  name = "connect_test_singleton_app"
-  source = "connect_test_singleton_app_manifest.json"
 }
 
 executable("connect_test_exe") {
@@ -152,23 +108,6 @@ executable("connect_test_exe") {
     "//base",
     "//build/win:default_exe_manifest",
     "//services/service_manager/public/cpp",
-    "//services/service_manager/public/cpp/standalone_service:main",
-  ]
-}
-
-service_manifest("connect_test_exe_manifest") {
-  name = "connect_test_exe"
-  source = "connect_test_exe_manifest.json"
-}
-
-catalog("catalog") {
-  embedded_services = [ ":manifest" ]
-
-  standalone_services = [
-    ":connect_test_app_manifest",
-    ":connect_test_class_app_manifest",
-    ":connect_test_exe_manifest",
-    ":connect_test_package_manifest",
-    ":connect_test_singleton_app_manifest",
+    "//services/service_manager/public/cpp/service_executable:main",
   ]
 }

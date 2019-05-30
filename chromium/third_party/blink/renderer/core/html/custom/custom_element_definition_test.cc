@@ -21,7 +21,7 @@ class ConstructorFails : public TestCustomElementDefinition {
   ConstructorFails(const CustomElementDescriptor& descriptor)
       : TestCustomElementDefinition(descriptor) {}
   ~ConstructorFails() override = default;
-  bool RunConstructor(Element*) override { return false; }
+  bool RunConstructor(Element&) override { return false; }
 
   DISALLOW_COPY_AND_ASSIGN(ConstructorFails);
 };
@@ -29,33 +29,39 @@ class ConstructorFails : public TestCustomElementDefinition {
 }  // namespace
 
 TEST(CustomElementDefinitionTest, upgrade_clearsReactionQueueOnFailure) {
-  Element* element = CreateElement("a-a");
-  EXPECT_EQ(CustomElementState::kUndefined, element->GetCustomElementState())
+  Element& element = *CreateElement("a-a");
+  EXPECT_EQ(CustomElementState::kUndefined, element.GetCustomElementState())
       << "sanity check: this element should be ready to upgrade";
   {
     CEReactionsScope reactions;
+    HeapVector<Member<Command>>* commands =
+        MakeGarbageCollected<HeapVector<Member<Command>>>();
+    commands->push_back(MakeGarbageCollected<Unreached>(
+        "upgrade failure should clear the reaction queue"));
     reactions.EnqueueToCurrentQueue(
-        element, new TestReaction({new Unreached(
-                     "upgrade failure should clear the reaction queue")}));
+        element, *MakeGarbageCollected<TestReaction>(commands));
     ConstructorFails definition(CustomElementDescriptor("a-a", "a-a"));
     definition.Upgrade(element);
   }
-  EXPECT_EQ(CustomElementState::kFailed, element->GetCustomElementState())
+  EXPECT_EQ(CustomElementState::kFailed, element.GetCustomElementState())
       << "failing to construct should have set the 'failed' element state";
 }
 
 TEST(CustomElementDefinitionTest,
      upgrade_clearsReactionQueueOnFailure_backupStack) {
-  Element* element = CreateElement("a-a");
-  EXPECT_EQ(CustomElementState::kUndefined, element->GetCustomElementState())
+  Element& element = *CreateElement("a-a");
+  EXPECT_EQ(CustomElementState::kUndefined, element.GetCustomElementState())
       << "sanity check: this element should be ready to upgrade";
   ResetCustomElementReactionStackForTest reset_reaction_stack;
+  HeapVector<Member<Command>>* commands =
+      MakeGarbageCollected<HeapVector<Member<Command>>>();
+  commands->push_back(MakeGarbageCollected<Unreached>(
+      "upgrade failure should clear the reaction queue"));
   reset_reaction_stack.Stack().EnqueueToBackupQueue(
-      element, new TestReaction({new Unreached(
-                   "upgrade failure should clear the reaction queue")}));
+      element, *MakeGarbageCollected<TestReaction>(commands));
   ConstructorFails definition(CustomElementDescriptor("a-a", "a-a"));
   definition.Upgrade(element);
-  EXPECT_EQ(CustomElementState::kFailed, element->GetCustomElementState())
+  EXPECT_EQ(CustomElementState::kFailed, element.GetCustomElementState())
       << "failing to construct should have set the 'failed' element state";
 }
 

@@ -86,7 +86,7 @@ class ClickBasedCategoryRankerTest : public testing::Test {
     variation_params_manager_.SetVariationParamsWithFeatureAssociations(
         kCategoryRanker.name,
         {{"click_based_category_ranker-dismissed_category_penalty",
-          base::IntToString(value)}},
+          base::NumberToString(value)}},
         {kCategoryRanker.name});
   }
 
@@ -94,7 +94,7 @@ class ClickBasedCategoryRankerTest : public testing::Test {
     variation_params_manager_.SetVariationParamsWithFeatureAssociations(
         kCategoryRanker.name,
         {{"click_based_category_ranker-promoted_category",
-          base::IntToString(value)}},
+          base::NumberToString(value)}},
         {kCategoryRanker.name});
   }
 
@@ -301,7 +301,7 @@ TEST_F(ClickBasedCategoryRankerTest, ShouldDecayClickCountsWithTime) {
 
   // The user behavior changes and they start using the second category instead.
   // According to our requirenments after such a long time it should take less
-  // than |first_clicks| for the second category to outperfom the first one.
+  // than |first_clicks| for the second category to outperform the first one.
   int second_clicks = 0;
   while (CompareCategories(first, second) && second_clicks < first_clicks) {
     NotifyOnSuggestionOpened(/*times=*/1, second);
@@ -608,10 +608,10 @@ TEST_F(ClickBasedCategoryRankerTest,
   ResetRanker(base::DefaultClock::GetInstance());
   // Make sure we have the default order.
   EXPECT_TRUE(CompareCategories(
-      Category::FromKnownCategory(KnownCategories::DOWNLOADS),
-      Category::FromKnownCategory(KnownCategories::FOREIGN_TABS)));
+      Category::FromKnownCategory(KnownCategories::READING_LIST),
+      Category::FromKnownCategory(KnownCategories::DOWNLOADS)));
   EXPECT_TRUE(CompareCategories(
-      Category::FromKnownCategory(KnownCategories::FOREIGN_TABS),
+      Category::FromKnownCategory(KnownCategories::DOWNLOADS),
       Category::FromKnownCategory(KnownCategories::BOOKMARKS)));
   EXPECT_TRUE(CompareCategories(
       Category::FromKnownCategory(KnownCategories::BOOKMARKS),
@@ -639,22 +639,22 @@ TEST_F(ClickBasedCategoryRankerTest,
        ShouldResumePromotionAfter2WeeksSinceDismissal) {
   const Category downloads =
       Category::FromKnownCategory(KnownCategories::DOWNLOADS);
-  const Category foreign_tabs =
-      Category::FromKnownCategory(KnownCategories::FOREIGN_TABS);
-  ASSERT_TRUE(CompareCategories(downloads, foreign_tabs));
+  const Category articles =
+      Category::FromKnownCategory(KnownCategories::ARTICLES);
+  ASSERT_TRUE(CompareCategories(downloads, articles));
 
-  SetPromotedCategoryVariationParam(foreign_tabs.id());
+  SetPromotedCategoryVariationParam(articles.id());
   ResetRanker(base::DefaultClock::GetInstance());
-  ASSERT_TRUE(CompareCategories(foreign_tabs, downloads));
+  ASSERT_TRUE(CompareCategories(articles, downloads));
 
-  ranker()->OnCategoryDismissed(foreign_tabs);
-  ASSERT_FALSE(CompareCategories(foreign_tabs, downloads));
+  ranker()->OnCategoryDismissed(articles);
+  ASSERT_FALSE(CompareCategories(articles, downloads));
 
   // Simulate a little over 2 weeks of time passing.
   base::SimpleTestClock test_clock;
   test_clock.SetNow(base::Time::Now() + base::TimeDelta::FromDays(15));
   ResetRanker(&test_clock);
-  EXPECT_TRUE(CompareCategories(foreign_tabs, downloads));
+  EXPECT_TRUE(CompareCategories(articles, downloads));
 }
 
 TEST_F(ClickBasedCategoryRankerTest,

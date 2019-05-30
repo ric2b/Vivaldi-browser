@@ -20,12 +20,19 @@ struct InstallableParams {
   // conforming to the primary icon size parameters.
   bool valid_primary_icon = false;
 
+  // Whether to prefer an icon with purpose 'maskable' for the primary icon.
+  bool prefer_maskable_icon = false;
+
   // Check whether there is a fetchable, non-empty icon in the manifest
   // conforming to the badge icon size parameters.
   bool valid_badge_icon = false;
 
   // Check whether the site has a manifest valid for a web app.
   bool valid_manifest = false;
+
+  // If the manifest is being checked, check the display setting in the manifest
+  // is a valid webapp display setting.
+  bool check_webapp_manifest_display = true;
 
   // Check whether the site has a service worker controlling the manifest start
   // URL and the current URL.

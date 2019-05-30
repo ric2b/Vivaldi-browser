@@ -10,7 +10,8 @@ from blinkpy.common.checkout.git_mock import MockGit
 from blinkpy.common.net.buildbot import Build
 from blinkpy.common.net.git_cl import TryJobStatus
 from blinkpy.common.net.git_cl_mock import MockGitCL
-from blinkpy.common.net.layout_test_results import LayoutTestResults
+from blinkpy.common.net.web_test_results import WebTestResults
+from blinkpy.common.path_finder import RELATIVE_WEB_TESTS
 from blinkpy.common.system.log_testing import LoggingTestCase
 from blinkpy.tool.commands.rebaseline import TestBaselineSet
 from blinkpy.tool.commands.rebaseline_cl import RebaselineCL
@@ -36,8 +37,8 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
 
         git = MockGit(filesystem=self.tool.filesystem, executive=self.tool.executive)
         git.changed_files = lambda **_: [
-            'third_party/WebKit/LayoutTests/one/text-fail.html',
-            'third_party/WebKit/LayoutTests/one/flaky-fail.html',
+            RELATIVE_WEB_TESTS + 'one/text-fail.html',
+            RELATIVE_WEB_TESTS + 'one/flaky-fail.html',
         ]
         self.tool.git = lambda: git
 
@@ -58,7 +59,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
                 'is_try_builder': True,
             },
         })
-        layout_test_results = LayoutTestResults({
+        web_test_results = WebTestResults({
             'tests': {
                 'one': {
                     'crash.html': {'expected': 'PASS', 'actual': 'CRASH', 'is_unexpected': True},
@@ -74,7 +75,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
         })
 
         for build in builds:
-            self.tool.buildbot.set_results(build, layout_test_results)
+            self.tool.buildbot.set_results(build, web_test_results)
             self.tool.buildbot.set_retry_sumary_json(build, json.dumps({
                 'failures': [
                     'one/flaky-fail.html',
@@ -96,11 +97,11 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
         ]
         for test in tests:
             path = self.mac_port.host.filesystem.join(
-                self.mac_port.layout_tests_dir(), test)
+                self.mac_port.web_tests_dir(), test)
             self._write(path, 'contents')
 
         self.mac_port.host.filesystem.write_text_file(
-            '/test.checkout/LayoutTests/external/wpt/MANIFEST.json', '{}')
+            '/test.checkout/web_tests/external/wpt/MANIFEST.json', '{}')
 
     def tearDown(self):
         BaseTestCase.tearDown(self)
@@ -170,13 +171,13 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
     def test_execute_with_unstaged_baselines_aborts(self):
         git = self.tool.git()
         git.unstaged_changes = lambda: {
-            'third_party/WebKit/LayoutTests/my-test-expected.txt': '?'
+            RELATIVE_WEB_TESTS + 'my-test-expected.txt': '?'
         }
         exit_code = self.command.execute(self.command_options(), [], self.tool)
         self.assertEqual(exit_code, 1)
         self.assertLog([
             'ERROR: Aborting: there are unstaged baselines:\n',
-            'ERROR:   /mock-checkout/third_party/WebKit/LayoutTests/'
+            'ERROR:   /mock-checkout/' + RELATIVE_WEB_TESTS +
             'my-test-expected.txt\n',
         ])
 
@@ -357,7 +358,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
         # one/flaky-fail.html is considered a real test to rebaseline.
         port = self.tool.port_factory.get('test-win-win7')
         path = port.host.filesystem.join(
-            port.layout_tests_dir(), 'one/flaky-fail.html')
+            port.web_tests_dir(), 'one/flaky-fail.html')
         self._write(path, 'contents')
         test_baseline_set = TestBaselineSet(self.tool)
         test_baseline_set.add(
@@ -379,6 +380,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
                     '--port-name', 'test-win-win7',
                     '--builder', 'MOCK Try Win',
                     '--build-number', '5000',
+                    '--step-name', 'webkit_layout_tests (with patch)',
                 ]],
                 [[
                     'python', 'echo', 'optimize-baselines',
@@ -393,7 +395,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
         self.command.trigger_try_jobs(['MOCK Try Linux', 'MOCK Try Win'])
         self.assertEqual(
             self.command.git_cl.calls,
-            [['git', 'cl', 'try', '-B', 'master.tryserver.blink',
+            [['git', 'cl', 'try', '-B', 'luci.chromium.try',
               '-b', 'MOCK Try Linux', '-b', 'MOCK Try Win']])
         self.assertLog([
             'INFO: Triggering try jobs:\n',
@@ -410,8 +412,8 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
         self.assertLog([
             'INFO: Finished try jobs found for all try bots.\n',
             'INFO: Failed to fetch results for "MOCK Try Win".\n',
-            ('INFO: Results URL: https://test-results.appspot.com/data/layout_results'
-             '/MOCK_Try_Win/5000/layout-test-results/results.html\n'),
+            ('INFO: Results URL: https://test-results.appspot.com/data/layout_results/'
+             'MOCK_Try_Win/5000/webkit_layout_tests%20%28with%20patch%29/layout-test-results/results.html\n'),
             'INFO: There are some builders with no results:\n',
             'INFO:   MOCK Try Win\n',
             'INFO: Would you like to continue?\n',
@@ -427,8 +429,8 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
         self.assertLog([
             'INFO: Finished try jobs found for all try bots.\n',
             'INFO: Failed to fetch results for "MOCK Try Win".\n',
-            ('INFO: Results URL: https://test-results.appspot.com/data/layout_results'
-             '/MOCK_Try_Win/5000/layout-test-results/results.html\n'),
+            ('INFO: Results URL: https://test-results.appspot.com/data/layout_results/'
+             'MOCK_Try_Win/5000/webkit_layout_tests%20%28with%20patch%29/layout-test-results/results.html\n'),
             'INFO: There are some builders with no results:\n',
             'INFO:   MOCK Try Win\n',
             'INFO: For one/flaky-fail.html:\n',

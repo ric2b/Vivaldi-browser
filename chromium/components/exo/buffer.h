@@ -13,20 +13,11 @@
 #include "base/memory/weak_ptr.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "ui/gfx/geometry/size.h"
-
-namespace base {
-namespace trace_event {
-class TracedValue;
-}
-}
-
-namespace gfx {
-class GpuMemoryBuffer;
-}
+#include "ui/gfx/gpu_memory_buffer.h"
 
 namespace exo {
 
-class LayerTreeFrameSinkHolder;
+class FrameSinkResourceManager;
 
 // This class provides the content for a Surface. The mechanism by which a
 // client provides and updates the contents is the responsibility of the client
@@ -38,8 +29,13 @@ class Buffer : public base::SupportsWeakPtr<Buffer> {
          unsigned texture_target,
          unsigned query_type,
          bool use_zero_copy,
-         bool is_overlay_candidate);
+         bool is_overlay_candidate,
+         bool y_invert);
   ~Buffer();
+
+  const gfx::GpuMemoryBuffer* gfx_buffer() const {
+    return gpu_memory_buffer_.get();
+  }
 
   // Set the callback to run when the buffer is no longer used by the
   // compositor. The client is free to re-use or destroy this buffer and
@@ -48,14 +44,16 @@ class Buffer : public base::SupportsWeakPtr<Buffer> {
     release_callback_ = release_callback;
   }
 
+  // Returns if this buffer's contents are vertically inverted.
+  bool y_invert() const { return y_invert_; }
+
   // This function can be used to acquire a texture mailbox for the contents of
   // buffer. Returns a release callback on success. The release callback should
   // be called before a new texture mailbox can be acquired unless
   // |non_client_usage| is true.
-  bool ProduceTransferableResource(
-      LayerTreeFrameSinkHolder* layer_tree_frame_sink_holder,
-      bool secure_output_only,
-      viz::TransferableResource* resource);
+  bool ProduceTransferableResource(FrameSinkResourceManager* resource_manager,
+                                   bool secure_output_only,
+                                   viz::TransferableResource* resource);
 
   // This should be called when the buffer is attached to a Surface.
   void OnAttach();
@@ -68,9 +66,6 @@ class Buffer : public base::SupportsWeakPtr<Buffer> {
 
   // Returns the format of the buffer.
   gfx::BufferFormat GetFormat() const;
-
-  // Returns a trace value representing the state of the buffer.
-  std::unique_ptr<base::trace_event::TracedValue> AsTracedValue() const;
 
   // Set the amount of time to wait for buffer release.
   void set_wait_for_release_delay_for_testing(
@@ -113,6 +108,9 @@ class Buffer : public base::SupportsWeakPtr<Buffer> {
 
   // True if this buffer is an overlay candidate.
   const bool is_overlay_candidate_;
+
+  // True if buffer content is vertically inverted.
+  const bool y_invert_;
 
   // This keeps track of how many Surfaces the buffer is attached to.
   unsigned attach_count_ = 0;

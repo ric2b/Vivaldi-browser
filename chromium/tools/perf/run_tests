@@ -22,7 +22,7 @@ from telemetry.testing import unittest_runner
 def main():
   project_config = chromium_config.ChromiumConfig(
       top_level_dir=path_util.GetPerfDir())
-  return unittest_runner.Run(project_config, disable_name="perf")
+  return unittest_runner.Run(project_config)
 
 if __name__ == '__main__':
   sys.exit(main())

@@ -10,11 +10,15 @@
 
 #include "base/macros.h"
 #include "base/memory/singleton.h"
+#include "chromecast/browser/extensions/api/automation_internal/automation_event_router_interface.h"
 #include "chromecast/common/extensions_api/automation_internal.h"
 #include "content/public/browser/ax_event_notification_details.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "extensions/common/extension_id.h"
+#include "extensions/common/extension_messages.h"
+#include "ui/accessibility/ax_event_bundle_sink.h"
+#include "ui/accessibility/ax_tree_id.h"
 
 namespace content {
 class BrowserContext;
@@ -31,7 +35,9 @@ namespace extensions {
 namespace cast {
 struct AutomationListener;
 
-class AutomationEventRouter : public content::NotificationObserver {
+class AutomationEventRouter : public ui::AXEventBundleSink,
+                              public AutomationEventRouterInterface,
+                              public content::NotificationObserver {
  public:
   static AutomationEventRouter* GetInstance();
 
@@ -41,7 +47,7 @@ class AutomationEventRouter : public content::NotificationObserver {
   // listener process dies.
   void RegisterListenerForOneTree(const ExtensionId& extension_id,
                                   int listener_process_id,
-                                  int source_ax_tree_id);
+                                  ui::AXTreeID source_ax_tree_id);
 
   // Indicates that the listener at |listener_process_id| wants to receive
   // automation events from all accessibility trees because it has Desktop
@@ -50,15 +56,21 @@ class AutomationEventRouter : public content::NotificationObserver {
                                              int listener_process_id);
 
   void DispatchAccessibilityEvents(
-      const ExtensionMsg_AccessibilityEventBundleParams& events);
+      const ExtensionMsg_AccessibilityEventBundleParams& events) override;
 
   void DispatchAccessibilityLocationChange(
-      const ExtensionMsg_AccessibilityLocationChangeParams& params);
+      const ExtensionMsg_AccessibilityLocationChangeParams& params) override;
 
   // Notify all automation extensions that an accessibility tree was
   // destroyed. If |browser_context| is null,
-  void DispatchTreeDestroyedEvent(int tree_id,
-                                  content::BrowserContext* browser_context);
+  void DispatchTreeDestroyedEvent(
+      ui::AXTreeID tree_id,
+      content::BrowserContext* browser_context) override;
+
+  // Notify the source extension of the action of an action result.
+  void DispatchActionResult(const ui::AXActionData& data,
+                            bool result,
+                            content::BrowserContext* active_profile) override;
 
  private:
   struct AutomationListener {
@@ -69,7 +81,7 @@ class AutomationEventRouter : public content::NotificationObserver {
     ExtensionId extension_id;
     int process_id;
     bool desktop;
-    std::set<int> tree_ids;
+    std::set<ui::AXTreeID> tree_ids;
   };
 
   AutomationEventRouter();
@@ -77,8 +89,14 @@ class AutomationEventRouter : public content::NotificationObserver {
 
   void Register(const ExtensionId& extension_id,
                 int listener_process_id,
-                int source_ax_tree_id,
+                ui::AXTreeID source_ax_tree_id,
                 bool desktop);
+
+  // ui::AXEventBundleSink:
+  void DispatchAccessibilityEvents(const ui::AXTreeID& tree_id,
+                                   std::vector<ui::AXTreeUpdate> updates,
+                                   const gfx::Point& mouse_location,
+                                   std::vector<ui::AXEvent> events) override;
 
   // content::NotificationObserver interface.
   void Observe(int type,

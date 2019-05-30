@@ -37,21 +37,22 @@ namespace blink {
 class ExceptionState;
 class Performance;
 
-typedef unsigned long long (
-    PerformanceTiming::*NavigationTimingFunction)() const;
+typedef uint64_t (PerformanceTiming::*NavigationTimingFunction)() const;
 using PerformanceEntryMap = HeapHashMap<AtomicString, PerformanceEntryVector>;
 
 class UserTiming final : public GarbageCollected<UserTiming> {
  public:
   static UserTiming* Create(Performance& performance) {
-    return new UserTiming(performance);
+    return MakeGarbageCollected<UserTiming>(performance);
   }
 
-  PerformanceMark* Mark(ScriptState*,
+  explicit UserTiming(Performance&);
+
+  PerformanceMark* Mark(ScriptState* script_state,
                         const AtomicString& mark_name,
-                        const DOMHighResTimeStamp& start_time,
-                        const ScriptValue& detail,
-                        ExceptionState&);
+                        PerformanceMarkOptions* mark_options,
+                        ExceptionState& exception_state);
+
   void ClearMarks(const AtomicString& mark_name);
 
   PerformanceMeasure* Measure(ScriptState*,
@@ -71,11 +72,15 @@ class UserTiming final : public GarbageCollected<UserTiming> {
   void Trace(blink::Visitor*);
 
  private:
-  explicit UserTiming(Performance&);
-
+  PerformanceMark* MarkInternal(ScriptState*,
+                                const AtomicString& mark_name,
+                                const DOMHighResTimeStamp& start_time,
+                                const ScriptValue& detail,
+                                ExceptionState&);
   double FindExistingMarkStartTime(const AtomicString& mark_name,
                                    ExceptionState&);
-  double FindStartMarkOrTime(const StringOrDouble& start, ExceptionState&);
+  double GetTimeOrFindMarkTime(const StringOrDouble& mark_or_time,
+                               ExceptionState&);
 
   Member<Performance> performance_;
   PerformanceEntryMap marks_map_;

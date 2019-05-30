@@ -80,8 +80,12 @@ function updateDetails(details, addr) {
     details.displayItems.splice(0, 1, shippingOption);
     details.shippingOptions = [shippingOption];
   } else {
-    delete details.shippingOptions;
+    details.shippingOptions = [];
     details.error = 'We do not ship to this address';
+    details.shippingAddressErrors = {
+      addressLine: 'ADDRESS LINE ERROR',
+      city: 'CITY ERROR',
+    };
   }
   return details;
 }

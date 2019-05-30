@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/bind.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
@@ -24,6 +25,7 @@
 #include "net/socket/client_socket_pool_manager.h"
 #include "net/ssl/ssl_config_service.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/network/public/mojom/tcp_socket.mojom.h"
 
 namespace gcm {
 
@@ -52,7 +54,8 @@ ConnectionFactoryImpl::ConnectionFactoryImpl(
     const std::vector<GURL>& mcs_endpoints,
     const net::BackoffEntry::Policy& backoff_policy,
     GetProxyResolvingFactoryCallback get_socket_factory_callback,
-    GCMStatsRecorder* recorder)
+    GCMStatsRecorder* recorder,
+    network::NetworkConnectionTracker* network_connection_tracker)
     : mcs_endpoints_(mcs_endpoints),
       next_endpoint_(0),
       last_successful_endpoint_(0),
@@ -63,6 +66,7 @@ ConnectionFactoryImpl::ConnectionFactoryImpl(
       waiting_for_network_online_(false),
       handshake_in_progress_(false),
       recorder_(recorder),
+      network_connection_tracker_(network_connection_tracker),
       listener_(NULL),
       weak_ptr_factory_(this) {
   DCHECK_GE(mcs_endpoints_.size(), 1U);
@@ -70,7 +74,7 @@ ConnectionFactoryImpl::ConnectionFactoryImpl(
 
 ConnectionFactoryImpl::~ConnectionFactoryImpl() {
   CloseSocket();
-  net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
+  network_connection_tracker_->RemoveNetworkConnectionObserver(this);
 }
 
 void ConnectionFactoryImpl::Initialize(
@@ -87,8 +91,14 @@ void ConnectionFactoryImpl::Initialize(
   read_callback_ = read_callback;
   write_callback_ = write_callback;
 
-  net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
-  waiting_for_network_online_ = net::NetworkChangeNotifier::IsOffline();
+  network_connection_tracker_->AddNetworkConnectionObserver(this);
+  auto type = network::mojom::ConnectionType::CONNECTION_UNKNOWN;
+  network_connection_tracker_->GetConnectionType(
+      &type, base::BindOnce(&ConnectionFactoryImpl::OnConnectionChanged,
+                            weak_ptr_factory_.GetWeakPtr()));
+  waiting_for_network_online_ =
+      type == network::mojom::ConnectionType::CONNECTION_NONE ||
+      type == network::mojom::ConnectionType::CONNECTION_UNKNOWN;
 }
 
 ConnectionHandler* ConnectionFactoryImpl::GetConnectionHandler() const {
@@ -134,8 +144,8 @@ void ConnectionFactoryImpl::ConnectWithBackoff() {
         backoff_entry_->GetTimeUntilRelease().InMilliseconds());
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&ConnectionFactoryImpl::ConnectWithBackoff,
-                   weak_ptr_factory_.GetWeakPtr()),
+        base::BindOnce(&ConnectionFactoryImpl::ConnectWithBackoff,
+                       weak_ptr_factory_.GetWeakPtr()),
         backoff_entry_->GetTimeUntilRelease());
     return;
   }
@@ -260,9 +270,9 @@ base::TimeTicks ConnectionFactoryImpl::NextRetryAttempt() const {
   return backoff_entry_->GetReleaseTime();
 }
 
-void ConnectionFactoryImpl::OnNetworkChanged(
-    net::NetworkChangeNotifier::ConnectionType type) {
-  if (type == net::NetworkChangeNotifier::CONNECTION_NONE) {
+void ConnectionFactoryImpl::OnConnectionChanged(
+    network::mojom::ConnectionType type) {
+  if (type == network::mojom::ConnectionType::CONNECTION_NONE) {
     DVLOG(1) << "Network lost, resettion connection.";
     waiting_for_network_online_ = true;
 
@@ -340,10 +350,13 @@ void ConnectionFactoryImpl::StartConnection() {
           "but does not have any effect on other Google Cloud messages."
         )");
 
+  network::mojom::ProxyResolvingSocketOptionsPtr options =
+      network::mojom::ProxyResolvingSocketOptions::New();
+  options->use_tls = true;
   socket_factory_->CreateProxyResolvingSocket(
-      current_endpoint, true /* use_tls */,
+      current_endpoint, std::move(options),
       net::MutableNetworkTrafficAnnotationTag(traffic_annotation),
-      mojo::MakeRequest(&socket_),
+      mojo::MakeRequest(&socket_), nullptr /* observer */,
       base::BindOnce(&ConnectionFactoryImpl::OnConnectDone,
                      base::Unretained(this)));
 }
@@ -418,7 +431,7 @@ void ConnectionFactoryImpl::OnConnectDone(
   }
 
   UMA_HISTOGRAM_BOOLEAN("GCM.ConnectionSuccessRate", true);
-  UMA_HISTOGRAM_COUNTS("GCM.ConnectionEndpoint", next_endpoint_);
+  UMA_HISTOGRAM_COUNTS_1M("GCM.ConnectionEndpoint", next_endpoint_);
   recorder_->RecordConnectionSuccess();
 
   // Reset the endpoint back to the default.

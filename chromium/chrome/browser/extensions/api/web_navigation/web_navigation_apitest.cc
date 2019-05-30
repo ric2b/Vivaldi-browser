@@ -5,6 +5,7 @@
 #include <list>
 #include <set>
 
+#include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -218,8 +219,8 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, Api) {
   ASSERT_TRUE(RunExtensionTest("webnavigation/api")) << message_;
 }
 
-// Flaky on Windows. See http://crbug.com/874782
-#if defined(OS_WIN)
+// Flaky on Windows Linux and  Chrome OS. See http://crbug.com/874782.
+#if defined(OS_WIN) || defined(OS_CHROMEOS) || defined(OS_LINUX)
 #define MAYBE_GetFrame DISABLED_GetFrame
 #else
 #define MAYBE_GetFrame GetFrame
@@ -360,7 +361,7 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, MAYBE_UserAction) {
   const extensions::Extension* extension =
       service->GetExtensionById(last_loaded_extension_id(), false);
   GURL url = extension->GetResourceURL(
-      "a.html?" + base::IntToString(embedded_test_server()->port()));
+      "a.html?" + base::NumberToString(embedded_test_server()->port()));
 
   // Register an observer for the navigation in the subframe, so the test
   // can wait until it is fully complete. Otherwise the context menu
@@ -561,6 +562,12 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, CrossProcessIframe) {
   content::IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webnavigation/crossProcessIframe")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, PendingDeletion) {
+  content::IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  ASSERT_TRUE(RunExtensionTest("webnavigation/pendingDeletion")) << message_;
 }
 
 // TODO(jam): http://crbug.com/350550

@@ -85,6 +85,26 @@
         },
         {
             "type": "setting",
+            "category": "DevTools",
+            "title": "Emulate a focused page",
+            "settingName": "emulatePageFocus",
+            "settingType": "boolean",
+            "storageType": "session",
+            "order": 2,
+            "defaultValue": false,
+            "options": [
+                {
+                    "value": true,
+                    "title": "Emulate a focused page"
+                },
+                {
+                    "value": false,
+                    "title": "Do not emulate a focused page"
+                }
+            ]
+        },
+        {
+            "type": "setting",
             "category": "Appearance",
             "title": "Don't show Chrome Data Saver warning",
             "settingName": "disableDataSaverInfobar",
@@ -107,13 +127,6 @@
             "persistence": "closeable",
             "order": 50,
             "className": "InspectorMain.RenderingOptionsView"
-        },
-        {
-            "type": "action",
-            "category": "Mobile",
-            "actionId": "components.request-app-banner",
-            "className": "InspectorMain.RequestAppBannerActionDelegate",
-            "title": "Add to homescreen"
         }
     ],
     "dependencies": [
@@ -122,7 +135,6 @@
     ],
     "scripts": [
         "RenderingOptions.js",
-        "RequestAppBannerActionDelegate.js",
         "InspectorMain.js"
     ],
     "resources": [

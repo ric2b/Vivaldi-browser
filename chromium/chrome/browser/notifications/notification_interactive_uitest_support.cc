@@ -5,6 +5,7 @@
 #include "chrome/browser/notifications/notification_interactive_uitest_support.h"
 
 #include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/notifications/notification_permission_context.h"
 #include "chrome/browser/permissions/permission_request_manager.h"
@@ -117,7 +118,15 @@ bool MessageCenterChangeObserver::Wait() {
   return impl_->Wait();
 }
 
-// -----------------------------------------------------------------------------
+void TestMessageCenterObserver::OnNotificationDisplayed(
+    const std::string& notification_id,
+    const message_center::DisplaySource source) {
+  last_displayed_id_ = notification_id;
+}
+
+const std::string& TestMessageCenterObserver::last_displayed_id() const {
+  return last_displayed_id_;
+}
 
 void NotificationsTest::SetUpDefaultCommandLine(
     base::CommandLine* command_line) {

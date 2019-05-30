@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
+#include "third_party/blink/renderer/core/editing/ephemeral_range.h"
 #include "third_party/blink/renderer/core/html/forms/html_opt_group_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_option_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
@@ -21,9 +22,9 @@
 #include "third_party/blink/renderer/core/layout/layout_table_section.h"
 #include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/line/inline_text_box.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_text_fragment.h"
-#include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
-#include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment_traversal.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node_data.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_offset_mapping.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_names.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -34,7 +35,7 @@ namespace {
 
 // The implementation of Element#innerText algorithm[1].
 // [1]
-// https://html.spec.whatwg.org/multipage/dom.html#the-innertext-idl-attribute
+// https://html.spec.whatwg.org/C/#the-innertext-idl-attribute
 class ElementInnerTextCollector final {
  public:
   ElementInnerTextCollector() = default;
@@ -47,69 +48,38 @@ class ElementInnerTextCollector final {
    public:
     Result() = default;
 
-    void EmitBeginBlock();
     void EmitChar16(UChar code_point);
-    void EmitCollapsibleSpace();
-    void EmitEndBlock();
     void EmitNewline();
     void EmitRequiredLineBreak(int count);
     void EmitTab();
     void EmitText(const StringView& text);
     String Finish();
 
-    bool HasCollapsibleSpace() const { return has_collapsible_space_; }
-
    private:
-    void FlushCollapsibleSpace();
     void FlushRequiredLineBreak();
 
     StringBuilder builder_;
     int required_line_break_count_ = 0;
-    bool at_start_of_block_ = false;
-    bool has_collapsible_space_ = false;
 
     DISALLOW_COPY_AND_ASSIGN(Result);
   };
 
-  // Minimal CSS text box representation for collecting character.
-  struct TextBox {
-    StringView text;
-    // An offset in |LayoutText::GetText()| or |NGInlineItemsData.text_content|.
-    unsigned start = 0;
-
-    TextBox(StringView passed_text, unsigned passed_start)
-        : text(passed_text), start(passed_start) {
-      DCHECK_GT(text.length(), 0u);
-    }
-  };
-
-  static bool EndsWithWhiteSpace(const InlineTextBox& text_box);
-  static bool EndsWithWhiteSpace(const LayoutText& layout_text);
-  static bool EndsWithWhiteSpace(const NGPhysicalTextFragment& fragment);
   static bool HasDisplayContentsStyle(const Node& node);
-  static bool IsAfterWhiteSpace(const InlineTextBox& text_box);
-  static bool IsAfterWhiteSpace(const LayoutText& layout_text);
-  static bool IsAfterWhiteSpace(const NGPhysicalTextFragment& fragment);
   static bool IsBeingRendered(const Node& node);
-  static bool IsCollapsibleSpace(UChar code_point);
   // Returns true if used value of "display" is block-level.
   static bool IsDisplayBlockLevel(const Node&);
   static LayoutObject* PreviousLeafOf(const LayoutObject& layout_object);
   static bool ShouldEmitNewlineForTableRow(const LayoutTableRow& table_row);
-  static bool StartsWithWhiteSpace(const LayoutText& layout_text);
 
+  const NGOffsetMapping* GetOffsetMapping(const LayoutText& layout_text);
   void ProcessChildren(const Node& node);
   void ProcessChildrenWithRequiredLineBreaks(const Node& node,
                                              int required_line_break_count);
-  void ProcessLayoutText(const LayoutText& layout_text);
+  void ProcessLayoutText(const LayoutText& layout_text, const Text& text_node);
   void ProcessLayoutTextEmpty(const LayoutText& layout_text);
-  void ProcessLayoutTextForNG(const NGPaintFragment::FragmentRange& fragments);
   void ProcessNode(const Node& node);
   void ProcessOptionElement(const HTMLOptionElement& element);
   void ProcessSelectElement(const HTMLSelectElement& element);
-  void ProcessText(StringView text, EWhiteSpace white_space);
-  void ProcessTextBoxes(const LayoutText& layout_text,
-                        const Vector<TextBox>& text_boxes);
   void ProcessTextNode(const Text& node);
 
   // Result character buffer.
@@ -133,34 +103,22 @@ String ElementInnerTextCollector::RunOn(const Element& element) {
     return element.textContent(convert_brs_to_newlines);
   }
 
-  // 2. Let results be the list resulting in running the inner text collection
-  // steps with this element. Each item in results will either be a JavaScript
-  // string or a positive integer (a required line break count).
-  ProcessNode(element);
+  // 2. Let results be a new empty list.
+  // 3. For each child node node of this element:
+  //   1. Let current be the list resulting in running the inner text collection
+  //      steps with node. Each item in results will either be a JavaScript
+  //      string or a positive integer (a required line break count).
+  //   2. For each item item in current, append item to results.
+  // Note: Handles <select> and <option> here since they are implemented as
+  // UA shadow DOM, e.g. Text nodes in <option> don't have layout object.
+  // See also: https://github.com/whatwg/html/issues/3797
+  if (IsHTMLSelectElement(element))
+    ProcessSelectElement(ToHTMLSelectElement(element));
+  else if (IsHTMLOptionElement(element))
+    ProcessOptionElement(ToHTMLOptionElement(element));
+  else
+    ProcessChildren(element);
   return result_.Finish();
-}
-
-// static
-bool ElementInnerTextCollector::EndsWithWhiteSpace(
-    const InlineTextBox& text_box) {
-  const unsigned length = text_box.Len();
-  if (length == 0)
-    return false;
-  const String text = text_box.GetLineLayoutItem().GetText();
-  return IsCollapsibleSpace(text[text_box.Start() + length - 1]);
-}
-
-// static
-bool ElementInnerTextCollector::EndsWithWhiteSpace(
-    const LayoutText& layout_text) {
-  const unsigned length = layout_text.TextLength();
-  return length > 0 && layout_text.ContainsOnlyWhitespace(length - 1, 1);
-}
-
-// static
-bool ElementInnerTextCollector::EndsWithWhiteSpace(
-    const NGPhysicalTextFragment& fragment) {
-  return IsCollapsibleSpace(fragment.Text()[fragment.Length() - 1]);
 }
 
 // static
@@ -173,78 +131,31 @@ bool ElementInnerTextCollector::HasDisplayContentsStyle(const Node& node) {
 // Note: Just being off-screen does not mean the element is not being rendered.
 // The presence of the "hidden" attribute normally means the element is not
 // being rendered, though this might be overridden by the style sheets.
-// From https://html.spec.whatwg.org/multipage/rendering.html#being-rendered
+// From https://html.spec.whatwg.org/C/#being-rendered
 // static
 bool ElementInnerTextCollector::IsBeingRendered(const Node& node) {
   return node.GetLayoutObject();
 }
 
 // static
-bool ElementInnerTextCollector::IsAfterWhiteSpace(
-    const InlineTextBox& text_box) {
-  const unsigned start = text_box.Start();
-  if (start == 0)
-    return false;
-  const String text = text_box.GetLineLayoutItem().GetText();
-  return IsCollapsibleSpace(text[start - 1]);
-}
-
-// static
-bool ElementInnerTextCollector::IsAfterWhiteSpace(
-    const LayoutText& layout_text) {
-  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    const auto fragments = NGPaintFragment::InlineFragmentsFor(&layout_text);
-    if (!fragments.IsEmpty() &&
-        fragments.IsInLayoutNGInlineFormattingContext()) {
-      NGPaintFragmentTraversalContext previous =
-          NGPaintFragmentTraversal::PreviousInlineLeafOfIgnoringLineBreak(
-              NGPaintFragmentTraversalContext::Create(&fragments.front()));
-      if (previous.IsNull())
-        return false;
-      const NGPhysicalFragment& previous_fragment =
-          previous.GetFragment()->PhysicalFragment();
-      if (!previous_fragment.IsText())
-        return false;
-      return EndsWithWhiteSpace(ToNGPhysicalTextFragment(previous_fragment));
-    }
-  }
-  if (InlineTextBox* text_box = layout_text.FirstTextBox()) {
-    const InlineBox* previous = text_box->PrevLeafChild();
-    if (!previous || !previous->IsInlineTextBox())
-      return false;
-    return EndsWithWhiteSpace(ToInlineTextBox(*previous));
-  }
-  const LayoutObject* previous_leaf = PreviousLeafOf(layout_text);
-  if (!previous_leaf || !previous_leaf->IsText())
-    return false;
-  const LayoutText& previous_text = ToLayoutText(*previous_leaf);
-  const unsigned length = previous_text.TextLength();
-  if (length == 0)
-    return false;
-  return previous_text.ContainsOnlyWhitespace(length - 1, 1);
-}
-
-bool ElementInnerTextCollector::IsAfterWhiteSpace(
-    const NGPhysicalTextFragment& text_box) {
-  const unsigned start = text_box.StartOffset();
-  if (start == 0)
-    return false;
-  const String text = text_box.TextContent();
-  return IsCollapsibleSpace(text[start - 1]);
-}
-
-// See https://drafts.csswg.org/css-text-3/#white-space-phase-2
-bool ElementInnerTextCollector::IsCollapsibleSpace(UChar code_point) {
-  return code_point == kSpaceCharacter || code_point == kNewlineCharacter ||
-         code_point == kTabulationCharacter ||
-         code_point == kCarriageReturnCharacter;
-}
-
-// static
 bool ElementInnerTextCollector::IsDisplayBlockLevel(const Node& node) {
   const LayoutObject* const layout_object = node.GetLayoutObject();
-  if (!layout_object || !layout_object->IsLayoutBlock())
+  if (!layout_object)
     return false;
+  if (!layout_object->IsLayoutBlock()) {
+    if (layout_object->IsTableSection()) {
+      // Note: |LayoutTableSeleciton::IsInline()| returns false, but it is not
+      // block-level.
+      return false;
+    }
+    // Note: Block-level replaced elements, e.g. <img style=display:block>,
+    // reach here. Unlike |LayoutBlockFlow::AddChild()|, innerText considers
+    // floats and absolutely-positioned elements as block-level node.
+    return !layout_object->IsInline();
+  }
+  // TODO(crbug.com/567964): Due by the issue, |IsAtomicInlineLevel()| is always
+  // true for replaced elements event if it has display:block, once it is fixed
+  // we should check at first.
   if (layout_object->IsAtomicInlineLevel())
     return false;
   if (layout_object->IsRubyText()) {
@@ -295,11 +206,15 @@ bool ElementInnerTextCollector::ShouldEmitNewlineForTableRow(
   return false;
 }
 
-// static
-bool ElementInnerTextCollector::StartsWithWhiteSpace(
+const NGOffsetMapping* ElementInnerTextCollector::GetOffsetMapping(
     const LayoutText& layout_text) {
-  const unsigned length = layout_text.TextLength();
-  return length > 0 && layout_text.ContainsOnlyWhitespace(0, 1);
+  // TODO(editing-dev): We should handle "text-transform" in "::first-line".
+  // In legacy layout, |InlineTextBox| holds original text and text box
+  // paint does text transform.
+  LayoutBlockFlow* const block_flow =
+      NGOffsetMapping::GetInlineFormattingContextOf(layout_text);
+  DCHECK(block_flow) << layout_text;
+  return NGInlineNode::GetOffsetMapping(block_flow);
 }
 
 void ElementInnerTextCollector::ProcessChildren(const Node& container) {
@@ -310,17 +225,15 @@ void ElementInnerTextCollector::ProcessChildren(const Node& container) {
 void ElementInnerTextCollector::ProcessChildrenWithRequiredLineBreaks(
     const Node& node,
     int required_line_break_count) {
-  DCHECK_GE(required_line_break_count, 0);
+  DCHECK_GE(required_line_break_count, 1);
   DCHECK_LE(required_line_break_count, 2);
-  result_.EmitBeginBlock();
   result_.EmitRequiredLineBreak(required_line_break_count);
   ProcessChildren(node);
   result_.EmitRequiredLineBreak(required_line_break_count);
-  result_.EmitEndBlock();
 }
 
-void ElementInnerTextCollector::ProcessLayoutText(
-    const LayoutText& layout_text) {
+void ElementInnerTextCollector::ProcessLayoutText(const LayoutText& layout_text,
+                                                  const Text& text_node) {
   if (layout_text.TextLength() == 0)
     return;
   if (layout_text.Style()->Visibility() != EVisibility::kVisible) {
@@ -328,94 +241,14 @@ void ElementInnerTextCollector::ProcessLayoutText(
     // we should get rid of this if-statement. http://crbug.com/866744
     return;
   }
-  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    const auto fragments = NGPaintFragment::InlineFragmentsFor(&layout_text);
-    if (!fragments.IsEmpty() &&
-        fragments.IsInLayoutNGInlineFormattingContext()) {
-      ProcessLayoutTextForNG(fragments);
-      return;
-    }
-  }
 
-  if (!layout_text.FirstTextBox()) {
-    if (!layout_text.ContainsOnlyWhitespace(0, layout_text.TextLength()))
-      return;
-    if (IsAfterWhiteSpace(layout_text))
-      return;
-    // <div style="width:0">abc<span> <span>def</span></div> reaches here for
-    // a space between SPAN.
-    result_.EmitCollapsibleSpace();
-    return;
+  const NGOffsetMapping* const mapping = GetOffsetMapping(layout_text);
+  const NGMappingUnitRange range = mapping->GetMappingUnitsForNode(text_node);
+  for (const NGOffsetMappingUnit& unit : range) {
+    result_.EmitText(
+        StringView(mapping->GetText(), unit.TextContentStart(),
+                   unit.TextContentEnd() - unit.TextContentStart()));
   }
-
-  // TODO(editing-dev): We should handle "text-transform" in "::first-line".
-  // In legacy layout, |InlineTextBox| holds original text and text box
-  // paint does text transform.
-  const String text = layout_text.GetText();
-  const bool collapse_white_space = layout_text.Style()->CollapseWhiteSpace();
-  bool may_have_leading_space = collapse_white_space &&
-                                StartsWithWhiteSpace(layout_text) &&
-                                !IsAfterWhiteSpace(layout_text);
-  Vector<TextBox> text_boxes;
-  for (InlineTextBox* text_box : layout_text.TextBoxes()) {
-    const unsigned start =
-        may_have_leading_space && IsAfterWhiteSpace(*text_box)
-            ? text_box->Start() - 1
-            : text_box->Start();
-    const unsigned end = text_box->Start() + text_box->Len();
-    may_have_leading_space =
-        collapse_white_space && !IsCollapsibleSpace(text[end - 1]);
-    text_boxes.emplace_back(StringView(text, start, end - start), start);
-  }
-  ProcessTextBoxes(layout_text, text_boxes);
-  if (!collapse_white_space || !EndsWithWhiteSpace(layout_text))
-    return;
-  result_.EmitCollapsibleSpace();
-}
-
-void ElementInnerTextCollector::ProcessLayoutTextForNG(
-    const NGPaintFragment::FragmentRange& paint_fragments) {
-  DCHECK(!paint_fragments.IsEmpty());
-  const LayoutText& layout_text =
-      ToLayoutText(*paint_fragments.front().GetLayoutObject());
-  const bool collapse_white_space = layout_text.Style()->CollapseWhiteSpace();
-  bool may_have_leading_space = collapse_white_space &&
-                                StartsWithWhiteSpace(layout_text) &&
-                                !IsAfterWhiteSpace(layout_text);
-  // TODO(editing-dev): We should include overflow text to result of CSS
-  // "text-overflow". See http://crbug.com/873957
-  Vector<TextBox> text_boxes;
-  const StringImpl* last_text_content = nullptr;
-  for (const NGPaintFragment* paint_fragment : paint_fragments) {
-    const NGPhysicalTextFragment& text_fragment =
-        ToNGPhysicalTextFragment(paint_fragment->PhysicalFragment());
-    if (text_fragment.IsGeneratedText())
-      continue;
-    // Symbol marker should be appeared in pseudo-element only.
-    DCHECK_NE(text_fragment.TextType(), NGPhysicalTextFragment::kSymbolMarker);
-    if (last_text_content != text_fragment.TextContent().Impl()) {
-      if (!text_boxes.IsEmpty()) {
-        ProcessTextBoxes(layout_text, text_boxes);
-        text_boxes.clear();
-      }
-      last_text_content = text_fragment.TextContent().Impl();
-    }
-    const unsigned start =
-        may_have_leading_space && IsAfterWhiteSpace(text_fragment)
-            ? text_fragment.StartOffset() - 1
-            : text_fragment.StartOffset();
-    const unsigned end = text_fragment.EndOffset();
-    may_have_leading_space =
-        collapse_white_space &&
-        !IsCollapsibleSpace(text_fragment.TextContent()[end - 1]);
-    text_boxes.emplace_back(
-        StringView(text_fragment.TextContent(), start, end - start), start);
-  }
-  if (!text_boxes.IsEmpty())
-    ProcessTextBoxes(layout_text, text_boxes);
-  if (!collapse_white_space || !EndsWithWhiteSpace(layout_text))
-    return;
-  result_.EmitCollapsibleSpace();
 }
 
 // The "inner text collection steps".
@@ -472,8 +305,7 @@ void ElementInnerTextCollector::ProcessNode(const Node& node) {
   // character to items.
   const LayoutObject& layout_object = *node.GetLayoutObject();
   if (style->Display() == EDisplay::kTableCell) {
-    ProcessChildrenWithRequiredLineBreaks(node, 0);
-    result_.EmitEndBlock();
+    ProcessChildren(node);
     if (layout_object.IsTableCell() &&
         ToLayoutTableCell(layout_object).NextCell())
       result_.EmitTab();
@@ -485,7 +317,7 @@ void ElementInnerTextCollector::ProcessNode(const Node& node) {
   // append a string containing a single U+000A LINE FEED (LF) character to
   // items.
   if (style->Display() == EDisplay::kTableRow) {
-    ProcessChildrenWithRequiredLineBreaks(node, 0);
+    ProcessChildren(node);
     if (layout_object.IsTableRow() &&
         ShouldEmitNewlineForTableRow(ToLayoutTableRow(layout_object)))
       result_.EmitNewline();
@@ -507,8 +339,6 @@ void ElementInnerTextCollector::ProcessNode(const Node& node) {
   if (IsDisplayBlockLevel(node))
     return ProcessChildrenWithRequiredLineBreaks(node, 1);
 
-  if (layout_object.IsLayoutBlock())
-    return ProcessChildrenWithRequiredLineBreaks(node, 0);
   ProcessChildren(node);
 }
 
@@ -539,83 +369,31 @@ void ElementInnerTextCollector::ProcessSelectElement(
   }
 }
 
-void ElementInnerTextCollector::ProcessTextBoxes(
-    const LayoutText& layout_text,
-    const Vector<TextBox>& passed_text_boxes) {
-  DCHECK(!passed_text_boxes.IsEmpty());
-  Vector<TextBox> text_boxes = passed_text_boxes;
-  // TODO(editing-dev): We may want to check |ContainsReversedText()| in
-  // |LayoutText|. See http://crbug.com/873949
-  std::sort(text_boxes.begin(), text_boxes.end(),
-            [](const TextBox& text_box1, const TextBox& text_box2) {
-              return text_box1.start < text_box2.start;
-            });
-  const EWhiteSpace white_space = layout_text.Style()->WhiteSpace();
-  for (const TextBox& text_box : text_boxes)
-    ProcessText(text_box.text, white_space);
-}
-
-void ElementInnerTextCollector::ProcessText(StringView text,
-                                            EWhiteSpace white_space) {
-  if (!ComputedStyle::CollapseWhiteSpace(white_space))
-    return result_.EmitText(text);
-  for (unsigned index = 0; index < text.length(); ++index) {
-    if (white_space == EWhiteSpace::kPreLine &&
-        text[index] == kNewlineCharacter) {
-      result_.EmitNewline();
-      continue;
-    }
-    if (IsCollapsibleSpace(text[index])) {
-      result_.EmitCollapsibleSpace();
-      continue;
-    }
-    result_.EmitChar16(text[index]);
-  }
-}
-
 void ElementInnerTextCollector::ProcessTextNode(const Text& node) {
   if (!node.GetLayoutObject())
     return;
   const LayoutText& layout_text = *node.GetLayoutObject();
-  if (LayoutText* first_letter_part = layout_text.GetFirstLetterPart())
-    ProcessLayoutText(*first_letter_part);
-  ProcessLayoutText(layout_text);
+  if (LayoutText* first_letter_part = layout_text.GetFirstLetterPart()) {
+    if (layout_text.TextLength() == 0 ||
+        NGOffsetMapping::GetInlineFormattingContextOf(layout_text) !=
+            NGOffsetMapping::GetInlineFormattingContextOf(*first_letter_part)) {
+      // "::first-letter" with "float" reach here.
+      ProcessLayoutText(*first_letter_part, node);
+    }
+  }
+  ProcessLayoutText(layout_text, node);
 }
 
 // ----
 
-void ElementInnerTextCollector::Result::EmitBeginBlock() {
-  if (has_collapsible_space_)
-    return;
-  at_start_of_block_ = true;
-}
-
 void ElementInnerTextCollector::Result::EmitChar16(UChar code_point) {
-  if (required_line_break_count_ > 0)
-    FlushRequiredLineBreak();
-  else
-    FlushCollapsibleSpace();
-  DCHECK_EQ(required_line_break_count_, 0);
-  DCHECK(!has_collapsible_space_);
-  builder_.Append(code_point);
-  at_start_of_block_ = false;
-}
-
-void ElementInnerTextCollector::Result::EmitCollapsibleSpace() {
-  if (at_start_of_block_)
-    return;
   FlushRequiredLineBreak();
-  has_collapsible_space_ = true;
-}
-
-void ElementInnerTextCollector::Result::EmitEndBlock() {
-  // Discard tailing collapsible spaces from last child of the block.
-  has_collapsible_space_ = false;
+  DCHECK_EQ(required_line_break_count_, 0);
+  builder_.Append(code_point);
 }
 
 void ElementInnerTextCollector::Result::EmitNewline() {
   FlushRequiredLineBreak();
-  has_collapsible_space_ = false;
   builder_.Append(kNewlineCharacter);
 }
 
@@ -634,41 +412,23 @@ void ElementInnerTextCollector::Result::EmitRequiredLineBreak(int count) {
   // items with a string consisting of as many U+000A LINE FEED (LF) characters
   // as the maximum of the values in the required line break count items.
   required_line_break_count_ = std::max(required_line_break_count_, count);
-  at_start_of_block_ = true;
 }
 
 void ElementInnerTextCollector::Result::EmitTab() {
-  if (required_line_break_count_ > 0)
-    FlushRequiredLineBreak();
-  has_collapsible_space_ = false;
-  at_start_of_block_ = false;
+  FlushRequiredLineBreak();
   builder_.Append(kTabulationCharacter);
 }
 
 void ElementInnerTextCollector::Result::EmitText(const StringView& text) {
   if (text.IsEmpty())
     return;
-  at_start_of_block_ = false;
-  if (required_line_break_count_ > 0)
-    FlushRequiredLineBreak();
-  else
-    FlushCollapsibleSpace();
+  FlushRequiredLineBreak();
   DCHECK_EQ(required_line_break_count_, 0);
-  DCHECK(!has_collapsible_space_);
   builder_.Append(text);
 }
 
 String ElementInnerTextCollector::Result::Finish() {
-  if (required_line_break_count_ == 0)
-    FlushCollapsibleSpace();
   return builder_.ToString();
-}
-
-void ElementInnerTextCollector::Result::FlushCollapsibleSpace() {
-  if (!has_collapsible_space_)
-    return;
-  has_collapsible_space_ = false;
-  builder_.Append(kSpaceCharacter);
 }
 
 void ElementInnerTextCollector::Result::FlushRequiredLineBreak() {
@@ -676,7 +436,6 @@ void ElementInnerTextCollector::Result::FlushRequiredLineBreak() {
   DCHECK_LE(required_line_break_count_, 2);
   builder_.Append("\n\n", required_line_break_count_);
   required_line_break_count_ = 0;
-  has_collapsible_space_ = false;
 }
 
 }  // anonymous namespace

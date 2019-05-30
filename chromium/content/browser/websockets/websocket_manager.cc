@@ -8,17 +8,20 @@
 #include <string>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/task/post_task.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/ssl/ssl_error_handler.h"
 #include "content/browser/ssl/ssl_manager.h"
 #include "content/browser/websockets/websocket_handshake_request_info_impl.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -79,9 +82,11 @@ class WebSocketManager::Delegate final : public network::WebSocket::Delegate {
     OnLostConnectionToClient(impl);
   }
 
-  bool CanReadRawCookies() override {
-    return ChildProcessSecurityPolicyImpl::GetInstance()->CanReadRawCookies(
-        manager_->process_id_);
+  bool CanReadRawCookies(const GURL& url) override {
+    ChildProcessSecurityPolicyImpl* impl =
+        ChildProcessSecurityPolicyImpl::GetInstance();
+    return impl->CanReadRawCookies(manager_->process_id_) &&
+           impl->CanAccessDataForWebSocket(manager_->process_id_, url);
   }
 
   void OnCreateURLRequest(int child_id,
@@ -162,6 +167,7 @@ void WebSocketManager::CreateWebSocket(
     int frame_id,
     url::Origin origin,
     network::mojom::AuthenticationHandlerPtr auth_handler,
+    network::mojom::TrustedHeaderClientPtr header_client,
     network::mojom::WebSocketRequest request) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
 
@@ -173,11 +179,14 @@ void WebSocketManager::CreateWebSocket(
     network::mojom::NetworkContext* network_context =
         storage_partition->GetNetworkContext();
     network_context->CreateWebSocket(std::move(request), process_id, frame_id,
-                                     origin, std::move(auth_handler));
+                                     origin, std::move(auth_handler),
+                                     std::move(header_client));
     return;
   }
-  // |auth_handler| is provided only for the network service path.
+  // |auth_handler| and |header_client| are provided only for the network
+  // service path.
   DCHECK(!auth_handler);
+  DCHECK(!header_client);
 
   // Maintain a WebSocketManager per RenderProcessHost. While the instance of
   // WebSocketManager is allocated on the UI thread, it must only be used and
@@ -194,8 +203,8 @@ void WebSocketManager::CreateWebSocket(
     DCHECK(handle->manager());
   }
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
       base::BindOnce(&WebSocketManager::DoCreateWebSocket,
                      base::Unretained(handle->manager()), frame_id,
                      std::move(origin), std::move(request)));
@@ -210,8 +219,8 @@ WebSocketManager::WebSocketManager(int process_id,
     // This unretained pointer is safe because we destruct a WebSocketManager
     // only via WebSocketManager::Handle::RenderProcessHostDestroyed which
     // posts a deletion task to the IO thread.
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::IO},
         base::BindOnce(&WebSocketManager::ObserveURLRequestContextGetter,
                        base::Unretained(this)));
   }
@@ -281,7 +290,7 @@ std::unique_ptr<network::WebSocket> WebSocketManager::DoCreateWebSocketInternal(
     url::Origin origin,
     base::TimeDelta delay) {
   return std::make_unique<network::WebSocket>(
-      std::move(delegate), std::move(request), nullptr,
+      std::move(delegate), std::move(request), nullptr, nullptr,
       std::move(pending_connection_tracker), child_id, frame_id,
       std::move(origin), delay);
 }

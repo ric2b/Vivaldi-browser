@@ -18,19 +18,19 @@
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
-#include "content/public/common/media_stream_request.h"
 #include "content/renderer/media/stream/aec_dump_message_filter.h"
 #include "content/renderer/media/stream/media_stream_audio_processor_options.h"
 #include "content/renderer/media/webrtc/webrtc_audio_device_impl.h"
 #include "media/base/audio_converter.h"
-#include "third_party/webrtc/api/mediastreaminterface.h"
+#include "media/webrtc/audio_delay_stats_reporter.h"
+#include "third_party/blink/public/common/mediastream/media_stream_request.h"
+#include "third_party/webrtc/api/media_stream_interface.h"
 #include "third_party/webrtc/modules/audio_processing/include/audio_processing.h"
 #include "third_party/webrtc/rtc_base/task_queue.h"
 
 namespace media {
 class AudioBus;
 class AudioParameters;
-class EchoInformation;
 }  // namespace media
 
 namespace webrtc {
@@ -133,10 +133,6 @@ class CONTENT_EXPORT MediaStreamAudioProcessor
   void OnPlayoutDataSourceChanged() override;
   void OnRenderThreadChanged() override;
 
-  // webrtc::AudioProcessorInterface implementation.
-  // This method is called on the libjingle thread.
-  void GetStats(AudioProcessorStats* stats) override;
-
   // This method is called on the libjingle thread.
   AudioProcessorStatistics GetStats(bool has_remote_tracks) override;
 
@@ -163,6 +159,9 @@ class CONTENT_EXPORT MediaStreamAudioProcessor
   // Cached value for the render delay latency. This member is accessed by
   // both the capture audio thread and the render audio thread.
   base::subtle::Atomic32 render_delay_ms_;
+
+  // For reporting audio delay stats.
+  media::AudioDelayStatsReporter audio_delay_stats_reporter_;
 
   // Low-priority task queue for doing AEC dump recordings. It has to
   // out-live audio_processing_ and be created/destroyed from the same
@@ -191,9 +190,9 @@ class CONTENT_EXPORT MediaStreamAudioProcessor
   const scoped_refptr<base::SingleThreadTaskRunner> main_thread_runner_;
 
   // Used to DCHECK that some methods are called on the capture audio thread.
-  base::ThreadChecker capture_thread_checker_;
+  THREAD_CHECKER(capture_thread_checker_);
   // Used to DCHECK that some methods are called on the render audio thread.
-  base::ThreadChecker render_thread_checker_;
+  THREAD_CHECKER(render_thread_checker_);
 
   // Flag to enable stereo channel mirroring.
   bool audio_mirroring_;
@@ -214,10 +213,6 @@ class CONTENT_EXPORT MediaStreamAudioProcessor
   size_t unsupported_buffer_size_log_count_ = 0;
   size_t apm_playout_error_code_log_count_ = 0;
   size_t large_delay_log_count_ = 0;
-
-  // Object for logging UMA stats for echo information when the AEC is enabled.
-  // Accessed on the main render thread.
-  std::unique_ptr<media::EchoInformation> echo_information_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaStreamAudioProcessor);
 };

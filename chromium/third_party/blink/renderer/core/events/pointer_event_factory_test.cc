@@ -6,7 +6,7 @@
 
 #include <gtest/gtest.h>
 
-#include <climits>
+#include <limits>
 
 #include "base/time/time.h"
 #include "third_party/blink/public/platform/web_pointer_properties.h"
@@ -53,7 +53,8 @@ class PointerEventFactoryTest : public testing::Test {
       WebInputEvent::Type type = WebInputEvent::kPointerDown,
       WebPointerProperties::Button button =
           WebPointerProperties::Button::kNoButton,
-      size_t coalesced_event_count = 0) {
+      wtf_size_t coalesced_event_count = 0,
+      wtf_size_t predicted_event_count = 0) {
     WebPointerEvent web_pointer_event;
     web_pointer_event.pointer_type = pointer_type;
     web_pointer_event.id = raw_id;
@@ -63,12 +64,17 @@ class PointerEventFactoryTest : public testing::Test {
     web_pointer_event.force = 1.0;
     web_pointer_event.hovering = hovering;
     web_pointer_event.button = button;
+    web_pointer_event.SetPositionInScreen(100, 100);
     Vector<WebPointerEvent> coalesced_events;
-    for (size_t i = 0; i < coalesced_event_count; i++) {
+    for (wtf_size_t i = 0; i < coalesced_event_count; i++) {
       coalesced_events.push_back(web_pointer_event);
     }
+    Vector<WebPointerEvent> predicted_events;
+    for (wtf_size_t i = 0; i < predicted_event_count; i++) {
+      predicted_events.push_back(web_pointer_event);
+    }
     PointerEvent* pointer_event = pointer_event_factory_.Create(
-        web_pointer_event, coalesced_events, nullptr);
+        web_pointer_event, coalesced_events, predicted_events, nullptr);
     EXPECT_EQ(unique_id, pointer_event->pointerId());
     EXPECT_EQ(is_primary, pointer_event->isPrimary());
     EXPECT_EQ(WebInputEvent::GetStaticTimeStampForTests(),
@@ -76,16 +82,40 @@ class PointerEventFactoryTest : public testing::Test {
     const char* expected_pointer_type =
         PointerTypeNameForWebPointPointerType(pointer_type);
     EXPECT_EQ(expected_pointer_type, pointer_event->pointerType());
-    EXPECT_EQ(coalesced_event_count,
-              pointer_event->getCoalescedEvents().size());
-    for (size_t i = 0; i < coalesced_event_count; i++) {
-      EXPECT_EQ(unique_id, pointer_event->getCoalescedEvents()[i]->pointerId());
-      EXPECT_EQ(is_primary,
-                pointer_event->getCoalescedEvents()[i]->isPrimary());
-      EXPECT_EQ(expected_pointer_type, pointer_event->pointerType());
-      EXPECT_EQ(WebInputEvent::GetStaticTimeStampForTests(),
-                pointer_event->PlatformTimeStamp());
+    if (type == WebInputEvent::kPointerMove) {
+      EXPECT_EQ(coalesced_event_count,
+                pointer_event->getCoalescedEvents().size());
+      EXPECT_EQ(predicted_event_count,
+                pointer_event->getPredictedEvents().size());
+      for (wtf_size_t i = 0; i < coalesced_event_count; i++) {
+        EXPECT_EQ(unique_id,
+                  pointer_event->getCoalescedEvents()[i]->pointerId());
+        EXPECT_EQ(is_primary,
+                  pointer_event->getCoalescedEvents()[i]->isPrimary());
+        EXPECT_EQ(expected_pointer_type, pointer_event->pointerType());
+        EXPECT_EQ(WebInputEvent::GetStaticTimeStampForTests(),
+                  pointer_event->PlatformTimeStamp());
+      }
+      for (wtf_size_t i = 0; i < predicted_event_count; i++) {
+        EXPECT_EQ(unique_id,
+                  pointer_event->getPredictedEvents()[i]->pointerId());
+        EXPECT_EQ(is_primary,
+                  pointer_event->getPredictedEvents()[i]->isPrimary());
+        EXPECT_EQ(expected_pointer_type, pointer_event->pointerType());
+        EXPECT_EQ(WebInputEvent::GetStaticTimeStampForTests(),
+                  pointer_event->PlatformTimeStamp());
+      }
+    } else {
+      EXPECT_EQ(0u, pointer_event->getCoalescedEvents().size());
+      EXPECT_EQ(0u, pointer_event->getPredictedEvents().size());
     }
+    EXPECT_EQ(
+        pointer_event_factory_.GetLastPointerPosition(
+            pointer_event->pointerId(),
+            WebPointerProperties(1, WebPointerProperties::PointerType::kUnknown,
+                                 WebPointerProperties::Button::kNoButton,
+                                 WebFloatPoint(50, 50), WebFloatPoint(20, 20))),
+        FloatPoint(100, 100));
     return pointer_event;
   }
   void CreateAndCheckPointerTransitionEvent(PointerEvent*, const AtomicString&);
@@ -155,7 +185,7 @@ TEST_F(PointerEventFactoryTest, MousePointer) {
       WebInputEvent::kLeftButtonDown);
 
   CreateAndCheckPointerTransitionEvent(pointer_event1,
-                                       EventTypeNames::pointerout);
+                                       event_type_names::kPointerout);
 
   EXPECT_TRUE(pointer_event_factory_.IsActive(expected_mouse_id_));
   EXPECT_TRUE(pointer_event_factory_.IsActiveButtonsState(expected_mouse_id_));
@@ -230,9 +260,9 @@ TEST_F(PointerEventFactoryTest, TouchPointerReleasedAndPressedAgain) {
       false /* isprimary */, false /* hovering */);
 
   CreateAndCheckPointerTransitionEvent(pointer_event1,
-                                       EventTypeNames::pointerleave);
+                                       event_type_names::kPointerleave);
   CreateAndCheckPointerTransitionEvent(pointer_event2,
-                                       EventTypeNames::pointerenter);
+                                       event_type_names::kPointerenter);
 
   EXPECT_TRUE(pointer_event_factory_.IsActive(mapped_id_start_));
   EXPECT_TRUE(pointer_event_factory_.IsActive(mapped_id_start_ + 1));
@@ -507,8 +537,9 @@ TEST_F(PointerEventFactoryTest, OutOfRange) {
                                 mapped_id_start_ + 4, false /* isprimary */,
                                 false /* hovering */);
   CreateAndCheckWebPointerEvent(WebPointerProperties::PointerType::kUnknown,
-                                INT_MAX, mapped_id_start_ + 5,
-                                false /* isprimary */, false /* hovering */);
+                                std::numeric_limits<int>::max(),
+                                mapped_id_start_ + 5, false /* isprimary */,
+                                false /* hovering */);
 
   pointer_event_factory_.Clear();
 
@@ -525,6 +556,27 @@ TEST_F(PointerEventFactoryTest, OutOfRange) {
   }
   CreateAndCheckPointerCancel(WebPointerProperties::PointerType::kMouse, 0,
                               expected_mouse_id_, true);
+
+  EXPECT_EQ(pointer_event_factory_.IsActive(0), false);
+  EXPECT_EQ(pointer_event_factory_.IsActive(-1), false);
+  EXPECT_EQ(
+      pointer_event_factory_.IsActive(std::numeric_limits<PointerId>::max()),
+      false);
+}
+
+TEST_F(PointerEventFactoryTest, LastPointerPosition) {
+  CreateAndCheckWebPointerEvent(
+      WebPointerProperties::PointerType::kMouse, 0, expected_mouse_id_,
+      true /* isprimary */, true /* hovering */, WebInputEvent::kNoModifiers,
+      WebInputEvent::kPointerMove, WebPointerProperties::Button::kNoButton, 4);
+  pointer_event_factory_.RemoveLastPosition(expected_mouse_id_);
+  EXPECT_EQ(
+      pointer_event_factory_.GetLastPointerPosition(
+          expected_mouse_id_,
+          WebPointerProperties(1, WebPointerProperties::PointerType::kUnknown,
+                               WebPointerProperties::Button::kNoButton,
+                               WebFloatPoint(50, 50), WebFloatPoint(20, 20))),
+      FloatPoint(20, 20));
 }
 
 TEST_F(PointerEventFactoryTest, CoalescedEvents) {
@@ -538,6 +590,31 @@ TEST_F(PointerEventFactoryTest, CoalescedEvents) {
       WebInputEvent::kPointerMove, WebPointerProperties::Button::kNoButton, 3);
 }
 
+TEST_F(PointerEventFactoryTest, PredictedEvents) {
+  CreateAndCheckWebPointerEvent(
+      WebPointerProperties::PointerType::kMouse, 0, expected_mouse_id_,
+      true /* isprimary */, true /* hovering */, WebInputEvent::kNoModifiers,
+      WebInputEvent::kPointerMove, WebPointerProperties::Button::kNoButton,
+      0 /* coalesced_count */, 4 /* predicted_count */);
+  CreateAndCheckWebPointerEvent(
+      WebPointerProperties::PointerType::kTouch, 0, mapped_id_start_,
+      true /* isprimary */, false /* hovering */, WebInputEvent::kNoModifiers,
+      WebInputEvent::kPointerMove, WebPointerProperties::Button::kNoButton,
+      0 /* coalesced_count */, 3 /* predicted_count */);
+
+  // Check predicted_event_count when type != kPointerMove
+  CreateAndCheckWebPointerEvent(
+      WebPointerProperties::PointerType::kMouse, 0, expected_mouse_id_,
+      true /* isprimary */, true /* hovering */, WebInputEvent::kNoModifiers,
+      WebInputEvent::kPointerDown, WebPointerProperties::Button::kNoButton,
+      0 /* coalesced_count */, 4 /* predicted_count */);
+  CreateAndCheckWebPointerEvent(
+      WebPointerProperties::PointerType::kTouch, 0, mapped_id_start_,
+      true /* isprimary */, false /* hovering */, WebInputEvent::kNoModifiers,
+      WebInputEvent::kPointerUp, WebPointerProperties::Button::kNoButton,
+      0 /* coalesced_count */, 3 /* predicted_count */);
+}
+
 TEST_F(PointerEventFactoryTest, PenEraserButton) {
   // Send the pointerdown event when pressing the eraser button on the tablet.
   PointerEvent* first_pointerdown_event = CreateAndCheckWebPointerEvent(
@@ -545,7 +622,7 @@ TEST_F(PointerEventFactoryTest, PenEraserButton) {
       true /* isprimary */, false /* hovering */,
       WebInputEvent::kLeftButtonDown, WebInputEvent::kPointerDown,
       WebPointerProperties::Button::kLeft);
-  EXPECT_EQ(EventTypeNames::pointerdown, first_pointerdown_event->type());
+  EXPECT_EQ(event_type_names::kPointerdown, first_pointerdown_event->type());
 
   // Send the pointermove event when pressing any other button while the eraser
   // button is still pressed on the tablet.
@@ -555,7 +632,7 @@ TEST_F(PointerEventFactoryTest, PenEraserButton) {
       WebPointerProperties::PointerType::kEraser, 1, mapped_id_start_ + 1,
       false /* isprimary */, false /* hovering */, modifiers,
       WebInputEvent::kPointerDown, WebPointerProperties::Button::kRight);
-  EXPECT_EQ(EventTypeNames::pointermove, second_pointerdown_event->type());
+  EXPECT_EQ(event_type_names::kPointermove, second_pointerdown_event->type());
 
   // Send the pointermove event when releasing any other button while the
   // eraser button is still pressed on the tablet.
@@ -564,14 +641,14 @@ TEST_F(PointerEventFactoryTest, PenEraserButton) {
       false /* isprimary */, true /* hovering */,
       WebInputEvent::kLeftButtonDown, WebInputEvent::kPointerUp,
       WebPointerProperties::Button::kRight);
-  EXPECT_EQ(EventTypeNames::pointermove, first_pointerup_event->type());
+  EXPECT_EQ(event_type_names::kPointermove, first_pointerup_event->type());
 
   // Send the pointerup event when releasing the eraser button from the tablet.
   PointerEvent* last_pointerup_event = CreateAndCheckWebPointerEvent(
       WebPointerProperties::PointerType::kEraser, 0, mapped_id_start_,
       true /* isprimary */, true /* hovering */, WebInputEvent::kNoModifiers,
       WebInputEvent::kPointerUp, WebPointerProperties::Button::kLeft);
-  EXPECT_EQ(EventTypeNames::pointerup, last_pointerup_event->type());
+  EXPECT_EQ(event_type_names::kPointerup, last_pointerup_event->type());
 }
 
 }  // namespace blink

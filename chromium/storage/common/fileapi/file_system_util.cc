@@ -10,6 +10,7 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -165,9 +166,9 @@ bool ParseFileSystemSchemeURL(const GURL& url,
   // A path of the inner_url contains only mount type part (e.g. "/temporary").
   DCHECK(url.inner_url());
   std::string inner_path = url.inner_url()->path();
-  for (size_t i = 0; i < arraysize(kValidTypes); ++i) {
-    if (inner_path == kValidTypes[i].dir) {
-      file_system_type = kValidTypes[i].type;
+  for (const auto& valid_type : kValidTypes) {
+    if (inner_path == valid_type.dir) {
+      file_system_type = valid_type.type;
       break;
     }
   }
@@ -339,35 +340,6 @@ base::FilePath StringToFilePath(const std::string& file_path_string) {
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   return base::FilePath(file_path_string);
 #endif
-}
-
-blink::WebFileError FileErrorToWebFileError(
-    base::File::Error error_code) {
-  switch (error_code) {
-    case base::File::FILE_ERROR_NOT_FOUND:
-      return blink::kWebFileErrorNotFound;
-    case base::File::FILE_ERROR_INVALID_OPERATION:
-    case base::File::FILE_ERROR_EXISTS:
-    case base::File::FILE_ERROR_NOT_EMPTY:
-      return blink::kWebFileErrorInvalidModification;
-    case base::File::FILE_ERROR_NOT_A_DIRECTORY:
-    case base::File::FILE_ERROR_NOT_A_FILE:
-      return blink::kWebFileErrorTypeMismatch;
-    case base::File::FILE_ERROR_ACCESS_DENIED:
-      return blink::kWebFileErrorNoModificationAllowed;
-    case base::File::FILE_ERROR_FAILED:
-      return blink::kWebFileErrorInvalidState;
-    case base::File::FILE_ERROR_ABORT:
-      return blink::kWebFileErrorAbort;
-    case base::File::FILE_ERROR_SECURITY:
-      return blink::kWebFileErrorSecurity;
-    case base::File::FILE_ERROR_NO_SPACE:
-      return blink::kWebFileErrorQuotaExceeded;
-    case base::File::FILE_ERROR_INVALID_URL:
-      return blink::kWebFileErrorEncoding;
-    default:
-      return blink::kWebFileErrorInvalidModification;
-  }
 }
 
 bool GetFileSystemPublicType(

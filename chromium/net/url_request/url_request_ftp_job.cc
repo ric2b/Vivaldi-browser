@@ -4,6 +4,7 @@
 
 #include "net/url_request/url_request_ftp_job.h"
 
+#include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
@@ -72,12 +73,18 @@ bool URLRequestFtpJob::GetMimeType(std::string* mime_type) const {
       return true;
     }
   } else {
-    // No special handling of MIME type is needed. As opposed to direct FTP
-    // transaction, we do not get a raw directory listing to parse.
-    return http_transaction_->GetResponseInfo()->
-        headers->GetMimeType(mime_type);
+    std::string proxy_mime;
+    http_transaction_->GetResponseInfo()->headers->GetMimeType(&proxy_mime);
+    if (proxy_mime == "text/vnd.chromium.ftp-dir") {
+      *mime_type = "text/vnd.chromium.ftp-dir";
+      return true;
+    }
   }
-  return false;
+
+  // FTP resources other than directory listings ought to be handled as raw
+  // binary data, not sniffed into HTML or etc.
+  *mime_type = "application/octet-stream";
+  return true;
 }
 
 void URLRequestFtpJob::GetResponseInfo(HttpResponseInfo* info) {
@@ -85,15 +92,15 @@ void URLRequestFtpJob::GetResponseInfo(HttpResponseInfo* info) {
     *info = *http_response_info_;
 }
 
-HostPortPair URLRequestFtpJob::GetSocketAddress() const {
+IPEndPoint URLRequestFtpJob::GetResponseRemoteEndpoint() const {
   if (proxy_info_.is_direct()) {
     if (!ftp_transaction_)
-      return HostPortPair();
-    return ftp_transaction_->GetResponseInfo()->socket_address;
+      return IPEndPoint();
+    return ftp_transaction_->GetResponseInfo()->remote_endpoint;
   } else {
     if (!http_transaction_)
-      return HostPortPair();
-    return http_transaction_->GetResponseInfo()->socket_address;
+      return IPEndPoint();
+    return http_transaction_->GetResponseInfo()->remote_endpoint;
   }
 }
 
@@ -118,7 +125,7 @@ void URLRequestFtpJob::Start() {
         request_->url(), "GET", &proxy_info_,
         base::Bind(&URLRequestFtpJob::OnResolveProxyComplete,
                    base::Unretained(this)),
-        &proxy_resolve_request_, NULL, request_->net_log());
+        &proxy_resolve_request_, request_->net_log());
 
     if (rv == ERR_IO_PENDING)
       return;
@@ -248,8 +255,8 @@ void URLRequestFtpJob::OnStartCompleted(int result) {
 
 void URLRequestFtpJob::OnStartCompletedAsync(int result) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&URLRequestFtpJob::OnStartCompleted,
-                            weak_factory_.GetWeakPtr(), result));
+      FROM_HERE, base::BindOnce(&URLRequestFtpJob::OnStartCompleted,
+                                weak_factory_.GetWeakPtr(), result));
 }
 
 void URLRequestFtpJob::OnReadCompleted(int result) {

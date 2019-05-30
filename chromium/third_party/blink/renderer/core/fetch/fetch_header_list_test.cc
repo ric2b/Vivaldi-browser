@@ -5,6 +5,8 @@
 #include "third_party/blink/renderer/core/fetch/fetch_header_list.h"
 
 #include <utility>
+
+#include "base/stl_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -23,7 +25,7 @@ TEST(FetchHeaderListTest, Append) {
       std::make_pair("ConTenT-TyPe", "application/xml"),
       std::make_pair("ConTenT-TyPe", "foo"), std::make_pair("X-Foo", "bar"),
   };
-  EXPECT_EQ(arraysize(expectedHeaders), headerList->size());
+  EXPECT_EQ(base::size(expectedHeaders), headerList->size());
   size_t i = 0;
   for (const auto& header : headerList->List()) {
     EXPECT_EQ(expectedHeaders[i].first, header.first);
@@ -46,7 +48,7 @@ TEST(FetchHeaderListTest, Set) {
       std::make_pair("some-header", "some value"),
       std::make_pair("X-Foo", "bar"),
   };
-  EXPECT_EQ(arraysize(expectedHeaders), headerList->size());
+  EXPECT_EQ(base::size(expectedHeaders), headerList->size());
   size_t i = 0;
   for (const auto& header : headerList->List()) {
     EXPECT_EQ(expectedHeaders[i].first, header.first);
@@ -68,7 +70,7 @@ TEST(FetchHeaderListTest, Erase) {
   const std::pair<String, String> expectedHeaders[] = {
       std::make_pair("X-Foo", "bar"),
   };
-  EXPECT_EQ(arraysize(expectedHeaders), headerList->size());
+  EXPECT_EQ(base::size(expectedHeaders), headerList->size());
   size_t i = 0;
   for (const auto& header : headerList->List()) {
     EXPECT_EQ(expectedHeaders[i].first, header.first);
@@ -90,23 +92,6 @@ TEST(FetchHeaderListTest, Combine) {
   EXPECT_EQ("text/plain, application/xml, foo", combinedValue);
 }
 
-// This is going to be removed: see crbug.com/645492.
-TEST(FetchHeaderListTest, GetAll) {
-  FetchHeaderList* headerList = FetchHeaderList::Create();
-  headerList->Append("ConTenT-TyPe", "text/plain");
-  headerList->Append("content-type", "application/xml");
-  headerList->Append("CONTENT-type", "foo");
-  headerList->Append("X-Foo", "bar");
-  Vector<String> combinedValues;
-  headerList->GetAll("content-TYPE", combinedValues);
-  EXPECT_EQ(Vector<String>({"text/plain", "application/xml", "foo"}),
-            combinedValues);
-  headerList->GetAll("x-foo", combinedValues);
-  EXPECT_EQ(Vector<String>({"bar"}), combinedValues);
-  headerList->GetAll("Host", combinedValues);
-  EXPECT_TRUE(combinedValues.IsEmpty());
-}
-
 TEST(FetchHeaderListTest, Contains) {
   FetchHeaderList* headerList = FetchHeaderList::Create();
   headerList->Append("ConTenT-TyPe", "text/plain");
@@ -115,26 +100,6 @@ TEST(FetchHeaderListTest, Contains) {
   EXPECT_TRUE(headerList->Has("CONTENT-TYPE"));
   EXPECT_TRUE(headerList->Has("X-Foo"));
   EXPECT_FALSE(headerList->Has("X-Bar"));
-}
-
-TEST(FetchHeaderListTest, ContainsNonCORSSafelistedHeader) {
-  FetchHeaderList* headerList = FetchHeaderList::Create();
-  EXPECT_FALSE(headerList->ContainsNonCORSSafelistedHeader());
-
-  headerList->Append("Host", "foobar");
-  headerList->Append("X-Foo", "bar");
-  EXPECT_TRUE(headerList->ContainsNonCORSSafelistedHeader());
-
-  headerList->ClearList();
-  headerList->Append("ConTenT-TyPe", "text/plain");
-  headerList->Append("content-type", "application/xml");
-  headerList->Append("X-Foo", "bar");
-  EXPECT_TRUE(headerList->ContainsNonCORSSafelistedHeader());
-
-  headerList->ClearList();
-  headerList->Append("ConTenT-TyPe", "multipart/form-data");
-  headerList->Append("Accept", "xyz");
-  EXPECT_FALSE(headerList->ContainsNonCORSSafelistedHeader());
 }
 
 TEST(FetchHeaderListTest, SortAndCombine) {
@@ -150,7 +115,7 @@ TEST(FetchHeaderListTest, SortAndCombine) {
       std::make_pair("x-foo", "bar")};
   const Vector<FetchHeaderList::Header> sortedAndCombined =
       headerList->SortAndCombine();
-  EXPECT_EQ(arraysize(expectedHeaders), sortedAndCombined.size());
+  EXPECT_EQ(base::size(expectedHeaders), sortedAndCombined.size());
   size_t i = 0;
   for (const auto& headerPair : headerList->SortAndCombine()) {
     EXPECT_EQ(expectedHeaders[i].first, headerPair.first);

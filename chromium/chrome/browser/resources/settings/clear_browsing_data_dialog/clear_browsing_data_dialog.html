@@ -29,14 +29,19 @@
       }
 
       #clearBrowsingDataDialog {
+        --border-top-color: var(--paper-grey-300);
         --cr-dialog-top-container-min-height: 42px;
         --cr-dialog-title: {
           padding-bottom: 8px;
         };
         --cr-dialog-body-container: {
-          border-top: 1px solid var(--paper-grey-300);
+          border-top: 1px solid var(--border-top-color);
           height: var(--body-container-height);
         };
+      }
+
+      :host-context([dark]) #clearBrowsingDataDialog {
+        --border-top-color: var(--cr-separator-color);
       }
 
       #clearBrowsingDataDialog:not(.fully-rendered) {
@@ -51,6 +56,10 @@
         background: var(--paper-grey-50);
         border-top: none;
         padding: 0;
+      }
+
+      :host-context([dark]) #clearBrowsingDataDialog [slot=footer] {
+        background: rgb(50, 54, 57);  /* Custom color from Namrata. */
       }
 
       .row {
@@ -113,7 +122,7 @@
         <div>$i18n{clearBrowsingData}</div>
       </div>
       <div slot="header">
-        <paper-tabs noink on-selected-changed="recordTabChange_"
+        <paper-tabs noink on-selected-changed="recordTabChange_" autoselect
             selected="{{prefs.browser.last_clear_browsing_data_tab.value}}">
           <paper-tab id="basicTabTitle">$i18n{basicPageTitle}</paper-tab>
           <paper-tab id="advancedTabTitle">$i18n{advancedPageTitle}</paper-tab>
@@ -235,12 +244,6 @@
                 sub-label="[[counters_.hosted_apps_data]]"
                 disabled="[[clearingInProgress_]]">
             </settings-checkbox>
-            <settings-checkbox
-                pref="{{prefs.browser.clear_data.media_licenses}}"
-                label="$i18n{clearMediaLicenses}"
-                sub-label="[[counters_.media_licenses]]"
-                disabled="[[clearingInProgress_]]">
-            </settings-checkbox>
           </div>
         </iron-pages>
       </div>
@@ -262,29 +265,20 @@
             hide-buttons>
         </settings-sync-account-control>
         <div class="divider"></div>
-        <div id="footer-description" on-tap="onSyncDescriptionLinkClicked_">
-          <template is="dom-if" if="[[!syncStatus.hasError]]">
-            <span id="sync-info">
-              $i18nRaw{clearBrowsingDataWithSync}
-            </span>
-          </template>
-          <template is="dom-if" if="[[syncStatus.hasError]]">
-            <template is="dom-if" if="[[isSyncPaused_]]">
-              <span id="sync-paused-info">
-                $i18nRaw{clearBrowsingDataWithSyncPaused}
-              </span>
-            </template>
-            <template is="dom-if" if="[[hasPassphraseError_]]">
-              <span id="sync-passphrase-error-info">
-                $i18nRaw{clearBrowsingDataWithSyncPassphraseError}
-              </span>
-            </template>
-            <template is="dom-if" if="[[hasOtherSyncError_]]">
-              <span id="sync-other-error-info">
-                $i18nRaw{clearBrowsingDataWithSyncError}
-              </span>
-            </template>
-          </template>
+        <div id="footer-description" on-click="onSyncDescriptionLinkClicked_">
+          <span id="sync-info" hidden="[[syncStatus.hasError]]">
+            $i18nRaw{clearBrowsingDataWithSync}
+          </span>
+          <span id="sync-paused-info" hidden="[[!isSyncPaused_]]">
+            $i18nRaw{clearBrowsingDataWithSyncPaused}
+          </span>
+          <span id="sync-passphrase-error-info"
+              hidden="[[!hasPassphraseError_]]">
+            $i18nRaw{clearBrowsingDataWithSyncPassphraseError}
+          </span>
+          <span id="sync-other-error-info" hidden="[[!hasOtherSyncError_]]">
+            $i18nRaw{clearBrowsingDataWithSyncError}
+          </span>
         </div>
       </div>
     </cr-dialog>

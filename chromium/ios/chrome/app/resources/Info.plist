@@ -82,6 +82,7 @@
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>${CHROMIUM_HANDOFF_ID}</string>
+		<string>SearchInChromeIntent</string>
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>
@@ -126,6 +127,10 @@
 	<true/>
 	<key>UIRequiresPersistentWiFi</key>
 	<true/>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
 	<key>UIStatusBarStyle</key>
 	<string>UIStatusBarStyleLightContent</string>
 	<key>UIStatusBarHidden</key>
@@ -189,5 +194,7 @@
 	<string>IDS_IOS_PHOTO_LIBRARY_ADD_USAGE_DESCRIPTION</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>IDS_IOS_BLUETOOTH_USAGE_DESCRIPTION</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>IDS_IOS_FACE_ID_USAGE_DESCRIPTION</string>
 </dict>
 </plist>

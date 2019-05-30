@@ -11,6 +11,7 @@
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "device/fido/fido_discovery_factory.h"
 #include "device/fido/fido_test_data.h"
 #include "device/fido/mock_fido_device.h"
 #include "device/fido/mock_fido_discovery_observer.h"
@@ -19,6 +20,8 @@
 
 namespace device {
 namespace test {
+
+using ::testing::_;
 
 class FakeFidoDiscoveryTest : public ::testing::Test {
  public:
@@ -119,7 +122,7 @@ TEST_F(FakeFidoDiscoveryTest, AddDevice) {
   auto device0 = std::make_unique<MockFidoDevice>();
   EXPECT_CALL(*device0, GetId()).WillOnce(::testing::Return("device0"));
   base::RunLoop device0_done;
-  EXPECT_CALL(observer, DeviceAdded(&discovery, ::testing::_))
+  EXPECT_CALL(observer, AuthenticatorAdded(&discovery, _))
       .WillOnce(testing::InvokeWithoutArgs(
           [&device0_done]() { device0_done.Quit(); }));
   discovery.AddDevice(std::move(device0));
@@ -133,7 +136,7 @@ TEST_F(FakeFidoDiscoveryTest, AddDevice) {
   auto device1 = std::make_unique<MockFidoDevice>();
   EXPECT_CALL(*device1, GetId()).WillOnce(::testing::Return("device1"));
   base::RunLoop device1_done;
-  EXPECT_CALL(observer, DeviceAdded(&discovery, ::testing::_))
+  EXPECT_CALL(observer, AuthenticatorAdded(&discovery, _))
       .WillOnce(testing::InvokeWithoutArgs(
           [&device1_done]() { device1_done.Quit(); }));
   discovery.AddDevice(std::move(device1));
@@ -148,7 +151,7 @@ TEST_F(ScopedFakeFidoDiscoveryFactoryTest,
   auto* injected_fake_discovery = factory.ForgeNextHidDiscovery();
   ASSERT_EQ(FidoTransportProtocol::kUsbHumanInterfaceDevice,
             injected_fake_discovery->transport());
-  auto produced_discovery = FidoDiscovery::Create(
+  auto produced_discovery = FidoDiscoveryFactory::Create(
       FidoTransportProtocol::kUsbHumanInterfaceDevice, nullptr);
   EXPECT_TRUE(produced_discovery);
   EXPECT_EQ(injected_fake_discovery, produced_discovery.get());
@@ -162,14 +165,14 @@ TEST_F(ScopedFakeFidoDiscoveryFactoryTest,
   auto* injected_fake_discovery_1 = factory.ForgeNextBleDiscovery();
   ASSERT_EQ(FidoTransportProtocol::kBluetoothLowEnergy,
             injected_fake_discovery_1->transport());
-  auto produced_discovery_1 = FidoDiscovery::Create(
+  auto produced_discovery_1 = FidoDiscoveryFactory::Create(
       FidoTransportProtocol::kBluetoothLowEnergy, nullptr);
   EXPECT_EQ(injected_fake_discovery_1, produced_discovery_1.get());
 
   auto* injected_fake_discovery_2 = factory.ForgeNextBleDiscovery();
   ASSERT_EQ(FidoTransportProtocol::kBluetoothLowEnergy,
             injected_fake_discovery_2->transport());
-  auto produced_discovery_2 = FidoDiscovery::Create(
+  auto produced_discovery_2 = FidoDiscoveryFactory::Create(
       FidoTransportProtocol::kBluetoothLowEnergy, nullptr);
   EXPECT_EQ(injected_fake_discovery_2, produced_discovery_2.get());
 }

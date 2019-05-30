@@ -1,0 +1,162 @@
+// Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved.
+
+[
+  {
+    "namespace": "vivaldiAccount",
+    "description": "Support for vivaldi.net authentication.",
+    "compiler_options": {
+      "implemented_in": "extensions/api/vivaldi_account/vivaldi_account_api.h"
+    },
+    "types": [
+      {
+        "id": "FetchErrorType",
+        "type": "string",
+        "enum": [ {
+          "name": "no_error",
+          "description": "Everything went fine"
+        }, {
+          "name": "network_error",
+          "description": "Couldn't fetch data because of a network issue."
+        }, {
+          "name": "server_error",
+          "description": "The server provided an unexpected response to our request."
+        }, {
+          "name": "invalid_credentials",
+          "description": "The server explicitly rejected our credentials."
+        } ]
+      },
+      {
+        "id": "FetchError",
+        "type": "object",
+        "description": "properties of an error that occured during a network request.",
+        "properties": {
+          "errorType": {
+            "$ref": "FetchErrorType"
+          },
+          "serverMessage": {
+            "type": "string"
+          },
+          "errorCode": {
+            "type": "integer"
+          }
+        }
+      },
+      {
+        "id": "AccountInfo",
+        "type": "object",
+        "description": "A structure detailing the informations about the currrently logged in account.",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "description": "The unique account identifier, as retrieved from the server. Typically, this is just a case-sensitive version of the username or an empty string if it hasn't been retrieved yet. The UI should check whether this is empty to determine whether the user has set up an account, even if the tokens might be missing."
+          },
+          "username": {
+            "type": "string",
+            "description": "The username, as entered by the user."
+          },
+          "pictureUrl": {
+            "type": "string",
+            "description": "A link to the user's avatar. This is typically an https url, but the server is free to provide any valid url."
+          }
+        }
+      },
+      {
+        "id": "State",
+        "type": "object",
+        "description": "Data reporting the current state of the account and associated tokens.",
+        "properties": {
+          "accountInfo": {
+            "$ref": "AccountInfo"
+          },
+          "hasToken": {
+            "type": "boolean",
+            "description": "If we have a token, we are practically logged in (but we may still need to get the accountId to be fully operational)."
+          },
+          "accessToken": {
+            "type": "string",
+            "description": "The actual access token. This is provided as a temporary measure until the notification code is moved to C++."
+          },
+          "hasEncryptedToken": {
+            "type": "boolean",
+            "description": "We found a saved encrypted token, but could not decrypt it."
+          },
+          "tokenRequestTime": {
+            "type": "number",
+            "descrption": "The time at which we sent the last token request."
+          },
+          "nextTokenRequestTime": {
+            "type": "number",
+            "descrption": "The time at which we'll automatically retry a token request if the previous one failed due to a network or server error."
+          },
+          "lastTokenFetchError": {
+            "$ref": "FetchError"
+          },
+          "lastAccountInfoFetchError": {
+            "$ref": "FetchError"
+          },
+          "isReady": {
+            "type": "boolean",
+            "desccription": "Always true. Lets the JS code knows that it has received the real data."
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "login",
+        "type": "function",
+        "description": "Attempt to obtain an access token for vivaldi.net using the provided credentials.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "username"
+          },
+          {
+            "type": "string",
+            "name": "password"
+          },
+          {
+            "type": "boolean",
+            "name": "savePassword"
+          }
+        ]
+      },
+      {
+        "name": "logout",
+        "type": "function",
+        "description": "Clear the previously obtained tokens and forget the logged in username.",
+        "parameters": []
+      },
+      {
+        "name": "getState",
+        "type": "function",
+        "description": "Retrieve the current state of the account manager.",
+        "parameters": [
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "name": "state",
+                "$ref": "State"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onAccountStateChanged",
+        "type": "function",
+        "description": "Fired whenever something changed with the account",
+        "parameters": [
+          {
+            "name": "state",
+            "$ref": "State"
+          }
+        ]
+      }
+    ]
+  }
+]

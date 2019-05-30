@@ -12,11 +12,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/i18n/break_iterator.h"
 #include "base/i18n/case_conversion.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/stl_util.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -33,6 +33,7 @@
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/url_prefix.h"
 #include "components/prefs/pref_service.h"
+#include "components/search_engines/template_url_service.h"
 #include "components/url_formatter/url_fixer.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "url/third_party/mozilla/url_parse.h"
@@ -162,119 +163,6 @@ ShortcutsProvider::~ShortcutsProvider() {
     backend->RemoveObserver(this);
 }
 
-// static
-ShortcutsProvider::WordMap ShortcutsProvider::CreateWordMapForString(
-    const base::string16& text) {
-  // First, convert |text| to a vector of the unique words in it.
-  WordMap word_map;
-  base::i18n::BreakIterator word_iter(text,
-                                      base::i18n::BreakIterator::BREAK_WORD);
-  if (!word_iter.Init())
-    return word_map;
-  std::vector<base::string16> words;
-  while (word_iter.Advance()) {
-    if (word_iter.IsWord())
-      words.push_back(word_iter.GetString());
-  }
-  if (words.empty())
-    return word_map;
-  std::sort(words.begin(), words.end());
-  words.erase(std::unique(words.begin(), words.end()), words.end());
-
-  // Now create a map from (first character) to (words beginning with that
-  // character).  We insert in reverse lexicographical order and rely on the
-  // multimap preserving insertion order for values with the same key.  (This
-  // is mandated in C++11, and part of that decision was based on a survey of
-  // existing implementations that found that it was already true everywhere.)
-  std::reverse(words.begin(), words.end());
-  for (std::vector<base::string16>::const_iterator i(words.begin());
-       i != words.end(); ++i)
-    word_map.insert(std::make_pair((*i)[0], *i));
-  return word_map;
-}
-
-// static
-ACMatchClassifications ShortcutsProvider::ClassifyAllMatchesInString(
-    const base::string16& find_text,
-    const WordMap& find_words,
-    const base::string16& text,
-    const bool text_is_search_query,
-    const ACMatchClassifications& original_class) {
-  DCHECK(!find_text.empty());
-  DCHECK(!find_words.empty());
-
-  // The code below assumes |text| is nonempty and therefore the resulting
-  // classification vector should always be nonempty as well.  Returning early
-  // if |text| is empty assures we'll return the (correct) empty vector rather
-  // than a vector with a single (0, NONE) match.
-  if (text.empty())
-    return original_class;
-
-  // First check whether |text| begins with |find_text| and mark that whole
-  // section as a match if so.
-  base::string16 text_lowercase(base::i18n::ToLower(text));
-  const ACMatchClassification::Style& class_of_find_text =
-      text_is_search_query ? ACMatchClassification::NONE
-                           : ACMatchClassification::MATCH;
-  const ACMatchClassification::Style& class_of_additional_text =
-      text_is_search_query ? ACMatchClassification::MATCH
-                           : ACMatchClassification::NONE;
-  ACMatchClassifications match_class;
-  size_t last_position = 0;
-  if (base::StartsWith(text_lowercase, find_text,
-                       base::CompareCase::SENSITIVE)) {
-    match_class.push_back(ACMatchClassification(0, class_of_find_text));
-    last_position = find_text.length();
-    // If |text_lowercase| is actually equal to |find_text|, we don't need to
-    // (and in fact shouldn't) put a trailing NONE classification after the end
-    // of the string.
-    if (last_position < text_lowercase.length()) {
-      match_class.push_back(
-          ACMatchClassification(last_position, class_of_additional_text));
-    }
-  } else {
-    // |match_class| should start at position 0.  If the first matching word is
-    // found at position 0, this will be popped from the vector further down.
-    match_class.push_back(ACMatchClassification(0, class_of_additional_text));
-  }
-
-  // Now, starting with |last_position|, check each character in
-  // |text_lowercase| to see if we have words starting with that character in
-  // |find_words|.  If so, check each of them to see if they match the portion
-  // of |text_lowercase| beginning with |last_position|. Accept the first
-  // matching word found (which should be the longest possible match at this
-  // location, given the construction of |find_words|) and add a MATCH region to
-  // |match_class|, moving |last_position| to be after the matching word.  If we
-  // found no matching words, move to the next character and repeat.
-  while (last_position < text_lowercase.length()) {
-    std::pair<WordMap::const_iterator, WordMap::const_iterator> range(
-        find_words.equal_range(text_lowercase[last_position]));
-    size_t next_character = last_position + 1;
-    for (WordMap::const_iterator i(range.first); i != range.second; ++i) {
-      const base::string16& word = i->second;
-      size_t word_end = last_position + word.length();
-      if ((word_end <= text_lowercase.length()) &&
-          !text_lowercase.compare(last_position, word.length(), word)) {
-        // Collapse adjacent ranges into one.
-        if (match_class.back().offset == last_position)
-          match_class.pop_back();
-
-        AutocompleteMatch::AddLastClassificationIfNecessary(
-            &match_class, last_position, class_of_find_text);
-        if (word_end < text_lowercase.length()) {
-          match_class.push_back(
-              ACMatchClassification(word_end, class_of_additional_text));
-        }
-        last_position = word_end;
-        break;
-      }
-    }
-    last_position = std::max(last_position, next_character);
-  }
-
-  return AutocompleteMatch::MergeClassifications(original_class, match_class);
-}
-
 void ShortcutsProvider::OnShortcutsLoaded() {
   initialized_ = true;
 }
@@ -297,11 +185,9 @@ void ShortcutsProvider::GetMatches(const AutocompleteInput& input) {
   const base::string16 fixed_up_input(FixupUserInput(input).second);
 
   std::vector<ShortcutMatch> shortcut_matches;
-  for (ShortcutsBackend::ShortcutMap::const_iterator it =
-           FindFirstMatch(term_string, backend.get());
+  for (auto it = FindFirstMatch(term_string, backend.get());
        it != backend->shortcuts_map().end() &&
-           base::StartsWith(it->first, term_string,
-                            base::CompareCase::SENSITIVE);
+       base::StartsWith(it->first, term_string, base::CompareCase::SENSITIVE);
        ++it) {
     // Don't return shortcuts with zero relevance.
     int relevance = CalculateScore(term_string, it->second, max_relevance);
@@ -390,41 +276,57 @@ AutocompleteMatch ShortcutsProvider::ShortcutToACMatch(
                              base::UTF16ToUTF8(shortcut.text));
 
   // Set |inline_autocompletion| and |allowed_to_be_default_match| if possible.
-  // If the match is a search query this is easy: simply check whether the
-  // user text is a prefix of the query.  If the match is a navigation, we
-  // assume the fill_into_edit looks something like a URL, so we use
-  // URLPrefix::GetInlineAutocompleteOffset() to try and strip off any prefixes
-  // that the user might not think would change the meaning, but would
-  // otherwise prevent inline autocompletion.  This allows, for example, the
-  // input of "foo.c" to autocomplete to "foo.com" for a fill_into_edit of
-  // "http://foo.com".
+  // If the input is in keyword mode, navigation matches cannot be the default
+  // match, and search query matches can only be the default match if their
+  // keywords matches the input's keyword, as otherwise, default,
+  // different-keyword matches may result in leaving keyword mode. Additionally,
+  // if the match is a search query, check whether the user text is a prefix of
+  // the query. If the match is a navigation, we assume the fill_into_edit looks
+  // something like a URL, so we use URLPrefix::GetInlineAutocompleteOffset() to
+  // try and strip off any prefixes that the user might not think would change
+  // the meaning, but would otherwise prevent inline autocompletion. This
+  // allows, for example, the input of "foo.c" to autocomplete to "foo.com" for
+  // a fill_into_edit of "http://foo.com".
   const bool is_search_type = AutocompleteMatch::IsSearchType(match.type);
-  if (is_search_type) {
-    if (match.fill_into_edit.size() >= input.text().size() &&
-        std::equal(match.fill_into_edit.begin(),
-                   match.fill_into_edit.begin() + input.text().size(),
-                   input.text().begin(),
-                   SimpleCaseInsensitiveCompareUCS2())) {
-      match.inline_autocompletion =
-          match.fill_into_edit.substr(input.text().length());
-      match.allowed_to_be_default_match =
-          !input.prevent_inline_autocomplete() ||
-          match.inline_autocompletion.empty();
-    }
-  } else {
-    const size_t inline_autocomplete_offset =
-        URLPrefix::GetInlineAutocompleteOffset(
-            input.text(), fixed_up_input_text, true, match.fill_into_edit);
-    if (inline_autocomplete_offset != base::string16::npos) {
-      match.inline_autocompletion =
-          match.fill_into_edit.substr(inline_autocomplete_offset);
-      match.allowed_to_be_default_match =
-          !HistoryProvider::PreventInlineAutocomplete(input) ||
-          match.inline_autocompletion.empty();
+
+  DCHECK(is_search_type != match.keyword.empty());
+
+  const bool keyword_matches =
+      base::StartsWith(base::UTF16ToUTF8(input.text()),
+                       base::StrCat({base::UTF16ToUTF8(match.keyword), " "}),
+                       base::CompareCase::INSENSITIVE_ASCII);
+
+  // True if input is in keyword mode and the match is a URL suggestion or the
+  // match has a different keyword.
+  bool would_cause_leaving_keyword_mode =
+      input.prefer_keyword() && !(is_search_type && keyword_matches);
+
+  if (!would_cause_leaving_keyword_mode) {
+    if (is_search_type) {
+      if (match.fill_into_edit.size() >= input.text().size() &&
+          std::equal(match.fill_into_edit.begin(),
+                     match.fill_into_edit.begin() + input.text().size(),
+                     input.text().begin(),
+                     SimpleCaseInsensitiveCompareUCS2())) {
+        match.inline_autocompletion =
+            match.fill_into_edit.substr(input.text().length());
+        match.allowed_to_be_default_match =
+            !input.prevent_inline_autocomplete() ||
+            match.inline_autocompletion.empty();
+      }
+    } else {
+      const size_t inline_autocomplete_offset =
+          URLPrefix::GetInlineAutocompleteOffset(
+              input.text(), fixed_up_input_text, true, match.fill_into_edit);
+      if (inline_autocomplete_offset != base::string16::npos) {
+        match.inline_autocompletion =
+            match.fill_into_edit.substr(inline_autocomplete_offset);
+        match.allowed_to_be_default_match =
+            !HistoryProvider::PreventInlineAutocomplete(input) ||
+            match.inline_autocompletion.empty();
+      }
     }
   }
-
-  match.EnsureUWYTIsAllowedToBeDefault(input, client_->GetTemplateURLService());
 
   // Try to mark pieces of the contents and description as matches if they
   // appear in |input.text()|.
@@ -443,8 +345,7 @@ ShortcutsBackend::ShortcutMap::const_iterator ShortcutsProvider::FindFirstMatch(
     const base::string16& keyword,
     ShortcutsBackend* backend) {
   DCHECK(backend);
-  ShortcutsBackend::ShortcutMap::const_iterator it =
-      backend->shortcuts_map().lower_bound(keyword);
+  auto it = backend->shortcuts_map().lower_bound(keyword);
   // Lower bound not necessarily matches the keyword, check for item pointed by
   // the lower bound iterator to at least start with keyword.
   return ((it == backend->shortcuts_map().end()) ||

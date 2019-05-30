@@ -23,13 +23,14 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/process/process_metrics.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/sys_info.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/system/sys_info.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -37,6 +38,7 @@
 #include "build/build_config.h"
 #include "third_party/leveldatabase/chromium_logger.h"
 #include "third_party/leveldatabase/leveldb_chrome.h"
+#include "third_party/leveldatabase/leveldb_features.h"
 #include "third_party/leveldatabase/src/include/leveldb/options.h"
 #include "third_party/re2/src/re2/re2.h"
 
@@ -63,12 +65,17 @@ const FilePath::CharType table_extension[] = FILE_PATH_LITERAL(".ldb");
 static const FilePath::CharType kLevelDBTestDirectoryPrefix[] =
     FILE_PATH_LITERAL("leveldb-test-");
 
+// This name should not be changed or users involved in a crash might not be
+// able to recover data.
+static const char kDatabaseNameSuffixForRebuildDB[] = "__tmp_for_rebuild";
+
 // Making direct platform in lieu of using base::FileEnumerator because the
 // latter can fail quietly without return an error result.
 static base::File::Error GetDirectoryEntries(const FilePath& dir_param,
                                              std::vector<FilePath>* result) {
   TRACE_EVENT0("leveldb", "ChromiumEnv::GetDirectoryEntries");
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   result->clear();
 #if defined(OS_WIN)
   FilePath dir_filepath = dir_param.Append(FILE_PATH_LITERAL("*"));
@@ -444,18 +451,27 @@ Status ChromiumWritableFile::Flush() {
 Status ChromiumWritableFile::Sync() {
   TRACE_EVENT0("leveldb", "WritableFile::Sync");
 
+  // leveldb's implicit contract for Sync() is that if this instance is for a
+  // manifest file then the directory is also sync'ed, to ensure new files
+  // referred to by the manifest are in the filesystem.
+  //
+  // This needs to happen before the manifest file is flushed to disk, to
+  // avoid crashing in a state where the manifest refers to files that are not
+  // yet on disk.
+  //
+  // See leveldb's env_posix.cc.
+  if (file_type_ == kManifest) {
+    Status status = SyncParent();
+    if (!status.ok())
+      return status;
+  }
+
   if (!file_.Flush()) {
     base::File::Error error = base::File::GetLastFileError();
     uma_logger_->RecordErrorAt(kWritableFileSync);
     return MakeIOError(filename_, base::File::ErrorToString(error),
                        kWritableFileSync, error);
   }
-
-  // leveldb's implicit contract for Sync() is that if this instance is for a
-  // manifest file then the directory is also sync'ed. See leveldb's
-  // env_posix.cc.
-  if (file_type_ == kManifest)
-    return SyncParent();
 
   return Status::OK();
 }
@@ -702,7 +718,7 @@ int GetCorruptionCode(const leveldb::Status& status) {
   const int kOtherError = 0;
   int error = kOtherError;
   const std::string& str_error = status.ToString();
-  const size_t kNumPatterns = arraysize(patterns);
+  const size_t kNumPatterns = base::size(patterns);
   for (size_t i = 0; i < kNumPatterns; ++i) {
     if (str_error.find(patterns[i]) != std::string::npos) {
       error = i + 1;
@@ -715,7 +731,7 @@ int GetCorruptionCode(const leveldb::Status& status) {
 int GetNumCorruptionCodes() {
   // + 1 for the "other" error that is returned when a corruption message
   // doesn't match any of the patterns.
-  return arraysize(patterns) + 1;
+  return base::size(patterns) + 1;
 }
 
 std::string GetCorruptionMessage(const leveldb::Status& status) {
@@ -735,6 +751,10 @@ bool IndicatesDiskFull(const leveldb::Status& status) {
   return (result == leveldb_env::METHOD_AND_BFE &&
           static_cast<base::File::Error>(error) ==
               base::File::FILE_ERROR_NO_SPACE);
+}
+
+std::string DatabaseNameForRewriteDB(const std::string& original_name) {
+  return original_name + kDatabaseNameSuffixForRebuildDB;
 }
 
 // Given the size of the disk, identified by |disk_size| in bytes, determine the
@@ -1611,11 +1631,83 @@ leveldb::Status OpenDB(const leveldb_env::Options& options,
     mem_options.write_buffer_size = 0;  // minimum size.
     s = DBTracker::GetInstance()->OpenDatabase(mem_options, name, &tracked_db);
   } else {
+    std::string tmp_name = DatabaseNameForRewriteDB(name);
+    // If Chrome crashes during rewrite, there might be a temporary db but
+    // no actual db.
+    if (options.env->FileExists(tmp_name) &&
+        !options.env->FileExists(name + "/CURRENT")) {
+      s = leveldb::DestroyDB(name, options);
+      if (!s.ok())
+        return s;
+      s = options.env->RenameFile(tmp_name, name);
+      if (!s.ok())
+        return s;
+    }
     s = DBTracker::GetInstance()->OpenDatabase(options, name, &tracked_db);
+    // It is possible that the database was partially deleted during a
+    // rewrite and can't be opened anymore.
+    if (!s.ok() && options.env->FileExists(tmp_name)) {
+      s = leveldb::DestroyDB(name, options);
+      if (!s.ok())
+        return s;
+      s = options.env->RenameFile(tmp_name, name);
+      if (!s.ok())
+        return s;
+      s = DBTracker::GetInstance()->OpenDatabase(options, name, &tracked_db);
+    }
+    // There might be a temporary database that needs to be cleaned up.
+    if (options.env->FileExists(tmp_name)) {
+      leveldb::DestroyDB(tmp_name, options);
+    }
   }
   if (s.ok())
     dbptr->reset(tracked_db);
   return s;
+}
+
+leveldb::Status RewriteDB(const leveldb_env::Options& options,
+                          const std::string& name,
+                          std::unique_ptr<leveldb::DB>* dbptr) {
+  DCHECK(options.create_if_missing);
+  if (!base::FeatureList::IsEnabled(leveldb::kLevelDBRewriteFeature))
+    return Status::OK();
+  if (leveldb_chrome::IsMemEnv(options.env))
+    return Status::OK();
+  TRACE_EVENT1("leveldb", "ChromiumEnv::RewriteDB", "name", name);
+  leveldb::Status s;
+  std::string tmp_name = DatabaseNameForRewriteDB(name);
+  if (options.env->FileExists(tmp_name)) {
+    s = leveldb::DestroyDB(tmp_name, options);
+    if (!s.ok())
+      return s;
+  }
+  // Copy all data from *dbptr to a temporary db.
+  std::unique_ptr<leveldb::DB> tmp_db;
+  s = leveldb_env::OpenDB(options, tmp_name, &tmp_db);
+  if (!s.ok())
+    return s;
+  std::unique_ptr<leveldb::Iterator> it(
+      (*dbptr)->NewIterator(leveldb::ReadOptions()));
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+    s = tmp_db->Put(leveldb::WriteOptions(), it->key(), it->value());
+    if (!s.ok())
+      break;
+  }
+  it.reset();
+  tmp_db.reset();
+  if (!s.ok()) {
+    leveldb::DestroyDB(tmp_name, options);
+    return s;
+  }
+  // Replace the old database with tmp_db.
+  (*dbptr).reset();
+  s = leveldb::DestroyDB(name, options);
+  if (!s.ok())
+    return s;
+  s = options.env->RenameFile(tmp_name, name);
+  if (!s.ok())
+    return s;
+  return leveldb_env::OpenDB(options, name, dbptr);
 }
 
 base::StringPiece MakeStringPiece(const leveldb::Slice& s) {

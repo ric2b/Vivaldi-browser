@@ -81,11 +81,19 @@ NavigationThrottle::WillProcessResponse() {
 }
 
 void NavigationThrottle::Resume() {
+  if (resume_callback_) {
+    resume_callback_.Run();
+    return;
+  }
   static_cast<NavigationHandleImpl*>(navigation_handle_)->Resume(this);
 }
 
 void NavigationThrottle::CancelDeferredNavigation(
     NavigationThrottle::ThrottleCheckResult result) {
+  if (cancel_deferred_navigation_callback_) {
+    cancel_deferred_navigation_callback_.Run(result);
+    return;
+  }
   static_cast<NavigationHandleImpl*>(navigation_handle_)
       ->CancelDeferredNavigation(this, result);
 }

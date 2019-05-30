@@ -29,6 +29,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/numerics/checked_math.h"
 #include "build/build_config.h"
 #include "third_party/blink/renderer/platform/wtf/ascii_ctype.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
@@ -95,7 +96,7 @@ class WTF_EXPORT StringImpl {
         contains_only_ascii_(true),
         needs_ascii_check_(false),
         is_atomic_(false),
-        is8_bit_(true),
+        is_8bit_(true),
         is_static_(true) {
     // Ensure that the hash is computed so that AtomicStringHash can call
     // existingHash() with impunity. The empty string is special because it
@@ -112,7 +113,7 @@ class WTF_EXPORT StringImpl {
         contains_only_ascii_(true),
         needs_ascii_check_(false),
         is_atomic_(false),
-        is8_bit_(false),
+        is_8bit_(false),
         is_static_(true) {
     GetHash();
   }
@@ -126,7 +127,7 @@ class WTF_EXPORT StringImpl {
         contains_only_ascii_(!length),
         needs_ascii_check_(static_cast<bool>(length)),
         is_atomic_(false),
-        is8_bit_(true),
+        is_8bit_(true),
         is_static_(false) {
     DCHECK(length_);
   }
@@ -138,7 +139,7 @@ class WTF_EXPORT StringImpl {
         contains_only_ascii_(!length),
         needs_ascii_check_(static_cast<bool>(length)),
         is_atomic_(false),
-        is8_bit_(false),
+        is_8bit_(false),
         is_static_(false) {
     DCHECK(length_);
   }
@@ -151,7 +152,7 @@ class WTF_EXPORT StringImpl {
         contains_only_ascii_(!length),
         needs_ascii_check_(static_cast<bool>(length)),
         is_atomic_(false),
-        is8_bit_(true),
+        is_8bit_(true),
         is_static_(true) {}
 
  public:
@@ -198,7 +199,7 @@ class WTF_EXPORT StringImpl {
                                                        UChar*& data);
 
   wtf_size_t length() const { return length_; }
-  bool Is8Bit() const { return is8_bit_; }
+  bool Is8Bit() const { return is_8bit_; }
 
   ALWAYS_INLINE const LChar* Characters8() const {
     DCHECK(Is8Bit());
@@ -224,7 +225,7 @@ class WTF_EXPORT StringImpl {
 
   bool IsStatic() const { return is_static_; }
 
-  bool ContainsOnlyASCII() const;
+  bool ContainsOnlyASCIIOrEmpty() const;
 
   bool IsSafeToSendToAnotherThread() const;
 
@@ -313,7 +314,7 @@ class WTF_EXPORT StringImpl {
   }
   UChar32 CharacterStartingAt(wtf_size_t);
 
-  bool ContainsOnlyWhitespace();
+  bool ContainsOnlyWhitespaceOrEmpty();
 
   int ToInt(NumberParsingOptions, bool* ok) const;
   wtf_size_t ToUInt(NumberParsingOptions, bool* ok) const;
@@ -440,10 +441,13 @@ class WTF_EXPORT StringImpl {
  private:
   template <typename CharType>
   static size_t AllocationSize(wtf_size_t length) {
-    CHECK_LE(length,
-             ((std::numeric_limits<wtf_size_t>::max() - sizeof(StringImpl)) /
-              sizeof(CharType)));
-    return sizeof(StringImpl) + length * sizeof(CharType);
+    static_assert(
+        sizeof(CharType) > 1,
+        "Don't use this template with 1-byte chars; use a template "
+        "specialization to save time and code-size by avoiding a CheckMul.");
+    return base::CheckAdd(sizeof(StringImpl),
+                          base::CheckMul(length, sizeof(CharType)))
+        .ValueOrDie();
   }
 
   scoped_refptr<StringImpl> Replace(UChar pattern,
@@ -461,7 +465,7 @@ class WTF_EXPORT StringImpl {
   NOINLINE wtf_size_t HashSlowCase() const;
 
   void DestroyIfNotStatic() const;
-  void UpdateContainsOnlyASCII() const;
+  void UpdateContainsOnlyASCIIOrEmpty() const;
 
 #if DCHECK_IS_ON()
   std::string AsciiForDebugging() const;
@@ -487,7 +491,7 @@ class WTF_EXPORT StringImpl {
   mutable unsigned contains_only_ascii_ : 1;
   mutable unsigned needs_ascii_check_ : 1;
   unsigned is_atomic_ : 1;
-  const unsigned is8_bit_ : 1;
+  const unsigned is_8bit_ : 1;
   const unsigned is_static_ : 1;
 
   DISALLOW_COPY_AND_ASSIGN(StringImpl);
@@ -501,6 +505,14 @@ ALWAYS_INLINE const LChar* StringImpl::GetCharacters<LChar>() const {
 template <>
 ALWAYS_INLINE const UChar* StringImpl::GetCharacters<UChar>() const {
   return Characters16();
+}
+
+// The following template specialization can be moved to the class declaration
+// once we officially switch to C++17 (we need C++ DR727 to be implemented).
+template <>
+ALWAYS_INLINE size_t StringImpl::AllocationSize<LChar>(wtf_size_t length) {
+  static_assert(sizeof(LChar) == 1, "sizeof(LChar) should be 1.");
+  return base::CheckAdd(sizeof(StringImpl), length).ValueOrDie();
 }
 
 WTF_EXPORT bool Equal(const StringImpl*, const StringImpl*);
@@ -521,9 +533,9 @@ inline bool Equal(const char* a, StringImpl* b) {
 }
 WTF_EXPORT bool EqualNonNull(const StringImpl* a, const StringImpl* b);
 
-ALWAYS_INLINE bool StringImpl::ContainsOnlyASCII() const {
+ALWAYS_INLINE bool StringImpl::ContainsOnlyASCIIOrEmpty() const {
   if (needs_ascii_check_)
-    UpdateContainsOnlyASCII();
+    UpdateContainsOnlyASCIIOrEmpty();
   return contains_only_ascii_;
 }
 
@@ -771,14 +783,14 @@ static inline int CodePointCompare(const StringImpl* string1,
   if (!string2)
     return string1->length() ? 1 : 0;
 
-  bool string1_is8_bit = string1->Is8Bit();
-  bool string2_is8_bit = string2->Is8Bit();
-  if (string1_is8_bit) {
-    if (string2_is8_bit)
+  bool string1_is_8bit = string1->Is8Bit();
+  bool string2_is_8bit = string2->Is8Bit();
+  if (string1_is_8bit) {
+    if (string2_is_8bit)
       return CodePointCompare8(string1, string2);
     return CodePointCompare8To16(string1, string2);
   }
-  if (string2_is8_bit)
+  if (string2_is_8bit)
     return -CodePointCompare8To16(string2, string1);
   return CodePointCompare16(string1, string2);
 }
@@ -788,7 +800,7 @@ static inline bool IsSpaceOrNewline(UChar c) {
   // This will include newlines, which aren't included in Unicode DirWS.
   return c <= 0x7F
              ? WTF::IsASCIISpace(c)
-             : WTF::Unicode::Direction(c) == WTF::Unicode::kWhiteSpaceNeutral;
+             : WTF::unicode::Direction(c) == WTF::unicode::kWhiteSpaceNeutral;
 }
 
 inline scoped_refptr<StringImpl> StringImpl::IsolatedCopy() const {

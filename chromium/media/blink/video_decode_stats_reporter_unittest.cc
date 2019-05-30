@@ -4,6 +4,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop_current.h"
@@ -15,11 +16,11 @@
 #include "media/base/video_types.h"
 #include "media/blink/video_decode_stats_reporter.h"
 #include "media/capabilities/bucket_utility.h"
+#include "media/mojo/interfaces/media_types.mojom.h"
 #include "media/mojo/interfaces/video_decode_stats_recorder.mojom.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "ui/gfx/geometry/rect.h"
 
 using ::testing::Invoke;
@@ -42,9 +43,10 @@ VideoDecoderConfig MakeVideoConfig(VideoCodec codec,
                                    gfx::Size natural_size) {
   gfx::Size coded_size = natural_size;
   gfx::Rect visible_rect(coded_size.width(), coded_size.height());
-  return VideoDecoderConfig(codec, profile, PIXEL_FORMAT_I420, COLOR_SPACE_JPEG,
-                            VIDEO_ROTATION_0, coded_size, visible_rect,
-                            natural_size, EmptyExtraData(), Unencrypted());
+  return VideoDecoderConfig(codec, profile, PIXEL_FORMAT_I420,
+                            VideoColorSpace::JPEG(), VIDEO_ROTATION_0,
+                            coded_size, visible_rect, natural_size,
+                            EmptyExtraData(), Unencrypted());
 }
 
 VideoDecoderConfig MakeDefaultVideoConfig() {
@@ -84,13 +86,13 @@ class RecordInterceptor : public mojom::VideoDecodeStatsRecorder {
 
   void UpdateRecord(mojom::PredictionTargetsPtr targets) override {
     MockUpdateRecord(targets->frames_decoded, targets->frames_dropped,
-                     targets->frames_decoded_power_efficient);
+                     targets->frames_power_efficient);
   }
 
   MOCK_METHOD3(MockUpdateRecord,
                void(uint32_t frames_decoded,
                     uint32_t frames_dropped,
-                    uint32_t frames_decoded_power_efficient));
+                    uint32_t frames_power_efficient));
 
   MOCK_METHOD0(FinalizeRecord, void());
 };
@@ -186,8 +188,7 @@ class VideoDecodeStatsReporterTest : public ::testing::Test {
         std::move(recorder_ptr),
         base::Bind(&VideoDecodeStatsReporterTest::GetPipelineStatsCB,
                    base::Unretained(this)),
-        MakeDefaultVideoConfig(),
-        blink::scheduler::GetSingleThreadTaskRunnerForTesting(),
+        MakeDefaultVideoConfig(), task_runner_,
         task_runner_->GetMockTickClock());
   }
 

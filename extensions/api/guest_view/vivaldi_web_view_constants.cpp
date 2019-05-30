@@ -27,7 +27,7 @@ const char kLoadedElements[] = "loadedElements";
 const char kTotalElements[] = "totalElements";
 
 // Parameters/properties on events.
-const char kInitialHeight[] = "initialHeight";
+const char kInitialTop[] = "initialTop";
 const char kInitialLeft[] = "initialLeft";
 
 }  // namespace webview

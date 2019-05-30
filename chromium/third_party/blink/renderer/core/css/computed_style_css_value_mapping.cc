@@ -27,6 +27,7 @@
 
 #include "third_party/blink/renderer/core/css/css_custom_property_declaration.h"
 #include "third_party/blink/renderer/core/css/css_value.h"
+#include "third_party/blink/renderer/core/css/properties/longhands/custom_property.h"
 #include "third_party/blink/renderer/core/css/property_registry.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 
@@ -36,25 +37,10 @@ const CSSValue* ComputedStyleCSSValueMapping::Get(
     const AtomicString custom_property_name,
     const ComputedStyle& style,
     const PropertyRegistry* registry) {
-  if (registry) {
-    const PropertyRegistration* registration =
-        registry->Registration(custom_property_name);
-    if (registration) {
-      const CSSValue* result = style.GetRegisteredVariable(
-          custom_property_name, registration->Inherits());
-      if (result)
-        return result;
-      return registration->Initial();
-    }
-  }
-
-  bool is_inherited_property = true;
-  CSSVariableData* data =
-      style.GetVariable(custom_property_name, is_inherited_property);
-  if (!data)
-    return nullptr;
-
-  return CSSCustomPropertyDeclaration::Create(custom_property_name, data);
+  CustomProperty custom_property(custom_property_name, registry);
+  return custom_property.CSSValueFromComputedStyle(
+      style, nullptr /* layout_object */, nullptr /* styled_node */,
+      false /* allow_visited_style */);
 }
 
 HeapHashMap<AtomicString, Member<const CSSValue>>
@@ -81,6 +67,22 @@ ComputedStyleCSSValueMapping::GetVariables(const ComputedStyle& style,
           ComputedStyleCSSValueMapping::Get(name, style, registry);
       if (value)
         variables.Set(name, value);
+    }
+  }
+
+  // Registered properties with initial values are not stored explicitly on
+  // each computed style. Their initialness is instead indicated by the
+  // absence of that property on the computed style. This means that registered
+  // properties with an implicit initial value will not appear in the result of
+  // Style[Non]InheritedVariables::GetCustomPropertyNames, so we need to
+  // iterate though all registrations and add the initial values, if necessary.
+  if (registry) {
+    for (const auto& entry : *registry) {
+      if (variables.Contains(entry.key))
+        continue;
+      const CSSValue* initial = entry.value->Initial();
+      if (initial)
+        variables.Set(entry.key, initial);
     }
   }
 

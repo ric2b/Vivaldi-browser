@@ -100,7 +100,7 @@ static void attachFunc(
     if( pNew->pBt ) sqlite3BtreeClose(pNew->pBt);
     pNew->pBt = 0;
     pNew->pSchema = 0;
-    rc = sqlite3BtreeOpen(pVfs, "x", db, &pNew->pBt, 0, SQLITE_OPEN_MAIN_DB);
+    rc = sqlite3BtreeOpen(pVfs, "x\0", db, &pNew->pBt, 0, SQLITE_OPEN_MAIN_DB);
   }else{
     /* This is a real ATTACH
     **
@@ -155,8 +155,8 @@ static void attachFunc(
     assert( pVfs );
     flags |= SQLITE_OPEN_MAIN_DB;
     rc = sqlite3BtreeOpen(pVfs, zPath, db, &pNew->pBt, 0, flags);
-    sqlite3_free( zPath );
     db->nDb++;
+    pNew->zDbSName = sqlite3DbStrDup(db, zName);
   }
   db->noSharedCache = 0;
   if( rc==SQLITE_CONSTRAINT ){
@@ -184,7 +184,6 @@ static void attachFunc(
     sqlite3BtreeLeave(pNew->pBt);
   }
   pNew->safety_level = SQLITE_DEFAULT_SYNCHRONOUS+1;
-  if( !REOPEN_AS_MEMDB(db) ) pNew->zDbSName = sqlite3DbStrDup(db, zName);
   if( rc==SQLITE_OK && pNew->zDbSName==0 ){
     rc = SQLITE_NOMEM_BKPT;
   }
@@ -212,15 +211,19 @@ static void attachFunc(
         break;
 
       case SQLITE_NULL:
-        /* No key specified.  Use the key from the main database */
-        sqlite3CodecGetKey(db, 0, (void**)&zKey, &nKey);
-        if( nKey || sqlite3BtreeGetOptimalReserve(db->aDb[0].pBt)>0 ){
-          rc = sqlite3CodecAttach(db, db->nDb-1, zKey, nKey);
+        /* No key specified.  Use the key from URI filename, or if none,
+        ** use the key from the main database. */
+        if( sqlite3CodecQueryParameters(db, zName, zPath)==0 ){
+          sqlite3CodecGetKey(db, 0, (void**)&zKey, &nKey);
+          if( nKey || sqlite3BtreeGetOptimalReserve(db->aDb[0].pBt)>0 ){
+            rc = sqlite3CodecAttach(db, db->nDb-1, zKey, nKey);
+          }
         }
         break;
     }
   }
 #endif
+  sqlite3_free( zPath );
 
   /* If the file was opened successfully, read the schema for the new database.
   ** If this fails, or if opening the file failed, then close the file and
@@ -414,6 +417,7 @@ void sqlite3Detach(Parse *pParse, Expr *pDbname){
     0,                /* pNext */
     detachFunc,       /* xSFunc */
     0,                /* xFinalize */
+    0, 0,             /* xValue, xInverse */
     "sqlite_detach",  /* zName */
     {0}
   };
@@ -433,6 +437,7 @@ void sqlite3Attach(Parse *pParse, Expr *p, Expr *pDbname, Expr *pKey){
     0,                /* pNext */
     attachFunc,       /* xSFunc */
     0,                /* xFinalize */
+    0, 0,             /* xValue, xInverse */
     "sqlite_attach",  /* zName */
     {0}
   };

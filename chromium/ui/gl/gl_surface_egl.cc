@@ -16,8 +16,9 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "ui/gfx/geometry/rect.h"
@@ -59,6 +60,11 @@
 #define EGL_EXT_gl_colorspace_display_p3 1
 #define EGL_GL_COLORSPACE_DISPLAY_P3_EXT 0x3363
 #endif /* EGL_EXT_gl_colorspace_display_p3 */
+
+#ifndef EGL_EXT_gl_colorspace_display_p3_passthrough
+#define EGL_EXT_gl_colorspace_display_p3_passthrough 1
+#define EGL_GL_COLORSPACE_DISPLAY_P3_PASSTHROUGH_EXT 0x3490
+#endif /* EGL_EXT_gl_colorspace_display_p3_passthrough */
 
 // From ANGLE's egl/eglext.h.
 
@@ -149,13 +155,14 @@ bool g_egl_surface_orientation_supported = false;
 bool g_egl_context_priority_supported = false;
 bool g_egl_khr_colorspace = false;
 bool g_egl_ext_colorspace_display_p3 = false;
-bool g_use_direct_composition = false;
+bool g_egl_ext_colorspace_display_p3_passthrough = false;
+bool g_egl_flexible_surface_compatibility_supported = false;
 bool g_egl_robust_resource_init_supported = false;
 bool g_egl_display_texture_share_group_supported = false;
 bool g_egl_create_context_client_arrays_supported = false;
 bool g_egl_android_native_fence_sync_supported = false;
 
-const char kSwapEventTraceCategories[] = "gpu";
+constexpr const char kSwapEventTraceCategories[] = "gpu";
 
 constexpr size_t kMaxTimestampsSupportable = 9;
 
@@ -492,10 +499,8 @@ EGLConfig ChooseConfig(GLSurfaceFormat format, bool surfaceless) {
 void AddInitDisplay(std::vector<DisplayType>* init_displays,
                     DisplayType display_type) {
   // Make sure to not add the same display type twice.
-  if (std::find(init_displays->begin(), init_displays->end(), display_type) ==
-      init_displays->end()) {
+  if (!base::ContainsValue(*init_displays, display_type))
     init_displays->push_back(display_type);
-  }
 }
 
 const char* GetDebugMessageTypeString(EGLint source) {
@@ -599,8 +604,13 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
 
   if (supports_angle_opengl) {
     if (use_angle_default && !supports_angle_d3d) {
+#if defined(OS_ANDROID)
+      // Don't request desktopGL on android
+      AddInitDisplay(init_displays, ANGLE_OPENGLES);
+#else
       AddInitDisplay(init_displays, ANGLE_OPENGL);
       AddInitDisplay(init_displays, ANGLE_OPENGLES);
+#endif
     } else {
       if (requested_renderer == kANGLEImplementationOpenGLName) {
         AddInitDisplay(init_displays, ANGLE_OPENGL);
@@ -682,8 +692,7 @@ bool GLSurfaceEGL::InitializeOneOffCommon() {
       HasEGLExtension("EGL_CHROMIUM_create_context_bind_generates_resource");
   g_egl_create_context_webgl_compatability_supported =
       HasEGLExtension("EGL_ANGLE_create_context_webgl_compatibility");
-  g_egl_sync_control_supported =
-      HasEGLExtension("EGL_CHROMIUM_sync_control");
+  g_egl_sync_control_supported = HasEGLExtension("EGL_CHROMIUM_sync_control");
   g_egl_window_fixed_size_supported =
       HasEGLExtension("EGL_ANGLE_window_fixed_size");
   g_egl_surface_orientation_supported =
@@ -691,6 +700,8 @@ bool GLSurfaceEGL::InitializeOneOffCommon() {
   g_egl_khr_colorspace = HasEGLExtension("EGL_KHR_gl_colorspace");
   g_egl_ext_colorspace_display_p3 =
       HasEGLExtension("EGL_EXT_gl_colorspace_display_p3");
+  g_egl_ext_colorspace_display_p3_passthrough =
+      HasEGLExtension("EGL_EXT_gl_colorspace_display_p3_passthrough");
   // According to https://source.android.com/compatibility/android-cdd.html the
   // EGL_IMG_context_priority extension is mandatory for Virtual Reality High
   // Performance support, but due to a bug in Android Nougat the extension
@@ -705,15 +716,9 @@ bool GLSurfaceEGL::InitializeOneOffCommon() {
 
 #if defined(OS_WIN)
   // Need EGL_ANGLE_flexible_surface_compatibility to allow surfaces with and
-  // without alpha to be bound to the same context. Blacklist direct composition
-  // if MCTU.dll or MCTUX.dll are injected. These are user mode drivers for
-  // display adapters from Magic Control Technology Corporation.
-  g_use_direct_composition =
-      HasEGLExtension("EGL_ANGLE_direct_composition") &&
-      HasEGLExtension("EGL_ANGLE_flexible_surface_compatibility") &&
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableDirectComposition) &&
-      !GetModuleHandle(TEXT("MCTU.dll")) && !GetModuleHandle(TEXT("MCTUX.dll"));
+  // without alpha to be bound to the same context.
+  g_egl_flexible_surface_compatibility_supported =
+      HasEGLExtension("EGL_ANGLE_flexible_surface_compatibility");
 #endif
 
   g_egl_display_texture_share_group_supported =
@@ -740,7 +745,7 @@ bool GLSurfaceEGL::InitializeOneOffCommon() {
     scoped_refptr<GLSurface> surface = new SurfacelessEGL(gfx::Size(1, 1));
     scoped_refptr<GLContext> context = InitializeGLContext(
         new GLContextEGL(nullptr), surface.get(), GLContextAttribs());
-    if (!context->MakeCurrent(surface.get()))
+    if (!context || !context->MakeCurrent(surface.get()))
       g_egl_surfaceless_context_supported = false;
 
     // Ensure context supports GL_OES_surfaceless_context.
@@ -799,7 +804,6 @@ void GLSurfaceEGL::ShutdownOneOff() {
   g_egl_sync_control_supported = false;
   g_egl_window_fixed_size_supported = false;
   g_egl_surface_orientation_supported = false;
-  g_use_direct_composition = false;
   g_egl_surfaceless_context_supported = false;
   g_egl_robust_resource_init_supported = false;
   g_egl_display_texture_share_group_supported = false;
@@ -852,8 +856,8 @@ bool GLSurfaceEGL::IsEGLContextPrioritySupported() {
 }
 
 // static
-bool GLSurfaceEGL::IsDirectCompositionSupported() {
-  return g_use_direct_composition;
+bool GLSurfaceEGL::IsEGLFlexibleSurfaceCompatibilitySupported() {
+  return g_egl_flexible_surface_compatibility_supported;
 }
 
 bool GLSurfaceEGL::IsRobustResourceInitSupported() {
@@ -1024,14 +1028,6 @@ bool NativeViewGLSurfaceEGL::Initialize(GLSurfaceFormat format) {
     egl_window_attributes.push_back(EGL_SURFACE_ORIENTATION_INVERT_Y_ANGLE);
   }
 
-  if (g_use_direct_composition) {
-    egl_window_attributes.push_back(
-        EGL_FLEXIBLE_SURFACE_COMPATIBILITY_SUPPORTED_ANGLE);
-    egl_window_attributes.push_back(EGL_TRUE);
-    egl_window_attributes.push_back(EGL_DIRECT_COMPOSITION_ANGLE);
-    egl_window_attributes.push_back(EGL_TRUE);
-  }
-
   switch (format_.GetColorSpace()) {
     case GLSurfaceFormat::COLOR_SPACE_UNSPECIFIED:
       break;
@@ -1053,9 +1049,20 @@ bool NativeViewGLSurfaceEGL::Initialize(GLSurfaceFormat format) {
       // with the P3 gamut instead of the the sRGB gamut.
       // COLORSPACE_DISPLAY_P3_LINEAR has a linear transfer function, and is
       // intended for use with 16-bit formats.
-      if (g_egl_khr_colorspace && g_egl_ext_colorspace_display_p3) {
+      bool p3_supported = g_egl_ext_colorspace_display_p3 ||
+                          g_egl_ext_colorspace_display_p3_passthrough;
+      if (g_egl_khr_colorspace && p3_supported) {
         egl_window_attributes.push_back(EGL_GL_COLORSPACE_KHR);
-        egl_window_attributes.push_back(EGL_GL_COLORSPACE_DISPLAY_P3_EXT);
+        // Chrome relied on incorrect Android behavior when dealing with P3 /
+        // framebuffer_srgb interactions. This behavior was fixed in Q, which
+        // causes invalid Chrome rendering. To achieve Android-P behavior in Q+,
+        // use EGL_GL_COLORSPACE_P3_PASSTHROUGH_EXT where possible.
+        if (g_egl_ext_colorspace_display_p3_passthrough) {
+          egl_window_attributes.push_back(
+              EGL_GL_COLORSPACE_DISPLAY_P3_PASSTHROUGH_EXT);
+        } else {
+          egl_window_attributes.push_back(EGL_GL_COLORSPACE_DISPLAY_P3_EXT);
+        }
       }
       break;
   }
@@ -1192,7 +1199,7 @@ bool NativeViewGLSurfaceEGL::IsOffscreen() {
 }
 
 gfx::SwapResult NativeViewGLSurfaceEGL::SwapBuffers(
-    const PresentationCallback& callback) {
+    PresentationCallback callback) {
   TRACE_EVENT2("gpu", "NativeViewGLSurfaceEGL:RealSwapBuffers",
       "width", GetSize().width(),
       "height", GetSize().height());
@@ -1212,7 +1219,7 @@ gfx::SwapResult NativeViewGLSurfaceEGL::SwapBuffers(
     new_frame_id = -1;
 
   GLSurfacePresentationHelper::ScopedSwapBuffers scoped_swap_buffers(
-      presentation_helper_.get(), callback, new_frame_id);
+      presentation_helper_.get(), std::move(callback), new_frame_id);
 
   if (!eglSwapBuffers(GetDisplay(), surface_)) {
     DVLOG(1) << "eglSwapBuffers failed with error "
@@ -1408,10 +1415,6 @@ bool NativeViewGLSurfaceEGL::FlipsVertically() const {
   return flips_vertically_;
 }
 
-bool NativeViewGLSurfaceEGL::BuffersFlipped() const {
-  return g_use_direct_composition;
-}
-
 EGLTimestampClient* NativeViewGLSurfaceEGL::GetEGLTimestampClient() {
   // This api call is used by GLSurfacePresentationHelper class which is member
   // of this class NativeViewGLSurfaceEGL. Hence its guaranteed "this" pointer
@@ -1484,15 +1487,20 @@ bool NativeViewGLSurfaceEGL::GetFrameTimestampInfoIfAvailable(
   if (presentation_time_ns == EGL_TIMESTAMP_PENDING_ANDROID) {
     return false;
   }
-  *presentation_time = base::TimeTicks() +
-                       base::TimeDelta::FromNanoseconds(presentation_time_ns);
-  *presentation_flags = presentation_flags_;
+  if (presentation_time_ns == EGL_TIMESTAMP_INVALID_ANDROID) {
+    *presentation_time = base::TimeTicks::Now();
+  } else {
+    *presentation_time = base::TimeTicks() +
+                         base::TimeDelta::FromNanoseconds(presentation_time_ns);
+    *presentation_flags = presentation_flags_;
+  }
+  DCHECK(!presentation_time->is_null());
   return true;
 }
 
 gfx::SwapResult NativeViewGLSurfaceEGL::SwapBuffersWithDamage(
     const std::vector<int>& rects,
-    const PresentationCallback& callback) {
+    PresentationCallback callback) {
   DCHECK(supports_swap_buffer_with_damage_);
   if (!CommitAndClearPendingOverlays()) {
     DVLOG(1) << "Failed to commit pending overlay planes.";
@@ -1500,7 +1508,7 @@ gfx::SwapResult NativeViewGLSurfaceEGL::SwapBuffersWithDamage(
   }
 
   GLSurfacePresentationHelper::ScopedSwapBuffers scoped_swap_buffers(
-      presentation_helper_.get(), callback);
+      presentation_helper_.get(), std::move(callback));
   if (!eglSwapBuffersWithDamageKHR(GetDisplay(), surface_,
                                    const_cast<EGLint*>(rects.data()),
                                    static_cast<EGLint>(rects.size() / 4))) {
@@ -1516,7 +1524,7 @@ gfx::SwapResult NativeViewGLSurfaceEGL::PostSubBuffer(
     int y,
     int width,
     int height,
-    const PresentationCallback& callback) {
+    PresentationCallback callback) {
   DCHECK(supports_post_sub_buffer_);
   if (!CommitAndClearPendingOverlays()) {
     DVLOG(1) << "Failed to commit pending overlay planes.";
@@ -1530,7 +1538,7 @@ gfx::SwapResult NativeViewGLSurfaceEGL::PostSubBuffer(
   }
 
   GLSurfacePresentationHelper::ScopedSwapBuffers scoped_swap_buffers(
-      presentation_helper_.get(), callback);
+      presentation_helper_.get(), std::move(callback));
   if (!eglPostSubBufferNV(GetDisplay(), surface_, x, y, width, height)) {
     DVLOG(1) << "eglPostSubBufferNV failed with error "
              << GetLastEGLErrorString();
@@ -1548,13 +1556,13 @@ bool NativeViewGLSurfaceEGL::SupportsCommitOverlayPlanes() {
 }
 
 gfx::SwapResult NativeViewGLSurfaceEGL::CommitOverlayPlanes(
-    const PresentationCallback& callback) {
+    PresentationCallback callback) {
   DCHECK(SupportsCommitOverlayPlanes());
   // Here we assume that the overlays scheduled on this surface will display
   // themselves to the screen right away in |CommitAndClearPendingOverlays|,
   // rather than being queued and waiting for a "swap" signal.
   GLSurfacePresentationHelper::ScopedSwapBuffers scoped_swap_buffers(
-      presentation_helper_.get(), callback);
+      presentation_helper_.get(), std::move(callback));
   if (!CommitAndClearPendingOverlays())
     scoped_swap_buffers.set_result(gfx::SwapResult::SWAP_FAILED);
   return scoped_swap_buffers.result();
@@ -1655,22 +1663,12 @@ bool PbufferGLSurfaceEGL::Initialize(GLSurfaceFormat format) {
   // they have different addresses. If they have the same address then a
   // future call to MakeCurrent might early out because it appears the current
   // context and surface have not changed.
-  std::vector<EGLint> pbuffer_attribs;
-  pbuffer_attribs.push_back(EGL_WIDTH);
-  pbuffer_attribs.push_back(size_.width());
-  pbuffer_attribs.push_back(EGL_HEIGHT);
-  pbuffer_attribs.push_back(size_.height());
-
-  if (g_use_direct_composition) {
-    pbuffer_attribs.push_back(
-        EGL_FLEXIBLE_SURFACE_COMPATIBILITY_SUPPORTED_ANGLE);
-    pbuffer_attribs.push_back(EGL_TRUE);
-  }
-
-  pbuffer_attribs.push_back(EGL_NONE);
+  EGLint pbuffer_attribs[] = {
+      EGL_WIDTH, size_.width(), EGL_HEIGHT, size_.height(), EGL_NONE,
+  };
 
   EGLSurface new_surface =
-      eglCreatePbufferSurface(display, GetConfig(), &pbuffer_attribs[0]);
+      eglCreatePbufferSurface(display, GetConfig(), pbuffer_attribs);
   if (!new_surface) {
     LOG(ERROR) << "eglCreatePbufferSurface failed with error "
                << GetLastEGLErrorString();
@@ -1699,7 +1697,7 @@ bool PbufferGLSurfaceEGL::IsOffscreen() {
 }
 
 gfx::SwapResult PbufferGLSurfaceEGL::SwapBuffers(
-    const PresentationCallback& callback) {
+    PresentationCallback callback) {
   NOTREACHED() << "Attempted to call SwapBuffers on a PbufferGLSurfaceEGL.";
   return gfx::SwapResult::SWAP_FAILED;
 }
@@ -1775,8 +1773,7 @@ bool SurfacelessEGL::IsSurfaceless() const {
   return true;
 }
 
-gfx::SwapResult SurfacelessEGL::SwapBuffers(
-    const PresentationCallback& callback) {
+gfx::SwapResult SurfacelessEGL::SwapBuffers(PresentationCallback callback) {
   LOG(ERROR) << "Attempted to call SwapBuffers with SurfacelessEGL.";
   return gfx::SwapResult::SWAP_FAILED;
 }

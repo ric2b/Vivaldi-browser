@@ -3,4 +3,12 @@ include_rules = [
   "+cc/base",
   "+cc/test",
   "+cc/trees",
+  "+device/vr/util",
 ]
+
+specific_include_rules = {
+  ".*test.*\.cc": [
+    "+device/vr/test/test_hook.h",
+    "+third_party/openvr/src/headers/openvr.h",
+  ],
+}

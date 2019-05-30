@@ -123,8 +123,7 @@ class NativeDiff(BaseDiff):
 class ResourceSizesDiff(BaseDiff):
   # Ordered by output appearance.
   _SUMMARY_SECTIONS = (
-      'Specifics', 'InstallSize', 'InstallBreakdown', 'Dex',
-      'StaticInitializersCount')
+      'Specifics', 'InstallSize', 'InstallBreakdown', 'Dex')
   # Sections where it makes sense to sum subsections into a section total.
   _AGGREGATE_SECTIONS = (
       'InstallBreakdown', 'Breakdown', 'MainLibInfo', 'Uncompressed')
@@ -148,13 +147,13 @@ class ResourceSizesDiff(BaseDiff):
     return self._ResultLines()
 
   def Summary(self):
-    header_lines = [
+    footer_lines = [
+        '',
         'For an explanation of these metrics, see:',
         ('https://chromium.googlesource.com/chromium/src/+/master/docs/speed/'
-         'binary_size/metrics.md#Metrics-for-Android'),
-        '']
-    return header_lines + self._ResultLines(
-        include_sections=ResourceSizesDiff._SUMMARY_SECTIONS)
+         'binary_size/metrics.md#Metrics-for-Android')]
+    return self._ResultLines(
+        include_sections=ResourceSizesDiff._SUMMARY_SECTIONS) + footer_lines
 
   def ProduceDiff(self, before_dir, after_dir):
     before = self._LoadResults(before_dir)
@@ -179,8 +178,7 @@ class ResourceSizesDiff(BaseDiff):
     """Generates diff lines for the specified sections (defaults to all)."""
     section_lines = collections.defaultdict(list)
     for section_name, section_results in self._diff.iteritems():
-      section_no_target = re.sub(r'^.*_', '', section_name)
-      if not include_sections or section_no_target in include_sections:
+      if not include_sections or section_name in include_sections:
         subsection_lines = []
         section_sum = 0
         units = ''
@@ -190,14 +188,14 @@ class ResourceSizesDiff(BaseDiff):
             continue
           section_sum += value
           subsection_lines.append('{:>+14,} {} {}'.format(value, units, name))
-        section_header = section_no_target
-        if section_no_target in ResourceSizesDiff._AGGREGATE_SECTIONS:
+        section_header = section_name
+        if section_name in ResourceSizesDiff._AGGREGATE_SECTIONS:
           section_header += ' ({:+,} {})'.format(section_sum, units)
         section_header += ':'
         # Omit sections with empty subsections.
         if subsection_lines:
-          section_lines[section_no_target].append(section_header)
-          section_lines[section_no_target].extend(subsection_lines)
+          section_lines[section_name].append(section_header)
+          section_lines[section_name].extend(subsection_lines)
     if not section_lines:
       return ['Empty ' + self.name]
     ret = []
@@ -209,7 +207,13 @@ class ResourceSizesDiff(BaseDiff):
     chartjson_file = os.path.join(archive_dir, self._filename)
     with open(chartjson_file) as f:
       chartjson = json.load(f)
-    return chartjson['charts']
+    charts = chartjson['charts']
+    # Older versions of resource_sizes.py prefixed the apk onto section names.
+    ret = {}
+    for section, section_dict in charts.iteritems():
+      section_no_target = re.sub(r'^.*_', '', section)
+      ret[section_no_target] = section_dict
+    return ret
 
 
 class _BuildHelper(object):
@@ -227,15 +231,23 @@ class _BuildHelper(object):
     self.target_os = args.target_os
     self.use_goma = args.use_goma
     self._SetDefaults()
+    self.is_bundle = 'minimal' in self.target
 
   @property
   def abs_apk_path(self):
     return os.path.join(self.output_directory, self.apk_path)
 
   @property
+  def abs_mapping_path(self):
+    return os.path.join(self.output_directory, self.mapping_path)
+
+  @property
   def apk_name(self):
-    # Only works on apk targets that follow: my_great_apk naming convention.
+    # my_great_apk -> MyGreat.apk
     apk_name = ''.join(s.title() for s in self.target.split('_')[:-1]) + '.apk'
+    if self.is_bundle:
+      # my_great_minimal_apks -> MyGreatMinimal.apk -> MyGreat.minimal.apks
+      apk_name = apk_name.replace('Minimal.apk', '.minimal.apks')
     return apk_name.replace('Webview', 'WebView')
 
   @property
@@ -243,14 +255,25 @@ class _BuildHelper(object):
     return os.path.join('apks', self.apk_name)
 
   @property
+  def mapping_path(self):
+    if self.is_bundle:
+      return self.apk_path.replace('.minimal.apks', '.aab') + '.mapping'
+    else:
+      return self.apk_path + '.mapping'
+
+  @property
   def main_lib_path(self):
-    # TODO(estevenson): Get this from GN instead of hardcoding.
+    # Cannot extract this from GN because --cloud needs to work without GN.
     if self.IsLinux():
       return 'chrome'
-    elif 'monochrome' in self.target:
-      return 'lib.unstripped/libmonochrome.so'
+    if 'monochrome' in self.target:
+      ret = 'lib.unstripped/libmonochrome_base.so'
     else:
-      return 'lib.unstripped/libchrome.so'
+      ret = 'lib.unstripped/libchrome_base.so'
+    # Maintain support for measuring non-bundle apks.
+    if not self.is_bundle:
+      ret = ret.replace('_base', '')
+    return ret
 
   @property
   def abs_main_lib_path(self):
@@ -307,9 +330,9 @@ class _BuildHelper(object):
       if self.IsLinux():
         self.target = 'chrome'
       elif self.enable_chrome_android_internal:
-        self.target = 'monochrome_apk'
+        self.target = 'monochrome_minimal_apks'
       else:
-        self.target = 'monochrome_public_apk'
+        self.target = 'monochrome_public_minimal_apks'
 
   def _GenGnCmd(self):
     gn_args = 'is_official_build=true'
@@ -375,7 +398,7 @@ class _BuildArchive(object):
     _EnsureDirsExist(self.dir)
     if self.build.IsAndroid():
       self._ArchiveFile(self.build.abs_apk_path)
-      self._ArchiveFile(self.build.abs_apk_path + '.mapping')
+      self._ArchiveFile(self.build.abs_mapping_path)
       self._ArchiveResourceSizes()
     self._ArchiveSizeFile(supersize_path, tool_prefix)
     if self._save_unstripped:
@@ -426,7 +449,7 @@ class _BuildArchive(object):
       else:
         supersize_cmd += ['--output-directory', self.build.output_directory]
       if self.build.IsAndroid():
-        supersize_cmd += ['--apk-file', self.build.abs_apk_path]
+        supersize_cmd += ['-f', self.build.abs_apk_path]
       logging.info('Creating .size file')
       _RunCmd(supersize_cmd)
 
@@ -445,9 +468,6 @@ class _DiffArchiveManager(object):
     self.diffs = diffs
     self.subrepo = subrepo
     self._summary_stats = []
-
-  def IterArchives(self):
-    return iter(self.build_archives)
 
   def MaybeDiff(self, before_id, after_id):
     """Perform diffs given two build archives."""
@@ -758,7 +778,7 @@ def _DownloadAndArchive(gsutil_path, archive, dl_dir, build, supersize_path):
   to_extract = [build.main_lib_path, build.map_file_path, 'args.gn']
   if build.IsAndroid():
     to_extract += ['build_vars.txt', build.apk_path,
-                   build.apk_path + '.mapping', build.apk_path + '.size']
+                   build.mapping_path, build.apk_path + '.size']
   extract_dir = dl_dst + '_' + 'unzipped'
   logging.info('Extracting build artifacts')
   with zipfile.ZipFile(dl_dst, 'r') as z:
@@ -845,32 +865,6 @@ def _GenRestoreFunc(subrepo):
 
 def _SetRestoreFunc(subrepo):
   atexit.register(_GenRestoreFunc(subrepo))
-
-
-# Used by binary size trybot.
-def _DiffMain(args):
-  parser = argparse.ArgumentParser()
-  parser.add_argument('--before-dir', required=True)
-  parser.add_argument('--after-dir', required=True)
-  parser.add_argument('--apk-name', required=True)
-  parser.add_argument('--diff-type', required=True, choices=['native', 'sizes'])
-  parser.add_argument('--diff-output', required=True)
-  args = parser.parse_args(args)
-
-  is_native_diff = args.diff_type == 'native'
-  if is_native_diff:
-    supersize_path = os.path.join(_BINARY_SIZE_DIR, 'supersize')
-    diff = NativeDiff(args.apk_name + '.size', supersize_path)
-  else:
-    diff = ResourceSizesDiff(args.apk_name)
-
-  diff.ProduceDiff(args.before_dir, args.after_dir)
-  lines = diff.DetailedResults() if is_native_diff else diff.Summary()
-
-  with open(args.diff_output, 'w') as f:
-    f.writelines(l + '\n' for l in lines)
-    stat = diff.summary_stat
-    f.write('\n{}={}\n'.format(*stat[:2]))
 
 
 def main():
@@ -965,8 +959,6 @@ def main():
   if len(sys.argv) == 1:
     parser.print_help()
     return 1
-  if sys.argv[1] == 'diff':
-    return _DiffMain(sys.argv[2:])
 
   args = parser.parse_args()
   log_level = logging.DEBUG if args.verbose else logging.INFO
@@ -1006,7 +998,7 @@ def main():
                                     subrepo, args.include_slow_options,
                                     args.unstripped)
     consecutive_failures = 0
-    for i, archive in enumerate(diff_mngr.IterArchives()):
+    for i, archive in enumerate(diff_mngr.build_archives):
       if archive.Exists():
         step = 'download' if build.IsCloud() else 'build'
         logging.info('Found matching metadata for %s, skipping %s step.',
@@ -1023,7 +1015,9 @@ def main():
                 'Build failed for %s, diffs using this rev will be skipped.',
                 archive.rev)
             consecutive_failures += 1
-            if consecutive_failures > _ALLOWED_CONSECUTIVE_FAILURES:
+            if len(diff_mngr.build_archives) <= 2:
+              _Die('Stopping due to build failure.')
+            elif consecutive_failures > _ALLOWED_CONSECUTIVE_FAILURES:
               _Die('%d builds failed in a row, last failure was %s.',
                    consecutive_failures, archive.rev)
           else:

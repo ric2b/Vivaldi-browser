@@ -13,6 +13,7 @@
 #include "chrome/browser/chromeos/crostini/crostini_registry_service.h"
 #include "chrome/browser/chromeos/crostini/crostini_registry_service_factory.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
+#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/launch_util.h"
@@ -28,6 +29,7 @@
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/extensions/extension_enable_flow.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "components/arc/arc_util.h"
 #include "components/arc/metrics/arc_metrics_constants.h"
@@ -76,7 +78,8 @@ const extensions::Extension* GetExtensionForTab(Profile* profile,
   if (extensions::util::IsNewBookmarkAppsEnabled()) {
     for (const auto& i : extensions) {
       if (i.get()->from_bookmark() &&
-          extensions::AppLaunchInfo::GetLaunchWebURL(i.get()) == url &&
+          extensions::IsInNavigationScopeForLaunchUrl(
+              extensions::AppLaunchInfo::GetLaunchWebURL(i.get()), url) &&
           !extensions::LaunchesInWindow(profile, i.get())) {
         return i.get();
       }
@@ -174,7 +177,7 @@ bool LauncherControllerHelper::IsValidIDForCurrentUser(
   crostini::CrostiniRegistryService* registry_service =
       crostini::CrostiniRegistryServiceFactory::GetForProfile(profile_);
   if (registry_service && registry_service->IsCrostiniShelfAppId(id)) {
-    return IsCrostiniUIAllowedForProfile(profile_) &&
+    return crostini::IsCrostiniUIAllowedForProfile(profile_) &&
            registry_service->GetRegistration(id).has_value();
   }
 
@@ -203,6 +206,12 @@ void LauncherControllerHelper::LaunchApp(const ash::ShelfID& id,
                                          ash::ShelfLaunchSource source,
                                          int event_flags,
                                          int64_t display_id) {
+  // Handle recording app launch source from the Shelf in Demo Mode.
+  if (source == ash::ShelfLaunchSource::LAUNCH_FROM_SHELF) {
+    chromeos::DemoSession::RecordAppLaunchSourceIfInDemoMode(
+        chromeos::DemoSession::AppLaunchSource::kShelf);
+  }
+
   const std::string& app_id = id.app_id;
   const ArcAppListPrefs* arc_prefs = GetArcAppListPrefs();
   if (arc_prefs && arc_prefs->IsRegistered(app_id)) {
@@ -218,7 +227,7 @@ void LauncherControllerHelper::LaunchApp(const ash::ShelfID& id,
     // This expects a valid app list id, which is fine as we only get here for
     // shelf entries associated with an actual app and not arbitrary Crostini
     // windows.
-    LaunchCrostiniApp(profile_, app_id, display_id);
+    crostini::LaunchCrostiniApp(profile_, app_id, display_id);
     return;
   }
 
@@ -247,7 +256,8 @@ void LauncherControllerHelper::LaunchApp(const ash::ShelfID& id,
   AppLaunchParams params = CreateAppLaunchParamsWithEventFlags(
       profile_, extension, event_flags, extensions::SOURCE_APP_LAUNCHER,
       display_id);
-  if (source != ash::LAUNCH_FROM_UNKNOWN &&
+  if ((source == ash::LAUNCH_FROM_APP_LIST ||
+       source == ash::LAUNCH_FROM_APP_LIST_SEARCH) &&
       app_id == extensions::kWebStoreAppId) {
     // Get the corresponding source string.
     std::string source_value = GetSourceFromAppListSource(source);

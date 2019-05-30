@@ -12,12 +12,11 @@ import android.widget.Button;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ntp.ContextMenuManager;
+import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.ntp.snippets.CategoryInt;
 import org.chromium.chrome.browser.snackbar.Snackbar;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.suggestions.ContentSuggestionsAdditionalAction;
-import org.chromium.chrome.browser.suggestions.SuggestionsConfig;
 import org.chromium.chrome.browser.suggestions.SuggestionsMetrics;
 import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
 import org.chromium.chrome.browser.suggestions.SuggestionsRecyclerView;
@@ -33,8 +32,8 @@ import java.util.Locale;
  * show a progress indicator over the same space. See {@link State}.
  */
 public class ActionItem extends OptionalLeaf {
-    @Retention(RetentionPolicy.SOURCE)
     @IntDef({State.HIDDEN, State.BUTTON, State.LOADING})
+    @Retention(RetentionPolicy.SOURCE)
     public @interface State {
         int HIDDEN = 0;
         int BUTTON = 1;
@@ -207,9 +206,7 @@ public class ActionItem extends OptionalLeaf {
 
         @LayoutRes
         private static int getLayout() {
-            return SuggestionsConfig.useModernLayout()
-                    ? R.layout.content_suggestions_action_card_modern
-                    : R.layout.new_tab_page_action_card;
+            return R.layout.content_suggestions_action_card_modern;
         }
 
         private void setState(@State int state) {

@@ -43,11 +43,12 @@ NGLayoutOpportunity FindLayoutOpportunityForFloat(
     const NGExclusionSpace& exclusion_space,
     const NGUnpositionedFloat& unpositioned_float,
     const NGBoxStrut& fragment_margins,
+    const NGConstraintSpace& parent_space,
     LayoutUnit inline_size) {
   NGBfcOffset adjusted_origin_point =
       AdjustToTopEdgeAlignmentRule(exclusion_space, origin_bfc_offset);
-  LayoutUnit clearance_offset =
-      exclusion_space.ClearanceOffset(unpositioned_float.ClearType());
+  LayoutUnit clearance_offset = exclusion_space.ClearanceOffset(
+      unpositioned_float.ClearType(parent_space.Direction()));
 
   AdjustToClearance(clearance_offset, &adjusted_origin_point);
 
@@ -59,22 +60,26 @@ NGLayoutOpportunity FindLayoutOpportunityForFloat(
 
 // Creates a constraint space for an unpositioned float. origin_block_offset
 // should only be set when we want to fragmentation to occur.
-scoped_refptr<NGConstraintSpace> CreateConstraintSpaceForFloat(
+NGConstraintSpace CreateConstraintSpaceForFloat(
     const NGLogicalSize& float_available_size,
     const NGLogicalSize& float_percentage_size,
+    const NGLogicalSize& float_replaced_percentage_size,
     const NGUnpositionedFloat& unpositioned_float,
     const NGConstraintSpace& parent_space,
+    const ComputedStyle& parent_style,
     base::Optional<LayoutUnit> origin_block_offset = base::nullopt) {
   const ComputedStyle& style = unpositioned_float.node.Style();
-  NGConstraintSpaceBuilder builder(parent_space);
+  NGConstraintSpaceBuilder builder(parent_space, style.GetWritingMode(),
+                                   /* is_new_fc */ true);
+  SetOrthogonalFallbackInlineSizeIfNeeded(parent_style, unpositioned_float.node,
+                                          &builder);
 
   if (origin_block_offset) {
     DCHECK(parent_space.HasBlockFragmentation());
     DCHECK_EQ(style.GetWritingMode(), parent_space.GetWritingMode());
 
     LayoutUnit fragmentation_offset =
-        parent_space.FragmentainerSpaceAtBfcStart() -
-        origin_block_offset.value();
+        parent_space.FragmentainerSpaceAtBfcStart() - *origin_block_offset;
     builder.SetFragmentainerBlockSize(parent_space.FragmentainerBlockSize());
     builder.SetFragmentainerSpaceAtBfcStart(fragmentation_offset);
     builder.SetFragmentationType(parent_space.BlockFragmentationType());
@@ -82,23 +87,25 @@ scoped_refptr<NGConstraintSpace> CreateConstraintSpaceForFloat(
     builder.SetFragmentationType(NGFragmentationType::kFragmentNone);
   }
 
-  return builder.SetPercentageResolutionSize(float_percentage_size)
-      .SetAvailableSize(float_available_size)
-      .SetIsNewFormattingContext(true)
-      .SetIsShrinkToFit(true)
+  return builder.SetAvailableSize(float_available_size)
+      .SetPercentageResolutionSize(float_percentage_size)
+      .SetReplacedPercentageResolutionSize(float_replaced_percentage_size)
+      .SetIsShrinkToFit(style.LogicalWidth().IsAuto())
       .SetTextDirection(style.Direction())
-      .ToConstraintSpace(style.GetWritingMode());
+      .ToConstraintSpace();
 }
 
 std::unique_ptr<NGExclusionShapeData> CreateExclusionShapeData(
     const NGLogicalSize& float_available_size,
     const NGLogicalSize& float_percentage_size,
+    const NGLogicalSize& float_replaced_percentage_size,
     const NGBoxStrut& margins,
-    const LayoutBox* layout_box,
     const NGUnpositionedFloat& unpositioned_float,
     const NGConstraintSpace& parent_space,
-    TextDirection direction) {
+    const ComputedStyle& parent_style) {
+  const LayoutBox* layout_box = unpositioned_float.node.GetLayoutBox();
   DCHECK(layout_box->GetShapeOutsideInfo());
+  TextDirection direction = parent_space.Direction();
 
   // We make the margins on the shape-data relative to line-left/line-right.
   NGBoxStrut new_margins(margins.LineLeft(direction),
@@ -106,7 +113,7 @@ std::unique_ptr<NGExclusionShapeData> CreateExclusionShapeData(
                          margins.block_end);
   NGBoxStrut shape_insets;
 
-  const ComputedStyle& style = layout_box->StyleRef();
+  const ComputedStyle& style = unpositioned_float.node.Style();
   switch (style.ShapeOutside()->CssBox()) {
     case CSSBoxType::kMissing:
     case CSSBoxType::kMargin:
@@ -115,25 +122,16 @@ std::unique_ptr<NGExclusionShapeData> CreateExclusionShapeData(
     case CSSBoxType::kBorder:
       break;
     case CSSBoxType::kPadding:
-      shape_insets =
-          ComputeBorders(*CreateConstraintSpaceForFloat(
-                             float_available_size, float_percentage_size,
-                             unpositioned_float, parent_space),
-                         style)
-              .ConvertToPhysical(style.GetWritingMode(), style.Direction())
-              .ConvertToLogical(parent_space.GetWritingMode(),
-                                TextDirection::kLtr);
-      break;
     case CSSBoxType::kContent:
-      const scoped_refptr<NGConstraintSpace> space =
-          CreateConstraintSpaceForFloat(float_available_size,
-                                        float_percentage_size,
-                                        unpositioned_float, parent_space);
-      NGBoxStrut border_padding =
-          ComputeBorders(*space, style) + ComputePadding(*space, style);
+      const NGConstraintSpace space = CreateConstraintSpaceForFloat(
+          float_available_size, float_percentage_size,
+          float_replaced_percentage_size, unpositioned_float, parent_space,
+          parent_style);
+      NGBoxStrut strut = ComputeBorders(space, unpositioned_float.node);
+      if (style.ShapeOutside()->CssBox() == CSSBoxType::kContent)
+        strut += ComputePadding(space, style);
       shape_insets =
-          border_padding
-              .ConvertToPhysical(style.GetWritingMode(), style.Direction())
+          strut.ConvertToPhysical(style.GetWritingMode(), style.Direction())
               .ConvertToLogical(parent_space.GetWritingMode(),
                                 TextDirection::kLtr);
       break;
@@ -148,13 +146,13 @@ std::unique_ptr<NGExclusionShapeData> CreateExclusionShapeData(
 scoped_refptr<NGExclusion> CreateExclusion(
     const NGLogicalSize& float_available_size,
     const NGLogicalSize& float_percentage_size,
+    const NGLogicalSize& float_replaced_percentage_size,
     const NGFragment& fragment,
     const NGBfcOffset& float_margin_bfc_offset,
     const NGBoxStrut& margins,
-    const LayoutBox* layout_box,
     const NGUnpositionedFloat& unpositioned_float,
     const NGConstraintSpace& parent_space,
-    TextDirection direction,
+    const ComputedStyle& parent_style,
     EFloat type) {
   NGBfcOffset start_offset = float_margin_bfc_offset;
   NGBfcOffset end_offset(
@@ -164,10 +162,11 @@ scoped_refptr<NGExclusion> CreateExclusion(
           (fragment.BlockSize() + margins.BlockSum()).ClampNegativeToZero());
 
   std::unique_ptr<NGExclusionShapeData> shape_data =
-      layout_box->GetShapeOutsideInfo()
+      unpositioned_float.node.GetLayoutBox()->GetShapeOutsideInfo()
           ? CreateExclusionShapeData(
-                float_available_size, float_percentage_size, margins,
-                layout_box, unpositioned_float, parent_space, direction)
+                float_available_size, float_percentage_size,
+                float_replaced_percentage_size, margins, unpositioned_float,
+                parent_space, parent_style)
           : nullptr;
 
   return NGExclusion::Create(NGBfcRect(start_offset, end_offset), type,
@@ -176,52 +175,60 @@ scoped_refptr<NGExclusion> CreateExclusion(
 
 // Performs layout on a float, without fragmentation, and stores the result on
 // the NGUnpositionedFloat data-structure.
-void LayoutFloatWithoutFragmentation(const NGLogicalSize& float_available_size,
-                                     const NGLogicalSize& float_percentage_size,
-                                     const NGConstraintSpace& parent_space,
-                                     NGUnpositionedFloat* unpositioned_float) {
+void LayoutFloatWithoutFragmentation(
+    const NGLogicalSize& float_available_size,
+    const NGLogicalSize& float_percentage_size,
+    const NGLogicalSize& float_replaced_percentage_size,
+    const NGConstraintSpace& parent_space,
+    const ComputedStyle& parent_style,
+    NGUnpositionedFloat* unpositioned_float) {
   if (unpositioned_float->layout_result)
     return;
 
-  const scoped_refptr<NGConstraintSpace> space =
-      CreateConstraintSpaceForFloat(float_available_size, float_percentage_size,
-                                    *unpositioned_float, parent_space);
+  const NGConstraintSpace space = CreateConstraintSpaceForFloat(
+      float_available_size, float_percentage_size,
+      float_replaced_percentage_size, *unpositioned_float, parent_space,
+      parent_style);
 
-  unpositioned_float->layout_result = unpositioned_float->node.Layout(*space);
+  unpositioned_float->layout_result = unpositioned_float->node.Layout(space);
   unpositioned_float->margins =
-      ComputeMarginsFor(*space, unpositioned_float->node.Style(), parent_space);
+      ComputeMarginsFor(space, unpositioned_float->node.Style(), parent_space);
 }
 
 }  // namespace
 
 LayoutUnit ComputeMarginBoxInlineSizeForUnpositionedFloat(
     const NGConstraintSpace& parent_space,
+    const ComputedStyle& parent_style,
     NGUnpositionedFloat* unpositioned_float) {
   DCHECK(unpositioned_float);
 
   // NOTE: We can safely use the parent space's available and percentage size
   // as this function should only be called within an inline context.
-  LayoutFloatWithoutFragmentation(parent_space.AvailableSize(),
-                                  parent_space.PercentageResolutionSize(),
-                                  parent_space, unpositioned_float);
+  LayoutFloatWithoutFragmentation(
+      parent_space.AvailableSize(), parent_space.PercentageResolutionSize(),
+      parent_space.ReplacedPercentageResolutionSize(), parent_space,
+      parent_style, unpositioned_float);
   DCHECK(unpositioned_float->layout_result);
 
-  const auto& fragment = unpositioned_float->layout_result->PhysicalFragment();
+  const auto* fragment = unpositioned_float->layout_result->PhysicalFragment();
   DCHECK(fragment);
-  DCHECK(fragment->BreakToken()->IsFinished());
+  DCHECK(!fragment->BreakToken() || fragment->BreakToken()->IsFinished());
 
   return (NGFragment(parent_space.GetWritingMode(), *fragment).InlineSize() +
           unpositioned_float->margins.InlineSum())
       .ClampNegativeToZero();
 }
 
-NGPositionedFloat PositionFloat(const NGLogicalSize& float_available_size,
-                                const NGLogicalSize& float_percentage_size,
-                                const NGBfcOffset& origin_bfc_offset,
-                                LayoutUnit parent_bfc_block_offset,
-                                NGUnpositionedFloat* unpositioned_float,
-                                const NGConstraintSpace& parent_space,
-                                NGExclusionSpace* exclusion_space) {
+NGPositionedFloat PositionFloat(
+    const NGLogicalSize& float_available_size,
+    const NGLogicalSize& float_percentage_size,
+    const NGLogicalSize& float_replaced_percentage_size,
+    const NGBfcOffset& origin_bfc_offset,
+    NGUnpositionedFloat* unpositioned_float,
+    const NGConstraintSpace& parent_space,
+    const ComputedStyle& parent_style,
+    NGExclusionSpace* exclusion_space) {
   DCHECK(unpositioned_float);
 
   bool is_same_writing_mode =
@@ -231,31 +238,37 @@ NGPositionedFloat PositionFloat(const NGLogicalSize& float_available_size,
   bool is_fragmentable =
       is_same_writing_mode && parent_space.HasBlockFragmentation();
 
-  scoped_refptr<NGLayoutResult> layout_result;
+  scoped_refptr<const NGLayoutResult> layout_result;
   NGBoxStrut fragment_margins;
 
   // We may be able to re-use the fragment from when we calculated the
   // inline-size, if there is no block fragmentation.
   if (!is_fragmentable) {
     LayoutFloatWithoutFragmentation(float_available_size, float_percentage_size,
-                                    parent_space, unpositioned_float);
+                                    float_replaced_percentage_size,
+                                    parent_space, parent_style,
+                                    unpositioned_float);
     layout_result = unpositioned_float->layout_result;
     fragment_margins = unpositioned_float->margins;
   } else {
-    scoped_refptr<NGConstraintSpace> space = CreateConstraintSpaceForFloat(
-        float_available_size, float_percentage_size, *unpositioned_float,
-        parent_space, origin_bfc_offset.block_offset);
-    layout_result = unpositioned_float->node.Layout(
-        *space, unpositioned_float->token.get());
+    NGConstraintSpace space = CreateConstraintSpaceForFloat(
+        float_available_size, float_percentage_size,
+        float_replaced_percentage_size, *unpositioned_float, parent_space,
+        parent_style, origin_bfc_offset.block_offset);
+    layout_result =
+        unpositioned_float->node.Layout(space, unpositioned_float->token.get());
     fragment_margins = ComputeMarginsFor(
-        *space, unpositioned_float->node.Style(), parent_space);
+        space, unpositioned_float->node.Style(), parent_space);
 
     // Make the margins fragmentation aware.
     if (ShouldIgnoreBlockStartMargin(parent_space, unpositioned_float->node,
                                      unpositioned_float->token.get()))
       fragment_margins.block_start = LayoutUnit();
-    if (!layout_result->PhysicalFragment()->BreakToken()->IsFinished())
-      fragment_margins.block_end = LayoutUnit();
+    if (const NGBreakToken* break_token =
+            layout_result->PhysicalFragment()->BreakToken()) {
+      if (!break_token->IsFinished())
+        fragment_margins.block_end = LayoutUnit();
+    }
   }
 
   DCHECK(layout_result->PhysicalFragment());
@@ -265,11 +278,12 @@ NGPositionedFloat PositionFloat(const NGLogicalSize& float_available_size,
   // Find a layout opportunity that will fit our float.
   NGLayoutOpportunity opportunity = FindLayoutOpportunityForFloat(
       float_available_size, origin_bfc_offset, *exclusion_space,
-      *unpositioned_float, fragment_margins, float_fragment.InlineSize());
+      *unpositioned_float, fragment_margins, parent_space,
+      float_fragment.InlineSize());
 
   // Calculate the float's margin box BFC offset.
   NGBfcOffset float_margin_bfc_offset = opportunity.rect.start_offset;
-  if (unpositioned_float->IsRight()) {
+  if (unpositioned_float->IsLineRight(parent_space.Direction())) {
     LayoutUnit float_margin_box_inline_size =
         float_fragment.InlineSize() + fragment_margins.InlineSum();
     float_margin_bfc_offset.line_offset +=
@@ -278,11 +292,12 @@ NGPositionedFloat PositionFloat(const NGLogicalSize& float_available_size,
 
   // Add the float as an exclusion.
   scoped_refptr<NGExclusion> exclusion = CreateExclusion(
-      float_available_size, float_percentage_size, float_fragment,
-      float_margin_bfc_offset, fragment_margins,
-      unpositioned_float->node.GetLayoutBox(), *unpositioned_float,
-      parent_space, parent_space.Direction(),
-      unpositioned_float->IsRight() ? EFloat::kRight : EFloat::kLeft);
+      float_available_size, float_percentage_size,
+      float_replaced_percentage_size, float_fragment, float_margin_bfc_offset,
+      fragment_margins, *unpositioned_float, parent_space, parent_style,
+      unpositioned_float->IsLineRight(parent_space.Direction())
+          ? EFloat::kRight
+          : EFloat::kLeft);
   exclusion_space->Add(std::move(exclusion));
 
   // Adjust the float's bfc_offset to its border-box (instead of margin-box).
@@ -292,51 +307,6 @@ NGPositionedFloat PositionFloat(const NGLogicalSize& float_available_size,
       float_margin_bfc_offset.block_offset + fragment_margins.block_start);
 
   return NGPositionedFloat(std::move(layout_result), float_bfc_offset);
-}
-
-const Vector<NGPositionedFloat> PositionFloats(
-    const NGLogicalSize& float_available_size,
-    const NGLogicalSize& float_percentage_size,
-    const NGBfcOffset& origin_bfc_offset,
-    LayoutUnit parent_bfc_block_offset,
-    NGUnpositionedFloatVector& unpositioned_floats,
-    const NGConstraintSpace& space,
-    NGExclusionSpace* exclusion_space) {
-  Vector<NGPositionedFloat> positioned_floats;
-  positioned_floats.ReserveCapacity(unpositioned_floats.size());
-
-  for (NGUnpositionedFloat& unpositioned_float : unpositioned_floats) {
-    positioned_floats.push_back(PositionFloat(
-        float_available_size, float_percentage_size, origin_bfc_offset,
-        parent_bfc_block_offset, &unpositioned_float, space, exclusion_space));
-  }
-
-  return positioned_floats;
-}
-
-void AddUnpositionedFloat(NGUnpositionedFloatVector* unpositioned_floats,
-                          NGContainerFragmentBuilder* fragment_builder,
-                          NGUnpositionedFloat unpositioned_float) {
-  // The same float node should not be added more than once.
-  DCHECK(
-      !RemoveUnpositionedFloat(unpositioned_floats, unpositioned_float.node));
-
-  if (fragment_builder && !fragment_builder->BfcBlockOffset()) {
-    fragment_builder->AddAdjoiningFloatTypes(
-        unpositioned_float.IsLeft() ? kFloatTypeLeft : kFloatTypeRight);
-  }
-  unpositioned_floats->push_back(std::move(unpositioned_float));
-}
-
-bool RemoveUnpositionedFloat(NGUnpositionedFloatVector* unpositioned_floats,
-                             NGBlockNode float_node) {
-  for (NGUnpositionedFloat& unpositioned_float : *unpositioned_floats) {
-    if (unpositioned_float.node == float_node) {
-      unpositioned_floats->erase(&unpositioned_float);
-      return true;
-    }
-  }
-  return false;
 }
 
 NGFloatTypes ToFloatTypes(EClear clear) {

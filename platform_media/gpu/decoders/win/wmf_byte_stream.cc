@@ -17,8 +17,7 @@ namespace {
 
 class WMFReadRequest : public base::win::IUnknownImpl {
  public:
-  WMFReadRequest(BYTE* buff, ULONG len) : buffer(buff), length(len), read(0) {
-  }
+  WMFReadRequest(BYTE* buff, ULONG len) : buffer(buff), length(len), read(0) {}
 
   ~WMFReadRequest() override {}
 
@@ -193,8 +192,14 @@ void WMFByteStream::OnReadData(int size) {
   HRESULT status;
   if (FAILED(hr) || !unknown || size == DataSource::kReadError) {
     LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " (E_FAIL Stream async read error";
+      << " (E_FAIL Stream async read error";
     status = E_FAIL;
+  }
+  else if (size == 0) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+      << " Stream read no data";
+    read_request->read = size;
+    status = E_INVALIDARG;
   } else {
     DCHECK(static_cast<ULONG>(size) <= read_request->length);
     read_request->read = size;
@@ -216,7 +221,8 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::BeginRead(BYTE* buff,
                                                    ULONG len,
                                                    IMFAsyncCallback* callback,
                                                    IUnknown* state) {
-  if (read_stream_->HasStopped()) {
+  VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " len: " << len;
+  if (read_stream_->HasStopped() || len == 0) {
     LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
                  << " (E_INVALIDARG) Stream has stopped";
     return E_INVALIDARG;
@@ -254,6 +260,8 @@ WMFByteStream::EndRead(IMFAsyncResult* result, ULONG* read) {
     *read = read_request->read;
     hresult = result->GetStatus();
   }
+  VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " read: " << *read
+          << ", hresult: " << hresult;
 
   // was acquired by a call to MFCreateAsyncResult in BeginRead
   result->Release();

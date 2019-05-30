@@ -5,8 +5,10 @@
 #import "ios/web/web_state/session_certificate_policy_cache_impl.h"
 
 #include "base/bind.h"
+#include "base/task/post_task.h"
 #include "ios/web/public/certificate_policy_cache.h"
 #import "ios/web/public/crw_session_certificate_policy_cache_storage.h"
+#include "ios/web/public/web_task_traits.h"
 #include "ios/web/public/web_thread.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -49,6 +51,21 @@ SessionCertificatePolicyCacheImpl::SessionCertificatePolicyCacheImpl()
 
 SessionCertificatePolicyCacheImpl::~SessionCertificatePolicyCacheImpl() {}
 
+void SessionCertificatePolicyCacheImpl::UpdateCertificatePolicyCache(
+    const scoped_refptr<web::CertificatePolicyCache>& cache) const {
+  DCHECK_CURRENTLY_ON(WebThread::UI);
+  DCHECK(cache.get());
+  NSSet* allowed_certs = [NSSet setWithSet:allowed_certs_];
+  const scoped_refptr<web::CertificatePolicyCache> cache_copy = cache;
+  base::PostTaskWithTraits(
+      FROM_HERE, {web::WebThread::IO}, base::BindOnce(^{
+        for (CRWSessionCertificateStorage* cert in allowed_certs) {
+          cache_copy->AllowCertForHost(cert.certificate, cert.host,
+                                       cert.status);
+        }
+      }));
+}
+
 void SessionCertificatePolicyCacheImpl::RegisterAllowedCertificate(
     const scoped_refptr<net::X509Certificate> certificate,
     const std::string& host,
@@ -58,26 +75,6 @@ void SessionCertificatePolicyCacheImpl::RegisterAllowedCertificate(
                                 initWithCertificate:certificate
                                                host:host
                                              status:status]];
-}
-
-void SessionCertificatePolicyCacheImpl::ClearAllowedCertificates() {
-  DCHECK_CURRENTLY_ON(WebThread::UI);
-  [allowed_certs_ removeAllObjects];
-}
-
-void SessionCertificatePolicyCacheImpl::UpdateCertificatePolicyCache(
-    const scoped_refptr<web::CertificatePolicyCache>& cache) const {
-  DCHECK_CURRENTLY_ON(WebThread::UI);
-  DCHECK(cache.get());
-  NSSet* allowed_certs = [NSSet setWithSet:allowed_certs_];
-  const scoped_refptr<web::CertificatePolicyCache> cache_copy = cache;
-  web::WebThread::PostTask(
-      web::WebThread::IO, FROM_HERE, base::BindOnce(^{
-        for (CRWSessionCertificateStorage* cert in allowed_certs) {
-          cache_copy->AllowCertForHost(cert.certificate, cert.host,
-                                       cert.status);
-        }
-      }));
 }
 
 void SessionCertificatePolicyCacheImpl::SetAllowedCerts(NSSet* allowed_certs) {

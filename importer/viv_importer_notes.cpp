@@ -24,7 +24,7 @@
 class OperaNotesReader : public OperaAdrFileReader {
  public:
   OperaNotesReader() {}
-  ~OperaNotesReader() override{};
+  ~OperaNotesReader() override {}
 
   void AddNote(const std::vector<base::string16>& current_folder,
                const base::DictionaryValue& entries,

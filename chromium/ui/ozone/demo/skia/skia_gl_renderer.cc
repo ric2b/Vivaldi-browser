@@ -4,11 +4,13 @@
 
 #include "ui/ozone/demo/skia/skia_gl_renderer.h"
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkFont.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/gl/GrGLAssembleInterface.h"
@@ -157,9 +159,11 @@ void SkiaGlRenderer::Draw(SkCanvas* canvas, float fraction) {
   }
 
   // Draw a message with a nice black paint
-  paint.setSubpixelText(true);
   paint.setColor(SK_ColorBLACK);
-  paint.setTextSize(32);
+
+  SkFont font;
+  font.setSize(32);
+  font.setSubpixel(true);
 
   canvas->save();
   static const char message[] = "Hello Ozone";
@@ -175,8 +179,7 @@ void SkiaGlRenderer::Draw(SkCanvas* canvas, float fraction) {
 
   const char* text = use_ddl_ ? message_ddl : message;
   // Draw the text
-  canvas->drawText(text, strlen(text), 0, 0, paint);
-
+  canvas->drawString(text, 0, 0, font, paint);
   canvas->restore();
 }
 

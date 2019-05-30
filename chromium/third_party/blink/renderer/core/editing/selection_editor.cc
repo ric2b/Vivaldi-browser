@@ -44,7 +44,7 @@ SelectionEditor::~SelectionEditor() = default;
 void SelectionEditor::AssertSelectionValid() const {
 #if DCHECK_IS_ON()
   // Since We don't track dom tree version during attribute changes, we can't
-  // use it for validity of |m_selection|.
+  // use it for validity of |selection_|.
   const_cast<SelectionEditor*>(this)->selection_.dom_tree_version_ =
       GetDocument().DomTreeVersion();
 #endif
@@ -140,7 +140,7 @@ void SelectionEditor::DidFinishDOMMutation() {
   AssertSelectionValid();
 }
 
-void SelectionEditor::DocumentAttached(Document* document) {
+void SelectionEditor::DidAttachDocument(Document* document) {
   DCHECK(document);
   DCHECK(!LifecycleContext()) << LifecycleContext();
   style_version_for_dom_tree_ = static_cast<uint64_t>(-1);
@@ -429,7 +429,7 @@ void SelectionEditor::ClearDocumentCachedRange() {
   cached_range_ = nullptr;
 }
 
-void SelectionEditor::Trace(blink::Visitor* visitor) {
+void SelectionEditor::Trace(Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(selection_);
   visitor->Trace(cached_visible_selection_in_dom_tree_);

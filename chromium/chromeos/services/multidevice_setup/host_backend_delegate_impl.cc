@@ -11,7 +11,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/no_destructor.h"
 #include "base/stl_util.h"
-#include "chromeos/components/proximity_auth/logging/logging.h"
+#include "chromeos/components/multidevice/logging/logging.h"
+#include "chromeos/components/multidevice/software_feature.h"
+#include "chromeos/components/multidevice/software_feature_state.h"
 #include "chromeos/services/multidevice_setup/eligible_host_devices_provider.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -103,7 +105,7 @@ HostBackendDelegateImpl::~HostBackendDelegateImpl() {
 }
 
 void HostBackendDelegateImpl::AttemptToSetMultiDeviceHostOnBackend(
-    const base::Optional<cryptauth::RemoteDeviceRef>& host_device) {
+    const base::Optional<multidevice::RemoteDeviceRef>& host_device) {
   if (host_device && !IsHostEligible(*host_device)) {
     PA_LOG(WARNING) << "HostBackendDelegateImpl::"
                     << "AttemptToSetMultiDeviceHostOnBackend(): Tried to set a "
@@ -164,7 +166,7 @@ bool HostBackendDelegateImpl::HasPendingHostRequest() {
   return false;
 }
 
-base::Optional<cryptauth::RemoteDeviceRef>
+base::Optional<multidevice::RemoteDeviceRef>
 HostBackendDelegateImpl::GetPendingHostRequest() const {
   const std::string pending_host_id_from_prefs =
       pref_service_->GetString(kPendingRequestHostIdPrefName);
@@ -191,13 +193,13 @@ HostBackendDelegateImpl::GetPendingHostRequest() const {
   return base::nullopt;
 }
 
-base::Optional<cryptauth::RemoteDeviceRef>
+base::Optional<multidevice::RemoteDeviceRef>
 HostBackendDelegateImpl::GetMultiDeviceHostFromBackend() const {
   return host_from_last_sync_;
 }
 
 bool HostBackendDelegateImpl::IsHostEligible(
-    const cryptauth::RemoteDeviceRef& provided_host) {
+    const multidevice::RemoteDeviceRef& provided_host) {
   return base::ContainsValue(
       eligible_host_devices_provider_->GetEligibleHostDevices(), provided_host);
 }
@@ -222,12 +224,12 @@ void HostBackendDelegateImpl::AttemptNetworkRequest(bool is_retry) {
     NOTREACHED();
   }
 
-  base::Optional<cryptauth::RemoteDeviceRef> pending_host_request =
+  base::Optional<multidevice::RemoteDeviceRef> pending_host_request =
       GetPendingHostRequest();
 
   // If |pending_host_request| is non-null, the request should be to set that
   // device. If it is null, the pending request is to remove the current host.
-  cryptauth::RemoteDeviceRef device_to_set =
+  multidevice::RemoteDeviceRef device_to_set =
       pending_host_request ? *pending_host_request : *host_from_last_sync_;
 
   // Likewise, if |pending_host_request| is non-null, that device should be
@@ -241,35 +243,15 @@ void HostBackendDelegateImpl::AttemptNetworkRequest(bool is_retry) {
 
   device_sync_client_->SetSoftwareFeatureState(
       device_to_set.public_key(),
-      cryptauth::SoftwareFeature::BETTER_TOGETHER_HOST,
+      multidevice::SoftwareFeature::kBetterTogetherHost,
       should_enable /* enabled */, should_enable /* is_exclusive */,
       base::BindOnce(&HostBackendDelegateImpl::OnSetSoftwareFeatureStateResult,
                      weak_ptr_factory_.GetWeakPtr(), device_to_set,
                      should_enable));
-
-  // Historical Note: On the GmsCore side, EASY_UNLOCK_HOST is blacklisted from
-  // being automatically disabled when BETTER_TOGETHER_HOST is disabled. This is
-  // done to prevent CryptAuth from losing the enabled status of EasyUnlock on
-  // host devices that have grandfathered-in EasyUnlock support. In order to
-  // disable EasyUnlock, it must be done so explicitly. Therefore, when the user
-  // chooses to manually disable all Better Together features via the "Forget
-  // this device" button in Chrome OS or a comparable method on Android,
-  // EASY_UNLOCK_HOST should be explicitly disabled in addition to
-  // BETTER_TOGETHER_HOST. See https://crbug.com/881612.
-  if (!should_enable) {
-    device_sync_client_->SetSoftwareFeatureState(
-        device_to_set.public_key(),
-        cryptauth::SoftwareFeature::EASY_UNLOCK_HOST, false /* enabled */,
-        false /* is_exclusive */,
-        base::BindOnce(
-            &HostBackendDelegateImpl::OnSetSoftwareFeatureStateResult,
-            weak_ptr_factory_.GetWeakPtr(), device_to_set,
-            false /* attempted_to_enable */));
-  }
 }
 
 void HostBackendDelegateImpl::OnNewDevicesSynced() {
-  base::Optional<cryptauth::RemoteDeviceRef> host_from_sync =
+  base::Optional<multidevice::RemoteDeviceRef> host_from_sync =
       GetHostFromDeviceSync();
   if (host_from_last_sync_ == host_from_sync)
     return;
@@ -282,9 +264,9 @@ void HostBackendDelegateImpl::OnNewDevicesSynced() {
                                 : kNoHostForLogging;
 
   host_from_last_sync_ = host_from_sync;
-  PA_LOG(INFO) << "HostBackendDelegateImpl::OnNewDevicesSynced(): New host "
-               << "device has been set. Old host device ID: " << old_host_id
-               << ", New host device ID: " << new_host_id;
+  PA_LOG(VERBOSE) << "HostBackendDelegateImpl::OnNewDevicesSynced(): New host "
+                  << "device has been set. Old host device ID: " << old_host_id
+                  << ", New host device ID: " << new_host_id;
 
   // If there is a pending request and the new host fulfills that pending
   // request, there is no longer a pending request.
@@ -296,17 +278,17 @@ void HostBackendDelegateImpl::OnNewDevicesSynced() {
   NotifyHostChangedOnBackend();
 }
 
-base::Optional<cryptauth::RemoteDeviceRef>
+base::Optional<multidevice::RemoteDeviceRef>
 HostBackendDelegateImpl::GetHostFromDeviceSync() {
-  cryptauth::RemoteDeviceRefList synced_devices =
+  multidevice::RemoteDeviceRefList synced_devices =
       device_sync_client_->GetSyncedDevices();
   auto it = std::find_if(
       synced_devices.begin(), synced_devices.end(),
       [](const auto& remote_device) {
-        cryptauth::SoftwareFeatureState host_state =
+        multidevice::SoftwareFeatureState host_state =
             remote_device.GetSoftwareFeatureState(
-                cryptauth::SoftwareFeature::BETTER_TOGETHER_HOST);
-        return host_state == cryptauth::SoftwareFeatureState::kEnabled;
+                multidevice::SoftwareFeature::kBetterTogetherHost);
+        return host_state == multidevice::SoftwareFeatureState::kEnabled;
       });
 
   if (it == synced_devices.end())
@@ -316,7 +298,7 @@ HostBackendDelegateImpl::GetHostFromDeviceSync() {
 }
 
 void HostBackendDelegateImpl::OnSetSoftwareFeatureStateResult(
-    cryptauth::RemoteDeviceRef device_for_request,
+    multidevice::RemoteDeviceRef device_for_request,
     bool attempted_to_enable,
     device_sync::mojom::NetworkRequestResult result_code) {
   bool success =
@@ -330,7 +312,7 @@ void HostBackendDelegateImpl::OnSetSoftwareFeatureStateResult(
      << ", Attempted to enable: " << (attempted_to_enable ? "true" : "false");
 
   if (success) {
-    PA_LOG(INFO) << ss.str();
+    PA_LOG(VERBOSE) << ss.str();
     return;
   }
 
@@ -340,7 +322,7 @@ void HostBackendDelegateImpl::OnSetSoftwareFeatureStateResult(
   if (!HasPendingHostRequest())
     return;
 
-  base::Optional<cryptauth::RemoteDeviceRef> pending_host_request =
+  base::Optional<multidevice::RemoteDeviceRef> pending_host_request =
       GetPendingHostRequest();
 
   bool failed_request_was_to_set_pending_host =

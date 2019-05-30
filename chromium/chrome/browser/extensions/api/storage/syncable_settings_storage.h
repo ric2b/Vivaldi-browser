@@ -14,7 +14,6 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/observer_list_threadsafe.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/api/storage/setting_sync_data.h"
 #include "components/sync/model/sync_change.h"
@@ -29,13 +28,12 @@ class SettingsSyncProcessor;
 // Decorates a ValueStore with sync behaviour.
 class SyncableSettingsStorage : public ValueStore {
  public:
-  SyncableSettingsStorage(
-      const scoped_refptr<SettingsObserverList>& observers,
-      const std::string& extension_id,
-      // Ownership taken.
-      ValueStore* delegate,
-      syncer::ModelType sync_type,
-      const syncer::SyncableService::StartSyncFlare& flare);
+  SyncableSettingsStorage(scoped_refptr<SettingsObserverList> observers,
+                          const std::string& extension_id,
+                          // Ownership taken.
+                          ValueStore* delegate,
+                          syncer::ModelType sync_type,
+                          const syncer::SyncableService::StartSyncFlare& flare);
 
   ~SyncableSettingsStorage() override;
 

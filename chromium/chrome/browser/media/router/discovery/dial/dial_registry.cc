@@ -7,13 +7,16 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/post_task.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/media/router/discovery/dial/dial_device_data.h"
 #include "chrome/browser/media/router/discovery/dial/dial_service.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
 
@@ -47,8 +50,8 @@ DialRegistry::DialRegistry()
       clock_(base::DefaultClock::GetInstance()) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK_GT(max_devices_, 0U);
-  BrowserThread::PostTaskAndReplyWithResult(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&content::GetNetworkConnectionTracker),
       base::BindOnce(&DialRegistry::SetNetworkConnectionTracker,
                      base::Unretained(this)));
@@ -220,7 +223,7 @@ void DialRegistry::StopPeriodicDiscovery() {
 bool DialRegistry::PruneExpiredDevices() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   bool pruned_device = false;
-  DeviceByLabelMap::iterator it = device_by_label_map_.begin();
+  auto it = device_by_label_map_.begin();
   while (it != device_by_label_map_.end()) {
     auto* device = it->second;
     if (IsDeviceExpired(*device)) {
@@ -289,7 +292,7 @@ void DialRegistry::SendEvent() {
 
 std::string DialRegistry::NextLabel() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  return base::IntToString(++label_count_);
+  return base::NumberToString(++label_count_);
 }
 
 void DialRegistry::OnDiscoveryRequest(DialService* service) {
@@ -309,8 +312,7 @@ void DialRegistry::OnDeviceDiscovered(DialService* service,
   DCHECK(device_data->label().empty());
 
   bool did_modify_list = false;
-  DeviceByIdMap::iterator lookup_result =
-      device_by_id_map_.find(device_data->device_id());
+  auto lookup_result = device_by_id_map_.find(device_data->device_id());
 
   if (lookup_result != device_by_id_map_.end()) {
     VLOG(2) << "Found device " << device_data->device_id() << ", merging";

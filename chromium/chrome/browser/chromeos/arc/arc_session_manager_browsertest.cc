@@ -6,27 +6,31 @@
 #include <string>
 
 #include "base/auto_reset.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/arc/arc_service_launcher.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/test/arc_data_removed_waiter.h"
+#include "chrome/browser/chromeos/login/test/local_policy_test_server_mixin.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/policy/cloud/test_request_interceptor.h"
+#include "chrome/browser/extensions/api/tabs/tabs_api.h"
+#include "chrome/browser/extensions/extension_function_test_utils.h"
+#include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
-#include "chrome/browser/policy/test/local_policy_test_server.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/fake_profile_oauth2_token_service_builder.h"
-#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
+#include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/account_id/account_id.h"
@@ -41,19 +45,20 @@
 #include "components/policy/core/common/policy_switches.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "extensions/common/extension.h"
+#include "extensions/common/extension_builder.h"
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/base/upload_data_stream.h"
 #include "net/url_request/url_request_test_job.h"
+#include "services/identity/public/cpp/identity_test_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
 namespace {
 
-constexpr char kRefreshToken[] = "fake-refresh-token";
 // Set managed auth token for Android managed accounts.
 constexpr char kManagedAuthToken[] = "managed-auth-token";
 // Set unmanaged auth token for other Android unmanaged accounts.
@@ -95,31 +100,20 @@ class ArcPlayStoreDisabledWaiter : public ArcSessionManager::Observer {
   DISALLOW_COPY_AND_ASSIGN(ArcPlayStoreDisabledWaiter);
 };
 
-class ArcSessionManagerTest : public InProcessBrowserTest {
+class ArcSessionManagerTest : public chromeos::MixinBasedInProcessBrowserTest {
  protected:
   ArcSessionManagerTest() {}
 
-  // InProcessBrowserTest:
+  // MixinBasedInProcessBrowserTest:
   ~ArcSessionManagerTest() override {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
+    chromeos::MixinBasedInProcessBrowserTest::SetUpCommandLine(command_line);
     arc::SetArcAvailableCommandLineForTesting(command_line);
   }
 
-  void SetUpInProcessBrowserTestFixture() override {
-    // Start test device management server.
-    test_server_.reset(new policy::LocalPolicyTestServer());
-    ASSERT_TRUE(test_server_->Start());
-
-    // Specify device management server URL.
-    std::string url = test_server_->GetServiceURL().spec();
-    base::CommandLine* const command_line =
-        base::CommandLine::ForCurrentProcess();
-    command_line->AppendSwitchASCII(policy::switches::kDeviceManagementUrl,
-                                    url);
-  }
-
   void SetUpOnMainThread() override {
+    chromeos::MixinBasedInProcessBrowserTest::SetUpOnMainThread();
     user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
         std::make_unique<chromeos::FakeChromeUserManager>());
     // Init ArcSessionManager for testing.
@@ -142,13 +136,14 @@ class ArcSessionManagerTest : public InProcessBrowserTest {
     TestingProfile::Builder profile_builder;
     profile_builder.SetPath(temp_dir_.GetPath().AppendASCII("TestArcProfile"));
     profile_builder.SetProfileName(kFakeUserName);
-    profile_builder.AddTestingFactory(
-        ProfileOAuth2TokenServiceFactory::GetInstance(),
-        BuildFakeProfileOAuth2TokenService);
-    profile_ = profile_builder.Build();
-    token_service_ = static_cast<FakeProfileOAuth2TokenService*>(
-        ProfileOAuth2TokenServiceFactory::GetForProfile(profile()));
-    token_service_->UpdateCredentials("", kRefreshToken);
+    profile_ = IdentityTestEnvironmentProfileAdaptor::
+        CreateProfileForIdentityTestEnvironment(profile_builder);
+
+    identity_test_environment_adaptor_ =
+        std::make_unique<IdentityTestEnvironmentProfileAdaptor>(profile_.get());
+
+    // Seed account info properly.
+    identity_test_env()->MakePrimaryAccountAvailable(kFakeUserName);
 
     profile()->GetPrefs()->SetBoolean(prefs::kArcSignedIn, true);
     profile()->GetPrefs()->SetBoolean(prefs::kArcTermsAccepted, true);
@@ -178,11 +173,12 @@ class ArcSessionManagerTest : public InProcessBrowserTest {
     // instance in fixture, once), but it should be no op.
     // TODO(hidehiko): Think about a way to test the code cleanly.
     ArcServiceLauncher::Get()->Shutdown();
+    identity_test_environment_adaptor_.reset();
     profile_.reset();
     base::RunLoop().RunUntilIdle();
     user_manager_enabler_.reset();
-    test_server_.reset();
     chromeos::ProfileHelper::SetAlwaysReturnPrimaryUserForTesting(false);
+    chromeos::MixinBasedInProcessBrowserTest::TearDownOnMainThread();
   }
 
   chromeos::FakeChromeUserManager* GetFakeUserManager() const {
@@ -202,22 +198,25 @@ class ArcSessionManagerTest : public InProcessBrowserTest {
 
   Profile* profile() { return profile_.get(); }
 
-  FakeProfileOAuth2TokenService* token_service() { return token_service_; }
+  identity::IdentityTestEnvironment* identity_test_env() {
+    return identity_test_environment_adaptor_->identity_test_env();
+  }
 
  private:
-  std::unique_ptr<policy::LocalPolicyTestServer> test_server_;
+  chromeos::LocalPolicyTestServerMixin local_policy_mixin_{&mixin_host_};
   std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
+  std::unique_ptr<IdentityTestEnvironmentProfileAdaptor>
+      identity_test_environment_adaptor_;
   base::ScopedTempDir temp_dir_;
   std::unique_ptr<TestingProfile> profile_;
-  FakeProfileOAuth2TokenService* token_service_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcSessionManagerTest);
 };
 
 IN_PROC_BROWSER_TEST_F(ArcSessionManagerTest, ConsumerAccount) {
   EnableArc();
-  token_service()->IssueTokenForAllPendingRequests(kUnmanagedAuthToken,
-                                                   base::Time::Max());
+  identity_test_env()->WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
+      kUnmanagedAuthToken, base::Time::Max());
   ASSERT_EQ(ArcSessionManager::State::ACTIVE,
             ArcSessionManager::Get()->state());
 }
@@ -241,10 +240,36 @@ IN_PROC_BROWSER_TEST_F(ArcSessionManagerTest, ManagedChromeAccount) {
 
 IN_PROC_BROWSER_TEST_F(ArcSessionManagerTest, ManagedAndroidAccount) {
   EnableArc();
-  token_service()->IssueTokenForAllPendingRequests(kManagedAuthToken,
-                                                   base::Time::Max());
+  identity_test_env()->WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
+      kManagedAuthToken, base::Time::Max());
   ArcPlayStoreDisabledWaiter().Wait();
   EXPECT_FALSE(IsArcPlayStoreEnabledForProfile(profile()));
+}
+
+// Make sure that ARC is disabled upon entering locked fullscreen mode.
+IN_PROC_BROWSER_TEST_F(ArcSessionManagerTest, ArcDisabledInLockedFullscreen) {
+  EnableArc();
+  ASSERT_EQ(ArcSessionManager::State::ACTIVE,
+            ArcSessionManager::Get()->state());
+
+  const int window_id = extensions::ExtensionTabUtil::GetWindowId(browser());
+  const char kStateLockedFullscreen[] =
+      "[%u, {\"state\": \"locked-fullscreen\"}]";
+
+  auto function = base::MakeRefCounted<extensions::WindowsUpdateFunction>();
+  scoped_refptr<const extensions::Extension> extension(
+      extensions::ExtensionBuilder("Test")
+          .SetID("pmgljoohajacndjcjlajcopidgnhphcl")
+          .AddPermission("lockWindowFullscreenPrivate")
+          .Build());
+  function->set_extension(extension.get());
+
+  extension_function_test_utils::RunFunctionAndReturnSingleResult(
+      function.get(), base::StringPrintf(kStateLockedFullscreen, window_id),
+      browser());
+
+  ASSERT_EQ(ArcSessionManager::State::STOPPED,
+            ArcSessionManager::Get()->state());
 }
 
 }  // namespace arc

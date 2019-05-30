@@ -6,6 +6,7 @@
 #define GPU_IPC_COMMAND_BUFFER_TASK_EXECUTOR_H_
 
 #include <memory>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
@@ -14,9 +15,11 @@
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/command_buffer/service/framebuffer_completeness_cache.h"
 #include "gpu/command_buffer/service/image_manager.h"
+#include "gpu/command_buffer/service/passthrough_discardable_manager.h"
 #include "gpu/command_buffer/service/sequence_id.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
 #include "gpu/command_buffer/service/shader_translator_cache.h"
+#include "gpu/command_buffer/service/shared_image_manager.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_preferences.h"
 #include "gpu/ipc/gl_in_process_context_export.h"
@@ -55,9 +58,6 @@ class GL_IN_PROCESS_CONTEXT_EXPORT CommandBufferTaskExecutor
     // Returns true if sequence should yield while running its current task.
     virtual bool ShouldYield() = 0;
 
-    // Enables or disables further execution of tasks in this sequence.
-    virtual void SetEnabled(bool enabled) = 0;
-
     // Schedule a task with provided sync token dependencies. The dependencies
     // are hints for sync token waits within the task, and can be ignored by the
     // implementation.
@@ -73,14 +73,15 @@ class GL_IN_PROCESS_CONTEXT_EXPORT CommandBufferTaskExecutor
                             SyncPointManager* sync_point_manager,
                             MailboxManager* mailbox_manager,
                             scoped_refptr<gl::GLShareGroup> share_group,
-                            gl::GLSurfaceFormat share_group_surface_format);
+                            gl::GLSurfaceFormat share_group_surface_format,
+                            SharedImageManager* shared_image_manager,
+                            gles2::ProgramCache* program_cache);
 
   // Always use virtualized GL contexts if this returns true.
-  virtual bool ForceVirtualizedGLContexts() = 0;
+  virtual bool ForceVirtualizedGLContexts() const = 0;
 
-  // Block thread when a WaitSyncToken command is encountered instead of calling
-  // OnWaitSyncToken().
-  virtual bool BlockThreadOnWaitSyncToken() = 0;
+  // Creates a memory tracker for the context group if this returns true.
+  virtual bool ShouldCreateMemoryTracker() const = 0;
 
   // Schedules |task| to run out of order with respect to other sequenced tasks.
   virtual void ScheduleOutOfOrderTask(base::OnceClosure task) = 0;
@@ -105,12 +106,16 @@ class GL_IN_PROCESS_CONTEXT_EXPORT CommandBufferTaskExecutor
   ServiceDiscardableManager* discardable_manager() {
     return &discardable_manager_;
   }
+  PassthroughDiscardableManager* passthrough_discardable_manager() {
+    return &passthrough_discardable_manager_;
+  }
   gles2::ShaderTranslatorCache* shader_translator_cache() {
     return &shader_translator_cache_;
   }
   gles2::FramebufferCompletenessCache* framebuffer_completeness_cache() {
     return &framebuffer_completeness_cache_;
   }
+  SharedImageManager* shared_image_manager() { return shared_image_manager_; }
 
   // These methods construct accessed fields if not already initialized.
   scoped_refptr<gl::GLShareGroup> share_group();
@@ -125,17 +130,19 @@ class GL_IN_PROCESS_CONTEXT_EXPORT CommandBufferTaskExecutor
  private:
   const GpuPreferences gpu_preferences_;
   const GpuFeatureInfo gpu_feature_info_;
-  std::unique_ptr<MailboxManager> owned_mailbox_manager_;
   SyncPointManager* sync_point_manager_;
   MailboxManager* mailbox_manager_;
   std::unique_ptr<gles2::Outputter> outputter_;
   scoped_refptr<gl::GLShareGroup> share_group_;
   gl::GLSurfaceFormat share_group_surface_format_;
-  std::unique_ptr<gles2::ProgramCache> program_cache_;
+  std::unique_ptr<gles2::ProgramCache> owned_program_cache_;
+  gles2::ProgramCache* program_cache_;
   gles2::ImageManager image_manager_;
   ServiceDiscardableManager discardable_manager_;
+  PassthroughDiscardableManager passthrough_discardable_manager_;
   gles2::ShaderTranslatorCache shader_translator_cache_;
   gles2::FramebufferCompletenessCache framebuffer_completeness_cache_;
+  SharedImageManager* shared_image_manager_;
 
   // No-op default initialization is used in in-process mode.
   GpuProcessActivityFlags activity_flags_;

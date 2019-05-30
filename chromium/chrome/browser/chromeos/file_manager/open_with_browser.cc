@@ -9,8 +9,9 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
+#include "base/stl_util.h"
 #include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
@@ -58,7 +59,7 @@ constexpr const base::FilePath::CharType* kFileExtensionsViewableInBrowser[] = {
 
 // Returns true if |file_path| is viewable in the browser (ex. HTML file).
 bool IsViewableInBrowser(const base::FilePath& file_path) {
-  for (size_t i = 0; i < arraysize(kFileExtensionsViewableInBrowser); i++) {
+  for (size_t i = 0; i < base::size(kFileExtensionsViewableInBrowser); i++) {
     if (file_path.MatchesExtension(kFileExtensionsViewableInBrowser[i]))
       return true;
   }
@@ -84,8 +85,9 @@ bool IsPepperPluginEnabled(Profile* profile,
 bool IsPdfPluginEnabled(Profile* profile) {
   DCHECK(profile);
 
-  static const base::FilePath plugin_path(ChromeContentClient::kPDFPluginPath);
-  return IsPepperPluginEnabled(profile, plugin_path);
+  static const base::NoDestructor<base::FilePath> plugin_path(
+      ChromeContentClient::kPDFPluginPath);
+  return IsPepperPluginEnabled(profile, *plugin_path);
 }
 
 bool IsFlashPluginEnabled(Profile* profile) {
@@ -193,8 +195,7 @@ bool OpenFileWithBrowser(Profile* profile,
           integration_service->GetDriveFsInterface() &&
           integration_service->GetRelativeDrivePath(file_path, &path)) {
         integration_service->GetDriveFsInterface()->GetMetadata(
-            path, false,
-            base::BindOnce(&OpenHostedDriveFsFile, file_path, profile));
+            path, base::BindOnce(&OpenHostedDriveFsFile, file_path, profile));
         return true;
       }
       OpenGDocUrlFromFile(file_path, profile);

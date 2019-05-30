@@ -19,6 +19,7 @@
 #include "content/renderer/pepper/video_decoder_shim.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "media/base/limits.h"
+#include "media/base/media_util.h"
 #include "media/gpu/ipc/client/gpu_video_decode_accelerator_host.h"
 #include "media/video/video_decode_accelerator.h"
 #include "ppapi/c/pp_completion_callback.h"
@@ -319,7 +320,7 @@ int32_t PepperVideoDecoderHost::OnHostMsgRecyclePicture(
     return PP_ERROR_FAILED;
   DCHECK(decoder_);
 
-  PictureBufferMap::iterator it = picture_buffer_map_.find(texture_id);
+  auto it = picture_buffer_map_.find(texture_id);
   if (it == picture_buffer_map_.end())
     return PP_ERROR_BADARGUMENT;
 
@@ -379,6 +380,7 @@ void PepperVideoDecoderHost::ProvidePictureBuffers(
     const gfx::Size& dimensions,
     uint32_t texture_target) {
   DCHECK_EQ(1u, textures_per_buffer);
+  coded_size_ = dimensions;
   pending_texture_requests_++;
   host()->SendUnsolicitedReply(
       pp_resource(), PpapiPluginMsg_VideoDecoder_RequestTextures(
@@ -388,11 +390,19 @@ void PepperVideoDecoderHost::ProvidePictureBuffers(
 }
 
 void PepperVideoDecoderHost::PictureReady(const media::Picture& picture) {
-  PictureBufferMap::iterator it =
-      picture_buffer_map_.find(picture.picture_buffer_id());
+  auto it = picture_buffer_map_.find(picture.picture_buffer_id());
   DCHECK(it != picture_buffer_map_.end());
-  DCHECK(it->second == PictureBufferState::ASSIGNED);
+  // VDA might send the same picture multiple times in VP9 video. However the
+  // Pepper client might not able to handle it. Therefore we just catch it here.
+  // https://crbug.com/755887
+  CHECK(it->second == PictureBufferState::ASSIGNED);
   it->second = PictureBufferState::IN_USE;
+
+  if (software_fallback_used_) {
+    media::ReportPepperVideoDecoderOutputPictureCountSW(coded_size_.height());
+  } else {
+    media::ReportPepperVideoDecoderOutputPictureCountHW(coded_size_.height());
+  }
 
   // Don't bother validating the visible rect, since the plugin process is less
   // trusted than the gpu process.
@@ -404,7 +414,7 @@ void PepperVideoDecoderHost::PictureReady(const media::Picture& picture) {
 }
 
 void PepperVideoDecoderHost::DismissPictureBuffer(int32_t picture_buffer_id) {
-  PictureBufferMap::iterator it = picture_buffer_map_.find(picture_buffer_id);
+  auto it = picture_buffer_map_.find(picture_buffer_id);
   DCHECK(it != picture_buffer_map_.end());
 
   // If the texture is still used by the plugin keep it until the plugin
@@ -423,7 +433,7 @@ void PepperVideoDecoderHost::DismissPictureBuffer(int32_t picture_buffer_id) {
 
 void PepperVideoDecoderHost::NotifyEndOfBitstreamBuffer(
     int32_t bitstream_buffer_id) {
-  PendingDecodeList::iterator it = GetPendingDecodeById(bitstream_buffer_id);
+  auto it = GetPendingDecodeById(bitstream_buffer_id);
   if (it == pending_decodes_.end()) {
     NOTREACHED();
     return;

@@ -12,10 +12,12 @@
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/first_run/first_run.h"
+#include "chrome/browser/first_run/first_run_internal.h"
 #include "chrome/browser/importer/importer_list.h"
 #include "chrome/browser/prefs/chrome_pref_service_factory.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -28,6 +30,9 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_prefs/user_prefs.h"
+#include "components/variations/metrics.h"
+#include "components/variations/pref_names.h"
+#include "components/variations/variations_switches.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
@@ -36,11 +41,13 @@
 
 typedef InProcessBrowserTest FirstRunBrowserTest;
 
+namespace first_run {
+
 IN_PROC_BROWSER_TEST_F(FirstRunBrowserTest, SetShouldShowWelcomePage) {
-  EXPECT_FALSE(first_run::ShouldShowWelcomePage());
-  first_run::SetShouldShowWelcomePage();
-  EXPECT_TRUE(first_run::ShouldShowWelcomePage());
-  EXPECT_FALSE(first_run::ShouldShowWelcomePage());
+  EXPECT_FALSE(ShouldShowWelcomePage());
+  SetShouldShowWelcomePage();
+  EXPECT_TRUE(ShouldShowWelcomePage());
+  EXPECT_FALSE(ShouldShowWelcomePage());
 }
 
 #if !defined(OS_CHROMEOS)
@@ -63,7 +70,7 @@ class FirstRunMasterPrefsBrowserTestBase : public InProcessBrowserTest {
     ASSERT_TRUE(base::CreateTemporaryFile(&prefs_file_));
     EXPECT_EQ(static_cast<int>(text_->size()),
               base::WriteFile(prefs_file_, text_->c_str(), text_->size()));
-    first_run::SetMasterPrefsPathForTesting(prefs_file_);
+    SetMasterPrefsPathForTesting(prefs_file_);
 
     // This invokes BrowserMain, and does the import, so must be done last.
     InProcessBrowserTest::SetUp();
@@ -76,10 +83,18 @@ class FirstRunMasterPrefsBrowserTestBase : public InProcessBrowserTest {
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kForceFirstRun);
-    EXPECT_EQ(first_run::AUTO_IMPORT_NONE, first_run::auto_import_state());
+    EXPECT_EQ(AUTO_IMPORT_NONE, auto_import_state());
 
     extensions::ComponentLoader::EnableBackgroundExtensionsForTesting();
   }
+
+#if defined(OS_MACOSX) || defined(OS_LINUX)
+  void SetUpInProcessBrowserTestFixture() override {
+    InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
+    // Suppress first run dialog since it blocks test progress.
+    internal::ForceFirstRunDialogShownForTesting(false);
+  }
+#endif
 
   void SetMasterPreferencesForTest(const char text[]) {
     text_.reset(new std::string(text));
@@ -127,31 +142,23 @@ int MaskExpectedImportState(int expected_import_state) {
   EXPECT_GT(source_profile_count, 0);
 #endif
   if (source_profile_count == 0)
-    return expected_import_state & ~first_run::AUTO_IMPORT_PROFILE_IMPORTED;
+    return expected_import_state & ~AUTO_IMPORT_PROFILE_IMPORTED;
   return expected_import_state;
 }
 
 }  // namespace
 
-extern const char kImportDefault[] =
+const char kImportDefault[] =
     "{\n"
     "}\n";
 typedef FirstRunMasterPrefsBrowserTestT<kImportDefault>
     FirstRunMasterPrefsImportDefault;
-// http://crbug.com/314221
-#if defined(OS_MACOSX) || (defined(GOOGLE_CHROME_BUILD) && defined(OS_LINUX))
-#define MAYBE_ImportDefault DISABLED_ImportDefault
-#else
-#define MAYBE_ImportDefault ImportDefault
-#endif
 // No items are imported by default.
-IN_PROC_BROWSER_TEST_F(FirstRunMasterPrefsImportDefault, MAYBE_ImportDefault) {
-  int auto_import_state = first_run::auto_import_state();
-  EXPECT_EQ(MaskExpectedImportState(first_run::AUTO_IMPORT_CALLED),
-            auto_import_state);
+IN_PROC_BROWSER_TEST_F(FirstRunMasterPrefsImportDefault, ImportDefault) {
+  EXPECT_EQ(MaskExpectedImportState(AUTO_IMPORT_CALLED), auto_import_state());
 }
 
-extern const char kImportAll[] =
+const char kImportAll[] =
     "{\n"
     "  \"distribution\": {\n"
     "    \"import_bookmarks\": true,\n"
@@ -162,22 +169,15 @@ extern const char kImportAll[] =
     "}\n";
 typedef FirstRunMasterPrefsBrowserTestT<kImportAll>
     FirstRunMasterPrefsImportAll;
-// http://crbug.com/314221
-#if defined(OS_MACOSX) || (defined(GOOGLE_CHROME_BUILD) && defined(OS_LINUX))
-#define MAYBE_ImportAll DISABLED_ImportAll
-#else
-#define MAYBE_ImportAll ImportAll
-#endif
-IN_PROC_BROWSER_TEST_F(FirstRunMasterPrefsImportAll, MAYBE_ImportAll) {
-  int auto_import_state = first_run::auto_import_state();
-  EXPECT_EQ(MaskExpectedImportState(first_run::AUTO_IMPORT_CALLED |
-                                    first_run::AUTO_IMPORT_PROFILE_IMPORTED),
-            auto_import_state);
+IN_PROC_BROWSER_TEST_F(FirstRunMasterPrefsImportAll, ImportAll) {
+  EXPECT_EQ(MaskExpectedImportState(AUTO_IMPORT_CALLED |
+                                    AUTO_IMPORT_PROFILE_IMPORTED),
+            auto_import_state());
 }
 
 // The bookmarks file doesn't actually need to exist for this integration test
 // to trigger the interaction being tested.
-extern const char kImportBookmarksFile[] =
+const char kImportBookmarksFile[] =
     "{\n"
     "  \"distribution\": {\n"
     "     \"import_bookmarks_from_file\": \"/foo/doesntexists.wtv\"\n"
@@ -185,25 +185,17 @@ extern const char kImportBookmarksFile[] =
     "}\n";
 typedef FirstRunMasterPrefsBrowserTestT<kImportBookmarksFile>
     FirstRunMasterPrefsImportBookmarksFile;
-// http://crbug.com/314221
-#if (defined(GOOGLE_CHROME_BUILD) && defined(OS_LINUX)) || defined(OS_MACOSX)
-#define MAYBE_ImportBookmarksFile DISABLED_ImportBookmarksFile
-#else
-#define MAYBE_ImportBookmarksFile ImportBookmarksFile
-#endif
 IN_PROC_BROWSER_TEST_F(FirstRunMasterPrefsImportBookmarksFile,
-                       MAYBE_ImportBookmarksFile) {
-  int auto_import_state = first_run::auto_import_state();
-  EXPECT_EQ(
-      MaskExpectedImportState(first_run::AUTO_IMPORT_CALLED |
-                              first_run::AUTO_IMPORT_BOOKMARKS_FILE_IMPORTED),
-      auto_import_state);
+                       ImportBookmarksFile) {
+  EXPECT_EQ(MaskExpectedImportState(AUTO_IMPORT_CALLED |
+                                    AUTO_IMPORT_BOOKMARKS_FILE_IMPORTED),
+            auto_import_state());
 }
 
 // Test an import with all import options disabled. This is a regression test
 // for http://crbug.com/169984 where this would cause the import process to
 // stay running, and the NTP to be loaded with no apps.
-extern const char kImportNothing[] =
+const char kImportNothing[] =
     "{\n"
     "  \"distribution\": {\n"
     "    \"import_bookmarks\": false,\n"
@@ -214,23 +206,16 @@ extern const char kImportNothing[] =
     "}\n";
 typedef FirstRunMasterPrefsBrowserTestT<kImportNothing>
     FirstRunMasterPrefsImportNothing;
-// http://crbug.com/314221
-#if defined(GOOGLE_CHROME_BUILD) && (defined(OS_MACOSX) || defined(OS_LINUX))
-#define MAYBE_ImportNothingAndShowNewTabPage \
-    DISABLED_ImportNothingAndShowNewTabPage
-#else
-#define MAYBE_ImportNothingAndShowNewTabPage ImportNothingAndShowNewTabPage
-#endif
 IN_PROC_BROWSER_TEST_F(FirstRunMasterPrefsImportNothing,
-                       MAYBE_ImportNothingAndShowNewTabPage) {
-  EXPECT_EQ(first_run::AUTO_IMPORT_CALLED, first_run::auto_import_state());
+                       ImportNothingAndShowNewTabPage) {
+  EXPECT_EQ(AUTO_IMPORT_CALLED, auto_import_state());
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
   content::WebContents* tab = browser()->tab_strip_model()->GetWebContentsAt(0);
   EXPECT_TRUE(WaitForLoadStop(tab));
 }
 
 // Test first run with some tracked preferences.
-extern const char kWithTrackedPrefs[] =
+const char kWithTrackedPrefs[] =
     "{\n"
     "  \"homepage\": \"example.com\",\n"
     "  \"homepage_is_newtabpage\": false\n"
@@ -265,16 +250,8 @@ class FirstRunMasterPrefsWithTrackedPreferences
   DISALLOW_COPY_AND_ASSIGN(FirstRunMasterPrefsWithTrackedPreferences);
 };
 
-// http://crbug.com/314221
-#if defined(GOOGLE_CHROME_BUILD) && (defined(OS_MACOSX) || defined(OS_LINUX))
-#define MAYBE_TrackedPreferencesSurviveFirstRun \
-    DISABLED_TrackedPreferencesSurviveFirstRun
-#else
-#define MAYBE_TrackedPreferencesSurviveFirstRun \
-    TrackedPreferencesSurviveFirstRun
-#endif
 IN_PROC_BROWSER_TEST_P(FirstRunMasterPrefsWithTrackedPreferences,
-                       MAYBE_TrackedPreferencesSurviveFirstRun) {
+                       TrackedPreferencesSurviveFirstRun) {
   const PrefService* user_prefs = browser()->profile()->GetPrefs();
   EXPECT_EQ("example.com", user_prefs->GetString(prefs::kHomePage));
   EXPECT_FALSE(user_prefs->GetBoolean(prefs::kHomePageIsNewTabPage));
@@ -290,15 +267,71 @@ IN_PROC_BROWSER_TEST_P(FirstRunMasterPrefsWithTrackedPreferences,
   EXPECT_TRUE(default_homepage_is_ntp);
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     FirstRunMasterPrefsWithTrackedPreferencesInstance,
     FirstRunMasterPrefsWithTrackedPreferences,
     testing::Values(
         chrome_prefs::internals::kSettingsEnforcementGroupNoEnforcement,
         chrome_prefs::internals::kSettingsEnforcementGroupEnforceAlways,
-        chrome_prefs::internals::
-            kSettingsEnforcementGroupEnforceAlwaysWithDSE,
+        chrome_prefs::internals::kSettingsEnforcementGroupEnforceAlwaysWithDSE,
         chrome_prefs::internals::
             kSettingsEnforcementGroupEnforceAlwaysWithExtensionsAndDSE));
 
+#define COMPRESSED_SEED_TEST_VALUE                                             \
+  "H4sICMNRYFcAA3NlZWRfYmluAOPSMEwxsjQxM0lLMk4xt0hLMzQ1NUs1TTI1NUw2MzExT05KNj" \
+  "dJNU1LMRDay8glH+rrqBual5mWX5SbWVKpG1KUmZija2igG5BalJyaVyLRMGfSUlYLRif2lNS0" \
+  "xNKcEi9uLhhTgNGLh4sjvSi/"                                                   \
+  "tCDewBCFZ4TCM0bhmaDwTFF4Zig8cxSeBQrPUoARAEVeJPrqAAAA"
+#define SEED_SIGNATURE_TEST_VALUE                                              \
+  "MEQCIDD1IVxjzWYncun+9IGzqYjZvqxxujQEayJULTlbTGA/AiAr0oVmEgVUQZBYq5VLOSvy96" \
+  "JkMYgzTkHPwbv7K/CmgA=="
+
+constexpr char kCompressedSeedTestValue[] = COMPRESSED_SEED_TEST_VALUE;
+constexpr char kSignatureValue[] = SEED_SIGNATURE_TEST_VALUE;
+
+extern const char kWithVariationsPrefs[] =
+    "{\n"
+    "  \"variations_compressed_seed\": \"" COMPRESSED_SEED_TEST_VALUE
+    "\",\n"
+    "  \"variations_seed_signature\": \"" SEED_SIGNATURE_TEST_VALUE
+    "\"\n"
+    "}\n";
+
+class FirstRunMasterPrefsVariationsSeedTest
+    : public FirstRunMasterPrefsBrowserTestT<kWithVariationsPrefs> {
+ public:
+  FirstRunMasterPrefsVariationsSeedTest() {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        variations::switches::kDisableFieldTrialTestingConfig);
+  }
+  ~FirstRunMasterPrefsVariationsSeedTest() override = default;
+
+ protected:
+  base::HistogramTester histogram_tester_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(FirstRunMasterPrefsVariationsSeedTest);
+};
+
+#undef COMPRESSED_SEED_TEST_VALUE
+#undef SEED_SIGNATURE_TEST_VALUE
+
+IN_PROC_BROWSER_TEST_F(FirstRunMasterPrefsVariationsSeedTest, Test) {
+  // Tests variation migration from master_preferences to local_state.
+  EXPECT_EQ(kCompressedSeedTestValue,
+            g_browser_process->local_state()->GetString(
+                variations::prefs::kVariationsCompressedSeed));
+  EXPECT_EQ(kSignatureValue, g_browser_process->local_state()->GetString(
+                                 variations::prefs::kVariationsSeedSignature));
+
+  // Verify variations loaded in VariationsService by metrics.
+  histogram_tester_.ExpectUniqueSample("Variations.SeedLoadResult",
+                                       variations::StoreSeedResult::SUCCESS, 1);
+  histogram_tester_.ExpectUniqueSample(
+      "Variations.LoadSeedSignature",
+      variations::VerifySignatureResult::VALID_SIGNATURE, 1);
+}
+
 #endif  // !defined(OS_CHROMEOS)
+
+}  // namespace first_run

@@ -4,7 +4,7 @@
 
 #include "ash/wm/workspace/workspace_event_handler.h"
 
-#include "ash/touch/touch_uma.h"
+#include "ash/public/cpp/touch_uma.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
@@ -16,12 +16,17 @@
 
 namespace ash {
 
-WorkspaceEventHandler::WorkspaceEventHandler() : click_component_(HTNOWHERE) {}
+WorkspaceEventHandler::WorkspaceEventHandler(aura::Window* workspace_window)
+    : workspace_window_(workspace_window), click_component_(HTNOWHERE) {
+  workspace_window_->AddPreTargetHandler(this);
+}
 
-WorkspaceEventHandler::~WorkspaceEventHandler() = default;
+WorkspaceEventHandler::~WorkspaceEventHandler() {
+  workspace_window_->RemovePreTargetHandler(this);
+}
 
-void WorkspaceEventHandler::OnMouseEvent(ui::MouseEvent* event,
-                                         aura::Window* target) {
+void WorkspaceEventHandler::OnMouseEvent(ui::MouseEvent* event) {
+  aura::Window* target = static_cast<aura::Window*>(event->target());
   if (event->type() == ui::ET_MOUSE_PRESSED && event->IsOnlyLeftMouseButton() &&
       ((event->flags() & (ui::EF_IS_DOUBLE_CLICK | ui::EF_IS_TRIPLE_CLICK)) ==
        0)) {
@@ -45,6 +50,9 @@ void WorkspaceEventHandler::OnMouseEvent(ui::MouseEvent* event,
       break;
     case ui::ET_MOUSE_PRESSED: {
       wm::WindowState* target_state = wm::GetWindowState(target);
+      // No action for windows that aren't managed by WindowState.
+      if (!target_state)
+        return;
 
       if (event->IsOnlyLeftMouseButton()) {
         if (event->flags() & ui::EF_IS_DOUBLE_CLICK) {
@@ -70,11 +78,11 @@ void WorkspaceEventHandler::OnMouseEvent(ui::MouseEvent* event,
   }
 }
 
-void WorkspaceEventHandler::OnGestureEvent(ui::GestureEvent* event,
-                                           aura::Window* target) {
+void WorkspaceEventHandler::OnGestureEvent(ui::GestureEvent* event) {
   if (event->handled() || event->type() != ui::ET_GESTURE_TAP)
     return;
 
+  aura::Window* target = static_cast<aura::Window*>(event->target());
   int previous_target_component = click_component_;
   click_component_ = wm::GetNonClientComponent(target, event->location());
 
@@ -82,14 +90,14 @@ void WorkspaceEventHandler::OnGestureEvent(ui::GestureEvent* event,
     return;
 
   if (event->details().tap_count() != 2) {
-    TouchUMA::GetInstance()->RecordGestureAction(GESTURE_FRAMEVIEW_TAP);
+    TouchUMA::RecordGestureAction(GESTURE_FRAMEVIEW_TAP);
     return;
   }
 
   if (click_component_ == previous_target_component) {
     base::RecordAction(
         base::UserMetricsAction("Caption_GestureTogglesMaximize"));
-    TouchUMA::GetInstance()->RecordGestureAction(GESTURE_MAXIMIZE_DOUBLETAP);
+    TouchUMA::RecordGestureAction(GESTURE_MAXIMIZE_DOUBLETAP);
     const wm::WMEvent wm_event(wm::WM_EVENT_TOGGLE_MAXIMIZE_CAPTION);
     wm::GetWindowState(target)->OnWMEvent(&wm_event);
     event->StopPropagation();

@@ -5,6 +5,7 @@
 #include <memory>
 #include <set>
 
+#include "base/json/json_writer.h"
 #include "base/strings/string_number_conversions.h"
 #include "tools/gn/commands.h"
 #include "tools/gn/config.h"
@@ -14,7 +15,9 @@
 #include "tools/gn/input_file.h"
 #include "tools/gn/parse_tree.h"
 #include "tools/gn/runtime_deps.h"
+#include "tools/gn/scope.h"
 #include "tools/gn/settings.h"
+#include "tools/gn/standard_out.h"
 #include "tools/gn/substitution_writer.h"
 #include "tools/gn/variables.h"
 
@@ -47,6 +50,11 @@
 //   "deps : [ list of target dependencies ],
 //   "libs" : [ list of libraries ],
 //   "lib_dirs" : [ list of library directories ]
+//   "metadata" : [ dictionary of target metadata values ]
+//   "data_keys" : [ list of target data keys ]
+//   "walk_keys" : [ list of target walk keys ]
+//   "rebase" : true or false
+//   "output_conversion" : "string for output conversion"
 // }
 //
 // Optionally, if "what" is specified while generating description, two other
@@ -142,6 +150,42 @@ class BaseDescBuilder {
     if (lib.is_source_file())
       return RenderValue(lib.source_file());
     return RenderValue(lib.value());
+  }
+
+  template <typename T>
+  base::Value ToBaseValue(const std::vector<T>& vector) {
+    base::ListValue res;
+    for (const auto& v : vector)
+      res.GetList().emplace_back(ToBaseValue(v));
+    return std::move(res);
+  }
+
+  base::Value ToBaseValue(const Scope* scope) {
+    base::DictionaryValue res;
+    Scope::KeyValueMap map;
+    scope->GetCurrentScopeValues(&map);
+    for (const auto& v : map)
+      res.SetKey(v.first, ToBaseValue(v.second));
+    return std::move(res);
+  }
+
+  base::Value ToBaseValue(const Value& val) {
+    switch (val.type()) {
+      case Value::STRING:
+        return base::Value(val.string_value());
+      case Value::INTEGER:
+        return base::Value(int(val.int_value()));
+      case Value::BOOLEAN:
+        return base::Value(val.boolean_value());
+      case Value::SCOPE:
+        return ToBaseValue(val.scope_value());
+      case Value::LIST:
+        return ToBaseValue(val.list_value());
+      case Value::NONE:
+        return base::Value();
+    }
+    NOTREACHED();
+    return base::Value();
   }
 
   template <class VectorType>
@@ -273,6 +317,14 @@ class TargetDescBuilder : public BaseDescBuilder {
     }
 
     // General target meta variables.
+
+    if (what(variables::kMetadata)) {
+      base::DictionaryValue metadata;
+      for (const auto& v : target_->metadata().contents())
+        metadata.SetKey(v.first, ToBaseValue(v.second));
+      res->SetKey(variables::kMetadata, std::move(metadata));
+    }
+
     if (what(variables::kVisibility))
       res->SetWithoutPathExpansion(variables::kVisibility,
                                    target_->visibility().AsValue());
@@ -411,6 +463,30 @@ class TargetDescBuilder : public BaseDescBuilder {
       FillInPrecompiledHeader(res.get(), target_->config_values());
     }
 
+    // GeneratedFile vars.
+    if (target_->output_type() == Target::GENERATED_FILE) {
+      if (what(variables::kWriteOutputConversion)) {
+        res->SetKey(variables::kWriteOutputConversion,
+                    std::move(ToBaseValue(target_->output_conversion())));
+      }
+      if (what(variables::kDataKeys)) {
+        base::ListValue keys;
+        for (const auto& k : target_->data_keys())
+          keys.GetList().push_back(base::Value(k));
+        res->SetKey(variables::kDataKeys, std::move(keys));
+      }
+      if (what(variables::kRebase)) {
+        res->SetWithoutPathExpansion(variables::kRebase,
+                                     RenderValue(target_->rebase()));
+      }
+      if (what(variables::kWalkKeys)) {
+        base::ListValue keys;
+        for (const auto& k : target_->walk_keys())
+          keys.GetList().push_back(base::Value(k));
+        res->SetKey(variables::kWalkKeys, std::move(keys));
+      }
+    }
+
     if (what(variables::kDeps))
       res->SetWithoutPathExpansion(variables::kDeps, RenderDeps());
 
@@ -462,8 +538,7 @@ class TargetDescBuilder : public BaseDescBuilder {
     std::vector<LabelTargetPair> sorted_deps;
     for (const auto& pair : target->GetDeps(Target::DEPS_ALL))
       sorted_deps.push_back(pair);
-    std::sort(sorted_deps.begin(), sorted_deps.end(),
-              LabelPtrLabelLess<Target>());
+    std::sort(sorted_deps.begin(), sorted_deps.end());
 
     std::string indent(indent_level * 2, ' ');
 
@@ -608,7 +683,8 @@ class TargetDescBuilder : public BaseDescBuilder {
         list->AppendString(elem.AsString());
 
       res->SetWithoutPathExpansion(variables::kOutputs, std::move(list));
-    } else if (target_->output_type() == Target::CREATE_BUNDLE) {
+    } else if (target_->output_type() == Target::CREATE_BUNDLE ||
+               target_->output_type() == Target::GENERATED_FILE) {
       std::vector<SourceFile> output_files;
       target_->bundle_data().GetOutputsAsSourceFiles(target_->settings(),
                                                      &output_files);

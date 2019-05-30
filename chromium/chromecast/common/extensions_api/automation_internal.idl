@@ -11,7 +11,7 @@ namespace automationInternal {
   // the tree update format.
   [nocompile] dictionary AXEventParams {
     // The tree id of the web contents that this update is for.
-    long treeID;
+    DOMString treeID;
 
     // ID of the node that the event applies to.
     long targetID;
@@ -31,6 +31,17 @@ namespace automationInternal {
     long actionRequestID;
   };
 
+  dictionary AXTextLocationParams {
+    DOMString treeID;
+    long nodeID;
+    boolean result;
+    long left;
+    long top;
+    long width;
+    long height;
+    long requestID;
+  };
+
   // Actions internally used by automation.
   enum ActionTypePrivate {
     resumeMedia,
@@ -41,7 +52,7 @@ namespace automationInternal {
 
   // Arguments required for all actions supplied to performAction.
   dictionary PerformActionRequiredParams {
-    long treeID;
+    DOMString treeID;
     long automationNodeID;
 
     // This can be either automation::ActionType or
@@ -78,7 +89,7 @@ namespace automationInternal {
 
   // Arguments for the querySelector function.
   dictionary QuerySelectorRequiredParams {
-    long treeID;
+    DOMString treeID;
     long automationNodeID;
     DOMString selector;
   };
@@ -101,12 +112,19 @@ namespace automationInternal {
     DOMString eventToFire;
   };
 
+  // Arguments for getTextLocation action.
+  dictionary GetTextLocationDataParams {
+    long startIndex;
+    long endIndex;
+  };
+
   // Returns the accessibility tree id of the web contents who's accessibility
   // was enabled using enableTab().
-  callback EnableTabCallback = void(long tree_id);
+  callback EnableTabCallback = void(DOMString tree_id);
 
-  // Callback called when enableDesktop() returns.
-  callback EnableDesktopCallback = void();
+  // Callback called when enableDesktop() returns. Returns the accessibility
+  // tree id of the desktop tree.
+  callback EnableDesktopCallback = void(DOMString tree_id);
 
   // Callback called when querySelector() returns.
   callback QuerySelectorCallback = void(long resultAutomationNodeID);
@@ -119,7 +137,7 @@ namespace automationInternal {
                           EnableTabCallback callback);
 
     // Enable automation of the frame with the given tree id.
-    static void enableFrame(long tree_id);
+    static void enableFrame(DOMString tree_id);
 
     // Enables desktop automation.
     static void enableDesktop(EnableDesktopCallback callback);
@@ -137,19 +155,21 @@ namespace automationInternal {
     // Fired when an accessibility event occurs
     static void onAccessibilityEvent(AXEventParams update);
 
-    static void onAccessibilityTreeDestroyed(long treeID);
+    static void onAccessibilityTreeDestroyed(DOMString treeID);
+
+    static void onGetTextLocationResult(AXTextLocationParams params);
 
     static void onTreeChange(long observerID,
-                             long treeID,
+                             DOMString treeID,
                              long nodeID,
                              DOMString changeType);
 
-    static void onChildTreeID(long treeID, long nodeID);
+    static void onChildTreeID(DOMString treeID);
 
-    static void onNodesRemoved(long treeID, long[] nodeIDs);
+    static void onNodesRemoved(DOMString treeID, long[] nodeIDs);
 
-    static void onAccessibilityTreeSerializationError(long treeID);
+    static void onAccessibilityTreeSerializationError(DOMString treeID);
 
-    static void onActionResult(long treeID, long requestID, boolean result);
+    static void onActionResult(DOMString treeID, long requestID, boolean result);
   };
 };

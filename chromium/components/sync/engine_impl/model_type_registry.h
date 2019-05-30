@@ -12,7 +12,9 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
 #include "components/sync/base/model_type.h"
+#include "components/sync/base/passphrase_enums.h"
 #include "components/sync/engine/cycle/type_debug_info_observer.h"
 #include "components/sync/engine/model_safe_worker.h"
 #include "components/sync/engine/model_type_connector.h"
@@ -82,8 +84,6 @@ class ModelTypeRegistry : public ModelTypeConnector,
   void OnCryptographerStateChanged(Cryptographer* cryptographer) override;
   void OnPassphraseTypeChanged(PassphraseType type,
                                base::Time passphrase_time) override;
-  void OnLocalSetPassphraseEncryption(
-      const SyncEncryptionHandler::NigoriState& nigori_state) override;
 
   // Gets the set of enabled types.
   ModelTypeSet GetEnabledTypes() const;
@@ -154,6 +154,10 @@ class ModelTypeRegistry : public ModelTypeConnector,
 
   // A copy of the directory's most recent cryptographer.
   std::unique_ptr<Cryptographer> cryptographer_;
+
+  // A copy of the directory's most recent passphrase type.
+  PassphraseType passphrase_type_ =
+      SyncEncryptionHandler::kInitialPassphraseType;
 
   // The set of encrypted types.
   ModelTypeSet encrypted_types_;

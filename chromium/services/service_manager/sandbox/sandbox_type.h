@@ -26,6 +26,15 @@ enum SandboxType {
 #if defined(OS_WIN)
   // Do not apply any sandboxing and elevate the privileges of the process.
   SANDBOX_TYPE_NO_SANDBOX_AND_ELEVATED_PRIVILEGES,
+
+  // The XR Compositing process.
+  SANDBOX_TYPE_XRCOMPOSITING,
+#endif
+
+#if defined(OS_FUCHSIA)
+  // Sandbox type for the web::Context process on Fuchsia. Functionally it's an
+  // equivalent of the browser process on other platforms.
+  SANDBOX_TYPE_WEB_CONTEXT,
 #endif
 
   // Renderer or worker process. Most common case.
@@ -60,6 +69,10 @@ enum SandboxType {
 
   // The audio service process.
   SANDBOX_TYPE_AUDIO,
+
+#if defined(OS_CHROMEOS)
+  SANDBOX_TYPE_IME,
+#endif  // defined(OS_CHROMEOS)
 
   SANDBOX_TYPE_AFTER_LAST_TYPE,  // Placeholder to ease iteration.
 };

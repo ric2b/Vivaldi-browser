@@ -6,7 +6,7 @@
  * @param {!FileSystemMetadataProvider} fileSystemMetadataProvider
  * @param {!ExternalMetadataProvider} externalMetadataProvider
  * @param {!ContentMetadataProvider} contentMetadataProvider
- * @param {!VolumeManagerCommon.VolumeInfoProvider} volumeManager
+ * @param {!VolumeManager} volumeManager
  * @constructor
  * @extends {MetadataProvider}
  * @struct
@@ -41,7 +41,7 @@ function MultiMetadataProvider(
   this.contentMetadataProvider_ = contentMetadataProvider;
 
   /**
-   * @private {!VolumeManagerCommon.VolumeInfoProvider}
+   * @private {!VolumeManager}
    * @const
    */
   this.volumeManager_ = volumeManager;
@@ -55,23 +55,23 @@ MultiMetadataProvider.prototype.__proto__ = MetadataProvider.prototype;
  * @return {!Promise<!Array<!MetadataItem>>}
  */
 MultiMetadataProvider.prototype.get = function(requests) {
-  var fileSystemRequests = [];
-  var externalRequests = [];
-  var contentRequests = [];
-  var fallbackContentRequests = [];
-  requests.forEach(function(request) {
+  const fileSystemRequests = [];
+  const externalRequests = [];
+  const contentRequests = [];
+  const fallbackContentRequests = [];
+  requests.forEach(request => {
     // Group property names.
-    var fileSystemPropertyNames = [];
-    var externalPropertyNames = [];
-    var contentPropertyNames = [];
-    var fallbackContentPropertyNames = [];
-    for (var i = 0; i < request.names.length; i++) {
-      var name = request.names[i];
-      var isFileSystemProperty =
+    const fileSystemPropertyNames = [];
+    const externalPropertyNames = [];
+    const contentPropertyNames = [];
+    const fallbackContentPropertyNames = [];
+    for (let i = 0; i < request.names.length; i++) {
+      const name = request.names[i];
+      const isFileSystemProperty =
           FileSystemMetadataProvider.PROPERTY_NAMES.indexOf(name) !== -1;
-      var isExternalProperty =
+      const isExternalProperty =
           ExternalMetadataProvider.PROPERTY_NAMES.indexOf(name) !== -1;
-      var isContentProperty =
+      const isContentProperty =
           ContentMetadataProvider.PROPERTY_NAMES.indexOf(name) !== -1;
       assert(isFileSystemProperty || isExternalProperty || isContentProperty);
       assert(!(isFileSystemProperty && isContentProperty));
@@ -85,17 +85,21 @@ MultiMetadataProvider.prototype.get = function(requests) {
         fallbackContentPropertyNames.push(name);
         continue;
       }
-      if (isFileSystemProperty)
+      if (isFileSystemProperty) {
         fileSystemPropertyNames.push(name);
-      if (isExternalProperty)
+      }
+      if (isExternalProperty) {
         externalPropertyNames.push(name);
-      if (isContentProperty)
+      }
+      if (isContentProperty) {
         contentPropertyNames.push(name);
+      }
     }
-    var volumeInfo = this.volumeManager_.getVolumeInfo(request.entry);
-    var addRequests = function(list, names) {
-      if (names.length)
+    const volumeInfo = this.volumeManager_.getVolumeInfo(request.entry);
+    const addRequests = (list, names) => {
+      if (names.length) {
         list.push(new MetadataRequest(request.entry, names));
+      }
     };
     if (volumeInfo &&
         (volumeInfo.volumeType === VolumeManagerCommon.VolumeType.DRIVE ||
@@ -116,35 +120,35 @@ MultiMetadataProvider.prototype.get = function(requests) {
           contentRequests,
           contentPropertyNames.concat(fallbackContentPropertyNames));
     }
-  }.bind(this));
+  });
 
-  var get = function(provider, inRequests) {
-    return provider.get(inRequests).then(function(results) {
+  const get = (provider, inRequests) => {
+    return provider.get(inRequests).then(results => {
       return {
         requests: inRequests,
         results: results
       };
     });
   };
-  var fileSystemPromise = get(
+  const fileSystemPromise = get(
       this.fileSystemMetadataProvider_, fileSystemRequests);
-  var externalPromise = get(this.externalMetadataProvider_, externalRequests);
-  var contentPromise = get(this.contentMetadataProvider_, contentRequests);
-  var fallbackContentPromise = externalPromise.then(
-      function(requestsAndResults) {
-        var requests = requestsAndResults.requests;
-        var results = requestsAndResults.results;
-        var dirtyMap = [];
-        for (var i = 0; i < results.length; i++) {
+  const externalPromise = get(this.externalMetadataProvider_, externalRequests);
+  const contentPromise = get(this.contentMetadataProvider_, contentRequests);
+  const fallbackContentPromise = externalPromise.then(
+      requestsAndResults => {
+        const requests = requestsAndResults.requests;
+        const results = requestsAndResults.results;
+        const dirtyMap = [];
+        for (let i = 0; i < results.length; i++) {
           dirtyMap[requests[i].entry.toURL()] = results[i].present;
         }
         return get(
             this.contentMetadataProvider_,
             fallbackContentRequests.filter(
-                function(request) {
+                request => {
                   return dirtyMap[request.entry.toURL()];
                 }));
-      }.bind(this));
+      });
 
   // Merge results.
   return Promise.all([
@@ -152,21 +156,21 @@ MultiMetadataProvider.prototype.get = function(requests) {
     externalPromise,
     contentPromise,
     fallbackContentPromise
-  ]).then(function(resultsList) {
-    var integratedResults = {};
-    for (var i = 0; i < resultsList.length; i++) {
-      var inRequests = resultsList[i].requests;
-      var results = resultsList[i].results;
+  ]).then(resultsList => {
+    const integratedResults = {};
+    for (let i = 0; i < resultsList.length; i++) {
+      const inRequests = resultsList[i].requests;
+      const results = resultsList[i].results;
       assert(inRequests.length === results.length);
-      for (var j = 0; j < results.length; j++) {
-        var url = inRequests[j].entry.toURL();
+      for (let j = 0; j < results.length; j++) {
+        const url = inRequests[j].entry.toURL();
         integratedResults[url] = integratedResults[url] || new MetadataItem();
-        for (var name in results[j]) {
+        for (const name in results[j]) {
           integratedResults[url][name] = results[j][name];
         }
       }
     }
-    return requests.map(function(request) {
+    return requests.map(request => {
       return integratedResults[request.entry.toURL()] || new MetadataItem();
     });
   });

@@ -9,6 +9,19 @@
 
 namespace blink {
 
+namespace {
+
+struct SameSizeAsNGBreakToken : RefCounted<NGBreakToken> {
+  virtual ~SameSizeAsNGBreakToken() = default;
+  void* pointer;
+  unsigned flags;
+};
+
+static_assert(sizeof(NGBreakToken) == sizeof(SameSizeAsNGBreakToken),
+              "NGBreakToken should stay small");
+
+}  // namespace
+
 #ifndef NDEBUG
 
 namespace {
@@ -27,8 +40,8 @@ void AppendBreakTokenToString(const NGBreakToken* token,
 
   if (token->Type() == NGBreakToken::kBlockBreakToken) {
     const auto children = ToNGBlockBreakToken(token)->ChildBreakTokens();
-    for (const auto& child : children)
-      AppendBreakTokenToString(child.get(), string_builder, indent + 2);
+    for (const auto* child : children)
+      AppendBreakTokenToString(child, string_builder, indent + 2);
   }
 }
 }  // namespace
@@ -36,7 +49,7 @@ void AppendBreakTokenToString(const NGBreakToken* token,
 String NGBreakToken::ToString() const {
   StringBuilder string_builder;
   string_builder.Append("(");
-  string_builder.Append(node_.ToString());
+  string_builder.Append(InputNode().ToString());
   string_builder.Append(")");
   if (IsFinished())
     string_builder.Append(" finished");

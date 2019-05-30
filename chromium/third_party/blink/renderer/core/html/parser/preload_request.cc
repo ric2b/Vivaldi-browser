@@ -5,10 +5,13 @@
 #include "third_party/blink/renderer/core/html/parser/preload_request.h"
 
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
+#include "third_party/blink/renderer/core/loader/preload_helper.h"
 #include "third_party/blink/renderer/core/script/document_write_intervention.h"
 #include "third_party/blink/renderer/core/script/script_loader.h"
-#include "third_party/blink/renderer/platform/cross_origin_attribute_value.h"
+#include "third_party/blink/renderer/platform/loader/fetch/cross_origin_attribute_value.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_info.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
@@ -40,8 +43,8 @@ Resource* PreloadRequest::Start(Document* document) {
   if (referrer_source_ == kBaseUrlIsReferrer)
     resource_request.SetReferrerString(base_url_.StrippedForUseAsReferrer());
 
-  resource_request.SetRequestContext(ResourceFetcher::DetermineRequestContext(
-      resource_type_, is_image_set_, false));
+  resource_request.SetRequestContext(
+      ResourceFetcher::DetermineRequestContext(resource_type_, is_image_set_));
 
   resource_request.SetFetchImportanceMode(importance_);
 
@@ -49,15 +52,15 @@ Resource* PreloadRequest::Start(Document* document) {
   options.initiator_info = initiator_info;
   FetchParameters params(resource_request, options);
 
-  if (resource_type_ == Resource::kImportResource) {
+  if (resource_type_ == ResourceType::kImportResource) {
     const SecurityOrigin* security_origin =
         document->ContextDocument()->GetSecurityOrigin();
     params.SetCrossOriginAccessControl(security_origin,
                                        kCrossOriginAttributeAnonymous);
   }
 
-  if (script_type_ == ScriptType::kModule) {
-    DCHECK_EQ(resource_type_, Resource::kScript);
+  if (script_type_ == mojom::ScriptType::kModule) {
+    DCHECK_EQ(resource_type_, ResourceType::kScript);
     params.SetCrossOriginAccessControl(
         document->GetSecurityOrigin(),
         ScriptLoader::ModuleScriptCredentialsMode(cross_origin_));
@@ -76,13 +79,13 @@ Resource* PreloadRequest::Start(Document* document) {
   if (request_type_ == kRequestTypeLinkRelPreload)
     params.SetLinkPreload(true);
 
-  if (script_type_ == ScriptType::kModule) {
-    DCHECK_EQ(resource_type_, Resource::kScript);
+  if (script_type_ == mojom::ScriptType::kModule) {
+    DCHECK_EQ(resource_type_, ResourceType::kScript);
     params.SetDecoderOptions(
         TextResourceDecoderOptions::CreateAlwaysUseUTF8ForText());
-  } else if (resource_type_ == Resource::kScript ||
-             resource_type_ == Resource::kCSSStyleSheet ||
-             resource_type_ == Resource::kImportResource) {
+  } else if (resource_type_ == ResourceType::kScript ||
+             resource_type_ == ResourceType::kCSSStyleSheet ||
+             resource_type_ == ResourceType::kImportResource) {
     params.SetCharset(charset_.IsEmpty() ? document->Encoding()
                                          : WTF::TextEncoding(charset_));
   }
@@ -94,13 +97,25 @@ Resource* PreloadRequest::Start(Document* document) {
   }
   params.SetSpeculativePreloadType(speculative_preload_type);
 
-  if (resource_type_ == Resource::kScript) {
+  if (resource_type_ == ResourceType::kScript) {
     MaybeDisallowFetchForDocWrittenScript(params, *document);
     // We intentionally ignore the returned value, because we don't resend
     // the async request to the blocked script here.
   }
 
-  return document->Loader()->StartPreload(resource_type_, params);
+  if (resource_type_ == ResourceType::kImage) {
+    if (const auto* frame = document->Loader()->GetFrame()) {
+      if (frame->IsClientLoFiAllowed(params.GetResourceRequest())) {
+        params.SetClientLoFiPlaceholder();
+      } else if (!is_lazyload_image_disabled_ &&
+                 frame->IsLazyLoadingImageAllowed()) {
+        params.SetLazyImagePlaceholder();
+      }
+    }
+  }
+
+  return PreloadHelper::StartPreload(resource_type_, params,
+                                     document->Fetcher());
 }
 
 }  // namespace blink

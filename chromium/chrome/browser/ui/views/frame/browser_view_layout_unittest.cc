@@ -33,6 +33,12 @@ class MockBrowserViewLayoutDelegate : public BrowserViewLayoutDelegate {
   void set_bookmark_bar_visible(bool visible) {
     bookmark_bar_visible_ = visible;
   }
+  void set_top_controls_slide_enabled(bool enabled) {
+    top_controls_slide_enabled_ = enabled;
+  }
+  void set_top_controls_shown_ratio(float ratio) {
+    top_controls_shown_ratio_ = ratio;
+  }
 
   // BrowserViewLayout::Delegate overrides:
   views::View* GetContentsWebView() const override {
@@ -53,6 +59,12 @@ class MockBrowserViewLayoutDelegate : public BrowserViewLayoutDelegate {
   ExclusiveAccessBubbleViews* GetExclusiveAccessBubble() const override {
     return nullptr;
   }
+  bool IsTopControlsSlideBehaviorEnabled() const override {
+    return top_controls_slide_enabled_;
+  }
+  float GetTopControlsSlideBehaviorShownRatio() const override {
+    return top_controls_shown_ratio_;
+  }
 
  private:
   views::View* contents_web_view_;
@@ -60,6 +72,8 @@ class MockBrowserViewLayoutDelegate : public BrowserViewLayoutDelegate {
   bool toolbar_visible_ = true;
   bool bookmark_bar_visible_ = true;
   bool download_shelf_needs_layout_ = false;
+  bool top_controls_slide_enabled_ = false;
+  float top_controls_shown_ratio_ = 1.f;
 
   DISALLOW_COPY_AND_ASSIGN(MockBrowserViewLayoutDelegate);
 };
@@ -97,7 +111,6 @@ class MockImmersiveModeController : public ImmersiveModeController {
   void OnFindBarVisibleBoundsChanged(
       const gfx::Rect& new_visible_bounds) override {}
   bool ShouldStayImmersiveAfterExitingFullscreen() override { return true; }
-  views::Widget* GetRevealWidget() override { return nullptr; }
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override {}
 
  private:
@@ -153,10 +166,9 @@ class BrowserViewLayoutTest : public BrowserWithTestWindowTest {
     contents_container_ = CreateFixedSizeView(gfx::Size(800, 600));
     contents_container_->AddChildView(devtools_web_view_);
     contents_container_->AddChildView(contents_web_view_);
-    ContentsLayoutManager* contents_layout_manager =
-        contents_container_->SetLayoutManager(
-            std::make_unique<ContentsLayoutManager>(devtools_web_view_,
-                                                    contents_web_view_));
+    contents_container_->SetLayoutManager(
+        std::make_unique<ContentsLayoutManager>(devtools_web_view_,
+                                                contents_web_view_));
 
     root_view_->AddChildView(contents_container_);
 
@@ -171,7 +183,6 @@ class BrowserViewLayoutTest : public BrowserWithTestWindowTest {
                   toolbar_,
                   infobar_container_,
                   contents_container_,
-                  contents_layout_manager,
                   immersive_mode_controller_.get());
   }
 
@@ -245,4 +256,31 @@ TEST_F(BrowserViewLayoutTest, LayoutDownloadShelf) {
   EXPECT_EQ(450, layout()->LayoutDownloadShelf(kBottom));
   EXPECT_TRUE(download_shelf->visible());
   EXPECT_EQ("0,450 0x50", download_shelf->bounds().ToString());
+}
+
+TEST_F(BrowserViewLayoutTest, LayoutContentsWithTopControlsSlideBehavior) {
+  // Top controls are fully shown.
+  delegate()->set_tab_strip_visible(false);
+  delegate()->set_toolbar_visible(true);
+  delegate()->set_top_controls_slide_enabled(true);
+  delegate()->set_top_controls_shown_ratio(1.f);
+  layout()->Layout(root_view());
+  EXPECT_EQ("0,0 800x30", top_container()->bounds().ToString());
+  EXPECT_EQ("0,0 800x30", toolbar()->bounds().ToString());
+  EXPECT_EQ("0,30 800x570", contents_container()->bounds().ToString());
+
+  // Top controls are half shown, half hidden.
+  delegate()->set_top_controls_shown_ratio(0.5f);
+  layout()->Layout(root_view());
+  EXPECT_EQ("0,0 800x30", top_container()->bounds().ToString());
+  EXPECT_EQ("0,0 800x30", toolbar()->bounds().ToString());
+  EXPECT_EQ("0,30 800x570", contents_container()->bounds().ToString());
+
+  // Top controls are fully hidden. the contents are expanded in height by an
+  // amount equal to the top controls height.
+  delegate()->set_top_controls_shown_ratio(0.f);
+  layout()->Layout(root_view());
+  EXPECT_EQ("0,-30 800x30", top_container()->bounds().ToString());
+  EXPECT_EQ("0,0 800x30", toolbar()->bounds().ToString());
+  EXPECT_EQ("0,0 800x600", contents_container()->bounds().ToString());
 }

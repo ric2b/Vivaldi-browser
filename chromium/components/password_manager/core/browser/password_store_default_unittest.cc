@@ -10,8 +10,8 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_task_environment.h"
@@ -158,9 +158,9 @@ base::FilePath PasswordStoreDefaultTestDelegate::test_login_db_file_path()
 
 }  // anonymous namespace
 
-INSTANTIATE_TYPED_TEST_CASE_P(Default,
-                              PasswordStoreOriginTest,
-                              PasswordStoreDefaultTestDelegate);
+INSTANTIATE_TYPED_TEST_SUITE_P(Default,
+                               PasswordStoreOriginTest,
+                               PasswordStoreDefaultTestDelegate);
 
 TEST(PasswordStoreDefaultTest, NonASCIIData) {
   PasswordStoreDefaultTestDelegate delegate;
@@ -175,7 +175,7 @@ TEST(PasswordStoreDefaultTest, NonASCIIData) {
 
   // Build the expected forms vector and add the forms to the store.
   std::vector<std::unique_ptr<PasswordForm>> expected_forms;
-  for (unsigned int i = 0; i < arraysize(form_data); ++i) {
+  for (unsigned int i = 0; i < base::size(form_data); ++i) {
     expected_forms.push_back(FillPasswordFormWithData(form_data[i]));
     store->AddLogin(*expected_forms.back());
   }
@@ -281,7 +281,7 @@ TEST(PasswordStoreDefaultTest, OperationsOnABadDatabaseSilentlyFail) {
   testing::Mock::VerifyAndClearExpectations(&mock_consumer);
 
   // Report metrics.
-  bad_store->ReportMetrics("Test Username", true);
+  bad_store->ReportMetrics("Test Username", true, false);
   delegate.FinishAsyncProcessing();
 
   // Change the login.

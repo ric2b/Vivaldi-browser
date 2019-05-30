@@ -38,10 +38,11 @@ void DeleteJournal::GetNotesDeleteJournals(
     if (!specifics.has_encrypted()) {
       delete_journal_list->back().specifics = specifics;
     } else {
-      std::string plaintext_data =
-          trans->GetCryptographer()->DecryptToString(specifics.encrypted());
+      std::string plaintext_data;
+      bool success = trans->GetCryptographer()->DecryptToString(
+          specifics.encrypted(), &plaintext_data);
       sync_pb::EntitySpecifics unencrypted_data;
-      if (plaintext_data.length() == 0 ||
+      if (!success || plaintext_data.length() == 0 ||
           !unencrypted_data.ParseFromString(plaintext_data)) {
         // Fail to decrypt, Add this delete journal to purge.
         undecryptable_journal.insert(delete_journal_list->back().id);

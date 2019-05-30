@@ -164,7 +164,7 @@ void LogDeprecationMessages(const WebFormControlElement& element) {
     std::string msg = std::string("autocomplete='") + str +
         "' is deprecated and will soon be ignored. See http://goo.gl/YjeSsW";
     WebConsoleMessage console_message = WebConsoleMessage(
-        WebConsoleMessage::kLevelWarning, WebString::FromASCII(msg));
+        blink::mojom::ConsoleMessageLevel::kWarning, WebString::FromASCII(msg));
     element.GetDocument().GetFrame()->AddMessageToConsole(console_message);
   }
 }
@@ -472,7 +472,14 @@ bool FormCache::ShowPredictions(const FormDataPredictions& form,
       title += "\nform signature: ";
       title += form.signature;
 
+      // Set this debug string to the title so that a developer can easily debug
+      // by hovering the mouse over the input field.
       element.SetAttribute("title", WebString::FromUTF8(title));
+
+      // Set the same debug string to an attribute that does not get mangled if
+      // Google Translate is triggered for the site. This is useful for
+      // automated processing of the data.
+      element.SetAttribute("autofill-information", WebString::FromUTF8(title));
 
       element.SetAttribute("autofill-prediction",
                            WebString::FromUTF8(field.overall_type));

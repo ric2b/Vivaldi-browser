@@ -75,6 +75,10 @@ class EmulationHandler : public DevToolsDomainHandler,
 
   void ApplyOverrides(net::HttpRequestHeaders* headers);
 
+  // NOTE(david@vivaldi.com): This method checks if there is another
+  // RenderWidgetHostImpl existing which requires an enabled touch emulator.
+  bool IsTouchEmulationRequiredByOthers();
+
  private:
   WebContentsImpl* GetWebContents();
   void UpdateTouchEventEmulationState();

@@ -30,8 +30,8 @@ namespace blink {
 MediaQueryList* MediaQueryList::Create(ExecutionContext* context,
                                        MediaQueryMatcher* matcher,
                                        scoped_refptr<MediaQuerySet> media) {
-  return new MediaQueryList(context, matcher,
-                            scoped_refptr<MediaQuerySet>(media));
+  return MakeGarbageCollected<MediaQueryList>(
+      context, matcher, scoped_refptr<MediaQuerySet>(media));
 }
 
 MediaQueryList::MediaQueryList(ExecutionContext* context,
@@ -52,18 +52,12 @@ String MediaQueryList::media() const {
   return media_->MediaText();
 }
 
-void MediaQueryList::addDeprecatedListener(EventListener* listener) {
-  if (!listener)
-    return;
-
-  addEventListener(EventTypeNames::change, listener, false);
+void MediaQueryList::addDeprecatedListener(V8EventListener* listener) {
+  addEventListener(event_type_names::kChange, listener);
 }
 
-void MediaQueryList::removeDeprecatedListener(EventListener* listener) {
-  if (!listener)
-    return;
-
-  removeEventListener(EventTypeNames::change, listener, false);
+void MediaQueryList::removeDeprecatedListener(V8EventListener* listener) {
+  removeEventListener(event_type_names::kChange, listener);
 }
 
 void MediaQueryList::AddListener(MediaQueryListListener* listener) {
@@ -82,7 +76,7 @@ void MediaQueryList::RemoveListener(MediaQueryListListener* listener) {
 
 bool MediaQueryList::HasPendingActivity() const {
   return GetExecutionContext() &&
-         (listeners_.size() || HasEventListeners(EventTypeNames::change));
+         (listeners_.size() || HasEventListeners(event_type_names::kChange));
 }
 
 void MediaQueryList::ContextDestroyed(ExecutionContext*) {
@@ -98,7 +92,7 @@ bool MediaQueryList::MediaFeaturesChanged(
   for (const auto& listener : listeners_) {
     listeners_to_notify->push_back(listener);
   }
-  return HasEventListeners(EventTypeNames::change);
+  return HasEventListeners(event_type_names::kChange);
 }
 
 bool MediaQueryList::UpdateMatches() {
@@ -123,7 +117,7 @@ void MediaQueryList::Trace(blink::Visitor* visitor) {
 }
 
 const AtomicString& MediaQueryList::InterfaceName() const {
-  return EventTargetNames::MediaQueryList;
+  return event_target_names::kMediaQueryList;
 }
 
 ExecutionContext* MediaQueryList::GetExecutionContext() const {

@@ -80,7 +80,8 @@ bool ComputedHashes::Reader::InitFromFile(const base::FilePath& path) {
     return false;
 
   base::DictionaryValue* top_dictionary = NULL;
-  std::unique_ptr<base::Value> value(base::JSONReader::Read(contents));
+  std::unique_ptr<base::Value> value(
+      base::JSONReader::ReadDeprecated(contents));
   if (!value.get() || !value->GetAsDictionary(&top_dictionary))
     return false;
 
@@ -144,7 +145,7 @@ bool ComputedHashes::Reader::GetHashes(const base::FilePath& relative_path,
                                        int* block_size,
                                        std::vector<std::string>* hashes) const {
   base::FilePath path = relative_path.NormalizePathSeparatorsTo('/');
-  std::map<base::FilePath, HashInfo>::const_iterator i = data_.find(path);
+  auto i = data_.find(path);
   if (i == data_.end()) {
     // If we didn't find the entry using exact match, it's possible the
     // developer is using a path with some letters in the incorrect case, which

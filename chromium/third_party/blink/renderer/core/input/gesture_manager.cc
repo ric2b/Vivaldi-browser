@@ -25,7 +25,7 @@
 
 #if BUILDFLAG(ENABLE_UNHANDLED_TAP)
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/blink/public/platform/unhandled_tap_notifier.mojom-blink.h"
+#include "third_party/blink/public/mojom/unhandled_tap_notifier/unhandled_tap_notifier.mojom-blink.h"
 #include "third_party/blink/public/web/web_node.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/editing/selection_template.h"
@@ -108,7 +108,7 @@ WebInputEventResult GestureManager::HandleGestureEventInFrame(
       if (gesture_dom_event_result != DispatchEventResult::kNotCanceled) {
         DCHECK(gesture_dom_event_result !=
                DispatchEventResult::kCanceledByEventHandler);
-        return EventHandlingUtil::ToWebInputEventResult(
+        return event_handling_util::ToWebInputEventResult(
             gesture_dom_event_result);
       }
     }
@@ -176,8 +176,8 @@ WebInputEventResult GestureManager::HandleGestureTap(
             WebInputEvent::Modifiers::kIsCompatibilityEventForTouch),
         gesture_event.TimeStamp());
     mouse_event_manager_->SetMousePositionAndDispatchMouseEvent(
-        current_hit_test.InnerNode(), current_hit_test.CanvasRegionId(),
-        EventTypeNames::mousemove, fake_mouse_move);
+        current_hit_test.InnerElement(), current_hit_test.CanvasRegionId(),
+        event_type_names::kMousemove, fake_mouse_move);
   }
 
   // Do a new hit-test in case the mousemove event changed the DOM.
@@ -196,7 +196,7 @@ WebInputEventResult GestureManager::HandleGestureTap(
       return WebInputEventResult::kNotHandled;
     adjusted_point = frame_view->ConvertFromRootFrame(
         FlooredIntPoint(gesture_event.PositionInRootFrame()));
-    current_hit_test = EventHandlingUtil::HitTestResultInFrame(
+    current_hit_test = event_handling_util::HitTestResultInFrame(
         frame_, HitTestLocation(adjusted_point), hit_type);
   }
 
@@ -206,7 +206,7 @@ WebInputEventResult GestureManager::HandleGestureTap(
   Node* tapped_node = current_hit_test.InnerNode();
   Element* tapped_element = current_hit_test.InnerElement();
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      Frame::NotifyUserActivation(
+      LocalFrame::NotifyUserActivation(
           tapped_node ? tapped_node->GetDocument().GetFrame() : nullptr);
 
   mouse_event_manager_->SetClickElement(tapped_element);
@@ -228,8 +228,8 @@ WebInputEventResult GestureManager::HandleGestureTap(
 
     mouse_down_event_result =
         mouse_event_manager_->SetMousePositionAndDispatchMouseEvent(
-            current_hit_test.InnerNode(), current_hit_test.CanvasRegionId(),
-            EventTypeNames::mousedown, fake_mouse_down);
+            current_hit_test.InnerElement(), current_hit_test.CanvasRegionId(),
+            event_type_names::kMousedown, fake_mouse_down);
     selection_controller_->InitializeSelectionState();
     if (mouse_down_event_result == WebInputEventResult::kNotHandled) {
       mouse_down_event_result = mouse_event_manager_->HandleMouseFocus(
@@ -256,10 +256,12 @@ WebInputEventResult GestureManager::HandleGestureTap(
   // http://crbug.com/398920
   if (current_hit_test.InnerNode()) {
     LocalFrame& main_frame = frame_->LocalFrameRoot();
-    if (main_frame.View())
-      main_frame.View()->UpdateAllLifecyclePhases();
+    if (main_frame.View()) {
+      main_frame.View()->UpdateAllLifecyclePhases(
+          DocumentLifecycle::LifecycleUpdateReason::kOther);
+    }
     adjusted_point = frame_view->ConvertFromRootFrame(tapped_position);
-    current_hit_test = EventHandlingUtil::HitTestResultInFrame(
+    current_hit_test = event_handling_util::HitTestResultInFrame(
         frame_, HitTestLocation(adjusted_point), hit_type);
   }
 
@@ -273,8 +275,9 @@ WebInputEventResult GestureManager::HandleGestureTap(
       suppress_mouse_events_from_gestures_
           ? WebInputEventResult::kHandledSuppressed
           : mouse_event_manager_->SetMousePositionAndDispatchMouseEvent(
-                current_hit_test.InnerNode(), current_hit_test.CanvasRegionId(),
-                EventTypeNames::mouseup, fake_mouse_up);
+                current_hit_test.InnerElement(),
+                current_hit_test.CanvasRegionId(), event_type_names::kMouseup,
+                fake_mouse_up);
 
   WebInputEventResult click_event_result = WebInputEventResult::kNotHandled;
   if (tapped_element) {
@@ -287,10 +290,14 @@ WebInputEventResult GestureManager::HandleGestureTap(
       // different.
       tapped_element->UpdateDistributionForFlatTreeTraversal();
       Node* click_target_node = current_hit_test.InnerNode()->CommonAncestor(
-          *tapped_element, EventHandlingUtil::ParentForClickEvent);
+          *tapped_element, event_handling_util::ParentForClickEvent);
+      Element* click_target_element = nullptr;
+      if (click_target_node && click_target_node->IsElementNode())
+        click_target_element = ToElement(click_target_node);
+
       click_event_result =
           mouse_event_manager_->SetMousePositionAndDispatchMouseEvent(
-              click_target_node, String(), EventTypeNames::click,
+              click_target_element, String(), event_type_names::kClick,
               fake_mouse_up);
     }
     mouse_event_manager_->SetClickElement(nullptr);
@@ -303,9 +310,9 @@ WebInputEventResult GestureManager::HandleGestureTap(
   }
   mouse_event_manager_->ClearDragHeuristicState();
 
-  WebInputEventResult event_result = EventHandlingUtil::MergeEventResult(
-      EventHandlingUtil::MergeEventResult(mouse_down_event_result,
-                                          mouse_up_event_result),
+  WebInputEventResult event_result = event_handling_util::MergeEventResult(
+      event_handling_util::MergeEventResult(mouse_down_event_result,
+                                            mouse_up_event_result),
       click_event_result);
   if (event_result == WebInputEventResult::kNotHandled && tapped_node &&
       frame_->GetPage()) {
@@ -361,7 +368,7 @@ WebInputEventResult GestureManager::HandleGestureLongPress(
   }
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      Frame::NotifyUserActivation(
+      LocalFrame::NotifyUserActivation(
           inner_node ? inner_node->GetDocument().GetFrame() : nullptr);
   return SendContextMenuEventForGesture(targeted_event);
 }
@@ -400,8 +407,8 @@ WebInputEventResult GestureManager::SendContextMenuEventForGesture(
             modifiers | WebInputEvent::kIsCompatibilityEventForTouch),
         gesture_event.TimeStamp());
     mouse_event_manager_->SetMousePositionAndDispatchMouseEvent(
-        targeted_event.GetHitTestResult().InnerNode(),
-        targeted_event.CanvasRegionId(), EventTypeNames::mousemove,
+        targeted_event.GetHitTestResult().InnerElement(),
+        targeted_event.CanvasRegionId(), event_type_names::kMousemove,
         fake_mouse_move);
   }
 

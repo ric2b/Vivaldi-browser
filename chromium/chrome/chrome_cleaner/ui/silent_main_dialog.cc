@@ -4,6 +4,10 @@
 
 #include "chrome/chrome_cleaner/ui/silent_main_dialog.h"
 
+#include <utility>
+#include <vector>
+
+#include "base/callback.h"
 #include "base/logging.h"
 
 namespace chrome_cleaner {
@@ -19,8 +23,6 @@ bool SilentMainDialog::Create() {
   return true;
 }
 
-void SilentMainDialog::StartScanning() {}
-
 void SilentMainDialog::NoPUPsFound() {
   delegate()->OnClose();
 }
@@ -32,14 +34,18 @@ void SilentMainDialog::ConfirmCleanup(
   delegate()->AcceptedCleanup(true);
 }
 
-void SilentMainDialog::StartCleanup(size_t num_pups) {}
-
 void SilentMainDialog::CleanupDone(ResultCode cleanup_result) {
   delegate()->OnClose();
 }
 
 void SilentMainDialog::Close() {
   delegate()->OnClose();
+}
+
+void SilentMainDialog::DisableExtensions(
+    const std::vector<base::string16>& extensions,
+    base::OnceCallback<void(bool)> on_disable) {
+  std::move(on_disable).Run(true);
 }
 
 }  // namespace chrome_cleaner

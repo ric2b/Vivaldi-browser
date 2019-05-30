@@ -42,6 +42,7 @@ typedef void (*PDFEnsureTypefaceCharactersAccessible)(const LOGFONT* font,
 struct PP_PdfPrintSettings_Dev;
 
 namespace gfx {
+class Rect;
 class Size;
 }
 
@@ -234,9 +235,6 @@ class PDFEngine {
         const base::char16* term,
         bool case_sensitive) = 0;
 
-    // Notifies the client that the engine has painted a page from the document.
-    virtual void DocumentPaintOccurred() {}
-
     // Notifies the client that the document has finished loading.
     virtual void DocumentLoadComplete(const DocumentFeatures& document_features,
                                       uint32_t file_size) {}
@@ -342,9 +340,6 @@ class PDFEngine {
   // Gets the named destination by name.
   virtual base::Optional<PDFEngine::NamedDestination> GetNamedDestination(
       const std::string& destination) = 0;
-  // Transforms an (x, y) point in page coordinates to screen coordinates.
-  virtual gfx::PointF TransformPagePoint(int page_index,
-                                         const gfx::PointF& page_xy) = 0;
   // Gets the index of the most visible page, or -1 if none are visible.
   virtual int GetMostVisiblePage() = 0;
   // Gets the rectangle of the page including shadow.
@@ -401,6 +396,7 @@ class PDFEngine {
   virtual void AppendPage(PDFEngine* engine, int index) = 0;
 
   virtual std::string GetMetadata(const std::string& key) = 0;
+  virtual std::vector<uint8_t> GetSaveData() = 0;
 
   virtual void SetCaretPosition(const pp::Point& position) = 0;
   virtual void MoveRangeSelectionExtent(const pp::Point& extent) = 0;
@@ -413,6 +409,9 @@ class PDFEngine {
 
   // Remove focus from form widgets, consolidating the user input.
   virtual void KillFormFocus() = 0;
+
+  virtual uint32_t GetLoadedByteSize() = 0;
+  virtual bool ReadLoadedBytes(uint32_t length, void* buffer) = 0;
 };
 
 // Interface for exports that wrap the PDF engine.
@@ -470,13 +469,15 @@ class PDFEngineExports {
   virtual std::vector<uint8_t> ConvertPdfPagesToNupPdf(
       std::vector<base::span<const uint8_t>> input_buffers,
       size_t pages_per_sheet,
-      const gfx::Size& page_size) = 0;
+      const gfx::Size& page_size,
+      const gfx::Rect& printable_area) = 0;
 
   // See the definition of ConvertPdfDocumentToNupPdf in pdf.cc for details.
   virtual std::vector<uint8_t> ConvertPdfDocumentToNupPdf(
       base::span<const uint8_t> input_buffer,
       size_t pages_per_sheet,
-      const gfx::Size& page_size) = 0;
+      const gfx::Size& page_size,
+      const gfx::Rect& printable_area) = 0;
 
   virtual bool GetPDFDocInfo(base::span<const uint8_t> pdf_buffer,
                              int* page_count,

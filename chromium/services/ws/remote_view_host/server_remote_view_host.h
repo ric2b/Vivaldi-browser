@@ -49,9 +49,13 @@ class ServerRemoteViewHost : public views::NativeViewHost {
                        int embed_flags,
                        EmbedCallback callback);
 
+  const char* GetClassName() const override;
+
   aura::Window* embedding_root() { return embedding_root_.get(); }
 
  private:
+  bool IsEmbedPending() const { return !embed_token_.is_empty(); }
+
   void EmbedImpl();
 
   // views::NativeViewHost:
@@ -61,7 +65,7 @@ class ServerRemoteViewHost : public views::NativeViewHost {
   base::UnguessableToken embed_token_;
   int embed_flags_ = 0;
   EmbedCallback embed_callback_;
-  std::unique_ptr<aura::Window> embedding_root_;
+  const std::unique_ptr<aura::Window> embedding_root_;
 
   DISALLOW_COPY_AND_ASSIGN(ServerRemoteViewHost);
 };

@@ -42,6 +42,12 @@
           "saveOnlyWindowId": {
             "type": "integer",
             "description": "Save only the given window."
+          },
+          "ids": {
+            "type": "array",
+            "items": { "type": "integer" },
+            "optional": true,
+            "description": "List of tab identifiers to be saved."
           }
         }
       }

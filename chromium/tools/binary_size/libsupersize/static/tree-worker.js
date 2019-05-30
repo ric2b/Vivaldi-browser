@@ -37,16 +37,24 @@
 importScripts('./shared.js');
 
 const _PATH_SEP = '/';
-const _DEMO_DATA_URL = 'demo.ndjson';
 const _NAMES_TO_FLAGS = Object.freeze({
   hot: _FLAGS.HOT,
   generated: _FLAGS.GENERATED_SOURCE,
   coverage: _FLAGS.COVERAGE,
+  uncompressed: _FLAGS.UNCOMPRESSED,
 });
 
 /** @param {FileEntry} fileEntry */
 function getSourcePath(fileEntry) {
   return fileEntry[_KEYS.SOURCE_PATH];
+}
+
+/**
+ * @param {Meta} meta
+ * @param {FileEntry} fileEntry
+ */
+function getComponent(meta, fileEntry) {
+  return meta.components[fileEntry[_KEYS.COMPONENT_INDEX]];
 }
 
 /**
@@ -91,21 +99,27 @@ function _compareFunc(a, b) {
 function createNode(options) {
   const {
     idPath,
+    srcPath,
+    component,
     type,
     shortNameIndex,
     size = 0,
     flags = 0,
+    numAliases,
     childStats = {},
   } = options;
   return {
     children: [],
     parent: null,
-    childStats,
     idPath,
+    srcPath,
+    component,
+    type,
     shortNameIndex,
     size,
-    type,
     flags,
+    numAliases,
+    childStats,
   };
 }
 
@@ -126,13 +140,16 @@ class TreeBuilder {
    * @param {(symbolNode: TreeNode) => boolean} options.highlightTest Called to
    * see if a symbol should be highlighted.
    * @param {string} options.sep Path seperator used to find parent names.
+   * @param {Meta} options.meta Metadata associated with this tree.
    */
   constructor(options) {
     this._getPath = options.getPath;
     this._filterTest = options.filterTest;
     this._highlightTest = options.highlightTest;
     this._sep = options.sep || _PATH_SEP;
+    this._meta = options.meta;
 
+    // srcPath and component don't make sense for the root node.
     this.rootNode = createNode({
       idPath: this._sep,
       shortNameIndex: 0,
@@ -206,57 +223,73 @@ class TreeBuilder {
    * @param {TreeNode} node
    */
   _joinDexMethodClasses(node) {
-    const hasDexMethods = node.childStats[_DEX_METHOD_SYMBOL_TYPE] != null;
-    if (!hasDexMethods || node.children == null) return node;
+    const hasDex = node.childStats[_DEX_SYMBOL_TYPE] ||
+        node.childStats[_DEX_METHOD_SYMBOL_TYPE];
+    if (!hasDex || !node.children) return node;
 
-    if (node.type[0] === _CONTAINER_TYPES.FILE) {
-      /** @type {Map<string, TreeNode>} */
-      const javaClassContainers = new Map();
-      /** @type {TreeNode[]} */
-      const otherSymbols = [];
-
-      // Place all dex methods into buckets
-      for (const childNode of node.children) {
-        // Java classes are denoted with a "#", such as "LogoView#onDraw"
-        const splitIndex = childNode.idPath.lastIndexOf('#');
-
-        const isDexMethodWithClass =
-          childNode.type === _DEX_METHOD_SYMBOL_TYPE &&
-          splitIndex > childNode.shortNameIndex;
-
-        if (isDexMethodWithClass) {
-          // Get the idPath of the class
-          const classIdPath = childNode.idPath.slice(0, splitIndex);
-
-          let classNode = javaClassContainers.get(classIdPath);
-          if (classNode == null) {
-            classNode = createNode({
-              idPath: classIdPath,
-              shortNameIndex: childNode.shortNameIndex,
-              type: _CONTAINER_TYPES.JAVA_CLASS,
-            });
-            javaClassContainers.set(classIdPath, classNode);
-          }
-
-          // Adjust the dex method's short name so it starts after the "#"
-          childNode.shortNameIndex = splitIndex + 1;
-          this._attachToParent(childNode, classNode);
-        } else {
-          otherSymbols.push(childNode);
-        }
-      }
-
-      node.children = otherSymbols;
-      for (const containerNode of javaClassContainers.values()) {
-        // Delay setting the parent until here so that `_attachToParent`
-        // doesn't add method stats twice
-        containerNode.parent = node;
-        node.children.push(containerNode);
-      }
-    } else {
+    if (node.type[0] !== _CONTAINER_TYPES.FILE) {
       for (const child of node.children) {
         this._joinDexMethodClasses(child);
       }
+      return node;
+    }
+    /** @type {Map<string, TreeNode>} */
+    const javaClassContainers = new Map();
+    /** @type {TreeNode[]} */
+    const otherSymbols = [];
+
+    // Place all dex symbols into buckets
+    for (const childNode of node.children) {
+      // Java classes are denoted with a "#", such as "LogoView#onDraw"
+      // Except for some older .ndjson files, which didn't do this for fields.
+      const splitIndex = childNode.idPath.lastIndexOf('#');
+      const isClassNode = childNode.idPath.indexOf(' ') == -1;
+      const hasClassPrefix = isClassNode || splitIndex != -1;
+
+      if (hasClassPrefix) {
+        // Get the idPath of the class
+        let classIdPath = splitIndex == -1 ? childNode.idPath :
+            childNode.idPath.slice(0, splitIndex);
+
+        // Strip package from the node name for classes in .java files since the
+        // directory tree already shows it.
+        let shortNameIndex = childNode.shortNameIndex;
+        const javaIdx = childNode.idPath.indexOf('.java:');
+        if (javaIdx != -1) {
+          const dotIdx = classIdPath.lastIndexOf('.');
+          if (dotIdx > javaIdx) {
+            shortNameIndex += dotIdx - (javaIdx + 6) + 1;
+          }
+        }
+
+        let classNode = javaClassContainers.get(classIdPath);
+        if (!classNode) {
+          classNode = createNode({
+            idPath: classIdPath,
+            srcPath: node.srcPath,
+            component: node.component,
+            shortNameIndex: shortNameIndex,
+            type: _CONTAINER_TYPES.JAVA_CLASS,
+          });
+          javaClassContainers.set(classIdPath, classNode);
+        }
+
+        // Adjust the dex method's short name so it starts after the "#"
+        if (splitIndex != -1) {
+          childNode.shortNameIndex = splitIndex + 1;
+        }
+        this._attachToParent(childNode, classNode);
+      } else {
+        otherSymbols.push(childNode);
+      }
+    }
+
+    node.children = otherSymbols;
+    for (const containerNode of javaClassContainers.values()) {
+      // Delay setting the parent until here so that `_attachToParent`
+      // doesn't add method stats twice
+      containerNode.parent = node;
+      node.children.push(containerNode);
     }
     return node;
   }
@@ -339,6 +372,9 @@ class TreeBuilder {
       // get parent from cache if it exists, otherwise create it
       parentNode = this._parents.get(parentPath);
       if (parentNode == null) {
+        // srcPath and component are not available for parent nodes, since they
+        // are stored alongside FileEntry. We could extract srcPath from idPath,
+        // but it doesn't really add enough value to warrent doing so.
         parentNode = createNode({
           idPath: parentPath,
           shortNameIndex: lastIndexOf(parentPath, this._sep) + 1,
@@ -359,29 +395,40 @@ class TreeBuilder {
    * tree nodes for that file's symbols attached. Afterwards attach that node to
    * its parent directory node, or create it if missing.
    * @param {FileEntry} fileEntry File entry from data file
+   * @param {boolean} diffMode Whether diff mode is in effect.
    */
-  addFileEntry(fileEntry) {
+  addFileEntry(fileEntry, diffMode) {
     const idPath = this._getPath(fileEntry);
+    const srcPath = getSourcePath(fileEntry);
+    const component = getComponent(this._meta, fileEntry);
     // make node for this
     const fileNode = createNode({
       idPath,
+      srcPath,
+      component,
       shortNameIndex: lastIndexOf(idPath, this._sep) + 1,
       type: _CONTAINER_TYPES.FILE,
     });
+    const defaultCount = diffMode ? 0 : 1;
     // build child nodes for this file's symbols and attach to self
     for (const symbol of fileEntry[_KEYS.FILE_SYMBOLS]) {
       const size = symbol[_KEYS.SIZE];
       const type = symbol[_KEYS.TYPE];
-      const count = symbol[_KEYS.COUNT] || 1;
-      const flags = symbol[_KEYS.FLAGS] || 0;
+      const count = _KEYS.COUNT in symbol ? symbol[_KEYS.COUNT] : defaultCount;
+      const flags = _KEYS.FLAGS in symbol ? symbol[_KEYS.FLAGS] : 0;
+      const numAliases =
+          _KEYS.NUM_ALIASES in symbol ? symbol[_KEYS.NUM_ALIASES] : 1;
 
       const symbolNode = createNode({
         // Join file path to symbol name with a ":"
         idPath: `${idPath}:${symbol[_KEYS.SYMBOL_NAME]}`,
+        srcPath,
+        component,
         shortNameIndex: idPath.length + 1,
         size,
         type,
         flags,
+        numAliases,
         childStats: {
           [type]: {
             size,
@@ -502,7 +549,10 @@ class DataFetcher {
   async fetch(url) {
     if (this._controller) this._controller.abort();
     this._controller = new AbortController();
+    const headers = new Headers();
+    headers.append('cache-control', 'no-cache');
     return fetch(url, {
+      headers,
       credentials: 'same-origin',
       signal: this._controller.signal,
     });
@@ -592,7 +642,7 @@ class DataFetcher {
 function parseOptions(options) {
   const params = new URLSearchParams(options);
 
-  const url = params.get('data_url');
+  const url = params.get('load_url');
   const groupBy = params.get('group_by') || 'source_path';
   const methodCountMode = params.has('method_count');
   const filterGeneratedFiles = params.has('generated_filter');
@@ -697,19 +747,12 @@ async function buildTree(groupBy, filterTest, highlightTest, onProgress) {
   /** @type {{ [gropyBy: string]: (fileEntry: FileEntry) => string }} */
   const getPathMap = {
     component(fileEntry) {
-      const component = meta.components[fileEntry[_KEYS.COMPONENT_INDEX]];
+      const component = getComponent(meta, fileEntry);
       const path = getSourcePath(fileEntry);
       return `${component || '(No component)'}>${path}`;
     },
     source_path: getSourcePath,
   };
-
-  builder = new TreeBuilder({
-    sep: groupBy === 'component' ? '>' : _PATH_SEP,
-    getPath: getPathMap[groupBy],
-    filterTest,
-    highlightTest,
-  });
 
   /**
    * Creates data to post to the UI thread. Defaults will be used for the root
@@ -751,13 +794,24 @@ async function buildTree(groupBy, filterTest, highlightTest, onProgress) {
   try {
     // Post partial state every second
     let lastBatchSent = Date.now();
+    let diffMode = null;
     for await (const dataObj of fetcher.newlineDelimtedJsonStream()) {
       if (meta == null) {
         // First line of data is used to store meta information.
         meta = /** @type {Meta} */ (dataObj);
+        diffMode = meta.diff_mode;
+
+        builder = new TreeBuilder({
+          getPath: getPathMap[groupBy],
+          filterTest,
+          highlightTest,
+          sep: groupBy === 'component' ? '>' : _PATH_SEP,
+          meta,
+        });
+
         postToUi();
       } else {
-        builder.addFileEntry(/** @type {FileEntry} */ (dataObj));
+        builder.addFileEntry(/** @type {FileEntry} */ (dataObj), diffMode);
         const currentTime = Date.now();
         if (currentTime - lastBatchSent > 500) {
           postToUi();
@@ -785,19 +839,10 @@ const actions = {
   /** @param {{input:string|null,options:string}} param0 */
   load({input, options}) {
     const {groupBy, filterTest, highlightTest, url} = parseOptions(options);
-    if (input === 'from-url://') {
-      if (url) {
-        // Display the data from the `data_url` query parameter
-        console.info('Displaying data from', url);
-        fetcher.setInput(url);
-      } else {
-        // Display starter content if nothing was specified.
-        console.info('Displaying demo data');
-        // The demo file only exists in the GCS bucket where the UI is hosted.
-        // When using `start_server`, no data is shown until the user uploads
-        // something.
-        fetcher.setInput(_DEMO_DATA_URL);
-      }
+    if (input === 'from-url://' && url) {
+      // Display the data from the `load_url` query parameter
+      console.info('Displaying data from', url);
+      fetcher.setInput(url);
     } else if (input != null) {
       console.info('Displaying uploaded data');
       fetcher.setInput(input);

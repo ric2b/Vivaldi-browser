@@ -77,6 +77,7 @@ class CORE_EXPORT HTMLCollection : public ScriptWrappable,
   };
 
   static HTMLCollection* Create(ContainerNode& base, CollectionType);
+  HTMLCollection(ContainerNode& base, CollectionType, ItemAfterOverrideType);
   ~HTMLCollection() override;
   void InvalidateCache(Document* old_document = nullptr) const override;
   void InvalidateCacheForAttribute(const QualifiedName*) const;
@@ -111,14 +112,16 @@ class CORE_EXPORT HTMLCollection : public ScriptWrappable,
   Iterator begin() const { return Iterator(this); }
   Iterator end() const { return Iterator::CreateEnd(this); }
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  protected:
-  HTMLCollection(ContainerNode& base, CollectionType, ItemAfterOverrideType);
-
   class NamedItemCache final : public GarbageCollected<NamedItemCache> {
    public:
-    static NamedItemCache* Create() { return new NamedItemCache; }
+    static NamedItemCache* Create() {
+      return MakeGarbageCollected<NamedItemCache>();
+    }
+
+    NamedItemCache();
 
     const HeapVector<Member<Element>>* GetElementsById(
         const AtomicString& id) const {
@@ -141,13 +144,12 @@ class CORE_EXPORT HTMLCollection : public ScriptWrappable,
       AddElementToMap(name_cache_, name, element);
     }
 
-    void Trace(blink::Visitor* visitor) {
+    void Trace(Visitor* visitor) {
       visitor->Trace(id_cache_);
       visitor->Trace(name_cache_);
     }
 
    private:
-    NamedItemCache();
     typedef HeapHashMap<StringImpl*, HeapVector<Member<Element>>>
         StringToElementsMap;
     static void AddElementToMap(StringToElementsMap& map,
@@ -225,7 +227,8 @@ inline void HTMLCollection::InvalidateCacheForAttribute(
   if (!attr_name ||
       ShouldInvalidateTypeOnAttributeChange(InvalidationType(), *attr_name))
     InvalidateCache();
-  else if (*attr_name == HTMLNames::idAttr || *attr_name == HTMLNames::nameAttr)
+  else if (*attr_name == html_names::kIdAttr ||
+           *attr_name == html_names::kNameAttr)
     InvalidateIdNameCacheMaps();
 }
 

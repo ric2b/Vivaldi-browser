@@ -43,6 +43,7 @@ using base::TimeDelta;
 using base::WaitableEvent;
 using testing::_;
 using testing::DoDefault;
+using testing::ElementsAre;
 using testing::ElementsAreArray;
 
 namespace {
@@ -106,7 +107,7 @@ class WebDataServiceTest : public testing::Test {
         base::CreateSingleThreadTaskRunnerWithTraits({base::MayBlock()});
     wdbs_ = new WebDatabaseService(path, base::ThreadTaskRunnerHandle::Get(),
                                    db_task_runner);
-    wdbs_->AddTable(base::WrapUnique(new AutofillTable));
+    wdbs_->AddTable(std::make_unique<AutofillTable>());
     wdbs_->LoadDatabase();
 
     wds_ = new AutofillWebDataService(
@@ -204,7 +205,7 @@ TEST_F(WebDataServiceAutofillTest, FormFillAdd) {
   // The event will be signaled when the mock observer is notified.
   done_event_.TimedWait(test_timeout_);
 
-  AutofillWebDataServiceConsumer<std::vector<base::string16>> consumer;
+  AutofillWebDataServiceConsumer<std::vector<AutofillEntry>> consumer;
   WebDataServiceBase::Handle handle;
   static const int limit = 10;
   handle = wds_->GetFormValuesForElementName(
@@ -212,7 +213,7 @@ TEST_F(WebDataServiceAutofillTest, FormFillAdd) {
   scoped_task_environment_.RunUntilIdle();
   EXPECT_EQ(handle, consumer.handle());
   ASSERT_EQ(1U, consumer.result().size());
-  EXPECT_EQ(value1_, consumer.result()[0]);
+  EXPECT_EQ(value1_, consumer.result()[0].key().value());
 }
 
 TEST_F(WebDataServiceAutofillTest, FormFillRemoveOne) {

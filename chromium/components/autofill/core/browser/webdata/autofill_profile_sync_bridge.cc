@@ -124,8 +124,9 @@ Optional<syncer::ModelError> AutofillProfileSyncBridge::MergeSyncData(
 
   RETURN_IF_ERROR(
       initial_sync_tracker.MergeSimilarEntriesForInitialSync(app_locale_));
-  RETURN_IF_ERROR(
-      FlushSyncTracker(std::move(metadata_change_list), &initial_sync_tracker));
+  RETURN_IF_ERROR(FlushSyncTracker(std::move(metadata_change_list),
+                                   &initial_sync_tracker,
+                                   AutofillProfileSyncChangeOrigin::kInitial));
 
   web_data_backend_->NotifyThatSyncHasStarted(syncer::AUTOFILL_PROFILE);
   return base::nullopt;
@@ -156,7 +157,8 @@ Optional<ModelError> AutofillProfileSyncBridge::ApplySyncChanges(
     }
   }
 
-  return FlushSyncTracker(std::move(metadata_change_list), &tracker);
+  return FlushSyncTracker(std::move(metadata_change_list), &tracker,
+                          AutofillProfileSyncChangeOrigin::kIncrementalRemote);
 }
 
 void AutofillProfileSyncBridge::GetData(StorageKeyList storage_keys,
@@ -215,16 +217,53 @@ void AutofillProfileSyncBridge::ActOnLocalChange(
       std::make_unique<syncer::SyncMetadataStoreChangeList>(
           GetAutofillTable(), syncer::AUTOFILL_PROFILE);
 
+  // TODO(crbug.com/904390): Remove when the investigation is over.
+  bool is_converted_from_server = false;
+  if (change.type() == AutofillProfileChange::REMOVE) {
+    // The profile is not available any more so we cannot compare its value,
+    // instead we use a rougher test based on the id - whether it is a local
+    // GUID or a server id. As a result, it has a different semantics compared
+    // to AddOrUpdate.
+    is_converted_from_server = !base::IsValidGUID(change.key());
+  } else {
+    std::vector<std::unique_ptr<AutofillProfile>> server_profiles;
+    GetAutofillTable()->GetServerProfiles(&server_profiles);
+    is_converted_from_server = IsLocalProfileEqualToServerProfile(
+        server_profiles, *change.data_model(), app_locale_);
+  }
+
   switch (change.type()) {
-    case AutofillChange::ADD:
-    case AutofillChange::UPDATE:
+    case AutofillProfileChange::ADD:
+    case AutofillProfileChange::UPDATE:
       change_processor()->Put(
           change.key(),
           CreateEntityDataFromAutofillProfile(*change.data_model()),
           metadata_change_list.get());
+
+      // TODO(crbug.com/904390): Remove when the investigation is over.
+      ReportAutofillProfileAddOrUpdateOrigin(
+          is_converted_from_server
+              ? AutofillProfileSyncChangeOrigin::kConvertedLocal
+              : AutofillProfileSyncChangeOrigin::kTrulyLocal);
       break;
-    case AutofillChange::REMOVE:
+    case AutofillProfileChange::REMOVE:
+      // Removals have no data_model() so this change can still be for a
+      // SERVER_PROFILE. We have no simple way to rule it out. For the time
+      // being we rely on the processor ignoring deletions for storage keys it
+      // does not know.
+      // TODO(jkrcal): implement a hash map of known storage_keys and use it
+      // here.
       change_processor()->Delete(change.key(), metadata_change_list.get());
+
+      // TODO(crbug.com/904390): Remove when the investigation is over.
+      ReportAutofillProfileDeleteOrigin(
+          is_converted_from_server
+              ? AutofillProfileSyncChangeOrigin::kConvertedLocal
+              : AutofillProfileSyncChangeOrigin::kTrulyLocal);
+      break;
+    case AutofillProfileChange::EXPIRE:
+      // EXPIRE changes are not being issued for profiles.
+      NOTREACHED();
       break;
   }
 
@@ -235,7 +274,8 @@ void AutofillProfileSyncBridge::ActOnLocalChange(
 
 base::Optional<syncer::ModelError> AutofillProfileSyncBridge::FlushSyncTracker(
     std::unique_ptr<MetadataChangeList> metadata_change_list,
-    AutofillProfileSyncDifferenceTracker* tracker) {
+    AutofillProfileSyncDifferenceTracker* tracker,
+    AutofillProfileSyncChangeOrigin origin) {
   DCHECK(tracker);
 
   RETURN_IF_ERROR(tracker->FlushToLocal(
@@ -249,6 +289,9 @@ base::Optional<syncer::ModelError> AutofillProfileSyncBridge::FlushSyncTracker(
     change_processor()->Put(GetStorageKeyFromAutofillProfile(*entry),
                             CreateEntityDataFromAutofillProfile(*entry),
                             metadata_change_list.get());
+
+    // TODO(crbug.com/904390): Remove when the investigation is over.
+    ReportAutofillProfileAddOrUpdateOrigin(origin);
   }
 
   return static_cast<syncer::SyncMetadataStoreChangeList*>(

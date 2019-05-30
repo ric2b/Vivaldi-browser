@@ -7,7 +7,7 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_member.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -43,6 +43,8 @@ class CORE_EXPORT ResizeObserver final
   static ResizeObserver* Create(Document&, V8ResizeObserverCallback*);
   static ResizeObserver* Create(Document&, Delegate*);
 
+  ResizeObserver(V8ResizeObserverCallback*, Document&);
+  ResizeObserver(Delegate*, Document&);
   ~ResizeObserver() override = default;
 
   // API methods
@@ -64,9 +66,6 @@ class CORE_EXPORT ResizeObserver final
   void Trace(blink::Visitor*) override;
 
  private:
-  ResizeObserver(V8ResizeObserverCallback*, Document&);
-  ResizeObserver(Delegate*, Document&);
-
   using ObservationList = HeapLinkedHashSet<WeakMember<ResizeObservation>>;
 
   // Either of |callback_| and |delegate_| should be non-null.

@@ -11,6 +11,7 @@
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "remoting/base/logging.h"
+#include "remoting/host/action_executor.h"
 #include "remoting/host/client_session_control.h"
 #include "remoting/host/curtain_mode.h"
 #include "remoting/host/desktop_resizer.h"
@@ -29,10 +30,21 @@
 #include <unistd.h>
 #endif  // defined(OS_POSIX)
 
+#if defined(OS_WIN)
+#include "base/win/windows_version.h"
+#endif  // defined(OS_WIN)
+
 namespace remoting {
 
 Me2MeDesktopEnvironment::~Me2MeDesktopEnvironment() {
   DCHECK(caller_task_runner()->BelongsToCurrentThread());
+}
+
+std::unique_ptr<ActionExecutor>
+Me2MeDesktopEnvironment::CreateActionExecutor() {
+  DCHECK(caller_task_runner()->BelongsToCurrentThread());
+
+  return ActionExecutor::Create();
 }
 
 std::unique_ptr<ScreenControls>
@@ -61,6 +73,17 @@ std::string Me2MeDesktopEnvironment::GetCapabilities() const {
     capabilities += protocol::kFileTransferCapability;
   }
 
+#if defined(OS_WIN)
+  capabilities += " ";
+  capabilities += protocol::kSendAttentionSequenceAction;
+
+  if (base::win::OSInfo::GetInstance()->version_type() !=
+      base::win::VersionType::SUITE_HOME) {
+    capabilities += " ";
+    capabilities += protocol::kLockWorkstationAction;
+  }
+#endif  // defined(OS_WIN)
+
   return capabilities;
 }
 
@@ -70,12 +93,14 @@ Me2MeDesktopEnvironment::Me2MeDesktopEnvironment(
     scoped_refptr<base::SingleThreadTaskRunner> input_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner,
     ui::SystemInputInjectorFactory* system_input_injector_factory,
+    base::WeakPtr<ClientSessionControl> client_session_control,
     const DesktopEnvironmentOptions& options)
     : BasicDesktopEnvironment(caller_task_runner,
                               video_capture_task_runner,
                               input_task_runner,
                               ui_task_runner,
                               system_input_injector_factory,
+                              client_session_control,
                               options) {
   DCHECK(caller_task_runner->BelongsToCurrentThread());
 
@@ -166,10 +191,10 @@ std::unique_ptr<DesktopEnvironment> Me2MeDesktopEnvironmentFactory::Create(
   DCHECK(caller_task_runner()->BelongsToCurrentThread());
 
   std::unique_ptr<Me2MeDesktopEnvironment> desktop_environment(
-      new Me2MeDesktopEnvironment(caller_task_runner(),
-                                  video_capture_task_runner(),
-                                  input_task_runner(), ui_task_runner(),
-                                  system_input_injector_factory(), options));
+      new Me2MeDesktopEnvironment(
+          caller_task_runner(), video_capture_task_runner(),
+          input_task_runner(), ui_task_runner(),
+          system_input_injector_factory(), client_session_control, options));
   if (!desktop_environment->InitializeSecurity(client_session_control)) {
     return nullptr;
   }

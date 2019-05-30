@@ -22,14 +22,16 @@ class KeyboardHookBase : public KeyboardHook {
   ~KeyboardHookBase() override;
 
   // KeyboardHook implementation.
-  bool IsKeyLocked(DomCode dom_code) override;
+  bool IsKeyLocked(DomCode dom_code) const override;
 
  protected:
   // Indicates whether |dom_code| should be intercepted by the keyboard hook.
   bool ShouldCaptureKeyEvent(DomCode dom_code) const;
 
   // Forwards the key event using |key_event_callback_|.
-  void ForwardCapturedKeyEvent(std::unique_ptr<KeyEvent> event);
+  // |event| is owned by the calling method and will live until this method
+  // returns.
+  void ForwardCapturedKeyEvent(KeyEvent* event);
 
   const base::Optional<base::flat_set<DomCode>>& dom_codes() {
     return dom_codes_;

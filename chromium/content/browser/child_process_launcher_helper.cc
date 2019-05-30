@@ -4,6 +4,7 @@
 
 #include "content/browser/child_process_launcher_helper.h"
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
@@ -13,6 +14,7 @@
 #include "base/task/single_thread_task_runner_thread_mode.h"
 #include "base/task/task_traits.h"
 #include "content/browser/child_process_launcher.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/child_process_launcher_utils.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
@@ -69,6 +71,9 @@ ChildProcessLauncherHelper::ChildProcessLauncherHelper(
     std::unique_ptr<SandboxedProcessLauncherDelegate> delegate,
     const base::WeakPtr<ChildProcessLauncher>& child_process_launcher,
     bool terminate_on_shutdown,
+#if defined(OS_ANDROID)
+    bool can_use_warm_up_connection,
+#endif
     mojo::OutgoingInvitation mojo_invitation,
     const mojo::ProcessErrorCallback& process_error_callback)
     : child_process_id_(child_process_id),
@@ -78,7 +83,13 @@ ChildProcessLauncherHelper::ChildProcessLauncherHelper(
       child_process_launcher_(child_process_launcher),
       terminate_on_shutdown_(terminate_on_shutdown),
       mojo_invitation_(std::move(mojo_invitation)),
-      process_error_callback_(process_error_callback) {}
+      process_error_callback_(process_error_callback)
+#if defined(OS_ANDROID)
+      ,
+      can_use_warm_up_connection_(can_use_warm_up_connection)
+#endif
+{
+}
 
 ChildProcessLauncherHelper::~ChildProcessLauncherHelper() = default;
 
@@ -87,9 +98,13 @@ void ChildProcessLauncherHelper::StartLaunchOnClientThread() {
 
   BeforeLaunchOnClientThread();
 
+#if defined(OS_FUCHSIA)
+  mojo_channel_.emplace();
+#else   // !defined(OS_FUCHSIA)
   mojo_named_channel_ = CreateNamedPlatformChannelOnClientThread();
   if (!mojo_named_channel_)
     mojo_channel_.emplace();
+#endif  //  !defined(OS_FUCHSIA)
 
   GetProcessLauncherTaskRunner()->PostTask(
       FROM_HERE,
@@ -112,6 +127,9 @@ void ChildProcessLauncherHelper::LaunchOnLauncherThread() {
   if (BeforeLaunchOnLauncherThread(*files_to_register, &options)) {
     process =
         LaunchProcessOnLauncherThread(options, std::move(files_to_register),
+#if defined(OS_ANDROID)
+                                      can_use_warm_up_connection_,
+#endif
                                       &is_synchronous_launch, &launch_result);
 
     AfterLaunchOnLauncherThread(process, options);
@@ -137,22 +155,26 @@ void ChildProcessLauncherHelper::PostLaunchOnLauncherThread(
   // we go out of scope regardless of the outcome below.
   mojo::OutgoingInvitation invitation = std::move(mojo_invitation_);
   if (process.process.IsValid()) {
+#if !defined(OS_FUCHSIA)
+    if (mojo_named_channel_) {
+      DCHECK(!mojo_channel_);
+      mojo::OutgoingInvitation::Send(
+          std::move(invitation), process.process.Handle(),
+          mojo_named_channel_->TakeServerEndpoint(), process_error_callback_);
+    } else
+#endif
     // Set up Mojo IPC to the new process.
-    if (mojo_channel_) {
+    {
+      DCHECK(mojo_channel_);
       DCHECK(mojo_channel_->local_endpoint().is_valid());
       mojo::OutgoingInvitation::Send(
           std::move(invitation), process.process.Handle(),
           mojo_channel_->TakeLocalEndpoint(), process_error_callback_);
-    } else {
-      DCHECK(mojo_named_channel_);
-      mojo::OutgoingInvitation::Send(
-          std::move(invitation), process.process.Handle(),
-          mojo_named_channel_->TakeServerEndpoint(), process_error_callback_);
     }
   }
 
-  BrowserThread::PostTask(
-      client_thread_id_, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {client_thread_id_},
       base::BindOnce(&ChildProcessLauncherHelper::PostLaunchOnClientThread,
                      this, std::move(process), launch_result));
 }

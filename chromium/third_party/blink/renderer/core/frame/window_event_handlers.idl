@@ -27,10 +27,9 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// https://html.spec.whatwg.org/multipage/webappapis.html#windoweventhandlers
+// https://html.spec.whatwg.org/C/#windoweventhandlers
 
 [
-    ImplementedAs=DOMWindowEventHandlers,
     LegacyTreatAsPartialInterface,
     NoInterfaceObject // Always used on target of 'implements'
 ] interface WindowEventHandlers {
@@ -47,6 +46,7 @@
     attribute EventHandler onpagehide;
     attribute EventHandler onpageshow;
     attribute EventHandler onpopstate;
+    [RuntimeEnabled=Portals] attribute EventHandler onportalactivate;
     attribute EventHandler onrejectionhandled;
     attribute EventHandler onstorage;
     attribute EventHandler onunhandledrejection;

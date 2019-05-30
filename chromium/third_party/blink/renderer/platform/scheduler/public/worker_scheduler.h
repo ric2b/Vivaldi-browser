@@ -10,6 +10,7 @@
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_or_worker_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 
 namespace blink {
 namespace scheduler {
@@ -27,6 +28,21 @@ class PLATFORM_EXPORT WorkerScheduler : public FrameOrWorkerScheduler {
   WorkerScheduler(WorkerThreadScheduler* worker_thread_scheduler,
                   WorkerSchedulerProxy* proxy);
   ~WorkerScheduler() override;
+
+  class PLATFORM_EXPORT PauseHandle {
+    USING_FAST_MALLOC(PauseHandle);
+
+   public:
+    PauseHandle(base::WeakPtr<WorkerScheduler>);
+    ~PauseHandle();
+
+   private:
+    base::WeakPtr<WorkerScheduler> scheduler_;
+
+    DISALLOW_COPY_AND_ASSIGN(PauseHandle);
+  };
+
+  std::unique_ptr<PauseHandle> Pause() WARN_UNUSED_RESULT;
 
   std::unique_ptr<ActiveConnectionHandle> OnActiveConnectionCreated() override;
 
@@ -49,25 +65,39 @@ class PLATFORM_EXPORT WorkerScheduler : public FrameOrWorkerScheduler {
 
  protected:
   scoped_refptr<NonMainThreadTaskQueue> ThrottleableTaskQueue();
-  scoped_refptr<NonMainThreadTaskQueue> UnthrottleableTaskQueue();
+  scoped_refptr<NonMainThreadTaskQueue> UnpausableTaskQueue();
+  scoped_refptr<NonMainThreadTaskQueue> PausableTaskQueue();
 
  private:
   void SetUpThrottling();
+  void PauseImpl();
+  void ResumeImpl();
 
   base::WeakPtr<WorkerScheduler> GetWeakPtr();
 
+  // The tasks runners below are listed in increasing QoS order.
+  // - throttleable task queue. Designed for custom user-provided javascript
+  //   tasks. Lowest guarantees. Can be paused, blocked during user gesture,
+  //   throttled when backgrounded or stopped completely after some time in
+  //   background.
+  // - pausable task queue. Default queue for high-priority javascript tasks.
+  //   They can be paused according to the spec during devtools debugging.
+  //   Otherwise scheduler does not tamper with their execution.
+  // - unpausable task queue. Should be used for control tasks which should
+  //   run when the context is paused. Usage should be extremely rare.
+  //   Please consult scheduler-dev@ before using it. Running javascript
+  //   on it is strictly verboten and can lead to hard-to-diagnose errors.
   scoped_refptr<NonMainThreadTaskQueue> throttleable_task_queue_;
-  scoped_refptr<NonMainThreadTaskQueue> unthrottleable_task_queue_;
+  scoped_refptr<NonMainThreadTaskQueue> pausable_task_queue_;
+  scoped_refptr<NonMainThreadTaskQueue> unpausable_task_queue_;
 
   SchedulingLifecycleState lifecycle_state_ =
       SchedulingLifecycleState::kNotThrottled;
 
   WorkerThreadScheduler* thread_scheduler_;  // NOT OWNED
 
-#if DCHECK_IS_ON()
   bool is_disposed_ = false;
-#endif
-
+  uint32_t paused_count_ = 0;
   base::WeakPtrFactory<WorkerScheduler> weak_factory_;
 };
 

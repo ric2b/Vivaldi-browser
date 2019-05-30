@@ -17,6 +17,16 @@ class AwWebContentsDelegate
  public:
   AwWebContentsDelegate(JNIEnv* env, jobject obj);
   ~AwWebContentsDelegate() override;
+
+  void RendererUnresponsive(
+      content::WebContents* source,
+      content::RenderWidgetHost* render_widget_host,
+      base::RepeatingClosure hang_monitor_restarter) override;
+
+  void RendererResponsive(
+      content::WebContents* source,
+      content::RenderWidgetHost* render_widget_host) override;
+
   content::JavaScriptDialogManager* GetJavaScriptDialogManager(
       content::WebContents* source) override;
   void FindReply(content::WebContents* web_contents,
@@ -29,7 +39,8 @@ class AwWebContentsDelegate
                    const std::string& request_method,
                    const base::Callback<void(bool)>& callback) override;
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
-                      const content::FileChooserParams& params) override;
+                      std::unique_ptr<content::FileSelectListener> listener,
+                      const blink::mojom::FileChooserParams& params) override;
   void AddNewContents(content::WebContents* source,
                       std::unique_ptr<content::WebContents> new_contents,
                       WindowOpenDisposition disposition,
@@ -62,9 +73,17 @@ class AwWebContentsDelegate
   void ExitFullscreenModeForTab(content::WebContents* web_contents) override;
   bool IsFullscreenForTabOrPending(
       const content::WebContents* web_contents) const override;
+  void UpdateUserGestureCarryoverInfo(
+      content::WebContents* web_contents) override;
+
+  std::unique_ptr<content::FileSelectListener> TakeFileSelectListener();
 
  private:
   bool is_fullscreen_;
+
+  // Maintain a FileSelectListener instance passed to RunFileChooser() until
+  // a callback is called.
+  std::unique_ptr<content::FileSelectListener> file_select_listener_;
 };
 
 }  // namespace android_webview

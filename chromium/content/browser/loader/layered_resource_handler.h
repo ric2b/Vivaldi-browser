@@ -46,8 +46,6 @@ class CONTENT_EXPORT LayeredResourceHandler : public ResourceHandler {
       const net::URLRequestStatus& status,
       std::unique_ptr<ResourceController> controller) override;
 
-  void SetOpenFlags(bool open_when_done, bool ask_for_target) override;
-
   std::unique_ptr<ResourceHandler> next_handler_;
 };
 

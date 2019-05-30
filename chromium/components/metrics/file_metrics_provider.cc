@@ -6,8 +6,10 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/flat_map.h"
+#include "base/feature_list.h"
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
@@ -17,10 +19,12 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/persistent_histogram_allocator.h"
 #include "base/metrics/persistent_memory_allocator.h"
+#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task_runner.h"
+#include "base/task_runner_util.h"
 #include "base/time/time.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_service.h"
@@ -212,7 +216,7 @@ void FileMetricsProvider::RegisterSource(const Params& params) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Ensure that kSourceOptions has been filled for this type.
-  DCHECK_GT(arraysize(kSourceOptions), static_cast<size_t>(params.type));
+  DCHECK_GT(base::size(kSourceOptions), static_cast<size_t>(params.type));
 
   std::unique_ptr<SourceInfo> source(new SourceInfo(params));
 
@@ -490,7 +494,7 @@ FileMetricsProvider::AccessResult FileMetricsProvider::CheckAndMapMetricSource(
   }
 
   // Map the file and validate it.
-  std::unique_ptr<base::PersistentMemoryAllocator> memory_allocator =
+  std::unique_ptr<base::FilePersistentMemoryAllocator> memory_allocator =
       std::make_unique<base::FilePersistentMemoryAllocator>(
           std::move(mapped), 0, 0, base::StringPiece(), read_only);
   if (memory_allocator->GetMemoryState() ==
@@ -499,6 +503,15 @@ FileMetricsProvider::AccessResult FileMetricsProvider::CheckAndMapMetricSource(
   }
   if (memory_allocator->IsCorrupt())
     return ACCESS_RESULT_DATA_CORRUPTION;
+
+  // Cache the file data while running in a background thread so that there
+  // shouldn't be any I/O when the data is accessed from the main thread.
+  // Files with an internal profile, those from previous runs that include
+  // a full system profile and are fetched via ProvideIndependentMetrics(),
+  // are loaded on a background task and so there's no need to cache the
+  // data in advance.
+  if (source->association != ASSOCIATE_INTERNAL_PROFILE)
+    memory_allocator->Cache();
 
   // Create an allocator for the mapped file. Ownership passes to the allocator.
   source->allocator = std::make_unique<base::PersistentHistogramAllocator>(
@@ -615,6 +628,38 @@ FileMetricsProvider::AccessResult FileMetricsProvider::HandleFilterSource(
   return ACCESS_RESULT_SUCCESS;
 }
 
+/* static */
+bool FileMetricsProvider::ProvideIndependentMetricsOnTaskRunner(
+    SourceInfo* source,
+    SystemProfileProto* system_profile_proto,
+    base::HistogramSnapshotManager* snapshot_manager) {
+  RecordEmbeddedProfileResult(EMBEDDED_PROFILE_ATTEMPT);
+  base::Time start_time = base::Time::Now();
+  if (PersistentSystemProfile::GetSystemProfile(
+          *source->allocator->memory_allocator(), system_profile_proto)) {
+    system_profile_proto->mutable_stability()->set_from_previous_run(true);
+    RecordHistogramSnapshotsFromSource(snapshot_manager, source);
+    UMA_HISTOGRAM_TIMES("UMA.FileMetricsProvider.EmbeddedProfile.RecordTime",
+                        base::Time::Now() - start_time);
+    RecordEmbeddedProfileResult(EMBEDDED_PROFILE_FOUND);
+    return true;
+  }
+
+  RecordEmbeddedProfileResult(EMBEDDED_PROFILE_DROPPED);
+
+  // TODO(bcwhite): Remove these once crbug/695880 is resolved.
+  int histogram_count = 0;
+  base::PersistentHistogramAllocator::Iterator histogram_iter(
+      source->allocator.get());
+  while (histogram_iter.GetNext()) {
+    ++histogram_count;
+  }
+  UMA_HISTOGRAM_COUNTS_10000(
+      "UMA.FileMetricsProvider.EmbeddedProfile.DroppedHistogramCount",
+      histogram_count);
+  return false;
+}
+
 void FileMetricsProvider::ScheduleSourcesCheck() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -709,51 +754,54 @@ void FileMetricsProvider::OnDidCreateMetricsLog() {
   sources_for_previous_run_.clear();
 }
 
-bool FileMetricsProvider::ProvideIndependentMetrics(
+bool FileMetricsProvider::HasIndependentMetrics() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return !sources_with_profile_.empty();
+}
+
+void FileMetricsProvider::ProvideIndependentMetrics(
+    base::OnceCallback<void(bool)> done_callback,
     SystemProfileProto* system_profile_proto,
     base::HistogramSnapshotManager* snapshot_manager) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  while (!sources_with_profile_.empty()) {
-    SourceInfo* source = sources_with_profile_.begin()->get();
-    DCHECK(source->allocator);
-
-    bool success = false;
-    RecordEmbeddedProfileResult(EMBEDDED_PROFILE_ATTEMPT);
-    if (PersistentSystemProfile::GetSystemProfile(
-            *source->allocator->memory_allocator(), system_profile_proto)) {
-      RecordHistogramSnapshotsFromSource(snapshot_manager, source);
-      success = true;
-      RecordEmbeddedProfileResult(EMBEDDED_PROFILE_FOUND);
-    } else {
-      RecordEmbeddedProfileResult(EMBEDDED_PROFILE_DROPPED);
-
-      // TODO(bcwhite): Remove these once crbug/695880 is resolved.
-
-      int histogram_count = 0;
-      base::PersistentHistogramAllocator::Iterator histogram_iter(
-          source->allocator.get());
-      while (histogram_iter.GetNext()) {
-        ++histogram_count;
-      }
-      UMA_HISTOGRAM_COUNTS_10000(
-          "UMA.FileMetricsProvider.EmbeddedProfile.DroppedHistogramCount",
-          histogram_count);
-    }
-
-    // Regardless of whether this source was successfully recorded, it is never
-    // read again.
-    source->read_complete = true;
-    RecordSourceAsRead(source);
-    sources_to_check_.splice(sources_to_check_.end(), sources_with_profile_,
-                             sources_with_profile_.begin());
-    ScheduleSourcesCheck();
-
-    if (success)
-      return true;
+  if (sources_with_profile_.empty()) {
+    std::move(done_callback).Run(false);
+    return;
   }
 
-  return false;
+  std::unique_ptr<SourceInfo> source =
+      std::move(*sources_with_profile_.begin());
+  sources_with_profile_.pop_front();
+  SourceInfo* source_ptr = source.get();
+  DCHECK(source->allocator);
+
+  // Do the actual work as a background task.
+  base::PostTaskAndReplyWithResult(
+      task_runner_.get(), FROM_HERE,
+      base::BindOnce(
+          &FileMetricsProvider::ProvideIndependentMetricsOnTaskRunner,
+          source_ptr, system_profile_proto, snapshot_manager),
+      base::BindOnce(&FileMetricsProvider::ProvideIndependentMetricsCleanup,
+                     weak_factory_.GetWeakPtr(), std::move(done_callback),
+                     std::move(source)));
+}
+
+void FileMetricsProvider::ProvideIndependentMetricsCleanup(
+    base::OnceCallback<void(bool)> done_callback,
+    std::unique_ptr<SourceInfo> source,
+    bool success) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // Regardless of whether this source was successfully recorded, it is
+  // never read again.
+  source->read_complete = true;
+  RecordSourceAsRead(source.get());
+  sources_to_check_.push_back(std::move(source));
+  ScheduleSourcesCheck();
+
+  // Execute the chained callback.
+  std::move(done_callback).Run(success);
 }
 
 bool FileMetricsProvider::HasPreviousSessionData() {

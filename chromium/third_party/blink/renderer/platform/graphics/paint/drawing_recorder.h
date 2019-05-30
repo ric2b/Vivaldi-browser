@@ -21,14 +21,13 @@ namespace blink {
 class GraphicsContext;
 
 class PLATFORM_EXPORT DrawingRecorder final {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
 
  public:
   static bool UseCachedDrawingIfPossible(GraphicsContext& context,
                                          const DisplayItemClient& client,
                                          DisplayItem::Type type) {
-    return context.GetPaintController().UseCachedDrawingIfPossible(client,
-                                                                   type);
+    return context.GetPaintController().UseCachedItemIfPossible(client, type);
   }
 
   static bool UseCachedDrawingIfPossible(GraphicsContext& context,
@@ -52,7 +51,7 @@ class PLATFORM_EXPORT DrawingRecorder final {
   ~DrawingRecorder();
 
   void SetKnownToBeOpaque() {
-    DCHECK(RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
+    DCHECK(RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
     known_to_be_opaque_ = true;
   }
 
@@ -61,7 +60,7 @@ class PLATFORM_EXPORT DrawingRecorder final {
   const DisplayItemClient& client_;
   const DisplayItem::Type type_;
 
-  // True if there are no transparent areas. Only used for SlimmingPaintV2.
+  // True if there are no transparent areas. Only used for CompositeAfterPaint.
   bool known_to_be_opaque_;
 
 #if DCHECK_IS_ON()

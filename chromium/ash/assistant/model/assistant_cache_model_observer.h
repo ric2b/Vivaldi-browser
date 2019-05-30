@@ -7,13 +7,17 @@
 
 #include <map>
 
+#include "base/component_export.h"
 #include "base/macros.h"
+#include "base/observer_list_types.h"
 #include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 
 namespace ash {
 
-// An observer which receives notification of changes to the Assistant cache.
-class AssistantCacheModelObserver {
+// A checked observer which receives notification of changes to the Assistant
+// cache.
+class COMPONENT_EXPORT(ASSISTANT_MODEL) AssistantCacheModelObserver
+    : public base::CheckedObserver {
  public:
   using AssistantSuggestion = chromeos::assistant::mojom::AssistantSuggestion;
 
@@ -22,7 +26,7 @@ class AssistantCacheModelObserver {
       const std::map<int, const AssistantSuggestion*>& conversation_starters) {}
 
  protected:
-  virtual ~AssistantCacheModelObserver() = default;
+  ~AssistantCacheModelObserver() override = default;
 };
 
 }  // namespace ash

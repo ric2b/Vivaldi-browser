@@ -25,6 +25,11 @@ class AutofillProfile;
 // Utilities to process, normalize and compare international phone numbers.
 namespace i18n {
 
+// No reasonable phone number should need more than |kMaxPhoneNumberSize|
+// characters. Longer inputs might be an error or an attack and processing them
+// takes non-trivial time (parsing with regex), so will be ignored.
+extern const size_t kMaxPhoneNumberSize;
+
 // Return true if the given |phone_number| object is likely to be a phone number
 // This method uses IsPossibleNumber from libphonenumber, instead of
 // IsValidNumber. IsPossibleNumber does a less strict check, it will not try to
@@ -85,11 +90,17 @@ bool PhoneNumbersMatch(const base::string16& number_a,
                        const std::string& app_locale);
 
 // Returns the phone number from the given |profile| formatted for display.
-// If it's valid number for the country of profile, or for the |locale| given
-// as a fall back, return the number in internaional format; otherwise return
+// If it's a valid number for the profile's country or for the |locale| given
+// as a fallback, returns the number in international format; otherwise returns
 // the raw number string from profile.
 base::string16 GetFormattedPhoneNumberForDisplay(const AutofillProfile& profile,
                                                  const std::string& locale);
+
+// Returns |phone_number| in i18n::phonenumbers::PhoneNumberUtil::
+// PhoneNumberFormat::NATIONAL format if the number is valid for
+// |country_code|. Otherwise, returns the given |phone_number|.
+std::string FormatPhoneNationallyForDisplay(const std::string& phone_number,
+                                            const std::string& country_code);
 
 // Formats the given number |phone_number| to
 // i18n::phonenumbers::PhoneNumberUtil::PhoneNumberFormat::INTERNATIONAL format

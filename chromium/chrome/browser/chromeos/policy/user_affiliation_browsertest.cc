@@ -5,10 +5,12 @@
 #include <memory>
 #include <ostream>
 
+#include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/active_directory_test_helper.h"
 #include "chrome/browser/chromeos/policy/affiliation_test_helper.h"
@@ -17,7 +19,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -29,6 +31,7 @@
 #include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/test_launcher.h"
@@ -104,8 +107,8 @@ bool IsSystemSlotAvailable(Profile* profile) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   base::RunLoop run_loop;
   bool system_slot_available = false;
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
       base::BindOnce(CheckIsSystemSlotAvailableOnIOThread,
                      profile->GetResourceContext(), &system_slot_available,
                      run_loop.QuitClosure()));
@@ -199,6 +202,16 @@ class UserAffiliationBrowserTest
     policy::DeviceManagementService::SetRetryDelayForTesting(0);
   }
 
+  void CreatedBrowserMainParts(
+      content::BrowserMainParts* browser_main_parts) override {
+    InProcessBrowserTest::CreatedBrowserMainParts(browser_main_parts);
+
+    login_ui_visible_waiter_ =
+        std::make_unique<content::WindowedNotificationObserver>(
+            chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
+            content::NotificationService::AllSources());
+  }
+
   // InProcessBrowserTest:
   void SetUpOnMainThread() override {
     InProcessBrowserTest::SetUpOnMainThread();
@@ -207,10 +220,7 @@ class UserAffiliationBrowserTest
       // This is a workaround for chrome crashing when running with DCHECKS when
       // it exits while the login manager is being loaded.
       // TODO(pmarko): Remove this when https://crbug.com/869272 is fixed.
-      content::WindowedNotificationObserver(
-          chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
-          content::NotificationService::AllSources())
-          .Wait();
+      login_ui_visible_waiter_->Wait();
     }
   }
 
@@ -226,8 +236,8 @@ class UserAffiliationBrowserTest
   void SetUpTestSystemSlot() {
     bool system_slot_constructed_successfully = false;
     base::RunLoop loop;
-    content::BrowserThread::PostTaskAndReply(
-        content::BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraitsAndReply(
+        FROM_HERE, {content::BrowserThread::IO},
         base::BindOnce(&UserAffiliationBrowserTest::SetUpTestSystemSlotOnIO,
                        base::Unretained(this),
                        &system_slot_constructed_successfully),
@@ -263,8 +273,8 @@ class UserAffiliationBrowserTest
       return;
 
     base::RunLoop loop;
-    content::BrowserThread::PostTaskAndReply(
-        content::BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraitsAndReply(
+        FROM_HERE, {content::BrowserThread::IO},
         base::BindOnce(&UserAffiliationBrowserTest::TearDownTestSystemSlotOnIO,
                        base::Unretained(this)),
         loop.QuitClosure());
@@ -274,6 +284,9 @@ class UserAffiliationBrowserTest
   void TearDownTestSystemSlotOnIO() { test_system_slot_.reset(); }
 
   std::unique_ptr<crypto::ScopedTestSystemNSSKeySlot> test_system_slot_;
+
+  std::unique_ptr<content::WindowedNotificationObserver>
+      login_ui_visible_waiter_;
 
   DISALLOW_COPY_AND_ASSIGN(UserAffiliationBrowserTest);
 };
@@ -298,16 +311,16 @@ IN_PROC_BROWSER_TEST_P(UserAffiliationBrowserTest, TestAffiliation) {
   ASSERT_NO_FATAL_FAILURE(VerifyAffiliationExpectations());
 }
 
-INSTANTIATE_TEST_CASE_P(AffiliationCheck,
-                        UserAffiliationBrowserTest,
-                        //         affiliated            active_directory
-                        //              |                         |
-                        //              +----------+      ______  +---------+
-                        //                         |     /      \______     |
-                        ::testing::Values(Params(true, true),     //   \   /
-                                          Params(false, true),    //    \ /
-                                          Params(true, false),    //     X
-                                          Params(false, false)),  //    / \<--!
-                        PrintParam);                              //    \_/
+INSTANTIATE_TEST_SUITE_P(AffiliationCheck,
+                         UserAffiliationBrowserTest,
+                         //         affiliated            active_directory
+                         //              |                         |
+                         //              +----------+      ______  +---------+
+                         //                         |     /      \______     |
+                         ::testing::Values(Params(true, true),     //   \   /
+                                           Params(false, true),    //    \ /
+                                           Params(true, false),    //     X
+                                           Params(false, false)),  //    / \<--!
+                         PrintParam);                              //    \_/
 
 }  // namespace policy

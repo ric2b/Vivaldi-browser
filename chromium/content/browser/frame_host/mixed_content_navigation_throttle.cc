@@ -14,11 +14,12 @@
 #include "content/common/frame_messages.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_frame_host.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/navigation_policy.h"
 #include "content/public/common/origin_util.h"
 #include "content/public/common/web_preferences.h"
 #include "net/base/url_util.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "url/url_constants.h"
@@ -34,9 +35,9 @@ bool IsSecureScheme(const std::string& scheme) {
 }
 
 // Should return the same value as SecurityOrigin::isLocal and
-// SchemeRegistry::shouldTreatURLSchemeAsCORSEnabled.
-bool ShouldTreatURLSchemeAsCORSEnabled(const GURL& url) {
-  return base::ContainsValue(url::GetCORSEnabledSchemes(), url.scheme());
+// SchemeRegistry::shouldTreatURLSchemeAsCorsEnabled.
+bool ShouldTreatURLSchemeAsCorsEnabled(const GURL& url) {
+  return base::ContainsValue(url::GetCorsEnabledSchemes(), url.scheme());
 }
 
 // Should return the same value as the resource URL checks assigned to
@@ -83,7 +84,8 @@ void UpdateRendererOnMixedContentFound(NavigationHandleImpl* navigation_handle,
   params.request_context_type = navigation_handle->request_context_type();
   params.was_allowed = was_allowed;
   params.had_redirect = for_redirect;
-  params.source_location = navigation_handle->source_location();
+  if (navigation_handle->source_location())
+    params.source_location = navigation_handle->source_location().value();
 
   rfh->Send(new FrameMsg_MixedContentFound(rfh->GetRoutingID(), params));
 }
@@ -94,16 +96,12 @@ void UpdateRendererOnMixedContentFound(NavigationHandleImpl* navigation_handle,
 std::unique_ptr<NavigationThrottle>
 MixedContentNavigationThrottle::CreateThrottleForNavigation(
     NavigationHandle* navigation_handle) {
-  if (IsBrowserSideNavigationEnabled())
-    return base::WrapUnique(
-        new MixedContentNavigationThrottle(navigation_handle));
-  return nullptr;
+  return std::make_unique<MixedContentNavigationThrottle>(navigation_handle);
 }
 
 MixedContentNavigationThrottle::MixedContentNavigationThrottle(
     NavigationHandle* navigation_handle)
     : NavigationThrottle(navigation_handle) {
-  DCHECK(IsBrowserSideNavigationEnabled());
 }
 
 MixedContentNavigationThrottle::~MixedContentNavigationThrottle() {}
@@ -151,13 +149,9 @@ bool MixedContentNavigationThrottle::ShouldBlockNavigation(bool for_redirect) {
 
   // From this point on we know this is not a main frame navigation and that
   // there is mixed content. Now let's decide if it's OK to proceed with it.
-  const WebPreferences& prefs = mixed_content_node->current_frame_host()
-                                    ->render_view_host()
-                                    ->GetWebkitPreferences();
 
   ReportBasicMixedContentFeatures(handle_impl->request_context_type(),
-                                  handle_impl->mixed_content_context_type(),
-                                  prefs);
+                                  handle_impl->mixed_content_context_type());
 
   // If we're in strict mode, we'll automagically fail everything, and
   // intentionally skip the client/embedder checks in order to prevent degrading
@@ -165,13 +159,16 @@ bool MixedContentNavigationThrottle::ShouldBlockNavigation(bool for_redirect) {
   bool block_all_mixed_content = !!(
       mixed_content_node->current_replication_state().insecure_request_policy &
       blink::kBlockAllMixedContent);
+  const WebPreferences& prefs = mixed_content_node->current_frame_host()
+                                    ->render_view_host()
+                                    ->GetWebkitPreferences();
   bool strict_mode =
       prefs.strict_mixed_content_checking || block_all_mixed_content;
 
   blink::WebMixedContentContextType mixed_context_type =
       handle_impl->mixed_content_context_type();
 
-  if (!ShouldTreatURLSchemeAsCORSEnabled(handle_impl->GetURL()))
+  if (!ShouldTreatURLSchemeAsCorsEnabled(handle_impl->GetURL()))
     mixed_context_type =
         blink::WebMixedContentContextType::kOptionallyBlockable;
 
@@ -298,9 +295,8 @@ void MixedContentNavigationThrottle::MaybeSendBlinkFeatureUsageReport() {
 
 // Based off of MixedContentChecker::count.
 void MixedContentNavigationThrottle::ReportBasicMixedContentFeatures(
-    RequestContextType request_context_type,
-    blink::WebMixedContentContextType mixed_content_context_type,
-    const WebPreferences& prefs) {
+    blink::mojom::RequestContextType request_context_type,
+    blink::WebMixedContentContextType mixed_content_context_type) {
   mixed_content_features_.insert(MIXED_CONTENT_PRESENT);
 
   // Report any blockable content.
@@ -315,19 +311,19 @@ void MixedContentNavigationThrottle::ReportBasicMixedContentFeatures(
   // ever be found here.
   UseCounterFeature feature;
   switch (request_context_type) {
-    case REQUEST_CONTEXT_TYPE_INTERNAL:
+    case blink::mojom::RequestContextType::INTERNAL:
       feature = MIXED_CONTENT_INTERNAL;
       break;
-    case REQUEST_CONTEXT_TYPE_PREFETCH:
+    case blink::mojom::RequestContextType::PREFETCH:
       feature = MIXED_CONTENT_PREFETCH;
       break;
 
-    case REQUEST_CONTEXT_TYPE_AUDIO:
-    case REQUEST_CONTEXT_TYPE_DOWNLOAD:
-    case REQUEST_CONTEXT_TYPE_FAVICON:
-    case REQUEST_CONTEXT_TYPE_IMAGE:
-    case REQUEST_CONTEXT_TYPE_PLUGIN:
-    case REQUEST_CONTEXT_TYPE_VIDEO:
+    case blink::mojom::RequestContextType::AUDIO:
+    case blink::mojom::RequestContextType::DOWNLOAD:
+    case blink::mojom::RequestContextType::FAVICON:
+    case blink::mojom::RequestContextType::IMAGE:
+    case blink::mojom::RequestContextType::PLUGIN:
+    case blink::mojom::RequestContextType::VIDEO:
     default:
       NOTREACHED() << "RequestContextType has value " << request_context_type
                    << " and has WebMixedContentContextType of "

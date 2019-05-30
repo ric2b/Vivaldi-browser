@@ -6,6 +6,7 @@
 
 #include <limits>
 
+#include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
@@ -22,7 +23,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_browsertest_util.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
-#include "chrome/browser/ui/views_mode_controller.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/test_launcher_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -49,11 +49,11 @@
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "ui/base/buildflags.h"
 #include "ui/base/ime/composition_text.h"
 #include "ui/base/ime/ime_text_span.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/test/ui_controls.h"
-#include "ui/base/ui_features.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/range/range.h"
@@ -675,10 +675,9 @@ class WebViewContextMenuBrowserPluginSpecificInteractiveTest
 // Disabled on Linux Aura because pointer lock does not work on Linux Aura.
 // crbug.com/341876
 
-#if defined(OS_LINUX)
-// flaky http://crbug.com/412086
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(WebViewPointerLockInteractiveTest,
-                       DISABLED_PointerLock) {
+                       PointerLock) {
   SetupTest("web_view/pointer_lock",
             "/extensions/platform_apps/web_view/pointer_lock/guest.html");
 
@@ -879,21 +878,6 @@ IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, Focus_AdvanceFocus) {
     content::SimulateKeyPress(embedder_web_contents, ui::DomKey::TAB,
                               ui::DomCode::TAB, ui::VKEY_TAB, false, false,
                               false, false);
-
-#if defined(OS_MACOSX)
-    bool is_cocoa = true;
-#if BUILDFLAG(MAC_VIEWS_BROWSER)
-    is_cocoa = views_mode_controller::IsViewsBrowserCocoa();
-#endif  //  BUILDFLAG(MAC_VIEWS_BROWSER)
-    // TODO(mcnee): A third Tab key press should not be necessary, but we seem
-    // to need this on Mac when using Cocoa browser UI.
-    if (is_cocoa) {
-      content::SimulateKeyPress(embedder_web_contents, ui::DomKey::TAB,
-                                ui::DomCode::TAB, ui::VKEY_TAB, false, false,
-                                false, false);
-    }
-#endif  //  defined(OS_MACOSX)
-
     ASSERT_TRUE(listener.WaitUntilSatisfied());
   }
 }

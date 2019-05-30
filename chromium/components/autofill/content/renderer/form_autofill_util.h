@@ -124,7 +124,7 @@ bool IsWebElementVisible(const blink::WebElement& element);
 
 // Returns the form's |name| attribute if non-empty; otherwise the form's |id|
 // attribute.
-const base::string16 GetFormIdentifier(const blink::WebFormElement& form);
+base::string16 GetFormIdentifier(const blink::WebFormElement& form);
 
 // Returns text alignment for |element|.
 base::i18n::TextDirection GetTextDirectionForElement(
@@ -278,11 +278,19 @@ bool InferLabelForElementForTesting(const blink::WebFormControlElement& element,
                                     const std::vector<base::char16>& stop_words,
                                     base::string16* label,
                                     FormFieldData::LabelSource* label_source);
+ButtonTitleList InferButtonTitlesForTesting(
+    const blink::WebElement& form_element);
 
 // Returns form by unique renderer id. Return null element if there is no form
 // with given form renderer id.
 blink::WebFormElement FindFormByUniqueRendererId(blink::WebDocument doc,
                                                  uint32_t form_renderer_id);
+
+// Returns form control element by unique renderer id. Return null element if
+// there is no element with given renderer id.
+blink::WebFormControlElement FindFormControlElementsByUniqueRendererId(
+    blink::WebDocument doc,
+    uint32_t form_control_renderer_id);
 
 // Note: The vector-based API of the following two functions is a tax for limiting
 // the frequency and duration of retrieving a lot of DOM elements. Alternative
@@ -313,6 +321,17 @@ FindFormControlElementsByUniqueRendererId(
     blink::WebDocument doc,
     uint32_t form_renderer_id,
     const std::vector<uint32_t>& form_control_renderer_ids);
+
+// Returns the ARIA label text of the elements denoted by the aria-labelledby
+// attribute of |element| or the value of the aria-label attribute of
+// |element|, with priority given to the aria-labelledby attribute.
+base::string16 GetAriaLabel(const blink::WebDocument& document,
+                            const blink::WebFormControlElement& element);
+
+// Returns the ARIA label text of the elements denoted by the aria-describedby
+// attribute of |element|.
+base::string16 GetAriaDescription(const blink::WebDocument& document,
+                                  const blink::WebFormControlElement& element);
 
 }  // namespace form_util
 }  // namespace autofill

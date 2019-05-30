@@ -119,10 +119,12 @@ Chromium uses [Ninja](https://ninja-build.org) as its main build tool along with
 a tool called [GN](https://gn.googlesource.com/gn/+/master/docs/quick_start.md)
 to generate `.ninja` files. You can create any number of *build directories*
 with different configurations. To create a build directory which builds Chrome
-for Android, run:
+for Android, run `gn args out/Default` and edit the file to contain the
+following arguments:
 
-```shell
-gn gen --args='target_os="android"' out/Default
+```gn
+target_os = "android"
+target_cpu = "arm64"  # See "Figuring out target_cpu" below
 ```
 
 * You only have to run this once for each new build directory, Ninja will
@@ -131,13 +133,33 @@ gn gen --args='target_os="android"' out/Default
   it should be a subdirectory of `out`.
 * For other build arguments, including release settings, see [GN build
   configuration](https://www.chromium.org/developers/gn-build-configuration).
-  The default will be a debug component build matching the current host
-  operating system and CPU.
+  The default will be a debug component build.
 * For more info on GN, run `gn help` on the command line or read the
   [quick start guide](../tools/gn/docs/quick_start.md).
 
 Also be aware that some scripts (e.g. `tombstones.py`, `adb_gdb.py`)
 require you to set `CHROMIUM_OUTPUT_DIR=out/Default`.
+
+### Figuring out target\_cpu
+
+The value of
+[`target_cpu`](https://gn.googlesource.com/gn/+/master/docs/reference.md#target_cpu)
+determines what instruction set to use for native code. Given a device (or
+emulator), you can determine the correct instruction set with `adb shell getprop
+ro.product.cpu.abi`:
+
+| `getprop ro.product.cpu.abi` output | `target_cpu` value |
+|-------------------------------------|--------------------|
+| `arm64-v8a`                         | `arm64`            |
+| `armeabi-v7a`                       | `arm`              |
+| `x86`                               | `x86`              |
+| `x86_64`                            | `x64`              |
+
+*** promo
+`arm` and `x86` may optionally be used instead of `arm64` and `x64` for
+non-WebView targets. This is also allowed for Monochrome, but only when not set
+as WebView the provider.
+***
 
 ## Build Chromium
 
@@ -147,13 +169,12 @@ Build Chromium with Ninja using the command:
 autoninja -C out/Default chrome_public_apk
 ```
 
-`autoninja` is a wrapper that automatically provides optimal values for the
-arguments passed to `ninja`.
-
+(`autoninja` is a wrapper that automatically provides optimal values for the
+arguments passed to `ninja`.)
 
 You can get a list of all of the other build targets from GN by running `gn ls
 out/Default` from the command line. To compile one, pass the GN label to Ninja
-with no preceding "//" (so, for `//chrome/test:unit_tests` use `ninja -C
+with no preceding "//" (so, for `//chrome/test:unit_tests` use `autoninja -C
 out/Default chrome/test:unit_tests`).
 
 ### Multiple Chrome APK Targets
@@ -163,7 +184,7 @@ the version of Android running on a device. Chrome uses this feature to target
 3 different versions using 3 different ninja targets:
 
 1. `chrome_public_apk` (ChromePublic.apk)
-   * `minSdkVersion=16` (Jelly Bean).
+   * `minSdkVersion=19` (KitKat).
    * Stores libchrome.so compressed within the APK.
    * Uses [Crazy Linker](https://cs.chromium.org/chromium/src/base/android/linker/BUILD.gn?rcl=6bb29391a86f2be58c626170156cbfaa2cbc5c91&l=9).
    * Shipped only for Android < 21, but still works fine on Android >= 21.
@@ -326,11 +347,18 @@ For information on running tests, see [Android Test Instructions](android_test_i
 
 ### Faster Edit/Deploy
 
+#### GN Args
+Args that affect build speed:
+ * `is_component_build = true` *(default=`is_debug`)*
+   * What it does: Uses multiple `.so` files instead of just one (faster links)
+ * `is_java_debug = true` *(default=`is_debug`)*
+   * What it does: Disables ProGuard (slow build step)
+
+#### Incremental Install
 "Incremental install" uses reflection and side-loading to speed up the edit
 & deploy cycle (normally < 10 seconds). The initial launch of the apk will be
 a little slower since updated dex files are installed manually.
 
-*   Make sure to set` is_component_build = true `in your GN args
 *   All apk targets have \*`_incremental` targets defined (e.g.
     `chrome_public_apk_incremental`) except for Webview and Monochrome
 
@@ -364,7 +392,7 @@ out/Default/bin/chrome_public_apk uninstall
 
 To avoid typing `_incremental` when building targets, you can use the GN arg:
 
-```
+```gn
 incremental_apk_by_default = true
 ```
 

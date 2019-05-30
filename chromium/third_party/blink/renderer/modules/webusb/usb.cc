@@ -7,7 +7,9 @@
 #include <utility>
 
 #include "device/usb/public/mojom/device.mojom-blink.h"
+#include "device/usb/public/mojom/device_enumeration_options.mojom-blink.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -19,7 +21,6 @@
 #include "third_party/blink/renderer/modules/webusb/usb_device.h"
 #include "third_party/blink/renderer/modules/webusb/usb_device_filter.h"
 #include "third_party/blink/renderer/modules/webusb/usb_device_request_options.h"
-#include "third_party/blink/renderer/platform/feature_policy/feature_policy.h"
 #include "third_party/blink/renderer/platform/mojo/mojo_helper.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
@@ -34,25 +35,55 @@ const char kFeaturePolicyBlocked[] =
     "Access to the feature \"usb\" is disallowed by feature policy.";
 const char kNoDeviceSelected[] = "No device selected.";
 
-UsbDeviceFilterPtr ConvertDeviceFilter(const USBDeviceFilter& filter) {
+void RejectWithTypeError(const String& error_details,
+                         ScriptPromiseResolver* resolver) {
+  ScriptState::Scope scope(resolver->GetScriptState());
+  v8::Isolate* isolate = resolver->GetScriptState()->GetIsolate();
+  resolver->Reject(V8ThrowException::CreateTypeError(isolate, error_details));
+}
+
+UsbDeviceFilterPtr ConvertDeviceFilter(const USBDeviceFilter* filter,
+                                       ScriptPromiseResolver* resolver) {
   auto mojo_filter = device::mojom::blink::UsbDeviceFilter::New();
-  mojo_filter->has_vendor_id = filter.hasVendorId();
+  mojo_filter->has_vendor_id = filter->hasVendorId();
   if (mojo_filter->has_vendor_id)
-    mojo_filter->vendor_id = filter.vendorId();
-  mojo_filter->has_product_id = filter.hasProductId();
-  if (mojo_filter->has_product_id)
-    mojo_filter->product_id = filter.productId();
-  mojo_filter->has_class_code = filter.hasClassCode();
+    mojo_filter->vendor_id = filter->vendorId();
+  mojo_filter->has_product_id = filter->hasProductId();
+  if (mojo_filter->has_product_id) {
+    if (!mojo_filter->has_vendor_id) {
+      RejectWithTypeError(
+          "A filter containing a productId must also contain a vendorId.",
+          resolver);
+      return nullptr;
+    }
+    mojo_filter->product_id = filter->productId();
+  }
+  mojo_filter->has_class_code = filter->hasClassCode();
   if (mojo_filter->has_class_code)
-    mojo_filter->class_code = filter.classCode();
-  mojo_filter->has_subclass_code = filter.hasSubclassCode();
-  if (mojo_filter->has_subclass_code)
-    mojo_filter->subclass_code = filter.subclassCode();
-  mojo_filter->has_protocol_code = filter.hasProtocolCode();
-  if (mojo_filter->has_protocol_code)
-    mojo_filter->protocol_code = filter.protocolCode();
-  if (filter.hasSerialNumber())
-    mojo_filter->serial_number = filter.serialNumber();
+    mojo_filter->class_code = filter->classCode();
+  mojo_filter->has_subclass_code = filter->hasSubclassCode();
+  if (mojo_filter->has_subclass_code) {
+    if (!mojo_filter->has_class_code) {
+      RejectWithTypeError(
+          "A filter containing a subclassCode must also contain a classCode.",
+          resolver);
+      return nullptr;
+    }
+    mojo_filter->subclass_code = filter->subclassCode();
+  }
+  mojo_filter->has_protocol_code = filter->hasProtocolCode();
+  if (mojo_filter->has_protocol_code) {
+    if (!mojo_filter->has_subclass_code) {
+      RejectWithTypeError(
+          "A filter containing a protocolCode must also contain a "
+          "subclassCode.",
+          resolver);
+      return nullptr;
+    }
+    mojo_filter->protocol_code = filter->protocolCode();
+  }
+  if (filter->hasSerialNumber())
+    mojo_filter->serial_number = filter->serialNumber();
   return mojo_filter;
 }
 
@@ -80,13 +111,19 @@ ScriptPromise USB::getDevices(ScriptState* script_state) {
         script_state,
         DOMException::Create(DOMExceptionCode::kNotSupportedError));
   }
-  if (!IsFeatureEnabled()) {
+
+  FeatureEnabledState state = GetFeatureEnabledState();
+  if (state != FeatureEnabledState::kEnabled) {
     ExecutionContext* execution_context = ExecutionContext::From(script_state);
-    if (execution_context && execution_context->IsDocument()) {
-      ToDocument(execution_context)
-          ->GetFrame()
-          ->ReportFeaturePolicyViolation(mojom::FeaturePolicyFeature::kUsb);
+    if (auto* document = DynamicTo<Document>(execution_context)) {
+      document->ReportFeaturePolicyViolation(
+          mojom::FeaturePolicyFeature::kUsb,
+          (state == FeatureEnabledState::kReportOnly
+               ? mojom::FeaturePolicyDisposition::kReport
+               : mojom::FeaturePolicyDisposition::kEnforce));
     }
+  }
+  if (state == FeatureEnabledState::kDisabled) {
     return ScriptPromise::RejectWithDOMException(
         script_state, DOMException::Create(DOMExceptionCode::kSecurityError,
                                            kFeaturePolicyBlocked));
@@ -101,16 +138,16 @@ ScriptPromise USB::getDevices(ScriptState* script_state) {
 }
 
 ScriptPromise USB::requestDevice(ScriptState* script_state,
-                                 const USBDeviceRequestOptions& options) {
+                                 const USBDeviceRequestOptions* options) {
   LocalFrame* frame = GetFrame();
-  if (!frame) {
+  if (!frame || !frame->GetDocument()) {
     return ScriptPromise::RejectWithDOMException(
         script_state,
         DOMException::Create(DOMExceptionCode::kNotSupportedError));
   }
 
-  if (!frame->IsFeatureEnabled(mojom::FeaturePolicyFeature::kUsb,
-                               ReportOptions::kReportOnFailure)) {
+  if (!frame->GetDocument()->IsFeatureEnabled(
+          mojom::FeaturePolicyFeature::kUsb, ReportOptions::kReportOnFailure)) {
     return ScriptPromise::RejectWithDOMException(
         script_state, DOMException::Create(DOMExceptionCode::kSecurityError,
                                            kFeaturePolicyBlocked));
@@ -118,7 +155,7 @@ ScriptPromise USB::requestDevice(ScriptState* script_state,
 
   EnsureServiceConnection();
 
-  if (!Frame::HasTransientUserActivation(frame)) {
+  if (!LocalFrame::HasTransientUserActivation(frame)) {
     return ScriptPromise::RejectWithDOMException(
         script_state,
         DOMException::Create(
@@ -126,19 +163,26 @@ ScriptPromise USB::requestDevice(ScriptState* script_state,
             "Must be handling a user gesture to show a permission request."));
   }
 
+  ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
+  ScriptPromise promise = resolver->Promise();
   Vector<UsbDeviceFilterPtr> filters;
-  if (options.hasFilters()) {
-    filters.ReserveCapacity(options.filters().size());
-    for (const auto& filter : options.filters())
-      filters.push_back(ConvertDeviceFilter(filter));
+  if (options->hasFilters()) {
+    filters.ReserveCapacity(options->filters().size());
+    for (const auto& filter : options->filters()) {
+      UsbDeviceFilterPtr converted_filter =
+          ConvertDeviceFilter(filter, resolver);
+      if (!converted_filter)
+        return promise;
+      filters.push_back(std::move(converted_filter));
+    }
   }
 
-  ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
+  DCHECK(options->filters().size() == filters.size());
   get_permission_requests_.insert(resolver);
   service_->GetPermission(std::move(filters),
                           WTF::Bind(&USB::OnGetPermission, WrapPersistent(this),
                                     WrapPersistent(resolver)));
-  return resolver->Promise();
+  return promise;
 }
 
 ExecutionContext* USB::GetExecutionContext() const {
@@ -146,7 +190,7 @@ ExecutionContext* USB::GetExecutionContext() const {
 }
 
 const AtomicString& USB::InterfaceName() const {
-  return EventTargetNames::USB;
+  return event_target_names::kUSB;
 }
 
 void USB::ContextDestroyed(ExecutionContext*) {
@@ -199,7 +243,7 @@ void USB::OnDeviceAdded(UsbDeviceInfoPtr device_info) {
     return;
 
   DispatchEvent(*USBConnectionEvent::Create(
-      EventTypeNames::connect, GetOrCreateDevice(std::move(device_info))));
+      event_type_names::kConnect, GetOrCreateDevice(std::move(device_info))));
 }
 
 void USB::OnDeviceRemoved(UsbDeviceInfoPtr device_info) {
@@ -210,7 +254,7 @@ void USB::OnDeviceRemoved(UsbDeviceInfoPtr device_info) {
                                GetExecutionContext());
   }
   DispatchEvent(
-      *USBConnectionEvent::Create(EventTypeNames::disconnect, device));
+      *USBConnectionEvent::Create(event_type_names::kDisconnect, device));
   device_cache_.erase(guid);
 }
 
@@ -231,12 +275,13 @@ void USB::OnServiceConnectionError() {
 void USB::AddedEventListener(const AtomicString& event_type,
                              RegisteredEventListener& listener) {
   EventTargetWithInlineData::AddedEventListener(event_type, listener);
-  if (event_type != EventTypeNames::connect &&
-      event_type != EventTypeNames::disconnect) {
+  if (event_type != event_type_names::kConnect &&
+      event_type != event_type_names::kDisconnect) {
     return;
   }
 
-  if (!IsContextSupported() || !IsFeatureEnabled())
+  if (!IsContextSupported() ||
+      GetFeatureEnabledState() == FeatureEnabledState::kDisabled)
     return;
 
   EnsureServiceConnection();
@@ -247,16 +292,19 @@ void USB::EnsureServiceConnection() {
     return;
 
   DCHECK(IsContextSupported());
-  DCHECK(IsFeatureEnabled());
+  DCHECK(GetFeatureEnabledState() != FeatureEnabledState::kDisabled);
+  // See https://bit.ly/2S0zRAS for task types.
+  auto task_runner =
+      GetExecutionContext()->GetTaskRunner(TaskType::kMiscPlatformAPI);
   GetExecutionContext()->GetInterfaceProvider()->GetInterface(
-      mojo::MakeRequest(&service_));
+      mojo::MakeRequest(&service_, task_runner));
   service_.set_connection_error_handler(
       WTF::Bind(&USB::OnServiceConnectionError, WrapWeakPersistent(this)));
 
   DCHECK(!client_binding_.is_bound());
 
-  device::mojom::blink::UsbDeviceManagerClientPtr client;
-  client_binding_.Bind(mojo::MakeRequest(&client));
+  device::mojom::blink::UsbDeviceManagerClientAssociatedPtrInfo client;
+  client_binding_.Bind(mojo::MakeRequest(&client), task_runner);
   service_->SetClient(std::move(client));
 }
 
@@ -276,10 +324,9 @@ bool USB::IsContextSupported() const {
   return true;
 }
 
-bool USB::IsFeatureEnabled() const {
-  ExecutionContext* context = GetExecutionContext();
-  FeaturePolicy* policy = context->GetSecurityContext().GetFeaturePolicy();
-  return policy->IsFeatureEnabled(mojom::FeaturePolicyFeature::kUsb);
+FeatureEnabledState USB::GetFeatureEnabledState() const {
+  return GetExecutionContext()->GetSecurityContext().GetFeatureEnabledState(
+      mojom::FeaturePolicyFeature::kUsb);
 }
 
 void USB::Trace(blink::Visitor* visitor) {

@@ -13,39 +13,34 @@ class WindowsSDKApi(recipe_api.RecipeApi):
   def __init__(self, sdk_properties, *args, **kwargs):
     super(WindowsSDKApi, self).__init__(*args, **kwargs)
 
-    self._sdk_properties = sdk_properties
+    self._sdk_package = sdk_properties['sdk_package']
+    self._sdk_version = sdk_properties['sdk_version']
 
   @contextmanager
-  def __call__(self, path=None, version=None, enabled=True):
-    """Setups the SDK environment when enabled.
+  def __call__(self):
+    """Setups the Windows SDK environment.
 
-    Args:
-      path (path): Path to a directory where to install the SDK
-        (default is '[start_dir]/cipd/windows_sdk')
-      version (str): CIPD instance ID, tag or ref of the SDK
-        (default is set via $infra/windows_sdk.version property)
-      enabled (bool): Whether the SDK should be used or not.
+    This call is a no-op on non-Windows platforms.
 
     Raises:
         StepFailure or InfraFailure.
     """
-    if enabled:
-      sdk_dir = self._ensure_sdk(
-          path or self.m.path['start_dir'].join('cipd', 'windows_sdk'),
-          version or self._sdk_properties['version'])
-      try:
-        with self.m.context(**self._sdk_env(sdk_dir)):
-          yield
-      finally:
-        if self.m.platform.is_win:
-          # cl.exe automatically starts background mspdbsrv.exe daemon which
-          # needs to be manually stopped so Swarming can tidy up after itself.
-          self.m.step('taskkill mspdbsrv',
-                      ['taskkill.exe', '/f', '/t', '/im', 'mspdbsrv.exe'])
-    else:
+    if not self.m.platform.is_win:
       yield
+      return
 
-  def _ensure_sdk(self, sdk_dir, sdk_version):
+    try:
+      with self.m.context(infra_steps=True):
+        sdk_dir = self._ensure_sdk()
+      with self.m.context(**self._sdk_env(sdk_dir)):
+        yield
+    finally:
+      # cl.exe automatically starts background mspdbsrv.exe daemon which
+      # needs to be manually stopped so Swarming can tidy up after itself.
+      self.m.step('taskkill mspdbsrv',
+                  ['taskkill.exe', '/f', '/t', '/im', 'mspdbsrv.exe'])
+
+  def _ensure_sdk(self):
     """Ensures the Windows SDK CIPD package is installed.
 
     Returns the directory where the SDK package has been installed.
@@ -54,11 +49,11 @@ class WindowsSDKApi(recipe_api.RecipeApi):
       path (path): Path to a directory.
       version (str): CIPD instance ID, tag or ref.
     """
-    with self.m.context(infra_steps=True):
-      pkgs = self.m.cipd.EnsureFile()
-      pkgs.add_package('chrome_internal/third_party/sdk/windows', sdk_version)
-      self.m.cipd.ensure(sdk_dir, pkgs)
-      return sdk_dir
+    sdk_dir = self.m.path['cache'].join('windows_sdk')
+    pkgs = self.m.cipd.EnsureFile()
+    pkgs.add_package(self._sdk_package, self._sdk_version)
+    self.m.cipd.ensure(sdk_dir, pkgs)
+    return sdk_dir
 
   def _sdk_env(self, sdk_dir):
     """Constructs the environment for the SDK.

@@ -20,10 +20,6 @@ class NavigationHandle;
 class RenderViewHost;
 }  // namespace content
 
-namespace thumbnails {
-class ThumbnailService;
-}  // namespace thumbnails
-
 class ThumbnailTabHelper
     : public content::RenderWidgetHostObserver,
       public content::WebContentsObserver,
@@ -98,8 +94,6 @@ class ThumbnailTabHelper
   // Called when the current tab gets hidden.
   void TabHidden();
 
-  scoped_refptr<thumbnails::ThumbnailService> GetThumbnailService();
-
   static void LogThumbnailingOutcome(TriggerReason trigger, Outcome outcome);
 
   ScopedObserver<content::RenderWidgetHost, content::RenderWidgetHostObserver>
@@ -118,6 +112,8 @@ class ThumbnailTabHelper
   base::TimeTicks copy_from_surface_start_time_;
 
   base::WeakPtrFactory<ThumbnailTabHelper> weak_factory_;
+
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
 
   DISALLOW_COPY_AND_ASSIGN(ThumbnailTabHelper);
 };

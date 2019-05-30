@@ -14,7 +14,7 @@
 #include "content/public/browser/restore_type.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/transferrable_url_loader.mojom.h"
-#include "net/base/host_port_pair.h"
+#include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_info.h"
 #include "services/network/public/cpp/resource_request_body.h"
@@ -102,7 +102,7 @@ class CONTENT_EXPORT NavigationHandle {
   virtual RenderFrameHost* GetParentFrame() = 0;
 
   // The WebContents the navigation is taking place in.
-  WebContents* GetWebContents();
+  virtual WebContents* GetWebContents();
 
   // The time the navigation started, recorded either in the renderer or in the
   // browser process. Corresponds to Navigation Timing API.
@@ -173,9 +173,11 @@ class CONTENT_EXPORT NavigationHandle {
   virtual net::Error GetNetErrorCode() = 0;
 
   // Returns the RenderFrameHost this navigation is committing in.  The
-  // RenderFrameHost returned will be the final host for the navigation.  This
-  // can only be accessed after a response has been delivered for processing,
-  // or after the navigation fails with an error page.
+  // RenderFrameHost returned will be the final host for the navigation. (Use
+  // WebContentsObserver::RenderFrameHostChanged() to observe RenderFrameHost
+  // changes that occur during navigation.) This can only be accessed after a
+  // response has been delivered for processing, or after the navigation fails
+  // with an error page.
   virtual RenderFrameHost* GetRenderFrameHost() = 0;
 
   // Whether the navigation happened without changing document. Examples of
@@ -230,10 +232,21 @@ class CONTENT_EXPORT NavigationHandle {
   virtual const GURL& GetPreviousURL() = 0;
 
   // Returns the remote address of the socket which fetched this resource.
-  virtual net::HostPortPair GetSocketAddress() = 0;
+  virtual net::IPEndPoint GetSocketAddress() = 0;
 
   // Returns the headers used for this request.
   virtual const net::HttpRequestHeaders& GetRequestHeaders() = 0;
+
+  // Remove a request's header. If the header is not present, it has no effect.
+  // Must be called during a redirect.
+  virtual void RemoveRequestHeader(const std::string& header_name) = 0;
+
+  // Set a request's header. If the header is already present, its value is
+  // overwritten. When modified during a navigation start, the headers will be
+  // applied to the initial network request. When modified during a redirect,
+  // the headers will be applied to the redirected request.
+  virtual void SetRequestHeader(const std::string& header_name,
+                                const std::string& header_value) = 0;
 
   // Returns the response headers for the request, or nullptr if there aren't
   // any response headers or they have not been received yet. The response
@@ -251,7 +264,7 @@ class CONTENT_EXPORT NavigationHandle {
   // Returns the SSLInfo for a request that succeeded or failed due to a
   // certificate error. In the case of other request failures or of a non-secure
   // scheme, returns an empty object.
-  virtual const net::SSLInfo& GetSSLInfo() = 0;
+  virtual const base::Optional<net::SSLInfo> GetSSLInfo() = 0;
 
   // Returns the ID of the URLRequest associated with this navigation. Can only
   // be called from NavigationThrottle::WillProcessResponse and
@@ -270,19 +283,26 @@ class CONTENT_EXPORT NavigationHandle {
   // Returns true if this navigation was initiated by a form submission.
   virtual bool IsFormSubmission() = 0;
 
+  // Returns true if the target is an inner response of a signed exchange.
+  virtual bool IsSignedExchangeInnerResponse() = 0;
+
+  // Returns true if the navigation response was cached.
+  virtual bool WasResponseCached() = 0;
+
+  // Returns the proxy server used for this navigation, if any.
+  virtual const net::ProxyServer& GetProxyServer() = 0;
+
+  // Returns the value of the hrefTranslate attribute if this navigation was
+  // initiated from a link that had that attribute set.
+  virtual const std::string& GetHrefTranslate() = 0;
+
+  // Returns, if available, the origin of the document that has initiated the
+  // navigation for this NavigationHandle.
+  virtual const base::Optional<url::Origin>& GetInitiatorOrigin() = 0;
+
   // Testing methods ----------------------------------------------------------
   //
   // The following methods should be used exclusively for writing unit tests.
-
-  static std::unique_ptr<NavigationHandle> CreateNavigationHandleForTesting(
-      const GURL& url,
-      RenderFrameHost* render_frame_host,
-      bool committed = false,
-      net::Error error = net::OK,
-      bool is_same_document = false,
-      bool is_post = false,
-      ui::PageTransition transition = ui::PAGE_TRANSITION_LINK,
-      bool is_form_submission = false);
 
   // Registers a NavigationThrottle for tests. The throttle can
   // modify the request, pause the request or cancel the request. This will
@@ -293,35 +313,6 @@ class CONTENT_EXPORT NavigationHandle {
   // ordering of the throttles.
   virtual void RegisterThrottleForTesting(
       std::unique_ptr<NavigationThrottle> navigation_throttle) = 0;
-
-  // Simulates the network request starting.
-  virtual NavigationThrottle::ThrottleCheckResult
-  CallWillStartRequestForTesting() = 0;
-
-  // Simulates the network request being redirected.
-  virtual NavigationThrottle::ThrottleCheckResult
-  CallWillRedirectRequestForTesting(const GURL& new_url,
-                                    bool new_method_is_post,
-                                    const GURL& new_referrer_url,
-                                    bool new_is_external_protocol) = 0;
-
-  // Simulates the network request failing.
-  virtual NavigationThrottle::ThrottleCheckResult CallWillFailRequestForTesting(
-      RenderFrameHost* render_frame_host,
-      base::Optional<net::SSLInfo> ssl_info) = 0;
-
-  // Simulates the reception of the network response.
-  virtual NavigationThrottle::ThrottleCheckResult
-  CallWillProcessResponseForTesting(
-      RenderFrameHost* render_frame_host,
-      const std::string& raw_response_headers) = 0;
-
-  // Simulates the navigation being committed.
-  virtual void CallDidCommitNavigationForTesting(const GURL& url) = 0;
-
-  // Simulates the navigation resuming. Most callers should just let the
-  // deferring NavigationThrottle do the resuming.
-  virtual void CallResumeForTesting() = 0;
 
   // Returns whether this navigation is currently deferred.
   virtual bool IsDeferredForTesting() = 0;

@@ -12,10 +12,6 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/modules/app_banner/before_install_prompt_event.h"
-#include "third_party/blink/renderer/platform/weborigin/kurl.h"
-#include "third_party/blink/renderer/platform/weborigin/referrer.h"
-#include "third_party/blink/renderer/platform/weborigin/security_policy.h"
-#include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 
 namespace blink {
 
@@ -26,8 +22,10 @@ void AppBannerController::BindMojoRequest(
     mojom::blink::AppBannerControllerRequest request) {
   DCHECK(frame);
 
+  // See https://bit.ly/2S0zRAS for task types.
   mojo::MakeStrongBinding(std::make_unique<AppBannerController>(*frame),
-                          std::move(request));
+                          std::move(request),
+                          frame->GetTaskRunner(TaskType::kMiscPlatformAPI));
 }
 
 void AppBannerController::BannerPromptRequest(
@@ -36,25 +34,21 @@ void AppBannerController::BannerPromptRequest(
     const Vector<String>& platforms,
     bool require_gesture,
     BannerPromptRequestCallback callback) {
-  if (!frame_ || !frame_->GetDocument()) {
-    std::move(callback).Run(mojom::blink::AppBannerPromptReply::NONE, "");
+  // TODO(hajimehoshi): Add tests for the case the frame is detached.
+  if (!frame_ || !frame_->GetDocument() || !frame_->IsAttached()) {
+    std::move(callback).Run(mojom::blink::AppBannerPromptReply::NONE);
     return;
   }
 
   mojom::AppBannerPromptReply reply =
       frame_->DomWindow()->DispatchEvent(*BeforeInstallPromptEvent::Create(
-          EventTypeNames::beforeinstallprompt, *frame_, std::move(service_ptr),
-          std::move(event_request), platforms, require_gesture)) ==
-              DispatchEventResult::kNotCanceled
+          event_type_names::kBeforeinstallprompt, *frame_,
+          std::move(service_ptr), std::move(event_request), platforms,
+          require_gesture)) == DispatchEventResult::kNotCanceled
           ? mojom::AppBannerPromptReply::NONE
           : mojom::AppBannerPromptReply::CANCEL;
 
-  AtomicString referrer = SecurityPolicy::GenerateReferrer(
-                              frame_->GetDocument()->GetReferrerPolicy(),
-                              KURL(), frame_->GetDocument()->OutgoingReferrer())
-                              .referrer;
-
-  std::move(callback).Run(reply, referrer.IsNull() ? g_empty_string : referrer);
+  std::move(callback).Run(reply);
 }
 
 }  // namespace blink

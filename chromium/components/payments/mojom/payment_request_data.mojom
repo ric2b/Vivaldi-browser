@@ -17,15 +17,6 @@ struct PaymentAddress {
   string dependent_locality;
   string postal_code;
   string sorting_code;
-
-  // Optional shortest ISO 639 language code. Two or three lower case ASCII
-  // letters.
-  string language_code;
-
-  // Optional ISO 15924 script code. Four ASCII letters. The first letter is
-  // upper case; the rest are lower case.
-  string script_code;
-
   string organization;
   string recipient;
   string phone;
@@ -49,13 +40,13 @@ struct PaymentCurrencyAmount {
 // the browser process when calling retry() method in JavaScript. It contains
 // merchant-defined error message strings.
 struct PaymentValidationErrors {
-  PayerErrorFields payer;
+  PayerErrors payer;
   AddressErrors shipping_address;
 };
 
-// The |PayerErrorFields| is used to represent validation errors with one or
+// The |PayerErrors| is used to represent validation errors with one or
 // more payer details.
-struct PayerErrorFields {
+struct PayerErrors {
   string email;
   string name;
   string phone;
@@ -68,12 +59,10 @@ struct AddressErrors {
   string city;
   string country;
   string dependent_locality;
-  string language_code;
   string organization;
   string phone;
   string postal_code;
   string recipient;
   string region;
-  string region_code;
   string sorting_code;
 };

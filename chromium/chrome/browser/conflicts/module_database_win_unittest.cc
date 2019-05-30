@@ -4,14 +4,10 @@
 
 #include "chrome/browser/conflicts/module_database_win.h"
 
-#include <algorithm>
 #include <memory>
-#include <vector>
 
 #include "base/bind.h"
 #include "base/task/post_task.h"
-#include "base/task/task_scheduler/task_scheduler.h"
-#include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/conflicts/module_database_observer_win.h"
@@ -34,9 +30,6 @@ constexpr size_t kSize2 = 20 * 4096;
 constexpr uint32_t kTime1 = 0xDEADBEEF;
 constexpr uint32_t kTime2 = 0xBAADF00D;
 
-constexpr uintptr_t kGoodAddress1 = 0x04000000u;
-constexpr uintptr_t kGoodAddress2 = 0x05000000u;
-
 }  // namespace
 
 class ModuleDatabaseTest : public testing::Test {
@@ -44,34 +37,35 @@ class ModuleDatabaseTest : public testing::Test {
   ModuleDatabaseTest()
       : dll1_(kDll1),
         dll2_(kDll2),
+        test_browser_thread_bundle_(
+            base::test::ScopedTaskEnvironment::MainThreadType::UI_MOCK_TIME),
         scoped_testing_local_state_(TestingBrowserProcess::GetGlobal()),
-        module_database_(base::SequencedTaskRunnerHandle::Get()) {}
+        module_database_(std::make_unique<ModuleDatabase>(
+            base::SequencedTaskRunnerHandle::Get())) {}
 
-  void TearDown() override {
-    // Give work on background threads a chance run, as it may want to use
-    // |mock_time_task_runner_|, which gets destroyed before
-    // |test_browser_thread_bundle_|
-    test_browser_thread_bundle_.RunUntilIdle();
+  ~ModuleDatabaseTest() override {
+    module_database_ = nullptr;
+
+    // Clear the outstanding delayed tasks that were posted by the
+    // ModuleDatabase instance.
+    test_browser_thread_bundle_.FastForwardUntilNoTasksRemain();
   }
 
   const ModuleDatabase::ModuleMap& modules() {
-    return module_database_.modules_;
+    return module_database_->modules_;
   }
 
-  ModuleDatabase* module_database() { return &module_database_; }
+  ModuleDatabase* module_database() { return module_database_.get(); }
 
   static uint32_t ProcessTypeToBit(content::ProcessType process_type) {
     return ModuleDatabase::ProcessTypeToBit(process_type);
   }
 
-  void RunSchedulerUntilIdle() {
-    base::TaskScheduler::GetInstance()->FlushForTesting();
-    mock_time_task_runner_->RunUntilIdle();
-  }
+  void RunSchedulerUntilIdle() { test_browser_thread_bundle_.RunUntilIdle(); }
 
   void FastForwardToIdleTimer() {
-    RunSchedulerUntilIdle();
-    mock_time_task_runner_->FastForwardBy(ModuleDatabase::kIdleTimeout);
+    test_browser_thread_bundle_.FastForwardBy(ModuleDatabase::kIdleTimeout);
+    test_browser_thread_bundle_.RunUntilIdle();
   }
 
   const base::FilePath dll1_;
@@ -81,11 +75,9 @@ class ModuleDatabaseTest : public testing::Test {
   // Must be before |module_database_|.
   content::TestBrowserThreadBundle test_browser_thread_bundle_;
 
-  base::ScopedMockTimeMessageLoopTaskRunner mock_time_task_runner_;
-
   ScopedTestingLocalState scoped_testing_local_state_;
 
-  ModuleDatabase module_database_;
+  std::unique_ptr<ModuleDatabase> module_database_;
 
   DISALLOW_COPY_AND_ASSIGN(ModuleDatabaseTest);
 };
@@ -93,16 +85,14 @@ class ModuleDatabaseTest : public testing::Test {
 TEST_F(ModuleDatabaseTest, TasksAreBounced) {
   // Run a task on the current thread. This should not be bounced, so their
   // results should be immediately available.
-  module_database()->OnModuleLoad(kProcessType1, dll1_, kSize1, kTime1,
-                                  kGoodAddress1);
+  module_database()->OnModuleLoad(kProcessType1, dll1_, kSize1, kTime1);
   EXPECT_EQ(1u, modules().size());
 
   // Run similar tasks on another thread with another module. These should be
   // bounced.
-  base::PostTask(FROM_HERE,
-                 base::Bind(&ModuleDatabase::OnModuleLoad,
-                            base::Unretained(module_database()), kProcessType2,
-                            dll2_, kSize1, kTime1, kGoodAddress1));
+  base::PostTask(FROM_HERE, base::Bind(&ModuleDatabase::OnModuleLoad,
+                                       base::Unretained(module_database()),
+                                       kProcessType2, dll2_, kSize1, kTime1));
   EXPECT_EQ(1u, modules().size());
   RunSchedulerUntilIdle();
   EXPECT_EQ(2u, modules().size());
@@ -112,8 +102,7 @@ TEST_F(ModuleDatabaseTest, DatabaseIsConsistent) {
   EXPECT_EQ(0u, modules().size());
 
   // Load a module.
-  module_database()->OnModuleLoad(kProcessType1, dll1_, kSize1, kTime1,
-                                  kGoodAddress1);
+  module_database()->OnModuleLoad(kProcessType1, dll1_, kSize1, kTime1);
   EXPECT_EQ(1u, modules().size());
 
   // Ensure that the process and module sets are up to date.
@@ -123,8 +112,7 @@ TEST_F(ModuleDatabaseTest, DatabaseIsConsistent) {
             m1->second.process_types);
 
   // Provide a redundant load message for that module.
-  module_database()->OnModuleLoad(kProcessType1, dll1_, kSize1, kTime1,
-                                  kGoodAddress1);
+  module_database()->OnModuleLoad(kProcessType1, dll1_, kSize1, kTime1);
   EXPECT_EQ(1u, modules().size());
 
   // Ensure that the process and module sets haven't changed.
@@ -133,8 +121,7 @@ TEST_F(ModuleDatabaseTest, DatabaseIsConsistent) {
             m1->second.process_types);
 
   // Load a second module into the process.
-  module_database()->OnModuleLoad(kProcessType1, dll2_, kSize2, kTime2,
-                                  kGoodAddress2);
+  module_database()->OnModuleLoad(kProcessType1, dll2_, kSize2, kTime2);
   EXPECT_EQ(2u, modules().size());
 
   // Ensure that the process and module sets are up to date.
@@ -144,8 +131,7 @@ TEST_F(ModuleDatabaseTest, DatabaseIsConsistent) {
             m2->second.process_types);
 
   // Load the dummy.dll in the second process as well.
-  module_database()->OnModuleLoad(kProcessType2, dll1_, kSize1, kTime1,
-                                  kGoodAddress1);
+  module_database()->OnModuleLoad(kProcessType2, dll1_, kSize1, kTime1);
   EXPECT_EQ(ProcessTypeToBit(content::PROCESS_TYPE_BROWSER) |
                 ProcessTypeToBit(content::PROCESS_TYPE_RENDERER),
             m1->second.process_types);
@@ -196,8 +182,7 @@ TEST_F(ModuleDatabaseTest, Observers) {
   module_database()->AddObserver(&before_load_observer);
   EXPECT_EQ(0, before_load_observer.new_module_count());
 
-  module_database()->OnModuleLoad(kProcessType1, dll1_, kSize1, kTime1,
-                                  kGoodAddress1);
+  module_database()->OnModuleLoad(kProcessType1, dll1_, kSize1, kTime1);
   RunSchedulerUntilIdle();
 
   EXPECT_EQ(1, before_load_observer.new_module_count());
@@ -231,8 +216,7 @@ TEST_F(ModuleDatabaseTest, OnKnownModuleLoaded) {
   EXPECT_EQ(0, dummy_observer.known_module_loaded_count());
 
   // Pretend the shell extension loads.
-  module_database()->OnModuleLoad(kProcessType1, dll1_, kSize1, kTime1,
-                                  kGoodAddress1);
+  module_database()->OnModuleLoad(kProcessType1, dll1_, kSize1, kTime1);
   RunSchedulerUntilIdle();
 
   EXPECT_EQ(1, dummy_observer.new_module_count());
@@ -255,8 +239,7 @@ TEST_F(ModuleDatabaseTest, IsIdle) {
   EXPECT_FALSE(module_database()->IsIdle());
 
   // A load module event starts the timer.
-  module_database()->OnModuleLoad(kProcessType1, dll1_, kSize1, kTime1,
-                                  kGoodAddress1);
+  module_database()->OnModuleLoad(kProcessType1, dll1_, kSize1, kTime1);
   EXPECT_FALSE(module_database()->IsIdle());
 
   FastForwardToIdleTimer();
@@ -277,8 +260,7 @@ TEST_F(ModuleDatabaseTest, IsIdle) {
   module_database()->RemoveObserver(&is_idle_observer);
 
   // Make the ModuleDabatase busy.
-  module_database()->OnModuleLoad(kProcessType2, dll2_, kSize2, kTime2,
-                                  kGoodAddress2);
+  module_database()->OnModuleLoad(kProcessType2, dll2_, kSize2, kTime2);
   EXPECT_FALSE(module_database()->IsIdle());
 
   // Adding an observer while busy doesn't.
@@ -302,8 +284,7 @@ TEST_F(ModuleDatabaseTest, WaitUntilRegisteredModulesEnumerated) {
   module_database()->AddObserver(&before_load_observer);
   EXPECT_EQ(0, before_load_observer.new_module_count());
 
-  module_database()->OnModuleLoad(kProcessType1, dll1_, kSize1, kTime1,
-                                  kGoodAddress1);
+  module_database()->OnModuleLoad(kProcessType1, dll1_, kSize1, kTime1);
   FastForwardToIdleTimer();
 
   // Idle state is prevented.

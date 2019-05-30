@@ -6,6 +6,7 @@
 
 #include "base/debug/alias.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/heap/process_heap.h"
 
 namespace blink {
@@ -181,7 +182,7 @@ void CrossThreadPersistentRegion::PrepareForThreadStateTermination(
           reinterpret_cast<CrossThreadPersistent<DummyGCBase>*>(
               slots->slot_[i].Self());
       DCHECK(persistent);
-      void* raw_object = persistent->AtomicGet();
+      void* raw_object = persistent->Get();
       if (!raw_object)
         continue;
       BasePage* page = PageFromObject(raw_object);
@@ -198,7 +199,7 @@ void CrossThreadPersistentRegion::PrepareForThreadStateTermination(
 #if defined(ADDRESS_SANITIZER)
 void CrossThreadPersistentRegion::UnpoisonCrossThreadPersistents() {
 #if DCHECK_IS_ON()
-  DCHECK(ProcessHeap::CrossThreadPersistentMutex().Locked());
+  ProcessHeap::CrossThreadPersistentMutex().AssertAcquired();
 #endif
   int persistent_count = 0;
   for (PersistentNodeSlots* slots = persistent_region_.slots_; slots;

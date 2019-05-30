@@ -26,7 +26,7 @@ void ProcessAcceleratorNow(const ui::Accelerator& accelerator) {
 views::ViewsDelegate::ProcessMenuAcceleratorResult
 ChromeViewsDelegate::ProcessAcceleratorWhileMenuShowing(
     const ui::Accelerator& accelerator) {
-  DCHECK(base::MessageLoopForUI::IsCurrent());
+  DCHECK(base::MessageLoopCurrentForUI::IsSet());
 
   // Early return because mash chrome does not have access to ash::Shell
   if (features::IsMultiProcessMash())
@@ -40,7 +40,7 @@ ChromeViewsDelegate::ProcessAcceleratorWhileMenuShowing(
   if (accelerator_controller->ShouldCloseMenuAndRepostAccelerator(
           accelerator)) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(ProcessAcceleratorNow, accelerator));
+        FROM_HERE, base::BindOnce(ProcessAcceleratorNow, accelerator));
     return views::ViewsDelegate::ProcessMenuAcceleratorResult::CLOSE_MENU;
   }
 

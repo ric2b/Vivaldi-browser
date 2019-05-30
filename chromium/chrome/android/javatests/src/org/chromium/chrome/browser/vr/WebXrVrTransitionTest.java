@@ -43,13 +43,14 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.vr.rules.VrSettingsFile;
 import org.chromium.chrome.browser.vr.rules.XrActivityRestriction;
+import org.chromium.chrome.browser.vr.util.NativeUiUtils;
 import org.chromium.chrome.browser.vr.util.NfcSimUtils;
 import org.chromium.chrome.browser.vr.util.VrSettingsServiceUtils;
 import org.chromium.chrome.browser.vr.util.VrTestRuleUtils;
 import org.chromium.chrome.browser.vr.util.VrTransitionUtils;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
-import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -484,5 +485,25 @@ public class WebXrVrTransitionTest {
         VrTransitionUtils.forceExitVr();
         mWebXrVrTestFramework.executeStepAndWait("stepAfterImmersive()");
         mWebXrVrTestFramework.endTest();
+    }
+
+    /**
+     * Tests that the "Press app button to exit" toast appears when entering an immersive WebXR for
+     * VR session with Daydream View paired.
+     */
+    @Test
+    @MediumTest
+    @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
+    @CommandLineFlags
+            .Remove({"enable-webvr"})
+            @CommandLineFlags.Add({"enable-features=WebXR"})
+            @XrActivityRestriction({XrActivityRestriction.SupportedActivity.CTA})
+            public void testAppButtonExitToast() throws InterruptedException {
+        mWebXrVrTestFramework.loadUrlAndAwaitInitialization(
+                WebXrVrTestFramework.getFileUrlForHtmlTestFile("generic_webxr_page"),
+                PAGE_LOAD_TIMEOUT_S);
+        mWebXrVrTestFramework.enterSessionWithUserGestureOrFail();
+        NativeUiUtils.performActionAndWaitForVisibilityStatus(
+                UserFriendlyElementName.APP_BUTTON_EXIT_TOAST, true /* visible*/, () -> {});
     }
 }

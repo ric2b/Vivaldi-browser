@@ -48,7 +48,7 @@ class CONTENT_EXPORT CSPContext {
   // Returns true when the request can proceed, false otherwise.
   bool IsAllowedByCsp(CSPDirective::Name directive_name,
                       const GURL& url,
-                      bool is_redirect,
+                      bool has_followed_redirect,
                       bool is_response_check,
                       const SourceLocation& source_location,
                       CheckCSPDisposition check_csp_disposition,
@@ -92,7 +92,7 @@ class CONTENT_EXPORT CSPContext {
   // without the round trip in the renderer process.
   // See https://crbug.com/721329
   virtual void SanitizeDataForUseInCspViolation(
-      bool is_redirect,
+      bool has_followed_redirect,
       CSPDirective::Name directive,
       GURL* blocked_url,
       SourceLocation* source_location) const;
@@ -114,7 +114,7 @@ struct CONTENT_EXPORT CSPViolationParams {
                      const std::vector<std::string>& report_endpoints,
                      bool use_reporting_api,
                      const std::string& header,
-                     const blink::WebContentSecurityPolicyType& disposition,
+                     const blink::mojom::ContentSecurityPolicyType& disposition,
                      bool after_redirect,
                      const SourceLocation& source_location);
   CSPViolationParams(const CSPViolationParams& other);
@@ -147,7 +147,7 @@ struct CONTENT_EXPORT CSPViolationParams {
 
   // Each policy has an associated disposition, which is either "enforce" or
   // "report".
-  blink::WebContentSecurityPolicyType disposition;
+  blink::mojom::ContentSecurityPolicyType disposition;
 
   // Whether or not the violation happens after a redirect.
   bool after_redirect;

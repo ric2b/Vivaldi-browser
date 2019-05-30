@@ -17,17 +17,23 @@ class SVGResource;
 class CSSURIValue : public CSSValue {
  public:
   static CSSURIValue* Create(const String& relative_url, const KURL& url) {
-    return new CSSURIValue(AtomicString(relative_url), url);
+    return MakeGarbageCollected<CSSURIValue>(AtomicString(relative_url), url);
   }
   static CSSURIValue* Create(const AtomicString& absolute_url) {
-    return new CSSURIValue(absolute_url, absolute_url);
+    return MakeGarbageCollected<CSSURIValue>(absolute_url, absolute_url);
   }
+
+  CSSURIValue(const AtomicString&, const KURL&);
+  CSSURIValue(const AtomicString& relative_url,
+              const AtomicString& absolute_url);
   ~CSSURIValue();
 
   SVGResource* EnsureResourceReference() const;
   void ReResolveUrl(const Document&) const;
 
-  const String& Value() const { return relative_url_; }
+  const AtomicString& ValueForSerialization() const {
+    return is_local_ ? relative_url_ : absolute_url_;
+  }
 
   String CustomCSSText() const;
 
@@ -39,10 +45,6 @@ class CSSURIValue : public CSSValue {
   void TraceAfterDispatch(blink::Visitor*);
 
  private:
-  CSSURIValue(const AtomicString&, const KURL&);
-  CSSURIValue(const AtomicString& relative_url,
-              const AtomicString& absolute_url);
-
   KURL AbsoluteUrl() const;
 
   AtomicString relative_url_;

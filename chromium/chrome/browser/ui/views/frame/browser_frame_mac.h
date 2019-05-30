@@ -15,7 +15,6 @@ class BrowserFrame;
 class BrowserView;
 @class BrowserWindowTouchBarController;
 @class BrowserWindowTouchBarViewsDelegate;
-@class ChromeCommandDispatcherDelegate;
 
 ////////////////////////////////////////////////////////////////////////////////
 //  BrowserFrameMac is a NativeWidgetMac subclass that provides
@@ -26,12 +25,15 @@ class BrowserFrameMac : public views::NativeWidgetMac,
  public:
   BrowserFrameMac(BrowserFrame* browser_frame, BrowserView* browser_view);
 
+  API_AVAILABLE(macos(10.12.2))
   BrowserWindowTouchBarController* GetTouchBarController() const;
 
   // Overridden from views::NativeWidgetMac:
-  int SheetPositionY() override;
+  int32_t SheetOffsetY() override;
+  void GetWindowFrameTitlebarHeight(bool* override_titlebar_height,
+                                    float* titlebar_height) override;
+  void OnFocusWindowToolbar() override;
   void OnWindowFullscreenStateChange() override;
-  void InitNativeWidget(const views::Widget::InitParams& params) override;
 
   // Overridden from NativeBrowserFrame:
   views::Widget::InitParams GetWidgetParams() override;
@@ -49,17 +51,27 @@ class BrowserFrameMac : public views::NativeWidgetMac,
   ~BrowserFrameMac() override;
 
   // Overridden from views::NativeWidgetMac:
+  void ValidateUserInterfaceItem(
+      int32_t command,
+      views_bridge_mac::mojom::ValidateUserInterfaceItemResult* result)
+      override;
+  bool ExecuteCommand(int32_t command,
+                      WindowOpenDisposition window_open_disposition,
+                      bool is_before_first_responder) override;
+  void PopulateCreateWindowParams(
+      const views::Widget::InitParams& widget_params,
+      views_bridge_mac::mojom::CreateWindowParams* params) override;
   NativeWidgetMacNSWindow* CreateNSWindow(
-      const views::Widget::InitParams& params) override;
-  void OnWindowDestroying(NSWindow* window) override;
+      const views_bridge_mac::mojom::CreateWindowParams* params) override;
+  views::BridgeFactoryHost* GetBridgeFactoryHost() override;
+  void OnWindowInitialized() override;
+  void OnWindowDestroying(gfx::NativeWindow window) override;
 
   // Overridden from NativeBrowserFrame:
   int GetMinimizeButtonOffset() const override;
 
  private:
   BrowserView* browser_view_;  // Weak. Our ClientView.
-  base::scoped_nsobject<ChromeCommandDispatcherDelegate>
-      command_dispatcher_delegate_;
   base::scoped_nsobject<BrowserWindowTouchBarViewsDelegate> touch_bar_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserFrameMac);

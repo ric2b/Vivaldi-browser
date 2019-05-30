@@ -29,7 +29,7 @@
 #include "third_party/blink/renderer/platform/fonts/font_fallback_list.h"
 #include "third_party/blink/renderer/platform/fonts/font_fallback_priority.h"
 #include "third_party/blink/renderer/platform/fonts/simple_font_data.h"
-#include "third_party/blink/renderer/platform/layout_unit.h"
+#include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/text/tab_size.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
@@ -45,6 +45,7 @@
 namespace cc {
 class PaintCanvas;
 class PaintFlags;
+struct NodeHolder;
 }  // namespace cc
 
 namespace blink {
@@ -90,9 +91,21 @@ class PLATFORM_EXPORT Font {
                 float device_scale_factor,
                 const cc::PaintFlags&) const;
   void DrawText(cc::PaintCanvas*,
+                const TextRunPaintInfo&,
+                const FloatPoint&,
+                float device_scale_factor,
+                const cc::NodeHolder&,
+                const cc::PaintFlags&) const;
+  void DrawText(cc::PaintCanvas*,
                 const NGTextFragmentPaintInfo&,
                 const FloatPoint&,
                 float device_scale_factor,
+                const cc::PaintFlags&) const;
+  void DrawText(cc::PaintCanvas*,
+                const NGTextFragmentPaintInfo&,
+                const FloatPoint&,
+                float device_scale_factor,
+                const cc::NodeHolder&,
                 const cc::PaintFlags&) const;
   bool DrawBidiText(cc::PaintCanvas*,
                     const TextRunPaintInfo&,
@@ -147,7 +160,7 @@ class PLATFORM_EXPORT Font {
                         BreakGlyphsOption) const;
   FloatRect SelectionRectForText(const TextRun&,
                                  const FloatPoint&,
-                                 int h,
+                                 float height,
                                  int from = 0,
                                  int to = -1) const;
   FloatRect BoundingBox(const TextRun&, int from = 0, int to = -1) const;
@@ -171,6 +184,10 @@ class PLATFORM_EXPORT Font {
     return (PrimaryFont() ? PrimaryFont()->SpaceWidth() : 0) +
            GetFontDescription().LetterSpacing();
   }
+
+  // Compute the base tab width; the width when its position is zero.
+  float TabWidth(const SimpleFontData*, const TabSize&) const;
+  // Compute the tab width for the specified |position|.
   float TabWidth(const SimpleFontData*, const TabSize&, float position) const;
   float TabWidth(const TabSize& tab_size, float position) const {
     return TabWidth(PrimaryFont(), tab_size, position);
@@ -251,13 +268,17 @@ inline FontSelector* Font::GetFontSelector() const {
 }
 
 inline float Font::TabWidth(const SimpleFontData* font_data,
-                            const TabSize& tab_size,
-                            float position) const {
+                            const TabSize& tab_size) const {
   if (!font_data)
     return GetFontDescription().LetterSpacing();
   float base_tab_width = tab_size.GetPixelSize(font_data->SpaceWidth());
-  if (!base_tab_width)
-    return GetFontDescription().LetterSpacing();
+  return base_tab_width ? base_tab_width : GetFontDescription().LetterSpacing();
+}
+
+inline float Font::TabWidth(const SimpleFontData* font_data,
+                            const TabSize& tab_size,
+                            float position) const {
+  float base_tab_width = TabWidth(font_data, tab_size);
   float distance_to_tab_stop = base_tab_width - fmodf(position, base_tab_width);
 
   // Let the minimum width be the half of the space width so that it's always

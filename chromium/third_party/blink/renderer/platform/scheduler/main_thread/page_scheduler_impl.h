@@ -17,11 +17,12 @@
 #include "base/time/time.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/scheduler/common/throttling/task_queue_throttler.h"
+#include "third_party/blink/renderer/platform/scheduler/common/tracing_helper.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/page_visibility_state.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_lifecycle_state.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
-#include "third_party/blink/renderer/platform/scheduler/util/tracing_helper.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 
 namespace base {
 namespace trace_event {
@@ -76,8 +77,6 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   bool IsExemptFromBudgetBasedThrottling() const override;
   bool HasActiveConnectionForTest() const override;
   bool RequestBeginMainFrameNotExpected(bool new_state) override;
-  void AddVirtualTimeObserver(VirtualTimeObserver*) override;
-  void RemoveVirtualTimeObserver(VirtualTimeObserver*) override;
 
   // Virtual for testing.
   virtual void ReportIntervention(const std::string& message);
@@ -157,6 +156,8 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   };
 
   class PageLifecycleStateTracker {
+    USING_FAST_MALLOC(PageLifecycleStateTracker);
+
    public:
     explicit PageLifecycleStateTracker(PageSchedulerImpl*, PageLifecycleState);
     ~PageLifecycleStateTracker() = default;

@@ -51,9 +51,9 @@ public final class EventConstants {
     public static final String CONTEXTUAL_SUGGESTIONS_OPENED = "contextual_suggestions_opened";
 
     /**
-     * The contextual suggestions bottom sheet was shown in its peeking state.
+     * A contextual suggestion was clicked, opened in a new tab or downloaded.
      */
-    public static final String CONTEXTUAL_SUGGESTIONS_PEEKED = "contextual_suggestions_peeked";
+    public static final String CONTEXTUAL_SUGGESTION_TAKEN = "contextual_suggestion_taken";
 
     /**
      * Screenshot is taken with Chrome in the foreground.
@@ -83,9 +83,19 @@ public final class EventConstants {
     public static final String DATA_SAVER_DETAIL_OPENED = "data_saver_overview_opened";
 
     /**
-     * The download button for a media element was displayed.
+     * The data saver milestone promo was used (tapped).
      */
-    public static final String MEDIA_DOWNLOAD_BUTTON_DISPLAYED = "media_download_button_displayed";
+    public static final String DATA_SAVER_MILESTONE_PROMO_OPENED = "data_saver_milestone_promo";
+
+    /**
+     * The previews verbose status view was opened.
+     */
+    public static final String PREVIEWS_VERBOSE_STATUS_OPENED = "previews_verbose_status_opened";
+
+    /**
+     * A page load used a preview.
+     */
+    public static final String PREVIEWS_PAGE_LOADED = "preview_page_load";
 
     /**
      * Contextual Search panel was opened.
@@ -149,6 +159,9 @@ public final class EventConstants {
 
     /** The pinned homepage tile in MV tiles was clicked. */
     public static final String HOMEPAGE_TILE_CLICKED = "homepage_tile_clicked";
+
+    /** The `Translate` app menu button was clicked. */
+    public static final String TRANSLATE_MENU_BUTTON_CLICKED = "translate_menu_button_clicked";
 
     /**
      * Do not instantiate.

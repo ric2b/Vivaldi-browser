@@ -7,9 +7,9 @@
 
 #include "base/macros.h"
 #include "base/task/sequence_manager/task_time_observer.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/wtf/time.h"
 
 namespace blink {
@@ -32,6 +32,8 @@ class CORE_EXPORT LongTaskDetector final
  public:
   static LongTaskDetector& Instance();
 
+  LongTaskDetector();
+
   void RegisterObserver(LongTaskObserver*);
   void UnregisterObserver(LongTaskObserver*);
 
@@ -41,8 +43,6 @@ class CORE_EXPORT LongTaskDetector final
       base::TimeDelta::FromMilliseconds(50);
 
  private:
-  LongTaskDetector();
-
   // scheduler::TaskTimeObserver implementation
   void WillProcessTask(base::TimeTicks start_time) override {}
   void DidProcessTask(base::TimeTicks start_time,

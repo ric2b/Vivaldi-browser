@@ -40,15 +40,17 @@ var Audits2Service = class {  // eslint-disable-line
    * @return {!Promise<!ReportRenderer.RunnerResult>}
    */
   start(params) {
-    if (Runtime.queryParam('isUnderTest'))
+    if (Runtime.queryParam('isUnderTest')) {
       this._disableLoggingForTest();
+      params.flags.maxWaitForLoad = 2 * 1000;
+    }
 
     self.listenForStatus(message => {
       this.statusUpdate(message[1]);
     });
 
     return Promise.resolve()
-        .then(_ => self.runLighthouseInWorker(this, params.url, {flags: params.flags}, params.categoryIDs))
+        .then(_ => self.runLighthouseInWorker(this, params.url, params.flags, params.categoryIDs))
         .then(/** @type {!ReportRenderer.RunnerResult} */ result => {
           // Keep all artifacts on the result, no trimming
           return result;

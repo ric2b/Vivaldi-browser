@@ -67,9 +67,17 @@
             "type": "string",
             "description": "chrome://thumb/<url> pointing to the stored url of the thumbnail"
           },
+          "partner": {
+            "type": "string",
+            "description": "Partner id for the node. Vivaldi extended property"
+          },
           "speeddial": {
             "type": "boolean",
-            "description": "Boolean variable, stating if a bookmark/folder is a speeddial"
+            "description": "Boolean variable, stating if a folder is a speeddial folder"
+          },
+          "bookmarkbar": {
+            "type": "boolean",
+            "description": "Boolean variable, stating if a folder is a bookmark bar folder"
           },
           "trash": {
             "type": "boolean",
@@ -138,9 +146,19 @@
             "description": "chrome://thumb/<url> pointing to the stored url of the thumbnail. Vivaldi extended property.",
             "optional": true
           },
+          "partner": {
+            "type": "string",
+            "description": "Partner id for the node. Vivaldi extended property",
+            "optional": true
+          },
           "speeddial": {
             "type": "boolean",
-            "description": "Boolean variable, stating if a bookmark/folder is a speeddial. Vivaldi extended property",
+            "description": "Boolean variable, stating if a folder is a speeddial. Vivaldi extended property",
+            "optional": true
+          },
+          "bookmarkbar": {
+            "type": "boolean",
+            "description": "Boolean variable, stating if a folder is a bookmark bar folder. Vivaldi extended property",
             "optional": true
           }
         }
@@ -415,7 +433,15 @@
                 "type": "string",
                 "optional": true
               },
+              "partner": {
+                "type": "string",
+                "optional": true
+              },
               "speeddial": {
+                "type": "boolean",
+                "optional": true
+              },
+              "bookmarkbar": {
                 "type": "boolean",
                 "optional": true
               }
@@ -553,7 +579,23 @@
                 "type": "string",
                 "optional": true
               },
+              "nickname": {
+                "type": "string",
+                "optional": true
+              },
+              "description": {
+                "type": "string",
+                "optional": true
+              },
+              "thumbnail": {
+                "type": "string",
+                "optional": true
+              },
               "speeddial": {
+                "type": "boolean",
+                "optional": true
+              },
+              "bookmarkbar": {
                 "type": "boolean",
                 "optional": true
               }

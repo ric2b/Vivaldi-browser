@@ -60,6 +60,15 @@ void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
     PrefService* prefs = profile->GetPrefs();
     web_prefs->tabs_to_links =
         prefs->GetBoolean(vivaldiprefs::kWebpagesTabFocusesLinks);
+
+    // Mouse gestures with the right button and rocker gestures require that
+    // we show the context menu on mouse up on all platforms, not only on
+    // Windows, to avoid showing it at the start of the gesture.
+    if (prefs->GetBoolean(vivaldiprefs::kMouseGesturesEnabled) ||
+      prefs->GetBoolean(vivaldiprefs::kMouseGesturesRockerGesturesEnabled)) {
+      web_prefs->context_menu_on_mouse_up = true;
+    }
+
 #endif
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     extensions::VivaldiAppHelper* vivaldi_app_helper =

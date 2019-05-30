@@ -11,8 +11,8 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/metrics/histogram.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -48,6 +48,7 @@ WASAPIAudioOutputStream::WASAPIAudioOutputStream(AudioManagerWin* manager,
       opened_(false),
       volume_(1.0),
       packet_size_frames_(0),
+      requested_iaudioclient3_buffer_size_(0),
       packet_size_bytes_(0),
       endpoint_buffer_size_frames_(0),
       device_id_(device_id),
@@ -102,6 +103,18 @@ WASAPIAudioOutputStream::WASAPIAudioOutputStream(AudioManagerWin* manager,
   DVLOG(1) << "Number of milliseconds per packet: "
            << params.GetBufferDuration().InMillisecondsF();
 
+  AudioParameters::HardwareCapabilities hardware_capabilities =
+      params.hardware_capabilities().value_or(
+          AudioParameters::HardwareCapabilities());
+
+  // Only request an explicit buffer size if we are requesting the minimum
+  // supported by the hardware, everything else uses the older IAudioClient API.
+  if (params.frames_per_buffer() ==
+      hardware_capabilities.min_frames_per_buffer) {
+    requested_iaudioclient3_buffer_size_ =
+        hardware_capabilities.min_frames_per_buffer;
+  }
+
   // All events are auto-reset events and non-signaled initially.
 
   // Create the event which the audio engine will signal each time
@@ -149,7 +162,7 @@ bool WASAPIAudioOutputStream::Open() {
     // mode and using event-driven buffer handling.
     hr = CoreAudioUtil::SharedModeInitialize(
         audio_client.Get(), &format_, audio_samples_render_event_.Get(),
-        &endpoint_buffer_size_frames_,
+        requested_iaudioclient3_buffer_size_, &endpoint_buffer_size_frames_,
         communications_device ? &kCommunicationsSessionId : NULL);
     if (FAILED(hr))
       return false;
@@ -394,10 +407,8 @@ void WASAPIAudioOutputStream::Run() {
   // is signaled. An error event can also break the main thread loop.
   while (playing && !error) {
     // Wait for a close-down event, stream-switch event or a new render event.
-    DWORD wait_result = WaitForMultipleObjects(arraysize(wait_array),
-                                               wait_array,
-                                               FALSE,
-                                               INFINITE);
+    DWORD wait_result = WaitForMultipleObjects(base::size(wait_array),
+                                               wait_array, FALSE, INFINITE);
 
     switch (wait_result) {
       case WAIT_OBJECT_0 + 0:

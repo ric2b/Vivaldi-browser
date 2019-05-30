@@ -28,10 +28,10 @@ suite('CrActionMenu', function() {
     document.body.innerHTML = `
       <button id="dots">...</button>
       <cr-action-menu>
-        <button slot="item" class="dropdown-item">Un</button>
-        <hr slot="item">
-        <button slot="item" class="dropdown-item">Dos</button>
-        <button slot="item" class="dropdown-item">Tres</button>
+        <button class="dropdown-item">Un</button>
+        <hr>
+        <button class="dropdown-item">Dos</button>
+        <button class="dropdown-item">Tres</button>
       </cr-action-menu>
     `;
 
@@ -45,8 +45,9 @@ suite('CrActionMenu', function() {
   teardown(function() {
     document.body.style.direction = 'ltr';
 
-    if (dialog.open)
+    if (dialog.open) {
       menu.close();
+    }
   });
 
   function down() {
@@ -57,22 +58,33 @@ suite('CrActionMenu', function() {
     MockInteractions.keyDownOn(menu, 'ArrowUp', [], 'ArrowUp');
   }
 
+  function enter() {
+    MockInteractions.keyDownOn(menu, 'Enter', [], 'Enter');
+  }
+
+  test('close event bubbles', function() {
+    menu.showAt(dots);
+    const whenFired = test_util.eventToPromise('close', menu);
+    menu.close();
+    return whenFired;
+  });
+
   test('hidden or disabled items', function() {
     menu.showAt(dots);
     down();
-    assertEquals(menu.root.activeElement, items[0]);
+    assertEquals(getDeepActiveElement(), items[0]);
 
     menu.close();
     items[0].hidden = true;
     menu.showAt(dots);
     down();
-    assertEquals(menu.root.activeElement, items[1]);
+    assertEquals(getDeepActiveElement(), items[1]);
 
     menu.close();
     items[1].disabled = true;
     menu.showAt(dots);
     down();
-    assertEquals(menu.root.activeElement, items[2]);
+    assertEquals(getDeepActiveElement(), items[2]);
   });
 
   test('focus after down/up arrow', function() {
@@ -80,30 +92,30 @@ suite('CrActionMenu', function() {
 
     // The menu should be focused when shown, but not on any of the items.
     assertEquals(menu, document.activeElement);
-    assertNotEquals(items[0], menu.root.activeElement);
-    assertNotEquals(items[1], menu.root.activeElement);
-    assertNotEquals(items[2], menu.root.activeElement);
+    assertNotEquals(items[0], getDeepActiveElement());
+    assertNotEquals(items[1], getDeepActiveElement());
+    assertNotEquals(items[2], getDeepActiveElement());
 
     down();
-    assertEquals(items[0], menu.root.activeElement);
+    assertEquals(items[0], getDeepActiveElement());
     down();
-    assertEquals(items[1], menu.root.activeElement);
+    assertEquals(items[1], getDeepActiveElement());
     down();
-    assertEquals(items[2], menu.root.activeElement);
+    assertEquals(items[2], getDeepActiveElement());
     down();
-    assertEquals(items[0], menu.root.activeElement);
+    assertEquals(items[0], getDeepActiveElement());
     up();
-    assertEquals(items[2], menu.root.activeElement);
+    assertEquals(items[2], getDeepActiveElement());
     up();
-    assertEquals(items[1], menu.root.activeElement);
+    assertEquals(items[1], getDeepActiveElement());
     up();
-    assertEquals(items[0], menu.root.activeElement);
+    assertEquals(items[0], getDeepActiveElement());
     up();
-    assertEquals(items[2], menu.root.activeElement);
+    assertEquals(items[2], getDeepActiveElement());
 
     items[1].disabled = true;
     up();
-    assertEquals(items[0], menu.root.activeElement);
+    assertEquals(items[0], getDeepActiveElement());
   });
 
   test('pressing up arrow when no focus will focus last item', function() {
@@ -111,28 +123,54 @@ suite('CrActionMenu', function() {
     assertEquals(menu, document.activeElement);
 
     up();
-    assertEquals(items[items.length - 1], menu.root.activeElement);
+    assertEquals(items[items.length - 1], getDeepActiveElement());
   });
 
-  test('can navigate to dynamically added items', function() {
+  test('pressing enter when no focus', function() {
+    if (cr.isWindows || cr.isMac) {
+      return testFocusAfterClosing('Enter');
+    }
+
+    // First item is selected
+    menu.showAt(dots);
+    assertEquals(menu, document.activeElement);
+    enter();
+    assertEquals(items[0], getDeepActiveElement());
+  });
+
+  test('pressing enter when when item has focus', function() {
+    menu.showAt(dots);
+    down();
+    enter();
+    assertEquals(items[0], getDeepActiveElement());
+  });
+
+  test('can navigate to dynamically added items', async function() {
     // Can modify children after attached() and before showAt().
     const item = document.createElement('button');
     item.classList.add('dropdown-item');
-    item.setAttribute('slot', 'item');
     menu.insertBefore(item, items[0]);
     menu.showAt(dots);
+    await PolymerTest.flushTasks();
 
     down();
-    assertEquals(item, menu.root.activeElement);
+    assertEquals(item, getDeepActiveElement());
     down();
-    assertEquals(items[0], menu.root.activeElement);
+    assertEquals(items[0], getDeepActiveElement());
 
     // Can modify children while menu is open.
     menu.removeChild(item);
 
     up();
     // Focus should have wrapped around to final item.
-    assertEquals(items[2], menu.root.activeElement);
+    assertEquals(items[2], getDeepActiveElement());
+  });
+
+  test('close on click away', function() {
+    menu.showAt(dots);
+    assertTrue(dialog.open);
+    menu.click();
+    assertFalse(dialog.open);
   });
 
   test('close on resize', function() {
@@ -180,48 +218,43 @@ suite('CrActionMenu', function() {
     menu.showAt(dots);
 
     // Moving mouse on option 1 should focus it.
-    assertNotEquals(items[0], menu.root.activeElement);
+    assertNotEquals(items[0], getDeepActiveElement());
     makeMouseoverEvent(items[0]);
-    assertEquals(items[0], menu.root.activeElement);
+    assertEquals(items[0], getDeepActiveElement());
 
     // Moving mouse on the menu (not on option) should focus the menu.
     makeMouseoverEvent(menu);
-    assertNotEquals(items[0], menu.root.activeElement);
+    assertNotEquals(items[0], getDeepActiveElement());
     assertEquals(menu, document.activeElement);
 
     // Moving mouse on a disabled item should focus the menu.
     items[2].setAttribute('disabled', '');
     makeMouseoverEvent(items[2]);
-    assertNotEquals(items[2], menu.root.activeElement);
+    assertNotEquals(items[2], getDeepActiveElement());
     assertEquals(menu, document.activeElement);
 
     // Mouse movements should override keyboard focus.
     down();
     down();
-    assertEquals(items[1], menu.root.activeElement);
+    assertEquals(items[1], getDeepActiveElement());
     makeMouseoverEvent(items[0]);
-    assertEquals(items[0], menu.root.activeElement);
+    assertEquals(items[0], getDeepActiveElement());
   });
 
-  test('items automatically given accessibility role', function() {
+  test('items automatically given accessibility role', async function() {
     const newItem = document.createElement('button');
-    newItem.setAttribute('slot', 'item');
     newItem.classList.add('dropdown-item');
 
     items[1].setAttribute('role', 'checkbox');
     menu.showAt(dots);
 
-    return PolymerTest.flushTasks()
-        .then(() => {
-          assertEquals('menuitem', items[0].getAttribute('role'));
-          assertEquals('checkbox', items[1].getAttribute('role'));
+    await PolymerTest.flushTasks();
+    assertEquals('menuitem', items[0].getAttribute('role'));
+    assertEquals('checkbox', items[1].getAttribute('role'));
 
-          menu.insertBefore(newItem, items[0]);
-          return PolymerTest.flushTasks();
-        })
-        .then(() => {
-          assertEquals('menuitem', newItem.getAttribute('role'));
-        });
+    menu.insertBefore(newItem, items[0]);
+    await PolymerTest.flushTasks();
+    assertEquals('menuitem', newItem.getAttribute('role'));
   });
 
   test('positioning', function() {
@@ -362,7 +395,7 @@ suite('CrActionMenu', function() {
     const containerTop = 10000;
     const containerWidth = 500;
     const containerHeight = 500;
-    const menuWidth = 100;
+    const menuWidth = 150;
     const menuHeight = 200;
 
     suiteSetup(function() {
@@ -397,10 +430,10 @@ suite('CrActionMenu', function() {
               <div id="inner-container">
                 <button id="dots">...</button>
                 <cr-action-menu>
-                  <button slot="item" class="dropdown-item">Un</button>
+                  <button class="dropdown-item">Un</button>
                   <hr>
-                  <button slot="item" class="dropdown-item">Dos</button>
-                  <button slot="item" class="dropdown-item">Tres</button>
+                  <button class="dropdown-item">Dos</button>
+                  <button class="dropdown-item">Tres</button>
                 </cr-action-menu>
               </div>
             </div>

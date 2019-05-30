@@ -21,13 +21,15 @@
 #include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
+#include "gpu/command_buffer/service/shared_image_manager.h"
 #include "media/base/android/media_codec_util.h"
 #include "media/base/android/mock_android_overlay.h"
 #include "media/base/android/mock_media_codec_bridge.h"
 #include "media/gpu/android/android_video_decode_accelerator.h"
 #include "media/gpu/android/android_video_surface_chooser.h"
-#include "media/gpu/android/avda_codec_allocator.h"
+#include "media/gpu/android/codec_allocator.h"
 #include "media/gpu/android/fake_codec_allocator.h"
+#include "media/gpu/android/mock_abstract_texture.h"
 #include "media/gpu/android/mock_android_video_surface_chooser.h"
 #include "media/gpu/android/mock_device_info.h"
 #include "media/media_buildflags.h"
@@ -109,7 +111,8 @@ class AndroidVideoDecodeAcceleratorTest
     context_group_ = new gpu::gles2::ContextGroup(
         gpu_preferences_, false, &mailbox_manager_, nullptr, nullptr, nullptr,
         feature_info_, false, &image_manager_, nullptr, nullptr,
-        gpu::GpuFeatureInfo(), &discardable_manager_);
+        gpu::GpuFeatureInfo(), &discardable_manager_, nullptr,
+        &shared_image_manager_);
 
     // By default, allow deferred init.
     config_.is_deferred_initialization_allowed = true;
@@ -146,6 +149,9 @@ class AndroidVideoDecodeAcceleratorTest
         base::BindRepeating(&GetContextGroup, context_group_),
         base::BindRepeating(&AndroidVideoDecodeAcceleratorTest::OverlayFactory,
                             base::Unretained(this)),
+        base::BindRepeating(
+            &AndroidVideoDecodeAcceleratorTest::CreateAbstractTexture,
+            base::Unretained(this)),
         device_info_.get());
     vda_.reset(avda);
     avda->force_defer_surface_creation_for_testing_ =
@@ -155,6 +161,18 @@ class AndroidVideoDecodeAcceleratorTest
     bool result = vda_->Initialize(config_, &client_);
     base::RunLoop().RunUntilIdle();
     return result;
+  }
+
+  std::unique_ptr<gpu::gles2::AbstractTexture> CreateAbstractTexture(
+      GLenum target,
+      GLenum internal_format,
+      GLsizei width,
+      GLsizei height,
+      GLsizei depth,
+      int border,
+      GLenum format,
+      GLenum type) {
+    return std::make_unique<MockAbstractTexture>(0);
   }
 
   // Initialize |vda_|, providing a new surface for it.  You may get the surface
@@ -230,6 +248,7 @@ class AndroidVideoDecodeAcceleratorTest
   gpu::gles2::MailboxManagerImpl mailbox_manager_;
   gpu::gles2::ImageManager image_manager_;
   gpu::ServiceDiscardableManager discardable_manager_;
+  gpu::SharedImageManager shared_image_manager_;
 
   // Only set until InitializeAVDA() is called.
   std::unique_ptr<MockAndroidVideoSurfaceChooser> chooser_that_is_usually_null_;
@@ -577,8 +596,8 @@ static std::vector<VideoCodecProfile> GetTestList() {
   return test_profiles;
 }
 
-INSTANTIATE_TEST_CASE_P(AndroidVideoDecodeAcceleratorTest,
-                        AndroidVideoDecodeAcceleratorTest,
-                        testing::ValuesIn(GetTestList()));
+INSTANTIATE_TEST_SUITE_P(AndroidVideoDecodeAcceleratorTest,
+                         AndroidVideoDecodeAcceleratorTest,
+                         testing::ValuesIn(GetTestList()));
 
 }  // namespace media

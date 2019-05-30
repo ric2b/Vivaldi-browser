@@ -13,7 +13,10 @@ import android.view.Display;
 
 import org.chromium.base.CommandLine;
 import org.chromium.base.Log;
+import org.chromium.base.compat.ApiHelperForO;
 
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * A DisplayAndroid implementation tied to a physical Display.
@@ -137,14 +140,26 @@ import org.chromium.base.Log;
         if (hasForcedDIPScale()) displayMetrics.density = sForcedDIPScale.floatValue();
         boolean isWideColorGamut = false;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            isWideColorGamut = display.isWideColorGamut();
+            isWideColorGamut = ApiHelperForO.isWideColorGamut(display);
         }
 
         // JellyBean MR1 and later always uses RGBA_8888.
         int pixelFormatId = (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR1)
                 ? display.getPixelFormat()
                 : PixelFormat.RGBA_8888;
+
+        Display.Mode currentMode = null;
+        List<Display.Mode> supportedModes = null;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            currentMode = display.getMode();
+            supportedModes = Arrays.asList(display.getSupportedModes());
+            assert currentMode != null;
+            assert supportedModes != null;
+            assert supportedModes.size() > 0;
+        }
+
         super.update(size, displayMetrics.density, bitsPerPixel(pixelFormatId),
-                bitsPerComponent(pixelFormatId), display.getRotation(), isWideColorGamut, null);
+                bitsPerComponent(pixelFormatId), display.getRotation(), isWideColorGamut, null,
+                display.getRefreshRate(), currentMode, supportedModes);
     }
 }

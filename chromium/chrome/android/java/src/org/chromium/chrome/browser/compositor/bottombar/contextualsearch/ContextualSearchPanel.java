@@ -8,14 +8,12 @@ import android.app.Activity;
 import android.content.Context;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.os.Handler;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
-import org.chromium.chrome.browser.compositor.bottombar.OverlayContentProgressObserver;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelContent;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
@@ -26,7 +24,6 @@ import org.chromium.chrome.browser.compositor.scene_layer.ContextualSearchSceneL
 import org.chromium.chrome.browser.compositor.scene_layer.SceneOverlayLayer;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.chrome.browser.widget.ScrimView;
 import org.chromium.chrome.browser.widget.ScrimView.ScrimParams;
@@ -37,12 +34,6 @@ import org.chromium.ui.resources.ResourceManager;
  * Controls the Contextual Search Panel.
  */
 public class ContextualSearchPanel extends OverlayPanel {
-
-    /**
-     * The delay after which the hide progress will be hidden.
-     */
-    private static final long HIDE_PROGRESS_BAR_DELAY = 1000 / 60 * 4;
-
     /** When using the Generic UX we never show the Arrow Icon */
     private static final float ARROW_ICON_OPACITY_GENERIC_UX = 0.f;
 
@@ -115,46 +106,14 @@ public class ContextualSearchPanel extends OverlayPanel {
 
     @Override
     protected void initializeUiState() {
-        mUseGenericSheetUx = mActivity.supportsContextualSuggestionsBottomSheet()
-                && FeatureUtilities.areContextualSuggestionsEnabled(mActivity);
+        mUseGenericSheetUx = false;
+        // TODO(crbug.com/831783): Clean up this code.
     }
 
     @Override
     public OverlayPanelContent createNewOverlayPanelContent() {
         return new OverlayPanelContent(mManagementDelegate.getOverlayContentDelegate(),
-                new PanelProgressObserver(), mActivity, getBarHeight());
-    }
-
-    /**
-     * Default loading animation for a panel.
-     */
-    public class PanelProgressObserver extends OverlayContentProgressObserver {
-
-        @Override
-        public void onProgressBarStarted() {
-            setProgressBarCompletion(0);
-            setProgressBarVisible(true);
-            requestUpdate();
-        }
-
-        @Override
-        public void onProgressBarUpdated(int progress) {
-            setProgressBarCompletion(progress);
-            requestUpdate();
-        }
-
-        @Override
-        public void onProgressBarFinished() {
-            // Hides the Progress Bar after a delay to make sure it is rendered for at least
-            // a few frames, otherwise its completion won't be visually noticeable.
-            new Handler().postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    setProgressBarVisible(false);
-                    requestUpdate();
-                }
-            }, HIDE_PROGRESS_BAR_DELAY);
-        }
+                new PanelProgressObserver(), mActivity, /* isIncognito= */ false, getBarHeight());
     }
 
     // ============================================================================================
@@ -211,8 +170,9 @@ public class ContextualSearchPanel extends OverlayPanel {
     // ============================================================================================
 
     @Override
-    public void setPanelState(PanelState toState, @StateChangeReason int reason) {
-        PanelState fromState = getPanelState();
+    public void setPanelState(@PanelState int toState, @StateChangeReason int reason) {
+        @PanelState
+        int fromState = getPanelState();
 
         mPanelMetrics.onPanelStateChanged(
                 fromState, toState, reason, Profile.getLastUsedProfile().getOriginalProfile());
@@ -234,7 +194,7 @@ public class ContextualSearchPanel extends OverlayPanel {
     }
 
     @Override
-    protected boolean isSupportedState(PanelState state) {
+    protected boolean isSupportedState(@PanelState int state) {
         return canDisplayContentInPanel() || state != PanelState.MAXIMIZED;
     }
 
@@ -248,8 +208,9 @@ public class ContextualSearchPanel extends OverlayPanel {
     }
 
     @Override
-    protected PanelState getProjectedState(float velocity) {
-        PanelState projectedState = super.getProjectedState(velocity);
+    protected @PanelState int getProjectedState(float velocity) {
+        @PanelState
+        int projectedState = super.getProjectedState(velocity);
 
         // Prevent the fling gesture from moving the Panel from PEEKED to MAXIMIZED. This is to
         // make sure the Promo will be visible, considering that the EXPANDED state is the only
@@ -267,6 +228,13 @@ public class ContextualSearchPanel extends OverlayPanel {
         }
 
         return projectedState;
+    }
+
+    @Override
+    public boolean onBackPressed() {
+        if (!isShowing()) return false;
+        mManagementDelegate.hideContextualSearch(StateChangeReason.BACK_PRESS);
+        return true;
     }
 
     // ============================================================================================
@@ -556,7 +524,7 @@ public class ContextualSearchPanel extends OverlayPanel {
     }
 
     @Override
-    public PanelState getPanelState() {
+    public @PanelState int getPanelState() {
         // NOTE(pedrosimonetti): exposing superclass method to the interface.
         return super.getPanelState();
     }

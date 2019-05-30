@@ -20,12 +20,12 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.widget.ListMenuButton;
-import org.chromium.chrome.browser.widget.TintedImageView;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -52,7 +52,7 @@ public class LanguageListBaseAdapter
         private TextView mTitle;
         private TextView mDescription;
 
-        private TintedImageView mStartIcon;
+        private ImageView mStartIcon;
         private ListMenuButton mMoreButton;
 
         LanguageRowViewHolder(View view) {
@@ -61,7 +61,7 @@ public class LanguageListBaseAdapter
             mTitle = (TextView) view.findViewById(R.id.title);
             mDescription = (TextView) view.findViewById(R.id.description);
 
-            mStartIcon = (TintedImageView) view.findViewById(R.id.icon_view);
+            mStartIcon = view.findViewById(R.id.icon_view);
             mMoreButton = (ListMenuButton) view.findViewById(R.id.more);
         }
 

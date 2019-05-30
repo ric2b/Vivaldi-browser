@@ -61,24 +61,40 @@ class VivaldiDataSource : public content::URLDataSource {
   scoped_refptr<base::SingleThreadTaskRunner> TaskRunnerForRequestPath(
       const std::string& path) const override;
 
- private:
-  void ExtractRequestTypeAndData(const std::string& path,
-                                 std::string& type,
-                                 std::string& data);
+ protected:
   VivaldiDataClassHandler* GetOrCreateDataClassHandlerForType(
       const std::string& type);
 
   std::map<std::string, std::unique_ptr<VivaldiDataClassHandler>>
       data_class_handlers_;
 
-  Profile* profile_;
-
   // Fallback image to send on failure
   scoped_refptr<base::RefCountedMemory> fallback_image_data_;
+
+  Profile* profile_;
+
+ private:
+  void ExtractRequestTypeAndData(const std::string& path,
+                                 std::string& type,
+                                 std::string& data);
 
   base::WeakPtrFactory<VivaldiDataSource> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiDataSource);
+};
+
+class VivaldiThumbDataSource : public VivaldiDataSource {
+ public:
+  explicit VivaldiThumbDataSource(Profile* profile);
+  ~VivaldiThumbDataSource() override;
+
+  // content::URLDataSource implementation.
+  std::string GetSource() const override;
+
+ private:
+  base::WeakPtrFactory<VivaldiDataSource> weak_ptr_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(VivaldiThumbDataSource);
 };
 
 #endif  // COMPONENTS_DATASOURCE_VIVALDI_DATA_SOURCE_H_

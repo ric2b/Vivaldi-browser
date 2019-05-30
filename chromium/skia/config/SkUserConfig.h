@@ -130,7 +130,6 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 // until we update our call-sites (typically these are for API changes).
 //
 // Remove these as we update our sites.
-//
 
 // Workaround for poor anisotropic mipmap quality,
 // pending Skia ripmap support.
@@ -145,47 +144,37 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #define SK_USE_LEGACY_DISTANCE_FIELDS
 #endif
 
+// skbug.com/4783
+#ifndef SK_SUPPORT_LEGACY_DRAWLOOPER
+#define SK_SUPPORT_LEGACY_DRAWLOOPER
+#endif
+
 // Skia is enabling this feature soon. Chrome probably does
 // not want it for M64
 #ifndef SK_DISABLE_EXPLICIT_GPU_RESOURCE_ALLOCATION
 #define SK_DISABLE_EXPLICIT_GPU_RESOURCE_ALLOCATION
 #endif
 
-#ifndef SK_SUPPORT_LEGACY_TILED_BITMAPS
-#define SK_SUPPORT_LEGACY_TILED_BITMAPS
-#endif
-
-// The matrix image filter imperceptibly alters the following two layout tests:
-//   fast/css/transformed-mask.html
-//   fast/reflections/opacity-reflection-transform.html
-// and changes the following cc_unittests:
-//   LayerTreeHostCommonTest.VisibleRectWithScalingClippingAndFilters
-//   LayerTreeHostCommonTest.VisibleRectWithClippingAndFilters
-// Landing the fix in Skia behind this flag will allow those all to be updated
-// together in Chrome (along with the removal of this flag).
-#ifndef SK_IGNORE_MATRIX_IMAGE_FILTER_FIX
-#define SK_IGNORE_MATRIX_IMAGE_FILTER_FIX
-#endif
-
-#ifndef SK_DISABLE_MASKFILTERED_MASK_CACHING
-#define SK_DISABLE_MASKFILTERED_MASK_CACHING
-#endif
-
-// remove after rebaselining svg layout tests
-#ifndef SK_SUPPORT_LEGACY_SVG_ARC_TO
-#define SK_SUPPORT_LEGACY_SVG_ARC_TO
+#ifndef SK_IGNORE_LINEONLY_AA_CONVEX_PATH_OPTS
+#define SK_IGNORE_LINEONLY_AA_CONVEX_PATH_OPTS
 #endif
 
 // Max. verb count for paths rendered by the edge-AA tessellating path renderer.
 #define GR_AA_TESSELLATOR_MAX_VERB_COUNT 100
 
-#ifndef SK_SUPPORT_LEGACY_THREADED_DAA_BUGS
-#define SK_SUPPORT_LEGACY_THREADED_DAA_BUGS
-#endif
-
 #ifndef SK_SUPPORT_LEGACY_AAA_CHOICE
 #define SK_SUPPORT_LEGACY_AAA_CHOICE
 #endif
+
+// We're turning this off indefinitely,
+// until we can figure out some fundamental problems with its approach.
+//
+// See chromium:913223, skia:6886.
+#define SK_DISABLE_DAA
+
+// Staging for lowp::bilerp_clamp_8888, and for planned misc. others.
+#define SK_DISABLE_LOWP_BILERP_CLAMP_CLAMP_STAGE
+#define SK_DISABLE_NEXT_BATCH_OF_LOWP_STAGES
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
 

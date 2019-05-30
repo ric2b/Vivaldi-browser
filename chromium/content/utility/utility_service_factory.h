@@ -9,8 +9,11 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/sequenced_task_runner.h"
 #include "content/child/service_factory.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
+#include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/mojom/service.mojom.h"
 
 namespace content {
@@ -23,18 +26,15 @@ class UtilityServiceFactory : public ServiceFactory {
   ~UtilityServiceFactory() override;
 
   // ServiceFactory overrides:
-  void CreateService(
-      service_manager::mojom::ServiceRequest request,
+  bool HandleServiceRequest(
       const std::string& name,
-      service_manager::mojom::PIDReceiverPtr pid_receiver) override;
-  void RegisterServices(ServiceMap* services) override;
-  void OnServiceQuit() override;
+      service_manager::mojom::ServiceRequest request) override;
 
  private:
   void OnLoadFailed() override;
 
-  std::unique_ptr<service_manager::Service> CreateNetworkService();
-  std::unique_ptr<service_manager::Service> CreateAudioService();
+  std::unique_ptr<service_manager::Service> CreateAudioService(
+      service_manager::mojom::ServiceRequest request);
 
   // Allows embedders to register their interface implementations before the
   // network or audio services are created. Used for testing.

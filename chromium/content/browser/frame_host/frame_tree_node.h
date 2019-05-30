@@ -20,6 +20,7 @@
 #include "content/common/content_export.h"
 #include "content/common/frame_owner_properties.h"
 #include "content/common/frame_replication_state.h"
+#include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
 #include "third_party/blink/public/common/frame/user_activation_state.h"
 #include "third_party/blink/public/common/frame/user_activation_update_type.h"
@@ -33,12 +34,21 @@ class FrameTree;
 class NavigationRequest;
 class Navigator;
 class RenderFrameHostImpl;
+class NavigationEntryImpl;
 struct ContentSecurityPolicyHeader;
 
 // When a page contains iframes, its renderer process maintains a tree structure
 // of those frames. We are mirroring this tree in the browser process. This
 // class represents a node in this tree and is a wrapper for all objects that
 // are frame-specific (as opposed to page-specific).
+//
+// Each FrameTreeNode has a current RenderFrameHost, which can change over
+// time as the frame is navigated. Any immediate subframes of the current
+// document are tracked using FrameTreeNodes owned by the current
+// RenderFrameHost, rather than as children of FrameTreeNode itself. This
+// allows subframe FrameTreeNodes to stay alive while a RenderFrameHost is
+// still alive - for example while pending deletion, after a new current
+// RenderFrameHost has replaced it.
 class CONTENT_EXPORT FrameTreeNode {
  public:
   class Observer {
@@ -62,16 +72,14 @@ class CONTENT_EXPORT FrameTreeNode {
   // calling the constructor.
   FrameTreeNode(FrameTree* frame_tree,
                 Navigator* navigator,
-                RenderFrameHostDelegate* render_frame_delegate,
-                RenderWidgetHostDelegate* render_widget_delegate,
-                RenderFrameHostManager::Delegate* manager_delegate,
                 FrameTreeNode* parent,
                 blink::WebTreeScopeType scope,
                 const std::string& name,
                 const std::string& unique_name,
                 bool is_created_by_script,
                 const base::UnguessableToken& devtools_frame_token,
-                const FrameOwnerProperties& frame_owner_properties);
+                const FrameOwnerProperties& frame_owner_properties,
+                blink::FrameOwnerElementType owner_type);
 
   ~FrameTreeNode();
 
@@ -79,14 +87,6 @@ class CONTENT_EXPORT FrameTreeNode {
   void RemoveObserver(Observer* observer);
 
   bool IsMainFrame() const;
-
-  FrameTreeNode* AddChild(std::unique_ptr<FrameTreeNode> child,
-                          int process_id,
-                          int frame_routing_id);
-  void RemoveChild(FrameTreeNode* child);
-
-  // Clears process specific-state in this node to prepare for a new process.
-  void ResetForNewProcess();
 
   // Clears any state in this node which was set by the document itself (CSP
   // Headers, Feature Policy Headers, and CSP-set sandbox flags), and notifies
@@ -124,9 +124,7 @@ class CONTENT_EXPORT FrameTreeNode {
     return devtools_frame_token_;
   }
 
-  size_t child_count() const {
-    return children_.size();
-  }
+  size_t child_count() const { return current_frame_host()->child_count(); }
 
   unsigned int depth() const { return depth_; }
 
@@ -149,7 +147,7 @@ class CONTENT_EXPORT FrameTreeNode {
   void SetOriginalOpener(FrameTreeNode* opener);
 
   FrameTreeNode* child_at(size_t index) const {
-    return children_[index].get();
+    return current_frame_host()->child_at(index);
   }
 
   // Returns the URL of the last committed page in the current frame.
@@ -269,8 +267,6 @@ class CONTENT_EXPORT FrameTreeNode {
     return render_manager_.current_frame_host();
   }
 
-  bool IsDescendantOf(FrameTreeNode* other) const;
-
   // Return the node immediately preceding this node in its parent's
   // |children_|, or nullptr if there is no such node.
   FrameTreeNode* PreviousSibling() const;
@@ -389,6 +385,12 @@ class CONTENT_EXPORT FrameTreeNode {
     return replication_state_.has_received_user_gesture;
   }
 
+  // Returns whether the frame received a user gesture on a previous navigation
+  // on the same eTLD+1.
+  bool has_received_user_gesture_before_nav() const {
+    return replication_state_.has_received_user_gesture_before_nav;
+  }
+
   // When a tab is discarded, WebContents sets was_discarded on its
   // root FrameTreeNode.
   // In addition, when a child frame is created, this bit is passed on from
@@ -396,6 +398,7 @@ class CONTENT_EXPORT FrameTreeNode {
   // When a navigation request is created, was_discarded is passed on to the
   // request and reset to false in FrameTreeNode.
   void set_was_discarded() { was_discarded_ = true; }
+  bool was_discarded() const { return was_discarded_; }
 
   // Returns the sticky bit of the User Activation v2 state of the
   // |FrameTreeNode|.
@@ -408,6 +411,20 @@ class CONTENT_EXPORT FrameTreeNode {
   bool HasTransientUserActivation() {
     return user_activation_state_.IsActive();
   }
+
+  // Remove history entries for all frames created by script in this frame's
+  // subtree. If a frame created by a script is removed, then its history entry
+  // will never be reused - this saves memory.
+  void PruneChildFrameNavigationEntries(NavigationEntryImpl* entry);
+
+  blink::FrameOwnerElementType frame_owner_element_type() const {
+    return replication_state_.frame_owner_element_type;
+  }
+  // Only meaningful to call on a root frame. The value of |feature_state| will
+  // be nontrivial if there is an opener which is restricted in some of the
+  // feature policies.
+  void SetOpenerFeaturePolicyState(
+      const blink::FeaturePolicy::FeatureState& feature_state);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessFeaturePolicyBrowserTest,
@@ -422,6 +439,8 @@ class CONTENT_EXPORT FrameTreeNode {
   bool NotifyUserActivation();
 
   bool ConsumeTransientUserActivation();
+
+  bool ClearUserActivation();
 
   // The next available browser-global FrameTreeNode ID.
   static int next_frame_tree_node_id_;
@@ -468,9 +487,6 @@ class CONTENT_EXPORT FrameTreeNode {
   // An observer that clears this node's |original_opener_| if the opener is
   // destroyed.
   std::unique_ptr<OpenerDestroyedObserver> original_opener_observer_;
-
-  // The immediate children of this specific frame.
-  std::vector<std::unique_ptr<FrameTreeNode>> children_;
 
   // Whether this frame has committed any real load, replacing its initial
   // about:blank page.

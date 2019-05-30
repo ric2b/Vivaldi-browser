@@ -26,12 +26,14 @@ GpuMemoryBufferImplSharedMemory::GpuMemoryBufferImplSharedMemory(
     const gfx::Size& size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
-    const DestructionCallback& callback,
-    std::unique_ptr<base::SharedMemory> shared_memory,
+    DestructionCallback callback,
+    base::UnsafeSharedMemoryRegion shared_memory_region,
+    base::WritableSharedMemoryMapping shared_memory_mapping,
     size_t offset,
     int stride)
-    : GpuMemoryBufferImpl(id, size, format, callback),
-      shared_memory_(std::move(shared_memory)),
+    : GpuMemoryBufferImpl(id, size, format, std::move(callback)),
+      shared_memory_region_(std::move(shared_memory_region)),
+      shared_memory_mapping_(std::move(shared_memory_mapping)),
       offset_(offset),
       stride_(stride) {
   DCHECK(IsUsageSupported(usage));
@@ -46,19 +48,22 @@ GpuMemoryBufferImplSharedMemory::Create(gfx::GpuMemoryBufferId id,
                                         const gfx::Size& size,
                                         gfx::BufferFormat format,
                                         gfx::BufferUsage usage,
-                                        const DestructionCallback& callback) {
+                                        DestructionCallback callback) {
   if (!IsUsageSupported(usage))
     return nullptr;
   size_t buffer_size = 0u;
   if (!gfx::BufferSizeForBufferFormatChecked(size, format, &buffer_size))
     return nullptr;
 
-  std::unique_ptr<base::SharedMemory> shared_memory(new base::SharedMemory());
-  if (!shared_memory->CreateAndMapAnonymous(buffer_size))
+  auto shared_memory_region =
+      base::UnsafeSharedMemoryRegion::Create(buffer_size);
+  auto shared_memory_mapping = shared_memory_region.Map();
+  if (!shared_memory_region.IsValid() || !shared_memory_mapping.IsValid())
     return nullptr;
 
   return base::WrapUnique(new GpuMemoryBufferImplSharedMemory(
-      id, size, format, usage, callback, std::move(shared_memory), 0,
+      id, size, format, usage, std::move(callback),
+      std::move(shared_memory_region), std::move(shared_memory_mapping), 0,
       gfx::RowSizeForBufferFormat(size.width(), format, 0)));
 }
 
@@ -75,8 +80,9 @@ GpuMemoryBufferImplSharedMemory::CreateGpuMemoryBuffer(
   if (!gfx::BufferSizeForBufferFormatChecked(size, format, &buffer_size))
     return gfx::GpuMemoryBufferHandle();
 
-  base::SharedMemory shared_memory;
-  if (!shared_memory.CreateAnonymous(buffer_size))
+  auto shared_memory_region =
+      base::UnsafeSharedMemoryRegion::Create(buffer_size);
+  if (!shared_memory_region.IsValid())
     return gfx::GpuMemoryBufferHandle();
 
   gfx::GpuMemoryBufferHandle handle;
@@ -85,7 +91,7 @@ GpuMemoryBufferImplSharedMemory::CreateGpuMemoryBuffer(
   handle.offset = 0;
   handle.stride = static_cast<int32_t>(
       gfx::RowSizeForBufferFormat(size.width(), format, 0));
-  handle.handle = shared_memory.TakeHandle();
+  handle.region = std::move(shared_memory_region);
   return handle;
 }
 
@@ -96,13 +102,13 @@ GpuMemoryBufferImplSharedMemory::CreateFromHandle(
     const gfx::Size& size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
-    const DestructionCallback& callback) {
-  DCHECK(base::SharedMemory::IsHandleValid(handle.handle));
+    DestructionCallback callback) {
+  DCHECK(handle.region.IsValid());
 
   return base::WrapUnique(new GpuMemoryBufferImplSharedMemory(
-      handle.id, size, format, usage, callback,
-      std::make_unique<base::SharedMemory>(handle.handle, false), handle.offset,
-      handle.stride));
+      handle.id, size, format, usage, std::move(callback),
+      std::move(handle.region), base::WritableSharedMemoryMapping(),
+      handle.offset, handle.stride));
 }
 
 // static
@@ -135,14 +141,6 @@ bool GpuMemoryBufferImplSharedMemory::IsSizeValidForFormat(
     const gfx::Size& size,
     gfx::BufferFormat format) {
   switch (format) {
-    case gfx::BufferFormat::ATC:
-    case gfx::BufferFormat::ATCIA:
-    case gfx::BufferFormat::DXT1:
-    case gfx::BufferFormat::DXT5:
-    case gfx::BufferFormat::ETC1:
-      // Compressed images must have a width and height that's evenly divisible
-      // by the block size.
-      return size.width() % 4 == 0 && size.height() % 4 == 0;
     case gfx::BufferFormat::R_8:
     case gfx::BufferFormat::R_16:
     case gfx::BufferFormat::RG_88:
@@ -175,7 +173,7 @@ bool GpuMemoryBufferImplSharedMemory::IsSizeValidForFormat(
 }
 
 // static
-base::Closure GpuMemoryBufferImplSharedMemory::AllocateForTesting(
+base::OnceClosure GpuMemoryBufferImplSharedMemory::AllocateForTesting(
     const gfx::Size& size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
@@ -189,14 +187,15 @@ bool GpuMemoryBufferImplSharedMemory::Map() {
 
   // Map the buffer first time Map() is called then keep it mapped for the
   // lifetime of the buffer. This avoids mapping the buffer unless necessary.
-  if (!shared_memory_->memory()) {
+  if (!shared_memory_mapping_.IsValid()) {
     DCHECK_EQ(static_cast<size_t>(stride_),
               gfx::RowSizeForBufferFormat(size_.width(), format_, 0));
     size_t buffer_size = gfx::BufferSizeForBufferFormat(size_, format_);
     // Note: offset_ != 0 is not common use-case. To keep it simple we
     // map offset + buffer_size here but this can be avoided using MapAt().
     size_t map_size = offset_ + buffer_size;
-    if (!shared_memory_->Map(map_size))
+    shared_memory_mapping_ = shared_memory_region_.MapAt(0, map_size);
+    if (!shared_memory_mapping_.IsValid())
       base::TerminateBecauseOutOfMemory(map_size);
   }
   mapped_ = true;
@@ -206,7 +205,7 @@ bool GpuMemoryBufferImplSharedMemory::Map() {
 void* GpuMemoryBufferImplSharedMemory::memory(size_t plane) {
   DCHECK(mapped_);
   DCHECK_LT(plane, gfx::NumberOfPlanesForBufferFormat(format_));
-  return static_cast<uint8_t*>(shared_memory_->memory()) + offset_ +
+  return static_cast<uint8_t*>(shared_memory_mapping_.memory()) + offset_ +
          gfx::BufferOffsetForBufferFormat(size_, format_, plane);
 }
 
@@ -231,7 +230,7 @@ gfx::GpuMemoryBufferHandle GpuMemoryBufferImplSharedMemory::CloneHandle()
   handle.id = id_;
   handle.offset = offset_;
   handle.stride = stride_;
-  handle.handle = base::SharedMemory::DuplicateHandle(shared_memory_->handle());
+  handle.region = shared_memory_region_.Duplicate();
   return handle;
 }
 
@@ -246,7 +245,7 @@ void GpuMemoryBufferImplSharedMemory::OnMemoryDump(
 
 base::UnguessableToken GpuMemoryBufferImplSharedMemory::GetSharedMemoryGUID()
     const {
-  return shared_memory_->mapped_id();
+  return shared_memory_region_.GetGUID();
 }
 
 }  // namespace gpu

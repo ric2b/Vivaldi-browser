@@ -5,29 +5,29 @@
 'use strict';
 
 /**
- * Sends a message to the controlling test harness, namely and usually, the
- * chrome FileManagerBrowserTest harness: it expects the message to contain
+ * Sends a command to the controlling test harness, namely and usually, the
+ * chrome FileManagerBrowserTest harness: it expects the command to contain
  * the 'name' of the command, and any required or optional arguments of the
  * command, e.g.,
  *
- *   sendTestMessage({
+ *   await sendTestMessage({
  *     name: 'addEntries', // command with volume and entries arguments
  *     volume: volume,
  *     entries: entries
- *   }).then(...);
+ *   });
  *
- * @param {Object} message Message object to be sent. The object is converted
- *     to a JSON string prior to sending.
+ * @param {Object} command Test command to send. The object is converted to
+ *     a JSON string prior to sending.
  * @return {Promise} Promise to be fulfilled with the value returned by the
  *     chrome.test.sendMessage callback.
  */
-function sendTestMessage(message) {
-  if (typeof message.name === 'string') {
+function sendTestMessage(command) {
+  if (typeof command.name === 'string') {
     return new Promise(function(fulfill) {
-      chrome.test.sendMessage(JSON.stringify(message), fulfill);
+      chrome.test.sendMessage(JSON.stringify(command), fulfill);
     });
   } else {
-    let error = 'sendTestMessage requires a message.name <string>';
+    const error = 'sendTestMessage requires a command.name <string>';
     throw new Error(error);
   }
 }
@@ -49,13 +49,14 @@ function wait(time) {
  * asserting the count returned by the app.getErrorCount remote call.
  * @param {!RemoteCall} app RemoteCall interface to the app window.
  * @param {function()} callback Completion callback.
+ * @return {Promise} Promise to be fulfilled on completion.
  */
-function checkIfNoErrorsOccuredOnApp(app, callback) {
-  var countPromise = app.callRemoteTestUtil('getErrorCount', null, []);
-  countPromise.then(function(count) {
-    chrome.test.assertEq(0, count, 'The error count is not 0.');
+async function checkIfNoErrorsOccuredOnApp(app, callback) {
+  const count = await app.callRemoteTestUtil('getErrorCount', null, []);
+  chrome.test.assertEq(0, count, 'The error count is not 0.');
+  if (callback) {
     callback();
-  });
+  }
 }
 
 /**
@@ -63,18 +64,19 @@ function checkIfNoErrorsOccuredOnApp(app, callback) {
  * @param {Promise} promise Promise to add the check to.
  * @param {Array<!RemoteCall>} apps An array of RemoteCall interfaces.
  */
-function testPromiseAndApps(promise, apps) {
-  promise.then(function() {
-    return Promise.all(
-        apps.map(function(app) {
-          return new Promise(checkIfNoErrorsOccuredOnApp.bind(null, app));
-        }));
-  }).then(chrome.test.callbackPass(function() {
+async function testPromiseAndApps(promise, apps) {
+  const finished = chrome.test.callbackPass(function() {
     // The callbackPass is necessary to avoid prematurely finishing tests.
     // Don't use chrome.test.succeed() here to avoid doubled success log.
-  }), function(error) {
-    chrome.test.fail(error.stack || error);
   });
+  try {
+    await promise;
+    await Promise.all(apps.map(app => checkIfNoErrorsOccuredOnApp(app)));
+  } catch (error) {
+    chrome.test.fail(error.stack || error);
+    return;
+  }
+  finished();
 }
 
 /**
@@ -147,22 +149,87 @@ function pending(caller, message, var_args) {
  *     checkFunction when the checkFunction reutrns a value but a pending
  *     marker.
  */
-function repeatUntil(checkFunction) {
+async function repeatUntil(checkFunction) {
   var logTime = Date.now() + LOG_INTERVAL;
-  var step = function() {
-    return Promise.resolve(checkFunction()).then(function(result) {
-      if (result instanceof pending) {
-        if (Date.now() > logTime) {
-          console.warn(result.message);
-          logTime += LOG_INTERVAL;
-        }
-        return wait(REPEAT_UNTIL_INTERVAL).then(step);
-      } else {
-        return result;
+  while (true) {
+    const result = await checkFunction();
+    if (!(result instanceof pending)) {
+      return result;
+    }
+    if (Date.now() > logTime) {
+      console.warn(result.message);
+      logTime += LOG_INTERVAL;
+    }
+    await wait(REPEAT_UNTIL_INTERVAL);
+  }
+}
+
+/**
+ * Sends the test |command| to the browser test harness and awaits a 'string'
+ * result. Calls |callback| with that result.
+ * @param {Object} command Test command to send. Refer to sendTestMessage()
+ *    above for the expected format of a test |command| object.
+ * @param {function(string)} callback Completion callback.
+ * @param {Object=} opt_debug If truthy, log the result.
+ */
+async function sendBrowserTestCommand(command, callback, opt_debug) {
+  const caller = getCaller();
+  if (typeof command.name !== 'string') {
+    chrome.test.fail('Invalid test command: ' + JSON.stringify(command));
+  }
+  const result = await repeatUntil(async () => {
+    const tryAgain = pending(caller, 'Sent BrowserTest ' + command.name);
+    try {
+      const result = await sendTestMessage(command);
+      if (typeof result !== 'string') {
+        return tryAgain;
       }
-    });
-  };
-  return step();
+      return result;
+    } catch (error) {
+      console.log(error.stack || error);
+      return tryAgain;
+    }
+  });
+  if (opt_debug) {
+    console.log('BrowserTest ' + command.name + ': ' + result);
+  }
+  callback(result);
+}
+
+/**
+ * Waits for an app window with the URL |windowUrl|.
+ * @param {string} windowUrl URL of the app window to wait for.
+ * @return {Promise} Promise to be fulfilled with the window ID of the
+ *     app window.
+ */
+function waitForAppWindow(windowUrl) {
+  const caller = getCaller();
+  const command = {'name': 'getAppWindowId', 'windowUrl': windowUrl};
+  return repeatUntil(async () => {
+    const result = await sendTestMessage(command);
+    if (result == 'none') {
+      return pending(caller, 'getAppWindowId ' + windowUrl);
+    }
+    return result;
+  });
+}
+
+/**
+ * Wait for the count of windows for app |appId| to equal |expectedCount|.
+ * @param{string} appId ID of the app to count windows for.
+ * @param{number} expectedCount Number of app windows to wait for.
+ * @return {Promise} Promise to be fulfilled when the number of app windows
+ *     equals |expectedCount|.
+ */
+function waitForAppWindowCount(appId, expectedCount) {
+  const caller = getCaller();
+  const command = {'name': 'countAppWindows', 'appId': appId};
+  return repeatUntil(async () => {
+    if (await sendTestMessage(command) != expectedCount) {
+      return pending(caller, 'waitForAppWindowCount ' + appId + ' ' + result);
+    }
+    return true;
+  });
 }
 
 /**
@@ -173,7 +240,7 @@ function repeatUntil(checkFunction) {
  *     result of function. The argument is true on success.
  * @return {Promise} Promise to be fulfilled when the entries are added.
  */
-function addEntries(volumeNames, entries, opt_callback) {
+async function addEntries(volumeNames, entries, opt_callback) {
   if (volumeNames.length == 0) {
     callback(true);
     return;
@@ -185,12 +252,16 @@ function addEntries(volumeNames, entries, opt_callback) {
       entries: entries
     });
   });
-  var resultPromise = Promise.all(volumeResultPromises);
-  if (opt_callback) {
-    resultPromise.then(opt_callback.bind(null, true),
-                       opt_callback.bind(null, false));
+  if (!opt_callback) {
+    return volumeResultPromises;
   }
-  return resultPromise;
+  try {
+    await Promise.all(volumeResultPromises);
+  } catch (error) {
+    opt_callback(false);
+    throw error;
+  }
+  opt_callback(true);
 }
 
 /**
@@ -201,6 +272,7 @@ var EntryType = Object.freeze({
   FILE: 'file',
   DIRECTORY: 'directory',
   TEAM_DRIVE: 'team_drive',
+  COMPUTER: 'Computer'
 });
 
 /**
@@ -209,7 +281,9 @@ var EntryType = Object.freeze({
  */
 var SharedOption = Object.freeze({
   NONE: 'none',
-  SHARED: 'shared'
+  SHARED: 'shared',
+  SHARED_WITH_ME: 'sharedWithMe',
+  NESTED_SHARED_WITH_ME: 'nestedSharedWithMe',
 });
 
 /**
@@ -217,7 +291,9 @@ var SharedOption = Object.freeze({
  */
 var RootPath = Object.seal({
   DOWNLOADS: '/must-be-filled-in-test-setup',
+  DOWNLOADS_PATH: '/must-be-filled-in-test-setup',
   DRIVE: '/must-be-filled-in-test-setup',
+  ANDROID_FILES: '/must-be-filled-in-test-setup',
 });
 
 
@@ -257,6 +333,31 @@ TestEntryCapabilities.prototype.canAddChildren = true;
 TestEntryCapabilities.prototype.canShare = true;
 
 /**
+ * The folder features for the test entry. Structure should match
+ * TestEntryFolderFeature in file_manager_browsertest_base.cc. All features
+ * default to false is not specified.
+ *
+ * @record
+ * @struct
+ */
+function TestEntryFolderFeature() {}
+
+/**
+ * @type {boolean|undefined}
+ */
+TestEntryFolderFeature.prototype.isMachineRoot = false;
+
+/**
+ * @type {boolean|undefined}
+ */
+TestEntryFolderFeature.prototype.isArbitrarySyncFolder = false;
+
+/**
+ * @type {boolean|undefined}
+ */
+TestEntryFolderFeature.prototype.isExternalMedia = false;
+
+/**
  * Parameters to creat a Test Entry in the file manager. Structure should match
  * TestEntryInfo in file_manager_browsertest_base.cc.
  *
@@ -284,6 +385,11 @@ TestEntryInfoOptions.prototype.targetPath;
  *     string (no team drive). Team Drive names must be unique.
  */
 TestEntryInfoOptions.prototype.teamDriveName;
+/**
+ * @type {string} Name of the computer this entry is in. Defaults to a blank
+ *     string (no computer). Computer names must be unique.
+ */
+TestEntryInfoOptions.prototype.computerName;
 /**
  * @type {string|undefined} Mime type.
  */
@@ -316,6 +422,12 @@ TestEntryInfoOptions.prototype.typeText;
 TestEntryInfoOptions.prototype.capabilities;
 
 /**
+ * @type {TestEntryFolderFeature|undefined} Foder features of this file.
+ *     Defaults to all features disabled.
+ */
+TestEntryInfoOptions.prototype.folderFeature;
+
+/**
  * File system entry information for tests. Structure should match TestEntryInfo
  * in file_manager_browsertest_base.cc
  * TODO(sashab): Remove this, rename TestEntryInfoOptions to TestEntryInfo and
@@ -328,6 +440,7 @@ function TestEntryInfo(options) {
   this.sourceFileName = options.sourceFileName || '';
   this.targetPath = options.targetPath;
   this.teamDriveName = options.teamDriveName || '';
+  this.computerName = options.computerName || '';
   this.mimeType = options.mimeType || '';
   this.sharedOption = options.sharedOption || SharedOption.NONE;
   this.lastModifiedTime = options.lastModifiedTime;
@@ -335,12 +448,15 @@ function TestEntryInfo(options) {
   this.sizeText = options.sizeText;
   this.typeText = options.typeText;
   this.capabilities = options.capabilities;
+  this.folderFeature = options.folderFeature;
   this.pinned = !!options.pinned;
   Object.freeze(this);
 }
 
 TestEntryInfo.getExpectedRows = function(entries) {
-  return entries.map(function(entry) { return entry.getExpectedRow(); });
+  return entries.map(function(entry) {
+    return entry.getExpectedRow();
+  });
 };
 
 /**
@@ -380,6 +496,28 @@ var ENTRIES = {
     nameText: 'world.ogv',
     sizeText: '59 KB',
     typeText: 'OGG video'
+  }),
+
+  video: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'video_long.ogv',
+    targetPath: 'video_long.ogv',
+    mimeType: 'video/ogg',
+    lastModifiedTime: 'Jan 14, 2019, 16:01 PM',
+    nameText: 'video_long.ogv',
+    sizeText: '166 KB',
+    typeText: 'OGG video'
+  }),
+
+  subtitle: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'video.vtt',
+    targetPath: 'world.vtt',
+    mimeType: 'text/vtt',
+    lastModifiedTime: 'Feb 7, 2019, 15:03 PM',
+    nameText: 'world.vtt',
+    sizeText: '46 bytes',
+    typeText: 'VTT text'
   }),
 
   unsupported: new TestEntryInfo({
@@ -425,6 +563,17 @@ var ENTRIES = {
     lastModifiedTime: 'Jan 18, 2038, 1:02 AM',
     nameText: 'image3.jpg',
     sizeText: '3 KB',
+    typeText: 'JPEG image'
+  }),
+
+  smallJpeg: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'small.jpg',
+    targetPath: 'small.jpg',
+    mimeType: 'image/jpeg',
+    lastModifiedTime: 'Jan 18, 2038, 1:02 AM',
+    nameText: 'small.jpg',
+    sizeText: '1 KB',
     typeText: 'JPEG image'
   }),
 
@@ -479,6 +628,39 @@ var ENTRIES = {
     nameText: 'newly added file.ogg',
     sizeText: '14 KB',
     typeText: 'OGG audio'
+  }),
+
+  tallText: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'tall.txt',
+    targetPath: 'tall.txt',
+    mimeType: 'text/plain',
+    lastModifiedTime: 'Sep 4, 1998, 12:34 PM',
+    nameText: 'tall.txt',
+    sizeText: '546 bytes',
+    typeText: 'Plain text',
+  }),
+
+  tallHtml: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'tall.html',
+    targetPath: 'tall.html',
+    mimeType: 'text/html',
+    lastModifiedTime: 'Sep 4, 1998, 12:34 PM',
+    nameText: 'tall.html',
+    sizeText: '589 bytes',
+    typeText: 'HTML document',
+  }),
+
+  tallPdf: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'tall.pdf',
+    targetPath: 'tall.pdf',
+    mimeType: 'application/pdf',
+    lastModifiedTime: 'Sep 4, 1998, 12:34 PM',
+    nameText: 'tall.pdf',
+    sizeText: '15 KB',
+    typeText: 'PDF document',
   }),
 
   pinned: new TestEntryInfo({
@@ -558,6 +740,50 @@ var ENTRIES = {
     typeText: 'Zip archive'
   }),
 
+  zipArchiveSJIS: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'archive_sjis.zip',
+    targetPath: 'archive_sjis.zip',
+    mimeType: 'application/x-zip',
+    lastModifiedTime: 'Dec 21, 2018, 12:21 PM',
+    nameText: 'archive_sjis.zip',
+    sizeText: '160 bytes',
+    typeText: 'Zip archive'
+  }),
+
+  zipArchiveMacOs: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'archive_macos.zip',
+    targetPath: 'archive_macos.zip',
+    mimeType: 'application/x-zip',
+    lastModifiedTime: 'Dec 21, 2018, 12:21 PM',
+    nameText: 'archive_macos.zip',
+    sizeText: '190 bytes',
+    typeText: 'Zip archive'
+  }),
+
+  zipArchiveWithAbsolutePaths: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'absolute_paths.zip',
+    targetPath: 'absolute_paths.zip',
+    mimeType: 'application/x-zip',
+    lastModifiedTime: 'Jan 1, 2014, 1:00 AM',
+    nameText: 'absolute_paths.zip',
+    sizeText: '400 bytes',
+    typeText: 'Zip archive'
+  }),
+
+  zipArchiveEncrypted: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'encrypted.zip',
+    targetPath: 'encrypted.zip',
+    mimeType: 'application/x-zip',
+    lastModifiedTime: 'Jan 1, 2014, 1:00 AM',
+    nameText: 'encrypted.zip',
+    sizeText: '589 bytes',
+    typeText: 'Zip archive'
+  }),
+
   debPackage: new TestEntryInfo({
     type: EntryType.FILE,
     sourceFileName: 'package.deb',
@@ -612,6 +838,23 @@ var ENTRIES = {
     },
   }),
 
+  teamDriveADirectory: new TestEntryInfo({
+    type: EntryType.DIRECTORY,
+    targetPath: 'teamDriveADirectory',
+    lastModifiedTime: 'Jan 1, 2000, 1:00 AM',
+    nameText: 'teamDriveADirectory',
+    sizeText: '--',
+    typeText: 'Folder',
+    teamDriveName: 'Team Drive A',
+    capabilities: {
+      canCopy: true,
+      canDelete: true,
+      canRename: true,
+      canAddChildren: true,
+      canShare: false,
+    },
+  }),
+
   teamDriveAHostedFile: new TestEntryInfo({
     type: EntryType.FILE,
     targetPath: 'teamDriveAHostedDoc',
@@ -654,6 +897,43 @@ var ENTRIES = {
     },
   }),
 
+  // Computer entries.
+  computerA: new TestEntryInfo({
+    type: EntryType.COMPUTER,
+    computerName: 'Computer A',
+    folderFeature: {
+      isMachineRoot: true,
+    },
+  }),
+
+  computerAFile: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'text.txt',
+    targetPath: 'computerAFile.txt',
+    mimeType: 'text/plain',
+    lastModifiedTime: 'Sep 4, 1998, 12:34 PM',
+    nameText: 'computerAFile.txt',
+    sizeText: '51 bytes',
+    typeText: 'Plain text',
+    computerName: 'Computer A',
+    capabilities: {
+      canCopy: true,
+      canDelete: true,
+      canRename: true,
+      canAddChildren: false,
+      canShare: true,
+    },
+  }),
+
+  computerAdirectoryA: new TestEntryInfo({
+    type: EntryType.DIRECTORY,
+    targetPath: 'A',
+    lastModifiedTime: 'Jan 1, 2000, 1:00 AM',
+    computerName: 'Computer A',
+    nameText: 'A',
+    sizeText: '--',
+    typeText: 'Folder'
+  }),
 
   // Read-only and write-restricted entries.
   // TODO(sashab): Generate all combinations of capabilities inside the test, to
@@ -732,5 +1012,125 @@ var ENTRIES = {
       canDelete: false,
       canShare: true
     },
-  })
+  }),
+
+  // Default Android directories.
+  directoryDocuments: new TestEntryInfo({
+    type: EntryType.DIRECTORY,
+    targetPath: 'Documents',
+    lastModifiedTime: 'Jan 1, 2000, 1:00 AM',
+    nameText: 'Documents',
+    sizeText: '--',
+    typeText: 'Folder',
+    capabilities: {
+      canCopy: false,
+      canAddChildren: true,
+      canRename: false,
+      canDelete: false,
+      canShare: true
+    },
+  }),
+
+  directoryMovies: new TestEntryInfo({
+    type: EntryType.DIRECTORY,
+    targetPath: 'Movies',
+    lastModifiedTime: 'Jan 1, 2000, 1:00 AM',
+    nameText: 'Movies',
+    sizeText: '--',
+    typeText: 'Folder',
+    capabilities: {
+      canCopy: false,
+      canAddChildren: true,
+      canRename: false,
+      canDelete: false,
+      canShare: true
+    },
+  }),
+
+  directoryMusic: new TestEntryInfo({
+    type: EntryType.DIRECTORY,
+    targetPath: 'Music',
+    lastModifiedTime: 'Jan 1, 2000, 1:00 AM',
+    nameText: 'Music',
+    sizeText: '--',
+    typeText: 'Folder',
+    capabilities: {
+      canCopy: false,
+      canAddChildren: true,
+      canRename: false,
+      canDelete: false,
+      canShare: true
+    },
+  }),
+
+  directoryPictures: new TestEntryInfo({
+    type: EntryType.DIRECTORY,
+    targetPath: 'Pictures',
+    lastModifiedTime: 'Jan 1, 2000, 1:00 AM',
+    nameText: 'Pictures',
+    sizeText: '--',
+    typeText: 'Folder',
+    capabilities: {
+      canCopy: false,
+      canAddChildren: true,
+      canRename: false,
+      canDelete: false,
+      canShare: true
+    },
+  }),
+
+  documentsText: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'text.txt',
+    targetPath: 'Documents/android.txt',
+    mimeType: 'text/plain',
+    lastModifiedTime: 'Sep 4, 1998, 12:34 PM',
+    nameText: 'android.txt',
+    sizeText: '51 bytes',
+    typeText: 'Plain text',
+  }),
+
+  neverSync: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'text.txt',
+    targetPath: 'never-sync.txt',
+    mimeType: 'text/plain',
+    lastModifiedTime: 'Sep 4, 1998, 12:34 PM',
+    nameText: 'never-sync.txt',
+    sizeText: '51 bytes',
+    typeText: 'Plain text'
+  }),
+
+  sharedDirectory: new TestEntryInfo({
+    type: EntryType.DIRECTORY,
+    targetPath: 'Shared Directory',
+    sharedOption: SharedOption.SHARED_WITH_ME,
+    lastModifiedTime: 'Jan 1, 2000, 1:00 AM',
+    nameText: 'Shared Directory',
+    sizeText: '--',
+    typeText: 'Folder'
+  }),
+
+  sharedDirectoryFile: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'text.txt',
+    targetPath: 'Shared Directory/file.txt',
+    mimeType: 'text/plain',
+    sharedOption: SharedOption.NESTED_SHARED_WITH_ME,
+    lastModifiedTime: 'Jan 1, 2000, 1:00 AM',
+    nameText: 'file.txt',
+    sizeText: '51 bytes',
+    typeText: 'Plain text'
+  }),
+
+  crdownload: new TestEntryInfo({
+    type: EntryType.FILE,
+    sourceFileName: 'text.txt',
+    targetPath: 'hello.crdownload',
+    mimeType: 'application/octet-stream',
+    lastModifiedTime: 'Sep 4, 1998, 12:34 PM',
+    nameText: 'hello.crdownload',
+    sizeText: '51 bytes',
+    typeText: 'CRDOWNLOAD file'
+  }),
 };

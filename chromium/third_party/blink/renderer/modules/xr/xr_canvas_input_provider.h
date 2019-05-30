@@ -16,7 +16,7 @@ namespace blink {
 
 class EventListener;
 class HTMLCanvasElement;
-class MouseEvent;
+class PointerEvent;
 class XRInputSource;
 class XRSession;
 
@@ -28,13 +28,15 @@ class XRCanvasInputProvider
   virtual ~XRCanvasInputProvider();
 
   XRSession* session() const { return session_; }
+  HTMLCanvasElement* canvas() const { return canvas_; }
 
   // Remove all event listeners.
   void Stop();
 
   bool ShouldProcessEvents();
 
-  void OnClick(MouseEvent*);
+  void OnPointerDown(PointerEvent*);
+  void OnPointerUp(PointerEvent*);
 
   XRInputSource* GetInputSource();
 
@@ -44,7 +46,7 @@ class XRCanvasInputProvider
   }
 
  private:
-  void UpdateInputSource(MouseEvent*);
+  void UpdateInputSource(PointerEvent*);
   void ClearInputSource();
 
   const Member<XRSession> session_;

@@ -22,14 +22,15 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.CardType;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
-import org.chromium.chrome.browser.modaldialog.ModalDialogView;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.ui.modaldialog.ModalDialogProperties;
 
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
@@ -107,7 +108,7 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogProperties.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
         mPaymentRequestTestRule.expectResultContains(
                 new String[] {"Jon Doe", "4111111111111111", "12", "2050", "basic-card", "123"});
     }
@@ -122,13 +123,13 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
         mPaymentRequestTestRule.clickAndWait(
                 R.id.button_primary, mPaymentRequestTestRule.getReadyForUnmaskInput());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                ModalDialogView.ButtonType.NEGATIVE, mPaymentRequestTestRule.getReadyToPay());
+                ModalDialogProperties.ButtonType.NEGATIVE, mPaymentRequestTestRule.getReadyToPay());
         mPaymentRequestTestRule.clickAndWait(
                 R.id.button_primary, mPaymentRequestTestRule.getReadyForUnmaskInput());
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogProperties.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
         mPaymentRequestTestRule.expectResultContains(
                 new String[] {"Jon Doe", "4111111111111111", "12", "2050", "basic-card", "123"});
     }
@@ -182,7 +183,7 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogProperties.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
         mPaymentRequestTestRule.expectResultContains(
                 new String[] {"5454545454545454", "12", "Bob"});
     }
@@ -206,7 +207,7 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogProperties.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
         mPaymentRequestTestRule.expectResultContains(
                 new String[] {"5454545454545454", "12", "Bob"});
     }
@@ -246,11 +247,17 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
         mPaymentRequestTestRule.setSpinnerSelectionsInCardEditorAndWait(
                 new int[] {DECEMBER, NEXT_YEAR, addBillingAddress},
                 mPaymentRequestTestRule.getReadyToEdit());
-
-        mPaymentRequestTestRule.setTextInEditorAndWait(
-                new String[] {"Bob", "Google", "1600 Amphitheatre Pkwy", "Mountain View", "CA",
-                        "94043", "650-253-0000"},
-                mPaymentRequestTestRule.getEditorTextUpdate());
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.AUTOFILL_ENABLE_COMPANY_NAME)) {
+            mPaymentRequestTestRule.setTextInEditorAndWait(
+                    new String[] {"Bob", "Google", "1600 Amphitheatre Pkwy", "Mountain View", "CA",
+                            "94043", "650-253-0000"},
+                    mPaymentRequestTestRule.getEditorTextUpdate());
+        } else {
+            mPaymentRequestTestRule.setTextInEditorAndWait(
+                    new String[] {"Bob", "1600 Amphitheatre Pkwy", "Mountain View", "CA", "94043",
+                            "650-253-0000"},
+                    mPaymentRequestTestRule.getEditorTextUpdate());
+        }
         mPaymentRequestTestRule.clickInEditorAndWait(
                 R.id.editor_dialog_done_button, mPaymentRequestTestRule.getReadyToEdit());
 
@@ -261,10 +268,16 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
-        mPaymentRequestTestRule.expectResultContains(
-                new String[] {"5454545454545454", "12", "Bob", "Google", "1600 Amphitheatre Pkwy",
-                        "Mountain View", "CA", "94043", "+16502530000"});
+                ModalDialogProperties.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.AUTOFILL_ENABLE_COMPANY_NAME)) {
+            mPaymentRequestTestRule.expectResultContains(new String[] {"5454545454545454", "12",
+                    "Bob", "Google", "1600 Amphitheatre Pkwy", "Mountain View", "CA", "94043",
+                    "+16502530000"});
+        } else {
+            mPaymentRequestTestRule.expectResultContains(
+                    new String[] {"5454545454545454", "12", "Bob", "1600 Amphitheatre Pkwy",
+                            "Mountain View", "CA", "94043", "+16502530000"});
+        }
     }
 
     /** Quickly pressing on "add card" and then [X] should not crash. */

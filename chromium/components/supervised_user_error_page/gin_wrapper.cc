@@ -4,6 +4,7 @@
 
 #include "components/supervised_user_error_page/gin_wrapper.h"
 
+#include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/public/renderer/render_frame.h"
 #include "gin/handle.h"
@@ -100,7 +101,8 @@ void GinWrapper::OnAccessRequestAdded(bool success) {
   v8::MicrotasksScope microtasks(isolate,
                                  v8::MicrotasksScope::kDoNotRunMicrotasks);
 
-  callback->Call(context->Global(), 1, &args);
+  callback->Call(context, context->Global(), 1, &args)
+      .FromMaybe(v8::Local<v8::Value>());
 }
 
 gin::ObjectTemplateBuilder GinWrapper::GetObjectTemplateBuilder(

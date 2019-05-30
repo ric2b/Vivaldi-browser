@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/profiles/profile.h"
@@ -87,9 +88,7 @@ void ChangeListPref(int index,
   {
     ListPrefUpdate update(GetPrefs(index), pref_name);
     base::ListValue* list = update.Get();
-    for (base::ListValue::const_iterator it = new_value.begin();
-         it != new_value.end();
-         ++it) {
+    for (auto it = new_value.begin(); it != new_value.end(); ++it) {
       list->Append(it->CreateDeepCopy());
     }
   }
@@ -97,9 +96,7 @@ void ChangeListPref(int index,
   if (test()->use_verifier()) {
     ListPrefUpdate update_verifier(GetVerifierPrefs(), pref_name);
     base::ListValue* list_verifier = update_verifier.Get();
-    for (base::ListValue::const_iterator it = new_value.begin();
-         it != new_value.end();
-         ++it) {
+    for (auto it = new_value.begin(); it != new_value.end(); ++it) {
       list_verifier->Append(it->CreateDeepCopy());
     }
   }

@@ -8,7 +8,6 @@
 #include "base/containers/flat_set.h"
 #include "base/observer_list_threadsafe.h"
 #include "components/crash/content/browser/child_exit_observer_android.h"
-#include "components/crash/content/browser/crash_dump_manager_android.h"
 
 namespace crash_reporter {
 
@@ -47,9 +46,11 @@ class CrashMetricsReporter {
     kRendererForegroundInvisibleWithStrongBindingOom = 12,
     kRendererForegroundInvisibleWithModerateBindingKilled = 13,
     kRendererForegroundInvisibleWithModerateBindingOom = 14,
-    kRendererForegroundVisibleVirtualMemoryOom = 15,
-    kRendererVirtualMemoryOomAll = 16,
-    kMaxValue = kRendererVirtualMemoryOomAll
+    kRendererForegroundVisibleAllocationFailure = 15,
+    kRendererAllocationFailureAll = 16,
+    kUtilityForegroundOom = 17,
+    kUtilityCrashAll = 18,
+    kMaxValue = kUtilityCrashAll
   };
   using ReportedCrashTypeSet = base::flat_set<ProcessedCrashCounts>;
 
@@ -73,8 +74,8 @@ class CrashMetricsReporter {
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
-  void CrashDumpProcessed(const ChildExitObserver::TerminationInfo& info,
-                          breakpad::CrashDumpManager::CrashDumpStatus status);
+  void ChildProcessExited(
+      const crash_reporter::ChildExitObserver::TerminationInfo& info);
 
  private:
   CrashMetricsReporter();

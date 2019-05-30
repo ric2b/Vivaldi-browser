@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_property_node.h"
 #include "third_party/blink/renderer/platform/graphics/paint/transform_paint_property_node.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
+#include "ui/gfx/rrect_f.h"
 
 namespace blink {
 
@@ -43,23 +44,42 @@ class PLATFORM_EXPORT EffectPaintPropertyNode
     ColorFilter color_filter = kColorFilterNone;
     CompositorFilterOperations filter;
     float opacity = 1;
+    CompositorFilterOperations backdrop_filter;
+    gfx::RRectF backdrop_filter_bounds;
     SkBlendMode blend_mode = SkBlendMode::kSrcOver;
     // === End of effects ===
     CompositingReasons direct_compositing_reasons = CompositingReason::kNone;
     CompositorElementId compositor_element_id;
-    // The offset of the effect's local space in m_localTransformSpace. Some
-    // effects e.g. reflection need this to apply geometry effects in the local
-    // space.
-    FloatPoint paint_offset = FloatPoint();
+    // The offset of the origin of filters in local_transform_space.
+    FloatPoint filters_origin;
 
     bool operator==(const State& o) const {
+      return EqualIgnoringAnimatingProperties(o, false);
+    }
+
+    bool EqualIgnoringAnimatingProperties(const State& o,
+                                          bool check_for_animations) const {
+      bool filters_equal =
+          (filter == o.filter) ||
+          (check_for_animations && (direct_compositing_reasons &
+                                    CompositingReason::kActiveFilterAnimation));
+      bool backdrops_equal =
+          (backdrop_filter == o.backdrop_filter) ||
+          (check_for_animations &&
+           (direct_compositing_reasons &
+            CompositingReason::kActiveBackdropFilterAnimation));
+      bool opacity_equal = (opacity == o.opacity) ||
+                           (check_for_animations &&
+                            (direct_compositing_reasons &
+                             CompositingReason::kActiveOpacityAnimation));
       return local_transform_space == o.local_transform_space &&
              output_clip == o.output_clip && color_filter == o.color_filter &&
-             filter == o.filter && opacity == o.opacity &&
+             backdrop_filter_bounds == o.backdrop_filter_bounds &&
              blend_mode == o.blend_mode &&
              direct_compositing_reasons == o.direct_compositing_reasons &&
              compositor_element_id == o.compositor_element_id &&
-             paint_offset == o.paint_offset;
+             filters_origin == o.filters_origin && filters_equal &&
+             backdrops_equal && opacity_equal;
     }
   };
 
@@ -69,8 +89,13 @@ class PLATFORM_EXPORT EffectPaintPropertyNode
   static scoped_refptr<EffectPaintPropertyNode> Create(
       const EffectPaintPropertyNode& parent,
       State&& state) {
-    return base::AdoptRef(
-        new EffectPaintPropertyNode(&parent, std::move(state)));
+    return base::AdoptRef(new EffectPaintPropertyNode(
+        &parent, std::move(state), false /* is_parent_alias */));
+  }
+  static scoped_refptr<EffectPaintPropertyNode> CreateAlias(
+      const EffectPaintPropertyNode& parent) {
+    return base::AdoptRef(new EffectPaintPropertyNode(
+        &parent, State{}, true /* is_parent_alias */));
   }
 
   bool Update(const EffectPaintPropertyNode& parent, State&& state) {
@@ -78,9 +103,16 @@ class PLATFORM_EXPORT EffectPaintPropertyNode
     if (state == state_)
       return parent_changed;
 
-    SetChanged();
+    DCHECK(!IsParentAlias()) << "Changed the state of an alias node.";
     state_ = std::move(state);
+    SetChanged();
     return true;
+  }
+
+  bool HaveNonAnimatingPropertiesChanged(const EffectPaintPropertyNode& parent,
+                                         State& state) const {
+    return !state.EqualIgnoringAnimatingProperties(state_, true) ||
+           HasParentChanged(&parent);
   }
 
   // Checks if the accumulated effect from |this| to |relative_to_state
@@ -94,54 +126,74 @@ class PLATFORM_EXPORT EffectPaintPropertyNode
   bool Changed(const PropertyTreeState& relative_to_state,
                const TransformPaintPropertyNode* transform_not_to_check) const;
 
-  const TransformPaintPropertyNode* LocalTransformSpace() const {
-    return state_.local_transform_space.get();
+  const TransformPaintPropertyNode& LocalTransformSpace() const {
+    DCHECK(!Parent() || !IsParentAlias());
+    return *state_.local_transform_space;
   }
   const ClipPaintPropertyNode* OutputClip() const {
+    DCHECK(!Parent() || !IsParentAlias());
     return state_.output_clip.get();
   }
 
-  SkBlendMode BlendMode() const { return state_.blend_mode; }
-  float Opacity() const { return state_.opacity; }
-  const CompositorFilterOperations& Filter() const { return state_.filter; }
-  ColorFilter GetColorFilter() const { return state_.color_filter; }
+  SkBlendMode BlendMode() const {
+    DCHECK(!Parent() || !IsParentAlias());
+    return state_.blend_mode;
+  }
+  float Opacity() const {
+    DCHECK(!Parent() || !IsParentAlias());
+    return state_.opacity;
+  }
+  const CompositorFilterOperations& Filter() const {
+    DCHECK(!Parent() || !IsParentAlias());
+    return state_.filter;
+  }
+  ColorFilter GetColorFilter() const {
+    DCHECK(!Parent() || !IsParentAlias());
+    return state_.color_filter;
+  }
+
+  const CompositorFilterOperations& BackdropFilter() const {
+    return state_.backdrop_filter;
+  }
+
+  const gfx::RRectF& BackdropFilterBounds() const {
+    return state_.backdrop_filter_bounds;
+  }
 
   bool HasFilterThatMovesPixels() const {
+    DCHECK(!Parent() || !IsParentAlias());
     return state_.filter.HasFilterThatMovesPixels();
   }
 
-  FloatPoint PaintOffset() const { return state_.paint_offset; }
+  FloatPoint FiltersOrigin() const {
+    DCHECK(!Parent() || !IsParentAlias());
+    return state_.filters_origin;
+  }
 
   // Returns a rect covering the pixels that can be affected by pixels in
   // |inputRect|. The rects are in the space of localTransformSpace.
   FloatRect MapRect(const FloatRect& input_rect) const;
 
   bool HasDirectCompositingReasons() const {
-    return state_.direct_compositing_reasons != CompositingReason::kNone;
+    return DirectCompositingReasons() != CompositingReason::kNone;
   }
-
   bool RequiresCompositingForAnimation() const {
-    return state_.direct_compositing_reasons &
+    return DirectCompositingReasons() &
            CompositingReason::kComboActiveAnimation;
+  }
+  bool HasActiveOpacityAnimation() const {
+    return DirectCompositingReasons() &
+           CompositingReason::kActiveOpacityAnimation;
+  }
+  bool HasActiveFilterAnimation() const {
+    return DirectCompositingReasons() &
+           CompositingReason::kActiveFilterAnimation;
   }
 
   const CompositorElementId& GetCompositorElementId() const {
+    DCHECK(!Parent() || !IsParentAlias());
     return state_.compositor_element_id;
   }
-
-#if DCHECK_IS_ON()
-  // The clone function is used by FindPropertiesNeedingUpdate.h for recording
-  // an effect node before it has been updated, to later detect changes.
-  scoped_refptr<EffectPaintPropertyNode> Clone() const {
-    return base::AdoptRef(new EffectPaintPropertyNode(Parent(), State(state_)));
-  }
-
-  // The equality operator is used by FindPropertiesNeedingUpdate.h for checking
-  // if an effect node has changed.
-  bool operator==(const EffectPaintPropertyNode& o) const {
-    return Parent() == o.Parent() && state_ == o.state_;
-  }
-#endif
 
   std::unique_ptr<JSONObject> ToJSON() const;
 
@@ -149,8 +201,15 @@ class PLATFORM_EXPORT EffectPaintPropertyNode
   size_t TreeMemoryUsageInBytes() const;
 
  private:
-  EffectPaintPropertyNode(const EffectPaintPropertyNode* parent, State&& state)
-      : PaintPropertyNode(parent), state_(std::move(state)) {}
+  EffectPaintPropertyNode(const EffectPaintPropertyNode* parent,
+                          State&& state,
+                          bool is_parent_alias)
+      : PaintPropertyNode(parent, is_parent_alias), state_(std::move(state)) {}
+
+  CompositingReasons DirectCompositingReasons() const {
+    DCHECK(!Parent() || !IsParentAlias());
+    return state_.direct_compositing_reasons;
+  }
 
   State state_;
 };

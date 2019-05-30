@@ -7,7 +7,6 @@
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "content/common/service_worker/service_worker_types.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/url_constants.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
@@ -24,14 +23,45 @@ SourceLocation::SourceLocation(const std::string& url,
 
 SourceLocation::~SourceLocation() = default;
 
+InitiatorCSPInfo::InitiatorCSPInfo() = default;
+InitiatorCSPInfo::InitiatorCSPInfo(
+    CSPDisposition should_check_main_world_csp,
+    const std::vector<ContentSecurityPolicy>& initiator_csp,
+    const base::Optional<CSPSource>& initiator_self_source)
+    : should_check_main_world_csp(should_check_main_world_csp),
+      initiator_csp(initiator_csp),
+      initiator_self_source(initiator_self_source) {}
+InitiatorCSPInfo::InitiatorCSPInfo(const InitiatorCSPInfo& other) = default;
+
+InitiatorCSPInfo::~InitiatorCSPInfo() = default;
+
+ResourceInterceptPolicy GetResourceInterceptPolicy(
+    NavigationDownloadPolicy policy) {
+  switch (policy) {
+    case NavigationDownloadPolicy::kDisallowViewSource:
+    case NavigationDownloadPolicy::kDisallowInterstitial:
+    case NavigationDownloadPolicy::kDisallowOpenerCrossOrigin:
+    case NavigationDownloadPolicy::kDisallowSandbox:
+      return ResourceInterceptPolicy::kAllowNone;
+    case NavigationDownloadPolicy::kAllow:
+      return ResourceInterceptPolicy::kAllowAll;
+  }
+}
+
+bool IsNavigationDownloadAllowed(NavigationDownloadPolicy policy) {
+  return GetResourceInterceptPolicy(policy) ==
+         ResourceInterceptPolicy::kAllowAll;
+}
+
 CommonNavigationParams::CommonNavigationParams() = default;
 
 CommonNavigationParams::CommonNavigationParams(
     const GURL& url,
+    const base::Optional<url::Origin>& initiator_origin,
     const Referrer& referrer,
     ui::PageTransition transition,
     FrameMsg_Navigate_Type::Value navigation_type,
-    bool allow_download,
+    NavigationDownloadPolicy download_policy,
     bool should_replace_current_entry,
     const GURL& base_url_for_data_url,
     const GURL& history_url_for_data_url,
@@ -40,17 +70,17 @@ CommonNavigationParams::CommonNavigationParams(
     std::string method,
     const scoped_refptr<network::ResourceRequestBody>& post_data,
     base::Optional<SourceLocation> source_location,
-    CSPDisposition should_check_main_world_csp,
     bool started_from_context_menu,
     bool has_user_gesture,
-    const std::vector<ContentSecurityPolicy>& initiator_csp,
-    const base::Optional<CSPSource>& initiator_self_source,
+    const InitiatorCSPInfo& initiator_csp_info,
+    const std::string& href_translate,
     base::TimeTicks input_start)
     : url(url),
+      initiator_origin(initiator_origin),
       referrer(referrer),
       transition(transition),
       navigation_type(navigation_type),
-      allow_download(allow_download),
+      download_policy(download_policy),
       should_replace_current_entry(should_replace_current_entry),
       base_url_for_data_url(base_url_for_data_url),
       history_url_for_data_url(history_url_for_data_url),
@@ -59,11 +89,10 @@ CommonNavigationParams::CommonNavigationParams(
       method(method),
       post_data(post_data),
       source_location(source_location),
-      should_check_main_world_csp(should_check_main_world_csp),
       started_from_context_menu(started_from_context_menu),
       has_user_gesture(has_user_gesture),
-      initiator_csp(initiator_csp),
-      initiator_self_source(initiator_self_source),
+      initiator_csp_info(initiator_csp_info),
+      href_translate(href_translate),
       input_start(input_start) {
   // |method != "POST"| should imply absence of |post_data|.
   if (method != "POST" && post_data) {
@@ -77,9 +106,10 @@ CommonNavigationParams::CommonNavigationParams(
 
 CommonNavigationParams::~CommonNavigationParams() = default;
 
-RequestNavigationParams::RequestNavigationParams() = default;
+CommitNavigationParams::CommitNavigationParams() = default;
 
-RequestNavigationParams::RequestNavigationParams(
+CommitNavigationParams::CommitNavigationParams(
+    const base::Optional<url::Origin>& origin_to_commit,
     bool is_overriding_user_agent,
     const std::vector<GURL>& redirects,
     const GURL& original_url,
@@ -95,7 +125,8 @@ RequestNavigationParams::RequestNavigationParams(
     int current_history_list_length,
     bool is_view_source,
     bool should_clear_history_list)
-    : is_overriding_user_agent(is_overriding_user_agent),
+    : origin_to_commit(origin_to_commit),
+      is_overriding_user_agent(is_overriding_user_agent),
       redirects(redirects),
       original_url(original_url),
       original_method(original_method),
@@ -111,9 +142,9 @@ RequestNavigationParams::RequestNavigationParams(
       is_view_source(is_view_source),
       should_clear_history_list(should_clear_history_list) {}
 
-RequestNavigationParams::RequestNavigationParams(
-    const RequestNavigationParams& other) = default;
+CommitNavigationParams::CommitNavigationParams(
+    const CommitNavigationParams& other) = default;
 
-RequestNavigationParams::~RequestNavigationParams() = default;
+CommitNavigationParams::~CommitNavigationParams() = default;
 
 }  // namespace content

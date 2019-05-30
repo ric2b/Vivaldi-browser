@@ -29,44 +29,41 @@
 namespace blink {
 
 inline SVGMaskElement::SVGMaskElement(Document& document)
-    : SVGElement(SVGNames::maskTag, document),
+    : SVGElement(svg_names::kMaskTag, document),
       SVGTests(this),
+      // Spec: If the x/y attribute is not specified, the effect is as if a
+      // value of "-10%" were specified.
       x_(SVGAnimatedLength::Create(this,
-                                   SVGNames::xAttr,
-                                   SVGLength::Create(SVGLengthMode::kWidth),
+                                   svg_names::kXAttr,
+                                   SVGLengthMode::kWidth,
+                                   SVGLength::Initial::kPercentMinus10,
                                    CSSPropertyX)),
       y_(SVGAnimatedLength::Create(this,
-                                   SVGNames::yAttr,
-                                   SVGLength::Create(SVGLengthMode::kHeight),
+                                   svg_names::kYAttr,
+                                   SVGLengthMode::kHeight,
+                                   SVGLength::Initial::kPercentMinus10,
                                    CSSPropertyY)),
+      // Spec: If the width/height attribute is not specified, the effect is as
+      // if a value of "120%" were specified.
       width_(SVGAnimatedLength::Create(this,
-                                       SVGNames::widthAttr,
-                                       SVGLength::Create(SVGLengthMode::kWidth),
+                                       svg_names::kWidthAttr,
+                                       SVGLengthMode::kWidth,
+                                       SVGLength::Initial::kPercent120,
                                        CSSPropertyWidth)),
-      height_(
-          SVGAnimatedLength::Create(this,
-                                    SVGNames::heightAttr,
-                                    SVGLength::Create(SVGLengthMode::kHeight),
-                                    CSSPropertyHeight)),
+      height_(SVGAnimatedLength::Create(this,
+                                        svg_names::kHeightAttr,
+                                        SVGLengthMode::kHeight,
+                                        SVGLength::Initial::kPercent120,
+                                        CSSPropertyHeight)),
       mask_units_(SVGAnimatedEnumeration<SVGUnitTypes::SVGUnitType>::Create(
           this,
-          SVGNames::maskUnitsAttr,
+          svg_names::kMaskUnitsAttr,
           SVGUnitTypes::kSvgUnitTypeObjectboundingbox)),
       mask_content_units_(
           SVGAnimatedEnumeration<SVGUnitTypes::SVGUnitType>::Create(
               this,
-              SVGNames::maskContentUnitsAttr,
+              svg_names::kMaskContentUnitsAttr,
               SVGUnitTypes::kSvgUnitTypeUserspaceonuse)) {
-  // Spec: If the x/y attribute is not specified, the effect is as if a value of
-  // "-10%" were specified.
-  x_->SetDefaultValueAsString("-10%");
-  y_->SetDefaultValueAsString("-10%");
-
-  // Spec: If the width/height attribute is not specified, the effect is as if a
-  // value of "120%" were specified.
-  width_->SetDefaultValueAsString("120%");
-  height_->SetDefaultValueAsString("120%");
-
   AddToPropertyMap(x_);
   AddToPropertyMap(y_);
   AddToPropertyMap(width_);
@@ -112,11 +109,11 @@ void SVGMaskElement::CollectStyleForPresentationAttribute(
 
 void SVGMaskElement::SvgAttributeChanged(const QualifiedName& attr_name) {
   bool is_length_attr =
-      attr_name == SVGNames::xAttr || attr_name == SVGNames::yAttr ||
-      attr_name == SVGNames::widthAttr || attr_name == SVGNames::heightAttr;
+      attr_name == svg_names::kXAttr || attr_name == svg_names::kYAttr ||
+      attr_name == svg_names::kWidthAttr || attr_name == svg_names::kHeightAttr;
 
-  if (is_length_attr || attr_name == SVGNames::maskUnitsAttr ||
-      attr_name == SVGNames::maskContentUnitsAttr ||
+  if (is_length_attr || attr_name == svg_names::kMaskUnitsAttr ||
+      attr_name == svg_names::kMaskContentUnitsAttr ||
       SVGTests::IsKnownAttribute(attr_name)) {
     SVGElement::InvalidationGuard invalidation_guard(this);
 
@@ -145,9 +142,10 @@ void SVGMaskElement::ChildrenChanged(const ChildrenChange& change) {
   if (change.by_parser)
     return;
 
-  if (LayoutObject* object = GetLayoutObject())
+  if (LayoutObject* object = GetLayoutObject()) {
     object->SetNeedsLayoutAndFullPaintInvalidation(
-        LayoutInvalidationReason::kChildChanged);
+        layout_invalidation_reason::kChildChanged);
+  }
 }
 
 LayoutObject* SVGMaskElement::CreateLayoutObject(const ComputedStyle&) {

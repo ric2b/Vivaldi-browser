@@ -11,8 +11,6 @@
 #include "ash/app_list/views/apps_container_view.h"
 #include "ash/app_list/views/contents_view.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
-#include "ash/public/cpp/app_list/app_list_constants.h"
-#include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/app_list/vector_icons/vector_icons.h"
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
@@ -98,13 +96,12 @@ ExpandArrowView::ExpandArrowView(ContentsView* contents_view,
     : views::Button(this),
       contents_view_(contents_view),
       app_list_view_(app_list_view),
-      is_new_style_launcher_enabled_(features::IsNewStyleLauncherEnabled()),
       weak_ptr_factory_(this) {
   SetFocusBehavior(FocusBehavior::ALWAYS);
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 
-  SetInkDropMode(InkDropHostView::InkDropMode::ON);
+  SetInkDropMode(InkDropMode::ON);
 
   SetAccessibleName(l10n_util::GetStringUTF16(IDS_APP_LIST_EXPAND_BUTTON));
 
@@ -112,7 +109,14 @@ ExpandArrowView::ExpandArrowView(ContentsView* contents_view,
   animation_->SetTweenType(gfx::Tween::LINEAR);
   animation_->SetSlideDuration(kCycleDurationInMs * 2 + kCycleIntervalInMs);
   ResetHintingAnimation();
-  ScheduleHintingAnimation(true);
+  // When side shelf or tablet mode is enabled, the peeking launcher won't be
+  // shown, so the hint animation is unnecessary. Also, do not run the animation
+  // during test since we are not testing the animation and it might cause msan
+  // crash when spoken feedbacke is enabled (See https://crbug.com/926038).
+  if (!app_list_view_->is_side_shelf() && !app_list_view_->is_tablet_mode() &&
+      !AppListView::ShortAnimationsForTesting()) {
+    ScheduleHintingAnimation(true);
+  }
 }
 
 ExpandArrowView::~ExpandArrowView() = default;
@@ -126,32 +130,30 @@ void ExpandArrowView::PaintButtonContents(gfx::Canvas* canvas) {
   SkColor circle_color =
       HasFocus() ? kFocusedBackgroundColor : kUnFocusedBackgroundColor;
   const float progress = app_list_view_->GetAppListTransitionProgress();
-  if (is_new_style_launcher_enabled_) {
-    if (progress <= 1) {
-      // Currently transition progress is between closed and peeking state.
-      // Change the y positions of arrow and circle.
-      circle_center.set_y(gfx::Tween::FloatValueBetween(
-          progress, kCircleCenterClosedY, kCircleCenterPeekingY));
-      arrow_origin.set_y(gfx::Tween::FloatValueBetween(progress, kArrowClosedY,
-                                                       kArrowPeekingY));
-    } else {
-      const float peeking_to_full_progress = progress - 1;
-      // Currently transition progress is between peeking and fullscreen state.
-      // Change the y positions of arrow and circle. Also change the shape of
-      // the arrow and the opacity of the circle.
-      circle_center.set_y(gfx::Tween::FloatValueBetween(
-          peeking_to_full_progress, kCircleCenterPeekingY,
-          kCircleCenterFullscreenY));
-      arrow_origin.set_y(gfx::Tween::FloatValueBetween(
-          peeking_to_full_progress, kArrowPeekingY, kArrowFullscreenY));
-      for (size_t i = 0; i < kPointCount; ++i) {
-        arrow_points[i].set_y(gfx::Tween::FloatValueBetween(
-            peeking_to_full_progress, kPeekingPoints[i].y(),
-            kFullscreenPoints[i].y()));
-      }
-      circle_color = gfx::Tween::ColorValueBetween(
-          peeking_to_full_progress, circle_color, SK_ColorTRANSPARENT);
+  if (progress <= 1) {
+    // Currently transition progress is between closed and peeking state.
+    // Change the y positions of arrow and circle.
+    circle_center.set_y(gfx::Tween::FloatValueBetween(
+        progress, kCircleCenterClosedY, kCircleCenterPeekingY));
+    arrow_origin.set_y(
+        gfx::Tween::FloatValueBetween(progress, kArrowClosedY, kArrowPeekingY));
+  } else {
+    const float peeking_to_full_progress = progress - 1;
+    // Currently transition progress is between peeking and fullscreen state.
+    // Change the y positions of arrow and circle. Also change the shape of
+    // the arrow and the opacity of the circle.
+    circle_center.set_y(gfx::Tween::FloatValueBetween(
+        peeking_to_full_progress, kCircleCenterPeekingY,
+        kCircleCenterFullscreenY));
+    arrow_origin.set_y(gfx::Tween::FloatValueBetween(
+        peeking_to_full_progress, kArrowPeekingY, kArrowFullscreenY));
+    for (size_t i = 0; i < kPointCount; ++i) {
+      arrow_points[i].set_y(gfx::Tween::FloatValueBetween(
+          peeking_to_full_progress, kPeekingPoints[i].y(),
+          kFullscreenPoints[i].y()));
     }
+    circle_color = gfx::Tween::ColorValueBetween(
+        peeking_to_full_progress, circle_color, SK_ColorTRANSPARENT);
   }
 
   if (animation_->is_animating() && progress <= 1) {
@@ -179,7 +181,7 @@ void ExpandArrowView::PaintButtonContents(gfx::Canvas* canvas) {
 
   // Add a clip path so that arrow will only be shown within the circular
   // highlight area.
-  gfx::Path arrow_mask_path;
+  SkPath arrow_mask_path;
   arrow_mask_path.addCircle(circle_center.x(), circle_center.y(),
                             kCircleRadius);
   canvas->ClipPath(arrow_mask_path, true);
@@ -196,7 +198,7 @@ void ExpandArrowView::PaintButtonContents(gfx::Canvas* canvas) {
   arrow_flags.setStrokeJoin(cc::PaintFlags::Join::kRound_Join);
   arrow_flags.setStyle(cc::PaintFlags::kStroke_Style);
 
-  gfx::Path arrow_path;
+  SkPath arrow_path;
   arrow_path.moveTo(arrow_points[0].x(), arrow_points[0].y());
   for (size_t i = 1; i < kPointCount; ++i)
     arrow_path.lineTo(arrow_points[i].x(), arrow_points[i].y());
@@ -324,7 +326,9 @@ void ExpandArrowView::AnimationProgressed(const gfx::Animation* animation) {
 
 void ExpandArrowView::AnimationEnded(const gfx::Animation* /*animation*/) {
   ResetHintingAnimation();
-  if (!button_pressed_)
+  // Only reschedule hinting animation if app list is not fullscreen. Once the
+  // user has made the app_list fullscreen, a hint to do so is no longer needed
+  if (!app_list_view_->is_fullscreen())
     ScheduleHintingAnimation(false);
 }
 

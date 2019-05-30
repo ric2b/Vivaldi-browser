@@ -4,12 +4,12 @@
 
 #include "third_party/blink/renderer/core/events/application_cache_error_event.h"
 
+#include "third_party/blink/public/mojom/appcache/appcache.mojom-blink.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 
 namespace blink {
 
-static const String& ErrorReasonToString(
-    WebApplicationCacheHost::ErrorReason reason) {
+static const String& ErrorReasonToString(mojom::AppCacheErrorReason reason) {
   DEFINE_STATIC_LOCAL(String, error_manifest, ("manifest"));
   DEFINE_STATIC_LOCAL(String, error_signature, ("signature"));
   DEFINE_STATIC_LOCAL(String, error_resource, ("resource"));
@@ -20,21 +20,21 @@ static const String& ErrorReasonToString(
   DEFINE_STATIC_LOCAL(String, error_unknown, ("unknown"));
 
   switch (reason) {
-    case WebApplicationCacheHost::kManifestError:
+    case mojom::AppCacheErrorReason::APPCACHE_MANIFEST_ERROR:
       return error_manifest;
-    case WebApplicationCacheHost::kSignatureError:
+    case mojom::AppCacheErrorReason::APPCACHE_SIGNATURE_ERROR:
       return error_signature;
-    case WebApplicationCacheHost::kResourceError:
+    case mojom::AppCacheErrorReason::APPCACHE_RESOURCE_ERROR:
       return error_resource;
-    case WebApplicationCacheHost::kChangedError:
+    case mojom::AppCacheErrorReason::APPCACHE_CHANGED_ERROR:
       return error_changed;
-    case WebApplicationCacheHost::kAbortError:
+    case mojom::AppCacheErrorReason::APPCACHE_ABORT_ERROR:
       return error_abort;
-    case WebApplicationCacheHost::kQuotaError:
+    case mojom::AppCacheErrorReason::APPCACHE_QUOTA_ERROR:
       return error_quota;
-    case WebApplicationCacheHost::kPolicyError:
+    case mojom::AppCacheErrorReason::APPCACHE_POLICY_ERROR:
       return error_policy;
-    case WebApplicationCacheHost::kUnknownError:
+    case mojom::AppCacheErrorReason::APPCACHE_UNKNOWN_ERROR:
       return error_unknown;
   }
   NOTREACHED();
@@ -42,11 +42,11 @@ static const String& ErrorReasonToString(
 }
 
 ApplicationCacheErrorEvent::ApplicationCacheErrorEvent(
-    WebApplicationCacheHost::ErrorReason reason,
+    mojom::AppCacheErrorReason reason,
     const String& url,
-    int status,
+    uint16_t status,
     const String& message)
-    : Event(EventTypeNames::error, Bubbles::kNo, Cancelable::kNo),
+    : Event(event_type_names::kError, Bubbles::kNo, Cancelable::kNo),
       reason_(ErrorReasonToString(reason)),
       url_(url),
       status_(status),
@@ -54,16 +54,16 @@ ApplicationCacheErrorEvent::ApplicationCacheErrorEvent(
 
 ApplicationCacheErrorEvent::ApplicationCacheErrorEvent(
     const AtomicString& event_type,
-    const ApplicationCacheErrorEventInit& initializer)
+    const ApplicationCacheErrorEventInit* initializer)
     : Event(event_type, initializer), status_(0) {
-  if (initializer.hasReason())
-    reason_ = initializer.reason();
-  if (initializer.hasURL())
-    url_ = initializer.url();
-  if (initializer.hasStatus())
-    status_ = initializer.status();
-  if (initializer.hasMessage())
-    message_ = initializer.message();
+  if (initializer->hasReason())
+    reason_ = initializer->reason();
+  if (initializer->hasURL())
+    url_ = initializer->url();
+  if (initializer->hasStatus())
+    status_ = initializer->status();
+  if (initializer->hasMessage())
+    message_ = initializer->message();
 }
 
 ApplicationCacheErrorEvent::~ApplicationCacheErrorEvent() = default;

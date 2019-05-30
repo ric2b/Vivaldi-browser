@@ -14,7 +14,7 @@ class FilePath;
 }
 
 // The path to the registry key where shell extensions are registered.
-extern const wchar_t kShellExtensionRegistryKey[];
+extern const wchar_t kApprovedShellExtensionRegistryKey[];
 
 // Finds shell extensions installed on the computer by enumerating the registry.
 // In addition to the file path, the SizeOfImage and TimeDateStamp of the module

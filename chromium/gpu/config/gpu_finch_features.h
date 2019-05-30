@@ -16,19 +16,32 @@ namespace features {
 
 // All features in alphabetical order. The features should be documented
 // alongside the definition of their values in the .cc file.
+#if defined(OS_ANDROID)
+GPU_EXPORT extern const base::Feature kAImageReaderMediaPlayer;
+GPU_EXPORT extern const base::Feature kAndroidSurfaceControl;
+#endif  // defined(OS_ANDROID)
+
 GPU_EXPORT extern const base::Feature kDefaultEnableGpuRasterization;
 
 GPU_EXPORT extern const base::Feature kDefaultEnableOopRasterization;
 
 GPU_EXPORT extern const base::Feature kDefaultPassthroughCommandDecoder;
 
-GPU_EXPORT extern const base::Feature kDirectCompositionOverlays;
+GPU_EXPORT extern const base::Feature kDirectCompositionPreferNV12Overlays;
+
+GPU_EXPORT extern const base::Feature kDirectCompositionUnderlays;
+
+GPU_EXPORT extern const base::Feature kSharedImageManager;
+
+GPU_EXPORT extern const base::Feature kUseDCOverlaysForSoftwareProtectedVideo;
+
+GPU_EXPORT extern const base::Feature kDirectCompositionUseNV12DecodeSwapChain;
+
+GPU_EXPORT extern const base::Feature kVaapiJpegImageDecodeAcceleration;
 
 #if defined(OS_ANDROID)
-GPU_EXPORT extern const base::Feature kAImageReaderMediaPlayer;
-#endif  // defined(OS_ANDROID)
-
-GPU_EXPORT extern const base::Feature kDirectCompositionPreferNV12Overlays;
+GPU_EXPORT bool IsAndroidSurfaceControlEnabled();
+#endif
 
 }  // namespace features
 

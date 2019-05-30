@@ -19,7 +19,7 @@ from telemetry import decorators
 
 import mock
 
-#import process_perf_results as ppr_module
+import process_perf_results as ppr_module
 
 
 class _FakeLogdogStream(object):
@@ -33,7 +33,34 @@ class _FakeLogdogStream(object):
   def get_viewer_url(self):
     return 'http://foobar.not.exit'
 
-@unittest.skip("Does not work in Vivaldi environment")
+
+# pylint: disable=protected-access
+class DataFormatParsingUnitTest(unittest.TestCase):
+  def tearDown(self):
+    ppr_module._data_format_cache = {}
+
+  def testGtest(self):
+    with mock.patch('__builtin__.open', mock.mock_open(read_data='{}')):
+      self.assertTrue(ppr_module._is_gtest('test.json'))
+      self.assertFalse(ppr_module._is_histogram('test.json'))
+    self.assertTrue(ppr_module._is_gtest('test.json'))
+    self.assertFalse(ppr_module._is_histogram('test.json'))
+
+  def testChartJSON(self):
+    with mock.patch('__builtin__.open',
+        mock.mock_open(read_data='{"charts": 1}')):
+      self.assertFalse(ppr_module._is_gtest('test.json'))
+      self.assertFalse(ppr_module._is_histogram('test.json'))
+    self.assertFalse(ppr_module._is_gtest('test.json'))
+    self.assertFalse(ppr_module._is_histogram('test.json'))
+
+  def testHistogram(self):
+    with mock.patch('__builtin__.open', mock.mock_open(read_data='[]')):
+      self.assertTrue(ppr_module._is_histogram('test.json'))
+      self.assertFalse(ppr_module._is_gtest('test.json'))
+    self.assertTrue(ppr_module._is_histogram('test.json'))
+    self.assertFalse(ppr_module._is_gtest('test.json'))
+
 class ProcessPerfResultsIntegrationTest(unittest.TestCase):
   def setUp(self):
     self.test_dir = tempfile.mkdtemp()
@@ -82,15 +109,16 @@ class ProcessPerfResultsIntegrationTest(unittest.TestCase):
              "created_by": "user:foo",
              "created_ts": "1535490272757820",
              "id": "8936915467712010816",
+             "project": "chrome",
              "lease_key": "461228535",
-             "tags": ["builder:obbs_fyi", "buildset:patch/1194825/3",
+             "tags": ["builder:android-go-perf", "buildset:patch/1194825/3",
                       "cq_experimental:False",
                       "master:master.tryserver.chromium.perf",
                       "user_agent:cq"]}}"""
         })
     return_code, benchmark_upload_result_map = ppr_module.process_perf_results(
         self.output_json, configuration_name='test-builder',
-        service_account_file = self.service_account_file,
+        service_account_file=self.service_account_file,
         build_properties=build_properties,
         task_output_dir=self.task_output_dir,
         smoke_test_mode=False)
@@ -131,6 +159,22 @@ class ProcessPerfResultsIntegrationTest(unittest.TestCase):
           "octane": True,
           "speedometer.reference": True
         })
+
+
+class ProcessPerfResults_HardenedUnittest(unittest.TestCase):
+  def test_handle_perf_json_test_results_IOError(self):
+    directory_map = {
+        'benchmark.example': ['directory_that_does_not_exist']}
+    test_results_list = []
+    ppr_module._handle_perf_json_test_results(directory_map, test_results_list)
+    self.assertEqual(test_results_list, [])
+
+  def test_merge_perf_results_IOError(self):
+    results_filename = None
+    directories = ['directory_that_does_not_exist']
+    ppr_module._merge_perf_results('benchmark.example', results_filename,
+                                   directories)
+
 
 if __name__ == '__main__':
   unittest.main()

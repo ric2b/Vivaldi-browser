@@ -4,8 +4,8 @@
 
 #include "ash/public/cpp/ash_view_ids.h"
 #include "ash/public/interfaces/constants.mojom.h"
-#include "ash/public/interfaces/system_tray_test_api.mojom.h"
-#include "ash/strings/grit/ash_strings.h"
+#include "ash/public/interfaces/system_tray_test_api.test-mojom-test-utils.h"
+#include "ash/public/interfaces/system_tray_test_api.test-mojom.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
@@ -40,9 +40,9 @@ IN_PROC_BROWSER_TEST_F(NetworkingConfigChromeosTest, SystemTrayItem) {
   wait_for.ShowDetailedView(ash::mojom::TrayItem::kNetwork);
 
   // Expect that the extension-controlled VPN item appears.
-  base::string16 expected_tooltip = l10n_util::GetStringFUTF16(
-      IDS_ASH_STATUS_TRAY_EXTENSION_CONTROLLED_WIFI,
-      base::UTF8ToUTF16("NetworkingConfig test extension"));
+  base::string16 expected_tooltip = base::UTF8ToUTF16(
+      "The extension \"NetworkingConfig test extension\" can help connect to "
+      "this network.");
   base::string16 tooltip;
   wait_for.GetBubbleViewTooltip(ash::VIEW_ID_EXTENSION_CONTROLLED_WIFI,
                                 &tooltip);

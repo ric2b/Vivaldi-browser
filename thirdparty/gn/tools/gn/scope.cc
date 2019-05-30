@@ -280,6 +280,23 @@ void Scope::GetCurrentScopeValues(KeyValueMap* output) const {
     (*output)[pair.first] = pair.second.value;
 }
 
+bool Scope::CheckCurrentScopeValuesEqual(const Scope* other) const {
+  // If there are containing scopes, equality shouldn't work.
+  if (containing()) {
+    return false;
+  }
+  if (values_.size() != other->values_.size()) {
+    return false;
+  }
+  for (const auto& pair : values_) {
+    const Value* v = other->GetValue(pair.first);
+    if (!v || *v != pair.second.value) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool Scope::NonRecursiveMergeTo(Scope* dest,
                                 const MergeOptions& options,
                                 const ParseNode* node_for_err,

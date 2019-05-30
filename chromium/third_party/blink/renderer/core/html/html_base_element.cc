@@ -32,16 +32,22 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 inline HTMLBaseElement::HTMLBaseElement(Document& document)
-    : HTMLElement(baseTag, document) {}
+    : HTMLElement(kBaseTag, document) {}
 
 DEFINE_NODE_FACTORY(HTMLBaseElement)
 
+const AttrNameToTrustedType& HTMLBaseElement::GetCheckedAttributeTypes() const {
+  DEFINE_STATIC_LOCAL(AttrNameToTrustedType, attribute_map,
+                      ({{"href", SpecificTrustedType::kTrustedURL}}));
+  return attribute_map;
+}
+
 void HTMLBaseElement::ParseAttribute(
     const AttributeModificationParams& params) {
-  if (params.name == hrefAttr || params.name == targetAttr)
+  if (params.name == kHrefAttr || params.name == kTargetAttr)
     GetDocument().ProcessBaseElement();
   else
     HTMLElement::ParseAttribute(params);
@@ -62,7 +68,7 @@ void HTMLBaseElement::RemovedFrom(ContainerNode& insertion_point) {
 }
 
 bool HTMLBaseElement::IsURLAttribute(const Attribute& attribute) const {
-  return attribute.GetName().LocalName() == hrefAttr ||
+  return attribute.GetName().LocalName() == kHrefAttr ||
          HTMLElement::IsURLAttribute(attribute);
 }
 
@@ -75,9 +81,9 @@ KURL HTMLBaseElement::href() const {
   // relative to the document's base URL; base elements like this one can be
   // used to set that base URL. Thus we need to resolve relative to the
   // document's fallback base URL and ignore the base URL.
-  // https://html.spec.whatwg.org/multipage/semantics.html#dom-base-href
+  // https://html.spec.whatwg.org/C/#dom-base-href
 
-  const AtomicString& attribute_value = FastGetAttribute(hrefAttr);
+  const AtomicString& attribute_value = FastGetAttribute(kHrefAttr);
   if (attribute_value.IsNull())
     return GetDocument().Url();
 
@@ -96,7 +102,7 @@ KURL HTMLBaseElement::href() const {
 
 void HTMLBaseElement::setHref(const USVStringOrTrustedURL& stringOrUrl,
                               ExceptionState& exception_state) {
-  setAttribute(hrefAttr, stringOrUrl, exception_state);
+  setAttribute(kHrefAttr, stringOrUrl, exception_state);
 }
 
 }  // namespace blink

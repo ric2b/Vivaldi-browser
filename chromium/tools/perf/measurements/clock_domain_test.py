@@ -13,10 +13,10 @@ def GetSyncEvents(trace_part):
 
 class ClockDomainTest(tab_test_case.TabTestCase):
 
-  # Don't run this test on Android; it's not supposed to work on Android
-  # (since when doing Android tracing there are two different devices,
-  # so the clock domains will be different)
-  @decorators.Disabled('android')
+  # Don't run this test on Android and remote Chrome OS; it won't work
+  # because there are two different devices, so the clock domains will
+  # be different.
+  @decorators.Disabled('android', 'cros-chrome')
   @decorators.Isolated
   def testTelemetryUsesChromeClockDomain(self):
 
@@ -25,7 +25,7 @@ class ClockDomainTest(tab_test_case.TabTestCase):
     options.enable_chrome_trace = True
     tracing_controller.StartTracing(options)
 
-    full_trace = tracing_controller.StopTracing()[0]
+    full_trace = tracing_controller.StopTracing()
 
     chrome_sync = GetSyncEvents(
         full_trace.GetTraceFor(trace_data.CHROME_TRACE_PART)['traceEvents'])
@@ -40,5 +40,5 @@ class ClockDomainTest(tab_test_case.TabTestCase):
     ts_telemetry_start = telemetry_sync[0]['args']['issue_ts']
     ts_chrome = chrome_sync[0]['ts']
     ts_telemetry_end = telemetry_sync[0]['ts']
-    assert ts_chrome >= ts_telemetry_start
-    assert ts_telemetry_end >= ts_chrome
+    assert ts_chrome > ts_telemetry_start
+    assert ts_telemetry_end > ts_chrome

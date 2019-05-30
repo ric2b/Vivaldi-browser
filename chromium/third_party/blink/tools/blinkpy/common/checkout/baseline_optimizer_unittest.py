@@ -32,6 +32,7 @@ from blinkpy.common.checkout.baseline_optimizer import BaselineOptimizer, Result
 from blinkpy.common.host_mock import MockHost
 from blinkpy.common.system.filesystem_mock import MockFileSystem
 from blinkpy.common.path_finder import PathFinder
+from blinkpy.common.path_finder import RELATIVE_WEB_TESTS
 from blinkpy.web_tests.builder_list import BuilderList
 
 ALL_PASS_TESTHARNESS_RESULT = """This is a testharness.js-based test.
@@ -44,6 +45,8 @@ PASS woohoo
 PASS yahoo
 Harness: the test ran to completion.
 """
+
+MOCK_WEB_TESTS = '/mock-checkout/' + RELATIVE_WEB_TESTS
 
 
 class BaselineOptimizerTest(unittest.TestCase):
@@ -88,23 +91,23 @@ class BaselineOptimizerTest(unittest.TestCase):
         self.assertEqual(sorted(self.host.port_factory.all_port_names()),
                          ['linux-trusty', 'mac-mac10.10', 'mac-mac10.11', 'mac-mac10.12', 'mac-mac10.13', 'win-win10'])
 
-    def _assert_optimization(self, results_by_directory, directory_to_new_results, baseline_dirname=''):
-        layout_tests_dir = PathFinder(self.fs).layout_tests_dir()
+    def _assert_optimization(self, results_by_directory, directory_to_new_results, baseline_dirname='', suffix='txt'):
+        web_tests_dir = PathFinder(self.fs).web_tests_dir()
         test_name = 'mock-test.html'
-        baseline_name = 'mock-test-expected.txt'
+        baseline_name = 'mock-test-expected.' + suffix
         self.fs.write_text_file(
-            self.fs.join(layout_tests_dir, 'VirtualTestSuites'),
+            self.fs.join(web_tests_dir, 'VirtualTestSuites'),
             '[{"prefix": "gpu", "base": "fast/canvas", "args": ["--foo"]}]')
 
         for dirname, contents in results_by_directory.items():
-            self.fs.write_binary_file(self.fs.join(layout_tests_dir, dirname, baseline_name), contents)
+            self.fs.write_binary_file(self.fs.join(web_tests_dir, dirname, baseline_name), contents)
 
         baseline_optimizer = BaselineOptimizer(self.host, self.host.port_factory.get(), self.host.port_factory.all_port_names())
         self.assertTrue(baseline_optimizer.optimize(
-            self.fs.join(baseline_dirname, test_name), 'txt'))
+            self.fs.join(baseline_dirname, test_name), suffix))
 
         for dirname, contents in directory_to_new_results.items():
-            path = self.fs.join(layout_tests_dir, dirname, baseline_name)
+            path = self.fs.join(web_tests_dir, dirname, baseline_name)
             if contents is None:
                 # Check files that are explicitly marked as absent.
                 self.assertFalse(self.fs.exists(path), '%s should not exist after optimization' % path)
@@ -112,9 +115,14 @@ class BaselineOptimizerTest(unittest.TestCase):
                 self.assertEqual(self.fs.read_binary_file(path), contents, 'Content of %s != "%s"' % (path, contents))
 
         for dirname in results_by_directory:
-            path = self.fs.join(layout_tests_dir, dirname, baseline_name)
+            path = self.fs.join(web_tests_dir, dirname, baseline_name)
             if dirname not in directory_to_new_results or directory_to_new_results[dirname] is None:
                 self.assertFalse(self.fs.exists(path), '%s should not exist after optimization' % path)
+
+    def _assert_reftest_optimization(self, results_by_directory, directory_to_new_results, test_path='', baseline_dirname=''):
+        web_tests_dir = PathFinder(self.fs).web_tests_dir()
+        self.fs.write_text_file(self.fs.join(web_tests_dir, test_path, 'mock-test-expected.html'), 'ref')
+        self._assert_optimization(results_by_directory, directory_to_new_results, baseline_dirname, suffix='png')
 
     def test_linux_redundant_with_win(self):
         self._assert_optimization(
@@ -376,55 +384,175 @@ class BaselineOptimizerTest(unittest.TestCase):
             },
             baseline_dirname='virtual/gpu/fast/canvas')
 
+    def test_empty_at_root(self):
+        self._assert_optimization(
+            {'': ''},
+            {'': None})
+
+    def test_empty_at_linux(self):
+        self._assert_optimization(
+            {'platform/linux': ''},
+            {'platform/linux': None})
+
+    def test_empty_at_linux_and_win(self):
+        # https://crbug.com/805008
+        self._assert_optimization(
+            {
+                'platform/linux': '',
+                'platform/win': '',
+            },
+            {
+                'platform/linux': None,
+                'platform/win': None,
+            })
+
+    def test_empty_at_virtual_root(self):
+        self._assert_optimization(
+            {'virtual/gpu/fast/canvas': ''},
+            {'virtual/gpu/fast/canvas': None},
+            baseline_dirname='virtual/gpu/fast/canvas')
+
+    def test_empty_at_virtual_linux(self):
+        self._assert_optimization(
+            {'platform/linux/virtual/gpu/fast/canvas': ''},
+            {'platform/linux/virtual/gpu/fast/canvas': None},
+            baseline_dirname='virtual/gpu/fast/canvas')
+
+    def test_empty_falls_back_to_non_empty(self):
+        # The empty baseline needs to be preserved in this case.
+        self._assert_optimization(
+            {
+                'platform/linux': '',
+                '': '1',
+            },
+            {
+                'platform/linux': '',
+                '': '1',
+            })
+
+    def test_virtual_empty_falls_back_to_non_empty(self):
+        # The empty baseline needs to be preserved in this case.
+        self._assert_optimization(
+            {
+                'virtual/gpu/fast/canvas': '',
+                'platform/linux/fast/canvas': '1',
+            },
+            {
+                'virtual/gpu/fast/canvas': '',
+                'platform/linux/fast/canvas': '1',
+            },
+            baseline_dirname='virtual/gpu/fast/canvas')
+
+    def test_extra_png_for_reftest_at_root(self):
+        self._assert_reftest_optimization(
+            {'': 'extra'},
+            {'': None})
+
+    def test_extra_png_for_reftest_at_linux(self):
+        self._assert_reftest_optimization(
+            {'platform/linux': 'extra'},
+            {'platform/linux': None})
+
+    def test_extra_png_for_reftest_at_linux_and_win(self):
+        # https://crbug.com/805008
+        self._assert_reftest_optimization(
+            {
+                'platform/linux': 'extra1',
+                'platform/win': 'extra2',
+            },
+            {
+                'platform/linux': None,
+                'platform/win': None,
+            })
+
+    def test_extra_png_for_reftest_at_virtual_root(self):
+        self._assert_reftest_optimization(
+            {'virtual/gpu/fast/canvas': 'extra'},
+            {'virtual/gpu/fast/canvas': None},
+            test_path='fast/canvas', baseline_dirname='virtual/gpu/fast/canvas')
+
+    def test_extra_png_for_reftest_at_virtual_linux(self):
+        self._assert_reftest_optimization(
+            {'platform/linux/virtual/gpu/fast/canvas': 'extra'},
+            {'platform/linux/virtual/gpu/fast/canvas': None},
+            test_path='fast/canvas', baseline_dirname='virtual/gpu/fast/canvas')
+
+    def test_extra_png_for_reftest_falls_back_to_base(self):
+        # The extra png for reftest should be removed even if it's different
+        # from the fallback.
+        self._assert_reftest_optimization(
+            {
+                'platform/linux': 'extra1',
+                '': 'extra2',
+            },
+            {
+                'platform/linux': None,
+                '': None,
+            })
+
+    def test_virtual_extra_png_for_reftest_falls_back_to_base(self):
+        # The extra png for reftest should be removed even if it's different
+        # from the fallback.
+        self._assert_reftest_optimization(
+            {
+                'virtual/gpu/fast/canvas': 'extra',
+                'platform/linux/fast/canvas': 'extra2',
+            },
+            {
+                'virtual/gpu/fast/canvas': None,
+                'platform/linux/fast/canvas': None,
+            },
+            test_path='fast/canvas', baseline_dirname='virtual/gpu/fast/canvas')
+
     # Tests for protected methods - pylint: disable=protected-access
 
     def test_move_baselines(self):
-        self.fs.write_text_file('/mock-checkout/third_party/WebKit/LayoutTests/VirtualTestSuites', '[]')
+        self.fs.write_text_file(MOCK_WEB_TESTS + 'VirtualTestSuites', '[]')
         self.fs.write_binary_file(
-            '/mock-checkout/third_party/WebKit/LayoutTests/platform/win/another/test-expected.txt', 'result A')
+            MOCK_WEB_TESTS + 'platform/win/another/test-expected.txt', 'result A')
         self.fs.write_binary_file(
-            '/mock-checkout/third_party/WebKit/LayoutTests/platform/mac/another/test-expected.txt', 'result A')
-        self.fs.write_binary_file('/mock-checkout/third_party/WebKit/LayoutTests/another/test-expected.txt', 'result B')
+            MOCK_WEB_TESTS + 'platform/mac/another/test-expected.txt', 'result A')
+        self.fs.write_binary_file(MOCK_WEB_TESTS + 'another/test-expected.txt', 'result B')
         baseline_optimizer = BaselineOptimizer(
             self.host, self.host.port_factory.get(), self.host.port_factory.all_port_names())
         baseline_optimizer._move_baselines(
             'another/test-expected.txt',
             {
-                '/mock-checkout/third_party/WebKit/LayoutTests/platform/win': 'aaa',
-                '/mock-checkout/third_party/WebKit/LayoutTests/platform/mac': 'aaa',
-                '/mock-checkout/third_party/WebKit/LayoutTests': 'bbb',
+                MOCK_WEB_TESTS + 'platform/win': 'aaa',
+                MOCK_WEB_TESTS + 'platform/mac': 'aaa',
+                MOCK_WEB_TESTS[:-1]: 'bbb',
             },
             {
-                '/mock-checkout/third_party/WebKit/LayoutTests': 'aaa',
+                MOCK_WEB_TESTS[:-1]: 'aaa',
             })
         self.assertEqual(
             self.fs.read_binary_file(
-                '/mock-checkout/third_party/WebKit/LayoutTests/another/test-expected.txt'),
+                MOCK_WEB_TESTS + 'another/test-expected.txt'),
             'result A')
 
     def test_move_baselines_skip_git_commands(self):
-        self.fs.write_text_file('/mock-checkout/third_party/WebKit/LayoutTests/VirtualTestSuites', '[]')
+        self.fs.write_text_file(MOCK_WEB_TESTS + 'VirtualTestSuites', '[]')
         self.fs.write_binary_file(
-            '/mock-checkout/third_party/WebKit/LayoutTests/platform/win/another/test-expected.txt', 'result A')
+            MOCK_WEB_TESTS + 'platform/win/another/test-expected.txt', 'result A')
         self.fs.write_binary_file(
-            '/mock-checkout/third_party/WebKit/LayoutTests/platform/mac/another/test-expected.txt', 'result A')
-        self.fs.write_binary_file('/mock-checkout/third_party/WebKit/LayoutTests/another/test-expected.txt', 'result B')
+            MOCK_WEB_TESTS + 'platform/mac/another/test-expected.txt', 'result A')
+        self.fs.write_binary_file(MOCK_WEB_TESTS + 'another/test-expected.txt', 'result B')
         baseline_optimizer = BaselineOptimizer(
             self.host, self.host.port_factory.get(), self.host.port_factory.all_port_names())
         baseline_optimizer._move_baselines(
             'another/test-expected.txt',
             {
-                '/mock-checkout/third_party/WebKit/LayoutTests/platform/win': 'aaa',
-                '/mock-checkout/third_party/WebKit/LayoutTests/platform/mac': 'aaa',
-                '/mock-checkout/third_party/WebKit/LayoutTests': 'bbb',
+                MOCK_WEB_TESTS + 'platform/win': 'aaa',
+                MOCK_WEB_TESTS + 'platform/mac': 'aaa',
+                MOCK_WEB_TESTS[:-1]: 'bbb',
             },
             {
-                '/mock-checkout/third_party/WebKit/LayoutTests/platform/linux': 'bbb',
-                '/mock-checkout/third_party/WebKit/LayoutTests': 'aaa',
+                MOCK_WEB_TESTS + 'platform/linux': 'bbb',
+                MOCK_WEB_TESTS[:-1]: 'aaa',
             })
         self.assertEqual(
             self.fs.read_binary_file(
-                '/mock-checkout/third_party/WebKit/LayoutTests/another/test-expected.txt'),
+                MOCK_WEB_TESTS + 'another/test-expected.txt'),
             'result A')
 
 
@@ -437,26 +565,45 @@ class ResultDigestTest(unittest.TestCase):
         self.fs.write_text_file('/all-pass/foo-expected.txt', ALL_PASS_TESTHARNESS_RESULT)
         self.fs.write_text_file('/all-pass/bar-expected.txt', ALL_PASS_TESTHARNESS_RESULT2)
         self.fs.write_text_file('/failures/baz-expected.txt', 'failure')
+        self.fs.write_binary_file('/others/reftest-expected.png', 'extra')
+        self.fs.write_binary_file('/others/reftest2-expected.png', 'extra2')
+        self.fs.write_text_file('/others/empty-expected.txt', '')
+        self.fs.write_binary_file('/others/something-expected.png', 'Something')
+        self.fs.write_binary_file('/others/empty-expected.png', '')
 
-    def test_test_all_pass_testharness_result(self):
-        self.assertTrue(ResultDigest.test_all_pass_testharness_result(
-            self.fs, '/all-pass/foo-expected.txt'))
-        self.assertTrue(ResultDigest.test_all_pass_testharness_result(
-            self.fs, '/all-pass/bar-expected.txt'))
-        self.assertFalse(ResultDigest.test_all_pass_testharness_result(
-            self.fs, '/failures/baz-expected.txt'))
-        self.assertFalse(ResultDigest.test_all_pass_testharness_result(
-            self.fs, '/others/something-expected.png'))
+    def test_all_pass_testharness_result(self):
+        self.assertTrue(ResultDigest(self.fs, '/all-pass/foo-expected.txt').is_extra_result)
+        self.assertTrue(ResultDigest(self.fs, '/all-pass/bar-expected.txt').is_extra_result)
+        self.assertFalse(ResultDigest(self.fs, '/failures/baz-expected.txt').is_extra_result)
 
-    def test_implicit_all_pass(self):
-        # Implicit all-PASS should equal to any all-PASS but not failures.
+    def test_empty_result(self):
+        self.assertFalse(ResultDigest(self.fs, '/others/something-expected.png').is_extra_result)
+        self.assertTrue(ResultDigest(self.fs, '/others/empty-expected.txt').is_extra_result)
+        self.assertTrue(ResultDigest(self.fs, '/others/empty-expected.png').is_extra_result)
+
+    def test_extra_png_for_reftest_result(self):
+        self.assertFalse(ResultDigest(self.fs, '/others/something-expected.png').is_extra_result)
+        self.assertTrue(ResultDigest(self.fs, '/others/reftest-expected.png', is_reftest=True).is_extra_result)
+
+    def test_non_extra_result(self):
+        self.assertFalse(ResultDigest(self.fs, '/others/something-expected.png').is_extra_result)
+
+    def test_implicit_extra_result(self):
+        # Implicit empty equal to any extra result but not failures.
         implicit = ResultDigest(None, None)
         self.assertTrue(implicit == ResultDigest(self.fs, '/all-pass/foo-expected.txt'))
         self.assertTrue(implicit == ResultDigest(self.fs, '/all-pass/bar-expected.txt'))
         self.assertFalse(implicit == ResultDigest(self.fs, '/failures/baz-expected.txt'))
+        self.assertTrue(implicit == ResultDigest(self.fs, '/others/reftest-expected.png', is_reftest=True))
 
     def test_different_all_pass_results(self):
         x = ResultDigest(self.fs, '/all-pass/foo-expected.txt')
         y = ResultDigest(self.fs, '/all-pass/bar-expected.txt')
         self.assertTrue(x != y)
         self.assertFalse(x == y)
+
+    def test_same_extra_png_for_reftest(self):
+        x = ResultDigest(self.fs, '/others/reftest-expected.png', is_reftest=True)
+        y = ResultDigest(self.fs, '/others/reftest2-expected.png', is_reftest=True)
+        self.assertTrue(x == y)
+        self.assertFalse(x != y)

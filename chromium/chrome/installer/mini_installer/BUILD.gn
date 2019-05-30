@@ -91,6 +91,7 @@ group("chrome_runtime_deps") {
   write_runtime_deps = chrome_runtime_deps
   data_deps = [
     "//chrome",
+    "//chrome/chrome_proxy",
   ]
 }
 
@@ -155,7 +156,7 @@ template("generate_mini_installer") {
       "--resource_file_path",
       rebase_path(packed_files_rc_file, root_build_dir),
       "--target_arch=$current_cpu",
-      "--distribution=_google_chrome",
+      "--distribution=_${branding_path_component}",
       "--output_dir",
       rebase_path(output_dir, root_build_dir),
       "--chrome_runtime_deps",
@@ -276,6 +277,9 @@ template("generate_mini_installer") {
     #   2. setting no_default_deps=true to avoid including the implicit
     #      dependency on //buildtools/third_party/libc++ in builds that set
     #      use_custom_libcxx=true.
+    #
+    # The net result is similar to linking with /NODEFAULTLIB, but more precise
+    # as it just excludes the CRT.
     #
     # But in asan builds we need to link against the asan runtime library, which
     # in turn depends on the standard library and relies on it to run

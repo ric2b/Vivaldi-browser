@@ -58,8 +58,10 @@ class PickerIndicatorElement final : public HTMLDivElement,
   };
 
   static PickerIndicatorElement* Create(Document&, PickerIndicatorOwner&);
+
+  PickerIndicatorElement(Document&, PickerIndicatorOwner&);
   ~PickerIndicatorElement() override;
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   void OpenPopup();
   void ClosePopup();
@@ -74,7 +76,6 @@ class PickerIndicatorElement final : public HTMLDivElement,
   void DidEndChooser() override;
 
  private:
-  PickerIndicatorElement(Document&, PickerIndicatorOwner&);
   LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
   void DefaultEventHandler(Event&) override;
   void DetachLayoutTree(const AttachContext& = AttachContext()) override;

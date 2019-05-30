@@ -94,6 +94,17 @@ std::unique_ptr<views::Border> MakeSeparatorBorder(int top,
   return views::CreateSolidSidedBorder(top, left, 0, 0, color);
 }
 
+#if !defined(OS_CHROMEOS)
+// static
+void SetBorderRight(views::View* view, int right) {
+  const gfx::Insets& insets = view->GetInsets();
+  if (insets.right() != right) {
+    view->SetBorder(
+        MakeEmptyBorder(insets.top(), insets.left(), insets.bottom(), right));
+  }
+}
+#endif
+
 // NotificationItemView ////////////////////////////////////////////////////////
 
 // NotificationItemViews are responsible for drawing each list notification
@@ -101,11 +112,6 @@ std::unique_ptr<views::Border> MakeSeparatorBorder(int top,
 class NotificationItemView : public views::View {
  public:
   explicit NotificationItemView(const NotificationItem& item);
-  ~NotificationItemView() override;
-
-  // Overridden from views::View:
-  void SetVisible(bool visible) override;
-
  private:
   DISALLOW_COPY_AND_ASSIGN(NotificationItemView);
 };
@@ -133,19 +139,13 @@ NotificationItemView::NotificationItemView(const NotificationItem& item) {
   SchedulePaint();
 }
 
-NotificationItemView::~NotificationItemView() {}
-
-void NotificationItemView::SetVisible(bool visible) {
-  views::View::SetVisible(visible);
-  for (int i = 0; i < child_count(); ++i)
-    child_at(i)->SetVisible(visible);
-}
-
 }  // namespace
 
 // NotificationView ////////////////////////////////////////////////////////////
 
 void NotificationView::CreateOrUpdateViews(const Notification& notification) {
+  top_view_count_ = 0;
+
   CreateOrUpdateTitleView(notification);
   CreateOrUpdateMessageView(notification);
   CreateOrUpdateProgressBarView(notification);
@@ -243,7 +243,14 @@ int NotificationView::GetHeightForWidth(int width) const {
 }
 
 void NotificationView::Layout() {
+  // |ShrinkTopmostLabel| updates the borders of views to make space for the
+  // control buttons. We have to update the borders before calling
+  // |MessageView::Layout| so that the latest values get taken into account
+  // while layouting. As |ShrinkTopmostLabel| only depends on the PreferredSize,
+  // this is valid to do before calling |MessageView::Layout|.
+  ShrinkTopmostLabel();
   MessageView::Layout();
+
   gfx::Insets insets = GetInsets();
   int content_width = width() - insets.width();
   gfx::Rect content_bounds = GetContentsBounds();
@@ -260,11 +267,7 @@ void NotificationView::Layout() {
   // Top views.
   int top_height = top_view_->GetHeightForWidth(content_width);
   top_view_->SetBounds(insets.left(), insets.top(), content_width, top_height);
-// NOTE(jarle@vivaldi.com): Calling ShrinkTopmostLabel() causes a regression,
-// VB-34628 / crbug 789904. Remove #if-define when the Chromium bug is fixed.
-#if !defined(VIVALDI_BUILD)
-  ShrinkTopmostLabel();
-#endif // VIVALDI_BUILD
+
   // Icon.
   icon_view_->SetBounds(insets.left(), insets.top(), kNotificationIconSize,
                         kNotificationIconSize);
@@ -373,10 +376,12 @@ void NotificationView::CreateOrUpdateTitleView(
     title_view_->SetLineLimit(kMaxTitleLines);
     title_view_->SetColor(kRegularTextColor);
     title_view_->SetBorder(MakeTextBorder(padding, 3, 0));
-    top_view_->AddChildView(title_view_);
+    top_view_->AddChildViewAt(title_view_, top_view_count_);
   } else {
     title_view_->SetText(title);
   }
+
+  top_view_count_++;
 }
 
 void NotificationView::CreateOrUpdateMessageView(
@@ -399,12 +404,13 @@ void NotificationView::CreateOrUpdateMessageView(
     message_view_->SetLineHeight(kMessageLineHeight);
     message_view_->SetColor(kRegularTextColor);
     message_view_->SetBorder(MakeTextBorder(padding, 4, 0));
-    top_view_->AddChildView(message_view_);
+    top_view_->AddChildViewAt(message_view_, top_view_count_);
   } else {
     message_view_->SetText(text);
   }
 
   message_view_->SetVisible(notification.items().empty());
+  top_view_count_++;
 }
 
 base::string16 NotificationView::FormatContextMessage(
@@ -443,10 +449,12 @@ void NotificationView::CreateOrUpdateContextMessageView(
     context_message_view_->SetLineHeight(kMessageLineHeight);
     context_message_view_->SetColor(kDimTextColor);
     context_message_view_->SetBorder(MakeTextBorder(padding, 4, 0));
-    top_view_->AddChildView(context_message_view_);
+    top_view_->AddChildViewAt(context_message_view_, top_view_count_);
   } else {
     context_message_view_->SetText(message);
   }
+
+  top_view_count_++;
 }
 
 void NotificationView::CreateOrUpdateProgressBarView(
@@ -464,11 +472,12 @@ void NotificationView::CreateOrUpdateProgressBarView(
     progress_bar_view_ = new views::ProgressBar();
     progress_bar_view_->SetBorder(MakeProgressBarBorder(
         kProgressBarTopPadding, kProgressBarBottomPadding));
-    top_view_->AddChildView(progress_bar_view_);
+    top_view_->AddChildViewAt(progress_bar_view_, top_view_count_);
   }
 
   progress_bar_view_->SetValue(notification.progress() / 100.0);
   progress_bar_view_->SetVisible(notification.items().empty());
+  top_view_count_++;
 }
 
 void NotificationView::CreateOrUpdateListItemViews(
@@ -488,7 +497,7 @@ void NotificationView::CreateOrUpdateListItemViews(
     NotificationItemView* item_view = new NotificationItemView(items[i]);
     item_view->SetBorder(MakeTextBorder(padding, i ? 0 : 4, 0));
     item_views_.push_back(item_view);
-    top_view_->AddChildView(item_view);
+    top_view_->AddChildViewAt(item_view, top_view_count_++);
   }
 }
 
@@ -609,59 +618,21 @@ void NotificationView::UpdateControlButtonsVisibilityWithNotification(
   UpdateControlButtonsVisibility();
 }
 
-void NotificationView::UpdateControlButtonsVisibility() {
-#if defined(OS_CHROMEOS)
-  // On Chrome OS, the settings button and the close button are shown when:
-  // (1) the mouse is hovering on the notification.
-  // (2) the focus is on the control buttons.
-  const bool target_visibility =
-      IsMouseHovered() || control_buttons_view_->IsCloseButtonFocused() ||
-      control_buttons_view_->IsSettingsButtonFocused();
-#else
-  // On non Chrome OS, the settings button and the close button are always
-  // shown.
-  const bool target_visibility = true;
-#endif
-
-  control_buttons_view_->SetVisible(target_visibility);
-}
-
 NotificationControlButtonsView* NotificationView::GetControlButtonsView()
     const {
   return control_buttons_view_;
 }
 
 int NotificationView::GetMessageLineLimit(int title_lines, int width) const {
-  // Image notifications require that the image must be kept flush against
-  // their icons, but we can allow more text if no image.
   int effective_title_lines = std::max(0, title_lines - 1);
-  int line_reduction_from_title = (image_view_ ? 1 : 2) * effective_title_lines;
-  if (!image_view_) {
-    // Title lines are counted as twice as big as message lines for the purpose
-    // of this calculation.
-    // The effect from the title reduction here should be:
-    //   * 0 title lines: 5 max lines message.
-    //   * 1 title line:  5 max lines message.
-    //   * 2 title lines: 3 max lines message.
-    return std::max(0, kMessageExpandedLineLimit - line_reduction_from_title);
-  }
-
-  int message_line_limit = kMessageCollapsedLineLimit;
-
-  // Subtract any lines taken by the context message.
-  if (context_message_view_) {
-    message_line_limit -= context_message_view_->GetLinesForWidthAndLimit(
-        width, kContextMessageLineLimit);
-  }
-
+  int line_reduction_from_title = 2 * effective_title_lines;
+  // Title lines are counted as twice as big as message lines for the purpose
+  // of this calculation.
   // The effect from the title reduction here should be:
-  //   * 0 title lines: 2 max lines message + context message.
-  //   * 1 title line:  2 max lines message + context message.
-  //   * 2 title lines: 1 max lines message + context message.
-  message_line_limit =
-      std::max(0, message_line_limit - line_reduction_from_title);
-
-  return message_line_limit;
+  //   * 0 title lines: 5 max lines message.
+  //   * 1 title line:  5 max lines message.
+  //   * 2 title lines: 3 max lines message.
+  return std::max(0, kMessageExpandedLineLimit - line_reduction_from_title);
 }
 
 int NotificationView::GetMessageHeight(int width, int limit) const {
@@ -673,12 +644,12 @@ void NotificationView::ShrinkTopmostLabel() {
 // Reduce width of the topmost label not to be covered by the control buttons
 // only on non Chrome OS platform.
 #if !defined(OS_CHROMEOS)
-  const int content_width = width() - GetInsets().width();
-  const int buttons_width = control_buttons_view_->GetPreferredSize().width();
-  if (top_view_->child_count() > 0) {
-    gfx::Rect bounds = top_view_->child_at(0)->bounds();
-    bounds.set_width(content_width - buttons_width);
-    top_view_->child_at(0)->SetBoundsRect(bounds);
+  const int child_count = top_view_->child_count();
+  if (child_count > 0) {
+    const int buttons_width = control_buttons_view_->GetPreferredSize().width();
+    SetBorderRight(top_view_->child_at(0), kTextRightPadding + buttons_width);
+    for (int i = 1; i < child_count; ++i)
+      SetBorderRight(top_view_->child_at(i), kTextRightPadding);
   }
 #endif
 }

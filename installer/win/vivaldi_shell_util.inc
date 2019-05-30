@@ -10,8 +10,7 @@ const wchar_t kRegShellOpenNewWindow[] = L"\\shell\\opennewwindow\\command";
 }
 
 // Cleans up DelegateExecute registry values from old Vivaldi installs.
-void RemoveDelegateExecuteForVivaldi(BrowserDistribution* dist,
-                                     const base::FilePath& chrome_exe,
+void RemoveDelegateExecuteForVivaldi(const base::FilePath& chrome_exe,
                                      const base::string16& suffix) {
   bool is_per_user_install = InstallUtil::IsPerUserInstall();
   HKEY root_key = DetermineRegistrationRoot(is_per_user_install);
@@ -55,7 +54,7 @@ void GetPathSpecificSuffix(const base::FilePath& path, base::string16* suffix) {
   base::MD5Sum(path_utf8.c_str(), strlen(path_utf8.c_str()), &md5_digest);
   const std::string base32_md5(base32::Base32Encode(
       base::StringPiece(reinterpret_cast<char*>(md5_digest.a),
-                        arraysize(md5_digest.a)),
+                        base::size(md5_digest.a)),
       base32::Base32EncodePolicy::OMIT_PADDING));
   DCHECK_EQ(base32_md5.length(), 26U);
   suffix->reserve(base32_md5.length() + 1);
@@ -64,9 +63,8 @@ void GetPathSpecificSuffix(const base::FilePath& path, base::string16* suffix) {
 }
 
 // Returns the application name, "Vivaldi" or "Vivaldi S [<folder>]".
-base::string16 GetAppName(BrowserDistribution* dist,
-                          const base::string16& install_path) {
-  base::string16 app_name(dist->GetDisplayName());
+base::string16 GetAppName(const base::string16& install_path) {
+  base::string16 app_name(L"Vivaldi");
   base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
   if (command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone)) {
     // extract the install folder name for the standalone install
@@ -79,5 +77,25 @@ base::string16 GetAppName(BrowserDistribution* dist,
   }
   return app_name;
 }
+
+namespace install_static {
+
+// Vivaldi customization. For standalone installs,
+// add the --user-data-dir argument.
+base::string16 GetArguments()
+{
+  base::string16 arguments;
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  if (command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone) &&
+      command_line.HasSwitch(vivaldi::constants::kVivaldiInstallDir)) {
+    base::FilePath install_path = command_line.GetSwitchValuePath(
+        vivaldi::constants::kVivaldiInstallDir).Append(L"User Data");
+    arguments.assign(L"--user-data-dir=").append(install_path.value());
+  }
+  return arguments;
+}
+
+}  // namespace install_static
 
 }  // namespace vivaldi

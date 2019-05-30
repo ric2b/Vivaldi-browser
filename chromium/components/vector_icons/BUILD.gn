@@ -16,6 +16,7 @@ aggregate_vector_icons("components_vector_icons") {
     "close.icon",
     "close_rounded.icon",
     "edit.icon",
+    "error.icon",
     "ethernet.icon",
     "folder.icon",
     "folder_managed.icon",
@@ -25,19 +26,28 @@ aggregate_vector_icons("components_vector_icons") {
     "headset.icon",
     "help_outline.icon",
     "info_outline.icon",
+    "lightbulb_outline.icon",
     "location_on.icon",
     "lock.icon",
+    "media_next_track.icon",
+    "media_previous_track.icon",
     "media_router_active.icon",
     "media_router_error.icon",
     "media_router_idle.icon",
     "media_router_warning.icon",
+    "media_seek_backward.icon",
+    "media_seek_forward.icon",
     "mic.icon",
     "midi.icon",
     "notifications.icon",
+    "pause.icon",
+    "play_arrow.icon",
     "protocol_handler.icon",
     "reload.icon",
+    "replay.icon",
     "screen_share.icon",
     "search.icon",
+    "serial_port.icon",
     "usb.icon",
     "videocam.icon",
     "warning.icon",
@@ -47,6 +57,8 @@ aggregate_vector_icons("components_vector_icons") {
 
 static_library("vector_icons") {
   sources = get_target_outputs(":components_vector_icons")
+
+  defines = [ "COMPONENTS_VECTOR_ICONS_IMPL" ]
 
   deps = [
     ":components_vector_icons",

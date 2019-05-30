@@ -5,7 +5,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "gpu/config/gpu_info.h"
 #include "jni/SystemInfoFeedbackSource_jni.h"
@@ -18,37 +18,30 @@ namespace chrome {
 namespace android {
 
 ScopedJavaLocalRef<jstring> JNI_SystemInfoFeedbackSource_GetCpuArchitecture(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz) {
+    JNIEnv* env) {
   return ConvertUTF8ToJavaString(env,
                                  base::SysInfo::OperatingSystemArchitecture());
 }
 
 ScopedJavaLocalRef<jstring> JNI_SystemInfoFeedbackSource_GetGpuVendor(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz) {
+    JNIEnv* env) {
   gpu::GPUInfo info = content::GpuDataManager::GetInstance()->GetGPUInfo();
 
   return ConvertUTF8ToJavaString(env, info.active_gpu().vendor_string);
 }
 
 ScopedJavaLocalRef<jstring> JNI_SystemInfoFeedbackSource_GetGpuModel(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz) {
+    JNIEnv* env) {
   gpu::GPUInfo info = content::GpuDataManager::GetInstance()->GetGPUInfo();
   return ConvertUTF8ToJavaString(env, info.active_gpu().device_string);
 }
 
-int JNI_SystemInfoFeedbackSource_GetAvailableMemoryMB(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz) {
+int JNI_SystemInfoFeedbackSource_GetAvailableMemoryMB(JNIEnv* env) {
   return base::saturated_cast<int>(
       base::SysInfo::AmountOfAvailablePhysicalMemory() / 1024 / 1024);
 }
 
-int JNI_SystemInfoFeedbackSource_GetTotalMemoryMB(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz) {
+int JNI_SystemInfoFeedbackSource_GetTotalMemoryMB(JNIEnv* env) {
   return base::SysInfo::AmountOfPhysicalMemoryMB();
 }
 

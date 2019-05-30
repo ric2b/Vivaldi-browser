@@ -43,8 +43,13 @@ class StyleFetchedImage final : public StyleImage,
   static StyleFetchedImage* Create(const Document& document,
                                    FetchParameters& params,
                                    bool is_lazyload_deferred) {
-    return new StyleFetchedImage(document, params, is_lazyload_deferred);
+    return MakeGarbageCollected<StyleFetchedImage>(document, params,
+                                                   is_lazyload_deferred);
   }
+
+  StyleFetchedImage(const Document&,
+                    FetchParameters&,
+                    bool is_lazyload_deferred);
   ~StyleFetchedImage() override;
 
   WrappedImagePtr Data() const override;
@@ -58,11 +63,11 @@ class StyleFetchedImage final : public StyleImage,
   FloatSize ImageSize(const Document&,
                       float multiplier,
                       const LayoutSize& default_object_size) const override;
-  bool ImageHasRelativeSize() const override;
-  bool UsesImageContainerSize() const override;
+  bool HasIntrinsicSize() const override;
   void AddClient(ImageResourceObserver*) override;
   void RemoveClient(ImageResourceObserver*) override;
   void ImageNotifyFinished(ImageResourceContent*) override;
+  bool GetImageAnimationPolicy(ImageAnimationPolicy&) override;
   String DebugName() const override { return "StyleFetchedImage"; }
   scoped_refptr<Image> GetImage(const ImageResourceObserver&,
                                 const Document&,
@@ -71,15 +76,14 @@ class StyleFetchedImage final : public StyleImage,
   bool KnownToBeOpaque(const Document&, const ComputedStyle&) const override;
   ImageResourceContent* CachedImage() const override;
 
+  const KURL& Url() const { return url_; }
+
   void LoadDeferredImage(const Document& document);
 
   void Trace(blink::Visitor*) override;
 
  private:
-  StyleFetchedImage(const Document&,
-                    FetchParameters&,
-                    bool is_lazyload_deferred);
-
+  bool IsEqual(const StyleImage&) const override;
   void Dispose();
 
   Member<ImageResourceContent> image_;

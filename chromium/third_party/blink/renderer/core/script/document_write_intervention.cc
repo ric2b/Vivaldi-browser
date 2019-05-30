@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/core/script/document_write_intervention.h"
 
-#include "third_party/blink/public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-shared.h"
 #include "third_party/blink/public/platform/web_effective_connection_type.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
@@ -31,8 +31,8 @@ void EmitWarningMayBeBlocked(const String& url, Document& document) {
       "confirmed in a subsequent console message. "
       "See https://www.chromestatus.com/feature/5718547946799104 "
       "for more details.";
-  document.AddConsoleMessage(
-      ConsoleMessage::Create(kJSMessageSource, kWarningMessageLevel, message));
+  document.AddConsoleMessage(ConsoleMessage::Create(
+      kJSMessageSource, mojom::ConsoleMessageLevel::kWarning, message));
   DVLOG(1) << message.Utf8().data();
 }
 
@@ -42,8 +42,8 @@ void EmitWarningNotBlocked(const String& url, Document& document) {
       ", invoked via document.write was NOT BLOCKED on this page load, but MAY "
       "be blocked by the browser in future page loads with poor network "
       "connectivity.";
-  document.AddConsoleMessage(
-      ConsoleMessage::Create(kJSMessageSource, kWarningMessageLevel, message));
+  document.AddConsoleMessage(ConsoleMessage::Create(
+      kJSMessageSource, mojom::ConsoleMessageLevel::kWarning, message));
 }
 
 void EmitErrorBlocked(const String& url, Document& document) {
@@ -54,7 +54,7 @@ void EmitErrorBlocked(const String& url, Document& document) {
       ", invoked via document.write was BLOCKED by the browser due to poor "
       "network connectivity. ";
   document.AddConsoleMessage(ConsoleMessage::Create(
-      kInterventionMessageSource, kErrorMessageLevel, message));
+      kInterventionMessageSource, mojom::ConsoleMessageLevel::kError, message));
 }
 
 void AddWarningHeader(FetchParameters* params) {
@@ -121,7 +121,7 @@ bool MaybeDisallowFetchForDocWrittenScript(FetchParameters& params,
   if (params.Defer() != FetchParameters::kNoDefer)
     return false;
 
-  probe::documentWriteFetchScript(&document);
+  probe::DocumentWriteFetchScript(&document);
 
   if (!params.Url().ProtocolIsInHTTPFamily())
     return false;
@@ -139,10 +139,10 @@ bool MaybeDisallowFetchForDocWrittenScript(FetchParameters& params,
   // If the hosts didn't match, then see if the domains match. For example, if
   // a script is served from static.example.com for a document served from
   // www.example.com, we consider that a first party script and allow it.
-  String request_domain = NetworkUtils::GetDomainAndRegistry(
-      request_host, NetworkUtils::kIncludePrivateRegistries);
-  String document_domain = NetworkUtils::GetDomainAndRegistry(
-      document_host, NetworkUtils::kIncludePrivateRegistries);
+  String request_domain = network_utils::GetDomainAndRegistry(
+      request_host, network_utils::kIncludePrivateRegistries);
+  String document_domain = network_utils::GetDomainAndRegistry(
+      document_host, network_utils::kIncludePrivateRegistries);
   // getDomainAndRegistry will return the empty string for domains that are
   // already top-level, such as localhost. Thus we only compare domains if we
   // get non-empty results back from getDomainAndRegistry.
@@ -199,9 +199,11 @@ bool MaybeDisallowFetchForDocWrittenScript(FetchParameters& params,
   return true;
 }
 
-void PossiblyFetchBlockedDocWriteScript(const Resource* resource,
-                                        Document& element_document,
-                                        const ScriptFetchOptions& options) {
+void PossiblyFetchBlockedDocWriteScript(
+    const Resource* resource,
+    Document& element_document,
+    const ScriptFetchOptions& options,
+    CrossOriginAttributeValue cross_origin) {
   if (!resource->ErrorOccurred()) {
     EmitWarningNotBlocked(resource->Url(), element_document);
     return;
@@ -214,10 +216,11 @@ void PossiblyFetchBlockedDocWriteScript(const Resource* resource,
   EmitErrorBlocked(resource->Url(), element_document);
 
   FetchParameters params = options.CreateFetchParameters(
-      resource->Url(), element_document.GetSecurityOrigin(),
+      resource->Url(), element_document.GetSecurityOrigin(), cross_origin,
       resource->Encoding(), FetchParameters::kIdleLoad);
   AddHeader(&params);
-  ScriptResource::Fetch(params, element_document.Fetcher(), nullptr);
+  ScriptResource::Fetch(params, element_document.Fetcher(), nullptr,
+                        ScriptResource::kNoStreaming);
 }
 
 }  // namespace blink

@@ -23,28 +23,28 @@ CSSValue* ConsumeAnimationValue(CSSPropertyID property,
                                 bool use_legacy_parsing) {
   switch (property) {
     case CSSPropertyAnimationDelay:
-      return CSSPropertyParserHelpers::ConsumeTime(range, kValueRangeAll);
+      return css_property_parser_helpers::ConsumeTime(range, kValueRangeAll);
     case CSSPropertyAnimationDirection:
-      return CSSPropertyParserHelpers::ConsumeIdent<
+      return css_property_parser_helpers::ConsumeIdent<
           CSSValueNormal, CSSValueAlternate, CSSValueReverse,
           CSSValueAlternateReverse>(range);
     case CSSPropertyAnimationDuration:
-      return CSSPropertyParserHelpers::ConsumeTime(range,
-                                                   kValueRangeNonNegative);
+      return css_property_parser_helpers::ConsumeTime(range,
+                                                      kValueRangeNonNegative);
     case CSSPropertyAnimationFillMode:
-      return CSSPropertyParserHelpers::ConsumeIdent<
+      return css_property_parser_helpers::ConsumeIdent<
           CSSValueNone, CSSValueForwards, CSSValueBackwards, CSSValueBoth>(
           range);
     case CSSPropertyAnimationIterationCount:
-      return CSSParsingUtils::ConsumeAnimationIterationCount(range);
+      return css_parsing_utils::ConsumeAnimationIterationCount(range);
     case CSSPropertyAnimationName:
-      return CSSParsingUtils::ConsumeAnimationName(range, context,
-                                                   use_legacy_parsing);
+      return css_parsing_utils::ConsumeAnimationName(range, context,
+                                                     use_legacy_parsing);
     case CSSPropertyAnimationPlayState:
-      return CSSPropertyParserHelpers::ConsumeIdent<CSSValueRunning,
-                                                    CSSValuePaused>(range);
+      return css_property_parser_helpers::ConsumeIdent<CSSValueRunning,
+                                                       CSSValuePaused>(range);
     case CSSPropertyAnimationTimingFunction:
-      return CSSParsingUtils::ConsumeAnimationTimingFunction(range);
+      return css_parsing_utils::ConsumeAnimationTimingFunction(range);
     default:
       NOTREACHED();
       return nullptr;
@@ -52,7 +52,7 @@ CSSValue* ConsumeAnimationValue(CSSPropertyID property,
 }
 
 }  // namespace
-namespace CSSShorthand {
+namespace css_shorthand {
 
 bool Animation::ParseShorthand(
     bool important,
@@ -63,18 +63,19 @@ bool Animation::ParseShorthand(
   const StylePropertyShorthand shorthand = animationShorthandForParsing();
   const unsigned longhand_count = shorthand.length();
 
-  HeapVector<Member<CSSValueList>, CSSParsingUtils::kMaxNumAnimationLonghands>
+  HeapVector<Member<CSSValueList>, css_parsing_utils::kMaxNumAnimationLonghands>
       longhands(longhand_count);
-  if (!CSSParsingUtils::ConsumeAnimationShorthand(
+  if (!css_parsing_utils::ConsumeAnimationShorthand(
           shorthand, longhands, ConsumeAnimationValue, range, context,
           local_context.UseAliasParsing())) {
     return false;
   }
 
-  for (size_t i = 0; i < longhand_count; ++i) {
-    CSSPropertyParserHelpers::AddProperty(
+  for (unsigned i = 0; i < longhand_count; ++i) {
+    css_property_parser_helpers::AddProperty(
         shorthand.properties()[i]->PropertyID(), shorthand.id(), *longhands[i],
-        important, CSSPropertyParserHelpers::IsImplicitProperty::kNotImplicit,
+        important,
+        css_property_parser_helpers::IsImplicitProperty::kNotImplicit,
         properties);
   }
   return range.AtEnd();
@@ -89,9 +90,8 @@ const CSSValue* Animation::CSSValueFromComputedStyleInternal(
   const CSSAnimationData* animation_data = style.Animations();
   if (animation_data) {
     CSSValueList* animations_list = CSSValueList::CreateCommaSeparated();
-    for (size_t i = 0; i < animation_data->NameList().size(); ++i) {
+    for (wtf_size_t i = 0; i < animation_data->NameList().size(); ++i) {
       CSSValueList* list = CSSValueList::CreateSpaceSeparated();
-      list->Append(*CSSCustomIdentValue::Create(animation_data->NameList()[i]));
       list->Append(*CSSPrimitiveValue::Create(
           CSSTimingData::GetRepeated(animation_data->DurationList(), i),
           CSSPrimitiveValue::UnitType::kSeconds));
@@ -109,6 +109,7 @@ const CSSValue* Animation::CSSValueFromComputedStyleInternal(
           CSSTimingData::GetRepeated(animation_data->FillModeList(), i)));
       list->Append(*ComputedStyleUtils::ValueForAnimationPlayState(
           CSSTimingData::GetRepeated(animation_data->PlayStateList(), i)));
+      list->Append(*CSSCustomIdentValue::Create(animation_data->NameList()[i]));
       animations_list->Append(*list);
     }
     return animations_list;
@@ -136,5 +137,5 @@ const CSSValue* Animation::CSSValueFromComputedStyleInternal(
   return list;
 }
 
-}  // namespace CSSShorthand
+}  // namespace css_shorthand
 }  // namespace blink

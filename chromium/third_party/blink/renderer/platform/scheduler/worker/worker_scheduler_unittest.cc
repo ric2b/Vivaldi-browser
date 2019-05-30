@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/platform/scheduler/public/worker_scheduler.h"
 
 #include <memory>
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/task/sequence_manager/test/sequence_manager_for_test.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -28,7 +29,7 @@ void AppendToVectorTestTask(std::vector<std::string>* vector,
   vector->push_back(value);
 }
 
-void RunChainedTask(scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+void RunChainedTask(scoped_refptr<base::sequence_manager::TaskQueue> task_queue,
                     int count,
                     base::TimeDelta duration,
                     scoped_refptr<base::TestMockTimeTaskRunner> environment,
@@ -42,9 +43,9 @@ void RunChainedTask(scoped_refptr<base::SingleThreadTaskRunner> task_runner,
 
   // Add a delay of 50ms to ensure that wake-up based throttling does not affect
   // us.
-  task_runner->PostDelayedTask(
+  task_queue->task_runner()->PostDelayedTask(
       FROM_HERE,
-      base::BindOnce(&RunChainedTask, task_runner, count - 1, duration,
+      base::BindOnce(&RunChainedTask, task_queue, count - 1, duration,
                      environment, base::Unretained(tasks)),
       base::TimeDelta::FromMilliseconds(50));
 }
@@ -71,8 +72,8 @@ class WorkerSchedulerForTest : public WorkerScheduler {
       WorkerThreadSchedulerForTest* thread_scheduler)
       : WorkerScheduler(thread_scheduler, nullptr) {}
 
-  using WorkerScheduler::UnthrottleableTaskQueue;
   using WorkerScheduler::ThrottleableTaskQueue;
+  using WorkerScheduler::UnpausableTaskQueue;
 };
 
 class WorkerSchedulerTest : public testing::Test {
@@ -113,10 +114,10 @@ class WorkerSchedulerTest : public testing::Test {
 
   // Helper for posting a task.
   void PostTestTask(std::vector<std::string>* run_order,
-                    const std::string& task_descriptor) {
-    worker_scheduler_->GetTaskRunner(TaskType::kInternalTest)
-        ->PostTask(FROM_HERE,
-                   WTF::Bind(&AppendToVectorTestTask,
+                    const std::string& task_descriptor,
+                    TaskType task_type) {
+    worker_scheduler_->GetTaskRunner(task_type)->PostTask(
+        FROM_HERE, WTF::Bind(&AppendToVectorTestTask,
                              WTF::Unretained(run_order), task_descriptor));
   }
 
@@ -131,18 +132,18 @@ class WorkerSchedulerTest : public testing::Test {
 
 TEST_F(WorkerSchedulerTest, TestPostTasks) {
   std::vector<std::string> run_order;
-  PostTestTask(&run_order, "T1");
-  PostTestTask(&run_order, "T2");
+  PostTestTask(&run_order, "T1", TaskType::kInternalTest);
+  PostTestTask(&run_order, "T2", TaskType::kInternalTest);
   RunUntilIdle();
-  PostTestTask(&run_order, "T3");
+  PostTestTask(&run_order, "T3", TaskType::kInternalTest);
   RunUntilIdle();
   EXPECT_THAT(run_order, testing::ElementsAre("T1", "T2", "T3"));
 
   // Tasks should not run after the scheduler is disposed of.
   worker_scheduler_->Dispose();
   run_order.clear();
-  PostTestTask(&run_order, "T4");
-  PostTestTask(&run_order, "T5");
+  PostTestTask(&run_order, "T4", TaskType::kInternalTest);
+  PostTestTask(&run_order, "T5", TaskType::kInternalTest);
   RunUntilIdle();
   EXPECT_TRUE(run_order.empty());
 
@@ -220,7 +221,7 @@ TEST_F(WorkerSchedulerTest, ThrottleWorkerScheduler_RunThrottledTasks) {
 
   std::vector<base::TimeTicks> tasks;
 
-  worker_scheduler_->ThrottleableTaskQueue()->PostTask(
+  worker_scheduler_->ThrottleableTaskQueue()->task_runner()->PostTask(
       FROM_HERE, base::BindOnce(&RunChainedTask,
                                 worker_scheduler_->ThrottleableTaskQueue(), 5,
                                 base::TimeDelta(), mock_task_runner_,
@@ -252,7 +253,7 @@ TEST_F(WorkerSchedulerTest,
 
   std::vector<base::TimeTicks> tasks;
 
-  worker_scheduler_->ThrottleableTaskQueue()->PostTask(
+  worker_scheduler_->ThrottleableTaskQueue()->task_runner()->PostTask(
       FROM_HERE, base::BindOnce(&RunChainedTask,
                                 worker_scheduler_->ThrottleableTaskQueue(), 5,
                                 base::TimeDelta::FromMilliseconds(100),
@@ -266,6 +267,40 @@ TEST_F(WorkerSchedulerTest,
                          base::TimeTicks() + base::TimeDelta::FromSeconds(21),
                          base::TimeTicks() + base::TimeDelta::FromSeconds(31),
                          base::TimeTicks() + base::TimeDelta::FromSeconds(41)));
+}
+
+TEST_F(WorkerSchedulerTest, PausableTasks) {
+  std::vector<std::string> run_order;
+  auto pause_handle = worker_scheduler_->Pause();
+  // Tests interlacing pausable, throttable and unpausable tasks and
+  // ensures that the pausable & throttable tasks don't run when paused.
+  // Throttable
+  PostTestTask(&run_order, "T1", TaskType::kJavascriptTimer);
+  // Pausable
+  PostTestTask(&run_order, "T2", TaskType::kNetworking);
+  // Unpausable
+  PostTestTask(&run_order, "T3", TaskType::kInternalTest);
+  RunUntilIdle();
+  EXPECT_THAT(run_order, testing::ElementsAre("T3"));
+  pause_handle.reset();
+  RunUntilIdle();
+
+  EXPECT_THAT(run_order, testing::ElementsAre("T3", "T1", "T2"));
+}
+
+TEST_F(WorkerSchedulerTest, NestedPauseHandlesTasks) {
+  std::vector<std::string> run_order;
+  auto pause_handle = worker_scheduler_->Pause();
+  {
+    auto pause_handle2 = worker_scheduler_->Pause();
+    PostTestTask(&run_order, "T1", TaskType::kJavascriptTimer);
+    PostTestTask(&run_order, "T2", TaskType::kNetworking);
+  }
+  RunUntilIdle();
+  EXPECT_EQ(0u, run_order.size());
+  pause_handle.reset();
+  RunUntilIdle();
+  EXPECT_THAT(run_order, testing::ElementsAre("T1", "T2"));
 }
 
 }  // namespace worker_scheduler_unittest

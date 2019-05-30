@@ -42,10 +42,13 @@ GestureConsumer* GestureRecognizerImplMac::GetTargetForLocation(
 void GestureRecognizerImplMac::CancelActiveTouchesExcept(
     GestureConsumer* not_cancelled) {}
 
+void GestureRecognizerImplMac::CancelActiveTouchesOn(
+    const std::vector<GestureConsumer*>& consumers) {}
+
 void GestureRecognizerImplMac::TransferEventsTo(
     GestureConsumer* current_consumer,
     GestureConsumer* new_consumer,
-    ShouldCancelTouches should_cancel_touches) {}
+    TransferTouchesBehavior transfer_touches_behavior) {}
 
 bool GestureRecognizerImplMac::GetLastTouchPointForTarget(
     GestureConsumer* consumer,

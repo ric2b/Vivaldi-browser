@@ -19,8 +19,9 @@
 #include "third_party/blink/renderer/core/layout/svg/svg_resources_cache.h"
 #include "third_party/blink/renderer/core/paint/inline_text_box_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
+#include "third_party/blink/renderer/core/paint/paint_timing_detector.h"
 #include "third_party/blink/renderer/core/paint/selection_painting_utils.h"
-#include "third_party/blink/renderer/core/paint/svg_paint_context.h"
+#include "third_party/blink/renderer/core/paint/svg_object_painter.h"
 #include "third_party/blink/renderer/core/style/applied_text_decoration.h"
 #include "third_party/blink/renderer/core/style/shadow_list.h"
 #include "third_party/blink/renderer/platform/fonts/text_run_paint_info.h"
@@ -93,15 +94,13 @@ void SVGInlineTextBoxPainter::Paint(const PaintInfo& paint_info,
   if (!TextShouldBePainted(text_layout_object))
     return;
 
-  DisplayItem::Type display_item_type =
-      DisplayItem::PaintPhaseToDrawingType(paint_info.phase);
   if (!DrawingRecorder::UseCachedDrawingIfPossible(
-          paint_info.context, svg_inline_text_box_, display_item_type)) {
+          paint_info.context, svg_inline_text_box_, paint_info.phase)) {
     LayoutObject& parent_layout_object = ParentInlineLayoutObject();
     const ComputedStyle& style = parent_layout_object.StyleRef();
 
     DrawingRecorder recorder(paint_info.context, svg_inline_text_box_,
-                             display_item_type);
+                             paint_info.phase);
     InlineTextBoxPainter text_painter(svg_inline_text_box_);
     const DocumentMarkerVector& markers_to_paint =
         text_painter.ComputeMarkersToPaint();
@@ -350,9 +349,9 @@ void SVGInlineTextBoxPainter::PaintDecoration(const PaintInfo& paint_info,
       case PT_FILL:
         if (svg_decoration_style.HasFill()) {
           PaintFlags fill_flags;
-          if (!SVGPaintContext::PaintForLayoutObject(
-                  paint_info, decoration_style, *decoration_layout_object,
-                  kApplyToFillMode, fill_flags))
+          if (!SVGObjectPainter(*decoration_layout_object)
+                   .PreparePaint(paint_info, decoration_style, kApplyToFillMode,
+                                 fill_flags))
             break;
           fill_flags.setAntiAlias(true);
           paint_info.context.DrawPath(path.GetSkPath(), fill_flags);
@@ -361,9 +360,9 @@ void SVGInlineTextBoxPainter::PaintDecoration(const PaintInfo& paint_info,
       case PT_STROKE:
         if (svg_decoration_style.HasVisibleStroke()) {
           PaintFlags stroke_flags;
-          if (!SVGPaintContext::PaintForLayoutObject(
-                  paint_info, decoration_style, *decoration_layout_object,
-                  kApplyToStrokeMode, stroke_flags))
+          if (!SVGObjectPainter(*decoration_layout_object)
+                   .PreparePaint(paint_info, decoration_style,
+                                 kApplyToStrokeMode, stroke_flags))
             break;
           stroke_flags.setAntiAlias(true);
           float stroke_scale_factor =
@@ -412,9 +411,9 @@ bool SVGInlineTextBoxPainter::SetupTextPaint(
       paint_server_transform->Multiply(*shader_transform);
   }
 
-  if (!SVGPaintContext::PaintForLayoutObject(
-          paint_info, style, ParentInlineLayoutObject(), resource_mode, flags,
-          base::OptionalOrNullptr(paint_server_transform)))
+  if (!SVGObjectPainter(ParentInlineLayoutObject())
+           .PreparePaint(paint_info, style, resource_mode, flags,
+                         base::OptionalOrNullptr(paint_server_transform)))
     return false;
   flags.setAntiAlias(true);
 
@@ -453,13 +452,11 @@ void SVGInlineTextBoxPainter::PaintText(const PaintInfo& paint_info,
   DCHECK(scaling_factor);
 
   FloatPoint text_origin(fragment.x, fragment.y);
-  FloatSize text_size(fragment.width, fragment.height);
 
   GraphicsContext& context = paint_info.context;
   GraphicsContextStateSaver state_saver(context, false);
   if (scaling_factor != 1) {
     text_origin.Scale(scaling_factor, scaling_factor);
-    text_size.Scale(scaling_factor);
     state_saver.Save();
     context.Scale(1 / scaling_factor, 1 / scaling_factor);
   }
@@ -468,19 +465,16 @@ void SVGInlineTextBoxPainter::PaintText(const PaintInfo& paint_info,
   text_run_paint_info.from = start_position;
   text_run_paint_info.to = end_position;
 
-  const SimpleFontData* font_data = scaled_font.PrimaryFont();
-  DCHECK(font_data);
-  if (!font_data)
-    return;
-  float baseline = font_data->GetFontMetrics().FloatAscent();
-  text_run_paint_info.bounds =
-      FloatRect(text_origin.X(), text_origin.Y() - baseline, text_size.Width(),
-                text_size.Height());
-
-  context.DrawText(scaled_font, text_run_paint_info, text_origin, flags);
+  context.DrawText(scaled_font, text_run_paint_info, text_origin, flags,
+                   text_layout_object.EnsureNodeHolder());
   // TODO(npm): Check that there are non-whitespace characters. See
   // crbug.com/788444.
   context.GetPaintController().SetTextPainted();
+  if (RuntimeEnabledFeatures::FirstContentfulPaintPlusPlusEnabled()) {
+    PaintTimingDetector::NotifyTextPaint(
+        InlineLayoutObject(),
+        paint_info.context.GetPaintController().CurrentPaintChunkProperties());
+  }
 }
 
 void SVGInlineTextBoxPainter::PaintText(

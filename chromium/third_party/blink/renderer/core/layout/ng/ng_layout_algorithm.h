@@ -17,39 +17,14 @@ class ComputedStyle;
 class NGLayoutResult;
 struct MinMaxSizeInput;
 
-// Base class for all LayoutNG algorithms.
-template <typename NGInputNodeType,
-          typename NGFragmentBuilderType,
-          typename NGBreakTokenType>
-class CORE_EXPORT NGLayoutAlgorithm {
-  STACK_ALLOCATED();
+// Operations provided by a layout algorithm.
+class NGLayoutAlgorithmOperations {
  public:
-  NGLayoutAlgorithm(NGInputNodeType node,
-                    scoped_refptr<const ComputedStyle> style,
-                    const NGConstraintSpace& space,
-                    TextDirection direction,
-                    NGBreakTokenType* break_token)
-      : node_(node),
-        constraint_space_(space),
-        break_token_(break_token),
-        container_builder_(node, style, space.GetWritingMode(), direction) {}
-
-  NGLayoutAlgorithm(NGInputNodeType node,
-                    const NGConstraintSpace& space,
-                    NGBreakTokenType* break_token)
-      : NGLayoutAlgorithm(node,
-                          &node.Style(),
-                          space,
-                          space.Direction(),
-                          break_token) {}
-
-  virtual ~NGLayoutAlgorithm() = default;
-
   // Actual layout function. Lays out the children and descendants within the
   // constraints given by the NGConstraintSpace. Returns a layout result with
   // the resulting layout information.
   // TODO(layout-dev): attempt to make this function const.
-  virtual scoped_refptr<NGLayoutResult> Layout() = 0;
+  virtual scoped_refptr<const NGLayoutResult> Layout() = 0;
 
   // Computes the min-content and max-content intrinsic sizes for the given box.
   // The result will not take any min-width, max-width or width properties into
@@ -60,29 +35,63 @@ class CORE_EXPORT NGLayoutAlgorithm {
       const MinMaxSizeInput&) const {
     return base::nullopt;
   }
+};
+
+// Base class for all LayoutNG algorithms.
+template <typename NGInputNodeType,
+          typename NGBoxFragmentBuilderType,
+          typename NGBreakTokenType>
+class CORE_EXPORT NGLayoutAlgorithm : public NGLayoutAlgorithmOperations {
+  STACK_ALLOCATED();
+ public:
+  NGLayoutAlgorithm(NGInputNodeType node,
+                    scoped_refptr<const ComputedStyle> style,
+                    const NGConstraintSpace& space,
+                    TextDirection direction,
+                    const NGBreakTokenType* break_token)
+      : node_(node),
+        break_token_(break_token),
+        container_builder_(node,
+                           style,
+                           &space,
+                           space.GetWritingMode(),
+                           direction) {}
+
+  NGLayoutAlgorithm(NGInputNodeType node,
+                    const NGConstraintSpace& space,
+                    const NGBreakTokenType* break_token)
+      : NGLayoutAlgorithm(node,
+                          &node.Style(),
+                          space,
+                          space.Direction(),
+                          break_token) {}
+
+  virtual ~NGLayoutAlgorithm() = default;
 
  protected:
-  const NGConstraintSpace& ConstraintSpace() const { return constraint_space_; }
+  const NGConstraintSpace& ConstraintSpace() const {
+    DCHECK(container_builder_.ConstraintSpace());
+    return *container_builder_.ConstraintSpace();
+  }
 
   const ComputedStyle& Style() const { return node_.Style(); }
 
   NGBfcOffset ContainerBfcOffset() const {
     DCHECK(container_builder_.BfcBlockOffset());
     return {container_builder_.BfcLineOffset(),
-            container_builder_.BfcBlockOffset().value()};
+            *container_builder_.BfcBlockOffset()};
   }
 
   NGInputNodeType Node() const { return node_; }
 
-  NGBreakTokenType* BreakToken() const { return break_token_; }
+  const NGBreakTokenType* BreakToken() const { return break_token_.get(); }
 
   NGInputNodeType node_;
-  const NGConstraintSpace& constraint_space_;
 
   // The break token from which we are currently resuming layout.
-  NGBreakTokenType* break_token_;
+  scoped_refptr<const NGBreakTokenType> break_token_;
 
-  NGFragmentBuilderType container_builder_;
+  NGBoxFragmentBuilderType container_builder_;
 };
 
 }  // namespace blink

@@ -12,9 +12,10 @@
 <script type="text/javascript" src="options_loader.js"></script>
 <script type="text/javascript" src="../../chromeVoxChromeOptionsScript.js">
 </script>
+  <link rel="import" href="chrome://resources/cr_elements/icons.html">
+  <link rel="import" href="chrome://resources/html/polymer.html">
+  <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
 </head>
-
-<html>
 
 <body>
   <!--
@@ -39,6 +40,14 @@
     <input id="autoRead" type="checkbox" class="checkbox pref" name="autoRead">
     <label for="autoRead" class="i18n" msgid="options_auto_read">
       Automatically read a page after it finishes loading.
+    </label>
+  </div>
+
+  <div class="option">
+    <input id="speakTextUnderMouse" type="checkbox" class="checkbox pref"
+           name="speakTextUnderMouse">
+    <label for="speakTextUnderMouse" class="i18n" msgid="options_speak_mouse">
+      Speak text under the mouse.
     </label>
   </div>
 
@@ -70,6 +79,15 @@
     <select id="voices" aria-labelledby="voices_description"></select>
   </div>
 
+  <div class="option" id="languageSwitchingOption">
+    <input id="languageSwitching" type="checkbox"
+           class="checkbox pref" name="languageSwitching">
+    <label for="languageSwitching" class="i18n"
+           msgid="options_lang_switching_checkbox_label">
+      Automatically detect and switch ChromeVox language.
+    </label>
+  </div>
+
   <h2 class="chromeos i18n" msgid="options_braille">Braille</h2>
   <div class="chromeos option">
     <span class="i18n description" msgid="options_braille_description_6"
@@ -98,6 +116,8 @@
     </label>
   </div>
 
+  <div id="bluetoothBraille"></div>
+
   <h2 class="i18n" msgid="options_virtual_braille_display">
     Virtual Braille Display
   </h2>
@@ -124,7 +144,6 @@
     <input type="number" min="1" id="virtual_braille_display_columns_input">
   </label>
   </div>
-
   <div class="option">
     <span id="currentDisplayStyle"></span>
     <button id="changeDisplayStyle"></button>
@@ -133,10 +152,23 @@
   <h2 class="i18n" msgid="options_developer_options" id="developerDescription">
     Developer Options
   </h2>
+  <div class="chromeos option" id="developerLog">
+    <label>
+      <paper-icon-button icon="cr:expand-more"
+        class="developer-option-icon-button" id="chromeVoxDeveloperOptionsMore"
+        name="chromeVoxDeveloperOptions"></paper-icon-button>
+      <paper-icon-button icon="cr:expand-less"
+        class="developer-option-icon-button" id="chromeVoxDeveloperOptionsLess"
+        name="chromeVoxDeveloperOptions" hidden></paper-icon-button>
+      <span class="i18n" msgid="options_developer_options">
+        Enable developer options
+      </span>
+    </label>
+  </div>
   <div class="option" id="developerSpeechLogging">
     <label>
-      <input id="enableSpeechLogging" type="checkbox" class="checkbox pref"
-             name="enableSpeechLogging">
+      <input id="enableSpeechLogging" type="checkbox"
+             class="checkbox pref logging" name="enableSpeechLogging">
       <span class="i18n" msgid="options_developer_speech_logging">
         Enable speech logging
       </span>
@@ -144,8 +176,8 @@
   </div>
   <div class="option" id="developerEarconLogging">
     <label>
-      <input id="enableEarconLogging" type="checkbox" class="checkbox pref"
-             name="enableEarconLogging">
+      <input id="enableEarconLogging" type="checkbox"
+             class="checkbox pref logging" name="enableEarconLogging">
       <span class="i18n" msgid="options_developer_earcon_logging">
         Enable earcon logging
       </span>
@@ -153,8 +185,8 @@
   </div>
   <div class="option" id="developerBrailleLogging">
     <label>
-      <input id="enableBrailleLogging" type="checkbox" class="checkbox pref"
-             name="enableBrailleLogging">
+      <input id="enableBrailleLogging" type="checkbox"
+             class="checkbox pref logging" name="enableBrailleLogging">
       <span class="i18n" msgid="options_developer_braille_logging">
         Enable braille logging
       </span>
@@ -162,14 +194,22 @@
   </div>
   <div class="option" id="developerEventStream">
     <label>
-      <input id="enableEventStreamLogging" type="checkbox" class="checkbox pref"
-             name="enableEventStreamLogging">
       <span class="i18n" msgid="options_event_stream_logging">
         Enable event stream logging
       </span>
     </label>
     <button id="toggleEventStreamFilters"></button>
   </div>
+   <div class="option" id="showDeveloperLog">
+    <label>
+      <paper-icon-button icon="cr:open-in-new"
+        class="developer-option-icon-button" id="openDeveloperLog">
+      </paper-icon-button>
+      <span class="i18n" msgid="options_show_log"></span>
+      <span class="i18n sub-description" msgid="options_show_log_key"></span>
+    </label>
+  </div>
+
   <div id="eventStreamFilters" hidden>
     <label><div class="option-eventstream">
       <input name="activedescendantchanged" type="checkbox"

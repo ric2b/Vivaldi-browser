@@ -19,10 +19,12 @@
 #include "base/timer/timer.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/network_change_notifier.h"
-#include "net/dns/dns_config_service.h"
+#include "net/dns/dns_config.h"
+#include "net/dns/dns_config_overrides.h"
 #include "net/dns/host_cache.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/host_resolver_proc.h"
+#include "net/dns/public/dns_query_type.h"
 #include "net/url_request/url_request_context.h"
 #include "url/gurl.h"
 
@@ -34,10 +36,19 @@ namespace net {
 
 class AddressList;
 class DnsClient;
+class HostPortPair;
 class IPAddress;
+class MDnsClient;
+class MDnsSocketFactory;
 class NetLog;
 class NetLogWithSource;
 
+// Scheduler and controller of host resolution requests. Because of the global
+// nature of host resolutions, this class is generally expected to be singleton
+// within the browser and only be interacted with through per-context
+// ContextHostResolver objects (which are themselves generally interacted with
+// though the HostResolver interface).
+//
 // For each hostname that is requested, HostResolver creates a
 // HostResolverImpl::Job. When this job gets dispatched it creates a task
 // (ProcTask for the system resolver or DnsTask for the async resolver) which
@@ -67,48 +78,14 @@ class NetLogWithSource;
 //
 // Jobs are ordered in the queue based on their priority and order of arrival.
 class NET_EXPORT HostResolverImpl
-    : public HostResolver,
-      public NetworkChangeNotifier::IPAddressObserver,
+    : public NetworkChangeNotifier::IPAddressObserver,
       public NetworkChangeNotifier::ConnectionTypeObserver,
       public NetworkChangeNotifier::DNSObserver {
  public:
-  // Parameters for ProcTask which resolves hostnames using HostResolveProc.
-  //
-  // |resolver_proc| is used to perform the actual resolves; it must be
-  // thread-safe since it may be run from multiple worker threads. If
-  // |resolver_proc| is NULL then the default host resolver procedure is
-  // used (which is SystemHostResolverProc except if overridden).
-  //
-  // For each attempt, we could start another attempt if host is not resolved
-  // within |unresponsive_delay| time. We keep attempting to resolve the host
-  // for |max_retry_attempts|. For every retry attempt, we grow the
-  // |unresponsive_delay| by the |retry_factor| amount (that is retry interval
-  // is multiplied by the retry factor each time). Once we have retried
-  // |max_retry_attempts|, we give up on additional attempts.
-  //
-  struct NET_EXPORT_PRIVATE ProcTaskParams {
-    // Sets up defaults.
-    ProcTaskParams(HostResolverProc* resolver_proc, size_t max_retry_attempts);
-
-    ProcTaskParams(const ProcTaskParams& other);
-
-    ~ProcTaskParams();
-
-    // The procedure to use for resolving host names. This will be NULL, except
-    // in the case of unit-tests which inject custom host resolving behaviors.
-    scoped_refptr<HostResolverProc> resolver_proc;
-
-    // Maximum number retry attempts to resolve the hostname.
-    // Pass HostResolver::kDefaultRetryAttempts to choose a default value.
-    size_t max_retry_attempts;
-
-    // This is the limit after which we make another attempt to resolve the host
-    // if the worker thread has not responded yet.
-    base::TimeDelta unresponsive_delay;
-
-    // Factor to grow |unresponsive_delay| when we re-re-try.
-    uint32_t retry_factor;
-  };
+  using MdnsListener = HostResolver::MdnsListener;
+  using Options = HostResolver::Options;
+  using ResolveHostRequest = HostResolver::ResolveHostRequest;
+  using ResolveHostParameters = HostResolver::ResolveHostParameters;
 
   // Creates a HostResolver as specified by |options|. Blocking tasks are run in
   // TaskScheduler.
@@ -138,29 +115,18 @@ class NET_EXPORT HostResolverImpl
   std::unique_ptr<ResolveHostRequest> CreateRequest(
       const HostPortPair& host,
       const NetLogWithSource& net_log,
-      const base::Optional<ResolveHostParameters>& optional_parameters)
-      override;
-  int Resolve(const RequestInfo& info,
-              RequestPriority priority,
-              AddressList* addresses,
-              CompletionOnceCallback callback,
-              std::unique_ptr<Request>* out_req,
-              const NetLogWithSource& source_net_log) override;
-  int ResolveFromCache(const RequestInfo& info,
-                       AddressList* addresses,
-                       const NetLogWithSource& source_net_log) override;
-  int ResolveStaleFromCache(const RequestInfo& info,
-                            AddressList* addresses,
-                            HostCache::EntryStaleness* stale_info,
-                            const NetLogWithSource& source_net_log) override;
-  void SetDnsClientEnabled(bool enabled) override;
+      const base::Optional<ResolveHostParameters>& optional_parameters);
+  std::unique_ptr<MdnsListener> CreateMdnsListener(const HostPortPair& host,
+                                                   DnsQueryType query_type);
+  void SetDnsClientEnabled(bool enabled);
 
-  HostCache* GetHostCache() override;
+  HostCache* GetHostCache();
   bool HasCached(base::StringPiece hostname,
                  HostCache::Entry::Source* source_out,
-                 HostCache::EntryStaleness* stale_out) const override;
+                 HostCache::EntryStaleness* stale_out,
+                 bool* secure_out) const;
 
-  std::unique_ptr<base::Value> GetDnsConfigAsValue() const override;
+  std::unique_ptr<base::Value> GetDnsConfigAsValue() const;
 
   // Returns the number of host cache entries that were restored, or 0 if there
   // is no cache.
@@ -168,14 +134,14 @@ class NET_EXPORT HostResolverImpl
   // Returns the number of entries in the host cache, or 0 if there is no cache.
   size_t CacheSize() const;
 
-  void SetNoIPv6OnWifi(bool no_ipv6_on_wifi) override;
-  bool GetNoIPv6OnWifi() override;
+  void SetNoIPv6OnWifi(bool no_ipv6_on_wifi);
+  bool GetNoIPv6OnWifi();
 
-  void SetRequestContext(URLRequestContext* request_context) override;
-  void AddDnsOverHttpsServer(std::string uri_template, bool use_post) override;
-  void ClearDnsOverHttpsServers() override;
+  void SetDnsConfigOverrides(const DnsConfigOverrides& overrides);
+
+  void SetRequestContext(URLRequestContext* request_context);
   const std::vector<DnsConfig::DnsOverHttpsServerConfig>*
-  GetDnsOverHttpsServersForTesting() const override;
+  GetDnsOverHttpsServersForTesting() const;
 
   void set_proc_params_for_test(const ProcTaskParams& proc_params) {
     proc_params_ = proc_params;
@@ -187,6 +153,12 @@ class NET_EXPORT HostResolverImpl
   // Only allowed when the queue is empty.
   void SetMaxQueuedJobsForTesting(size_t value);
 
+  void SetMdnsSocketFactoryForTesting(
+      std::unique_ptr<MDnsSocketFactory> socket_factory);
+  void SetMdnsClientForTesting(std::unique_ptr<MDnsClient> client);
+
+  void SetBaseDnsConfigForTesting(const DnsConfig& base_config);
+
  protected:
   // Callback from HaveOnlyLoopbackAddresses probe.
   void SetHaveOnlyLoopbackAddresses(bool result);
@@ -196,14 +168,30 @@ class NET_EXPORT HostResolverImpl
 
  private:
   friend class HostResolverImplTest;
+  FRIEND_TEST_ALL_PREFIXES(HostResolverImplDnsTest, ModeForHistogram);
   class Job;
   class ProcTask;
   class LoopbackProbeJob;
   class DnsTask;
   class RequestImpl;
-  class LegacyRequestImpl;
   using Key = HostCache::Key;
   using JobMap = std::map<Key, std::unique_ptr<Job>>;
+
+  // Current resolver mode, useful for breaking down histograms.
+  enum ModeForHistogram {
+    // Using the system (i.e. O/S's) resolver.
+    MODE_FOR_HISTOGRAM_SYSTEM,
+    // Using the system resolver, which is in turn using private DNS.
+    MODE_FOR_HISTOGRAM_SYSTEM_PRIVATE_DNS,
+    // Using the system resolver, which is using DNS servers which offer
+    // DNS-over-HTTPS service.
+    MODE_FOR_HISTOGRAM_SYSTEM_SUPPORTS_DOH,
+    // Using Chromium DNS resolver.
+    MODE_FOR_HISTOGRAM_ASYNC_DNS,
+    // Using Chromium DNS resolver which is using DNS servers which offer
+    // DNS-over-HTTPS service.
+    MODE_FOR_HISTOGRAM_ASYNC_DNS_PRIVATE_SUPPORTS_DOH,
+  };
 
   // Number of consecutive failures of DnsTask (with successful fallback to
   // ProcTask) before the DnsClient is disabled until the next DNS change.
@@ -214,73 +202,58 @@ class NET_EXPORT HostResolverImpl
   int Resolve(RequestImpl* request);
 
   // Attempts host resolution using fast local sources: IP literal resolution,
-  // cache lookup, HOSTS lookup (if enabled), and localhost. Returns OK if
-  // successful, ERR_NAME_NOT_RESOLVED if input is invalid, or
-  // ERR_DNS_CACHE_MISS if the host could not be resolved using local sources.
-  //
-  // On success, the resulting addresses are written to |addresses|.
+  // cache lookup, HOSTS lookup (if enabled), and localhost. Returns results
+  // with error() OK if successful, ERR_NAME_NOT_RESOLVED if input is invalid,
+  // or ERR_DNS_CACHE_MISS if the host could not be resolved using local
+  // sources.
   //
   // On ERR_DNS_CACHE_MISS and OK, the cache key for the request is written to
-  // |key|. On other errors, it may not be.
+  // |out_key|. On other errors, it may not be.
   //
-  // If |allow_stale| is true, then stale cache entries can be returned.
-  // |stale_info| must be non-null, and will be filled in with details of the
-  // entry's staleness (if an entry is returned).
+  // If results are returned from the host cache, |out_stale_info| will be
+  // filled in with information on how stale or fresh the result is. Otherwise,
+  // |out_stale_info| will be set to |base::nullopt|.
   //
-  // If |allow_stale| is false, then stale cache entries will not be returned,
-  // and |stale_info| must be null.
-  int ResolveLocally(const HostPortPair& host,
-                     DnsQueryType requested_address_family,
-                     HostResolverSource source,
-                     HostResolverFlags flags,
-                     bool allow_cache,
-                     bool allow_stale,
-                     HostCache::EntryStaleness* stale_info,
-                     const NetLogWithSource& request_net_log,
-                     AddressList* addresses,
-                     Key* key);
+  // If |cache_usage == ResolveHostParameters::CacheUsage::STALE_ALLOWED|, then
+  // stale cache entries can be returned.
+  HostCache::Entry ResolveLocally(
+      const std::string& hostname,
+      DnsQueryType requested_address_family,
+      HostResolverSource source,
+      HostResolverFlags flags,
+      ResolveHostParameters::CacheUsage cache_usage,
+      const NetLogWithSource& request_net_log,
+      Key* out_key,
+      base::Optional<HostCache::EntryStaleness>* out_stale_info);
 
   // Attempts to create and start a Job to asynchronously attempt to resolve
   // |key|. On success, returns ERR_IO_PENDING and attaches the Job to
   // |request|. On error, marks |request| completed and returns the error.
   int CreateAndStartJob(const Key& key, RequestImpl* request);
 
-  // Tries to resolve |key| as an IP, returns true and sets |net_error| if
-  // succeeds, returns false otherwise.
-  bool ResolveAsIP(const Key& key,
-                   uint16_t host_port,
-                   const IPAddress* ip_address,
-                   int* net_error,
-                   AddressList* addresses);
+  // Tries to resolve |key| and its possible IP address representation,
+  // |ip_address|. Returns a results entry iff the input can be resolved.
+  base::Optional<HostCache::Entry> ResolveAsIP(const Key& key,
+                                               const IPAddress* ip_address);
 
-  // If |key| is not found in cache returns false, otherwise returns
-  // true, sets |net_error| to the cached error code and fills |addresses|
-  // if it is a positive entry.
+  // Returns the result iff a positive match is found for |key| in the cache.
+  // |out_stale_info| must be non-null, and will be filled in with details of
+  // the entry's staleness if an entry is returned, otherwise it will be set to
+  // |base::nullopt|.
   //
   // If |allow_stale| is true, then stale cache entries can be returned.
-  // |stale_info| must be non-null, and will be filled in with details of the
-  // entry's staleness (if an entry is returned).
-  //
-  // If |allow_stale| is false, then stale cache entries will not be returned,
-  // and |stale_info| must be null.
-  bool ServeFromCache(const Key& key,
-                      uint16_t host_port,
-                      int* net_error,
-                      AddressList* addresses,
-                      bool allow_stale,
-                      HostCache::EntryStaleness* stale_info);
+  base::Optional<HostCache::Entry> ServeFromCache(
+      const Key& key,
+      bool allow_stale,
+      base::Optional<HostCache::EntryStaleness>* out_stale_info);
 
-  // If we have a DnsClient with a valid DnsConfig, and |key| is found in the
-  // HOSTS file, returns true and fills |addresses|. Otherwise returns false.
-  bool ServeFromHosts(const Key& key,
-                      uint16_t host_port,
-                      AddressList* addresses);
+  // Iff we have a DnsClient with a valid DnsConfig, and |key| can be resolved
+  // from the HOSTS file, return the results.
+  base::Optional<HostCache::Entry> ServeFromHosts(const Key& key);
 
-  // If |key| is for a localhost name (RFC 6761), returns true and fills
-  // |addresses| with the loopback IP. Otherwise returns false.
-  bool ServeLocalhost(const Key& key,
-                      uint16_t host_port,
-                      AddressList* addresses);
+  // Iff |key| is for a localhost name (RFC 6761) and address DNS query type,
+  // returns a results entry with the loopback IP.
+  base::Optional<HostCache::Entry> ServeLocalhost(const Key& key);
 
   // Returns the (hostname, address_family) key to use for |info|, choosing an
   // "effective" address family by inheriting the resolver's default address
@@ -309,6 +282,11 @@ class NET_EXPORT HostResolverImpl
                    const HostCache::Entry& entry,
                    base::TimeDelta ttl);
 
+  // Record time from Request creation until a valid DNS response.
+  void RecordTotalTime(bool speculative,
+                       bool from_cache,
+                       base::TimeDelta duration) const;
+
   // Removes |job| from |jobs_| and return, only if it exists.
   std::unique_ptr<Job> RemoveJob(Job* job);
 
@@ -317,9 +295,11 @@ class NET_EXPORT HostResolverImpl
   void AbortAllInProgressJobs();
 
   // Aborts all in progress DnsTasks. In-progress jobs will fall back to
-  // ProcTasks. Might start new jobs, if any jobs were taking up two dispatcher
-  // slots.
-  void AbortDnsTasks();
+  // ProcTasks if able and otherwise abort with |error|. Might start new jobs,
+  // if any jobs were taking up two dispatcher slots.
+  //
+  // If |fallback_only|, tasks will only abort if they can fallback to ProcTask.
+  void AbortDnsTasks(int error, bool fallback_only);
 
   // Attempts to serve each Job in |jobs_| from the HOSTS file if we have
   // a DnsClient with a valid DnsConfig.
@@ -336,14 +316,21 @@ class NET_EXPORT HostResolverImpl
   void OnDNSChanged() override;
   void OnInitialDNSConfigRead() override;
 
+  // Returns DNS configuration including applying overrides. |log_to_net_log|
+  // indicates whether the config should be logged to the netlog.
+  DnsConfig GetBaseDnsConfig(bool log_to_net_log);
   void UpdateDNSConfig(bool config_changed);
 
   // True if have a DnsClient with a valid DnsConfig.
   bool HaveDnsConfig() const;
 
-  // Called when a host name is successfully resolved and DnsTask was run on it
-  // and resulted in |net_error|.
-  void OnDnsTaskResolve(int net_error);
+  // Called on successful DnsTask resolve.
+  void OnDnsTaskResolve();
+  // Called on successful resolve after falling back to ProcTask after a failed
+  // DnsTask resolve.
+  void OnFallbackResolve(int dns_task_error);
+
+  MDnsClient* GetOrCreateMdnsClient();
 
   // Allows the tests to catch slots leaking out of the dispatcher.  One
   // HostResolverImpl::Job could occupy multiple PrioritizedDispatcher job
@@ -352,8 +339,17 @@ class NET_EXPORT HostResolverImpl
     return dispatcher_->num_running_jobs();
   }
 
+  // Update |mode_for_histogram_|. Called when DNS config changes. |dns_config|
+  // is the current DNS config and is only used if !HaveDnsConfig().
+  void UpdateModeForHistogram(const DnsConfig& dns_config);
+
   // Cache of host resolution results.
   std::unique_ptr<HostCache> cache_;
+
+  // Used for multicast DNS tasks. Created on first use using
+  // GetOrCreateMndsClient().
+  std::unique_ptr<MDnsSocketFactory> mdns_socket_factory_;
+  std::unique_ptr<MDnsClient> mdns_client_;
 
   // Map from HostCache::Key to a Job.
   JobMap jobs_;
@@ -376,6 +372,15 @@ class NET_EXPORT HostResolverImpl
   // to measure performance of DnsConfigService: http://crbug.com/125599
   bool received_dns_config_;
 
+  // If set, used instead of getting DNS configuration from
+  // NetworkChangeNotifier. Changes sent from NetworkChangeNotifier will also be
+  // ignored and not cancel any pending requests.
+  base::Optional<DnsConfig> test_base_config_;
+
+  // Overrides or adds to DNS configuration read from the system for DnsClient
+  // resolution.
+  DnsConfigOverrides dns_config_overrides_;
+
   // Number of consecutive failures of DnsTask, counted when fallback succeeds.
   unsigned num_dns_failures_;
 
@@ -393,15 +398,23 @@ class NET_EXPORT HostResolverImpl
   // Any resolver flags that should be added to a request by default.
   HostResolverFlags additional_resolver_flags_;
 
+  // |true| if requests that would otherwise be handled via DnsTask should
+  // instead use ProcTask when able.  Used in cases where there have been
+  // multiple failures in DnsTask that succeeded in ProcTask, leading to the
+  // conclusion that the resolver has a bad DNS configuration.
+  bool use_proctask_by_default_;
+
   // Allow fallback to ProcTask if DnsTask fails.
-  bool fallback_to_proctask_;
+  bool allow_fallback_to_proctask_;
 
   // Task runner used for DNS lookups using the system resolver. Normally a
   // TaskScheduler task runner, but can be overridden for tests.
   scoped_refptr<base::TaskRunner> proc_task_runner_;
 
+  // Current resolver mode, useful for breaking down histogram data.
+  ModeForHistogram mode_for_histogram_;
+
   URLRequestContext* url_request_context_;
-  std::vector<DnsConfig::DnsOverHttpsServerConfig> dns_over_https_servers_;
 
   // Shared tick clock, overridden for testing.
   const base::TickClock* tick_clock_;
@@ -416,7 +429,7 @@ class NET_EXPORT HostResolverImpl
 };
 
 // Resolves a local hostname (such as "localhost" or "localhost6") into
-// IP endpoints with the given port. Returns true if |host| is a local
+// IP endpoints (with port 0). Returns true if |host| is a local
 // hostname and false otherwise. Special IPv6 names (e.g. "localhost6")
 // will resolve to an IPv6 address only, whereas other names will
 // resolve to both IPv4 and IPv6.
@@ -424,7 +437,6 @@ class NET_EXPORT HostResolverImpl
 // TODO(tfarina): It would be better to change the tests so this function
 // gets exercised indirectly through HostResolverImpl.
 NET_EXPORT_PRIVATE bool ResolveLocalHostname(base::StringPiece host,
-                                             uint16_t port,
                                              AddressList* address_list);
 
 }  // namespace net

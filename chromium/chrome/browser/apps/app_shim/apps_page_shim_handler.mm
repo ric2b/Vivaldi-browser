@@ -6,6 +6,7 @@
 
 #import "base/mac/foundation_util.h"
 #import "chrome/browser/app_controller_mac.h"
+#include "chrome/browser/apps/app_shim/app_shim_host_bootstrap_mac.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -52,26 +53,29 @@ void OpenAppsPage(Profile* fallback_profile) {
 
 }  // namespace
 
-void AppsPageShimHandler::OnShimLaunch(
-    apps::AppShimHandler::Host* host,
-    apps::AppShimLaunchType launch_type,
-    const std::vector<base::FilePath>& files) {
+void AppsPageShimHandler::OnShimLaunchRequested(
+    AppShimHost* host,
+    bool recreate_shims,
+    apps::ShimLaunchedCallback launched_callback,
+    apps::ShimTerminatedCallback terminated_callback) {}
+
+void AppsPageShimHandler::OnShimProcessConnected(
+    std::unique_ptr<AppShimHostBootstrap> bootstrap) {
   AppController* controller =
       base::mac::ObjCCastStrict<AppController>([NSApp delegate]);
   OpenAppsPage([controller lastProfile]);
 
   // Always close the shim process immediately.
-  host->OnAppLaunchComplete(apps::APP_SHIM_LAUNCH_DUPLICATE_HOST);
+  bootstrap->OnFailedToConnectToHost(apps::APP_SHIM_LAUNCH_DUPLICATE_HOST);
 }
 
-void AppsPageShimHandler::OnShimClose(apps::AppShimHandler::Host* host) {}
+void AppsPageShimHandler::OnShimClose(AppShimHost* host) {}
 
 void AppsPageShimHandler::OnShimFocus(
-    apps::AppShimHandler::Host* host,
+    AppShimHost* host,
     apps::AppShimFocusType focus_type,
     const std::vector<base::FilePath>& files) {}
 
-void AppsPageShimHandler::OnShimSetHidden(apps::AppShimHandler::Host* host,
-                                          bool hidden) {}
+void AppsPageShimHandler::OnShimSetHidden(AppShimHost* host, bool hidden) {}
 
-void AppsPageShimHandler::OnShimQuit(apps::AppShimHandler::Host* host) {}
+void AppsPageShimHandler::OnShimQuit(AppShimHost* host) {}

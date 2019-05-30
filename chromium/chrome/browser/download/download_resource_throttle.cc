@@ -7,8 +7,10 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/download/download_stats.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
 #if defined(OS_ANDROID)
@@ -24,10 +26,10 @@ namespace {
 
 void OnCanDownloadDecided(base::WeakPtr<DownloadResourceThrottle> throttle,
                           bool storage_permission_granted, bool allow) {
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(&DownloadResourceThrottle::ContinueDownload, throttle,
-                 storage_permission_granted, allow));
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
+      base::BindOnce(&DownloadResourceThrottle::ContinueDownload, throttle,
+                     storage_permission_granted, allow));
 }
 
 void CanDownload(
@@ -35,8 +37,7 @@ void CanDownload(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   info->limiter->CanDownload(info->web_contents_getter, info->url,
                              info->request_method,
-                             base::Bind(info->continue_callback, true),
-                             info->download_info);
+                             base::Bind(info->continue_callback, true));
 }
 
 #if defined(OS_ANDROID)
@@ -73,13 +74,11 @@ DownloadResourceThrottle::DownloadRequestInfo::DownloadRequestInfo(
     const content::ResourceRequestInfo::WebContentsGetter& web_contents_getter,
     const GURL& url,
     const std::string& request_method,
-    const content::DownloadInformation &download_info,
     const DownloadRequestInfo::Callback& continue_callback)
     : limiter(limiter),
       web_contents_getter(web_contents_getter),
       url(url),
       request_method(request_method),
-      download_info(download_info),
       continue_callback(continue_callback) {}
 
 DownloadResourceThrottle::DownloadRequestInfo::~DownloadRequestInfo() {}
@@ -88,20 +87,17 @@ DownloadResourceThrottle::DownloadResourceThrottle(
     scoped_refptr<DownloadRequestLimiter> limiter,
     const content::ResourceRequestInfo::WebContentsGetter& web_contents_getter,
     const GURL& url,
-    const std::string& request_method,
-    const content::DownloadInformation& info_p)
+    const std::string& request_method)
     : querying_limiter_(true),
       request_allowed_(false),
       request_deferred_(false) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  content::DownloadInformation info(info_p);
-  info.open_flags_cb = base::Bind(&DownloadResourceThrottle::SetOpenFlags, AsWeakPtr());
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(
           &CanDownloadOnUIThread,
           std::unique_ptr<DownloadRequestInfo>(new DownloadRequestInfo(
-              limiter, web_contents_getter, url, request_method, info,
+              limiter, web_contents_getter, url, request_method,
               base::Bind(&OnCanDownloadDecided, AsWeakPtr())))));
 }
 

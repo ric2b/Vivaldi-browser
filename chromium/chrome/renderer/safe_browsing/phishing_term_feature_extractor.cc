@@ -7,6 +7,7 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <unordered_set>
 #include <utility>
 
 #include "base/bind.h"
@@ -82,8 +83,8 @@ struct PhishingTermFeatureExtractor::ExtractionState {
 };
 
 PhishingTermFeatureExtractor::PhishingTermFeatureExtractor(
-    const base::hash_set<std::string>* page_term_hashes,
-    const base::hash_set<uint32_t>* page_word_hashes,
+    const std::unordered_set<std::string>* page_term_hashes,
+    const std::unordered_set<uint32_t>* page_word_hashes,
     size_t max_words_per_term,
     uint32_t murmurhash3_seed,
     size_t max_shingles_per_page,
@@ -110,7 +111,7 @@ void PhishingTermFeatureExtractor::ExtractFeatures(
     const base::string16* page_text,
     FeatureMap* features,
     std::set<uint32_t>* shingle_hashes,
-    const DoneCallback& done_callback) {
+    DoneCallback done_callback) {
   // The RenderView should have called CancelPendingExtraction() before
   // starting a new extraction, so DCHECK this.
   CheckNoPendingExtraction();
@@ -120,8 +121,7 @@ void PhishingTermFeatureExtractor::ExtractFeatures(
 
   page_text_ = page_text;
   features_ = features;
-  shingle_hashes_ = shingle_hashes,
-  done_callback_ = done_callback;
+  shingle_hashes_ = shingle_hashes, done_callback_ = std::move(done_callback);
 
   state_.reset(new ExtractionState(*page_text_, clock_->Now()));
   base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -143,7 +143,7 @@ void PhishingTermFeatureExtractor::ExtractFeaturesWithTimeout() {
 
   if (!state_->iterator.get()) {
     // We failed to initialize the break iterator, so stop now.
-    UMA_HISTOGRAM_COUNTS("SBClientPhishing.TermFeatureBreakIterError", 1);
+    UMA_HISTOGRAM_COUNTS_1M("SBClientPhishing.TermFeatureBreakIterError", 1);
     RunCallback(false);
     return;
   }
@@ -164,7 +164,7 @@ void PhishingTermFeatureExtractor::ExtractFeaturesWithTimeout() {
           base::TimeDelta::FromMilliseconds(kMaxTotalTimeMs)) {
         DLOG(ERROR) << "Feature extraction took too long, giving up";
         // We expect this to happen infrequently, so record when it does.
-        UMA_HISTOGRAM_COUNTS("SBClientPhishing.TermFeatureTimeout", 1);
+        UMA_HISTOGRAM_COUNTS_1M("SBClientPhishing.TermFeatureTimeout", 1);
         RunCallback(false);
         return;
       }
@@ -207,7 +207,7 @@ void PhishingTermFeatureExtractor::HandleWord(
   // Check if the size of shingle hashes is over the limit.
   if (shingle_hashes_->size() > max_shingles_per_page_) {
     // Pop the largest one.
-    std::set<uint32_t>::iterator it = shingle_hashes_->end();
+    auto it = shingle_hashes_->end();
     shingle_hashes_->erase(--it);
   }
 
@@ -234,16 +234,14 @@ void PhishingTermFeatureExtractor::HandleWord(
   //
   state_->previous_words.append(word_lower);
   std::string current_term = state_->previous_words;
-  for (std::list<size_t>::iterator it = state_->previous_word_sizes.begin();
+  for (auto it = state_->previous_word_sizes.begin();
        it != state_->previous_word_sizes.end(); ++it) {
     hashes_to_check[crypto::SHA256HashString(current_term)] = current_term;
     current_term.erase(0, *it);
   }
 
   // Add features for any hashes that match page_term_hashes_.
-  for (std::map<std::string, std::string>::iterator it =
-           hashes_to_check.begin();
-       it != hashes_to_check.end(); ++it) {
+  for (auto it = hashes_to_check.begin(); it != hashes_to_check.end(); ++it) {
     if (page_term_hashes_->find(it->first) != page_term_hashes_->end()) {
       features_->AddBooleanFeature(features::kPageTerm + it->second);
     }
@@ -277,13 +275,13 @@ void PhishingTermFeatureExtractor::RunCallback(bool success) {
   // Record some timing stats that we can use to evaluate feature extraction
   // performance.  These include both successful and failed extractions.
   DCHECK(state_.get());
-  UMA_HISTOGRAM_COUNTS("SBClientPhishing.TermFeatureIterations",
-                       state_->num_iterations);
+  UMA_HISTOGRAM_COUNTS_1M("SBClientPhishing.TermFeatureIterations",
+                          state_->num_iterations);
   UMA_HISTOGRAM_TIMES("SBClientPhishing.TermFeatureTotalTime",
                       clock_->Now() - state_->start_time);
 
   DCHECK(!done_callback_.is_null());
-  done_callback_.Run(success);
+  std::move(done_callback_).Run(success);
   Clear();
 }
 

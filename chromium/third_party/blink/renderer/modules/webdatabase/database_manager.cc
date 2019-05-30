@@ -49,7 +49,8 @@ DatabaseManager& DatabaseManager::Manager() {
   return *g_database_manager;
 }
 
-DatabaseManager::DatabaseManager() = default;
+DatabaseManager::DatabaseManager()
+    : context_map_(MakeGarbageCollected<ContextMap>()) {}
 
 DatabaseManager::~DatabaseManager() = default;
 
@@ -61,7 +62,7 @@ DatabaseContext* DatabaseManager::ExistingDatabaseContextFor(
   DCHECK_LE(database_context_registered_count_,
             database_context_instance_count_);
 #endif
-  return context_map_.at(context);
+  return context_map_->at(context);
 }
 
 DatabaseContext* DatabaseManager::DatabaseContextFor(
@@ -74,7 +75,7 @@ DatabaseContext* DatabaseManager::DatabaseContextFor(
 void DatabaseManager::RegisterDatabaseContext(
     DatabaseContext* database_context) {
   ExecutionContext* context = database_context->GetExecutionContext();
-  context_map_.Set(context, database_context);
+  context_map_->Set(context, database_context);
 #if DCHECK_IS_ON()
   database_context_registered_count_++;
 #endif
@@ -83,11 +84,11 @@ void DatabaseManager::RegisterDatabaseContext(
 void DatabaseManager::UnregisterDatabaseContext(
     DatabaseContext* database_context) {
   ExecutionContext* context = database_context->GetExecutionContext();
-  DCHECK(context_map_.at(context));
+  DCHECK(context_map_->at(context));
 #if DCHECK_IS_ON()
   database_context_registered_count_--;
 #endif
-  context_map_.erase(context);
+  context_map_->erase(context);
 }
 
 #if DCHECK_IS_ON()
@@ -141,10 +142,9 @@ Database* DatabaseManager::OpenDatabaseInternal(
   DCHECK_EQ(error, DatabaseError::kNone);
 
   DatabaseContext* backend_context = DatabaseContextFor(context)->Backend();
-  if (DatabaseTracker::Tracker().CanEstablishDatabase(
-          backend_context, name, display_name, estimated_size, error)) {
-    Database* backend = new Database(backend_context, name, expected_version,
-                                     display_name, estimated_size);
+  if (DatabaseTracker::Tracker().CanEstablishDatabase(backend_context, error)) {
+    Database* backend = MakeGarbageCollected<Database>(
+        backend_context, name, expected_version, display_name, estimated_size);
     if (backend->OpenAndVerifyVersion(set_version_in_new_database, error,
                                       error_message, creation_callback))
       return backend;
@@ -200,7 +200,7 @@ String DatabaseManager::FullPathForDatabase(const SecurityOrigin* origin,
 void DatabaseManager::LogErrorMessage(ExecutionContext* context,
                                       const String& message) {
   context->AddConsoleMessage(ConsoleMessage::Create(
-      kStorageMessageSource, kErrorMessageLevel, message));
+      kStorageMessageSource, mojom::ConsoleMessageLevel::kError, message));
 }
 
 }  // namespace blink

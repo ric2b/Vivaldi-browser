@@ -9,9 +9,17 @@ Polymer({
 
   properties: {
     disabled: Boolean,
+
+    /** Mirroring the enum so that it can be used from HTML bindings. */
+    MarginsValue: Object,
   },
 
   observers: ['onMarginsSettingChange_(settings.margins.value)'],
+
+  /** @override */
+  ready: function() {
+    this.MarginsValue = print_preview.ticket_items.MarginsTypeValue;
+  },
 
   /**
    * @param {*} newValue The new value of the margins setting.
@@ -26,5 +34,15 @@ Polymer({
   /** @param {string} value The new select value. */
   onProcessSelectChange: function(value) {
     this.setSetting('margins', parseInt(value, 10));
+  },
+
+  /**
+   * @param {boolean} globallyDisabled Value of the |disabled| property.
+   * @param {number} pagesPerSheet Number of pages per sheet.
+   * @return {boolean} Whether the margins settings button should be disabled.
+   * @private
+   */
+  getMarginsSettingsDisabled_: function(globallyDisabled, pagesPerSheet) {
+    return globallyDisabled || pagesPerSheet > 1;
   },
 });

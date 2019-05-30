@@ -36,11 +36,12 @@
 #include "third_party/blink/public/platform/modules/permissions/permission.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/permissions/permission_status.mojom-blink.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache_base.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_object.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
+#include "ui/accessibility/ax_enums.mojom-blink.h"
 
 namespace blink {
 
@@ -55,40 +56,6 @@ class MODULES_EXPORT AXObjectCacheImpl
       public mojom::blink::PermissionObserver {
  public:
   static AXObjectCache* Create(Document&);
-
-  enum AXNotification {
-    kAXActiveDescendantChanged,
-    kAXAriaAttributeChanged,
-    kAXAutocorrectionOccured,
-    kAXBlur,
-    kAXCheckedStateChanged,
-    kAXChildrenChanged,
-    kAXClicked,
-    kAXDocumentSelectionChanged,
-    kAXDocumentTitleChanged,
-    kAXExpandedChanged,
-    kAXFocusedUIElementChanged,
-    kAXHide,
-    kAXHover,
-    kAXInvalidStatusChanged,
-    kAXLayoutComplete,
-    kAXLiveRegionChanged,
-    kAXLoadComplete,
-    kAXLocationChanged,
-    kAXMenuListItemSelected,
-    kAXMenuListItemUnselected,
-    kAXMenuListValueChanged,
-    kAXRowCollapsed,
-    kAXRowCountChanged,
-    kAXRowExpanded,
-    kAXScrollPositionChanged,
-    kAXScrolledToAnchor,
-    kAXSelectedChildrenChanged,
-    kAXSelectedTextChanged,
-    kAXShow,
-    kAXTextChanged,
-    kAXValueChanged
-  };
 
   explicit AXObjectCacheImpl(Document&);
   ~AXObjectCacheImpl() override;
@@ -118,6 +85,7 @@ class MODULES_EXPORT AXObjectCacheImpl
   void ListboxActiveIndexChanged(HTMLSelectElement*) override;
   void LocationChanged(LayoutObject*) override;
   void RadiobuttonRemovedFromGroup(HTMLInputElement*) override;
+  void ImageLoaded(LayoutObject*) override;
 
   void Remove(AccessibleNode*) override;
   void Remove(LayoutObject*) override;
@@ -130,6 +98,7 @@ class MODULES_EXPORT AXObjectCacheImpl
   // changed.
   void TextChanged(LayoutObject*) override;
   void TextChanged(AXObject*, Node* optional_node = nullptr);
+  void FocusableChanged(Element* element);
   void DocumentTitleChanged() override;
   // Called when a node has just been attached, so we can make sure we have the
   // right subclass of AXObject.
@@ -139,6 +108,8 @@ class MODULES_EXPORT AXObjectCacheImpl
   void HandleAttributeChanged(const QualifiedName& attr_name,
                               Element*) override;
   void HandleAutofillStateChanged(Element*, bool) override;
+  void HandleValidationMessageVisibilityChanged(
+      const Element* form_control) override;
   void HandleFocusedUIElementChanged(Node* old_focused_node,
                                      Node* new_focused_node) override;
   void HandleInitialFocus() override;
@@ -161,6 +132,7 @@ class MODULES_EXPORT AXObjectCacheImpl
                              const LayoutRect&) override;
 
   void InlineTextBoxesUpdated(LineLayoutItem) override;
+  void ProcessUpdatesAfterLayout(Document&) override;
 
   // Called when the scroll offset changes.
   void HandleScrollPositionChanged(LocalFrameView*) override;
@@ -169,6 +141,10 @@ class MODULES_EXPORT AXObjectCacheImpl
   // Called when scroll bars are added / removed (as the view resizes).
   void HandleLayoutComplete(LayoutObject*) override;
   void HandleScrolledToAnchor(const Node* anchor_node) override;
+
+  // Called when the frame rect changes, which can sometimes happen
+  // without producing any layout or other notifications.
+  void HandleFrameRectsChanged(Document&) override;
 
   const AtomicString& ComputedRoleForNode(Node*) override;
   String ComputedNameForNode(Node*) override;
@@ -179,7 +155,7 @@ class MODULES_EXPORT AXObjectCacheImpl
   AXObject* Root();
 
   // used for objects without backing elements
-  AXObject* GetOrCreate(AccessibilityRole);
+  AXObject* GetOrCreate(ax::mojom::Role);
   AXObject* GetOrCreate(AccessibleNode*);
   AXObject* GetOrCreate(LayoutObject*) override;
   AXObject* GetOrCreate(const Node*);
@@ -204,7 +180,8 @@ class MODULES_EXPORT AXObjectCacheImpl
   void MaybeNewRelationTarget(Node* node, AXObject* obj);
 
   void HandleActiveDescendantChanged(Node*);
-  void HandlePossibleRoleChange(Node*);
+  void HandleRoleChange(Node*);
+  void HandleRoleChangeIfNotEditable(Node*);
   void HandleAriaExpandedChange(Node*);
   void HandleAriaSelectedChanged(Node*);
 
@@ -219,9 +196,11 @@ class MODULES_EXPORT AXObjectCacheImpl
   // values are cached as long as the modification count hasn't changed.
   int ModificationCount() const { return modification_count_; }
 
-  void PostNotification(LayoutObject*, AXNotification);
-  void PostNotification(Node*, AXNotification);
-  void PostNotification(AXObject*, AXNotification);
+  void PostNotification(LayoutObject*, ax::mojom::Event);
+  void PostNotification(Node*, ax::mojom::Event);
+  void PostNotification(AXObject*, ax::mojom::Event);
+  void MarkAXObjectDirty(AXObject*, bool subtree);
+  void MarkElementDirty(const Element*, bool subtree);
 
   //
   // Aria-owns support.
@@ -257,8 +236,11 @@ class MODULES_EXPORT AXObjectCacheImpl
   // granted, it only applies to the next event received.
   void RequestAOMEventListenerPermission();
 
+  // For built-in HTML form validation messages.
+  AXObject* ValidationMessageObjectIfInvalid();
+
  protected:
-  void PostPlatformNotification(AXObject*, AXNotification);
+  void PostPlatformNotification(AXObject*, ax::mojom::Event);
   void LabelChanged(Element*);
 
   AXObject* CreateFromRenderer(LayoutObject*);
@@ -278,6 +260,12 @@ class MODULES_EXPORT AXObjectCacheImpl
 
   HashSet<AXID> ids_in_use_;
 
+  // Used for a mock AXObject representing the message displayed in the
+  // validation message bubble.
+  // There can be only one of these per document with invalid form controls,
+  // and it will always be related to the currently focused control.
+  AXID validation_message_axid_;
+
   std::unique_ptr<AXRelationCache> relation_cache_;
 
 #if DCHECK_IS_ON()
@@ -286,7 +274,7 @@ class MODULES_EXPORT AXObjectCacheImpl
 #endif
 
   TaskRunnerTimer<AXObjectCacheImpl> notification_post_timer_;
-  HeapVector<std::pair<Member<AXObject>, AXNotification>>
+  HeapVector<std::pair<Member<AXObject>, ax::mojom::Event>>
       notifications_to_post_;
   void NotificationPostTimerFired(TimerBase*);
 
@@ -318,6 +306,10 @@ class MODULES_EXPORT AXObjectCacheImpl
   // Must be called an entire subtree of accessible objects are no longer valid.
   void InvalidateTableSubtree(AXObject* subtree);
 
+  // Object for HTML validation alerts. Created at most once per object cache.
+  AXObject* GetOrCreateValidationMessageObject();
+  void RemoveValidationMessageObject();
+
   // Whether the user has granted permission for the user to install event
   // listeners for accessibility events using the AOM.
   mojom::PermissionStatus accessibility_event_permission_;
@@ -325,6 +317,10 @@ class MODULES_EXPORT AXObjectCacheImpl
   // permission.
   mojom::blink::PermissionServicePtr permission_service_;
   mojo::Binding<mojom::blink::PermissionObserver> permission_observer_binding_;
+
+  VectorOf<Node> nodes_changed_during_layout_;
+  typedef VectorOfPairs<QualifiedName, Element> AttributesChangedVector;
+  AttributesChangedVector attributes_changed_during_layout_;
 
   DISALLOW_COPY_AND_ASSIGN(AXObjectCacheImpl);
 };

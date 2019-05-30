@@ -13,7 +13,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_thread.h"
@@ -152,7 +151,7 @@ void ScriptInjectionManager::RFOHelper::DidCreateDocumentElement() {
 
 void ScriptInjectionManager::RFOHelper::DidFailProvisionalLoad(
     const blink::WebURLError& error) {
-  FrameStatusMap::iterator it = manager_->frame_statuses_.find(render_frame());
+  auto it = manager_->frame_statuses_.find(render_frame());
   if (it != manager_->frame_statuses_.end() &&
       it->second == UserScript::DOCUMENT_START) {
     // Since the provisional load failed, the frame stays at its previous loaded
@@ -189,8 +188,8 @@ void ScriptInjectionManager::RFOHelper::DidFinishDocumentLoad() {
   // keep waiting.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&ScriptInjectionManager::RFOHelper::RunIdle,
-                 weak_factory_.GetWeakPtr()),
+      base::BindOnce(&ScriptInjectionManager::RFOHelper::RunIdle,
+                     weak_factory_.GetWeakPtr()),
       base::TimeDelta::FromMilliseconds(kScriptIdleTimeoutInMs));
 
   ExtensionFrameHelper::Get(render_frame())
@@ -347,7 +346,7 @@ void ScriptInjectionManager::InvalidateForFrame(content::RenderFrame* frame) {
 void ScriptInjectionManager::StartInjectScripts(
     content::RenderFrame* frame,
     UserScript::RunLocation run_location) {
-  FrameStatusMap::iterator iter = frame_statuses_.find(frame);
+  auto iter = frame_statuses_.find(frame);
   // We also don't execute if we detect that the run location is somehow out of
   // order. This can happen if:
   // - The first run location reported for the frame isn't DOCUMENT_START, or

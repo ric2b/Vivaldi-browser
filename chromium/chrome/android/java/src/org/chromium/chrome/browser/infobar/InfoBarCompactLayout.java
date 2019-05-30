@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.infobar;
 
 import android.content.Context;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.support.annotation.StringRes;
 import android.text.SpannableString;
@@ -131,9 +132,10 @@ public class InfoBarCompactLayout extends LinearLayout implements View.OnClickLi
         public MessageBuilder withLink(@StringRes int textResId, Callback<View> onTapCallback) {
             assert mLink == null;
 
-            String label = mLayout.getResources().getString(textResId);
+            final Resources resources = mLayout.getResources();
+            String label = resources.getString(textResId);
             SpannableString link = new SpannableString(label);
-            link.setSpan(new NoUnderlineClickableSpan(onTapCallback), 0, label.length(),
+            link.setSpan(new NoUnderlineClickableSpan(resources, onTapCallback), 0, label.length(),
                     Spanned.SPAN_INCLUSIVE_EXCLUSIVE);
             mLink = link;
 
@@ -164,7 +166,8 @@ public class InfoBarCompactLayout extends LinearLayout implements View.OnClickLi
             if (mLink != null) builder.append(" ").append(mLink);
 
             TextView prompt = new InfoBarMessageView(mLayout.getContext());
-            ApiCompatibilityUtils.setTextAppearance(prompt, R.style.BlackBodyDefault);
+            ApiCompatibilityUtils.setTextAppearance(
+                    prompt, R.style.TextAppearance_BlackBodyDefault);
             prompt.setText(builder);
             prompt.setGravity(Gravity.CENTER_VERTICAL);
             prompt.setPadding(0, messagePadding, 0, messagePadding);

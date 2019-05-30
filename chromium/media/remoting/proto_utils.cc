@@ -184,11 +184,10 @@ scoped_refptr<DecoderBuffer> ByteArrayToDecoderBuffer(const uint8_t* data,
   pb::DecoderBuffer segment;
   uint32_t buffer_size = 0;
   if (reader.ReadU8(&payload_version) && payload_version == 0 &&
-      reader.ReadU16(&proto_size) &&
-      static_cast<int>(proto_size) < reader.remaining() &&
+      reader.ReadU16(&proto_size) && proto_size < reader.remaining() &&
       segment.ParseFromArray(reader.ptr(), proto_size) &&
       reader.Skip(proto_size) && reader.ReadU32(&buffer_size) &&
-      static_cast<int64_t>(buffer_size) <= reader.remaining()) {
+      buffer_size <= reader.remaining()) {
     // Deserialize proto buffer. It passes the pre allocated DecoderBuffer into
     // the function because the proto buffer may overwrite DecoderBuffer since
     // it may be EOS buffer.
@@ -311,8 +310,20 @@ void ConvertVideoDecoderConfigToProto(const VideoDecoderConfig& video_config,
       ToProtoVideoDecoderConfigProfile(video_config.profile()).value());
   video_message->set_format(
       ToProtoVideoDecoderConfigFormat(video_config.format()).value());
-  video_message->set_color_space(
-      ToProtoVideoDecoderConfigColorSpace(video_config.color_space()).value());
+
+  // TODO(hubbe): Update proto to use color_space_info()
+  if (video_config.color_space_info() == VideoColorSpace::JPEG()) {
+    video_message->set_color_space(pb::VideoDecoderConfig::COLOR_SPACE_JPEG);
+  } else if (video_config.color_space_info() == VideoColorSpace::REC709()) {
+    video_message->set_color_space(
+        pb::VideoDecoderConfig::COLOR_SPACE_HD_REC709);
+  } else if (video_config.color_space_info() == VideoColorSpace::REC601()) {
+    video_message->set_color_space(
+        pb::VideoDecoderConfig::COLOR_SPACE_SD_REC601);
+  } else {
+    video_message->set_color_space(
+        pb::VideoDecoderConfig::COLOR_SPACE_SD_REC601);
+  }
 
   pb::Size* coded_size_message = video_message->mutable_coded_size();
   coded_size_message->set_width(video_config.coded_size().width());
@@ -346,11 +357,27 @@ bool ConvertProtoToVideoDecoderConfig(
     VideoDecoderConfig* video_config) {
   DCHECK(video_config);
   EncryptionScheme encryption_scheme;
+
+  // TODO(hubbe): Update pb to use VideoColorSpace
+  VideoColorSpace color_space;
+  switch (video_message.color_space()) {
+    case pb::VideoDecoderConfig::COLOR_SPACE_UNSPECIFIED:
+      break;
+    case pb::VideoDecoderConfig::COLOR_SPACE_JPEG:
+      color_space = VideoColorSpace::JPEG();
+      break;
+    case pb::VideoDecoderConfig::COLOR_SPACE_HD_REC709:
+      color_space = VideoColorSpace::REC709();
+      break;
+    case pb::VideoDecoderConfig::COLOR_SPACE_SD_REC601:
+      color_space = VideoColorSpace::REC601();
+      break;
+  }
   video_config->Initialize(
       ToMediaVideoCodec(video_message.codec()).value(),
       ToMediaVideoCodecProfile(video_message.profile()).value(),
-      ToMediaVideoPixelFormat(video_message.format()).value(),
-      ToMediaColorSpace(video_message.color_space()).value(), VIDEO_ROTATION_0,
+      ToMediaVideoPixelFormat(video_message.format()).value(), color_space,
+      VIDEO_ROTATION_0,
       gfx::Size(video_message.coded_size().width(),
                 video_message.coded_size().height()),
       gfx::Rect(video_message.visible_rect().x(),

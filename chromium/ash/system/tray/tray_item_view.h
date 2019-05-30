@@ -10,6 +10,7 @@
 #include "ash/ash_export.h"
 #include "base/macros.h"
 #include "ui/gfx/animation/animation_delegate.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/view.h"
 
 namespace gfx {
@@ -18,11 +19,27 @@ class SlideAnimation;
 
 namespace views {
 class ImageView;
-class Label;
 }
 
 namespace ash {
-class SystemTrayItem;
+class Shelf;
+
+// Label view which can be given a different data from the visible label.
+// IME icons like "US" (US keyboard) or "あ(Google Japanese Input)" are
+// rendered as a label, but reading such text literally will not always be
+// understandable.
+class IconizedLabel : public views::Label {
+ public:
+  void SetCustomAccessibleName(const base::string16& name) {
+    custom_accessible_name_ = name;
+  }
+
+  // views::Label:
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+
+ private:
+  base::string16 custom_accessible_name_;
+};
 
 // Base-class for items in the tray. It makes sure the widget is updated
 // correctly when the visibility/size of the tray item changes. It also adds
@@ -30,7 +47,7 @@ class SystemTrayItem;
 class ASH_EXPORT TrayItemView : public views::View,
                                 public gfx::AnimationDelegate {
  public:
-  explicit TrayItemView(SystemTrayItem* owner);
+  explicit TrayItemView(Shelf* shelf);
   ~TrayItemView() override;
 
   // Convenience function for creating a child Label or ImageView.
@@ -38,8 +55,7 @@ class ASH_EXPORT TrayItemView : public views::View,
   void CreateLabel();
   void CreateImageView();
 
-  SystemTrayItem* owner() const { return owner_; }
-  views::Label* label() const { return label_; }
+  IconizedLabel* label() const { return label_; }
   views::ImageView* image_view() const { return image_view_; }
 
   // Overridden from views::View.
@@ -51,6 +67,9 @@ class ASH_EXPORT TrayItemView : public views::View,
   // The default animation duration is 200ms. But each view can customize this.
   virtual int GetAnimationDurationMS();
 
+  // Returns whether the shelf is horizontal.
+  bool IsHorizontalAlignment() const;
+
  private:
   // Overridden from views::View.
   void ChildPreferredSizeChanged(View* child) override;
@@ -60,10 +79,10 @@ class ASH_EXPORT TrayItemView : public views::View,
   void AnimationEnded(const gfx::Animation* animation) override;
   void AnimationCanceled(const gfx::Animation* animation) override;
 
-  SystemTrayItem* owner_;
+  Shelf* const shelf_;
   std::unique_ptr<gfx::SlideAnimation> animation_;
   // Only one of |label_| and |image_view_| should be non-null.
-  views::Label* label_;
+  IconizedLabel* label_;
   views::ImageView* image_view_;
 
   DISALLOW_COPY_AND_ASSIGN(TrayItemView);

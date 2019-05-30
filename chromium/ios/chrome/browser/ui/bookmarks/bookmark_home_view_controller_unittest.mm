@@ -21,12 +21,13 @@ TEST_F(BookmarkHomeViewControllerTest,
        TableViewPopulatedAfterBookmarkModelLoaded) {
   @autoreleasepool {
     BookmarkHomeViewController* controller = [[BookmarkHomeViewController alloc]
-        initWithLoader:nil
-          browserState:chrome_browser_state_.get()
-            dispatcher:nil];
+        initWithBrowserState:chrome_browser_state_.get()
+                  dispatcher:nil
+                webStateList:nullptr];
 
     [controller setRootNode:_bookmarkModel->mobile_node()];
-    EXPECT_EQ(1, [controller numberOfSectionsInTableView:controller.tableView]);
+    // Two sections: Messages and Bookmarks.
+    EXPECT_EQ(2, [controller numberOfSectionsInTableView:controller.tableView]);
   }
 }
 

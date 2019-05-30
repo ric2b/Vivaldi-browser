@@ -15,6 +15,7 @@ import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_V
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.PointF;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.LargeTest;
 import android.support.test.filters.MediumTest;
@@ -47,10 +48,9 @@ import org.chromium.chrome.browser.vr.util.VrBrowserTransitionUtils;
 import org.chromium.chrome.browser.vr.util.VrShellDelegateUtils;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ActivityUtils;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.DOMUtils;
-import org.chromium.content.browser.test.util.JavaScriptUtils;
-import org.chromium.net.test.EmbeddedTestServer;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.DOMUtils;
+import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -209,12 +209,12 @@ public class VrBrowserTransitionTest {
         mVrBrowserTestFramework.loadUrlAndAwaitInitialization(
                 VrBrowserTestFramework.getFileUrlForHtmlTestFile("test_navigation_2d_page"),
                 PAGE_LOAD_TIMEOUT_S);
-        DOMUtils.clickNode(mVrBrowserTestFramework.getFirstTabWebContents(), "fullscreen",
+        DOMUtils.clickNode(mVrBrowserTestFramework.getCurrentWebContents(), "fullscreen",
                 false /* goThroughRootAndroidView */);
         mVrBrowserTestFramework.waitOnJavaScriptStep();
 
         Assert.assertTrue("Page is not in fullscreen",
-                DOMUtils.isFullscreen(mVrBrowserTestFramework.getFirstTabWebContents()));
+                DOMUtils.isFullscreen(mVrBrowserTestFramework.getCurrentWebContents()));
         VrBrowserTransitionUtils.forceExitVr();
         // The fullscreen exit from exiting VR isn't necessarily instantaneous, so give it
         // a bit of time.
@@ -223,7 +223,7 @@ public class VrBrowserTransitionTest {
                         -> {
                     try {
                         return !DOMUtils.isFullscreen(
-                                mVrBrowserTestFramework.getFirstTabWebContents());
+                                mVrBrowserTestFramework.getCurrentWebContents());
                     } catch (InterruptedException | TimeoutException e) {
                         return false;
                     }
@@ -316,7 +316,6 @@ public class VrBrowserTransitionTest {
     private void reEntryFromVrBrowserImpl(String url, WebXrVrTestFramework framework)
             throws InterruptedException {
         VrBrowserTransitionUtils.forceEnterVrBrowserOrFail(POLL_TIMEOUT_LONG_MS);
-        EmulatedVrController controller = new EmulatedVrController(mTestRule.getActivity());
 
         framework.loadUrlAndAwaitInitialization(url, PAGE_LOAD_TIMEOUT_S);
         framework.enterSessionWithUserGestureOrFail();
@@ -324,7 +323,7 @@ public class VrBrowserTransitionTest {
         framework.executeStepAndWait("stepVerifyFirstPresent()");
         // The bug did not reproduce with vrDisplay.exitPresent(), so it might not reproduce with
         // session.end(). Instead, use the controller to exit.
-        controller.pressReleaseAppButton();
+        NativeUiUtils.clickAppButton(UserFriendlyElementName.NONE, new PointF());
         framework.executeStepAndWait("stepVerifyMagicWindow()");
 
         framework.enterSessionWithUserGestureOrFail();
@@ -389,12 +388,10 @@ public class VrBrowserTransitionTest {
 
         // Enable the mock controller even though we don't use it, because the real controller will
         // never allow the scene to reach quiescense.
-        NativeUiUtils.enableMockedController();
+        NativeUiUtils.enableMockedInput();
         NativeUiUtils.performActionAndWaitForUiQuiescence(() -> {
             ThreadUtils.runOnUiThreadBlocking(() -> {
-                Intent preferencesIntent = PreferencesLauncher.createIntentForSettingsPage(
-                        context, SingleWebsitePreferences.class.getName());
-                context.startActivity(preferencesIntent);
+                PreferencesLauncher.launchSettingsPage(context, SingleWebsitePreferences.class);
             });
         });
         ThreadUtils.runOnUiThreadBlocking(
@@ -452,7 +449,6 @@ public class VrBrowserTransitionTest {
     @Test
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM)
     @LargeTest
-    @CommandLineFlags.Add("enable-features=VrBrowsingNativeAndroidUi")
     public void testExitVrWithPromptDisplayed() throws InterruptedException, TimeoutException {
         mVrBrowserTestFramework.loadUrlAndAwaitInitialization(
                 VrBrowserTestFramework.getFileUrlForHtmlTestFile("test_navigation_2d_page"),
@@ -463,7 +459,7 @@ public class VrBrowserTransitionTest {
         // Alerts block JavaScript execution until they're closed, so we can't use the normal
         // runJavaScriptOrFail, as that will time out.
         JavaScriptUtils.executeJavaScript(
-                mVrBrowserTestFramework.getFirstTabWebContents(), "alert('Please no crash')");
+                mVrBrowserTestFramework.getCurrentWebContents(), "alert('Please no crash')");
         VrBrowserTransitionUtils.waitForNativeUiPrompt(POLL_TIMEOUT_LONG_MS);
         VrBrowserTransitionUtils.forceExitVr();
 
@@ -490,7 +486,7 @@ public class VrBrowserTransitionTest {
                 (IncognitoNewTabPage) mTestRule.getActivity().getActivityTab().getNativePage();
         // Enable the mock controller even though we don't use it, because the real controller will
         // never allow the scene to reach quiescense.
-        NativeUiUtils.enableMockedController();
+        NativeUiUtils.enableMockedInput();
         NativeUiUtils.performActionAndWaitForUiQuiescence(() -> {
             ThreadUtils.runOnUiThreadBlocking(
                     () -> { ntp.getView().findViewById(R.id.learn_more).performClick(); });
@@ -545,11 +541,9 @@ public class VrBrowserTransitionTest {
     @MediumTest
     public void testPermissionsPersistWhenEnteringVrBrowser() throws InterruptedException {
         // Permissions don't work on file:// URLs, so use a local server.
-        EmbeddedTestServer server =
-                EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         mVrBrowserTestFramework.loadUrlAndAwaitInitialization(
-                server.getURL(VrBrowserTestFramework.getEmbeddedServerPathForHtmlTestFile(
-                        "test_permissions_persist_when_entering_vr_browser")),
+                mVrBrowserTestFramework.getEmbeddedServerUrlForHtmlTestFile(
+                        "test_permissions_persist_when_entering_vr_browser"),
                 PAGE_LOAD_TIMEOUT_S);
         // Ensure that permission requests initially trigger a prompt.
         Assert.assertTrue("Camera permission would not trigger prompt",
@@ -565,8 +559,8 @@ public class VrBrowserTransitionTest {
         mVrBrowserTestFramework.waitOnJavaScriptStep();
         // Reload the page and ensure that the permissions are still granted.
         mVrBrowserTestFramework.loadUrlAndAwaitInitialization(
-                server.getURL(VrBrowserTestFramework.getEmbeddedServerPathForHtmlTestFile(
-                        "test_permissions_persist_when_entering_vr_browser")),
+                mVrBrowserTestFramework.getEmbeddedServerUrlForHtmlTestFile(
+                        "test_permissions_persist_when_entering_vr_browser"),
                 PAGE_LOAD_TIMEOUT_S);
         Assert.assertFalse("Camera permission would trigger prompt after reload",
                 mVrBrowserTestFramework.permissionRequestWouldTriggerPrompt("camera"));
@@ -576,7 +570,6 @@ public class VrBrowserTransitionTest {
         VrBrowserTransitionUtils.forceEnterVrBrowserOrFail(POLL_TIMEOUT_LONG_MS);
         mVrBrowserTestFramework.executeStepAndWait("stepRequestPermission()");
         mVrBrowserTestFramework.endTest();
-        server.stopAndDestroyServer();
     }
 
     /**

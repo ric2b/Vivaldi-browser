@@ -8,7 +8,6 @@
 #include "base/macros.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
-#include "third_party/blink/renderer/platform/loader/fetch/resource.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
@@ -17,10 +16,8 @@
 
 namespace blink {
 class ExecutionContext;
-class DocumentLoader;
 class ResourceRequest;
-class ResourceResponse;
-struct FetchInitiatorInfo;
+enum class ResourceType : uint8_t;
 
 namespace probe {
 class CallFunction;
@@ -40,19 +37,16 @@ class CORE_EXPORT AdTracker : public GarbageCollectedFinalized<AdTracker> {
   void Will(const probe::CallFunction&);
   void Did(const probe::CallFunction&);
 
-  // Called when a resource request is about to be sent. This will do the
-  // following:
-  // - Mark a resource request as an ad if any executing scripts contain an ad.
-  // - If the marked resource is a script, also save it to keep track of all
-  // those script resources that have been identified as ads.
+  // Called when a subresource request is about to be sent or is redirected.
+  // Returns true if:
+  // - If the resource is loaded in an ad iframe
+  // - If ad script is in the v8 stack
+  // - |known_ad| is true
   // Virtual for testing.
-  virtual void WillSendRequest(ExecutionContext*,
-                               unsigned long identifier,
-                               DocumentLoader*,
-                               ResourceRequest&,
-                               const ResourceResponse& redirect_response,
-                               const FetchInitiatorInfo&,
-                               Resource::Type);
+  virtual bool CalculateIfAdSubresource(ExecutionContext* execution_context,
+                                        const ResourceRequest& request,
+                                        ResourceType resource_type,
+                                        bool known_ad);
 
   // Returns true if any script in the pseudo call stack has previously been
   // identified as an ad resource.
@@ -81,18 +75,13 @@ class CORE_EXPORT AdTracker : public GarbageCollectedFinalized<AdTracker> {
 
   Member<LocalFrame> local_root_;
 
-  // Since the script URLs should be external strings in v8 (allocated in Blink)
-  // getting it as String should end up with the same StringImpl. Thus storing a
-  // vector of Strings here should not be expensive.
-  // TODO(jkarlin): We don't need this struct. A Vector<bool> would suffice.
-  struct ExecutingScript {
-    String url;
-    bool is_ad;
-    ExecutingScript(String script_url, bool is_ad_script)
-        : url(script_url), is_ad(is_ad_script) {}
-  };
+  // Each time v8 is started to run a script or function, this records if it was
+  // an ad script. Each time the script or function finishes, it pops the stack.
+  Vector<bool> stack_frame_is_ad_;
 
-  Vector<ExecutingScript> executing_scripts_;
+  uint32_t num_ads_in_stack_ = 0;
+
+  // The set of ad scripts detected outside of ad-frame contexts.
   HeapHashMap<WeakMember<ExecutionContext>, HashSet<String>> known_ad_scripts_;
 
   DISALLOW_COPY_AND_ASSIGN(AdTracker);

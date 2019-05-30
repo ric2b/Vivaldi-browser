@@ -45,7 +45,7 @@ class SyncEngine : public ModelTypeConfigurer {
  public:
   using Status = SyncStatus;
   using HttpPostProviderFactoryGetter =
-      base::Callback<std::unique_ptr<HttpPostProviderFactory>(
+      base::OnceCallback<std::unique_ptr<HttpPostProviderFactory>(
           CancelationSignal*)>;
 
   // Utility struct for holding initialization options.
@@ -77,6 +77,13 @@ class SyncEngine : public ModelTypeConfigurer {
     std::unique_ptr<SyncEncryptionHandler::NigoriState> saved_nigori_state;
     std::map<ModelType, int64_t> invalidation_versions;
 
+    // Non-authoritative values from prefs, to be compared with the Directory's
+    // counterparts.
+    // TODO(crbug.com/923285): Consider making these the authoritative data.
+    std::string cache_guid;
+    std::string birthday;
+    std::string bag_of_chips;
+
     // Define the polling intervals. Must not be zero.
     base::TimeDelta short_poll_interval;
     base::TimeDelta long_poll_interval;
@@ -99,8 +106,8 @@ class SyncEngine : public ModelTypeConfigurer {
   virtual void TriggerRefresh(const ModelTypeSet& types) = 0;
 
   // Updates the engine's SyncCredentials. The credentials must be fully
-  // specified (account ID, sync token and scope). To invalidate the credentials
-  // use InvalisateCredentials() instead.
+  // specified (account ID, email, and sync token). To invalidate the
+  // credentials, use InvalidateCredentials() instead.
   virtual void UpdateCredentials(const SyncCredentials& credentials) = 0;
 
   // Invalidates the SyncCredentials.
@@ -119,15 +126,8 @@ class SyncEngine : public ModelTypeConfigurer {
   // Asynchronously set a new passphrase for encryption. Note that it is an
   // error to call SetEncryptionPassphrase under the following circumstances:
   // - An explicit passphrase has already been set
-  // - |is_explicit| is true and we have pending keys.
-  // When |is_explicit| is false, a couple of things could happen:
-  // - If there are pending keys, we try to decrypt them. If decryption works,
-  //   this acts like a call to SetDecryptionPassphrase. If not, the GAIA
-  //   passphrase passed in is cached so we can re-encrypt with it in future.
-  // - If there are no pending keys, data is encrypted with |passphrase| (this
-  //   is a no-op if data was already encrypted with |passphrase|.)
-  virtual void SetEncryptionPassphrase(const std::string& passphrase,
-                                       bool is_explicit) = 0;
+  // - We have pending keys.
+  virtual void SetEncryptionPassphrase(const std::string& passphrase) = 0;
 
   // Use the provided passphrase to asynchronously attempt decryption. If new
   // encrypted keys arrive during the asynchronous call, OnPassphraseRequired
@@ -161,10 +161,6 @@ class SyncEngine : public ModelTypeConfigurer {
   virtual void HasUnsyncedItemsForTest(
       base::OnceCallback<void(bool)> cb) const = 0;
 
-  // True if the cryptographer has any keys available to attempt decryption.
-  // Could mean we've downloaded and loaded Nigori objects, or we bootstrapped
-  // using a token previously received.
-  virtual bool IsCryptographerReady(const BaseTransaction* trans) const = 0;
 
   virtual void GetModelSafeRoutingInfo(ModelSafeRoutingInfo* out) const = 0;
 
@@ -188,14 +184,14 @@ class SyncEngine : public ModelTypeConfigurer {
   // Disables the sending of directory type debug counters.
   virtual void DisableDirectoryTypeDebugInfoForwarding() = 0;
 
-  // See SyncManager::ClearServerData.
-  virtual void ClearServerData(const base::Closure& callback) = 0;
-
   // Notify the syncer that the cookie jar has changed.
   // See SyncManager::OnCookieJarChanged.
   virtual void OnCookieJarChanged(bool account_mismatch,
                                   bool empty_jar,
                                   const base::Closure& callback) = 0;
+
+  // Enables/Disables invalidations for session sync related datatypes.
+  virtual void SetInvalidationsForSessionsEnabled(bool enabled) = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SyncEngine);

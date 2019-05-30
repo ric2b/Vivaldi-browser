@@ -264,7 +264,8 @@ void Receiver::OnBufferingStateChange(BufferingState state) {
   rpc_broker_->SendMessageToRemote(std::move(rpc));
 }
 
-void Receiver::OnWaitingForDecryptionKey() {
+// TODO: Passes |reason| over.
+void Receiver::OnWaiting(WaitingReason reason) {
   DVLOG(3) << __func__ << ": Issues RPC_RC_ONWAITINGFORDECRYPTIONKEY message.";
   std::unique_ptr<pb::RpcMessage> rpc(new pb::RpcMessage());
   rpc->set_handle(remote_handle_);
@@ -323,6 +324,11 @@ void Receiver::OnDurationChange(base::TimeDelta duration) {
   rpc->set_proc(pb::RpcMessage::RPC_RC_ONDURATIONCHANGE);
   rpc->set_integer_value(duration.InMicroseconds());
   rpc_broker_->SendMessageToRemote(std::move(rpc));
+}
+
+void Receiver::OnRemotePlayStateChange(MediaStatus::State state) {
+  // Only used with the FlingingRenderer.
+  NOTREACHED();
 }
 
 }  // namespace remoting

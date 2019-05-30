@@ -18,6 +18,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/trace_event.h"
@@ -41,6 +42,7 @@
 #include "components/safe_browsing/db/database_manager.h"
 #include "components/safe_browsing/ping_manager.h"
 #include "components/safe_browsing/triggers/trigger_manager.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/resource_request_info.h"
@@ -62,8 +64,39 @@
 #endif
 
 using content::BrowserThread;
+using content::NonNestable;
 
 namespace safe_browsing {
+
+#if defined(FULL_SAFE_BROWSING)
+namespace {
+
+// 50 was chosen as an arbitrary upper bound on the likely font sizes. For
+// reference, the "Font size" dropdown in settings lets you select between 9,
+// 12, 16, 20, or 24.
+const int kMaximumTrackedFontSize = 50;
+
+void RecordFontSizeMetrics(const PrefService& pref_service) {
+  UMA_HISTOGRAM_EXACT_LINEAR(
+      "SafeBrowsing.FontSize.Default",
+      pref_service.GetInteger(prefs::kWebKitDefaultFontSize),
+      kMaximumTrackedFontSize);
+  UMA_HISTOGRAM_EXACT_LINEAR(
+      "SafeBrowsing.FontSize.DefaultFixed",
+      pref_service.GetInteger(prefs::kWebKitDefaultFixedFontSize),
+      kMaximumTrackedFontSize);
+  UMA_HISTOGRAM_EXACT_LINEAR(
+      "SafeBrowsing.FontSize.Minimum",
+      pref_service.GetInteger(prefs::kWebKitMinimumFontSize),
+      kMaximumTrackedFontSize);
+  UMA_HISTOGRAM_EXACT_LINEAR(
+      "SafeBrowsing.FontSize.MinimumLogical",
+      pref_service.GetInteger(prefs::kWebKitMinimumLogicalFontSize),
+      kMaximumTrackedFontSize);
+}
+
+}  // namespace
+#endif
 
 // static
 SafeBrowsingServiceFactory* SafeBrowsingService::factory_ = NULL;
@@ -191,8 +224,8 @@ void SafeBrowsingService::ShutDown() {
   // |url_request_context_getter_| to delete it, so need to shut it down first,
   // which will cancel any requests that are currently using it, and prevent
   // new requests from using it as well.
-  BrowserThread::PostNonNestableTask(
-      BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO, NonNestable()},
       base::BindOnce(&SafeBrowsingURLRequestContextGetter::ServiceShuttingDown,
                      url_request_context_getter_));
 
@@ -248,8 +281,8 @@ scoped_refptr<network::SharedURLLoaderFactory>
 SafeBrowsingService::GetURLLoaderFactoryOnIOThread() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (!shared_url_loader_factory_on_io_) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&SafeBrowsingService::CreateURLLoaderFactoryForIO, this,
                        MakeRequest(&url_loader_factory_on_io_)));
     shared_url_loader_factory_on_io_ =
@@ -314,8 +347,8 @@ void SafeBrowsingService::OnResourceRequest(const net::URLRequest* request) {
                request->url().spec());
 
   ResourceRequestInfo info = ResourceRequestDetector::GetRequestInfo(request);
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&SafeBrowsingService::ProcessResourceRequest, this, info));
 #endif
 }
@@ -400,16 +433,16 @@ void SafeBrowsingService::Start() {
         PingManager::Create(GetURLLoaderFactory(), GetV4ProtocolConfig());
   }
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
       base::BindOnce(&SafeBrowsingService::StartOnIOThread, this));
 }
 
 void SafeBrowsingService::Stop(bool shutdown) {
   ping_manager_.reset();
   ui_manager_->Stop(shutdown);
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
       base::BindOnce(&SafeBrowsingService::StopOnIOThread, this, shutdown));
 }
 
@@ -421,6 +454,7 @@ void SafeBrowsingService::Observe(int type,
       DCHECK_CURRENTLY_ON(BrowserThread::UI);
       Profile* profile = content::Source<Profile>(source).ptr();
       services_delegate_->CreatePasswordProtectionService(profile);
+      services_delegate_->CreateTelemetryService(profile);
       if (!profile->IsOffTheRecord())
         AddPrefService(profile->GetPrefs());
       break;
@@ -429,6 +463,7 @@ void SafeBrowsingService::Observe(int type,
       DCHECK_CURRENTLY_ON(BrowserThread::UI);
       Profile* profile = content::Source<Profile>(source).ptr();
       services_delegate_->RemovePasswordProtectionService(profile);
+      services_delegate_->RemoveTelemetryService();
       if (!profile->IsOffTheRecord())
         RemovePrefService(profile->GetPrefs());
       break;
@@ -459,6 +494,10 @@ void SafeBrowsingService::AddPrefService(PrefService* pref_service) {
                         pref_service->GetBoolean(prefs::kSafeBrowsingEnabled));
   // Extended Reporting metrics are handled together elsewhere.
   RecordExtendedReportingMetrics(*pref_service);
+
+#if defined(FULL_SAFE_BROWSING)
+  RecordFontSizeMetrics(*pref_service);
+#endif
 }
 
 void SafeBrowsingService::RemovePrefService(PrefService* pref_service) {
@@ -541,8 +580,10 @@ network::mojom::NetworkContextParamsPtr
 SafeBrowsingService::CreateNetworkContextParams() {
   auto params = g_browser_process->system_network_context_manager()
                     ->CreateDefaultNetworkContextParams();
-  if (!proxy_config_monitor_)
-    proxy_config_monitor_ = std::make_unique<ProxyConfigMonitor>();
+  if (!proxy_config_monitor_) {
+    proxy_config_monitor_ =
+        std::make_unique<ProxyConfigMonitor>(g_browser_process->local_state());
+  }
   proxy_config_monitor_->AddToNetworkContextParams(params.get());
   return params;
 }

@@ -8,18 +8,24 @@
 Polymer({
   is: 'network-config-select',
 
-  behaviors: [I18nBehavior],
+  behaviors: [
+    I18nBehavior,
+    CrPolicyNetworkBehavior,
+    NetworkConfigElementBehavior,
+  ],
 
   properties: {
     label: String,
 
-    disabled: {
-      type: Boolean,
-      reflectToAttribute: true,
-    },
-
     /** Set to true if |items| is a list of certificates. */
     certList: Boolean,
+
+    /**
+     * Set true if the dropdown list should allow only device-wide
+     * certificates.
+     * Note: only used when |items| is a list of certificates.
+     */
+    deviceCertsOnly: Boolean,
 
     /**
      * Array of item values to select from.
@@ -53,9 +59,10 @@ Polymer({
   updateSelected_: function() {
     // Wait for the dom-repeat to populate the <option> entries.
     this.async(function() {
-      var select = this.$$('select');
-      if (select.value != this.value)
+      const select = this.$$('select');
+      if (select.value != this.value) {
         select.value = this.value;
+      }
     });
   },
 
@@ -70,10 +77,11 @@ Polymer({
       return this.getCertificateName_(
           /** @type {chrome.networkingPrivate.Certificate}*/ (item));
     }
-    var key = /** @type {string} */ (item);
-    var oncKey = 'Onc' + prefix.replace(/\./g, '-') + '_' + key;
-    if (this.i18nExists(oncKey))
+    const key = /** @type {string} */ (item);
+    const oncKey = 'Onc' + prefix.replace(/\./g, '-') + '_' + key;
+    if (this.i18nExists(oncKey)) {
       return this.i18n(oncKey);
+    }
     assertNotReached('ONC Key not found: ' + oncKey);
     return key;
   },
@@ -84,8 +92,9 @@ Polymer({
    * @private
    */
   getItemValue_: function(item) {
-    if (this.certList)
+    if (this.certList) {
       return /** @type {chrome.networkingPrivate.Certificate}*/ (item).hash;
+    }
     return /** @type {string} */ (item);
   },
 
@@ -96,7 +105,10 @@ Polymer({
    */
   getItemEnabled_: function(item) {
     if (this.certList) {
-      var cert = /** @type {chrome.networkingPrivate.Certificate}*/ (item);
+      const cert = /** @type {chrome.networkingPrivate.Certificate}*/ (item);
+      if (this.deviceCertsOnly && !(cert.deviceWide || cert.isDefault)) {
+        return false;
+      }
       return !!cert.hash;
     }
     return true;

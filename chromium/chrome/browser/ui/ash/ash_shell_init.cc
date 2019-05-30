@@ -6,15 +6,17 @@
 
 #include <utility>
 
-#include "ash/content/content_gpu_interface_provider.h"
 #include "ash/display/display_prefs.h"
 #include "ash/shell.h"
 #include "ash/shell_init_params.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/ash/chrome_shell_delegate.h"
+#include "chrome/browser/ui/ash/keyboard/chrome_keyboard_ui_factory.h"
 #include "content/public/browser/context_factory.h"
+#include "content/public/browser/gpu_interface_provider_factory.h"
 #include "content/public/common/service_manager_connection.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/ui_base_features.h"
 
 namespace {
 
@@ -25,7 +27,7 @@ void CreateClassicShell() {
   shell_init_params.context_factory_private =
       content::GetContextFactoryPrivate();
   shell_init_params.gpu_interface_provider =
-      std::make_unique<ash::ContentGpuInterfaceProvider>();
+      content::CreateGpuInterfaceProvider();
   shell_init_params.connector =
       content::ServiceManagerConnection::GetForProcess()->GetConnector();
   DCHECK(shell_init_params.connector);
@@ -36,6 +38,10 @@ void CreateClassicShell() {
   shell_init_params.initial_display_prefs =
       ash::DisplayPrefs::GetInitialDisplayPrefsFromPrefService(
           g_browser_process->local_state());
+  if (!features::IsUsingWindowService()) {
+    shell_init_params.keyboard_ui_factory =
+        std::make_unique<ChromeKeyboardUIFactory>();
+  }
 
   ash::Shell::CreateInstance(std::move(shell_init_params));
 }

@@ -35,15 +35,12 @@
 #import "ios/chrome/browser/ui/ntp/notification_promo_whats_new.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_controller.h"
 #import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
-#import "ios/chrome/browser/ui/toolbar/adaptive/primary_toolbar_view_controller.h"
-#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_factory.h"
-#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_visibility_configuration.h"
-#import "ios/chrome/browser/ui/toolbar/clean/toolbar_mediator.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/url_loading/url_loading_service.h"
+#import "ios/chrome/browser/url_loading/url_loading_service_factory.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/voice/voice_search_provider.h"
-#include "ios/web/public/features.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -72,7 +69,6 @@
 
 @synthesize browserState = _browserState;
 @synthesize suggestionsViewController = _suggestionsViewController;
-@synthesize URLLoader = _URLLoader;
 @synthesize visible = _visible;
 @synthesize contentSuggestionsMediator = _contentSuggestionsMediator;
 @synthesize headerCollectionInteractionHandler =
@@ -81,7 +77,6 @@
 @synthesize webStateList = _webStateList;
 @synthesize toolbarDelegate = _toolbarDelegate;
 @synthesize dispatcher = _dispatcher;
-@synthesize delegate = _delegate;
 @synthesize metricsRecorder = _metricsRecorder;
 @synthesize NTPMediator = _NTPMediator;
 
@@ -119,12 +114,17 @@
     ntp_home::RecordNTPImpression(ntp_home::LOCAL_SUGGESTIONS);
   }
 
+  UrlLoadingService* urlLoadingService =
+      UrlLoadingServiceFactory::GetForBrowserState(_browserState);
+
   self.NTPMediator = [[NTPHomeMediator alloc]
       initWithWebStateList:self.webStateList
         templateURLService:ios::TemplateURLServiceFactory::GetForBrowserState(
                                self.browserState)
+         urlLoadingService:urlLoadingService
                 logoVendor:ios::GetChromeBrowserProvider()->CreateLogoVendor(
-                               self.browserState, self.dispatcher)];
+                               self.browserState,
+                               urlLoadingService->GetUrlLoader())];
 
   BOOL voiceSearchEnabled = ios::GetChromeBrowserProvider()
                                 ->GetVoiceSearchProvider()
@@ -198,6 +198,8 @@
       [[ContentSuggestionsHeaderSynchronizer alloc]
           initWithCollectionController:self.suggestionsViewController
                       headerController:self.headerController];
+  self.NTPMediator.headerCollectionInteractionHandler =
+      self.headerCollectionInteractionHandler;
 }
 
 - (void)stop {
@@ -213,10 +215,6 @@
 }
 
 #pragma mark - ContentSuggestionsViewControllerAudience
-
-- (void)contentOffsetDidChange {
-  [self.delegate updateNtpBarShadowForPanelController:self];
-}
 
 - (void)promoShown {
   NotificationPromoWhatsNew* notificationPromo =
@@ -265,52 +263,11 @@
 
 - (CGFloat)overscrollHeaderHeight {
   CGFloat height = [self.headerController toolBarView].bounds.size.height;
-  CGFloat topInset = 0.0;
-  if (@available(iOS 11, *)) {
-    topInset = self.suggestionsViewController.view.safeAreaInsets.top;
-  } else if (IsUIRefreshPhase1Enabled() ||
-             base::FeatureList::IsEnabled(
-                 web::features::kBrowserContainerFullscreen)) {
-    // TODO(crbug.com/826369) Replace this when the NTP is contained by the
-    // BVC with |self.suggestionsViewController.topLayoutGuide.length|.
-    topInset = StatusBarHeight();
-  }
+  CGFloat topInset = self.suggestionsViewController.view.safeAreaInsets.top;
   return height + topInset;
 }
 
-#pragma mark - NewTabPagePanelProtocol
-
-- (CGFloat)alphaForBottomShadow {
-  UICollectionView* collection = self.suggestionsViewController.collectionView;
-
-  NSInteger numberOfSection =
-      [collection.dataSource numberOfSectionsInCollectionView:collection];
-
-  NSInteger lastNonEmptySection = 0;
-  NSInteger lastItemIndex = 0;
-  for (NSInteger i = 0; i < numberOfSection; i++) {
-    NSInteger itemsInSection = [collection.dataSource collectionView:collection
-                                              numberOfItemsInSection:i];
-    if (itemsInSection > 0) {
-      // Some sections might be empty. Only consider the last non-empty one.
-      lastNonEmptySection = i;
-      lastItemIndex = itemsInSection - 1;
-    }
-  }
-  if (lastNonEmptySection == 0)
-    return 0;
-
-  NSIndexPath* lastCellIndexPath =
-      [NSIndexPath indexPathForItem:lastItemIndex
-                          inSection:lastNonEmptySection];
-  UICollectionViewLayoutAttributes* attributes =
-      [collection layoutAttributesForItemAtIndexPath:lastCellIndexPath];
-  CGRect lastCellFrame = attributes.frame;
-  CGFloat pixelsBelowFrame =
-      CGRectGetMaxY(lastCellFrame) - CGRectGetMaxY(collection.bounds);
-  CGFloat alpha = pixelsBelowFrame / kNewTabPageDistanceToFadeShadow;
-  return MIN(MAX(alpha, 0), 1);
-}
+#pragma mark - CRWNativeContent
 
 - (UIView*)view {
   return self.suggestionsViewController.view;
@@ -321,21 +278,20 @@
 }
 
 - (void)wasShown {
-  self.headerController.isShowing = YES;
-  [self.suggestionsViewController.collectionView
-          .collectionViewLayout invalidateLayout];
-  [self.delegate updateNtpBarShadowForPanelController:self];
 }
 
 - (void)wasHidden {
-  self.headerController.isShowing = NO;
 }
 
 - (void)dismissModals {
   [self.NTPMediator dismissModals];
 }
 
-- (CGPoint)scrollOffset {
+- (UIEdgeInsets)contentInset {
+  return self.suggestionsViewController.collectionView.contentInset;
+}
+
+- (CGPoint)contentOffset {
   CGPoint collectionOffset =
       self.suggestionsViewController.collectionView.contentOffset;
   collectionOffset.y -=
@@ -345,6 +301,18 @@
 
 - (void)willUpdateSnapshot {
   [self.suggestionsViewController clearOverscroll];
+}
+
+- (NSString*)title {
+  return nil;
+}
+
+- (const GURL&)url {
+  return GURL::EmptyGURL();
+}
+
+- (BOOL)isViewAlive {
+  return YES;
 }
 
 @end

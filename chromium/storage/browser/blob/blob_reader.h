@@ -12,12 +12,12 @@
 #include <memory>
 #include <vector>
 
+#include "base/component_export.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "net/base/completion_once_callback.h"
-#include "storage/browser/storage_browser_export.h"
 #include "storage/common/blob_storage/blob_storage_constants.h"
 
 class GURL;
@@ -46,9 +46,12 @@ class FileStreamReader;
 //  * If a status of Status::NET_ERROR is returned, that means there was an
 //    error and the net_error() variable contains the error code.
 // Use a BlobDataHandle to create an instance.
-class STORAGE_EXPORT BlobReader {
+//
+// For more information on how to read Blobs in your specific situation, see:
+// https://chromium.googlesource.com/chromium/src/+/HEAD/storage/browser/blob/README.md#accessing-reading
+class COMPONENT_EXPORT(STORAGE_BROWSER) BlobReader {
  public:
-  class STORAGE_EXPORT FileStreamReaderProvider {
+  class COMPONENT_EXPORT(STORAGE_BROWSER) FileStreamReaderProvider {
    public:
     virtual ~FileStreamReaderProvider();
 
@@ -65,7 +68,7 @@ class STORAGE_EXPORT BlobReader {
         const base::Time& expected_modification_time) = 0;
   };
   enum class Status { NET_ERROR, IO_PENDING, DONE };
-  typedef base::Callback<void(Status)> StatusCallback;
+  using StatusCallback = base::OnceCallback<void(Status)>;
   virtual ~BlobReader();
 
   // This calculates the total size of the blob, and initializes the reading
@@ -92,7 +95,7 @@ class STORAGE_EXPORT BlobReader {
   // * If this function returns Status::IO_PENDING, the done callback will be
   //   called with Status::DONE or Status::NET_ERROR.
   // Currently side data is supported only for single DiskCache entry blob.
-  Status ReadSideData(const StatusCallback& done);
+  Status ReadSideData(StatusCallback done);
 
   // Returns the side data which has been already read with ReadSideData().
   net::IOBufferWithSize* side_data() const {
@@ -199,7 +202,7 @@ class STORAGE_EXPORT BlobReader {
   Status ReadDiskCacheEntryItem(const BlobDataItem& item, int bytes_to_read);
   void DidReadDiskCacheEntry(int result);
   void DidReadItem(int result);
-  void DidReadDiskCacheEntrySideData(const StatusCallback& done,
+  void DidReadDiskCacheEntrySideData(StatusCallback done,
                                      int expected_size,
                                      int result);
   int ComputeBytesToRead() const;

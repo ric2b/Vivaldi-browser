@@ -13,6 +13,7 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/optional.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
@@ -26,7 +27,7 @@
 #include "chrome/browser/chromeos/policy/device_local_account_policy_store.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chrome/common/chrome_content_client.h"
-#include "chromeos/chromeos_paths.h"
+#include "chromeos/constants/chromeos_paths.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/settings/cros_settings_provider.h"
@@ -38,9 +39,11 @@
 #include "components/policy/core/common/cloud/resource_cache.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_switches.h"
+#include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/network_service_instance.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "url/gurl.h"
 
@@ -142,7 +145,8 @@ DeviceLocalAccountPolicyBroker::DeviceLocalAccountPolicyBroker(
       core_(dm_protocol::kChromePublicAccountPolicyType,
             store_->account_id(),
             store_.get(),
-            task_runner),
+            task_runner,
+            base::BindRepeating(&content::GetNetworkConnectionTracker)),
       policy_update_callback_(policy_update_callback),
       resource_cache_task_runner_(resource_cache_task_runner) {
   if (account.type != DeviceLocalAccount::TYPE_ARC_KIOSK_APP) {
@@ -248,11 +252,13 @@ void DeviceLocalAccountPolicyBroker::CreateComponentCloudPolicyService(
   }
 
   std::unique_ptr<ResourceCache> resource_cache(new ResourceCache(
-      component_policy_cache_path_, resource_cache_task_runner_));
+      component_policy_cache_path_, resource_cache_task_runner_,
+      /* max_cache_size */ base::nullopt));
 
   component_policy_service_.reset(new ComponentCloudPolicyService(
-      dm_protocol::kChromeExtensionPolicyType, this, &schema_registry_, core(),
-      client, std::move(resource_cache), resource_cache_task_runner_));
+      dm_protocol::kChromeExtensionPolicyType, POLICY_SOURCE_CLOUD, this,
+      &schema_registry_, core(), client, std::move(resource_cache),
+      resource_cache_task_runner_));
 }
 
 DeviceLocalAccountPolicyService::DeviceLocalAccountPolicyService(

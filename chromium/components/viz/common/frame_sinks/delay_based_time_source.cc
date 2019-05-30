@@ -13,7 +13,7 @@
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
-#include "base/trace_event/trace_event_argument.h"
+#include "base/trace_event/traced_value.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 
 namespace viz {
@@ -155,8 +155,8 @@ void DelayBasedTimeSource::PostNextTickTask(base::TimeTicks now) {
       next_tick_time_ += interval_;
     DCHECK_GT(next_tick_time_, now);
   }
-  tick_closure_.Reset(base::Bind(&DelayBasedTimeSource::OnTimerTick,
-                                 weak_factory_.GetWeakPtr()));
+  tick_closure_.Reset(base::BindOnce(&DelayBasedTimeSource::OnTimerTick,
+                                     weak_factory_.GetWeakPtr()));
   task_runner_->PostDelayedTask(FROM_HERE, tick_closure_.callback(),
                                 next_tick_time_ - now);
 }

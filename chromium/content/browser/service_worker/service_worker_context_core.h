@@ -40,7 +40,6 @@ class SpecialStoragePolicy;
 
 namespace content {
 
-class EmbeddedWorkerRegistry;
 class ServiceWorkerContextCoreObserver;
 class ServiceWorkerContextWrapper;
 class ServiceWorkerJobCoordinator;
@@ -93,9 +92,9 @@ class CONTENT_EXPORT ServiceWorkerContextCore
    private:
     friend class ServiceWorkerContextCore;
     using ProviderHostPredicate =
-        base::Callback<bool(ServiceWorkerProviderHost*)>;
+        base::RepeatingCallback<bool(ServiceWorkerProviderHost*)>;
     ProviderHostIterator(ProcessToProviderMap* map,
-                         const ProviderHostPredicate& predicate);
+                         ProviderHostPredicate predicate);
     void Initialize();
     bool ForwardUntilMatchingProviderHost();
 
@@ -143,7 +142,7 @@ class CONTENT_EXPORT ServiceWorkerContextCore
                        const GURL& source_url) override;
   void OnReportConsoleMessage(ServiceWorkerVersion* version,
                               int source_identifier,
-                              int message_level,
+                              blink::mojom::ConsoleMessageLevel message_level,
                               const base::string16& message,
                               int line_number,
                               const GURL& source_url) override;
@@ -157,9 +156,6 @@ class CONTENT_EXPORT ServiceWorkerContextCore
   ServiceWorkerContextWrapper* wrapper() const { return wrapper_; }
   ServiceWorkerStorage* storage() { return storage_.get(); }
   ServiceWorkerProcessManager* process_manager();
-  EmbeddedWorkerRegistry* embedded_worker_registry() {
-    return embedded_worker_registry_.get();
-  }
   ServiceWorkerJobCoordinator* job_coordinator() {
     return job_coordinator_.get();
   }
@@ -203,13 +199,19 @@ class CONTENT_EXPORT ServiceWorkerContextCore
       const GURL& script_url,
       const blink::mojom::ServiceWorkerRegistrationOptions& options,
       RegistrationCallback callback);
-  void UnregisterServiceWorker(const GURL& pattern,
+  void UnregisterServiceWorker(const GURL& scope,
                                UnregistrationCallback callback);
 
   // Callback is called after all deletions occured. The status code is
   // blink::ServiceWorkerStatusCode::kOk if all succeed, or
   // SERVICE_WORKER_FAILED if any did not succeed.
   void DeleteForOrigin(const GURL& origin, StatusCallback callback);
+
+  // Performs internal storage cleanup. Operations to the storage in the past
+  // (e.g. deletion) are usually recorded in disk for a certain period until
+  // compaction happens. This method wipes them out to ensure that the deleted
+  // entries and other traces like log files are removed.
+  void PerformStorageCleanup(base::OnceClosure callback);
 
   // Updates the service worker. If |force_bypass_cache| is true or 24 hours
   // have passed since the last update, bypasses the browser cache.
@@ -264,12 +266,11 @@ class CONTENT_EXPORT ServiceWorkerContextCore
 
   void ClearAllServiceWorkersForTest(base::OnceClosure callback);
 
-  // Determines if there is a ServiceWorker registration that matches |url|, and
-  // if |other_url| falls inside the scope of the same registration. See
-  // ServiceWorkerContext::CheckHasServiceWorker for more details.
+  // Determines if there is a ServiceWorker registration that matches
+  // |url|. See ServiceWorkerContext::CheckHasServiceWorker for more
+  // details.
   void CheckHasServiceWorker(
       const GURL& url,
-      const GURL& other_url,
       const ServiceWorkerContext::CheckHasServiceWorkerCallback callback);
 
   void UpdateVersionFailureCount(int64_t version_id,
@@ -279,7 +280,7 @@ class CONTENT_EXPORT ServiceWorkerContextCore
   int GetVersionFailureCount(int64_t version_id);
 
   // Called by ServiceWorkerStorage when StoreRegistration() succeeds.
-  void NotifyRegistrationStored(int64_t registration_id, const GURL& pattern);
+  void NotifyRegistrationStored(int64_t registration_id, const GURL& scope);
 
   URLLoaderFactoryGetter* loader_factory_getter() {
     return loader_factory_getter_.get();
@@ -288,6 +289,8 @@ class CONTENT_EXPORT ServiceWorkerContextCore
   base::WeakPtr<ServiceWorkerContextCore> AsWeakPtr() {
     return weak_factory_.GetWeakPtr();
   }
+
+  int GetNextEmbeddedWorkerId();
 
  private:
   friend class ServiceWorkerContextCoreTest;
@@ -303,7 +306,7 @@ class CONTENT_EXPORT ServiceWorkerContextCore
 
   ProviderMap* GetProviderMapForProcess(int process_id);
 
-  void RegistrationComplete(const GURL& pattern,
+  void RegistrationComplete(const GURL& scope,
                             RegistrationCallback callback,
                             blink::ServiceWorkerStatusCode status,
                             const std::string& status_message,
@@ -314,7 +317,7 @@ class CONTENT_EXPORT ServiceWorkerContextCore
                       const std::string& status_message,
                       ServiceWorkerRegistration* registration);
 
-  void UnregistrationComplete(const GURL& pattern,
+  void UnregistrationComplete(const GURL& scope,
                               UnregistrationCallback callback,
                               int64_t registration_id,
                               blink::ServiceWorkerStatusCode status);
@@ -330,7 +333,6 @@ class CONTENT_EXPORT ServiceWorkerContextCore
           registrations);
 
   void DidFindRegistrationForCheckHasServiceWorker(
-      const GURL& other_url,
       ServiceWorkerContext::CheckHasServiceWorkerCallback callback,
       blink::ServiceWorkerStatusCode status,
       scoped_refptr<ServiceWorkerRegistration> registration);
@@ -350,7 +352,6 @@ class CONTENT_EXPORT ServiceWorkerContextCore
   std::unique_ptr<ProviderByClientUUIDMap> provider_by_uuid_;
 
   std::unique_ptr<ServiceWorkerStorage> storage_;
-  scoped_refptr<EmbeddedWorkerRegistry> embedded_worker_registry_;
   std::unique_ptr<ServiceWorkerJobCoordinator> job_coordinator_;
   std::map<int64_t, ServiceWorkerRegistration*> live_registrations_;
   std::map<int64_t, ServiceWorkerVersion*> live_versions_;
@@ -369,6 +370,8 @@ class CONTENT_EXPORT ServiceWorkerContextCore
   using ServiceWorkerContextObserverList =
       base::ObserverListThreadSafe<ServiceWorkerContextCoreObserver>;
   const scoped_refptr<ServiceWorkerContextObserverList> observer_list_;
+
+  int next_embedded_worker_id_ = 0;
 
   base::WeakPtrFactory<ServiceWorkerContextCore> weak_factory_;
 

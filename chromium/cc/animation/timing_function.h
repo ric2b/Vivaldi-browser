@@ -22,8 +22,8 @@ class CC_ANIMATION_EXPORT TimingFunction {
   enum class Type { LINEAR, CUBIC_BEZIER, STEPS, FRAMES };
 
   virtual Type GetType() const = 0;
-  virtual float GetValue(double t) const = 0;
-  virtual float Velocity(double time) const = 0;
+  virtual double GetValue(double t) const = 0;
+  virtual double Velocity(double time) const = 0;
   virtual std::unique_ptr<TimingFunction> Clone() const = 0;
 
  protected:
@@ -46,8 +46,8 @@ class CC_ANIMATION_EXPORT CubicBezierTimingFunction : public TimingFunction {
 
   // TimingFunction implementation.
   Type GetType() const override;
-  float GetValue(double time) const override;
-  float Velocity(double time) const override;
+  double GetValue(double time) const override;
+  double Velocity(double time) const override;
   std::unique_ptr<TimingFunction> Clone() const override;
 
   EaseType ease_type() const { return ease_type_; }
@@ -68,8 +68,9 @@ class CC_ANIMATION_EXPORT CubicBezierTimingFunction : public TimingFunction {
 
 class CC_ANIMATION_EXPORT StepsTimingFunction : public TimingFunction {
  public:
-  // Web Animations specification, 3.12.4. Timing in discrete steps.
-  enum class StepPosition { START, MIDDLE, END };
+  // step-timing-function values
+  // https://drafts.csswg.org/css-easing-1/#typedef-step-timing-function
+  enum class StepPosition { START, END };
 
   static std::unique_ptr<StepsTimingFunction> Create(
       int steps,
@@ -78,9 +79,9 @@ class CC_ANIMATION_EXPORT StepsTimingFunction : public TimingFunction {
 
   // TimingFunction implementation.
   Type GetType() const override;
-  float GetValue(double t) const override;
+  double GetValue(double t) const override;
   std::unique_ptr<TimingFunction> Clone() const override;
-  float Velocity(double time) const override;
+  double Velocity(double time) const override;
 
   int steps() const { return steps_; }
   StepPosition step_position() const { return step_position_; }
@@ -104,9 +105,9 @@ class CC_ANIMATION_EXPORT FramesTimingFunction : public TimingFunction {
 
   // TimingFunction implementation.
   Type GetType() const override;
-  float GetValue(double t) const override;
+  double GetValue(double t) const override;
   std::unique_ptr<TimingFunction> Clone() const override;
-  float Velocity(double time) const override;
+  double Velocity(double time) const override;
 
   int frames() const { return frames_; }
   double GetPreciseValue(double t) const;

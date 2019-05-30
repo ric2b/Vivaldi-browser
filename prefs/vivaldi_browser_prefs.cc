@@ -15,6 +15,7 @@
 #include "base/json/json_reader.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -135,50 +136,64 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
   }
 
   if (type.compare(kTypeEnumName) == 0) {
-    const base::DictionaryValue* enum_values;
-    if (!definition->GetDictionary(kEnumValuesKey, &enum_values))
-      LOG(DFATAL) << "Expected a dictionary at '" << current_path << "."
-                  << kEnumValuesKey << "'";
-
-    if (!default_value->is_string())
-      LOG(DFATAL) << "Expected a string at '" << current_path << "."
-                  << kDefaultKeyName << "'";
-    std::string default_string = default_value->GetString();
-
-    std::unordered_map<std::string, int> string_to_value;
-    std::unordered_map<int, std::string> value_to_string;
-    bool found_default = false;
-    int default_index = 0;
-    for (const auto& enum_value : *enum_values) {
-      if (!enum_value.second->is_int())
-        LOG(DFATAL) << "Expected an integer at '" << current_path << "."
-                    << kEnumValuesKey << "." << enum_value.first << "'";
-      string_to_value.insert(
-          std::make_pair(enum_value.first, enum_value.second->GetInt()));
-      value_to_string.insert(
-          std::make_pair(enum_value.second->GetInt(), enum_value.first));
-
-      if (default_string == enum_value.first) {
-        default_index = enum_value.second->GetInt();
-        found_default = true;
+    if (!computed_default || computed_default->is_none()) {
+      const base::DictionaryValue* enum_values;
+      if (!definition->GetDictionary(kEnumValuesKey, &enum_values)) {
+        LOG(DFATAL) << "Expected a dictionary at '" << current_path << "."
+                    << kEnumValuesKey << "'";
       }
+
+      if (!default_value->is_string()) {
+        LOG(DFATAL) << "Expected a string at '" << current_path << "."
+                    << kDefaultKeyName << "'";
+      }
+      std::string default_string = default_value->GetString();
+
+      std::unordered_map<std::string, int> string_to_value;
+      std::unordered_map<int, std::string> value_to_string;
+      bool found_default = false;
+      int default_index = 0;
+      for (const auto& enum_value : *enum_values) {
+        if (!enum_value.second->is_int()) {
+          LOG(DFATAL) << "Expected an integer at '" << current_path << "."
+                      << kEnumValuesKey << "." << enum_value.first << "'";
+        }
+        string_to_value.insert(
+            std::make_pair(enum_value.first, enum_value.second->GetInt()));
+        value_to_string.insert(
+            std::make_pair(enum_value.second->GetInt(), enum_value.first));
+
+        if (default_string == enum_value.first) {
+          default_index = enum_value.second->GetInt();
+          found_default = true;
+        }
+      }
+
+      if (!found_default) {
+        LOG(DFATAL)
+            << "Default value for enum isn't part of possible values at '"
+            << current_path << "'";
+      }
+
+      prefs_properties->insert(std::make_pair(
+          current_path, PrefProperties(false, std::move(string_to_value),
+                                       std::move(value_to_string))));
+      registry->RegisterIntegerPref(current_path, default_index, flags);
+    } else if (computed_default->is_int()) {
+      registry->RegisterIntegerPref(current_path, computed_default->GetInt(),
+                                    flags);
+    } else {
+      LOG(DFATAL) << "Expected a integer at '" << current_path << "."
+                  << kDefaultKeyName << "'";
     }
-
-    if (!found_default)
-      LOG(DFATAL) << "Default value for enum isn't part of possible values at '"
-                  << current_path << "'";
-
-    prefs_properties->insert(std::make_pair(
-        current_path, PrefProperties(false, std::move(string_to_value),
-                                     std::move(value_to_string))));
-    registry->RegisterIntegerPref(current_path, default_index, flags);
     return;
   }
 
   if (type.compare(kTypeStringName) == 0) {
-    if (!default_value->is_string())
+    if (!default_value->is_string()) {
       LOG(DFATAL) << "Expected a string at '" << current_path << "."
                   << kDefaultKeyName << "'";
+    }
 
     prefs_properties->insert(
         std::make_pair(current_path, PrefProperties(false)));
@@ -186,9 +201,10 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
                                  flags);
 
   } else if (type.compare(kTypeFilePathName) == 0) {
-    if (!default_value->is_string())
+    if (!default_value->is_string()) {
       LOG(DFATAL) << "Expected a string at '" << current_path << "."
                   << kDefaultKeyName << "'";
+    }
 
     prefs_properties->insert(
         std::make_pair(current_path, PrefProperties(false)));
@@ -197,9 +213,10 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
         base::FilePath::FromUTF8Unsafe(default_value->GetString()), flags);
 
   } else if (type.compare(kTypeBooleanName) == 0) {
-    if (!default_value->is_bool())
+    if (!default_value->is_bool()) {
       LOG(DFATAL) << "Expected a boolean at '" << current_path << "."
                   << kDefaultKeyName << "'";
+    }
 
     prefs_properties->insert(
         std::make_pair(current_path, PrefProperties(false)));
@@ -207,18 +224,20 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
                                   flags);
 
   } else if (type.compare(kTypeIntegerName) == 0) {
-    if (!default_value->is_int())
+    if (!default_value->is_int()) {
       LOG(DFATAL) << "Expected an integer at '" << current_path << "."
                   << kDefaultKeyName << "'";
+    }
 
     prefs_properties->insert(
         std::make_pair(current_path, PrefProperties(false)));
     registry->RegisterIntegerPref(current_path, default_value->GetInt(), flags);
 
   } else if (type.compare(kTypeDoubleName) == 0) {
-    if (!default_value->is_double())
+    if (!default_value->is_double()) {
       LOG(DFATAL) << "Expected a double at '" << current_path << "."
                   << kDefaultKeyName << "'";
+    }
 
     prefs_properties->insert(
         std::make_pair(current_path, PrefProperties(false)));
@@ -226,30 +245,26 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
                                  flags);
 
   } else if (type.compare(kTypeListName) == 0) {
-    if (!default_value->is_list())
+    if (!default_value->is_list()) {
       LOG(DFATAL) << "Expected a list at '" << current_path << "."
                   << kDefaultKeyName << "'";
+    }
 
     prefs_properties->insert(
         std::make_pair(current_path, PrefProperties(false)));
-    registry->RegisterListPref(
-        current_path,
-        base::ListValue::From(
-            std::make_unique<base::Value>(default_value->Clone())),
-        flags);
+    registry->RegisterListPref(current_path, default_value->Clone(),
+                               flags);
 
   } else if (type.compare(kTypeDictionaryName) == 0) {
-    if (!default_value->is_dict())
+    if (!default_value->is_dict()) {
       LOG(DFATAL) << "Expected a dictionary at '" << current_path << "."
                   << kDefaultKeyName << "'";
+    }
 
     prefs_properties->insert(
         std::make_pair(current_path, PrefProperties(false)));
-    registry->RegisterDictionaryPref(
-        current_path,
-        base::DictionaryValue::From(
-            std::make_unique<base::Value>(default_value->Clone())),
-        flags);
+    registry->RegisterDictionaryPref(current_path, default_value->Clone(),
+                                     flags);
 
   } else {
     LOG(DFATAL) << "Invalid type value at '" << current_path << "'";
@@ -258,6 +273,9 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
 
 std::unordered_map<std::string, PrefProperties> RegisterBrowserPrefs(
     user_prefs::PrefRegistrySyncable* registry) {
+  // This might be called outside the startup, eg. during creation of a guest
+  // window, so need to allow IO.
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
   base::FilePath prefs_definition_file;
 #if !defined(OS_ANDROID)
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -316,7 +334,7 @@ std::unordered_map<std::string, PrefProperties> RegisterBrowserPrefs(
   auto prefs_definitions_json =
       base::JSONReader::Read(prefs_definitions_content);
   base::DictionaryValue* prefs_definitions = nullptr;
-  if (!prefs_definitions_json.get() ||
+  if (!prefs_definitions_json ||
       !prefs_definitions_json->GetAsDictionary(&prefs_definitions)) {
     LOG(DFATAL) << "Expected a dictionary at the root of the pref definitions";
   }
@@ -345,19 +363,37 @@ std::unordered_map<std::string, PrefProperties> RegisterBrowserPrefs(
                               registry, &prefs_properties);
 
   for (const auto& pref : *chromium_prefs_list) {
-    std::string pref_path;
-    if (!pref.second->GetAsString(&pref_path)) {
-      LOG(DFATAL) << "Expected a string at 'chromium." << pref.first;
+    base::DictionaryValue* pref_definition = nullptr;
+    if (!pref.second->GetAsDictionary(&pref_definition)) {
+      LOG(DFATAL) << "Expected a dictionary at '" << kChromiumKeyName << "."
+                  << pref.first << "'";
     }
-    prefs_properties.insert(std::make_pair(pref_path, PrefProperties(false)));
+
+    base::Value* pref_path =
+        pref_definition->FindKeyOfType("path", base::Value::Type::STRING);
+    if (!pref_path) {
+      LOG(DFATAL) << "Expected a string at '" << kChromiumKeyName << "."
+                  << pref.first << ".path'";
+    }
+    prefs_properties.insert(
+        std::make_pair(pref_path->GetString(), PrefProperties(false)));
   }
 
   for (const auto& pref : *chromium_local_prefs_list) {
-    std::string pref_path;
-    if (!pref.second->GetAsString(&pref_path)) {
-      LOG(DFATAL) << "Expected a string at 'chromium." << pref.first;
+    base::DictionaryValue* pref_definition = nullptr;
+    if (!pref.second->GetAsDictionary(&pref_definition)) {
+      LOG(DFATAL) << "Expected a dictionary at '" << kChromiumLocalKeyName
+                  << "." << pref.first << "'";
     }
-    prefs_properties.insert(std::make_pair(pref_path, PrefProperties(true)));
+
+    base::Value* pref_path =
+        pref_definition->FindKeyOfType("path", base::Value::Type::STRING);
+    if (!pref_path) {
+      LOG(DFATAL) << "Expected a string at '" << kChromiumLocalKeyName << "."
+                  << pref.first << ".path'";
+    }
+    prefs_properties.insert(
+        std::make_pair(pref_path->GetString(), PrefProperties(true)));
   }
 
   return prefs_properties;

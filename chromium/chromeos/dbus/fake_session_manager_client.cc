@@ -19,7 +19,7 @@
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chromeos/chromeos_paths.h"
+#include "chromeos/dbus/constants/dbus_paths.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/login_manager/policy_descriptor.pb.h"
 #include "chromeos/dbus/util/account_identifier_operators.h"
@@ -95,8 +95,8 @@ std::vector<std::string> ReadCreateStateKeysStub(const base::FilePath& path) {
     // Create stub state keys on the fly.
     for (int i = 0; i < 5; ++i) {
       contents += crypto::SHA256HashString(
-          base::IntToString(i) +
-          base::Int64ToString(base::Time::Now().ToJavaTime()));
+          base::NumberToString(i) +
+          base::NumberToString(base::Time::Now().ToJavaTime()));
     }
     StoreFiles({{path, contents}});
   }
@@ -171,7 +171,8 @@ base::FilePath GetStubPolicyFilePath(
   switch (descriptor.account_type()) {
     case login_manager::ACCOUNT_TYPE_DEVICE: {
       base::FilePath owner_key_path;
-      CHECK(base::PathService::Get(chromeos::FILE_OWNER_KEY, &owner_key_path));
+      CHECK(
+          base::PathService::Get(dbus_paths::FILE_OWNER_KEY, &owner_key_path));
       if (key_path)
         *key_path = owner_key_path;
       return owner_key_path.DirName().Append(relative_policy_path);
@@ -181,7 +182,8 @@ base::FilePath GetStubPolicyFilePath(
     case login_manager::ACCOUNT_TYPE_SESSIONLESS_USER:
     case login_manager::ACCOUNT_TYPE_DEVICE_LOCAL_ACCOUNT: {
       base::FilePath base_path;
-      CHECK(base::PathService::Get(chromeos::DIR_USER_POLICY_KEYS, &base_path));
+      CHECK(
+          base::PathService::Get(dbus_paths::DIR_USER_POLICY_KEYS, &base_path));
       if (key_path) {
         *key_path = base_path.Append(relative_policy_path.DirName())
                         .AppendASCII(kStubPerAccountPolicyKeyFileName);
@@ -218,6 +220,7 @@ FakeSessionManagerClient::FakeSessionManagerClient()
 FakeSessionManagerClient::FakeSessionManagerClient(
     PolicyStorageType policy_storage)
     : policy_storage_(policy_storage),
+      clear_forced_re_enrollment_vpd_call_count_(0),
       start_device_wipe_call_count_(0),
       request_lock_screen_call_count_(0),
       notify_lock_screen_shown_call_count_(0),
@@ -245,6 +248,12 @@ void FakeSessionManagerClient::RemoveObserver(Observer* observer) {
 
 bool FakeSessionManagerClient::HasObserver(const Observer* observer) const {
   return observers_.HasObserver(observer);
+}
+
+void FakeSessionManagerClient::WaitForServiceToBeAvailable(
+    WaitForServiceToBeAvailableCallback callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), true));
 }
 
 bool FakeSessionManagerClient::IsScreenLocked() const {
@@ -280,6 +289,12 @@ void FakeSessionManagerClient::NotifySupervisedUserCreationFinished() {}
 
 void FakeSessionManagerClient::StartDeviceWipe() {
   start_device_wipe_call_count_++;
+}
+
+void FakeSessionManagerClient::ClearForcedReEnrollmentVpd(
+    VoidDBusMethodCallback callback) {
+  clear_forced_re_enrollment_vpd_call_count_++;
+  PostReply(FROM_HERE, std::move(callback), true);
 }
 
 void FakeSessionManagerClient::StartTPMFirmwareUpdate(
@@ -471,7 +486,14 @@ void FakeSessionManagerClient::StorePolicy(
         base::FilePath key_path;
         GetStubPolicyFilePath(descriptor, &key_path);
         DCHECK(!key_path.empty());
-        StoreFiles({{key_path, response.new_public_key()}});
+
+        base::PostTaskWithTraits(
+            FROM_HERE,
+            {base::MayBlock(),
+             base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+            base::BindOnce(StoreFiles,
+                           std::map<base::FilePath, std::string>{
+                               {key_path, response.new_public_key()}}));
         for (auto& observer : observers_)
           observer.OwnerKeySet(true /* success */);
       }
@@ -495,7 +517,7 @@ void FakeSessionManagerClient::GetServerBackedStateKeys(
     StateKeysCallback callback) {
   if (policy_storage_ == PolicyStorageType::kOnDisk) {
     base::FilePath owner_key_path;
-    CHECK(base::PathService::Get(chromeos::FILE_OWNER_KEY, &owner_key_path));
+    CHECK(base::PathService::Get(dbus_paths::FILE_OWNER_KEY, &owner_key_path));
     const base::FilePath state_keys_path =
         owner_key_path.DirName().AppendASCII(kStubStateKeysFileName);
     base::PostTaskWithTraitsAndReplyWithResult(
@@ -524,7 +546,7 @@ void FakeSessionManagerClient::StartArcMiniContainer(
 
 void FakeSessionManagerClient::UpgradeArcContainer(
     const login_manager::UpgradeArcContainerRequest& request,
-    UpgradeArcContainerCallback success_callback,
+    base::OnceClosure success_callback,
     UpgradeErrorCallback error_callback) {
   last_upgrade_arc_request_ = request;
 
@@ -542,7 +564,8 @@ void FakeSessionManagerClient::UpgradeArcContainer(
     PostReply(FROM_HERE, std::move(error_callback), true);
     return;
   }
-  PostReply(FROM_HERE, std::move(success_callback), base::ScopedFD());
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                std::move(success_callback));
 }
 
 void FakeSessionManagerClient::StopArcInstance(
@@ -580,13 +603,6 @@ void FakeSessionManagerClient::GetArcStartTime(
   PostReply(
       FROM_HERE, std::move(callback),
       arc_available_ ? base::make_optional(arc_start_time_) : base::nullopt);
-}
-
-void FakeSessionManagerClient::RemoveArcData(
-    const cryptohome::AccountIdentifier& cryptohome_id,
-    VoidDBusMethodCallback callback) {
-  if (!callback.is_null())
-    PostReply(FROM_HERE, std::move(callback), arc_available_);
 }
 
 void FakeSessionManagerClient::NotifyArcInstanceStopped(

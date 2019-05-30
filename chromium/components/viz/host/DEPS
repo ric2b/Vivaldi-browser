@@ -11,7 +11,7 @@ include_rules = [
   "+gpu/ipc/client",
   "+gpu/ipc/common",
   "+gpu/ipc/host",
-  "+ipc",
+  "+media/capture/mojom/video_capture_types.mojom.h",
   "+mojo/public/cpp",
   "+services/viz/privileged/interfaces",
   "+services/viz/public/interfaces",
@@ -20,6 +20,7 @@ include_rules = [
   "+skia",
   "+third_party/skia",
   "+ui/accelerated_widget_mac",
+  "+ui/ozone/public",
 ]
 
 specific_include_rules = {

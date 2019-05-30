@@ -478,10 +478,10 @@ InlineBox* RootInlineBox::ClosestLeafChildForLogicalLeftPosition(
 
 BidiStatus RootInlineBox::LineBreakBidiStatus() const {
   return BidiStatus(
-      static_cast<WTF::Unicode::CharDirection>(line_break_bidi_status_eor_),
-      static_cast<WTF::Unicode::CharDirection>(
+      static_cast<WTF::unicode::CharDirection>(line_break_bidi_status_eor_),
+      static_cast<WTF::unicode::CharDirection>(
           line_break_bidi_status_last_strong_),
-      static_cast<WTF::Unicode::CharDirection>(line_break_bidi_status_last_),
+      static_cast<WTF::unicode::CharDirection>(line_break_bidi_status_last_),
       line_break_context_);
 }
 
@@ -604,8 +604,8 @@ void RootInlineBox::AscentAndDescentForBox(
                                              .PrimaryFont();
     if (primary_font)
       used_fonts->push_back(primary_font);
-    for (size_t i = 0; i < used_fonts->size(); ++i) {
-      const FontMetrics& font_metrics = used_fonts->at(i)->GetFontMetrics();
+    for (const SimpleFontData* font_data : *used_fonts) {
+      const FontMetrics& font_metrics = font_data->GetFontMetrics();
       LayoutUnit used_font_ascent(font_metrics.Ascent(BaselineType()));
       LayoutUnit used_font_descent(font_metrics.Descent(BaselineType()));
       LayoutUnit half_leading(
@@ -748,12 +748,69 @@ bool RootInlineBox::IncludeLeadingForBox(InlineBox* box) const {
            (box->GetLineLayoutItem().IsText() && !box->IsText()));
 }
 
+void RootInlineBox::CollectLeafBoxesInLogicalOrder(
+    Vector<InlineBox*>& leaf_boxes_in_logical_order,
+    CustomInlineBoxRangeReverse custom_reverse_implementation) const {
+  InlineBox* leaf = FirstLeafChild();
+
+  // FIXME: The reordering code is a copy of parts from BidiResolver::
+  // createBidiRunsForLine, operating directly on InlineBoxes, instead of
+  // BidiRuns. Investigate on how this code could possibly be shared.
+  unsigned char min_level = 128;
+  unsigned char max_level = 0;
+
+  // First find highest and lowest levels, and initialize
+  // leafBoxesInLogicalOrder with the leaf boxes in visual order.
+  for (; leaf; leaf = leaf->NextLeafChild()) {
+    min_level = std::min(min_level, leaf->BidiLevel());
+    max_level = std::max(max_level, leaf->BidiLevel());
+    leaf_boxes_in_logical_order.push_back(leaf);
+  }
+
+  if (GetLineLayoutItem().StyleRef().RtlOrdering() == EOrder::kVisual)
+    return;
+
+  // Reverse of reordering of the line (L2 according to Bidi spec):
+  // L2. From the highest level found in the text to the lowest odd level on
+  // each line, reverse any contiguous sequence of characters that are at that
+  // level or higher.
+
+  // Reversing the reordering of the line is only done up to the lowest odd
+  // level.
+  if (!(min_level % 2))
+    ++min_level;
+
+  Vector<InlineBox*>::iterator end = leaf_boxes_in_logical_order.end();
+  while (min_level <= max_level) {
+    Vector<InlineBox*>::iterator it = leaf_boxes_in_logical_order.begin();
+    while (it != end) {
+      while (it != end) {
+        if ((*it)->BidiLevel() >= min_level)
+          break;
+        ++it;
+      }
+      Vector<InlineBox*>::iterator first = it;
+      while (it != end) {
+        if ((*it)->BidiLevel() < min_level)
+          break;
+        ++it;
+      }
+      Vector<InlineBox*>::iterator last = it;
+      if (custom_reverse_implementation)
+        (*custom_reverse_implementation)(first, last);
+      else
+        std::reverse(first, last);
+    }
+    ++min_level;
+  }
+}
+
 const InlineBox* RootInlineBox::GetLogicalStartNonPseudoBox() const {
   Vector<InlineBox*> leaf_boxes_in_logical_order;
   CollectLeafBoxesInLogicalOrder(leaf_boxes_in_logical_order);
-  for (size_t i = 0; i < leaf_boxes_in_logical_order.size(); ++i) {
-    if (leaf_boxes_in_logical_order[i]->GetLineLayoutItem().NonPseudoNode())
-      return leaf_boxes_in_logical_order[i];
+  for (InlineBox* box : leaf_boxes_in_logical_order) {
+    if (box->GetLineLayoutItem().NonPseudoNode())
+      return box;
   }
   return nullptr;
 }
@@ -761,7 +818,7 @@ const InlineBox* RootInlineBox::GetLogicalStartNonPseudoBox() const {
 const InlineBox* RootInlineBox::GetLogicalEndNonPseudoBox() const {
   Vector<InlineBox*> leaf_boxes_in_logical_order;
   CollectLeafBoxesInLogicalOrder(leaf_boxes_in_logical_order);
-  for (size_t i = leaf_boxes_in_logical_order.size(); i > 0; --i) {
+  for (wtf_size_t i = leaf_boxes_in_logical_order.size(); i > 0; --i) {
     if (leaf_boxes_in_logical_order[i - 1]
             ->GetLineLayoutItem()
             .NonPseudoNode()) {

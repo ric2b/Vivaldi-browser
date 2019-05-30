@@ -21,8 +21,8 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
 #include "components/autofill/core/browser/test_event_waiter.h"
-#include "components/autofill/core/browser/test_sync_service.h"
 #include "components/payments/content/payment_request.h"
+#include "components/sync/driver/test_sync_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -55,6 +55,7 @@ class PersonalDataLoadedObserverMock
   ~PersonalDataLoadedObserverMock() override;
 
   MOCK_METHOD0(OnPersonalDataChanged, void());
+  MOCK_METHOD0(OnPersonalDataFinishedProfileTasks, void());
 };
 
 // Base class for any interactive PaymentRequest test that will need to open
@@ -82,6 +83,8 @@ class PaymentRequestBrowserTestBase
     EDITOR_VIEW_UPDATED,
     CAN_MAKE_PAYMENT_CALLED,
     CAN_MAKE_PAYMENT_RETURNED,
+    HAS_ENROLLED_INSTRUMENT_CALLED,
+    HAS_ENROLLED_INSTRUMENT_RETURNED,
     ERROR_MESSAGE_SHOWN,
     SPEC_DONE_UPDATING,
     CVC_PROMPT_SHOWN,
@@ -109,6 +112,8 @@ class PaymentRequestBrowserTestBase
   // PaymentRequest::ObserverForTest:
   void OnCanMakePaymentCalled() override;
   void OnCanMakePaymentReturned() override;
+  void OnHasEnrolledInstrumentCalled() override;
+  void OnHasEnrolledInstrumentReturned() override;
   void OnNotSupportedError() override;
   void OnConnectionTerminated() override;
   void OnAbortCalled() override;
@@ -174,6 +179,7 @@ class PaymentRequestBrowserTestBase
   // are added close to each other.
   void AddAutofillProfile(const autofill::AutofillProfile& profile);
   void AddCreditCard(const autofill::CreditCard& card);
+  void WaitForOnPersonalDataChanged();
 
   void CreatePaymentRequestForTest(
       payments::mojom::PaymentRequestRequest request,
@@ -209,9 +215,11 @@ class PaymentRequestBrowserTestBase
   void PayWithCreditCardAndWait(const base::string16& cvc,
                                 PaymentRequestDialogView* dialog_view);
   void PayWithCreditCard(const base::string16& cvc);
-  void RetryPaymentRequest(const std::string& validation_errors);
   void RetryPaymentRequest(const std::string& validation_errors,
-                           const DialogEvent& dialog_event);
+                           PaymentRequestDialogView* dialog_view);
+  void RetryPaymentRequest(const std::string& validation_errors,
+                           const DialogEvent& dialog_event,
+                           PaymentRequestDialogView* dialog_view);
 
   // Getting/setting the |value| in the textfield of a given |type|.
   base::string16 GetEditorTextfieldValue(autofill::ServerFieldType type);
@@ -267,7 +275,7 @@ class PaymentRequestBrowserTestBase
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
   // Weak, owned by the PaymentRequest object.
   TestChromePaymentRequestDelegate* delegate_;
-  autofill::TestSyncService sync_service_;
+  syncer::TestSyncService sync_service_;
   sync_preferences::TestingPrefServiceSyncable prefs_;
   bool is_incognito_;
   bool is_valid_ssl_;

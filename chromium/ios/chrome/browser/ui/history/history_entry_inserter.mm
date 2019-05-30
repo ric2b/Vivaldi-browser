@@ -7,12 +7,11 @@
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/time/time.h"
-#import "ios/chrome/browser/ui/collection_view/cells/collection_view_text_item.h"
 #import "ios/chrome/browser/ui/history/history_entry_item_interface.h"
 #include "ios/chrome/browser/ui/history/history_util.h"
 #import "ios/chrome/browser/ui/list_model/list_model.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_header_footer_item.h"
-#include "ios/chrome/browser/ui/ui_util.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -129,20 +128,13 @@
   NSInteger insertionIndex = _firstSectionIndex + index;
   [_listModel insertSectionWithIdentifier:sectionIdentifier
                                   atIndex:insertionIndex];
-  if (IsUIRefreshPhase1Enabled()) {
+
     TableViewTextHeaderFooterItem* header =
         [[TableViewTextHeaderFooterItem alloc] initWithType:kItemTypeEnumZero];
     header.text =
         base::SysUTF16ToNSString(history::GetRelativeDateLocalized(timestamp));
     [_listModel setHeader:header forSectionWithIdentifier:sectionIdentifier];
 
-  } else {
-    CollectionViewTextItem* header =
-        [[CollectionViewTextItem alloc] initWithType:kItemTypeEnumZero];
-    header.text =
-        base::SysUTF16ToNSString(history::GetRelativeDateLocalized(timestamp));
-    [_listModel setHeader:header forSectionWithIdentifier:sectionIdentifier];
-  }
   [self.delegate historyEntryInserter:self
               didInsertSectionAtIndex:insertionIndex];
   return sectionIdentifier;

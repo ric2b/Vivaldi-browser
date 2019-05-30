@@ -10,6 +10,7 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_constants.h"
 #include "ash/shell.h"
+#include "ash/system/tray/tray_constants.h"
 #include "base/i18n/rtl.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -23,11 +24,6 @@ namespace ash {
 namespace {
 
 const int kToastMarginX = 7;
-
-// If there should be no margin for the first item, this value needs to be
-// subtracted to flush the message to the shelf (the width of the border +
-// shadow).
-const int kNoToastMarginBorderAndShadowOffset = 2;
 
 }  // namespace
 
@@ -88,8 +84,7 @@ int AshPopupAlignmentDelegate::GetToastOriginX(
 }
 
 int AshPopupAlignmentDelegate::GetBaseline() const {
-  return work_area_.bottom() - kNoToastMarginBorderAndShadowOffset -
-         tray_bubble_height_;
+  return work_area_.bottom() - kUnifiedMenuPadding - tray_bubble_height_;
 }
 
 gfx::Rect AshPopupAlignmentDelegate::GetWorkArea() const {
@@ -161,12 +156,6 @@ void AshPopupAlignmentDelegate::OnAutoHideStateChanged(
 
 ///////////////////////////////////////////////////////////////////////////////
 // display::DisplayObserver:
-
-void AshPopupAlignmentDelegate::OnDisplayAdded(
-    const display::Display& new_display) {}
-
-void AshPopupAlignmentDelegate::OnDisplayRemoved(
-    const display::Display& old_display) {}
 
 void AshPopupAlignmentDelegate::OnDisplayMetricsChanged(
     const display::Display& display,

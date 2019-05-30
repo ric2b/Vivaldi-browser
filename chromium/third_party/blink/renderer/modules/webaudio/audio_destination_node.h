@@ -26,8 +26,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_WEBAUDIO_AUDIO_DESTINATION_NODE_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_WEBAUDIO_AUDIO_DESTINATION_NODE_H_
 
+#include <atomic>
 #include "third_party/blink/renderer/modules/webaudio/audio_node.h"
-#include "third_party/blink/renderer/platform/wtf/atomics.h"
 
 namespace blink {
 
@@ -43,10 +43,12 @@ class AudioDestinationHandler : public AudioHandler {
   // The method MUST NOT be invoked when rendering a graph because the
   // destination node is a sink. Instead, this node gets pulled by the
   // underlying renderer (audio hardware or worker thread).
-  void Process(size_t) final { NOTREACHED(); }
+  void Process(uint32_t) final { NOTREACHED(); }
 
   virtual void StartRendering() = 0;
   virtual void StopRendering() = 0;
+  virtual void Pause() = 0;
+  virtual void Resume() = 0;
 
   // The render thread needs to be changed after Worklet JS code is loaded by
   // AudioWorklet. This method ensures the switching of render thread and the
@@ -54,7 +56,7 @@ class AudioDestinationHandler : public AudioHandler {
   virtual void RestartRendering() = 0;
 
   size_t CurrentSampleFrame() const {
-    return AcquireLoad(&current_sample_frame_);
+    return current_sample_frame_.load(std::memory_order_acquire);
   }
 
   double CurrentTime() const {
@@ -62,7 +64,7 @@ class AudioDestinationHandler : public AudioHandler {
   }
 
   virtual double SampleRate() const = 0;
-  virtual unsigned long MaxChannelCount() const = 0;
+  virtual uint32_t MaxChannelCount() const = 0;
 
   void ContextDestroyed() { is_execution_context_destroyed_ = true; }
   bool IsExecutionContextDestroyed() const {
@@ -70,10 +72,15 @@ class AudioDestinationHandler : public AudioHandler {
   }
 
  protected:
-  // The number of sample frames processed by the destination so far.
-  size_t current_sample_frame_;
+  void AdvanceCurrentSampleFrame(size_t number_of_frames) {
+    current_sample_frame_.fetch_add(number_of_frames,
+                                    std::memory_order_release);
+  }
 
  private:
+  // The number of sample frames processed by the destination so far.
+  std::atomic_size_t current_sample_frame_{0};
+
   // True if the execution context is being destroyed.  If this is true, the
   // destination ndoe must avoid checking for or accessing the execution
   // context.
@@ -92,7 +99,7 @@ class AudioDestinationNode : public AudioNode {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  unsigned long maxChannelCount() const;
+  uint32_t maxChannelCount() const;
 
   // Returns its own handler object instead of a generic one from
   // AudioNode::Handler().

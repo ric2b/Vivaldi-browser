@@ -11,74 +11,35 @@
 
 #include "base/guid.h"
 #include "base/path_service.h"
+#include "base/task/post_task.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/resource_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "headless/grit/headless_lib_resources.h"
 #include "headless/lib/browser/headless_browser_context_options.h"
 #include "headless/lib/browser/headless_browser_impl.h"
 #include "headless/lib/browser/headless_browser_main_parts.h"
 #include "headless/lib/browser/headless_permission_manager.h"
-#include "headless/lib/browser/headless_url_request_context_getter.h"
-#include "net/log/net_log.h"
+#include "headless/lib/browser/headless_web_contents_impl.h"
 #include "net/url_request/url_request_context.h"
 #include "ui/base/resource/resource_bundle.h"
 
 namespace headless {
-
-// Contains net::URLRequestContextGetter required for resource loading.
-// Must be destructed on the IO thread as per content::ResourceContext
-// requirements.
-class HeadlessResourceContext : public content::ResourceContext {
- public:
-  HeadlessResourceContext();
-  ~HeadlessResourceContext() override;
-
-  // ResourceContext implementation:
-  net::URLRequestContext* GetRequestContext() override;
-
-  // Configure the URL request context getter to be used for resource fetching.
-  // Must be called before any of the other methods of this class are used. Must
-  // be called on the browser UI thread.
-  void set_url_request_context_getter(
-      scoped_refptr<net::URLRequestContextGetter> url_request_context_getter) {
-    DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
-    url_request_context_getter_ = std::move(url_request_context_getter);
-  }
-
-  net::URLRequestContextGetter* url_request_context_getter() {
-    return url_request_context_getter_.get();
-  }
-
- private:
-  scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
-
-  DISALLOW_COPY_AND_ASSIGN(HeadlessResourceContext);
-};
-
-HeadlessResourceContext::HeadlessResourceContext() {
-  DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
-}
-
-HeadlessResourceContext::~HeadlessResourceContext() {
-  DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::IO));
-}
-
-net::URLRequestContext* HeadlessResourceContext::GetRequestContext() {
-  CHECK(url_request_context_getter_);
-  return url_request_context_getter_->GetURLRequestContext();
-}
 
 HeadlessBrowserContextImpl::HeadlessBrowserContextImpl(
     HeadlessBrowserImpl* browser,
     std::unique_ptr<HeadlessBrowserContextOptions> context_options)
     : browser_(browser),
       context_options_(std::move(context_options)),
-      resource_context_(std::make_unique<HeadlessResourceContext>()),
       permission_controller_delegate_(
-          std::make_unique<HeadlessPermissionManager>(this)),
-      net_log_(new net::NetLog()) {
+          std::make_unique<HeadlessPermissionManager>(this)) {
   InitWhileIOAllowed();
+  base::FilePath user_data_path =
+      IsOffTheRecord() || context_options_->user_data_dir().empty()
+          ? base::FilePath()
+          : path_;
+  request_context_manager_ = std::make_unique<HeadlessRequestContextManager>(
+      context_options_.get(), user_data_path);
 }
 
 HeadlessBrowserContextImpl::~HeadlessBrowserContextImpl() {
@@ -88,22 +49,12 @@ HeadlessBrowserContextImpl::~HeadlessBrowserContextImpl() {
   // Destroy all web contents before shutting down storage partitions.
   web_contents_map_.clear();
 
-  if (resource_context_) {
+  if (request_context_manager_) {
     content::BrowserThread::DeleteSoon(content::BrowserThread::IO, FROM_HERE,
-                                       resource_context_.release());
+                                       request_context_manager_.release());
   }
-  content::BrowserThread::DeleteSoon(content::BrowserThread::IO, FROM_HERE,
-                                     net_log_.release());
 
   ShutdownStoragePartitions();
-
-  if (url_request_getter_) {
-    content::BrowserThread::PostTask(
-        content::BrowserThread::IO, FROM_HERE,
-        base::BindOnce(
-            &HeadlessURLRequestContextGetter::NotifyContextShuttingDown,
-            url_request_getter_));
-  }
 }
 
 // static
@@ -213,16 +164,12 @@ base::FilePath HeadlessBrowserContextImpl::GetPath() const {
   return path_;
 }
 
-base::FilePath HeadlessBrowserContextImpl::GetCachePath() const {
-  return path_;
-}
-
 bool HeadlessBrowserContextImpl::IsOffTheRecord() const {
   return context_options_->incognito_mode();
 }
 
 content::ResourceContext* HeadlessBrowserContextImpl::GetResourceContext() {
-  return resource_context_.get();
+  return request_context_manager_->GetResourceContext();
 }
 
 content::DownloadManagerDelegate*
@@ -256,6 +203,11 @@ HeadlessBrowserContextImpl::GetPermissionControllerDelegate() {
   return permission_controller_delegate_.get();
 }
 
+content::ClientHintsControllerDelegate*
+HeadlessBrowserContextImpl::GetClientHintsControllerDelegate() {
+  return nullptr;
+}
+
 content::BackgroundFetchDelegate*
 HeadlessBrowserContextImpl::GetBackgroundFetchDelegate() {
   return nullptr;
@@ -274,14 +226,8 @@ HeadlessBrowserContextImpl::GetBrowsingDataRemoverDelegate() {
 net::URLRequestContextGetter* HeadlessBrowserContextImpl::CreateRequestContext(
     content::ProtocolHandlerMap* protocol_handlers,
     content::URLRequestInterceptorScopedVector request_interceptors) {
-  url_request_getter_ = base::MakeRefCounted<HeadlessURLRequestContextGetter>(
-      content::BrowserThread::GetTaskRunnerForThread(
-          content::BrowserThread::IO),
-      protocol_handlers, context_options_->TakeProtocolHandlers(),
-      std::move(request_interceptors), context_options_.get(), net_log_.get(),
-      this);
-  resource_context_->set_url_request_context_getter(url_request_getter_);
-  return url_request_getter_.get();
+  return request_context_manager_->CreateRequestContext(
+      protocol_handlers, std::move(request_interceptors));
 }
 
 net::URLRequestContextGetter*
@@ -295,7 +241,7 @@ HeadlessBrowserContextImpl::CreateRequestContextForStoragePartition(
 
 net::URLRequestContextGetter*
 HeadlessBrowserContextImpl::CreateMediaRequestContext() {
-  return resource_context_->url_request_context_getter();
+  return request_context_manager_->url_request_context_getter();
 }
 
 net::URLRequestContextGetter*
@@ -359,13 +305,12 @@ const std::string& HeadlessBrowserContextImpl::Id() const {
   return UniqueId();
 }
 
-void HeadlessBrowserContextImpl::SetNetworkConditions(
-    HeadlessNetworkConditions conditions) {
-  network_conditions_ = conditions;
-}
-
-HeadlessNetworkConditions HeadlessBrowserContextImpl::GetNetworkConditions() {
-  return network_conditions_;
+::network::mojom::NetworkContextPtr
+HeadlessBrowserContextImpl::CreateNetworkContext(
+    bool in_memory,
+    const base::FilePath& relative_partition_path) {
+  return request_context_manager_->CreateNetworkContext(
+      in_memory, relative_partition_path);
 }
 
 HeadlessBrowserContext::Builder::Builder(HeadlessBrowserImpl* browser)
@@ -410,13 +355,6 @@ HeadlessBrowserContext::Builder::SetProxyConfig(
   return *this;
 }
 
-HeadlessBrowserContext::Builder&
-HeadlessBrowserContext::Builder::SetHostResolverRules(
-    const std::string& host_resolver_rules) {
-  options_->host_resolver_rules_ = host_resolver_rules;
-  return *this;
-}
-
 HeadlessBrowserContext::Builder& HeadlessBrowserContext::Builder::SetWindowSize(
     const gfx::Size& window_size) {
   options_->window_size_ = window_size;
@@ -433,12 +371,6 @@ HeadlessBrowserContext::Builder::SetUserDataDir(
 HeadlessBrowserContext::Builder&
 HeadlessBrowserContext::Builder::SetIncognitoMode(bool incognito_mode) {
   options_->incognito_mode_ = incognito_mode;
-  return *this;
-}
-
-HeadlessBrowserContext::Builder&
-HeadlessBrowserContext::Builder::SetSitePerProcess(bool site_per_process) {
-  options_->site_per_process_ = site_per_process;
   return *this;
 }
 

@@ -8,6 +8,8 @@
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
 #include "net/url_request/url_request.h"
+#include "services/network/public/cpp/resource_request.h"
+#include "ui/base/page_transition_types.h"
 
 using base::android::ConvertJavaStringToUTF16;
 using base::android::ConvertUTF8ToJavaString;
@@ -33,17 +35,31 @@ void ConvertRequestHeadersToVectors(const net::HttpRequestHeaders& headers,
 
 AwWebResourceRequest::AwWebResourceRequest(const net::URLRequest& request)
     : url(request.url().spec()), method(request.method()) {
-  const content::ResourceRequestInfo* info =
+  content::ResourceRequestInfo* info =
       content::ResourceRequestInfo::ForRequest(&request);
   is_main_frame =
       info && info->GetResourceType() == content::RESOURCE_TYPE_MAIN_FRAME;
   has_user_gesture = info && info->HasUserGesture();
+  is_renderer_initiated =
+      info && ui::PageTransitionIsWebTriggerable(info->GetPageTransition());
 
   net::HttpRequestHeaders headers;
   if (!request.GetFullRequestHeaders(&headers))
     headers = request.extra_request_headers();
 
   ConvertRequestHeadersToVectors(headers, &header_names, &header_values);
+}
+
+AwWebResourceRequest::AwWebResourceRequest(
+    const network::ResourceRequest& request)
+    : url(request.url.spec()),
+      method(request.method),
+      is_main_frame(request.resource_type == content::RESOURCE_TYPE_MAIN_FRAME),
+      has_user_gesture(request.has_user_gesture),
+      is_renderer_initiated(ui::PageTransitionIsWebTriggerable(
+          static_cast<ui::PageTransition>(request.transition_type))) {
+  ConvertRequestHeadersToVectors(request.headers, &header_names,
+                                 &header_values);
 }
 
 AwWebResourceRequest::AwWebResourceRequest(

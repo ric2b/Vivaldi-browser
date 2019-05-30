@@ -10,6 +10,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/ui_base_features.h"
@@ -318,11 +319,6 @@ class WidgetScrollViewTest : public test::WidgetTest,
     quit_closure_.Run();
     quit_closure_.Reset();
   }
-  void OnCompositingStarted(ui::Compositor* compositor,
-                            base::TimeTicks start_time) override {}
-  void OnCompositingEnded(ui::Compositor* compositor) override {}
-  void OnCompositingChildResizing(ui::Compositor* compositor) override {}
-  void OnCompositingShuttingDown(ui::Compositor* compositor) override {}
 
   Widget* widget_ = nullptr;
 
@@ -686,6 +682,34 @@ TEST_F(ScrollViewTest, HeaderScrollsWithContent) {
   EXPECT_EQ("-1,0", header->origin().ToString());
 }
 
+// Test that calling ScrollToPosition() also updates the position of the
+// corresponding ScrollBar.
+TEST_F(ScrollViewTest, ScrollToPositionUpdatesScrollBar) {
+  ScrollViewTestApi test_api(scroll_view_.get());
+  View* contents = InstallContents();
+
+  // Scroll the horizontal scrollbar, after which, the scroll bar thumb position
+  // should be updated (i.e. it should be non-zero).
+  contents->SetBounds(0, 0, 400, 50);
+  scroll_view_->Layout();
+  auto* scroll_bar = test_api.GetBaseScrollBar(HORIZONTAL);
+  ASSERT_TRUE(scroll_bar);
+  EXPECT_TRUE(scroll_bar->visible());
+  EXPECT_EQ(0, scroll_bar->GetPosition());
+  scroll_view_->ScrollToPosition(scroll_bar, 20);
+  EXPECT_GT(scroll_bar->GetPosition(), 0);
+
+  // Scroll the vertical scrollbar.
+  contents->SetBounds(0, 0, 50, 400);
+  scroll_view_->Layout();
+  scroll_bar = test_api.GetBaseScrollBar(VERTICAL);
+  ASSERT_TRUE(scroll_bar);
+  EXPECT_TRUE(scroll_bar->visible());
+  EXPECT_EQ(0, scroll_bar->GetPosition());
+  scroll_view_->ScrollToPosition(scroll_bar, 20);
+  EXPECT_GT(scroll_bar->GetPosition(), 0);
+}
+
 // Verifies ScrollRectToVisible() on the child works.
 TEST_F(ScrollViewTest, ScrollRectToVisible) {
   ScrollViewTestApi test_api(scroll_view_.get());
@@ -1025,8 +1049,9 @@ TEST_F(WidgetScrollViewTest, ScrollersOnRest) {
   const float y_offset = 3;
   const int kSteps = 1;
   const int kNnumFingers = 2;
-  generator.ScrollSequence(generator.current_location(), base::TimeDelta(), 0,
-                           y_offset, kSteps, kNnumFingers);
+  generator.ScrollSequence(generator.current_screen_location(),
+                           base::TimeDelta(), 0, y_offset, kSteps,
+                           kNnumFingers);
 
   // Horizontal scroller should start fading out immediately.
   EXPECT_EQ(kMaxOpacity, bar[HORIZONTAL]->layer()->opacity());
@@ -1044,8 +1069,9 @@ TEST_F(WidgetScrollViewTest, ScrollersOnRest) {
   // Then, scrolling horizontally should show the horizontal scroller. The
   // vertical scroller should still be visible, running its hide timer.
   const float x_offset = 5;
-  generator.ScrollSequence(generator.current_location(), base::TimeDelta(),
-                           x_offset, 0, kSteps, kNnumFingers);
+  generator.ScrollSequence(generator.current_screen_location(),
+                           base::TimeDelta(), x_offset, 0, kSteps,
+                           kNnumFingers);
   for (ScrollBarOrientation orientation : {HORIZONTAL, VERTICAL}) {
     EXPECT_EQ(kMaxOpacity, bar[orientation]->layer()->opacity());
     EXPECT_EQ(kMaxOpacity, bar[orientation]->layer()->GetTargetOpacity());
@@ -1727,12 +1753,12 @@ TEST_F(WidgetScrollViewTest, CompositedScrollEvents) {
   EXPECT_EQ(gfx::ScrollOffset(0, 10), test_api.CurrentOffset());
 }
 
-INSTANTIATE_TEST_CASE_P(,
-                        WidgetScrollViewTestRTLAndLayers,
-                        ::testing::Values(UiConfig::kLtr,
-                                          UiConfig::kRtl,
-                                          UiConfig::kLtrWithLayers,
-                                          UiConfig::kRtlWithLayers),
-                        &UiConfigToString);
+INSTANTIATE_TEST_SUITE_P(,
+                         WidgetScrollViewTestRTLAndLayers,
+                         ::testing::Values(UiConfig::kLtr,
+                                           UiConfig::kRtl,
+                                           UiConfig::kLtrWithLayers,
+                                           UiConfig::kRtlWithLayers),
+                         &UiConfigToString);
 
 }  // namespace views

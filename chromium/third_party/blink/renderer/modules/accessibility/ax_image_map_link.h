@@ -39,11 +39,9 @@ namespace blink {
 class AXObjectCacheImpl;
 
 class AXImageMapLink final : public AXNodeObject {
- private:
-  explicit AXImageMapLink(HTMLAreaElement*, AXObjectCacheImpl&);
-
  public:
   static AXImageMapLink* Create(HTMLAreaElement*, AXObjectCacheImpl&);
+  explicit AXImageMapLink(HTMLAreaElement*, AXObjectCacheImpl&);
   ~AXImageMapLink() override;
   void Trace(blink::Visitor*) override;
 
@@ -51,7 +49,7 @@ class AXImageMapLink final : public AXNodeObject {
 
   HTMLMapElement* MapElement() const;
 
-  AccessibilityRole RoleValue() const override;
+  ax::mojom::Role RoleValue() const override;
   bool ComputeAccessibilityIsIgnored(IgnoredReasons* = nullptr) const override;
 
   Element* AnchorElement() const override;

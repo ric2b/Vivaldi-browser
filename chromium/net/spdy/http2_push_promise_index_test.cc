@@ -60,10 +60,12 @@ class Http2PushPromiseIndexTest : public testing::Test {
         key1_(HostPortPair::FromURL(url1_),
               ProxyServer::Direct(),
               PRIVACY_MODE_ENABLED,
+              SpdySessionKey::IsProxySession::kFalse,
               SocketTag()),
         key2_(HostPortPair::FromURL(url2_),
               ProxyServer::Direct(),
               PRIVACY_MODE_ENABLED,
+              SpdySessionKey::IsProxySession::kFalse,
               SocketTag()) {}
 
   const GURL url1_;
@@ -445,9 +447,7 @@ TEST(Http2PushPromiseIndexCompareByUrlTest, LookupByURL) {
   ASSERT_EQ(4u, entries.size());
 
   // Test that entries are ordered by URL first, not stream ID.
-  std::set<Http2PushPromiseIndexPeer::UnclaimedPushedStream,
-           Http2PushPromiseIndexPeer::CompareByUrl>::iterator it =
-      entries.begin();
+  auto it = entries.begin();
   EXPECT_EQ(8u, it->stream_id);
   ++it;
   EXPECT_EQ(4u, it->stream_id);

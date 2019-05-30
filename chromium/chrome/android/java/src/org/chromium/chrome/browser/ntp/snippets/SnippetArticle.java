@@ -9,11 +9,13 @@ import android.support.annotation.ColorInt;
 import android.support.annotation.Nullable;
 
 import org.chromium.base.DiscardableReferencePool.DiscardableReference;
-import org.chromium.chrome.browser.modelutil.PropertyObservable;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageViewHolder.PartialBindCallback;
 import org.chromium.chrome.browser.suggestions.OfflinableSuggestion;
+import org.chromium.ui.modelutil.PropertyObservable;
 
 import java.io.File;
+import java.util.Collection;
+import java.util.Collections;
 
 /**
  * Represents the data for an article card on the NTP.
@@ -308,5 +310,15 @@ public class SnippetArticle
 
     public int getPerSectionRank() {
         return mPerSectionRank;
+    }
+
+    @Override
+    public Collection<PartialBindCallback> getAllSetProperties() {
+        return Collections.emptyList();
+    }
+
+    @Override
+    public Collection<PartialBindCallback> getAllProperties() {
+        return Collections.emptyList();
     }
 }

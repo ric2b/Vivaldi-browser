@@ -13,6 +13,8 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
+import org.chromium.components.crash.CrashKeyIndex;
+import org.chromium.components.crash.CrashKeys;
 import org.chromium.components.minidump_uploader.CrashTestRule;
 
 import java.io.BufferedReader;
@@ -53,7 +55,8 @@ public class PureJavaExceptionReporterTest {
     private static final String[] REPORT_FIELDS = {PureJavaExceptionReporter.CHANNEL,
             PureJavaExceptionReporter.VERSION, PureJavaExceptionReporter.PRODUCT,
             PureJavaExceptionReporter.ANDROID_BUILD_ID, PureJavaExceptionReporter.ANDROID_BUILD_FP,
-            PureJavaExceptionReporter.DEVICE, PureJavaExceptionReporter.GMS_CORE_VERSION,
+            PureJavaExceptionReporter.SDK, PureJavaExceptionReporter.DEVICE,
+            PureJavaExceptionReporter.GMS_CORE_VERSION,
             PureJavaExceptionReporter.INSTALLER_PACKAGE_NAME, PureJavaExceptionReporter.ABI_NAME,
             PureJavaExceptionReporter.PACKAGE, PureJavaExceptionReporter.MODEL,
             PureJavaExceptionReporter.BRAND, PureJavaExceptionReporter.BOARD,

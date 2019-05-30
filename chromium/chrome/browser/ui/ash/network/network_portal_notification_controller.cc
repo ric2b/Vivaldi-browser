@@ -9,7 +9,9 @@
 #include <memory>
 #include <vector>
 
+#include "ash/public/cpp/notification_utils.h"
 #include "ash/public/cpp/vector_icons/vector_icons.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -29,7 +31,7 @@
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_type_pattern.h"
@@ -51,11 +53,6 @@ namespace chromeos {
 namespace {
 
 const char kNotifierNetworkPortalDetector[] = "ash.network.portal-detector";
-
-bool IsPortalNotificationEnabled() {
-  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kDisableNetworkPortalNotification);
-}
 
 Profile* GetProfileForPrimaryUser() {
   const user_manager::User* primary_user =
@@ -257,9 +254,6 @@ void NetworkPortalNotificationController::DefaultNetworkChanged(
 void NetworkPortalNotificationController::OnPortalDetectionCompleted(
     const NetworkState* network,
     const NetworkPortalDetector::CaptivePortalState& state) {
-  if (!IsPortalNotificationEnabled())
-    return;
-
   if (!network ||
       state.status != NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PORTAL) {
     last_network_guid_.clear();
@@ -334,11 +328,11 @@ NetworkPortalNotificationController::CreateDefaultCaptivePortalNotification(
       base::MakeRefCounted<NetworkPortalNotificationControllerDelegate>(
           std::string(), network->guid(), weak_factory_.GetWeakPtr());
   message_center::NotifierId notifier_id(
-      message_center::NotifierId::SYSTEM_COMPONENT,
+      message_center::NotifierType::SYSTEM_COMPONENT,
       kNotifierNetworkPortalDetector);
   bool is_wifi = NetworkTypePattern::WiFi().MatchesType(network->type());
   std::unique_ptr<message_center::Notification> notification =
-      message_center::Notification::CreateSystemNotification(
+      ash::CreateSystemNotification(
           message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId,
           l10n_util::GetStringUTF16(
               is_wifi ? IDS_PORTAL_DETECTION_NOTIFICATION_TITLE_WIFI
@@ -365,7 +359,7 @@ NetworkPortalNotificationController::
       base::MakeRefCounted<NetworkPortalNotificationControllerDelegate>(
           extension->id(), network->guid(), weak_factory_.GetWeakPtr());
   message_center::NotifierId notifier_id(
-      message_center::NotifierId::SYSTEM_COMPONENT,
+      message_center::NotifierType::SYSTEM_COMPONENT,
       kNotifierNetworkPortalDetector);
 
   extensions::NetworkingConfigService::AuthenticationResult
@@ -396,7 +390,7 @@ NetworkPortalNotificationController::
         IDS_PORTAL_DETECTION_NOTIFICATION_BUTTON_PORTAL)));
   }
   std::unique_ptr<message_center::Notification> notification =
-      message_center::Notification::CreateSystemNotification(
+      ash::CreateSystemNotification(
           message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId,
           l10n_util::GetStringUTF16(
               IDS_PORTAL_DETECTION_NOTIFICATION_TITLE_WIFI),

@@ -18,7 +18,7 @@
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_content_browser_client.h"
 #include "content/shell/common/shell_switches.h"
-#include "content/shell/renderer/layout_test/layout_test_content_renderer_client.h"
+#include "content/shell/renderer/web_test/web_test_content_renderer_client.h"
 #include "content/test/test_content_client.h"
 
 #if defined(OS_ANDROID)
@@ -31,6 +31,10 @@
 
 #if !defined(OS_CHROMEOS) && defined(OS_LINUX)
 #include "ui/base/ime/input_method_initializer.h"
+#endif
+
+#if defined(OS_CHROMEOS)
+#include "content/public/test/network_connection_change_simulator.h"
 #endif
 
 #if defined(USE_AURA) && defined(TOOLKIT_VIEWS)
@@ -59,8 +63,6 @@ ContentBrowserTest::~ContentBrowserTest() {
 
 void ContentBrowserTest::SetUp() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  command_line->AppendSwitch(switches::kContentBrowserTest);
-
   SetUpCommandLine(command_line);
 
 #if defined(OS_ANDROID)
@@ -72,7 +74,7 @@ void ContentBrowserTest::SetUp() {
     // destroyed.
     ContentRendererClient* old_client =
         switches::IsRunWebTestsSwitchPresent()
-            ? SetRendererClientForTesting(new LayoutTestContentRendererClient)
+            ? SetRendererClientForTesting(new WebTestContentRendererClient)
             : SetRendererClientForTesting(new ShellContentRendererClient);
     // No-one should have set this value before we did.
     DCHECK(!old_client);
@@ -118,6 +120,11 @@ void ContentBrowserTest::TearDown() {
 }
 
 void ContentBrowserTest::PreRunTestOnMainThread() {
+#if defined(OS_CHROMEOS)
+  NetworkConnectionChangeSimulator network_change_simulator;
+  network_change_simulator.InitializeChromeosConnectionType();
+#endif
+
   if (!switches::IsRunWebTestsSwitchPresent()) {
     CHECK_EQ(Shell::windows().size(), 1u);
     shell_ = Shell::windows()[0];
@@ -136,15 +143,22 @@ void ContentBrowserTest::PreRunTestOnMainThread() {
 #endif
 
   // Pump startup related events.
-  DCHECK(base::MessageLoopForUI::IsCurrent());
+  DCHECK(base::MessageLoopCurrentForUI::IsSet());
   base::RunLoop().RunUntilIdle();
 
 #if defined(OS_MACOSX)
   pool_->Recycle();
 #endif
+
+  pre_run_test_executed_ = true;
 }
 
 void ContentBrowserTest::PostRunTestOnMainThread() {
+  // This code is failing when the test is overriding PreRunTestOnMainThread()
+  // without the required call to ContentBrowserTest::PreRunTestOnMainThread().
+  // This is a common error causing a crash on MAC.
+  DCHECK(pre_run_test_executed_);
+
 #if defined(OS_MACOSX)
   pool_->Recycle();
 #endif

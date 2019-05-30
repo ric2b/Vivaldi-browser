@@ -4,17 +4,37 @@
 
 #include "chrome/browser/unified_consent/unified_consent_service_factory.h"
 
+#include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "chrome/browser/unified_consent/chrome_unified_consent_service_client.h"
+#include "chrome/common/pref_names.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/prefs/pref_registry_simple.h"
-#include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
+#include "components/spellcheck/browser/pref_names.h"
+#include "components/sync_preferences/pref_service_syncable.h"
 #include "components/unified_consent/feature.h"
+#include "components/unified_consent/unified_consent_metrics.h"
 #include "components/unified_consent/unified_consent_service.h"
+
+using unified_consent::UnifiedConsentService;
+using unified_consent::metrics::RecordSettingsHistogram;
+
+namespace {
+
+// Returns the synced pref names of the services on the "Sync and Google
+// services" settings page.
+// Note: The synced prefs returned by this method have to match the prefs
+// shown in personalization_options.html.
+std::vector<std::string> GetSyncedServicePrefNames() {
+  return {prefs::kSearchSuggestEnabled, prefs::kAlternateErrorPagesEnabled,
+          prefs::kSafeBrowsingEnabled,
+          prefs::kSafeBrowsingScoutReportingEnabled,
+          spellcheck::prefs::kSpellCheckUseSpellingService};
+}
+
+}  // namespace
 
 UnifiedConsentServiceFactory::UnifiedConsentServiceFactory()
     : BrowserContextKeyedServiceFactory(
@@ -27,9 +47,9 @@ UnifiedConsentServiceFactory::UnifiedConsentServiceFactory()
 UnifiedConsentServiceFactory::~UnifiedConsentServiceFactory() = default;
 
 // static
-unified_consent::UnifiedConsentService*
-UnifiedConsentServiceFactory::GetForProfile(Profile* profile) {
-  return static_cast<unified_consent::UnifiedConsentService*>(
+UnifiedConsentService* UnifiedConsentServiceFactory::GetForProfile(
+    Profile* profile) {
+  return static_cast<UnifiedConsentService*>(
       GetInstance()->GetServiceForBrowserContext(profile, true));
 }
 
@@ -40,27 +60,30 @@ UnifiedConsentServiceFactory* UnifiedConsentServiceFactory::GetInstance() {
 
 void UnifiedConsentServiceFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-  unified_consent::UnifiedConsentService::RegisterPrefs(registry);
+  UnifiedConsentService::RegisterPrefs(registry);
 }
 
 KeyedService* UnifiedConsentServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   Profile* profile = Profile::FromBrowserContext(context);
+  sync_preferences::PrefServiceSyncable* pref_service =
+      PrefServiceSyncableFromProfile(profile);
+  // Record settings for pre- and post-UnifiedConsent users.
+  RecordSettingsHistogram(pref_service);
+
   syncer::SyncService* sync_service =
-      ProfileSyncServiceFactory::GetSyncServiceForBrowserContext(profile);
+      ProfileSyncServiceFactory::GetForProfile(profile);
   if (!sync_service)
     return nullptr;
 
   if (!unified_consent::IsUnifiedConsentFeatureEnabled()) {
-    unified_consent::UnifiedConsentService::RollbackIfNeeded(
-        profile->GetPrefs(), sync_service);
+    UnifiedConsentService::RollbackIfNeeded(pref_service, sync_service);
     return nullptr;
   }
 
-  return new unified_consent::UnifiedConsentService(
-      std::make_unique<ChromeUnifiedConsentServiceClient>(profile->GetPrefs()),
-      profile->GetPrefs(), IdentityManagerFactory::GetForProfile(profile),
-      sync_service);
+  return new UnifiedConsentService(
+      pref_service, IdentityManagerFactory::GetForProfile(profile),
+      sync_service, GetSyncedServicePrefNames());
 }
 
 bool UnifiedConsentServiceFactory::ServiceIsNULLWhileTesting() const {

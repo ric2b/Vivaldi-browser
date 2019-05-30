@@ -6,6 +6,7 @@
 
 #include <string.h>
 
+#include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -20,7 +21,6 @@
 #include "net/third_party/quic/core/quic_packets.h"
 #include "net/third_party/quic/core/tls_server_handshaker.h"
 #include "net/third_party/quic/tools/quic_simple_dispatcher.h"
-#include "net/tools/quic/quic_simple_per_connection_packet_writer.h"
 #include "net/tools/quic/quic_simple_server_packet_writer.h"
 #include "net/tools/quic/quic_simple_server_session_helper.h"
 
@@ -132,7 +132,7 @@ int QuicSimpleServer::Listen(const IPEndPoint& address) {
   socket_.swap(socket);
 
   dispatcher_.reset(new quic::QuicSimpleDispatcher(
-      config_, &crypto_config_, &version_manager_,
+      &config_, &crypto_config_, &version_manager_,
       std::unique_ptr<quic::QuicConnectionHelperInterface>(helper_),
       std::unique_ptr<quic::QuicCryptoServerStream::Helper>(
           new QuicSimpleServerSessionHelper(quic::QuicRandom::GetInstance())),
@@ -179,8 +179,8 @@ void QuicSimpleServer::StartReading() {
     if (dispatcher_->HasChlosBuffered()) {
       // No more packets to read, so yield before processing buffered packets.
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(&QuicSimpleServer::StartReading,
-                                weak_factory_.GetWeakPtr()));
+          FROM_HERE, base::BindOnce(&QuicSimpleServer::StartReading,
+                                    weak_factory_.GetWeakPtr()));
     }
     return;
   }
@@ -190,8 +190,8 @@ void QuicSimpleServer::StartReading() {
     // Schedule the processing through the message loop to 1) prevent infinite
     // recursion and 2) avoid blocking the thread for too long.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&QuicSimpleServer::OnReadComplete,
-                              weak_factory_.GetWeakPtr(), result));
+        FROM_HERE, base::BindOnce(&QuicSimpleServer::OnReadComplete,
+                                  weak_factory_.GetWeakPtr(), result));
   } else {
     OnReadComplete(result);
   }

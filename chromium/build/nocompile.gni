@@ -55,6 +55,7 @@
 # something goes wrong, and know during the unittest run that the test was at
 # least processed when things go right.
 
+import("//build/config/clang/clang.gni")
 import("//testing/test.gni")
 
 declare_args() {
@@ -64,14 +65,19 @@ declare_args() {
 }
 
 if (enable_nocompile_tests) {
-  import("//build/config/sysroot.gni")
   import("//build/config/c++/c++.gni")
+  import("//build/config/sysroot.gni")
   template("nocompile_test") {
     nocompile_target = target_name + "_run_nocompile"
 
     action_foreach(nocompile_target) {
+      testonly = true
       script = "//tools/nocompile_driver.py"
       sources = invoker.sources
+      deps = invoker.deps
+      if (defined(invoker.public_deps)) {
+        public_deps = invoker.public_deps
+      }
 
       result_path = "$target_gen_dir/{{source_name_part}}_nc.cc"
       depfile = "${result_path}.d"
@@ -79,6 +85,7 @@ if (enable_nocompile_tests) {
         result_path,
       ]
       args = [
+        rebase_path("$clang_base_path/bin/clang++", root_build_dir),
         "4",  # number of compilers to invoke in parallel.
         "{{source}}",
         rebase_path(result_path, root_build_dir),

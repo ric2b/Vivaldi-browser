@@ -7,7 +7,6 @@
 #include "base/callback.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/ntp_snippets/category.h"
-#import "ios/chrome/browser/ui/collection_view/cells/collection_view_text_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_action_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
@@ -142,6 +141,7 @@ ContentSuggestionsMostVisitedItem* ConvertNTPTile(
   suggestion.URL = tile.url;
   suggestion.source = tile.source;
   suggestion.titleSource = tile.title_source;
+  suggestion.accessibilityTraits = UIAccessibilityTraitButton;
 
   suggestion.suggestionIdentifier = [[ContentSuggestionIdentifier alloc] init];
   suggestion.suggestionIdentifier.IDInSection = tile.url.spec();
@@ -169,20 +169,20 @@ content_suggestions::StatusCode ConvertStatusCode(ntp_snippets::Status status) {
 
 ContentSuggestionsMostVisitedActionItem* BookmarkActionItem() {
   return [[ContentSuggestionsMostVisitedActionItem alloc]
-      initWithAction:ContentSuggestionsMostVisitedActionBookmark];
+      initWithCollectionShortcutType:NTPCollectionShortcutTypeBookmark];
 }
 
 ContentSuggestionsMostVisitedActionItem* ReadingListActionItem() {
   return [[ContentSuggestionsMostVisitedActionItem alloc]
-      initWithAction:ContentSuggestionsMostVisitedActionReadingList];
+      initWithCollectionShortcutType:NTPCollectionShortcutTypeReadingList];
 }
 
 ContentSuggestionsMostVisitedActionItem* RecentTabsActionItem() {
   return [[ContentSuggestionsMostVisitedActionItem alloc]
-      initWithAction:ContentSuggestionsMostVisitedActionRecentTabs];
+      initWithCollectionShortcutType:NTPCollectionShortcutTypeRecentTabs];
 }
 
 ContentSuggestionsMostVisitedActionItem* HistoryActionItem() {
   return [[ContentSuggestionsMostVisitedActionItem alloc]
-      initWithAction:ContentSuggestionsMostVisitedActionHistory];
+      initWithCollectionShortcutType:NTPCollectionShortcutTypeHistory];
 }

@@ -54,7 +54,7 @@ bool GetAtomPairArrayProperty(XID window,
   XAtom type = x11::None;
   int format = 0;  // size in bits of each item in 'property'
   unsigned long num_items = 0;
-  unsigned char* properties = NULL;
+  unsigned char* properties = nullptr;
   unsigned long remaining_bytes = 0;
 
   int result = XGetWindowProperty(gfx::GetXDisplay(), window, property,
@@ -100,10 +100,8 @@ SelectionOwner::~SelectionOwner() {
 }
 
 void SelectionOwner::RetrieveTargets(std::vector<XAtom>* targets) {
-  for (SelectionFormatMap::const_iterator it = format_map_.begin();
-       it != format_map_.end(); ++it) {
-    targets->push_back(it->first);
-  }
+  for (const auto& format_target : format_map_)
+    targets->push_back(format_target.first);
 }
 
 void SelectionOwner::TakeOwnershipOfSelection(
@@ -146,13 +144,12 @@ void SelectionOwner::OnSelectionRequest(const XEvent& event) {
                                  requested_property,
                                  &conversions)) {
       std::vector<XAtom> conversion_results;
-      for (size_t i = 0; i < conversions.size(); ++i) {
-        bool conversion_successful = ProcessTarget(conversions[i].first,
-                                                   requestor,
-                                                   conversions[i].second);
-        conversion_results.push_back(conversions[i].first);
-        conversion_results.push_back(
-            conversion_successful ? conversions[i].second : x11::None);
+      for (const std::pair<XAtom, XAtom>& conversion : conversions) {
+        bool conversion_successful =
+            ProcessTarget(conversion.first, requestor, conversion.second);
+        conversion_results.push_back(conversion.first);
+        conversion_results.push_back(conversion_successful ? conversion.second
+                                                           : x11::None);
       }
 
       // Set the property to indicate which conversions succeeded. This matches
@@ -187,8 +184,7 @@ bool SelectionOwner::CanDispatchPropertyEvent(const XEvent& event) {
 }
 
 void SelectionOwner::OnPropertyEvent(const XEvent& event) {
-  std::vector<IncrementalTransfer>::iterator it =
-      FindIncrementalTransferForEvent(event);
+  auto it = FindIncrementalTransferForEvent(event);
   if (it == incremental_transfers_.end())
     return;
 
@@ -218,11 +214,8 @@ bool SelectionOwner::ProcessTarget(XAtom target,
   if (target == targets_atom) {
     // We have been asked for TARGETS. Send an atom array back with the data
     // types we support.
-    std::vector<XAtom> targets;
-    targets.push_back(timestamp_atom);
-    targets.push_back(targets_atom);
-    targets.push_back(save_targets_atom);
-    targets.push_back(multiple_atom);
+    std::vector<XAtom> targets = {timestamp_atom, targets_atom,
+                                  save_targets_atom, multiple_atom};
     RetrieveTargets(&targets);
 
     XChangeProperty(x_display_, requestor, property, XA_ATOM, 32,
@@ -233,7 +226,7 @@ bool SelectionOwner::ProcessTarget(XAtom target,
   }
 
   // Try to find the data type in map.
-  SelectionFormatMap::const_iterator it = format_map_.find(target);
+  auto it = format_map_.find(target);
   if (it != format_map_.end()) {
     if (it->second->size() > max_request_size_) {
       // We must send the data back in several chunks due to a limitation in
@@ -304,7 +297,7 @@ void SelectionOwner::ProcessIncrementalTransfer(IncrementalTransfer* transfer) {
   // transfer->data once the zero-sized chunk is sent to indicate that state
   // related to this data transfer can be cleared.
   if (chunk_length == 0)
-    transfer->data = NULL;
+    transfer->data = nullptr;
 }
 
 void SelectionOwner::AbortStaleIncrementalTransfers() {
@@ -326,10 +319,8 @@ void SelectionOwner::CompleteIncrementalTransfer(
 
 std::vector<SelectionOwner::IncrementalTransfer>::iterator
     SelectionOwner::FindIncrementalTransferForEvent(const XEvent& event) {
-  for (std::vector<IncrementalTransfer>::iterator it =
-           incremental_transfers_.begin();
-       it != incremental_transfers_.end();
-       ++it) {
+  for (auto it = incremental_transfers_.begin();
+       it != incremental_transfers_.end(); ++it) {
     if (it->window == event.xproperty.window &&
         it->property == event.xproperty.atom) {
       return it;

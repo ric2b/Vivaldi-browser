@@ -31,22 +31,23 @@
 
 #include <memory>
 
+#include "base/macros.h"
 #include "third_party/blink/renderer/platform/audio/audio_array.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
-#include "third_party/blink/renderer/platform/wtf/noncopyable.h"
 
 namespace blink {
 
 class PLATFORM_EXPORT DirectConvolver {
   USING_FAST_MALLOC(DirectConvolver);
-  WTF_MAKE_NONCOPYABLE(DirectConvolver);
 
  public:
   DirectConvolver(size_t input_block_size,
                   std::unique_ptr<AudioFloatArray> convolution_kernel);
 
-  void Process(const float* source_p, float* dest_p, size_t frames_to_process);
+  void Process(const float* source_p,
+               float* dest_p,
+               uint32_t frames_to_process);
 
   void Reset();
 
@@ -58,6 +59,8 @@ class PLATFORM_EXPORT DirectConvolver {
   AudioFloatArray buffer_;
   std::unique_ptr<AudioFloatArray> convolution_kernel_;
   AudioFloatArray prepared_convolution_kernel_;
+
+  DISALLOW_COPY_AND_ASSIGN(DirectConvolver);
 };
 
 }  // namespace blink

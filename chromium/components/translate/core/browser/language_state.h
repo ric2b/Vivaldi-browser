@@ -30,7 +30,9 @@ class LanguageState {
   // frame or sub-frame navigation).
   void DidNavigate(bool is_same_document_navigation,
                    bool is_main_frame,
-                   bool reload);
+                   bool reload,
+                   const std::string& href_translate,
+                   bool navigation_from_google);
 
   // Should be called when the language of the page has been determined.
   // |page_needs_translation| when false indicates that the browser should not
@@ -76,6 +78,16 @@ class LanguageState {
   // Whether the current page's language is different from the previous
   // language.
   bool HasLanguageChanged() const;
+
+  std::string href_translate() const { return href_translate_; }
+  bool navigation_from_google() const { return navigation_from_google_; }
+
+  std::string GetPredefinedTargetLanguage() const {
+    return predefined_target_language_;
+  }
+  void SetPredefinedTargetLanguage(const std::string& language) {
+    predefined_target_language_ = language;
+  }
 
  private:
   void SetIsPageTranslated(bool value);
@@ -124,6 +136,17 @@ class LanguageState {
 
   // Whether the Translate is enabled.
   bool translate_enabled_;
+
+  // The value of the hrefTranslate attribute on the link that initiated the
+  // current navigation, if it was specified.
+  std::string href_translate_;
+
+  // True when the current page was the result of a navigation originated in a
+  // Google origin.
+  bool navigation_from_google_ = false;
+
+  // Target language set by client.
+  std::string predefined_target_language_;
 
   DISALLOW_COPY_AND_ASSIGN(LanguageState);
 };

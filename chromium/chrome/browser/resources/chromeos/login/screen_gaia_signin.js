@@ -164,6 +164,9 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
           this.screenMode_ != ScreenMode.SAML_INTERSTITIAL;
 
       $('login-header-bar').updateUI_();
+
+      let showGuestInOobe = !this.closable && this.isAtTheBeginning();
+      chrome.send('showGuestInOobe', [showGuestInOobe]);
     },
 
     /**
@@ -304,6 +307,10 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
             this.screenMode = ScreenMode.DEFAULT;
             this.loadGaiaAuthHost_(false /* doSamlRedirect */);
           }.bind(this));
+
+      $('offline-ad-auth').addEventListener('cancel', function() {
+        this.cancel();
+      }.bind(this));
     },
 
     /**
@@ -567,7 +574,7 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
       this.screenMode = ScreenMode.DEFAULT;
       this.loading = true;
       chrome.send('loginUIStateChanged', ['gaia-signin', true]);
-      $('login-header-bar').signinUIState = SIGNIN_UI_STATE.GAIA_SIGNIN;
+      Oobe.getInstance().setSigninUIState(SIGNIN_UI_STATE.GAIA_SIGNIN);
 
       // Ensure that GAIA signin (or loading UI) is actually visible.
       window.requestAnimationFrame(function() {
@@ -584,6 +591,7 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
       this.lastBackMessageValue_ = false;
       this.updateControlsState();
 
+      $('offline-ad-auth').onBeforeShow();
       return $('signin-frame-dialog').onBeforeShow();
     },
 
@@ -630,7 +638,7 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
      */
     onBeforeHide: function() {
       chrome.send('loginUIStateChanged', ['gaia-signin', false]);
-      $('login-header-bar').signinUIState = SIGNIN_UI_STATE.HIDDEN;
+      Oobe.getInstance().setSigninUIState(SIGNIN_UI_STATE.HIDDEN);
       $('offline-gaia').switchToEmailCard(false /* animated */);
     },
 
@@ -706,11 +714,6 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
       $('login-header-bar').showCreateSupervisedButton =
           data.supervisedUsersCanCreate;
       $('login-header-bar').showGuestButton = data.guestSignin;
-      if (Oobe.getInstance().showingViewsLogin) {
-        chrome.send(
-            'showGuestForGaia',
-            [data.guestSignin, !this.closable && this.isAtTheBeginning()]);
-      }
 
       // Reset SAML
       this.classList.toggle('full-width', false);
@@ -723,6 +726,10 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
             .insertBefore($('offline-gaia'), $('gaia-step-contents'));
         $('offline-gaia').removeAttribute('not-a-dialog');
         $('offline-gaia').classList.toggle('fit', false);
+        $('gaia-signin')
+            .insertBefore($('offline-ad-auth'), $('gaia-step-contents'));
+        $('offline-ad-auth').removeAttribute('not-a-dialog');
+        $('offline-ad-auth').classList.toggle('fit', false);
       } else {
         $('gaia-signin-form-container').appendChild($('signin-frame'));
         $('gaia-signin-form-container')
@@ -789,7 +796,8 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
       let oldState = this.classList.contains('v2');
       this.classList.toggle('v2', false);
       if ((this.screenMode_ == ScreenMode.DEFAULT ||
-           this.screenMode_ == ScreenMode.OFFLINE) &&
+           this.screenMode_ == ScreenMode.OFFLINE ||
+           this.screenMode_ == ScreenMode.AD_AUTH) &&
           this.chromeOSApiVersion_ == 2) {
         this.classList.toggle('v2', true);
       }
@@ -1091,16 +1099,10 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
         chrome.send(
             'completeOfflineAuthentication',
             [credentials.email, credentials.password]);
-      } else if (credentials.authCode) {
+      } else {
         chrome.send('completeAuthentication', [
           credentials.gaiaId, credentials.email, credentials.password,
-          credentials.authCode, credentials.usingSAML, credentials.gapsCookie,
-          credentials.services
-        ]);
-      } else {
-        chrome.send('completeLogin', [
-          credentials.gaiaId, credentials.email, credentials.password,
-          credentials.usingSAML
+          credentials.usingSAML, credentials.services
         ]);
       }
 
@@ -1161,7 +1163,7 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
           // Show 'Cancel' button to allow user to return to the main screen
           // (e.g. this makes sense when connection is back).
           Oobe.getInstance().headerHidden = false;
-          $('login-header-bar').signinUIState = SIGNIN_UI_STATE.GAIA_SIGNIN;
+          Oobe.getInstance().setSigninUIState(SIGNIN_UI_STATE.GAIA_SIGNIN);
           // Do nothing, since offline version is reloaded after an error comes.
         } else {
           Oobe.showSigninUI();
@@ -1261,16 +1263,14 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
     loadAdAuth: function(params) {
       this.loading = true;
       this.startLoadingTimer_();
-      var ADAuthUI = this.getSigninFrame_();
-      if ('realm' in params)
-        ADAuthUI.realm = params['realm'];
+      var adAuthUI = this.getSigninFrame_();
+      adAuthUI.realm = params['realm'];
 
       if ('emailDomain' in params)
-        ADAuthUI.userRealm = '@' + params['emailDomain'];
-      else if ('realm' in params)
-        ADAuthUI.userRealm = '@' + params['realm'];
+        adAuthUI.userRealm = '@' + params['emailDomain'];
 
-      ADAuthUI.setUser(params['email']);
+      adAuthUI.userName = params['email'];
+      adAuthUI.focus();
       this.onAuthReady_();
     },
 
@@ -1307,8 +1307,8 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
       if (this.screenMode_ != ScreenMode.AD_AUTH)
         return;
       var adAuthUI = this.getSigninFrame_();
-      adAuthUI.setUser(username);
-      adAuthUI.setInvalid(errorState);
+      adAuthUI.userName = username;
+      adAuthUI.errorState = errorState;
       this.authCompleted_ = false;
       this.loading = false;
       Oobe.getInstance().headerHidden = false;

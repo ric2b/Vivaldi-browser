@@ -4,6 +4,7 @@
 
 #include "services/device/generic_sensor/platform_sensor_linux.h"
 
+#include "base/bind.h"
 #include "base/single_thread_task_runner.h"
 #include "services/device/generic_sensor/linux/sensor_data_linux.h"
 #include "services/device/generic_sensor/platform_sensor_reader_linux.h"
@@ -71,16 +72,16 @@ bool PlatformSensorLinux::StartSensor(
   DCHECK(task_runner_->BelongsToCurrentThread());
   polling_thread_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&SensorReader::StartFetchingData,
-                 base::Unretained(sensor_reader_.get()), configuration));
+      base::BindOnce(&SensorReader::StartFetchingData,
+                     base::Unretained(sensor_reader_.get()), configuration));
   return true;
 }
 
 void PlatformSensorLinux::StopSensor() {
   DCHECK(task_runner_->BelongsToCurrentThread());
   polling_thread_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&SensorReader::StopFetchingData,
-                            base::Unretained(sensor_reader_.get())));
+      FROM_HERE, base::BindOnce(&SensorReader::StopFetchingData,
+                                base::Unretained(sensor_reader_.get())));
 }
 
 bool PlatformSensorLinux::CheckSensorConfiguration(

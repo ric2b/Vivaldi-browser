@@ -8,11 +8,13 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "media/base/media_switches.h"
 #include "media/blink/resource_multibuffer_data_provider.h"
 
 namespace media {
@@ -43,15 +45,15 @@ void ResourceMultiBuffer::OnEmpty() {
   url_data_->OnEmpty();
 }
 
-UrlData::UrlData(const GURL& url, CORSMode cors_mode, UrlIndex* url_index)
+UrlData::UrlData(const GURL& url, CorsMode cors_mode, UrlIndex* url_index)
     : url_(url),
       have_data_origin_(false),
       cors_mode_(cors_mode),
+      has_access_control_(false),
       url_index_(url_index),
       length_(kPositionNotSpecified),
       range_supported_(false),
       cacheable_(false),
-      has_opaque_data_(false),
       last_used_(),
       multibuffer_(this, url_index_->block_shift_) {}
 
@@ -62,7 +64,7 @@ UrlData::~UrlData() {
                           BytesReadFromNetwork() >> 10);
 }
 
-std::pair<GURL, UrlData::CORSMode> UrlData::key() const {
+std::pair<GURL, UrlData::CorsMode> UrlData::key() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   return std::make_pair(url(), cors_mode());
 }
@@ -87,9 +89,9 @@ void UrlData::MergeFrom(const scoped_refptr<UrlData>& other) {
       last_modified_ = other->last_modified_;
     }
     bytes_read_from_cache_ += other->bytes_read_from_cache_;
-    // set_has_opaque_data() will not relax from opaque to non-opaque if already
-    // opaque.
-    set_has_opaque_data(other->has_opaque_data_);
+    // is_cors_corss_origin_ will not relax from true to false.
+    set_is_cors_cross_origin(other->is_cors_cross_origin_);
+    has_access_control_ |= other->has_access_control_;
     multibuffer()->MergeFrom(other->multibuffer());
   }
 }
@@ -106,16 +108,26 @@ void UrlData::set_length(int64_t length) {
   }
 }
 
-void UrlData::set_has_opaque_data(bool has_opaque_data) {
-  if (has_opaque_data_)
+void UrlData::set_is_cors_cross_origin(bool is_cors_cross_origin) {
+  if (is_cors_cross_origin_)
     return;
-  has_opaque_data_ = has_opaque_data;
+  is_cors_cross_origin_ = is_cors_cross_origin;
+}
+
+void UrlData::set_has_access_control() {
+  has_access_control_ = true;
 }
 
 void UrlData::RedirectTo(const scoped_refptr<UrlData>& url_data) {
   DCHECK(thread_checker_.CalledOnValidThread());
   // Copy any cached data over to the new location.
   url_data->multibuffer()->MergeFrom(multibuffer());
+
+  // All |bytes_received_callbacks_| should also listen for bytes on the
+  // redirect UrlData.
+  for (const auto& cb : bytes_received_callbacks_) {
+    url_data->AddBytesReceivedCallback(cb);
+  }
 
   std::vector<RedirectCB> redirect_callbacks;
   redirect_callbacks.swap(redirect_callbacks_);
@@ -210,6 +222,18 @@ ResourceMultiBuffer* UrlData::multibuffer() {
   return &multibuffer_;
 }
 
+void UrlData::AddBytesReceivedCallback(BytesReceivedCB bytes_received_cb) {
+  bytes_received_callbacks_.emplace_back(std::move(bytes_received_cb));
+}
+
+void UrlData::AddBytesReadFromNetwork(int64_t b) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  bytes_read_from_network_ += b;
+  for (const auto& cb : bytes_received_callbacks_) {
+    cb.Run(b);
+  }
+}
+
 size_t UrlData::CachedSize() {
   DCHECK(thread_checker_.CalledOnValidThread());
   return multibuffer()->map().size();
@@ -244,7 +268,7 @@ void UrlIndex::RemoveUrlData(const scoped_refptr<UrlData>& url_data) {
 }
 
 scoped_refptr<UrlData> UrlIndex::GetByUrl(const GURL& gurl,
-                                          UrlData::CORSMode cors_mode) {
+                                          UrlData::CorsMode cors_mode) {
   auto i = indexed_data_.find(std::make_pair(gurl, cors_mode));
   if (i != indexed_data_.end() && i->second->Valid()) {
     return i->second;
@@ -254,7 +278,7 @@ scoped_refptr<UrlData> UrlIndex::GetByUrl(const GURL& gurl,
 }
 
 scoped_refptr<UrlData> UrlIndex::NewUrlData(const GURL& url,
-                                            UrlData::CORSMode cors_mode) {
+                                            UrlData::CorsMode cors_mode) {
   return new UrlData(url, cors_mode, this);
 }
 

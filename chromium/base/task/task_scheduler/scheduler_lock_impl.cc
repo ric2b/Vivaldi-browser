@@ -11,8 +11,9 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/synchronization/condition_variable.h"
+#include "base/task/task_scheduler/scheduler_lock.h"
 #include "base/threading/platform_thread.h"
-#include "base/threading/thread_local_storage.h"
+#include "base/threading/thread_local.h"
 
 namespace base {
 namespace internal {
@@ -21,7 +22,7 @@ namespace {
 
 class SafeAcquisitionTracker {
  public:
-  SafeAcquisitionTracker() : tls_acquired_locks_(&OnTLSDestroy) {}
+  SafeAcquisitionTracker() = default;
 
   void RegisterLock(const SchedulerLockImpl* const lock,
                     const SchedulerLockImpl* const predecessor) {
@@ -49,6 +50,10 @@ class SafeAcquisitionTracker {
     acquired_locks->erase(iter_at_lock);
   }
 
+  void AssertNoLockHeldOnCurrentThread() {
+    DCHECK(GetAcquiredLocksOnCurrentThread()->empty());
+  }
+
  private:
   using LockVector = std::vector<const SchedulerLockImpl*>;
   using PredecessorMap =
@@ -63,13 +68,20 @@ class SafeAcquisitionTracker {
     if (acquired_locks->empty())
       return;
 
-    // Otherwise, make sure that the previous lock acquired is an allowed
-    // predecessor.
+    // A universal predecessor may not be acquired after any other lock.
+    DCHECK(!lock->is_universal_predecessor());
+
+    // Otherwise, make sure that the previous lock acquired is either an
+    // allowed predecessor for this lock or a universal predecessor.
+    const SchedulerLockImpl* previous_lock = acquired_locks->back();
+    if (previous_lock->is_universal_predecessor())
+      return;
+
     AutoLock auto_lock(allowed_predecessor_map_lock_);
     // Using at() is exception-safe here as |lock| was registered already.
     const SchedulerLockImpl* allowed_predecessor =
         allowed_predecessor_map_.at(lock);
-    DCHECK_EQ(acquired_locks->back(), allowed_predecessor);
+    DCHECK_EQ(previous_lock, allowed_predecessor);
   }
 
   // Asserts that |lock|'s registered predecessor is safe. Because
@@ -95,13 +107,9 @@ class SafeAcquisitionTracker {
 
   LockVector* GetAcquiredLocksOnCurrentThread() {
     if (!tls_acquired_locks_.Get())
-      tls_acquired_locks_.Set(new LockVector);
+      tls_acquired_locks_.Set(std::make_unique<LockVector>());
 
-    return reinterpret_cast<LockVector*>(tls_acquired_locks_.Get());
-  }
-
-  static void OnTLSDestroy(void* value) {
-    delete reinterpret_cast<LockVector*>(value);
+    return tls_acquired_locks_.Get();
   }
 
   // Synchronizes access to |allowed_predecessor_map_|.
@@ -112,7 +120,7 @@ class SafeAcquisitionTracker {
 
   // A thread-local slot holding a vector of locks currently acquired on the
   // current thread.
-  ThreadLocalStorage::Slot tls_acquired_locks_;
+  ThreadLocalOwnedPointer<LockVector> tls_acquired_locks_;
 
   DISALLOW_COPY_AND_ASSIGN(SafeAcquisitionTracker);
 };
@@ -124,12 +132,20 @@ LazyInstance<SafeAcquisitionTracker>::Leaky g_safe_acquisition_tracker =
 
 SchedulerLockImpl::SchedulerLockImpl() : SchedulerLockImpl(nullptr) {}
 
-SchedulerLockImpl::SchedulerLockImpl(const SchedulerLockImpl* predecessor) {
+SchedulerLockImpl::SchedulerLockImpl(const SchedulerLockImpl* predecessor)
+    : is_universal_predecessor_(false) {
   g_safe_acquisition_tracker.Get().RegisterLock(this, predecessor);
 }
 
+SchedulerLockImpl::SchedulerLockImpl(UniversalPredecessor)
+    : is_universal_predecessor_(true) {}
+
 SchedulerLockImpl::~SchedulerLockImpl() {
   g_safe_acquisition_tracker.Get().UnregisterLock(this);
+}
+
+void SchedulerLockImpl::AssertNoLockHeldOnCurrentThread() {
+  g_safe_acquisition_tracker.Get().AssertNoLockHeldOnCurrentThread();
 }
 
 void SchedulerLockImpl::Acquire() {

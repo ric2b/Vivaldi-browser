@@ -11,23 +11,25 @@
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "content/common/content_export.h"
-#include "content/public/renderer/media_stream_video_sink.h"
-#include "content/renderer/media/stream/media_stream_track.h"
 #include "content/renderer/media/stream/media_stream_video_source.h"
-#include "content/renderer/media/stream/secure_display_link_tracker.h"
+#include "third_party/blink/public/platform/modules/mediastream/secure_display_link_tracker.h"
+#include "third_party/blink/public/platform/modules/mediastream/web_media_stream_sink.h"
+#include "third_party/blink/public/platform/modules/mediastream/web_platform_media_stream_track.h"
 #include "third_party/blink/public/platform/web_media_stream_track.h"
 
 namespace content {
 
-struct VideoTrackAdapterSettings;
+class VideoTrackAdapterSettings;
 
 // MediaStreamVideoTrack is a video specific representation of a
 // blink::WebMediaStreamTrack in content. It is owned by the blink object
 // and can be retrieved from a blink object using
 // WebMediaStreamTrack::getExtraData() or MediaStreamVideoTrack::GetVideoTrack.
-class CONTENT_EXPORT MediaStreamVideoTrack : public MediaStreamTrack {
+class CONTENT_EXPORT MediaStreamVideoTrack
+    : public blink::WebPlatformMediaStreamTrack {
  public:
   // Help method to create a blink::WebMediaStreamTrack and a
   // MediaStreamVideoTrack instance. The MediaStreamVideoTrack object is owned
@@ -80,6 +82,14 @@ class CONTENT_EXPORT MediaStreamVideoTrack : public MediaStreamTrack {
   void StopAndNotify(base::OnceClosure callback) override;
   void GetSettings(blink::WebMediaStreamTrack::Settings& settings) override;
 
+  // Add |sink| to receive state changes on the main render thread and video
+  // frames in the |callback| method on the IO-thread.
+  // |callback| will be reset on the render thread.
+  void AddSink(blink::WebMediaStreamSink* sink,
+               const blink::VideoCaptureDeliverFrameCB& callback,
+               bool is_sink_secure);
+  void RemoveSink(blink::WebMediaStreamSink* sink);
+
   void OnReadyStateChanged(blink::WebMediaStreamSource::ReadyState state);
 
   const base::Optional<bool>& noise_reduction() const {
@@ -106,35 +116,48 @@ class CONTENT_EXPORT MediaStreamVideoTrack : public MediaStreamTrack {
     frame_rate_ = frame_rate;
   }
 
+  // Setting information about the track size.
+  // Passed as callback on MediaStreamVideoTrack::AddTrack, and run from
+  // VideoFrameResolutionAdapter on frame delivery to update track settings.
+  void SetSizeAndComputedFrameRate(gfx::Size frame_size, double frame_rate) {
+    width_ = frame_size.width();
+    height_ = frame_size.height();
+    computed_frame_rate_ = frame_rate;
+  }
+
+  // Setting information about the source format. The format is computed based
+  // on incoming frames and it's used for applying constraints for remote video
+  // tracks. Passed as callback on MediaStreamVideoTrack::AddTrack, and run from
+  // VideoFrameResolutionAdapter on frame delivery.
+  void set_computed_source_format(const media::VideoCaptureFormat& format) {
+    computed_source_format_ = format;
+  }
+
+  void SetTrackAdapterSettings(const VideoTrackAdapterSettings& settings);
+
+  media::VideoCaptureFormat GetComputedSourceFormat();
+
   MediaStreamVideoSource* source() const { return source_.get(); }
 
+  void OnFrameDropped(media::VideoCaptureFrameDropReason reason);
+
  private:
-  // MediaStreamVideoSink is a friend to allow it to call AddSink() and
-  // RemoveSink().
-  friend class MediaStreamVideoSink;
   FRIEND_TEST_ALL_PREFIXES(MediaStreamRemoteVideoSourceTest, StartTrack);
   FRIEND_TEST_ALL_PREFIXES(MediaStreamRemoteVideoSourceTest, RemoteTrackStop);
   FRIEND_TEST_ALL_PREFIXES(MediaStreamRemoteVideoSourceTest,
                            PreservesColorSpace);
   FRIEND_TEST_ALL_PREFIXES(PepperToVideoTrackAdapterTest, PutFrame);
 
-  // Add |sink| to receive state changes on the main render thread and video
-  // frames in the |callback| method on the IO-thread.
-  // |callback| will be reset on the render thread.
-  // These two methods are private such that no subclass can intercept and
-  // store the callback. This is important to ensure that we can release
-  // the callback on render thread without reference to it on the IO-thread.
-  void AddSink(MediaStreamVideoSink* sink,
-               const VideoCaptureDeliverFrameCB& callback,
-               bool is_sink_secure);
-  void RemoveSink(MediaStreamVideoSink* sink);
+  // In debug builds, check that all methods that could cause object graph
+  // or data flow changes are being called on the main thread.
+  THREAD_CHECKER(main_render_thread_checker_);
 
-  std::vector<MediaStreamVideoSink*> sinks_;
+  std::vector<blink::WebMediaStreamSink*> sinks_;
 
   // |FrameDeliverer| is an internal helper object used for delivering video
   // frames on the IO-thread using callbacks to all registered tracks.
   class FrameDeliverer;
-  const scoped_refptr<FrameDeliverer> frame_deliverer_;
+  scoped_refptr<FrameDeliverer> frame_deliverer_;
 
   // TODO(guidou): Make this field a regular field instead of a unique_ptr.
   std::unique_ptr<VideoTrackAdapterSettings> adapter_settings_;
@@ -147,12 +170,16 @@ class CONTENT_EXPORT MediaStreamVideoTrack : public MediaStreamTrack {
   base::WeakPtr<MediaStreamVideoSource> source_;
 
   // This is used for tracking if all connected video sinks are secure.
-  SecureDisplayLinkTracker<MediaStreamVideoSink> secure_tracker_;
+  blink::SecureDisplayLinkTracker<blink::WebMediaStreamSink> secure_tracker_;
 
   // Remembering our desired video size and frame rate.
   int width_ = 0;
   int height_ = 0;
   double frame_rate_ = 0.0;
+  base::Optional<double> computed_frame_rate_;
+  media::VideoCaptureFormat computed_source_format_;
+
+  base::WeakPtrFactory<MediaStreamVideoTrack> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaStreamVideoTrack);
 };

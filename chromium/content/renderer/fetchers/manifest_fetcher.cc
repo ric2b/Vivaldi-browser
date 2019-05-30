@@ -35,8 +35,8 @@ void ManifestFetcher::Start(blink::WebLocalFrame* frame,
   // See https://w3c.github.io/manifest/. Use "include" when use_credentials is
   // true, and "omit" otherwise.
   fetcher_->Start(
-      frame, blink::WebURLRequest::kRequestContextManifest,
-      network::mojom::FetchRequestMode::kCORS,
+      frame, blink::mojom::RequestContextType::MANIFEST,
+      network::mojom::FetchRequestMode::kCors,
       use_credentials ? network::mojom::FetchCredentialsMode::kInclude
                       : network::mojom::FetchCredentialsMode::kOmit,
       network::mojom::RequestContextFrameType::kNone,

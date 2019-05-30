@@ -25,18 +25,22 @@
 
 #include <iterator>
 #include "base/memory/scoped_refptr.h"
+#include "third_party/blink/renderer/core/content_capture/content_holder.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/line/line_box_list.h"
 #include "third_party/blink/renderer/core/layout/text_run_constructor.h"
-#include "third_party/blink/renderer/platform/length_functions.h"
+#include "third_party/blink/renderer/platform/geometry/length_functions.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 
 namespace blink {
 
 class AbstractInlineTextBox;
+class ContentCaptureManager;
 class InlineTextBox;
+class NGInlineItem;
+class NGInlineItems;
 class NGOffsetMapping;
 
 enum class OnlyWhitespaceOrNbsp : unsigned { kUnknown = 0, kNo = 1, kYes = 2 };
@@ -84,7 +88,7 @@ class CORE_EXPORT LayoutText : public LayoutObject {
 
   const char* GetName() const override { return "LayoutText"; }
 
-  virtual bool IsTextFragment() const;
+  bool IsTextFragment() const { return is_text_fragment_; }
   virtual bool IsWordBreak() const;
 
   virtual scoped_refptr<StringImpl> OriginalText() const;
@@ -103,7 +107,7 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   // Returns first letter part of |LayoutTextFragment|.
   virtual LayoutText* GetFirstLetterPart() const { return nullptr; }
 
-  InlineTextBox* CreateInlineTextBox(int start, unsigned short length);
+  InlineTextBox* CreateInlineTextBox(int start, uint16_t length);
   void DirtyOrDeleteLineBoxesIfNeeded(bool full_layout);
   void DirtyLineBoxes();
 
@@ -187,8 +191,6 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   LayoutRect VisualOverflowRect() const;
 
   FloatPoint FirstRunOrigin() const;
-  float FirstRunX() const;
-  float FirstRunY() const;
 
   virtual void SetText(scoped_refptr<StringImpl>,
                        bool force = false,
@@ -313,8 +315,20 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   bool MapDOMOffsetToTextContentOffset(const NGOffsetMapping&,
                                        unsigned* start,
                                        unsigned* end) const;
+  NodeHolder EnsureNodeHolder();
+  bool HasNodeHolder() const { return !node_holder_.is_empty; }
+
+  void SetInlineItems(NGInlineItem* begin, NGInlineItem* end);
+  void ClearInlineItems();
+  bool HasValidInlineItems() const { return valid_ng_items_; }
+  const NGInlineItems& InlineItems() const;
+  // Inline items depends on context. It needs to be invalidated not only when
+  // it was inserted/changed but also it was moved.
+  void InvalidateInlineItems() { valid_ng_items_ = false; }
 
  protected:
+  virtual const NGInlineItems* GetNGInlineItems() const { return nullptr; }
+  virtual NGInlineItems* GetNGInlineItems() { return nullptr; }
   void WillBeDestroyed() override;
 
   void StyleWillChange(StyleDifference, const ComputedStyle&) final {}
@@ -322,17 +336,8 @@ class CORE_EXPORT LayoutText : public LayoutObject {
 
   void InLayoutNGInlineFormattingContextWillChange(bool) final;
 
-  void AddLayerHitTestRects(
-      LayerHitTestRects&,
-      const PaintLayer* current_layer,
-      const LayoutPoint& layer_offset,
-      TouchAction supported_fast_actions,
-      const LayoutRect& container_rect,
-      TouchAction container_whitelisted_touch_action) const override;
-
-  virtual InlineTextBox* CreateTextBox(
-      int start,
-      unsigned short length);  // Subclassed by SVG.
+  virtual InlineTextBox* CreateTextBox(int start,
+                                       uint16_t length);  // Subclassed by SVG.
 
   void InvalidateDisplayItemClients(PaintInvalidationReason) const override;
 
@@ -388,6 +393,11 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   LayoutRect LocalVisualRectIgnoringVisibility() const final;
 
   bool CanOptimizeSetText() const;
+  void SetFirstTextBoxLogicalLeft(float text_width) const;
+
+ private:
+  ContentCaptureManager* GetContentCaptureManager();
+  NodeHolder node_holder_;
 
   // We put the bitfield first to minimize padding on 64-bit.
  protected:
@@ -417,7 +427,12 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   mutable unsigned known_to_have_no_overflow_and_no_fallback_fonts_ : 1;
   unsigned contains_only_whitespace_or_nbsp_ : 2;
 
+  unsigned is_text_fragment_ : 1;
+
  private:
+  // Used for LayoutNG with accessibility. True if inline fragments are
+  // associated to |NGAbstractInlineTextBox|.
+  unsigned has_abstract_inline_text_box_ : 1;
   float min_width_;
   float max_width_;
   float first_line_min_width_;
@@ -432,7 +447,7 @@ class CORE_EXPORT LayoutText : public LayoutObject {
     InlineTextBoxList text_boxes_;
     // The first fragment of text boxes associated with this object.
     // Valid only when IsInLayoutNGInlineFormattingContext().
-    scoped_refptr<NGPaintFragment> first_paint_fragment_;
+    NGPaintFragment* first_paint_fragment_;
   };
 };
 
@@ -442,7 +457,7 @@ inline InlineTextBoxList& LayoutText::MutableTextBoxes() {
 }
 
 inline NGPaintFragment* LayoutText::FirstInlineFragment() const {
-  return IsInLayoutNGInlineFormattingContext() ? first_paint_fragment_.get()
+  return IsInLayoutNGInlineFormattingContext() ? first_paint_fragment_
                                                : nullptr;
 }
 

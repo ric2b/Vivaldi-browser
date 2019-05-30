@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
@@ -33,6 +34,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/network_time/network_time_tracker.h"
 #include "components/prefs/pref_service.h"
+#include "components/security_interstitials/content/security_interstitial_page.h"
 #include "components/security_interstitials/core/ssl_error_ui.h"
 #include "components/ssl_errors/error_classification.h"
 #include "components/ssl_errors/error_info.h"
@@ -55,7 +57,7 @@
 #endif
 
 #if defined(OS_WIN)
-#include "base/win/win_util.h"
+#include "base/enterprise_util.h"
 #elif defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #endif  // #if defined(OS_WIN)
@@ -74,14 +76,6 @@ const base::Feature kCaptivePortalInterstitial{
 const base::Feature kCaptivePortalCertificateList{
     "CaptivePortalCertificateList", base::FEATURE_ENABLED_BY_DEFAULT};
 
-#if defined(OS_WIN)
-const base::Feature kSuperfishInterstitial{"SuperfishInterstitial",
-                                           base::FEATURE_ENABLED_BY_DEFAULT};
-#else
-const base::Feature kSuperfishInterstitial{"SuperfishInterstitial",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
-#endif
-
 namespace {
 
 const base::Feature kSSLCommonNameMismatchHandling{
@@ -97,28 +91,6 @@ const base::Feature kSSLCommonNameMismatchHandling{
 const int64_t kInterstitialDelayInMilliseconds = 3000;
 
 const char kHistogram[] = "interstitial.ssl_error_handler";
-
-bool IsSuperfish(const scoped_refptr<net::X509Certificate>& cert) {
-  // This is the fingerprint of the well-known Superfish certificate at
-  // https://pastebin.com/WcXv8QcG. Superfish is identified by certificate
-  // fingerprint rather than SPKI because net::SSLInfo does not guarantee
-  // |public_key_hashes| (the SPKIs) to be populated if the certificate doesn't
-  // verify successfully. It so happens that Superfish uses the same certificate
-  // universally (not just the same public key), and calculating the fingerprint
-  // is more convenient here than calculating the SPKI.
-  const net::SHA256HashValue kSuperfishFingerprint{
-      {0xB6, 0xFE, 0x91, 0x51, 0x40, 0x2B, 0xAD, 0x1C, 0x06, 0xD7, 0xE6,
-       0x6D, 0xB6, 0x7A, 0x26, 0xAA, 0x73, 0x56, 0xF2, 0xE6, 0xC6, 0x44,
-       0xDB, 0xCF, 0x9F, 0x98, 0x96, 0x8F, 0xF6, 0x32, 0xE1, 0xB7}};
-  for (const auto& intermediate : cert->intermediate_buffers()) {
-    net::SHA256HashValue hash =
-        net::X509Certificate::CalculateFingerprint256(intermediate.get());
-    if (hash == kSuperfishFingerprint) {
-      return true;
-    }
-  }
-  return false;
-}
 
 // Adds a message to console after navigation commits and then, deletes itself.
 // Also deletes itself if the navigation is stopped.
@@ -139,6 +111,7 @@ class CommonNameMismatchRedirectObserver
   }
 
  private:
+  friend class content::WebContentsUserData<CommonNameMismatchRedirectObserver>;
   CommonNameMismatchRedirectObserver(content::WebContents* web_contents,
                                      const std::string& request_url_hostname,
                                      const std::string& suggested_url_hostname)
@@ -175,8 +148,12 @@ class CommonNameMismatchRedirectObserver
   const std::string request_url_hostname_;
   const std::string suggested_url_hostname_;
 
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
+
   DISALLOW_COPY_AND_ASSIGN(CommonNameMismatchRedirectObserver);
 };
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(CommonNameMismatchRedirectObserver)
 
 void RecordUMA(SSLErrorHandler::UMAEvent event) {
   UMA_HISTOGRAM_ENUMERATION(kHistogram, event,
@@ -233,6 +210,7 @@ class ConfigSingleton {
   void SetErrorAssistantProto(
       std::unique_ptr<chrome_browser_ssl::SSLErrorAssistantConfig>
           error_assistant_proto);
+
   void SetEnterpriseManagedForTesting(bool enterprise_managed);
   bool IsEnterpriseManagedFlagSetForTesting() const;
   int GetErrorAssistantProtoVersionIdForTesting() const;
@@ -369,7 +347,7 @@ bool ConfigSingleton::IsEnterpriseManaged() const {
   }
 
 #if defined(OS_WIN)
-  if (base::win::IsEnterpriseManaged()) {
+  if (base::IsMachineExternallyManaged()) {
     return true;
   }
 #elif defined(OS_CHROMEOS)
@@ -422,7 +400,6 @@ class SSLErrorHandlerDelegateImpl : public SSLErrorHandler::Delegate {
       Profile* const profile,
       int cert_error,
       int options_mask,
-      bool is_superfish,
       const GURL& request_url,
       std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
       const base::Callback<void(content::CertificateRequestResultType)>&
@@ -433,7 +410,6 @@ class SSLErrorHandlerDelegateImpl : public SSLErrorHandler::Delegate {
         profile_(profile),
         cert_error_(cert_error),
         options_mask_(options_mask),
-        is_superfish_(is_superfish),
         request_url_(request_url),
         ssl_cert_reporter_(std::move(ssl_cert_reporter)),
         decision_callback_(decision_callback),
@@ -470,7 +446,6 @@ class SSLErrorHandlerDelegateImpl : public SSLErrorHandler::Delegate {
   Profile* const profile_;
   const int cert_error_;
   const int options_mask_;
-  const bool is_superfish_;
   const GURL request_url_;
   std::unique_ptr<CommonNameMismatchHandler> common_name_mismatch_handler_;
   std::unique_ptr<SSLCertReporter> ssl_cert_reporter_;
@@ -557,7 +532,7 @@ void SSLErrorHandlerDelegateImpl::ShowSSLInterstitial(const GURL& support_url) {
   OnBlockingPageReady(SSLBlockingPage::Create(
       web_contents_, cert_error_, ssl_info_, request_url_, options_mask_,
       base::Time::NowFromSystemTime(), support_url,
-      std::move(ssl_cert_reporter_), is_superfish_, decision_callback_));
+      std::move(ssl_cert_reporter_), decision_callback_));
 }
 
 void SSLErrorHandlerDelegateImpl::ShowBadClockInterstitial(
@@ -586,9 +561,9 @@ void SSLErrorHandlerDelegateImpl::OnBlockingPageReady(
   if (blocking_page_ready_callback_.is_null()) {
     interstitial_page->Show();
   } else {
-    std::move(blocking_page_ready_callback_)
-        .Run(std::unique_ptr<security_interstitials::SecurityInterstitialPage>(
-            interstitial_page));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(blocking_page_ready_callback_),
+                                  base::WrapUnique(interstitial_page)));
   }
 }
 
@@ -637,23 +612,26 @@ void SSLErrorHandler::HandleSSLError(
 
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
+
+  // This can happen if GetBrowserContext no longer exist by the time this gets
+  // called (e.g. the SSL error was in a webview that has since been destroyed),
+  // if that's the case we don't need to handle the error (and will crash if we
+  // attempt to).
+  if (!profile)
+    return;
+
   bool hard_override_disabled =
       !profile->GetPrefs()->GetBoolean(prefs::kSSLErrorOverrideAllowed);
-  bool is_superfish_cert = IsSuperfish(ssl_info.cert);
-  UMA_HISTOGRAM_BOOLEAN("interstitial.ssl_error_handler.superfish",
-                        is_superfish_cert);
-  bool is_superfish =
-      base::FeatureList::IsEnabled(kSuperfishInterstitial) && is_superfish_cert;
-  int options_mask = CalculateOptionsMask(
-      cert_error, hard_override_disabled, ssl_info.is_fatal_cert_error,
-      is_superfish, expired_previous_decision);
+  int options_mask = CalculateOptionsMask(cert_error, hard_override_disabled,
+                                          ssl_info.is_fatal_cert_error,
+                                          expired_previous_decision);
 
   SSLErrorHandler* error_handler = new SSLErrorHandler(
       std::unique_ptr<SSLErrorHandler::Delegate>(
           new SSLErrorHandlerDelegateImpl(
               web_contents, ssl_info, profile, cert_error, options_mask,
-              is_superfish, request_url, std::move(ssl_cert_reporter),
-              decision_callback, std::move(blocking_page_ready_callback))),
+              request_url, std::move(ssl_cert_reporter), decision_callback,
+              std::move(blocking_page_ready_callback))),
       web_contents, profile, cert_error, ssl_info, request_url,
       decision_callback);
   web_contents->SetUserData(UserDataKey(), base::WrapUnique(error_handler));
@@ -726,6 +704,7 @@ bool SSLErrorHandler::IsTimerRunningForTesting() const {
   return timer_.IsRunning();
 }
 
+// static
 void SSLErrorHandler::SetErrorAssistantProto(
     std::unique_ptr<chrome_browser_ssl::SSLErrorAssistantConfig> config_proto) {
   g_config.Pointer()->SetErrorAssistantProto(std::move(config_proto));
@@ -1083,11 +1062,10 @@ bool SSLErrorHandler::IsOnlyCertError(
 int SSLErrorHandler::CalculateOptionsMask(int cert_error,
                                           bool hard_override_disabled,
                                           bool should_ssl_errors_be_fatal,
-                                          bool is_superfish,
                                           bool expired_previous_decision) {
   int options_mask = 0;
   if (!IsCertErrorFatal(cert_error) && !hard_override_disabled &&
-      !should_ssl_errors_be_fatal && !is_superfish) {
+      !should_ssl_errors_be_fatal) {
     options_mask |= security_interstitials::SSLErrorUI::SOFT_OVERRIDE_ENABLED;
   }
   if (hard_override_disabled) {
@@ -1102,3 +1080,5 @@ int SSLErrorHandler::CalculateOptionsMask(int cert_error,
   }
   return options_mask;
 }
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(SSLErrorHandler)

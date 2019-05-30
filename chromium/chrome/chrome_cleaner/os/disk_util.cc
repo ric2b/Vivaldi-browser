@@ -18,9 +18,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/md5.h"
 #include "base/path_service.h"
-#include "base/sha1.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -64,9 +62,12 @@ const wchar_t kWindowsCurrentVersionRegKeyName[] =
 // "C:\Program Files\Common Files\".
 const wchar_t kCommonProgramW6432[] = L"%CommonProgramW6432%";
 
-const wchar_t* company_white_list[] = {
-    L"Google Inc", L"Google Inc.", L"Intel Corporation",
-    L"Microsoft Corporation",
+constexpr const base::char16* kCompanyIgnoredReportingList[] = {
+    STRING16_LITERAL("Google LLC"),
+    STRING16_LITERAL("Google Inc"),
+    STRING16_LITERAL("Google Inc."),
+    STRING16_LITERAL("Intel Corporation"),
+    STRING16_LITERAL("Microsoft Corporation"),
 };
 
 // Built from various sources to try and include all the extensions that are
@@ -477,7 +478,7 @@ base::string16 FileInformationToString(
   AppendFileInformationField(
       L"digest", base::UTF8ToUTF16(file_information.sha256), &content);
   AppendFileInformationField(
-      L"size", base::Int64ToString16(file_information.size), &content);
+      L"size", base::NumberToString16(file_information.size), &content);
   AppendFileInformationField(L"company_name", file_information.company_name,
                              &content);
   AppendFileInformationField(L"company_short_name",
@@ -501,40 +502,34 @@ base::string16 FileInformationToString(
   return content;
 }
 
-bool IsExecutableOnDefaultReportingWhiteList(const base::FilePath& file_path) {
+bool IsCompanyOnIgnoredReportingList(const base::string16& company_name) {
+  return base::ContainsValue(kCompanyIgnoredReportingList, company_name);
+}
+
+bool IsExecutableOnIgnoredReportingList(const base::FilePath& file_path) {
   std::unique_ptr<FileVersionInfo> file_information(
       FileVersionInfo::CreateFileVersionInfo(file_path));
-  if (!file_information)
-    return false;
-
-  bool white_listed = false;
-  base::string16 company_name = file_information->company_name();
-  for (const base::string16& white_listed_name : company_white_list) {
-    if (company_name.compare(white_listed_name) == 0) {
-      white_listed = true;
-      break;
-    }
-  }
-  return white_listed;
+  return file_information &&
+         IsCompanyOnIgnoredReportingList(file_information->company_name());
 }
 
 bool RetrieveDetailedFileInformation(
     const base::FilePath& file_path,
     internal::FileInformation* file_information,
-    bool* white_listed,
-    ReportingWhiteListCallback white_list_callback) {
+    bool* ignored_reporting,
+    IgnoredReportingCallback ignored_reporting_callback) {
   DCHECK(file_information);
-  DCHECK(white_listed);
+  DCHECK(ignored_reporting);
 
   base::FilePath expanded_path;
   if (!TryToExpandPath(file_path, &expanded_path))
     return false;
 
-  if (std::move(white_list_callback).Run(file_path)) {
-    *white_listed = true;
+  if (std::move(ignored_reporting_callback).Run(file_path)) {
+    *ignored_reporting = true;
     return false;
   }
-  *white_listed = false;
+  *ignored_reporting = false;
 
   // Retrieve the basic file information.
   RetrievePathInformation(expanded_path, file_information);
@@ -578,9 +573,9 @@ bool RetrieveFileInformation(const base::FilePath& file_path,
                              bool include_details,
                              internal::FileInformation* file_information) {
   if (include_details) {
-    bool whitelisted_unused = false;
+    bool ignored_reporting_unused = false;
     return RetrieveDetailedFileInformation(file_path, file_information,
-                                           &whitelisted_unused);
+                                           &ignored_reporting_unused);
   } else {
     return RetrieveBasicFileInformation(file_path, file_information);
   }
@@ -590,7 +585,8 @@ bool ComputeSHA256DigestOfPath(const base::FilePath& path,
                                std::string* digest) {
   DCHECK(digest);
 
-  base::File file(path, base::File::FLAG_OPEN | base::File::FLAG_READ);
+  base::File file(path, base::File::FLAG_OPEN | base::File::FLAG_READ |
+                            base::File::FLAG_SHARE_DELETE);
   if (!file.IsValid())
     return false;
 

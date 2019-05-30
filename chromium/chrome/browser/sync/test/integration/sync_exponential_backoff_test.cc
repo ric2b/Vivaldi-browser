@@ -11,6 +11,8 @@
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
 #include "components/browser_sync/profile_sync_service.h"
+#include "components/sync/test/fake_server/fake_server_http_post_provider.h"
+#include "content/public/test/network_connection_change_simulator.h"
 #include "net/base/network_change_notifier.h"
 
 namespace {
@@ -73,7 +75,7 @@ IN_PROC_BROWSER_TEST_F(SyncExponentialBackoffTest, OfflineToOnline) {
   ASSERT_TRUE(AddFolder(0, 0, "folder1"));
   ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
 
-  GetFakeServer()->DisableNetwork();
+  fake_server::FakeServerHttpPostProvider::DisableNetwork();
 
   // Add a new item to trigger another sync cycle.
   ASSERT_TRUE(AddFolder(0, 0, "folder2"));
@@ -84,9 +86,10 @@ IN_PROC_BROWSER_TEST_F(SyncExponentialBackoffTest, OfflineToOnline) {
 
   // Trigger network change notification and remember time when it happened.
   // Ensure that scheduler runs canary job immediately.
-  GetFakeServer()->EnableNetwork();
-  net::NetworkChangeNotifier::NotifyObserversOfNetworkChangeForTests(
-      net::NetworkChangeNotifier::CONNECTION_ETHERNET);
+  fake_server::FakeServerHttpPostProvider::EnableNetwork();
+  content::NetworkConnectionChangeSimulator connection_change_simulator;
+  connection_change_simulator.SetConnectionType(
+      network::mojom::ConnectionType::CONNECTION_ETHERNET);
 
   base::Time network_notification_time = base::Time::Now();
 
@@ -100,6 +103,40 @@ IN_PROC_BROWSER_TEST_F(SyncExponentialBackoffTest, OfflineToOnline) {
       GetSyncService(0)->GetLastCycleSnapshot().sync_start_time() -
       network_notification_time;
   ASSERT_LE(recovery_time, base::TimeDelta::FromSeconds(2));
+}
+
+IN_PROC_BROWSER_TEST_F(SyncExponentialBackoffTest, ServerRedirect) {
+  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+
+  // Add an item and ensure that sync is successful.
+  ASSERT_TRUE(AddFolder(0, 0, "folder1"));
+  ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
+
+  GetFakeServer()->SetHttpError(net::HTTP_USE_PROXY);
+
+  // Add a new item to trigger another sync cycle.
+  ASSERT_TRUE(AddFolder(0, 0, "folder2"));
+
+  // Verify that the client goes into exponential backoff while it is unable to
+  // reach the sync server.
+  ASSERT_TRUE(ExponentialBackoffChecker(GetSyncService(0)).Wait());
+}
+
+IN_PROC_BROWSER_TEST_F(SyncExponentialBackoffTest, InternalServerError) {
+  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+
+  // Add an item and ensure that sync is successful.
+  ASSERT_TRUE(AddFolder(0, 0, "folder1"));
+  ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
+
+  GetFakeServer()->SetHttpError(net::HTTP_INTERNAL_SERVER_ERROR);
+
+  // Add a new item to trigger another sync cycle.
+  ASSERT_TRUE(AddFolder(0, 0, "folder2"));
+
+  // Verify that the client goes into exponential backoff while it is unable to
+  // reach the sync server.
+  ASSERT_TRUE(ExponentialBackoffChecker(GetSyncService(0)).Wait());
 }
 
 IN_PROC_BROWSER_TEST_F(SyncExponentialBackoffTest, TransientErrorTest) {

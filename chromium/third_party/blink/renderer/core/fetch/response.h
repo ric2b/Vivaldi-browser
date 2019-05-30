@@ -36,16 +36,15 @@ class CORE_EXPORT Response final : public Body {
   static Response* Create(ScriptState*, ExceptionState&);
   static Response* Create(ScriptState*,
                           ScriptValue body,
-                          const ResponseInit&,
+                          const ResponseInit*,
                           ExceptionState&);
 
   static Response* Create(ScriptState*,
                           BodyStreamBuffer*,
                           const String& content_type,
-                          const ResponseInit&,
+                          const ResponseInit*,
                           ExceptionState&);
   static Response* Create(ExecutionContext*, FetchResponseData*);
-  static Response* Create(ScriptState*, const WebServiceWorkerResponse&);
   static Response* Create(ScriptState*, mojom::blink::FetchAPIResponse&);
 
   static Response* CreateClone(const Response&);
@@ -53,8 +52,12 @@ class CORE_EXPORT Response final : public Body {
   static Response* error(ScriptState*);
   static Response* redirect(ScriptState*,
                             const String& url,
-                            unsigned short status,
+                            uint16_t status,
                             ExceptionState&);
+
+  explicit Response(ExecutionContext*);
+  Response(ExecutionContext*, FetchResponseData*);
+  Response(ExecutionContext*, FetchResponseData*, Headers*);
 
   const FetchResponseData* GetResponse() const { return response_; }
 
@@ -62,7 +65,7 @@ class CORE_EXPORT Response final : public Body {
   String type() const;
   String url() const;
   bool redirected() const;
-  unsigned short status() const;
+  uint16_t status() const;
   bool ok() const;
   String statusText() const;
   Headers* headers() const;
@@ -106,13 +109,9 @@ class CORE_EXPORT Response final : public Body {
  protected:
   // A version of IsBodyUsed() which catches exceptions and returns
   // false. Should never be used outside DCHECK().
-  bool IsBodyUsedForDCheck() override;
+  bool IsBodyUsedForDCheck(ExceptionState&) override;
 
  private:
-  explicit Response(ExecutionContext*);
-  Response(ExecutionContext*, FetchResponseData*);
-  Response(ExecutionContext*, FetchResponseData*, Headers*);
-
   const TraceWrapperMember<FetchResponseData> response_;
   const Member<Headers> headers_;
   DISALLOW_COPY_AND_ASSIGN(Response);

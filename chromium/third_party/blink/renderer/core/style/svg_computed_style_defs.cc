@@ -46,7 +46,7 @@ bool SVGPaint::operator==(const SVGPaint& other) const {
          DataEquivalent(resource, other.resource);
 }
 
-const String& SVGPaint::GetUrl() const {
+const AtomicString& SVGPaint::GetUrl() const {
   return Resource()->Url();
 }
 
@@ -93,34 +93,41 @@ bool StyleStrokeData::operator==(const StyleStrokeData& other) const {
 }
 
 StyleStopData::StyleStopData()
-    : opacity(SVGComputedStyle::InitialStopOpacity()),
-      color(SVGComputedStyle::InitialStopColor()) {}
+    : color(SVGComputedStyle::InitialStopColor()),
+      opacity(SVGComputedStyle::InitialStopOpacity()) {}
 
 StyleStopData::StyleStopData(const StyleStopData& other)
-    : RefCounted<StyleStopData>(), opacity(other.opacity), color(other.color) {}
+    : RefCounted<StyleStopData>(), color(other.color), opacity(other.opacity) {}
 
 bool StyleStopData::operator==(const StyleStopData& other) const {
   return color == other.color && opacity == other.opacity;
 }
 
 StyleMiscData::StyleMiscData()
-    : flood_color(SVGComputedStyle::InitialFloodColor()),
-      flood_opacity(SVGComputedStyle::InitialFloodOpacity()),
+    : baseline_shift_value(SVGComputedStyle::InitialBaselineShiftValue()),
+      flood_color(SVGComputedStyle::InitialFloodColor()),
       lighting_color(SVGComputedStyle::InitialLightingColor()),
-      baseline_shift_value(SVGComputedStyle::InitialBaselineShiftValue()) {}
+      flood_opacity(SVGComputedStyle::InitialFloodOpacity()),
+      flood_color_is_current_color(false),
+      lighting_color_is_current_color(false) {}
 
 StyleMiscData::StyleMiscData(const StyleMiscData& other)
     : RefCounted<StyleMiscData>(),
+      baseline_shift_value(other.baseline_shift_value),
       flood_color(other.flood_color),
-      flood_opacity(other.flood_opacity),
       lighting_color(other.lighting_color),
-      baseline_shift_value(other.baseline_shift_value) {}
+      flood_opacity(other.flood_opacity),
+      flood_color_is_current_color(other.flood_color_is_current_color),
+      lighting_color_is_current_color(other.lighting_color_is_current_color) {}
 
 bool StyleMiscData::operator==(const StyleMiscData& other) const {
-  return flood_opacity == other.flood_opacity &&
-         flood_color == other.flood_color &&
+  return flood_color == other.flood_color &&
          lighting_color == other.lighting_color &&
-         baseline_shift_value == other.baseline_shift_value;
+         baseline_shift_value == other.baseline_shift_value &&
+         flood_opacity == other.flood_opacity &&
+         flood_color_is_current_color == other.flood_color_is_current_color &&
+         lighting_color_is_current_color ==
+             other.lighting_color_is_current_color;
 }
 
 StyleResourceData::StyleResourceData()

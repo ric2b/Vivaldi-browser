@@ -5,11 +5,14 @@
 #include "chrome/browser/task_manager/sampling/task_manager_impl.h"
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/adapters.h"
 #include "base/task/post_task.h"
@@ -34,7 +37,9 @@
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/memory_instrumentation.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/arc/process/arc_process_service.h"
 #include "chrome/browser/task_manager/providers/arc/arc_process_task_provider.h"
+#include "chrome/browser/task_manager/providers/crostini/crostini_process_task_provider.h"
 #include "components/arc/arc_util.h"
 #endif  // defined(OS_CHROMEOS)
 
@@ -87,6 +92,8 @@ TaskManagerImpl::TaskManagerImpl()
 #if defined(OS_CHROMEOS)
   if (arc::IsArcAvailable())
     task_providers_.emplace_back(new ArcProcessTaskProvider());
+  task_providers_.emplace_back(new CrostiniProcessTaskProvider());
+  arc_shared_sampler_ = std::make_unique<ArcSharedSampler>();
 #endif  // defined(OS_CHROMEOS)
 }
 
@@ -154,10 +161,6 @@ int64_t TaskManagerImpl::GetGpuMemoryUsage(TaskId task_id,
   return task_group->gpu_memory();
 }
 
-base::MemoryState TaskManagerImpl::GetMemoryState(TaskId task_id) const {
-  return GetTaskGroupByTaskId(task_id)->memory_state();
-}
-
 int TaskManagerImpl::GetIdleWakeupsPerSecond(TaskId task_id) const {
   return GetTaskGroupByTaskId(task_id)->idle_wakeups_per_second();
 }
@@ -205,11 +208,11 @@ void TaskManagerImpl::GetUSERHandles(TaskId task_id,
 }
 
 int TaskManagerImpl::GetOpenFdCount(TaskId task_id) const {
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_MACOSX)
   return GetTaskGroupByTaskId(task_id)->open_fd_count();
 #else
   return -1;
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_MACOSX)
 }
 
 bool TaskManagerImpl::IsTaskOnBackgroundedProcess(TaskId task_id) const {
@@ -332,7 +335,10 @@ const TaskIdList& TaskManagerImpl::GetTaskIdsList() const {
                              b->task_id());
     };
 
-    const size_t num_groups = task_groups_by_proc_id_.size();
+    const size_t num_groups =
+        task_groups_by_proc_id_.size() + arc_vm_task_groups_by_proc_id_.size();
+
+    // |task_groups_by_task_id_| contains all tasks, both VM and non-VM.
     const size_t num_tasks = task_groups_by_task_id_.size();
 
     // Populate |tasks_to_visit| with one task from each group.
@@ -354,6 +360,13 @@ const TaskIdList& TaskManagerImpl::GetTaskIdsList() const {
         else
           DCHECK(!group_task->HasParentTask());
       }
+    }
+
+    for (const auto& groups_pair : arc_vm_task_groups_by_proc_id_) {
+      const std::vector<Task*>& tasks = groups_pair.second->tasks();
+      Task* group_task =
+          *std::min_element(tasks.begin(), tasks.end(), comparator);
+      tasks_to_visit.push_back(group_task);
     }
 
     // Now sort |tasks_to_visit| in reverse order (putting the browser process
@@ -426,6 +439,10 @@ size_t TaskManagerImpl::GetNumberOfTasksOnSameProcess(TaskId task_id) const {
   return GetTaskGroupByTaskId(task_id)->num_tasks();
 }
 
+bool TaskManagerImpl::IsRunningInVM(TaskId task_id) const {
+  return GetTaskByTaskId(task_id)->IsRunningInVM();
+}
+
 TaskId TaskManagerImpl::GetTaskIdForWebContents(
     content::WebContents* web_contents) const {
   if (!web_contents)
@@ -442,12 +459,23 @@ void TaskManagerImpl::TaskAdded(Task* task) {
 
   const base::ProcessId proc_id = task->process_id();
   const TaskId task_id = task->task_id();
+  const bool is_running_in_vm = task->IsRunningInVM();
 
-  std::unique_ptr<TaskGroup>& task_group = task_groups_by_proc_id_[proc_id];
-  if (!task_group)
+  TaskManagerImpl::PidToTaskGroupMap& task_group_map =
+      is_running_in_vm ? arc_vm_task_groups_by_proc_id_
+                       : task_groups_by_proc_id_;
+
+  std::unique_ptr<TaskGroup>& task_group = task_group_map[proc_id];
+  if (!task_group) {
     task_group.reset(new TaskGroup(task->process_handle(), proc_id,
+                                   is_running_in_vm,
                                    on_background_data_ready_callback_,
                                    shared_sampler_, blocking_pool_runner_));
+#if defined(OS_CHROMEOS)
+    if (task->GetType() == Task::ARC)
+      task_group->SetArcSampler(arc_shared_sampler_.get());
+#endif
+  }
 
   task_group->AddTask(task);
 
@@ -464,8 +492,13 @@ void TaskManagerImpl::TaskRemoved(Task* task) {
 
   const base::ProcessId proc_id = task->process_id();
   const TaskId task_id = task->task_id();
+  const bool is_running_in_vm = task->IsRunningInVM();
 
-  DCHECK(task_groups_by_proc_id_.count(proc_id));
+  TaskManagerImpl::PidToTaskGroupMap& task_group_map =
+      is_running_in_vm ? arc_vm_task_groups_by_proc_id_
+                       : task_groups_by_proc_id_;
+
+  DCHECK(task_group_map.count(proc_id));
 
   NotifyObserversOnTaskToBeRemoved(task_id);
 
@@ -474,7 +507,7 @@ void TaskManagerImpl::TaskRemoved(Task* task) {
   task_groups_by_task_id_.erase(task_id);
 
   if (task_group->empty())
-    task_groups_by_proc_id_.erase(proc_id);  // Deletes |task_group|.
+    task_group_map.erase(proc_id);  // Deletes |task_group|.
 
   // Invalidate the cached sorted IDs by clearing the list.
   sorted_task_ids_.clear();
@@ -604,6 +637,18 @@ void TaskManagerImpl::Refresh() {
                                enabled_resources_flags());
   }
 
+  for (auto& groups_itr : arc_vm_task_groups_by_proc_id_) {
+    groups_itr.second->Refresh(gpu_memory_stats_, GetCurrentRefreshTime(),
+                               enabled_resources_flags());
+  }
+
+#if defined(OS_CHROMEOS)
+  if (TaskManagerObserver::IsResourceRefreshEnabled(
+          REFRESH_TYPE_MEMORY_FOOTPRINT, enabled_resources_flags())) {
+    arc_shared_sampler_->Refresh();
+  }
+#endif  // defined(OS_CHROMEOS)
+
   NotifyObserversOnRefresh(GetTaskIdsList());
 }
 
@@ -620,6 +665,9 @@ void TaskManagerImpl::StartUpdating() {
     io_thread_helper_manager_.reset(new IoThreadHelperManager(
         base::BindRepeating(&TaskManagerImpl::OnMultipleBytesTransferredUI)));
   }
+  // Kick off fetch of asynchronous data, e.g., memory footprint, so that it
+  // will be displayed sooner after opening the task manager.
+  Refresh();
 }
 
 void TaskManagerImpl::StopUpdating() {
@@ -634,6 +682,7 @@ void TaskManagerImpl::StopUpdating() {
     provider->ClearObserver();
 
   task_groups_by_proc_id_.clear();
+  arc_vm_task_groups_by_proc_id_.clear();
   task_groups_by_task_id_.clear();
   sorted_task_ids_.clear();
 }
@@ -674,17 +723,13 @@ Task* TaskManagerImpl::GetTaskByTaskId(TaskId task_id) const {
 }
 
 void TaskManagerImpl::OnTaskGroupBackgroundCalculationsDone() {
-  // TODO(afakhry): There should be a better way for doing this!
-  bool are_all_processes_data_ready = true;
   for (const auto& groups_itr : task_groups_by_proc_id_) {
-    are_all_processes_data_ready &=
-        groups_itr.second->AreBackgroundCalculationsDone();
+    if (!groups_itr.second->AreBackgroundCalculationsDone())
+      return;
   }
-  if (are_all_processes_data_ready) {
-    NotifyObserversOnRefreshWithBackgroundCalculations(GetTaskIdsList());
-    for (const auto& groups_itr : task_groups_by_proc_id_)
-      groups_itr.second->ClearCurrentBackgroundCalculationsFlags();
-  }
+  NotifyObserversOnRefreshWithBackgroundCalculations(GetTaskIdsList());
+  for (const auto& groups_itr : task_groups_by_proc_id_)
+    groups_itr.second->ClearCurrentBackgroundCalculationsFlags();
 }
 
 }  // namespace task_manager

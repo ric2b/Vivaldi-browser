@@ -54,8 +54,8 @@ class ExtensionViewHost
 
   // Handles keyboard events that were not handled by HandleKeyboardEvent().
   // Platform specific implementation may override this method to handle the
-  // event in platform specific way.
-  virtual void UnhandledKeyboardEvent(
+  // event in platform specific way. Returns whether the events are handled.
+  virtual bool UnhandledKeyboardEvent(
       content::WebContents* source,
       const content::NativeWebKeyboardEvent& event);
 
@@ -72,7 +72,7 @@ class ExtensionViewHost
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
       content::WebContents* source,
       const content::NativeWebKeyboardEvent& event) override;
-  void HandleKeyboardEvent(
+  bool HandleKeyboardEvent(
       content::WebContents* source,
       const content::NativeWebKeyboardEvent& event) override;
   bool PreHandleGestureEvent(content::WebContents* source,
@@ -83,7 +83,8 @@ class ExtensionViewHost
       const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions)
       override;
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
-                      const content::FileChooserParams& params) override;
+                      std::unique_ptr<content::FileSelectListener> listener,
+                      const blink::mojom::FileChooserParams& params) override;
   void ResizeDueToAutoResize(content::WebContents* source,
                              const gfx::Size& new_size) override;
 

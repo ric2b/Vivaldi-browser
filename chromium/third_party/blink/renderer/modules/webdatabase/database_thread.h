@@ -29,6 +29,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_WEBDATABASE_DATABASE_THREAD_H_
 
 #include <memory>
+#include "base/synchronization/waitable_event.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/web_thread_supporting_gc.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
@@ -40,11 +41,14 @@ class Database;
 class DatabaseTask;
 class SQLTransactionClient;
 class SQLTransactionCoordinator;
-class WaitableEvent;
 
 class DatabaseThread : public GarbageCollectedFinalized<DatabaseThread> {
  public:
-  static DatabaseThread* Create() { return new DatabaseThread; }
+  static DatabaseThread* Create() {
+    return MakeGarbageCollected<DatabaseThread>();
+  }
+
+  DatabaseThread();
   ~DatabaseThread();
   void Trace(blink::Visitor*);
 
@@ -69,8 +73,6 @@ class DatabaseThread : public GarbageCollectedFinalized<DatabaseThread> {
   }
 
  private:
-  DatabaseThread();
-
   void SetupDatabaseThread();
   void CleanupDatabaseThread();
   void CleanupDatabaseThreadCompleted();
@@ -84,7 +86,7 @@ class DatabaseThread : public GarbageCollectedFinalized<DatabaseThread> {
 
   std::unique_ptr<SQLTransactionClient> transaction_client_;
   CrossThreadPersistent<SQLTransactionCoordinator> transaction_coordinator_;
-  WaitableEvent* cleanup_sync_;
+  base::WaitableEvent* cleanup_sync_;
 
   Mutex termination_requested_mutex_;
   bool termination_requested_;

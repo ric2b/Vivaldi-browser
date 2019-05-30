@@ -4,23 +4,27 @@
 
 #include "services/media_session/media_session_service.h"
 
-#include "services/service_manager/public/cpp/service_context.h"
+#include "base/bind.h"
+#include "services/media_session/audio_focus_manager.h"
 
 namespace media_session {
 
-std::unique_ptr<service_manager::Service> MediaSessionService::Create() {
-  return std::make_unique<MediaSessionService>();
+MediaSessionService::MediaSessionService(
+    service_manager::mojom::ServiceRequest request)
+    : service_binding_(this, std::move(request)),
+      audio_focus_manager_(std::make_unique<AudioFocusManager>()) {
+  registry_.AddInterface(
+      base::BindRepeating(&AudioFocusManager::BindToInterface,
+                          base::Unretained(audio_focus_manager_.get())));
+  registry_.AddInterface(
+      base::BindRepeating(&AudioFocusManager::BindToDebugInterface,
+                          base::Unretained(audio_focus_manager_.get())));
+  registry_.AddInterface(
+      base::BindRepeating(&AudioFocusManager::BindToControllerManagerInterface,
+                          base::Unretained(audio_focus_manager_.get())));
 }
-
-MediaSessionService::MediaSessionService() = default;
 
 MediaSessionService::~MediaSessionService() = default;
-
-void MediaSessionService::OnStart() {
-  DLOG(ERROR) << "start";
-  ref_factory_.reset(new service_manager::ServiceContextRefFactory(
-      context()->CreateQuitClosure()));
-}
 
 void MediaSessionService::OnBindInterface(
     const service_manager::BindSourceInfo& source_info,

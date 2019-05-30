@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/debug/debugging_buildflags.h"
 #include "base/debug/profiler.h"
@@ -27,6 +28,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/search/search.h"
+#include "chrome/browser/send_tab_to_self/send_tab_to_self_util.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -35,7 +37,9 @@
 #include "chrome/browser/ui/global_error/global_error.h"
 #include "chrome/browser/ui/global_error/global_error_service.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
+#include "chrome/browser/ui/managed_ui.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/toolbar/app_menu_icon_controller.h"
 #include "chrome/browser/ui/toolbar/bookmark_sub_menu_model.h"
 #include "chrome/browser/ui/toolbar/recent_tabs_sub_menu_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
@@ -44,7 +48,6 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/profiling.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
@@ -53,6 +56,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/vector_icons/vector_icons.h"
 #include "components/zoom/zoom_controller.h"
 #include "components/zoom/zoom_event_manager.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -61,20 +65,24 @@
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/profiling.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/models/button_menu_item_model.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_elider.h"
+#include "ui/native_theme/native_theme.h"
 
 #if defined(GOOGLE_CHROME_BUILD)
 #include "base/feature_list.h"
 #endif
 
 #if defined(OS_CHROMEOS)
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #endif
 
 #if defined(OS_WIN)
@@ -110,8 +118,6 @@ base::string16 GetUpgradeDialogMenuItemName() {
 // Returns the appropriate menu label for the IDC_INSTALL_PWA command if
 // available.
 base::Optional<base::string16> GetInstallPWAAppMenuItemName(Browser* browser) {
-  if (!browser->tab_strip_model())
-    return base::nullopt;
   WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
   if (!web_contents)
@@ -224,15 +230,24 @@ void ToolsMenuModel::Build(Browser* browser) {
 ////////////////////////////////////////////////////////////////////////////////
 // AppMenuModel
 
-AppMenuModel::AppMenuModel(ui::AcceleratorProvider* provider, Browser* browser)
+// static
+const int AppMenuModel::kMinRecentTabsCommandId;
+// static
+const int AppMenuModel::kMaxRecentTabsCommandId;
+
+AppMenuModel::AppMenuModel(ui::AcceleratorProvider* provider,
+                           Browser* browser,
+                           AppMenuIconController* app_menu_icon_controller)
     : ui::SimpleMenuModel(this),
       uma_action_recorded_(false),
       provider_(provider),
-      browser_(browser) {}
+      browser_(browser),
+      app_menu_icon_controller_(app_menu_icon_controller) {
+  DCHECK(browser_);
+}
 
 AppMenuModel::~AppMenuModel() {
-  if (browser_)  // Null in Cocoa tests.
-    browser_->tab_strip_model()->RemoveObserver(this);
+  browser_->tab_strip_model()->RemoveObserver(this);
 }
 
 void AppMenuModel::Init() {
@@ -286,6 +301,7 @@ base::string16 AppMenuModel::GetLabelForCommandId(int command_id) const {
     case IDC_INSTALL_PWA:
       return GetInstallPWAAppMenuItemName(browser_).value();
     case IDC_UPGRADE_DIALOG:
+      DCHECK(browser_defaults::kShowUpgradeMenuItem);
       return GetUpgradeDialogMenuItemName();
     default:
       NOTREACHED();
@@ -294,8 +310,8 @@ base::string16 AppMenuModel::GetLabelForCommandId(int command_id) const {
 }
 
 bool AppMenuModel::GetIconForCommandId(int command_id, gfx::Image* icon) const {
-  if (command_id == IDC_UPGRADE_DIALOG &&
-      UpgradeDetector::GetInstance()->notify_upgrade()) {
+  if (command_id == IDC_UPGRADE_DIALOG) {
+    DCHECK(browser_defaults::kShowUpgradeMenuItem);
     *icon = UpgradeDetector::GetInstance()->GetIcon();
     return true;
   }
@@ -534,7 +550,7 @@ void AppMenuModel::LogMenuMetrics(int command_id) {
       }
       LogMenuAction(MENU_ACTION_SHOW_DOWNLOADS);
       break;
-    case IDC_SHOW_SYNC_SETUP:
+    case IDC_SHOW_SIGNIN:
       if (!uma_action_recorded_) {
         UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.ShowSyncSetup",
                                    delta);
@@ -625,7 +641,7 @@ bool AppMenuModel::IsCommandIdChecked(int command_id) const {
         bookmarks::prefs::kShowBookmarkBar);
   }
   if (command_id == IDC_PROFILING_ENABLED)
-    return Profiling::BeingProfiled();
+    return content::Profiling::BeingProfiled();
   if (command_id == IDC_TOGGLE_REQUEST_TABLET_SITE)
     return chrome::IsRequestingTabletSite(browser_);
 
@@ -649,9 +665,12 @@ bool AppMenuModel::IsCommandIdVisible(int command_id) const {
 #endif
     case IDC_PIN_TO_START_SCREEN:
       return false;
-    case IDC_UPGRADE_DIALOG:
-      return browser_defaults::kShowUpgradeMenuItem &&
-          UpgradeDetector::GetInstance()->notify_upgrade();
+    case IDC_UPGRADE_DIALOG: {
+      if (!browser_defaults::kShowUpgradeMenuItem || !app_menu_icon_controller_)
+        return false;
+      return app_menu_icon_controller_->GetTypeAndSeverity().type ==
+             AppMenuIconController::IconType::UPGRADE_NOTIFICATION;
+    }
 #if !defined(OS_LINUX) || defined(USE_AURA)
     case IDC_BOOKMARK_PAGE:
       return !chrome::ShouldRemoveBookmarkThisPageUI(browser_->profile());
@@ -669,20 +688,18 @@ bool AppMenuModel::GetAcceleratorForCommandId(
   return provider_->GetAcceleratorForCommandId(command_id, accelerator);
 }
 
-void AppMenuModel::ActiveTabChanged(WebContents* old_contents,
-                                    WebContents* new_contents,
-                                    int index,
-                                    int reason) {
-  // The user has switched between tabs and the new tab may have a different
-  // zoom setting.
-  UpdateZoomControls();
-}
+void AppMenuModel::OnTabStripModelChanged(
+    TabStripModel* tab_strip_model,
+    const TabStripModelChange& change,
+    const TabStripSelectionChange& selection) {
+  if (tab_strip_model->empty())
+    return;
 
-void AppMenuModel::TabReplacedAt(TabStripModel* tab_strip_model,
-                                 WebContents* old_contents,
-                                 WebContents* new_contents,
-                                 int index) {
-  UpdateZoomControls();
+  if (selection.active_tab_changed()) {
+    // The user has switched between tabs and the new tab may have a different
+    // zoom setting. Or web contents for a tab has been replaced.
+    UpdateZoomControls();
+  }
 }
 
 void AppMenuModel::Observe(int type,
@@ -747,6 +764,11 @@ void AppMenuModel::Build() {
     AddItemWithStringId(IDC_ROUTE_MEDIA, IDS_MEDIA_ROUTER_MENU_ITEM_TITLE);
 
   AddItemWithStringId(IDC_FIND, IDS_FIND);
+
+  if (send_tab_to_self::ShouldOfferFeature(browser_)) {
+    AddItemWithStringId(IDC_SEND_TO_MY_DEVICES, IDS_SEND_TO_MY_DEVICES);
+  }
+
   if (extensions::util::IsNewBookmarkAppsEnabled() &&
       banners::AppBannerManager::IsExperimentalAppBannersEnabled()) {
     const extensions::Extension* pwa =
@@ -800,6 +822,22 @@ void AppMenuModel::Build() {
     AddSeparator(ui::NORMAL_SEPARATOR);
     AddItemWithStringId(IDC_EXIT, IDS_EXIT);
   }
+
+  // On Chrome OS, similar UI is displayed in the system tray menu, instead of
+  // this menu.
+#if !defined(OS_CHROMEOS)
+  if (chrome::ShouldDisplayManagedUi(browser_->profile())) {
+    AddSeparator(ui::LOWER_SEPARATOR);
+    const int kIconSize = 18;
+    SkColor color = ui::NativeTheme::GetInstanceForNativeUi()->GetSystemColor(
+        ui::NativeTheme::kColorId_HighlightedMenuItemForegroundColor);
+    const auto icon =
+        gfx::CreateVectorIcon(vector_icons::kBusinessIcon, kIconSize, color);
+    AddHighlightedItemWithStringIdAndIcon(IDC_SHOW_MANAGEMENT_PAGE,
+                                          IDS_MANAGED_BY_ORG, icon);
+  }
+#endif  // !defined(OS_CHROMEOS)
+
   uma_action_recorded_ = false;
 }
 
@@ -851,14 +889,11 @@ void AppMenuModel::CreateZoomMenu() {
 }
 
 void AppMenuModel::UpdateZoomControls() {
-  int zoom_percent = 100;
-  if (browser_->tab_strip_model() &&
-      browser_->tab_strip_model()->GetActiveWebContents()) {
-    zoom_percent = zoom::ZoomController::FromWebContents(
-                       browser_->tab_strip_model()->GetActiveWebContents())
-                       ->GetZoomPercent();
-  }
-  zoom_label_ = base::FormatPercent(zoom_percent);
+  WebContents* contents = browser_->tab_strip_model()->GetActiveWebContents();
+  zoom_label_ = base::FormatPercent(
+      contents
+          ? zoom::ZoomController::FromWebContents(contents)->GetZoomPercent()
+          : 100);
 }
 
 bool AppMenuModel::ShouldShowNewIncognitoWindowMenuItem() {
@@ -877,8 +912,7 @@ bool AppMenuModel::AddGlobalErrorMenuItems() {
   const GlobalErrorService::GlobalErrorList& errors =
       GlobalErrorServiceFactory::GetForProfile(browser_->profile())->errors();
   bool menu_items_added = false;
-  for (GlobalErrorService::GlobalErrorList::const_iterator it = errors.begin();
-       it != errors.end(); ++it) {
+  for (auto it = errors.begin(); it != errors.end(); ++it) {
     GlobalError* error = *it;
     DCHECK(error);
     if (error->HasMenuItem()) {

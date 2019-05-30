@@ -5,13 +5,12 @@
 package org.chromium.chrome.browser.init;
 
 import android.annotation.TargetApi;
-import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.SystemClock;
 import android.support.annotation.WorkerThread;
-import android.view.View;
+import android.text.format.DateUtils;
 import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.view.inputmethod.InputMethodSubtype;
@@ -19,7 +18,6 @@ import android.view.inputmethod.InputMethodSubtype;
 import com.google.ipc.invalidation.external.client.android.service.AndroidLogger;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.AsyncTask;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -28,6 +26,10 @@ import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.task.AsyncTask;
+import org.chromium.base.task.BackgroundOnlyAsyncTask;
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.build.BuildHooksAndroid;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.AfterStartupTaskUtils;
@@ -49,13 +51,13 @@ import org.chromium.chrome.browser.download.DownloadManagerService;
 import org.chromium.chrome.browser.firstrun.ForcedSigninProcessor;
 import org.chromium.chrome.browser.identity.UniqueIdentificationGeneratorFactory;
 import org.chromium.chrome.browser.identity.UuidBasedUniqueIdentificationGenerator;
+import org.chromium.chrome.browser.incognito.IncognitoTabLauncher;
 import org.chromium.chrome.browser.invalidation.UniqueIdInvalidationClientNameGenerator;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.media.MediaCaptureNotificationService;
 import org.chromium.chrome.browser.media.MediaViewerUtils;
 import org.chromium.chrome.browser.metrics.LaunchMetrics;
 import org.chromium.chrome.browser.metrics.PackageMetrics;
-import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.notifications.channels.ChannelsUpdater;
 import org.chromium.chrome.browser.ntp.NewTabPage;
@@ -74,9 +76,11 @@ import org.chromium.chrome.browser.util.ConversionUtils;
 import org.chromium.chrome.browser.webapps.WebApkVersionManager;
 import org.chromium.chrome.browser.webapps.WebappRegistry;
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
+import org.chromium.components.download.DownloadCollectionBridge;
 import org.chromium.components.minidump_uploader.CrashFileManager;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountsChangeObserver;
+import org.chromium.content_public.browser.BrowserTaskExecutor;
 import org.chromium.content_public.browser.ChildProcessLauncherHelper;
 import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.printing.PrintDocumentAdapterWrapper;
@@ -91,7 +95,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Handles the initialization dependences of the browser process.  This is meant to handle the
@@ -136,33 +139,22 @@ public class ProcessInitializationHandler {
      * startup.
      */
     public final void initializePreNative() {
-        ThreadUtils.checkUiThread();
-        if (mInitializedPreNative) return;
-        handlePreNativeInitialization();
-        mInitializedPreNative = true;
+        try (TraceEvent e =
+                        TraceEvent.scoped("ProcessInitializationHandler.initializePreNative()")) {
+            ThreadUtils.checkUiThread();
+            if (mInitializedPreNative) return;
+            handlePreNativeInitialization();
+            mInitializedPreNative = true;
+        }
     }
 
     /**
      * Performs the shared class initialization.
      */
     protected void handlePreNativeInitialization() {
+        BrowserTaskExecutor.register();
+
         Context application = ContextUtils.getApplicationContext();
-
-        UiUtils.setKeyboardShowingDelegate(new UiUtils.KeyboardShowingDelegate() {
-            @Override
-            public boolean disableKeyboardCheck(Context context, View view) {
-                Activity activity = null;
-                if (context instanceof Activity) {
-                    activity = (Activity) context;
-                } else if (view != null && view.getContext() instanceof Activity) {
-                    activity = (Activity) view.getContext();
-                }
-
-                // For multiwindow mode we do not track keyboard visibility.
-                return activity != null
-                        && MultiWindowUtils.getInstance().isLegacyMultiWindow(activity);
-            }
-        });
 
         // Initialize the AccountManagerFacade with the correct AccountManagerDelegate. Must be done
         // only once and before AccountMangerHelper.get(...) is called to avoid using the
@@ -185,6 +177,11 @@ public class ProcessInitializationHandler {
         UniqueIdentificationGeneratorFactory.registerGenerator(SyncController.GENERATOR_ID,
                 new UuidBasedUniqueIdentificationGenerator(
                         application, SESSIONS_UUID_PREF_KEY), false);
+
+        // Set up the DownloadCollectionBridge early as display names may be immediately retrieved
+        // after native is loaded.
+        DownloadCollectionBridge.setDownloadCollectionBridge(
+                AppHooks.get().getDownloadCollectionBridge());
     }
 
     /**
@@ -239,25 +236,25 @@ public class ProcessInitializationHandler {
             });
         }
 
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.NEW_CONTACTS_PICKER)) {
-            UiUtils.setContactsPickerDelegate(new UiUtils.ContactsPickerDelegate() {
-                private ContactsPickerDialog mDialog;
+        UiUtils.setContactsPickerDelegate(new UiUtils.ContactsPickerDelegate() {
+            private ContactsPickerDialog mDialog;
 
-                @Override
-                public void showContactsPicker(Context context, ContactsPickerListener listener,
-                        boolean allowMultiple, List<String> mimeTypes) {
-                    mDialog = new ContactsPickerDialog(context, listener, allowMultiple, mimeTypes);
-                    mDialog.getWindow().getAttributes().windowAnimations =
-                            R.style.PickerDialogAnimation;
-                    mDialog.show();
-                }
+            @Override
+            public void showContactsPicker(Context context, ContactsPickerListener listener,
+                    boolean allowMultiple, boolean includeNames, boolean includeEmails,
+                    boolean includeTel, String formattedOrigin) {
+                mDialog = new ContactsPickerDialog(context, listener, allowMultiple, includeNames,
+                        includeEmails, includeTel, formattedOrigin);
+                mDialog.getWindow().getAttributes().windowAnimations =
+                        R.style.PickerDialogAnimation;
+                mDialog.show();
+            }
 
-                @Override
-                public void onContactsPickerDismissed() {
-                    mDialog = null;
-                }
-            });
-        }
+            @Override
+            public void onContactsPickerDismissed() {
+                mDialog = null;
+            }
+        });
 
         SearchWidgetProvider.initialize();
     }
@@ -421,38 +418,34 @@ public class ProcessInitializationHandler {
             }
         });
 
-        deferredStartupHandler.addDeferredTask(new Runnable() {
-            @Override
-            public void run() {
-                BackgroundTaskSchedulerFactory.getScheduler().checkForOSUpgrade(application);
-            }
-        });
-
-        deferredStartupHandler.addDeferredTask(new Runnable() {
-            @Override
-            public void run() {
-                logEGLShaderCacheSizeHistogram();
-            }
-        });
+        deferredStartupHandler.addDeferredTask(
+                () -> BackgroundTaskSchedulerFactory.getScheduler().checkForOSUpgrade(application));
 
         deferredStartupHandler.addDeferredTask(
-                () -> { BuildHooksAndroid.maybeRecordResourceMetrics(); });
+                ProcessInitializationHandler::logEGLShaderCacheSizeHistogram);
 
-        deferredStartupHandler.addDeferredTask(() -> {
-            MediaViewerUtils.updateMediaLauncherActivityEnabled(
-                    ContextUtils.getApplicationContext());
-        });
+        deferredStartupHandler.addDeferredTask(
+                BuildHooksAndroid::maybeRecordResourceMetrics);
+
+        deferredStartupHandler.addDeferredTask(
+                () -> MediaViewerUtils.updateMediaLauncherActivityEnabled(application));
+
+        deferredStartupHandler.addDeferredTask(
+                ChromeApplication.getComponent().resolveTwaClearDataDialogRecorder()
+                        ::makeDeferredRecordings);
+
+        deferredStartupHandler.addDeferredTask(
+                () ->  IncognitoTabLauncher.updateComponentEnabledState(application));
     }
 
     private void initChannelsAsync() {
-        new AsyncTask<Void>() {
+        new BackgroundOnlyAsyncTask<Void>() {
             @Override
             protected Void doInBackground() {
                 ChannelsUpdater.getInstance().updateChannels();
                 return null;
             }
-        }
-                .executeOnExecutor(AsyncTask.SERIAL_EXECUTOR);
+        }.executeOnExecutor(AsyncTask.SERIAL_EXECUTOR);
     }
 
     private void initAsyncDiskTask(final Context context) {
@@ -513,7 +506,7 @@ public class ProcessInitializationHandler {
 
                 RecordHistogram.recordLongTimesHistogram(
                         "UMA.Debug.EnableCrashUpload.DeferredStartUpAsyncTaskDuration",
-                        SystemClock.uptimeMillis() - mAsyncTaskStartTime, TimeUnit.MILLISECONDS);
+                        SystemClock.uptimeMillis() - mAsyncTaskStartTime);
             }
 
             /**
@@ -628,7 +621,7 @@ public class ProcessInitializationHandler {
                 if (!CrashFileManager.isMinidumpSansLogcat(minidump.getName())) return false;
 
                 long ageInMillis = new Date().getTime() - minidump.lastModified();
-                long ageInHours = TimeUnit.HOURS.convert(ageInMillis, TimeUnit.MILLISECONDS);
+                long ageInHours = ageInMillis / DateUtils.HOUR_IN_MILLIS;
                 return ageInHours < LOGCAT_RELEVANCE_THRESHOLD_IN_HOURS;
             }
         }
@@ -698,40 +691,35 @@ public class ProcessInitializationHandler {
                 ContextUtils.getApplicationContext().createDeviceProtectedStorageContext();
 
         // Must log async, as we're doing a file access.
-        new AsyncTask<Void>() {
+        PostTask.postTask(TaskTraits.BEST_EFFORT_MAY_BLOCK, () -> {
             // Record file sizes between 1-2560KB. Expected range is 1-2048KB, so this gives
             // us a bit of buffer. These values cannot be changed, as doing so will alter
             // histogram bucketing and confuse the dashboard.
-            private static final int MIN_CACHE_FILE_SIZE_KB = 1;
-            private static final int MAX_CACHE_FILE_SIZE_KB = 2560;
+            final int minCacheFileSizeKb = 1;
+            final int maxCacheFileSizeKb = 2560;
 
-            @Override
-            protected Void doInBackground() {
-                File codeCacheDir = cacheContext.getCodeCacheDir();
-                if (codeCacheDir == null) {
-                    return null;
-                }
-                // This filename is defined in core/java/android/view/HardwareRenderer.java,
-                // and has been located in the codeCacheDir since Android M.
-                File cacheFile = new File(codeCacheDir, "com.android.opengl.shaders_cache");
-                if (!cacheFile.exists()) {
-                    return null;
-                }
-                long cacheFileSizeKb = ConversionUtils.bytesToKilobytes(cacheFile.length());
-                // Clamp size to [minFileSizeKb, maxFileSizeKb). This also guarantees that the
-                // int-cast below is safe.
-                if (cacheFileSizeKb < MIN_CACHE_FILE_SIZE_KB) {
-                    cacheFileSizeKb = MIN_CACHE_FILE_SIZE_KB;
-                }
-                if (cacheFileSizeKb >= MAX_CACHE_FILE_SIZE_KB) {
-                    cacheFileSizeKb = MAX_CACHE_FILE_SIZE_KB - 1;
-                }
-                String histogramName = "Memory.Experimental.Browser.EGLShaderCacheSize.Android";
-                RecordHistogram.recordCustomCountHistogram(histogramName, (int) cacheFileSizeKb,
-                        MIN_CACHE_FILE_SIZE_KB, MAX_CACHE_FILE_SIZE_KB, 50);
-                return null;
+            File codeCacheDir = cacheContext.getCodeCacheDir();
+            if (codeCacheDir == null) {
+                return;
             }
-        }
-                .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+            // This filename is defined in core/java/android/view/HardwareRenderer.java,
+            // and has been located in the codeCacheDir since Android M.
+            File cacheFile = new File(codeCacheDir, "com.android.opengl.shaders_cache");
+            if (!cacheFile.exists()) {
+                return;
+            }
+            long cacheFileSizeKb = ConversionUtils.bytesToKilobytes(cacheFile.length());
+            // Clamp size to [minFileSizeKb, maxFileSizeKb). This also guarantees that the
+            // int-cast below is safe.
+            if (cacheFileSizeKb < minCacheFileSizeKb) {
+                cacheFileSizeKb = minCacheFileSizeKb;
+            }
+            if (cacheFileSizeKb >= maxCacheFileSizeKb) {
+                cacheFileSizeKb = maxCacheFileSizeKb - 1;
+            }
+            String histogramName = "Memory.Experimental.Browser.EGLShaderCacheSize.Android";
+            RecordHistogram.recordCustomCountHistogram(histogramName, (int) cacheFileSizeKb,
+                    minCacheFileSizeKb, maxCacheFileSizeKb, 50);
+        });
     }
 }

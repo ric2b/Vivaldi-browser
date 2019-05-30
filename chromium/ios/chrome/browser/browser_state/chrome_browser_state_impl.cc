@@ -33,6 +33,7 @@
 #include "ios/chrome/browser/prefs/ios_chrome_pref_service_factory.h"
 #include "ios/chrome/browser/signin/identity_service_creator.h"
 #include "ios/web/public/web_thread.h"
+#include "services/identity/public/mojom/constants.mojom.h"
 
 namespace {
 
@@ -66,6 +67,9 @@ bool EnsureBrowserStateDirectoriesCreated(const base::FilePath& path,
 base::FilePath GetCachePath(const base::FilePath& base) {
   return base.Append(kIOSChromeCacheDirname);
 }
+
+const base::FilePath::CharType kIOSChromeChannelIDFilename[] =
+    FILE_PATH_LITERAL("Origin Bound Certs");
 
 }  // namespace
 
@@ -108,15 +112,20 @@ ChromeBrowserStateImpl::ChromeBrowserStateImpl(
       this);
 
   base::FilePath cookie_path = state_path_.Append(kIOSChromeCookieFilename);
-  base::FilePath channel_id_path =
-      state_path_.Append(kIOSChromeChannelIDFilename);
   base::FilePath cache_path = GetCachePath(base_cache_path);
   int cache_max_size = 0;
 
+  // TODO(crbug.com/903642): Remove the following when no longer needed.
+  base::FilePath channel_id_path =
+      state_path_.Append(kIOSChromeChannelIDFilename);
+  base::DeleteFile(channel_id_path, false);
+  base::DeleteFile(
+      base::FilePath(channel_id_path.value() + FILE_PATH_LITERAL("-journal")),
+      false);
+
   // Make sure we initialize the io_data_ after everything else has been
   // initialized that we might be reading from the IO thread.
-  io_data_->Init(cookie_path, channel_id_path, cache_path, cache_max_size,
-                 state_path_);
+  io_data_->Init(cookie_path, cache_path, cache_max_size, state_path_);
 
   // Listen for bookmark model load, to bootstrap the sync service.
   bookmarks::BookmarkModel* model =
@@ -170,11 +179,17 @@ base::FilePath ChromeBrowserStateImpl::GetStatePath() const {
   return state_path_;
 }
 
-void ChromeBrowserStateImpl::RegisterServices(StaticServiceMap* services) {
+std::unique_ptr<service_manager::Service>
+ChromeBrowserStateImpl::HandleServiceRequest(
+    const std::string& service_name,
+    service_manager::mojom::ServiceRequest request) {
   // TODO(crbug.com/787794): It would be nice to avoid ChromeBrowserState/
   // Profile needing to know explicitly about every service that it is
   // embedding.
-  RegisterIdentityServiceForBrowserState(this, services);
+  if (service_name == identity::mojom::kServiceName)
+    return CreateIdentityService(this, std::move(request));
+
+  return nullptr;
 }
 
 void ChromeBrowserStateImpl::SetOffTheRecordChromeBrowserState(

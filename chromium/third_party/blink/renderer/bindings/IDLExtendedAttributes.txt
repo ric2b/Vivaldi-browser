@@ -37,7 +37,7 @@ AllowShared
 CEReactions
 CachedAccessor
 CachedAttribute=*
-CallWith=ExecutionContext|ScriptState|ScriptArguments|CurrentWindow|EnteredWindow|ThisValue
+CallWith=ExecutionContext|Isolate|ScriptState|ThisValue
 CheckSecurity=Receiver|ReturnValue
 Clamp
 Constructor
@@ -49,7 +49,7 @@ CrossOrigin=|Getter|Setter
 Custom=|Getter|Setter|LegacyCallAsFunction|PropertyGetter|PropertyEnumerator|PropertyQuery|CallPrologue|CallEpilogue
 CustomConstructor
 CustomElementCallbacks
-Default=Undefined
+DefaultValue=Undefined
 DeprecateAs=*
 DoNotCheckConstants
 DoNotTestNewObject
@@ -57,7 +57,8 @@ EnforceRange
 Exposed=*
 FeaturePolicy=*
 FlexibleArrayBufferView
-Global=|*
+Global=*
+HighEntropy
 HTMLConstructor
 ImmutablePrototype
 ImplementedAs=*
@@ -79,7 +80,6 @@ OverrideBuiltins
 PartialInterfaceImplementedAs=*
 PermissiveDictionaryConversion
 PerWorldBindings
-PrimaryGlobal=|*
 PutForwards=*
 RaisesException=|Getter|Setter|Constructor
 Reflect=|*
@@ -89,17 +89,19 @@ ReflectMissing=*
 ReflectOnly=*
 Replaceable
 # Valid values for [RuntimeEnabled] are the Runtime Enabled Features, listed in
-# Source/platform/runtime_enabled_features.json5
+# third_party/blink/renderer/platform/runtime_enabled_features.json5
 RuntimeEnabled=*
 # Valid values for [RuntimeCallStatsCounter] are counters defined in
-# Source/platform/bindings/RuntimeCallStats.h
+# third_party/blink/renderer/platform/bindings/runtime_call_stats.h
 RuntimeCallStatsCounter=*
 SameObject
 SaveSameObject
 SecureContext=|*
-SetterCallWith=ExecutionContext|ScriptArguments|CurrentWindow|EnteredWindow
-TreatNullAs=NullString|EmptyString
+Serializable
+SetterCallWith=ExecutionContext|Isolate|ScriptState
+Transferable
+TreatNonObjectAsNull
+TreatNullAs=EmptyString
 URL
 Unforgeable
 Unscopable
-WebAgentAPI

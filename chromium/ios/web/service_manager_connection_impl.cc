@@ -10,26 +10,27 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop_current.h"
+#include "base/no_destructor.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ios/web/public/web_thread.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/system/message_pipe.h"
-#include "services/service_manager/embedder/embedded_service_runner.h"
 #include "services/service_manager/public/cpp/service.h"
-#include "services/service_manager/public/cpp/service_context.h"
+#include "services/service_manager/public/cpp/service_binding.h"
 #include "services/service_manager/public/mojom/constants.mojom.h"
 #include "services/service_manager/public/mojom/service_factory.mojom.h"
-#include "services/service_manager/runner/common/client_util.h"
 
 namespace web {
 namespace {
 
-base::LazyInstance<std::unique_ptr<ServiceManagerConnection>>::Leaky
-    g_connection_for_process = LAZY_INSTANCE_INITIALIZER;
+std::unique_ptr<ServiceManagerConnection>& GetConnectionForProcess() {
+  static base::NoDestructor<std::unique_ptr<ServiceManagerConnection>>
+      connection_for_process;
+  return *connection_for_process;
+}
 
 }  // namespace
 
@@ -44,11 +45,9 @@ class ServiceManagerConnectionImpl::IOThreadContext
   IOThreadContext(
       service_manager::mojom::ServiceRequest service_request,
       scoped_refptr<base::SequencedTaskRunner> io_task_runner,
-      std::unique_ptr<service_manager::Connector> io_thread_connector,
       service_manager::mojom::ConnectorRequest connector_request)
       : pending_service_request_(std::move(service_request)),
         io_task_runner_(io_task_runner),
-        io_thread_connector_(std::move(io_thread_connector)),
         pending_connector_request_(std::move(connector_request)),
         weak_factory_(this) {
     // This will be reattached by any of the IO thread functions on first call.
@@ -56,14 +55,17 @@ class ServiceManagerConnectionImpl::IOThreadContext
   }
 
   // Safe to call from any thread.
-  void Start(const base::Closure& stop_callback) {
+  void Start(base::OnceClosure stop_callback,
+             const ServiceManagerConnection::ServiceRequestHandler&
+                 default_request_handler) {
     DCHECK(!started_);
 
     started_ = true;
     callback_task_runner_ = base::ThreadTaskRunnerHandle::Get();
-    stop_callback_ = stop_callback;
+    stop_callback_ = std::move(stop_callback);
+    default_request_handler_ = default_request_handler;
     io_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&IOThreadContext::StartOnIOThread, this));
+        FROM_HERE, base::BindOnce(&IOThreadContext::StartOnIOThread, this));
   }
 
   // Safe to call from whichever thread called Start() (or may have called
@@ -73,16 +75,8 @@ class ServiceManagerConnectionImpl::IOThreadContext
       return;
 
     bool posted = io_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&IOThreadContext::ShutDownOnIOThread, this));
+        FROM_HERE, base::BindOnce(&IOThreadContext::ShutDownOnIOThread, this));
     DCHECK(posted);
-  }
-
-  void AddEmbeddedService(const std::string& name,
-                          const service_manager::EmbeddedServiceInfo& info) {
-    io_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&ServiceManagerConnectionImpl::IOThreadContext::
-                                  AddEmbeddedServiceRequestHandlerOnIoThread,
-                              this, name, info));
   }
 
  private:
@@ -130,11 +124,11 @@ class ServiceManagerConnectionImpl::IOThreadContext
   void StartOnIOThread() {
     // Should bind |io_thread_checker_| to the context's thread.
     DCHECK(io_thread_checker_.CalledOnValidThread());
-    DCHECK(!service_context_);
-    service_context_.reset(new service_manager::ServiceContext(
-        std::make_unique<service_manager::ForwardingService>(this),
-        std::move(pending_service_request_), std::move(io_thread_connector_),
-        std::move(pending_connector_request_)));
+    DCHECK(!service_binding_);
+    service_binding_ = std::make_unique<service_manager::ServiceBinding>(
+        this, std::move(pending_service_request_));
+    service_binding_->GetConnector()->BindConnectorRequest(
+        std::move(pending_connector_request_));
 
     // MessageLoopObserver owns itself.
     message_loop_observer_ =
@@ -160,33 +154,7 @@ class ServiceManagerConnectionImpl::IOThreadContext
     scoped_refptr<IOThreadContext> keepalive(this);
 
     factory_bindings_.CloseAllBindings();
-    service_context_.reset();
-
-    request_handlers_.clear();
-    embedded_services_.clear();
-  }
-
-  void AddEmbeddedServiceRequestHandlerOnIoThread(
-      const std::string& name,
-      const service_manager::EmbeddedServiceInfo& info) {
-    DCHECK(io_thread_checker_.CalledOnValidThread());
-    auto service =
-        std::make_unique<service_manager::EmbeddedServiceRunner>(name, info);
-    AddServiceRequestHandlerOnIoThread(
-        name,
-        base::Bind(&service_manager::EmbeddedServiceRunner::BindServiceRequest,
-                   base::Unretained(service.get())));
-    auto insertion_result =
-        embedded_services_.insert(std::make_pair(name, std::move(service)));
-    DCHECK(insertion_result.second);
-  }
-
-  void AddServiceRequestHandlerOnIoThread(
-      const std::string& name,
-      const ServiceRequestHandler& handler) {
-    DCHECK(io_thread_checker_.CalledOnValidThread());
-    auto result = request_handlers_.insert(std::make_pair(name, handler));
-    DCHECK(result.second);
+    service_binding_.reset();
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -204,9 +172,8 @@ class ServiceManagerConnectionImpl::IOThreadContext
     }
   }
 
-  bool OnServiceManagerConnectionLost() override {
-    callback_task_runner_->PostTask(FROM_HERE, stop_callback_);
-    return true;
+  void OnDisconnected() override {
+    callback_task_runner_->PostTask(FROM_HERE, std::move(stop_callback_));
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -217,12 +184,9 @@ class ServiceManagerConnectionImpl::IOThreadContext
       const std::string& name,
       service_manager::mojom::PIDReceiverPtr pid_receiver) override {
     DCHECK(io_thread_checker_.CalledOnValidThread());
-    auto it = request_handlers_.find(name);
-    if (it == request_handlers_.end()) {
-      LOG(ERROR) << "Can't create service " << name << ". No handler found.";
-      return;
-    }
-    it->second.Run(std::move(request));
+    callback_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(default_request_handler_, name, std::move(request)));
   }
 
   base::ThreadChecker io_thread_checker_;
@@ -232,7 +196,6 @@ class ServiceManagerConnectionImpl::IOThreadContext
   // once the connection is started.
   service_manager::mojom::ServiceRequest pending_service_request_;
   scoped_refptr<base::SequencedTaskRunner> io_task_runner_;
-  std::unique_ptr<service_manager::Connector> io_thread_connector_;
   service_manager::mojom::ConnectorRequest pending_connector_request_;
 
   // TaskRunner on which to run our owner's callbacks, i.e. the ones passed to
@@ -240,17 +203,15 @@ class ServiceManagerConnectionImpl::IOThreadContext
   scoped_refptr<base::SequencedTaskRunner> callback_task_runner_;
 
   // Callback to run if the service is stopped by the service manager.
-  base::Closure stop_callback_;
+  base::OnceClosure stop_callback_;
 
-  std::unique_ptr<service_manager::ServiceContext> service_context_;
+  ServiceManagerConnection::ServiceRequestHandler default_request_handler_;
+
+  std::unique_ptr<service_manager::ServiceBinding> service_binding_;
   mojo::BindingSet<service_manager::mojom::ServiceFactory> factory_bindings_;
 
   // Not owned.
   MessageLoopObserver* message_loop_observer_ = nullptr;
-
-  std::map<std::string, std::unique_ptr<service_manager::EmbeddedServiceRunner>>
-      embedded_services_;
-  std::map<std::string, ServiceRequestHandler> request_handlers_;
 
   base::WeakPtrFactory<IOThreadContext> weak_factory_;
 
@@ -264,8 +225,8 @@ class ServiceManagerConnectionImpl::IOThreadContext
 void ServiceManagerConnection::Set(
     std::unique_ptr<ServiceManagerConnection> connection) {
   DCHECK_CURRENTLY_ON(WebThread::UI);
-  DCHECK(!g_connection_for_process.Get());
-  g_connection_for_process.Get() = std::move(connection);
+  DCHECK(!GetConnectionForProcess());
+  GetConnectionForProcess() = std::move(connection);
 }
 
 // static
@@ -275,7 +236,7 @@ ServiceManagerConnection* ServiceManagerConnection::Get() {
   // otherwise the DCHECK in the above method would fire).
   DCHECK(!web::WebThread::IsThreadInitialized(web::WebThread::UI) ||
          web::WebThread::CurrentlyOn(web::WebThread::UI));
-  return g_connection_for_process.Get().get();
+  return GetConnectionForProcess().get();
 }
 
 // static
@@ -283,7 +244,7 @@ void ServiceManagerConnection::Destroy() {
   DCHECK_CURRENTLY_ON(WebThread::UI);
 
   // This joins the service manager controller thread.
-  g_connection_for_process.Get().reset();
+  GetConnectionForProcess().reset();
 }
 
 // static
@@ -305,11 +266,7 @@ ServiceManagerConnectionImpl::ServiceManagerConnectionImpl(
     : weak_factory_(this) {
   service_manager::mojom::ConnectorRequest connector_request;
   connector_ = service_manager::Connector::Create(&connector_request);
-
-  std::unique_ptr<service_manager::Connector> io_thread_connector =
-      connector_->Clone();
   context_ = new IOThreadContext(std::move(request), io_task_runner,
-                                 std::move(io_thread_connector),
                                  std::move(connector_request));
 }
 
@@ -321,18 +278,21 @@ ServiceManagerConnectionImpl::~ServiceManagerConnectionImpl() {
 // ServiceManagerConnectionImpl, ServiceManagerConnection implementation:
 
 void ServiceManagerConnectionImpl::Start() {
-  context_->Start(base::Bind(&ServiceManagerConnectionImpl::OnConnectionLost,
-                             weak_factory_.GetWeakPtr()));
+  context_->Start(
+      base::BindOnce(&ServiceManagerConnectionImpl::OnConnectionLost,
+                     weak_factory_.GetWeakPtr()),
+      base::BindRepeating(
+          &ServiceManagerConnectionImpl::OnUnhandledServiceRequest,
+          weak_factory_.GetWeakPtr()));
 }
 
 service_manager::Connector* ServiceManagerConnectionImpl::GetConnector() {
   return connector_.get();
 }
 
-void ServiceManagerConnectionImpl::AddEmbeddedService(
-    const std::string& name,
-    const service_manager::EmbeddedServiceInfo& info) {
-  context_->AddEmbeddedService(name, info);
+void ServiceManagerConnectionImpl::SetDefaultServiceRequestHandler(
+    const ServiceRequestHandler& handler) {
+  default_request_handler_ = handler;
 }
 
 void ServiceManagerConnectionImpl::OnConnectionLost() {}
@@ -342,6 +302,15 @@ void ServiceManagerConnectionImpl::GetInterface(
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle request_handle) {
   provider->GetInterface(interface_name, std::move(request_handle));
+}
+
+void ServiceManagerConnectionImpl::OnUnhandledServiceRequest(
+    const std::string& service_name,
+    service_manager::mojom::ServiceRequest request) {
+  if (default_request_handler_)
+    default_request_handler_.Run(service_name, std::move(request));
+  else
+    LOG(ERROR) << "Can't create service: " << service_name;
 }
 
 }  // namespace web

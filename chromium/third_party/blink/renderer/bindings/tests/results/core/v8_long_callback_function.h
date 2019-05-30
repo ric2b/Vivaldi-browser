@@ -8,23 +8,24 @@
 // DO NOT MODIFY!
 
 // clang-format off
-
-#ifndef V8LongCallbackFunction_h
-#define V8LongCallbackFunction_h
+#ifndef THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_CORE_V8_LONG_CALLBACK_FUNCTION_H_
+#define THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_CORE_V8_LONG_CALLBACK_FUNCTION_H_
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/bindings/callback_function_base.h"
+#include "third_party/blink/renderer/platform/bindings/v8_value_or_script_wrappable_adapter.h"
+#include "third_party/blink/renderer/platform/wtf/forward.h"
 
 namespace blink {
-
-class ScriptWrappable;
 
 class CORE_EXPORT V8LongCallbackFunction final : public CallbackFunctionBase {
  public:
   static V8LongCallbackFunction* Create(v8::Local<v8::Function> callback_function) {
-    return new V8LongCallbackFunction(callback_function);
+    return MakeGarbageCollected<V8LongCallbackFunction>(callback_function);
   }
 
+  explicit V8LongCallbackFunction(v8::Local<v8::Function> callback_function)
+      : CallbackFunctionBase(callback_function) {}
   ~V8LongCallbackFunction() override = default;
 
   // NameClient overrides:
@@ -32,11 +33,7 @@ class CORE_EXPORT V8LongCallbackFunction final : public CallbackFunctionBase {
 
   // Performs "invoke".
   // https://heycam.github.io/webidl/#es-invoking-callback-functions
-  v8::Maybe<int32_t> Invoke(ScriptWrappable* callback_this_value, int32_t num1, int32_t num2) WARN_UNUSED_RESULT;
-
- private:
-  explicit V8LongCallbackFunction(v8::Local<v8::Function> callback_function)
-      : CallbackFunctionBase(callback_function) {}
+  v8::Maybe<int32_t> Invoke(bindings::V8ValueOrScriptWrappableAdapter callback_this_value, int32_t num1, int32_t num2) WARN_UNUSED_RESULT;
 };
 
 template <>
@@ -44,17 +41,16 @@ class V8PersistentCallbackFunction<V8LongCallbackFunction> final : public V8Pers
   using V8CallbackFunction = V8LongCallbackFunction;
 
  public:
+  explicit V8PersistentCallbackFunction(V8CallbackFunction* callback_function)
+      : V8PersistentCallbackFunctionBase(callback_function) {}
   ~V8PersistentCallbackFunction() override = default;
 
   // Returns a wrapper-tracing version of this callback function.
   V8CallbackFunction* ToNonV8Persistent() { return Proxy(); }
 
-  v8::Maybe<int32_t> Invoke(ScriptWrappable* callback_this_value, int32_t num1, int32_t num2) WARN_UNUSED_RESULT;
+  v8::Maybe<int32_t> Invoke(bindings::V8ValueOrScriptWrappableAdapter callback_this_value, int32_t num1, int32_t num2) WARN_UNUSED_RESULT;
 
  private:
-  explicit V8PersistentCallbackFunction(V8CallbackFunction* callback_function)
-      : V8PersistentCallbackFunctionBase(callback_function) {}
-
   V8CallbackFunction* Proxy() {
     return As<V8CallbackFunction>();
   }
@@ -73,4 +69,4 @@ Persistent<V8LongCallbackFunction> WrapPersistent(V8LongCallbackFunction*) = del
 
 }  // namespace blink
 
-#endif  // V8LongCallbackFunction_h
+#endif  // THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_CORE_V8_LONG_CALLBACK_FUNCTION_H_

@@ -6,6 +6,7 @@
 
 #include <iterator>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/single_thread_task_runner.h"
@@ -15,6 +16,7 @@
 #include "content/renderer/loader/url_response_body_consumer.h"
 #include "net/url_request/redirect_info.h"
 #include "services/network/public/cpp/features.h"
+#include "third_party/blink/public/common/features.h"
 
 namespace content {
 namespace {
@@ -107,6 +109,22 @@ class URLLoaderClientImpl::DeferredOnReceiveCachedMetadata final
 
  private:
   const std::vector<uint8_t> data_;
+};
+
+class URLLoaderClientImpl::DeferredOnStartLoadingResponseBody final
+    : public DeferredMessage {
+ public:
+  explicit DeferredOnStartLoadingResponseBody(
+      mojo::ScopedDataPipeConsumerHandle body)
+      : body_(std::move(body)) {}
+
+  void HandleMessage(ResourceDispatcher* dispatcher, int request_id) override {
+    dispatcher->OnStartLoadingResponseBody(request_id, std::move(body_));
+  }
+  bool IsCompletionMessage() const override { return false; }
+
+ private:
+  mojo::ScopedDataPipeConsumerHandle body_;
 };
 
 class URLLoaderClientImpl::DeferredOnComplete final : public DeferredMessage {
@@ -234,7 +252,7 @@ void URLLoaderClientImpl::Bind(
 
 void URLLoaderClientImpl::OnReceiveResponse(
     const network::ResourceResponseHead& response_head) {
-  has_received_response_ = true;
+  has_received_response_head_ = true;
   if (NeedsStoringMessage()) {
     StoreAndDispatch(
         std::make_unique<DeferredOnReceiveResponse>(response_head));
@@ -246,7 +264,7 @@ void URLLoaderClientImpl::OnReceiveResponse(
 void URLLoaderClientImpl::OnReceiveRedirect(
     const net::RedirectInfo& redirect_info,
     const network::ResourceResponseHead& response_head) {
-  DCHECK(!has_received_response_);
+  DCHECK(!has_received_response_head_);
   DCHECK(!body_consumer_);
   if (base::FeatureList::IsEnabled(network::features::kNetworkService) &&
       !bypass_redirect_checks_ &&
@@ -289,7 +307,7 @@ void URLLoaderClientImpl::OnReceiveCachedMetadata(
 }
 
 void URLLoaderClientImpl::OnTransferSizeUpdated(int32_t transfer_size_diff) {
-  if (is_deferred_) {
+  if (NeedsStoringMessage()) {
     accumulated_transfer_size_diff_during_deferred_ += transfer_size_diff;
   } else {
     resource_dispatcher_->OnTransferSizeUpdated(request_id_,
@@ -300,29 +318,48 @@ void URLLoaderClientImpl::OnTransferSizeUpdated(int32_t transfer_size_diff) {
 void URLLoaderClientImpl::OnStartLoadingResponseBody(
     mojo::ScopedDataPipeConsumerHandle body) {
   DCHECK(!body_consumer_);
-  DCHECK(has_received_response_);
+  DCHECK(has_received_response_head_);
+  DCHECK(!has_received_response_body_);
+  has_received_response_body_ = true;
 
-  if (pass_response_pipe_to_dispatcher_) {
+  if (!base::FeatureList::IsEnabled(
+          blink::features::kResourceLoadViaDataPipe) &&
+      !pass_response_pipe_to_dispatcher_) {
+    body_consumer_ = new URLResponseBodyConsumer(
+        request_id_, resource_dispatcher_, std::move(body), task_runner_);
+
+    if (NeedsStoringMessage()) {
+      body_consumer_->SetDefersLoading();
+      return;
+    }
+
+    body_consumer_->OnReadable(MOJO_RESULT_OK);
+    return;
+  }
+
+  if (NeedsStoringMessage()) {
+    StoreAndDispatch(
+        std::make_unique<DeferredOnStartLoadingResponseBody>(std::move(body)));
+  } else {
     resource_dispatcher_->OnStartLoadingResponseBody(request_id_,
                                                      std::move(body));
-    return;
   }
-
-  body_consumer_ = new URLResponseBodyConsumer(
-      request_id_, resource_dispatcher_, std::move(body), task_runner_);
-
-  if (is_deferred_) {
-    body_consumer_->SetDefersLoading();
-    return;
-  }
-
-  body_consumer_->OnReadable(MOJO_RESULT_OK);
 }
 
 void URLLoaderClientImpl::OnComplete(
     const network::URLLoaderCompletionStatus& status) {
   has_received_complete_ = true;
+
+  // Dispatch completion status to the ResourceDispatcher.
+  //
+  // Non-ResourceLoadViaDataPipe: Call ResourceDispatcher::OnRequestComplete
+  // only when body doesn't exist since |body_consumer_| will call
+  // ResrouceDispatcher::OnRequestComplete() when body exists.
+  // ResourceLoadViaDataPipe: always go into this path since we no longer use
+  // |body_consumer_| for transferring the body.
   if (!body_consumer_) {
+    // Except for errors, there must always be a response's body.
+    DCHECK(has_received_response_body_ || status.error_code != net::OK);
     if (NeedsStoringMessage()) {
       StoreAndDispatch(std::make_unique<DeferredOnComplete>(status));
     } else {
@@ -330,11 +367,15 @@ void URLLoaderClientImpl::OnComplete(
     }
     return;
   }
+
+  DCHECK(
+      !base::FeatureList::IsEnabled(blink::features::kResourceLoadViaDataPipe));
   body_consumer_->OnComplete(status);
 }
 
 bool URLLoaderClientImpl::NeedsStoringMessage() const {
-  return is_deferred_ || deferred_messages_.size() > 0;
+  return is_deferred_ || deferred_messages_.size() > 0 ||
+         accumulated_transfer_size_diff_during_deferred_ > 0;
 }
 
 void URLLoaderClientImpl::StoreAndDispatch(
@@ -342,7 +383,8 @@ void URLLoaderClientImpl::StoreAndDispatch(
   DCHECK(NeedsStoringMessage());
   if (is_deferred_) {
     deferred_messages_.push_back(std::move(message));
-  } else if (deferred_messages_.size() > 0) {
+  } else if (deferred_messages_.size() > 0 ||
+             accumulated_transfer_size_diff_during_deferred_ > 0) {
     deferred_messages_.push_back(std::move(message));
     FlushDeferredMessages();
   } else {

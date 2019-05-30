@@ -64,6 +64,8 @@ class CORE_EXPORT PerformanceEntry : public ScriptWrappable {
     kPaint = 1 << 6,
     kEvent = 1 << 7,
     kFirstInput = 1 << 8,
+    kElement = 1 << 9,
+    kLayoutJank = 1 << 10,
   };
 
   const AtomicString& name() const { return name_; }
@@ -91,6 +93,22 @@ class CORE_EXPORT PerformanceEntry : public ScriptWrappable {
 
   static PerformanceEntry::EntryType ToEntryTypeEnum(
       const AtomicString& entry_type);
+
+  // Entries of the types listed here will be accessible from the
+  // PerformanceTimeline or the PerformanceObserver.  Those not listed will
+  // only be available via the PerformanceObserver.
+  // Note: Currently buffered flags don't support long task entries
+  // so leaving it out of this list for now.
+  static bool IsValidTimelineEntryType(const PerformanceEntryType& entry_type) {
+    if (entry_type == kInvalid) {
+      return true;
+    }
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(
+        HashSet<PerformanceEntryType>, valid_timeline_entry_types,
+        ({kNavigation, kMark, kMeasure, kResource, kTaskAttribution, kPaint,
+          kEvent, kFirstInput, kElement, kLayoutJank}));
+    return valid_timeline_entry_types.Contains(entry_type);
+  }
 
  protected:
   PerformanceEntry(const AtomicString& name,

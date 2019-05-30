@@ -10,8 +10,10 @@ import android.app.Activity;
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.task.PostTask;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.ChildAccountStatus;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.ui.base.WindowAndroid;
 
 /**
@@ -41,11 +43,11 @@ public class ChildAccountService {
         ThreadUtils.assertOnUiThread();
         final AccountManagerFacade accountManager = AccountManagerFacade.get();
         accountManager.tryGetGoogleAccounts(accounts -> {
-            if (accounts.length != 1) {
+            if (accounts.size() != 1) {
                 // Child accounts can't share a device.
                 callback.onResult(ChildAccountStatus.NOT_CHILD);
             } else {
-                accountManager.checkChildAccountStatus(accounts[0], callback);
+                accountManager.checkChildAccountStatus(accounts.get(0), callback);
             }
         });
     }
@@ -65,7 +67,8 @@ public class ChildAccountService {
 
         Activity activity = windowAndroid.getActivity().get();
         if (activity == null) {
-            ThreadUtils.postOnUiThread(() -> nativeOnReauthenticationResult(nativeCallback, false));
+            PostTask.postTask(UiThreadTaskTraits.DEFAULT,
+                    () -> nativeOnReauthenticationResult(nativeCallback, false));
             return;
         }
 

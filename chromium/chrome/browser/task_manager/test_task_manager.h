@@ -33,7 +33,6 @@ class TestTaskManager : public TaskManagerInterface {
   int64_t GetSwappedMemoryUsage(TaskId task_id) const override;
   int64_t GetGpuMemoryUsage(TaskId task_id,
                             bool* has_duplicates) const override;
-  base::MemoryState GetMemoryState(TaskId task_id) const override;
   int GetIdleWakeupsPerSecond(TaskId task_id) const override;
   int GetHardFaultsPerSecond(TaskId task_id) const override;
   int GetNaClDebugStubPort(TaskId task_id) const override;
@@ -72,6 +71,7 @@ class TestTaskManager : public TaskManagerInterface {
   const TaskIdList& GetTaskIdsList() const override;
   TaskIdList GetIdsOfTasksSharingSameProcess(TaskId task_id) const override;
   size_t GetNumberOfTasksOnSameProcess(TaskId task_id) const override;
+  bool IsRunningInVM(TaskId task_id) const override;
   TaskId GetTaskIdForWebContents(
       content::WebContents* web_contents) const override;
 

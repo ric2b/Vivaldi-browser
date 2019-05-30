@@ -9,6 +9,8 @@
 
 #include "ash/ash_export.h"
 #include "ash/system/tray/tray_background_view.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
 
 namespace ash {
 
@@ -16,6 +18,7 @@ namespace tray {
 class TimeTrayItemView;
 }  // namespace tray
 
+class CurrentLocaleView;
 class ImeModeView;
 class ManagedDeviceView;
 class NotificationCounterView;
@@ -23,6 +26,7 @@ class QuietModeView;
 class UnifiedSliderBubbleController;
 class UnifiedSystemTrayBubble;
 class UnifiedSystemTrayModel;
+class NetworkIconPurger;
 
 // UnifiedSystemTray is system menu of Chromium OS, which is typically
 // accessible from the button on the right bottom of the screen (Status Area).
@@ -74,6 +78,10 @@ class ASH_EXPORT UnifiedSystemTray : public TrayBackgroundView {
   // open when disabling, also close it.
   void SetTrayEnabled(bool enabled);
 
+  // Set the target notification, which is visible in the viewport when the
+  // message center opens.
+  void SetTargetNotification(const std::string& notification_id);
+
   // Sets the height of the system tray bubble from the edge of the work area
   // so that the notification popups don't overlap with the tray. Pass 0 if no
   // bubble is shown.
@@ -85,7 +93,8 @@ class ASH_EXPORT UnifiedSystemTray : public TrayBackgroundView {
   void CloseBubble() override;
   base::string16 GetAccessibleNameForBubble() override;
   base::string16 GetAccessibleNameForTray() override;
-  void HideBubbleWithView(const views::TrayBubbleView* bubble_view) override;
+  void HideBubble(const TrayBubbleView* bubble_view) override;
+  void HideBubbleWithView(const TrayBubbleView* bubble_view) override;
   void ClickedOutsideBubble() override;
   void UpdateAfterShelfAlignmentChange() override;
   bool ShouldEnableExtraKeyboardAccessibility() override;
@@ -96,23 +105,21 @@ class ASH_EXPORT UnifiedSystemTray : public TrayBackgroundView {
   UnifiedSystemTrayModel* model() { return model_.get(); }
 
  private:
+  static const base::TimeDelta kNotificationCountUpdateDelay;
+
   friend class UnifiedSystemTrayTest;
   friend class UnifiedSystemTrayTestApi;
 
   // Private class implements MessageCenterUiDelegate.
   class UiDelegate;
 
-  // Private class implements TrayNetworkStateObserver::Delegate.
-  class NetworkStateDelegate;
-
   // Forwarded from UiDelegate.
   void ShowBubbleInternal(bool show_by_click);
   void HideBubbleInternal();
   void UpdateNotificationInternal();
+  void UpdateNotificationAfterDelay();
 
   const std::unique_ptr<UiDelegate> ui_delegate_;
-
-  std::unique_ptr<NetworkStateDelegate> network_state_delegate_;
 
   std::unique_ptr<UnifiedSystemTrayBubble> bubble_;
 
@@ -122,6 +129,9 @@ class ASH_EXPORT UnifiedSystemTray : public TrayBackgroundView {
   const std::unique_ptr<UnifiedSliderBubbleController>
       slider_bubble_controller_;
 
+  const std::unique_ptr<NetworkIconPurger> network_icon_purger_;
+
+  CurrentLocaleView* const current_locale_view_;
   ImeModeView* const ime_mode_view_;
   ManagedDeviceView* const managed_device_view_;
   NotificationCounterView* const notification_counter_item_;
@@ -129,6 +139,7 @@ class ASH_EXPORT UnifiedSystemTray : public TrayBackgroundView {
   tray::TimeTrayItemView* const time_view_;
 
   ui::Layer* ink_drop_layer_ = nullptr;
+  base::OneShotTimer timer_;
 
   DISALLOW_COPY_AND_ASSIGN(UnifiedSystemTray);
 };

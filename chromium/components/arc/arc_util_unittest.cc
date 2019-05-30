@@ -155,6 +155,14 @@ TEST_F(ArcUtilTest, IsArcAvailable_OfficiallySupported) {
   EXPECT_TRUE(IsArcKioskAvailable());
 }
 
+TEST_F(ArcUtilTest, IsArcVmEnablede) {
+  EXPECT_FALSE(IsArcVmEnabled());
+
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  command_line->InitFromArgv({"", "--enable-arcvm"});
+  EXPECT_TRUE(IsArcVmEnabled());
+}
+
 // TODO(hidehiko): Add test for IsArcKioskMode().
 // It depends on UserManager, but a utility to inject fake instance is
 // available only in chrome/. To use it in components/, refactoring is needed.
@@ -239,7 +247,7 @@ TEST_F(ArcUtilTest, ArcStartModeDefault) {
   auto* command_line = base::CommandLine::ForCurrentProcess();
   command_line->InitFromArgv({"", "--arc-availability=installed"});
   EXPECT_FALSE(ShouldArcAlwaysStart());
-  EXPECT_TRUE(IsPlayStoreAvailable());
+  EXPECT_FALSE(ShouldArcAlwaysStartWithNoPlayStore());
 }
 
 TEST_F(ArcUtilTest, ArcStartModeWithoutPlayStore) {
@@ -248,7 +256,7 @@ TEST_F(ArcUtilTest, ArcStartModeWithoutPlayStore) {
       {"", "--arc-availability=installed",
        "--arc-start-mode=always-start-with-no-play-store"});
   EXPECT_TRUE(ShouldArcAlwaysStart());
-  EXPECT_FALSE(IsPlayStoreAvailable());
+  EXPECT_TRUE(ShouldArcAlwaysStartWithNoPlayStore());
 }
 
 TEST_F(ArcUtilTest, ScaleFactorToDensity) {

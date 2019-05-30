@@ -57,6 +57,7 @@
     <string name="help_context_sad_tab">mobile_awsnap</string>
     <string name="help_context_clear_browsing_data">clear_browsing_data</string>
     <string name="help_context_change_sync_passphrase">change_sync_passphrase</string>
+    <string name="help_context_sync_and_services">syncgoogleservices</string>
     <!-- TODO(peconn): Add help section. -->
     <!-- <string name="help_context_suggestions">mobile_content_suggestions</string> -->
 
@@ -64,7 +65,6 @@
     <string name="manage_space_activity"></string>
 
     <!-- Value for scaleX to mirror drawables correctly for LTR / RTL layouts. -->
-    <integer name="automirror_scale_x">1</integer>
     <integer name="automirror_scale_x_reverse">-1</integer>
 
     <!-- Modern List Item -->
@@ -80,4 +80,7 @@
     <integer name="download_infobar_bar_start_offset">800</integer>
     <integer name="download_infobar_bar_fill_in_delay">400</integer>
     <integer name="download_infobar_bar_fill_out_delay">200</integer>
+
+    <!-- Bottom navigation bar styling. -->
+    <bool name="window_light_navigation_bar">true</bool>
 </resources>

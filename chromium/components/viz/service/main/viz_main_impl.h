@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_VIZ_SERVICE_MAIN_VIZ_MAIN_IMPL_H_
 #define COMPONENTS_VIZ_SERVICE_MAIN_VIZ_MAIN_IMPL_H_
 
+#include <string>
+
 #include "base/power_monitor/power_monitor.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
@@ -12,15 +14,21 @@
 #include "components/discardable_memory/client/client_discardable_shared_memory_manager.h"
 #include "components/viz/service/main/viz_compositor_thread_runner.h"
 #include "gpu/ipc/in_process_command_buffer.h"
-#include "gpu/ipc/service/gpu_init.h"
 #include "mojo/public/cpp/bindings/associated_binding_set.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/viz/privileged/interfaces/gl/gpu_service.mojom.h"
 #include "services/viz/privileged/interfaces/viz_main.mojom.h"
 #include "ui/gfx/font_render_params.h"
 
+#if defined(USE_OZONE)
+#include "mojo/public/cpp/system/message_pipe.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
+#endif
+
 namespace gpu {
+class GpuInit;
 class SyncPointManager;
+class SharedImageManager;
 }  // namespace gpu
 
 namespace service_manager {
@@ -40,7 +48,7 @@ using CompositorThreadType = base::android::JavaHandlerThread;
 using CompositorThreadType = base::Thread;
 #endif
 
-class VizMainImpl : public gpu::GpuSandboxHelper, public mojom::VizMain {
+class VizMainImpl : public mojom::VizMain {
  public:
   struct LogMessage {
     int severity;
@@ -57,6 +65,7 @@ class VizMainImpl : public gpu::GpuSandboxHelper, public mojom::VizMain {
     virtual void OnGpuServiceConnection(GpuServiceImpl* gpu_service) = 0;
     virtual void PostCompositorThreadCreated(
         base::SingleThreadTaskRunner* task_runner) = 0;
+    virtual void QuitMainMessageLoop() = 0;
   };
 
   struct ExternalDependencies {
@@ -69,6 +78,7 @@ class VizMainImpl : public gpu::GpuSandboxHelper, public mojom::VizMain {
 
     bool create_display_compositor = false;
     gpu::SyncPointManager* sync_point_manager = nullptr;
+    gpu::SharedImageManager* shared_image_manager = nullptr;
     base::WaitableEvent* shutdown_event = nullptr;
     scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner;
     service_manager::Connector* connector = nullptr;
@@ -77,11 +87,9 @@ class VizMainImpl : public gpu::GpuSandboxHelper, public mojom::VizMain {
     DISALLOW_COPY_AND_ASSIGN(ExternalDependencies);
   };
 
-  // TODO(kylechar): Provide a quit closure for the appropriate RunLoop instance
-  // to stop the thread and remove base::RunLoop::QuitCurrentDeprecated() usage.
   VizMainImpl(Delegate* delegate,
               ExternalDependencies dependencies,
-              std::unique_ptr<gpu::GpuInit> gpu_init = nullptr);
+              std::unique_ptr<gpu::GpuInit> gpu_init);
   // Destruction must happen on the GPU thread.
   ~VizMainImpl() override;
 
@@ -89,6 +97,12 @@ class VizMainImpl : public gpu::GpuSandboxHelper, public mojom::VizMain {
 
   void Bind(mojom::VizMainRequest request);
   void BindAssociated(mojom::VizMainAssociatedRequest request);
+
+#if defined(USE_OZONE)
+  bool CanBindInterface(const std::string& interface_name) const;
+  void BindInterface(const std::string& interface_name,
+                     mojo::ScopedMessagePipeHandle interface_pipe);
+#endif
 
   // mojom::VizMain implementation:
   void CreateGpuService(
@@ -99,6 +113,7 @@ class VizMainImpl : public gpu::GpuSandboxHelper, public mojom::VizMain {
       mojo::ScopedSharedBufferHandle activity_flags,
       gfx::FontRenderParams::SubpixelRendering subpixel_rendering) override;
   void CreateFrameSinkManager(mojom::FrameSinkManagerParamsPtr params) override;
+  void CreateVizDevTools(mojom::VizDevToolsParamsPtr params) override;
 
   GpuServiceImpl* gpu_service() { return gpu_service_.get(); }
   const GpuServiceImpl* gpu_service() const { return gpu_service_.get(); }
@@ -110,20 +125,14 @@ class VizMainImpl : public gpu::GpuSandboxHelper, public mojom::VizMain {
     return discardable_shared_memory_manager_.get();
   }
 
+  // Cleanly exits the process.
+  void ExitProcess();
+
  private:
   // Initializes GPU's UkmRecorder if GPU is running in it's own process.
   void CreateUkmRecorderIfNeeded(service_manager::Connector* connector);
 
   void CreateFrameSinkManagerInternal(mojom::FrameSinkManagerParamsPtr params);
-
-  // Cleanly exits the process.
-  void ExitProcess();
-
-  // gpu::GpuSandboxHelper:
-  void PreSandboxStartup() override;
-  bool EnsureSandboxInitialized(gpu::GpuWatchdogThread* watchdog_thread,
-                                const gpu::GPUInfo* gpu_info,
-                                const gpu::GpuPreferences& gpu_prefs) override;
 
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner() const {
     return io_thread_ ? io_thread_->task_runner()
@@ -172,6 +181,11 @@ class VizMainImpl : public gpu::GpuSandboxHelper, public mojom::VizMain {
 
   std::unique_ptr<discardable_memory::ClientDiscardableSharedMemoryManager>
       discardable_shared_memory_manager_;
+
+#if defined(USE_OZONE)
+  // Registry for gpu-related interfaces needed by ozone.
+  service_manager::BinderRegistry registry_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(VizMainImpl);
 };

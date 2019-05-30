@@ -12,7 +12,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "components/autofill/core/browser/suggestion.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -86,21 +85,13 @@ class AutofillPopupBaseViewTest : public InProcessBrowserTest {
   }
 
  protected:
-  test::ScopedMacViewsBrowserMode views_mode_{true};
   testing::NiceMock<MockAutofillPopupViewDelegate> mock_delegate_;
   AutofillPopupBaseView* view_;
 
   DISALLOW_COPY_AND_ASSIGN(AutofillPopupBaseViewTest);
 };
 
-// Flaky on Win and Linux.  http://crbug.com/376299
-#if defined(OS_LINUX) || defined(OS_WIN)
-#define MAYBE_GestureTest DISABLED_GestureTest
-#else
-#define MAYBE_GestureTest GestureTest
-#endif
-
-IN_PROC_BROWSER_TEST_F(AutofillPopupBaseViewTest, MAYBE_GestureTest) {
+IN_PROC_BROWSER_TEST_F(AutofillPopupBaseViewTest, GestureTest) {
   const int kElementSize = 5;
   gfx::RectF bounds(0, 0, kElementSize, kElementSize);
   EXPECT_CALL(mock_delegate_, element_bounds())

@@ -74,7 +74,8 @@ class TestPlugin : public blink::WebPlugin, public cc::TextureLayerClient {
   blink::WebPluginContainer* Container() const override;
   bool CanProcessDrag() const override;
   bool SupportsKeyboardFocus() const override;
-  void UpdateAllLifecyclePhases() override {}
+  void UpdateAllLifecyclePhases(
+      blink::WebWidget::LifecycleUpdateReason) override {}
   void Paint(cc::PaintCanvas* canvas, const blink::WebRect& rect) override {}
   void UpdateGeometry(const blink::WebRect& window_rect,
                       const blink::WebRect& clip_rect,
@@ -92,7 +93,7 @@ class TestPlugin : public blink::WebPlugin, public cc::TextureLayerClient {
       const blink::WebFloatPoint& position,
       const blink::WebFloatPoint& screen_position) override;
   void DidReceiveResponse(const blink::WebURLResponse& response) override {}
-  void DidReceiveData(const char* data, int data_length) override {}
+  void DidReceiveData(const char* data, size_t data_length) override {}
   void DidFinishLoading() override {}
   void DidFailLoading(const blink::WebURLError& error) override {}
   bool IsPlaceholder() override;

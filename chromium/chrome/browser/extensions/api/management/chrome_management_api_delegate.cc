@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
@@ -37,6 +38,10 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension.h"
 #include "services/data_decoder/public/cpp/safe_json_parser.h"
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
+#endif
 
 namespace {
 
@@ -91,9 +96,8 @@ class ManagementUninstallFunctionUninstallDialogDelegate
       bool show_programmatic_uninstall_ui)
       : function_(function) {
     ChromeExtensionFunctionDetails details(function);
-    extension_uninstall_dialog_.reset(
-        extensions::ExtensionUninstallDialog::Create(
-            details.GetProfile(), details.GetNativeWindowForUI(), this));
+    extension_uninstall_dialog_ = extensions::ExtensionUninstallDialog::Create(
+        details.GetProfile(), details.GetNativeWindowForUI(), this);
     bool uninstall_from_webstore =
         function->extension() &&
         function->extension()->id() == extensions::kWebStoreAppId;
@@ -195,6 +199,12 @@ void ChromeManagementAPIDelegate::LaunchAppFunctionDelegate(
                                   extension, launch_container,
                                   WindowOpenDisposition::NEW_FOREGROUND_TAB,
                                   extensions::SOURCE_MANAGEMENT_API));
+
+#if defined(OS_CHROMEOS)
+  chromeos::DemoSession::RecordAppLaunchSourceIfInDemoMode(
+      chromeos::DemoSession::AppLaunchSource::kExtensionApi);
+#endif
+
   extensions::RecordAppLaunchType(extension_misc::APP_LAUNCH_EXTENSION_API,
                                   extension->GetType());
 }

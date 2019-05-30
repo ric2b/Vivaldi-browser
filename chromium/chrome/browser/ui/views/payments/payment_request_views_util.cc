@@ -219,7 +219,7 @@ void PopulateSheetHeaderView(bool show_back_arrow,
     views::ImageButton* back_arrow = views::CreateVectorImageButton(listener);
     views::SetImageFromVectorIcon(
         back_arrow, vector_icons::kBackArrowIcon,
-        GetForegroundColorForBackground(background_color));
+        color_utils::GetColorWithMaxContrast(background_color));
     constexpr int kBackArrowSize = 16;
     back_arrow->SetSize(gfx::Size(kBackArrowSize, kBackArrowSize));
     back_arrow->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
@@ -252,7 +252,7 @@ std::unique_ptr<views::ImageView> CreateInstrumentIconView(
     // Images from |icon_resource_id| are 32x20 credit cards.
     icon_view->SetImageSize(gfx::Size(32, 20));
   }
-  icon_view->SetTooltipText(tooltip_text);
+  icon_view->set_tooltip_text(tooltip_text);
   icon_view->SetPaintToLayer();
   icon_view->layer()->SetFillsBoundsOpaquely(false);
   icon_view->layer()->SetOpacity(opacity);
@@ -276,7 +276,7 @@ std::unique_ptr<views::View> CreateProductLogoFooterView() {
   chrome_logo->SetImage(ui::ResourceBundle::GetSharedInstance()
                             .GetImageNamed(IDR_PRODUCT_LOGO_NAME_22)
                             .AsImageSkia());
-  chrome_logo->SetTooltipText(l10n_util::GetStringUTF16(IDS_PRODUCT_NAME));
+  chrome_logo->set_tooltip_text(l10n_util::GetStringUTF16(IDS_PRODUCT_NAME));
   content_view->AddChildView(chrome_logo.release());
 
   return content_view;
@@ -411,17 +411,6 @@ std::unique_ptr<views::View> CreateShippingOptionLabel(
   }
 
   return container;
-}
-
-SkColor GetForegroundColorForBackground(SkColor background_color) {
-  constexpr float kLightForegroundRatioThreshold = 3;
-  if (background_color != 0 &&
-      color_utils::GetContrastRatio(background_color, SK_ColorWHITE) >=
-          kLightForegroundRatioThreshold) {
-    return SK_ColorWHITE;
-  }
-  views::Label label;
-  return label.enabled_color();
 }
 
 }  // namespace payments

@@ -55,8 +55,8 @@ class CORE_EXPORT FilterOperations {
   const FilterOperationVector& Operations() const { return operations_; }
 
   bool IsEmpty() const { return !operations_.size(); }
-  size_t size() const { return operations_.size(); }
-  const FilterOperation* at(size_t index) const {
+  wtf_size_t size() const { return operations_.size(); }
+  const FilterOperation* at(wtf_size_t index) const {
     return index < operations_.size() ? operations_.at(index).Get() : nullptr;
   }
 
@@ -70,7 +70,7 @@ class CORE_EXPORT FilterOperations {
   bool HasFilterThatAffectsOpacity() const;
   bool HasFilterThatMovesPixels() const;
 
-  bool HasReferenceFilter() const;
+  bool HasBlurOrReferenceFilter() const;
 
   void AddClient(SVGResourceClient&) const;
   void RemoveClient(SVGResourceClient&) const;
@@ -86,23 +86,22 @@ class FilterOperationsWrapper
     : public GarbageCollected<FilterOperationsWrapper> {
  public:
   static FilterOperationsWrapper* Create() {
-    return new FilterOperationsWrapper();
+    return MakeGarbageCollected<FilterOperationsWrapper>();
   }
 
   static FilterOperationsWrapper* Create(const FilterOperations& operations) {
-    return new FilterOperationsWrapper(operations);
+    return MakeGarbageCollected<FilterOperationsWrapper>(operations);
   }
+
+  FilterOperationsWrapper() = default;
+  explicit FilterOperationsWrapper(const FilterOperations& operations)
+      : operations_(operations) {}
 
   const FilterOperations& Operations() const { return operations_; }
 
   void Trace(blink::Visitor* visitor) { visitor->Trace(operations_); }
 
  private:
-  FilterOperationsWrapper() = default;
-
-  explicit FilterOperationsWrapper(const FilterOperations& operations)
-      : operations_(operations) {}
-
   FilterOperations operations_;
 };
 

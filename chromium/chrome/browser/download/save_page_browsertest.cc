@@ -1072,6 +1072,23 @@ class SavePageOriginalVsSavedComparisonTest
         expected_number_of_frames_in_original_page;
     AssertExpectationsAboutCurrentTab(expected_number_of_frames_in_saved_page,
                                       expected_substrings);
+
+    if (GetParam() == content::SAVE_PAGE_TYPE_AS_MHTML) {
+      std::set<url::Origin> origins;
+      GetCurrentTab(browser())->ForEachFrame(
+          base::BindRepeating(&CheckFrameForMHTML, base::Unretained(&origins)));
+      int unique_origins = origins.size();
+      EXPECT_EQ(expected_number_of_frames_in_saved_page, unique_origins)
+          << "All origins should be unique";
+    }
+
+    // Check that we're able to navigate away and come back, as well.
+    // See https://crbug.com/948246.
+    ui_test_utils::NavigateToURL(browser(), GURL("data:text/html,foo"));
+    chrome::GoBack(browser(), WindowOpenDisposition::CURRENT_TAB);
+    content::WaitForLoadStop(GetCurrentTab(browser()));
+    AssertExpectationsAboutCurrentTab(expected_number_of_frames_in_saved_page,
+                                      expected_substrings);
   }
 
   // Helper method to deduplicate some code across 2 tests.
@@ -1147,6 +1164,18 @@ class SavePageOriginalVsSavedComparisonTest
 
   static void IncrementInteger(int* i, content::RenderFrameHost* /* unused */) {
     (*i)++;
+  }
+
+  static void CheckFrameForMHTML(std::set<url::Origin>* origins,
+                                 content::RenderFrameHost* host) {
+    // See RFC n°2557, section-8.3: "Use of the Content-ID header and CID URLs".
+    const char kContentIdScheme[] = "cid";
+    origins->insert(host->GetLastCommittedOrigin());
+    EXPECT_TRUE(host->GetLastCommittedOrigin().opaque());
+    if (!host->GetParent())
+      EXPECT_TRUE(host->GetLastCommittedURL().SchemeIsFile());
+    else
+      EXPECT_TRUE(host->GetLastCommittedURL().SchemeIs(kContentIdScheme));
   }
 };
 
@@ -1337,7 +1366,7 @@ IN_PROC_BROWSER_TEST_P(SavePageOriginalVsSavedComparisonTest, CrossSiteObject) {
   TestOriginalVsSavedPage(save_page_type, url, 4, 4, expected_substrings);
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     SaveType,
     SavePageOriginalVsSavedComparisonTest,
     ::testing::Values(content::SAVE_PAGE_TYPE_AS_COMPLETE_HTML,

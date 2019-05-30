@@ -32,11 +32,14 @@ class SharedWorkerReportingProxy final
                        std::unique_ptr<SourceLocation>,
                        int exception_id) override;
   void ReportConsoleMessage(MessageSource,
-                            MessageLevel,
+                            mojom::ConsoleMessageLevel,
                             const String& message,
                             SourceLocation*) override;
-  void PostMessageToPageInspector(int session_id, const WTF::String&) override;
-  void DidEvaluateClassicScript(bool success) override {}
+  void DidFetchScript() override;
+  void DidFailToFetchClassicScript() override;
+  void DidFailToFetchModuleScript() override;
+  void DidEvaluateClassicScript(bool success) override;
+  void DidEvaluateModuleScript(bool success) override;
   void DidCloseWorkerGlobalScope() override;
   void WillDestroyWorkerGlobalScope() override {}
   void DidTerminateWorkerThread() override;

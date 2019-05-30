@@ -6,12 +6,12 @@
 
 #include <utility>
 
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "base/time/time.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
-#include "components/prefs/pref_registry_simple.h"
-#include "components/signin/core/browser/profile_management_switches.h"
+#include "components/prefs/pref_service.h"
+#include "components/signin/core/browser/account_consistency_method.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_pref_names.h"
 #include "ios/web_view/internal/app/application_context.h"
@@ -20,7 +20,6 @@
 #include "ios/web_view/internal/signin/web_view_gaia_cookie_manager_service_factory.h"
 #include "ios/web_view/internal/signin/web_view_oauth2_token_service_factory.h"
 #include "ios/web_view/internal/signin/web_view_signin_client_factory.h"
-#include "ios/web_view/internal/signin/web_view_signin_error_controller_factory.h"
 #include "ios/web_view/internal/web_view_browser_state.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -37,7 +36,6 @@ WebViewSigninManagerFactory::WebViewSigninManagerFactory()
   DependsOn(WebViewGaiaCookieManagerServiceFactory::GetInstance());
   DependsOn(WebViewOAuth2TokenServiceFactory::GetInstance());
   DependsOn(WebViewAccountTrackerServiceFactory::GetInstance());
-  DependsOn(WebViewSigninErrorControllerFactory::GetInstance());
 }
 
 // static
@@ -56,7 +54,8 @@ SigninManager* WebViewSigninManagerFactory::GetForBrowserStateIfExists(
 
 // static
 WebViewSigninManagerFactory* WebViewSigninManagerFactory::GetInstance() {
-  return base::Singleton<WebViewSigninManagerFactory>::get();
+  static base::NoDestructor<WebViewSigninManagerFactory> instance;
+  return instance.get();
 }
 
 void WebViewSigninManagerFactory::RegisterBrowserStatePrefs(
@@ -69,12 +68,19 @@ WebViewSigninManagerFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
   WebViewBrowserState* browser_state =
       WebViewBrowserState::FromBrowserState(context);
+
+  // Clearing the sign in state on start up greatly simplifies the management of
+  // ChromeWebView's signin state.
+  PrefService* pref_service = browser_state->GetPrefs();
+  pref_service->ClearPref(prefs::kGoogleServicesAccountId);
+  pref_service->ClearPref(prefs::kGoogleServicesUsername);
+  pref_service->ClearPref(prefs::kGoogleServicesUserAccountId);
+
   std::unique_ptr<SigninManager> service = std::make_unique<SigninManager>(
       WebViewSigninClientFactory::GetForBrowserState(browser_state),
       WebViewOAuth2TokenServiceFactory::GetForBrowserState(browser_state),
       WebViewAccountTrackerServiceFactory::GetForBrowserState(browser_state),
       WebViewGaiaCookieManagerServiceFactory::GetForBrowserState(browser_state),
-      WebViewSigninErrorControllerFactory::GetForBrowserState(browser_state),
       signin::AccountConsistencyMethod::kDisabled);
   service->Initialize(ApplicationContext::GetInstance()->GetLocalState());
   return service;

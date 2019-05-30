@@ -27,7 +27,7 @@ bool V8ValueConverter::Strategy::FromV8Object(
     v8::Local<v8::Object> value,
     std::unique_ptr<base::Value>* out,
     v8::Isolate* isolate,
-    const FromV8ValueCallback& callback) const {
+    const FromV8ValueCallback& callback) {
   return false;
 }
 
@@ -35,28 +35,27 @@ bool V8ValueConverter::Strategy::FromV8Array(
     v8::Local<v8::Array> value,
     std::unique_ptr<base::Value>* out,
     v8::Isolate* isolate,
-    const FromV8ValueCallback& callback) const {
+    const FromV8ValueCallback& callback) {
   return false;
 }
 
 bool V8ValueConverter::Strategy::FromV8ArrayBuffer(
     v8::Local<v8::Object> value,
     std::unique_ptr<base::Value>* out,
-    v8::Isolate* isolate) const {
+    v8::Isolate* isolate) {
   return false;
 }
 
 bool V8ValueConverter::Strategy::FromV8Number(
     v8::Local<v8::Number> value,
-    std::unique_ptr<base::Value>* out) const {
+    std::unique_ptr<base::Value>* out) {
   return false;
 }
 
 bool V8ValueConverter::Strategy::FromV8Undefined(
-    std::unique_ptr<base::Value>* out) const {
+    std::unique_ptr<base::Value>* out) {
   return false;
 }
-
 
 namespace {
 
@@ -95,7 +94,7 @@ class V8ValueConverterImpl::FromV8ValueState {
   // hash (key) in the map, because two objects can have the same hash.
   bool AddToUniquenessCheck(v8::Local<v8::Object> handle) {
     int hash;
-    Iterator iter = GetIteratorInMap(handle, &hash);
+    auto iter = GetIteratorInMap(handle, &hash);
     if (iter != unique_map_.end())
       return false;
 
@@ -105,7 +104,7 @@ class V8ValueConverterImpl::FromV8ValueState {
 
   bool RemoveFromUniquenessCheck(v8::Local<v8::Object> handle) {
     int unused_hash;
-    Iterator iter = GetIteratorInMap(handle, &unused_hash);
+    auto iter = GetIteratorInMap(handle, &unused_hash);
     if (iter == unique_map_.end())
       return false;
     unique_map_.erase(iter);
@@ -126,7 +125,7 @@ class V8ValueConverterImpl::FromV8ValueState {
     // hash. Different hash obviously means different objects, but two objects
     // in a couple of thousands could have the same identity hash.
     std::pair<Iterator, Iterator> range = unique_map_.equal_range(*hash);
-    for (Iterator it = range.first; it != range.second; ++it) {
+    for (auto it = range.first; it != range.second; ++it) {
       // Operator == for handles actually compares the underlying objects.
       if (it->second == handle)
         return it;
@@ -212,7 +211,8 @@ void V8ValueConverterImpl::SetStrategy(Strategy* strategy) {
 }
 
 v8::Local<v8::Value> V8ValueConverterImpl::ToV8Value(
-    const base::Value* value, v8::Local<v8::Context> context) const {
+    const base::Value* value,
+    v8::Local<v8::Context> context) {
   v8::Context::Scope context_scope(context);
   v8::EscapableHandleScope handle_scope(context->GetIsolate());
   return handle_scope.Escape(
@@ -221,7 +221,7 @@ v8::Local<v8::Value> V8ValueConverterImpl::ToV8Value(
 
 std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8Value(
     v8::Local<v8::Value> val,
-    v8::Local<v8::Context> context) const {
+    v8::Local<v8::Context> context) {
   v8::Context::Scope context_scope(context);
   v8::HandleScope handle_scope(context->GetIsolate());
   FromV8ValueState state(avoid_identity_hash_for_testing_);
@@ -258,8 +258,9 @@ v8::Local<v8::Value> V8ValueConverterImpl::ToV8ValueImpl(
     case base::Value::Type::STRING: {
       std::string val;
       CHECK(value->GetAsString(&val));
-      return v8::String::NewFromUtf8(
-          isolate, val.c_str(), v8::String::kNormalString, val.length());
+      return v8::String::NewFromUtf8(isolate, val.c_str(),
+                                     v8::NewStringType::kNormal, val.length())
+          .ToLocalChecked();
     }
 
     case base::Value::Type::LIST:
@@ -325,8 +326,9 @@ v8::Local<v8::Value> V8ValueConverterImpl::ToV8Object(
 
     v8::Maybe<bool> maybe = result->CreateDataProperty(
         context,
-        v8::String::NewFromUtf8(isolate, key.c_str(), v8::String::kNormalString,
-                                key.length()),
+        v8::String::NewFromUtf8(isolate, key.c_str(),
+                                v8::NewStringType::kNormal, key.length())
+            .ToLocalChecked(),
         child_v8);
     if (!maybe.IsJust() || !maybe.FromJust())
       LOG(ERROR) << "Failed to set property with key " << key;
@@ -370,7 +372,7 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8ValueImpl(
   }
 
   if (val->IsInt32())
-    return std::make_unique<base::Value>(val->ToInt32(isolate)->Value());
+    return std::make_unique<base::Value>(val.As<v8::Int32>()->Value());
 
   if (val->IsNumber()) {
     double val_as_double = val.As<v8::Number>()->Value();
@@ -403,7 +405,7 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8ValueImpl(
     if (!date_allowed_)
       // JSON.stringify would convert this to a string, but an object is more
       // consistent within this class.
-      return FromV8Object(val->ToObject(isolate), state, isolate);
+      return FromV8Object(val.As<v8::Object>(), state, isolate);
     v8::Date* date = v8::Date::Cast(*val);
     return std::make_unique<base::Value>(date->ValueOf() / 1000.0);
   }
@@ -468,13 +470,16 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8Array(
   // Only fields with integer keys are carried over to the ListValue.
   for (uint32_t i = 0; i < val->Length(); ++i) {
     v8::TryCatch try_catch(isolate);
-    v8::Local<v8::Value> child_v8 = val->Get(i);
-    if (try_catch.HasCaught()) {
+    v8::Local<v8::Value> child_v8;
+    v8::MaybeLocal<v8::Value> maybe_child =
+        val->Get(isolate->GetCurrentContext(), i);
+    if (try_catch.HasCaught() || !maybe_child.ToLocal(&child_v8)) {
       LOG(ERROR) << "Getter for index " << i << " threw an exception.";
       child_v8 = v8::Null(isolate);
     }
 
-    if (!val->HasRealIndexedProperty(i)) {
+    if (!val->HasRealIndexedProperty(isolate->GetCurrentContext(), i)
+             .FromMaybe(false)) {
       result->Append(std::make_unique<base::Value>());
       continue;
     }
@@ -560,10 +565,15 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8Object(
     return std::make_unique<base::DictionaryValue>();
 
   std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
-  v8::Local<v8::Array> property_names(val->GetOwnPropertyNames());
+  v8::Local<v8::Array> property_names;
+  if (!val->GetOwnPropertyNames(isolate->GetCurrentContext())
+           .ToLocal(&property_names)) {
+    return std::move(result);
+  }
 
   for (uint32_t i = 0; i < property_names->Length(); ++i) {
-    v8::Local<v8::Value> key(property_names->Get(i));
+    v8::Local<v8::Value> key =
+        property_names->Get(isolate->GetCurrentContext(), i).ToLocalChecked();
 
     // Extend this test to cover more types as necessary and if sensible.
     if (!key->IsString() &&
@@ -577,9 +587,10 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8Object(
     v8::String::Utf8Value name_utf8(isolate, key);
 
     v8::TryCatch try_catch(isolate);
-    v8::Local<v8::Value> child_v8 = val->Get(key);
-
-    if (try_catch.HasCaught()) {
+    v8::Local<v8::Value> child_v8;
+    v8::MaybeLocal<v8::Value> maybe_child =
+        val->Get(isolate->GetCurrentContext(), key);
+    if (try_catch.HasCaught() || !maybe_child.ToLocal(&child_v8)) {
       LOG(WARNING) << "Getter for property " << *name_utf8
                    << " threw an exception.";
       child_v8 = v8::Null(isolate);

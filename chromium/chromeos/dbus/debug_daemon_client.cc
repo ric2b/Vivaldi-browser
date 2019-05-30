@@ -4,11 +4,13 @@
 
 #include "chromeos/dbus/debug_daemon_client.h"
 
+#include <dbus/dbus-protocol.h>
 #include <fcntl.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <unistd.h>
 
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -20,6 +22,7 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/no_destructor.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
@@ -101,6 +104,21 @@ class PipeReaderWrapper : public base::SupportsWeakPtr<PipeReaderWrapper> {
 
   DISALLOW_COPY_AND_ASSIGN(PipeReaderWrapper);
 };
+
+// Convert the string representation of a D-Bus error into a
+// DbusLibraryError value.
+DbusLibraryError DbusLibraryErrorFromString(
+    const std::string& dbus_error_string) {
+  static const base::NoDestructor<std::map<std::string, DbusLibraryError>>
+      error_string_map({
+          {DBUS_ERROR_NO_REPLY, DbusLibraryError::kNoReply},
+          {DBUS_ERROR_TIMEOUT, DbusLibraryError::kTimeout},
+      });
+
+  auto it = error_string_map->find(dbus_error_string);
+  return it != error_string_map->end() ? it->second
+                                       : DbusLibraryError::kGenericError;
+}
 
 }  // namespace
 
@@ -203,7 +221,7 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
   void GetPerfOutput(base::TimeDelta duration,
                      const std::vector<std::string>& perf_args,
                      int file_descriptor,
-                     VoidDBusMethodCallback callback) override {
+                     DBusMethodCallback<uint64_t> callback) override {
     DCHECK(file_descriptor);
     dbus::MethodCall method_call(debugd::kDebugdInterface,
                                  debugd::kGetPerfOutputFd);
@@ -214,7 +232,7 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
 
     debugdaemon_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::BindOnce(&DebugDaemonClientImpl::OnVoidMethod,
+        base::BindOnce(&DebugDaemonClientImpl::OnUint64Method,
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
@@ -462,7 +480,7 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
         reinterpret_cast<const uint8_t*>(ppd_contents.data()),
         ppd_contents.size());
 
-    debugdaemon_proxy_->CallMethod(
+    debugdaemon_proxy_->CallMethodWithErrorResponse(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
         base::BindOnce(&DebugDaemonClientImpl::OnPrinterAdded,
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
@@ -478,7 +496,7 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
     writer.AppendString(name);
     writer.AppendString(uri);
 
-    debugdaemon_proxy_->CallMethod(
+    debugdaemon_proxy_->CallMethodWithErrorResponse(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
         base::BindOnce(&DebugDaemonClientImpl::OnPrinterAdded,
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
@@ -527,6 +545,18 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
     debugdaemon_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
         base::BindOnce(&DebugDaemonClientImpl::OnSetRlzPingSent,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  }
+
+  void SetSchedulerConfiguration(const std::string& config_name,
+                                 VoidDBusMethodCallback callback) override {
+    dbus::MethodCall method_call(debugd::kDebugdInterface,
+                                 debugd::kSetSchedulerConfiguration);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendString(config_name);
+    debugdaemon_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&DebugDaemonClientImpl::OnVoidMethod,
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
@@ -605,6 +635,22 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
   // completed or on its error.
   void OnVoidMethod(VoidDBusMethodCallback callback, dbus::Response* response) {
     std::move(callback).Run(response);
+  }
+
+  void OnUint64Method(DBusMethodCallback<uint64_t> callback,
+                      dbus::Response* response) {
+    if (!response) {
+      std::move(callback).Run(0);
+      return;
+    }
+
+    dbus::MessageReader reader(response);
+    uint64_t result;
+    if (!reader.PopUint64(&result)) {
+      result = 0;
+    }
+
+    std::move(callback).Run(std::move(result));
   }
 
   // Called when D-Bus method call which returns a string is completed or on
@@ -702,14 +748,27 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
   }
 
   void OnPrinterAdded(CupsAddPrinterCallback callback,
-                      dbus::Response* response) {
+                      dbus::Response* response,
+                      dbus::ErrorResponse* err_response) {
     int32_t result;
     dbus::MessageReader reader(response);
+
+    // If we get a normal response, we need not examine the error response.
     if (response && reader.PopInt32(&result)) {
+      DCHECK_GE(result, 0);
       std::move(callback).Run(result);
-    } else {
-      std::move(callback).Run(base::nullopt);
+      return;
     }
+
+    // Without a normal response, we communicate the D-Bus error response
+    // to the callback.
+    std::string err_str;
+    if (err_response) {
+      dbus::MessageReader err_reader(err_response);
+      err_str = err_response->GetErrorName();
+    }
+    DbusLibraryError dbus_error = DbusLibraryErrorFromString(err_str);
+    std::move(callback).Run(dbus_error);
   }
 
   void OnPrinterRemoved(const CupsRemovePrinterCallback& callback,
@@ -734,12 +793,9 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
   }
 
   void OnStopConcierge(ConciergeCallback callback, dbus::Response* response) {
-    bool result = false;
-    dbus::MessageReader reader(response);
-    if (response) {
-      reader.PopBool(&result);
-    }
-    std::move(callback).Run(result);
+    // Debugd just sends back an empty response, so we just check if
+    // the response exists
+    std::move(callback).Run(response != nullptr);
   }
 
   void OnSetRlzPingSent(SetRlzPingSentCallback callback,

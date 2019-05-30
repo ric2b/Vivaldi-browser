@@ -46,7 +46,7 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 // When inserting a new line, we want to avoid nesting empty divs if we can.
 // Otherwise, when pasting, it's easy to have each new line be a div deeper than
@@ -111,11 +111,11 @@ void InsertParagraphSeparatorCommand::ApplyStyleAfterInsertion(
     EditingState* editing_state) {
   // Not only do we break out of header tags, but we also do not preserve the
   // typing style, in order to match other browsers.
-  if (original_enclosing_block->HasTagName(h1Tag) ||
-      original_enclosing_block->HasTagName(h2Tag) ||
-      original_enclosing_block->HasTagName(h3Tag) ||
-      original_enclosing_block->HasTagName(h4Tag) ||
-      original_enclosing_block->HasTagName(h5Tag)) {
+  if (original_enclosing_block->HasTagName(kH1Tag) ||
+      original_enclosing_block->HasTagName(kH2Tag) ||
+      original_enclosing_block->HasTagName(kH3Tag) ||
+      original_enclosing_block->HasTagName(kH4Tag) ||
+      original_enclosing_block->HasTagName(kH5Tag)) {
     return;
   }
 
@@ -138,11 +138,11 @@ bool InsertParagraphSeparatorCommand::ShouldUseDefaultParagraphElement(
   if (!IsEndOfBlock(EndingVisibleSelection().VisibleStart()))
     return false;
 
-  return enclosing_block->HasTagName(h1Tag) ||
-         enclosing_block->HasTagName(h2Tag) ||
-         enclosing_block->HasTagName(h3Tag) ||
-         enclosing_block->HasTagName(h4Tag) ||
-         enclosing_block->HasTagName(h5Tag);
+  return enclosing_block->HasTagName(kH1Tag) ||
+         enclosing_block->HasTagName(kH2Tag) ||
+         enclosing_block->HasTagName(kH3Tag) ||
+         enclosing_block->HasTagName(kH4Tag) ||
+         enclosing_block->HasTagName(kH5Tag);
 }
 
 void InsertParagraphSeparatorCommand::GetAncestorsInsideBlock(
@@ -166,15 +166,15 @@ Element* InsertParagraphSeparatorCommand::CloneHierarchyUnderNewBlock(
     EditingState* editing_state) {
   // Make clones of ancestors in between the start node and the start block.
   Element* parent = block_to_insert;
-  for (size_t i = ancestors.size(); i != 0; --i) {
-    Element* child = ancestors[i - 1]->CloneWithoutChildren();
+  for (wtf_size_t i = ancestors.size(); i != 0; --i) {
+    Element& child = ancestors[i - 1]->CloneWithoutChildren();
     // It should always be okay to remove id from the cloned elements, since the
     // originals are not deleted.
-    child->removeAttribute(idAttr);
-    AppendNode(child, parent, editing_state);
+    child.removeAttribute(kIdAttr);
+    AppendNode(&child, parent, editing_state);
     if (editing_state->IsAborted())
       return nullptr;
-    parent = child;
+    parent = &child;
   }
 
   return parent;
@@ -274,7 +274,7 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
   } else if (ShouldUseDefaultParagraphElement(start_block)) {
     block_to_insert = CreateDefaultParagraphElement(GetDocument());
   } else {
-    block_to_insert = start_block->CloneWithoutChildren();
+    block_to_insert = &start_block->CloneWithoutChildren();
   }
 
   VisiblePosition visible_pos =
@@ -314,11 +314,11 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
       }
 
       if (list_child && list_child != start_block) {
-        Element* list_child_to_insert = list_child->CloneWithoutChildren();
-        AppendNode(block_to_insert, list_child_to_insert, editing_state);
+        Element& list_child_to_insert = list_child->CloneWithoutChildren();
+        AppendNode(block_to_insert, &list_child_to_insert, editing_state);
         if (editing_state->IsAborted())
           return;
-        InsertNodeAfter(list_child_to_insert, list_child, editing_state);
+        InsertNodeAfter(&list_child_to_insert, list_child, editing_state);
       } else {
         // Most of the time we want to stay at the nesting level of the
         // startBlock (e.g., when nesting within lists). However, for div nodes,
@@ -365,11 +365,11 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
 
     if (is_first_in_block && !nest_new_block) {
       if (list_child && list_child != start_block) {
-        Element* list_child_to_insert = list_child->CloneWithoutChildren();
-        AppendNode(block_to_insert, list_child_to_insert, editing_state);
+        Element& list_child_to_insert = list_child->CloneWithoutChildren();
+        AppendNode(block_to_insert, &list_child_to_insert, editing_state);
         if (editing_state->IsAborted())
           return;
-        InsertNodeBefore(list_child_to_insert, list_child, editing_state);
+        InsertNodeBefore(&list_child_to_insert, list_child, editing_state);
         if (editing_state->IsAborted())
           return;
       } else {
@@ -523,11 +523,11 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
   if (nest_new_block) {
     AppendNode(block_to_insert, start_block, editing_state);
   } else if (list_child && list_child != start_block) {
-    Element* list_child_to_insert = list_child->CloneWithoutChildren();
-    AppendNode(block_to_insert, list_child_to_insert, editing_state);
+    Element& list_child_to_insert = list_child->CloneWithoutChildren();
+    AppendNode(block_to_insert, &list_child_to_insert, editing_state);
     if (editing_state->IsAborted())
       return;
-    InsertNodeAfter(list_child_to_insert, list_child, editing_state);
+    InsertNodeAfter(&list_child_to_insert, list_child, editing_state);
   } else {
     InsertNodeAfter(block_to_insert, start_block, editing_state);
   }
@@ -607,7 +607,7 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
   ApplyStyleAfterInsertion(start_block, editing_state);
 }
 
-void InsertParagraphSeparatorCommand::Trace(blink::Visitor* visitor) {
+void InsertParagraphSeparatorCommand::Trace(Visitor* visitor) {
   visitor->Trace(style_);
   CompositeEditCommand::Trace(visitor);
 }

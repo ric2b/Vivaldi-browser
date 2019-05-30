@@ -110,8 +110,7 @@ class HistogramTest : public testing::TestWithParam<bool> {
 };
 
 // Run all HistogramTest cases with both heap and persistent memory.
-INSTANTIATE_TEST_CASE_P(HeapAndPersistent, HistogramTest, testing::Bool());
-
+INSTANTIATE_TEST_SUITE_P(HeapAndPersistent, HistogramTest, testing::Bool());
 
 // Check for basic syntax and use.
 TEST_P(HistogramTest, BasicTest) {
@@ -293,6 +292,25 @@ TEST_P(HistogramTest, LinearRangesTest) {
   Histogram* histogram2 = static_cast<Histogram*>(
       LinearHistogram::FactoryGet("Linear2", 1, 6, 5, HistogramBase::kNoFlags));
   EXPECT_TRUE(ranges2.Equals(histogram2->bucket_ranges()));
+}
+
+TEST_P(HistogramTest, SingleValueEnumerationHistogram) {
+  // Make sure its possible to construct a linear histogram with only the two
+  // required outlier buckets (underflow and overflow).
+  HistogramBase* histogram = LinearHistogram::FactoryGet(
+      "SingleValueEnum", 1, 1, 2, HistogramBase::kNoFlags);
+  EXPECT_TRUE(histogram);
+
+  // Make sure the macros work properly. This can only be run when
+  // there is no persistent allocator which can be discarded and leave
+  // dangling pointers.
+  if (!use_persistent_histogram_allocator_) {
+    enum EnumWithMax {
+      kSomething = 0,
+      kMaxValue = kSomething,
+    };
+    UMA_HISTOGRAM_ENUMERATION("h1", kSomething);
+  }
 }
 
 TEST_P(HistogramTest, ArrayToCustomEnumRangesTest) {

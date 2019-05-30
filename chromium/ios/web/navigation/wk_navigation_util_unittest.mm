@@ -18,6 +18,7 @@
 #import "net/base/mac/url_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
+#include "url/scheme_host_port.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -42,8 +43,7 @@ void CreateTestNavigationItems(
 }
 
 // Extracts session dictionary from |restore_session_url|.
-int ExtractSessionDict(GURL restore_session_url,
-                       std::unique_ptr<base::Value>* session_value) {
+base::JSONReader::ValueWithError ExtractSessionDict(GURL restore_session_url) {
   NSString* fragment = net::NSURLWithGURL(restore_session_url).fragment;
   NSString* encoded_session =
       [fragment substringFromIndex:strlen(kRestoreSessionSessionHashPrefix)];
@@ -51,11 +51,8 @@ int ExtractSessionDict(GURL restore_session_url,
       base::SysNSStringToUTF8(encoded_session),
       net::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS);
 
-  int error_code = 0;
-  *session_value = base::JSONReader::ReadAndReturnError(
-      session_json, base::JSON_PARSE_RFC, &error_code,
-      /*error_msg_out=*/nullptr);
-  return error_code;
+  return base::JSONReader::ReadAndReturnValueWithError(session_json,
+                                                       base::JSON_PARSE_RFC);
 }
 }
 
@@ -107,17 +104,18 @@ TEST_F(WKNavigationUtilTest, CreateRestoreSessionUrlForLargeSession) {
   ASSERT_TRUE(IsRestoreSessionUrl(restore_session_url));
 
   // Extract session JSON from restoration URL.
-  std::unique_ptr<base::Value> session_value;
-  ASSERT_EQ(0, ExtractSessionDict(restore_session_url, &session_value));
-  ASSERT_TRUE(session_value.get());
+  base::JSONReader::ValueWithError value_with_error =
+      ExtractSessionDict(restore_session_url);
+  ASSERT_EQ(base::JSONReader::JSON_NO_ERROR, value_with_error.error_code);
+  ASSERT_TRUE(value_with_error.value.has_value());
 
   // Verify that all titles and URLs are present.
-  base::Value* titles_value = session_value->FindKey("titles");
+  base::Value* titles_value = value_with_error.value->FindKey("titles");
   ASSERT_TRUE(titles_value);
   ASSERT_TRUE(titles_value->is_list());
   ASSERT_EQ(kItemCount, titles_value->GetList().size());
 
-  base::Value* urls_value = session_value->FindKey("urls");
+  base::Value* urls_value = value_with_error.value->FindKey("urls");
   ASSERT_TRUE(urls_value);
   ASSERT_TRUE(urls_value->is_list());
   ASSERT_EQ(kItemCount, urls_value->GetList().size());
@@ -136,12 +134,13 @@ TEST_F(WKNavigationUtilTest, CreateRestoreSessionUrlForExtraLargeForwardList) {
   ASSERT_TRUE(IsRestoreSessionUrl(restore_session_url));
 
   // Extract session JSON from restoration URL.
-  std::unique_ptr<base::Value> session_value;
-  ASSERT_EQ(0, ExtractSessionDict(restore_session_url, &session_value));
-  ASSERT_TRUE(session_value.get());
+  base::JSONReader::ValueWithError value_with_error =
+      ExtractSessionDict(restore_session_url);
+  ASSERT_EQ(base::JSONReader::JSON_NO_ERROR, value_with_error.error_code);
+  ASSERT_TRUE(value_with_error.value.has_value());
 
   // Verify that first kMaxSessionSize titles and URLs are present.
-  base::Value* titles_value = session_value->FindKey("titles");
+  base::Value* titles_value = value_with_error.value->FindKey("titles");
   ASSERT_TRUE(titles_value);
   ASSERT_TRUE(titles_value->is_list());
   ASSERT_EQ(static_cast<size_t>(kMaxSessionSize),
@@ -149,13 +148,17 @@ TEST_F(WKNavigationUtilTest, CreateRestoreSessionUrlForExtraLargeForwardList) {
   ASSERT_EQ("Test0", titles_value->GetList()[0].GetString());
   ASSERT_EQ("Test74", titles_value->GetList()[kMaxSessionSize - 1].GetString());
 
-  base::Value* urls_value = session_value->FindKey("urls");
+  base::Value* urls_value = value_with_error.value->FindKey("urls");
   ASSERT_TRUE(urls_value);
   ASSERT_TRUE(urls_value->is_list());
   ASSERT_EQ(static_cast<size_t>(kMaxSessionSize), urls_value->GetList().size());
   ASSERT_EQ("http:%2F%2Fwww.0.com%2F", urls_value->GetList()[0].GetString());
   ASSERT_EQ("http:%2F%2Fwww.74.com%2F",
             urls_value->GetList()[kMaxSessionSize - 1].GetString());
+
+  // Verify the offset is correct.
+  ASSERT_EQ(1 - kMaxSessionSize,
+            value_with_error.value->FindKey("offset")->GetInt());
 }
 
 // Verifies that large session can be stored in NSURL and that extra items
@@ -171,12 +174,13 @@ TEST_F(WKNavigationUtilTest, CreateRestoreSessionUrlForExtraLargeBackList) {
   ASSERT_TRUE(IsRestoreSessionUrl(restore_session_url));
 
   // Extract session JSON from restoration URL.
-  std::unique_ptr<base::Value> session_value;
-  ASSERT_EQ(0, ExtractSessionDict(restore_session_url, &session_value));
-  ASSERT_TRUE(session_value.get());
+  base::JSONReader::ValueWithError value_with_error =
+      ExtractSessionDict(restore_session_url);
+  ASSERT_EQ(base::JSONReader::JSON_NO_ERROR, value_with_error.error_code);
+  ASSERT_TRUE(value_with_error.value.has_value());
 
   // Verify that last kMaxSessionSize titles and URLs are present.
-  base::Value* titles_value = session_value->FindKey("titles");
+  base::Value* titles_value = value_with_error.value->FindKey("titles");
   ASSERT_TRUE(titles_value);
   ASSERT_TRUE(titles_value->is_list());
   ASSERT_EQ(static_cast<size_t>(kMaxSessionSize),
@@ -185,13 +189,16 @@ TEST_F(WKNavigationUtilTest, CreateRestoreSessionUrlForExtraLargeBackList) {
   ASSERT_EQ("Test149",
             titles_value->GetList()[kMaxSessionSize - 1].GetString());
 
-  base::Value* urls_value = session_value->FindKey("urls");
+  base::Value* urls_value = value_with_error.value->FindKey("urls");
   ASSERT_TRUE(urls_value);
   ASSERT_TRUE(urls_value->is_list());
   ASSERT_EQ(static_cast<size_t>(kMaxSessionSize), urls_value->GetList().size());
   ASSERT_EQ("http:%2F%2Fwww.75.com%2F", urls_value->GetList()[0].GetString());
   ASSERT_EQ("http:%2F%2Fwww.149.com%2F",
             urls_value->GetList()[kMaxSessionSize - 1].GetString());
+
+  // Verify the offset is correct.
+  ASSERT_EQ(0, value_with_error.value->FindKey("offset")->GetInt());
 }
 
 // Verifies that large session can be stored in NSURL and that extra items
@@ -208,12 +215,13 @@ TEST_F(WKNavigationUtilTest,
   ASSERT_TRUE(IsRestoreSessionUrl(restore_session_url));
 
   // Extract session JSON from restoration URL.
-  std::unique_ptr<base::Value> session_value;
-  ASSERT_EQ(0, ExtractSessionDict(restore_session_url, &session_value));
-  ASSERT_TRUE(session_value.get());
+  base::JSONReader::ValueWithError value_with_error =
+      ExtractSessionDict(restore_session_url);
+  ASSERT_EQ(base::JSONReader::JSON_NO_ERROR, value_with_error.error_code);
+  ASSERT_TRUE(value_with_error.value.has_value());
 
   // Verify that last kMaxSessionSize titles and URLs are present.
-  base::Value* titles_value = session_value->FindKey("titles");
+  base::Value* titles_value = value_with_error.value->FindKey("titles");
   ASSERT_TRUE(titles_value);
   ASSERT_TRUE(titles_value->is_list());
   ASSERT_EQ(static_cast<size_t>(kMaxSessionSize),
@@ -222,13 +230,17 @@ TEST_F(WKNavigationUtilTest,
   ASSERT_EQ("Test112",
             titles_value->GetList()[kMaxSessionSize - 1].GetString());
 
-  base::Value* urls_value = session_value->FindKey("urls");
+  base::Value* urls_value = value_with_error.value->FindKey("urls");
   ASSERT_TRUE(urls_value);
   ASSERT_TRUE(urls_value->is_list());
   ASSERT_EQ(static_cast<size_t>(kMaxSessionSize), urls_value->GetList().size());
   ASSERT_EQ("http:%2F%2Fwww.38.com%2F", urls_value->GetList()[0].GetString());
   ASSERT_EQ("http:%2F%2Fwww.112.com%2F",
             urls_value->GetList()[kMaxSessionSize - 1].GetString());
+
+  // Verify the offset is correct.
+  ASSERT_EQ((1 - kMaxSessionSize) / 2,
+            value_with_error.value->FindKey("offset")->GetInt());
 }
 
 TEST_F(WKNavigationUtilTest, IsNotRestoreSessionUrl) {
@@ -285,6 +297,33 @@ TEST_F(WKNavigationUtilTest, EncodeDecodeValidUrls) {
 TEST_F(WKNavigationUtilTest, DecodeRejectInvalidUrls) {
   GURL encoded("about:blank?for=thisisnotanurl");
   EXPECT_EQ(GURL::EmptyGURL(), ExtractUrlFromPlaceholderUrl(encoded));
+}
+
+// Tests that app specific urls and non-placeholder about: urls do not need a
+// user agent type, but normal urls and placeholders do.
+TEST_F(WKNavigationUtilTest, URLNeedsUserAgentType) {
+  // Not app specific or non-placeholder about urls.
+  GURL non_user_agent_urls("http://newtab");
+  GURL::Replacements scheme_replacements;
+  scheme_replacements.SetSchemeStr(kTestNativeContentScheme);
+  EXPECT_FALSE(URLNeedsUserAgentType(
+      non_user_agent_urls.ReplaceComponents(scheme_replacements)));
+  scheme_replacements.SetSchemeStr(url::kAboutScheme);
+  EXPECT_FALSE(URLNeedsUserAgentType(
+      non_user_agent_urls.ReplaceComponents(scheme_replacements)));
+
+  // Not a placeholder or normal URL.
+  EXPECT_TRUE(URLNeedsUserAgentType(GURL("about:blank?for=")));
+  EXPECT_TRUE(URLNeedsUserAgentType(GURL("http://www.0.com")));
+
+  // file:// URL.
+  EXPECT_FALSE(URLNeedsUserAgentType(GURL("file://foo.pdf")));
+
+  // App specific URL or a placeholder for an app specific URL.
+  GURL app_specific(
+      url::SchemeHostPort(kTestAppSpecificScheme, "foo", 0).Serialize());
+  EXPECT_FALSE(URLNeedsUserAgentType(app_specific));
+  EXPECT_FALSE(URLNeedsUserAgentType(CreatePlaceholderUrlForUrl(app_specific)));
 }
 
 }  // namespace wk_navigation_util

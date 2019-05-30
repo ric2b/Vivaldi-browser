@@ -5,10 +5,13 @@
 #include "cc/trees/single_thread_proxy.h"
 
 #include "base/auto_reset.h"
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/devtools_instrumentation.h"
 #include "cc/benchmarks/benchmark_instrumentation.h"
+#include "cc/input/browser_controls_offset_manager.h"
+#include "cc/paint/paint_worklet_layer_painter.h"
 #include "cc/resources/ui_resource_manager.h"
 #include "cc/scheduler/commit_earlyout_reason.h"
 #include "cc/scheduler/compositor_timing_history.h"
@@ -46,10 +49,12 @@ SingleThreadProxy::SingleThreadProxy(LayerTreeHost* layer_tree_host,
       inside_impl_frame_(false),
 #endif
       inside_draw_(false),
+      defer_main_frame_update_(false),
       defer_commits_(false),
       animate_requested_(false),
       commit_requested_(false),
       inside_synchronous_composite_(false),
+      needs_impl_frame_(false),
       layer_tree_frame_sink_creation_requested_(false),
       layer_tree_frame_sink_lost_(true),
       frame_sink_bound_weak_factory_(this),
@@ -162,7 +167,6 @@ void SingleThreadProxy::SetLayerTreeFrameSink(
 void SingleThreadProxy::SetNeedsAnimate() {
   TRACE_EVENT0("cc", "SingleThreadProxy::SetNeedsAnimate");
   DCHECK(task_runner_provider_->IsMainThread());
-  single_thread_client_->RequestScheduleAnimation();
   if (animate_requested_)
     return;
   animate_requested_ = true;
@@ -227,8 +231,8 @@ void SingleThreadProxy::CommitComplete() {
       << "Activation is expected to have synchronously occurred by now.";
 
   DebugScopedSetMainThread main(task_runner_provider_);
-  layer_tree_host_->CommitComplete();
   layer_tree_host_->DidBeginMainFrame();
+  layer_tree_host_->CommitComplete();
 
   next_frame_is_newly_committed_frame_ = true;
 }
@@ -258,24 +262,50 @@ void SingleThreadProxy::SetNextCommitWaitsForActivation() {
 }
 
 bool SingleThreadProxy::RequestedAnimatePending() {
-  return animate_requested_ || commit_requested_;
+  return animate_requested_ || commit_requested_ || needs_impl_frame_;
 }
 
-void SingleThreadProxy::SetDeferCommits(bool defer_commits) {
+void SingleThreadProxy::SetDeferMainFrameUpdate(bool defer_main_frame_update) {
   DCHECK(task_runner_provider_->IsMainThread());
-  // Deferring commits only makes sense if there's a scheduler.
+  // Deferring main frame updates only makes sense if there's a scheduler.
   if (!scheduler_on_impl_thread_)
     return;
-  if (defer_commits_ == defer_commits)
+  if (defer_main_frame_update_ == defer_main_frame_update)
     return;
 
-  if (defer_commits)
-    TRACE_EVENT_ASYNC_BEGIN0("cc", "SingleThreadProxy::SetDeferCommits", this);
+  if (defer_main_frame_update)
+    TRACE_EVENT_ASYNC_BEGIN0("cc", "SingleThreadProxy::SetDeferMainFrameUpdate",
+                             this);
   else
-    TRACE_EVENT_ASYNC_END0("cc", "SingleThreadProxy::SetDeferCommits", this);
+    TRACE_EVENT_ASYNC_END0("cc", "SingleThreadProxy::SetDeferMainFrameUpdate",
+                           this);
 
-  defer_commits_ = defer_commits;
-  scheduler_on_impl_thread_->SetDeferCommits(defer_commits);
+  defer_main_frame_update_ = defer_main_frame_update;
+
+  // The scheduler needs to know that it should not issue BeginMainFrame.
+  scheduler_on_impl_thread_->SetDeferBeginMainFrame(defer_main_frame_update_);
+}
+
+void SingleThreadProxy::StartDeferringCommits(base::TimeDelta timeout) {
+  DCHECK(task_runner_provider_->IsMainThread());
+
+  // Do nothing if already deferring. The timeout remains as it was from when
+  // we most recently began deferring.
+  if (defer_commits_)
+    return;
+
+  TRACE_EVENT_ASYNC_BEGIN0("cc", "SingleThreadProxy::SetDeferCommits", this);
+
+  defer_commits_ = true;
+  commits_restart_time_ = base::TimeTicks::Now() + timeout;
+}
+
+void SingleThreadProxy::StopDeferringCommits() {
+  if (!defer_commits_)
+    return;
+  defer_commits_ = false;
+  commits_restart_time_ = base::TimeTicks();
+  TRACE_EVENT_ASYNC_END0("cc", "SingleThreadProxy::SetDeferCommits", this);
 }
 
 bool SingleThreadProxy::CommitRequested() const {
@@ -312,6 +342,11 @@ void SingleThreadProxy::SetMutator(std::unique_ptr<LayerTreeMutator> mutator) {
   host_impl_->SetLayerTreeMutator(std::move(mutator));
 }
 
+void SingleThreadProxy::SetPaintWorkletLayerPainter(
+    std::unique_ptr<PaintWorkletLayerPainter> painter) {
+  NOTREACHED();
+}
+
 void SingleThreadProxy::OnCanDrawStateChanged(bool can_draw) {
   TRACE_EVENT1("cc", "SingleThreadProxy::OnCanDrawStateChanged", "can_draw",
                can_draw);
@@ -346,6 +381,7 @@ void SingleThreadProxy::SetNeedsOneBeginImplFrameOnImplThread() {
   single_thread_client_->RequestScheduleComposite();
   if (scheduler_on_impl_thread_)
     scheduler_on_impl_thread_->SetNeedsOneBeginImplFrame();
+  needs_impl_frame_ = true;
 }
 
 void SingleThreadProxy::SetNeedsPrepareTilesOnImplThread() {
@@ -358,6 +394,7 @@ void SingleThreadProxy::SetNeedsCommitOnImplThread() {
   single_thread_client_->RequestScheduleComposite();
   if (scheduler_on_impl_thread_)
     scheduler_on_impl_thread_->SetNeedsBeginMainFrame();
+  commit_requested_ = true;
 }
 
 void SingleThreadProxy::SetVideoNeedsBeginFrames(bool needs_begin_frames) {
@@ -442,12 +479,15 @@ void SingleThreadProxy::DidReceiveCompositorFrameAckOnImplThread() {
                "SingleThreadProxy::DidReceiveCompositorFrameAckOnImplThread");
   if (scheduler_on_impl_thread_)
     scheduler_on_impl_thread_->DidReceiveCompositorFrameAck();
-  // We do a PostTask here because freeing resources in some cases (such as in
-  // TextureLayer) is PostTasked and we want to make sure ack is received after
-  // resources are returned.
-  task_runner_provider_->MainThreadTaskRunner()->PostTask(
-      FROM_HERE, base::Bind(&SingleThreadProxy::DidReceiveCompositorFrameAck,
-                            frame_sink_bound_weak_ptr_));
+  if (layer_tree_host_->GetSettings().send_compositor_frame_ack) {
+    // We do a PostTask here because freeing resources in some cases (such as in
+    // TextureLayer) is PostTasked and we want to make sure ack is received
+    // after resources are returned.
+    task_runner_provider_->MainThreadTaskRunner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&SingleThreadProxy::DidReceiveCompositorFrameAck,
+                       frame_sink_bound_weak_ptr_));
+  }
 }
 
 void SingleThreadProxy::OnDrawForLayerTreeFrameSink(
@@ -483,6 +523,23 @@ void SingleThreadProxy::DidPresentCompositorFrameOnImplThread(
     const gfx::PresentationFeedback& feedback) {
   layer_tree_host_->DidPresentCompositorFrame(frame_token, std::move(callbacks),
                                               feedback);
+}
+
+void SingleThreadProxy::DidGenerateLocalSurfaceIdAllocationOnImplThread(
+    const viz::LocalSurfaceIdAllocation& allocation) {
+  DebugScopedSetMainThread main(task_runner_provider_);
+  layer_tree_host_->DidGenerateLocalSurfaceIdAllocation(allocation);
+}
+
+void SingleThreadProxy::NotifyAnimationWorkletStateChange(
+    AnimationWorkletMutationState state,
+    ElementListType element_list_type) {
+  layer_tree_host_->NotifyAnimationWorkletStateChange(state, element_list_type);
+}
+
+uint32_t SingleThreadProxy::GenerateChildSurfaceSequenceNumberSync() {
+  DebugScopedSetImplThread impl(task_runner_provider_);
+  return host_impl_->GenerateChildSurfaceSequenceNumberSync();
 }
 
 void SingleThreadProxy::RequestBeginMainFrameNotExpected(bool new_state) {
@@ -526,6 +583,7 @@ void SingleThreadProxy::CompositeImmediately(base::TimeTicks frame_begin_time,
     DCHECK(inside_impl_frame_);
 #endif
     animate_requested_ = false;
+    needs_impl_frame_ = false;
     // Prevent new commits from being requested inside DoBeginMainFrame.
     // Note: We do not want to prevent SetNeedsAnimate from requesting
     // a commit here.
@@ -580,8 +638,8 @@ void SingleThreadProxy::ScheduleRequestNewLayerTreeFrameSink() {
   if (layer_tree_frame_sink_creation_callback_.IsCancelled() &&
       !layer_tree_frame_sink_creation_requested_) {
     layer_tree_frame_sink_creation_callback_.Reset(
-        base::Bind(&SingleThreadProxy::RequestNewLayerTreeFrameSink,
-                   weak_factory_.GetWeakPtr()));
+        base::BindOnce(&SingleThreadProxy::RequestNewLayerTreeFrameSink,
+                       weak_factory_.GetWeakPtr()));
     task_runner_provider_->MainThreadTaskRunner()->PostTask(
         FROM_HERE, layer_tree_frame_sink_creation_callback_.callback());
   }
@@ -658,6 +716,14 @@ void SingleThreadProxy::SetRenderFrameObserver(
   host_impl_->SetRenderFrameObserver(std::move(observer));
 }
 
+void SingleThreadProxy::UpdateBrowserControlsState(
+    BrowserControlsState constraints,
+    BrowserControlsState current,
+    bool animate) {
+  host_impl_->browser_controls_manager()->UpdateBrowserControlsState(
+      constraints, current, animate);
+}
+
 bool SingleThreadProxy::WillBeginImplFrame(const viz::BeginFrameArgs& args) {
   DebugScopedSetImplThread impl(task_runner_provider_);
 #if DCHECK_IS_ON()
@@ -683,10 +749,16 @@ void SingleThreadProxy::ScheduledActionSendBeginMainFrame(
       << "BeginMainFrame should only be sent inside a BeginImplFrame";
 #endif
 
+  host_impl_->WillSendBeginMainFrame();
   task_runner_provider_->MainThreadTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&SingleThreadProxy::BeginMainFrame,
                                 weak_factory_.GetWeakPtr(), begin_frame_args));
   host_impl_->DidSendBeginMainFrame();
+}
+
+void SingleThreadProxy::FrameIntervalUpdated(base::TimeDelta interval) {
+  DebugScopedSetMainThread main(task_runner_provider_);
+  single_thread_client_->FrameIntervalUpdated(interval);
 }
 
 void SingleThreadProxy::SendBeginMainFrameNotExpectedSoon() {
@@ -711,13 +783,14 @@ void SingleThreadProxy::BeginMainFrame(
   }
 
   commit_requested_ = false;
+  needs_impl_frame_ = false;
   animate_requested_ = false;
 
-  if (defer_commits_) {
-    TRACE_EVENT_INSTANT0("cc", "EarlyOut_DeferCommit",
+  if (defer_main_frame_update_) {
+    TRACE_EVENT_INSTANT0("cc", "EarlyOut_DeferBeginMainFrame",
                          TRACE_EVENT_SCOPE_THREAD);
     BeginMainFrameAbortedOnImplThread(
-        CommitEarlyOutReason::ABORTED_DEFERRED_COMMIT);
+        CommitEarlyOutReason::ABORTED_DEFERRED_MAIN_FRAME_UPDATE);
     return;
   }
 
@@ -738,9 +811,15 @@ void SingleThreadProxy::BeginMainFrame(
   // New commits requested inside UpdateLayers should be respected.
   commit_requested_ = false;
 
+  // Check now if we should stop deferring commits
+  if (defer_commits_ && base::TimeTicks::Now() > commits_restart_time_) {
+    StopDeferringCommits();
+  }
+
   // At this point the main frame may have deferred commits to avoid committing
   // right now.
-  if (defer_commits_ || begin_frame_args.animate_only) {
+  if (defer_main_frame_update_ || defer_commits_ ||
+      begin_frame_args.animate_only) {
     TRACE_EVENT_INSTANT0("cc", "EarlyOut_DeferCommit_InsideBeginMainFrame",
                          TRACE_EVENT_SCOPE_THREAD);
     BeginMainFrameAbortedOnImplThread(
@@ -773,10 +852,7 @@ void SingleThreadProxy::DoBeginMainFrame(
   layer_tree_host_->WillBeginMainFrame();
   layer_tree_host_->BeginMainFrame(begin_frame_args);
   layer_tree_host_->AnimateLayers(begin_frame_args.frame_time);
-  layer_tree_host_->RequestMainFrameUpdate(
-      begin_frame_args.animate_only
-          ? LayerTreeHost::VisualStateUpdate::kPrePaint
-          : LayerTreeHost::VisualStateUpdate::kAll);
+  layer_tree_host_->RequestMainFrameUpdate();
 }
 
 void SingleThreadProxy::DoPainting() {
@@ -876,6 +952,10 @@ void SingleThreadProxy::DidFinishImplFrame() {
 void SingleThreadProxy::DidNotProduceFrame(const viz::BeginFrameAck& ack) {
   DebugScopedSetImplThread impl(task_runner_provider_);
   host_impl_->DidNotProduceFrame(ack);
+}
+
+void SingleThreadProxy::WillNotReceiveBeginFrame() {
+  host_impl_->DidNotNeedBeginFrame();
 }
 
 void SingleThreadProxy::DidReceiveCompositorFrameAck() {

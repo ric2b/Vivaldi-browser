@@ -16,13 +16,6 @@ function GearMenu(element) {
       (queryRequiredElement('#gear-menu-drive-sync-settings', element));
 
   /**
-   * @type {!HTMLMenuItemElement}
-   * @const
-   */
-  this.hostedButton = /** @type {!HTMLMenuItemElement} */
-      (queryRequiredElement('#gear-menu-drive-hosted-settings', element));
-
-  /**
    * @type {!HTMLElement}
    * @const
    */
@@ -78,7 +71,6 @@ function GearMenu(element) {
 
   // Initialize attributes.
   this.syncButton.checkable = true;
-  this.hostedButton.checkable = true;
 }
 
 /**
@@ -118,15 +110,16 @@ GearMenu.prototype.setSpaceInfo = function(
     this.volumeSpaceInnerBar_.style.width = '100%';
   }
 
-  spaceInfoPromise.then(function(spaceInfo) {
-    if (this.spaceInfoPromise_ != spaceInfoPromise)
+  spaceInfoPromise.then(spaceInfo => {
+    if (this.spaceInfoPromise_ != spaceInfoPromise) {
       return;
+    }
     this.volumeSpaceInnerBar_.removeAttribute('pending');
     if (spaceInfo) {
-      var sizeStr = util.bytesToString(spaceInfo.remainingSize);
+      const sizeStr = util.bytesToString(spaceInfo.remainingSize);
       this.volumeSpaceInfoLabel_.textContent = strf('SPACE_AVAILABLE', sizeStr);
 
-      var usedSpace = spaceInfo.totalSize - spaceInfo.remainingSize;
+      const usedSpace = spaceInfo.totalSize - spaceInfo.remainingSize;
       this.volumeSpaceInnerBar_.style.width =
           (100 * usedSpace / spaceInfo.totalSize) + '%';
 
@@ -135,5 +128,5 @@ GearMenu.prototype.setSpaceInfo = function(
       this.volumeSpaceOuterBar_.hidden = true;
       this.volumeSpaceInfoLabel_.textContent = str('FAILED_SPACE_INFO');
     }
-  }.bind(this));
+  });
 };

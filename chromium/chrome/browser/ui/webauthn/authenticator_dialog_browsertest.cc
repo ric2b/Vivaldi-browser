@@ -10,6 +10,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/webauthn/authenticator_request_dialog.h"
+#include "chrome/browser/webauthn/authenticator_reference.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
 
 class AuthenticatorDialogTest : public DialogBrowserTest {
@@ -18,6 +19,10 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
 
   // DialogBrowserTest:
   void ShowUi(const std::string& name) override {
+    // Web modal dialogs' bounds may exceed the display's work area.
+    // https://crbug.com/893292.
+    set_should_verify_dialog_bounds(false);
+
     auto model = std::make_unique<AuthenticatorRequestDialogModel>();
     ::device::FidoRequestHandlerBase::TransportAvailabilityInfo
         transport_availability;
@@ -28,7 +33,7 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
         AuthenticatorTransport::kNearFieldCommunication,
         AuthenticatorTransport::kInternal,
         AuthenticatorTransport::kCloudAssistedBluetoothLowEnergy};
-    model->StartFlow(std::move(transport_availability), base::nullopt);
+    model->StartFlow(std::move(transport_availability), base::nullopt, nullptr);
 
     // The dialog should immediately close as soon as it is displayed.
     if (name == "closed") {
@@ -40,17 +45,16 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
       model->SetCurrentStep(
           AuthenticatorRequestDialogModel::Step::kUsbInsertAndActivate);
     } else if (name == "timeout") {
-      model->SetCurrentStep(
-          AuthenticatorRequestDialogModel::Step::kPostMortemTimedOut);
+      model->SetCurrentStep(AuthenticatorRequestDialogModel::Step::kTimedOut);
     } else if (name == "no_available_transports") {
       model->SetCurrentStep(
           AuthenticatorRequestDialogModel::Step::kErrorNoAvailableTransports);
     } else if (name == "key_not_registered") {
       model->SetCurrentStep(
-          AuthenticatorRequestDialogModel::Step::kPostMortemKeyNotRegistered);
+          AuthenticatorRequestDialogModel::Step::kKeyNotRegistered);
     } else if (name == "key_already_registered") {
-      model->SetCurrentStep(AuthenticatorRequestDialogModel::Step::
-                                kPostMortemKeyAlreadyRegistered);
+      model->SetCurrentStep(
+          AuthenticatorRequestDialogModel::Step::kKeyAlreadyRegistered);
     } else if (name == "ble_power_on_manual") {
       model->SetCurrentStep(
           AuthenticatorRequestDialogModel::Step::kBlePowerOnManual);
@@ -64,6 +68,11 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
       model->SetCurrentStep(
           AuthenticatorRequestDialogModel::Step::kBleDeviceSelection);
     } else if (name == "ble_pin_entry") {
+      model->SetSelectedAuthenticatorForTesting(AuthenticatorReference(
+          "test_authenticator_id" /* authenticator_id */,
+          base::string16() /* authenticator_display_name */,
+          AuthenticatorTransport::kInternal, false /* is_in_pairing_mode */,
+          false /* is_paired */));
       model->SetCurrentStep(
           AuthenticatorRequestDialogModel::Step::kBlePinEntry);
     } else if (name == "ble_verifying") {

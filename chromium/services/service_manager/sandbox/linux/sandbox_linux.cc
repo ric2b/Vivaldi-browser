@@ -21,7 +21,6 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
-#include "base/debug/stack_trace.h"
 #include "base/feature_list.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
@@ -29,7 +28,7 @@
 #include "base/memory/singleton.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "sandbox/constants.h"
@@ -107,10 +106,15 @@ bool UpdateProcessTypeAndEnableSandbox(
   base::CommandLine::ForCurrentProcess()->InitFromArgv(exec);
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  command_line->AppendSwitchASCII(
-      switches::kProcessType,
-      command_line->GetSwitchValueASCII(switches::kProcessType)
-          .append("-broker"));
+  std::string new_process_type =
+      command_line->GetSwitchValueASCII(switches::kProcessType);
+  if (!new_process_type.empty()) {
+    new_process_type.append("-broker");
+  } else {
+    new_process_type = "broker";
+  }
+
+  command_line->AppendSwitchASCII(switches::kProcessType, new_process_type);
 
   if (broker_side_hook)
     CHECK(std::move(broker_side_hook).Run(options));
@@ -192,26 +196,11 @@ void SandboxLinux::PreinitializeSandbox() {
 }
 
 void SandboxLinux::EngageNamespaceSandbox(bool from_zygote) {
-  CHECK(pre_initialized_);
-  if (from_zygote) {
-    // Check being in a new PID namespace created by the namespace sandbox and
-    // being the init process.
-    CHECK(sandbox::NamespaceSandbox::InNewPidNamespace());
-    const pid_t pid = getpid();
-    CHECK_EQ(1, pid);
-  }
+  CHECK(EngageNamespaceSandboxInternal(from_zygote));
+}
 
-  CHECK(sandbox::Credentials::MoveToNewUserNS());
-
-  // Note: this requires SealSandbox() to be called later in this process to be
-  // safe, as this class is keeping a file descriptor to /proc/.
-  CHECK(sandbox::Credentials::DropFileSystemAccess(proc_fd_));
-
-  // We do not drop CAP_SYS_ADMIN because we need it to place each child process
-  // in its own PID namespace later on.
-  std::vector<sandbox::Credentials::Capability> caps;
-  caps.push_back(sandbox::Credentials::Capability::SYS_ADMIN);
-  CHECK(sandbox::Credentials::SetCapabilities(proc_fd_, caps));
+bool SandboxLinux::EngageNamespaceSandboxIfPossible() {
+  return EngageNamespaceSandboxInternal(false /* from_zygote */);
 }
 
 std::vector<int> SandboxLinux::GetFileDescriptorsToClose() {
@@ -495,6 +484,37 @@ void SandboxLinux::StopThreadAndEnsureNotCounted(base::Thread* thread) const {
   PCHECK(proc_fd.is_valid());
   CHECK(
       sandbox::ThreadHelpers::StopThreadAndWatchProcFS(proc_fd.get(), thread));
+}
+
+bool SandboxLinux::EngageNamespaceSandboxInternal(bool from_zygote) {
+  CHECK(pre_initialized_);
+  if (from_zygote) {
+    // Check being in a new PID namespace created by the namespace sandbox and
+    // being the init process.
+    CHECK(sandbox::NamespaceSandbox::InNewPidNamespace());
+    const pid_t pid = getpid();
+    CHECK_EQ(1, pid);
+  }
+
+  // After we successfully move to a new user ns, we don't allow this function
+  // to fail.
+  if (!sandbox::Credentials::MoveToNewUserNS()) {
+    return false;
+  }
+
+  // Note: this requires SealSandbox() to be called later in this process to be
+  // safe, as this class is keeping a file descriptor to /proc/.
+  CHECK(sandbox::Credentials::DropFileSystemAccess(proc_fd_));
+
+  // Now we drop all capabilities that we can. In the zygote process, we need
+  // to keep CAP_SYS_ADMIN, to place each child in its own PID namespace
+  // later on.
+  std::vector<sandbox::Credentials::Capability> caps;
+  if (from_zygote) {
+    caps.push_back(sandbox::Credentials::Capability::SYS_ADMIN);
+  }
+  CHECK(sandbox::Credentials::SetCapabilities(proc_fd_, caps));
+  return true;
 }
 
 }  // namespace service_manager

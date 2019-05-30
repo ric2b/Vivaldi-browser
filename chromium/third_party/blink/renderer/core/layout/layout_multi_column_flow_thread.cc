@@ -330,7 +330,8 @@ LayoutUnit LayoutMultiColumnFlowThread::MaxColumnLogicalHeight() const {
     return column_height_available_;
   }
   const LayoutBlockFlow* multicol_block = MultiColumnBlockFlow();
-  Length logical_max_height = multicol_block->StyleRef().LogicalMaxHeight();
+  const Length& logical_max_height =
+      multicol_block->StyleRef().LogicalMaxHeight();
   if (!logical_max_height.IsMaxSizeNone()) {
     LayoutUnit resolved_logical_max_height =
         multicol_block->ComputeContentLogicalHeight(
@@ -491,7 +492,15 @@ LayoutMultiColumnSet* LayoutMultiColumnFlowThread::ColumnSetAtBlockOffset(
   // Avoid returning zero-height column sets, if possible. We found a column set
   // based on a flow thread coordinate. If multiple column sets share that
   // coordinate (because we have zero-height column sets between column
-  // spanners, for instance), look for one that has a height.
+  // spanners, for instance), look for one that has a height. Also look ahead to
+  // find a set that actually contains the coordinate. Note that when we do this
+  // during layout, it means that we might return a column set that hasn't got
+  // its flow thread boundaries updated yet (and thus using those from the
+  // previous layout), but that's the best we can do when our engine doesn't
+  // actually understand fragmentation. This may happen when there's a float
+  // that's split into multiple fragments because of column spanners, and we
+  // still perform all its layout at the position before the first spanner in
+  // question (i.e. where only the first fragment is supposed to be laid out).
   for (LayoutMultiColumnSet* walker = column_set; walker;
        walker = walker->NextSiblingMultiColumnSet()) {
     if (!walker->IsPageLogicalHeightKnown())
@@ -500,11 +509,10 @@ LayoutMultiColumnSet* LayoutMultiColumnFlowThread::ColumnSetAtBlockOffset(
       if (walker->LogicalTopInFlowThread() < offset &&
           walker->LogicalBottomInFlowThread() >= offset)
         return walker;
-    }
-    if (walker->LogicalTopInFlowThread() <= offset &&
-        walker->LogicalBottomInFlowThread() > offset)
+    } else if (walker->LogicalTopInFlowThread() <= offset &&
+               walker->LogicalBottomInFlowThread() > offset) {
       return walker;
-    break;
+    }
   }
   return column_set;
 }
@@ -604,7 +612,7 @@ bool LayoutMultiColumnFlowThread::RemoveSpannerPlaceholderIfNoLongerValid(
   // it for relayout.
   spanner_object_in_flow_thread->ContainingBlock()
       ->SetNeedsLayoutAndPrefWidthsRecalc(
-          LayoutInvalidationReason::kColumnsChanged);
+          layout_invalidation_reason::kColumnsChanged);
 
   // Now generate a column set for this ex-spanner, if needed and none is there
   // for us already.
@@ -1459,47 +1467,6 @@ MultiColumnLayoutState LayoutMultiColumnFlowThread::GetMultiColumnLayoutState()
 void LayoutMultiColumnFlowThread::RestoreMultiColumnLayoutState(
     const MultiColumnLayoutState& state) {
   last_set_worked_on_ = state.ColumnSet();
-}
-
-unsigned LayoutMultiColumnFlowThread::CalculateActualColumnCountAllowance()
-    const {
-  // To avoid performance problems, limit the maximum number of columns. Try to
-  // identify legitimate reasons for creating many columns, and allow many
-  // columns in such cases. The amount of "content" will determine the
-  // allowance.
-  unsigned allowance = 0;
-
-  // This isn't a particularly clever algorithm. For example, we don't account
-  // for parallel flows (absolute positioning, floats, visible overflow, table
-  // cells, flex items). We just generously add everything together.
-  for (const LayoutObject* descendant = this; descendant;) {
-    bool examine_children = false;
-    if (descendant->IsBox() && !descendant->IsInline() &&
-        !ToLayoutBox(descendant)->IsWritingModeRoot()) {
-      // Give one point to any kind of block level content.
-      allowance++;
-      if (descendant->IsLayoutBlockFlow() && descendant->ChildrenInline()) {
-        // It's a block-level block container in the same writing mode, and it
-        // has inline children. Count the lines and add it to the allowance.
-        allowance += ToLayoutBlockFlow(descendant)->LineCount();
-      } else {
-        // We could examine other types of layout modes (tables, flexbox, etc.)
-        // as well, but then again, that might be overkill. Just enter and see
-        // what we find.
-        examine_children = true;
-      }
-    }
-
-    if (allowance >= ColumnCountClampMax())
-      return ColumnCountClampMax();
-
-    descendant = examine_children
-                     ? descendant->NextInPreOrder(this)
-                     : descendant->NextInPreOrderAfterChildren(this);
-  }
-
-  DCHECK_LE(allowance, ColumnCountClampMax());
-  return std::max(allowance, ColumnCountClampMin());
 }
 
 }  // namespace blink

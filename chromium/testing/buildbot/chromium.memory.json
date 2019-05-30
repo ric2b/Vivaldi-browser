@@ -271,6 +271,51 @@
             "--bucket",
             "chromium-result-details",
             "--test-name",
+            "webkit_unit_tests"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "name": "webkit_unit_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "device_os": "MMB29Q",
+              "device_type": "bullhead",
+              "os": "Android"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ],
+          "shards": 2
+        },
+        "test": "blink_unittests"
+      },
+      {
+        "args": [
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
             "boringssl_crypto_tests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
@@ -435,6 +480,7 @@
       },
       {
         "args": [
+          "--gtest_filter=-*UsingRealWebcam*",
           "--gs-results-bucket=chromium-result-details",
           "--recover-devices"
         ],
@@ -608,6 +654,8 @@
       },
       {
         "args": [
+          "--shared-prefs-file=//chrome/android/shared_preference_files/test/vr_cardboard_skipdon_setupcomplete.json",
+          "--additional-apk=//third_party/gvr-android-sdk/test-apks/vr_services/vr_services_current.apk",
           "--gs-results-bucket=chromium-result-details",
           "--recover-devices"
         ],
@@ -649,49 +697,6 @@
           "shards": 2
         },
         "test": "chrome_public_test_vr_apk"
-      },
-      {
-        "args": [
-          "--gs-results-bucket=chromium-result-details",
-          "--recover-devices"
-        ],
-        "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "chrome_sync_shell_test_apk"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
-          "dimension_sets": [
-            {
-              "device_os": "MMB29Q",
-              "device_type": "bullhead",
-              "os": "Android"
-            }
-          ],
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ]
-        },
-        "test": "chrome_sync_shell_test_apk"
       },
       {
         "args": [
@@ -826,7 +831,7 @@
       },
       {
         "args": [
-          "--enable-features=TracingPerfettoBackend",
+          "--enable-perfetto",
           "--gtest_filter=TracingControllerTest.*",
           "--gs-results-bucket=chromium-result-details",
           "--recover-devices"
@@ -867,52 +872,6 @@
               "name": "shard #${SHARD_INDEX} logcats"
             }
           ]
-        },
-        "test": "content_browsertests"
-      },
-      {
-        "args": [
-          "--enable-features=VizDisplayCompositor",
-          "--gs-results-bucket=chromium-result-details",
-          "--recover-devices"
-        ],
-        "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "viz_content_browsertests"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
-        },
-        "name": "viz_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
-          "dimension_sets": [
-            {
-              "device_os": "MMB29Q",
-              "device_type": "bullhead",
-              "os": "Android"
-            }
-          ],
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ],
-          "shards": 10
         },
         "test": "content_browsertests"
       },
@@ -2478,6 +2437,49 @@
             "--bucket",
             "chromium-result-details",
             "--test-name",
+            "vr_android_unittests"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "device_os": "MMB29Q",
+              "device_type": "bullhead",
+              "os": "Android"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ]
+        },
+        "test": "vr_android_unittests"
+      },
+      {
+        "args": [
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
             "vr_common_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
@@ -2553,50 +2555,6 @@
           ]
         },
         "test": "vr_pixeltests"
-      },
-      {
-        "args": [
-          "--gs-results-bucket=chromium-result-details",
-          "--recover-devices"
-        ],
-        "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "webkit_unit_tests"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
-          "dimension_sets": [
-            {
-              "device_os": "MMB29Q",
-              "device_type": "bullhead",
-              "os": "Android"
-            }
-          ],
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ],
-          "shards": 2
-        },
-        "test": "webkit_unit_tests"
       },
       {
         "args": [
@@ -2691,7 +2649,6 @@
     "gtest_tests": [
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2701,7 +2658,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2712,7 +2668,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2722,7 +2677,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2732,7 +2686,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2742,7 +2695,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2752,7 +2704,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2762,7 +2713,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2772,7 +2722,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2782,7 +2731,17 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "webkit_unit_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "shards": 5
+        },
+        "test": "blink_unittests"
+      },
+      {
+        "args": [
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2792,7 +2751,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2802,7 +2760,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2813,20 +2770,19 @@
       },
       {
         "args": [
-          "--enable-features=WebUIPolymer2",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer2_browser_tests.filter",
-          "--test-launcher-batch-limit=1",
+          "--disable-features=WebUIPolymer2",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer1_browser_tests.filter",
           "--test-launcher-print-test-stdio=always"
         ],
-        "name": "webui_polymer2_browser_tests",
+        "name": "webui_polymer1_browser_tests",
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "shards": 4
         },
         "test": "browser_tests"
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2836,7 +2792,7 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
+          "--gtest_filter=-*UsingRealWebcam*",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2846,7 +2802,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2856,7 +2811,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2866,7 +2820,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2876,7 +2829,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2886,7 +2838,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2896,7 +2847,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2907,7 +2857,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2917,20 +2866,18 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
           "can_use_on_swarming_builders": true,
-          "shards": 8
+          "shards": 6
         },
         "test": "content_browsertests"
       },
       {
         "args": [
-          "--enable-features=TracingPerfettoBackend",
+          "--enable-perfetto",
           "--gtest_filter=TracingControllerTest.*",
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "name": "perfetto_content_browsertests",
@@ -2941,20 +2888,6 @@
       },
       {
         "args": [
-          "--enable-features=VizDisplayCompositor",
-          "--test-launcher-batch-limit=1",
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "name": "viz_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "shards": 8
-        },
-        "test": "content_browsertests"
-      },
-      {
-        "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2965,7 +2898,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2975,7 +2907,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2985,7 +2916,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -2995,7 +2925,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3005,7 +2934,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3015,7 +2943,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3025,7 +2952,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3035,7 +2961,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3045,7 +2970,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3055,7 +2979,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3065,7 +2988,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3075,7 +2997,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3085,7 +3006,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always",
           "--use-gpu-in-tests",
           "--no-xvfb"
@@ -3105,7 +3025,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3115,7 +3034,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3125,7 +3043,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3135,7 +3052,24 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "headless_browsertests"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "headless_unittests"
+      },
+      {
+        "args": [
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3146,12 +3080,11 @@
       },
       {
         "args": [
-          "--enable-features=WebUIPolymer2",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer2_interactive_ui_tests.filter",
-          "--test-launcher-batch-limit=1",
+          "--disable-features=WebUIPolymer2",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer1_interactive_ui_tests.filter",
           "--test-launcher-print-test-stdio=always"
         ],
-        "name": "webui_polymer2_interactive_ui_tests",
+        "name": "webui_polymer1_interactive_ui_tests",
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -3159,7 +3092,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3169,7 +3101,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3179,7 +3110,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3189,7 +3119,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3199,7 +3128,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3209,7 +3137,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3219,7 +3146,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3229,7 +3155,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3239,7 +3164,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3249,7 +3173,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3259,7 +3182,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3269,7 +3191,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3279,7 +3200,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3289,7 +3209,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3299,7 +3218,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3309,7 +3227,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3320,7 +3237,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3330,7 +3246,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3340,7 +3255,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3350,7 +3264,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3360,7 +3273,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3370,7 +3282,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3380,7 +3291,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3390,7 +3300,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3400,7 +3309,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3410,7 +3318,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3420,7 +3327,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3430,7 +3336,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3440,7 +3345,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3450,7 +3354,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3460,7 +3363,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3470,7 +3372,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3480,7 +3381,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3491,7 +3391,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3501,7 +3400,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3511,7 +3409,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3521,7 +3418,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3531,7 +3427,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3541,18 +3436,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "shards": 5
-        },
-        "test": "webkit_unit_tests"
-      },
-      {
-        "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3562,7 +3445,6 @@
       },
       {
         "args": [
-          "--test-launcher-batch-limit=1",
           "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
@@ -3575,6 +3457,9 @@
   "Linux ASan Tests (sandboxed)": {
     "gtest_tests": [
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
           "shards": 10
@@ -3582,18 +3467,27 @@
         "test": "browser_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "components_browsertests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "content_browsertests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
           "shards": 3
@@ -3659,6 +3553,13 @@
         "test": "blink_platform_unittests"
       },
       {
+        "name": "webkit_unit_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "blink_unittests"
+      },
+      {
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -3679,24 +3580,13 @@
       },
       {
         "args": [
-          "--enable-features=NetworkService",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/mojo.fyi.network_browser_tests.filter"
+          "--disable-features=WebUIPolymer2",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer1_browser_tests.filter"
         ],
-        "name": "network_service_browser_tests",
+        "name": "webui_polymer1_browser_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
-          "shards": 15
-        },
-        "test": "browser_tests"
-      },
-      {
-        "args": [
-          "--enable-features=WebUIPolymer2",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer2_browser_tests.filter"
-        ],
-        "name": "webui_polymer2_browser_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true
+          "shards": 4
         },
         "test": "browser_tests"
       },
@@ -3707,6 +3597,9 @@
         "test": "cacheinvalidation_unittests"
       },
       {
+        "args": [
+          "--gtest_filter=-*UsingRealWebcam*"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -3743,16 +3636,6 @@
         "test": "components_browsertests"
       },
       {
-        "args": [
-          "--enable-features=NetworkService"
-        ],
-        "name": "network_service_components_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "components_browsertests"
-      },
-      {
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -3766,41 +3649,19 @@
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "content_browsertests"
-      },
-      {
-        "args": [
-          "--enable-features=NetworkService",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/mojo.fyi.network_content_browsertests.filter"
-        ],
-        "name": "network_service_content_browsertests",
-        "swarming": {
           "can_use_on_swarming_builders": true,
-          "shards": 2
+          "shards": 6
         },
         "test": "content_browsertests"
       },
       {
         "args": [
-          "--enable-features=TracingPerfettoBackend",
+          "--enable-perfetto",
           "--gtest_filter=TracingControllerTest.*"
         ],
         "name": "perfetto_content_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true
-        },
-        "test": "content_browsertests"
-      },
-      {
-        "args": [
-          "--enable-features=VizDisplayCompositor"
-        ],
-        "name": "viz_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "shards": 10
         },
         "test": "content_browsertests"
       },
@@ -3853,16 +3714,6 @@
         "test": "events_unittests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "extensions_browsertests"
-      },
-      {
-        "args": [
-          "--enable-features=NetworkService"
-        ],
-        "name": "network_service_extensions_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -3967,21 +3818,10 @@
       },
       {
         "args": [
-          "--enable-features=NetworkService"
+          "--disable-features=WebUIPolymer2",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer1_interactive_ui_tests.filter"
         ],
-        "name": "network_service_interactive_ui_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "shards": 3
-        },
-        "test": "interactive_ui_tests"
-      },
-      {
-        "args": [
-          "--enable-features=WebUIPolymer2",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer2_interactive_ui_tests.filter"
-        ],
-        "name": "webui_polymer2_interactive_ui_tests",
+        "name": "webui_polymer1_interactive_ui_tests",
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -4214,12 +4054,6 @@
           "can_use_on_swarming_builders": true
         },
         "test": "vr_pixeltests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "webkit_unit_tests"
       },
       {
         "swarming": {
@@ -4238,127 +4072,185 @@
   "Linux Chromium OS ASan LSan Tests (1)": {
     "gtest_tests": [
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "accessibility_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "angle_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "app_list_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "app_shell_unittests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "ash_content_unittests"
-      },
-      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "ash_unittests"
       },
       {
+        "args": [
+          "--disable-features=SingleProcessMash",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "non_single_process_mash_ash_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "ash_unittests"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "aura_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "base_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "blink_common_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "blink_fuzzer_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "blink_heap_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "blink_platform_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "webkit_unit_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "blink_unittests"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "boringssl_crypto_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "boringssl_ssl_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
-          "shards": 30
+          "shards": 31
         },
         "test": "browser_tests"
       },
       {
         "args": [
           "--enable-features=Mash",
+          "--disable-features=SingleProcessMash",
           "--override-use-software-gl-for-tests",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/chromeos.mash.browser_tests.filter"
+          "--test-launcher-filter-file=../../testing/buildbot/filters/chromeos.mash.browser_tests.filter",
+          "--test-launcher-print-test-stdio=always"
         ],
         "name": "mash_browser_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
-          "hard_timeout": 1800,
+          "hard_timeout": 1800
+        },
+        "test": "browser_tests"
+      },
+      {
+        "args": [
+          "--disable-features=SingleProcessMash",
+          "--override-use-software-gl-for-tests",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "non_single_process_mash_browser_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
           "shards": 30
         },
         "test": "browser_tests"
       },
       {
         "args": [
-          "--enable-features=SingleProcessMash",
-          "--override-use-software-gl-for-tests",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/chromeos.single_process_mash.browser_tests.filter"
-        ],
-        "name": "single_process_mash_browser_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "hard_timeout": 1800,
-          "shards": 10
-        },
-        "test": "browser_tests"
-      },
-      {
-        "args": [
-          "--enable-features=VizDisplayCompositor"
+          "--enable-features=VizDisplayCompositor",
+          "--test-launcher-print-test-stdio=always"
         ],
         "name": "viz_browser_tests",
         "swarming": {
@@ -4369,76 +4261,103 @@
       },
       {
         "args": [
-          "--enable-features=WebUIPolymer2",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer2_browser_tests.filter"
+          "--disable-features=WebUIPolymer2",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer1_browser_tests.filter",
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "webui_polymer2_browser_tests",
+        "name": "webui_polymer1_browser_tests",
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "shards": 4
         },
         "test": "browser_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "cacheinvalidation_unittests"
       },
       {
+        "args": [
+          "--gtest_filter=-*UsingRealWebcam*",
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "capture_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "cast_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "cc_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "chrome_app_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "chromedriver_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "chromeos_components_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "chromeos_unittests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "chromevox_tests"
-      },
-      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "components_browsertests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
           "shards": 5
@@ -4446,22 +4365,42 @@
         "test": "components_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "compositor_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
-          "shards": 4
+          "shards": 6
         },
         "test": "content_browsertests"
       },
       {
         "args": [
-          "--enable-features=TracingPerfettoBackend",
-          "--gtest_filter=TracingControllerTest.*"
+          "--disable-features=SingleProcessMash",
+          "--override-use-software-gl-for-tests",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "non_single_process_mash_content_browsertests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "shards": 5
+        },
+        "test": "content_browsertests"
+      },
+      {
+        "args": [
+          "--enable-perfetto",
+          "--gtest_filter=TracingControllerTest.*",
+          "--test-launcher-print-test-stdio=always"
         ],
         "name": "perfetto_content_browsertests",
         "swarming": {
@@ -4471,7 +4410,8 @@
       },
       {
         "args": [
-          "--enable-features=VizDisplayCompositor"
+          "--enable-features=VizDisplayCompositor",
+          "--test-launcher-print-test-stdio=always"
         ],
         "name": "viz_content_browsertests",
         "swarming": {
@@ -4481,16 +4421,9 @@
         "test": "content_browsertests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "content_unittests"
-      },
-      {
         "args": [
-          "--enable-features=SingleProcessMash"
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "single_process_mash_content_unittests",
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -4498,7 +4431,19 @@
       },
       {
         "args": [
-          "--enable-features=VizDisplayCompositor"
+          "--disable-features=SingleProcessMash",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "non_single_process_mash_content_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "content_unittests"
+      },
+      {
+        "args": [
+          "--enable-features=VizDisplayCompositor",
+          "--test-launcher-print-test-stdio=always"
         ],
         "name": "viz_content_unittests",
         "swarming": {
@@ -4507,90 +4452,146 @@
         "test": "content_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "crypto_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "dbus_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "device_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "display_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "events_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "exo_unittests"
       },
       {
+        "args": [
+          "--disable-features=SingleProcessMash",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "non_single_process_mash_exo_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "exo_unittests"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "extensions_browsertests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "extensions_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "filesystem_service_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "gcm_unit_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "gfx_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "gl_unittests_ozone"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "google_apis_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "gpu_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
           "shards": 3
@@ -4599,112 +4600,176 @@
       },
       {
         "args": [
-          "--enable-features=WebUIPolymer2",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer2_interactive_ui_tests.filter"
+          "--disable-features=SingleProcessMash",
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "webui_polymer2_interactive_ui_tests",
+        "name": "non_single_process_mash_interactive_ui_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "shards": 3
+        },
+        "test": "interactive_ui_tests"
+      },
+      {
+        "args": [
+          "--disable-features=WebUIPolymer2",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer1_interactive_ui_tests.filter",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "webui_polymer1_interactive_ui_tests",
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "interactive_ui_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "ipc_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "jingle_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "keyboard_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "latency_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "leveldb_service_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "libjingle_xmpp_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "media_blink_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "media_service_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "media_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "message_center_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "midi_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "mojo_core_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "mojo_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "nacl_helper_nonsfi_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "nacl_loader_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "native_theme_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
           "shards": 8
@@ -4713,7 +4778,8 @@
       },
       {
         "args": [
-          "--ozone-platform=headless"
+          "--ozone-platform=headless",
+          "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
           "can_use_on_swarming_builders": true
@@ -4721,126 +4787,180 @@
         "test": "ozone_gl_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "ozone_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "ozone_x11_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "pdf_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "ppapi_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "printing_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "remoting_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "sandbox_linux_unittests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "select_to_speak_extension_tests"
-      },
-      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "service_manager_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "services_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "shell_dialogs_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "skia_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "snapshot_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "sql_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "storage_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "sync_integration_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "traffic_annotation_auditor_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "ui_base_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "ui_chromeos_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "ui_touch_selection_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
           "shards": 2
@@ -4848,54 +4968,65 @@
         "test": "unit_tests"
       },
       {
+        "args": [
+          "--disable-features=SingleProcessMash",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "non_single_process_mash_unit_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "unit_tests"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "url_unittests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "views_mus_interactive_ui_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "views_mus_unittests"
-      },
-      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "views_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "viz_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "wayland_client_perftests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "webkit_unit_tests"
-      },
-      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "wm_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -4906,660 +5037,1554 @@
   "Linux ChromiumOS MSan Tests": {
     "gtest_tests": [
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "accessibility_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "angle_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "app_list_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "app_shell_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "ash_content_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "ash_unittests"
       },
       {
+        "args": [
+          "--disable-features=SingleProcessMash",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "non_single_process_mash_ash_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
+        },
+        "test": "ash_unittests"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "aura_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "base_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "blink_common_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "blink_fuzzer_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "blink_heap_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "blink_platform_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "webkit_unit_tests",
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
+        },
+        "test": "blink_unittests"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "boringssl_crypto_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "boringssl_ssl_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
-          "shards": 20
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ],
+          "shards": 25
         },
         "test": "browser_tests"
       },
       {
         "args": [
           "--enable-features=Mash",
+          "--disable-features=SingleProcessMash",
           "--override-use-software-gl-for-tests",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/chromeos.mash.browser_tests.filter"
+          "--test-launcher-filter-file=../../testing/buildbot/filters/chromeos.mash.browser_tests.filter",
+          "--test-launcher-print-test-stdio=always"
         ],
         "name": "mash_browser_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
-          "hard_timeout": 1800,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ],
+          "hard_timeout": 1800
+        },
+        "test": "browser_tests"
+      },
+      {
+        "args": [
+          "--disable-features=SingleProcessMash",
+          "--override-use-software-gl-for-tests",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "non_single_process_mash_browser_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ],
           "shards": 20
         },
         "test": "browser_tests"
       },
       {
         "args": [
-          "--enable-features=SingleProcessMash",
-          "--override-use-software-gl-for-tests",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/chromeos.single_process_mash.browser_tests.filter"
-        ],
-        "name": "single_process_mash_browser_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "hard_timeout": 1800,
-          "shards": 10
-        },
-        "test": "browser_tests"
-      },
-      {
-        "args": [
-          "--enable-features=VizDisplayCompositor"
+          "--enable-features=VizDisplayCompositor",
+          "--test-launcher-print-test-stdio=always"
         ],
         "name": "viz_browser_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ],
           "shards": 20
         },
         "test": "browser_tests"
       },
       {
         "args": [
-          "--enable-features=WebUIPolymer2",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer2_browser_tests.filter"
+          "--disable-features=WebUIPolymer2",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer1_browser_tests.filter",
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "webui_polymer2_browser_tests",
+        "name": "webui_polymer1_browser_tests",
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ],
+          "shards": 4
         },
         "test": "browser_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "cacheinvalidation_unittests"
       },
       {
+        "args": [
+          "--gtest_filter=-*UsingRealWebcam*",
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "capture_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "cast_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "cc_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "chrome_app_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "chromedriver_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "chromeos_components_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "chromeos_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
-          "shards": 6
-        },
-        "test": "chromevox_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "components_browsertests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "components_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "compositor_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ],
+          "shards": 6
         },
         "test": "content_browsertests"
       },
       {
         "args": [
-          "--enable-features=TracingPerfettoBackend",
-          "--gtest_filter=TracingControllerTest.*"
+          "--disable-features=SingleProcessMash",
+          "--override-use-software-gl-for-tests",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "non_single_process_mash_content_browsertests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ],
+          "shards": 5
+        },
+        "test": "content_browsertests"
+      },
+      {
+        "args": [
+          "--enable-perfetto",
+          "--gtest_filter=TracingControllerTest.*",
+          "--test-launcher-print-test-stdio=always"
         ],
         "name": "perfetto_content_browsertests",
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "content_browsertests"
       },
       {
         "args": [
-          "--enable-features=VizDisplayCompositor"
+          "--enable-features=VizDisplayCompositor",
+          "--test-launcher-print-test-stdio=always"
         ],
         "name": "viz_content_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ],
           "shards": 2
         },
         "test": "content_browsertests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ],
           "shards": 2
         },
         "test": "content_unittests"
       },
       {
         "args": [
-          "--enable-features=SingleProcessMash"
+          "--disable-features=SingleProcessMash",
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "single_process_mash_content_unittests",
+        "name": "non_single_process_mash_content_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "content_unittests"
       },
       {
         "args": [
-          "--enable-features=VizDisplayCompositor"
+          "--enable-features=VizDisplayCompositor",
+          "--test-launcher-print-test-stdio=always"
         ],
         "name": "viz_content_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "content_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "crypto_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "dbus_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "device_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "display_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "events_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "exo_unittests"
       },
       {
+        "args": [
+          "--disable-features=SingleProcessMash",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "non_single_process_mash_exo_unittests",
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
+        },
+        "test": "exo_unittests"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "extensions_browsertests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "extensions_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "filesystem_service_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "gcm_unit_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "gfx_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "gin_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "google_apis_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "gpu_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ],
           "shards": 5
         },
         "test": "interactive_ui_tests"
       },
       {
         "args": [
-          "--enable-features=WebUIPolymer2",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer2_interactive_ui_tests.filter"
+          "--disable-features=SingleProcessMash",
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "webui_polymer2_interactive_ui_tests",
+        "name": "non_single_process_mash_interactive_ui_tests",
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ],
+          "shards": 3
         },
         "test": "interactive_ui_tests"
       },
       {
+        "args": [
+          "--disable-features=WebUIPolymer2",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer1_interactive_ui_tests.filter",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "webui_polymer1_interactive_ui_tests",
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
+        },
+        "test": "interactive_ui_tests"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "ipc_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "jingle_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "keyboard_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "latency_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "leveldb_service_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "libjingle_xmpp_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "media_blink_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "media_service_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "media_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "message_center_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "midi_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "mojo_core_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "mojo_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "nacl_helper_nonsfi_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "nacl_loader_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "native_theme_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ],
           "shards": 2
         },
         "test": "net_unittests"
       },
       {
         "args": [
-          "--ozone-platform=headless"
+          "--ozone-platform=headless",
+          "--test-launcher-print-test-stdio=always"
         ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "ozone_gl_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "ozone_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "ozone_x11_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "pdf_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "ppapi_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "printing_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "remoting_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "sandbox_linux_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "select_to_speak_extension_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "service_manager_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "shell_dialogs_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "skia_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "snapshot_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "sql_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "storage_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "sync_integration_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "traffic_annotation_auditor_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "ui_base_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "ui_chromeos_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "ui_touch_selection_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ],
           "shards": 2
         },
         "test": "unit_tests"
       },
       {
+        "args": [
+          "--disable-features=SingleProcessMash",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "non_single_process_mash_unit_tests",
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
+        },
+        "test": "unit_tests"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "url_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "views_mus_interactive_ui_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "views_mus_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "views_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "viz_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "wayland_client_perftests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "webkit_unit_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "wm_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "wtf_unittests"
       }
@@ -5568,595 +6593,1292 @@
   "Linux MSan Tests": {
     "gtest_tests": [
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "accessibility_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "angle_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "app_shell_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "aura_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "base_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "blink_common_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "blink_fuzzer_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "blink_heap_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "blink_platform_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "webkit_unit_tests",
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
+        },
+        "test": "blink_unittests"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "boringssl_crypto_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "boringssl_ssl_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ],
           "shards": 10
         },
         "test": "browser_tests"
       },
       {
         "args": [
-          "--enable-features=NetworkService",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/mojo.fyi.network_browser_tests.filter"
+          "--disable-features=WebUIPolymer2",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer1_browser_tests.filter",
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "network_service_browser_tests",
+        "name": "webui_polymer1_browser_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
-          "shards": 15
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ],
+          "shards": 4
         },
         "test": "browser_tests"
       },
       {
         "args": [
-          "--enable-features=WebUIPolymer2",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer2_browser_tests.filter"
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "webui_polymer2_browser_tests",
         "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "browser_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "cacheinvalidation_unittests"
       },
       {
+        "args": [
+          "--gtest_filter=-*UsingRealWebcam*",
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "capture_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "cast_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "cc_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "chrome_app_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "chromedriver_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "components_browsertests"
       },
       {
         "args": [
-          "--enable-features=NetworkService"
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "network_service_components_browsertests",
         "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "components_browsertests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "components_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "compositor_unittests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "content_browsertests"
-      },
-      {
         "args": [
-          "--enable-features=NetworkService",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/mojo.fyi.network_content_browsertests.filter"
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "network_service_content_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
-          "shards": 2
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ],
+          "shards": 6
         },
         "test": "content_browsertests"
       },
       {
         "args": [
-          "--enable-features=TracingPerfettoBackend",
-          "--gtest_filter=TracingControllerTest.*"
+          "--enable-perfetto",
+          "--gtest_filter=TracingControllerTest.*",
+          "--test-launcher-print-test-stdio=always"
         ],
         "name": "perfetto_content_browsertests",
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "content_browsertests"
       },
       {
         "args": [
-          "--enable-features=VizDisplayCompositor"
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "viz_content_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
-          "shards": 10
-        },
-        "test": "content_browsertests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "content_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "cronet_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "cronet_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "crypto_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "dbus_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "device_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "display_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "events_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "extensions_browsertests"
       },
       {
         "args": [
-          "--enable-features=NetworkService"
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "network_service_extensions_browsertests",
         "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "extensions_browsertests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "extensions_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "filesystem_service_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "gcm_unit_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "gfx_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "gin_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "gl_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "google_apis_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "gpu_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "headless_browsertests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "headless_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ],
           "shards": 3
         },
         "test": "interactive_ui_tests"
       },
       {
         "args": [
-          "--enable-features=NetworkService"
+          "--disable-features=WebUIPolymer2",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer1_interactive_ui_tests.filter",
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "network_service_interactive_ui_tests",
+        "name": "webui_polymer1_interactive_ui_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
-          "shards": 3
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "interactive_ui_tests"
       },
       {
         "args": [
-          "--enable-features=WebUIPolymer2",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer2_interactive_ui_tests.filter"
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "webui_polymer2_interactive_ui_tests",
         "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "interactive_ui_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "ipc_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "jingle_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "latency_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "leveldb_service_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "libjingle_xmpp_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "media_blink_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "media_service_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "media_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "message_center_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "midi_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "mojo_core_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "mojo_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "nacl_helper_nonsfi_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "nacl_loader_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "native_theme_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "net_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "pdf_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "ppapi_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "printing_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "remoting_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "sandbox_linux_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "service_manager_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "shell_dialogs_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "skia_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "snapshot_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "sql_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "storage_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "sync_integration_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "traffic_annotation_auditor_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "ui_base_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "ui_touch_selection_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "unit_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "url_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "views_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "viz_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "vr_common_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "vr_pixeltests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "webkit_unit_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "wm_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "os": "Ubuntu-14.04"
+            }
+          ]
         },
         "test": "wtf_unittests"
       }
@@ -6165,60 +7887,109 @@
   "Linux TSan Tests": {
     "gtest_tests": [
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "accessibility_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "angle_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "app_shell_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "aura_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "base_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "blink_common_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "blink_fuzzer_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "blink_heap_unittests"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "blink_platform_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "webkit_unit_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "blink_unittests"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "boringssl_crypto_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -6226,80 +7997,114 @@
       },
       {
         "args": [
-          "--enable-features=WebUIPolymer2",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer2_browser_tests.filter"
+          "--disable-features=WebUIPolymer2",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer1_browser_tests.filter",
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "webui_polymer2_browser_tests",
+        "name": "webui_polymer1_browser_tests",
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "shards": 4
         },
         "test": "browser_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "cacheinvalidation_unittests"
       },
       {
+        "args": [
+          "--gtest_filter=-*UsingRealWebcam*",
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "capture_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "cast_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "cc_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "chrome_app_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "chromedriver_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "components_browsertests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "components_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "compositor_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
-          "shards": 5
+          "shards": 6
         },
         "test": "content_browsertests"
       },
       {
         "args": [
-          "--enable-features=TracingPerfettoBackend",
-          "--gtest_filter=TracingControllerTest.*"
+          "--enable-perfetto",
+          "--gtest_filter=TracingControllerTest.*",
+          "--test-launcher-print-test-stdio=always"
         ],
         "name": "perfetto_content_browsertests",
         "swarming": {
@@ -6309,94 +8114,125 @@
       },
       {
         "args": [
-          "--enable-features=VizDisplayCompositor"
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "viz_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "shards": 7
-        },
-        "test": "content_browsertests"
-      },
-      {
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "content_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "cronet_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "cronet_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "crypto_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "dbus_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "device_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "display_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "events_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "extensions_browsertests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "extensions_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "filesystem_service_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "gcm_unit_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "gfx_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -6404,6 +8240,7 @@
       },
       {
         "args": [
+          "--test-launcher-print-test-stdio=always",
           "--use-gpu-in-tests",
           "--no-xvfb"
         ],
@@ -6421,30 +8258,54 @@
         "use_xvfb": false
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "gl_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "google_apis_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "gpu_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "headless_browsertests"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "headless_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
           "shards": 6
@@ -6453,94 +8314,137 @@
       },
       {
         "args": [
-          "--enable-features=WebUIPolymer2",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer2_interactive_ui_tests.filter"
+          "--disable-features=WebUIPolymer2",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer1_interactive_ui_tests.filter",
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "webui_polymer2_interactive_ui_tests",
+        "name": "webui_polymer1_interactive_ui_tests",
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "interactive_ui_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "ipc_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "jingle_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "latency_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "leveldb_service_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "libjingle_xmpp_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "media_blink_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "media_service_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "media_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "message_center_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "midi_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "mojo_core_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "mojo_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "native_theme_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
           "shards": 4
@@ -6548,96 +8452,154 @@
         "test": "net_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "pdf_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "ppapi_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "printing_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "remoting_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "sandbox_linux_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "service_manager_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "services_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "shell_dialogs_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "skia_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "snapshot_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "sql_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "storage_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "shards": 6
+        },
+        "test": "sync_integration_tests"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "traffic_annotation_auditor_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "ui_base_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "ui_touch_selection_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
           "shards": 2
@@ -6645,48 +8607,63 @@
         "test": "unit_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "url_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "views_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "viz_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "vr_common_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "vr_pixeltests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "webkit_unit_tests"
-      },
-      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "wm_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -6697,60 +8674,100 @@
   "Mac ASan 64 Tests (1)": {
     "gtest_tests": [
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "accessibility_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "angle_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "app_shell_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "base_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "blink_common_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "blink_fuzzer_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "blink_heap_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "blink_platform_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "webkit_unit_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "blink_unittests"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "boringssl_crypto_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -6758,74 +8775,117 @@
       },
       {
         "args": [
-          "--enable-features=WebUIPolymer2",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer2_browser_tests.filter"
+          "--test-launcher-print-test-stdio=always",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/mac_window_server_killers.browser_tests.filter",
+          "--gtest_shuffle"
         ],
-        "name": "webui_polymer2_browser_tests",
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "shards": 20
         },
         "test": "browser_tests"
       },
       {
+        "args": [
+          "--disable-features=WebUIPolymer2",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer1_browser_tests.filter",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "webui_polymer1_browser_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "shards": 4
+        },
+        "test": "browser_tests"
+      },
+      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "cacheinvalidation_unittests"
       },
       {
+        "args": [
+          "--gtest_filter=-*UsingRealWebcam*",
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "capture_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "cast_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "cc_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "chrome_app_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "chromedriver_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "components_browsertests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "components_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
-          "shards": 2
+          "shards": 6
         },
         "test": "content_browsertests"
       },
       {
         "args": [
-          "--enable-features=TracingPerfettoBackend",
-          "--gtest_filter=TracingControllerTest.*"
+          "--enable-perfetto",
+          "--gtest_filter=TracingControllerTest.*",
+          "--test-launcher-print-test-stdio=always"
         ],
         "name": "perfetto_content_browsertests",
         "swarming": {
@@ -6835,16 +8895,8 @@
       },
       {
         "args": [
-          "--enable-features=VizDisplayCompositor"
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "viz_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "shards": 10
-        },
-        "test": "content_browsertests"
-      },
-      {
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -6852,117 +8904,161 @@
       },
       {
         "args": [
-          "--enable-features=VizDisplayCompositor"
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "viz_content_unittests",
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "content_unittests"
-      },
-      {
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "crashpad_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "cronet_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "cronet_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "crypto_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "device_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "display_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "events_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "extensions_browsertests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "extensions_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "filesystem_service_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "gcm_unit_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "gfx_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "gin_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "google_apis_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "gpu_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "headless_browsertests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "headless_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
           "shards": 3
@@ -6971,230 +9067,411 @@
       },
       {
         "args": [
-          "--enable-features=WebUIPolymer2",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer2_interactive_ui_tests.filter"
+          "--disable-features=WebUIPolymer2",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer1_interactive_ui_tests.filter",
+          "--test-launcher-print-test-stdio=always"
         ],
-        "name": "webui_polymer2_interactive_ui_tests",
+        "name": "webui_polymer1_interactive_ui_tests",
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "interactive_ui_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "ipc_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "jingle_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "latency_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "leveldb_service_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "libjingle_xmpp_unittests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "mac_installer_unittests"
-      },
-      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "media_blink_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "media_service_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "media_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "message_center_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "midi_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "mojo_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "native_theme_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "net_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "pdf_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "ppapi_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "printing_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "remoting_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "sandbox_mac_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "service_manager_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "services_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "shell_dialogs_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "skia_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "snapshot_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "sql_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "storage_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "sync_integration_tests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "traffic_annotation_auditor_unittests"
-      },
-      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "ui_base_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "ui_touch_selection_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "unit_tests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "url_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "views_unittests"
       },
       {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "viz_unittests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "webkit_unit_tests"
-      },
-      {
+        "args": [
+          "--test-launcher-print-test-stdio=always"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "wtf_unittests"
+      }
+    ]
+  },
+  "WebKit Linux Trusty ASAN": {
+    "isolated_scripts": [
+      {
+        "args": [
+          "--num-retries=3",
+          "--additional-expectations",
+          "../../third_party/blink/web_tests/ASANExpectations",
+          "--time-out-ms",
+          "48000",
+          "--enable-sanitizer"
+        ],
+        "isolate_name": "blink_web_tests_exparchive",
+        "merge": {
+          "args": [
+            "--verbose"
+          ],
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
+        },
+        "name": "webkit_layout_tests",
+        "results_handler": "layout tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-14.04"
+            }
+          ],
+          "shards": 20
+        }
+      }
+    ]
+  },
+  "WebKit Linux Trusty Leak": {
+    "isolated_scripts": [
+      {
+        "args": [
+          "--num-retries=3",
+          "--additional-expectations",
+          "../../third_party/blink/web_tests/LeakExpectations",
+          "--time-out-ms",
+          "48000",
+          "--enable-leak-detection"
+        ],
+        "isolate_name": "blink_web_tests_exparchive",
+        "merge": {
+          "args": [
+            "--verbose"
+          ],
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
+        },
+        "name": "webkit_layout_tests",
+        "results_handler": "layout tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-14.04"
+            }
+          ],
+          "shards": 10
+        }
+      }
+    ]
+  },
+  "WebKit Linux Trusty MSAN": {
+    "isolated_scripts": [
+      {
+        "args": [
+          "--num-retries=3",
+          "--additional-expectations",
+          "../../third_party/blink/web_tests/MSANExpectations",
+          "--time-out-ms",
+          "66000",
+          "--enable-sanitizer"
+        ],
+        "isolate_name": "blink_web_tests_exparchive",
+        "merge": {
+          "args": [
+            "--verbose"
+          ],
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
+        },
+        "name": "webkit_layout_tests",
+        "results_handler": "layout tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-14.04"
+            }
+          ],
+          "expiration": 36000,
+          "hard_timeout": 10800,
+          "io_timeout": 3600,
+          "shards": 20
+        }
       }
     ]
   },
@@ -7300,6 +9577,18 @@
         "test": "blink_platform_unittests"
       },
       {
+        "name": "webkit_unit_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Windows-10-15063"
+            }
+          ]
+        },
+        "test": "blink_unittests"
+      },
+      {
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7335,10 +9624,10 @@
       },
       {
         "args": [
-          "--enable-features=NetworkService",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/mojo.fyi.network_browser_tests.filter"
+          "--disable-features=WebUIPolymer2",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer1_browser_tests.filter"
         ],
-        "name": "network_service_browser_tests",
+        "name": "webui_polymer1_browser_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7346,23 +9635,7 @@
               "os": "Windows-10-15063"
             }
           ],
-          "shards": 15
-        },
-        "test": "browser_tests"
-      },
-      {
-        "args": [
-          "--enable-features=WebUIPolymer2",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer2_browser_tests.filter"
-        ],
-        "name": "webui_polymer2_browser_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Windows-10-15063"
-            }
-          ]
+          "shards": 4
         },
         "test": "browser_tests"
       },
@@ -7378,6 +9651,9 @@
         "test": "cacheinvalidation_unittests"
       },
       {
+        "args": [
+          "--gtest_filter=-*UsingRealWebcam*"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7477,21 +9753,6 @@
         "test": "components_browsertests"
       },
       {
-        "args": [
-          "--enable-features=NetworkService"
-        ],
-        "name": "network_service_components_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Windows-10-15063"
-            }
-          ]
-        },
-        "test": "components_browsertests"
-      },
-      {
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7520,30 +9781,14 @@
             {
               "os": "Windows-10-15063"
             }
-          ]
-        },
-        "test": "content_browsertests"
-      },
-      {
-        "args": [
-          "--enable-features=NetworkService",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/mojo.fyi.network_content_browsertests.filter"
-        ],
-        "name": "network_service_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Windows-10-15063"
-            }
           ],
-          "shards": 2
+          "shards": 6
         },
         "test": "content_browsertests"
       },
       {
         "args": [
-          "--enable-features=TracingPerfettoBackend",
+          "--enable-perfetto",
           "--gtest_filter=TracingControllerTest.*"
         ],
         "name": "perfetto_content_browsertests",
@@ -7554,22 +9799,6 @@
               "os": "Windows-10-15063"
             }
           ]
-        },
-        "test": "content_browsertests"
-      },
-      {
-        "args": [
-          "--enable-features=VizDisplayCompositor"
-        ],
-        "name": "viz_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Windows-10-15063"
-            }
-          ],
-          "shards": 10
         },
         "test": "content_browsertests"
       },
@@ -7695,21 +9924,6 @@
         "test": "extensions_browsertests"
       },
       {
-        "args": [
-          "--enable-features=NetworkService"
-        ],
-        "name": "network_service_extensions_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Windows-10-15063"
-            }
-          ]
-        },
-        "test": "extensions_browsertests"
-      },
-      {
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7741,6 +9955,17 @@
           ]
         },
         "test": "gcm_unit_tests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Windows-10-15063"
+            }
+          ]
+        },
+        "test": "gcp_unittests"
       },
       {
         "swarming": {
@@ -7845,26 +10070,10 @@
       },
       {
         "args": [
-          "--enable-features=NetworkService"
+          "--disable-features=WebUIPolymer2",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer1_interactive_ui_tests.filter"
         ],
-        "name": "network_service_interactive_ui_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Windows-10-15063"
-            }
-          ],
-          "shards": 3
-        },
-        "test": "interactive_ui_tests"
-      },
-      {
-        "args": [
-          "--enable-features=WebUIPolymer2",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_polymer2_interactive_ui_tests.filter"
-        ],
-        "name": "webui_polymer2_interactive_ui_tests",
+        "name": "webui_polymer1_interactive_ui_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -8327,17 +10536,6 @@
           ]
         },
         "test": "vr_pixeltests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Windows-10-15063"
-            }
-          ]
-        },
-        "test": "webkit_unit_tests"
       },
       {
         "swarming": {

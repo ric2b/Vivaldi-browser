@@ -4,8 +4,11 @@
 
 #include "chrome/browser/ui/extensions/extension_action_view_controller.h"
 
+#include <memory>
+#include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
@@ -63,7 +66,7 @@ ExtensionActionViewController::ExtensionActionViewController(
 }
 
 ExtensionActionViewController::~ExtensionActionViewController() {
-  DCHECK(!is_showing_popup());
+  DCHECK(!IsShowingPopup());
 }
 
 std::string ExtensionActionViewController::GetId() const {
@@ -77,8 +80,7 @@ void ExtensionActionViewController::SetDelegate(
     view_delegate_ = delegate;
     platform_delegate_->OnDelegateSet();
   } else {
-    if (is_showing_popup())
-      HidePopup();
+    HidePopup();
     platform_delegate_.reset();
     view_delegate_ = nullptr;
   }
@@ -120,7 +122,7 @@ base::string16 ExtensionActionViewController::GetAccessibleName(
   // With runtime host permissions, include a "host access" portion of the
   // tooltip if the extension has or wants access to the site.
   if (base::FeatureList::IsEnabled(
-          extensions::features::kRuntimeHostPermissions)) {
+          extensions_features::kRuntimeHostPermissions)) {
     PageInteractionStatus interaction_status =
         GetPageInteractionStatus(web_contents);
     int interaction_status_description_id = -1;
@@ -176,8 +178,12 @@ bool ExtensionActionViewController::HasPopup(
   return tab_id.is_valid() ? extension_action_->HasPopup(tab_id.id()) : false;
 }
 
+bool ExtensionActionViewController::IsShowingPopup() const {
+  return popup_host_ != nullptr;
+}
+
 void ExtensionActionViewController::HidePopup() {
-  if (is_showing_popup()) {
+  if (IsShowingPopup()) {
     popup_host_->Close();
     // We need to do these actions synchronously (instead of closing and then
     // performing the rest of the cleanup in OnExtensionHostDestroyed()) because
@@ -213,8 +219,7 @@ ui::MenuModel* ExtensionActionViewController::GetContextMenu() {
 
 void ExtensionActionViewController::OnContextMenuClosed() {
   if (toolbar_actions_bar_ &&
-      toolbar_actions_bar_->popped_out_action() == this &&
-      !is_showing_popup()) {
+      toolbar_actions_bar_->popped_out_action() == this && !IsShowingPopup()) {
     toolbar_actions_bar_->UndoPopOut();
   }
 }
@@ -373,7 +378,7 @@ bool ExtensionActionViewController::TriggerPopupWithUrl(
   if (!ExtensionIsValid())
     return false;
 
-  bool already_showing = is_showing_popup();
+  bool already_showing = IsShowingPopup();
 
   // Always hide the current popup, even if it's not owned by this extension.
   // Only one popup should be visible at a time.
@@ -385,9 +390,9 @@ bool ExtensionActionViewController::TriggerPopupWithUrl(
   if (already_showing)
     return false;
 
-  std::unique_ptr<extensions::ExtensionViewHost> host(
+  std::unique_ptr<extensions::ExtensionViewHost> host =
       extensions::ExtensionViewHostFactory::CreatePopupHost(popup_url,
-                                                            browser_));
+                                                            browser_);
   if (!host)
     return false;
 
@@ -398,7 +403,7 @@ bool ExtensionActionViewController::TriggerPopupWithUrl(
 
   if (toolbar_actions_bar_ &&
       !toolbar_actions_bar_->IsActionVisibleOnMainBar(this)) {
-    platform_delegate_->CloseOverflowMenu();
+    toolbar_actions_bar_->CloseOverflowMenuIfOpen();
     toolbar_actions_bar_->PopOutAction(
         this,
         show_action == SHOW_POPUP_AND_INSPECT,
@@ -461,7 +466,7 @@ ExtensionActionViewController::GetIconImageSource(
   bool was_blocked = false;
   bool action_is_visible = extension_action_->GetIsVisible(tab_id);
   if (base::FeatureList::IsEnabled(
-          extensions::features::kRuntimeHostPermissions)) {
+          extensions_features::kRuntimeHostPermissions)) {
     PageInteractionStatus interaction_status =
         GetPageInteractionStatus(web_contents);
     // With the runtime host permissions feature, we only grayscale the icon if

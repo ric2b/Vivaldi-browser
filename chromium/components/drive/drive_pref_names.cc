@@ -15,13 +15,16 @@ const char kDisableDrive[] = "gdata.disabled";
 // The pref prefix should remain as "gdata" for backward compatibility.
 const char kDisableDriveOverCellular[] = "gdata.cellular.disabled";
 
-// A boolean pref to disable hosted files on Drive.
-// The pref prefix should remain as "gdata" for backward compatibility.
-const char kDisableDriveHostedFiles[] = "gdata.hosted_files.disabled";
-
 // A string pref containing a random salt used to obfuscate account IDs
 // when passed to drivefs.
 const char kDriveFsProfileSalt[] = "drivefs.profile_salt";
+
+// A boolean pref containing whether pinned files have been migrated to DriveFS.
+const char kDriveFsPinnedMigrated[] = "drivefs.pinned_migrated";
+
+// A boolean pref containing whether DriveFS was ever successfully launched.
+const char kDriveFsWasLaunchedAtLeastOnce[] =
+    "drivefs.was_launched_at_least_once";
 
 }  // namespace prefs
 }  // namespace drive

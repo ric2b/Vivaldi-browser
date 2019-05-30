@@ -16,6 +16,7 @@
 #include "base/containers/circular_deque.h"
 #include "base/memory/ref_counted.h"
 #include "gpu/command_buffer/common/debug_marker_manager.h"
+#include "gpu/command_buffer/common/discardable_handle.h"
 #include "gpu/command_buffer/common/gles2_cmd_format.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/command_buffer/common/mailbox.h"
@@ -39,10 +40,13 @@ class GLFence;
 }
 
 namespace gpu {
+class SharedImageRepresentationGLTexturePassthrough;
+
 namespace gles2 {
 
 class ContextGroup;
 class GPUTracer;
+class MultiDrawManager;
 class PassthroughAbstractTextureImpl;
 
 struct MappedBuffer {
@@ -87,6 +91,14 @@ struct PassthroughResources {
   ClientServiceMap<GLuint, scoped_refptr<TexturePassthrough>>
       texture_object_map;
 
+  // Mapping of client texture IDs to
+  // SharedImageRepresentationGLTexturePassthroughs.
+  // TODO(ericrk): Remove this once TexturePassthrough holds a reference to
+  // the SharedImageRepresentationGLTexturePassthrough itself.
+  base::flat_map<GLuint,
+                 std::unique_ptr<SharedImageRepresentationGLTexturePassthrough>>
+      texture_shared_image_map;
+
   // A set of yet-to-be-deleted TexturePassthrough, which should be tossed
   // whenever a context switch happens or the resources is destroyed.
   base::flat_set<scoped_refptr<TexturePassthrough>>
@@ -99,11 +111,13 @@ struct PassthroughResources {
 
 class ScopedFramebufferBindingReset {
  public:
-  explicit ScopedFramebufferBindingReset(gl::GLApi* api);
+  explicit ScopedFramebufferBindingReset(gl::GLApi* api,
+                                         bool supports_separate_fbo_bindings);
   ~ScopedFramebufferBindingReset();
 
  private:
   gl::GLApi* api_;
+  bool supports_separate_fbo_bindings_;
   GLint draw_framebuffer_;
   GLint read_framebuffer_;
 };
@@ -206,7 +220,7 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
   void RestoreRenderbufferBindings() override;
   void RestoreGlobalState() const override;
   void RestoreProgramBindings() const override;
-  void RestoreTextureState(unsigned service_id) const override;
+  void RestoreTextureState(unsigned service_id) override;
   void RestoreTextureUnitBindings(unsigned unit) const override;
   void RestoreVertexAttribArray(unsigned index) override;
   void RestoreAllExternalTextureBindingsIfNeeded() override;
@@ -349,6 +363,8 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
   void SetCopyTextureResourceManagerForTest(
       CopyTextureCHROMIUMResourceManager* copy_texture_resource_manager)
       override;
+  void SetCopyTexImageBlitterForTest(
+      CopyTexImageResourceManager* copy_tex_image_blit) override;
 
   void OnAbstractTextureDestroyed(PassthroughAbstractTextureImpl*,
                                   scoped_refptr<TexturePassthrough>);
@@ -386,7 +402,7 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
     }
 
     // Copy into the destination
-    DCHECK(*length < bufsize);
+    DCHECK(*length <= bufsize);
     std::copy(scratch_params, scratch_params + *length, params);
 
     return error::kNoError;
@@ -424,9 +440,17 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   error::Error ProcessReadPixels(bool did_finish);
 
+  // Checks to see if the inserted fence has completed.
+  void ProcessDescheduleUntilFinished();
+
   void UpdateTextureBinding(GLenum target,
                             GLuint client_id,
                             TexturePassthrough* texture);
+
+  void UpdateTextureSizeFromTexturePassthrough(TexturePassthrough* texture,
+                                               GLuint client_id);
+  void UpdateTextureSizeFromTarget(GLenum target);
+  void UpdateTextureSizeFromClientID(GLuint client_id);
 
   error::Error BindTexImage2DCHROMIUMImpl(GLenum target,
                                           GLenum internalformat,
@@ -456,7 +480,7 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   // Fail-fast inline version of BindPendingImagesForSamplers.
   inline void BindPendingImagesForSamplersIfNeeded() {
-    if (textures_pending_binding_.size() > 0)
+    if (!textures_pending_binding_.empty())
       BindPendingImagesForSamplers();
   }
 
@@ -472,6 +496,19 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
     if (texture && texture->is_bind_pending())
       BindOnePendingImage(texture->target(), texture.get());
+  }
+
+  inline void RemovePendingBindingTexture(GLenum target, GLuint unit) {
+    // Note that this code was found to be faster than running base::EraseIf.
+    size_t num_pending = textures_pending_binding_.size();
+    for (size_t index = 0; index < num_pending; ++index) {
+      TexturePendingBinding& pending = textures_pending_binding_[index];
+      if (pending.target == target && pending.unit == unit) {
+        textures_pending_binding_.erase(textures_pending_binding_.begin() +
+                                        index);
+        return;
+      }
+    }
   }
 
   DecoderClient* client_ = nullptr;
@@ -541,6 +578,8 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   std::unique_ptr<GpuFenceManager> gpu_fence_manager_;
 
+  std::unique_ptr<MultiDrawManager> multi_draw_manager_;
+
   // State tracking of currently bound 2D textures (client IDs)
   size_t active_texture_unit_;
 
@@ -570,6 +609,12 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
     scoped_refptr<TexturePassthrough> texture;
   };
 
+  // Tracked viewport and scissor state for surface offset
+  GLint viewport_[4] = {0, 0, 0, 0};
+  GLint scissor_[4] = {0, 0, 0, 0};
+  gfx::Vector2d GetSurfaceDrawOffset() const;
+  void ApplySurfaceDrawOffset();
+
   // Use a limit that is at least ANGLE's IMPLEMENTATION_MAX_ACTIVE_TEXTURES
   // constant
   static constexpr size_t kMaxTextureUnits = 64;
@@ -578,20 +623,24 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
   std::array<std::array<BoundTexture, kMaxTextureUnits>, kNumTextureTypes>
       bound_textures_;
 
-  // [target, texture unit] = texture that has a bound GLImage that requires
-  // bind / copy before draw.
-  using TargetUnitPair = std::pair<GLenum, GLuint>;
-  struct TargetUnitPairHasher {
-    std::size_t operator()(const TargetUnitPair& target_unit_pair) const {
-      // Combine them into disjoint ints.
-      return target_unit_pair.first * kMaxTextureUnits +
-             target_unit_pair.second;
-    }
+  // [target, texture unit, texture] where texture has a bound GLImage that
+  // requires bind / copy before draw.
+  struct TexturePendingBinding {
+    TexturePendingBinding(GLenum target,
+                          GLuint unit,
+                          base::WeakPtr<TexturePassthrough> texture);
+    TexturePendingBinding(const TexturePendingBinding& other);
+    TexturePendingBinding(TexturePendingBinding&& other);
+    ~TexturePendingBinding();
+
+    TexturePendingBinding& operator=(const TexturePendingBinding& other);
+    TexturePendingBinding& operator=(TexturePendingBinding&& other);
+
+    GLenum target;
+    GLuint unit;
+    base::WeakPtr<TexturePassthrough> texture;
   };
-  std::unordered_map<TargetUnitPair,
-                     base::WeakPtr<TexturePassthrough>,
-                     TargetUnitPairHasher>
-      textures_pending_binding_;
+  std::vector<TexturePendingBinding> textures_pending_binding_;
 
   // State tracking of currently bound buffers
   std::unordered_map<GLenum, GLuint> bound_buffers_;
@@ -617,6 +666,8 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
     scoped_refptr<gpu::Buffer> shm;
     QuerySync* sync = nullptr;
     base::subtle::Atomic32 submit_count = 0;
+
+    std::unique_ptr<gl::GLFence> commands_completed_fence;
 
     std::vector<base::OnceClosure> callbacks;
     std::unique_ptr<gl::GLFence> buffer_shadow_update_fence = nullptr;
@@ -718,7 +769,8 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
     EmulatedDefaultFramebuffer(
         gl::GLApi* api,
         const EmulatedDefaultFramebufferFormat& format_in,
-        const FeatureInfo* feature_info);
+        const FeatureInfo* feature_info,
+        bool supports_separate_fbo_bindings);
     ~EmulatedDefaultFramebuffer();
 
     // Set a new color buffer, return the old one
@@ -732,6 +784,7 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
     void Destroy(bool have_context);
 
     gl::GLApi* api;
+    bool supports_separate_fbo_bindings = false;
 
     // Service ID of the framebuffer
     GLuint framebuffer_service_id = 0;
@@ -774,6 +827,9 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
   GLuint bound_draw_framebuffer_;
   GLuint bound_read_framebuffer_;
 
+  // If this context supports both read and draw framebuffer bindings
+  bool supports_separate_fbo_bindings_ = false;
+
   // Tracing
   std::unique_ptr<GPUTracer> gpu_tracer_;
   const unsigned char* gpu_decoder_category_ = nullptr;
@@ -790,7 +846,10 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
   // Cache of scratch memory
   std::vector<uint8_t> scratch_memory_;
 
-  std::unique_ptr<DCLayerSharedState> dc_layer_shared_state_;
+  // After a second fence is inserted, both the GpuChannelMessageQueue and
+  // CommandExecutor are descheduled. Once the first fence has completed, both
+  // get rescheduled.
+  std::vector<std::unique_ptr<gl::GLFence>> deschedule_until_finished_fences_;
 
   base::WeakPtrFactory<GLES2DecoderPassthroughImpl> weak_ptr_factory_;
 

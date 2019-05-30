@@ -5,14 +5,12 @@
 #include <stdint.h>
 #include <tuple>
 
+#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "content/common/frame_messages.h"
-#include "content/common/view_messages.h"
-#include "content/public/common/file_chooser_file_info.h"
-#include "content/public/common/file_chooser_params.h"
 #include "content/public/test/render_view_test.h"
+#include "content/public/test/test_utils.h"
 #include "content/renderer/pepper/mock_renderer_ppapi_host.h"
 #include "content/renderer/pepper/pepper_file_chooser_host.h"
 #include "content/renderer/render_view_impl.h"
@@ -28,11 +26,75 @@
 #include "ppapi/shared_impl/proxy_lock.h"
 #include "ppapi/shared_impl/resource_tracker.h"
 #include "ppapi/shared_impl/test_globals.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
 
 namespace content {
 
+using blink::mojom::FileChooser;
+using blink::mojom::FileChooserFileInfo;
+using blink::mojom::FileChooserFileInfoPtr;
+using blink::mojom::FileChooserParams;
+using blink::mojom::FileChooserParamsPtr;
+using blink::mojom::FileChooserPtr;
+using blink::mojom::FileChooserRequest;
+
 namespace {
+
+class MockFileChooser : public FileChooser {
+ public:
+  MockFileChooser(service_manager::InterfaceProvider* provider,
+                  base::OnceClosure reached_callback)
+      : reached_callback_(std::move(reached_callback)) {
+    service_manager::InterfaceProvider::TestApi test_api(provider);
+    test_api.SetBinderForName(
+        FileChooser::Name_,
+        base::BindRepeating(&MockFileChooser::OnFileChooserRequest,
+                            base::Unretained(this)));
+    provider_ = provider;
+  }
+
+  ~MockFileChooser() override {
+    service_manager::InterfaceProvider::TestApi test_api(provider_);
+    test_api.ClearBinderForName(FileChooser::Name_);
+  }
+
+  const FileChooserParams& params() const {
+    DCHECK(params_);
+    return *params_;
+  }
+
+  void ResponseOnOpenFileChooser(std::vector<FileChooserFileInfoPtr> files) {
+    DCHECK(callback_);
+    DCHECK(params_);
+    std::move(callback_).Run(blink::mojom::FileChooserResult::New(
+        std::move(files), base::FilePath()));
+    bindings_.FlushForTesting();
+  }
+
+ private:
+  void OnFileChooserRequest(mojo::ScopedMessagePipeHandle handle) {
+    bindings_.AddBinding(this, FileChooserRequest(std::move(handle)));
+  }
+
+  void OpenFileChooser(FileChooserParamsPtr params,
+                       OpenFileChooserCallback callback) override {
+    callback_ = std::move(callback);
+    params_ = std::move(params);
+    std::move(reached_callback_).Run();
+  }
+
+  void EnumerateChosenDirectory(
+      const base::FilePath& directory_path,
+      EnumerateChosenDirectoryCallback callback) override {}
+
+  service_manager::InterfaceProvider* provider_;
+  mojo::BindingSet<FileChooser> bindings_;
+  OpenFileChooserCallback callback_;
+  FileChooserParamsPtr params_;
+  base::OnceClosure reached_callback_;
+};
 
 class PepperFileChooserHostTest : public RenderViewTest {
  public:
@@ -43,14 +105,25 @@ class PepperFileChooserHostTest : public RenderViewTest {
     RenderViewTest::SetUp();
 
     globals_.GetResourceTracker()->DidCreateInstance(pp_instance_);
+    mock_file_chooser_ = std::make_unique<MockFileChooser>(
+        static_cast<RenderFrameImpl*>(view_->GetMainRenderFrame())
+            ->GetInterfaceProvider(),
+        run_loop_.QuitClosure());
   }
   void TearDown() override {
+    mock_file_chooser_.reset();
     globals_.GetResourceTracker()->DidDeleteInstance(pp_instance_);
 
     RenderViewTest::TearDown();
   }
 
   PP_Instance pp_instance() const { return pp_instance_; }
+  MockFileChooser* mock_file_chooser() const {
+    return mock_file_chooser_.get();
+  }
+
+ protected:
+  base::RunLoop run_loop_;
 
  private:
   PP_Instance pp_instance_;
@@ -59,16 +132,9 @@ class PepperFileChooserHostTest : public RenderViewTest {
   ppapi::ProxyLock::LockingDisablerForTest disable_locking_;
   ppapi::TestGlobals globals_;
   TestContentClient client_;
-};
 
-// For testing to convert our hardcoded file paths to 8-bit.
-std::string FilePathToUTF8(const base::FilePath::StringType& path) {
-#if defined(OS_WIN)
-  return base::UTF16ToUTF8(path);
-#else
-  return path;
-#endif
-}
+  std::unique_ptr<MockFileChooser> mock_file_chooser_;
+};
 
 }  // namespace
 
@@ -90,32 +156,26 @@ TEST_F(PepperFileChooserHostTest, Show) {
   int32_t result = chooser.OnResourceMessageReceived(show_msg, &context);
   EXPECT_EQ(PP_OK_COMPLETIONPENDING, result);
 
+  run_loop_.Run();
   // The render view should have sent a chooser request to the browser
-  // (caught by the render thread's test message sink).
-  const IPC::Message* msg = render_thread_->sink().GetUniqueMessageMatching(
-      FrameHostMsg_RunFileChooser::ID);
-  ASSERT_TRUE(msg);
-  FrameHostMsg_RunFileChooser::Schema::Param call_msg_param;
-  ASSERT_TRUE(FrameHostMsg_RunFileChooser::Read(msg, &call_msg_param));
-  const FileChooserParams& chooser_params = std::get<0>(call_msg_param);
 
   // Basic validation of request.
-  EXPECT_EQ(FileChooserParams::Open, chooser_params.mode);
-  ASSERT_EQ(1u, chooser_params.accept_types.size());
-  EXPECT_EQ(accept[0], base::UTF16ToUTF8(chooser_params.accept_types[0]));
+  auto& params = mock_file_chooser()->params();
+  EXPECT_EQ(FileChooserParams::Mode::kOpen, params.mode);
+  ASSERT_EQ(1u, params.accept_types.size());
+  EXPECT_EQ(accept[0], base::UTF16ToUTF8(params.accept_types[0]));
 
   // Send a chooser reply to the render view. Note our reply path has to have a
   // path separator so we include both a Unix and a Windows one.
-  content::FileChooserFileInfo selected_info;
-  selected_info.display_name = FILE_PATH_LITERAL("Hello, world");
-  selected_info.file_path = base::FilePath(FILE_PATH_LITERAL("myp\\ath/foo"));
-  std::vector<content::FileChooserFileInfo> selected_info_vector;
-  selected_info_vector.push_back(selected_info);
-  RenderFrameImpl* frame_impl =
-      static_cast<RenderFrameImpl*>(view_->GetMainRenderFrame());
-  FrameMsg_RunFileChooserResponse response(frame_impl->GetRoutingID(),
-                                           selected_info_vector);
-  EXPECT_TRUE(frame_impl->OnMessageReceived(response));
+  std::vector<blink::mojom::FileChooserFileInfoPtr> selected_info_vector;
+  base::string16 display_name = base::ASCIIToUTF16("Hello, world");
+  selected_info_vector.push_back(
+      blink::mojom::FileChooserFileInfo::NewNativeFile(
+          blink::mojom::NativeFileInfo::New(
+              base::FilePath(FILE_PATH_LITERAL("myp\\ath/foo")),
+              display_name)));
+  mock_file_chooser()->ResponseOnOpenFileChooser(
+      std::move(selected_info_vector));
 
   // This should have sent the Pepper reply to our test sink.
   ppapi::proxy::ResourceMessageReplyParams reply_params;
@@ -132,8 +192,7 @@ TEST_F(PepperFileChooserHostTest, Show) {
   const std::vector<ppapi::FileRefCreateInfo>& chooser_results =
       std::get<0>(reply_msg_param);
   ASSERT_EQ(1u, chooser_results.size());
-  EXPECT_EQ(FilePathToUTF8(selected_info.display_name),
-            chooser_results[0].display_name);
+  EXPECT_EQ(base::UTF16ToUTF8(display_name), chooser_results[0].display_name);
 }
 
 TEST_F(PepperFileChooserHostTest, NoUserGesture) {

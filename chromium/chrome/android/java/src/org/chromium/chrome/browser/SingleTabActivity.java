@@ -5,20 +5,21 @@
 package org.chromium.chrome.browser;
 
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Bundle;
 import android.util.Pair;
+import android.view.KeyCharacterMap;
+import android.view.KeyEvent;
 
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabBuilder;
 import org.chromium.chrome.browser.tab.TabDelegateFactory;
-import org.chromium.chrome.browser.tab.TabUma.TabCreationState;
 import org.chromium.chrome.browser.tabmodel.SingleTabModelSelector;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
+import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
-import org.chromium.content_public.browser.ChildProcessImportance;
 import org.chromium.content_public.browser.LoadUrlParams;
-
-import java.io.File;
 
 /**
  * Base class for task-focused activities that need to display a single tab.
@@ -27,9 +28,6 @@ import java.io.File;
  * activities - anything where maintaining multiple tabs is unnecessary.
  */
 public abstract class SingleTabActivity extends ChromeActivity {
-    protected static final String BUNDLE_TAB_ID = "tabId";
-    protected static final String BUNDLE_TAB_URL = "tabUrl";
-
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -62,10 +60,13 @@ public abstract class SingleTabActivity extends ChromeActivity {
     public void initializeState() {
         super.initializeState();
 
+        createAndShowTab();
+    }
+
+    protected void createAndShowTab() {
         Tab tab = createTab();
         getTabModelSelector().setTab(tab);
         tab.show(TabSelectionType.FROM_NEW);
-        tab.setImportance(ChildProcessImportance.MODERATE);
     }
 
     @Override
@@ -83,24 +84,16 @@ public abstract class SingleTabActivity extends ChromeActivity {
         Tab tab = null;
         boolean unfreeze = false;
 
-        int tabId = Tab.INVALID_TAB_ID;
-        String tabUrl = null;
         if (getSavedInstanceState() != null) {
-            tabId = getSavedInstanceState().getInt(BUNDLE_TAB_ID, Tab.INVALID_TAB_ID);
-            tabUrl = getSavedInstanceState().getString(BUNDLE_TAB_URL);
-        }
-
-        if (tabId != Tab.INVALID_TAB_ID && tabUrl != null && getActivityDirectory() != null) {
-            // Restore the tab.
-            TabState tabState = TabState.restoreTabState(getActivityDirectory(), tabId);
-            tab = new Tab(tabId, Tab.INVALID_TAB_ID, false, getWindowAndroid(),
-                    TabLaunchType.FROM_RESTORE, TabCreationState.FROZEN_ON_RESTORE, tabState);
-            unfreeze = true;
+            tab = restoreTab(getSavedInstanceState());
+            if (tab != null) unfreeze = true;
         }
 
         if (tab == null) {
-            tab = new Tab(Tab.INVALID_TAB_ID, Tab.INVALID_TAB_ID, false, getWindowAndroid(),
-                    TabLaunchType.FROM_CHROME_UI, null, null);
+            tab = new TabBuilder()
+                          .setWindow(getWindowAndroid())
+                          .setLaunchType(TabLaunchType.FROM_CHROME_UI)
+                          .build();
         }
 
         tab.initialize(null, getTabContentManager(), createTabDelegateFactory(), false, unfreeze);
@@ -114,11 +107,11 @@ public abstract class SingleTabActivity extends ChromeActivity {
         return new TabDelegateFactory();
     }
 
-    /**
-     * @return {@link File} pointing at a directory specific for this class.
-     */
-    protected File getActivityDirectory() {
-        return null;
+    protected abstract Tab restoreTab(Bundle savedInstanceState);
+
+    private boolean supportsAppSwitcher() {
+        return getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)
+                || KeyCharacterMap.deviceHasKey(KeyEvent.KEYCODE_APP_SWITCH);
     }
 
     @Override
@@ -132,9 +125,17 @@ public abstract class SingleTabActivity extends ChromeActivity {
             tab.goBack();
             return true;
         }
+
+        if (!supportsAppSwitcher()) {
+            // If the device has no way to get to the task switcher, we don't want the default back
+            // button behavior of finishing the Activity. If the device is low on memory LMK will
+            // kill us, and if not, we'll start up faster when returned to.
+            moveTaskToBack(true);
+            return true;
+        }
         return false;
     }
 
     @Override
-    public void onCheckForUpdate(boolean updateAvailable) {}
+    public void onUpdateStateChanged() {}
 }

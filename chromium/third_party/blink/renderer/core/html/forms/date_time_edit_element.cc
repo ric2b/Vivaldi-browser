@@ -42,7 +42,7 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 class DateTimeEditBuilder : private DateTimeFormat::TokenHandler {
  public:
@@ -467,10 +467,10 @@ void DateTimeEditBuilder::VisitLiteral(const String& text) {
   HTMLDivElement* element = HTMLDivElement::Create(EditElement().GetDocument());
   element->SetShadowPseudoId(text_pseudo_id);
   if (parameters_.locale.IsRTL() && text.length()) {
-    WTF::Unicode::CharDirection dir = WTF::Unicode::Direction(text[0]);
-    if (dir == WTF::Unicode::kSegmentSeparator ||
-        dir == WTF::Unicode::kWhiteSpaceNeutral ||
-        dir == WTF::Unicode::kOtherNeutral)
+    WTF::unicode::CharDirection dir = WTF::unicode::Direction(text[0]);
+    if (dir == WTF::unicode::kSegmentSeparator ||
+        dir == WTF::unicode::kWhiteSpaceNeutral ||
+        dir == WTF::unicode::kOtherNeutral)
       element->AppendChild(Text::Create(EditElement().GetDocument(),
                                         String(&kRightToLeftMarkCharacter, 1)));
   }
@@ -522,7 +522,7 @@ DateTimeEditElement::DateTimeEditElement(Document& document,
 
 DateTimeEditElement::~DateTimeEditElement() = default;
 
-void DateTimeEditElement::Trace(blink::Visitor* visitor) {
+void DateTimeEditElement::Trace(Visitor* visitor) {
   visitor->Trace(fields_);
   visitor->Trace(edit_control_owner_);
   HTMLDivElement::Trace(visitor);
@@ -557,9 +557,9 @@ DateTimeEditElement* DateTimeEditElement::Create(
     Document& document,
     EditControlOwner& edit_control_owner) {
   DateTimeEditElement* container =
-      new DateTimeEditElement(document, edit_control_owner);
+      MakeGarbageCollected<DateTimeEditElement>(document, edit_control_owner);
   container->SetShadowPseudoId(AtomicString("-webkit-datetime-edit"));
-  container->setAttribute(idAttr, ShadowElementNames::DateTimeEdit());
+  container->setAttribute(kIdAttr, shadow_element_names::DateTimeEdit());
   return container;
 }
 
@@ -586,8 +586,7 @@ scoped_refptr<ComputedStyle> DateTimeEditElement::CustomStyleForLayoutObject() {
           *style, child_element->textContent());
     }
   }
-  style->SetWidth(Length(ceilf(width), kFixed));
-  style->SetUnique();
+  style->SetWidth(Length::Fixed(ceilf(width)));
   return style;
 }
 
@@ -605,13 +604,15 @@ void DateTimeEditElement::DisabledStateChanged() {
   UpdateUIState();
 }
 
-DateTimeFieldElement* DateTimeEditElement::FieldAt(size_t field_index) const {
+DateTimeFieldElement* DateTimeEditElement::FieldAt(
+    wtf_size_t field_index) const {
   return field_index < fields_.size() ? fields_[field_index].Get() : nullptr;
 }
 
-size_t DateTimeEditElement::FieldIndexOf(
+wtf_size_t DateTimeEditElement::FieldIndexOf(
     const DateTimeFieldElement& field) const {
-  for (size_t field_index = 0; field_index < fields_.size(); ++field_index) {
+  for (wtf_size_t field_index = 0; field_index < fields_.size();
+       ++field_index) {
     if (fields_[field_index] == &field)
       return field_index;
   }
@@ -628,7 +629,7 @@ void DateTimeEditElement::FocusByOwner(Element* old_focused_element) {
   if (old_focused_element && old_focused_element->IsDateTimeFieldElement()) {
     DateTimeFieldElement* old_focused_field =
         static_cast<DateTimeFieldElement*>(old_focused_element);
-    size_t index = FieldIndexOf(*old_focused_field);
+    wtf_size_t index = FieldIndexOf(*old_focused_field);
     GetDocument().UpdateStyleAndLayoutTreeForNode(old_focused_field);
     if (index != kInvalidFieldIndex && old_focused_field->IsFocusable()) {
       old_focused_field->focus();
@@ -642,9 +643,10 @@ DateTimeFieldElement* DateTimeEditElement::FocusedField() const {
   return FieldAt(FocusedFieldIndex());
 }
 
-size_t DateTimeEditElement::FocusedFieldIndex() const {
+wtf_size_t DateTimeEditElement::FocusedFieldIndex() const {
   Element* const focused_field_element = GetDocument().FocusedElement();
-  for (size_t field_index = 0; field_index < fields_.size(); ++field_index) {
+  for (wtf_size_t field_index = 0; field_index < fields_.size();
+       ++field_index) {
     if (fields_[field_index] == focused_field_element)
       return field_index;
   }
@@ -656,9 +658,9 @@ void DateTimeEditElement::FieldValueChanged() {
     edit_control_owner_->EditControlValueChanged();
 }
 
-bool DateTimeEditElement::FocusOnNextFocusableField(size_t start_index) {
+bool DateTimeEditElement::FocusOnNextFocusableField(wtf_size_t start_index) {
   GetDocument().UpdateStyleAndLayoutTreeIgnorePendingStylesheets();
-  for (size_t field_index = start_index; field_index < fields_.size();
+  for (wtf_size_t field_index = start_index; field_index < fields_.size();
        ++field_index) {
     if (fields_[field_index]->IsFocusable()) {
       fields_[field_index]->focus();
@@ -669,7 +671,7 @@ bool DateTimeEditElement::FocusOnNextFocusableField(size_t start_index) {
 }
 
 bool DateTimeEditElement::FocusOnNextField(const DateTimeFieldElement& field) {
-  const size_t start_field_index = FieldIndexOf(field);
+  const wtf_size_t start_field_index = FieldIndexOf(field);
   if (start_field_index == kInvalidFieldIndex)
     return false;
   return FocusOnNextFocusableField(start_field_index + 1);
@@ -677,11 +679,11 @@ bool DateTimeEditElement::FocusOnNextField(const DateTimeFieldElement& field) {
 
 bool DateTimeEditElement::FocusOnPreviousField(
     const DateTimeFieldElement& field) {
-  const size_t start_field_index = FieldIndexOf(field);
+  const wtf_size_t start_field_index = FieldIndexOf(field);
   if (start_field_index == kInvalidFieldIndex)
     return false;
   GetDocument().UpdateStyleAndLayoutTreeIgnorePendingStylesheets();
-  size_t field_index = start_field_index;
+  wtf_size_t field_index = start_field_index;
   while (field_index > 0) {
     --field_index;
     if (fields_[field_index]->IsFocusable()) {
@@ -728,7 +730,7 @@ void DateTimeEditElement::GetLayout(const LayoutParameters& layout_parameters,
   }
   Element* fields_wrapper = FieldsWrapperElement();
 
-  size_t focused_field_index = FocusedFieldIndex();
+  wtf_size_t focused_field_index = FocusedFieldIndex();
   DateTimeFieldElement* const focused_field = FieldAt(focused_field_index);
   const AtomicString focused_field_id =
       focused_field ? focused_field->ShadowPseudoId() : g_null_atom;
@@ -741,14 +743,15 @@ void DateTimeEditElement::GetLayout(const LayoutParameters& layout_parameters,
   }
 
   if (focused_field_index != kInvalidFieldIndex) {
-    for (size_t field_index = 0; field_index < fields_.size(); ++field_index) {
+    for (wtf_size_t field_index = 0; field_index < fields_.size();
+         ++field_index) {
       if (fields_[field_index]->ShadowPseudoId() == focused_field_id) {
         focused_field_index = field_index;
         break;
       }
     }
-    if (DateTimeFieldElement* field = FieldAt(std::min(
-            focused_field_index, static_cast<size_t>(fields_.size()) - 1)))
+    if (DateTimeFieldElement* field =
+            FieldAt(std::min(focused_field_index, fields_.size() - 1)))
       field->focus();
   }
 
@@ -761,7 +764,7 @@ void DateTimeEditElement::GetLayout(const LayoutParameters& layout_parameters,
     }
     SetNeedsStyleRecalc(
         kSubtreeStyleChange,
-        StyleChangeReasonForTracing::Create(StyleChangeReason::kControl));
+        StyleChangeReasonForTracing::Create(style_change_reason::kControl));
   }
 }
 

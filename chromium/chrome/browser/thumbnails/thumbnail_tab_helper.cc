@@ -4,15 +4,15 @@
 
 #include "chrome/browser/thumbnails/thumbnail_tab_helper.h"
 
+#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/thumbnails/thumbnail_service.h"
-#include "chrome/browser/thumbnails/thumbnail_service_factory.h"
 #include "chrome/browser/thumbnails/thumbnail_utils.h"
 #include "chrome/common/chrome_features.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_view_host.h"
@@ -49,6 +49,9 @@ void ComputeThumbnailScore(const SkBitmap& thumbnail,
 
 // Overview
 // --------
+// DEPRECATED, thumbnails have been removed from the New Tab Page. See
+// https://crbug.com/893362.
+//
 // This class provides a service for updating thumbnails to be used in the
 // "Most visited" section of the New Tab page. The process is started by
 // StartThumbnailCaptureIfNecessary(), which updates the thumbnail for the
@@ -233,15 +236,7 @@ void ThumbnailTabHelper::StartThumbnailCaptureIfNecessary(
     return;
   }
 
-  scoped_refptr<thumbnails::ThumbnailService> thumbnail_service =
-      GetThumbnailService();
-
-  // Skip if we don't need to update the thumbnail.
-  if (!thumbnail_service ||
-      !thumbnail_service->ShouldAcquirePageThumbnail(url, page_transition_)) {
-    LogThumbnailingOutcome(trigger, Outcome::NOT_ATTEMPTED_SHOULD_NOT_ACQUIRE);
-    return;
-  }
+  // Check if the thumbnail needs to be updated. If not, log and return.
 
   content::RenderWidgetHost* render_widget_host =
       web_contents()->GetRenderViewHost()->GetWidget();
@@ -313,26 +308,17 @@ void ThumbnailTabHelper::ProcessCapturedBitmap(TriggerReason trigger,
     // that cleanup happens on that thread.
     // TODO(treib): Figure out whether it actually happen that we get called
     // back on something other than the UI thread.
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI,
-        FROM_HERE,
-        base::Bind(&ThumbnailTabHelper::CleanUpFromThumbnailGeneration,
-                   weak_factory_.GetWeakPtr()));
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::UI},
+        base::BindOnce(&ThumbnailTabHelper::CleanUpFromThumbnailGeneration,
+                       weak_factory_.GetWeakPtr()));
   }
 }
 
 void ThumbnailTabHelper::StoreThumbnail(const SkBitmap& thumbnail) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  scoped_refptr<thumbnails::ThumbnailService> thumbnail_service =
-      GetThumbnailService();
-  if (thumbnail_service) {
-    // Feed the constructed thumbnail to the thumbnail service.
-    gfx::Image image = gfx::Image::CreateFrom1xBitmap(thumbnail);
-    thumbnail_service->SetPageThumbnail(*thumbnailing_context_, image);
-    DVLOG(1) << "Thumbnail taken for " << thumbnailing_context_->url << ": "
-             << thumbnailing_context_->score.ToString();
-  }
+  // Convert |thumbnail| to gfx::Image and store it.
 
   CleanUpFromThumbnailGeneration();
 }
@@ -353,13 +339,6 @@ void ThumbnailTabHelper::TabHidden() {
   StartThumbnailCaptureIfNecessary(TriggerReason::TAB_HIDDEN);
 }
 
-scoped_refptr<thumbnails::ThumbnailService>
-ThumbnailTabHelper::GetThumbnailService() {
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-  return ThumbnailServiceFactory::GetForProfile(profile);
-}
-
 // static
 void ThumbnailTabHelper::LogThumbnailingOutcome(TriggerReason trigger,
                                                 Outcome outcome) {
@@ -377,3 +356,5 @@ void ThumbnailTabHelper::LogThumbnailingOutcome(TriggerReason trigger,
       break;
   }
 }
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(ThumbnailTabHelper)

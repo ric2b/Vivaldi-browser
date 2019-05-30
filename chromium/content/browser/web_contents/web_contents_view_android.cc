@@ -28,6 +28,7 @@
 #include "jni/DragEvent_jni.h"
 #include "ui/android/overscroll_refresh_handler.h"
 #include "ui/base/clipboard/clipboard.h"
+#include "ui/base/clipboard/clipboard_constants.h"
 #include "ui/display/screen.h"
 #include "ui/events/android/drag_event_android.h"
 #include "ui/events/android/gesture_event_android.h"
@@ -192,7 +193,7 @@ void WebContentsViewAndroid::Focus() {
 
 void WebContentsViewAndroid::SetInitialFocus() {
   if (web_contents_->FocusLocationBarByDefault())
-    web_contents_->SetFocusToLocationBar(false);
+    web_contents_->SetFocusToLocationBar();
   else
     Focus();
 }
@@ -255,7 +256,7 @@ RenderWidgetHostViewBase* WebContentsViewAndroid::CreateViewForWidget(
   return rwhv;
 }
 
-RenderWidgetHostViewBase* WebContentsViewAndroid::CreateViewForPopupWidget(
+RenderWidgetHostViewBase* WebContentsViewAndroid::CreateViewForChildWidget(
     RenderWidgetHost* render_widget_host) {
   RenderWidgetHostImpl* rwhi = RenderWidgetHostImpl::From(render_widget_host);
   return new RenderWidgetHostViewAndroid(rwhi, nullptr);
@@ -309,6 +310,7 @@ void WebContentsViewAndroid::ShowContextMenu(
     RenderFrameHost* render_frame_host, const ContextMenuParams& params) {
   auto* rwhv = static_cast<RenderWidgetHostViewAndroid*>(
       web_contents_->GetRenderWidgetHostView());
+
   // See if context menu is handled by SelectionController as a selection menu.
   // If not, use the delegate to show it.
   if (rwhv && rwhv->ShowSelectionMenu(params))
@@ -413,9 +415,9 @@ bool WebContentsViewAndroid::OnDragEvent(const ui::DragEventAndroid& event) {
       base::string16 drop_content =
           ConvertJavaStringToUTF16(env, event.GetJavaContent());
       for (const base::string16& mime_type : event.mime_types()) {
-        if (base::EqualsASCII(mime_type, ui::Clipboard::kMimeTypeURIList)) {
+        if (base::EqualsASCII(mime_type, ui::kMimeTypeURIList)) {
           drop_data.url = GURL(drop_content);
-        } else if (base::EqualsASCII(mime_type, ui::Clipboard::kMimeTypeText)) {
+        } else if (base::EqualsASCII(mime_type, ui::kMimeTypeText)) {
           drop_data.text = base::NullableString16(drop_content, false);
         } else {
           drop_data.html = base::NullableString16(drop_content, false);
@@ -521,9 +523,10 @@ int WebContentsViewAndroid::GetBottomControlsHeight() const {
   return delegate ? delegate->GetBottomControlsHeight() : 0;
 }
 
-bool WebContentsViewAndroid::DoBrowserControlsShrinkBlinkSize() const {
+bool WebContentsViewAndroid::DoBrowserControlsShrinkRendererSize() const {
   auto* delegate = web_contents_->GetDelegate();
-  return delegate ? delegate->DoBrowserControlsShrinkBlinkSize() : false;
+  return delegate &&
+         delegate->DoBrowserControlsShrinkRendererSize(web_contents_);
 }
 
 bool WebContentsViewAndroid::OnTouchEvent(const ui::MotionEventAndroid& event) {

@@ -5,7 +5,8 @@
 #ifndef CHROMEOS_DBUS_CONCIERGE_CLIENT_H_
 #define CHROMEOS_DBUS_CONCIERGE_CLIENT_H_
 
-#include "chromeos/chromeos_export.h"
+#include "base/component_export.h"
+#include "base/files/scoped_file.h"
 #include "chromeos/dbus/concierge/service.pb.h"
 #include "chromeos/dbus/dbus_client.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
@@ -15,7 +16,7 @@ namespace chromeos {
 
 // ConciergeClient is used to communicate with Concierge, which is used to
 // start and stop VMs.
-class CHROMEOS_EXPORT ConciergeClient : public DBusClient {
+class COMPONENT_EXPORT(CHROMEOS_DBUS) ConciergeClient : public DBusClient {
  public:
   class Observer {
    public:
@@ -72,13 +73,6 @@ class CHROMEOS_EXPORT ConciergeClient : public DBusClient {
       const vm_tools::concierge::StopVmRequest& request,
       DBusMethodCallback<vm_tools::concierge::StopVmResponse> callback) = 0;
 
-  // Starts a Container inside an existing Termina VM.
-  // |callback| is called after the method call finishes.
-  virtual void StartContainer(
-      const vm_tools::concierge::StartContainerRequest& request,
-      DBusMethodCallback<vm_tools::concierge::StartContainerResponse>
-          callback) = 0;
-
   // Registers |callback| to run when the Concierge service becomes available.
   // If the service is already available, or if connecting to the name-owner-
   // changed signal fails, |callback| will be run once asynchronously.
@@ -93,6 +87,27 @@ class CHROMEOS_EXPORT ConciergeClient : public DBusClient {
   virtual void GetContainerSshKeys(
       const vm_tools::concierge::ContainerSshKeysRequest& request,
       DBusMethodCallback<vm_tools::concierge::ContainerSshKeysResponse>
+          callback) = 0;
+
+  // Attaches a USB device to a VM
+  // |callback| is called once the method call has finished
+  virtual void AttachUsbDevice(base::ScopedFD fd,
+      const vm_tools::concierge::AttachUsbDeviceRequest& request,
+      DBusMethodCallback<vm_tools::concierge::AttachUsbDeviceResponse>
+          callback) = 0;
+
+  // Remove a USB device from a VM it's been attached to
+  // |callback| is called once the method call has finished
+  virtual void DetachUsbDevice(
+      const vm_tools::concierge::DetachUsbDeviceRequest& request,
+      DBusMethodCallback<vm_tools::concierge::DetachUsbDeviceResponse>
+          callback) = 0;
+
+  // List all the USB devices currently attached to a given VM
+  // |callback| is called once the method call has finished
+  virtual void ListUsbDevices(
+      const vm_tools::concierge::ListUsbDeviceRequest& request,
+      DBusMethodCallback<vm_tools::concierge::ListUsbDeviceResponse>
           callback) = 0;
 
   // Creates an instance of ConciergeClient.

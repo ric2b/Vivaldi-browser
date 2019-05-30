@@ -17,6 +17,7 @@
 #include "ash/accelerators/exit_warning_handler.h"
 #include "ash/ash_export.h"
 #include "ash/public/interfaces/accelerator_controller.mojom.h"
+#include "ash/public/interfaces/volume.mojom.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -26,7 +27,6 @@
 
 namespace ui {
 class AcceleratorManager;
-class AcceleratorManagerDelegate;
 }
 
 namespace ash {
@@ -45,9 +45,7 @@ ASH_EXPORT extern const char kFullscreenMagnifierToggleAccelNotificationId[];
 class ASH_EXPORT AcceleratorController : public ui::AcceleratorTarget,
                                          public mojom::AcceleratorController {
  public:
-  // TODO(jamescook): Remove |manager_delegate|. https://crbug.com/842365
-  explicit AcceleratorController(
-      ui::AcceleratorManagerDelegate* manager_delegate);
+  AcceleratorController();
   ~AcceleratorController() override;
 
   // A list of possible ways in which an accelerator should be restricted before
@@ -239,6 +237,8 @@ class ASH_EXPORT AcceleratorController : public ui::AcceleratorTarget,
   std::set<int> actions_allowed_in_app_mode_;
   // Actions allowed in pinned mode.
   std::set<int> actions_allowed_in_pinned_mode_;
+  // Actions allowed when Kiosk Next Shell is enabled.
+  std::set<int> actions_allowed_for_kiosk_next_shell_;
   // Actions disallowed if there are no windows.
   std::set<int> actions_needing_window_;
   // Actions that can be performed without closing the menu (if one is present).

@@ -38,7 +38,7 @@ Network.RequestHTMLView = class extends UI.VBox {
   constructor(dataURL) {
     super(true);
     this.registerRequiredCSS('network/requestHTMLView.css');
-    this._dataURL = dataURL;
+    this._dataURL = encodeURI(dataURL).replace(/#/g, '%23');
     this.contentElement.classList.add('html', 'request-view');
   }
 

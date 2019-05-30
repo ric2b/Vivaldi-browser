@@ -15,8 +15,13 @@
 #include "base/macros.h"
 #include "base/strings/string_piece.h"
 #include "net/dns/dns_client.h"
-#include "net/dns/dns_config_service.h"
 #include "net/socket/socket_test_util.h"
+#include "net/url_request/url_request.h"
+#include "net/url_request/url_request_interceptor.h"
+
+namespace net {
+struct DnsConfig;
+}
 
 namespace certificate_transparency {
 
@@ -117,6 +122,16 @@ class MockLogDnsTraffic {
   // Allows tests to change socket read mode. Only the LogDnsClient tests should
   // need to do so, to ensure consistent behaviour regardless of mode.
   friend class LogDnsClientTest;
+  friend class SingleTreeTrackerTest;
+
+  class DohJobInterceptor : public net::URLRequestInterceptor {
+   public:
+    DohJobInterceptor() {}
+
+    net::URLRequestJob* MaybeInterceptRequest(
+        net::URLRequest* request,
+        net::NetworkDelegate* network_delegate) const override;
+  };
 
   class MockSocketData;
 

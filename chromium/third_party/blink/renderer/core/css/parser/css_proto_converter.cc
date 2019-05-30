@@ -28,6 +28,8 @@ const std::string Converter::kViewportValueLookupTable[] = {
 
 const std::string Converter::kPseudoLookupTable[] = {
     "",  // This is just to fill the zeroth spot. It should not be used.
+    "-internal-autofill-previewed",
+    "-internal-autofill-selected",
     "-internal-is-html",
     "-internal-list-box",
     "-internal-media-controls-overlay-cast-button",
@@ -245,7 +247,6 @@ const std::string Converter::kValueLookupTable[] = {
     "small",
     "media-sliderthumb",
     "round",
-    "-internal-media-subtitles-icon",
     "media-play-button",
     "smaller",
     "jis04",
@@ -343,7 +344,6 @@ const std::string Converter::kValueLookupTable[] = {
     "slider-vertical",
     "-webkit-box",
     "plum",
-    "-internal-media-overlay-cast-off-button",
     "inactivecaptiontext",
     "dodgerblue",
     "threedshadow",
@@ -433,7 +433,6 @@ const std::string Converter::kValueLookupTable[] = {
     "accumulate",
     "flex-end",
     "transparent",
-    "-internal-media-remoting-cast-icon",
     "goldenrod",
     "historical-ligatures",
     "darkviolet",
@@ -461,7 +460,6 @@ const std::string Converter::kValueLookupTable[] = {
     "darkkhaki",
     "keep-all",
     "content",
-    "-internal-media-download-button",
     "upper-roman",
     "cornsilk",
     "red",
@@ -490,7 +488,6 @@ const std::string Converter::kValueLookupTable[] = {
     "sideways-right",
     "jis83",
     "mediumspringgreen",
-    "caps-lock-indicator",
     "sliderthumb-horizontal",
     "forwards",
     "upper-alpha",
@@ -666,7 +663,6 @@ const std::string Converter::kValueLookupTable[] = {
     "read-write-plaintext-only",
     "padding-box",
     "col-resize",
-    "-internal-media-track-selection-checkmark",
     "lower-latin",
     "-webkit-nowrap",
     "table",
@@ -735,7 +731,6 @@ const std::string Converter::kValueLookupTable[] = {
     "center",
     "lightyellow",
     "lavenderblush",
-    "-internal-media-closed-captions-icon",
     "inherit",
     "media-controls-background",
     "justify",
@@ -823,7 +818,6 @@ const std::string Converter::kValueLookupTable[] = {
     "cursive",
     "on",
     "central",
-    "-internal-media-overflow-button",
     "standalone",
     "column",
     "coral",
@@ -856,7 +850,6 @@ const std::string Converter::kValueLookupTable[] = {
     "blanchedalmond",
     "caret",
     "start",
-    "-internal-media-cast-off-button",
     "italic",
     "ivory",
     "buttontext",
@@ -2145,4 +2138,4 @@ void Converter::AppendPropertyAndValue(
   if (append_semicolon)
     string_ += "; ";
 }
-};  // namespace css_proto_converter
+}  // namespace css_proto_converter

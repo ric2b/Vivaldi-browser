@@ -26,12 +26,14 @@
 #include "components/sync/protocol/mountain_share_specifics.pb.h"
 #include "components/sync/protocol/nigori_specifics.pb.h"
 #include "components/sync/protocol/password_specifics.pb.h"
+#include "components/sync/protocol/persisted_entity_data.pb.h"
 #include "components/sync/protocol/preference_specifics.pb.h"
 #include "components/sync/protocol/printer_specifics.pb.h"
 #include "components/sync/protocol/priority_preference_specifics.pb.h"
 #include "components/sync/protocol/proto_enum_conversions.h"
 #include "components/sync/protocol/reading_list_specifics.pb.h"
 #include "components/sync/protocol/search_engine_specifics.pb.h"
+#include "components/sync/protocol/send_tab_to_self_specifics.pb.h"
 #include "components/sync/protocol/session_specifics.pb.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/protocol/theme_specifics.pb.h"
@@ -370,7 +372,7 @@ VISIT_PROTO_FIELDS(const sync_pb::EntityMetadata& proto) {
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
-  static_assert(42 + 1 /* notes */ == MODEL_TYPE_COUNT,
+  static_assert(44 + 1 /* notes */ == MODEL_TYPE_COUNT,
                 "When adding a new protocol type, you will likely need to add "
                 "it here as well.");
   VISIT(encrypted);
@@ -404,6 +406,8 @@ VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
   VISIT(priority_preference);
   VISIT(reading_list);
   VISIT(search_engine);
+  VISIT(security_event);
+  VISIT(send_tab_to_self);
   VISIT(session);
   VISIT(synced_notification);
   VISIT(synced_notification_app_info);
@@ -490,10 +494,12 @@ VISIT_PROTO_FIELDS(const sync_pb::GetUpdateTriggers& proto) {
   VISIT(invalidations_out_of_sync);
   VISIT(local_modification_nudges);
   VISIT(datatype_refresh_nudges);
+  VISIT(server_dropped_hints);
+  VISIT(initial_sync_in_progress);
+  VISIT(sync_for_resolve_conflict_in_progress);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::GetUpdatesCallerInfo& proto) {
-  VISIT_ENUM(source);
   VISIT(notifications_enabled);
 }
 
@@ -525,6 +531,7 @@ VISIT_PROTO_FIELDS(const sync_pb::GlobalIdDirective& proto) {
 VISIT_PROTO_FIELDS(const sync_pb::HistoryDeleteDirectiveSpecifics& proto) {
   VISIT(global_id_directive);
   VISIT(time_range_directive);
+  VISIT(url_directive);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::HistoryDeleteDirectives& proto) {
@@ -671,6 +678,11 @@ VISIT_PROTO_FIELDS(const sync_pb::PasswordSpecificsMetadata& proto) {
   VISIT(url);
 }
 
+VISIT_PROTO_FIELDS(const sync_pb::PersistedEntityData& proto) {
+  VISIT(non_unique_name);
+  VISIT(specifics);
+}
+
 VISIT_PROTO_FIELDS(const sync_pb::PreCommitUpdateAvoidanceFlags& proto) {
   VISIT(enabled);
 }
@@ -733,6 +745,15 @@ VISIT_PROTO_FIELDS(const sync_pb::SearchEngineSpecifics& proto) {
   VISIT(suggestions_url_post_params);
   VISIT(image_url_post_params);
   VISIT(new_tab_url);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::SendTabToSelfSpecifics& proto) {
+  VISIT(guid);
+  VISIT(title);
+  VISIT(url);
+  VISIT(shared_time_usec);
+  VISIT(navigation_time_usec);
+  VISIT(device_name);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::SessionHeader& proto) {
@@ -806,8 +827,11 @@ VISIT_PROTO_FIELDS(const sync_pb::SyncedNotificationAppInfoSpecifics& proto) {}
 
 VISIT_PROTO_FIELDS(const sync_pb::SyncedNotificationSpecifics& proto) {}
 
-VISIT_PROTO_FIELDS(
-    const sync_pb::UserEventSpecifics::GaiaPasswordReuse& proto) {
+VISIT_PROTO_FIELDS(const sync_pb::SecurityEventSpecifics& proto) {
+  VISIT(gaia_password_reuse_event);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::GaiaPasswordReuse& proto) {
   VISIT(reuse_detected);
   VISIT(reuse_lookup);
   VISIT(dialog_interaction);
@@ -816,34 +840,31 @@ VISIT_PROTO_FIELDS(
 }
 
 VISIT_PROTO_FIELDS(
-    const sync_pb::UserEventSpecifics::GaiaPasswordReuse::PasswordReuseDetected&
-        proto) {
+    const sync_pb::GaiaPasswordReuse::PasswordReuseDetected& proto) {
   VISIT(status);
 }
 
-VISIT_PROTO_FIELDS(const sync_pb::UserEventSpecifics::GaiaPasswordReuse::
-                       PasswordReuseDetected::SafeBrowsingStatus& proto) {
+VISIT_PROTO_FIELDS(
+    const sync_pb::GaiaPasswordReuse::PasswordReuseDetected::SafeBrowsingStatus&
+        proto) {
   VISIT(enabled);
   VISIT_ENUM(safe_browsing_reporting_population);
 }
 
-VISIT_PROTO_FIELDS(const sync_pb::UserEventSpecifics::GaiaPasswordReuse::
-                       PasswordReuseDialogInteraction& proto) {
+VISIT_PROTO_FIELDS(
+    const sync_pb::GaiaPasswordReuse::PasswordReuseDialogInteraction& proto) {
   VISIT_ENUM(interaction_result);
 }
 
 VISIT_PROTO_FIELDS(
-    const sync_pb::UserEventSpecifics::GaiaPasswordReuse::PasswordReuseLookup&
-        proto) {
+    const sync_pb::GaiaPasswordReuse::PasswordReuseLookup& proto) {
   VISIT_ENUM(lookup_result);
   VISIT_ENUM(verdict);
   VISIT(verdict_token);
 }
 
 // TODO(markusheintz): Remove.
-VISIT_PROTO_FIELDS(
-    const sync_pb::UserEventSpecifics::GaiaPasswordReuse::PasswordCaptured&
-        proto) {
+VISIT_PROTO_FIELDS(const sync_pb::GaiaPasswordReuse::PasswordCaptured& proto) {
   VISIT_ENUM(event_trigger);
 }
 
@@ -898,6 +919,11 @@ VISIT_PROTO_FIELDS(const sync_pb::UserEventSpecifics::Translation& proto) {
   VISIT(from_language_code);
   VISIT(to_language_code);
   VISIT_ENUM(interaction);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::UrlDirective& proto) {
+  VISIT(url);
+  VISIT(end_time_usec);
 }
 
 // TODO(vitaliii): Delete once UserEventSpecifics::UserConsent is completely

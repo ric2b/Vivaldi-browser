@@ -66,3 +66,8 @@ fi
 
 # Run the cron job immediately to perform repository configuration.
 nohup sh /etc/cron.daily/@@PACKAGE@@ > /dev/null 2>&1 &
+
+# Setup Widevine support
+if command -v nohup >/dev/null 2>&1; then
+  nohup /opt/@@PACKAGE@@/update-widevine --system > /dev/null 2>&1 &
+fi

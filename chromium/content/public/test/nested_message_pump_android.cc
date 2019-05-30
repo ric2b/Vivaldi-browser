@@ -29,7 +29,9 @@ struct NestedMessagePumpAndroid::RunState {
         run_depth(run_depth),
         should_quit(false),
         waitable_event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
-                       base::WaitableEvent::InitialState::NOT_SIGNALED) {}
+                       base::WaitableEvent::InitialState::NOT_SIGNALED) {
+    waitable_event.declare_only_used_while_idle();
+  }
 
   base::MessagePump::Delegate* delegate;
 
@@ -96,7 +98,6 @@ void NestedMessagePumpAndroid::Run(Delegate* delegate) {
         env, g_message_handler_obj.Get());
     CHECK(ret) << "Error running java message loop, tests will likely fail.";
 
-    base::ThreadRestrictions::ScopedAllowWait allow_wait;
     if (state_->delayed_work_time.is_null()) {
       state_->waitable_event.TimedWait(max_delay);
     } else {

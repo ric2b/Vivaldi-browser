@@ -26,20 +26,45 @@ public interface SafeBrowsingApiHandler {
     }
 
     // Possible values for resultStatus. Native side has the same definitions.
+    @IntDef({SafeBrowsingResult.INTERNAL_ERROR, SafeBrowsingResult.SUCCESS,
+            SafeBrowsingResult.TIMEOUT})
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef({STATUS_INTERNAL_ERROR, STATUS_SUCCESS, STATUS_TIMEOUT})
-    @interface SafeBrowsingResult {}
-    static final int STATUS_INTERNAL_ERROR = -1;
-    static final int STATUS_SUCCESS = 0;
-    static final int STATUS_TIMEOUT = 1;
+    @interface SafeBrowsingResult {
+        int INTERNAL_ERROR = -1;
+        int SUCCESS = 0;
+        int TIMEOUT = 1;
+    }
 
     /**
      * Verifies that SafeBrowsingApiHandler can operate and initializes if feasible.
      * Should be called on the same sequence as |startUriLookup|.
      *
-     * @return the handler if it's usable, or null if the API is not supported.
+     * @param observer The object on which to call the callback functions when URL checking
+     * is complete.
+     *
+     * @return whether Safe Browsing is supported for this installation.
      */
     public boolean init(Observer result);
+
+    /**
+     * Verifies that SafeBrowsingApiHandler can operate and initializes if feasible.
+     * Should be called on the same sequence as |startUriLookup|.
+     *
+     * @param observer The object on which to call the callback functions when URL checking
+     * is complete.
+     * @param enableLocalBlacklists specifies if the feature to use local blacklists is enabled.
+     *
+     * @return whether Safe Browsing is supported for this installation.
+     */
+    public boolean init(Observer result, boolean enableLocalBlacklists);
+
+    /**
+     * Returns the Safety Net ID of the device. Checks to make sure that the feature to report
+     * telemetry for APK downloads is enabled. This should not be called for AW.
+     *
+     * @return the Safety Net ID of the device.
+     */
+    public String getSafetyNetId();
 
     /**
      * Start a URI-lookup to determine if it matches one of the specified threats.

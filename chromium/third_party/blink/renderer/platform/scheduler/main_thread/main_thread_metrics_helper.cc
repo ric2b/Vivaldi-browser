@@ -8,7 +8,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "services/resource_coordinator/public/cpp/resource_coordinator_features.h"
-#include "third_party/blink/public/platform/scheduler/renderer_process_type.h"
+#include "third_party/blink/public/platform/scheduler/web_renderer_process_type.h"
 #include "third_party/blink/renderer/platform/instrumentation/resource_coordinator/renderer_resource_coordinator.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/frame_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
@@ -195,7 +195,7 @@ base::TimeDelta DurationOfIntervalOverlap(base::TimeTicks start1,
 
 void MainThreadMetricsHelper::RecordTaskMetrics(
     MainThreadTaskQueue* queue,
-    const base::sequence_manager::TaskQueue::Task& task,
+    const base::sequence_manager::Task& task,
     const base::sequence_manager::TaskQueue::TaskTiming& task_timing) {
   if (ShouldDiscardTask(queue, task, task_timing))
     return;
@@ -270,7 +270,7 @@ void MainThreadMetricsHelper::RecordTaskMetrics(
 
   per_queue_type_reporters_.overall.RecordTask(queue_type, duration);
 
-  TaskType task_type = static_cast<TaskType>(task.task_type());
+  TaskType task_type = static_cast<TaskType>(task.task_type);
   per_task_type_duration_reporter_.RecordTask(task_type, duration);
 
   if (main_thread_scheduler_->main_thread_only().renderer_backgrounded) {
@@ -452,12 +452,19 @@ void MainThreadMetricsHelper::RecordTaskMetrics(
     input_handling_per_task_type_duration_reporter_.RecordTask(task_type,
                                                                duration);
   }
-  if (task_type == TaskType::kNetworkingWithURLLoaderAnnotation && queue &&
-      queue->net_request_priority()) {
+
+  if (task_type == TaskType::kNetworkingWithURLLoaderAnnotation && queue) {
+    if (queue->net_request_priority()) {
+      UMA_HISTOGRAM_ENUMERATION(
+          "RendererScheduler.ResourceLoadingTaskCountPerNetPriority",
+          queue->net_request_priority().value(),
+          net::RequestPriority::MAXIMUM_PRIORITY + 1);
+    }
+
     UMA_HISTOGRAM_ENUMERATION(
-        "RendererScheduler.ResourceLoadingTaskCountPerNetPriority",
-        queue->net_request_priority().value(),
-        net::RequestPriority::MAXIMUM_PRIORITY + 1);
+        "RendererScheduler.ResourceLoadingTaskCountPerPriority",
+        queue->GetQueuePriority(),
+        base::sequence_manager::TaskQueue::QueuePriority::kQueuePriorityCount);
   }
 }
 
@@ -471,7 +478,7 @@ void MainThreadMetricsHelper::RecordMainThreadTaskLoad(base::TimeTicks time,
   UMA_HISTOGRAM_PERCENTAGE(MAIN_THREAD_LOAD_METRIC_NAME, load_percentage);
 
   if (main_thread_scheduler_->main_thread_only().process_type ==
-      RendererProcessType::kExtensionRenderer) {
+      WebRendererProcessType::kExtensionRenderer) {
     UMA_HISTOGRAM_PERCENTAGE(EXTENSIONS_MAIN_THREAD_LOAD_METRIC_NAME,
                              load_percentage);
   }
@@ -487,12 +494,12 @@ void MainThreadMetricsHelper::RecordForegroundMainThreadTaskLoad(
   DCHECK_LE(load_percentage, 100);
 
   switch (main_thread_scheduler_->main_thread_only().process_type) {
-    case RendererProcessType::kExtensionRenderer:
+    case WebRendererProcessType::kExtensionRenderer:
       UMA_HISTOGRAM_PERCENTAGE(EXTENSIONS_MAIN_THREAD_LOAD_METRIC_NAME
                                ".Foreground",
                                load_percentage);
       break;
-    case RendererProcessType::kRenderer:
+    case WebRendererProcessType::kRenderer:
       UMA_HISTOGRAM_PERCENTAGE(MAIN_THREAD_LOAD_METRIC_NAME ".Foreground",
                                load_percentage);
 
@@ -519,12 +526,12 @@ void MainThreadMetricsHelper::RecordBackgroundMainThreadTaskLoad(
   DCHECK_LE(load_percentage, 100);
 
   switch (main_thread_scheduler_->main_thread_only().process_type) {
-    case RendererProcessType::kExtensionRenderer:
+    case WebRendererProcessType::kExtensionRenderer:
       UMA_HISTOGRAM_PERCENTAGE(EXTENSIONS_MAIN_THREAD_LOAD_METRIC_NAME
                                ".Background",
                                load_percentage);
       break;
-    case RendererProcessType::kRenderer:
+    case WebRendererProcessType::kRenderer:
       UMA_HISTOGRAM_PERCENTAGE(MAIN_THREAD_LOAD_METRIC_NAME ".Background",
                                load_percentage);
 
@@ -569,15 +576,18 @@ void MainThreadMetricsHelper::ReportLowThreadLoadForPageAlmostIdleSignal(
   static const int main_thread_task_load_low_threshold =
       ::resource_coordinator::GetMainThreadTaskLoadLowThreshold();
 
-  // Avoid sending duplicate IPCs when the state doesn't change.
-  if (load_percentage <= main_thread_task_load_low_threshold &&
-      main_thread_task_load_state_ != MainThreadTaskLoadState::kLow) {
-    RendererResourceCoordinator::Get().SetMainThreadTaskLoadIsLow(true);
-    main_thread_task_load_state_ = MainThreadTaskLoadState::kLow;
-  } else if (load_percentage > main_thread_task_load_low_threshold &&
-             main_thread_task_load_state_ != MainThreadTaskLoadState::kHigh) {
-    RendererResourceCoordinator::Get().SetMainThreadTaskLoadIsLow(false);
-    main_thread_task_load_state_ = MainThreadTaskLoadState::kHigh;
+  if (auto* renderer_resource_coordinator =
+          RendererResourceCoordinator::Get()) {
+    // Avoid sending duplicate IPCs when the state doesn't change.
+    if (load_percentage <= main_thread_task_load_low_threshold &&
+        main_thread_task_load_state_ != MainThreadTaskLoadState::kLow) {
+      renderer_resource_coordinator->SetMainThreadTaskLoadIsLow(true);
+      main_thread_task_load_state_ = MainThreadTaskLoadState::kLow;
+    } else if (load_percentage > main_thread_task_load_low_threshold &&
+               main_thread_task_load_state_ != MainThreadTaskLoadState::kHigh) {
+      renderer_resource_coordinator->SetMainThreadTaskLoadIsLow(false);
+      main_thread_task_load_state_ = MainThreadTaskLoadState::kHigh;
+    }
   }
 }
 

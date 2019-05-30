@@ -10,13 +10,20 @@
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "content/public/browser/service_worker_usage_info.h"
-#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
+#include "content/common/content_export.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom-forward.h"
 #include "url/gurl.h"
+
+namespace blink {
+
+struct TransferableMessage;
+
+}
 
 namespace content {
 
 class ServiceWorkerContextObserver;
+struct StorageUsageInfo;
 
 enum class ServiceWorkerCapability {
   NO_SERVICE_WORKER,
@@ -51,8 +58,8 @@ class ServiceWorkerContext {
  public:
   using ResultCallback = base::OnceCallback<void(bool success)>;
 
-  using GetUsageInfoCallback = base::OnceCallback<void(
-      const std::vector<ServiceWorkerUsageInfo>& usage_info)>;
+  using GetUsageInfoCallback =
+      base::OnceCallback<void(const std::vector<StorageUsageInfo>& usage_info)>;
 
   using CheckHasServiceWorkerCallback =
       base::OnceCallback<void(ServiceWorkerCapability capability)>;
@@ -139,38 +146,51 @@ class ServiceWorkerContext {
   virtual void DeleteForOrigin(const GURL& origin_url,
                                ResultCallback callback) = 0;
 
+  // Performs internal storage cleanup. Operations to the storage in the past
+  // (e.g. deletion) are usually recorded in disk for a certain period until
+  // compaction happens. This method wipes them out to ensure that the deleted
+  // entries and other traces like log files are removed.
+  // Must be called from the IO thread.
+  virtual void PerformStorageCleanup(base::OnceClosure callback) = 0;
+
   // Returns ServiceWorkerCapability describing existence and properties of a
-  // Service Worker registration matching |url|. Found service worker
-  // registration must also encompass the |other_url|, otherwise it will be
-  // considered non existent by this method. Note that the longest matching
-  // registration for |url| is described, which is not necessarily the longest
-  // matching registration for |other_url|. In case the service worker is being
-  // installed as of calling this method, it will wait for the installation to
-  // finish before coming back with the result.
+  // Service Worker registration matching |url|. In case the service
+  // worker is being installed as of calling this method, it will wait for the
+  // installation to finish before coming back with the result.
   //
   // This function can be called from any thread, but the callback will always
   // be called on the UI thread.
   virtual void CheckHasServiceWorker(
       const GURL& url,
-      const GURL& other_url,
       CheckHasServiceWorkerCallback callback) = 0;
 
   // Stops all running service workers and unregisters all service worker
-  // registrations. This method is used in LayoutTests to make sure that the
+  // registrations. This method is used in web tests to make sure that the
   // existing service worker will not affect the succeeding tests.
   //
   // This function can be called from any thread, but the callback will always
   // be called on the UI thread.
   virtual void ClearAllServiceWorkersForTest(base::OnceClosure callback) = 0;
 
-  // Starts the active worker of the registration whose scope is |pattern|. If
+  // Starts the active worker of the registration for the given |scope|. If
   // there is no active worker, starts the installing worker.
   // |info_callback| is passed information about the started worker.
   //
   // Must be called on IO thread.
-  virtual void StartWorkerForPattern(const GURL& pattern,
-                                     StartWorkerCallback info_callback,
-                                     base::OnceClosure failure_callback) = 0;
+  virtual void StartWorkerForScope(const GURL& scope,
+                                   StartWorkerCallback info_callback,
+                                   base::OnceClosure failure_callback) = 0;
+
+  // Starts the active worker of the registration for the given |scope| and
+  // dispatches the given |message| to the service worker. |result_callback|
+  // is passed a success boolean indicating whether the message was dispatched
+  // successfully.
+  //
+  // Must be called on IO thread.
+  virtual void StartServiceWorkerAndDispatchMessage(
+      const GURL& scope,
+      blink::TransferableMessage message,
+      ResultCallback result_callback) = 0;
 
   // Deprecated: DO NOT USE
   // This is a temporary addition only to be used for the Android Messages
@@ -179,11 +199,11 @@ class ServiceWorkerContext {
   // (content/browser/service_worker/OWNERS) if you have questions.
   //
   // This method MUST be called on the IO thread.  It starts the active worker
-  // of the registration whose scope is |pattern|, sets its timeout to 999 days,
+  // of the registration for the given |scope|, sets its timeout to 999 days,
   // and passes in the given |message|.  The |result_callback| will be executed
   // upon success or failure and pass back the boolean result.
   virtual void StartServiceWorkerAndDispatchLongRunningMessage(
-      const GURL& pattern,
+      const GURL& scope,
       blink::TransferableMessage message,
       ResultCallback result_callback) = 0;
 

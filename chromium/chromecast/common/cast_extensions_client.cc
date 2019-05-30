@@ -11,8 +11,6 @@
 #include "base/macros.h"
 #include "base/no_destructor.h"
 #include "chromecast/common/cast_extensions_api_provider.h"
-#include "components/version_info/version_info.h"
-#include "content/public/common/user_agent.h"
 #include "extensions/common/api/api_features.h"
 #include "extensions/common/api/behavior_features.h"
 #include "extensions/common/api/generated_schemas.h"
@@ -39,6 +37,11 @@ class ShellPermissionMessageProvider : public PermissionMessageProvider {
 
   // PermissionMessageProvider implementation.
   PermissionMessages GetPermissionMessages(
+      const PermissionIDSet& permissions) const override {
+    return PermissionMessages();
+  }
+
+  PermissionMessages GetPowerfulPermissionMessages(
       const PermissionIDSet& permissions) const override {
     return PermissionMessages();
   }
@@ -138,11 +141,6 @@ const GURL& CastExtensionsClient::GetWebstoreUpdateURL() const {
 
 bool CastExtensionsClient::IsBlacklistUpdateURL(const GURL& url) const {
   return true;
-}
-
-std::string CastExtensionsClient::GetUserAgent() const {
-  return content::BuildUserAgentFromProduct(
-      version_info::GetProductNameAndVersionForUserAgent());
 }
 
 }  // namespace extensions

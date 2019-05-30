@@ -80,23 +80,26 @@ SKIP_GN_ISOLATE_MAP_TARGETS = {
   # These targets are listed only in build-side recipes.
   'All_syzygy',
   'blink_tests',
+  'captured_sites_interactive_tests',
   'cast_shell',
   'cast_shell_apk',
   'chrome_official_builder',
   'chrome_official_builder_no_unittests',
+  'chrome_sandbox',
   'chromium_builder_asan',
   'chromium_builder_perf',
   'chromiumos_preflight',
+  'linux_symbols',
   'mini_installer',
   'previous_version_mini_installer',
+  'symupload',
 
   # iOS tests are listed in //ios/build/bots.
   'cronet_test',
   'cronet_unittests_ios',
-  'ios_chrome_adaptive_toolbar_egtests',
   'ios_chrome_bookmarks_egtests',
   'ios_chrome_integration_egtests',
-  'ios_chrome_payments_egtests',
+  'ios_chrome_manual_fill_egtests',
   'ios_chrome_reading_list_egtests',
   'ios_chrome_settings_egtests',
   'ios_chrome_smoke_egtests',
@@ -127,17 +130,20 @@ SKIP_GN_ISOLATE_MAP_TARGETS = {
   'device_junit_tests',
   'junit_unit_tests',
   'media_router_e2e_tests',
+  'media_router_junit_tests',
   'media_router_perf_tests',
   'motopho_latency_test',
   'net_junit_tests',
   'net_junit_tests',
   'service_junit_tests',
+  'shipped_binaries',
   'system_webview_apk',
   'ui_junit_tests',
-  'vrcore_fps_test',
   'vr_common_perftests',
   'vr_perf_tests',
+  'vrcore_fps_test',
   'webapk_client_junit_tests',
+  'webapk_shell_apk_h2o_junit_tests',
   'webapk_shell_apk_junit_tests',
 
   # These tests are only run on WebRTC CI.
@@ -174,6 +180,9 @@ SKIP_GN_ISOLATE_MAP_TARGETS = {
 
   # These are only for developer convenience and not on any bots.
   'telemetry_gpu_integration_test_scripts_only',
+
+  # These are defined by an android internal gn_isolate_map.pyl file.
+  'chrome_apk',
 }
 
 
@@ -446,8 +455,10 @@ def main():
                           ninja_targets, ninja_targets_seen):
         result = 1
 
-    extra_targets = (set(ninja_targets) - ninja_targets_seen -
-                     SKIP_GN_ISOLATE_MAP_TARGETS)
+    skip_targets = [k for k, v in gn_isolate_map.items() if
+                    ('skip_usage_check' in v and v['skip_usage_check'])]
+    extra_targets = (set(ninja_targets) - set(skip_targets) -
+                     ninja_targets_seen - SKIP_GN_ISOLATE_MAP_TARGETS)
     if extra_targets:
       if len(extra_targets) > 1:
         extra_targets_str = ', '.join(extra_targets) + ' are'

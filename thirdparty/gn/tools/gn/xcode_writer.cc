@@ -376,17 +376,14 @@ bool XcodeWriter::RunAndWriteFiles(const std::string& workspace_name,
       break;
   }
 
-  const std::string source_path =
-      base::FilePath::FromUTF8Unsafe(
-          RebasePath("//", build_settings->build_dir()))
-          .StripTrailingSeparators()
-          .AsUTF8Unsafe();
+  const std::string source_path = FilePathToUTF8(
+      UTF8ToFilePath(RebasePath("//", build_settings->build_dir()))
+          .StripTrailingSeparators());
 
-  std::string config_name = build_settings->build_dir()
-                                .Resolve(base::FilePath(), true)
-                                .StripTrailingSeparators()
-                                .BaseName()
-                                .AsUTF8Unsafe();
+  std::string config_name = FilePathToUTF8(build_settings->build_dir()
+                                               .Resolve(base::FilePath(), true)
+                                               .StripTrailingSeparators()
+                                               .BaseName());
   DCHECK(!config_name.empty());
 
   std::string::size_type separator = config_name.find('-');

@@ -17,18 +17,14 @@
 <link rel="import" href="code_section.html">
 <link rel="import" href="item_util.html">
 <link rel="import" href="navigation_helper.html">
+<link rel="import" href="shared_style.html">
 
 <dom-module id="extensions-error-page">
   <template>
-    <style include="paper-button-style cr-icons cr-shared-style">
+    <style include="paper-button-style cr-icons cr-shared-style shared-style">
       :host {
         display: block;
         height: 100%;
-      }
-
-      #container {
-        height: 100%;
-        overflow: overlay;
       }
 
       iron-icon {
@@ -38,22 +34,12 @@
       }
 
       iron-icon[icon='cr:warning'] {
+        /* TODO(dbeam): find dark mode equivalent for this orange. */
         --iron-icon-fill-color: var(--paper-orange-500);
       }
 
       iron-icon[icon='cr:error'] {
-        --iron-icon-fill-color: var(--paper-red-700);
-      }
-
-      /* TODO(dpapad): There is a lot of duplicated styling between
-       * detail_view.html and error_page.html. Refactor such that no duplication
-       * happens.*/
-      #main {
-        @apply --cr-card-elevation;
-        background-color: white;
-        margin: auto;
-        min-height: 100%;
-        width: 640px;
+        --iron-icon-fill-color: var(--error-color);
       }
 
       .section {
@@ -80,7 +66,7 @@
 
       .error-item {
         @apply --cr-section;
-        padding-left: 0;
+        padding-inline-start: 0;
       }
 
       .error-item paper-icon-button-light {
@@ -131,34 +117,12 @@
       .stack-trace-container li.selected,
       .stack-trace-container li:hover {
         background: var(--google-blue-100);
+        color: var(--google-grey-900);  /* Same in light & dark modes. */
       }
 
       extensions-code-section {
-        background: white;
         height: 200px;
         margin-bottom: 20px;
-      }
-
-      /* TODO(scottchen): extract to shared location from settings. */
-      .separator {
-        --separator-gaps: 9px;
-        border-inline-start: var(--cr-separator-line);
-        flex-shrink: 0;
-        height: calc(var(--cr-section-min-height) -
-            var(--separator-gaps));
-        margin-inline-end: var(--cr-section-padding);
-
-        /**
-         * Makes the tappable area fill its parent.
-         * TODO(scottchen): This is an explicit reminder to override once
-         * .separator styling is extracted from settings.
-         */
-        margin-inline-start: 0;
-      }
-
-      /* TODO(scottchen): extract to shared location from settings. */
-      .separator + paper-icon-button-light {
-        margin-inline-start: var(--cr-icon-ripple-margin);
       }
 
       :host-context(.focus-outline-visible) .start:focus {
@@ -168,9 +132,13 @@
       .start:focus {
         outline: none;
       }
+
+      .context-url {
+        word-wrap: break-word;
+      }
     </style>
-    <div id="container">
-      <div id="main">
+    <div class="page-container" id="container">
+      <div class="page-content">
         <div id="heading">
           <paper-icon-button-light class="icon-arrow-back no-overlap">
             <button id="closeButton" aria-label="$i18n{back}"
@@ -238,12 +206,9 @@
                         </template>
                       </ul>
                     </template>
-                    <template is="dom-if"
-                        if="[[isOpened_(index, selectedEntry_)]]">
-                      <extensions-code-section code="[[code_]]"
-                          could-not-display-code="$i18n{noErrorsToShow}">
-                      </extensions-code-section>
-                    </template>
+                    <extensions-code-section code="[[code_]]"
+                        could-not-display-code="$i18n{noErrorsToShow}">
+                    </extensions-code-section>
                   </div>
                 </iron-collapse>
               </div>

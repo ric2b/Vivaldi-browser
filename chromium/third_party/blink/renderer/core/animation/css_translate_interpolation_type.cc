@@ -90,7 +90,7 @@ InterpolationValue ConvertTranslateOperation(
                                translate->Y(), zoom)
                                .interpolable_value);
   result->Set(kTranslateZ, LengthInterpolationFunctions::MaybeConvertLength(
-                               Length(translate->Z(), kFixed), zoom)
+                               Length::Fixed(translate->Z()), zoom)
                                .interpolable_value);
   return InterpolationValue(std::move(result));
 }
@@ -134,7 +134,7 @@ InterpolationValue CSSTranslateInterpolationType::MaybeConvertValue(
 
   std::unique_ptr<InterpolableList> result =
       InterpolableList::Create(kTranslateComponentIndexCount);
-  for (size_t i = 0; i < kTranslateComponentIndexCount; i++) {
+  for (wtf_size_t i = 0; i < kTranslateComponentIndexCount; i++) {
     InterpolationValue component = nullptr;
     if (i < list.length()) {
       component =

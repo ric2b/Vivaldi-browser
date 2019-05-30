@@ -5,40 +5,34 @@
 #include "android_webview/browser/aw_browser_context.h"
 
 #include <memory>
+#include <string>
 #include <utility>
 
-#include "android_webview/browser/aw_browser_policy_connector.h"
 #include "android_webview/browser/aw_download_manager_delegate.h"
 #include "android_webview/browser/aw_form_database_service.h"
 #include "android_webview/browser/aw_metrics_service_client.h"
 #include "android_webview/browser/aw_permission_manager.h"
 #include "android_webview/browser/aw_quota_manager_bridge.h"
 #include "android_webview/browser/aw_resource_context.h"
-#include "android_webview/browser/aw_safe_browsing_whitelist_manager.h"
 #include "android_webview/browser/aw_web_ui_controller_factory.h"
 #include "android_webview/browser/net/aw_url_request_context_getter.h"
-#include "android_webview/common/aw_content_client.h"
-#include "base/base_paths_android.h"
+#include "android_webview/browser/safe_browsing/aw_safe_browsing_whitelist_manager.h"
+#include "base/base_paths_posix.h"
 #include "base/bind.h"
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task/post_task.h"
-#include "components/autofill/core/common/autofill_prefs.h"
-#include "components/metrics/metrics_service.h"
+#include "components/autofill/core/browser/autocomplete_history_manager.h"
+#include "components/download/public/common/in_progress_download_manager.h"
 #include "components/policy/core/browser/browser_policy_connector_base.h"
-#include "components/policy/core/browser/configuration_policy_pref_store.h"
-#include "components/policy/core/browser/url_blacklist_manager.h"
-#include "components/pref_registry/pref_registry_syncable.h"
-#include "components/prefs/in_memory_pref_store.h"
-#include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_service.h"
-#include "components/prefs/pref_service_factory.h"
-#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/triggers/trigger_manager.h"
 #include "components/url_formatter/url_fixer.h"
 #include "components/user_prefs/user_prefs.h"
 #include "components/visitedlink/browser/visitedlink_master.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/download_request_utils.h"
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
@@ -67,27 +61,14 @@ const char kWebRestrictionsAuthority[] = "web_restrictions_authority";
 
 namespace {
 
-const base::FilePath::CharType kChannelIDFilename[] = "Origin Bound Certs";
-
 const void* const kDownloadManagerDelegateKey = &kDownloadManagerDelegateKey;
-
-// Shows notifications which correspond to PersistentPrefStore's reading errors.
-void HandleReadError(PersistentPrefStore::PrefReadError error) {
-}
-
-base::FilePath GetPrefStorePath() {
-  base::FilePath path;
-  base::PathService::Get(base::DIR_ANDROID_APP_DATA, &path);
-  path = path.Append(FILE_PATH_LITERAL("pref_store"));
-  return path;
-}
 
 AwBrowserContext* g_browser_context = NULL;
 
 std::unique_ptr<net::ProxyConfigServiceAndroid> CreateProxyConfigService() {
   std::unique_ptr<net::ProxyConfigServiceAndroid> config_service_android =
       std::make_unique<net::ProxyConfigServiceAndroid>(
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+          base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}),
           base::ThreadTaskRunnerHandle::Get());
 
   // TODO(csharrison) Architect the wrapper better so we don't need a cast for
@@ -103,26 +84,32 @@ CreateSafeBrowsingWhitelistManager() {
       base::CreateSequencedTaskRunnerWithTraits(
           {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
+      base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO});
   return std::make_unique<AwSafeBrowsingWhitelistManager>(
       background_task_runner, io_task_runner);
 }
 
-base::FilePath GetCacheDirForAw() {
-  FilePath cache_path;
-  base::PathService::Get(base::DIR_CACHE, &cache_path);
-  cache_path =
-      cache_path.Append(FILE_PATH_LITERAL("org.chromium.android_webview"));
-  return cache_path;
+// Empty method to skip origin security check as DownloadManager will set its
+// own method.
+bool IgnoreOriginSecurityCheck(const GURL& url) {
+  return true;
 }
 
 }  // namespace
 
-AwBrowserContext::AwBrowserContext(const FilePath path)
-    : context_storage_path_(path) {
+AwBrowserContext::AwBrowserContext(
+    const base::FilePath path,
+    std::unique_ptr<PrefService> pref_service,
+    std::unique_ptr<policy::BrowserPolicyConnectorBase> policy_connector)
+    : context_storage_path_(path),
+      user_pref_service_(std::move(pref_service)),
+      browser_policy_connector_(std::move(policy_connector)) {
   DCHECK(!g_browser_context);
   g_browser_context = this;
   BrowserContext::Initialize(this, path);
+
+  pref_change_registrar_.Init(user_pref_service_.get());
+  user_prefs::UserPrefs::Set(this, user_pref_service_.get());
 
   // This constructor is entered during the creation of ContentBrowserClient,
   // before browser threads are created. Therefore any checks to enforce
@@ -148,16 +135,36 @@ AwBrowserContext* AwBrowserContext::FromWebContents(
   return static_cast<AwBrowserContext*>(web_contents->GetBrowserContext());
 }
 
+// static
+base::FilePath AwBrowserContext::GetCacheDir() {
+  FilePath cache_path;
+  if (!base::PathService::Get(base::DIR_CACHE, &cache_path)) {
+    NOTREACHED() << "Failed to get app cache directory for Android WebView";
+  }
+  cache_path =
+      cache_path.Append(FILE_PATH_LITERAL("org.chromium.android_webview"));
+  return cache_path;
+}
+
+// static
+base::FilePath AwBrowserContext::GetCookieStorePath() {
+  FilePath cookie_store_path;
+  if (!base::PathService::Get(base::DIR_ANDROID_APP_DATA, &cookie_store_path)) {
+    NOTREACHED() << "Failed to get app data directory for Android WebView";
+  }
+  cookie_store_path = cookie_store_path.Append(FILE_PATH_LITERAL("Cookies"));
+  return cookie_store_path;
+}
+
 void AwBrowserContext::PreMainMessageLoopRun(net::NetLog* net_log) {
-  FilePath cache_path = GetCacheDirForAw();
+  FilePath cache_path = GetCacheDir();
 
-  browser_policy_connector_.reset(new AwBrowserPolicyConnector());
-
-  InitUserPrefService();
-
-  url_request_context_getter_ = new AwURLRequestContextGetter(
-      cache_path, context_storage_path_.Append(kChannelIDFilename),
-      CreateProxyConfigService(), user_pref_service_.get(), net_log);
+  // TODO(ntfschr): set this to nullptr when the NetworkService is disabled,
+  // once we remove a dependency on url_request_context_getter_
+  // (http://crbug.com/887538).
+  url_request_context_getter_ =
+      new AwURLRequestContextGetter(cache_path, CreateProxyConfigService(),
+                                    user_pref_service_.get(), net_log);
 
   scoped_refptr<base::SequencedTaskRunner> db_task_runner =
       base::CreateSequencedTaskRunnerWithTraits(
@@ -171,11 +178,6 @@ void AwBrowserContext::PreMainMessageLoopRun(net::NetLog* net_log) {
       new AwFormDatabaseService(context_storage_path_));
 
   EnsureResourceContextInitialized(this);
-
-  AwMetricsServiceClient::GetInstance()->Initialize(
-      user_pref_service_.get(),
-      content::BrowserContext::GetDefaultStoragePartition(this)
-          ->GetURLRequestContext());
 
   web_restriction_provider_.reset(
       new web_restrictions::WebRestrictionsClient());
@@ -226,64 +228,21 @@ AwURLRequestContextGetter* AwBrowserContext::GetAwURLRequestContext() {
   return url_request_context_getter_.get();
 }
 
-// Create user pref service
-void AwBrowserContext::InitUserPrefService() {
-  auto pref_registry = base::MakeRefCounted<user_prefs::PrefRegistrySyncable>();
-  // We only use the autocomplete feature of Autofill, which is controlled via
-  // the manager_delegate. We don't use the rest of Autofill, which is why it is
-  // hardcoded as disabled here.
-  // TODO(crbug.com/873740): The following also disables autocomplete.
-  // Investigate what the intended behavior is.
-  pref_registry->RegisterBooleanPref(autofill::prefs::kAutofillProfileEnabled,
-                                     false);
-  pref_registry->RegisterBooleanPref(
-      autofill::prefs::kAutofillCreditCardEnabled, false);
-  policy::URLBlacklistManager::RegisterProfilePrefs(pref_registry.get());
+autofill::AutocompleteHistoryManager*
+AwBrowserContext::GetAutocompleteHistoryManager() {
+  if (!autocomplete_history_manager_) {
+    autocomplete_history_manager_ =
+        std::make_unique<autofill::AutocompleteHistoryManager>();
+    autocomplete_history_manager_->Init(
+        form_database_service_->get_autofill_webdata_service(),
+        user_pref_service_.get(), IsOffTheRecord());
+  }
 
-  pref_registry->RegisterStringPref(prefs::kWebRestrictionsAuthority,
-                                    std::string());
-
-  android_webview::AwURLRequestContextGetter::RegisterPrefs(
-      pref_registry.get());
-  metrics::MetricsService::RegisterPrefs(pref_registry.get());
-  safe_browsing::RegisterProfilePrefs(pref_registry.get());
-
-  PrefServiceFactory pref_service_factory;
-
-  // These prefs go in the JsonPrefStore, and will persist across runs. Other
-  // prefs go in the InMemoryPrefStore, and will be lost when the process ends.
-  std::set<std::string> persistent_prefs;
-  // TODO(crbug/866722): Add kMetricsLowEntropySource to persistent_prefs to
-  // support persistent variations experiments.
-
-  // SegregatedPrefStore may be validated with a MAC (message authentication
-  // code). On Android, the store is protected by app sandboxing, so validation
-  // is unnnecessary. Thus validation_delegate is null.
-  pref_service_factory.set_user_prefs(
-      base::MakeRefCounted<SegregatedPrefStore>(
-          base::MakeRefCounted<InMemoryPrefStore>(),
-          base::MakeRefCounted<JsonPrefStore>(GetPrefStorePath()),
-          persistent_prefs, /*validation_delegate=*/nullptr));
-  pref_service_factory.set_managed_prefs(
-      base::MakeRefCounted<policy::ConfigurationPolicyPrefStore>(
-          browser_policy_connector_.get(),
-          browser_policy_connector_->GetPolicyService(),
-          browser_policy_connector_->GetHandlerList(),
-          policy::POLICY_LEVEL_MANDATORY));
-  pref_service_factory.set_read_error_callback(
-      base::BindRepeating(&HandleReadError));
-  user_pref_service_ = pref_service_factory.Create(pref_registry);
-  pref_change_registrar_.Init(user_pref_service_.get());
-
-  user_prefs::UserPrefs::Set(this, user_pref_service_.get());
+  return autocomplete_history_manager_.get();
 }
 
 base::FilePath AwBrowserContext::GetPath() const {
   return context_storage_path_;
-}
-
-base::FilePath AwBrowserContext::GetCachePath() const {
-  return GetCacheDirForAw();
 }
 
 bool AwBrowserContext::IsOffTheRecord() const {
@@ -293,8 +252,7 @@ bool AwBrowserContext::IsOffTheRecord() const {
 
 content::ResourceContext* AwBrowserContext::GetResourceContext() {
   if (!resource_context_) {
-    resource_context_.reset(
-        new AwResourceContext(url_request_context_getter_.get()));
+    resource_context_.reset(new AwResourceContext);
   }
   return resource_context_.get();
 }
@@ -337,10 +295,13 @@ AwBrowserContext::GetPermissionControllerDelegate() {
   return permission_manager_.get();
 }
 
+content::ClientHintsControllerDelegate*
+AwBrowserContext::GetClientHintsControllerDelegate() {
+  return nullptr;
+}
+
 content::BackgroundFetchDelegate*
 AwBrowserContext::GetBackgroundFetchDelegate() {
-  // TODO(crbug.com/766077): Resolve whether to support or disable background
-  // fetch on WebView.
   return nullptr;
 }
 
@@ -388,6 +349,14 @@ AwBrowserContext::CreateMediaRequestContextForStoragePartition(
     bool in_memory) {
   NOTREACHED();
   return NULL;
+}
+
+download::InProgressDownloadManager*
+AwBrowserContext::RetriveInProgressDownloadManager() {
+  return new download::InProgressDownloadManager(
+      nullptr, base::FilePath(),
+      base::BindRepeating(&IgnoreOriginSecurityCheck),
+      base::BindRepeating(&content::DownloadRequestUtils::IsURLSafe));
 }
 
 web_restrictions::WebRestrictionsClient*

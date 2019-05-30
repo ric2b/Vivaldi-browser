@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,6 +43,7 @@ chrome.automation.EventType = {
   LIVE_REGION_CREATED: 'liveRegionCreated',
   LIVE_REGION_CHANGED: 'liveRegionChanged',
   LOAD_COMPLETE: 'loadComplete',
+  LOAD_START: 'loadStart',
   LOCATION_CHANGED: 'locationChanged',
   MEDIA_STARTED_PLAYING: 'mediaStartedPlaying',
   MEDIA_STOPPED_PLAYING: 'mediaStoppedPlaying',
@@ -50,6 +51,7 @@ chrome.automation.EventType = {
   MENU_LIST_ITEM_SELECTED: 'menuListItemSelected',
   MENU_LIST_VALUE_CHANGED: 'menuListValueChanged',
   MENU_POPUP_END: 'menuPopupEnd',
+  MENU_POPUP_HIDE: 'menuPopupHide',
   MENU_POPUP_START: 'menuPopupStart',
   MENU_START: 'menuStart',
   MOUSE_CANCELED: 'mouseCanceled',
@@ -70,6 +72,8 @@ chrome.automation.EventType = {
   STATE_CHANGED: 'stateChanged',
   TEXT_CHANGED: 'textChanged',
   TEXT_SELECTION_CHANGED: 'textSelectionChanged',
+  WINDOW_ACTIVATED: 'windowActivated',
+  WINDOW_DEACTIVATED: 'windowDeactivated',
   TREE_CHANGED: 'treeChanged',
   VALUE_CHANGED: 'valueChanged',
 };
@@ -188,6 +192,7 @@ chrome.automation.RoleType = {
   LIST: 'list',
   LIST_BOX: 'listBox',
   LIST_BOX_OPTION: 'listBoxOption',
+  LIST_GRID: 'listGrid',
   LIST_ITEM: 'listItem',
   LIST_MARKER: 'listMarker',
   LOG: 'log',
@@ -287,6 +292,7 @@ chrome.automation.StateType = {
  * @see https://developer.chrome.com/extensions/automation#type-ActionType
  */
 chrome.automation.ActionType = {
+  ANNOTATE_PAGE_IMAGES: 'annotatePageImages',
   BLUR: 'blur',
   CLEAR_ACCESSIBILITY_FOCUS: 'clearAccessibilityFocus',
   CUSTOM_ACTION: 'customAction',
@@ -294,6 +300,7 @@ chrome.automation.ActionType = {
   DO_DEFAULT: 'doDefault',
   FOCUS: 'focus',
   GET_IMAGE_DATA: 'getImageData',
+  GET_TEXT_LOCATION: 'getTextLocation',
   HIT_TEST: 'hitTest',
   INCREMENT: 'increment',
   LOAD_INLINE_TEXT_BOXES: 'loadInlineTextBoxes',
@@ -303,9 +310,9 @@ chrome.automation.ActionType = {
   SCROLL_FORWARD: 'scrollForward',
   SCROLL_LEFT: 'scrollLeft',
   SCROLL_RIGHT: 'scrollRight',
+  SCROLL_UP: 'scrollUp',
   SCROLL_TO_MAKE_VISIBLE: 'scrollToMakeVisible',
   SCROLL_TO_POINT: 'scrollToPoint',
-  SCROLL_UP: 'scrollUp',
   SET_ACCESSIBILITY_FOCUS: 'setAccessibilityFocus',
   SET_SCROLL_OFFSET: 'setScrollOffset',
   SET_SELECTION: 'setSelection',
@@ -335,9 +342,11 @@ chrome.automation.NameFromType = {
   UNINITIALIZED: 'uninitialized',
   ATTRIBUTE: 'attribute',
   ATTRIBUTE_EXPLICITLY_EMPTY: 'attributeExplicitlyEmpty',
+  CAPTION: 'caption',
   CONTENTS: 'contents',
   PLACEHOLDER: 'placeholder',
   RELATED_ELEMENT: 'relatedElement',
+  TITLE: 'title',
   VALUE: 'value',
 };
 
@@ -531,16 +540,16 @@ chrome.automation.AutomationNode.prototype.state;
 chrome.automation.AutomationNode.prototype.location;
 
 /**
- * Computes the bounding box of a subrange of this node in global screen
- * coordinates. Returns the same as |location| if range information is not
- * available. The start and end indices are zero-based offsets into the node's
- * "name" string attribute.
+ * Determines the location of the text within the node specified by |startIndex|
+ * and |endIndex|, inclusively. Invokes |callback| with the bounding rectangle,
+ * in screen coordinates. |callback| can be invoked either synchronously or
+ * asynchronously.
  * @param {number} startIndex
  * @param {number} endIndex
- * @return {!chrome.automation.Rect}
+ * @param {function(!chrome.automation.Rect):void} callback
  * @see https://developer.chrome.com/extensions/automation#method-boundsForRange
  */
-chrome.automation.AutomationNode.prototype.boundsForRange = function(startIndex, endIndex) {};
+chrome.automation.AutomationNode.prototype.boundsForRange = function(startIndex, endIndex, callback) {};
 
 /**
  * The location (as a bounding box) of this node in global screen coordinates without applying any clipping from ancestors.
@@ -583,6 +592,13 @@ chrome.automation.AutomationNode.prototype.name;
  * @see https://developer.chrome.com/extensions/automation#type-nameFrom
  */
 chrome.automation.AutomationNode.prototype.nameFrom;
+
+/**
+ * The image annotation for image nodes, which may be a human-readable string that is the contextualized annotation or a status string related to annotations.
+ * @type {(string|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-imageAnnotation
+ */
+chrome.automation.AutomationNode.prototype.imageAnnotation;
 
 /**
  * The value for this node: for example the <code>value</code> attribute of an <code>&lt;input&gt; element.
@@ -831,6 +847,13 @@ chrome.automation.AutomationNode.prototype.scrollYMin;
 chrome.automation.AutomationNode.prototype.scrollYMax;
 
 /**
+ * Indicates whether this node is scrollable.
+ * @type {(boolean|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-scrollable
+ */
+chrome.automation.AutomationNode.prototype.scrollable;
+
+/**
  * The character index of the start of the selection within this editable text element; -1 if no selection.
  * @type {(number|undefined)}
  * @see https://developer.chrome.com/extensions/automation#type-textSelStart
@@ -850,13 +873,6 @@ chrome.automation.AutomationNode.prototype.textSelEnd;
  * @see https://developer.chrome.com/extensions/automation#type-textInputType
  */
 chrome.automation.AutomationNode.prototype.textInputType;
-
-/**
- * An array of indexes of the break between lines in editable text.
- * @type {!Array<number>}
- * @see https://developer.chrome.com/extensions/automation#type-lineBreaks
- */
-chrome.automation.AutomationNode.prototype.lineBreaks;
 
 /**
  * An array of indexes of the start position of each text marker.
@@ -1174,11 +1190,18 @@ chrome.automation.AutomationNode.prototype.display;
 chrome.automation.AutomationNode.prototype.imageDataUrl;
 
 /**
- * The language code for this subtree.
+ * The author-provided language code for this subtree.
  * @type {(string|undefined)}
  * @see https://developer.chrome.com/extensions/automation#type-language
  */
 chrome.automation.AutomationNode.prototype.language;
+
+/**
+ * The detected language code for this subtree.
+ * @type {(string|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-detectedLanguage
+ */
+chrome.automation.AutomationNode.prototype.detectedLanguage;
 
 /**
  * Indicates the availability and type of interactive popup element true - the popup is a menu menu - the popup is a menu listbox - the popup is a listbox tree - the popup is a tree grid - the popup is a grid dialog - the popup is a dialog
@@ -1270,6 +1293,18 @@ chrome.automation.AutomationNode.prototype.underline;
  * @see https://developer.chrome.com/extensions/automation#type-lineThrough
  */
 chrome.automation.AutomationNode.prototype.lineThrough;
+
+/**
+ * The font family of this node.
+ * @type {string|undefined}
+ */
+chrome.automation.AutomationNode.prototype.fontFamily;
+
+/**
+ * The font size of this node.
+ * @type {number|undefined}
+ */
+chrome.automation.AutomationNode.prototype.fontSize;
 
 /**
  * Indicates whether this node is selected, unselected, or neither.

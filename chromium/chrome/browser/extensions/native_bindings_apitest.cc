@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/extension_action.h"
@@ -37,7 +38,8 @@ class NativeBindingsApiTest : public ExtensionApiTest {
   ~NativeBindingsApiTest() override {}
 
   void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(features::kNativeCrxBindings);
+    scoped_feature_list_.InitAndEnableFeature(
+        extensions_features::kNativeCrxBindings);
     ExtensionApiTest::SetUp();
   }
 

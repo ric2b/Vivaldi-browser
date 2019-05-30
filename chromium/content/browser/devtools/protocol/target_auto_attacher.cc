@@ -5,13 +5,14 @@
 #include "content/browser/devtools/protocol/target_auto_attacher.h"
 
 #include "base/containers/queue.h"
+#include "content/browser/devtools/devtools_renderer_channel.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/navigation_handle_impl.h"
+#include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 
 namespace content {
 namespace protocol {
@@ -84,12 +85,46 @@ ServiceWorkerDevToolsAgentHost::Map GetMatchingServiceWorkers(
   return result;
 }
 
+base::flat_set<GURL> GetFrameUrls(RenderFrameHostImpl* render_frame_host) {
+  // We try to attach to a service worker in the following cases:
+  // 1. SW is created while user is inspecting frame (from WorkerCreated).
+  // 2. Frame has navigated and we are picking up new SW corresponding to new
+  //    url (from DidFinishNavigation).
+  // 3. Frame is trying to navigate and it spawns a new SW which we pick up
+  //    (from WorkerCreated). See also https://crbug.com/907072
+  //
+  // We are not attaching in the following case:
+  // 4. Frame is trying to navigate and we _should_ pick up an existing SW but we don't.
+  //    We _could_ do this, but since we are not pausing the navigation, there
+  //    is no principal difference between picking up SW earlier or later.
+  //
+  // We also try to detach from SW picked up for [3] if navigation has failed
+  // (from DidFinishNavigation).
+
+  base::flat_set<GURL> frame_urls;
+  if (render_frame_host) {
+    for (FrameTreeNode* node :
+         render_frame_host->frame_tree_node()->frame_tree()->Nodes()) {
+      frame_urls.insert(node->current_url());
+      // We use both old and new frame urls to support [3], where we attach while
+      // navigation is still ongoing.
+      if (node->navigation_request()) {
+        frame_urls.insert(node->navigation_request()->common_params().url);
+      }
+    }
+  }
+  return frame_urls;
+}
+
 }  // namespace
 
-TargetAutoAttacher::TargetAutoAttacher(AttachCallback attach_callback,
-                                       DetachCallback detach_callback)
+TargetAutoAttacher::TargetAutoAttacher(
+    AttachCallback attach_callback,
+    DetachCallback detach_callback,
+    DevToolsRendererChannel* renderer_channel)
     : attach_callback_(attach_callback),
       detach_callback_(detach_callback),
+      renderer_channel_(renderer_channel),
       render_frame_host_(nullptr),
       auto_attach_(false),
       wait_for_debugger_on_start_(false) {}
@@ -183,17 +218,12 @@ void TargetAutoAttacher::ReattachServiceWorkers(bool waiting_for_debugger) {
   if (!auto_attaching_service_workers_)
     return;
 
-  frame_urls_.clear();
   BrowserContext* browser_context = nullptr;
-  if (render_frame_host_) {
-    for (FrameTreeNode* node :
-         render_frame_host_->frame_tree_node()->frame_tree()->Nodes()) {
-      frame_urls_.insert(node->current_url());
-    }
+  if (render_frame_host_)
     browser_context = render_frame_host_->GetProcess()->GetBrowserContext();
-  }
 
-  auto matching = GetMatchingServiceWorkers(browser_context, frame_urls_);
+  auto matching = GetMatchingServiceWorkers(browser_context,
+                                            GetFrameUrls(render_frame_host_));
   Hosts new_hosts;
   for (const auto& pair : matching)
     new_hosts.insert(pair.second);
@@ -220,12 +250,11 @@ void TargetAutoAttacher::ReattachTargetsOfType(const Hosts& new_hosts,
 }
 
 void TargetAutoAttacher::SetAutoAttach(bool auto_attach,
-                                       bool wait_for_debugger_on_start) {
+                                       bool wait_for_debugger_on_start,
+                                       base::OnceClosure callback) {
   wait_for_debugger_on_start_ = wait_for_debugger_on_start;
-  if (auto_attach_ == auto_attach)
-    return;
-  auto_attach_ = auto_attach;
-  if (auto_attach_) {
+  if (auto_attach && !auto_attach_) {
+    auto_attach_ = true;
     auto_attaching_service_workers_ =
         render_frame_host_ && !render_frame_host_->GetParent();
     if (auto_attaching_service_workers_) {
@@ -233,7 +262,8 @@ void TargetAutoAttacher::SetAutoAttach(bool auto_attach,
       ReattachServiceWorkers(false);
     }
     UpdateFrames();
-  } else {
+  } else if (!auto_attach && auto_attach_) {
+    auto_attach_ = false;
     Hosts empty;
     ReattachTargetsOfType(empty, DevToolsAgentHost::kTypeFrame, false);
     if (auto_attaching_service_workers_) {
@@ -242,8 +272,12 @@ void TargetAutoAttacher::SetAutoAttach(bool auto_attach,
                             false);
       auto_attaching_service_workers_ = false;
     }
+    ReattachTargetsOfType(empty, DevToolsAgentHost::kTypeDedicatedWorker,
+                          false);
     DCHECK(auto_attached_hosts_.empty());
   }
+  renderer_channel_->SetReportChildWorkers(
+      this, auto_attach, wait_for_debugger_on_start, std::move(callback));
 }
 
 // -------- ServiceWorkerDevToolsManager::Observer ----------
@@ -253,7 +287,9 @@ void TargetAutoAttacher::WorkerCreated(ServiceWorkerDevToolsAgentHost* host,
   BrowserContext* browser_context = nullptr;
   if (render_frame_host_)
     browser_context = render_frame_host_->GetProcess()->GetBrowserContext();
-  auto hosts = GetMatchingServiceWorkers(browser_context, frame_urls_);
+
+  auto hosts = GetMatchingServiceWorkers(browser_context,
+                                         GetFrameUrls(render_frame_host_));
   if (hosts.find(host->GetId()) != hosts.end()) {
     *should_pause_on_start = wait_for_debugger_on_start_;
     Hosts new_hosts;
@@ -276,6 +312,12 @@ void TargetAutoAttacher::WorkerVersionDoomed(
 
 void TargetAutoAttacher::WorkerDestroyed(ServiceWorkerDevToolsAgentHost* host) {
   ReattachServiceWorkers(false);
+}
+
+void TargetAutoAttacher::ChildWorkerCreated(DevToolsAgentHostImpl* agent_host,
+                                            bool waiting_for_debugger) {
+  attach_callback_.Run(agent_host, waiting_for_debugger);
+  auto_attached_hosts_.insert(scoped_refptr<DevToolsAgentHost>(agent_host));
 }
 
 }  // namespace protocol

@@ -21,11 +21,13 @@ class StubCrosSettingsProvider;
 
 class FakeOwnerSettingsService : public OwnerSettingsServiceChromeOS {
  public:
-  explicit FakeOwnerSettingsService(Profile* profile);
+  FakeOwnerSettingsService(StubCrosSettingsProvider* provider,
+                           Profile* profile);
   FakeOwnerSettingsService(
+      StubCrosSettingsProvider* provider,
       Profile* profile,
-      const scoped_refptr<ownership::OwnerKeyUtil>& owner_key_util,
-      StubCrosSettingsProvider* provider);
+      const scoped_refptr<ownership::OwnerKeyUtil>& owner_key_util);
+
   ~FakeOwnerSettingsService() override;
 
   void set_set_management_settings_result(bool success) {
@@ -41,6 +43,7 @@ class FakeOwnerSettingsService : public OwnerSettingsServiceChromeOS {
   }
 
   // OwnerSettingsServiceChromeOS:
+  bool IsOwner() override;
   bool Set(const std::string& setting, const base::Value& value) override;
 
   // NotificationObserver:

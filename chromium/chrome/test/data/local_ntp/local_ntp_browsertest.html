@@ -5,18 +5,27 @@
      found in the LICENSE file. -->
 <head>
   <script>window.localNTPUnitTest = true;</script>
+  <link rel="stylesheet" href="chrome-search://local-ntp/animations.css"></link>
+  <link rel="stylesheet" href="chrome-search://local-ntp/local-ntp-common.css"></link>
+  <link rel="stylesheet" href="chrome-search://local-ntp/custom-backgrounds.css"></link>
+  <link rel="stylesheet" href="chrome-search://local-ntp/doodles.css"></link>
   <link rel="stylesheet" href="chrome-search://local-ntp/local-ntp.css"></link>
   <link rel="stylesheet" href="chrome-search://local-ntp/voice.css"></link>
-  <link rel="stylesheet" href="chrome-search://local-ntp/custom-backgrounds.css"></link>
-  <script src="chrome-search://local-ntp/local-ntp.js" charset="utf-8"></script>
-  <script src="chrome-search://local-ntp/voice.js" charset="utf-8"></script>
+  <script src="chrome-search://local-ntp/animations.js" charset="utf-8"></script>
   <script src="chrome-search://local-ntp/config.js" charset="utf-8"></script>
   <script src="chrome-search://local-ntp/custom-backgrounds.js" charset="utf-8"></script>
+  <script src="chrome-search://local-ntp/doodles.js" charset="utf-8"></script>
+  <script src="chrome-search://local-ntp/local-ntp.js" charset="utf-8"></script>
+  <script src="chrome-search://local-ntp/utils.js" charset="utf-8"></script>
+  <script src="chrome-search://local-ntp/voice.js" charset="utf-8"></script>
   <script src="test_utils.js" charset="utf-8"></script>
-  <script src="local_ntp_browsertest.js" charset="utf-8"></script>
   <script src="custom_backgrounds_browsertest.js" charset="utf-8"></script>
+  <script src="local_ntp_browsertest.js" charset="utf-8"></script>
   <template id="local-ntp-template">
     <div id="custom-bg"></div>
+    <!-- Container for the OneGoogleBar HTML. -->
+    <div id="one-google" class="hidden"></div>
+
     <div id="ntp-contents">
       <div id="logo">
         <!-- The logo that is displayed in the absence of a doodle. -->
@@ -25,10 +34,12 @@
         <div id="logo-non-white" title="Google"></div>
         <!-- A doodle, if any: its link and image. -->
         <div id="logo-doodle">
-          <button id="logo-doodle-button">
-            <img id="logo-doodle-image"></img>
-          </button>
-          <iframe id="logo-doodle-iframe"></iframe>
+          <div id="logo-doodle-container">
+            <button id="logo-doodle-button">
+              <img id="logo-doodle-image" tabindex="-1"></img>
+            </button>
+          </div>
+          <iframe id="logo-doodle-iframe" scrolling="no"></iframe>
           <!-- A spinner, visible on dark-themed NTPs, prompting the doodle -->
           <button id="logo-doodle-notifier">
             <div class="outer ball0"><div class="inner"></div></div>
@@ -49,68 +60,89 @@
         </div>
       </div>
 
-      <div id="most-visited">
-        <!-- The container for the tiles. The MV iframe goes in here. -->
-        <div id="mv-tiles"></div>
-        <!-- Notification shown when a tile is blacklisted. -->
-        <div id="mv-notice-container">
-          <div id="mv-notice" class="notice-hide" role="alert">
-            <span id="mv-msg"></span>
-            <!-- Links in the notification. -->
-            <span id="mv-notice-links">
-              <span id="mv-undo" class="ripple" tabindex="0" role="button"></span>
-              <span id="mv-restore" class="ripple" tabindex="0" role="button">
+      <div id="user-content">
+        <!-- Search suggestions will be inserted here. -->
+        <div id="most-visited">
+          <!-- The container for the tiles. The MV iframe goes in here. -->
+          <div id="mv-tiles"></div>
+          <!-- Notification shown when a tile is blacklisted. -->
+          <div id="mv-notice-container">
+            <div id="mv-notice" class="notice-hide" role="alert">
+              <span id="mv-msg"></span>
+              <!-- Links in the notification. -->
+              <span id="mv-notice-links">
+                <span id="mv-undo" class="ripple" tabindex="0" role="button"></span>
+                <span id="mv-restore" class="ripple" tabindex="0" role="button"></span>
+                <div id="mv-notice-x" tabindex="0" role="button"></div>
               </span>
-              <div id="mv-notice-x" tabindex="0" role="button"></div>
-            </span>
+            </div>
           </div>
         </div>
       </div>
+
       <div id="attribution"><div id="attribution-text"></div></div>
 
       <div id="error-notice-container">
         <div id="error-notice" class="notice-hide" role="alert">
-          <span id="error-notice-icon-container">
-            <div id="error-notice-icon"></div>
-          </span>
+          <span id="error-notice-icon"></span>
           <span id="error-notice-msg"></span>
           <span id="error-notice-link" class="ripple" tabindex="0" role="button"></span>
         </div>
       </div>
 
-      <div id="edit-bg" hidden>
-        <button id="edit-bg-gear"></button>
+      <div id="edit-bg" tabindex="0" role="button" hidden>
+        <div id="edit-bg-icon"></div>
+        <span id="edit-bg-text"></span>
       </div>
 
       <div id="custom-bg-attr"></div>
     </div>
 
-    <dialog div id="edit-bg-dialog">
-      <div id="edit-bg-title"></div>
-      <div id="edit-bg-default-wallpapers" class="bg-option" tabindex="0">
-        <div class="bg-option-img"></div>
-        <div id="edit-bg-default-wallpapers-text" class="bg-option-text">
+    <dialog div id="edit-bg-dialog" class="customize-dialog">
+      <div id="edit-bg-menu">
+        <div id="edit-bg-title"></div>
+        <div id="edit-bg-default-wallpapers" class="bg-option" tabindex="0">
+          <div class="bg-option-img"></div>
+          <div id="edit-bg-default-wallpapers-text" class="bg-option-text">
+          </div>
+        </div>
+        <div id="edit-bg-upload-image" class="bg-option" tabindex="0">
+          <div class="bg-option-img"></div>
+          <div id="edit-bg-upload-image-text" class="bg-option-text"></div>
+        </div>
+        <div id="edit-bg-divider"></div>
+        <div id="custom-links-restore-default" class="bg-option bg-option-disabled" tabindex="0">
+          <div class="bg-option-img"></div>
+          <div id="custom-links-restore-default-text" class="bg-option-text"></div>
+        </div>
+        <div id="edit-bg-restore-default" class="bg-option bg-option-disabled" tabindex="0">
+          <div class="bg-option-img"></div>
+          <div id="edit-bg-restore-default-text" class="bg-option-text"></div>
         </div>
       </div>
-      <div id="edit-bg-upload-image" class="bg-option" tabindex="0">
-        <div class="bg-option-img"></div>
-        <div id="edit-bg-upload-image-text" class="bg-option-text"></div>
-      </div>
-      <div id="edit-bg-divider"></div>
-      <div id="custom-links-restore-default" class="bg-option bg-option-disabled" tabindex="0">
-        <div class="bg-option-img"></div>
-        <div id="custom-links-restore-default-text" class="bg-option-text"></div>
-      </div>
-      <div id="edit-bg-restore-default" class="bg-option bg-option-disabled" tabindex="0">
-        <div class="bg-option-img"></div>
-        <div id="edit-bg-restore-default-text" class="bg-option-text"></div>
+    </dialog>
+
+    <dialog id="ddlsd">
+      <div id="ddlsd-title"></div>
+      <button id="ddlsd-close"></button>
+      <div id="ddlsd-content">
+        <button id="ddlsd-fbb" class="ddlsd-sbtn"></button>
+        <button id="ddlsd-twb" class="ddlsd-sbtn"></button>
+        <button id="ddlsd-emb" class="ddlsd-sbtn"></button>
+        <hr id="ddlsd-hr">
+        <div id="ddlsd-link">
+          <button id="ddlsd-copy"></button>
+          <span id="ddlsd-text-ctr">
+            <input type="text" id="ddlsd-text" dir="ltr">
+          </span>
+        </div>
       </div>
     </dialog>
 
     <dialog id="bg-sel-menu">
       <div id="bg-sel-title-bar">
-      <div id="bg-sel-back-circle">
-        <button id="bg-sel-back" tabindex="0"></button>
+      <div id="bg-sel-back-circle" tabindex="0" role="button">
+        <div id="bg-sel-back"></div>
       </div>
       <div id="bg-sel-title"></div>
       </div>
@@ -121,8 +153,10 @@
           <span class="toggle"></span>
         </label>
         <div id="bg-sel-refresh-text"></div>
-        <div id="bg-sel-footer-cancel" class="bg-sel-footer-button ripple" tabindex="0"></div>
-        <div id="bg-sel-footer-done" class="bg-sel-footer-button ripple" tabindex="-1"></div>
+        <button id="bg-sel-footer-cancel" class="bg-sel-footer-button paper secondary ripple"
+            tabindex="0"></button>
+        <button id="bg-sel-footer-done" class="bg-sel-footer-button paper primary ripple"
+            tabindex="-1"></button>
       </div>
     </dialog>
 
@@ -157,6 +191,7 @@
       </div>
     </dialog>
 
+    <div id="one-google-end-of-body"></div>
   </template>
 </head>
 <body>

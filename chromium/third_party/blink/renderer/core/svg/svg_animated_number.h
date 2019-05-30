@@ -49,10 +49,28 @@ class SVGAnimatedNumber : public ScriptWrappable,
  public:
   static SVGAnimatedNumber* Create(SVGElement* context_element,
                                    const QualifiedName& attribute_name,
-                                   SVGNumber* initial_value) {
-    return new SVGAnimatedNumber(context_element, attribute_name,
-                                 initial_value);
+                                   float initial_number) {
+    SVGNumber* initial_value = SVGNumber::Create(initial_number);
+    return MakeGarbageCollected<SVGAnimatedNumber>(
+        context_element, attribute_name, initial_value);
   }
+  static SVGAnimatedNumber* Create(SVGElement* context_element,
+                                   const QualifiedName& attribute_name,
+                                   SVGNumber* initial_value) {
+    return MakeGarbageCollected<SVGAnimatedNumber>(
+        context_element, attribute_name, initial_value);
+  }
+
+  SVGAnimatedNumber(SVGElement* context_element,
+                    const QualifiedName& attribute_name,
+                    SVGNumber* initial_value)
+      : SVGAnimatedProperty<SVGNumber>(
+            context_element,
+            attribute_name,
+            initial_value,
+            CSSPropertyInvalid,
+            static_cast<unsigned>(initial_value->Value())),
+        parent_number_optional_number_(nullptr) {}
 
   void SynchronizeAttribute() override;
 
@@ -64,14 +82,6 @@ class SVGAnimatedNumber : public ScriptWrappable,
   void Trace(blink::Visitor*) override;
 
  protected:
-  SVGAnimatedNumber(SVGElement* context_element,
-                    const QualifiedName& attribute_name,
-                    SVGNumber* initial_value)
-      : SVGAnimatedProperty<SVGNumber>(context_element,
-                                       attribute_name,
-                                       initial_value),
-        parent_number_optional_number_(nullptr) {}
-
   Member<SVGAnimatedNumberOptionalNumber> parent_number_optional_number_;
 };
 

@@ -70,10 +70,24 @@ QuicChromiumClientSession* QuicStreamFactoryPeer::GetActiveSession(
   return factory->active_sessions_[session_key];
 }
 
+bool QuicStreamFactoryPeer::HasLiveSession(
+    QuicStreamFactory* factory,
+    const HostPortPair& destination,
+    const quic::QuicServerId& server_id) {
+  QuicSessionKey session_key = QuicSessionKey(server_id, SocketTag());
+  QuicStreamFactory::QuicSessionAliasKey alias_key =
+      QuicStreamFactory::QuicSessionAliasKey(destination, session_key);
+  for (auto it = factory->all_sessions_.begin();
+       it != factory->all_sessions_.end(); ++it) {
+    if (it->second == alias_key)
+      return true;
+  }
+  return false;
+}
+
 bool QuicStreamFactoryPeer::IsLiveSession(QuicStreamFactory* factory,
                                           QuicChromiumClientSession* session) {
-  for (QuicStreamFactory::SessionIdMap::iterator it =
-           factory->all_sessions_.begin();
+  for (auto it = factory->all_sessions_.begin();
        it != factory->all_sessions_.end(); ++it) {
     if (it->first == session)
       return true;
@@ -85,6 +99,11 @@ void QuicStreamFactoryPeer::SetTaskRunner(
     QuicStreamFactory* factory,
     base::SequencedTaskRunner* task_runner) {
   factory->task_runner_ = task_runner;
+}
+
+void QuicStreamFactoryPeer::SetTickClock(QuicStreamFactory* factory,
+                                         const base::TickClock* tick_clock) {
+  factory->tick_clock_ = tick_clock;
 }
 
 quic::QuicTime::Delta QuicStreamFactoryPeer::GetPingTimeout(

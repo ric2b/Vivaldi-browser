@@ -13,16 +13,17 @@
 
 namespace mojo {
 
-using ::blink::mojom::PublicKeyCredentialUserEntityPtr;
-using ::blink::mojom::PublicKeyCredentialRpEntityPtr;
-using ::blink::mojom::AuthenticatorTransport;
-using ::blink::mojom::PublicKeyCredentialType;
-using ::blink::mojom::PublicKeyCredentialParametersPtr;
-using ::blink::mojom::PublicKeyCredentialDescriptorPtr;
-using ::blink::mojom::AuthenticatorSelectionCriteriaPtr;
+using ::blink::mojom::AttestationConveyancePreference;
 using ::blink::mojom::AuthenticatorAttachment;
-using ::blink::mojom::UserVerificationRequirement;
+using ::blink::mojom::AuthenticatorSelectionCriteriaPtr;
+using ::blink::mojom::AuthenticatorTransport;
 using ::blink::mojom::CableAuthenticationPtr;
+using ::blink::mojom::PublicKeyCredentialDescriptorPtr;
+using ::blink::mojom::PublicKeyCredentialParametersPtr;
+using ::blink::mojom::PublicKeyCredentialRpEntityPtr;
+using ::blink::mojom::PublicKeyCredentialType;
+using ::blink::mojom::PublicKeyCredentialUserEntityPtr;
+using ::blink::mojom::UserVerificationRequirement;
 
 // static
 ::device::FidoTransportProtocol
@@ -42,6 +43,25 @@ TypeConverter<::device::FidoTransportProtocol, AuthenticatorTransport>::Convert(
   }
   NOTREACHED();
   return ::device::FidoTransportProtocol::kUsbHumanInterfaceDevice;
+}
+
+AuthenticatorTransport
+TypeConverter<AuthenticatorTransport, ::device::FidoTransportProtocol>::Convert(
+    const ::device::FidoTransportProtocol& input) {
+  switch (input) {
+    case ::device::FidoTransportProtocol::kUsbHumanInterfaceDevice:
+      return AuthenticatorTransport::USB;
+    case ::device::FidoTransportProtocol::kNearFieldCommunication:
+      return AuthenticatorTransport::NFC;
+    case ::device::FidoTransportProtocol::kBluetoothLowEnergy:
+      return AuthenticatorTransport::BLE;
+    case ::device::FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy:
+      return AuthenticatorTransport::CABLE;
+    case ::device::FidoTransportProtocol::kInternal:
+      return AuthenticatorTransport::INTERNAL;
+  }
+  NOTREACHED();
+  return AuthenticatorTransport::USB;
 }
 
 // static
@@ -97,10 +117,10 @@ TypeConverter<std::vector<::device::PublicKeyCredentialDescriptor>,
 }
 
 // static
-::device::UserVerificationRequirement
-TypeConverter<::device::UserVerificationRequirement,
-              UserVerificationRequirement>::
-    Convert(const UserVerificationRequirement& input) {
+::device::UserVerificationRequirement TypeConverter<
+    ::device::UserVerificationRequirement,
+    UserVerificationRequirement>::Convert(const UserVerificationRequirement&
+                                              input) {
   switch (input) {
     case UserVerificationRequirement::PREFERRED:
       return ::device::UserVerificationRequirement::kPreferred;
@@ -114,23 +134,19 @@ TypeConverter<::device::UserVerificationRequirement,
 }
 
 // static
-::device::AuthenticatorSelectionCriteria::AuthenticatorAttachment TypeConverter<
-    ::device::AuthenticatorSelectionCriteria::AuthenticatorAttachment,
+::device::AuthenticatorAttachment TypeConverter<
+    ::device::AuthenticatorAttachment,
     AuthenticatorAttachment>::Convert(const AuthenticatorAttachment& input) {
   switch (input) {
     case AuthenticatorAttachment::NO_PREFERENCE:
-      return ::device::AuthenticatorSelectionCriteria::AuthenticatorAttachment::
-          kAny;
+      return ::device::AuthenticatorAttachment::kAny;
     case AuthenticatorAttachment::PLATFORM:
-      return ::device::AuthenticatorSelectionCriteria::AuthenticatorAttachment::
-          kPlatform;
+      return ::device::AuthenticatorAttachment::kPlatform;
     case AuthenticatorAttachment::CROSS_PLATFORM:
-      return ::device::AuthenticatorSelectionCriteria::AuthenticatorAttachment::
-          kCrossPlatform;
+      return ::device::AuthenticatorAttachment::kCrossPlatform;
   }
   NOTREACHED();
-  return ::device::AuthenticatorSelectionCriteria::AuthenticatorAttachment::
-      kAny;
+  return ::device::AuthenticatorAttachment::kAny;
 }
 
 // static
@@ -139,8 +155,7 @@ TypeConverter<::device::AuthenticatorSelectionCriteria,
               AuthenticatorSelectionCriteriaPtr>::
     Convert(const AuthenticatorSelectionCriteriaPtr& input) {
   return device::AuthenticatorSelectionCriteria(
-      ConvertTo<
-          ::device::AuthenticatorSelectionCriteria::AuthenticatorAttachment>(
+      ConvertTo<::device::AuthenticatorAttachment>(
           input->authenticator_attachment),
       input->require_resident_key,
       ConvertTo<::device::UserVerificationRequirement>(
@@ -202,6 +217,25 @@ TypeConverter<std::vector<::device::CableDiscoveryData>,
   }
 
   return discovery_data;
+}
+
+// static
+::device::AttestationConveyancePreference
+TypeConverter<::device::AttestationConveyancePreference,
+              AttestationConveyancePreference>::
+    Convert(const AttestationConveyancePreference& input) {
+  switch (input) {
+    case AttestationConveyancePreference::NONE:
+      return ::device::AttestationConveyancePreference::NONE;
+    case AttestationConveyancePreference::INDIRECT:
+      return ::device::AttestationConveyancePreference::INDIRECT;
+    case AttestationConveyancePreference::DIRECT:
+      return ::device::AttestationConveyancePreference::DIRECT;
+    case AttestationConveyancePreference::ENTERPRISE:
+      return ::device::AttestationConveyancePreference::ENTERPRISE;
+  }
+  NOTREACHED();
+  return ::device::AttestationConveyancePreference::NONE;
 }
 
 }  // namespace mojo

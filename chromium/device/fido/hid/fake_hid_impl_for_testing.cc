@@ -7,6 +7,10 @@
 #include <utility>
 
 #include "device/fido/fido_parsing_utils.h"
+#include "services/device/public/mojom/constants.mojom.h"
+#include "services/device/public/mojom/hid.mojom.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/mojom/connector.mojom.h"
 
 namespace device {
 
@@ -19,7 +23,7 @@ MATCHER_P(IsCtapHidCommand, expected_command, "") {
 
 }  // namespace
 
-MockHidConnection::MockHidConnection(
+MockFidoHidConnection::MockFidoHidConnection(
     device::mojom::HidDeviceInfoPtr device,
     device::mojom::HidConnectionRequest request,
     std::vector<uint8_t> connection_channel_id)
@@ -27,34 +31,36 @@ MockHidConnection::MockHidConnection(
       device_(std::move(device)),
       connection_channel_id_(connection_channel_id) {}
 
-MockHidConnection::~MockHidConnection() {}
+MockFidoHidConnection::~MockFidoHidConnection() {}
 
-void MockHidConnection::Read(ReadCallback callback) {
+void MockFidoHidConnection::Read(ReadCallback callback) {
   return ReadPtr(&callback);
 }
 
-void MockHidConnection::Write(uint8_t report_id,
-                              const std::vector<uint8_t>& buffer,
-                              WriteCallback callback) {
+void MockFidoHidConnection::Write(uint8_t report_id,
+                                  const std::vector<uint8_t>& buffer,
+                                  WriteCallback callback) {
   return WritePtr(report_id, buffer, &callback);
 }
 
-void MockHidConnection::GetFeatureReport(uint8_t report_id,
-                                         GetFeatureReportCallback callback) {
+void MockFidoHidConnection::GetFeatureReport(
+    uint8_t report_id,
+    GetFeatureReportCallback callback) {
   NOTREACHED();
 }
 
-void MockHidConnection::SendFeatureReport(uint8_t report_id,
-                                          const std::vector<uint8_t>& buffer,
-                                          SendFeatureReportCallback callback) {
+void MockFidoHidConnection::SendFeatureReport(
+    uint8_t report_id,
+    const std::vector<uint8_t>& buffer,
+    SendFeatureReportCallback callback) {
   NOTREACHED();
 }
 
-void MockHidConnection::SetNonce(base::span<uint8_t const> nonce) {
+void MockFidoHidConnection::SetNonce(base::span<uint8_t const> nonce) {
   nonce_ = std::vector<uint8_t>(nonce.begin(), nonce.end());
 }
 
-void MockHidConnection::ExpectWriteHidInit() {
+void MockFidoHidConnection::ExpectWriteHidInit() {
   EXPECT_CALL(*this, WritePtr(::testing::_,
                               IsCtapHidCommand(FidoHidDeviceCommand::kInit),
                               ::testing::_))
@@ -69,7 +75,8 @@ void MockHidConnection::ExpectWriteHidInit() {
           }));
 }
 
-void MockHidConnection::ExpectHidWriteWithCommand(FidoHidDeviceCommand cmd) {
+void MockFidoHidConnection::ExpectHidWriteWithCommand(
+    FidoHidDeviceCommand cmd) {
   EXPECT_CALL(*this,
               WritePtr(::testing::_, IsCtapHidCommand(cmd), ::testing::_))
       .WillOnce(::testing::Invoke(
@@ -124,6 +131,20 @@ void FakeHidManager::AddBinding(mojo::ScopedMessagePipeHandle handle) {
 
 void FakeHidManager::AddBinding2(device::mojom::HidManagerRequest request) {
   bindings_.AddBinding(this, std::move(request));
+}
+
+void FakeHidManager::AddFidoHidDevice(std::string guid) {
+  auto c_info = device::mojom::HidCollectionInfo::New();
+  c_info->usage = device::mojom::HidUsageAndPage::New(1, 0xf1d0);
+  auto device = device::mojom::HidDeviceInfo::New();
+  device->guid = std::move(guid);
+  device->product_name = "Test Fido Device";
+  device->serial_number = "123FIDO";
+  device->bus_type = device::mojom::HidBusType::kHIDBusTypeUSB;
+  device->collections.push_back(std::move(c_info));
+  device->max_input_report_size = 64;
+  device->max_output_report_size = 64;
+  AddDevice(std::move(device));
 }
 
 void FakeHidManager::GetDevicesAndSetClient(
@@ -183,5 +204,16 @@ void FakeHidManager::RemoveDevice(const std::string device_guid) {
   });
   devices_.erase(it);
 }
+
+ScopedFakeHidManager::ScopedFakeHidManager() {
+  service_manager::mojom::ConnectorRequest request;
+  connector_ = service_manager::Connector::Create(&request);
+  connector_->OverrideBinderForTesting(
+      service_manager::ServiceFilter::ByName(device::mojom::kServiceName),
+      device::mojom::HidManager::Name_,
+      base::BindRepeating(&FakeHidManager::AddBinding, base::Unretained(this)));
+}
+
+ScopedFakeHidManager::~ScopedFakeHidManager() = default;
 
 }  // namespace device

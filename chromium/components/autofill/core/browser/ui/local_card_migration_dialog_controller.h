@@ -11,13 +11,13 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "components/autofill/core/browser/legal_message_line.h"
+#include "url/gurl.h"
 
 namespace autofill {
 
 enum class LocalCardMigrationDialogState;
 class MigratableCreditCard;
 
-// TODO(crbug.com/867194): Add legal message.
 // Interface that exposes controller functionality to local card migration
 // dialog views.
 class LocalCardMigrationDialogController {
@@ -26,14 +26,19 @@ class LocalCardMigrationDialogController {
   virtual ~LocalCardMigrationDialogController() {}
 
   virtual LocalCardMigrationDialogState GetViewState() const = 0;
-  virtual void SetViewState(LocalCardMigrationDialogState view_state) = 0;
   virtual const std::vector<MigratableCreditCard>& GetCardList() const = 0;
-  // TODO(crbug.com/867194): Ensure this would not be called when migration is
-  // happending.
-  virtual void SetCardList(std::vector<MigratableCreditCard>& card_list) = 0;
   virtual const LegalMessageLines& GetLegalMessageLines() const = 0;
-  virtual void OnCardSelected(int index) = 0;
+  virtual const base::string16& GetTipMessage() const = 0;
+  virtual const std::string& GetUserEmail() const = 0;
+  virtual void OnSaveButtonClicked(
+      const std::vector<std::string>& selected_cards_guids) = 0;
+  virtual void OnCancelButtonClicked() = 0;
+  virtual void OnDoneButtonClicked() = 0;
+  virtual void OnViewCardsButtonClicked() = 0;
+  virtual void OnLegalMessageLinkClicked(const GURL& url) = 0;
+  virtual void DeleteCard(const std::string& deleted_card_guid) = 0;
   virtual void OnDialogClosed() = 0;
+  virtual bool AllCardsInvalid() const = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(LocalCardMigrationDialogController);

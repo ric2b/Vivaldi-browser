@@ -55,8 +55,6 @@ class CONTENT_EXPORT ThrottlingResourceHandler
   void CancelWithError(int error_code) override;
   void Resume() override;
 
-  void SetDelegateOpenFlags(bool open_when_done, bool ask_for_target) override;
-
  private:
   void ResumeStart();
   void ResumeRedirect();

@@ -18,7 +18,6 @@ import android.content.Context;
 import android.os.Bundle;
 
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -34,11 +33,11 @@ import org.robolectric.shadows.multidex.ShadowMultiDex;
 
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.chrome.browser.DeviceConditions;
+import org.chromium.chrome.browser.ShadowDeviceConditions;
 import org.chromium.chrome.browser.background_task_scheduler.NativeBackgroundTask;
 import org.chromium.chrome.browser.init.BrowserParts;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
-import org.chromium.chrome.browser.offlinepages.DeviceConditions;
-import org.chromium.chrome.browser.offlinepages.ShadowDeviceConditions;
 import org.chromium.components.background_task_scheduler.BackgroundTask.TaskFinishedCallback;
 import org.chromium.components.background_task_scheduler.BackgroundTaskScheduler;
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
@@ -148,15 +147,13 @@ public class PrefetchBackgroundTaskUnitTest {
                              + additionalDelaySeconds),
                 scheduledTask.getOneOffInfo().getWindowStartTimeMs());
         assertEquals(true, scheduledTask.isPersisted());
-        assertEquals(TaskInfo.NETWORK_TYPE_UNMETERED, scheduledTask.getRequiredNetworkType());
+        assertEquals(TaskInfo.NetworkType.UNMETERED, scheduledTask.getRequiredNetworkType());
     }
 
     /**
      * Tests that the background task is scheduled when limitless prefetching is enabled:
      * the waiting delay is shorter but the provided backoff time should be respected.
-     * TODO(https://crbug.com/803584): fix limitless mode or fully remove it.
      */
-    @Ignore
     @Test
     public void scheduleTaskLimitless() {
         final int additionalDelaySeconds = 20;
@@ -167,7 +164,7 @@ public class PrefetchBackgroundTaskUnitTest {
         assertEquals(TimeUnit.SECONDS.toMillis(additionalDelaySeconds),
                 scheduledTask.getOneOffInfo().getWindowStartTimeMs());
         assertEquals(true, scheduledTask.isPersisted());
-        assertEquals(TaskInfo.NETWORK_TYPE_ANY, scheduledTask.getRequiredNetworkType());
+        assertEquals(TaskInfo.NetworkType.ANY, scheduledTask.getRequiredNetworkType());
     }
 
     @Test
@@ -215,9 +212,7 @@ public class PrefetchBackgroundTaskUnitTest {
     /**
      * Tests that the background task is correctly started when conditions are sufficient for
      * limitless prefetching.
-     * TODO(https://crbug.com/803584): fix limitless mode or fully remove it.
      */
-    @Ignore
     @Test
     public void createNativeTaskLimitless() {
         final ArrayList<Boolean> reschedules = new ArrayList<>();
@@ -310,9 +305,7 @@ public class PrefetchBackgroundTaskUnitTest {
     /**
      * Tests that the background task is not started (rescheduled) when there's no connection and
      * limitless prefetching is enabled.
-     * TODO(https://crbug.com/803584): fix limitless mode or fully remove it.
      */
-    @Ignore
     @Test
     public void testNoNetworkLimitless() throws Exception {
         // Setup no network conditions.

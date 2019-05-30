@@ -43,10 +43,24 @@ WasTypedAttribute.prototype.handleMutation = function (oldValue, newValue) {
   }
 };
 
+function ViewtypeAttribute(view) {
+  $Function.call(
+      GuestViewAttributes.Attribute, this, WebViewConstants.ATTRIBUTE_VIEW_TYPE,
+      view);
+}
+
+ViewtypeAttribute.prototype.__proto__ = GuestViewAttributes.Attribute.prototype;
+
+ViewtypeAttribute.prototype.handleMutation = function (oldValue, newValue) {
+  // nothing to do here
+};
+
 function addVivaldiWebViewAttributes(athis) {
   athis.InspectTabIdAttribute = InspectTabIdAttribute;
   athis.TabIdAttribute = TabIdAttribute;
   athis.WasTypedAttribute = WasTypedAttribute;
+  athis.ViewtypeAttribute = ViewtypeAttribute;
 }
+
 // Exports.
 exports.$set('addVivaldiWebViewAttributes', addVivaldiWebViewAttributes);

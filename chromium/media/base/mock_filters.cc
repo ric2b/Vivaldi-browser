@@ -37,6 +37,10 @@ void MockPipeline::Resume(std::unique_ptr<Renderer> renderer,
   Resume(&renderer, timestamp, seek_cb);
 }
 
+MockMediaResource::MockMediaResource() = default;
+
+MockMediaResource::~MockMediaResource() = default;
+
 MockDemuxer::MockDemuxer() = default;
 
 MockDemuxer::~MockDemuxer() = default;
@@ -236,7 +240,7 @@ void MockCdmFactory::Create(
   }
 
   // Since there is a CDM, call |before_creation_cb_| first.
-  if (!before_creation_cb_.is_null())
+  if (before_creation_cb_)
     before_creation_cb_.Run();
 
   // Create and return a new MockCdm. Keep a pointer to the created CDM so
@@ -261,5 +265,9 @@ void MockCdmFactory::SetBeforeCreationCB(
 MockStreamParser::MockStreamParser() = default;
 
 MockStreamParser::~MockStreamParser() = default;
+
+MockMediaClient::MockMediaClient() = default;
+
+MockMediaClient::~MockMediaClient() = default;
 
 }  // namespace media

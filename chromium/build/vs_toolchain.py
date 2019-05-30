@@ -13,13 +13,11 @@ import shutil
 import stat
 import subprocess
 import sys
+
 from gn_helpers import ToGNString
 
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
-chrome_src = os.path.abspath(os.path.join(script_dir, os.pardir))
-SRC_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(chrome_src, 'tools', 'gyp', 'pylib'))
 json_data_file = os.path.join(script_dir, 'win_toolchain.json')
 
 
@@ -29,10 +27,12 @@ CURRENT_DEFAULT_TOOLCHAIN_VERSION = '2017'
 
 def SetEnvironmentAndGetRuntimeDllDirs():
   """Sets up os.environ to use the depot_tools VS toolchain with gyp, and
-  returns the location of the VS runtime DLLs so they can be copied into
+  returns the location of the VC runtime DLLs so they can be copied into
   the output directory after gyp generation.
 
-  Return value is [x64path, x86path] or None
+  Return value is [x64path, x86path, 'Arm64Unused'] or None. arm64path is
+  generated separately because there are multiple folders for the arm64 VC
+  runtime.
   """
   vs_runtime_dll_dirs = None
   depot_tools_win_toolchain = \
@@ -42,7 +42,10 @@ def SetEnvironmentAndGetRuntimeDllDirs():
   if ((sys.platform in ('win32', 'cygwin') or os.path.exists(json_data_file))
       and depot_tools_win_toolchain):
     if ShouldUpdateToolchain():
-      update_result = Update()
+      if len(sys.argv) > 1 and sys.argv[1] == 'update':
+        update_result = Update()
+      else:
+        update_result = Update(no_download=True)
       if update_result != 0:
         raise Exception('Failed to update, error code %d.' % update_result)
     with open(json_data_file, 'r') as tempf:
@@ -55,9 +58,14 @@ def SetEnvironmentAndGetRuntimeDllDirs():
       win_sdk = toolchain_data['win8sdk']
     wdk = toolchain_data['wdk']
     # TODO(scottmg): The order unfortunately matters in these. They should be
-    # split into separate keys for x86 and x64. (See CopyDlls call below).
+    # split into separate keys for x64/x86/arm64. (See CopyDlls call below).
     # http://crbug.com/345992
     vs_runtime_dll_dirs = toolchain_data['runtime_dirs']
+    # The number of runtime_dirs in the toolchain_data was two (x64/x86) but
+    # changed to three (x64/x86/arm64) and this code needs to handle both
+    # possibilities, which can change independently from this code.
+    if len(vs_runtime_dll_dirs) == 2:
+      vs_runtime_dll_dirs.append('Arm64Unused')
 
     os.environ['GYP_MSVS_OVERRIDE_PATH'] = toolchain
     os.environ['GYP_MSVS_VERSION'] = version
@@ -79,9 +87,14 @@ def SetEnvironmentAndGetRuntimeDllDirs():
     # directory ensures that they are available when needed.
     bitness = platform.architecture()[0]
     # When running 64-bit python the x64 DLLs will be in System32
+    # ARM64 binaries will not be available in the system directories because we
+    # don't build on ARM64 machines.
     x64_path = 'System32' if bitness == '64bit' else 'Sysnative'
     x64_path = os.path.join(os.path.expandvars('%windir%'), x64_path)
-    vs_runtime_dll_dirs = [x64_path, os.path.expandvars('%windir%/SysWOW64')]
+    vs_runtime_dll_dirs = [x64_path,
+                           os.path.join(os.path.expandvars('%windir%'),
+                                        'SysWOW64'),
+                           'Arm64Unused']
 
   return vs_runtime_dll_dirs
 
@@ -128,27 +141,33 @@ def DetectVisualStudioPath():
   version_as_year = GetVisualStudioVersion()
   year_to_version = {
       '2017': '15.0',
+      '2019': '16.0',
   }
   if version_as_year not in year_to_version:
     raise Exception(('Visual Studio version %s (from GYP_MSVS_VERSION)'
                      ' not supported. Supported versions are: %s') % (
                        version_as_year, ', '.join(year_to_version.keys())))
-  version = year_to_version[version_as_year]
-  if version_as_year == '2017':
-    # The VC++ 2017 install location needs to be located using COM instead of
-    # the registry. For details see:
-    # https://blogs.msdn.microsoft.com/heaths/2016/09/15/changes-to-visual-studio-15-setup/
-    # For now we use a hardcoded default with an environment variable override.
-    for path in (
-        os.environ.get('vs2017_install'),
-        os.path.expandvars('%ProgramFiles(x86)%'
-                           '/Microsoft Visual Studio/2017/Enterprise'),
-        os.path.expandvars('%ProgramFiles(x86)%'
-                           '/Microsoft Visual Studio/2017/Professional'),
-        os.path.expandvars('%ProgramFiles(x86)%'
-                           '/Microsoft Visual Studio/2017/Community')):
-      if path and os.path.exists(path):
-        return path
+
+  # The VC++ >=2017 install location needs to be located using COM instead of
+  # the registry. For details see:
+  # https://blogs.msdn.microsoft.com/heaths/2016/09/15/changes-to-visual-studio-15-setup/
+  # For now we use a hardcoded default with an environment variable override.
+  for path in (
+      os.environ.get('vs%s_install' % version_as_year),
+      os.path.expandvars('%ProgramFiles(x86)%' +
+                         '/Microsoft Visual Studio/%s/Enterprise' %
+                         version_as_year),
+      os.path.expandvars('%ProgramFiles(x86)%' +
+                         '/Microsoft Visual Studio/%s/Professional' %
+                         version_as_year),
+      os.path.expandvars('%ProgramFiles(x86)%' +
+                         '/Microsoft Visual Studio/%s/Community' %
+                         version_as_year),
+      os.path.expandvars('%ProgramFiles(x86)%' +
+                         '/Microsoft Visual Studio/%s/Preview' %
+                         version_as_year)):
+    if path and os.path.exists(path):
+      return path
 
   raise Exception(('Visual Studio Version %s (from GYP_MSVS_VERSION)'
                    ' not found.') % (version_as_year))
@@ -179,6 +198,16 @@ def _CopyRuntimeImpl(target, source, verbose=True):
 def _CopyUCRTRuntime(target_dir, source_dir, target_cpu, dll_pattern, suffix):
   """Copy both the msvcp and vccorlib runtime DLLs, only if the target doesn't
   exist, but the target directory does exist."""
+  if target_cpu == 'arm64':
+    # Windows ARM64 VCRuntime is located at {toolchain_root}/VC/Redist/MSVC/
+    # {x.y.z}/[debug_nonredist/]arm64/Microsoft.VC141.CRT/.
+    vc_redist_root = FindVCRedistRoot()
+    if suffix.startswith('.'):
+      source_dir = os.path.join(vc_redist_root,
+                                'arm64', 'Microsoft.VC141.CRT')
+    else:
+      source_dir = os.path.join(vc_redist_root, 'debug_nonredist',
+                                'arm64', 'Microsoft.VC141.DebugCRT')
   for file_part in ('msvcp', 'vccorlib', 'vcruntime'):
     dll = dll_pattern % file_part
     target = os.path.join(target_dir, dll)
@@ -193,78 +222,79 @@ def _CopyUCRTRuntime(target_dir, source_dir, target_cpu, dll_pattern, suffix):
       os.environ.get('WINDOWSSDKDIR',
                      os.path.expandvars('%ProgramFiles(x86)%'
                                         '\\Windows Kits\\10')))
-  ucrt_dll_dirs = os.path.join(win_sdk_dir, 'Redist', 'ucrt', 'DLLs',
-                               target_cpu)
-  ucrt_files = glob.glob(os.path.join(ucrt_dll_dirs, 'api-ms-win-*.dll'))
-  assert len(ucrt_files) > 0
-  for ucrt_src_file in ucrt_files:
-    file_part = os.path.basename(ucrt_src_file)
-    ucrt_dst_file = os.path.join(target_dir, file_part)
-    _CopyRuntimeImpl(ucrt_dst_file, ucrt_src_file, False)
-  _CopyRuntimeImpl(os.path.join(target_dir, 'ucrtbase' + suffix),
-                    os.path.join(source_dir, 'ucrtbase' + suffix))
+  # ARM64 doesn't have a redist for the ucrt DLLs because they are always
+  # present in the OS.
+  if target_cpu != 'arm64':
+    # Starting with the 10.0.17763 SDK the ucrt files are in a version-named
+    # directory - this handles both cases.
+    redist_dir = os.path.join(win_sdk_dir, 'Redist')
+    version_dirs = glob.glob(os.path.join(redist_dir, '10.*'))
+    if len(version_dirs) > 0:
+      version_dirs.sort(reverse=True)
+      redist_dir = version_dirs[0]
+    ucrt_dll_dirs = os.path.join(redist_dir, 'ucrt', 'DLLs', target_cpu)
+    ucrt_files = glob.glob(os.path.join(ucrt_dll_dirs, 'api-ms-win-*.dll'))
+    assert len(ucrt_files) > 0
+    for ucrt_src_file in ucrt_files:
+      file_part = os.path.basename(ucrt_src_file)
+      ucrt_dst_file = os.path.join(target_dir, file_part)
+      _CopyRuntimeImpl(ucrt_dst_file, ucrt_src_file, False)
+  # We must copy ucrtbase.dll for x64/x86, and ucrtbased.dll for all CPU types.
+  if target_cpu != 'arm64' or not suffix.startswith('.'):
+    if not suffix.startswith('.'):
+      # ucrtbased.dll is located at {win_sdk_dir}/bin/{a.b.c.d}/{target_cpu}/
+      # ucrt/.
+      sdk_redist_root = os.path.join(win_sdk_dir, 'bin')
+      sdk_bin_sub_dirs = os.listdir(sdk_redist_root)
+      # Select the most recent SDK if there are multiple versions installed.
+      sdk_bin_sub_dirs.sort(reverse=True)
+      for directory in sdk_bin_sub_dirs:
+        sdk_redist_root_version = os.path.join(sdk_redist_root, directory)
+        if not os.path.isdir(sdk_redist_root_version):
+          continue
+        if re.match('10\.\d+\.\d+\.\d+', directory):
+          source_dir = os.path.join(sdk_redist_root_version, target_cpu, 'ucrt')
+          break
+    _CopyRuntimeImpl(os.path.join(target_dir, 'ucrtbase' + suffix),
+                     os.path.join(source_dir, 'ucrtbase' + suffix))
 
 
-def FindVCToolsRoot():
-  """In VS2017 the PGO runtime dependencies are located in
-  {toolchain_root}/VC/Tools/MSVC/{x.y.z}/bin/Host{target_cpu}/{target_cpu}/, the
-  {version_number} part is likely to change in case of a minor update of the
-  toolchain so we don't hardcode this value here (except for the major number).
-
-  This returns the '{toolchain_root}/VC/Tools/MSVC/{x.y.z}/bin/' path.
-
-  This function should only be called when using VS2017.
+def FindVCComponentRoot(component):
+  """Find the most recent Tools or Redist or other directory in an MSVC install.
+  Typical results are {toolchain_root}/VC/{component}/MSVC/{x.y.z}. The {x.y.z}
+  version number part changes frequently so the highest version number found is
+  used.
   """
-  assert GetVisualStudioVersion() == '2017'
+  assert GetVisualStudioVersion() in ['2017', '2019']
   SetEnvironmentAndGetRuntimeDllDirs()
   assert ('GYP_MSVS_OVERRIDE_PATH' in os.environ)
-  vc_tools_msvc_root = os.path.join(os.environ['GYP_MSVS_OVERRIDE_PATH'],
-      'VC', 'Tools', 'MSVC')
-  for directory in os.listdir(vc_tools_msvc_root):
-    if not os.path.isdir(os.path.join(vc_tools_msvc_root, directory)):
+  vc_component_msvc_root = os.path.join(os.environ['GYP_MSVS_OVERRIDE_PATH'],
+      'VC', component, 'MSVC')
+  vc_component_msvc_contents = os.listdir(vc_component_msvc_root)
+  # Select the most recent toolchain if there are several.
+  vc_component_msvc_contents.sort(reverse=True)
+  for directory in vc_component_msvc_contents:
+    if not os.path.isdir(os.path.join(vc_component_msvc_root, directory)):
       continue
     if re.match('14\.\d+\.\d+', directory):
-      return os.path.join(vc_tools_msvc_root, directory, 'bin')
-  raise Exception('Unable to find the VC tools directory.')
+      return os.path.join(vc_component_msvc_root, directory)
+  raise Exception('Unable to find the VC %s directory.' % component)
 
 
-def _CopyPGORuntime(target_dir, target_cpu):
-  """Copy the runtime dependencies required during a PGO build.
+def FindVCRedistRoot():
+  """In >=VS2017, Redist binaries are located in
+  {toolchain_root}/VC/Redist/MSVC/{x.y.z}/{target_cpu}/.
+
+  This returns the '{toolchain_root}/VC/Redist/MSVC/{x.y.z}/' path.
   """
-  env_version = GetVisualStudioVersion()
-  # These dependencies will be in a different location depending on the version
-  # of the toolchain.
-  if env_version == '2017':
-    pgo_runtime_root = FindVCToolsRoot()
-    assert pgo_runtime_root
-    # There's no version of pgosweep.exe in HostX64/x86, so we use the copy
-    # from HostX86/x86.
-    pgo_x86_runtime_dir = os.path.join(pgo_runtime_root, 'HostX86', 'x86')
-    pgo_x64_runtime_dir = os.path.join(pgo_runtime_root, 'HostX64', 'x64')
-  else:
-    raise Exception('Unexpected toolchain version: %s.' % env_version)
-
-  # We need to copy 2 runtime dependencies used during the profiling step:
-  #     - pgort140.dll: runtime library required to run the instrumented image.
-  #     - pgosweep.exe: executable used to collect the profiling data
-  pgo_runtimes = ['pgort140.dll', 'pgosweep.exe']
-  for runtime in pgo_runtimes:
-    if target_cpu == 'x86':
-      source = os.path.join(pgo_x86_runtime_dir, runtime)
-    elif target_cpu == 'x64':
-      source = os.path.join(pgo_x64_runtime_dir, runtime)
-    else:
-      raise NotImplementedError("Unexpected target_cpu value: " + target_cpu)
-    if not os.path.exists(source):
-      raise Exception('Unable to find %s.' % source)
-    _CopyRuntimeImpl(os.path.join(target_dir, runtime), source)
+  return FindVCComponentRoot('Redist')
 
 
 def _CopyRuntime(target_dir, source_dir, target_cpu, debug):
   """Copy the VS runtime DLLs, only if the target doesn't exist, but the target
-  directory does exist. Handles VS 2015 and VS 2017."""
-  suffix = "d.dll" if debug else ".dll"
-  # VS 2017 uses the same CRT DLLs as VS 2015.
+  directory does exist. Handles VS 2015, 2017 and 2019."""
+  suffix = 'd.dll' if debug else '.dll'
+  # VS 2015, 2017 and 2019 use the same CRT DLLs.
   _CopyUCRTRuntime(target_dir, source_dir, target_cpu, '%s140' + suffix,
                     suffix)
 
@@ -273,7 +303,7 @@ def CopyDlls(target_dir, configuration, target_cpu):
   """Copy the VS runtime DLLs into the requested directory as needed.
 
   configuration is one of 'Debug' or 'Release'.
-  target_cpu is one of 'x86' or 'x64'.
+  target_cpu is one of 'x86', 'x64' or 'arm64'.
 
   The debug configuration gets both the debug and release DLLs; the
   release config only the latter.
@@ -282,21 +312,25 @@ def CopyDlls(target_dir, configuration, target_cpu):
   if not vs_runtime_dll_dirs:
     return
 
-  x64_runtime, x86_runtime = vs_runtime_dll_dirs
-  runtime_dir = x64_runtime if target_cpu == 'x64' else x86_runtime
+  x64_runtime, x86_runtime, arm64_runtime = vs_runtime_dll_dirs
+  if target_cpu == 'x64':
+    runtime_dir = x64_runtime
+  elif target_cpu == 'x86':
+    runtime_dir = x86_runtime
+  elif target_cpu == 'arm64':
+    runtime_dir = arm64_runtime
+  else:
+    raise Exception('Unknown target_cpu: ' + target_cpu)
   _CopyRuntime(target_dir, runtime_dir, target_cpu, debug=False)
   if configuration == 'Debug':
     _CopyRuntime(target_dir, runtime_dir, target_cpu, debug=True)
-  else:
-    _CopyPGORuntime(target_dir, target_cpu)
-
   _CopyDebugger(target_dir, target_cpu)
 
 
 def _CopyDebugger(target_dir, target_cpu):
   """Copy dbghelp.dll and dbgcore.dll into the requested directory as needed.
 
-  target_cpu is one of 'x86' or 'x64'.
+  target_cpu is one of 'x86', 'x64' or 'arm64'.
 
   dbghelp.dll is used when Chrome needs to symbolize stacks. Copying this file
   from the SDK directory avoids using the system copy of dbghelp.dll which then
@@ -322,7 +356,7 @@ def _CopyDebugger(target_dir, target_cpu):
         # TODO(crbug.com/773476): remove version requirement.
         raise Exception('%s not found in "%s"\r\nYou must install the '
                         '"Debugging Tools for Windows" feature from the Windows'
-                        ' 10 SDK. You must use v10.0.17134.0. of the SDK'
+                        ' 10 SDK.'
                         % (debug_file, full_path))
     target_path = os.path.join(target_dir, debug_file)
     _CopyRuntimeImpl(target_path, full_path)
@@ -333,9 +367,9 @@ def _GetDesiredVsToolchainHashes():
   to build with."""
   env_version = GetVisualStudioVersion()
   if env_version == '2017':
-    # VS 2017 Update 7.1 (15.7.1) with 10.0.17134.12 SDK, rebuilt with
-    # dbghelp.dll fix.
-    toolchain_hash = '3bc0ec615cf20ee342f3bc29bc991b5ad66d8d2c'
+    # VS 2017 Update 9 (15.9.3) with 10.0.17763.132 SDK, 10.0.17134 version of
+    # d3dcompiler_47.dll, with ARM64 libraries.
+    toolchain_hash = '818a152b3f1da991c1725d85be19a0f27af6bab4'
     # Third parties that do not have access to the canonical toolchain can map
     # canonical toolchain version to their own toolchain versions.
     toolchain_hash_mapping_key = 'GYP_MSVS_HASH_%s' % toolchain_hash
@@ -356,10 +390,12 @@ def ShouldUpdateToolchain():
   return version != env_version
 
 
-def Update(force=False):
+def Update(force=False, no_download=False):
   """Requests an update of the toolchain to the specific hashes we have at
   this revision. The update outputs a .json of the various configuration
   information required to pass to gyp which we use in |GetToolchainDir()|.
+  If no_download is true then the toolchain will be configured if present but
+  will not be downloaded.
   """
   if force != False and force != '--force':
     print >>sys.stderr, 'Unknown parameter "%s"' % force
@@ -410,13 +446,15 @@ def Update(force=False):
       ] + _GetDesiredVsToolchainHashes()
     if force:
       get_toolchain_args.append('--force')
+    if no_download:
+      get_toolchain_args.append('--no-download')
     subprocess.check_call(get_toolchain_args)
 
   return 0
 
 
 def NormalizePath(path):
-  while path.endswith("\\"):
+  while path.endswith('\\'):
     path = path[:-1]
   return path
 

@@ -5,14 +5,21 @@
 #include <map>
 #include <string>
 
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/field_trial_param_associator.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
 #include "components/ukm/test_ukm_recorder.h"
+#include "media/base/media_switches.h"
 #include "media/capabilities/video_decode_stats_db.h"
+#include "media/mojo/interfaces/media_types.mojom.h"
+#include "media/mojo/services/test_helpers.h"
 #include "media/mojo/services/video_decode_perf_history.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -21,7 +28,6 @@
 #include "url/origin.h"
 
 using UkmEntry = ukm::builders::Media_VideoDecodePerfRecord;
-using testing::Eq;
 using testing::IsNull;
 using testing::_;
 
@@ -54,14 +60,27 @@ class FakeVideoDecodeStatsDB : public VideoDecodeStatsDB {
   // for success.
   void CompleteInitialize(bool success) {
     DVLOG(2) << __func__ << " running with success = " << success;
-    EXPECT_FALSE(pendnding_init_cb_.is_null());
+    EXPECT_FALSE(!pendnding_init_cb_);
     std::move(pendnding_init_cb_).Run(success);
   }
+
+  // Simple hooks to fail the next calls to AppendDecodeStats() and
+  // GetDecodeStats(). Will be reset to false after the call.
+  void set_fail_next_append(bool fail_append) {
+    fail_next_append_ = fail_append;
+  }
+  void set_fail_next_get(bool fail_get) { fail_next_get_ = fail_get; }
 
   void AppendDecodeStats(const VideoDescKey& key,
                          const DecodeStatsEntry& new_entry,
                          AppendDecodeStatsCB append_done_cb) override {
-    std::string key_str = MakeKeyString(key);
+    if (fail_next_append_) {
+      fail_next_append_ = false;
+      std::move(append_done_cb).Run(false);
+      return;
+    }
+
+    std::string key_str = key.Serialize();
     if (entries_.find(key_str) == entries_.end()) {
       entries_.emplace(std::make_pair(key_str, new_entry));
     } else {
@@ -69,8 +88,8 @@ class FakeVideoDecodeStatsDB : public VideoDecodeStatsDB {
       entries_.at(key_str) = DecodeStatsEntry(
           known_entry.frames_decoded + new_entry.frames_decoded,
           known_entry.frames_dropped + new_entry.frames_dropped,
-          known_entry.frames_decoded_power_efficient +
-              new_entry.frames_decoded_power_efficient);
+          known_entry.frames_power_efficient +
+              new_entry.frames_power_efficient);
     }
 
     std::move(append_done_cb).Run(true);
@@ -78,7 +97,13 @@ class FakeVideoDecodeStatsDB : public VideoDecodeStatsDB {
 
   void GetDecodeStats(const VideoDescKey& key,
                       GetDecodeStatsCB get_stats_cb) override {
-    auto entry_it = entries_.find(MakeKeyString(key));
+    if (fail_next_get_) {
+      fail_next_get_ = false;
+      std::move(get_stats_cb).Run(false, nullptr);
+      return;
+    }
+
+    auto entry_it = entries_.find(key.Serialize());
     if (entry_it == entries_.end()) {
       std::move(get_stats_cb).Run(true, nullptr);
     } else {
@@ -87,32 +112,18 @@ class FakeVideoDecodeStatsDB : public VideoDecodeStatsDB {
     }
   }
 
-  void DestroyStats(base::OnceClosure destroy_done_cb) override {
+  void ClearStats(base::OnceClosure clear_done_cb) override {
     entries_.clear();
-    std::move(destroy_done_cb).Run();
+    std::move(clear_done_cb).Run();
   }
 
  private:
-  static std::string MakeKeyString(const VideoDescKey& key) {
-    return base::StringPrintf("%d|%s|%d", static_cast<int>(key.codec_profile),
-                              key.size.ToString().c_str(), key.frame_rate);
-  }
+  bool fail_next_append_ = false;
+  bool fail_next_get_ = false;
 
   std::map<std::string, DecodeStatsEntry> entries_;
 
   base::OnceCallback<void(bool)> pendnding_init_cb_;
-};
-
-// Simple factory that always returns the pointer its given. The lifetime of
-// |db| is managed by the CreateDB() caller.
-class FakeVideoDecodeStatsDBFactory : public VideoDecodeStatsDBFactory {
- public:
-  FakeVideoDecodeStatsDBFactory() = default;
-  ~FakeVideoDecodeStatsDBFactory() override = default;
-
-  std::unique_ptr<VideoDecodeStatsDB> CreateDB() override {
-    return std::make_unique<FakeVideoDecodeStatsDB>();
-  }
 };
 
 class VideoDecodePerfHistoryTest : public testing::Test {
@@ -120,7 +131,7 @@ class VideoDecodePerfHistoryTest : public testing::Test {
   void SetUp() override {
     test_recorder_ = std::make_unique<ukm::TestAutoSetUkmRecorder>();
     perf_history_ = std::make_unique<VideoDecodePerfHistory>(
-        std::make_unique<FakeVideoDecodeStatsDBFactory>());
+        std::make_unique<FakeVideoDecodeStatsDB>());
   }
 
   void TearDown() override { perf_history_.reset(); }
@@ -137,20 +148,8 @@ class VideoDecodePerfHistoryTest : public testing::Test {
     GetFakeDB()->CompleteInitialize(initialize_success);
   }
 
-  // Clearing history internally recreates and re-initializes the database.
-  // Tests may set this as the callback for VideoDecodePerfHistory::ClearHistory
-  // to automatically complete re-initialization and finally call
-  // MockOnClearedHistory (which tests may EXPECT_CALL).
-  void CompleteDBInitOnClearedHistory() {
-    DCHECK_EQ(VideoDecodePerfHistory::InitStatus::PENDING,
-              perf_history_->db_init_status_);
-
-    GetFakeDB()->CompleteInitialize(true /* success */);
-
-    DCHECK_EQ(VideoDecodePerfHistory::InitStatus::COMPLETE,
-              perf_history_->db_init_status_);
-
-    MockOnClearedHistory();
+  double GetMaxSmoothDroppedFramesPercent() {
+    return VideoDecodePerfHistory::GetMaxSmoothDroppedFramesPercent();
   }
 
   // Tests may set this as the callback for VideoDecodePerfHistory::GetPerfInfo
@@ -159,39 +158,10 @@ class VideoDecodePerfHistoryTest : public testing::Test {
                void(bool is_smooth, bool is_power_efficient));
 
   // Tests should EXPECT_CALL this method prior to ClearHistory() to know that
-  // the operation has completed. See CompleteDBInitOnClearedHistory().
+  // the operation has completed.
   MOCK_METHOD0(MockOnClearedHistory, void());
 
   MOCK_METHOD1(MockGetVideoDecodeStatsDBCB, void(VideoDecodeStatsDB* db));
-
-  mojom::PredictionFeatures MakeFeatures(VideoCodecProfile profile,
-                                         gfx::Size video_size,
-                                         int frames_per_sec) {
-    mojom::PredictionFeatures features;
-    features.profile = profile;
-    features.video_size = video_size;
-    features.frames_per_sec = frames_per_sec;
-    return features;
-  }
-
-  mojom::PredictionFeaturesPtr MakeFeaturesPtr(VideoCodecProfile profile,
-                                               gfx::Size video_size,
-                                               int frames_per_sec) {
-    mojom::PredictionFeaturesPtr features = mojom::PredictionFeatures::New();
-    *features = MakeFeatures(profile, video_size, frames_per_sec);
-    return features;
-  }
-
-  mojom::PredictionTargets MakeTargets(
-      uint32_t frames_decoded,
-      uint32_t frames_dropped,
-      uint32_t frames_decoded_power_efficient) {
-    mojom::PredictionTargets targets;
-    targets.frames_decoded = frames_decoded;
-    targets.frames_dropped = frames_dropped;
-    targets.frames_decoded_power_efficient = frames_decoded_power_efficient;
-    return targets;
-  }
 
   void SavePerfRecord(const url::Origin& origin,
                       bool is_top_frame,
@@ -214,8 +184,6 @@ class VideoDecodePerfHistoryTest : public testing::Test {
   using VideoDescKey = VideoDecodeStatsDB::VideoDescKey;
   using DecodeStatsEntry = VideoDecodeStatsDB::DecodeStatsEntry;
 
-  static constexpr double kMaxSmoothDroppedFramesPercent =
-      VideoDecodePerfHistory::kMaxSmoothDroppedFramesPercent;
   static constexpr double kMinPowerEfficientDecodedFramePercent =
       VideoDecodePerfHistory::kMinPowerEfficientDecodedFramePercent;
 
@@ -255,10 +223,10 @@ TEST_P(VideoDecodePerfHistoryParamTest, GetPerfInfo_Smooth) {
   const int kNotPowerEfficientFramesDecoded = 0;
   // Sets the ratio of dropped frames to barely qualify as smooth.
   const int kSmoothFramesDropped =
-      kFramesDecoded * kMaxSmoothDroppedFramesPercent;
+      kFramesDecoded * GetMaxSmoothDroppedFramesPercent();
   // Set the ratio of dropped frames to barely qualify as NOT smooth.
   const int kNotSmoothFramesDropped =
-      kFramesDecoded * kMaxSmoothDroppedFramesPercent + 1;
+      kFramesDecoded * GetMaxSmoothDroppedFramesPercent() + 1;
 
   // Add the entries.
   SavePerfRecord(kOrigin, kIsTopFrame,
@@ -331,10 +299,10 @@ TEST_P(VideoDecodePerfHistoryParamTest, GetPerfInfo_PowerEfficient) {
       kFramesDecoded * kMinPowerEfficientDecodedFramePercent - 1;
   // Sets the ratio of dropped frames to barely qualify as smooth.
   const int kSmoothFramesDropped =
-      kFramesDecoded * kMaxSmoothDroppedFramesPercent;
+      kFramesDecoded * GetMaxSmoothDroppedFramesPercent();
   // Set the ratio of dropped frames to barely qualify as NOT smooth.
   const int kNotSmoothFramesDropped =
-      kFramesDecoded * kMaxSmoothDroppedFramesPercent + 1;
+      kFramesDecoded * GetMaxSmoothDroppedFramesPercent() + 1;
 
   // Add the entries.
   SavePerfRecord(
@@ -455,9 +423,9 @@ TEST_P(VideoDecodePerfHistoryParamTest, AppendAndDestroyStats) {
 
   // Initiate async clearing of history.
   EXPECT_CALL(*this, MockOnClearedHistory());
-  perf_history_->ClearHistory(base::BindOnce(
-      &VideoDecodePerfHistoryParamTest::CompleteDBInitOnClearedHistory,
-      base::Unretained(this)));
+  perf_history_->ClearHistory(
+      base::BindOnce(&VideoDecodePerfHistoryParamTest::MockOnClearedHistory,
+                     base::Unretained(this)));
 
   // Verify record we added above is no longer present.
   // SUBTLE: The PerfHistory will optimistically respond kIsSmooth when no data
@@ -559,52 +527,189 @@ TEST_P(VideoDecodePerfHistoryParamTest,
   }
 }
 
-INSTANTIATE_TEST_CASE_P(VaryDBInitTiming,
-                        VideoDecodePerfHistoryParamTest,
-                        ::testing::Values(true, false));
+TEST_P(VideoDecodePerfHistoryParamTest, FailedDatabaseAppend) {
+  // NOTE: The when the DB initialization is deferred, All EXPECT_CALLs are then
+  // delayed until we db_->CompleteInitialize(). testing::InSequence enforces
+  // that EXPECT_CALLs arrive in top-to-bottom order.
+  bool defer_initialize = GetParam();
+  testing::InSequence dummy;
 
-TEST_F(VideoDecodePerfHistoryTest, AppendWhileDestroying) {
-  // This test requires the DB to be always pre-initialized.
-  PreInitializeDB(/* success */ true);
+  // Complete initialization in advance of API calls when not asked to defer.
+  if (!defer_initialize)
+    PreInitializeDB(/* success */ true);
 
-  // Add a simple record to the history.
+  // Force the DB to fail on the next append.
+  GetFakeDB()->set_fail_next_append(true);
+
+  // Create a record that is neither smooth nor power efficient. After we fail
+  // to save this record we should find smooth = power_efficient = true (the
+  // default for no-data-found).
   const VideoCodecProfile kProfile = VP9PROFILE_PROFILE0;
   const gfx::Size kSize(100, 200);
   const int kFrameRate = 30;
   const int kFramesDecoded = 1000;
-  const int kManyFramesDropped = kFramesDecoded / 2;
-  const int kFramesPowerEfficient = kFramesDecoded;
+  const int kFramesDropped =
+      kFramesDecoded * GetMaxSmoothDroppedFramesPercent() + 1;
+  const int kFramesPowerEfficient = 0;
 
-  // Initiate async clearing of history. Set the Mock callback to be called
-  // directly, bypassing the reinitialization that occurs in
-  // VideoDecodePerfHistoryTest::CompleteDBInitOnClearedHistory. This leaves the
-  // initialization still "pending" while we attempt to SavePerfRecord() below.
-  EXPECT_CALL(*this, MockOnClearedHistory());
-  perf_history_->ClearHistory(
-      base::BindOnce(&VideoDecodePerfHistoryTest::MockOnClearedHistory,
-                     base::Unretained(this)));
-
-  // With DB reinitialization still pending, save a record that indicates
-  // NOT smooth performance.
+  // Attempt (and fail) the save.
   SavePerfRecord(
       kOrigin, kIsTopFrame, MakeFeatures(kProfile, kSize, kFrameRate),
-      MakeTargets(kFramesDecoded, kManyFramesDropped, kFramesPowerEfficient),
+      MakeTargets(kFramesDecoded, kFramesDropped, kFramesPowerEfficient),
       kPlayerId);
 
-  // Expect that NOT smooth is eventually reported (after DB reinitialization
-  // completes) when we query this stream description.
-  EXPECT_CALL(*this, MockGetPerfInfoCB(kIsNotSmooth, kIsPowerEfficient));
+  // Verify perf history still returns is_smooth = power_efficient = true since
+  // no data was successfully saved for the given configuration.
+  EXPECT_CALL(*this, MockGetPerfInfoCB(kIsSmooth, kIsPowerEfficient));
   perf_history_->GetPerfInfo(
       MakeFeaturesPtr(kProfile, kSize, kFrameRate),
+      base::BindOnce(&VideoDecodePerfHistoryTest::MockGetPerfInfoCB,
+                     base::Unretained(this)));
+
+  // Try again, but this time fail the "get" step of the save (we always get
+  // existing stats prior to save for UKM reporting).
+  GetFakeDB()->set_fail_next_get(true);
+
+  // Attempt (and fail) the save.
+  SavePerfRecord(
+      kOrigin, kIsTopFrame, MakeFeatures(kProfile, kSize, kFrameRate),
+      MakeTargets(kFramesDecoded, kFramesDropped, kFramesPowerEfficient),
+      kPlayerId);
+
+  // Verify perf history still returns is_smooth = power_efficient = true since
+  // no data was successfully saved for the given configuration.
+  EXPECT_CALL(*this, MockGetPerfInfoCB(kIsSmooth, kIsPowerEfficient));
+  perf_history_->GetPerfInfo(
+      MakeFeaturesPtr(kProfile, kSize, kFrameRate),
+      base::BindOnce(&VideoDecodePerfHistoryTest::MockGetPerfInfoCB,
+                     base::Unretained(this)));
+
+  // Complete successful deferred DB initialization (see comment at top of test)
+  if (defer_initialize) {
+    GetFakeDB()->CompleteInitialize(true);
+
+    // Allow initialize-deferred API calls to complete.
+    scoped_task_environment_.RunUntilIdle();
+  }
+}
+
+// Tests that the feature parameters are used to override constants for the
+// Media Capabilities feature.
+// To avoid race conditions when setting the parameter, the test sets it when
+// starting and make sure the values recorded to the DB wouldn't be smooth per
+// the default value.
+TEST_P(VideoDecodePerfHistoryParamTest, SmoothThresholdFinchOverride) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  std::unique_ptr<base::FieldTrialList> field_trial_list;
+
+  double previous_smooth_dropped_frames_threshold =
+      GetMaxSmoothDroppedFramesPercent();
+  double new_smooth_dropped_frames_threshold =
+      previous_smooth_dropped_frames_threshold / 2;
+
+  ASSERT_LT(new_smooth_dropped_frames_threshold,
+            previous_smooth_dropped_frames_threshold);
+
+  // Override field trial.
+  std::map<std::string, std::string> params;
+  params[VideoDecodePerfHistory::kMaxSmoothDroppedFramesPercentParamName] =
+      std::to_string(new_smooth_dropped_frames_threshold);
+
+  field_trial_list.reset();
+  field_trial_list.reset(new base::FieldTrialList(nullptr));
+  base::FieldTrialParamAssociator::GetInstance()->ClearAllParamsForTesting();
+
+  const std::string kTrialName = "TrialName";
+  const std::string kGroupName = "GroupName";
+
+  base::AssociateFieldTrialParams(kTrialName, kGroupName, params);
+  base::FieldTrial* field_trial =
+      base::FieldTrialList::CreateFieldTrial(kTrialName, kGroupName);
+
+  std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
+  feature_list->RegisterFieldTrialOverride(
+      media::kMediaCapabilitiesWithParameters.name,
+      base::FeatureList::OVERRIDE_ENABLE_FEATURE, field_trial);
+  base::FeatureList::ClearInstanceForTesting();
+  scoped_feature_list.InitWithFeatureList(std::move(feature_list));
+
+  std::map<std::string, std::string> actual_params;
+  EXPECT_TRUE(base::GetFieldTrialParamsByFeature(
+      media::kMediaCapabilitiesWithParameters, &actual_params));
+  EXPECT_EQ(params, actual_params);
+
+  EXPECT_EQ(new_smooth_dropped_frames_threshold,
+            GetMaxSmoothDroppedFramesPercent());
+
+  // NOTE: The when the DB initialization is deferred, All EXPECT_CALLs are then
+  // delayed until we db_->CompleteInitialize(). testing::InSequence enforces
+  // that EXPECT_CALLs arrive in top-to-bottom order.
+  bool defer_initialize = GetParam();
+  testing::InSequence dummy;
+
+  // Complete initialization in advance of API calls when not asked to defer.
+  if (!defer_initialize)
+    PreInitializeDB(/* success */ true);
+
+  // First add 2 records to the history. The second record has a higher frame
+  // rate and a higher number of dropped frames such that it is "not smooth".
+  const VideoCodecProfile kKnownProfile = VP9PROFILE_PROFILE0;
+  const gfx::Size kKownSize(100, 200);
+  const int kSmoothFrameRatePrevious = 30;
+  const int kSmoothFrameRateNew = 90;
+  const int kFramesDecoded = 1000;
+  const int kNotPowerEfficientFramesDecoded = 0;
+
+  // Sets the ratio of dropped frames to qualify as smooth per the default
+  // threshold.
+  const int kSmoothFramesDroppedPrevious =
+      kFramesDecoded * previous_smooth_dropped_frames_threshold;
+  // Sets the ratio of dropped frames to quality as smooth per the new
+  // threshold.
+  const int kSmoothFramesDroppedNew =
+      kFramesDecoded * new_smooth_dropped_frames_threshold;
+
+  // Add the entry.
+  SavePerfRecord(
+      kOrigin, kIsTopFrame,
+      MakeFeatures(kKnownProfile, kKownSize, kSmoothFrameRatePrevious),
+      MakeTargets(kFramesDecoded, kSmoothFramesDroppedPrevious,
+                  kNotPowerEfficientFramesDecoded),
+      kPlayerId);
+
+  SavePerfRecord(kOrigin, kIsTopFrame,
+                 MakeFeatures(kKnownProfile, kKownSize, kSmoothFrameRateNew),
+                 MakeTargets(kFramesDecoded, kSmoothFramesDroppedNew,
+                             kNotPowerEfficientFramesDecoded),
+                 kPlayerId);
+
+  // Verify perf history returns is_smooth = false for entry that would be
+  // smooth per previous smooth threshold.
+  EXPECT_CALL(*this, MockGetPerfInfoCB(kIsNotSmooth, kIsNotPowerEfficient));
+  perf_history_->GetPerfInfo(
+      MakeFeaturesPtr(kKnownProfile, kKownSize, kSmoothFrameRatePrevious),
       base::BindOnce(&VideoDecodePerfHistoryParamTest::MockGetPerfInfoCB,
                      base::Unretained(this)));
 
-  // Finally, complete DB reinitialization that was triggered by clearing the
-  // history.
-  GetFakeDB()->CompleteInitialize(/* success */ true);
+  // Verify perf history returns is_smooth = true for entry that would be
+  // smooth per new smooth theshold.
+  EXPECT_CALL(*this, MockGetPerfInfoCB(kIsSmooth, kIsNotPowerEfficient));
+  perf_history_->GetPerfInfo(
+      MakeFeaturesPtr(kKnownProfile, kKownSize, kSmoothFrameRateNew),
+      base::BindOnce(&VideoDecodePerfHistoryParamTest::MockGetPerfInfoCB,
+                     base::Unretained(this)));
 
-  // Allow initialize-deferred API calls to complete.
-  scoped_task_environment_.RunUntilIdle();
+  // Complete successful deferred DB initialization (see comment at top of test)
+  if (defer_initialize) {
+    GetFakeDB()->CompleteInitialize(true);
+
+    // Allow initialize-deferred API calls to complete.
+    scoped_task_environment_.RunUntilIdle();
+  }
 }
+
+INSTANTIATE_TEST_SUITE_P(VaryDBInitTiming,
+                         VideoDecodePerfHistoryParamTest,
+                         ::testing::Values(true, false));
 
 }  // namespace media

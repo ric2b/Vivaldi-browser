@@ -9,19 +9,21 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
-#include "components/autofill/core/browser/autofill_manager.h"
+#include "components/autofill/core/browser/autofill_download_manager.h"
 #include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/browser/randomized_encoder.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 
+using autofill::AutofillDownloadManager;
 using autofill::AutofillField;
-using autofill::AutofillManager;
 using autofill::AutofillUploadContents;
 using autofill::FormData;
 using autofill::FormStructure;
 using autofill::PasswordForm;
+using autofill::RandomizedEncoder;
 using autofill::ServerFieldType;
 using autofill::ServerFieldTypeSet;
 using autofill::ValueElementPair;
@@ -142,21 +144,6 @@ void VotesUploader::SendVotesOnSave(
     const PasswordForm& submitted_form,
     const std::map<base::string16, const PasswordForm*>& best_matches,
     PasswordForm* pending_credentials) {
-  // if (observed_form_.IsPossibleChangePasswordFormWithoutUsername())
-  // return; // todo: is it needed
-
-  // Send votes for sign-in form.
-  FormData& form_data = pending_credentials->form_data;
-  if (form_data.fields.size() == 2 &&
-      form_data.fields[0].form_control_type == "text" &&
-      form_data.fields[1].form_control_type == "password") {
-    // |form_data| is received from the renderer and does not contain field
-    // values. Fill username field value with username to allow AutofillManager
-    // to detect username autofill type.
-    form_data.fields[0].value = pending_credentials->username_value;
-    SendSignInVote(form_data, submitted_form.submission_event);
-  }
-
   if (pending_credentials->times_used == 1 ||
       IsAddingUsernameToExistingMatch(*pending_credentials, best_matches))
     UploadFirstLoginVotes(best_matches, *pending_credentials, submitted_form);
@@ -168,8 +155,8 @@ void VotesUploader::SendVotesOnSave(
   if (pending_credentials->times_used == 0) {
     UploadPasswordVote(*pending_credentials, submitted_form, autofill::PASSWORD,
                        std::string());
-    if (has_username_correction_vote_) {
-      UploadPasswordVote(username_correction_vote_, submitted_form,
+    if (username_correction_vote_) {
+      UploadPasswordVote(*username_correction_vote_, submitted_form,
                          autofill::USERNAME,
                          FormStructure(observed).FormSignatureAsStr());
     }
@@ -241,8 +228,9 @@ bool VotesUploader::UploadPasswordVote(
     return false;
   }
 
-  AutofillManager* autofill_manager = client_->GetAutofillManagerForMainFrame();
-  if (!autofill_manager || !autofill_manager->download_manager())
+  AutofillDownloadManager* download_manager =
+      client_->GetAutofillDownloadManager();
+  if (!download_manager)
     return false;
 
   // If this is an update, a vote about the observed form is sent. If the user
@@ -319,9 +307,17 @@ bool VotesUploader::UploadPasswordVote(
     logger.LogFormStructure(Logger::STRING_FORM_VOTES, form_structure);
   }
 
-  bool success = autofill_manager->download_manager()->StartUploadRequest(
+  // Annotate the form with the source language of the page.
+  form_structure.set_page_language(client_->GetPageLanguage());
+
+  // Attach the Randomized Encoder.
+  form_structure.set_randomized_encoder(
+      RandomizedEncoder::Create(client_->GetPrefs()));
+
+  bool success = download_manager->StartUploadRequest(
       form_structure, false /* was_autofilled */, available_field_types,
-      login_form_signature, true /* observed_submission */);
+      login_form_signature, true /* observed_submission */,
+      nullptr /* prefs */);
 
   UMA_HISTOGRAM_BOOLEAN("PasswordGeneration.UploadStarted", success);
   return success;
@@ -332,8 +328,9 @@ void VotesUploader::UploadFirstLoginVotes(
     const std::map<base::string16, const PasswordForm*>& best_matches,
     const PasswordForm& pending_credentials,
     const PasswordForm& form_to_upload) {
-  AutofillManager* autofill_manager = client_->GetAutofillManagerForMainFrame();
-  if (!autofill_manager || !autofill_manager->download_manager())
+  AutofillDownloadManager* download_manager =
+      client_->GetAutofillDownloadManager();
+  if (!download_manager)
     return;
 
   if (form_to_upload.form_data.fields.empty()) {
@@ -367,25 +364,16 @@ void VotesUploader::UploadFirstLoginVotes(
     logger.LogFormStructure(Logger::STRING_FORM_VOTES, form_structure);
   }
 
-  autofill_manager->download_manager()->StartUploadRequest(
-      form_structure, false /* was_autofilled */, available_field_types,
-      std::string(), true /* observed_submission */);
-}
+  // Annotate the form with the source language of the page.
+  form_structure.set_page_language(client_->GetPageLanguage());
 
-void VotesUploader::SendSignInVote(
-    const FormData& form_data,
-    const PasswordForm::SubmissionIndicatorEvent& submission_event) {
-  AutofillManager* autofill_manager = client_->GetAutofillManagerForMainFrame();
-  if (!autofill_manager)
-    return;
-  std::unique_ptr<FormStructure> form_structure(new FormStructure(form_data));
-  form_structure->set_submission_event(submission_event);
-  form_structure->set_is_signin_upload(true);
-  DCHECK_EQ(2u, form_structure->field_count());
-  form_structure->field(1)->set_possible_types({autofill::PASSWORD});
-  autofill_manager->MaybeStartVoteUploadProcess(std::move(form_structure),
-                                                base::TimeTicks::Now(),
-                                                /*observed_submission=*/true);
+  // Attach the Randomized Encoder.
+  form_structure.set_randomized_encoder(
+      RandomizedEncoder::Create(client_->GetPrefs()));
+
+  download_manager->StartUploadRequest(
+      form_structure, false /* was_autofilled */, available_field_types,
+      std::string(), true /* observed_submission */, nullptr /* prefs */);
 }
 
 void VotesUploader::AddGeneratedVote(FormStructure* form_structure) {
@@ -460,13 +448,12 @@ void VotesUploader::SetKnownValueFlag(
 bool VotesUploader::FindUsernameInOtherPossibleUsernames(
     const PasswordForm& match,
     const base::string16& username) {
-  DCHECK(!has_username_correction_vote_);
+  DCHECK(!username_correction_vote_);
 
   for (const ValueElementPair& pair : match.other_possible_usernames) {
     if (pair.first == username) {
       username_correction_vote_ = match;
-      username_correction_vote_.username_element = pair.second;
-      has_username_correction_vote_ = true;
+      username_correction_vote_->username_element = pair.second;
       return true;
     }
   }

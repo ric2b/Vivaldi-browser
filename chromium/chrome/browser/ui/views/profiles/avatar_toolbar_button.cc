@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/profiles/avatar_toolbar_button.h"
 
+#include <vector>
+
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -14,17 +16,19 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
-#include "chrome/browser/signin/account_tracker_service_factory.h"
-#include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_ui_util.h"
 #include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/browser/themes/theme_properties.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/view_ids.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/signin/core/browser/signin_manager.h"
+#include "services/identity/public/cpp/identity_manager.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/models/menu_model.h"
@@ -55,24 +59,19 @@ AvatarToolbarButton::AvatarToolbarButton(Browser* browser)
 #if !defined(OS_CHROMEOS)
       error_controller_(this, profile_),
 #endif  // !defined(OS_CHROMEOS)
+      browser_list_observer_(this),
       profile_observer_(this),
-      cookie_manager_service_observer_(this),
-      account_tracker_service_observer_(this) {
+      identity_manager_observer_(this) {
+  if (IsIncognitoCounterActive())
+    browser_list_observer_.Add(BrowserList::GetInstance());
+
   profile_observer_.Add(
       &g_browser_process->profile_manager()->GetProfileAttributesStorage());
 
   if (!IsIncognito() && !profile_->IsGuestSession()) {
-    cookie_manager_service_observer_.Add(
-        GaiaCookieManagerServiceFactory::GetForProfile(profile_));
-    account_tracker_service_observer_.Add(
-        AccountTrackerServiceFactory::GetForProfile(profile_));
+    identity_manager_observer_.Add(
+        IdentityManagerFactory::GetForProfile(profile_));
   }
-
-  // In non-touch mode we use a larger-than-normal icon size for avatars as 16dp
-  // is hard to read for user avatars. This constant is correspondingly smaller
-  // than GetLayoutInsets(TOOLBAR_BUTTON).
-  if (!ui::MaterialDesignController::IsTouchOptimizedUiEnabled())
-    SetLayoutInsets(GetLayoutInsets(TOOLBAR_BUTTON) - gfx::Insets(2));
 
   // Activate on press for left-mouse-button only to mimic other MenuButtons
   // without drag-drop actions (specifically the adjacent browser menu).
@@ -80,7 +79,6 @@ AvatarToolbarButton::AvatarToolbarButton(Browser* browser)
   set_triggerable_event_flags(ui::EF_LEFT_MOUSE_BUTTON);
 
   set_tag(IDC_SHOW_AVATAR_MENU);
-  set_id(VIEW_ID_AVATAR_BUTTON);
 
   // The avatar should not flip with RTL UI. This does not affect text rendering
   // and LabelButton image/label placement is still flipped like usual.
@@ -91,21 +89,25 @@ AvatarToolbarButton::AvatarToolbarButton(Browser* browser)
 #if defined(OS_CHROMEOS)
   // On CrOS the avatar toolbar button should only show as badging for Incognito
   // and Guest sessions. It should not be instantiated for regular profiles and
-  // it should not be enabled as there's no profile switcher to trigger / show.
+  // it should not be enabled as there's no profile switcher to trigger / show,
+  // unless incognito window counter is available.
   DCHECK(IsIncognito() || profile_->IsGuestSession());
-  SetEnabled(false);
+  SetEnabled(IsIncognitoCounterActive());
 #else
-  // The profile switcher is only available outside incognito.
-  SetEnabled(!IsIncognito());
+  // The profile switcher is only available outside incognito or if incognito
+  // window counter is enabled.
+  SetEnabled(!IsIncognito() || IsIncognitoCounterActive());
 #endif  // !defined(OS_CHROMEOS)
 
   // Set initial text and tooltip. UpdateIcon() needs to be called from the
   // outside as GetThemeProvider() is not available until the button is added to
   // ToolbarView's hierarchy.
   UpdateText();
+
+  md_observer_.Add(ui::MaterialDesignController::GetInstance());
 }
 
-AvatarToolbarButton::~AvatarToolbarButton() = default;
+AvatarToolbarButton::~AvatarToolbarButton() {}
 
 void AvatarToolbarButton::UpdateIcon() {
   SetImage(views::Button::STATE_NORMAL, GetAvatarIcon());
@@ -114,21 +116,43 @@ void AvatarToolbarButton::UpdateIcon() {
 void AvatarToolbarButton::UpdateText() {
   base::Optional<SkColor> color;
   base::string16 text;
-  switch (GetSyncState()) {
-    case SyncState::kError:
-      color = gfx::kGoogleRed600;
-      text = l10n_util::GetStringUTF16(IDS_AVATAR_BUTTON_SYNC_ERROR);
-      break;
-    case SyncState::kPaused:
-      color = gfx::kGoogleBlue600;
-      text = l10n_util::GetStringUTF16(IDS_AVATAR_BUTTON_SYNC_PAUSED);
-      break;
-    case SyncState::kNormal:
-      break;
+
+  const SyncState sync_state = GetSyncState();
+
+  if (IsIncognito() && GetThemeProvider()) {
+    // Note that this chip does not have a highlight color.
+    const SkColor text_color = GetThemeProvider()->GetColor(
+        ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON);
+    SetEnabledTextColors(text_color);
+    // TODO(pbos): Remove this call once the incognito chip always triggers a
+    // menu.
+    if (!IsIncognitoCounterActive())
+      SetTextColor(STATE_DISABLED, text_color);
   }
+
+  if (IsIncognito()) {
+    int incognito_window_count =
+        BrowserList::GetIncognitoSessionsActiveForProfile(profile_);
+    if (!IsIncognitoCounterActive())
+      incognito_window_count = 1;
+    text = l10n_util::GetPluralStringFUTF16(IDS_AVATAR_BUTTON_INCOGNITO,
+                                            incognito_window_count);
+  } else if (sync_state == SyncState::kError) {
+    color = AdjustHighlightColorForContrast(
+        GetThemeProvider(), gfx::kGoogleRed300, gfx::kGoogleRed600,
+        gfx::kGoogleRed050, gfx::kGoogleRed900);
+    text = l10n_util::GetStringUTF16(IDS_AVATAR_BUTTON_SYNC_ERROR);
+  } else if (sync_state == SyncState::kPaused) {
+    color = AdjustHighlightColorForContrast(
+        GetThemeProvider(), gfx::kGoogleBlue300, gfx::kGoogleBlue600,
+        gfx::kGoogleBlue050, gfx::kGoogleBlue900);
+
+    text = l10n_util::GetStringUTF16(IDS_AVATAR_BUTTON_SYNC_PAUSED);
+  }
+
+  SetInsets();
   SetHighlightColor(color);
   SetText(text);
-
   SetTooltipText(GetAvatarTooltipText());
 }
 
@@ -137,13 +161,37 @@ void AvatarToolbarButton::NotifyClick(const ui::Event& event) {
   // TODO(bsep): Other toolbar buttons have ToolbarView as a listener and let it
   // call ExecuteCommandWithDisposition on their behalf. Unfortunately, it's not
   // possible to plumb IsKeyEvent through, so this has to be a special case.
+  if (IsIncognito() && !IsIncognitoCounterActive())
+    return;
+
   browser_->window()->ShowAvatarBubbleFromAvatarButton(
-      BrowserWindow::AVATAR_BUBBLE_MODE_DEFAULT, signin::ManageAccountsParams(),
+      IsIncognito() ? BrowserWindow::AVATAR_BUBBLE_MODE_INCOGNITO
+                    : BrowserWindow::AVATAR_BUBBLE_MODE_DEFAULT,
+      signin::ManageAccountsParams(),
       signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN,
       event.IsKeyEvent());
 }
 
+void AvatarToolbarButton::OnThemeChanged() {
+  UpdateIcon();
+  UpdateText();
+}
+
+void AvatarToolbarButton::AddedToWidget() {
+  UpdateText();
+}
+
 void AvatarToolbarButton::OnAvatarErrorChanged() {
+  UpdateIcon();
+  UpdateText();
+}
+
+void AvatarToolbarButton::OnBrowserAdded(Browser* browser) {
+  UpdateIcon();
+  UpdateText();
+}
+
+void AvatarToolbarButton::OnBrowserRemoved(Browser* browser) {
   UpdateIcon();
   UpdateText();
 }
@@ -178,24 +226,38 @@ void AvatarToolbarButton::OnProfileNameChanged(
   UpdateText();
 }
 
-void AvatarToolbarButton::OnGaiaAccountsInCookieUpdated(
-    const std::vector<gaia::ListedAccount>& accounts,
-    const std::vector<gaia::ListedAccount>& signed_out_accounts,
+void AvatarToolbarButton::OnAccountsInCookieUpdated(
+    const identity::AccountsInCookieJarInfo& accounts_in_cookie_jar_info,
     const GoogleServiceAuthError& error) {
   UpdateIcon();
 }
 
-void AvatarToolbarButton::OnAccountImageUpdated(const std::string& account_id,
-                                                const gfx::Image& image) {
+void AvatarToolbarButton::OnExtendedAccountInfoUpdated(
+    const AccountInfo& info) {
   UpdateIcon();
 }
 
-void AvatarToolbarButton::OnAccountRemoved(const AccountInfo& info) {
+void AvatarToolbarButton::OnExtendedAccountInfoRemoved(
+    const AccountInfo& info) {
   UpdateIcon();
+}
+
+void AvatarToolbarButton::OnTouchUiChanged() {
+  SetInsets();
+  PreferredSizeChanged();
 }
 
 bool AvatarToolbarButton::IsIncognito() const {
   return profile_->IsOffTheRecord() && !profile_->IsGuestSession();
+}
+
+bool AvatarToolbarButton::IsIncognitoCounterActive() const {
+#if defined(OS_CHROMEOS)
+  return false;
+#else
+  return IsIncognito() &&
+         base::FeatureList::IsEnabled(features::kEnableIncognitoWindowCounter);
+#endif  // defined(OS_CHROMEOS)
 }
 
 bool AvatarToolbarButton::ShouldShowGenericIcon() const {
@@ -217,7 +279,7 @@ bool AvatarToolbarButton::ShouldShowGenericIcon() const {
          g_browser_process->profile_manager()
                  ->GetProfileAttributesStorage()
                  .GetNumberOfProfiles() == 1 &&
-         !SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated();
+         !IdentityManagerFactory::GetForProfile(profile_)->HasPrimaryAccount();
 }
 
 base::string16 AvatarToolbarButton::GetAvatarTooltipText() const {
@@ -248,10 +310,9 @@ base::string16 AvatarToolbarButton::GetAvatarTooltipText() const {
 }
 
 gfx::ImageSkia AvatarToolbarButton::GetAvatarIcon() const {
-  const int icon_size =
-      ui::MaterialDesignController::IsTouchOptimizedUiEnabled() ? 24 : 20;
+  const int icon_size = ui::MaterialDesignController::touch_ui() ? 24 : 20;
 
-  const SkColor icon_color =
+  SkColor icon_color =
       GetThemeProvider()->GetColor(ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON);
 
   if (IsIncognito())
@@ -282,10 +343,8 @@ gfx::Image AvatarToolbarButton::GetIconImageFromProfile() const {
 
   // If there is a GAIA image available, try to use that.
   if (entry->IsUsingGAIAPicture()) {
-    // TODO(chengx): The GetGAIAPicture API call will trigger an async image
-    // load from disk if it has not been loaded. This is non-obvious and
-    // dependency should be avoided. We should come with a better idea to handle
-    // this.
+    // The GetGAIAPicture API call will trigger an async image load from disk if
+    // it has not been loaded.
     const gfx::Image* gaia_image = entry->GetGAIAPicture();
 
     if (gaia_image)
@@ -300,13 +359,12 @@ gfx::Image AvatarToolbarButton::GetIconImageFromProfile() const {
   //  - the user isn't signed in
   //  - the profile icon wasn't explicitly changed
   if (AccountConsistencyModeManager::IsDiceEnabledForProfile(profile_) &&
-      !SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated() &&
+      !IdentityManagerFactory::GetForProfile(profile_)->HasPrimaryAccount() &&
       entry->IsUsingDefaultAvatar()) {
     std::vector<AccountInfo> promo_accounts =
         signin_ui_util::GetAccountsForDicePromos(profile_);
     if (!promo_accounts.empty()) {
-      return AccountTrackerServiceFactory::GetForProfile(profile_)
-          ->GetAccountImage(promo_accounts[0].account_id);
+      return promo_accounts.front().account_image;
     }
   }
 #endif  // !defined(OS_CHROMEOS)
@@ -316,19 +374,27 @@ gfx::Image AvatarToolbarButton::GetIconImageFromProfile() const {
 
 AvatarToolbarButton::SyncState AvatarToolbarButton::GetSyncState() const {
 #if !defined(OS_CHROMEOS)
-  SigninManager* signin_manager = SigninManagerFactory::GetForProfile(profile_);
-  if (signin_manager && signin_manager->IsAuthenticated() &&
+  identity::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(profile_);
+  if (identity_manager && identity_manager->HasPrimaryAccount() &&
       profile_->IsSyncAllowed() && error_controller_.HasAvatarError()) {
     // When DICE is enabled and the error is an auth error, the sync-paused
     // icon is shown.
     int unused;
     const bool should_show_sync_paused_ui =
         AccountConsistencyModeManager::IsDiceEnabledForProfile(profile_) &&
-        sync_ui_util::GetMessagesForAvatarSyncError(profile_, *signin_manager,
-                                                    &unused, &unused) ==
-            sync_ui_util::AUTH_ERROR;
+        sync_ui_util::GetMessagesForAvatarSyncError(
+            profile_, &unused, &unused) == sync_ui_util::AUTH_ERROR;
     return should_show_sync_paused_ui ? SyncState::kPaused : SyncState::kError;
   }
 #endif  // !defined(OS_CHROMEOS)
   return SyncState::kNormal;
+}
+
+void AvatarToolbarButton::SetInsets() {
+  // In non-touch mode we use a larger-than-normal icon size for avatars as 16dp
+  // is hard to read for user avatars, so we need to set corresponding insets.
+  gfx::Insets layout_insets(ui::MaterialDesignController::touch_ui() ? 0 : -2);
+
+  SetLayoutInsetDelta(layout_insets);
 }

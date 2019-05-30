@@ -4,6 +4,7 @@
 
 #include "ui/ozone/demo/gl_renderer.h"
 
+#include "base/bind.h"
 #include "base/location.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -54,14 +55,14 @@ void GlRenderer::RenderFrame() {
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   if (surface_->SupportsAsyncSwap()) {
-    surface_->SwapBuffersAsync(base::Bind(&GlRenderer::PostRenderFrameTask,
-                                          weak_ptr_factory_.GetWeakPtr()),
-                               base::Bind(&GlRenderer::OnPresentation,
-                                          weak_ptr_factory_.GetWeakPtr()));
+    surface_->SwapBuffersAsync(base::BindOnce(&GlRenderer::PostRenderFrameTask,
+                                              weak_ptr_factory_.GetWeakPtr()),
+                               base::BindOnce(&GlRenderer::OnPresentation,
+                                              weak_ptr_factory_.GetWeakPtr()));
   } else {
     PostRenderFrameTask(
-        surface_->SwapBuffers(base::Bind(&GlRenderer::OnPresentation,
-                                         weak_ptr_factory_.GetWeakPtr())),
+        surface_->SwapBuffers(base::BindOnce(&GlRenderer::OnPresentation,
+                                             weak_ptr_factory_.GetWeakPtr())),
         nullptr);
   }
 }
@@ -73,7 +74,7 @@ void GlRenderer::PostRenderFrameTask(gfx::SwapResult result,
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(&GlRenderer::RenderFrame, weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&GlRenderer::RenderFrame, weak_ptr_factory_.GetWeakPtr()));
 }
 
 void GlRenderer::OnPresentation(const gfx::PresentationFeedback& feedback) {

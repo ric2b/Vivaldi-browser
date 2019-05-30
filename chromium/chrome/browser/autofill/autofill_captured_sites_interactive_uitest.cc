@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <map>
 #include <string>
 
+#include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
@@ -52,6 +54,13 @@ namespace {
 const base::TimeDelta autofill_wait_for_action_interval =
     base::TimeDelta::FromSeconds(5);
 
+struct GetParamAsString {
+  template <class ParamType>
+  std::string operator()(const testing::TestParamInfo<ParamType>& info) const {
+    return info.param;
+  }
+};
+
 base::FilePath GetReplayFilesDirectory() {
   base::FilePath src_dir;
   if (base::PathService::Get(base::DIR_SOURCE_ROOT, &src_dir)) {
@@ -97,9 +106,10 @@ class AutofillCapturedSitesInteractiveTest
       public ::testing::WithParamInterface<std::string> {
  public:
   // TestRecipeReplayChromeFeatureActionExecutor
-  bool AutofillForm(content::RenderFrameHost* frame,
-                    const std::string& focus_element_css_selector,
-                    const int attempts = 1) override {
+  bool AutofillForm(const std::string& focus_element_css_selector,
+                    const std::vector<std::string> iframe_path,
+                    const int attempts,
+                    content::RenderFrameHost* frame) override {
     content::WebContents* web_contents =
         content::WebContents::FromRenderFrameHost(frame);
     AutofillManager* autofill_manager =
@@ -113,7 +123,8 @@ class AutofillCapturedSitesInteractiveTest
       tries++;
       autofill_manager->client()->HideAutofillPopup();
 
-      if (!ShowAutofillSuggestion(frame, focus_element_css_selector)) {
+      if (!ShowAutofillSuggestion(focus_element_css_selector, iframe_path,
+                                  frame)) {
         LOG(WARNING) << "Failed to bring up the autofill suggestion drop down.";
         continue;
       }
@@ -142,20 +153,68 @@ class AutofillCapturedSitesInteractiveTest
     }
 
     autofill_manager->client()->HideAutofillPopup();
+    ADD_FAILURE() << "Failed to autofill the form!";
     return false;
+  }
+
+  bool AddAutofillProfileInfo(const std::string& field_type,
+                              const std::string& field_value) override {
+    ServerFieldType type;
+    if (!StringToFieldType(field_type, &type)) {
+      ADD_FAILURE() << "Unable to recognize autofill field type '" << field_type
+                    << "'!";
+      return false;
+    }
+
+    if (base::StartsWith(field_type, "HTML_TYPE_CREDIT_CARD_",
+                         base::CompareCase::INSENSITIVE_ASCII) ||
+        base::StartsWith(field_type, "CREDIT_CARD_",
+                         base::CompareCase::INSENSITIVE_ASCII)) {
+      if (type == autofill::CREDIT_CARD_NAME_FIRST ||
+          type == autofill::CREDIT_CARD_NAME_LAST) {
+        card_.SetRawInfo(autofill::CREDIT_CARD_NAME_FULL,
+                         base::ASCIIToUTF16(""));
+      }
+      card_.SetRawInfo(type, base::UTF8ToUTF16(field_value));
+    } else {
+      profile_.SetRawInfo(type, base::UTF8ToUTF16(field_value));
+    }
+
+    return true;
+  }
+
+  bool SetupAutofillProfile() override {
+    AddTestAutofillData(browser(), profile(), credit_card());
+    return true;
   }
 
  protected:
   AutofillCapturedSitesInteractiveTest()
       : profile_(test::GetFullProfile()),
-        card_(CreditCard(base::GenerateGUID(), "http://www.example.com")) {}
+        card_(CreditCard(base::GenerateGUID(), "http://www.example.com")) {
+    for (size_t i = NO_SERVER_DATA; i < MAX_VALID_FIELD_TYPE; ++i) {
+      ServerFieldType field_type = static_cast<ServerFieldType>(i);
+      string_to_field_type_map_[AutofillType(field_type).ToString()] =
+          field_type;
+    }
+
+    for (size_t i = HTML_TYPE_UNSPECIFIED; i < HTML_TYPE_UNRECOGNIZED; ++i) {
+      AutofillType field_type(static_cast<HtmlFieldType>(i), HTML_MODE_NONE);
+      string_to_field_type_map_[field_type.ToString()] =
+          field_type.GetStorableType();
+    }
+
+    // Initialize the credit card with default values, in case the test recipe
+    // file does not contain pre-saved credit card info.
+    test::SetCreditCardInfo(&card_, "Buddy Holly", "5187654321098765", "10",
+                            "2998", "1");
+  }
 
   ~AutofillCapturedSitesInteractiveTest() override {}
 
   // InProcessBrowserTest:
   void SetUpOnMainThread() override {
     AutofillUiTest::SetUpOnMainThread();
-    SetupTestProfile();
     recipe_replayer_ =
         std::make_unique<captured_sites_test_utils::TestRecipeReplayer>(
             browser(), this);
@@ -172,8 +231,11 @@ class AutofillCapturedSitesInteractiveTest
     // feature forces input elements on a form to display their autofill type
     // prediction. Test will check this attribute on all the relevant input
     // elements in a form to determine if the form is ready for interaction.
-    feature_list_.InitAndEnableFeature(features::kAutofillShowTypePredictions);
+    feature_list_.InitWithFeatures({features::kAutofillShowTypePredictions},
+                                   {features::kAutofillCacheQueryResponses});
     command_line->AppendSwitch(switches::kShowAutofillTypePredictions);
+    command_line->AppendSwitchASCII(::switches::kForceFieldTrials,
+                                    "AutofillFieldMetadata/Enabled/");
     captured_sites_test_utils::TestRecipeReplayer::SetUpCommandLine(
         command_line);
   }
@@ -187,75 +249,43 @@ class AutofillCapturedSitesInteractiveTest
   const AutofillProfile profile() { return profile_; }
 
  private:
-  void SetupTestProfile() {
-    test::SetCreditCardInfo(&card_, "Milton Waddams", "9621327911759602", "5",
-                            "2027", "1");
-    test::SetProfileInfo(&profile_, "Milton", "C.", "Waddams",
-                         "red.swingline@initech.com", "Initech",
-                         "4120 Freidrich Lane", "Apt 8", "Austin", "Texas",
-                         "78744", "US", "5125551234");
-    AddTestAutofillData(browser(), profile_, card_);
-  }
-
-  bool ShowAutofillSuggestion(content::RenderFrameHost* frame,
-                              const std::string& target_element_xpath) {
-    const std::string get_target_field_x_js(base::StringPrintf(
-        "window.domAutomationController.send("
-        "    (function() {"
-        "       try {"
-        "         const element = automation_helper.getElementByXpath(`%s`);"
-        "         const rect = element.getBoundingClientRect();"
-        "         console.log(`Window href x: ${location.href}`);"
-        "         return Math.floor(rect.left + rect.width / 2);"
-        "       } catch(ex) {}"
-        "       return -1;"
-        "    })());",
-        target_element_xpath.c_str()));
-    const std::string get_target_field_y_js(base::StringPrintf(
-        "window.domAutomationController.send("
-        "    (function() {"
-        "       try {"
-        "         const element = automation_helper.getElementByXpath(`%s`);"
-        "         const rect = element.getBoundingClientRect();"
-        "         console.log(`Window href y: ${location.href}`);"
-        "         return Math.floor(rect.top + rect.height / 2);"
-        "       } catch(ex) {}"
-        "       return -1;"
-        "    })());",
-        target_element_xpath.c_str()));
-
+  bool ShowAutofillSuggestion(const std::string& target_element_xpath,
+                              const std::vector<std::string> iframe_path,
+                              content::RenderFrameHost* frame) {
     // First, automation should focus on the frame containg the autofill form.
     // Doing so ensures that Chrome scrolls the element into view if the
     // element is off the page.
     if (!captured_sites_test_utils::TestRecipeReplayer::PlaceFocusOnElement(
-            frame, target_element_xpath))
+            target_element_xpath, iframe_path, frame))
       return false;
 
-    int x;
-    if (!content::ExecuteScriptAndExtractInt(frame, get_target_field_x_js, &x))
-      return false;
-    if (x == -1)
-      return false;
-
-    int y;
-    if (!content::ExecuteScriptAndExtractInt(frame, get_target_field_y_js, &y))
-      return false;
-    if (y == -1)
+    gfx::Rect rect;
+    if (!captured_sites_test_utils::TestRecipeReplayer::
+            GetBoundingRectOfTargetElement(target_element_xpath, iframe_path,
+                                           frame, &rect))
       return false;
 
     test_delegate()->Reset();
     if (!captured_sites_test_utils::TestRecipeReplayer::
-            SimulateLeftMouseClickAt(frame, gfx::Point(x, y)))
+            SimulateLeftMouseClickAt(rect.CenterPoint(), frame))
       return false;
 
     return test_delegate()->Wait({ObservedUiEvents::kSuggestionShown},
                                  autofill_wait_for_action_interval);
   }
 
+  bool StringToFieldType(const std::string& str, ServerFieldType* type) {
+    if (string_to_field_type_map_.count(str) == 0)
+      return false;
+    *type = string_to_field_type_map_[str];
+    return true;
+  }
+
   AutofillProfile profile_;
   CreditCard card_;
   std::unique_ptr<captured_sites_test_utils::TestRecipeReplayer>
       recipe_replayer_;
+  std::map<const std::string, ServerFieldType> string_to_field_type_map_;
 
   base::test::ScopedFeatureList feature_list_;
 };
@@ -278,15 +308,8 @@ IN_PROC_BROWSER_TEST_P(AutofillCapturedSitesInteractiveTest, Recipe) {
       recipe_replayer()->ReplayTest(capture_file_path, recipe_file_path));
 }
 
-struct GetParamAsString {
-  template <class ParamType>
-  std::string operator()(const testing::TestParamInfo<ParamType>& info) const {
-    return info.param;
-  }
-};
-
-INSTANTIATE_TEST_CASE_P(,
-                        AutofillCapturedSitesInteractiveTest,
-                        testing::ValuesIn(GetCapturedSites()),
-                        GetParamAsString());
+INSTANTIATE_TEST_SUITE_P(,
+                         AutofillCapturedSitesInteractiveTest,
+                         testing::ValuesIn(GetCapturedSites()),
+                         GetParamAsString());
 }  // namespace autofill

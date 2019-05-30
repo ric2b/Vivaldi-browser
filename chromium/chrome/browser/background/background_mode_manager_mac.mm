@@ -7,12 +7,13 @@
 #include "base/mac/mac_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "chrome/browser/background/background_mode_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
 using content::BrowserThread;
@@ -31,7 +32,8 @@ void SetCreatedLoginItemPrefOnUIThread() {
 }
 
 void DisableLaunchOnStartupOnWorkerThread() {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   // If the LoginItem is not hidden, it means it's user created, so don't
   // delete it.
   bool is_hidden = false;
@@ -40,16 +42,19 @@ void DisableLaunchOnStartupOnWorkerThread() {
 }
 
 void CheckForUserRemovedLoginItemOnWorkerThread() {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   if (!base::mac::CheckLoginItemStatus(NULL)) {
     // There's no LoginItem, so set the kUserRemovedLoginItem pref.
-    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            base::Bind(SetUserRemovedLoginItemPrefOnUIThread));
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
+        base::BindOnce(SetUserRemovedLoginItemPrefOnUIThread));
   }
 }
 
 void EnableLaunchOnStartupOnWorkerThread(bool need_migration) {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   if (need_migration) {
     // This is the first time running Chrome since the kChromeCreatedLoginItem
     // pref was added. Initialize the status of this pref based on whether
@@ -59,8 +64,9 @@ void EnableLaunchOnStartupOnWorkerThread(bool need_migration) {
       if (is_hidden) {
       // We already have a hidden login item, so set the kChromeCreatedLoginItem
       // flag.
-        BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                                base::Bind(SetCreatedLoginItemPrefOnUIThread));
+      base::PostTaskWithTraits(
+          FROM_HERE, {BrowserThread::UI},
+          base::BindOnce(SetCreatedLoginItemPrefOnUIThread));
       }
       // LoginItem already exists - just exit.
       return;
@@ -75,8 +81,8 @@ void EnableLaunchOnStartupOnWorkerThread(bool need_migration) {
     // before our callback is run, but the user can manually disable
     // "Open At Login" via the dock if this happens.
     base::mac::AddToLoginItems(true);  // Hide on startup.
-    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            base::Bind(SetCreatedLoginItemPrefOnUIThread));
+    base::PostTaskWithTraits(FROM_HERE, {BrowserThread::UI},
+                             base::BindOnce(SetCreatedLoginItemPrefOnUIThread));
   }
 }
 
@@ -118,14 +124,15 @@ void BackgroundModeManager::EnableLaunchOnStartup(bool should_launch) {
       // a new one - just check to see if the user removed it so we don't
       // ever create another one.
       task_runner_->PostTask(
-          FROM_HERE, base::Bind(CheckForUserRemovedLoginItemOnWorkerThread));
+          FROM_HERE,
+          base::BindOnce(CheckForUserRemovedLoginItemOnWorkerThread));
     } else {
       bool need_migration = !service->GetBoolean(
           prefs::kMigratedLoginItemPref);
       service->SetBoolean(prefs::kMigratedLoginItemPref, true);
       task_runner_->PostTask(
           FROM_HERE,
-          base::Bind(EnableLaunchOnStartupOnWorkerThread, need_migration));
+          base::BindOnce(EnableLaunchOnStartupOnWorkerThread, need_migration));
     }
   } else {
     PrefService* service = g_browser_process->local_state();
@@ -139,12 +146,12 @@ void BackgroundModeManager::EnableLaunchOnStartup(bool should_launch) {
     // If the user removed our login item, note this so we don't ever create
     // another one.
     task_runner_->PostTask(
-        FROM_HERE, base::Bind(CheckForUserRemovedLoginItemOnWorkerThread));
+        FROM_HERE, base::BindOnce(CheckForUserRemovedLoginItemOnWorkerThread));
 
     // Call to the File thread to remove the login item since it requires
     // accessing the disk.
-    task_runner_->PostTask(FROM_HERE,
-                           base::Bind(DisableLaunchOnStartupOnWorkerThread));
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(DisableLaunchOnStartupOnWorkerThread));
   }
 }
 

@@ -244,7 +244,7 @@ std::unique_ptr<test_server::HttpResponse> ReturnPreflightError(
   return std::move(response);
 }
 
-TEST_F(ReportingUploaderTest, FailedCORSPreflight) {
+TEST_F(ReportingUploaderTest, FailedCorsPreflight) {
   server_.RegisterRequestHandler(base::BindRepeating(&ReturnPreflightError));
   server_.RegisterRequestHandler(base::BindRepeating(&ReturnResponse, HTTP_OK));
   ASSERT_TRUE(server_.Start());
@@ -273,7 +273,7 @@ std::unique_ptr<test_server::HttpResponse> ReturnPreflightWithoutOrigin(
   return std::move(response);
 }
 
-TEST_F(ReportingUploaderTest, CORSPreflightWithoutOrigin) {
+TEST_F(ReportingUploaderTest, CorsPreflightWithoutOrigin) {
   server_.RegisterRequestHandler(
       base::BindRepeating(&ReturnPreflightWithoutOrigin));
   server_.RegisterRequestHandler(base::BindRepeating(&ReturnResponse, HTTP_OK));
@@ -303,7 +303,7 @@ std::unique_ptr<test_server::HttpResponse> ReturnPreflightWithoutMethods(
   return std::move(response);
 }
 
-TEST_F(ReportingUploaderTest, CORSPreflightWithoutMethods) {
+TEST_F(ReportingUploaderTest, CorsPreflightWithoutMethods) {
   server_.RegisterRequestHandler(
       base::BindRepeating(&ReturnPreflightWithoutMethods));
   server_.RegisterRequestHandler(base::BindRepeating(&ReturnResponse, HTTP_OK));
@@ -333,7 +333,7 @@ std::unique_ptr<test_server::HttpResponse> ReturnPreflightWithoutHeaders(
   return std::move(response);
 }
 
-TEST_F(ReportingUploaderTest, CORSPreflightWithoutHeaders) {
+TEST_F(ReportingUploaderTest, CorsPreflightWithoutHeaders) {
   server_.RegisterRequestHandler(
       base::BindRepeating(&ReturnPreflightWithoutHeaders));
   server_.RegisterRequestHandler(base::BindRepeating(&ReturnResponse, HTTP_OK));
@@ -440,13 +440,16 @@ TEST_F(ReportingUploaderTest, DontSendCookies) {
   server_.RegisterRequestHandler(base::BindRepeating(&ReturnResponse, HTTP_OK));
   ASSERT_TRUE(server_.Start());
 
-  ResultSavingCookieCallback<bool> cookie_callback;
+  ResultSavingCookieCallback<CanonicalCookie::CookieInclusionStatus>
+      cookie_callback;
   context_.cookie_store()->SetCookieWithOptionsAsync(
       server_.GetURL("/"), "foo=bar", CookieOptions(),
-      base::BindRepeating(&ResultSavingCookieCallback<bool>::Run,
+      base::BindRepeating(&ResultSavingCookieCallback<
+                              CanonicalCookie::CookieInclusionStatus>::Run,
                           base::Unretained(&cookie_callback)));
   cookie_callback.WaitUntilDone();
-  ASSERT_TRUE(cookie_callback.result());
+  ASSERT_EQ(CanonicalCookie::CookieInclusionStatus::INCLUDE,
+            cookie_callback.result());
 
   TestUploadCallback upload_callback;
   uploader_->StartUpload(kOrigin, server_.GetURL("/"), kUploadBody, 0,

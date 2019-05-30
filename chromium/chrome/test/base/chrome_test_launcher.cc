@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/base_paths.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/debug/leak_annotations.h"
 #include "base/files/file_path.h"
@@ -32,7 +33,6 @@
 #include "content/public/test/network_service_test_helper.h"
 #include "content/public/test/test_launcher.h"
 #include "content/public/test/test_utils.h"
-#include "services/service_manager/runner/common/switches.h"
 #include "ui/base/test/ui_controls.h"
 
 #if defined(OS_MACOSX)
@@ -48,6 +48,8 @@
 #if defined(OS_CHROMEOS)
 #include "ash/mojo_interface_factory.h"
 #include "ash/mojo_test_interface_factory.h"
+#include "ash/public/cpp/manifest.h"
+#include "ash/public/cpp/test_manifest.h"
 #include "ash/test/ui_controls_factory_ash.h"
 #endif
 
@@ -155,7 +157,9 @@ int LaunchChromeTests(size_t parallel_jobs,
   install_static::ScopedInstallDetails install_details;
 #endif
 
-#if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_ANDROID)
+  ChromeCrashReporterClient::Create();
+#elif defined(OS_WIN)
   // We leak this pointer intentionally. The crash client needs to outlive
   // all other code.
   ChromeCrashReporterClient* crash_client = new ChromeCrashReporterClient();
@@ -183,6 +187,7 @@ int LaunchChromeTests(size_t parallel_jobs,
 #if defined(OS_CHROMEOS)
   // Inject the test interfaces for ash. Use a callback to avoid linking test
   // interface support into production code.
+  ash::AmendManifestForTesting(ash::GetManifestOverlayForTesting());
   ash::mojo_interface_factory::SetRegisterInterfacesCallback(
       base::Bind(&ash::mojo_test_interface_factory::RegisterInterfaces));
 #endif

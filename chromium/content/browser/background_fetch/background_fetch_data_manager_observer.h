@@ -6,16 +6,18 @@
 #define CONTENT_BROWSER_BACKGROUND_FETCH_BACKGROUND_FETCH_DATA_MANAGER_OBSERVER_H_
 
 #include <memory>
+#include <vector>
 
+#include "base/memory/scoped_refptr.h"
 #include "base/optional.h"
+#include "third_party/blink/public/mojom/background_fetch/background_fetch.mojom.h"
 
 class SkBitmap;
 
 namespace content {
 
-struct BackgroundFetchOptions;
-struct BackgroundFetchRegistration;
 class BackgroundFetchRegistrationId;
+class BackgroundFetchRequestInfo;
 
 // Observer interface for objects that would like to be notified about changes
 // committed to storage through the Background Fetch data manager. All methods
@@ -25,24 +27,38 @@ class BackgroundFetchDataManagerObserver {
   // Called when the Background Fetch |registration| has been created.
   virtual void OnRegistrationCreated(
       const BackgroundFetchRegistrationId& registration_id,
-      const BackgroundFetchRegistration& registration,
-      const BackgroundFetchOptions& options,
+      const blink::mojom::BackgroundFetchRegistration& registration,
+      blink::mojom::BackgroundFetchOptionsPtr options,
       const SkBitmap& icon,
-      int num_requests) = 0;
+      int num_requests,
+      bool start_paused) = 0;
 
-  // Called when the UI options for the Background Fetch |registration_id| have
-  // been updated in the data store.
-  virtual void OnUpdatedUI(const BackgroundFetchRegistrationId& registration_id,
-                           const base::Optional<std::string>& title,
-                           const base::Optional<SkBitmap>& icon) = 0;
+  // Called on start-up when an incomplete registration has been found.
+  virtual void OnRegistrationLoadedAtStartup(
+      const BackgroundFetchRegistrationId& registration_id,
+      const blink::mojom::BackgroundFetchRegistration& registration,
+      blink::mojom::BackgroundFetchOptionsPtr options,
+      const SkBitmap& icon,
+      int num_completed_requests,
+      int num_requests,
+      std::vector<scoped_refptr<BackgroundFetchRequestInfo>>
+          active_fetch_requests) = 0;
+
+  // Called when a registration is being queried. Implementations should update
+  // |registration| with in-progress information.
+  virtual void OnRegistrationQueried(
+      blink::mojom::BackgroundFetchRegistration* registration) = 0;
 
   // Called if corrupted data is found in the Service Worker database.
   virtual void OnServiceWorkerDatabaseCorrupted(
       int64_t service_worker_registration_id) = 0;
 
-  // Called if the origin is out of quota during the fetch.
-  virtual void OnQuotaExceeded(
-      const BackgroundFetchRegistrationId& registration_id) = 0;
+  // Called when a request has been completed, for the registration identified
+  // by |unique_id|.
+  virtual void OnRequestCompleted(
+      const std::string& unique_id,
+      blink::mojom::FetchAPIRequestPtr request,
+      blink::mojom::FetchAPIResponsePtr response) = 0;
 
   virtual ~BackgroundFetchDataManagerObserver() {}
 };

@@ -4,11 +4,13 @@
 # found in the LICENSE file.
 
 """Utilities for formatting and writing DEPS files."""
+from __future__ import print_function
+from __future__ import absolute_import
 
 import re
 import sys
 import subprocess
-from deps2git.deps_utils import  *
+from .deps2git.deps_utils import  *
 
 DEPS_FIELDS = ['vars', 'deps', 'deps_os', 'include_rules',
               'skip_child_includes', 'hooks', 'recursion']
@@ -24,12 +26,12 @@ def split_deps(deps):
 def RemoveModule(deps_data, module):
   """Remove a module"""
   if not deps_data:
-    print "RemoveModule: No DEPS data"
+    print("RemoveModule: No DEPS data")
     return
 
   deps_data["deps"].pop(module, {})
 
-  for x,y in deps_data["deps_os"].iteritems():
+  for x,y in deps_data["deps_os"].items():
     y.pop(module, {})
 
 def AddModule(deps_data, module, dep_locs, source, rev):
@@ -39,7 +41,7 @@ def AddModule(deps_data, module, dep_locs, source, rev):
   Does not remove a module if it is not listed in a location
   """
   if not deps_data:
-    print "AddModule: No DEPS data"
+    print("AddModule: No DEPS data")
     return
 
   for x in dep_locs:
@@ -58,11 +60,11 @@ def UpdateModuleInfo(deps_data, modules, path_prefix="src"):
   path_levels = path_prefix.count("/")+1
 
   if not deps_data:
-    print "UpdateModuleInfo: No DEPS data"
+    print("UpdateModuleInfo: No DEPS data")
     return
 
-  for dep_list in [deps_data["deps"]] + list(deps_data["deps_os"].itervalues()):
-    for mod, url_rev in dep_list.iteritems():
+  for dep_list in [deps_data["deps"]] + list(deps_data["deps_os"].values()):
+    for mod, url_rev in dep_list.items():
       if not url_rev:
         continue
       (url, sep, rev) = url_rev.partition("@")
@@ -84,42 +86,42 @@ def UpdateModuleInfo(deps_data, modules, path_prefix="src"):
 
 def PrintDeps(deps_data):
   if not deps_data:
-    print "PrintDeps: No DEPS data"
+    print("PrintDeps: No DEPS data")
     return
   for (x1,y1) in [(x, deps_data[x]) for x in DEPS_FIELDS]:
-    print x1, ":",
+    print(x1, ":", end=' ')
     if isinstance(y1, dict):
-      print "{"
-      for (x,y) in sorted(y1.iteritems()):
+      print("{")
+      for (x,y) in sorted(y1.items()):
         if isinstance(y, dict):
-          print "    ",x,"{"
-          for (x2,y2) in sorted(y.iteritems()):
-            print "        ", x2,":",y2
-          print "},"
+          print("    ",x,"{")
+          for (x2,y2) in sorted(y.items()):
+            print("        ", x2,":",y2)
+          print("},")
         else:
-          print "     ", x,":",y
-      print "},"
+          print("     ", x,":",y)
+      print("},")
     elif isinstance(y1, list):
-      print "["
+      print("[")
       for x in y1:
-        print "     ", x
-      print "],"
+        print("     ", x)
+      print("],")
     else:
-      print y1
+      print(y1)
 
 def RunHooks(deps_data, cwd, env=None):
   if not deps_data:
-    print "RunHooks: No DEPS data"
+    print("RunHooks: No DEPS data")
     return
   for hook in deps_data["hooks"]:
     if "action" in hook:
-      print 'running action "%s" in %s' %(hook["action"],cwd)
+      print('running action "%s" in %s' %(hook["action"],cwd))
       try:
         st = subprocess.call(hook["action"], cwd=cwd, env=env, shell=True)
-      except Exception,e:
-        print "Env:", env
-        print "Exception:", e
+      except Exception as e:
+        print("Env:", env)
+        print("Exception:", e)
         st = -1
       if st != 0:
-        print "Exit status:", st
+        print("Exit status:", st)
         raise BaseException("Hook failed")

@@ -26,25 +26,26 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_WEBAUDIO_REALTIME_ANALYSER_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_WEBAUDIO_REALTIME_ANALYSER_H_
 
+#include <atomic>
 #include <memory>
+
+#include "base/macros.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
 #include "third_party/blink/renderer/platform/audio/audio_array.h"
 #include "third_party/blink/renderer/platform/audio/fft_frame.h"
-#include "third_party/blink/renderer/platform/wtf/noncopyable.h"
 
 namespace blink {
 
 class AudioBus;
 
 class RealtimeAnalyser final {
-  WTF_MAKE_NONCOPYABLE(RealtimeAnalyser);
   DISALLOW_NEW();
 
  public:
   RealtimeAnalyser();
 
-  size_t FftSize() const { return fft_size_; }
-  bool SetFftSize(size_t);
+  uint32_t FftSize() const { return fft_size_; }
+  bool SetFftSize(uint32_t);
 
   unsigned FrequencyBinCount() const { return fft_size_ / 2; }
 
@@ -63,7 +64,7 @@ class RealtimeAnalyser final {
   void GetByteTimeDomainData(DOMUint8Array*);
 
   // The audio thread writes input data here.
-  void WriteInput(AudioBus*, size_t frames_to_process);
+  void WriteInput(AudioBus*, uint32_t frames_to_process);
 
   static const double kDefaultSmoothingTimeConstant;
   static const double kDefaultMinDecibels;
@@ -77,17 +78,19 @@ class RealtimeAnalyser final {
  private:
   // The audio thread writes the input audio here.
   AudioFloatArray input_buffer_;
-  unsigned write_index_;
+  std::atomic_uint write_index_{0};
 
-  unsigned GetWriteIndex() const { return AcquireLoad(&write_index_); }
+  unsigned GetWriteIndex() const {
+    return write_index_.load(std::memory_order_acquire);
+  }
   void SetWriteIndex(unsigned new_index) {
-    ReleaseStore(&write_index_, new_index);
+    write_index_.store(new_index, std::memory_order_release);
   }
 
   // Input audio is downmixed to this bus before copying to m_inputBuffer.
   scoped_refptr<AudioBus> down_mix_bus_;
 
-  size_t fft_size_;
+  uint32_t fft_size_;
   std::unique_ptr<FFTFrame> analysis_frame_;
   void DoFFTAnalysis();
 
@@ -112,6 +115,8 @@ class RealtimeAnalyser final {
 
   // Time at which the FFT was last computed.
   double last_analysis_time_;
+
+  DISALLOW_COPY_AND_ASSIGN(RealtimeAnalyser);
 };
 
 }  // namespace blink

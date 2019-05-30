@@ -12,7 +12,6 @@
 namespace blink {
 
 class ModuleScriptFetcher;
-class ResourceFetcher;
 class ScriptState;
 
 // DocumentModulatorImpl is the Modulator implementation used in main documents
@@ -21,20 +20,18 @@ class ScriptState;
 // ModulatorImplBase.
 class DocumentModulatorImpl final : public ModulatorImplBase {
  public:
-  static ModulatorImplBase* Create(ScriptState*, ResourceFetcher*);
+  static ModulatorImplBase* Create(ScriptState*);
+
+  explicit DocumentModulatorImpl(ScriptState*);
 
   // Implements Modulator.
   ModuleScriptFetcher* CreateModuleScriptFetcher(
       ModuleScriptCustomFetchType) override;
 
-  void Trace(blink::Visitor*) override;
-
  private:
   // Implements ModulatorImplBase.
   bool IsDynamicImportForbidden(String* reason) override;
-
-  DocumentModulatorImpl(ScriptState*, ResourceFetcher*);
-  Member<ResourceFetcher> fetcher_;
+  V8CacheOptions GetV8CacheOptions() const override;
 };
 
 }  // namespace blink

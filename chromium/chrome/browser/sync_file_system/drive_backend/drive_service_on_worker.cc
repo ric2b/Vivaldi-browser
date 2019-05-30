@@ -171,10 +171,11 @@ google_apis::CancelCallback DriveServiceOnWorker::GetRemainingTeamDriveList(
   DCHECK(sequence_checker_.CalledOnValidSequence());
 
   ui_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&DriveServiceWrapper::GetRemainingTeamDriveList,
-                            wrapper_, page_token,
-                            RelayCallbackToTaskRunner(worker_task_runner_.get(),
-                                                      FROM_HERE, callback)));
+      FROM_HERE,
+      base::BindOnce(&DriveServiceWrapper::GetRemainingTeamDriveList, wrapper_,
+                     page_token,
+                     RelayCallbackToTaskRunner(worker_task_runner_.get(),
+                                               FROM_HERE, callback)));
 
   return google_apis::CancelCallback();
 }
@@ -318,20 +319,6 @@ google_apis::CancelCallback DriveServiceOnWorker::Search(
   return google_apis::CancelCallback();
 }
 
-google_apis::CancelCallback DriveServiceOnWorker::GetShareUrl(
-    const std::string& resource_id,
-    const GURL& embed_origin,
-    const google_apis::GetShareUrlCallback& callback) {
-  NOTREACHED();
-  return google_apis::CancelCallback();
-}
-
-google_apis::CancelCallback DriveServiceOnWorker::GetAppList(
-    const google_apis::AppListCallback& callback) {
-  NOTREACHED();
-  return google_apis::CancelCallback();
-}
-
 google_apis::CancelCallback DriveServiceOnWorker::TrashResource(
     const std::string& resource_id,
     const google_apis::EntryActionCallback& callback) {
@@ -440,21 +427,6 @@ std::unique_ptr<drive::BatchRequestConfiguratorInterface>
 DriveServiceOnWorker::StartBatchRequest() {
   NOTREACHED();
   return std::unique_ptr<drive::BatchRequestConfiguratorInterface>();
-}
-
-google_apis::CancelCallback DriveServiceOnWorker::AuthorizeApp(
-    const std::string& resource_id,
-    const std::string& app_id,
-    const google_apis::AuthorizeAppCallback& callback) {
-  NOTREACHED();
-  return google_apis::CancelCallback();
-}
-
-google_apis::CancelCallback DriveServiceOnWorker::UninstallApp(
-    const std::string& app_id,
-    const google_apis::EntryActionCallback& callback) {
-  NOTREACHED();
-  return google_apis::CancelCallback();
 }
 
 google_apis::CancelCallback DriveServiceOnWorker::AddPermission(

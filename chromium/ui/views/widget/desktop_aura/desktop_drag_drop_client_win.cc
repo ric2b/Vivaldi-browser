@@ -14,6 +14,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "ui/dragging/custom_drag_source_win.h"
+#include "ui/content/vivaldi_event_hooks.h"
 
 namespace views {
 
@@ -38,8 +39,7 @@ int DesktopDragDropClientWin::StartDragAndDrop(
     aura::Window* source_window,
     const gfx::Point& screen_location,
     int operation,
-    ui::DragDropTypes::DragEventSource source,
-    bool& cancelled) {
+    ui::DragDropTypes::DragEventSource source) {
   drag_drop_in_progress_ = true;
   drag_operation_ = operation;
 
@@ -69,8 +69,6 @@ int DesktopDragDropClientWin::StartDragAndDrop(
   if (alive)
     drag_drop_in_progress_ = false;
 
-  cancelled = (result == DRAGDROP_S_CANCEL);
-
   if (result != DRAGDROP_S_DROP)
     effect = DROPEFFECT_NONE;
 
@@ -82,6 +80,10 @@ int DesktopDragDropClientWin::StartDragAndDrop(
   } else {
     UMA_HISTOGRAM_ENUMERATION("Event.DragDrop.Drop", source,
                               ui::DragDropTypes::DRAG_EVENT_SOURCE_COUNT);
+  }
+
+  if (::vivaldi::IsVivaldiRunning() && result == DRAGDROP_S_CANCEL) {
+    drag_operation |= VivaldiEventHooks::DRAG_CANCEL;
   }
 
   return drag_operation;

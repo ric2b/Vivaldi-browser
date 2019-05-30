@@ -100,7 +100,9 @@ class FakeLayerTreeFrameSink : public LayerTreeFrameSink {
   // LayerTreeFrameSink implementation.
   bool BindToClient(LayerTreeFrameSinkClient* client) override;
   void DetachFromClient() override;
-  void SubmitCompositorFrame(viz::CompositorFrame frame) override;
+  void SubmitCompositorFrame(viz::CompositorFrame frame,
+                             bool hit_test_data_changed,
+                             bool show_hit_test_borders) override;
   void DidNotProduceFrame(const viz::BeginFrameAck& ack) override;
   void DidAllocateSharedBitmap(mojo::ScopedSharedBufferHandle buffer,
                                const viz::SharedBitmapId& id) override;

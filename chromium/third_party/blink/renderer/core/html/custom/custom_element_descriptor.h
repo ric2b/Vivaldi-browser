@@ -14,7 +14,7 @@
 namespace blink {
 
 // Describes what elements a custom element definition applies to.
-// https://html.spec.whatwg.org/multipage/scripting.html#custom-elements-core-concepts
+// https://html.spec.whatwg.org/C/#custom-elements-core-concepts
 //
 // There are two kinds of definitions:
 //
@@ -30,7 +30,7 @@ namespace blink {
 // example, a definition for "my-element", "my-element" must not be
 // applied to an element <button is="my-element">.
 class CORE_EXPORT CustomElementDescriptor final {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
 
  public:
   CustomElementDescriptor() = default;
@@ -49,7 +49,7 @@ class CORE_EXPORT CustomElementDescriptor final {
   bool Matches(const Element& element) const {
     return LocalName() == element.localName() &&
            (IsAutonomous() || GetName() == element.IsValue()) &&
-           element.namespaceURI() == HTMLNames::xhtmlNamespaceURI;
+           element.namespaceURI() == html_names::xhtmlNamespaceURI;
   }
 
   bool IsAutonomous() const { return name_ == local_name_; }

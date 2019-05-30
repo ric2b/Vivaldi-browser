@@ -68,18 +68,10 @@ enum EasyUnlockAuthEvent {
   // their password every 20 hours).
   PASSWORD_ENTRY_FORCED_REAUTH = 20,
 
-  // Password entry was forced because it is required to login.
-  PASSWORD_ENTRY_REQUIRED_FOR_LOGIN = 21,
+  // Password entry was forced because sign-in with Smart Lock is disabled.
+  PASSWORD_ENTRY_LOGIN_DISABLED = 21,
 
   EASY_UNLOCK_AUTH_EVENT_COUNT  // Must be the last entry.
-};
-
-enum EasyUnlockTrialRunEvent {
-  // A trial run was initiated from the Easy Unlock setup app.
-  EASY_UNLOCK_TRIAL_RUN_EVENT_LAUNCHED = 0,
-  // The user clicked on the lock icon during the trial run.
-  EASY_UNLOCK_TRIAL_RUN_EVENT_CLICKED_LOCK_ICON = 1,
-  EASY_UNLOCK_TRIAL_RUN_EVENT_COUNT  // Must be the last entry.
 };
 
 void RecordEasyUnlockDidUserManuallyUnlockPhone(bool did_unlock);
@@ -87,7 +79,6 @@ void RecordEasyUnlockSigninDuration(const base::TimeDelta& duration);
 void RecordEasyUnlockSigninEvent(EasyUnlockAuthEvent event);
 void RecordEasyUnlockScreenUnlockDuration(const base::TimeDelta& duration);
 void RecordEasyUnlockScreenUnlockEvent(EasyUnlockAuthEvent event);
-void RecordEasyUnlockTrialRunEvent(EasyUnlockTrialRunEvent event);
 
 }  // namespace chromeos
 

@@ -50,11 +50,6 @@ InternalFormatType BufferFormatToInternalFormatType(gfx::BufferFormat format) {
     case gfx::BufferFormat::BGRX_1010102:
       NOTIMPLEMENTED();
       return {GL_NONE, GL_NONE};
-    case gfx::BufferFormat::ATC:
-    case gfx::BufferFormat::ATCIA:
-    case gfx::BufferFormat::DXT1:
-    case gfx::BufferFormat::DXT5:
-    case gfx::BufferFormat::ETC1:
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
@@ -195,21 +190,23 @@ bool GLImageIOSurfaceEGL::CopyTexImage(unsigned target) {
   EGLSurface y_surface = EGL_NO_SURFACE;
   EGLSurface uv_surface = EGL_NO_SURFACE;
 
+  EGLSurface* y_surface_ptr = &y_surface;
+  EGLSurface* uv_surface_ptr = &uv_surface;
   glGetIntegerv(target_getter, &rgb_texture);
   base::ScopedClosureRunner destroy_resources_runner(
       base::BindOnce(base::RetainBlock(^{
-        if (y_surface != EGL_NO_SURFACE) {
+        if (*y_surface_ptr != EGL_NO_SURFACE) {
           EGLBoolean result =
-              eglReleaseTexImage(display_, y_surface, EGL_BACK_BUFFER);
+              eglReleaseTexImage(display_, *y_surface_ptr, EGL_BACK_BUFFER);
           DCHECK(result == EGL_TRUE);
-          result = eglDestroySurface(display_, y_surface);
+          result = eglDestroySurface(display_, *y_surface_ptr);
           DCHECK(result == EGL_TRUE);
         }
-        if (uv_surface != EGL_NO_SURFACE) {
+        if (*uv_surface_ptr != EGL_NO_SURFACE) {
           EGLBoolean result =
-              eglReleaseTexImage(display_, uv_surface, EGL_BACK_BUFFER);
+              eglReleaseTexImage(display_, *uv_surface_ptr, EGL_BACK_BUFFER);
           DCHECK(result == EGL_TRUE);
-          result = eglDestroySurface(display_, uv_surface);
+          result = eglDestroySurface(display_, *uv_surface_ptr);
           DCHECK(result == EGL_TRUE);
         }
         glBindTexture(target, rgb_texture);

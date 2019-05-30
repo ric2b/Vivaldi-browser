@@ -39,17 +39,16 @@ class PasswordInputType final : public BaseTextInputType {
  public:
   static InputType* Create(HTMLInputElement&);
 
- private:
   explicit PasswordInputType(HTMLInputElement& element)
       : BaseTextInputType(element) {}
+
+ private:
   void CountUsage() override;
   const AtomicString& FormControlType() const override;
   bool ShouldSaveAndRestoreFormControlState() const override;
   FormControlState SaveFormControlState() const override;
   void RestoreFormControlState(const FormControlState&) override;
   bool ShouldRespectListAttribute() override;
-  void OnAttachWithLayoutObject() override;
-  void OnDetachWithLayoutObject() override;
 };
 
 }  // namespace blink

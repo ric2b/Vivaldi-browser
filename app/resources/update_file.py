@@ -1,5 +1,9 @@
 # Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
 
+from __future__ import print_function
+from builtins import str
+from builtins import object
+
 import os, sys
 import argparse
 import json
@@ -15,12 +19,12 @@ def ScanDir(scandir):
     else:
       assert dirname and not dirname.startswith("."),  dirname
     dirlist.extend([os.path.join(
-                      *filter(None, [dirname, f])).replace("\\", "/")
+                      *[_f for _f in [dirname, f] if _f]).replace("\\", "/")
                         for f in filenames])
   return dirlist
 
 
-class UpdateConfig:
+class UpdateConfig(object):
 
   def __init__(self, json_name, target_name, target_dir, root_dir):
     self.json_time = os.path.getmtime(json_name)
@@ -33,7 +37,7 @@ class UpdateConfig:
 
   def __get_section(self, section):
     updates = self.update_json.get(section, {})
-    update_list = dict([(x,y) for x, y in updates.get("MANY", {}).iteritems()
+    update_list = dict([(x,y) for x, y in updates.get("MANY", {}).items()
                         if self.target_name in y.get("targets", [])])
     update_list.update(updates.get(self.target_name, {}))
     return update_list
@@ -108,19 +112,19 @@ class UpdateConfig:
       self.__conditional_action(fp, config, perform_update, force=force)
 
     update_list = self.__get_section("updates")
-    for fp, config in update_list.iteritems():
+    for fp, config in update_list.items():
       update_file(fp, config)
 
     update_list = self.__get_section("extra_updates")
-    for fp, config in update_list.iteritems():
+    for fp, config in update_list.items():
       update_file(fp, config)
 
   def get_update_sources(self):
     update_list = self.__get_section("updates")
-    source = list(update_list.iterkeys())
+    source = list(update_list.keys())
 
     update_list = self.__get_section("extra_updates")
-    source.extend(list(update_list.iterkeys()))
+    source.extend(list(update_list.keys()))
 
     return [os.path.join(self.root_dir,fp).replace("\\", "/") for fp in source]
 
@@ -128,12 +132,12 @@ class UpdateConfig:
     source = []
 
     update_list = self.__get_section("updates")
-    for fp, config in update_list.iteritems():
+    for fp, config in update_list.items():
       target_file = self.__get_target_filename(None, fp, config)
       source.append(target_file.replace("\\", "/"))
 
     update_list = self.__get_section("extra_updates")
-    for fp, config in update_list.iteritems():
+    for fp, config in update_list.items():
       target_file = self.__get_target_filename(None, fp, config)
       source.append(target_file.replace("\\", "/"))
 
@@ -157,20 +161,20 @@ class UpdateConfig:
       self.__conditional_action(fp, config, perform_copy, force=force)
 
     update_list = self.__get_section("copies")
-    for fp, config in update_list.iteritems():
+    for fp, config in update_list.items():
       dirlist = self.__get_dir_list(fp, config)
 
       for x in dirlist:
         try:
           copy_file(x, config)
         except:
-          print >>sys.stderr, self.root_dir, self.target_dir, fp, str(config), x
+          print(self.root_dir, self.target_dir, fp, str(config), x, file=sys.stderr)
           raise
 
   def get_copy_sources(self):
     update_list = self.__get_section("copies")
     source = []
-    for fp, config in update_list.iteritems():
+    for fp, config in update_list.items():
       source.extend(self.__get_dir_list(fp, config))
 
     return [os.path.join(self.root_dir,fp).replace("\\", "/") for fp in source]
@@ -178,7 +182,7 @@ class UpdateConfig:
   def get_copy_targets(self):
     update_list = self.__get_section("copies")
     source = []
-    for fp, config in update_list.iteritems():
+    for fp, config in update_list.items():
       dirlist = self.__get_dir_list(fp, config)
 
       for fp1 in dirlist:

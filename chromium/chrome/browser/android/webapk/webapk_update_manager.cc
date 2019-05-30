@@ -46,7 +46,6 @@ void OnUpdated(const JavaRef<jobject>& java_callback,
 // static JNI method.
 static void JNI_WebApkUpdateManager_StoreWebApkUpdateRequestToFile(
     JNIEnv* env,
-    const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& java_update_request_path,
     const JavaParamRef<jstring>& java_start_url,
     const JavaParamRef<jstring>& java_scope,
@@ -62,6 +61,10 @@ static void JNI_WebApkUpdateManager_StoreWebApkUpdateRequestToFile(
     jint java_orientation,
     jlong java_theme_color,
     jlong java_background_color,
+    const JavaParamRef<jstring>& java_share_target_action,
+    const JavaParamRef<jstring>& java_share_target_param_title,
+    const JavaParamRef<jstring>& java_share_target_param_text,
+    const JavaParamRef<jstring>& java_share_target_param_url,
     const JavaParamRef<jstring>& java_web_manifest_url,
     const JavaParamRef<jstring>& java_webapk_package,
     jint java_webapk_version,
@@ -89,12 +92,25 @@ static void JNI_WebApkUpdateManager_StoreWebApkUpdateRequestToFile(
       GURL(ConvertJavaStringToUTF8(env, java_badge_icon_url));
   info.manifest_url = GURL(ConvertJavaStringToUTF8(env, java_web_manifest_url));
 
-  base::android::AppendJavaStringArrayToStringVector(env, java_icon_urls.obj(),
+  GURL share_target_action =
+      GURL(ConvertJavaStringToUTF8(env, java_share_target_action));
+  if (!share_target_action.is_empty()) {
+    info.share_target = ShareTarget();
+    info.share_target->action = share_target_action;
+    info.share_target->params.title =
+        ConvertJavaStringToUTF16(java_share_target_param_title);
+    info.share_target->params.text =
+        ConvertJavaStringToUTF16(java_share_target_param_text);
+    info.share_target->params.url =
+        ConvertJavaStringToUTF16(java_share_target_param_url);
+  }
+
+  base::android::AppendJavaStringArrayToStringVector(env, java_icon_urls,
                                                      &info.icon_urls);
 
   std::vector<std::string> icon_hashes;
-  base::android::AppendJavaStringArrayToStringVector(
-      env, java_icon_hashes.obj(), &icon_hashes);
+  base::android::AppendJavaStringArrayToStringVector(env, java_icon_hashes,
+                                                     &icon_hashes);
 
   std::map<std::string, std::string> icon_url_to_murmur2_hash;
   for (size_t i = 0; i < info.icon_urls.size(); ++i)
@@ -129,7 +145,6 @@ static void JNI_WebApkUpdateManager_StoreWebApkUpdateRequestToFile(
 // static JNI method.
 static void JNI_WebApkUpdateManager_UpdateWebApkFromFile(
     JNIEnv* env,
-    const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& java_update_request_path,
     const JavaParamRef<jobject>& java_callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -140,8 +155,8 @@ static void JNI_WebApkUpdateManager_UpdateWebApkFromFile(
   if (profile == nullptr) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&OnUpdated, callback_ref, WebApkInstallResult::FAILURE,
-                   false /* relax_updates */, "" /* webapk_package */));
+        base::BindOnce(&OnUpdated, callback_ref, WebApkInstallResult::FAILURE,
+                       false /* relax_updates */, "" /* webapk_package */));
     return;
   }
 

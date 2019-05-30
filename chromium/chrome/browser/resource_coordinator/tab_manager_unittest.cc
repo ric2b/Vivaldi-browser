@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -24,6 +25,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_session_duration_tracker.h"
+#include "chrome/browser/performance_manager/performance_manager_tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/background_tab_navigation_throttle.h"
 #include "chrome/browser/resource_coordinator/local_site_characteristics_data_unittest_utils.h"
@@ -36,6 +38,7 @@
 #include "chrome/browser/resource_coordinator/tab_manager_stats_collector.h"
 #include "chrome/browser/resource_coordinator/tab_manager_web_contents_data.h"
 #include "chrome/browser/resource_coordinator/time.h"
+#include "chrome/browser/resource_coordinator/utils.h"
 #include "chrome/browser/sessions/tab_loader.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tab_ui_helper.h"
@@ -48,6 +51,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/mock_navigation_handle.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/web_contents_tester.h"
 #include "net/base/network_change_notifier.h"
@@ -55,7 +59,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
-using content::NavigationHandle;
+using content::MockNavigationHandle;
 using content::NavigationThrottle;
 using content::WebContents;
 using content::WebContentsTester;
@@ -143,6 +147,10 @@ class TabManagerTest : public testing::ChromeTestHarnessWithLocalDB {
 
   std::unique_ptr<WebContents> CreateWebContents() {
     std::unique_ptr<WebContents> web_contents = CreateTestWebContents();
+    // TODO(siggi): This is an abomination, remove this once the
+    //     PageSignalGenerator is folded into the performance manager.
+    performance_manager::PerformanceManagerTabHelper::CreateForWebContents(
+        web_contents.get());
     ResourceCoordinatorTabHelper::CreateForWebContents(web_contents.get());
     // Commit an URL to allow discarding.
     content::WebContentsTester::For(web_contents.get())
@@ -163,14 +171,23 @@ class TabManagerTest : public testing::ChromeTestHarnessWithLocalDB {
   }
 
   void ResetState() {
+    // Simulate the DidFinishNavigation notification coming from the
+    // NavigationHandles.
+    if (nav_handle1_)
+      tab_manager_->OnDidFinishNavigation(nav_handle1_.get());
+    if (nav_handle2_)
+      tab_manager_->OnDidFinishNavigation(nav_handle2_.get());
+    if (nav_handle3_)
+      tab_manager_->OnDidFinishNavigation(nav_handle3_.get());
+
     // NavigationHandles and NavigationThrottles must be deleted before the
     // associated WebContents.
-    nav_handle1_.reset();
-    nav_handle2_.reset();
-    nav_handle3_.reset();
     throttle1_.reset();
     throttle2_.reset();
     throttle3_.reset();
+    nav_handle1_.reset();
+    nav_handle2_.reset();
+    nav_handle3_.reset();
 
     // WebContents must be deleted before
     // ChromeTestHarnessWithLocalDB::TearDown() deletes the
@@ -192,12 +209,18 @@ class TabManagerTest : public testing::ChromeTestHarnessWithLocalDB {
                    const char* url2 = kTestUrl,
                    const char* url3 = kTestUrl) {
     contents1_ = CreateTestWebContents();
+    performance_manager::PerformanceManagerTabHelper::CreateForWebContents(
+        contents1_.get());
     ResourceCoordinatorTabHelper::CreateForWebContents(contents1_.get());
     nav_handle1_ = CreateTabAndNavigation(url1, contents1_.get());
     contents2_ = CreateTestWebContents();
+    performance_manager::PerformanceManagerTabHelper::CreateForWebContents(
+        contents2_.get());
     ResourceCoordinatorTabHelper::CreateForWebContents(contents2_.get());
     nav_handle2_ = CreateTabAndNavigation(url2, contents2_.get());
     contents3_ = CreateTestWebContents();
+    performance_manager::PerformanceManagerTabHelper::CreateForWebContents(
+        contents3_.get());
     ResourceCoordinatorTabHelper::CreateForWebContents(contents3_.get());
     nav_handle3_ = CreateTabAndNavigation(url3, contents3_.get());
 
@@ -237,7 +260,7 @@ class TabManagerTest : public testing::ChromeTestHarnessWithLocalDB {
 
   TabLifecycleUnitSource::TabLifecycleUnit* GetTabLifecycleUnit(
       content::WebContents* content) {
-    return TabLifecycleUnitSource::GetInstance()->GetTabLifecycleUnit(content);
+    return GetTabLifecycleUnitSource()->GetTabLifecycleUnit(content);
   }
 
   bool IsTabFrozen(content::WebContents* content) {
@@ -282,12 +305,12 @@ class TabManagerTest : public testing::ChromeTestHarnessWithLocalDB {
   }
 
  protected:
-  std::unique_ptr<NavigationHandle> CreateTabAndNavigation(
+  std::unique_ptr<MockNavigationHandle> CreateTabAndNavigation(
       const char* url,
       content::WebContents* web_contents) {
     TabUIHelper::CreateForWebContents(web_contents);
-    return content::NavigationHandle::CreateNavigationHandleForTesting(
-        GURL(url), web_contents->GetMainFrame());
+    return std::make_unique<MockNavigationHandle>(GURL(url),
+                                                  web_contents->GetMainFrame());
   }
 
   TabManager* tab_manager_ = nullptr;
@@ -298,9 +321,9 @@ class TabManagerTest : public testing::ChromeTestHarnessWithLocalDB {
   std::unique_ptr<BackgroundTabNavigationThrottle> throttle1_;
   std::unique_ptr<BackgroundTabNavigationThrottle> throttle2_;
   std::unique_ptr<BackgroundTabNavigationThrottle> throttle3_;
-  std::unique_ptr<NavigationHandle> nav_handle1_;
-  std::unique_ptr<NavigationHandle> nav_handle2_;
-  std::unique_ptr<NavigationHandle> nav_handle3_;
+  std::unique_ptr<MockNavigationHandle> nav_handle1_;
+  std::unique_ptr<MockNavigationHandle> nav_handle2_;
+  std::unique_ptr<MockNavigationHandle> nav_handle3_;
   std::unique_ptr<WebContents> contents1_;
   std::unique_ptr<WebContents> contents2_;
   std::unique_ptr<WebContents> contents3_;
@@ -479,7 +502,7 @@ TEST_F(TabManagerTest, ActivateTabResetPurgeState) {
   EXPECT_TRUE(tab_manager_->GetWebContentsData(raw_tab2)->is_purged());
 
   // Activate tab2. Tab2's PurgeAndSuspend state should be NOT_PURGED.
-  tabstrip->ActivateTabAt(1, true /* user_gesture */);
+  tabstrip->ActivateTabAt(1, {TabStripModel::GestureType::kOther});
   EXPECT_FALSE(tab_manager_->GetWebContentsData(raw_tab2)->is_purged());
 
   // Tabs with a committed URL must be closed explicitly to avoid DCHECK errors.
@@ -756,14 +779,14 @@ TEST_F(TabManagerTest, BackgroundTabLoadingMode) {
 }
 
 TEST_F(TabManagerTest, BackgroundTabLoadingSlots) {
-  TabManager tab_manager1;
+  TabManager tab_manager1(GetPageSignalReceiver(), TabLoadTracker::Get());
   MaybeThrottleNavigations(&tab_manager1, 1);
   EXPECT_FALSE(tab_manager1.IsNavigationDelayedForTest(nav_handle1_.get()));
   EXPECT_TRUE(tab_manager1.IsNavigationDelayedForTest(nav_handle2_.get()));
   EXPECT_TRUE(tab_manager1.IsNavigationDelayedForTest(nav_handle3_.get()));
   ResetState();
 
-  TabManager tab_manager2;
+  TabManager tab_manager2(GetPageSignalReceiver(), TabLoadTracker::Get());
   tab_manager2.SetLoadingSlotsForTest(2);
   MaybeThrottleNavigations(&tab_manager2, 2);
   EXPECT_FALSE(tab_manager2.IsNavigationDelayedForTest(nav_handle1_.get()));
@@ -771,7 +794,7 @@ TEST_F(TabManagerTest, BackgroundTabLoadingSlots) {
   EXPECT_TRUE(tab_manager2.IsNavigationDelayedForTest(nav_handle3_.get()));
   ResetState();
 
-  TabManager tab_manager3;
+  TabManager tab_manager3(GetPageSignalReceiver(), TabLoadTracker::Get());
   tab_manager3.SetLoadingSlotsForTest(3);
   MaybeThrottleNavigations(&tab_manager3, 3);
   EXPECT_FALSE(tab_manager3.IsNavigationDelayedForTest(nav_handle1_.get()));

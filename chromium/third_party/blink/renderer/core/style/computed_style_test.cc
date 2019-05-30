@@ -77,6 +77,26 @@ TEST(ComputedStyleTest, FocusRingOutset) {
 #endif
 }
 
+TEST(ComputedStyleTest, FocusRingCustomizedOutset) {
+  float old_minimum_stroke_width_for_focus_ring =
+      LayoutTheme::GetTheme().MinimumStrokeWidthForFocusRing();
+  bool old_is_focus_ring_outset = LayoutTheme::GetTheme().IsFocusRingOutset();
+  LayoutTheme::GetTheme().SetMinimumStrokeWidthForFocusRing(4.0);
+  LayoutTheme::GetTheme().SetIsFocusRingOutset(true);
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+  style->SetOutlineStyle(EBorderStyle::kSolid);
+  style->SetOutlineStyleIsAuto(static_cast<bool>(OutlineIsAuto::kOn));
+  style->SetEffectiveZoom(4.75);
+#if defined(OS_MACOSX)
+  EXPECT_EQ(4, style->OutlineOutsetExtent());
+#else
+  EXPECT_EQ(5, style->OutlineOutsetExtent());
+#endif
+  LayoutTheme::GetTheme().SetMinimumStrokeWidthForFocusRing(
+      old_minimum_stroke_width_for_focus_ring);
+  LayoutTheme::GetTheme().SetIsFocusRingOutset(old_is_focus_ring_outset);
+}
+
 TEST(ComputedStyleTest, SVGStackingContext) {
   scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
   style->UpdateIsStackingContext(false, false, true);
@@ -90,6 +110,14 @@ TEST(ComputedStyleTest, Preserve3dForceStackingContext) {
   style->SetOverflowY(EOverflow::kHidden);
   style->UpdateIsStackingContext(false, false, false);
   EXPECT_EQ(ETransformStyle3D::kFlat, style->UsedTransformStyle3D());
+  EXPECT_TRUE(style->IsStackingContext());
+}
+
+TEST(ComputedStyleTest, LayoutContainmentStackingContext) {
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+  EXPECT_FALSE(style->IsStackingContext());
+  style->SetContain(kContainsLayout);
+  style->UpdateIsStackingContext(false, false, false);
   EXPECT_TRUE(style->IsStackingContext());
 }
 
@@ -167,17 +195,6 @@ TEST(ComputedStyleTest,
 }
 
 TEST(ComputedStyleTest,
-     UpdatePropertySpecificDifferencesCompositingReasonsInlineTransform) {
-  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
-  scoped_refptr<ComputedStyle> other = ComputedStyle::Clone(*style);
-
-  other->SetHasInlineTransform(true);
-  StyleDifference diff;
-  style->UpdatePropertySpecificDifferences(*other, diff);
-  EXPECT_TRUE(diff.CompositingReasonsChanged());
-}
-
-TEST(ComputedStyleTest,
      UpdatePropertySpecificDifferencesCompositingReasonsBackfaceVisibility) {
   scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
   scoped_refptr<ComputedStyle> other = ComputedStyle::Clone(*style);
@@ -233,6 +250,39 @@ TEST(ComputedStyleTest,
   StyleDifference diff;
   style->UpdatePropertySpecificDifferences(*other, diff);
   EXPECT_TRUE(diff.CompositingReasonsChanged());
+}
+
+TEST(ComputedStyleTest, UpdateBackgroundColorDifferencesHasAlpha) {
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+  scoped_refptr<ComputedStyle> other = ComputedStyle::Clone(*style);
+
+  StyleDifference diff;
+  style->AdjustDiffForBackgroundVisuallyEqual(*other, diff);
+  EXPECT_FALSE(diff.HasAlphaChanged());
+
+  style->SetBackgroundColor(StyleColor(Color(255, 255, 255, 255)));
+  other->SetBackgroundColor(StyleColor(Color(255, 255, 255, 128)));
+
+  EXPECT_FALSE(
+      style->VisitedDependentColor(GetCSSPropertyBackgroundColor()).HasAlpha());
+  EXPECT_TRUE(
+      other->VisitedDependentColor(GetCSSPropertyBackgroundColor()).HasAlpha());
+
+  style->AdjustDiffForBackgroundVisuallyEqual(*other, diff);
+  EXPECT_TRUE(diff.HasAlphaChanged());
+}
+
+TEST(ComputedStyleTest, UpdateBackgroundLayerDifferencesHasAlpha) {
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+  scoped_refptr<ComputedStyle> other = ComputedStyle::Clone(*style);
+
+  StyleDifference diff;
+  style->AdjustDiffForBackgroundVisuallyEqual(*other, diff);
+  EXPECT_FALSE(diff.HasAlphaChanged());
+
+  other->AccessBackgroundLayers().EnsureNext();
+  style->AdjustDiffForBackgroundVisuallyEqual(*other, diff);
+  EXPECT_TRUE(diff.HasAlphaChanged());
 }
 
 TEST(ComputedStyleTest, HasOutlineWithCurrentColor) {

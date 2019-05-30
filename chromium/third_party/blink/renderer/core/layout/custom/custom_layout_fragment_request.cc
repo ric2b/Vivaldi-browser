@@ -16,7 +16,7 @@ namespace blink {
 
 CustomLayoutFragmentRequest::CustomLayoutFragmentRequest(
     CustomLayoutChild* child,
-    const CustomLayoutConstraintsOptions& options,
+    const CustomLayoutConstraintsOptions* options,
     scoped_refptr<SerializedScriptValue> constraint_data)
     : child_(child),
       options_(options),
@@ -40,41 +40,66 @@ CustomLayoutFragment* CustomLayoutFragmentRequest::PerformLayout(
   bool is_parallel_writing_mode = IsParallelWritingMode(
       parent->StyleRef().GetWritingMode(), style.GetWritingMode());
 
-  if (options_.hasFixedInlineSize()) {
+  if (options_->hasFixedInlineSize()) {
     if (is_parallel_writing_mode) {
       box->SetOverrideLogicalWidth(
-          LayoutUnit::FromDoubleRound(options_.fixedInlineSize()));
+          LayoutUnit::FromDoubleRound(options_->fixedInlineSize()));
     } else {
       box->SetOverrideLogicalHeight(
-          LayoutUnit::FromDoubleRound(options_.fixedInlineSize()));
+          LayoutUnit::FromDoubleRound(options_->fixedInlineSize()));
     }
   } else {
+    box->SetOverrideContainingBlockContentLogicalWidth(
+        options_->hasAvailableInlineSize() &&
+                options_->availableInlineSize() >= 0.0
+            ? LayoutUnit::FromDoubleRound(options_->availableInlineSize())
+            : LayoutUnit());
+  }
+
+  if (options_->hasFixedBlockSize()) {
     if (is_parallel_writing_mode) {
-      box->SetOverrideContainingBlockContentLogicalWidth(
-          LayoutUnit::FromDoubleRound(options_.availableInlineSize()));
+      box->SetOverrideLogicalHeight(
+          LayoutUnit::FromDoubleRound(options_->fixedBlockSize()));
     } else {
-      box->SetOverrideContainingBlockContentLogicalHeight(
-          LayoutUnit::FromDoubleRound(options_.availableInlineSize()));
+      box->SetOverrideLogicalWidth(
+          LayoutUnit::FromDoubleRound(options_->fixedBlockSize()));
+    }
+  } else {
+    box->SetOverrideContainingBlockContentLogicalHeight(
+        options_->hasAvailableBlockSize() &&
+                options_->availableBlockSize() >= 0.0
+            ? LayoutUnit::FromDoubleRound(options_->availableBlockSize())
+            : LayoutUnit());
+  }
+
+  // We default the percentage resolution block-size to indefinite if nothing
+  // is specified.
+  LayoutUnit percentage_resolution_logical_height(-1);
+
+  if (is_parallel_writing_mode) {
+    if (options_->hasPercentageBlockSize() &&
+        options_->percentageBlockSize() >= 0.0) {
+      percentage_resolution_logical_height =
+          LayoutUnit::FromDoubleRound(options_->percentageBlockSize());
+    } else if (options_->hasAvailableBlockSize() &&
+               options_->availableBlockSize() >= 0.0) {
+      percentage_resolution_logical_height =
+          LayoutUnit::FromDoubleRound(options_->availableBlockSize());
+    }
+  } else {
+    if (options_->hasPercentageInlineSize() &&
+        options_->percentageInlineSize() >= 0.0) {
+      percentage_resolution_logical_height =
+          LayoutUnit::FromDoubleRound(options_->percentageInlineSize());
+    } else if (options_->hasAvailableInlineSize() &&
+               options_->availableInlineSize() >= 0.0) {
+      percentage_resolution_logical_height =
+          LayoutUnit::FromDoubleRound(options_->availableInlineSize());
     }
   }
 
-  if (options_.hasFixedBlockSize()) {
-    if (is_parallel_writing_mode) {
-      box->SetOverrideLogicalHeight(
-          LayoutUnit::FromDoubleRound(options_.fixedBlockSize()));
-    } else {
-      box->SetOverrideLogicalWidth(
-          LayoutUnit::FromDoubleRound(options_.fixedBlockSize()));
-    }
-  } else {
-    if (is_parallel_writing_mode) {
-      box->SetOverrideContainingBlockContentLogicalHeight(
-          LayoutUnit::FromDoubleRound(options_.availableBlockSize()));
-    } else {
-      box->SetOverrideContainingBlockContentLogicalWidth(
-          LayoutUnit::FromDoubleRound(options_.availableBlockSize()));
-    }
-  }
+  box->SetOverridePercentageResolutionBlockSize(
+      percentage_resolution_logical_height);
 
   if (box->IsLayoutCustom())
     ToLayoutCustom(box)->SetConstraintData(constraint_data_);
@@ -82,6 +107,7 @@ CustomLayoutFragment* CustomLayoutFragmentRequest::PerformLayout(
   box->ForceLayout();
 
   box->ClearOverrideContainingBlockContentSize();
+  box->ClearOverridePercentageResolutionBlockSize();
   box->ClearOverrideSize();
 
   if (box->IsLayoutCustom())
@@ -92,8 +118,8 @@ CustomLayoutFragment* CustomLayoutFragmentRequest::PerformLayout(
   LayoutUnit fragment_block_size =
       is_parallel_writing_mode ? box->LogicalHeight() : box->LogicalWidth();
 
-  return new CustomLayoutFragment(this, fragment_inline_size,
-                                  fragment_block_size, isolate);
+  return MakeGarbageCollected<CustomLayoutFragment>(
+      this, fragment_inline_size, fragment_block_size, isolate);
 }
 
 LayoutBox* CustomLayoutFragmentRequest::GetLayoutBox() const {
@@ -106,6 +132,7 @@ bool CustomLayoutFragmentRequest::IsValid() const {
 
 void CustomLayoutFragmentRequest::Trace(blink::Visitor* visitor) {
   visitor->Trace(child_);
+  visitor->Trace(options_);
   ScriptWrappable::Trace(visitor);
 }
 

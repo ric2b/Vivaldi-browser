@@ -13,10 +13,10 @@
 
 #include "base/containers/circular_deque.h"
 #include "base/macros.h"
-#include "base/memory/memory_coordinator_client.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "base/time/tick_clock.h"
 #include "base/trace_event/memory_allocator_dump_guid.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "base/unguessable_token.h"
@@ -34,6 +34,10 @@ namespace base {
 class SingleThreadTaskRunner;
 }
 
+namespace gpu {
+struct Capabilities;
+}
+
 namespace viz {
 class ClientResourceProvider;
 class ContextProvider;
@@ -41,14 +45,16 @@ class ContextProvider;
 
 namespace cc {
 
-class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
-                               public base::MemoryCoordinatorClient {
+class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider {
   class PoolResource;
 
  public:
   // Delay before a resource is considered expired.
   static constexpr base::TimeDelta kDefaultExpirationDelay =
       base::TimeDelta::FromSeconds(5);
+  // Max delay before an evicted resource is flushed.
+  static constexpr base::TimeDelta kDefaultMaxFlushDelay =
+      base::TimeDelta::FromSeconds(1);
 
   // A base class to hold ownership of gpu backed PoolResources. Allows the
   // client to define destruction semantics.
@@ -67,6 +73,11 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
         const base::trace_event::MemoryAllocatorDumpGuid& buffer_dump_guid,
         uint64_t tracing_process_id,
         int importance) const = 0;
+
+    void InitOverlayCandidateAndTextureTarget(
+        const viz::ResourceFormat format,
+        const gpu::Capabilities& caps,
+        bool use_gpu_memory_buffer_resources);
 
     gpu::Mailbox mailbox;
     gpu::SyncToken mailbox_sync_token;
@@ -210,7 +221,10 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
   // acquired InUsePoolResource will be only metadata, and the backing is given
   // to it by code which is aware of the expected backing type - currently by
   // RasterBufferProvider::AcquireBufferForRaster().
-  void PrepareForExport(const InUsePoolResource& resource);
+  // Returns false if the backing does not contain valid data, in particular
+  // a zero mailbox for GpuBacking, in which case the resource is not exported,
+  // and true otherwise.
+  bool PrepareForExport(const InUsePoolResource& resource);
 
   // Marks any resources in the pool as invalid, preventing their reuse. Call if
   // previous resources were allocated in one way, but future resources should
@@ -235,12 +249,6 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                     base::trace_event::ProcessMemoryDump* pmd) override;
 
-  // Overriden from base::MemoryCoordinatorClient.
-  void OnPurgeMemory() override;
-  void OnMemoryStateChange(base::MemoryState state) override;
-
-  // TODO(gyuyoung): OnMemoryPressure is deprecated. So this should be removed
-  // when the memory coordinator is enabled by default.
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel level);
 
@@ -256,6 +264,9 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
   bool AllowsNonExactReUseForTesting() const {
     return !disallow_non_exact_reuse_;
   }
+
+  // Overrides internal clock for testing purposes.
+  void SetClockForTesting(const base::TickClock* clock) { clock_ = clock; }
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ResourcePoolTest, ReuseResource);
@@ -364,6 +375,7 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
   void EvictResourcesNotUsedSince(base::TimeTicks time_limit);
   bool HasEvictableResources() const;
   base::TimeTicks GetUsageTimeForLRUResource() const;
+  void FlushEvictedResources();
 
   viz::ClientResourceProvider* const resource_provider_;
   viz::ContextProvider* const context_provider_;
@@ -389,6 +401,10 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
   std::map<size_t, std::unique_ptr<PoolResource>> in_use_resources_;
 
   std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
+
+  base::TimeTicks flush_evicted_resources_deadline_;
+
+  const base::TickClock* clock_;
 
   base::WeakPtrFactory<ResourcePool> weak_ptr_factory_;
 

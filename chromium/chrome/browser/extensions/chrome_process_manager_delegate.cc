@@ -26,7 +26,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #endif
 
 namespace extensions {
@@ -88,10 +88,8 @@ bool ChromeProcessManagerDelegate::IsExtensionBackgroundPageAllowed(
 
   if (chromeos::ProfileHelper::IsLockScreenAppProfile(profile) &&
       !profile->IsOffTheRecord()) {
-    return !base::CommandLine::ForCurrentProcess()->HasSwitch(
-               chromeos::switches::kDisableLockScreenApps) &&
-           extension.permissions_data()->HasAPIPermission(
-               APIPermission::kLockScreen);
+    return extension.permissions_data()->HasAPIPermission(
+        APIPermission::kLockScreen);
   }
 #endif
 

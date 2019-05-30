@@ -26,7 +26,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/download/download_commands.h"
-#include "chrome/browser/download/download_item_model.h"
+#include "chrome/browser/download/download_ui_model.h"
 #include "chrome/browser/icon_manager.h"
 #include "components/download/public/common/download_item.h"
 #include "content/public/browser/download_manager.h"
@@ -53,7 +53,6 @@ namespace views {
 class ImageButton;
 class Label;
 class MdTextButton;
-class ViewHierarchyChangedDetails;
 }
 
 // Represents a single download item on the download shelf. Encompasses an icon,
@@ -61,10 +60,10 @@ class ViewHierarchyChangedDetails;
 class DownloadItemView : public views::InkDropHostView,
                          public views::ButtonListener,
                          public views::ContextMenuController,
-                         public download::DownloadItem::Observer,
+                         public DownloadUIModel::Observer,
                          public gfx::AnimationDelegate {
  public:
-  DownloadItemView(download::DownloadItem* download,
+  DownloadItemView(DownloadUIModel::DownloadUIModelPtr download,
                    DownloadShelfView* parent,
                    views::View* accessible_alert);
   ~DownloadItemView() override;
@@ -79,8 +78,8 @@ class DownloadItemView : public views::InkDropHostView,
 
   void OnExtractIconComplete(gfx::Image* icon);
 
-  // Returns the DownloadItem model object belonging to this item.
-  download::DownloadItem* download() { return model_.download(); }
+  // Returns the DownloadUIModel object belonging to this item.
+  DownloadUIModel* model() { return model_.get(); }
 
   // Submits download to download feedback service if the user has approved and
   // the download is suitable for submission, then apply |download_command|.
@@ -88,13 +87,14 @@ class DownloadItemView : public views::InkDropHostView,
   void MaybeSubmitDownloadToFeedbackService(
       DownloadCommands::Command download_command);
 
-  // download::DownloadItem::Observer:
-  void OnDownloadUpdated(download::DownloadItem* download) override;
-  void OnDownloadOpened(download::DownloadItem* download) override;
-  void OnDownloadDestroyed(download::DownloadItem* download) override;
+  // DownloadUIModel::Observer:
+  void OnDownloadUpdated() override;
+  void OnDownloadOpened() override;
+  void OnDownloadDestroyed() override;
 
   // views::View:
   void Layout() override;
+  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   gfx::Size CalculatePreferredSize() const override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   bool OnMouseDragged(const ui::MouseEvent& event) override;
@@ -104,25 +104,18 @@ class DownloadItemView : public views::InkDropHostView,
   bool GetTooltipText(const gfx::Point& p,
                       base::string16* tooltip) const override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
-  void OnThemeChanged() override;
-  void ViewHierarchyChanged(
-      const ViewHierarchyChangedDetails& details) override;
 
   // view::InkDropHostView:
-  void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
-  std::unique_ptr<views::InkDrop> CreateInkDrop() override;
-  std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
-  std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
-      const override;
   void OnInkDropCreated() override;
+  SkColor GetInkDropBaseColor() const override;
 
   // ui::EventHandler:
   void OnGestureEvent(ui::GestureEvent* event) override;
 
   // views::ContextMenuController.
-  void ShowContextMenuForView(View* source,
-                              const gfx::Point& point,
-                              ui::MenuSourceType source_type) override;
+  void ShowContextMenuForViewImpl(View* source,
+                                  const gfx::Point& point,
+                                  ui::MenuSourceType source_type) override;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
@@ -135,6 +128,8 @@ class DownloadItemView : public views::InkDropHostView,
   void OnPaint(gfx::Canvas* canvas) override;
   void OnFocus() override;
   void OnBlur() override;
+  void AddedToWidget() override;
+  void OnThemeChanged() override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(DownloadItemViewDangerousDownloadLabelTest,
@@ -309,8 +304,14 @@ class DownloadItemView : public views::InkDropHostView,
   // Returns a slightly dimmed version of the base text color.
   SkColor GetDimmedTextColor() const;
 
+  // Returns the status text to show in the notification.
+  base::string16 GetStatusText() const;
+
   // The download shelf that owns us.
   DownloadShelfView* shelf_;
+
+  // The focus ring for this Button.
+  std::unique_ptr<views::FocusRing> focus_ring_;
 
   // Elements of our particular download
   base::string16 status_text_;
@@ -351,7 +352,7 @@ class DownloadItemView : public views::InkDropHostView,
   base::CancelableTaskTracker cancelable_task_tracker_;
 
   // A model class to control the status text we display.
-  DownloadItemModel model_;
+  DownloadUIModel::DownloadUIModelPtr model_;
 
   // Animation for download complete.
   std::unique_ptr<gfx::SlideAnimation> complete_animation_;

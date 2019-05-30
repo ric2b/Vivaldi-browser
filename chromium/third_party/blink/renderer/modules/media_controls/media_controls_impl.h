@@ -27,6 +27,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_MEDIA_CONTROLS_MEDIA_CONTROLS_IMPL_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_MEDIA_CONTROLS_MEDIA_CONTROLS_IMPL_H_
 
+#include "base/macros.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect_read_only.h"
 #include "third_party/blink/renderer/core/html/html_div_element.h"
 #include "third_party/blink/renderer/core/html/media/media_controls.h"
@@ -42,6 +43,7 @@ class MediaControlsDisplayCutoutDelegate;
 class MediaControlsOrientationLockDelegate;
 class MediaControlsRotateToFullscreenDelegate;
 class MediaControlsWindowEventListener;
+class MediaControlAnimatedArrowContainerElement;
 class MediaControlButtonPanelElement;
 class MediaControlCastButtonElement;
 class MediaControlCurrentTimeDisplayElement;
@@ -63,8 +65,8 @@ class MediaControlScrubbingMessageElement;
 class MediaControlTextTrackListElement;
 class MediaControlTimelineElement;
 class MediaControlToggleClosedCaptionsButtonElement;
+class MediaControlVolumeControlContainerElement;
 class MediaControlVolumeSliderElement;
-class MediaDownloadInProductHelpManager;
 class ShadowRoot;
 class TextTrack;
 
@@ -73,10 +75,11 @@ class TextTrack;
 class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
                                                public MediaControls {
   USING_GARBAGE_COLLECTED_MIXIN(MediaControlsImpl);
-  WTF_MAKE_NONCOPYABLE(MediaControlsImpl);
 
  public:
   static MediaControlsImpl* Create(HTMLMediaElement&, ShadowRoot&);
+
+  explicit MediaControlsImpl(HTMLMediaElement&);
   ~MediaControlsImpl() override = default;
 
   // Returns whether the ModernMediaControlsEnabled runtime flag is on.
@@ -108,6 +111,7 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   // Return the internal elements, which is used by registering clicking
   // EventHandlers from MediaControlsWindowEventListener.
   HTMLDivElement* PanelElement() override;
+  HTMLDivElement* ButtonPanelElement();
   // TODO(mlamouri): this method is needed in order to notify the controls that
   // the `MediaControlsEnabled` setting has changed.
   void OnMediaControlsEnabledChange() override {
@@ -127,14 +131,23 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   void ToggleTextTrackList();
   void ShowTextTrackAtIndex(unsigned);
   void DisableShowingTextTracks();
+  bool TextTrackListIsWanted();
 
   // Returns the label for the track when a valid track is passed in and "Off"
   // when the parameter is null.
   String GetTextTrackLabel(TextTrack*) const;
 
   // Methods related to the overflow menu.
+  void OpenOverflowMenu();
+  void CloseOverflowMenu();
+  bool OverflowMenuIsWanted();
+
   void ToggleOverflowMenu();
   bool OverflowMenuVisible();
+
+  void VolumeSliderWantedTimerFired(TimerBase*);
+  void OpenVolumeSliderIfNecessary();
+  void CloseVolumeSliderIfNecessary();
 
   void ShowOverlayCastButtonIfNeeded();
 
@@ -144,11 +157,8 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   void UpdateCurrentTimeDisplay();
 
   // Methods used for Download In-product help.
-  const MediaControlDownloadButtonElement& DownloadButton() const;
   const MediaControlOverflowMenuButtonElement& OverflowButton() const;
   MediaControlOverflowMenuButtonElement& OverflowButton();
-  void DidDismissDownloadInProductHelp();
-  MediaDownloadInProductHelpManager* DownloadInProductHelp();
 
   // Accessors for UI elements.
   const MediaControlCurrentTimeDisplayElement& CurrentTimeDisplay() const;
@@ -189,6 +199,10 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   // accessibility tool. This is meant to be replaced by AOM when the event will
   // be exposed to the platform.
   void OnAccessibleFocus();
+  void OnAccessibleBlur();
+
+  // Returns true/false based on which set of controls to display.
+  bool ShouldShowAudioControls() const;
 
  private:
   // MediaControlsMediaEventListener is a component that is listening to events
@@ -229,10 +243,11 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   // check that the element is a video element first.
   HTMLVideoElement& VideoElement();
 
-  explicit MediaControlsImpl(HTMLMediaElement&);
-
   void InitializeControls();
   void PopulatePanel();
+
+  // Attach hover background div to buttons
+  void AttachHoverBackground(Element*);
 
   void MakeOpaque();
   void MakeOpaqueFromPointerEvent();
@@ -262,6 +277,9 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   void HideCursor();
   void ShowCursor();
 
+  bool ShouldOpenVolumeSlider() const;
+  bool ShouldCloseVolumeSlider() const;
+
   void ElementSizeChangedTimerFired(TimerBase*);
 
   // Hide elements that don't fit, and show those things that we want which
@@ -269,10 +287,12 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   // current.
   void ComputeWhichControlsFit();
 
+  void HidePopupMenu();
   void UpdateOverflowMenuWanted() const;
+  void UpdateOverflowMenuItemCSSClass() const;
   void UpdateScrubbingMessageFits() const;
+  void UpdateOverflowAndTrackListCSSClassForPip() const;
   void UpdateSizingCSSClass();
-  void UpdateOverlayPlayButtonWidthCSSVar();
   void MaybeRecordElementsDisplayed() const;
 
   // Takes a popup menu (caption, overflow) and position on the screen. This is
@@ -288,7 +308,6 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   void UpdateActingAsAudioControls();
 
   // Returns true/false based on which set of controls to display.
-  bool ShouldShowAudioControls() const;
   bool ShouldShowVideoControls() const;
 
   // Node
@@ -298,7 +317,13 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   bool ContainsRelatedTarget(Event*);
 
   void HandlePointerEvent(Event*);
+  void HandleClickEvent(Event*);
   void HandleTouchEvent(Event*);
+
+  void EnsureAnimatedArrowContainer();
+  void MaybeJump(int);
+  bool IsOnLeftSide(Event*);
+  void TapTimerFired(TimerBase*);
 
   // Internal cast related methods.
   void RemotePlaybackStateChanged();
@@ -339,6 +364,7 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   Member<MediaControlRemainingTimeDisplayElement> duration_display_;
   Member<MediaControlMuteButtonElement> mute_button_;
   Member<MediaControlVolumeSliderElement> volume_slider_;
+  Member<MediaControlVolumeControlContainerElement> volume_control_container_;
   Member<MediaControlToggleClosedCaptionsButtonElement>
       toggle_closed_captions_button_;
   Member<MediaControlTextTrackListElement> text_track_list_;
@@ -347,6 +373,8 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   Member<MediaControlButtonPanelElement> media_button_panel_;
   Member<MediaControlLoadingPanelElement> loading_panel_;
   Member<MediaControlPictureInPictureButtonElement> picture_in_picture_button_;
+  Member<MediaControlAnimatedArrowContainerElement>
+      animated_arrow_container_element_;
 
   Member<MediaControlCastButtonElement> cast_button_;
   Member<MediaControlFullscreenButtonElement> fullscreen_button_;
@@ -379,8 +407,6 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
 
   bool keep_showing_until_timer_fires_ : 1;
 
-  Member<MediaDownloadInProductHelpManager> download_iph_manager_;
-
   bool is_acting_as_audio_controls_ = false;
 
   // Our best guess on whether the user is interacting with the controls via
@@ -389,11 +415,17 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   // touch events, we want to ignore pointerover/pointerout/pointermove events.
   bool is_touch_interaction_ = false;
 
-  // Holds the currently set --overlay-play-button-width value. Used to check if
-  // we need to update.
-  base::Optional<double> overlay_play_button_width_;
+  // Timer for distinguishing double-taps.
+  TaskRunnerTimer<MediaControlsImpl> tap_timer_;
+  bool is_paused_for_double_tap_ = false;
+
+  // Timer to delay showing the volume slider to avoid accidental triggering
+  // of the slider
+  TaskRunnerTimer<MediaControlsImpl> volume_slider_wanted_timer_;
 
   bool is_test_mode_ = false;
+
+  DISALLOW_COPY_AND_ASSIGN(MediaControlsImpl);
 };
 
 DEFINE_ELEMENT_TYPE_CASTS(MediaControlsImpl, IsMediaControls());

@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/platform/network/content_security_policy_response_headers.h"
 #include "third_party/blink/renderer/platform/network/http_header_map.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
@@ -17,21 +18,25 @@ namespace blink {
 // InstalledScriptsManager provides the scripts of workers that have been
 // installed. Currently it is only used for installed service workers.
 class InstalledScriptsManager {
+  USING_FAST_MALLOC(InstalledScriptsManager);
+
  public:
   InstalledScriptsManager() = default;
 
   class CORE_EXPORT ScriptData {
+    USING_FAST_MALLOC(ScriptData);
+
    public:
     ScriptData() = default;
     ScriptData(const KURL& script_url,
                String source_text,
-               std::unique_ptr<Vector<char>> meta_data,
+               std::unique_ptr<Vector<uint8_t>> meta_data,
                std::unique_ptr<CrossThreadHTTPHeaderMapData>);
     ScriptData(ScriptData&& other) = default;
     ScriptData& operator=(ScriptData&& other) = default;
 
     String TakeSourceText() { return std::move(source_text_); }
-    std::unique_ptr<Vector<char>> TakeMetaData() {
+    std::unique_ptr<Vector<uint8_t>> TakeMetaData() {
       return std::move(meta_data_);
     }
 
@@ -43,7 +48,7 @@ class InstalledScriptsManager {
    private:
     KURL script_url_;
     String source_text_;
-    std::unique_ptr<Vector<char>> meta_data_;
+    std::unique_ptr<Vector<uint8_t>> meta_data_;
     HTTPHeaderMap headers_;
 
     DISALLOW_COPY_AND_ASSIGN(ScriptData);
@@ -53,18 +58,11 @@ class InstalledScriptsManager {
   // installed.
   virtual bool IsScriptInstalled(const KURL& script_url) const = 0;
 
-  enum class ScriptStatus { kSuccess, kFailed };
-  // Used on the worker thread. GetScriptData() can provide a script for the
-  // |script_url| only once. When GetScriptData returns
-  // - ScriptStatus::kSuccess: the script has been received correctly. Sets
-  //                           |out_script_data| to the script.
-  // - ScriptStatus::kFailed: an error happened while receiving the script from
-  //                          the browser process. |out_script_data| is set to
-  //                          empty ScriptData.
+  // Used on the worker thread. Returning nullptr indicates an error
+  // happened while receiving the script from the browser process.
   // This can block if the script has not been received from the browser process
   // yet.
-  virtual ScriptStatus GetScriptData(const KURL& script_url,
-                                     ScriptData* out_script_data) = 0;
+  virtual std::unique_ptr<ScriptData> GetScriptData(const KURL& script_url) = 0;
 };
 
 }  // namespace blink

@@ -15,7 +15,7 @@
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/font.h"
-#include "ui/gfx/linux_font_delegate.h"
+#include "ui/gfx/skia_font_delegate.h"
 
 namespace gfx {
 
@@ -33,9 +33,9 @@ const char kFontconfigMatchFontHeader[] = "  <match target=\"font\">\n";
 const char kFontconfigMatchPatternHeader[] = "  <match target=\"pattern\">\n";
 const char kFontconfigMatchFooter[] = "  </match>\n";
 
-// Implementation of LinuxFontDelegate that returns a canned FontRenderParams
+// Implementation of SkiaFontDelegate that returns a canned FontRenderParams
 // struct. This is used to isolate tests from the system's local configuration.
-class TestFontDelegate : public LinuxFontDelegate {
+class TestFontDelegate : public SkiaFontDelegate {
  public:
   TestFontDelegate() {}
   ~TestFontDelegate() override {}
@@ -59,35 +59,11 @@ class TestFontDelegate : public LinuxFontDelegate {
   DISALLOW_COPY_AND_ASSIGN(TestFontDelegate);
 };
 
-// Instructs Fontconfig to load |path|, an XML configuration file, into the
-// current config, returning true on success.
-bool LoadConfigFileIntoFontconfig(const base::FilePath& path) {
-  // Unlike other FcConfig functions, FcConfigParseAndLoad() doesn't default to
-  // the current config when passed NULL. So that's cool.
-  if (!FcConfigParseAndLoad(
-          FcConfigGetCurrent(),
-          reinterpret_cast<const FcChar8*>(path.value().c_str()), FcTrue)) {
-    LOG(ERROR) << "Fontconfig failed to load " << path.value();
-    return false;
-  }
-  return true;
-}
-
-// Writes |data| to a file in |temp_dir| and passes it to
-// LoadConfigFileIntoFontconfig().
-bool LoadConfigDataIntoFontconfig(const base::FilePath& temp_dir,
-                                  const std::string& data) {
-  base::FilePath path;
-  if (!base::CreateTemporaryFileInDir(temp_dir, &path)) {
-    PLOG(ERROR) << "Unable to create temporary file in " << temp_dir.value();
-    return false;
-  }
-  if (base::WriteFile(path, data.data(), data.size()) !=
-      static_cast<int>(data.size())) {
-    PLOG(ERROR) << "Unable to write config data to " << path.value();
-    return false;
-  }
-  return LoadConfigFileIntoFontconfig(path);
+// Loads XML-formatted |data| into the current font configuration.
+bool LoadConfigDataIntoFontconfig(const std::string& data) {
+  return FcConfigParseAndLoadFromMemory(
+      FcConfigGetCurrent(), reinterpret_cast<const FcChar8*>(data.c_str()),
+      FcTrue);
 }
 
 // Returns a Fontconfig <edit> stanza.
@@ -129,31 +105,20 @@ std::string CreateFontconfigAliasStanza(const std::string& original_family,
 class FontRenderParamsTest : public testing::Test {
  public:
   FontRenderParamsTest() {
-    CHECK(temp_dir_.CreateUniqueTempDir());
-    original_font_delegate_ = LinuxFontDelegate::instance();
-    LinuxFontDelegate::SetInstance(&test_font_delegate_);
+    original_font_delegate_ = SkiaFontDelegate::instance();
+    SkiaFontDelegate::SetInstance(&test_font_delegate_);
     ClearFontRenderParamsCacheForTest();
+    FcInit();
   }
 
   ~FontRenderParamsTest() override {
-    LinuxFontDelegate::SetInstance(
-        const_cast<LinuxFontDelegate*>(original_font_delegate_));
-  }
-
-  void SetUp() override {
-    // Fontconfig should already be set up by the test runner.
-    DCHECK(FcConfigGetCurrent());
-  }
-
-  void TearDown() override {
-    // We might have made a mess introducing new fontconfig settings.  Reset the
-    // state of fontconfig for the next test.
-    base::SetUpFontconfig();
+    FcFini();
+    SkiaFontDelegate::SetInstance(
+        const_cast<SkiaFontDelegate*>(original_font_delegate_));
   }
 
  protected:
-  base::ScopedTempDir temp_dir_;
-  const LinuxFontDelegate* original_font_delegate_;
+  const SkiaFontDelegate* original_font_delegate_;
   TestFontDelegate test_font_delegate_;
 
  private:
@@ -162,7 +127,6 @@ class FontRenderParamsTest : public testing::Test {
 
 TEST_F(FontRenderParamsTest, Default) {
   ASSERT_TRUE(LoadConfigDataIntoFontconfig(
-      temp_dir_.GetPath(),
       std::string(kFontconfigFileHeader) +
           // Specify the desired defaults via a font match rather than a pattern
           // match (since this is the style generally used in
@@ -211,7 +175,6 @@ TEST_F(FontRenderParamsTest, Default) {
 
 TEST_F(FontRenderParamsTest, Size) {
   ASSERT_TRUE(LoadConfigDataIntoFontconfig(
-      temp_dir_.GetPath(),
       std::string(kFontconfigFileHeader) + kFontconfigMatchPatternHeader +
           CreateFontconfigEditStanza("antialias", "bool", "true") +
           CreateFontconfigEditStanza("hinting", "bool", "true") +
@@ -256,7 +219,6 @@ TEST_F(FontRenderParamsTest, Style) {
   // Load a config that disables subpixel rendering for bold text and disables
   // hinting for italic text.
   ASSERT_TRUE(LoadConfigDataIntoFontconfig(
-      temp_dir_.GetPath(),
       std::string(kFontconfigFileHeader) + kFontconfigMatchPatternHeader +
           CreateFontconfigEditStanza("antialias", "bool", "true") +
           CreateFontconfigEditStanza("hinting", "bool", "true") +
@@ -301,7 +263,6 @@ TEST_F(FontRenderParamsTest, Style) {
 TEST_F(FontRenderParamsTest, Scalable) {
   // Load a config that only enables antialiasing for scalable fonts.
   ASSERT_TRUE(LoadConfigDataIntoFontconfig(
-      temp_dir_.GetPath(),
       std::string(kFontconfigFileHeader) + kFontconfigMatchPatternHeader +
           CreateFontconfigEditStanza("antialias", "bool", "false") +
           kFontconfigMatchFooter + kFontconfigMatchPatternHeader +
@@ -318,7 +279,6 @@ TEST_F(FontRenderParamsTest, Scalable) {
 TEST_F(FontRenderParamsTest, UseBitmaps) {
   // Load a config that enables embedded bitmaps for fonts <= 10 pixels.
   ASSERT_TRUE(LoadConfigDataIntoFontconfig(
-      temp_dir_.GetPath(),
       std::string(kFontconfigFileHeader) + kFontconfigMatchPatternHeader +
           CreateFontconfigEditStanza("embeddedbitmap", "bool", "false") +
           kFontconfigMatchFooter + kFontconfigMatchPatternHeader +
@@ -339,7 +299,6 @@ TEST_F(FontRenderParamsTest, ForceFullHintingWhenAntialiasingIsDisabled) {
   // Load a config that disables antialiasing and hinting while requesting
   // subpixel rendering.
   ASSERT_TRUE(LoadConfigDataIntoFontconfig(
-      temp_dir_.GetPath(),
       std::string(kFontconfigFileHeader) + kFontconfigMatchPatternHeader +
           CreateFontconfigEditStanza("antialias", "bool", "false") +
           CreateFontconfigEditStanza("hinting", "bool", "false") +
@@ -394,7 +353,7 @@ TEST_F(FontRenderParamsTest, ForceSubpixelPositioning) {
 }
 
 TEST_F(FontRenderParamsTest, OnlySetConfiguredValues) {
-  // Configure the LinuxFontDelegate (which queries GtkSettings on desktop
+  // Configure the SkiaFontDelegate (which queries GtkSettings on desktop
   // Linux) to request subpixel rendering.
   FontRenderParams system_params;
   system_params.subpixel_rendering = FontRenderParams::SUBPIXEL_RENDERING_RGB;
@@ -403,7 +362,6 @@ TEST_F(FontRenderParamsTest, OnlySetConfiguredValues) {
   // Load a Fontconfig config that enables antialiasing but doesn't say anything
   // about subpixel rendering.
   ASSERT_TRUE(LoadConfigDataIntoFontconfig(
-      temp_dir_.GetPath(),
       std::string(kFontconfigFileHeader) + kFontconfigMatchPatternHeader +
           CreateFontconfigEditStanza("antialias", "bool", "true") +
           kFontconfigMatchFooter + kFontconfigFileFooter));
@@ -436,6 +394,8 @@ TEST_F(FontRenderParamsTest, NoFontconfigMatch) {
   EXPECT_EQ(system_params.hinting, params.hinting);
   EXPECT_EQ(system_params.subpixel_rendering, params.subpixel_rendering);
   EXPECT_EQ(query.families[0], suggested_family);
+
+  FcConfigDestroy(FcConfigGetCurrent());
 }
 
 TEST_F(FontRenderParamsTest, MissingFamily) {
@@ -453,7 +413,6 @@ TEST_F(FontRenderParamsTest, MissingFamily) {
 TEST_F(FontRenderParamsTest, SubstituteFamily) {
   // Configure Fontconfig to use Tinos for both Helvetica and Arimo.
   ASSERT_TRUE(LoadConfigDataIntoFontconfig(
-      temp_dir_.GetPath(),
       std::string(kFontconfigFileHeader) +
           CreateFontconfigAliasStanza("Helvetica", "Tinos") +
           kFontconfigMatchPatternHeader +

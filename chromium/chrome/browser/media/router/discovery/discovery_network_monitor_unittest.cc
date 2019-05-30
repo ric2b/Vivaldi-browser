@@ -4,8 +4,10 @@
 
 #include "chrome/browser/media/router/discovery/discovery_network_monitor.h"
 
+#include <functional>
 #include <memory>
 
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/task/task_scheduler/task_scheduler.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -169,7 +171,7 @@ TEST_F(DiscoveryNetworkMonitorTest, GetNetworkIdWithRefresh) {
     EXPECT_EQ(refresh_network_id, network_id);
   };
   discovery_network_monitor->GetNetworkId(
-      base::BindOnce(check_network_id, base::ConstRef(current_network_id)));
+      base::BindOnce(check_network_id, std::cref(current_network_id)));
   thread_bundle.RunUntilIdle();
 }
 

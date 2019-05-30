@@ -26,13 +26,15 @@ class NavigatorWakeLock final : public GarbageCollected<NavigatorWakeLock>,
 
   static ScriptPromise getWakeLock(ScriptState*, Navigator&, String);
 
+  explicit NavigatorWakeLock(Navigator&);
+
   void Trace(blink::Visitor*) override;
 
  private:
   ScriptPromise getWakeLock(ScriptState*, String);
-  explicit NavigatorWakeLock(Navigator&);
 
   Member<WakeLock> wake_lock_screen_;
+  Member<WakeLock> wake_lock_system_;
 };
 
 }  // namespace blink

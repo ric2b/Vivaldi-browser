@@ -52,7 +52,7 @@
 #endif  // ABSL_HAVE_EXCEPTIONS
 
 #define ABSL_VARIANT_TEST_EXPECT_BAD_VARIANT_ACCESS(...)                 \
-  ABSL_VARIANT_TEST_EXPECT_FAIL((__VA_ARGS__), absl::bad_variant_access, \
+  ABSL_VARIANT_TEST_EXPECT_FAIL((void)(__VA_ARGS__), absl::bad_variant_access, \
                                 "Bad variant access")
 
 struct Hashable {};
@@ -257,7 +257,7 @@ class NonCopyable {
 // each type.
 template <typename T>
 class VariantTypesTest : public ::testing::Test {};
-TYPED_TEST_CASE(VariantTypesTest, VariantTypes);
+TYPED_TEST_SUITE(VariantTypesTest, VariantTypes);
 
 ////////////////////
 // [variant.ctor] //
@@ -403,7 +403,7 @@ struct is_trivially_move_constructible
 
 template <class T>
 struct is_trivially_move_assignable
-    : std::is_move_assignable<SingleUnion<T>>::type {};
+    : absl::is_move_assignable<SingleUnion<T>>::type {};
 
 TEST(VariantTest, NothrowMoveConstructible) {
   // Verify that variant is nothrow move constructible iff its template
@@ -559,9 +559,14 @@ TEST(VariantTest, TestDtor) {
 }
 
 #ifdef ABSL_HAVE_EXCEPTIONS
-
+// See comment in absl/base/config.h
+#if defined(ABSL_INTERNAL_MSVC_2017_DBG_MODE)
+TEST(VariantTest, DISABLED_TestDtorValuelessByException)
+#else
 // Test destruction when in the valueless_by_exception state.
-TEST(VariantTest, TestDtorValuelessByException) {
+TEST(VariantTest, TestDtorValuelessByException)
+#endif
+{
   int counter = 0;
   IncrementInDtor counter_adjuster(&counter);
 
@@ -1972,29 +1977,17 @@ TEST(VariantTest, MonostateHash) {
 }
 
 TEST(VariantTest, Hash) {
-  static_assert(type_traits_internal::IsHashEnabled<variant<int>>::value, "");
-  static_assert(type_traits_internal::IsHashEnabled<variant<Hashable>>::value,
+  static_assert(type_traits_internal::IsHashable<variant<int>>::value, "");
+  static_assert(type_traits_internal::IsHashable<variant<Hashable>>::value, "");
+  static_assert(type_traits_internal::IsHashable<variant<int, Hashable>>::value,
+                "");
+
+#if ABSL_META_INTERNAL_STD_HASH_SFINAE_FRIENDLY_
+  static_assert(!type_traits_internal::IsHashable<variant<NonHashable>>::value,
                 "");
   static_assert(
-      type_traits_internal::IsHashEnabled<variant<int, Hashable>>::value, "");
-
-#if defined(_MSC_VER) ||                                   \
-    (defined(_LIBCPP_VERSION) && _LIBCPP_VERSION < 4000 && \
-     _LIBCPP_STD_VER > 11) ||                              \
-    defined(__APPLE__)
-  // For MSVC and libc++ (< 4.0 and c++14), std::hash primary template has a
-  // static_assert to catch any user-defined type T that doesn't provide a hash
-  // specialization. So instantiating std::hash<variant<T>> will result
-  // in a hard error which is not SFINAE friendly.
-#define ABSL_STD_HASH_NOT_SFINAE_FRIENDLY 1
-#endif
-
-#ifndef ABSL_STD_HASH_NOT_SFINAE_FRIENDLY
-  static_assert(
-      !type_traits_internal::IsHashEnabled<variant<NonHashable>>::value, "");
-  static_assert(!type_traits_internal::IsHashEnabled<
-                    variant<Hashable, NonHashable>>::value,
-                "");
+      !type_traits_internal::IsHashable<variant<Hashable, NonHashable>>::value,
+      "");
 #endif
 
 // MSVC std::hash<std::variant> does not use the index, thus produce the same
@@ -2018,11 +2011,10 @@ TEST(VariantTest, Hash) {
     EXPECT_GT(hashcodes.size(), 90);
 
     // test const-qualified
+    static_assert(type_traits_internal::IsHashable<variant<const int>>::value,
+                  "");
     static_assert(
-        type_traits_internal::IsHashEnabled<variant<const int>>::value, "");
-    static_assert(
-        type_traits_internal::IsHashEnabled<variant<const Hashable>>::value,
-        "");
+        type_traits_internal::IsHashable<variant<const Hashable>>::value, "");
     std::hash<absl::variant<const int>> c_hash;
     for (int i = 0; i < 100; ++i) {
       EXPECT_EQ(hash(i), c_hash(i));
@@ -2439,14 +2431,14 @@ TEST(VariantTest, TestMoveConversionViaConvertVariantTo) {
 
 TEST(VariantTest, TestCopyAndMoveTypeTraits) {
   EXPECT_TRUE(std::is_copy_constructible<variant<std::string>>::value);
-  EXPECT_TRUE(std::is_copy_assignable<variant<std::string>>::value);
+  EXPECT_TRUE(absl::is_copy_assignable<variant<std::string>>::value);
   EXPECT_TRUE(std::is_move_constructible<variant<std::string>>::value);
-  EXPECT_TRUE(std::is_move_assignable<variant<std::string>>::value);
+  EXPECT_TRUE(absl::is_move_assignable<variant<std::string>>::value);
   EXPECT_TRUE(std::is_move_constructible<variant<std::unique_ptr<int>>>::value);
-  EXPECT_TRUE(std::is_move_assignable<variant<std::unique_ptr<int>>>::value);
+  EXPECT_TRUE(absl::is_move_assignable<variant<std::unique_ptr<int>>>::value);
   EXPECT_FALSE(
       std::is_copy_constructible<variant<std::unique_ptr<int>>>::value);
-  EXPECT_FALSE(std::is_copy_assignable<variant<std::unique_ptr<int>>>::value);
+  EXPECT_FALSE(absl::is_copy_assignable<variant<std::unique_ptr<int>>>::value);
 
   EXPECT_FALSE(
       absl::is_trivially_copy_constructible<variant<std::string>>::value);

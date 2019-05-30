@@ -6,7 +6,7 @@
 
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/autoplay.mojom-blink.h"
+#include "third_party/blink/public/mojom/autoplay/autoplay.mojom-blink.h"
 #include "third_party/blink/public/platform/web_media_player_source.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/media/html_audio_element.h"
@@ -38,14 +38,16 @@ class MockWebMediaPlayer : public EmptyWebMediaPlayer {
       Load,
       WebMediaPlayer::LoadTiming(LoadType load_type,
                                  const blink::WebMediaPlayerSource& source,
-                                 CORSMode cors_mode));
+                                 CorsMode cors_mode));
+  MOCK_CONST_METHOD0(DidLazyLoad, bool());
 };
 
 class WebMediaStubLocalFrameClient : public EmptyLocalFrameClient {
  public:
   static WebMediaStubLocalFrameClient* Create(
       std::unique_ptr<WebMediaPlayer> player) {
-    return new WebMediaStubLocalFrameClient(std::move(player));
+    return MakeGarbageCollected<WebMediaStubLocalFrameClient>(
+        std::move(player));
   }
 
   WebMediaStubLocalFrameClient(std::unique_ptr<WebMediaPlayer> player)
@@ -86,6 +88,8 @@ class HTMLMediaElementTest : public testing::TestWithParam<MediaTestParam> {
     EXPECT_CALL(*mock_media_player, Load(_, _, _))
         .Times(AnyNumber())
         .WillRepeatedly(Return(WebMediaPlayer::LoadTiming::kImmediate));
+    EXPECT_CALL(*mock_media_player, DidLazyLoad)
+        .WillRepeatedly(testing::Return(false));
 
     dummy_page_holder_ = DummyPageHolder::Create(
         IntSize(), nullptr,
@@ -98,7 +102,7 @@ class HTMLMediaElementTest : public testing::TestWithParam<MediaTestParam> {
       media_ = HTMLVideoElement::Create(dummy_page_holder_->GetDocument());
   }
 
-  HTMLMediaElement* Media() { return media_.Get(); }
+  HTMLMediaElement* Media() const { return media_.Get(); }
   void SetCurrentSrc(const AtomicString& src) {
     KURL url(src);
     Media()->current_src_ = url;
@@ -123,6 +127,14 @@ class HTMLMediaElementTest : public testing::TestWithParam<MediaTestParam> {
         mojom::blink::kAutoplayFlagHighMediaEngagement);
   }
 
+  bool HasLazyLoadObserver() const {
+    return !!Media()->lazy_load_intersection_observer_;
+  }
+
+  ExecutionContext* GetExecutionContext() const {
+    return &dummy_page_holder_->GetDocument();
+  }
+
  private:
   std::unique_ptr<DummyPageHolder> dummy_page_holder_;
   Persistent<HTMLMediaElement> media_;
@@ -131,12 +143,12 @@ class HTMLMediaElementTest : public testing::TestWithParam<MediaTestParam> {
   MockWebMediaPlayer* media_player_;
 };
 
-INSTANTIATE_TEST_CASE_P(Audio,
-                        HTMLMediaElementTest,
-                        testing::Values(MediaTestParam::kAudio));
-INSTANTIATE_TEST_CASE_P(Video,
-                        HTMLMediaElementTest,
-                        testing::Values(MediaTestParam::kVideo));
+INSTANTIATE_TEST_SUITE_P(Audio,
+                         HTMLMediaElementTest,
+                         testing::Values(MediaTestParam::kAudio));
+INSTANTIATE_TEST_SUITE_P(Video,
+                         HTMLMediaElementTest,
+                         testing::Values(MediaTestParam::kVideo));
 
 TEST_P(HTMLMediaElementTest, effectiveMediaVolume) {
   struct TestData {
@@ -187,7 +199,6 @@ AtomicString SrcSchemeToURL(TestURLScheme scheme) {
 TEST_P(HTMLMediaElementTest, preloadType) {
   struct TestData {
     bool data_saver_enabled;
-    bool force_preload_none_for_media_elements;
     bool is_cellular;
     TestURLScheme src_scheme;
     AtomicString preload_to_set;
@@ -195,29 +206,27 @@ TEST_P(HTMLMediaElementTest, preloadType) {
   } test_data[] = {
       // Tests for conditions in which preload type should be overriden to
       // "none".
-      {false, true, false, TestURLScheme::kHttp, "auto", "none"},
-      {true, true, false, TestURLScheme::kHttps, "auto", "none"},
-      {true, true, false, TestURLScheme::kFtp, "metadata", "none"},
-      {false, false, false, TestURLScheme::kHttps, "auto", "auto"},
-      {false, true, false, TestURLScheme::kFile, "auto", "auto"},
-      {false, true, false, TestURLScheme::kData, "metadata", "metadata"},
-      {false, true, false, TestURLScheme::kBlob, "auto", "auto"},
-      {false, true, false, TestURLScheme::kFile, "none", "none"},
+      {false, false, TestURLScheme::kHttp, "auto", "auto"},
+      {true, false, TestURLScheme::kHttps, "auto", "auto"},
+      {true, false, TestURLScheme::kFtp, "metadata", "metadata"},
+      {false, false, TestURLScheme::kHttps, "auto", "auto"},
+      {false, false, TestURLScheme::kFile, "auto", "auto"},
+      {false, false, TestURLScheme::kData, "metadata", "metadata"},
+      {false, false, TestURLScheme::kBlob, "auto", "auto"},
+      {false, false, TestURLScheme::kFile, "none", "none"},
       // Tests for conditions in which preload type should be overriden to
       // "metadata".
-      {false, false, true, TestURLScheme::kHttp, "auto", "metadata"},
-      {false, false, true, TestURLScheme::kHttp, "scheme", "metadata"},
-      {false, false, true, TestURLScheme::kHttp, "none", "none"},
+      {false, true, TestURLScheme::kHttp, "auto", "metadata"},
+      {false, true, TestURLScheme::kHttp, "scheme", "metadata"},
+      {false, true, TestURLScheme::kHttp, "none", "none"},
       // Tests that the preload is overriden to "metadata".
-      {false, false, false, TestURLScheme::kHttp, "foo", "metadata"},
+      {false, false, TestURLScheme::kHttp, "foo", "metadata"},
   };
 
   int index = 0;
   for (const auto& data : test_data) {
     GetNetworkStateNotifier().SetSaveDataEnabledOverride(
         data.data_saver_enabled);
-    Media()->GetDocument().GetSettings()->SetForcePreloadNoneForMediaElements(
-        data.force_preload_none_for_media_elements);
     if (data.is_cellular) {
       GetNetworkStateNotifier().SetNetworkConnectionInfoOverride(
           true, WebConnectionType::kWebConnectionTypeCellular3G,
@@ -310,7 +319,7 @@ TEST_P(HTMLMediaElementTest, AutoplayInitiated_DocumentActivation_Low_Gesture) {
   RuntimeEnabledFeatures::SetMediaEngagementBypassAutoplayPoliciesEnabled(true);
   Media()->GetDocument().GetSettings()->SetAutoplayPolicy(
       AutoplayPolicy::Type::kDocumentUserActivationRequired);
-  Frame::NotifyUserActivation(Media()->GetDocument().GetFrame());
+  LocalFrame::NotifyUserActivation(Media()->GetDocument().GetFrame());
 
   Media()->Play();
 
@@ -327,7 +336,7 @@ TEST_P(HTMLMediaElementTest,
   Media()->GetDocument().GetSettings()->SetAutoplayPolicy(
       AutoplayPolicy::Type::kDocumentUserActivationRequired);
   SimulateHighMediaEngagement();
-  Frame::NotifyUserActivation(Media()->GetDocument().GetFrame());
+  LocalFrame::NotifyUserActivation(Media()->GetDocument().GetFrame());
 
   Media()->Play();
 
@@ -357,7 +366,7 @@ TEST_P(HTMLMediaElementTest, AutoplayInitiated_GestureRequired_Gesture) {
   // - MEI doesn't matter as it's not used by the policy.
   Media()->GetDocument().GetSettings()->SetAutoplayPolicy(
       AutoplayPolicy::Type::kUserGestureRequired);
-  Frame::NotifyUserActivation(Media()->GetDocument().GetFrame());
+  LocalFrame::NotifyUserActivation(Media()->GetDocument().GetFrame());
 
   Media()->Play();
 
@@ -371,7 +380,7 @@ TEST_P(HTMLMediaElementTest, AutoplayInitiated_NoGestureRequired_Gesture) {
   // - MEI doesn't matter as it's not used by the policy.
   Media()->GetDocument().GetSettings()->SetAutoplayPolicy(
       AutoplayPolicy::Type::kNoUserGestureRequired);
-  Frame::NotifyUserActivation(Media()->GetDocument().GetFrame());
+  LocalFrame::NotifyUserActivation(Media()->GetDocument().GetFrame());
 
   Media()->Play();
 
@@ -442,6 +451,42 @@ TEST_P(HTMLMediaElementTest, DefaultTracksAreEnabled) {
   ASSERT_EQ(1u, Media()->videoTracks().length());
   EXPECT_TRUE(Media()->audioTracks().AnonymousIndexedGetter(0)->enabled());
   EXPECT_TRUE(Media()->videoTracks().AnonymousIndexedGetter(0)->selected());
+}
+
+// Ensure a visibility observer is created for lazy loading.
+TEST_P(HTMLMediaElementTest, VisibilityObserverCreatedForLazyLoad) {
+  Media()->SetSrc(SrcSchemeToURL(TestURLScheme::kHttp));
+  test::RunPendingTasks();
+
+  EXPECT_CALL(*MockMediaPlayer(), DidLazyLoad()).WillRepeatedly(Return(true));
+
+  SetReadyState(HTMLMediaElement::kHaveFutureData);
+  EXPECT_EQ(HasLazyLoadObserver(), GetParam() == MediaTestParam::kVideo);
+}
+
+TEST_P(HTMLMediaElementTest, DomInteractive) {
+  EXPECT_FALSE(Media()->GetDocument().GetTiming().DomInteractive().is_null());
+}
+
+TEST_P(HTMLMediaElementTest, ContextPaused) {
+  Media()->SetSrc(SrcSchemeToURL(TestURLScheme::kHttp));
+  Media()->Play();
+
+  test::RunPendingTasks();
+  SetReadyState(HTMLMediaElement::kHaveFutureData);
+
+  EXPECT_FALSE(Media()->paused());
+  GetExecutionContext()->SetLifecycleState(
+      mojom::FrameLifecycleState::kFrozenAutoResumeMedia);
+  EXPECT_TRUE(Media()->paused());
+  GetExecutionContext()->SetLifecycleState(
+      mojom::FrameLifecycleState::kRunning);
+  EXPECT_FALSE(Media()->paused());
+  GetExecutionContext()->SetLifecycleState(mojom::FrameLifecycleState::kFrozen);
+  EXPECT_TRUE(Media()->paused());
+  GetExecutionContext()->SetLifecycleState(
+      mojom::FrameLifecycleState::kRunning);
+  EXPECT_TRUE(Media()->paused());
 }
 
 }  // namespace blink

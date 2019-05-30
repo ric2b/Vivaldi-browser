@@ -6,8 +6,8 @@
 
 #include "base/bind.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_tpm_key_manager.h"
-#include "chromeos/components/proximity_auth/logging/logging.h"
-#include "components/cryptauth/proto/securemessage.pb.h"
+#include "chromeos/components/multidevice/logging/logging.h"
+#include "chromeos/services/device_sync/proto/securemessage.pb.h"
 
 namespace chromeos {
 
@@ -77,7 +77,7 @@ void EasyUnlockChallengeWrapper::OnChannelBindingDataSigned(
   wrapped_challenge.set_header_and_body(challenge_);
   wrapped_challenge.set_signature(signature_container.SerializeAsString());
 
-  PA_LOG(INFO) << "Finished wrapping challenge.";
+  PA_LOG(VERBOSE) << "Finished wrapping challenge.";
   callback_.Run(wrapped_challenge.SerializeAsString());
 }
 

@@ -32,7 +32,7 @@ constexpr int kBorderCornerRadius = 32;
 KSVSearchBoxView::KSVSearchBoxView(search_box::SearchBoxViewDelegate* delegate)
     : search_box::SearchBoxViewBase(delegate) {
   SetSearchBoxBackgroundCornerRadius(kBorderCornerRadius);
-  SetSearchBoxBackgroundColor(kDefaultSearchBoxBackgroundColor);
+  UpdateBackgroundColor(kDefaultSearchBoxBackgroundColor);
   search_box()->SetBackgroundColor(SK_ColorTRANSPARENT);
   search_box()->SetColor(gfx::kGoogleGrey900);
   search_box()->set_placeholder_text_color(gfx::kGoogleGrey900);
@@ -56,15 +56,16 @@ void KSVSearchBoxView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 
 void KSVSearchBoxView::OnKeyEvent(ui::KeyEvent* event) {
   const ui::KeyboardCode key = event->key_code();
-  const bool is_escape_key = (key == ui::VKEY_ESCAPE);
-  if (!is_escape_key && key != ui::VKEY_BROWSER_BACK)
+  if ((key != ui::VKEY_ESCAPE && key != ui::VKEY_BROWSER_BACK) ||
+      event->type() != ui::ET_KEY_PRESSED) {
     return;
+  }
 
   event->SetHandled();
   // |VKEY_BROWSER_BACK| will only clear all the text.
   ClearSearch();
   // |VKEY_ESCAPE| will clear text and exit search mode directly.
-  if (is_escape_key)
+  if (key == ui::VKEY_ESCAPE)
     SetSearchBoxActive(false, event->type());
 }
 
@@ -82,7 +83,7 @@ void KSVSearchBoxView::SetAccessibleValue(const base::string16& value) {
 }
 
 void KSVSearchBoxView::UpdateBackgroundColor(SkColor color) {
-  SetSearchBoxBackgroundColor(color);
+  GetSearchBoxBackground()->SetNativeControlColor(color);
 }
 
 void KSVSearchBoxView::UpdateSearchBoxBorder() {
@@ -97,12 +98,12 @@ void KSVSearchBoxView::UpdateSearchBoxBorder() {
   if (search_box()->HasFocus() || is_search_box_active()) {
     SetBorder(views::CreateRoundedRectBorder(
         kBorderThichness, kBorderCornerRadius, kActiveBorderColor));
-    SetSearchBoxBackgroundColor(gfx::kGoogleGrey100);
+    UpdateBackgroundColor(gfx::kGoogleGrey100);
     return;
   }
   SetBorder(views::CreateRoundedRectBorder(
       kBorderThichness, kBorderCornerRadius, SK_ColorTRANSPARENT));
-  SetSearchBoxBackgroundColor(kDefaultSearchBoxBackgroundColor);
+  UpdateBackgroundColor(kDefaultSearchBoxBackgroundColor);
 }
 
 void KSVSearchBoxView::SetupCloseButton() {

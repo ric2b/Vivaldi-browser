@@ -10,14 +10,18 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/version.h"
 #include "components/component_updater/component_updater_command_line_config_policy.h"
 #include "components/component_updater/configurator_impl.h"
 #include "components/update_client/activity_data_service.h"
+#include "components/update_client/net/network_chromium.h"
+#include "components/update_client/protocol_handler.h"
 #include "components/update_client/update_query_params.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/google/google_brand.h"
 #include "ios/chrome/common/channel_info.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 namespace component_updater {
@@ -41,10 +45,10 @@ class IOSConfigurator : public update_client::Configurator {
   std::string GetBrand() const override;
   std::string GetLang() const override;
   std::string GetOSLongName() const override;
-  std::string ExtraRequestParams() const override;
+  base::flat_map<std::string, std::string> ExtraRequestParams() const override;
   std::string GetDownloadPreference() const override;
-  scoped_refptr<network::SharedURLLoaderFactory> URLLoaderFactory()
-      const override;
+  scoped_refptr<update_client::NetworkFetcherFactory> GetNetworkFetcherFactory()
+      override;
   std::unique_ptr<service_manager::Connector> CreateServiceManagerConnector()
       const override;
   bool EnabledDeltas() const override;
@@ -56,11 +60,15 @@ class IOSConfigurator : public update_client::Configurator {
   bool IsPerUserInstall() const override;
   std::vector<uint8_t> GetRunActionKeyHash() const override;
   std::string GetAppGuid() const override;
+  std::unique_ptr<update_client::ProtocolHandlerFactory>
+  GetProtocolHandlerFactory() const override;
+  update_client::RecoveryCRXElevator GetRecoveryCRXElevator() const override;
 
  private:
   friend class base::RefCountedThreadSafe<IOSConfigurator>;
 
   ConfiguratorImpl configurator_impl_;
+  scoped_refptr<update_client::NetworkFetcherFactory> network_fetcher_factory_;
 
   ~IOSConfigurator() override {}
 };
@@ -123,7 +131,8 @@ std::string IOSConfigurator::GetOSLongName() const {
   return configurator_impl_.GetOSLongName();
 }
 
-std::string IOSConfigurator::ExtraRequestParams() const {
+base::flat_map<std::string, std::string> IOSConfigurator::ExtraRequestParams()
+    const {
   return configurator_impl_.ExtraRequestParams();
 }
 
@@ -131,9 +140,14 @@ std::string IOSConfigurator::GetDownloadPreference() const {
   return configurator_impl_.GetDownloadPreference();
 }
 
-scoped_refptr<network::SharedURLLoaderFactory>
-IOSConfigurator::URLLoaderFactory() const {
-  return GetApplicationContext()->GetSharedURLLoaderFactory();
+scoped_refptr<update_client::NetworkFetcherFactory>
+IOSConfigurator::GetNetworkFetcherFactory() {
+  if (!network_fetcher_factory_) {
+    network_fetcher_factory_ =
+        base::MakeRefCounted<update_client::NetworkFetcherChromiumFactory>(
+            GetApplicationContext()->GetSharedURLLoaderFactory());
+  }
+  return network_fetcher_factory_;
 }
 
 std::unique_ptr<service_manager::Connector>
@@ -176,6 +190,16 @@ std::vector<uint8_t> IOSConfigurator::GetRunActionKeyHash() const {
 
 std::string IOSConfigurator::GetAppGuid() const {
   return configurator_impl_.GetAppGuid();
+}
+
+std::unique_ptr<update_client::ProtocolHandlerFactory>
+IOSConfigurator::GetProtocolHandlerFactory() const {
+  return configurator_impl_.GetProtocolHandlerFactory();
+}
+
+update_client::RecoveryCRXElevator IOSConfigurator::GetRecoveryCRXElevator()
+    const {
+  return configurator_impl_.GetRecoveryCRXElevator();
 }
 
 }  // namespace

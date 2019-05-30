@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
@@ -54,8 +55,7 @@ storage::FileSystemURL CreateFileSystemURL(const std::string& mount_point_name,
   const storage::ExternalMountPoints* const mount_points =
       storage::ExternalMountPoints::GetSystemInstance();
   return mount_points->CreateCrackedFileSystemURL(
-      GURL(origin),
-      storage::kFileSystemTypeExternal,
+      url::Origin::Create(GURL(origin)), storage::kFileSystemTypeExternal,
       base::FilePath::FromUTF8Unsafe(mount_point_name).Append(file_path));
 }
 
@@ -109,7 +109,8 @@ TEST_F(FileSystemProviderFileStreamWriter, Write) {
 
   const int64_t initial_offset = 0;
   FileStreamWriter writer(file_url_, initial_offset);
-  scoped_refptr<net::IOBuffer> io_buffer(new net::StringIOBuffer(kTextToWrite));
+  scoped_refptr<net::IOBuffer> io_buffer =
+      base::MakeRefCounted<net::StringIOBuffer>(kTextToWrite);
 
   {
     const int result = writer.Write(io_buffer.get(),
@@ -160,7 +161,8 @@ TEST_F(FileSystemProviderFileStreamWriter, Cancel) {
 
   const int64_t initial_offset = 0;
   FileStreamWriter writer(file_url_, initial_offset);
-  scoped_refptr<net::IOBuffer> io_buffer(new net::StringIOBuffer(kTextToWrite));
+  scoped_refptr<net::IOBuffer> io_buffer =
+      base::MakeRefCounted<net::StringIOBuffer>(kTextToWrite);
 
   const int write_result = writer.Write(io_buffer.get(),
                                         sizeof(kTextToWrite) - 1,
@@ -182,7 +184,8 @@ TEST_F(FileSystemProviderFileStreamWriter, Cancel_NotRunning) {
 
   const int64_t initial_offset = 0;
   FileStreamWriter writer(file_url_, initial_offset);
-  scoped_refptr<net::IOBuffer> io_buffer(new net::StringIOBuffer(kTextToWrite));
+  scoped_refptr<net::IOBuffer> io_buffer =
+      base::MakeRefCounted<net::StringIOBuffer>(kTextToWrite);
 
   std::vector<int> cancel_log;
   const int cancel_result = writer.Cancel(base::Bind(&LogValue, &cancel_log));
@@ -198,7 +201,8 @@ TEST_F(FileSystemProviderFileStreamWriter, Write_WrongFile) {
 
   const int64_t initial_offset = 0;
   FileStreamWriter writer(wrong_file_url_, initial_offset);
-  scoped_refptr<net::IOBuffer> io_buffer(new net::StringIOBuffer(kTextToWrite));
+  scoped_refptr<net::IOBuffer> io_buffer =
+      base::MakeRefCounted<net::StringIOBuffer>(kTextToWrite);
 
   const int result = writer.Write(io_buffer.get(),
                                   sizeof(kTextToWrite) - 1,
@@ -222,7 +226,8 @@ TEST_F(FileSystemProviderFileStreamWriter, Write_Append) {
   ASSERT_LT(0, initial_offset);
 
   FileStreamWriter writer(file_url_, initial_offset);
-  scoped_refptr<net::IOBuffer> io_buffer(new net::StringIOBuffer(kTextToWrite));
+  scoped_refptr<net::IOBuffer> io_buffer =
+      base::MakeRefCounted<net::StringIOBuffer>(kTextToWrite);
 
   const int result = writer.Write(io_buffer.get(),
                                   sizeof(kTextToWrite) - 1,

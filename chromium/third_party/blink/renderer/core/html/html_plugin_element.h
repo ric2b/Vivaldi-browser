@@ -67,9 +67,9 @@ class CORE_EXPORT HTMLPlugInElement
 
  public:
   ~HTMLPlugInElement() override;
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
-  bool IsPlugin() override { return true; }
+  bool IsPlugin() const final { return true; }
 
   bool HasPendingActivity() const final;
 

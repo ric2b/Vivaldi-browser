@@ -5,6 +5,7 @@
 #include "chrome/browser/devtools/chrome_devtools_session.h"
 
 #include "chrome/browser/devtools/protocol/browser_handler.h"
+#include "chrome/browser/devtools/protocol/cast_handler.h"
 #include "chrome/browser/devtools/protocol/page_handler.h"
 #include "chrome/browser/devtools/protocol/target_handler.h"
 #include "content/public/browser/devtools_agent_host.h"
@@ -25,9 +26,16 @@ ChromeDevToolsSession::ChromeDevToolsSession(
       agent_host->GetType() == content::DevToolsAgentHost::kTypePage) {
     page_handler_ = std::make_unique<PageHandler>(agent_host->GetWebContents(),
                                                   dispatcher_.get());
+    if (client->MayAttachToBrowser()) {
+      cast_handler_ = std::make_unique<CastHandler>(
+          agent_host->GetWebContents(), dispatcher_.get());
+    }
   }
   target_handler_ = std::make_unique<TargetHandler>(dispatcher_.get());
-  browser_handler_ = std::make_unique<BrowserHandler>(dispatcher_.get());
+  if (client->MayAttachToBrowser()) {
+    browser_handler_ = std::make_unique<BrowserHandler>(dispatcher_.get(),
+                                                        agent_host->GetId());
+  }
 #if defined(OS_CHROMEOS)
   window_manager_protocl_handler_ =
       std::make_unique<WindowManagerHandler>(dispatcher_.get());
@@ -40,39 +48,42 @@ void ChromeDevToolsSession::sendProtocolResponse(
     int call_id,
     std::unique_ptr<protocol::Serializable> message) {
   pending_commands_.erase(call_id);
-  client_->DispatchProtocolMessage(agent_host_, message->serialize());
+  bool binary = client_->UsesBinaryProtocol();
+  client_->DispatchProtocolMessage(agent_host_, message->serialize(binary));
 }
 
 void ChromeDevToolsSession::HandleCommand(
-    std::unique_ptr<base::DictionaryValue> command_dict,
+    const std::string& method,
     const std::string& message,
     content::DevToolsManagerDelegate::NotHandledCallback callback) {
-  int call_id;
-  std::string method;
-  std::unique_ptr<protocol::Value> protocolCommand =
-      protocol::toProtocolValue(command_dict.get(), 1000);
-  if (!dispatcher_->parseCommand(protocolCommand.get(), &call_id, &method))
-    return;
-  if (dispatcher_->canDispatch(method)) {
-    pending_commands_[call_id] =
-        std::make_pair(std::move(callback), std::move(command_dict));
-    dispatcher_->dispatch(call_id, method, std::move(protocolCommand), message);
+  if (!dispatcher_->canDispatch(method)) {
+    std::move(callback).Run(message);
     return;
   }
-  std::move(callback).Run(std::move(command_dict), message);
+
+  int call_id;
+  std::string unused;
+  std::unique_ptr<protocol::DictionaryValue> value =
+      protocol::DictionaryValue::cast(protocol::StringUtil::parseMessage(
+          message, client_->UsesBinaryProtocol()));
+  if (!dispatcher_->parseCommand(value.get(), &call_id, &unused))
+    return;
+  pending_commands_[call_id] = std::move(callback);
+  dispatcher_->dispatch(call_id, method, std::move(value), message);
 }
 
 void ChromeDevToolsSession::fallThrough(int call_id,
                                         const std::string& method,
                                         const std::string& message) {
-  PendingCommand command = std::move(pending_commands_[call_id]);
+  auto callback = std::move(pending_commands_[call_id]);
   pending_commands_.erase(call_id);
-  std::move(command.first).Run(std::move(command.second), message);
+  std::move(callback).Run(message);
 }
 
 void ChromeDevToolsSession::sendProtocolNotification(
     std::unique_ptr<protocol::Serializable> message) {
-  client_->DispatchProtocolMessage(agent_host_, message->serialize());
+  bool binary = client_->UsesBinaryProtocol();
+  client_->DispatchProtocolMessage(agent_host_, message->serialize(binary));
 }
 
 void ChromeDevToolsSession::flushProtocolNotifications() {}

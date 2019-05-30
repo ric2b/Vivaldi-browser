@@ -8,10 +8,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/form_structure.h"
@@ -128,8 +128,7 @@ class FakePasswordRequirementsSpecFetcher
 class MockPasswordManagerClient : public StubPasswordManagerClient {
  public:
   MOCK_CONST_METHOD0(GetPasswordSyncState, SyncState());
-  MOCK_CONST_METHOD0(GetHistorySyncState, SyncState());
-  MOCK_CONST_METHOD0(IsSavingAndFillingEnabledForCurrentPage, bool());
+  MOCK_CONST_METHOD1(IsSavingAndFillingEnabled, bool(const GURL&));
   MOCK_CONST_METHOD0(IsIncognito, bool());
 
   explicit MockPasswordManagerClient(std::unique_ptr<PrefService> prefs)
@@ -193,14 +192,14 @@ class PasswordGenerationManagerTest : public testing::Test {
     GetGenerationManager()->DetectFormsEligibleForGeneration(forms);
   }
 
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
   std::unique_ptr<MockPasswordManagerClient> client_;
 };
 
 TEST_F(PasswordGenerationManagerTest, IsGenerationEnabled) {
   // Enabling the PasswordManager and password sync should cause generation to
   // be enabled, unless the sync is with a custom passphrase.
-  EXPECT_CALL(*client_, IsSavingAndFillingEnabledForCurrentPage())
+  EXPECT_CALL(*client_, IsSavingAndFillingEnabled(_))
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(*client_, GetPasswordSyncState())
       .WillRepeatedly(testing::Return(SYNCING_NORMAL_ENCRYPTION));
@@ -217,7 +216,7 @@ TEST_F(PasswordGenerationManagerTest, IsGenerationEnabled) {
 
   // Disabling the PasswordManager should cause generation to be disabled even
   // if syncing is enabled.
-  EXPECT_CALL(*client_, IsSavingAndFillingEnabledForCurrentPage())
+  EXPECT_CALL(*client_, IsSavingAndFillingEnabled(_))
       .WillRepeatedly(testing::Return(false));
   EXPECT_CALL(*client_, GetPasswordSyncState())
       .WillRepeatedly(testing::Return(SYNCING_NORMAL_ENCRYPTION));
@@ -232,7 +231,7 @@ TEST_F(PasswordGenerationManagerTest, IsGenerationEnabled) {
 // stored and that domain-wide password requirements are fetched as well.
 TEST_F(PasswordGenerationManagerTest, ProcessPasswordRequirements) {
   // Setup so that IsGenerationEnabled() returns true.
-  EXPECT_CALL(*client_, IsSavingAndFillingEnabledForCurrentPage())
+  EXPECT_CALL(*client_, IsSavingAndFillingEnabled(_))
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(*client_, GetPasswordSyncState())
       .WillRepeatedly(testing::Return(SYNCING_NORMAL_ENCRYPTION));
@@ -240,7 +239,6 @@ TEST_F(PasswordGenerationManagerTest, ProcessPasswordRequirements) {
     const char* name;
     bool has_domain_wide_requirements = false;
     bool has_field_requirements = false;
-    bool allowed_to_fetch_specs = true;
     autofill::PasswordRequirementsSpec expected_spec;
   } kTests[] = {
       {
@@ -262,14 +260,6 @@ TEST_F(PasswordGenerationManagerTest, ProcessPasswordRequirements) {
           .has_domain_wide_requirements = true,
           .has_field_requirements = true,
           .expected_spec = GetDomainWideRequirements(),
-      },
-      {
-          .name = "Don't fetch spec if not allowed",
-          .has_domain_wide_requirements = true,
-          .allowed_to_fetch_specs = false,
-          // Default value is expected even though .has_domain_wide_requirements
-          // is true.
-          .expected_spec = autofill::PasswordRequirementsSpec(),
       },
   };
 
@@ -328,11 +318,6 @@ TEST_F(PasswordGenerationManagerTest, ProcessPasswordRequirements) {
     autofill::FormStructure::ParseQueryResponse(response_string, forms,
                                                 nullptr);
 
-    EXPECT_CALL(*client_, GetHistorySyncState())
-        .WillRepeatedly(testing::Return(test.allowed_to_fetch_specs
-                                            ? SYNCING_NORMAL_ENCRYPTION
-                                            : NOT_SYNCING));
-
     GetGenerationManager()->PrefetchSpec(origin.GetOrigin());
 
     // Processs the password requirements with expected side effects of
@@ -354,7 +339,7 @@ TEST_F(PasswordGenerationManagerTest, ProcessPasswordRequirements) {
 
 TEST_F(PasswordGenerationManagerTest, DetectFormsEligibleForGeneration) {
   // Setup so that IsGenerationEnabled() returns true.
-  EXPECT_CALL(*client_, IsSavingAndFillingEnabledForCurrentPage())
+  EXPECT_CALL(*client_, IsSavingAndFillingEnabled(_))
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(*client_, GetPasswordSyncState())
       .WillRepeatedly(testing::Return(SYNCING_NORMAL_ENCRYPTION));
@@ -459,7 +444,7 @@ TEST_F(PasswordGenerationManagerTest, DetectFormsEligibleForGeneration) {
 TEST_F(PasswordGenerationManagerTest, UpdatePasswordSyncStateIncognito) {
   // Disable password manager by going incognito. Even though password
   // syncing is enabled, generation should still be disabled.
-  EXPECT_CALL(*client_, IsSavingAndFillingEnabledForCurrentPage())
+  EXPECT_CALL(*client_, IsSavingAndFillingEnabled(_))
       .WillRepeatedly(testing::Return(false));
   EXPECT_CALL(*client_, IsIncognito()).WillRepeatedly(testing::Return(true));
   PrefService* prefs = client_->GetPrefs();

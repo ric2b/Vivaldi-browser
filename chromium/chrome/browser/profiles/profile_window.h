@@ -62,10 +62,12 @@ void FindOrCreateNewWindowForProfile(
 // Opens a Browser for |profile|.
 // If |always_create| is true a window is created even if one already exists.
 // If |is_new_profile| is true a first run window is created.
+// If |unblock_extensions| is true, all extensions are unblocked.
 // When the browser is opened, |callback| will be run if it isn't null.
 void OpenBrowserWindowForProfile(ProfileManager::CreateCallback callback,
                                  bool always_create,
                                  bool is_new_profile,
+                                 bool unblock_extensions,
                                  Profile* profile,
                                  Profile::CreateStatus status);
 
@@ -127,6 +129,26 @@ void CreateSystemProfileForUserManager(
 // ProfileChooserView.
 void BubbleViewModeFromAvatarBubbleMode(BrowserWindow::AvatarBubbleMode mode,
                                         BubbleViewMode* bubble_view_mode);
+
+// Handles running a callback when a new Browser for the given profile
+// has been completely created.  This object deletes itself once the browser
+// is created and the callback is executed.
+class BrowserAddedForProfileObserver : public BrowserListObserver {
+ public:
+  BrowserAddedForProfileObserver(Profile* profile,
+                                 ProfileManager::CreateCallback callback);
+  ~BrowserAddedForProfileObserver() override;
+
+ private:
+  // Overridden from BrowserListObserver:
+  void OnBrowserAdded(Browser* browser) override;
+
+  // Profile for which the browser should be opened.
+  Profile* profile_;
+  ProfileManager::CreateCallback callback_;
+
+  DISALLOW_COPY_AND_ASSIGN(BrowserAddedForProfileObserver);
+};
 
 }  // namespace profiles
 

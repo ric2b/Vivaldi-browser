@@ -12,6 +12,7 @@
 #include <string>
 
 #include "base/command_line.h"
+#include "base/stl_util.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/config/gpu_info_collector.h"
@@ -365,9 +366,8 @@ bool GpuCommandBufferTestEGL::InitializeEGLGLES2(int width, int height) {
   if (gl::GetGLImplementation() !=
       gl::GLImplementation::kGLImplementationEGLGLES2) {
     const auto impls = gl::init::GetAllowedGLImplementations();
-    if (std::find(impls.begin(), impls.end(),
-                  gl::GLImplementation::kGLImplementationEGLGLES2) ==
-        impls.end()) {
+    if (!base::ContainsValue(impls,
+          gl::GLImplementation::kGLImplementationEGLGLES2)) {
       LOG(INFO) << "Skip test, implementation EGLGLES2 is not available";
       return false;
     }
@@ -451,8 +451,7 @@ GpuCommandBufferTestEGL::CreateGLImageNativePixmap(gfx::BufferFormat format,
   EXPECT_NE(0u, tex_service_id);
 
   // Create an EGLImage from the real texture id.
-  scoped_refptr<gl::GLImageNativePixmap> image(new gl::GLImageNativePixmap(
-      size, gl::GLImageNativePixmap::GetInternalFormatForTesting(format)));
+  auto image = base::MakeRefCounted<gl::GLImageNativePixmap>(size, format);
   bool result = image->InitializeFromTexture(tex_service_id);
   DCHECK(result);
 

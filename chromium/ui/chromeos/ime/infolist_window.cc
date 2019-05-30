@@ -57,9 +57,8 @@ class InfolistBorder : public views::BubbleBorder {
 
 InfolistBorder::InfolistBorder()
     : views::BubbleBorder(views::BubbleBorder::LEFT_CENTER,
-                          views::BubbleBorder::NO_SHADOW,
-                          SK_ColorTRANSPARENT) {
-}
+                          views::BubbleBorder::BIG_SHADOW,
+                          SK_ColorTRANSPARENT) {}
 
 InfolistBorder::~InfolistBorder() {}
 
@@ -174,7 +173,7 @@ InfolistWindow::InfolistWindow(views::View* candidate_window,
       title_font_list_(gfx::Font(kJapaneseFontName, kFontSizeDelta + 15)),
       description_font_list_(
           gfx::Font(kJapaneseFontName, kFontSizeDelta + 11)) {
-  set_can_activate(false);
+  SetCanActivate(false);
   set_accept_events(false);
   set_margins(gfx::Insets());
 
@@ -197,7 +196,7 @@ InfolistWindow::InfolistWindow(views::View* candidate_window,
       color_utils::AlphaBlend(SK_ColorBLACK,
                               GetNativeTheme()->GetSystemColor(
                                   ui::NativeTheme::kColorId_WindowBackground),
-                              0x10)));
+                              0.0625f)));
 
   AddChildView(caption_label);
 

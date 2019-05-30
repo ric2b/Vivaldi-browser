@@ -50,23 +50,26 @@ RendererSettings CreateRendererSettings() {
 #elif defined(OS_MACOSX)
   renderer_settings.release_overlay_resources_after_gpu_query = true;
   renderer_settings.auto_resize_output_surface = false;
+#elif defined(OS_CHROMEOS)
+  renderer_settings.auto_resize_output_surface = false;
 #endif
   renderer_settings.tint_gl_composited_content =
       command_line->HasSwitch(switches::kTintGlCompositedContent);
   renderer_settings.show_overdraw_feedback =
       command_line->HasSwitch(switches::kShowOverdrawFeedback);
-  renderer_settings.enable_draw_occlusion = features::IsDrawOcclusionEnabled();
   renderer_settings.allow_antialiasing =
       !command_line->HasSwitch(switches::kDisableCompositedAntialiasing);
   renderer_settings.use_skia_renderer = features::IsUsingSkiaRenderer();
-  renderer_settings.use_skia_deferred_display_list =
-      features::IsUsingSkiaDeferredDisplayList();
+  renderer_settings.use_skia_renderer_non_ddl =
+      features::IsUsingSkiaRendererNonDDL();
 #if defined(OS_MACOSX)
   renderer_settings.allow_overlays =
       ui::RemoteLayerAPISupported() &&
       !base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableMacOverlays);
 #endif
+  renderer_settings.record_sk_picture = features::IsRecordingSkPicture();
+
   if (command_line->HasSwitch(switches::kSlowDownCompositingScaleFactor)) {
     const int kMinSlowDownScaleFactor = 1;
     const int kMaxSlowDownScaleFactor = 1000;

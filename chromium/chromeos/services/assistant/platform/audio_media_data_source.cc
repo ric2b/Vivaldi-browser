@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "base/bind.h"
 #include "base/time/time.h"
 
 namespace chromeos {
@@ -15,7 +16,7 @@ namespace {
 
 // The maximum number of bytes to decode on each iteration.
 // 512 was chosen to make sure decoding does not block for long.
-constexpr int kMaxBytesToDecode = 512;
+constexpr uint32_t kMaxBytesToDecode = 512;
 
 }  // namespace
 
@@ -29,7 +30,7 @@ AudioMediaDataSource::AudioMediaDataSource(
 AudioMediaDataSource::~AudioMediaDataSource() = default;
 
 void AudioMediaDataSource::Read(
-    int32_t size,
+    uint32_t size,
     mojom::AssistantMediaDataSource::ReadCallback callback) {
   if (!delegate_) {
     task_runner_->PostTask(

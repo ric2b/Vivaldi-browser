@@ -10,10 +10,6 @@
 #include "ui/aura/test/aura_test_context_factory.h"
 #include "ui/base/ui_base_features.h"
 
-#if defined(USE_OZONE)
-#include "services/ws/public/cpp/input_devices/input_device_client.h"
-#endif
-
 #if BUILDFLAG(ENABLE_MUS)
 #include "ui/aura/test/mus/test_window_tree_client_delegate.h"
 #include "ui/aura/test/mus/test_window_tree_client_setup.h"
@@ -22,17 +18,8 @@
 namespace aura {
 namespace {
 
-#if defined(USE_OZONE)
-class TestInputDeviceClient : public ws::InputDeviceClient {
- public:
-  TestInputDeviceClient() = default;
-  ~TestInputDeviceClient() override = default;
-
-  using InputDeviceClient::GetIntefacePtr;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestInputDeviceClient);
-};
+#if BUILDFLAG(ENABLE_MUS)
+bool g_disable_mus_features = false;
 #endif
 
 }  // namespace
@@ -40,6 +27,11 @@ class TestInputDeviceClient : public ws::InputDeviceClient {
 AuraTestSuiteSetup::AuraTestSuiteSetup() {
   DCHECK(!Env::HasInstance());
 #if BUILDFLAG(ENABLE_MUS)
+  if (g_disable_mus_features) {
+    scoped_feature_list_.InitWithFeatures(
+        {} /* enabled */,
+        {features::kMash, features::kSingleProcessMash} /* disabled */);
+  }
   const Env::Mode env_mode =
       features::IsUsingWindowService() ? Env::Mode::MUS : Env::Mode::LOCAL;
   env_ = Env::CreateInstance(env_mode);
@@ -53,6 +45,13 @@ AuraTestSuiteSetup::AuraTestSuiteSetup() {
 AuraTestSuiteSetup::~AuraTestSuiteSetup() = default;
 
 #if BUILDFLAG(ENABLE_MUS)
+// static
+void AuraTestSuiteSetup::DisableMusFeatures() {
+  g_disable_mus_features = true;
+}
+#endif
+
+#if BUILDFLAG(ENABLE_MUS)
 void AuraTestSuiteSetup::ConfigureMus() {
   // Configure the WindowTreeClient in a mode similar to that of connecting via
   // a WindowTreeFactory. This gives WindowTreeClient a mock WindowTree.
@@ -63,12 +62,11 @@ void AuraTestSuiteSetup::ConfigureMus() {
       test_window_tree_client_delegate_.get());
   env_->SetWindowTreeClient(window_tree_client_setup_->window_tree_client());
 
-#if defined(USE_OZONE)
-  input_device_client_ = std::make_unique<TestInputDeviceClient>();
-#endif
+#if !defined(USE_OZONE)
   context_factory_ = std::make_unique<test::AuraTestContextFactory>();
   env_->set_context_factory(context_factory_.get());
   env_->set_context_factory_private(nullptr);
+#endif
 }
 #endif
 

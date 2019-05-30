@@ -7,6 +7,8 @@
 
 #include "base/macros.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/editing/finder/find_options.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_view.h"
 #include "third_party/blink/renderer/platform/wtf/text/unicode.h"
 
@@ -15,26 +17,33 @@ struct UStringSearch;
 namespace blink {
 
 struct CORE_EXPORT MatchResultICU {
-  size_t start;
-  size_t length;
+  wtf_size_t start;
+  wtf_size_t length;
 };
 
 class CORE_EXPORT TextSearcherICU {
+  DISALLOW_NEW();
+
  public:
   TextSearcherICU();
   ~TextSearcherICU();
 
-  void SetPattern(const StringView& pattern, bool sensitive);
-  void SetText(const UChar* text, size_t length);
-  void SetOffset(size_t);
+  void SetPattern(const StringView& pattern, FindOptions options);
+  void SetText(const UChar* text, wtf_size_t length);
+  void SetOffset(wtf_size_t);
   bool NextMatchResult(MatchResultICU&);
 
  private:
-  void SetPattern(const UChar* pattern, size_t length);
+  void SetPattern(const UChar* pattern, wtf_size_t length);
   void SetCaseSensitivity(bool case_sensitive);
+  bool ShouldSkipCurrentMatch(MatchResultICU&) const;
+  bool NextMatchResultInternal(MatchResultICU&);
+  bool IsCorrectKanaMatch(const UChar* text, MatchResultICU&) const;
 
   UStringSearch* searcher_ = nullptr;
-  size_t text_length_ = 0;
+  wtf_size_t text_length_ = 0;
+  Vector<UChar> normalized_search_text_;
+  FindOptions options_;
 
   DISALLOW_COPY_AND_ASSIGN(TextSearcherICU);
 };

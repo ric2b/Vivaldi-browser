@@ -53,6 +53,19 @@
 #include <string>
 #include <vector>
 
+#ifdef __has_attribute
+#define MALLOC_HAVE_ATTRIBUTE(x) __has_attribute(x)
+#else
+#define MALLOC_HAVE_ATTRIBUTE(x) 0
+#endif
+
+#if MALLOC_HAVE_ATTRIBUTE(unused)
+#undef ATTRIBUTE_UNUSED
+#define ATTRIBUTE_UNUSED __attribute__((unused))
+#else
+#define ATTRIBUTE_UNUSED
+#endif
+
 // Annoying stuff for windows -- makes sure clients can import these functions
 #ifndef PERFTOOLS_DLL_DECL
 # ifdef _WIN32
@@ -162,6 +175,14 @@ class PERFTOOLS_DLL_DECL MallocExtension {
   //            current_allocated_bytes +
   //            fragmentation +
   //            freed memory regions
+  //      This property is not writable.
+  //
+  //  "generic.total_physical_bytes"
+  //      Estimate of total bytes of the physical memory usage by the
+  //      allocator ==
+  //            current_allocated_bytes +
+  //            fragmentation +
+  //            metadata
   //      This property is not writable.
   //
   // tcmalloc
@@ -326,7 +347,10 @@ class PERFTOOLS_DLL_DECL MallocExtension {
   virtual Ownership GetOwnership(const void* p);
 
   // The current malloc implementation.  Always non-NULL.
-  static MallocExtension* instance();
+  static MallocExtension* instance() {
+    InitModuleOnce();
+    return current_instance_.load(std::memory_order_acquire);
+  }
 
   // Change the malloc implementation.  Typically called by the
   // malloc implementation during initialization.
@@ -404,6 +428,18 @@ class PERFTOOLS_DLL_DECL MallocExtension {
   // have an empty cache but will not need to pay to reconstruct the
   // cache data structures.
   virtual void MarkThreadTemporarilyIdle();
+
+ private:
+  static MallocExtension* InitModule();
+
+  static void InitModuleOnce() {
+    // Pointer stored here so heap leak checker will consider the default
+    // instance reachable, even if current_instance_ is later overridden by
+    // MallocExtension::Register().
+    ATTRIBUTE_UNUSED static MallocExtension* default_instance = InitModule();
+  }
+
+  static std::atomic<MallocExtension*> current_instance_;
 };
 
 namespace base {

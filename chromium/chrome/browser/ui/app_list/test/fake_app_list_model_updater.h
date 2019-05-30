@@ -10,6 +10,7 @@
 
 #include <vector>
 
+#include "base/observer_list.h"
 #include "chrome/browser/ui/app_list/app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 
@@ -17,7 +18,7 @@ class ChromeAppListItem;
 
 class FakeAppListModelUpdater : public AppListModelUpdater {
  public:
-  FakeAppListModelUpdater();
+  explicit FakeAppListModelUpdater(Profile* profile = nullptr);
   ~FakeAppListModelUpdater() override;
 
   // For AppListModel:
@@ -51,6 +52,7 @@ class FakeAppListModelUpdater : public AppListModelUpdater {
   ChromeAppListItem* FindFolderItem(const std::string& folder_id) override;
   bool FindItemIndexForTest(const std::string& id, size_t* index) override;
   void GetIdToAppListIndexMap(GetIdToAppListIndexMapCallback callback) override;
+  syncer::StringOrdinal GetFirstAvailablePosition() const override;
   void GetContextMenuModel(const std::string& id,
                            GetMenuModelCallback callback) override;
   size_t BadgedItemCount() override;
@@ -60,19 +62,22 @@ class FakeAppListModelUpdater : public AppListModelUpdater {
     return search_results_;
   }
 
-  void OnFolderCreated(ash::mojom::AppListItemMetadataPtr folder) override {}
+  void OnFolderCreated(ash::mojom::AppListItemMetadataPtr folder) override;
   void OnFolderDeleted(ash::mojom::AppListItemMetadataPtr item) override {}
   void OnItemUpdated(ash::mojom::AppListItemMetadataPtr item) override {}
   void OnPageBreakItemAdded(const std::string& id,
                             const syncer::StringOrdinal& position) override {}
+  void OnPageBreakItemDeleted(const std::string& id) override {}
 
-  void SetDelegate(AppListModelUpdaterDelegate* delegate) override;
+  void AddObserver(AppListModelUpdaterObserver* observer) override;
+  void RemoveObserver(AppListModelUpdaterObserver* observer) override;
 
  private:
   bool search_engine_is_google_ = false;
   std::vector<std::unique_ptr<ChromeAppListItem>> items_;
   std::vector<ChromeSearchResult*> search_results_;
-  AppListModelUpdaterDelegate* delegate_ = nullptr;
+  base::ObserverList<AppListModelUpdaterObserver> observers_;
+  Profile* profile_;
 
   ash::mojom::AppListItemMetadataPtr FindOrCreateOemFolder(
       const std::string& oem_folder_name,

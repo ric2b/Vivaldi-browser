@@ -101,14 +101,15 @@ TEST_F(LiveNodeListRegistryTest, ExplicitRemove) {
 struct LiveNodeListRegistryWrapper
     : public GarbageCollectedFinalized<LiveNodeListRegistryWrapper> {
   LiveNodeListRegistry registry;
-  void Trace(blink::Visitor* visitor) { visitor->Trace(registry); }
+  void Trace(Visitor* visitor) { visitor->Trace(registry); }
 };
 
 // The set of types which match should be updated as elements are removed due to
 // the garbage collected. Similar to the previous case, except all references to
 // |a| are removed together by the GC.
 TEST_F(LiveNodeListRegistryTest, ImplicitRemove) {
-  auto wrapper = WrapPersistent(new LiveNodeListRegistryWrapper);
+  auto wrapper =
+      WrapPersistent(MakeGarbageCollected<LiveNodeListRegistryWrapper>());
   auto& registry = wrapper->registry;
   auto a = WrapPersistent(CreateNodeList());
   auto b = WrapPersistent(CreateNodeList());

@@ -5,6 +5,8 @@
 #include "third_party/blink/renderer/modules/payments/payment_request_update_event.h"
 
 #include <memory>
+
+#include "base/macros.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -22,7 +24,6 @@ namespace {
 class MockPaymentUpdater : public GarbageCollectedFinalized<MockPaymentUpdater>,
                            public PaymentUpdater {
   USING_GARBAGE_COLLECTED_MIXIN(MockPaymentUpdater);
-  WTF_MAKE_NONCOPYABLE(MockPaymentUpdater);
 
  public:
   MockPaymentUpdater() = default;
@@ -33,13 +34,16 @@ class MockPaymentUpdater : public GarbageCollectedFinalized<MockPaymentUpdater>,
   MOCK_METHOD1(OnUpdatePaymentDetailsFailure, void(const String& error));
 
   void Trace(blink::Visitor* visitor) override {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockPaymentUpdater);
 };
 
 TEST(PaymentRequestUpdateEventTest, OnUpdatePaymentDetailsCalled) {
   V8TestingScope scope;
   PaymentRequestUpdateEvent* event = PaymentRequestUpdateEvent::Create(
-      scope.GetExecutionContext(), EventTypeNames::shippingaddresschange);
-  MockPaymentUpdater* updater = new MockPaymentUpdater;
+      scope.GetExecutionContext(), event_type_names::kShippingaddresschange);
+  MockPaymentUpdater* updater = MakeGarbageCollected<MockPaymentUpdater>();
   event->SetTrusted(true);
   event->SetPaymentDetailsUpdater(updater);
   event->SetEventPhase(Event::kCapturingPhase);
@@ -58,8 +62,8 @@ TEST(PaymentRequestUpdateEventTest, OnUpdatePaymentDetailsCalled) {
 TEST(PaymentRequestUpdateEventTest, OnUpdatePaymentDetailsFailureCalled) {
   V8TestingScope scope;
   PaymentRequestUpdateEvent* event = PaymentRequestUpdateEvent::Create(
-      scope.GetExecutionContext(), EventTypeNames::shippingaddresschange);
-  MockPaymentUpdater* updater = new MockPaymentUpdater;
+      scope.GetExecutionContext(), event_type_names::kShippingaddresschange);
+  MockPaymentUpdater* updater = MakeGarbageCollected<MockPaymentUpdater>();
   event->SetTrusted(true);
   event->SetPaymentDetailsUpdater(updater);
   event->SetEventPhase(Event::kCapturingPhase);
@@ -78,8 +82,8 @@ TEST(PaymentRequestUpdateEventTest, OnUpdatePaymentDetailsFailureCalled) {
 TEST(PaymentRequestUpdateEventTest, CannotUpdateWithoutDispatching) {
   V8TestingScope scope;
   PaymentRequestUpdateEvent* event = PaymentRequestUpdateEvent::Create(
-      scope.GetExecutionContext(), EventTypeNames::shippingaddresschange);
-  event->SetPaymentDetailsUpdater(new MockPaymentUpdater);
+      scope.GetExecutionContext(), event_type_names::kShippingaddresschange);
+  event->SetPaymentDetailsUpdater((MakeGarbageCollected<MockPaymentUpdater>()));
 
   event->updateWith(
       scope.GetScriptState(),
@@ -92,8 +96,8 @@ TEST(PaymentRequestUpdateEventTest, CannotUpdateWithoutDispatching) {
 TEST(PaymentRequestUpdateEventTest, CannotUpdateTwice) {
   V8TestingScope scope;
   PaymentRequestUpdateEvent* event = PaymentRequestUpdateEvent::Create(
-      scope.GetExecutionContext(), EventTypeNames::shippingaddresschange);
-  MockPaymentUpdater* updater = new MockPaymentUpdater;
+      scope.GetExecutionContext(), event_type_names::kShippingaddresschange);
+  MockPaymentUpdater* updater = MakeGarbageCollected<MockPaymentUpdater>();
   event->SetTrusted(true);
   event->SetPaymentDetailsUpdater(updater);
   event->SetEventPhase(Event::kCapturingPhase);
@@ -114,7 +118,7 @@ TEST(PaymentRequestUpdateEventTest, CannotUpdateTwice) {
 TEST(PaymentRequestUpdateEventTest, UpdaterNotRequired) {
   V8TestingScope scope;
   PaymentRequestUpdateEvent* event = PaymentRequestUpdateEvent::Create(
-      scope.GetExecutionContext(), EventTypeNames::shippingaddresschange);
+      scope.GetExecutionContext(), event_type_names::kShippingaddresschange);
   event->SetTrusted(true);
 
   event->updateWith(
@@ -133,7 +137,7 @@ TEST(PaymentRequestUpdateEventTest, AddressChangeUpdateWithTimeout) {
       scope.GetExecutionContext(), BuildPaymentMethodDataForTest(),
       BuildPaymentDetailsInitForTest(), scope.GetExceptionState());
   PaymentRequestUpdateEvent* event = PaymentRequestUpdateEvent::Create(
-      scope.GetExecutionContext(), EventTypeNames::shippingaddresschange);
+      scope.GetExecutionContext(), event_type_names::kShippingaddresschange);
   event->SetPaymentDetailsUpdater(request);
   event->SetTrusted(true);
   EXPECT_FALSE(scope.GetExceptionState().HadException());
@@ -166,7 +170,7 @@ TEST(PaymentRequestUpdateEventTest, OptionChangeUpdateWithTimeout) {
       scope.GetExecutionContext(), BuildPaymentMethodDataForTest(),
       BuildPaymentDetailsInitForTest(), scope.GetExceptionState());
   PaymentRequestUpdateEvent* event = PaymentRequestUpdateEvent::Create(
-      scope.GetExecutionContext(), EventTypeNames::shippingoptionchange);
+      scope.GetExecutionContext(), event_type_names::kShippingoptionchange);
   event->SetTrusted(true);
   event->SetPaymentDetailsUpdater(request);
   EXPECT_FALSE(scope.GetExceptionState().HadException());
@@ -200,7 +204,7 @@ TEST(PaymentRequestUpdateEventTest, AddressChangePromiseTimeout) {
       BuildPaymentDetailsInitForTest(), scope.GetExceptionState());
   EXPECT_FALSE(scope.GetExceptionState().HadException());
   PaymentRequestUpdateEvent* event = PaymentRequestUpdateEvent::Create(
-      scope.GetExecutionContext(), EventTypeNames::shippingaddresschange);
+      scope.GetExecutionContext(), event_type_names::kShippingaddresschange);
   event->SetTrusted(true);
   event->SetPaymentDetailsUpdater(request);
   event->SetEventPhase(Event::kCapturingPhase);
@@ -233,7 +237,7 @@ TEST(PaymentRequestUpdateEventTest, OptionChangePromiseTimeout) {
       BuildPaymentDetailsInitForTest(), scope.GetExceptionState());
   EXPECT_FALSE(scope.GetExceptionState().HadException());
   PaymentRequestUpdateEvent* event = PaymentRequestUpdateEvent::Create(
-      scope.GetExecutionContext(), EventTypeNames::shippingoptionchange);
+      scope.GetExecutionContext(), event_type_names::kShippingoptionchange);
   event->SetTrusted(true);
   event->SetPaymentDetailsUpdater(request);
   event->SetEventPhase(Event::kCapturingPhase);
@@ -260,7 +264,7 @@ TEST(PaymentRequestUpdateEventTest, OptionChangePromiseTimeout) {
 TEST(PaymentRequestUpdateEventTest, NotAllowUntrustedEvent) {
   V8TestingScope scope;
   PaymentRequestUpdateEvent* event = PaymentRequestUpdateEvent::Create(
-      scope.GetExecutionContext(), EventTypeNames::shippingaddresschange);
+      scope.GetExecutionContext(), event_type_names::kShippingaddresschange);
   event->SetTrusted(false);
 
   event->updateWith(

@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # Copyright (c) 2012 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -31,28 +30,42 @@ class IncludeNode(base.Node):
   def _IsValidChild(self, child):
     return False
 
-  def _GetFlattenedData(self, allow_external_script=False):
+  def _GetFlattenedData(
+      self, allow_external_script=False, preprocess_only=False):
     if not self._flattened_data:
       filename = self.ToRealPath(self.GetInputPath())
       self._flattened_data = (
           grit.format.html_inline.InlineToString(filename, self,
-              preprocess_only=False,
+              preprocess_only=preprocess_only,
               allow_external_script=allow_external_script))
     return self._flattened_data
   def MandatoryAttributes(self):
     return ['name', 'type', 'file']
 
   def DefaultAttributes(self):
+    """Attributes:
+       translateable:         False if the node has contents that should not be
+                              translated.
+       preprocess:            Takes the same code path as flattenhtml, but it
+                              disables any  processing/inlining outside of <if>
+                              and <include>.
+       compress:              The format to compress the data with, e.g. 'gzip'
+                              or 'false' if data should not be compressed.
+       skip_minify:           If true, skips minifying the node's contents.
+       skip_in_resource_map:  If true, do not add to the resource map.
+    """
     return {'translateable' : 'true',
             'generateid': 'true',
             'filenameonly': 'false',
             'mkoutput': 'false',
+            'preprocess': 'false',
             'flattenhtml': 'false',
             'compress': 'false',
             'allowexternalscript': 'false',
             'relativepath': 'false',
             'use_base_dir': 'true',
             'skip_minify': 'false',
+            'skip_in_resource_map': 'false',
            }
 
   def GetInputPath(self):
@@ -89,6 +102,8 @@ class IncludeNode(base.Node):
     if self.attrs['flattenhtml'] == 'true':
       allow_external_script = self.attrs['allowexternalscript'] == 'true'
       data = self._GetFlattenedData(allow_external_script=allow_external_script)
+    elif self.attrs['preprocess'] == 'true':
+      data = self._GetFlattenedData(preprocess_only=True)
     else:
       data = util.ReadFile(filename, util.BINARY)
 
@@ -126,7 +141,8 @@ class IncludeNode(base.Node):
          allow_external_script=allow_external_script)
 
   def IsResourceMapSource(self):
-    return True
+    skip = self.attrs.get('skip_in_resource_map', 'false') == 'true'
+    return not skip
 
   @staticmethod
   def Construct(parent, name, type, file, translateable=True,

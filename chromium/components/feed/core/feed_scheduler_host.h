@@ -60,6 +60,24 @@ class FeedSchedulerHost : web_resource::EulaAcceptedNotifier::Observer {
     kMaxValue = kFixedTimer
   };
 
+  // Enum for the status of the refresh, reported through UMA.
+  // If any new values are added, update the corresponding definition in
+  // enums.xml.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum ShouldRefreshResult {
+    kShouldRefresh = 0,
+    kDontRefreshOutstandingRequest = 1,
+    kDontRefreshTriggerDisabled = 2,
+    kDontRefreshNetworkOffline = 3,
+    kDontRefreshEulaNotAccepted = 4,
+    kDontRefreshArticlesHidden = 5,
+    kDontRefreshRefreshSuppressed = 6,
+    kDontRefreshNotStale = 7,
+    kDontRefreshRefreshThrottled = 8,
+    kMaxValue = kDontRefreshRefreshThrottled,
+  };
+
   FeedSchedulerHost(PrefService* profile_prefs,
                     PrefService* local_state,
                     base::Clock* clock);
@@ -77,7 +95,8 @@ class FeedSchedulerHost : web_resource::EulaAcceptedNotifier::Observer {
   // specific place that the FeedHostService does not know of.
   void Initialize(
       base::RepeatingClosure refresh_callback,
-      ScheduleBackgroundTaskCallback schedule_background_task_callback);
+      ScheduleBackgroundTaskCallback schedule_background_task_callback,
+      base::RepeatingClosure cancel_background_task_callback);
 
   // Called when the NTP is opened to decide how to handle displaying and
   // refreshing content.
@@ -100,10 +119,6 @@ class FeedSchedulerHost : web_resource::EulaAcceptedNotifier::Observer {
   // is started for this trigger, |on_completion| is run immediately.
   void OnFixedTimer(base::OnceClosure on_completion);
 
-  // Called when the background task may need to be rescheduled, such as on OS
-  // upgrades that change the way tasks are stored.
-  void OnTaskReschedule();
-
   // Should be called when a suggestion is consumed. This is a signal the
   // scheduler users to track the kind of user, and optimize refresh frequency.
   void OnSuggestionConsumed();
@@ -112,9 +127,21 @@ class FeedSchedulerHost : web_resource::EulaAcceptedNotifier::Observer {
   // users to track the kind of user, and optimize refresh frequency.
   void OnSuggestionsShown();
 
-  // When the user clears history, the scheduler will clear out some stored data
-  // and stop requesting refreshes for a period of time.
-  void OnHistoryCleared();
+  // Should be called when something happens to clear stored articles. The
+  // scheduler updates its internal state and treats this event as a kNtpShown
+  // trigger. Similar to ShouldSessionRequestData(), the scheduler will not
+  // start a refresh itself during this method. Instead, the caller should check
+  // the return value, and if true, the caller should start a refresh.
+  bool OnArticlesCleared(bool suppress_refreshes);
+
+  // Surface user_classifier_ for internals debugging page.
+  UserClassifier* GetUserClassifierForDebugging();
+
+  // Surface suppress_refreshes_until_ for internals debugging page.
+  base::Time GetSuppressRefreshesUntilForDebugging() const;
+
+  // Surface last_fetch_status_ for internals debugging page.
+  int GetLastFetchStatusForDebugging() const;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(FeedSchedulerHostTest, GetTriggerThreshold);
@@ -126,7 +153,7 @@ class FeedSchedulerHost : web_resource::EulaAcceptedNotifier::Observer {
   // If this method is called and returns true we presume the refresh will
   // happen, therefore we report metrics respectively and update
   // |tracking_oustanding_request_|.
-  bool ShouldRefresh(TriggerType trigger);
+  ShouldRefreshResult ShouldRefresh(TriggerType trigger);
 
   // Decides if content whose age is the difference between now and
   // |content_creation_date_time| is old enough to be considered stale.
@@ -136,9 +163,12 @@ class FeedSchedulerHost : web_resource::EulaAcceptedNotifier::Observer {
   // considered old enough for a given trigger to warrant a refresh.
   base::TimeDelta GetTriggerThreshold(TriggerType trigger);
 
-  // Schedules a task to wakeup and try to refresh. Overrides previously
+  // Schedules a task to wake up and try to refresh. Overrides previously
   // scheduled tasks.
   void ScheduleFixedTimerWakeUp(base::TimeDelta period);
+
+  // Clears the task to wake up and try to refresh.
+  void CancelFixedTimerWakeUp();
 
   // Non-owning reference to pref service providing durable storage.
   PrefService* profile_prefs_;
@@ -152,9 +182,12 @@ class FeedSchedulerHost : web_resource::EulaAcceptedNotifier::Observer {
   // Callback to request that an async refresh be started.
   base::RepeatingClosure refresh_callback_;
 
-  // Provides ability to schedule and cancel persistent background fixed timer
-  // wake ups that will call into OnFixedTimer().
+  // Provides ability to schedule persistent background fixed timer wake ups
+  // that will call into OnFixedTimer().
   ScheduleBackgroundTaskCallback schedule_background_task_callback_;
+
+  // Provides ability to cancel the persistent background fixed timer wake ups.
+  base::RepeatingClosure cancel_background_task_callback_;
 
   // When a background wake up has caused a fixed timer refresh, this callback
   // will be valid and holds a way to inform the task driving this wake up that
@@ -170,13 +203,13 @@ class FeedSchedulerHost : web_resource::EulaAcceptedNotifier::Observer {
   // should cause a refresh to occur.
   base::Time suppress_refreshes_until_;
 
-  // Whether the scheduler is aware of an outstanding refresh or not. There are
-  // cases where a refresh may be occurring without the scheduler knowing about
-  // it, such as user interaction with UI on the NTP. If this field holds a
-  // value of true, it is expected that either OnReceiveNewContent or
-  // OnRequestError will be called eventually, somewhere on the order of seconds
-  // from now, assuming the browser does not shut down.
-  bool tracking_oustanding_request_ = false;
+  // The goal of this field is to not make multiple refresh request at the same
+  // time. When the scheduler starts or indicates the caller should start a
+  // request, this field is set. When that request finishes, this field is
+  // cleared. It is unclear if this field is always and correctly cleared out,
+  // so after the point in time held by this field, the scheduler is allowed to
+  // trigger another request.
+  base::Time outstanding_request_until_;
 
   // May hold a nullptr if the platform does not show the user a EULA. Will only
   // notify if IsEulaAccepted() is called and it returns false.
@@ -191,6 +224,9 @@ class FeedSchedulerHost : web_resource::EulaAcceptedNotifier::Observer {
   // throttler for any situation.
   base::flat_map<UserClassifier::UserClass, std::unique_ptr<RefreshThrottler>>
       throttlers_;
+
+  // Status of the last fetch for debugging.
+  int last_fetch_status_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(FeedSchedulerHost);
 };

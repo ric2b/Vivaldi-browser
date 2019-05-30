@@ -11,7 +11,6 @@
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_context_menu.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_icon_loader.h"
-#include "chrome/browser/ui/app_list/search/search_util.h"
 
 namespace {
 const char kArcAppPrefix[] = "arc://";
@@ -32,13 +31,36 @@ ArcAppResult::ArcAppResult(Profile* profile,
       AppListConfig::instance().GetPreferredIconDimension(display_type()),
       this);
   icon_loader_->FetchImage(app_id);
+  // Load an additional chip icon when it is a recommendation result
+  // so that it renders clearly in both a chip and a tile.
+  if (display_type() == ash::SearchResultDisplayType::kRecommendation) {
+    chip_icon_loader_ = std::make_unique<ArcAppIconLoader>(
+        profile, AppListConfig::instance().suggestion_chip_icon_dimension(),
+        this);
+    chip_icon_loader_->FetchImage(app_id);
+  }
 }
 
 ArcAppResult::~ArcAppResult() {}
 
 void ArcAppResult::OnAppImageUpdated(const std::string& app_id,
                                      const gfx::ImageSkia& image) {
-  SetIcon(image);
+  const gfx::Size icon_size(
+      AppListConfig::instance().GetPreferredIconDimension(display_type()),
+      AppListConfig::instance().GetPreferredIconDimension(display_type()));
+  const gfx::Size chip_icon_size(
+      AppListConfig::instance().suggestion_chip_icon_dimension(),
+      AppListConfig::instance().suggestion_chip_icon_dimension());
+  DCHECK(icon_size != chip_icon_size);
+
+  if (image.size() == icon_size) {
+    SetIcon(image);
+  } else if (image.size() == chip_icon_size) {
+    DCHECK_EQ(ash::SearchResultDisplayType::kRecommendation, display_type());
+    SetChipIcon(image);
+  } else {
+    NOTREACHED();
+  }
 }
 
 void ArcAppResult::ExecuteLaunchCommand(int event_flags) {
@@ -55,16 +77,16 @@ void ArcAppResult::GetContextMenuModel(GetMenuModelCallback callback) {
   context_menu_->GetMenuModel(std::move(callback));
 }
 
+SearchResultType ArcAppResult::GetSearchResultType() const {
+  return PLAY_STORE_APP;
+}
+
 AppContextMenu* ArcAppResult::GetAppContextMenu() {
   return context_menu_.get();
 }
 
 void ArcAppResult::Launch(int event_flags,
                           arc::UserInteractionType interaction) {
-  // Record the search metric if the result is not a suggested app.
-  if (display_type() != ash::SearchResultDisplayType::kRecommendation)
-    RecordHistogram(APP_SEARCH_RESULT);
-
   arc::LaunchApp(profile(), app_id(), event_flags, interaction,
                  controller()->GetAppListDisplayId());
 }

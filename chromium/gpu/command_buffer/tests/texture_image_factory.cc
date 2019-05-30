@@ -16,6 +16,7 @@ class TextureImage : public gl::GLImage {
 
   gfx::Size GetSize() override { return size_; }
   unsigned GetInternalFormat() override { return GL_RGBA; }
+  BindOrCopy ShouldBindOrCopy() override { return BIND; }
   bool BindTexImage(unsigned target) override {
     glTexImage2D(target,
                  0,  // mip level
@@ -24,8 +25,20 @@ class TextureImage : public gl::GLImage {
                  GetInternalFormat(), GL_UNSIGNED_BYTE, nullptr);
     return true;
   }
+  bool BindTexImageWithInternalformat(unsigned target,
+                                      unsigned internal_format) override {
+    glTexImage2D(target,
+                 0,  // mip level
+                 GetInternalFormat(), size_.width(), size_.height(),
+                 0,  // border
+                 GetInternalFormat(), GL_UNSIGNED_BYTE, nullptr);
+    return true;
+  }
   void ReleaseTexImage(unsigned target) override {}
-  bool CopyTexImage(unsigned target) override { return false; }
+  bool CopyTexImage(unsigned target) override {
+    NOTREACHED();
+    return false;
+  }
   bool CopyTexSubImage(unsigned target,
                        const gfx::Point& offset,
                        const gfx::Rect& rect) override {
@@ -55,7 +68,6 @@ scoped_refptr<gl::GLImage> TextureImageFactory::CreateImageForGpuMemoryBuffer(
     gfx::GpuMemoryBufferHandle handle,
     const gfx::Size& size,
     gfx::BufferFormat format,
-    unsigned internalformat,
     int client_id,
     SurfaceHandle surface_handle) {
   return nullptr;
@@ -69,7 +81,6 @@ scoped_refptr<gl::GLImage> TextureImageFactory::CreateAnonymousImage(
     const gfx::Size& size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
-    unsigned internalformat,
     bool* is_cleared) {
   *is_cleared = true;
   return new TextureImage(size);

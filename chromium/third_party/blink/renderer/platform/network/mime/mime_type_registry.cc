@@ -10,9 +10,9 @@
 #include "media/filters/stream_parser_factory.h"
 #include "net/base/mime_util.h"
 #include "third_party/blink/public/common/mime_util/mime_util.h"
+#include "third_party/blink/public/mojom/mime/mime_registry.mojom-blink.h"
 #include "third_party/blink/public/platform/file_path_conversion.h"
 #include "third_party/blink/public/platform/interface_provider.h"
-#include "third_party/blink/public/platform/mime_registry.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -47,7 +47,7 @@ std::string ToLowerASCIIInternal(CHARTYPE* str, SIZETYPE length) {
 
 // Does the same as ToASCIIOrEmpty, but also makes the chars lower.
 std::string ToLowerASCIIOrEmpty(const String& str) {
-  if (str.IsEmpty() || !str.ContainsOnlyASCII())
+  if (str.IsEmpty() || !str.ContainsOnlyASCIIOrEmpty())
     return std::string();
   if (str.Is8Bit())
     return ToLowerASCIIInternal(str.Characters8(), str.length());
@@ -168,7 +168,7 @@ MIMETypeRegistry::SupportsType MIMETypeRegistry::SupportsMediaMIMEType(
 #endif
 
   std::vector<std::string> codec_vector;
-  media::SplitCodecsToVector(ToASCIIOrEmpty(codecs), &codec_vector, false);
+  media::SplitCodecs(ToASCIIOrEmpty(codecs), &codec_vector);
   return static_cast<SupportsType>(
       media::IsSupportedMediaFormat(ascii_mime_type, codec_vector));
 }
@@ -179,7 +179,7 @@ bool MIMETypeRegistry::IsSupportedMediaSourceMIMEType(const String& mime_type,
   if (ascii_mime_type.empty())
     return false;
   std::vector<std::string> parsed_codec_ids;
-  media::SplitCodecsToVector(ToASCIIOrEmpty(codecs), &parsed_codec_ids, false);
+  media::SplitCodecs(ToASCIIOrEmpty(codecs), &parsed_codec_ids);
   return static_cast<MIMETypeRegistry::SupportsType>(
       media::StreamParserFactory::IsTypeSupported(ascii_mime_type,
                                                   parsed_codec_ids));

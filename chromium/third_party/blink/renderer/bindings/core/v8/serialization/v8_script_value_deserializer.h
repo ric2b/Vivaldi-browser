@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_SERIALIZATION_V8_SCRIPT_VALUE_DESERIALIZER_H_
 #define THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_SERIALIZATION_V8_SCRIPT_VALUE_DESERIALIZER_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialization_tag.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_color_params.h"
@@ -12,11 +13,12 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
-#include "third_party/blink/renderer/platform/wtf/noncopyable.h"
 #include "v8/include/v8.h"
 
 namespace blink {
 
+class DOMRectReadOnly;
+class ExceptionState;
 class File;
 class UnpackedSerializedScriptValue;
 
@@ -31,7 +33,6 @@ class UnpackedSerializedScriptValue;
 class CORE_EXPORT V8ScriptValueDeserializer
     : public v8::ValueDeserializer::Delegate {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(V8ScriptValueDeserializer);
 
  public:
   using Options = SerializedScriptValue::DeserializeOptions;
@@ -45,7 +46,7 @@ class CORE_EXPORT V8ScriptValueDeserializer
   v8::Local<v8::Value> Deserialize();
 
  protected:
-  virtual ScriptWrappable* ReadDOMObject(SerializationTag);
+  virtual ScriptWrappable* ReadDOMObject(SerializationTag, ExceptionState&);
 
   ScriptState* GetScriptState() const { return script_state_; }
 
@@ -65,6 +66,7 @@ class CORE_EXPORT V8ScriptValueDeserializer
     return deserializer_.ReadRawBytes(size, data);
   }
   bool ReadUTF8String(String* string_out);
+  DOMRectReadOnly* ReadDOMRectReadOnly();
 
   template <typename E>
   bool ReadUint32Enum(E* value) {
@@ -97,8 +99,8 @@ class CORE_EXPORT V8ScriptValueDeserializer
 
   // v8::ValueDeserializer::Delegate
   v8::MaybeLocal<v8::Object> ReadHostObject(v8::Isolate*) override;
-  v8::MaybeLocal<v8::WasmCompiledModule> GetWasmModuleFromId(v8::Isolate*,
-                                                             uint32_t) override;
+  v8::MaybeLocal<v8::WasmModuleObject> GetWasmModuleFromId(v8::Isolate*,
+                                                           uint32_t) override;
   v8::MaybeLocal<v8::SharedArrayBuffer> GetSharedArrayBufferFromId(
       v8::Isolate*,
       uint32_t) override;
@@ -111,6 +113,8 @@ class CORE_EXPORT V8ScriptValueDeserializer
   // Message ports which were transferred in.
   const MessagePortArray* transferred_message_ports_ = nullptr;
 
+  Member<MessagePortArray> transferred_stream_ports_;
+
   // Blob info for blobs stored by index.
   const WebBlobInfoArray* blob_info_array_ = nullptr;
 
@@ -120,6 +124,8 @@ class CORE_EXPORT V8ScriptValueDeserializer
 #if DCHECK_IS_ON()
   bool deserialize_invoked_ = false;
 #endif
+
+  DISALLOW_COPY_AND_ASSIGN(V8ScriptValueDeserializer);
 };
 
 }  // namespace blink

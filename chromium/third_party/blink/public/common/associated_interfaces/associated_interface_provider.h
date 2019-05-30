@@ -14,7 +14,7 @@
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/associated_interface_request.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
-#include "third_party/blink/common/common_export.h"
+#include "third_party/blink/public/common/common_export.h"
 #include "third_party/blink/public/mojom/associated_interfaces/associated_interfaces.mojom.h"
 
 namespace blink {
@@ -66,7 +66,7 @@ class BLINK_COMMON_EXPORT AssociatedInterfaceProvider {
 
   template <typename Interface>
   void GetInterface(mojo::AssociatedInterfacePtr<Interface>* proxy) {
-    GetInterface(mojo::MakeRequest(proxy));
+    GetInterface(mojo::MakeRequest(proxy, task_runner_));
   }
 
   void OverrideBinderForTesting(

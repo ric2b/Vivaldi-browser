@@ -22,11 +22,12 @@ std::unique_ptr<CompositorAnimation>
 CompositorAnimation::CreateWorkletAnimation(
     cc::WorkletAnimationId worklet_animation_id,
     const String& name,
+    double playback_rate,
     std::unique_ptr<CompositorScrollTimeline> scroll_timeline,
     std::unique_ptr<cc::AnimationOptions> options) {
   return std::make_unique<CompositorAnimation>(cc::WorkletAnimation::Create(
       worklet_animation_id, std::string(name.Ascii().data(), name.length()),
-      std::move(scroll_timeline), std::move(options)));
+      playback_rate, std::move(scroll_timeline), std::move(options)));
 }
 
 CompositorAnimation::CompositorAnimation(
@@ -81,9 +82,17 @@ void CompositorAnimation::AbortKeyframeModel(int keyframe_model_id) {
   animation_->AbortKeyframeModel(keyframe_model_id);
 }
 
-void CompositorAnimation::UpdateScrollTimelineId(
-    base::Optional<cc::ElementId> element_id) {
-  cc::ToWorkletAnimation(animation_.get())->SetScrollSourceId(element_id);
+void CompositorAnimation::UpdateScrollTimeline(
+    base::Optional<cc::ElementId> element_id,
+    base::Optional<double> start_scroll_offset,
+    base::Optional<double> end_scroll_offset) {
+  cc::ToWorkletAnimation(animation_.get())
+      ->UpdateScrollTimeline(element_id, start_scroll_offset,
+                             end_scroll_offset);
+}
+
+void CompositorAnimation::UpdatePlaybackRate(double playback_rate) {
+  cc::ToWorkletAnimation(animation_.get())->UpdatePlaybackRate(playback_rate);
 }
 
 void CompositorAnimation::NotifyAnimationStarted(base::TimeTicks monotonic_time,

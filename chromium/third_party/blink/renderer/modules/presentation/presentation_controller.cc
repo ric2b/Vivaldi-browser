@@ -35,7 +35,8 @@ PresentationController* PresentationController::From(LocalFrame& frame) {
 
 // static
 void PresentationController::ProvideTo(LocalFrame& frame) {
-  Supplement<LocalFrame>::ProvideTo(frame, new PresentationController(frame));
+  Supplement<LocalFrame>::ProvideTo(
+      frame, MakeGarbageCollected<PresentationController>(frame));
 }
 
 // static
@@ -44,8 +45,7 @@ PresentationController* PresentationController::FromContext(
   if (!execution_context)
     return nullptr;
 
-  DCHECK(execution_context->IsDocument());
-  Document* document = ToDocument(execution_context);
+  Document* document = To<Document>(execution_context);
   if (!document->GetFrame())
     return nullptr;
 
@@ -122,7 +122,6 @@ void PresentationController::OnDefaultPresentationStarted(
   if (!presentation_ || !presentation_->defaultRequest())
     return;
 
-  PresentationRequest::RecordStartOriginTypeAccess(*GetExecutionContext());
   auto* connection = ControllerPresentationConnection::Take(
       this, *result->presentation_info, presentation_->defaultRequest());
   // TODO(btolsch): Convert this and similar calls to just use InterfacePtrInfo
@@ -157,10 +156,15 @@ mojom::blink::PresentationServicePtr&
 PresentationController::GetPresentationService() {
   if (!presentation_service_ && GetFrame() && GetFrame()->Client()) {
     auto* interface_provider = GetFrame()->Client()->GetInterfaceProvider();
-    interface_provider->GetInterface(mojo::MakeRequest(&presentation_service_));
+
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+        GetFrame()->GetTaskRunner(TaskType::kPresentation);
+    interface_provider->GetInterface(
+        mojo::MakeRequest(&presentation_service_, task_runner));
 
     mojom::blink::PresentationControllerPtr controller_ptr;
-    controller_binding_.Bind(mojo::MakeRequest(&controller_ptr));
+    controller_binding_.Bind(mojo::MakeRequest(&controller_ptr, task_runner),
+                             task_runner);
     presentation_service_->SetController(std::move(controller_ptr));
   }
   return presentation_service_;

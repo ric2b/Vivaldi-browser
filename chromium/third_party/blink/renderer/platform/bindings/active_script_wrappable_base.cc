@@ -20,7 +20,15 @@ void ActiveScriptWrappableBase::TraceActiveScriptWrappables(
   if (!active_script_wrappables)
     return;
 
-  for (auto active_wrappable : *active_script_wrappables) {
+  for (const auto& active_wrappable : *active_script_wrappables) {
+    // Ignore objects that are currently under construction. They are kept alive
+    // via conservative stack scan.
+    HeapObjectHeader const* const header =
+        active_wrappable->GetHeapObjectHeader();
+    if ((header == BlinkGC::kNotFullyConstructedObject) ||
+        header->IsInConstruction())
+      continue;
+
     if (!active_wrappable->DispatchHasPendingActivity())
       continue;
 
@@ -28,7 +36,7 @@ void ActiveScriptWrappableBase::TraceActiveScriptWrappables(
     // detached, even if hasPendingActivity() returns |true|. This measure
     // avoids memory leaks and has proven not to be too eager wrt
     // garbage collection of objects belonging to discarded browser contexts
-    // ( https://html.spec.whatwg.org/#a-browsing-context-is-discarded )
+    // ( https://html.spec.whatwg.org/C/#a-browsing-context-is-discarded )
     //
     // Consequently, an implementation of hasPendingActivity() is
     // not required to take the detached state of the associated

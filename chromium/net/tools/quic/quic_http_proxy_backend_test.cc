@@ -7,7 +7,9 @@
 #include "base/test/scoped_task_environment.h"
 #include "base/test/test_simple_task_runner.h"
 #include "net/base/url_util.h"
+#include "net/third_party/quic/core/quic_connection_id.h"
 #include "net/third_party/quic/platform/api/quic_test.h"
+#include "net/third_party/quic/test_tools/quic_test_utils.h"
 
 #include "net/tools/quic/quic_http_proxy_backend.h"
 #include "net/tools/quic/quic_http_proxy_backend_stream.h"
@@ -22,9 +24,11 @@ class TestQuicServerStream
 
   ~TestQuicServerStream() override {}
 
-  quic::QuicConnectionId connection_id() const override { return 123; };
-  quic::QuicStreamId stream_id() const override { return 5; };
-  std::string peer_host() const override { return "127.0.0.1"; };
+  quic::QuicConnectionId connection_id() const override {
+    return quic::test::TestConnectionId(123);
+  }
+  quic::QuicStreamId stream_id() const override { return 5; }
+  std::string peer_host() const override { return "127.0.0.1"; }
 
   void OnResponseBackendComplete(
       const quic::QuicBackendResponse* response,
@@ -110,8 +114,7 @@ TEST_F(QuicHttpProxyBackendTest, InitializeQuicHttpProxyBackend) {
 TEST_F(QuicHttpProxyBackendTest, CheckProxyStreamManager) {
   TestQuicServerStream quic_stream;
   SendRequestOverBackend(&quic_stream);
-  QuicHttpProxyBackend::ProxyBackendStreamMap::const_iterator it_find_success =
-      proxy_stream_map_->find(&quic_stream);
+  auto it_find_success = proxy_stream_map_->find(&quic_stream);
   EXPECT_NE(it_find_success, proxy_stream_map_->end());
 
   http_proxy_.CloseBackendResponseStream(&quic_stream);

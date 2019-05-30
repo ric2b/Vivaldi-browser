@@ -52,11 +52,6 @@ const net::ProxyConfig* HeadlessBrowserContextOptions::proxy_config() const {
   return browser_options_->proxy_config.get();
 }
 
-const std::string& HeadlessBrowserContextOptions::host_resolver_rules() const {
-  return ReturnOverriddenValue(host_resolver_rules_,
-                               browser_options_->host_resolver_rules);
-}
-
 const gfx::Size& HeadlessBrowserContextOptions::window_size() const {
   return ReturnOverriddenValue(window_size_, browser_options_->window_size);
 }
@@ -68,11 +63,6 @@ const base::FilePath& HeadlessBrowserContextOptions::user_data_dir() const {
 bool HeadlessBrowserContextOptions::incognito_mode() const {
   return ReturnOverriddenValue(incognito_mode_,
                                browser_options_->incognito_mode);
-}
-
-bool HeadlessBrowserContextOptions::site_per_process() const {
-  return ReturnOverriddenValue(site_per_process_,
-                               browser_options_->site_per_process);
 }
 
 bool HeadlessBrowserContextOptions::block_new_web_contents() const {

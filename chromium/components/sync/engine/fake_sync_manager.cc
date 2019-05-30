@@ -145,8 +145,7 @@ void FakeSyncManager::StartConfiguration() {
 void FakeSyncManager::ConfigureSyncer(ConfigureReason reason,
                                       ModelTypeSet to_download,
                                       SyncFeatureState sync_feature_state,
-                                      const base::Closure& ready_task,
-                                      const base::Closure& retry_task) {
+                                      const base::Closure& ready_task) {
   last_configure_reason_ = reason;
   ModelTypeSet success_types = to_download;
   success_types.RemoveAll(configure_fail_types_);
@@ -260,14 +259,14 @@ void FakeSyncManager::SetInvalidatorEnabled(bool invalidator_enabled) {
   // Do nothing.
 }
 
-void FakeSyncManager::ClearServerData(const base::Closure& callback) {
-  callback.Run();
-}
-
 void FakeSyncManager::OnCookieJarChanged(bool account_mismatch,
                                          bool empty_jar) {}
 
 void FakeSyncManager::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd) {
+  NOTIMPLEMENTED();
+}
+
+void FakeSyncManager::UpdateInvalidationClientId(const std::string&) {
   NOTIMPLEMENTED();
 }
 

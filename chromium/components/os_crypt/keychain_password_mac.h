@@ -14,13 +14,20 @@ namespace crypto {
 class AppleKeychain;
 }
 
+namespace os_crypt {
+class EncryptionKeyCreationUtil;
+}
+
+using os_crypt::EncryptionKeyCreationUtil;
+
 class COMPONENT_EXPORT(OS_CRYPT) KeychainPassword {
  public:
-  explicit KeychainPassword(const crypto::AppleKeychain& keychain)
-      : keychain_(keychain) {
-  }
+  KeychainPassword(
+      const crypto::AppleKeychain& keychain,
+      std::unique_ptr<EncryptionKeyCreationUtil> key_creation_util);
+  ~KeychainPassword();
 
-  // Get the OSCrypt password for this system.  If no password exists
+  // Get the OSCrypt password for this system. If no password exists
   // in the Keychain then one is generated, stored in the Mac keychain, and
   // returned.
   // If one exists then it is fetched from the Keychain and returned.
@@ -36,6 +43,7 @@ class COMPONENT_EXPORT(OS_CRYPT) KeychainPassword {
 
  private:
   const crypto::AppleKeychain& keychain_;
+  std::unique_ptr<EncryptionKeyCreationUtil> key_creation_util_;
 
   DISALLOW_COPY_AND_ASSIGN(KeychainPassword);
 };

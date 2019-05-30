@@ -27,25 +27,34 @@ The file `README` has the original readme from the developpers.
 >
 >And lastly the 'Release' folder will be about 30GB once built. Not all of the files/folders in it are needed to run the browser. So [here's](https://gist.github.com/Sporif/89e9584ef2370079756700e7f2aecf4e) a Powershell script I made that copies only the stuff you need.
 
-# Note for the maintainer - Update the repository
+'
 
+## Note for the maintainer - How to update the repository
+
+#### Setup
+
+```bash
+ssh $USER@$FAST_MACHINE
+cd /var/tmp/
+mkdir -p ${USER:0:2}
+cd ${USER:0:2}
+curl https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > Miniconda.sh
+bash Miniconda.sh -b -p /var/tmp/${USER:0:2}/co
+source /var/tmp/${USER:0:2}/co/bin/activate
+conda install git
+git config --global user.name  "..."
+git config --global user.email "..."
 ```
-# ssh $USER@$FAST_MACHINE
-# cd /var/tmp/
-# mkdir -p ${USER:0:2}
-# cd ${USER:0:2}
-# wget Miniconda.sh
-# bash Miniconda.sh -b -p /var/tmp/...
-# source /var/tmp/.../bin/activate
-# conda install git
-# git config --global user.name  "..."
-# git config --global user.email "..."
+
+#### Committing a version
+
+```bash
 git clone --depth=1 https://github.com/ric2b/Vivaldi-browser w
 
 wget https://vivaldi.com/source/vivaldi-source-2.0...tar.xz
 tar --xz -xf ...
 mv vivaldi-source v0
-ls v0/.git/*/*/*
+ls -ld v0/.git
 rm -rf v0/.git
 
 cp w/.git README.md v0
@@ -56,16 +65,24 @@ git status | grep -v chromium
 git commit -m 'Added version 2.0...' --author '... <...>' | grep -v chromium
 git status | grep -v chromium
 cd ..
+```
 
+#### Committing a second version
+
+```
 wget https://vivaldi.com/source/vivaldi-source-2.1...tar.xz
 tar --xz -xf ...
 mv vivaldi-source v1
-ls v0/.git/*/*/*
+ls -ld v0/.git
 rm -rf v1/.git
 
 cp w/.git README.md v1
 ...
+```
 
+#### Pushing and cleaning up
+
+```
 git status | grep -v chromium
 git push
 cd ..

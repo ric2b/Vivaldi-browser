@@ -8,8 +8,8 @@
 #include <vector>
 
 #include "net/third_party/quic/core/crypto/proof_source.h"
+#include "net/third_party/quic/core/quic_lru_cache.h"
 #include "net/third_party/quic/platform/api/quic_export.h"
-#include "net/third_party/quic/platform/api/quic_lru_cache.h"
 #include "net/third_party/quic/platform/api/quic_string.h"
 
 namespace quic {
@@ -46,7 +46,7 @@ class QUIC_EXPORT_PRIVATE QuicCompressedCertsCache {
   size_t Size();
 
   // Default size of the QuicCompressedCertsCache per server side investigation.
-  static const size_t kQuicCompressedCertsCacheSize = 225;
+  static const size_t kQuicCompressedCertsCacheSize;
 
  private:
   // A wrapper of the tuple:

@@ -71,10 +71,10 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 class AttributeChange {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
 
  public:
   AttributeChange() : name_(g_null_atom, g_null_atom, g_null_atom) {}
@@ -86,7 +86,7 @@ class AttributeChange {
 
   void Apply() { element_->setAttribute(name_, AtomicString(value_)); }
 
-  void Trace(blink::Visitor* visitor) { visitor->Trace(element_); }
+  void Trace(Visitor* visitor) { visitor->Trace(element_); }
 
  private:
   Member<Element> element_;
@@ -96,7 +96,7 @@ class AttributeChange {
 
 }  // namespace blink
 
-WTF_ALLOW_INIT_WITH_MEM_FUNCTIONS(blink::AttributeChange);
+WTF_ALLOW_INIT_WITH_MEM_FUNCTIONS(blink::AttributeChange)
 
 namespace blink {
 
@@ -130,7 +130,7 @@ static HTMLElement* AncestorToRetainStructureAndAppearanceForBlock(
   if (!common_ancestor_block)
     return nullptr;
 
-  if (common_ancestor_block->HasTagName(tbodyTag) ||
+  if (common_ancestor_block->HasTagName(kTbodyTag) ||
       IsHTMLTableRowElement(*common_ancestor_block))
     return Traversal<HTMLTableElement>::FirstAncestor(*common_ancestor_block);
 
@@ -170,7 +170,7 @@ template <typename Strategy>
 static HTMLElement* HighestAncestorToWrapMarkup(
     const PositionTemplate<Strategy>& start_position,
     const PositionTemplate<Strategy>& end_position,
-    EAnnotateForInterchange should_annotate,
+    AnnotateForInterchange should_annotate,
     Node* constraining_ancestor) {
   Node* first_node = start_position.NodeAsRangeFirstNode();
   // For compatibility reason, we use container node of start and end
@@ -217,6 +217,13 @@ static HTMLElement* HighestAncestorToWrapMarkup(
   Node* check_ancestor =
       special_common_ancestor ? special_common_ancestor : common_ancestor;
   if (check_ancestor->GetLayoutObject()) {
+    // We want to constrain the ancestor to the enclosing block.
+    // Ex: <b><p></p></b> is an ill-formed html and we don't want to return <b>
+    // as the ancestor because paragraph element is the enclosing block of the
+    // start and end positions provided to this API.
+    constraining_ancestor = constraining_ancestor
+                                ? constraining_ancestor
+                                : EnclosingBlock(check_ancestor);
     HTMLElement* new_special_common_ancestor =
         ToHTMLElement(HighestEnclosingNodeOfType(
             Position::FirstPositionInNode(*check_ancestor),
@@ -243,7 +250,7 @@ static HTMLElement* HighestAncestorToWrapMarkup(
               Position::FirstPositionInNode(special_common_ancestor
                                                 ? *special_common_ancestor
                                                 : *common_ancestor),
-              aTag)))
+              kATag)))
     special_common_ancestor = enclosing_anchor;
 
   return special_common_ancestor;
@@ -255,9 +262,9 @@ class CreateMarkupAlgorithm {
   static String CreateMarkup(
       const PositionTemplate<Strategy>& start_position,
       const PositionTemplate<Strategy>& end_position,
-      EAnnotateForInterchange should_annotate = kDoNotAnnotateForInterchange,
+      AnnotateForInterchange should_annotate = kDoNotAnnotateForInterchange,
       ConvertBlocksToInlines = ConvertBlocksToInlines::kNotConvert,
-      EAbsoluteURLs should_resolve_urls = kDoNotResolveURLs,
+      AbsoluteURLs should_resolve_urls = kDoNotResolveURLs,
       Node* constraining_ancestor = nullptr);
 };
 
@@ -269,9 +276,9 @@ template <typename Strategy>
 String CreateMarkupAlgorithm<Strategy>::CreateMarkup(
     const PositionTemplate<Strategy>& start_position,
     const PositionTemplate<Strategy>& end_position,
-    EAnnotateForInterchange should_annotate,
+    AnnotateForInterchange should_annotate,
     ConvertBlocksToInlines convert_blocks_to_inlines,
-    EAbsoluteURLs should_resolve_urls,
+    AbsoluteURLs should_resolve_urls,
     Node* constraining_ancestor) {
   if (start_position.IsNull() || end_position.IsNull())
     return g_empty_string;
@@ -303,9 +310,9 @@ String CreateMarkupAlgorithm<Strategy>::CreateMarkup(
 
 String CreateMarkup(const Position& start_position,
                     const Position& end_position,
-                    EAnnotateForInterchange should_annotate,
+                    AnnotateForInterchange should_annotate,
                     ConvertBlocksToInlines convert_blocks_to_inlines,
-                    EAbsoluteURLs should_resolve_urls,
+                    AbsoluteURLs should_resolve_urls,
                     Node* constraining_ancestor) {
   return CreateMarkupAlgorithm<EditingStrategy>::CreateMarkup(
       start_position, end_position, should_annotate, convert_blocks_to_inlines,
@@ -314,9 +321,9 @@ String CreateMarkup(const Position& start_position,
 
 String CreateMarkup(const PositionInFlatTree& start_position,
                     const PositionInFlatTree& end_position,
-                    EAnnotateForInterchange should_annotate,
+                    AnnotateForInterchange should_annotate,
                     ConvertBlocksToInlines convert_blocks_to_inlines,
-                    EAbsoluteURLs should_resolve_urls,
+                    AbsoluteURLs should_resolve_urls,
                     Node* constraining_ancestor) {
   return CreateMarkupAlgorithm<EditingInFlatTreeStrategy>::CreateMarkup(
       start_position, end_position, should_annotate, convert_blocks_to_inlines,
@@ -446,14 +453,13 @@ DocumentFragment* CreateFragmentFromMarkupWithContext(
 }
 
 String CreateMarkup(const Node* node,
-                    EChildrenOnly children_only,
-                    EAbsoluteURLs should_resolve_urls) {
+                    ChildrenOnly children_only,
+                    AbsoluteURLs should_resolve_urls) {
   if (!node)
     return "";
 
   MarkupAccumulator accumulator(should_resolve_urls);
-  return SerializeNodes<EditingStrategy>(accumulator, const_cast<Node&>(*node),
-                                         children_only);
+  return accumulator.SerializeNodes<EditingStrategy>(*node, children_only);
 }
 
 static void FillContainerFromString(ContainerNode* paragraph,
@@ -471,8 +477,8 @@ static void FillContainerFromString(ContainerNode* paragraph,
   string.Split('\t', true, tab_list);
   StringBuilder tab_text;
   bool first = true;
-  size_t num_entries = tab_list.size();
-  for (size_t i = 0; i < num_entries; ++i) {
+  wtf_size_t num_entries = tab_list.size();
+  for (wtf_size_t i = 0; i < num_entries; ++i) {
     const String& s = tab_list[i];
 
     // append the non-tab textual part
@@ -551,7 +557,7 @@ DocumentFragment* CreateFragmentFromText(const EphemeralRange& context,
     fragment->AppendChild(document.createTextNode(string));
     if (string.EndsWith('\n')) {
       HTMLBRElement* element = HTMLBRElement::Create(document);
-      element->setAttribute(classAttr, AppleInterchangeNewline);
+      element->setAttribute(kClassAttr, AppleInterchangeNewline);
       fragment->AppendChild(element);
     }
     return fragment;
@@ -573,18 +579,18 @@ DocumentFragment* CreateFragmentFromText(const EphemeralRange& context,
 
   Vector<String> list;
   string.Split('\n', true, list);  // true gets us empty strings in the list
-  size_t num_lines = list.size();
-  for (size_t i = 0; i < num_lines; ++i) {
+  wtf_size_t num_lines = list.size();
+  for (wtf_size_t i = 0; i < num_lines; ++i) {
     const String& s = list[i];
 
     Element* element = nullptr;
     if (s.IsEmpty() && i + 1 == num_lines) {
       // For last line, use the "magic BR" rather than a P.
       element = HTMLBRElement::Create(document);
-      element->setAttribute(classAttr, AppleInterchangeNewline);
+      element->setAttribute(kClassAttr, AppleInterchangeNewline);
     } else {
       if (use_clones_of_enclosing_block)
-        element = block->CloneWithoutChildren();
+        element = &block->CloneWithoutChildren();
       else
         element = CreateDefaultParagraphElement(document);
       FillContainerFromString(element, s);
@@ -730,22 +736,6 @@ void ReplaceChildrenWithText(ContainerNode* container,
   ContainerNode* container_node(container);
 
   ChildListMutationScope mutation(*container_node);
-
-  // FIXME: This is wrong if containerNode->firstChild() has more than one ref!
-  // Example:
-  // <div>foo</div>
-  // <script>
-  // var oldText = div.firstChild;
-  // console.log(oldText.data); // foo
-  // div.innerText = "bar";
-  // console.log(oldText.data); // bar!?!
-  // </script>
-  // I believe this is an intentional benchmark cheat from years ago.
-  // We should re-visit if we actually want this still.
-  if (container_node->HasOneTextChild()) {
-    ToText(container_node->firstChild())->setData(text);
-    return;
-  }
 
   // NOTE: This method currently always creates a text node, even if that text
   // node will be empty.

@@ -14,8 +14,10 @@
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
+#import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/search_engines/search_engine_observer_bridge.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
+#import "ios/chrome/browser/ui/chrome_load_params.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
@@ -25,6 +27,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_action_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_alert_factory.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_synchronizer.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_mediator.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_metrics_recorder.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
@@ -35,8 +38,10 @@
 #include "ios/chrome/browser/ui/ntp/metrics.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ui/ntp/notification_promo_whats_new.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/url_loader.h"
+#import "ios/chrome/browser/ui/toolbar/public/omnibox_focuser.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/url_loading/url_loading_service.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/chrome/common/favicon/favicon_attributes.h"
@@ -58,12 +63,6 @@ namespace {
 // URL for the page displaying help for the NTP.
 const char kNTPHelpURL[] =
     "https://support.google.com/chrome/?p=ios_new_tab&ios=1";
-
-// The What's New promo command that shows the Bookmarks Manager.
-const char kBookmarkCommand[] = "bookmark";
-
-// The What's New promo command that launches Rate This App.
-const char kRateThisAppCommand[] = "ratethisapp";
 }  // namespace
 
 @interface NTPHomeMediator ()<CRWWebStateObserver,
@@ -75,6 +74,8 @@ const char kRateThisAppCommand[] = "ratethisapp";
   std::unique_ptr<WebStateListObserverBridge> _webStateListObserver;
   // Listen for default search engine changes.
   std::unique_ptr<SearchEngineObserverBridge> _searchEngineObserver;
+  // Used to load URLs.
+  UrlLoadingService* _urlLoadingService;
 }
 
 @property(nonatomic, strong) AlertCoordinator* alertCoordinator;
@@ -106,6 +107,7 @@ const char kRateThisAppCommand[] = "ratethisapp";
 
 - (instancetype)initWithWebStateList:(WebStateList*)webStateList
                   templateURLService:(TemplateURLService*)templateURLService
+                   urlLoadingService:(UrlLoadingService*)urlLoadingService
                           logoVendor:(id<LogoVendor>)logoVendor {
   self = [super init];
   if (self) {
@@ -113,6 +115,7 @@ const char kRateThisAppCommand[] = "ratethisapp";
     _webStateListObserver = std::make_unique<WebStateListObserverBridge>(self);
     _webStateList->AddObserver(_webStateListObserver.get());
     _templateURLService = templateURLService;
+    _urlLoadingService = urlLoadingService;
     // Listen for default search engine changes.
     _searchEngineObserver = std::make_unique<SearchEngineObserverBridge>(
         self, self.templateURLService);
@@ -168,6 +171,7 @@ const char kRateThisAppCommand[] = "ratethisapp";
   _searchEngineObserver.reset();
   DCHECK(_webStateObserver);
   if (_webState) {
+    [self saveContentOffsetForWebState:_webState];
     _webState->RemoveObserver(_webStateObserver.get());
     _webStateObserver.reset();
   }
@@ -189,26 +193,7 @@ const char kRateThisAppCommand[] = "ratethisapp";
 
 - (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
   DCHECK_EQ(_webState, webState);
-  if (!success)
-    return;
-
-  web::NavigationManager* navigationManager = webState->GetNavigationManager();
-  web::NavigationItem* item = navigationManager->GetVisibleItem();
-  if (item && item->GetPageDisplayState().scroll_state().offset_y() > 0) {
-    CGFloat offset = item->GetPageDisplayState().scroll_state().offset_y();
-    UICollectionView* collection =
-        self.suggestionsViewController.collectionView;
-    // Don't set the offset such as the content of the collection is smaller
-    // than the part of the collection which should be displayed with that
-    // offset, taking into account the size of the toolbar.
-    offset = MAX(0, MIN(offset, collection.contentSize.height -
-                                    collection.bounds.size.height -
-                                    ntp_header::ToolbarHeight() +
-                                    collection.contentInset.bottom));
-    collection.contentOffset = CGPointMake(0, offset);
-    // Update the constraints in case the omnibox needs to be moved.
-    [self.suggestionsViewController updateConstraints];
-  }
+  [self setContentOffsetForWebState:webState];
 }
 
 - (void)webStateDestroyed:(web::WebState*)webState {
@@ -223,6 +208,11 @@ const char kRateThisAppCommand[] = "ratethisapp";
 }
 
 - (void)openPageForItemAtIndexPath:(NSIndexPath*)indexPath {
+  NewTabPageTabHelper* NTPHelper =
+      NewTabPageTabHelper::FromWebState(self.webState);
+  if (NTPHelper && NTPHelper->IgnoreLoadRequests()) {
+    return;
+  }
   CollectionViewItem* item = [self.suggestionsViewController.collectionViewModel
       itemAtIndexPath:indexPath];
   ContentSuggestionsItem* suggestionItem =
@@ -246,30 +236,36 @@ const char kRateThisAppCommand[] = "ratethisapp";
       web::Referrer(GURL(ntp_snippets::GetContentSuggestionsReferrerURL()),
                     web::ReferrerPolicyDefault);
   params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
-  [self.dispatcher loadURLWithParams:params];
+  ChromeLoadParams chromeParams(params);
+  _urlLoadingService->LoadUrlInCurrentTab(chromeParams);
   [self.NTPMetrics recordAction:new_tab_page_uma::ACTION_OPENED_SUGGESTION];
 }
 
 - (void)openMostVisitedItem:(CollectionViewItem*)item
                     atIndex:(NSInteger)mostVisitedIndex {
+  NewTabPageTabHelper* NTPHelper =
+      NewTabPageTabHelper::FromWebState(self.webState);
+  if (NTPHelper && NTPHelper->IgnoreLoadRequests())
+    return;
+
   if ([item isKindOfClass:[ContentSuggestionsMostVisitedActionItem class]]) {
     ContentSuggestionsMostVisitedActionItem* mostVisitedItem =
         base::mac::ObjCCastStrict<ContentSuggestionsMostVisitedActionItem>(
             item);
-    switch (mostVisitedItem.action) {
-      case ContentSuggestionsMostVisitedActionBookmark:
+    switch (mostVisitedItem.collectionShortcutType) {
+      case NTPCollectionShortcutTypeBookmark:
         [self.dispatcher showBookmarksManager];
         base::RecordAction(base::UserMetricsAction("MobileNTPShowBookmarks"));
         break;
-      case ContentSuggestionsMostVisitedActionReadingList:
+      case NTPCollectionShortcutTypeReadingList:
         [self.dispatcher showReadingList];
         base::RecordAction(base::UserMetricsAction("MobileNTPShowReadingList"));
         break;
-      case ContentSuggestionsMostVisitedActionRecentTabs:
+      case NTPCollectionShortcutTypeRecentTabs:
         [self.dispatcher showRecentTabs];
         base::RecordAction(base::UserMetricsAction("MobileNTPShowRecentTabs"));
         break;
-      case ContentSuggestionsMostVisitedActionHistory:
+      case NTPCollectionShortcutTypeHistory:
         [self.dispatcher showHistory];
         base::RecordAction(base::UserMetricsAction("MobileNTPShowHistory"));
         break;
@@ -284,7 +280,8 @@ const char kRateThisAppCommand[] = "ratethisapp";
 
   web::NavigationManager::WebLoadParams params(mostVisitedItem.URL);
   params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
-  [self.dispatcher loadURLWithParams:params];
+  ChromeLoadParams chromeParams(params);
+  _urlLoadingService->LoadUrlInCurrentTab(chromeParams);
 }
 
 - (void)displayContextMenuForSuggestion:(CollectionViewItem*)item
@@ -351,28 +348,28 @@ const char kRateThisAppCommand[] = "ratethisapp";
                                    inIncognito:NO
                                   inBackground:NO
                                       appendTo:kCurrentTab];
-    [self.dispatcher webPageOrderedOpen:command];
+    _urlLoadingService->OpenUrlInNewTab(command);
     return;
   }
 
   if (notificationPromo->IsChromeCommandPromo()) {
-    std::string command = notificationPromo->command();
-    if (command == kBookmarkCommand) {
-      [self.dispatcher showBookmarksManager];
-    } else if (command == kRateThisAppCommand) {
-      [self.dispatcher showRateThisAppDialog];
-    } else {
-      NOTREACHED() << "Promo command is not valid.";
-    }
+    // "What's New" promo that runs a command can be added here by calling
+    // self.dispatcher.
+    DCHECK_EQ(kTestWhatsNewCommand, notificationPromo->command())
+        << "Promo command is not valid.";
     return;
   }
   NOTREACHED() << "Promo type is neither URL or command.";
 }
 
 - (void)handleLearnMoreTapped {
+  NewTabPageTabHelper* NTPHelper =
+      NewTabPageTabHelper::FromWebState(self.webState);
+  if (NTPHelper && NTPHelper->IgnoreLoadRequests())
+    return;
   GURL URL(kNTPHelpURL);
-  web::NavigationManager::WebLoadParams params(URL);
-  [self.dispatcher loadURLWithParams:params];
+  ChromeLoadParams params(URL);
+  _urlLoadingService->LoadUrlInCurrentTab(params);
   [self.NTPMetrics recordAction:new_tab_page_uma::ACTION_OPENED_LEARN_MORE];
 }
 
@@ -469,6 +466,15 @@ const char kRateThisAppCommand[] = "ratethisapp";
   return self.suggestionsViewController.scrolledToTop;
 }
 
+- (BOOL)ignoreLoadRequests {
+  NewTabPageTabHelper* NTPHelper =
+      NewTabPageTabHelper::FromWebState(self.webState);
+  if (NTPHelper && NTPHelper->IgnoreLoadRequests()) {
+    return YES;
+  }
+  return NO;
+}
+
 #pragma mark - WebStateListObserving
 
 - (void)webStateList:(WebStateList*)webStateList
@@ -545,7 +551,12 @@ const char kRateThisAppCommand[] = "ratethisapp";
                                 inBackground:!incognito
                                     appendTo:kCurrentTab];
   command.originPoint = originPoint;
-  [self.dispatcher webPageOrderedOpen:command];
+  if (incognito) {
+    // Unfocus the omnibox if the new page should be opened in incognito to
+    // prevent staying stuck.
+    [self.dispatcher cancelOmniboxEdit];
+  }
+  _urlLoadingService->OpenUrlInNewTab(command);
 }
 
 // Logs a histogram due to a Most Visited item being opened.
@@ -583,6 +594,42 @@ const char kRateThisAppCommand[] = "ratethisapp";
   message.action = action;
   message.category = @"MostVisitedUndo";
   [self.dispatcher showSnackbarMessage:message];
+}
+
+// Save the NTP scroll offset into the last committed navigation item for the
+// before we navigate away.
+- (void)saveContentOffsetForWebState:(web::WebState*)webState {
+  if (webState->GetLastCommittedURL().GetOrigin() != kChromeUINewTabURL)
+    return;
+
+  if (!base::FeatureList::IsEnabled(kBrowserContainerContainsNTP))
+    return;
+
+  web::NavigationManager* manager = webState->GetNavigationManager();
+  web::NavigationItem* item = manager->GetLastCommittedItem();
+  web::PageDisplayState displayState;
+  UIEdgeInsets contentInset =
+      self.suggestionsViewController.collectionView.contentInset;
+  CGPoint contentOffset =
+      self.suggestionsViewController.collectionView.contentOffset;
+  contentOffset.y -=
+      self.headerCollectionInteractionHandler.collectionShiftingOffset;
+  displayState.scroll_state() =
+      web::PageScrollState(contentOffset, contentInset);
+  item->SetPageDisplayState(displayState);
+}
+
+// Set the NTP scroll offset for the current navigation item.
+- (void)setContentOffsetForWebState:(web::WebState*)webState {
+  if (webState->GetVisibleURL().GetOrigin() != kChromeUINewTabURL) {
+    return;
+  }
+  web::NavigationManager* navigationManager = webState->GetNavigationManager();
+  web::NavigationItem* item = navigationManager->GetVisibleItem();
+  CGFloat offset =
+      item ? item->GetPageDisplayState().scroll_state().content_offset().y : 0;
+  if (offset > 0)
+    [self.suggestionsViewController setContentOffset:offset];
 }
 
 @end

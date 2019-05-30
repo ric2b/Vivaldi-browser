@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.ntp;
 
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.browser.cached_image_fetcher.CachedImageFetcher;
 import org.chromium.chrome.browser.ntp.LogoBridge.Logo;
 import org.chromium.chrome.browser.ntp.LogoBridge.LogoObserver;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -12,8 +13,6 @@ import org.chromium.chrome.browser.suggestions.SuggestionsNavigationDelegate;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.mojom.WindowOpenDisposition;
-
-import java.util.concurrent.TimeUnit;
 
 import jp.tomorrowkey.android.gifplayer.BaseGifImage;
 
@@ -69,17 +68,16 @@ public class LogoDelegateImpl implements LogoView.Delegate {
         if (mIsDestroyed) return;
 
         if (!isAnimatedLogoShowing && mAnimatedLogoUrl != null) {
-            RecordHistogram.recordSparseSlowlyHistogram(LOGO_CLICK_UMA_NAME, CTA_IMAGE_CLICKED);
+            RecordHistogram.recordSparseHistogram(LOGO_CLICK_UMA_NAME, CTA_IMAGE_CLICKED);
             mLogoView.showLoadingView();
-            mLogoBridge.getAnimatedLogo(new LogoBridge.AnimatedLogoCallback() {
-                @Override
-                public void onAnimatedLogoAvailable(BaseGifImage animatedLogoImage) {
-                    if (mIsDestroyed) return;
-                    mLogoView.playAnimatedLogo(animatedLogoImage);
-                }
-            }, mAnimatedLogoUrl);
+            CachedImageFetcher.getInstance().fetchGif(mAnimatedLogoUrl,
+                    CachedImageFetcher.NTP_ANIMATED_LOGO_UMA_CLIENT_NAME,
+                    (BaseGifImage animatedLogoImage) -> {
+                        if (mIsDestroyed || animatedLogoImage == null) return;
+                        mLogoView.playAnimatedLogo(animatedLogoImage);
+                    });
         } else if (mOnLogoClickUrl != null) {
-            RecordHistogram.recordSparseSlowlyHistogram(LOGO_CLICK_UMA_NAME,
+            RecordHistogram.recordSparseHistogram(LOGO_CLICK_UMA_NAME,
                     isAnimatedLogoShowing ? ANIMATED_LOGO_CLICKED : STATIC_LOGO_CLICKED);
             mNavigationDelegate.openUrl(WindowOpenDisposition.CURRENT_TAB,
                     new LoadUrlParams(mOnLogoClickUrl, PageTransition.LINK));
@@ -111,7 +109,7 @@ public class LogoDelegateImpl implements LogoView.Delegate {
                     if (mShouldRecordLoadTime) {
                         long loadTime = System.currentTimeMillis() - loadTimeStart;
                         RecordHistogram.recordMediumTimesHistogram(
-                                LOGO_SHOWN_TIME_UMA_NAME, loadTime, TimeUnit.MILLISECONDS);
+                                LOGO_SHOWN_TIME_UMA_NAME, loadTime);
                         // Only record the load time once per NTP, for the first logo we got,
                         // whether that came from cache or not.
                         mShouldRecordLoadTime = false;

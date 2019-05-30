@@ -3,8 +3,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-
-from writers import template_writer
+from writers import gpo_editor_writer
 import re
 
 NEWLINE = '\r\n'
@@ -61,20 +60,20 @@ class IndentedStringBuilder:
     return NEWLINE.join(self.lines)
 
 
-class AdmWriter(template_writer.TemplateWriter):
+class AdmWriter(gpo_editor_writer.GpoEditorWriter):
   '''Class for generating policy templates in Windows ADM format.
   It is used by PolicyTemplateGenerator to write ADM files.
   '''
 
   TYPE_TO_INPUT = {
-    'string': 'EDITTEXT',
-    'int': 'NUMERIC',
-    'string-enum': 'DROPDOWNLIST',
-    'int-enum': 'DROPDOWNLIST',
-    'list': 'LISTBOX',
-    'string-enum-list': 'LISTBOX',
-    'dict': 'EDITTEXT',
-    'external': 'EDITTEXT'
+      'string': 'EDITTEXT',
+      'int': 'NUMERIC',
+      'string-enum': 'DROPDOWNLIST',
+      'int-enum': 'DROPDOWNLIST',
+      'list': 'LISTBOX',
+      'string-enum-list': 'LISTBOX',
+      'dict': 'EDITTEXT',
+      'external': 'EDITTEXT'
   }
 
   def _Escape(self, string):
@@ -123,7 +122,15 @@ class AdmWriter(template_writer.TemplateWriter):
       builder.AddLine('VALUENAME "%s"' % policy['name'])
     if policy['type'] == 'int':
       # The default max for NUMERIC values is 9999 which is too small for us.
-      builder.AddLine('MIN 0 MAX 2000000000')
+      max = '2000000000'
+      min = '0'
+      if self.PolicyHasRestrictions(policy):
+        schema = policy['schema']
+        if 'minimum' in schema:
+          min = schema['minimum']
+        if 'maximum' in schema:
+          max = schema['maximum']
+      builder.AddLine('MIN ' + str(min) + ' MAX ' + max)
     if policy['type'] in ('string', 'dict', 'external'):
       # The default max for EDITTEXT values is 1023, which is too small for
       # big JSON blobs and other string policies.
@@ -140,6 +147,12 @@ class AdmWriter(template_writer.TemplateWriter):
         self._AddGuiString(string_id, item['caption'])
       builder.AddLine('END ITEMLIST', -1)
     builder.AddLine('END PART', -1)
+
+  def PolicyHasRestrictions(self, policy):
+    if 'schema' in policy:
+      return any(keyword in policy['schema'] \
+        for keyword in ['minimum', 'maximum'])
+    return False
 
   def _WritePolicy(self, policy, key_name, builder):
     policy_name = self._Escape(policy['name'] + '_Policy')
@@ -171,7 +184,10 @@ class AdmWriter(template_writer.TemplateWriter):
     reference_link_text = reference_link_text.replace('$6', reference_url)
 
     if policy_desc is not None:
-      return policy_desc + '\n\n' + reference_link_text
+      policy_desc += '\n\n'
+      if not policy.get('deprecated', False):
+        policy_desc += reference_link_text
+      return policy_desc
     else:
       return reference_link_text
 
@@ -184,13 +200,11 @@ class AdmWriter(template_writer.TemplateWriter):
 
   def WritePolicy(self, policy):
     if self.CanBeMandatory(policy):
-      self._WritePolicy(policy,
-                        self.winconfig['reg_mandatory_key_name'],
+      self._WritePolicy(policy, self.winconfig['reg_mandatory_key_name'],
                         self.policies)
 
   def WriteRecommendedPolicy(self, policy):
-    self._WritePolicy(policy,
-                      self.winconfig['reg_recommended_key_name'],
+    self._WritePolicy(policy, self.winconfig['reg_recommended_key_name'],
                       self.recommended_policies)
 
   def BeginPolicyGroup(self, group):
@@ -258,19 +272,19 @@ class AdmWriter(template_writer.TemplateWriter):
 
   def EndTemplate(self):
     # Copy policies into self.lines.
-    policy_class = self.GetClass().upper();
+    policy_class = self.GetClass().upper()
     for class_name in ['MACHINE', 'USER']:
       if policy_class != 'BOTH' and policy_class != class_name:
         continue
       self.lines.AddLine('CLASS ' + class_name, 1)
-      self.lines.AddLines(self._CreateTemplate(
-          self.winconfig['mandatory_category_path'],
-          self.winconfig['reg_mandatory_key_name'],
-          self.policies))
-      self.lines.AddLines(self._CreateTemplate(
-          self.winconfig['recommended_category_path'],
-          self.winconfig['reg_recommended_key_name'],
-          self.recommended_policies))
+      self.lines.AddLines(
+          self._CreateTemplate(self.winconfig['mandatory_category_path'],
+                               self.winconfig['reg_mandatory_key_name'],
+                               self.policies))
+      self.lines.AddLines(
+          self._CreateTemplate(self.winconfig['recommended_category_path'],
+                               self.winconfig['reg_recommended_key_name'],
+                               self.recommended_policies))
       self.lines.AddLine('', -1)
     # Copy user strings into self.lines.
     self.lines.AddLine('[Strings]')
@@ -295,4 +309,4 @@ class AdmWriter(template_writer.TemplateWriter):
     return self.lines.ToString()
 
   def GetClass(self):
-    return 'Both';
+    return 'Both'

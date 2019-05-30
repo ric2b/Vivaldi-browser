@@ -4,11 +4,12 @@
 
 #import "ios/web/shell/test/earl_grey/web_shell_test_case.h"
 
-#import <EarlGrey/EarlGrey.h>
-
+#import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ios/web/public/test/http_server/http_server.h"
-#import "ios/web/shell/test/earl_grey/shell_matchers.h"
-#include "testing/coverage_util_ios.h"
+
+#if defined(CHROME_EARL_GREY_1)
+#include "testing/coverage_util_ios.h"  // nogncheck
+#endif
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -18,6 +19,7 @@ using web::test::HttpServer;
 
 @implementation WebShellTestCase
 
+#if defined(CHROME_EARL_GREY_1)
 // Overrides |testInvocations| to skip all tests if a system alert view is
 // shown, since this isn't a case a user would encounter (i.e. they would
 // dismiss the alert first).
@@ -35,13 +37,16 @@ using web::test::HttpServer;
   }
   return [super testInvocations];
 }
+#endif
 
 // Set up called once for the class.
 + (void)setUp {
   [super setUp];
   HttpServer::GetSharedInstance().StartOrDie();
 
+#if defined(CHROME_EARL_GREY_1)
   coverage_util::ConfigureCoverageReportPath();
+#endif
 }
 
 // Tear down called once for the class.

@@ -4,6 +4,8 @@
 
 #include "ui/views/views_delegate.h"
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "build/build_config.h"
 #include "ui/views/views_touch_selection_controller_factory.h"
@@ -14,11 +16,12 @@
 #endif
 
 namespace views {
+
 namespace {
 
 ViewsDelegate* views_delegate = nullptr;
 
-}
+}  // namespace
 
 ViewsDelegate::ViewsDelegate()
     : editing_controller_factory_(new ViewsTouchEditingControllerFactory) {
@@ -48,8 +51,7 @@ ViewsDelegate* ViewsDelegate::GetInstance() {
 void ViewsDelegate::SaveWindowPlacement(const Widget* widget,
                                         const std::string& window_name,
                                         const gfx::Rect& bounds,
-                                        ui::WindowShowState show_state) {
-}
+                                        ui::WindowShowState show_state) {}
 
 bool ViewsDelegate::GetSavedWindowPlacement(
     const Widget* widget,
@@ -59,15 +61,11 @@ bool ViewsDelegate::GetSavedWindowPlacement(
   return false;
 }
 
-void ViewsDelegate::NotifyAccessibilityEvent(View* view,
-                                             ax::mojom::Event event_type) {}
-
 void ViewsDelegate::NotifyMenuItemFocused(const base::string16& menu_name,
                                           const base::string16& menu_item_name,
                                           int item_index,
                                           int item_count,
-                                          bool has_submenu) {
-}
+                                          bool has_submenu) {}
 
 ViewsDelegate::ProcessMenuAcceleratorResult
 ViewsDelegate::ProcessAcceleratorWhileMenuShowing(
@@ -98,19 +96,13 @@ NonClientFrameView* ViewsDelegate::CreateDefaultNonClientFrameView(
   return nullptr;
 }
 
-void ViewsDelegate::AddRef() {
-}
+void ViewsDelegate::AddRef() {}
 
-void ViewsDelegate::ReleaseRef() {
-}
+void ViewsDelegate::ReleaseRef() {}
 
 void ViewsDelegate::OnBeforeWidgetInit(
     Widget::InitParams* params,
     internal::NativeWidgetDelegate* delegate) {}
-
-base::TimeDelta ViewsDelegate::GetTextfieldPasswordRevealDuration() {
-  return base::TimeDelta();
-}
 
 bool ViewsDelegate::WindowManagerProvidesTitleBar(bool maximized) {
   return false;
@@ -136,8 +128,11 @@ int ViewsDelegate::GetAppbarAutohideEdges(HMONITOR monitor,
 }
 #endif
 
-bool ViewsDelegate::ShouldMirrorArrowsInRTL() const {
-  return true;
+#if defined(USE_AURA)
+void ViewsDelegate::SetTouchSelectionMenuRunner(
+    std::unique_ptr<TouchSelectionMenuRunnerViews> menu_runner) {
+  touch_selection_menu_runner_ = std::move(menu_runner);
 }
+#endif
 
 }  // namespace views

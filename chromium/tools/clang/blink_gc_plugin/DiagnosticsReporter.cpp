@@ -17,9 +17,6 @@ const char kClassRequiresTraceMethod[] =
 const char kBaseRequiresTracing[] =
     "[blink-gc] Base class %0 of derived class %1 requires tracing.";
 
-const char kBaseRequiresWrapperTracing[] =
-    "[blink-gc] Base class %0 of derived class %1 requires wrapper tracing.";
-
 const char kBaseRequiresTracingNote[] =
     "[blink-gc] Untraced base class %0 declared here:";
 
@@ -162,6 +159,13 @@ const char kOptionalUsedWithGC[] =
     "[blink-gc] Disallowed construction of %0 found; %1 is a garbage-collected "
     "type. optional cannot hold garbage-collected objects.";
 
+const char kMissingMixinMarker[] =
+    "[blink-gc] Garbage-collected class %0 derives mixin class %1. "
+    "You must add USING_GARBAGE_COLLECTED_MIXIN(%2).";
+
+const char kMissingMixinMarkerNote[] =
+    "[blink-gc] Mixin base class derived here:";
+
 } // namespace
 
 DiagnosticBuilder DiagnosticsReporter::ReportDiagnostic(
@@ -275,6 +279,10 @@ DiagnosticsReporter::DiagnosticsReporter(
       diagnostic_.getCustomDiagID(getErrorLevel(), kUniquePtrUsedWithGC);
   diag_optional_used_with_gc_ =
       diagnostic_.getCustomDiagID(getErrorLevel(), kOptionalUsedWithGC);
+  diag_missing_mixin_marker_ =
+      diagnostic_.getCustomDiagID(getErrorLevel(), kMissingMixinMarker);
+  diag_missing_mixin_marker_note_ = diagnostic_.getCustomDiagID(
+      DiagnosticsEngine::Note, kMissingMixinMarkerNote);
 }
 
 bool DiagnosticsReporter::hasErrorOccurred() const
@@ -312,7 +320,7 @@ void DiagnosticsReporter::BaseRequiresTracing(
     RecordInfo* derived,
     CXXMethodDecl* trace,
     CXXRecordDecl* base) {
-  ReportDiagnostic(trace->getLocStart(), diag_base_requires_tracing_)
+  ReportDiagnostic(trace->getBeginLoc(), diag_base_requires_tracing_)
       << base << derived->record();
 }
 
@@ -327,8 +335,7 @@ void DiagnosticsReporter::FieldsImproperlyTraced(
       break;
     }
   }
-  ReportDiagnostic(trace->getLocStart(), diag)
-      << info->record();
+  ReportDiagnostic(trace->getBeginLoc(), diag) << info->record();
   for (auto& field : info->GetFields()) {
     if (!field.second.IsProperlyTraced())
       NoteFieldRequiresTracing(info, field.first);
@@ -340,8 +347,7 @@ void DiagnosticsReporter::FieldsImproperlyTraced(
 void DiagnosticsReporter::ClassContainsInvalidFields(
     RecordInfo* info,
     const CheckFieldsVisitor::Errors& errors) {
-
-  ReportDiagnostic(info->record()->getLocStart(),
+  ReportDiagnostic(info->record()->getBeginLoc(),
                    diag_class_contains_invalid_fields_)
       << info->record();
 
@@ -380,7 +386,7 @@ void DiagnosticsReporter::ClassContainsGCRoots(
     for (FieldPoint* path : error) {
       if (!point) {
         point = path;
-        ReportDiagnostic(info->record()->getLocStart(),
+        ReportDiagnostic(info->record()->getBeginLoc(),
                          diag_class_contains_gc_root_)
             << info->record() << point->field();
         continue;
@@ -403,7 +409,7 @@ void DiagnosticsReporter::FinalizerAccessesFinalizedFields(
     unsigned diag_note = as_eagerly_finalized ?
                          diag_eagerly_finalized_field_note_ :
                          diag_finalized_field_note_;
-    ReportDiagnostic(error.member->getLocStart(), diag_error)
+    ReportDiagnostic(error.member->getBeginLoc(), diag_error)
         << dtor << error.field->field();
     NoteField(error.field, diag_note);
   }
@@ -426,7 +432,7 @@ void DiagnosticsReporter::OverriddenNonVirtualTrace(
     RecordInfo* info,
     CXXMethodDecl* trace,
     CXXMethodDecl* overridden) {
-  ReportDiagnostic(trace->getLocStart(), diag_overridden_non_virtual_trace_)
+  ReportDiagnostic(trace->getBeginLoc(), diag_overridden_non_virtual_trace_)
       << info->record() << overridden->getParent();
   NoteOverriddenNonVirtualTrace(overridden);
 }
@@ -472,28 +478,27 @@ void DiagnosticsReporter::ReportMissingDispatch(
     const FunctionDecl* dispatch,
     RecordInfo* receiver,
     unsigned error) {
-  ReportDiagnostic(dispatch->getLocStart(), error) << receiver->record();
+  ReportDiagnostic(dispatch->getBeginLoc(), error) << receiver->record();
 }
 
 void DiagnosticsReporter::StackAllocatedDerivesGarbageCollected(
     RecordInfo* info,
     BasePoint* base) {
-  ReportDiagnostic(base->spec().getLocStart(),
-                   diag_stack_allocated_derives_gc_)
+  ReportDiagnostic(base->spec().getBeginLoc(), diag_stack_allocated_derives_gc_)
       << info->record() << base->info()->record();
 }
 
 void DiagnosticsReporter::ClassOverridesNew(
     RecordInfo* info,
     CXXMethodDecl* newop) {
-  ReportDiagnostic(newop->getLocStart(), diag_class_overrides_new_)
+  ReportDiagnostic(newop->getBeginLoc(), diag_class_overrides_new_)
       << info->record();
 }
 
 void DiagnosticsReporter::ClassDeclaresPureVirtualTrace(
     RecordInfo* info,
     CXXMethodDecl* trace) {
-  ReportDiagnostic(trace->getLocStart(),
+  ReportDiagnostic(trace->getBeginLoc(),
                    diag_class_declares_pure_virtual_trace_)
       << info->record();
 }
@@ -501,7 +506,7 @@ void DiagnosticsReporter::ClassDeclaresPureVirtualTrace(
 void DiagnosticsReporter::LeftMostBaseMustBePolymorphic(
     RecordInfo* derived,
     CXXRecordDecl* base) {
-  ReportDiagnostic(base->getLocStart(),
+  ReportDiagnostic(base->getBeginLoc(),
                    diag_left_most_base_must_be_polymorphic_)
       << base << derived->record();
 }
@@ -509,7 +514,7 @@ void DiagnosticsReporter::LeftMostBaseMustBePolymorphic(
 void DiagnosticsReporter::BaseClassMustDeclareVirtualTrace(
     RecordInfo* derived,
     CXXRecordDecl* base) {
-  ReportDiagnostic(base->getLocStart(),
+  ReportDiagnostic(base->getBeginLoc(),
                    diag_base_class_must_declare_virtual_trace_)
       << base << derived->record();
 }
@@ -517,20 +522,18 @@ void DiagnosticsReporter::BaseClassMustDeclareVirtualTrace(
 void DiagnosticsReporter::TraceMethodForStackAllocatedClass(
     RecordInfo* info,
     CXXMethodDecl* trace) {
-  ReportDiagnostic(trace->getLocStart(),
+  ReportDiagnostic(trace->getBeginLoc(),
                    diag_trace_method_of_stack_allocated_parent_)
       << info->record();
 }
 
 void DiagnosticsReporter::NoteManualDispatchMethod(CXXMethodDecl* dispatch) {
-  ReportDiagnostic(dispatch->getLocStart(),
-                   diag_manual_dispatch_method_note_)
+  ReportDiagnostic(dispatch->getBeginLoc(), diag_manual_dispatch_method_note_)
       << dispatch;
 }
 
 void DiagnosticsReporter::NoteBaseRequiresTracing(BasePoint* base) {
-  ReportDiagnostic(base->spec().getLocStart(),
-                   diag_base_requires_tracing_note_)
+  ReportDiagnostic(base->spec().getBeginLoc(), diag_base_requires_tracing_note_)
       << base->info()->record();
 }
 
@@ -548,7 +551,7 @@ void DiagnosticsReporter::NoteFieldShouldNotBeTraced(
 
 void DiagnosticsReporter::NotePartObjectContainsGCRoot(FieldPoint* point) {
   FieldDecl* field = point->field();
-  ReportDiagnostic(field->getLocStart(),
+  ReportDiagnostic(field->getBeginLoc(),
                    diag_part_object_contains_gc_root_note_)
       << field << field->getParent();
 }
@@ -558,15 +561,15 @@ void DiagnosticsReporter::NoteFieldContainsGCRoot(FieldPoint* point) {
 }
 
 void DiagnosticsReporter::NoteUserDeclaredDestructor(CXXMethodDecl* dtor) {
-  ReportDiagnostic(dtor->getLocStart(), diag_user_declared_destructor_note_);
+  ReportDiagnostic(dtor->getBeginLoc(), diag_user_declared_destructor_note_);
 }
 
 void DiagnosticsReporter::NoteUserDeclaredFinalizer(CXXMethodDecl* dtor) {
-  ReportDiagnostic(dtor->getLocStart(), diag_user_declared_finalizer_note_);
+  ReportDiagnostic(dtor->getBeginLoc(), diag_user_declared_finalizer_note_);
 }
 
 void DiagnosticsReporter::NoteBaseRequiresFinalization(BasePoint* base) {
-  ReportDiagnostic(base->spec().getLocStart(),
+  ReportDiagnostic(base->spec().getBeginLoc(),
                    diag_base_requires_finalization_note_)
       << base->info()->record();
 }
@@ -580,12 +583,12 @@ void DiagnosticsReporter::NoteField(FieldPoint* point, unsigned note) {
 }
 
 void DiagnosticsReporter::NoteField(FieldDecl* field, unsigned note) {
-  ReportDiagnostic(field->getLocStart(), note) << field;
+  ReportDiagnostic(field->getBeginLoc(), note) << field;
 }
 
 void DiagnosticsReporter::NoteOverriddenNonVirtualTrace(
     CXXMethodDecl* overridden) {
-  ReportDiagnostic(overridden->getLocStart(),
+  ReportDiagnostic(overridden->getBeginLoc(),
                    diag_overridden_non_virtual_trace_note_)
       << overridden;
 }
@@ -594,7 +597,7 @@ void DiagnosticsReporter::UniquePtrUsedWithGC(
     const clang::Expr* expr,
     const clang::FunctionDecl* bad_function,
     const clang::CXXRecordDecl* gc_type) {
-  ReportDiagnostic(expr->getLocStart(), diag_unique_ptr_used_with_gc_)
+  ReportDiagnostic(expr->getBeginLoc(), diag_unique_ptr_used_with_gc_)
       << bad_function << gc_type << expr->getSourceRange();
 }
 
@@ -602,6 +605,21 @@ void DiagnosticsReporter::OptionalUsedWithGC(
     const clang::Expr* expr,
     const clang::CXXRecordDecl* optional,
     const clang::CXXRecordDecl* gc_type) {
-  ReportDiagnostic(expr->getLocStart(), diag_optional_used_with_gc_)
+  ReportDiagnostic(expr->getBeginLoc(), diag_optional_used_with_gc_)
       << optional << gc_type << expr->getSourceRange();
+}
+
+void DiagnosticsReporter::MissingMixinMarker(
+    const clang::CXXRecordDecl* bad_class,
+    const clang::CXXRecordDecl* mixin_class,
+    const clang::CXXBaseSpecifier* first_base) {
+  ReportDiagnostic(first_base->getBaseTypeLoc(), diag_missing_mixin_marker_)
+      << bad_class << mixin_class << bad_class->getName()
+      << first_base->getSourceRange();
+}
+
+void DiagnosticsReporter::MissingMixinMarkerNote(
+    const clang::CXXBaseSpecifier* base) {
+  ReportDiagnostic(base->getBaseTypeLoc(), diag_missing_mixin_marker_note_)
+      << base->getSourceRange();
 }

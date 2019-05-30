@@ -91,8 +91,7 @@ class ZoomController : public content::WebContentsObserver,
   // Since it's possible for a WebContents to not have a ZoomController, provide
   // a simple, safe and reliable method to find the current zoom level for a
   // given WebContents*.
-  static double GetZoomLevelForWebContents(
-      const content::WebContents* web_contents);
+  static double GetZoomLevelForWebContents(content::WebContents* web_contents);
 
   ~ZoomController() override;
 
@@ -196,6 +195,8 @@ class ZoomController : public content::WebContentsObserver,
   content::HostZoomMap* host_zoom_map_;
 
   std::unique_ptr<content::HostZoomMap::Subscription> zoom_subscription_;
+
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
 
   DISALLOW_COPY_AND_ASSIGN(ZoomController);
 };

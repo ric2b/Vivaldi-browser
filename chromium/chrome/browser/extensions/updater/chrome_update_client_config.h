@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "components/component_updater/configurator_impl.h"
@@ -22,6 +23,8 @@ class BrowserContext;
 
 namespace update_client {
 class ActivityDataService;
+class NetworkFetcherFactory;
+class ProtocolHandlerFactory;
 }
 
 namespace extensions {
@@ -49,10 +52,10 @@ class ChromeUpdateClientConfig : public update_client::Configurator {
   std::string GetBrand() const override;
   std::string GetLang() const override;
   std::string GetOSLongName() const override;
-  std::string ExtraRequestParams() const override;
+  base::flat_map<std::string, std::string> ExtraRequestParams() const override;
   std::string GetDownloadPreference() const override;
-  scoped_refptr<network::SharedURLLoaderFactory> URLLoaderFactory()
-      const override;
+  scoped_refptr<update_client::NetworkFetcherFactory> GetNetworkFetcherFactory()
+      override;
   std::unique_ptr<service_manager::Connector> CreateServiceManagerConnector()
       const override;
   bool EnabledDeltas() const override;
@@ -64,6 +67,9 @@ class ChromeUpdateClientConfig : public update_client::Configurator {
   bool IsPerUserInstall() const override;
   std::vector<uint8_t> GetRunActionKeyHash() const override;
   std::string GetAppGuid() const override;
+  std::unique_ptr<update_client::ProtocolHandlerFactory>
+  GetProtocolHandlerFactory() const override;
+  update_client::RecoveryCRXElevator GetRecoveryCRXElevator() const override;
 
  protected:
   friend class base::RefCountedThreadSafe<ChromeUpdateClientConfig>;
@@ -82,6 +88,7 @@ class ChromeUpdateClientConfig : public update_client::Configurator {
   component_updater::ConfiguratorImpl impl_;
   PrefService* pref_service_;
   std::unique_ptr<update_client::ActivityDataService> activity_data_service_;
+  scoped_refptr<update_client::NetworkFetcherFactory> network_fetcher_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeUpdateClientConfig);
 };

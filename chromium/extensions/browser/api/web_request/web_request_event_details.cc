@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/strings/string_number_conversions.h"
 #include "content/public/browser/browser_thread.h"
@@ -33,6 +34,18 @@ namespace helpers = extension_web_request_api_helpers;
 namespace keys = extension_web_request_api_constants;
 
 namespace extensions {
+namespace {
+
+// Removes all headers for which predicate(header_name) returns true.
+void EraseHeadersIf(
+    base::Value* headers,
+    base::RepeatingCallback<bool(const std::string&)> predicate) {
+  base::EraseIf(headers->GetList(), [&predicate](const base::Value& v) {
+    return predicate.Run(v.FindKey(keys::kHeaderNameKey)->GetString());
+  });
+}
+
+}  // namespace
 
 WebRequestEventDetails::WebRequestEventDetails(const WebRequestInfo& request,
                                                int extra_info_spec)
@@ -135,15 +148,6 @@ void WebRequestEventDetails::DetermineFrameDataOnUI() {
   SetFrameData(frame_data);
 }
 
-void WebRequestEventDetails::DetermineFrameDataOnIO(
-    const DeterminedFrameDataCallback& callback) {
-  std::unique_ptr<WebRequestEventDetails> self(this);
-  ExtensionApiFrameIdMap::Get()->GetFrameDataOnIO(
-      render_process_id_, render_frame_id_,
-      base::Bind(&WebRequestEventDetails::OnDeterminedFrameData,
-                 base::Unretained(this), base::Passed(&self), callback));
-}
-
 std::unique_ptr<base::DictionaryValue> WebRequestEventDetails::GetFilteredDict(
     int extra_info_spec,
     const extensions::InfoMap* extension_info_map,
@@ -154,18 +158,26 @@ std::unique_ptr<base::DictionaryValue> WebRequestEventDetails::GetFilteredDict(
     result->SetKey(keys::kRequestBodyKey, request_body_->Clone());
   }
   if ((extra_info_spec & ExtraInfoSpec::REQUEST_HEADERS) && request_headers_) {
-    result->SetKey(keys::kRequestHeadersKey, request_headers_->Clone());
+    base::Value request_headers = request_headers_->Clone();
+    EraseHeadersIf(
+        &request_headers,
+        base::BindRepeating(helpers::ShouldHideRequestHeader, extra_info_spec));
+    result->SetKey(keys::kRequestHeadersKey, std::move(request_headers));
   }
   if ((extra_info_spec & ExtraInfoSpec::RESPONSE_HEADERS) &&
       response_headers_) {
-    result->SetKey(keys::kResponseHeadersKey, response_headers_->Clone());
+    base::Value response_headers = response_headers_->Clone();
+    EraseHeadersIf(&response_headers,
+                   base::BindRepeating(helpers::ShouldHideResponseHeader,
+                                       extra_info_spec));
+    result->SetKey(keys::kResponseHeadersKey, std::move(response_headers));
   }
 
   // Only listeners with a permission for the initiator should recieve it.
   if (extension_info_map && initiator_) {
     int tab_id = -1;
     dict_.GetInteger(keys::kTabIdKey, &tab_id);
-    if (initiator_->unique() ||
+    if (initiator_->opaque() ||
         WebRequestPermissions::CanExtensionAccessInitiator(
             extension_info_map, extension_id, initiator_, tab_id,
             crosses_incognito)) {
@@ -211,13 +223,5 @@ WebRequestEventDetails::CreatePublicSessionCopy() {
 
 WebRequestEventDetails::WebRequestEventDetails()
     : extra_info_spec_(0), render_process_id_(0), render_frame_id_(0) {}
-
-void WebRequestEventDetails::OnDeterminedFrameData(
-    std::unique_ptr<WebRequestEventDetails> self,
-    const DeterminedFrameDataCallback& callback,
-    const ExtensionApiFrameIdMap::FrameData& frame_data) {
-  SetFrameData(frame_data);
-  callback.Run(std::move(self));
-}
 
 }  // namespace extensions

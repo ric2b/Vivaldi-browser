@@ -13,7 +13,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
-#include "ios/chrome/browser/ui/ui_util.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/app/settings_test_util.h"
 #import "ios/chrome/test/app/web_view_interaction_test_util.h"
@@ -21,12 +21,14 @@
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
+#import "ios/web/public/features.h"
 #import "ios/web/public/test/earl_grey/web_view_matchers.h"
 #import "ios/web/public/test/http_server/error_page_response_provider.h"
 #import "ios/web/public/test/http_server/http_server.h"
 #include "ios/web/public/test/http_server/http_server_util.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
 #import "ios/web/public/web_client.h"
+#import "ios/web/public/web_state/web_state.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -106,6 +108,17 @@ void AssertURLIs(const GURL& expectedURL) {
       yOffset = -56.0;
     }
   }
+  if (base::FeatureList::IsEnabled(
+          web::features::kBrowserContainerFullscreen) &&
+      base::FeatureList::IsEnabled(web::features::kOutOfWebFullscreen) &&
+      base::ios::IsRunningOnIOS12OrLater()) {
+    // In the fullscreen browser implementation, the safe area is included in
+    // the top inset as well as the toolbar heights.  Due to crbug.com/903635,
+    // however, this only occurs on iOS 12; pdf rendering does not correctly
+    // account for the safe area on iOS 11.
+    yOffset -=
+        chrome_test_util::GetCurrentWebState()->GetView().safeAreaInsets.top;
+  }
   DCHECK_LT(yOffset, 0);
   [[EarlGrey
       selectElementWithMatcher:web::WebViewScrollView(
@@ -113,8 +126,8 @@ void AssertURLIs(const GURL& expectedURL) {
       assertWithMatcher:grey_scrollViewContentOffset(CGPointMake(0, yOffset))];
 }
 
-// Verifies that the toolbar properly appears/disappears when scrolling up/down
-// on a PDF that is short in length and wide in width.
+// Verifies that the toolbar is not hidden when scrolling a short pdf, as the
+// entire document is visible without hiding the toolbar.
 - (void)testSmallWidePDFScroll {
   web::test::SetUpFileBasedHttpServer();
   GURL URL = web::test::HttpServer::MakeUrl(
@@ -136,16 +149,10 @@ void AssertURLIs(const GURL& expectedURL) {
       performAction:grey_swipeFastInDirection(kGREYDirectionDown)];
   [ChromeEarlGreyUI waitForToolbarVisible:YES];
 
-  if (base::ios::IsRunningOnIOS12OrLater()) {
-    // Test that the toolbar is still visible even after attempting to hide it
-    // on swipe up.
-    HideToolbarUsingUI();
-    [ChromeEarlGreyUI waitForToolbarVisible:YES];
-  } else {
-    // Test that the toolbar is no longer visible after a user swipes up.
-    HideToolbarUsingUI();
-    [ChromeEarlGreyUI waitForToolbarVisible:NO];
-  }
+  // Test that the toolbar is still visible even after attempting to hide it
+  // on swipe up.
+  HideToolbarUsingUI();
+  [ChromeEarlGreyUI waitForToolbarVisible:YES];
 
   // Reenable synchronization.
   if (@available(iOS 12, *)) {
@@ -158,6 +165,10 @@ void AssertURLIs(const GURL& expectedURL) {
 // Verifies that the toolbar properly appears/disappears when scrolling up/down
 // on a PDF that is long in length and wide in width.
 - (void)testLongPDFScroll {
+  // TODO(crbug.com/904694): This test is failing on iOS11.
+  if (!base::ios::IsRunningOnIOS12OrLater())
+    EARL_GREY_TEST_DISABLED(@"Disabled on iOS 11.");
+
 // TODO(crbug.com/714329): Re-enable this test on devices.
 #if !TARGET_IPHONE_SIMULATOR
   EARL_GREY_TEST_DISABLED(@"Test disabled on device.");

@@ -37,8 +37,9 @@
 #include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/chromeos_switches.h"
 #include "chromeos/components/proximity_auth/screenlock_bridge.h"
+#include "chromeos/components/proximity_auth/smart_lock_metrics_recorder.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -156,18 +157,38 @@ void AddPublicSessionDetailsToUserDictionaryEntry(
                         has_multiple_locales);
 }
 
-// Returns true if the fingerprint icon should be displayed for the given
-// |user|.
-bool AllowFingerprintForUser(const user_manager::User* user) {
+// Determines the initial fingerprint state for the given user.
+ash::mojom::FingerprintState GetInitialFingerprintState(
+    const user_manager::User* user) {
+  // User must be logged in.
   if (!user->is_logged_in())
-    return false;
+    return ash::mojom::FingerprintState::UNAVAILABLE;
 
+  // Quick unlock storage must be available.
   quick_unlock::QuickUnlockStorage* quick_unlock_storage =
       quick_unlock::QuickUnlockFactory::GetForUser(user);
   if (!quick_unlock_storage)
-    return false;
+    return ash::mojom::FingerprintState::UNAVAILABLE;
 
-  return quick_unlock_storage->IsFingerprintAuthenticationAvailable();
+  // Fingerprint is not registered for this account.
+  if (!quick_unlock_storage->fingerprint_storage()->HasRecord())
+    return ash::mojom::FingerprintState::UNAVAILABLE;
+
+  // Fingerprint unlock attempts should not be exceeded, as the lock screen has
+  // not been displayed yet.
+  DCHECK(
+      !quick_unlock_storage->fingerprint_storage()->ExceededUnlockAttempts());
+
+  // It has been too long since the last authentication.
+  if (!quick_unlock_storage->HasStrongAuth())
+    return ash::mojom::FingerprintState::DISABLED_FROM_TIMEOUT;
+
+  // Auth is available.
+  if (quick_unlock_storage->IsFingerprintAuthenticationAvailable())
+    return ash::mojom::FingerprintState::AVAILABLE;
+
+  // Default to unavailabe.
+  return ash::mojom::FingerprintState::UNAVAILABLE;
 }
 
 // Returns true if dircrypto migration check should be performed.
@@ -385,7 +406,9 @@ void UserSelectionScreen::FillUserDictionary(
   user_dict->SetBoolean(kKeySignedIn, user->is_logged_in());
   user_dict->SetBoolean(kKeyIsOwner, is_owner);
   user_dict->SetBoolean(kKeyIsActiveDirectory, user->IsActiveDirectoryUser());
-  user_dict->SetBoolean(kKeyAllowFingerprint, AllowFingerprintForUser(user));
+  user_dict->SetBoolean(kKeyAllowFingerprint,
+                        GetInitialFingerprintState(user) ==
+                            ash::mojom::FingerprintState::AVAILABLE);
 
   FillMultiProfileUserPrefs(user, user_dict, is_signin_to_add);
 
@@ -443,11 +466,9 @@ bool UserSelectionScreen::ShouldForceOnlineSignIn(
       token_status == user_manager::User::OAUTH2_TOKEN_STATUS_INVALID)
     RecordReauthReason(user->GetAccountId(), ReauthReason::OTHER);
 
-  // We need to force an online signin if the user is marked as requiring it,
-  // or if the user's session never completed initialization (still need to
-  // check for policy/management state) or if there's an invalid OAUTH token
-  // that needs to be refreshed.
-  return user->force_online_signin() || !user->profile_ever_initialized() ||
+  // We need to force an online signin if the user is marked as requiring it or
+  // if there's an invalid OAUTH token that needs to be refreshed.
+  return user->force_online_signin() ||
          (has_gaia_account &&
           (token_status == user_manager::User::OAUTH2_TOKEN_STATUS_INVALID ||
            token_status == user_manager::User::OAUTH_TOKEN_STATUS_UNKNOWN));
@@ -706,6 +727,10 @@ void UserSelectionScreen::AttemptEasySignin(const AccountId& account_id,
   if (LoginDisplayHost::default_host()) {
     LoginDisplayHost::default_host()->GetLoginDisplay()->delegate()->Login(
         user_context, SigninSpecifics());
+  } else {
+    SmartLockMetricsRecorder::RecordAuthResultSignInFailure(
+        SmartLockMetricsRecorder::SmartLockAuthResultFailureReason::
+            kLoginDisplayHostDoesNotExist);
   }
 }
 
@@ -728,13 +753,6 @@ void UserSelectionScreen::AttemptEasyUnlock(const AccountId& account_id) {
   if (!service)
     return;
   service->AttemptAuth(account_id);
-}
-
-void UserSelectionScreen::RecordClickOnLockIcon(const AccountId& account_id) {
-  EasyUnlockService* service = GetEasyUnlockServiceForUser(account_id);
-  if (!service)
-    return;
-  service->RecordClickOnLockIcon();
 }
 
 std::unique_ptr<base::ListValue>
@@ -814,7 +832,7 @@ UserSelectionScreen::UpdateAndReturnUserListForMojo() {
     user_info->is_signed_in = user->is_logged_in();
     user_info->is_device_owner = is_owner;
     user_info->can_remove = CanRemoveUser(user);
-    user_info->allow_fingerprint_unlock = AllowFingerprintForUser(user);
+    user_info->fingerprint_state = GetInitialFingerprintState(user);
 
     // Fill multi-profile data.
     if (!is_signin_to_add) {

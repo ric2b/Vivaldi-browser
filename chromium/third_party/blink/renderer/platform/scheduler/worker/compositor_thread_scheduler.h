@@ -9,9 +9,9 @@
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "components/scheduling_metrics/task_duration_metric_reporter.h"
-#include "third_party/blink/public/platform/scheduler/single_thread_idle_task_runner.h"
 #include "third_party/blink/public/platform/web_thread_type.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
+#include "third_party/blink/renderer/platform/scheduler/common/single_thread_idle_task_runner.h"
 #include "third_party/blink/renderer/platform/scheduler/worker/compositor_metrics_helper.h"
 #include "third_party/blink/renderer/platform/scheduler/worker/non_main_thread_scheduler_impl.h"
 
@@ -31,15 +31,14 @@ class PLATFORM_EXPORT CompositorThreadScheduler
   // NonMainThreadSchedulerImpl:
   scoped_refptr<NonMainThreadTaskQueue> DefaultTaskQueue() override;
   void OnTaskCompleted(NonMainThreadTaskQueue* worker_task_queue,
-                       const base::sequence_manager::TaskQueue::Task& task,
+                       const base::sequence_manager::Task& task,
                        const base::sequence_manager::TaskQueue::TaskTiming&
                            task_timing) override;
 
   // WebThreadScheduler:
-  scoped_refptr<scheduler::SingleThreadIdleTaskRunner> IdleTaskRunner()
-      override;
   scoped_refptr<base::SingleThreadTaskRunner> V8TaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override;
+  scoped_refptr<base::SingleThreadTaskRunner> IPCTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> InputTaskRunner() override;
   bool ShouldYieldForHighPriorityWork() override;
   bool CanExceedIdleDeadlineIfRequired() const override;
@@ -48,6 +47,10 @@ class PLATFORM_EXPORT CompositorThreadScheduler
       base::MessageLoop::TaskObserver* task_observer) override;
   void AddRAILModeObserver(WebRAILModeObserver*) override {}
   void Shutdown() override;
+
+  // ThreadSchedulerImpl:
+  scoped_refptr<scheduler::SingleThreadIdleTaskRunner> IdleTaskRunner()
+      override;
 
   // SingleThreadIdleTaskRunner::Delegate:
   void OnIdleTaskPosted() override;

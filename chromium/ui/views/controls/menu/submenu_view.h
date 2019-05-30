@@ -51,6 +51,9 @@ class VIEWS_EXPORT SubmenuView : public View,
   explicit SubmenuView(MenuItemView* parent);
   ~SubmenuView() override;
 
+  // Returns true if the submenu has at least one empty menu item.
+  bool HasEmptyMenuItemView();
+
   // Returns true if the submenu has at least one visible child item.
   bool HasVisibleChildren();
 
@@ -75,9 +78,8 @@ class VIEWS_EXPORT SubmenuView : public View,
   void PaintChildren(const PaintInfo& paint_info) override;
 
   // Drag and drop methods. These are forwarded to the MenuController.
-  bool GetDropFormats(
-      int* formats,
-      std::set<ui::Clipboard::FormatType>* format_types) override;
+  bool GetDropFormats(int* formats,
+                      std::set<ui::ClipboardFormatType>* format_types) override;
   bool AreDropTypesRequired() override;
   bool CanDrop(const OSExchangeData& data) override;
   void OnDragEntered(const ui::DropTargetEvent& event) override;
@@ -143,6 +145,9 @@ class VIEWS_EXPORT SubmenuView : public View,
 
   // Returns the container for the SubmenuView.
   MenuScrollViewContainer* GetScrollViewContainer();
+
+  // Returns the last MenuItemView in this submenu.
+  MenuItemView* GetLastItem();
 
   // Invoked if the menu is prematurely destroyed. This can happen if the window
   // closes while the menu is shown. If invoked the SubmenuView must drop all

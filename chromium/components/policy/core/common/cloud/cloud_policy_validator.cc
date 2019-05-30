@@ -9,7 +9,6 @@
 
 #include "base/bind_helpers.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
@@ -63,6 +62,45 @@ enum class MetricPolicyUserVerification {
 };
 
 }  // namespace
+
+// static
+const char* CloudPolicyValidatorBase::StatusToString(Status status) {
+  switch (status) {
+    case VALIDATION_OK:
+      return "OK";
+    case VALIDATION_BAD_INITIAL_SIGNATURE:
+      return "BAD_INITIAL_SIGNATURE";
+    case VALIDATION_BAD_SIGNATURE:
+      return "BAD_SIGNATURE";
+    case VALIDATION_ERROR_CODE_PRESENT:
+      return "ERROR_CODE_PRESENT";
+    case VALIDATION_PAYLOAD_PARSE_ERROR:
+      return "PAYLOAD_PARSE_ERROR";
+    case VALIDATION_WRONG_POLICY_TYPE:
+      return "WRONG_POLICY_TYPE";
+    case VALIDATION_WRONG_SETTINGS_ENTITY_ID:
+      return "WRONG_SETTINGS_ENTITY_ID";
+    case VALIDATION_BAD_TIMESTAMP:
+      return "BAD_TIMESTAMP";
+    case VALIDATION_BAD_DM_TOKEN:
+      return "BAD_DM_TOKEN";
+    case VALIDATION_BAD_DEVICE_ID:
+      return "BAD_DEVICE_ID";
+    case VALIDATION_BAD_USER:
+      return "BAD_USER";
+    case VALIDATION_POLICY_PARSE_ERROR:
+      return "POLICY_PARSE_ERROR";
+    case VALIDATION_BAD_KEY_VERIFICATION_SIGNATURE:
+      return "BAD_KEY_VERIFICATION_SIGNATURE";
+    case VALIDATION_VALUE_WARNING:
+      return "VALUE_WARNING";
+    case VALIDATION_VALUE_ERROR:
+      return "VALUE_ERROR";
+    case VALIDATION_STATUS_SIZE:
+      return "UNKNOWN";
+  }
+  return "UNKNOWN";
+}
 
 CloudPolicyValidatorBase::ValidationResult::ValidationResult() = default;
 CloudPolicyValidatorBase::ValidationResult::~ValidationResult() = default;
@@ -298,7 +336,7 @@ void CloudPolicyValidatorBase::RunChecks() {
       {VALIDATE_VALUES, &CloudPolicyValidatorBase::CheckValues},
   };
 
-  for (size_t i = 0; i < arraysize(kCheckFunctions); ++i) {
+  for (size_t i = 0; i < base::size(kCheckFunctions); ++i) {
     if (validation_flags_ & kCheckFunctions[i].flag) {
       status_ = (this->*(kCheckFunctions[i].checkFunction))();
       if (status_ != VALIDATION_OK)

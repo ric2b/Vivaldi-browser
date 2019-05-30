@@ -18,6 +18,7 @@ class AccessibilityHelperHost;
 class AccessibilityHelperInstance;
 class AppHost;
 class AppInstance;
+class AppPermissionsInstance;
 class AppfuseHost;
 class AppfuseInstance;
 class AudioHost;
@@ -51,6 +52,7 @@ class IntentHelperInstance;
 class KioskHost;
 class KioskInstance;
 class LockScreenInstance;
+class MediaSessionInstance;
 class MetricsHost;
 class MetricsInstance;
 class MidisHost;
@@ -84,10 +86,6 @@ class UsbHostHost;
 class UsbHostInstance;
 class VideoHost;
 class VideoInstance;
-class VoiceInteractionArcHomeHost;
-class VoiceInteractionArcHomeInstance;
-class VoiceInteractionFrameworkHost;
-class VoiceInteractionFrameworkInstance;
 class VolumeMounterHost;
 class VolumeMounterInstance;
 class WakeLockHost;
@@ -110,6 +108,9 @@ class ArcBridgeService {
     return &accessibility_helper_;
   }
   ConnectionHolder<mojom::AppInstance, mojom::AppHost>* app() { return &app_; }
+  ConnectionHolder<mojom::AppPermissionsInstance>* app_permissions() {
+    return &app_permissions_;
+  }
   ConnectionHolder<mojom::AppfuseInstance, mojom::AppfuseHost>* appfuse() {
     return &appfuse_;
   }
@@ -175,6 +176,9 @@ class ArcBridgeService {
   ConnectionHolder<mojom::LockScreenInstance>* lock_screen() {
     return &lock_screen_;
   }
+  ConnectionHolder<mojom::MediaSessionInstance>* media_session() {
+    return &media_session_;
+  }
   ConnectionHolder<mojom::MetricsInstance, mojom::MetricsHost>* metrics() {
     return &metrics_;
   }
@@ -223,16 +227,6 @@ class ArcBridgeService {
   ConnectionHolder<mojom::VideoInstance, mojom::VideoHost>* video() {
     return &video_;
   }
-  ConnectionHolder<mojom::VoiceInteractionArcHomeInstance,
-                   mojom::VoiceInteractionArcHomeHost>*
-  voice_interaction_arc_home() {
-    return &voice_interaction_arc_home_;
-  }
-  ConnectionHolder<mojom::VoiceInteractionFrameworkInstance,
-                   mojom::VoiceInteractionFrameworkHost>*
-  voice_interaction_framework() {
-    return &voice_interaction_framework_;
-  }
   ConnectionHolder<mojom::VolumeMounterInstance, mojom::VolumeMounterHost>*
   volume_mounter() {
     return &volume_mounter_;
@@ -250,6 +244,7 @@ class ArcBridgeService {
                    mojom::AccessibilityHelperHost>
       accessibility_helper_;
   ConnectionHolder<mojom::AppInstance, mojom::AppHost> app_;
+  ConnectionHolder<mojom::AppPermissionsInstance> app_permissions_;
   ConnectionHolder<mojom::AppfuseInstance, mojom::AppfuseHost> appfuse_;
   ConnectionHolder<mojom::AudioInstance, mojom::AudioHost> audio_;
   ConnectionHolder<mojom::AuthInstance, mojom::AuthHost> auth_;
@@ -276,6 +271,7 @@ class ArcBridgeService {
       intent_helper_;
   ConnectionHolder<mojom::KioskInstance, mojom::KioskHost> kiosk_;
   ConnectionHolder<mojom::LockScreenInstance> lock_screen_;
+  ConnectionHolder<mojom::MediaSessionInstance> media_session_;
   ConnectionHolder<mojom::MetricsInstance, mojom::MetricsHost> metrics_;
   ConnectionHolder<mojom::MidisInstance, mojom::MidisHost> midis_;
   ConnectionHolder<mojom::NetInstance, mojom::NetHost> net_;
@@ -297,12 +293,6 @@ class ArcBridgeService {
   ConnectionHolder<mojom::TtsInstance, mojom::TtsHost> tts_;
   ConnectionHolder<mojom::UsbHostInstance, mojom::UsbHostHost> usb_host_;
   ConnectionHolder<mojom::VideoInstance, mojom::VideoHost> video_;
-  ConnectionHolder<mojom::VoiceInteractionArcHomeInstance,
-                   mojom::VoiceInteractionArcHomeHost>
-      voice_interaction_arc_home_;
-  ConnectionHolder<mojom::VoiceInteractionFrameworkInstance,
-                   mojom::VoiceInteractionFrameworkHost>
-      voice_interaction_framework_;
   ConnectionHolder<mojom::VolumeMounterInstance, mojom::VolumeMounterHost>
       volume_mounter_;
   ConnectionHolder<mojom::WakeLockInstance, mojom::WakeLockHost> wake_lock_;

@@ -72,6 +72,9 @@ Polymer({
 
     /** @private */
     lastFocused_: Object,
+
+    /** @private */
+    listBlurred_: Boolean,
   },
 
   /** @private {settings.LocalDataBrowserProxy} */
@@ -114,19 +117,6 @@ Polymer({
   },
 
   /**
-   * Returns the icon to use for a given site.
-   * @param {string} url The url of the site to fetch the icon for.
-   * @return {string} Value for background-image style.
-   * @private
-   */
-  favicon_: function(url) {
-    // If the url doesn't have a scheme, inject HTTP as the scheme. Otherwise,
-    // the URL isn't valid and no icon will be returned.
-    const urlWithScheme = url.includes('://') ? url : 'http://' + url;
-    return cr.icon.getFavicon(urlWithScheme);
-  },
-
-  /**
    * @param {!Map<string, (string|Function)>} newConfig
    * @param {?Map<string, (string|Function)>} oldConfig
    * @private
@@ -141,8 +131,9 @@ Polymer({
     // elements residing in this element's Shadow DOM.
     if (settings.routes.SITE_SETTINGS_DATA_DETAILS) {
       const onNavigatedTo = () => this.async(() => {
-        if (this.lastSelected_ == null || this.sites.length == 0)
+        if (this.lastSelected_ == null || this.sites.length == 0) {
           return;
+        }
 
         const lastSelectedSite = this.lastSelected_.item.site;
         const lastSelectedIndex = this.lastSelected_.index;
@@ -200,8 +191,9 @@ Polymer({
    * @private
    */
   computeRemoveLabel_: function(filter) {
-    if (filter.length == 0)
+    if (filter.length == 0) {
       return loadTimeData.getString('siteSettingsCookieRemoveAll');
+    }
     return loadTimeData.getString('siteSettingsCookieRemoveAllShown');
   },
 

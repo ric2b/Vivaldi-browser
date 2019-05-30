@@ -23,6 +23,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "base/vivaldi_switches.h"
 #include "base/win/message_window.h"
@@ -306,7 +307,7 @@ UpdateNotifierManager::UpdateNotifierManager() {
         global_restart_event_.get(),
         base::Bind(&UpdateNotifierManager::OnEventTriggered,
                    base::Unretained(this)),
-        base::MessageLoop::current()->task_runner());
+        base::ThreadTaskRunnerHandle::Get());
   }
 
   global_quit_event_.reset(MakeEvent(kGlobalQuitEventName));
@@ -315,7 +316,7 @@ UpdateNotifierManager::UpdateNotifierManager() {
         global_quit_event_.get(),
         base::Bind(&UpdateNotifierManager::OnEventTriggered,
                    base::Unretained(this)),
-        base::MessageLoop::current()->task_runner());
+        base::ThreadTaskRunnerHandle::Get());
   }
 
   base::FilePath exe_dir;
@@ -332,7 +333,7 @@ UpdateNotifierManager::UpdateNotifierManager() {
         quit_event_.get(),
         base::Bind(&UpdateNotifierManager::OnEventTriggered,
                    base::Unretained(this)),
-        base::MessageLoop::current()->task_runner());
+        base::ThreadTaskRunnerHandle::Get());
   }
 
   base::win::ScopedHandle check_for_updates_event_handle;
@@ -347,7 +348,7 @@ UpdateNotifierManager::UpdateNotifierManager() {
         check_for_updates_event_.get(),
         base::Bind(&UpdateNotifierManager::OnEventTriggered,
                    base::Unretained(this)),
-        base::MessageLoop::current()->task_runner());
+        base::ThreadTaskRunnerHandle::Get());
   }
 }
 
@@ -368,7 +369,7 @@ bool UpdateNotifierManager::OnUpdateAvailable(const char* version) {
   // We make sure to have a copy of version made here by creating a
   // std::string immediately because version itself is deleted immediately
   // after getting out of here.
-  self->ui_thread_loop_->task_runner()->PostTask(
+  self->ui_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&UpdateNotifierWindow::ShowNotification,
                  base::Unretained(self->update_notifier_window_.get()),
@@ -406,7 +407,7 @@ void UpdateNotifierManager::OnEventTriggered(
         check_for_updates_event_.get(), base::Bind(
             &UpdateNotifierManager::OnEventTriggered,
             base::Unretained(this)),
-      base::MessageLoop::current()->task_runner());
+      base::ThreadTaskRunnerHandle::Get());
     TriggerUpdate(true);
   } else {
     NOTREACHED();
@@ -496,7 +497,7 @@ bool UpdateNotifierManager::RunNotifier(HINSTANCE instance) {
 
   instance_ = instance;
 
-  ui_thread_loop_ = base::MessageLoop::current();
+  ui_task_runner_ = base::ThreadTaskRunnerHandle::Get();
 
   std::unique_ptr<FileVersionInfo> file_version_info(
       FileVersionInfo::CreateFileVersionInfoForModule(instance_));
@@ -511,7 +512,7 @@ bool UpdateNotifierManager::RunNotifier(HINSTANCE instance) {
   base::FilePath local_state_path;
   CHECK(PathService::Get(chrome::FILE_LOCAL_STATE, &local_state_path));
   scoped_refptr<JsonPrefStore> local_state = new JsonPrefStore(
-      local_state_path, nullptr, ui_thread_loop_->task_runner());
+      local_state_path, nullptr, ui_task_runner_);
   local_state->ReadPrefs();
 
   const base::Value* locale_value = nullptr;

@@ -13,19 +13,19 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "components/signin/core/browser/signin_manager_base.h"
+#include "services/identity/public/cpp/identity_manager.h"
 
 class Profile;
 
-// Android wrapper of the SigninManager which provides access from the Java
-// layer. Note that on Android, there's only a single profile, and therefore
-// a single instance of this wrapper. The name of the Java class is
-// SigninManager.
-// This class should only be accessed from the UI thread.
+// Android wrapper of Chrome's C++ identity management code which provides
+// access from the Java layer. Note that on Android, there's only a single
+// profile, and therefore a single instance of this wrapper. The name of the
+// Java class is SigninManager. This class should only be accessed from the UI
+// thread.
 //
 // This class implements parts of the sign-in flow, to make sure that policy
 // is available before sign-in completes.
-class SigninManagerAndroid : public SigninManagerBase::Observer {
+class SigninManagerAndroid : public identity::IdentityManager::Observer {
  public:
   SigninManagerAndroid(JNIEnv* env, jobject obj);
 
@@ -46,7 +46,9 @@ class SigninManagerAndroid : public SigninManagerBase::Observer {
                          const base::android::JavaParamRef<jobject>& obj,
                          const base::android::JavaParamRef<jstring>& username);
 
-  void SignOut(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void SignOut(JNIEnv* env,
+               const base::android::JavaParamRef<jobject>& obj,
+               jint signoutReason);
 
   base::android::ScopedJavaLocalRef<jstring> GetManagementDomain(
       JNIEnv* env,
@@ -54,14 +56,12 @@ class SigninManagerAndroid : public SigninManagerBase::Observer {
 
   // Delete all data for this profile.
   void WipeProfileData(JNIEnv* env,
-                       const base::android::JavaParamRef<jobject>& obj,
-                       const base::android::JavaParamRef<jobject>& hooks);
+                       const base::android::JavaParamRef<jobject>& obj);
 
   // Delete service worker caches for google.<eTLD>.
   void WipeGoogleServiceWorkerCaches(
       JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jobject>& hooks);
+      const base::android::JavaParamRef<jobject>& obj);
 
   void LogInSignedInUser(JNIEnv* env,
                          const base::android::JavaParamRef<jobject>& obj);
@@ -80,16 +80,9 @@ class SigninManagerAndroid : public SigninManagerBase::Observer {
   jboolean IsSignedInOnNative(JNIEnv* env,
                               const base::android::JavaParamRef<jobject>& obj);
 
-  void ProhibitSignout(JNIEnv* env,
-                       const base::android::JavaParamRef<jobject>& obj,
-                       jboolean prohibit_signout);
-
-  // SigninManagerBase::Observer implementation.
-  void GoogleSigninFailed(const GoogleServiceAuthError& error) override;
-  void GoogleSigninSucceeded(const std::string& account_id,
-                             const std::string& username) override;
-  void GoogleSignedOut(const std::string& account_id,
-                       const std::string& username) override;
+  // identity::IdentityManager::Observer implementation.
+  void OnPrimaryAccountCleared(
+      const CoreAccountInfo& previous_primary_account_info) override;
 
  private:
   friend class SigninManagerAndroidTest;
@@ -102,14 +95,13 @@ class SigninManagerAndroid : public SigninManagerBase::Observer {
                             const std::string& client_id);
   void OnPolicyFetchDone(bool success);
 
-  void OnBrowsingDataRemoverDone(
-      const base::android::ScopedJavaGlobalRef<jobject>& callback);
+  void OnBrowsingDataRemoverDone();
 
   void OnSigninAllowedPrefChanged();
 
   static void WipeData(Profile* profile,
                        bool all_data,
-                       const base::Closure& callback);
+                       base::OnceClosure callback);
 
   Profile* profile_;
 

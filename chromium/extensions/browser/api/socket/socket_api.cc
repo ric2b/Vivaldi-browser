@@ -4,15 +4,17 @@
 
 #include "extensions/browser/api/socket/socket_api.h"
 
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
-#include "base/containers/hash_tables.h"
 #include "base/task/post_task.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "extensions/browser/api/socket/socket.h"
 #include "extensions/browser/api/socket/tcp_socket.h"
@@ -97,7 +99,7 @@ void SocketAsyncApiFunction::ReplaceSocket(int api_resource_id,
   manager_->Replace(extension_->id(), api_resource_id, socket);
 }
 
-base::hash_set<int>* SocketAsyncApiFunction::GetSocketIds() {
+std::unordered_set<int>* SocketAsyncApiFunction::GetSocketIds() {
   return manager_->GetResourceIds(extension_->id());
 }
 
@@ -123,10 +125,10 @@ void SocketAsyncApiFunction::OpenFirewallHole(const std::string& address,
                                          ? AppFirewallHole::PortType::TCP
                                          : AppFirewallHole::PortType::UDP;
 
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(&SocketAsyncApiFunction::OpenFirewallHoleOnUIThread, this,
-                   type, local_address.port(), socket_id));
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
+        base::BindOnce(&SocketAsyncApiFunction::OpenFirewallHoleOnUIThread,
+                       this, type, local_address.port(), socket_id));
     return;
   }
 #endif
@@ -144,10 +146,10 @@ void SocketAsyncApiFunction::OpenFirewallHoleOnUIThread(
       AppFirewallHoleManager::Get(browser_context());
   std::unique_ptr<AppFirewallHole, BrowserThread::DeleteOnUIThread> hole(
       manager->Open(type, port, extension_id()).release());
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(&SocketAsyncApiFunction::OnFirewallHoleOpened, this, socket_id,
-                 base::Passed(&hole)));
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
+      base::BindOnce(&SocketAsyncApiFunction::OnFirewallHoleOpened, this,
+                     socket_id, std::move(hole)));
 }
 
 void SocketAsyncApiFunction::OnFirewallHoleOpened(
@@ -186,7 +188,8 @@ bool SocketExtensionWithDnsLookupFunction::PrePrepare() {
     return false;
   content::BrowserContext::GetDefaultStoragePartition(browser_context())
       ->GetNetworkContext()
-      ->CreateHostResolver(mojo::MakeRequest(&host_resolver_info_));
+      ->CreateHostResolver(base::nullopt,
+                           mojo::MakeRequest(&host_resolver_info_));
   return true;
 }
 
@@ -850,44 +853,23 @@ void SocketGetInfoFunction::Work() {
 }
 
 ExtensionFunction::ResponseAction SocketGetNetworkListFunction::Run() {
-  base::PostTaskWithTraits(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
-       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::Bind(&SocketGetNetworkListFunction::GetNetworkListOnFileThread,
-                 this));
+  content::GetNetworkService()->GetNetworkList(
+      net::INCLUDE_HOST_SCOPE_VIRTUAL_INTERFACES,
+      base::BindOnce(&SocketGetNetworkListFunction::GotNetworkList, this));
   return RespondLater();
 }
 
-void SocketGetNetworkListFunction::GetNetworkListOnFileThread() {
-  net::NetworkInterfaceList interface_list;
-  if (GetNetworkList(&interface_list,
-                     net::INCLUDE_HOST_SCOPE_VIRTUAL_INTERFACES)) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(&SocketGetNetworkListFunction::SendResponseOnUIThread, this,
-                   interface_list));
+void SocketGetNetworkListFunction::GotNetworkList(
+    const base::Optional<net::NetworkInterfaceList>& interface_list) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (!interface_list.has_value()) {
+    Respond(Error(kNetworkListError));
     return;
   }
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&SocketGetNetworkListFunction::HandleGetNetworkListError,
-                 this));
-}
-
-void SocketGetNetworkListFunction::HandleGetNetworkListError() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  Respond(Error(kNetworkListError));
-}
-
-void SocketGetNetworkListFunction::SendResponseOnUIThread(
-    const net::NetworkInterfaceList& interface_list) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
   std::vector<api::socket::NetworkInterface> create_arg;
-  create_arg.reserve(interface_list.size());
-  for (const net::NetworkInterface& interface : interface_list) {
+  create_arg.reserve(interface_list->size());
+  for (const net::NetworkInterface& interface : interface_list.value()) {
     api::socket::NetworkInterface info;
     info.name = interface.name;
     info.address = interface.address.ToString();

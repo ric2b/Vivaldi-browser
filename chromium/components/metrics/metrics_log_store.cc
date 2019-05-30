@@ -41,7 +41,8 @@ void MetricsLogStore::RegisterPrefs(PrefRegistrySimple* registry) {
 }
 
 MetricsLogStore::MetricsLogStore(PrefService* local_state,
-                                 size_t max_ongoing_log_size)
+                                 size_t max_ongoing_log_size,
+                                 const std::string& signing_key)
     : unsent_logs_loaded_(false),
       initial_log_queue_(std::unique_ptr<PersistedLogsMetricsImpl>(
                              new PersistedLogsMetricsImpl()),
@@ -49,14 +50,16 @@ MetricsLogStore::MetricsLogStore(PrefService* local_state,
                          prefs::kMetricsInitialLogs,
                          kInitialLogsPersistLimit,
                          kStorageByteLimitPerLogType,
-                         0),
+                         0,
+                         signing_key),
       ongoing_log_queue_(std::unique_ptr<PersistedLogsMetricsImpl>(
                              new PersistedLogsMetricsImpl()),
                          local_state,
                          prefs::kMetricsOngoingLogs,
                          kOngoingLogsPersistLimit,
                          kStorageByteLimitPerLogType,
-                         max_ongoing_log_size) {}
+                         max_ongoing_log_size,
+                         signing_key) {}
 
 MetricsLogStore::~MetricsLogStore() {}
 
@@ -98,6 +101,12 @@ const std::string& MetricsLogStore::staged_log_hash() const {
   return initial_log_queue_.has_staged_log()
              ? initial_log_queue_.staged_log_hash()
              : ongoing_log_queue_.staged_log_hash();
+}
+
+const std::string& MetricsLogStore::staged_log_signature() const {
+  return initial_log_queue_.has_staged_log()
+             ? initial_log_queue_.staged_log_signature()
+             : ongoing_log_queue_.staged_log_signature();
 }
 
 void MetricsLogStore::StageNextLog() {

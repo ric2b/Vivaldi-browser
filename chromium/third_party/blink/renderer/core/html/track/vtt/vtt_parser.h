@@ -53,7 +53,7 @@ class VTTParserClient : public GarbageCollectedMixin {
   virtual void NewCuesParsed() = 0;
   virtual void FileFailedToParse() = 0;
 
-  void Trace(blink::Visitor* visitor) override {}
+  void Trace(Visitor* visitor) override {}
 };
 
 // Implementation of the WebVTT parser algorithm.
@@ -71,14 +71,16 @@ class VTTParser final : public GarbageCollectedFinalized<VTTParser> {
   };
 
   static VTTParser* Create(VTTParserClient* client, Document& document) {
-    return new VTTParser(client, document);
+    return MakeGarbageCollected<VTTParser>(client, document);
   }
+
+  VTTParser(VTTParserClient*, Document&);
   ~VTTParser() = default;
 
   static inline bool IsRecognizedTag(const AtomicString& tag_name) {
-    return tag_name == HTMLNames::iTag || tag_name == HTMLNames::bTag ||
-           tag_name == HTMLNames::uTag || tag_name == HTMLNames::rubyTag ||
-           tag_name == HTMLNames::rtTag;
+    return tag_name == html_names::kITag || tag_name == html_names::kBTag ||
+           tag_name == html_names::kUTag || tag_name == html_names::kRubyTag ||
+           tag_name == html_names::kRtTag;
   }
   static inline bool IsASpace(UChar c) {
     // WebVTT space characters are U+0020 SPACE, U+0009 CHARACTER
@@ -110,11 +112,9 @@ class VTTParser final : public GarbageCollectedFinalized<VTTParser> {
   // Transfers ownership of last parsed cues to caller.
   void GetNewCues(HeapVector<Member<TextTrackCue>>&);
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
  private:
-  VTTParser(VTTParserClient*, Document&);
-
   Member<Document> document_;
   ParseState state_;
 

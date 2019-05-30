@@ -32,12 +32,17 @@ class MODULES_EXPORT AudioWorkletProcessorDefinition final
       v8::Local<v8::Object> constructor,
       v8::Local<v8::Function> process);
 
+  AudioWorkletProcessorDefinition(v8::Isolate*,
+                                  const String& name,
+                                  v8::Local<v8::Object> constructor,
+                                  v8::Local<v8::Function> process);
   virtual ~AudioWorkletProcessorDefinition();
 
   const String& GetName() const { return name_; }
   v8::Local<v8::Object> ConstructorLocal(v8::Isolate*);
   v8::Local<v8::Function> ProcessLocal(v8::Isolate*);
-  void SetAudioParamDescriptors(const HeapVector<AudioParamDescriptor>&);
+  void SetAudioParamDescriptors(
+      const HeapVector<Member<AudioParamDescriptor>>&);
   const Vector<String> GetAudioParamDescriptorNames() const;
   const AudioParamDescriptor* GetAudioParamDescriptor(const String& key) const;
 
@@ -47,21 +52,15 @@ class MODULES_EXPORT AudioWorkletProcessorDefinition final
   void MarkAsSynchronized() { is_synchronized_ = true; }
 
   void Trace(blink::Visitor* visitor) {
-    visitor->Trace(constructor_.Cast<v8::Value>());
-    visitor->Trace(process_.Cast<v8::Value>());
+    visitor->Trace(constructor_);
+    visitor->Trace(process_);
     visitor->Trace(audio_param_descriptors_);
-  };
+  }
   const char* NameInHeapSnapshot() const override {
     return "AudioWorkletProcessorDefinition";
   }
 
  private:
-  AudioWorkletProcessorDefinition(
-      v8::Isolate*,
-      const String& name,
-      v8::Local<v8::Object> constructor,
-      v8::Local<v8::Function> process);
-
   const String name_;
   bool is_synchronized_ = false;
 
@@ -70,7 +69,7 @@ class MODULES_EXPORT AudioWorkletProcessorDefinition final
   TraceWrapperV8Reference<v8::Object> constructor_;
   TraceWrapperV8Reference<v8::Function> process_;
 
-  HeapVector<AudioParamDescriptor> audio_param_descriptors_;
+  HeapVector<Member<AudioParamDescriptor>> audio_param_descriptors_;
 };
 
 }  // namespace blink

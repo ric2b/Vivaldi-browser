@@ -32,9 +32,9 @@
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
 #include "third_party/blink/renderer/platform/graphics/compositor_element_id.h"
+#include "third_party/blink/renderer/platform/graphics/scroll_types.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_types.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -42,9 +42,11 @@ namespace base {
 class SingleThreadTaskRunner;
 }
 
-namespace blink {
+namespace cc {
+class AnimationHost;
+}
 
-class CompositorAnimationHost;
+namespace blink {
 class CompositorAnimationTimeline;
 class GraphicsLayer;
 class LayoutBox;
@@ -151,7 +153,7 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
     return programmatic_scroll_animator_;
   }
 
-  virtual CompositorAnimationHost* GetCompositorAnimationHost() const {
+  virtual cc::AnimationHost* GetCompositorAnimationHost() const {
     return nullptr;
   }
   virtual CompositorAnimationTimeline* GetCompositorAnimationTimeline() const {
@@ -398,6 +400,8 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
 
   virtual ScrollbarTheme& GetPageScrollbarTheme() const = 0;
 
+  float ScrollStep(ScrollGranularity, ScrollbarOrientation) const;
+
  protected:
   // Deduces the ScrollBehavior based on the element style and the parameter set
   // by programmatic scroll into either instant or smooth scroll.
@@ -409,7 +413,6 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
 
   ScrollbarOrientation ScrollbarOrientationFromDirection(
       ScrollDirectionPhysical) const;
-  float ScrollStep(ScrollGranularity, ScrollbarOrientation) const;
 
   // Needed to let the animators call scrollOffsetChanged.
   friend class ScrollAnimatorCompositorCoordinator;

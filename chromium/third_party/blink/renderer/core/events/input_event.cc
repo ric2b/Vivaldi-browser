@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/events/input_event.h"
 
+#include "base/stl_util.h"
 #include "third_party/blink/public/platform/web_editing_command_type.h"
 #include "third_party/blink/renderer/core/dom/events/event_dispatcher.h"
 #include "third_party/blink/renderer/core/dom/range.h"
@@ -59,7 +60,7 @@ const struct {
 };
 
 static_assert(
-    arraysize(kInputTypeStringNameMap) ==
+    base::size(kInputTypeStringNameMap) ==
         static_cast<size_t>(InputEvent::InputType::kNumberOfInputTypes),
     "must handle all InputEvent::InputType");
 
@@ -73,7 +74,7 @@ String ConvertInputTypeToString(InputEvent::InputType input_type) {
 }
 
 InputEvent::InputType ConvertStringToInputType(const String& string_name) {
-  // TODO(chongz): Use binary search if the map goes larger.
+  // TODO(input-dev): Use binary search if the map goes larger.
   for (const auto& entry : kInputTypeStringNameMap) {
     if (string_name == entry.string_name)
       return entry.input_type;
@@ -84,22 +85,22 @@ InputEvent::InputType ConvertStringToInputType(const String& string_name) {
 }  // anonymous namespace
 
 InputEvent::InputEvent(const AtomicString& type,
-                       const InputEventInit& initializer)
+                       const InputEventInit* initializer)
     : UIEvent(type, initializer) {
   // TODO(ojan): We should find a way to prevent conversion like
   // String->enum->String just in order to use initializer.
   // See InputEvent::createBeforeInput() for the first conversion.
-  if (initializer.hasInputType())
-    input_type_ = ConvertStringToInputType(initializer.inputType());
-  if (initializer.hasData())
-    data_ = initializer.data();
-  if (initializer.hasDataTransfer())
-    data_transfer_ = initializer.dataTransfer();
-  if (initializer.hasIsComposing())
-    is_composing_ = initializer.isComposing();
-  if (!initializer.hasTargetRanges())
+  if (initializer->hasInputType())
+    input_type_ = ConvertStringToInputType(initializer->inputType());
+  if (initializer->hasData())
+    data_ = initializer->data();
+  if (initializer->hasDataTransfer())
+    data_transfer_ = initializer->dataTransfer();
+  if (initializer->hasIsComposing())
+    is_composing_ = initializer->isComposing();
+  if (!initializer->hasTargetRanges())
     return;
-  for (const auto& range : initializer.targetRanges())
+  for (const auto& range : initializer->targetRanges())
     ranges_.push_back(range->toRange());
 }
 
@@ -109,20 +110,20 @@ InputEvent* InputEvent::CreateBeforeInput(InputType input_type,
                                           EventCancelable cancelable,
                                           EventIsComposing is_composing,
                                           const StaticRangeVector* ranges) {
-  InputEventInit input_event_init;
+  InputEventInit* input_event_init = InputEventInit::Create();
 
-  input_event_init.setBubbles(true);
-  input_event_init.setCancelable(cancelable == kIsCancelable);
+  input_event_init->setBubbles(true);
+  input_event_init->setCancelable(cancelable == kIsCancelable);
   // TODO(ojan): We should find a way to prevent conversion like
   // String->enum->String just in order to use initializer.
   // See InputEvent::InputEvent() for the second conversion.
-  input_event_init.setInputType(ConvertInputTypeToString(input_type));
-  input_event_init.setData(data);
-  input_event_init.setIsComposing(is_composing == kIsComposing);
+  input_event_init->setInputType(ConvertInputTypeToString(input_type));
+  input_event_init->setData(data);
+  input_event_init->setIsComposing(is_composing == kIsComposing);
   if (ranges)
-    input_event_init.setTargetRanges(*ranges);
-  input_event_init.setComposed(true);
-  return InputEvent::Create(EventTypeNames::beforeinput, input_event_init);
+    input_event_init->setTargetRanges(*ranges);
+  input_event_init->setComposed(true);
+  return InputEvent::Create(event_type_names::kBeforeinput, input_event_init);
 }
 
 /* static */
@@ -131,17 +132,17 @@ InputEvent* InputEvent::CreateBeforeInput(InputType input_type,
                                           EventCancelable cancelable,
                                           EventIsComposing is_composing,
                                           const StaticRangeVector* ranges) {
-  InputEventInit input_event_init;
+  InputEventInit* input_event_init = InputEventInit::Create();
 
-  input_event_init.setBubbles(true);
-  input_event_init.setCancelable(cancelable == kIsCancelable);
-  input_event_init.setInputType(ConvertInputTypeToString(input_type));
-  input_event_init.setDataTransfer(data_transfer);
-  input_event_init.setIsComposing(is_composing == kIsComposing);
+  input_event_init->setBubbles(true);
+  input_event_init->setCancelable(cancelable == kIsCancelable);
+  input_event_init->setInputType(ConvertInputTypeToString(input_type));
+  input_event_init->setDataTransfer(data_transfer);
+  input_event_init->setIsComposing(is_composing == kIsComposing);
   if (ranges)
-    input_event_init.setTargetRanges(*ranges);
-  input_event_init.setComposed(true);
-  return InputEvent::Create(EventTypeNames::beforeinput, input_event_init);
+    input_event_init->setTargetRanges(*ranges);
+  input_event_init->setComposed(true);
+  return InputEvent::Create(event_type_names::kBeforeinput, input_event_init);
 }
 
 /* static */
@@ -149,20 +150,20 @@ InputEvent* InputEvent::CreateInput(InputType input_type,
                                     const String& data,
                                     EventIsComposing is_composing,
                                     const StaticRangeVector* ranges) {
-  InputEventInit input_event_init;
+  InputEventInit* input_event_init = InputEventInit::Create();
 
-  input_event_init.setBubbles(true);
-  input_event_init.setCancelable(false);
+  input_event_init->setBubbles(true);
+  input_event_init->setCancelable(false);
   // TODO(ojan): We should find a way to prevent conversion like
   // String->enum->String just in order to use initializer.
   // See InputEvent::InputEvent() for the second conversion.
-  input_event_init.setInputType(ConvertInputTypeToString(input_type));
-  input_event_init.setData(data);
-  input_event_init.setIsComposing(is_composing == kIsComposing);
+  input_event_init->setInputType(ConvertInputTypeToString(input_type));
+  input_event_init->setData(data);
+  input_event_init->setIsComposing(is_composing == kIsComposing);
   if (ranges)
-    input_event_init.setTargetRanges(*ranges);
-  input_event_init.setComposed(true);
-  return InputEvent::Create(EventTypeNames::input, input_event_init);
+    input_event_init->setTargetRanges(*ranges);
+  input_event_init->setComposed(true);
+  return InputEvent::Create(event_type_names::kInput, input_event_init);
 }
 
 String InputEvent::inputType() const {

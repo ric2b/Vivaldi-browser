@@ -6,10 +6,12 @@
 
 #include <algorithm>
 
+#include "ash/public/cpp/ash_features.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/message_center/ash_message_center_lock_screen_controller.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_utils.h"
 #include "base/i18n/number_formatting.h"
@@ -89,10 +91,9 @@ class NumberIconImageSource : public gfx::CanvasImageSource {
 
 }  // namespace
 
-NotificationCounterView::NotificationCounterView() : TrayItemView(nullptr) {
+NotificationCounterView::NotificationCounterView(Shelf* shelf)
+    : TrayItemView(shelf) {
   CreateImageView();
-  image_view()->SetTooltipText(
-      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NOTIFICATIONS_LABEL));
   SetVisible(false);
   Shell::Get()->session_controller()->AddObserver(this);
 }
@@ -102,10 +103,14 @@ NotificationCounterView::~NotificationCounterView() {
 }
 
 void NotificationCounterView::Update() {
+  SessionController* session_controller = Shell::Get()->session_controller();
   size_t notification_count =
       message_center::MessageCenter::Get()->NotificationCount();
   if (notification_count == 0 ||
-      message_center::MessageCenter::Get()->IsQuietMode()) {
+      message_center::MessageCenter::Get()->IsQuietMode() ||
+      !session_controller->ShouldShowNotificationTray() ||
+      (session_controller->IsScreenLocked() &&
+       !AshMessageCenterLockScreenController::IsEnabled())) {
     SetVisible(false);
     return;
   }
@@ -115,6 +120,8 @@ void NotificationCounterView::Update() {
         gfx::CanvasImageSource::MakeImageSkia<NumberIconImageSource>(icon_id));
     count_for_display_ = icon_id;
   }
+  image_view()->set_tooltip_text(l10n_util::GetPluralStringFUTF16(
+      IDS_ASH_STATUS_TRAY_NOTIFICATIONS_COUNT_TOOLTIP, notification_count));
   SetVisible(true);
 }
 
@@ -123,8 +130,10 @@ void NotificationCounterView::OnSessionStateChanged(
   Update();
 }
 
-QuietModeView::QuietModeView() : TrayItemView(nullptr) {
+QuietModeView::QuietModeView(Shelf* shelf) : TrayItemView(shelf) {
   CreateImageView();
+  image_view()->set_tooltip_text(
+      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_QUIET_MODE_TOOLTIP));
   SetVisible(false);
   Shell::Get()->session_controller()->AddObserver(this);
 }

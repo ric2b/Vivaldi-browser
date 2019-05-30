@@ -8,7 +8,6 @@
 #include <memory>
 #include <string>
 
-#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
 #include "components/data_reduction_proxy/proto/client_config.pb.h"
 #include "components/data_reduction_proxy/proto/pageload_metrics.pb.h"
 #include "net/base/network_change_notifier.h"
@@ -46,16 +45,6 @@ enum class Client {
   CHROME_OPENBSD,
   CHROME_SOLARIS,
   CHROME_QNX,
-};
-
-// Scheme of the proxy used.
-enum ProxyScheme {
-  PROXY_SCHEME_UNKNOWN = 0,
-  PROXY_SCHEME_HTTP,
-  PROXY_SCHEME_HTTPS,
-  PROXY_SCHEME_QUIC,
-  PROXY_SCHEME_DIRECT,
-  PROXY_SCHEME_MAX
 };
 
 namespace util {
@@ -119,9 +108,6 @@ int64_t EstimateOriginalBodySize(const net::URLRequest& request,
 int64_t EstimateOriginalReceivedBytes(const net::URLRequest& request,
                                       const LoFiDecider* lofi_decider);
 
-// Converts net::ProxyServer::Scheme to type ProxyScheme.
-ProxyScheme ConvertNetProxySchemeToProxyScheme(net::ProxyServer::Scheme scheme);
-
 // Returns the hostname used for the other bucket to record datause not scoped
 // to a page load such as chrome-services traffic, service worker, Downloads.
 const char* GetSiteBreakdownOtherHostName();
@@ -144,10 +130,6 @@ ProtoEffectiveConnectionTypeFromEffectiveConnectionType(
 // |connection_type|.
 PageloadMetrics_ConnectionType ProtoConnectionTypeFromConnectionType(
     net::NetworkChangeNotifier::ConnectionType connection_type);
-
-// Returns the RequestInfo_Protocol equivalent of |protocol|.
-RequestInfo_Protocol ProtoRequestInfoProtocolFromRequestInfoProtocol(
-    DataReductionProxyData::RequestInfo::Protocol protocol);
 
 // Returns the |net::ProxyServer::Scheme| for a ProxyServer_ProxyScheme.
 net::ProxyServer::Scheme SchemeFromProxyScheme(

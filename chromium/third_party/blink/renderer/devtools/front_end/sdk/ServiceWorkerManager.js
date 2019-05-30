@@ -73,6 +73,18 @@ SDK.ServiceWorkerManager = class extends SDK.SDKModel {
   }
 
   /**
+   * @param {!Array<string>} urls
+   * @return {boolean}
+   */
+  hasRegistrationForURLs(urls) {
+    for (const registration of this._registrations.values()) {
+      if (urls.filter(url => url && url.startsWith(registration.scopeURL)).length === urls.length)
+        return true;
+    }
+    return false;
+  }
+
+  /**
    * @param {string} versionId
    * @return {?SDK.ServiceWorkerVersion}
    */
@@ -580,7 +592,7 @@ SDK.ServiceWorkerContextNamer = class {
     const parent = target.parentTarget();
     if (!parent || parent.parentTarget() !== this._target)
       return null;
-    return parent.id();
+    return parent.type() === SDK.Target.Type.ServiceWorker ? parent.id() : null;
   }
 
   _updateAllContextLabels() {

@@ -3,13 +3,15 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/ash/network/network_portal_notification_controller.h"
+
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
+#include "chrome/browser/notifications/system_notification_helper.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/network/network_state.h"
 
 namespace chromeos {
@@ -18,6 +20,14 @@ namespace {
 
 const char* const kNotificationId =
     NetworkPortalNotificationController::kNotificationId;
+
+class TestWiFiNetworkState : public NetworkState {
+ public:
+  explicit TestWiFiNetworkState(const std::string& name) : NetworkState(name) {
+    SetGuid(name);
+    set_type(shill::kTypeWifi);
+  }
+};
 
 }  // namespace
 
@@ -30,11 +40,11 @@ class NetworkPortalNotificationControllerTest
 
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
-    base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
-    cl->AppendSwitch(switches::kEnableNetworkPortalNotification);
 
+    TestingBrowserProcess::GetGlobal()->SetSystemNotificationHelper(
+        std::make_unique<SystemNotificationHelper>());
     display_service_ = std::make_unique<NotificationDisplayServiceTester>(
-        ProfileHelper::GetSigninProfile());
+        nullptr /* profile */);
   }
 
  protected:
@@ -56,8 +66,7 @@ class NetworkPortalNotificationControllerTest
 };
 
 TEST_F(NetworkPortalNotificationControllerTest, NetworkStateChanged) {
-  NetworkState wifi("wifi");
-  wifi.SetGuid("wifi");
+  TestWiFiNetworkState wifi("wifi");
   NetworkPortalDetector::CaptivePortalState wifi_state;
 
   // Notification is not displayed for online state.
@@ -80,8 +89,7 @@ TEST_F(NetworkPortalNotificationControllerTest, NetworkStateChanged) {
 }
 
 TEST_F(NetworkPortalNotificationControllerTest, NetworkChanged) {
-  NetworkState wifi1("wifi1");
-  wifi1.SetGuid("wifi1");
+  TestWiFiNetworkState wifi1("wifi1");
   NetworkPortalDetector::CaptivePortalState wifi1_state;
   wifi1_state.status = NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PORTAL;
   wifi1_state.response_code = 200;
@@ -97,8 +105,7 @@ TEST_F(NetworkPortalNotificationControllerTest, NetworkChanged) {
   OnPortalDetectionCompleted(&wifi1, wifi1_state);
   ASSERT_FALSE(HasNotification());
 
-  NetworkState wifi2("wifi2");
-  wifi2.SetGuid("wifi2");
+  TestWiFiNetworkState wifi2("wifi2");
   NetworkPortalDetector::CaptivePortalState wifi2_state;
   wifi2_state.status = NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_ONLINE;
   wifi2_state.response_code = 204;
@@ -121,8 +128,7 @@ TEST_F(NetworkPortalNotificationControllerTest, NotificationUpdated) {
 
   // First network is behind a captive portal, so notification should
   // be displayed.
-  NetworkState wifi1("wifi1");
-  wifi1.SetGuid("wifi1");
+  TestWiFiNetworkState wifi1("wifi1");
   wifi1.PropertyChanged("Name", base::Value("wifi1"));
   OnPortalDetectionCompleted(&wifi1, portal_state);
   ASSERT_TRUE(HasNotification());
@@ -135,8 +141,7 @@ TEST_F(NetworkPortalNotificationControllerTest, NotificationUpdated) {
 
   // Second network is also behind a captive portal, so notification
   // should be updated.
-  NetworkState wifi2("wifi2");
-  wifi2.SetGuid("wifi2");
+  TestWiFiNetworkState wifi2("wifi2");
   wifi2.PropertyChanged("Name", base::Value("wifi2"));
   OnPortalDetectionCompleted(&wifi2, portal_state);
   ASSERT_TRUE(HasNotification());

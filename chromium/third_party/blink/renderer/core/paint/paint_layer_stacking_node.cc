@@ -50,6 +50,7 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/layout/layout_multi_column_flow_thread.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 
@@ -129,8 +130,19 @@ void PaintLayerStackingNode::DirtyZOrderLists() {
 void PaintLayerStackingNode::DirtyStackingContextZOrderLists(
     PaintLayer* layer) {
   if (PaintLayerStackingNode* stacking_node =
-          AncestorStackingContextNode(layer))
+          AncestorStackingContextNode(layer)) {
+    // This invalidation code intentionally refers to stale state.
+    DisableCompositingQueryAsserts disabler;
+
+    // Changes of stacking may result in graphics layers changing size
+    // due to new contents painting into them.
+    PaintLayer* ancestor_layer = stacking_node->Layer();
+    if (auto* mapping = ancestor_layer->GetCompositedLayerMapping()) {
+      mapping->SetNeedsGraphicsLayerUpdate(kGraphicsLayerUpdateSubtree);
+    }
+
     stacking_node->DirtyZOrderLists();
+  }
 }
 
 void PaintLayerStackingNode::RebuildZOrderLists() {
@@ -224,12 +236,12 @@ void PaintLayerStackingNode::CollectLayers(
 void PaintLayerStackingNode::UpdateStackingParentForZOrderLists(
     PaintLayerStackingNode* stacking_parent) {
   if (pos_z_order_list_) {
-    for (size_t i = 0; i < pos_z_order_list_->size(); ++i)
+    for (wtf_size_t i = 0; i < pos_z_order_list_->size(); ++i)
       pos_z_order_list_->at(i)->SetStackingParent(stacking_parent);
   }
 
   if (neg_z_order_list_) {
-    for (size_t i = 0; i < neg_z_order_list_->size(); ++i)
+    for (wtf_size_t i = 0; i < neg_z_order_list_->size(); ++i)
       neg_z_order_list_->at(i)->SetStackingParent(stacking_parent);
   }
 }

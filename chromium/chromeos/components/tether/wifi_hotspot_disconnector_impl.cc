@@ -5,7 +5,7 @@
 #include "chromeos/components/tether/wifi_hotspot_disconnector_impl.h"
 
 #include "base/bind.h"
-#include "chromeos/components/proximity_auth/logging/logging.h"
+#include "chromeos/components/multidevice/logging/logging.h"
 #include "chromeos/components/tether/network_configuration_remover.h"
 #include "chromeos/components/tether/pref_names.h"
 #include "chromeos/network/network_connection_handler.h"
@@ -96,8 +96,8 @@ void WifiHotspotDisconnectorImpl::OnSuccessfulWifiDisconnect(
     const std::string& wifi_network_path,
     const base::Closure& success_callback,
     const network_handler::StringResultCallback& error_callback) {
-  PA_LOG(INFO) << "Successfully disconnected from Wi-Fi network with GUID "
-               << wifi_network_guid << ".";
+  PA_LOG(VERBOSE) << "Successfully disconnected from Wi-Fi network with GUID "
+                  << wifi_network_guid << ".";
   CleanUpAfterWifiDisconnection(true /* success */, wifi_network_path,
                                 success_callback, error_callback);
 }

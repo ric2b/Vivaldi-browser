@@ -24,8 +24,10 @@
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "net/base/cache_type.h"
 #include "net/base/completion_once_callback.h"
+#include "net/base/net_errors.h"
 #include "net/base/net_export.h"
 
 #if defined(OS_ANDROID)
@@ -51,9 +53,14 @@ class NET_EXPORT_PRIVATE EntryMetadata {
   EntryMetadata();
   EntryMetadata(base::Time last_used_time,
                 base::StrictNumeric<uint32_t> entry_size);
+  EntryMetadata(int32_t trailer_prefetch_size,
+                base::StrictNumeric<uint32_t> entry_size);
 
   base::Time GetLastUsedTime() const;
   void SetLastUsedTime(const base::Time& last_used_time);
+
+  int32_t GetTrailerPrefetchSize() const;
+  void SetTrailerPrefetchSize(int32_t size);
 
   uint32_t RawTimeForSorting() const {
     return last_used_time_seconds_since_epoch_;
@@ -66,8 +73,11 @@ class NET_EXPORT_PRIVATE EntryMetadata {
   void SetInMemoryData(uint8_t val) { in_memory_data_ = val; }
 
   // Serialize the data into the provided pickle.
-  void Serialize(base::Pickle* pickle) const;
-  bool Deserialize(base::PickleIterator* it, bool has_entry_in_memory_data);
+  void Serialize(net::CacheType cache_type, base::Pickle* pickle) const;
+  bool Deserialize(net::CacheType cache_type,
+                   base::PickleIterator* it,
+                   bool has_entry_in_memory_data,
+                   bool app_cache_has_trailer_prefetch_size);
 
   static base::TimeDelta GetLowerEpsilonForTimeComparisons() {
     return base::TimeDelta::FromSeconds(1);
@@ -80,12 +90,23 @@ class NET_EXPORT_PRIVATE EntryMetadata {
 
  private:
   friend class SimpleIndexFileTest;
+  FRIEND_TEST_ALL_PREFIXES(SimpleIndexFileTest, ReadV8Format);
+  FRIEND_TEST_ALL_PREFIXES(SimpleIndexFileTest, ReadV8FormatAppCache);
 
   // There are tens of thousands of instances of EntryMetadata in memory, so the
   // size of each entry matters.  Even when the values used to set these members
   // are originally calculated as >32-bit types, the actual necessary size for
   // each shouldn't exceed 32 bits, so we use 32-bit types here.
-  uint32_t last_used_time_seconds_since_epoch_;
+
+  // In most modes we track the last access time in order to support automatic
+  // eviction. In APP_CACHE mode, however, eviction is disabled. Instead of
+  // storing the access time in APP_CACHE mode we instead store a hint about
+  // how much entry file trailer should be prefetched when its opened.
+  union {
+    uint32_t last_used_time_seconds_since_epoch_;
+    int32_t trailer_prefetch_size_;  // in bytes
+  };
+
   uint32_t entry_size_256b_chunks_ : 24;  // in 256-byte blocks, rounded up.
   uint32_t in_memory_data_ : 8;
 };
@@ -141,6 +162,9 @@ class NET_EXPORT_PRIVATE SimpleIndex
 
   void WriteToDisk(IndexWriteToDiskReason reason);
 
+  int32_t GetTrailerPrefetchSize(uint64_t entry_hash) const;
+  void SetTrailerPrefetchSize(uint64_t entry_hash, int32_t size);
+
   // Update the size (in bytes) of an entry, in the metadata stored in the
   // index. This should be the total disk-file size including all streams of the
   // entry.
@@ -149,7 +173,9 @@ class NET_EXPORT_PRIVATE SimpleIndex
 
   using EntrySet = std::unordered_map<uint64_t, EntryMetadata>;
 
-  static void InsertInEntrySet(uint64_t entry_hash,
+  // Insert an entry in the given set if there is not already entry present.
+  // Returns true if the set was modified.
+  static bool InsertInEntrySet(uint64_t entry_hash,
                                const EntryMetadata& entry_metadata,
                                EntrySet* entry_set);
 
@@ -159,12 +185,16 @@ class NET_EXPORT_PRIVATE SimpleIndex
                              const EntryMetadata& entry_metadata);
 
   // Executes the |callback| when the index is ready. Allows multiple callbacks.
-  int ExecuteWhenReady(net::CompletionOnceCallback callback);
+  net::Error ExecuteWhenReady(net::CompletionOnceCallback callback);
 
   // Returns entries from the index that have last accessed time matching the
   // range between |initial_time| and |end_time| where open intervals are
   // possible according to the definition given in |DoomEntriesBetween()| in the
   // disk cache backend interface.
+  //
+  // Access times are not updated in net::APP_CACHE mode.  GetEntriesBetween()
+  // should only be called with null times indicating the full range when in
+  // this mode.
   std::unique_ptr<HashList> GetEntriesBetween(const base::Time initial_time,
                                               const base::Time end_time);
 
@@ -192,7 +222,20 @@ class NET_EXPORT_PRIVATE SimpleIndex
   // Returns the estimate of dynamically allocated memory in bytes.
   size_t EstimateMemoryUsage() const;
 
+  // Returns base::Time() if hash not known.
+  base::Time GetLastUsedTime(uint64_t entry_hash);
   void SetLastUsedTimeForTest(uint64_t entry_hash, const base::Time last_used);
+
+#if defined(OS_ANDROID)
+  void set_app_status_listener(
+      base::android::ApplicationStatusListener* app_status_listener) {
+    app_status_listener_ = app_status_listener;
+  }
+#endif
+
+  // Return true if a pending disk write has been scheduled from
+  // PostponeWritingToDisk().
+  bool HasPendingWrite() const;
 
  private:
   friend class SimpleIndexTest;
@@ -200,13 +243,16 @@ class NET_EXPORT_PRIVATE SimpleIndex
   FRIEND_TEST_ALL_PREFIXES(SimpleIndexTest, DiskWriteQueued);
   FRIEND_TEST_ALL_PREFIXES(SimpleIndexTest, DiskWriteExecuted);
   FRIEND_TEST_ALL_PREFIXES(SimpleIndexTest, DiskWritePostponed);
+  FRIEND_TEST_ALL_PREFIXES(SimpleIndexAppCacheTest, DiskWriteQueued);
 
   void StartEvictionIfNeeded();
   void EvictionDone(int result);
 
   void PostponeWritingToDisk();
 
-  void UpdateEntryIteratorSize(EntrySet::iterator* it,
+  // Update the size of the entry pointed to by the given iterator.  Return
+  // true if the new size actually results in a change.
+  bool UpdateEntryIteratorSize(EntrySet::iterator* it,
                                base::StrictNumeric<uint32_t> entry_size);
 
   // Must run on IO Thread.
@@ -216,7 +262,8 @@ class NET_EXPORT_PRIVATE SimpleIndex
   void OnApplicationStateChange(base::android::ApplicationState state);
 
   std::unique_ptr<base::android::ApplicationStatusListener>
-      app_status_listener_;
+      owned_app_status_listener_;
+  base::android::ApplicationStatusListener* app_status_listener_ = nullptr;
 #endif
 
   scoped_refptr<BackendCleanupTracker> cleanup_tracker_;
@@ -227,18 +274,18 @@ class NET_EXPORT_PRIVATE SimpleIndex
   EntrySet entries_set_;
 
   const net::CacheType cache_type_;
-  uint64_t cache_size_;  // Total cache storage size in bytes.
-  uint64_t max_size_;
-  uint64_t high_watermark_;
-  uint64_t low_watermark_;
-  bool eviction_in_progress_;
+  uint64_t cache_size_ = 0;  // Total cache storage size in bytes.
+  uint64_t max_size_ = 0;
+  uint64_t high_watermark_ = 0;
+  uint64_t low_watermark_ = 0;
+  bool eviction_in_progress_ = false;
   base::TimeTicks eviction_start_time_;
 
   // This stores all the entry_hash of entries that are removed during
   // initialization.
   std::unordered_set<uint64_t> removed_entries_;
-  bool initialized_;
-  IndexInitMethod init_method_;
+  bool initialized_ = false;
+  IndexInitMethod init_method_ = INITIALIZE_METHOD_MAX;
 
   std::unique_ptr<SimpleIndexFile> index_file_;
 
@@ -262,7 +309,7 @@ class NET_EXPORT_PRIVATE SimpleIndex
   // Set to true when the app is on the background. When the app is in the
   // background we can write the index much more frequently, to insure fresh
   // index on next startup.
-  bool app_on_background_;
+  bool app_on_background_ = false;
 };
 
 }  // namespace disk_cache

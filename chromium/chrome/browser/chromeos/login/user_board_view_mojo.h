@@ -24,6 +24,8 @@ class UserBoardViewMojo : public UserBoardView {
                                std::unique_ptr<base::ListValue> locales,
                                const std::string& default_locale,
                                bool multiple_recommended_locales) override;
+  void SetPublicSessionShowFullManagementDisclosure(
+      bool show_full_management_disclosure) override;
   void ShowBannerMessage(const base::string16& message,
                          bool is_warning) override;
   void ShowUserPodCustomIcon(
@@ -34,8 +36,8 @@ class UserBoardViewMojo : public UserBoardView {
   void SetAuthType(const AccountId& account_id,
                    proximity_auth::mojom::AuthType auth_type,
                    const base::string16& initial_value) override;
-  void Bind(UserSelectionScreen* screen) override{};
-  void Unbind() override{};
+  void Bind(UserSelectionScreen* screen) override {}
+  void Unbind() override {}
   base::WeakPtr<UserBoardView> GetWeakPtr() override;
 
  private:

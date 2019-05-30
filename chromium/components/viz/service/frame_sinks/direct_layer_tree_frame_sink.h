@@ -30,6 +30,26 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
       public ExternalBeginFrameSourceClient,
       public DisplayClient {
  public:
+  // This class is used to handle the graphics pipeline related metrics
+  // reporting.
+  class PipelineReporting {
+   public:
+    PipelineReporting(BeginFrameArgs args, base::TimeTicks now);
+    ~PipelineReporting();
+
+    void Report();
+
+    int64_t trace_id() const { return trace_id_; }
+
+   private:
+    // The trace id of a BeginFrame which is used to track its progress on the
+    // client side.
+    int64_t trace_id_;
+
+    // The time stamp for the begin frame to arrive on client side.
+    base::TimeTicks frame_time_;
+  };
+
   // The underlying Display, FrameSinkManagerImpl, and LocalSurfaceIdAllocator
   // must outlive this class.
   DirectLayerTreeFrameSink(
@@ -48,7 +68,9 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
   // LayerTreeFrameSink implementation.
   bool BindToClient(cc::LayerTreeFrameSinkClient* client) override;
   void DetachFromClient() override;
-  void SubmitCompositorFrame(CompositorFrame frame) override;
+  void SubmitCompositorFrame(CompositorFrame frame,
+                             bool hit_test_data_changed,
+                             bool show_hit_test_borders) override;
   void DidNotProduceFrame(const BeginFrameAck& ack) override;
   void DidAllocateSharedBitmap(mojo::ScopedSharedBufferHandle buffer,
                                const SharedBitmapId& id) override;
@@ -57,7 +79,7 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
   // DisplayClient implementation.
   void DisplayOutputSurfaceLost() override;
   void DisplayWillDrawAndSwap(bool will_draw_and_swap,
-                              const RenderPassList& render_passes) override;
+                              RenderPassList* render_passes) override;
   void DisplayDidDrawAndSwap() override;
   void DisplayDidReceiveCALayerParams(
       const gfx::CALayerParams& ca_layer_params) override;
@@ -69,16 +91,15 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
   // mojom::CompositorFrameSinkClient implementation:
   void DidReceiveCompositorFrameAck(
       const std::vector<ReturnedResource>& resources) override;
-  void DidPresentCompositorFrame(
-      uint32_t presentation_token,
-      const gfx::PresentationFeedback& feedback) override;
-  void OnBeginFrame(const BeginFrameArgs& args) override;
+  void OnBeginFrame(const BeginFrameArgs& args,
+                    const base::flat_map<uint32_t, gfx::PresentationFeedback>&
+                        feedbacks) override;
   void ReclaimResources(
       const std::vector<ReturnedResource>& resources) override;
   void OnBeginFramePausedChanged(bool paused) override;
 
   // ExternalBeginFrameSourceClient implementation:
-  void OnNeedsBeginFrames(bool needs_begin_frame) override;
+  void OnNeedsBeginFrames(bool needs_begin_frames) override;
 
   // ContextLostObserver implementation:
   void OnContextLost() override;
@@ -91,6 +112,7 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
 
   std::unique_ptr<CompositorFrameSinkSupport> support_;
 
+  bool needs_begin_frames_ = false;
   const FrameSinkId frame_sink_id_;
   CompositorFrameSinkSupportManager* const support_manager_;
   FrameSinkManagerImpl* frame_sink_manager_;
@@ -103,6 +125,11 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
   float device_scale_factor_ = 1.f;
   bool is_lost_ = false;
   std::unique_ptr<ExternalBeginFrameSource> begin_frame_source_;
+
+  HitTestRegionList last_hit_test_data_;
+
+  // Use this map to record the time when client received the BeginFrameArgs.
+  base::flat_map<int64_t, PipelineReporting> pipeline_reporting_frame_times_;
   base::WeakPtrFactory<DirectLayerTreeFrameSink> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(DirectLayerTreeFrameSink);

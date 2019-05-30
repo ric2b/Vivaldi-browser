@@ -54,6 +54,7 @@ LanguageDetectionController::LanguageDetectionController(
 
 LanguageDetectionController::~LanguageDetectionController() {
   if (web_state_) {
+    web_state_->RemoveScriptCommandCallback(kCommandPrefix);
     web_state_->RemoveObserver(this);
     web_state_ = nullptr;
   }
@@ -74,7 +75,8 @@ bool LanguageDetectionController::OnTextCaptured(
     const base::DictionaryValue& command,
     const GURL& url,
     bool interacting,
-    bool is_main_frame) {
+    bool is_main_frame,
+    web::WebFrame* sender_frame) {
   if (!is_main_frame) {
     // Translate is only supported on main frame.
     return false;

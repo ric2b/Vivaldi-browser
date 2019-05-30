@@ -19,6 +19,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/rand_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
@@ -32,6 +33,7 @@
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "components/omnibox/browser/url_prefix.h"
+#include "components/omnibox/common/omnibox_features.h"
 #include "components/search/search.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/strings/grit/components_strings.h"
@@ -44,10 +46,13 @@
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/url_constants.h"
 #include "url/url_util.h"
+
+using metrics::OmniboxEventProto;
 
 // Helpers --------------------------------------------------------------------
 
@@ -133,12 +138,13 @@ SearchProvider::SearchProvider(AutocompleteProviderClient* client,
     : BaseSearchProvider(AutocompleteProvider::TYPE_SEARCH, client),
       listener_(listener),
       providers_(client->GetTemplateURLService()),
-      answers_cache_(10) {
+      answers_cache_(10),
+      observer_(this) {
   TemplateURLService* template_url_service = client->GetTemplateURLService();
 
   // |template_url_service| can be null in tests.
   if (template_url_service)
-    template_url_service->AddObserver(this);
+    observer_.Add(template_url_service);
 }
 
 // static
@@ -154,15 +160,15 @@ void SearchProvider::RegisterDisplayedAnswers(
   // The answer must be in the first or second slot to be considered. It should
   // only be in the second slot if AutocompleteController ranked a local search
   // history or a verbatim item higher than the answer.
-  AutocompleteResult::const_iterator match = result.begin();
-  if (match->answer_contents.empty() && result.size() > 1)
+  auto match = result.begin();
+  if (!match->answer && result.size() > 1)
     ++match;
-  if (match->answer_contents.empty() || match->answer_type.empty() ||
-      match->fill_into_edit.empty())
+  if (!match->answer || match->fill_into_edit.empty())
     return;
 
   // Valid answer encountered, cache it for further queries.
-  answers_cache_.UpdateRecentAnswers(match->fill_into_edit, match->answer_type);
+  answers_cache_.UpdateRecentAnswers(match->fill_into_edit,
+                                     match->answer->type());
 }
 
 // static
@@ -188,9 +194,6 @@ void SearchProvider::ResetSession() {
 }
 
 SearchProvider::~SearchProvider() {
-  TemplateURLService* template_url_service = client()->GetTemplateURLService();
-  if (template_url_service)
-    template_url_service->RemoveObserver(this);
 }
 
 // static
@@ -200,9 +203,8 @@ void SearchProvider::UpdateOldResults(
   // When called without |minimal_changes|, it likely means the user has
   // pressed a key.  Revise the cached results appropriately.
   if (!minimal_changes) {
-    for (SearchSuggestionParser::SuggestResults::iterator sug_it =
-             results->suggest_results.begin();
-         sug_it != results->suggest_results.end(); ) {
+    for (auto sug_it = results->suggest_results.begin();
+         sug_it != results->suggest_results.end();) {
       if (sug_it->type() == AutocompleteMatchType::CALCULATOR) {
         sug_it = results->suggest_results.erase(sug_it);
       } else {
@@ -210,11 +212,8 @@ void SearchProvider::UpdateOldResults(
         ++sug_it;
       }
     }
-    for (SearchSuggestionParser::NavigationResults::iterator nav_it =
-             results->navigation_results.begin();
-         nav_it != results->navigation_results.end(); ++nav_it) {
-      nav_it->set_received_after_last_keystroke(false);
-    }
+    for (auto& navigation_result : results->navigation_results)
+      navigation_result.set_received_after_last_keystroke(false);
   }
 }
 
@@ -285,6 +284,9 @@ void SearchProvider::Start(const AutocompleteInput& input,
     // User typed "?" alone.  Give them a placeholder result indicating what
     // this syntax does.
     if (default_provider) {
+      // TODO(etienneb): Remove this trace event when https://crbug/868419 is
+      // fixed.
+      TRACE_EVENT0("omnibox", "SearchProvider::question_mark");
       AutocompleteMatch match;
       match.provider = this;
       match.contents.assign(l10n_util::GetStringUTF16(IDS_EMPTY_KEYWORD_VALUE));
@@ -342,8 +344,7 @@ const AutocompleteInput SearchProvider::GetInput(bool is_keyword) const {
 
 bool SearchProvider::ShouldAppendExtraParams(
     const SearchSuggestionParser::SuggestResult& result) const {
-  return !result.from_keyword_provider() ||
-      providers_.default_provider().empty();
+  return !result.from_keyword() || providers_.default_provider().empty();
 }
 
 void SearchProvider::RecordDeletionResult(bool success) {
@@ -461,16 +462,10 @@ void SearchProvider::ClearAllResults() {
 void SearchProvider::UpdateMatchContentsClass(
     const base::string16& input_text,
     SearchSuggestionParser::Results* results) {
-  for (SearchSuggestionParser::SuggestResults::iterator sug_it =
-           results->suggest_results.begin();
-       sug_it != results->suggest_results.end(); ++sug_it) {
-    sug_it->ClassifyMatchContents(false, input_text);
-  }
-  for (SearchSuggestionParser::NavigationResults::iterator nav_it =
-           results->navigation_results.begin();
-       nav_it != results->navigation_results.end(); ++nav_it) {
-    nav_it->CalculateAndClassifyMatchContents(false, input_text);
-  }
+  for (auto& suggest_result : results->suggest_results)
+    suggest_result.ClassifyMatchContents(false, input_text);
+  for (auto& navigation_result : results->navigation_results)
+    navigation_result.CalculateAndClassifyMatchContents(false, input_text);
 }
 
 void SearchProvider::SortResults(bool is_keyword,
@@ -552,7 +547,8 @@ void SearchProvider::EnforceConstraints() {
         (keyword_url != nullptr) &&
         (keyword_url->type() == TemplateURL::OMNIBOX_API_EXTENSION);
     if ((keyword_url != nullptr) && !is_extension_keyword &&
-        (AutocompleteResult::FindTopMatch(&matches_) == matches_.end())) {
+        (AutocompleteResult::FindTopMatch(input_.current_page_classification(),
+                                          matches_) == matches_.end())) {
       // In non-extension keyword mode, disregard the keyword verbatim suggested
       // relevance if necessary, so at least one match is allowed to be default.
       // (In extension keyword mode this is not necessary because the extension
@@ -574,7 +570,8 @@ void SearchProvider::EnforceConstraints() {
       ConvertResultsToAutocompleteMatches();
     }
     if (!is_extension_keyword &&
-        (AutocompleteResult::FindTopMatch(&matches_) == matches_.end())) {
+        (AutocompleteResult::FindTopMatch(input_.current_page_classification(),
+                                          matches_) == matches_.end())) {
       // Guarantee that SearchProvider returns a legal default match (except
       // when in extension-based keyword mode).  The omnibox always needs at
       // least one legal default match, and it relies on SearchProvider in
@@ -589,23 +586,23 @@ void SearchProvider::EnforceConstraints() {
       ConvertResultsToAutocompleteMatches();
     }
     DCHECK(!IsTopMatchSearchWithURLInput());
-    DCHECK(is_extension_keyword ||
-           (AutocompleteResult::FindTopMatch(&matches_) != matches_.end()));
+    DCHECK(is_extension_keyword || (AutocompleteResult::FindTopMatch(
+                                        input_.current_page_classification(),
+                                        matches_) != matches_.end()));
   }
 }
 
 void SearchProvider::RecordTopSuggestion() {
-  top_query_suggestion_match_contents_ = base::string16();
+  top_query_suggestion_fill_into_edit_ = base::string16();
   top_navigation_suggestion_ = GURL();
-  ACMatches::const_iterator first_match =
-      AutocompleteResult::FindTopMatch(matches_);
-  if ((first_match != matches_.end()) &&
-      !first_match->inline_autocompletion.empty()) {
+  auto first_match = AutocompleteResult::FindTopMatch(
+      input_.current_page_classification(), matches_);
+  if (first_match != matches_.end()) {
     // Identify if this match came from a query suggestion or a navsuggestion.
     // In either case, extracts the identifying feature of the suggestion
     // (query string or navigation url).
     if (AutocompleteMatch::IsSearchType(first_match->type))
-      top_query_suggestion_match_contents_ = first_match->contents;
+      top_query_suggestion_fill_into_edit_ = first_match->fill_into_edit;
     else
       top_navigation_suggestion_ = first_match->destination_url;
   }
@@ -700,9 +697,6 @@ void SearchProvider::StartOrStopSuggestQuery(bool minimal_changes) {
     ClearAllResults();
     return;
   }
-
-  if (OmniboxFieldTrial::DisableResultsCaching())
-    ClearAllResults();
 
   // For the minimal_changes case, if we finished the previous query and still
   // have its results, or are allowed to keep running it, just do that, rather
@@ -829,20 +823,18 @@ void SearchProvider::PersistTopSuggestions(
   // clobbering top results, which may be used for inline autocompletion.
   // Other results don't need similar changes, because they shouldn't be
   // displayed asynchronously anyway.
-  if (!top_query_suggestion_match_contents_.empty()) {
-    for (SearchSuggestionParser::SuggestResults::iterator sug_it =
-             results->suggest_results.begin();
-         sug_it != results->suggest_results.end(); ++sug_it) {
-      if (sug_it->match_contents() == top_query_suggestion_match_contents_)
-        sug_it->set_received_after_last_keystroke(false);
+  if (!top_query_suggestion_fill_into_edit_.empty()) {
+    for (auto& suggest_result : results->suggest_results) {
+      if (GetFillIntoEdit(suggest_result, providers_.GetKeywordProviderURL()) ==
+          top_query_suggestion_fill_into_edit_) {
+        suggest_result.set_received_after_last_keystroke(false);
+      }
     }
   }
   if (top_navigation_suggestion_.is_valid()) {
-    for (SearchSuggestionParser::NavigationResults::iterator nav_it =
-             results->navigation_results.begin();
-         nav_it != results->navigation_results.end(); ++nav_it) {
-      if (nav_it->url() == top_navigation_suggestion_)
-        nav_it->set_received_after_last_keystroke(false);
+    for (auto& navigation_result : results->navigation_results) {
+      if (navigation_result.url() == top_navigation_suggestion_)
+        navigation_result.set_received_after_last_keystroke(false);
     }
   }
 }
@@ -875,6 +867,17 @@ std::unique_ptr<network::SimpleURLLoader> SearchProvider::CreateSuggestLoader(
   if (!template_url || template_url->suggestions_url().empty())
     return nullptr;
 
+  // Setting SuggestUrl the same as SearchUrl is a typical misconfiguration.
+  // It's not possible for a URL to both provide a search results page and
+  // suggested queries response (at least they have different format).  Most
+  // like the user set the search URL correctly; it would be obvious if they did
+  // not. Thus, it's likely that the suggest URL is wrong.  Because it would not
+  // give a valid query suggestion response, don't bother sending queries to it
+  // (otherwise user will quickly hit rate-limit for search queries, that will
+  // harm valid search queries as well).
+  if (template_url->suggestions_url() == template_url->url())
+    return nullptr;
+
   // Bail if the suggestion URL is invalid with the given replacements.
   TemplateURLRef::SearchTermsArgs search_term_args(input.text());
   search_term_args.input_type = input.type();
@@ -886,17 +889,27 @@ std::unique_ptr<network::SimpleURLLoader> SearchProvider::CreateSuggestLoader(
     search_term_args.prefetch_query =
         base::UTF16ToUTF8(prefetch_data_.full_query_text);
     search_term_args.prefetch_query_type =
-        base::UTF16ToUTF8(prefetch_data_.query_type);
+        base::NumberToString(prefetch_data_.query_type);
   }
+
+  // Append a specific suggest client if it is in ChromeOS app_list launcher
+  // contexts.
+  const SearchTermsData& search_terms_data =
+      client()->GetTemplateURLService()->search_terms_data();
+  BaseSearchProvider::AppendSuggestClientToAdditionalQueryParams(
+      template_url, search_terms_data, input.current_page_classification(),
+      &search_term_args);
 
   // If the request is from omnibox focus, send empty search term args. The
   // purpose of such a request is to signal the server to warm up; no info
   // is required.
+  TemplateURLRef::SearchTermsArgs empty_search_term_args((base::string16()));
+  BaseSearchProvider::AppendSuggestClientToAdditionalQueryParams(
+      template_url, search_terms_data, input.current_page_classification(),
+      &empty_search_term_args);
   GURL suggest_url(template_url->suggestions_url_ref().ReplaceSearchTerms(
-      input.from_omnibox_focus()
-          ? TemplateURLRef::SearchTermsArgs(base::string16())
-          : search_term_args,
-      client()->GetTemplateURLService()->search_terms_data()));
+      input.from_omnibox_focus() ? empty_search_term_args : search_term_args,
+      search_terms_data));
   if (!suggest_url.is_valid())
     return nullptr;
 
@@ -945,11 +958,11 @@ std::unique_ptr<network::SimpleURLLoader> SearchProvider::CreateSuggestLoader(
   request->url = suggest_url;
   request->load_flags = net::LOAD_DO_NOT_SAVE_COOKIES;
   // Add Chrome experiment state to the request headers.
-  variations::AppendVariationHeadersUnknownSignedIn(
+  variations::AppendVariationsHeaderUnknownSignedIn(
       request->url,
       client()->IsOffTheRecord() ? variations::InIncognito::kYes
                                  : variations::InIncognito::kNo,
-      &request->headers);
+      request.get());
 
   // TODO(https://crbug.com/808498) re-add data use measurement once
   // SimpleURLLoader supports it.
@@ -980,25 +993,23 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
       TemplateURLRef::NO_SUGGESTIONS_AVAILABLE :
       TemplateURLRef::NO_SUGGESTION_CHOSEN;
   const TemplateURL* keyword_url = providers_.GetKeywordProviderURL();
-  if (verbatim_relevance > 0) {
+  const bool should_curb_default_suggestions = ShouldCurbDefaultSuggestions();
+  // Don't add what-you-typed suggestion from the default provider when the
+  // user requested keyword search.
+  if (!should_curb_default_suggestions && verbatim_relevance > 0) {
     const base::string16& trimmed_verbatim =
         base::CollapseWhitespace(input_.text(), false);
 
     // Verbatim results don't get suggestions and hence, answers.
     // Scan previous matches if the last answer-bearing suggestion matches
     // verbatim, and if so, copy over answer contents.
-    base::string16 answer_contents;
-    base::string16 answer_type;
     SuggestionAnswer answer;
     bool has_answer = false;
     base::string16 trimmed_verbatim_lower =
         base::i18n::ToLower(trimmed_verbatim);
-    for (ACMatches::iterator it = matches_.begin(); it != matches_.end();
-         ++it) {
+    for (auto it = matches_.begin(); it != matches_.end(); ++it) {
       if (it->answer &&
           base::i18n::ToLower(it->fill_into_edit) == trimmed_verbatim_lower) {
-        answer_contents = it->answer_contents;
-        answer_type = it->answer_type;
         answer = *it->answer;
         has_answer = true;
         break;
@@ -1008,11 +1019,11 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
     SearchSuggestionParser::SuggestResult verbatim(
         /*suggestion=*/trimmed_verbatim,
         AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED,
-        /*subtype_identifier=*/0, /*from_keyword_provider=*/false,
-        verbatim_relevance, relevance_from_server,
+        /*subtype_identifier=*/0, /*from_keyword=*/false, verbatim_relevance,
+        relevance_from_server,
         /*input_text=*/trimmed_verbatim);
     if (has_answer)
-      verbatim.SetAnswer(answer_contents, answer_type, answer);
+      verbatim.SetAnswer(answer);
     AddMatchToMap(verbatim, std::string(), did_not_accept_default_suggestion,
                   false, keyword_url != nullptr, &map);
   }
@@ -1034,7 +1045,7 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
         SearchSuggestionParser::SuggestResult verbatim(
             /*suggestion=*/trimmed_verbatim,
             AutocompleteMatchType::SEARCH_OTHER_ENGINE,
-            /*subtype_identifier=*/0, /*from_keyword_provider=*/true,
+            /*subtype_identifier=*/0, /*from_keyword=*/true,
             keyword_verbatim_relevance, keyword_relevance_from_server,
             /*input_text=*/trimmed_verbatim);
         AddMatchToMap(verbatim, std::string(),
@@ -1043,19 +1054,23 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
     }
   }
   AddRawHistoryResultsToMap(true, did_not_accept_keyword_suggestion, &map);
-  AddRawHistoryResultsToMap(false, did_not_accept_default_suggestion, &map);
-
+  if (!should_curb_default_suggestions)
+    AddRawHistoryResultsToMap(false, did_not_accept_default_suggestion, &map);
   AddSuggestResultsToMap(keyword_results_.suggest_results,
                          keyword_results_.metadata, &map);
-  AddSuggestResultsToMap(default_results_.suggest_results,
-                         default_results_.metadata, &map);
-
+  if (!should_curb_default_suggestions) {
+    AddSuggestResultsToMap(default_results_.suggest_results,
+                           default_results_.metadata, &map);
+  }
   ACMatches matches;
   for (MatchMap::const_iterator i(map.begin()); i != map.end(); ++i)
     matches.push_back(i->second);
 
   AddNavigationResultsToMatches(keyword_results_.navigation_results, &matches);
-  AddNavigationResultsToMatches(default_results_.navigation_results, &matches);
+  if (!should_curb_default_suggestions) {
+    AddNavigationResultsToMatches(default_results_.navigation_results,
+                                  &matches);
+  }
 
   // Now add the most relevant matches to |matches_|.  We take up to kMaxMatches
   // suggest/navsuggest matches, regardless of origin.  We always include in
@@ -1073,8 +1088,8 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
   // Guarantee that if there's a legal default match anywhere in the result
   // set that it'll get returned.  The rotate() call does this by moving the
   // default match to the front of the list.
-  ACMatches::iterator default_match =
-      AutocompleteResult::FindTopMatch(&matches);
+  auto default_match = AutocompleteResult::FindTopMatch(
+      input_.current_page_classification(), &matches);
   if (default_match != matches.end())
     std::rotate(matches.begin(), default_match, default_match + 1);
 
@@ -1114,13 +1129,11 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
 
 void SearchProvider::RemoveExtraAnswers(ACMatches* matches) {
   bool answer_seen = false;
-  for (ACMatches::iterator it = matches->begin(); it != matches->end(); ++it) {
+  for (auto it = matches->begin(); it != matches->end(); ++it) {
     if (it->answer) {
       if (!answer_seen) {
         answer_seen = true;
       } else {
-        it->answer_contents.clear();
-        it->answer_type.clear();
         it->answer.reset();
       }
     }
@@ -1128,8 +1141,8 @@ void SearchProvider::RemoveExtraAnswers(ACMatches* matches) {
 }
 
 bool SearchProvider::IsTopMatchSearchWithURLInput() const {
-  ACMatches::const_iterator first_match =
-      AutocompleteResult::FindTopMatch(matches_);
+  auto first_match = AutocompleteResult::FindTopMatch(
+      input_.current_page_classification(), matches_);
   return (input_.type() == metrics::OmniboxInputType::URL) &&
          (first_match != matches_.end()) &&
          (first_match->relevance > CalculateRelevanceForVerbatim()) &&
@@ -1140,8 +1153,8 @@ bool SearchProvider::IsTopMatchSearchWithURLInput() const {
 void SearchProvider::AddNavigationResultsToMatches(
     const SearchSuggestionParser::NavigationResults& navigation_results,
     ACMatches* matches) {
-  for (SearchSuggestionParser::NavigationResults::const_iterator it =
-           navigation_results.begin(); it != navigation_results.end(); ++it) {
+  for (auto it = navigation_results.begin(); it != navigation_results.end();
+       ++it) {
     matches->push_back(NavigationToMatch(*it));
     // In the absence of suggested relevance scores, use only the single
     // highest-scoring result.  (The results are already sorted by relevance.)
@@ -1169,9 +1182,7 @@ void SearchProvider::AddTransformedHistoryResultsToMap(
     const SearchSuggestionParser::SuggestResults& transformed_results,
     int did_not_accept_suggestion,
     MatchMap* map) {
-  for (SearchSuggestionParser::SuggestResults::const_iterator i(
-           transformed_results.begin());
-       i != transformed_results.end();
+  for (auto i(transformed_results.begin()); i != transformed_results.end();
        ++i) {
     AddMatchToMap(*i, std::string(), did_not_accept_suggestion, true,
                   providers_.GetKeywordProviderURL() != nullptr, map);
@@ -1192,8 +1203,7 @@ SearchProvider::ScoreHistoryResultsHelper(const HistoryResults& results,
           input_.current_page_classification());
   const base::string16& trimmed_input =
       base::CollapseWhitespace(input_text, false);
-  for (HistoryResults::const_iterator i(results.begin()); i != results.end();
-       ++i) {
+  for (auto i(results.begin()); i != results.end(); ++i) {
     const base::string16& trimmed_suggestion =
         base::CollapseWhitespace(i->term, false);
 
@@ -1209,8 +1219,7 @@ SearchProvider::ScoreHistoryResultsHelper(const HistoryResults& results,
     // Add the match to |scored_results| by putting the what-you-typed match
     // on the front and appending all other matches.  We want the what-you-
     // typed match to always be first.
-    SearchSuggestionParser::SuggestResults::iterator insertion_position =
-        scored_results.end();
+    auto insertion_position = scored_results.end();
     if (trimmed_suggestion == trimmed_input) {
       found_what_you_typed_match = true;
       insertion_position = scored_results.begin();
@@ -1279,8 +1288,7 @@ SearchProvider::ScoreHistoryResultsHelper(const HistoryResults& results,
     }
   }
 
-  for (SearchSuggestionParser::SuggestResults::iterator i(
-           scored_results.begin()); i != scored_results.end(); ++i) {
+  for (auto i(scored_results.begin()); i != scored_results.end(); ++i) {
     if ((last_relevance != 0) && (i->relevance() >= last_relevance))
       i->set_relevance(last_relevance - 1);
     last_relevance = i->relevance();
@@ -1360,6 +1368,21 @@ int SearchProvider::GetVerbatimRelevance(bool* relevance_from_server) const {
     *relevance_from_server = use_server_relevance;
   return use_server_relevance ?
       default_results_.verbatim_relevance : CalculateRelevanceForVerbatim();
+}
+
+bool SearchProvider::ShouldCurbDefaultSuggestions() const {
+  // Only curb if the global experimental keyword feature is enabled, we're
+  // in keyword mode and the user selected the mode explicitly. For now, we
+  // consider entering keyword mode with spaces to be unintentional and all
+  // other methods as intentional. In this experimental mode, we don't want
+  // non-keyword suggestions if we're not confident that the user entered
+  // keyword mode explicitly.
+  return OmniboxFieldTrial::IsExperimentalKeywordModeEnabled() &&
+         !keyword_input_.text().empty() && keyword_input_.prefer_keyword() &&
+         keyword_input_.keyword_mode_entry_method() !=
+             OmniboxEventProto::SPACE_AT_END &&
+         keyword_input_.keyword_mode_entry_method() !=
+             OmniboxEventProto::SPACE_IN_MIDDLE;
 }
 
 int SearchProvider::CalculateRelevanceForVerbatim() const {
@@ -1452,10 +1475,10 @@ int SearchProvider::CalculateRelevanceForHistory(
 AutocompleteMatch SearchProvider::NavigationToMatch(
     const SearchSuggestionParser::NavigationResult& navigation) {
   base::string16 input;
-  const bool trimmed_whitespace = base::TrimWhitespace(
-      navigation.from_keyword_provider() ?
-          keyword_input_.text() : input_.text(),
-      base::TRIM_TRAILING, &input) != base::TRIM_NONE;
+  const bool trimmed_whitespace =
+      base::TrimWhitespace(
+          navigation.from_keyword() ? keyword_input_.text() : input_.text(),
+          base::TRIM_TRAILING, &input) != base::TRIM_NONE;
   AutocompleteMatch match(this, navigation.relevance(), false,
                           navigation.type());
   match.destination_url = navigation.url();
@@ -1505,8 +1528,6 @@ AutocompleteMatch SearchProvider::NavigationToMatch(
       !navigation.received_after_last_keystroke() &&
       (match.inline_autocompletion.empty() ||
        (!input_.prevent_inline_autocomplete() && !trimmed_whitespace));
-  match.EnsureUWYTIsAllowedToBeDefault(input_,
-                                       client()->GetTemplateURLService());
 
   match.contents = navigation.match_contents();
   match.contents_class = navigation.match_contents_class();
@@ -1518,6 +1539,8 @@ AutocompleteMatch SearchProvider::NavigationToMatch(
       kRelevanceFromServerKey,
       navigation.relevance_from_server() ? kTrue : kFalse);
   match.RecordAdditionalInfo(kShouldPrefetchKey, kFalse);
+
+  match.from_keyword = navigation.from_keyword();
 
   return match;
 }

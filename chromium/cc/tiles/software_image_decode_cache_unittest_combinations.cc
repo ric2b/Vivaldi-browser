@@ -50,7 +50,7 @@ class BaseTest : public testing::Test {
             ? SkIRect::MakeWH(paint_image().width(), paint_image().height())
             : src_rect,
         kMedium_SkFilterQuality, CreateMatrix(SkSize::Make(scale, scale), true),
-        PaintImage::kDefaultFrameIndex, GetColorSpace());
+        PaintImage::kDefaultFrameIndex);
   }
 
   SoftwareImageDecodeCache& cache() { return *cache_; }
@@ -80,7 +80,8 @@ class N32Cache : public virtual BaseTest {
   std::unique_ptr<SoftwareImageDecodeCache> CreateCache() override {
     return std::make_unique<SoftwareImageDecodeCache>(
         kN32_SkColorType, kLockedMemoryLimitBytes,
-        PaintImage::kDefaultGeneratorClientId);
+        PaintImage::kDefaultGeneratorClientId,
+        GetColorSpace().ToSkColorSpace());
   }
 };
 
@@ -89,7 +90,18 @@ class RGBA4444Cache : public virtual BaseTest {
   std::unique_ptr<SoftwareImageDecodeCache> CreateCache() override {
     return std::make_unique<SoftwareImageDecodeCache>(
         kARGB_4444_SkColorType, kLockedMemoryLimitBytes,
-        PaintImage::kDefaultGeneratorClientId);
+        PaintImage::kDefaultGeneratorClientId,
+        GetColorSpace().ToSkColorSpace());
+  }
+};
+
+class RGBA_F16Cache : public virtual BaseTest {
+ protected:
+  std::unique_ptr<SoftwareImageDecodeCache> CreateCache() override {
+    return std::make_unique<SoftwareImageDecodeCache>(
+        kRGBA_F16_SkColorType, kLockedMemoryLimitBytes,
+        PaintImage::kDefaultGeneratorClientId,
+        GetColorSpace().ToSkColorSpace());
   }
 };
 
@@ -140,6 +152,17 @@ class NoDecodeToScaleSupport : public virtual BaseTest {
   }
 };
 
+class NoDecodeToScaleSupportF16 : public virtual BaseTest {
+ protected:
+  PaintImage CreatePaintImage(const gfx::Size& size) override {
+    PaintImage paint_image = CreateDiscardablePaintImage(
+        size, GetColorSpace().ToSkColorSpace(),
+        true /*allocate_encoded_memory*/, PaintImage::kInvalidId,
+        kRGBA_F16_SkColorType);
+    return paint_image;
+  }
+};
+
 class DefaultColorSpace : public virtual BaseTest {
  protected:
   gfx::ColorSpace GetColorSpace() override {
@@ -155,6 +178,13 @@ class ExoticColorSpace : public virtual BaseTest {
   }
 };
 
+class WideGamutCanvasColorSpace : public virtual BaseTest {
+ protected:
+  gfx::ColorSpace GetColorSpace() override {
+    return gfx::ColorSpace(gfx::ColorSpace::PrimaryID::SMPTEST432_1,  // P3
+                           gfx::ColorSpace::TransferID::LINEAR);
+  }
+};
 class SoftwareImageDecodeCacheTest_Typical : public N32Cache,
                                              public Predecode,
                                              public NoDecodeToScaleSupport,
@@ -360,61 +390,6 @@ TEST_F(SoftwareImageDecodeCacheTest_AtRaster,
   EXPECT_EQ(3u, cache().GetNumCacheEntriesForTesting());
 }
 
-class SoftwareImageDecodeCacheTest_RGBA4444 : public RGBA4444Cache,
-                                              public Predecode,
-                                              public NoDecodeToScaleSupport,
-                                              public DefaultColorSpace {};
-
-TEST_F(SoftwareImageDecodeCacheTest_RGBA4444, AlwaysUseOriginalDecode) {
-  auto draw_image_50 = CreateDrawImageForScale(0.5f);
-  auto result = GenerateCacheEntry(draw_image_50);
-  EXPECT_TRUE(result.has_task);
-  EXPECT_TRUE(result.needs_unref);
-
-  cache().ClearCache();
-  VerifyEntryExists(__LINE__, draw_image_50, gfx::Size(512, 512));
-  EXPECT_EQ(1u, cache().GetNumCacheEntriesForTesting());
-
-  auto draw_image_125 = CreateDrawImageForScale(0.125f);
-  result = GenerateCacheEntry(draw_image_125);
-  EXPECT_FALSE(result.has_task);
-  EXPECT_TRUE(result.needs_unref);
-  VerifyEntryExists(__LINE__, draw_image_125, gfx::Size(512, 512));
-
-  // We didn't clear the cache the second time, and should only expect to find
-  // one entry: 1.0 scale.
-  EXPECT_EQ(1u, cache().GetNumCacheEntriesForTesting());
-
-  cache().UnrefImage(draw_image_50);
-  cache().UnrefImage(draw_image_125);
-}
-
-TEST_F(SoftwareImageDecodeCacheTest_RGBA4444,
-       AlwaysUseOriginalDecodeEvenSubrected) {
-  auto draw_image_50 = CreateDrawImageForScale(0.5f, SkIRect::MakeWH(10, 10));
-  auto result = GenerateCacheEntry(draw_image_50);
-  EXPECT_TRUE(result.has_task);
-  EXPECT_TRUE(result.needs_unref);
-
-  cache().ClearCache();
-  VerifyEntryExists(__LINE__, draw_image_50, gfx::Size(512, 512));
-  EXPECT_EQ(1u, cache().GetNumCacheEntriesForTesting());
-
-  auto draw_image_125 =
-      CreateDrawImageForScale(0.125f, SkIRect::MakeWH(20, 20));
-  result = GenerateCacheEntry(draw_image_125);
-  EXPECT_FALSE(result.has_task);
-  EXPECT_TRUE(result.needs_unref);
-  VerifyEntryExists(__LINE__, draw_image_125, gfx::Size(512, 512));
-
-  // We didn't clear the cache the second time, and should only expect to find
-  // one entry: 1.0 scale.
-  EXPECT_EQ(1u, cache().GetNumCacheEntriesForTesting());
-
-  cache().UnrefImage(draw_image_50);
-  cache().UnrefImage(draw_image_125);
-}
-
 class SoftwareImageDecodeCacheTest_ExoticColorSpace
     : public N32Cache,
       public Predecode,
@@ -425,6 +400,7 @@ TEST_F(SoftwareImageDecodeCacheTest_ExoticColorSpace,
        UseClosestAvailableDecode) {
   auto draw_image_50 = CreateDrawImageForScale(0.5f);
   auto result = GenerateCacheEntry(draw_image_50);
+
   EXPECT_TRUE(result.has_task);
   EXPECT_TRUE(result.needs_unref);
 
@@ -438,6 +414,74 @@ TEST_F(SoftwareImageDecodeCacheTest_ExoticColorSpace,
   EXPECT_TRUE(result.has_task);
   EXPECT_TRUE(result.needs_unref);
   VerifyEntryExists(__LINE__, draw_image_125, gfx::Size(64, 64));
+
+  // We didn't clear the cache the second time, and should only expect to find
+  // these entries: 0.5 scale and 0.125 scale.
+  EXPECT_EQ(2u, cache().GetNumCacheEntriesForTesting());
+
+  cache().UnrefImage(draw_image_50);
+  cache().UnrefImage(draw_image_125);
+}
+
+class SoftwareImageDecodeCacheTest_F16_ExoticColorSpace
+    : public RGBA_F16Cache,
+      public Predecode,
+      public NoDecodeToScaleSupportF16,
+      public ExoticColorSpace {};
+
+TEST_F(SoftwareImageDecodeCacheTest_F16_ExoticColorSpace,
+       UseClosestAvailableDecode_F16_ExoticColorSpace) {
+  auto draw_image_50 = CreateDrawImageForScale(0.5f);
+  auto result = GenerateCacheEntry(draw_image_50);
+  EXPECT_TRUE(result.has_task);
+  EXPECT_TRUE(result.needs_unref);
+
+  // Clear the cache to eliminate the transient 1.f scale from the cache.
+  cache().ClearCache();
+  VerifyEntryExists(__LINE__, draw_image_50, gfx::Size(256, 256));
+  EXPECT_EQ(kRGBA_F16_SkColorType, draw_image_50.paint_image().GetColorType());
+  EXPECT_EQ(1u, cache().GetNumCacheEntriesForTesting());
+
+  auto draw_image_125 = CreateDrawImageForScale(0.125f);
+  result = GenerateCacheEntry(draw_image_125);
+  EXPECT_TRUE(result.has_task);
+  EXPECT_TRUE(result.needs_unref);
+  VerifyEntryExists(__LINE__, draw_image_125, gfx::Size(64, 64));
+  EXPECT_EQ(kRGBA_F16_SkColorType, draw_image_125.paint_image().GetColorType());
+
+  // We didn't clear the cache the second time, and should only expect to find
+  // these entries: 0.5 scale and 0.125 scale.
+  EXPECT_EQ(2u, cache().GetNumCacheEntriesForTesting());
+
+  cache().UnrefImage(draw_image_50);
+  cache().UnrefImage(draw_image_125);
+}
+
+class SoftwareImageDecodeCacheTest_F16_WideGamutCanvasColorSpace
+    : public RGBA_F16Cache,
+      public Predecode,
+      public NoDecodeToScaleSupportF16,
+      public WideGamutCanvasColorSpace {};
+
+TEST_F(SoftwareImageDecodeCacheTest_F16_WideGamutCanvasColorSpace,
+       UseClosestAvailableDecode_F16_WideGamutCanvasColorSpace) {
+  auto draw_image_50 = CreateDrawImageForScale(0.5f);
+  auto result = GenerateCacheEntry(draw_image_50);
+  EXPECT_TRUE(result.has_task);
+  EXPECT_TRUE(result.needs_unref);
+
+  // Clear the cache to eliminate the transient 1.f scale from the cache.
+  cache().ClearCache();
+  VerifyEntryExists(__LINE__, draw_image_50, gfx::Size(256, 256));
+  EXPECT_EQ(kRGBA_F16_SkColorType, draw_image_50.paint_image().GetColorType());
+  EXPECT_EQ(1u, cache().GetNumCacheEntriesForTesting());
+
+  auto draw_image_125 = CreateDrawImageForScale(0.125f);
+  result = GenerateCacheEntry(draw_image_125);
+  EXPECT_TRUE(result.has_task);
+  EXPECT_TRUE(result.needs_unref);
+  VerifyEntryExists(__LINE__, draw_image_125, gfx::Size(64, 64));
+  EXPECT_EQ(kRGBA_F16_SkColorType, draw_image_125.paint_image().GetColorType());
 
   // We didn't clear the cache the second time, and should only expect to find
   // these entries: 0.5 scale and 0.125 scale.

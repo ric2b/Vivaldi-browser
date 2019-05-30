@@ -162,6 +162,8 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
   void Restore() override;
   void SetFullscreen(bool fullscreen) override;
   bool IsFullscreen() const override;
+  void SetCanAppearInExistingFullscreenSpaces(
+      bool can_appear_in_existing_fullscreen_spaces) override;
   void SetOpacity(float opacity) override;
   void SetAspectRatio(const gfx::SizeF& aspect_ratio) override;
   void FlashFrame(bool flash_frame) override;
@@ -188,7 +190,7 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
   bool IsTranslucentWindowOpacitySupported() const override;
   ui::GestureRecognizer* GetGestureRecognizer() override;
   void OnSizeConstraintsChanged() override;
-  void RepostNativeEvent(gfx::NativeEvent native_event) override;
+  void OnCanActivateChanged() override;
   std::string GetName() const override;
 
   // Overridden from aura::WindowDelegate:
@@ -210,7 +212,7 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
   void OnWindowDestroyed(aura::Window* window) override;
   void OnWindowTargetVisibilityChanged(bool visible) override;
   bool HasHitTestMask() const override;
-  void GetHitTestMask(gfx::Path* mask) const override;
+  void GetHitTestMask(SkPath* mask) const override;
 
   // Overridden from ui::EventHandler:
   void OnKeyEvent(ui::KeyEvent* event) override;
@@ -251,6 +253,9 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
   void UpdateWindowTransparency();
 
   void RootWindowDestroyed();
+
+  // Notify the root view of our widget of a native accessibility event.
+  void NotifyAccessibilityEvent(ax::mojom::Event event_type);
 
   std::unique_ptr<aura::WindowTreeHost> host_;
   DesktopWindowTreeHost* desktop_window_tree_host_;
@@ -313,6 +318,16 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
 
   // See DesktopWindowTreeHost::ShouldUseDesktopNativeCursorManager().
   bool use_desktop_native_cursor_manager_ = false;
+
+  // Whether HandleActivationChanged is being called for deactivation. The
+  // current active aura::Window is deactivated in HandleActivationChanged.
+  // However, the current active window could be a sibling of |content_window_|
+  // (e.g. aura::Window of a child bubble widget such as browser window
+  // bubbles). The deactivation of such window would activate |content_window_|
+  // and could trigger RestoreFocusedView which could activate the widget. The
+  // flag is used to skip RestoreFocusedView to avoid activating the widget
+  // immediately after it is deactivated.
+  bool is_handling_deactivation_ = false;
 
   // The following factory is used for calls to close the NativeWidgetAura
   // instance.

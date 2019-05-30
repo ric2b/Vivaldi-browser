@@ -18,9 +18,10 @@
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/browser/accessibility/browser_accessibility_win.h"
 #include "content/common/accessibility_messages.h"
+#include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "ui/accessibility/ax_modes.h"
+#include "ui/accessibility/ax_mode.h"
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/ax_text_utils.h"
 #include "ui/base/win/accessibility_ids_win.h"
@@ -63,8 +64,7 @@ BrowserAccessibilityComWin::BrowserAccessibilityComWin()
       previous_scroll_x_(0),
       previous_scroll_y_(0) {}
 
-BrowserAccessibilityComWin::~BrowserAccessibilityComWin() {
-}
+BrowserAccessibilityComWin::~BrowserAccessibilityComWin() {}
 
 //
 // IAccessible2 overrides:
@@ -93,9 +93,10 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_appName(BSTR* app_name) {
   // GetProduct() returns a string like "Chrome/aa.bb.cc.dd", split out
   // the part before the "/".
   std::vector<std::string> product_components =
-      base::SplitString(GetContentClient()->GetProduct(), "/",
+      base::SplitString(GetContentClient()->browser()->GetProduct(), "/",
                         base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-  DCHECK_EQ(2U, product_components.size());
+  // |GetProduct| will return an empty string if we are running the content
+  // shell instead of Chrome.
   if (product_components.size() != 2)
     return E_FAIL;
   *app_name = SysAllocString(base::UTF8ToUTF16(product_components[0]).c_str());
@@ -112,9 +113,10 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_appVersion(BSTR* app_version) {
   // GetProduct() returns a string like "Chrome/aa.bb.cc.dd", split out
   // the part after the "/".
   std::vector<std::string> product_components =
-      base::SplitString(GetContentClient()->GetProduct(), "/",
+      base::SplitString(GetContentClient()->browser()->GetProduct(), "/",
                         base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-  DCHECK_EQ(2U, product_components.size());
+  // |GetProduct| will return an empty string if we are running the content
+  // shell instead of Chrome.
   if (product_components.size() != 2)
     return E_FAIL;
   *app_version =
@@ -128,10 +130,7 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_toolkitName(BSTR* toolkit_name) {
   if (!toolkit_name)
     return E_INVALIDARG;
 
-  // This is hard-coded; all products based on the Chromium engine
-  // will have the same toolkit name, so that assistive technology can
-  // detect any Chrome-based product.
-  *toolkit_name = SysAllocString(L"Chrome");
+  *toolkit_name = SysAllocString(FRAMEWORK_ID);
   DCHECK(*toolkit_name);
   return *toolkit_name ? S_OK : E_FAIL;
 }
@@ -142,7 +141,7 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_toolkitVersion(
   if (!toolkit_version)
     return E_INVALIDARG;
 
-  std::string user_agent = GetContentClient()->GetUserAgent();
+  std::string user_agent = GetContentClient()->browser()->GetUserAgent();
   *toolkit_version = SysAllocString(base::UTF8ToUTF16(user_agent).c_str());
   DCHECK(*toolkit_version);
   return *toolkit_version ? S_OK : E_FAIL;
@@ -241,7 +240,7 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_characterExtents(
   if (!out_x || !out_y || !out_width || !out_height)
     return E_INVALIDARG;
 
-  const base::string16& text_str = GetTextAsString16();
+  const base::string16& text_str = GetText();
   HandleSpecialTextOffset(&offset);
   if (offset < 0 || offset > static_cast<LONG>(text_str.size()))
     return E_INVALIDARG;
@@ -289,7 +288,7 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_text(LONG start_offset,
   if (!text)
     return E_INVALIDARG;
 
-  const base::string16& text_str = GetTextAsString16();
+  const base::string16& text_str = GetText();
   HandleSpecialTextOffset(&start_offset);
   HandleSpecialTextOffset(&end_offset);
 
@@ -336,7 +335,7 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_textAtOffset(
   if (offset < 0)
     return E_INVALIDARG;
 
-  const base::string16& text_str = GetTextAsString16();
+  const base::string16& text_str = GetText();
   LONG text_len = text_str.length();
   if (offset > text_len)
     return E_INVALIDARG;
@@ -380,7 +379,7 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_textBeforeOffset(
   *end_offset = 0;
   *text = NULL;
 
-  const base::string16& text_str = GetTextAsString16();
+  const base::string16& text_str = GetText();
   LONG text_len = text_str.length();
   if (offset > text_len)
     return E_INVALIDARG;
@@ -414,7 +413,7 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_textAfterOffset(
   *end_offset = 0;
   *text = NULL;
 
-  const base::string16& text_str = GetTextAsString16();
+  const base::string16& text_str = GetText();
   LONG text_len = text_str.length();
   if (offset > text_len)
     return E_INVALIDARG;
@@ -447,7 +446,7 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_newText(
   if (new_len == 0)
     return E_FAIL;
 
-  base::string16 substr = GetTextAsString16().substr(start, new_len);
+  base::string16 substr = GetText().substr(start, new_len);
   new_text->text = SysAllocString(substr.c_str());
   new_text->start = static_cast<LONG>(start);
   new_text->end = static_cast<LONG>(start + new_len);
@@ -584,7 +583,7 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_attributes(
   if (!owner())
     return E_FAIL;
 
-  const base::string16 text = GetTextAsString16();
+  const base::string16 text = GetText();
   HandleSpecialTextOffset(&offset);
   if (offset < 0 || offset > static_cast<LONG>(text.size()))
     return E_INVALIDARG;
@@ -660,8 +659,7 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_hyperlinkIndex(
   if (!hyperlink_index)
     return E_INVALIDARG;
 
-  if (char_index < 0 ||
-      char_index >= static_cast<LONG>(GetTextAsString16().size())) {
+  if (char_index < 0 || char_index >= static_cast<LONG>(GetText().size())) {
     return E_INVALIDARG;
   }
 
@@ -692,7 +690,7 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_anchor(LONG index,
   if (index != 0 || !anchor)
     return E_INVALIDARG;
 
-  BSTR ia2_hypertext = SysAllocString(GetTextAsString16().c_str());
+  BSTR ia2_hypertext = SysAllocString(GetText().c_str());
   DCHECK(ia2_hypertext);
   anchor->vt = VT_BSTR;
   anchor->bstrVal = ia2_hypertext;
@@ -1455,8 +1453,7 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_unclippedSubstringBounds(
   if (!out_x || !out_y || !out_width || !out_height)
     return E_INVALIDARG;
 
-  unsigned int text_length =
-      static_cast<unsigned int>(GetTextAsString16().size());
+  unsigned int text_length = static_cast<unsigned int>(GetText().size());
   if (start_index > text_length || end_index > text_length ||
       start_index > end_index) {
     return E_INVALIDARG;
@@ -1484,8 +1481,7 @@ IFACEMETHODIMP BrowserAccessibilityComWin::scrollToSubstring(
   if (!manager)
     return E_FAIL;
 
-  unsigned int text_length =
-      static_cast<unsigned int>(GetTextAsString16().size());
+  unsigned int text_length = static_cast<unsigned int>(GetText().size());
   if (start_index > text_length || end_index > text_length ||
       start_index > end_index) {
     return E_INVALIDARG;
@@ -1591,7 +1587,7 @@ STDMETHODIMP BrowserAccessibilityComWin::InternalQueryInterface(
       return E_NOINTERFACE;
     }
   } else if (iid == IID_IAccessibleTableCell) {
-    if (!ui::IsCellOrTableHeaderRole(accessibility->owner()->GetRole())) {
+    if (!ui::IsCellOrTableHeader(accessibility->owner()->GetRole())) {
       *object = nullptr;
       return E_NOINTERFACE;
     }
@@ -1658,30 +1654,13 @@ void BrowserAccessibilityComWin::ComputeStylesIfNeeded() {
           child->GetSpellingAttributes();
       MergeSpellingIntoTextAttributes(spelling_attributes, start_offset,
                                       &attributes_map);
-      start_offset += child->GetTextAsString16().length();
+      start_offset += child->GetText().length();
     } else {
       start_offset += 1;
     }
   }
 
   win_attributes_->offset_to_text_attributes.swap(attributes_map);
-}
-
-// |offset| could either be a text character or a child index in case of
-// non-text objects.
-// Currently, to be safe, we convert to text leaf equivalents and we don't use
-// tree positions.
-// TODO(nektar): Remove this function once selection fixes in Blink are
-// thoroughly tested and convert to tree positions.
-BrowserAccessibilityPosition::AXPositionInstance
-BrowserAccessibilityComWin::CreatePositionForSelectionAt(int offset) const {
-  BrowserAccessibilityPositionInstance position =
-      owner()->CreatePositionAt(offset)->AsLeafTextPosition();
-  if (position->GetAnchor() &&
-      position->GetAnchor()->GetRole() == ax::mojom::Role::kInlineTextBox) {
-    return position->CreateParentPosition();
-    }
-    return position;
 }
 
 //
@@ -1813,16 +1792,6 @@ void BrowserAccessibilityComWin::UpdateStep3FireEvents(
         FireNativeEvent(IA2_EVENT_TEXT_INSERTED);
       }
     }
-
-    // Changing a static text node can affect the IA2 hypertext of its parent
-    // and, if the node is in a simple text control, the hypertext of the text
-    // control itself.
-    BrowserAccessibilityComWin* parent =
-        ToBrowserAccessibilityComWin(owner()->PlatformGetParent());
-    if (parent && (parent->owner()->HasState(ax::mojom::State::kEditable) ||
-                   owner()->IsTextOnlyObject())) {
-      parent->owner()->UpdatePlatformAttributes();
-    }
   }
 
   old_win_attributes_.reset(nullptr);
@@ -1916,9 +1885,9 @@ std::vector<base::string16> BrowserAccessibilityComWin::ComputeTextAttributes()
     unsigned int blue = SkColorGetB(color);
     // Don't expose default value of pure white.
     if (alpha && (red != 255 || green != 255 || blue != 255)) {
-      base::string16 color_value = L"rgb(" + base::UintToString16(red) + L',' +
-                                   base::UintToString16(green) + L',' +
-                                   base::UintToString16(blue) + L')';
+      base::string16 color_value = L"rgb(" + base::NumberToString16(red) +
+                                   L',' + base::NumberToString16(green) + L',' +
+                                   base::NumberToString16(blue) + L')';
       SanitizeStringAttributeForIA2(color_value, &color_value);
       attributes.push_back(L"background-color:" + color_value);
     }
@@ -1930,9 +1899,9 @@ std::vector<base::string16> BrowserAccessibilityComWin::ComputeTextAttributes()
     unsigned int blue = SkColorGetB(color);
     // Don't expose default value of black.
     if (red || green || blue) {
-      base::string16 color_value = L"rgb(" + base::UintToString16(red) + L',' +
-                                   base::UintToString16(green) + L',' +
-                                   base::UintToString16(blue) + L')';
+      base::string16 color_value = L"rgb(" + base::NumberToString16(red) +
+                                   L',' + base::NumberToString16(green) + L',' +
+                                   base::NumberToString16(blue) + L')';
       SanitizeStringAttributeForIA2(color_value, &color_value);
       attributes.push_back(L"color:" + color_value);
     }
@@ -1964,25 +1933,16 @@ std::vector<base::string16> BrowserAccessibilityComWin::ComputeTextAttributes()
 
   int32_t text_style =
       owner()->GetIntAttribute(ax::mojom::IntAttribute::kTextStyle);
-  if (text_style != static_cast<int32_t>(ax::mojom::TextStyle::kNone)) {
-    if (text_style &
-        static_cast<int32_t>(ax::mojom::TextStyle::kTextStyleItalic)) {
-      attributes.push_back(L"font-style:italic");
-    }
-
-    if (text_style &
-        static_cast<int32_t>(ax::mojom::TextStyle::kTextStyleBold)) {
+  if (text_style) {
+    if (GetData().HasTextStyle(ax::mojom::TextStyle::kBold))
       attributes.push_back(L"font-weight:bold");
-    }
-
-    if (text_style &
-        static_cast<int32_t>(ax::mojom::TextStyle::kTextStyleLineThrough)) {
+    if (GetData().HasTextStyle(ax::mojom::TextStyle::kItalic))
+      attributes.push_back(L"font-style:italic");
+    if (GetData().HasTextStyle(ax::mojom::TextStyle::kLineThrough)) {
       // TODO(nektar): Figure out a more specific value.
       attributes.push_back(L"text-line-through-style:solid");
     }
-
-    if (text_style &
-        static_cast<int32_t>(ax::mojom::TextStyle::kTextStyleUnderline)) {
+    if (GetData().HasTextStyle(ax::mojom::TextStyle::kUnderline)) {
       // TODO(nektar): Figure out a more specific value.
       attributes.push_back(L"text-underline-style:solid");
     }
@@ -2078,8 +2038,7 @@ BrowserAccessibilityComWin::GetSpellingAttributes() {
           spelling_attributes[start_offset + attribute.first] =
               std::move(attribute.second);
         }
-        start_offset +=
-            static_cast<int>(text_win->GetTextAsString16().length());
+        start_offset += static_cast<int>(text_win->GetText().length());
       }
     }
   }
@@ -2188,9 +2147,9 @@ void BrowserAccessibilityComWin::SetIA2HypertextSelection(LONG start_offset,
   HandleSpecialTextOffset(&start_offset);
   HandleSpecialTextOffset(&end_offset);
   BrowserAccessibilityPositionInstance start_position =
-      CreatePositionForSelectionAt(static_cast<int>(start_offset));
+      owner()->CreatePositionForSelectionAt(static_cast<int>(start_offset));
   BrowserAccessibilityPositionInstance end_position =
-      CreatePositionForSelectionAt(static_cast<int>(end_offset));
+      owner()->CreatePositionForSelectionAt(static_cast<int>(end_offset));
   Manager()->SetSelection(
       AXPlatformRange(std::move(start_position), std::move(end_position)));
 }
@@ -2253,14 +2212,14 @@ LONG BrowserAccessibilityComWin::FindBoundary(
   // TODO(nektar): |AXPosition| can handle other types of boundaries as well.
   ui::TextBoundaryType boundary = IA2TextBoundaryToTextBoundary(ia2_boundary);
   return ui::FindAccessibleTextBoundary(
-      GetTextAsString16(), owner()->GetLineStartOffsets(), boundary,
-      start_offset, direction, affinity);
+      GetText(), owner()->GetLineStartOffsets(), boundary, start_offset,
+      direction, affinity);
 }
 
 LONG BrowserAccessibilityComWin::FindStartOfStyle(
     LONG start_offset,
     ui::TextBoundaryDirection direction) {
-  LONG text_length = static_cast<LONG>(GetTextAsString16().length());
+  LONG text_length = static_cast<LONG>(GetText().length());
   DCHECK_GE(start_offset, 0);
   DCHECK_LE(start_offset, text_length);
 

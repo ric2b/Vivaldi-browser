@@ -36,8 +36,9 @@ var totalToPerSecond = function(srcDataSeries) {
   if (length >= 2) {
     var lastDataPoint = srcDataSeries.dataPoints_[length - 1];
     var secondLastDataPoint = srcDataSeries.dataPoints_[length - 2];
-    return (lastDataPoint.value - secondLastDataPoint.value) * 1000 /
-           (lastDataPoint.time - secondLastDataPoint.time);
+    return Math.floor(
+        (lastDataPoint.value - secondLastDataPoint.value) * 1000 /
+        (lastDataPoint.time - secondLastDataPoint.time));
   }
 
   return 0;
@@ -73,11 +74,12 @@ var dataConversionConfig = {
   // TODO (jiayl): remove this when the unit bug is fixed.
   googTargetEncBitrate: {
     convertedName: 'googTargetEncBitrateCorrected',
-    convertFunction: function (srcDataSeries) {
+    convertFunction: function(srcDataSeries) {
       var length = srcDataSeries.dataPoints_.length;
       var lastDataPoint = srcDataSeries.dataPoints_[length - 1];
-      if (lastDataPoint.value < 5000)
+      if (lastDataPoint.value < 5000) {
         return lastDataPoint.value * 1000;
+      }
       return lastDataPoint.value;
     }
   }
@@ -99,8 +101,9 @@ var graphViews = {};
 
 // Returns number parsed from |value|, or NaN if the stats name is black-listed.
 function getNumberFromValue(name, value) {
-  if (statsNameBlackList[name])
+  if (statsNameBlackList[name]) {
     return NaN;
+  }
   return parseFloat(value);
 }
 
@@ -110,8 +113,9 @@ function drawSingleReport(peerConnectionElement, report) {
   var reportType = report.type;
   var reportId = report.id;
   var stats = report.stats;
-  if (!stats || !stats.values)
+  if (!stats || !stats.values) {
     return;
+  }
 
   for (var i = 0; i < stats.values.length - 1; i = i + 2) {
     var rawLabel = stats.values[i];
@@ -126,11 +130,9 @@ function drawSingleReport(peerConnectionElement, report) {
     if (isNaN(rawValue)) {
       // We do not draw non-numerical values, but still want to record it in the
       // data series.
-      addDataSeriesPoints(peerConnectionElement,
-                          rawDataSeriesId,
-                          rawLabel,
-                          [stats.timestamp],
-                          [stats.values[i + 1]]);
+      addDataSeriesPoints(
+          peerConnectionElement, rawDataSeriesId, rawLabel, [stats.timestamp],
+          [stats.values[i + 1]]);
       continue;
     }
 
@@ -140,11 +142,9 @@ function drawSingleReport(peerConnectionElement, report) {
     // We need to convert the value if dataConversionConfig[rawLabel] exists.
     if (dataConversionConfig[rawLabel]) {
       // Updates the original dataSeries before the conversion.
-      addDataSeriesPoints(peerConnectionElement,
-                          rawDataSeriesId,
-                          rawLabel,
-                          [stats.timestamp],
-                          [rawValue]);
+      addDataSeriesPoints(
+          peerConnectionElement, rawDataSeriesId, rawLabel, [stats.timestamp],
+          [rawValue]);
 
       // Convert to another value to draw on graph, using the original
       // dataSeries as input.
@@ -156,22 +156,19 @@ function drawSingleReport(peerConnectionElement, report) {
     }
 
     // Updates the final dataSeries to draw.
-    addDataSeriesPoints(peerConnectionElement,
-                        finalDataSeriesId,
-                        finalLabel,
-                        [stats.timestamp],
-                        [finalValue]);
+    addDataSeriesPoints(
+        peerConnectionElement, finalDataSeriesId, finalLabel, [stats.timestamp],
+        [finalValue]);
 
     // Updates the graph.
-    var graphType = bweCompoundGraphConfig[finalLabel] ?
-                    'bweCompound' : finalLabel;
+    var graphType =
+        bweCompoundGraphConfig[finalLabel] ? 'bweCompound' : finalLabel;
     var graphViewId =
         peerConnectionElement.id + '-' + reportId + '-' + graphType;
 
     if (!graphViews[graphViewId]) {
-      graphViews[graphViewId] = createStatsGraphView(peerConnectionElement,
-                                                     report,
-                                                     graphType);
+      graphViews[graphViewId] =
+          createStatsGraphView(peerConnectionElement, report, graphType);
       var date = new Date(stats.timestamp);
       graphViews[graphViewId].setDateRange(date, date);
     }
@@ -180,8 +177,9 @@ function drawSingleReport(peerConnectionElement, report) {
     var dataSeries =
         peerConnectionDataStore[peerConnectionElement.id].getDataSeries(
             finalDataSeriesId);
-    if (!graphViews[graphViewId].hasDataSeries(dataSeries))
+    if (!graphViews[graphViewId].hasDataSeries(dataSeries)) {
       graphViews[graphViewId].addDataSeries(dataSeries);
+    }
     graphViews[graphViewId].updateEndDate();
   }
 }
@@ -192,8 +190,8 @@ function drawSingleReport(peerConnectionElement, report) {
 function addDataSeriesPoints(
     peerConnectionElement, dataSeriesId, label, times, values) {
   var dataSeries =
-    peerConnectionDataStore[peerConnectionElement.id].getDataSeries(
-        dataSeriesId);
+      peerConnectionDataStore[peerConnectionElement.id].getDataSeries(
+          dataSeriesId);
   if (!dataSeries) {
     dataSeries = new TimelineDataSeries();
     peerConnectionDataStore[peerConnectionElement.id].setDataSeries(
@@ -202,8 +200,9 @@ function addDataSeriesPoints(
       dataSeries.setColor(bweCompoundGraphConfig[label].color);
     }
   }
-  for (var i = 0; i < times.length; ++i)
+  for (var i = 0; i < times.length; ++i) {
     dataSeries.addPoint(times[i], values[i]);
+  }
 }
 
 // Draws the received propagation deltas using the packet group arrival time as
@@ -222,8 +221,9 @@ function drawReceivedPropagationDelta(peerConnectionElement, report, deltas) {
     }
   }
   // Unexpected.
-  if (times == null)
+  if (times == null) {
     return;
+  }
 
   // Convert |deltas| and |times| from strings to arrays of numbers.
   try {
@@ -237,24 +237,20 @@ function drawReceivedPropagationDelta(peerConnectionElement, report, deltas) {
   // Update the data series.
   var dataSeriesId = reportId + '-' + RECEIVED_PROPAGATION_DELTA_LABEL;
   addDataSeriesPoints(
-      peerConnectionElement,
-      dataSeriesId,
-      RECEIVED_PROPAGATION_DELTA_LABEL,
-      times,
-      deltas);
+      peerConnectionElement, dataSeriesId, RECEIVED_PROPAGATION_DELTA_LABEL,
+      times, deltas);
   // Update the graph.
   var graphViewId = peerConnectionElement.id + '-' + reportId + '-' +
       RECEIVED_PROPAGATION_DELTA_LABEL;
   var date = new Date(times[times.length - 1]);
   if (!graphViews[graphViewId]) {
     graphViews[graphViewId] = createStatsGraphView(
-        peerConnectionElement,
-        report,
-        RECEIVED_PROPAGATION_DELTA_LABEL);
+        peerConnectionElement, report, RECEIVED_PROPAGATION_DELTA_LABEL);
     graphViews[graphViewId].setScale(10);
     graphViews[graphViewId].setDateRange(date, date);
-    var dataSeries = peerConnectionDataStore[peerConnectionElement.id]
-        .getDataSeries(dataSeriesId);
+    var dataSeries =
+        peerConnectionDataStore[peerConnectionElement.id].getDataSeries(
+            dataSeriesId);
     graphViews[graphViewId].addDataSeries(dataSeries);
   }
   graphViews[graphViewId].updateEndDate(date);
@@ -264,8 +260,9 @@ function drawReceivedPropagationDelta(peerConnectionElement, report, deltas) {
 // can be deduced from existing stats labels. Otherwise empty string for
 // non-SSRC reports or where type (audio/video) can't be deduced.
 function getSsrcReportType(report) {
-  if (report.type != 'ssrc')
+  if (report.type != 'ssrc') {
     return '';
+  }
   if (report.stats && report.stats.values) {
     // Known stats keys for audio send/receive streams.
     if (report.stats.values.indexOf('audioOutputLevel') != -1 ||
@@ -286,8 +283,8 @@ function getSsrcReportType(report) {
 // Ensures a div container to hold all stats graphs for one track is created as
 // a child of |peerConnectionElement|.
 function ensureStatsGraphTopContainer(peerConnectionElement, report) {
-  var containerId = peerConnectionElement.id + '-' +
-      report.type + '-' + report.id + '-graph-container';
+  var containerId = peerConnectionElement.id + '-' + report.type + '-' +
+      report.id + '-graph-container';
   var container = $(containerId);
   if (!container) {
     container = document.createElement('details');
@@ -295,20 +292,21 @@ function ensureStatsGraphTopContainer(peerConnectionElement, report) {
     container.className = 'stats-graph-container';
 
     peerConnectionElement.appendChild(container);
-    container.innerHTML ='<summary><span></span></summary>';
+    container.innerHTML = '<summary><span></span></summary>';
     container.firstChild.firstChild.className =
         STATS_GRAPH_CONTAINER_HEADING_CLASS;
     container.firstChild.firstChild.textContent =
         'Stats graphs for ' + report.id + ' (' + report.type + ')';
     var statsType = getSsrcReportType(report);
-    if (statsType != '')
+    if (statsType != '') {
       container.firstChild.firstChild.textContent += ' (' + statsType + ')';
+    }
 
     if (report.type == 'ssrc') {
       var ssrcInfoElement = document.createElement('div');
       container.firstChild.appendChild(ssrcInfoElement);
-      ssrcInfoManager.populateSsrcInfo(ssrcInfoElement,
-                                       GetSsrcFromReport(report));
+      ssrcInfoManager.populateSsrcInfo(
+          ssrcInfoElement, GetSsrcFromReport(report));
     }
   }
   return container;
@@ -316,25 +314,23 @@ function ensureStatsGraphTopContainer(peerConnectionElement, report) {
 
 // Creates the container elements holding a timeline graph
 // and the TimelineGraphView object.
-function createStatsGraphView(
-    peerConnectionElement, report, statsName) {
-  var topContainer = ensureStatsGraphTopContainer(peerConnectionElement,
-                                                  report);
+function createStatsGraphView(peerConnectionElement, report, statsName) {
+  var topContainer =
+      ensureStatsGraphTopContainer(peerConnectionElement, report);
 
   var graphViewId =
       peerConnectionElement.id + '-' + report.id + '-' + statsName;
   var divId = graphViewId + '-div';
   var canvasId = graphViewId + '-canvas';
-  var container = document.createElement("div");
+  var container = document.createElement('div');
   container.className = 'stats-graph-sub-container';
 
   topContainer.appendChild(container);
   container.innerHTML = '<div>' + statsName + '</div>' +
       '<div id=' + divId + '><canvas id=' + canvasId + '></canvas></div>';
   if (statsName == 'bweCompound') {
-      container.insertBefore(
-          createBweCompoundLegend(peerConnectionElement, report.id),
-          $(divId));
+    container.insertBefore(
+        createBweCompoundLegend(peerConnectionElement, report.id), $(divId));
   }
   return new TimelineGraphView(divId, canvasId);
 }
@@ -352,11 +348,11 @@ function createBweCompoundLegend(peerConnectionElement, reportId) {
     div.graphViewId =
         peerConnectionElement.id + '-' + reportId + '-bweCompound';
     div.firstChild.addEventListener('click', function(event) {
-        var target =
-            peerConnectionDataStore[peerConnectionElement.id].getDataSeries(
-                event.target.parentNode.dataSeriesId);
-        target.show(event.target.checked);
-        graphViews[event.target.parentNode.graphViewId].repaint();
+      var target =
+          peerConnectionDataStore[peerConnectionElement.id].getDataSeries(
+              event.target.parentNode.dataSeriesId);
+      target.show(event.target.checked);
+      graphViews[event.target.parentNode.graphViewId].repaint();
     });
   }
   return legend;

@@ -10,7 +10,10 @@
 
 #include "base/macros.h"
 #include "base/optional.h"
+#include "base/scoped_observer.h"
 #include "base/strings/string16.h"
+#include "ui/base/material_design/material_design_controller.h"
+#include "ui/base/material_design/material_design_controller_observer.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/animation/ink_drop_host_view.h"
@@ -34,7 +37,7 @@ class InkDropContainerView;
 // tab-to-search UI, and content settings.
 class IconLabelBubbleView : public views::InkDropObserver,
                             public views::Button,
-                            public views::WidgetObserver {
+                            public ui::MaterialDesignControllerObserver {
  public:
   static constexpr int kTrailingPaddingPreMd = 2;
 
@@ -74,18 +77,23 @@ class IconLabelBubbleView : public views::InkDropObserver,
 
   void SetLabel(const base::string16& label);
   void SetImage(const gfx::ImageSkia& image);
+  void SetFontList(const gfx::FontList& font_list);
 
   const views::ImageView* GetImageView() const { return image_; }
   views::ImageView* GetImageView() { return image_; }
 
+  // Returns the color of the IconLabelBubbleView's surrounding context.
+  SkColor GetParentBackgroundColor() const;
+
   // Exposed for testing.
   SeparatorView* separator_view() const { return separator_view_; }
+
+  // Exposed for testing.
+  bool is_animating_label() const { return slide_animation_.is_animating(); }
 
   void set_next_element_interior_padding(int padding) {
     next_element_interior_padding_ = padding;
   }
-
-  void OnBubbleCreated(views::Widget* bubble_widget);
 
  protected:
   static constexpr int kOpenTimeMS = 150;
@@ -104,12 +112,6 @@ class IconLabelBubbleView : public views::InkDropObserver,
   // Returns true when the separator should be visible.
   virtual bool ShouldShowSeparator() const;
 
-  // Returns true when additional padding equal to
-  // GetWidthBetweenIconAndSeparator() should be added to the end of the view.
-  // This is useful in the case where it's required to layout subsequent views
-  // in the same position regardless of whether the separator is shown or not.
-  virtual bool ShouldShowExtraEndSpace() const;
-
   // Returns a multiplier used to calculate the actual width of the view based
   // on its desired width.  This ranges from 0 for a zero-width view to 1 for a
   // full-width view and can be used to animate the width of the view.
@@ -125,12 +127,14 @@ class IconLabelBubbleView : public views::InkDropObserver,
   // prevent the bubble from reshowing on a mouse release.
   virtual bool IsBubbleShowing() const;
 
-  // views::InkDropHostView:
+  // Sets the border padding around this view.
+  virtual void UpdateBorder();
+
+  // views::Button:
   gfx::Size CalculatePreferredSize() const override;
+  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   void Layout() override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
-  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   void OnNativeThemeChanged(const ui::NativeTheme* native_theme) override;
   void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
   void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
@@ -138,10 +142,8 @@ class IconLabelBubbleView : public views::InkDropObserver,
   std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
   std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
       const override;
-  SkColor GetInkDropBaseColor() const override;
   std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override;
-
-  // views::Button:
+  SkColor GetInkDropBaseColor() const override = 0;
   bool IsTriggerableEvent(const ui::Event& event) override;
   bool ShouldUpdateInkDropOnClickCanceled() const override;
   void NotifyClick(const ui::Event& event) override;
@@ -151,20 +153,12 @@ class IconLabelBubbleView : public views::InkDropObserver,
   void AnimationProgressed(const gfx::Animation* animation) override;
   void AnimationCanceled(const gfx::Animation* animation) override;
 
-  // views::WidgetObserver:
-  void OnWidgetDestroying(views::Widget* widget) override;
-  void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
+  // ui::MaterialDesignControllerObserver:
+  void OnTouchUiChanged() override;
 
   const gfx::FontList& font_list() const { return label_->font_list(); }
 
-  SkColor GetParentBackgroundColor() const;
-
   gfx::Size GetSizeForLabelWidth(int label_width) const;
-
-  // Returns the width after the icon and before the separator. If the
-  // separator is not shown, and ShouldShowExtraEndSpace() is false, this
-  // returns 0.
-  int GetWidthBetweenIconAndSeparator() const;
 
   // Set up for icons that animate their labels in and then out.
   void SetUpForInOutAnimation();
@@ -193,6 +187,10 @@ class IconLabelBubbleView : public views::InkDropObserver,
   // currently paused.
   bool is_animation_paused() const { return is_animation_paused_; }
 
+  // Reduces the slide duration to 1ms such that animation still follows
+  // through in the code but is short enough that it is essentially skipped.
+  void ReduceAnimationTimeForTesting();
+
  private:
   // Spacing between the image and the label.
   int GetInternalSpacing() const;
@@ -205,6 +203,11 @@ class IconLabelBubbleView : public views::InkDropObserver,
   // Subclasses that want a different duration for the slide animation can
   // override this method.
   virtual int GetSlideDurationTime() const;
+
+  // Returns the width after the icon and before the separator. If the
+  // separator is not shown, and ShouldShowExtraEndSpace() is false, this
+  // returns 0.
+  int GetWidthBetweenIconAndSeparator() const;
 
   // Padding after the separator. If this separator is shown, this includes the
   // separator width.
@@ -224,6 +227,8 @@ class IconLabelBubbleView : public views::InkDropObserver,
   // Disables highlights and calls Hide on the slide animation, should not be
   // called directly, use AnimateOut() instead, which handles label visibility.
   void HideAnimation();
+
+  gfx::Rect CalculateInkDropContainerBounds() const;
 
   // The contents of the bubble.
   views::ImageView* image_;
@@ -249,6 +254,10 @@ class IconLabelBubbleView : public views::InkDropObserver,
   bool is_animation_paused_ = false;
   double pause_animation_state_ = 0.0;
   double open_state_fraction_ = 0.0;
+
+  ScopedObserver<ui::MaterialDesignController,
+                 ui::MaterialDesignControllerObserver>
+      md_observer_{this};
 
   DISALLOW_COPY_AND_ASSIGN(IconLabelBubbleView);
 };

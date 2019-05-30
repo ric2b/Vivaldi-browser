@@ -17,7 +17,6 @@ import android.view.ViewGroup;
 import android.view.ViewStub;
 import android.widget.FrameLayout;
 
-import org.chromium.base.AsyncTask;
 import org.chromium.base.Log;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.SysUtils;
@@ -26,8 +25,8 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.widget.ControlContainer;
 import org.chromium.content_public.browser.WebContents;
@@ -43,7 +42,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 /**
  * This class is a singleton that holds utilities for warming up Chrome and prerendering urls
@@ -51,7 +49,7 @@ import java.util.concurrent.TimeUnit;
  *
  * This class is not thread-safe and must only be used on the UI thread.
  */
-public final class WarmupManager {
+public class WarmupManager {
     private static final String TAG = "WarmupManager";
 
     @VisibleForTesting
@@ -81,7 +79,7 @@ public final class WarmupManager {
         public void renderProcessGone(boolean wasOomProtected) {
             long elapsed = SystemClock.elapsedRealtime() - mWebContentsCreationTimeMs;
             RecordHistogram.recordLongTimesHistogram(
-                    "CustomTabs.SpareWebContents.TimeBeforeDeath", elapsed, TimeUnit.MILLISECONDS);
+                    "CustomTabs.SpareWebContents.TimeBeforeDeath", elapsed);
             recordWebContentsStatus(WebContentsStatus.KILLED);
             destroySpareWebContentsInternal();
         }
@@ -246,16 +244,14 @@ public final class WarmupManager {
                 .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
-    /** Launches a background DNS query for a given URL if the data reduction proxy is not in use.
+    /** Launches a background DNS query for a given URL.
      *
      * @param context The Application context.
      * @param url URL from which the domain to query is extracted.
      */
     public void maybePrefetchDnsForUrlInBackground(Context context, String url) {
         ThreadUtils.assertOnUiThread();
-        if (!DataReductionProxySettings.isEnabledBeforeNativeLoad(context)) {
             prefetchDnsForUrlInBackground(url);
-        }
     }
 
     /**
@@ -282,10 +278,7 @@ public final class WarmupManager {
         Uri uri = Uri.parse(url);
         if (uri == null) return;
         String scheme = uri.normalizeScheme().getScheme();
-        boolean isHttp = UrlConstants.HTTP_SCHEME.equals(scheme);
-        if (!isHttp && !UrlConstants.HTTPS_SCHEME.equals(scheme)) return;
-        // HTTP connections will not be used when the data reduction proxy is enabled.
-        if (DataReductionProxySettings.getInstance().isDataReductionProxyEnabled() && isHttp) {
+        if (!UrlConstants.HTTP_SCHEME.equals(scheme) && !UrlConstants.HTTPS_SCHEME.equals(scheme)) {
             return;
         }
 
@@ -341,7 +334,7 @@ public final class WarmupManager {
                 || SysUtils.isLowEndDevice()) {
             return;
         }
-        mSpareWebContents = WebContentsFactory.createWebContentsWithWarmRenderer(
+        mSpareWebContents = new WebContentsFactory().createWebContentsWithWarmRenderer(
                 false /* incognito */, true /* initiallyHidden */);
         mObserver = new RenderProcessGoneObserver();
         mSpareWebContents.addObserver(mObserver);

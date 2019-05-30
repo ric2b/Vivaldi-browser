@@ -39,7 +39,6 @@ class OmniboxPopupViewIOS : public OmniboxPopupView,
   void OnLineSelected(size_t line) override {}
   void UpdatePopupAppearance() override;
   void OnMatchIconUpdated(size_t match_index) override {}
-  void PaintUpdatesNow() override {}
   void OnDragCanceled() override {}
 
   void UpdateEditViewIcon();
@@ -51,7 +50,11 @@ class OmniboxPopupViewIOS : public OmniboxPopupView,
   // OmniboxPopupViewControllerDelegate implementation.
   bool IsStarredMatch(const AutocompleteMatch& match) const override;
   void OnMatchHighlighted(size_t row) override;
-  void OnMatchSelected(const AutocompleteMatch& match, size_t row) override;
+  // |disposition| should be CURRENT_TAB is the match should be loaded,
+  // SWITCH_TO_TAB if it should switch to this tab.
+  void OnMatchSelected(const AutocompleteMatch& match,
+                       size_t row,
+                       WindowOpenDisposition disposition) override;
   void OnMatchSelectedForAppending(const AutocompleteMatch& match) override;
   void OnMatchSelectedForDeletion(const AutocompleteMatch& match) override;
   void OnScroll() override;

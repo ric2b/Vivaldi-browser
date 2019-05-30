@@ -161,8 +161,13 @@ bool AppLaunchInfo::LoadLaunchURL(Extension* extension, base::string16* error) {
     // Ensure the launch web URL is a valid absolute URL and web extent scheme.
     GURL url(launch_url);
     URLPattern pattern(Extension::kValidWebExtentSchemes);
-    if (extension->from_bookmark())
-      pattern.SetValidSchemes(Extension::kValidBookmarkAppSchemes);
+    if (extension->from_bookmark()) {
+      // System Web Apps are bookmark apps that point to chrome:// URLs.
+      int valid_schemes = Extension::kValidBookmarkAppSchemes;
+      if (extension->location() == Manifest::EXTERNAL_COMPONENT)
+        valid_schemes |= URLPattern::SCHEME_CHROMEUI;
+      pattern.SetValidSchemes(valid_schemes);
+    }
     if ((!url.is_valid() || !pattern.SetScheme(url.scheme()))) {
       *error = ErrorUtils::FormatErrorMessageUTF16(
           errors::kInvalidLaunchValue,
@@ -238,8 +243,8 @@ bool AppLaunchInfo::LoadLaunchContainer(Extension* extension,
     return false;
   }
 
-  if (launch_container_string == values::kLaunchContainerPanel) {
-    launch_container_ = LAUNCH_CONTAINER_PANEL;
+  if (launch_container_string == values::kLaunchContainerPanelDeprecated) {
+    launch_container_ = LAUNCH_CONTAINER_PANEL_DEPRECATED;
   } else if (launch_container_string == values::kLaunchContainerTab) {
     launch_container_ = LAUNCH_CONTAINER_TAB;
   } else {
@@ -247,7 +252,10 @@ bool AppLaunchInfo::LoadLaunchContainer(Extension* extension,
     return false;
   }
 
-  bool can_specify_initial_size = launch_container_ == LAUNCH_CONTAINER_PANEL;
+  // TODO(manucornet): Remove this special behavior now that panels are
+  // deprecated.
+  bool can_specify_initial_size =
+      launch_container_ == LAUNCH_CONTAINER_PANEL_DEPRECATED;
 
   // Validate the container width if present.
   if (!ReadLaunchDimension(extension->manifest(),
@@ -289,7 +297,7 @@ void AppLaunchInfo::OverrideLaunchURL(Extension* extension,
 
   URLPattern pattern(Extension::kValidWebExtentSchemes);
   URLPattern::ParseResult result = pattern.Parse(override_url.spec());
-  DCHECK_EQ(result, URLPattern::PARSE_SUCCESS);
+  DCHECK_EQ(result, URLPattern::ParseResult::kSuccess);
   pattern.SetPath(pattern.path() + '*');
   extension->AddWebExtentPattern(pattern);
 }

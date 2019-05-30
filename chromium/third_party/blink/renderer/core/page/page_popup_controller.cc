@@ -45,7 +45,7 @@ PagePopupController::PagePopupController(PagePopup& popup,
 
 PagePopupController* PagePopupController::Create(PagePopup& popup,
                                                  PagePopupClient* client) {
-  return new PagePopupController(popup, client);
+  return MakeGarbageCollected<PagePopupController>(popup, client);
 }
 
 void PagePopupController::setValueAndClosePopup(int num_value,
@@ -61,7 +61,7 @@ void PagePopupController::setValue(const String& value) {
 
 void PagePopupController::closePopup() {
   if (popup_client_)
-    popup_client_->ClosePopup();
+    popup_client_->CancelPopup();
 }
 
 void PagePopupController::selectFontsFromOwnerDocument(

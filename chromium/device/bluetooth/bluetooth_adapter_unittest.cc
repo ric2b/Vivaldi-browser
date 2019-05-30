@@ -39,6 +39,8 @@
 #include "device/bluetooth/test/bluetooth_test_cast.h"
 #elif defined(OS_CHROMEOS) || defined(OS_LINUX)
 #include "device/bluetooth/test/bluetooth_test_bluez.h"
+#elif defined(OS_FUCHSIA)
+#include "device/bluetooth/test/bluetooth_test_fuchsia.h"
 #endif
 
 using device::BluetoothDevice;
@@ -1792,12 +1794,12 @@ TEST_F(BluetoothTest, DiscoverConnectedLowEnergyDeviceTwice) {
 #endif  // defined(OS_MACOSX)
 
 #if defined(OS_WIN)
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     /* no prefix */,
     BluetoothTestWinrt,
     ::testing::Bool());
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     /* no prefix */,
     BluetoothTestWinrtOnly,
     ::testing::Values(true));

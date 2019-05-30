@@ -44,7 +44,12 @@ class ImageResourceObserver;
 class StylePendingImage final : public StyleImage {
  public:
   static StylePendingImage* Create(const CSSValue& value) {
-    return new StylePendingImage(value);
+    return MakeGarbageCollected<StylePendingImage>(value);
+  }
+
+  explicit StylePendingImage(const CSSValue& value)
+      : value_(const_cast<CSSValue*>(&value)) {
+    is_pending_image_ = true;
   }
 
   WrappedImagePtr Data() const override { return value_.Get(); }
@@ -77,8 +82,7 @@ class StylePendingImage final : public StyleImage {
                       const LayoutSize& /*defaultObjectSize*/) const override {
     return FloatSize();
   }
-  bool ImageHasRelativeSize() const override { return false; }
-  bool UsesImageContainerSize() const override { return false; }
+  bool HasIntrinsicSize() const override { return true; }
   void AddClient(ImageResourceObserver*) override {}
   void RemoveClient(ImageResourceObserver*) override {}
   scoped_refptr<Image> GetImage(const ImageResourceObserver&,
@@ -98,10 +102,7 @@ class StylePendingImage final : public StyleImage {
   }
 
  private:
-  explicit StylePendingImage(const CSSValue& value)
-      : value_(const_cast<CSSValue*>(&value)) {
-    is_pending_image_ = true;
-  }
+  bool IsEqual(const StyleImage& other) const override;
 
   // TODO(sashab): Replace this with <const CSSValue> once Member<>
   // supports const types.
@@ -109,6 +110,13 @@ class StylePendingImage final : public StyleImage {
 };
 
 DEFINE_STYLE_IMAGE_TYPE_CASTS(StylePendingImage, IsPendingImage());
+
+inline bool StylePendingImage::IsEqual(const StyleImage& other) const {
+  if (!other.IsPendingImage())
+    return false;
+  const auto& other_pending = ToStylePendingImage(other);
+  return value_ == other_pending.value_;
+}
 
 }  // namespace blink
 #endif

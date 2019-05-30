@@ -26,9 +26,9 @@
 
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
 
+#include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
-#include "third_party/blink/renderer/platform/feature_policy/feature_policy.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 
@@ -70,6 +70,44 @@ void SecurityContext::SetContentSecurityPolicy(
   content_security_policy_ = content_security_policy;
 }
 
+bool SecurityContext::IsSandboxed(SandboxFlag mask) const {
+  if (RuntimeEnabledFeatures::FeaturePolicyForSandboxEnabled()) {
+    switch (mask) {
+      case kSandboxAll:
+        NOTREACHED();
+        break;
+      case kSandboxTopNavigation:
+        return !feature_policy_->IsFeatureEnabled(
+            mojom::FeaturePolicyFeature::kTopNavigation);
+      case kSandboxForms:
+        return !feature_policy_->IsFeatureEnabled(
+            mojom::FeaturePolicyFeature::kFormSubmission);
+      case kSandboxScripts:
+        return !feature_policy_->IsFeatureEnabled(
+            mojom::FeaturePolicyFeature::kScript);
+      case kSandboxPopups:
+        return !feature_policy_->IsFeatureEnabled(
+            mojom::FeaturePolicyFeature::kPopups);
+      case kSandboxPointerLock:
+        return !feature_policy_->IsFeatureEnabled(
+            mojom::FeaturePolicyFeature::kPointerLock);
+      case kSandboxOrientationLock:
+        return !feature_policy_->IsFeatureEnabled(
+            mojom::FeaturePolicyFeature::kOrientationLock);
+      case kSandboxModals:
+        return !feature_policy_->IsFeatureEnabled(
+            mojom::FeaturePolicyFeature::kModals);
+      case kSandboxPresentationController:
+        return !feature_policy_->IsFeatureEnabled(
+            mojom::FeaturePolicyFeature::kPresentation);
+      default:
+        // Any other flags fall through to the bitmask test below
+        break;
+    }
+  }
+  return sandbox_flags_ & mask;
+}
+
 void SecurityContext::EnforceSandboxFlags(SandboxFlags mask) {
   ApplySandboxFlags(mask);
 }
@@ -81,7 +119,7 @@ void SecurityContext::ApplySandboxFlags(SandboxFlags mask,
   if (IsSandboxed(kSandboxOrigin) && GetSecurityOrigin() &&
       !GetSecurityOrigin()->IsOpaque()) {
     scoped_refptr<SecurityOrigin> security_origin =
-        SecurityOrigin::CreateUniqueOpaque();
+        GetSecurityOrigin()->DeriveNewOpaqueOrigin();
     security_origin->SetOpaqueOriginIsPotentiallyTrustworthy(
         is_potentially_trustworthy);
     SetSecurityOrigin(std::move(security_origin));
@@ -104,6 +142,20 @@ String SecurityContext::addressSpaceForBindings() const {
   return "public";
 }
 
+void SecurityContext::SetRequireTrustedTypes() {
+  DCHECK(require_safe_types_ ||
+         content_security_policy_->IsRequireTrustedTypes());
+  require_safe_types_ = true;
+}
+
+void SecurityContext::SetRequireTrustedTypesForTesting() {
+  require_safe_types_ = true;
+}
+
+bool SecurityContext::RequireTrustedTypes() const {
+  return require_safe_types_;
+}
+
 void SecurityContext::SetFeaturePolicy(
     std::unique_ptr<FeaturePolicy> feature_policy) {
   // This method should be called before a FeaturePolicy has been created.
@@ -114,10 +166,81 @@ void SecurityContext::SetFeaturePolicy(
 void SecurityContext::InitializeFeaturePolicy(
     const ParsedFeaturePolicy& parsed_header,
     const ParsedFeaturePolicy& container_policy,
-    const FeaturePolicy* parent_feature_policy) {
-  feature_policy_ = FeaturePolicy::CreateFromParentPolicy(
-      parent_feature_policy, container_policy, security_origin_->ToUrlOrigin());
+    const FeaturePolicy* parent_feature_policy,
+    const FeaturePolicy::FeatureState* opener_feature_state) {
+  // Feature policy should either come from a parent in the case of an embedded
+  // child frame, or from an opener if any when a new window is created by an
+  // opener. A main frame without an opener would not have a parent policy nor
+  // an opener feature state.
+  DCHECK(!parent_feature_policy || !opener_feature_state);
+  report_only_feature_policy_ = nullptr;
+  if (!HasCustomizedFeaturePolicy()) {
+    feature_policy_ = FeaturePolicy::CreateFromParentPolicy(
+        nullptr, {}, security_origin_->ToUrlOrigin());
+    return;
+  }
+
+  if (!opener_feature_state ||
+      !RuntimeEnabledFeatures::FeaturePolicyForSandboxEnabled()) {
+    feature_policy_ = FeaturePolicy::CreateFromParentPolicy(
+        parent_feature_policy, container_policy,
+        security_origin_->ToUrlOrigin());
+  } else {
+    DCHECK(!parent_feature_policy);
+    feature_policy_ = FeaturePolicy::CreateWithOpenerPolicy(
+        *opener_feature_state, security_origin_->ToUrlOrigin());
+  }
   feature_policy_->SetHeaderPolicy(parsed_header);
+}
+
+// Uses the parent enforcing policy as the basis for the report-only policy.
+void SecurityContext::AddReportOnlyFeaturePolicy(
+    const ParsedFeaturePolicy& parsed_report_only_header,
+    const ParsedFeaturePolicy& container_policy,
+    const FeaturePolicy* parent_feature_policy) {
+  report_only_feature_policy_ = FeaturePolicy::CreateFromParentPolicy(
+      parent_feature_policy, container_policy, security_origin_->ToUrlOrigin());
+  report_only_feature_policy_->SetHeaderPolicy(parsed_report_only_header);
+}
+
+bool SecurityContext::IsFeatureEnabled(mojom::FeaturePolicyFeature feature,
+                                       ReportOptions report_on_failure,
+                                       const String& message) const {
+  if (report_on_failure == ReportOptions::kReportOnFailure) {
+    // We are expecting a violation report in case the feature is disabled in
+    // the context. Therefore, this qualifies as a potential violation (i.e.,
+    // if the feature was disabled it would generate a report).
+    CountPotentialFeaturePolicyViolation(feature);
+  }
+
+  FeatureEnabledState state = GetFeatureEnabledState(feature);
+  if (state == FeatureEnabledState::kEnabled)
+    return true;
+  if (report_on_failure == ReportOptions::kReportOnFailure) {
+    ReportFeaturePolicyViolation(
+        feature,
+        (state == FeatureEnabledState::kReportOnly
+             ? mojom::FeaturePolicyDisposition::kReport
+             : mojom::FeaturePolicyDisposition::kEnforce),
+        message);
+  }
+  return (state != FeatureEnabledState::kDisabled);
+}
+
+FeatureEnabledState SecurityContext::GetFeatureEnabledState(
+    mojom::FeaturePolicyFeature feature) const {
+  // The policy should always be initialized before checking it to ensure we
+  // properly inherit the parent policy.
+  DCHECK(feature_policy_);
+
+  if (feature_policy_->IsFeatureEnabled(feature)) {
+    if (report_only_feature_policy_ &&
+        !report_only_feature_policy_->IsFeatureEnabled(feature)) {
+      return FeatureEnabledState::kReportOnly;
+    }
+    return FeatureEnabledState::kEnabled;
+  }
+  return FeatureEnabledState::kDisabled;
 }
 
 }  // namespace blink

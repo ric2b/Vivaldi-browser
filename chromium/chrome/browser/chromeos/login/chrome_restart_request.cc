@@ -10,13 +10,14 @@
 #include "ash/public/cpp/app_list/app_list_switches.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "base/base_switches.h"
+#include "base/bind.h"
 #include "base/command_line.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/launch.h"
+#include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
 #include "cc/base/switches.h"
@@ -27,7 +28,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
@@ -88,7 +89,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableAcceleratedVideoDecode,
     ::switches::kDisableAcceleratedVideoEncode,
     ::switches::kDisableBlinkFeatures,
-    ::switches::kDisableCastStreamingHWEncoding,
     ::switches::kDisableGpu,
     ::switches::kDisableGpuMemoryBufferVideoFrames,
     ::switches::kDisableGpuShaderDiskCache,
@@ -117,7 +117,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kEnablePinch,
     ::switches::kEnablePreferCompositingToLCDText,
     ::switches::kEnableRGBA4444Textures,
-    ::switches::kEnableSlimmingPaintV2,
     ::switches::kEnableTouchDragDrop,
     ::switches::kEnableUnifiedDesktop,
     ::switches::kEnableUseZoomForDSF,
@@ -145,7 +144,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kTouchCalibration,
     ::switches::kTouchDevices,
     ::switches::kTouchEventFeatureDetection,
-    ::switches::kTopChromeMD,
+    ::switches::kTopChromeTouchUi,
     ::switches::kTraceToConsole,
     ::switches::kUIDisablePartialSwap,
 #if defined(USE_CRAS)
@@ -179,13 +178,11 @@ void DeriveCommandLine(const GURL& start_url,
     // Please keep these in alphabetical order. Non-UI Compositor switches
     // here should also be added to
     // content/browser/renderer_host/render_process_host_impl.cc.
-    cc::switches::kAlwaysRequestPresentationTime,
     cc::switches::kCheckDamageEarly,
     cc::switches::kDisableCompositedAntialiasing,
     cc::switches::kDisableMainFrameBeforeActivation,
     cc::switches::kDisableThreadedAnimation,
     cc::switches::kEnableGpuBenchmarking,
-    cc::switches::kEnableLayerLists,
     cc::switches::kEnableMainFrameBeforeActivation,
     cc::switches::kShowCompositedLayerBorders,
     cc::switches::kShowFPSCounter,
@@ -205,16 +202,16 @@ void DeriveCommandLine(const GURL& start_url,
     chromeos::switches::kEnableArc,
     chromeos::switches::kEnterpriseDisableArc,
     chromeos::switches::kEnterpriseEnableForcedReEnrollment,
-    chromeos::switches::kHasChromeOSDiamondKey,
     chromeos::switches::kHasChromeOSKeyboard,
     chromeos::switches::kLoginProfile,
     chromeos::switches::kNaturalScrollDefault,
+    chromeos::switches::kRlzPingDelay,
     chromeos::switches::kSystemInDevMode,
     policy::switches::kDeviceManagementUrl,
     wm::switches::kWindowAnimationsDisabled,
   };
   command_line->CopySwitchesFrom(base_command_line, kForwardSwitches,
-                                 arraysize(kForwardSwitches));
+                                 base::size(kForwardSwitches));
 
   if (start_url.is_valid())
     command_line->AppendArg(start_url.spec());

@@ -57,10 +57,9 @@ class BrowserRootView : public views::internal::RootView {
   BrowserRootView(BrowserView* browser_view, views::Widget* widget);
   ~BrowserRootView() override;
 
-  // Overridden from views::View:
-  bool GetDropFormats(
-      int* formats,
-      std::set<ui::Clipboard::FormatType>* format_types) override;
+  // views::View:
+  bool GetDropFormats(int* formats,
+                      std::set<ui::ClipboardFormatType>* format_types) override;
   bool AreDropTypesRequired() override;
   bool CanDrop(const ui::OSExchangeData& data) override;
   void OnDragEntered(const ui::DropTargetEvent& event) override;

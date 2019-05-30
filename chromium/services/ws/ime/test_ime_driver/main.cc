@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "services/service_manager/public/c/main.h"
-#include "services/service_manager/public/cpp/service_runner.h"
+#include "base/message_loop/message_loop.h"
+#include "services/service_manager/public/cpp/service_executable/service_main.h"
 #include "services/ws/ime/test_ime_driver/test_ime_application.h"
 
-MojoResult ServiceMain(MojoHandle service_request_handle) {
-  service_manager::ServiceRunner runner(new ws::test::TestIMEApplication);
-  return runner.Run(service_request_handle);
+void ServiceMain(service_manager::mojom::ServiceRequest request) {
+  base::MessageLoop message_loop;
+  ws::test::TestIMEApplication(std::move(request)).RunUntilTermination();
 }

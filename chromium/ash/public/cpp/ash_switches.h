@@ -19,18 +19,14 @@ namespace switches {
 ASH_PUBLIC_EXPORT extern const char kAshConstrainPointerToRoot[];
 ASH_PUBLIC_EXPORT extern const char kAshDebugShortcuts[];
 ASH_PUBLIC_EXPORT extern const char kAshDeveloperShortcuts[];
-ASH_PUBLIC_EXPORT extern const char kAshDisableLoginDimAndBlur[];
-ASH_PUBLIC_EXPORT extern const char kAshDisableSmoothScreenRotation[];
 ASH_PUBLIC_EXPORT extern const char kAshDisableTabletSplitView[];
 ASH_PUBLIC_EXPORT extern const char kAshDisableTouchExplorationMode[];
 ASH_PUBLIC_EXPORT extern const char kAshEnableCursorMotionBlur[];
 ASH_PUBLIC_EXPORT extern const char kAshEnableV1AppBackButton[];
 ASH_PUBLIC_EXPORT extern const char kAshEnableMagnifierKeyScroller[];
 ASH_PUBLIC_EXPORT extern const char kAshEnablePaletteOnAllDisplays[];
-ASH_PUBLIC_EXPORT extern const char kAshEnableScaleSettingsTray[];
 ASH_PUBLIC_EXPORT extern const char kAshEnableTabletMode[];
 ASH_PUBLIC_EXPORT extern const char kAshEnableWaylandServer[];
-ASH_PUBLIC_EXPORT extern const char kAshEnableMirroredScreen[];
 ASH_PUBLIC_EXPORT extern const char kAshForceEnableStylusTools[];
 ASH_PUBLIC_EXPORT extern const char kAshPowerButtonPosition[];
 ASH_PUBLIC_EXPORT extern const char kAshUiMode[];
@@ -50,6 +46,7 @@ ASH_PUBLIC_EXPORT extern const char kAshShelfColorSchemeDarkMuted[];
 ASH_PUBLIC_EXPORT extern const char kAshShelfColorSchemeDarkVibrant[];
 ASH_PUBLIC_EXPORT extern const char kAshTouchHud[];
 ASH_PUBLIC_EXPORT extern const char kAuraLegacyPowerButton[];
+ASH_PUBLIC_EXPORT extern const char kForceTabletPowerButton[];
 ASH_PUBLIC_EXPORT extern const char kHasInternalStylus[];
 ASH_PUBLIC_EXPORT extern const char kShowTaps[];
 ASH_PUBLIC_EXPORT extern const char kShowWebUiLock[];
@@ -57,7 +54,6 @@ ASH_PUBLIC_EXPORT extern const char kShowWebUiLogin[];
 ASH_PUBLIC_EXPORT extern const char kSuppressMessageCenterPopups[];
 ASH_PUBLIC_EXPORT extern const char kTouchscreenUsableWhileScreenOff[];
 
-ASH_PUBLIC_EXPORT bool IsTrilinearFilteringEnabled();
 ASH_PUBLIC_EXPORT bool IsUsingViewsLock();
 
 }  // namespace switches

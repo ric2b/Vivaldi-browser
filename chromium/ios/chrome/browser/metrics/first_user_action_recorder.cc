@@ -7,10 +7,11 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "ios/chrome/browser/ui/ui_util.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
 #include "ios/web/public/web_thread.h"
 
 const char* kFirstUserActionNewTaskHistogramName[] = {
@@ -109,6 +110,10 @@ FirstUserActionRecorder::~FirstUserActionRecorder() {
 
 void FirstUserActionRecorder::Expire() {
   std::string log_message = "Recording 'Expiration' for first user action type";
+  // If there is a pending rethrowable action, it could technically be logged.
+  // But as FirstUserActionRecorder will be destroyed in this runloop, it is too
+  // late.
+  rethrow_callback_.Cancel();
   RecordAction(EXPIRATION, log_message);
 }
 
@@ -120,7 +125,7 @@ void FirstUserActionRecorder::RecordStartOnNTP() {
 
 void FirstUserActionRecorder::OnUserAction(const std::string& action_name) {
   if (ShouldProcessAction(action_name)) {
-    if (ArrayContainsString(kNewTaskActions, arraysize(kNewTaskActions),
+    if (ArrayContainsString(kNewTaskActions, base::size(kNewTaskActions),
                             action_name.c_str())) {
       std::string log_message = base::StringPrintf(
           "Recording 'New task' for first user action type"
@@ -181,11 +186,13 @@ bool FirstUserActionRecorder::ShouldProcessAction(
     return false;
 
   if (!action_pending_ &&
-      ArrayContainsString(kRethrownActions, arraysize(kRethrownActions),
+      ArrayContainsString(kRethrownActions, base::size(kRethrownActions),
                           action_name.c_str())) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&FirstUserActionRecorder::OnUserAction,
-                              base::Unretained(this), action_name));
+    rethrow_callback_.Reset(
+        base::BindOnce(&FirstUserActionRecorder::OnUserAction,
+                       base::Unretained(this), action_name));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                  rethrow_callback_.callback());
     action_pending_ = true;
     return false;
   }
@@ -194,11 +201,11 @@ bool FirstUserActionRecorder::ShouldProcessAction(
   // |new_task_actions_| whitelist.
   bool known_mobile_action =
       base::StartsWith(action_name, "Mobile", base::CompareCase::SENSITIVE) ||
-      ArrayContainsString(kNewTaskActions, arraysize(kNewTaskActions),
+      ArrayContainsString(kNewTaskActions, base::size(kNewTaskActions),
                           action_name.c_str());
 
   return known_mobile_action &&
-         !ArrayContainsString(kIgnoredActions, arraysize(kIgnoredActions),
+         !ArrayContainsString(kIgnoredActions, base::size(kIgnoredActions),
                               action_name.c_str());
 }
 

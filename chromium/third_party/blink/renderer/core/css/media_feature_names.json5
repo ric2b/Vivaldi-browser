@@ -1,6 +1,6 @@
 {
   metadata: {
-    namespace: "MediaFeature",
+    namespace: "media_feature_names",
     export: "",
   },
 
@@ -48,6 +48,8 @@
     "min-width",
     "min-resolution",
     "pointer",
+    "prefers-color-scheme",
+    "prefers-reduced-motion",
     "resolution",
     "-webkit-transform-3d",
     "scan",

@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile_io_data.h"
 #include "chrome/browser/ui/browser.h"
@@ -176,7 +177,7 @@ void BookmarkAppNavigationBrowserTest::ClickLinkWithModifiersAndWaitForURL(
   content::SimulateMouseClick(web_contents, modifiers,
                               blink::WebMouseEvent::Button::kLeft);
 
-  observer->WaitForNavigationFinished();
+  observer->Wait();
 }
 
 // static
@@ -305,7 +306,7 @@ Browser* BookmarkAppNavigationBrowserTest::OpenTestBookmarkApp() {
   GURL app_url = https_server_.GetURL(GetAppUrlHost(), GetAppUrlPath());
   auto observer = GetTestNavigationObserver(app_url);
   Browser* app_browser = LaunchAppBrowser(test_bookmark_app_);
-  observer->WaitForNavigationFinished();
+  observer->Wait();
 
   return app_browser;
 }

@@ -17,8 +17,6 @@ enum VpxDecodeVendors {
 
 // gpu::GpuPreferences
 struct GpuPreferences {
-  bool single_process;
-  bool in_process_gpu;
   bool disable_accelerated_video_decode;
   bool disable_accelerated_video_encode;
   bool gpu_startup_dialog;
@@ -52,6 +50,7 @@ struct GpuPreferences {
   bool gl_shader_interm_output;
   bool emulate_shader_precision;
   uint32 max_active_webgl_contexts;
+  bool enable_android_surface_control;
   bool enable_gpu_service_logging;
   bool enable_gpu_service_tracing;
   bool use_passthrough_cmd_decoder;
@@ -62,6 +61,9 @@ struct GpuPreferences {
   bool ignore_gpu_blacklist;
   bool enable_oop_rasterization;
   bool disable_oop_rasterization;
+  bool enable_oop_rasterization_ddl;
+  bool enable_raster_to_sk_image;
+  bool enable_passthrough_raster_decoder;
   bool watchdog_starts_backgrounded;
   bool enable_vulkan;
   bool enable_gpu_benchmarking_extension;

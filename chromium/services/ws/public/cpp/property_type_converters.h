@@ -10,6 +10,7 @@
 
 #include "base/strings/string16.h"
 #include "mojo/public/cpp/bindings/type_converter.h"
+#include "services/ws/common/types.h"
 
 class SkBitmap;
 
@@ -20,6 +21,7 @@ class UnguessableToken;
 namespace gfx {
 class Rect;
 class Size;
+class SizeF;
 }  // namespace gfx
 
 namespace mojo {
@@ -44,6 +46,15 @@ struct TypeConverter<std::vector<uint8_t>, gfx::Size> {
 template <>
 struct TypeConverter<gfx::Size, std::vector<uint8_t>> {
   static gfx::Size Convert(const std::vector<uint8_t>& input);
+};
+
+template <>
+struct TypeConverter<std::vector<uint8_t>, gfx::SizeF> {
+  static std::vector<uint8_t> Convert(const gfx::SizeF& input);
+};
+template <>
+struct TypeConverter<gfx::SizeF, std::vector<uint8_t>> {
+  static gfx::SizeF Convert(const std::vector<uint8_t>& input);
 };
 
 template <>
@@ -107,6 +118,15 @@ struct TypeConverter<std::vector<uint8_t>, base::UnguessableToken> {
 template <>
 struct TypeConverter<base::UnguessableToken, std::vector<uint8_t>> {
   static base::UnguessableToken Convert(const std::vector<uint8_t>& input);
+};
+
+template <>
+struct TypeConverter<std::vector<uint8_t>, uint64_t> {
+  static std::vector<uint8_t> Convert(uint64_t input);
+};
+template <>
+struct TypeConverter<uint64_t, std::vector<uint8_t>> {
+  static uint64_t Convert(const std::vector<uint8_t>& input);
 };
 
 }  // namespace mojo

@@ -37,6 +37,7 @@ cr.define('chrome', function() {
         WiFi: {Type: 'WiFi', State: ''},
         Cellular: {Type: 'Cellular', State: ''},
         Tether: {Type: 'Tether', State: ''},
+        VPN: {Type: 'VPN', State: ''},
         WiMAX: {Type: 'WiMAX', State: ''},
       };
 
@@ -64,6 +65,11 @@ cr.define('chrome', function() {
     /** @param {!Array<!CrOnc.NetworkStateProperties>} network */
     addNetworksForTest: function(networks) {
       this.networkStates_ = this.networkStates_.concat(networks);
+    },
+
+    /** @param {!{chrome.networkingPrivate.CertificateLists}} */
+    setCertificatesForTest: function(certificateLists) {
+      this.certificateLists_ = certificateLists;
     },
 
     /**
@@ -116,8 +122,7 @@ cr.define('chrome', function() {
       var result = this.networkStates_.find(function(state) {
         return state.GUID == guid;
       });
-      // TODO(stevenjb): Convert state to ManagedProperties.
-      callback(result);
+      callback(CrOncTest.convertToManagedProperties(result));
       this.methodCalled('getManagedProperties');
     },
 
@@ -151,8 +156,9 @@ cr.define('chrome', function() {
       var devices = [];
       Object.keys(this.deviceStates_).forEach(function(type) {
         var state = this.deviceStates_[type];
-        if (state.State != '')
+        if (state.State != '') {
           devices.push(state);
+        }
       }.bind(this));
       callback(devices);
       this.methodCalled('getDeviceStates');

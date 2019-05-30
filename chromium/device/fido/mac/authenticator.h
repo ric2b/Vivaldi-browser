@@ -12,6 +12,7 @@
 #include "base/mac/availability.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/strings/string16.h"
 #include "base/strings/string_piece_forward.h"
 #include "device/fido/fido_authenticator.h"
 #include "device/fido/fido_transport_protocol.h"
@@ -56,8 +57,11 @@ class COMPONENT_EXPORT(DEVICE_FIDO) TouchIdAuthenticator
                     GetAssertionCallback callback) override;
   void Cancel() override;
   std::string GetId() const override;
-  const AuthenticatorSupportedOptions& Options() const override;
-  FidoTransportProtocol AuthenticatorTransport() const override;
+  base::string16 GetDisplayName() const override;
+  const base::Optional<AuthenticatorSupportedOptions>& Options() const override;
+  base::Optional<FidoTransportProtocol> AuthenticatorTransport() const override;
+  bool IsInPairingMode() const override;
+  bool IsPaired() const override;
   base::WeakPtr<FidoAuthenticator> GetWeakPtr() override;
 
  private:

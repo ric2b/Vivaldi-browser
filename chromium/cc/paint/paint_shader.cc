@@ -52,6 +52,13 @@ bool CompareMatrices(const SkMatrix& a,
 
 const PaintShader::RecordShaderId PaintShader::kInvalidRecordShaderId = -1;
 
+sk_sp<PaintShader> PaintShader::MakeEmpty() {
+  sk_sp<PaintShader> shader(new PaintShader(Type::kEmpty));
+
+  shader->CreateSkShader();
+  return shader;
+}
+
 sk_sp<PaintShader> PaintShader::MakeColor(SkColor color) {
   sk_sp<PaintShader> shader(new PaintShader(Type::kColor));
 
@@ -214,7 +221,7 @@ PaintShader::PaintShader(Type type) : shader_type_(type) {}
 PaintShader::~PaintShader() = default;
 
 bool PaintShader::has_discardable_images() const {
-  return (image_ && image_.IsLazyGenerated()) ||
+  return (image_ && !image_.IsTextureBacked()) ||
          (record_ && record_->HasDiscardableImages());
 }
 
@@ -269,6 +276,12 @@ sk_sp<PaintShader> PaintShader::CreateScaledPaintRecord(
     gfx::SizeF* raster_scale) const {
   DCHECK_EQ(shader_type_, Type::kPaintRecord);
 
+  // If this is already fixed scale, then this is already good to go.
+  if (scaling_behavior_ == ScalingBehavior::kFixedScale) {
+    *raster_scale = gfx::SizeF(1.f, 1.f);
+    return sk_ref_sp<PaintShader>(this);
+  }
+
   // For creating a decoded PaintRecord shader, we need to do the following:
   // 1) Figure out the scale at which the record should be rasterization given
   //    the ctm and local_matrix on the shader.
@@ -322,7 +335,7 @@ sk_sp<PaintShader> PaintShader::CreateDecodedImage(
   SkIRect int_src_rect;
   src_rect.roundOut(&int_src_rect);
   DrawImage draw_image(image_, int_src_rect, quality, total_image_matrix);
-  auto decoded_draw_image = image_provider->GetDecodedDrawImage(draw_image);
+  auto decoded_draw_image = image_provider->GetRasterContent(draw_image);
   if (!decoded_draw_image)
     return nullptr;
 
@@ -367,6 +380,9 @@ void PaintShader::CreateSkShader(const gfx::SizeF* raster_scale,
   DCHECK(!cached_shader_);
 
   switch (shader_type_) {
+    case Type::kEmpty:
+      cached_shader_ = SkShader::MakeEmptyShader();
+      break;
     case Type::kColor:
       // This will be handled by the fallback check below.
       break;
@@ -481,6 +497,7 @@ bool PaintShader::IsValid() const {
     return true;
 
   switch (shader_type_) {
+    case Type::kEmpty:
     case Type::kColor:
       return true;
     case Type::kSweepGradient:
@@ -539,6 +556,7 @@ bool PaintShader::operator==(const PaintShader& other) const {
 
   // Variables that only some shaders use.
   switch (shader_type_) {
+    case Type::kEmpty:
     case Type::kColor:
       break;
     case Type::kSweepGradient:

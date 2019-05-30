@@ -14,8 +14,13 @@
 #include "media/media_buildflags.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 
+namespace base {
+class Token;
+}
+
 namespace gpu {
 struct GpuPreferences;
+class SharedImageManager;
 class SyncPointManager;
 }
 
@@ -48,15 +53,16 @@ class CONTENT_EXPORT ContentGpuClient {
   virtual void PostCompositorThreadCreated(
       base::SingleThreadTaskRunner* task_runner) {}
 
-  // Allows client to supply a SyncPointManager instance instead of having
-  // content internally create one.
+  // Allows client to supply SyncPointManager and SharedImageManager instance
+  // instead of having content internally create one.
   virtual gpu::SyncPointManager* GetSyncPointManager();
+  virtual gpu::SharedImageManager* GetSharedImageManager();
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   // Creates a media::CdmProxy for the type of Content Decryption Module (CDM)
   // identified by |cdm_guid|.
   virtual std::unique_ptr<media::CdmProxy> CreateCdmProxy(
-      const std::string& cdm_guid);
+      const base::Token& cdm_guid);
 #endif
 };
 

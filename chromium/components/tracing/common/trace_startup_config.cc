@@ -31,6 +31,9 @@ namespace {
 const size_t kTraceConfigFileSizeLimit = 64 * 1024;
 const int kDefaultStartupDuration = 5;
 
+// 95th percentile size of current startup traces size uploaded.
+const size_t kMaxStartupTraceSizeInKb = 300;
+
 // Trace config file path:
 // - Android: /data/local/chrome-trace-config.json
 // - Others: specified by --trace-config-file flag.
@@ -39,11 +42,12 @@ const base::FilePath::CharType kAndroidTraceConfigFile[] =
     FILE_PATH_LITERAL("/data/local/chrome-trace-config.json");
 
 const char kDefaultStartupCategories[] =
-    "startup,browser,toplevel,EarlyJava,cc,Java,navigation,loading,gpu,-*";
+    "startup,browser,toplevel,EarlyJava,cc,Java,navigation,loading,gpu,"
+    "disabled-by-default-cpu_profiler,download_service,-*";
 #else
 const char kDefaultStartupCategories[] =
     "benchmark,toplevel,startup,disabled-by-default-file,disabled-by-default-"
-    "toplevel.flow,disabled-by-default-ipc.flow,-*";
+    "toplevel.flow,disabled-by-default-ipc.flow,download_service,-*";
 #endif
 
 // String parameters that can be used to parse the trace config file content.
@@ -69,6 +73,7 @@ TraceStartupConfig::GetDefaultBrowserStartupConfig() {
       {base::GetCurrentProcId()});
   // First 10k events at start are sufficient to debug startup traces.
   trace_config.SetTraceBufferSizeInEvents(10000);
+  trace_config.SetTraceBufferSizeInKb(kMaxStartupTraceSizeInKb);
   trace_config.SetProcessFilterConfig(process_config);
   // Enable argument filter since we could be background tracing.
   trace_config.EnableArgumentFilter();
@@ -84,7 +89,7 @@ TraceStartupConfig::TraceStartupConfig()
   if (EnableFromCommandLine()) {
     DCHECK(IsEnabled());
   } else if (EnableFromConfigFile()) {
-    DCHECK(IsEnabled());
+    DCHECK(IsEnabled() || IsUsingPerfettoOutput());
   } else if (EnableFromBackgroundTracing()) {
     DCHECK(IsEnabled());
     DCHECK(!IsTracingStartupForDuration());
@@ -96,7 +101,12 @@ TraceStartupConfig::TraceStartupConfig()
 TraceStartupConfig::~TraceStartupConfig() = default;
 
 bool TraceStartupConfig::IsEnabled() const {
-  return is_enabled_;
+  // TODO(oysteine): Support early startup tracing using Perfetto
+  // output; right now the early startup tracing gets controlled
+  // through the TracingController, and the Perfetto output is
+  // using the Consumer Mojo interface; the two can't be used
+  // together.
+  return is_enabled_ && !IsUsingPerfettoOutput();
 }
 
 void TraceStartupConfig::SetDisabled() {
@@ -104,21 +114,21 @@ void TraceStartupConfig::SetDisabled() {
 }
 
 bool TraceStartupConfig::IsTracingStartupForDuration() const {
-  return is_enabled_ && startup_duration_ > 0;
+  return IsEnabled() && startup_duration_ > 0;
 }
 
 base::trace_event::TraceConfig TraceStartupConfig::GetTraceConfig() const {
-  DCHECK(IsEnabled());
+  DCHECK(IsEnabled() || IsUsingPerfettoOutput());
   return trace_config_;
 }
 
 int TraceStartupConfig::GetStartupDuration() const {
-  DCHECK(IsEnabled());
+  DCHECK(IsEnabled() || IsUsingPerfettoOutput());
   return startup_duration_;
 }
 
 bool TraceStartupConfig::ShouldTraceToResultFile() const {
-  return is_enabled_ && should_trace_to_result_file_;
+  return IsEnabled() && should_trace_to_result_file_;
 }
 
 base::FilePath TraceStartupConfig::GetResultFile() const {
@@ -129,6 +139,11 @@ base::FilePath TraceStartupConfig::GetResultFile() const {
 
 bool TraceStartupConfig::GetBackgroundStartupTracingEnabled() const {
   return is_enabled_from_background_tracing_;
+}
+
+bool TraceStartupConfig::IsUsingPerfettoOutput() const {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kPerfettoOutputFile);
 }
 
 void TraceStartupConfig::SetBackgroundStartupTracingEnabled(bool enabled) {
@@ -226,7 +241,7 @@ bool TraceStartupConfig::EnableFromBackgroundTracing() {
 
 bool TraceStartupConfig::ParseTraceConfigFileContent(
     const std::string& content) {
-  std::unique_ptr<base::Value> value(base::JSONReader::Read(content));
+  std::unique_ptr<base::Value> value(base::JSONReader::ReadDeprecated(content));
   if (!value || !value->is_dict())
     return false;
 

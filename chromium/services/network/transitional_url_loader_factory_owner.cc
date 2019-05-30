@@ -4,6 +4,7 @@
 
 #include "services/network/transitional_url_loader_factory_owner.h"
 
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_delete_on_sequence.h"
@@ -103,6 +104,12 @@ TransitionalURLLoaderFactoryOwner::GetURLLoaderFactory() {
   }
 
   return shared_url_loader_factory_;
+}
+
+network::mojom::NetworkContext*
+TransitionalURLLoaderFactoryOwner::GetNetworkContext() {
+  GetURLLoaderFactory();
+  return network_context_pipe_.get();
 }
 
 void TransitionalURLLoaderFactoryOwner::DisallowUsageInProcess() {

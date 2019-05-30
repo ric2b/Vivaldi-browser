@@ -8,8 +8,8 @@
 #include <memory>
 #include <vector>
 
-#include "android_webview/browser/aw_safe_browsing_ui_manager.h"
 #include "android_webview/browser/aw_ssl_host_state_delegate.h"
+#include "android_webview/browser/safe_browsing/aw_safe_browsing_ui_manager.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
@@ -23,11 +23,19 @@
 class GURL;
 class PrefService;
 
+namespace autofill {
+class AutocompleteHistoryManager;
+}
+
 namespace content {
 class PermissionControllerDelegate;
 class ResourceContext;
 class SSLHostStateDelegate;
 class WebContents;
+}
+
+namespace download {
+class InProgressDownloadManager;
 }
 
 namespace net {
@@ -65,7 +73,10 @@ extern const char kWebRestrictionsAuthority[];
 class AwBrowserContext : public content::BrowserContext,
                          public visitedlink::VisitedLinkDelegate {
  public:
-  AwBrowserContext(const base::FilePath path);
+  AwBrowserContext(
+      const base::FilePath path,
+      std::unique_ptr<PrefService> pref_service,
+      std::unique_ptr<policy::BrowserPolicyConnectorBase> policy_connector);
   ~AwBrowserContext() override;
 
   // Currently only one instance per process is supported.
@@ -76,6 +87,11 @@ class AwBrowserContext : public content::BrowserContext,
   static AwBrowserContext* FromWebContents(
       content::WebContents* web_contents);
 
+  // TODO(ntfschr): consider moving these into our PathService in
+  // common/aw_paths.h (http://crbug.com/934184).
+  static base::FilePath GetCacheDir();
+  static base::FilePath GetCookieStorePath();
+
   // Maps to BrowserMainParts::PreMainMessageLoopRun.
   void PreMainMessageLoopRun(net::NetLog* net_log);
 
@@ -85,12 +101,12 @@ class AwBrowserContext : public content::BrowserContext,
   AwQuotaManagerBridge* GetQuotaManagerBridge();
   AwFormDatabaseService* GetFormDatabaseService();
   AwURLRequestContextGetter* GetAwURLRequestContext();
+  autofill::AutocompleteHistoryManager* GetAutocompleteHistoryManager();
 
   web_restrictions::WebRestrictionsClient* GetWebRestrictionProvider();
 
   // content::BrowserContext implementation.
   base::FilePath GetPath() const override;
-  base::FilePath GetCachePath() const override;
   bool IsOffTheRecord() const override;
   content::ResourceContext* GetResourceContext() override;
   content::DownloadManagerDelegate* GetDownloadManagerDelegate() override;
@@ -99,6 +115,8 @@ class AwBrowserContext : public content::BrowserContext,
   content::PushMessagingService* GetPushMessagingService() override;
   content::SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   content::PermissionControllerDelegate* GetPermissionControllerDelegate()
+      override;
+  content::ClientHintsControllerDelegate* GetClientHintsControllerDelegate()
       override;
   content::BackgroundFetchDelegate* GetBackgroundFetchDelegate() override;
   content::BackgroundSyncController* GetBackgroundSyncController() override;
@@ -116,6 +134,8 @@ class AwBrowserContext : public content::BrowserContext,
   net::URLRequestContextGetter* CreateMediaRequestContextForStoragePartition(
       const base::FilePath& partition_path,
       bool in_memory) override;
+  download::InProgressDownloadManager* RetriveInProgressDownloadManager()
+      override;
 
   // visitedlink::VisitedLinkDelegate implementation.
   void RebuildTable(const scoped_refptr<URLEnumerator>& enumerator) override;
@@ -126,7 +146,6 @@ class AwBrowserContext : public content::BrowserContext,
   AwSafeBrowsingWhitelistManager* GetSafeBrowsingWhitelistManager() const;
 
  private:
-  void InitUserPrefService();
   void OnWebRestrictionsAuthorityChanged();
 
   // The file path where data for this context is persisted.
@@ -135,6 +154,8 @@ class AwBrowserContext : public content::BrowserContext,
   scoped_refptr<AwURLRequestContextGetter> url_request_context_getter_;
   scoped_refptr<AwQuotaManagerBridge> quota_manager_bridge_;
   std::unique_ptr<AwFormDatabaseService> form_database_service_;
+  std::unique_ptr<autofill::AutocompleteHistoryManager>
+      autocomplete_history_manager_;
 
   std::unique_ptr<visitedlink::VisitedLinkMaster> visitedlink_master_;
   std::unique_ptr<content::ResourceContext> resource_context_;

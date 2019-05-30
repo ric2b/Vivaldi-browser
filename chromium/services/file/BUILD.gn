@@ -2,9 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//services/service_manager/public/cpp/service.gni")
-import("//services/service_manager/public/service_manifest.gni")
-
 source_set("lib") {
   sources = [
     "file_service.cc",
@@ -14,6 +11,8 @@ source_set("lib") {
     "user_id_map.cc",
     "user_id_map.h",
   ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   deps = [
     "//base",
@@ -27,9 +26,4 @@ source_set("lib") {
     "//services/service_manager/public/mojom",
     "//url",
   ]
-}
-
-service_manifest("manifest") {
-  name = "file"
-  source = "manifest.json"
 }

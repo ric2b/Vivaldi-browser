@@ -5,6 +5,7 @@
 #include "net/nqe/network_quality_observation_source.h"
 
 #include "base/logging.h"
+#include "base/stl_util.h"
 
 namespace net {
 
@@ -18,10 +19,11 @@ static constexpr const char* kObservationSourceMapping[] = {
     "HttpPlatform",
     "HttpExternalEstimate",
     "TransportCachedEstimate",
-    "TransportPlatform"};
+    "TransportPlatform",
+    "H2Pings"};
 
 static_assert(static_cast<size_t>(NETWORK_QUALITY_OBSERVATION_SOURCE_MAX) ==
-                  arraysize(kObservationSourceMapping),
+                  base::size(kObservationSourceMapping),
               "unhandled network quality observation source");
 
 }  // namespace

@@ -5,13 +5,13 @@
 #ifndef CHROME_BROWSER_SESSIONS_TAB_LOADER_H_
 #define CHROME_BROWSER_SESSIONS_TAB_LOADER_H_
 
+#include <utility>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/containers/flat_set.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/memory_coordinator_client.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/time/tick_clock.h"
 #include "base/timer/timer.h"
@@ -56,7 +56,6 @@ class TabLoaderTester;
 // out of the outermost function.
 class TabLoader : public base::RefCounted<TabLoader>,
                   public TabLoaderCallback,
-                  public base::MemoryCoordinatorClient,
                   public resource_coordinator::TabLoadTracker::Observer {
  public:
   // Helper class used for tracking reentrancy and performing lifetime
@@ -92,13 +91,15 @@ class TabLoader : public base::RefCounted<TabLoader>,
 
   using LoadingTabSet = base::flat_set<LoadingTab>;
   using TabSet = base::flat_set<content::WebContents*>;
-  using TabVector = std::vector<content::WebContents*>;
+  using TabVector = std::vector<std::pair<float, content::WebContents*>>;
 
   explicit TabLoader(base::TimeTicks restore_started);
   ~TabLoader() override;
 
   // TabLoaderCallback:
   void SetTabLoadingEnabled(bool loading_enabled) override;
+  void NotifyTabScoreChanged(content::WebContents* contents,
+                             float score) override;
 
   // This is invoked once by RestoreTabs to start loading.
   void StartLoading(const std::vector<RestoredTab>& tabs);
@@ -113,9 +114,6 @@ class TabLoader : public base::RefCounted<TabLoader>,
   // React to memory pressure by stopping to load any more tabs.
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
-
-  // base::MemoryCoordinatorClient implementation:
-  void OnMemoryStateChange(base::MemoryState state) override;
 
   // Determines whether or not tab loading should stop early due to external
   // factors.
@@ -193,6 +191,37 @@ class TabLoader : public base::RefCounted<TabLoader>,
   // Calls MaybeLoadSomeTabs, but wrapped with entry count management.
   void MaybeLoadSomeTabsForTesting();
 
+  // Sets a tab loading enabled callback for testing.
+  void SetTabLoadingEnabledCallbackForTesting(
+      base::RepeatingCallback<void(bool)>* callback);
+
+  // Returns true if loading is currently enabled, false otherwise. This checks
+  // the value of |loading_enabled_| and |all_tabs_scored_|, which are each
+  // independent mechanisms for disabling tab loading.
+  bool IsLoadingEnabled() const;
+
+  // Starts or stops loading as necessary, depending on the current value of
+  // IsLoadingEnabled. Should only be called if IsLoadingEnabled has changed
+  // values. This is called via SetAllTabsScored or SetTabLoadingEnabled.
+  void OnIsLoadingEnabledChanged();
+
+  void SetAllTabsScored(bool all_tabs_scored);
+
+  TabVector::iterator FindTabToLoad(content::WebContents* contents);
+  TabVector::const_iterator FindTabToLoad(content::WebContents* contents) const;
+
+  // Given a position in |tabs_to_load_|, moves that element into its sorted
+  // position using a bubble sort. This assumes that only data associated with
+  // the particular element has changed, and that the vector is otherwise
+  // sorted.
+  void MoveToSortedPosition(TabVector::iterator it);
+
+  // The number of tabs to load simultaneously. This is a soft cap in that it
+  // can be exceeded by tabs that timeout, visible tabs, and user interactions
+  // forcing a tab load. However, normal session restore tab loads will not kick
+  // off a new load unless there is room below this cap.
+  size_t MaxSimultaneousLoads() const;
+
   // The OS specific delegate of the TabLoader.
   std::unique_ptr<TabLoaderDelegate> delegate_;
 
@@ -204,19 +233,16 @@ class TabLoader : public base::RefCounted<TabLoader>,
   // non-active tabs from being scheduled to load initially.
   bool did_one_tab_load_ = false;
 
-  // The number of tabs to load simultaneously. This is a soft cap in that it
-  // can be exceeded by tabs that timeout, visible tabs, and user interactions
-  // forcing a tab load. However, normal session restore tab loads will not kick
-  // off a new load unless there is room below this cap. This is initialized via
-  // the delegate. The initial value of 0 is used to indicate "uninitialized".
-  size_t max_simultaneous_loads_ = 0;
+  // Overrides the value of max simultaneous loads that is normally provided by
+  // the policy engine.
+  size_t max_simultaneous_loads_for_testing_ = 0;
 
   // The delay timer multiplier. See class description for details.
   size_t force_load_delay_multiplier_ = 1;
 
-  // True if tab loading is currently enabled. The delegate can cause this to
-  // toggle.
-  bool is_loading_enabled_ = true;
+  // These two variables determine whether or not tab loading is enabled.
+  bool loading_enabled_ = true;
+  bool all_tabs_scored_ = true;
 
   // The following 3 containers are mutually exclusive. A tab will be in at most
   // one of them at any moment.
@@ -256,6 +282,12 @@ class TabLoader : public base::RefCounted<TabLoader>,
   // not running.
   base::TimeTicks force_load_time_;
 
+  // The time at which tab loading was last disabled. This is used to extend
+  // time outs across "tab loading disabled" time periods (tab loading is
+  // disabled due to loss of network connection, or while waiting for tab
+  // ordering scores to be calculated).
+  base::TimeTicks tab_loading_disabled_time_;
+
   // For keeping TabLoader alive while it's loading even if no
   // SessionRestoreImpls reference it.
   scoped_refptr<TabLoader> this_retainer_;
@@ -279,6 +311,9 @@ class TabLoader : public base::RefCounted<TabLoader>,
   // has been reentered. Only functions that are directly invoked by external
   // callers are counted.
   size_t reentry_depth_ = 0;
+
+  // Callback that is invoked by calls to SetTabLoadingEnabled.
+  base::RepeatingCallback<void(bool)>* tab_loading_enabled_callback_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(TabLoader);
 };

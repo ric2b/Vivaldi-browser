@@ -35,14 +35,14 @@
 class FilesAppEntry {
   constructor() {
     /**
-     * @public {!boolean} true if this entry represents a Directory-like entry,
+     * @public {boolean} true if this entry represents a Directory-like entry,
      * as in have sub-entries and implements {createReader} method.
      * This attribute is defined on Entry.
      */
     this.isDirectory = false;
 
     /**
-     * @public {!boolean} true if this entry represents a File-like entry.
+     * @public {boolean} true if this entry represents a File-like entry.
      * Implementations of FilesAppEntry are expected to have this as |true|.
      * Whereas implementations of FilesAppDirEntry are expected to have this as
      * |false|.
@@ -66,7 +66,7 @@ class FilesAppEntry {
     this.name = '';
 
     /**
-     * @public {!string} the class name for this class. It's workaround for the
+     * @public {string} the class name for this class. It's workaround for the
      * fact that an instance created on foreground page and sent to background
      * page can't be checked with "instanceof".
      */
@@ -84,7 +84,7 @@ class FilesAppEntry {
   getParent(success, error) {}
 
   /**
-   * @return {!string} used to compare entries. It should return an unique
+   * @return {string} used to compare entries. It should return an unique
    * identifier for such entry, usually prefixed with it's root type like:
    * "fake-entry://unique/path/to/entry".
    * This method is defined on Entry.
@@ -104,9 +104,17 @@ class FilesAppEntry {
   /**
    * Returns true if this entry object has a native representation such as Entry
    * or DirectoryEntry, this means it can interact with VolumeManager.
-   * @return {!boolean}
+   * @return {boolean}
    */
   get isNativeType() {}
+
+  /**
+   * Returns a FileSystemEntry if this instance has one, returns null if it
+   * doesn't have or the entry hasn't been resolved yet. It's used to unwrap a
+   * FilesAppEntry to be able to send to FileSystem API or fileManagerPrivate.
+   * @return {Entry}
+   */
+  getNativeEntry() {}
 }
 
 /**
@@ -114,33 +122,92 @@ class FilesAppEntry {
  * that reads a static list of entries, provided at construction time.
  * https://developer.mozilla.org/en-US/docs/Web/API/FileSystemDirectoryReader
  * It can be used by DirectoryEntry-like such as EntryList to return its
- * children entries.
+ * entries.
+ * @extends {DirectoryReader}
  */
 class StaticReader {
   /**
-   * @param {Array<Entry|FakeEntry|FilesAppEntry>} children: Array of Entry-like
+   * @param {!Array<!Entry|!FilesAppEntry>} entries: Array of Entry-like
    * instances that will be returned/read by this reader.
    */
-  constructor(children) {
-    this.children_ = children;
+  constructor(entries) {
+    this.entries_ = entries;
   }
 
   /**
    * Reads array of entries via |success| callback.
    *
-   * @param {function(Array<Entry|FilesAppEntry>)} success: A callback that will
-   * be called multiple times with the entries, last call will be called with an
-   * empty array indicating that no more entries available.
-   * @param {function(Array<Entry|FilesAppEntry>)} error: A callback that's
-   * never called, it's here to match the signature from the Web Standards.
+   * @param {function(!Array<!Entry|!FilesAppEntry>)} success: A callback that
+   *     will be called multiple times with the entries, last call will be
+   *     called with an empty array indicating that no more entries available.
+   * @param {function(!FileError)=} error: A callback that's never
+   *     called, it's here to match the signature from the Web Standards.
+   * @override
    */
   readEntries(success, error) {
-    let children = this.children_;
+    const entries = this.entries_;
     // readEntries is suppose to return empty result when there are no more
-    // files to return, so we clear the children_ attribute for next call.
-    this.children_ = [];
+    // files to return, so we clear the entries_ attribute for next call.
+    this.entries_ = [];
     // Triggers callback asynchronously.
-    setTimeout(children => success(children), 0, children);
+    setTimeout(success, 0, entries);
+  }
+}
+
+/**
+ * A reader compatible with DirectoryEntry.createReader (from Web Standards),
+ * It chains entries from one reader to another, creating a combined set of
+ * entries from all readers.
+ * @extends {DirectoryReader}
+ */
+class CombinedReaders {
+  /**
+   * @param {!Array<!DirectoryReader>} readers Array of all readers that will
+   * have their entries combined.
+   */
+  constructor(readers) {
+    /**
+     * @private {!Array<!DirectoryReader>} Reversed readers so the readEntries
+     *     can just use pop() to get the next
+     */
+    this.readers_ = readers.reverse();
+
+    /** @private {!DirectoryReader} */
+    this.currentReader_ = readers.pop();
+  }
+
+  /**
+   * @param {function(!Array<!Entry|!FilesAppEntry>)} success returning entries
+   *     of all readers, it's called with empty Array when there is no more
+   *     entries to return.
+   * @param {function(!FileError)=} error called when error happens when reading
+   *    from readers.
+   * for this implementation.
+   * @override
+   */
+  readEntries(success, error) {
+    if (!this.currentReader_) {
+      // If there is no more reader to consume, just return an empty result
+      // which indicates that read has finished.
+      success([]);
+      return;
+    }
+    this.currentReader_.readEntries((results) => {
+      if (results.length) {
+        success(results);
+      } else {
+        // If there isn't no more readers, finish by calling success with no
+        // results.
+        if (!this.readers_.length) {
+          success([]);
+          return;
+        }
+        // Move to next reader and start consuming it.
+        this.currentReader_ = this.readers_.pop();
+        this.readEntries(success, error);
+      }
+
+    }, error);
   }
 }
 
@@ -161,7 +228,7 @@ class FilesAppDirEntry extends FilesAppEntry {
   constructor() {
     super();
     /**
-     * @public {!boolean} true if this entry represents a Directory-like entry,
+     * @public {boolean} true if this entry represents a Directory-like entry,
      * as in have sub-entries and implements {createReader} method.
      * Implementations of FilesAppEntry are expected to have this as |true|.
      * This attribute is defined on Entry.
@@ -171,7 +238,7 @@ class FilesAppDirEntry extends FilesAppEntry {
   }
 
   /**
-   * @return {!StaticReader|!DirectoryReader} Returns a reader compatible with
+   * @return {!DirectoryReader} Returns a reader compatible with
    * DirectoryEntry.createReader (from Web Standards) that reads the children of
    * this instance.
    * This method is defined on DirectoryEntry.
@@ -191,9 +258,9 @@ class EntryList {
    * @param {string} label: Label to be used when displaying to user, it should
    *    already translated.
    * @param {VolumeManagerCommon.RootType} rootType root type.
-   *
+   * @param {string} devicePath Device path
    */
-  constructor(label, rootType) {
+  constructor(label, rootType, devicePath = '') {
     /**
      * @private {string} label: Label to be used when displaying to user, it
      *      should be already translated. */
@@ -203,7 +270,13 @@ class EntryList {
     this.rootType_ = rootType;
 
     /**
-     * @private {!Array<!Entry|!FilesAppEntry|!FakeEntry>} children entries of
+     * @private {string} devicePath Path belonging to the external media
+     * device. Partitions on the same external drive have the same device path.
+     */
+    this.devicePath_ = devicePath;
+
+    /**
+     * @private {!Array<!Entry|!FilesAppEntry>} children entries of
      * this EntryList instance.
      */
     this.children_ = [];
@@ -213,7 +286,12 @@ class EntryList {
     this.type_name = 'EntryList';
   }
 
-  get children() {
+  /**
+   * @return {!Array<!Entry|!FilesAppEntry>} List of entries that are shown as
+   *     children of this Volume in the UI, but are not actually entries of the
+   *     Volume.  E.g. 'Play files' is shown as a child of 'My files'.
+   */
+  getUIChildren() {
     return this.children_;
   }
 
@@ -241,10 +319,15 @@ class EntryList {
   }
 
   /**
-   * @return {!string} used to compare entries.
+   * @return {string} used to compare entries.
    * @override
    */
   toURL() {
+    // There may be multiple entry lists. Append the device path to return
+    // a unique identifiable URL for the entry list.
+    if (this.devicePath_) {
+      return 'entry-list://' + this.rootType + '/' + this.devicePath_;
+    }
     return 'entry-list://' + this.rootType;
   }
 
@@ -262,7 +345,7 @@ class EntryList {
   }
 
   /**
-   * @param {!Entry|!FakeEntry|!FilesAppEntry} entry that should be added as
+   * @param {!Entry|!FilesAppEntry} entry that should be added as
    * child of this EntryList.
    * This method is specific to EntryList instance.
    */
@@ -277,7 +360,7 @@ class EntryList {
   }
 
   /**
-   * @return {!StaticReader} Returns a reader compatible with
+   * @return {!DirectoryReader} Returns a reader compatible with
    * DirectoryEntry.createReader (from Web Standards) that reads the children of
    * this EntryList instance.
    * This method is defined on DirectoryEntry.
@@ -288,42 +371,29 @@ class EntryList {
   }
 
   /**
-   * @param {!Entry|!FakeEntry|!FilesAppEntry} entry that should be removed as
-   * child of this EntryList.
-   * This method is specific to EntryList instance.
-   * @return {boolean} if entry was removed.
-   */
-  removeEntry(entry) {
-    const entryIndex = this.children.indexOf(entry);
-    if (entryIndex !== -1) {
-      this.children.splice(entryIndex, 1);
-      return true;
-    }
-    return false;
-  }
-
-  /**
    * @param {!VolumeInfo} volumeInfo that's desired to be removed.
-   * This method is specific to EntryList instance.
+   * This method is specific to VolumeEntry/EntryList instance.
    * @return {number} index of entry on this EntryList or -1 if not found.
    */
   findIndexByVolumeInfo(volumeInfo) {
-    return this.children.findIndex(
-        childEntry => childEntry.volumeInfo === volumeInfo);
+    return this.children_.findIndex(childEntry => {
+      return /** @type {VolumeEntry} */ (childEntry).volumeInfo === volumeInfo;
+    });
   }
 
   /**
    * Removes the first volume with the given type.
    * @param {!VolumeManagerCommon.VolumeType} volumeType desired type.
-   * This method is specific to EntryList instance.
+   * This method is specific to VolumeEntry/EntryList instance.
    * @return {boolean} if entry was removed.
    */
   removeByVolumeType(volumeType) {
-    const childIndex = this.children.findIndex(
-        childEntry => childEntry.volumeInfo &&
-            childEntry.volumeInfo.volumeType === volumeType);
+    const childIndex = this.children_.findIndex(childEntry => {
+      const volumeInfo = /** @type {VolumeEntry} */ (childEntry).volumeInfo;
+      return volumeInfo && volumeInfo.volumeType === volumeType;
+    });
     if (childIndex !== -1) {
-      this.children.splice(childIndex, 1);
+      this.children_.splice(childIndex, 1);
       return true;
     }
     return false;
@@ -332,17 +402,38 @@ class EntryList {
   /**
    * Removes the first entry that matches the rootType.
    * @param {!VolumeManagerCommon.RootType} rootType to be removed.
-   * This method is specific to EntryList instance.
+   * This method is specific to VolumeEntry/EntryList instance.
    * @return {boolean} if entry was removed.
    */
   removeByRootType(rootType) {
-    const childIndex =
-        this.children.findIndex(childEntry => childEntry.rootType === rootType);
+    const childIndex = this.children_.findIndex(
+        childEntry => childEntry.rootType === rootType);
     if (childIndex !== -1) {
-      this.children.splice(childIndex, 1);
+      this.children_.splice(childIndex, 1);
       return true;
     }
     return false;
+  }
+
+  /**
+   * Removes the entry.
+   * @param {!Entry|FilesAppEntry} entry to be removed.
+   * This method is specific to EntryList and VolumeEntry instance.
+   * @return {boolean} if entry was removed.
+   */
+  removeChildEntry(entry) {
+    const childIndex =
+        this.children_.findIndex(childEntry => childEntry === entry);
+    if (childIndex !== -1) {
+      this.children_.splice(childIndex, 1);
+      return true;
+    }
+    return false;
+  }
+
+  /** @override */
+  getNativeEntry() {
+    return null;
   }
 }
 
@@ -368,6 +459,12 @@ class VolumeEntry {
      */
     this.volumeInfo_ = volumeInfo;
 
+    /**
+     * @private{!Array<!Entry|!FilesAppEntry>} additional entries that will be
+     * displayed together with this Volume's entries.
+     */
+    this.children_ = [];
+
     /** @type {DirectoryEntry} from Volume's root. */
     this.rootEntry_ = volumeInfo.displayRoot;
     if (!volumeInfo.displayRoot) {
@@ -385,13 +482,6 @@ class VolumeEntry {
   get volumeInfo() {
     return this.volumeInfo_;
   }
-  /**
-   * @return {DirectoryEntry} for this volume. This method is only valid for
-   * VolumeEntry instances.
-   */
-  get rootEntry() {
-    return this.rootEntry_;
-  }
 
   /**
    * @return {!FileSystem} FileSystem for this volume.
@@ -402,7 +492,17 @@ class VolumeEntry {
   }
 
   /**
-   * @return {!string} Full path for this volume.
+   * @return {!Array<!Entry|!FilesAppEntry>} List of entries that are shown as
+   *     children of this Volume in the UI, but are not actually entries of the
+   *     Volume.  E.g. 'Play files' is shown as a child of 'My files'.  Use
+   *     createReader to find real child entries of the Volume's filesystem.
+   */
+  getUIChildren() {
+    return this.children_;
+  }
+
+  /**
+   * @return {string} Full path for this volume.
    * This method is defined on Entry.
    * @override.
    */
@@ -417,7 +517,38 @@ class VolumeEntry {
   }
 
   /**
-   * @return {!string} Name for this volume.
+   * @see https://github.com/google/closure-compiler/blob/master/externs/browser/fileapi.js
+   * @param {string} path Entry fullPath.
+   * @param {!FileSystemFlags=} options
+   * @param {function(!DirectoryEntry)=} success
+   * @param {function(!FileError)=} error
+   */
+  getDirectory(path, options, success, error) {
+    if (!this.rootEntry_) {
+      error && setTimeout(error, 0, new Error('root entry not resolved yet.'));
+      return;
+    }
+    return this.rootEntry_.getDirectory(path, options, success, error);
+  }
+
+  /**
+   * @see https://github.com/google/closure-compiler/blob/master/externs/browser/fileapi.js
+   * @param {string} path
+   * @param {!FileSystemFlags=} options
+   * @param {function(!FileEntry)=} success
+   * @param {function(!FileError)=} error
+   * @return {undefined}
+   */
+  getFile(path, options, success, error) {
+    if (!this.rootEntry_) {
+      error && setTimeout(error, 0, new Error('root entry not resolved yet.'));
+      return;
+    }
+    return this.rootEntry_.getFile(path, options, success, error);
+  }
+
+  /**
+   * @return {string} Name for this volume.
    * @override.
    */
   get name() {
@@ -463,14 +594,28 @@ class VolumeEntry {
     return true;
   }
 
+  /** @override */
+  getNativeEntry() {
+    return this.rootEntry_;
+  }
+
   /**
-   * @return {!StaticReader|!DirectoryReader} Returns a reader from root entry,
-   * which is compatible with DirectoryEntry.createReader (from Web Standards).
+   * @return {!DirectoryReader} Returns a reader from root entry, which is
+   * compatible with DirectoryEntry.createReader (from Web Standards).
    * This method is defined on DirectoryEntry.
    * @override
    */
   createReader() {
-    return this.rootEntry_.createReader();
+    const readers = [];
+    if (this.rootEntry_) {
+      readers.push(this.rootEntry_.createReader());
+    }
+
+    if (this.children_.length) {
+      readers.push(new StaticReader(this.children_));
+    }
+
+    return new CombinedReaders(readers);
   }
 
   /**
@@ -480,6 +625,82 @@ class VolumeEntry {
    */
   setPrefix(entry) {
     this.volumeInfo_.prefixEntry = entry;
+  }
+
+  /**
+   * @param {!Entry|!FilesAppEntry} entry that should be added as
+   * child of this VolumeEntry.
+   * This method is specific to VolumeEntry instance.
+   */
+  addEntry(entry) {
+    this.children_.push(entry);
+    // Only VolumeEntry can have prefix set becuase it sets on VolumeInfo
+    // which's then used on LocationInfo/LocationLine.
+    if (entry.type_name == 'VolumeEntry') {
+      const volumeEntry = /** @type {VolumeEntry} */ (entry);
+      volumeEntry.setPrefix(this);
+    }
+  }
+
+  /**
+   * @param {!VolumeInfo} volumeInfo that's desired to be removed.
+   * This method is specific to VolumeEntry/EntryList instance.
+   * @return {number} index of entry within VolumeEntry or -1 if not found.
+   */
+  findIndexByVolumeInfo(volumeInfo) {
+    return this.children_.findIndex(
+        childEntry =>
+            /** @type {VolumeEntry} */ (childEntry).volumeInfo === volumeInfo);
+  }
+
+  /**
+   * Removes the first volume with the given type.
+   * @param {!VolumeManagerCommon.VolumeType} volumeType desired type.
+   * This method is specific to VolumeEntry/EntryList instance.
+   * @return {boolean} if entry was removed.
+   */
+  removeByVolumeType(volumeType) {
+    const childIndex = this.children_.findIndex(childEntry => {
+      const entry = /** @type {VolumeEntry} */ (childEntry);
+      return entry.volumeInfo && entry.volumeInfo.volumeType === volumeType;
+    });
+    if (childIndex !== -1) {
+      this.children_.splice(childIndex, 1);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Removes the first entry that matches the rootType.
+   * @param {!VolumeManagerCommon.RootType} rootType to be removed.
+   * This method is specific to VolumeEntry/EntryList instance.
+   * @return {boolean} if entry was removed.
+   */
+  removeByRootType(rootType) {
+    const childIndex = this.children_.findIndex(
+        childEntry => childEntry.rootType === rootType);
+    if (childIndex !== -1) {
+      this.children_.splice(childIndex, 1);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Removes the entry.
+   * @param {!Entry|FilesAppEntry} entry to be removed.
+   * This method is specific to EntryList and VolumeEntry instance.
+   * @return {boolean} if entry was removed.
+   */
+  removeChildEntry(entry) {
+    const childIndex =
+        this.children_.findIndex(childEntry => childEntry === entry);
+    if (childIndex !== -1) {
+      this.children_.splice(childIndex, 1);
+      return true;
+    }
+    return false;
   }
 }
 
@@ -562,8 +783,13 @@ class FakeEntry {
     return false;
   }
 
+  /** @override */
+  getNativeEntry() {
+    return null;
+  }
+
   /**
-   * @return {!StaticReader} Returns a reader compatible with
+   * @return {!DirectoryReader} Returns a reader compatible with
    * DirectoryEntry.createReader (from Web Standards) that reads 0 entries.
    * @override
    */

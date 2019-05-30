@@ -81,6 +81,10 @@ class CC_EXPORT LayerTreeFrameSink : public viz::SharedBitmapReporter,
 
   bool HasClient() { return !!client_; }
 
+  void set_source_frame_number(int64_t frame_number) {
+    source_frame_number_ = frame_number;
+  }
+
   // The viz::ContextProviders may be null if frames should be submitted with
   // software SharedMemory resources.
   viz::ContextProvider* context_provider() const {
@@ -106,7 +110,15 @@ class CC_EXPORT LayerTreeFrameSink : public viz::SharedBitmapReporter,
   // For successful swaps, the implementation must call
   // DidReceiveCompositorFrameAck() asynchronously when the frame has been
   // processed in order to unthrottle the next frame.
-  virtual void SubmitCompositorFrame(viz::CompositorFrame frame) = 0;
+  // If |hit_test_data_changed| is false, we do an equality check
+  // with the old hit-test data. If there is no change, we do not send the
+  // hit-test data. False positives are allowed. The value of
+  // |hit_test_data_changed| should remain constant in the caller.
+  // |show_hit_test_borders| controls whether viz will insert debug borders over
+  // hit-test data and is passed from LayerTreeDebugState.
+  virtual void SubmitCompositorFrame(viz::CompositorFrame frame,
+                                     bool hit_test_data_changed,
+                                     bool show_hit_test_borders) = 0;
 
   // Signals that a BeginFrame issued by the viz::BeginFrameSource provided to
   // the client did not lead to a CompositorFrame submission.
@@ -116,6 +128,10 @@ class CC_EXPORT LayerTreeFrameSink : public viz::SharedBitmapReporter,
   void DidAllocateSharedBitmap(mojo::ScopedSharedBufferHandle buffer,
                                const viz::SharedBitmapId& id) override = 0;
   void DidDeleteSharedBitmap(const viz::SharedBitmapId& id) override = 0;
+
+  // Ensure next CompositorFrame is submitted to a new surface. Only used when
+  // surface synchronization is off.
+  virtual void ForceAllocateNewId() {}
 
  protected:
   class ContextLostForwarder;
@@ -131,6 +147,8 @@ class CC_EXPORT LayerTreeFrameSink : public viz::SharedBitmapReporter,
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
 
   std::unique_ptr<ContextLostForwarder> worker_context_lost_forwarder_;
+
+  int64_t source_frame_number_;
 
  private:
   THREAD_CHECKER(thread_checker_);

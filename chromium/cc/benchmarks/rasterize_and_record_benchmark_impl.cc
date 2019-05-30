@@ -9,8 +9,8 @@
 #include <algorithm>
 #include <limits>
 
+#include "base/timer/lap_timer.h"
 #include "base/values.h"
-#include "cc/base/lap_timer.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/picture_layer_impl.h"
 #include "cc/raster/playback_image_provider.h"
@@ -34,7 +34,7 @@ void RunBenchmark(RasterSource* raster_source,
                   size_t repeat_count,
                   base::TimeDelta* min_time,
                   bool* is_solid_color) {
-  // Parameters for LapTimer.
+  // Parameters for base::LapTimer.
   const int kTimeLimitMillis = 1;
   const int kWarmupRuns = 0;
   const int kTimeCheckInterval = 1;
@@ -43,9 +43,9 @@ void RunBenchmark(RasterSource* raster_source,
   for (size_t i = 0; i < repeat_count; ++i) {
     // Run for a minimum amount of time to avoid problems with timer
     // quantization when the layer is very small.
-    LapTimer timer(kWarmupRuns,
-                   base::TimeDelta::FromMilliseconds(kTimeLimitMillis),
-                   kTimeCheckInterval);
+    base::LapTimer timer(kWarmupRuns,
+                         base::TimeDelta::FromMilliseconds(kTimeLimitMillis),
+                         kTimeCheckInterval);
     SkColor color = SK_ColorTRANSPARENT;
     gfx::Rect layer_rect =
         gfx::ScaleToEnclosingRect(content_rect, 1.f / contents_scale);
@@ -65,8 +65,8 @@ void RunBenchmark(RasterSource* raster_source,
       image_settings->images_to_skip = {};
       image_settings->image_to_current_frame_index = {};
 
-      PlaybackImageProvider image_provider(
-          image_decode_cache, gfx::ColorSpace(), std::move(image_settings));
+      PlaybackImageProvider image_provider(image_decode_cache,
+                                           std::move(image_settings));
       RasterSource::PlaybackSettings settings;
       settings.image_provider = &image_provider;
 
@@ -78,8 +78,7 @@ void RunBenchmark(RasterSource* raster_source,
 
       timer.NextLap();
     } while (!timer.HasTimeLimitExpired());
-    base::TimeDelta duration =
-        base::TimeDelta::FromMillisecondsD(timer.MsPerLap());
+    base::TimeDelta duration = timer.TimePerLap();
     if (duration < *min_time)
       *min_time = duration;
   }

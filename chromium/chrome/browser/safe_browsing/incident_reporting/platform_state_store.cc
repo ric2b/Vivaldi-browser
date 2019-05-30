@@ -96,7 +96,7 @@ void RestoreOfTypeFromProtobuf(
     if (!key_digest.has_key() || !key_digest.has_digest())
       continue;
     type_dict->SetKey(key_digest.key(),
-                      base::Value(base::UintToString(key_digest.digest())));
+                      base::Value(base::NumberToString(key_digest.digest())));
   }
 }
 
@@ -110,7 +110,7 @@ void RestoreFromProtobuf(
         type_incidents.incidents().key_to_digest_size() == 0) {
       continue;
     }
-    std::string type_string(base::IntToString(type_incidents.type()));
+    std::string type_string(base::NumberToString(type_incidents.type()));
     base::Value* type_dict =
         value_dict->FindKeyOfType(type_string, base::Value::Type::DICTIONARY);
     if (!type_dict) {
@@ -164,7 +164,7 @@ void Store(Profile* profile, const base::DictionaryValue* incidents_sent) {
 #if defined(USE_PLATFORM_STATE_STORE)
   std::string data;
   SerializeIncidentsSent(incidents_sent, &data);
-  UMA_HISTOGRAM_COUNTS("SBIRS.PSSDataStoreSize", data.size());
+  UMA_HISTOGRAM_COUNTS_1M("SBIRS.PSSDataStoreSize", data.size());
   WriteStoreData(profile, data);
 #endif
 }

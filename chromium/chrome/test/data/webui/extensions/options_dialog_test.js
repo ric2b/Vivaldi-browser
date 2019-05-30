@@ -41,7 +41,11 @@ cr.define('extension_options_dialog_tests', function() {
       assertFalse(isDialogVisible());
       optionsDialog.show(data);
       return test_util.eventToPromise('cr-dialog-open', optionsDialog)
-          .then(function() {
+          .then(() => {
+            // Wait more than 50ms for the debounced size update.
+            return new Promise(r => setTimeout(r, 100));
+          })
+          .then(() => {
             assertTrue(isDialogVisible());
 
             const dialogElement = optionsDialog.$.dialog.getNative();

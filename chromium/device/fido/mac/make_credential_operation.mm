@@ -15,6 +15,7 @@
 #include "device/fido/attestation_statement_formats.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_parsing_utils.h"
+#include "device/fido/fido_transport_protocol.h"
 #include "device/fido/mac/credential_metadata.h"
 #include "device/fido/mac/keychain.h"
 #include "device/fido/mac/util.h"
@@ -63,7 +64,7 @@ void MakeCredentialOperation::Run() {
   if (!std::any_of(key_params.begin(), key_params.end(), is_es256)) {
     DVLOG(1) << "No supported algorithm found.";
     std::move(callback())
-        .Run(CtapDeviceResponseCode::kCtap2ErrUnsupportedAlgorithms,
+        .Run(CtapDeviceResponseCode::kCtap2ErrUnsupportedAlgorithm,
              base::nullopt);
     return;
   }
@@ -202,11 +203,13 @@ void MakeCredentialOperation::PromptTouchIdDone(bool success) {
     return;
   }
   std::vector<std::vector<uint8_t>> no_certificates;
-  AuthenticatorMakeCredentialResponse response(AttestationObject(
-      std::move(*authenticator_data),
-      std::make_unique<PackedAttestationStatement>(
-          CoseAlgorithmIdentifier::kCoseEs256, std::move(*signature),
-          std::move(no_certificates))));
+  AuthenticatorMakeCredentialResponse response(
+      FidoTransportProtocol::kInternal,
+      AttestationObject(
+          std::move(*authenticator_data),
+          std::make_unique<PackedAttestationStatement>(
+              CoseAlgorithmIdentifier::kCoseEs256, std::move(*signature),
+              std::move(no_certificates))));
   std::move(callback())
       .Run(CtapDeviceResponseCode::kSuccess, std::move(response));
 }

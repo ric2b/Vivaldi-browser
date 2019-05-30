@@ -4,8 +4,8 @@
 
 #include "services/service_manager/public/cpp/service.h"
 
-#include "base/logging.h"
-#include "services/service_manager/public/cpp/service_context.h"
+#include "base/bind.h"
+#include "base/run_loop.h"
 
 namespace service_manager {
 
@@ -13,47 +13,42 @@ Service::Service() = default;
 
 Service::~Service() = default;
 
+// static
+void Service::RunAsyncUntilTermination(std::unique_ptr<Service> service,
+                                       base::OnceClosure callback) {
+  auto* raw_service = service.get();
+  raw_service->set_termination_closure(base::BindOnce(
+      [](std::unique_ptr<Service> service, base::OnceClosure callback) {
+        service.reset();
+        if (callback)
+          std::move(callback).Run();
+      },
+      std::move(service), std::move(callback)));
+}
+
 void Service::OnStart() {}
 
 void Service::OnBindInterface(const BindSourceInfo& source,
                               const std::string& interface_name,
                               mojo::ScopedMessagePipeHandle interface_pipe) {}
 
+void Service::OnDisconnected() {
+  Terminate();
+}
+
 bool Service::OnServiceManagerConnectionLost() {
   return true;
 }
 
-ServiceContext* Service::context() const {
-  DCHECK(service_context_)
-      << "Service::context() may only be called after the Service constructor.";
-  return service_context_;
+void Service::RunUntilTermination() {
+  base::RunLoop loop;
+  set_termination_closure(loop.QuitClosure());
+  loop.Run();
 }
 
-void Service::SetContext(ServiceContext* context) {
-  service_context_ = context;
-}
-
-ForwardingService::ForwardingService(Service* target) : target_(target) {}
-
-ForwardingService::~ForwardingService() {}
-
-void ForwardingService::OnStart() {
-  target_->OnStart();
-}
-
-void ForwardingService::OnBindInterface(
-    const BindSourceInfo& source,
-    const std::string& interface_name,
-    mojo::ScopedMessagePipeHandle interface_pipe) {
-  target_->OnBindInterface(source, interface_name, std::move(interface_pipe));
-}
-
-bool ForwardingService::OnServiceManagerConnectionLost() {
-  return target_->OnServiceManagerConnectionLost();
-}
-
-void ForwardingService::SetContext(ServiceContext* context) {
-  target_->SetContext(context);
+void Service::Terminate() {
+  if (termination_closure_)
+    std::move(termination_closure_).Run();
 }
 
 }  // namespace service_manager

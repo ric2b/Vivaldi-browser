@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/optional.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "build/build_config.h"
@@ -31,8 +32,13 @@ CloudPolicyManager::CloudPolicyManager(
     const std::string& policy_type,
     const std::string& settings_entity_id,
     CloudPolicyStore* cloud_policy_store,
-    const scoped_refptr<base::SequencedTaskRunner>& task_runner)
-    : core_(policy_type, settings_entity_id, cloud_policy_store, task_runner),
+    const scoped_refptr<base::SequencedTaskRunner>& task_runner,
+    network::NetworkConnectionTrackerGetter network_connection_tracker_getter)
+    : core_(policy_type,
+            settings_entity_id,
+            cloud_policy_store,
+            task_runner,
+            std::move(network_connection_tracker_getter)),
       waiting_for_policy_refresh_(false) {}
 
 CloudPolicyManager::~CloudPolicyManager() {}
@@ -115,6 +121,7 @@ void CloudPolicyManager::GetChromePolicy(PolicyMap* policy_map) {
 void CloudPolicyManager::CreateComponentCloudPolicyService(
     const std::string& policy_type,
     const base::FilePath& policy_cache_path,
+    PolicySource policy_source,
     CloudPolicyClient* client,
     SchemaRegistry* schema_registry) {
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
@@ -140,10 +147,10 @@ void CloudPolicyManager::CreateComponentCloudPolicyService(
   // on the same task runner.
   const auto task_runner =
       base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()});
-  std::unique_ptr<ResourceCache> resource_cache(
-      new ResourceCache(policy_cache_path, task_runner));
+  std::unique_ptr<ResourceCache> resource_cache(new ResourceCache(
+      policy_cache_path, task_runner, /* max_cache_size */ base::nullopt));
   component_policy_service_.reset(new ComponentCloudPolicyService(
-      policy_type, this, schema_registry, core(), client,
+      policy_type, policy_source, this, schema_registry, core(), client,
       std::move(resource_cache), task_runner));
 #endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 }

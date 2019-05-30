@@ -65,7 +65,7 @@ base::Optional<double> NumberPropertyFunctions::GetNumber(
     case CSSPropertyLineHeight: {
       const Length& length = style.SpecifiedLineHeight();
       // Numbers are represented by percentages.
-      if (length.GetType() != kPercent)
+      if (!length.IsPercent())
         return base::Optional<double>();
       double value = length.Value();
       // -100% represents the keyword "normal".
@@ -104,13 +104,13 @@ double NumberPropertyFunctions::ClampNumber(const CSSProperty& property,
 
     case CSSPropertyOrphans:
     case CSSPropertyWidows:
-      return clampTo<short>(round(value), 1);
+      return clampTo<int16_t>(round(value), 1);
 
     case CSSPropertyColumnCount:
-      return clampTo<unsigned short>(round(value), 1);
+      return clampTo<uint16_t>(round(value), 1);
 
     case CSSPropertyColumnRuleWidth:
-      return clampTo<unsigned short>(round(value));
+      return clampTo<uint16_t>(round(value));
 
     case CSSPropertyOrder:
     case CSSPropertyZIndex:
@@ -140,7 +140,7 @@ bool NumberPropertyFunctions::SetNumber(const CSSProperty& property,
       style.SetFloodOpacity(value);
       return true;
     case CSSPropertyLineHeight:
-      style.SetLineHeight(Length(value * 100, kPercent));
+      style.SetLineHeight(Length::Percent(value * 100));
       return true;
     case CSSPropertyOpacity:
       style.SetOpacity(value);

@@ -42,7 +42,7 @@ DocumentXPathEvaluator& DocumentXPathEvaluator::From(Document& document) {
   DocumentXPathEvaluator* cache =
       Supplement<Document>::From<DocumentXPathEvaluator>(document);
   if (!cache) {
-    cache = new DocumentXPathEvaluator(document);
+    cache = MakeGarbageCollected<DocumentXPathEvaluator>(document);
     Supplement<Document>::ProvideTo(document, cache);
   }
   return *cache;
@@ -72,7 +72,7 @@ XPathResult* DocumentXPathEvaluator::evaluate(Document& document,
                                               const String& expression,
                                               Node* context_node,
                                               XPathNSResolver* resolver,
-                                              unsigned short type,
+                                              uint16_t type,
                                               const ScriptValue&,
                                               ExceptionState& exception_state) {
   DocumentXPathEvaluator& suplement = From(document);

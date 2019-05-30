@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
@@ -42,7 +43,8 @@ class ReSignInInfoBarDelegateTest : public PlatformTest {
     TestChromeBrowserState::Builder builder;
     builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
-        AuthenticationServiceFake::CreateAuthenticationService);
+        base::BindRepeating(
+            &AuthenticationServiceFake::CreateAuthenticationService));
     chrome_browser_state_ = builder.Build();
   }
 
@@ -156,7 +158,6 @@ TEST_F(ReSignInInfoBarDelegateTest, TestAccept) {
       CreateConfirmInfoBar(ReSignInInfoBarDelegate::CreateInfoBarDelegate(
           chrome_browser_state_.get(), presenter)));
   InfoBarIOS* infobarIOS = static_cast<InfoBarIOS*>(infobar.get());
-  infobarIOS->Layout(CGRectZero);
 
   ReSignInInfoBarDelegate* delegate =
       static_cast<ReSignInInfoBarDelegate*>(infobarIOS->delegate());
@@ -178,7 +179,6 @@ TEST_F(ReSignInInfoBarDelegateTest, TestInfoBarDismissed) {
       CreateConfirmInfoBar(ReSignInInfoBarDelegate::CreateInfoBarDelegate(
           chrome_browser_state_.get(), presenter)));
   InfoBarIOS* infobarIOS = static_cast<InfoBarIOS*>(infobar.get());
-  infobarIOS->Layout(CGRectZero);
 
   ReSignInInfoBarDelegate* delegate =
       static_cast<ReSignInInfoBarDelegate*>(infobarIOS->delegate());

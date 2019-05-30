@@ -27,14 +27,27 @@ extern const char kAutofillCreditCardSigninPromoImpressionCount[];
 extern const char kAutofillEnabledDeprecated[];
 extern const char kAutofillJapanCityFieldMigrated[];
 extern const char kAutofillLastVersionDeduped[];
+extern const char kAutofillLastVersionValidated[];
 extern const char kAutofillLastVersionDisusedAddressesDeleted[];
 extern const char kAutofillLastVersionDisusedCreditCardsDeleted[];
+extern const char kAutofillMigrateLocalCardsCancelledPrompt[];
 extern const char kAutofillOrphanRowsRemoved[];
 // Do not get/set the value of this pref directly. Use provided getter/setter.
 extern const char kAutofillProfileEnabled[];
+extern const char kAutofillProfileValidity[];
+extern const char kAutofillSyncTransportOptIn[];
+extern const char kAutofillUploadEncodingSeed[];
+extern const char kAutofillUploadEvents[];
+extern const char kAutofillUploadEventsLastResetTimestamp[];
 extern const char kAutofillWalletImportEnabled[];
 extern const char kAutofillWalletImportStorageCheckboxState[];
-extern const char kAutofillProfileValidity[];
+extern const char kAutocompleteLastVersionRetentionPolicy[];
+
+namespace sync_transport_opt_in {
+enum Flags {
+  kWallet = 1 << 0,
+};
+}  // namespace sync_transport_opt_in
 
 // Possible values for previous user decision when we displayed a save credit
 // card prompt.
@@ -57,6 +70,10 @@ bool IsAutofillEnabled(const PrefService* prefs);
 
 void SetAutofillEnabled(PrefService* prefs, bool enabled);
 
+bool IsCreditCardAutofillEnabled(const PrefService* prefs);
+
+void SetCreditCardAutofillEnabled(PrefService* prefs, bool enabled);
+
 bool IsAutofillManaged(const PrefService* prefs);
 
 bool IsProfileAutofillManaged(const PrefService* prefs);
@@ -67,15 +84,25 @@ bool IsProfileAutofillEnabled(const PrefService* prefs);
 
 void SetProfileAutofillEnabled(PrefService* prefs, bool enabled);
 
-bool IsCreditCardAutofillEnabled(const PrefService* prefs);
+bool IsLocalCardMigrationPromptPreviouslyCancelled(const PrefService* prefs);
 
-void SetCreditCardAutofillEnabled(PrefService* prefs, bool enabled);
+void SetLocalCardMigrationPromptPreviouslyCancelled(PrefService* prefs,
+                                                    bool enabled);
 
 bool IsPaymentsIntegrationEnabled(const PrefService* prefs);
 
 void SetPaymentsIntegrationEnabled(PrefService* prefs, bool enabled);
 
 std::string GetAllProfilesValidityMapsEncodedString(const PrefService* prefs);
+
+void SetUserOptedInWalletSyncTransport(PrefService* prefs,
+                                       const std::string& account_id,
+                                       bool opted_in);
+
+bool IsUserOptedInWalletSyncTransport(const PrefService* prefs,
+                                      const std::string& account_id);
+
+void ClearSyncTransportOptIns(PrefService* prefs);
 
 }  // namespace prefs
 }  // namespace autofill

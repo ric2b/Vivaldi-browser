@@ -34,11 +34,11 @@
 #include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_abstract_event_listener.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_array_buffer_view.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_element.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_event_target.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_html_link_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_window.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_worker_global_scope.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_worklet_global_scope.h"
@@ -75,15 +75,18 @@
 
 namespace blink {
 
-bool ToBooleanSlow(v8::Isolate* isolate,
-                   v8::Local<v8::Value> value,
-                   ExceptionState& exception_state) {
-  DCHECK(!value->IsBoolean());
-  v8::TryCatch block(isolate);
-  bool result = false;
-  if (!value->BooleanValue(isolate->GetCurrentContext()).To(&result))
-    exception_state.RethrowV8Exception(block.Exception());
-  return result;
+void V8SetReturnValue(const v8::PropertyCallbackInfo<v8::Value>& info,
+                      const v8::PropertyDescriptor& descriptor) {
+  DCHECK(descriptor.has_configurable());
+  DCHECK(descriptor.has_enumerable());
+  DCHECK(descriptor.has_value());
+  DCHECK(descriptor.has_writable());
+  info.GetReturnValue().Set(V8ObjectBuilder(ScriptState::ForCurrentRealm(info))
+                                .Add("configurable", descriptor.configurable())
+                                .Add("enumerable", descriptor.enumerable())
+                                .Add("value", descriptor.value())
+                                .Add("writable", descriptor.writable())
+                                .V8Value());
 }
 
 const int32_t kMaxInt32 = 0x7fffffff;
@@ -114,32 +117,42 @@ static double EnforceRange(double x,
 }
 
 template <typename T>
+struct IntTypeNumberOfValues {
+  static constexpr unsigned value =
+      1 << (std::numeric_limits<T>::digits + std::is_signed<T>::value);
+};
+
+template <typename T>
 struct IntTypeLimits {};
 
 template <>
 struct IntTypeLimits<int8_t> {
-  static const int8_t kMinValue = -128;
-  static const int8_t kMaxValue = 127;
-  static const unsigned kNumberOfValues = 256;  // 2^8
+  static constexpr int8_t kMinValue = std::numeric_limits<int8_t>::min();
+  static constexpr int8_t kMaxValue = std::numeric_limits<int8_t>::max();
+  static constexpr unsigned kNumberOfValues =
+      IntTypeNumberOfValues<int8_t>::value;  // 2^8
 };
 
 template <>
 struct IntTypeLimits<uint8_t> {
-  static const uint8_t kMaxValue = 255;
-  static const unsigned kNumberOfValues = 256;  // 2^8
+  static constexpr uint8_t kMaxValue = std::numeric_limits<uint8_t>::max();
+  static constexpr unsigned kNumberOfValues =
+      IntTypeNumberOfValues<uint8_t>::value;  // 2^8
 };
 
 template <>
 struct IntTypeLimits<int16_t> {
-  static const short kMinValue = -32768;
-  static const short kMaxValue = 32767;
-  static const unsigned kNumberOfValues = 65536;  // 2^16
+  static constexpr int16_t kMinValue = std::numeric_limits<int16_t>::min();
+  static constexpr int16_t kMaxValue = std::numeric_limits<int16_t>::max();
+  static constexpr unsigned kNumberOfValues =
+      IntTypeNumberOfValues<int16_t>::value;  // 2^16
 };
 
 template <>
 struct IntTypeLimits<uint16_t> {
-  static const unsigned short kMaxValue = 65535;
-  static const unsigned kNumberOfValues = 65536;  // 2^16
+  static constexpr uint16_t kMaxValue = std::numeric_limits<uint16_t>::max();
+  static constexpr unsigned kNumberOfValues =
+      IntTypeNumberOfValues<uint16_t>::value;  // 2^16
 };
 
 template <typename T>
@@ -604,7 +617,7 @@ String ReplaceUnmatchedSurrogates(const String& string) {
 XPathNSResolver* ToXPathNSResolver(ScriptState* script_state,
                                    v8::Local<v8::Value> value) {
   XPathNSResolver* resolver = nullptr;
-  if (V8XPathNSResolver::hasInstance(value, script_state->GetIsolate())) {
+  if (V8XPathNSResolver::HasInstance(value, script_state->GetIsolate())) {
     resolver = V8XPathNSResolver::ToImpl(v8::Local<v8::Object>::Cast(value));
   } else if (value->IsObject()) {
     resolver =
@@ -617,7 +630,7 @@ DOMWindow* ToDOMWindow(v8::Isolate* isolate, v8::Local<v8::Value> value) {
   if (value.IsEmpty() || !value->IsObject())
     return nullptr;
 
-  v8::Local<v8::Object> window_wrapper = V8Window::findInstanceInPrototypeChain(
+  v8::Local<v8::Object> window_wrapper = V8Window::FindInstanceInPrototypeChain(
       v8::Local<v8::Object>::Cast(value), isolate);
   if (!window_wrapper.IsEmpty())
     return V8Window::ToImpl(window_wrapper);
@@ -627,13 +640,19 @@ DOMWindow* ToDOMWindow(v8::Isolate* isolate, v8::Local<v8::Value> value) {
 LocalDOMWindow* ToLocalDOMWindow(v8::Local<v8::Context> context) {
   if (context.IsEmpty())
     return nullptr;
-  return ToLocalDOMWindow(
+  return To<LocalDOMWindow>(
       ToDOMWindow(context->GetIsolate(), context->Global()));
 }
 
 LocalDOMWindow* EnteredDOMWindow(v8::Isolate* isolate) {
   LocalDOMWindow* window =
       ToLocalDOMWindow(isolate->GetEnteredOrMicrotaskContext());
+  DCHECK(window);
+  return window;
+}
+
+LocalDOMWindow* IncumbentDOMWindow(v8::Isolate* isolate) {
+  LocalDOMWindow* window = ToLocalDOMWindow(isolate->GetIncumbentContext());
   DCHECK(window);
   return window;
 }
@@ -657,11 +676,11 @@ ExecutionContext* ToExecutionContext(v8::Local<v8::Context> context) {
     return nullptr;
 
   const WrapperTypeInfo* wrapper_type_info = ToWrapperTypeInfo(global_proxy);
-  if (wrapper_type_info->Equals(&V8Window::wrapperTypeInfo))
+  if (wrapper_type_info->Equals(V8Window::GetWrapperTypeInfo()))
     return V8Window::ToImpl(global_proxy)->GetExecutionContext();
-  if (wrapper_type_info->IsSubclass(&V8WorkerGlobalScope::wrapperTypeInfo))
+  if (wrapper_type_info->IsSubclass(V8WorkerGlobalScope::GetWrapperTypeInfo()))
     return V8WorkerGlobalScope::ToImpl(global_proxy)->GetExecutionContext();
-  if (wrapper_type_info->IsSubclass(&V8WorkletGlobalScope::wrapperTypeInfo))
+  if (wrapper_type_info->IsSubclass(V8WorkletGlobalScope::GetWrapperTypeInfo()))
     return V8WorkletGlobalScope::ToImpl(global_proxy)->GetExecutionContext();
 
   NOTREACHED();
@@ -694,7 +713,7 @@ void ToFlexibleArrayBufferView(v8::Isolate* isolate,
   }
   size_t length = buffer->ByteLength();
   buffer->CopyContents(storage, length);
-  result.SetSmall(storage, length);
+  result.SetSmall(storage, SafeCast<uint32_t>(length));
 }
 
 static ScriptState* ToScriptStateImpl(LocalFrame* frame,
@@ -714,12 +733,11 @@ static ScriptState* ToScriptStateImpl(LocalFrame* frame,
 v8::Local<v8::Context> ToV8Context(ExecutionContext* context,
                                    DOMWrapperWorld& world) {
   DCHECK(context);
-  if (context->IsDocument()) {
-    if (LocalFrame* frame = ToDocument(context)->GetFrame())
+  if (auto* document = DynamicTo<Document>(context)) {
+    if (LocalFrame* frame = document->GetFrame())
       return ToV8Context(frame, world);
-  } else if (context->IsWorkerOrWorkletGlobalScope()) {
-    if (WorkerOrWorkletScriptController* script =
-            ToWorkerOrWorkletGlobalScope(context)->ScriptController()) {
+  } else if (auto* scope = DynamicTo<WorkerOrWorkletGlobalScope>(context)) {
+    if (WorkerOrWorkletScriptController* script = scope->ScriptController()) {
       if (script->GetScriptState()->ContextIsValid())
         return script->GetScriptState()->GetContext();
     }
@@ -740,6 +758,18 @@ v8::Local<v8::Context> ToV8ContextEvenIfDetached(LocalFrame* frame,
   // but it does through WindowProxy() call.
   DCHECK(frame);
   return frame->WindowProxy(world)->ContextIfInitialized();
+}
+
+ScriptState* ToScriptState(ExecutionContext* context, DOMWrapperWorld& world) {
+  DCHECK(context);
+  if (auto* document = DynamicTo<Document>(context)) {
+    if (LocalFrame* frame = document->GetFrame())
+      return ToScriptState(frame, world);
+  } else if (auto* scope = DynamicTo<WorkerOrWorkletGlobalScope>(context)) {
+    if (WorkerOrWorkletScriptController* script = scope->ScriptController())
+      return script->GetScriptState();
+  }
+  return nullptr;
 }
 
 ScriptState* ToScriptState(LocalFrame* frame, DOMWrapperWorld& world) {
@@ -858,13 +888,7 @@ bool HasCallableIteratorSymbol(v8::Isolate* isolate,
   return iterator_getter->IsFunction();
 }
 
-v8::Isolate* ToIsolate(ExecutionContext* context) {
-  if (context && context->IsDocument())
-    return V8PerIsolateData::MainThreadIsolate();
-  return v8::Isolate::GetCurrent();
-}
-
-v8::Isolate* ToIsolate(LocalFrame* frame) {
+v8::Isolate* ToIsolate(const LocalFrame* frame) {
   DCHECK(frame);
   return frame->GetWindowProxyManager()->GetIsolate();
 }

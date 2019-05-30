@@ -9,6 +9,7 @@
 
 #include "base/debug/leak_annotations.h"
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "url/url_canon_internal.h"
 #include "url/url_constants.h"
@@ -18,6 +19,8 @@
 namespace url {
 
 namespace {
+
+bool g_allow_non_standard_schemes = false;
 
 // Pass this enum through for methods which would like to know if whitespace
 // removal is necessary.
@@ -65,10 +68,8 @@ const char* kNoAccessSchemes[] = {
   kDataScheme,
 };
 
-const char* kCORSEnabledSchemes[] = {
-  kHttpsScheme,
-  kHttpScheme,
-  kDataScheme,
+const char* kCorsEnabledSchemes[] = {
+    kHttpsScheme, kHttpScheme, kDataScheme,
 };
 
 const char* kWebStorageSchemes[] = {
@@ -512,25 +513,26 @@ void Initialize() {
   if (initialized)
     return;
   InitSchemesWithType(&standard_schemes, kStandardURLSchemes,
-                      arraysize(kStandardURLSchemes));
+                      base::size(kStandardURLSchemes));
   InitSchemesWithType(&referrer_schemes, kReferrerURLSchemes,
-                      arraysize(kReferrerURLSchemes));
-  InitSchemes(&secure_schemes, kSecureSchemes, arraysize(kSecureSchemes));
-  InitSchemes(&local_schemes, kLocalSchemes, arraysize(kLocalSchemes));
+                      base::size(kReferrerURLSchemes));
+  InitSchemes(&secure_schemes, kSecureSchemes, base::size(kSecureSchemes));
+  InitSchemes(&local_schemes, kLocalSchemes, base::size(kLocalSchemes));
   InitSchemes(&no_access_schemes, kNoAccessSchemes,
-              arraysize(kNoAccessSchemes));
-  InitSchemes(&cors_enabled_schemes, kCORSEnabledSchemes,
-              arraysize(kCORSEnabledSchemes));
+              base::size(kNoAccessSchemes));
+  InitSchemes(&cors_enabled_schemes, kCorsEnabledSchemes,
+              base::size(kCorsEnabledSchemes));
   InitSchemes(&web_storage_schemes, kWebStorageSchemes,
-              arraysize(kWebStorageSchemes));
+              base::size(kWebStorageSchemes));
   InitSchemes(&csp_bypassing_schemes, nullptr, 0);
   InitSchemes(&empty_document_schemes, kEmptyDocumentSchemes,
-              arraysize(kEmptyDocumentSchemes));
+              base::size(kEmptyDocumentSchemes));
   initialized = true;
 }
 
 void Shutdown() {
   initialized = false;
+  g_allow_non_standard_schemes = false;
   delete standard_schemes;
   standard_schemes = nullptr;
   delete referrer_schemes;
@@ -549,6 +551,14 @@ void Shutdown() {
   csp_bypassing_schemes = nullptr;
   delete empty_document_schemes;
   empty_document_schemes = nullptr;
+}
+
+void EnableNonStandardSchemesForAndroidWebView() {
+  g_allow_non_standard_schemes = true;
+}
+
+bool AllowNonStandardSchemesForAndroidWebView() {
+  return g_allow_non_standard_schemes;
 }
 
 void AddStandardScheme(const char* new_scheme, SchemeType type) {
@@ -591,12 +601,12 @@ const std::vector<std::string>& GetNoAccessSchemes() {
   return *no_access_schemes;
 }
 
-void AddCORSEnabledScheme(const char* new_scheme) {
+void AddCorsEnabledScheme(const char* new_scheme) {
   Initialize();
   DoAddScheme(new_scheme, cors_enabled_schemes);
 }
 
-const std::vector<std::string>& GetCORSEnabledSchemes() {
+const std::vector<std::string>& GetCorsEnabledSchemes() {
   Initialize();
   return *cors_enabled_schemes;
 }
@@ -789,9 +799,10 @@ bool ReplaceComponents(const char* spec,
                              charset_converter, output, out_parsed);
 }
 
-DecodeURLResult DecodeURLEscapeSequences(const char* input,
-                                         int length,
-                                         CanonOutputW* output) {
+void DecodeURLEscapeSequences(const char* input,
+                              int length,
+                              DecodeURLMode mode,
+                              CanonOutputW* output) {
   RawCanonOutputT<char> unescaped_chars;
   for (int i = 0; i < length; i++) {
     if (input[i] == '%') {
@@ -809,8 +820,6 @@ DecodeURLResult DecodeURLEscapeSequences(const char* input,
   }
 
   int output_initial_length = output->length();
-  bool did_utf8_decode = false;
-  bool did_isomorphic_decode = false;
   // Convert that 8-bit to UTF-16. It's not clear IE does this at all to
   // JavaScript URLs, but Firefox and Safari do.
   for (int i = 0; i < unescaped_chars.length(); i++) {
@@ -828,28 +837,22 @@ DecodeURLResult DecodeURLEscapeSequences(const char* input,
         // Valid UTF-8 character, convert to UTF-16.
         AppendUTF16Value(code_point, output);
         i = next_character;
-        did_utf8_decode = true;
+      } else if (mode == DecodeURLMode::kUTF8) {
+        DCHECK_EQ(code_point, 0xFFFDU);
+        AppendUTF16Value(code_point, output);
+        i = next_character;
       } else {
         // If there are any sequences that are not valid UTF-8, we
         // revert |output| changes, and promote any bytes to UTF-16. We
         // copy all characters from the beginning to the end of the
         // identified sequence.
         output->set_length(output_initial_length);
-        did_utf8_decode = false;
         for (int j = 0; j < unescaped_chars.length(); ++j)
           output->push_back(static_cast<unsigned char>(unescaped_chars.at(j)));
-        did_isomorphic_decode = true;
         break;
       }
     }
   }
-
-  DCHECK(!(did_utf8_decode && did_isomorphic_decode));
-  if (did_isomorphic_decode)
-    return DecodeURLResult::kIsomorphic;
-  if (did_utf8_decode)
-    return DecodeURLResult::kUTF8;
-  return DecodeURLResult::kAsciiOnly;
 }
 
 void EncodeURIComponent(const char* input, int length, CanonOutput* output) {

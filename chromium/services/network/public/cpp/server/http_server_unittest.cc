@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -49,9 +50,10 @@ class TestHttpClient {
     base::RunLoop run_loop;
     int net_error = net::ERR_FAILED;
     factory_.CreateTCPConnectedSocket(
-        base::nullopt, /* local address */
-        addresses, TRAFFIC_ANNOTATION_FOR_TESTS, mojo::MakeRequest(&socket_),
-        nullptr, /* observer */
+        base::nullopt /* local address */, addresses,
+        nullptr /* tcp_connected_socket_options */,
+        TRAFFIC_ANNOTATION_FOR_TESTS, mojo::MakeRequest(&socket_),
+        nullptr /* observer */,
         base::BindOnce(
             [](base::RunLoop* run_loop, int* result_out,
                mojo::ScopedDataPipeConsumerHandle* receive_pipe_handle_out,
@@ -128,9 +130,9 @@ class TestHttpClient {
  private:
   bool IsCompleteResponse(const std::string& response) {
     // Check end of headers first.
-    int end_of_headers =
+    size_t end_of_headers =
         net::HttpUtil::LocateEndOfHeaders(response.data(), response.size());
-    if (end_of_headers < 0)
+    if (end_of_headers == std::string::npos)
       return false;
 
     // Return true if response has data equal to or more than content length.
@@ -345,7 +347,7 @@ TEST_F(HttpServerTest, RequestWithHeaders) {
       {"HeaderWithNonASCII", ":  ", "\xf7"},
   };
   std::string headers;
-  for (size_t i = 0; i < arraysize(kHeaders); ++i) {
+  for (size_t i = 0; i < base::size(kHeaders); ++i) {
     headers +=
         std::string(kHeaders[i][0]) + kHeaders[i][1] + kHeaders[i][2] + "\r\n";
   }
@@ -354,7 +356,7 @@ TEST_F(HttpServerTest, RequestWithHeaders) {
   RunUntilRequestsReceived(1);
   ASSERT_EQ("", GetRequest(0).data);
 
-  for (size_t i = 0; i < arraysize(kHeaders); ++i) {
+  for (size_t i = 0; i < base::size(kHeaders); ++i) {
     std::string field = base::ToLowerASCII(std::string(kHeaders[i][0]));
     std::string value = kHeaders[i][2];
     ASSERT_EQ(1u, GetRequest(0).headers.count(field)) << field;
@@ -371,7 +373,7 @@ TEST_F(HttpServerTest, RequestWithDuplicateHeaders) {
       {"LastHeader", ": ", "5"},
   };
   std::string headers;
-  for (size_t i = 0; i < arraysize(kHeaders); ++i) {
+  for (size_t i = 0; i < base::size(kHeaders); ++i) {
     headers +=
         std::string(kHeaders[i][0]) + kHeaders[i][1] + kHeaders[i][2] + "\r\n";
   }
@@ -380,7 +382,7 @@ TEST_F(HttpServerTest, RequestWithDuplicateHeaders) {
   RunUntilRequestsReceived(1);
   ASSERT_EQ("", GetRequest(0).data);
 
-  for (size_t i = 0; i < arraysize(kHeaders); ++i) {
+  for (size_t i = 0; i < base::size(kHeaders); ++i) {
     std::string field = base::ToLowerASCII(std::string(kHeaders[i][0]));
     std::string value = (field == "duplicateheader") ? "2,4" : kHeaders[i][2];
     ASSERT_EQ(1u, GetRequest(0).headers.count(field)) << field;
@@ -403,7 +405,7 @@ TEST_F(HttpServerTest, HasHeaderValueTest) {
       "HeaderWithNonASCII:  \xf7",
   };
   std::string headers;
-  for (size_t i = 0; i < arraysize(kHeaders); ++i) {
+  for (size_t i = 0; i < base::size(kHeaders); ++i) {
     headers += std::string(kHeaders[i]) + "\r\n";
   }
 
@@ -590,7 +592,7 @@ TEST_F(HttpServerTest, WrongProtocolRequest) {
       "GET /test \r\n\r\n",
   };
 
-  for (size_t i = 0; i < arraysize(kBadProtocolRequests); ++i) {
+  for (size_t i = 0; i < base::size(kBadProtocolRequests); ++i) {
     TestHttpClient client;
     ASSERT_THAT(client.ConnectAndWait(server_address_), IsOk());
 

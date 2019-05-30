@@ -12,6 +12,7 @@
 #include <ostream>
 
 #include "base/debug/proc_maps_linux.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_restrictions.h"
 
@@ -69,23 +70,22 @@ bool EnableInProcessStackDumping() {
   return (sigaction(SIGPIPE, &action, NULL) == 0);
 }
 
-StackTrace::StackTrace(size_t count) {
-  count = std::min(arraysize(trace_), count);
-
-  StackCrawlState state(reinterpret_cast<uintptr_t*>(trace_), count);
+size_t CollectStackTrace(void** trace, size_t count) {
+  StackCrawlState state(reinterpret_cast<uintptr_t*>(trace), count);
   _Unwind_Backtrace(&TraceStackFrame, &state);
-  count_ = state.frame_count;
+  return state.frame_count;
 }
 
-void StackTrace::Print() const {
-  std::string backtrace = ToString();
+void StackTrace::PrintWithPrefix(const char* prefix_string) const {
+  std::string backtrace = ToStringWithPrefix(prefix_string);
   __android_log_write(ANDROID_LOG_ERROR, "chromium", backtrace.c_str());
 }
 
 // NOTE: Native libraries in APKs are stripped before installing. Print out the
 // relocatable address and library names so host computers can use tools to
 // symbolize and demangle (e.g., addr2line, c++filt).
-void StackTrace::OutputToStream(std::ostream* os) const {
+void StackTrace::OutputToStreamWithPrefix(std::ostream* os,
+                                          const char* prefix_string) const {
   std::string proc_maps;
   std::vector<MappedMemoryRegion> regions;
   // Allow IO to read /proc/self/maps. Reading this file doesn't hit the disk
@@ -115,6 +115,9 @@ void StackTrace::OutputToStream(std::ostream* os) const {
       }
       ++iter;
     }
+
+    if (prefix_string)
+      *os << prefix_string;
 
     *os << base::StringPrintf("#%02zd " FMT_ADDR " ", i, address);
 

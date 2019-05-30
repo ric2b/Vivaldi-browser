@@ -70,9 +70,9 @@ class ChromeTranslateClient
       content::WebContents* web_contents);
 
   // Gets |source| and |target| language for translation.
-  static void GetTranslateLanguages(content::WebContents* web_contents,
-                                    std::string* source,
-                                    std::string* target);
+  void GetTranslateLanguages(content::WebContents* web_contents,
+                             std::string* source,
+                             std::string* target);
 
   // Gets the associated TranslateManager.
   translate::TranslateManager* GetTranslateManager();
@@ -86,19 +86,18 @@ class ChromeTranslateClient
   PrefService* GetPrefs() override;
   std::unique_ptr<translate::TranslatePrefs> GetTranslatePrefs() override;
   translate::TranslateAcceptLanguages* GetTranslateAcceptLanguages() override;
-  int GetInfobarIconID() const override;
   void RecordTranslateEvent(const metrics::TranslateEventProto&) override;
-#if !defined(USE_AURA)
+#if defined(OS_ANDROID)
   std::unique_ptr<infobars::InfoBar> CreateInfoBar(
       std::unique_ptr<translate::TranslateInfoBarDelegate> delegate)
       const override;
+  int GetInfobarIconID() const override;
+
+  // Trigger a manual translation when the necessary state (e.g. source
+  // language) is ready.
+  void ManualTranslateWhenReady();
 #endif
-#if defined(OS_MACOSX)
-  // Temporary shim for Polychrome. See bottom of first comment in
-  // https://crbug.com/804950 for details
-  std::unique_ptr<infobars::InfoBar> CreateInfoBarCocoa(
-      std::unique_ptr<translate::TranslateInfoBarDelegate> delegate) const;
-#endif
+  void SetPredefinedTargetLanguage(const std::string& translate_language_code);
 
   void RecordLanguageDetectionEvent(
       const translate::LanguageDetectionDetails& details) const override;
@@ -135,10 +134,20 @@ class ChromeTranslateClient
   // Shows the translate bubble.
   ShowTranslateBubbleResult ShowBubble(
       translate::TranslateStep step,
+      const std::string& source_language,
+      const std::string& target_language,
       translate::TranslateErrors::Type error_type);
 
   translate::ContentTranslateDriver translate_driver_;
   std::unique_ptr<translate::TranslateManager> translate_manager_;
+
+#if defined(OS_ANDROID)
+  // Whether to trigger a manual translation when ready.
+  // See ChromeTranslateClient::ManualTranslateOnReady
+  bool manual_translate_on_ready_ = false;
+#endif
+
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
 
   DISALLOW_COPY_AND_ASSIGN(ChromeTranslateClient);
 };

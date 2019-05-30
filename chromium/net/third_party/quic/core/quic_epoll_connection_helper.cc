@@ -9,12 +9,11 @@
 
 #include "net/third_party/quic/core/crypto/quic_random.h"
 #include "net/third_party/quic/platform/impl/quic_socket_utils.h"
-#include "net/tools/epoll_server/epoll_server.h"
 
 namespace quic {
 
 QuicEpollConnectionHelper::QuicEpollConnectionHelper(
-    net::EpollServer* epoll_server,
+    QuicEpollServer* epoll_server,
     QuicAllocator type)
     : clock_(epoll_server),
       random_generator_(QuicRandom::GetInstance()),

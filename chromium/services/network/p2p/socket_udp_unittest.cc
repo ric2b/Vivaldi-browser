@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/containers/circular_deque.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
@@ -147,6 +148,8 @@ class FakeDatagramServerSocket : public net::DatagramServerSocket {
   void AllowAddressReuse() override { NOTIMPLEMENTED(); }
 
   void AllowBroadcast() override { NOTIMPLEMENTED(); }
+
+  void AllowAddressSharingForMulticast() override { NOTIMPLEMENTED(); }
 
   int JoinGroup(const net::IPAddress& group_address) const override {
     NOTIMPLEMENTED();

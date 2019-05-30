@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/app_mode/kiosk_profile_loader.h"
 
+#include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -11,8 +12,8 @@
 #include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
-#include "base/sys_info.h"
 #include "base/syslog_logging.h"
+#include "base/system/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/login/auth/chrome_login_performer.h"

@@ -32,9 +32,11 @@ const char kUIOptionsKeyPrefix[] = "bgfetch_ui_options_";
 const char kPendingRequestKeyPrefix[] = "bgfetch_pending_request_";
 const char kActiveRequestKeyPrefix[] = "bgfetch_active_request_";
 const char kCompletedRequestKeyPrefix[] = "bgfetch_completed_request_";
+const char kStorageVersionKeyPrefix[] = "bgfetch_storage_version_";
 
 // Database Keys.
-std::string ActiveRegistrationUniqueIdKey(const std::string& developer_id);
+CONTENT_EXPORT std::string ActiveRegistrationUniqueIdKey(
+    const std::string& developer_id);
 
 CONTENT_EXPORT std::string RegistrationKey(const std::string& unique_id);
 
@@ -53,6 +55,8 @@ std::string CompletedRequestKeyPrefix(const std::string& unique_id);
 std::string CompletedRequestKey(const std::string& unique_id,
                                 int request_index);
 
+CONTENT_EXPORT std::string StorageVersionKey(const std::string& unique_id);
+
 // Database status.
 enum class DatabaseStatus { kOk, kFailed, kNotFound };
 
@@ -61,12 +65,22 @@ DatabaseStatus ToDatabaseStatus(blink::ServiceWorkerStatusCode status);
 // Converts the |metadata_proto| to a BackgroundFetchRegistration object.
 bool ToBackgroundFetchRegistration(
     const proto::BackgroundFetchMetadata& metadata_proto,
-    BackgroundFetchRegistration* registration);
+    blink::mojom::BackgroundFetchRegistration* registration);
 
 bool MojoFailureReasonFromRegistrationProto(
     proto::BackgroundFetchRegistration_BackgroundFetchFailureReason
         proto_failure_reason,
     blink::mojom::BackgroundFetchFailureReason* failure_reason);
+
+// Utility functions to make sure the request URLs are unique, since
+// Cache Storage does not support duplicate URLs yet.
+// Use `MakeCacheUrlUnique` before writing to the cache, and
+// `RemoveUniqueParamFromCacheURL` when querying from the cache.
+CONTENT_EXPORT GURL MakeCacheUrlUnique(const GURL& url,
+                                       const std::string& unique_id,
+                                       size_t request_index);
+CONTENT_EXPORT GURL RemoveUniqueParamFromCacheURL(const GURL& url,
+                                                  const std::string& unique_id);
 
 }  // namespace background_fetch
 

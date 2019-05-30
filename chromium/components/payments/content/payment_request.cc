@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/stl_util.h"
 #include "components/payments/content/can_make_payment_query_factory.h"
@@ -29,6 +30,13 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 
+namespace {
+
+using ::payments::mojom::CanMakePaymentQueryResult;
+using ::payments::mojom::HasEnrolledInstrumentQueryResult;
+
+}  // namespace
+
 namespace payments {
 
 PaymentRequest::PaymentRequest(
@@ -40,6 +48,7 @@ PaymentRequest::PaymentRequest(
     mojo::InterfaceRequest<mojom::PaymentRequest> request,
     ObserverForTest* observer_for_testing)
     : web_contents_(web_contents),
+      log_(web_contents_),
       delegate_(std::move(delegate)),
       manager_(manager),
       display_manager_(display_manager),
@@ -69,11 +78,19 @@ void PaymentRequest::Init(mojom::PaymentRequestClientPtr client,
                           mojom::PaymentDetailsPtr details,
                           mojom::PaymentOptionsPtr options) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  if (is_initialized_) {
+    log_.Error("Attempted initialization twice");
+    OnConnectionTerminated();
+    return;
+  }
+
+  is_initialized_ = true;
   client_ = std::move(client);
 
   const GURL last_committed_url = delegate_->GetLastCommittedURL();
   if (!OriginSecurityChecker::IsOriginSecure(last_committed_url)) {
-    LOG(ERROR) << "Not in a secure origin";
+    log_.Error("Not in a secure origin");
     OnConnectionTerminated();
     return;
   }
@@ -82,31 +99,34 @@ void PaymentRequest::Init(mojom::PaymentRequestClientPtr client,
       OriginSecurityChecker::IsSchemeCryptographic(last_committed_url) ||
       OriginSecurityChecker::IsOriginLocalhostOrFile(last_committed_url);
   if (!allowed_origin) {
-    LOG(ERROR) << "Only localhost, file://, and cryptographic scheme origins "
-                  "allowed";
+    log_.Error(
+        "Only localhost, file://, and cryptographic scheme origins allowed");
   }
 
   bool invalid_ssl =
       OriginSecurityChecker::IsSchemeCryptographic(last_committed_url) &&
       !delegate_->IsSslCertificateValid();
-  if (invalid_ssl)
-    LOG(ERROR) << "SSL certificate is not valid";
+  if (invalid_ssl) {
+    log_.Error("SSL certificate is not valid.");
+  }
 
   if (!allowed_origin || invalid_ssl) {
-    // Intentionally don't set |spec_| and |state_|. Don't show UI. Resolve
-    // .canMakepayment() with "false". Reject .show() with "NotSupportedError".
+    // Intentionally don't set |spec_| and |state_|, so the UI is never shown.
+    log_.Error(
+        "No UI will be shown. CanMakePayment will always return false. "
+        "Show will be rejected with NotSupportedError.");
     return;
   }
 
   std::string error;
   if (!ValidatePaymentDetails(ConvertPaymentDetails(details), &error)) {
-    LOG(ERROR) << error;
+    log_.Error(error);
     OnConnectionTerminated();
     return;
   }
 
   if (!details->total) {
-    LOG(ERROR) << "Missing total";
+    log_.Error("Missing total");
     OnConnectionTerminated();
     return;
   }
@@ -145,16 +165,24 @@ void PaymentRequest::Init(mojom::PaymentRequestClientPtr client,
 }
 
 void PaymentRequest::Show(bool is_user_gesture) {
-  if (!client_.is_bound() || !binding_.is_bound()) {
-    LOG(ERROR) << "Attempted Show(), but binding(s) missing.";
+  if (!IsInitialized()) {
+    log_.Error("Attempted show without initialization");
     OnConnectionTerminated();
     return;
   }
 
+  if (is_show_called_) {
+    log_.Error("Attempted show twice");
+    OnConnectionTerminated();
+    return;
+  }
+
+  is_show_called_ = true;
+
   // A tab can display only one PaymentRequest UI at a time.
   display_handle_ = display_manager_->TryShow(delegate_.get());
   if (!display_handle_) {
-    LOG(ERROR) << "A PaymentRequest UI is already showing";
+    log_.Error("A PaymentRequest UI is already showing");
     journey_logger_.SetNotShown(
         JourneyLogger::NOT_SHOWN_REASON_CONCURRENT_REQUESTS);
     client_->OnError(mojom::PaymentErrorReason::ALREADY_SHOWING);
@@ -163,7 +191,7 @@ void PaymentRequest::Show(bool is_user_gesture) {
   }
 
   if (!delegate_->IsBrowserWindowActive()) {
-    LOG(ERROR) << "Cannot show PaymentRequest UI in a background tab";
+    log_.Error("Cannot show PaymentRequest UI in a background tab");
     journey_logger_.SetNotShown(JourneyLogger::NOT_SHOWN_REASON_OTHER);
     client_->OnError(mojom::PaymentErrorReason::USER_CANCEL);
     OnConnectionTerminated();
@@ -171,7 +199,8 @@ void PaymentRequest::Show(bool is_user_gesture) {
   }
 
   if (!state_) {
-    // SSL is not valid.
+    // SSL is not valid. Reject show with NotSupportedError, disconnect the
+    // mojo pipe, and destroy this object.
     AreRequestedMethodsSupportedCallback(false);
     return;
   }
@@ -186,14 +215,14 @@ void PaymentRequest::Show(bool is_user_gesture) {
 }
 
 void PaymentRequest::Retry(mojom::PaymentValidationErrorsPtr errors) {
-  if (!client_.is_bound() || !binding_.is_bound()) {
-    DLOG(ERROR) << "Attempted Retry(), but binding(s) missing.";
+  if (!IsInitialized()) {
+    log_.Error("Attempted retry without initialization");
     OnConnectionTerminated();
     return;
   }
 
-  if (!display_handle_) {
-    DLOG(ERROR) << "Attempted Retry(), but display_handle_ is nullptr.";
+  if (!IsThisPaymentRequestShowing()) {
+    log_.Error("Attempted retry without show");
     OnConnectionTerminated();
     return;
   }
@@ -201,57 +230,40 @@ void PaymentRequest::Retry(mojom::PaymentValidationErrorsPtr errors) {
   std::string error;
   if (!PaymentsValidators::IsValidPaymentValidationErrorsFormat(errors,
                                                                 &error)) {
-    DLOG(ERROR) << error;
+    log_.Error(error);
     client_->OnError(mojom::PaymentErrorReason::USER_CANCEL);
     OnConnectionTerminated();
     return;
   }
 
-  spec()->UpdateShippingAddressErrors(std::move(errors->shipping_address));
-  spec()->UpdatePayerErrors(std::move(errors->payer));
+  spec()->Retry(std::move(errors));
   display_handle_->Retry();
 }
 
-void PaymentRequest::AreRequestedMethodsSupportedCallback(
-    bool methods_supported) {
-  if (methods_supported) {
-    if (SatisfiesSkipUIConstraints()) {
-      skipped_payment_request_ui_ = true;
-      Pay();
-    }
-  } else {
-    journey_logger_.SetNotShown(
-        JourneyLogger::NOT_SHOWN_REASON_NO_SUPPORTED_PAYMENT_METHOD);
-    client_->OnError(mojom::PaymentErrorReason::NOT_SUPPORTED);
-    if (observer_for_testing_)
-      observer_for_testing_->OnNotSupportedError();
-    OnConnectionTerminated();
-  }
-}
-
-bool PaymentRequest::SatisfiesSkipUIConstraints() const {
-  return base::FeatureList::IsEnabled(features::kWebPaymentsSingleAppUiSkip) &&
-         base::FeatureList::IsEnabled(::features::kServiceWorkerPaymentApps) &&
-         is_show_user_gesture_ && state()->is_get_all_instruments_finished() &&
-         state()->available_instruments().size() == 1 &&
-         spec()->stringified_method_data().size() == 1 &&
-         !spec()->request_shipping() && !spec()->request_payer_name() &&
-         !spec()->request_payer_phone() &&
-         !spec()->request_payer_email()
-         // Only allowing URL base payment apps to skip the payment sheet.
-         && spec()->url_payment_method_identifiers().size() == 1;
-}
-
 void PaymentRequest::UpdateWith(mojom::PaymentDetailsPtr details) {
-  std::string error;
-  if (!ValidatePaymentDetails(ConvertPaymentDetails(details), &error)) {
-    LOG(ERROR) << error;
+  if (!IsInitialized()) {
+    log_.Error("Attempted updateWith without initialization");
     OnConnectionTerminated();
     return;
   }
 
-  if (!details->total) {
-    LOG(ERROR) << "Missing total";
+  if (!IsThisPaymentRequestShowing()) {
+    log_.Error("Attempted updateWith without show");
+    OnConnectionTerminated();
+    return;
+  }
+
+  std::string error;
+  if (!ValidatePaymentDetails(ConvertPaymentDetails(details), &error)) {
+    log_.Error(error);
+    OnConnectionTerminated();
+    return;
+  }
+
+  if (details->shipping_address_errors &&
+      !PaymentsValidators::IsValidAddressErrorsFormat(
+          details->shipping_address_errors, &error)) {
+    log_.Error(error);
     OnConnectionTerminated();
     return;
   }
@@ -260,10 +272,37 @@ void PaymentRequest::UpdateWith(mojom::PaymentDetailsPtr details) {
 }
 
 void PaymentRequest::NoUpdatedPaymentDetails() {
+  // This Mojo call is triggered by the user of the API doing nothing in
+  // response to a shipping address update event, so the error messages cannot
+  // be more verbose.
+  if (!IsInitialized()) {
+    log_.Error("Not initialized");
+    OnConnectionTerminated();
+    return;
+  }
+
+  if (!IsThisPaymentRequestShowing()) {
+    log_.Error("Not shown");
+    OnConnectionTerminated();
+    return;
+  }
+
   spec_->RecomputeSpecForDetails();
 }
 
 void PaymentRequest::Abort() {
+  if (!IsInitialized()) {
+    log_.Error("Attempted abort without initialization");
+    OnConnectionTerminated();
+    return;
+  }
+
+  if (!IsThisPaymentRequestShowing()) {
+    log_.Error("Attempted abort without show");
+    OnConnectionTerminated();
+    return;
+  }
+
   // The API user has decided to abort. If a successful abort message is
   // returned to the renderer, the Mojo message pipe is closed, which triggers
   // PaymentRequest::OnConnectionTerminated, which destroys this object.
@@ -283,8 +322,17 @@ void PaymentRequest::Abort() {
 }
 
 void PaymentRequest::Complete(mojom::PaymentComplete result) {
-  if (!client_.is_bound())
+  if (!IsInitialized()) {
+    log_.Error("Attempted complete without initialization");
+    OnConnectionTerminated();
     return;
+  }
+
+  if (!IsThisPaymentRequestShowing()) {
+    log_.Error("Attempted complete without show");
+    OnConnectionTerminated();
+    return;
+  }
 
   // Failed transactions show an error. Successful and unknown-state
   // transactions don't show an error.
@@ -304,18 +352,89 @@ void PaymentRequest::Complete(mojom::PaymentComplete result) {
   }
 }
 
-void PaymentRequest::CanMakePayment() {
+void PaymentRequest::CanMakePayment(bool legacy_mode) {
+  if (!IsInitialized()) {
+    log_.Error("Attempted canMakePayment without initialization");
+    OnConnectionTerminated();
+    return;
+  }
+
+  // It's valid to call canMakePayment() without calling show() first.
+
   if (observer_for_testing_)
     observer_for_testing_->OnCanMakePaymentCalled();
 
   if (!delegate_->GetPrefService()->GetBoolean(kCanMakePaymentEnabled) ||
       !state_) {
-    CanMakePaymentCallback(/*can_make_payment=*/false);
+    CanMakePaymentCallback(legacy_mode, /*can_make_payment=*/false);
   } else {
     state_->CanMakePayment(
+        legacy_mode,
         base::BindOnce(&PaymentRequest::CanMakePaymentCallback,
-                       weak_ptr_factory_.GetWeakPtr()));
+                       weak_ptr_factory_.GetWeakPtr(), legacy_mode));
   }
+}
+
+void PaymentRequest::HasEnrolledInstrument(bool per_method_quota) {
+  if (!IsInitialized()) {
+    log_.Error("Attempted hasEnrolledInstrument without initialization");
+    OnConnectionTerminated();
+    return;
+  }
+
+  // It's valid to call hasEnrolledInstrument() without calling show() first.
+
+  if (observer_for_testing_)
+    observer_for_testing_->OnHasEnrolledInstrumentCalled();
+
+  if (!delegate_->GetPrefService()->GetBoolean(kCanMakePaymentEnabled) ||
+      !state_) {
+    HasEnrolledInstrumentCallback(per_method_quota,
+                                  /*has_enrolled_instrument=*/false);
+  } else {
+    state_->HasEnrolledInstrument(
+        base::BindOnce(&PaymentRequest::HasEnrolledInstrumentCallback,
+                       weak_ptr_factory_.GetWeakPtr(), per_method_quota));
+  }
+}
+
+void PaymentRequest::AreRequestedMethodsSupportedCallback(
+    bool methods_supported) {
+  if (methods_supported) {
+    if (SatisfiesSkipUIConstraints()) {
+      skipped_payment_request_ui_ = true;
+      Pay();
+    }
+  } else {
+    journey_logger_.SetNotShown(
+        JourneyLogger::NOT_SHOWN_REASON_NO_SUPPORTED_PAYMENT_METHOD);
+    client_->OnError(mojom::PaymentErrorReason::NOT_SUPPORTED);
+    if (observer_for_testing_)
+      observer_for_testing_->OnNotSupportedError();
+    OnConnectionTerminated();
+  }
+}
+
+bool PaymentRequest::IsInitialized() const {
+  return is_initialized_ && client_ && client_.is_bound() &&
+         binding_.is_bound();
+}
+
+bool PaymentRequest::IsThisPaymentRequestShowing() const {
+  return is_show_called_ && display_handle_ && spec_ && state_;
+}
+
+bool PaymentRequest::SatisfiesSkipUIConstraints() const {
+  return base::FeatureList::IsEnabled(features::kWebPaymentsSingleAppUiSkip) &&
+         base::FeatureList::IsEnabled(::features::kServiceWorkerPaymentApps) &&
+         is_show_user_gesture_ && state()->is_get_all_instruments_finished() &&
+         state()->available_instruments().size() == 1 &&
+         spec()->stringified_method_data().size() == 1 &&
+         !spec()->request_shipping() && !spec()->request_payer_name() &&
+         !spec()->request_payer_phone() &&
+         !spec()->request_payer_email()
+         // Only allowing URL base payment apps to skip the payment sheet.
+         && spec()->url_payment_method_identifiers().size() == 1;
 }
 
 void PaymentRequest::OnPaymentResponseAvailable(
@@ -331,6 +450,13 @@ void PaymentRequest::OnPaymentResponseAvailable(
     return;
   }
 
+  // If currently interactive, show the processing spinner. Autofill payment
+  // instruments request a CVC, so they are always interactive at this point. A
+  // payment handler may elect to be non-interactive by not showing a
+  // confirmation page to the user.
+  if (delegate_->IsInteractive())
+    delegate_->ShowProcessingSpinner();
+
   client_->OnPaymentResponse(std::move(response));
 }
 
@@ -342,6 +468,10 @@ void PaymentRequest::OnShippingOptionIdSelected(
 void PaymentRequest::OnShippingAddressSelected(
     mojom::PaymentAddressPtr address) {
   client_->OnShippingAddressChange(std::move(address));
+}
+
+void PaymentRequest::OnPayerInfoSelected(mojom::PayerDetailPtr payer_info) {
+  client_->OnPayerDetailChange(std::move(payer_info));
 }
 
 void PaymentRequest::UserCancelled() {
@@ -429,36 +559,75 @@ void PaymentRequest::RecordFirstAbortReason(
   }
 }
 
-void PaymentRequest::CanMakePaymentCallback(bool can_make_payment) {
-  if (!spec_ || CanMakePaymentQueryFactory::GetInstance()
-                    ->GetForContext(web_contents_->GetBrowserContext())
-                    ->CanQuery(top_level_origin_, frame_origin_,
-                               spec_->stringified_method_data())) {
-    RespondToCanMakePaymentQuery(can_make_payment, false);
-  } else if (OriginSecurityChecker::IsOriginLocalhostOrFile(frame_origin_)) {
-    RespondToCanMakePaymentQuery(can_make_payment, true);
+void PaymentRequest::CanMakePaymentCallback(bool legacy_mode,
+                                            bool can_make_payment) {
+  // Only need to enforce query quota in legacy mode. Per-method quota not
+  // supported.
+  if (legacy_mode && spec_ &&
+      !CanMakePaymentQueryFactory::GetInstance()
+           ->GetForContext(web_contents_->GetBrowserContext())
+           ->CanQuery(top_level_origin_, frame_origin_,
+                      spec_->stringified_method_data(),
+                      /*per_method_quota=*/false)) {
+    if (OriginSecurityChecker::IsOriginLocalhostOrFile(frame_origin_)) {
+      client_->OnCanMakePayment(
+          can_make_payment
+              ? CanMakePaymentQueryResult::WARNING_CAN_MAKE_PAYMENT
+              : CanMakePaymentQueryResult::WARNING_CANNOT_MAKE_PAYMENT);
+    } else {
+      client_->OnCanMakePayment(
+          CanMakePaymentQueryResult::QUERY_QUOTA_EXCEEDED);
+    }
   } else {
     client_->OnCanMakePayment(
-        mojom::CanMakePaymentQueryResult::QUERY_QUOTA_EXCEEDED);
+        can_make_payment
+            ? mojom::CanMakePaymentQueryResult::CAN_MAKE_PAYMENT
+            : mojom::CanMakePaymentQueryResult::CANNOT_MAKE_PAYMENT);
   }
+
+  journey_logger_.SetCanMakePaymentValue(can_make_payment);
 
   if (observer_for_testing_)
     observer_for_testing_->OnCanMakePaymentReturned();
 }
 
-void PaymentRequest::RespondToCanMakePaymentQuery(bool can_make_payment,
-                                                  bool warn_localhost_or_file) {
-  mojom::CanMakePaymentQueryResult positive =
-      warn_localhost_or_file
-          ? mojom::CanMakePaymentQueryResult::WARNING_CAN_MAKE_PAYMENT
-          : mojom::CanMakePaymentQueryResult::CAN_MAKE_PAYMENT;
-  mojom::CanMakePaymentQueryResult negative =
-      warn_localhost_or_file
-          ? mojom::CanMakePaymentQueryResult::WARNING_CANNOT_MAKE_PAYMENT
-          : mojom::CanMakePaymentQueryResult::CANNOT_MAKE_PAYMENT;
+void PaymentRequest::HasEnrolledInstrumentCallback(
+    bool per_method_quota,
+    bool has_enrolled_instrument) {
+  if (!spec_ ||
+      CanMakePaymentQueryFactory::GetInstance()
+          ->GetForContext(web_contents_->GetBrowserContext())
+          ->CanQuery(top_level_origin_, frame_origin_,
+                     spec_->stringified_method_data(), per_method_quota)) {
+    RespondToHasEnrolledInstrumentQuery(has_enrolled_instrument,
+                                        /*warn_localhost_or_file=*/false);
+  } else if (OriginSecurityChecker::IsOriginLocalhostOrFile(frame_origin_)) {
+    RespondToHasEnrolledInstrumentQuery(has_enrolled_instrument,
+                                        /*warn_localhost_or_file=*/true);
+  } else {
+    client_->OnHasEnrolledInstrument(
+        HasEnrolledInstrumentQueryResult::QUERY_QUOTA_EXCEEDED);
+  }
 
-  client_->OnCanMakePayment(can_make_payment ? positive : negative);
-  journey_logger_.SetCanMakePaymentValue(can_make_payment);
+  if (observer_for_testing_)
+    observer_for_testing_->OnHasEnrolledInstrumentReturned();
+}
+
+void PaymentRequest::RespondToHasEnrolledInstrumentQuery(
+    bool has_enrolled_instrument,
+    bool warn_localhost_or_file) {
+  HasEnrolledInstrumentQueryResult positive =
+      warn_localhost_or_file
+          ? HasEnrolledInstrumentQueryResult::WARNING_HAS_ENROLLED_INSTRUMENT
+          : HasEnrolledInstrumentQueryResult::HAS_ENROLLED_INSTRUMENT;
+  HasEnrolledInstrumentQueryResult negative =
+      warn_localhost_or_file
+          ? HasEnrolledInstrumentQueryResult::WARNING_HAS_NO_ENROLLED_INSTRUMENT
+          : HasEnrolledInstrumentQueryResult::HAS_NO_ENROLLED_INSTRUMENT;
+
+  client_->OnHasEnrolledInstrument(has_enrolled_instrument ? positive
+                                                           : negative);
+  journey_logger_.SetHasEnrolledInstrumentValue(has_enrolled_instrument);
 }
 
 }  // namespace payments

@@ -5,30 +5,29 @@
 package org.chromium.chrome.browser.browserservices;
 
 import org.chromium.base.annotations.JNINamespace;
-import org.chromium.base.annotations.NativeCall;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.content_public.browser.WebContents;
 
 /**
  * An interface and classes to record User Keyed Metrics relevant to Trusted Web Activities. This
  * will allow us to concentrate on the use cases for the most used TWAs.
  */
-public interface UkmRecorder {
+public abstract class UkmRecorder {
     /**
-     * Records a TWA has been opened.
+     * Records a TWA has been opened in given tab.
      */
-    void recordTwaOpened(WebContents webContents);
+    abstract void recordTwaOpened(Tab tab);
 
     /**
      * The actual recorder.
      */
     @JNINamespace("browserservices")
-    class Bridge implements UkmRecorder {
+    static class Bridge extends UkmRecorder {
         @Override
-        public void recordTwaOpened(WebContents webContents) {
-            nativeRecordOpen(webContents);
+        public void recordTwaOpened(Tab tab) {
+            nativeRecordOpen(tab.getWebContents());
         }
-
-        @NativeCall("Bridge")
-        private static native void nativeRecordOpen(WebContents webContents);
     }
+
+    private static native void nativeRecordOpen(WebContents webContents);
 }

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
@@ -21,6 +22,8 @@
 #endif
 
 #if defined(TOOLKIT_VIEWS)
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/widget/widget_observer.h"
 #endif
@@ -62,26 +65,44 @@ void TestBrowserDialog::PreShow() {
   UpdateWidgets();
 }
 
-// This can return false if no dialog was shown, if the dialog shown wasn't a
-// toolkit-views dialog, or if more than one child dialog was shown.
+// This returns true if exactly one views widget was shown that is a dialog or
+// has a name matching the test-specified name, and if that window is in the
+// work area (if |should_verify_dialog_bounds_| is true).
 bool TestBrowserDialog::VerifyUi() {
 #if defined(TOOLKIT_VIEWS)
   views::Widget::Widgets widgets_before = widgets_;
   UpdateWidgets();
 
+  // Get the list of added dialog widgets. Ignore non-dialog widgets, including
+  // those added by tests to anchor dialogs and the browser's status bubble.
+  // Non-dialog widgets matching the test-specified name will also be included.
   auto added =
       base::STLSetDifference<views::Widget::Widgets>(widgets_, widgets_before);
-
-  if (added.size() > 1) {
-    // Some tests create a standalone window to anchor a dialog. In those cases,
-    // ignore added Widgets that are not dialogs.
-    base::EraseIf(added, [](views::Widget* widget) {
-      return !widget->widget_delegate()->AsDialogDelegate();
-    });
-  }
+  std::string name = GetNonDialogName();
+  base::EraseIf(added, [&](views::Widget* widget) {
+    return !widget->widget_delegate()->AsDialogDelegate() &&
+           (name.empty() || widget->GetName() != name);
+  });
   widgets_ = added;
 
-  return added.size() == 1;
+  if (added.size() != 1)
+    return false;
+
+  if (!should_verify_dialog_bounds_)
+    return true;
+
+  // Verify that the dialog's dimensions do not exceed the display's work area
+  // bounds, which may be smaller than its bounds(), e.g. in the case of the
+  // docked magnifier or Chromevox being enabled.
+  views::Widget* dialog_widget = *(added.begin());
+  const gfx::Rect dialog_bounds = dialog_widget->GetWindowBoundsInScreen();
+  gfx::NativeWindow native_window = dialog_widget->GetNativeWindow();
+  DCHECK(native_window);
+  display::Screen* screen = display::Screen::GetScreen();
+  const gfx::Rect display_work_area =
+      screen->GetDisplayNearestWindow(native_window).work_area();
+
+  return display_work_area.Contains(dialog_bounds);
 #else
   NOTIMPLEMENTED();
   return false;
@@ -116,6 +137,10 @@ void TestBrowserDialog::DismissUi() {
 bool TestBrowserDialog::AlwaysCloseAsynchronously() {
   // TODO(tapted): Iterate over close methods for greater test coverage.
   return false;
+}
+
+std::string TestBrowserDialog::GetNonDialogName() {
+  return std::string();
 }
 
 void TestBrowserDialog::UpdateWidgets() {

@@ -5,7 +5,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "base/bind.h"
 #include "base/containers/flat_map.h"
+#include "base/files/file.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -43,7 +45,7 @@ class MessageDumper : public mojo::MessageReceiver {
 
   bool Accept(mojo::Message* message) override {
     base::FilePath path = directory_.Append(FILE_PATH_LITERAL("message_") +
-                                            base::IntToString(count_++) +
+                                            base::NumberToString(count_++) +
                                             FILE_PATH_LITERAL(".mojomsg"));
 
     base::File file(path,

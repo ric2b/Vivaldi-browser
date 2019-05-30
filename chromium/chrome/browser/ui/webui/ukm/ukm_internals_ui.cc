@@ -10,6 +10,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
@@ -29,6 +30,7 @@ content::WebUIDataSource* CreateUkmHTMLSource() {
       content::WebUIDataSource::Create(chrome::kChromeUIUkmHost);
 
   source->AddResourcePath("ukm_internals.js", IDR_UKM_INTERNALS_JS);
+  source->AddResourcePath("ukm_internals.css", IDR_UKM_INTERNALS_CSS);
   source->SetDefaultResource(IDR_UKM_INTERNALS_HTML);
   source->UseGzip();
   return source;

@@ -7,6 +7,7 @@
 
 #include "base/callback.h"
 #include "base/environment.h"
+#include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "chrome/browser/ui/browser.h"
@@ -15,9 +16,8 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "url/gurl.h"
-
-#define REQUIRES_GPU(x) DISABLED_##x
 
 namespace vr {
 
@@ -34,6 +34,8 @@ class XrBrowserTestBase : public InProcessBrowserTest {
       base::TimeDelta::FromMilliseconds(100);
   static constexpr base::TimeDelta kPollTimeoutShort =
       base::TimeDelta::FromMilliseconds(1000);
+  static constexpr base::TimeDelta kPollTimeoutMedium =
+      base::TimeDelta::FromMilliseconds(5000);
   static constexpr base::TimeDelta kPollTimeoutLong =
       base::TimeDelta::FromMilliseconds(10000);
   // Still considered XR-wide instead of VR-specific since OpenVR can be used
@@ -44,6 +46,8 @@ class XrBrowserTestBase : public InProcessBrowserTest {
   static constexpr char kVrConfigPathVal[] = "./";
   static constexpr char kVrLogPathEnvVar[] = "VR_LOG_PATH";
   static constexpr char kVrLogPathVal[] = "./";
+  static constexpr char kTestFileDir[] =
+      "chrome/test/data/xr/e2e_test_files/html/";
   enum class TestStatus {
     STATUS_RUNNING = 0,
     STATUS_PASSED = 1,
@@ -58,11 +62,19 @@ class XrBrowserTestBase : public InProcessBrowserTest {
   // Returns a GURL to the XR test HTML file of the given name, e.g.
   // GetHtmlTestFile("foo") returns a GURL for the foo.html file in the XR
   // test HTML directory.
-  GURL GetHtmlTestFile(const std::string& test_name);
+  GURL GetFileUrlForHtmlTestFile(const std::string& test_name);
 
-  // Convenience function for accessing the WebContents belonging to the first
+  // Returns a GURL to the XR test HTML file of the given name served through
+  // the local server.
+  GURL GetEmbeddedServerUrlForHtmlTestFile(const std::string& test_name);
+
+  // Returns a pointer to the embedded test server capable of serving test
+  // HTML files, initializing and starting the server if necessary.
+  net::EmbeddedTestServer* GetEmbeddedServer();
+
+  // Convenience function for accessing the WebContents belonging to the current
   // tab open in the browser.
-  content::WebContents* GetFirstTabWebContents();
+  content::WebContents* GetCurrentWebContents();
 
   // Loads the given GURL and blocks until the JavaScript on the page has
   // signalled that pre-test initialization is complete.
@@ -100,15 +112,14 @@ class XrBrowserTestBase : public InProcessBrowserTest {
                                    content::WebContents* web_contents);
 
   // Blocks until the given callback returns true or the timeout is reached.
-  // Returns true if the condition successfully resolved or false on timeout.
-  // This is unsafe because it relies on the provided callback checking a result
-  // from a different thread. This isn't an issue when blocking on some
-  // JavaScript condition to be true, but could be problematic if forced into
-  // use elsewhere.
-  bool BlockOnConditionUnsafe(
-      base::RepeatingCallback<bool()> condition,
-      const base::TimeDelta& timeout = kPollTimeoutLong,
-      const base::TimeDelta& period = kPollCheckIntervalLong);
+  // Fills the given bool with true if the condition successfully resolved or
+  // false on timeout.
+  void BlockOnCondition(base::RepeatingCallback<bool()> condition,
+                        bool* result,
+                        base::RunLoop* wait_loop,
+                        const base::Time& start_time,
+                        const base::TimeDelta& timeout = kPollTimeoutLong,
+                        const base::TimeDelta& period = kPollCheckIntervalLong);
 
   // Blocks until the JavaScript in the given WebContents signals that it is
   // finished.
@@ -136,42 +147,42 @@ class XrBrowserTestBase : public InProcessBrowserTest {
   Browser* browser() { return InProcessBrowserTest::browser(); }
 
   // Convenience function for running RunJavaScriptOrFail with the return value
-  // of GetFirstTabWebContents.
+  // of GetCurrentWebContents.
   void RunJavaScriptOrFail(const std::string& js_expression);
 
   // Convenience function for running RunJavaScriptAndExtractBoolOrFail with the
-  // return value of GetFirstTabWebContents.
+  // return value of GetCurrentWebContents.
   bool RunJavaScriptAndExtractBoolOrFail(const std::string& js_expression);
 
   // Convenience function for running RunJavaScriptAndExtractStringOrFail with
-  // the return value of GetFirstTabWebContents.
+  // the return value of GetCurrentWebContents.
   std::string RunJavaScriptAndExtractStringOrFail(
       const std::string& js_expression);
 
   // Convenience function for running PollJavaScriptBoolean with the return
-  // value of GetFirstTabWebContents.
+  // value of GetCurrentWebContents.
   bool PollJavaScriptBoolean(const std::string& bool_expression,
                              const base::TimeDelta& timeout);
 
   // Convenience function for running PollJavaScriptBooleanOrFail with the
-  // return value of GetFirstTabWebContents.
+  // return value of GetCurrentWebContents.
   void PollJavaScriptBooleanOrFail(const std::string& bool_expression,
                                    const base::TimeDelta& timeout);
 
   // Convenience function for running WaitOnJavaScriptStep with the return value
-  // of GetFirstTabWebContents.
+  // of GetCurrentWebContents.
   void WaitOnJavaScriptStep();
 
   // Convenience function for running ExecuteStepAndWait with the return value
-  // of GetFirstTabWebContents.
+  // of GetCurrentWebContents.
   void ExecuteStepAndWait(const std::string& step_function);
 
   // Convenience function for running EndTest with the return value of
-  // GetFirstTabWebContents.
+  // GetCurrentWebContents.
   void EndTest();
 
   // Convenience function for running AssertNoJavaScriptErrors with the return
-  // value of GetFirstTabWebContents.
+  // value of GetCurrentWebContents.
   void AssertNoJavaScriptErrors();
 
  protected:
@@ -180,6 +191,7 @@ class XrBrowserTestBase : public InProcessBrowserTest {
   std::vector<std::string> append_switches_;
 
  private:
+  std::unique_ptr<net::EmbeddedTestServer> server_;
   base::test::ScopedFeatureList scoped_feature_list_;
   DISALLOW_COPY_AND_ASSIGN(XrBrowserTestBase);
 };

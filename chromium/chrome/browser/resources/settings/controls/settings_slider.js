@@ -4,12 +4,9 @@
 
 /**
  * @fileoverview
- * settings-slider wraps a paper-slider. It maps the slider's values from a
+ * settings-slider wraps a cr-slider. It maps the slider's values from a
  * linear UI range to a range of real values.  When |value| does not map exactly
  * to a tick mark, it interpolates to the nearest tick.
- *
- * Unlike paper-slider, there is no distinction between value and
- * immediateValue; when either changes, the |value| property is updated.
  */
 Polymer({
   is: 'settings-slider',
@@ -20,16 +17,19 @@ Polymer({
     /** @type {!chrome.settingsPrivate.PrefObject} */
     pref: Object,
 
-    /** @type {!Array<number>} Values corresponding to each tick. */
-    tickValues: {
+    /**
+     * Values corresponding to each tick.
+     * @type {!Array<cr_slider.SliderTick>|!Array<number>}
+     */
+    ticks: {
       type: Array,
       value: () => [],
     },
 
     /**
-     * A scale factor used to support fractional pref values since paper-slider
-     * only supports integers. This is not compatible with |tickValues|,
-     * i.e. if |scale| is not 1 then |tickValues| must be empty.
+     * A scale factor used to support fractional pref values. This is not
+     * compatible with |ticks|, i.e. if |scale| is not 1 then |ticks| must be
+     * empty.
      */
     scale: {
       type: Number,
@@ -46,16 +46,47 @@ Polymer({
 
     disabled: Boolean,
 
+    showMarkers: Boolean,
+
     /** @private */
     disableSlider_: {
-      computed: 'computeDisableSlider_(pref.*, disabled)',
+      computed: 'computeDisableSlider_(pref.*, disabled, ticks.*)',
       type: Boolean,
     },
+
+    updateValueInstantly: {
+      type: Boolean,
+      value: true,
+      observer: 'onSliderChanged_',
+    },
+
+    loaded_: Boolean,
   },
 
   observers: [
-    'valueChanged_(pref.*, tickValues.*)',
+    'valueChanged_(pref.*, ticks.*, loaded_)',
   ],
+
+  attached: function() {
+    this.loaded_ = true;
+  },
+
+  /**
+   * @param {number|cr_slider.SliderTick} tick
+   * @return {number|undefined}
+   */
+  getTickValue_: function(tick) {
+    return typeof tick == 'object' ? tick.value : tick;
+  },
+
+  /**
+   * @param {number} index
+   * @return {number|undefined}
+   * @private
+   */
+  getTickValueAtIndex_: function(index) {
+    return this.getTickValue_(this.ticks[index]);
+  },
 
   /**
    * Sets the |pref.value| property to the value corresponding to the knob
@@ -63,15 +94,22 @@ Polymer({
    * @private
    */
   onSliderChanged_: function() {
-    const sliderValue = isNaN(this.$.slider.immediateValue) ?
-        this.$.slider.value :
-        this.$.slider.immediateValue;
+    if (!this.loaded_) {
+      return;
+    }
+
+    if (this.$.slider.dragging && !this.updateValueInstantly) {
+      return;
+    }
+
+    const sliderValue = this.$.slider.value;
 
     let newValue;
-    if (this.tickValues && this.tickValues.length > 0)
-      newValue = this.tickValues[sliderValue];
-    else
+    if (this.ticks && this.ticks.length > 0) {
+      newValue = this.getTickValueAtIndex_(sliderValue);
+    } else {
       newValue = sliderValue / this.scale;
+    }
 
     this.set('pref.value', newValue);
   },
@@ -88,70 +126,66 @@ Polymer({
    * @private
    */
   valueChanged_: function() {
-    if (this.pref == undefined)
-      return;
-
-    // If |tickValues| is empty, simply set current value to the slider.
-    if (this.tickValues.length == 0) {
-      this.$.slider.value =
-          /** @type {number} */ (this.pref.value) * this.scale;
+    if (this.pref == undefined || !this.loaded_) {
       return;
     }
-    assert(this.scale == 1);
 
-    // First update the slider settings if |tickValues| was set.
-    const numTicks = Math.max(1, this.tickValues.length);
-    this.$.slider.max = numTicks - 1;
+    // First update the slider settings if |ticks| was set.
+    const numTicks = this.ticks.length;
+    if (numTicks == 1) {
+      this.$.slider.disabled = true;
+      return;
+    }
+
+    const prefValue = /** @type {number} */ (this.pref.value);
+
+    // The preference and slider values are continuous when |ticks| is empty.
+    if (numTicks == 0) {
+      // This method is handling a preference value change. If the slider is,
+      // in a dragging state, that change is discarded and the the preference
+      // value is updated based on the slider value.
+      if (this.$.slider.dragging) {
+        const prefValueFromSlider = this.$.slider.value / this.scale;
+        if (this.updateValueInstantly && prefValue != prefValueFromSlider) {
+          this.set('pref.value', prefValueFromSlider);
+        }
+      } else {
+        // When not dragging, simply update the slider value.
+        this.$.slider.value = prefValue * this.scale;
+      }
+      return;
+    }
+
+    assert(this.scale == 1);
     // Limit the number of ticks to 10 to keep the slider from looking too busy.
     const MAX_TICKS = 10;
-    this.$.slider.snaps = numTicks < MAX_TICKS;
-    this.$.slider.maxMarkers = numTicks < MAX_TICKS ? numTicks : 0;
+    this.$.slider.markerCount =
+        (this.showMarkers || numTicks <= MAX_TICKS) ? numTicks : 0;
 
-    if (this.$.slider.dragging && this.tickValues.length > 0 &&
-        this.pref.value != this.tickValues[this.$.slider.immediateValue]) {
-      // The value changed outside settings-slider but we're still holding the
-      // knob, so set the value back to where the knob was.
-      // Async so we don't confuse Polymer's data binding.
-      this.async(function() {
-        const newValue = this.tickValues[this.$.slider.immediateValue];
-        this.set('pref.value', newValue);
-      });
+    if (this.$.slider.dragging) {
+      const tickValue = this.getTickValueAtIndex_(this.$.slider.value);
+      if (this.updateValueInstantly && this.pref.value != tickValue) {
+        this.set('pref.value', tickValue);
+      }
+
       return;
     }
 
     // Convert from the public |value| to the slider index (where the knob
     // should be positioned on the slider).
-    let sliderIndex = this.tickValues.length > 0 ?
-        this.tickValues.indexOf(/** @type {number} */ (this.pref.value)) :
-        0;
-    if (sliderIndex == -1) {
-      // No exact match.
-      sliderIndex = this.findNearestIndex_(
-          this.tickValues,
-          /** @type {number} */ (this.pref.value));
+    const index =
+        this.ticks.map(tick => Math.abs(this.getTickValue_(tick) - prefValue))
+            .reduce(
+                (acc, diff, index) => diff < acc.diff ? {index, diff} : acc,
+                {index: -1, diff: Number.MAX_VALUE})
+            .index;
+    assert(index != -1);
+    if (this.$.slider.value != index) {
+      this.$.slider.value = index;
     }
-    this.$.slider.value = sliderIndex;
-  },
-
-  /**
-   * Returns the index of the item in |arr| closest to |value|.
-   * @param {!Array<number>} arr
-   * @param {number} value
-   * @return {number}
-   * @private
-   */
-  findNearestIndex_: function(arr, value) {
-    let closestIndex;
-    let minDifference = Number.MAX_VALUE;
-    for (let i = 0; i < arr.length; i++) {
-      const difference = Math.abs(arr[i] - value);
-      if (difference < minDifference) {
-        closestIndex = i;
-        minDifference = difference;
-      }
+    const tickValue = this.getTickValueAtIndex_(index);
+    if (this.pref.value != tickValue) {
+      this.set('pref.value', tickValue);
     }
-
-    assert(typeof closestIndex != 'undefined');
-    return closestIndex;
   },
 });

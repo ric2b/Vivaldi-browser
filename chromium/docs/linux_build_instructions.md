@@ -84,6 +84,10 @@ $ cd src
 Once you have checked out the code, and assuming you're using Ubuntu, run
 [build/install-build-deps.sh](/build/install-build-deps.sh)
 
+```shell
+$ ./build/install-build-deps.sh
+```
+
 You may need to adjust the build dependencies for other distros. There are
 some [notes](#notes) at the end of this document, but we make no guarantees
 for their accuracy.
@@ -242,8 +246,8 @@ Build Chromium (the "chrome" target) with Ninja using the command:
 $ autoninja -C out/Default chrome
 ```
 
-`autoninja` is a wrapper that automatically provides optimal values for the
-arguments passed to `ninja`.
+(`autoninja` is a wrapper that automatically provides optimal values for the
+arguments passed to `ninja`.)
 
 You can get a list of all of the other build targets from GN by running `gn ls
 out/Default` from the command line. To compile one, pass the GN label to Ninja
@@ -350,36 +354,20 @@ For the optional packages on Arch Linux:
     in AUR/`yaourt`
 *   `sun-java6-fonts` do not seem to be in main repository or AUR.
 
-### Debian
+### Crostini (Debian based)
 
-Some tests require the `ttf-mscorefonts-installer` package from the `contrib`
-component. `contrib` packages may have dependencies on non-free software.
+First install the `file` command for the script to run properly:
 
-If you need to run tests requiring MS TTF fonts, you can edit your apt
-`sources.list` by adding `contrib` to the end of each line beginning with `deb`.
-You might end up with something like this:
-
-```
-deb http://ftp.us.debian.org/debian/ jessie main contrib
-deb-src http://ftp.us.debian.org/debian/ jessie main contrib
-
-deb http://security.debian.org/ jessie/updates main contrib
-deb-src http://security.debian.org/ jessie/updates main contrib
-
-# jessie-updates, previously known as 'volatile'
-deb http://ftp.us.debian.org/debian/ jessie-updates main contrib
-deb-src http://ftp.us.debian.org/debian/ jessie-updates main contrib
+```shell
+$ sudo apt-get install file
 ```
 
-Next, run:
+Then invoke install-build-deps.sh with the `--no-arm` argument,
+because the ARM toolchain doesn't exist for this configuration:
 
-``` shell
-$ sudo apt-get update
-$ sudo apt-get install ttf-mscorefonts-installer
+```shell
+$ sudo install-build-deps.sh --no-arm
 ```
-
-If you already have the `contrib` component enabled, `install-build-deps.sh`
-will install `ttf-mscorefonts-installer` for you.
 
 ### Fedora
 
@@ -398,7 +386,7 @@ pulseaudio-libs-devel zlib.i686 httpd mod_ssl php php-cli python-psutil wdiff \
 xorg-x11-server-Xvfb'
 ```
 
-The fonts needed by Blink's LayoutTests can be obtained by following [these
+The fonts needed by Blink's web tests can be obtained by following [these
 instructions](https://gist.github.com/pwnall/32a3b11c2b10f6ae5c6a6de66c1e12ae).
 For the optional packages:
 

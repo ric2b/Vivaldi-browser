@@ -7,6 +7,7 @@
 #include "third_party/blink/renderer/core/animation/element_animations.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
+#include "third_party/blink/renderer/core/paint/stub_chrome_client_for_cap.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 #include "third_party/blink/renderer/platform/animation/compositor_animation_delegate.h"
 
@@ -14,7 +15,8 @@ namespace blink {
 
 class CSSAnimationsTest : public RenderingTest {
  public:
-  CSSAnimationsTest() {
+  CSSAnimationsTest()
+      : chrome_client_(MakeGarbageCollected<StubChromeClientForCAP>()) {
     EnablePlatform();
     platform()->SetThreadedAnimationEnabled(true);
   }
@@ -31,6 +33,8 @@ class CSSAnimationsTest : public RenderingTest {
     platform()->SetAutoAdvanceNowToPendingTasks(true);
     platform()->RunUntilIdle();
   }
+
+  ChromeClient& GetChromeClient() const override { return *chrome_client_; }
 
   void StartAnimationOnCompositor(Animation* animation) {
     static_cast<CompositorAnimationDelegate*>(animation)
@@ -52,6 +56,9 @@ class CSSAnimationsTest : public RenderingTest {
     return static_cast<const BasicComponentTransferFilterOperation*>(filter)
         ->Amount();
   }
+
+ private:
+  Persistent<StubChromeClientForCAP> chrome_client_;
 };
 
 // Verify that a composited animation is retargeted according to its composited
@@ -66,8 +73,8 @@ TEST_F(CSSAnimationsTest, RetargetedTransition) {
     <div id='test'></div>
   )HTML");
   Element* element = GetDocument().getElementById("test");
-  element->setAttribute(HTMLNames::classAttr, "contrast1");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  element->setAttribute(html_names::kClassAttr, "contrast1");
+  UpdateAllLifecyclePhasesForTest();
   ElementAnimations* animations = element->GetElementAnimations();
   EXPECT_EQ(1u, animations->Animations().size());
   Animation* animation = (*animations->Animations().begin()).key;
@@ -77,15 +84,15 @@ TEST_F(CSSAnimationsTest, RetargetedTransition) {
   AdvanceClockSeconds(0.8);
 
   // Starting the second transition should retarget the active transition.
-  element->setAttribute(HTMLNames::classAttr, "contrast2");
+  element->setAttribute(html_names::kClassAttr, "contrast2");
   GetPage().Animator().ServiceScriptedAnimations(CurrentTimeTicks());
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
   EXPECT_DOUBLE_EQ(0.6, GetContrastFilterAmount(element));
 
   // As it has been retargeted, advancing halfway should go to 0.3.
   AdvanceClockSeconds(0.5);
   GetPage().Animator().ServiceScriptedAnimations(CurrentTimeTicks());
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
   EXPECT_DOUBLE_EQ(0.3, GetContrastFilterAmount(element));
 }
 
@@ -102,8 +109,8 @@ TEST_F(CSSAnimationsTest, IncompatibleRetargetedTransition) {
     <div id='test'></div>
   )HTML");
   Element* element = GetDocument().getElementById("test");
-  element->setAttribute(HTMLNames::classAttr, "saturate");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  element->setAttribute(html_names::kClassAttr, "saturate");
+  UpdateAllLifecyclePhasesForTest();
   ElementAnimations* animations = element->GetElementAnimations();
   EXPECT_EQ(1u, animations->Animations().size());
   Animation* animation = (*animations->Animations().begin()).key;
@@ -119,9 +126,9 @@ TEST_F(CSSAnimationsTest, IncompatibleRetargetedTransition) {
   // Now we start a contrast filter. Since it will try to combine with
   // the in progress saturate filter, and be incompatible, there should
   // be no transition and it should immediately apply on the next frame.
-  element->setAttribute(HTMLNames::classAttr, "contrast");
+  element->setAttribute(html_names::kClassAttr, "contrast");
   EXPECT_TRUE(element->GetComputedStyle()->Filter().IsEmpty());
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(0.2, GetContrastFilterAmount(element));
 }
 

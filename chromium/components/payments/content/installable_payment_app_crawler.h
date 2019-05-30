@@ -13,6 +13,7 @@
 
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
+#include "components/payments/content/developer_console_logger.h"
 #include "components/payments/content/manifest_verifier.h"
 #include "components/payments/content/payment_manifest_web_data_service.h"
 #include "components/payments/content/utility/payment_manifest_parser.h"
@@ -56,17 +57,26 @@ class InstallablePaymentAppCrawler : public content::WebContentsObserver {
       FinishedCrawlingCallback callback,
       base::OnceClosure finished_using_resources);
 
+  void IgnorePortInOriginComparisonForTesting();
+
  private:
-  void OnPaymentMethodManifestDownloaded(const GURL& method_manifest_url,
-                                         const std::string& content);
+  bool IsSameOriginWith(const GURL& a, const GURL& b);
+
+  void OnPaymentMethodManifestDownloaded(
+      const GURL& method_manifest_url,
+      const GURL& method_manifest_url_after_redirects,
+      const std::string& content);
   void OnPaymentMethodManifestParsed(
       const GURL& method_manifest_url,
+      const GURL& method_manifest_url_after_redirects,
       const std::vector<GURL>& default_applications,
       const std::vector<url::Origin>& supported_origins,
       bool all_origins_supported);
-  void OnPaymentWebAppManifestDownloaded(const GURL& method_manifest_url,
-                                         const GURL& web_app_manifest_url,
-                                         const std::string& content);
+  void OnPaymentWebAppManifestDownloaded(
+      const GURL& method_manifest_url,
+      const GURL& web_app_manifest_url,
+      const GURL& web_app_manifest_url_after_redirects,
+      const std::string& content);
   void OnPaymentWebAppInstallationInfo(
       const GURL& method_manifest_url,
       const GURL& web_app_manifest_url,
@@ -85,8 +95,7 @@ class InstallablePaymentAppCrawler : public content::WebContentsObserver {
                                              const SkBitmap& icon);
   void FinishCrawlingPaymentAppsIfReady();
 
-  void WarnIfPossible(const std::string& message);
-
+  DeveloperConsoleLogger log_;
   PaymentManifestDownloader* downloader_;
   PaymentManifestParser* parser_;
   FinishedCrawlingCallback callback_;
@@ -99,6 +108,8 @@ class InstallablePaymentAppCrawler : public content::WebContentsObserver {
   size_t number_of_web_app_icons_to_download_and_decode_;
   std::set<GURL> downloaded_web_app_manifests_;
   std::map<GURL, std::unique_ptr<WebAppInstallationInfo>> installable_apps_;
+
+  bool ignore_port_in_origin_comparison_for_testing_ = false;
 
   base::WeakPtrFactory<InstallablePaymentAppCrawler> weak_ptr_factory_;
 

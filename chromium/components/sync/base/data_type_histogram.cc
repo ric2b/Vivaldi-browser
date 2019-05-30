@@ -8,7 +8,7 @@
 
 namespace {
 const char kModelTypeMemoryHistogramPrefix[] = "Sync.ModelTypeMemoryKB.";
-const char kModelTypeCountHistogramPrefix[] = "Sync.ModelTypeCount3.";
+const char kModelTypeCountHistogramPrefix[] = "Sync.ModelTypeCount4.";
 }  // namespace
 
 void SyncRecordModelTypeMemoryHistogram(syncer::ModelType model_type,
@@ -25,4 +25,8 @@ void SyncRecordModelTypeCountHistogram(syncer::ModelType model_type,
   std::string full_histogram_name =
       kModelTypeCountHistogramPrefix + type_string;
   base::UmaHistogramCounts1M(full_histogram_name, count);
+}
+
+void SyncWalletDataRecordClearedEntitiesCount(size_t count) {
+  UMA_HISTOGRAM_COUNTS_100("Sync.Wallet.EntitiesClearedWhenDisabled", count);
 }

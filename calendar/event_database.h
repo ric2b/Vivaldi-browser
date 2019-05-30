@@ -58,7 +58,8 @@ class EventDatabase {
 // string dynamically anyway, use the constant, it will save space.
 #define CALENDAR_EVENT_ROW_FIELDS                                         \
   " id, calendar_id, alarm_id, title, description, start, end, all_day, " \
-  "is_recurring, start_recurring, end_recurring, location, url "
+  "is_recurring, start_recurring, end_recurring, location, url, etag, href,"\
+  " uid "
 
 }  // namespace calendar
 

@@ -16,7 +16,7 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/pref_names.h"
-#include "components/browser_sync/profile_sync_service.h"
+#include "components/browser_sync/browser_sync_switches.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/language/core/browser/pref_names.h"
@@ -24,6 +24,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/sync/base/sync_prefs.h"
+#include "components/sync/driver/sync_service.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/storage_partition.h"
@@ -34,7 +35,7 @@
 #if defined(OS_CHROMEOS)
 #include "base/command_line.h"
 #include "chrome/common/chrome_switches.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #endif
 
 #if !defined(OS_ANDROID)
@@ -181,8 +182,6 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterStringPref(prefs::kApplicationLocaleBackup, std::string());
   registry->RegisterStringPref(prefs::kApplicationLocaleAccepted,
                                std::string());
-  registry->RegisterListPref(prefs::kAllowedUILocales,
-                             std::make_unique<base::ListValue>());
 #endif
 
   registry->RegisterBooleanPref(prefs::kDataSaverEnabled, false);
@@ -270,8 +269,8 @@ bool Profile::IsNewProfile() {
 }
 
 bool Profile::IsSyncAllowed() {
-  if (ProfileSyncServiceFactory::HasProfileSyncService(this)) {
-    browser_sync::ProfileSyncService* sync_service =
+  if (ProfileSyncServiceFactory::HasSyncService(this)) {
+    syncer::SyncService* sync_service =
         ProfileSyncServiceFactory::GetForProfile(this);
     return !sync_service->HasDisableReason(
                syncer::SyncService::DISABLE_REASON_PLATFORM_OVERRIDE) &&
@@ -282,8 +281,7 @@ bool Profile::IsSyncAllowed() {
   // No ProfileSyncService created yet - we don't want to create one, so just
   // infer the accessible state by looking at prefs/command line flags.
   syncer::SyncPrefs prefs(GetPrefs());
-  return browser_sync::ProfileSyncService::IsSyncAllowedByFlag() &&
-         !prefs.IsManaged();
+  return switches::IsSyncAllowedByFlag() && !prefs.IsManaged();
 }
 
 void Profile::MaybeSendDestroyedNotification() {

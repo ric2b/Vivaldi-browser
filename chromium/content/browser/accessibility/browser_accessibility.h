@@ -5,9 +5,11 @@
 #ifndef CONTENT_BROWSER_ACCESSIBILITY_BROWSER_ACCESSIBILITY_H_
 #define CONTENT_BROWSER_ACCESSIBILITY_BROWSER_ACCESSIBILITY_H_
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <map>
+#include <set>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -19,8 +21,10 @@
 #include "content/browser/accessibility/browser_accessibility_position.h"
 #include "content/common/content_export.h"
 #include "third_party/blink/public/web/web_ax_enums.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/accessibility/ax_node_position.h"
 #include "ui/accessibility/ax_range.h"
 #include "ui/accessibility/ax_text_utils.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
@@ -114,6 +118,9 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // that might send notifications.
   virtual bool PlatformIsLeaf() const;
 
+  // Returns true if this object can fire events.
+  virtual bool CanFireEvents() const;
+
   // Returns the number of children of this object, or 0 if PlatformIsLeaf()
   // returns true.
   virtual uint32_t PlatformChildCount() const;
@@ -204,7 +211,7 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   virtual void Destroy();
 
   // Subclasses should override this to support platform reference counting.
-  virtual void NativeAddReference() { }
+  virtual void NativeAddReference() {}
 
   // Subclasses should override this to support platform reference counting.
   virtual void NativeReleaseReference();
@@ -294,9 +301,6 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   bool GetHtmlAttribute(const char* attr, std::string* value) const;
   bool GetHtmlAttribute(const char* attr, base::string16* value) const;
 
-  base::string16 GetFontFamily() const;
-  base::string16 GetLanguage() const;
-
   virtual base::string16 GetText() const;
 
   // Returns true if the bit corresponding to the given enum is 1.
@@ -323,11 +327,18 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // Get text to announce for a live region change if AT does not implement.
   std::string GetLiveRegionText() const;
 
-  // Creates a text position rooted at this object.
+  // Creates a text position rooted at this object. Does not conver to a
+  // leaf text position - see CreatePositionForSelectionAt, below.
   BrowserAccessibilityPosition::AXPositionInstance CreatePositionAt(
       int offset,
       ax::mojom::TextAffinity affinity =
           ax::mojom::TextAffinity::kDownstream) const;
+
+  // |offset| could either be a text character or a child index in case of
+  // non-text objects. Converts to a leaf text position if you pass a
+  // character offset on a container node.
+  BrowserAccessibilityPosition::AXPositionInstance CreatePositionForSelectionAt(
+      int offset) const;
 
   // Gets the text offsets where new lines start.
   std::vector<int> GetLineStartOffsets() const;
@@ -337,7 +348,11 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // AXPlatformNodeDelegate.
   const ui::AXNodeData& GetData() const override;
   const ui::AXTreeData& GetTreeData() const override;
-  gfx::NativeWindow GetTopLevelWidget() override;
+  ui::AXNodePosition::AXPositionInstance CreateTextPositionAt(
+      int offset,
+      ax::mojom::TextAffinity affinity =
+          ax::mojom::TextAffinity::kDownstream) const override;
+  gfx::NativeViewAccessible GetNSWindow() override;
   gfx::NativeViewAccessible GetParent() override;
   int GetChildCount() override;
   gfx::NativeViewAccessible ChildAtIndex(int index) override;
@@ -348,22 +363,59 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   ui::AXPlatformNode* GetFromNodeID(int32_t id) override;
   int GetIndexInParent() const override;
   gfx::AcceleratedWidget GetTargetForNativeAccessibilityEvent() override;
-  int GetTableRowCount() const override;
-  int GetTableColCount() const override;
-  std::vector<int32_t> GetColHeaderNodeIds() const override;
-  std::vector<int32_t> GetColHeaderNodeIds(int32_t col_index) const override;
-  std::vector<int32_t> GetRowHeaderNodeIds() const override;
-  std::vector<int32_t> GetRowHeaderNodeIds(int32_t row_index) const override;
+
+  ui::AXPlatformNodeDelegate::EnclosingBoundaryOffsets
+  FindTextBoundariesAtOffset(ui::TextBoundaryType boundary_type,
+                             int offset,
+                             ax::mojom::TextAffinity affinity) const override;
+
+  bool IsTable() const override;
+  int32_t GetTableColCount() const override;
+  int32_t GetTableRowCount() const override;
+  base::Optional<int32_t> GetTableAriaColCount() const override;
+  base::Optional<int32_t> GetTableAriaRowCount() const override;
+  int32_t GetTableCellCount() const override;
+  const std::vector<int32_t> GetColHeaderNodeIds() const override;
+  const std::vector<int32_t> GetColHeaderNodeIds(
+      int32_t col_index) const override;
+  const std::vector<int32_t> GetRowHeaderNodeIds() const override;
+  const std::vector<int32_t> GetRowHeaderNodeIds(
+      int32_t row_index) const override;
+  ui::AXPlatformNode* GetTableCaption() override;
+
+  bool IsTableRow() const override;
+  int32_t GetTableRowRowIndex() const override;
+
+  bool IsTableCellOrHeader() const override;
+  int32_t GetTableCellIndex() const override;
+  int32_t GetTableCellColIndex() const override;
+  int32_t GetTableCellRowIndex() const override;
+  int32_t GetTableCellColSpan() const override;
+  int32_t GetTableCellRowSpan() const override;
+  int32_t GetTableCellAriaColIndex() const override;
+  int32_t GetTableCellAriaRowIndex() const override;
   int32_t GetCellId(int32_t row_index, int32_t col_index) const override;
-  int32_t CellIdToIndex(int32_t cell_id) const override;
   int32_t CellIndexToId(int32_t cell_index) const override;
+
   bool AccessibilityPerformAction(const ui::AXActionData& data) override;
+  base::string16 GetLocalizedStringForImageAnnotationStatus(
+      ax::mojom::ImageAnnotationStatus status) const override;
+  base::string16 GetLocalizedRoleDescriptionForUnlabeledImage() const override;
   bool ShouldIgnoreHoveredStateForTesting() override;
   bool IsOffscreen() const override;
-  std::set<int32_t> GetReverseRelations(ax::mojom::IntAttribute attr,
-                                        int32_t dst_id) override;
-  std::set<int32_t> GetReverseRelations(ax::mojom::IntListAttribute attr,
-                                        int32_t dst_id) override;
+  bool IsWebContent() const override;
+  ui::AXPlatformNode* GetTargetNodeForRelation(
+      ax::mojom::IntAttribute attr) override;
+  std::set<ui::AXPlatformNode*> GetTargetNodesForRelation(
+      ax::mojom::IntListAttribute attr) override;
+  std::set<ui::AXPlatformNode*> GetReverseRelations(
+      ax::mojom::IntAttribute attr) override;
+  std::set<ui::AXPlatformNode*> GetReverseRelations(
+      ax::mojom::IntListAttribute attr) override;
+  bool IsOrderedSetItem() const override;
+  bool IsOrderedSet() const override;
+  int32_t GetPosInSet() const override;
+  int32_t GetSetSize() const override;
 
  protected:
   using BrowserAccessibilityPositionInstance =
@@ -391,6 +443,13 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // special character in the place of every embedded object instead of its
   // text, depending on the platform.
   base::string16 GetInnerText() const;
+
+  gfx::Rect GetPageBoundsPastEndOfText() const;
+
+  // Given a set of node ids, return the nodes in this delegate's tree to
+  // which they correspond.
+  std::set<ui::AXPlatformNode*> GetNodesForNodeIdSet(
+      const std::set<int32_t>& ids);
 
   // A unique ID, since node IDs are frame-local.
   ui::AXUniqueId unique_id_;

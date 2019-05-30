@@ -17,18 +17,19 @@
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/crash_report/breakpad_helper.h"
-#include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/metrics/first_user_action_recorder.h"
 #import "ios/chrome/browser/metrics/previous_session_info.h"
 #import "ios/chrome/browser/net/connection_type_observer_bridge.h"
 #include "ios/chrome/browser/pref_names.h"
+#include "ios/chrome/browser/system_flags.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
-#import "ios/chrome/browser/ui/main/browser_view_information.h"
+#import "ios/chrome/browser/ui/main/browser_interface_provider.h"
 #include "ios/chrome/common/app_group/app_group_metrics_mainapp.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/distribution/app_distribution_provider.h"
 #import "ios/web/public/web_state/web_state.h"
+#include "ios/web/public/web_task_traits.h"
 #include "ios/web/public/web_thread.h"
 #include "url/gurl.h"
 
@@ -114,9 +115,10 @@ using metrics_mediator::kAppEnteredBackgroundDateKey;
 
 + (void)logLaunchMetricsWithStartupInformation:
             (id<StartupInformation>)startupInformation
-                        browserViewInformation:
-                            (id<BrowserViewInformation>)browserViewInformation {
-  int numTabs = static_cast<int>([[browserViewInformation mainTabModel] count]);
+                             interfaceProvider:(id<BrowserInterfaceProvider>)
+                                                   interfaceProvider {
+  int numTabs =
+      static_cast<int>(interfaceProvider.mainInterface.tabModel.count);
   if (startupInformation.isColdStart) {
     [self recordNumTabAtStartup:numTabs];
   } else {
@@ -139,7 +141,7 @@ using metrics_mediator::kAppEnteredBackgroundDateKey;
     [startupInformation
         activateFirstUserActionRecorderWithBackgroundTime:interval];
 
-    Tab* currentTab = [[browserViewInformation currentTabModel] currentTab];
+    Tab* currentTab = interfaceProvider.currentInterface.tabModel.currentTab;
     if (currentTab.webState &&
         currentTab.webState->GetLastCommittedURL() == kChromeUINewTabURL) {
       startupInformation.firstUserActionRecorder->RecordStartOnNTP();
@@ -236,8 +238,8 @@ using metrics_mediator::kAppEnteredBackgroundDateKey;
     callback = ^(NSData* log_content) {
       std::string log(static_cast<const char*>([log_content bytes]),
                       static_cast<size_t>([log_content length]));
-      web::WebThread::PostTask(
-          web::WebThread::UI, FROM_HERE, base::BindOnce(^{
+      base::PostTaskWithTraits(
+          FROM_HERE, {web::WebThread::UI}, base::BindOnce(^{
             GetApplicationContext()->GetMetricsService()->PushExternalLog(log);
           }));
     };
@@ -248,7 +250,7 @@ using metrics_mediator::kAppEnteredBackgroundDateKey;
   app_group::main_app::RecordWidgetUsage();
   base::PostTaskWithTraits(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-      base::Bind(&app_group::main_app::ProcessPendingLogs, callback));
+      base::BindOnce(&app_group::main_app::ProcessPendingLogs, callback));
 }
 
 - (void)processCrashReportsPresentAtStartup {

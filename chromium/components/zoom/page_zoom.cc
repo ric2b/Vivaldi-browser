@@ -17,7 +17,6 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/page_zoom.h"
-#include "content/public/common/renderer_preferences.h"
 
 using base::UserMetricsAction;
 
@@ -97,8 +96,7 @@ void PageZoom::Zoom(content::WebContents* web_contents,
   if (zoom == content::PAGE_ZOOM_OUT) {
     // Iterate through the zoom levels in reverse order to find the next
     // lower level based on the current zoom level for this page.
-    for (std::vector<double>::reverse_iterator i = zoom_levels.rbegin();
-         i != zoom_levels.rend(); ++i) {
+    for (auto i = zoom_levels.rbegin(); i != zoom_levels.rend(); ++i) {
       double zoom_level = *i;
       if (content::ZoomValuesEqual(zoom_level, current_zoom_level))
         continue;

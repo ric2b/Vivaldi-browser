@@ -25,9 +25,9 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/browser/account_info.h"
+#include "components/sync/driver/sync_service.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/common/constants.h"
 #include "services/identity/public/cpp/identity_manager.h"
@@ -126,7 +126,7 @@ std::unique_ptr<base::DictionaryValue> SinksAndIdentityToValue(
       // Convert default domains to user domain
       if (domain == "default") {
         domain = user_domain;
-        if (domain == AccountTrackerService::kNoHostedDomainFound) {
+        if (domain == kNoHostedDomainFound) {
           // Default domain will be empty for non-dasher accounts.
           domain.clear();
         }
@@ -541,7 +541,7 @@ void MediaRouterWebUIMessageHandler::OnRequestInitialData(
       media_router_ui_->routes_and_cast_modes()));
   initial_data.Set("routes", std::move(routes));
 
-  const std::set<MediaCastMode> cast_modes = media_router_ui_->cast_modes();
+  const std::set<MediaCastMode>& cast_modes = media_router_ui_->GetCastModes();
   std::unique_ptr<base::ListValue> cast_modes_list(CastModesToValue(
       cast_modes, media_router_ui_->GetPresentationRequestSourceName(),
       media_router_ui_->forced_cast_mode()));
@@ -700,7 +700,11 @@ void MediaRouterWebUIMessageHandler::OnCloseRoute(const base::ListValue* args) {
     return;
   }
   media_router_ui_->TerminateRoute(route_id);
-  UMA_HISTOGRAM_BOOLEAN("MediaRouter.Ui.Action.StopRoute", !is_local);
+  if (is_local) {
+    MediaRouterMetrics::RecordStopLocalRoute();
+  } else {
+    MediaRouterMetrics::RecordStopRemoteRoute();
+  }
 }
 
 void MediaRouterWebUIMessageHandler::OnCloseDialog(
@@ -960,13 +964,13 @@ void MediaRouterWebUIMessageHandler::OnPlayCurrentMedia(
 void MediaRouterWebUIMessageHandler::OnSeekCurrentMedia(
     const base::ListValue* args) {
   const base::DictionaryValue* args_dict = nullptr;
-  int time;
+  double time;
   if (!args->GetDictionary(0, &args_dict) ||
-      !args_dict->GetInteger("time", &time)) {
+      !args_dict->GetDouble("time", &time)) {
     DVLOG(1) << "Unable to extract time";
     return;
   }
-  base::TimeDelta time_delta = base::TimeDelta::FromSeconds(time);
+  base::TimeDelta time_delta = base::TimeDelta::FromSecondsD(time);
   MediaRouteController* route_controller =
       media_router_ui_->GetMediaRouteController();
   if (route_controller && current_media_status_ &&
@@ -1080,7 +1084,8 @@ void MediaRouterWebUIMessageHandler::MaybeUpdateFirstRunFlowData() {
       // being shown the cloud services option, and is now logged in with sync
       // enabled, turn on cloud services.
       if (first_run_flow_acknowledged &&
-          ProfileSyncServiceFactory::GetForProfile(profile)->IsSyncActive()) {
+          ProfileSyncServiceFactory::GetForProfile(profile)
+              ->IsSyncFeatureActive()) {
         pref_service->SetBoolean(::prefs::kMediaRouterEnableCloudServices,
                                  true);
         pref_service->SetBoolean(::prefs::kMediaRouterCloudServicesPrefSet,

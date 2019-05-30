@@ -10,6 +10,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/net/profile_network_context_service.h"
@@ -158,7 +159,8 @@ IN_PROC_BROWSER_TEST_F(LoadTimingBrowserTest, Proxy) {
   ProfileNetworkContextServiceFactory::GetForContext(browser()->profile())
       ->FlushProxyConfigMonitorForTesting();
 
-  GURL url = spawned_test_server()->GetURL("chunked?waitBeforeHeaders=100");
+  // This request will fail if it doesn't go through proxy.
+  GURL url("http://does.not.resolve.test/chunked?waitBeforeHeaders=100");
   ui_test_utils::NavigateToURL(browser(), url);
 
   TimingDeltas navigation_deltas;

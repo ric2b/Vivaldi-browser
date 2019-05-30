@@ -10,10 +10,10 @@ import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 import org.robolectric.annotation.Resetter;
 
+import org.chromium.base.metrics.CachedMetrics;
 import org.chromium.base.metrics.RecordHistogram;
 
 import java.util.HashMap;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Implementation of RecordHistogram which does not rely on native and still enables testing of
@@ -42,19 +42,27 @@ public class ShadowRecordHistogram {
     }
 
     @Implementation
+    public static void recordCustomCountHistogram(
+            String name, int sample, int min, int max, int numBuckets) {
+        Pair<String, Integer> key = Pair.create(name, sample);
+        incrementSampleCount(key);
+    }
+
+    @Implementation
     public static void recordEnumeratedHistogram(String name, int sample, int boundary) {
         assert sample < boundary : "Sample " + sample + " is not within boundary " + boundary + "!";
         incrementSampleCount(Pair.create(name, sample));
     }
 
     @Implementation
-    public static void recordLongTimesHistogram100(String name, long duration, TimeUnit timeUnit) {
-        Pair<String, Integer> key = Pair.create(name, (int) timeUnit.toMillis(duration));
+    public static void recordLongTimesHistogram100(String name, long durationMs) {
+        Pair<String, Integer> key = Pair.create(name, (int) durationMs);
         incrementSampleCount(key);
     }
 
     @Implementation
     public static int getHistogramValueCountForTesting(String name, int sample) {
+        CachedMetrics.commitCachedMetrics();
         Integer i = sSamples.get(Pair.create(name, sample));
         return (i != null) ? i : 0;
     }

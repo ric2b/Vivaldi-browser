@@ -21,7 +21,9 @@
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "remoting/host/client_session_control.h"
 #include "remoting/host/current_process_stats_agent.h"
+#include "remoting/host/desktop_display_info.h"
 #include "remoting/host/desktop_environment_options.h"
+#include "remoting/host/file_transfer/session_file_operations_handler.h"
 #include "remoting/protocol/clipboard_stub.h"
 #include "remoting/protocol/process_stats_stub.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
@@ -35,6 +37,7 @@ class Message;
 
 namespace remoting {
 
+class ActionExecutor;
 class AudioCapturer;
 class AudioPacket;
 class AutoThreadTaskRunner;
@@ -47,6 +50,7 @@ class ScreenControls;
 class ScreenResolution;
 
 namespace protocol {
+class ActionRequest;
 class InputEventTracker;
 }  // namespace protocol
 
@@ -58,7 +62,8 @@ class DesktopSessionAgent
       public webrtc::DesktopCapturer::Callback,
       public webrtc::MouseCursorMonitor::Callback,
       public ClientSessionControl,
-      public protocol::ProcessStatsStub {
+      public protocol::ProcessStatsStub,
+      public IpcFileOperations::ResultHandler {
  public:
   class Delegate {
    public:
@@ -99,6 +104,13 @@ class DesktopSessionAgent
   // Forwards an audio packet though the IPC channel to the network process.
   void ProcessAudioPacket(std::unique_ptr<AudioPacket> packet);
 
+  // IpcFileOperations::ResultHandler implementation.
+  void OnResult(std::uint64_t file_id, ResultHandler::Result result) override;
+  void OnInfoResult(std::uint64_t file_id,
+                    ResultHandler::InfoResult result) override;
+  void OnDataResult(std::uint64_t file_id,
+                    ResultHandler::DataResult result) override;
+
   // Creates desktop integration components and a connected IPC channel to be
   // used to access them. The client end of the channel is returned.
   mojo::ScopedMessagePipeHandle Start(const base::WeakPtr<Delegate>& delegate);
@@ -116,6 +128,8 @@ class DesktopSessionAgent
   void DisconnectSession(protocol::ErrorCode error) override;
   void OnLocalMouseMoved(const webrtc::DesktopVector& position) override;
   void SetDisableInputs(bool disable_inputs) override;
+  void OnDesktopDisplayChanged(
+      std::unique_ptr<protocol::VideoLayout> layout) override;
 
   // ProcessStatsStub interface.
   void OnProcessStats(
@@ -129,12 +143,16 @@ class DesktopSessionAgent
   // Handles CaptureFrame requests from the client.
   void OnCaptureFrame();
 
+  // Handles desktop display selection requests from the client.
+  void OnSelectSource(int id);
+
   // Handles event executor requests from the client.
   void OnInjectClipboardEvent(const std::string& serialized_event);
   void OnInjectKeyEvent(const std::string& serialized_event);
   void OnInjectTextEvent(const std::string& serialized_event);
   void OnInjectMouseEvent(const std::string& serialized_event);
   void OnInjectTouchEvent(const std::string& serialized_event);
+  void OnExecuteActionRequestEvent(const protocol::ActionRequest& request);
 
   // Handles ChromotingNetworkDesktopMsg_SetScreenResolution request from
   // the client.
@@ -180,6 +198,9 @@ class DesktopSessionAgent
   // The DesktopEnvironment instance used by this agent.
   std::unique_ptr<DesktopEnvironment> desktop_environment_;
 
+  // Executes action request events.
+  std::unique_ptr<ActionExecutor> action_executor_;
+
   // Executes keyboard, mouse and clipboard events.
   std::unique_ptr<InputInjector> input_injector_;
 
@@ -207,6 +228,10 @@ class DesktopSessionAgent
   // Keep reference to the last frame sent to make sure shared buffer is alive
   // before it's received.
   std::unique_ptr<webrtc::DesktopFrame> last_frame_;
+
+  // Routes file-transfer messages to the corresponding reader/writer to be
+  // executed.
+  base::Optional<SessionFileOperationsHandler> session_file_operations_handler_;
 
   // Reports process statistic data to network process.
   std::unique_ptr<ProcessStatsSender> stats_sender_;

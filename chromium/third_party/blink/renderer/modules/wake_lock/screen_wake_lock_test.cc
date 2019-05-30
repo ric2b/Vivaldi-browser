@@ -8,7 +8,6 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/mojom/page/page_visibility_state.mojom-blink.h"
 #include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_init.h"
@@ -63,7 +62,7 @@ class ScreenWakeLockTest : public testing::Test {
                                             WTF::Unretained(&mock_wake_lock_)));
 
     web_view_helper_.Initialize(&test_web_frame_client_);
-    URLTestHelpers::RegisterMockedURLLoadFromBase(
+    url_test_helpers::RegisterMockedURLLoadFromBase(
         WebString::FromUTF8("http://example.com/"), test::CoreTestDataPath(),
         WebString::FromUTF8("foo.html"));
     LoadFrame();
@@ -76,9 +75,12 @@ class ScreenWakeLockTest : public testing::Test {
   }
 
   void LoadFrame() {
-    FrameTestHelpers::LoadFrame(web_view_helper_.GetWebView()->MainFrameImpl(),
-                                "http://example.com/foo.html");
-    web_view_helper_.GetWebView()->UpdateAllLifecyclePhases();
+    frame_test_helpers::LoadFrame(
+        web_view_helper_.GetWebView()->MainFrameImpl(),
+        "http://example.com/foo.html");
+
+    web_view_helper_.GetWebView()->MainFrameWidget()->UpdateAllLifecyclePhases(
+        WebWidget::LifecycleUpdateReason::kTest);
   }
 
   LocalFrame* GetFrame() {
@@ -109,24 +111,24 @@ class ScreenWakeLockTest : public testing::Test {
 
   void Show() {
     DCHECK(web_view_helper_.GetWebView());
-    web_view_helper_.GetWebView()->SetVisibilityState(
-        mojom::blink::PageVisibilityState::kVisible, false);
+    web_view_helper_.GetWebView()->SetIsHidden(
+        /*is_hidden=*/false, /*initial_state=*/false);
     // Let the notification sink through the mojo pipes.
     test::RunPendingTasks();
   }
 
   void Hide() {
     DCHECK(web_view_helper_.GetWebView());
-    web_view_helper_.GetWebView()->SetVisibilityState(
-        mojom::blink::PageVisibilityState::kHidden, false);
+    web_view_helper_.GetWebView()->SetIsHidden(
+        /*is_hidden=*/true, /*initial_state=*/false);
     // Let the notification sink through the mojo pipes.
     test::RunPendingTasks();
   }
 
   // Order of these members is important as we need to make sure that
   // test_web_frame_client_ outlives web_view_helper_ (destruction order)
-  FrameTestHelpers::TestWebFrameClient test_web_frame_client_;
-  FrameTestHelpers::WebViewHelper web_view_helper_;
+  frame_test_helpers::TestWebFrameClient test_web_frame_client_;
+  frame_test_helpers::WebViewHelper web_view_helper_;
 
   MockWakeLock mock_wake_lock_;
   ScopedTestingPlatformSupport<TestingPlatformSupport> platform_;

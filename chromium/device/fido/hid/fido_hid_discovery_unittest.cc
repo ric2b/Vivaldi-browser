@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/test/scoped_task_environment.h"
+#include "device/fido/fido_authenticator.h"
 #include "device/fido/hid/fake_hid_impl_for_testing.h"
 #include "device/fido/hid/fido_hid_device.h"
 #include "device/fido/mock_fido_discovery_observer.h"
@@ -23,21 +24,6 @@ namespace device {
 using ::testing::_;
 
 namespace {
-
-device::mojom::HidDeviceInfoPtr MakeFidoHidDevice(std::string guid) {
-  auto c_info = device::mojom::HidCollectionInfo::New();
-  c_info->usage = device::mojom::HidUsageAndPage::New(1, 0xf1d0);
-
-  auto u2f_device = device::mojom::HidDeviceInfo::New();
-  u2f_device->guid = std::move(guid);
-  u2f_device->product_name = "Test Fido Device";
-  u2f_device->serial_number = "123FIDO";
-  u2f_device->bus_type = device::mojom::HidBusType::kHIDBusTypeUSB;
-  u2f_device->collections.push_back(std::move(c_info));
-  u2f_device->max_input_report_size = 64;
-  u2f_device->max_output_report_size = 64;
-  return u2f_device;
-}
 
 device::mojom::HidDeviceInfoPtr MakeOtherDevice(std::string guid) {
   auto other_device = device::mojom::HidDeviceInfo::New();
@@ -55,35 +41,16 @@ MATCHER_P(IdMatches, id, "") {
 }  // namespace
 
 class FidoHidDiscoveryTest : public ::testing::Test {
- public:
-  base::test::ScopedTaskEnvironment& scoped_task_environment() {
-    return scoped_task_environment_;
-  }
-
-  void SetUp() override {
-    fake_hid_manager_ = std::make_unique<FakeHidManager>();
-
-    service_manager::mojom::ConnectorRequest request;
-    connector_ = service_manager::Connector::Create(&request);
-    service_manager::Connector::TestApi test_api(connector_.get());
-    test_api.OverrideBinderForTesting(
-        service_manager::Identity(device::mojom::kServiceName),
-        device::mojom::HidManager::Name_,
-        base::Bind(&FakeHidManager::AddBinding,
-                   base::Unretained(fake_hid_manager_.get())));
-  }
-
  protected:
   base::test::ScopedTaskEnvironment scoped_task_environment_;
-  std::unique_ptr<service_manager::Connector> connector_;
-  std::unique_ptr<FakeHidManager> fake_hid_manager_;
+  ScopedFakeHidManager fake_hid_manager_;
 };
 
 TEST_F(FidoHidDiscoveryTest, TestAddRemoveDevice) {
-  FidoHidDiscovery discovery(connector_.get());
+  FidoHidDiscovery discovery(fake_hid_manager_.service_manager_connector());
   MockFidoDiscoveryObserver observer;
 
-  fake_hid_manager_->AddDevice(MakeFidoHidDevice("known"));
+  fake_hid_manager_.AddFidoHidDevice("known");
 
   EXPECT_CALL(observer, DiscoveryStarted(&discovery, true));
   discovery.set_observer(&observer);
@@ -91,29 +58,29 @@ TEST_F(FidoHidDiscoveryTest, TestAddRemoveDevice) {
 
   // Devices initially known to the service before discovery started should be
   // reported as KNOWN.
-  EXPECT_CALL(observer, DeviceAdded(&discovery, IdMatches("known")));
-  scoped_task_environment().RunUntilIdle();
+  EXPECT_CALL(observer, AuthenticatorAdded(&discovery, IdMatches("known")));
+  scoped_task_environment_.RunUntilIdle();
 
   // Devices added during the discovery should be reported as ADDED.
-  EXPECT_CALL(observer, DeviceAdded(&discovery, IdMatches("added")));
-  fake_hid_manager_->AddDevice(MakeFidoHidDevice("added"));
-  scoped_task_environment().RunUntilIdle();
+  EXPECT_CALL(observer, AuthenticatorAdded(&discovery, IdMatches("added")));
+  fake_hid_manager_.AddFidoHidDevice("added");
+  scoped_task_environment_.RunUntilIdle();
 
   // Added non-U2F devices should not be reported at all.
-  EXPECT_CALL(observer, DeviceAdded(_, _)).Times(0);
-  fake_hid_manager_->AddDevice(MakeOtherDevice("other"));
+  EXPECT_CALL(observer, AuthenticatorAdded(_, _)).Times(0);
+  fake_hid_manager_.AddDevice(MakeOtherDevice("other"));
 
   // Removed non-U2F devices should not be reported at all.
-  EXPECT_CALL(observer, DeviceRemoved(_, _)).Times(0);
-  fake_hid_manager_->RemoveDevice("other");
-  scoped_task_environment().RunUntilIdle();
+  EXPECT_CALL(observer, AuthenticatorRemoved(_, _)).Times(0);
+  fake_hid_manager_.RemoveDevice("other");
+  scoped_task_environment_.RunUntilIdle();
 
   // Removed U2F devices should be reported as REMOVED.
-  EXPECT_CALL(observer, DeviceRemoved(&discovery, IdMatches("known")));
-  EXPECT_CALL(observer, DeviceRemoved(&discovery, IdMatches("added")));
-  fake_hid_manager_->RemoveDevice("known");
-  fake_hid_manager_->RemoveDevice("added");
-  scoped_task_environment().RunUntilIdle();
+  EXPECT_CALL(observer, AuthenticatorRemoved(&discovery, IdMatches("known")));
+  EXPECT_CALL(observer, AuthenticatorRemoved(&discovery, IdMatches("added")));
+  fake_hid_manager_.RemoveDevice("known");
+  fake_hid_manager_.RemoveDevice("added");
+  scoped_task_environment_.RunUntilIdle();
 }
 
 }  // namespace device

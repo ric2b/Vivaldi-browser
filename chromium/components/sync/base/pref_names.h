@@ -15,7 +15,6 @@ extern const char kSyncLastSyncedTime[];
 extern const char kSyncLastPollTime[];
 extern const char kSyncShortPollIntervalSeconds[];
 extern const char kSyncLongPollIntervalSeconds[];
-extern const char kSyncHasAuthError[];
 extern const char kSyncFirstSetupComplete[];
 extern const char kSyncKeepEverythingSynced[];
 
@@ -44,6 +43,7 @@ extern const char kSyncPriorityPreferences[];
 extern const char kSyncPrinters[];
 extern const char kSyncReadingList[];
 extern const char kSyncSearchEngines[];
+extern const char kSyncSendTabToSelf[];
 extern const char kSyncSessions[];
 extern const char kSyncSupervisedUserSettings[];
 extern const char kSyncSupervisedUserSharedSettings[];
@@ -64,7 +64,9 @@ extern const char kSyncSuppressStart[];
 extern const char kSyncEncryptionBootstrapToken[];
 extern const char kSyncKeystoreEncryptionBootstrapToken[];
 
-extern const char kSyncSessionsGUID[];
+extern const char kSyncCacheGuid[];
+extern const char kSyncBirthday[];
+extern const char kSyncBagOfChips[];
 
 #if defined(OS_CHROMEOS)
 extern const char kSyncSpareBootstrapToken[];
@@ -80,9 +82,6 @@ extern const char kSyncShutdownCleanly[];
 extern const char kSyncInvalidationVersions[];
 
 extern const char kSyncLastRunVersion[];
-
-extern const char kSyncPassphraseEncryptionTransitionInProgress[];
-extern const char kSyncNigoriStateForPassphraseTransition[];
 
 extern const char kEnableLocalSyncBackend[];
 extern const char kLocalSyncBackendDir[];

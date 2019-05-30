@@ -29,7 +29,6 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/browser/ui/views_mode_controller.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/installer/util/google_update_settings.h"
@@ -37,8 +36,8 @@
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "ui/base/buildflags.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/ui_features.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/label.h"
@@ -47,12 +46,6 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/widget/widget.h"
-
-#if defined(OS_MACOSX)
-#include "chrome/browser/platform_util.h"
-#include "chrome/browser/ui/cocoa/browser_dialogs_views_mac.h"
-#include "chrome/browser/ui/cocoa/bubble_anchor_helper_views.h"
-#endif
 
 namespace {
 
@@ -82,32 +75,16 @@ bool DoesSupportConsentCheck() {
 #endif
 }
 
-#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
 // Returns the app menu view, except when the browser window is Cocoa; Cocoa
 // browser windows always have a null anchor view and use
 // GetSessionCrashedBubbleAnchorRect() instead.
 views::View* GetSessionCrashedBubbleAnchorView(Browser* browser) {
-#if BUILDFLAG(MAC_VIEWS_BROWSER)
-  if (views_mode_controller::IsViewsBrowserCocoa())
-    return nullptr;
-#endif
   return BrowserView::GetBrowserViewForBrowser(browser)
       ->toolbar_button_provider()
       ->GetAppMenuButton();
 }
-#else  // OS_MACOSX && !MAC_VIEWS_BROWSER
-views::View* GetSessionCrashedBubbleAnchorView(Browser* browser) {
-  return nullptr;
-}
-#endif
 
 gfx::Rect GetSessionCrashedBubbleAnchorRect(Browser* browser) {
-#if BUILDFLAG(MAC_VIEWS_BROWSER)
-  if (views_mode_controller::IsViewsBrowserCocoa())
-    return bubble_anchor_util::GetAppMenuAnchorRectCocoa(browser);
-#elif defined(OS_MACOSX)
-  return bubble_anchor_util::GetAppMenuAnchorRectCocoa(browser);
-#endif
   return gfx::Rect();
 }
 
@@ -142,10 +119,6 @@ class SessionCrashedBubbleView::BrowserRemovalObserver
 bool SessionCrashedBubble::Show(Browser* browser) {
   if (browser->is_vivaldi())
     return false;
-#if defined(OS_MACOSX)
-  if (!chrome::ShowAllDialogsWithViewsToolkit())
-    return false;
-#endif
 
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (browser->profile()->IsOffTheRecord())
@@ -191,10 +164,6 @@ void SessionCrashedBubbleView::ShowForReal(
       GetSessionCrashedBubbleAnchorView(browser),
       GetSessionCrashedBubbleAnchorRect(browser), browser, offer_uma_optin);
   views::BubbleDialogDelegateView::CreateBubble(crash_bubble)->Show();
-#if defined(OS_MACOSX)
-  if (views_mode_controller::IsViewsBrowserCocoa())
-    KeepBubbleAnchored(crash_bubble);
-#endif
 
   RecordBubbleHistogramValue(SESSION_CRASHED_BUBBLE_SHOWN);
   if (uma_opted_in_already)

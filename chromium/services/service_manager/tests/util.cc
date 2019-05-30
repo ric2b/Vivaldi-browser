@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/path_service.h"
 #include "base/process/process.h"
 #include "base/rand_util.h"
@@ -19,9 +20,10 @@
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "mojo/public/cpp/system/invitation.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/service_executable/switches.h"
 #include "services/service_manager/public/mojom/connector.mojom.h"
+#include "services/service_manager/public/mojom/service.mojom.h"
 #include "services/service_manager/public/mojom/service_factory.mojom.h"
-#include "services/service_manager/runner/common/switches.h"
 
 namespace service_manager {
 namespace test {
@@ -30,8 +32,7 @@ namespace {
 
 void GrabConnectResult(base::RunLoop* loop,
                        mojom::ConnectResult* out_result,
-                       mojom::ConnectResult result,
-                       const Identity& resolved_identity) {
+                       mojom::ConnectResult result) {
   loop->Quit();
   *out_result = result;
 }
@@ -65,22 +66,20 @@ mojom::ConnectResult LaunchAndConnectToProcess(
   mojo::OutgoingInvitation invitation;
   auto pipe_name = base::NumberToString(base::RandUint64());
   mojo::ScopedMessagePipeHandle pipe = invitation.AttachMessagePipe(pipe_name);
-  child_command_line.AppendSwitchASCII(switches::kServicePipeToken, pipe_name);
+  child_command_line.AppendSwitchASCII(switches::kServiceRequestAttachmentName,
+                                       pipe_name);
 
   service_manager::mojom::ServicePtr client;
   client.Bind(mojo::InterfacePtrInfo<service_manager::mojom::Service>(
       std::move(pipe), 0u));
   service_manager::mojom::PIDReceiverPtr receiver;
 
-  connector->StartService(target, std::move(client), MakeRequest(&receiver));
   mojom::ConnectResult result;
-  {
-    base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
-    Connector::TestApi test_api(connector);
-    test_api.SetStartServiceCallback(
-        base::Bind(&GrabConnectResult, &loop, &result));
-    loop.Run();
-  }
+  base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
+  connector->RegisterServiceInstance(
+      target, std::move(client), MakeRequest(&receiver),
+      base::BindOnce(&GrabConnectResult, &loop, &result));
+  loop.Run();
 
   base::LaunchOptions options;
 #if defined(OS_WIN)

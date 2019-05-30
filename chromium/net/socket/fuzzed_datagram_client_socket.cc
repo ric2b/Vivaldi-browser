@@ -5,6 +5,7 @@
 #include "net/socket/fuzzed_datagram_client_socket.h"
 
 #include <algorithm>
+#include <string>
 
 #include "base/bind.h"
 #include "base/location.h"
@@ -119,6 +120,10 @@ void FuzzedDatagramClientSocket::SetMaxPacketSize(size_t max_packet_size) {}
 void FuzzedDatagramClientSocket::SetWriteMultiCoreEnabled(bool enabled) {}
 void FuzzedDatagramClientSocket::SetSendmmsgEnabled(bool enabled) {}
 void FuzzedDatagramClientSocket::SetWriteBatchingActive(bool active) {}
+int FuzzedDatagramClientSocket::SetMulticastInterface(
+    uint32_t interface_index) {
+  return ERR_NOT_IMPLEMENTED;
+}
 
 const NetLogWithSource& FuzzedDatagramClientSocket::NetLog() const {
   return net_log_;
@@ -138,8 +143,8 @@ int FuzzedDatagramClientSocket::Read(IOBuffer* buf,
   CHECK(connected_);
 
   // Get contents of response.
-  std::string data(data_provider_->ConsumeBytes(
-      data_provider_->ConsumeUint32InRange(0, buf_len)));
+  std::string data = data_provider_->ConsumeRandomLengthString(
+      data_provider_->ConsumeIntegralInRange(0, buf_len));
 
   int result;
   if (data.size() > 0) {

@@ -47,7 +47,8 @@ MutationObserverInterestGroup* MutationObserverInterestGroup::CreateIfNeeded(
   if (observers.IsEmpty())
     return nullptr;
 
-  return new MutationObserverInterestGroup(observers, old_value_flag);
+  return MakeGarbageCollected<MutationObserverInterestGroup>(observers,
+                                                             old_value_flag);
 }
 
 MutationObserverInterestGroup::MutationObserverInterestGroup(
@@ -87,7 +88,7 @@ void MutationObserverInterestGroup::EnqueueMutationRecord(
   }
 }
 
-void MutationObserverInterestGroup::Trace(blink::Visitor* visitor) {
+void MutationObserverInterestGroup::Trace(Visitor* visitor) {
   visitor->Trace(observers_);
 }
 

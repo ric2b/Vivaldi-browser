@@ -8,12 +8,12 @@ import android.content.Context;
 import android.util.AttributeSet;
 import android.widget.Checkable;
 
-import org.chromium.chrome.browser.widget.TintedImageView;
+import org.chromium.ui.widget.ChromeImageView;
 
 /**
- * A TintedImageView that supports the checkable state.
+ * An AppCompatImageView that supports the checkable state.
  */
-public class AppMenuItemIcon extends TintedImageView implements Checkable {
+public class AppMenuItemIcon extends ChromeImageView implements Checkable {
     private static final int[] CHECKED_STATE_SET = new int[] {android.R.attr.state_checked};
     private boolean mCheckedState;
 

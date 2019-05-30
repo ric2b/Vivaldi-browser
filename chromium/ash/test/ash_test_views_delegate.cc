@@ -5,7 +5,7 @@
 #include "ash/test/ash_test_views_delegate.h"
 
 #include "ash/shell.h"
-#include "ash/test/ash_test_helper.h"
+#include "ui/base/ui_base_features.h"
 
 namespace ash {
 
@@ -17,9 +17,13 @@ void AshTestViewsDelegate::OnBeforeWidgetInit(
     views::Widget::InitParams* params,
     views::internal::NativeWidgetDelegate* delegate) {
   if (running_outside_ash_) {
-    DCHECK(ash::Shell::HasInstance());
-    if (!params->parent && !params->context)
-      params->context = Shell::GetRootWindowForNewWindows();
+    // With Mash, MusClient::CreateNativeWidget uses a DesktopNativeWidgetAura,
+    // which doesn't need a context.
+    if (!features::IsUsingWindowService()) {
+      DCHECK(ash::Shell::HasInstance());
+      if (!params->parent && !params->context)
+        params->context = Shell::GetRootWindowForNewWindows();
+    }
   } else {
     CHECK(params->native_widget || params->context || params->parent)
         << "Widgets must be created with a context or parent. In tests use "
@@ -29,17 +33,6 @@ void AshTestViewsDelegate::OnBeforeWidgetInit(
   }
 
   TestViewsDelegate::OnBeforeWidgetInit(params, delegate);
-}
-
-void AshTestViewsDelegate::NotifyAccessibilityEvent(
-    views::View* view,
-    ax::mojom::Event event_type) {
-  TestViewsDelegate::NotifyAccessibilityEvent(view, event_type);
-
-  if (test_accessibility_event_delegate_) {
-    test_accessibility_event_delegate_->NotifyAccessibilityEvent(view,
-                                                                 event_type);
-  }
 }
 
 views::TestViewsDelegate::ProcessMenuAcceleratorResult

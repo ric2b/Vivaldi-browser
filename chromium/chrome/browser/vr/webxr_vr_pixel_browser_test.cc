@@ -7,7 +7,7 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
-#include "chrome/browser/vr/test/mock_openvr_device_hook_base.h"
+#include "chrome/browser/vr/test/mock_xr_device_hook_base.h"
 #include "chrome/browser/vr/test/webvr_browser_test.h"
 #include "chrome/browser/vr/test/webxr_vr_browser_test.h"
 
@@ -15,9 +15,11 @@
 
 namespace vr {
 
-class MyOpenVRMock : public MockOpenVRBase {
+class MyXRMock : public MockXRDeviceHookBase {
  public:
-  void OnFrameSubmitted(device::SubmittedFrameData frame_data) final;
+  void OnFrameSubmitted(
+      device_test::mojom::SubmittedFrameDataPtr frame_data,
+      device_test::mojom::XRTestHook::OnFrameSubmittedCallback callback) final;
 
   void WaitForFrame() {
     DCHECK(!wait_loop_);
@@ -30,35 +32,39 @@ class MyOpenVRMock : public MockOpenVRBase {
     wait_loop_ = nullptr;
   }
 
-  device::Color last_submitted_color_ = {};
+  device_test::mojom::ColorPtr last_submitted_color_ = {};
   unsigned int num_submitted_frames_ = 0;
 
  private:
   base::RunLoop* wait_loop_ = nullptr;
 };
 
-void MyOpenVRMock::OnFrameSubmitted(device::SubmittedFrameData frame_data) {
-  last_submitted_color_ = frame_data.color;
+void MyXRMock::OnFrameSubmitted(
+    device_test::mojom::SubmittedFrameDataPtr frame_data,
+    device_test::mojom::XRTestHook::OnFrameSubmittedCallback callback) {
+  last_submitted_color_ = std::move(frame_data->color);
   num_submitted_frames_++;
 
   if (wait_loop_) {
     wait_loop_->Quit();
   }
+
+  std::move(callback).Run();
 }
 
 // Pixel test for WebVR/WebXR - start presentation, submit frames, get data back
 // out. Validates that a pixel was rendered with the expected color.
 void TestPresentationPixelsImpl(WebXrVrBrowserTestBase* t,
                                 std::string filename) {
-  MyOpenVRMock my_mock;
+  MyXRMock my_mock;
 
   // Load the test page, and enter presentation.
-  t->LoadUrlAndAwaitInitialization(t->GetHtmlTestFile(filename));
+  t->LoadUrlAndAwaitInitialization(t->GetFileUrlForHtmlTestFile(filename));
   t->EnterSessionWithUserGestureOrFail();
 
   // Wait for JavaScript to submit at least one frame.
   EXPECT_TRUE(
-      t->PollJavaScriptBoolean("hasPresentedFrame", t->kPollTimeoutShort))
+      t->PollJavaScriptBoolean("hasPresentedFrame", t->kPollTimeoutMedium))
       << "No frame submitted";
 
   // Tell JavaScript that it is done with the test.
@@ -67,23 +73,21 @@ void TestPresentationPixelsImpl(WebXrVrBrowserTestBase* t,
 
   my_mock.WaitForFrame();
 
-  device::Color expected = {0, 0, 255, 255};
-  EXPECT_EQ(expected.r, my_mock.last_submitted_color_.r)
+  auto expected = device_test::mojom::Color::New(0, 0, 255, 255);
+  EXPECT_EQ(expected->r, my_mock.last_submitted_color_->r)
       << "Red channel of submitted color does not match expectation";
-  EXPECT_EQ(expected.g, my_mock.last_submitted_color_.g)
+  EXPECT_EQ(expected->g, my_mock.last_submitted_color_->g)
       << "Green channel of submitted color does not match expectation";
-  EXPECT_EQ(expected.b, my_mock.last_submitted_color_.b)
+  EXPECT_EQ(expected->b, my_mock.last_submitted_color_->b)
       << "Blue channel of submitted color does not match expectation";
-  EXPECT_EQ(expected.a, my_mock.last_submitted_color_.a)
+  EXPECT_EQ(expected->a, my_mock.last_submitted_color_->a)
       << "Alpha channel of submitted color does not match expectation";
 }
 
-IN_PROC_BROWSER_TEST_F(WebVrBrowserTestStandard,
-                       REQUIRES_GPU(TestPresentationPixels)) {
+IN_PROC_BROWSER_TEST_F(WebVrBrowserTestStandard, TestPresentationPixels) {
   TestPresentationPixelsImpl(this, "test_webvr_pixels");
 }
-IN_PROC_BROWSER_TEST_F(WebXrVrBrowserTestStandard,
-                       REQUIRES_GPU(TestPresentationPixels)) {
+IN_PROC_BROWSER_TEST_F(WebXrVrBrowserTestStandard, TestPresentationPixels) {
   TestPresentationPixelsImpl(this, "test_webxr_pixels");
 }
 

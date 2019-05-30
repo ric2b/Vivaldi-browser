@@ -13,8 +13,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/rand_util.h"
 #include "net/base/ip_address.h"
-#include "net/dns/dns_protocol.h"
 #include "net/dns/dns_socket_pool.h"
+#include "net/dns/public/dns_protocol.h"
 #include "net/log/net_log_source.h"
 #include "net/socket/socket_performance_watcher.h"
 #include "net/socket/socket_test_util.h"
@@ -45,7 +45,7 @@ class TestClientSocketFactory : public ClientSocketFactory {
   }
 
   std::unique_ptr<SSLClientSocket> CreateSSLClientSocket(
-      std::unique_ptr<ClientSocketHandle> transport_socket,
+      std::unique_ptr<StreamSocket> stream_socket,
       const HostPortPair& host_and_port,
       const SSLConfig& ssl_config,
       const SSLClientSocketContext& context) override {
@@ -54,20 +54,20 @@ class TestClientSocketFactory : public ClientSocketFactory {
   }
 
   std::unique_ptr<ProxyClientSocket> CreateProxyClientSocket(
-      std::unique_ptr<ClientSocketHandle> transport_socket,
+      std::unique_ptr<StreamSocket> stream_socket,
       const std::string& user_agent,
       const HostPortPair& endpoint,
+      const ProxyServer& proxy_server,
       HttpAuthController* http_auth_controller,
       bool tunnel,
       bool using_spdy,
       NextProto negotiated_protocol,
+      ProxyDelegate* proxy_delegate,
       bool is_https_proxy,
       const NetworkTrafficAnnotationTag& traffic_annotation) override {
     NOTIMPLEMENTED();
     return nullptr;
   }
-
-  void ClearSSLSessionCache() override { NOTIMPLEMENTED(); }
 
  private:
   std::list<std::unique_ptr<SocketDataProvider>> data_providers_;

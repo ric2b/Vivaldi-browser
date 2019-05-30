@@ -5,11 +5,11 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_ANIMATIONWORKLET_ANIMATOR_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_ANIMATIONWORKLET_ANIMATOR_H_
 
-#include "third_party/blink/renderer/modules/animationworklet/effect_proxy.h"
+#include "third_party/blink/renderer/modules/animationworklet/worklet_group_effect_proxy.h"
 #include "third_party/blink/renderer/platform/bindings/name_client.h"
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_member.h"
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_v8_reference.h"
-#include "third_party/blink/renderer/platform/graphics/compositor_animators_state.h"
+#include "third_party/blink/renderer/platform/graphics/animation_worklet_mutators_state.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/time.h"
 #include "v8/include/v8.h"
@@ -17,7 +17,6 @@
 namespace blink {
 
 class AnimatorDefinition;
-class ScriptState;
 
 // Represents an animator instance. It owns the underlying |v8::Object| for the
 // instance and knows how to invoke the |animate| function on it.
@@ -25,7 +24,10 @@ class ScriptState;
 class Animator final : public GarbageCollectedFinalized<Animator>,
                        public NameClient {
  public:
-  Animator(v8::Isolate*, AnimatorDefinition*, v8::Local<v8::Object> instance);
+  Animator(v8::Isolate*,
+           AnimatorDefinition*,
+           v8::Local<v8::Value> instance,
+           int num_effects);
   ~Animator();
   void Trace(blink::Visitor*);
   const char* NameInHeapSnapshot() const override { return "Animator"; }
@@ -33,17 +35,19 @@ class Animator final : public GarbageCollectedFinalized<Animator>,
   // Returns true if it successfully invoked animate callback in JS. It receives
   // latest state coming from |AnimationHost| as input and fills
   // the output state with new updates.
-  bool Animate(ScriptState*,
+  bool Animate(v8::Isolate* isolate,
                double current_time,
-               CompositorMutatorOutputState::AnimationState*);
+               AnimationWorkletDispatcherOutput::AnimationState* output);
+  std::vector<base::Optional<TimeDelta>> GetLocalTimes() const;
+  bool IsStateful() const;
 
  private:
   // This object keeps the definition object, and animator instance alive.
   // It participates in wrapper tracing as it holds onto V8 wrappers.
   TraceWrapperMember<AnimatorDefinition> definition_;
-  TraceWrapperV8Reference<v8::Object> instance_;
+  TraceWrapperV8Reference<v8::Value> instance_;
 
-  Member<EffectProxy> effect_;
+  Member<WorkletGroupEffectProxy> group_effect_;
 };
 
 }  // namespace blink

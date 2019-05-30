@@ -497,6 +497,18 @@ class ScopedStoppable {
 
 }  // namespace
 
+#if defined(OS_ANDROID)
+
+extern "C" {
+__attribute__((visibility("default"), used)) int CrashpadHandlerMain(
+    int argc,
+    char* argv[]) {
+  return HandlerMain(argc, argv, nullptr);
+}
+}  // extern "C"
+
+#endif  // OS_ANDROID
+
 int HandlerMain(int argc,
                 char* argv[],
                 const UserStreamDataSources* user_stream_sources) {
@@ -541,6 +553,8 @@ int HandlerMain(int argc,
     kOptionSanitizationInformation,
 #endif
     kOptionURL,
+
+    kDisableVivaldi,
 
     // Standard options.
     kOptionHelp = -2,
@@ -602,6 +616,7 @@ int HandlerMain(int argc,
     {"url", required_argument, nullptr, kOptionURL},
     {"help", no_argument, nullptr, kOptionHelp},
     {"version", no_argument, nullptr, kOptionVersion},
+    {"disable-vivaldi", no_argument, nullptr, kDisableVivaldi},
     {nullptr, 0, nullptr, 0},
   };
 
@@ -746,6 +761,9 @@ int HandlerMain(int argc,
         ToolSupport::Version(me);
         MetricsRecordExit(Metrics::LifetimeMilestone::kExitedEarly);
         return EXIT_SUCCESS;
+      }
+      case kDisableVivaldi: {
+        break;
       }
       default: {
         ToolSupport::UsageHint(me, nullptr);

@@ -20,15 +20,17 @@ I18NCustomBindings::I18NCustomBindings(ScriptContext* context)
     : ObjectBackedNativeHandler(context) {}
 
 void I18NCustomBindings::AddRoutes() {
+  RouteHandlerFunction("GetL10nMessage", "i18n",
+                       base::BindRepeating(&I18NCustomBindings::GetL10nMessage,
+                                           base::Unretained(this)));
   RouteHandlerFunction(
-      "GetL10nMessage", "i18n",
-      base::Bind(&I18NCustomBindings::GetL10nMessage, base::Unretained(this)));
-  RouteHandlerFunction("GetL10nUILanguage", "i18n",
-                       base::Bind(&I18NCustomBindings::GetL10nUILanguage,
-                                  base::Unretained(this)));
-  RouteHandlerFunction("DetectTextLanguage", "i18n",
-                       base::Bind(&I18NCustomBindings::DetectTextLanguage,
-                                  base::Unretained(this)));
+      "GetL10nUILanguage", "i18n",
+      base::BindRepeating(&I18NCustomBindings::GetL10nUILanguage,
+                          base::Unretained(this)));
+  RouteHandlerFunction(
+      "DetectTextLanguage", "i18n",
+      base::BindRepeating(&I18NCustomBindings::DetectTextLanguage,
+                          base::Unretained(this)));
 }
 
 void I18NCustomBindings::GetL10nMessage(
@@ -57,8 +59,11 @@ void I18NCustomBindings::GetL10nMessage(
 
 void I18NCustomBindings::GetL10nUILanguage(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
-  args.GetReturnValue().Set(v8::String::NewFromUtf8(
-      args.GetIsolate(), content::RenderThread::Get()->GetLocale().c_str()));
+  args.GetReturnValue().Set(
+      v8::String::NewFromUtf8(args.GetIsolate(),
+                              content::RenderThread::Get()->GetLocale().c_str(),
+                              v8::NewStringType::kNormal)
+          .ToLocalChecked());
 }
 
 void I18NCustomBindings::DetectTextLanguage(

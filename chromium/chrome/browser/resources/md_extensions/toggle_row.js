@@ -15,6 +15,8 @@ cr.define('extensions', function() {
 
     properties: {
       checked: Boolean,
+
+      disabled: Boolean,
     },
 
     /**
@@ -55,8 +57,7 @@ cr.define('extensions', function() {
     },
 
     /**
-     * Fires
-     * @param {!CustomEvent} e
+     * @param {!CustomEvent<boolean>} e
      * @private
      */
     onCrToggleChange_: function(e) {

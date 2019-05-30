@@ -105,7 +105,8 @@ class PlatformHandleTest : public testing::Test,
     base::File test_file(temp_dir_.GetPath().AppendASCII("test"),
                          base::File::FLAG_CREATE | base::File::FLAG_WRITE |
                              base::File::FLAG_READ);
-    test_file.WriteAtCurrentPos(kTestData.data(), kTestData.size());
+    test_file.WriteAtCurrentPos(kTestData.data(),
+                                static_cast<int>(kTestData.size()));
 
 #if defined(OS_WIN)
     return PlatformHandle(
@@ -127,7 +128,7 @@ class PlatformHandleTest : public testing::Test,
     base::File file(handle.GetFD().get());
 #endif
     std::vector<char> buffer(kTestData.size());
-    file.Read(0, buffer.data(), buffer.size());
+    file.Read(0, buffer.data(), static_cast<int>(buffer.size()));
     std::string contents(buffer.begin(), buffer.end());
 
 // Let |handle| retain ownership.
@@ -243,20 +244,20 @@ TEST_P(PlatformHandleTest, CStructConversion) {
   EXPECT_EQ(kTestData, GetObjectContents(handle));
 }
 
-INSTANTIATE_TEST_CASE_P(,
-                        PlatformHandleTest,
+INSTANTIATE_TEST_SUITE_P(,
+                         PlatformHandleTest,
 #if defined(OS_WIN)
-                        testing::Values(HandleType::kHandle)
+                         testing::Values(HandleType::kHandle)
 #elif defined(OS_FUCHSIA)
-                        testing::Values(HandleType::kHandle,
-                                        HandleType::kFileDescriptor)
+                         testing::Values(HandleType::kHandle,
+                                         HandleType::kFileDescriptor)
 #elif defined(OS_MACOSX) && !defined(OS_IOS)
-                        testing::Values(HandleType::kFileDescriptor,
-                                        HandleType::kMachPort)
+                         testing::Values(HandleType::kFileDescriptor,
+                                         HandleType::kMachPort)
 #elif defined(OS_POSIX)
-                        testing::Values(HandleType::kFileDescriptor)
+                         testing::Values(HandleType::kFileDescriptor)
 #endif
-                            );
+);
 
 }  // namespace
 }  // namespace mojo

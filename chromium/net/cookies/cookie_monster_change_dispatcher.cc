@@ -44,14 +44,16 @@ CookieMonsterChangeDispatcher::Subscription::Subscription(
   // different options. For example, JavaScript observers will not be allowed to
   // see HTTP-only changes.
   options_.set_include_httponly();
-  options_.set_same_site_cookie_mode(
-      CookieOptions::SameSiteCookieMode::INCLUDE_STRICT_AND_LAX);
+  options_.set_same_site_cookie_context(
+      CookieOptions::SameSiteCookieContext::SAME_SITE_STRICT);
 }
 
 CookieMonsterChangeDispatcher::Subscription::~Subscription() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  change_dispatcher_->UnlinkSubscription(this);
+  if (change_dispatcher_) {
+    change_dispatcher_->UnlinkSubscription(this);
+  }
 }
 
 void CookieMonsterChangeDispatcher::Subscription::DispatchChange(
@@ -59,7 +61,8 @@ void CookieMonsterChangeDispatcher::Subscription::DispatchChange(
     net::CookieChangeCause change_cause) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  if (!url_.is_empty() && !cookie.IncludeForRequestURL(url_, options_))
+  if (!url_.is_empty() && cookie.IncludeForRequestURL(url_, options_) !=
+                              CanonicalCookie::CookieInclusionStatus::INCLUDE)
     return;
 
   // TODO(mmenke, pwnall): Run callbacks synchronously?
@@ -168,7 +171,7 @@ void CookieMonsterChangeDispatcher::DispatchChangeToDomainKey(
     const std::string& domain_key) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  CookieDomainMap::iterator it = cookie_domain_map_.find(domain_key);
+  auto it = cookie_domain_map_.find(domain_key);
   if (it == cookie_domain_map_.end())
     return;
 
@@ -184,7 +187,7 @@ void CookieMonsterChangeDispatcher::DispatchChangeToNameKey(
     const std::string& name_key) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  CookieNameMap::iterator it = cookie_name_map.find(name_key);
+  auto it = cookie_name_map.find(name_key);
   if (it == cookie_name_map.end())
     return;
 
@@ -212,12 +215,12 @@ void CookieMonsterChangeDispatcher::UnlinkSubscription(
     Subscription* subscription) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  CookieDomainMap::iterator cookie_domain_map_iterator =
+  auto cookie_domain_map_iterator =
       cookie_domain_map_.find(subscription->domain_key());
   DCHECK(cookie_domain_map_iterator != cookie_domain_map_.end());
 
   CookieNameMap& cookie_name_map = cookie_domain_map_iterator->second;
-  CookieNameMap::iterator cookie_name_map_iterator =
+  auto cookie_name_map_iterator =
       cookie_name_map.find(subscription->name_key());
   DCHECK(cookie_name_map_iterator != cookie_name_map.end());
 

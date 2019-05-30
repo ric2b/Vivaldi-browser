@@ -7,8 +7,10 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/service/surfaces/surface_manager.h"
@@ -41,7 +43,6 @@ class CompositorTest : public testing::Test {
     compositor_.reset(new ui::Compositor(
         context_factory_private->AllocateFrameSinkId(), context_factory,
         context_factory_private, CreateTaskRunner(),
-        false /* enable_surface_synchronization */,
         false /* enable_pixel_canvas */));
     compositor_->SetAcceleratedWidget(gfx::kNullAcceleratedWidget);
   }
@@ -80,6 +81,12 @@ class CompositorTestWithMockedTime : public CompositorTest {
 
 // For tests that run on a real MessageLoop with real time.
 class CompositorTestWithMessageLoop : public CompositorTest {
+ public:
+  CompositorTestWithMessageLoop()
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::UI) {}
+  ~CompositorTestWithMessageLoop() override = default;
+
  protected:
   scoped_refptr<base::SingleThreadTaskRunner> CreateTaskRunner() override {
     task_runner_ = base::ThreadTaskRunnerHandle::Get();
@@ -89,6 +96,7 @@ class CompositorTestWithMessageLoop : public CompositorTest {
   base::SequencedTaskRunner* task_runner() { return task_runner_.get(); }
 
  private:
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 };
 
@@ -96,9 +104,12 @@ class CompositorTestWithMessageLoop : public CompositorTest {
 
 TEST_F(CompositorTestWithMessageLoop, OutputColorMatrix) {
   auto root_layer = std::make_unique<Layer>(ui::LAYER_SOLID_COLOR);
+  viz::ParentLocalSurfaceIdAllocator allocator;
+  allocator.GenerateId();
   root_layer->SetBounds(gfx::Rect(10, 10));
   compositor()->SetRootLayer(root_layer.get());
-  compositor()->SetScaleAndSize(1.0f, gfx::Size(10, 10), viz::LocalSurfaceId());
+  compositor()->SetScaleAndSize(1.0f, gfx::Size(10, 10),
+                                allocator.GetCurrentLocalSurfaceIdAllocation());
   DCHECK(compositor()->IsVisible());
 
   // Set a non-identity color matrix on the compistor display, and expect it to
@@ -149,9 +160,12 @@ TEST_F(CompositorTestWithMockedTime,
 #endif
 TEST_F(CompositorTestWithMessageLoop, MAYBE_CreateAndReleaseOutputSurface) {
   std::unique_ptr<Layer> root_layer(new Layer(ui::LAYER_SOLID_COLOR));
+  viz::ParentLocalSurfaceIdAllocator allocator;
+  allocator.GenerateId();
   root_layer->SetBounds(gfx::Rect(10, 10));
   compositor()->SetRootLayer(root_layer.get());
-  compositor()->SetScaleAndSize(1.0f, gfx::Size(10, 10), viz::LocalSurfaceId());
+  compositor()->SetScaleAndSize(1.0f, gfx::Size(10, 10),
+                                allocator.GetCurrentLocalSurfaceIdAllocation());
   DCHECK(compositor()->IsVisible());
   compositor()->ScheduleDraw();
   DrawWaiterForTest::WaitForCompositingEnded(compositor());

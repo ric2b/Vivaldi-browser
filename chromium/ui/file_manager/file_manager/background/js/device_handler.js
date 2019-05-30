@@ -213,10 +213,10 @@ DeviceHandler.Notification.RENAME_FAIL = new DeviceHandler.Notification(
  * @return {string} Notification ID.
  */
 DeviceHandler.Notification.prototype.show = function(devicePath, opt_message) {
-  var notificationId = this.makeId_(devicePath);
-  this.queue_.run(function(callback) {
+  const notificationId = this.makeId_(devicePath);
+  this.queue_.run(callback => {
     this.showInternal_(notificationId, opt_message || null, callback);
-  }.bind(this));
+  });
   return notificationId;
 };
 
@@ -226,15 +226,15 @@ DeviceHandler.Notification.prototype.show = function(devicePath, opt_message) {
  * @param {string} devicePath Device path.
  */
 DeviceHandler.Notification.prototype.showOnce = function(devicePath) {
-  var notificationId = this.makeId_(devicePath);
+  const notificationId = this.makeId_(devicePath);
   this.queue_.run(function(callback) {
-    chrome.notifications.getAll(function(idList) {
+    chrome.notifications.getAll(idList => {
       if (idList.indexOf(notificationId) !== -1) {
         callback();
         return;
       }
       this.showInternal_(notificationId, null, callback);
-    }.bind(this));
+    });
   });
 };
 
@@ -248,7 +248,7 @@ DeviceHandler.Notification.prototype.showOnce = function(devicePath) {
  */
 DeviceHandler.Notification.prototype.showInternal_ = function(
     notificationId, message, callback) {
-  var buttons =
+  const buttons =
       this.buttonLabel ? [{title: str(this.buttonLabel)}] : undefined;
   chrome.notifications.create(
       notificationId,
@@ -268,9 +268,9 @@ DeviceHandler.Notification.prototype.showInternal_ = function(
  * @param {string} devicePath Device path.
  */
 DeviceHandler.Notification.prototype.hide = function(devicePath) {
-  this.queue_.run(function(callback) {
+  this.queue_.run(callback => {
     chrome.notifications.clear(this.makeId_(devicePath), callback);
-  }.bind(this));
+  });
 };
 
 /**
@@ -368,30 +368,34 @@ DeviceHandler.prototype.onMountCompleted_ = function(event) {
 };
 
 DeviceHandler.prototype.onMountCompletedInternal_ = function(event) {
-  var volume = event.volumeMetadata;
+  const volume = event.volumeMetadata;
 
   if (event.status === 'success' && event.shouldNotify) {
-    if (event.eventType === 'mount')
+    if (event.eventType === 'mount') {
       this.onMount_(event);
-    else if (event.eventType === 'unmount')
+    } else if (event.eventType === 'unmount') {
       this.onUnmount_(event);
+    }
   }
 
-  if (!volume.deviceType || !volume.devicePath || !event.shouldNotify)
+  if (!volume.deviceType || !volume.devicePath || !event.shouldNotify) {
     return;
+  }
 
-  var getFirstStatus = function(event) {
-    if (event.status === 'success')
+  const getFirstStatus = event => {
+    if (event.status === 'success') {
       return DeviceHandler.MountStatus.SUCCESS;
-    else if (event.volumeMetadata.isParentDevice)
+    } else if (event.volumeMetadata.isParentDevice) {
       return DeviceHandler.MountStatus.ONLY_PARENT_ERROR;
-    else
+    } else {
       return DeviceHandler.MountStatus.CHILD_ERROR;
+    }
   };
 
   // Update the current status.
-  if (!this.mountStatus_[volume.devicePath])
+  if (!this.mountStatus_[volume.devicePath]) {
     this.mountStatus_[volume.devicePath] = DeviceHandler.MountStatus.NO_RESULT;
+  }
   switch (this.mountStatus_[volume.devicePath]) {
     // If the multipart error message has already shown, do nothing because the
     // message does not changed by the following mount results.
@@ -405,9 +409,10 @@ DeviceHandler.prototype.onMountCompletedInternal_ = function(event) {
     // the parent error. (parent device contains partition table, which is
     // unmountable)
     case DeviceHandler.MountStatus.ONLY_PARENT_ERROR:
-      if (!volume.isParentDevice)
+      if (!volume.isParentDevice) {
         DeviceHandler.Notification.DEVICE_FAIL.hide(
             /** @type {string} */ (volume.devicePath));
+      }
       this.mountStatus_[volume.devicePath] = getFirstStatus(event);
       break;
     // We have a multi-partition device for which at least one mount
@@ -426,12 +431,13 @@ DeviceHandler.prototype.onMountCompletedInternal_ = function(event) {
       break;
   }
 
-  if (event.eventType === 'unmount')
+  if (event.eventType === 'unmount') {
     return;
+  }
 
   // Show the notification for the current errors.
   // If there is no error, do not show/update the notification.
-  var message;
+  let message;
   switch (this.mountStatus_[volume.devicePath]) {
     case DeviceHandler.MountStatus.MULTIPART_ERROR:
       message = volume.deviceLabel ?
@@ -475,19 +481,18 @@ DeviceHandler.prototype.onMountCompletedInternal_ = function(event) {
 DeviceHandler.prototype.onMount_ = function(event) {
   // If this is remounting, which happens when resuming Chrome OS, the device
   // has already inserted to the computer. So we suppress the notification.
-  var metadata = event.volumeMetadata;
+  const metadata = event.volumeMetadata;
   volumeManagerFactory.getInstance()
       .then(
           /**
            * @param {!VolumeManager} volumeManager
            * @return {!Promise<!VolumeInfo>}
            */
-          function(volumeManager) {
+          (volumeManager) => {
             if (!metadata.volumeId) {
               return Promise.reject('No volume id associated with event.');
             }
-            return volumeManager.volumeInfoList.whenVolumeInfoReady(
-                metadata.volumeId);
+            return volumeManager.whenVolumeInfoReady(metadata.volumeId);
           })
       .then(
           /**
@@ -495,11 +500,11 @@ DeviceHandler.prototype.onMount_ = function(event) {
            * @return {!Promise<!DirectoryEntry>} The root directory
            *     of the volume.
            */
-          function(volumeInfo) {
+          volumeInfo => {
             return importer.importEnabled()
                 .then(
                     /** @param {boolean} enabled */
-                    function(enabled) {
+                    enabled => {
                       if (enabled && importer.isEligibleVolume(volumeInfo)) {
                         return volumeInfo.resolveDisplayRoot();
                       }
@@ -511,47 +516,41 @@ DeviceHandler.prototype.onMount_ = function(event) {
            * @param {!DirectoryEntry} root
            * @return {!Promise<!DirectoryEntry>}
            */
-          function(root) {
+          root => {
             return importer.getMediaDirectory(root);
           })
-      .then(
-          (/**
-           * @param {!DirectoryEntry} directory
-           * @this {DeviceHandler}
-           */
-          function(directory) {
-            return importer.isPhotosAppImportEnabled()
-                .then(
-                    (/**
-                     * @param {boolean} appEnabled
-                     * @this {DeviceHandler}
-                     */
-                    function(appEnabled) {
-                      // We don't want to auto-open two windows when a user
-                      // inserts a removable device.  Only open Files app if
-                      // auto-import is disabled in Photos app.
-                      if (!appEnabled) {
-                        this.openMediaDirectory_(
-                            metadata.volumeId, null, directory.fullPath);
-                      }
-                    }).bind(this));
-          }).bind(this))
-      .catch(
-        function(error) {
-          if (metadata.deviceType && metadata.devicePath) {
-            if (metadata.isReadOnly &&
-                !metadata.isReadOnlyRemovableDevice) {
-              DeviceHandler.Notification.DEVICE_NAVIGATION_READONLY_POLICY.show(
-                  /** @type {string} */ (metadata.devicePath));
-            } else {
-              DeviceHandler.Notification.DEVICE_NAVIGATION.show(
-                  /** @type {string} */ (metadata.devicePath));
-            }
+      .then(/**
+   * @param {!DirectoryEntry} directory
+   */
+  directory => {
+    return importer.isPhotosAppImportEnabled().then(
+        /**
+         * @param {boolean} appEnabled
+         */
+        appEnabled => {
+          // We don't want to auto-open two windows when a user
+          // inserts a removable device.  Only open Files app if
+          // auto-import is disabled in Photos app.
+          if (!appEnabled) {
+            this.openMediaDirectory_(
+                metadata.volumeId, null, directory.fullPath);
           }
         });
+  })
+      .catch(error => {
+        if (metadata.deviceType && metadata.devicePath) {
+          if (metadata.isReadOnly && !metadata.isReadOnlyRemovableDevice) {
+            DeviceHandler.Notification.DEVICE_NAVIGATION_READONLY_POLICY.show(
+                /** @type {string} */ (metadata.devicePath));
+          } else {
+            DeviceHandler.Notification.DEVICE_NAVIGATION.show(
+                /** @type {string} */ (metadata.devicePath));
+          }
+        }
+      });
 };
 
-DeviceHandler.prototype.onUnmount_ = function(event) {
+DeviceHandler.prototype.onUnmount_ = event => {
   DeviceHandler.Notification.DEVICE_NAVIGATION.hide(
       /** @type {string} */ (event.devicePath));
 };
@@ -572,14 +571,14 @@ DeviceHandler.prototype.onNotificationClicked_ = function(id) {
  * @private
  */
 DeviceHandler.prototype.onNotificationClickedInternal_ = function(id) {
-  var pos = id.indexOf(':');
-  var type = id.substr(0, pos);
-  var devicePath = id.substr(pos + 1);
+  const pos = id.indexOf(':');
+  const type = id.substr(0, pos);
+  const devicePath = id.substr(pos + 1);
   if (type === 'deviceNavigation' || type === 'deviceFail') {
-    chrome.notifications.clear(id, function() {});
+    chrome.notifications.clear(id, () => {});
     this.openMediaDirectory_(null, devicePath, null);
   } else if (type === 'deviceImport') {
-    chrome.notifications.clear(id, function() {});
+    chrome.notifications.clear(id, () => {});
     this.openMediaDirectory_(null, devicePath, 'DCIM');
   }
 };
@@ -593,7 +592,7 @@ DeviceHandler.prototype.onNotificationClickedInternal_ = function(id) {
  */
 DeviceHandler.prototype.openMediaDirectory_ =
     function(volumeId, devicePath, filePath) {
-  var event = new Event(DeviceHandler.VOLUME_NAVIGATION_REQUESTED);
+  const event = new Event(DeviceHandler.VOLUME_NAVIGATION_REQUESTED);
   event.volumeId = volumeId;
   event.devicePath = devicePath;
   event.filePath = filePath;

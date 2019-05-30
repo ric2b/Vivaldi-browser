@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/memory/ref_counted.h"
@@ -19,6 +20,7 @@
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/gpu/browser_gpu_client_delegate.h"
 #include "content/common/child_process_host_impl.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/connection_filter.h"
 #include "content/public/common/service_manager_connection.h"
@@ -29,10 +31,10 @@
 #include "ui/base/ui_base_features.h"
 
 #if defined(OS_WIN)
-#include "content/browser/renderer_host/dwrite_font_proxy_message_filter_win.h"
+#include "content/browser/renderer_host/dwrite_font_proxy_impl_win.h"
 #include "content/public/common/font_cache_dispatcher_win.h"
 #elif defined(OS_MACOSX)
-#include "content/common/font_loader_dispatcher_mac.h"
+#include "content/browser/sandbox_support_mac_impl.h"
 #endif
 
 namespace content {
@@ -49,9 +51,11 @@ class ConnectionFilterImpl : public ConnectionFilter {
         base::CreateSequencedTaskRunnerWithTraits(
             {base::TaskPriority::USER_BLOCKING, base::MayBlock()}));
 #elif defined(OS_MACOSX)
-    registry_.AddInterface(base::BindRepeating(&FontLoaderDispatcher::Create));
+    registry_.AddInterface(
+        base::BindRepeating(&SandboxSupportMacImpl::BindRequest,
+                            base::Owned(new SandboxSupportMacImpl)));
 #endif
-    if (!features::IsUsingWindowService()) {
+    if (!features::IsMultiProcessMash()) {
       // For mus, the mojom::discardable_memory::DiscardableSharedMemoryManager
       // is exposed from ui::Service. So we don't need bind the interface here.
       auto* browser_main_loop = BrowserMainLoop::GetInstance();
@@ -106,7 +110,7 @@ class ConnectionFilterImpl : public ConnectionFilter {
     auto gpu_client = std::make_unique<viz::GpuClient>(
         std::make_unique<BrowserGpuClientDelegate>(), gpu_client_id,
         gpu_client_tracing_id,
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+        base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}));
     gpu_client->SetConnectionErrorHandler(
         base::BindOnce(&ConnectionFilterImpl::OnGpuConnectionClosed,
                        base::Unretained(this), source_info.identity));

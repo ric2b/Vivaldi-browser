@@ -4,9 +4,9 @@
 
 #include "components/autofill/content/renderer/renderer_save_password_progress_logger.h"
 
-#include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/autofill/content/common/autofill_driver.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -58,8 +58,7 @@ class FakeContentPasswordManagerDriver : public mojom::PasswordManagerDriver {
   void SameDocumentNavigation(
       const autofill::PasswordForm& password_form) override {}
 
-  void ShowPasswordSuggestions(int key,
-                               base::i18n::TextDirection text_direction,
+  void ShowPasswordSuggestions(base::i18n::TextDirection text_direction,
                                const base::string16& typed_username,
                                int options,
                                const gfx::RectF& bounds) override {}
@@ -75,6 +74,8 @@ class FakeContentPasswordManagerDriver : public mojom::PasswordManagerDriver {
                                    const GURL& frame_url) override {}
 
   void FocusedInputChanged(bool is_fillable, bool is_password_field) override {}
+  void LogFirstFillingResult(uint32_t form_renderer_id,
+                             int32_t result) override {}
 
   // Records whether RecordSavePasswordProgress() gets called.
   bool called_record_save_;
@@ -95,7 +96,7 @@ class TestLogger : public RendererSavePasswordProgressLogger {
 }  // namespace
 
 TEST(RendererSavePasswordProgressLoggerTest, SendLog) {
-  base::MessageLoop loop;
+  base::test::ScopedTaskEnvironment task_environment;
   FakeContentPasswordManagerDriver fake_driver;
   mojom::PasswordManagerDriverPtr driver_ptr =
       fake_driver.CreateInterfacePtrAndBind();

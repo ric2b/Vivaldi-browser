@@ -4,6 +4,7 @@
 
 #include "chrome/browser/feedback/feedback_uploader_chrome.h"
 
+#include "base/bind.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -56,7 +57,7 @@ void FeedbackUploaderChrome::StartDispatchingReport() {
       IdentityManagerFactory::GetForProfile(profile);
 
   if (identity_manager && identity_manager->HasPrimaryAccount()) {
-    OAuth2TokenService::ScopeSet scopes;
+    identity::ScopeSet scopes;
     scopes.insert("https://www.googleapis.com/auth/supportcontent");
     token_fetcher_ =
         std::make_unique<identity::PrimaryAccountAccessTokenFetcher>(

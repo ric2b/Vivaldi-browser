@@ -9,6 +9,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
@@ -321,8 +322,10 @@ void TabsEventRouter::OnFaviconUpdated(
   }
 }
 
-void TabsEventRouter::OnDiscardedStateChange(WebContents* contents,
-                                             bool is_discarded) {
+void TabsEventRouter::OnDiscardedStateChange(
+    WebContents* contents,
+    ::mojom::LifecycleUnitDiscardReason reason,
+    bool is_discarded) {
   std::set<std::string> changed_property_names;
   changed_property_names.insert(tabs_constants::kDiscardedKey);
   DispatchTabUpdatedEvent(contents, std::move(changed_property_names));
@@ -360,6 +363,13 @@ void TabsEventRouter::DispatchTabInsertedAt(TabStripModel* tab_strip_model,
       std::make_unique<Value>(ExtensionTabUtil::GetWindowIdOfTab(contents)));
   object_args->Set(tabs_constants::kNewPositionKey,
                    std::make_unique<Value>(index));
+  // NOTE(andre@vivaldi.com): If NavigationController::NeedsReload is set this
+  // is a lazy-loaded tab. Report this to the client so we can act the right
+  // way.
+  bool is_lazy_loaded_tab = contents->GetController().NeedsReload();
+  bool is_discarded = ExtensionTabUtil::IsDiscarded(contents);
+  object_args->SetBoolean(tabs_constants::kDiscardedKey,
+                          is_discarded || is_lazy_loaded_tab);
   args->Append(std::move(object_args));
 
   Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
@@ -547,7 +557,7 @@ void TabsEventRouter::TabCreatedAt(WebContents* contents,
                                        std::move(args), profile);
   event->user_gesture = EventRouter::USER_GESTURE_NOT_ENABLED;
   event->will_dispatch_callback =
-      base::Bind(&WillDispatchTabCreatedEvent, contents, active);
+      base::BindRepeating(&WillDispatchTabCreatedEvent, contents, active);
   EventRouter::Get(profile)->BroadcastEvent(std::move(event));
 
   RegisterForTabNotifications(contents);
@@ -630,8 +640,8 @@ void TabsEventRouter::DispatchTabUpdatedEvent(
                                        std::move(args_base), profile);
   event->user_gesture = EventRouter::USER_GESTURE_NOT_ENABLED;
   event->will_dispatch_callback =
-      base::Bind(&WillDispatchTabUpdatedEvent, contents,
-                 std::move(changed_property_names));
+      base::BindRepeating(&WillDispatchTabUpdatedEvent, contents,
+                          std::move(changed_property_names));
   EventRouter::Get(profile)->BroadcastEvent(std::move(event));
 }
 

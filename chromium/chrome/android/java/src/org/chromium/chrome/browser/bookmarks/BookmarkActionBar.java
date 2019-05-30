@@ -16,7 +16,7 @@ import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
+import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
 import org.chromium.chrome.browser.widget.selection.SelectableListToolbar;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
@@ -67,7 +67,7 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
 
     @Override
     public void onNavigationBack() {
-        if (mIsSearching) {
+        if (isSearching()) {
             super.onNavigationBack();
             return;
         }

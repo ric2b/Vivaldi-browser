@@ -18,7 +18,6 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/keyed_service/core/refcounted_keyed_service.h"
-#include "components/password_manager/core/browser/password_reuse_defines.h"
 #include "components/password_manager/core/browser/password_store_change.h"
 #include "components/password_manager/core/browser/password_store_sync.h"
 #include "components/sync/model/syncable_service.h"
@@ -39,6 +38,8 @@ struct PasswordForm;
 }
 
 namespace syncer {
+class ModelTypeControllerDelegate;
+class ProxyModelTypeControllerDelegate;
 class SyncableService;
 }
 
@@ -48,6 +49,7 @@ class AffiliatedMatchHelper;
 class PasswordStoreConsumer;
 class PasswordStoreSigninNotifier;
 class PasswordSyncableService;
+class PasswordSyncBridge;
 struct InteractionsStats;
 
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
@@ -223,11 +225,18 @@ class PasswordStore : protected PasswordStoreSync,
   virtual void GetBlacklistLoginsWithAffiliationAndBrandingInformation(
       PasswordStoreConsumer* consumer);
 
-  // Reports usage metrics for the database. |sync_username| and
-  // |custom_passphrase_sync_enabled| determine some of the UMA stats that
-  // may be reported.
+  // Gets the complete list of PasswordForms, regardless of their blacklist
+  // status. Also fills in affiliation and branding information for Android
+  // credentials.
+  virtual void GetAllLoginsWithAffiliationAndBrandingInformation(
+      PasswordStoreConsumer* consumer);
+
+  // Reports usage metrics for the database. |sync_username|, and
+  // |custom_passphrase_sync_enabled|, and |is_under_advanced_protection|
+  // determine some of the UMA stats that may be reported.
   virtual void ReportMetrics(const std::string& sync_username,
-                             bool custom_passphrase_sync_enabled);
+                             bool custom_passphrase_sync_enabled,
+                             bool is_under_advanced_protection);
 
   // Adds or replaces the statistics for the domain |stats.origin_domain|.
   void AddSiteStats(const InteractionsStats& stats);
@@ -250,9 +259,19 @@ class PasswordStore : protected PasswordStoreSync,
   void RemoveObserver(Observer* observer);
 
   // Schedules the given |task| to be run on the PasswordStore's TaskRunner.
-  bool ScheduleTask(const base::Closure& task);
+  bool ScheduleTask(base::OnceClosure task);
+
+  scoped_refptr<base::SequencedTaskRunner> GetBackgroundTaskRunner();
+
+  // Returns true iff initialization was successful.
+  virtual bool IsAbleToSavePasswords() const;
 
   base::WeakPtr<syncer::SyncableService> GetPasswordSyncableService();
+
+  // For sync codebase only: instantiates a proxy controller delegate to
+  // interact with PasswordSyncBridge. Must be called from the UI thread.
+  std::unique_ptr<syncer::ProxyModelTypeControllerDelegate>
+  CreateSyncControllerDelegate();
 
 // TODO(crbug.com/706392): Fix password reuse detection for Android.
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
@@ -369,6 +388,19 @@ class PasswordStore : protected PasswordStoreSync,
   };
 #endif
 
+  // Status of PasswordStore::Init().
+  enum class InitStatus {
+    // Initialization status is still not determined (init hasn't started or
+    // finished yet).
+    kUnknown,
+    // Initialization is successfully finished.
+    kSuccess,
+    // There was an error during initialization and PasswordStore is not ready
+    // to save or get passwords.
+    // Removing passwords may still work.
+    kFailure,
+  };
+
   ~PasswordStore() override;
 
   // Create a TaskRunner to be saved in |background_task_runner_|.
@@ -376,8 +408,9 @@ class PasswordStore : protected PasswordStoreSync,
       const;
 
   // Creates PasswordSyncableService and PasswordReuseDetector instances on the
-  // background sequence. Subclasses can add more logic.
-  virtual void InitOnBackgroundSequence(
+  // background sequence. Subclasses can add more logic. Returns true on
+  // success.
+  virtual bool InitOnBackgroundSequence(
       const syncer::SyncableService::StartSyncFlare& flare);
 
   // Methods below will be run in PasswordStore's own sequence.
@@ -466,9 +499,9 @@ class PasswordStore : protected PasswordStoreSync,
   PasswordStoreChangeList RemoveLoginSync(
       const autofill::PasswordForm& form) override;
 
-  // Called by WrapModificationTask() once the underlying data-modifying
-  // operation has been performed. Notifies observers that password store data
-  // may have been changed.
+  // Called by *Internal() methods once the underlying data-modifying operation
+  // has been performed. Notifies observers that password store data may have
+  // been changed.
   void NotifyLoginsChanged(const PasswordStoreChangeList& changes) override;
 
 // TODO(crbug.com/706392): Fix password reuse detection for Android.
@@ -521,19 +554,19 @@ class PasswordStore : protected PasswordStoreSync,
   FRIEND_TEST_ALL_PREFIXES(PasswordStoreTest,
                            UpdatePasswordsStoredForAffiliatedWebsites);
 
+  // Called on the main thread after initialization is completed.
+  // |success| is true if initialization was successful. Sets the
+  // |init_status_|.
+  void OnInitCompleted(bool success);
+
   // Schedule the given |func| to be run in the PasswordStore's own sequence
   // with responses delivered to |consumer| on the current sequence.
   void Schedule(void (PasswordStore::*func)(std::unique_ptr<GetLoginsRequest>),
                 PasswordStoreConsumer* consumer);
 
-  // Wrapper method called on the destination sequence that invokes |task| and
-  // then calls back into the source sequence to notify observers that the
-  // password store may have been modified via NotifyLoginsChanged(). Note that
-  // there is no guarantee that the called method will actually modify the
-  // password store data.
-  void WrapModificationTask(ModificationTask task);
-
-  // Temporary specializations of WrapModificationTask for a better stack trace.
+  // The following methods notify observers that the password store may have
+  // been modified via NotifyLoginsChanged(). Note that there is no guarantee
+  // that the called method will actually modify the password store data.
   void AddLoginInternal(const autofill::PasswordForm& form);
   void UpdateLoginInternal(const autofill::PasswordForm& form);
   void RemoveLoginInternal(const autofill::PasswordForm& form);
@@ -579,6 +612,11 @@ class PasswordStore : protected PasswordStoreSync,
   // Same as above, but also fills in affiliation and branding information for
   // Android credentials.
   void GetBlacklistLoginsWithAffiliationAndBrandingInformationImpl(
+      std::unique_ptr<GetLoginsRequest> request);
+
+  // Find all PasswordForms, fills in affiliation and branding information for
+  // Android credentials, and notifies the consumer.
+  void GetAllLoginsWithAffiliationAndBrandingInformationImpl(
       std::unique_ptr<GetLoginsRequest> request);
 
   // Notifies |request| about the stats for all sites.
@@ -640,6 +678,11 @@ class PasswordStore : protected PasswordStoreSync,
       const autofill::PasswordForm& updated_android_form,
       const std::vector<std::string>& affiliated_web_realms);
 
+  // Returns the sync controller delegate for syncing passwords. It must be
+  // called on the background sequence.
+  base::WeakPtr<syncer::ModelTypeControllerDelegate>
+  GetSyncControllerDelegateOnBackgroundSequence();
+
   // Schedules UpdateAffiliatedWebLoginsImpl() to run on the background
   // sequence. Should be called from the main sequence.
   void ScheduleUpdateAffiliatedWebLoginsImpl(
@@ -659,7 +702,10 @@ class PasswordStore : protected PasswordStoreSync,
   // The observers.
   scoped_refptr<base::ObserverListThreadSafe<Observer>> observers_;
 
+  // Either of two below would actually be set based on a feature flag.
   std::unique_ptr<PasswordSyncableService> syncable_service_;
+  std::unique_ptr<PasswordSyncBridge> sync_bridge_;
+
   std::unique_ptr<AffiliatedMatchHelper> affiliated_match_helper_;
 // TODO(crbug.com/706392): Fix password reuse detection for Android.
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
@@ -675,6 +721,8 @@ class PasswordStore : protected PasswordStoreSync,
   bool is_propagating_password_changes_to_web_credentials_enabled_;
 
   bool shutdown_called_;
+
+  InitStatus init_status_;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordStore);
 };

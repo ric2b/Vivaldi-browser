@@ -7,11 +7,13 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/strings/string16.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
+#include "components/autofill/core/browser/local_card_migration_strike_database.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
 
 namespace autofill {
@@ -31,12 +33,10 @@ const char kMigrationResultSuccess[] = "SUCCESS";
 // credit card information, it also includes a boolean that represents whether
 // the card was chosen for upload. We use each card's guid to distinguish each
 // credit card for upload request/response.
-// TODO(crbug.com/852904): Create one Enum to represent migration status such as
-// whether the card is successfully uploaded or failure on uploading.
 class MigratableCreditCard {
  public:
   // Possible states for the migratable local card.
-  enum MigrationStatus {
+  enum class MigrationStatus {
     // Set if the migratable card have not been uploaded.
     UNKNOWN,
     // Set if the migratable card was successfully uploaded to the server.
@@ -45,13 +45,10 @@ class MigratableCreditCard {
     FAILURE_ON_UPLOAD,
   };
 
-  MigratableCreditCard(const CreditCard& credit_card);
+  explicit MigratableCreditCard(const CreditCard& credit_card);
   ~MigratableCreditCard();
 
   CreditCard credit_card() const { return credit_card_; }
-
-  bool is_chosen() const { return is_chosen_; }
-  void ToggleChosen() { is_chosen_ = !is_chosen(); }
 
   MigrationStatus migration_status() const { return migration_status_; }
   void set_migration_status(MigrationStatus migration_status) {
@@ -62,10 +59,6 @@ class MigratableCreditCard {
   // The main card information of the current migratable card.
   CreditCard credit_card_;
 
-  // Whether the user has decided to migrate the this card; shown as a checkbox
-  // in the UI.
-  bool is_chosen_ = true;
-
   // Migration status for this card.
   MigrationStatus migration_status_ = MigrationStatus::UNKNOWN;
 };
@@ -75,6 +68,16 @@ class MigratableCreditCard {
 // Owned by FormDataImporter.
 class LocalCardMigrationManager {
  public:
+  // An observer class used by browsertests that gets notified whenever
+  // particular actions occur.
+  class ObserverForTest {
+   public:
+    virtual void OnDecideToRequestLocalCardMigration() = 0;
+    virtual void OnReceivedGetUploadDetailsResponse() = 0;
+    virtual void OnSentMigrateCardsRequest() = 0;
+    virtual void OnReceivedMigrateCardsResponse() = 0;
+  };
+
   // The parameters should outlive the LocalCardMigrationManager.
   LocalCardMigrationManager(AutofillClient* client,
                             payments::PaymentsClient* payments_client,
@@ -99,9 +102,18 @@ class LocalCardMigrationManager {
   virtual void OnUserAcceptedIntermediateMigrationDialog();
 
   // Callback function when user confirms migration on the main migration
-  // dialog. Sets |user_accepted_main_migration_dialog_| and sends the migration
-  // request once risk data is available. Exposed for testing.
-  virtual void OnUserAcceptedMainMigrationDialog();
+  // dialog. Removes any MigratableCreditCard of which the guid is not in
+  // |selected_card_guids| from |migratable_credit_cards_|. Sets
+  // |user_accepted_main_migration_dialog_| and sends the migration request
+  // once risk data is available. Exposed for testing.
+  virtual void OnUserAcceptedMainMigrationDialog(
+      const std::vector<std::string>& selected_card_guids);
+
+  // Callback function when user clicks the trash can button in the
+  // action-required dialog to delete one credit card from Chrome.
+  // |deleted_card_guid| is the GUID of the card to be deleted.
+  virtual void OnUserDeletedLocalCardViaMigrationDialog(
+      const std::string& deleted_card_guid);
 
   // Check that the user is signed in, syncing, and the proper experiment
   // flags are enabled. Override in the test class.
@@ -123,7 +135,8 @@ class LocalCardMigrationManager {
       bool is_from_settings_page,
       AutofillClient::PaymentsRpcResult result,
       const base::string16& context_token,
-      std::unique_ptr<base::DictionaryValue> legal_message);
+      std::unique_ptr<base::Value> legal_message,
+      std::vector<std::pair<int, int>> supported_card_bin_ranges);
 
   // Callback after successfully getting the migration save results. Map
   // migration save result to each card depending on the |save_result|. Will
@@ -141,12 +154,18 @@ class LocalCardMigrationManager {
   payments::PaymentsClient* payments_client_;
 
  private:
+  friend class LocalCardMigrationBrowserTest;
   FRIEND_TEST_ALL_PREFIXES(LocalCardMigrationManagerTest,
                            MigrateCreditCard_MigrationPermanentFailure);
   FRIEND_TEST_ALL_PREFIXES(LocalCardMigrationManagerTest,
                            MigrateCreditCard_MigrationTemporaryFailure);
   FRIEND_TEST_ALL_PREFIXES(LocalCardMigrationManagerTest,
                            MigrateCreditCard_MigrationSuccess);
+  FRIEND_TEST_ALL_PREFIXES(LocalCardMigrationManagerTest,
+                           MigrateCreditCard_ToggleIsChosen);
+
+  // Returns the LocalCardMigrationStrikeDatabase for |client_|.
+  LocalCardMigrationStrikeDatabase* GetLocalCardMigrationStrikeDatabase();
 
   // Pops up a larger, modal dialog showing the local cards to be uploaded.
   void ShowMainMigrationDialog();
@@ -158,6 +177,11 @@ class LocalCardMigrationManager {
 
   // Finalizes the migration request and calls PaymentsClient.
   void SendMigrateLocalCardsRequest();
+
+  // For testing.
+  void SetEventObserverForTesting(ObserverForTest* observer) {
+    observer_for_testing_ = observer;
+  }
 
   std::unique_ptr<base::DictionaryValue> legal_message_;
 
@@ -172,7 +196,10 @@ class LocalCardMigrationManager {
   // Collected information about a pending migration request.
   payments::PaymentsClient::MigrationRequestDetails migration_request_;
 
-  // The local credit cards to be uploaded.
+  // The local credit cards to be uploaded. Owned by LocalCardMigrationManager.
+  // The order of cards should not be changed.
+  // TODO(crbug.com/867194): Currently we will not handle the case of local
+  // cards added/deleted during migration.
   std::vector<MigratableCreditCard> migratable_credit_cards_;
 
   // |true| if the user has accepted migrating their local cards to Google Pay
@@ -181,6 +208,12 @@ class LocalCardMigrationManager {
 
   // Record the triggering source of the local card migration.
   AutofillMetrics::LocalCardMigrationOrigin local_card_migration_origin_;
+
+  // Initialized only during tests.
+  ObserverForTest* observer_for_testing_ = nullptr;
+
+  std::unique_ptr<LocalCardMigrationStrikeDatabase>
+      local_card_migration_strike_database_;
 
   base::WeakPtrFactory<LocalCardMigrationManager> weak_ptr_factory_;
 

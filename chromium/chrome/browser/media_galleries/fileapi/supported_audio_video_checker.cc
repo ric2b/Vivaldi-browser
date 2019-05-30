@@ -20,6 +20,7 @@
 #include "base/task/task_traits.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "chrome/services/media_gallery_util/public/cpp/safe_audio_video_checker.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/service_manager_connection.h"
 #include "net/base/mime_util.h"
@@ -58,7 +59,8 @@ base::LazyInstance<SupportedAudioVideoExtensions>::DestructorAtExit
     g_audio_video_extensions = LAZY_INSTANCE_INITIALIZER;
 
 base::File OpenBlocking(const base::FilePath& path) {
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   return base::File(path, base::File::FLAG_OPEN | base::File::FLAG_READ);
 }
 
@@ -77,8 +79,8 @@ void SupportedAudioVideoChecker::StartPreWriteValidation(
   DCHECK(callback_.is_null());
   callback_ = result_callback;
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
       base::BindOnce(&SupportedAudioVideoChecker::RetrieveConnectorOnUIThread,
                      weak_factory_.GetWeakPtr()));
 }
@@ -100,8 +102,8 @@ void SupportedAudioVideoChecker::RetrieveConnectorOnUIThread(
   // We need a fresh connector so that we can use it on the IO thread. It has
   // to be retrieved from the UI thread. We must use static method and pass a
   // WeakPtr around as WeakPtrs are not thread-safe.
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
       base::BindOnce(&SupportedAudioVideoChecker::OnConnectorRetrieved,
                      this_ptr, std::move(connector)));
 }

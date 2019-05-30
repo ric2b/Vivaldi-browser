@@ -179,20 +179,27 @@ void LogContextOfShowAllSavedPasswordsAccepted(
       SHOW_ALL_SAVED_PASSWORDS_CONTEXT_COUNT);
 }
 
+void LogPasswordDropdownShown(PasswordDropdownState state) {
+  UMA_HISTOGRAM_ENUMERATION("PasswordManager.PasswordDropdownShown", state);
+}
+
+void LogPasswordDropdownItemSelected(PasswordDropdownSelectedOption type) {
+  UMA_HISTOGRAM_ENUMERATION("PasswordManager.PasswordDropdownItemSelected",
+                            type);
+}
+
 void LogPasswordSuccessfulSubmissionIndicatorEvent(
-    autofill::PasswordForm::SubmissionIndicatorEvent event) {
+    autofill::SubmissionIndicatorEvent event) {
   UMA_HISTOGRAM_ENUMERATION(
       "PasswordManager.SuccessfulSubmissionIndicatorEvent", event,
-      autofill::PasswordForm::SubmissionIndicatorEvent::
-          SUBMISSION_INDICATOR_EVENT_COUNT);
+      autofill::SubmissionIndicatorEvent::SUBMISSION_INDICATOR_EVENT_COUNT);
 }
 
 void LogPasswordAcceptedSaveUpdateSubmissionIndicatorEvent(
-    autofill::PasswordForm::SubmissionIndicatorEvent event) {
+    autofill::SubmissionIndicatorEvent event) {
   UMA_HISTOGRAM_ENUMERATION(
       "PasswordManager.AcceptedSaveUpdateSubmissionIndicatorEvent", event,
-      autofill::PasswordForm::SubmissionIndicatorEvent::
-          SUBMISSION_INDICATOR_EVENT_COUNT);
+      autofill::SubmissionIndicatorEvent::SUBMISSION_INDICATOR_EVENT_COUNT);
 }
 
 void LogSubmittedFormFrame(SubmittedFormFrame frame) {
@@ -201,9 +208,14 @@ void LogSubmittedFormFrame(SubmittedFormFrame frame) {
 }
 
 void LogDeleteUndecryptableLoginsReturnValue(
-    DeleteUndecryptableLoginsReturnValue return_value) {
+    DeleteCorruptedPasswordsResult result) {
   UMA_HISTOGRAM_ENUMERATION(
-      "PasswordManager.DeleteUndecryptableLoginsReturnValue", return_value);
+      "PasswordManager.DeleteUndecryptableLoginsReturnValue", result);
+}
+
+void LogDeleteCorruptedPasswordsResult(DeleteCorruptedPasswordsResult result) {
+  UMA_HISTOGRAM_ENUMERATION("PasswordManager.DeleteCorruptedPasswordsResult",
+                            result);
 }
 
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
@@ -213,10 +225,16 @@ void LogSyncPasswordHashChange(SyncPasswordHashChange event) {
       SyncPasswordHashChange::SAVED_SYNC_PASSWORD_CHANGE_COUNT);
 }
 
-void LogIsSyncPasswordHashSaved(IsSyncPasswordHashSaved state) {
+void LogIsSyncPasswordHashSaved(IsSyncPasswordHashSaved state,
+                                bool is_under_advanced_protection) {
   UMA_HISTOGRAM_ENUMERATION(
       "PasswordManager.IsSyncPasswordHashSaved", state,
       IsSyncPasswordHashSaved::IS_SYNC_PASSWORD_HASH_SAVED_COUNT);
+  if (is_under_advanced_protection) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "PasswordManager.IsSyncPasswordHashSavedForAdvancedProtectionUser",
+        state, IsSyncPasswordHashSaved::IS_SYNC_PASSWORD_HASH_SAVED_COUNT);
+  }
 }
 
 void LogProtectedPasswordHashCounts(size_t gaia_hash_count,

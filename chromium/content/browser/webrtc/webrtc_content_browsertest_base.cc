@@ -4,6 +4,7 @@
 
 #include "content/browser/webrtc/webrtc_content_browsertest_base.h"
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -76,7 +77,8 @@ std::string WebRtcContentBrowserTestBase::ExecuteJavascriptAndReturnResult(
 void WebRtcContentBrowserTestBase::MakeTypicalCall(
     const std::string& javascript,
     const std::string& html_file) {
-  ASSERT_TRUE(embedded_test_server()->Start());
+  if (!embedded_test_server()->Started())
+    ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL(html_file));
   NavigateToURL(shell(), url);

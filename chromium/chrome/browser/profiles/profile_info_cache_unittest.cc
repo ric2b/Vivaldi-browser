@@ -12,7 +12,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -27,7 +27,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/testing_pref_service.h"
-#include "components/signin/core/browser/profile_management_switches.h"
+#include "components/signin/core/browser/account_consistency_method.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
@@ -528,7 +528,7 @@ TEST_F(ProfileInfoCacheTest, AddStubProfile) {
     { "path_test3", "name_3" },
   };
 
-  for (size_t i = 0; i < arraysize(kTestCases); ++i) {
+  for (size_t i = 0; i < base::size(kTestCases); ++i) {
     base::FilePath profile_path = GetProfilePath(kTestCases[i].profile_path);
     base::string16 profile_name = ASCIIToUTF16(kTestCases[i].profile_name);
 
@@ -578,7 +578,7 @@ TEST_F(ProfileInfoCacheTest, EntriesInAttributesStorage) {
   // ProfileAttributesStorage is checked after each insert and delete operation.
 
   // Add profiles.
-  for (size_t i = 0; i < arraysize(kTestCases); ++i) {
+  for (size_t i = 0; i < base::size(kTestCases); ++i) {
     base::FilePath profile_path = GetProfilePath(kTestCases[i].profile_path);
     base::string16 profile_name = ASCIIToUTF16(kTestCases[i].profile_name);
 
@@ -613,7 +613,7 @@ TEST_F(ProfileInfoCacheTest, EntriesInAttributesStorage) {
   }
 
   // Remove profiles.
-  for (size_t i = 0; i < arraysize(kTestCases); ++i) {
+  for (size_t i = 0; i < base::size(kTestCases); ++i) {
     base::FilePath profile_path = GetProfilePath(kTestCases[i].profile_path);
     ASSERT_EQ(1u, GetCache()->profile_attributes_entries_.count(
                       profile_path.value()));

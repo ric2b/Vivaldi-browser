@@ -26,6 +26,29 @@ typedef unsigned long VisualID;
 
 namespace gpu {
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class GpuSeriesType {
+  kUnknown = 0,
+  // Intel 6th gen
+  kIntelSandyBridge = 1,
+  // Intel 7th gen
+  kIntelValleyView = 2,  // BayTrail
+  kIntelIvyBridge = 3,
+  kIntelHaswell = 4,
+  // Intel 8th gen
+  kIntelCherryView = 5,  // Braswell
+  kIntelBroadwell = 6,
+  // Intel 9th gen
+  kIntelApolloLake = 7,
+  kIntelSkyLake = 8,
+  kIntelGeminiLake = 9,
+  kIntelKabyLake = 10,
+  kIntelCoffeeLake = 11,
+  // Please also update |gpu_series_map| in process_json.py.
+  kMaxValue = kIntelCoffeeLake,
+};
+
 // Video profile.  This *must* match media::VideoCodecProfile.
 enum VideoCodecProfile {
   VIDEO_CODEC_PROFILE_UNKNOWN = -1,
@@ -90,6 +113,46 @@ struct GPU_EXPORT VideoEncodeAcceleratorSupportedProfile {
 using VideoEncodeAcceleratorSupportedProfiles =
     std::vector<VideoEncodeAcceleratorSupportedProfile>;
 
+enum class ImageDecodeAcceleratorType {
+  kJpeg = 0,
+  kUnknown = 1,
+  kMaxValue = kUnknown,
+};
+
+enum class ImageDecodeAcceleratorSubsampling {
+  k420 = 0,
+  k422 = 1,
+  kMaxValue = k422,
+};
+
+// Specification of an image decoding profile supported by a hardware decoder.
+struct GPU_EXPORT ImageDecodeAcceleratorSupportedProfile {
+  ImageDecodeAcceleratorSupportedProfile();
+  ImageDecodeAcceleratorSupportedProfile(
+      const ImageDecodeAcceleratorSupportedProfile& other);
+  ImageDecodeAcceleratorSupportedProfile(
+      ImageDecodeAcceleratorSupportedProfile&& other);
+  ~ImageDecodeAcceleratorSupportedProfile();
+  ImageDecodeAcceleratorSupportedProfile& operator=(
+      const ImageDecodeAcceleratorSupportedProfile& other);
+  ImageDecodeAcceleratorSupportedProfile& operator=(
+      ImageDecodeAcceleratorSupportedProfile&& other);
+
+  // Fields common to all image types.
+  // Type of image to which this profile applies, e.g., JPEG.
+  ImageDecodeAcceleratorType image_type;
+  // Minimum and maximum supported pixel dimensions of the encoded image.
+  gfx::Size min_encoded_dimensions;
+  gfx::Size max_encoded_dimensions;
+
+  // Fields specific to |image_type| == kJpeg.
+  // The supported chroma subsampling formats, e.g. 4:2:0.
+  std::vector<ImageDecodeAcceleratorSubsampling> subsamplings;
+};
+using ImageDecodeAcceleratorSupportedProfiles =
+    std::vector<ImageDecodeAcceleratorSupportedProfile>;
+
+#if defined(OS_WIN)
 // Common overlay formats that we're interested in. Must match the OverlayFormat
 // enum in //tools/metrics/histograms/enums.xml. Mapped to corresponding DXGI
 // formats in DirectCompositionSurfaceWin.
@@ -103,6 +166,23 @@ struct GPU_EXPORT OverlayCapability {
   bool operator==(const OverlayCapability& other) const;
 };
 using OverlayCapabilities = std::vector<OverlayCapability>;
+
+struct GPU_EXPORT Dx12VulkanVersionInfo {
+  bool IsEmpty() const { return !d3d12_feature_level && !vulkan_version; }
+
+  // True if the GPU driver supports DX12.
+  bool supports_dx12 = false;
+
+  // True if the GPU driver supports Vulkan.
+  bool supports_vulkan = false;
+
+  // The supported d3d feature level in the gpu driver;
+  uint32_t d3d12_feature_level = 0;
+
+  // The support Vulkan API version in the gpu driver;
+  uint32_t vulkan_version = 0;
+};
+#endif
 
 struct GPU_EXPORT GPUInfo {
   struct GPU_EXPORT GPUDevice {
@@ -234,10 +314,10 @@ struct GPU_EXPORT GPUInfo {
   bool can_support_threaded_texture_mailbox = false;
 
 #if defined(OS_WIN)
-  // True if we use direct composition surfaces on Windows.
+  // True if we use direct composition surface on Windows.
   bool direct_composition = false;
 
-  // True if the current set of outputs supports overlays.
+  // True if we use direct composition surface overlays on Windows.
   bool supports_overlays = false;
 
   OverlayCapabilities overlay_capabilities;
@@ -245,23 +325,16 @@ struct GPU_EXPORT GPUInfo {
   // The information returned by the DirectX Diagnostics Tool.
   DxDiagNode dx_diagnostics;
 
-  // True if the GPU driver supports DX12.
-  bool supports_dx12 = false;
-
-  // True if the GPU driver supports Vulkan.
-  bool supports_vulkan = false;
-
-  // The supported d3d feature level in the gpu driver;
-  uint32_t d3d12_feature_level = 0;
-
-  // The support Vulkan API version in the gpu driver;
-  uint32_t vulkan_version = 0;
+  Dx12VulkanVersionInfo dx12_vulkan_version_info;
 #endif
 
   VideoDecodeAcceleratorCapabilities video_decode_accelerator_capabilities;
   VideoEncodeAcceleratorSupportedProfiles
       video_encode_accelerator_supported_profiles;
   bool jpeg_decode_accelerator_supported;
+
+  ImageDecodeAcceleratorSupportedProfiles
+      image_decode_accelerator_supported_profiles;
 
 #if defined(USE_X11)
   VisualID system_visual;
@@ -304,6 +377,11 @@ struct GPU_EXPORT GPUInfo {
     virtual void BeginVideoEncodeAcceleratorSupportedProfile() = 0;
     virtual void EndVideoEncodeAcceleratorSupportedProfile() = 0;
 
+    // Markers indicating that an ImageDecodeAcceleratorSupportedProfile is
+    // being described.
+    virtual void BeginImageDecodeAcceleratorSupportedProfile() = 0;
+    virtual void EndImageDecodeAcceleratorSupportedProfile() = 0;
+
     // Markers indicating that "auxiliary" attributes of the GPUInfo
     // (according to the DevTools protocol) are being described.
     virtual void BeginAuxAttributes() = 0;
@@ -311,6 +389,9 @@ struct GPU_EXPORT GPUInfo {
 
     virtual void BeginOverlayCapability() = 0;
     virtual void EndOverlayCapability() = 0;
+
+    virtual void BeginDx12VulkanVersionInfo() = 0;
+    virtual void EndDx12VulkanVersionInfo() = 0;
 
    protected:
     virtual ~Enumerator() = default;

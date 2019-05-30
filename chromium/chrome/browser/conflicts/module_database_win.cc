@@ -11,17 +11,19 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "chrome/browser/conflicts/module_database_observer_win.h"
+#include "content/public/browser/browser_task_traits.h"
 
 #if defined(GOOGLE_CHROME_BUILD)
+#include "base/enterprise_util.h"
 #include "base/feature_list.h"
 #include "base/task/post_task.h"
-#include "base/win/win_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/conflicts/incompatible_applications_updater_win.h"
 #include "chrome/browser/conflicts/module_load_attempt_log_listener_win.h"
 #include "chrome/browser/conflicts/third_party_conflicts_manager_win.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
+#include "chrome_elf/third_party_dlls/public_api.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -38,6 +40,22 @@ static_assert(content::PROCESS_TYPE_BROWSER == 2,
 constexpr uint32_t kFirstValidProcessType = content::PROCESS_TYPE_BROWSER;
 
 ModuleDatabase* g_module_database_win_instance = nullptr;
+
+#if defined(GOOGLE_CHROME_BUILD)
+// Returns true if either the IncompatibleApplicationsWarning or
+// ThirdPartyModulesBlocking features are enabled via the "enable-features"
+// command-line switch.
+bool AreThirdPartyFeaturesEnabledViaCommandLine() {
+  base::FeatureList* feature_list_instance = base::FeatureList::GetInstance();
+
+  return feature_list_instance->IsFeatureOverriddenFromCommandLine(
+             features::kIncompatibleApplicationsWarning.name,
+             base::FeatureList::OVERRIDE_ENABLE_FEATURE) ||
+         feature_list_instance->IsFeatureOverriddenFromCommandLine(
+             features::kThirdPartyModulesBlocking.name,
+             base::FeatureList::OVERRIDE_ENABLE_FEATURE);
+}
+#endif  // defined(GOOGLE_CHROME_BUILD)
 
 }  // namespace
 
@@ -58,6 +76,7 @@ ModuleDatabase::ModuleDatabase(
       // base::Unretained().
       module_inspector_(base::Bind(&ModuleDatabase::OnModuleInspected,
                                    base::Unretained(this))) {
+  AddObserver(&module_inspector_);
   AddObserver(&third_party_metrics_);
 
 #if defined(GOOGLE_CHROME_BUILD)
@@ -147,8 +166,7 @@ void ModuleDatabase::OnImeEnumerationFinished() {
 void ModuleDatabase::OnModuleLoad(content::ProcessType process_type,
                                   const base::FilePath& module_path,
                                   uint32_t module_size,
-                                  uint32_t module_time_date_stamp,
-                                  uintptr_t module_load_address) {
+                                  uint32_t module_time_date_stamp) {
   // Messages can arrive from any thread (UI thread for calls over IPC, and
   // anywhere at all for calls from ModuleWatcher), so bounce if necessary.
   // It is safe to use base::Unretained() because this class is a singleton that
@@ -156,9 +174,9 @@ void ModuleDatabase::OnModuleLoad(content::ProcessType process_type,
   if (!task_runner_->RunsTasksInCurrentSequence()) {
     task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&ModuleDatabase::OnModuleLoad, base::Unretained(this),
-                   process_type, module_path, module_size,
-                   module_time_date_stamp, module_load_address));
+        base::BindOnce(&ModuleDatabase::OnModuleLoad, base::Unretained(this),
+                       process_type, module_path, module_size,
+                       module_time_date_stamp));
     return;
   }
 
@@ -203,7 +221,7 @@ void ModuleDatabase::OnModuleAddedToBlacklist(const base::FilePath& module_path,
                                               uint32_t module_size,
                                               uint32_t module_time_date_stamp) {
   auto iter = modules_.find(
-      ModuleInfoKey(module_path, module_size, module_time_date_stamp, 0));
+      ModuleInfoKey(module_path, module_size, module_time_date_stamp));
 
   // Only known modules should be added to the blacklist.
   DCHECK(iter != modules_.end());
@@ -249,6 +267,26 @@ bool ModuleDatabase::IsThirdPartyBlockingPolicyEnabled() {
   return !third_party_blocking_enabled_pref->IsManaged() ||
          third_party_blocking_enabled_pref->GetValue()->GetBool();
 }
+
+// static
+void ModuleDatabase::DisableThirdPartyBlocking() {
+  // Immediately disable the hook. DisableHook() can be called concurrently.
+  DisableHook();
+
+  // Stop analyzing those modules.
+  ThirdPartyConflictsManager* third_party_conflicts_manager =
+      ModuleDatabase::GetInstance()->third_party_conflicts_manager_.get();
+  if (third_party_conflicts_manager)
+    third_party_conflicts_manager->DisableModuleAnalysis();
+
+  // Notify the ThirdPartyMetricsRecorder instance that the hook is disabled.
+  // Since this is meant for a heartbeat metric, the small latency introduced
+  // with the thread-hopping is perfectly acceptable.
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI}, base::BindOnce([]() {
+        ModuleDatabase::GetInstance()->third_party_metrics_.SetHookDisabled();
+      }));
+}
 #endif  // defined(GOOGLE_CHROME_BUILD)
 
 // static
@@ -273,8 +311,7 @@ bool ModuleDatabase::FindOrCreateModuleInfo(
     ModuleDatabase::ModuleInfo** module_info) {
   auto result = modules_.emplace(
       std::piecewise_construct,
-      std::forward_as_tuple(module_path, module_size, module_time_date_stamp,
-                            modules_.size()),
+      std::forward_as_tuple(module_path, module_size, module_time_date_stamp),
       std::forward_as_tuple());
 
   // New modules must be inspected.
@@ -304,7 +341,7 @@ void ModuleDatabase::OnRegisteredModulesEnumerated() {
 
 void ModuleDatabase::OnModuleInspected(
     const ModuleInfoKey& module_key,
-    std::unique_ptr<ModuleInspectionResult> inspection_result) {
+    ModuleInspectionResult inspection_result) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   auto it = modules_.find(module_key);
@@ -346,11 +383,14 @@ void ModuleDatabase::MaybeInitializeThirdPartyConflictsManager() {
   // Temporarily disable this class on domain-joined machines because enterprise
   // clients depend on IAttachmentExecute::Save() to be invoked for downloaded
   // files, but that API call has a known issue (https://crbug.com/870998) with
-  // third-party modules blocking.
+  // third-party modules blocking. Can be Overridden by enabling the feature via
+  // the command-line.
   // TODO(pmonette): Move IAttachmentExecute::Save() to a utility process and
   //                 remove this.
-  if (base::win::IsEnterpriseManaged())
+  if (base::IsMachineExternallyManaged() &&
+      !AreThirdPartyFeaturesEnabledViaCommandLine()) {
     return;
+  }
 
   if (!IsThirdPartyBlockingPolicyEnabled())
     return;

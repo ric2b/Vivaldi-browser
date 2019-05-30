@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -495,8 +496,6 @@ class AudioOutputProxyTest : public testing::Test {
 
 class AudioOutputResamplerTest : public AudioOutputProxyTest {
  public:
-  void TearDown() override { AudioOutputProxyTest::TearDown(); }
-
   void InitDispatcher(base::TimeDelta close_delay) override {
     // Use a low sample rate and large buffer size when testing otherwise the
     // FakeAudioOutputStream will keep the message loop busy indefinitely; i.e.,

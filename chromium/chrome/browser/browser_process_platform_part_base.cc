@@ -23,7 +23,7 @@ void BrowserProcessPlatformPartBase::PlatformSpecificCommandLineProcessing(
 void BrowserProcessPlatformPartBase::StartTearDown() {
 }
 
-void BrowserProcessPlatformPartBase::AttemptExit() {
+void BrowserProcessPlatformPartBase::AttemptExit(bool try_to_quit_application) {
 // chrome::CloseAllBrowsers() doesn't link on OS_ANDROID, but it overrides this
 // method already.
 #if defined(OS_ANDROID)
@@ -41,7 +41,3 @@ std::unique_ptr<policy::ChromeBrowserPolicyConnector>
 BrowserProcessPlatformPartBase::CreateBrowserPolicyConnector() {
   return std::make_unique<policy::ChromeBrowserPolicyConnector>();
 }
-
-void BrowserProcessPlatformPartBase::RegisterInProcessServices(
-    content::ContentBrowserClient::StaticServiceMap* services,
-    content::ServiceManagerConnection* connection) {}

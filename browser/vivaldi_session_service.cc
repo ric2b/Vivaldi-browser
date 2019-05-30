@@ -57,7 +57,7 @@ void SessionService::Observe(int type,
 /* static */
 bool SessionService::ShouldTrackVivaldiBrowser(Browser* browser) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  std::unique_ptr<base::Value> json =
+  base::Optional<base::Value> json =
       base::JSONReader::Read(browser->ext_data(), options);
   base::DictionaryValue* dict = NULL;
   std::string window_type;

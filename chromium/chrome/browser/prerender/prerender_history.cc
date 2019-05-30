@@ -37,9 +37,7 @@ std::unique_ptr<base::Value> PrerenderHistory::CopyEntriesAsValue() const {
   auto return_list = std::make_unique<base::ListValue>();
   // Javascript needs times in terms of milliseconds since Jan 1, 1970.
   base::Time epoch_start = base::Time::UnixEpoch();
-  for (std::list<Entry>::const_reverse_iterator it = entries_.rbegin();
-       it != entries_.rend();
-       ++it) {
+  for (auto it = entries_.rbegin(); it != entries_.rend(); ++it) {
     const Entry& entry = *it;
     auto entry_dict = std::make_unique<base::DictionaryValue>();
     entry_dict->SetString("url", entry.url.spec());
@@ -50,7 +48,7 @@ std::unique_ptr<base::Value> PrerenderHistory::CopyEntriesAsValue() const {
     // integers.
     entry_dict->SetString(
         "end_time",
-        base::Int64ToString((entry.end_time - epoch_start).InMilliseconds()));
+        base::NumberToString((entry.end_time - epoch_start).InMilliseconds()));
     return_list->Append(std::move(entry_dict));
   }
   return std::move(return_list);

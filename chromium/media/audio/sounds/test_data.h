@@ -9,9 +9,9 @@
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "media/audio/sounds/audio_stream_handler.h"
 
 namespace media {
@@ -22,7 +22,17 @@ const char kTestAudioData[] =
     "RIFF\x28\x00\x00\x00WAVEfmt \x10\x00\x00\x00"
     "\x01\x00\x02\x00\x80\xbb\x00\x00\x00\x77\x01\x00\x02\x00\x10\x00"
     "data\x04\x00\x00\x00\x01\x00\x01\x00";
-const size_t kTestAudioDataSize = arraysize(kTestAudioData) - 1;
+const size_t kTestAudioDataSize = base::size(kTestAudioData) - 1;
+
+// Extensible format with 48kHz rate stereo 32 bit PCM samples
+const char kTestExtensibleAudioData[] =
+    "RIFF\x44\x00\x00\x00WAVEfmt \x28\x00\x00\x00"
+    "\xfe\xff\x02\x00\x80\xbb\x00\x00\x00\x77\x01\x00\x02\x00\x20\x00"
+    "\x16\x00\x20\x00\x00\x00\x00\x00"
+    "\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    "data\x08\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00";
+const size_t kTestExtensibleAudioDataSize =
+    base::size(kTestExtensibleAudioData) - 1;
 
 class TestObserver : public AudioStreamHandler::TestObserver {
  public:

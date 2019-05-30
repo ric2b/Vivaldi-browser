@@ -7,6 +7,8 @@
 #include "build/build_config.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 
+class Profile;
+
 class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
  public:
   VivaldiBrowserMainExtraParts();
@@ -15,7 +17,12 @@ class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
   // Overridden from ChromeBrowserMainExtraParts:
   void PostEarlyInitialization() override;
   void PreProfileInit() override;
-  void PostProfileInit() override;
+
+  // We cannot override PostProfileInit() as we need Profile instance. Instead
+  // the patched ChromeBrowserMainParts::PreMainMessageLoopRunImpl calls
+  // this static method below with the proper Profile*
+  // argument.
+  static void PostProfileInit(Profile* profile);
 
   static VivaldiBrowserMainExtraParts* Create();
  private:

@@ -51,11 +51,11 @@ TEST_F(AnimationSimTest, CustomPropertyBaseComputedStyle) {
   //   inherits: false
   // })
   DummyExceptionStateForTesting exception_state;
-  PropertyDescriptor property_descriptor;
-  property_descriptor.setName("--x");
-  property_descriptor.setSyntax("<percentage>");
-  property_descriptor.setInitialValue("0%");
-  property_descriptor.setInherits(false);
+  PropertyDescriptor* property_descriptor = PropertyDescriptor::Create();
+  property_descriptor->setName("--x");
+  property_descriptor->setSyntax("<percentage>");
+  property_descriptor->setInitialValue("0%");
+  property_descriptor->setInherits(false);
   PropertyRegistration::registerProperty(&GetDocument(), property_descriptor,
                                          exception_state);
   EXPECT_FALSE(exception_state.HadException());
@@ -73,7 +73,7 @@ TEST_F(AnimationSimTest, CustomPropertyBaseComputedStyle) {
   StringKeyframeVector keyframes;
   keyframes.push_back(keyframe);
   Timing timing;
-  timing.iteration_duration = 1;  // Seconds.
+  timing.iteration_duration = AnimationTimeDelta::FromSecondsD(1);
   ElementAnimation::animateInternal(
       *target, StringKeyframeEffectModel::Create(keyframes), timing);
 
@@ -94,7 +94,7 @@ TEST_F(AnimationSimTest, CustomPropertyBaseComputedStyle) {
   keyframes.clear();
   keyframes.push_back(std::move(keyframe));
   timing = Timing::Defaults();
-  timing.iteration_duration = 1;  // Seconds.
+  timing.iteration_duration = AnimationTimeDelta::FromSecondsD(1);
   ElementAnimation::animateInternal(
       *target, StringKeyframeEffectModel::Create(keyframes), timing);
 

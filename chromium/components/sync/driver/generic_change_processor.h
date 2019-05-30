@@ -14,6 +14,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
 #include "base/sequence_checker.h"
 #include "components/sync/model/change_processor.h"
 #include "components/sync/model/data_type_error_handler.h"
@@ -22,7 +23,6 @@
 
 namespace syncer {
 
-class SyncClient;
 class SyncData;
 class SyncableService;
 class WriteNode;
@@ -50,8 +50,7 @@ class GenericChangeProcessor : public ChangeProcessor,
                          std::unique_ptr<DataTypeErrorHandler> error_handler,
                          const base::WeakPtr<SyncableService>& local_service,
                          const base::WeakPtr<SyncMergeResult>& merge_result,
-                         UserShare* user_share,
-                         SyncClient* sync_client);
+                         UserShare* user_share);
   ~GenericChangeProcessor() override;
 
   // ChangeProcessor interface.

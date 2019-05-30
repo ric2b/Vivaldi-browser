@@ -10,8 +10,9 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_split.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/common/chrome_paths.h"
-#include "chromeos/chromeos_paths.h"
+#include "chromeos/constants/chromeos_paths.h"
 #include "chromeos/dbus/auth_policy_client.h"
 #include "chromeos/dbus/authpolicy/active_directory_info.pb.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -85,6 +86,8 @@ void PrepareLogin(const std::string& user_principal_name) {
 void OverridePaths() {
   base::FilePath user_data_dir;
   ASSERT_TRUE(base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
+
+  base::ScopedAllowBlockingForTesting allow_io;
   RegisterStubPathOverrides(user_data_dir);
 }
 

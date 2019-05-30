@@ -28,6 +28,7 @@
 
 #include "third_party/blink/renderer/core/css/css_rule.h"
 #include "third_party/blink/renderer/core/css/style_rule_keyframe.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
 
@@ -40,6 +41,7 @@ class CSSKeyframeRule final : public CSSRule {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
+  CSSKeyframeRule(StyleRuleKeyframe*, CSSKeyframesRule* parent);
   ~CSSKeyframeRule() override;
 
   String cssText() const override { return keyframe_->CssText(); }
@@ -53,18 +55,21 @@ class CSSKeyframeRule final : public CSSRule {
   void Trace(blink::Visitor*) override;
 
  private:
-  CSSKeyframeRule(StyleRuleKeyframe*, CSSKeyframesRule* parent);
-
   CSSRule::Type type() const override { return kKeyframeRule; }
 
-  Member<StyleRuleKeyframe> keyframe_;
-  mutable Member<KeyframeStyleRuleCSSStyleDeclaration>
+  TraceWrapperMember<StyleRuleKeyframe> keyframe_;
+  mutable TraceWrapperMember<KeyframeStyleRuleCSSStyleDeclaration>
       properties_cssom_wrapper_;
 
   friend class CSSKeyframesRule;
 };
 
-DEFINE_CSS_RULE_TYPE_CASTS(CSSKeyframeRule, kKeyframeRule);
+template <>
+struct DowncastTraits<CSSKeyframeRule> {
+  static bool AllowFrom(const CSSRule& rule) {
+    return rule.type() == CSSRule::kKeyframeRule;
+  }
+};
 
 }  // namespace blink
 

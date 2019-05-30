@@ -28,7 +28,7 @@
 
 #include "third_party/blink/renderer/core/css/css_value_list.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_mode.h"
-#include "third_party/blink/renderer/platform/cross_origin_attribute_value.h"
+#include "third_party/blink/renderer/platform/loader/fetch/cross_origin_attribute_value.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
 #include "third_party/blink/renderer/platform/weborigin/referrer.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
@@ -41,8 +41,10 @@ class StyleImage;
 class CSSImageSetValue : public CSSValueList {
  public:
   static CSSImageSetValue* Create(CSSParserMode parser_mode) {
-    return new CSSImageSetValue(parser_mode);
+    return MakeGarbageCollected<CSSImageSetValue>(parser_mode);
   }
+
+  explicit CSSImageSetValue(CSSParserMode);
   ~CSSImageSetValue();
 
   bool IsCachePending(float device_scale_factor) const;
@@ -56,7 +58,7 @@ class CSSImageSetValue : public CSSValueList {
   String CustomCSSText() const;
 
   struct ImageWithScale {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+    DISALLOW_NEW();
     String image_url;
     Referrer referrer;
     float scale_factor;
@@ -72,8 +74,6 @@ class CSSImageSetValue : public CSSValueList {
   ImageWithScale BestImageForScaleFactor(float scale_factor);
 
  private:
-  explicit CSSImageSetValue(CSSParserMode);
-
   void FillImageSet();
   static inline bool CompareByScaleFactor(ImageWithScale first,
                                           ImageWithScale second) {

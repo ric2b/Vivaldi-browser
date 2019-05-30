@@ -7,15 +7,10 @@ assert(is_mac)
 import("//vivaldi/gn/config/signer_features.gni")
 
 build_app_dmg_script_path = "//vivaldi/thirdparty/create_dmg/create-dmg"
-mac_signing_key = getenv("VIVALDI_SIGNING_KEY")
-mac_signing_id = getenv("VIVALDI_SIGNING_ID")
 
 dmg_name = "Vivaldi.$vivaldi_version_full.dmg"
 
-perform_signing = mac_signing_key != "" && mac_signing_id != ""
-if (mac_signing_id != "") {
-  # Dummy use to avoid unused variable errors
-}
+perform_signing = vivaldi_signing_key != "" && vivaldi_signing_id != ""
 
 signing_deps = []
 if (perform_signing) {
@@ -77,6 +72,7 @@ command_bash("build_dmg") {
     "--icon", ".fseventsd", "1100", "152",
     "--icon", ".VolumeIcon.icns", "1200", "152",
     "--app-drop-link", "412", "152",
+    "--format", "UDBZ",
     "--no-internet-enable",
     "Vivaldi.$vivaldi_version_full.dmg",
     "Vivaldi.app",
@@ -108,8 +104,8 @@ if (perform_signing) {
     ]
     args = [
       rebase_path(mac_app_name, root_build_dir),
-      mac_signing_key,
-      mac_signing_id,
+      vivaldi_signing_key,
+      vivaldi_signing_id,
     ]
   }
 
@@ -133,8 +129,8 @@ if (perform_signing) {
     ]
     args = [
       rebase_path(mac_app_name, root_build_dir),
-      mac_signing_key,
-      mac_signing_id,
+      vivaldi_signing_key,
+      vivaldi_signing_id,
     ]
   }
 

@@ -33,6 +33,7 @@ import re
 
 from optparse import make_option
 
+from blinkpy.common.path_finder import WEB_TESTS_LAST_COMPONENT
 from blinkpy.common.system.crash_logs import CrashLogs
 from blinkpy.tool.commands.command import Command
 from blinkpy.web_tests.models.test_expectations import TestExpectations
@@ -104,10 +105,10 @@ class PrintExpectations(Command):
 
         if options.paths:
             files = default_port.expectations_files()
-            layout_tests_dir = default_port.layout_tests_dir()
+            web_tests_dir = default_port.web_tests_dir()
             for file in files:
-                if file.startswith(layout_tests_dir):
-                    file = file.replace(layout_tests_dir, 'LayoutTests')
+                if file.startswith(web_tests_dir):
+                    file = file.replace(web_tests_dir, WEB_TESTS_LAST_COMPONENT)
                 print file
             return
 

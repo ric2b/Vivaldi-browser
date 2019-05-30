@@ -12,17 +12,30 @@ source_set("crash_report") {
     "crash_report_user_application_state.mm",
     "crash_upload_list.cc",
     "crash_upload_list.h",
+    "main_thread_freeze_detector.h",
+    "main_thread_freeze_detector.mm",
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
 
   deps = [
+    ":flags",
     "//base",
     "//components/crash/core/common",
     "//components/upload_list",
     "//ios/chrome/browser",
     "//ios/web",
     "//third_party/breakpad:client",
+  ]
+}
+
+source_set("flags") {
+  sources = [
+    "crash_report_flags.cc",
+    "crash_report_flags.h",
+  ]
+  deps = [
+    "//base",
   ]
 }
 
@@ -67,6 +80,7 @@ source_set("unit_tests") {
     ":crash_report",
     ":crash_report_internal",
     "//base",
+    "//base/test:test_support",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/sessions:serialisation",

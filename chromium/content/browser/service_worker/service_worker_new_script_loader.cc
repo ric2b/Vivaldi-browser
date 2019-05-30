@@ -5,6 +5,7 @@
 #include "content/browser/service_worker/service_worker_new_script_loader.h"
 
 #include <memory>
+#include "base/bind.h"
 #include "base/numerics/safe_conversions.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "content/browser/appcache/appcache_response.h"
@@ -16,6 +17,7 @@
 #include "content/browser/service_worker/service_worker_write_to_cache_job.h"
 #include "content/browser/url_loader_factory_getter.h"
 #include "content/common/service_worker/service_worker_utils.h"
+#include "net/base/ip_endpoint.h"
 #include "net/base/load_flags.h"
 #include "net/cert/cert_status_flags.h"
 #include "services/network/public/cpp/resource_response.h"
@@ -90,9 +92,11 @@ ServiceWorkerNewScriptLoader::ServiceWorkerNewScriptLoader(
     // may be used by ServiceWorkerNavigationLoader for navigations handled
     // by this service worker.
     options |= network::mojom::kURLLoadOptionSendSSLInfoWithResponse;
+
+    resource_request.headers.SetHeader("Service-Worker", "script");
   }
 
-  // Bypass the browser cache if needed, e.g., updateViaCache demands it or 24
+  // Validate the browser cache if needed, e.g., updateViaCache demands it or 24
   // hours passed since the last update check that hit network.
   base::TimeDelta time_since_last_check =
       base::Time::Now() - registration->last_update_check();
@@ -100,22 +104,22 @@ ServiceWorkerNewScriptLoader::ServiceWorkerNewScriptLoader(
           is_main_script, registration->update_via_cache()) ||
       time_since_last_check > kServiceWorkerScriptMaxCacheAge ||
       version_->force_bypass_cache_for_scripts()) {
-    resource_request.load_flags |= net::LOAD_BYPASS_CACHE;
+    resource_request.load_flags |= net::LOAD_VALIDATE_CACHE;
   }
 
-  resource_request.headers.SetHeader("Service-Worker", "script");
-
-  // Create response readers only when we have to do the byte-for-byte check.
-  std::unique_ptr<ServiceWorkerResponseReader> compare_reader;
-  std::unique_ptr<ServiceWorkerResponseReader> copy_reader;
   ServiceWorkerStorage* storage = version_->context()->storage();
   if (incumbent_cache_resource_id != kInvalidServiceWorkerResourceId) {
-    compare_reader = storage->CreateResponseReader(incumbent_cache_resource_id);
-    copy_reader = storage->CreateResponseReader(incumbent_cache_resource_id);
+    // Create response readers only when we have to do the byte-for-byte check.
+    cache_writer_ = ServiceWorkerCacheWriter::CreateForComparison(
+        storage->CreateResponseReader(incumbent_cache_resource_id),
+        storage->CreateResponseReader(incumbent_cache_resource_id),
+        storage->CreateResponseWriter(cache_resource_id),
+        false /* pause_when_not_identical */);
+  } else {
+    // The script is new, create a cache writer for write back.
+    cache_writer_ = ServiceWorkerCacheWriter::CreateForWriteBack(
+        storage->CreateResponseWriter(cache_resource_id));
   }
-  cache_writer_ = std::make_unique<ServiceWorkerCacheWriter>(
-      std::move(compare_reader), std::move(copy_reader),
-      storage->CreateResponseWriter(cache_resource_id));
 
   version_->script_cache_map()->NotifyStartedCaching(request_url_,
                                                      cache_resource_id);
@@ -136,9 +140,9 @@ ServiceWorkerNewScriptLoader::ServiceWorkerNewScriptLoader(
 ServiceWorkerNewScriptLoader::~ServiceWorkerNewScriptLoader() = default;
 
 void ServiceWorkerNewScriptLoader::FollowRedirect(
-    const base::Optional<std::vector<std::string>>&
-        to_be_removed_request_headers,
-    const base::Optional<net::HttpRequestHeaders>& modified_request_headers) {
+    const std::vector<std::string>& removed_headers,
+    const net::HttpRequestHeaders& modified_headers,
+    const base::Optional<GURL>& new_url) {
   // Resource requests for service worker scripts should not follow redirects.
   // See comments in OnReceiveRedirect().
   NOTREACHED();
@@ -150,15 +154,18 @@ void ServiceWorkerNewScriptLoader::ProceedWithResponse() {
 
 void ServiceWorkerNewScriptLoader::SetPriority(net::RequestPriority priority,
                                                int32_t intra_priority_value) {
-  network_loader_->SetPriority(priority, intra_priority_value);
+  if (network_loader_)
+    network_loader_->SetPriority(priority, intra_priority_value);
 }
 
 void ServiceWorkerNewScriptLoader::PauseReadingBodyFromNet() {
-  network_loader_->PauseReadingBodyFromNet();
+  if (network_loader_)
+    network_loader_->PauseReadingBodyFromNet();
 }
 
 void ServiceWorkerNewScriptLoader::ResumeReadingBodyFromNet() {
-  network_loader_->ResumeReadingBodyFromNet();
+  if (network_loader_)
+    network_loader_->ResumeReadingBodyFromNet();
 }
 
 // URLLoaderClient for network loader ------------------------------------------
@@ -183,7 +190,8 @@ void ServiceWorkerNewScriptLoader::OnReceiveResponse(
   response_info->alpn_negotiated_protocol =
       response_head.alpn_negotiated_protocol;
   response_info->connection_info = response_head.connection_info;
-  response_info->socket_address = response_head.socket_address;
+  response_info->remote_endpoint = response_head.remote_endpoint;
+  response_info->response_time = response_head.response_time;
 
   // The following sequence is equivalent to
   // ServiceWorkerWriteToCacheJob::OnResponseStarted.
@@ -247,6 +255,8 @@ void ServiceWorkerNewScriptLoader::OnReceiveResponse(
     version_->SetMainScriptHttpResponseInfo(*response_info);
   }
 
+  network_loader_state_ = NetworkLoaderState::kWaitingForBody;
+
   WriteHeaders(
       base::MakeRefCounted<HttpResponseInfoIOBuffer>(std::move(response_info)));
 
@@ -258,11 +268,9 @@ void ServiceWorkerNewScriptLoader::OnReceiveResponse(
     network::ResourceResponseHead new_response_head = response_head;
     new_response_head.ssl_info.reset();
     client_->OnReceiveResponse(new_response_head);
-  } else {
-    client_->OnReceiveResponse(response_head);
+    return;
   }
-
-  network_loader_state_ = NetworkLoaderState::kWaitingForBody;
+  client_->OnReceiveResponse(response_head);
 }
 
 void ServiceWorkerNewScriptLoader::OnReceiveRedirect(
@@ -434,8 +442,8 @@ void ServiceWorkerNewScriptLoader::MaybeStartNetworkConsumerHandleWatcher() {
   network_watcher_.Watch(
       network_consumer_.get(),
       MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
-      base::Bind(&ServiceWorkerNewScriptLoader::OnNetworkDataAvailable,
-                 weak_factory_.GetWeakPtr()));
+      base::BindRepeating(&ServiceWorkerNewScriptLoader::OnNetworkDataAvailable,
+                          weak_factory_.GetWeakPtr()));
   network_watcher_.ArmOrNotify();
 }
 
@@ -562,7 +570,7 @@ void ServiceWorkerNewScriptLoader::CommitCompleted(
     // TODO(nhiroki): Consider replacing this hacky way with the new error code
     // handling mechanism in URLLoader.
     version_->embedded_worker()->AddMessageToConsole(
-        blink::WebConsoleMessage::kLevelError, status_message);
+        blink::mojom::ConsoleMessageLevel::kError, status_message);
   }
   version_->script_cache_map()->NotifyFinishedCaching(
       request_url_, bytes_written, error_code, status_message);

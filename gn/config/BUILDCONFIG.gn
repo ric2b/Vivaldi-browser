@@ -5,3 +5,9 @@ assert (is_vivaldi)
 
 import ("//build/config/BUILDCONFIG.gn")
 import ("//vivaldi/gn/config/product_configs.gni")
+
+declare_args() {
+  vivaldi_signing_id = ""
+  vivaldi_signing_key = ""
+  vivaldi_signing_command = ""
+}

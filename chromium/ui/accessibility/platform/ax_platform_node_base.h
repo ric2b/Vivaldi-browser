@@ -10,9 +10,10 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "build/build_config.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
-#include "ui/base/ui_features.h"
+#include "ui/base/buildflags.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -45,20 +46,30 @@ struct AX_EXPORT AXHypertext {
 
 class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
  public:
+  AXPlatformNodeBase();
+  ~AXPlatformNodeBase() override;
+
   virtual void Init(AXPlatformNodeDelegate* delegate);
 
   // These are simple wrappers to our delegate.
   const AXNodeData& GetData() const;
-  gfx::NativeViewAccessible GetParent();
-  int GetChildCount();
+  gfx::NativeViewAccessible GetFocus();
+  gfx::NativeViewAccessible GetParent() const;
+  int GetChildCount() const;
   gfx::NativeViewAccessible ChildAtIndex(int index);
 
   // This needs to be implemented for each platform.
-  virtual int GetIndexInParent() = 0;
+  virtual int GetIndexInParent();
 
   // AXPlatformNode.
   void Destroy() override;
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
+  void NotifyAccessibilityEvent(ax::mojom::Event event_type) override;
+
+#if defined(OS_MACOSX)
+  void AnnounceText(base::string16& text) override;
+#endif
+
   AXPlatformNodeDelegate* GetDelegate() const override;
 
   // Helpers.
@@ -101,6 +112,9 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // Returns the table or ARIA grid if inside one.
   AXPlatformNodeBase* GetTable() const;
 
+  // If inside an HTML or ARIA table, returns the object containing the caption.
+  AXPlatformNodeBase* GetTableCaption() const;
+
   // If inside a table or ARIA grid, returns the cell found at the given index.
   // Indices are in row major order and each cell is counted once regardless of
   // its span.
@@ -126,6 +140,10 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // otherwise returns 0.
   int GetTableColumnCount() const;
 
+  // If inside a table or ARIA grid, returns the number of ARIA columns,
+  // otherwise returns nullopt.
+  base::Optional<int32_t> GetTableAriaColumnCount() const;
+
   // If inside a table or ARIA grid, returns the number of physical columns that
   // this cell spans. If not a cell, returns 0.
   int GetTableColumnSpan() const;
@@ -139,6 +157,10 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // If inside a table or ARIA grid, returns the number of physical rows,
   // otherwise returns 0.
   int GetTableRowCount() const;
+
+  // If inside a table or ARIA grid, returns the number of ARIA rows,
+  // otherwise returns nullopt.
+  base::Optional<int32_t> GetTableAriaRowCount() const;
 
   // If inside a table or ARIA grid, returns the number of physical rows that
   // this cell spans. If not a cell, returns 0.
@@ -154,7 +176,7 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // Returns true if an ancestor of this node (not including itself) is a
   // leaf node, meaning that this node is not actually exposed to the
   // platform.
-  bool IsChildOfLeaf();
+  bool IsChildOfLeaf() const;
 
   // Returns true if this is a leaf node on this platform, meaning any
   // children should not be exposed to this platform's native accessibility
@@ -163,6 +185,8 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // but a leaf node should never have children that are focusable or
   // that might send notifications.
   bool IsLeaf();
+
+  bool IsInvisibleOrIgnored() const;
 
   // Returns true if this node can be scrolled either in the horizontal or the
   // vertical direction.
@@ -176,9 +200,9 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
 
   bool HasFocus();
 
-  virtual std::string GetText();
+  virtual base::string16 GetText() const;
 
-  virtual base::string16 GetValue();
+  virtual base::string16 GetValue() const;
 
   // Represents a non-static text node in IAccessibleHypertext (and ATK in the
   // future). This character is embedded in the response to
@@ -186,33 +210,41 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // child object appears.
   static const base::char16 kEmbeddedCharacter;
 
+  // Get a node given its unique id or null in the case that the id is unknown.
+  static AXPlatformNode* GetFromUniqueId(int32_t unique_id);
+
+  // Return the number of instances of AXPlatformNodeBase, for leak testing.
+  static size_t GetInstanceCountForTesting();
+
   //
   // Delegate.  This is a weak reference which owns |this|.
   //
   AXPlatformNodeDelegate* delegate_;
 
  protected:
-  AXPlatformNodeBase();
-  ~AXPlatformNodeBase() override;
-
+  bool IsDocument() const;
   bool IsTextOnlyObject() const;
   bool IsPlainTextField() const;
   // Is in a focused textfield with a related suggestion popup available,
   // such as for the Autofill feature. The suggestion popup can be either hidden
   // and available or already visible. This indicates next down arrow key will
   // navigate within the suggestion popup.
-  bool IsFocusedInputWithSuggestions();
+  bool IsFocusedInputWithSuggestions() const;
   bool IsRichTextField() const;
   bool IsRangeValueSupported() const;
 
   // Get the range value text, which might come from aria-valuetext or
   // a floating-point value. This is different from the value string
   // attribute used in input controls such as text boxes and combo boxes.
-  base::string16 GetRangeValueText();
+  base::string16 GetRangeValueText() const;
 
   // |GetInnerText| recursively includes all the text from descendants such as
   // text found in any embedded object.
-  std::string GetInnerText();
+  base::string16 GetInnerText() const;
+
+  // Get the role description from the node data or from the image annotation
+  // status.
+  base::string16 GetRoleDescription() const;
 
   // Cast a gfx::NativeViewAccessible to an AXPlatformNodeBase if it is one,
   // or return NULL if it's not an instance of this class.
@@ -258,11 +290,11 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
                                   const std::string& value,
                                   PlatformAttributeList* attributes);
 
-  // A pure virtual method that subclasses use to actually add the attribute to
+  // A virtual method that subclasses use to actually add the attribute to
   // |attributes|.
   virtual void AddAttributeToList(const char* name,
                                   const char* value,
-                                  PlatformAttributeList* attributes) = 0;
+                                  PlatformAttributeList* attributes);
 
   // Escapes characters in string attributes as required by the IA2 Spec
   // and AT-SPI2. It's okay for input to be the same as output.
@@ -273,6 +305,9 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // method is responsible for properly embedding children using the special
   // embedded element character.
   AXHypertext ComputeHypertext();
+
+  int32_t GetPosInSet() const;
+  int32_t GetSetSize() const;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(AXPlatformNodeBase);

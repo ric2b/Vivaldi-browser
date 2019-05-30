@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
+import android.support.annotation.Nullable;
 import android.support.annotation.VisibleForTesting;
 import android.support.v4.view.ViewCompat;
 import android.support.v4.widget.DrawerLayout;
@@ -26,7 +27,7 @@ import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.gesturenav.HistoryNavigationLayout;
 import org.chromium.chrome.browser.widget.FadingShadow;
 import org.chromium.chrome.browser.widget.FadingShadowView;
 import org.chromium.chrome.browser.widget.LoadingView;
@@ -37,8 +38,6 @@ import org.chromium.chrome.browser.widget.displaystyle.UiConfig.DisplayStyle;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate.SelectionObserver;
 
 import java.util.List;
-
-import javax.annotation.Nullable;
 
 /**
  * Contains UI elements common to selectable list views: a loading view, empty view, selection
@@ -56,6 +55,7 @@ public class SelectableListLayout<E>
     private RecyclerView.Adapter mAdapter;
     private ViewStub mToolbarStub;
     private TextView mEmptyView;
+    private View mEmptyViewWrapper;
     private LoadingView mLoadingView;
     private RecyclerView mRecyclerView;
     private ItemAnimator mItemAnimator;
@@ -72,18 +72,17 @@ public class SelectableListLayout<E>
         @Override
         public void onChanged() {
             super.onChanged();
+            updateEmptyViewVisibility();
             if (mAdapter.getItemCount() == 0) {
-                mEmptyView.setVisibility(View.VISIBLE);
                 mRecyclerView.setVisibility(View.GONE);
             } else {
-                mEmptyView.setVisibility(View.GONE);
                 mRecyclerView.setVisibility(View.VISIBLE);
             }
             // At inflation, the RecyclerView is set to gone, and the loading view is visible. As
             // long as the adapter data changes, we show the recycler view, and hide loading view.
             mLoadingView.hideLoadingUI();
 
-            mToolbar.onDataChanged(mAdapter.getItemCount());
+            mToolbar.setSearchEnabled(mAdapter.getItemCount() != 0);
         }
 
         @Override
@@ -110,6 +109,7 @@ public class SelectableListLayout<E>
         LayoutInflater.from(getContext()).inflate(R.layout.selectable_list_layout, this);
 
         mEmptyView = (TextView) findViewById(R.id.empty_view);
+        mEmptyViewWrapper = findViewById(R.id.empty_view_wrapper);
         mLoadingView = (LoadingView) findViewById(R.id.loading_view);
         mLoadingView.showLoadingUI();
 
@@ -194,9 +194,6 @@ public class SelectableListLayout<E>
      *                         established.
      * @param selectedGroupResId The resource id of the menu item to show when a selection is
      *                           established.
-     * @param normalBackgroundColorResId The resource id of the color to use as the background color
-     *                                   when selection is not enabled. If null the default appbar
-     *                                   background color will be used.
      * @param listener The OnMenuItemClickListener to set on the toolbar.
      * @param showShadowOnSelection Whether to show the toolbar shadow on selection.
      * @param updateStatusBarColor Whether the status bar color should be updated to match the
@@ -207,7 +204,6 @@ public class SelectableListLayout<E>
     public SelectableListToolbar<E> initializeToolbar(int toolbarLayoutId,
             SelectionDelegate<E> delegate, int titleResId, @Nullable DrawerLayout drawerLayout,
             int normalGroupResId, int selectedGroupResId,
-            @Nullable Integer normalBackgroundColorResId,
             @Nullable OnMenuItemClickListener listener, boolean showShadowOnSelection,
             boolean updateStatusBarColor) {
         mToolbarStub.setLayoutResource(toolbarLayoutId);
@@ -215,7 +211,7 @@ public class SelectableListLayout<E>
         SelectableListToolbar<E> toolbar = (SelectableListToolbar<E>) mToolbarStub.inflate();
         mToolbar = toolbar;
         mToolbar.initialize(delegate, titleResId, drawerLayout, normalGroupResId,
-                selectedGroupResId, normalBackgroundColorResId, updateStatusBarColor);
+                selectedGroupResId, updateStatusBarColor);
 
         if (listener != null) {
             mToolbar.setOnMenuItemClickListener(listener);
@@ -249,6 +245,9 @@ public class SelectableListLayout<E>
 
         mEmptyView.setCompoundDrawablesWithIntrinsicBounds(null, emptyDrawable, null, null);
         mEmptyView.setText(mEmptyStringResId);
+
+        // Dummy listener to have the touch events dispatched to this view tree for navigation UI.
+        mEmptyViewWrapper.setOnTouchListener((v, event) -> true);
 
         return mEmptyView;
     }
@@ -296,6 +295,9 @@ public class SelectableListLayout<E>
     @Override
     public void onSelectionStateChange(List<E> selectedItems) {
         setToolbarShadowVisibility();
+        if (!selectedItems.isEmpty()) {
+            ((HistoryNavigationLayout) findViewById(R.id.list_content)).release();
+        }
     }
 
     /**
@@ -337,7 +339,6 @@ public class SelectableListLayout<E>
         if (mToolbar == null || mRecyclerView == null) return;
 
         boolean showShadow = mRecyclerView.canScrollVertically(-1)
-                || (mToolbar.isSearching() && !FeatureUtilities.isChromeModernDesignEnabled())
                 || (mToolbar.getSelectionDelegate().isSelectionEnabled() && mShowShadowOnSelection);
         mToolbarShadow.setVisibility(showShadow ? View.VISIBLE : View.GONE);
     }
@@ -347,7 +348,9 @@ public class SelectableListLayout<E>
      * view implementation. We need to check it ourselves.
      */
     private void updateEmptyViewVisibility() {
-        mEmptyView.setVisibility(mAdapter.getItemCount() == 0 ? View.VISIBLE : View.GONE);
+        int visible = mAdapter.getItemCount() == 0 ? View.VISIBLE : View.GONE;
+        mEmptyView.setVisibility(visible);
+        mEmptyViewWrapper.setVisibility(visible);
     }
 
     @VisibleForTesting

@@ -27,7 +27,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-"""The Manager orchestrates the overall process of running layout tests.
+"""The Manager orchestrates the overall process of running web tests.
 
 This includes finding tests to run, reading the test expectations,
 starting the required helper servers, deciding the order and way to
@@ -48,9 +48,9 @@ from blinkpy.common.net.file_uploader import FileUploader
 from blinkpy.common.path_finder import PathFinder
 from blinkpy.tool import grammar
 from blinkpy.w3c.wpt_manifest import WPTManifest
-from blinkpy.web_tests.controllers.layout_test_finder import LayoutTestFinder
-from blinkpy.web_tests.controllers.layout_test_runner import LayoutTestRunner
 from blinkpy.web_tests.controllers.test_result_writer import TestResultWriter
+from blinkpy.web_tests.controllers.web_test_finder import WebTestFinder
+from blinkpy.web_tests.controllers.web_test_runner import WebTestRunner
 from blinkpy.web_tests.layout_package import json_results_generator
 from blinkpy.web_tests.models import test_expectations
 from blinkpy.web_tests.models import test_failures
@@ -63,7 +63,7 @@ TestExpectations = test_expectations.TestExpectations
 
 
 class Manager(object):
-    """A class for managing running a series of layout tests."""
+    """A class for managing running a series of web tests."""
 
     HTTP_SUBDIR = 'http'
     PERF_SUBDIR = 'perf'
@@ -89,9 +89,9 @@ class Manager(object):
         self._websockets_server_started = False
 
         self._results_directory = self._port.results_directory()
-        self._finder = LayoutTestFinder(self._port, self._options)
+        self._finder = WebTestFinder(self._port, self._options)
         self._path_finder = PathFinder(port.host.filesystem)
-        self._runner = LayoutTestRunner(self._options, self._port, self._printer, self._results_directory, self._test_is_slow)
+        self._runner = WebTestRunner(self._options, self._port, self._printer, self._results_directory, self._test_is_slow)
 
     def run(self, args):
         """Runs the tests and return a RunDetails object with the results."""
@@ -99,7 +99,7 @@ class Manager(object):
         self._printer.write_update('Collecting tests ...')
         running_all_tests = False
 
-        if not args or any('external' in path for path in args):
+        if self._options.manifest_update and (not args or any('external' in path for path in args)):
             self._printer.write_update('Generating MANIFEST.json for web-platform-tests ...')
             WPTManifest.ensure_manifest(self._port.host)
             self._printer.write_update('Completed generating manifest.')
@@ -146,13 +146,15 @@ class Manager(object):
             return test_run_results.RunDetails(exit_code=exit_code)
 
         if self._options.num_retries is None:
-            # Don't retry failures if an explicit list of tests was passed in.
-            should_retry_failures = len(paths) < len(test_names)
-            # Retry failures 3 times by default.
-            if should_retry_failures:
+            # If --test-list is passed, or if no test narrowing is specified,
+            # default to 3 retries. Otherwise [e.g. if tests are being passed by
+            # name], default to 0 retries.
+            if self._options.test_list or len(paths) < len(test_names):
                 self._options.num_retries = 3
-        else:
-            should_retry_failures = self._options.num_retries > 0
+            else:
+                self._options.num_retries = 0
+
+        should_retry_failures = self._options.num_retries > 0
 
         try:
             self._start_servers(tests_to_run)
@@ -160,7 +162,7 @@ class Manager(object):
                 run_results = self._run_test_loop(tests_to_run, tests_to_skip)
             else:
                 run_results = self._run_test_once(tests_to_run, tests_to_skip, should_retry_failures)
-            initial_results, all_retry_results, enabled_pixel_tests_in_retry = run_results
+            initial_results, all_retry_results = run_results
         finally:
             self._stop_servers()
             self._clean_up_run()
@@ -174,11 +176,10 @@ class Manager(object):
 
         self._printer.write_update('Summarizing results ...')
         summarized_full_results = test_run_results.summarize_results(
-            self._port, self._expectations, initial_results, all_retry_results,
-            enabled_pixel_tests_in_retry)
+            self._port, self._expectations, initial_results, all_retry_results)
         summarized_failing_results = test_run_results.summarize_results(
             self._port, self._expectations, initial_results, all_retry_results,
-            enabled_pixel_tests_in_retry, only_include_failing=True)
+            only_include_failing=True)
 
         exit_code = summarized_failing_results['num_regressions']
         if exit_code > exit_codes.MAX_FAILURES_EXIT_STATUS:
@@ -192,7 +193,6 @@ class Manager(object):
             self._upload_json_files()
 
             self._copy_results_html_file(self._results_directory, 'results.html')
-            self._copy_results_html_file(self._results_directory, 'legacy-results.html')
             if initial_results.keyboard_interrupted:
                 exit_code = exit_codes.INTERRUPTED_EXIT_STATUS
             else:
@@ -205,7 +205,7 @@ class Manager(object):
 
         return test_run_results.RunDetails(
             exit_code, summarized_full_results, summarized_failing_results,
-            initial_results, all_retry_results, enabled_pixel_tests_in_retry)
+            initial_results, all_retry_results)
 
     def _run_test_loop(self, tests_to_run, tests_to_skip):
         # Don't show results in a new browser window because we're already
@@ -213,7 +213,7 @@ class Manager(object):
         self._options.show_results = False
 
         while True:
-            initial_results, all_retry_results, enabled_pixel_tests_in_retry = self._run_test_once(
+            initial_results, all_retry_results = self._run_test_once(
                 tests_to_run, tests_to_skip, should_retry_failures=False)
             for name in initial_results.failures_by_name:
                 failure = initial_results.failures_by_name[name][0]
@@ -229,11 +229,9 @@ class Manager(object):
                 'Interactive watch mode: (q)uit (r)etry\n').lower()
 
             if user_input == 'q' or user_input == 'quit':
-                return (initial_results, all_retry_results, enabled_pixel_tests_in_retry)
+                return (initial_results, all_retry_results)
 
     def _run_test_once(self, tests_to_run, tests_to_skip, should_retry_failures):
-        enabled_pixel_tests_in_retry = False
-
         num_workers = self._port.num_workers(int(self._options.child_processes))
 
         initial_results = self._run_tests(
@@ -247,8 +245,6 @@ class Manager(object):
         tests_to_retry = self._tests_to_retry(initial_results)
         all_retry_results = []
         if should_retry_failures and tests_to_retry:
-            enabled_pixel_tests_in_retry = self._force_pixel_tests_if_needed()
-
             for retry_attempt in xrange(1, self._options.num_retries + 1):
                 if not tests_to_retry:
                     break
@@ -267,10 +263,7 @@ class Manager(object):
                 all_retry_results.append(retry_results)
 
                 tests_to_retry = self._tests_to_retry(retry_results)
-
-            if enabled_pixel_tests_in_retry:
-                self._options.pixel_tests = False
-        return (initial_results, all_retry_results, enabled_pixel_tests_in_retry)
+        return (initial_results, all_retry_results)
 
     def _collect_tests(self, args):
         return self._finder.find_tests(args, test_list=self._options.test_list,
@@ -382,7 +375,7 @@ class Manager(object):
         # Check that the system dependencies (themes, fonts, ...) are correct.
         if not self._options.nocheck_sys_deps:
             self._printer.write_update('Checking system dependencies ...')
-            exit_code = self._port.check_sys_deps(self._needs_servers(test_names))
+            exit_code = self._port.check_sys_deps()
             if exit_code:
                 return exit_code
 
@@ -393,10 +386,6 @@ class Manager(object):
 
         test_inputs = []
         for _ in xrange(iterations):
-            # TODO(crbug.com/650747): We may want to switch the two loops below
-            # to make the behavior consistent with gtest runner (--gtest_repeat
-            # is an alias for --repeat-each now), which looks like "ABCABCABC".
-            # And remember to update the help text when we do so.
             for test in tests_to_run:
                 for _ in xrange(repeat_each):
                     test_inputs.append(self._test_input_for_file(test))
@@ -440,12 +429,6 @@ class Manager(object):
         sys.stderr.flush()
         _log.debug('Cleaning up port')
         self._port.clean_up_test_run()
-
-    def _force_pixel_tests_if_needed(self):
-        if self._options.pixel_tests:
-            return False
-        self._options.pixel_tests = True
-        return True
 
     def _look_for_new_crash_logs(self, run_results, start_time):
         """Looks for and writes new crash logs, at the end of the test run.
@@ -582,7 +565,7 @@ class Manager(object):
 
     def _copy_results_html_file(self, destination_dir, filename):
         """Copies a file from the template directory to the results directory."""
-        template_dir = self._path_finder.path_from_layout_tests('fast', 'harness')
+        template_dir = self._path_finder.path_from_web_tests('fast', 'harness')
         source_path = self._filesystem.join(template_dir, filename)
         destination_path = self._filesystem.join(destination_dir, filename)
         # Note that the results.html template file won't exist when

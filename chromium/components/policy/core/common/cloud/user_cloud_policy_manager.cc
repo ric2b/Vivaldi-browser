@@ -20,6 +20,7 @@
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
+#include "components/prefs/pref_service.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace em = enterprise_management;
@@ -30,11 +31,13 @@ UserCloudPolicyManager::UserCloudPolicyManager(
     std::unique_ptr<UserCloudPolicyStore> store,
     const base::FilePath& component_policy_cache_path,
     std::unique_ptr<CloudExternalDataManager> external_data_manager,
-    const scoped_refptr<base::SequencedTaskRunner>& task_runner)
+    const scoped_refptr<base::SequencedTaskRunner>& task_runner,
+    network::NetworkConnectionTrackerGetter network_connection_tracker_getter)
     : CloudPolicyManager(dm_protocol::kChromeUserPolicyType,
                          std::string(),
                          store.get(),
-                         task_runner),
+                         task_runner,
+                         network_connection_tracker_getter),
       store_(std::move(store)),
       component_policy_cache_path_(component_policy_cache_path),
       external_data_manager_(std::move(external_data_manager)) {}
@@ -69,9 +72,12 @@ void UserCloudPolicyManager::Connect(
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory =
       client->GetURLLoaderFactory();
 
-  CreateComponentCloudPolicyService(dm_protocol::kChromeExtensionPolicyType,
-                                    component_policy_cache_path_, client.get(),
-                                    schema_registry());
+  CreateComponentCloudPolicyService(
+      dm_protocol::kChromeExtensionPolicyType, component_policy_cache_path_,
+      (local_state->GetBoolean(policy_prefs::kCloudPolicyOverridesMachinePolicy)
+           ? POLICY_SOURCE_PRIORITY_CLOUD
+           : POLICY_SOURCE_CLOUD),
+      client.get(), schema_registry());
   core()->Connect(std::move(client));
   core()->StartRefreshScheduler();
   core()->TrackRefreshDelayPref(local_state,

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "ui/aura/test/aura_test_base.h"
+#include "ui/aura/test/test_cursor_client.h"
 #include "ui/aura/test/test_screen.h"
 #include "ui/aura/test/window_event_dispatcher_test_api.h"
 #include "ui/aura/window.h"
@@ -10,41 +11,11 @@
 #include "ui/base/ime/input_method.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/test/draw_waiter_for_test.h"
+#include "ui/events/base_event_utils.h"
 #include "ui/events/event_rewriter.h"
 #include "ui/events/keycodes/dom/dom_code.h"
+#include "ui/events/test/test_event_rewriter.h"
 #include "ui/platform_window/stub/stub_window.h"
-
-namespace {
-
-// Counts number of events observed.
-class CounterEventRewriter : public ui::EventRewriter {
- public:
-  CounterEventRewriter() : events_seen_(0) {}
-  ~CounterEventRewriter() override {}
-
-  int events_seen() const { return events_seen_; }
-
- private:
-  // ui::EventRewriter:
-  ui::EventRewriteStatus RewriteEvent(
-      const ui::Event& event,
-      std::unique_ptr<ui::Event>* new_event) override {
-    events_seen_++;
-    return ui::EVENT_REWRITE_CONTINUE;
-  }
-
-  ui::EventRewriteStatus NextDispatchEvent(
-      const ui::Event& last_event,
-      std::unique_ptr<ui::Event>* new_event) override {
-    return ui::EVENT_REWRITE_CONTINUE;
-  }
-
-  int events_seen_;
-
-  DISALLOW_COPY_AND_ASSIGN(CounterEventRewriter);
-};
-
-}  // namespace
 
 namespace aura {
 
@@ -88,8 +59,8 @@ TEST_F(WindowTreeHostTest, HoldPointerMovesOnChildResizing) {
   // effect of prioritizing the resize event above other operations in aura.
   EXPECT_TRUE(dispatcher_api.HoldingPointerMoves());
 
-  // Wait for a CompositorFrame to be submitted.
-  ui::DrawWaiterForTest::WaitForCompositingStarted(host()->compositor());
+  // Wait for a CompositorFrame to be activated.
+  ui::DrawWaiterForTest::WaitForCompositingEnded(host()->compositor());
 
   // Pointer moves should be routed normally after commit.
   EXPECT_FALSE(dispatcher_api.HoldingPointerMoves());
@@ -97,7 +68,7 @@ TEST_F(WindowTreeHostTest, HoldPointerMovesOnChildResizing) {
 #endif
 
 TEST_F(WindowTreeHostTest, NoRewritesPostIME) {
-  CounterEventRewriter event_rewriter;
+  ui::test::TestEventRewriter event_rewriter;
   host()->AddEventRewriter(&event_rewriter);
 
   ui::KeyEvent key_event('A', ui::VKEY_A, ui::DomCode::NONE, 0);
@@ -141,12 +112,51 @@ class TestWindowTreeHost : public WindowTreeHostPlatform {
     CreateCompositor();
   }
 
+  ui::CursorType GetCursorType() { return GetCursorNative()->native_type(); }
+  void DispatchEventForTest(ui::Event* event) { DispatchEvent(event); }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(TestWindowTreeHost);
 };
 
+class TestCursorClient : public test::TestCursorClient {
+ public:
+  explicit TestCursorClient(aura::Window* root_window)
+      : test::TestCursorClient(root_window) {
+    window_ = root_window;
+  }
+  ~TestCursorClient() override {}
+
+  // Overridden from test::TestCursorClient:
+  void SetCursor(gfx::NativeCursor cursor) override {
+    WindowTreeHost* host = window_->GetHost();
+    if (host)
+      host->SetCursor(cursor);
+  }
+
+ private:
+  aura::Window* window_;
+  DISALLOW_COPY_AND_ASSIGN(TestCursorClient);
+};
+
 TEST_F(WindowTreeHostTest, LostCaptureDuringTearDown) {
   TestWindowTreeHost host;
+}
+
+// Tests if the cursor type is reset after ET_MOUSE_EXITED event.
+TEST_F(WindowTreeHostTest, ResetCursorOnExit) {
+  TestWindowTreeHost host;
+  aura::TestCursorClient cursor_client(host.window());
+
+  // Set the cursor with the specific type to check if it's reset after
+  // ET_MOUSE_EXITED event.
+  host.SetCursorNative(ui::CursorType::kCross);
+
+  ui::MouseEvent exit_event(ui::ET_MOUSE_EXITED, gfx::Point(), gfx::Point(),
+                            ui::EventTimeForNow(), 0, 0);
+
+  host.DispatchEventForTest(&exit_event);
+  EXPECT_EQ(host.GetCursorType(), ui::CursorType::kNone);
 }
 
 }  // namespace aura

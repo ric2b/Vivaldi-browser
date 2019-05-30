@@ -33,9 +33,10 @@ SDK.CPUProfileNode = class extends SDK.ProfileNode {
 SDK.CPUProfileDataModel = class extends SDK.ProfileTreeModel {
   /**
    * @param {!Protocol.Profiler.Profile} profile
+   * @param {?SDK.Target} target
    */
-  constructor(profile) {
-    super();
+  constructor(profile, target) {
+    super(target);
     const isLegacyFormat = !!profile['head'];
     if (isLegacyFormat) {
       // Legacy format contains raw timestamps and start/stop times are in seconds.
@@ -50,6 +51,7 @@ SDK.CPUProfileDataModel = class extends SDK.ProfileTreeModel {
       this.timestamps = this._convertTimeDeltas(profile);
     }
     this.samples = profile.samples;
+    this.lines = profile.lines;
     this.totalHitCount = 0;
     this.profileHead = this._translateProfileTree(profile.nodes);
     this.initialize(this.profileHead);
@@ -114,6 +116,7 @@ SDK.CPUProfileDataModel = class extends SDK.ProfileTreeModel {
         return !!node.callFrame.url && node.callFrame.url.startsWith('native ');
       return !!node['url'] && node['url'].startsWith('native ');
     }
+
     /**
      * @param {!Array<!Protocol.Profiler.ProfileNode>} nodes
      */
@@ -130,12 +133,29 @@ SDK.CPUProfileDataModel = class extends SDK.ProfileTreeModel {
           parentNode.children = [node.id];
       }
     }
+
+    /**
+     * @param {!Array<!Protocol.Profiler.ProfileNode>} nodes
+     * @param {!Array<number>|undefined} samples
+     */
+    function buildHitCountFromSamples(nodes, samples) {
+      if (typeof(nodes[0].hitCount) === 'number')
+        return;
+      console.assert(samples, 'Error: Neither hitCount nor samples are present in profile.');
+      for (let i = 0; i < nodes.length; ++i)
+        nodes[i].hitCount = 0;
+      for (let i = 0; i < samples.length; ++i)
+        ++nodeByIdMap.get(samples[i]).hitCount;
+    }
+
     /** @type {!Map<number, !Protocol.Profiler.ProfileNode>} */
     const nodeByIdMap = new Map();
     for (let i = 0; i < nodes.length; ++i) {
       const node = nodes[i];
       nodeByIdMap.set(node.id, node);
     }
+
+    buildHitCountFromSamples(nodes, this.samples);
     buildChildrenFromParents(nodes);
     this.totalHitCount = nodes.reduce((acc, node) => acc + node.hitCount, 0);
     const sampleTime = (this.profileEndTime - this.profileStartTime) / this.totalHitCount;

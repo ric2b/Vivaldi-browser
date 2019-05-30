@@ -10,27 +10,27 @@ namespace content {
 
 namespace {
 
-SkPaint::Hinting RendererPreferencesToSkiaHinting(
-    const RendererPreferences& prefs) {
+SkFontHinting RendererPreferencesToSkiaHinting(
+    const blink::mojom::RendererPreferences& prefs) {
   switch (prefs.hinting) {
     case gfx::FontRenderParams::HINTING_NONE:
-      return SkPaint::kNo_Hinting;
+      return SkFontHinting::kNone;
     case gfx::FontRenderParams::HINTING_SLIGHT:
-      return SkPaint::kSlight_Hinting;
+      return SkFontHinting::kSlight;
     case gfx::FontRenderParams::HINTING_MEDIUM:
-      return SkPaint::kNormal_Hinting;
+      return SkFontHinting::kNormal;
     case gfx::FontRenderParams::HINTING_FULL:
-      return SkPaint::kFull_Hinting;
+      return SkFontHinting::kFull;
     default:
       NOTREACHED();
-      return SkPaint::kNormal_Hinting;
+      return SkFontHinting::kNormal;
   }
 }
 
 }  // namespace
 
 void RenderViewImpl::UpdateFontRenderingFromRendererPrefs() {
-  const RendererPreferences& prefs = renderer_preferences_;
+  const blink::mojom::RendererPreferences& prefs = renderer_preferences_;
   blink::WebFontRenderStyle::SetHinting(
       RendererPreferencesToSkiaHinting(prefs));
   blink::WebFontRenderStyle::SetAutoHint(prefs.use_autohinter);

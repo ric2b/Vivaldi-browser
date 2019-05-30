@@ -66,7 +66,7 @@ TEST(ArcDocumentsProviderUtilTest, ParseDocumentsProviderUrl) {
 
   EXPECT_TRUE(ParseDocumentsProviderUrl(
       storage::FileSystemURL::CreateForTest(
-          GURL(), storage::kFileSystemTypeArcDocumentsProvider,
+          url::Origin(), storage::kFileSystemTypeArcDocumentsProvider,
           base::FilePath(kDocumentsProviderMountPointPath)
               .Append(FILE_PATH_LITERAL("cats/root/home/calico.jpg"))),
       &authority, &root_document_id, &path));
@@ -85,7 +85,7 @@ TEST(ArcDocumentsProviderUtilTest, ParseDocumentsProviderUrlEmptyPath) {
   // Should accept a path pointing to a root directory.
   EXPECT_TRUE(ParseDocumentsProviderUrl(
       storage::FileSystemURL::CreateForTest(
-          GURL(), storage::kFileSystemTypeArcDocumentsProvider,
+          url::Origin(), storage::kFileSystemTypeArcDocumentsProvider,
           base::FilePath(kDocumentsProviderMountPointPath)
               .Append(FILE_PATH_LITERAL("cats/root"))),
       &authority, &root_document_id, &path));
@@ -104,7 +104,7 @@ TEST(ArcDocumentsProviderUtilTest, ParseDocumentsProviderUrlEmptyPathSlash) {
   // Should accept a path pointing to a root directory.
   EXPECT_TRUE(ParseDocumentsProviderUrl(
       storage::FileSystemURL::CreateForTest(
-          GURL(), storage::kFileSystemTypeArcDocumentsProvider,
+          url::Origin(), storage::kFileSystemTypeArcDocumentsProvider,
           base::FilePath(kDocumentsProviderMountPointPath)
               .Append(FILE_PATH_LITERAL("cats/root/"))),
       &authority, &root_document_id, &path));
@@ -121,7 +121,7 @@ TEST(ArcDocumentsProviderUtilTest, ParseDocumentsProviderUrlInvalidType) {
   // Not storage::kFileSystemTypeArcDocumentsProvider.
   EXPECT_FALSE(ParseDocumentsProviderUrl(
       storage::FileSystemURL::CreateForTest(
-          GURL(), storage::kFileSystemTypeArcContent,
+          url::Origin(), storage::kFileSystemTypeArcContent,
           base::FilePath(kDocumentsProviderMountPointPath)
               .Append(FILE_PATH_LITERAL("cats/root/home/calico.jpg"))),
       &authority, &root_document_id, &path));
@@ -135,7 +135,7 @@ TEST(ArcDocumentsProviderUtilTest, ParseDocumentsProviderUrlInvalidPath) {
   // root_document_id part is missing.
   EXPECT_FALSE(ParseDocumentsProviderUrl(
       storage::FileSystemURL::CreateForTest(
-          GURL(), storage::kFileSystemTypeArcDocumentsProvider,
+          url::Origin(), storage::kFileSystemTypeArcDocumentsProvider,
           base::FilePath(kDocumentsProviderMountPointPath)
               .Append(FILE_PATH_LITERAL("root-missing"))),
       &authority, &root_document_id, &path));
@@ -143,7 +143,7 @@ TEST(ArcDocumentsProviderUtilTest, ParseDocumentsProviderUrlInvalidPath) {
   // Leading / is missing.
   EXPECT_FALSE(ParseDocumentsProviderUrl(
       storage::FileSystemURL::CreateForTest(
-          GURL(), storage::kFileSystemTypeArcDocumentsProvider,
+          url::Origin(), storage::kFileSystemTypeArcDocumentsProvider,
           base::FilePath(FILE_PATH_LITERAL(
               "special/arc-documents-provider/cats/root/home/calico.jpg"))),
       &authority, &root_document_id, &path));
@@ -151,7 +151,7 @@ TEST(ArcDocumentsProviderUtilTest, ParseDocumentsProviderUrlInvalidPath) {
   // Not under /special.
   EXPECT_FALSE(ParseDocumentsProviderUrl(
       storage::FileSystemURL::CreateForTest(
-          GURL(), storage::kFileSystemTypeArcDocumentsProvider,
+          url::Origin(), storage::kFileSystemTypeArcDocumentsProvider,
           base::FilePath(FILE_PATH_LITERAL(
               "/invalid/arc-documents-provider/cats/root/home/calico.jpg"))),
       &authority, &root_document_id, &path));
@@ -159,7 +159,7 @@ TEST(ArcDocumentsProviderUtilTest, ParseDocumentsProviderUrlInvalidPath) {
   // Not under /special/arc-documents-provider.
   EXPECT_FALSE(ParseDocumentsProviderUrl(
       storage::FileSystemURL::CreateForTest(
-          GURL(), storage::kFileSystemTypeArcDocumentsProvider,
+          url::Origin(), storage::kFileSystemTypeArcDocumentsProvider,
           base::FilePath(FILE_PATH_LITERAL(
               "/special/something-else/cats/root/home/calico.jpg"))),
       &authority, &root_document_id, &path));
@@ -172,7 +172,7 @@ TEST(ArcDocumentsProviderUtilTest, ParseDocumentsProviderUrlUnescape) {
 
   EXPECT_TRUE(ParseDocumentsProviderUrl(
       storage::FileSystemURL::CreateForTest(
-          GURL(), storage::kFileSystemTypeArcDocumentsProvider,
+          url::Origin(), storage::kFileSystemTypeArcDocumentsProvider,
           base::FilePath(
               "/special/arc-documents-provider/cats/ro%2Fot/home/calico.jpg")),
       &authority, &root_document_id, &path));
@@ -188,7 +188,7 @@ TEST(ArcDocumentsProviderUtilTest, ParseDocumentsProviderUrlUtf8) {
 
   EXPECT_TRUE(ParseDocumentsProviderUrl(
       storage::FileSystemURL::CreateForTest(
-          GURL(), storage::kFileSystemTypeArcDocumentsProvider,
+          url::Origin(), storage::kFileSystemTypeArcDocumentsProvider,
           base::FilePath(
               "/special/arc-documents-provider/cats/root/home/みけねこ.jpg")),
       &authority, &root_document_id, &path));
@@ -243,6 +243,49 @@ TEST(ArcDocumentsProviderUtilTest, GetFileNameForDocument) {
             GetFileNameForDocument(MakeDocument("kitten", "image/png")));
   EXPECT_EQ("kitten",
             GetFileNameForDocument(MakeDocument("kitten", "abc/xyz")));
+
+  // Check that files with a mime type different than expected appends a
+  // possible extension when a different mime type with a different category is
+  // found in the Android mime types map.
+  EXPECT_EQ("file.txt.3gp",
+            GetFileNameForDocument(MakeDocument("file.txt", "video/3gpp")));
+
+  // Check that files with a mime type different than expected don't append
+  // an extension when a different mime type with the same category is
+  // found in the Android mime types map.
+  EXPECT_EQ("file.3gp",
+            GetFileNameForDocument(MakeDocument("file.3gp", "video/mp4")));
+}
+
+TEST(ArcDocumentsProviderUtilTest, StripMimeSubType) {
+  // Check that the category type is returned for a valid mime type.
+  EXPECT_EQ("video", StripMimeSubType("video/mp4"));
+  // Check that an empty string is returned for malformed mime types.
+  EXPECT_EQ("", StripMimeSubType(""));
+  EXPECT_EQ("", StripMimeSubType("video/"));
+  EXPECT_EQ("", StripMimeSubType("/"));
+  EXPECT_EQ("", StripMimeSubType("/abc"));
+  EXPECT_EQ("", StripMimeSubType("/abc/xyz"));
+}
+
+TEST(ArcDocumentsProviderUtilTest, FindArcMimeTypeFromExtension) {
+  // Test that a lone possible extension returns the correct type.
+  EXPECT_EQ("application/msword", FindArcMimeTypeFromExtension("doc"));
+  // Test that the first extension in the comma delimited list of extensions
+  // returns the correct type.
+  EXPECT_EQ("video/3gpp", FindArcMimeTypeFromExtension("3gp"));
+  // Test that the second extension in the comma delimited list of extensions
+  // returns the correct type.
+  EXPECT_EQ("audio/mpeg", FindArcMimeTypeFromExtension("mpga"));
+  // Test that matching suffixes (m4a) return null without a full match.
+  EXPECT_EQ("", FindArcMimeTypeFromExtension("4a"));
+  // Test that matching prefixes (imy) return null without a full match.
+  EXPECT_EQ("", FindArcMimeTypeFromExtension("im"));
+  // Test that ambiguous prefixes (mp4, mpg) return null.
+  EXPECT_EQ("", FindArcMimeTypeFromExtension("mp"));
+  // Test that invalid mime types return null.
+  EXPECT_EQ("", FindArcMimeTypeFromExtension(""));
+  EXPECT_EQ("", FindArcMimeTypeFromExtension("invalid"));
 }
 
 }  // namespace

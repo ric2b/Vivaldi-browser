@@ -16,12 +16,12 @@ namespace blink {
 
 PaymentManager* PaymentManager::Create(
     ServiceWorkerRegistration* registration) {
-  return new PaymentManager(registration);
+  return MakeGarbageCollected<PaymentManager>(registration);
 }
 
 PaymentInstruments* PaymentManager::instruments() {
   if (!instruments_)
-    instruments_ = new PaymentInstruments(manager_);
+    instruments_ = MakeGarbageCollected<PaymentInstruments>(manager_);
   return instruments_;
 }
 
@@ -44,8 +44,9 @@ PaymentManager::PaymentManager(ServiceWorkerRegistration* registration)
     : registration_(registration), instruments_(nullptr) {
   DCHECK(registration);
 
-  auto request = mojo::MakeRequest(&manager_);
   if (ExecutionContext* context = registration->GetExecutionContext()) {
+    auto request = mojo::MakeRequest(
+        &manager_, context->GetTaskRunner(TaskType::kUserInteraction));
     if (auto* interface_provider = context->GetInterfaceProvider()) {
       interface_provider->GetInterface(std::move(request));
     }

@@ -1,4 +1,4 @@
-{% from 'utilities.cpp.tmpl' import declare_enum_validation_variable %}
+{% from 'utilities.cc.tmpl' import declare_enum_validation_variable %}
 
 {# Implements callback interface\'s "call a user object's operation", or
    callback function\'s "invoke" and/or "construct".
@@ -11,24 +11,32 @@
       return_cpp_type = Blink (C++) return type
       return_native_value_traits_tag = tag of NativeValueTraits for return type
       arguments = dict of arguments\' info
+      is_treat_non_object_as_null = True if [TreatNonObjectAsNull]
+      bypass_runnability_check = Skip IsCallbackFunctionRunnable check if True
       interface_name = interface name used for exception
       operation_name = interface name used for exception and property lookup
 #}
 {% macro callback_invoke(
     interface_or_function, invoke_or_construct,
     return_cpp_type, return_native_value_traits_tag, arguments,
+    is_treat_non_object_as_null, bypass_runnability_check,
     interface_name, operation_name) %}
-  if (!IsCallbackFunctionRunnable(CallbackRelevantScriptState(),
+  ScriptState* callback_relevant_script_state =
+      CallbackRelevantScriptStateOrThrowException(
+          "{{interface_name}}",
+          "{{operation_name}}");
+  if (!callback_relevant_script_state) {
+    return v8::Nothing<{{return_cpp_type}}>();
+  }
+
+  {% if not bypass_runnability_check %}
+  if (!IsCallbackFunctionRunnable(callback_relevant_script_state,
                                   IncumbentScriptState())) {
     // Wrapper-tracing for the callback function makes the function object and
     // its creation context alive. Thus it's safe to use the creation context
     // of the callback function here.
     v8::HandleScope handle_scope(GetIsolate());
-    {% if interface_or_function == 'callback function' %}
-    v8::Local<v8::Object> callback_object = CallbackFunction();
-    {% else %}
     v8::Local<v8::Object> callback_object = CallbackObject();
-    {% endif %}
     CHECK(!callback_object.IsEmpty());
     v8::Context::Scope context_scope(callback_object->CreationContext());
     V8ThrowException::ThrowError(
@@ -39,10 +47,11 @@
             "The provided callback is no longer runnable."));
     return v8::Nothing<{{return_cpp_type}}>();
   }
+  {% endif %}
 
   // step: Prepare to run script with relevant settings.
   ScriptState::Scope callback_relevant_context_scope(
-      CallbackRelevantScriptState());
+      callback_relevant_script_state);
   // step: Prepare to run a callback with stored settings.
   v8::Context::BackupIncumbentScope backup_incumbent_scope(
       IncumbentScriptState()->GetContext());
@@ -53,7 +62,7 @@
   // Note that step 7. and 8. are side effect free (except for a very rare
   // exception due to no incumbent realm), so it's okay to put step 3. after
   // step 7. and 8.
-  if (!CallbackFunction()->IsConstructor()) {
+  if (!IsConstructor()) {
     V8ThrowException::ThrowTypeError(
         GetIsolate(),
         ExceptionMessages::FailedToExecute(
@@ -67,12 +76,36 @@
   v8::Local<v8::Function> function;
   {# Fill |function|. #}
   {% if interface_or_function == 'callback function' %}
-  // callback function\'s invoke:
+  // callback function's invoke:
   // step 4. If ! IsCallable(F) is false:
+  {% if is_treat_non_object_as_null %}
+  if (!CallbackObject()->IsFunction()) {
+    // Handle the special case of [TreatNonObjectAsNull].
+    //
+    {% if return_cpp_type == 'void' %}
+    // step 4.1. If the callback function's return type is void, return.
+    return v8::JustVoid();
+    {% else %}
+    // step 4.2. Return the result of converting undefined to the callback
+    //   function's return type.
+    ExceptionState exception_state(GetIsolate(),
+                                   ExceptionState::kExecutionContext,
+                                   "{{interface_name}}",
+                                   "{{operation_name}}");
+    auto native_result =
+        NativeValueTraits<{{return_native_value_traits_tag}}>::NativeValue(
+            GetIsolate(), v8::Undefined(GetIsolate()), exception_state);
+    if (exception_state.HadException())
+      return v8::Nothing<{{return_cpp_type}}>();
+    else
+      return v8::Just<{{return_cpp_type}}>(native_result);
+    {% endif %}{# if return_cpp_type == 'void' #}
+  }
+  {% else %}
   //
-  // As Blink no longer supports [TreatNonObjectAsNull], there must be no such a
-  // case.
-  DCHECK(CallbackFunction()->IsFunction());
+  // No [TreatNonObjectAsNull] presents.  Must be always callable.
+  DCHECK(CallbackObject()->IsFunction());
+  {% endif %}
   function = CallbackFunction();
   {% else %}
   if (IsCallbackObjectCallable()) {
@@ -84,7 +117,7 @@
     // step 9.2.2. If getResult is an abrupt completion, set completion to
     //   getResult and jump to the step labeled return.
     v8::Local<v8::Value> value;
-    if (!CallbackObject()->Get(CallbackRelevantScriptState()->GetContext(),
+    if (!CallbackObject()->Get(callback_relevant_script_state->GetContext(),
                                V8String(GetIsolate(), "{{operation_name}}"))
         .ToLocal(&value)) {
       return v8::Nothing<{{return_cpp_type}}>();
@@ -110,18 +143,23 @@
   {% endif %}
   {# Fill |this_arg|. #}
   {% if invoke_or_construct == 'invoke' %}
-  this_arg = ToV8(callback_this_value, CallbackRelevantScriptState());
+  if (callback_this_value.IsEmpty()) {
+    // step 2. If thisArg was not given, let thisArg be undefined.
+    this_arg = v8::Undefined(GetIsolate());
+  } else {
+    this_arg = callback_this_value.V8Value(callback_relevant_script_state);
+  }
   {% elif interface_or_function == 'callback interface' %}
   if (!IsCallbackObjectCallable()) {
     // step 11. If value's interface is not a single operation callback
     //   interface, or if !IsCallable(O) is false, set thisArg to O (overriding
     //   the provided value).
     this_arg = CallbackObject();
-  } else if (!callback_this_value) {
+  } else if (callback_this_value.IsEmpty()) {
     // step 2. If thisArg was not given, let thisArg be undefined.
     this_arg = v8::Undefined(GetIsolate());
   } else {
-    this_arg = ToV8(callback_this_value, CallbackRelevantScriptState());
+    this_arg = callback_this_value.V8Value(callback_relevant_script_state);
   }
   {% endif %}
 
@@ -129,7 +167,7 @@
   // Enum values provided by Blink must be valid, otherwise typo.
 #if DCHECK_IS_ON()
   {
-    {% set valid_enum_variables = 'valid_' + argument.name + '_values' %}
+    {% set valid_enum_variables = 'kValid' + argument.name[0].upper() + argument.name[1:] + 'Values' %}
     {{declare_enum_validation_variable(argument.enum_values, valid_enum_variables) | trim | indent(4)}}
     ExceptionState exception_state(GetIsolate(),
                                    ExceptionState::kExecutionContext,
@@ -149,18 +187,23 @@
   //   labeled return.
   {% if arguments %}
   v8::Local<v8::Object> argument_creation_context =
-      CallbackRelevantScriptState()->GetContext()->Global();
+      callback_relevant_script_state->GetContext()->Global();
   ALLOW_UNUSED_LOCAL(argument_creation_context);
   {% set has_variadic_argument = arguments[-1].is_variadic %}
   {% set non_variadic_arguments = arguments | rejectattr('is_variadic') | list %}
   {% set variadic_argument = arguments[-1] if has_variadic_argument else None %}
-  {% set arguments_length = '%d + %s.size()' % (non_variadic_arguments|length, variadic_argument.name) if has_variadic_argument else non_variadic_arguments|length %}
   {% for argument in non_variadic_arguments %}
   v8::Local<v8::Value> {{argument.v8_name}} = {{argument.cpp_value_to_v8_value}};
   {% endfor %}
   {% if has_variadic_argument %}
-  const int argc = {{arguments_length}};
-  v8::Local<v8::Value> argv[argc];
+  // Secure one element at least in |argv| to avoid the following restriction.
+  //
+  // C++14 8.3.4 Arrays
+  // If the constant-expression (5.19) is present, it shall be a converted
+  // constant expression of type std::size_t and its value shall be greater than
+  // zero.
+  const int argc = {{non_variadic_arguments|length}} + {{variadic_argument.name}}.size();
+  v8::Local<v8::Value> argv[std::max(1, argc)];
   {% for argument in non_variadic_arguments %}
   argv[{{loop.index0}}] = {{argument.v8_name}};
   {% endfor %}
@@ -168,7 +211,7 @@
     argv[{{non_variadic_arguments|length}} + i] = ToV8({{variadic_argument.name}}[i], argument_creation_context, GetIsolate());
   }
   {% else %}{# if has_variadic_argument #}
-  constexpr int argc = {{arguments_length}};
+  constexpr int argc = {{non_variadic_arguments|length}};
   v8::Local<v8::Value> argv[] = { {{non_variadic_arguments | join(', ', 'v8_name')}} };
   static_assert(static_cast<size_t>(argc) == base::size(argv), "size mismatch");
   {% endif %}
@@ -184,7 +227,7 @@
   if (!V8ScriptRunner::CallAsConstructor(
           GetIsolate(),
           function,
-          ExecutionContext::From(CallbackRelevantScriptState()),
+          ExecutionContext::From(callback_relevant_script_state),
           argc,
           argv).ToLocal(&call_result)) {
     // step 11. If callResult is an abrupt completion, set completion to
@@ -195,7 +238,7 @@
   // step: Let callResult be Call(X, thisArg, esArgs).
   if (!V8ScriptRunner::CallFunction(
           function,
-          ExecutionContext::From(CallbackRelevantScriptState()),
+          ExecutionContext::From(callback_relevant_script_state),
           this_arg,
           argc,
           argv,

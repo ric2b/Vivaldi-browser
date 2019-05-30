@@ -37,19 +37,19 @@ class CORE_EXPORT HTMLBodyElement final : public HTMLElement {
 
  public:
   DECLARE_NODE_FACTORY(HTMLBodyElement);
+
+  explicit HTMLBodyElement(Document&);
   ~HTMLBodyElement() override;
 
-  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(blur);
-  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(error);
-  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(focus);
-  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(load);
-  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(resize);
-  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(scroll);
-  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(orientationchange);
+  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(blur, kBlur)
+  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(error, kError)
+  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(focus, kFocus)
+  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(load, kLoad)
+  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(resize, kResize)
+  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(scroll, kScroll)
+  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(orientationchange, kOrientationchange)
 
  private:
-  explicit HTMLBodyElement(Document&);
-
   void ParseAttribute(const AttributeModificationParams&) override;
   bool IsPresentationAttribute(const QualifiedName&) const override;
   void CollectStyleForPresentationAttribute(

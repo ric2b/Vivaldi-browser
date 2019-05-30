@@ -14,7 +14,7 @@ namespace switches {
 // Can't find the switch you are looking for? Try looking in:
 // ash/public/cpp/ash_switches.cc
 // base/base_switches.cc
-// chromeos/chromeos_switches.cc
+// chromeos/constants/chromeos_switches.cc
 // etc.
 //
 // When commenting your switch, please use the same voice as surrounding
@@ -176,10 +176,6 @@ const char kDisableBackgroundNetworking[]   = "disable-background-networking";
 // Disables the bundled PPAPI version of Flash.
 const char kDisableBundledPpapiFlash[]      = "disable-bundled-ppapi-flash";
 
-// Disables hardware encoding support for Cast Streaming.
-const char kDisableCastStreamingHWEncoding[] =
-    "disable-cast-streaming-hw-encoding";
-
 // Disables the client-side phishing detection feature. Note that even if
 // client-side phishing detection is enabled, it will only be active if the
 // user has opted in to UMA stats and SafeBrowsing is enabled in the
@@ -293,11 +289,6 @@ const char kEnableExtensionActivityLogging[] =
 const char kEnableExtensionActivityLogTesting[] =
     "enable-extension-activity-log-testing";
 
-// Enable the fast unload controller, which speeds up tab/window close by
-// running a tab's onunload js handler independently of the GUI -
-// crbug.com/142458 .
-const char kEnableFastUnload[] = "enable-fast-unload";
-
 // Runs the Native Client inside the renderer process and enables GPU plugin
 // (internally adds lEnableGpuPlugin to the command line).
 const char kEnableNaCl[]                    = "enable-nacl";
@@ -321,20 +312,6 @@ const char kEnableOfflineAutoReloadVisibleOnly[] =
 // content mode, powerful feature restrictions, etc.)
 const char kEnablePotentiallyAnnoyingSecurityFeatures[] =
     "enable-potentially-annoying-security-features";
-
-// Enables the Power overlay in Settings.
-const char kEnablePowerOverlay[]            = "enable-power-overlay";
-
-// Enables showing unregistered printers in print preview
-const char kEnablePrintPreviewRegisterPromos[] =
-    "enable-print-preview-register-promos";
-
-// Enables user control over muting tab audio from the tab strip.
-const char kEnableTabAudioMuting[]  = "enable-tab-audio-muting";
-
-// Enables DevTools server for UI (mus, ash, etc). Value should be the port the
-// server is started on. Default port is 9223.
-const char kEnableUiDevTools[] = "enable-ui-devtools";
 
 // Name of the command line flag to force content verification to be on in one
 // of various modes.
@@ -367,18 +344,9 @@ const char kForceAndroidAppMode[] = "force-android-app-mode";
 // the app to be installed if it hasn't been already.
 const char kForceAppMode[]                  = "force-app-mode";
 
-// Forces Desktop to iOS promotion to appear in windows whenever an entrypoint
-// is triggered.
-const char kForceDesktopIOSPromotion[] = "force-desktop-ios-promotion";
-
 // Displays the First Run experience when the browser is started, regardless of
 // whether or not it's actually the First Run (this overrides kNoFirstRun).
 const char kForceFirstRun[]                 = "force-first-run";
-
-// Shows the modal first run dialog during browser startup. This is shown for
-// the "organic" first run experience (Chrome downloaded, empty user data dir).
-// This does nothing without --force-first-run also being set.
-const char kForceFirstRunDialog[] = "force-first-run-dialog";
 
 // Forces Chrome to use localNTP instead of server (GWS) NTP.
 const char kForceLocalNtp[]                 = "force-local-ntp";
@@ -390,12 +358,6 @@ const char kForceStackedTabStripLayout[]    = "force-stacked-tab-strip-layout";
 // for testing purposes so that the UI tests don't depend on what comes up for
 // http://google.com.
 const char kHomePage[]                      = "homepage";
-
-// Causes net::URLFetchers to ignore requests for SSL client certificates,
-// causing them to attempt an unauthenticated SSL/TLS session. This is intended
-// for use when testing various service URLs (eg: kPromoServerURL, kSbURLPrefix,
-// kSyncServiceURL, etc).
-const char kIgnoreUrlFetcherCertRequests[] = "ignore-urlfetcher-cert-requests";
 
 // Causes the browser to launch directly in incognito mode.
 const char kIncognito[]                     = "incognito";
@@ -502,6 +464,13 @@ const char kNoStartupWindow[]               = "no-startup-window";
 const char kNoSupervisedUserAcknowledgmentCheck[]  =
     "no-managed-user-acknowledgment-check";
 
+// Calculate the hash of an MHTML file as it is being saved.
+// The browser process will write the serialized MHTML contents to a file and
+// calculate its hash as it is streamed back from the renderer via a Mojo data
+// pipe.
+const char kOnTheFlyMhtmlHashComputation[] =
+    "on-the-fly-mhtml-hash-computation";
+
 // Launches URL in new browser window.
 const char kOpenInNewWindow[]               = "new-window";
 
@@ -525,9 +494,6 @@ const char kPackExtension[]                 = "pack-extension";
 
 // Optional PEM private key to use in signing packaged .crx.
 const char kPackExtensionKey[]              = "pack-extension-key";
-
-// Specifies the path to the user data folder for the parent profile.
-const char kParentProfile[]                 = "parent-profile";
 
 // Development flag for permission request API. This flag is needed until
 // the API is finalized.
@@ -557,17 +523,6 @@ const char kProductVersion[]                = "product-version";
 // Selects directory of profile to associate with the first browser launched.
 const char kProfileDirectory[]              = "profile-directory";
 
-// Starts the sampling based profiler for the browser process at startup. This
-// will only work if chrome has been built with the gyp variable profiling=1.
-// The output will go to the value of kProfilingFile.
-const char kProfilingAtStart[]              = "profiling-at-start";
-
-// Controls whether profile data is periodically flushed to a file. Normally
-// the data gets written on exit but cases exist where chrome doesn't exit
-// cleanly (especially when using single-process). A time in seconds can be
-// specified.
-const char kProfilingFlush[]                = "profiling-flush";
-
 // Forces proxy auto-detection.
 const char kProxyAutoDetect[]               = "proxy-auto-detect";
 
@@ -596,6 +551,9 @@ const char kRestoreLastSession[]            = "restore-last-session";
 // See http://crbug.com/120416 for how to remove this switch.
 const char kSavePageAsMHTML[]               = "save-page-as-mhtml";
 
+// Sets the Reporting API delay to under a second to allow much quicker reports.
+const char kShortReportingDelay[] = "short-reporting-delay";
+
 // If true the app list will be shown.
 const char kShowAppList[]                   = "show-app-list";
 
@@ -621,12 +579,6 @@ const char kSimulateOutdatedNoAU[]          = "simulate-outdated-no-au";
 
 // Simulates an update being available.
 const char kSimulateUpgrade[]               = "simulate-upgrade";
-
-// Causes SSL key material to be logged to the specified file for debugging
-// purposes. See
-// https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS/Key_Log_Format
-// for the format.
-const char kSSLKeyLogFile[]               = "ssl-key-log-file";
 
 // Specifies the maximum SSL/TLS version ("tls1.2" or "tls1.3").
 const char kSSLVersionMax[] = "ssl-version-max";
@@ -669,22 +621,6 @@ const char kTaskManagerShowExtraRenderers[] =
 
 // Passes the name of the current running automated test to Chrome.
 const char kTestName[]                      = "test-name";
-
-// Specifies the enabled TLS 1.3 variant ("disabled", "draft23", "draft28",
-// "final").
-const char kTLS13Variant[] = "tls13-variant";
-
-// This mode disables the TLS 1.3 for the |kTLS13Variant| switch.
-const char kTLS13VariantDisabled[] = "disabled";
-
-// This mode enables TLS 1.3 draft-23 for the |kTLS13Variant| switch.
-const char kTLS13VariantDraft23[] = "draft23";
-
-// This mode enables TLS 1.3 draft-28 for the |kTLS13Variant| switch.
-const char kTLS13VariantDraft28[] = "draft28";
-
-// This mode enables TLS 1.3 final for the |kTLS13Variant| switch.
-const char kTLS13VariantFinal[] = "final";
 
 // Identifies a list of download sources as trusted, but only if proper group
 // policy is set.
@@ -760,12 +696,6 @@ const char kWinHttpProxyResolver[]          = "winhttp-proxy-resolver";
 // resulted in a browser startup.
 const char kWinJumplistAction[]             = "win-jumplist-action";
 
-#if defined(GOOGLE_CHROME_BUILD)
-// Shows a Google icon next to context menu items powered by Google services.
-const char kEnableGoogleBrandedContextMenu[] =
-    "enable-google-branded-context-menu";
-#endif  // defined(GOOGLE_CHROME_BUILD)
-
 #if !defined(GOOGLE_CHROME_BUILD)
 // Enables a live-reload for local NTP resources. This only works when Chrome
 // is running from a Chrome source directory.
@@ -776,18 +706,9 @@ const char kLocalNtpReload[]                = "local-ntp-reload";
 // Android authentication account type for SPNEGO authentication
 const char kAuthAndroidNegotiateAccountType[] = "auth-spnego-account-type";
 
-// Android authentication account type for SPNEGO authentication
-const char kChromeHomeSwipeLogicType[] = "chrome-home-swipe-logic";
-
-// Disables Contextual Search.
-const char kDisableContextualSearch[] = "disable-contextual-search";
-
 // Enable the accessibility tab switcher.
 const char kEnableAccessibilityTabSwitcher[] =
     "enable-accessibility-tab-switcher";
-
-// Enables Contextual Search.
-const char kEnableContextualSearch[] = "enable-contextual-search";
 
 // Enables a hung renderer InfoBar allowing the user to close or wait on
 // unresponsive web content.
@@ -796,8 +717,8 @@ const char kEnableHungRendererInfoBar[] = "enable-hung-renderer-infobar";
 // Forces the update menu badge to show.
 const char kForceShowUpdateMenuBadge[] = "force-show-update-menu-badge";
 
-// Forces the update menu item to show.
-const char kForceShowUpdateMenuItem[] = "force-show-update-menu-item";
+// Forces the update menu type to a specific type.
+const char kForceUpdateMenuType[] = "force-update-menu-type";
 
 // Forces a custom summary to be displayed below the update menu item.
 const char kForceShowUpdateMenuItemCustomSummary[] = "custom_summary";
@@ -830,6 +751,15 @@ const char kDisableLoginScreenApps[] = "disable-login-screen-apps";
 // NOTE: Used by the Chrome OS crash_reporter to identify mash processes. If you
 // change or remove the flag please update platform2/crash_reporter.
 const char kMashServiceName[] = "mash-service-name";
+
+// Use a short (1 second) timeout for merge session loader throttle testing.
+const char kShortMergeSessionTimeoutForTest[] =
+    "short-merge-session-timeout-for-test";
+
+// Selects the scheduler configuration specified in the parameter.
+const char kSchedulerConfiguration[] = "scheduler-configuration";
+const char kSchedulerConfigurationConservative[] = "conservative";
+const char kSchedulerConfigurationPerformance[] = "performance";
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_CHROMEOS)
@@ -864,13 +794,6 @@ const char kAppsKeepChromeAliveInTests[]    = "apps-keep-chrome-alive-in-tests";
 // Disable the toolkit-views App Info dialog for Mac.
 const char kDisableAppInfoDialogMac[] = "disable-app-info-dialog-mac";
 
-// Disables custom Cmd+` window cycling for platform apps and hosted apps.
-const char kDisableAppWindowCycling[] = "disable-app-window-cycling";
-
-// Disables tab detaching in fullscreen mode on Mac.
-const char kDisableFullscreenTabDetaching[] =
-    "disable-fullscreen-tab-detaching";
-
 // Disables app shim creation for hosted apps on Mac.
 const char kDisableHostedAppShimCreation[] = "disable-hosted-app-shim-creation";
 
@@ -888,22 +811,12 @@ const char kEnableUserMetrics[] = "enable-user-metrics";
 // chrome://apps and chrome://extensions and is already enabled on non-mac.
 const char kEnableAppInfoDialogMac[] = "enable-app-info-dialog-mac";
 
-// Enables custom Cmd+` window cycling for platform apps and hosted apps.
-const char kEnableAppWindowCycling[] = "enable-app-window-cycling";
-
-// Enables tab detaching in fullscreen mode on Mac.
-const char kEnableFullscreenTabDetaching[] = "enable-fullscreen-tab-detaching";
-
 // Enables the fullscreen toolbar to reveal itself for tab strip changes.
 const char kEnableFullscreenToolbarReveal[] =
     "enable-fullscreen-toolbar-reveal";
 
 // Allows hosted apps to be opened in windows on Mac.
 const char kEnableHostedAppsInWindows[] = "enable-hosted-apps-in-windows";
-
-// Enables use of toolkit-views based native app windows.
-const char kEnableMacViewsNativeAppWindows[] =
-    "enable-mac-views-native-app-windows";
 
 // Shows a notification when quitting Chrome with hosted apps running. Default
 // behavior is to also quit all hosted apps.
@@ -999,6 +912,14 @@ const char kEnableInputImeAPI[] = "enable-input-ime-api";
 
 #if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_WIN)
 const char kEnableNewAppMenuIcon[] = "enable-new-app-menu-icon";
+#endif
+
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && \
+    !defined(GOOGLE_CHROME_BUILD)
+// Enables Machine level user cloud policy on Chromium build. This policy is
+// always enabled on the branded builds.
+const char kEnableMachineLevelUserCloudPolicy[] =
+    "enable-machine-level-user-cloud-policy";
 #endif
 
 #if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)

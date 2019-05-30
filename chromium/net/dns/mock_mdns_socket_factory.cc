@@ -7,11 +7,13 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/net_errors.h"
+#include "net/dns/public/util.h"
 
 using testing::_;
 using testing::Invoke;
@@ -20,7 +22,7 @@ namespace net {
 
 MockMDnsDatagramServerSocket::MockMDnsDatagramServerSocket(
     AddressFamily address_family) {
-  local_address_ = GetMDnsIPEndPoint(address_family);
+  local_address_ = dns_util::GetMdnsReceiveEndPoint(address_family);
 }
 
 MockMDnsDatagramServerSocket::~MockMDnsDatagramServerSocket() = default;

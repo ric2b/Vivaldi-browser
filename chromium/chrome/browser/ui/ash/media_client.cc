@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/ash/media_client.h"
 
 #include "ash/public/interfaces/constants.mojom.h"
+#include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
@@ -29,6 +30,7 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/process_manager.h"
+#include "services/media_session/public/mojom/media_session.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 using ash::mojom::MediaCaptureState;
@@ -189,13 +191,19 @@ void MediaClient::HandleMediaPlayPause() {
 
 void MediaClient::ToggleMediaSessionPlayPause(
     content::MediaSession* media_session) {
-  if (!media_session->IsControllable())
-    return;
+  media_session->GetMediaSessionInfo(base::BindOnce(
+      [](content::MediaSession* media_session,
+         media_session::mojom::MediaSessionInfoPtr session_info) {
+        if (!session_info->is_controllable)
+          return;
 
-  if (media_session->IsActuallyPaused())
-    media_session->Resume(content::MediaSession::SuspendType::UI);
-  else
-    media_session->Suspend(content::MediaSession::SuspendType::UI);
+        if (session_info->playback_state ==
+            media_session::mojom::MediaPlaybackState::kPlaying)
+          media_session->Suspend(content::MediaSession::SuspendType::kUI);
+        else
+          media_session->Resume(content::MediaSession::SuspendType::kUI);
+      },
+      media_session));
 }
 
 void MediaClient::HandleMediaPrevTrack() {
@@ -218,15 +226,15 @@ void MediaClient::RequestCaptureState() {
 void MediaClient::SuspendMediaSessions() {
   for (auto* web_contents : AllTabContentses()) {
     content::MediaSession::Get(web_contents)
-        ->Suspend(content::MediaSession::SuspendType::SYSTEM);
+        ->Suspend(content::MediaSession::SuspendType::kSystem);
   }
 }
 
 void MediaClient::OnRequestUpdate(int render_process_id,
                                   int render_frame_id,
-                                  content::MediaStreamType stream_type,
+                                  blink::MediaStreamType stream_type,
                                   const content::MediaRequestState state) {
-  DCHECK(base::MessageLoopForUI::IsCurrent());
+  DCHECK(base::MessageLoopCurrentForUI::IsSet());
   // The PostTask is necessary because the state of MediaStreamCaptureIndicator
   // gets updated after this.
   base::ThreadTaskRunnerHandle::Get()->PostTask(

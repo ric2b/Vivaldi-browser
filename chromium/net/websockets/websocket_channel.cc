@@ -15,16 +15,17 @@
 #include "base/bind.h"
 #include "base/containers/circular_deque.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "net/base/auth.h"
 #include "net/base/io_buffer.h"
+#include "net/base/ip_endpoint.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
@@ -34,7 +35,6 @@
 #include "net/websockets/websocket_frame.h"
 #include "net/websockets/websocket_handshake_request_info.h"
 #include "net/websockets/websocket_handshake_response_info.h"
-#include "net/websockets/websocket_handshake_stream_create_helper.h"
 #include "net/websockets/websocket_stream.h"
 #include "url/origin.h"
 
@@ -81,7 +81,7 @@ bool IsStrictlyValidCloseStatusCode(int code) {
       5000, 65536,  // Codes above 5000 are invalid.
   };
   const int* const kInvalidRangesEnd =
-      kInvalidRanges + arraysize(kInvalidRanges);
+      kInvalidRanges + base::size(kInvalidRanges);
 
   DCHECK_GE(code, 0);
   DCHECK_LT(code, 65536);
@@ -207,11 +207,11 @@ class WebSocketChannel::ConnectDelegate
 
   int OnAuthRequired(scoped_refptr<AuthChallengeInfo> auth_info,
                      scoped_refptr<HttpResponseHeaders> headers,
-                     const HostPortPair& host_port_pair,
+                     const IPEndPoint& remote_endpoint,
                      base::OnceCallback<void(const AuthCredentials*)> callback,
                      base::Optional<AuthCredentials>* credentials) override {
     return creator_->OnAuthRequired(std::move(auth_info), std::move(headers),
-                                    host_port_pair, std::move(callback),
+                                    remote_endpoint, std::move(callback),
                                     credentials);
   }
 
@@ -544,10 +544,8 @@ void WebSocketChannel::SendAddChannelRequestWithSuppliedCallback(
   }
   socket_url_ = socket_url;
   auto connect_delegate = std::make_unique<ConnectDelegate>(this);
-  auto create_helper = std::make_unique<WebSocketHandshakeStreamCreateHelper>(
-      connect_delegate.get(), requested_subprotocols);
   stream_request_ =
-      callback.Run(socket_url_, std::move(create_helper), origin,
+      callback.Run(socket_url_, requested_subprotocols, origin,
                    site_for_cookies, additional_headers, url_request_context_,
                    NetLogWithSource(), std::move(connect_delegate));
   SetState(CONNECTING);
@@ -606,11 +604,11 @@ void WebSocketChannel::OnSSLCertificateError(
 int WebSocketChannel::OnAuthRequired(
     scoped_refptr<AuthChallengeInfo> auth_info,
     scoped_refptr<HttpResponseHeaders> response_headers,
-    const HostPortPair& host_port_pair,
+    const IPEndPoint& remote_endpoint,
     base::OnceCallback<void(const AuthCredentials*)> callback,
     base::Optional<AuthCredentials>* credentials) {
   return event_interface_->OnAuthRequired(
-      std::move(auth_info), std::move(response_headers), host_port_pair,
+      std::move(auth_info), std::move(response_headers), remote_endpoint,
       std::move(callback), credentials);
 }
 

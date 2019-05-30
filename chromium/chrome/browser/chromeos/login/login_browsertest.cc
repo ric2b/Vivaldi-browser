@@ -4,11 +4,9 @@
 
 #include <string>
 
-#include "ash/public/cpp/ash_features.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
-#include "ash/system/tray/system_tray.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "base/command_line.h"
 #include "base/location.h"
@@ -25,6 +23,7 @@
 #include "chrome/browser/chromeos/login/ui/login_display_host_webui.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/chromeos/settings/stub_install_attributes.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
@@ -33,7 +32,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/account_id/account_id.h"
@@ -44,6 +43,7 @@
 #include "extensions/browser/extension_system.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gfx/geometry/test/rect_test_util.h"
 
 using ::gfx::test::RectContains;
@@ -98,7 +98,7 @@ class LoginSigninTest : public InProcessBrowserTest {
 
 class LoginTest : public LoginManagerTest {
  public:
-  LoginTest() : LoginManagerTest(true) {}
+  LoginTest() : LoginManagerTest(true, true) {}
   ~LoginTest() override {}
 
   void StartGaiaAuthOffline() {
@@ -114,7 +114,7 @@ class LoginTest : public LoginManagerTest {
       "$('error-offline-login-link').onclick();"
     "})();";
     // clang-format on
-    ASSERT_TRUE(content::ExecuteScript(web_contents(), js));
+    test::ExecuteOobeJS(js);
 
     std::string message;
     do {
@@ -140,20 +140,20 @@ class LoginTest : public LoginManagerTest {
         " /deep/ #button')";
 
     content::DOMMessageQueue message_queue;
-    JSExpect("!document.querySelector('#offline-gaia').hidden");
-    JSExpect("document.querySelector('#signin-frame').hidden");
+    test::OobeJS().ExpectTrue(
+        "!document.querySelector('#offline-gaia').hidden");
+    test::OobeJS().ExpectTrue("document.querySelector('#signin-frame').hidden");
     const std::string js =
         animated_pages +
         ".addEventListener('neon-animation-finish',"
         "function() {"
         "window.domAutomationController.send('switchToPassword');"
         "})";
-    ASSERT_TRUE(content::ExecuteScript(web_contents(), js));
+    test::ExecuteOobeJS(js);
     std::string set_email = email_input + ".value = '$Email'";
     base::ReplaceSubstringsAfterOffset(&set_email, 0, "$Email", user_email);
-    ASSERT_TRUE(content::ExecuteScript(web_contents(), set_email));
-    ASSERT_TRUE(content::ExecuteScript(web_contents(),
-                                       email_next_button + ".fire('tap')"));
+    test::ExecuteOobeJS(set_email);
+    test::ExecuteOobeJS(email_next_button + ".fire('tap')");
     std::string message;
     do {
       ASSERT_TRUE(message_queue.WaitForMessage(&message));
@@ -161,9 +161,8 @@ class LoginTest : public LoginManagerTest {
 
     std::string set_password = password_input + ".value = '$Password'";
     base::ReplaceSubstringsAfterOffset(&set_password, 0, "$Password", password);
-    ASSERT_TRUE(content::ExecuteScript(web_contents(), set_password));
-    ASSERT_TRUE(content::ExecuteScript(web_contents(),
-                                       password_next_button + ".fire('tap')"));
+    test::ExecuteOobeJS(set_password);
+    test::ExecuteOobeJS(password_next_button + ".fire('tap')");
   }
 
   void PrepareOfflineLogin() {
@@ -180,6 +179,10 @@ class LoginTest : public LoginManagerTest {
     user_context.SetKey(Key(kPassword));
     SetExpectedCredentials(user_context);
   }
+
+ protected:
+  ScopedCrosSettingsTestHelper settings_helper_{
+      /* create_settings_service= */ false};
 };
 
 // Used to make sure that the system tray is visible and within the screen
@@ -188,18 +191,18 @@ void TestSystemTrayIsVisible(bool otr) {
   aura::Window* primary_win = ash::Shell::GetPrimaryRootWindow();
   ash::Shelf* shelf = ash::Shelf::ForWindow(primary_win);
   ash::TrayBackgroundView* tray =
-      ash::features::IsSystemTrayUnifiedEnabled()
-          ? static_cast<ash::TrayBackgroundView*>(
-                shelf->GetStatusAreaWidget()->unified_system_tray())
-          : static_cast<ash::TrayBackgroundView*>(
-                shelf->GetStatusAreaWidget()->system_tray());
+      shelf->GetStatusAreaWidget()->unified_system_tray();
   SCOPED_TRACE(testing::Message()
                << "ShelfVisibilityState=" << shelf->GetVisibilityState()
                << " ShelfAutoHideBehavior=" << shelf->auto_hide_behavior());
   EXPECT_TRUE(tray->visible());
 
   // This check flakes for LoginGuestTest: https://crbug.com/693106.
-  if (!otr)
+  // This check is suppressed for Mash since the warning button of Mash changes
+  // the tray bounds which triggers the failure. See: https://crbug.com/892730
+  // TODO(jamescook): remove this when Mash is on by default or the button is
+  // removed.
+  if (!otr && !features::IsUsingWindowService())
     EXPECT_TRUE(RectContains(primary_win->bounds(), tray->GetBoundsInScreen()));
 }
 
@@ -254,7 +257,7 @@ IN_PROC_BROWSER_TEST_F(LoginSigninTest, WebUIVisible) {
 IN_PROC_BROWSER_TEST_F(LoginTest, PRE_GaiaAuthOffline) {
   RegisterUser(AccountId::FromUserEmailGaiaId(kTestUser, kGaiaId));
   StartupUtils::MarkOobeCompleted();
-  CrosSettings::Get()->SetBoolean(kAccountsPrefShowUserNamesOnSignIn, false);
+  settings_helper_.SetBoolean(kAccountsPrefShowUserNamesOnSignIn, false);
 }
 
 // Flaky, see http://crbug/692364.

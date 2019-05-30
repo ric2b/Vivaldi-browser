@@ -11,7 +11,6 @@
 
 #include "ash/ash_export.h"
 #include "ash/metrics/user_metrics_recorder.h"
-#include "ash/public/cpp/app_list/app_list_constants.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/session/session_observer.h"
 #include "ash/wm/system_modal_container_event_filter_delegate.h"
@@ -19,7 +18,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "ui/aura/window.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/display/screen.h"
@@ -49,11 +48,11 @@ class FileHelper;
 namespace gfx {
 class Insets;
 class Point;
-}
+}  // namespace gfx
 
 namespace keyboard {
-class KeyboardController;
-}  // namespace keyboard
+class KeyboardUIFactory;
+}
 
 namespace service_manager {
 class Connector;
@@ -68,8 +67,6 @@ class UserActivityPowerManagerNotifier;
 
 namespace views {
 class NonClientFrameView;
-class PointerWatcher;
-enum class PointerWatcherEventTypes;
 class Widget;
 namespace corewm {
 class TooltipController;
@@ -81,6 +78,7 @@ class AcceleratorFilter;
 class ActivationClient;
 class CompoundEventFilter;
 class FocusController;
+class FocusRules;
 class ShadowController;
 class VisibilityController;
 class WindowModalityController;
@@ -96,6 +94,7 @@ class AcceleratorController;
 class AccessibilityController;
 class AccessibilityDelegate;
 class AccessibilityFocusRingController;
+class ArcCustomTabController;
 class AshDBusServices;
 class AshDisplayController;
 class AppListControllerImpl;
@@ -108,9 +107,9 @@ class BluetoothNotificationController;
 class BluetoothPowerController;
 class BrightnessControlDelegate;
 class CastConfigController;
-class ClientImageRegistry;
 class DisplayOutputProtection;
 class CrosDisplayConfig;
+class DesksController;
 class DetachableBaseHandler;
 class DetachableBaseNotificationController;
 class DisplayColorManager;
@@ -129,20 +128,23 @@ class FirstRunHelper;
 class FocusCycler;
 class HighContrastController;
 class HighlighterController;
+class HomeScreenController;
 class ImeController;
 class ImeFocusHandler;
-class ImmersiveContextAsh;
-class ImmersiveHandlerFactoryAsh;
+class ImmersiveContext;
 class KeyAccessibilityEnabler;
 class KeyboardBrightnessControlDelegate;
+class KioskNextShellController;
+class AshKeyboardController;
 class LaserPointerController;
-class LocaleNotificationController;
+class LocaleUpdateController;
 class LockStateController;
 class LogoutConfirmationController;
 class LoginScreenController;
 class MagnificationController;
 class TabletModeController;
 class MediaController;
+class MediaNotificationController;
 class MessageCenterController;
 class MouseCursorEventFilter;
 class MruWindowTracker;
@@ -150,15 +152,14 @@ class MultiDeviceNotificationPresenter;
 class NewWindowController;
 class NightLightController;
 class NoteTakingController;
-class NotificationTray;
 class OverlayEventFilter;
 class PartialMagnificationController;
 class PeripheralBatteryNotifier;
 class PersistentWindowController;
-class PointerWatcherAdapter;
 class PolicyRecommendationRestorer;
 class PowerButtonController;
 class PowerEventObserver;
+class NotificationReporter;
 class PowerPrefs;
 class ProjectingObserver;
 class ResizeShadowController;
@@ -185,7 +186,6 @@ class StickyKeysController;
 class SystemGestureEventFilter;
 class SystemModalContainerEventFilter;
 class SystemNotificationController;
-class SystemTray;
 class SystemTrayModel;
 class SystemTrayNotifier;
 class TimeToFirstPresentRecorder;
@@ -194,7 +194,6 @@ class ToastManager;
 class TouchDevicesController;
 class TrayAction;
 class TrayBluetoothHelper;
-class VirtualKeyboardController;
 class VideoActivityNotifier;
 class VideoDetector;
 class VoiceInteractionController;
@@ -204,10 +203,9 @@ class WaylandServerController;
 class WindowServiceOwner;
 class WindowCycleController;
 class WindowPositioner;
-class WindowSelectorController;
+class OverviewController;
 class WindowTreeHostManager;
 
-enum class Config;
 enum class LoginStatus;
 
 // Shell is a singleton object that presents the Shell API and implements the
@@ -276,11 +274,10 @@ class ASH_EXPORT Shell : public SessionObserver,
   // Returns true if a system-modal dialog window is currently open.
   static bool IsSystemModalWindowOpen();
 
-  // Whether |window| hosts a remote client (e.g. the keyboard shortcut viewer
-  // app under classic ash, or a browser window under mash).
-  static bool HasRemoteClient(aura::Window* window);
-
-  static Config GetAshConfig();
+  // Returns true if |window| is a proxy window. A proxy window is a window that
+  // was created by way of a WindowService client (e.g. the keyboard shortcut
+  // viewer app under classic ash, or a browser window under mash).
+  static bool IsProxyWindow(aura::Window* window);
 
   // Registers all ash related local state prefs to the given |registry|.
   static void RegisterLocalStatePrefs(PrefRegistrySimple* registry,
@@ -349,6 +346,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   AppListControllerImpl* app_list_controller() {
     return app_list_controller_.get();
   }
+  ArcCustomTabController* arc_custom_tab_controller() {
+    return arc_custom_tab_controller_.get();
+  }
   AshDisplayController* ash_display_controller() {
     return ash_display_controller_.get();
   }
@@ -369,14 +369,12 @@ class ASH_EXPORT Shell : public SessionObserver,
     return brightness_control_delegate_.get();
   }
   CastConfigController* cast_config() { return cast_config_.get(); }
-  ClientImageRegistry* client_image_registry() {
-    return client_image_registry_.get();
-  }
   service_manager::Connector* connector() { return connector_; }
   CrosDisplayConfig* cros_display_config() {
     return cros_display_config_.get();
   }
   ::wm::CursorManager* cursor_manager() { return cursor_manager_.get(); }
+  DesksController* desks_controller() { return desks_controller_.get(); }
   DetachableBaseHandler* detachable_base_handler() {
     return detachable_base_handler_.get();
   }
@@ -387,10 +385,8 @@ class ASH_EXPORT Shell : public SessionObserver,
     return display_configuration_controller_.get();
   }
 
-  // TODO(oshima): Move these objects to WindowTreeHostManager.
-  display::DisplayConfigurator* display_configurator() {
-    return display_configurator_.get();
-  }
+  display::DisplayConfigurator* display_configurator();
+
   DisplayColorManager* display_color_manager() {
     return display_color_manager_.get();
   }
@@ -411,8 +407,12 @@ class ASH_EXPORT Shell : public SessionObserver,
   EventTransformationHandler* event_transformation_handler() {
     return event_transformation_handler_.get();
   }
+  HomeScreenController* home_screen_controller() {
+    return home_screen_controller_.get();
+  }
   FirstRunHelper* first_run_helper() { return first_run_helper_.get(); }
   ::wm::FocusController* focus_controller() { return focus_controller_.get(); }
+  ::wm::FocusRules* focus_rules() { return focus_rules_; }
   FocusCycler* focus_cycler() { return focus_cycler_.get(); }
   HighlighterController* highlighter_controller() {
     return highlighter_controller_.get();
@@ -421,17 +421,24 @@ class ASH_EXPORT Shell : public SessionObserver,
     return high_contrast_controller_.get();
   }
   ImeController* ime_controller() { return ime_controller_.get(); }
+  ImmersiveContext* immersive_context() { return immersive_context_.get(); }
   KeyAccessibilityEnabler* key_accessibility_enabler() {
     return key_accessibility_enabler_.get();
   }
   KeyboardBrightnessControlDelegate* keyboard_brightness_control_delegate() {
     return keyboard_brightness_control_delegate_.get();
   }
+  KioskNextShellController* kiosk_next_shell_controller() {
+    return kiosk_next_shell_controller_.get();
+  }
+  AshKeyboardController* ash_keyboard_controller() {
+    return ash_keyboard_controller_.get();
+  }
   LaserPointerController* laser_pointer_controller() {
     return laser_pointer_controller_.get();
   }
-  LocaleNotificationController* locale_notification_controller() {
-    return locale_notification_controller_.get();
+  LocaleUpdateController* locale_update_controller() {
+    return locale_update_controller_.get();
   }
   LoginScreenController* login_screen_controller() {
     return login_screen_controller_.get();
@@ -446,6 +453,9 @@ class ASH_EXPORT Shell : public SessionObserver,
     return magnification_controller_.get();
   }
   MediaController* media_controller() { return media_controller_.get(); }
+  MediaNotificationController* media_notification_controller() {
+    return media_notification_controller_.get();
+  }
   MessageCenterController* message_center_controller() {
     return message_center_controller_.get();
   }
@@ -459,6 +469,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   NightLightController* night_light_controller();
   NoteTakingController* note_taking_controller() {
     return note_taking_controller_.get();
+  }
+  NotificationReporter* notification_reporter() {
+    return notification_reporter_.get();
   }
   OverlayEventFilter* overlay_filter() { return overlay_filter_.get(); }
   PartialMagnificationController* partial_magnification_controller() {
@@ -540,9 +553,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   }
   UserMetricsRecorder* metrics() { return user_metrics_recorder_.get(); }
   VideoDetector* video_detector() { return video_detector_.get(); }
-  VirtualKeyboardController* virtual_keyboard_controller() {
-    return virtual_keyboard_controller_.get();
-  }
   VoiceInteractionController* voice_interaction_controller() {
     return voice_interaction_controller_.get();
   }
@@ -554,8 +564,8 @@ class ASH_EXPORT Shell : public SessionObserver,
     return window_cycle_controller_.get();
   }
   WindowPositioner* window_positioner() { return window_positioner_.get(); }
-  WindowSelectorController* window_selector_controller() {
-    return window_selector_controller_.get();
+  OverviewController* overview_controller() {
+    return overview_controller_.get();
   }
   WindowServiceOwner* window_service_owner() {
     return window_service_owner_.get();
@@ -572,14 +582,8 @@ class ASH_EXPORT Shell : public SessionObserver,
   // TODO(jamescook): Move to Shelf.
   void UpdateShelfVisibility();
 
-  // Returns NotificationTray on the primary root window.
-  NotificationTray* GetNotificationTray();
-
   // Does the primary display have status area?
   bool HasPrimaryStatusArea();
-
-  // Returns the system tray on primary display.
-  SystemTray* GetPrimarySystemTray();
 
   // Starts the animation that occurs on first login.
   void DoInitialWorkspaceAnimation();
@@ -600,36 +604,12 @@ class ASH_EXPORT Shell : public SessionObserver,
   void ShowContextMenu(const gfx::Point& location_in_screen,
                        ui::MenuSourceType source_type);
 
-  // If |events| is PointerWatcherEventTypes::MOVES,
-  // PointerWatcher::OnPointerEventObserved() is called for pointer move events.
-  // If |events| is PointerWatcherEventTypes::DRAGS,
-  // PointerWatcher::OnPointerEventObserved() is called for pointer drag events.
-  // Requesting pointer moves or drags may incur a performance hit and should be
-  // avoided if possible.
-  void AddPointerWatcher(views::PointerWatcher* watcher,
-                         views::PointerWatcherEventTypes events);
-  void RemovePointerWatcher(views::PointerWatcher* watcher);
-
   void AddShellObserver(ShellObserver* observer);
   void RemoveShellObserver(ShellObserver* observer);
 
   // Called when the login status changes.
   // TODO(oshima): Investigate if we can merge this and |OnLoginStateChanged|.
   void UpdateAfterLoginStatusChange(LoginStatus status);
-
-  // Notifies observers that overview mode is about to be started (before the
-  // windows get re-arranged).
-  void NotifyOverviewModeStarting();
-
-  // Notifies observers that overview mode is about to end (bofore the windows
-  // restore themselves).
-  void NotifyOverviewModeEnding();
-
-  // Notifies observers that overview mode has ended.
-  void NotifyOverviewModeEnded();
-
-  // Notifies observers that the end overivew mode animation has completed.
-  void NotifyOverviewModeEndingAnimationComplete();
 
   // Notifies observers that split view mode is about to be started (before the
   // window gets snapped and activated).
@@ -659,8 +639,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   // Used to provide better error messages for Shell::Get() under mash.
   static void SetIsBrowserProcessWithMash();
 
-  void NotifyAppListVisibilityChanged(bool visible, aura::Window* root_window);
-
  private:
   FRIEND_TEST_ALL_PREFIXES(ExtendedDesktopTest, TestCursor);
   FRIEND_TEST_ALL_PREFIXES(WindowManagerTest, MouseEventCursors);
@@ -679,7 +657,8 @@ class ASH_EXPORT Shell : public SessionObserver,
   void Init(ui::ContextFactory* context_factory,
             ui::ContextFactoryPrivate* context_factory_private,
             std::unique_ptr<base::Value> initial_display_prefs,
-            std::unique_ptr<ws::GpuInterfaceProvider> gpu_interface_provider);
+            std::unique_ptr<ws::GpuInterfaceProvider> gpu_interface_provider,
+            std::unique_ptr<keyboard::KeyboardUIFactory> keyboard_ui_factory);
 
   // Initializes the display manager and related components.
   void InitializeDisplayManager();
@@ -737,15 +716,16 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<AccessibilityFocusRingController>
       accessibility_focus_ring_controller_;
   std::unique_ptr<AppListControllerImpl> app_list_controller_;
+  std::unique_ptr<ArcCustomTabController> arc_custom_tab_controller_;
   std::unique_ptr<AshDBusServices> ash_dbus_services_;
   std::unique_ptr<AshDisplayController> ash_display_controller_;
   std::unique_ptr<AssistantController> assistant_controller_;
   std::unique_ptr<BacklightsForcedOffSetter> backlights_forced_off_setter_;
   std::unique_ptr<BrightnessControlDelegate> brightness_control_delegate_;
   std::unique_ptr<CastConfigController> cast_config_;
-  std::unique_ptr<ClientImageRegistry> client_image_registry_;
   std::unique_ptr<CrosDisplayConfig> cros_display_config_;
   service_manager::Connector* const connector_;
+  std::unique_ptr<DesksController> desks_controller_;
   std::unique_ptr<DetachableBaseHandler> detachable_base_handler_;
   std::unique_ptr<DetachableBaseNotificationController>
       detachable_base_notification_controller_;
@@ -753,22 +733,23 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<DragDropController> drag_drop_controller_;
   std::unique_ptr<FirstRunHelper> first_run_helper_;
   std::unique_ptr<FocusCycler> focus_cycler_;
+  std::unique_ptr<HomeScreenController> home_screen_controller_;
   std::unique_ptr<ImeController> ime_controller_;
   std::unique_ptr<ImeFocusHandler> ime_focus_handler_;
-  std::unique_ptr<ImmersiveContextAsh> immersive_context_;
+  std::unique_ptr<ImmersiveContext> immersive_context_;
   std::unique_ptr<KeyboardBrightnessControlDelegate>
       keyboard_brightness_control_delegate_;
-  std::unique_ptr<keyboard::KeyboardController> keyboard_controller_;
-  std::unique_ptr<LocaleNotificationController> locale_notification_controller_;
+  std::unique_ptr<KioskNextShellController> kiosk_next_shell_controller_;
+  std::unique_ptr<LocaleUpdateController> locale_update_controller_;
   std::unique_ptr<LoginScreenController> login_screen_controller_;
   std::unique_ptr<LogoutConfirmationController> logout_confirmation_controller_;
   std::unique_ptr<TabletModeController> tablet_mode_controller_;
   std::unique_ptr<MediaController> media_controller_;
+  std::unique_ptr<MediaNotificationController> media_notification_controller_;
   std::unique_ptr<MruWindowTracker> mru_window_tracker_;
   std::unique_ptr<MultiDeviceNotificationPresenter>
       multidevice_notification_presenter_;
   std::unique_ptr<NewWindowController> new_window_controller_;
-  std::unique_ptr<PointerWatcherAdapter> pointer_watcher_adapter_;
   std::unique_ptr<ResizeShadowController> resize_shadow_controller_;
   std::unique_ptr<SessionController> session_controller_;
   std::unique_ptr<NightLightController> night_light_controller_;
@@ -791,7 +772,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<VpnList> vpn_list_;
   std::unique_ptr<WallpaperController> wallpaper_controller_;
   std::unique_ptr<WindowCycleController> window_cycle_controller_;
-  std::unique_ptr<WindowSelectorController> window_selector_controller_;
+  std::unique_ptr<OverviewController> overview_controller_;
+  // Owned by |focus_controller_|.
+  ::wm::FocusRules* focus_rules_ = nullptr;
   std::unique_ptr<::wm::ShadowController> shadow_controller_;
   std::unique_ptr<::wm::VisibilityController> visibility_controller_;
   std::unique_ptr<::wm::WindowModalityController> window_modality_controller_;
@@ -851,9 +834,8 @@ class ASH_EXPORT Shell : public SessionObserver,
       bluetooth_notification_controller_;
   std::unique_ptr<BluetoothPowerController> bluetooth_power_controller_;
   std::unique_ptr<TrayBluetoothHelper> tray_bluetooth_helper_;
-  std::unique_ptr<VirtualKeyboardController> virtual_keyboard_controller_;
+  std::unique_ptr<AshKeyboardController> ash_keyboard_controller_;
   // Controls video output device state.
-  std::unique_ptr<display::DisplayConfigurator> display_configurator_;
   std::unique_ptr<DisplayOutputProtection> display_output_protection_;
   std::unique_ptr<DisplayColorManager> display_color_manager_;
   std::unique_ptr<DisplayErrorObserver> display_error_observer_;
@@ -901,9 +883,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   // For testing only: simulate that a modal window is open
   bool simulate_modal_window_open_for_test_ = false;
 
-  std::unique_ptr<ImmersiveHandlerFactoryAsh> immersive_handler_factory_;
-
   std::unique_ptr<MessageCenterController> message_center_controller_;
+
+  std::unique_ptr<NotificationReporter> notification_reporter_;
 
   base::ObserverList<ShellObserver>::Unchecked shell_observers_;
 

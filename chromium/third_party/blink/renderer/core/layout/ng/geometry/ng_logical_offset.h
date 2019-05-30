@@ -6,7 +6,7 @@
 #define NGLogicalOffset_h
 
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/platform/layout_unit.h"
+#include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "third_party/blink/renderer/platform/text/writing_mode.h"
 
@@ -45,6 +45,7 @@ struct CORE_EXPORT NGLogicalOffset {
   NGLogicalOffset operator+(const NGLogicalOffset& other) const;
   NGLogicalOffset operator+(const NGLogicalSize& size) const;
   NGLogicalOffset& operator+=(const NGLogicalOffset& other);
+  NGLogicalOffset& operator+=(const NGLogicalSize& size);
 
   NGLogicalDelta operator-(const NGLogicalOffset& other) const;
   NGLogicalOffset& operator-=(const NGLogicalOffset& other);

@@ -28,14 +28,15 @@ class VivaldiLocationBar : public LocationBar {
   WindowOpenDisposition GetWindowOpenDisposition() const override;
   ui::PageTransition GetPageTransition() const override;
   void AcceptInput() override {}
+  void AcceptInput(base::TimeTicks match_selection_timestamp) override {}
   void FocusLocation(bool select_all) override {}
   void FocusSearch() override {}
   void UpdateContentSettingsIcons() override {}
-  void UpdateManagePasswordsIconAndBubble() override;
   void UpdateSaveCreditCardIcon() override {}
   void UpdateBookmarkStarVisibility() override {}
-  void UpdateLocationBarVisibility(bool visible, bool animate) override {}
   void UpdateLocalCardMigrationIcon() override {}
+
+  base::TimeTicks GetMatchSelectionTimestamp() const override;
 
   // TODO?
   void SaveStateToContents(content::WebContents* contents) override {}
@@ -47,24 +48,8 @@ class VivaldiLocationBar : public LocationBar {
   // Returns a pointer to the testing interface.
   LocationBarTesting* GetLocationBarForTesting() override;
 
-  class VivaldiManagePasswordsIconView : public ManagePasswordsIconView {
-   public:
-    explicit VivaldiManagePasswordsIconView(Profile* profile);
-
-    virtual ~VivaldiManagePasswordsIconView() = default;
-
-    void SetState(password_manager::ui::State state) override;
-
-   private:
-    Profile* profile_ = nullptr;
-
-    DISALLOW_COPY_AND_ASSIGN(VivaldiManagePasswordsIconView);
-  };
-
  protected:
   Browser* browser_;
-
-  std::unique_ptr<VivaldiManagePasswordsIconView> icon_view_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiLocationBar);
 };

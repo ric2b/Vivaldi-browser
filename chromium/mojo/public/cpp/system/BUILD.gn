@@ -26,6 +26,7 @@ component("system") {
     "buffer.cc",
     "buffer.h",
     "core.h",
+    "data_pipe.cc",
     "data_pipe.h",
     "data_pipe_drainer.cc",
     "data_pipe_drainer.h",
@@ -61,6 +62,13 @@ component("system") {
     "wait_set.cc",
     "wait_set.h",
   ]
+
+  if (is_nacl) {
+    # This file refers to a the base::File::File(path, flags)
+    # constructor which does not exist in nacl builds, and the code
+    # here is unused in nacl builds anyway.
+    sources -= [ "file_data_pipe_producer.cc" ]
+  }
 
   public_deps = [
     "//base",

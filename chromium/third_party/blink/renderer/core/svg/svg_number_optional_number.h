@@ -45,14 +45,19 @@ class SVGNumberOptionalNumber final : public SVGPropertyBase {
 
   static SVGNumberOptionalNumber* Create(SVGNumber* first_number,
                                          SVGNumber* second_number) {
-    return new SVGNumberOptionalNumber(first_number, second_number);
+    return MakeGarbageCollected<SVGNumberOptionalNumber>(first_number,
+                                                         second_number);
   }
+
+  SVGNumberOptionalNumber(SVGNumber* first_number, SVGNumber* second_number);
 
   SVGNumberOptionalNumber* Clone() const;
   SVGPropertyBase* CloneForAnimation(const String&) const override;
 
   String ValueAsString() const override;
   SVGParsingError SetValueAsString(const String&);
+  void SetInitial(unsigned);
+  static constexpr int kInitialValueBits = SVGNumber::kInitialValueBits;
 
   void Add(SVGPropertyBase*, SVGElement*) override;
   void CalculateAnimatedValue(SVGAnimationElement*,
@@ -76,8 +81,6 @@ class SVGNumberOptionalNumber final : public SVGPropertyBase {
   void Trace(blink::Visitor*) override;
 
  protected:
-  SVGNumberOptionalNumber(SVGNumber* first_number, SVGNumber* second_number);
-
   Member<SVGNumber> first_number_;
   Member<SVGNumber> second_number_;
 };

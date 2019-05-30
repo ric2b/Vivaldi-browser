@@ -27,11 +27,13 @@ MachineLevelUserCloudPolicyManager::MachineLevelUserCloudPolicyManager(
     std::unique_ptr<MachineLevelUserCloudPolicyStore> store,
     std::unique_ptr<CloudExternalDataManager> external_data_manager,
     const base::FilePath& policy_dir,
-    const scoped_refptr<base::SequencedTaskRunner>& task_runner)
+    const scoped_refptr<base::SequencedTaskRunner>& task_runner,
+    network::NetworkConnectionTrackerGetter network_connection_tracker_getter)
     : CloudPolicyManager(dm_protocol::kChromeMachineLevelUserCloudPolicyType,
                          std::string(),
                          store.get(),
-                         task_runner),
+                         task_runner,
+                         std::move(network_connection_tracker_getter)),
       store_(std::move(store)),
       external_data_manager_(std::move(external_data_manager)),
       policy_dir_(policy_dir) {}
@@ -48,8 +50,11 @@ void MachineLevelUserCloudPolicyManager::Connect(
 
   CreateComponentCloudPolicyService(
       dm_protocol::kChromeMachineLevelExtensionCloudPolicyType,
-      policy_dir_.Append(kComponentPolicyCache), client.get(),
-      schema_registry());
+      policy_dir_.Append(kComponentPolicyCache),
+      (local_state->GetBoolean(policy_prefs::kCloudPolicyOverridesMachinePolicy)
+           ? POLICY_SOURCE_PRIORITY_CLOUD
+           : POLICY_SOURCE_CLOUD),
+      client.get(), schema_registry());
   core()->Connect(std::move(client));
   core()->StartRefreshScheduler();
   core()->TrackRefreshDelayPref(local_state,
@@ -64,6 +69,8 @@ bool MachineLevelUserCloudPolicyManager::IsClientRegistered() {
 
 void MachineLevelUserCloudPolicyManager::Init(SchemaRegistry* registry) {
   DVLOG(1) << "Machine level cloud policy manager initialized";
+  // Call to grand-parent's Init() instead of parent's is intentional.
+  // NOLINTNEXTLINE(bugprone-parent-virtual-call)
   ConfigurationPolicyProvider::Init(registry);
 
   store()->AddObserver(this);

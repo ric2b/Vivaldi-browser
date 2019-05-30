@@ -40,7 +40,7 @@ const GUID GUID_IAccessibleContentDocument = {
 namespace ui {
 enum TextBoundaryDirection;
 enum TextBoundaryType;
-}
+}  // namespace ui
 
 namespace content {
 class BrowserAccessibilityWin;
@@ -391,11 +391,6 @@ class __declspec(uuid("562072fe-3390-43b1-9e2c-dd4118f5ac79"))
   // embedded child objects.
   CONTENT_EXPORT void ComputeStylesIfNeeded();
 
-  // |offset| could either be a text character or a child index in case of
-  // non-text objects.
-  BrowserAccessibilityPosition::AXPositionInstance CreatePositionForSelectionAt(
-      int offset) const;
-
   // Public accessors (these do not have COM accessible accessors)
   const base::string16& role_name() const { return win_attributes_->role_name; }
   const std::map<int, std::vector<base::string16>>& offset_to_text_attributes()
@@ -469,6 +464,8 @@ class __declspec(uuid("562072fe-3390-43b1-9e2c-dd4118f5ac79"))
       const base::string16& input,
       base::string16* output);
   FRIEND_TEST_ALL_PREFIXES(BrowserAccessibilityTest,
+                           TestSanitizeStringAttributeForIA2);
+  FRIEND_TEST_ALL_PREFIXES(BrowserAccessibilityWinTest,
                            TestSanitizeStringAttributeForIA2);
 
   // Sets the selection given a start and end offset in IA2 Hypertext.

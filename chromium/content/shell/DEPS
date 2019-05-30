@@ -9,7 +9,6 @@ include_rules = [
 
   # The content_shell is the canonical sample embedder, so it only uses
   # content's public API.
-  "+content/app/strings/grit",  # For generated headers
   "+content/public",
 
   "+services/network/ignore_errors_cert_verifier.h",
@@ -43,6 +42,9 @@ include_rules = [
 
   # Access to the process specific switches.
   "+services/service_manager/embedder",
+
+  # Allows using test_ws for mash.
+  "+services/ws/test_ws",
 ]
 
 specific_include_rules = {

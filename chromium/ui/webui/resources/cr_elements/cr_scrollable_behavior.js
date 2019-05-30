@@ -35,25 +35,36 @@
  */
 
 /** @polymerBehavior */
-var CrScrollableBehavior = {
+const CrScrollableBehavior = {
 
   /** @private {number|null} */
   intervalId_: null,
 
   ready: function() {
-    this.requestUpdateScroll();
+    const readyAsync = () => {
+      this.requestUpdateScroll();
 
-    // Listen to the 'scroll' event for each scrollable container.
-    var scrollableElements = this.root.querySelectorAll('[scrollable]');
-    for (var i = 0; i < scrollableElements.length; i++) {
-      scrollableElements[i].addEventListener(
-          'scroll', this.updateScrollEvent_.bind(this));
+      // Listen to the 'scroll' event for each scrollable container.
+      const scrollableElements = this.root.querySelectorAll('[scrollable]');
+      for (let i = 0; i < scrollableElements.length; i++) {
+        scrollableElements[i].addEventListener(
+            'scroll', this.updateScrollEvent_.bind(this));
+      }
+    };
+
+    // TODO(dpapad): Remove Polymer 1 codepath when Polymer 2 migration has
+    // completed.
+    if (Polymer.DomIf) {
+      Polymer.RenderStatus.beforeNextRender(this, readyAsync);
+      return;
     }
+    readyAsync();
   },
 
   detached: function() {
-    if (this.intervalId_ !== null)
+    if (this.intervalId_ !== null) {
       clearInterval(this.intervalId_);
+    }
   },
 
   /**
@@ -62,25 +73,27 @@ var CrScrollableBehavior = {
    * containers are resized correctly.
    */
   updateScrollableContents: function() {
-    if (this.intervalId_ !== null)
-      return;  // notifyResize is already in progress.
+    if (this.intervalId_ !== null) {
+      return;
+    }  // notifyResize is already in progress.
 
     this.requestUpdateScroll();
 
-    var nodeList = this.root.querySelectorAll('[scrollable] iron-list');
-    if (!nodeList.length)
+    let nodeList = this.root.querySelectorAll('[scrollable] iron-list');
+    if (!nodeList.length) {
       return;
+    }
 
     // Use setInterval to avoid initial render / sizing issues.
     this.intervalId_ = window.setInterval(function() {
-      var unreadyNodes = [];
-      for (var i = 0; i < nodeList.length; i++) {
-        var node = nodeList[i];
+      const unreadyNodes = [];
+      for (let i = 0; i < nodeList.length; i++) {
+        const node = nodeList[i];
         if (node.parentNode.scrollHeight == 0) {
           unreadyNodes.push(node);
           continue;
         }
-        var ironList = /** @type {!IronListElement} */ (node);
+        const ironList = /** @type {!IronListElement} */ (node);
         ironList.notifyResize();
       }
       if (unreadyNodes.length == 0) {
@@ -99,9 +112,10 @@ var CrScrollableBehavior = {
    */
   requestUpdateScroll: function() {
     requestAnimationFrame(function() {
-      var scrollableElements = this.root.querySelectorAll('[scrollable]');
-      for (var i = 0; i < scrollableElements.length; i++)
+      const scrollableElements = this.root.querySelectorAll('[scrollable]');
+      for (let i = 0; i < scrollableElements.length; i++) {
         this.updateScroll_(/** @type {!HTMLElement} */ (scrollableElements[i]));
+      }
     }.bind(this));
   },
 
@@ -117,11 +131,12 @@ var CrScrollableBehavior = {
   /** @param {!IronListElement} list */
   restoreScroll: function(list) {
     this.async(function() {
-      var scrollTop = list.savedScrollTops.shift();
+      const scrollTop = list.savedScrollTops.shift();
       // Ignore scrollTop of 0 in case it was intermittent (we do not need to
       // explicitly scroll to 0).
-      if (scrollTop != 0)
+      if (scrollTop != 0) {
         list.scroll(0, scrollTop);
+      }
     });
   },
 
@@ -131,7 +146,7 @@ var CrScrollableBehavior = {
    * @private
    */
   updateScrollEvent_: function(event) {
-    var scrollable = /** @type {!HTMLElement} */ (event.target);
+    const scrollable = /** @type {!HTMLElement} */ (event.target);
     this.updateScroll_(scrollable);
   },
 

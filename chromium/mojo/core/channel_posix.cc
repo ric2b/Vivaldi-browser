@@ -48,7 +48,7 @@ class MessageView {
       : message_(std::move(message)),
         offset_(offset),
         handles_(message_->TakeHandlesForTransport()) {
-    DCHECK_GT(message_->data_num_bytes(), offset_);
+    DCHECK(!message_->data_num_bytes() || message_->data_num_bytes() > offset_);
   }
 
   MessageView(MessageView&& other) { *this = std::move(other); }
@@ -70,8 +70,10 @@ class MessageView {
 
   size_t data_offset() const { return offset_; }
   void advance_data_offset(size_t num_bytes) {
-    DCHECK_GT(message_->data_num_bytes(), offset_ + num_bytes);
-    offset_ += num_bytes;
+    if (num_bytes) {
+      DCHECK_GT(message_->data_num_bytes(), offset_ + num_bytes);
+      offset_ += num_bytes;
+    }
   }
 
   std::vector<PlatformHandleInTransit> TakeHandles() {
@@ -83,10 +85,17 @@ class MessageView {
     handles_ = std::move(handles);
   }
 
+  size_t num_handles_sent() { return num_handles_sent_; }
+
+  void set_num_handles_sent(size_t num_handles_sent) {
+    num_handles_sent_ = num_handles_sent;
+  }
+
  private:
   Channel::MessagePtr message_;
   size_t offset_;
   std::vector<PlatformHandleInTransit> handles_;
+  size_t num_handles_sent_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(MessageView);
 };
@@ -100,8 +109,11 @@ class ChannelPosix : public Channel,
  public:
   ChannelPosix(Delegate* delegate,
                ConnectionParams connection_params,
+               HandlePolicy handle_policy,
                scoped_refptr<base::TaskRunner> io_task_runner)
-      : Channel(delegate), self_(this), io_task_runner_(io_task_runner) {
+      : Channel(delegate, handle_policy),
+        self_(this),
+        io_task_runner_(io_task_runner) {
     if (connection_params.server_endpoint().is_valid())
       server_ = connection_params.TakeServerEndpoint();
     else
@@ -470,6 +482,11 @@ class ChannelPosix : public Channel,
                  (errno != EAGAIN && errno != EWOULDBLOCK)) {
         read_error = true;
         break;
+      } else {
+        // We expect more data but there is none to read. The
+        // FileDescriptorWatcher will wake us up again once there is.
+        DCHECK(errno == EAGAIN || errno == EWOULDBLOCK);
+        return;
       }
     } while (bytes_read == buffer_capacity &&
              total_bytes_read < kMaxBatchReadCapacity && next_read_size > 0);
@@ -504,17 +521,21 @@ class ChannelPosix : public Channel,
       return true;
     }
     size_t bytes_written = 0;
+    std::vector<PlatformHandleInTransit> handles = message_view.TakeHandles();
+    size_t num_handles = handles.size();
+    size_t handles_written = message_view.num_handles_sent();
     do {
       message_view.advance_data_offset(bytes_written);
 
       ssize_t result;
-      std::vector<PlatformHandleInTransit> handles = message_view.TakeHandles();
-      if (!handles.empty()) {
+      if (handles_written < num_handles) {
         iovec iov = {const_cast<void*>(message_view.data()),
                      message_view.data_num_bytes()};
-        std::vector<base::ScopedFD> fds(handles.size());
-        for (size_t i = 0; i < handles.size(); ++i)
-          fds[i] = handles[i].TakeHandle().TakeFD();
+        size_t num_handles_to_send =
+            std::min(num_handles - handles_written, kMaxSendmsgHandles);
+        std::vector<base::ScopedFD> fds(num_handles_to_send);
+        for (size_t i = 0; i < num_handles_to_send; ++i)
+          fds[i] = handles[i + handles_written].TakeHandle().TakeFD();
         // TODO: Handle lots of handles.
         result = SendmsgWithHandles(socket_.get(), &iov, 1, fds);
         if (result >= 0) {
@@ -527,11 +548,11 @@ class ChannelPosix : public Channel,
           // letting us know that it is now safe to close the file
           // descriptor. For more information, see:
           // http://crbug.com/298276
-          MessagePtr fds_message(
-              new Channel::Message(sizeof(fds[0]) * fds.size(), 0,
-                                   Message::MessageType::HANDLES_SENT));
-          memcpy(fds_message->mutable_payload(), fds.data(),
-                 sizeof(fds[0]) * fds.size());
+          MessagePtr fds_message(new Channel::Message(
+              sizeof(int) * fds.size(), 0, Message::MessageType::HANDLES_SENT));
+          int* fd_data = reinterpret_cast<int*>(fds_message->mutable_payload());
+          for (size_t i = 0; i < fds.size(); ++i)
+            fd_data[i] = fds[i].get();
           outgoing_messages_.emplace_back(std::move(fds_message), 0);
           {
             base::AutoLock l(fds_to_close_lock_);
@@ -539,11 +560,14 @@ class ChannelPosix : public Channel,
               fds_to_close_.emplace_back(std::move(fd));
           }
 #endif  // defined(OS_MACOSX)
+          handles_written += num_handles_to_send;
+          DCHECK_LE(handles_written, num_handles);
+          message_view.set_num_handles_sent(handles_written);
         } else {
           // Message transmission failed, so pull the FDs back into |handles|
           // so they can be held by the Message again.
           for (size_t i = 0; i < fds.size(); ++i) {
-            handles[i] =
+            handles[i + handles_written] =
                 PlatformHandleInTransit(PlatformHandle(std::move(fds[i])));
           }
         }
@@ -581,7 +605,8 @@ class ChannelPosix : public Channel,
       }
 
       bytes_written = static_cast<size_t>(result);
-    } while (bytes_written < message_view.data_num_bytes());
+    } while (handles_written < num_handles ||
+             bytes_written < message_view.data_num_bytes());
 
     return FlushOutgoingMessagesNoLock();
   }
@@ -759,8 +784,9 @@ class ChannelPosix : public Channel,
 scoped_refptr<Channel> Channel::Create(
     Delegate* delegate,
     ConnectionParams connection_params,
+    HandlePolicy handle_policy,
     scoped_refptr<base::TaskRunner> io_task_runner) {
-  return new ChannelPosix(delegate, std::move(connection_params),
+  return new ChannelPosix(delegate, std::move(connection_params), handle_policy,
                           io_task_runner);
 }
 

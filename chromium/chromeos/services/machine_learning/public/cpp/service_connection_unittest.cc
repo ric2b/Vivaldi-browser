@@ -4,11 +4,13 @@
 
 #include "chromeos/services/machine_learning/public/cpp/service_connection.h"
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom.h"
+#include "chromeos/services/machine_learning/public/mojom/model.mojom.h"
 #include "mojo/core/embedder/embedder.h"
 #include "mojo/core/embedder/scoped_ipc_support.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
@@ -43,9 +45,10 @@ class ServiceConnectionTest : public testing::Test {
 // Tests that BindModelProvider runs OK (no crash) in a basic Mojo environment.
 TEST_F(ServiceConnectionTest, BindModelProvider) {
   mojom::ModelPtr model;
-  mojom::ModelSpecPtr spec = mojom::ModelSpec::New(mojom::ModelId::UNKNOWN);
-  ServiceConnection::GetInstance()->LoadModel(std::move(spec),
-                                              mojo::MakeRequest(&model));
+  mojom::ModelSpecPtr spec = mojom::ModelSpec::New(mojom::ModelId::TEST_MODEL);
+  ServiceConnection::GetInstance()->LoadModel(
+      std::move(spec), mojo::MakeRequest(&model),
+      base::BindOnce([](mojom::LoadModelResult result) {}));
 }
 
 }  // namespace

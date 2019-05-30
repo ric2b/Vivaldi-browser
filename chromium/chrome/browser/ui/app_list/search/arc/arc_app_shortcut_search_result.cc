@@ -9,13 +9,15 @@
 
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
+#include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/arc/icon_decode_request.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
-#include "ui/gfx/image/image_skia_operations.h"
+#include "chrome/grit/generated_resources.h"
+#include "ui/base/l10n/l10n_util.h"
 
 namespace app_list {
 
@@ -33,6 +35,8 @@ ArcAppShortcutSearchResult::ArcAppShortcutSearchResult(
   SetTitle(base::UTF8ToUTF16(data_->short_label));
   set_id(kAppShortcutSearchPrefix + GetAppId() + "/" + data_->shortcut_id);
   SetDisplayType(ash::SearchResultDisplayType::kTile);
+  SetAccessibleName(ComputeAccessibleName());
+  SetResultType(ash::SearchResultType::kArcAppShortcut);
 
   const int icon_dimension =
       app_list::AppListConfig::instance().search_tile_icon_dimension();
@@ -42,8 +46,10 @@ ArcAppShortcutSearchResult::ArcAppShortcutSearchResult(
       icon_dimension);
   icon_decode_request_->StartWithOptions(data_->icon_png);
 
-  badge_icon_loader_ =
-      std::make_unique<ArcAppIconLoader>(profile_, icon_dimension, this);
+  badge_icon_loader_ = std::make_unique<ArcAppIconLoader>(
+      profile_,
+      app_list::AppListConfig::instance().search_tile_badge_icon_dimension(),
+      this);
   badge_icon_loader_->FetchImage(GetAppId());
 }
 
@@ -54,12 +60,14 @@ void ArcAppShortcutSearchResult::Open(int event_flags) {
                              list_controller_->GetAppListDisplayId());
 }
 
+SearchResultType ArcAppShortcutSearchResult::GetSearchResultType() const {
+  return PLAY_STORE_APP_SHORTCUT;
+}
+
 void ArcAppShortcutSearchResult::OnAppImageUpdated(
     const std::string& app_id,
     const gfx::ImageSkia& image) {
-  SetBadgeIcon(gfx::ImageSkiaOperations::CreateResizedImage(
-      image, skia::ImageOperations::RESIZE_BEST,
-      app_list::AppListConfig::instance().search_tile_badge_icon_size()));
+  SetBadgeIcon(image);
 }
 
 std::string ArcAppShortcutSearchResult::GetAppId() const {
@@ -68,6 +76,19 @@ std::string ArcAppShortcutSearchResult::GetAppId() const {
   const ArcAppListPrefs* arc_prefs = ArcAppListPrefs::Get(profile_);
   DCHECK(arc_prefs);
   return arc_prefs->GetAppIdByPackageName(data_->package_name.value());
+}
+
+base::string16 ArcAppShortcutSearchResult::ComputeAccessibleName() const {
+  const ArcAppListPrefs* arc_prefs = ArcAppListPrefs::Get(profile_);
+  DCHECK(arc_prefs);
+  std::unique_ptr<ArcAppListPrefs::AppInfo> app_info =
+      arc_prefs->GetApp(GetAppId());
+  if (!app_info.get())
+    return base::string16();
+
+  return l10n_util::GetStringFUTF16(IDS_APP_ACTION_SHORTCUT_ACCESSIBILITY_NAME,
+                                    base::UTF8ToUTF16(data_->short_label),
+                                    base::UTF8ToUTF16(app_info->name));
 }
 
 }  // namespace app_list

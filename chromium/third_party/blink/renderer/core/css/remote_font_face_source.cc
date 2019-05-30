@@ -83,7 +83,11 @@ RemoteFontFaceSource::RemoteFontFaceSource(CSSFontFace* css_font_face,
                                            FontDisplay display)
     : face_(css_font_face),
       font_selector_(font_selector),
-      display_(display),
+      // No need to report the violation here since the font is not loaded yet
+      display_(
+          GetFontDisplayWithFeaturePolicyCheck(display,
+                                               font_selector,
+                                               ReportOptions::kDoNotReport)),
       phase_(kNoLimitExceeded),
       is_intervention_triggered_(ShouldTriggerWebFontsIntervention()) {
   DCHECK(face_);
@@ -120,12 +124,12 @@ void RemoteFontFaceSource::NotifyFinished(Resource* resource) {
   if (font->GetStatus() == ResourceStatus::kDecodeError) {
     font_selector_->GetExecutionContext()->AddConsoleMessage(
         ConsoleMessage::Create(
-            kOtherMessageSource, kWarningMessageLevel,
+            kOtherMessageSource, mojom::ConsoleMessageLevel::kWarning,
             "Failed to decode downloaded font: " + font->Url().ElidedString()));
     if (font->OtsParsingMessage().length() > 1) {
       font_selector_->GetExecutionContext()->AddConsoleMessage(
           ConsoleMessage::Create(
-              kOtherMessageSource, kWarningMessageLevel,
+              kOtherMessageSource, mojom::ConsoleMessageLevel::kWarning,
               "OTS parsing error: " + font->OtsParsingMessage()));
     }
   }
@@ -139,7 +143,7 @@ void RemoteFontFaceSource::NotifyFinished(Resource* resource) {
     const scoped_refptr<FontCustomPlatformData> customFontData =
         font->GetCustomFontData();
     if (customFontData) {
-      probe::fontsUpdated(font_selector_->GetExecutionContext(),
+      probe::FontsUpdated(font_selector_->GetExecutionContext(),
                           face_->GetFontFace(), resource->Url().GetString(),
                           customFontData.get());
     }
@@ -168,7 +172,8 @@ void RemoteFontFaceSource::SetDisplay(FontDisplay display) {
   // using the loaded font.
   if (IsLoaded())
     return;
-  display_ = display;
+  display_ = GetFontDisplayWithFeaturePolicyCheck(
+      display, font_selector_, ReportOptions::kReportOnFailure);
   UpdatePeriod();
 }
 
@@ -188,15 +193,28 @@ void RemoteFontFaceSource::UpdatePeriod() {
   period_ = new_period;
 }
 
+FontDisplay RemoteFontFaceSource::GetFontDisplayWithFeaturePolicyCheck(
+    FontDisplay display,
+    const FontSelector* font_selector,
+    ReportOptions report) const {
+  ExecutionContext* context = font_selector->GetExecutionContext();
+  if (display != kFontDisplayFallback && display != kFontDisplayOptional &&
+      context && context->IsDocument() &&
+      !To<Document>(context)->IsFeatureEnabled(
+          mojom::FeaturePolicyFeature::kFontDisplay, report)) {
+    return kFontDisplayOptional;
+  }
+  return display;
+}
+
 bool RemoteFontFaceSource::ShouldTriggerWebFontsIntervention() {
-  if (!font_selector_->GetExecutionContext()->IsDocument())
+  const auto* document =
+      DynamicTo<Document>(font_selector_->GetExecutionContext());
+  if (!document)
     return false;
 
   WebEffectiveConnectionType connection_type =
-      ToDocument(font_selector_->GetExecutionContext())
-          ->GetFrame()
-          ->Client()
-          ->GetEffectiveConnectionType();
+      document->GetFrame()->Client()->GetEffectiveConnectionType();
 
   bool network_is_slow =
       WebEffectiveConnectionType::kTypeOffline <= connection_type &&
@@ -236,9 +254,9 @@ RemoteFontFaceSource::CreateLoadingFallbackFontData(
     const FontDescription& font_description) {
   // This temporary font is not retained and should not be returned.
   FontCachePurgePreventer font_cache_purge_preventer;
-  SimpleFontData* temporary_font =
-      FontCache::GetFontCache()->GetNonRetainedLastResortFallbackFont(
-          font_description);
+  scoped_refptr<SimpleFontData> temporary_font =
+      FontCache::GetFontCache()->GetLastResortFallbackFont(font_description,
+                                                           kDoNotRetain);
   if (!temporary_font) {
     NOTREACHED();
     return nullptr;
@@ -254,12 +272,14 @@ void RemoteFontFaceSource::BeginLoadIfNeeded() {
     return;
   DCHECK(GetResource());
 
+  SetDisplay(face_->GetFontFace()->GetFontDisplayWithFallback());
+
   FontResource* font = ToFontResource(GetResource());
   if (font->StillNeedsLoad()) {
     if (font->IsLowPriorityLoadingAllowedForRemoteFont()) {
       font_selector_->GetExecutionContext()->AddConsoleMessage(
           ConsoleMessage::Create(
-              kInterventionMessageSource, kInfoMessageLevel,
+              kInterventionMessageSource, mojom::ConsoleMessageLevel::kInfo,
               "Slow network is detected. See "
               "https://www.chromestatus.com/feature/5636954674692096 for more "
               "details. Fallback font will be used while loading: " +
@@ -331,11 +351,11 @@ void RemoteFontFaceSource::FontLoadHistograms::RecordRemoteFont(
     int duration = static_cast<int>(CurrentTimeMS() - load_start_time_);
     RecordLoadTimeHistogram(font, duration);
 
-    enum { kCORSFail, kCORSSuccess, kCORSEnumMax };
+    enum { kCorsFail, kCorsSuccess, kCorsEnumMax };
     int cors_value =
-        font->IsSameOriginOrCORSSuccessful() ? kCORSSuccess : kCORSFail;
+        font->GetResponse().IsCorsSameOrigin() ? kCorsSuccess : kCorsFail;
     DEFINE_THREAD_SAFE_STATIC_LOCAL(EnumerationHistogram, cors_histogram,
-                                    ("WebFont.CORSSuccess", kCORSEnumMax));
+                                    ("WebFont.CORSSuccess", kCorsEnumMax));
     cors_histogram.Count(cors_value);
   }
 }
@@ -371,7 +391,7 @@ void RemoteFontFaceSource::FontLoadHistograms::RecordLoadTimeHistogram(
     return;
   }
 
-  unsigned size = font->EncodedSize();
+  size_t size = font->EncodedSize();
   if (size < 10 * 1024) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(
         CustomCountHistogram, under10k_histogram,

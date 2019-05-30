@@ -6,6 +6,7 @@
 #define COMPONENTS_VIZ_SERVICE_DISPLAY_EMBEDDER_SOFTWARE_OUTPUT_SURFACE_H_
 
 #include "base/memory/weak_ptr.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/viz_service_export.h"
 #include "ui/latency/latency_info.h"
@@ -13,11 +14,13 @@
 
 namespace viz {
 class SoftwareOutputDevice;
+class SyntheticBeginFrameSource;
 
 class VIZ_SERVICE_EXPORT SoftwareOutputSurface : public OutputSurface {
  public:
-  explicit SoftwareOutputSurface(
-      std::unique_ptr<SoftwareOutputDevice> software_device);
+  SoftwareOutputSurface(
+      std::unique_ptr<SoftwareOutputDevice> software_device,
+      SyntheticBeginFrameSource* synthetic_begin_frame_source);
   ~SoftwareOutputSurface() override;
 
   // OutputSurface implementation.
@@ -39,18 +42,22 @@ class VIZ_SERVICE_EXPORT SoftwareOutputSurface : public OutputSurface {
   bool HasExternalStencilTest() const override;
   void ApplyExternalStencil() override;
   uint32_t GetFramebufferCopyTextureFormat() override;
-#if BUILDFLAG(ENABLE_VULKAN)
-  gpu::VulkanSurface* GetVulkanSurface() override;
-#endif
   unsigned UpdateGpuFence() override;
 
  private:
-  void SwapBuffersCallback(bool need_presentation_feedback);
+  void SwapBuffersCallback();
+  void UpdateVSyncParametersCallback(base::TimeTicks timebase,
+                                     base::TimeDelta interval);
 
   OutputSurfaceClient* client_ = nullptr;
-  base::TimeDelta refresh_interval_;
+
+  SyntheticBeginFrameSource* const synthetic_begin_frame_source_;
+  base::TimeTicks refresh_timebase_;
+  base::TimeDelta refresh_interval_ = BeginFrameArgs::DefaultInterval();
+
   std::vector<ui::LatencyInfo> stored_latency_info_;
   ui::LatencyTracker latency_tracker_;
+
   base::WeakPtrFactory<SoftwareOutputSurface> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SoftwareOutputSurface);

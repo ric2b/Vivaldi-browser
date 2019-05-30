@@ -2,12 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "services/service_manager/public/c/main.h"
-#include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "components/services/leveldb/leveldb_app.h"
-#include "services/service_manager/public/cpp/service_runner.h"
+#include "services/service_manager/public/cpp/service_executable/service_main.h"
 
-MojoResult ServiceMain(MojoHandle application_request) {
-  service_manager::ServiceRunner runner(new leveldb::LevelDBApp());
-  return runner.Run(application_request);
+void ServiceMain(service_manager::mojom::ServiceRequest request) {
+  base::MessageLoop message_loop;
+  leveldb::LevelDBApp(std::move(request)).RunUntilTermination();
 }

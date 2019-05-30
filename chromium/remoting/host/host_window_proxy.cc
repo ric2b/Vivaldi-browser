@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "remoting/host/client_session_control.h"
+#include "remoting/proto/control.pb.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
 
 namespace remoting {
@@ -44,6 +45,8 @@ class HostWindowProxy::Core
   void DisconnectSession(protocol::ErrorCode error) override;
   void OnLocalMouseMoved(const webrtc::DesktopVector& position) override;
   void SetDisableInputs(bool disable_inputs) override;
+  void OnDesktopDisplayChanged(
+      std::unique_ptr<protocol::VideoLayout> layout) override;
 
   // Task runner on which public methods of this class must be called.
   scoped_refptr<base::SingleThreadTaskRunner> caller_task_runner_;
@@ -111,14 +114,15 @@ void HostWindowProxy::Core::Start(
 
   client_session_control_ = client_session_control;
   ui_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&Core::StartOnUiThread, this,
-                            client_session_control->client_jid()));
+      FROM_HERE, base::BindOnce(&Core::StartOnUiThread, this,
+                                client_session_control->client_jid()));
 }
 
 void HostWindowProxy::Core::Stop() {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
-  ui_task_runner_->PostTask(FROM_HERE, base::Bind(&Core::StopOnUiThread, this));
+  ui_task_runner_->PostTask(FROM_HERE,
+                            base::BindOnce(&Core::StopOnUiThread, this));
 }
 
 HostWindowProxy::Core::~Core() {
@@ -148,7 +152,7 @@ const std::string& HostWindowProxy::Core::client_jid() const {
 void HostWindowProxy::Core::DisconnectSession(protocol::ErrorCode error) {
   if (!caller_task_runner_->BelongsToCurrentThread()) {
     caller_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&Core::DisconnectSession, this, error));
+        FROM_HERE, base::BindOnce(&Core::DisconnectSession, this, error));
     return;
   }
 
@@ -160,7 +164,7 @@ void HostWindowProxy::Core::OnLocalMouseMoved(
     const webrtc::DesktopVector& position) {
   if (!caller_task_runner_->BelongsToCurrentThread()) {
     caller_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&Core::OnLocalMouseMoved, this, position));
+        FROM_HERE, base::BindOnce(&Core::OnLocalMouseMoved, this, position));
     return;
   }
 
@@ -171,12 +175,18 @@ void HostWindowProxy::Core::OnLocalMouseMoved(
 void HostWindowProxy::Core::SetDisableInputs(bool disable_inputs) {
   if (!caller_task_runner_->BelongsToCurrentThread()) {
     caller_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&Core::SetDisableInputs, this, disable_inputs));
+        FROM_HERE,
+        base::BindOnce(&Core::SetDisableInputs, this, disable_inputs));
     return;
   }
 
   if (client_session_control_.get())
     client_session_control_->SetDisableInputs(disable_inputs);
+}
+
+void HostWindowProxy::Core::OnDesktopDisplayChanged(
+    std::unique_ptr<protocol::VideoLayout> layout) {
+  NOTREACHED();
 }
 
 }  // namespace remoting

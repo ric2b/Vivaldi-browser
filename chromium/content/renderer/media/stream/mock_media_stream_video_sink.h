@@ -5,12 +5,12 @@
 #ifndef CONTENT_RENDERER_MEDIA_STREAM_MOCK_MEDIA_STREAM_VIDEO_SINK_H_
 #define CONTENT_RENDERER_MEDIA_STREAM_MOCK_MEDIA_STREAM_VIDEO_SINK_H_
 
-#include "content/public/renderer/media_stream_video_sink.h"
+#include "content/renderer/media_stream_video_sink.h"
 
 #include "base/memory/weak_ptr.h"
-#include "content/common/media/video_capture.h"
 #include "media/base/video_frame.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/blink/public/common/media/video_capture.h"
 
 namespace content {
 
@@ -23,8 +23,9 @@ class MockMediaStreamVideoSink : public MediaStreamVideoSink {
     MediaStreamVideoSink::ConnectToTrack(track, GetDeliverFrameCB(), true);
   }
 
-  void ConnectToTrackWithCallback(const blink::WebMediaStreamTrack& track,
-                                  const VideoCaptureDeliverFrameCB& callback) {
+  void ConnectToTrackWithCallback(
+      const blink::WebMediaStreamTrack& track,
+      const blink::VideoCaptureDeliverFrameCB& callback) {
     MediaStreamVideoSink::ConnectToTrack(track, callback, true);
   }
 
@@ -40,12 +41,12 @@ class MockMediaStreamVideoSink : public MediaStreamVideoSink {
   // is called.
   MOCK_METHOD0(OnVideoFrame, void());
 
-  VideoCaptureDeliverFrameCB GetDeliverFrameCB();
+  blink::VideoCaptureDeliverFrameCB GetDeliverFrameCB();
 
   int number_of_frames() const { return number_of_frames_; }
   media::VideoPixelFormat format() const { return format_; }
   gfx::Size frame_size() const { return frame_size_; }
-  scoped_refptr<media::VideoFrame> last_frame() const { return last_frame_; };
+  scoped_refptr<media::VideoFrame> last_frame() const { return last_frame_; }
 
   bool enabled() const { return enabled_; }
   blink::WebMediaStreamSource::ReadyState state() const { return state_; }

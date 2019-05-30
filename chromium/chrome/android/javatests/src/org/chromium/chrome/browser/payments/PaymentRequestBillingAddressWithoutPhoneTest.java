@@ -18,14 +18,15 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.CardType;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
-import org.chromium.chrome.browser.modaldialog.ModalDialogView;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.ui.modaldialog.ModalDialogProperties;
 
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
@@ -79,7 +80,7 @@ public class PaymentRequestBillingAddressWithoutPhoneTest implements MainActivit
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogProperties.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
         mPaymentRequestTestRule.expectResultContains(new String[] {"Jon NoPhone"});
     }
 
@@ -149,10 +150,16 @@ public class PaymentRequestBillingAddressWithoutPhoneTest implements MainActivit
         mPaymentRequestTestRule.setSpinnerSelectionsInCardEditorAndWait(
                 new int[] {DECEMBER, NEXT_YEAR, ADD_BILLING_ADDRESS},
                 mPaymentRequestTestRule.getReadyToEdit());
-        mPaymentRequestTestRule.setTextInEditorAndWait(
-                new String[] {"Seb Doe", "Google", "340 Main St", "Los Angeles", "CA", "90291", ""},
-                mPaymentRequestTestRule.getEditorTextUpdate());
-
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.AUTOFILL_ENABLE_COMPANY_NAME)) {
+            mPaymentRequestTestRule.setTextInEditorAndWait(
+                    new String[] {
+                            "Seb Doe", "Google", "340 Main St", "Los Angeles", "CA", "90291", ""},
+                    mPaymentRequestTestRule.getEditorTextUpdate());
+        } else {
+            mPaymentRequestTestRule.setTextInEditorAndWait(
+                    new String[] {"Seb Doe", "340 Main St", "Los Angeles", "CA", "90291", ""},
+                    mPaymentRequestTestRule.getEditorTextUpdate());
+        }
         // Trying to add the address without a phone number should fail.
         mPaymentRequestTestRule.clickInEditorAndWait(
                 R.id.editor_dialog_done_button, mPaymentRequestTestRule.getEditorValidationError());

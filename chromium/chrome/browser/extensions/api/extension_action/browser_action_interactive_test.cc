@@ -22,7 +22,6 @@
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "extensions/browser/extension_registry.h"
@@ -33,7 +32,7 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
-#include "ui/base/ui_features.h"
+#include "ui/base/buildflags.h"
 
 #if defined(OS_WIN)
 #include "ui/views/win/hwnd_util.h"
@@ -303,15 +302,10 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest,
   test_util->HidePopup();
 }
 
-#if defined(OS_LINUX)
-#define MAYBE_TestOpenPopupDoesNotCloseOtherPopups DISABLED_TestOpenPopupDoesNotCloseOtherPopups
-#else
-#define MAYBE_TestOpenPopupDoesNotCloseOtherPopups TestOpenPopupDoesNotCloseOtherPopups
-#endif
 // Tests if there is already a popup open (by a user click or otherwise), that
 // the openPopup API does not override it.
 IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest,
-                       MAYBE_TestOpenPopupDoesNotCloseOtherPopups) {
+                       TestOpenPopupDoesNotCloseOtherPopups) {
   if (!ShouldRunPopupTest())
     return;
 
@@ -393,7 +387,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest, TabSwitchClosesPopup) {
       extensions::NOTIFICATION_EXTENSION_HOST_DESTROYED,
       content::NotificationService::AllSources());
   // Change active tabs, the extension popup should close.
-  browser()->tab_strip_model()->ActivateTabAt(0, true);
+  browser()->tab_strip_model()->ActivateTabAt(
+      0, {TabStripModel::GestureType::kOther});
   observer.Wait();
 
   EXPECT_FALSE(BrowserActionTestUtil::Create(browser())->HasPopup());
@@ -430,20 +425,12 @@ class BrowserActionInteractiveViewsTest : public BrowserActionInteractiveTest {
   ~BrowserActionInteractiveViewsTest() override = default;
 
  private:
-  test::ScopedMacViewsBrowserMode views_mode_{true};
-
   DISALLOW_COPY_AND_ASSIGN(BrowserActionInteractiveViewsTest);
 };
 
-// BrowserActionTestUtil::InspectPopup() is not implemented for a Cocoa browser.
-#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
-#define MAYBE_CloseBrowserWithDevTools CloseBrowserWithDevTools
-#else
-#define MAYBE_CloseBrowserWithDevTools DISABLED_CloseBrowserWithDevTools
-#endif
 // Test closing the browser while inspecting an extension popup with dev tools.
 IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveViewsTest,
-                       MAYBE_CloseBrowserWithDevTools) {
+                       CloseBrowserWithDevTools) {
   if (!ShouldRunPopupTest())
     return;
 

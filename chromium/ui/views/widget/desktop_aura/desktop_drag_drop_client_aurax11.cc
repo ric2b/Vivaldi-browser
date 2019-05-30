@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -17,7 +18,7 @@
 #include "ui/aura/client/drag_drop_delegate.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
-#include "ui/base/clipboard/clipboard.h"
+#include "ui/base/clipboard/clipboard_constants.h"
 #include "ui/base/dragdrop/drop_target_event.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/dragdrop/os_exchange_data_provider_aurax11.h"
@@ -450,8 +451,7 @@ void DesktopDragDropClientAuraX11::X11DragContext::ReadActions() {
 
 int DesktopDragDropClientAuraX11::X11DragContext::GetDragOperation() const {
   int drag_operation = ui::DragDropTypes::DRAG_NONE;
-  for (std::vector<::Atom>::const_iterator it = actions_.begin();
-       it != actions_.end(); ++it) {
+  for (auto it = actions_.begin(); it != actions_.end(); ++it) {
     MaskOperation(*it, &drag_operation);
   }
 
@@ -711,7 +711,7 @@ void DesktopDragDropClientAuraX11::OnXdndDrop(
       }
 
       if (!IsDragDropInProgress()) {
-        UMA_HISTOGRAM_COUNTS("Event.DragDrop.ExternalOriginDrop", 1);
+        UMA_HISTOGRAM_COUNTS_1M("Event.DragDrop.ExternalOriginDrop", 1);
       }
 
       drag_operation = delegate->OnPerformDrop(event);
@@ -750,8 +750,7 @@ int DesktopDragDropClientAuraX11::StartDragAndDrop(
     aura::Window* source_window,
     const gfx::Point& screen_location,
     int operation,
-    ui::DragDropTypes::DragEventSource source,
-    bool& cancelled) {
+    ui::DragDropTypes::DragEventSource source) {
   UMA_HISTOGRAM_ENUMERATION("Event.DragDrop.Start", source,
                             ui::DragDropTypes::DRAG_EVENT_SOURCE_COUNT);
 
@@ -776,7 +775,7 @@ int DesktopDragDropClientAuraX11::StartDragAndDrop(
     actions.push_back(gfx::GetAtom(kXdndActionDirectSave));
     ui::SetStringProperty(
         xwindow_, gfx::GetAtom(kXdndDirectSave0),
-        gfx::GetAtom(ui::Clipboard::kMimeTypeText),
+        gfx::GetAtom(ui::kMimeTypeText),
         source_provider_->file_contents_name().AsUTF8Unsafe());
   }
   ui::SetAtomArrayProperty(xwindow_, kXdndActionList, "ATOM", actions);
@@ -807,11 +806,9 @@ int DesktopDragDropClientAuraX11::StartDragAndDrop(
 
   if (alive) {
     if (negotiated_operation_ == ui::DragDropTypes::DRAG_NONE) {
-      cancelled = true;
       UMA_HISTOGRAM_ENUMERATION("Event.DragDrop.Cancel", source,
                                 ui::DragDropTypes::DRAG_EVENT_SOURCE_COUNT);
     } else {
-      cancelled = false;
       UMA_HISTOGRAM_ENUMERATION("Event.DragDrop.Drop", source,
                                 ui::DragDropTypes::DRAG_EVENT_SOURCE_COUNT);
     }
@@ -825,7 +822,6 @@ int DesktopDragDropClientAuraX11::StartDragAndDrop(
 
     return negotiated_operation_;
   }
-  cancelled = true;
   UMA_HISTOGRAM_ENUMERATION("Event.DragDrop.Cancel", source,
                             ui::DragDropTypes::DRAG_EVENT_SOURCE_COUNT);
   return ui::DragDropTypes::DRAG_NONE;
@@ -1173,6 +1169,8 @@ void DesktopDragDropClientAuraX11::CompleteXdndPosition(
   DragTranslate(screen_point, &data, &drop_target_event, &delegate);
   if (delegate)
     drag_operation = delegate->OnDragUpdated(*drop_target_event);
+  UMA_HISTOGRAM_BOOLEAN("Event.DragDrop.AcceptDragUpdate",
+                        drag_operation != ui::DragDropTypes::DRAG_NONE);
 
   // Sends an XdndStatus message back to the source_window. l[2,3]
   // theoretically represent an area in the window where the current action is

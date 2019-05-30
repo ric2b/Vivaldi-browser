@@ -11,20 +11,6 @@ Polymer({
 
   properties: {
     /** @private */
-    isConsentBump_: {
-      type: Boolean,
-      value: function() {
-        return window.location.search.includes('consent-bump');
-      },
-    },
-
-    /** @private */
-    showMoreOptions_: {
-      type: Boolean,
-      value: false,
-    },
-
-    /** @private */
     accountImageSrc_: {
       type: String,
       value: function() {
@@ -61,20 +47,18 @@ Polymer({
   /** @private */
   onConfirm_: function(e) {
     this.syncConfirmationBrowserProxy_.confirm(
-        this.getConsentDescription_(), this.getConsentConfirmation_(e.path),
-        this.isConsentBump_, this.showMoreOptions_);
+        this.getConsentDescription_(), this.getConsentConfirmation_(e.path));
   },
 
   /** @private */
   onUndo_: function() {
-    this.syncConfirmationBrowserProxy_.undo(this.isConsentBump_);
+    this.syncConfirmationBrowserProxy_.undo();
   },
 
   /** @private */
   onGoToSettings_: function(e) {
     this.syncConfirmationBrowserProxy_.goToSettings(
-        this.getConsentDescription_(), this.getConsentConfirmation_(e.path),
-        this.isConsentBump_);
+        this.getConsentDescription_(), this.getConsentConfirmation_(e.path));
   },
 
   /** @private */
@@ -92,9 +76,11 @@ Polymer({
    * @private
    */
   getConsentConfirmation_: function(path) {
-    for (var element of path) {
-      if (element.hasAttribute('consent-confirmation'))
+    for (const element of path) {
+      if (element.nodeType !== Node.DOCUMENT_FRAGMENT_NODE &&
+          element.hasAttribute('consent-confirmation')) {
         return element.innerHTML.trim();
+      }
     }
     assertNotReached('No consent confirmation element found.');
     return '';
@@ -102,38 +88,12 @@ Polymer({
 
   /** @return {!Array<string>} Text of the consent description elements. */
   getConsentDescription_: function() {
-    var consentDescription =
+    const consentDescription =
         Array.from(this.shadowRoot.querySelectorAll('[consent-description]'))
             .filter(element => element.clientWidth * element.clientHeight > 0)
             .map(element => element.innerHTML.trim());
     assert(consentDescription);
     return consentDescription;
-  },
-
-  /** @private */
-  onOK_: function(e) {
-    switch (this.$$('paper-radio-group').selected) {
-      case 'reviewSettings':
-        this.onGoToSettings_(e);
-        break;
-      case 'noChanges':
-        this.onUndo_();
-        break;
-      case 'defaultSettings':
-        this.onConfirm_(e);
-        break;
-    }
-    assertNotReached();
-  },
-
-  /** @private */
-  onMoreOptions_: function() {
-    this.showMoreOptions_ = true;
-  },
-
-  /** @private */
-  onBack_: function() {
-    this.showMoreOptions_ = false;
   },
 
   /**

@@ -9,13 +9,13 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 
 namespace blink {
-namespace CSSLonghand {
+namespace css_longhand {
 
 const CSSValue* FontFeatureSettings::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext&,
     const CSSParserLocalContext&) const {
-  return CSSParsingUtils::ConsumeFontFeatureSettings(range);
+  return css_parsing_utils::ConsumeFontFeatureSettings(range);
 }
 
 const CSSValue* FontFeatureSettings::CSSValueFromComputedStyleInternal(
@@ -29,7 +29,7 @@ const CSSValue* FontFeatureSettings::CSSValueFromComputedStyleInternal(
   if (!feature_settings || !feature_settings->size())
     return CSSIdentifierValue::Create(CSSValueNormal);
   CSSValueList* list = CSSValueList::CreateCommaSeparated();
-  for (unsigned i = 0; i < feature_settings->size(); ++i) {
+  for (wtf_size_t i = 0; i < feature_settings->size(); ++i) {
     const FontFeature& feature = feature_settings->at(i);
     cssvalue::CSSFontFeatureValue* feature_value =
         cssvalue::CSSFontFeatureValue::Create(feature.Tag(), feature.Value());
@@ -38,5 +38,5 @@ const CSSValue* FontFeatureSettings::CSSValueFromComputedStyleInternal(
   return list;
 }
 
-}  // namespace CSSLonghand
+}  // namespace css_longhand
 }  // namespace blink

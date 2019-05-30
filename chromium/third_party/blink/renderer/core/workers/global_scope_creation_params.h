@@ -7,29 +7,31 @@
 
 #include <memory>
 #include "base/macros.h"
-#include "base/optional.h"
 #include "base/unguessable_token.h"
+#include "services/network/public/mojom/referrer_policy.mojom-shared.h"
 #include "services/service_manager/public/mojom/interface_provider.mojom-blink.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/mojom/net/ip_address_space.mojom-blink.h"
+#include "third_party/blink/public/mojom/script/script_type.mojom-blink.h"
+#include "third_party/blink/public/platform/web_worker_fetch_context.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_cache_options.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
-#include "third_party/blink/renderer/core/script/script.h"
 #include "third_party/blink/renderer/core/workers/worker_clients.h"
 #include "third_party/blink/renderer/core/workers/worker_settings.h"
 #include "third_party/blink/renderer/core/workers/worklet_module_responses_map.h"
 #include "third_party/blink/renderer/platform/graphics/begin_frame_provider.h"
 #include "third_party/blink/renderer/platform/loader/fetch/https_state.h"
-#include "third_party/blink/renderer/platform/network/content_security_policy_parsers.h"
-#include "third_party/blink/renderer/platform/network/content_security_policy_response_headers.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
-#include "third_party/blink/renderer/platform/weborigin/referrer_policy.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 
 namespace blink {
 
 class WorkerClients;
+
+// TODO(nhiroki): Remove this option after off-the-main-thread worker script
+// fetch is enabled for all worker types (https://crbug.com/835717).
+enum class OffMainThreadWorkerScriptFetchOption { kDisabled, kEnabled };
 
 // GlobalScopeCreationParams contains parameters for initializing
 // WorkerGlobalScope or WorkletGlobalScope.
@@ -39,10 +41,13 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
  public:
   GlobalScopeCreationParams(
       const KURL& script_url,
-      ScriptType script_type,
+      mojom::ScriptType script_type,
+      OffMainThreadWorkerScriptFetchOption,
+      const String& global_scope_name,
       const String& user_agent,
+      scoped_refptr<WebWorkerFetchContext>,
       const Vector<CSPHeaderAndType>& content_security_policy_parsed_headers,
-      ReferrerPolicy referrer_policy,
+      network::mojom::ReferrerPolicy referrer_policy,
       const SecurityOrigin*,
       bool starter_secure_context,
       HttpsState starter_https_state,
@@ -63,7 +68,7 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
   // The URL to be used as the worker global scope's URL.
   // According to the spec, this should be response URL of the top-level
   // worker script after the top-level worker script is loaded.
-  // https://html.spec.whatwg.org/multipage/workers.html#run-a-worker
+  // https://html.spec.whatwg.org/C/#run-a-worker
   //
   // However, this can't be set to response URL in case of module workers or
   // off-the-main-thread fetch, because at the time of GlobalScopeCreationParams
@@ -74,18 +79,17 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
   // workers.
   KURL script_url;
 
-  ScriptType script_type;
+  mojom::ScriptType script_type;
+  OffMainThreadWorkerScriptFetchOption off_main_thread_fetch_option;
+
+  String global_scope_name;
   String user_agent;
 
-  // |content_security_policy_parsed_headers| and
-  // |content_security_policy_raw_headers| are mutually exclusive.
-  // |content_security_policy_parsed_headers| is an empty vector
-  // when |content_security_policy_raw_headers| is set.
-  Vector<CSPHeaderAndType> content_security_policy_parsed_headers;
-  base::Optional<ContentSecurityPolicyResponseHeaders>
-      content_security_policy_raw_headers;
+  scoped_refptr<WebWorkerFetchContext> web_worker_fetch_context;
 
-  ReferrerPolicy referrer_policy;
+  Vector<CSPHeaderAndType> content_security_policy_parsed_headers;
+
+  network::mojom::ReferrerPolicy referrer_policy;
   std::unique_ptr<Vector<String>> origin_trial_tokens;
 
   // The SecurityOrigin of the Document creating a Worker/Worklet.

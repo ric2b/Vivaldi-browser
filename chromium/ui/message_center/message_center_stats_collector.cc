@@ -47,6 +47,10 @@ void MessageCenterStatsCollector::NotificationStats::RecordAggregateStats() {
   }
 }
 
+void MessageCenterStatsCollector::RecordNotifierType(NotifierType type) {
+  UMA_HISTOGRAM_ENUMERATION("Notifications.NotifierType", type);
+}
+
 MessageCenterStatsCollector::MessageCenterStatsCollector(
     MessageCenter* message_center)
     : message_center_(message_center) {
@@ -61,16 +65,21 @@ void MessageCenterStatsCollector::OnNotificationAdded(
     const std::string& notification_id) {
   stats_[notification_id] = NotificationStats(notification_id);
 
-  StatsCollection::iterator iter = stats_.find(notification_id);
+  auto iter = stats_.find(notification_id);
   DCHECK(iter != stats_.end());
 
   stats_[notification_id].CollectAction(NOTIFICATION_ACTION_ADD);
+
+  const auto* notification =
+      message_center_->FindVisibleNotificationById(notification_id);
+  if (notification)
+    RecordNotifierType(notification->notifier_id().type);
 }
 
 void MessageCenterStatsCollector::OnNotificationRemoved(
     const std::string& notification_id,
     bool by_user) {
-  StatsCollection::iterator iter = stats_.find(notification_id);
+  auto iter = stats_.find(notification_id);
   if (iter == stats_.end())
     return;
   NotificationStats& notification_stat = iter->second;
@@ -83,7 +92,7 @@ void MessageCenterStatsCollector::OnNotificationRemoved(
 
 void MessageCenterStatsCollector::OnNotificationUpdated(
     const std::string& notification_id) {
-  StatsCollection::iterator iter = stats_.find(notification_id);
+  auto iter = stats_.find(notification_id);
   if (iter == stats_.end())
     return;
   NotificationStats& notification_stat = iter->second;
@@ -95,7 +104,7 @@ void MessageCenterStatsCollector::OnNotificationClicked(
     const std::string& notification_id,
     const base::Optional<int>& button_index,
     const base::Optional<base::string16>& reply) {
-  StatsCollection::iterator iter = stats_.find(notification_id);
+  auto iter = stats_.find(notification_id);
   if (iter == stats_.end())
     return;
   NotificationStats& notification_stat = iter->second;
@@ -112,7 +121,7 @@ void MessageCenterStatsCollector::OnNotificationSettingsClicked(bool handled) {
 void MessageCenterStatsCollector::OnNotificationDisplayed(
     const std::string& notification_id,
     const DisplaySource source) {
-  StatsCollection::iterator iter = stats_.find(notification_id);
+  auto iter = stats_.find(notification_id);
   if (iter == stats_.end())
     return;
   NotificationStats& notification_stat = iter->second;

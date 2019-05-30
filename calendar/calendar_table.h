@@ -58,7 +58,7 @@ class CalendarTable {
 
 #define CALENDAR_ROW_FIELDS                                         \
   " id, name, description,  url, ctag, orderindex, color, hidden, " \
-  " created, last_modified "
+  " active, iconindex, username, created, last_modified "
 
 }  // namespace calendar
 

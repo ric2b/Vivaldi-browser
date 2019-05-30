@@ -6,9 +6,10 @@
 #define COMPONENTS_INVALIDATION_IMPL_FCM_INVALIDATION_SERVICE_H_
 
 #include "base/macros.h"
-#include "base/timer/timer.h"
+#include "base/time/time.h"
+#include "components/gcm_driver/instance_id/instance_id.h"
 #include "components/invalidation/impl/invalidation_logger.h"
-#include "components/invalidation/impl/invalidator_registrar.h"
+#include "components/invalidation/impl/invalidator_registrar_with_memory.h"
 #include "components/invalidation/public/identity_provider.h"
 #include "components/invalidation/public/invalidation_handler.h"
 #include "components/invalidation/public/invalidation_service.h"
@@ -40,7 +41,7 @@ class FCMInvalidationService : public InvalidationService,
  public:
   FCMInvalidationService(IdentityProvider* identity_provider,
                          gcm::GCMDriver* gcm_driver,
-                         instance_id::InstanceIDDriver* instance_id_driver,
+                         instance_id::InstanceIDDriver* client_id_driver,
                          PrefService* pref_service,
                          const syncer::ParseJSONCallback& parse_json,
                          network::mojom::URLLoaderFactory* loader_factory);
@@ -81,13 +82,38 @@ class FCMInvalidationService : public InvalidationService,
   void InitForTest(syncer::Invalidator* invalidator);
 
  private:
+  struct Diagnostics {
+    Diagnostics();
+
+    // Collect all the internal variables in a single readable dictionary.
+    base::DictionaryValue CollectDebugData() const;
+
+    base::Time active_account_login;
+    base::Time active_account_token_updated;
+    base::Time active_account_logged_out;
+    base::Time instance_id_requested;
+    base::Time instance_id_received;
+    base::Time service_was_stopped;
+    base::Time service_was_started;
+    bool was_already_started_on_login = false;
+    bool was_ready_to_start_on_login = false;
+    std::string active_account_id;
+  };
+
   bool IsReadyToStart();
   bool IsStarted() const;
 
   void StartInvalidator();
   void StopInvalidator();
 
-  syncer::InvalidatorRegistrar invalidator_registrar_;
+  void PopulateClientID();
+  void ResetClientID();
+  void OnInstanceIdRecieved(const std::string& id);
+  void OnDeleteIDCompleted(instance_id::InstanceID::Result);
+
+  void DoUpdateRegisteredIdsIfNeeded();
+
+  syncer::InvalidatorRegistrarWithMemory invalidator_registrar_;
   std::unique_ptr<syncer::Invalidator> invalidator_;
 
   // The invalidation logger object we use to record state changes
@@ -96,11 +122,14 @@ class FCMInvalidationService : public InvalidationService,
 
   gcm::GCMDriver* gcm_driver_;
   instance_id::InstanceIDDriver* instance_id_driver_;
+  std::string client_id_;
 
   IdentityProvider* identity_provider_;
   PrefService* pref_service_;
   syncer::ParseJSONCallback parse_json_;
   network::mojom::URLLoaderFactory* loader_factory_;
+  bool update_was_requested_ = false;
+  Diagnostics diagnostic_info_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

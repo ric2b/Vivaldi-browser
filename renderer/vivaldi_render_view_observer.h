@@ -23,6 +23,9 @@ class VivaldiRenderViewObserver : public content::RenderViewObserver {
   void OnPinchZoom(float scale, int x, int y);
   void OnRequestThumbnailForFrame(
       VivaldiViewMsg_RequestThumbnailForFrame_Params params);
+  void OnGetAccessKeysForPage();
+  void OnAccessKeyAction(std::string access_key);
+  void OnScrollPage(std::string scroll_type);
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiRenderViewObserver);
 };

@@ -164,6 +164,16 @@ bool StartOrStopEffect(int fd, int effect_id, bool do_start) {
   return nbytes == sizeof(start_stop);
 }
 
+uint16_t HexStringToUInt16WithDefault(base::StringPiece input,
+                                      uint16_t default_value) {
+  uint32_t out = 0;
+  if (!base::HexStringToUInt(input, &out) ||
+      out > std::numeric_limits<uint16_t>::max()) {
+    return default_value;
+  }
+  return static_cast<uint16_t>(out);
+}
+
 }  // namespace
 
 GamepadDeviceLinux::GamepadDeviceLinux(const std::string& syspath_prefix)
@@ -183,7 +193,7 @@ bool GamepadDeviceLinux::IsEmpty() const {
 }
 
 bool GamepadDeviceLinux::SupportsVibration() const {
-  if (dualshock4_)
+  if (dualshock4_ || hid_haptics_)
     return true;
 
   // Vibration is only supported over USB.
@@ -338,9 +348,8 @@ bool GamepadDeviceLinux::ReadEvdevSpecialKeys(Gamepad* pad) {
 }
 
 GamepadStandardMappingFunction GamepadDeviceLinux::GetMappingFunction() const {
-  return GetGamepadStandardMappingFunction(vendor_id_.c_str(),
-                                           product_id_.c_str(),
-                                           version_number_.c_str(), bus_type_);
+  return GetGamepadStandardMappingFunction(vendor_id_, product_id_,
+                                           version_number_, bus_type_);
 }
 
 bool GamepadDeviceLinux::IsSameDevice(const UdevGamepadLinux& pad_info) {
@@ -370,10 +379,9 @@ bool GamepadDeviceLinux::OpenJoydevNode(const UdevGamepadLinux& pad_info,
   const char* name = udev_device_get_sysattr_value(parent_device, "name");
   std::string name_string(name ? name : "");
 
-  int vendor_id_int = 0;
-  int product_id_int = 0;
-  base::HexStringToInt(vendor_id, &vendor_id_int);
-  base::HexStringToInt(product_id, &product_id_int);
+  uint16_t vendor_id_int = HexStringToUInt16WithDefault(vendor_id, 0);
+  uint16_t product_id_int = HexStringToUInt16WithDefault(product_id, 0);
+  uint16_t version_number_int = HexStringToUInt16WithDefault(version_number, 0);
 
   // In many cases the information the input subsystem contains isn't
   // as good as the information that the device bus has, walk up further
@@ -402,9 +410,9 @@ bool GamepadDeviceLinux::OpenJoydevNode(const UdevGamepadLinux& pad_info,
   }
 
   joydev_index_ = pad_info.index;
-  vendor_id_ = vendor_id ? vendor_id : "";
-  product_id_ = product_id ? product_id : "";
-  version_number_ = version_number ? version_number : "";
+  vendor_id_ = vendor_id_int;
+  product_id_ = product_id_int;
+  version_number_ = version_number_int;
   name_ = name_string;
 
   return true;
@@ -416,9 +424,9 @@ void GamepadDeviceLinux::CloseJoydevNode() {
     joydev_fd_ = -1;
   }
   joydev_index_ = -1;
-  vendor_id_.clear();
-  product_id_.clear();
-  version_number_.clear();
+  vendor_id_ = 0;
+  product_id_ = 0;
+  version_number_ = 0;
   name_.clear();
 
   // Button indices must be recomputed once the joydev node is closed.
@@ -477,12 +485,14 @@ bool GamepadDeviceLinux::OpenHidrawNode(const UdevGamepadLinux& pad_info) {
   uint16_t product_id;
   bool is_dualshock4 = false;
   bool is_switch_pro = false;
+  bool is_hid_haptic = false;
   if (GetHidrawDevinfo(hidraw_fd_, &bus_type_, &vendor_id, &product_id)) {
     is_dualshock4 =
         Dualshock4ControllerLinux::IsDualshock4(vendor_id, product_id);
     is_switch_pro =
         SwitchProControllerLinux::IsSwitchPro(vendor_id, product_id);
-    DCHECK(!is_dualshock4 || !is_switch_pro);
+    is_hid_haptic = HidHapticGamepadLinux::IsHidHaptic(vendor_id, product_id);
+    DCHECK_LE(is_dualshock4 + is_switch_pro + is_hid_haptic, 1);
   }
 
   if (is_dualshock4 && !dualshock4_)
@@ -495,6 +505,11 @@ bool GamepadDeviceLinux::OpenHidrawNode(const UdevGamepadLinux& pad_info) {
       switch_pro_->SendConnectionStatusQuery();
   }
 
+  if (is_hid_haptic && !hid_haptics_) {
+    hid_haptics_ =
+        HidHapticGamepadLinux::Create(vendor_id, product_id, hidraw_fd_);
+  }
+
   return true;
 }
 
@@ -505,6 +520,9 @@ void GamepadDeviceLinux::CloseHidrawNode() {
   if (switch_pro_)
     switch_pro_->Shutdown();
   switch_pro_.reset();
+  if (hid_haptics_)
+    hid_haptics_->Shutdown();
+  hid_haptics_.reset();
   if (hidraw_fd_ >= 0) {
     close(hidraw_fd_);
     hidraw_fd_ = -1;
@@ -520,6 +538,11 @@ void GamepadDeviceLinux::SetVibration(double strong_magnitude,
 
   if (switch_pro_) {
     switch_pro_->SetVibration(strong_magnitude, weak_magnitude);
+    return;
+  }
+
+  if (hid_haptics_) {
+    hid_haptics_->SetVibration(strong_magnitude, weak_magnitude);
     return;
   }
 
@@ -552,6 +575,11 @@ void GamepadDeviceLinux::SetZeroVibration() {
 
   if (switch_pro_) {
     switch_pro_->SetZeroVibration();
+    return;
+  }
+
+  if (hid_haptics_) {
+    hid_haptics_->SetZeroVibration();
     return;
   }
 

@@ -136,7 +136,13 @@
         "name": "toggleDevtools",
         "type": "function",
         "description": "Toggle developer tools.",
-        "parameters": []
+        "parameters": [
+          {
+            "type": "boolean",
+            "name": "inspect",
+            "description": "Whether to enable the element picker (corresponds to Ctrl+Shift+C in Chrome)"
+          }
+        ]
       }
     ],
     "events": [

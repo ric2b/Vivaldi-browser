@@ -11,8 +11,7 @@
 <translation id="1375198122581997741">关于版本</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> 未发送任何数据。</translation>
 <translation id="14171126816530869">位于<ph name="LOCALITY" />的<ph name="ORGANIZATION" />的身份已通过了<ph name="ISSUER" />的验证。</translation>
-<translation id="1506687042165942984">显示为此页面保存的已知过时副本。</translation>
-<translation id="1559528461873125649">不存在此类文件或目录</translation>
+<translation id="1559528461873125649">该文件或目录不存在</translation>
 <translation id="1620510694547887537">摄像头</translation>
 <translation id="1640244768702815859">请尝试<ph name="BEGIN_LINK" />访问该网站的首页<ph name="END_LINK" />。</translation>
 <translation id="1645368109819982629">协议不受支持</translation>
@@ -38,6 +37,7 @@
 <translation id="2337852623177822836">设置由管理员控制</translation>
 <translation id="2355395290879513365">攻击者可能能够看到您正在此网站上浏览的图片，并通过编辑这些图片让您受骗。</translation>
 <translation id="2356070529366658676">询问</translation>
+<translation id="2359808026110333948">继续</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />正在进行网络诊断<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">通知</translation>
 <translation id="2539524384386349900">检测</translation>
@@ -46,7 +46,7 @@
 <translation id="2609632851001447353">其他变体</translation>
 <translation id="2634124572758952069">找不到 <ph name="HOST_NAME" /> 的服务器 IP 地址。</translation>
 <translation id="2649204054376361687"><ph name="COUNTRY" /><ph name="CITY" /></translation>
-<translation id="2650446666397867134">访问文件遭拒</translation>
+<translation id="2650446666397867134">文件访问已被拒绝</translation>
 <translation id="2705137772291741111">无法读取此网站的已保存（缓存）副本。</translation>
 <translation id="2784949926578158345">连接已重置。</translation>
 <translation id="2826760142808435982">该连接使用 <ph name="CIPHER" /> 进行加密和身份验证，并使用 <ph name="KX" /> 作为密钥交换机制。</translation>
@@ -72,7 +72,6 @@
 <translation id="3586931643579894722">隐藏详细信息</translation>
 <translation id="3630155396527302611">如果它已在可访问网络的程序列表中，请尝试将它从该列表中移除，然后重新添加到其中。</translation>
 <translation id="3658742229777143148">修订版本</translation>
-<translation id="366094926047009040">您可能会无法再访问自己的 Vivaldi 帐号，或者遭遇身份信息被盗用。Vivaldi 建议您立即更改密码。</translation>
 <translation id="3681007416295224113">证书信息</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />检查代理服务器、防火墙和 DNS 配置<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">如果您使用代理服务器…</translation>
@@ -106,7 +105,6 @@
 <translation id="4744603770635761495">可执行文件路径</translation>
 <translation id="4750917950439032686">您发送给这个网站的信息（例如密码或信用卡号）不会外泄。</translation>
 <translation id="4764776831041365478">网址为 <ph name="URL" /> 的网页可能暂时无法连接，或者它已永久性地移动到了新网址。</translation>
-<translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
 <translation id="4974590756084640048">重新启用警告功能</translation>
 <translation id="5023310440958281426">请查看管理员制定的政策</translation>
 <translation id="5039804452771397117">允许</translation>
@@ -135,7 +133,7 @@
 <translation id="5810442152076338065">您与 <ph name="DOMAIN" /> 之间的连接采用过时的加密套件进行了加密。</translation>
 <translation id="5838278095973806738">请勿在此网站上输入任何敏感信息（例如密码或信用卡信息），因为攻击者可能会盗取这些信息。</translation>
 <translation id="5869405914158311789">无法访问此网站</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{正在使用 1 个} other {正在使用 # 个}}</translation>
+<translation id="5932224571077948991">网站展示过侵扰性或误导性广告</translation>
 <translation id="5990559369517809815">对服务器的请求已遭到某个扩展程序的阻止。</translation>
 <translation id="6051221802930200923">您目前无法访问 <ph name="SITE" />，因为此网站使用了证书锁定。网络错误和攻击通常是暂时的，因此，此网页稍后可能会恢复正常。</translation>
 <translation id="6146055958333702838">请检查所有网线是否都已连好，然后重新启动您可能正在使用的任何路由器、调制解调器或其他网络设备。</translation>
@@ -153,6 +151,7 @@
 <translation id="6417515091412812850">无法检查证书是否已吊销。</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> 拒绝了我们的连接请求。</translation>
 <translation id="6447842834002726250">Cookie</translation>
+<translation id="6451458296329894277">确认重新提交表单</translation>
 <translation id="6569060085658103619">您正在查看扩展程序页面</translation>
 <translation id="6657585470893396449">密码</translation>
 <translation id="6685834062052613830">请退出并完成设置</translation>
@@ -190,13 +189,14 @@
 <translation id="8025119109950072390">此网站上的攻击者可能会诱骗您做出一些诸如安装软件或泄露个人信息（例如：密码、电话号码或信用卡信息）之类的危险事情。</translation>
 <translation id="8037357227543935929">询问（默认）</translation>
 <translation id="8041940743680923270">使用全局默认设置（询问）</translation>
+<translation id="808894953321890993">更改密码</translation>
 <translation id="8142868475871995937">请访问 &lt;strong&gt;vivaldi:// 政策&lt;/strong&gt;，查看列入黑名单的网址列表以及您的系统管理员强制要求执行的其他政策。</translation>
 <translation id="8149426793427495338">您的计算机已进入休眠模式。</translation>
 <translation id="8150722005171944719">无法读取 <ph name="URL" /> 上的文件。该文件可能已遭到删除、移动，或者文件权限不允许进行访问。</translation>
 <translation id="8184538546369750125">使用全局默认设置（允许）</translation>
-<translation id="8205463626947051446">网站常常会展示侵扰性广告</translation>
 <translation id="8211406090763984747">连接是安全的</translation>
 <translation id="8225771182978767009">设置此计算机的用户已选择屏蔽此网站。</translation>
+<translation id="8241707690549784388">您所查找的网页要使用已输入的信息。返回此页可能需要重复已进行的所有操作。是否要继续操作？</translation>
 <translation id="8241712895048303527">在此网站上拦截</translation>
 <translation id="8288807391153049143">显示证书</translation>
 <translation id="8289355894181816810">如果您不确定这是什么意思，请与您的网络管理员联系。</translation>
@@ -212,10 +212,10 @@
 <translation id="9025348182339809926">（无效）</translation>
 <translation id="9039213469156557790">而且，此页中包含其他不安全的资源。这些资源在传输过程中能被他人查看，而攻击者可以修改这些资源，从而改变此页的行为。</translation>
 <translation id="9069693763241529744">已被某款扩展程序阻止</translation>
-<translation id="910908805481542201">帮我解决此问题</translation>
 <translation id="9169664750068251925">在此网站上始终阻止</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> 使用了不受支持的协议。</translation>
 <translation id="9219103736887031265">图片</translation>
+<translation id="936602727769022409">您可能会无法再访问自己的 Google 帐号。Chromium 建议您立即更改密码。系统会要求您登录。</translation>
 <translation id="969892804517981540">正式版本</translation>
 <translation id="988159990683914416">开发者内部版本</translation>
 </translationbundle>

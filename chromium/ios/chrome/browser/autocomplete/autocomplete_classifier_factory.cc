@@ -4,8 +4,9 @@
 
 #include "ios/chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
@@ -42,13 +43,14 @@ AutocompleteClassifier* AutocompleteClassifierFactory::GetForBrowserState(
 
 // static
 AutocompleteClassifierFactory* AutocompleteClassifierFactory::GetInstance() {
-  return base::Singleton<AutocompleteClassifierFactory>::get();
+  static base::NoDestructor<AutocompleteClassifierFactory> instance;
+  return instance.get();
 }
 
 // static
-BrowserStateKeyedServiceFactory::TestingFactoryFunction
+BrowserStateKeyedServiceFactory::TestingFactory
 AutocompleteClassifierFactory::GetDefaultFactory() {
-  return &BuildAutocompleteClassifier;
+  return base::BindRepeating(&BuildAutocompleteClassifier);
 }
 
 AutocompleteClassifierFactory::AutocompleteClassifierFactory()

@@ -34,7 +34,7 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   static std::unique_ptr<Proxy> Create(
       LayerTreeHost* layer_tree_host,
       LayerTreeHostSingleThreadClient* client,
-      TaskRunnerProvider* task_runner_provider_);
+      TaskRunnerProvider* task_runner_provider);
   ~SingleThreadProxy() override;
 
   // Proxy implementation
@@ -51,11 +51,15 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   void SetNextCommitWaitsForActivation() override;
   bool RequestedAnimatePending() override;
   void NotifyInputThrottledUntilCommit() override {}
-  void SetDeferCommits(bool defer_commits) override;
+  void SetDeferMainFrameUpdate(bool defer_main_frame_update) override;
+  void StartDeferringCommits(base::TimeDelta timeout) override;
+  void StopDeferringCommits() override;
   bool CommitRequested() const override;
   void Start() override;
   void Stop() override;
   void SetMutator(std::unique_ptr<LayerTreeMutator> mutator) override;
+  void SetPaintWorkletLayerPainter(
+      std::unique_ptr<PaintWorkletLayerPainter> painter) override;
   bool SupportsImplScrolling() const override;
   bool MainFrameWillHappenForTesting() override;
   void SetURLForUkm(const GURL& url) override {
@@ -67,16 +71,15 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   void SetRenderFrameObserver(
       std::unique_ptr<RenderFrameMetadataObserver> observer) override;
 
-  // Blink layout tests might call into this even though an unthreaded CC
-  // doesn't have BrowserControls itself.
   void UpdateBrowserControlsState(BrowserControlsState constraints,
                                   BrowserControlsState current,
-                                  bool animate) override {}
+                                  bool animate) override;
 
   // SchedulerClient implementation
   bool WillBeginImplFrame(const viz::BeginFrameArgs& args) override;
   void DidFinishImplFrame() override;
   void DidNotProduceFrame(const viz::BeginFrameAck& ack) override;
+  void WillNotReceiveBeginFrame() override;
   void ScheduledActionSendBeginMainFrame(
       const viz::BeginFrameArgs& args) override;
   DrawResult ScheduledActionDrawIfPossible() override;
@@ -90,6 +93,7 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   void SendBeginMainFrameNotExpectedSoon() override;
   void ScheduledActionBeginMainFrameNotExpectedUntil(
       base::TimeTicks time) override;
+  void FrameIntervalUpdated(base::TimeDelta interval) override;
   size_t CompositedAnimationsCount() const override;
   size_t MainThreadAnimationsCount() const override;
   bool CurrentFrameHadRAF() const override;
@@ -111,7 +115,7 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
       std::unique_ptr<MutatorEvents> events) override;
   bool IsInsideDraw() override;
   void RenewTreePriority() override {}
-  void PostDelayedAnimationTaskOnImplThread(const base::Closure& task,
+  void PostDelayedAnimationTaskOnImplThread(base::OnceClosure task,
                                             base::TimeDelta delay) override {}
   void DidActivateSyncTree() override;
   void WillPrepareTiles() override;
@@ -121,11 +125,17 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
                                    bool skip_draw) override;
   void NeedsImplSideInvalidation(bool needs_first_draw_on_activation) override;
   void RequestBeginMainFrameNotExpected(bool new_state) override;
+  uint32_t GenerateChildSurfaceSequenceNumberSync() override;
   void NotifyImageDecodeRequestFinished() override;
   void DidPresentCompositorFrameOnImplThread(
       uint32_t frame_token,
       std::vector<LayerTreeHost::PresentationTimeCallback> callbacks,
       const gfx::PresentationFeedback& feedback) override;
+  void DidGenerateLocalSurfaceIdAllocationOnImplThread(
+      const viz::LocalSurfaceIdAllocation& allocation) override;
+  void NotifyAnimationWorkletStateChange(
+      AnimationWorkletMutationState state,
+      ElementListType element_list_type) override;
 
   void RequestNewLayerTreeFrameSink();
 
@@ -168,16 +178,21 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   // Accessed from both threads.
   std::unique_ptr<Scheduler> scheduler_on_impl_thread_;
 
+  // Only used when defer_commits_ is active and must be set in such cases.
+  base::TimeTicks commits_restart_time_;
+
   bool next_frame_is_newly_committed_frame_;
 
 #if DCHECK_IS_ON()
   bool inside_impl_frame_;
 #endif
   bool inside_draw_;
+  bool defer_main_frame_update_;
   bool defer_commits_;
   bool animate_requested_;
   bool commit_requested_;
   bool inside_synchronous_composite_;
+  bool needs_impl_frame_;
 
   // True if a request to the LayerTreeHostClient to create an output surface
   // is still outstanding.
@@ -187,7 +202,7 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   bool layer_tree_frame_sink_lost_;
 
   // This is the callback for the scheduled RequestNewLayerTreeFrameSink.
-  base::CancelableClosure layer_tree_frame_sink_creation_callback_;
+  base::CancelableOnceClosure layer_tree_frame_sink_creation_callback_;
 
   base::WeakPtr<SingleThreadProxy> frame_sink_bound_weak_ptr_;
 

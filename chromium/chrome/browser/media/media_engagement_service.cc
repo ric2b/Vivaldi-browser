@@ -4,6 +4,9 @@
 
 #include "chrome/browser/media/media_engagement_service.h"
 
+#include <functional>
+
+#include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
@@ -22,9 +25,6 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
 #include "media/base/media_switches.h"
-
-const char MediaEngagementService::kHistogramScoreAtStartupName[] =
-    "Media.Engagement.ScoreAtStartup";
 
 const char MediaEngagementService::kHistogramURLsDeletedScoreReductionName[] =
     "Media.Engagement.URLsDeletedScoreReduction";
@@ -142,18 +142,9 @@ MediaEngagementService::MediaEngagementService(Profile* profile,
         ->ClearSettingsForOneType(CONTENT_SETTINGS_TYPE_MEDIA_ENGAGEMENT);
     SetSchemaVersion(kSchemaVersion);
   }
-
-  // Record the stored scores to a histogram.
-  task_tracker_.PostTask(
-      base::ThreadTaskRunnerHandle::Get().get(), FROM_HERE,
-      base::BindOnce(&MediaEngagementService::RecordStoredScoresToHistogram,
-                     base::Unretained(this)));
 }
 
-MediaEngagementService::~MediaEngagementService() {
-  // Cancel any tasks that depend on |this|.
-  task_tracker_.TryCancelAll();
-}
+MediaEngagementService::~MediaEngagementService() = default;
 
 int MediaEngagementService::GetSchemaVersion() const {
   return profile_->GetPrefs()->GetInteger(prefs::kMediaEngagementSchemaVersion);
@@ -185,14 +176,6 @@ void MediaEngagementService::Shutdown() {
       profile_, ServiceAccessType::IMPLICIT_ACCESS);
   if (history)
     history->RemoveObserver(this);
-}
-
-void MediaEngagementService::RecordStoredScoresToHistogram() {
-  for (const MediaEngagementScore& score : GetAllStoredScores()) {
-    int percentage = round(score.actual_score() * 100);
-    UMA_HISTOGRAM_PERCENTAGE(
-        MediaEngagementService::kHistogramScoreAtStartupName, percentage);
-  }
 }
 
 void MediaEngagementService::OnURLsDeleted(
@@ -282,7 +265,7 @@ void MediaEngagementService::Clear(const GURL& url) {
       ->ClearSettingsForOneTypeWithPredicate(
           CONTENT_SETTINGS_TYPE_MEDIA_ENGAGEMENT, base::Time(),
           base::Time::Max(),
-          base::Bind(&MediaEngagementFilterAdapter, base::ConstRef(url)));
+          base::Bind(&MediaEngagementFilterAdapter, std::cref(url)));
 }
 
 double MediaEngagementService::GetEngagementScore(const GURL& url) const {

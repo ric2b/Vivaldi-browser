@@ -62,12 +62,13 @@ class WebNodeSimTest : public SimTest {};
 
 TEST_F(WebNodeSimTest, IsFocused) {
   SimRequest main_resource("https://example.com/test.html", "text/html");
-  SimRequest css_resource("https://example.com/style.css", "text/css");
+  SimSubresourceRequest css_resource("https://example.com/style.css",
+                                     "text/css");
 
   LoadURL("https://example.com/test.html");
-  WebView().Resize(WebSize(800, 600));
+  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
 
-  main_resource.Complete(R"HTML(
+  main_resource.Write(R"HTML(
     <!DOCTYPE html>
     <link rel=stylesheet href=style.css>
     <input id=focusable>
@@ -79,7 +80,9 @@ TEST_F(WebNodeSimTest, IsFocused) {
 
   WebNode input_node(GetDocument().getElementById("focusable"));
   EXPECT_FALSE(input_node.IsFocusable());
+  EXPECT_FALSE(GetDocument().HasNodesWithPlaceholderStyle());
 
+  main_resource.Finish();
   css_resource.Complete("dummy {}");
   EXPECT_TRUE(input_node.IsFocusable());
 }

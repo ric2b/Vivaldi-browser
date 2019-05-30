@@ -61,6 +61,13 @@ class CORE_EXPORT Range final : public ScriptWrappable {
                        unsigned end_offset);
   static Range* Create(Document&, const Position&, const Position&);
 
+  explicit Range(Document&);
+  Range(Document&,
+        Node* start_container,
+        unsigned start_offset,
+        Node* end_container,
+        unsigned end_offset);
+
   void Dispose();
 
   Document& OwnerDocument() const {
@@ -86,7 +93,7 @@ class CORE_EXPORT Range final : public ScriptWrappable {
               ExceptionState& = ASSERT_NO_EXCEPTION);
   void collapse(bool to_start);
   bool isPointInRange(Node* ref_node, unsigned offset, ExceptionState&) const;
-  short comparePoint(Node* ref_node, unsigned offset, ExceptionState&) const;
+  int16_t comparePoint(Node* ref_node, unsigned offset, ExceptionState&) const;
   enum CompareResults {
     NODE_BEFORE,
     NODE_AFTER,
@@ -94,17 +101,17 @@ class CORE_EXPORT Range final : public ScriptWrappable {
     NODE_INSIDE
   };
   enum CompareHow { kStartToStart, kStartToEnd, kEndToEnd, kEndToStart };
-  short compareBoundaryPoints(unsigned how,
-                              const Range* source_range,
-                              ExceptionState&) const;
-  static short compareBoundaryPoints(Node* container_a,
-                                     unsigned offset_a,
-                                     Node* container_b,
-                                     unsigned offset_b,
-                                     ExceptionState&);
-  static short compareBoundaryPoints(const RangeBoundaryPoint& boundary_a,
-                                     const RangeBoundaryPoint& boundary_b,
-                                     ExceptionState&);
+  int16_t compareBoundaryPoints(unsigned how,
+                                const Range* source_range,
+                                ExceptionState&) const;
+  static int16_t compareBoundaryPoints(Node* container_a,
+                                       unsigned offset_a,
+                                       Node* container_b,
+                                       unsigned offset_b,
+                                       ExceptionState&);
+  static int16_t compareBoundaryPoints(const RangeBoundaryPoint& boundary_a,
+                                       const RangeBoundaryPoint& boundary_b,
+                                       ExceptionState&);
   bool BoundaryPointsValid() const;
   bool intersectsNode(Node* ref_node, ExceptionState&);
   void deleteContents(ExceptionState&);
@@ -148,6 +155,11 @@ class CORE_EXPORT Range final : public ScriptWrappable {
   void NodeChildrenWillBeRemoved(ContainerNode&);
   void NodeWillBeRemoved(Node&);
 
+  // They are special fixups only for sequential focus navigation
+  // starting point.
+  void FixupRemovedChildrenAcrossShadowBoundary(ContainerNode& container);
+  void FixupRemovedNodeAcrossShadowBoundary(Node& node);
+
   void DidInsertText(const CharacterData&, unsigned offset, unsigned length);
   void DidRemoveText(const CharacterData&, unsigned offset, unsigned length);
   void DidMergeTextNodes(const NodeWithIndex& old_node, unsigned offset);
@@ -164,16 +176,9 @@ class CORE_EXPORT Range final : public ScriptWrappable {
 
   static Node* CheckNodeWOffset(Node*, unsigned offset, ExceptionState&);
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
-  explicit Range(Document&);
-  Range(Document&,
-        Node* start_container,
-        unsigned start_offset,
-        Node* end_container,
-        unsigned end_offset);
-
   void SetDocument(Document&);
 
   void CheckNodeBA(Node*, ExceptionState&) const;
@@ -189,7 +194,7 @@ class CORE_EXPORT Range final : public ScriptWrappable {
                                              unsigned end_offset,
                                              ExceptionState&);
   static void ProcessNodes(ActionType,
-                           HeapVector<Member<Node>>&,
+                           NodeVector&,
                            Node* old_container,
                            Node* new_container,
                            ExceptionState&);

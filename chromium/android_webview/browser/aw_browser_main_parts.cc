@@ -5,6 +5,9 @@
 #include "android_webview/browser/aw_browser_main_parts.h"
 
 #include <memory>
+#include <set>
+#include <string>
+#include <utility>
 
 #include "android_webview/browser/aw_browser_context.h"
 #include "android_webview/browser/aw_browser_terminator.h"
@@ -18,18 +21,20 @@
 #include "android_webview/common/crash_reporter/aw_crash_reporter_client.h"
 #include "base/android/apk_assets.h"
 #include "base/android/build_info.h"
-#include "base/android/locale_utils.h"
 #include "base/android/memory_pressure_listener_android.h"
+#include "base/base_paths_android.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/i18n/rtl.h"
 #include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_loop_current.h"
 #include "base/path_service.h"
 #include "components/crash/content/browser/child_exit_observer_android.h"
-#include "components/crash/content/browser/crash_dump_manager_android.h"
 #include "components/heap_profiling/supervisor.h"
 #include "components/services/heap_profiling/public/cpp/settings.h"
+#include "components/user_prefs/user_prefs.h"
+#include "components/variations/variations_crash_keys.h"
 #include "content/public/browser/android/synchronous_compositor.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -43,9 +48,6 @@
 #include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
-#include "ui/base/resource/resource_bundle.h"
-#include "ui/base/resource/resource_bundle_android.h"
-#include "ui/base/ui_base_paths.h"
 #include "ui/gl/gl_surface.h"
 
 namespace android_webview {
@@ -55,11 +57,6 @@ AwBrowserMainParts::AwBrowserMainParts(AwContentBrowserClient* browser_client)
 }
 
 AwBrowserMainParts::~AwBrowserMainParts() {
-}
-
-bool AwBrowserMainParts::ShouldContentCreateFeatureList() {
-  // FeatureList will be created in AwFieldTrialCreator.
-  return false;
 }
 
 int AwBrowserMainParts::PreEarlyInitialization() {
@@ -82,23 +79,6 @@ int AwBrowserMainParts::PreEarlyInitialization() {
 }
 
 int AwBrowserMainParts::PreCreateThreads() {
-  ui::SetLocalePaksStoredInApk(true);
-  std::string locale = ui::ResourceBundle::InitSharedInstanceWithLocale(
-      base::android::GetDefaultLocaleString(), NULL,
-      ui::ResourceBundle::LOAD_COMMON_RESOURCES);
-  if (locale.empty()) {
-    LOG(WARNING) << "Failed to load locale .pak from the apk. "
-        "Bringing up WebView without any locale";
-  }
-  base::i18n::SetICUDefaultLocale(locale);
-
-  // Try to directly mmap the resources.pak from the apk. Fall back to load
-  // from file, using PATH_SERVICE, otherwise.
-  base::FilePath pak_file_path;
-  base::PathService::Get(ui::DIR_RESOURCE_PAKS_ANDROID, &pak_file_path);
-  pak_file_path = pak_file_path.AppendASCII("resources.pak");
-  ui::LoadMainAndroidPackFile("assets/resources.pak", pak_file_path);
-
   base::android::MemoryPressureListenerAndroid::Initialize(
       base::android::AttachCurrentThread());
   ::crash_reporter::ChildExitObserver::Create();
@@ -115,10 +95,9 @@ int AwBrowserMainParts::PreCreateThreads() {
   }
 
   base::FilePath crash_dir;
-  if (crash_reporter::IsCrashReporterEnabled()) {
-    if (base::PathService::Get(android_webview::DIR_CRASH_DUMPS, &crash_dir)) {
-      if (!base::PathExists(crash_dir))
-        base::CreateDirectory(crash_dir);
+  if (base::PathService::Get(android_webview::DIR_CRASH_DUMPS, &crash_dir)) {
+    if (!base::PathExists(crash_dir)) {
+      base::CreateDirectory(crash_dir);
     }
   }
 
@@ -126,19 +105,19 @@ int AwBrowserMainParts::PreCreateThreads() {
           switches::kWebViewSandboxedRenderer)) {
     // Create the renderers crash manager on the UI thread.
     ::crash_reporter::ChildExitObserver::GetInstance()->RegisterClient(
-        std::make_unique<AwBrowserTerminator>(crash_dir));
+        std::make_unique<AwBrowserTerminator>());
   }
 
-  aw_field_trial_creator_.SetUpFieldTrials();
+  variations::InitCrashKeys();
 
   return service_manager::RESULT_CODE_NORMAL_EXIT;
 }
 
 void AwBrowserMainParts::PreMainMessageLoopRun() {
-  browser_client_->InitBrowserContext()->PreMainMessageLoopRun(
-      browser_client_->GetNetLog());
+  AwBrowserContext* context = browser_client_->InitBrowserContext();
+  context->PreMainMessageLoopRun(browser_client_->GetNetLog());
 
-  content::RenderFrameHost::AllowInjectingJavaScriptForAndroidWebView();
+  content::RenderFrameHost::AllowInjectingJavaScript();
 }
 
 bool AwBrowserMainParts::MainMessageLoopRun(int* result_code) {

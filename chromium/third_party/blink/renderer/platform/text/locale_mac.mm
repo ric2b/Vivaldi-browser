@@ -33,9 +33,11 @@
 #import <Foundation/NSDateFormatter.h>
 #import <Foundation/NSLocale.h>
 #include <memory>
+
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "third_party/blink/renderer/platform/language.h"
-#include "third_party/blink/renderer/platform/layout_test_support.h"
+#include "third_party/blink/renderer/platform/web_test_support.h"
 #include "third_party/blink/renderer/platform/wtf/date_math.h"
 #include "third_party/blink/renderer/platform/wtf/retain_ptr.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
@@ -52,7 +54,7 @@ static inline String LanguageFromLocale(const String& locale) {
 }
 
 static RetainPtr<NSLocale> DetermineLocale(const String& locale) {
-  if (!LayoutTestSupport::IsRunningLayoutTest()) {
+  if (!WebTestSupport::IsRunningWebTest()) {
     RetainPtr<NSLocale> current_locale = [NSLocale currentLocale];
     String current_locale_language =
         LanguageFromLocale(String([current_locale.Get() localeIdentifier]));
@@ -87,7 +89,8 @@ LocaleMac::LocaleMac(NSLocale* locale)
     : locale_(locale),
       gregorian_calendar_(
           kAdoptNS,
-          [[NSCalendar alloc] initWithCalendarIdentifier:NSGregorianCalendar]),
+          [[NSCalendar alloc]
+              initWithCalendarIdentifier:NSCalendarIdentifierGregorian]),
       did_initialize_number_data_(false) {
   NSArray* available_languages = [NSLocale ISOLanguageCodes];
   // NSLocale returns a lower case NSLocaleLanguageCode so we don't have care
@@ -127,7 +130,7 @@ const Vector<String>& LocaleMac::MonthLabels() {
       month_labels_.push_back(String([array objectAtIndex:i]));
     return month_labels_;
   }
-  for (unsigned i = 0; i < arraysize(WTF::kMonthFullName); ++i)
+  for (unsigned i = 0; i < base::size(WTF::kMonthFullName); ++i)
     month_labels_.push_back(WTF::kMonthFullName[i]);
   return month_labels_;
 }
@@ -142,7 +145,7 @@ const Vector<String>& LocaleMac::WeekDayShortLabels() {
       week_day_short_labels_.push_back(String([array objectAtIndex:i]));
     return week_day_short_labels_;
   }
-  for (unsigned i = 0; i < arraysize(WTF::kWeekdayName); ++i) {
+  for (unsigned i = 0; i < base::size(WTF::kWeekdayName); ++i) {
     // weekdayName starts with Monday.
     week_day_short_labels_.push_back(WTF::kWeekdayName[(i + 6) % 7]);
   }
@@ -254,7 +257,7 @@ const Vector<String>& LocaleMac::ShortMonthLabels() {
       short_month_labels_.push_back([array objectAtIndex:i]);
     return short_month_labels_;
   }
-  for (unsigned i = 0; i < arraysize(WTF::kMonthName); ++i)
+  for (unsigned i = 0; i < base::size(WTF::kMonthName); ++i)
     short_month_labels_.push_back(WTF::kMonthName[i]);
   return short_month_labels_;
 }

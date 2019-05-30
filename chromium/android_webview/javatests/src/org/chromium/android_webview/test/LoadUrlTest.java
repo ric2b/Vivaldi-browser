@@ -25,7 +25,7 @@ import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.android_webview.test.util.JSUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Feature;
-import org.chromium.content.browser.test.util.HistoryUtils;
+import org.chromium.content_public.browser.test.util.HistoryUtils;
 import org.chromium.net.test.util.TestWebServer;
 
 import java.io.UnsupportedEncodingException;
@@ -331,8 +331,12 @@ public class LoadUrlTest {
         validateHeadersValue(awContents, contentsClient, extraHeaders, true);
 
         int currentCallCount = contentsClient.getOnPageFinishedHelper().getCallCount();
-        JSUtils.clickOnLinkUsingJs(InstrumentationRegistry.getInstrumentation(), awContents,
-                contentsClient.getOnEvaluateJavaScriptResultHelper(), "click");
+
+        // Using a user gesture for the redirect since the history intervention will not allow to
+        // go back to a page that does a redirect without any user interaction since the page
+        // loaded.
+        JSUtils.clickNodeWithUserGesture(testContainerView.getWebContents(), "click");
+
         contentsClient.getOnPageFinishedHelper().waitForCallback(
                 currentCallCount, 1, WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         // No extra headers for the page navigated via clicking.

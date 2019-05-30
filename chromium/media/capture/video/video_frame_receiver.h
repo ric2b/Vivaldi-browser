@@ -16,7 +16,7 @@ namespace media {
 // clients.
 class CAPTURE_EXPORT VideoFrameReceiver {
  public:
-  virtual ~VideoFrameReceiver(){};
+  virtual ~VideoFrameReceiver() {}
 
   // Tells the VideoFrameReceiver that the producer is going to subsequently use
   // the provided buffer as one of possibly many for frame delivery via
@@ -56,6 +56,7 @@ class CAPTURE_EXPORT VideoFrameReceiver {
   virtual void OnLog(const std::string& message) = 0;
   virtual void OnStarted() = 0;
   virtual void OnStartedUsingGpuDecode() = 0;
+  virtual void OnStopped() = 0;
 };
 
 }  // namespace media

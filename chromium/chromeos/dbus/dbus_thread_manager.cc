@@ -9,7 +9,7 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/threading/thread.h"
 #include "chromeos/dbus/arc_midis_client.h"
 #include "chromeos/dbus/arc_obb_mounter_client.h"
@@ -19,17 +19,16 @@
 #include "chromeos/dbus/cec_service_client.h"
 #include "chromeos/dbus/cicerone_client.h"
 #include "chromeos/dbus/concierge_client.h"
+#include "chromeos/dbus/constants/dbus_switches.h"
 #include "chromeos/dbus/cras_audio_client.h"
 #include "chromeos/dbus/cros_disks_client.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_client.h"
 #include "chromeos/dbus/dbus_clients_browser.h"
 #include "chromeos/dbus/dbus_clients_common.h"
-#include "chromeos/dbus/dbus_switches.h"
 #include "chromeos/dbus/debug_daemon_client.h"
 #include "chromeos/dbus/easy_unlock_client.h"
 #include "chromeos/dbus/gsm_sms_client.h"
-#include "chromeos/dbus/hammerd_client.h"
 #include "chromeos/dbus/image_burner_client.h"
 #include "chromeos/dbus/image_loader_client.h"
 #include "chromeos/dbus/lorgnette_manager_client.h"
@@ -37,7 +36,8 @@
 #include "chromeos/dbus/media_analytics_client.h"
 #include "chromeos/dbus/modem_messaging_client.h"
 #include "chromeos/dbus/permission_broker_client.h"
-#include "chromeos/dbus/power_manager_client.h"
+#include "chromeos/dbus/runtime_probe_client.h"
+#include "chromeos/dbus/seneschal_client.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/dbus/shill_device_client.h"
 #include "chromeos/dbus/shill_ipconfig_client.h"
@@ -47,7 +47,6 @@
 #include "chromeos/dbus/shill_third_party_vpn_driver_client.h"
 #include "chromeos/dbus/smb_provider_client.h"
 #include "chromeos/dbus/sms_client.h"
-#include "chromeos/dbus/system_clock_client.h"
 #include "chromeos/dbus/update_engine_client.h"
 #include "chromeos/dbus/upstart_client.h"
 #include "dbus/bus.h"
@@ -176,6 +175,11 @@ DebugDaemonClient* DBusThreadManager::GetDebugDaemonClient() {
                           : nullptr;
 }
 
+DiagnosticsdClient* DBusThreadManager::GetDiagnosticsdClient() {
+  return clients_browser_ ? clients_browser_->diagnosticsd_client_.get()
+                          : nullptr;
+}
+
 EasyUnlockClient* DBusThreadManager::GetEasyUnlockClient() {
   return clients_browser_ ? clients_browser_->easy_unlock_client_.get()
                           : nullptr;
@@ -208,10 +212,6 @@ DBusThreadManager::GetShillThirdPartyVpnDriverClient() {
 
 GsmSMSClient* DBusThreadManager::GetGsmSMSClient() {
   return clients_common_->gsm_sms_client_.get();
-}
-
-HammerdClient* DBusThreadManager::GetHammerdClient() {
-  return clients_common_->hammerd_client_.get();
 }
 
 ImageBurnerClient* DBusThreadManager::GetImageBurnerClient() {
@@ -250,12 +250,17 @@ PermissionBrokerClient* DBusThreadManager::GetPermissionBrokerClient() {
   return clients_common_->permission_broker_client_.get();
 }
 
-PowerManagerClient* DBusThreadManager::GetPowerManagerClient() {
-  return clients_common_->power_manager_client_.get();
-}
-
 SessionManagerClient* DBusThreadManager::GetSessionManagerClient() {
   return clients_common_->session_manager_client_.get();
+}
+
+RuntimeProbeClient* DBusThreadManager::GetRuntimeProbeClient() {
+  return clients_browser_ ? clients_browser_->runtime_probe_client_.get()
+                          : nullptr;
+}
+
+SeneschalClient* DBusThreadManager::GetSeneschalClient() {
+  return clients_browser_ ? clients_browser_->seneschal_client_.get() : nullptr;
 }
 
 SmbProviderClient* DBusThreadManager::GetSmbProviderClient() {
@@ -265,10 +270,6 @@ SmbProviderClient* DBusThreadManager::GetSmbProviderClient() {
 
 SMSClient* DBusThreadManager::GetSMSClient() {
   return clients_common_->sms_client_.get();
-}
-
-SystemClockClient* DBusThreadManager::GetSystemClockClient() {
-  return clients_common_->system_clock_client_.get();
 }
 
 UpdateEngineClient* DBusThreadManager::GetUpdateEngineClient() {
@@ -413,9 +414,15 @@ void DBusThreadManagerSetter::SetDebugDaemonClient(
       std::move(client);
 }
 
-void DBusThreadManagerSetter::SetHammerdClient(
-    std::unique_ptr<HammerdClient> client) {
-  DBusThreadManager::Get()->clients_common_->hammerd_client_ =
+void DBusThreadManagerSetter::SetRuntimeProbeClient(
+    std::unique_ptr<RuntimeProbeClient> client) {
+  DBusThreadManager::Get()->clients_browser_->runtime_probe_client_ =
+      std::move(client);
+}
+
+void DBusThreadManagerSetter::SetSeneschalClient(
+    std::unique_ptr<SeneschalClient> client) {
+  DBusThreadManager::Get()->clients_browser_->seneschal_client_ =
       std::move(client);
 }
 
@@ -480,12 +487,6 @@ void DBusThreadManagerSetter::SetPermissionBrokerClient(
       std::move(client);
 }
 
-void DBusThreadManagerSetter::SetPowerManagerClient(
-    std::unique_ptr<PowerManagerClient> client) {
-  DBusThreadManager::Get()->clients_common_->power_manager_client_ =
-      std::move(client);
-}
-
 void DBusThreadManagerSetter::SetSessionManagerClient(
     std::unique_ptr<SessionManagerClient> client) {
   DBusThreadManager::Get()->clients_common_->session_manager_client_ =
@@ -495,12 +496,6 @@ void DBusThreadManagerSetter::SetSessionManagerClient(
 void DBusThreadManagerSetter::SetSmbProviderClient(
     std::unique_ptr<SmbProviderClient> client) {
   DBusThreadManager::Get()->clients_browser_->smb_provider_client_ =
-      std::move(client);
-}
-
-void DBusThreadManagerSetter::SetSystemClockClient(
-    std::unique_ptr<SystemClockClient> client) {
-  DBusThreadManager::Get()->clients_common_->system_clock_client_ =
       std::move(client);
 }
 

@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "base/at_exit.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
@@ -12,7 +13,7 @@
 #include "base/task/task_scheduler/task_scheduler.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
-#include "chrome/browser/vr/base_compositor_delegate.h"
+#include "chrome/browser/vr/base_graphics_delegate.h"
 #include "chrome/browser/vr/testapp/gl_renderer.h"
 #include "chrome/browser/vr/testapp/vr_test_context.h"
 #include "third_party/skia/include/core/SkBitmap.h"

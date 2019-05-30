@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <functional>
 #include <set>
 #include <string>
 #include <utility>
@@ -14,9 +15,11 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
@@ -32,6 +35,8 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/variations/variations_associated_data.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
 #include "net/base/hash_value.h"
 #include "net/base/url_util.h"
@@ -39,6 +44,7 @@
 #include "net/http/http_transaction_factory.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/features.h"
 #include "url/gurl.h"
 
 namespace {
@@ -194,7 +200,7 @@ std::string GetKey(const net::X509Certificate& cert, int error) {
       base::StringPiece(reinterpret_cast<const char*>(fingerprint.data),
                         sizeof(fingerprint.data)),
       &base64_fingerprint);
-  return base::UintToString(error) + base64_fingerprint;
+  return base::NumberToString(error) + base64_fingerprint;
 }
 
 void MigrateOldSettings(HostContentSettingsMap* map) {
@@ -315,7 +321,7 @@ void ChromeSSLHostStateDelegate::Clear(
   HostContentSettingsMap::PatternSourcePredicate pattern_filter;
   if (!host_filter.is_null()) {
     pattern_filter =
-        base::Bind(&HostFilterToPatternFilter, base::ConstRef(host_filter));
+        base::Bind(&HostFilterToPatternFilter, std::cref(host_filter));
   }
 
   HostContentSettingsMapFactory::GetForProfile(profile_)
@@ -395,12 +401,12 @@ bool ChromeSSLHostStateDelegate::DidHostRunInsecureContent(
     const std::string& host,
     int child_id,
     InsecureContentType content_type) const {
+  auto entry = BrokenHostEntry(host, child_id);
   switch (content_type) {
     case MIXED_CONTENT:
-      return !!ran_mixed_content_hosts_.count(BrokenHostEntry(host, child_id));
+      return base::ContainsKey(ran_mixed_content_hosts_, entry);
     case CERT_ERRORS_CONTENT:
-      return !!ran_content_with_cert_errors_hosts_.count(
-          BrokenHostEntry(host, child_id));
+      return base::ContainsKey(ran_content_with_cert_errors_hosts_, entry);
   }
   NOTREACHED();
   return false;
@@ -464,6 +470,13 @@ bool ChromeSSLHostStateDelegate::HasAllowException(
 void ChromeSSLHostStateDelegate::RevokeUserAllowExceptionsHard(
     const std::string& host) {
   RevokeUserAllowExceptions(host);
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    auto* network_context =
+        content::BrowserContext::GetDefaultStoragePartition(profile_)
+            ->GetNetworkContext();
+    network_context->CloseIdleConnections(base::NullCallback());
+    return;
+  }
   scoped_refptr<net::URLRequestContextGetter> getter(
       profile_->GetRequestContext());
   getter->GetNetworkTaskRunner()->PostTask(
@@ -618,7 +631,7 @@ base::DictionaryValue* ChromeSSLHostStateDelegate::GetValidCertDecisionsDict(
     // values, only doubles. Since this mildly depends on precision, it is
     // better to store the value as a string.
     dict->SetString(kSSLCertDecisionExpirationTimeKey,
-                    base::Int64ToString(expiration_time.ToInternalValue()));
+                    base::NumberToString(expiration_time.ToInternalValue()));
   }
 
   // Extract the map of certificate fingerprints to errors from the setting.

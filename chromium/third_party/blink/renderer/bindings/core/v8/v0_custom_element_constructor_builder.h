@@ -31,6 +31,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_V0_CUSTOM_ELEMENT_CONSTRUCTOR_BUILDER_H_
 #define THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_V0_CUSTOM_ELEMENT_CONSTRUCTOR_BUILDER_H_
 
+#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_v0_custom_element_lifecycle_callbacks.h"
@@ -53,12 +54,11 @@ struct WrapperTypeInfo;
 // used in the implementation of those algorithms in
 // Document::registerElement.
 class V0CustomElementConstructorBuilder {
-  WTF_MAKE_NONCOPYABLE(V0CustomElementConstructorBuilder);
   STACK_ALLOCATED();
 
  public:
   V0CustomElementConstructorBuilder(ScriptState*,
-                                    const ElementRegistrationOptions&);
+                                    const ElementRegistrationOptions*);
 
   // The builder accumulates state and may run script at specific
   // points. These methods must be called in order. When one fails
@@ -85,10 +85,12 @@ class V0CustomElementConstructorBuilder {
   v8::MaybeLocal<v8::Function> RetrieveCallback(const char* name);
 
   Member<ScriptState> script_state_;
-  const ElementRegistrationOptions& options_;
+  Member<const ElementRegistrationOptions> options_;
   v8::Local<v8::Object> prototype_;
   v8::Local<v8::Function> constructor_;
   Member<V8V0CustomElementLifecycleCallbacks> callbacks_;
+
+  DISALLOW_COPY_AND_ASSIGN(V0CustomElementConstructorBuilder);
 };
 
 }  // namespace blink

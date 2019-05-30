@@ -21,9 +21,10 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/installable/installable_data.h"
-#include "chrome/browser/web_applications/extensions/bookmark_app_data_retriever.h"
-#include "chrome/browser/web_applications/extensions/bookmark_app_installer.h"
-#include "chrome/browser/web_applications/extensions/bookmark_app_shortcut_installation_task.h"
+#include "chrome/browser/web_applications/components/web_app_constants.h"
+#include "chrome/browser/web_applications/components/web_app_data_retriever.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_ids_map.h"
+#include "chrome/browser/web_applications/test/test_data_retriever.h"
 #include "chrome/common/web_application_info.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
@@ -38,7 +39,6 @@
 namespace extensions {
 
 using Result = BookmarkAppInstallationTask::Result;
-using ResultCode = BookmarkAppInstallationTask::ResultCode;
 
 namespace {
 
@@ -66,8 +66,8 @@ class TestBookmarkAppHelper : public BookmarkAppHelper {
   void CompleteInstallableCheck() {
     blink::Manifest manifest;
     InstallableData data = {
-        NO_MANIFEST, GURL(),  &manifest, GURL(), nullptr,
-        GURL(),      nullptr, false,     false,
+        NO_MANIFEST, GURL(), &manifest, GURL(), nullptr,
+        false,       GURL(), nullptr,   false,  false,
     };
     BookmarkAppHelper::OnDidPerformInstallableCheck(data);
   }
@@ -84,37 +84,6 @@ class TestBookmarkAppHelper : public BookmarkAppHelper {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TestBookmarkAppHelper);
-};
-
-// All BookmarkAppDataRetriever operations are async, so this class posts tasks
-// when running callbacks to simulate async behavior in tests as well.
-class TestDataRetriever : public BookmarkAppDataRetriever {
- public:
-  explicit TestDataRetriever(std::unique_ptr<WebApplicationInfo> web_app_info)
-      : web_app_info_(std::move(web_app_info)) {}
-
-  ~TestDataRetriever() override = default;
-
-  void GetWebApplicationInfo(content::WebContents* web_contents,
-                             GetWebApplicationInfoCallback callback) override {
-    DCHECK(web_contents);
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::BindOnce(std::move(callback), std::move(web_app_info_)));
-  }
-
-  void GetIcons(const GURL& app_url,
-                const std::vector<GURL>& icon_urls,
-                GetIconsCallback callback) override {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback),
-                                  std::vector<WebApplicationInfo::IconInfo>()));
-  }
-
- private:
-  std::unique_ptr<WebApplicationInfo> web_app_info_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestDataRetriever);
 };
 
 class BookmarkAppInstallationTaskTest : public ChromeRenderViewHostTestHarness {
@@ -144,8 +113,9 @@ class BookmarkAppInstallationTaskTest : public ChromeRenderViewHostTestHarness {
     WebApplicationInfo info;
     info.app_url = app_url;
     info.title = base::UTF8ToUTF16(kWebAppTitle);
-    task->SetDataRetrieverForTesting(std::make_unique<TestDataRetriever>(
-        std::make_unique<WebApplicationInfo>(std::move(info))));
+    task->SetDataRetrieverForTesting(
+        std::make_unique<web_app::TestDataRetriever>(
+            std::make_unique<WebApplicationInfo>(std::move(info))));
     task->SetBookmarkAppHelperFactoryForTesting(helper_factory());
   }
 
@@ -156,9 +126,14 @@ class BookmarkAppInstallationTaskTest : public ChromeRenderViewHostTestHarness {
   }
 
   bool app_installed() {
-    bool app_installed = app_installation_result_->code == ResultCode::kSuccess;
+    bool app_installed =
+        app_installation_result_->code == web_app::InstallResultCode::kSuccess;
     EXPECT_EQ(app_installed, app_installation_result_->app_id.has_value());
     return app_installed;
+  }
+
+  const std::string& app_id() {
+    return app_installation_result_->app_id.value();
   }
 
   TestBookmarkAppHelper& test_helper() { return *test_helper_; }
@@ -184,128 +159,18 @@ class BookmarkAppInstallationTaskTest : public ChromeRenderViewHostTestHarness {
   DISALLOW_COPY_AND_ASSIGN(BookmarkAppInstallationTaskTest);
 };
 
-class TestInstaller : public BookmarkAppInstaller {
- public:
-  explicit TestInstaller(Profile* profile, bool succeeds)
-      : BookmarkAppInstaller(profile), succeeds_(succeeds) {}
-
-  ~TestInstaller() override = default;
-
-  void Install(const WebApplicationInfo& web_app_info,
-               ResultCallback callback) override {
-    web_app_info_ = web_app_info;
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback),
-                                  succeeds_ ? "12345" : std::string()));
-  }
-
-  const WebApplicationInfo& web_app_info() { return web_app_info_.value(); }
-
- private:
-  const bool succeeds_;
-  base::Optional<WebApplicationInfo> web_app_info_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestInstaller);
-};
-
-TEST_F(BookmarkAppInstallationTaskTest, ShortcutFromContents_Delete) {
-  auto task = std::make_unique<BookmarkAppShortcutInstallationTask>(profile());
-  task->SetDataRetrieverForTesting(
-      std::make_unique<TestDataRetriever>(nullptr));
-
-  base::RunLoop run_loop;
-  task->InstallFromWebContents(
-      web_contents(),
-      base::BindOnce(&BookmarkAppInstallationTaskTest::OnInstallationTaskResult,
-                     base::Unretained(this), run_loop.QuitClosure()));
-  task.reset();
-  run_loop.RunUntilIdle();
-
-  // Shouldn't crash.
-}
-
-TEST_F(BookmarkAppInstallationTaskTest, ShortcutFromContents_NoWebAppInfo) {
-  auto task = std::make_unique<BookmarkAppShortcutInstallationTask>(profile());
-  task->SetDataRetrieverForTesting(
-      std::make_unique<TestDataRetriever>(nullptr));
-
-  base::RunLoop run_loop;
-  task->InstallFromWebContents(
-      web_contents(),
-      base::BindOnce(&BookmarkAppInstallationTaskTest::OnInstallationTaskResult,
-                     base::Unretained(this), run_loop.QuitClosure()));
-  run_loop.Run();
-
-  EXPECT_FALSE(app_installed());
-  EXPECT_EQ(
-      BookmarkAppInstallationTask::ResultCode::kGetWebApplicationInfoFailed,
-      app_installation_result().code);
-}
-
-TEST_F(BookmarkAppInstallationTaskTest, ShortcutFromContents_NoManifest) {
-  auto task = std::make_unique<BookmarkAppShortcutInstallationTask>(profile());
-
-  WebApplicationInfo info;
-  info.app_url = GURL(kWebAppUrl);
-  info.title = base::UTF8ToUTF16(kWebAppTitle);
-  task->SetDataRetrieverForTesting(std::make_unique<TestDataRetriever>(
-      std::make_unique<WebApplicationInfo>(std::move(info))));
-
-  auto installer =
-      std::make_unique<TestInstaller>(profile(), true /* succeeds */);
-  auto* installer_ptr = installer.get();
-  task->SetInstallerForTesting(std::move(installer));
-
-  base::RunLoop run_loop;
-  task->InstallFromWebContents(
-      web_contents(),
-      base::BindOnce(&BookmarkAppInstallationTaskTest::OnInstallationTaskResult,
-                     base::Unretained(this), run_loop.QuitClosure()));
-  run_loop.Run();
-
-  EXPECT_TRUE(app_installed());
-
-  const auto& installed_info = installer_ptr->web_app_info();
-  EXPECT_EQ(info.app_url, installed_info.app_url);
-  EXPECT_EQ(info.title, installed_info.title);
-}
-
-TEST_F(BookmarkAppInstallationTaskTest,
-       ShortcutFromContents_InstallationFails) {
-  auto task = std::make_unique<BookmarkAppShortcutInstallationTask>(profile());
-
-  WebApplicationInfo info;
-  info.app_url = GURL(kWebAppUrl);
-  info.title = base::UTF8ToUTF16(kWebAppTitle);
-  task->SetDataRetrieverForTesting(std::make_unique<TestDataRetriever>(
-      std::make_unique<WebApplicationInfo>(std::move(info))));
-  task->SetInstallerForTesting(
-      std::make_unique<TestInstaller>(profile(), false /* succeeds */));
-
-  base::RunLoop run_loop;
-  task->InstallFromWebContents(
-      web_contents(),
-      base::BindOnce(&BookmarkAppInstallationTaskTest::OnInstallationTaskResult,
-                     base::Unretained(this), run_loop.QuitClosure()));
-  run_loop.Run();
-
-  EXPECT_FALSE(app_installed());
-  EXPECT_EQ(BookmarkAppInstallationTask::ResultCode::kInstallationFailed,
-            app_installation_result().code);
-}
-
 TEST_F(BookmarkAppInstallationTaskTest,
        WebAppOrShortcutFromContents_InstallationSucceeds) {
   const GURL app_url(kWebAppUrl);
 
   auto task = std::make_unique<BookmarkAppInstallationTask>(
-      profile(),
-      web_app::PendingAppManager::AppInfo::Create(
-          app_url, web_app::PendingAppManager::LaunchContainer::kDefault));
+      profile(), web_app::PendingAppManager::AppInfo(
+                     app_url, web_app::LaunchContainer::kDefault,
+                     web_app::InstallSource::kInternal));
 
   SetTestingFactories(task.get(), app_url);
 
-  task->InstallWebAppOrShortcutFromWebContents(
+  task->Install(
       web_contents(),
       base::BindOnce(&BookmarkAppInstallationTaskTest::OnInstallationTaskResult,
                      base::Unretained(this), base::DoNothing().Once()));
@@ -317,10 +182,16 @@ TEST_F(BookmarkAppInstallationTaskTest,
   test_helper().CompleteIconDownload();
   content::RunAllTasksUntilIdle();
 
+  base::Optional<std::string> id =
+      web_app::ExtensionIdsMap(profile()->GetPrefs())
+          .LookupExtensionId(app_url);
+
   EXPECT_TRUE(app_installed());
+  EXPECT_EQ(app_id(), id.value());
+
   EXPECT_TRUE(test_helper().create_shortcuts());
   EXPECT_FALSE(test_helper().forced_launch_type().has_value());
-  EXPECT_FALSE(test_helper().is_default_app());
+  EXPECT_TRUE(test_helper().is_default_app());
   EXPECT_FALSE(test_helper().is_policy_installed_app());
 }
 
@@ -329,13 +200,13 @@ TEST_F(BookmarkAppInstallationTaskTest,
   const GURL app_url(kWebAppUrl);
 
   auto task = std::make_unique<BookmarkAppInstallationTask>(
-      profile(),
-      web_app::PendingAppManager::AppInfo::Create(
-          app_url, web_app::PendingAppManager::LaunchContainer::kWindow));
+      profile(), web_app::PendingAppManager::AppInfo(
+                     app_url, web_app::LaunchContainer::kWindow,
+                     web_app::InstallSource::kInternal));
 
   SetTestingFactories(task.get(), app_url);
 
-  task->InstallWebAppOrShortcutFromWebContents(
+  task->Install(
       web_contents(),
       base::BindOnce(&BookmarkAppInstallationTaskTest::OnInstallationTaskResult,
                      base::Unretained(this), base::DoNothing().Once()));
@@ -347,22 +218,28 @@ TEST_F(BookmarkAppInstallationTaskTest,
   test_helper().FailIconDownload();
   content::RunAllTasksUntilIdle();
 
+  base::Optional<std::string> id =
+      web_app::ExtensionIdsMap(profile()->GetPrefs())
+          .LookupExtensionId(app_url);
+
   EXPECT_FALSE(app_installed());
+  EXPECT_FALSE(id.has_value());
 }
 
 TEST_F(BookmarkAppInstallationTaskTest,
        WebAppOrShortcutFromContents_NoShortcuts) {
   const GURL app_url(kWebAppUrl);
 
-  auto app_info = web_app::PendingAppManager::AppInfo::Create(
-      app_url, web_app::PendingAppManager::LaunchContainer::kWindow,
-      false /* create_shortcuts */);
+  web_app::PendingAppManager::AppInfo app_info(
+      app_url, web_app::LaunchContainer::kWindow,
+      web_app::InstallSource::kInternal);
+  app_info.create_shortcuts = false;
   auto task = std::make_unique<BookmarkAppInstallationTask>(
       profile(), std::move(app_info));
 
   SetTestingFactories(task.get(), app_url);
 
-  task->InstallWebAppOrShortcutFromWebContents(
+  task->Install(
       web_contents(),
       base::BindOnce(&BookmarkAppInstallationTaskTest::OnInstallationTaskResult,
                      base::Unretained(this), base::DoNothing().Once()));
@@ -379,13 +256,14 @@ TEST_F(BookmarkAppInstallationTaskTest,
        WebAppOrShortcutFromContents_ForcedContainerWindow) {
   const GURL app_url(kWebAppUrl);
 
-  auto app_info = web_app::PendingAppManager::AppInfo::Create(
-      app_url, web_app::PendingAppManager::LaunchContainer::kWindow);
+  auto app_info = web_app::PendingAppManager::AppInfo(
+      app_url, web_app::LaunchContainer::kWindow,
+      web_app::InstallSource::kInternal);
   auto task = std::make_unique<BookmarkAppInstallationTask>(
       profile(), std::move(app_info));
   SetTestingFactories(task.get(), app_url);
 
-  task->InstallWebAppOrShortcutFromWebContents(
+  task->Install(
       web_contents(),
       base::BindOnce(&BookmarkAppInstallationTaskTest::OnInstallationTaskResult,
                      base::Unretained(this), base::DoNothing().Once()));
@@ -401,13 +279,14 @@ TEST_F(BookmarkAppInstallationTaskTest,
        WebAppOrShortcutFromContents_ForcedContainerTab) {
   const GURL app_url(kWebAppUrl);
 
-  auto app_info = web_app::PendingAppManager::AppInfo::Create(
-      app_url, web_app::PendingAppManager::LaunchContainer::kTab);
+  auto app_info = web_app::PendingAppManager::AppInfo(
+      app_url, web_app::LaunchContainer::kTab,
+      web_app::InstallSource::kInternal);
   auto task = std::make_unique<BookmarkAppInstallationTask>(
       profile(), std::move(app_info));
   SetTestingFactories(task.get(), app_url);
 
-  task->InstallWebAppOrShortcutFromWebContents(
+  task->Install(
       web_contents(),
       base::BindOnce(&BookmarkAppInstallationTaskTest::OnInstallationTaskResult,
                      base::Unretained(this), base::DoNothing().Once()));
@@ -423,13 +302,14 @@ TEST_F(BookmarkAppInstallationTaskTest,
        WebAppOrShortcutFromContents_DefaultApp) {
   const GURL app_url(kWebAppUrl);
 
-  auto app_info = web_app::PendingAppManager::AppInfo::CreateForDefaultApp(
-      app_url, web_app::PendingAppManager::LaunchContainer::kDefault);
+  auto app_info = web_app::PendingAppManager::AppInfo(
+      app_url, web_app::LaunchContainer::kDefault,
+      web_app::InstallSource::kInternal);
   auto task = std::make_unique<BookmarkAppInstallationTask>(
       profile(), std::move(app_info));
   SetTestingFactories(task.get(), app_url);
 
-  task->InstallWebAppOrShortcutFromWebContents(
+  task->Install(
       web_contents(),
       base::BindOnce(&BookmarkAppInstallationTaskTest::OnInstallationTaskResult,
                      base::Unretained(this), base::DoNothing().Once()));
@@ -445,13 +325,14 @@ TEST_F(BookmarkAppInstallationTaskTest,
        WebAppOrShortcutFromContents_AppFromPolicy) {
   const GURL app_url(kWebAppUrl);
 
-  auto app_info = web_app::PendingAppManager::AppInfo::CreateForPolicy(
-      app_url, web_app::PendingAppManager::LaunchContainer::kDefault);
+  auto app_info = web_app::PendingAppManager::AppInfo(
+      app_url, web_app::LaunchContainer::kDefault,
+      web_app::InstallSource::kExternalPolicy);
   auto task = std::make_unique<BookmarkAppInstallationTask>(
       profile(), std::move(app_info));
   SetTestingFactories(task.get(), app_url);
 
-  task->InstallWebAppOrShortcutFromWebContents(
+  task->Install(
       web_contents(),
       base::BindOnce(&BookmarkAppInstallationTaskTest::OnInstallationTaskResult,
                      base::Unretained(this), base::DoNothing().Once()));

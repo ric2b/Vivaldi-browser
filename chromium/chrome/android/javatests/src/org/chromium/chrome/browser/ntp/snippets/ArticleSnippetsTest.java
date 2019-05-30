@@ -18,6 +18,7 @@ import android.util.TypedValue;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -28,17 +29,19 @@ import org.junit.runner.RunWith;
 import org.chromium.base.Callback;
 import org.chromium.base.DiscardableReferencePool;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.favicon.IconType;
 import org.chromium.chrome.browser.favicon.LargeIconBridge;
-import org.chromium.chrome.browser.ntp.ContextMenuManager;
-import org.chromium.chrome.browser.ntp.cards.NewTabPageViewHolder;
-import org.chromium.chrome.browser.ntp.cards.SignInPromo;
+import org.chromium.chrome.browser.native_page.ContextMenuManager;
+import org.chromium.chrome.browser.ntp.NewTabPage;
+import org.chromium.chrome.browser.ntp.cards.PersonalizedPromoViewHolder;
 import org.chromium.chrome.browser.ntp.cards.SuggestionsCategoryInfo;
 import org.chromium.chrome.browser.signin.DisplayableProfileData;
 import org.chromium.chrome.browser.signin.SigninAccessPoint;
@@ -61,10 +64,12 @@ import org.chromium.chrome.browser.widget.displaystyle.VerticalDisplayStyle;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.RenderTestRule;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.compositor.layouts.DisableChromeAnimations;
 import org.chromium.chrome.test.util.browser.suggestions.DummySuggestionsEventReporter;
 import org.chromium.chrome.test.util.browser.suggestions.FakeSuggestionsSource;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.net.NetworkChangeNotifier;
 
 import java.io.IOException;
@@ -99,7 +104,7 @@ public class ArticleSnippetsTest {
     private ContextMenuManager mContextMenuManager;
     private FrameLayout mContentView;
     private SnippetArticleViewHolder mSuggestion;
-    private NewTabPageViewHolder mSigninPromo;
+    private PersonalizedPromoViewHolder mSigninPromo;
 
     private UiConfig mUiConfig;
 
@@ -136,12 +141,18 @@ public class ArticleSnippetsTest {
 
             mRecyclerView = new SuggestionsRecyclerView(activity);
             mContextMenuManager = new ContextMenuManager(mUiDelegate.getNavigationDelegate(),
-                    mRecyclerView::setTouchEnabled, activity::closeContextMenu, false);
+                    mRecyclerView::setTouchEnabled, activity::closeContextMenu,
+                    NewTabPage.CONTEXT_MENU_USER_ACTION_PREFIX);
             mRecyclerView.init(mUiConfig, mContextMenuManager);
 
             mSuggestion = new SnippetArticleViewHolder(mRecyclerView, mContextMenuManager,
                     mUiDelegate, mUiConfig, /* offlinePageBridge = */ null);
         });
+    }
+
+    @After
+    public void tearDown() {
+        if (mSigninPromo != null) mSigninPromo.setSigninPromoControllerForTests(null);
     }
 
     @Test
@@ -321,6 +332,8 @@ public class ArticleSnippetsTest {
     @Test
     @MediumTest
     @Feature({"ArticleSnippets", "RenderTest"})
+    // TODO(https://crbug.com/936986): Add goldens for UnifiedConsent promos.
+    @DisableFeatures(ChromeFeatureList.UNIFIED_CONSENT)
     public void testPersonalizedSigninPromosNoAccounts() throws IOException {
         ThreadUtils.runOnUiThreadBlocking(() -> {
             createPersonalizedSigninPromo(null);
@@ -332,6 +345,8 @@ public class ArticleSnippetsTest {
     @Test
     @MediumTest
     @Feature({"ArticleSnippets", "RenderTest"})
+    // TODO(https://crbug.com/936986): Add goldens for UnifiedConsent promos.
+    @DisableFeatures(ChromeFeatureList.UNIFIED_CONSENT)
     public void testPersonalizedSigninPromosWithAccount() throws IOException {
         ThreadUtils.runOnUiThreadBlocking(() -> {
             createPersonalizedSigninPromo(getTestProfileData());
@@ -343,10 +358,9 @@ public class ArticleSnippetsTest {
     private void createPersonalizedSigninPromo(@Nullable DisplayableProfileData profileData) {
         SigninPromoController signinPromoController =
                 new SigninPromoController(SigninAccessPoint.NTP_CONTENT_SUGGESTIONS);
-        mSigninPromo = new SignInPromo.PersonalizedPromoViewHolder(
-                mRecyclerView, mUiConfig, null, null, signinPromoController);
-        ((SignInPromo.PersonalizedPromoViewHolder) mSigninPromo)
-                .bindAndConfigureViewForTests(profileData);
+        mSigninPromo = new PersonalizedPromoViewHolder(mRecyclerView, null, mUiConfig);
+        mSigninPromo.setSigninPromoControllerForTests(signinPromoController);
+        mSigninPromo.bindAndConfigureViewForTests(profileData);
     }
 
     private DisplayableProfileData getTestProfileData() {
@@ -479,14 +493,14 @@ public class ArticleSnippetsTest {
     private class MockImageFetcher extends ImageFetcher {
         public MockImageFetcher(
                 SuggestionsSource suggestionsSource, DiscardableReferencePool referencePool) {
-            super(suggestionsSource, null, referencePool, null);
+            super(suggestionsSource, null, referencePool);
         }
 
         @Override
-        public void makeFaviconRequest(SnippetArticle suggestion, final int faviconSizePx,
-                final Callback<Bitmap> faviconCallback) {
+        public void makeFaviconRequest(
+                SnippetArticle suggestion, final Callback<Bitmap> faviconCallback) {
             // Run the callback asynchronously in case the caller made that assumption.
-            ThreadUtils.postOnUiThread(() -> {
+            PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
                 // Return an arbitrary drawable.
                 faviconCallback.onResult(getBitmap(R.drawable.star_green));
             });
@@ -496,7 +510,7 @@ public class ArticleSnippetsTest {
         public void makeLargeIconRequest(final String url, final int largeIconSizePx,
                 final LargeIconBridge.LargeIconCallback callback) {
             // Run the callback asynchronously in case the caller made that assumption.
-            ThreadUtils.postOnUiThread(() -> {
+            PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
                 // Return an arbitrary drawable.
                 callback.onLargeIconAvailable(
                         getBitmap(R.drawable.star_green), largeIconSizePx, true, IconType.INVALID);

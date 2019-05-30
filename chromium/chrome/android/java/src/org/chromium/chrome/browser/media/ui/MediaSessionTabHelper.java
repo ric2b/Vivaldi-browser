@@ -10,12 +10,12 @@ import android.graphics.Bitmap;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
+import android.support.annotation.Nullable;
 import android.text.TextUtils;
 
 import org.chromium.base.Log;
 import org.chromium.base.SysUtils;
 import org.chromium.base.VisibleForTesting;
-import org.chromium.blink.mojom.MediaSessionAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.favicon.LargeIconBridge;
 import org.chromium.chrome.browser.metrics.MediaNotificationUma;
@@ -23,18 +23,22 @@ import org.chromium.chrome.browser.metrics.MediaSessionUMA;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
+import org.chromium.chrome.browser.tabmodel.TabSelectionType;
+import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.MediaSession;
 import org.chromium.content_public.browser.MediaSessionObserver;
+import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.common.MediaMetadata;
+import org.chromium.media_session.mojom.MediaSessionAction;
+import org.chromium.services.media_session.MediaImage;
+import org.chromium.services.media_session.MediaMetadata;
 import org.chromium.ui.base.WindowAndroid;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.List;
 import java.util.Set;
-
-import javax.annotation.Nullable;
 
 /**
  * A tab helper responsible for enabling/disabling media controls and passing
@@ -94,15 +98,9 @@ public class MediaSessionTabHelper implements MediaImageCallback {
             MediaSessionUMA.recordPlay(
                     MediaSessionTabHelper.convertMediaActionSourceToUMA(actionSource));
 
-            if (mMediaSessionObserver.getMediaSession() != null) {
-                if (mMediaSessionActions != null
-                        && mMediaSessionActions.contains(MediaSessionAction.PLAY)) {
-                    mMediaSessionObserver.getMediaSession()
-                            .didReceiveAction(MediaSessionAction.PLAY);
-                } else {
-                    mMediaSessionObserver.getMediaSession().resume();
-                }
-            }
+            if (mMediaSessionObserver.getMediaSession() == null) return;
+
+            mMediaSessionObserver.getMediaSession().resume();
         }
 
         @Override
@@ -112,15 +110,9 @@ public class MediaSessionTabHelper implements MediaImageCallback {
             MediaSessionUMA.recordPause(
                     MediaSessionTabHelper.convertMediaActionSourceToUMA(actionSource));
 
-            if (mMediaSessionObserver.getMediaSession() != null) {
-                if (mMediaSessionActions != null
-                        && mMediaSessionActions.contains(MediaSessionAction.PAUSE)) {
-                    mMediaSessionObserver.getMediaSession()
-                            .didReceiveAction(MediaSessionAction.PAUSE);
-                } else {
-                    mMediaSessionObserver.getMediaSession().suspend();
-                }
-            }
+            if (mMediaSessionObserver.getMediaSession() == null) return;
+
+            mMediaSessionObserver.getMediaSession().suspend();
         }
 
         @Override
@@ -208,7 +200,7 @@ public class MediaSessionTabHelper implements MediaImageCallback {
                     return;
                 }
 
-                Intent contentIntent = Tab.createBringTabToFrontIntent(mTab.getId());
+                Intent contentIntent = IntentUtils.createBringTabToFrontIntent(mTab.getId());
                 if (contentIntent != null) {
                     contentIntent.putExtra(MediaNotificationUma.INTENT_EXTRA_NAME,
                             MediaNotificationUma.Source.MEDIA);
@@ -239,7 +231,8 @@ public class MediaSessionTabHelper implements MediaImageCallback {
                 // since we do not need to show default icon then change it to favicon. It is ok to
                 // wait here since the favicon is loaded from local cache in favicon service sql
                 // database.
-                if (mCurrentMediaImage == null && !fetchFaviconImage()) {
+                // Incognito Tabs need the default icon as they don't show the media icon.
+                if (mTab.isIncognito() || (mCurrentMediaImage == null && !fetchFaviconImage())) {
                     mNotificationInfoBuilder.setDefaultNotificationLargeIcon(
                             R.drawable.audio_playing_square);
                 }
@@ -253,9 +246,6 @@ public class MediaSessionTabHelper implements MediaImageCallback {
             @Override
             public void mediaSessionMetadataChanged(MediaMetadata metadata) {
                 mPageMetadata = metadata;
-                mMediaImageManager.downloadImage(
-                        (mPageMetadata != null) ? mPageMetadata.getArtwork() : null,
-                        MediaSessionTabHelper.this);
                 updateNotificationMetadata();
             }
 
@@ -263,6 +253,12 @@ public class MediaSessionTabHelper implements MediaImageCallback {
             public void mediaSessionActionsChanged(Set<Integer> actions) {
                 mMediaSessionActions = actions;
                 updateNotificationActions();
+            }
+
+            @Override
+            public void mediaSessionArtworkChanged(List<MediaImage> images) {
+                mMediaImageManager.downloadImage(images, MediaSessionTabHelper.this);
+                updateNotificationMetadata();
             }
         };
     }
@@ -303,13 +299,12 @@ public class MediaSessionTabHelper implements MediaImageCallback {
         }
 
         @Override
-        public void onDidFinishNavigation(Tab tab, String url, boolean isInMainFrame,
-                boolean isErrorPage, boolean hasCommitted, boolean isSameDocument,
-                boolean isFragmentNavigation, Integer pageTransition, int errorCode,
-                int httpStatusCode) {
+        public void onDidFinishNavigation(Tab tab, NavigationHandle navigation) {
             assert tab == mTab;
 
-            if (!hasCommitted || !isInMainFrame || isSameDocument) return;
+            if (!navigation.hasCommitted() || !navigation.isInMainFrame()
+                    || navigation.isSameDocument())
+                return;
 
             String origin = mTab.getUrl();
             try {
@@ -355,7 +350,7 @@ public class MediaSessionTabHelper implements MediaImageCallback {
         }
 
         @Override
-        public void onShown(Tab tab) {
+        public void onShown(Tab tab, @TabSelectionType int type) {
             assert tab == mTab;
             MediaNotificationManager.activateAndroidMediaSession(
                     tab.getId(), R.id.media_playback_notification);

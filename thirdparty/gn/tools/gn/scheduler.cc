@@ -123,6 +123,16 @@ bool Scheduler::IsFileGeneratedByWriteRuntimeDeps(
   return false;
 }
 
+void Scheduler::AddGeneratedFile(const SourceFile& entry) {
+  std::lock_guard<std::mutex> lock(lock_);
+  generated_files_.insert(std::make_pair(entry, true));
+}
+
+bool Scheduler::IsFileGeneratedByTarget(const SourceFile& file) const {
+  std::lock_guard<std::mutex> lock(lock_);
+  return generated_files_.find(file) != generated_files_.end();
+}
+
 std::multimap<SourceFile, const Target*> Scheduler::GetUnknownGeneratedInputs()
     const {
   std::lock_guard<std::mutex> lock(lock_);

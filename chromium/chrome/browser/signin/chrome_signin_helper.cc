@@ -14,6 +14,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -25,8 +26,8 @@
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/dice_response_handler.h"
 #include "chrome/browser/signin/dice_tab_helper.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/process_dice_header_delegate_impl.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -34,11 +35,12 @@
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/url_constants.h"
+#include "components/signin/core/browser/account_consistency_method.h"
 #include "components/signin/core/browser/account_reconcilor.h"
 #include "components/signin/core/browser/chrome_connected_header_helper.h"
-#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/signin_buildflags.h"
 #include "components/signin/core/browser/signin_header_helper.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/web_contents.h"
@@ -49,6 +51,7 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/signin/account_management_screen_helper.h"
+#include "ui/android/view_android.h"
 #else
 #include "chrome/browser/ui/browser_commands.h"
 #include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
@@ -56,7 +59,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #endif
 
 namespace signin {
@@ -165,6 +168,7 @@ void ProcessMirrorHeaderUIThread(
     ManageAccountsParams manage_accounts_params,
     const content::ResourceRequestInfo::WebContentsGetter&
         web_contents_getter) {
+#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   GAIAServiceType service_type = manage_accounts_params.service_type;
@@ -182,13 +186,13 @@ void ProcessMirrorHeaderUIThread(
   AccountReconcilor* account_reconcilor =
       AccountReconcilorFactory::GetForProfile(profile);
   account_reconcilor->OnReceivedManageAccountsResponse(service_type);
-#if !defined(OS_ANDROID)
+#if defined(OS_CHROMEOS)
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
   if (browser) {
     BrowserWindow::AvatarBubbleMode bubble_mode;
     switch (service_type) {
       case GAIA_SERVICE_TYPE_INCOGNITO:
-        chrome::NewIncognitoWindow(browser);
+        chrome::NewIncognitoWindow(profile);
         return;
       case GAIA_SERVICE_TYPE_ADDSESSION:
         bubble_mode = BrowserWindow::AVATAR_BUBBLE_MODE_ADD_ACCOUNT;
@@ -202,7 +206,6 @@ void ProcessMirrorHeaderUIThread(
     signin_metrics::LogAccountReconcilorStateOnGaiaResponse(
         account_reconcilor->GetState());
 
-#if defined(OS_CHROMEOS)
     if (chromeos::switches::IsAccountManagerEnabled()) {
       // Chrome OS Account Manager is available. The only allowed operations
       // are:
@@ -221,13 +224,8 @@ void ProcessMirrorHeaderUIThread(
     // consistency is enforced and adding/removing accounts is not allowed,
     // GAIA_SERVICE_TYPE_INCOGNITO may be allowed though.
     return;
-#endif
-
-    browser->window()->ShowAvatarBubbleFromAvatarButton(
-        bubble_mode, manage_accounts_params,
-        signin_metrics::AccessPoint::ACCESS_POINT_CONTENT_AREA, false);
   }
-#else   // defined(OS_ANDROID)
+#else   // !defined(OS_CHROMEOS)
   if (service_type == signin::GAIA_SERVICE_TYPE_INCOGNITO) {
     GURL url(manage_accounts_params.continue_url.empty()
                  ? chrome::kChromeUINativeNewTabURL
@@ -238,10 +236,12 @@ void ProcessMirrorHeaderUIThread(
   } else {
     signin_metrics::LogAccountReconcilorStateOnGaiaResponse(
         account_reconcilor->GetState());
-    AccountManagementScreenHelper::OpenAccountManagementScreen(profile,
+    auto* window = web_contents->GetNativeView()->GetWindowAndroid();
+    AccountManagementScreenHelper::OpenAccountManagementScreen(window,
                                                                service_type);
   }
-#endif  // !defined(OS_ANDROID)
+#endif  // defined(OS_CHROMEOS)
+#endif  // defined(OS_CHROMEOS) || defined(OS_ANDROID)
 }
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
@@ -304,6 +304,9 @@ void ProcessDiceHeaderUIThread(
   signin_metrics::PromoAction promo_action =
       signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO;
   signin_metrics::Reason reason = signin_metrics::Reason::REASON_UNKNOWN_REASON;
+  // This is the URL that the browser specified to redirect to after the user
+  // signs in. Not to be confused with the redirect header from GAIA response.
+  GURL redirect_after_signin_url = GURL::EmptyGURL();
 
   bool is_sync_signin_tab = false;
   DiceTabHelper* tab_helper = DiceTabHelper::FromWebContents(web_contents);
@@ -312,6 +315,7 @@ void ProcessDiceHeaderUIThread(
     access_point = tab_helper->signin_access_point();
     promo_action = tab_helper->signin_promo_action();
     reason = tab_helper->signin_reason();
+    redirect_after_signin_url = tab_helper->redirect_url();
   }
 
   DiceResponseHandler* dice_response_handler =
@@ -320,10 +324,11 @@ void ProcessDiceHeaderUIThread(
       dice_params,
       std::make_unique<ProcessDiceHeaderDelegateImpl>(
           web_contents, account_consistency,
-          SigninManagerFactory::GetForProfile(profile), is_sync_signin_tab,
+          IdentityManagerFactory::GetForProfile(profile), is_sync_signin_tab,
           base::BindOnce(&CreateDiceTurnOnSyncHelper, base::Unretained(profile),
                          access_point, promo_action, reason),
-          base::BindOnce(&ShowDiceSigninError, base::Unretained(profile))));
+          base::BindOnce(&ShowDiceSigninError, base::Unretained(profile)),
+          redirect_after_signin_url));
 }
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
@@ -362,10 +367,9 @@ void ProcessMirrorResponseHeaderIfExists(ResponseAdapter* response,
   if (params.service_type == GAIA_SERVICE_TYPE_NONE)
     return;
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
-      base::BindOnce(ProcessMirrorHeaderUIThread, params,
-                     response->GetWebContentsGetter()));
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                           base::BindOnce(ProcessMirrorHeaderUIThread, params,
+                                          response->GetWebContentsGetter()));
 }
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
@@ -401,10 +405,10 @@ void ProcessDiceResponseHeaderIfExists(ResponseAdapter* response,
   if (params.user_intention == DiceAction::NONE)
     return;
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
-      base::Bind(ProcessDiceHeaderUIThread, base::Passed(std::move(params)),
-                 response->GetWebContentsGetter()));
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
+      base::BindOnce(ProcessDiceHeaderUIThread, std::move(params),
+                     response->GetWebContentsGetter()));
 }
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
@@ -421,12 +425,12 @@ bool ChromeRequestAdapter::IsMainRequestContext(ProfileIOData* io_data) {
 
 content::ResourceRequestInfo::WebContentsGetter
 ChromeRequestAdapter::GetWebContentsGetter() const {
-  const auto* info = content::ResourceRequestInfo::ForRequest(request_);
+  auto* info = content::ResourceRequestInfo::ForRequest(request_);
   return info->GetWebContentsGetterForRequest();
 }
 
 content::ResourceType ChromeRequestAdapter::GetResourceType() const {
-  const auto* info = content::ResourceRequestInfo::ForRequest(request_);
+  auto* info = content::ResourceRequestInfo::ForRequest(request_);
   return info->GetResourceType();
 }
 
@@ -450,12 +454,12 @@ ResponseAdapter::~ResponseAdapter() = default;
 
 content::ResourceRequestInfo::WebContentsGetter
 ResponseAdapter::GetWebContentsGetter() const {
-  const auto* info = content::ResourceRequestInfo::ForRequest(request_);
+  auto* info = content::ResourceRequestInfo::ForRequest(request_);
   return info->GetWebContentsGetterForRequest();
 }
 
 bool ResponseAdapter::IsMainFrame() const {
-  const auto* info = content::ResourceRequestInfo::ForRequest(request_);
+  auto* info = content::ResourceRequestInfo::ForRequest(request_);
   return info && (info->GetResourceType() == content::RESOURCE_TYPE_MAIN_FRAME);
 }
 
@@ -517,16 +521,16 @@ void FixAccountConsistencyRequestHeader(ChromeRequestAdapter* request,
   // Dice header:
   bool dice_header_added = AppendOrRemoveDiceRequestHeader(
       request, redirect_url, account_id, io_data->IsSyncEnabled(),
-      io_data->SyncHasAuthError(), account_consistency,
-      io_data->GetCookieSettings(), io_data->GetSigninScopedDeviceId());
+      account_consistency, io_data->GetCookieSettings(),
+      io_data->GetSigninScopedDeviceId());
 
   // Block the AccountReconcilor while the Dice requests are in flight. This
   // allows the DiceReponseHandler to process the response before the reconcilor
   // starts.
   if (dice_header_added && ShouldBlockReconcilorForRequest(request)) {
     auto lock_wrapper = base::MakeRefCounted<AccountReconcilorLockWrapper>();
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::UI},
         base::BindOnce(&AccountReconcilorLockWrapper::CreateLockOnUI,
                        lock_wrapper, request->GetWebContentsGetter()));
 

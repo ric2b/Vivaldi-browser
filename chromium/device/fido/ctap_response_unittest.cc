@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/cbor/cbor_reader.h"
-#include "components/cbor/cbor_values.h"
-#include "components/cbor/cbor_writer.h"
+#include <algorithm>
+
+#include "base/stl_util.h"
+#include "components/cbor/reader.h"
+#include "components/cbor/values.h"
+#include "components/cbor/writer.h"
 #include "device/fido/attestation_statement_formats.h"
 #include "device/fido/authenticator_get_assertion_response.h"
 #include "device/fido/authenticator_make_credential_response.h"
@@ -85,10 +88,12 @@ constexpr uint8_t kTestAuthenticatorGetInfoResponseWithDuplicateVersion[] = {
     0xA6,
     // Key(01) - versions
     0x01,
-    // Array(02)
-    0x82,
-    // "U2F_V2"
-    0x66, 0x55, 0x32, 0x46, 0x5F, 0x56, 0x32,
+    // Array(03)
+    0x83,
+    // "U2F_V9"
+    0x66, 0x55, 0x32, 0x46, 0x5F, 0x56, 0x39,
+    // "U2F_V9"
+    0x66, 0x55, 0x32, 0x46, 0x5F, 0x56, 0x39,
     // "U2F_V2"
     0x66, 0x55, 0x32, 0x46, 0x5F, 0x56, 0x32,
     // Key(02) - extensions
@@ -298,7 +303,7 @@ std::vector<uint8_t> GetTestSignResponse() {
 
 // Get a subset of the response for testing error handling.
 std::vector<uint8_t> GetTestCorruptedSignResponse(size_t length) {
-  DCHECK_LE(length, arraysize(test_data::kTestU2fSignResponse));
+  DCHECK_LE(length, base::size(test_data::kTestU2fSignResponse));
   return fido_parsing_utils::Materialize(fido_parsing_utils::ExtractSpan(
       test_data::kTestU2fSignResponse, 0, length));
 }
@@ -314,46 +319,47 @@ std::vector<uint8_t> GetTestCredentialRawIdBytes() {
 // /specs/fido-v2.0-rd-20170927/fido-client-to-authenticator-protocol-v2.0-rd-
 // 20170927.html
 TEST(CTAPResponseTest, TestReadMakeCredentialResponse) {
-  auto make_credential_response =
-      ReadCTAPMakeCredentialResponse(test_data::kTestMakeCredentialResponse);
+  auto make_credential_response = ReadCTAPMakeCredentialResponse(
+      FidoTransportProtocol::kUsbHumanInterfaceDevice,
+      test_data::kTestMakeCredentialResponse);
   ASSERT_TRUE(make_credential_response);
-  auto cbor_attestation_object = cbor::CBORReader::Read(
+  auto cbor_attestation_object = cbor::Reader::Read(
       make_credential_response->GetCBOREncodedAttestationObject());
   ASSERT_TRUE(cbor_attestation_object);
   ASSERT_TRUE(cbor_attestation_object->is_map());
 
   const auto& attestation_object_map = cbor_attestation_object->GetMap();
-  auto it = attestation_object_map.find(cbor::CBORValue(kFormatKey));
+  auto it = attestation_object_map.find(cbor::Value(kFormatKey));
   ASSERT_TRUE(it != attestation_object_map.end());
   ASSERT_TRUE(it->second.is_string());
   EXPECT_EQ(it->second.GetString(), "packed");
 
-  it = attestation_object_map.find(cbor::CBORValue(kAuthDataKey));
+  it = attestation_object_map.find(cbor::Value(kAuthDataKey));
   ASSERT_TRUE(it != attestation_object_map.end());
   ASSERT_TRUE(it->second.is_bytestring());
   EXPECT_THAT(
       it->second.GetBytestring(),
       ::testing::ElementsAreArray(test_data::kCtap2MakeCredentialAuthData));
 
-  it = attestation_object_map.find(cbor::CBORValue(kAttestationStatementKey));
+  it = attestation_object_map.find(cbor::Value(kAttestationStatementKey));
   ASSERT_TRUE(it != attestation_object_map.end());
   ASSERT_TRUE(it->second.is_map());
 
   const auto& attestation_statement_map = it->second.GetMap();
-  auto attStmt_it = attestation_statement_map.find(cbor::CBORValue("alg"));
+  auto attStmt_it = attestation_statement_map.find(cbor::Value("alg"));
 
   ASSERT_TRUE(attStmt_it != attestation_statement_map.end());
   ASSERT_TRUE(attStmt_it->second.is_integer());
   EXPECT_EQ(attStmt_it->second.GetInteger(), -7);
 
-  attStmt_it = attestation_statement_map.find(cbor::CBORValue("sig"));
+  attStmt_it = attestation_statement_map.find(cbor::Value("sig"));
   ASSERT_TRUE(attStmt_it != attestation_statement_map.end());
   ASSERT_TRUE(attStmt_it->second.is_bytestring());
   EXPECT_THAT(
       attStmt_it->second.GetBytestring(),
       ::testing::ElementsAreArray(test_data::kCtap2MakeCredentialSignature));
 
-  attStmt_it = attestation_statement_map.find(cbor::CBORValue("x5c"));
+  attStmt_it = attestation_statement_map.find(cbor::Value("x5c"));
   ASSERT_TRUE(attStmt_it != attestation_statement_map.end());
   const auto& certificate = attStmt_it->second;
   ASSERT_TRUE(certificate.is_array());
@@ -368,10 +374,12 @@ TEST(CTAPResponseTest, TestReadMakeCredentialResponse) {
 }
 
 TEST(CTAPResponseTest, TestMakeCredentialNoneAttestationResponse) {
-  auto make_credential_response =
-      ReadCTAPMakeCredentialResponse(test_data::kTestMakeCredentialResponse);
+  auto make_credential_response = ReadCTAPMakeCredentialResponse(
+      FidoTransportProtocol::kUsbHumanInterfaceDevice,
+      test_data::kTestMakeCredentialResponse);
   ASSERT_TRUE(make_credential_response);
-  make_credential_response->EraseAttestationStatement();
+  make_credential_response->EraseAttestationStatement(
+      AttestationObject::AAGUID::kErase);
   EXPECT_THAT(make_credential_response->GetCBOREncodedAttestationObject(),
               ::testing::ElementsAreArray(test_data::kNoneAttestationResponse));
 }
@@ -397,6 +405,7 @@ TEST(CTAPResponseTest, TestReadGetAssertionResponse) {
 TEST(CTAPResponseTest, TestParseRegisterResponseData) {
   auto response =
       AuthenticatorMakeCredentialResponse::CreateFromU2fRegisterResponse(
+          FidoTransportProtocol::kUsbHumanInterfaceDevice,
           test_data::kApplicationParameter,
           test_data::kTestU2fRegisterResponse);
   ASSERT_TRUE(response);
@@ -422,8 +431,8 @@ TEST(CTAPResponseTest, TestParseU2fAttestationStatementCBOR) {
       FidoAttestationStatement::CreateFromU2fRegisterResponse(
           test_data::kTestU2fRegisterResponse);
   ASSERT_TRUE(fido_attestation_statement);
-  auto cbor = cbor::CBORWriter::Write(
-      cbor::CBORValue(fido_attestation_statement->GetAsCBORMap()));
+  auto cbor = cbor::Writer::Write(
+      cbor::Value(fido_attestation_statement->GetAsCBORMap()));
   ASSERT_TRUE(cbor);
   EXPECT_THAT(*cbor, ::testing::ElementsAreArray(
                          test_data::kU2fAttestationStatementCBOR));
@@ -526,6 +535,21 @@ TEST(CTAPResponseTest, TestParseU2fSignWithNullResponse) {
   EXPECT_FALSE(response);
 }
 
+TEST(CTAPResponseTest, TestParseU2fSignWithCTAP2Flags) {
+  std::vector<uint8_t> sign_response = GetTestSignResponse();
+  // Set two flags that should only be set in CTAP2 responses and expect parsing
+  // to fail.
+  sign_response[0] |=
+      static_cast<uint8_t>(AuthenticatorData::Flag::kExtensionDataIncluded);
+  sign_response[0] |=
+      static_cast<uint8_t>(AuthenticatorData::Flag::kAttestation);
+
+  auto response = AuthenticatorGetAssertionResponse::CreateFromU2fSignResponse(
+      test_data::kApplicationParameter, sign_response,
+      GetTestCredentialRawIdBytes());
+  EXPECT_FALSE(response);
+}
+
 TEST(CTAPResponseTest, TestParseU2fSignWithNullCorruptedCounter) {
   // A sign response of less than 5 bytes.
   auto response = AuthenticatorGetAssertionResponse::CreateFromU2fSignResponse(
@@ -552,22 +576,42 @@ TEST(CTAPResponseTest, TestReadGetInfoResponse) {
       base::ContainsKey(get_info_response->versions(), ProtocolVersion::kCtap));
   EXPECT_TRUE(
       base::ContainsKey(get_info_response->versions(), ProtocolVersion::kU2f));
-  EXPECT_TRUE(get_info_response->options().is_platform_device());
-  EXPECT_TRUE(get_info_response->options().supports_resident_key());
-  EXPECT_TRUE(get_info_response->options().user_presence_required());
+  EXPECT_TRUE(get_info_response->options().is_platform_device);
+  EXPECT_TRUE(get_info_response->options().supports_resident_key);
+  EXPECT_TRUE(get_info_response->options().supports_user_presence);
   EXPECT_EQ(AuthenticatorSupportedOptions::UserVerificationAvailability::
                 kSupportedAndConfigured,
-            get_info_response->options().user_verification_availability());
+            get_info_response->options().user_verification_availability);
   EXPECT_EQ(AuthenticatorSupportedOptions::ClientPinAvailability::
                 kSupportedButPinNotSet,
-            get_info_response->options().client_pin_availability());
+            get_info_response->options().client_pin_availability);
+}
+
+TEST(CTAPResponseTest, TestReadGetInfoResponseWithDuplicateVersion) {
+  uint8_t
+      get_info[sizeof(kTestAuthenticatorGetInfoResponseWithDuplicateVersion)];
+  memcpy(get_info, kTestAuthenticatorGetInfoResponseWithDuplicateVersion,
+         sizeof(get_info));
+  // Should fail to parse with duplicate versions.
+  EXPECT_FALSE(ReadCTAPGetInfoResponse(get_info));
+
+  // Find the first of the duplicate versions and change it to a different
+  // value. That should be sufficient to make the data parsable.
+  static const char kU2Fv9[] = "U2F_V9";
+  uint8_t* first_version =
+      std::search(get_info, get_info + sizeof(get_info), kU2Fv9, kU2Fv9 + 6);
+  ASSERT_TRUE(first_version);
+  memcpy(first_version, "U2F_V3", 6);
+  base::Optional<AuthenticatorGetInfoResponse> response =
+      ReadCTAPGetInfoResponse(get_info);
+  ASSERT_TRUE(response);
+  EXPECT_EQ(1u, response->versions().size());
+  EXPECT_TRUE(response->versions().contains(ProtocolVersion::kU2f));
 }
 
 TEST(CTAPResponseTest, TestReadGetInfoResponseWithIncorrectFormat) {
   EXPECT_FALSE(
       ReadCTAPGetInfoResponse(kTestAuthenticatorGetInfoResponseWithNoVersion));
-  EXPECT_FALSE(ReadCTAPGetInfoResponse(
-      kTestAuthenticatorGetInfoResponseWithDuplicateVersion));
   EXPECT_FALSE(ReadCTAPGetInfoResponse(
       kTestAuthenticatorGetInfoResponseWithIncorrectAaguid));
 }
@@ -577,14 +621,12 @@ TEST(CTAPResponseTest, TestSerializeGetInfoResponse) {
       {ProtocolVersion::kCtap, ProtocolVersion::kU2f}, kTestDeviceAaguid);
   response.SetExtensions({"uvm", "hmac-secret"});
   AuthenticatorSupportedOptions options;
-  options.SetSupportsResidentKey(true);
-  options.SetIsPlatformDevice(true);
-  options.SetClientPinAvailability(
-      AuthenticatorSupportedOptions::ClientPinAvailability::
-          kSupportedButPinNotSet);
-  options.SetUserVerificationAvailability(
-      AuthenticatorSupportedOptions::UserVerificationAvailability::
-          kSupportedAndConfigured);
+  options.supports_resident_key = true;
+  options.is_platform_device = true;
+  options.client_pin_availability = AuthenticatorSupportedOptions::
+      ClientPinAvailability::kSupportedButPinNotSet;
+  options.user_verification_availability = AuthenticatorSupportedOptions::
+      UserVerificationAvailability::kSupportedAndConfigured;
   response.SetOptions(std::move(options));
   response.SetMaxMsgSize(1200);
   response.SetPinProtocols({1});
@@ -597,13 +639,24 @@ TEST(CTAPResponseTest, TestSerializeGetInfoResponse) {
 
 TEST(CTAPResponseTest, TestSerializeMakeCredentialResponse) {
   constexpr uint8_t kCoseEncodedPublicKey[] = {
-      0xa3, 0x63, 0x61, 0x6c, 0x67, 0x65, 0x45, 0x53, 0x32, 0x35, 0x36, 0x61,
-      0x78, 0x58, 0x20, 0xf7, 0xc4, 0xf4, 0xa6, 0xf1, 0xd7, 0x95, 0x38, 0xdf,
-      0xa4, 0xc9, 0xac, 0x50, 0x84, 0x8d, 0xf7, 0x08, 0xbc, 0x1c, 0x99, 0xf5,
-      0xe6, 0x0e, 0x51, 0xb4, 0x2a, 0x52, 0x1b, 0x35, 0xd3, 0xb6, 0x9a, 0x61,
-      0x79, 0x58, 0x20, 0xde, 0x7b, 0x7d, 0x6c, 0xa5, 0x64, 0xe7, 0x0e, 0xa3,
-      0x21, 0xa4, 0xd5, 0xd9, 0x6e, 0xa0, 0x0e, 0xf0, 0xe2, 0xdb, 0x89, 0xdd,
-      0x61, 0xd4, 0x89, 0x4c, 0x15, 0xac, 0x58, 0x5b, 0xd2, 0x36, 0x84,
+      // map(3)
+      0xa3,
+      //   "x"
+      0x61, 0x78,
+      //   byte(32)
+      0x58, 0x20, 0xf7, 0xc4, 0xf4, 0xa6, 0xf1, 0xd7, 0x95, 0x38, 0xdf, 0xa4,
+      0xc9, 0xac, 0x50, 0x84, 0x8d, 0xf7, 0x08, 0xbc, 0x1c, 0x99, 0xf5, 0xe6,
+      0x0e, 0x51, 0xb4, 0x2a, 0x52, 0x1b, 0x35, 0xd3, 0xb6, 0x9a,
+      //   "y"
+      0x61, 0x79,
+      //   byte(32)
+      0x58, 0x20, 0xde, 0x7b, 0x7d, 0x6c, 0xa5, 0x64, 0xe7, 0x0e, 0xa3, 0x21,
+      0xa4, 0xd5, 0xd9, 0x6e, 0xa0, 0x0e, 0xf0, 0xe2, 0xdb, 0x89, 0xdd, 0x61,
+      0xd4, 0x89, 0x4c, 0x15, 0xac, 0x58, 0x5b, 0xd2, 0x36, 0x84,
+      //   "fmt"
+      0x63, 0x61, 0x6c, 0x67,
+      //   "ES256"
+      0x65, 0x45, 0x53, 0x32, 0x35, 0x36,
   };
 
   const auto application_parameter =
@@ -628,18 +681,20 @@ TEST(CTAPResponseTest, TestSerializeMakeCredentialResponse) {
                                        signature_counter,
                                        std::move(attested_credential_data));
 
-  cbor::CBORValue::MapValue attestation_map;
+  cbor::Value::MapValue attestation_map;
   attestation_map.emplace("alg", -7);
   attestation_map.emplace("sig", fido_parsing_utils::Materialize(
                                      test_data::kCtap2MakeCredentialSignature));
-  cbor::CBORValue::ArrayValue certificate_chain;
+  cbor::Value::ArrayValue certificate_chain;
   certificate_chain.emplace_back(fido_parsing_utils::Materialize(
       test_data::kCtap2MakeCredentialCertificate));
   attestation_map.emplace("x5c", std::move(certificate_chain));
-  AuthenticatorMakeCredentialResponse response(AttestationObject(
-      std::move(authenticator_data),
-      std::make_unique<OpaqueAttestationStatement>(
-          "packed", cbor::CBORValue(std::move(attestation_map)))));
+  AuthenticatorMakeCredentialResponse response(
+      FidoTransportProtocol::kUsbHumanInterfaceDevice,
+      AttestationObject(
+          std::move(authenticator_data),
+          std::make_unique<OpaqueAttestationStatement>(
+              "packed", cbor::Value(std::move(attestation_map)))));
   EXPECT_THAT(
       GetSerializedCtapDeviceResponse(response),
       ::testing::ElementsAreArray(

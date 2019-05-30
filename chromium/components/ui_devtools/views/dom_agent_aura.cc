@@ -5,7 +5,10 @@
 #include "components/ui_devtools/views/dom_agent_aura.h"
 
 #include <memory>
+#include <utility>
+#include <vector>
 
+#include "base/stl_util.h"
 #include "components/ui_devtools/devtools_server.h"
 #include "components/ui_devtools/root_element.h"
 #include "components/ui_devtools/ui_element.h"
@@ -22,7 +25,8 @@
 namespace ui_devtools {
 namespace {
 
-using namespace ui_devtools::protocol;
+using ui_devtools::protocol::DOM::Node;
+using ui_devtools::protocol::Array;
 // TODO(mhashmi): Make ids reusable
 
 views::Widget* GetWidgetFromWindow(gfx::NativeWindow window) {
@@ -31,28 +35,50 @@ views::Widget* GetWidgetFromWindow(gfx::NativeWindow window) {
 
 }  // namespace
 
-DOMAgentAura::DOMAgentAura() {
-  aura::Env::GetInstance()->AddObserver(this);
+DOMAgentAura* DOMAgentAura::dom_agent_aura_ = nullptr;
+
+DOMAgentAura::DOMAgentAura(aura::Env* env) {
+  DCHECK(!dom_agent_aura_);
+  dom_agent_aura_ = this;
+  RegisterEnv(env);
 }
 
 DOMAgentAura::~DOMAgentAura() {
-  aura::Env::GetInstance()->RemoveObserver(this);
+  for (aura::Window* window : roots_)
+    window->RemoveObserver(this);
+  for (auto* env : envs_)
+    env->RemoveObserver(this);
+  dom_agent_aura_ = nullptr;
+}
+
+void DOMAgentAura::RegisterEnv(aura::Env* env) {
+  envs_.push_back(env);
+  env->AddObserver(this);
+}
+
+void DOMAgentAura::RegisterRootWindow(aura::Window* root) {
+  roots_.push_back(root);
+  root->AddObserver(this);
 }
 
 void DOMAgentAura::OnHostInitialized(aura::WindowTreeHost* host) {
-  root_windows_.push_back(host->window());
+  RegisterRootWindow(host->window());
+}
+
+void DOMAgentAura::OnWindowDestroying(aura::Window* window) {
+  base::Erase(roots_, window);
 }
 
 std::vector<UIElement*> DOMAgentAura::CreateChildrenForRoot() {
   std::vector<UIElement*> children;
-  for (aura::Window* window : root_windows_) {
+  for (aura::Window* window : roots_) {
     UIElement* window_element = new WindowElement(window, this, element_root());
     children.push_back(window_element);
   }
   return children;
 }
 
-std::unique_ptr<DOM::Node> DOMAgentAura::BuildTreeForUIElement(
+std::unique_ptr<Node> DOMAgentAura::BuildTreeForUIElement(
     UIElement* ui_element) {
   if (ui_element->type() == UIElementType::WINDOW) {
     return BuildTreeForWindow(
@@ -70,10 +96,10 @@ std::unique_ptr<DOM::Node> DOMAgentAura::BuildTreeForUIElement(
   return nullptr;
 }
 
-std::unique_ptr<DOM::Node> DOMAgentAura::BuildTreeForWindow(
+std::unique_ptr<Node> DOMAgentAura::BuildTreeForWindow(
     UIElement* window_element_root,
     aura::Window* window) {
-  std::unique_ptr<Array<DOM::Node>> children = Array<DOM::Node>::create();
+  std::unique_ptr<Array<Node>> children = Array<Node>::create();
   views::Widget* widget = GetWidgetFromWindow(window);
   if (widget) {
     UIElement* widget_element =
@@ -89,16 +115,16 @@ std::unique_ptr<DOM::Node> DOMAgentAura::BuildTreeForWindow(
     children->addItem(BuildTreeForWindow(window_element, child));
     window_element_root->AddChild(window_element);
   }
-  std::unique_ptr<DOM::Node> node =
+  std::unique_ptr<Node> node =
       BuildNode("Window", window_element_root->GetAttributes(),
                 std::move(children), window_element_root->node_id());
   return node;
 }
 
-std::unique_ptr<DOM::Node> DOMAgentAura::BuildTreeForRootWidget(
+std::unique_ptr<Node> DOMAgentAura::BuildTreeForRootWidget(
     UIElement* widget_element,
     views::Widget* widget) {
-  std::unique_ptr<Array<DOM::Node>> children = Array<DOM::Node>::create();
+  std::unique_ptr<Array<Node>> children = Array<Node>::create();
 
   UIElement* view_element =
       new ViewElement(widget->GetRootView(), this, widget_element);
@@ -106,24 +132,35 @@ std::unique_ptr<DOM::Node> DOMAgentAura::BuildTreeForRootWidget(
   children->addItem(BuildTreeForView(view_element, widget->GetRootView()));
   widget_element->AddChild(view_element);
 
-  std::unique_ptr<DOM::Node> node =
+  std::unique_ptr<Node> node =
       BuildNode("Widget", widget_element->GetAttributes(), std::move(children),
                 widget_element->node_id());
   return node;
 }
 
-std::unique_ptr<DOM::Node> DOMAgentAura::BuildTreeForView(
-    UIElement* view_element,
-    views::View* view) {
-  std::unique_ptr<Array<DOM::Node>> children = Array<DOM::Node>::create();
+std::unique_ptr<Node> DOMAgentAura::BuildTreeForView(UIElement* view_element,
+                                                     views::View* view) {
+  std::unique_ptr<Array<Node>> children = Array<Node>::create();
 
   for (auto* child : view->GetChildrenInZOrder()) {
-    UIElement* view_element_child = new ViewElement(child, this, view_element);
+    // When building the subtree, a particular view could be visited multiple
+    // times because for each view of the subtree, we would call
+    // BuildTreeForView(..) on that view which causes the subtree with that view
+    // as root being visited again.  Here we check if we already constructed the
+    // ViewElement and skip true.
+    UIElement* view_element_child = nullptr;
+    auto id =
+        view_element->FindUIElementIdForBackendElement<views::View>(child);
+    if (id > 0) {
+      view_element_child = GetElementFromNodeId(id);
+    } else {
+      view_element_child = new ViewElement(child, this, view_element);
+      view_element->AddChild(view_element_child);
+    }
 
     children->addItem(BuildTreeForView(view_element_child, child));
-    view_element->AddChild(view_element_child);
   }
-  std::unique_ptr<DOM::Node> node =
+  std::unique_ptr<Node> node =
       BuildNode("View", view_element->GetAttributes(), std::move(children),
                 view_element->node_id());
   return node;

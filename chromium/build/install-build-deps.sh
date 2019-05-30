@@ -136,6 +136,7 @@ dev_list="\
   gperf
   libappindicator3-dev
   libasound2-dev
+  libatspi2.0-dev
   libbrlapi-dev
   libbz2-dev
   libcairo2-dev
@@ -207,6 +208,7 @@ common_lib_list="\
   libappindicator3-1
   libasound2
   libatk1.0-0
+  libatspi2.0-0
   libc6
   libcairo2
   libcap2
@@ -288,6 +290,7 @@ backwards_compatible_list="\
   libgl1-mesa-dev
   libgl1-mesa-glx:i386
   libgles2-mesa-dev
+  libgtk-3-0:i386
   libgtk2.0-0
   libgtk2.0-0:i386
   libgtk2.0-dev
@@ -387,7 +390,6 @@ nacl_list="\
   libfontconfig1:i386
   libglib2.0-0:i386
   libgpm2:i386
-  libgtk-3-0:i386
   libncurses5:i386
   lib32ncurses5-dev
   libnss3:i386

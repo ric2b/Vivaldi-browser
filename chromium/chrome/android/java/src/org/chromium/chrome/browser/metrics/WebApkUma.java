@@ -12,10 +12,11 @@ import android.os.StatFs;
 import android.provider.Settings;
 import android.support.annotation.IntDef;
 import android.text.TextUtils;
+import android.text.format.DateUtils;
 
-import org.chromium.base.AsyncTask;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.browser.util.ConversionUtils;
 import org.chromium.chrome.browser.webapps.WebApkInfo;
 
@@ -148,7 +149,7 @@ public class WebApkUma {
      */
     public static void recordShellApkLaunchToSplashscreenVisible(long durationMs) {
         RecordHistogram.recordMediumTimesHistogram(
-                HISTOGRAM_LAUNCH_TO_SPLASHSCREEN_VISIBLE, durationMs, TimeUnit.MILLISECONDS);
+                HISTOGRAM_LAUNCH_TO_SPLASHSCREEN_VISIBLE, durationMs);
     }
 
     /**
@@ -157,7 +158,7 @@ public class WebApkUma {
      */
     public static void recordShellApkLaunchToSplashscreenHidden(long durationMs) {
         RecordHistogram.recordMediumTimesHistogram(
-                HISTOGRAM_LAUNCH_TO_SPLASHSCREEN_HIDDEN, durationMs, TimeUnit.MILLISECONDS);
+                HISTOGRAM_LAUNCH_TO_SPLASHSCREEN_HIDDEN, durationMs);
     }
 
     /** Records whether a WebAPK has permission to display notifications. */
@@ -179,7 +180,7 @@ public class WebApkUma {
     public static void recordGooglePlayInstallErrorCode(int errorCode) {
         // Don't use an enumerated histogram as there are > 30 potential error codes. In practice,
         // a given client will always get the same error code.
-        RecordHistogram.recordSparseSlowlyHistogram(
+        RecordHistogram.recordSparseHistogram(
                 "WebApk.Install.GooglePlayErrorCode", Math.min(errorCode, 1000));
     }
 
@@ -197,13 +198,13 @@ public class WebApkUma {
             @WebApkInfo.WebApkDistributor int distributor, long duration) {
         RecordHistogram.recordLongTimesHistogram(
                 "WebApk.Session.TotalDuration2." + getWebApkDistributorUmaSuffix(distributor),
-                duration, TimeUnit.MILLISECONDS);
+                duration);
     }
 
     /** Records the current Shell APK version. */
     public static void recordShellApkVersion(
             int shellApkVersion, @WebApkInfo.WebApkDistributor int distributor) {
-        RecordHistogram.recordSparseSlowlyHistogram(
+        RecordHistogram.recordSparseHistogram(
                 "WebApk.ShellApkVersion2." + getWebApkDistributorUmaSuffix(distributor),
                 shellApkVersion);
     }
@@ -271,7 +272,7 @@ public class WebApkUma {
      */
     public static void recordLaunchInterval(long intervalMs) {
         RecordHistogram.recordCustomCountHistogram("WebApk.LaunchInterval2",
-                (int) TimeUnit.MILLISECONDS.toMinutes(intervalMs), 30,
+                (int) (DateUtils.MINUTE_IN_MILLIS * intervalMs), 30,
                 (int) TimeUnit.DAYS.toMinutes(90), 50);
     }
 
@@ -287,7 +288,7 @@ public class WebApkUma {
 
     /** Records the network error code caught when a WebAPK is launched. */
     public static void recordNetworkErrorWhenLaunch(int errorCode) {
-        RecordHistogram.recordSparseSlowlyHistogram("WebApk.Launch.NetworkError", -errorCode);
+        RecordHistogram.recordSparseHistogram("WebApk.Launch.NetworkError", -errorCode);
     }
 
     /**
@@ -295,8 +296,8 @@ public class WebApkUma {
      */
     public static void logSpaceUsageUMAWhenInstallationFails() {
         new AsyncTask<Void>() {
-            long mAvailableSpaceInByte = 0;
-            long mCacheSizeInByte = 0;
+            long mAvailableSpaceInByte;
+            long mCacheSizeInByte;
             @Override
             protected Void doInBackground() {
                 mAvailableSpaceInByte = getAvailableSpaceAboveLowSpaceLimit();
@@ -313,14 +314,13 @@ public class WebApkUma {
     }
 
     private static void logSpaceUsageUMAOnDataAvailable(long spaceSize, long cacheSize) {
-        RecordHistogram.recordSparseSlowlyHistogram(
+        RecordHistogram.recordSparseHistogram(
                 "WebApk.Install.AvailableSpace.Fail", roundByteToMb(spaceSize));
 
-        RecordHistogram.recordSparseSlowlyHistogram(
+        RecordHistogram.recordSparseHistogram(
                 "WebApk.Install.ChromeCacheSize.Fail", roundByteToMb(cacheSize));
 
-        RecordHistogram.recordSparseSlowlyHistogram(
-                "WebApk.Install.AvailableSpaceAfterFreeUpCache.Fail",
+        RecordHistogram.recordSparseHistogram("WebApk.Install.AvailableSpaceAfterFreeUpCache.Fail",
                 roundByteToMb(spaceSize + cacheSize));
     }
 

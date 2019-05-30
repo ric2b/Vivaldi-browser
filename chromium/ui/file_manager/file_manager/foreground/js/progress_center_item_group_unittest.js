@@ -1,20 +1,24 @@
 // Copyright 2014 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
 'use strict';
 
-// Prepare the string assets.
-loadTimeData.data = {
+// Mock LoadTimeData strings.
+window.loadTimeData.data = {
   COPY_PROGRESS_SUMMARY: 'Copying...',
   ERROR_PROGRESS_SUMMARY: '1 Error.',
   ERROR_PROGRESS_SUMMARY_PLURAL: '$1 Errors.'
 };
+window.loadTimeData.getString = id => {
+  return window.loadTimeData.data_[id] || id;
+};
 
 function testSimpleProgress() {
-  var group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
+  const group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
   assertEquals(ProgressCenterItemGroup.State.EMPTY, group.state);
 
-  var item = new ProgressCenterItem();
+  const item = new ProgressCenterItem();
   item.id = 'test-item-1';
   item.message = 'TestItemMessage1';
   item.state = ProgressItemState.PROGRESSING;
@@ -30,7 +34,7 @@ function testSimpleProgress() {
 
   // Start an animation of the item.
   item.progressValue = 0.5;
-  group.update(item, 0);
+  group.update(item);
   assertTrue(group.isAnimated(item.id));
   assertTrue(group.isSummarizedAnimated());
   assertEquals(0.5, group.getItem(item.id).progressValue);
@@ -40,7 +44,7 @@ function testSimpleProgress() {
   // Item is completed, but the animation is still on going.
   item.progressValue = 1.0;
   item.state = ProgressItemState.COMPLETED;
-  group.update(item, 0);
+  group.update(item);
   assertTrue(group.isAnimated(item.id));
   assertTrue(group.isSummarizedAnimated());
   assertEquals(100, group.getItem(item.id).progressRateInPercent);
@@ -61,15 +65,15 @@ function testSimpleProgress() {
 }
 
 function testCompleteAnimationDuringProgress() {
-  var group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
-  var item = new ProgressCenterItem();
+  const group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
+  const item = new ProgressCenterItem();
   item.id = 'test-item-1';
   item.message = 'TestItemMessage1';
   item.state = ProgressItemState.PROGRESSING;
   item.progressMax = 1.0;
 
   // Add an item.
-  group.update(item, 0);
+  group.update(item);
   assertFalse(group.isAnimated(item.id));
   assertFalse(group.isSummarizedAnimated());
   assertEquals('TestItemMessage1', group.getItem(item.id).message);
@@ -78,7 +82,7 @@ function testCompleteAnimationDuringProgress() {
 
   // Start an animation of the item.
   item.progressValue = 0.5;
-  group.update(item, 0);
+  group.update(item);
   assertTrue(group.isAnimated(item.id));
   assertTrue(group.isSummarizedAnimated());
   assertEquals(0.5, group.getItem(item.id).progressValue);
@@ -102,7 +106,7 @@ function testCompleteAnimationDuringProgress() {
   // The item is completed. The animation to 100% progress starts.
   item.progressValue = 1.0;
   item.state = ProgressItemState.COMPLETED;
-  group.update(item, 0);
+  group.update(item);
   assertTrue(group.isAnimated(item.id));
   assertTrue(group.isSummarizedAnimated());
   assertEquals(100, group.getItem(item.id).progressRateInPercent);
@@ -123,8 +127,8 @@ function testCompleteAnimationDuringProgress() {
 }
 
 function testAddMaxProgressItem() {
-  var group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
-  var item = new ProgressCenterItem();
+  const group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
+  const item = new ProgressCenterItem();
   item.id = 'test-item-1';
   item.message = 'TestItemMessage1';
   item.state = ProgressItemState.PROGRESSING;
@@ -132,7 +136,7 @@ function testAddMaxProgressItem() {
   item.progressValue = 1.0;
 
   // Add an item with 100% progress.
-  group.update(item, 0);
+  group.update(item);
   assertFalse(group.isAnimated(item.id));
   assertFalse(group.isSummarizedAnimated());
   assertEquals('TestItemMessage1', group.getItem(item.id).message);
@@ -140,9 +144,8 @@ function testAddMaxProgressItem() {
   assertEquals(ProgressCenterItemGroup.State.ACTIVE, group.state);
 
   // Complete the item without animation.
-  item.progressValue = null;
   item.state = ProgressItemState.COMPLETED;
-  group.update(item, 0);
+  group.update(item);
   assertFalse(group.isAnimated(item.id));
   assertFalse(group.isSummarizedAnimated());
   assertEquals(null, group.getItem(item.id));
@@ -151,8 +154,8 @@ function testAddMaxProgressItem() {
 }
 
 function testCompleteDuringAnimation() {
-  var group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
-  var item = new ProgressCenterItem();
+  const group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
+  const item = new ProgressCenterItem();
   item.id = 'test-item-1';
   item.message = 'TestItemMessage1';
   item.state = ProgressItemState.PROGRESSING;
@@ -160,7 +163,7 @@ function testCompleteDuringAnimation() {
   item.progressValue = 0.0;
 
   // Add an item.
-  group.update(item, 0);
+  group.update(item);
   assertFalse(group.isAnimated(item.id));
   assertFalse(group.isSummarizedAnimated());
   assertEquals('TestItemMessage1', group.getItem(item.id).message);
@@ -169,7 +172,7 @@ function testCompleteDuringAnimation() {
 
   // Update the progress of the item to 100%. The animation starts.
   item.progressValue = 1.0;
-  group.update(item, 0);
+  group.update(item);
   assertTrue(group.isAnimated(item.id));
   assertTrue(group.isSummarizedAnimated());
   assertEquals('TestItemMessage1', group.getItem(item.id).message);
@@ -177,9 +180,8 @@ function testCompleteDuringAnimation() {
   assertEquals(ProgressCenterItemGroup.State.ACTIVE, group.state);
 
   // Complete the item. The animation is still on going.
-  item.progressValue = null;
   item.state = ProgressItemState.COMPLETED;
-  group.update(item, 0);
+  group.update(item);
   assertTrue(group.isAnimated(item.id));
   assertTrue(group.isSummarizedAnimated());
   assertTrue(!!group.getItem(item.id));
@@ -188,8 +190,8 @@ function testCompleteDuringAnimation() {
 }
 
 function testTwoItems() {
-  var group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
-  var item1 = new ProgressCenterItem();
+  const group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
+  const item1 = new ProgressCenterItem();
   item1.id = 'test-item-1';
   item1.message = 'TestItemMessage1';
   item1.state = ProgressItemState.PROGRESSING;
@@ -197,7 +199,7 @@ function testTwoItems() {
   item1.progressValue = 0.0;
   item1.type = ProgressItemType.COPY;
 
-  var item2 = new ProgressCenterItem();
+  const item2 = new ProgressCenterItem();
   item2.id = 'test-item-2';
   item2.message = 'TestItemMessage2';
   item2.state = ProgressItemState.PROGRESSING;
@@ -278,8 +280,8 @@ function testTwoItems() {
 }
 
 function testOneError() {
-  var group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
-  var item1 = new ProgressCenterItem();
+  const group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
+  const item1 = new ProgressCenterItem();
   item1.id = 'test-item-1';
   item1.message = 'TestItemMessage1';
   item1.state = ProgressItemState.PROGRESSING;
@@ -297,12 +299,12 @@ function testOneError() {
 
   assertTrue(!!group.getItem(item1.id));
   assertFalse(group.isAnimated(item1.id));
-  assertEquals(null, group.getSummarizedItem());
+  assertEquals(null, group.getSummarizedItem(0));
   assertFalse(group.isSummarizedAnimated());
   assertEquals(ProgressCenterItemGroup.State.INACTIVE, group.state);
 
   // Add another item without dismissing the error item.
-  var item2 = new ProgressCenterItem();
+  const item2 = new ProgressCenterItem();
   item2.id = 'test-item-2';
   item2.message = 'TestItemMessage2';
   item2.state = ProgressItemState.PROGRESSING;
@@ -332,8 +334,8 @@ function testOneError() {
 }
 
 function testOneItemWithError() {
-  var group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
-  var item1 = new ProgressCenterItem();
+  const group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
+  const item1 = new ProgressCenterItem();
   item1.id = 'test-item-1';
   item1.message = 'TestItemMessage1';
   item1.state = ProgressItemState.PROGRESSING;
@@ -341,7 +343,7 @@ function testOneItemWithError() {
   item1.progressValue = 0.0;
   item1.type = ProgressItemType.COPY;
 
-  var item2 = new ProgressCenterItem();
+  const item2 = new ProgressCenterItem();
   item2.id = 'test-item-2';
   item2.message = 'TestItemMessage2';
   item2.state = ProgressItemState.PROGRESSING;
@@ -408,8 +410,8 @@ function testOneItemWithError() {
 }
 
 function testOneItemWithErrorDuringAnimation() {
-  var group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
-  var item1 = new ProgressCenterItem();
+  const group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
+  const item1 = new ProgressCenterItem();
   item1.id = 'test-item-1';
   item1.message = 'TestItemMessage1';
   item1.state = ProgressItemState.PROGRESSING;
@@ -417,7 +419,7 @@ function testOneItemWithErrorDuringAnimation() {
   item1.progressValue = 0.0;
   item1.type = ProgressItemType.COPY;
 
-  var item2 = new ProgressCenterItem();
+  const item2 = new ProgressCenterItem();
   item2.id = 'test-item-2';
   item2.message = 'TestItemMessage2';
   item2.state = ProgressItemState.PROGRESSING;
@@ -451,14 +453,14 @@ function testOneItemWithErrorDuringAnimation() {
 }
 
 function testTwoErrors() {
-  var group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
-  var item1 = new ProgressCenterItem();
+  const group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
+  const item1 = new ProgressCenterItem();
   item1.id = 'test-item-1';
   item1.message = 'Error message 1';
   item1.state = ProgressItemState.ERROR;
   item1.type = ProgressItemType.COPY;
 
-  var item2 = new ProgressCenterItem();
+  const item2 = new ProgressCenterItem();
   item2.id = 'test-item-2';
   item2.message = 'Error message 2';
   item2.state = ProgressItemState.ERROR;
@@ -493,8 +495,8 @@ function testTwoErrors() {
 }
 
 function testCancel() {
-  var group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
-  var item = new ProgressCenterItem();
+  const group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
+  const item = new ProgressCenterItem();
   item.id = 'test-item-1';
   item.message = 'TestItemMessage1';
   item.state = ProgressItemState.PROGRESSING;
@@ -520,8 +522,8 @@ function testCancel() {
 }
 
 function testCancelWithError() {
-  var group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
-  var item1 = new ProgressCenterItem();
+  const group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ false);
+  const item1 = new ProgressCenterItem();
   item1.id = 'test-item-1';
   item1.message = 'TestItemMessage1';
   item1.state = ProgressItemState.PROGRESSING;
@@ -529,7 +531,7 @@ function testCancelWithError() {
   item1.progressValue = 0.0;
   item1.type = ProgressItemType.COPY;
 
-  var item2 = new ProgressCenterItem();
+  const item2 = new ProgressCenterItem();
   item2.id = 'test-item-2';
   item2.message = 'Error message 2';
   item2.state = ProgressItemState.ERROR;
@@ -560,8 +562,8 @@ function testCancelWithError() {
 }
 
 function testQuietItem() {
-  var group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ true);
-  var item = new ProgressCenterItem();
+  const group = new ProgressCenterItemGroup(/* name */ 'test', /* quite */ true);
+  const item = new ProgressCenterItem();
   item.id = 'test-item-1';
   item.message = 'TestItemMessage1';
   item.state = ProgressItemState.PROGRESSING;
@@ -576,7 +578,7 @@ function testQuietItem() {
 
   // Start an animation of the item.
   item.progressValue = 0.5;
-  group.update(item, 0);
+  group.update(item);
   assertTrue(group.isAnimated(item.id));
   // Summarized item should not animated because the panel does not show
   // progress bar for quiet and summarized item.
@@ -588,7 +590,7 @@ function testQuietItem() {
   // Item is completed, but the animation is still on going.
   item.progressValue = 1.0;
   item.state = ProgressItemState.COMPLETED;
-  group.update(item, 0);
+  group.update(item);
   assertTrue(group.isAnimated(item.id));
   assertFalse(group.isSummarizedAnimated());
   assertEquals(100, group.getItem(item.id).progressRateInPercent);

@@ -15,9 +15,12 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string16.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -30,11 +33,14 @@
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/browser/legacy_strike_database.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
 #include "components/autofill/core/browser/payments/payments_util.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/autofill/core/browser/strike_database.h"
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_clock.h"
+#include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "services/identity/public/cpp/identity_manager.h"
@@ -78,23 +84,53 @@ CreditCardSaveManager::CreditCardSaveManager(
       payments_client_(payments_client),
       app_locale_(app_locale),
       personal_data_manager_(personal_data_manager),
-      weak_ptr_factory_(this) {}
+      weak_ptr_factory_(this) {
+  // This is to initialize StrikeDatabase is if it hasn't been already, so that
+  // its cache would be loaded and ready to use when the first CCSM is created.
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillSaveCreditCardUsesStrikeSystemV2) ||
+      base::FeatureList::IsEnabled(
+          features::kAutofillLocalCardMigrationUsesStrikeSystemV2)) {
+    // Only init when |kAutofillSaveCreditCardUsesStrikeSystemV2| is enabled. If
+    // flag is off and LegacyStrikeDatabase instead of StrikeDatabase is used,
+    // this init will cause failure on GetStrikes().
+    client_->GetStrikeDatabase();
+  }
+}
 
 CreditCardSaveManager::~CreditCardSaveManager() {}
 
-void CreditCardSaveManager::OfferCardLocalSave(const CreditCard& card) {
-  if (card.HasFirstAndLastName())
-    AutofillMetrics::LogSaveCardWithFirstAndLastNameOffered(/*is_local=*/true);
-  if (observer_for_testing_)
-    observer_for_testing_->OnOfferLocalSave();
-  client_->ConfirmSaveCreditCardLocally(
-      card, base::Bind(base::IgnoreResult(
-                           &PersonalDataManager::OnAcceptedLocalCreditCardSave),
-                       base::Unretained(personal_data_manager_), card));
+void CreditCardSaveManager::AttemptToOfferCardLocalSave(
+    bool has_non_focusable_field,
+    const CreditCard& card) {
+  local_card_save_candidate_ = card;
+  show_save_prompt_ = base::nullopt;
+  has_non_focusable_field_ = has_non_focusable_field;
+
+  // Query the Autofill StrikeDatabase on if we should pop up the
+  // offer-to-save prompt for this card.
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillSaveCreditCardUsesStrikeSystemV2)) {
+    OnDidGetStrikesForLocalSave(GetCreditCardSaveStrikeDatabase()->GetStrikes(
+        base::UTF16ToUTF8(local_card_save_candidate_.LastFourDigits())));
+  } else if (base::FeatureList::IsEnabled(
+                 features::kAutofillSaveCreditCardUsesStrikeSystem)) {
+    LegacyStrikeDatabase* strike_database = client_->GetLegacyStrikeDatabase();
+    strike_database->GetStrikes(
+        strike_database->GetKeyForCreditCardSave(
+            base::UTF16ToUTF8(local_card_save_candidate_.LastFourDigits())),
+        base::BindRepeating(&CreditCardSaveManager::OnDidGetStrikesForLocalSave,
+                            weak_ptr_factory_.GetWeakPtr()));
+  } else {
+    // Skip retrieving data from the Autofill LegacyStrikeDatabase; assume 0
+    // strikes.
+    OnDidGetStrikesForLocalSave(0);
+  }
 }
 
 void CreditCardSaveManager::AttemptToOfferCardUploadSave(
     const FormStructure& submitted_form,
+    bool has_non_focusable_field,
     const CreditCard& card,
     const bool uploading_local_card) {
   // Abort the uploading if |payments_client_| is nullptr.
@@ -103,6 +139,7 @@ void CreditCardSaveManager::AttemptToOfferCardUploadSave(
   upload_request_ = payments::PaymentsClient::UploadRequestDetails();
   upload_request_.card = card;
   uploading_local_card_ = uploading_local_card;
+  show_save_prompt_ = base::nullopt;
 
   // In an ideal scenario, when uploading a card, we would have:
   //  1) Card number and expiration
@@ -119,6 +156,8 @@ void CreditCardSaveManager::AttemptToOfferCardUploadSave(
   found_cvc_field_ = false;
   found_value_in_cvc_field_ = false;
   found_cvc_value_in_non_cvc_field_ = false;
+
+  has_non_focusable_field_ = has_non_focusable_field;
 
   for (const auto& field : submitted_form) {
     const bool is_valid_cvc = IsValidCreditCardSecurityCode(
@@ -144,21 +183,18 @@ void CreditCardSaveManager::AttemptToOfferCardUploadSave(
 
   pending_upload_request_origin_ = submitted_form.main_frame_origin();
 
+  if (has_non_focusable_field_) {
+    upload_decision_metrics_ |=
+        AutofillMetrics::UPLOAD_OFFERED_FROM_NON_FOCUSABLE_FIELD;
+  }
+
   if (upload_request_.cvc.empty()) {
     // Apply the CVC decision to |upload_decision_metrics_| to denote a problem
     // was found.
     upload_decision_metrics_ |= GetCVCCardUploadDecisionMetric();
   }
 
-  // Add active experiments to the request payload.
-  if (features::IsAutofillUpstreamSendPanFirstSixExperimentEnabled()) {
-    upload_request_.active_experiments.push_back(
-        features::kAutofillUpstreamSendPanFirstSix.name);
-  }
-  if (features::IsAutofillUpstreamUpdatePromptExplanationExperimentEnabled()) {
-    upload_request_.active_experiments.push_back(
-        features::kAutofillUpstreamUpdatePromptExplanation.name);
-  }
+  // Add active Chrome experiments to the request payload here (currently none).
 
   // We store the detected values in the upload request, because the addresses
   // are being possibly modified in the next code block, and we want the
@@ -174,6 +210,28 @@ void CreditCardSaveManager::AttemptToOfferCardUploadSave(
     should_request_name_from_user_ = true;
   }
 
+  // If the user must provide expiration month or expration year, log it and set
+  // |should_request_expiration_date_from_user_| so the offer-to-save dialog
+  // knows to ask for it.
+  should_request_expiration_date_from_user_ = false;
+  if (upload_request_.detected_values &
+      DetectedValue::USER_PROVIDED_EXPIRATION_DATE) {
+    upload_decision_metrics_ |=
+        AutofillMetrics::USER_REQUESTED_TO_PROVIDE_EXPIRATION_DATE;
+    LogSaveCardRequestExpirationDateReasonMetric();
+    should_request_expiration_date_from_user_ = true;
+  }
+
+  // The cardholder name and expiration date fix flows cannot both be
+  // active at the same time.  If they are, abort offering upload.
+  if (should_request_name_from_user_ &&
+      should_request_expiration_date_from_user_) {
+    DCHECK(base::FeatureList::IsEnabled(
+        features::kAutofillUpstreamEditableExpirationDate));
+    LogCardUploadDecisions(upload_decision_metrics_);
+    pending_upload_request_origin_ = url::Origin();
+    return;
+  }
   // If the relevant feature is enabled, only send the country of the
   // recently-used addresses. We make a copy here to avoid modifying
   // |upload_request_.profiles|, which should always have full addresses even
@@ -197,22 +255,45 @@ void CreditCardSaveManager::AttemptToOfferCardUploadSave(
   payments_client_->GetUploadDetails(
       send_only_country_in_addresses ? country_only_profiles
                                      : upload_request_.profiles,
-      upload_request_.detected_values,
-      base::UTF16ToASCII(CreditCard::StripSeparators(card.number()))
-          .substr(0, 6),
-      upload_request_.active_experiments, app_locale_,
+      upload_request_.detected_values, upload_request_.active_experiments,
+      app_locale_,
       base::BindOnce(&CreditCardSaveManager::OnDidGetUploadDetails,
                      weak_ptr_factory_.GetWeakPtr()),
-      payments::kUploadCardBillableServiceNumber);
+      payments::kUploadCardBillableServiceNumber,
+      payments::PaymentsClient::UploadCardSource::UPSTREAM_CHECKOUT_FLOW);
+  // Query the Autofill StrikeDatabase on if we should pop up the
+  // offer-to-save prompt for this card.
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillSaveCreditCardUsesStrikeSystemV2)) {
+    OnDidGetStrikesForUploadSave(GetCreditCardSaveStrikeDatabase()->GetStrikes(
+        base::UTF16ToUTF8(upload_request_.card.LastFourDigits())));
+  } else if (base::FeatureList::IsEnabled(
+                 features::kAutofillSaveCreditCardUsesStrikeSystem)) {
+    LegacyStrikeDatabase* strike_database = client_->GetLegacyStrikeDatabase();
+    strike_database->GetStrikes(
+        strike_database->GetKeyForCreditCardSave(
+            base::UTF16ToUTF8(upload_request_.card.LastFourDigits())),
+        base::BindRepeating(
+            &CreditCardSaveManager::OnDidGetStrikesForUploadSave,
+            weak_ptr_factory_.GetWeakPtr()));
+  } else {
+    // Skip retrieving data from the Autofill LegacyStrikeDatabase; assume 0
+    // strikes.
+    OnDidGetStrikesForUploadSave(0);
+  }
 }
 
 bool CreditCardSaveManager::IsCreditCardUploadEnabled() {
+#if defined(OS_IOS)
   // If observer_for_testing_ is set, assume we are in a browsertest and
   // credit card upload should be enabled by default.
-  return observer_for_testing_ ||
-         ::autofill::IsCreditCardUploadEnabled(
-             client_->GetPrefs(), client_->GetSyncService(),
-             personal_data_manager_->GetAccountInfoForPaymentsServer().email);
+  // TODO(crbug.com/859761): Remove dependency from iOS tests on this behavior.
+  if (observer_for_testing_)
+    return true;
+#endif  // defined(OS_IOS)
+  return ::autofill::IsCreditCardUploadEnabled(
+      client_->GetPrefs(), client_->GetSyncService(),
+      personal_data_manager_->GetAccountInfoForPaymentsServer().email);
 }
 
 bool CreditCardSaveManager::IsUploadEnabledForNetwork(
@@ -231,54 +312,154 @@ bool CreditCardSaveManager::IsUploadEnabledForNetwork(
 void CreditCardSaveManager::OnDidUploadCard(
     AutofillClient::PaymentsRpcResult result,
     const std::string& server_id) {
+  if (observer_for_testing_)
+    observer_for_testing_->OnReceivedUploadCardResponse();
+
   if (result == AutofillClient::SUCCESS &&
       upload_request_.card.HasFirstAndLastName()) {
     AutofillMetrics::LogSaveCardWithFirstAndLastNameComplete(
         /*is_local=*/false);
   }
 
-  // We don't do anything user-visible if the upload attempt fails. If the
-  // upload succeeds and we can store unmasked cards on this OS, we will keep a
-  // copy of the card as a full server card on the device.
-  if (result == AutofillClient::SUCCESS && !server_id.empty() &&
-      OfferStoreUnmaskedCards() &&
-      !IsAutofillNoLocalSaveOnUploadSuccessExperimentEnabled()) {
-    upload_request_.card.set_record_type(CreditCard::FULL_SERVER_CARD);
-    upload_request_.card.SetServerStatus(CreditCard::OK);
-    upload_request_.card.set_server_id(server_id);
-    DCHECK(personal_data_manager_);
-    if (personal_data_manager_)
-      personal_data_manager_->AddFullServerCreditCard(upload_request_.card);
+  if (result == AutofillClient::SUCCESS) {
+    // If the upload succeeds and we can store unmasked cards on this OS, we
+    // will keep a copy of the card as a full server card on the device.
+    if (!server_id.empty() &&
+        OfferStoreUnmaskedCards(payments_client_->is_off_the_record()) &&
+        !IsAutofillNoLocalSaveOnUploadSuccessExperimentEnabled()) {
+      upload_request_.card.set_record_type(CreditCard::FULL_SERVER_CARD);
+      upload_request_.card.SetServerStatus(CreditCard::OK);
+      upload_request_.card.set_server_id(server_id);
+      DCHECK(personal_data_manager_);
+      if (personal_data_manager_)
+        personal_data_manager_->AddFullServerCreditCard(upload_request_.card);
+    }
+    if (base::FeatureList::IsEnabled(
+            features::kAutofillSaveCreditCardUsesStrikeSystemV2)) {
+      // Log how many strikes the card had when it was saved.
+      LogStrikesPresentWhenCardSaved(
+          /*is_local=*/false,
+          GetCreditCardSaveStrikeDatabase()->GetStrikes(
+              base::UTF16ToUTF8(upload_request_.card.LastFourDigits())));
+
+      // Clear all CreditCardSave strikes for this card, in case it is later
+      // removed.
+      GetCreditCardSaveStrikeDatabase()->ClearStrikes(
+          base::UTF16ToUTF8(upload_request_.card.LastFourDigits()));
+    } else if (base::FeatureList::IsEnabled(
+                   features::kAutofillSaveCreditCardUsesStrikeSystem)) {
+      LegacyStrikeDatabase* strike_database =
+          client_->GetLegacyStrikeDatabase();
+      // Log how many strikes the card had when it was saved.
+      strike_database->GetStrikes(
+          strike_database->GetKeyForCreditCardSave(
+              base::UTF16ToUTF8(upload_request_.card.LastFourDigits())),
+          base::BindRepeating(
+              &CreditCardSaveManager::LogStrikesPresentWhenCardSaved,
+              weak_ptr_factory_.GetWeakPtr(),
+              /*is_local=*/false));
+      // Clear all strikes for this card, in case it is later removed.
+      strike_database->ClearAllStrikesForKey(
+          strike_database->GetKeyForCreditCardSave(
+              base::UTF16ToUTF8(upload_request_.card.LastFourDigits())),
+          base::DoNothing());
+    }
+  } else {
+    if (show_save_prompt_.value()) {
+      if (base::FeatureList::IsEnabled(
+              features::kAutofillSaveCreditCardUsesStrikeSystemV2)) {
+        // If the upload failed and the bubble was actually shown (NOT just the
+        // icon), count that as a strike against offering upload in the future.
+        int nth_strike_added = GetCreditCardSaveStrikeDatabase()->AddStrike(
+            base::UTF16ToUTF8(upload_request_.card.LastFourDigits()));
+        // Notify the browsertests that a strike was added.
+        OnStrikeChangeComplete(nth_strike_added);
+      } else if (base::FeatureList::IsEnabled(
+                     features::kAutofillSaveCreditCardUsesStrikeSystem)) {
+        // If the upload failed and the bubble was actually shown (NOT just the
+        // icon), count that as a strike against offering upload in the future.
+        LegacyStrikeDatabase* strike_database =
+            client_->GetLegacyStrikeDatabase();
+        strike_database->AddStrike(
+            strike_database->GetKeyForCreditCardSave(
+                base::UTF16ToUTF8(upload_request_.card.LastFourDigits())),
+            base::BindRepeating(&CreditCardSaveManager::OnStrikeChangeComplete,
+                                weak_ptr_factory_.GetWeakPtr()));
+      }
+    }
   }
+}
+
+CreditCardSaveStrikeDatabase*
+CreditCardSaveManager::GetCreditCardSaveStrikeDatabase() {
+  if (credit_card_save_strike_database_.get() == nullptr) {
+    credit_card_save_strike_database_ =
+        std::make_unique<CreditCardSaveStrikeDatabase>(
+            CreditCardSaveStrikeDatabase(client_->GetStrikeDatabase()));
+  }
+  return credit_card_save_strike_database_.get();
+}
+
+LocalCardMigrationStrikeDatabase*
+CreditCardSaveManager::GetLocalCardMigrationStrikeDatabase() {
+  if (local_card_migration_strike_database_.get() == nullptr) {
+    local_card_migration_strike_database_ =
+        std::make_unique<LocalCardMigrationStrikeDatabase>(
+            LocalCardMigrationStrikeDatabase(client_->GetStrikeDatabase()));
+  }
+  return local_card_migration_strike_database_.get();
+}
+
+void CreditCardSaveManager::OnDidGetStrikesForLocalSave(const int num_strikes) {
+  show_save_prompt_ =
+      num_strikes < kMaxStrikesToPreventPoppingUpOfferToSavePrompt;
+
+  OfferCardLocalSave();
+}
+
+void CreditCardSaveManager::OnDidGetStrikesForUploadSave(
+    const int num_strikes) {
+  show_save_prompt_ =
+      num_strikes < kMaxStrikesToPreventPoppingUpOfferToSavePrompt;
+
+  // Only offer upload once both Payments and the Autofill
+  // LegacyStrikeDatabase have returned their decisions. Use population of
+  // |upload_request_.context_token| as an indicator of the Payments call
+  // returning successfully.
+  if (!upload_request_.context_token.empty())
+    OfferCardUploadSave();
 }
 
 void CreditCardSaveManager::OnDidGetUploadDetails(
     AutofillClient::PaymentsRpcResult result,
     const base::string16& context_token,
-    std::unique_ptr<base::DictionaryValue> legal_message) {
+    std::unique_ptr<base::Value> legal_message,
+    std::vector<std::pair<int, int>> supported_card_bin_ranges) {
   if (observer_for_testing_)
     observer_for_testing_->OnReceivedGetUploadDetailsResponse();
   if (result == AutofillClient::SUCCESS) {
     // Do *not* call payments_client_->Prepare() here. We shouldn't send
     // credentials until the user has explicitly accepted a prompt to upload.
-    upload_request_.context_token = context_token;
-    user_did_accept_upload_prompt_ = false;
-    client_->ConfirmSaveCreditCardToCloud(
-        upload_request_.card, std::move(legal_message),
-        should_request_name_from_user_,
-        base::BindOnce(&CreditCardSaveManager::OnUserDidAcceptUpload,
-                       weak_ptr_factory_.GetWeakPtr()));
-    client_->LoadRiskData(
-        base::Bind(&CreditCardSaveManager::OnDidGetUploadRiskData,
-                   weak_ptr_factory_.GetWeakPtr()));
-    upload_decision_metrics_ |= AutofillMetrics::UPLOAD_OFFERED;
-    AutofillMetrics::LogUploadOfferedCardOriginMetric(
-        uploading_local_card_ ? AutofillMetrics::OFFERING_UPLOAD_OF_LOCAL_CARD
-                              : AutofillMetrics::OFFERING_UPLOAD_OF_NEW_CARD);
-    if (upload_request_.card.HasFirstAndLastName()) {
-      AutofillMetrics::LogSaveCardWithFirstAndLastNameOffered(
-          /*is_local=*/false);
+    if (base::FeatureList::IsEnabled(
+            features::kAutofillDoNotUploadSaveUnsupportedCards) &&
+        !supported_card_bin_ranges.empty() &&
+        !IsCreditCardSupported(supported_card_bin_ranges)) {
+      AttemptToOfferCardLocalSave(has_non_focusable_field_,
+                                  upload_request_.card);
+      upload_decision_metrics_ |=
+          AutofillMetrics::UPLOAD_NOT_OFFERED_UNSUPPORTED_BIN_RANGE;
+      LogCardUploadDecisions(upload_decision_metrics_);
+      return;
     }
+    upload_request_.context_token = context_token;
+    legal_message_ = base::DictionaryValue::From(std::move(legal_message));
+
+    // Only offer upload once both Payments and the Autofill
+    // LegacyStrikeDatabase have returned their decisions. Use presence of
+    // |show_save_prompt_| as an indicator of LegacyStrikeDatabase retrieving
+    // its data.
+    if (show_save_prompt_ != base::nullopt)
+      OfferCardUploadSave();
   } else {
     // If the upload details request failed and we *know* we have all possible
     // information (card number, expiration, cvc, name, and address), fall back
@@ -290,19 +471,168 @@ void CreditCardSaveManager::OnDidGetUploadDetails(
     // if there's a network breakdown or Payments outage, resulting in sometimes
     // showing upload and sometimes offering local save, but such cases should
     // be rare.)
+    //
+    // Note that calling AttemptToOfferCardLocalSave(~) pings the Autofill
+    // LegacyStrikeDatabase again, but A) the result should be cached so this
+    // shouldn't hit the disk, and B) the alternative would require hooking into
+    // the LegacyStrikeDatabase's GetStrikes() call already in progress, which
+    // would be hacky at worst and require additional class state variables at
+    // best.
     bool found_name_and_postal_code_and_cvc =
         (upload_request_.detected_values & DetectedValue::CARDHOLDER_NAME ||
          upload_request_.detected_values & DetectedValue::ADDRESS_NAME) &&
         upload_request_.detected_values & DetectedValue::POSTAL_CODE &&
         upload_request_.detected_values & DetectedValue::CVC;
-    if (found_name_and_postal_code_and_cvc && !uploading_local_card_)
-      OfferCardLocalSave(upload_request_.card);
+    if (found_name_and_postal_code_and_cvc && !uploading_local_card_) {
+      AttemptToOfferCardLocalSave(has_non_focusable_field_,
+                                  upload_request_.card);
+    }
     upload_decision_metrics_ |=
         AutofillMetrics::UPLOAD_NOT_OFFERED_GET_UPLOAD_DETAILS_FAILED;
+    LogCardUploadDecisions(upload_decision_metrics_);
   }
+}
 
+void CreditCardSaveManager::OfferCardLocalSave() {
+#if defined(OS_ANDROID) || defined(OS_IOS)
+  bool is_mobile_build = true;
+#else
+  bool is_mobile_build = false;
+#endif  // #if defined(OS_ANDROID) || defined(OS_IOS)
+
+  // If |show_save_prompt_.value()| is false, desktop builds will still offer
+  // save in the omnibox without popping-up the bubble. Mobile builds, however,
+  // should not display the offer-to-save infobar at all.
+  if (!is_mobile_build || show_save_prompt_.value()) {
+    if (observer_for_testing_)
+      observer_for_testing_->OnOfferLocalSave();
+    client_->ConfirmSaveCreditCardLocally(
+        local_card_save_candidate_,
+        AutofillClient::SaveCreditCardOptions().with_show_prompt(
+            show_save_prompt_.value()),
+        base::BindOnce(&CreditCardSaveManager::OnUserDidDecideOnLocalSave,
+                       weak_ptr_factory_.GetWeakPtr()));
+
+    // Log metrics.
+    if (local_card_save_candidate_.HasFirstAndLastName())
+      AutofillMetrics::LogSaveCardWithFirstAndLastNameOffered(
+          /*is_local=*/true);
+  }
+  if (!show_save_prompt_.value()) {
+    AutofillMetrics::LogCreditCardSaveNotOfferedDueToMaxStrikesMetric(
+        AutofillMetrics::SaveTypeMetric::LOCAL);
+  }
+}
+
+void CreditCardSaveManager::OfferCardUploadSave() {
+#if defined(OS_ANDROID) || defined(OS_IOS)
+  bool is_mobile_build = true;
+#else
+  bool is_mobile_build = false;
+#endif  // #if defined(OS_ANDROID) || defined(OS_IOS)
+  // If |show_save_prompt_.value()| is false, desktop builds will still offer
+  // save in the omnibox without popping-up the bubble. Mobile builds, however,
+  // should not display the offer-to-save infobar at all.
+  if (!is_mobile_build || show_save_prompt_.value()) {
+    user_did_accept_upload_prompt_ = false;
+    client_->ConfirmSaveCreditCardToCloud(
+        upload_request_.card, std::move(legal_message_),
+        AutofillClient::SaveCreditCardOptions()
+            .with_has_non_focusable_field(has_non_focusable_field_)
+            .with_should_request_name_from_user(should_request_name_from_user_)
+            .with_should_request_expiration_date_from_user(
+                should_request_expiration_date_from_user_)
+            .with_show_prompt(show_save_prompt_.value()),
+        base::BindOnce(&CreditCardSaveManager::OnUserDidDecideOnUploadSave,
+                       weak_ptr_factory_.GetWeakPtr()));
+    client_->LoadRiskData(
+        base::BindOnce(&CreditCardSaveManager::OnDidGetUploadRiskData,
+                       weak_ptr_factory_.GetWeakPtr()));
+
+    // Log metrics.
+    AutofillMetrics::LogUploadOfferedCardOriginMetric(
+        uploading_local_card_ ? AutofillMetrics::OFFERING_UPLOAD_OF_LOCAL_CARD
+                              : AutofillMetrics::OFFERING_UPLOAD_OF_NEW_CARD);
+    if (upload_request_.card.HasFirstAndLastName()) {
+      AutofillMetrics::LogSaveCardWithFirstAndLastNameOffered(
+          /*is_local=*/false);
+    }
+    // Set that upload was offered.
+    upload_decision_metrics_ |= AutofillMetrics::UPLOAD_OFFERED;
+  } else {
+    // Set that upload was abandoned due to the Autofill LegacyStrikeDatabase
+    // returning too many strikes for a mobile infobar to be displayed.
+    upload_decision_metrics_ |=
+        AutofillMetrics::UPLOAD_NOT_OFFERED_MAX_STRIKES_ON_MOBILE;
+  }
   LogCardUploadDecisions(upload_decision_metrics_);
-  pending_upload_request_origin_ = url::Origin();
+  if (!show_save_prompt_.value()) {
+    AutofillMetrics::LogCreditCardSaveNotOfferedDueToMaxStrikesMetric(
+        AutofillMetrics::SaveTypeMetric::SERVER);
+  }
+}
+
+void CreditCardSaveManager::OnUserDidDecideOnLocalSave(
+    AutofillClient::SaveCardOfferUserDecision user_decision) {
+  switch (user_decision) {
+    case AutofillClient::ACCEPTED:
+      if (local_card_save_candidate_.HasFirstAndLastName())
+        AutofillMetrics::LogSaveCardWithFirstAndLastNameComplete(
+            /*is_local=*/true);
+      if (base::FeatureList::IsEnabled(
+              features::kAutofillSaveCreditCardUsesStrikeSystemV2)) {
+        // Log how many CreditCardSave strikes the card had when it was saved.
+        LogStrikesPresentWhenCardSaved(
+            /*is_local=*/true,
+            GetCreditCardSaveStrikeDatabase()->GetStrikes(base::UTF16ToUTF8(
+                local_card_save_candidate_.LastFourDigits())));
+        // Clear all CreditCardSave strikes for this card, in case it is later
+        // removed.
+        GetCreditCardSaveStrikeDatabase()->ClearStrikes(
+            base::UTF16ToUTF8(local_card_save_candidate_.LastFourDigits()));
+      } else if (base::FeatureList::IsEnabled(
+                     features::kAutofillSaveCreditCardUsesStrikeSystem)) {
+        LegacyStrikeDatabase* strike_database =
+            client_->GetLegacyStrikeDatabase();
+        // Log how many strikes the card had when it was saved.
+        strike_database->GetStrikes(
+            strike_database->GetKeyForCreditCardSave(
+                base::UTF16ToUTF8(local_card_save_candidate_.LastFourDigits())),
+            base::BindRepeating(
+                &CreditCardSaveManager::LogStrikesPresentWhenCardSaved,
+                weak_ptr_factory_.GetWeakPtr(),
+                /*is_local=*/true));
+        // Clear all strikes for this card, in case it is later removed.
+        strike_database->ClearAllStrikesForKey(
+            strike_database->GetKeyForCreditCardSave(
+                base::UTF16ToUTF8(local_card_save_candidate_.LastFourDigits())),
+            base::DoNothing());
+      }
+      if (base::FeatureList::IsEnabled(
+              features::kAutofillLocalCardMigrationUsesStrikeSystemV2)) {
+        GetLocalCardMigrationStrikeDatabase()->RemoveStrikes(
+            LocalCardMigrationStrikeDatabase::
+                kStrikesToRemoveWhenLocalCardAdded);
+      }
+
+      personal_data_manager_->OnAcceptedLocalCreditCardSave(
+          local_card_save_candidate_);
+      break;
+
+    case AutofillClient::DECLINED:
+    case AutofillClient::IGNORED:
+      OnUserDidIgnoreOrDeclineSave(local_card_save_candidate_.LastFourDigits());
+      break;
+  }
+}
+
+void CreditCardSaveManager::LogStrikesPresentWhenCardSaved(
+    bool is_local,
+    const int num_strikes) {
+  std::string suffix = is_local ? "StrikesPresentWhenLocalCardSaved"
+                                : "StrikesPresentWhenServerCardSaved";
+  base::UmaHistogramCounts1000("Autofill.StrikeDatabase." + suffix,
+                               num_strikes);
 }
 
 void CreditCardSaveManager::SetProfilesForCreditCardUpload(
@@ -477,6 +807,45 @@ int CreditCardSaveManager::GetDetectedValues() const {
     detected_values |= DetectedValue::HAS_GOOGLE_PAYMENTS_ACCOUNT;
   }
 
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillUpstreamEditableExpirationDate)) {
+    // If expiration date month or expiration year are missing, signal that
+    // expiration date will be explicitly requested in the offer-to-save bubble.
+    if (!upload_request_.card
+             .GetInfo(AutofillType(CREDIT_CARD_EXP_MONTH), app_locale_)
+             .empty()) {
+      detected_values |= DetectedValue::CARD_EXPIRATION_MONTH;
+    }
+    if (!(upload_request_.card
+              .GetInfo(AutofillType(CREDIT_CARD_EXP_4_DIGIT_YEAR), app_locale_)
+              .empty())) {
+      detected_values |= DetectedValue::CARD_EXPIRATION_YEAR;
+    }
+
+    // Set |USER_PROVIDED_EXPIRATION_DATE| if expiration date is detected as
+    // expired or missing.
+    if (detected_values & DetectedValue::CARD_EXPIRATION_MONTH &&
+        detected_values & DetectedValue::CARD_EXPIRATION_YEAR) {
+      int month_value = 0, year_value = 0;
+      bool parsable =
+          base::StringToInt(
+              upload_request_.card.GetInfo(AutofillType(CREDIT_CARD_EXP_MONTH),
+                                           app_locale_),
+              &month_value) &&
+          base::StringToInt(
+              upload_request_.card.GetInfo(
+                  AutofillType(CREDIT_CARD_EXP_4_DIGIT_YEAR), app_locale_),
+              &year_value);
+      DCHECK(parsable);
+      if (!IsValidCreditCardExpirationDate(year_value, month_value,
+                                           AutofillClock::Now())) {
+        detected_values |= DetectedValue::USER_PROVIDED_EXPIRATION_DATE;
+      }
+    } else {
+      detected_values |= DetectedValue::USER_PROVIDED_EXPIRATION_DATE;
+    }
+  }
+
   // If one of the following is true, signal that cardholder name will be
   // explicitly requested in the offer-to-save bubble:
   //  1) Name is conflicting/missing, and the user does NOT have a Google
@@ -495,18 +864,85 @@ int CreditCardSaveManager::GetDetectedValues() const {
   return detected_values;
 }
 
-void CreditCardSaveManager::OnUserDidAcceptUpload(
+void CreditCardSaveManager::OnUserDidDecideOnUploadSave(
+    AutofillClient::SaveCardOfferUserDecision user_decision,
+    const AutofillClient::UserProvidedCardDetails& user_provided_card_details) {
+  switch (user_decision) {
+    case AutofillClient::ACCEPTED:
+// On Android, requesting cardholder name or expiration date is a two step
+// flow.
+#if defined(OS_ANDROID)
+      if (should_request_name_from_user_) {
+        client_->ConfirmAccountNameFixFlow(base::BindOnce(
+            &CreditCardSaveManager::OnUserDidAcceptAccountNameFixFlow,
+            weak_ptr_factory_.GetWeakPtr()));
+      } else if (should_request_expiration_date_from_user_) {
+        client_->ConfirmExpirationDateFixFlow(
+            upload_request_.card,
+            base::BindOnce(
+                &CreditCardSaveManager::OnUserDidAcceptExpirationDateFixFlow,
+                weak_ptr_factory_.GetWeakPtr()));
+      } else {
+        OnUserDidAcceptUploadHelper(user_provided_card_details);
+      }
+#else
+      OnUserDidAcceptUploadHelper(user_provided_card_details);
+#endif
+      break;
+
+    case AutofillClient::DECLINED:
+    case AutofillClient::IGNORED:
+      OnUserDidIgnoreOrDeclineSave(upload_request_.card.LastFourDigits());
+      break;
+  }
+
+  personal_data_manager_->OnUserAcceptedUpstreamOffer();
+}
+
+#if defined(OS_ANDROID)
+void CreditCardSaveManager::OnUserDidAcceptAccountNameFixFlow(
     const base::string16& cardholder_name) {
+  DCHECK(should_request_name_from_user_);
+
+  OnUserDidAcceptUploadHelper({cardholder_name,
+                               /*expiration_date_month=*/base::string16(),
+                               /*expiration_date_year=*/base::string16()});
+}
+
+void CreditCardSaveManager::OnUserDidAcceptExpirationDateFixFlow(
+    const base::string16& month,
+    const base::string16& year) {
+  OnUserDidAcceptUploadHelper(
+      {/*cardholder_name=*/base::string16(), month, year});
+}
+#endif
+
+void CreditCardSaveManager::OnUserDidAcceptUploadHelper(
+    const AutofillClient::UserProvidedCardDetails& user_provided_card_details) {
   // If cardholder name was explicitly requested for the user to enter/confirm,
   // replace the name on |upload_request_.card| with the entered name.  (Note
   // that it is possible a name already existed on the card if conflicting names
   // were found, which this intentionally overwrites.)
-  if (!cardholder_name.empty()) {
+  if (!user_provided_card_details.cardholder_name.empty()) {
     DCHECK(should_request_name_from_user_);
-    upload_request_.card.SetInfo(CREDIT_CARD_NAME_FULL, cardholder_name,
+    upload_request_.card.SetInfo(CREDIT_CARD_NAME_FULL,
+                                 user_provided_card_details.cardholder_name,
                                  app_locale_);
   }
+
   user_did_accept_upload_prompt_ = true;
+  // If expiration date was explicitly requested for the user to select, replace
+  // the expiration date on |upload_request_.card| with the selected date.
+  if (!user_provided_card_details.expiration_date_month.empty() &&
+      !user_provided_card_details.expiration_date_year.empty()) {
+    DCHECK(should_request_expiration_date_from_user_);
+    upload_request_.card.SetInfo(
+        CREDIT_CARD_EXP_MONTH, user_provided_card_details.expiration_date_month,
+        app_locale_);
+    upload_request_.card.SetInfo(
+        CREDIT_CARD_EXP_4_DIGIT_YEAR,
+        user_provided_card_details.expiration_date_year, app_locale_);
+  }
   // Populating risk data and offering upload occur asynchronously.
   // If |risk_data| has already been loaded, send the upload card request.
   // Otherwise, continue to wait and let OnDidGetUploadRiskData handle it.
@@ -540,6 +976,38 @@ void CreditCardSaveManager::SendUploadCardRequest() {
                                       weak_ptr_factory_.GetWeakPtr()));
 }
 
+void CreditCardSaveManager::OnUserDidIgnoreOrDeclineSave(
+    const base::string16& card_last_four_digits) {
+  if (show_save_prompt_ != base::nullopt && show_save_prompt_.value()) {
+    if (base::FeatureList::IsEnabled(
+            features::kAutofillSaveCreditCardUsesStrikeSystemV2)) {
+      // If the user rejected or ignored save and the offer-to-save bubble or
+      // infobar was actually shown (NOT just the icon if on desktop), count
+      // that as a strike against offering upload in the future.
+      int nth_strike_added = GetCreditCardSaveStrikeDatabase()->AddStrike(
+          base::UTF16ToUTF8(card_last_four_digits));
+      OnStrikeChangeComplete(nth_strike_added);
+    } else if (base::FeatureList::IsEnabled(
+                   features::kAutofillSaveCreditCardUsesStrikeSystem)) {
+      // If the user rejected or ignored save and the offer-to-save bubble or
+      // infobar was actually shown (NOT just the icon if on desktop), count
+      // that as a strike against offering upload in the future.
+      LegacyStrikeDatabase* strike_database =
+          client_->GetLegacyStrikeDatabase();
+      strike_database->AddStrike(
+          strike_database->GetKeyForCreditCardSave(
+              base::UTF16ToUTF8(card_last_four_digits)),
+          base::BindRepeating(&CreditCardSaveManager::OnStrikeChangeComplete,
+                              weak_ptr_factory_.GetWeakPtr()));
+    }
+  }
+}
+
+void CreditCardSaveManager::OnStrikeChangeComplete(const int num_strikes) {
+  if (observer_for_testing_)
+    observer_for_testing_->OnStrikeChangeComplete();
+}
+
 AutofillMetrics::CardUploadDecisionMetric
 CreditCardSaveManager::GetCVCCardUploadDecisionMetric() const {
   // This function assumes a valid CVC was not found.
@@ -558,6 +1026,72 @@ void CreditCardSaveManager::LogCardUploadDecisions(
   AutofillMetrics::LogCardUploadDecisionsUkm(
       client_->GetUkmRecorder(), client_->GetUkmSourceId(),
       pending_upload_request_origin_.GetURL(), upload_decision_metrics);
+  pending_upload_request_origin_ = url::Origin();
+}
+
+void CreditCardSaveManager::LogSaveCardRequestExpirationDateReasonMetric() {
+  bool is_month_empty =
+      upload_request_.card
+          .GetInfo(AutofillType(CREDIT_CARD_EXP_MONTH), app_locale_)
+          .empty();
+  bool is_year_empty =
+      upload_request_.card
+          .GetInfo(AutofillType(CREDIT_CARD_EXP_4_DIGIT_YEAR), app_locale_)
+          .empty();
+
+  if (is_month_empty && is_year_empty) {
+    AutofillMetrics::LogSaveCardRequestExpirationDateReasonMetric(
+        AutofillMetrics::SaveCardRequestExpirationDateReasonMetric::
+            kMonthAndYearMissing);
+  } else if (is_month_empty) {
+    AutofillMetrics::LogSaveCardRequestExpirationDateReasonMetric(
+        AutofillMetrics::SaveCardRequestExpirationDateReasonMetric::
+            kMonthMissingOnly);
+  } else if (is_year_empty) {
+    AutofillMetrics::LogSaveCardRequestExpirationDateReasonMetric(
+        AutofillMetrics::SaveCardRequestExpirationDateReasonMetric::
+            kYearMissingOnly);
+  } else {
+    int month = 0, year = 0;
+    bool parsable =
+        base::StringToInt(
+            upload_request_.card.GetInfo(
+                AutofillType(CREDIT_CARD_EXP_4_DIGIT_YEAR), app_locale_),
+            &year) &&
+        base::StringToInt(upload_request_.card.GetInfo(
+                              AutofillType(CREDIT_CARD_EXP_MONTH), app_locale_),
+                          &month);
+    DCHECK(parsable);
+    // Month and year are not empty, so they must be expired.
+    DCHECK(!IsValidCreditCardExpirationDate(year, month, AutofillClock::Now()));
+    AutofillMetrics::LogSaveCardRequestExpirationDateReasonMetric(
+        AutofillMetrics::SaveCardRequestExpirationDateReasonMetric::
+            kExpirationDatePresentButExpired);
+  }
+}
+
+bool CreditCardSaveManager::IsCreditCardSupported(
+    std::vector<std::pair<int, int>> supported_card_bin_ranges) {
+  base::string16 stripped_number =
+      CreditCard::StripSeparators(upload_request_.card.number());
+  for (auto& bin_range : supported_card_bin_ranges) {
+    unsigned long range_num_of_digits =
+        base::NumberToString(bin_range.first).size();
+    DCHECK_EQ(range_num_of_digits,
+              base::NumberToString(bin_range.second).size());
+    // The first n digits of credit card number, where n is the number of
+    // digits in range's starting/ending number.
+    int first_digits_start, first_digits_end;
+    base::StringToInt(stripped_number.substr(0, range_num_of_digits),
+                      &first_digits_start);
+    base::StringToInt(stripped_number.substr(0, range_num_of_digits),
+                      &first_digits_end);
+    if (first_digits_start >= bin_range.first &&
+        first_digits_end <= bin_range.second) {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace autofill

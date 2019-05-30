@@ -38,18 +38,16 @@ class TickClock;
 
 namespace viz {
 
-namespace test {
-class SurfaceReferencesTest;
-class SurfaceSynchronizationTest;
-}  // namespace test
 class Surface;
+class SurfaceAllocationGroup;
+class SurfaceManagerDelegate;
 struct BeginFrameAck;
 struct BeginFrameArgs;
 
 class VIZ_SERVICE_EXPORT SurfaceManager {
  public:
-  explicit SurfaceManager(
-      base::Optional<uint32_t> activation_deadline_in_frames);
+  SurfaceManager(SurfaceManagerDelegate* delegate,
+                 base::Optional<uint32_t> activation_deadline_in_frames);
   ~SurfaceManager();
 
 #if DCHECK_IS_ON()
@@ -85,11 +83,13 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   Surface* CreateSurface(base::WeakPtr<SurfaceClient> surface_client,
                          const SurfaceInfo& surface_info,
                          BeginFrameSource* begin_frame_source,
-                         bool needs_sync_tokens);
+                         bool needs_sync_tokens,
+                         bool block_activation_on_parent);
 
   // Destroy the Surface once a set of sequence numbers has been satisfied.
   void DestroySurface(const SurfaceId& surface_id);
 
+  // Returns a Surface corresponding to the provided |surface_id|.
   Surface* GetSurfaceForId(const SurfaceId& surface_id);
 
   void AddObserver(SurfaceObserver* obs) { observer_list_.AddObserver(obs); }
@@ -122,6 +122,10 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   // was not blocked on dependencies.
   void SurfaceActivated(Surface* surface,
                         base::Optional<base::TimeDelta> duration);
+
+  // Called when this |surface_id| is referenced as an activation dependency
+  // from a parent CompositorFrame.
+  void SurfaceDependencyAdded(const SurfaceId& surface_id);
 
   // Called when the dependencies of a pending CompositorFrame within |surface|
   // has changed.
@@ -168,18 +172,6 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   // collection to delete unreachable surfaces.
   void RemoveSurfaceReferences(const std::vector<SurfaceReference>& references);
 
-  // Assigns |owner| as the owner of the temporary reference to
-  // |surface_id|. If |owner| is invalidated the temporary reference
-  // will be removed. If a surface reference has already been added from the
-  // parent to |surface_id| then this will do nothing.
-  void AssignTemporaryReference(const SurfaceId& surface_id,
-                                const FrameSinkId& owner);
-
-  // Drops the temporary reference for |surface_id|. If a surface reference has
-  // already been added from the parent to |surface_id| then this will do
-  // nothing.
-  void DropTemporaryReference(const SurfaceId& surface_id);
-
   // Garbage collects all destroyed surfaces that aren't live.
   void GarbageCollectSurfaces();
 
@@ -202,39 +194,49 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   // next display frame. We will notify SurfaceObservers accordingly.
   void SurfaceWillBeDrawn(Surface* surface);
 
+  // Removes temporary reference to |surface_id| and older surfaces.
+  void DropTemporaryReference(const SurfaceId& surface_id);
+
+  // Returns the corresponding SurfaceAllocationGroup for |surface_id|. A
+  // SurfaceAllocationGroup will be created for |surface_id| if one doesn't
+  // exist yet. If there is already a SurfaceAllocationGroup that matches the
+  // embed token of |surface_id| but its submitter doesn't match |surface_id|'s
+  // FrameSinkId, nullptr will be returned. In any other case, the returned
+  // value will always be a valid SurfaceAllocationGroup.
+  SurfaceAllocationGroup* GetOrCreateAllocationGroupForSurfaceId(
+      const SurfaceId& surface_id);
+
+  // Similar to GetOrCreateAllocationGroupForSurfaceId, but will not attempt to
+  // create the allocation group if it does not already exist.
+  SurfaceAllocationGroup* GetAllocationGroupForSurfaceId(
+      const SurfaceId& surface_id);
+
  private:
-  friend class test::SurfaceSynchronizationTest;
-  friend class test::SurfaceReferencesTest;
+  friend class CompositorFrameSinkSupportTest;
+  friend class FrameSinkManagerTest;
+  friend class HitTestAggregatorTest;
+  friend class SurfaceSynchronizationTest;
+  friend class SurfaceReferencesTest;
+  friend class SurfaceSynchronizationTest;
 
   using SurfaceIdSet = std::unordered_set<SurfaceId, SurfaceIdHash>;
 
   // The reason for removing a temporary reference.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
   enum class RemovedReason {
-    EMBEDDED,     // The surface was embedded.
-    DROPPED,      // The surface won't be embedded so it was dropped.
-    SKIPPED,      // A newer surface was embedded and the surface was skipped.
-    INVALIDATED,  // The expected embedder was invalidated.
-    EXPIRED,      // The surface was never embedded and expired.
+    EMBEDDED = 0,  // The surface was embedded.
+    DROPPED = 1,   // The surface won't be embedded so it was dropped.
+    SKIPPED = 2,   // A newer surface was embedded and the surface was skipped.
+    EXPIRED = 4,   // The surface was never embedded and expired.
     COUNT
   };
 
   struct TemporaryReferenceData {
-    TemporaryReferenceData();
-    ~TemporaryReferenceData();
-
-    // The FrameSinkId that is expected to embed this SurfaceId. This will
-    // initially be empty and set later by AssignTemporaryReference().
-    base::Optional<FrameSinkId> owner;
-
     // Used to track old surface references, will be marked as true on first
     // timer tick and will be true on second timer tick.
     bool marked_as_old = false;
   };
-
-  // Returns the latest surface in a FrameSinkId that satisfies |is_valid|.
-  Surface* GetLatestInFlightSurfaceForFrameSinkId(
-      const SurfaceRange& surface_range,
-      const FrameSinkId& sink_id);
 
   // Returns set of live surfaces for |lifetime_manager_| is REFERENCES.
   SurfaceIdSet GetLiveSurfacesForReferences();
@@ -252,18 +254,14 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   // Returns whether |surface_id| has a temporary reference or not.
   bool HasTemporaryReference(const SurfaceId& surface_id) const;
 
-  // Returns whether |surface_id| has a Persistent reference or not.
-  bool HasPersistentReference(const SurfaceId& surface_id) const;
-
   // Adds a temporary reference to |surface_id|. The reference will not have an
   // owner initially.
   void AddTemporaryReference(const SurfaceId& surface_id);
 
-  // Removes temporary reference to |surface_id|. The |reason| for removing will
-  // be recorded with UMA. If |reason| is EMBEDDED then older temporary
-  // references from the same FrameSinkId will also be removed.
-  void RemoveTemporaryReference(const SurfaceId& surface_id,
-                                RemovedReason reason);
+  // Removes temporary reference to |surface_id| and older surfaces. The
+  // |reason| for removing will be recorded with UMA.
+  void RemoveTemporaryReferenceImpl(const SurfaceId& surface_id,
+                                    RemovedReason reason);
 
   // Marks and then expires old temporary references. This function is run
   // periodically by a timer.
@@ -281,6 +279,9 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
 
   // Returns true if |surface_id| is in the garbage collector's queue.
   bool IsMarkedForDestruction(const SurfaceId& surface_id);
+
+  // Can be nullptr.
+  SurfaceManagerDelegate* const delegate_;
 
   base::Optional<uint32_t> activation_deadline_in_frames_;
 
@@ -327,11 +328,6 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   std::unordered_map<FrameSinkId, std::vector<LocalSurfaceId>, FrameSinkIdHash>
       temporary_reference_ranges_;
 
-  // A list of surfaces with a given FrameSinkId that have a persistent
-  // reference.
-  base::flat_map<FrameSinkId, base::flat_set<LocalSurfaceId>>
-      persistent_references_by_frame_sink_id_;
-
   // A map storing SurfaceIds interested in knowing about activation events
   // happending in FrameSinkId.
   base::flat_map<FrameSinkId, base::flat_set<SurfaceId>> activation_observers_;
@@ -340,6 +336,10 @@ class VIZ_SERVICE_EXPORT SurfaceManager {
   // interval of time. The timer will started/stopped so it only runs if there
   // are temporary references. Also the timer isn't used with Android WebView.
   base::Optional<base::RepeatingTimer> expire_timer_;
+
+  base::flat_map<base::UnguessableToken,
+                 std::unique_ptr<SurfaceAllocationGroup>>
+      embed_token_to_allocation_group_;
 
   base::WeakPtrFactory<SurfaceManager> weak_factory_;
 

@@ -24,9 +24,11 @@ namespace vivaldi {
 
 NotesDataTypeController::NotesDataTypeController(
     const base::Closure& dump_stack,
+    syncer::SyncService* sync_service,
     syncer::SyncClient* sync_client)
-    : FrontendDataTypeController(syncer::NOTES, dump_stack, sync_client),
-      notes_model_observer_(this) {}
+    : FrontendDataTypeController(syncer::NOTES, dump_stack, sync_service),
+      notes_model_observer_(this),
+      sync_client_(sync_client) {}
 
 NotesDataTypeController::~NotesDataTypeController() {}
 
@@ -48,7 +50,7 @@ void NotesDataTypeController::CreateSyncComponents() {
       CreateErrorHandler());
 
   Notes_Model* notes_model = sync_client_->GetNotesModel();
-  syncer::UserShare* user_share = sync_client_->GetSyncService()->GetUserShare();
+  syncer::UserShare* user_share = sync_service()->GetUserShare();
   std::unique_ptr<NotesModelAssociator> model_associator =
       std::make_unique<NotesModelAssociator>(notes_model, sync_client_,
                                              user_share, error_handler->Copy());

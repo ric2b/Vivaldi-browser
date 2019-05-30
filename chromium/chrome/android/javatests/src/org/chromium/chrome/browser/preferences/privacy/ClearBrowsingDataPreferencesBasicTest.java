@@ -26,6 +26,7 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.preferences.Preferences;
+import org.chromium.chrome.browser.preferences.privacy.ClearBrowsingDataPreferences.DialogOption;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -53,13 +54,14 @@ public class ClearBrowsingDataPreferencesBasicTest {
 
     @Before
     public void setUp() throws InterruptedException {
-        SigninTestUtil.setUpAuthForTest(InstrumentationRegistry.getInstrumentation());
+        SigninTestUtil.setUpAuthForTest();
         mActivityTestRule.startMainActivityOnBlankPage();
     }
 
     @After
     public void tearDown() throws Exception {
         ThreadUtils.runOnUiThreadBlocking(() -> ProfileSyncService.resetForTests());
+        SigninTestUtil.tearDownAuthForTest();
     }
 
     private static class StubProfileSyncService extends ProfileSyncService {
@@ -72,11 +74,8 @@ public class ClearBrowsingDataPreferencesBasicTest {
 
         @Override
         public Set<Integer> getActiveDataTypes() {
-            if (mSyncable) {
-                return CollectionUtil.newHashSet(ModelType.HISTORY_DELETE_DIRECTIVES);
-            } else {
-                return new HashSet<Integer>();
-            }
+            return mSyncable ? CollectionUtil.newHashSet(ModelType.HISTORY_DELETE_DIRECTIVES)
+                             : new HashSet<Integer>();
         }
     }
 
@@ -86,9 +85,9 @@ public class ClearBrowsingDataPreferencesBasicTest {
         delegate.setMasterSyncAutomatically(syncable);
         AndroidSyncSettings.overrideForTests(delegate, null);
         if (syncable) {
-            AndroidSyncSettings.enableChromeSync();
+            AndroidSyncSettings.get().enableChromeSync();
         } else {
-            AndroidSyncSettings.disableChromeSync();
+            AndroidSyncSettings.get().disableChromeSync();
         }
 
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -110,8 +109,6 @@ public class ClearBrowsingDataPreferencesBasicTest {
     @Test
     @SmallTest
     public void testCheckBoxTextNonsigned() throws Exception {
-        SigninTestUtil.resetSigninState();
-
         final Preferences preferences = mActivityTestRule.startPreferences(
                 ClearBrowsingDataPreferencesBasic.class.getName());
 
@@ -122,10 +119,11 @@ public class ClearBrowsingDataPreferencesBasicTest {
                         (ClearBrowsingDataPreferencesBasic) preferences.getFragmentForTest();
                 PreferenceScreen screen = fragment.getPreferenceScreen();
 
-                String cookiesSummary =
-                        getCheckboxSummary(screen, ClearBrowsingDataPreferencesBasic.PREF_COOKIES);
-                String historySummary =
-                        getCheckboxSummary(screen, ClearBrowsingDataPreferencesBasic.PREF_HISTORY);
+                String cookiesSummary = getCheckboxSummary(screen,
+                        ClearBrowsingDataPreferences.getPreferenceKey(
+                                DialogOption.CLEAR_COOKIES_AND_SITE_DATA));
+                String historySummary = getCheckboxSummary(screen,
+                        ClearBrowsingDataPreferences.getPreferenceKey(DialogOption.CLEAR_HISTORY));
 
                 assertThat(cookiesSummary, not(containsString(GOOGLE_ACCOUNT)));
                 assertThat(historySummary, not(containsString(OTHER_ACTIVITY)));
@@ -136,7 +134,8 @@ public class ClearBrowsingDataPreferencesBasicTest {
 
     /**
      * Tests that for users who are signed in but don't have sync activated,
-     * only information about "other activity" is shown in the history summary.
+     * only information about your "google account" which will stay signed in
+     * and "other activity" is shown.
      */
     @Test
     @SmallTest
@@ -154,9 +153,13 @@ public class ClearBrowsingDataPreferencesBasicTest {
                         (ClearBrowsingDataPreferencesBasic) preferences.getFragmentForTest();
                 PreferenceScreen screen = fragment.getPreferenceScreen();
 
-                String historySummary =
-                        getCheckboxSummary(screen, ClearBrowsingDataPreferencesBasic.PREF_HISTORY);
+                String cookiesSummary = getCheckboxSummary(screen,
+                        ClearBrowsingDataPreferences.getPreferenceKey(
+                                DialogOption.CLEAR_COOKIES_AND_SITE_DATA));
+                String historySummary = getCheckboxSummary(screen,
+                        ClearBrowsingDataPreferences.getPreferenceKey(DialogOption.CLEAR_HISTORY));
 
+                assertThat(cookiesSummary, containsString(GOOGLE_ACCOUNT));
                 assertThat(historySummary, containsString(OTHER_ACTIVITY));
                 assertThat(historySummary, not(containsString(SIGNED_IN_DEVICES)));
             }
@@ -165,7 +168,8 @@ public class ClearBrowsingDataPreferencesBasicTest {
 
     /**
      * Tests that users who are signed in, and have sync enabled see information
-     * about their "other activity" and history on "signed in devices".
+     * about their "google account", "other activity" and history on "signed in
+     * devices".
      */
     @Test
     @SmallTest
@@ -183,9 +187,13 @@ public class ClearBrowsingDataPreferencesBasicTest {
                         (ClearBrowsingDataPreferencesBasic) preferences.getFragmentForTest();
                 PreferenceScreen screen = fragment.getPreferenceScreen();
 
-                String historySummary =
-                        getCheckboxSummary(screen, ClearBrowsingDataPreferencesBasic.PREF_HISTORY);
+                String cookiesSummary = getCheckboxSummary(screen,
+                        ClearBrowsingDataPreferences.getPreferenceKey(
+                                DialogOption.CLEAR_COOKIES_AND_SITE_DATA));
+                String historySummary = getCheckboxSummary(screen,
+                        ClearBrowsingDataPreferences.getPreferenceKey(DialogOption.CLEAR_HISTORY));
 
+                assertThat(cookiesSummary, containsString(GOOGLE_ACCOUNT));
                 assertThat(historySummary, containsString(OTHER_ACTIVITY));
                 assertThat(historySummary, containsString(SIGNED_IN_DEVICES));
             }

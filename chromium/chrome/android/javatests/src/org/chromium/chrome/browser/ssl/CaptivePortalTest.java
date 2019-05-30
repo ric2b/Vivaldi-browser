@@ -26,9 +26,9 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.browser.TabTitleObserver;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.net.X509Util;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.ServerCertificate;
@@ -110,8 +110,13 @@ public class CaptivePortalTest {
         Tab tab = mActivityTestRule.getActivity().getActivityTab();
         ChromeTabUtils.loadUrlOnUiThread(
                 tab, mServer.getURL("/chrome/test/data/android/navigate/simple.html"));
-        waitForInterstitial(tab.getWebContents(), true);
-        Assert.assertTrue(tab.isShowingInterstitialPage());
+
+        // If committed interstitials are enabled, the interstitial is a regular navigation, so we
+        // skip interstitial specific checks, and just check the page title.
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.SSL_COMMITTED_INTERSTITIALS)) {
+            waitForInterstitial(tab.getWebContents(), true);
+            Assert.assertTrue(tab.isShowingInterstitialPage());
+        }
 
         new TabTitleObserver(tab, CAPTIVE_PORTAL_INTERSTITIAL_TITLE_PREFIX) {
             @Override
@@ -179,8 +184,13 @@ public class CaptivePortalTest {
         Tab tab = mActivityTestRule.getActivity().getActivityTab();
         ChromeTabUtils.loadUrlOnUiThread(
                 tab, mServer.getURL("/chrome/test/data/android/navigate/simple.html"));
-        waitForInterstitial(tab.getWebContents(), true);
-        Assert.assertTrue(tab.isShowingInterstitialPage());
+
+        // If committed interstitials are enabled, the interstitial is a regular navigation, so we
+        // skip interstitial specific checks, and just check the page title.
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.SSL_COMMITTED_INTERSTITIALS)) {
+            waitForInterstitial(tab.getWebContents(), true);
+            Assert.assertTrue(tab.isShowingInterstitialPage());
+        }
 
         new TabTitleObserver(tab, SSL_INTERSTITIAL_TITLE)
                 .waitForTitleUpdate(INTERSTITIAL_TITLE_UPDATE_TIMEOUT_SECONDS);

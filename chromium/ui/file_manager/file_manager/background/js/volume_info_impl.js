@@ -36,17 +36,20 @@
  *     type indentifier.
  * @param {!chrome.fileManagerPrivate.IconSet} iconSet Set of icons for this
  *     volume.
+ * @param {(string|undefined)} driveLabel Drive label of the volume. Removable
+ *     partitions belonging to the same device will share the same drive label.
  */
 function VolumeInfoImpl(
     volumeType, volumeId, fileSystem, error, deviceType, devicePath, isReadOnly,
     isReadOnlyRemovableDevice, profile, label, providerId, hasMedia,
-    configurable, watchable, source, diskFileSystemType, iconSet) {
+    configurable, watchable, source, diskFileSystemType, iconSet, driveLabel) {
   this.volumeType_ = volumeType;
   this.volumeId_ = volumeId;
   this.fileSystem_ = fileSystem;
   this.label_ = label;
   this.displayRoot_ = null;
   this.teamDriveDisplayRoot_ = null;
+  this.computersDisplayRoot_ = null;
 
   /**
    * @type {FilesAppEntry} an entry to be used as prefix of this volume on
@@ -55,18 +58,8 @@ function VolumeInfoImpl(
    */
   this.prefixEntry_ = null;
 
-  /** @type {Promise<boolean>} */
-  this.isTeamDrivesEnabledPromise_ = new Promise(resolve => {
-    chrome.commandLinePrivate.hasSwitch('disable-team-drives', enabled => {
-      resolve(!enabled);
-    });
-  });
-
   /** @type {Object<!FakeEntry>} */
   this.fakeEntries_ = {};
-
-  /** @type {Promise<!DirectoryEntry>} */
-  this.displayRootPromise_ = null;
 
   if (volumeType === VolumeManagerCommon.VolumeType.DRIVE) {
     this.fakeEntries_[VolumeManagerCommon.RootType.DRIVE_OFFLINE] =
@@ -96,6 +89,10 @@ function VolumeInfoImpl(
   this.source_ = source;
   this.diskFileSystemType_ = diskFileSystemType;
   this.iconSet_ = iconSet;
+  this.driveLabel_ = driveLabel;
+
+  /** @type {Promise<!DirectoryEntry>} */
+  this.displayRootPromise_ = this.resolveDisplayRootImpl_();
 }
 
 VolumeInfoImpl.prototype = /** @struct */ {
@@ -131,6 +128,14 @@ VolumeInfoImpl.prototype = /** @struct */ {
    */
   get teamDriveDisplayRoot() {
     return this.teamDriveDisplayRoot_;
+  },
+  /**
+   * @return {DirectoryEntry} The display root path of Computers directory.
+   * It is null before finishing to resolve the entry. Valid only for Drive
+   * volume.
+   */
+  get computersDisplayRoot() {
+    return this.computersDisplayRoot_;
   },
   /**
    * @return {Object<!FakeEntry>} Fake entries.
@@ -223,6 +228,14 @@ VolumeInfoImpl.prototype = /** @struct */ {
     return this.iconSet_;
   },
   /**
+   * @return {(string|undefined)} Drive label for the volume. Removable
+   * partitions belonging to the same physical media device will share the
+   * same drive label.
+   */
+  get driveLabel() {
+    return this.driveLabel_;
+  },
+  /**
    * @type {FilesAppEntry} an entry to be used as prefix of this volume on
    *     breadcrumbs, e.g. "My Files > Downloads", "My Files" is a prefixEntry
    *     on "Downloads" VolumeInfo.
@@ -240,7 +253,7 @@ VolumeInfoImpl.prototype = /** @struct */ {
  * @param {string} url The filesystem URL
  * @return {!Promise<Entry>}
  */
-VolumeInfoImpl.resolveFileSystemUrl_ = function(url) {
+VolumeInfoImpl.resolveFileSystemUrl_ = url => {
   return new Promise(window.webkitResolveLocalFileSystemURL.bind(null, url));
 };
 
@@ -251,61 +264,83 @@ VolumeInfoImpl.resolveFileSystemUrl_ = function(url) {
  * @return {!Promise<void>}
  */
 VolumeInfoImpl.prototype.resolveTeamDrivesRoot_ = function() {
-  return this.isTeamDrivesEnabledPromise_.then(enabled => {
-    if (!enabled) {
-      return;
+  return VolumeInfoImpl
+      .resolveFileSystemUrl_(
+          this.fileSystem_.root.toURL() +
+          VolumeManagerCommon.TEAM_DRIVES_DIRECTORY_NAME)
+      .then(
+          teamDrivesRoot => {
+            this.teamDriveDisplayRoot_ = teamDrivesRoot;
+          },
+          error => {
+            if (error.name != 'NotFoundError') {
+              throw error;
+            }
+          });
+};
+
+/**
+ * Sets |computersDisplayRoot_| if Computers are enabled.
+ *
+ * If Computers are not enabled, resolveFileSystemUrl_ will return a
+ * 'NotFoundError' which will be caught here. Any other errors will be rethrown.
+ *
+ * The return value will resolve once this operation is complete.
+ * @return {!Promise<void>}
+ */
+VolumeInfoImpl.prototype.resolveComputersRoot_ = function() {
+  return VolumeInfoImpl
+      .resolveFileSystemUrl_(
+          this.fileSystem_.root.toURL() +
+          VolumeManagerCommon.COMPUTERS_DIRECTORY_NAME)
+      .then(
+          (computersRoot) => {
+            this.computersDisplayRoot_ = computersRoot;
+          },
+          (error) => {
+            if (error.name != 'NotFoundError') {
+              throw error;
+            }
+          });
+};
+
+/**
+ * Returns a promise that resolves when the display root is resolved.
+ * @return {Promise<!DirectoryEntry>} Volume type.
+ */
+VolumeInfoImpl.prototype.resolveDisplayRootImpl_ = function() {
+  // TODO(mtomasz): Do not add VolumeInfo which failed to resolve root, and
+  // remove this if logic.
+  if (this.volumeType !== VolumeManagerCommon.VolumeType.DRIVE) {
+    if (this.fileSystem_) {
+      this.displayRoot_ = this.fileSystem_.root;
+      return Promise.resolve(this.displayRoot_);
+    } else {
+      return Promise.reject(this.error);
     }
-    return VolumeInfoImpl
-        .resolveFileSystemUrl_(
-            this.fileSystem_.root.toURL() +
-            VolumeManagerCommon.TEAM_DRIVES_DIRECTORY_NAME)
-        .then(
-            teamDrivesRoot => {
-              this.teamDriveDisplayRoot_ = teamDrivesRoot;
-            },
-            error => {
-              if (error.name != 'NotFoundError') {
-                throw error;
-              }
-            });
-  });
+  }
+  // For Drive, we need to resolve.
+  const displayRootURL = this.fileSystem_.root.toURL() + 'root';
+  return Promise
+      .all([
+        VolumeInfoImpl.resolveFileSystemUrl_(displayRootURL),
+        this.resolveTeamDrivesRoot_(),
+        this.resolveComputersRoot_(),
+      ])
+      .then(([displayRoot]) => {
+        // Store the obtained displayRoot.
+        this.displayRoot_ = displayRoot;
+        return displayRoot;
+      });
 };
 
 /**
  * @override
  */
-VolumeInfoImpl.prototype.resolveDisplayRoot = function(opt_onSuccess,
-                                                       opt_onFailure) {
-  if (!this.displayRootPromise_) {
-    // TODO(mtomasz): Do not add VolumeInfo which failed to resolve root, and
-    // remove this if logic. Call opt_onSuccess() always, instead.
-    if (this.volumeType !== VolumeManagerCommon.VolumeType.DRIVE) {
-      if (this.fileSystem_)
-        this.displayRootPromise_ = /** @type {Promise<!DirectoryEntry>} */ (
-            Promise.resolve(this.fileSystem_.root));
-      else
-        this.displayRootPromise_ = /** @type {Promise<!DirectoryEntry>} */ (
-            Promise.reject(this.error));
-    } else {
-      // For Drive, we need to resolve.
-      var displayRootURL = this.fileSystem_.root.toURL() + 'root';
-      this.displayRootPromise_ =
-          Promise
-              .all([
-                VolumeInfoImpl.resolveFileSystemUrl_(displayRootURL),
-                this.resolveTeamDrivesRoot_()
-              ])
-              .then(([root]) => {
-                return root;
-              });
-    }
-
-    // Store the obtained displayRoot.
-    this.displayRootPromise_.then(function(displayRoot) {
-      this.displayRoot_ = displayRoot;
-    }.bind(this));
-  }
-  if (opt_onSuccess)
+VolumeInfoImpl.prototype.resolveDisplayRoot = function(
+    opt_onSuccess, opt_onFailure) {
+  if (opt_onSuccess) {
     this.displayRootPromise_.then(opt_onSuccess, opt_onFailure);
-  return this.displayRootPromise_;
+  }
+  return assert(this.displayRootPromise_);
 };

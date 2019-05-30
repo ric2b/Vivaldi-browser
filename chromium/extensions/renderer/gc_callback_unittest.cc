@@ -72,8 +72,11 @@ class GCCallbackTest : public testing::TestWithParam<CallbackType> {
       v8::Local<v8::FunctionTemplate> unreachable_function =
           gin::CreateFunctionTemplate(isolate,
                                       base::Bind(SetToTrue, callback_invoked));
-      return new GCCallback(script_context, object,
-                            unreachable_function->GetFunction(), fallback);
+      v8::Local<v8::Context> v8_context = isolate->GetCurrentContext();
+      return new GCCallback(
+          script_context, object,
+          unreachable_function->GetFunction(v8_context).ToLocalChecked(),
+          fallback);
     }
     return new GCCallback(script_context, object,
                           base::Bind(SetToTrue, callback_invoked), fallback);
@@ -199,16 +202,16 @@ TEST_P(GCCallbackTest,
   EXPECT_EQ(has_fallback(), fallback_invoked);
 }
 
-INSTANTIATE_TEST_CASE_P(NativeCallback,
-                        GCCallbackTest,
-                        ::testing::Values(NATIVE));
-INSTANTIATE_TEST_CASE_P(JSCallback, GCCallbackTest, ::testing::Values(JS));
-INSTANTIATE_TEST_CASE_P(NativeCallbackWithNoFallback,
-                        GCCallbackTest,
-                        ::testing::Values(NATIVE_WITH_NO_FALLBACK));
-INSTANTIATE_TEST_CASE_P(JSCallbackWithNoFallback,
-                        GCCallbackTest,
-                        ::testing::Values(JS_WITH_NO_FALLBACK));
+INSTANTIATE_TEST_SUITE_P(NativeCallback,
+                         GCCallbackTest,
+                         ::testing::Values(NATIVE));
+INSTANTIATE_TEST_SUITE_P(JSCallback, GCCallbackTest, ::testing::Values(JS));
+INSTANTIATE_TEST_SUITE_P(NativeCallbackWithNoFallback,
+                         GCCallbackTest,
+                         ::testing::Values(NATIVE_WITH_NO_FALLBACK));
+INSTANTIATE_TEST_SUITE_P(JSCallbackWithNoFallback,
+                         GCCallbackTest,
+                         ::testing::Values(JS_WITH_NO_FALLBACK));
 
 }  // namespace
 }  // namespace extensions

@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -15,7 +16,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon_client.h"
@@ -35,8 +36,10 @@ const char kJsScreenPath[] = "login.EnableDebuggingScreen";
 
 namespace chromeos {
 
-EnableDebuggingScreenHandler::EnableDebuggingScreenHandler()
-    : BaseScreenHandler(kScreenId), weak_ptr_factory_(this) {
+EnableDebuggingScreenHandler::EnableDebuggingScreenHandler(
+    JSCallsContainer* js_calls_container)
+    : BaseScreenHandler(kScreenId, js_calls_container),
+      weak_ptr_factory_(this) {
   set_call_js_prefix(kJsScreenPath);
 }
 
@@ -222,7 +225,7 @@ void EnableDebuggingScreenHandler::OnRemoveRootfsVerification(bool success) {
   PrefService* prefs = g_browser_process->local_state();
   prefs->SetBoolean(prefs::kDebuggingFeaturesRequested, true);
   prefs->CommitPendingWrite();
-  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->RequestRestart(
+  chromeos::PowerManagerClient::Get()->RequestRestart(
       power_manager::REQUEST_RESTART_OTHER,
       "login debugging screen removing rootfs verification");
 }
@@ -271,9 +274,7 @@ void EnableDebuggingScreenHandler::UpdateUIState(
     prefs->CommitPendingWrite();
   }
 
-  web_ui()->CallJavascriptFunctionUnsafe(
-      "login.EnableDebuggingScreen.updateState",
-      base::Value(static_cast<int>(state)));
+  CallJS("login.EnableDebuggingScreen.updateState", static_cast<int>(state));
 }
 
 void EnableDebuggingScreenHandler::HandleOnLearnMore() {

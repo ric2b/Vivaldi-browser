@@ -579,13 +579,8 @@ IN_PROC_BROWSER_TEST_F(SiteDetailsBrowserTest, DISABLED_ManyIframes) {
                   ElementsAre(Bucket(12, 1), Bucket(29, 1), Bucket(68, 1))));
 }
 
-// Flaky on Windows, Mac and ChromeOS. crbug.com/671891
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
-#define MAYBE_IsolateExtensions DISABLED_IsolateExtensions
-#else
-#define MAYBE_IsolateExtensions IsolateExtensions
-#endif
-IN_PROC_BROWSER_TEST_F(SiteDetailsBrowserTest, MAYBE_IsolateExtensions) {
+// TODO(crbug.com/671891): This test is flaky.
+IN_PROC_BROWSER_TEST_F(SiteDetailsBrowserTest, DISABLED_IsolateExtensions) {
   // We start on "about:blank", which should be credited with a process in this
   // case.
   scoped_refptr<TestMemoryDetails> details = new TestMemoryDetails();
@@ -810,7 +805,8 @@ IN_PROC_BROWSER_TEST_F(SiteDetailsBrowserTest, MAYBE_IsolateExtensions) {
   // Navigate tab1 to an extension3 page with an extension3 iframe. There should
   // be three processes estimated by IsolateExtensions: one for extension3, one
   // for extension1's background page, and one for the web iframe in tab2.
-  browser()->tab_strip_model()->ActivateTabAt(0, true);
+  browser()->tab_strip_model()->ActivateTabAt(
+      0, {TabStripModel::GestureType::kOther});
   ui_test_utils::NavigateToURL(browser(),
                                extension3->GetResourceURL("blank_iframe.html"));
   details = new TestMemoryDetails();
@@ -857,17 +853,13 @@ IN_PROC_BROWSER_TEST_F(SiteDetailsBrowserTest, MAYBE_IsolateExtensions) {
                   "SiteIsolation.IsolateExtensionsProcessCountNoLimit"),
               HasOneSample(4));
 
-  // As part of https://crbug.com/512560, subframes that require a dedicated
-  // process started reusing existing processes when possible, so under
-  // --site-per-process, tab1's web iframe will share the process with tab2's
-  // web iframe, since they have the same site. This won't affect
-  // --isolate-extensions, because the web iframe's site won't require a
-  // dedicated process in that mode. Hence, with site-per-process, there should
-  // be three total renderer processes: one for the two web iframes, one for
-  // extension3, and one for extension 1's background page. With only
-  // --isolate-extensions, there should be four total renderer processes, as
-  // each web iframe will go into its own process.
-  EXPECT_THAT(GetRenderProcessCount(), DependingOnPolicy(2, 4, 3));
+  // There should be four total renderer processes: one for each of the two web
+  // iframes, one for extension3, and one for extension 1's background page.
+  // Note that the optimization in https://crbug.com/512560, where subframes
+  // that require a dedicated process reuse existing processes where possible,
+  // does not apply to web iframes in extensions anymore -- see
+  // https://crbug.com/899418.
+  EXPECT_THAT(GetRenderProcessCount(), DependingOnPolicy(2, 4, 4));
   EXPECT_THAT(details->GetOutOfProcessIframeCount(),
               DependingOnPolicy(0, 2, 2));
 }
@@ -1056,8 +1048,10 @@ IN_PROC_BROWSER_TEST_F(SiteDetailsBrowserTest,
 
 // Verifies that the UMA counter for SiteInstances in a BrowsingInstance is
 // correct when using tabs with web pages.
+//
+// Disabled since it's flaky. https://crbug.com/934900
 IN_PROC_BROWSER_TEST_F(SiteDetailsBrowserTest,
-                       VerifySiteInstanceCountInBrowsingInstance) {
+                       DISABLED_VerifySiteInstanceCountInBrowsingInstance) {
   // Page with 14 nested oopifs across 9 sites (a.com through i.com).
   GURL abcdefghi_url = embedded_test_server()->GetURL(
       "a.com",

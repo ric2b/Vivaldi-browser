@@ -12,6 +12,7 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -147,7 +148,6 @@ ScoredHistoryMatch::ScoredHistoryMatch(
   input_location = 0;
   match_in_scheme = false;
   match_in_subdomain = false;
-  match_after_host = false;
   innermost_match = false;
 
   // NOTE: Call Init() before doing any validity checking to ensure that the
@@ -335,7 +335,7 @@ ScoredHistoryMatch::ScoredHistoryMatch(
         std::make_pair(url_match.offset, url_match.offset + url_match.length));
   }
   AutocompleteMatch::GetMatchComponents(gurl, match_positions, &match_in_scheme,
-                                        &match_in_subdomain, &match_after_host);
+                                        &match_in_subdomain);
 }
 
 ScoredHistoryMatch::ScoredHistoryMatch(const ScoredHistoryMatch& other) =
@@ -397,8 +397,8 @@ TermMatches ScoredHistoryMatch::FilterTermMatchesByWordStarts(
   if (start_pos == std::string::npos)
     return term_matches;
   TermMatches filtered_matches;
-  WordStarts::const_iterator next_word_starts = word_starts.begin();
-  WordStarts::const_iterator end_word_starts = word_starts.end();
+  auto next_word_starts = word_starts.begin();
+  auto end_word_starts = word_starts.end();
   for (const auto& term_match : term_matches) {
     const size_t term_offset =
         terms_to_word_starts_offsets[term_match.term_num];
@@ -454,10 +454,8 @@ float ScoredHistoryMatch::GetTopicalityScore(
   // in the same part of the URL/title.
   DCHECK_GT(num_terms, 0);
   std::vector<int> term_scores(num_terms, 0);
-  WordStarts::const_iterator next_word_starts =
-      word_starts.url_word_starts_.begin();
-  WordStarts::const_iterator end_word_starts =
-      word_starts.url_word_starts_.end();
+  auto next_word_starts = word_starts.url_word_starts_.begin();
+  auto end_word_starts = word_starts.url_word_starts_.end();
 
   const url::Parsed& parsed = url.parsed_for_possibly_invalid_spec();
   size_t host_pos = parsed.CountCharactersBefore(url::Parsed::HOST, true);
@@ -643,12 +641,11 @@ float ScoredHistoryMatch::GetDocumentSpecificityScore(
     size_t num_matching_pages) const {
   // A mapping from the number of matching pages to their associated document
   // specificity scores.  See omnibox_field_trial.h for more details.
-  CR_DEFINE_STATIC_LOCAL(OmniboxFieldTrial::NumMatchesScores,
-                         default_matches_to_specificity,
-                         (OmniboxFieldTrial::HQPNumMatchesScores()));
+  static base::NoDestructor<OmniboxFieldTrial::NumMatchesScores>
+      default_matches_to_specificity(OmniboxFieldTrial::HQPNumMatchesScores());
   OmniboxFieldTrial::NumMatchesScores* matches_to_specificity =
       matches_to_specificity_override_ ? matches_to_specificity_override_
-                                       : &default_matches_to_specificity;
+                                       : default_matches_to_specificity.get();
 
   // The floating point value below must be less than the lowest score the
   // server would send down.
@@ -664,11 +661,11 @@ float ScoredHistoryMatch::GetFinalRelevancyScore(float topicality_score,
                                                  float specificity_score) {
   // |relevance_buckets| gives a mapping from intemerdiate score to the final
   // relevance score.
-  CR_DEFINE_STATIC_LOCAL(ScoreMaxRelevances, default_relevance_buckets,
-                         (GetHQPBuckets()));
+  static base::NoDestructor<ScoreMaxRelevances> default_relevance_buckets(
+      GetHQPBuckets());
   ScoreMaxRelevances* relevance_buckets = relevance_buckets_override_
                                               ? relevance_buckets_override_
-                                              : &default_relevance_buckets;
+                                              : default_relevance_buckets.get();
   DCHECK(!relevance_buckets->empty());
   DCHECK_EQ(0.0, (*relevance_buckets)[0].first);
 

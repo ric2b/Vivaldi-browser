@@ -11,6 +11,7 @@
 #include <xf86drmMode.h>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/free_deleter.h"
@@ -20,7 +21,7 @@
 #include "base/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
-#include "base/trace_event/trace_event_argument.h"
+#include "base/trace_event/traced_value.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/display/types/gamma_ramp_rgb_entry.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
@@ -205,19 +206,19 @@ class DrmDevice::IOWatcher : public base::MessagePumpLibevent::FdWatcher {
 
  private:
   void Register() {
-    DCHECK(base::MessageLoopForIO::IsCurrent());
+    DCHECK(base::MessageLoopCurrentForIO::IsSet());
     base::MessageLoopCurrentForIO::Get()->WatchFileDescriptor(
         fd_, true, base::MessagePumpForIO::WATCH_READ, &controller_, this);
   }
 
   void Unregister() {
-    DCHECK(base::MessageLoopForIO::IsCurrent());
+    DCHECK(base::MessageLoopCurrentForIO::IsSet());
     controller_.StopWatchingFileDescriptor();
   }
 
   // base::MessagePumpLibevent::FdWatcher overrides:
   void OnFileCanReadWithoutBlocking(int fd) override {
-    DCHECK(base::MessageLoopForIO::IsCurrent());
+    DCHECK(base::MessageLoopCurrentForIO::IsSet());
     TRACE_EVENT1("drm", "OnDrmEvent", "socket", fd);
 
     if (!ProcessDrmEvent(
@@ -260,10 +261,10 @@ bool DrmDevice::Initialize() {
   // Use atomic only if kernel allows it.
   is_atomic_ = SetCapability(DRM_CLIENT_CAP_ATOMIC, 1);
   if (is_atomic_)
-    plane_manager_.reset(new HardwareDisplayPlaneManagerAtomic());
+    plane_manager_.reset(new HardwareDisplayPlaneManagerAtomic(this));
   else
-    plane_manager_.reset(new HardwareDisplayPlaneManagerLegacy());
-  if (!plane_manager_->Initialize(this)) {
+    plane_manager_.reset(new HardwareDisplayPlaneManagerLegacy(this));
+  if (!plane_manager_->Initialize()) {
     LOG(ERROR) << "Failed to initialize the plane manager for "
                << device_path_.value();
     plane_manager_.reset();
@@ -382,20 +383,6 @@ bool DrmDevice::PageFlip(uint32_t crtc_id,
   }
 
   return false;
-}
-
-bool DrmDevice::PageFlipOverlay(uint32_t crtc_id,
-                                uint32_t framebuffer,
-                                const gfx::Rect& location,
-                                const gfx::Rect& source,
-                                int overlay_plane) {
-  DCHECK(file_.IsValid());
-  TRACE_EVENT2("drm", "DrmDevice::PageFlipOverlay", "crtc", crtc_id,
-               "framebuffer", framebuffer);
-  return !drmModeSetPlane(file_.GetPlatformFile(), overlay_plane, crtc_id,
-                          framebuffer, 0, location.x(), location.y(),
-                          location.width(), location.height(), source.x(),
-                          source.y(), source.width(), source.height());
 }
 
 ScopedDrmFramebufferPtr DrmDevice::GetFramebuffer(uint32_t framebuffer) {

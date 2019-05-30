@@ -35,8 +35,8 @@ class BrowserMainLoopTest_CreateThreadsInSingleProcess_Test;
 
 namespace base {
 
-class HistogramBase;
 class SchedulerWorkerObserver;
+class TaskSchedulerTestHelpers;
 
 // Interface for a task scheduler and static methods to manage the instance used
 // by the post_task.h API.
@@ -63,19 +63,13 @@ class BASE_EXPORT TaskScheduler : public TaskExecutor {
 
     InitParams(
         const SchedulerWorkerPoolParams& background_worker_pool_params_in,
-        const SchedulerWorkerPoolParams&
-            background_blocking_worker_pool_params_in,
         const SchedulerWorkerPoolParams& foreground_worker_pool_params_in,
-        const SchedulerWorkerPoolParams&
-            foreground_blocking_worker_pool_params_in,
         SharedWorkerPoolEnvironment shared_worker_pool_environment_in =
             SharedWorkerPoolEnvironment::DEFAULT);
     ~InitParams();
 
     SchedulerWorkerPoolParams background_worker_pool_params;
-    SchedulerWorkerPoolParams background_blocking_worker_pool_params;
     SchedulerWorkerPoolParams foreground_worker_pool_params;
-    SchedulerWorkerPoolParams foreground_blocking_worker_pool_params;
     SharedWorkerPoolEnvironment shared_worker_pool_environment;
   };
 
@@ -110,9 +104,6 @@ class BASE_EXPORT TaskScheduler : public TaskExecutor {
   virtual void Start(
       const InitParams& init_params,
       SchedulerWorkerObserver* scheduler_worker_observer = nullptr) = 0;
-
-  // Returns a vector of all histograms available in this task scheduler.
-  virtual std::vector<const HistogramBase*> GetHistograms() const = 0;
 
   // Synchronously shuts down the scheduler. Once this is called, only tasks
   // posted with the BLOCK_SHUTDOWN behavior will be run. When this returns:
@@ -201,6 +192,7 @@ class BASE_EXPORT TaskScheduler : public TaskExecutor {
   static TaskScheduler* GetInstance();
 
  private:
+  friend class TaskSchedulerTestHelpers;
   friend class gin::V8Platform;
   friend class content::BrowserMainLoopTest_CreateThreadsInSingleProcess_Test;
 

@@ -49,7 +49,19 @@ class AutofillWalletMetadataSyncableService
       public syncer::SyncableService,
       public AutofillWebDataServiceObserverOnDBSequence {
  public:
+  AutofillWalletMetadataSyncableService(
+      AutofillWebDataBackend* web_data_backend,
+      const std::string& app_locale);
+
   ~AutofillWalletMetadataSyncableService() override;
+
+  // Determines whether this bridge should be monitoring the Wallet data. This
+  // should be called whenever the data bridge sync state changes.
+  void OnWalletDataTrackingStateChanged(bool is_tracking);
+
+  base::WeakPtr<AutofillWalletMetadataSyncableService> GetWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
 
   // syncer::SyncableService implementation.
   syncer::SyncMergeResult MergeDataAndStartSyncing(
@@ -83,10 +95,6 @@ class AutofillWalletMetadataSyncableService
       AutofillWebDataService* web_data_service);
 
  protected:
-  AutofillWalletMetadataSyncableService(
-      AutofillWebDataBackend* web_data_backend,
-      const std::string& app_locale);
-
   // Populates the provided |profiles| and |cards| with mappings from server ID
   // to server profiles and server cards read from disk. This data contains the
   // usage stats. Returns true on success.
@@ -122,14 +130,6 @@ class AutofillWalletMetadataSyncableService
   // is not present locally.
   syncer::SyncMergeResult MergeData(const syncer::SyncDataList& sync_data);
 
-  // Sends the autofill data model updates to the sync server if the local
-  // version is more recent. Used for both profiles and credit cards.
-  template <class DataType>
-  void AutofillDataModelChanged(
-      const std::string& server_id,
-      const sync_pb::WalletMetadataSpecifics::Type& type,
-      const DataType& local);
-
   base::ThreadChecker thread_checker_;
   AutofillWebDataBackend* web_data_backend_;  // Weak ref.
   ScopedObserver<AutofillWebDataBackend, AutofillWalletMetadataSyncableService>
@@ -139,6 +139,18 @@ class AutofillWalletMetadataSyncableService
 
   // Local metadata plus metadata for the data that hasn't synced down yet.
   syncer::SyncDataList cache_;
+
+  // Indicates whether we should rely on wallet data being actively synced. If
+  // true, the service will prune metadata entries without corresponding wallet
+  // data entry.
+  bool track_wallet_data_;
+
+  // Indicates that we should ignore multiple changed notification. This is used
+  // to block reflection and not to act on notification that we've triggered
+  // ourselves.
+  bool ignore_multiple_changed_notification_;
+
+  base::WeakPtrFactory<AutofillWalletMetadataSyncableService> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AutofillWalletMetadataSyncableService);
 };

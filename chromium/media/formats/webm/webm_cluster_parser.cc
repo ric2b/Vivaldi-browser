@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/numerics/checked_math.h"
+#include "base/stl_util.h"
 #include "base/sys_byteorder.h"
 #include "media/base/decrypt_config.h"
 #include "media/base/timestamp_constants.h"
@@ -36,7 +36,7 @@ enum {
 };
 
 WebMClusterParser::WebMClusterParser(
-    int64_t timecode_scale,
+    int64_t timecode_scale_ns,
     int audio_track_num,
     base::TimeDelta audio_default_duration,
     int video_track_num,
@@ -47,7 +47,7 @@ WebMClusterParser::WebMClusterParser(
     const std::string& video_encryption_key_id,
     const AudioCodec audio_codec,
     MediaLog* media_log)
-    : timecode_multiplier_(timecode_scale / 1000.0),
+    : timecode_multiplier_(timecode_scale_ns / 1000.0),
       ignored_tracks_(ignored_tracks),
       audio_encryption_key_id_(audio_encryption_key_id),
       video_encryption_key_id_(video_encryption_key_id),
@@ -64,9 +64,7 @@ WebMClusterParser::WebMClusterParser(
              media_log),
       ready_buffer_upper_bound_(kNoDecodeTimestamp()),
       media_log_(media_log) {
-  for (WebMTracksParser::TextTracks::const_iterator it = text_tracks.begin();
-       it != text_tracks.end();
-       ++it) {
+  for (auto it = text_tracks.begin(); it != text_tracks.end(); ++it) {
     text_track_map_.insert(std::make_pair(
         it->first,
         Track(it->first, TrackType::TEXT, kNoTimestamp, media_log_)));
@@ -245,7 +243,7 @@ base::TimeDelta WebMClusterParser::ReadOpusDuration(const uint8_t* data,
 
   int opusConfig = (data[0] & kTocConfigMask) >> 3;
   CHECK_GE(opusConfig, 0);
-  CHECK_LT(opusConfig, static_cast<int>(arraysize(kOpusFrameDurationsMu)));
+  CHECK_LT(opusConfig, static_cast<int>(base::size(kOpusFrameDurationsMu)));
 
   DCHECK_GT(frame_count, 0);
   base::TimeDelta duration = base::TimeDelta::FromMicroseconds(
@@ -818,18 +816,14 @@ base::TimeDelta WebMClusterParser::Track::GetDurationEstimate() {
 
 void WebMClusterParser::ClearTextTrackReadyBuffers() {
   text_buffers_map_.clear();
-  for (TextTrackMap::iterator it = text_track_map_.begin();
-       it != text_track_map_.end();
-       ++it) {
+  for (auto it = text_track_map_.begin(); it != text_track_map_.end(); ++it) {
     it->second.ClearReadyBuffers();
   }
 }
 
 void WebMClusterParser::ResetTextTracks() {
   ClearTextTrackReadyBuffers();
-  for (TextTrackMap::iterator it = text_track_map_.begin();
-       it != text_track_map_.end();
-       ++it) {
+  for (auto it = text_track_map_.begin(); it != text_track_map_.end(); ++it) {
     it->second.Reset();
   }
 }
@@ -858,8 +852,7 @@ void WebMClusterParser::UpdateReadyBuffers() {
   // Prepare each track's ready buffers for retrieval.
   audio_.ExtractReadyBuffers(ready_buffer_upper_bound_);
   video_.ExtractReadyBuffers(ready_buffer_upper_bound_);
-  for (TextTrackMap::iterator itr = text_track_map_.begin();
-       itr != text_track_map_.end();
+  for (auto itr = text_track_map_.begin(); itr != text_track_map_.end();
        ++itr) {
     itr->second.ExtractReadyBuffers(ready_buffer_upper_bound_);
   }

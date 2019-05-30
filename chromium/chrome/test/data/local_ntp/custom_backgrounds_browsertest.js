@@ -32,39 +32,9 @@ test.customBackgrounds.setUp = function() {
  * enabled and no custom theme is being used.
  */
 test.customBackgrounds.testShowEditCustomBackground = function() {
-  initLocalNTPWithCustomBackgroundsEnabled();
+  initLocalNTP(/*isGooglePage=*/true);
 
   assertTrue(elementIsVisible($('edit-bg')));
-};
-
-
-/**
- * Tests that the edit custom background button is not visible if the flag is
- * disabled.
- */
-test.customBackgrounds.testHideEditCustomBackgroundFlag = function() {
-  // Turn off voice search to avoid reinitializing the speech object
-  configData.isVoiceSearchEnabled = false;
-  configData.isCustomBackgroundsEnabled = false;
-  initLocalNTP(/*isGooglePage=*/true);
-
-  assertFalse(elementIsVisible($('edit-bg')));
-};
-
-
-/**
- * Tests that the edit custom background button is not visible if a custom
- * theme is being used.
- */
-test.customBackgrounds.testHideEditCustomBackgroundTheme = function() {
-  // Turn off voice search to avoid reinitializing the speech object
-  configData.isVoiceSearchEnabled = false;
-  getThemeBackgroundInfo = () => {
-    return {usingDefaultTheme: false};
-  };
-  initLocalNTP(/*isGooglePage=*/true);
-
-  assertFalse(elementIsVisible($('edit-bg')));
 };
 
 
@@ -72,7 +42,7 @@ test.customBackgrounds.testHideEditCustomBackgroundTheme = function() {
  * Tests that clicking on the gear icon opens the background option dialog.
  */
 test.customBackgrounds.testClickGearIcon = function() {
-  initLocalNTPWithCustomBackgroundsEnabled();
+  initLocalNTP(/*isGooglePage=*/true);
 
   $('edit-bg').click();
 
@@ -85,7 +55,7 @@ test.customBackgrounds.testClickGearIcon = function() {
  * selection dialog.
  */
 test.customBackgrounds.testClickChromeBackgrounds = function() {
-  initLocalNTPWithCustomBackgroundsEnabled();
+  initLocalNTP(/*isGooglePage=*/true);
 
   $('edit-bg').click();
   setupFakeAsyncCollectionLoad();
@@ -100,7 +70,7 @@ test.customBackgrounds.testClickChromeBackgrounds = function() {
  * closes the dialog.
  */
 test.customBackgrounds.testCollectionDialogCancel = function() {
-  initLocalNTPWithCustomBackgroundsEnabled();
+  initLocalNTP(/*isGooglePage=*/true);
 
   $('edit-bg').click();
   setupFakeAsyncCollectionLoad();
@@ -116,7 +86,7 @@ test.customBackgrounds.testCollectionDialogCancel = function() {
  * nothing.
  */
 test.customBackgrounds.testCollectionDialogDone = function() {
-  initLocalNTPWithCustomBackgroundsEnabled();
+  initLocalNTP(/*isGooglePage=*/true);
 
   $('edit-bg').click();
   setupFakeAsyncCollectionLoad();
@@ -132,7 +102,7 @@ test.customBackgrounds.testCollectionDialogDone = function() {
  * dialog.
  */
 test.customBackgrounds.testCollectionDialogTileClick = function() {
-  initLocalNTPWithCustomBackgroundsEnabled();
+  initLocalNTP(/*isGooglePage=*/true);
 
   $('edit-bg').click();
   setupFakeAsyncCollectionLoad();
@@ -148,7 +118,7 @@ test.customBackgrounds.testCollectionDialogTileClick = function() {
  * Test that clicking cancel on the image selection dialog closes the dialog.
  */
 test.customBackgrounds.testImageDialogCancel = function() {
-  initLocalNTPWithCustomBackgroundsEnabled();
+  initLocalNTP(/*isGooglePage=*/true);
 
   $('edit-bg').click();
   setupFakeAsyncCollectionLoad();
@@ -167,7 +137,7 @@ test.customBackgrounds.testImageDialogCancel = function() {
  * the collection selection dialog being displayed.
  */
 test.customBackgrounds.testImageDialogBack = function() {
-  initLocalNTPWithCustomBackgroundsEnabled();
+  initLocalNTP(/*isGooglePage=*/true);
 
   $('edit-bg').click();
   setupFakeAsyncCollectionLoad();
@@ -185,7 +155,7 @@ test.customBackgrounds.testImageDialogBack = function() {
  * Test that clicking on an image tile applies the selected styling.
  */
 test.customBackgrounds.testImageTileClick = function() {
-  initLocalNTPWithCustomBackgroundsEnabled();
+  initLocalNTP(/*isGooglePage=*/true);
 
   $('edit-bg').click();
   setupFakeAsyncCollectionLoad();
@@ -203,7 +173,7 @@ test.customBackgrounds.testImageTileClick = function() {
  * Test that clicking done with no image selected does nothing.
  */
 test.customBackgrounds.testImageDoneClickNoneSelected = function() {
-  initLocalNTPWithCustomBackgroundsEnabled();
+  initLocalNTP(/*isGooglePage=*/true);
 
   $('edit-bg').click();
   setupFakeAsyncCollectionLoad();
@@ -221,7 +191,7 @@ test.customBackgrounds.testImageDoneClickNoneSelected = function() {
  * Test that clicking done with an image selected closes the dialog.
  */
 test.customBackgrounds.testImageDoneClick = function() {
-  initLocalNTPWithCustomBackgroundsEnabled();
+  initLocalNTP(/*isGooglePage=*/true);
 
   $('edit-bg').click();
   setupFakeAsyncCollectionLoad();
@@ -233,6 +203,36 @@ test.customBackgrounds.testImageDoneClick = function() {
   $('bg-sel-footer-done').click();
 
   assertFalse(elementIsVisible($('bg-sel-menu')));
+};
+
+/**
+ * Test that no custom background option will be shown when offline.
+ */
+test.customBackgrounds.testHideCustomBackgroundOffline = function() {
+  initLocalNTP(/*isGooglePage=*/true);
+
+  let event = new Event('offline', {});
+  window.dispatchEvent(event);
+  $('edit-bg').click();
+
+  assertFalse(elementIsVisible($('edit-bg-default-wallpapers-text')));
+};
+
+/**
+ * Test that clicking collection when offline will trigger an error
+ * notification.
+ */
+test.customBackgrounds.testClickCollectionOfflineShowErrorMsg = function() {
+  initLocalNTP(/*isGooglePage=*/true);
+
+  $('edit-bg').click();
+  setupFakeAsyncCollectionLoad();
+  $('edit-bg-default-wallpapers').click();
+  setupFakeAsyncImageLoadOffline('coll_tile_0');
+  let event = new Event('click', {'target': $('coll_tile_0')});
+  $('coll_tile_0').click(event);
+
+  assertTrue(elementIsVisible($('error-notice')));
 };
 
 
@@ -274,7 +274,7 @@ setupFakeAsyncCollectionLoad = function() {
       }
     ];
     coll_errors = {};
-  }
+  };
 
   // Append a call to onload to the end of the click handler.
   var oldBackgroundsFunc = $('edit-bg-default-wallpapers').onclick;
@@ -339,18 +339,20 @@ setupFakeAsyncImageLoad = function(tile_id) {
 
 
 /**
- * Initialize the NTP with custombackgrounds enabled.
+ * Fake loading a collection's images with a network error to simulate offline
+ * status.
  */
-initLocalNTPWithCustomBackgroundsEnabled = function() {
-  // Turn off voice search to avoid reinitializing the speech object
-  configData.isVoiceSearchEnabled = false;
-
-  configData.isCustomBackgroundsEnabled = true;
-  getThemeBackgroundInfo = () => {
-    return {usingDefaultTheme: true};
-  };
-  initLocalNTP(/*isGooglePage=*/true);
+setupFakeAsyncImageLoadOffline = function(tile_id) {
+  // Override the image tile's onclick function.
+  let oldImageLoader = $(tile_id).onclick;
+  $(tile_id).onclick = function(event) {
+    oldImageLoader(event);
+    coll_img = [];
+    coll_img_errors = { net_error: true, net_error_no: -106 };
+    $('ntp-images-loader').onload();
+  }
 };
+
 
 /**
  * Check that the collection selection dialog contains the correct elements.

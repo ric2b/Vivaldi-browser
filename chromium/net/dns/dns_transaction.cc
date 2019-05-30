@@ -40,11 +40,12 @@
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/base/upload_bytes_element_reader.h"
-#include "net/dns/dns_protocol.h"
+#include "net/dns/dns_config.h"
 #include "net/dns/dns_query.h"
 #include "net/dns/dns_response.h"
 #include "net/dns/dns_session.h"
 #include "net/dns/dns_util.h"
+#include "net/dns/public/dns_protocol.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_capture_mode.h"
 #include "net/log/net_log_event_type.h"
@@ -140,6 +141,10 @@ class DnsAttempt {
 
   // Returns the net log bound to the source of the socket.
   virtual const NetLogWithSource& GetSocketNetLog() const = 0;
+
+  // Returns true if a secure transport was used for the attempt. This method
+  // should be overridden for subclasses using a secure transport.
+  virtual bool secure() const { return false; }
 
   // Returns the index of the destination server within DnsConfig::nameservers.
   unsigned server_index() const { return server_index_; }
@@ -248,14 +253,8 @@ class DnsUDPAttempt : public DnsAttempt {
     if (rv == ERR_IO_PENDING)
       return rv;
 
-    if (rv == OK) {
+    if (rv == OK)
       DCHECK_EQ(STATE_NONE, next_state_);
-      UMA_HISTOGRAM_LONG_TIMES_100("AsyncDNS.UDPAttemptSuccess",
-                                   base::TimeTicks::Now() - start_time_);
-    } else {
-      UMA_HISTOGRAM_LONG_TIMES_100("AsyncDNS.UDPAttemptFail",
-                                   base::TimeTicks::Now() - start_time_);
-    }
     return rv;
   }
 
@@ -358,6 +357,7 @@ class DnsHTTPAttempt : public DnsAttempt, public URLRequest::Delegate {
     HttpRequestHeaders extra_request_headers;
     extra_request_headers.SetHeader("Accept", kDnsOverHttpResponseContentType);
 
+    DCHECK(url_request_context);
     request_ = url_request_context->CreateRequest(
         url, request_priority_, this,
         net::DefineNetworkTrafficAnnotation("dns_over_https", R"(
@@ -422,6 +422,7 @@ class DnsHTTPAttempt : public DnsAttempt, public URLRequest::Delegate {
     return (resp != NULL && resp->IsValid()) ? resp : NULL;
   }
   const NetLogWithSource& GetSocketNetLog() const override { return net_log_; }
+  bool secure() const override { return true; }
 
   // URLRequest::Delegate overrides
 
@@ -524,7 +525,7 @@ class DnsHTTPAttempt : public DnsAttempt, public URLRequest::Delegate {
     buffer_->set_offset(0);
     if (size == 0u)
       return ERR_DNS_MALFORMED_RESPONSE;
-    response_ = std::make_unique<DnsResponse>(buffer_.get(), size + 1);
+    response_ = std::make_unique<DnsResponse>(buffer_, size + 1);
     if (!response_->InitParse(size, *query_))
       return ERR_DNS_MALFORMED_RESPONSE;
     if (response_->rcode() == dns_protocol::kRcodeNXDOMAIN)
@@ -632,14 +633,8 @@ class DnsTCPAttempt : public DnsAttempt {
     } while (rv != ERR_IO_PENDING && next_state_ != STATE_NONE);
 
     set_result(rv);
-    if (rv == OK) {
+    if (rv == OK)
       DCHECK_EQ(STATE_NONE, next_state_);
-      UMA_HISTOGRAM_LONG_TIMES_100("AsyncDNS.TCPAttemptSuccess",
-                                   base::TimeTicks::Now() - start_time_);
-    } else if (rv != ERR_IO_PENDING) {
-      UMA_HISTOGRAM_LONG_TIMES_100("AsyncDNS.TCPAttemptFail",
-                                   base::TimeTicks::Now() - start_time_);
-    }
     return rv;
   }
 
@@ -805,11 +800,13 @@ class DnsTransactionImpl : public DnsTransaction,
                      uint16_t qtype,
                      DnsTransactionFactory::CallbackType callback,
                      const NetLogWithSource& net_log,
-                     const OptRecordRdata* opt_rdata)
+                     const OptRecordRdata* opt_rdata,
+                     SecureDnsMode secure_dns_mode)
       : session_(session),
         hostname_(hostname),
         qtype_(qtype),
         opt_rdata_(opt_rdata),
+        secure_dns_mode_(secure_dns_mode),
         callback_(std::move(callback)),
         net_log_(net_log),
         qnames_initial_size_(0),
@@ -851,8 +848,6 @@ class DnsTransactionImpl : public DnsTransaction,
     AttemptResult result(PrepareSearch(), NULL);
     if (result.rv == OK) {
       qnames_initial_size_ = qnames_.size();
-      if (qtype_ == dns_protocol::kTypeA)
-        UMA_HISTOGRAM_COUNTS_1M("AsyncDNS.SuffixSearchStart", qnames_.size());
       result = ProcessAttemptResult(StartQuery());
     }
 
@@ -945,32 +940,28 @@ class DnsTransactionImpl : public DnsTransaction,
         result.attempt ? result.attempt->GetResponse() : NULL;
     CHECK(result.rv != OK || response != NULL);
 
-    timer_.Stop();
-    RecordLostPacketsIfAny();
-    if (result.rv == OK)
-      UMA_HISTOGRAM_COUNTS_1M("AsyncDNS.AttemptCountSuccess", attempts_count_);
-    else
-      UMA_HISTOGRAM_COUNTS_1M("AsyncDNS.AttemptCountFail", attempts_count_);
+    bool secure = result.attempt ? result.attempt->secure() : false;
 
-    if (response && qtype_ == dns_protocol::kTypeA) {
-      UMA_HISTOGRAM_COUNTS_1M("AsyncDNS.SuffixSearchRemain", qnames_.size());
-      UMA_HISTOGRAM_COUNTS_1M("AsyncDNS.SuffixSearchDone",
-                              qnames_initial_size_ - qnames_.size());
-    }
+    timer_.Stop();
 
     net_log_.EndEventWithNetErrorCode(NetLogEventType::DNS_TRANSACTION,
                                       result.rv);
 
-    std::move(callback_).Run(this, result.rv, response);
+    std::move(callback_).Run(this, result.rv, response, secure);
   }
 
   AttemptResult MakeAttempt() {
-    // Make an HTTP attempt unless we have already made more attempts
-    // than we have configured servers. Otherwise make a UDP attempt
-    // as long as we have configured nameservers.
     DnsConfig config = session_->config();
-    if (doh_attempts_ < config.dns_over_https_servers.size())
+    // In AUTOMATIC and SECURE mode, make an HTTP attempt unless we have already
+    // made more attempts than we have configured servers.
+    if (secure_dns_mode_ != SecureDnsMode::OFF &&
+        doh_attempts_ < config.dns_over_https_servers.size()) {
       return MakeHTTPAttempt(config.dns_over_https_servers);
+    }
+    // In AUTOMATIC mode, insecure attempts are allowed after HTTP attempts are
+    // exhausted. In OFF mode, only insecure attempts are allowed. It should
+    // not be possible to reach this point in SECURE mode.
+    DCHECK_NE(secure_dns_mode_, SecureDnsMode::SECURE);
     DCHECK_GT(config.nameservers.size(), 0u);
     return MakeUDPAttempt();
   }
@@ -1083,8 +1074,6 @@ class DnsTransactionImpl : public DnsTransaction,
     std::unique_ptr<DnsQuery> query =
         previous_attempt->GetQuery()->CloneWithNewId(id);
 
-    RecordLostPacketsIfAny();
-
     // Cancel all attempts that have not received a response, no point waiting
     // on them.
     ClearAttempts(nullptr);
@@ -1121,7 +1110,6 @@ class DnsTransactionImpl : public DnsTransaction,
     first_server_index_ = session_->config().nameservers.empty()
                               ? 0
                               : session_->NextFirstServerIndex();
-    RecordLostPacketsIfAny();
     attempts_.clear();
     had_tcp_attempt_ = false;
     return MakeAttempt();
@@ -1149,41 +1137,11 @@ class DnsTransactionImpl : public DnsTransaction,
       DoCallback(result);
   }
 
-  // Record packet loss for any incomplete attempts.
-  void RecordLostPacketsIfAny() {
-    // Loop through attempts until we find first that is completed
-    size_t first_completed = 0;
-    for (first_completed = 0; first_completed < attempts_.size();
-         ++first_completed) {
-      if (attempts_[first_completed]->is_completed())
-        break;
-    }
-    // If there were no completed attempts, then we must be offline, so don't
-    // record any attempts as lost packets.
-    if (first_completed == attempts_.size())
-      return;
-
-    size_t num_servers = session_->config().nameservers.size() +
-                         session_->config().dns_over_https_servers.size();
-    std::vector<int> server_attempts(num_servers);
-    for (size_t i = 0; i < first_completed; ++i) {
-      unsigned server_index = attempts_[i]->server_index();
-      int server_attempt = server_attempts[server_index]++;
-      // Don't record lost packet unless attempt is in pending state.
-      if (!attempts_[i]->is_pending())
-        continue;
-      session_->RecordLostPacket(server_index, server_attempt);
-    }
-  }
-
   void LogResponse(const DnsAttempt* attempt) {
     if (attempt && attempt->GetResponse()) {
       net_log_.AddEvent(NetLogEventType::DNS_TRANSACTION_RESPONSE,
                         base::Bind(&DnsAttempt::NetLogResponseCallback,
                                    base::Unretained(attempt)));
-
-      base::UmaHistogramSparse("AsyncDNS.Rcode",
-                               attempt->GetResponse()->rcode());
     }
   }
 
@@ -1191,8 +1149,19 @@ class DnsTransactionImpl : public DnsTransaction,
     if (had_tcp_attempt_)
       return false;
     const DnsConfig& config = session_->config();
-    return attempts_.size() < config.attempts * config.nameservers.size() +
-                                  config.dns_over_https_servers.size();
+    unsigned insecure_attempts_possible =
+        config.attempts * config.nameservers.size();
+    unsigned secure_attempts_possible = config.dns_over_https_servers.size();
+
+    switch (secure_dns_mode_) {
+      case SecureDnsMode::SECURE:
+        return attempts_.size() < secure_attempts_possible;
+      case SecureDnsMode::AUTOMATIC:
+        return attempts_.size() <
+               secure_attempts_possible + insecure_attempts_possible;
+      case SecureDnsMode::OFF:
+        return attempts_.size() < insecure_attempts_possible;
+    }
   }
 
   // Resolves the result of a DnsAttempt until a terminal result is reached
@@ -1283,6 +1252,7 @@ class DnsTransactionImpl : public DnsTransaction,
   std::string hostname_;
   uint16_t qtype_;
   const OptRecordRdata* opt_rdata_;
+  const SecureDnsMode secure_dns_mode_;
   // Cleared in DoCallback.
   DnsTransactionFactory::CallbackType callback_;
 
@@ -1327,10 +1297,11 @@ class DnsTransactionFactoryImpl : public DnsTransactionFactory {
       const std::string& hostname,
       uint16_t qtype,
       CallbackType callback,
-      const NetLogWithSource& net_log) override {
-    return std::make_unique<DnsTransactionImpl>(session_.get(), hostname, qtype,
-                                                std::move(callback), net_log,
-                                                opt_rdata_.get());
+      const NetLogWithSource& net_log,
+      SecureDnsMode secure_dns_mode) override {
+    return std::make_unique<DnsTransactionImpl>(
+        session_.get(), hostname, qtype, std::move(callback), net_log,
+        opt_rdata_.get(), secure_dns_mode);
   }
 
   void AddEDNSOption(const OptRecordRdata::Opt& opt) override {

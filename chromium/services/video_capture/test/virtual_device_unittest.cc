@@ -2,15 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/mock_callback.h"
 #include "media/capture/video/video_capture_device_info.h"
-#include "services/service_manager/public/cpp/service_context_ref.h"
+#include "services/service_manager/public/cpp/service_keepalive.h"
+#include "services/video_capture/public/cpp/mock_producer.h"
+#include "services/video_capture/public/cpp/mock_receiver.h"
 #include "services/video_capture/shared_memory_virtual_device_mojo_adapter.h"
-#include "services/video_capture/test/mock_producer.h"
-#include "services/video_capture/test/mock_receiver.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using testing::_;
@@ -31,7 +32,7 @@ const media::VideoPixelFormat kTestPixelFormat =
 
 class VirtualDeviceTest : public ::testing::Test {
  public:
-  VirtualDeviceTest() : ref_factory_(base::DoNothing()) {}
+  VirtualDeviceTest() : keepalive_(nullptr, base::nullopt) {}
   ~VirtualDeviceTest() override {}
 
   void SetUp() override {
@@ -41,7 +42,7 @@ class VirtualDeviceTest : public ::testing::Test {
     producer_ =
         std::make_unique<MockProducer>(mojo::MakeRequest(&producer_proxy));
     device_adapter_ = std::make_unique<SharedMemoryVirtualDeviceMojoAdapter>(
-        ref_factory_.CreateRef(), std::move(producer_proxy));
+        keepalive_.CreateRef(), std::move(producer_proxy));
   }
 
   void OnFrameBufferReceived(bool valid_buffer_expected, int32_t buffer_id) {
@@ -70,14 +71,14 @@ class VirtualDeviceTest : public ::testing::Test {
          SharedMemoryVirtualDeviceMojoAdapter::max_buffer_pool_buffer_count();
          i++) {
       device_adapter_->RequestFrameBuffer(
-          kTestFrameSize, kTestPixelFormat,
+          kTestFrameSize, kTestPixelFormat, nullptr,
           base::Bind(&VirtualDeviceTest::OnFrameBufferReceived,
                      base::Unretained(this), true /* valid_buffer_expected */));
     }
 
     // No more buffer available. Invalid buffer id should be returned.
     device_adapter_->RequestFrameBuffer(
-        kTestFrameSize, kTestPixelFormat,
+        kTestFrameSize, kTestPixelFormat, nullptr,
         base::Bind(&VirtualDeviceTest::OnFrameBufferReceived,
                    base::Unretained(this), false /* valid_buffer_expected */));
 
@@ -96,7 +97,7 @@ class VirtualDeviceTest : public ::testing::Test {
 
  private:
   base::MessageLoop loop_;
-  service_manager::ServiceContextRefFactory ref_factory_;
+  service_manager::ServiceKeepalive keepalive_;
   media::VideoCaptureDeviceInfo device_info_;
 };
 
@@ -115,7 +116,7 @@ TEST_F(VirtualDeviceTest, OnFrameReadyInBufferWithoutReceiver) {
   // buffer.
   EXPECT_CALL(*producer_, DoOnNewBuffer(_, _, _)).Times(0);
   device_adapter_->RequestFrameBuffer(
-      kTestFrameSize, kTestPixelFormat,
+      kTestFrameSize, kTestPixelFormat, nullptr,
       base::Bind(&VirtualDeviceTest::OnFrameBufferReceived,
                  base::Unretained(this), true /* valid_buffer_expected */));
 
@@ -161,9 +162,24 @@ TEST_F(VirtualDeviceTest, OnFrameReadyInBufferWithReceiver) {
         // Verify that the returned |buffer_id| is a known buffer ID.
         EXPECT_TRUE(base::ContainsValue(received_buffer_ids_, buffer_id));
       }));
-  device_adapter_->RequestFrameBuffer(kTestFrameSize, kTestPixelFormat,
+  device_adapter_->RequestFrameBuffer(kTestFrameSize, kTestPixelFormat, nullptr,
                                       request_frame_buffer_callback.Get());
   wait_loop2.RunUntilIdle();
+
+  // Verify that when stopping the device, the receiver receives calls to
+  // OnBufferRetired() followed by a single call to OnStopped().
+  base::RunLoop wait_for_stopped_loop;
+  {
+    testing::InSequence s;
+    EXPECT_CALL(receiver, DoOnBufferRetired(_))
+        .Times(SharedMemoryVirtualDeviceMojoAdapter::
+                   max_buffer_pool_buffer_count());
+    EXPECT_CALL(receiver, OnStopped())
+        .WillOnce(Invoke(
+            [&wait_for_stopped_loop]() { wait_for_stopped_loop.Quit(); }));
+  }
+  device_adapter_->Stop();
+  wait_for_stopped_loop.Run();
 }
 
 }  // namespace video_capture

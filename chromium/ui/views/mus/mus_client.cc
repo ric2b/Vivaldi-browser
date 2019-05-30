@@ -28,17 +28,12 @@
 #include "ui/views/mus/ax_remote_host.h"
 #include "ui/views/mus/desktop_window_tree_host_mus.h"
 #include "ui/views/mus/mus_property_mirror.h"
-#include "ui/views/mus/pointer_watcher_event_router.h"
 #include "ui/views/mus/screen_mus.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/wm/core/shadow_types.h"
 #include "ui/wm/core/wm_state.h"
-
-#if defined(USE_OZONE)
-#include "ui/base/cursor/ozone/cursor_data_factory_ozone.h"
-#endif
 
 // Widget::InitParams::Type must match that of ws::mojom::WindowType.
 #define WINDOW_TYPES_MATCH(NAME)                                      \
@@ -48,7 +43,6 @@
       "Window type constants must match")
 
 WINDOW_TYPES_MATCH(WINDOW);
-WINDOW_TYPES_MATCH(PANEL);
 WINDOW_TYPES_MATCH(WINDOW_FRAMELESS);
 WINDOW_TYPES_MATCH(CONTROL);
 WINDOW_TYPES_MATCH(POPUP);
@@ -72,17 +66,6 @@ MusClient::MusClient(const InitParams& params) : identity_(params.identity) {
   DCHECK(!instance_);
   DCHECK(aura::Env::GetInstance());
   instance_ = this;
-
-#if defined(USE_OZONE)
-  // If we're in a mus client, we aren't going to have all of ozone initialized
-  // even though we're in an ozone build. All the hard coded USE_OZONE ifdefs
-  // that handle cursor code expect that there will be a CursorFactoryOzone
-  // instance. Partially initialize the ozone cursor internals here, like we
-  // partially initialize other ozone subsystems in
-  // ChromeBrowserMainExtraPartsViews.
-  if (params.create_cursor_factory)
-    cursor_factory_ozone_ = std::make_unique<ui::CursorDataFactoryOzone>();
-#endif
 
   property_converter_ = std::make_unique<aura::PropertyConverter>();
   property_converter_->RegisterPrimitiveProperty(
@@ -108,9 +91,6 @@ MusClient::MusClient(const InitParams& params) : identity_(params.identity) {
   } else {
     window_tree_client_ = params.window_tree_client;
   }
-
-  pointer_watcher_event_router_ =
-      std::make_unique<PointerWatcherEventRouter>(window_tree_client_);
 
   if (connector && !params.running_in_ws_process) {
     input_device_client_ = std::make_unique<ws::InputDeviceClient>();
@@ -195,11 +175,10 @@ bool MusClient::ShouldCreateDesktopNativeWidgetAura(
 // static
 bool MusClient::ShouldMakeWidgetWindowsTranslucent(
     const Widget::InitParams& params) {
-  // |TYPE_WINDOW| and |TYPE_PANEL| are forced to translucent so that the
-  // window manager can draw the client decorations.
+  // |TYPE_WINDOW| is forced to translucent so that the window manager
+  // can draw the client decorations.
   return params.opacity == Widget::InitParams::TRANSLUCENT_WINDOW ||
-         params.type == Widget::InitParams::TYPE_WINDOW ||
-         params.type == Widget::InitParams::TYPE_PANEL;
+         params.type == Widget::InitParams::TYPE_WINDOW;
 }
 
 // static
@@ -237,7 +216,7 @@ MusClient::ConfigurePropertiesFromParams(
       mojo::ConvertTo<TransportType>(
           static_cast<PrimitiveType>(init_params.keep_on_top));
 
-  properties[WindowManager::kRemoveStandardFrame_InitProperty] =
+  properties[WindowManager::kClientProvidesFrame_InitProperty] =
       mojo::ConvertTo<TransportType>(init_params.remove_standard_frame);
 
   if (init_params.corner_radius) {
@@ -266,22 +245,6 @@ MusClient::ConfigurePropertiesFromParams(
       properties[WindowManager::kWindowTitle_Property] =
           mojo::ConvertTo<TransportType>(
               init_params.delegate->GetWindowTitle());
-    }
-
-    // TODO(crbug.com/667566): Support additional scales or gfx::Image[Skia].
-    gfx::ImageSkia app_icon = init_params.delegate->GetWindowAppIcon();
-    SkBitmap app_bitmap = app_icon.GetRepresentation(1.f).sk_bitmap();
-    if (!app_bitmap.isNull()) {
-      properties[WindowManager::kAppIcon_Property] =
-          mojo::ConvertTo<TransportType>(app_bitmap);
-    }
-
-    // TODO(crbug.com/667566): Support additional scales or gfx::Image[Skia].
-    gfx::ImageSkia window_icon = init_params.delegate->GetWindowIcon();
-    SkBitmap window_bitmap = window_icon.GetRepresentation(1.f).sk_bitmap();
-    if (!window_bitmap.isNull()) {
-      properties[WindowManager::kWindowIcon_Property] =
-          mojo::ConvertTo<TransportType>(window_bitmap);
     }
   }
 
@@ -316,14 +279,12 @@ void MusClient::OnWidgetInitDone(Widget* widget) {
 
 void MusClient::OnCaptureClientSet(
     aura::client::CaptureClient* capture_client) {
-  pointer_watcher_event_router_->AttachToCaptureClient(capture_client);
   window_tree_client_->capture_synchronizer()->AttachToCaptureClient(
       capture_client);
 }
 
 void MusClient::OnCaptureClientUnset(
     aura::client::CaptureClient* capture_client) {
-  pointer_watcher_event_router_->DetachFromCaptureClient(capture_client);
   window_tree_client_->capture_synchronizer()->DetachFromCaptureClient(
       capture_client);
 }
@@ -374,13 +335,6 @@ void MusClient::OnEmbedRootDestroyed(
     aura::WindowTreeHostMus* window_tree_host) {
   static_cast<DesktopWindowTreeHostMus*>(window_tree_host)
       ->ServerDestroyedWindow();
-}
-
-void MusClient::OnPointerEventObserved(const ui::PointerEvent& event,
-                                       const gfx::Point& location_in_screen,
-                                       aura::Window* target) {
-  pointer_watcher_event_router_->OnPointerEventObserved(
-      event, location_in_screen, target);
 }
 
 void MusClient::OnDisplaysChanged(

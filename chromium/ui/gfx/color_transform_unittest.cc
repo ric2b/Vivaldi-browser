@@ -110,7 +110,6 @@ TEST(SimpleColorSpace, BT2020CLtoBT2020RGB) {
   ColorSpace bt2020rgb(ColorSpace::PrimaryID::BT2020,
                        ColorSpace::TransferID::BT2020_10,
                        ColorSpace::MatrixID::RGB, ColorSpace::RangeID::FULL);
-  ColorSpace sRGB = ColorSpace::CreateSRGB();
   std::unique_ptr<ColorTransform> t(ColorTransform::NewColorTransform(
       bt2020cl, bt2020rgb, ColorTransform::Intent::INTENT_ABSOLUTE));
 
@@ -366,7 +365,7 @@ TEST(SimpleColorSpace, Scale) {
   EXPECT_NEAR(tmp.x(), 0.735356983052449f, kEpsilon);
   EXPECT_NEAR(tmp.y(), 0.735356983052449f, kEpsilon);
   EXPECT_NEAR(tmp.z(), 0.735356983052449f, kEpsilon);
-};
+}
 
 TEST(SimpleColorSpace, ToUndefined) {
   ColorSpace null;
@@ -429,13 +428,13 @@ TEST(SimpleColorSpace, DefaultToSRGB) {
 // This tests to make sure that we don't emit "pow" parts of a
 // transfer function unless necessary.
 TEST(SimpleColorSpace, ShaderSourceTrFnOptimizations) {
-  SkMatrix44 primaries;
+  skcms_Matrix3x3 primaries;
   gfx::ColorSpace::CreateSRGB().GetPrimaryMatrix(&primaries);
 
-  SkColorSpaceTransferFn fn_no_pow = {
+  skcms_TransferFunction fn_no_pow = {
       1.f, 2.f, 0.f, 1.f, 0.f, 0.f, 0.f,
   };
-  SkColorSpaceTransferFn fn_yes_pow = {
+  skcms_TransferFunction fn_yes_pow = {
       2.f, 2.f, 0.f, 1.f, 0.f, 0.f, 0.f,
   };
   gfx::ColorSpace src;
@@ -459,12 +458,7 @@ TEST(SimpleColorSpace, ShaderSourceTrFnOptimizations) {
 // to make reviewing shader code simpler by giving an example of the resulting
 // shader source. This should be updated whenever shader generation is updated.
 // This test produces slightly different results on Android.
-#if defined(OS_ANDROID)
-#define MAYBE_SampleShaderSource DISABLED_SampleShaderSource
-#else
-#define MAYBE_SampleShaderSource SampleShaderSource
-#endif
-TEST(SimpleColorSpace, MAYBE_SampleShaderSource) {
+TEST(SimpleColorSpace, SampleShaderSource) {
   ColorSpace bt709 = ColorSpace::CreateREC709();
   ColorSpace output(ColorSpace::PrimaryID::BT2020,
                     ColorSpace::TransferID::GAMMA28);
@@ -480,7 +474,7 @@ TEST(SimpleColorSpace, MAYBE_SampleShaderSource) {
       "}\n"
       "float TransferFn3(float v) {\n"
       "  if (v < 0.00000000e+00)\n"
-      "    return v;\n"
+      "    return 0.00000000e+00 * v;\n"
       "  return pow(v, 3.57142866e-01);\n"
       "}\n"
       "vec3 DoColorConversion(vec3 color) {\n"
@@ -492,9 +486,9 @@ TEST(SimpleColorSpace, MAYBE_SampleShaderSource) {
       "  color.r = TransferFn1(color.r);\n"
       "  color.g = TransferFn1(color.g);\n"
       "  color.b = TransferFn1(color.b);\n"
-      "  color = mat3(6.27403915e-01, 6.90973178e-02, 1.63914412e-02,\n"
-      "               3.29283148e-01, 9.19540286e-01, 8.80132914e-02,\n"
-      "               4.33131084e-02, 1.13623003e-02, 8.95595253e-01) "
+      "  color = mat3(6.27404153e-01, 6.90974146e-02, 1.63914431e-02,\n"
+      "               3.29283088e-01, 9.19540644e-01, 8.80132765e-02,\n"
+      "               4.33131084e-02, 1.13623096e-02, 8.95595253e-01) "
       "* color;\n"
       "  color.r = TransferFn3(color.r);\n"
       "  color.g = TransferFn3(color.g);\n"
@@ -537,9 +531,9 @@ TEST_P(TransferTest, basicTest) {
   }
 }
 
-INSTANTIATE_TEST_CASE_P(ColorSpace,
-                        TransferTest,
-                        testing::ValuesIn(simple_transfers));
+INSTANTIATE_TEST_SUITE_P(ColorSpace,
+                         TransferTest,
+                         testing::ValuesIn(simple_transfers));
 
 class NonInvertibleTransferTest
     : public testing::TestWithParam<ColorSpace::TransferID> {};
@@ -567,9 +561,9 @@ TEST_P(NonInvertibleTransferTest, basicTest) {
   from_linear->Transform(&tristim, 1);
 }
 
-INSTANTIATE_TEST_CASE_P(ColorSpace,
-                        NonInvertibleTransferTest,
-                        testing::ValuesIn(noninvertible_transfers));
+INSTANTIATE_TEST_SUITE_P(ColorSpace,
+                         NonInvertibleTransferTest,
+                         testing::ValuesIn(noninvertible_transfers));
 
 class ExtendedTransferTest
     : public testing::TestWithParam<ColorSpace::TransferID> {};
@@ -598,9 +592,9 @@ TEST_P(ExtendedTransferTest, extendedTest) {
   }
 }
 
-INSTANTIATE_TEST_CASE_P(ColorSpace,
-                        ExtendedTransferTest,
-                        testing::ValuesIn(extended_transfers));
+INSTANTIATE_TEST_SUITE_P(ColorSpace,
+                         ExtendedTransferTest,
+                         testing::ValuesIn(extended_transfers));
 
 typedef std::tuple<ColorSpace::PrimaryID,
                    ColorSpace::TransferID,
@@ -646,7 +640,7 @@ TEST_P(ColorSpaceTest, toXYZandBack) {
   EXPECT_NEAR(tristim.z(), 0.6f, 0.001f);
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     A,
     ColorSpaceTest,
     testing::Combine(testing::ValuesIn(all_primaries),
@@ -655,7 +649,7 @@ INSTANTIATE_TEST_CASE_P(
                      testing::Values(ColorSpace::RangeID::LIMITED),
                      testing::ValuesIn(intents)));
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     B,
     ColorSpaceTest,
     testing::Combine(testing::Values(ColorSpace::PrimaryID::BT709),
@@ -664,7 +658,7 @@ INSTANTIATE_TEST_CASE_P(
                      testing::ValuesIn(all_ranges),
                      testing::ValuesIn(intents)));
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     C,
     ColorSpaceTest,
     testing::Combine(testing::ValuesIn(all_primaries),

@@ -43,7 +43,7 @@ struct EVMetadata {
   SHA256HashValue fingerprint;
 
   // The EV policy OIDs of the root CA.
-  base::StringPiece policy_oids[kMaxOIDsPerCA];
+  const base::StringPiece policy_oids[kMaxOIDsPerCA];
 };
 
 // These certificates may be found in net/data/ssl/ev_roots.
@@ -796,7 +796,7 @@ bool EVRootCAMetadata::IsEVPolicyOIDGivenBytes(
 
 bool EVRootCAMetadata::HasEVPolicyOID(const SHA256HashValue& fingerprint,
                                       PolicyOID policy_oid) const {
-  PolicyOIDMap::const_iterator iter = ev_policy_.find(fingerprint);
+  auto iter = ev_policy_.find(fingerprint);
   if (iter == ev_policy_.end())
     return false;
   return std::find(iter->second.begin(), iter->second.end(), policy_oid) !=
@@ -837,7 +837,7 @@ bool EVRootCAMetadata::AddEVCA(const SHA256HashValue& fingerprint,
 }
 
 bool EVRootCAMetadata::RemoveEVCA(const SHA256HashValue& fingerprint) {
-  PolicyOIDMap::iterator it = ev_policy_.find(fingerprint);
+  auto it = ev_policy_.find(fingerprint);
   if (it == ev_policy_.end())
     return false;
   PolicyOID oid = it->second[0];

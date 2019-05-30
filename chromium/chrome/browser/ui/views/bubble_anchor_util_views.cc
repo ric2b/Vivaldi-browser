@@ -8,8 +8,8 @@
 #include "chrome/browser/ui/views/frame/app_menu_button.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+#include "chrome/browser/ui/views/location_bar/location_icon_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/browser/ui/views_mode_controller.h"
 
 #include "app/vivaldi_apptools.h"
 
@@ -20,31 +20,29 @@ namespace bubble_anchor_util {
 
 AnchorConfiguration GetPageInfoAnchorConfiguration(Browser* browser,
                                                    Anchor anchor) {
-#if defined(OS_MACOSX)
-  if (views_mode_controller::IsViewsBrowserCocoa())
-    return {};
-#endif
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   if (!browser_view)
     return {};
 
   if (anchor == kLocationBar && browser_view->GetLocationBarView()->IsDrawn())
-    return {browser_view->GetLocationBarView()->GetSecurityBubbleAnchorView(),
+    return {browser_view->GetLocationBarView(),
+            browser_view->GetLocationBarView()->location_icon_view(),
             views::BubbleBorder::TOP_LEFT};
-  // Fall back to menu button if no location bar present.
 
-  views::View* app_menu_button =
+  if (anchor == kCustomTabBar && browser_view->toolbar()->custom_tab_bar())
+    return {browser_view->toolbar()->custom_tab_bar(),
+            browser_view->toolbar()->custom_tab_bar()->location_icon_view(),
+            views::BubbleBorder::TOP_LEFT};
+
+  // Fall back to menu button.
+  views::Button* app_menu_button =
       browser_view->toolbar_button_provider()->GetAppMenuButton();
   if (app_menu_button && app_menu_button->IsDrawn())
-    return {app_menu_button, views::BubbleBorder::TOP_RIGHT};
+    return {app_menu_button, app_menu_button, views::BubbleBorder::TOP_RIGHT};
   return {};
 }
 
 gfx::Rect GetPageInfoAnchorRect(Browser* browser) {
-#if defined(OS_MACOSX)
-  if (views_mode_controller::IsViewsBrowserCocoa())
-    return GetPageInfoAnchorRectCocoa(browser);
-#endif
   // GetPageInfoAnchorConfiguration()'s anchor_view should be preferred if
   // available.
   DCHECK_EQ(GetPageInfoAnchorConfiguration(browser).anchor_view, nullptr);

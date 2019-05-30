@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/platform/scheduler/common/metrics_helper.h"
 
-#include "third_party/blink/renderer/platform/scheduler/child/process_state.h"
+#include "third_party/blink/renderer/platform/scheduler/common/process_state.h"
 
 namespace blink {
 namespace scheduler {
@@ -28,14 +28,13 @@ scheduling_metrics::ThreadType ConvertBlinkThreadType(
       return scheduling_metrics::ThreadType::kRendererDedicatedWorkerThread;
     case WebThreadType::kServiceWorkerThread:
       return scheduling_metrics::ThreadType::kRendererServiceWorkerThread;
-    case WebThreadType::kAnimationWorkletThread:
+    case WebThreadType::kAnimationAndPaintWorkletThread:
     case WebThreadType::kAudioWorkletThread:
     case WebThreadType::kDatabaseThread:
     case WebThreadType::kFileThread:
     case WebThreadType::kHRTFDatabaseLoaderThread:
     case WebThreadType::kOfflineAudioRenderThread:
     case WebThreadType::kReverbConvolutionBackgroundThread:
-    case WebThreadType::kScriptStreamerThread:
     case WebThreadType::kSharedWorkerThread:
     case WebThreadType::kUnspecifiedWorkerThread:
     case WebThreadType::kWebAudioThread:
@@ -71,7 +70,7 @@ MetricsHelper::~MetricsHelper() {}
 
 bool MetricsHelper::ShouldDiscardTask(
     base::sequence_manager::TaskQueue* queue,
-    const base::sequence_manager::TaskQueue::Task& task,
+    const base::sequence_manager::Task& task,
     const base::sequence_manager::TaskQueue::TaskTiming& task_timing) {
   // TODO(altimin): Investigate the relationship between thread time and
   // wall time for discarded tasks.
@@ -80,7 +79,7 @@ bool MetricsHelper::ShouldDiscardTask(
 
 void MetricsHelper::RecordCommonTaskMetrics(
     base::sequence_manager::TaskQueue* queue,
-    const base::sequence_manager::TaskQueue::Task& task,
+    const base::sequence_manager::Task& task,
     const base::sequence_manager::TaskQueue::TaskTiming& task_timing) {
   thread_metrics_.RecordTaskMetrics(queue, task, task_timing);
 

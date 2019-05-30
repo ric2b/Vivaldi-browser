@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
@@ -164,14 +165,13 @@ std::unique_ptr<RemoteSuggestion> CreateTestRemoteSuggestion(
 }
 
 void ServeOneByOneImage(
-    const std::string& id,
     image_fetcher::ImageDataFetcherCallback* image_data_callback,
     image_fetcher::ImageFetcherCallback* callback) {
   std::move(*image_data_callback)
       .Run("1-by-1-image-data", image_fetcher::RequestMetadata());
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::BindOnce(std::move(*callback), id, gfx::test::CreateImage(1, 1),
+      base::BindOnce(std::move(*callback), gfx::test::CreateImage(1, 1),
                      image_fetcher::RequestMetadata()));
 }
 
@@ -330,7 +330,7 @@ class RemoteSuggestionsProviderImplTest : public ::testing::Test {
 
   ~RemoteSuggestionsProviderImplTest() override {
     // We need to run until idle after deleting the database, because
-    // ProtoDatabaseImpl deletes the actual LevelDB asynchronously on the task
+    // ProtoDatabase deletes the actual LevelDB asynchronously on the task
     // runner. Without this, we'd get reports of memory leaks.
     RunUntilIdle();
   }
@@ -615,9 +615,9 @@ class RemoteSuggestionsProviderImplTest : public ::testing::Test {
         kKeepPrefetchedContentSuggestions.name,
         {
             {"max_additional_prefetched_suggestions",
-             base::IntToString(max_additional_prefetched_suggestions)},
+             base::NumberToString(max_additional_prefetched_suggestions)},
             {"max_age_for_additional_prefetched_suggestion_minutes",
-             base::IntToString(
+             base::NumberToString(
                  max_age_for_additional_prefetched_suggestion.InMinutes())},
         },
         {kKeepPrefetchedContentSuggestions.name});
@@ -668,7 +668,7 @@ class RemoteSuggestionsProviderImplTest : public ::testing::Test {
     params_manager_.ClearAllVariationParams();
     params_manager_.SetVariationParamsWithFeatureAssociations(
         /*trial_name=*/kArticleSuggestionsFeature.name,
-        {{"fetch_more_suggestions_count", base::IntToString(count)}},
+        {{"fetch_more_suggestions_count", base::NumberToString(count)}},
         {kArticleSuggestionsFeature.name});
   }
 
@@ -1325,8 +1325,8 @@ TEST_F(RemoteSuggestionsProviderImplTest,
   image_decoder()->SetDecodedImage(gfx::test::CreateImage(1, 1));
   auto serve_one_by_one_image_callback =
       base::BindRepeating(&ServeOneByOneImage);
-  EXPECT_CALL(*image_fetcher(), FetchImageAndData_(_, _, _, _, _))
-      .WillOnce(WithArgs<0, 2, 3>(
+  EXPECT_CALL(*image_fetcher(), FetchImageAndData_(_, _, _, _))
+      .WillOnce(WithArgs<1, 2>(
           Invoke(CreateFunctor(serve_one_by_one_image_callback))));
 
   gfx::Image image = FetchImage(provider.get(), MakeArticleID("id"));
@@ -1397,8 +1397,8 @@ TEST_F(RemoteSuggestionsProviderImplTest,
   image_decoder()->SetDecodedImage(gfx::test::CreateImage(1, 1));
   auto serve_one_by_one_image_callback =
       base::BindRepeating(&ServeOneByOneImage);
-  EXPECT_CALL(*image_fetcher(), FetchImageAndData_(_, _, _, _, _))
-      .WillOnce(WithArgs<0, 2, 3>(
+  EXPECT_CALL(*image_fetcher(), FetchImageAndData_(_, _, _, _))
+      .WillOnce(WithArgs<1, 2>(
           Invoke(CreateFunctor(serve_one_by_one_image_callback))));
 
   gfx::Image image = FetchImage(provider.get(), MakeArticleID("id"));
@@ -1565,9 +1565,9 @@ TEST_F(RemoteSuggestionsProviderImplTest,
                         Status::Success(), std::move(fetched_categories));
   // Make sure images of both batches are available. This is to sanity check our
   // assumptions for the test are right.
-  EXPECT_CALL(*image_fetcher(), FetchImageAndData_(_, _, _, _, _))
+  EXPECT_CALL(*image_fetcher(), FetchImageAndData_(_, _, _, _))
       .Times(2)
-      .WillRepeatedly(WithArgs<0, 2, 3>(
+      .WillRepeatedly(WithArgs<1, 2>(
           Invoke(CreateFunctor(base::BindRepeating(&ServeOneByOneImage)))));
   image_decoder()->SetDecodedImage(gfx::test::CreateImage(1, 1));
   gfx::Image image = FetchImage(provider.get(), MakeArticleID("http://id-1"));
@@ -1730,8 +1730,8 @@ TEST_F(RemoteSuggestionsProviderImplTest, Dismiss) {
   ASSERT_THAT(provider->GetSuggestionsForTesting(articles_category()),
               SizeIs(1));
   // Load the image to store it in the database.
-  EXPECT_CALL(*image_fetcher(), FetchImageAndData_(_, _, _, _, _))
-      .WillOnce(WithArgs<0, 2, 3>(
+  EXPECT_CALL(*image_fetcher(), FetchImageAndData_(_, _, _, _))
+      .WillOnce(WithArgs<1, 2>(
           Invoke(CreateFunctor(base::BindRepeating(&ServeOneByOneImage)))));
   image_decoder()->SetDecodedImage(gfx::test::CreateImage(1, 1));
   gfx::Image image =
@@ -1856,8 +1856,8 @@ TEST_F(RemoteSuggestionsProviderImplTest, RemoveExpiredDismissedContent) {
   // Load the image to store it in the database.
   // TODO(tschumann): Introduce some abstraction to nicely work with image
   // fetching expectations.
-  EXPECT_CALL(*image_fetcher(), FetchImageAndData_(_, _, _, _, _))
-      .WillOnce(WithArgs<0, 2, 3>(
+  EXPECT_CALL(*image_fetcher(), FetchImageAndData_(_, _, _, _))
+      .WillOnce(WithArgs<1, 2>(
           Invoke(CreateFunctor(base::BindRepeating(&ServeOneByOneImage)))));
   image_decoder()->SetDecodedImage(gfx::test::CreateImage(1, 1));
   gfx::Image image = FetchImage(provider.get(), MakeArticleID("http://first/"));
@@ -2122,8 +2122,8 @@ TEST_F(RemoteSuggestionsProviderImplTest, ImageReturnedWithTheSameId) {
   MockFunction<void(const gfx::Image&)> image_fetched;
   {
     InSequence s;
-    EXPECT_CALL(*image_fetcher(), FetchImageAndData_(_, _, _, _, _))
-        .WillOnce(WithArgs<0, 2, 3>(
+    EXPECT_CALL(*image_fetcher(), FetchImageAndData_(_, _, _, _))
+        .WillOnce(WithArgs<1, 2>(
             Invoke(CreateFunctor(base::BindRepeating(&ServeOneByOneImage)))));
     EXPECT_CALL(image_fetched, Call(_)).WillOnce(SaveArg<0>(&image));
   }
@@ -2258,8 +2258,8 @@ TEST_F(RemoteSuggestionsProviderImplTest, ShouldClearOrphanedImagesOnRestart) {
   FetchTheseSuggestions(provider.get(), /*interactive_request=*/true,
                         Status::Success(), std::move(fetched_categories));
 
-  EXPECT_CALL(*image_fetcher(), FetchImageAndData_(_, _, _, _, _))
-      .WillOnce(WithArgs<0, 2, 3>(
+  EXPECT_CALL(*image_fetcher(), FetchImageAndData_(_, _, _, _))
+      .WillOnce(WithArgs<1, 2>(
           Invoke(CreateFunctor(base::BindRepeating(&ServeOneByOneImage)))));
   image_decoder()->SetDecodedImage(gfx::test::CreateImage(1, 1));
 
@@ -2498,7 +2498,7 @@ TEST_F(RemoteSuggestionsProviderImplTest,
 
   std::set<std::string> known_ids;
   for (int i = 0; i < 200; ++i) {
-    known_ids.insert(base::IntToString(i));
+    known_ids.insert(base::NumberToString(i));
   }
 
   EXPECT_CALL(*scheduler(), AcquireQuotaForInteractiveFetch())
@@ -3381,7 +3381,7 @@ TEST_F(RemoteSuggestionsProviderImplTest,
   FetchedCategoryBuilder category_builder =
       FetchedCategoryBuilder().SetCategory(articles_category());
   for (int i = 0; i < 10; ++i) {
-    const std::string url = "http://other.com/" + base::IntToString(i);
+    const std::string url = "http://other.com/" + base::NumberToString(i);
     category_builder.AddSuggestionViaBuilder(
         RemoteSuggestionBuilder().AddId(url).SetUrl(url));
   }
@@ -3407,7 +3407,7 @@ TEST_F(RemoteSuggestionsProviderImplTest,
   for (int i = 0; i < 10; ++i) {
     expected.push_back(
         Property(&ContentSuggestion::id,
-                 MakeArticleID("http://other.com/" + base::IntToString(i))));
+                 MakeArticleID("http://other.com/" + base::NumberToString(i))));
   }
 
   EXPECT_THAT(observer().SuggestionsForCategory(articles_category()),
@@ -3600,7 +3600,7 @@ TEST_F(RemoteSuggestionsProviderImplTest,
   FetchedCategoryBuilder category_builder =
       FetchedCategoryBuilder().SetCategory(articles_category());
   for (int i = 0; i < 10; ++i) {
-    const std::string url = "http://other.com/" + base::IntToString(i);
+    const std::string url = "http://other.com/" + base::NumberToString(i);
     category_builder.AddSuggestionViaBuilder(
         RemoteSuggestionBuilder().AddId(url).SetUrl(url));
   }
@@ -3633,7 +3633,7 @@ TEST_F(RemoteSuggestionsProviderImplTest,
   for (int i = 0; i < 10; ++i) {
     expected.push_back(
         Property(&ContentSuggestion::id,
-                 MakeArticleID("http://other.com/" + base::IntToString(i))));
+                 MakeArticleID("http://other.com/" + base::NumberToString(i))));
   }
 
   EXPECT_THAT(observer().SuggestionsForCategory(articles_category()),

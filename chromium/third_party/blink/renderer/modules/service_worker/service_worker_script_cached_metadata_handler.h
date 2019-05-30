@@ -22,14 +22,18 @@ class ServiceWorkerScriptCachedMetadataHandler
   static ServiceWorkerScriptCachedMetadataHandler* Create(
       WorkerGlobalScope* worker_global_scope,
       const KURL& script_url,
-      const Vector<char>* meta_data) {
-    return new ServiceWorkerScriptCachedMetadataHandler(worker_global_scope,
-                                                        script_url, meta_data);
+      const Vector<uint8_t>* meta_data) {
+    return MakeGarbageCollected<ServiceWorkerScriptCachedMetadataHandler>(
+        worker_global_scope, script_url, meta_data);
   }
+
+  ServiceWorkerScriptCachedMetadataHandler(WorkerGlobalScope*,
+                                           const KURL& script_url,
+                                           const Vector<uint8_t>* meta_data);
   ~ServiceWorkerScriptCachedMetadataHandler() override;
   void Trace(blink::Visitor*) override;
   void SetCachedMetadata(uint32_t data_type_id,
-                         const char*,
+                         const uint8_t*,
                          size_t,
                          CacheType) override;
   void ClearCachedMetadata(CacheType) override;
@@ -37,12 +41,11 @@ class ServiceWorkerScriptCachedMetadataHandler
       uint32_t data_type_id) const override;
   String Encoding() const override;
   bool IsServedFromCacheStorage() const override;
+  void OnMemoryDump(WebProcessMemoryDump* pmd,
+                    const String& dump_prefix) const override;
+  size_t GetCodeCacheSize() const override;
 
  private:
-  ServiceWorkerScriptCachedMetadataHandler(WorkerGlobalScope*,
-                                           const KURL& script_url,
-                                           const Vector<char>* meta_data);
-
   Member<WorkerGlobalScope> worker_global_scope_;
   KURL script_url_;
   scoped_refptr<CachedMetadata> cached_metadata_;

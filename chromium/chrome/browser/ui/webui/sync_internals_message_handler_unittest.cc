@@ -7,10 +7,11 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
-#include "base/memory/ref_counted.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/user_event_service_factory.h"
+#include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/browser_sync/browser_sync_switches.h"
 #include "components/sync/driver/about_sync_util.h"
@@ -20,9 +21,7 @@
 #include "components/sync/user_events/fake_user_event_service.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_web_ui.h"
-#include "testing/gtest/include/gtest/gtest.h"
 
 using base::DictionaryValue;
 using base::ListValue;
@@ -105,24 +104,33 @@ static std::unique_ptr<KeyedService> BuildFakeUserEventService(
   return std::make_unique<FakeUserEventService>();
 }
 
-class SyncInternalsMessageHandlerTest : public ::testing::Test {
+class SyncInternalsMessageHandlerTest : public ChromeRenderViewHostTestHarness {
  protected:
-  SyncInternalsMessageHandlerTest() {
-    site_instance_ = content::SiteInstance::Create(&profile_);
-    web_contents_ = content::WebContents::Create(
-        content::WebContents::CreateParams(&profile_, site_instance_.get()));
-    web_ui_.set_web_contents(web_contents_.get());
+  SyncInternalsMessageHandlerTest() = default;
+  ~SyncInternalsMessageHandlerTest() override = default;
+
+  void SetUp() override {
+    ChromeRenderViewHostTestHarness::SetUp();
+
+    web_ui_.set_web_contents(web_contents());
     test_sync_service_ = static_cast<TestSyncService*>(
         ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-            &profile_, &BuildTestSyncService));
+            profile(), base::BindRepeating(&BuildTestSyncService)));
     fake_user_event_service_ = static_cast<FakeUserEventService*>(
         browser_sync::UserEventServiceFactory::GetInstance()
-            ->SetTestingFactoryAndUse(&profile_, &BuildFakeUserEventService));
+            ->SetTestingFactoryAndUse(
+                profile(), base::BindRepeating(&BuildFakeUserEventService)));
     handler_.reset(new TestableSyncInternalsMessageHandler(
         &web_ui_,
         base::BindRepeating(
             &SyncInternalsMessageHandlerTest::ConstructAboutInformation,
             base::Unretained(this))));
+  }
+
+  void TearDown() override {
+    // Destroy |handler_| before |web_contents()|.
+    handler_ = nullptr;
+    ChromeRenderViewHostTestHarness::TearDown();
   }
 
   std::unique_ptr<DictionaryValue> ConstructAboutInformation(
@@ -165,8 +173,6 @@ class SyncInternalsMessageHandlerTest : public ::testing::Test {
     EXPECT_TRUE(web_ui_.call_data().empty());
   }
 
-  TestingProfile* profile() { return &profile_; }
-
   TestSyncService* test_sync_service() { return test_sync_service_; }
 
   FakeUserEventService* fake_user_event_service() {
@@ -196,16 +202,14 @@ class SyncInternalsMessageHandlerTest : public ::testing::Test {
   void ResetHandler() { handler_.reset(); }
 
  private:
-  content::TestBrowserThreadBundle thread_bundle_;
-  TestingProfile profile_;
-  scoped_refptr<content::SiteInstance> site_instance_;
-  std::unique_ptr<content::WebContents> web_contents_;
   content::TestWebUI web_ui_;
   TestSyncService* test_sync_service_;
   FakeUserEventService* fake_user_event_service_;
   std::unique_ptr<TestableSyncInternalsMessageHandler> handler_;
   int about_sync_data_delegate_call_count_ = 0;
   SyncService* last_delegate_sync_service_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(SyncInternalsMessageHandlerTest);
 };
 
 TEST_F(SyncInternalsMessageHandlerTest, AddRemoveObservers) {
@@ -257,8 +261,8 @@ TEST_F(SyncInternalsMessageHandlerTest, AddRemoveObserversDisallowJavascript) {
 
 TEST_F(SyncInternalsMessageHandlerTest, AddRemoveObserversSyncDisabled) {
   // Simulate completely disabling sync by flag or other mechanism.
-  ProfileSyncServiceFactory::GetInstance()->SetTestingFactory(profile(),
-                                                              nullptr);
+  ProfileSyncServiceFactory::GetInstance()->SetTestingFactory(
+      profile(), BrowserContextKeyedServiceFactory::TestingFactory());
 
   ListValue empty_list;
   handler()->HandleRegisterForEvents(&empty_list);
@@ -321,8 +325,8 @@ TEST_F(SyncInternalsMessageHandlerTest, SendAboutInfo) {
 
 TEST_F(SyncInternalsMessageHandlerTest, SendAboutInfoSyncDisabled) {
   // Simulate completely disabling sync by flag or other mechanism.
-  ProfileSyncServiceFactory::GetInstance()->SetTestingFactory(profile(),
-                                                              nullptr);
+  ProfileSyncServiceFactory::GetInstance()->SetTestingFactory(
+      profile(), BrowserContextKeyedServiceFactory::TestingFactory());
 
   handler()->AllowJavascriptForTesting();
   handler()->OnStateChanged(nullptr);

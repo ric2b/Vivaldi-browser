@@ -11,7 +11,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "base/run_loop.h"
 #include "net/third_party/quic/core/crypto/quic_random.h"
 #include "net/third_party/quic/core/http/spdy_utils.h"
 #include "net/third_party/quic/core/quic_connection.h"
@@ -23,15 +22,12 @@
 #include "net/third_party/quic/platform/api/quic_bug_tracker.h"
 #include "net/third_party/quic/platform/api/quic_logging.h"
 #include "net/third_party/quic/platform/api/quic_ptr_util.h"
+#include "net/third_party/quic/platform/api/quic_system_event_loop.h"
 #include "net/third_party/quic/platform/impl/quic_socket_utils.h"
 
 #ifndef SO_RXQ_OVFL
 #define SO_RXQ_OVFL 40
 #endif
-
-// TODO(rtenneti): Add support for MMSG_MORE.
-#define MMSG_MORE 0
-using std::string;
 
 namespace quic {
 
@@ -40,7 +36,7 @@ const int kEpollFlags = EPOLLIN | EPOLLOUT | EPOLLET;
 }  // namespace
 
 QuicClientEpollNetworkHelper::QuicClientEpollNetworkHelper(
-    net::EpollServer* epoll_server,
+    QuicEpollServer* epoll_server,
     QuicClientBase* client)
     : epoll_server_(epoll_server),
       packets_dropped_(0),
@@ -59,7 +55,7 @@ QuicClientEpollNetworkHelper::~QuicClientEpollNetworkHelper() {
   CleanUpAllUDPSockets();
 }
 
-string QuicClientEpollNetworkHelper::Name() const {
+QuicString QuicClientEpollNetworkHelper::Name() const {
   return "QuicClientEpollNetworkHelper";
 }
 
@@ -122,18 +118,18 @@ void QuicClientEpollNetworkHelper::CleanUpUDPSocketImpl(int fd) {
 }
 
 void QuicClientEpollNetworkHelper::RunEventLoop() {
-  base::RunLoop().RunUntilIdle();
+  QuicRunSystemEventLoopIteration();
   epoll_server_->WaitForEventsAndExecuteCallbacks();
 }
 
-void QuicClientEpollNetworkHelper::OnRegistration(net::EpollServer* eps,
+void QuicClientEpollNetworkHelper::OnRegistration(QuicEpollServer* eps,
                                                   int fd,
                                                   int event_mask) {}
 void QuicClientEpollNetworkHelper::OnModification(int fd, int event_mask) {}
 void QuicClientEpollNetworkHelper::OnUnregistration(int fd, bool replaced) {}
-void QuicClientEpollNetworkHelper::OnShutdown(net::EpollServer* eps, int fd) {}
+void QuicClientEpollNetworkHelper::OnShutdown(QuicEpollServer* eps, int fd) {}
 
-void QuicClientEpollNetworkHelper::OnEvent(int fd, net::EpollEvent* event) {
+void QuicClientEpollNetworkHelper::OnEvent(int fd, QuicEpollEvent* event) {
   DCHECK_EQ(fd, GetLatestFD());
 
   if (event->in_events & EPOLLIN) {

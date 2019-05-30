@@ -169,9 +169,9 @@ void MojoRendererService::OnBufferingStateChange(BufferingState state) {
   client_->OnBufferingStateChange(state);
 }
 
-void MojoRendererService::OnWaitingForDecryptionKey() {
+void MojoRendererService::OnWaiting(WaitingReason reason) {
   DVLOG(1) << __func__;
-  client_->OnWaitingForDecryptionKey();
+  client_->OnWaiting(reason);
 }
 
 void MojoRendererService::OnAudioConfigChange(
@@ -193,6 +193,10 @@ void MojoRendererService::OnVideoNaturalSizeChange(const gfx::Size& size) {
 
 void MojoRendererService::OnDurationChange(base::TimeDelta duration) {
   client_->OnDurationChange(duration);
+}
+
+void MojoRendererService::OnRemotePlayStateChange(MediaStatus::State state) {
+  client_->OnRemotePlayStateChange(state);
 }
 
 void MojoRendererService::OnVideoOpacityChange(bool opaque) {
@@ -275,13 +279,13 @@ void MojoRendererService::OnCdmAttached(base::OnceCallback<void(bool)> callback,
 
 void MojoRendererService::InitiateScopedSurfaceRequest(
     InitiateScopedSurfaceRequestCallback callback) {
-  if (initiate_surface_request_cb_.is_null()) {
+  if (!initiate_surface_request_cb_) {
     // |renderer_| is likely not of type MediaPlayerRenderer.
     // This is an unexpected call, and the connection should be closed.
     mojo::ReportBadMessage("Unexpected call to InitiateScopedSurfaceRequest.");
 
     // This may cause |this| to be destructed.
-    DCHECK(!bad_message_cb_.is_null());
+    DCHECK(bad_message_cb_);
     bad_message_cb_.Run();
 
     return;

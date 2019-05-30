@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
@@ -1746,7 +1747,7 @@ TEST_F(PixelInspectTileManagerTest, LowResHasNoImage) {
   gfx::Size size(10, 12);
   TileResolution resolutions[] = {HIGH_RESOLUTION, LOW_RESOLUTION};
 
-  for (size_t i = 0; i < arraysize(resolutions); ++i) {
+  for (size_t i = 0; i < base::size(resolutions); ++i) {
     SCOPED_TRACE(resolutions[i]);
 
     // Make a RasterSource that will draw a blue bitmap image.
@@ -2169,6 +2170,91 @@ TEST_F(TileManagerTest, PartialRasterSuccessfullyDisabled) {
   RunPartialRasterCheck(TakeHostImpl(), false /* partial_raster_enabled */);
 }
 
+class InvalidResourceRasterBufferProvider
+    : public FakeRasterBufferProviderImpl {
+ public:
+  std::unique_ptr<RasterBuffer> AcquireBufferForRaster(
+      const ResourcePool::InUsePoolResource& resource,
+      uint64_t resource_content_id,
+      uint64_t previous_content_id) override {
+    if (!resource.gpu_backing()) {
+      auto backing = std::make_unique<StubGpuBacking>();
+      // Don't set a mailbox to signal invalid resource.
+      backing->texture_target = 5;
+      resource.set_gpu_backing(std::move(backing));
+    }
+    return std::make_unique<FakeRasterBuffer>();
+  }
+
+ private:
+  class StubGpuBacking : public ResourcePool::GpuBacking {
+   public:
+    void OnMemoryDump(
+        base::trace_event::ProcessMemoryDump* pmd,
+        const base::trace_event::MemoryAllocatorDumpGuid& buffer_dump_guid,
+        uint64_t tracing_process_id,
+        int importance) const override {}
+  };
+
+  class FakeRasterBuffer : public RasterBuffer {
+   public:
+    void Playback(const RasterSource* raster_source,
+                  const gfx::Rect& raster_full_rect,
+                  const gfx::Rect& raster_dirty_rect,
+                  uint64_t new_content_id,
+                  const gfx::AxisTransform2d& transform,
+                  const RasterSource::PlaybackSettings& playback_settings,
+                  const GURL& url) override {}
+  };
+};
+
+class InvalidResourceTileManagerTest : public TileManagerTest {
+ protected:
+  std::unique_ptr<LayerTreeFrameSink> CreateLayerTreeFrameSink() override {
+    return FakeLayerTreeFrameSink::Create3d();
+  }
+};
+
+TEST_F(InvalidResourceTileManagerTest, InvalidResource) {
+  auto* tile_manager = host_impl()->tile_manager();
+  InvalidResourceRasterBufferProvider raster_buffer_provider;
+  tile_manager->SetRasterBufferProviderForTesting(&raster_buffer_provider);
+
+  gfx::Size size(10, 12);
+  FakePictureLayerTilingClient tiling_client;
+  tiling_client.SetTileSize(size);
+
+  std::unique_ptr<PictureLayerImpl> layer = PictureLayerImpl::Create(
+      host_impl()->active_tree(), 1, Layer::LayerMaskType::NOT_MASK);
+  layer->set_contributes_to_drawn_render_surface(true);
+
+  auto* tiling = layer->picture_layer_tiling_set()->AddTiling(
+      gfx::AxisTransform2d(), FakeRasterSource::CreateFilled(size));
+  tiling->set_resolution(HIGH_RESOLUTION);
+  tiling->CreateAllTilesForTesting();
+  tiling->SetTilePriorityRectsForTesting(gfx::Rect(size),   // Visible rect.
+                                         gfx::Rect(size),   // Skewport rect.
+                                         gfx::Rect(size),   // Soon rect.
+                                         gfx::Rect(size));  // Eventually rect.
+
+  base::RunLoop run_loop;
+  EXPECT_CALL(MockHostImpl(), NotifyAllTileTasksCompleted())
+      .WillOnce(testing::Invoke([&run_loop]() { run_loop.Quit(); }));
+  tile_manager->PrepareTiles(host_impl()->global_tile_state());
+  run_loop.Run();
+  tile_manager->CheckForCompletedTasks();
+
+  Tile* tile = tiling->TileAt(0, 0);
+  ASSERT_TRUE(tile);
+  // The tile in the tiling was rastered, but didn't get a resource.
+  EXPECT_TRUE(tile->draw_info().IsReadyToDraw());
+  EXPECT_EQ(TileDrawInfo::OOM_MODE, tile->draw_info().mode());
+
+  // Ensure that the host impl doesn't outlive |raster_buffer_provider|.
+  layer = nullptr;
+  TakeHostImpl();
+}
+
 // FakeRasterBufferProviderImpl that allows us to mock ready to draw
 // functionality.
 class MockReadyToDrawRasterBufferProviderImpl
@@ -2180,7 +2266,7 @@ class MockReadyToDrawRasterBufferProviderImpl
       SetReadyToDrawCallback,
       uint64_t(
           const std::vector<const ResourcePool::InUsePoolResource*>& resources,
-          const base::RepeatingClosure& callback,
+          base::OnceClosure callback,
           uint64_t pending_callback_id));
 
   std::unique_ptr<RasterBuffer> AcquireBufferForRaster(
@@ -2284,7 +2370,7 @@ TEST_F(TileManagerReadyToDrawTest, SmoothActivationWaitsOnCallback) {
   host_impl()->SetTreePriority(SMOOTHNESS_TAKES_PRIORITY);
   SetupTreesWithPendingTreeTiles();
 
-  base::RepeatingClosure callback;
+  base::OnceClosure callback;
   {
     base::RunLoop run_loop;
 
@@ -2295,16 +2381,15 @@ TEST_F(TileManagerReadyToDrawTest, SmoothActivationWaitsOnCallback) {
         .WillRepeatedly(Return(false));
 
     EXPECT_CALL(*mock_raster_buffer_provider(), SetReadyToDrawCallback(_, _, 0))
-        .WillOnce(testing::Invoke(
-            [&run_loop, &callback](
-                const std::vector<const ResourcePool::InUsePoolResource*>&
-                    resources,
-                const base::RepeatingClosure& callback_in,
-                uint64_t pending_callback_id) {
-              callback = callback_in;
-              run_loop.Quit();
-              return 1;
-            }));
+        .WillOnce([&run_loop, &callback](
+                      const std::vector<const ResourcePool::InUsePoolResource*>&
+                          resources,
+                      base::OnceClosure callback_in,
+                      uint64_t pending_callback_id) {
+          callback = std::move(callback_in);
+          run_loop.Quit();
+          return 1;
+        });
     host_impl()->tile_manager()->PrepareTiles(host_impl()->global_tile_state());
     run_loop.Run();
   }
@@ -2319,7 +2404,7 @@ TEST_F(TileManagerReadyToDrawTest, SmoothActivationWaitsOnCallback) {
     EXPECT_CALL(*mock_raster_buffer_provider(),
                 IsResourceReadyToDraw(testing::_))
         .WillRepeatedly(Return(true));
-    callback.Run();
+    std::move(callback).Run();
     run_loop.Run();
   }
 
@@ -2347,7 +2432,7 @@ TEST_F(TileManagerReadyToDrawTest, SmoothDrawWaitsOnCallback) {
   host_impl()->SetTreePriority(SMOOTHNESS_TAKES_PRIORITY);
   SetupTreesWithActiveTreeTiles();
 
-  base::RepeatingClosure callback;
+  base::OnceClosure callback;
   {
     base::RunLoop run_loop;
 
@@ -2358,16 +2443,15 @@ TEST_F(TileManagerReadyToDrawTest, SmoothDrawWaitsOnCallback) {
         .WillRepeatedly(Return(false));
 
     EXPECT_CALL(*mock_raster_buffer_provider(), SetReadyToDrawCallback(_, _, 0))
-        .WillOnce(Invoke(
-            [&run_loop, &callback](
-                const std::vector<const ResourcePool::InUsePoolResource*>&
-                    resources,
-                const base::RepeatingClosure& callback_in,
-                uint64_t pending_callback_id) {
-              callback = callback_in;
-              run_loop.Quit();
-              return 1;
-            }));
+        .WillOnce([&run_loop, &callback](
+                      const std::vector<const ResourcePool::InUsePoolResource*>&
+                          resources,
+                      base::OnceClosure callback_in,
+                      uint64_t pending_callback_id) {
+          callback = std::move(callback_in);
+          run_loop.Quit();
+          return 1;
+        });
     host_impl()->tile_manager()->PrepareTiles(host_impl()->global_tile_state());
     run_loop.Run();
   }
@@ -2382,7 +2466,7 @@ TEST_F(TileManagerReadyToDrawTest, SmoothDrawWaitsOnCallback) {
     EXPECT_CALL(*mock_raster_buffer_provider(),
                 IsResourceReadyToDraw(testing::_))
         .WillRepeatedly(Return(true));
-    callback.Run();
+    std::move(callback).Run();
     run_loop.Run();
   }
 
@@ -2548,21 +2632,20 @@ TEST_F(TileManagerReadyToDrawTest, ReadyToDrawRespectsRequirementChange) {
   EXPECT_CALL(*mock_raster_buffer_provider(), IsResourceReadyToDraw(testing::_))
       .WillRepeatedly(Return(false));
 
-  base::RepeatingClosure callback;
+  base::OnceClosure callback;
   {
     base::RunLoop run_loop;
 
     EXPECT_CALL(*mock_raster_buffer_provider(), SetReadyToDrawCallback(_, _, 0))
-        .WillOnce(testing::Invoke(
-            [&run_loop, &callback](
-                const std::vector<const ResourcePool::InUsePoolResource*>&
-                    resources,
-                const base::RepeatingClosure& callback_in,
-                uint64_t pending_callback_id) {
-              callback = callback_in;
-              run_loop.Quit();
-              return 1;
-            }));
+        .WillOnce([&run_loop, &callback](
+                      const std::vector<const ResourcePool::InUsePoolResource*>&
+                          resources,
+                      base::OnceClosure callback_in,
+                      uint64_t pending_callback_id) {
+          callback = std::move(callback_in);
+          run_loop.Quit();
+          return 1;
+        });
     host_impl()->tile_manager()->DidModifyTilePriorities();
     host_impl()->tile_manager()->PrepareTiles(host_impl()->global_tile_state());
     run_loop.Run();
@@ -3280,9 +3363,9 @@ TEST_F(DecodedImageTrackerTileManagerTest, DecodedImageTrackerDropsLocksOnUse) {
 
   // Add the images to our decoded_image_tracker.
   host_impl()->tile_manager()->decoded_image_tracker().QueueImageDecode(
-      image1, gfx::ColorSpace(), base::DoNothing());
+      image1, base::DoNothing());
   host_impl()->tile_manager()->decoded_image_tracker().QueueImageDecode(
-      image2, gfx::ColorSpace(), base::DoNothing());
+      image2, base::DoNothing());
   EXPECT_EQ(0u, host_impl()
                     ->tile_manager()
                     ->decoded_image_tracker()
@@ -3342,6 +3425,35 @@ TEST_F(DecodedImageTrackerTileManagerTest, DecodedImageTrackerDropsLocksOnUse) {
                     ->tile_manager()
                     ->decoded_image_tracker()
                     .NumLockedImagesForTesting());
+}
+
+class TileManagerCheckRasterQueriesTest : public TileManagerTest {
+ public:
+  void SetUp() override {
+    TileManagerTest::SetUp();
+    host_impl()->tile_manager()->SetRasterBufferProviderForTesting(
+        &raster_buffer_provider_);
+  }
+
+ protected:
+  class MockRasterBufferProvider : public FakeRasterBufferProviderImpl {
+   public:
+    MOCK_METHOD0(CheckRasterFinishedQueries, bool());
+  };
+
+  MockRasterBufferProvider raster_buffer_provider_;
+};
+
+TEST_F(TileManagerCheckRasterQueriesTest,
+       ChecksRasterQueriesInAllTilesDoneTask) {
+  base::RunLoop run_loop;
+  EXPECT_FALSE(host_impl()->tile_manager()->HasScheduledTileTasksForTesting());
+  EXPECT_CALL(MockHostImpl(), NotifyAllTileTasksCompleted())
+      .WillOnce(testing::Invoke([&run_loop]() { run_loop.Quit(); }));
+  EXPECT_CALL(raster_buffer_provider_, CheckRasterFinishedQueries()).Times(1);
+  host_impl()->tile_manager()->PrepareTiles(host_impl()->global_tile_state());
+  EXPECT_TRUE(host_impl()->tile_manager()->HasScheduledTileTasksForTesting());
+  run_loop.Run();
 }
 
 }  // namespace

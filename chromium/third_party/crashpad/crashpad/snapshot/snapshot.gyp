@@ -111,14 +111,21 @@
         'minidump/minidump_annotation_reader.h',
         'minidump/minidump_simple_string_dictionary_reader.cc',
         'minidump/minidump_simple_string_dictionary_reader.h',
+        'minidump/minidump_stream.h',
         'minidump/minidump_string_list_reader.cc',
         'minidump/minidump_string_list_reader.h',
         'minidump/minidump_string_reader.cc',
         'minidump/minidump_string_reader.h',
+        'minidump/memory_snapshot_minidump.cc',
+        'minidump/memory_snapshot_minidump.h',
         'minidump/module_snapshot_minidump.cc',
         'minidump/module_snapshot_minidump.h',
         'minidump/process_snapshot_minidump.cc',
         'minidump/process_snapshot_minidump.h',
+        'minidump/system_snapshot_minidump.cc',
+        'minidump/system_snapshot_minidump.h',
+        'minidump/thread_snapshot_minidump.cc',
+        'minidump/thread_snapshot_minidump.h',
         'module_snapshot.h',
         'posix/timezone.cc',
         'posix/timezone.h',
@@ -201,33 +208,6 @@
             ['include', '^linux/'],
           ],
         }],
-      ],
-    },
-    {
-      'variables': {
-        'conditions': [
-          ['OS == "win"', {
-            'snapshot_api_target_type%': 'static_library',
-          }, {
-            # There are no source files except on Windows.
-            'snapshot_api_target_type%': 'none',
-          }],
-        ],
-      },
-      'target_name': 'crashpad_snapshot_api',
-      'type': '<(snapshot_api_target_type)',
-      'dependencies': [
-        'crashpad_snapshot',
-        '../compat/compat.gyp:crashpad_compat',
-        '../third_party/mini_chromium/mini_chromium.gyp:base',
-        '../util/util.gyp:crashpad_util',
-      ],
-      'include_dirs': [
-        '..',
-      ],
-      'sources': [
-        'api/module_annotations_win.cc',
-        'api/module_annotations_win.h',
       ],
     },
   ],

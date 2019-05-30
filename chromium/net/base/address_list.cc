@@ -23,12 +23,12 @@ std::unique_ptr<base::Value> NetLogAddressListCallback(
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   std::unique_ptr<base::ListValue> list(new base::ListValue());
 
-  for (AddressList::const_iterator it = address_list->begin();
-       it != address_list->end(); ++it) {
+  for (auto it = address_list->begin(); it != address_list->end(); ++it) {
     list->AppendString(it->ToString());
   }
 
   dict->Set("address_list", std::move(list));
+  dict->SetString("canonical_name", address_list->canonical_name());
   return std::move(dict);
 }
 
@@ -56,8 +56,7 @@ AddressList AddressList::CreateFromIPAddressList(
     const std::string& canonical_name) {
   AddressList list;
   list.set_canonical_name(canonical_name);
-  for (IPAddressList::const_iterator iter = addresses.begin();
-       iter != addresses.end(); ++iter) {
+  for (auto iter = addresses.begin(); iter != addresses.end(); ++iter) {
     list.push_back(IPEndPoint(*iter, 0));
   }
   return list;
@@ -72,7 +71,7 @@ AddressList AddressList::CreateFromAddrinfo(const struct addrinfo* head) {
   for (const struct addrinfo* ai = head; ai; ai = ai->ai_next) {
     IPEndPoint ipe;
     // NOTE: Ignoring non-INET* families.
-    if (ipe.FromSockAddr(ai->ai_addr, ai->ai_addrlen))
+    if (ipe.FromSockAddr(ai->ai_addr, static_cast<socklen_t>(ai->ai_addrlen)))
       list.push_back(ipe);
     else
       DLOG(WARNING) << "Unknown family found in addrinfo: " << ai->ai_family;

@@ -2,6 +2,24 @@
 
 <grit base_dir="." latest_public_release="0" current_release="1"
       source_lang_id="en" enc_check="möl">
+  <outputs>
+    <output filename="ui_strings_be.pak" type="data_package" lang="be" />
+    <output filename="ui_strings_eo.pak" type="data_package" lang="eo" />
+    <output filename="ui_strings_es-PE.pak" type="data_package" lang="es-PE" />
+    <output filename="ui_strings_eu.pak" type="data_package" lang="eu" />
+    <output filename="ui_strings_fy.pak" type="data_package" lang="fy" />
+    <output filename="ui_strings_gl.pak" type="data_package" lang="gl" />
+    <output filename="ui_strings_hy.pak" type="data_package" lang="hy" />
+    <output filename="ui_strings_io.pak" type="data_package" lang="io" />
+    <output filename="ui_strings_is.pak" type="data_package" lang="is" />
+    <output filename="ui_strings_jbo.pak" type="data_package" lang="jbo" />
+    <output filename="ui_strings_ka.pak" type="data_package" lang="ka" />
+    <output filename="ui_strings_ku.pak" type="data_package" lang="ku" />
+    <output filename="ui_strings_mk.pak" type="data_package" lang="mk" />
+    <output filename="ui_strings_sc.pak" type="data_package" lang="sc" />
+    <output filename="ui_strings_sq.pak" type="data_package" lang="sq" />
+    <output filename="ui_strings_nn.pak" type="data_package" lang="nn" />
+  </outputs>
   <translations>
     <file path="strings/vivaldi_ui_strings_am.xtb" lang="am" />
     <file path="strings/vivaldi_ui_strings_ar.xtb" lang="ar" />

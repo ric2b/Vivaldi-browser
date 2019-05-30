@@ -65,7 +65,6 @@ class PLATFORM_EXPORT StaticBitmapImage : public Image {
   virtual bool HasMailbox() const { return false; }
   virtual bool IsValid() const { return true; }
   virtual void Transfer() {}
-  virtual void Abandon() {}
 
   // Creates a non-gpu copy of the image, or returns this if image is already
   // non-gpu.
@@ -113,7 +112,9 @@ class PLATFORM_EXPORT StaticBitmapImage : public Image {
   // Methods have exactly the same implementation for all sub-classes
   bool OriginClean() const { return is_origin_clean_; }
   void SetOriginClean(bool flag) { is_origin_clean_ = flag; }
-  scoped_refptr<StaticBitmapImage> ConvertToColorSpace(sk_sp<SkColorSpace>);
+  scoped_refptr<StaticBitmapImage> ConvertToColorSpace(
+      sk_sp<SkColorSpace>,
+      SkColorType = kN32_SkColorType);
 
   static bool ConvertToArrayBufferContents(
       scoped_refptr<StaticBitmapImage> src_image,

@@ -5,15 +5,23 @@
 // This module implements the shared functionality for different guestview
 // containers, such as web_view, app_view, etc.
 
-var DocumentNatives = requireNative('document_natives');
+// Methods ending with $ will be overwritten by guest_view_iframe_container.js.
+// TODO(mcnee): When BrowserPlugin is removed, merge
+// guest_view_iframe_container.js into this file.
+
+var $parseInt = require('safeMethods').SafeMethods.$parseInt;
+var $getComputedStyle = require('safeMethods').SafeMethods.$getComputedStyle;
+var $Element = require('safeMethods').SafeMethods.$Element;
+var $EventTarget = require('safeMethods').SafeMethods.$EventTarget;
+var $HTMLElement = require('safeMethods').SafeMethods.$HTMLElement;
+var $Node = require('safeMethods').SafeMethods.$Node;
 var GuestView = require('guestView').GuestView;
 var GuestViewInternalNatives = requireNative('guest_view_internal');
 var IdGenerator = requireNative('id_generator');
 var MessagingNatives = requireNative('messaging_natives');
 
 function GuestViewContainer(element, viewType) {
-  privates(element).internal = this;
-  this.attributes = {};
+  this.attributes = $Object.create(null);
   this.element = element;
   this.elementAttached = false;
   this.viewInstanceId = IdGenerator.GetNextId();
@@ -23,7 +31,8 @@ function GuestViewContainer(element, viewType) {
   this.guest = new GuestView(viewType);
   this.setupAttributes();
 
-  privates(this).internalElement = this.createInternalElement$();
+  this.internalElement = this.createInternalElement$();
+
   // NOTE(andre@vivaldi.com) : This was proposed by WillyYu.
   // See https://github.com/WillyYu/vivaldi_1.7/
   // Attach attributes to internal element, used to determine if this element
@@ -31,62 +40,34 @@ function GuestViewContainer(element, viewType) {
   var attrs = element.attributes;
   for (var i = 0; i < attrs.length; ++i) {
     var att = attrs[i];
-    privates(this).internalElement.setAttribute(att.nodeName, att.nodeValue);
+    this.internalElement.setAttribute(att.nodeName, att.nodeValue);
   }
 
-  var shadowRoot = this.element.attachShadow({mode: 'open'});
-  shadowRoot.appendChild(privates(this).internalElement);
+  this.shadowRoot = $Element.attachShadow(this.element, {mode: 'closed'});
+  $Node.appendChild(this.shadowRoot, this.internalElement);
 
   GuestViewInternalNatives.RegisterView(this.viewInstanceId, this, viewType);
 }
 
 // Prevent GuestViewContainer inadvertently inheriting code from the global
 // Object, allowing a pathway for executing unintended user code execution.
-// TODO(wjmaclean): Use utils.expose() here instead? Track down other issues
-// of Object inheritance. https://crbug.com/701034
+// TODO(wjmaclean): Track down other issues of Object inheritance.
+// https://crbug.com/701034
 GuestViewContainer.prototype.__proto__ = null;
-
-// Forward public API methods from |proto| to their internal implementations.
-GuestViewContainer.forwardApiMethods = function(proto, apiMethods) {
-  var createProtoHandler = function(m) {
-    return function(var_args) {
-      var internal = privates(this).internal;
-      return $Function.apply(internal[m], internal, arguments);
-    };
-  };
-  for (var i = 0; apiMethods[i]; ++i) {
-    proto[apiMethods[i]] = createProtoHandler(apiMethods[i]);
-  }
-};
-
-// Registers the browserplugin and guestview as custom elements once the
-// document has loaded.
-GuestViewContainer.registerElement = function(guestViewContainerType) {
-  var useCapture = true;
-  window.addEventListener('readystatechange', function listener(event) {
-    if (document.readyState == 'loading')
-      return;
-
-    registerInternalElement(
-        $String.toLowerCase(guestViewContainerType.VIEW_TYPE));
-    registerGuestViewElement(guestViewContainerType);
-    window.removeEventListener(event.type, listener, useCapture);
-  }, useCapture);
-};
 
 // Create the 'guest' property to track new GuestViews and always listen for
 // their resizes.
 GuestViewContainer.prototype.setupGuestProperty = function() {
   $Object.defineProperty(this, 'guest', {
     get: $Function.bind(function() {
-      return privates(this).guest;
+      return this.guest_;
     }, this),
     set: $Function.bind(function(value) {
-      privates(this).guest = value;
+      this.guest_ = value;
       if (!value) {
         return;
       }
-      privates(this).guest.onresize = $Function.bind(function(e) {
+      this.guest_.onresize = $Function.bind(function(e) {
         // Dispatch the 'contentresize' event.
         var contentResizeEvent = new Event('contentresize', { bubbles: true });
         contentResizeEvent.oldWidth = e.oldWidth;
@@ -109,11 +90,11 @@ GuestViewContainer.prototype.createInternalElement$ = function() {
   return browserPluginElement;
 };
 
-GuestViewContainer.prototype.prepareForReattach_ = function() {};
+GuestViewContainer.prototype.prepareForReattach$ = function() {};
 
 GuestViewContainer.prototype.focus = function() {
   // Focus the internal element when focus() is called on the GuestView element.
-  privates(this).internalElement.focus();
+  $HTMLElement.focus(this.internalElement);
 }
 
 GuestViewContainer.prototype.attachWindow$ = function() {
@@ -153,8 +134,9 @@ GuestViewContainer.prototype.onInternalInstanceId = function(
 GuestViewContainer.prototype.handleInternalElementAttributeMutation =
     function(name, oldValue, newValue) {
   if (name == 'internalinstanceid' && !oldValue && !!newValue) {
-    privates(this).internalElement.removeAttribute('internalinstanceid');
-    this.onInternalInstanceId(parseInt(newValue));
+    $Element.removeAttribute(
+        this.internalElement, 'internalinstanceid');
+    this.onInternalInstanceId($parseInt(newValue));
   }
 };
 
@@ -172,18 +154,18 @@ GuestViewContainer.prototype.buildParams = function() {
   // However, in the case where the GuestViewContainer has a fixed size we can
   // use that value to initially size the guest so as to avoid a relayout of the
   // on display:block.
-  var css = window.getComputedStyle(this.element, null);
-  var elementRect = this.element.getBoundingClientRect();
-  params['elementWidth'] = parseInt(elementRect.width) ||
-      parseInt(css.getPropertyValue('width'));
-  params['elementHeight'] = parseInt(elementRect.height) ||
-      parseInt(css.getPropertyValue('height'));
+  var css = $getComputedStyle(this.element, null);
+  var elementRect = $Element.getBoundingClientRect(this.element);
+  params['elementWidth'] =
+      $parseInt(elementRect.width) || $parseInt(css.getPropertyValue('width'));
+  params['elementHeight'] = $parseInt(elementRect.height) ||
+      $parseInt(css.getPropertyValue('height'));
   return params;
 };
 
 GuestViewContainer.prototype.dispatchEvent = function(event) {
-  return this.element.dispatchEvent(event);
-}
+  return $EventTarget.dispatchEvent(this.element, event);
+};
 
 // Returns a wrapper function for |func| with a weak reference to |this|.
 GuestViewContainer.prototype.weakWrapper = function(func) {
@@ -196,115 +178,15 @@ GuestViewContainer.prototype.weakWrapper = function(func) {
   };
 };
 
+GuestViewContainer.prototype.willAttachElement$ = function() {};
+
 // Implemented by the specific view type, if needed.
-GuestViewContainer.prototype.buildContainerParams = function() { return {}; };
-GuestViewContainer.prototype.willAttachElement = function() {};
+GuestViewContainer.prototype.buildContainerParams = function() {
+  return $Object.create(null);
+};
 GuestViewContainer.prototype.onElementAttached = function() {};
 GuestViewContainer.prototype.onElementDetached = function() {};
 GuestViewContainer.prototype.setupAttributes = function() {};
-
-// Registers the browser plugin <object> custom element. |viewType| is the
-// name of the specific guestview container (e.g. 'webview').
-function registerInternalElement(viewType) {
-  var proto = $Object.create(HTMLElement.prototype);
-
-  proto.createdCallback = function() {
-    this.setAttribute('type', 'application/browser-plugin');
-    this.setAttribute('id', 'browser-plugin-' + IdGenerator.GetNextId());
-    this.style.width = '100%';
-    this.style.height = '100%';
-  };
-
-  proto.attachedCallback = function() {
-    // Load the plugin immediately.
-    var unused = this.nonExistentAttribute;
-  };
-
-  proto.attributeChangedCallback = function(name, oldValue, newValue) {
-    var internal = privates(this).internal;
-    if (!internal) {
-      return;
-    }
-    internal.handleInternalElementAttributeMutation(name, oldValue, newValue);
-  };
-
-  GuestViewContainer[viewType + 'BrowserPlugin'] =
-      DocumentNatives.RegisterElement(viewType + 'browserplugin',
-                                      {extends: 'object', prototype: proto});
-
-  delete proto.createdCallback;
-  delete proto.attachedCallback;
-  delete proto.detachedCallback;
-  delete proto.attributeChangedCallback;
-};
-
-// Registers the guestview container as a custom element.
-// |guestViewContainerType| is the type of guestview container
-// (e.g. WebViewImpl).
-function registerGuestViewElement(guestViewContainerType) {
-  var proto = $Object.create(HTMLElement.prototype);
-
-  proto.createdCallback = function() {
-    new guestViewContainerType(this);
-  };
-
-  proto.attachedCallback = function() {
-    var internal = privates(this).internal;
-    if (!internal) {
-      return;
-    }
-    internal.elementAttached = true;
-    internal.willAttachElement();
-    internal.onElementAttached();
-  };
-
-  proto.attributeChangedCallback = function(name, oldValue, newValue) {
-    var internal = privates(this).internal;
-    if (!internal || !internal.attributes[name]) {
-      return;
-    }
-
-    // Let the changed attribute handle its own mutation.
-    internal.attributes[name].maybeHandleMutation(oldValue, newValue);
-  };
-
-  proto.detachedCallback = function() {
-    var internal = privates(this).internal;
-    if (!internal) {
-      return;
-    }
-    internal.elementAttached = false;
-    internal.internalInstanceId = 0;
-    internal.guest.destroy();
-    internal.onElementDetached();
-  };
-
-  // Override |focus| to let |internal| handle it.
-  proto.focus = function() {
-    var internal = privates(this).internal;
-    if (!internal) {
-      return;
-    }
-    internal.focus();
-  };
-
-  // Let the specific view type add extra functionality to its custom element
-  // through |proto|.
-  if (guestViewContainerType.setupElement) {
-    guestViewContainerType.setupElement(proto);
-  }
-
-  window[guestViewContainerType.VIEW_TYPE] = DocumentNatives.RegisterElement(
-      $String.toLowerCase(guestViewContainerType.VIEW_TYPE),
-      {prototype: proto});
-
-  // Delete the callbacks so developers cannot call them and produce unexpected
-  // behavior.
-  delete proto.createdCallback;
-  delete proto.attachedCallback;
-  delete proto.detachedCallback;
-  delete proto.attributeChangedCallback;
-}
 
 // Exports.
 exports.$set('GuestViewContainer', GuestViewContainer);

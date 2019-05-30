@@ -27,7 +27,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_EDITING_SERIALIZERS_SERIALIZATION_H_
 
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/css_property_names.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/dom/parser_content_policy.h"
 #include "third_party/blink/renderer/core/editing/forward.h"
 #include "third_party/blink/renderer/core/editing/serializers/html_interchange.h"
@@ -44,8 +44,8 @@ class ExceptionState;
 class Node;
 class CSSPropertyValueSet;
 
-enum EChildrenOnly { kIncludeNode, kChildrenOnly };
-enum EAbsoluteURLs { kDoNotResolveURLs, kResolveAllURLs, kResolveNonLocalURLs };
+enum ChildrenOnly { kIncludeNode, kChildrenOnly };
+enum AbsoluteURLs { kDoNotResolveURLs, kResolveAllURLs, kResolveNonLocalURLs };
 enum class ConvertBlocksToInlines { kNotConvert, kConvert };
 
 DocumentFragment* CreateFragmentFromText(const EphemeralRange& context,
@@ -85,22 +85,22 @@ void ReplaceChildrenWithFragment(ContainerNode*,
 void ReplaceChildrenWithText(ContainerNode*, const String&, ExceptionState&);
 
 CORE_EXPORT String CreateMarkup(const Node*,
-                                EChildrenOnly = kIncludeNode,
-                                EAbsoluteURLs = kDoNotResolveURLs);
+                                ChildrenOnly = kIncludeNode,
+                                AbsoluteURLs = kDoNotResolveURLs);
 
 CORE_EXPORT String
 CreateMarkup(const Position& start,
              const Position& end,
-             EAnnotateForInterchange = kDoNotAnnotateForInterchange,
+             AnnotateForInterchange = kDoNotAnnotateForInterchange,
              ConvertBlocksToInlines = ConvertBlocksToInlines::kNotConvert,
-             EAbsoluteURLs = kDoNotResolveURLs,
+             AbsoluteURLs = kDoNotResolveURLs,
              Node* constraining_ancestor = nullptr);
 CORE_EXPORT String
 CreateMarkup(const PositionInFlatTree& start,
              const PositionInFlatTree& end,
-             EAnnotateForInterchange = kDoNotAnnotateForInterchange,
+             AnnotateForInterchange = kDoNotAnnotateForInterchange,
              ConvertBlocksToInlines = ConvertBlocksToInlines::kNotConvert,
-             EAbsoluteURLs = kDoNotResolveURLs,
+             AbsoluteURLs = kDoNotResolveURLs,
              Node* constraining_ancestor = nullptr);
 
 void MergeWithNextTextNode(Text*, ExceptionState&);

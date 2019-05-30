@@ -4,9 +4,11 @@
 
 #include "third_party/blink/renderer/core/fetch/multipart_parser.h"
 
+#include "base/stl_util.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/network/http_names.h"
 #include "third_party/blink/renderer/platform/network/http_parsers.h"
+#include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 
 #include <algorithm>
 #include <utility>
@@ -17,10 +19,10 @@ namespace {
 
 constexpr char kCloseDelimiterSuffix[] = "--\r\n";
 constexpr size_t kCloseDelimiterSuffixSize =
-    arraysize(kCloseDelimiterSuffix) - 1u;
+    base::size(kCloseDelimiterSuffix) - 1u;
 constexpr size_t kDashBoundaryOffset = 2u;  // The length of "\r\n".
 constexpr char kDelimiterSuffix[] = "\r\n";
-constexpr size_t kDelimiterSuffixSize = arraysize(kDelimiterSuffix) - 1u;
+constexpr size_t kDelimiterSuffixSize = base::size(kDelimiterSuffix) - 1u;
 
 }  // namespace
 
@@ -298,14 +300,17 @@ bool MultipartParser::ParseHeaderFields(const char** bytes_pointer,
                                         HTTPHeaderMap* header_fields) {
   // Combine the current bytes with buffered header bytes if needed.
   const char* header_bytes = *bytes_pointer;
-  size_t header_size = static_cast<size_t>(bytes_end - *bytes_pointer);
+  if ((bytes_end - *bytes_pointer) > std::numeric_limits<wtf_size_t>::max())
+    return false;
+
+  wtf_size_t header_size = static_cast<wtf_size_t>(bytes_end - *bytes_pointer);
   if (!buffered_header_bytes_.IsEmpty()) {
     buffered_header_bytes_.Append(header_bytes, header_size);
     header_bytes = buffered_header_bytes_.data();
     header_size = buffered_header_bytes_.size();
   }
 
-  size_t end = 0u;
+  wtf_size_t end = 0u;
   if (!ParseMultipartFormHeadersFromBody(header_bytes, header_size,
                                          header_fields, &end)) {
     // Store the current header bytes for the next call unless that has

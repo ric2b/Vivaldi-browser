@@ -24,10 +24,20 @@ Polymer({
     /** @type {!print_preview_new.State} */
     state: Number,
 
-    /** @private {boolean} */
+    /** @private */
     printButtonEnabled_: {
       type: Boolean,
       value: false,
+    },
+
+    managed: Boolean,
+
+    /** @private */
+    printButtonLabel_: {
+      type: String,
+      value: function() {
+        return loadTimeData.getString('printButton');
+      },
     },
 
     /** @private {?string} */
@@ -47,9 +57,11 @@ Polymer({
     errorMessage: String,
   },
 
-  observers:
-      ['update_(settings.copies.value, settings.duplex.value, ' +
-       'settings.pages.value, state, destination.id)'],
+  observers: [
+    'update_(settings.copies.value, settings.duplex.value, ' +
+        'settings.pages.value, state, destination.id)',
+    'updatePrintButtonLabel_(destination.id)'
+  ],
 
   /** @private {!print_preview_new.State} */
   lastState_: print_preview_new.State.NOT_READY,
@@ -76,12 +88,9 @@ Polymer({
              print_preview.Destination.GooglePromotedId.DOCS);
   },
 
-  /**
-   * @return {string}
-   * @private
-   */
-  getPrintButton_: function() {
-    return loadTimeData.getString(
+  /** @private */
+  updatePrintButtonLabel_: function() {
+    this.printButtonLabel_ = loadTimeData.getString(
         this.isPdfOrDrive_() ? 'saveButton' : 'printButton');
   },
 
@@ -137,7 +146,7 @@ Polymer({
         if (this.lastState_ != this.state &&
             (document.activeElement == null ||
              document.activeElement == document.body)) {
-          this.$$('button.print').focus();
+          this.$$('paper-button.action-button').focus();
         }
         break;
       case (print_preview_new.State.FATAL_ERROR):
@@ -179,5 +188,5 @@ Polymer({
     return loadTimeData.getStringF(
         'printPreviewSummaryFormatShort', labelInfo.numSheets.toLocaleString(),
         labelInfo.summaryLabel);
-  }
+  },
 });

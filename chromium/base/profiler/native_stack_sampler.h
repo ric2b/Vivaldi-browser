@@ -14,6 +14,7 @@
 
 namespace base {
 
+class ModuleCache;
 class NativeStackSamplerTestDelegate;
 
 // NativeStackSampler is an implementation detail of StackSamplingProfiler. It
@@ -47,6 +48,7 @@ class NativeStackSampler {
   // Returns null if this platform does not support stack sampling.
   static std::unique_ptr<NativeStackSampler> Create(
       PlatformThreadId thread_id,
+      ModuleCache* module_cache,
       NativeStackSamplerTestDelegate* test_delegate);
 
   // Gets the required size of the stack buffer.
@@ -58,9 +60,6 @@ class NativeStackSampler {
 
   // The following functions are all called on the SamplingThread (not the
   // thread being sampled).
-
-  // Notifies the sampler that we're starting to record a new profile.
-  virtual void ProfileRecordingStarting() = 0;
 
   // Records a set of frames and returns them.
   virtual std::vector<StackSamplingProfiler::Frame> RecordStackFrames(
@@ -94,4 +93,3 @@ class BASE_EXPORT NativeStackSamplerTestDelegate {
 }  // namespace base
 
 #endif  // BASE_PROFILER_NATIVE_STACK_SAMPLER_H_
-

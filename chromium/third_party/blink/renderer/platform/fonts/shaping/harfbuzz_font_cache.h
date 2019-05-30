@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_FONTS_SHAPING_HARFBUZZ_FONT_CACHE_H_
 
 #include <memory>
+
 #include "third_party/blink/renderer/platform/fonts/font_metrics.h"
 #include "third_party/blink/renderer/platform/fonts/opentype/open_type_vertical_data.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/harfbuzz_face.h"
@@ -36,11 +37,10 @@ const unsigned kInvalidFallbackMetricsValue = static_cast<unsigned>(-1);
 // particular size.
 struct HarfBuzzFontData {
   USING_FAST_MALLOC(HarfBuzzFontData);
-  WTF_MAKE_NONCOPYABLE(HarfBuzzFontData);
 
  public:
   HarfBuzzFontData()
-      : paint_(),
+      : font_(),
         space_in_gpos_(SpaceGlyphInOpenTypeTables::Unknown),
         space_in_gsub_(SpaceGlyphInOpenTypeTables::Unknown),
         vertical_data_(nullptr),
@@ -51,19 +51,19 @@ struct HarfBuzzFontData {
   // layout information is found from the font.
   void UpdateFallbackMetricsAndScale(
       const FontPlatformData& platform_data,
-      const SkPaint& paint,
       HarfBuzzFace::VerticalLayoutCallbacks vertical_layout) {
     float ascent = 0;
     float descent = 0;
     unsigned dummy_ascent_inflation = 0;
     unsigned dummy_descent_inflation = 0;
 
-    paint_ = paint;
+    font_ = SkFont();
+    platform_data.SetupSkFont(&font_);
 
     if (UNLIKELY(vertical_layout == HarfBuzzFace::PrepareForVerticalLayout)) {
       FontMetrics::AscentDescentWithHacks(
           ascent, descent, dummy_ascent_inflation, dummy_descent_inflation,
-          platform_data, paint);
+          platform_data, font_);
       ascent_fallback_ = ascent;
       // Simulate the rounding that FontMetrics does so far for returning the
       // integer Height()
@@ -83,6 +83,14 @@ struct HarfBuzzFontData {
     }
   }
 
+  float SizePerUnit(const SkTypeface& typeface) const {
+    if (size_per_unit_ != kInvalidFallbackMetricsValue)
+      return size_per_unit_;
+    int units_per_em = typeface.getUnitsPerEm();
+    size_per_unit_ = font_.getSize() / units_per_em;
+    return size_per_unit_;
+  }
+
   scoped_refptr<OpenTypeVerticalData> VerticalData() {
     if (!vertical_data_) {
       DCHECK_NE(ascent_fallback_, kInvalidFallbackMetricsValue);
@@ -90,18 +98,18 @@ struct HarfBuzzFontData {
       DCHECK_NE(size_per_unit_, kInvalidFallbackMetricsValue);
 
       vertical_data_ =
-          OpenTypeVerticalData::CreateUnscaled(paint_.refTypeface());
+          OpenTypeVerticalData::CreateUnscaled(font_.refTypeface());
     }
     vertical_data_->SetScaleAndFallbackMetrics(size_per_unit_, ascent_fallback_,
                                                height_fallback_);
     return vertical_data_;
   }
 
-  SkPaint paint_;
+  SkFont font_;
 
   // Capture these scaled fallback metrics from FontPlatformData so that a
   // OpenTypeVerticalData object can be constructed from them when needed.
-  float size_per_unit_;
+  mutable float size_per_unit_;
   float ascent_fallback_;
   float height_fallback_;
 
@@ -112,6 +120,9 @@ struct HarfBuzzFontData {
 
   scoped_refptr<OpenTypeVerticalData> vertical_data_;
   scoped_refptr<UnicodeRangeSet> range_set_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(HarfBuzzFontData);
 };
 
 // Though we have FontCache class, which provides the cache mechanism for
@@ -134,7 +145,7 @@ class HbFontCacheEntry : public RefCounted<HbFontCacheEntry> {
  private:
   explicit HbFontCacheEntry(hb_font_t* font)
       : hb_font_(HbFontUniquePtr(font)),
-        hb_font_data_(std::make_unique<HarfBuzzFontData>()){};
+        hb_font_data_(std::make_unique<HarfBuzzFontData>()) {}
 
   HbFontUniquePtr hb_font_;
   std::unique_ptr<HarfBuzzFontData> hb_font_data_;

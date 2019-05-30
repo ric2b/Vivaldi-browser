@@ -8,6 +8,12 @@ namespace installer {
 
 namespace switches {
 
+// Allow an update of Chrome from a higher version to a lower version.
+// Ordinarily, such downgrades are disallowed. An administrator may wish to
+// allow them in circumstances where the potential loss of user data is
+// permissable.
+const char kAllowDowngrade[] = "allow-downgrade";
+
 // Run the installer for Chrome SxS.
 const char kChromeSxS[] = "chrome-sxs";
 
@@ -190,9 +196,12 @@ const wchar_t kChromeChildDll[] = L"vivaldi_child.dll";
 const wchar_t kChromeExe[] = L"vivaldi.exe";
 const wchar_t kChromeNewExe[] = L"new_vivaldi.exe";
 const wchar_t kChromeOldExe[] = L"old_vivaldi.exe";
+const wchar_t kChromeProxyExe[] = L"chrome_proxy.exe";
+const wchar_t kChromeProxyNewExe[] = L"new_chrome_proxy.exe";
+const wchar_t kChromeProxyOldExe[] = L"old_chrome_proxy.exe";
 const wchar_t kCmdOnOsUpgrade[] = L"on-os-upgrade";
 const wchar_t kCmdStoreDMToken[] = L"store-dmtoken";
-const wchar_t kEULASentinelFile[] = L"EULA Accepted";
+const wchar_t kEulaSentinelFile[] = L"EULA Accepted";
 const wchar_t kInstallBinaryDir[] = L"Application";
 const wchar_t kInstallerDir[] = L"Installer";
 const wchar_t kInstallTempDir[] = L"Temp";
@@ -203,8 +212,11 @@ const wchar_t kSetupExe[] = L"setup.exe";
 const wchar_t kUninstallStringField[] = L"UninstallString";
 const wchar_t kUninstallArgumentsField[] = L"UninstallArguments";
 const wchar_t kUninstallDisplayNameField[] = L"DisplayName";
-const char kUninstallMetricsName[] = "uninstall_metrics";
 const wchar_t kUninstallInstallationDate[] = L"installation_date";
+
+// Elevation Service constants.
+const base::FilePath::CharType kElevationServiceExe[] =
+    FILE_PATH_LITERAL("elevation_service.exe");
 
 // Google Update installer result API.
 const wchar_t kInstallerError[] = L"InstallerError";

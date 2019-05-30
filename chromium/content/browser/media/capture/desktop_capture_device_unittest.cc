@@ -11,6 +11,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop_current.h"
@@ -230,18 +231,13 @@ class DesktopCaptureDeviceTest : public testing::Test {
   std::unique_ptr<media::MockVideoCaptureDeviceClient>
   CreateMockVideoCaptureDeviceClient() {
     auto result = std::make_unique<media::MockVideoCaptureDeviceClient>();
-    ON_CALL(*result, ReserveOutputBuffer(_, _, _))
-        .WillByDefault(
-            Invoke([](const gfx::Size&, media::VideoPixelFormat format, int) {
-              EXPECT_TRUE(format == media::PIXEL_FORMAT_I420);
-              return media::VideoCaptureDevice::Client::Buffer();
-            }));
-    ON_CALL(*result, ResurrectLastOutputBuffer(_, _, _))
-        .WillByDefault(
-            Invoke([](const gfx::Size&, media::VideoPixelFormat format, int) {
-              EXPECT_TRUE(format == media::PIXEL_FORMAT_I420);
-              return media::VideoCaptureDevice::Client::Buffer();
-            }));
+    ON_CALL(*result, ReserveOutputBuffer(_, _, _, _))
+        .WillByDefault(Invoke([](const gfx::Size&,
+                                 media::VideoPixelFormat format, int,
+                                 media::VideoCaptureDevice::Client::Buffer*) {
+          EXPECT_TRUE(format == media::PIXEL_FORMAT_I420);
+          return media::VideoCaptureDevice::Client::ReserveResult::kSucceeded;
+        }));
     return result;
   }
 
@@ -673,7 +669,7 @@ TEST_F(DesktopCaptureDeviceThrottledTest, Throttled80) {
 
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       "--webrtc-max-cpu-consumption-percentage",
-      base::IntToString(max_cpu_consumption_percentage));
+      base::NumberToString(max_cpu_consumption_percentage));
 
   const double actual_framerate = CaptureFrames();
 

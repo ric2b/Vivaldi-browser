@@ -32,10 +32,13 @@
 namespace blink {
 
 SVGLength::SVGLength(SVGLengthMode mode)
-    : value_(
-          CSSPrimitiveValue::Create(0,
-                                    CSSPrimitiveValue::UnitType::kUserUnits)),
-      unit_mode_(static_cast<unsigned>(mode)) {
+    : SVGLength(
+          *CSSPrimitiveValue::Create(0,
+                                     CSSPrimitiveValue::UnitType::kUserUnits),
+          mode) {}
+
+SVGLength::SVGLength(const CSSPrimitiveValue& value, SVGLengthMode mode)
+    : value_(value), unit_mode_(static_cast<unsigned>(mode)) {
   DCHECK_EQ(UnitMode(), mode);
 }
 
@@ -48,7 +51,7 @@ void SVGLength::Trace(blink::Visitor* visitor) {
 }
 
 SVGLength* SVGLength::Clone() const {
-  return new SVGLength(*this);
+  return MakeGarbageCollected<SVGLength>(*this);
 }
 
 SVGPropertyBase* SVGLength::CloneForAnimation(const String& value) const {
@@ -188,30 +191,30 @@ SVGLengthMode SVGLength::LengthModeForAnimatedLengthAttribute(
   DEFINE_STATIC_LOCAL(LengthModeForLengthAttributeMap, length_mode_map, ());
 
   if (length_mode_map.IsEmpty()) {
-    length_mode_map.Set(SVGNames::xAttr, SVGLengthMode::kWidth);
-    length_mode_map.Set(SVGNames::yAttr, SVGLengthMode::kHeight);
-    length_mode_map.Set(SVGNames::cxAttr, SVGLengthMode::kWidth);
-    length_mode_map.Set(SVGNames::cyAttr, SVGLengthMode::kHeight);
-    length_mode_map.Set(SVGNames::dxAttr, SVGLengthMode::kWidth);
-    length_mode_map.Set(SVGNames::dyAttr, SVGLengthMode::kHeight);
-    length_mode_map.Set(SVGNames::frAttr, SVGLengthMode::kOther);
-    length_mode_map.Set(SVGNames::fxAttr, SVGLengthMode::kWidth);
-    length_mode_map.Set(SVGNames::fyAttr, SVGLengthMode::kHeight);
-    length_mode_map.Set(SVGNames::rAttr, SVGLengthMode::kOther);
-    length_mode_map.Set(SVGNames::rxAttr, SVGLengthMode::kWidth);
-    length_mode_map.Set(SVGNames::ryAttr, SVGLengthMode::kHeight);
-    length_mode_map.Set(SVGNames::widthAttr, SVGLengthMode::kWidth);
-    length_mode_map.Set(SVGNames::heightAttr, SVGLengthMode::kHeight);
-    length_mode_map.Set(SVGNames::x1Attr, SVGLengthMode::kWidth);
-    length_mode_map.Set(SVGNames::x2Attr, SVGLengthMode::kWidth);
-    length_mode_map.Set(SVGNames::y1Attr, SVGLengthMode::kHeight);
-    length_mode_map.Set(SVGNames::y2Attr, SVGLengthMode::kHeight);
-    length_mode_map.Set(SVGNames::refXAttr, SVGLengthMode::kWidth);
-    length_mode_map.Set(SVGNames::refYAttr, SVGLengthMode::kHeight);
-    length_mode_map.Set(SVGNames::markerWidthAttr, SVGLengthMode::kWidth);
-    length_mode_map.Set(SVGNames::markerHeightAttr, SVGLengthMode::kHeight);
-    length_mode_map.Set(SVGNames::textLengthAttr, SVGLengthMode::kWidth);
-    length_mode_map.Set(SVGNames::startOffsetAttr, SVGLengthMode::kWidth);
+    length_mode_map.Set(svg_names::kXAttr, SVGLengthMode::kWidth);
+    length_mode_map.Set(svg_names::kYAttr, SVGLengthMode::kHeight);
+    length_mode_map.Set(svg_names::kCxAttr, SVGLengthMode::kWidth);
+    length_mode_map.Set(svg_names::kCyAttr, SVGLengthMode::kHeight);
+    length_mode_map.Set(svg_names::kDxAttr, SVGLengthMode::kWidth);
+    length_mode_map.Set(svg_names::kDyAttr, SVGLengthMode::kHeight);
+    length_mode_map.Set(svg_names::kFrAttr, SVGLengthMode::kOther);
+    length_mode_map.Set(svg_names::kFxAttr, SVGLengthMode::kWidth);
+    length_mode_map.Set(svg_names::kFyAttr, SVGLengthMode::kHeight);
+    length_mode_map.Set(svg_names::kRAttr, SVGLengthMode::kOther);
+    length_mode_map.Set(svg_names::kRxAttr, SVGLengthMode::kWidth);
+    length_mode_map.Set(svg_names::kRyAttr, SVGLengthMode::kHeight);
+    length_mode_map.Set(svg_names::kWidthAttr, SVGLengthMode::kWidth);
+    length_mode_map.Set(svg_names::kHeightAttr, SVGLengthMode::kHeight);
+    length_mode_map.Set(svg_names::kX1Attr, SVGLengthMode::kWidth);
+    length_mode_map.Set(svg_names::kX2Attr, SVGLengthMode::kWidth);
+    length_mode_map.Set(svg_names::kY1Attr, SVGLengthMode::kHeight);
+    length_mode_map.Set(svg_names::kY2Attr, SVGLengthMode::kHeight);
+    length_mode_map.Set(svg_names::kRefXAttr, SVGLengthMode::kWidth);
+    length_mode_map.Set(svg_names::kRefYAttr, SVGLengthMode::kHeight);
+    length_mode_map.Set(svg_names::kMarkerWidthAttr, SVGLengthMode::kWidth);
+    length_mode_map.Set(svg_names::kMarkerHeightAttr, SVGLengthMode::kHeight);
+    length_mode_map.Set(svg_names::kTextLengthAttr, SVGLengthMode::kWidth);
+    length_mode_map.Set(svg_names::kStartOffsetAttr, SVGLengthMode::kWidth);
   }
 
   if (length_mode_map.Contains(attr_name))
@@ -225,9 +228,10 @@ bool SVGLength::NegativeValuesForbiddenForAnimatedLengthAttribute(
   DEFINE_STATIC_LOCAL(
       HashSet<QualifiedName>, no_negative_values_set,
       ({
-          SVGNames::frAttr, SVGNames::rAttr, SVGNames::rxAttr, SVGNames::ryAttr,
-          SVGNames::widthAttr, SVGNames::heightAttr, SVGNames::markerWidthAttr,
-          SVGNames::markerHeightAttr, SVGNames::textLengthAttr,
+          svg_names::kFrAttr, svg_names::kRAttr, svg_names::kRxAttr,
+          svg_names::kRyAttr, svg_names::kWidthAttr, svg_names::kHeightAttr,
+          svg_names::kMarkerWidthAttr, svg_names::kMarkerHeightAttr,
+          svg_names::kTextLengthAttr,
       }));
   return no_negative_values_set.Contains(attr_name);
 }
@@ -283,6 +287,51 @@ float SVGLength::CalculateDistance(SVGPropertyBase* to_value,
   SVGLength* to_length = ToSVGLength(to_value);
 
   return fabsf(to_length->Value(length_context) - Value(length_context));
+}
+
+namespace {
+
+#define CAST_UNIT(unit) \
+  (static_cast<uint8_t>(CSSPrimitiveValue::UnitType::unit))
+
+// Table of initial values for SVGLength properties. Indexed by the
+// SVGLength::Initial enumeration, hence these two need to be kept
+// synchronized.
+const struct {
+  int8_t value;
+  uint8_t unit;
+} g_initial_lengths_table[] = {
+    {0, CAST_UNIT(kUserUnits)},    {-10, CAST_UNIT(kPercentage)},
+    {0, CAST_UNIT(kPercentage)},   {50, CAST_UNIT(kPercentage)},
+    {100, CAST_UNIT(kPercentage)}, {120, CAST_UNIT(kPercentage)},
+    {3, CAST_UNIT(kUserUnits)},
+};
+static_assert(static_cast<size_t>(SVGLength::Initial::kNumValues) ==
+                  base::size(g_initial_lengths_table),
+              "the enumeration is synchronized with the value table");
+static_assert(static_cast<size_t>(SVGLength::Initial::kNumValues) <=
+                  1u << SVGLength::kInitialValueBits,
+              "the enumeration is synchronized with the value table");
+
+#undef CAST_UNIT
+
+const CSSPrimitiveValue& CreateInitialCSSValue(
+    SVGLength::Initial initial_value) {
+  size_t initial_value_index = static_cast<size_t>(initial_value);
+  DCHECK_LT(initial_value_index, base::size(g_initial_lengths_table));
+  const auto& entry = g_initial_lengths_table[initial_value_index];
+  return *CSSPrimitiveValue::Create(
+      entry.value, static_cast<CSSPrimitiveValue::UnitType>(entry.unit));
+}
+
+}  // namespace
+
+SVGLength* SVGLength::Create(Initial initial, SVGLengthMode mode) {
+  return MakeGarbageCollected<SVGLength>(CreateInitialCSSValue(initial), mode);
+}
+
+void SVGLength::SetInitial(unsigned initial_value) {
+  value_ = CreateInitialCSSValue(static_cast<Initial>(initial_value));
 }
 
 }  // namespace blink

@@ -17,6 +17,11 @@
 
 namespace cc {
 
+// A DecodedDrawImage is a finalized (decoded, scaled, colorspace converted,
+// possibly uploaded) version of a DrawImage.  When this image is going to
+// be serialized, it uses the transfer cache entry id (see the function
+// PaintOpWriter::Write(DrawImage&) constructor.  When this image is going
+// to be rastered directly, it uses the SkImage constructor.
 class CC_PAINT_EXPORT DecodedDrawImage {
  public:
   DecodedDrawImage(sk_sp<const SkImage> image,
@@ -31,6 +36,10 @@ class CC_PAINT_EXPORT DecodedDrawImage {
                    bool needs_mips,
                    bool is_budgeted);
   DecodedDrawImage(const DecodedDrawImage& other);
+  DecodedDrawImage(DecodedDrawImage&& other);
+  DecodedDrawImage& operator=(const DecodedDrawImage&);
+  DecodedDrawImage& operator=(DecodedDrawImage&&);
+
   DecodedDrawImage();
   ~DecodedDrawImage();
 
@@ -49,6 +58,7 @@ class CC_PAINT_EXPORT DecodedDrawImage {
     return transfer_cache_entry_needs_mips_;
   }
   bool is_budgeted() const { return is_budgeted_; }
+  operator bool() const { return image_ || transfer_cache_entry_id_; }
 
  private:
   sk_sp<const SkImage> image_;

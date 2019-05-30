@@ -42,7 +42,8 @@ struct NotificationItem {
 // The fields and their meanings match message_center::ButtonInfo.
 struct ButtonInfo {
   mojo_base.mojom.String16 title;
-  gfx.mojom.ImageSkia? icon;
+  // |icon| intentionally omitted as it's not used on platforms that use mojo
+  // for notifications.
   mojo_base.mojom.String16? placeholder;
 };
 
@@ -89,4 +90,5 @@ struct Notification {
   // |shown_as_popup_| intentionally omitted.
   // |is_read_| intentionally omitted.
   // |delegate_| intentionally omitted.
+  // |custom_view_type_| intentionally omitted.
 };

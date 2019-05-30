@@ -29,14 +29,12 @@ import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity2;
 import org.chromium.chrome.browser.multiwindow.MultiWindowTestHelper;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.util.concurrent.Callable;
@@ -462,12 +460,12 @@ public class UndoTabModelTest {
      * @throws InterruptedException
      */
     @Test
-    @MediumTest
-    // TODO(jbudorick): Replace with DisableIf when it supports filtering by device type.
-    // Flaky on tablets, crbug.com/620014.
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    @RetryOnFailure
-    public void testTwoTabs() throws InterruptedException, TimeoutException {
+    // @MediumTest
+    // @RetryOnFailure
+    @DisabledTest(
+            message = "Flaky on all Android configurations except Swarming.  See crbug.com/620014.")
+    public void
+    testTwoTabs() throws InterruptedException, TimeoutException {
         TabModel model = mActivityTestRule.getActivity().getTabModelSelector().getModel(false);
         ChromeTabCreator tabCreator = mActivityTestRule.getActivity().getTabCreator(false);
         createTabOnUiThread(tabCreator);

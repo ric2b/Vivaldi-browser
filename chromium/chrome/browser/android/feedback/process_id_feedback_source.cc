@@ -4,6 +4,8 @@
 
 #include "chrome/browser/android/feedback/process_id_feedback_source.h"
 
+#include "base/task/post_task.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "jni/ProcessIdFeedbackSource_jni.h"
 
 #include "base/android/jni_array.h"
@@ -22,14 +24,11 @@ using content::BrowserThread;
 namespace chrome {
 namespace android {
 
-int64_t JNI_ProcessIdFeedbackSource_GetCurrentPid(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz) {
+int64_t JNI_ProcessIdFeedbackSource_GetCurrentPid(JNIEnv* env) {
   return base::GetCurrentProcId();
 }
 
 void JNI_ProcessIdFeedbackSource_Start(JNIEnv* env,
-                                       const JavaParamRef<jclass>& clazz,
                                        const JavaParamRef<jobject>& obj) {
   scoped_refptr<ProcessIdFeedbackSource> source =
       new ProcessIdFeedbackSource(env, obj);
@@ -55,8 +54,8 @@ void ProcessIdFeedbackSource::PrepareProcessIds() {
     process_ids_[content::PROCESS_TYPE_RENDERER].push_back(
         host->GetProcess().Pid());
   }
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
       base::BindOnce(&ProcessIdFeedbackSource::PrepareProcessIdsOnIOThread,
                      this));
 }
@@ -66,10 +65,10 @@ void ProcessIdFeedbackSource::PrepareProcessIdsOnIOThread() {
 
   for (content::BrowserChildProcessHostIterator iter; !iter.Done(); ++iter)
     process_ids_[iter.GetData().process_type].push_back(
-        iter.GetData().GetHandle());
+        iter.GetData().GetProcess().Handle());
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&ProcessIdFeedbackSource::PrepareCompleted, this));
 }
 

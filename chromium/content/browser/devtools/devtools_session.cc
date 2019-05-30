@@ -4,14 +4,16 @@
 
 #include "content/browser/devtools/devtools_session.h"
 
+#include "base/bind.h"
 #include "base/json/json_reader.h"
-#include "base/json/json_writer.h"
+#include "base/strings/stringprintf.h"
 #include "content/browser/devtools/devtools_manager.h"
+#include "content/browser/devtools/protocol/devtools_domain_handler.h"
 #include "content/browser/devtools/protocol/protocol.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/public/browser/devtools_external_agent_proxy_delegate.h"
 #include "content/public/browser/devtools_manager_delegate.h"
-#include "content/public/common/child_process_host.h"
 
 namespace content {
 
@@ -29,26 +31,35 @@ bool ShouldSendOnIO(const std::string& method) {
          method == "Emulation.setScriptExecutionDisabled";
 }
 
+static const char kMethod[] = "method";
+static const char kResumeMethod[] = "Runtime.runIfWaitingForDebugger";
+static const char kSessionId[] = "sessionId";
+
 }  // namespace
 
-DevToolsSession::DevToolsSession(DevToolsAgentHostImpl* agent_host,
-                                 DevToolsAgentHostClient* client,
-                                 bool restricted)
+DevToolsSession::DevToolsSession(DevToolsAgentHostClient* client)
     : binding_(this),
-      agent_host_(agent_host),
       client_(client),
-      restricted_(restricted),
-      process_host_id_(ChildProcessHost::kInvalidUniqueID),
-      host_(nullptr),
       dispatcher_(new protocol::UberDispatcher(this)),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 DevToolsSession::~DevToolsSession() {
+  if (proxy_delegate_)
+    proxy_delegate_->Detach(this);
   // It is Ok for session to be deleted without the dispose -
   // it can be kicked out by an extension connect / disconnect.
   if (dispatcher_)
     Dispose();
+}
+
+void DevToolsSession::SetAgentHost(DevToolsAgentHostImpl* agent_host) {
+  DCHECK(!agent_host_);
+  agent_host_ = agent_host;
+}
+
+void DevToolsSession::SetRuntimeResumeCallback(
+    base::OnceClosure runtime_resume) {
+  runtime_resume_ = std::move(runtime_resume);
 }
 
 void DevToolsSession::Dispose() {
@@ -58,27 +69,36 @@ void DevToolsSession::Dispose() {
   handlers_.clear();
 }
 
-void DevToolsSession::AddHandler(
-    std::unique_ptr<protocol::DevToolsDomainHandler> handler) {
-  handler->Wire(dispatcher_.get());
-  handler->SetRenderer(process_host_id_, host_);
-  handlers_[handler->name()] = std::move(handler);
+DevToolsSession* DevToolsSession::GetRootSession() {
+  return root_session_ ? root_session_ : this;
 }
 
-void DevToolsSession::SetRenderer(int process_host_id,
-                                  RenderFrameHostImpl* frame_host) {
-  process_host_id_ = process_host_id;
-  host_ = frame_host;
-  for (auto& pair : handlers_)
-    pair.second->SetRenderer(process_host_id_, host_);
+void DevToolsSession::AddHandler(
+    std::unique_ptr<protocol::DevToolsDomainHandler> handler) {
+  DCHECK(agent_host_);
+  handler->Wire(dispatcher_.get());
+  handlers_[handler->name()] = std::move(handler);
 }
 
 void DevToolsSession::SetBrowserOnly(bool browser_only) {
   browser_only_ = browser_only;
 }
 
-void DevToolsSession::AttachToAgent(
-    const blink::mojom::DevToolsAgentAssociatedPtr& agent) {
+void DevToolsSession::TurnIntoExternalProxy(
+    DevToolsExternalAgentProxyDelegate* proxy_delegate) {
+  proxy_delegate_ = proxy_delegate;
+  proxy_delegate_->Attach(this);
+}
+
+void DevToolsSession::AttachToAgent(blink::mojom::DevToolsAgent* agent) {
+  DCHECK(agent_host_);
+  if (!agent) {
+    binding_.Close();
+    session_ptr_.reset();
+    io_session_ptr_.reset();
+    return;
+  }
+
   blink::mojom::DevToolsSessionHostAssociatedPtrInfo host_ptr_info;
   binding_.Bind(mojo::MakeRequest(&host_ptr_info));
   agent->AttachDevToolsSession(
@@ -107,47 +127,65 @@ void DevToolsSession::AttachToAgent(
     session_state_cookie_ = blink::mojom::DevToolsSessionState::New();
 }
 
-void DevToolsSession::SendResponse(
-    std::unique_ptr<base::DictionaryValue> response) {
-  std::string json;
-  base::JSONWriter::Write(*response.get(), &json);
-  client_->DispatchProtocolMessage(agent_host_, json);
-  // |this| may be deleted at this point.
-}
-
 void DevToolsSession::MojoConnectionDestroyed() {
   binding_.Close();
   session_ptr_.reset();
   io_session_ptr_.reset();
 }
 
-void DevToolsSession::DispatchProtocolMessage(
+bool DevToolsSession::DispatchProtocolMessage(const std::string& message) {
+  if (proxy_delegate_) {
+    // Note: we assume that child sessions are not forwarding.
+    proxy_delegate_->SendMessageToBackend(this, message);
+    return true;
+  }
+
+  std::unique_ptr<protocol::DictionaryValue> value =
+      protocol::DictionaryValue::cast(protocol::StringUtil::parseMessage(
+          message, client_->UsesBinaryProtocol()));
+
+  std::string session_id;
+  if (!value || !value->getString(kSessionId, &session_id))
+    return DispatchProtocolMessageInternal(message, std::move(value));
+
+  auto it = child_sessions_.find(session_id);
+  if (it == child_sessions_.end())
+    return false;
+  DevToolsSession* session = it->second;
+  DCHECK(!session->proxy_delegate_);
+  return session->DispatchProtocolMessageInternal(message, std::move(value));
+}
+
+bool DevToolsSession::DispatchProtocolMessageInternal(
     const std::string& message,
-    std::unique_ptr<base::DictionaryValue> parsed_message) {
+    std::unique_ptr<protocol::DictionaryValue> value) {
+  std::string method;
+  bool has_method = value && value->getString(kMethod, &method);
+  if (!runtime_resume_.is_null() && has_method && method == kResumeMethod)
+    std::move(runtime_resume_).Run();
+
   DevToolsManagerDelegate* delegate =
       DevToolsManager::GetInstance()->delegate();
-  if (delegate && parsed_message) {
-    delegate->HandleCommand(agent_host_, client_, std::move(parsed_message),
-                            message,
-                            base::BindOnce(&DevToolsSession::HandleCommand,
-                                           weak_factory_.GetWeakPtr()));
+  if (delegate && has_method) {
+    delegate->HandleCommand(
+        agent_host_, client_, method, message,
+        base::BindOnce(&DevToolsSession::HandleCommand,
+                       weak_factory_.GetWeakPtr(), std::move(value)));
   } else {
-    HandleCommand(std::move(parsed_message), message);
+    HandleCommand(std::move(value), message);
   }
+  return true;
 }
 
 void DevToolsSession::HandleCommand(
-    std::unique_ptr<base::DictionaryValue> parsed_message,
+    std::unique_ptr<protocol::DictionaryValue> value,
     const std::string& message) {
-  std::unique_ptr<protocol::Value> protocol_command =
-      protocol::toProtocolValue(parsed_message.get(), 1000);
   int call_id;
   std::string method;
-  if (!dispatcher_->parseCommand(protocol_command.get(), &call_id, &method))
+  if (!dispatcher_->parseCommand(value.get(), &call_id, &method))
     return;
   if (browser_only_ || dispatcher_->canDispatch(method)) {
-    dispatcher_->dispatch(call_id, method, std::move(protocol_command),
-                          message);
+    dispatcher_->dispatch(call_id, method, std::move(value), message);
   } else {
     fallThrough(call_id, method, message);
   }
@@ -173,12 +211,17 @@ void DevToolsSession::DispatchProtocolMessageToAgent(
     const std::string& method,
     const std::string& message) {
   DCHECK(!browser_only_);
+  auto message_ptr = blink::mojom::DevToolsMessage::New();
+  message_ptr->data = mojo_base::BigBuffer(base::make_span(
+      reinterpret_cast<const uint8_t*>(message.data()), message.length()));
   if (ShouldSendOnIO(method)) {
     if (io_session_ptr_)
-      io_session_ptr_->DispatchProtocolCommand(call_id, method, message);
+      io_session_ptr_->DispatchProtocolCommand(call_id, method,
+                                               std::move(message_ptr));
   } else {
     if (session_ptr_)
-      session_ptr_->DispatchProtocolCommand(call_id, method, message);
+      session_ptr_->DispatchProtocolCommand(call_id, method,
+                                            std::move(message_ptr));
   }
 }
 
@@ -202,13 +245,15 @@ void DevToolsSession::ResumeSendingMessagesToAgent() {
 void DevToolsSession::sendProtocolResponse(
     int call_id,
     std::unique_ptr<protocol::Serializable> message) {
-  client_->DispatchProtocolMessage(agent_host_, message->serialize());
+  bool binary = client_->UsesBinaryProtocol();
+  client_->DispatchProtocolMessage(agent_host_, message->serialize(binary));
   // |this| may be deleted at this point.
 }
 
 void DevToolsSession::sendProtocolNotification(
     std::unique_ptr<protocol::Serializable> message) {
-  client_->DispatchProtocolMessage(agent_host_, message->serialize());
+  bool binary = client_->UsesBinaryProtocol();
+  client_->DispatchProtocolMessage(agent_host_, message->serialize(binary));
   // |this| may be deleted at this point.
 }
 
@@ -216,21 +261,40 @@ void DevToolsSession::flushProtocolNotifications() {
 }
 
 void DevToolsSession::DispatchProtocolResponse(
-    const std::string& message,
+    blink::mojom::DevToolsMessagePtr message,
     int call_id,
     blink::mojom::DevToolsSessionStatePtr updates) {
   ApplySessionStateUpdates(std::move(updates));
   waiting_for_response_messages_.erase(call_id);
-  client_->DispatchProtocolMessage(agent_host_, message);
+  client_->DispatchProtocolMessage(
+      agent_host_,
+      std::string(reinterpret_cast<const char*>(message->data.data()),
+                  message->data.size()));
   // |this| may be deleted at this point.
 }
 
 void DevToolsSession::DispatchProtocolNotification(
-    const std::string& message,
+    blink::mojom::DevToolsMessagePtr message,
     blink::mojom::DevToolsSessionStatePtr updates) {
   ApplySessionStateUpdates(std::move(updates));
+  client_->DispatchProtocolMessage(
+      agent_host_,
+      std::string(reinterpret_cast<const char*>(message->data.data()),
+                  message->data.size()));
+  // |this| may be deleted at this point.
+}
+
+void DevToolsSession::DispatchOnClientHost(const std::string& message) {
   client_->DispatchProtocolMessage(agent_host_, message);
   // |this| may be deleted at this point.
+}
+
+void DevToolsSession::ConnectionClosed() {
+  DevToolsAgentHostClient* client = client_;
+  DevToolsAgentHostImpl* agent_host = agent_host_;
+  agent_host->DetachInternal(this);
+  // |this| is delete here, do not use any fields below.
+  client->AgentHostClosed(agent_host);
 }
 
 void DevToolsSession::ApplySessionStateUpdates(
@@ -246,4 +310,44 @@ void DevToolsSession::ApplySessionStateUpdates(
       session_state_cookie_->entries.erase(entry.first);
   }
 }
+
+DevToolsSession* DevToolsSession::AttachChildSession(
+    const std::string& session_id,
+    DevToolsAgentHostImpl* agent_host,
+    DevToolsAgentHostClient* client) {
+  DCHECK(!agent_host->SessionByClient(client));
+  DCHECK(!root_session_);
+  auto session = std::make_unique<DevToolsSession>(client);
+  session->root_session_ = this;
+  DevToolsSession* session_ptr = session.get();
+  // If attach did not succeed, |session| is already destroyed.
+  if (!agent_host->AttachInternal(std::move(session)))
+    return nullptr;
+  child_sessions_[session_id] = session_ptr;
+  return session_ptr;
+}
+
+void DevToolsSession::DetachChildSession(const std::string& session_id) {
+  child_sessions_.erase(session_id);
+}
+
+void DevToolsSession::SendMessageFromChildSession(const std::string& session_id,
+                                                  const std::string& message) {
+  if (child_sessions_.find(session_id) == child_sessions_.end())
+    return;
+  std::string patched;
+  bool patched_ok;
+  if (client_->UsesBinaryProtocol()) {
+    patched_ok = protocol::AppendStringValueToMapBinary(message, kSessionId,
+                                                        session_id, &patched);
+  } else {
+    patched_ok = protocol::AppendStringValueToMapJSON(message, kSessionId,
+                                                      session_id, &patched);
+  }
+  if (!patched_ok)
+    return;
+  client_->DispatchProtocolMessage(agent_host_, patched);
+  // |this| may be deleted at this point.
+}
+
 }  // namespace content

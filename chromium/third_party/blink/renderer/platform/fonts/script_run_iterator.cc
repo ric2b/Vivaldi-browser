@@ -10,6 +10,26 @@
 
 namespace blink {
 
+namespace {
+
+// UScriptCode and OpenType script are not 1:1; specifically, both Hiragana and
+// Katakana map to 'kana' in OpenType. They will be mapped correctly in
+// HarfBuzz, but normalizing earlier helps to reduce splitting runs between
+// these scripts.
+// https://docs.microsoft.com/en-us/typography/opentype/spec/scripttags
+inline UScriptCode getScriptForOpenType(UChar32 ch, UErrorCode* status) {
+  UScriptCode script = uscript_getScript(ch, status);
+  if (UNLIKELY(U_FAILURE(*status)))
+    return script;
+  if (UNLIKELY(script == USCRIPT_KATAKANA ||
+               script == USCRIPT_KATAKANA_OR_HIRAGANA)) {
+    return USCRIPT_HIRAGANA;
+  }
+  return script;
+}
+
+}  // namespace
+
 typedef ScriptData::PairedBracketType PairedBracketType;
 
 constexpr int ScriptRunIterator::kMaxScriptCount;
@@ -27,6 +47,10 @@ void ICUScriptData::GetScripts(UChar32 ch, UScriptCodeList& dst) const {
   // regardless of the capacity passed to the call. So count can be greater
   // than dst->size(), if a later version of the unicode data has more
   // than kMaxScriptCount items.
+
+  // |uscript_getScriptExtensions| do not need to be collated to
+  // USCRIPT_HIRAGANA because when ScriptExtensions contains Kana, it contains
+  // Hira as well, and Hira is always before Kana.
   int count = uscript_getScriptExtensions(ch, &dst[0], dst.size(), &status);
   if (status == U_BUFFER_OVERFLOW_ERROR) {
     // Allow this, we'll just use what we have.
@@ -35,7 +59,7 @@ void ICUScriptData::GetScripts(UChar32 ch, UScriptCodeList& dst) const {
     count = dst.size();
     status = U_ZERO_ERROR;
   }
-  UScriptCode primary_script = uscript_getScript(ch, &status);
+  UScriptCode primary_script = getScriptForOpenType(ch, &status);
 
   if (U_FAILURE(status)) {
     DLOG(ERROR) << "Could not get icu script data: " << status << " for 0x"
@@ -76,7 +100,7 @@ void ICUScriptData::GetScripts(UChar32 ch, UScriptCodeList& dst) const {
     // Ignore common. Find the preferred script of the multiple scripts that
     // remain, and ensure it is at the head. Just keep swapping them in,
     // there aren't likely to be many.
-    for (size_t i = 1; i < dst.size(); ++i) {
+    for (wtf_size_t i = 1; i < dst.size(); ++i) {
       if (dst.at(0) == USCRIPT_LATIN || dst.at(i) < dst.at(0)) {
         std::swap(dst.at(0), dst.at(i));
       }
@@ -92,7 +116,7 @@ void ICUScriptData::GetScripts(UChar32 ch, UScriptCodeList& dst) const {
   // just sorted in alphabetic order.
   dst.push_back(dst.at(0));
   dst.at(0) = primary_script;
-  for (size_t i = 2; i < dst.size(); ++i) {
+  for (wtf_size_t i = 2; i < dst.size(); ++i) {
     if (dst.at(1) == USCRIPT_LATIN || dst.at(i) < dst.at(1)) {
       std::swap(dst.at(1), dst.at(i));
     }
@@ -115,7 +139,7 @@ const ICUScriptData* ICUScriptData::Instance() {
 }
 
 ScriptRunIterator::ScriptRunIterator(const UChar* text,
-                                     size_t length,
+                                     wtf_size_t length,
                                      const ScriptData* data)
     : text_(text),
       length_(length),
@@ -141,15 +165,15 @@ ScriptRunIterator::ScriptRunIterator(const UChar* text,
   }
 }
 
-ScriptRunIterator::ScriptRunIterator(const UChar* text, size_t length)
+ScriptRunIterator::ScriptRunIterator(const UChar* text, wtf_size_t length)
     : ScriptRunIterator(text, length, ICUScriptData::Instance()) {}
 
-bool ScriptRunIterator::Consume(unsigned& limit, UScriptCode& script) {
+bool ScriptRunIterator::Consume(unsigned* limit, UScriptCode* script) {
   if (current_set_.IsEmpty()) {
     return false;
   }
 
-  size_t pos;
+  wtf_size_t pos;
   UChar32 ch;
   while (Fetch(&pos, &ch)) {
     PairedBracketType paired_type = script_data_->GetPairedBracketType(ch);
@@ -164,16 +188,16 @@ bool ScriptRunIterator::Consume(unsigned& limit, UScriptCode& script) {
         break;
     }
     if (!MergeSets()) {
-      limit = pos;
-      script = ResolveCurrentScript();
-      FixupStack(script);
+      *limit = pos;
+      *script = ResolveCurrentScript();
+      FixupStack(*script);
       current_set_ = *next_set_;
       return true;
     }
   }
 
-  limit = length_;
-  script = ResolveCurrentScript();
+  *limit = length_;
+  *script = ResolveCurrentScript();
   current_set_.clear();
   return true;
 }
@@ -190,7 +214,7 @@ void ScriptRunIterator::OpenBracket(UChar32 ch) {
 }
 
 void ScriptRunIterator::CloseBracket(UChar32 ch) {
-  if (brackets_.size() > 0) {
+  if (!brackets_.empty()) {
     UChar32 target = script_data_->GetPairedBracket(ch);
     for (auto it = brackets_.rbegin(); it != brackets_.rend(); ++it) {
       if (it->ch == target) {
@@ -200,12 +224,13 @@ void ScriptRunIterator::CloseBracket(UChar32 ch) {
         next_set_->push_back(script);
 
         // And pop stack to this point.
-        int num_popped = std::distance(brackets_.rbegin(), it);
+        int num_popped =
+            static_cast<int>(std::distance(brackets_.rbegin(), it));
         // TODO: No resize operation in WTF::Deque?
         for (int i = 0; i < num_popped; ++i)
           brackets_.pop_back();
-        brackets_fixup_depth_ = std::max(static_cast<size_t>(0),
-                                         brackets_fixup_depth_ - num_popped);
+        brackets_fixup_depth_ = static_cast<wtf_size_t>(
+            std::max(0, static_cast<int>(brackets_fixup_depth_) - num_popped));
         return;
       }
     }
@@ -291,7 +316,8 @@ bool ScriptRunIterator::MergeSets() {
   }
 
   // Only change current if the run continues.
-  int written = std::distance(current_set_.begin(), current_write_it);
+  int written =
+      static_cast<int>(std::distance(current_set_.begin(), current_write_it));
   if (written > 0) {
     current_set_.resize(written);
     return true;
@@ -314,7 +340,7 @@ void ScriptRunIterator::FixupStack(UScriptCode resolved_script) {
       brackets_fixup_depth_ = brackets_.size();
     }
     auto it = brackets_.rbegin();
-    for (size_t i = 0; i < brackets_fixup_depth_; ++i) {
+    for (wtf_size_t i = 0; i < brackets_fixup_depth_; ++i) {
       it->script = resolved_script;
       ++it;
     }
@@ -322,7 +348,7 @@ void ScriptRunIterator::FixupStack(UScriptCode resolved_script) {
   }
 }
 
-bool ScriptRunIterator::Fetch(size_t* pos, UChar32* ch) {
+bool ScriptRunIterator::Fetch(wtf_size_t* pos, UChar32* ch) {
   if (ahead_pos_ > length_) {
     return false;
   }

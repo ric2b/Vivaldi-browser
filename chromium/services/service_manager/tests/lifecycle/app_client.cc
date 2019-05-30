@@ -6,17 +6,21 @@
 
 #include "base/macros.h"
 #include "base/run_loop.h"
-#include "services/service_manager/public/cpp/service_context.h"
+#include "services/service_manager/public/cpp/service_binding.h"
 
 namespace service_manager {
 namespace test {
 
-AppClient::AppClient() {
+AppClient::AppClient(service_manager::mojom::ServiceRequest request)
+    : service_binding_(this, std::move(request)) {
+  bindings_.set_connection_error_handler(base::BindRepeating(
+      &AppClient::LifecycleControlBindingLost, base::Unretained(this)));
+
   registry_.AddInterface<mojom::LifecycleControl>(
-      base::Bind(&AppClient::Create, base::Unretained(this)));
+      base::BindRepeating(&AppClient::Create, base::Unretained(this)));
 }
 
-AppClient::~AppClient() {}
+AppClient::~AppClient() = default;
 
 void AppClient::OnBindInterface(const BindSourceInfo& source_info,
                                 const std::string& interface_name,
@@ -24,9 +28,10 @@ void AppClient::OnBindInterface(const BindSourceInfo& source_info,
   registry_.BindInterface(interface_name, std::move(interface_pipe));
 }
 
-bool AppClient::OnServiceManagerConnectionLost() {
-  context()->QuitNow();
-  return true;
+void AppClient::OnDisconnected() {
+  DCHECK(service_binding_.is_bound());
+  service_binding_.Close();
+  Terminate();
 }
 
 void AppClient::Create(mojom::LifecycleControlRequest request) {
@@ -38,7 +43,10 @@ void AppClient::Ping(PingCallback callback) {
 }
 
 void AppClient::GracefulQuit() {
-  context()->CreateQuitClosure().Run();
+  if (service_binding_.is_bound())
+    service_binding_.RequestClose();
+  else
+    Terminate();
 }
 
 void AppClient::Crash() {
@@ -49,14 +57,13 @@ void AppClient::Crash() {
 }
 
 void AppClient::CloseServiceManagerConnection() {
-  context()->DisconnectFromServiceManager();
-  bindings_.set_connection_error_handler(
-      base::Bind(&AppClient::BindingLost, base::Unretained(this)));
+  if (service_binding_.is_bound())
+    service_binding_.Close();
 }
 
-void AppClient::BindingLost() {
-  if (bindings_.empty())
-    OnServiceManagerConnectionLost();
+void AppClient::LifecycleControlBindingLost() {
+  if (!service_binding_.is_bound() && bindings_.empty())
+    Terminate();
 }
 
 }  // namespace test

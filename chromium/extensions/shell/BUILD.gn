@@ -227,7 +227,12 @@ source_set("app_shell_lib") {
       "browser/shell_screen.h",
     ]
     deps += [
-      "//chromeos",
+      "//chromeos/audio",
+      "//chromeos/constants",
+      "//chromeos/dbus",
+      "//chromeos/disks",
+      "//chromeos/login/login_state",
+      "//chromeos/network",
       "//ui/chromeos",
       "//ui/display/manager",
     ]
@@ -283,12 +288,12 @@ test("app_shell_unittests") {
   sources = [
     "../test/extensions_unittests_main.cc",
     "browser/api/identity/identity_api_unittest.cc",
+    "browser/shell_content_browser_client_unittest.cc",
     "browser/shell_extension_loader_unittest.cc",
     "browser/shell_keep_alive_requester_unittest.cc",
     "browser/shell_oauth2_token_service_unittest.cc",
     "browser/shell_prefs_unittest.cc",
     "browser/system_logs/shell_system_logs_fetcher_unittest.cc",
-    "common/shell_content_client_unittest.cc",
     "test/shell_test_extensions_browser_client.cc",
     "test/shell_test_extensions_browser_client.h",
   ]
@@ -351,8 +356,9 @@ test("app_shell_unittests") {
       "browser/shell_screen_unittest.cc",
     ]
     deps += [
-      "//chromeos",
-      "//chromeos:test_support_without_gmock",
+      "//chromeos/audio",
+      "//chromeos/constants",
+      "//chromeos/dbus:test_support",
     ]
   }
 
@@ -374,7 +380,6 @@ source_set("browser_tests") {
   testonly = true
   sources = [
     "browser/api/runtime/runtime_apitest.cc",
-    "browser/geolocation/geolocation_apitest.cc",
     "browser/shell_browsertest.cc",
     "test/shell_apitest.cc",
     "test/shell_apitest.h",
@@ -401,6 +406,7 @@ source_set("browser_tests") {
     "//extensions/browser",
     "//extensions/browser:test_support",
     "//extensions/common",
+    "//ui/base",
   ]
 
   if (use_aura) {
@@ -422,14 +428,14 @@ source_set("unit_tests") {
 
   if (is_chromeos) {
     deps += [
-      "//chromeos:test_support",
+      "//chromeos/constants",
       "//components/keyed_service/content",
     ]
   }
 }
 
 if (is_desktop_linux && is_official_build) {
-  extract_symbols("app_shell_linux") {
+  extract_symbols("app_shell_linux_symbols") {
     # testonly because :app_shell is testonly. See :app_shell_lib comment.
     testonly = true
 

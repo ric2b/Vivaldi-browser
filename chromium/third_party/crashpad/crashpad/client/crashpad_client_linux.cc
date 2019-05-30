@@ -28,6 +28,7 @@
 #include "util/file/file_io.h"
 #include "util/linux/exception_handler_client.h"
 #include "util/linux/exception_information.h"
+#include "util/linux/scoped_pr_set_dumpable.h"
 #include "util/linux/scoped_pr_set_ptracer.h"
 #include "util/misc/from_pointer_cast.h"
 #include "util/posix/double_fork_and_exec.h"
@@ -56,7 +57,7 @@ std::vector<std::string> BuildAppProcessArgs(
     const std::vector<std::string>& arguments,
     int socket) {
   std::vector<std::string> argv;
-#if defined(ARCH_CPU_64_BIT)
+#if defined(ARCH_CPU_64_BITS)
   argv.push_back("/system/bin/app_process64");
 #else
   argv.push_back("/system/bin/app_process32");
@@ -76,30 +77,40 @@ std::vector<std::string> BuildAppProcessArgs(
   return argv;
 }
 
-#endif  // OS_ANDROID
+std::vector<std::string> BuildArgsToLaunchWithLinker(
+    const std::string& handler_trampoline,
+    const std::string& handler_library,
+    bool is_64_bit,
+    const base::FilePath& database,
+    const base::FilePath& metrics_dir,
+    const std::string& url,
+    const std::map<std::string, std::string>& annotations,
+    const std::vector<std::string>& arguments,
+    int socket) {
+  std::vector<std::string> argv;
+  if (is_64_bit) {
+    argv.push_back("/system/bin/linker64");
+  } else {
+    argv.push_back("/system/bin/linker");
+  }
+  argv.push_back(handler_trampoline);
+  argv.push_back(handler_library);
 
-class SignalHandler {
- public:
-  virtual void HandleCrashFatal(int signo,
-                                siginfo_t* siginfo,
-                                void* context) = 0;
-  virtual bool HandleCrashNonFatal(int signo,
-                                   siginfo_t* siginfo,
-                                   void* context) = 0;
+  std::vector<std::string> handler_argv = BuildHandlerArgvStrings(
+      base::FilePath(), database, metrics_dir, url, annotations, arguments);
 
-  void SetFirstChanceHandler(CrashpadClient::FirstChanceHandler handler) {
-    first_chance_handler_ = handler;
+  if (socket != kInvalidFileHandle) {
+    handler_argv.push_back(FormatArgumentInt("initial-client-fd", socket));
   }
 
- protected:
-  SignalHandler() = default;
-  ~SignalHandler() = default;
+  argv.insert(argv.end(), handler_argv.begin() + 1, handler_argv.end());
+  return argv;
+}
 
-  CrashpadClient::FirstChanceHandler first_chance_handler_ = nullptr;
-};
+#endif  // OS_ANDROID
 
 // Launches a single use handler to snapshot this process.
-class LaunchAtCrashHandler : public SignalHandler {
+class LaunchAtCrashHandler {
  public:
   static LaunchAtCrashHandler* Get() {
     static LaunchAtCrashHandler* instance = new LaunchAtCrashHandler();
@@ -120,12 +131,10 @@ class LaunchAtCrashHandler : public SignalHandler {
                                                   &exception_information_));
 
     StringVectorToCStringVector(argv_strings_, &argv_);
-    return Signals::InstallCrashHandlers(HandleCrash, 0, nullptr);
+    return Signals::InstallCrashHandlers(HandleCrash, 0, &old_actions_);
   }
 
-  bool HandleCrashNonFatal(int signo,
-                           siginfo_t* siginfo,
-                           void* context) override {
+  bool HandleCrashNonFatal(int signo, siginfo_t* siginfo, void* context) {
     if (first_chance_handler_ &&
         first_chance_handler_(
             signo, siginfo, static_cast<ucontext_t*>(context))) {
@@ -141,6 +150,7 @@ class LaunchAtCrashHandler : public SignalHandler {
     exception_information_.thread_id = syscall(SYS_gettid);
 
     ScopedPrSetPtracer set_ptracer(getpid(), /* may_log= */ false);
+    ScopedPrSetDumpable set_dumpable(/* may_log= */ false);
 
     pid_t pid = fork();
     if (pid < 0) {
@@ -162,12 +172,19 @@ class LaunchAtCrashHandler : public SignalHandler {
     return false;
   }
 
-  void HandleCrashFatal(int signo, siginfo_t* siginfo, void* context) override {
-    if (HandleCrashNonFatal(signo, siginfo, context)) {
+  void HandleCrashFatal(int signo, siginfo_t* siginfo, void* context) {
+    if (enabled_ && HandleCrashNonFatal(signo, siginfo, context)) {
       return;
     }
-    Signals::RestoreHandlerAndReraiseSignalOnReturn(siginfo, nullptr);
+    Signals::RestoreHandlerAndReraiseSignalOnReturn(
+        siginfo, old_actions_.ActionForSignal(signo));
   }
+
+  void SetFirstChanceHandler(CrashpadClient::FirstChanceHandler handler) {
+    first_chance_handler_ = handler;
+  }
+
+  static void Disable() { enabled_ = false; }
 
  private:
   LaunchAtCrashHandler() = default;
@@ -179,20 +196,25 @@ class LaunchAtCrashHandler : public SignalHandler {
     state->HandleCrashFatal(signo, siginfo, context);
   }
 
+  Signals::OldActions old_actions_ = {};
   std::vector<std::string> argv_strings_;
   std::vector<const char*> argv_;
   std::vector<std::string> envp_strings_;
   std::vector<const char*> envp_;
-  bool set_envp_ = false;
   ExceptionInformation exception_information_;
+  CrashpadClient::FirstChanceHandler first_chance_handler_ = nullptr;
+  bool set_envp_ = false;
+
+  static thread_local bool enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(LaunchAtCrashHandler);
 };
+thread_local bool LaunchAtCrashHandler::enabled_ = true;
 
 // A pointer to the currently installed crash signal handler. This allows
 // the static method CrashpadClient::DumpWithoutCrashing to simulate a crash
 // using the currently configured crash handling strategy.
-static SignalHandler* g_crash_handler;
+static LaunchAtCrashHandler* g_crash_handler;
 
 }  // namespace
 
@@ -259,6 +281,61 @@ bool CrashpadClient::StartJavaHandlerForClient(
   return DoubleForkAndExec(argv, env, socket, false, nullptr);
 }
 
+// static
+bool CrashpadClient::StartHandlerWithLinkerAtCrash(
+    const std::string& handler_trampoline,
+    const std::string& handler_library,
+    bool is_64_bit,
+    const std::vector<std::string>* env,
+    const base::FilePath& database,
+    const base::FilePath& metrics_dir,
+    const std::string& url,
+    const std::map<std::string, std::string>& annotations,
+    const std::vector<std::string>& arguments) {
+  std::vector<std::string> argv =
+      BuildArgsToLaunchWithLinker(handler_trampoline,
+                                  handler_library,
+                                  is_64_bit,
+                                  database,
+                                  metrics_dir,
+                                  url,
+                                  annotations,
+                                  arguments,
+                                  kInvalidFileHandle);
+  auto signal_handler = LaunchAtCrashHandler::Get();
+  if (signal_handler->Initialize(&argv, env)) {
+    DCHECK(!g_crash_handler);
+    g_crash_handler = signal_handler;
+    return true;
+  }
+  return false;
+}
+
+// static
+bool CrashpadClient::StartHandlerWithLinkerForClient(
+    const std::string& handler_trampoline,
+    const std::string& handler_library,
+    bool is_64_bit,
+    const std::vector<std::string>* env,
+    const base::FilePath& database,
+    const base::FilePath& metrics_dir,
+    const std::string& url,
+    const std::map<std::string, std::string>& annotations,
+    const std::vector<std::string>& arguments,
+    int socket) {
+  std::vector<std::string> argv =
+      BuildArgsToLaunchWithLinker(handler_trampoline,
+                                  handler_library,
+                                  is_64_bit,
+                                  database,
+                                  metrics_dir,
+                                  url,
+                                  annotations,
+                                  arguments,
+                                  socket);
+  return DoubleForkAndExec(argv, env, socket, false, nullptr);
+}
+
 #endif
 
 // static
@@ -300,7 +377,10 @@ bool CrashpadClient::StartHandlerForClient(
 
 // static
 void CrashpadClient::DumpWithoutCrash(NativeCPUContext* context) {
-  DCHECK(g_crash_handler);
+  if (!g_crash_handler) {
+    DLOG(ERROR) << "Crashpad isn't enabled";
+    return;
+  }
 
 #if defined(ARCH_CPU_ARMEL)
   memset(context->uc_regspace, 0, sizeof(context->uc_regspace));
@@ -316,6 +396,12 @@ void CrashpadClient::DumpWithoutCrash(NativeCPUContext* context) {
   siginfo.si_code = 0;
   g_crash_handler->HandleCrashNonFatal(
       siginfo.si_signo, &siginfo, reinterpret_cast<void*>(context));
+}
+
+// static
+void CrashpadClient::CrashWithoutDump(const std::string& message) {
+  LaunchAtCrashHandler::Disable();
+  LOG(FATAL) << message;
 }
 
 // static

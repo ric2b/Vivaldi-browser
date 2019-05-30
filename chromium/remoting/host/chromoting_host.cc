@@ -25,6 +25,7 @@
 #include "remoting/protocol/host_stub.h"
 #include "remoting/protocol/ice_connection_to_client.h"
 #include "remoting/protocol/input_stub.h"
+#include "remoting/protocol/native_ip_synthesizer.h"
 #include "remoting/protocol/transport_context.h"
 #include "remoting/protocol/webrtc_connection_to_client.h"
 
@@ -110,6 +111,8 @@ void ChromotingHost::Start(const std::string& host_owner_email) {
   for (auto& observer : status_monitor_->observers())
     observer.OnStart(host_owner_email);
 
+  protocol::InitializeNativeIpSynthesizer();
+
   session_manager_->AcceptIncoming(
       base::Bind(&ChromotingHost::OnIncomingSession, base::Unretained(this)));
 }
@@ -189,11 +192,10 @@ void ChromotingHost::OnSessionAuthenticationFailed(ClientSession* client) {
 void ChromotingHost::OnSessionClosed(ClientSession* client) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  ClientSessions::iterator it =
-      std::find_if(clients_.begin(), clients_.end(),
-                   [client](const std::unique_ptr<ClientSession>& item) {
-                     return item.get() == client;
-                   });
+  auto it = std::find_if(clients_.begin(), clients_.end(),
+                         [client](const std::unique_ptr<ClientSession>& item) {
+                           return item.get() == client;
+                         });
   CHECK(it != clients_.end());
 
   bool was_authenticated = client->is_authenticated();

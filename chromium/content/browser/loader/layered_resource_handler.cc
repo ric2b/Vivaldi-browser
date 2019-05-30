@@ -40,12 +40,6 @@ void LayeredResourceHandler::OnResponseStarted(
     std::unique_ptr<ResourceController> controller) {
   DCHECK(next_handler_.get());
 
-  // <Vivaldi>
-  ResourceRequestInfoImpl* info = GetRequestInfo();
-  if (info)
-    SetOpenFlags(info->open_when_downloaded(), info->ask_for_save_target());
-  // </Vivaldi>
-
   next_handler_->OnResponseStarted(response, std::move(controller));
 }
 

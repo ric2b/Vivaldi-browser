@@ -123,8 +123,7 @@ class UsbGetUserSelectedDevicesFunction : public UIThreadExtensionFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void OnDevicesChosen(
-      const std::vector<scoped_refptr<device::UsbDevice>>& devices);
+  void OnDevicesChosen(std::vector<device::mojom::UsbDeviceInfoPtr> devices);
 
   std::unique_ptr<DevicePermissionsPrompt> prompt_;
 
@@ -133,7 +132,7 @@ class UsbGetUserSelectedDevicesFunction : public UIThreadExtensionFunction {
 
 class UsbGetConfigurationsFunction : public UsbPermissionCheckingFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("usb.getConfigurations", USB_GETCONFIGURATIONS);
+  DECLARE_EXTENSION_FUNCTION("usb.getConfigurations", USB_GETCONFIGURATIONS)
 
   UsbGetConfigurationsFunction();
 

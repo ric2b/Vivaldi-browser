@@ -7,11 +7,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "base/bind.h"
 #include "base/command_line.h"
-#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "chromeos/chromeos_switches.h"
+#include "base/stl_util.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/manager/fake_display_snapshot.h"
 #include "ui/display/manager/test/action_logger_util.h"
@@ -112,8 +113,9 @@ class TestStateController : public DisplayConfigurator::StateController {
       const DisplayConfigurator::DisplayStateList& outputs) override {
     return state_;
   }
-  bool GetResolutionForDisplayId(int64_t display_id,
-                                 gfx::Size* size) const override {
+  bool GetSelectedModeForDisplayId(
+      int64_t display_id,
+      ManagedDisplayMode* out_mode) const override {
     return false;
   }
 
@@ -287,7 +289,7 @@ class DisplayConfiguratorTest : public testing::Test {
   // output-change events to |configurator_| and triggers the configure
   // timeout if one was scheduled.
   void UpdateOutputs(size_t num_outputs, bool send_events) {
-    ASSERT_LE(num_outputs, arraysize(outputs_));
+    ASSERT_LE(num_outputs, base::size(outputs_));
     std::vector<DisplaySnapshot*> outputs;
     for (size_t i = 0; i < num_outputs; ++i)
       outputs.push_back(outputs_[i].get());
@@ -439,7 +441,7 @@ TEST_F(DisplayConfiguratorTest, ConnectSecondOutput) {
   EXPECT_EQ(1, observer_.num_changes());
 
   observer_.Reset();
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   EXPECT_EQ(
       JoinActions(
           GetCrtcAction(*outputs_[0], &small_mode_, gfx::Point(0, 0)).c_str(),
@@ -483,7 +485,7 @@ TEST_F(DisplayConfiguratorTest, ConnectSecondOutput) {
   EXPECT_FALSE(mirroring_controller_.SoftwareMirroringEnabled());
 
   observer_.Reset();
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
   EXPECT_EQ(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED,
             configurator_.display_state());
@@ -500,7 +502,7 @@ TEST_F(DisplayConfiguratorTest, ConnectSecondOutput) {
 
   // Set back to software mirror mode.
   observer_.Reset();
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
   EXPECT_EQ(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED,
             configurator_.display_state());
@@ -522,7 +524,7 @@ TEST_F(DisplayConfiguratorTest, ConnectSecondOutput) {
 TEST_F(DisplayConfiguratorTest, SetDisplayPower) {
   InitWithSingleOutput();
 
-  state_controller_.set_state(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+  state_controller_.set_state(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   observer_.Reset();
   UpdateOutputs(2, true);
   EXPECT_EQ(
@@ -567,7 +569,7 @@ TEST_F(DisplayConfiguratorTest, SetDisplayPower) {
                 GetCrtcAction(*outputs_[1], nullptr, gfx::Point(0, 0)).c_str(),
                 nullptr),
             log_->GetActionsAndClear());
-  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR, configurator_.display_state());
+  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR, configurator_.display_state());
   EXPECT_FALSE(mirroring_controller_.SoftwareMirroringEnabled());
   EXPECT_EQ(1, observer_.num_changes());
 
@@ -585,7 +587,7 @@ TEST_F(DisplayConfiguratorTest, SetDisplayPower) {
           GetCrtcAction(*outputs_[1], &small_mode_, gfx::Point(0, 0)).c_str(),
           nullptr),
       log_->GetActionsAndClear());
-  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR, configurator_.display_state());
+  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR, configurator_.display_state());
   EXPECT_FALSE(mirroring_controller_.SoftwareMirroringEnabled());
   EXPECT_EQ(1, observer_.num_changes());
 
@@ -598,7 +600,7 @@ TEST_F(DisplayConfiguratorTest, SetDisplayPower) {
                     .SetIsAspectPerservingScaling(true)
                     .Build();
 
-  state_controller_.set_state(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+  state_controller_.set_state(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   observer_.Reset();
   UpdateOutputs(2, true);
 
@@ -698,11 +700,10 @@ TEST_F(DisplayConfiguratorTest, SuspendAndResume) {
   configurator_.SuspendDisplays(config_waiter_.on_configuration_callback());
   EXPECT_EQ(kNoDelay, config_waiter_.Wait());
   EXPECT_EQ(CALLBACK_SUCCESS, config_waiter_.callback_result());
-  EXPECT_EQ(
-      JoinActions(
-          GetCrtcAction(*outputs_[0], nullptr, gfx::Point(0, 0)).c_str(),
-          nullptr),
-      log_->GetActionsAndClear());
+  EXPECT_EQ(JoinActions(
+                GetCrtcAction(*outputs_[0], nullptr, gfx::Point(0, 0)).c_str(),
+                nullptr),
+            log_->GetActionsAndClear());
 
   // No resume delay in single display mode.
   config_waiter_.Reset();
@@ -723,11 +724,10 @@ TEST_F(DisplayConfiguratorTest, SuspendAndResume) {
                                 config_waiter_.on_configuration_callback());
   EXPECT_EQ(kNoDelay, config_waiter_.Wait());
   EXPECT_EQ(CALLBACK_SUCCESS, config_waiter_.callback_result());
-  EXPECT_EQ(
-      JoinActions(
-          GetCrtcAction(*outputs_[0], nullptr, gfx::Point(0, 0)).c_str(),
-          nullptr),
-      log_->GetActionsAndClear());
+  EXPECT_EQ(JoinActions(
+                GetCrtcAction(*outputs_[0], nullptr, gfx::Point(0, 0)).c_str(),
+                nullptr),
+            log_->GetActionsAndClear());
 
   config_waiter_.Reset();
   configurator_.SuspendDisplays(config_waiter_.on_configuration_callback());
@@ -753,7 +753,7 @@ TEST_F(DisplayConfiguratorTest, SuspendAndResume) {
           nullptr),
       log_->GetActionsAndClear());
 
-  state_controller_.set_state(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+  state_controller_.set_state(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   UpdateOutputs(2, true);
   EXPECT_EQ(
       JoinActions(
@@ -768,7 +768,7 @@ TEST_F(DisplayConfiguratorTest, SuspendAndResume) {
                                 config_waiter_.on_configuration_callback());
   EXPECT_EQ(kNoDelay, config_waiter_.Wait());
   EXPECT_EQ(CALLBACK_SUCCESS, config_waiter_.callback_result());
-  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR, configurator_.display_state());
+  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR, configurator_.display_state());
   EXPECT_EQ(JoinActions(
                 GetCrtcAction(*outputs_[0], nullptr, gfx::Point(0, 0)).c_str(),
                 GetCrtcAction(*outputs_[1], nullptr, gfx::Point(0, 0)).c_str(),
@@ -782,7 +782,7 @@ TEST_F(DisplayConfiguratorTest, SuspendAndResume) {
   EXPECT_EQ(CALLBACK_SUCCESS, config_waiter_.callback_result());
   EXPECT_EQ(chromeos::DISPLAY_POWER_ALL_OFF,
             configurator_.current_power_state());
-  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR, configurator_.display_state());
+  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR, configurator_.display_state());
   EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
 
   // If a display is disconnected while suspended, the configurator should
@@ -861,7 +861,7 @@ TEST_F(DisplayConfiguratorTest, StartWithTwoOutputs) {
   Init(false);
   EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
 
-  state_controller_.set_state(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+  state_controller_.set_state(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   configurator_.ForceInitialConfigure();
   EXPECT_EQ(
       JoinActions(
@@ -882,7 +882,7 @@ TEST_F(DisplayConfiguratorTest, InvalidMultipleDisplayStates) {
   EXPECT_EQ(1, observer_.num_changes());
   EXPECT_EQ(0, observer_.num_failures());
   configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_SINGLE);
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED);
   EXPECT_EQ(1, observer_.num_changes());
   EXPECT_EQ(3, observer_.num_failures());
@@ -895,7 +895,7 @@ TEST_F(DisplayConfiguratorTest, InvalidMultipleDisplayStates) {
   configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_SINGLE);
   EXPECT_EQ(1, observer_.num_changes());
   EXPECT_EQ(1, observer_.num_failures());
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED);
   EXPECT_EQ(1, observer_.num_changes());
   EXPECT_EQ(3, observer_.num_failures());
@@ -907,7 +907,7 @@ TEST_F(DisplayConfiguratorTest, InvalidMultipleDisplayStates) {
   configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_SINGLE);
   EXPECT_EQ(0, observer_.num_changes());
   EXPECT_EQ(2, observer_.num_failures());
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED);
   EXPECT_EQ(2, observer_.num_changes());
   EXPECT_EQ(2, observer_.num_failures());
@@ -916,9 +916,9 @@ TEST_F(DisplayConfiguratorTest, InvalidMultipleDisplayStates) {
 TEST_F(DisplayConfiguratorTest, GetMultipleDisplayStateForMirroredDisplays) {
   UpdateOutputs(2, false);
   Init(false);
-  state_controller_.set_state(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+  state_controller_.set_state(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   configurator_.ForceInitialConfigure();
-  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR, configurator_.display_state());
+  EXPECT_EQ(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR, configurator_.display_state());
 }
 
 TEST_F(DisplayConfiguratorTest, UpdateCachedOutputsEvenAfterFailure) {
@@ -936,7 +936,6 @@ TEST_F(DisplayConfiguratorTest, UpdateCachedOutputsEvenAfterFailure) {
   EXPECT_EQ(outputs_[0]->current_mode(), cached[0]->current_mode());
   EXPECT_EQ(outputs_[1]->current_mode(), cached[1]->current_mode());
 }
-
 
 TEST_F(DisplayConfiguratorTest, ContentProtection) {
   Init(false);
@@ -1016,11 +1015,10 @@ TEST_F(DisplayConfiguratorTest, DoNotConfigureWithSuspendedDisplays) {
   configurator_.SuspendDisplays(config_waiter_.on_configuration_callback());
   EXPECT_EQ(kNoDelay, config_waiter_.Wait());
   EXPECT_EQ(CALLBACK_SUCCESS, config_waiter_.callback_result());
-  EXPECT_EQ(
-      JoinActions(
-          GetCrtcAction(*outputs_[0], nullptr, gfx::Point(0, 0)).c_str(),
-          nullptr),
-      log_->GetActionsAndClear());
+  EXPECT_EQ(JoinActions(
+                GetCrtcAction(*outputs_[0], nullptr, gfx::Point(0, 0)).c_str(),
+                nullptr),
+            log_->GetActionsAndClear());
 
   // The configuration timer should not be started when the displays
   // are suspended.
@@ -1050,7 +1048,7 @@ TEST_F(DisplayConfiguratorTest, DoNotConfigureWithSuspendedDisplays) {
       log_->GetActionsAndClear());
 
   UpdateOutputs(2, false);
-  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+  configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   EXPECT_EQ(
       JoinActions(
           GetCrtcAction(*outputs_[0], &small_mode_, gfx::Point(0, 0)).c_str(),
@@ -1073,11 +1071,10 @@ TEST_F(DisplayConfiguratorTest, DoNotConfigureWithSuspendedDisplays) {
   configurator_.SuspendDisplays(config_waiter_.on_configuration_callback());
   EXPECT_EQ(kNoDelay, config_waiter_.Wait());
   EXPECT_EQ(CALLBACK_SUCCESS, config_waiter_.callback_result());
-  EXPECT_EQ(
-      JoinActions(
-          GetCrtcAction(*outputs_[0], nullptr, gfx::Point(0, 0)).c_str(),
-          nullptr),
-      log_->GetActionsAndClear());
+  EXPECT_EQ(JoinActions(
+                GetCrtcAction(*outputs_[0], nullptr, gfx::Point(0, 0)).c_str(),
+                nullptr),
+            log_->GetActionsAndClear());
   EXPECT_FALSE(test_api_.TriggerConfigureTimeout());
   EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
 
@@ -1255,7 +1252,7 @@ TEST_F(DisplayConfiguratorTest, HandleConfigureCrtcFailure) {
   // and should end up in extended mode.
   native_display_delegate_->set_max_configurable_pixels(
       modes[3]->size().GetArea());
-  state_controller_.set_state(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+  state_controller_.set_state(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   UpdateOutputs(2, true);
 
   EXPECT_EQ(
@@ -1337,7 +1334,7 @@ TEST_F(DisplayConfiguratorTest, SaveDisplayPowerStateOnConfigFailure) {
 // http://crosbug.com/p/32393
 TEST_F(DisplayConfiguratorTest, DontRestoreStalePowerStateAfterResume) {
   // Start out with two displays in mirrored mode.
-  state_controller_.set_state(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+  state_controller_.set_state(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
   Init(false);
   configurator_.ForceInitialConfigure();
   log_->GetActionsAndClear();
@@ -1423,11 +1420,10 @@ TEST_F(DisplayConfiguratorTest, ExternalControl) {
       base::BindOnce(&DisplayConfiguratorTest::OnDisplayControlUpdated,
                      base::Unretained(this)));
   EXPECT_EQ(CALLBACK_SUCCESS, PopDisplayControlResult());
-  EXPECT_EQ(
-      JoinActions(
-          GetCrtcAction(*outputs_[0], nullptr, gfx::Point(0, 0)).c_str(),
-          kRelinquishDisplayControl, nullptr),
-      log_->GetActionsAndClear());
+  EXPECT_EQ(JoinActions(
+                GetCrtcAction(*outputs_[0], nullptr, gfx::Point(0, 0)).c_str(),
+                kRelinquishDisplayControl, nullptr),
+            log_->GetActionsAndClear());
   configurator_.TakeControl(
       base::BindOnce(&DisplayConfiguratorTest::OnDisplayControlUpdated,
                      base::Unretained(this)));
@@ -1798,10 +1794,7 @@ class DisplayConfiguratorMultiMirroringTest : public DisplayConfiguratorTest {
   DisplayConfiguratorMultiMirroringTest() = default;
   ~DisplayConfiguratorMultiMirroringTest() override = default;
 
-  void SetUp() override {
-    configurator_.set_is_multi_mirroring_enabled_for_test(true);
-    DisplayConfiguratorTest::SetUp();
-  }
+  void SetUp() override { DisplayConfiguratorTest::SetUp(); }
 
   // Test that setting mirror mode with current outputs, all displays are set to
   // expected mirror mode.
@@ -1810,7 +1803,7 @@ class DisplayConfiguratorMultiMirroringTest : public DisplayConfiguratorTest {
     UpdateOutputs(3, true);
     log_->GetActionsAndClear();
     observer_.Reset();
-    configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+    configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
     EXPECT_EQ(
         JoinActions(GetCrtcAction(*outputs_[0], expected_mirror_mode.get(),
                                   gfx::Point(0, 0))
@@ -1833,7 +1826,7 @@ class DisplayConfiguratorMultiMirroringTest : public DisplayConfiguratorTest {
     UpdateOutputs(3, true);
     log_->GetActionsAndClear();
     observer_.Reset();
-    configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+    configurator_.SetDisplayMode(MULTIPLE_DISPLAY_STATE_MULTI_MIRROR);
     EXPECT_EQ(kNoActions, log_->GetActionsAndClear());
     EXPECT_TRUE(mirroring_controller_.SoftwareMirroringEnabled());
     EXPECT_EQ(1, observer_.num_changes());

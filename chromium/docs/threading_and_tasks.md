@@ -2,6 +2,9 @@
 
 [TOC]
 
+Note: See [Threading and Tasks FAQ](threading_and_tasks_faq.md) for more
+examples.
+
 ## Overview
 
 Chromium is a very multithreaded product. We try to keep the UI as responsive as
@@ -11,6 +14,37 @@ communicating between threads. We discourage locking and threadsafe
 objects. Instead, objects live on only one thread, we pass messages between
 threads for communication, and we use callback interfaces (implemented by
 message passing) for most cross-thread requests.
+
+### Nomenclature
+ * **Thread-unsafe**: The vast majority of types in Chromium are thread-unsafe
+   by design. Access to such types/methods must be synchronized, typically by
+   sequencing access through a single `base::SequencedTaskRunner` (this should
+   be enforced by a `SEQUENCE_CHECKER`) or via low-level synchronization (e.g.
+   locks -- but [prefer sequences](#Using-Sequences-Instead-of-Locks)).
+ * **Thread-affine**: Such types/methods need to be always accessed from the
+   same physical thread (i.e. from the same `base::SingleThreadTaskRunner`) and
+   should use `THREAD_CHECKER` to verify that they are. Short of using a
+   third-party API or having a leaf dependency which is thread-affine: there's
+   pretty much no reason for a type to be thread-affine in Chromium. Note that
+   `base::SingleThreadTaskRunner` is-a `base::SequencedTaskRunner` so
+   thread-affine is a subset of thread-unsafe. Thread-affine is also sometimes
+   referred to as **thread-hostile**.
+ * **Thread-safe**: Such types/methods can be safely accessed concurrently.
+ * **Thread-compatible**: Such types provide safe concurrent access to const
+   methods but require synchronization for non-const (or mixed const/non-const
+   access). Chromium doesn't expose reader-writer locks; as such, the only use
+   case for this is objects (typically globals) which are initialized once in a
+   thread-safe manner (either in the single-threaded phase of startup or lazily
+   through a thread-safe static-local-initialization paradigm a la
+   `base::NoDestructor`) and forever after immutable.
+ * **Immutable**: A subset of thread-compatible types which cannot be modified
+   after construction.
+ * **Sequence-friendly**: Such types/methods are thread-unsafe types which
+   support being invoked from a `base::SequencedTaskRunner`. Ideally this would
+   be the case for all thread-unsafe types but legacy code sometimes has
+   overzealous checks that enforce thread-affinity in mere thread-unsafe
+   scenarios. See [Prefer Sequences to Threads](#prefer-sequences-to-threads)
+   below for more details.
 
 ### Threads
 
@@ -67,9 +101,10 @@ availability (increased parallelism on bigger machines, avoids trashing
 resources on smaller machines).
 
 Many core APIs were recently made sequence-friendly (classes are rarely
-thread-affine -- i.e. only when using thread-local-storage or third-party APIs
-that do). But the codebase has long evolved assuming single-threaded contexts...
-If your class could run on a sequence but is blocked by an overzealous use of
+thread-affine -- i.e. only when using third-party APIs that are thread-affine;
+even ThreadLocalStorage has a SequenceLocalStorage equivalent). But the codebase
+has long evolved assuming single-threaded contexts... If your class could run on
+a sequence but is blocked by an overzealous use of
 ThreadChecker/ThreadTaskRunnerHandle/SingleThreadTaskRunner in a leaf
 dependency, consider fixing that dependency for everyone's benefit (or at the
 very least file a blocking bug against https://crbug.com/675631 and flag your
@@ -77,7 +112,7 @@ use of base::CreateSingleThreadTaskRunnerWithTraits() with a TODO against your
 bug to use base::CreateSequencedTaskRunnerWithTraits() when fixed).
 
 Detailed documentation on how to migrate from single-threaded contexts to
-sequenced contexts can be found [here](task_scheduler_migration.md).
+sequenced contexts can be found [here](threading_and_tasks_faq.md#How-to-migrate-from-SingleThreadTaskRunner-to-SequencedTaskRunner).
 
 The discussion below covers all of these ways to execute tasks in details.
 
@@ -190,8 +225,13 @@ base::SequencedTaskRunnerHandle::Get()->
 ## Using Sequences Instead of Locks
 
 Usage of locks is discouraged in Chrome. Sequences inherently provide
-thread-safety. Prefer classes that are always accessed from the same sequence to
-managing your own thread-safety with locks.
+thread-safety. Prefer classes that are always accessed from the same
+sequence to managing your own thread-safety with locks.
+
+**Thread-safe but not thread-affine; how so?** Tasks posted to the same sequence
+will run in sequential order. After a sequenced task completes, the next task
+may be picked up by a different worker thread, but that task is guaranteed to
+see any side-effects caused by the previous one(s) on its sequence.
 
 ```cpp
 class A {
@@ -302,7 +342,9 @@ using is incorrectly thread-affine (i.e. using
 [`base::ThreadChecker`](https://cs.chromium.org/chromium/src/base/threading/thread_checker.h)
 when it’s merely thread-unsafe and should use
 [`base::SequenceChecker`](https://cs.chromium.org/chromium/src/base/sequence_checker.h)),
-please consider fixing it instead of making things worse by also making your API thread-affine.
+please consider
+[`fixing it`](threading_and_tasks_faq.md#How-to-migrate-from-SingleThreadTaskRunner-to-SequencedTaskRunner)
+instead of making things worse by also making your API thread-affine.
 ***
 
 ### Posting to the Current Thread
@@ -555,6 +597,15 @@ To test code that uses `base::ThreadTaskRunnerHandle`,
 [`base::test::ScopedTaskEnvironment`](https://cs.chromium.org/chromium/src/base/test/scoped_task_environment.h)
 for the scope of the test.
 
+Tests can run the ScopedTaskEnvironment's message pump using a RunLoop, which
+can be made to run until Quit, or to execute ready-to-run tasks and immediately
+return.
+
+ScopedTaskEnvironment configures RunLoop::Run() to LOG(FATAL) if it hasn't been
+explicitly quit after TestTimeouts::action_timeout(). This is preferable to
+having the test hang if the code under test fails to trigger the RunLoop to
+quit. The timeout can be overridden with ScopedRunTimeoutForTest.
+
 ```cpp
 class MyTest : public testing::Test {
  public:
@@ -672,3 +723,6 @@ class FooWithCustomizableTaskRunnerForTesting {
 
 Note that this still allows removing all layers of plumbing between //chrome and
 that component since unit tests will use the leaf layer directly.
+
+## FAQ
+See [Threading and Tasks FAQ](threading_and_tasks_faq.md) for more examples.

@@ -11,6 +11,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -111,8 +112,6 @@ class OAuth2TokenService {
     // Called after all refresh tokens are loaded during OAuth2TokenService
     // startup.
     virtual void OnRefreshTokensLoaded() {}
-    // Sent before starting a batch of refresh token changes.
-    virtual void OnStartBatchChanges() {}
     // Sent after a batch of refresh token changes is done.
     virtual void OnEndBatchChanges() {}
     // Called when the authentication error state for |account_id| has changed.
@@ -142,8 +141,21 @@ class OAuth2TokenService {
                                             const ScopeSet& scopes,
                                             GoogleServiceAuthError error,
                                             base::Time expiration_time) {}
-    virtual void OnTokenRemoved(const std::string& account_id,
-                                const ScopeSet& scopes) {}
+    // Called when an access token was removed.
+    virtual void OnAccessTokenRemoved(const std::string& account_id,
+                                      const ScopeSet& scopes) {}
+
+    // Caled when a new refresh token is available. Contains diagnostic
+    // information about the source of the update credentials operation.
+    virtual void OnRefreshTokenAvailableFromSource(
+        const std::string& account_id,
+        bool is_refresh_token_valid,
+        const std::string& source) {}
+
+    // Called when a refreh token is revoked. Contains diagnostic information
+    // about the source that initiated the revokation operation.
+    virtual void OnRefreshTokenRevokedFromSource(const std::string& account_id,
+                                                 const std::string& source) {}
   };
 
   explicit OAuth2TokenService(
@@ -169,6 +181,13 @@ class OAuth2TokenService {
                                                 const ScopeSet& scopes,
                                                 Consumer* consumer);
 
+  // Try to get refresh token from delegate. If it is accessible (i.e. not
+  // empty), return it directly, otherwise start request to get access token.
+  // Used for getting tokens to send to Gaia Multilogin endpoint.
+  std::unique_ptr<OAuth2TokenService::Request> StartRequestForMultilogin(
+      const std::string& account_id,
+      OAuth2TokenService::Consumer* consumer);
+
   // This method does the same as |StartRequest| except it uses |client_id| and
   // |client_secret| to identify OAuth client app instead of using
   // Chrome's default values.
@@ -190,10 +209,15 @@ class OAuth2TokenService {
 
   // Lists account IDs of all accounts with a refresh token maintained by this
   // instance.
+  // Note: For each account returned by |GetAccounts|, |RefreshTokenIsAvailable|
+  // will return true.
+  // Note: If tokens have not been fully loaded yet, an empty list is returned.
   std::vector<std::string> GetAccounts() const;
 
   // Returns true if a refresh token exists for |account_id|. If false, calls to
   // |StartRequest| will result in a Consumer::OnGetTokenFailure callback.
+  // Note: This will return |true| if and only if |account_id| is contained in
+  // the list returned by |GetAccounts|.
   bool RefreshTokenIsAvailable(const std::string& account_id) const;
 
   // Returns true if a refresh token exists for |account_id| and it is in a
@@ -203,10 +227,6 @@ class OAuth2TokenService {
   // Returns the auth error associated with |account_id|. Only persistent errors
   // will be returned.
   GoogleServiceAuthError GetAuthError(const std::string& account_id) const;
-
-  // This method cancels all token requests, revoke all refresh tokens and
-  // cached access tokens.
-  void RevokeAllCredentials();
 
   // Mark an OAuth2 |access_token| issued for |account_id| and |scopes| as
   // invalid. This should be done if the token was received from this class,
@@ -223,6 +243,13 @@ class OAuth2TokenService {
                                       const std::string& client_id,
                                       const ScopeSet& scopes,
                                       const std::string& access_token);
+
+  // Removes token from cache (if it is cached) and calls
+  // InvalidateTokenForMultilogin method of the delegate. This should be done if
+  // the token was received from this class, but was not accepted by the server
+  // (e.g., the server returned 401 Unauthorized).
+  virtual void InvalidateTokenForMultilogin(const std::string& failed_account,
+                                            const std::string& token);
 
   void set_max_authorization_token_fetch_retries_for_testing(int max_retries);
   // Returns the current number of pending fetchers matching given params.
@@ -315,6 +342,11 @@ class OAuth2TokenService {
                                          const std::string& client_id,
                                          const ScopeSet& scopes,
                                          const std::string& access_token);
+
+  const base::ObserverList<DiagnosticsObserver, true>::Unchecked&
+  GetDiagnicsObservers() {
+    return diagnostics_observer_list_;
+  }
 
  private:
   class Fetcher;

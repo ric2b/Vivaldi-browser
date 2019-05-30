@@ -38,6 +38,17 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
   void DeviceAddressChanged(device::BluetoothAdapter* adapter,
                             device::BluetoothDevice* device,
                             const std::string& old_address) override;
+  void DeviceAdvertisementReceived(
+      const std::string& device_id,
+      const base::Optional<std::string>& device_name,
+      const base::Optional<std::string>& advertisement_name,
+      base::Optional<int8_t> rssi,
+      base::Optional<int8_t> tx_power,
+      base::Optional<uint16_t> appearance,
+      const device::BluetoothDevice::UUIDList& advertised_uuids,
+      const device::BluetoothDevice::ServiceDataMap& service_data_map,
+      const device::BluetoothDevice::ManufacturerDataMap& manufacturer_data_map)
+      override;
 #if defined(OS_CHROMEOS) || defined(OS_LINUX)
   void DevicePairedChanged(device::BluetoothAdapter* adapter,
                            device::BluetoothDevice* device,
@@ -45,6 +56,13 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
   void DeviceMTUChanged(device::BluetoothAdapter* adapter,
                         device::BluetoothDevice* device,
                         uint16_t mtu) override;
+  void DeviceAdvertisementReceived(device::BluetoothAdapter* adapter,
+                                   device::BluetoothDevice* device,
+                                   int16_t rssi,
+                                   const std::vector<uint8_t>& eir) override;
+  void DeviceConnectedStateChanged(device::BluetoothAdapter* adapter,
+                                   device::BluetoothDevice* device,
+                                   bool is_now_connected) override;
 #endif
   void DeviceRemoved(BluetoothAdapter* adapter,
                      BluetoothDevice* device) override;
@@ -95,6 +113,23 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
   int device_address_changed_count() const {
     return device_address_changed_count_;
   }
+
+  // Advertisement related:
+  int device_advertisement_raw_received_count() const {
+    return device_advertisement_raw_received_count_;
+  }
+  const base::Optional<std::string>& device_last_device_name() const {
+    return last_device_name_;
+  }
+  const base::Optional<std::string>& device_last_advertisement_name() const {
+    return last_advertisement_name_;
+  }
+  base::Optional<int8_t> device_last_rssi() const { return last_rssi_; }
+  base::Optional<int8_t> device_last_tx_power() const { return last_tx_power_; }
+  base::Optional<uint16_t> device_last_appearance() const {
+    return last_appearance_;
+  }
+
 #if defined(OS_CHROMEOS) || defined(OS_LINUX)
   int device_paired_changed_count() const {
     return device_paired_changed_count_;
@@ -102,6 +137,13 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
   bool device_new_paired_status() const { return device_new_paired_status_; }
   int device_mtu_changed_count() const { return device_mtu_changed_count_; }
   uint16_t last_mtu_value() const { return device_mtu_; }
+  int device_advertisement_received_count() const {
+    return device_advertisement_received_count_;
+  }
+  const std::vector<uint8_t>& device_eir() const { return device_eir_; }
+  const std::vector<bool>& device_connected_state_changed_values() const {
+    return device_connected_state_changed_values_;
+  }
 #endif
   int device_removed_count() const { return device_removed_count_; }
   BluetoothDevice* last_device() const { return last_device_; }
@@ -182,11 +224,23 @@ class TestBluetoothAdapterObserver : public BluetoothAdapter::Observer {
   int device_added_count_;
   int device_changed_count_;
   int device_address_changed_count_;
+
+  // Advertisement related
+  int device_advertisement_raw_received_count_;
+  base::Optional<std::string> last_device_name_;
+  base::Optional<std::string> last_advertisement_name_;
+  base::Optional<int8_t> last_rssi_;
+  base::Optional<int8_t> last_tx_power_;
+  base::Optional<uint16_t> last_appearance_;
+
 #if defined(OS_CHROMEOS) || defined(OS_LINUX)
   int device_paired_changed_count_;
   bool device_new_paired_status_;
   int device_mtu_changed_count_;
   uint16_t device_mtu_;
+  int device_advertisement_received_count_;
+  std::vector<uint8_t> device_eir_;
+  std::vector<bool> device_connected_state_changed_values_;
 #endif
   int device_removed_count_;
   BluetoothDevice* last_device_;

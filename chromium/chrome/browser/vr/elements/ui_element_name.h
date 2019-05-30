@@ -56,7 +56,6 @@ enum UiElementName {
   kUrlBarHintLayout,
   kUrlBarHintText,
   kUrlBarRightSeparator,
-  kUrlBarTabSeparator,
   kUrlBarOverflowButton,
   kOverflowMenuBackplane,
   kOverflowMenu,
@@ -149,6 +148,7 @@ enum UiElementName {
   kControllerBatteryDot4,
   kContentRepositionHitPlane,
   kContentRepositionVisibilityToggle,
+  kWebXrExternalPromptNotification,
 
   // This must be last.
   kNumUiElementNames,

@@ -17,13 +17,14 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/webdata/autofill_entry.h"
 #include "components/autofill/core/browser/webdata/autofill_table.h"
-#include "components/autofill/core/browser/webdata/autofill_webdata_backend.h"
-#include "components/autofill/core/browser/webdata/autofill_webdata_backend_impl.h"
+#include "components/autofill/core/browser/webdata/mock_autofill_webdata_backend.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/sync/base/hash_util.h"
 #include "components/sync/model/data_batch.h"
 #include "components/sync/model/data_type_activation_request.h"
@@ -52,14 +53,15 @@ using syncer::EntityDataPtr;
 using syncer::HasInitialSyncDone;
 using syncer::IsEmptyMetadataBatch;
 using syncer::KeyAndData;
+using syncer::MockModelTypeChangeProcessor;
 using syncer::ModelError;
 using syncer::ModelType;
 using syncer::ModelTypeChangeProcessor;
 using syncer::ModelTypeSyncBridge;
-using syncer::MockModelTypeChangeProcessor;
 using testing::_;
 using testing::IsEmpty;
 using testing::Not;
+using testing::Return;
 using testing::SizeIs;
 
 namespace autofill {
@@ -136,26 +138,6 @@ AutofillEntry CreateAutofillEntry(const AutofillSpecifics& autofill_specifics) {
   return AutofillEntry(key, date_created, date_last_used);
 }
 
-class FakeAutofillBackend : public AutofillWebDataBackend {
- public:
-  FakeAutofillBackend() {}
-  ~FakeAutofillBackend() override {}
-  WebDatabase* GetDatabase() override { return db_; }
-  void AddObserver(
-      autofill::AutofillWebDataServiceObserverOnDBSequence* observer) override {
-  }
-  void RemoveObserver(
-      autofill::AutofillWebDataServiceObserverOnDBSequence* observer) override {
-  }
-  void RemoveExpiredFormElements() override {}
-  void NotifyOfMultipleAutofillChanges() override {}
-  void NotifyThatSyncHasStarted(ModelType model_type) override {}
-  void SetWebDatabase(WebDatabase* db) { db_ = db; }
-
- private:
-  WebDatabase* db_;
-};
-
 }  // namespace
 
 class AutocompleteSyncBridgeTest : public testing::Test {
@@ -167,7 +149,7 @@ class AutocompleteSyncBridgeTest : public testing::Test {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     db_.AddTable(&table_);
     db_.Init(temp_dir_.GetPath().AppendASCII("SyncTestWebDatabase"));
-    backend_.SetWebDatabase(&db_);
+    ON_CALL(*backend(), GetDatabase()).WillByDefault(Return(&db_));
     ResetProcessor();
     ResetBridge();
   }
@@ -311,12 +293,12 @@ class AutocompleteSyncBridgeTest : public testing::Test {
 
   AutofillTable* table() { return &table_; }
 
-  FakeAutofillBackend* backend() { return &backend_; }
+  MockAutofillWebDataBackend* backend() { return &backend_; }
 
  private:
   ScopedTempDir temp_dir_;
   base::test::ScopedTaskEnvironment scoped_task_environment_;
-  FakeAutofillBackend backend_;
+  testing::NiceMock<MockAutofillWebDataBackend> backend_;
   AutofillTable table_;
   WebDatabase db_;
   std::unique_ptr<AutocompleteSyncBridge> bridge_;
@@ -463,6 +445,34 @@ TEST_F(AutocompleteSyncBridgeTest, ApplySyncChangesSimple) {
 
   ApplyChanges({EntityChange::CreateDelete(GetStorageKey(specifics1))});
   VerifyAllData({specifics2});
+}
+
+// Tests that the function RemoveExpiredFormElements is called when the
+// Autocomplete Retention Policy feature flag is disabled.
+TEST_F(AutocompleteSyncBridgeTest,
+       ApplySyncChangesSimple_FlagOff_Calls_RemoveExpiredFormElements) {
+  base::test::ScopedFeatureList scoped_features;
+  scoped_features.InitAndDisableFeature(
+      features::kAutocompleteRetentionPolicyEnabled);
+
+  EXPECT_CALL(*backend(), RemoveExpiredFormElements);
+
+  AutofillSpecifics specifics1 = CreateSpecifics(1);
+  ApplyAdds({specifics1});
+}
+
+// Tests that the function RemoveExpiredFormElements is not called when the
+// Autocomplete Retention Policy feature flag is enabled.
+TEST_F(AutocompleteSyncBridgeTest,
+       ApplySyncChangesSimple_FlagOn_Not_Calls_RemoveExpiredFormElements) {
+  base::test::ScopedFeatureList scoped_features;
+  scoped_features.InitAndEnableFeature(
+      features::kAutocompleteRetentionPolicyEnabled);
+
+  EXPECT_CALL(*backend(), RemoveExpiredFormElements).Times(0);
+
+  AutofillSpecifics specifics1 = CreateSpecifics(1);
+  ApplyAdds({specifics1});
 }
 
 // Should be resilient to deleting and updating non-existent things, and adding
@@ -612,6 +622,33 @@ TEST_F(AutocompleteSyncBridgeTest, LocalEntryDeleted) {
       {AutofillChange(AutofillChange::REMOVE, deleted_entry.key())});
 }
 
+// Tests that AutofillEntry marked with AutofillChange::EXPIRE are unlinked from
+// sync, and their sync metadata is deleted in this client.
+TEST_F(AutocompleteSyncBridgeTest, LocalEntryExpired) {
+  StartSyncing();
+  const AutofillSpecifics expired_specifics = CreateSpecifics(1, {2, 3});
+  const AutofillEntry expired_entry = CreateAutofillEntry(expired_specifics);
+  const std::string storage_key = GetStorageKey(expired_specifics);
+
+  // Let's add the sync metadata
+  ASSERT_TRUE(table()->UpdateSyncMetadata(syncer::AUTOFILL, storage_key,
+                                          EntityMetadata()));
+
+  // Validate that it was added.
+  syncer::MetadataBatch batch;
+  ASSERT_TRUE(table()->GetAllSyncMetadata(syncer::AUTOFILL, &batch));
+  ASSERT_EQ(1U, batch.TakeAllMetadata().size());
+
+  EXPECT_CALL(mock_processor(), UntrackEntityForStorageKey(storage_key));
+
+  bridge()->AutofillEntriesChanged(
+      {AutofillChange(AutofillChange::EXPIRE, expired_entry.key())});
+
+  // Expect metadata to have been cleaned up.
+  EXPECT_TRUE(table()->GetAllSyncMetadata(syncer::AUTOFILL, &batch));
+  EXPECT_EQ(0U, batch.TakeAllMetadata().size());
+}
+
 TEST_F(AutocompleteSyncBridgeTest, LoadMetadataCalled) {
   ModelTypeState model_type_state;
   model_type_state.set_initial_sync_done(true);
@@ -628,7 +665,7 @@ TEST_F(AutocompleteSyncBridgeTest, LoadMetadataCalled) {
 }
 
 TEST_F(AutocompleteSyncBridgeTest, LoadMetadataReportsErrorForMissingDB) {
-  backend()->SetWebDatabase(nullptr);
+  ON_CALL(*backend(), GetDatabase()).WillByDefault(Return(nullptr));
   EXPECT_CALL(mock_processor(), ReportError(_));
   ResetBridge();
 }

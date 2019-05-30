@@ -33,11 +33,13 @@ BlinkTransferableMessage ToBlinkTransferableMessage(
                                       mojom::Blob::Version_)));
   }
   result.sender_stack_trace_id = v8_inspector::V8StackTraceId(
-      message.stack_trace_id,
+      static_cast<uintptr_t>(message.stack_trace_id),
       std::make_pair(message.stack_trace_debugger_id_first,
                      message.stack_trace_debugger_id_second));
   result.locked_agent_cluster_id = message.locked_agent_cluster_id;
   result.ports.AppendRange(message.ports.begin(), message.ports.end());
+  result.message->GetStreamChannels().AppendRange(
+      message.stream_channels.begin(), message.stream_channels.end());
   result.has_user_gesture = message.has_user_gesture;
   if (message.user_activation) {
     result.user_activation = mojom::blink::UserActivationSnapshot::New(
@@ -66,6 +68,8 @@ TransferableMessage ToTransferableMessage(BlinkTransferableMessage message) {
       message.sender_stack_trace_id.debugger_id.second;
   result.locked_agent_cluster_id = message.locked_agent_cluster_id;
   result.ports.assign(message.ports.begin(), message.ports.end());
+  auto& stream_channels = message.message->GetStreamChannels();
+  result.stream_channels.assign(stream_channels.begin(), stream_channels.end());
   result.has_user_gesture = message.has_user_gesture;
   if (message.user_activation) {
     result.user_activation = mojom::UserActivationSnapshot::New(

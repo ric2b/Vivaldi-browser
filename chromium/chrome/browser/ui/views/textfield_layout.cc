@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/textfield_layout.h"
 
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "ui/base/models/combobox_model.h"
 #include "ui/views/controls/combobox/combobox.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -83,6 +84,6 @@ views::Combobox* AddComboboxRow(views::GridLayout* layout,
                         ChromeLayoutProvider::Get()->GetDistanceMetric(
                             DISTANCE_CONTROL_LIST_VERTICAL));
   AddLabelAndField(layout, label, combobox, column_set_id,
-                   views::Combobox::GetFontList());
+                   combobox->GetFontList());
   return combobox;
 }

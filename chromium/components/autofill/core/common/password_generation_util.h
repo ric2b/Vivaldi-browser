@@ -71,27 +71,12 @@ enum PasswordGenerationEvent {
   // Context menu with generation item was shown.
   PASSWORD_GENERATION_CONTEXT_MENU_SHOWN,
 
+  // The generated password was removed from the field because a credential
+  // was autofilled.
+  PASSWORD_DELETED_BY_AUTOFILLING,
+
   // Number of enum entries, used for UMA histogram reporting macros.
   EVENT_ENUM_COUNT
-};
-
-// These values are used for metrics. Entries should not be renumbered and
-// numeric values should never be reused.
-// Metric: PasswordGeneration.UserEvent
-enum class PasswordGenerationUserEvent {
-  // The generated password was accepted by the user.
-  kPasswordAccepted = 0,
-  // The generated password was edited by the user in the field in which
-  // it was filled after being accepted.
-  kPasswordEdited = 1,
-  // The generated password was deleted by the user from the field
-  // in which it was filled after being accepted.
-  kPasswordDeleted = 2,
-  // The generated password was rejected by the user from the modal
-  // dialog, either by pressing "Cancel" in the dialog or by dismissing it.
-  // Only used on Android.
-  kPasswordRejectedInDialog = 3,
-  kMaxValue = kPasswordRejectedInDialog
 };
 
 // Wrapper to store the user interactions with the password generation bubble.
@@ -139,34 +124,7 @@ struct PasswordGenerationUIData {
   autofill::PasswordForm password_form;
 };
 
-void LogUserActions(PasswordGenerationActions actions);
-
 void LogPasswordGenerationEvent(PasswordGenerationEvent event);
-
-void LogPasswordGenerationUserEvent(PasswordGenerationUserEvent event);
-
-// Enumerates user actions after password generation bubble is shown.
-// These are visible for testing purposes.
-enum UserAction {
-  // User closes the bubble without any meaningful actions (e.g. use backspace
-  // key, close the bubble, click outside the bubble, etc).
-  IGNORE_FEATURE,
-
-  // User navigates to the learn more page. Note that in the current
-  // implementation this will result in closing the bubble so this action
-  // doesn't overlap with the following two actions.
-  LEARN_MORE,
-
-  // User accepts the generated password without manually editing it (but
-  // including changing it through the regenerate button).
-  ACCEPT_ORIGINAL_PASSWORD,
-
-  // User accepts the gererated password after manually editing it.
-  ACCEPT_AFTER_EDITING,
-
-  // Number of enum entries, used for UMA histogram reporting macros.
-  ACTION_ENUM_COUNT
-};
 
 // Returns true if Password Generation is enabled according to the field
 // trial result and the flags.

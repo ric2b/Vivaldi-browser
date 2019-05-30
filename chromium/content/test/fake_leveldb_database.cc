@@ -7,6 +7,7 @@
 #include <iterator>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 
@@ -75,6 +76,10 @@ void FakeLevelDBDatabase::DeletePrefixed(const std::vector<uint8_t>& key_prefix,
                                          DeletePrefixedCallback callback) {
   mock_data_.erase(mock_data_.lower_bound(key_prefix),
                    mock_data_.lower_bound(successor(key_prefix)));
+  std::move(callback).Run(leveldb::mojom::DatabaseError::OK);
+}
+
+void FakeLevelDBDatabase::RewriteDB(RewriteDBCallback callback) {
   std::move(callback).Run(leveldb::mojom::DatabaseError::OK);
 }
 

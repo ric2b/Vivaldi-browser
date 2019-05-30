@@ -10,8 +10,6 @@
 #error "This file requires ARC support."
 #endif
 
-DEFINE_WEB_STATE_USER_DATA_KEY(LegacyTabHelper);
-
 // static
 void LegacyTabHelper::CreateForWebState(web::WebState* web_state) {
   CreateForWebStateInternal(web_state, nil);
@@ -48,3 +46,5 @@ void LegacyTabHelper::CreateForWebStateInternal(web::WebState* web_state,
             web_state, tab ? tab : [[Tab alloc] initWithWebState:web_state])));
   }
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(LegacyTabHelper)

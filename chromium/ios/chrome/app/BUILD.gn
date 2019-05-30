@@ -10,16 +10,10 @@ import("//ios/build/chrome_build.gni")
 import("//ios/build/config.gni")
 import("//ios/public/provider/chrome/browser/build_config.gni")
 import("//ios/third_party/firebase/firebase.gni")
-import("//services/service_manager/public/service_manifest.gni")
 
 buildflag_header("firebase_buildflags") {
   header = "firebase_buildflags.h"
   flags = [ "FIREBASE_ENABLED=$ios_enable_firebase_sdk" ]
-}
-
-service_manifest("chrome_browser_manifest_overlay") {
-  source = "//ios/chrome/browser/chrome_browser_manifest_overlay.json"
-  packaged_services = [ "//services/identity:manifest" ]
 }
 
 source_set("app") {
@@ -61,8 +55,10 @@ source_set("unit_tests") {
     "//ios/chrome/common/app_group",
     "//ios/chrome/test:test_support",
     "//ios/chrome/test/base",
-    "//ios/public/provider/chrome/browser",
+    "//ios/public/provider/chrome/browser:browser",
+    "//ios/public/provider/chrome/browser:test_support",
     "//ios/public/provider/chrome/browser/distribution",
+    "//ios/public/provider/chrome/browser/distribution:test_support",
     "//ios/web/public/test:test",
     "//testing/gtest",
     "//third_party/ocmock",
@@ -162,13 +158,13 @@ source_set("app_internal") {
     "//components/prefs",
     "//components/prefs/ios",
     "//components/proxy_config",
-    "//components/signin/core/browser",
     "//components/suggestions",
     "//components/sync",
     "//components/url_formatter",
     "//components/web_resource",
     "//ios/chrome/app/application_delegate",
     "//ios/chrome/app/application_delegate:application_delegate_internal",
+    "//ios/chrome/app/intents",
     "//ios/chrome/app/spotlight",
     "//ios/chrome/app/startup",
     "//ios/chrome/app/startup:startup_basic",
@@ -200,6 +196,7 @@ source_set("app_internal") {
     "//ios/chrome/browser/payments:constants",
     "//ios/chrome/browser/reading_list",
     "//ios/chrome/browser/search_engines",
+    "//ios/chrome/browser/search_engines:extension_search_engine_data_updater",
     "//ios/chrome/browser/share_extension",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/snapshots",
@@ -207,6 +204,7 @@ source_set("app_internal") {
     "//ios/chrome/browser/sync",
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui:feature_flags",
     "//ios/chrome/browser/ui:ui_internal",
     "//ios/chrome/browser/ui/authentication",
     "//ios/chrome/browser/ui/commands",
@@ -214,23 +212,24 @@ source_set("app_internal") {
     "//ios/chrome/browser/ui/first_run",
     "//ios/chrome/browser/ui/history",
     "//ios/chrome/browser/ui/main",
-    "//ios/chrome/browser/ui/main:feature_flags",
+    "//ios/chrome/browser/ui/main:tab_switcher",
     "//ios/chrome/browser/ui/promos",
     "//ios/chrome/browser/ui/settings",
+    "//ios/chrome/browser/ui/settings:settings_root",
+    "//ios/chrome/browser/ui/settings/google_services",
     "//ios/chrome/browser/ui/signin_interaction",
-    "//ios/chrome/browser/ui/stack_view",
     "//ios/chrome/browser/ui/tab_grid",
     "//ios/chrome/browser/ui/tab_grid:tab_grid_ui",
-    "//ios/chrome/browser/ui/tab_switcher",
-    "//ios/chrome/browser/ui/tab_switcher:modes",
     "//ios/chrome/browser/ui/tabs",
-    "//ios/chrome/browser/ui/toolbar/clean:toolbar_ui",
+    "//ios/chrome/browser/ui/toolbar:toolbar_ui",
     "//ios/chrome/browser/ui/toolbar/public",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/ui/webui:webui_internal",
     "//ios/chrome/browser/upgrade",
+    "//ios/chrome/browser/url_loading",
     "//ios/chrome/browser/variations:ios_chrome_ui_string_overrider_factory",
     "//ios/chrome/browser/voice",
+    "//ios/chrome/browser/web",
     "//ios/chrome/browser/web:tab_id_tab_helper",
     "//ios/chrome/browser/web:web_internal",
     "//ios/chrome/browser/web_state_list",
@@ -247,6 +246,7 @@ source_set("app_internal") {
     "//ios/third_party/material_roboto_font_loader_ios",
     "//mojo/core/embedder",
     "//net",
+    "//services/identity/public/cpp:cpp",
     "//skia",
     "//ui/base",
     "//ui/gfx",
@@ -289,7 +289,16 @@ ios_app_bundle("chrome") {
 
   bundle_deps = [ "//ios/chrome/app/resources" ]
   if (!is_chrome_branded || ios_chrome_app_variants == []) {
+    assert(ios_application_icons_target != "",
+           "ios_application_icons_target must be defined.")
     bundle_deps += [ ios_application_icons_target ]
+
+    if (ios_enable_firebase_sdk) {
+      assert(ios_firebase_resources_target != "",
+             "ios_firebase_resources_target must be defined if Firebase SDK " +
+                 "is enabled.")
+      bundle_deps += [ ios_firebase_resources_target ]
+    }
   } else {
     variants = ios_chrome_app_variants
   }

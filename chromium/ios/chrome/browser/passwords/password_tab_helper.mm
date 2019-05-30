@@ -12,8 +12,6 @@
 #error "This file requires ARC support."
 #endif
 
-DEFINE_WEB_STATE_USER_DATA_KEY(PasswordTabHelper);
-
 PasswordTabHelper::~PasswordTabHelper() = default;
 
 // static
@@ -39,12 +37,27 @@ void PasswordTabHelper::SetPasswordControllerDelegate(
   controller_.delegate = delegate;
 }
 
+void PasswordTabHelper::GenerateAndOfferPassword(
+    NSString* formName,
+    NSString* newPasswordIdentifier,
+    NSString* confirmPasswordIdentifier) {
+  [controller_ generatePasswordForFormName:formName
+                     newPasswordIdentifier:newPasswordIdentifier
+                 confirmPasswordIdentifier:confirmPasswordIdentifier
+                         completionHandler:nil];
+}
+
 id<FormSuggestionProvider> PasswordTabHelper::GetSuggestionProvider() {
   return controller_.suggestionProvider;
 }
 
 id<PasswordFormFiller> PasswordTabHelper::GetPasswordFormFiller() {
   return controller_.passwordFormFiller;
+}
+
+password_manager::PasswordGenerationManager*
+PasswordTabHelper::GetPasswordGenerationManager() {
+  return controller_.passwordGenerationManager;
 }
 
 PasswordTabHelper::PasswordTabHelper(web::WebState* web_state)
@@ -56,3 +69,5 @@ void PasswordTabHelper::WebStateDestroyed(web::WebState* web_state) {
   web_state->RemoveObserver(this);
   controller_ = nil;
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(PasswordTabHelper)

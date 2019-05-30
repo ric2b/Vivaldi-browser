@@ -40,7 +40,7 @@ bool NSImageStructureMatches(
     float scale = scales[i];
     bool found_match = false;
     for (size_t j = 0; j < [ns_image representations].count; ++j) {
-      NSImageRep* ns_image_rep = [[ns_image representations] objectAtIndex:j];
+      NSImageRep* ns_image_rep = [ns_image representations][j];
       if (ns_image_rep &&
           [ns_image_rep pixelsWide] == width * scale &&
           [ns_image_rep pixelsHigh] == height * scale) {
@@ -101,7 +101,7 @@ TEST_F(ImageMacTest, MultiResolutionNSImageToImageSkia) {
   [ns_image addRepresentation:ns_image_rep1];
   [ns_image addRepresentation:ns_image_rep2];
 
-  gfx::Image image(ns_image.release());
+  gfx::Image image(ns_image);
 
   EXPECT_EQ(1u, image.RepresentationCount());
 
@@ -132,7 +132,7 @@ TEST_F(ImageMacTest, UnalignedMultiResolutionNSImageToImageSkia) {
       [[NSImage alloc] initWithSize:NSMakeSize(kWidth1x, kHeight1x)]);
   [ns_image addRepresentation:ns_image_rep4];
 
-  gfx::Image image(ns_image.release());
+  gfx::Image image(ns_image);
 
   EXPECT_EQ(1u, image.RepresentationCount());
 
@@ -200,10 +200,10 @@ TEST_F(ImageMacTest, MultiResolutionPNGToNSImage) {
   // Convert to ImageSkia to check pixel contents of NSImageReps.
   gfx::ImageSkia image_skia = gfx::ImageSkiaFromNSImage(ns_image);
   EXPECT_TRUE(gt::ArePNGBytesCloseToBitmap(
-      bytes1x, image_skia.GetRepresentation(1.0f).sk_bitmap(),
+      bytes1x, image_skia.GetRepresentation(1.0f).GetBitmap(),
       gt::MaxColorSpaceConversionColorShift()));
-  EXPECT_TRUE(gt::ArePNGBytesCloseToBitmap(bytes2x,
-      image_skia.GetRepresentation(2.0f).sk_bitmap(),
+  EXPECT_TRUE(gt::ArePNGBytesCloseToBitmap(
+      bytes2x, image_skia.GetRepresentation(2.0f).GetBitmap(),
       gt::MaxColorSpaceConversionColorShift()));
 }
 

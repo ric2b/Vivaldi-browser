@@ -4,6 +4,7 @@
 
 #include "chrome/browser/resource_coordinator/local_site_characteristics_webcontents_observer.h"
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "chrome/browser/resource_coordinator/local_site_characteristics_data_store_factory.h"
@@ -12,9 +13,9 @@
 #include "chrome/browser/resource_coordinator/site_characteristics_data_store.h"
 #include "chrome/browser/resource_coordinator/tab_manager_features.h"
 #include "chrome/browser/resource_coordinator/time.h"
-#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/favicon_url.h"
+#include "content/public/test/mock_navigation_handle.h"
 #include "content/public/test/web_contents_tester.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -39,8 +40,8 @@ class LenientMockDataWriter : public SiteCharacteristicsDataWriter {
   MOCK_METHOD0(NotifyUpdatesTitleInBackground, void());
   MOCK_METHOD0(NotifyUsesAudioInBackground, void());
   MOCK_METHOD0(NotifyUsesNotificationsInBackground, void());
-  MOCK_METHOD2(NotifyLoadTimePerformanceMeasurement,
-               void(base::TimeDelta, uint64_t));
+  MOCK_METHOD3(NotifyLoadTimePerformanceMeasurement,
+               void(base::TimeDelta, base::TimeDelta, uint64_t));
 
   const url::Origin& Origin() const { return origin_; }
 
@@ -91,11 +92,9 @@ class LocalSiteCharacteristicsWebContentsObserverTest
     test_clock().Advance(base::TimeDelta::FromSeconds(1));
     // Set the testing factory for the test browser context.
     LocalSiteCharacteristicsDataStoreFactory::GetInstance()->SetTestingFactory(
-        browser_context(), &BuildMockDataStoreForContext);
+        browser_context(), base::BindRepeating(&BuildMockDataStoreForContext));
 
     TabLoadTracker::Get()->StartTracking(web_contents());
-    LocalSiteCharacteristicsWebContentsObserver::
-        SkipObserverRegistrationForTesting();
     observer_ = std::make_unique<LocalSiteCharacteristicsWebContentsObserver>(
         web_contents());
     observer()->SetPageSignalReceiverForTesting(&receiver_);
@@ -159,10 +158,9 @@ TEST_F(LocalSiteCharacteristicsWebContentsObserverTest,
 
   // Navigate to a different origin but don't set the |committed| bit, this
   // shouldn't affect the writer.
-  auto navigation_handle =
-      content::NavigationHandle::CreateNavigationHandleForTesting(
-          kTestUrl2, web_contents()->GetMainFrame(), false);
-  observer()->DidFinishNavigation(navigation_handle.get());
+  content::MockNavigationHandle navigation_handle(
+      kTestUrl2, web_contents()->GetMainFrame());
+  observer()->DidFinishNavigation(&navigation_handle);
   ::testing::Mock::VerifyAndClear(mock_writer);
 
   // Set the |committed| bit and ensure that the navigation event cause the
@@ -190,6 +188,7 @@ TEST_F(LocalSiteCharacteristicsWebContentsObserverTest,
   observer()->DidUpdateFaviconURL({});
   observer()->TitleWasSet(nullptr);
 
+  EXPECT_CALL(*mock_writer, NotifySiteLoaded());
   TabLoadTracker::Get()->TransitionStateForTesting(web_contents(),
                                                    LoadingState::LOADED);
   EXPECT_CALL(*mock_writer,
@@ -361,6 +360,7 @@ TEST_F(LocalSiteCharacteristicsWebContentsObserverTest, LoadEvent) {
 TEST_F(LocalSiteCharacteristicsWebContentsObserverTest,
        LateNotificationUsageSignalIsIgnored) {
   MockDataWriter* mock_writer = NavigateAndReturnMockWriter(kTestUrl1);
+  EXPECT_CALL(*mock_writer, NotifySiteLoaded());
   TabLoadTracker::Get()->TransitionStateForTesting(web_contents(),
                                                    LoadingState::LOADED);
 
@@ -394,16 +394,21 @@ TEST_F(LocalSiteCharacteristicsWebContentsObserverTest,
 TEST_F(LocalSiteCharacteristicsWebContentsObserverTest,
        OnLoadTimePerformanceMeasurement) {
   MockDataWriter* mock_writer = NavigateAndReturnMockWriter(kTestUrl1);
+  EXPECT_CALL(*mock_writer, NotifySiteLoaded());
   TabLoadTracker::Get()->TransitionStateForTesting(web_contents(),
                                                    LoadingState::LOADED);
 
+  constexpr base::TimeDelta kExpectedLoadDuration =
+      base::TimeDelta::FromMicroseconds(501);
   constexpr base::TimeDelta kExpectedCPUTime =
       base::TimeDelta::FromMicroseconds(1003);
   constexpr uint64_t kExpectedMemory = 123u;
   auto nav_id = GetNavIdForWebContents();
-  EXPECT_CALL(*mock_writer, NotifyLoadTimePerformanceMeasurement(
-                                kExpectedCPUTime, kExpectedMemory));
+  EXPECT_CALL(*mock_writer,
+              NotifyLoadTimePerformanceMeasurement(
+                  kExpectedLoadDuration, kExpectedCPUTime, kExpectedMemory));
   observer()->OnLoadTimePerformanceEstimate(web_contents(), nav_id,
+                                            kExpectedLoadDuration,
                                             kExpectedCPUTime, kExpectedMemory);
   ::testing::Mock::VerifyAndClear(mock_writer);
 
@@ -412,6 +417,7 @@ TEST_F(LocalSiteCharacteristicsWebContentsObserverTest,
   //     writer.
   nav_id.navigation_id++;
   observer()->OnLoadTimePerformanceEstimate(web_contents(), nav_id,
+                                            kExpectedLoadDuration,
                                             kExpectedCPUTime, kExpectedMemory);
   ::testing::Mock::VerifyAndClear(mock_writer);
 

@@ -9,9 +9,9 @@ import android.support.graphics.drawable.AnimatedVectorDrawableCompat;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.widget.TintedImageView;
 
 /**
  * A helper UI widget that provides visual feedback when the selection state of the underlying view
@@ -19,8 +19,8 @@ import org.chromium.chrome.browser.widget.TintedImageView;
  * selected. The caller can define the UI behavior at each of these states by subclassing this view.
  */
 public class SelectionView extends FrameLayout {
-    private final TintedImageView mCheck;
-    private final TintedImageView mCircle;
+    private final ImageView mCheck;
+    private final ImageView mCircle;
     private final AnimatedVectorDrawableCompat mCheckDrawable;
 
     private boolean mIsSelected;
@@ -31,8 +31,8 @@ public class SelectionView extends FrameLayout {
     public SelectionView(Context context, AttributeSet attrs) {
         super(context, attrs);
         LayoutInflater.from(context).inflate(R.layout.list_selection_handle_view, this, true);
-        mCheck = (TintedImageView) findViewById(R.id.check);
-        mCircle = (TintedImageView) findViewById(R.id.circle);
+        mCheck = findViewById(R.id.check);
+        mCircle = findViewById(R.id.circle);
         mCheckDrawable = AnimatedVectorDrawableCompat.create(
                 context, R.drawable.ic_check_googblue_24dp_animated);
     }

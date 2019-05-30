@@ -12,6 +12,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/signin/gaia_auth_extension_loader.h"
 #include "chrome/browser/profiles/profile.h"
@@ -19,7 +20,6 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
-#include "chrome/browser/ui/signin_view_controller_delegate.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/common/chrome_features.h"
@@ -83,7 +83,6 @@ void InlineLoginHandler::HandleInitializeMessage(const base::ListValue* args) {
           content::StoragePartition::REMOVE_DATA_MASK_ALL,
           content::StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
           GURL(),
-          content::StoragePartition::OriginMatcherFunction(),
           base::Time(),
           base::Time::Max(),
           base::Bind(&InlineLoginHandler::ContinueHandleInitializeMessage,
@@ -105,9 +104,9 @@ void InlineLoginHandler::ContinueHandleInitializeMessage() {
 
   const GURL& current_url = web_ui()->GetWebContents()->GetURL();
   signin_metrics::AccessPoint access_point =
-      signin::GetAccessPointForPromoURL(current_url);
+      signin::GetAccessPointForEmbeddedPromoURL(current_url);
   signin_metrics::Reason reason =
-      signin::GetSigninReasonForPromoURL(current_url);
+      signin::GetSigninReasonForEmbeddedPromoURL(current_url);
 
   if (reason != signin_metrics::Reason::REASON_REAUTHENTICATION &&
       reason != signin_metrics::Reason::REASON_UNLOCK &&
@@ -137,11 +136,10 @@ void InlineLoginHandler::ContinueHandleInitializeMessage() {
   if (!default_email.empty())
     params.SetString("email", default_email);
 
-  std::string is_constrained;
-  net::GetValueForKeyInQuery(
-      current_url, signin::kSignInPromoQueryKeyConstrained, &is_constrained);
-  if (!is_constrained.empty())
-    params.SetString(signin::kSignInPromoQueryKeyConstrained, is_constrained);
+  // The legacy full-tab Chrome sign-in page is no longer used as it was relying
+  // on exchanging cookies for refresh tokens and that endpoint is no longer
+  // supported.
+  params.SetString("constrained", "1");
 
   // TODO(rogerta): this needs to be passed on to gaia somehow.
   std::string read_only_email;
@@ -196,12 +194,8 @@ void InlineLoginHandler::HandleCompleteLoginMessageWithCookies(
   bool choose_what_to_sync = false;
   dict->GetBoolean("chooseWhatToSync", &choose_what_to_sync);
 
-  base::string16 session_index_string16;
-  dict->GetString("sessionIndex", &session_index_string16);
-  std::string session_index = base::UTF16ToASCII(session_index_string16);
-
   CompleteLogin(email, password, gaia_id, auth_code, skip_for_now, trusted,
-                trusted_found, choose_what_to_sync, session_index);
+                trusted_found, choose_what_to_sync);
 }
 
 void InlineLoginHandler::HandleSwitchToFullTabMessage(
@@ -227,14 +221,6 @@ void InlineLoginHandler::HandleSwitchToFullTabMessage(
       main_frame_url, kSignInPromoQueryKeyShowAccountManagement, "1");
   main_frame_url = net::AppendOrReplaceQueryParameter(
       main_frame_url, signin::kSignInPromoQueryKeyForceKeepData, "1");
-  if (base::FeatureList::IsEnabled(
-          features::kRemoveUsageOfDeprecatedGaiaSigninEndpoint)) {
-    main_frame_url = net::AppendOrReplaceQueryParameter(
-        main_frame_url, signin::kSignInPromoQueryKeyConstrained, "1");
-  } else {
-    main_frame_url = net::AppendOrReplaceQueryParameter(
-        main_frame_url, signin::kSignInPromoQueryKeyConstrained, "0");
-  }
 
   NavigateParams params(profile, main_frame_url,
                         ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
@@ -245,18 +231,13 @@ void InlineLoginHandler::HandleSwitchToFullTabMessage(
 
 void InlineLoginHandler::HandleNavigationButtonClicked(
     const base::ListValue* args) {
-  Browser* browser = signin::GetDesktopBrowser(web_ui());
-  DCHECK(browser);
-
-  browser->signin_view_controller()->PerformNavigation();
+#if !defined(OS_CHROMEOS)
+  NOTREACHED() << "The inline login handler is no longer used in a browser "
+                  "or tab modal dialog.";
+#endif
 }
 
 void InlineLoginHandler::HandleDialogClose(const base::ListValue* args) {
-  Browser* browser = signin::GetDesktopBrowser(web_ui());
-  // If the dialog was opened in the User Manager browser will be null here.
-  if (browser)
-    browser->signin_view_controller()->CloseModalSignin();
-
 #if !defined(OS_CHROMEOS)
   // Does nothing if user manager is not showing.
   UserManagerProfileDialog::HideDialog();

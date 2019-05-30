@@ -4,59 +4,31 @@
 
 module ash.mojom;
 
+import "ash/public/interfaces/accessibility_controller_enums.mojom";
+import "mojo/public/mojom/base/string16.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "ui/accessibility/ax_enums.mojom";
+import "ui/events/mojo/event.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 
-// Alert sent to the accessibility api.
-enum AccessibilityAlert {
-  // Default value, indicates no accessibility alert.
-  NONE,
+// Allows a client to implement Select-to-Speak.
+// TODO(katie): Consider combining DispatchMouseEvent and DispatchKeyEvent
+// into a single DispatchEvent function.
+interface SelectToSpeakEventHandlerDelegate {
+  // Sends a KeyEvent to the Select-to-Speak extension in Chrome. The event
+  // is cast to a key event with a type CHECK.
+  DispatchKeyEvent(ui.mojom.Event event);
 
-  // When caps lock is turned on.
-  CAPS_ON,
-
-  // When caps lock is turned off.
-  CAPS_OFF,
-
-  // When screen is turned on by tablet power button.
-  SCREEN_ON,
-
-  // When screen is turned off by tablet power button.
-  SCREEN_OFF,
-
-  // When window moved to another display by accelerators.
-  WINDOW_MOVED_TO_ANOTHER_DISPLAY,
-
-  // When the user attempts a keyboard command that requires a window to work,
-  // and none is available.
-  WINDOW_NEEDED,
-
-  // When the user enters window overview mode.
-  WINDOW_OVERVIEW_MODE_ENTERED
+  // Sends a MouseEvent to the Select-to-Speak extension in Chrome. The event
+  // is cast to a mouse event with a type CHECK.
+  DispatchMouseEvent(ui.mojom.Event event);
 };
 
-enum AccessibilityPanelState {
-  // Window bounds are set explicitly.
-  BOUNDED,
-
-  // Width of panel matches screen width, y_coord and height are set by bounds.
-  FULL_WIDTH,
-
-  // Panel occupies the full screen. Bounds are ignored.
-  FULLSCREEN
-};
-
-enum SelectToSpeakState {
-  // Select to Speak is not actively selecting text or speaking.
-  kSelectToSpeakStateInactive,
-
-  // Select to Speak is being used to actively select a new region. Note that
-  // it might also be speaking, but the selecting state takes precedence.
-  kSelectToSpeakStateSelecting,
-
-  // Select to Speak is currently speaking.
-  kSelectToSpeakStateSpeaking,
+// Allows a client to implement Switch Access.
+interface SwitchAccessEventHandlerDelegate {
+  // Sends a KeyEvent to the Switch Access extension in Chrome. The event
+  // is cast to a key event with a type CHECK.
+  DispatchKeyEvent(ui.mojom.Event event);
 };
 
 // Interface for ash client (e.g. Chrome) to control and query accessibility
@@ -93,6 +65,28 @@ interface AccessibilityController {
   // Sets the current Select-to-Speak state. This should be used by the Select-
   // to-Speak extension to inform ash of its updated state.
   SetSelectToSpeakState(SelectToSpeakState state);
+
+  // Set the delegate used by the Select-to-Speak event handler.
+  SetSelectToSpeakEventHandlerDelegate(
+      SelectToSpeakEventHandlerDelegate delegate);
+
+  // Sets the key codes that Switch Access should capture.
+  SetSwitchAccessKeysToCapture(array<int32> keys_to_capture);
+
+  // Set the delegate used by the Switch Access event handler.
+  SetSwitchAccessEventHandlerDelegate(
+      SwitchAccessEventHandlerDelegate delegate);
+
+  // Starts or stops dictation. Records metrics for toggling via SwitchAccess.
+  ToggleDictationFromSource(DictationToggleSource source);
+
+  // Tells the Switch Access Event Handler whether to forward all key events to
+  // the Switch Access extension.
+  ForwardKeyEventsToSwitchAccess(bool should_forward);
+
+  // Retrieves a string description of the current battery status.
+  GetBatteryDescription()
+    => (mojo_base.mojom.String16 battery_description);
 };
 
 // Interface for ash to request accessibility service from its client (e.g.

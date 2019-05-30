@@ -23,7 +23,12 @@ LazyInstance<ThreadLocalBoolean>::Leaky
 LazyInstance<ThreadLocalBoolean>::Leaky g_base_sync_primitives_disallowed =
     LAZY_INSTANCE_INITIALIZER;
 
+LazyInstance<ThreadLocalBoolean>::Leaky g_cpu_intensive_work_disallowed =
+    LAZY_INSTANCE_INITIALIZER;
+
 }  // namespace
+
+namespace internal {
 
 void AssertBlockingAllowed() {
   DCHECK(!g_blocking_disallowed.Get().Get())
@@ -33,6 +38,8 @@ void AssertBlockingAllowed() {
          "this blocking work asynchronous or, as a last resort, you may use "
          "ScopedAllowBlocking (see its documentation for best practices).";
 }
+
+}  // namespace internal
 
 void DisallowBlocking() {
   g_blocking_disallowed.Get().Set(true);
@@ -114,9 +121,22 @@ void ResetThreadRestrictionsForTesting() {
   g_blocking_disallowed.Get().Set(false);
   g_singleton_disallowed.Get().Set(false);
   g_base_sync_primitives_disallowed.Get().Set(false);
+  g_cpu_intensive_work_disallowed.Get().Set(false);
 }
 
 }  // namespace internal
+
+void AssertLongCPUWorkAllowed() {
+  DCHECK(!g_cpu_intensive_work_disallowed.Get().Get())
+      << "Function marked as CPU intensive was called from a scope that "
+         "disallows this kind of work! Consider making this work asynchronous.";
+}
+
+void DisallowUnresponsiveTasks() {
+  DisallowBlocking();
+  DisallowBaseSyncPrimitives();
+  g_cpu_intensive_work_disallowed.Get().Set(true);
+}
 
 ThreadRestrictions::ScopedAllowIO::ScopedAllowIO()
     : was_allowed_(SetIOAllowed(true)) {}
@@ -162,13 +182,6 @@ bool ThreadRestrictions::SetWaitAllowed(bool allowed) {
   bool previous_disallowed = g_base_sync_primitives_disallowed.Get().Get();
   g_base_sync_primitives_disallowed.Get().Set(!allowed);
   return !previous_disallowed;
-}
-
-ThreadRestrictions::ScopedAllowWait::ScopedAllowWait()
-    : was_allowed_(SetWaitAllowed(true)) {}
-
-ThreadRestrictions::ScopedAllowWait::~ScopedAllowWait() {
-  SetWaitAllowed(was_allowed_);
 }
 
 }  // namespace base

@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "third_party/blink/renderer/core/input/touch_event_manager.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
-#include "third_party/blink/renderer/core/dom/events/event_listener.h"
+#include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
+#include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
-#include "third_party/blink/renderer/core/input/touch_event_manager.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_compositor.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_request.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_test.h"
@@ -32,31 +35,24 @@ class TouchEventManagerTest : public SimTest {
   }
 };
 
-class CheckEventListenerCallback final : public EventListener {
+class CheckEventListenerCallback final : public NativeEventListener {
  public:
   static CheckEventListenerCallback* Create() {
-    return new CheckEventListenerCallback();
-  }
-  bool operator==(const EventListener& other) const override {
-    return this == &other;
+    return MakeGarbageCollected<CheckEventListenerCallback>();
   }
 
-  void handleEvent(ExecutionContext*, Event* event) override {
+  void Invoke(ExecutionContext*, Event* event) override {
     event_received_ = true;
   }
 
   bool HasReceivedEvent() const { return event_received_; }
 
  private:
-  CheckEventListenerCallback()
-      : EventListener(EventListener::kCPPEventListenerType) {
-    event_received_ = false;
-  }
-  bool event_received_;
+  bool event_received_ = false;
 };
 
 TEST_F(TouchEventManagerTest, LostTouchDueToInnerIframeRemove) {
-  WebView().Resize(WebSize(400, 400));
+  WebView().MainFrameWidget()->Resize(WebSize(400, 400));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -65,26 +61,52 @@ TEST_F(TouchEventManagerTest, LostTouchDueToInnerIframeRemove) {
     </body>
   )HTML");
   CheckEventListenerCallback* callback = CheckEventListenerCallback::Create();
-  GetDocument().body()->addEventListener(EventTypeNames::touchstart, callback);
+  GetDocument().body()->addEventListener(event_type_names::kTouchstart,
+                                         callback);
 
   GetEventHandler().HandlePointerEvent(
       CreateTouchPointerEvent(WebInputEvent::kPointerDown),
-      Vector<WebPointerEvent>());
+      Vector<WebPointerEvent>(), Vector<WebPointerEvent>());
   GetEventHandler().DispatchBufferedTouchEvents();
 
   GetDocument().getElementById("target")->remove();
 
   GetEventHandler().HandlePointerEvent(
       CreateTouchPointerEvent(WebInputEvent::kPointerUp),
-      Vector<WebPointerEvent>());
+      Vector<WebPointerEvent>(), Vector<WebPointerEvent>());
   GetEventHandler().DispatchBufferedTouchEvents();
 
   GetEventHandler().HandlePointerEvent(
       CreateTouchPointerEvent(WebInputEvent::kPointerDown),
-      Vector<WebPointerEvent>());
+      Vector<WebPointerEvent>(), Vector<WebPointerEvent>());
   GetEventHandler().DispatchBufferedTouchEvents();
 
   ASSERT_TRUE(callback->HasReceivedEvent());
+}
+
+TEST_F(TouchEventManagerTest, AbosolutePosWithScrollAndZoom) {
+  WebView().MainFrameWidget()->Resize(WebSize(400, 400));
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Complete(R"HTML(
+    <body style='width: 1600px; height: 1600px;'>
+    <input type='range' id='slideElement' value=0 style='
+      position: absolute; left:100px; top:100px; width:200px; height:200px;'>
+    </body>
+  )HTML");
+  GetDocument().GetFrame()->SetPageZoomFactor(2);
+  Window().scrollTo(100, 100);
+
+  GetEventHandler().HandlePointerEvent(
+      CreateTouchPointerEvent(WebInputEvent::kPointerDown),
+      Vector<WebPointerEvent>(), Vector<WebPointerEvent>());
+  GetEventHandler().DispatchBufferedTouchEvents();
+
+  HTMLInputElement* input =
+      ToHTMLInputElement(GetDocument().getElementById("slideElement"));
+  // Allow off by 1 error because it may result in different value in some
+  // platform.
+  EXPECT_NEAR(23, ParseToDoubleForNumberType(input->value()), 1);
 }
 
 }  // namespace blink

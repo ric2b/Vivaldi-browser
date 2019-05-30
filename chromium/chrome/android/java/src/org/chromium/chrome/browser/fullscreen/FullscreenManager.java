@@ -10,6 +10,7 @@ import android.view.Window;
 
 import org.chromium.chrome.browser.fullscreen.FullscreenHtmlApiHandler.FullscreenHtmlApiDelegate;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabBrowserControlsOffsetHelper;
 
 /**
  * Manages the basic fullscreen functionality required by a Tab.
@@ -46,14 +47,24 @@ public abstract class FullscreenManager {
     }
 
     /**
-     * @return The height of the top controls in pixels.
+     * @return The height of the top controls in pixels in px.
      */
     public abstract int getTopControlsHeight();
 
     /**
-     * @return The height of the bottom controls in pixels.
+     * @return The offset of the controls from the top of the screen.
+     */
+    public abstract int getTopControlOffset();
+
+    /**
+     * @return The height of the bottom controls in pixels in px.
      */
     public abstract int getBottomControlsHeight();
+
+    /**
+     * @return The offset of the controls from the bottom of the screen.
+     */
+    public abstract int getBottomControlOffset();
 
     /**
      * @return The ratio that the browser controls are off screen; this will be a number [0,1]
@@ -62,9 +73,9 @@ public abstract class FullscreenManager {
     public abstract float getBrowserControlHiddenRatio();
 
     /**
-     * @return The offset of the content from the top of the screen.
+     * @return The offset of the content from the top of the screen in px.
      */
-    public abstract float getContentOffset();
+    public abstract int getContentOffset();
 
     /**
      * Tells the fullscreen manager a ContentVideoView is created below the contents.
@@ -90,13 +101,12 @@ public abstract class FullscreenManager {
     /**
      * Updates the positions of the browser controls and content based on the desired position of
      * the current tab.
-     *
-     * @param topControlsOffset The Y offset of the top controls.
-     * @param bottomControlsOffset The Y offset of the bottom controls.
-     * @param topContentOffset The Y offset for the content.
+     * @param topControlsOffset The Y offset of the top controls in px.
+     * @param bottomControlsOffset The Y offset of the bottom controls in px.
+     * @param topContentOffset The Y offset for the content in px.
      */
-    public abstract void setPositionsForTab(float topControlsOffset, float bottomControlsOffset,
-            float topContentOffset);
+    public abstract void setPositionsForTab(
+            int topControlsOffset, int bottomControlsOffset, int topContentOffset);
 
     /**
      * Updates the current ContentView's children and any popups with the correct offsets based on
@@ -111,12 +121,18 @@ public abstract class FullscreenManager {
         if (mTab == tab) return;
 
         // Remove the fullscreen manager from the old tab before setting the new tab.
-        if (mTab != null) mTab.setFullscreenManager(null);
+        setFullscreenManager(null);
 
         mTab = tab;
 
         // Initialize the new tab with the correct fullscreen manager reference.
-        if (mTab != null) mTab.setFullscreenManager(this);
+        setFullscreenManager(this);
+    }
+
+    private void setFullscreenManager(FullscreenManager manager) {
+        if (mTab == null) return;
+        mTab.setFullscreenManager(manager);
+        TabBrowserControlsOffsetHelper.from(mTab).resetPositions();
     }
 
     /**
@@ -181,4 +197,11 @@ public abstract class FullscreenManager {
      * Called when scrolling state of the ContentView changed.
      */
     public void onContentViewScrollingStateChanged(boolean scrolling) {}
+
+    /**
+     * Destroys the FullscreenManager
+     */
+    public void destroy() {
+        setTab(null);
+    }
 }

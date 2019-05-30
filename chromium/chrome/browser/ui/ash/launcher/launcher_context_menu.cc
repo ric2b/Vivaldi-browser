@@ -22,7 +22,6 @@
 #include "chrome/browser/ui/ash/launcher/internal_app_shelf_context_menu.h"
 #include "chrome/browser/ui/ash/tablet_mode_client.h"
 #include "chrome/grit/generated_resources.h"
-#include "ui/base/ui_base_features.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/controls/menu/menu_config.h"
@@ -94,7 +93,7 @@ void LauncherContextMenu::ExecuteCommand(int command_id, int event_flags) {
     case ash::MENU_OPEN_NEW:
       // Use a copy of the id to avoid crashes, as this menu's owner will be
       // destroyed if LaunchApp replaces the ShelfItemDelegate instance.
-      controller_->LaunchApp(ash::ShelfID(item_.id), ash::LAUNCH_FROM_UNKNOWN,
+      controller_->LaunchApp(ash::ShelfID(item_.id), ash::LAUNCH_FROM_SHELF,
                              ui::EF_NONE, display_id_);
       break;
     case ash::MENU_CLOSE:
@@ -163,7 +162,7 @@ void LauncherContextMenu::AddContextMenuOption(ui::SimpleMenuModel* menu_model,
                                                ash::CommandId type,
                                                int string_id) {
   const gfx::VectorIcon& icon = GetCommandIdVectorIcon(type, string_id);
-  if (features::IsTouchableAppContextMenuEnabled() && !icon.is_empty()) {
+  if (!icon.is_empty()) {
     const views::MenuConfig& menu_config = views::MenuConfig::instance();
     menu_model->AddItemWithStringIdAndIcon(
         type, string_id,
@@ -190,7 +189,6 @@ void LauncherContextMenu::AddContextMenuOption(ui::SimpleMenuModel* menu_model,
 const gfx::VectorIcon& LauncherContextMenu::GetCommandIdVectorIcon(
     ash::CommandId type,
     int string_id) const {
-  static const gfx::VectorIcon blank = {};
   switch (type) {
     case ash::MENU_OPEN_NEW:
       if (string_id == IDS_APP_LIST_CONTEXT_MENU_NEW_TAB)
@@ -212,18 +210,26 @@ const gfx::VectorIcon& LauncherContextMenu::GetCommandIdVectorIcon(
     case ash::LAUNCH_TYPE_FULLSCREEN:
     case ash::LAUNCH_TYPE_WINDOW:
       // Check items use a default icon in touchable and default context menus.
-      return blank;
+      return gfx::kNoneIcon;
     case ash::NOTIFICATION_CONTAINER:
       NOTREACHED() << "NOTIFICATION_CONTAINER does not have an icon, and it is "
                       "added to the model by NotificationMenuController.";
-      return blank;
+      return gfx::kNoneIcon;
+    case ash::STOP_APP:
+      if (string_id == IDS_CROSTINI_SHUT_DOWN_LINUX_MENU_ITEM)
+        return views::kLinuxShutdownIcon;
+      return gfx::kNoneIcon;
+    case ash::CROSTINI_USE_HIGH_DENSITY:
+      return views::kLinuxHighDensityIcon;
+    case ash::CROSTINI_USE_LOW_DENSITY:
+      return views::kLinuxLowDensityIcon;
     case ash::LAUNCH_APP_SHORTCUT_FIRST:
     case ash::LAUNCH_APP_SHORTCUT_LAST:
     case ash::COMMAND_ID_COUNT:
       NOTREACHED();
-      return blank;
+      return gfx::kNoneIcon;
     default:
       NOTREACHED();
-      return blank;
+      return gfx::kNoneIcon;
   }
 }

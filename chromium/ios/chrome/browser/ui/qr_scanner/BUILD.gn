@@ -9,6 +9,7 @@ source_set("qr_scanner") {
     "camera_controller.mm",
     "qr_scanner_alerts.h",
     "qr_scanner_alerts.mm",
+    "qr_scanner_presenting.h",
     "qr_scanner_transitioning_delegate.h",
     "qr_scanner_transitioning_delegate.mm",
     "qr_scanner_view.h",
@@ -22,12 +23,11 @@ source_set("qr_scanner") {
     "//base",
     "//components/version_info",
     "//ios/chrome/app/strings",
-    "//ios/chrome/browser/ui",
-    "//ios/chrome/browser/ui/commands:commands",
+    "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/icons",
-    "//ios/chrome/browser/ui/popup_menu:constants",
-    "//ios/chrome/browser/ui/qr_scanner/requirements",
+    "//ios/chrome/browser/ui/util",
     "//ios/chrome/common:ios_app_bundle_id_prefix_buildflags",
+    "//ios/chrome/common/ui_util",
     "//ios/third_party/material_components_ios",
     "//ui/base",
   ]
@@ -45,26 +45,10 @@ source_set("coordinator") {
   ]
   deps = [
     ":qr_scanner",
-    "//ios/chrome/browser",
-    "//ios/chrome/browser/browser_state",
-    "//ios/chrome/browser/tabs",
+    "//base",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/coordinators:chrome_coordinators",
-    "//ios/chrome/browser/ui/qr_scanner/requirements",
     "//ios/chrome/browser/ui/toolbar/public",
-  ]
-}
-
-source_set("unit_tests") {
-  configs += [ "//build/config/compiler:enable_arc" ]
-  testonly = true
-  sources = [
-    "camera_controller_unittest.mm",
-  ]
-  deps = [
-    ":qr_scanner",
-    "//base",
-    "//testing/gtest:gtest",
   ]
 }
 
@@ -90,8 +74,8 @@ source_set("eg_tests") {
     "//ios/chrome/browser/ui/location_bar",
     "//ios/chrome/browser/ui/omnibox",
     "//ios/chrome/browser/ui/toolbar",
-    "//ios/chrome/browser/ui/toolbar/clean:toolbar",
     "//ios/chrome/browser/ui/toolbar/public:feature_flags",
+    "//ios/chrome/browser/url_loading",
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/base",
     "//ios/chrome/test/earl_grey:test_support",

@@ -12,7 +12,7 @@ class DevtoolsPrivateGetDockingStateSizesFunction
     : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("devtoolsPrivate.getDockingStateSizes",
-                             DEVTOOLSPRIVATE_GETDOCKINGSTATESIZES);
+                             DEVTOOLSPRIVATE_GETDOCKINGSTATESIZES)
 
   DevtoolsPrivateGetDockingStateSizesFunction() = default;
 
@@ -29,7 +29,7 @@ class DevtoolsPrivateCloseDevtoolsFunction
   : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("devtoolsPrivate.closeDevtools",
-  DEVTOOLSPRIVATE_CLOSEDEVTOOLS);
+  DEVTOOLSPRIVATE_CLOSEDEVTOOLS)
 
   DevtoolsPrivateCloseDevtoolsFunction() = default;
 

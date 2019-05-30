@@ -150,10 +150,9 @@ class VIEWS_EXPORT MenuDelegate {
   virtual bool CanDrop(MenuItemView* menu, const OSExchangeData& data);
 
   // See view for a description of this method.
-  virtual bool GetDropFormats(
-      MenuItemView* menu,
-      int* formats,
-      std::set<ui::Clipboard::FormatType>* format_types);
+  virtual bool GetDropFormats(MenuItemView* menu,
+                              int* formats,
+                              std::set<ui::ClipboardFormatType>* format_types);
 
   // See view for a description of this method.
   virtual bool AreDropTypesRequired(MenuItemView* menu);
@@ -195,8 +194,7 @@ class VIEWS_EXPORT MenuDelegate {
   virtual bool ShouldCloseOnDragComplete();
 
   // Notification that the user has highlighted the specified item.
-  virtual void SelectionChanged(MenuItemView* menu) {
-  }
+  virtual void VivaldiSelectionChanged(MenuItemView* menu) {}
 
   // Notification the menu has closed. This will not be called if MenuRunner is
   // deleted during calls to ExecuteCommand().
@@ -233,6 +231,11 @@ class VIEWS_EXPORT MenuDelegate {
   // Returns true if the labels should reserve additional spacing for e.g.
   // submenu indicators at the end of the line.
   virtual bool ShouldReserveSpaceForSubmenuIndicator() const;
+
+  // Returns true if menus should fall back to positioning beside the anchor,
+  // rather than directly above or below it, when the menu is too tall to fit
+  // within the screen.
+  virtual bool ShouldTryPositioningBesideAnchor() const;
 };
 
 }  // namespace views

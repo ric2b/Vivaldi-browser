@@ -133,7 +133,7 @@ IPCAudioDecoder::~IPCAudioDecoder() {
   if (!ipc_media_pipeline_host_)
     return;
 
-  base::ThreadRestrictions::ScopedAllowWait scoped_wait;
+  base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope scoped_wait;
 
   factory_.PostTaskAndWait(factory_.MediaTaskRunner(), FROM_HERE,
                   base::Bind(&IPCMediaPipelineHost::Stop,
@@ -155,7 +155,7 @@ bool IPCAudioDecoder::Initialize() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(factory_.MediaTaskRunner()) << "Must call Preinitialize() first";
 
-  base::ThreadRestrictions::ScopedAllowWait scoped_wait;
+  base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope scoped_wait;
 
   factory_.PostTaskAndWait(factory_.MainTaskRunner(), FROM_HERE,
                   base::Bind(&IPCAudioDecoder::RunCreatorOnMainThread,
@@ -212,7 +212,7 @@ int IPCAudioDecoder::Read(
 
   decoded_audio_packets_ = decoded_audio_packets;
 
-  base::ThreadRestrictions::ScopedAllowWait scoped_wait;
+  base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope scoped_wait;
 
   factory_.MediaTaskRunner()->PostTask(
       FROM_HERE,

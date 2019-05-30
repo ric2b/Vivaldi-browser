@@ -75,13 +75,6 @@ bool DeleteFile(const FilePath& path, bool recursive);
 bool DeleteFileAfterReboot(const FilePath& path);
 #endif
 
-// Moves the given path, whether it's a file or a directory.
-// If a simple rename is not possible, such as in the case where the paths are
-// on different volumes, this will attempt to copy and delete. Returns
-// true for success.
-// This function fails if either path contains traversal components ('..').
-bool Move(const FilePath& from_path, const FilePath& to_path);
-
 // Renames file |from_path| to |to_path|. Both paths must be on the same
 // volume, or the function will fail. Destination file will be created
 // if it doesn't exist. Prefer this function over Move when dealing with
@@ -91,47 +84,6 @@ bool Move(const FilePath& from_path, const FilePath& to_path);
 bool ReplaceFile(const FilePath& from_path,
                  const FilePath& to_path,
                  File::Error* error);
-
-// Copies a single file. Use CopyDirectory() to copy directories.
-// This function fails if either path contains traversal components ('..').
-// This function also fails if |to_path| is a directory.
-//
-// On POSIX, if |to_path| is a symlink, CopyFile() will follow the symlink. This
-// may have security implications. Use with care.
-//
-// If |to_path| already exists and is a regular file, it will be overwritten,
-// though its permissions will stay the same.
-//
-// If |to_path| does not exist, it will be created. The new file's permissions
-// varies per platform:
-//
-// - This function keeps the metadata on Windows. The read only bit is not kept.
-// - On Mac and iOS, |to_path| retains |from_path|'s permissions, except user
-//   read/write permissions are always set.
-// - On Linux and Android, |to_path| has user read/write permissions only. i.e.
-//   Always 0600.
-// - On ChromeOS, |to_path| has user read/write permissions and group/others
-//   read permissions. i.e. Always 0644.
-bool CopyFile(const FilePath& from_path, const FilePath& to_path);
-
-// Copies the given path, and optionally all subdirectories and their contents
-// as well.
-//
-// If there are files existing under to_path, always overwrite. Returns true
-// if successful, false otherwise. Wildcards on the names are not supported.
-//
-// This function has the same metadata behavior as CopyFile().
-//
-// If you only need to copy a file use CopyFile, it's faster.
-bool CopyDirectory(const FilePath& from_path,
-                   const FilePath& to_path,
-                   bool recursive);
-
-// Like CopyDirectory() except trying to overwrite an existing file will not
-// work and will return false.
-bool CopyDirectoryExcl(const FilePath& from_path,
-                       const FilePath& to_path,
-                       bool recursive);
 
 // Returns true if the given path exists on the local filesystem,
 // false otherwise.
@@ -240,14 +192,6 @@ bool IsDirectoryEmpty(const FilePath& dir_path);
 // permissions are set so that other users on the system can't edit them while
 // they're open (which can lead to security issues).
 bool GetTempDir(FilePath* path);
-
-// Get the home directory. This is more complicated than just getenv("HOME")
-// as it knows to fall back on getpwent() etc.
-//
-// You should not generally call this directly. Instead use DIR_HOME with the
-// path service which will use this function but cache the value.
-// Path service may also override DIR_HOME.
-FilePath GetHomeDir();
 
 // Creates a temporary file. The full path is placed in |path|, and the
 // function returns true if was successful in creating the file. The file will
@@ -446,23 +390,6 @@ bool GetFileSystemType(const FilePath& path, FileSystemType* type);
 bool GetShmemTempDir(bool executable, FilePath* path);
 #endif
 
-// Internal --------------------------------------------------------------------
-
-namespace internal {
-
-// Same as Move but allows paths with traversal components.
-// Use only with extreme care.
-bool MoveUnsafe(const FilePath& from_path, const FilePath& to_path);
-
-#if defined(OS_WIN)
-// Copy from_path to to_path recursively and then delete from_path recursively.
-// Returns true if all operations succeed.
-// This function simulates Move(), but unlike Move() it works across volumes.
-// This function is not transactional.
-bool CopyAndDeleteDirectory(const FilePath& from_path, const FilePath& to_path);
-#endif  // defined(OS_WIN)
-
-}  // namespace internal
 }  // namespace base
 
 #endif  // BASE_FILES_FILE_UTIL_H_

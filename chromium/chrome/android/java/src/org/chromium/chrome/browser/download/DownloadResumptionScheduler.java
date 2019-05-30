@@ -5,17 +5,16 @@
 package org.chromium.chrome.browser.download;
 
 import android.annotation.SuppressLint;
-import android.content.Intent;
+import android.text.format.DateUtils;
 
 import org.chromium.base.ContextUtils;
-import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
 import org.chromium.components.background_task_scheduler.TaskIds;
 import org.chromium.components.background_task_scheduler.TaskInfo;
 import org.chromium.components.background_task_scheduler.TaskInfo.NetworkType;
 
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Class for scheduing download resumption tasks.
@@ -38,6 +37,8 @@ public class DownloadResumptionScheduler {
      * if there are resumable downloads available.
      */
     public void scheduleIfNecessary() {
+        if (FeatureUtilities.isDownloadAutoResumptionEnabledInNative()) return;
+
         List<DownloadSharedPreferenceEntry> entries =
                 DownloadSharedPreferenceHelper.getInstance().getEntries();
 
@@ -56,17 +57,17 @@ public class DownloadResumptionScheduler {
 
         if (scheduleAutoResumption) {
             @NetworkType
-            int networkType = allowMeteredConnection ? TaskInfo.NETWORK_TYPE_ANY
-                                                     : TaskInfo.NETWORK_TYPE_UNMETERED;
+            int networkType = allowMeteredConnection ? TaskInfo.NetworkType.ANY
+                                                     : TaskInfo.NetworkType.UNMETERED;
 
-            TaskInfo task = TaskInfo.createOneOffTask(TaskIds.DOWNLOAD_RESUMPTION_JOB_ID,
-                                            DownloadResumptionBackgroundTask.class,
-                                            TimeUnit.DAYS.toMillis(1))
-                                    .setUpdateCurrent(true)
-                                    .setRequiredNetworkType(networkType)
-                                    .setRequiresCharging(false)
-                                    .setIsPersisted(true)
-                                    .build();
+            TaskInfo task =
+                    TaskInfo.createOneOffTask(TaskIds.DOWNLOAD_RESUMPTION_JOB_ID,
+                                    DownloadResumptionBackgroundTask.class, DateUtils.DAY_IN_MILLIS)
+                            .setUpdateCurrent(true)
+                            .setRequiredNetworkType(networkType)
+                            .setRequiresCharging(false)
+                            .setIsPersisted(true)
+                            .build();
 
             BackgroundTaskSchedulerFactory.getScheduler().schedule(
                     ContextUtils.getApplicationContext(), task);
@@ -84,21 +85,12 @@ public class DownloadResumptionScheduler {
     }
 
     /**
-     * Kicks off the download resumption process through either {@link DownloadNotificationService}
-     * or {@link DownloadNotificationService2}, which handles actually resuming the individual
-     * downloads.
+     * Kicks off the download resumption process through {@link DownloadNotificationService},
+     * which handles actually resuming the individual downloads.
      *
      * It is assumed that native is loaded at the time of this call.
      */
     public void resume() {
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOADS_FOREGROUND)) {
-            DownloadNotificationService2.getInstance().resumeAllPendingDownloads();
-        } else {
-            // Start the DownloadNotificationService and allow that to manage the download life
-            // cycle. Shut down the task right away after starting the service
-            DownloadNotificationService.startDownloadNotificationService(
-                    ContextUtils.getApplicationContext(),
-                    new Intent(DownloadNotificationService.ACTION_DOWNLOAD_RESUME_ALL));
-        }
+        DownloadNotificationService.getInstance().resumeAllPendingDownloads();
     }
 }

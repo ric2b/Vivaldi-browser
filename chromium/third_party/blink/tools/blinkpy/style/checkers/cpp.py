@@ -1123,16 +1123,6 @@ def check_for_non_standard_constructs(clean_lines, line_number,
                   'The class %s probably needs a virtual destructor due to '
                   'having virtual method(s), one declared at line %d.'
                   % (classinfo.name, classinfo.virtual_method_line_number))
-        # Look for mixed bool and unsigned bitfields.
-        if classinfo.bool_bitfields and classinfo.unsigned_bitfields:
-            bool_list = ', '.join(classinfo.bool_bitfields)
-            unsigned_list = ', '.join(classinfo.unsigned_bitfields)
-            error(classinfo.line_number, 'runtime/bitfields', 5,
-                  'The class %s contains mixed unsigned and bool bitfields, '
-                  'which will pack into separate words on the MSVC compiler.\n'
-                  'Bool bitfields are [%s].\nUnsigned bitfields are [%s].\n'
-                  'Consider converting bool bitfields to unsigned.'
-                  % (classinfo.name, bool_list, unsigned_list))
     else:
         classinfo.brace_depth = brace_depth
 
@@ -1874,6 +1864,13 @@ def check_language(filename, clean_lines, line_number, file_extension, include_s
         return
 
     # FIXME: figure out if they're using default arguments in fn proto.
+
+    # Check if they're using a precise-width integer type.
+    matched = search(r'\b((un)?signed\s+)?short\b', line)
+    if matched:
+        error(line_number, 'runtime/int', 1,
+              'Use a precise-width integer type from <stdint.h> or <cstdint>'
+              ' such as uint16_t instead of %s' % matched.group(0))
 
     # Check to see if they're using an conversion function cast.
     # I just try to capture the most common basic types, though there are more.
@@ -2633,6 +2630,7 @@ class CppChecker(object):
         'runtime/casting',
         'runtime/ctype_function',
         'runtime/explicit',
+        'runtime/int',
         'runtime/invalid_increment',
         'runtime/max_min_macros',
         'runtime/memset',

@@ -48,7 +48,6 @@ class AdSamplerTriggerTest : public content::RenderViewHostTestHarness {
     safe_browsing::RegisterProfilePrefs(prefs_.registry());
     prefs_.SetBoolean(prefs::kSafeBrowsingExtendedReportingOptInAllowed, true);
     prefs_.SetBoolean(prefs::kSafeBrowsingScoutReportingEnabled, true);
-    prefs_.SetBoolean(prefs::kSafeBrowsingScoutGroupSelected, true);
   }
 
   void CreateTriggerWithFrequency(const size_t denominator) {
@@ -226,6 +225,7 @@ TEST(AdSamplerTriggerTestFinch, FrequencyDenominatorFeature) {
   // Make sure that setting the frequency denominator via Finch params works as
   // expected, and that the default frequency is used when no Finch config is
   // given.
+  content::TestBrowserThreadBundle thread_bundle;
   AdSamplerTrigger trigger_default(nullptr, nullptr, nullptr, nullptr, nullptr);
   EXPECT_EQ(kAdSamplerDefaultFrequency,
             trigger_default.sampler_frequency_denominator_);
@@ -238,7 +238,7 @@ TEST(AdSamplerTriggerTestFinch, FrequencyDenominatorFeature) {
   std::map<std::string, std::string> feature_params;
   feature_params[std::string(
       safe_browsing::kAdSamplerFrequencyDenominatorParam)] =
-      base::IntToString(kDenominatorInt);
+      base::NumberToString(kDenominatorInt);
   base::AssociateFieldTrialParams(safe_browsing::kAdSamplerTriggerFeature.name,
                                   "Group", feature_params);
   std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);

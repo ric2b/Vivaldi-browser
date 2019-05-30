@@ -69,7 +69,8 @@ using DownloadOpenDelayedCallback = base::Callback<void(bool)>;
 // Called with the result of CheckForFileExistence().
 using CheckForFileExistenceCallback = base::OnceCallback<void(bool result)>;
 
-using DownloadIdCallback = base::Callback<void(uint32_t)>;
+// On failure, |next_id| is equal to kInvalidId.
+using DownloadIdCallback = base::Callback<void(uint32_t /* next_id */)>;
 
 // Called on whether a download is allowed to continue.
 using CheckDownloadAllowedCallback = base::OnceCallback<void(bool /*allow*/)>;
@@ -81,7 +82,8 @@ class CONTENT_EXPORT DownloadManagerDelegate {
   virtual void Shutdown() {}
 
   // Runs |callback| with a new download id when possible, perhaps
-  // synchronously.
+  // synchronously. If this call fails, |callback| will be called with
+  // kInvalidId.
   virtual void GetNextId(const DownloadIdCallback& callback);
 
   // Called to notify the delegate that a new download |item| requires a
@@ -121,10 +123,14 @@ class CONTENT_EXPORT DownloadManagerDelegate {
 
   // Checks and hands off the downloading to be handled by another system based
   // on mime type. Returns true if the download was intercepted.
-  virtual bool InterceptDownloadIfApplicable(const GURL& url,
-                                             const std::string& mime_type,
-                                             const std::string& request_origin,
-                                             WebContents* web_contents);
+  virtual bool InterceptDownloadIfApplicable(
+      const GURL& url,
+      const std::string& user_agent,
+      const std::string& content_disposition,
+      const std::string& mime_type,
+      const std::string& request_origin,
+      int64_t content_length,
+      WebContents* web_contents);
 
   // Returns true if we need to generate a binary hash for downloads.
   virtual bool GenerateFileHash();

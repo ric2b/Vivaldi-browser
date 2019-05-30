@@ -5,6 +5,8 @@
 #ifndef CONTENT_RENDERER_MEDIA_ANDROID_MEDIA_PLAYER_RENDERER_CLIENT_H_
 #define CONTENT_RENDERER_MEDIA_ANDROID_MEDIA_PLAYER_RENDERER_CLIENT_H_
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -39,7 +41,7 @@ class CONTENT_EXPORT MediaPlayerRendererClient : public media::Renderer,
   MediaPlayerRendererClient(
       scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
-      media::MojoRenderer* mojo_renderer,
+      std::unique_ptr<media::MojoRenderer> mojo_renderer,
       media::ScopedStreamTextureWrapper stream_texture_wrapper,
       media::VideoRendererSink* sink);
 
@@ -62,12 +64,13 @@ class CONTENT_EXPORT MediaPlayerRendererClient : public media::Renderer,
   void OnEnded() override;
   void OnStatisticsUpdate(const media::PipelineStatistics& stats) override;
   void OnBufferingStateChange(media::BufferingState state) override;
-  void OnWaitingForDecryptionKey() override;
+  void OnWaiting(media::WaitingReason reason) override;
   void OnAudioConfigChange(const media::AudioDecoderConfig& config) override;
   void OnVideoConfigChange(const media::VideoDecoderConfig& config) override;
   void OnVideoNaturalSizeChange(const gfx::Size& size) override;
   void OnVideoOpacityChange(bool opaque) override;
   void OnDurationChange(base::TimeDelta duration) override;
+  void OnRemotePlayStateChange(media::MediaStatus::State state) override;
 
   // Called on |compositor_task_runner_| whenever |stream_texture_wrapper_| has
   // a new frame.

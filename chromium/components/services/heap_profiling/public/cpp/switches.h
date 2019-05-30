@@ -8,6 +8,7 @@
 namespace heap_profiling {
 
 extern const char kMemlog[];
+extern const char kMemlogInProcess[];
 extern const char kMemlogKeepSmallAllocations[];
 extern const char kMemlogModeAll[];
 extern const char kMemlogModeAllRenderers[];
@@ -18,7 +19,6 @@ extern const char kMemlogModeMinimal[];
 extern const char kMemlogModeRendererSampling[];
 extern const char kMemlogModeUtilityAndBrowser[];
 extern const char kMemlogModeUtilitySampling[];
-extern const char kMemlogSampling[];
 extern const char kMemlogSamplingRate[];
 extern const char kMemlogStackMode[];
 extern const char kMemlogStackModeMixed[];

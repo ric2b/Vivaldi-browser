@@ -5,17 +5,20 @@
 package org.chromium.chrome.browser.appmenu;
 
 import android.content.Context;
+import android.graphics.drawable.Drawable;
+import android.support.v4.graphics.drawable.DrawableCompat;
 import android.support.v7.content.res.AppCompatResources;
 import android.util.AttributeSet;
 import android.view.View;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.widget.TintedImageButton;
 
 /**
  * A {@link LinearLayout} that displays a horizontal row of icons for page actions.
@@ -24,11 +27,11 @@ public class AppMenuIconRowFooter extends LinearLayout implements View.OnClickLi
     private ChromeActivity mActivity;
     private AppMenu mAppMenu;
 
-    private TintedImageButton mForwardButton;
-    private TintedImageButton mBookmarkButton;
-    private TintedImageButton mDownloadButton;
-    private TintedImageButton mPageInfoButton;
-    private TintedImageButton mReloadButton;
+    private ImageButton mForwardButton;
+    private ImageButton mBookmarkButton;
+    private ImageButton mDownloadButton;
+    private ImageButton mPageInfoButton;
+    private ImageButton mReloadButton;
 
     public AppMenuIconRowFooter(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -38,20 +41,27 @@ public class AppMenuIconRowFooter extends LinearLayout implements View.OnClickLi
     protected void onFinishInflate() {
         super.onFinishInflate();
 
-        mForwardButton = (TintedImageButton) findViewById(R.id.forward_menu_id);
+        mForwardButton = findViewById(R.id.forward_menu_id);
         mForwardButton.setOnClickListener(this);
 
-        mBookmarkButton = (TintedImageButton) findViewById(R.id.bookmark_this_page_id);
+        mBookmarkButton = findViewById(R.id.bookmark_this_page_id);
         mBookmarkButton.setOnClickListener(this);
 
-        mDownloadButton = (TintedImageButton) findViewById(R.id.offline_page_id);
+        mDownloadButton = findViewById(R.id.offline_page_id);
         mDownloadButton.setOnClickListener(this);
 
-        mPageInfoButton = (TintedImageButton) findViewById(R.id.info_menu_id);
+        mPageInfoButton = findViewById(R.id.info_menu_id);
         mPageInfoButton.setOnClickListener(this);
 
-        mReloadButton = (TintedImageButton) findViewById(R.id.reload_menu_id);
+        mReloadButton = findViewById(R.id.reload_menu_id);
         mReloadButton.setOnClickListener(this);
+
+        // ImageView tinting doesn't work with LevelListDrawable, use Drawable tinting instead.
+        // See https://crbug.com/891593 for details.
+        Drawable icon = AppCompatResources.getDrawable(getContext(), R.drawable.btn_reload_stop);
+        DrawableCompat.setTintList(icon,
+                AppCompatResources.getColorStateList(getContext(), R.color.standard_mode_tint));
+        mReloadButton.setImageDrawable(icon);
     }
 
     /**
@@ -73,7 +83,6 @@ public class AppMenuIconRowFooter extends LinearLayout implements View.OnClickLi
 
         mDownloadButton.setEnabled(DownloadUtils.isAllowedToDownloadPage(currentTab));
 
-        mReloadButton.setImageResource(R.drawable.btn_reload_stop);
         loadingStateChanged(currentTab.isLoading());
     }
 
@@ -102,7 +111,7 @@ public class AppMenuIconRowFooter extends LinearLayout implements View.OnClickLi
         if (currentTab.getBookmarkId() != Tab.INVALID_BOOKMARK_ID) {
             mBookmarkButton.setImageResource(R.drawable.btn_star_filled);
             mBookmarkButton.setContentDescription(mActivity.getString(R.string.edit_bookmark));
-            mBookmarkButton.setTint(
+            ApiCompatibilityUtils.setImageTintList(mBookmarkButton,
                     AppCompatResources.getColorStateList(getContext(), R.color.blue_mode_tint));
         } else {
             mBookmarkButton.setImageResource(R.drawable.btn_star);

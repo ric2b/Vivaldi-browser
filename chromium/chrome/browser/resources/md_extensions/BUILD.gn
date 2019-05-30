@@ -2,10 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//third_party/closure_compiler/compile_js.gni")
-import("../optimize_webui.gni")
-import("//tools/grit/grit_rule.gni")
 import("//chrome/common/features.gni")
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/grit/grit_rule.gni")
+import("../optimize_webui.gni")
 
 extensions_pak_file = "extensions_resources.pak"
 unpak_folder = "extensions_resources.unpak"
@@ -48,13 +48,22 @@ grit("flattened_resources") {
   ]
   output_dir = "$root_gen_dir/chrome/browser/resources/md_extensions"
 }
-js_type_check("closure_compile") {
+
+group("closure_compile") {
+  deps = [
+    ":extensions_resources",
+    "activity_log:closure_compile",
+  ]
+}
+
+js_type_check("extensions_resources") {
   deps = [
     ":code_section",
     ":detail_view",
     ":drag_and_drop_handler",
     ":drop_overlay",
     ":error_page",
+    ":host_permissions_toggle_list",
     ":install_warnings_dialog",
     ":item",
     ":item_behavior",
@@ -76,7 +85,6 @@ js_type_check("closure_compile") {
     ":shortcut_util",
     ":sidebar",
     ":toolbar",
-    ":view_manager",
   ]
 }
 
@@ -139,6 +147,13 @@ js_library("error_page") {
   ]
 }
 
+js_library("host_permissions_toggle_list") {
+  deps = [
+    "//ui/webui/resources/js:cr",
+  ]
+  externs_list = [ "$externs_path/developer_private.js" ]
+}
+
 js_library("install_warnings_dialog") {
   deps = [
     "//ui/webui/resources/js:cr",
@@ -161,6 +176,7 @@ js_library("item") {
 js_library("item_behavior") {
   deps = [
     "//ui/webui/resources/js:cr",
+    "//ui/webui/resources/js:load_time_data",
   ]
   externs_list = [ "$externs_path/developer_private.js" ]
 }
@@ -240,8 +256,9 @@ js_library("manager") {
     ":service",
     ":sidebar",
     ":toolbar",
-    ":view_manager",
+    "activity_log:activity_log",
     "//ui/webui/resources/cr_elements/cr_drawer:cr_drawer",
+    "//ui/webui/resources/cr_elements/cr_view_manager:cr_view_manager",
     "//ui/webui/resources/js:assert",
     "//ui/webui/resources/js:cr",
   ]
@@ -287,6 +304,8 @@ js_library("runtime_host_permissions") {
   deps = [
     ":item",
     ":runtime_hosts_dialog",
+    "//ui/webui/resources/cr_elements/cr_radio_button:cr_radio_button",
+    "//ui/webui/resources/cr_elements/cr_radio_group:cr_radio_group",
   ]
   externs_list = [ "$externs_path/developer_private.js" ]
 }
@@ -307,11 +326,15 @@ js_library("service") {
     ":navigation_helper",
     ":pack_dialog",
     ":toolbar",
+    "activity_log:activity_log",
+    "activity_log:activity_log_history",
+    "activity_log:activity_log_stream",
     "//ui/webui/resources/js:assert",
     "//ui/webui/resources/js:cr",
     "//ui/webui/resources/js:load_time_data",
   ]
   externs_list = [
+    "$externs_path/activity_log_private.js",
     "$externs_path/developer_private.js",
     "$externs_path/management.js",
     "$externs_path/metrics_private.js",
@@ -352,12 +375,4 @@ js_library("toolbar") {
     "//ui/webui/resources/js:util",
   ]
   externs_list = [ "$externs_path/metrics_private.js" ]
-}
-
-js_library("view_manager") {
-  deps = [
-    "//ui/webui/resources/js:assert",
-    "//ui/webui/resources/js:cr",
-  ]
-  externs_list = [ "$externs_path/web_animations.js" ]
 }

@@ -15,9 +15,9 @@
 #include "extensions/browser/api/feedback_private/feedback_private_api.h"
 
 #if defined(OS_CHROMEOS)
-#include "base/sys_info.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
-#include "components/signin/core/browser/signin_manager.h"
+#include "base/system/sys_info.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
+#include "services/identity/public/cpp/identity_manager.h"
 #endif
 
 namespace feedback_private = extensions::api::feedback_private;
@@ -35,6 +35,7 @@ bool IsFromUserInteraction(FeedbackSource source) {
   switch (source) {
     case kFeedbackSourceArcApp:
     case kFeedbackSourceAsh:
+    case kFeedbackSourceAssistant:
     case kFeedbackSourceBrowserCommand:
     case kFeedbackSourceMdSettingsAboutPage:
     case kFeedbackSourceOldSettingsAboutPage:
@@ -84,20 +85,22 @@ void ShowFeedbackPage(Browser* browser,
           ? feedback_private::FeedbackFlow::FEEDBACK_FLOW_SADTABCRASH
           : feedback_private::FeedbackFlow::FEEDBACK_FLOW_REGULAR;
 
+  bool include_bluetooth_logs = false;
 #if defined(OS_CHROMEOS)
-  SigninManagerBase* signin_manager =
-      SigninManagerFactory::GetForProfile(profile);
-  if (signin_manager &&
-      base::EndsWith(signin_manager->GetAuthenticatedAccountInfo().email,
-                     kGoogleDotCom, base::CompareCase::INSENSITIVE_ASCII) &&
-      IsFromUserInteraction(source) && IsBluetoothLoggingAllowedByBoard()) {
+  auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
+  if (identity_manager &&
+      base::EndsWith(identity_manager->GetPrimaryAccountInfo().email,
+                     kGoogleDotCom, base::CompareCase::INSENSITIVE_ASCII)) {
     flow = feedback_private::FeedbackFlow::FEEDBACK_FLOW_GOOGLEINTERNAL;
+    include_bluetooth_logs =
+        IsFromUserInteraction(source) && IsBluetoothLoggingAllowedByBoard();
   }
 #endif
 
-  api->RequestFeedbackForFlow(description_template,
-                              description_placeholder_text, category_tag,
-                              extra_diagnostics, page_url, flow);
+  api->RequestFeedbackForFlow(
+      description_template, description_placeholder_text, category_tag,
+      extra_diagnostics, page_url, flow, source == kFeedbackSourceAssistant,
+      include_bluetooth_logs);
 }
 
 }  // namespace chrome

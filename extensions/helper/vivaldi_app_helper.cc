@@ -8,6 +8,8 @@
 
 namespace extensions {
 
+WEB_CONTENTS_USER_DATA_KEY_IMPL(VivaldiAppHelper)
+
 VivaldiAppHelper::VivaldiAppHelper(content::WebContents* contents) {}
 
 VivaldiAppHelper::~VivaldiAppHelper() {}

@@ -4,7 +4,6 @@
 
 #include "third_party/blink/renderer/modules/presentation/presentation_availability.h"
 
-#include "third_party/blink/public/mojom/page/page_visibility_state.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -23,9 +22,9 @@ PresentationAvailability* PresentationAvailability::Take(
     const WTF::Vector<KURL>& urls,
     bool value) {
   PresentationAvailability* presentation_availability =
-      new PresentationAvailability(resolver->GetExecutionContext(), urls,
-                                   value);
-  presentation_availability->PauseIfNeeded();
+      MakeGarbageCollected<PresentationAvailability>(
+          resolver->GetExecutionContext(), urls, value);
+  presentation_availability->UpdateStateIfNeeded();
   presentation_availability->UpdateListening();
   return presentation_availability;
 }
@@ -34,8 +33,8 @@ PresentationAvailability::PresentationAvailability(
     ExecutionContext* execution_context,
     const WTF::Vector<KURL>& urls,
     bool value)
-    : PausableObject(execution_context),
-      PageVisibilityObserver(ToDocument(execution_context)->GetPage()),
+    : ContextLifecycleStateObserver(execution_context),
+      PageVisibilityObserver(To<Document>(execution_context)->GetPage()),
       urls_(urls),
       value_(value),
       state_(State::kActive) {
@@ -45,11 +44,11 @@ PresentationAvailability::PresentationAvailability(
 PresentationAvailability::~PresentationAvailability() = default;
 
 const AtomicString& PresentationAvailability::InterfaceName() const {
-  return EventTargetNames::PresentationAvailability;
+  return event_target_names::kPresentationAvailability;
 }
 
 ExecutionContext* PresentationAvailability::GetExecutionContext() const {
-  return PausableObject::GetExecutionContext();
+  return ContextLifecycleStateObserver::GetExecutionContext();
 }
 
 void PresentationAvailability::AddedEventListener(
@@ -57,7 +56,7 @@ void PresentationAvailability::AddedEventListener(
     RegisteredEventListener& registered_listener) {
   EventTargetWithInlineData::AddedEventListener(event_type,
                                                 registered_listener);
-  if (event_type == EventTypeNames::change) {
+  if (event_type == event_type_names::kChange) {
     UseCounter::Count(GetExecutionContext(),
                       WebFeature::kPresentationAvailabilityChangeEventListener);
   }
@@ -70,19 +69,19 @@ void PresentationAvailability::AvailabilityChanged(
     return;
 
   value_ = value;
-  DispatchEvent(*Event::Create(EventTypeNames::change));
+  DispatchEvent(*Event::Create(event_type_names::kChange));
 }
 
 bool PresentationAvailability::HasPendingActivity() const {
   return state_ != State::kInactive;
 }
 
-void PresentationAvailability::Unpause() {
-  SetState(State::kActive);
-}
-
-void PresentationAvailability::Pause() {
-  SetState(State::kSuspended);
+void PresentationAvailability::ContextLifecycleStateChanged(
+    mojom::FrameLifecycleState state) {
+  if (state == mojom::FrameLifecycleState::kRunning)
+    SetState(State::kActive);
+  else
+    SetState(State::kSuspended);
 }
 
 void PresentationAvailability::ContextDestroyed(ExecutionContext*) {
@@ -107,8 +106,7 @@ void PresentationAvailability::UpdateListening() {
     return;
 
   if (state_ == State::kActive &&
-      (ToDocument(GetExecutionContext())->GetPageVisibilityState() ==
-       mojom::PageVisibilityState::kVisible))
+      (To<Document>(GetExecutionContext())->IsPageVisible()))
     controller->GetAvailabilityState()->AddObserver(this);
   else
     controller->GetAvailabilityState()->RemoveObserver(this);
@@ -125,7 +123,7 @@ bool PresentationAvailability::value() const {
 void PresentationAvailability::Trace(blink::Visitor* visitor) {
   EventTargetWithInlineData::Trace(visitor);
   PageVisibilityObserver::Trace(visitor);
-  PausableObject::Trace(visitor);
+  ContextLifecycleStateObserver::Trace(visitor);
 }
 
 }  // namespace blink

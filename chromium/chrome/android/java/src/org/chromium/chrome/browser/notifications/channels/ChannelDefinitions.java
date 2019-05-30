@@ -67,6 +67,7 @@ public class ChannelDefinitions {
         String WEBAPP_ACTIONS = "webapp_actions";
         // TODO(crbug.com/700377): Deprecate the 'sites' channel.
         String SITES = "sites";
+        String VR = "vr";
     }
 
     @StringDef({ChannelGroupId.GENERAL, ChannelGroupId.SITES})
@@ -149,6 +150,13 @@ public class ChannelDefinitions {
                             R.string.notification_category_fullscreen_controls,
                             NotificationManager.IMPORTANCE_MIN, ChannelGroupId.GENERAL));
 
+            // Not adding to startup channels because we want ChannelId.VR to be created on the
+            // first use, as not all users use VR. Channel must have high importance for
+            // notifications to show up in VR.
+            map.put(ChannelId.VR,
+                    new PredefinedChannel(ChannelId.VR, R.string.notification_category_vr,
+                            NotificationManager.IMPORTANCE_HIGH, ChannelGroupId.GENERAL));
+
             MAP = Collections.unmodifiableMap(map);
             STARTUP = Collections.unmodifiableSet(startup);
         }
@@ -177,11 +185,36 @@ public class ChannelDefinitions {
     }
 
     /**
+     * @return A set of all known channel group ids that can be used for {@link #getChannelGroup}.
+     */
+    static Set<String> getAllChannelGroupIds() {
+        return PredefinedChannelGroups.MAP.keySet();
+    }
+
+    /**
+     * @return A set of all known channel ids that can be used for {@link #getChannelFromId}.
+     */
+    static Set<String> getAllChannelIds() {
+        return PredefinedChannels.MAP.keySet();
+    }
+
+    /**
      * @return A set of channel ids of channels that should be initialized on startup.
      */
     static Set<String> getStartupChannelIds() {
         // CHANNELS_VERSION must be incremented if the set of channels returned here changes.
         return PredefinedChannels.STARTUP;
+    }
+
+    /**
+     * @return A set of channel group ids of channel groups that should be initialized on startup.
+     */
+    static Set<String> getStartupChannelGroupIds() {
+        Set<String> groupIds = new HashSet<>();
+        for (String id : getStartupChannelIds()) {
+            groupIds.add(getChannelFromId(id).mGroupId);
+        }
+        return groupIds;
     }
 
     /**

@@ -10,6 +10,8 @@ import org.chromium.chrome.browser.incognito.IncognitoNotificationManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 
+import java.util.List;
+
 /**
  * A TabModel implementation that handles off the record tabs.
  *
@@ -30,6 +32,13 @@ public class IncognitoTabModel implements TabModel {
 
         /** @return Whether Incognito Tabs exist. */
         boolean doIncognitoTabsExist();
+
+        /**
+         * @param model {@link TabModel} to act on.
+         * @return Whether the provided {@link TabModel} is currently selected in the corresponding
+         * {@link IncognitoTabModelDelegate}.
+         */
+        boolean isCurrentModel(TabModel model);
     }
 
     private final IncognitoTabModelDelegate mDelegate;
@@ -128,6 +137,12 @@ public class IncognitoTabModel implements TabModel {
     }
 
     @Override
+    public void closeMultipleTabs(List<Tab> tabs, boolean canUndo) {
+        mDelegateModel.closeMultipleTabs(tabs, canUndo);
+        destroyIncognitoIfNecessary();
+    }
+
+    @Override
     public void closeAllTabs() {
         mDelegateModel.closeAllTabs();
         destroyIncognitoIfNecessary();
@@ -166,7 +181,7 @@ public class IncognitoTabModel implements TabModel {
 
     @Override
     public boolean isCurrentModel() {
-        return mDelegateModel.isCurrentModel();
+        return mDelegate.isCurrentModel(this);
     }
 
     @Override

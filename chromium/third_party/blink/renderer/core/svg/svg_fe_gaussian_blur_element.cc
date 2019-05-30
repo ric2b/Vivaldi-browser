@@ -27,14 +27,13 @@
 namespace blink {
 
 inline SVGFEGaussianBlurElement::SVGFEGaussianBlurElement(Document& document)
-    : SVGFilterPrimitiveStandardAttributes(SVGNames::feGaussianBlurTag,
+    : SVGFilterPrimitiveStandardAttributes(svg_names::kFEGaussianBlurTag,
                                            document),
       std_deviation_(
           SVGAnimatedNumberOptionalNumber::Create(this,
-                                                  SVGNames::stdDeviationAttr,
-                                                  0,
-                                                  0)),
-      in1_(SVGAnimatedString::Create(this, SVGNames::inAttr)) {
+                                                  svg_names::kStdDeviationAttr,
+                                                  0.0f)),
+      in1_(SVGAnimatedString::Create(this, svg_names::kInAttr)) {
   AddToPropertyMap(std_deviation_);
   AddToPropertyMap(in1_);
 }
@@ -55,8 +54,8 @@ void SVGFEGaussianBlurElement::setStdDeviation(float x, float y) {
 
 void SVGFEGaussianBlurElement::SvgAttributeChanged(
     const QualifiedName& attr_name) {
-  if (attr_name == SVGNames::inAttr ||
-      attr_name == SVGNames::stdDeviationAttr) {
+  if (attr_name == svg_names::kInAttr ||
+      attr_name == svg_names::kStdDeviationAttr) {
     SVGElement::InvalidationGuard invalidation_guard(this);
     Invalidate();
     return;

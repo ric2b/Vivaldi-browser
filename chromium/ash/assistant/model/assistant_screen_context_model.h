@@ -5,6 +5,7 @@
 #ifndef ASH_ASSISTANT_MODEL_ASSISTANT_SCREEN_CONTEXT_MODEL_H_
 #define ASH_ASSISTANT_MODEL_ASSISTANT_SCREEN_CONTEXT_MODEL_H_
 
+#include "base/component_export.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 
@@ -18,7 +19,7 @@ enum class ScreenContextRequestState {
   kInProgress,
 };
 
-class AssistantScreenContextModel {
+class COMPONENT_EXPORT(ASSISTANT_MODEL) AssistantScreenContextModel {
  public:
   AssistantScreenContextModel();
   ~AssistantScreenContextModel();
@@ -35,7 +36,7 @@ class AssistantScreenContextModel {
 
   ScreenContextRequestState request_state_ = ScreenContextRequestState::kIdle;
 
-  base::ObserverList<AssistantScreenContextModelObserver>::Unchecked observers_;
+  base::ObserverList<AssistantScreenContextModelObserver> observers_;
 
   DISALLOW_COPY_AND_ASSIGN(AssistantScreenContextModel);
 };

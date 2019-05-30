@@ -6,14 +6,14 @@
  * @fileoverview This implements a combobutton control.
  * TODO(yawano): Migrate combobutton to Polymer element.
  */
-cr.define('cr.ui', function() {
+cr.define('cr.ui', () => {
   /**
    * Creates a new combobutton element.
    * @param {Object=} opt_propertyBag Optional properties.
    * @constructor
    * @extends {cr.ui.MenuButton}
    */
-  var ComboButton = cr.ui.define(cr.ui.MenuButton);
+  const ComboButton = cr.ui.define(cr.ui.MenuButton);
 
   ComboButton.prototype = {
     __proto__: cr.ui.MenuButton.prototype,
@@ -30,11 +30,12 @@ cr.define('cr.ui', function() {
 
     addDropDownItem: function(item) {
       this.multiple = true;
-      var menuitem = this.menu.addMenuItem(item);
+      const menuitem = this.menu.addMenuItem(item);
 
       // If menu is files-menu, decorate menu item as FilesMenuItem.
-      if (this.menu.classList.contains('files-menu'))
+      if (this.menu.classList.contains('files-menu')) {
         cr.ui.decorate(menuitem, cr.ui.FilesMenuItem);
+      }
 
       menuitem.data = item;
       if (item.iconType) {
@@ -73,7 +74,7 @@ cr.define('cr.ui', function() {
 
       this.classList.add('combobutton');
 
-      var buttonLayer = this.ownerDocument.createElement('div');
+      const buttonLayer = this.ownerDocument.createElement('div');
       buttonLayer.classList.add('button');
       this.appendChild(buttonLayer);
 
@@ -81,7 +82,7 @@ cr.define('cr.ui', function() {
       this.actionNode_.classList.add('action');
       buttonLayer.appendChild(this.actionNode_);
 
-      var triggerIcon = this.ownerDocument.createElement('iron-icon');
+      const triggerIcon = this.ownerDocument.createElement('iron-icon');
       triggerIcon.setAttribute('icon', 'files:arrow-drop-down');
       this.trigger_ = this.ownerDocument.createElement('div');
       this.trigger_.classList.add('trigger');
@@ -89,7 +90,7 @@ cr.define('cr.ui', function() {
 
       buttonLayer.appendChild(this.trigger_);
 
-      var ripplesLayer = this.ownerDocument.createElement('div');
+      const ripplesLayer = this.ownerDocument.createElement('div');
       ripplesLayer.classList.add('ripples');
       this.appendChild(ripplesLayer);
 
@@ -126,8 +127,9 @@ cr.define('cr.ui', function() {
       switch (e.key) {
         case 'ArrowDown':
         case 'ArrowUp':
-          if (!this.isMenuShown())
+          if (!this.isMenuShown()) {
             this.showMenu(false);
+          }
           e.preventDefault();
           break;
         case 'Escape': // Maybe this is remote desktop playing a prank?
@@ -169,7 +171,7 @@ cr.define('cr.ui', function() {
     },
 
     dispatchSelectEvent: function(item) {
-      var selectEvent = new Event('select');
+      const selectEvent = new Event('select');
       selectEvent.item = item;
       this.dispatchEvent(selectEvent);
     }

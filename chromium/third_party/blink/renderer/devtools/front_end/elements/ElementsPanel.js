@@ -271,6 +271,7 @@ Elements.ElementsPanel = class extends UI.Panel {
     if (this._popoverHelper)
       this._popoverHelper.hidePopover();
     super.willHide();
+    UI.context.setFlavor(Elements.ElementsPanel, null);
   }
 
   /**
@@ -647,16 +648,15 @@ Elements.ElementsPanel = class extends UI.Panel {
   /**
    * @param {!SDK.DOMNode} node
    * @param {boolean} focus
+   * @param {boolean=} omitHighlight
    * @return {!Promise}
    */
-  revealAndSelectNode(node, focus) {
-    if (Elements.inspectElementModeController && Elements.inspectElementModeController.isInInspectElementMode())
-      Elements.inspectElementModeController.stopInspection();
-
+  revealAndSelectNode(node, focus, omitHighlight) {
     this._omitDefaultSelection = true;
 
     node = Common.moduleSetting('showUAShadowDOM').get() ? node : this._leaveUserAgentShadowDOM(node);
-    node.highlightForTwoSeconds();
+    if (!omitHighlight)
+      node.highlightForTwoSeconds();
 
     return UI.viewManager.showView('elements', false, !focus).then(() => {
       this.selectDOMNode(node, focus);
@@ -932,14 +932,10 @@ Elements.ElementsActionDelegate = class {
         treeOutline.toggleEditAsHTML(node);
         return true;
       case 'elements.undo':
-        if (UI.isEditing())
-          return false;
         SDK.domModelUndoStack.undo();
         Elements.ElementsPanel.instance()._stylesWidget.forceUpdate();
         return true;
       case 'elements.redo':
-        if (UI.isEditing())
-          return false;
         SDK.domModelUndoStack.redo();
         Elements.ElementsPanel.instance()._stylesWidget.forceUpdate();
         return true;

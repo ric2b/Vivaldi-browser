@@ -18,15 +18,16 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event_impl.h"
 #include "base/trace_event/tracing_agent.h"
 #include "components/tracing/common/trace_startup_config.h"
+#include "content/browser/devtools/devtools_agent_host_impl.h"
 #include "content/browser/devtools/devtools_frame_trace_recorder.h"
 #include "content/browser/devtools/devtools_io_context.h"
-#include "content/browser/devtools/devtools_session.h"
 #include "content/browser/devtools/devtools_stream_file.h"
 #include "content/browser/devtools/devtools_traceable_screenshot.h"
 #include "content/browser/devtools/devtools_video_consumer.h"
@@ -37,6 +38,7 @@
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/tracing/tracing_controller_impl.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/memory_instrumentation.h"
 #include "services/tracing/public/mojom/constants.mojom.h"
@@ -134,8 +136,8 @@ class DevToolsStreamEndpoint : public TracingController::TraceDataEndpoint {
 
   void ReceiveTraceChunk(std::unique_ptr<std::string> chunk) override {
     if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-      BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE,
+      base::PostTaskWithTraits(
+          FROM_HERE, {BrowserThread::UI},
           base::BindOnce(&DevToolsStreamEndpoint::ReceiveTraceChunk, this,
                          std::move(chunk)));
       return;
@@ -147,8 +149,8 @@ class DevToolsStreamEndpoint : public TracingController::TraceDataEndpoint {
   void ReceiveTraceFinalContents(
       std::unique_ptr<const base::DictionaryValue> metadata) override {
     if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-      BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE,
+      base::PostTaskWithTraits(
+          FROM_HERE, {BrowserThread::UI},
           base::BindOnce(&DevToolsStreamEndpoint::ReceiveTraceFinalContents,
                          this, std::move(metadata)));
       return;
@@ -209,13 +211,16 @@ void FillFrameData(base::trace_event::TracedValue* data,
 }  // namespace
 
 TracingHandler::TracingHandler(FrameTreeNode* frame_tree_node_,
-                               DevToolsIOContext* io_context)
+                               DevToolsIOContext* io_context,
+                               bool use_binary_protocol)
     : DevToolsDomainHandler(Tracing::Metainfo::domainName),
+      use_binary_protocol_(use_binary_protocol),
       io_context_(io_context),
       frame_tree_node_(frame_tree_node_),
       did_initiate_recording_(false),
       return_as_stream_(false),
       gzip_compression_(false),
+      buffer_usage_reporting_interval_(0),
       weak_factory_(this) {
   bool use_video_capture_api = true;
 #ifdef OS_ANDROID
@@ -235,8 +240,7 @@ TracingHandler::~TracingHandler() = default;
 // static
 std::vector<TracingHandler*> TracingHandler::ForAgentHost(
     DevToolsAgentHostImpl* host) {
-  return DevToolsSession::HandlersForAgentHost<TracingHandler>(
-      host, Tracing::Metainfo::domainName);
+  return host->HandlersByName<TracingHandler>(Tracing::Metainfo::domainName);
 }
 
 void TracingHandler::SetRenderer(int process_host_id,
@@ -275,7 +279,12 @@ void TracingHandler::OnTraceDataCollected(
   message.append(valid_trace_fragment.c_str() +
                  trace_data_buffer_state_.offset);
   message += "] } }";
-  frontend_->sendRawNotification(message);
+  if (use_binary_protocol_) {
+    auto parsed = protocol::StringUtil::parseMessage(message, false);
+    frontend_->sendRawNotification(parsed->serializeToBinary());
+  } else {
+    frontend_->sendRawNotification(std::move(message));
+  }
 }
 
 void TracingHandler::OnTraceComplete() {
@@ -389,8 +398,8 @@ void TracingHandler::Start(Maybe<std::string> categories,
   did_initiate_recording_ = true;
   return_as_stream_ = return_as_stream;
   gzip_compression_ = gzip_compression;
-  if (buffer_usage_reporting_interval.isJust())
-    SetupTimer(buffer_usage_reporting_interval.fromJust());
+  buffer_usage_reporting_interval_ =
+      buffer_usage_reporting_interval.fromMaybe(0);
 
   trace_config_ = base::trace_event::TraceConfig();
   if (config.isJust()) {
@@ -406,8 +415,8 @@ void TracingHandler::Start(Maybe<std::string> categories,
   }
 
   // GPU process id can only be retrieved on IO thread. Do some thread hopping.
-  BrowserThread::PostTaskAndReplyWithResult(
-      BrowserThread::IO, FROM_HERE, base::BindOnce([]() {
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, {BrowserThread::IO}, base::BindOnce([]() {
         GpuProcessHost* gpu_process_host =
             GpuProcessHost::Get(GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
                                 /* force_create */ false);
@@ -431,9 +440,9 @@ void TracingHandler::StartTracingWithGpuPid(
   SetupProcessFilter(gpu_pid, nullptr);
 
   TracingController::GetInstance()->StartTracing(
-      trace_config_, base::BindRepeating(&TracingHandler::OnRecordingEnabled,
-                                         weak_factory_.GetWeakPtr(),
-                                         base::Passed(std::move(callback))));
+      trace_config_,
+      base::BindOnce(&TracingHandler::OnRecordingEnabled,
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void TracingHandler::SetupProcessFilter(
@@ -484,7 +493,7 @@ void TracingHandler::OnProcessReady(RenderProcessHost* process_host) {
       base::trace_event::TraceConfig::ProcessFilterConfig(
           included_process_ids));
   TracingController::GetInstance()->StartTracing(
-      trace_config_, base::RepeatingCallback<void()>());
+      trace_config_, TracingController::StartTracingDoneCallback());
 }
 
 Response TracingHandler::End() {
@@ -518,9 +527,8 @@ Response TracingHandler::End() {
 void TracingHandler::GetCategories(
     std::unique_ptr<GetCategoriesCallback> callback) {
   TracingController::GetInstance()->GetCategories(
-      base::Bind(&TracingHandler::OnCategoriesReceived,
-                 weak_factory_.GetWeakPtr(),
-                 base::Passed(std::move(callback))));
+      base::BindOnce(&TracingHandler::OnCategoriesReceived,
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void TracingHandler::OnRecordingEnabled(
@@ -533,6 +541,8 @@ void TracingHandler::OnRecordingEnabled(
 
   EmitFrameTree();
   callback->sendSuccess();
+
+  SetupTimer(buffer_usage_reporting_interval_);
 
   bool screenshot_enabled;
   TRACE_EVENT_CATEGORY_GROUP_ENABLED(
@@ -573,8 +583,8 @@ void TracingHandler::RequestMemoryDump(
   }
 
   auto on_memory_dump_finished =
-      base::Bind(&TracingHandler::OnMemoryDumpFinished,
-                 weak_factory_.GetWeakPtr(), base::Passed(std::move(callback)));
+      base::BindOnce(&TracingHandler::OnMemoryDumpFinished,
+                     weak_factory_.GetWeakPtr(), std::move(callback));
   memory_instrumentation::MemoryInstrumentation::GetInstance()
       ->RequestGlobalDumpAndAppendToTrace(
           base::trace_event::MemoryDumpType::EXPLICITLY_TRIGGERED,
@@ -684,7 +694,7 @@ void TracingHandler::ReadyToCommitNavigation(
   SetupProcessFilter(base::kNullProcessId,
                      navigation_handle->GetRenderFrameHost());
   TracingController::GetInstance()->StartTracing(
-      trace_config_, base::RepeatingCallback<void()>());
+      trace_config_, TracingController::StartTracingDoneCallback());
 }
 
 void TracingHandler::FrameDeleted(RenderFrameHostImpl* frame_host) {

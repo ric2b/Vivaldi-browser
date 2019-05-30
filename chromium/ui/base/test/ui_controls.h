@@ -34,11 +34,6 @@ namespace ui_controls {
 // Note: Windows does not currently do anything with the |window| argument for
 // these functions, so passing NULL is ok.
 
-// Send a key press with/without modifier keys.
-//
-// If you're writing a test chances are you want the variant in ui_test_utils.
-// See it for details.
-
 // Per the above comment, these methods can only be called from non-sharded test
 // suites. This method ensures that they're not accidently called by sharded
 // tests.
@@ -48,6 +43,10 @@ void EnableUIControls();
 bool IsUIControlsEnabled();
 #endif
 
+// Send a key press with/without modifier keys.
+//
+// If you're writing a test chances are you want the variant in ui_test_utils.
+// See it for details.
 bool SendKeyPress(gfx::NativeWindow window,
                   ui::KeyboardCode key,
                   bool control,
@@ -118,6 +117,17 @@ bool SendMouseClick(MouseButton type);
 // pointers, |screen_x| and |screen_y| are the screen coordinates of a touch
 // pointer.
 bool SendTouchEvents(int action, int num, int screen_x, int screen_y);
+#elif defined(OS_CHROMEOS)
+// Sends a TouchEvent to the window system. |action| is a bitmask of the
+// TouchType constants that indicates what events are generated, |id| identifies
+// the touch point.
+// TODO(mukai): consolidate this interface with the Windows SendTouchEvents.
+bool SendTouchEvents(int action, int id, int x, int y);
+bool SendTouchEventsNotifyWhenDone(int action,
+                                   int id,
+                                   int x,
+                                   int y,
+                                   base::OnceClosure task);
 #endif
 
 #if defined(USE_AURA)

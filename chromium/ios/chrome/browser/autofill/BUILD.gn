@@ -7,15 +7,16 @@ source_set("autofill") {
   sources = [
     "address_normalizer_factory.cc",
     "address_normalizer_factory.h",
+    "autocomplete_history_manager_factory.cc",
+    "autocomplete_history_manager_factory.h",
+    "autofill_profile_validator_factory.cc",
+    "autofill_profile_validator_factory.h",
     "form_input_accessory_consumer.h",
     "form_input_accessory_view.h",
     "form_input_accessory_view.mm",
     "form_input_accessory_view_controller.h",
     "form_input_accessory_view_controller.mm",
-    "form_input_accessory_view_delegate.h",
-    "form_input_accessory_view_handler.h",
-    "form_input_accessory_view_handler.mm",
-    "form_input_accessory_view_provider.h",
+    "form_input_suggestions_provider.h",
     "form_suggestion_controller.h",
     "form_suggestion_controller.mm",
     "form_suggestion_label.h",
@@ -24,9 +25,12 @@ source_set("autofill") {
     "form_suggestion_tab_helper.mm",
     "form_suggestion_view.h",
     "form_suggestion_view.mm",
-    "form_suggestion_view_client.h",
+    "legacy_strike_database_factory.cc",
+    "legacy_strike_database_factory.h",
     "personal_data_manager_factory.cc",
     "personal_data_manager_factory.h",
+    "strike_database_factory.cc",
+    "strike_database_factory.h",
     "validation_rules_storage_factory.cc",
     "validation_rules_storage_factory.h",
   ]
@@ -52,18 +56,21 @@ source_set("autofill") {
     "//base:i18n",
     "//components/autofill/core/browser",
     "//components/autofill/ios/browser",
+    "//components/autofill/ios/form_util",
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
     "//components/prefs",
-    "//components/signin/core/browser",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/history",
     "//ios/chrome/browser/passwords:passwords_generation_utils",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui/autofill/manual_fill:manual_fill_ui",
     "//ios/chrome/browser/ui/image_util",
     "//ios/web",
+    "//third_party/leveldatabase",
     "//third_party/libaddressinput",
     "//ui/base",
     "//url",
@@ -74,7 +81,17 @@ source_set("autofill") {
 source_set("autofill_shared") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
-    "form_input_accessory_view_provider.h",
+    "form_input_accessory_view_handler.h",
+    "form_input_accessory_view_handler.mm",
+    "form_input_navigator.h",
+    "form_input_suggestions_provider.h",
+    "form_suggestion_client.h",
+  ]
+  deps = [
+    "//base",
+    "//components/autofill/core/browser",
+    "//components/autofill/ios/browser",
+    "//ios/chrome/browser/ui",
   ]
   libs = [ "UIKit.framework" ]
 }
@@ -82,8 +99,6 @@ source_set("autofill_shared") {
 source_set("autofill_internal") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
-    "autofill_controller.h",
-    "autofill_controller.mm",
     "autofill_tab_helper.h",
     "autofill_tab_helper.mm",
   ]
@@ -104,6 +119,7 @@ source_set("autofill_internal") {
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/ui/autofill",
     "//ios/web",
+    "//third_party/leveldatabase",
     "//ui/gfx/geometry",
     "//url",
   ]
@@ -142,6 +158,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/ssl",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/autofill",
+    "//ios/chrome/browser/ui/coordinators:chrome_coordinators",
     "//ios/chrome/browser/ui/settings:test_support",
     "//ios/chrome/browser/web:test_support",
     "//ios/chrome/browser/web:web_internal",
@@ -149,6 +166,7 @@ source_set("unit_tests") {
     "//ios/web",
     "//ios/web/public/test",
     "//testing/gtest",
+    "//third_party/leveldatabase",
     "//third_party/ocmock",
     "//ui/base:test_support",
   ]
@@ -308,6 +326,9 @@ bundle_data("unit_tests_bundle_data") {
     "//components/test/data/autofill/heuristics/input/149_checkout_qvc.com_non_hidden.html",
     "//components/test/data/autofill/heuristics/input/150_checkout_venus.com_search_field.html",
     "//components/test/data/autofill/heuristics/input/151_ticketmaster.com.html",
+    "//components/test/data/autofill/heuristics/input/153_fmm-en_inm.gob.mx.html",
+    "//components/test/data/autofill/heuristics/input/154_fmm-es_inm.gob.mx.html",
+    "//components/test/data/autofill/heuristics/input/155_fmm-ja_inm.gob.mx.html",
     "//components/test/data/autofill/heuristics/output/000_i18n_de.out",
     "//components/test/data/autofill/heuristics/output/001_i18n_de2.out",
     "//components/test/data/autofill/heuristics/output/002_i18n_en.out",
@@ -460,6 +481,9 @@ bundle_data("unit_tests_bundle_data") {
     "//components/test/data/autofill/heuristics/output/149_checkout_qvc.com_non_hidden.out",
     "//components/test/data/autofill/heuristics/output/150_checkout_venus.com_search_field.out",
     "//components/test/data/autofill/heuristics/output/151_ticketmaster.com.out",
+    "//components/test/data/autofill/heuristics/output/153_fmm-en_inm.gob.mx.out",
+    "//components/test/data/autofill/heuristics/output/154_fmm-es_inm.gob.mx.out",
+    "//components/test/data/autofill/heuristics/output/155_fmm-ja_inm.gob.mx.out",
   ]
   outputs = [
     "{{bundle_resources_dir}}/" +
@@ -479,6 +503,7 @@ source_set("eg_tests") {
     "//base/test:test_support",
     "//components/autofill/ios/browser:browser",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/autofill:autofill_shared",
     "//ios/chrome/browser/ui",
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/earl_grey:test_support",

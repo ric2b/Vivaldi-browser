@@ -13,13 +13,12 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "crypto/ec_private_key.h"
 #include "crypto/ec_signature_creator.h"
 #include "net/base/completion_once_callback.h"
-#include "net/base/proxy_delegate.h"
 #include "net/base/proxy_server.h"
 #include "net/base/request_priority.h"
 #include "net/base/test_completion_callback.h"
@@ -33,11 +32,17 @@
 #include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/socket/socket_test_util.h"
 #include "net/spdy/spdy_session.h"
+#include "net/spdy/spdy_session_pool.h"
 #include "net/ssl/ssl_config_service_defaults.h"
-#include "net/third_party/spdy/core/spdy_protocol.h"
+#include "net/third_party/quiche/src/spdy/core/spdy_protocol.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_storage.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if BUILDFLAG(ENABLE_REPORTING)
+#include "net/network_error_logging/network_error_logging_service.h"
+#include "net/reporting/reporting_service.h"
+#endif
 
 class GURL;
 
@@ -47,9 +52,9 @@ class CTVerifier;
 class CTPolicyEnforcer;
 class HashValue;
 class HostPortPair;
+class HostResolver;
 class NetLogWithSource;
 class SpdySessionKey;
-class SpdySessionPool;
 class SpdyStream;
 class SpdyStreamRequest;
 class TransportSecurityState;
@@ -58,7 +63,7 @@ class TransportSecurityState;
 // data frames.
 const char kDefaultUrl[] = "https://www.example.org/";
 const char kUploadData[] = "hello!";
-const int kUploadDataSize = arraysize(kUploadData)-1;
+const int kUploadDataSize = base::size(kUploadData) - 1;
 
 // While HTTP/2 protocol defines default SETTINGS_MAX_HEADER_LIST_SIZE_FOR_TEST
 // to be unlimited, BufferedSpdyFramer constructor requires a value.
@@ -179,6 +184,11 @@ struct SpdySessionDependencies {
 
   ~SpdySessionDependencies();
 
+  HostResolver* GetHostResolver() {
+    return alternate_host_resolver ? alternate_host_resolver.get()
+                                   : host_resolver.get();
+  }
+
   static std::unique_ptr<HttpNetworkSession> SpdyCreateSession(
       SpdySessionDependencies* session_deps);
 
@@ -194,6 +204,8 @@ struct SpdySessionDependencies {
 
   // NOTE: host_resolver must be ordered before http_auth_handler_factory.
   std::unique_ptr<MockHostResolverBase> host_resolver;
+  // For using a HostResolver not derived from MockHostResolverBase.
+  std::unique_ptr<HostResolver> alternate_host_resolver;
   std::unique_ptr<CertVerifier> cert_verifier;
   std::unique_ptr<ChannelIDService> channel_id_service;
   std::unique_ptr<TransportSecurityState> transport_security_state;
@@ -204,6 +216,10 @@ struct SpdySessionDependencies {
   std::unique_ptr<MockClientSocketFactory> socket_factory;
   std::unique_ptr<HttpAuthHandlerFactory> http_auth_handler_factory;
   std::unique_ptr<HttpServerPropertiesImpl> http_server_properties;
+#if BUILDFLAG(ENABLE_REPORTING)
+  std::unique_ptr<ReportingService> reporting_service;
+  std::unique_ptr<NetworkErrorLoggingService> network_error_logging_service;
+#endif
   bool enable_ip_pooling;
   bool enable_ping;
   bool enable_user_alternate_protocol_ports;
@@ -212,9 +228,9 @@ struct SpdySessionDependencies {
   size_t session_max_recv_window_size;
   spdy::SettingsMap http2_settings;
   SpdySession::TimeFunc time_func;
-  std::unique_ptr<ProxyDelegate> proxy_delegate;
   bool enable_http2_alternative_service;
   bool enable_websocket_over_http2;
+  base::Optional<SpdySessionPool::GreasedHttp2Frame> greased_http2_frame;
   NetLog* net_log;
   bool http_09_on_non_default_ports_enabled;
   bool disable_idle_sockets_close_on_memory_pressure;
@@ -521,16 +537,6 @@ namespace test {
 
 // Returns a SHA1 HashValue in which each byte has the value |label|.
 HashValue GetTestHashValue(uint8_t label);
-
-// Returns SHA1 pinning header for the of the base64 encoding of
-// GetTestHashValue(|label|).
-std::string GetTestPin(uint8_t label);
-
-// Adds a pin for |host| to |state|.
-void AddPin(TransportSecurityState* state,
-            const std::string& host,
-            uint8_t primary_label,
-            uint8_t backup_label);
 
 // A test implementation of ServerPushDelegate that caches all the pushed
 // request and provides a interface to cancel the push given url.

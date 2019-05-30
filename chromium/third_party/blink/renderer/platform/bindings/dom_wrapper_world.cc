@@ -54,11 +54,6 @@ static WorldMap& GetWorldMap() {
 }
 
 #if DCHECK_IS_ON()
-static bool IsIsolatedWorldId(int world_id) {
-  return DOMWrapperWorld::kMainWorldId < world_id &&
-         world_id < DOMWrapperWorld::kIsolatedWorldIdLimit;
-}
-
 static bool IsMainWorldId(int world_id) {
   return world_id == DOMWrapperWorld::kMainWorldId;
 }
@@ -85,7 +80,6 @@ DOMWrapperWorld::DOMWrapperWorld(v8::Isolate* isolate,
       break;
     case WorldType::kIsolated:
     case WorldType::kInspectorIsolated:
-    case WorldType::kGarbageCollector:
     case WorldType::kRegExp:
     case WorldType::kTesting:
     case WorldType::kForV8ContextSnapshotNonMain:
@@ -139,7 +133,6 @@ DOMWrapperWorld::~DOMWrapperWorld() {
 }
 
 void DOMWrapperWorld::Dispose() {
-  dom_object_holders_.clear();
   dom_data_store_.reset();
   DCHECK(GetWorldMap().Contains(world_id_));
   GetWorldMap().erase(world_id_);
@@ -213,55 +206,6 @@ void DOMWrapperWorld::SetNonMainWorldHumanReadableName(
   IsolatedWorldHumanReadableNames().Set(world_id, human_readable_name);
 }
 
-typedef HashMap<int, bool> IsolatedWorldContentSecurityPolicyMap;
-static IsolatedWorldContentSecurityPolicyMap&
-IsolatedWorldContentSecurityPolicies() {
-  DCHECK(IsMainThread());
-  DEFINE_STATIC_LOCAL(IsolatedWorldContentSecurityPolicyMap, map, ());
-  return map;
-}
-
-bool DOMWrapperWorld::IsolatedWorldHasContentSecurityPolicy() {
-  DCHECK(this->IsIsolatedWorld());
-  IsolatedWorldContentSecurityPolicyMap& policies =
-      IsolatedWorldContentSecurityPolicies();
-  IsolatedWorldContentSecurityPolicyMap::iterator it =
-      policies.find(GetWorldId());
-  return it == policies.end() ? false : it->value;
-}
-
-void DOMWrapperWorld::SetIsolatedWorldContentSecurityPolicy(
-    int world_id,
-    const String& policy) {
-#if DCHECK_IS_ON()
-  DCHECK(IsIsolatedWorldId(world_id));
-#endif
-  if (!policy.IsEmpty())
-    IsolatedWorldContentSecurityPolicies().Set(world_id, true);
-  else
-    IsolatedWorldContentSecurityPolicies().erase(world_id);
-}
-
-void DOMWrapperWorld::RegisterDOMObjectHolderInternal(
-    std::unique_ptr<DOMObjectHolderBase> holder_base) {
-  DCHECK(!dom_object_holders_.Contains(holder_base.get()));
-  holder_base->SetWorld(this);
-  holder_base->SetWeak(&DOMWrapperWorld::WeakCallbackForDOMObjectHolder);
-  dom_object_holders_.insert(std::move(holder_base));
-}
-
-void DOMWrapperWorld::UnregisterDOMObjectHolder(
-    DOMObjectHolderBase* holder_base) {
-  DCHECK(dom_object_holders_.Contains(holder_base));
-  dom_object_holders_.erase(holder_base);
-}
-
-void DOMWrapperWorld::WeakCallbackForDOMObjectHolder(
-    const v8::WeakCallbackInfo<DOMObjectHolderBase>& data) {
-  DOMObjectHolderBase* holder_base = data.GetParameter();
-  holder_base->World()->UnregisterDOMObjectHolder(holder_base);
-}
-
 // static
 int DOMWrapperWorld::GenerateWorldIdForType(WorldType world_type) {
   DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<int>, next_world_id, ());
@@ -284,7 +228,6 @@ int DOMWrapperWorld::GenerateWorldIdForType(WorldType world_type) {
         return WorldId::kInvalidWorldId;
       return next_devtools_isolated_world_id++;
     }
-    case WorldType::kGarbageCollector:
     case WorldType::kRegExp:
     case WorldType::kTesting:
     case WorldType::kForV8ContextSnapshotNonMain:

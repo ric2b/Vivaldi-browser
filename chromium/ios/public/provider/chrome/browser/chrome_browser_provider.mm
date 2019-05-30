@@ -73,10 +73,6 @@ UITextField<TextFieldStyling>* ChromeBrowserProvider::CreateStyledTextField(
   return nil;
 }
 
-id<AppRatingPrompt> ChromeBrowserProvider::CreateAppRatingPrompt() const {
-  return nil;
-}
-
 void ChromeBrowserProvider::InitializeCastService(
     TabModel* main_tab_model) const {}
 
@@ -110,20 +106,18 @@ SpotlightProvider* ChromeBrowserProvider::GetSpotlightProvider() const {
   return nullptr;
 }
 
-ExternalSearchProvider* ChromeBrowserProvider::GetExternalSearchProvider()
-    const {
+FullscreenProvider* ChromeBrowserProvider::GetFullscreenProvider() const {
   return nullptr;
 }
 
-FullscreenProvider* ChromeBrowserProvider::GetFullscreenProvider() const {
+BrowserURLRewriterProvider*
+ChromeBrowserProvider::GetBrowserURLRewriterProvider() const {
   return nullptr;
 }
 
 MailtoHandlerProvider* ChromeBrowserProvider::GetMailtoHandlerProvider() const {
   return mailto_handler_provider_.get();
 }
-
-void ChromeBrowserProvider::CheckForFirstPartyApps() const {}
 
 BrandedImageProvider* ChromeBrowserProvider::GetBrandedImageProvider() const {
   return nullptr;

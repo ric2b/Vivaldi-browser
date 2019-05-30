@@ -28,16 +28,19 @@
 
 #include "device/gamepad/public/cpp/gamepads.h"
 #include "third_party/blink/renderer/modules/gamepad/gamepad.h"
+#include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 
 namespace blink {
 
-class GamepadList final : public ScriptWrappable {
+class MODULES_EXPORT GamepadList final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static GamepadList* Create() { return new GamepadList(); }
+  static GamepadList* Create() { return MakeGarbageCollected<GamepadList>(); }
+
+  GamepadList();
 
   void Set(unsigned index, Gamepad*);
   Gamepad* item(unsigned index);
@@ -46,7 +49,6 @@ class GamepadList final : public ScriptWrappable {
   void Trace(blink::Visitor*) override;
 
  private:
-  GamepadList();
   Member<Gamepad> items_[device::Gamepads::kItemsLengthCap];
 };
 

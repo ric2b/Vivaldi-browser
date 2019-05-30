@@ -87,10 +87,10 @@ class PLATFORM_EXPORT SchemeRegistry {
   static bool ShouldTreatURLSchemeAsNotAllowingJavascriptURLs(
       const String& scheme);
 
-  static bool ShouldTreatURLSchemeAsCORSEnabled(const String& scheme);
+  static bool ShouldTreatURLSchemeAsCorsEnabled(const String& scheme);
 
   // Serialize the registered schemes in a comma-separated list.
-  static String ListOfCORSEnabledURLSchemes();
+  static String ListOfCorsEnabledURLSchemes();
 
   // "Legacy" schemes (e.g. 'ftp:', 'gopher:') which we might want to treat
   // differently from "webby" schemes.
@@ -107,6 +107,9 @@ class PLATFORM_EXPORT SchemeRegistry {
   // HTTP-like schemes that are treated as supporting the Fetch API.
   static void RegisterURLSchemeAsSupportingFetchAPI(const String& scheme);
   static bool ShouldTreatURLSchemeAsSupportingFetchAPI(const String& scheme);
+
+  // https://fetch.spec.whatwg.org/#fetch-scheme
+  static bool IsFetchScheme(const String& scheme);
 
   // Schemes which override the first-/third-party checks on a Document.
   static void RegisterURLSchemeAsFirstPartyWhenTopLevel(const String& scheme);

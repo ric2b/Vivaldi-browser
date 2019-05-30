@@ -6,7 +6,7 @@
 
 #include <stddef.h>
 
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/values.h"
 #include "components/sync/protocol/app_notification_specifics.pb.h"
@@ -21,6 +21,7 @@
 #include "components/sync/protocol/preference_specifics.pb.h"
 #include "components/sync/protocol/reading_list_specifics.pb.h"
 #include "components/sync/protocol/search_engine_specifics.pb.h"
+#include "components/sync/protocol/send_tab_to_self_specifics.pb.h"
 #include "components/sync/protocol/session_specifics.pb.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/protocol/theme_specifics.pb.h"
@@ -30,24 +31,24 @@
 namespace syncer {
 
 struct ModelTypeInfo {
-  ModelType model_type;
+  const ModelType model_type;
   // Model Type notification string.
   // This needs to match the corresponding proto message name in sync.proto. It
   // is also used to identify the model type in the SyncModelType
   // histogram_suffix in histograms.xml. Must always be kept in sync.
-  const char* notification_type;
+  const char* const notification_type;
   // Root tag for Model Type
   // This should be the same as the model type but all lowercase.
-  const char* root_tag;
+  const char* const root_tag;
   // String value for Model Type
   // This should be the same as the model type but space separated and the
   // first letter of every word capitalized.
-  const char* model_type_string;
+  const char* const model_type_string;
   // Field number of the model type specifics in EntitySpecifics.
-  int specifics_field_number;
+  const int specifics_field_number;
   // Model type value from SyncModelTypes enum in enums.xml. Must always be in
   // sync with the enum.
-  int model_type_histogram_val;
+  const int model_type_histogram_val;
 };
 
 // Below struct entries are in the same order as their definition in the
@@ -93,16 +94,16 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
     {EXTENSION_SETTINGS, "EXTENSION_SETTING", "extension_settings",
      "Extension settings",
      sync_pb::EntitySpecifics::kExtensionSettingFieldNumber, 14},
-    {APP_NOTIFICATIONS, "APP_NOTIFICATION", "app_notifications",
+    {DEPRECATED_APP_NOTIFICATIONS, "APP_NOTIFICATION", "app_notifications",
      "App Notifications", sync_pb::EntitySpecifics::kAppNotificationFieldNumber,
      15},
     {HISTORY_DELETE_DIRECTIVES, "HISTORY_DELETE_DIRECTIVE",
      "history_delete_directives", "History Delete Directives",
      sync_pb::EntitySpecifics::kHistoryDeleteDirectiveFieldNumber, 16},
-    {SYNCED_NOTIFICATIONS, "SYNCED_NOTIFICATION", "synced_notifications",
-     "Synced Notifications",
+    {DEPRECATED_SYNCED_NOTIFICATIONS, "SYNCED_NOTIFICATION",
+     "synced_notifications", "Synced Notifications",
      sync_pb::EntitySpecifics::kSyncedNotificationFieldNumber, 20},
-    {SYNCED_NOTIFICATION_APP_INFO, "SYNCED_NOTIFICATION_APP_INFO",
+    {DEPRECATED_SYNCED_NOTIFICATION_APP_INFO, "SYNCED_NOTIFICATION_APP_INFO",
      "synced_notification_app_info", "Synced Notification App Info",
      sync_pb::EntitySpecifics::kSyncedNotificationAppInfoFieldNumber, 31},
     {DICTIONARY, "DICTIONARY", "dictionary", "Dictionary",
@@ -125,11 +126,11 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
     {DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS, "MANAGED_USER_SHARED_SETTING",
      "managed_user_shared_settings", "Managed User Shared Settings",
      sync_pb::EntitySpecifics::kManagedUserSharedSettingFieldNumber, 30},
-    {DEPRECATED_ARTICLES, "ARTICLE", "deprecated_articles",
-     "Deprecated Articles", sync_pb::EntitySpecifics::kArticleFieldNumber, 28},
+    {DEPRECATED_ARTICLES, "ARTICLE", "articles", "Articles",
+     sync_pb::EntitySpecifics::kArticleFieldNumber, 28},
     {APP_LIST, "APP_LIST", "app_list", "App List",
      sync_pb::EntitySpecifics::kAppListFieldNumber, 29},
-    {WIFI_CREDENTIALS, "WIFI_CREDENTIAL", "wifi_credentials",
+    {DEPRECATED_WIFI_CREDENTIALS, "WIFI_CREDENTIAL", "wifi_credentials",
      "WiFi Credentials", sync_pb::EntitySpecifics::kWifiCredentialFieldNumber,
      32},
     {SUPERVISED_USER_WHITELISTS, "MANAGED_USER_WHITELIST",
@@ -147,6 +148,11 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
      sync_pb::EntitySpecifics::kMountainShareFieldNumber, 40},
     {USER_CONSENTS, "USER_CONSENT", "user_consent", "User Consents",
      sync_pb::EntitySpecifics::kUserConsentFieldNumber, 41},
+    {SEND_TAB_TO_SELF, "SEND_TAB_TO_SELF", "send_tab_to_self",
+     "Send Tab To Self", sync_pb::EntitySpecifics::kSendTabToSelfFieldNumber,
+     42},
+    {SECURITY_EVENTS, "SECURITY_EVENT", "security_events", "Security Events",
+     sync_pb::EntitySpecifics::kSecurityEventFieldNumber, 43},
     {NOTES, "NOTES", "vivaldi_notes",
       "Notes", sync_pb::EntitySpecifics::kNotesFieldNumber, 300},
     // ---- Proxy types ----
@@ -158,14 +164,14 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
      sync_pb::EntitySpecifics::kExperimentsFieldNumber, 19},
 };
 
-static_assert(arraysize(kModelTypeInfoMap) == MODEL_TYPE_COUNT,
+static_assert(base::size(kModelTypeInfoMap) == MODEL_TYPE_COUNT,
               "kModelTypeInfoMap should have MODEL_TYPE_COUNT elements");
 
-static_assert(42 + 1 /* notes */ == syncer::MODEL_TYPE_COUNT,
+static_assert(44 + 1 /* notes */ == syncer::MODEL_TYPE_COUNT,
               "When adding a new type, update enum SyncModelTypes in enums.xml "
               "and suffix SyncModelType in histograms.xml.");
 
-static_assert(42 + 1 /* notes */ == syncer::MODEL_TYPE_COUNT,
+static_assert(44 + 1 /* notes */ == syncer::MODEL_TYPE_COUNT,
               "When adding a new type, update kAllocatorDumpNameWhitelist in "
               "base/trace_event/memory_infra_background_whitelist.cc.");
 
@@ -220,16 +226,16 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
     case EXTENSION_SETTINGS:
       specifics->mutable_extension_setting();
       break;
-    case APP_NOTIFICATIONS:
+    case DEPRECATED_APP_NOTIFICATIONS:
       specifics->mutable_app_notification();
       break;
     case HISTORY_DELETE_DIRECTIVES:
       specifics->mutable_history_delete_directive();
       break;
-    case SYNCED_NOTIFICATIONS:
+    case DEPRECATED_SYNCED_NOTIFICATIONS:
       specifics->mutable_synced_notification();
       break;
-    case SYNCED_NOTIFICATION_APP_INFO:
+    case DEPRECATED_SYNCED_NOTIFICATION_APP_INFO:
       specifics->mutable_synced_notification_app_info();
       break;
     case DICTIONARY:
@@ -262,7 +268,7 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
     case APP_LIST:
       specifics->mutable_app_list();
       break;
-    case WIFI_CREDENTIALS:
+    case DEPRECATED_WIFI_CREDENTIALS:
       specifics->mutable_wifi_credential();
       break;
     case SUPERVISED_USER_WHITELISTS:
@@ -280,11 +286,17 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
     case USER_EVENTS:
       specifics->mutable_user_event();
       break;
+    case SECURITY_EVENTS:
+      specifics->mutable_security_event();
+      break;
     case MOUNTAIN_SHARES:
       specifics->mutable_mountain_share();
       break;
     case USER_CONSENTS:
       specifics->mutable_user_consent();
+      break;
+    case SEND_TAB_TO_SELF:
+      specifics->mutable_send_tab_to_self();
       break;
     case PROXY_TABS:
       NOTREACHED() << "No default field value for " << ModelTypeToString(type);
@@ -353,7 +365,7 @@ ModelType GetModelType(const sync_pb::SyncEntity& sync_entity) {
 }
 
 ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
-  static_assert(42 + 1 /* notes */ == MODEL_TYPE_COUNT,
+  static_assert(44 + 1 /* notes */ == MODEL_TYPE_COUNT,
                 "When adding new protocol types, the following type lookup "
                 "logic must be updated.");
   if (specifics.has_bookmark())
@@ -387,13 +399,13 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
   if (specifics.has_extension_setting())
     return EXTENSION_SETTINGS;
   if (specifics.has_app_notification())
-    return APP_NOTIFICATIONS;
+    return DEPRECATED_APP_NOTIFICATIONS;
   if (specifics.has_history_delete_directive())
     return HISTORY_DELETE_DIRECTIVES;
   if (specifics.has_synced_notification())
-    return SYNCED_NOTIFICATIONS;
+    return DEPRECATED_SYNCED_NOTIFICATIONS;
   if (specifics.has_synced_notification_app_info())
-    return SYNCED_NOTIFICATION_APP_INFO;
+    return DEPRECATED_SYNCED_NOTIFICATION_APP_INFO;
   if (specifics.has_dictionary())
     return DICTIONARY;
   if (specifics.has_favicon_image())
@@ -415,7 +427,7 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
   if (specifics.has_app_list())
     return APP_LIST;
   if (specifics.has_wifi_credential())
-    return WIFI_CREDENTIALS;
+    return DEPRECATED_WIFI_CREDENTIALS;
   if (specifics.has_managed_user_whitelist())
     return SUPERVISED_USER_WHITELISTS;
   if (specifics.has_arc_package())
@@ -434,6 +446,10 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
     return NIGORI;
   if (specifics.has_experiments())
     return EXPERIMENTS;
+  if (specifics.has_send_tab_to_self())
+    return SEND_TAB_TO_SELF;
+  if (specifics.has_security_event())
+    return SECURITY_EVENTS;
 
   if (specifics.has_notes())
     return NOTES;
@@ -455,7 +471,7 @@ ModelTypeNameMap GetUserSelectableTypeNameMap() {
 }
 
 ModelTypeSet EncryptableUserTypes() {
-  static_assert(42 + 1  /*notes*/ == MODEL_TYPE_COUNT,
+  static_assert(44 + 1 /* notes */ == MODEL_TYPE_COUNT,
                 "If adding an unencryptable type, remove from "
                 "encryptable_user_types below.");
   ModelTypeSet encryptable_user_types = UserTypes();
@@ -464,10 +480,10 @@ ModelTypeSet EncryptableUserTypes() {
   // We never encrypt history delete directives.
   encryptable_user_types.Remove(HISTORY_DELETE_DIRECTIVES);
   // Synced notifications are not encrypted since the server must see changes.
-  encryptable_user_types.Remove(SYNCED_NOTIFICATIONS);
+  encryptable_user_types.Remove(DEPRECATED_SYNCED_NOTIFICATIONS);
   // Synced Notification App Info does not have private data, so it is not
   // encrypted.
-  encryptable_user_types.Remove(SYNCED_NOTIFICATION_APP_INFO);
+  encryptable_user_types.Remove(DEPRECATED_SYNCED_NOTIFICATION_APP_INFO);
   // Device info data is not encrypted because it might be synced before
   // encryption is ready.
   encryptable_user_types.Remove(DEVICE_INFO);
@@ -488,6 +504,7 @@ ModelTypeSet EncryptableUserTypes() {
   // server-side.
   encryptable_user_types.Remove(USER_EVENTS);
   encryptable_user_types.Remove(USER_CONSENTS);
+  encryptable_user_types.Remove(SECURITY_EVENTS);
   // Proxy types have no sync representation and are therefore not encrypted.
   // Note however that proxy types map to one or more protocol types, which
   // may or may not be encrypted themselves.
@@ -549,7 +566,7 @@ std::unique_ptr<base::Value> ModelTypeToValue(ModelType model_type) {
 ModelType ModelTypeFromString(const std::string& model_type_string) {
   if (model_type_string != "Unspecified" &&
       model_type_string != "Top Level Folder") {
-    for (size_t i = 0; i < arraysize(kModelTypeInfoMap); ++i) {
+    for (size_t i = 0; i < base::size(kModelTypeInfoMap); ++i) {
       if (kModelTypeInfoMap[i].model_type_string == model_type_string)
         return kModelTypeInfoMap[i].model_type;
     }
@@ -641,7 +658,7 @@ bool NotificationTypeToRealModelType(const std::string& notification_type,
     *model_type = UNSPECIFIED;
     return false;
   }
-  for (size_t i = 0; i < arraysize(kModelTypeInfoMap); ++i) {
+  for (size_t i = 0; i < base::size(kModelTypeInfoMap); ++i) {
     if (kModelTypeInfoMap[i].notification_type == notification_type) {
       *model_type = kModelTypeInfoMap[i].model_type;
       return true;

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/installable/installable_manager.h"
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -21,6 +22,11 @@
 using IconPurpose = blink::Manifest::ImageResource::Purpose;
 
 namespace {
+
+const char kInsecureOrigin[] = "http://www.google.com";
+const char kOtherInsecureOrigin[] = "http://maps.google.com";
+const char kUnsafeSecureOriginFlag[] =
+    "unsafely-treat-insecure-origin-as-secure";
 
 InstallableParams GetManifestParams() {
   InstallableParams params;
@@ -53,6 +59,14 @@ InstallableParams GetPrimaryIconAndBadgeIconParams() {
   return params;
 }
 
+InstallableParams GetPrimaryIconPreferMaskableParams() {
+  InstallableParams params = GetManifestParams();
+  params.valid_primary_icon = true;
+  params.prefer_maskable_icon = true;
+  params.wait_for_worker = true;
+  return params;
+}
+
 }  // anonymous namespace
 
 // Used only for testing pages with no service workers. This class will dispatch
@@ -66,7 +80,7 @@ class LazyWorkerInstallableManager : public InstallableManager {
   ~LazyWorkerInstallableManager() override {}
 
  protected:
-  void OnWaitingForServiceWorker() override { quit_closure_.Run(); };
+  void OnWaitingForServiceWorker() override { quit_closure_.Run(); }
 
  private:
   base::Closure quit_closure_;
@@ -106,6 +120,7 @@ class CallbackTester {
     primary_icon_url_ = data.primary_icon_url;
     if (data.primary_icon)
       primary_icon_.reset(new SkBitmap(*data.primary_icon));
+    has_maskable_primary_icon_ = data.has_maskable_primary_icon;
     badge_icon_url_ = data.badge_icon_url;
     if (data.badge_icon)
       badge_icon_.reset(new SkBitmap(*data.badge_icon));
@@ -119,6 +134,7 @@ class CallbackTester {
   const blink::Manifest& manifest() const { return manifest_; }
   const GURL& primary_icon_url() const { return primary_icon_url_; }
   const SkBitmap* primary_icon() const { return primary_icon_.get(); }
+  bool has_maskable_primary_icon() const { return has_maskable_primary_icon_; }
   const GURL& badge_icon_url() const { return badge_icon_url_; }
   const SkBitmap* badge_icon() const { return badge_icon_.get(); }
   bool valid_manifest() const { return valid_manifest_; }
@@ -131,6 +147,7 @@ class CallbackTester {
   blink::Manifest manifest_;
   GURL primary_icon_url_;
   std::unique_ptr<SkBitmap> primary_icon_;
+  bool has_maskable_primary_icon_;
   GURL badge_icon_url_;
   std::unique_ptr<SkBitmap> badge_icon_;
   bool valid_manifest_;
@@ -242,6 +259,13 @@ class InstallableManagerBrowserTest : public InProcessBrowserTest {
   }
 };
 
+class InstallableManagerWhitelistOriginBrowserTest
+    : public InstallableManagerBrowserTest {
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitchASCII(kUnsafeSecureOriginFlag, kInsecureOrigin);
+  }
+};
+
 IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
                        ManagerBeginsInEmptyState) {
   // Ensure that the InstallableManager starts off with everything null.
@@ -311,6 +335,7 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest, CheckNoManifest) {
   EXPECT_TRUE(tester->manifest_url().is_empty());
   EXPECT_TRUE(tester->primary_icon_url().is_empty());
   EXPECT_EQ(nullptr, tester->primary_icon());
+  EXPECT_FALSE(tester->has_maskable_primary_icon());
   EXPECT_FALSE(tester->valid_manifest());
   EXPECT_FALSE(tester->has_worker());
   EXPECT_TRUE(tester->badge_icon_url().is_empty());
@@ -353,6 +378,7 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest, CheckManifest404) {
   EXPECT_FALSE(tester->manifest_url().is_empty());
   EXPECT_TRUE(tester->primary_icon_url().is_empty());
   EXPECT_EQ(nullptr, tester->primary_icon());
+  EXPECT_FALSE(tester->has_maskable_primary_icon());
   EXPECT_FALSE(tester->valid_manifest());
   EXPECT_FALSE(tester->has_worker());
   EXPECT_TRUE(tester->badge_icon_url().is_empty());
@@ -375,6 +401,7 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest, CheckManifestOnly) {
 
   EXPECT_TRUE(tester->primary_icon_url().is_empty());
   EXPECT_EQ(nullptr, tester->primary_icon());
+  EXPECT_FALSE(tester->has_maskable_primary_icon());
   EXPECT_FALSE(tester->valid_manifest());
   EXPECT_FALSE(tester->has_worker());
   EXPECT_TRUE(tester->badge_icon_url().is_empty());
@@ -400,6 +427,7 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
 
   EXPECT_TRUE(tester->primary_icon_url().is_empty());
   EXPECT_EQ(nullptr, tester->primary_icon());
+  EXPECT_FALSE(tester->has_maskable_primary_icon());
   EXPECT_FALSE(tester->valid_manifest());
   EXPECT_FALSE(tester->has_worker());
   EXPECT_TRUE(tester->badge_icon_url().is_empty());
@@ -766,6 +794,92 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest, CheckWebapp) {
     EXPECT_EQ(NO_ERROR_DETECTED, manager->valid_manifest_error());
     EXPECT_EQ(NO_ERROR_DETECTED, manager->worker_error());
     EXPECT_TRUE(!manager->task_queue_.HasCurrent());
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest, CheckMaskableIcon) {
+  // Checks that InstallableManager chooses the correct primary icon when the
+  // manifest contains maskable icons.
+
+  // Checks that if a MASKABLE icon is specified, it is used as primary icon.
+  {
+    base::RunLoop run_loop;
+    std::unique_ptr<CallbackTester> tester(
+        new CallbackTester(run_loop.QuitClosure()));
+
+    NavigateAndRunInstallableManager(browser(), tester.get(),
+                                     GetPrimaryIconPreferMaskableParams(),
+                                     GetURLOfPageWithServiceWorkerAndManifest(
+                                         "/banners/manifest_maskable.json"));
+
+    run_loop.Run();
+
+    EXPECT_FALSE(tester->manifest().IsEmpty());
+    EXPECT_FALSE(tester->manifest_url().is_empty());
+
+    EXPECT_FALSE(tester->primary_icon_url().is_empty());
+    EXPECT_NE(nullptr, tester->primary_icon());
+    EXPECT_TRUE(tester->has_maskable_primary_icon());
+
+    EXPECT_FALSE(tester->valid_manifest());
+    EXPECT_FALSE(tester->has_worker());
+    EXPECT_TRUE(tester->badge_icon_url().is_empty());
+    EXPECT_EQ(nullptr, tester->badge_icon());
+    EXPECT_EQ(NO_ERROR_DETECTED, tester->error_code());
+  }
+
+  // Checks that we don't pick a MASKABLE icon if it was not requested.
+  {
+    base::RunLoop run_loop;
+    std::unique_ptr<CallbackTester> tester(
+        new CallbackTester(run_loop.QuitClosure()));
+
+    NavigateAndRunInstallableManager(browser(), tester.get(),
+                                     GetPrimaryIconParams(),
+                                     GetURLOfPageWithServiceWorkerAndManifest(
+                                         "/banners/manifest_maskable.json"));
+
+    run_loop.Run();
+
+    EXPECT_FALSE(tester->manifest().IsEmpty());
+    EXPECT_FALSE(tester->manifest_url().is_empty());
+
+    EXPECT_FALSE(tester->primary_icon_url().is_empty());
+    EXPECT_NE(nullptr, tester->primary_icon());
+    EXPECT_FALSE(tester->has_maskable_primary_icon());
+
+    EXPECT_FALSE(tester->valid_manifest());
+    EXPECT_FALSE(tester->has_worker());
+    EXPECT_TRUE(tester->badge_icon_url().is_empty());
+    EXPECT_EQ(nullptr, tester->badge_icon());
+    EXPECT_EQ(NO_ERROR_DETECTED, tester->error_code());
+  }
+
+  // Checks that we fall back to using an ANY icon if a MASKABLE icon is
+  // requested but not in the manifest.
+  {
+    base::RunLoop run_loop;
+    std::unique_ptr<CallbackTester> tester(
+        new CallbackTester(run_loop.QuitClosure()));
+
+    NavigateAndRunInstallableManager(browser(), tester.get(),
+                                     GetPrimaryIconPreferMaskableParams(),
+                                     "/banners/manifest_test_page.html");
+
+    run_loop.Run();
+
+    EXPECT_FALSE(tester->manifest().IsEmpty());
+    EXPECT_FALSE(tester->manifest_url().is_empty());
+
+    EXPECT_FALSE(tester->primary_icon_url().is_empty());
+    EXPECT_NE(nullptr, tester->primary_icon());
+    EXPECT_FALSE(tester->has_maskable_primary_icon());
+
+    EXPECT_FALSE(tester->valid_manifest());
+    EXPECT_FALSE(tester->has_worker());
+    EXPECT_TRUE(tester->badge_icon_url().is_empty());
+    EXPECT_EQ(nullptr, tester->badge_icon());
+    EXPECT_EQ(NO_ERROR_DETECTED, tester->error_code());
   }
 }
 
@@ -1218,6 +1332,30 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
   EXPECT_EQ(NOT_OFFLINE_CAPABLE, tester->error_code());
 }
 
+IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
+                       CheckPageWithNestedServiceWorkerCanBeInstalled) {
+  base::RunLoop run_loop;
+  std::unique_ptr<CallbackTester> tester(
+      new CallbackTester(run_loop.QuitClosure()));
+
+  NavigateAndRunInstallableManager(browser(), tester.get(), GetWebAppParams(),
+                                   "/banners/nested_sw_test_page.html");
+
+  RunInstallableManager(browser(), tester.get(), GetWebAppParams());
+  run_loop.Run();
+
+  EXPECT_FALSE(tester->manifest().IsEmpty());
+  EXPECT_FALSE(tester->manifest_url().is_empty());
+
+  EXPECT_FALSE(tester->primary_icon_url().is_empty());
+  EXPECT_NE(nullptr, tester->primary_icon());
+  EXPECT_TRUE(tester->valid_manifest());
+  EXPECT_TRUE(tester->has_worker());
+  EXPECT_TRUE(tester->badge_icon_url().is_empty());
+  EXPECT_EQ(nullptr, tester->badge_icon());
+  EXPECT_EQ(NO_ERROR_DETECTED, tester->error_code());
+}
+
 IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest, CheckDataUrlIcon) {
   // Verify that InstallableManager can handle data URL icons.
   base::RunLoop run_loop;
@@ -1411,4 +1549,15 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
               tester->manifest().short_name.string());
     EXPECT_EQ(NO_ERROR_DETECTED, tester->error_code());
   }
+}
+
+IN_PROC_BROWSER_TEST_F(InstallableManagerWhitelistOriginBrowserTest,
+                       SecureOriginCheckRespectsUnsafeFlag) {
+  // The whitelisted origin should be regarded as secure.
+  ui_test_utils::NavigateToURL(browser(), GURL(kInsecureOrigin));
+  EXPECT_TRUE(GetManager(browser())->IsContentSecureForTesting());
+
+  // While a non-whitelisted origin should not.
+  ui_test_utils::NavigateToURL(browser(), GURL(kOtherInsecureOrigin));
+  EXPECT_FALSE(GetManager(browser())->IsContentSecureForTesting());
 }

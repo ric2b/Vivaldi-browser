@@ -96,7 +96,7 @@ class TriggerManager {
   // |pref_service|. Only the fields needed by TriggerManager will be set.
   static SBErrorOptions GetSBErrorDisplayOptions(
       const PrefService& pref_service,
-      const content::WebContents& web_contents);
+      content::WebContents* web_contents);
 
   // Returns whether data collection can be started for the |trigger_type| based
   // on the settings specified in |error_display_options| as well as quota.
@@ -218,6 +218,7 @@ class TriggerManagerWebContentsHelper
 
   // Trigger Manager will be notified of any relevant WebContents events.
   TriggerManager* trigger_manager_;
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
 };
 
 }  // namespace safe_browsing

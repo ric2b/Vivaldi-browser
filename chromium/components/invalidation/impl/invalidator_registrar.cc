@@ -73,15 +73,14 @@ void InvalidatorRegistrar::UnregisterHandler(InvalidationHandler* handler) {
 TopicSet InvalidatorRegistrar::GetRegisteredTopics(
     InvalidationHandler* handler) const {
   DCHECK(thread_checker_.CalledOnValidThread());
-  HandlerTopicsMap::const_iterator lookup =
-      handler_to_topics_map_.find(handler);
+  auto lookup = handler_to_topics_map_.find(handler);
   return lookup != handler_to_topics_map_.end() ? lookup->second : TopicSet();
 }
 
 TopicSet InvalidatorRegistrar::GetAllRegisteredIds() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   TopicSet registered_ids;
-  for (HandlerTopicsMap::const_iterator it = handler_to_topics_map_.begin();
+  for (auto it = handler_to_topics_map_.begin();
        it != handler_to_topics_map_.end(); ++it) {
     registered_ids.insert(it->second.begin(), it->second.end());
   }
@@ -120,6 +119,11 @@ void InvalidatorRegistrar::UpdateInvalidatorState(InvalidatorState state) {
     observer.OnInvalidatorStateChange(state);
 }
 
+void InvalidatorRegistrar::UpdateInvalidatorId(const std::string& id) {
+  for (auto& observer : handlers_)
+    observer.OnInvalidatorClientIdChange(id);
+}
+
 InvalidatorState InvalidatorRegistrar::GetInvalidatorState() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   return state_;
@@ -135,7 +139,7 @@ InvalidatorRegistrar::GetSanitizedHandlersIdsMap() {
   return clean_handlers_to_topics;
 }
 
-bool InvalidatorRegistrar::IsHandlerRegisteredForTest(
+bool InvalidatorRegistrar::IsHandlerRegistered(
     const InvalidationHandler* handler) const {
   DCHECK(thread_checker_.CalledOnValidThread());
   return handlers_.HasObserver(handler);

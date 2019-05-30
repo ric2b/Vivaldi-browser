@@ -40,19 +40,19 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 inline HTMLBodyElement::HTMLBodyElement(Document& document)
-    : HTMLElement(bodyTag, document) {}
+    : HTMLElement(kBodyTag, document) {}
 
 DEFINE_NODE_FACTORY(HTMLBodyElement)
 
 HTMLBodyElement::~HTMLBodyElement() = default;
 
 bool HTMLBodyElement::IsPresentationAttribute(const QualifiedName& name) const {
-  if (name == backgroundAttr || name == marginwidthAttr ||
-      name == leftmarginAttr || name == marginheightAttr ||
-      name == topmarginAttr || name == bgcolorAttr || name == textAttr)
+  if (name == kBackgroundAttr || name == kMarginwidthAttr ||
+      name == kLeftmarginAttr || name == kMarginheightAttr ||
+      name == kTopmarginAttr || name == kBgcolorAttr || name == kTextAttr)
     return true;
   return HTMLElement::IsPresentationAttribute(name);
 }
@@ -61,7 +61,7 @@ void HTMLBodyElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
     MutableCSSPropertyValueSet* style) {
-  if (name == backgroundAttr) {
+  if (name == kBackgroundAttr) {
     String url = StripLeadingAndTrailingHTMLSpaces(value);
     if (!url.IsEmpty()) {
       CSSImageValue* image_value =
@@ -72,15 +72,15 @@ void HTMLBodyElement::CollectStyleForPresentationAttribute(
       style->SetProperty(
           CSSPropertyValue(GetCSSPropertyBackgroundImage(), *image_value));
     }
-  } else if (name == marginwidthAttr || name == leftmarginAttr) {
+  } else if (name == kMarginwidthAttr || name == kLeftmarginAttr) {
     AddHTMLLengthToStyle(style, CSSPropertyMarginRight, value);
     AddHTMLLengthToStyle(style, CSSPropertyMarginLeft, value);
-  } else if (name == marginheightAttr || name == topmarginAttr) {
+  } else if (name == kMarginheightAttr || name == kTopmarginAttr) {
     AddHTMLLengthToStyle(style, CSSPropertyMarginBottom, value);
     AddHTMLLengthToStyle(style, CSSPropertyMarginTop, value);
-  } else if (name == bgcolorAttr) {
+  } else if (name == kBgcolorAttr) {
     AddHTMLColorToStyle(style, CSSPropertyBackgroundColor, value);
-  } else if (name == textAttr) {
+  } else if (name == kTextAttr) {
     AddHTMLColorToStyle(style, CSSPropertyColor, value);
   } else {
     HTMLElement::CollectStyleForPresentationAttribute(name, value, style);
@@ -91,11 +91,11 @@ void HTMLBodyElement::ParseAttribute(
     const AttributeModificationParams& params) {
   const QualifiedName& name = params.name;
   const AtomicString& value = params.new_value;
-  if (name == vlinkAttr || name == alinkAttr || name == linkAttr) {
+  if (name == kVlinkAttr || name == kAlinkAttr || name == kLinkAttr) {
     if (value.IsNull()) {
-      if (name == linkAttr)
+      if (name == kLinkAttr)
         GetDocument().GetTextLinkColors().ResetLinkColor();
-      else if (name == vlinkAttr)
+      else if (name == kVlinkAttr)
         GetDocument().GetTextLinkColors().ResetVisitedLinkColor();
       else
         GetDocument().GetTextLinkColors().ResetActiveLinkColor();
@@ -105,9 +105,9 @@ void HTMLBodyElement::ParseAttribute(
       if (!HTMLElement::ParseColorWithLegacyRules(string_value, color))
         return;
 
-      if (name == linkAttr)
+      if (name == kLinkAttr)
         GetDocument().GetTextLinkColors().SetLinkColor(color);
-      else if (name == vlinkAttr)
+      else if (name == kVlinkAttr)
         GetDocument().GetTextLinkColors().SetVisitedLinkColor(color);
       else
         GetDocument().GetTextLinkColors().SetActiveLinkColor(color);
@@ -115,120 +115,107 @@ void HTMLBodyElement::ParseAttribute(
 
     SetNeedsStyleRecalc(kSubtreeStyleChange,
                         StyleChangeReasonForTracing::Create(
-                            StyleChangeReason::kLinkColorChange));
-  } else if (name == onafterprintAttr) {
+                            style_change_reason::kLinkColorChange));
+  } else if (name == kOnafterprintAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::afterprint,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onbeforeprintAttr) {
+        event_type_names::kAfterprint,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnbeforeprintAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::beforeprint,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onloadAttr) {
+        event_type_names::kBeforeprint,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnloadAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::load,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onbeforeunloadAttr) {
+        event_type_names::kLoad,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnbeforeunloadAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::beforeunload,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onunloadAttr) {
+        event_type_names::kBeforeunload,
+        CreateAttributeEventListener(
+            GetDocument().GetFrame(), name, value,
+            JSEventHandler::HandlerType::kOnBeforeUnloadEventHandler));
+  } else if (name == kOnunloadAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::unload,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onpagehideAttr) {
+        event_type_names::kUnload,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnpagehideAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::pagehide,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onpageshowAttr) {
+        event_type_names::kPagehide,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnpageshowAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::pageshow,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onpopstateAttr) {
+        event_type_names::kPageshow,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnpopstateAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::popstate,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onblurAttr) {
+        event_type_names::kPopstate,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnblurAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::blur,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onerrorAttr) {
+        event_type_names::kBlur,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnerrorAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::error,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onfocusAttr) {
+        event_type_names::kError,
+        CreateAttributeEventListener(
+            GetDocument().GetFrame(), name, value,
+            JSEventHandler::HandlerType::kOnErrorEventHandler));
+  } else if (name == kOnfocusAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::focus,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
+        event_type_names::kFocus,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
   } else if (RuntimeEnabledFeatures::OrientationEventEnabled() &&
-             name == onorientationchangeAttr) {
+             name == kOnorientationchangeAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::orientationchange,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onhashchangeAttr) {
+        event_type_names::kOrientationchange,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnhashchangeAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::hashchange,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onmessageAttr) {
+        event_type_names::kHashchange,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnmessageAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::message,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onmessageerrorAttr) {
+        event_type_names::kMessage,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnmessageerrorAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::messageerror,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onresizeAttr) {
+        event_type_names::kMessageerror,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnresizeAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::resize,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onscrollAttr) {
+        event_type_names::kResize,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnscrollAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::scroll,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onselectionchangeAttr) {
+        event_type_names::kScroll,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnselectionchangeAttr) {
     UseCounter::Count(GetDocument(),
                       WebFeature::kHTMLBodyElementOnSelectionChangeAttribute);
     GetDocument().SetAttributeEventListener(
-        EventTypeNames::selectionchange,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onstorageAttr) {
+        event_type_names::kSelectionchange,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnstorageAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::storage,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == ononlineAttr) {
+        event_type_names::kStorage,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnonlineAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::online,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onofflineAttr) {
+        event_type_names::kOnline,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnofflineAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::offline,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
-  } else if (name == onlanguagechangeAttr) {
+        event_type_names::kOffline,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (name == kOnlanguagechangeAttr) {
     GetDocument().SetWindowAttributeEventListener(
-        EventTypeNames::languagechange,
-        CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
-                                     EventParameterName()));
+        event_type_names::kLanguagechange,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
+  } else if (RuntimeEnabledFeatures::PortalsEnabled() &&
+             name == kOnportalactivateAttr) {
+    GetDocument().SetWindowAttributeEventListener(
+        event_type_names::kPortalactivate,
+        CreateAttributeEventListener(GetDocument().GetFrame(), name, value));
   } else {
     HTMLElement::ParseAttribute(params);
   }
@@ -248,23 +235,23 @@ void HTMLBodyElement::DidNotifySubtreeInsertionsToDocument() {
     int margin_width = GetDocument().GetFrame()->Owner()->MarginWidth();
     int margin_height = GetDocument().GetFrame()->Owner()->MarginHeight();
     if (margin_width != -1)
-      SetIntegralAttribute(marginwidthAttr, margin_width);
+      SetIntegralAttribute(kMarginwidthAttr, margin_width);
     if (margin_height != -1)
-      SetIntegralAttribute(marginheightAttr, margin_height);
+      SetIntegralAttribute(kMarginheightAttr, margin_height);
   }
 }
 
 bool HTMLBodyElement::IsURLAttribute(const Attribute& attribute) const {
-  return attribute.GetName() == backgroundAttr ||
+  return attribute.GetName() == kBackgroundAttr ||
          HTMLElement::IsURLAttribute(attribute);
 }
 
 bool HTMLBodyElement::HasLegalLinkAttribute(const QualifiedName& name) const {
-  return name == backgroundAttr || HTMLElement::HasLegalLinkAttribute(name);
+  return name == kBackgroundAttr || HTMLElement::HasLegalLinkAttribute(name);
 }
 
 const QualifiedName& HTMLBodyElement::SubResourceAttributeName() const {
-  return backgroundAttr;
+  return kBackgroundAttr;
 }
 
 bool HTMLBodyElement::SupportsFocus() const {

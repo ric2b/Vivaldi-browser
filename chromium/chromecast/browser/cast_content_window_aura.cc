@@ -6,10 +6,14 @@
 
 #include <memory>
 
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "chromecast/chromecast_buildflags.h"
 #include "chromecast/graphics/cast_window_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/aura/window.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 
 namespace chromecast {
 namespace shell {
@@ -74,7 +78,8 @@ std::unique_ptr<CastContentWindow> CastContentWindow::Create(
 CastContentWindowAura::CastContentWindowAura(
     const CastContentWindow::CreateParams& params)
     : delegate_(params.delegate),
-      gesture_dispatcher_(std::make_unique<CastGestureDispatcher>(delegate_)),
+      gesture_dispatcher_(
+          std::make_unique<CastContentGestureHandler>(delegate_)),
       gesture_priority_(params.gesture_priority),
       is_touch_enabled_(params.enable_touch_input),
       window_(nullptr),
@@ -119,6 +124,11 @@ void CastContentWindowAura::CreateWindowForWebContents(
 void CastContentWindowAura::GrantScreenAccess() {
   has_screen_access_ = true;
   if (window_) {
+#if !BUILDFLAG(IS_CAST_AUDIO_ONLY)
+    gfx::Size display_size =
+        display::Screen::GetScreen()->GetPrimaryDisplay().size();
+    window_->SetBounds(gfx::Rect(display_size.width(), display_size.height()));
+#endif
     window_->Show();
   }
 }
@@ -127,6 +137,10 @@ void CastContentWindowAura::RevokeScreenAccess() {
   has_screen_access_ = false;
   if (window_) {
     window_->Hide();
+    // Because rendering a larger window may require more system resources,
+    // resize the window to one pixel while hidden.
+    LOG(INFO) << "Resizing window to 1x1 pixel while hidden";
+    window_->SetBounds(gfx::Rect(1, 1));
   }
 }
 
@@ -137,14 +151,21 @@ void CastContentWindowAura::EnableTouchInput(bool enabled) {
 }
 
 void CastContentWindowAura::RequestVisibility(
-    VisibilityPriority visibility_priority){};
+    VisibilityPriority visibility_priority) {}
+
+void CastContentWindowAura::SetActivityContext(base::Value activity_context) {}
+
+void CastContentWindowAura::SetHostContext(base::Value host_context) {}
 
 void CastContentWindowAura::NotifyVisibilityChange(
     VisibilityType visibility_type) {
   delegate_->OnVisibilityChange(visibility_type);
+  for (auto& observer : observer_list_) {
+    observer.OnVisibilityChange(visibility_type);
+  }
 }
 
-void CastContentWindowAura::RequestMoveOut(){};
+void CastContentWindowAura::RequestMoveOut() {}
 
 void CastContentWindowAura::OnWindowVisibilityChanged(aura::Window* window,
                                                       bool visible) {

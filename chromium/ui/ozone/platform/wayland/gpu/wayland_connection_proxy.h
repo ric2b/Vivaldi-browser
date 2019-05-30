@@ -11,13 +11,17 @@
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/ozone/platform/wayland/wayland_connection.h"
+#include "ui/ozone/platform/wayland/wayland_util.h"
 #include "ui/ozone/public/interfaces/wayland/wayland_connection.mojom.h"
 
 #if defined(WAYLAND_GBM)
-#include "ui/ozone/common/linux/gbm_device.h"
+#include "ui/ozone/common/linux/gbm_device.h"  // nogncheck
 #endif
 
-struct wl_shm;
+namespace gfx {
+enum class SwapResult;
+class Rect;
+}  // namespace gfx
 
 namespace ui {
 
@@ -38,6 +42,7 @@ class WaylandConnectionProxy : public ozone::mojom::WaylandConnectionClient {
 
   // WaylandConnectionProxy overrides:
   void SetWaylandConnection(ozone::mojom::WaylandConnectionPtr wc_ptr) override;
+  void ResetGbmDevice() override;
 
   // Methods, which must be used when GPU is hosted on a different process
   // aka gpu process.
@@ -58,7 +63,12 @@ class WaylandConnectionProxy : public ozone::mojom::WaylandConnectionClient {
 
   // Asks Wayland to find a wl_buffer with the |buffer_id| and schedule a
   // buffer swap for a WaylandWindow, which backs the following |widget|.
-  void ScheduleBufferSwap(gfx::AcceleratedWidget widget, uint32_t buffer_id);
+  // The |callback| is called once a frame callback from the Wayland server
+  // is received.
+  void ScheduleBufferSwap(gfx::AcceleratedWidget widget,
+                          uint32_t buffer_id,
+                          const gfx::Rect& damage_region,
+                          wl::BufferSwapCallback callback);
 
 #if defined(WAYLAND_GBM)
   // Returns a gbm_device based on a DRM render node.
@@ -68,6 +78,23 @@ class WaylandConnectionProxy : public ozone::mojom::WaylandConnectionClient {
   }
 #endif
 
+  // Methods that are used to manage shared buffers when software rendering is
+  // used:
+  //
+  // Asks Wayland to create a buffer based on shared memory |file| handle for
+  // specific |widget|. There can be only one buffer per widget.
+  void CreateShmBufferForWidget(gfx::AcceleratedWidget widget,
+                                base::File file,
+                                size_t length,
+                                const gfx::Size size);
+
+  // Asks to damage and commit previously created buffer for the |widget|.
+  void PresentShmBufferForWidget(gfx::AcceleratedWidget widget,
+                                 const gfx::Rect& damage);
+
+  // Asks to destroy shared memory based buffer for the |widget|.
+  void DestroyShmBuffer(gfx::AcceleratedWidget widget);
+
   // Methods, which must be used when a single process mode is used (GPU is
   // hosted in the browser process).
   //
@@ -75,8 +102,6 @@ class WaylandConnectionProxy : public ozone::mojom::WaylandConnectionClient {
   WaylandWindow* GetWindow(gfx::AcceleratedWidget widget);
   // Schedule flush in the Wayland message loop.
   void ScheduleFlush();
-  // Returns an object for a shared memory support. Used for software fallback.
-  wl_shm* shm();
 
   // Methods, which can be used with both single- and multi-process modes.
   //

@@ -28,7 +28,6 @@ class SecureChannelClient;
 namespace tether {
 
 class ActiveHost;
-class BleConnectionManager;
 class DeviceIdTetherNetworkGuidMap;
 class DisconnectTetheringRequestSender;
 class HostScanCache;
@@ -53,7 +52,6 @@ class TetherConnectorImpl : public TetherConnector,
       WifiHotspotConnector* wifi_hotspot_connector,
       ActiveHost* active_host,
       TetherHostFetcher* tether_host_fetcher,
-      BleConnectionManager* connection_manager,
       TetherHostResponseRecorder* tether_host_response_recorder,
       DeviceIdTetherNetworkGuidMap* device_id_tether_network_guid_map,
       HostScanCache* host_scan_cache,
@@ -73,13 +71,13 @@ class TetherConnectorImpl : public TetherConnector,
 
   // ConnectTetheringOperation::Observer:
   void OnConnectTetheringRequestSent(
-      cryptauth::RemoteDeviceRef remote_device) override;
+      multidevice::RemoteDeviceRef remote_device) override;
   void OnSuccessfulConnectTetheringResponse(
-      cryptauth::RemoteDeviceRef remote_device,
+      multidevice::RemoteDeviceRef remote_device,
       const std::string& ssid,
       const std::string& password) override;
   void OnConnectTetheringFailure(
-      cryptauth::RemoteDeviceRef remote_device,
+      multidevice::RemoteDeviceRef remote_device,
       ConnectTetheringOperation::HostResponseErrorCode error_code) override;
 
  private:
@@ -93,7 +91,7 @@ class TetherConnectorImpl : public TetherConnector,
 
   void OnTetherHostToConnectFetched(
       const std::string& device_id,
-      base::Optional<cryptauth::RemoteDeviceRef> tether_host_to_connect);
+      base::Optional<multidevice::RemoteDeviceRef> tether_host_to_connect);
   void OnWifiConnection(const std::string& device_id,
                         const std::string& wifi_network_guid);
   HostConnectionMetricsLogger::ConnectionToHostResult
@@ -108,7 +106,6 @@ class TetherConnectorImpl : public TetherConnector,
   WifiHotspotConnector* wifi_hotspot_connector_;
   ActiveHost* active_host_;
   TetherHostFetcher* tether_host_fetcher_;
-  BleConnectionManager* connection_manager_;
   TetherHostResponseRecorder* tether_host_response_recorder_;
   DeviceIdTetherNetworkGuidMap* device_id_tether_network_guid_map_;
   HostScanCache* host_scan_cache_;
@@ -117,6 +114,7 @@ class TetherConnectorImpl : public TetherConnector,
   DisconnectTetheringRequestSender* disconnect_tethering_request_sender_;
   WifiHotspotDisconnector* wifi_hotspot_disconnector_;
 
+  bool did_send_successful_request_ = false;
   std::string device_id_pending_connection_;
   base::Closure success_callback_;
   network_handler::StringResultCallback error_callback_;

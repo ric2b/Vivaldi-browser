@@ -6,18 +6,19 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/scoped_task_environment.h"
 #include "content/child/child_process.h"
-#include "content/renderer/media/stream/media_stream_audio_source.h"
 #include "content/renderer/media/stream/media_stream_video_track.h"
 #include "content/renderer/media/stream/mock_media_stream_video_sink.h"
 #include "content/renderer/media/stream/mock_media_stream_video_source.h"
 #include "content/renderer/media/webrtc/mock_peer_connection_dependency_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/platform/modules/mediastream/media_stream_audio_source.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/public/platform/web_media_stream_source.h"
 #include "third_party/blink/public/platform/web_media_stream_track.h"
@@ -49,9 +50,10 @@ class WebRtcMediaStreamTrackAdapterTest : public ::testing::Test {
                           blink::WebMediaStreamSource::kTypeAudio,
                           blink::WebString::FromUTF8("local_audio_track"),
                           false);
-    MediaStreamAudioSource* audio_source = new MediaStreamAudioSource(true);
+    blink::MediaStreamAudioSource* audio_source =
+        new blink::MediaStreamAudioSource(true);
     // Takes ownership of |audio_source|.
-    web_source.SetExtraData(audio_source);
+    web_source.SetPlatformSource(base::WrapUnique(audio_source));
 
     blink::WebMediaStreamTrack web_track;
     web_track.Initialize(web_source.Id(), web_source);
@@ -67,7 +69,7 @@ class WebRtcMediaStreamTrackAdapterTest : public ::testing::Test {
                           false);
     MockMediaStreamVideoSource* video_source = new MockMediaStreamVideoSource();
     // Takes ownership of |video_source|.
-    web_source.SetExtraData(video_source);
+    web_source.SetPlatformSource(base::WrapUnique(video_source));
 
     return MediaStreamVideoTrack::CreateVideoTrack(
         video_source, MediaStreamVideoSource::ConstraintsCallback(), true);
@@ -77,6 +79,12 @@ class WebRtcMediaStreamTrackAdapterTest : public ::testing::Test {
       webrtc::MediaStreamTrackInterface* webrtc_track) {
     track_adapter_ = WebRtcMediaStreamTrackAdapter::CreateRemoteTrackAdapter(
         dependency_factory_.get(), main_thread_, webrtc_track);
+  }
+
+  void HoldOntoAdapterReference(
+      base::WaitableEvent* waitable_event,
+      scoped_refptr<WebRtcMediaStreamTrackAdapter> adapter) {
+    waitable_event->Wait();
   }
 
   // Runs message loops on the webrtc signaling thread and optionally the main
@@ -226,6 +234,35 @@ TEST_F(WebRtcMediaStreamTrackAdapterTest, RemoteTrackExplicitlyInitialized) {
   EXPECT_TRUE(track_adapter_->GetRemoteAudioTrackAdapterForTesting());
   EXPECT_TRUE(
       track_adapter_->GetRemoteAudioTrackAdapterForTesting()->initialized());
+}
+
+TEST_F(WebRtcMediaStreamTrackAdapterTest, LastReferenceOnSignalingThread) {
+  scoped_refptr<MockWebRtcAudioTrack> webrtc_track =
+      MockWebRtcAudioTrack::Create("remote_audio_track");
+  dependency_factory_->GetWebRtcSignalingThread()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &WebRtcMediaStreamTrackAdapterTest::CreateRemoteTrackAdapter,
+          base::Unretained(this), base::Unretained(webrtc_track.get())));
+  // The adapter is initialized implicitly in a PostTask, allow it to run.
+  RunMessageLoopsUntilIdle();
+  DCHECK(track_adapter_);
+  EXPECT_TRUE(track_adapter_->is_initialized());
+
+  base::WaitableEvent waitable_event(
+      base::WaitableEvent::ResetPolicy::MANUAL,
+      base::WaitableEvent::InitialState::NOT_SIGNALED);
+  dependency_factory_->GetWebRtcSignalingThread()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &WebRtcMediaStreamTrackAdapterTest::HoldOntoAdapterReference,
+          base::Unretained(this), base::Unretained(&waitable_event),
+          track_adapter_));
+  // Clear last reference on main thread.
+  track_adapter_->Dispose();
+  track_adapter_ = nullptr;
+  waitable_event.Signal();
+  RunMessageLoopsUntilIdle();
 }
 
 }  // namespace content

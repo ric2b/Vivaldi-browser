@@ -1,6 +1,8 @@
 #ifndef _RAR_EXTRACT_
 #define _RAR_EXTRACT_
 
+namespace third_party_unrar {
+
 enum EXTRACT_ARC_CODE {EXTRACT_ARC_NEXT,EXTRACT_ARC_REPEAT};
 
 class CmdExtract
@@ -43,7 +45,7 @@ class CmdExtract
 
     wchar ArcName[NM];
 
-    bool PasswordAll;
+    bool GlobalPassword;
     bool PrevProcessed; // If previous file was successfully extracted or tested.
     wchar DestFileName[NM];
     bool PasswordCancelled;
@@ -58,5 +60,7 @@ class CmdExtract
     bool ExtractCurrentFile(Archive &Arc,size_t HeaderSize,bool &Repeat);
     static void UnstoreFile(ComprDataIO &DataIO,int64 DestUnpSize);
 };
+
+}  // namespace third_party_unrar
 
 #endif

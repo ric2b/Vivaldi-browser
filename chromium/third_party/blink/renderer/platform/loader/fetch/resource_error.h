@@ -43,7 +43,7 @@ enum class ResourceRequestBlockedReason;
 // ResourceError represents an error for loading a resource. There is no
 // "no-error" instance. Use Optional for nullable errors.
 class PLATFORM_EXPORT ResourceError final {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
 
  public:
   static ResourceError CancelledError(const KURL&);
@@ -63,9 +63,9 @@ class PLATFORM_EXPORT ResourceError final {
   // |error_code| must not be 0.
   ResourceError(int error_code,
                 const KURL& failing_url,
-                base::Optional<network::CORSErrorStatus>);
+                base::Optional<network::CorsErrorStatus>);
   ResourceError(const KURL& failing_url,
-                const network::CORSErrorStatus& status);
+                const network::CorsErrorStatus& status);
   ResourceError(const WebURLError&);
 
   // Makes a deep copy. Useful for when you need to use a ResourceError on
@@ -86,7 +86,7 @@ class PLATFORM_EXPORT ResourceError final {
   base::Optional<ResourceRequestBlockedReason> GetResourceRequestBlockedReason()
       const;
 
-  base::Optional<network::CORSErrorStatus> CORSErrorStatus() const {
+  base::Optional<network::CorsErrorStatus> CorsErrorStatus() const {
     return cors_error_status_;
   }
 
@@ -107,7 +107,7 @@ class PLATFORM_EXPORT ResourceError final {
   bool is_access_check_ = false;
   bool has_copy_in_cache_ = false;
   bool blocked_by_subresource_filter_ = false;
-  base::Optional<network::CORSErrorStatus> cors_error_status_;
+  base::Optional<network::CorsErrorStatus> cors_error_status_;
 };
 
 inline bool operator==(const ResourceError& a, const ResourceError& b) {

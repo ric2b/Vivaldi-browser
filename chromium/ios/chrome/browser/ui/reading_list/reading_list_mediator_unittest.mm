@@ -8,16 +8,16 @@
 
 #include "base/strings/sys_string_conversions.h"
 #include "base/test/simple_test_clock.h"
-#include "components/favicon/core/large_icon_service.h"
+#include "components/favicon/core/large_icon_service_impl.h"
 #include "components/favicon/core/test/mock_favicon_service.h"
 #include "components/reading_list/core/reading_list_model_impl.h"
 #include "components/url_formatter/url_formatter.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
-#import "ios/chrome/browser/ui/reading_list/reading_list_collection_view_item.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_list_item_accessibility_delegate.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_list_item_custom_action_factory.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_list_item_factory.h"
+#import "ios/chrome/browser/ui/reading_list/reading_list_table_view_item.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -67,23 +67,14 @@ class ReadingListMediatorTest
     model_->AddEntry(GURL("http://chromium.org/read2"), "read2",
                      reading_list::ADDED_VIA_CURRENT_APP);
     model_->SetReadStatus(GURL("http://chromium.org/read2"), true);
-    large_icon_service_.reset(new favicon::LargeIconService(
+    large_icon_service_.reset(new favicon::LargeIconServiceImpl(
         &mock_favicon_service_, /*image_fetcher=*/nullptr));
 
-    if (GetParam() == FaviconServiceType::FAVICON_LOADER) {
-      favicon_loader.reset(new FaviconLoader(large_icon_service_.get()));
-      mediator_ = [[ReadingListMediator alloc]
-            initWithModel:model_.get()
-            faviconLoader:favicon_loader.get()
-          listItemFactory:[ReadingListListItemFactory
-                              collectionViewItemFactory]];
-    } else {
-      mediator_ = [[ReadingListMediator alloc]
-             initWithModel:model_.get()
-          largeIconService:large_icon_service_.get()
-           listItemFactory:[ReadingListListItemFactory
-                               collectionViewItemFactory]];
-    }
+    favicon_loader.reset(new FaviconLoader(large_icon_service_.get()));
+    mediator_ = [[ReadingListMediator alloc]
+          initWithModel:model_.get()
+          faviconLoader:favicon_loader.get()
+        listItemFactory:[[ReadingListListItemFactory alloc] init]];
   }
 
  protected:
@@ -93,7 +84,7 @@ class ReadingListMediatorTest
   base::SimpleTestClock clock_;
   GURL no_title_entry_url_;
   std::unique_ptr<FaviconLoader> favicon_loader;
-  std::unique_ptr<favicon::LargeIconService> large_icon_service_;
+  std::unique_ptr<favicon::LargeIconServiceImpl> large_icon_service_;
 
  private:
   web::TestWebThreadBundle thread_bundle_;
@@ -111,14 +102,14 @@ TEST_P(ReadingListMediatorTest, fillItems) {
   // Tests.
   EXPECT_EQ(3U, [unreadArray count]);
   EXPECT_EQ(2U, [readArray count]);
-  NSArray<ReadingListCollectionViewItem*>* rlReadArray = [readArray copy];
-  NSArray<ReadingListCollectionViewItem*>* rlUneadArray = [unreadArray copy];
+  NSArray<ReadingListTableViewItem*>* rlReadArray = [readArray copy];
+  NSArray<ReadingListTableViewItem*>* rlUneadArray = [unreadArray copy];
   EXPECT_TRUE([rlUneadArray[0].title isEqualToString:@""]);
   EXPECT_TRUE([rlReadArray[0].title isEqualToString:@"read2"]);
   EXPECT_TRUE([rlReadArray[1].title isEqualToString:@"read1"]);
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     ,  // Empty instatiation name.
     ReadingListMediatorTest,
     ::testing::Values(FaviconServiceType::FAVICON_LOADER,

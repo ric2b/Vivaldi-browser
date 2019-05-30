@@ -113,15 +113,17 @@ def _DiffSymbolGroups(before, after):
   # Create a DeltaSymbol to represent the zero'd out padding of matched symbols.
   for section_name, padding in padding_by_section_name.iteritems():
     if padding != 0:
-      after_sym = models.Symbol(section_name, padding,
-                                name="** aggregate padding of diff'ed symbols")
+      after_sym = models.Symbol(
+          section_name,
+          padding,
+          name="Overhead: aggregate padding of diff'ed symbols")
       after_sym.padding = padding
       all_deltas.append(models.DeltaSymbol(None, after_sym))
 
   return models.DeltaSymbolGroup(all_deltas)
 
 
-def Diff(before, after):
+def Diff(before, after, sort=False):
   """Diffs two SizeInfo objects. Returns a DeltaSizeInfo."""
   assert isinstance(before, models.SizeInfo)
   assert isinstance(after, models.SizeInfo)
@@ -132,4 +134,15 @@ def Diff(before, after):
       section_sizes[k] = v
 
   symbol_diff = _DiffSymbolGroups(before.raw_symbols, after.raw_symbols)
-  return models.DeltaSizeInfo(before, after, section_sizes, symbol_diff)
+  ret = models.DeltaSizeInfo(before, after, section_sizes, symbol_diff)
+
+  if sort:
+    syms = ret.symbols  # Triggers clustering.
+    logging.debug('Grouping')
+    # Group path aliases so that functions defined in headers will be sorted
+    # by their actual size rather than shown as many small symbols.
+    syms = syms.GroupedByAliases(same_name_only=True)
+    logging.debug('Sorting')
+    ret.symbols = syms.Sorted()
+  logging.debug('Diff complete')
+  return ret

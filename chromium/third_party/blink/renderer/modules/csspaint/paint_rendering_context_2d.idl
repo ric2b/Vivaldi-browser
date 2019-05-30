@@ -36,7 +36,7 @@
     attribute (DOMString or CanvasGradient or CanvasPattern) fillStyle; // (default black)
     CanvasGradient createLinearGradient(double x0, double y0, double x1, double y1);
     [RaisesException] CanvasGradient createRadialGradient(double x0, double y0, double r0, double x1, double y1, double r1);
-    [CallWith=ScriptState, RaisesException] CanvasPattern? createPattern(CanvasImageSource image, [TreatNullAs=NullString] DOMString repetitionType);
+    [CallWith=ScriptState, RaisesException] CanvasPattern? createPattern(CanvasImageSource image, [TreatNullAs=EmptyString] DOMString repetitionType);
 
     // shadows
     attribute unrestricted double shadowOffsetX;
@@ -58,10 +58,10 @@
 
     void clip(optional CanvasFillRule winding);
     void clip(Path2D path, optional CanvasFillRule winding);
-    boolean isPointInPath(unrestricted double x, unrestricted double y, optional CanvasFillRule winding);
-    boolean isPointInPath(Path2D path, unrestricted double x, unrestricted double y, optional CanvasFillRule winding);
-    boolean isPointInStroke(unrestricted double x, unrestricted double y);
-    boolean isPointInStroke(Path2D path, unrestricted double x, unrestricted double y);
+    [HighEntropy, Measure] boolean isPointInPath(unrestricted double x, unrestricted double y, optional CanvasFillRule winding);
+    [HighEntropy, Measure] boolean isPointInPath(Path2D path, unrestricted double x, unrestricted double y, optional CanvasFillRule winding);
+    [HighEntropy, Measure] boolean isPointInStroke(unrestricted double x, unrestricted double y);
+    [HighEntropy, Measure] boolean isPointInStroke(Path2D path, unrestricted double x, unrestricted double y);
 
     // drawing images
     [CallWith=ScriptState, RaisesException] void drawImage(CanvasImageSource image, unrestricted double x, unrestricted double y);

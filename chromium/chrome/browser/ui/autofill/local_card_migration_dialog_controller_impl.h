@@ -8,7 +8,12 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/observer_list.h"
+#include "base/timer/elapsed_timer.h"
+#include "chrome/browser/ui/autofill/local_card_migration_controller_observer.h"
+#include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/ui/local_card_migration_dialog_controller.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
 namespace autofill {
@@ -20,23 +25,56 @@ class LocalCardMigrationDialog;
 // dialog that the migration dialog interrupted.
 class LocalCardMigrationDialogControllerImpl
     : public LocalCardMigrationDialogController,
+      public content::WebContentsObserver,
       public content::WebContentsUserData<
           LocalCardMigrationDialogControllerImpl> {
  public:
   ~LocalCardMigrationDialogControllerImpl() override;
 
-  void ShowDialog(std::unique_ptr<base::DictionaryValue> legal_message,
-                  LocalCardMigrationDialog* local_card_migration_Dialog,
-                  base::OnceClosure user_accepted_migration_closure_);
+  void ShowOfferDialog(
+      std::unique_ptr<base::DictionaryValue> legal_message,
+      const std::string& user_email,
+      const std::vector<MigratableCreditCard>& migratable_credit_cards,
+      AutofillClient::LocalCardMigrationCallback
+          start_migrating_cards_callback);
+
+  // When migration is finished, update the credit card icon. Also passes
+  // |tip_message|, and |migratable_credit_cards| to controller.
+  void UpdateCreditCardIcon(
+      const base::string16& tip_message,
+      const std::vector<MigratableCreditCard>& migratable_credit_cards,
+      AutofillClient::MigrationDeleteCardCallback delete_local_card_callback);
+
+  // If the user clicks on the credit card icon in the omnibox, we show the
+  // feedback dialog containing the uploading results of the cards that the
+  // user selected to upload.
+  void ShowFeedbackDialog();
+
+  // If the user clicks on the credit card icon in the omnibox after the
+  // migration request failed due to some internal server errors, we show the
+  // error dialog containing an error message.
+  void ShowErrorDialog();
+
+  void AddObserver(LocalCardMigrationControllerObserver* observer);
 
   // LocalCardMigrationDialogController:
   LocalCardMigrationDialogState GetViewState() const override;
-  void SetViewState(LocalCardMigrationDialogState view_state) override;
   const std::vector<MigratableCreditCard>& GetCardList() const override;
-  void SetCardList(std::vector<MigratableCreditCard>& card_list) override;
   const LegalMessageLines& GetLegalMessageLines() const override;
-  void OnCardSelected(int index) override;
+  const base::string16& GetTipMessage() const override;
+  const std::string& GetUserEmail() const override;
+  void OnSaveButtonClicked(
+      const std::vector<std::string>& selected_cards_guids) override;
+  void OnCancelButtonClicked() override;
+  void OnDoneButtonClicked() override;
+  void OnViewCardsButtonClicked() override;
+  void OnLegalMessageLinkClicked(const GURL& url) override;
+  void DeleteCard(const std::string& deleted_card_guid) override;
   void OnDialogClosed() override;
+  bool AllCardsInvalid() const override;
+
+  // Returns nullptr if no dialog is currently shown.
+  LocalCardMigrationDialog* local_card_migration_dialog_view() const;
 
  protected:
   explicit LocalCardMigrationDialogControllerImpl(
@@ -46,16 +84,56 @@ class LocalCardMigrationDialogControllerImpl
   friend class content::WebContentsUserData<
       LocalCardMigrationDialogControllerImpl>;
 
-  LocalCardMigrationDialog* local_card_migration_dialog_;
+  void OpenUrl(const GURL& url);
+
+  void UpdateIcon();
+
+  // The dialog is showing cards of which the migration failed. We will show
+  // the "Almost done" dialog in this case.
+  bool HasFailedCard() const;
+
+  void NotifyMigrationNoLongerAvailable();
+  void NotifyMigrationStarted();
+
+  LocalCardMigrationDialog* local_card_migration_dialog_ = nullptr;
+
+  PrefService* pref_service_;
 
   LocalCardMigrationDialogState view_state_;
 
   LegalMessageLines legal_message_lines_;
 
-  // TODO(crbug.com/867194): Currently we will not handle the case of local
-  // cards added/deleted during migration. migratable_credit_cards_ are local
-  // cards presented when the user accepts the intermediate bubble.
+  // Invoked when the save button is clicked. Will return a vector containing
+  // GUIDs of cards that the user selected to upload.
+  AutofillClient::LocalCardMigrationCallback start_migrating_cards_callback_;
+
+  // Invoked when the trash can button in the action-requied dialog is clicked.
+  // Will pass a string of GUID of the card the user selected to delete from
+  // local storage to LocalCardMigrationManager.
+  AutofillClient::MigrationDeleteCardCallback delete_local_card_callback_;
+
+  // Local copy of the MigratableCreditCards vector passed from
+  // LocalCardMigrationManager. Used in constructing the
+  // LocalCardMigrationDialogView.
   std::vector<MigratableCreditCard> migratable_credit_cards_;
+
+  // Timer used to measure the amount of time that the local card migration
+  // dialog is visible to users.
+  base::ElapsedTimer dialog_is_visible_duration_timer_;
+
+  // The message containing information from Google Payments. Shown in the
+  // feedback dialogs after migration process is finished.
+  base::string16 tip_message_;
+
+  // The user email shown in the dialogs.
+  std::string user_email_;
+
+  // Contains observer listening to user's interactions with the dialog. The
+  // observer is responsible for setting flow step upon these interactions.
+  base::ObserverList<LocalCardMigrationControllerObserver>::Unchecked
+      observer_list_;
+
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
 
   DISALLOW_COPY_AND_ASSIGN(LocalCardMigrationDialogControllerImpl);
 };

@@ -66,12 +66,13 @@ InMemoryDownloadFactory::~InMemoryDownloadFactory() = default;
 std::unique_ptr<InMemoryDownload> InMemoryDownloadFactory::Create(
     const std::string& guid,
     const RequestParams& request_params,
+    scoped_refptr<network::ResourceRequestBody> request_body,
     const net::NetworkTrafficAnnotationTag& traffic_annotation,
     InMemoryDownload::Delegate* delegate) {
   DCHECK(url_loader_factory_);
   return std::make_unique<InMemoryDownloadImpl>(
-      guid, request_params, traffic_annotation, delegate, url_loader_factory_,
-      blob_context_getter_, io_task_runner_);
+      guid, request_params, std::move(request_body), traffic_annotation,
+      delegate, url_loader_factory_, blob_context_getter_, io_task_runner_);
 }
 
 InMemoryDownloadDriver::InMemoryDownloadDriver(
@@ -99,19 +100,18 @@ void InMemoryDownloadDriver::Start(
     const RequestParams& request_params,
     const std::string& guid,
     const base::FilePath& file_path,
-    scoped_refptr<network::ResourceRequestBody> post_body,
+    scoped_refptr<network::ResourceRequestBody> request_body,
     const net::NetworkTrafficAnnotationTag& traffic_annotation) {
-  std::unique_ptr<InMemoryDownload> download =
-      download_factory_->Create(guid, request_params, traffic_annotation, this);
+  std::unique_ptr<InMemoryDownload> download = download_factory_->Create(
+      guid, request_params, std::move(request_body), traffic_annotation, this);
   InMemoryDownload* download_ptr = download.get();
   DCHECK(downloads_.find(guid) == downloads_.end()) << "Existing GUID found.";
   downloads_.emplace(guid, std::move(download));
 
   download_ptr->Start();
-  client_->OnDownloadCreated(CreateDriverEntry(*download_ptr));
 }
 
-void InMemoryDownloadDriver::Remove(const std::string& guid) {
+void InMemoryDownloadDriver::Remove(const std::string& guid, bool remove_file) {
   downloads_.erase(guid);
 }
 
@@ -155,6 +155,11 @@ size_t InMemoryDownloadDriver::EstimateMemoryUsage() const {
   return memory_usage;
 }
 
+void InMemoryDownloadDriver::OnDownloadStarted(InMemoryDownload* download) {
+  DCHECK(client_);
+  client_->OnDownloadCreated(CreateDriverEntry(*download));
+}
+
 void InMemoryDownloadDriver::OnDownloadProgress(InMemoryDownload* download) {
   DCHECK(client_);
   client_->OnDownloadUpdated(CreateDriverEntry(*download));
@@ -181,6 +186,12 @@ void InMemoryDownloadDriver::OnDownloadComplete(InMemoryDownload* download) {
       NOTREACHED();
       return;
   }
+}
+
+void InMemoryDownloadDriver::OnUploadProgress(InMemoryDownload* download) {
+  DCHECK(download);
+  DCHECK(client_);
+  client_->OnUploadProgress(download->guid(), download->bytes_uploaded());
 }
 
 }  // namespace download

@@ -11,14 +11,16 @@
 
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/extensions/launch_util.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
+#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/ash/launcher/arc_playstore_shortcut_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
 #include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
 #include "chrome/browser/ui/ash/launcher/launcher_controller_helper.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
+#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -33,7 +35,6 @@
 #include "extensions/browser/process_manager.h"
 #include "ui/aura/window.h"
 #include "ui/events/event.h"
-#include "ui/wm/core/window_animations.h"
 
 using extensions::Extension;
 using extensions::ExtensionRegistry;
@@ -42,6 +43,47 @@ namespace {
 
 // The time delta between clicks in which clicks to launch V2 apps are ignored.
 const int kClickSuppressionInMS = 1000;
+
+// Returns true if this app matches the given |web_contents|. To accelerate
+// the matching, the app managing |extension| as well as the parsed
+// |refocus_pattern| get passed. If |is_app| is true, the application gets
+// first checked against its original URL since a windowed app might have
+// navigated away from its app domain.
+bool WebContentMatchesApp(const std::string& app_id,
+                          const extensions::Extension* extension,
+                          const URLPattern& refocus_pattern,
+                          content::WebContents* web_contents,
+                          Browser* browser) {
+  // If the browser is an app window, and the app name matches the extension,
+  // then the contents match the app.
+  if (browser->is_app()) {
+    const extensions::Extension* browser_extension =
+        ExtensionRegistry::Get(browser->profile())
+            ->GetExtensionById(
+                web_app::GetAppIdFromApplicationName(browser->app_name()),
+                ExtensionRegistry::EVERYTHING);
+    return browser_extension == extension;
+  }
+
+  // Apps set to launch in app windows should not match contents running in
+  // tabs.
+  if (extensions::LaunchesInWindow(browser->profile(), extension))
+    return false;
+
+  // There are three ways to identify the association of a URL with this
+  // extension:
+  // - The refocus pattern is matched (needed for apps like drive).
+  // - The extension's origin + extent gets matched.
+  // - The launcher controller knows that the tab got created for this app.
+  const GURL tab_url = web_contents->GetURL();
+  return (
+      (!refocus_pattern.match_all_urls() &&
+       refocus_pattern.MatchesURL(tab_url)) ||
+      (extension->OverlapsWithOrigin(tab_url) &&
+       extension->web_extent().MatchesURL(tab_url)) ||
+      ChromeLauncherController::instance()->IsWebContentHandledByApplication(
+          web_contents, app_id));
+}
 
 }  // namespace
 
@@ -52,6 +94,42 @@ AppShortcutLauncherItemController::Create(const ash::ShelfID& shelf_id) {
     return std::make_unique<ArcPlaystoreShortcutLauncherItemController>();
   return base::WrapUnique<AppShortcutLauncherItemController>(
       new AppShortcutLauncherItemController(shelf_id));
+}
+
+// static
+std::vector<content::WebContents*>
+AppShortcutLauncherItemController::GetRunningApplications(
+    const std::string& app_id,
+    const GURL& refocus_url) {
+  std::vector<content::WebContents*> items;
+
+  URLPattern refocus_pattern(URLPattern::SCHEME_ALL);
+  refocus_pattern.SetMatchAllURLs(true);
+
+  if (!refocus_url.is_empty()) {
+    refocus_pattern.SetMatchAllURLs(false);
+    refocus_pattern.Parse(refocus_url.spec());
+  }
+
+  const Extension* extension = GetExtensionForAppID(
+      app_id, ChromeLauncherController::instance()->profile());
+
+  // It is possible to come here While an extension gets loaded.
+  if (!extension)
+    return items;
+
+  for (auto* browser : *BrowserList::GetInstance()) {
+    if (!multi_user_util::IsProfileFromActiveUser(browser->profile()))
+      continue;
+    TabStripModel* tab_strip = browser->tab_strip_model();
+    for (int index = 0; index < tab_strip->count(); index++) {
+      content::WebContents* web_contents = tab_strip->GetWebContentsAt(index);
+      if (WebContentMatchesApp(app_id, extension, refocus_pattern, web_contents,
+                               browser))
+        items.push_back(web_contents);
+    }
+  }
+  return items;
 }
 
 AppShortcutLauncherItemController::AppShortcutLauncherItemController(
@@ -160,7 +238,7 @@ void AppShortcutLauncherItemController::ExecuteCommand(bool from_context_menu,
     } else {
       multi_user_util::MoveWindowToCurrentDesktop(
           browser->window()->GetNativeWindow());
-      tab_strip->ActivateTabAt(index, false);
+      tab_strip->ActivateTabAt(index);
       browser->window()->Show();
       browser->window()->Activate();
     }
@@ -188,35 +266,7 @@ void AppShortcutLauncherItemController::Close() {
 
 std::vector<content::WebContents*>
 AppShortcutLauncherItemController::GetRunningApplications() {
-  std::vector<content::WebContents*> items;
-
-  URLPattern refocus_pattern(URLPattern::SCHEME_ALL);
-  refocus_pattern.SetMatchAllURLs(true);
-
-  if (!refocus_url_.is_empty()) {
-    refocus_pattern.SetMatchAllURLs(false);
-    refocus_pattern.Parse(refocus_url_.spec());
-  }
-
-  const Extension* extension = GetExtensionForAppID(
-      app_id(), ChromeLauncherController::instance()->profile());
-
-  // It is possible to come here While an extension gets loaded.
-  if (!extension)
-    return items;
-
-  for (auto* browser : *BrowserList::GetInstance()) {
-    if (!multi_user_util::IsProfileFromActiveUser(browser->profile()))
-      continue;
-    TabStripModel* tab_strip = browser->tab_strip_model();
-    for (int index = 0; index < tab_strip->count(); index++) {
-      content::WebContents* web_contents = tab_strip->GetWebContentsAt(index);
-      if (WebContentMatchesApp(extension, refocus_pattern, web_contents,
-                               browser))
-        items.push_back(web_contents);
-    }
-  }
-  return items;
+  return GetRunningApplications(app_id(), refocus_url_);
 }
 
 content::WebContents* AppShortcutLauncherItemController::GetLRUApplication() {
@@ -249,8 +299,8 @@ content::WebContents* AppShortcutLauncherItemController::GetLRUApplication() {
     for (int index = 0; index < tab_strip->count(); index++) {
       content::WebContents* web_contents = tab_strip->GetWebContentsAt(
           (index + active_index) % tab_strip->count());
-      if (WebContentMatchesApp(extension, refocus_pattern, web_contents,
-                               browser))
+      if (WebContentMatchesApp(app_id(), extension, refocus_pattern,
+                               web_contents, browser))
         return web_contents;
     }
   }
@@ -265,48 +315,12 @@ content::WebContents* AppShortcutLauncherItemController::GetLRUApplication() {
     TabStripModel* tab_strip = browser->tab_strip_model();
     for (int index = 0; index < tab_strip->count(); index++) {
       content::WebContents* web_contents = tab_strip->GetWebContentsAt(index);
-      if (WebContentMatchesApp(extension, refocus_pattern, web_contents,
-                               browser))
+      if (WebContentMatchesApp(app_id(), extension, refocus_pattern,
+                               web_contents, browser))
         return web_contents;
     }
   }
   return NULL;
-}
-
-bool AppShortcutLauncherItemController::WebContentMatchesApp(
-    const extensions::Extension* extension,
-    const URLPattern& refocus_pattern,
-    content::WebContents* web_contents,
-    Browser* browser) {
-  // If the browser is an app window, and the app name matches the extension,
-  // then the contents match the app.
-  if (browser->is_app()) {
-    const extensions::Extension* browser_extension =
-        ExtensionRegistry::Get(browser->profile())
-            ->GetExtensionById(
-                web_app::GetAppIdFromApplicationName(browser->app_name()),
-                ExtensionRegistry::EVERYTHING);
-    return browser_extension == extension;
-  }
-
-  // Apps set to launch in app windows should not match contents running in
-  // tabs.
-  if (extensions::LaunchesInWindow(browser->profile(), extension))
-    return false;
-
-  // There are three ways to identify the association of a URL with this
-  // extension:
-  // - The refocus pattern is matched (needed for apps like drive).
-  // - The extension's origin + extent gets matched.
-  // - The launcher controller knows that the tab got created for this app.
-  const GURL tab_url = web_contents->GetURL();
-  return (
-      (!refocus_pattern.match_all_urls() &&
-       refocus_pattern.MatchesURL(tab_url)) ||
-      (extension->OverlapsWithOrigin(tab_url) &&
-       extension->web_extent().MatchesURL(tab_url)) ||
-      ChromeLauncherController::instance()->IsWebContentHandledByApplication(
-          web_contents, app_id()));
 }
 
 ash::ShelfAction AppShortcutLauncherItemController::ActivateContent(
@@ -318,7 +332,7 @@ ash::ShelfAction AppShortcutLauncherItemController::ActivateContent(
 
   int old_index = tab_strip->active_index();
   if (index != old_index)
-    tab_strip->ActivateTabAt(index, false);
+    tab_strip->ActivateTabAt(index);
   return ChromeLauncherController::instance()->ActivateWindowOrMinimizeIfActive(
       browser->window(),
       index == old_index && GetRunningApplications().size() == 1);
@@ -340,8 +354,7 @@ bool AppShortcutLauncherItemController::AdvanceToNextApp() {
         if (items.size() == 1) {
           // If there is only a single item available, we animate it upon key
           // action.
-          AnimateWindow(browser->window()->GetNativeWindow(),
-                        wm::WINDOW_ANIMATION_TYPE_BOUNCE);
+          ash_util::BounceWindow(browser->window()->GetNativeWindow());
         } else {
           int index = (static_cast<int>(i - items.begin()) + 1) % items.size();
           ActivateContent(items[index]);

@@ -1,11 +1,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromecast_build.gni")
 import("//build/config/jumbo.gni")
 import("//extensions/buildflags/buildflags.gni")
 import("//testing/test.gni")
 import("//tools/grit/grit_rule.gni")
 import("//tools/grit/repack.gni")
+import("//ui/base/ui_features.gni")
 
 assert(enable_extensions)
 
@@ -38,6 +40,7 @@ grit("extensions_browser_resources") {
 
 grit("extensions_renderer_resources") {
   source = "renderer/resources/extensions_renderer_resources.grd"
+  defines = [ "is_chromecast=$is_chromecast" ]
   outputs = [
     "grit/extensions_renderer_resources.h",
     "extensions_renderer_resources.pak",
@@ -159,6 +162,8 @@ jumbo_static_library("test_support") {
 }
 
 repack("shell_and_test_pak") {
+  testonly = true
+
   sources = [
     "$root_gen_dir/content/app/strings/content_strings_en-US.pak",
     "$root_gen_dir/content/browser/devtools/devtools_resources.pak",
@@ -229,6 +234,10 @@ test("extensions_unittests") {
   data_deps = [
     "//third_party/mesa_headers",
   ]
+
+  if (enable_mus) {
+    deps += [ "//ui/aura:test_support" ]
+  }
 }
 
 test("extensions_browsertests") {

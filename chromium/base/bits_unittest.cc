@@ -51,7 +51,7 @@ TEST(BitsTest, Log2Ceiling) {
 }
 
 TEST(BitsTest, Align) {
-  const size_t kSizeTMax = std::numeric_limits<size_t>::max();
+  static constexpr size_t kSizeTMax = std::numeric_limits<size_t>::max();
   EXPECT_EQ(0ul, Align(0, 4));
   EXPECT_EQ(4ul, Align(1, 4));
   EXPECT_EQ(4096ul, Align(1, 4096));
@@ -60,6 +60,19 @@ TEST(BitsTest, Align) {
   EXPECT_EQ(8192ul, Align(4097, 4096));
   EXPECT_EQ(kSizeTMax - 31, Align(kSizeTMax - 62, 32));
   EXPECT_EQ(kSizeTMax / 2 + 1, Align(1, kSizeTMax / 2 + 1));
+}
+
+TEST(BitsTest, AlignDown) {
+  static constexpr size_t kSizeTMax = std::numeric_limits<size_t>::max();
+  EXPECT_EQ(0ul, AlignDown(0, 4));
+  EXPECT_EQ(0ul, AlignDown(1, 4));
+  EXPECT_EQ(0ul, AlignDown(1, 4096));
+  EXPECT_EQ(4096ul, AlignDown(4096, 4096));
+  EXPECT_EQ(0ul, AlignDown(4095, 4096));
+  EXPECT_EQ(4096ul, AlignDown(4097, 4096));
+  EXPECT_EQ(kSizeTMax - 63, AlignDown(kSizeTMax - 62, 32));
+  EXPECT_EQ(kSizeTMax - 31, AlignDown(kSizeTMax, 32));
+  EXPECT_EQ(0ul, AlignDown(1, kSizeTMax / 2 + 1));
 }
 
 TEST(BitsTest, CountLeadingZeroBits8) {
@@ -118,8 +131,6 @@ TEST(BitsTest, CountTrailingeZeroBits32) {
   EXPECT_EQ(4u, CountTrailingZeroBits(uint32_t{0xf0f0f0f0}));
 }
 
-#if defined(ARCH_CPU_64_BITS)
-
 TEST(BitsTest, CountLeadingZeroBits64) {
   EXPECT_EQ(64u, CountLeadingZeroBits(uint64_t{0}));
   EXPECT_EQ(63u, CountLeadingZeroBits(uint64_t{1}));
@@ -137,8 +148,6 @@ TEST(BitsTest, CountTrailingeZeroBits64) {
   }
   EXPECT_EQ(4u, CountTrailingZeroBits(uint64_t{0xf0f0f0f0f0f0f0f0}));
 }
-
-#endif  // ARCH_CPU_64_BITS
 
 TEST(BitsTest, CountLeadingZeroBitsSizeT) {
 #if defined(ARCH_CPU_64_BITS)

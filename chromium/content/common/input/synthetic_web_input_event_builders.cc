@@ -5,6 +5,7 @@
 #include "content/common/input/synthetic_web_input_event_builders.h"
 
 #include "base/logging.h"
+#include "content/common/input/web_mouse_wheel_event_traits.h"
 #include "content/common/input/web_touch_event_traits.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
@@ -47,6 +48,7 @@ WebMouseWheelEvent SyntheticWebMouseWheelEventBuilder::Build(
   WebMouseWheelEvent result(WebInputEvent::kMouseWheel,
                             WebInputEvent::kNoModifiers, ui::EventTimeForNow());
   result.phase = phase;
+  result.event_action = WebMouseWheelEventTraits::GetEventAction(result);
   return result;
 }
 
@@ -83,6 +85,7 @@ WebMouseWheelEvent SyntheticWebMouseWheelEventBuilder::Build(
     result.wheel_ticks_y = dy > 0.0f ? 1.0f : -1.0f;
   result.has_precise_scrolling_deltas = precise;
   result.scroll_by_page = scroll_by_page;
+  result.event_action = WebMouseWheelEventTraits::GetEventAction(result);
   return result;
 }
 
@@ -107,10 +110,10 @@ WebGestureEvent SyntheticWebGestureEventBuilder::Build(
     result.data.tap.tap_count = 1;
     result.data.tap.width = 10;
     result.data.tap.height = 10;
-  } else if (WebInputEvent::IsPinchGestureEventType(type)) {
-    result.SetNeedsWheelEvent(source_device ==
-                              blink::kWebGestureDeviceTouchpad);
   }
+
+  result.SetNeedsWheelEvent(result.IsTouchpadZoomEvent());
+
   return result;
 }
 
@@ -199,7 +202,12 @@ void SyntheticWebTouchEvent::ResetPoints() {
   unique_touch_event_id = ui::GetNextTouchEventId();
 }
 
-int SyntheticWebTouchEvent::PressPoint(float x, float y) {
+int SyntheticWebTouchEvent::PressPoint(float x,
+                                       float y,
+                                       float radius_x,
+                                       float radius_y,
+                                       float rotation_angle,
+                                       float force) {
   int index = FirstFreeIndex();
   if (index == -1)
     return -1;
@@ -208,10 +216,10 @@ int SyntheticWebTouchEvent::PressPoint(float x, float y) {
   point.SetPositionInWidget(x, y);
   point.SetPositionInScreen(x, y);
   point.state = WebTouchPoint::kStatePressed;
-  // Use radius != default(25.f) to test the value is propagated correctly
-  point.radius_x = point.radius_y = 20.f;
-  point.rotation_angle = 1.f;
-  point.force = 1.f;
+  point.radius_x = radius_x;
+  point.radius_y = radius_y;
+  point.rotation_angle = rotation_angle;
+  point.force = force;
   point.tilt_x = point.tilt_y = 0;
   point.pointer_type = blink::WebPointerProperties::PointerType::kTouch;
   ++touches_length;
@@ -219,7 +227,13 @@ int SyntheticWebTouchEvent::PressPoint(float x, float y) {
   return index;
 }
 
-void SyntheticWebTouchEvent::MovePoint(int index, float x, float y) {
+void SyntheticWebTouchEvent::MovePoint(int index,
+                                       float x,
+                                       float y,
+                                       float radius_x,
+                                       float radius_y,
+                                       float rotation_angle,
+                                       float force) {
   CHECK_GE(index, 0);
   CHECK_LT(index, kTouchesLengthCap);
   // Always set this bit to avoid otherwise unexpected touchmove suppression.
@@ -228,7 +242,11 @@ void SyntheticWebTouchEvent::MovePoint(int index, float x, float y) {
   WebTouchPoint& point = touches[index];
   point.SetPositionInWidget(x, y);
   point.SetPositionInScreen(x, y);
-  touches[index].state = WebTouchPoint::kStateMoved;
+  point.state = WebTouchPoint::kStateMoved;
+  point.radius_x = radius_x;
+  point.radius_y = radius_y;
+  point.rotation_angle = rotation_angle;
+  point.force = force;
   WebTouchEventTraits::ResetType(WebInputEvent::kTouchMove, TimeStamp(), this);
 }
 

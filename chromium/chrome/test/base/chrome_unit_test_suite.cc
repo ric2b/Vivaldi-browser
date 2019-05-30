@@ -31,7 +31,7 @@
 #include "ui/gl/test/gl_surface_test_support.h"
 
 #if defined(OS_CHROMEOS)
-#include "chromeos/chromeos_paths.h"
+#include "chromeos/constants/chromeos_paths.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -121,7 +121,11 @@ void ChromeUnitTestSuite::InitializeProviders() {
   content::RegisterPathProvider();
   ui::RegisterPathProvider();
   component_updater::RegisterPathProvider(chrome::DIR_COMPONENTS,
+#if defined(OS_CHROMEOS)
+                                          chromeos::DIR_PREINSTALLED_COMPONENTS,
+#else
                                           chrome::DIR_INTERNAL_PLUGINS,
+#endif
                                           chrome::DIR_USER_DATA);
 
 #if defined(OS_CHROMEOS)

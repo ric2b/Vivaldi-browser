@@ -22,6 +22,7 @@
 
 #include "third_party/blink/renderer/core/html/forms/file_input_type.h"
 
+#include "third_party/blink/public/platform/file_path_conversion.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
@@ -34,6 +35,7 @@
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
+#include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/layout/layout_file_upload_control.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/drag_data.h"
@@ -47,11 +49,12 @@
 namespace blink {
 
 using blink::WebLocalizedString;
-using namespace HTMLNames;
+using mojom::blink::FileChooserParams;
+using namespace html_names;
 
 namespace {
 
-WebVector<WebString> CollectAcceptTypes(const HTMLInputElement& input) {
+Vector<String> CollectAcceptTypes(const HTMLInputElement& input) {
   Vector<String> mime_types = input.AcceptMIMETypes();
   Vector<String> extensions = input.AcceptFileExtensions();
 
@@ -70,10 +73,10 @@ inline FileInputType::FileInputType(HTMLInputElement& element)
       file_list_(FileList::Create()) {}
 
 InputType* FileInputType::Create(HTMLInputElement& element) {
-  return new FileInputType(element);
+  return MakeGarbageCollected<FileInputType>(element);
 }
 
-void FileInputType::Trace(blink::Visitor* visitor) {
+void FileInputType::Trace(Visitor* visitor) {
   visitor->Trace(file_list_);
   KeyboardClickableInputTypeView::Trace(visitor);
   InputType::Trace(visitor);
@@ -83,20 +86,26 @@ InputTypeView* FileInputType::CreateView() {
   return this;
 }
 
-Vector<FileChooserFileInfo> FileInputType::FilesFromFormControlState(
-    const FormControlState& state) {
-  Vector<FileChooserFileInfo> files;
-  for (size_t i = 0; i < state.ValueSize(); i += 2) {
-    if (!state[i + 1].IsEmpty())
-      files.push_back(FileChooserFileInfo(state[i], state[i + 1]));
-    else
-      files.push_back(FileChooserFileInfo(state[i]));
+template <typename ItemType, typename VectorType>
+VectorType CreateFilesFrom(const FormControlState& state,
+                           ItemType (*factory)(const FormControlState&,
+                                               wtf_size_t&)) {
+  VectorType files;
+  files.ReserveInitialCapacity(state.ValueSize() / 3);
+  for (wtf_size_t i = 0; i < state.ValueSize();) {
+    files.push_back(factory(state, i));
   }
   return files;
 }
 
+Vector<String> FileInputType::FilesFromFormControlState(
+    const FormControlState& state) {
+  return CreateFilesFrom<String, Vector<String>>(state,
+                                                 &File::PathFromControlState);
+}
+
 const AtomicString& FileInputType::FormControlType() const {
-  return InputTypeNames::file;
+  return input_type_names::kFile;
 }
 
 FormControlState FileInputType::SaveFormControlState() const {
@@ -104,20 +113,21 @@ FormControlState FileInputType::SaveFormControlState() const {
     return FormControlState();
   FormControlState state;
   unsigned num_files = file_list_->length();
-  for (unsigned i = 0; i < num_files; ++i) {
-    if (file_list_->item(i)->HasBackingFile()) {
-      state.Append(file_list_->item(i)->GetPath());
-      state.Append(file_list_->item(i)->name());
-    }
-    // FIXME: handle Blob-backed File instances, see http://crbug.com/394948
-  }
+  for (unsigned i = 0; i < num_files; ++i)
+    file_list_->item(i)->AppendToControlState(state);
   return state;
 }
 
 void FileInputType::RestoreFormControlState(const FormControlState& state) {
-  if (state.ValueSize() % 2)
+  if (state.ValueSize() % 3)
     return;
-  FilesChosen(FilesFromFormControlState(state));
+  HeapVector<Member<File>> file_vector =
+      CreateFilesFrom<File*, HeapVector<Member<File>>>(
+          state, &File::CreateFromControlState);
+  FileList* file_list = FileList::Create();
+  for (const auto& file : file_vector)
+    file_list->Append(file);
+  SetFilesAndDispatchEvents(file_list);
 }
 
 void FileInputType::AppendToFormData(FormData& form_data) const {
@@ -148,21 +158,32 @@ void FileInputType::HandleDOMActivateEvent(Event& event) {
   if (GetElement().IsDisabledFormControl())
     return;
 
-  if (!Frame::HasTransientUserActivation(GetElement().GetDocument().GetFrame()))
+  HTMLInputElement& input = GetElement();
+  Document& document = input.GetDocument();
+
+  if (!LocalFrame::HasTransientUserActivation(document.GetFrame())) {
+    String message =
+        "File chooser dialog can only be shown with a user activation.";
+    document.AddConsoleMessage(ConsoleMessage::Create(
+        kJSMessageSource, mojom::ConsoleMessageLevel::kWarning, message));
     return;
+  }
 
   if (ChromeClient* chrome_client = GetChromeClient()) {
-    WebFileChooserParams params;
-    HTMLInputElement& input = GetElement();
-    Document& document = input.GetDocument();
-    bool is_directory = input.FastHasAttribute(webkitdirectoryAttr);
-    params.directory = is_directory;
+    FileChooserParams params;
+    bool is_directory = input.FastHasAttribute(kWebkitdirectoryAttr);
+    if (is_directory)
+      params.mode = FileChooserParams::Mode::kUploadFolder;
+    else if (input.FastHasAttribute(kMultipleAttr))
+      params.mode = FileChooserParams::Mode::kOpenMultiple;
+    else
+      params.mode = FileChooserParams::Mode::kOpen;
+    params.title = g_empty_string;
     params.need_local_path = is_directory;
-    params.multi_select = is_directory || input.FastHasAttribute(multipleAttr);
     params.accept_types = CollectAcceptTypes(input);
     params.selected_files = file_list_->PathsForUserVisibleFiles();
     params.use_media_capture = RuntimeEnabledFeatures::MediaCaptureEnabled() &&
-                               input.FastHasAttribute(captureAttr);
+                               input.FastHasAttribute(kCaptureAttr);
     params.requestor = document.Url();
 
     UseCounter::Count(
@@ -223,48 +244,56 @@ void FileInputType::SetValue(const String&,
   file_list_->clear();
   GetElement().SetNeedsStyleRecalc(
       kSubtreeStyleChange,
-      StyleChangeReasonForTracing::Create(StyleChangeReason::kControlValue));
+      StyleChangeReasonForTracing::Create(style_change_reason::kControlValue));
   GetElement().SetNeedsValidityCheck();
 }
 
-FileList* FileInputType::CreateFileList(
-    const Vector<FileChooserFileInfo>& files,
-    bool has_webkit_directory_attr) {
+FileList* FileInputType::CreateFileList(const FileChooserFileInfoList& files,
+                                        const base::FilePath& base_dir) {
   FileList* file_list(FileList::Create());
-  size_t size = files.size();
+  wtf_size_t size = files.size();
 
   // If a directory is being selected, the UI allows a directory to be chosen
-  // and the paths provided here share a root directory somewhere up the tree;
-  // we want to store only the relative paths from that point.
-  if (size && has_webkit_directory_attr) {
-    // Find the common root path.
-    String root_path = DirectoryName(files[0].path);
-    for (size_t i = 1; i < size; ++i) {
-      while (!files[i].path.StartsWith(root_path))
-        root_path = DirectoryName(root_path);
-    }
-    root_path = DirectoryName(root_path);
-    DCHECK(root_path.length());
-    int root_length = root_path.length();
-    if (root_path[root_length - 1] != '\\' && root_path[root_length - 1] != '/')
+  // and the paths provided here should start with |base_dir|.
+  // We want to store only the relative path starting with the basename of
+  // |base_dir|.
+  if (size && !base_dir.empty()) {
+    base::FilePath root_path = base_dir.DirName();
+    int root_length = FilePathToString(root_path).length();
+    DCHECK(root_length);
+    if (!root_path.EndsWithSeparator())
       root_length += 1;
+    if (base_dir == root_path)
+      root_length = 0;
     for (const auto& file : files) {
       // Normalize backslashes to slashes before exposing the relative path to
       // script.
+      String string_path = FilePathToString(file->get_native_file()->file_path);
+      DCHECK(
+          string_path.StartsWithIgnoringASCIICase(FilePathToString(base_dir)))
+          << "A path in a FileChooserFileInfo " << string_path
+          << " should start with " << FilePathToString(base_dir);
       String relative_path =
-          file.path.Substring(root_length).Replace('\\', '/');
-      file_list->Append(File::CreateWithRelativePath(file.path, relative_path));
+          string_path.Substring(root_length).Replace('\\', '/');
+      file_list->Append(
+          File::CreateWithRelativePath(string_path, relative_path));
     }
     return file_list;
   }
 
   for (const auto& file : files) {
-    if (file.file_system_url.IsEmpty()) {
-      file_list->Append(
-          File::CreateForUserProvidedFile(file.path, file.display_name));
+    if (file->is_native_file()) {
+      file_list->Append(File::CreateForUserProvidedFile(
+          FilePathToString(file->get_native_file()->file_path),
+          file->get_native_file()->display_name));
     } else {
-      file_list->Append(File::CreateForFileSystemFile(
-          file.file_system_url, file.metadata, File::kIsUserVisible));
+      const auto& fs_info = file->get_file_system();
+      FileMetadata metadata;
+      metadata.modification_time = fs_info->modification_time.ToJsTime();
+      metadata.length = fs_info->length;
+      metadata.type = FileMetadata::kTypeFile;
+      file_list->Append(File::CreateForFileSystemFile(fs_info->url, metadata,
+                                                      File::kIsUserVisible));
     }
   }
   return file_list;
@@ -282,9 +311,9 @@ void FileInputType::CreateShadowSubtree() {
   DCHECK(IsShadowHost(GetElement()));
   auto* button = HTMLInputElement::Create(GetElement().GetDocument(),
                                           CreateElementFlags());
-  button->setType(InputTypeNames::button);
+  button->setType(input_type_names::kButton);
   button->setAttribute(
-      valueAttr,
+      kValueAttr,
       AtomicString(GetLocale().QueryString(
           GetElement().Multiple()
               ? WebLocalizedString::kFileButtonChooseMultipleFilesLabel
@@ -297,7 +326,7 @@ void FileInputType::DisabledAttributeChanged() {
   DCHECK(IsShadowHost(GetElement()));
   if (Element* button =
           ToElementOrDie(GetElement().UserAgentShadowRoot()->firstChild()))
-    button->SetBooleanAttribute(disabledAttr,
+    button->SetBooleanAttribute(kDisabledAttr,
                                 GetElement().IsDisabledFormControl());
 }
 
@@ -306,16 +335,16 @@ void FileInputType::MultipleAttributeChanged() {
   if (Element* button =
           ToElementOrDie(GetElement().UserAgentShadowRoot()->firstChild()))
     button->setAttribute(
-        valueAttr,
+        kValueAttr,
         AtomicString(GetLocale().QueryString(
             GetElement().Multiple()
                 ? WebLocalizedString::kFileButtonChooseMultipleFilesLabel
                 : WebLocalizedString::kFileButtonChooseFileLabel)));
 }
 
-void FileInputType::SetFiles(FileList* files) {
+bool FileInputType::SetFiles(FileList* files) {
   if (!files)
-    return;
+    return false;
 
   bool files_changed = false;
   if (files->length() != file_list_->length()) {
@@ -337,7 +366,11 @@ void FileInputType::SetFiles(FileList* files) {
   if (GetElement().GetLayoutObject())
     GetElement().GetLayoutObject()->SetShouldDoFullPaintInvalidation();
 
-  if (files_changed) {
+  return files_changed;
+}
+
+void FileInputType::SetFilesAndDispatchEvents(FileList* files) {
+  if (SetFiles(files)) {
     // This call may cause destruction of this instance.
     // input instance is safe since it is ref-counted.
     GetElement().DispatchInputEvent();
@@ -345,9 +378,20 @@ void FileInputType::SetFiles(FileList* files) {
   }
 }
 
-void FileInputType::FilesChosen(const Vector<FileChooserFileInfo>& files) {
-  SetFiles(CreateFileList(files,
-                          GetElement().FastHasAttribute(webkitdirectoryAttr)));
+void FileInputType::FilesChosen(FileChooserFileInfoList files,
+                                const base::FilePath& base_dir) {
+  for (wtf_size_t i = 0; i < files.size();) {
+    // Drop files of which names can not be converted to WTF String. We
+    // can't expose such files via File API.
+    if (files[i]->is_native_file() &&
+        FilePathToString(files[i]->get_native_file()->file_path).IsEmpty()) {
+      files.EraseAt(i);
+      // Do not increment |i|.
+      continue;
+    }
+    ++i;
+  }
+  SetFilesAndDispatchEvents(CreateFileList(files, base_dir));
   if (HasConnectedFileChooser())
     DisconnectFileChooser();
 }
@@ -357,17 +401,13 @@ LocalFrame* FileInputType::FrameOrNull() const {
 }
 
 void FileInputType::SetFilesFromDirectory(const String& path) {
-  if (ChromeClient* chrome_client = GetChromeClient()) {
-    Vector<String> files;
-    files.push_back(path);
-    WebFileChooserParams params;
-    params.directory = true;
-    params.multi_select = true;
-    params.selected_files = files;
-    params.accept_types = CollectAcceptTypes(GetElement());
-    params.requestor = GetElement().GetDocument().Url();
-    chrome_client->EnumerateChosenDirectory(NewFileChooser(params));
-  }
+  FileChooserParams params;
+  params.mode = FileChooserParams::Mode::kUploadFolder;
+  params.title = g_empty_string;
+  params.selected_files.push_back(StringToFilePath(path));
+  params.accept_types = CollectAcceptTypes(GetElement());
+  params.requestor = GetElement().GetDocument().Url();
+  NewFileChooser(params)->EnumerateChosenDirectory();
 }
 
 void FileInputType::SetFilesFromPaths(const Vector<String>& paths) {
@@ -375,21 +415,21 @@ void FileInputType::SetFilesFromPaths(const Vector<String>& paths) {
     return;
 
   HTMLInputElement& input = GetElement();
-  if (input.FastHasAttribute(webkitdirectoryAttr)) {
+  if (input.FastHasAttribute(kWebkitdirectoryAttr)) {
     SetFilesFromDirectory(paths[0]);
     return;
   }
 
-  Vector<FileChooserFileInfo> files;
+  FileChooserFileInfoList files;
   for (const auto& path : paths)
-    files.push_back(FileChooserFileInfo(path));
+    files.push_back(CreateFileChooserFileInfoNative(path));
 
-  if (input.FastHasAttribute(multipleAttr)) {
-    FilesChosen(files);
+  if (input.FastHasAttribute(kMultipleAttr)) {
+    FilesChosen(std::move(files), base::FilePath());
   } else {
-    Vector<FileChooserFileInfo> first_file_only;
-    first_file_only.push_back(files[0]);
-    FilesChosen(first_file_only);
+    FileChooserFileInfoList first_file_only;
+    first_file_only.push_back(std::move(files[0]));
+    FilesChosen(std::move(first_file_only), base::FilePath());
   }
 }
 
@@ -399,7 +439,7 @@ bool FileInputType::ReceiveDroppedFiles(const DragData* drag_data) {
   if (paths.IsEmpty())
     return false;
 
-  if (!GetElement().FastHasAttribute(webkitdirectoryAttr)) {
+  if (!GetElement().FastHasAttribute(kWebkitdirectoryAttr)) {
     dropped_file_system_id_ = drag_data->DroppedFileSystemId();
   }
   SetFilesFromPaths(paths);
@@ -419,7 +459,7 @@ String FileInputType::DefaultToolTip(const InputTypeView&) const {
   }
 
   StringBuilder names;
-  for (size_t i = 0; i < list_size; ++i) {
+  for (wtf_size_t i = 0; i < list_size; ++i) {
     names.Append(file_list->item(i)->name());
     if (i != list_size - 1)
       names.Append('\n');
@@ -435,7 +475,7 @@ void FileInputType::CopyNonAttributeProperties(const HTMLInputElement& source) {
 }
 
 void FileInputType::HandleKeypressEvent(KeyboardEvent& event) {
-  if (GetElement().FastHasAttribute(webkitdirectoryAttr)) {
+  if (GetElement().FastHasAttribute(kWebkitdirectoryAttr)) {
     // Override to invoke the action on Enter key up (not press) to avoid
     // repeats committing the file chooser.
     if (event.key() == "Enter") {
@@ -447,7 +487,7 @@ void FileInputType::HandleKeypressEvent(KeyboardEvent& event) {
 }
 
 void FileInputType::HandleKeyupEvent(KeyboardEvent& event) {
-  if (GetElement().FastHasAttribute(webkitdirectoryAttr)) {
+  if (GetElement().FastHasAttribute(kWebkitdirectoryAttr)) {
     // Override to invoke the action on Enter key up (not press) to avoid
     // repeats committing the file chooser.
     if (event.key() == "Enter") {

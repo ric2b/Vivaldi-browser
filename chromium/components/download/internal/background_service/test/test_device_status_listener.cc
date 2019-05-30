@@ -6,8 +6,10 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "components/download/internal/background_service/scheduler/battery_status_listener_impl.h"
-#include "components/download/internal/background_service/scheduler/network_status_listener_impl.h"
+#include "components/download/network/network_status_listener_impl.h"
+#include "services/network/test/test_network_connection_tracker.h"
 
 namespace download {
 namespace test {
@@ -25,14 +27,12 @@ class FakeBatteryStatusListener : public BatteryStatusListenerImpl {
 };
 
 TestDeviceStatusListener::TestDeviceStatusListener()
-    : DeviceStatusListener(base::TimeDelta(), /* startup_delay */
-                           base::TimeDelta(), /* online_delay */
-                           std::make_unique<FakeBatteryStatusListener>(),
-                           std::make_unique<NetworkStatusListenerImpl>(
-                               &test_network_connection_tracker_)),
-      test_network_connection_tracker_(
-          true,
-          network::mojom::ConnectionType::CONNECTION_UNKNOWN),
+    : DeviceStatusListener(
+          base::TimeDelta(), /* startup_delay */
+          base::TimeDelta(), /* online_delay */
+          std::make_unique<FakeBatteryStatusListener>(),
+          std::make_unique<NetworkStatusListenerImpl>(
+              network::TestNetworkConnectionTracker::GetInstance())),
       weak_ptr_factory_(this) {}
 
 TestDeviceStatusListener::~TestDeviceStatusListener() {
@@ -52,9 +52,11 @@ void TestDeviceStatusListener::SetDeviceStatus(const DeviceStatus& status) {
   status_ = status;
 }
 
-void TestDeviceStatusListener::Start(DeviceStatusListener::Observer* observer) {
+void TestDeviceStatusListener::Start(const base::TimeDelta& start_delay) {
+  if (listening_ || !observer_)
+    return;
+
   listening_ = true;
-  observer_ = observer;
 
   // Simulates the delay after start up.
   base::ThreadTaskRunnerHandle::Get()->PostTask(

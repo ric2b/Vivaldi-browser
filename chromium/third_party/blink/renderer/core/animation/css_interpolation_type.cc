@@ -120,7 +120,7 @@ class ResolvedRegisteredCustomPropertyChecker
   bool IsValid(const InterpolationEnvironment& environment,
                const InterpolationValue&) const final {
     DCHECK(ToCSSInterpolationEnvironment(environment).HasVariableResolver());
-    bool cycle_detected;
+    bool cycle_detected = false;
     scoped_refptr<CSSVariableData> resolved_tokens =
         ToCSSInterpolationEnvironment(environment)
             .VariableResolver()
@@ -233,7 +233,7 @@ InterpolationValue CSSInterpolationType::MaybeConvertCustomPropertyDeclaration(
 
   scoped_refptr<CSSVariableData> resolved_tokens;
   if (declaration.Value()->NeedsVariableResolution()) {
-    bool cycle_detected;
+    bool cycle_detected = false;
     resolved_tokens = variable_resolver.ResolveCustomPropertyAnimationKeyframe(
         declaration, cycle_detected);
     DCHECK(!cycle_detected);
@@ -266,12 +266,8 @@ InterpolationValue CSSInterpolationType::MaybeConvertUnderlyingValue(
   const AtomicString& name = property.CustomPropertyName();
   const CSSValue* underlying_value =
       style.GetRegisteredVariable(name, Registration().Inherits());
-  if (!underlying_value) {
-    underlying_value = Registration().Initial();
-  }
-  if (!underlying_value) {
+  if (!underlying_value)
     return nullptr;
-  }
   // TODO(alancutter): Remove the need for passing in conversion checkers.
   ConversionCheckers dummy_conversion_checkers;
   return MaybeConvertValue(*underlying_value, nullptr,
@@ -314,13 +310,9 @@ void CSSInterpolationType::ApplyCustomPropertyValue(
   ComputedStyle& style = *state.Style();
   const PropertyHandle property = GetProperty();
   const AtomicString& property_name = property.CustomPropertyName();
-  if (Registration().Inherits()) {
-    style.SetResolvedInheritedVariable(property_name, std::move(variable_data),
-                                       css_value);
-  } else {
-    style.SetResolvedNonInheritedVariable(property_name,
-                                          std::move(variable_data), css_value);
-  }
+  bool inherits = Registration().Inherits();
+  style.SetVariable(property_name, std::move(variable_data), inherits);
+  style.SetRegisteredVariable(property_name, css_value, inherits);
 }
 
 }  // namespace blink

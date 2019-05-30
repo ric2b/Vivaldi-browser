@@ -5,8 +5,8 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/stl_util.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/mojom/url_test.mojom.h"
@@ -42,7 +42,7 @@ TEST(MojoGURLStructTraitsTest, Basic) {
       "http://www.google.com/", "http://user:pass@host.com:888/foo;bar?baz#nop",
   };
 
-  for (size_t i = 0; i < arraysize(serialize_cases); i++) {
+  for (size_t i = 0; i < base::size(serialize_cases); i++) {
     GURL input(serialize_cases[i]);
     GURL output;
     EXPECT_TRUE(proxy->BounceUrl(input, &output));
@@ -72,22 +72,35 @@ TEST(MojoGURLStructTraitsTest, Basic) {
   }
 
   // Test basic Origin serialization.
-  Origin non_unique = Origin::UnsafelyCreateOriginWithoutNormalization(
-      "http", "www.google.com", 80);
+  Origin non_unique = Origin::UnsafelyCreateTupleOriginWithoutNormalization(
+                          "http", "www.google.com", 80)
+                          .value();
   Origin output;
   EXPECT_TRUE(proxy->BounceOrigin(non_unique, &output));
   EXPECT_EQ(non_unique, output);
-  EXPECT_FALSE(output.unique());
+  EXPECT_FALSE(output.opaque());
 
-  Origin unique;
-  EXPECT_TRUE(proxy->BounceOrigin(unique, &output));
-  EXPECT_TRUE(output.unique());
+  Origin unique1;
+  Origin unique2 = non_unique.DeriveNewOpaqueOrigin();
+  EXPECT_NE(unique1, unique2);
+  EXPECT_NE(unique2, unique1);
+  EXPECT_NE(unique2, non_unique);
+  EXPECT_TRUE(proxy->BounceOrigin(unique1, &output));
+  EXPECT_TRUE(output.opaque());
+  EXPECT_EQ(unique1, output);
+  Origin output2;
+  EXPECT_TRUE(proxy->BounceOrigin(unique2, &output2));
+  EXPECT_EQ(unique2, output2);
+  EXPECT_NE(unique2, output);
+  EXPECT_NE(unique1, output2);
 
   Origin normalized =
       Origin::CreateFromNormalizedTuple("http", "www.google.com", 80);
+  EXPECT_EQ(normalized, non_unique);
   EXPECT_TRUE(proxy->BounceOrigin(normalized, &output));
   EXPECT_EQ(normalized, output);
-  EXPECT_FALSE(output.unique());
+  EXPECT_EQ(non_unique, output);
+  EXPECT_FALSE(output.opaque());
 }
 
 }  // namespace url

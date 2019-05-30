@@ -22,8 +22,9 @@ cr.define('extensions', function() {
     shouldAcceptDrag(e) {
       // External Extension installation can be disabled globally, e.g. while a
       // different overlay is already showing.
-      if (!this.dragEnabled)
+      if (!this.dragEnabled) {
         return false;
+      }
 
       // We can't access filenames during the 'dragenter' event, so we have to
       // wait until 'drop' to decide whether to do something with the file or
@@ -53,14 +54,15 @@ cr.define('extensions', function() {
     /** @override */
     doDrop(e) {
       this.fireDragEnded_();
-      if (e.dataTransfer.files.length != 1)
+      if (e.dataTransfer.files.length != 1) {
         return;
+      }
 
       let handled = false;
 
       // Files lack a check if they're a directory, but we can find out through
       // its item entry.
-      let item = e.dataTransfer.items[0];
+      const item = e.dataTransfer.items[0];
       if (item.kind === 'file' && item.webkitGetAsEntry().isDirectory) {
         handled = true;
         this.handleDirectoryDrop_();
@@ -71,8 +73,9 @@ cr.define('extensions', function() {
         this.handleFileDrop_();
       }
 
-      if (handled)
+      if (handled) {
         e.preventDefault();
+      }
     }
 
     /**

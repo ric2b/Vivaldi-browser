@@ -8,7 +8,6 @@
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_view_host.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "ui/base/test/ui_controls.h"
@@ -21,8 +20,6 @@ class ExtensionDialogUiTest : public extensions::ExtensionBrowserTest {
   ~ExtensionDialogUiTest() override = default;
 
  private:
-  test::ScopedMacViewsBrowserMode views_mode_{true};
-
   DISALLOW_COPY_AND_ASSIGN(ExtensionDialogUiTest);
 };
 
@@ -49,8 +46,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionDialogUiTest, MAYBE_TabFocusLoop) {
   // The main.html contains three buttons.
   ExtensionDialog* dialog = ExtensionDialog::Show(
       extension->url().Resolve("main.html"),
-      browser()->window()->GetNativeWindow(), browser()->profile(),
-      NULL, 300, 300, 300, 300, base::string16(), NULL);
+      browser()->window()->GetNativeWindow(), browser()->profile(), nullptr,
+      true, 300, 300, 300, 300, base::string16(), nullptr);
   ASSERT_TRUE(dialog);
   ASSERT_TRUE(init_listener.WaitUntilSatisfied());
 
@@ -77,4 +74,4 @@ IN_PROC_BROWSER_TEST_F(ExtensionDialogUiTest, MAYBE_TabFocusLoop) {
                   browser()->window()->GetNativeWindow(),
                   ui::VKEY_TAB, false, true, false, false));
   ASSERT_TRUE(button3_focus_listener.WaitUntilSatisfied());
-};
+}

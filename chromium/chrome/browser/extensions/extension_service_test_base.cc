@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted.h"
@@ -45,9 +46,6 @@ namespace extensions {
 
 namespace {
 
-// By default, we run on the IO loop.
-const int kThreadOptions = content::TestBrowserThreadBundle::IO_MAINLOOP;
-
 // Create a testing profile according to |params|.
 std::unique_ptr<TestingProfile> BuildTestingProfile(
     const ExtensionServiceTestBase::ExtensionServiceInitParams& params) {
@@ -84,7 +82,7 @@ ExtensionServiceTestBase::ExtensionServiceInitParams::
         default;
 
 ExtensionServiceTestBase::ExtensionServiceTestBase()
-    : thread_bundle_(kThreadOptions),
+    : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP),
       service_(nullptr),
       testing_local_state_(TestingBrowserProcess::GetGlobal()),
       registry_(nullptr) {
@@ -135,7 +133,8 @@ void ExtensionServiceTestBase::InitializeExtensionService(
 
   // Garbage collector is typically NULL during tests, so give it a build.
   ExtensionGarbageCollectorFactory::GetInstance()->SetTestingFactoryAndUse(
-      profile_.get(), &ExtensionGarbageCollectorFactory::BuildInstanceFor);
+      profile_.get(),
+      base::BindRepeating(&ExtensionGarbageCollectorFactory::BuildInstanceFor));
 }
 
 void ExtensionServiceTestBase::InitializeEmptyExtensionService() {
@@ -243,9 +242,9 @@ void ExtensionServiceTestBase::ValidateIntegerPref(
     const std::string& extension_id,
     const std::string& pref_path,
     int expected_val) {
-  std::string msg = base::StringPrintf("while checking: %s %s == %s",
-                                       extension_id.c_str(), pref_path.c_str(),
-                                       base::IntToString(expected_val).c_str());
+  std::string msg = base::StringPrintf(
+      "while checking: %s %s == %s", extension_id.c_str(), pref_path.c_str(),
+      base::NumberToString(expected_val).c_str());
 
   PrefService* prefs = profile()->GetPrefs();
   const base::DictionaryValue* dict =
@@ -281,6 +280,9 @@ void ExtensionServiceTestBase::ValidateStringPref(
 
 void ExtensionServiceTestBase::SetUp() {
   LoadErrorReporter::GetInstance()->ClearErrors();
+
+  // Force TabManager/TabLifecycleUnitSource creation.
+  g_browser_process->resource_coordinator_parts();
 }
 
 void ExtensionServiceTestBase::TearDown() {

@@ -6,6 +6,7 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include "base/bind.h"
 #include "base/mac/availability.h"
 #import "base/mac/scoped_objc_class_swizzler.h"
 #include "base/mac/sdk_forward_declarations.h"
@@ -13,12 +14,12 @@
 #include "base/threading/thread_task_runner_handle.h"
 #import "ui/base/clipboard/clipboard_util_mac.h"
 #include "ui/gfx/image/image_unittest_util.h"
-#import "ui/views/cocoa/bridged_native_widget.h"
 #import "ui/views/cocoa/bridged_native_widget_host_impl.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/native_widget_mac.h"
 #include "ui/views/widget/widget.h"
+#import "ui/views_bridge_mac/bridged_native_widget_impl.h"
 
 using base::ASCIIToUTF16;
 
@@ -56,7 +57,7 @@ using base::ASCIIToUTF16;
 @synthesize draggingFormation;
 @synthesize springLoadingHighlight;
 
-- (id)initWithPasteboard:(NSPasteboard*)pasteboard {
+- (instancetype)initWithPasteboard:(NSPasteboard*)pasteboard {
   if ((self = [super init])) {
     pasteboard_ = pasteboard;
   }
@@ -130,7 +131,7 @@ class DragDropView : public View {
   // View:
   bool GetDropFormats(
       int* formats,
-      std::set<ui::Clipboard::FormatType>* format_types) override {
+      std::set<ui::ClipboardFormatType>* format_types) override {
     *formats |= formats_;
     return true;
   }
@@ -156,7 +157,9 @@ class DragDropClientMacTest : public WidgetTest {
  public:
   DragDropClientMacTest() : widget_(new Widget) {}
 
-  DragDropClientMac* drag_drop_client() { return bridge_->drag_drop_client(); }
+  DragDropClientMac* drag_drop_client() {
+    return bridge_host_->drag_drop_client();
+  }
 
   NSDragOperation DragUpdate(NSPasteboard* pasteboard) {
     DragDropClientMac* client = drag_drop_client();
@@ -174,8 +177,8 @@ class DragDropClientMacTest : public WidgetTest {
   }
 
   void SetData(OSExchangeData& data) {
-    drag_drop_client()->data_source_.reset(
-        [[CocoaDragDropDataProvider alloc] initWithData:data]);
+    drag_drop_client()->exchange_data_ =
+        std::make_unique<ui::OSExchangeData>(data.provider().Clone());
   }
 
   // testing::Test:
@@ -186,17 +189,16 @@ class DragDropClientMacTest : public WidgetTest {
     gfx::Rect bounds(0, 0, 100, 100);
     widget_->SetBounds(bounds);
 
-    bridge_ =
-        NativeWidgetMac::GetBridgeForNativeWindow(widget_->GetNativeWindow());
-    bridge_host_ = NativeWidgetMac::GetBridgeHostImplForNativeWindow(
+    bridge_host_ = BridgedNativeWidgetHostImpl::GetFromNativeWindow(
         widget_->GetNativeWindow());
+    bridge_ = bridge_host_->bridge_impl();
     widget_->Show();
 
     target_ = new DragDropView();
     widget_->GetContentsView()->AddChildView(target_);
     target_->SetBoundsRect(bounds);
 
-    drag_drop_client()->operation_ = ui::DragDropTypes::DRAG_COPY;
+    drag_drop_client()->source_operation_ = ui::DragDropTypes::DRAG_COPY;
   }
 
   void TearDown() override {
@@ -207,7 +209,7 @@ class DragDropClientMacTest : public WidgetTest {
 
  protected:
   Widget* widget_ = nullptr;
-  BridgedNativeWidget* bridge_ = nullptr;
+  BridgedNativeWidgetImpl* bridge_ = nullptr;
   BridgedNativeWidgetHostImpl* bridge_host_ = nullptr;
   DragDropView* target_ = nullptr;
   base::scoped_nsobject<MockDraggingInfo> dragging_info_;
@@ -258,8 +260,8 @@ TEST_F(DragDropClientMacTest, ReleaseCapture) {
 
   // Immediately quit drag'n'drop, or we'll hang.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&DragDropClientMac::EndDrag,
-                            base::Unretained(drag_drop_client())));
+      FROM_HERE, base::BindOnce(&DragDropClientMac::EndDrag,
+                                base::Unretained(drag_drop_client())));
 
   // It will call ReleaseCapture().
   drag_drop_client()->StartDragAndDrop(

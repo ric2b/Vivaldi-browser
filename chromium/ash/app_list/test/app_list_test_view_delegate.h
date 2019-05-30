@@ -18,6 +18,7 @@
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "services/content/public/cpp/test/fake_navigable_contents_factory.h"
 #include "ui/base/models/simple_menu_model.h"
 
 namespace app_list {
@@ -34,6 +35,7 @@ class AppListTestViewDelegate : public AppListViewDelegate,
 
   int dismiss_count() const { return dismiss_count_; }
   int open_search_result_count() const { return open_search_result_count_; }
+  int open_assistant_ui_count() const { return open_assistant_ui_count_; }
   std::map<size_t, int>& open_search_result_counts() {
     return open_search_result_counts_;
   }
@@ -45,6 +47,10 @@ class AppListTestViewDelegate : public AppListViewDelegate,
   // SetProfileByPath() is called.
   void set_next_profile_app_count(int apps) { next_profile_app_count_ = apps; }
 
+  content::FakeNavigableContentsFactory& fake_navigable_contents_factory() {
+    return fake_navigable_contents_factory_;
+  }
+
   // Sets whether the search engine is Google or not.
   void SetSearchEngineIsGoogle(bool is_google);
 
@@ -53,7 +59,14 @@ class AppListTestViewDelegate : public AppListViewDelegate,
   SearchModel* GetSearchModel() override;
   void StartAssistant() override {}
   void StartSearch(const base::string16& raw_query) override {}
-  void OpenSearchResult(const std::string& result_id, int event_flags) override;
+  void OpenSearchResult(const std::string& result_id,
+                        int event_flags,
+                        ash::mojom::AppListLaunchedFrom launched_from,
+                        ash::mojom::AppListLaunchType launch_type,
+                        int suggestion_index) override;
+  void LogResultLaunchHistogram(
+      app_list::SearchResultLaunchLocation launch_location,
+      int suggestion_index) override {}
   void InvokeSearchResultAction(const std::string& result_id,
                                 int action_index,
                                 int event_flags) override {}
@@ -66,6 +79,7 @@ class AppListTestViewDelegate : public AppListViewDelegate,
   void ViewShown(int64_t display_id) override {}
   void DismissAppList() override;
   void ViewClosing() override {}
+  void ViewClosed() override {}
   void GetWallpaperProminentColors(
       GetWallpaperProminentColorsCallback callback) override {}
   void ActivateItem(const std::string& id, int event_flags) override;
@@ -76,7 +90,15 @@ class AppListTestViewDelegate : public AppListViewDelegate,
                                int event_flags) override {}
   void ShowWallpaperContextMenu(const gfx::Point& onscreen_location,
                                 ui::MenuSourceType source_type) override;
-  ws::WindowService* GetWindowService() override;
+  bool ProcessHomeLauncherGesture(ui::GestureEvent* event,
+                                  const gfx::Point& screen_location) override;
+  bool CanProcessEventsOnApplistViews() override;
+  void GetNavigableContentsFactory(
+      content::mojom::NavigableContentsFactoryRequest request) override;
+  ash::AssistantViewDelegate* GetAssistantViewDelegate() override;
+  void OnSearchResultVisibilityChanged(const std::string& id,
+                                       bool visibility) override;
+  bool IsAssistantAllowedAndEnabled() const override;
 
   // Do a bulk replacement of the items in the model.
   void ReplaceTestModel(int item_count);
@@ -92,6 +114,7 @@ class AppListTestViewDelegate : public AppListViewDelegate,
 
   int dismiss_count_ = 0;
   int open_search_result_count_ = 0;
+  int open_assistant_ui_count_ = 0;
   int next_profile_app_count_ = 0;
   int show_wallpaper_context_menu_count_ = 0;
   std::map<size_t, int> open_search_result_counts_;
@@ -99,6 +122,7 @@ class AppListTestViewDelegate : public AppListViewDelegate,
   std::unique_ptr<SearchModel> search_model_;
   std::vector<SkColor> wallpaper_prominent_colors_;
   ui::SimpleMenuModel search_result_context_menu_model_;
+  content::FakeNavigableContentsFactory fake_navigable_contents_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListTestViewDelegate);
 };

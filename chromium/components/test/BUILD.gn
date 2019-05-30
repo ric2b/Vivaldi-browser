@@ -3,8 +3,7 @@
 # found in the LICENSE file.
 
 import("//printing/buildflags/buildflags.gni")
-import("//services/catalog/public/tools/catalog.gni")
-import("//services/service_manager/public/service_manifest.gni")
+import("//ui/base/ui_features.gni")
 
 source_set("test_support") {
   testonly = true
@@ -29,7 +28,14 @@ source_set("test_support") {
     "//base/test:test_support",
   ]
 
-  if (!is_ios) {
+  if (is_ios) {
+    sources += [
+      "ios_components_test_initializer.cc",
+      "ios_components_test_initializer.h",
+    ]
+
+    deps += [ "//services/network:test_support" ]
+  } else {
     deps += [
       "//components/invalidation/impl",
       "//components/policy/core/browser",
@@ -37,6 +43,10 @@ source_set("test_support") {
     ]
 
     public_deps += [ "//content/test:test_support" ]
+  }
+
+  if (enable_mus) {
+    deps += [ "//ui/aura:test_support" ]
   }
 }
 
@@ -51,26 +61,4 @@ source_set("run_all_unittests") {
   deps = [
     ":test_support",
   ]
-
-  if (enable_basic_printing) {
-    defines = [ "HAS_SERVICE_IN_UNIT_TEST" ]
-    deps += [
-      ":components_unittests_catalog_source",
-      "//services/catalog:lib",
-    ]
-  }
-}
-
-if (enable_basic_printing) {
-  # There is only one service in catalog, which depends on printing feature.
-  # When more services are added, the condition can be moved inside of catalog.
-  catalog("components_unittests_catalog") {
-    embedded_services = [ "//components/services/pdf_compositor:pdf_compositor_service_unittest_manifest" ]
-  }
-
-  catalog_cpp_source("components_unittests_catalog_source") {
-    testonly = true
-    catalog = ":components_unittests_catalog"
-    generated_function_name = "components::CreateUnittestsCatalog"
-  }
 }

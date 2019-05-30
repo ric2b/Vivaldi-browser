@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/platform/testing/viewport_layers_setup.h"
 
 #include <memory>
+#include "base/time/time.h"
 #include "cc/layers/picture_layer.h"
 #include "cc/trees/layer_tree_host.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
@@ -31,7 +32,7 @@ ViewportLayersSetup::ViewportLayersSetup() {
   scroll_elasticity_layer_->SetElementId(cc::LayerIdToElementIdForTesting(
       scroll_elasticity_layer_->CcLayer()->id()));
 
-  cc::LayerTreeHost::ViewportLayers viewport_layers;
+  cc::ViewportLayers viewport_layers;
   viewport_layers.overscroll_elasticity_element_id =
       scroll_elasticity_layer_->GetElementId();
   viewport_layers.page_scale = page_scale_layer_->CcLayer();
@@ -39,7 +40,8 @@ ViewportLayersSetup::ViewportLayersSetup() {
   viewport_layers.inner_viewport_scroll = graphics_layer_->CcLayer();
   layer_tree_->layer_tree_host()->RegisterViewportLayers(viewport_layers);
   layer_tree_->layer_tree_host()->SetViewportSizeAndScale(
-      gfx::Size(1, 1), /*device_scale_factor=*/1.f, viz::LocalSurfaceId());
+      gfx::Size(1, 1), /*device_scale_factor=*/1.f,
+      viz::LocalSurfaceIdAllocation());
 
   graphics_layer_->SetLayerState(PropertyTreeState(PropertyTreeState::Root()),
                                  IntPoint());

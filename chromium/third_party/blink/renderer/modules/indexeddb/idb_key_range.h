@@ -44,14 +44,31 @@ class MODULES_EXPORT IDBKeyRange final : public ScriptWrappable {
   enum LowerBoundType { kLowerBoundOpen, kLowerBoundClosed };
   enum UpperBoundType { kUpperBoundOpen, kUpperBoundClosed };
 
+  static IDBKeyRange* Create(const IDBKey* key) {
+    std::unique_ptr<IDBKey> lower_key = IDBKey::Clone(key);
+    std::unique_ptr<IDBKey> upper_key = IDBKey::Clone(key);
+    return IDBKeyRange::Create(std::move(lower_key), std::move(upper_key),
+                               kLowerBoundClosed, kUpperBoundClosed);
+  }
+
   static IDBKeyRange* Create(std::unique_ptr<IDBKey> lower,
                              std::unique_ptr<IDBKey> upper,
                              LowerBoundType lower_type,
                              UpperBoundType upper_type) {
+    if ((!lower || !lower->IsValid()) && (!upper || !upper->IsValid()))
+      return nullptr;
+
     IDBKey* upper_compressed = upper.get();
-    return new IDBKeyRange(std::move(lower), upper_compressed, std::move(upper),
-                           lower_type, upper_type);
+    return MakeGarbageCollected<IDBKeyRange>(std::move(lower), upper_compressed,
+                                             std::move(upper), lower_type,
+                                             upper_type);
   }
+
+  IDBKeyRange(std::unique_ptr<IDBKey> lower,
+              IDBKey* upper,
+              std::unique_ptr<IDBKey> upper_if_distinct,
+              LowerBoundType lower_type,
+              UpperBoundType upper_type);
 
   // Null if the script value is null or undefined, the range if it is one,
   // otherwise tries to convert to a key and throws if it fails.
@@ -115,12 +132,6 @@ class MODULES_EXPORT IDBKeyRange final : public ScriptWrappable {
   // (open to infinity on the right side) have a null upper_if_distinct_, but
   // are not considered compressed, as the left key is different from the right
   // key.
-
-  IDBKeyRange(std::unique_ptr<IDBKey> lower,
-              IDBKey* upper,
-              std::unique_ptr<IDBKey> upper_if_distinct,
-              LowerBoundType lower_type,
-              UpperBoundType upper_type);
 
   // Owns the range's lower key, and possibly the upper key.
   std::unique_ptr<IDBKey> lower_;

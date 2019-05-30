@@ -33,9 +33,10 @@ class DownloadTaskImpl : public DownloadTask {
     // remove all references to the given DownloadTask and stop using it.
     virtual void OnTaskDestroyed(DownloadTaskImpl* task) = 0;
 
-    // Creates background NSURLSession with given |identifier|, |delegate| and
-    // |delegate_queue|.
+    // Creates background NSURLSession with given |identifier|, |cookies|,
+    // |delegate| and |delegate_queue|.
     virtual NSURLSession* CreateSession(NSString* identifier,
+                                        NSArray<NSHTTPCookie*>* cookies,
                                         id<NSURLSessionDataDelegate> delegate,
                                         NSOperationQueue* delegate_queue) = 0;
     virtual ~Delegate() = default;
@@ -69,6 +70,7 @@ class DownloadTaskImpl : public DownloadTask {
   int64_t GetReceivedBytes() const override;
   int GetPercentComplete() const override;
   std::string GetContentDisposition() const override;
+  std::string GetOriginalMimeType() const override;
   std::string GetMimeType() const override;
   ui::PageTransition GetTransitionType() const override;
   base::string16 GetSuggestedFilename() const override;
@@ -78,8 +80,9 @@ class DownloadTaskImpl : public DownloadTask {
   ~DownloadTaskImpl() override;
 
  private:
-  // Creates background NSURLSession with given |identifier|.
-  NSURLSession* CreateSession(NSString* identifier);
+  // Creates background NSURLSession with given |identifier| and |cookies|.
+  NSURLSession* CreateSession(NSString* identifier,
+                              NSArray<NSHTTPCookie*>* cookies);
 
   // Asynchronously returns cookies for WebState associated with this task (on
   // iOS 10 and earlier, the array is always empty as it is not possible to
@@ -95,11 +98,19 @@ class DownloadTaskImpl : public DownloadTask {
   // Starts the download with given cookies.
   void StartWithCookies(NSArray<NSHTTPCookie*>* cookies);
 
+  // Starts parsing data:// url. Separate code path is used because
+  // NSURLSession does not support data URLs.
+  void StartDataUrlParsing();
+
   // Called when download task was updated.
   void OnDownloadUpdated();
 
   // Called when download was completed and the data writing was finished.
   void OnDownloadFinished(int error_code);
+
+  // Called when data:// url parsing has completed and the data has been
+  // written.
+  void OnDataUrlWritten(int bytes_written);
 
   // A list of observers. Weak references.
   base::ObserverList<DownloadTaskObserver, true>::Unchecked observers_;
@@ -114,8 +125,10 @@ class DownloadTaskImpl : public DownloadTask {
   int64_t received_bytes_ = 0;
   int percent_complete_ = -1;
   std::string content_disposition_;
+  std::string original_mime_type_;
   std::string mime_type_;
   ui::PageTransition page_transition_ = ui::PAGE_TRANSITION_LINK;
+  NSString* identifier_ = nil;
   bool has_performed_background_download_ = false;
 
   const WebState* web_state_ = nullptr;

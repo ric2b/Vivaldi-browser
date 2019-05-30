@@ -33,27 +33,14 @@
 #include <stdint.h>
 
 #include "base/logging.h"
+#include "base/threading/platform_thread.h"
 #include "build/build_config.h"
 #include "third_party/blink/renderer/platform/wtf/type_traits.h"
 #include "third_party/blink/renderer/platform/wtf/wtf_export.h"
 
 namespace WTF {
 
-#if defined(OS_WIN)
-typedef uint32_t ThreadIdentifier;
-#else
-typedef intptr_t ThreadIdentifier;
-#endif
-
-namespace internal {
-WTF_EXPORT ThreadIdentifier CurrentThreadSyscall();
-}  // namespace internal
-
-// Initializes global state required by |currentThread|.
-// Needs to be called once during program execution, before |currentThread|.
-WTF_EXPORT void InitializeCurrentThread();
-
-WTF_EXPORT ThreadIdentifier CurrentThread();
+WTF_EXPORT base::PlatformThreadId CurrentThread();
 
 #if DCHECK_IS_ON()
 WTF_EXPORT bool IsBeforeThreadCreated();
@@ -62,7 +49,6 @@ WTF_EXPORT void WillCreateThread();
 
 }  // namespace WTF
 
-using WTF::ThreadIdentifier;
 using WTF::CurrentThread;
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_WTF_THREADING_H_

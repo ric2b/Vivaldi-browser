@@ -301,7 +301,7 @@ bool ParamTraits<signed char>::Read(const base::Pickle* m,
 }
 
 void ParamTraits<signed char>::Log(const param_type& p, std::string* l) {
-  l->append(base::IntToString(p));
+  l->append(base::NumberToString(p));
 }
 
 void ParamTraits<unsigned char>::Write(base::Pickle* m, const param_type& p) {
@@ -319,7 +319,7 @@ bool ParamTraits<unsigned char>::Read(const base::Pickle* m,
 }
 
 void ParamTraits<unsigned char>::Log(const param_type& p, std::string* l) {
-  l->append(base::UintToString(p));
+  l->append(base::NumberToString(p));
 }
 
 void ParamTraits<unsigned short>::Write(base::Pickle* m, const param_type& p) {
@@ -1006,7 +1006,10 @@ bool ParamTraits<base::subtle::PlatformSharedMemoryRegion>::Read(
 void ParamTraits<base::subtle::PlatformSharedMemoryRegion>::Log(
     const param_type& p,
     std::string* l) {
-#if defined(OS_FUCHSIA) || defined(OS_WIN)
+#if defined(OS_FUCHSIA)
+  l->append("Handle: ");
+  LogParam(p.GetPlatformHandle()->get(), l);
+#elif defined(OS_WIN)
   l->append("Handle: ");
   LogParam(p.GetPlatformHandle(), l);
 #elif defined(OS_MACOSX) && !defined(OS_IOS)

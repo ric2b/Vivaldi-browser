@@ -17,6 +17,7 @@
 #include "components/metrics/data_use_tracker.h"
 #include "components/metrics/metrics_log_uploader.h"
 #include "third_party/metrics_proto/reporting_info.pb.h"
+#include "url/gurl.h"
 
 class PrefService;
 class PrefRegistrySimple;
@@ -66,25 +67,20 @@ class ReportingService {
   // True iff reporting is currently enabled.
   bool reporting_active() const;
 
-  // Updates data usage tracking prefs with the specified values.
-  void UpdateMetricsUsagePrefs(const std::string& service_name,
-                               int message_size,
-                               bool is_cellular);
-
   // Registers local state prefs used by this class. This should only be called
   // once.
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
  protected:
-  MetricsServiceClient* client() const { return client_; };
+  MetricsServiceClient* client() const { return client_; }
 
  private:
   // Retrieves the log store backing this service.
   virtual LogStore* log_store() = 0;
 
   // Getters for MetricsLogUploader parameters.
-  virtual std::string GetUploadUrl() const = 0;
-  virtual std::string GetInsecureUploadUrl() const = 0;
+  virtual GURL GetUploadUrl() const = 0;
+  virtual GURL GetInsecureUploadUrl() const = 0;
   virtual base::StringPiece upload_mime_type() const = 0;
   virtual MetricsLogUploader::MetricServiceType service_type() const = 0;
 

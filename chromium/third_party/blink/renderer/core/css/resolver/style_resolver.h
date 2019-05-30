@@ -52,7 +52,7 @@ class MatchResult;
 class RuleSet;
 class CSSPropertyValueSet;
 class StyleRuleUsageTracker;
-class CSSVariableResolver;
+class PropertyHandle;
 
 enum RuleMatchingBehavior { kMatchAllRules, kMatchAllRulesExcludingSMIL };
 
@@ -64,8 +64,10 @@ class CORE_EXPORT StyleResolver final
 
  public:
   static StyleResolver* Create(Document& document) {
-    return new StyleResolver(document);
+    return MakeGarbageCollected<StyleResolver>(document);
   }
+
+  explicit StyleResolver(Document&);
   ~StyleResolver();
   void Dispose();
 
@@ -75,11 +77,13 @@ class CORE_EXPORT StyleResolver final
       const ComputedStyle* layout_parent_style = nullptr,
       RuleMatchingBehavior = kMatchAllRules);
 
+  static scoped_refptr<ComputedStyle> InitialStyleForElement(Document&);
+
   static AnimatableValue* CreateAnimatableValueSnapshot(
       Element&,
       const ComputedStyle& base_style,
       const ComputedStyle* parent_style,
-      const CSSProperty&,
+      const PropertyHandle&,
       const CSSValue*);
 
   scoped_refptr<ComputedStyle> PseudoStyleForElement(
@@ -128,27 +132,14 @@ class CORE_EXPORT StyleResolver final
   void SetResizedForViewportUnits();
   void ClearResizedForViewportUnits();
 
-  // Exposed for ComputedStyle::IsStyleAvailable().
-  static ComputedStyle* StyleNotYetAvailable() {
-    return style_not_yet_available_;
-  }
-
   void SetRuleUsageTracker(StyleRuleUsageTracker*);
   void UpdateMediaType();
-
-  static void ApplyAnimatedCustomProperty(StyleResolverState&,
-                                          CSSVariableResolver&,
-                                          const PropertyHandle&);
 
   static bool HasAuthorBackground(const StyleResolverState&);
 
   void Trace(blink::Visitor*);
 
  private:
-  explicit StyleResolver(Document&);
-
-  static scoped_refptr<ComputedStyle> InitialStyleForElement(Document&);
-
   // FIXME: This should probably go away, folded into FontBuilder.
   void UpdateFont(StyleResolverState&);
 
@@ -166,6 +157,7 @@ class CORE_EXPORT StyleResolver final
   // This matches `::part` selectors. It looks in ancestor scopes as far as
   // part mapping requires.
   void MatchPseudoPartRules(const Element&, ElementRuleCollector&);
+  void MatchPseudoPartRulesForUAHost(const Element&, ElementRuleCollector&);
   void MatchScopedRulesV0(const Element&,
                           ElementRuleCollector&,
                           ScopedStyleResolver*);
@@ -285,8 +277,6 @@ class CORE_EXPORT StyleResolver final
   bool HasAuthorBorder(const StyleResolverState&);
   Document& GetDocument() const { return *document_; }
   bool WasViewportResized() const { return was_viewport_resized_; }
-
-  static ComputedStyle* style_not_yet_available_;
 
   MatchedPropertiesCache matched_properties_cache_;
   Member<Document> document_;

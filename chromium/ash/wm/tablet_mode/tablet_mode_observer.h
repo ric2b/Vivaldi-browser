@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef ASH_TABLET_MODE_TABLET_MODE_OBSERVER_H_
-#define ASH_TABLET_MODE_TABLET_MODE_OBSERVER_H_
+#ifndef ASH_WM_TABLET_MODE_TABLET_MODE_OBSERVER_H_
+#define ASH_WM_TABLET_MODE_TABLET_MODE_OBSERVER_H_
 
 #include "ash/ash_export.h"
 
@@ -29,10 +29,14 @@ class ASH_EXPORT TabletModeObserver {
   // connected.
   virtual void OnTabletModeEventsBlockingChanged() {}
 
+  // Called when the tablet mode controller is destroyed, to help manage issues
+  // with observers being destroyed after controllers.
+  virtual void OnTabletControllerDestroyed() {}
+
  protected:
-  virtual ~TabletModeObserver() {}
+  virtual ~TabletModeObserver() = default;
 };
 
 }  // namespace ash
 
-#endif  // ASH_TABLET_MODE_TABLET_MODE_OBSERVER_H_
+#endif  // ASH_WM_TABLET_MODE_TABLET_MODE_OBSERVER_H_

@@ -7,11 +7,11 @@ package org.chromium.chrome.browser.ntp.snippets;
 import android.support.annotation.LayoutRes;
 
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.metrics.ImpressionTracker;
-import org.chromium.chrome.browser.ntp.ContextMenuManager;
-import org.chromium.chrome.browser.ntp.ContextMenuManager.ContextMenuItemId;
+import org.chromium.chrome.browser.native_page.ContextMenuManager;
+import org.chromium.chrome.browser.native_page.ContextMenuManager.ContextMenuItemId;
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.ntp.cards.CardViewHolder;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageViewHolder;
@@ -19,7 +19,6 @@ import org.chromium.chrome.browser.ntp.cards.SectionList;
 import org.chromium.chrome.browser.ntp.cards.SuggestionsCategoryInfo;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.suggestions.SuggestionsBinder;
-import org.chromium.chrome.browser.suggestions.SuggestionsConfig;
 import org.chromium.chrome.browser.suggestions.SuggestionsMetrics;
 import org.chromium.chrome.browser.suggestions.SuggestionsOfflineModelObserver;
 import org.chromium.chrome.browser.suggestions.SuggestionsRecyclerView;
@@ -82,7 +81,11 @@ public class SnippetArticleViewHolder extends CardViewHolder {
 
     @Override
     public void onCardTapped() {
-        if (!mArticle.isContextual()) SuggestionsMetrics.recordCardTapped();
+        if (mArticle.isContextual()) {
+            RecordUserAction.record("ContextualSuggestions.SuggestionClicked");
+        } else {
+            SuggestionsMetrics.recordCardTapped();
+        }
         int windowDisposition = WindowOpenDisposition.CURRENT_TAB;
         mUiDelegate.getEventReporter().onSuggestionOpened(
                 mArticle, windowDisposition, mUiDelegate.getSuggestionsRanker());
@@ -187,9 +190,7 @@ public class SnippetArticleViewHolder extends CardViewHolder {
     }
 
     private boolean shouldShowThumbnailVideoBadge(boolean showThumbnail) {
-        if (!showThumbnail) return false;
-        if (!mArticle.mIsVideoSuggestion) return false;
-        return SuggestionsConfig.useModernLayout();
+        return showThumbnail && mArticle.mIsVideoSuggestion;
     }
 
     /** Updates the visibility of the card's offline badge by checking the bound article's info. */
@@ -210,14 +211,7 @@ public class SnippetArticleViewHolder extends CardViewHolder {
      */
     @LayoutRes
     private static int getLayout() {
-        if (SuggestionsConfig.useModernLayout()) {
-            if (ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.CHROME_MODERN_ALTERNATE_CARD_LAYOUT)) {
-                return R.layout.content_suggestions_card_modern_reversed;
-            }
-            return R.layout.content_suggestions_card_modern;
-        }
-        return R.layout.new_tab_page_snippets_card_large_thumbnail;
+        return R.layout.content_suggestions_card_modern_reversed;
     }
 
     private void onExposure() {

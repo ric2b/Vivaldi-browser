@@ -11,8 +11,10 @@
 #include "ash/system/message_center/arc/arc_notification_content_view.h"
 #include "ash/system/message_center/arc/arc_notification_delegate.h"
 #include "ash/system/message_center/arc/arc_notification_view.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/arc/metrics/arc_metrics_constants.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
@@ -108,7 +110,7 @@ void ArcNotificationItemImpl::OnUpdatedFromAndroid(
       is_snooze_supported && !is_setting_shown;
 
   message_center::NotifierId notifier_id(
-      message_center::NotifierId::ARC_APPLICATION,
+      message_center::NotifierType::ARC_APPLICATION,
       app_id.empty() ? kDefaultArcNotifierId : app_id);
   notifier_id.profile_id = profile_id_.GetUserEmail();
 
@@ -121,6 +123,7 @@ void ArcNotificationItemImpl::OnUpdatedFromAndroid(
       notifier_id, rich_data,
       new ArcNotificationDelegate(weak_ptr_factory_.GetWeakPtr()));
   notification->set_timestamp(base::Time::FromJavaTime(data->time));
+  notification->set_custom_view_type(kArcNotificationCustomViewType);
 
   if (expand_state_ != ArcNotificationExpandState::FIXED_SIZE &&
       data->expand_state != ArcNotificationExpandState::FIXED_SIZE &&
@@ -175,6 +178,12 @@ void ArcNotificationItemImpl::Close(bool by_user) {
 
 void ArcNotificationItemImpl::Click() {
   manager_->SendNotificationClickedOnChrome(notification_key_);
+
+  // This is reached when user focuses on the notification and hits enter on
+  // keyboard. Mouse clicks and taps are handled separately in
+  // ArcNotificationContentView.
+  UMA_HISTOGRAM_ENUMERATION("Arc.UserInteraction",
+                            arc::UserInteractionType::NOTIFICATION_INTERACTION);
 }
 
 void ArcNotificationItemImpl::OpenSettings() {
@@ -256,8 +265,8 @@ const std::string& ArcNotificationItemImpl::GetNotificationId() const {
   return notification_id_;
 }
 
-void ArcNotificationItemImpl::CancelLongPress() {
-  manager_->CancelLongPress(notification_key_);
+void ArcNotificationItemImpl::CancelPress() {
+  manager_->CancelPress(notification_key_);
 }
 
 }  // namespace ash

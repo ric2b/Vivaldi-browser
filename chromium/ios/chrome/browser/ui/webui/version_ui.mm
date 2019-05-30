@@ -18,7 +18,7 @@
 #include "components/version_ui/version_ui_constants.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
-#include "ios/chrome/browser/ui/ui_util.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
 #include "ios/chrome/browser/ui/webui/version_handler.h"
 #include "ios/chrome/common/channel_info.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
@@ -55,7 +55,7 @@ web::WebUIIOSDataSource* CreateVersionUIDataSource() {
   html_source->AddString(
       version_ui::kCopyright,
       l10n_util::GetStringFUTF16(IDS_IOS_ABOUT_VERSION_COPYRIGHT,
-                                 base::IntToString16(exploded_time.year)));
+                                 base::NumberToString16(exploded_time.year)));
   html_source->AddLocalizedString(version_ui::kRevision,
                                   IDS_VERSION_UI_REVISION);
   std::string last_change = version_info::GetLastChange();

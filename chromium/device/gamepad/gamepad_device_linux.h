@@ -12,6 +12,7 @@
 #include "device/gamepad/abstract_haptic_gamepad.h"
 #include "device/gamepad/dualshock4_controller_linux.h"
 #include "device/gamepad/gamepad_standard_mappings.h"
+#include "device/gamepad/hid_haptic_gamepad_linux.h"
 #include "device/gamepad/switch_pro_controller_linux.h"
 #include "device/gamepad/udev_gamepad_linux.h"
 
@@ -41,9 +42,9 @@ class GamepadDeviceLinux : public AbstractHapticGamepad {
   bool IsEmpty() const;
 
   int GetJoydevIndex() const { return joydev_index_; }
-  std::string GetVendorId() const { return vendor_id_; }
-  std::string GetProductId() const { return product_id_; }
-  std::string GetVersionNumber() const { return version_number_; }
+  uint16_t GetVendorId() const { return vendor_id_; }
+  uint16_t GetProductId() const { return product_id_; }
+  uint16_t GetVersionNumber() const { return version_number_; }
   std::string GetName() const { return name_; }
   std::string GetSyspathPrefix() const { return syspath_prefix_; }
   GamepadBusType GetBusType() const { return bus_type_; }
@@ -119,13 +120,13 @@ class GamepadDeviceLinux : public AbstractHapticGamepad {
   std::vector<bool> button_indices_used_;
 
   // The vendor ID of the device.
-  std::string vendor_id_;
+  uint16_t vendor_id_;
 
   // The product ID of the device.
-  std::string product_id_;
+  uint16_t product_id_;
 
   // The version number of the device.
-  std::string version_number_;
+  uint16_t version_number_;
 
   // A string identifying the manufacturer and model of the device.
   std::string name_;
@@ -161,6 +162,9 @@ class GamepadDeviceLinux : public AbstractHapticGamepad {
 
   // Nintendo Switch Pro controller functionality, if available.
   std::unique_ptr<SwitchProControllerLinux> switch_pro_;
+
+  // A controller that uses a HID output report for vibration effects.
+  std::unique_ptr<HidHapticGamepadLinux> hid_haptics_;
 };
 
 }  // namespace device

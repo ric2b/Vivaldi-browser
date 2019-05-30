@@ -35,8 +35,6 @@
 
 namespace blink {
 
-using namespace HTMLNames;
-
 AXListBox::AXListBox(LayoutObject* layout_object,
                      AXObjectCacheImpl& ax_object_cache)
     : AXLayoutObject(layout_object, ax_object_cache), active_index_(-1) {
@@ -47,14 +45,14 @@ AXListBox::~AXListBox() = default;
 
 AXListBox* AXListBox::Create(LayoutObject* layout_object,
                              AXObjectCacheImpl& ax_object_cache) {
-  return new AXListBox(layout_object, ax_object_cache);
+  return MakeGarbageCollected<AXListBox>(layout_object, ax_object_cache);
 }
 
-AccessibilityRole AXListBox::DetermineAccessibilityRole() {
-  if ((aria_role_ = DetermineAriaRoleAttribute()) != kUnknownRole)
+ax::mojom::Role AXListBox::DetermineAccessibilityRole() {
+  if ((aria_role_ = DetermineAriaRoleAttribute()) != ax::mojom::Role::kUnknown)
     return aria_role_;
 
-  return kListBoxRole;
+  return ax::mojom::Role::kListBox;
 }
 
 AXObject* AXListBox::ActiveDescendant() {
@@ -84,8 +82,8 @@ void AXListBox::ActiveIndexChanged() {
   if (!select->IsFocused())
     return;
 
-  AXObjectCache().PostNotification(
-      this, AXObjectCacheImpl::kAXActiveDescendantChanged);
+  AXObjectCache().PostNotification(this,
+                                   ax::mojom::Event::kActiveDescendantChanged);
 }
 
 }  // namespace blink

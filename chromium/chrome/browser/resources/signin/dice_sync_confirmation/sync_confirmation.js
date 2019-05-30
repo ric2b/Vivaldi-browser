@@ -13,22 +13,19 @@ cr.define('sync.confirmation', function() {
     // even when the page zoom in Chrome is different than 100%.
     syncConfirmationBrowserProxy.initializedWithSize(
         [document.body.offsetHeight]);
+    // The web dialog size has been initialized, so reset the body width to
+    // auto. This makes sure that the body only takes up the viewable width,
+    // e.g. when there is a scrollbar.
+    document.body.style.width = 'auto';
   }
 
   function clearFocus() {
     document.activeElement.blur();
   }
 
-  // The C++ handler calls out to this Javascript function, so it needs to
-  // exist in the namespace. However, this version of the sync confirmation
-  // doesn't use a user image, so we do not need to actually implement this.
-  // TODO(scottchen): make the C++ handler not call this at all.
-  function setUserImageURL() {}
-
   return {
     clearFocus: clearFocus,
     initialize: initialize,
-    setUserImageURL: setUserImageURL
   };
 });
 

@@ -12,7 +12,7 @@
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/attestation/mock_attestation_flow.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/system/fake_statistics_provider.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/prefs/testing_pref_service.h"
@@ -106,7 +106,7 @@ TEST_P(DeviceCloudPolicyInitializerTest,
 
   // Server-backed state: advertised enrollment.
   base::DictionaryValue state_dict;
-  state_dict.SetString(kDeviceStateRestoreMode,
+  state_dict.SetString(kDeviceStateMode,
                        kDeviceStateRestoreModeReEnrollmentRequested);
   state_dict.SetString(kDeviceStateManagementDomain, "example.com");
   local_state_.Set(prefs::kServerBackedDeviceState, state_dict);
@@ -137,7 +137,7 @@ TEST_P(DeviceCloudPolicyInitializerTest,
   EXPECT_EQ(GetParam().auth_mechanism, config.auth_mechanism);
 
   // Server-backed state: forced enrollment.
-  state_dict.SetString(kDeviceStateRestoreMode,
+  state_dict.SetString(kDeviceStateMode,
                        kDeviceStateRestoreModeReEnrollmentEnforced);
   local_state_.Set(prefs::kServerBackedDeviceState, state_dict);
   config = device_cloud_policy_initializer_.GetPrescribedEnrollmentConfig();
@@ -184,7 +184,7 @@ TEST_P(DeviceCloudPolicyInitializerTest,
   EXPECT_EQ(GetParam().auth_mechanism_after_oobe, config.auth_mechanism);
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     ZeroTouchFlag,
     DeviceCloudPolicyInitializerTest,
     ::testing::Values(

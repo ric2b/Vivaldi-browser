@@ -192,7 +192,7 @@ static int CheckForValidDouble(const CharacterType* string,
                                const CharacterType* end,
                                const bool terminated_by_space,
                                const char terminator) {
-  int length = end - string;
+  int length = static_cast<int>(end - string);
   if (length < 1)
     return 0;
 
@@ -388,7 +388,7 @@ static inline bool ParseAlphaValue(const CharacterType*& string,
 
   value = 0;
 
-  int length = end - string;
+  size_t length = end - string;
   if (length < 2)
     return false;
 
@@ -593,7 +593,7 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
     case CSSPropertyColorInterpolation:
     case CSSPropertyColorInterpolationFilters:
       return value_id == CSSValueAuto || value_id == CSSValueSRGB ||
-             value_id == CSSValueLinearRGB;
+             value_id == CSSValueLinearrgb;
     case CSSPropertyColorRendering:
       return value_id == CSSValueAuto || value_id == CSSValueOptimizespeed ||
              value_id == CSSValueOptimizequality;
@@ -665,7 +665,7 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
     case CSSPropertyPointerEvents:
       return value_id == CSSValueVisible || value_id == CSSValueNone ||
              value_id == CSSValueAll || value_id == CSSValueAuto ||
-             (value_id >= CSSValueVisiblePainted &&
+             (value_id >= CSSValueVisiblepainted &&
               value_id <= CSSValueBoundingBox);
     case CSSPropertyPosition:
       return value_id == CSSValueStatic || value_id == CSSValueRelative ||
@@ -678,7 +678,6 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
               (value_id == CSSValueBlock || value_id == CSSValueInline)) ||
              value_id == CSSValueAuto;
     case CSSPropertyScrollBehavior:
-      DCHECK(RuntimeEnabledFeatures::CSSOMSmoothScrollEnabled());
       return value_id == CSSValueAuto || value_id == CSSValueSmooth;
     case CSSPropertyShapeRendering:
       return value_id == CSSValueAuto || value_id == CSSValueOptimizespeed ||
@@ -878,12 +877,13 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
     case CSSPropertyWhiteSpace:
       return value_id == CSSValueNormal || value_id == CSSValuePre ||
              value_id == CSSValuePreWrap || value_id == CSSValuePreLine ||
-             value_id == CSSValueNowrap;
+             value_id == CSSValueNowrap ||
+             (RuntimeEnabledFeatures::CSS3TextBreakSpacesEnabled() &&
+              value_id == CSSValueBreakSpaces);
     case CSSPropertyWordBreak:
       return value_id == CSSValueNormal || value_id == CSSValueBreakAll ||
              value_id == CSSValueKeepAll || value_id == CSSValueBreakWord;
     case CSSPropertyScrollSnapStop:
-      DCHECK(RuntimeEnabledFeatures::CSSScrollSnapPointsEnabled());
       return value_id == CSSValueNormal || value_id == CSSValueAlways;
     case CSSPropertyOverscrollBehaviorX:
       return value_id == CSSValueAuto || value_id == CSSValueContain ||
@@ -1063,8 +1063,8 @@ static bool ParseTransformTranslateArguments(
     unsigned expected_count,
     CSSFunctionValue* transform_value) {
   while (expected_count) {
-    size_t delimiter =
-        WTF::Find(pos, end - pos, expected_count == 1 ? ')' : ',');
+    wtf_size_t delimiter = WTF::Find(pos, static_cast<wtf_size_t>(end - pos),
+                                     expected_count == 1 ? ')' : ',');
     if (delimiter == kNotFound)
       return false;
     unsigned argument_length = static_cast<unsigned>(delimiter);
@@ -1089,8 +1089,8 @@ static bool ParseTransformNumberArguments(CharType*& pos,
                                           unsigned expected_count,
                                           CSSFunctionValue* transform_value) {
   while (expected_count) {
-    size_t delimiter =
-        WTF::Find(pos, end - pos, expected_count == 1 ? ')' : ',');
+    wtf_size_t delimiter = WTF::Find(pos, static_cast<wtf_size_t>(end - pos),
+                                     expected_count == 1 ? ')' : ',');
     if (delimiter == kNotFound)
       return false;
     unsigned argument_length = static_cast<unsigned>(delimiter);
@@ -1223,7 +1223,7 @@ static bool TransformCanLikelyUseFastPath(const CharType* chars,
         // All other things, ex. rotate.
         return false;
     }
-    size_t arguments_end = WTF::Find(chars, length, ')', i);
+    wtf_size_t arguments_end = WTF::Find(chars, length, ')', i);
     if (arguments_end == kNotFound)
       return false;
     // Advance to the end of the arguments.

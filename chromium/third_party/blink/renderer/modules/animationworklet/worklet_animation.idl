@@ -16,8 +16,14 @@
     MeasureAs=WorkletAnimationConstructor,
     OriginTrialEnabled=AnimationWorklet
 ] interface WorkletAnimation {
+  readonly attribute AnimationEffect? effect;
   readonly attribute AnimationTimeline? timeline;
   readonly attribute AnimationPlayState playState;
-  void play();
+  readonly attribute double? currentTime;
+  readonly attribute double? startTime;
+
+  [CallWith=ScriptState] attribute double playbackRate;
+  [RaisesException] void play();
+  [RaisesException] void pause();
   void cancel();
 };

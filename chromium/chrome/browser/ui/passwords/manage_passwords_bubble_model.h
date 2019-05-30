@@ -12,6 +12,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/clock.h"
 #include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/manage_passwords_referrer.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/statistics_table.h"
 #include "components/password_manager/core/common/password_manager_ui.h"
@@ -64,15 +65,12 @@ class ManagePasswordsBubbleModel {
   void OnSaveClicked();
 
   // Called by the view code when the manage button is clicked by the user.
-  void OnManageClicked();
+  void OnManageClicked(password_manager::ManagePasswordsReferrer referrer);
 
   // Called by the view code when the navigate to passwords.google.com link is
   // clicked by the user.
-  void OnNavigateToPasswordManagerAccountDashboardLinkClicked();
-
-  // Called by the view code when the brand name link is clicked by the user.
-  // TODO(crbug.com/862269): Remove when "Smart Lock" is gone.
-  void OnBrandLinkClicked();
+  void OnNavigateToPasswordManagerAccountDashboardLinkClicked(
+      password_manager::ManagePasswordsReferrer referrer);
 
   // Called by the view code when the auto-signin toast is about to close due to
   // timeout.
@@ -108,10 +106,6 @@ class ManagePasswordsBubbleModel {
   }
   const gfx::Range& save_confirmation_link_range() const {
     return save_confirmation_link_range_;
-  }
-
-  const gfx::Range& title_brand_link_range() const {
-    return title_brand_link_range_;
   }
 
   bool are_passwords_revealed_when_bubble_is_opened() const {
@@ -161,8 +155,7 @@ class ManagePasswordsBubbleModel {
 
  private:
   class InteractionKeeper;
-  // Updates |title_| and |title_brand_link_range_| for the
-  // PENDING_PASSWORD_STATE.
+  // Updates |title_| for the PENDING_PASSWORD_STATE.
   void UpdatePendingStateTitle();
   // Updates |title_| for the MANAGE_STATE.
   void UpdateManageStateTitle();
@@ -171,9 +164,6 @@ class ManagePasswordsBubbleModel {
   GURL origin_;
   password_manager::ui::State state_;
   base::string16 title_;
-  // Range of characters in the title that contains the Smart Lock Brand and
-  // should point to an article. For the default title the range is empty.
-  gfx::Range title_brand_link_range_;
   autofill::PasswordForm pending_password_;
   std::vector<autofill::PasswordForm> local_credentials_;
   base::string16 manage_link_;

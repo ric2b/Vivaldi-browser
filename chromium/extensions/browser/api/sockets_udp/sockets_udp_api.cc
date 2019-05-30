@@ -4,6 +4,7 @@
 
 #include "extensions/browser/api/sockets_udp/sockets_udp_api.h"
 
+#include "base/bind.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/socket_permission_request.h"
@@ -240,7 +241,7 @@ bool SocketsUdpSendFunction::Prepare() {
   params_ = sockets_udp::Send::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params_.get());
   io_buffer_size_ = params_->data.size();
-  io_buffer_ = new net::WrappedIOBuffer(
+  io_buffer_ = base::MakeRefCounted<net::WrappedIOBuffer>(
       reinterpret_cast<const char*>(params_->data.data()));
 
   return true;
@@ -361,7 +362,7 @@ bool SocketsUdpGetSocketsFunction::Prepare() { return true; }
 
 void SocketsUdpGetSocketsFunction::Work() {
   std::vector<sockets_udp::SocketInfo> socket_infos;
-  base::hash_set<int>* resource_ids = GetSocketIds();
+  std::unordered_set<int>* resource_ids = GetSocketIds();
   if (resource_ids != NULL) {
     for (int socket_id : *resource_ids) {
       ResumableUDPSocket* socket = GetUdpSocket(socket_id);

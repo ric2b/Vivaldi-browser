@@ -47,14 +47,14 @@ class CORE_EXPORT HTMLResourcePreloader
 
  public:
   static HTMLResourcePreloader* Create(Document&);
-  int CountPreloads();
-  Document* GetDocument() { return document_.Get(); }
-  void Trace(blink::Visitor*);
+
+  explicit HTMLResourcePreloader(Document&);
+
+  void Trace(Visitor*);
 
  protected:
   void Preload(std::unique_ptr<PreloadRequest>,
                const NetworkHintsInterface&) override;
-  explicit HTMLResourcePreloader(Document&);
 
  private:
   Member<Document> document_;

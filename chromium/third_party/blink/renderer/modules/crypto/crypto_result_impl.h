@@ -57,6 +57,7 @@ class MODULES_EXPORT CryptoResultImpl final : public CryptoResult {
  public:
   static CryptoResultImpl* Create(ScriptState*);
 
+  explicit CryptoResultImpl(ScriptState*);
   ~CryptoResultImpl() override;
 
   void CompleteWithError(WebCryptoErrorType, const WebString&) override;
@@ -77,23 +78,6 @@ class MODULES_EXPORT CryptoResultImpl final : public CryptoResult {
 
  private:
   class Resolver;
-  class ResultCancel : public CryptoResultCancel {
-   public:
-    static scoped_refptr<ResultCancel> Create() {
-      return base::AdoptRef(new ResultCancel);
-    }
-
-    bool Cancelled() const override;
-
-    void Cancel();
-
-   private:
-    ResultCancel();
-
-    int cancelled_;
-  };
-
-  explicit CryptoResultImpl(ScriptState*);
 
   void Cancel();
   void ClearResolver();
@@ -109,7 +93,7 @@ class MODULES_EXPORT CryptoResultImpl final : public CryptoResult {
   // check cancellation status via this result object. So, keep a separate
   // cancellation status object for the purpose, which will outlive the
   // result object and can be safely accessed by multiple threads.
-  scoped_refptr<ResultCancel> cancel_;
+  scoped_refptr<CryptoResultCancel> cancel_;
 };
 
 }  // namespace blink

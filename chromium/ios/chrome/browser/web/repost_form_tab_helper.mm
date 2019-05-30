@@ -10,8 +10,6 @@
 #error "This file requires ARC support."
 #endif
 
-DEFINE_WEB_STATE_USER_DATA_KEY(RepostFormTabHelper);
-
 RepostFormTabHelper::RepostFormTabHelper(
     web::WebState* web_state,
     id<RepostFormTabHelperDelegate> delegate)
@@ -69,3 +67,5 @@ void RepostFormTabHelper::WebStateDestroyed(web::WebState* web_state) {
   web_state_->RemoveObserver(this);
   web_state_ = nullptr;
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(RepostFormTabHelper)

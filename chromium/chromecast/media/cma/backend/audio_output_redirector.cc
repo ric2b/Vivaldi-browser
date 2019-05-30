@@ -4,6 +4,7 @@
 
 #include "chromecast/media/cma/backend/audio_output_redirector.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "base/logging.h"
@@ -11,6 +12,7 @@
 #include "base/strings/pattern.h"
 #include "base/values.h"
 #include "chromecast/media/cma/backend/audio_fader.h"
+#include "chromecast/media/cma/backend/audio_output_redirector_input.h"
 #include "chromecast/media/cma/backend/mixer_input.h"
 #include "chromecast/media/cma/backend/stream_mixer.h"
 #include "chromecast/public/cast_media_shlib.h"
@@ -69,31 +71,33 @@ void AudioOutputRedirector::InputImpl::Redirect(::media::AudioBus* const buffer,
                                                 RenderingDelay rendering_delay,
                                                 bool redirected) {
   if (!temp_buffer_ || temp_buffer_->frames() < num_frames) {
-    temp_buffer_ =
-        ::media::AudioBus::Create(mixer_input_->num_channels(), num_frames);
+    temp_buffer_ = ::media::AudioBus::Create(mixer_input_->num_channels(),
+                                             std::max(num_frames, 256));
   }
 
-  if (previous_ended_in_silence_ && redirected) {
-    // Previous buffer ended in silence, and the current buffer was redirected
-    // by a previous output splitter, so maintain silence.
-    num_frames = 0;
-  } else {
-    buffer->CopyPartialFramesTo(0, num_frames, 0, temp_buffer_.get());
-  }
-
-  if (previous_ended_in_silence_) {
-    if (!redirected) {
-      // Smoothly fade in from previous silence.
-      AudioFader::FadeInHelper(temp_buffer_.get(), num_frames, num_frames,
-                               num_frames);
+  if (num_frames != 0) {
+    if (previous_ended_in_silence_ && redirected) {
+      // Previous buffer ended in silence, and the current buffer was redirected
+      // by a previous output splitter, so maintain silence.
+      num_frames = 0;
+    } else {
+      buffer->CopyPartialFramesTo(0, num_frames, 0, temp_buffer_.get());
     }
-  } else if (redirected) {
-    // Smoothly fade out to silence, since output is now being redirected by a
-    // previous output splitter.
-    AudioFader::FadeOutHelper(temp_buffer_.get(), num_frames, num_frames,
-                              num_frames);
+
+    if (previous_ended_in_silence_) {
+      if (!redirected) {
+        // Smoothly fade in from previous silence.
+        AudioFader::FadeInHelper(temp_buffer_.get(), num_frames, 0, num_frames,
+                                 num_frames);
+      }
+    } else if (redirected) {
+      // Smoothly fade out to silence, since output is now being redirected by a
+      // previous output splitter.
+      AudioFader::FadeOutHelper(temp_buffer_.get(), num_frames, 0, num_frames,
+                                num_frames);
+    }
+    previous_ended_in_silence_ = redirected;
   }
-  previous_ended_in_silence_ = redirected;
 
   output_redirector_->MixInput(mixer_input_, temp_buffer_.get(), num_frames,
                                rendering_delay);
@@ -114,11 +118,14 @@ AudioOutputRedirector::~AudioOutputRedirector() = default;
 void AudioOutputRedirector::AddInput(MixerInput* mixer_input) {
   if (ApplyToInput(mixer_input)) {
     inputs_[mixer_input] = std::make_unique<InputImpl>(this, mixer_input);
+  } else {
+    non_redirected_inputs_.insert(mixer_input);
   }
 }
 
 void AudioOutputRedirector::RemoveInput(MixerInput* mixer_input) {
   inputs_.erase(mixer_input);
+  non_redirected_inputs_.erase(mixer_input);
 }
 
 bool AudioOutputRedirector::ApplyToInput(MixerInput* mixer_input) {
@@ -134,6 +141,33 @@ bool AudioOutputRedirector::ApplyToInput(MixerInput* mixer_input) {
   }
 
   return false;
+}
+
+void AudioOutputRedirector::UpdatePatterns(
+    std::vector<std::pair<AudioContentType, std::string>> patterns) {
+  config_.stream_match_patterns = std::move(patterns);
+  // Remove streams that no longer match.
+  for (auto it = inputs_.begin(); it != inputs_.end();) {
+    MixerInput* mixer_input = it->first;
+    if (!ApplyToInput(mixer_input)) {
+      non_redirected_inputs_.insert(mixer_input);
+      it = inputs_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+
+  // Add streams that previously didn't match.
+  for (auto it = non_redirected_inputs_.begin();
+       it != non_redirected_inputs_.end();) {
+    MixerInput* mixer_input = *it;
+    if (ApplyToInput(mixer_input)) {
+      inputs_[mixer_input] = std::make_unique<InputImpl>(this, mixer_input);
+      it = non_redirected_inputs_.erase(it);
+    } else {
+      ++it;
+    }
+  }
 }
 
 void AudioOutputRedirector::Start(int output_samples_per_second) {
@@ -217,8 +251,7 @@ void AudioOutputRedirector::FinishBuffer() {
 AudioOutputRedirectorToken* CastMediaShlib::AddAudioOutputRedirection(
     const AudioOutputRedirectionConfig& config,
     std::unique_ptr<RedirectedAudioOutput> output) {
-  if (!output || config.num_output_channels <= 0 ||
-      config.stream_match_patterns.empty()) {
+  if (!output || config.num_output_channels <= 0) {
     return nullptr;
   }
 
@@ -236,6 +269,19 @@ void CastMediaShlib::RemoveAudioOutputRedirection(
       static_cast<AudioOutputRedirector*>(token);
   if (redirector) {
     StreamMixer::Get()->RemoveAudioOutputRedirector(redirector);
+  }
+}
+
+// static
+void CastMediaShlib::ModifyAudioOutputRedirection(
+    AudioOutputRedirectorToken* token,
+    std::vector<std::pair<AudioContentType, std::string>>
+        stream_match_patterns) {
+  AudioOutputRedirector* redirector =
+      static_cast<AudioOutputRedirector*>(token);
+  if (redirector) {
+    StreamMixer::Get()->ModifyAudioOutputRedirection(
+        redirector, std::move(stream_match_patterns));
   }
 }
 

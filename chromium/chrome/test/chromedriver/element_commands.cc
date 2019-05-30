@@ -13,6 +13,7 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/logging.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/platform_thread.h"
@@ -33,16 +34,18 @@ const int kFlickTouchEventsPerSecond = 30;
 
 namespace {
 
-Status SendKeysToElement(
+Status FocusToElement(
     Session* session,
     WebView* web_view,
-    const std::string& element_id,
-    const base::ListValue* key_list) {
+    const std::string& element_id) {
+  Status status = CheckElement(element_id);
+  if (status.IsError())
+    return status;
   bool is_displayed = false;
   bool is_focused = false;
   base::TimeTicks start_time = base::TimeTicks::Now();
   while (true) {
-    Status status = IsElementDisplayed(
+    status = IsElementDisplayed(
         session, web_view, element_id, true, &is_displayed);
     if (status.IsError())
       return status;
@@ -60,7 +63,7 @@ Status SendKeysToElement(
   }
 
   bool is_enabled = false;
-  Status status = IsElementEnabled(session, web_view, element_id, &is_enabled);
+  status = IsElementEnabled(session, web_view, element_id, &is_enabled);
   if (status.IsError())
     return status;
   if (!is_enabled)
@@ -75,7 +78,17 @@ Status SendKeysToElement(
     if (status.IsError())
       return status;
   }
+  return Status(kOk);
+}
 
+Status SendKeysToElement(
+    Session* session,
+    WebView* web_view,
+    const std::string& element_id,
+    const base::ListValue* key_list) {
+  Status status = FocusToElement(session, web_view, element_id);
+  if (status.IsError())
+        return Status(kElementNotInteractable);
   return SendKeysOnWindow(web_view, key_list, true, &session->sticky_modifiers);
 }
 
@@ -91,7 +104,7 @@ Status ExecuteElementCommand(
   std::string id;
   if (params.GetString("id", &id) || params.GetString("element", &id))
     return command.Run(session, web_view, id, params, value);
-  return Status(kUnknownError, "element identifier must be a string");
+  return Status(kInvalidArgument, "element identifier must be a string");
 }
 
 Status ExecuteFindChildElement(int interval_ms,
@@ -125,9 +138,8 @@ Status ExecuteHoverOverElement(Session* session,
   if (status.IsError())
     return status;
 
-  MouseEvent move_event(
-      kMovedMouseEventType, kNoneMouseButton, location.x, location.y,
-      session->sticky_modifiers, 0);
+  MouseEvent move_event(kMovedMouseEventType, kNoneMouseButton, location.x,
+                        location.y, session->sticky_modifiers, 0, 0);
   std::list<MouseEvent> events;
   events.push_back(move_event);
   status = web_view->DispatchMouseEvents(events, session->GetCurrentFrameId());
@@ -163,15 +175,15 @@ Status ExecuteClickElement(Session* session,
       return status;
 
     std::list<MouseEvent> events;
-    events.push_back(
-        MouseEvent(kMovedMouseEventType, kNoneMouseButton,
-                   location.x, location.y, session->sticky_modifiers, 0));
-    events.push_back(
-        MouseEvent(kPressedMouseEventType, kLeftMouseButton,
-                   location.x, location.y, session->sticky_modifiers, 1));
-    events.push_back(
-        MouseEvent(kReleasedMouseEventType, kLeftMouseButton,
-                   location.x, location.y, session->sticky_modifiers, 1));
+    events.push_back(MouseEvent(kMovedMouseEventType, kNoneMouseButton,
+                                location.x, location.y,
+                                session->sticky_modifiers, 0, 0));
+    events.push_back(MouseEvent(kPressedMouseEventType, kLeftMouseButton,
+                                location.x, location.y,
+                                session->sticky_modifiers, 0, 1));
+    events.push_back(MouseEvent(kReleasedMouseEventType, kLeftMouseButton,
+                                location.x, location.y,
+                                session->sticky_modifiers, 1, 1));
     status =
         web_view->DispatchMouseEvents(events, session->GetCurrentFrameId());
     if (status.IsOk())
@@ -249,13 +261,13 @@ Status ExecuteFlick(Session* session,
 
   int xoffset, yoffset, speed;
   if (!params.GetInteger("xoffset", &xoffset))
-    return Status(kUnknownError, "'xoffset' must be an integer");
+    return Status(kInvalidArgument, "'xoffset' must be an integer");
   if (!params.GetInteger("yoffset", &yoffset))
-    return Status(kUnknownError, "'yoffset' must be an integer");
+    return Status(kInvalidArgument, "'yoffset' must be an integer");
   if (!params.GetInteger("speed", &speed))
-    return Status(kUnknownError, "'speed' must be an integer");
+    return Status(kInvalidArgument, "'speed' must be an integer");
   if (speed < 1)
-    return Status(kUnknownError, "'speed' must be a positive integer");
+    return Status(kInvalidArgument, "'speed' must be a positive integer");
 
   status = web_view->DispatchTouchEvent(
       TouchEvent(kTouchStart, location.x, location.y));
@@ -289,6 +301,34 @@ Status ExecuteClearElement(Session* session,
                            const std::string& element_id,
                            const base::DictionaryValue& params,
                            std::unique_ptr<base::Value>* value) {
+  Status status = CheckElement(element_id);
+  if (status.IsError())
+    return status;
+  // Scrolling to element is done by webdriver::atoms::CLEAR
+  bool is_displayed = false;
+  base::TimeTicks start_time = base::TimeTicks::Now();
+  while (true) {
+    status = IsElementDisplayed(
+      session, web_view, element_id, true, &is_displayed);
+    if (status.IsError())
+      return status;
+    if (is_displayed)
+      break;
+    if (base::TimeTicks::Now() - start_time >= session->implicit_wait) {
+      return Status(kElementNotVisible);
+    }
+    base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(50));
+  }
+  static bool isClearWarningNotified = false;
+  if (!isClearWarningNotified) {
+    std::string messageClearWarning =
+        "\n\t=== NOTE: ===\n"
+        "\tThe Clear command in ChromeDriver 2.43 and above\n"
+        "\thas been updated to conform to the current standard,\n"
+        "\tincluding raising blur event after clearing.\n";
+    VLOG(0) << messageClearWarning;
+    isClearWarningNotified = true;
+  }
   base::ListValue args;
   args.Append(CreateElement(element_id));
   std::unique_ptr<base::Value> result;
@@ -303,12 +343,24 @@ Status ExecuteSendKeysToElement(Session* session,
                                 const std::string& element_id,
                                 const base::DictionaryValue& params,
                                 std::unique_ptr<base::Value>* value) {
+  Status status = CheckElement(element_id);
+  if (status.IsError())
+    return status;
   const base::ListValue* key_list;
-  if (!params.GetList("value", &key_list))
-    return Status(kUnknownError, "'value' must be a list");
+  base::ListValue key_list_local;
+  if (session->w3c_compliant) {
+    const base::Value* text;
+    if (!params.Get("text", &text) || !text->is_string())
+      return Status(kInvalidArgument, "'text' must be a string");
+    key_list_local.Set(0, std::make_unique<base::Value>(text->Clone()));
+    key_list = &key_list_local;
+  } else {
+    if (!params.GetList("value", &key_list))
+      return Status(kInvalidArgument, "'value' must be a list");
+  }
 
   bool is_input = false;
-  Status status = IsElementAttributeEqualToIgnoreCase(
+  status = IsElementAttributeEqualToIgnoreCase(
       session, web_view, element_id, "tagName", "input", &is_input);
   if (status.IsError())
     return status;
@@ -318,12 +370,17 @@ Status ExecuteSendKeysToElement(Session* session,
   if (status.IsError())
     return status;
   if (is_input && is_file) {
+    if (session->strict_file_interactability) {
+      status = FocusToElement(session, web_view,element_id);
+      if (status.IsError())
+        return status;
+    }
     // Compress array into a single string.
     base::FilePath::StringType paths_string;
     for (size_t i = 0; i < key_list->GetSize(); ++i) {
       base::FilePath::StringType path_part;
       if (!key_list->GetString(i, &path_part))
-        return Status(kUnknownError, "'value' is invalid");
+        return Status(kInvalidArgument, "'value' is invalid");
       paths_string.append(path_part);
     }
 
@@ -340,7 +397,7 @@ Status ExecuteSendKeysToElement(Session* session,
       if (is_desktop && !base::PathExists(base::FilePath(path_piece))) {
         return Status(
             kInvalidArgument,
-            base::StringPrintf("File not found : %" PRIsFP,
+            base::StringPrintf("File not found : %" PRFilePath,
                                base::FilePath(path_piece).value().c_str()));
       }
       paths.push_back(base::FilePath(path_piece));
@@ -367,6 +424,9 @@ Status ExecuteSubmitElement(Session* session,
                             const std::string& element_id,
                             const base::DictionaryValue& params,
                             std::unique_ptr<base::Value>* value) {
+  Status status = CheckElement(element_id);
+  if (status.IsError())
+    return status;
   base::ListValue args;
   args.Append(CreateElement(element_id));
   return web_view->CallFunction(
@@ -381,6 +441,9 @@ Status ExecuteGetElementText(Session* session,
                              const std::string& element_id,
                              const base::DictionaryValue& params,
                              std::unique_ptr<base::Value>* value) {
+  Status status = CheckElement(element_id);
+  if (status.IsError())
+    return status;
   base::ListValue args;
   args.Append(CreateElement(element_id));
   return web_view->CallFunction(
@@ -395,6 +458,9 @@ Status ExecuteGetElementValue(Session* session,
                               const std::string& element_id,
                               const base::DictionaryValue& params,
                               std::unique_ptr<base::Value>* value) {
+  Status status = CheckElement(element_id);
+  if (status.IsError())
+    return status;
   base::ListValue args;
   args.Append(CreateElement(element_id));
   return web_view->CallFunction(
@@ -404,11 +470,37 @@ Status ExecuteGetElementValue(Session* session,
       value);
 }
 
+Status ExecuteGetElementProperty(Session* session,
+                              WebView* web_view,
+                              const std::string& element_id,
+                              const base::DictionaryValue& params,
+                              std::unique_ptr<base::Value>* value) {
+  Status status = CheckElement(element_id);
+  if (status.IsError())
+    return status;
+  base::ListValue args;
+  args.Append(CreateElement(element_id));
+
+  std::string name;
+  if (!params.GetString("name", &name))
+    return Status(kInvalidArgument, "missing 'name'");
+  args.AppendString(name);
+
+  return web_view->CallFunction(
+      session->GetCurrentFrameId(),
+      "function(elem, name) { return elem[name] }",
+      args,
+      value);
+}
+
 Status ExecuteGetElementTagName(Session* session,
                                 WebView* web_view,
                                 const std::string& element_id,
                                 const base::DictionaryValue& params,
                                 std::unique_ptr<base::Value>* value) {
+  Status status = CheckElement(element_id);
+  if (status.IsError())
+    return status;
   base::ListValue args;
   args.Append(CreateElement(element_id));
   return web_view->CallFunction(
@@ -423,6 +515,9 @@ Status ExecuteIsElementSelected(Session* session,
                                 const std::string& element_id,
                                 const base::DictionaryValue& params,
                                 std::unique_ptr<base::Value>* value) {
+  Status status = CheckElement(element_id);
+  if (status.IsError())
+    return status;
   base::ListValue args;
   args.Append(CreateElement(element_id));
   return web_view->CallFunction(
@@ -437,13 +532,27 @@ Status ExecuteIsElementEnabled(Session* session,
                                const std::string& element_id,
                                const base::DictionaryValue& params,
                                std::unique_ptr<base::Value>* value) {
+  Status status = CheckElement(element_id);
+  if (status.IsError())
+    return status;
   base::ListValue args;
   args.Append(CreateElement(element_id));
-  return web_view->CallFunction(
+
+  bool is_xml = false;
+  status = IsDocumentTypeXml(session, web_view, &is_xml);
+  if (status.IsError())
+    return status;
+
+  if (is_xml) {
+      value->reset(new base::Value(false));
+      return Status(kOk);
+  } else {
+    return web_view->CallFunction(
       session->GetCurrentFrameId(),
       webdriver::atoms::asString(webdriver::atoms::IS_ENABLED),
       args,
       value);
+  }
 }
 
 Status ExecuteIsElementDisplayed(Session* session,
@@ -451,6 +560,9 @@ Status ExecuteIsElementDisplayed(Session* session,
                                  const std::string& element_id,
                                  const base::DictionaryValue& params,
                                  std::unique_ptr<base::Value>* value) {
+  Status status = CheckElement(element_id);
+  if (status.IsError())
+    return status;
   base::ListValue args;
   args.Append(CreateElement(element_id));
   return web_view->CallFunction(
@@ -465,6 +577,9 @@ Status ExecuteGetElementLocation(Session* session,
                                  const std::string& element_id,
                                  const base::DictionaryValue& params,
                                  std::unique_ptr<base::Value>* value) {
+  Status status = CheckElement(element_id);
+  if (status.IsError())
+    return status;
   base::ListValue args;
   args.Append(CreateElement(element_id));
   return web_view->CallFunction(
@@ -479,11 +594,14 @@ Status ExecuteGetElementRect(Session* session,
                              const std::string& element_id,
                              const base::DictionaryValue& params,
                              std::unique_ptr<base::Value>* value) {
+  Status status = CheckElement(element_id);
+  if (status.IsError())
+    return status;
   base::ListValue args;
   args.Append(CreateElement(element_id));
 
   std::unique_ptr<base::Value> location;
-  Status status = web_view->CallFunction(
+  status = web_view->CallFunction(
       session->GetCurrentFrameId(),
       webdriver::atoms::asString(webdriver::atoms::GET_LOCATION), args,
       &location);
@@ -547,6 +665,9 @@ Status ExecuteGetElementSize(Session* session,
                              const std::string& element_id,
                              const base::DictionaryValue& params,
                              std::unique_ptr<base::Value>* value) {
+  Status status = CheckElement(element_id);
+  if (status.IsError())
+    return status;
   base::ListValue args;
   args.Append(CreateElement(element_id));
   return web_view->CallFunction(
@@ -563,25 +684,34 @@ Status ExecuteGetElementAttribute(Session* session,
                                   std::unique_ptr<base::Value>* value) {
   std::string name;
   if (!params.GetString("name", &name))
-    return Status(kUnknownError, "missing 'name'");
+    return Status(kInvalidArgument, "missing 'name'");
   return GetElementAttribute(session, web_view, element_id, name, value);
 }
 
 Status ExecuteGetElementValueOfCSSProperty(
-    Session* session,
-    WebView* web_view,
-    const std::string& element_id,
-    const base::DictionaryValue& params,
-    std::unique_ptr<base::Value>* value) {
-  std::string property_name;
-  if (!params.GetString("propertyName", &property_name))
-    return Status(kUnknownError, "missing 'propertyName'");
-  std::string property_value;
-  Status status = GetElementEffectiveStyle(
-      session, web_view, element_id, property_name, &property_value);
+                                      Session* session,
+                                      WebView* web_view,
+                                      const std::string& element_id,
+                                      const base::DictionaryValue& params,
+                                      std::unique_ptr<base::Value>* value) {
+  bool is_xml = false;
+  Status status = IsDocumentTypeXml(session, web_view, &is_xml);
   if (status.IsError())
     return status;
-  value->reset(new base::Value(property_value));
+
+  if (is_xml) {
+      value->reset(new base::Value(""));
+  } else {
+    std::string property_name;
+    if (!params.GetString("propertyName", &property_name))
+      return Status(kInvalidArgument, "missing 'propertyName'");
+    std::string property_value;
+    status = GetElementEffectiveStyle(
+        session, web_view, element_id, property_name, &property_value);
+    if (status.IsError())
+      return status;
+    value->reset(new base::Value(property_value));
+  }
   return Status(kOk);
 }
 
@@ -592,7 +722,7 @@ Status ExecuteElementEquals(Session* session,
                             std::unique_ptr<base::Value>* value) {
   std::string other_element_id;
   if (!params.GetString("other", &other_element_id))
-    return Status(kUnknownError, "'other' must be a string");
+    return Status(kInvalidArgument, "'other' must be a string");
   value->reset(new base::Value(element_id == other_element_id));
   return Status(kOk);
 }
@@ -602,33 +732,56 @@ Status ExecuteElementScreenshot(Session* session,
                                 const std::string& element_id,
                                 const base::DictionaryValue& params,
                                 std::unique_ptr<base::Value>* value) {
-  bool scroll = true;
-  params.GetBoolean("scroll", &scroll);
-
   Status status = session->chrome->ActivateWebView(web_view->GetId());
   if (status.IsError())
     return status;
 
-  if (scroll) {
-    WebPoint offset(0, 0);
-    WebPoint location;
-    status = ScrollElementIntoView(session, web_view, element_id, &offset,
-                                   &location);
-    if (status.IsError())
-      return status;
-  }
+  WebPoint offset(0, 0);
+  WebPoint location;
+  status =
+      ScrollElementIntoView(session, web_view, element_id, &offset, &location);
+  if (status.IsError())
+    return status;
 
-  std::string screenshot;
   std::unique_ptr<base::Value> clip;
-  ExecuteGetElementRect(session, web_view, element_id, params, &clip);
+  status = ExecuteGetElementRect(session, web_view, element_id, params, &clip);
+  if (status.IsError())
+    return status;
 
-  std::unique_ptr<base::DictionaryValue> clip_dict = base::DictionaryValue::From(std::move(clip));
+  // |location| returned by ScrollElementIntoView is relative to the current
+  // view port. However, CaptureScreenshot expects a location relative to the
+  // document origin. We make the adjustment using the scroll amount of the top
+  // level window. Scrolling of frames has already been included in |location|.
+  // Scroll information can be in either document.documentElement or
+  // document.body, depending on document compatibility mode. The parentheses
+  // around the JavaScript code below is needed because JavaScript syntax
+  // doesn't allow a statement to start with an object literal.
+  std::unique_ptr<base::Value> scroll;
+  status = web_view->EvaluateScript(
+      std::string(),
+      "({x: document.documentElement.scrollLeft || document.body.scrollLeft,"
+      "  y: document.documentElement.scrollTop || document.body.scrollTop})",
+      &scroll);
+  if (status.IsError())
+    return status;
+  int scroll_left = scroll->FindKey("x")->GetInt();
+  int scroll_top = scroll->FindKey("y")->GetInt();
+
+  std::unique_ptr<base::DictionaryValue> clip_dict =
+      base::DictionaryValue::From(std::move(clip));
   if (!clip_dict)
     return Status(kUnknownError, "Element Rect is not a dictionary");
+  // |clip_dict| already contains the right width and height of the target
+  // element, but its x and y are relative to containing frame. We replace them
+  // with the x and y relative to top-level document origin, as expected by
+  // CaptureScreenshot.
+  clip_dict->SetInteger("x", location.x + scroll_left);
+  clip_dict->SetInteger("y", location.y + scroll_top);
   clip_dict->SetDouble("scale", 1.0);
   base::DictionaryValue screenshot_params;
   screenshot_params.SetDictionary("clip", std::move(clip_dict));
 
+  std::string screenshot;
   status = web_view->CaptureScreenshot(&screenshot, screenshot_params);
   if (status.IsError())
     return status;

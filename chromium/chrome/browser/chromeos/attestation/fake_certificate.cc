@@ -6,7 +6,7 @@
 
 #include <stdint.h>
 
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/time/time.h"
 #include "crypto/rsa_private_key.h"
 #include "net/cert/x509_certificate.h"
@@ -61,13 +61,13 @@ bool GetFakeCertificateDER(const base::TimeDelta& expiry,
   }
   std::unique_ptr<crypto::RSAPrivateKey> test_key(
       crypto::RSAPrivateKey::CreateFromPrivateKeyInfo(std::vector<uint8_t>(
-          &kTestKeyData[0], &kTestKeyData[arraysize(kTestKeyData)])));
+          &kTestKeyData[0], &kTestKeyData[base::size(kTestKeyData)])));
   if (!test_key.get()) {
     return false;
   }
   return net::x509_util::CreateSelfSignedCert(
       test_key->key(), net::x509_util::DIGEST_SHA256, "CN=subject", 12345,
-      valid_start, valid_expiry, certificate);
+      valid_start, valid_expiry, {}, certificate);
 }
 
 bool GetFakeCertificatePEM(const base::TimeDelta& expiry,

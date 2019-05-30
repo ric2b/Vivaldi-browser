@@ -49,18 +49,6 @@ class UserManager {
 
   // Get the path of profile that is being signed in.
   static base::FilePath GetSigninProfilePath();
-#if defined(OS_MACOSX)
-  // Temporary shim for Polychrome. See bottom of first comment in
-  // https://crbug.com/80495 for details.
-  static void ShowCocoa(const base::FilePath& profile_path_to_focus,
-                        profiles::UserManagerAction user_manager_action);
-  static void HideCocoa();
-  static bool IsShowingCocoa();
-  static void OnUserManagerShownCocoa();
-  static void AddOnUserManagerShownCallbackForTestingCocoa(
-      const base::Closure& callback);
-  static base::FilePath GetSigninProfilePathCocoa();
-#endif
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(UserManager);
@@ -75,33 +63,22 @@ class UserManagerProfileDialog {
   static constexpr int kDialogWidth = 448;
 
   // Shows a dialog where the user can re-authenticate the profile with the
-  // given |email|. This is called in the following scenarios:
-  //  -From the user manager when a profile is locked and the user's password is
-  //   detected to have been changed.
-  //  -From the user manager when a custodian account needs to be
-  //   reauthenticated.
-  // |reason| can be REASON_UNLOCK or REASON_REAUTHENTICATION to indicate
-  // whether this is a reauth or unlock scenario.
-  static void ShowReauthDialog(content::BrowserContext* browser_context,
-                               const std::string& email,
-                               signin_metrics::Reason reason);
+  // given |email|. This is called from the user manager when a profile is
+  // locked and the user's password is detected to have been changed.
+  static void ShowUnlockDialog(content::BrowserContext* browser_context,
+                               const std::string& email);
 
   // Shows a reauth dialog with profile path so that the sign in error message
   // can be displayed without browser window.
-  static void ShowReauthDialogWithProfilePath(
+  static void ShowUnlockDialogWithProfilePath(
       content::BrowserContext* browser_context,
       const std::string& email,
-      const base::FilePath& profile_path,
-      signin_metrics::Reason reason);
+      const base::FilePath& profile_path);
 
   // Shows a dialog where the user logs into their profile for the first time
-  // via the user manager.
-  // |reason| can be REASON_SIGNIN_PRIMARY_ACCOUNT or
-  // REASON_FORCED_SIGNIN_PRIMARY_ACCOUNT to indicate whether this sign in is
-  // forced or not.
-  static void ShowSigninDialog(content::BrowserContext* browser_context,
-                               const base::FilePath& profile_path,
-                               signin_metrics::Reason reason);
+  // via the user manager, when force signin is enabled.
+  static void ShowForceSigninDialog(content::BrowserContext* browser_context,
+                                    const base::FilePath& profile_path);
 
   // Show the dialog and display local sign in error message without browser.
   static void ShowDialogAndDisplayErrorMessage(
@@ -113,25 +90,6 @@ class UserManagerProfileDialog {
   // Hides the dialog if it is showing.
   static void HideDialog();
 
-#if defined(OS_MACOSX)
-  // Temporary shim for Polychrome. See bottom of first comment in
-  // https://crbug.com/80495 for details.
-  static void ShowReauthDialogCocoa(content::BrowserContext* browser_context,
-                                    const std::string& email,
-                                    signin_metrics::Reason reason);
-  static void ShowReauthDialogWithProfilePathCocoa(
-      content::BrowserContext* browser_context,
-      const std::string& email,
-      const base::FilePath& profile_path,
-      signin_metrics::Reason reason);
-  static void ShowSigninDialogCocoa(content::BrowserContext* browser_context,
-                                    const base::FilePath& profile_path,
-                                    signin_metrics::Reason reason);
-  static void ShowDialogAndDisplayErrorMessageCocoa(
-      content::BrowserContext* browser_context);
-  static void DisplayErrorMessageCocoa();
-  static void HideDialogCocoa();
-#endif
   // Abstract base class for performing online reauthentication of profiles in
   // the User Manager. It is concretely implemented in UserManagerMac and
   // UserManagerView to specialize the closing of the UI's dialog widgets.
@@ -140,7 +98,8 @@ class UserManagerProfileDialog {
     BaseDialogDelegate();
 
     // content::WebContentsDelegate:
-    bool HandleContextMenu(const content::ContextMenuParams& params) override;
+    bool HandleContextMenu(content::RenderFrameHost* render_frame_host,
+                           const content::ContextMenuParams& params) override;
 
     // content::WebContentsDelegate:
     void LoadingStateChanged(content::WebContents* source,

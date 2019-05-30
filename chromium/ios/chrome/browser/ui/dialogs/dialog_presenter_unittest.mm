@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/ui/dialogs/dialog_presenter.h"
 
 #include "base/strings/sys_string_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
@@ -49,11 +50,18 @@ class DialogPresenterTestWebState : public web::TestWebState {
 }
 // The web states for the dialogs that have been presented.
 @property(nonatomic, readonly) std::vector<web::WebState*> presentedWebStates;
+// Whether the dialog should be allowed to present a dialog.
+@property(nonatomic, assign) BOOL shouldAllowDialogPresentation;
 @end
 
 @implementation TestDialogPresenterDelegate
-@synthesize dialogPresenterDelegateIsPresenting =
-    _dialogPresenterDelegateIsPresenting;
+
+- (instancetype)init {
+  if (self = [super init]) {
+    _shouldAllowDialogPresentation = YES;
+  }
+  return self;
+}
 
 - (std::vector<web::WebState*>)presentedWebStates {
   return _presentedWebStates;
@@ -62,6 +70,10 @@ class DialogPresenterTestWebState : public web::TestWebState {
 - (void)dialogPresenter:(DialogPresenter*)presenter
     willShowDialogForWebState:(web::WebState*)webState {
   _presentedWebStates.push_back(webState);
+}
+
+- (BOOL)shouldDialogPresenterPresentDialog:(DialogPresenter*)presenter {
+  return self.shouldAllowDialogPresentation;
 }
 
 @end
@@ -138,6 +150,23 @@ TEST_F(DialogPresenterTest, IFrameTest) {
   EXPECT_NSEQ(expected_title, different_origin_title);
 }
 
+// Tests that JavaScript dialogs have correct title when they are presented from
+// about:blank page.
+TEST_F(DialogPresenterTest, AboutBlankTest) {
+  DialogPresenterTestWebState web_state;
+  web_state.SetCurrentURL(GURL(url::kAboutBlankURL));
+  [presenter() runJavaScriptAlertPanelWithMessage:@""
+                                       requestURL:GURL(url::kAboutBlankURL)
+                                         webState:&web_state
+                                completionHandler:nil];
+
+  NSString* expected_title = l10n_util::GetNSStringF(
+      IDS_JAVASCRIPT_MESSAGEBOX_TITLE, base::UTF8ToUTF16(url::kAboutBlankURL));
+  NSString* actual_title =
+      [presenter() presentedDialogCoordinator].alertController.title;
+  EXPECT_NSEQ(expected_title, actual_title);
+}
+
 // Tests that multiple JavaScript dialogs are queued
 TEST_F(DialogPresenterTest, QueueTest) {
   // Tests that the dialog for |webState1| has been shown.
@@ -197,7 +226,7 @@ TEST_F(DialogPresenterTest, CancelTest) {
 TEST_F(DialogPresenterTest, DelegatePresenting) {
   // Tests that the dialog is not shown if the delegate is presenting.
   DialogPresenterTestWebState webState1;
-  delegate().dialogPresenterDelegateIsPresenting = YES;
+  delegate().shouldAllowDialogPresentation = NO;
   [presenter() runJavaScriptAlertPanelWithMessage:@""
                                        requestURL:GURL()
                                          webState:&webState1
@@ -207,7 +236,7 @@ TEST_F(DialogPresenterTest, DelegatePresenting) {
   EXPECT_EQ(0U, delegate().presentedWebStates.size());
 
   // The delegate is not presenting anymore, the dialog is not shown yet.
-  delegate().dialogPresenterDelegateIsPresenting = NO;
+  delegate().shouldAllowDialogPresentation = YES;
   EXPECT_EQ(0U, delegate().presentedWebStates.size());
 
   // Notify the presenter that it can present.

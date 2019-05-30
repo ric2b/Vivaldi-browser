@@ -40,15 +40,14 @@ class CONTENT_EXPORT ServiceManagerConnectionImpl
   void SetConnectionLostClosure(const base::Closure& closure) override;
   int AddConnectionFilter(std::unique_ptr<ConnectionFilter> filter) override;
   void RemoveConnectionFilter(int filter_id) override;
-  void AddEmbeddedService(
-      const std::string& name,
-      const service_manager::EmbeddedServiceInfo& info) override;
   void AddServiceRequestHandler(
       const std::string& name,
       const ServiceRequestHandler& handler) override;
   void AddServiceRequestHandlerWithPID(
       const std::string& name,
       const ServiceRequestHandlerWithPID& handler) override;
+  void SetDefaultServiceRequestHandler(
+      const DefaultServiceRequestHandler& handler) override;
 
   void OnConnectionLost();
   void GetInterface(service_manager::mojom::InterfaceProvider* provider,

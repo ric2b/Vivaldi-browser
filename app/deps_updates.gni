@@ -1,39 +1,41 @@
 
-update_template_instance("//chrome:packed_resources") {
-  if (!defined(additional_extra_paks)) {
-    additional_extra_paks = []
+if (!is_android) {
+  update_template_instance("//chrome:packed_resources") {
+    if (!defined(additional_extra_paks)) {
+      additional_extra_paks = []
+    }
+    additional_extra_paks += [
+      "$root_gen_dir/vivaldi/vivaldi_native_unscaled.pak",
+    ]
+    if (!defined(public_deps)) { public_deps = [] }
+    public_deps += [
+      "//vivaldi/app:vivaldi_native_resources",
+      "//vivaldi/app:vivaldi_native_strings",
+      "//vivaldi/app:vivaldi_unscaled_native_resources",
+      "//vivaldi/app:vivaldi_merge_repacks",
+    ]
   }
-  additional_extra_paks += [
-    "$root_gen_dir/vivaldi/vivaldi_native_unscaled.pak",
-  ]
-  if (!defined(public_deps)) { public_deps = [] }
-  public_deps += [
-    "//vivaldi/app:vivaldi_native_resources",
-    "//vivaldi/app:vivaldi_native_strings",
-    "//vivaldi/app:vivaldi_unscaled_native_resources",
-  ]
-}
 
-update_template_instance("//chrome:packed_resources_extra") {
-  if (!defined(deps)) { deps = [] }
-  deps += [
-    "//vivaldi/app:vivaldi_unscaled_native_resources",
-  ]
-}
-
-
-update_template_instance("//chrome:packed_resources_locales") {
-  if (!defined(additional_source_patterns)) {
-    additional_source_patterns = []
+  update_template_instance("//chrome:packed_resources_extra") {
+    if (!defined(deps)) { deps = [] }
+    deps += [
+      "//vivaldi/app:vivaldi_unscaled_native_resources",
+    ]
   }
-  additional_source_patterns += [ "$root_gen_dir/vivaldi/vivaldi_native_strings_" ]
 
-  # Both deps and public_deps need to be updated; deps are used by subtargets
-  if (!defined(deps)) { deps = [] }
-  deps += [
-    "//vivaldi/app:vivaldi_native_strings",
-    "//vivaldi/app:vivaldi_unscaled_native_resources",
-  ]
+  update_template_instance("//chrome:packed_resources_locales") {
+    if (!defined(additional_source_patterns)) {
+      additional_source_patterns = []
+    }
+    additional_source_patterns += [ "$root_gen_dir/vivaldi/vivaldi_native_strings_" ]
+
+    # Both deps and public_deps need to be updated; deps are used by subtargets
+    if (!defined(deps)) { deps = [] }
+    deps += [
+      "//vivaldi/app:vivaldi_native_strings",
+      "//vivaldi/app:vivaldi_unscaled_native_resources",
+    ]
+  }
 }
 
 update_target("//chrome:resources") {
@@ -78,12 +80,11 @@ update_template_instance("//components:components_tests_pak") {
   ]
 }
 
-_targets = [
-  "//chrome:packed_resources_100_percent",
-]
+_targets = []
 
 if (!is_android) {
   _targets += [
+    "//chrome:packed_resources_100_percent",
     "//chrome:packed_resources_200_percent",
   ]
 }

@@ -6,13 +6,13 @@
 
 #include "ash/public/cpp/login_constants.h"
 #include "ash/public/cpp/wallpaper_types.h"
+#include "ash/public/cpp/window_animation_types.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/wallpaper/wallpaper_controller.h"
 #include "ash/wallpaper/wallpaper_widget_controller.h"
-#include "ash/wm/overview/window_selector_controller.h"
-#include "ash/wm/window_animation_types.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ui/aura/window.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_manager.h"
@@ -29,6 +29,10 @@
 
 namespace ash {
 namespace {
+
+// The value used for alpha to apply a dark filter to the wallpaper in tablet
+// mode. A higher number up to 255 results in a darker wallpaper.
+constexpr int kTabletModeWallpaperAlpha = 102;
 
 // A view that controls the child view's layer so that the layer always has the
 // same size as the display's original, un-scaled size in DIP. The layer is then
@@ -81,60 +85,27 @@ SkColor GetWallpaperDarkenColor() {
       SkColorSetA(login_constants::kDefaultBaseColor,
                   login_constants::kTranslucentColorDarkenAlpha),
       SkColorSetA(darken_color, 0xFF));
-  return SkColorSetA(darken_color, login_constants::kTranslucentAlpha);
+
+  int alpha = login_constants::kTranslucentAlpha;
+  if (Shell::Get()
+          ->tablet_mode_controller()
+          ->IsTabletModeWindowManagerEnabled()) {
+    alpha = kTabletModeWallpaperAlpha;
+  }
+
+  return SkColorSetA(darken_color, alpha);
 }
 
 }  // namespace
 
-// This event handler receives events in the pre-target phase and takes care of
-// the following:
-//   - Disabling overview mode on touch release.
-//   - Disabling overview mode on mouse release.
-class PreEventDispatchHandler : public ui::EventHandler {
- public:
-  PreEventDispatchHandler() = default;
-  ~PreEventDispatchHandler() override = default;
-
- private:
-  // ui::EventHandler:
-  void OnMouseEvent(ui::MouseEvent* event) override {
-    CHECK_EQ(ui::EP_PRETARGET, event->phase());
-    WindowSelectorController* controller =
-        Shell::Get()->window_selector_controller();
-    if (event->type() == ui::ET_MOUSE_RELEASED && controller->IsSelecting()) {
-      controller->ToggleOverview();
-      event->StopPropagation();
-    }
-  }
-
-  void OnGestureEvent(ui::GestureEvent* event) override {
-    CHECK_EQ(ui::EP_PRETARGET, event->phase());
-    WindowSelectorController* controller =
-        Shell::Get()->window_selector_controller();
-    if (event->type() == ui::ET_GESTURE_TAP && controller->IsSelecting()) {
-      controller->ToggleOverview();
-      event->StopPropagation();
-    }
-  }
-
-  DISALLOW_COPY_AND_ASSIGN(PreEventDispatchHandler);
-};
-
 ////////////////////////////////////////////////////////////////////////////////
 // WallpaperView, public:
 
-WallpaperView::WallpaperView()
-    : pre_dispatch_handler_(new PreEventDispatchHandler()) {
+WallpaperView::WallpaperView() {
   set_context_menu_controller(this);
-  AddPreTargetHandler(pre_dispatch_handler_.get());
 }
 
-WallpaperView::~WallpaperView() {
-  RemovePreTargetHandler(pre_dispatch_handler_.get());
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// WallpaperView, views::View overrides:
+WallpaperView::~WallpaperView() = default;
 
 void WallpaperView::OnPaint(gfx::Canvas* canvas) {
   // Scale the image while maintaining the aspect ratio, cropping as necessary
@@ -223,14 +194,15 @@ bool WallpaperView::OnMousePressed(const ui::MouseEvent& event) {
   return true;
 }
 
-void WallpaperView::ShowContextMenuForView(views::View* source,
-                                           const gfx::Point& point,
-                                           ui::MenuSourceType source_type) {
+void WallpaperView::ShowContextMenuForViewImpl(views::View* source,
+                                               const gfx::Point& point,
+                                               ui::MenuSourceType source_type) {
   Shell::Get()->ShowContextMenu(point, source_type);
 }
 
 views::Widget* CreateWallpaperWidget(aura::Window* root_window,
-                                     int container_id) {
+                                     int container_id,
+                                     WallpaperView** out_wallpaper_view) {
   WallpaperController* controller = Shell::Get()->wallpaper_controller();
 
   views::Widget* wallpaper_widget = new views::Widget;
@@ -241,7 +213,9 @@ views::Widget* CreateWallpaperWidget(aura::Window* root_window,
     params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
   params.parent = root_window->GetChildById(container_id);
   wallpaper_widget->Init(params);
-  wallpaper_widget->SetContentsView(new LayerControlView(new WallpaperView()));
+  WallpaperView* wallpaper_view = new WallpaperView();  // Owned by views.
+  wallpaper_widget->SetContentsView(new LayerControlView(wallpaper_view));
+  *out_wallpaper_view = wallpaper_view;
   int animation_type =
       controller->ShouldShowInitialAnimation()
           ? wm::WINDOW_VISIBILITY_ANIMATION_TYPE_BRIGHTNESS_GRAYSCALE

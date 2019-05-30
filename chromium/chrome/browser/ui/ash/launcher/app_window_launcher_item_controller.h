@@ -72,7 +72,13 @@ class AppWindowLauncherItemController : public ash::ShelfItemDelegate,
 
   const WindowList& windows() const { return windows_; }
 
+ protected:
+  // Returns last active window in the controller or first window.
+  ui::BaseWindow* GetLastActiveWindow();
+
  private:
+  friend class ChromeLauncherControllerTest;
+
   // Returns the action performed. Should be one of SHELF_ACTION_NONE,
   // SHELF_ACTION_WINDOW_ACTIVATED, or SHELF_ACTION_WINDOW_MINIMIZED.
   ash::ShelfAction ShowAndActivateOrMinimize(ui::BaseWindow* window);
@@ -83,9 +89,6 @@ class AppWindowLauncherItemController : public ash::ShelfItemDelegate,
   // SHELF_ACTION_WINDOW_ACTIVATED, or SHELF_ACTION_WINDOW_MINIMIZED.
   ash::ShelfAction ActivateOrAdvanceToNextAppWindow(
       ui::BaseWindow* window_to_show);
-
-  // Returns last active window in the controller or first window.
-  ui::BaseWindow* GetLastActiveWindow();
 
   WindowList::iterator GetFromNativeWindow(aura::Window* window);
 

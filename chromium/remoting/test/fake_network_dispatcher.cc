@@ -62,7 +62,7 @@ void FakeNetworkDispatcher::DeliverPacket(
   {
     base::AutoLock auto_lock(nodes_lock_);
 
-    NodesMap::iterator node_it = nodes_.find(to.ipaddr());
+    auto node_it = nodes_.find(to.ipaddr());
     if (node_it == nodes_.end()) {
       LOG(ERROR) << "Tried to deliver packet to unknown target: "
                  << to.ToString();
@@ -75,9 +75,9 @@ void FakeNetworkDispatcher::DeliverPacket(
     // case.
     scoped_refptr<base::SingleThreadTaskRunner> task_runner = node->GetThread();
     if (!task_runner->BelongsToCurrentThread()) {
-      task_runner->PostTask(FROM_HERE,
-                            base::Bind(&FakeNetworkDispatcher::DeliverPacket,
-                                       this, from, to, data, data_size));
+      task_runner->PostTask(
+          FROM_HERE, base::BindOnce(&FakeNetworkDispatcher::DeliverPacket, this,
+                                    from, to, data, data_size));
       return;
     }
   }

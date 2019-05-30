@@ -12,6 +12,9 @@ namespace switches {
 // transparent.
 const char kDefaultBackgroundColor[] = "default-background-color";
 
+// Whether cookies stored as part of user profile are encrypted.
+const char kDisableCookieEncryption[] = "disable-cookie-encryption";
+
 // Whether or not begin frames should be issued over DevToolsProtocol
 // (experimental).
 const char kEnableBeginFrameControl[] = "enable-begin-frame-control";
@@ -30,6 +33,10 @@ const char kCrashDumpsDir[] = "crash-dumps-dir";
 // deterministic mode where begin frames should be issued over DevToolsProtocol
 // (experimental).
 const char kDeterministicMode[] = "deterministic-mode";
+
+// Use a specific disk cache location, rather than one derived from the
+// UserDatadir.
+const char kDiskCacheDir[] = "disk-cache-dir";
 
 // Instructs headless_shell to print document.body.innerHTML to stdout.
 const char kDumpDom[] = "dump-dom";

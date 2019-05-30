@@ -51,7 +51,7 @@ class CONTENT_EXPORT Calculator {
  protected:
   // Emits an UMA metric for responsiveness of a single measurement interval.
   // Exposed for testing.
-  virtual void EmitResponsiveness(int janky_slices);
+  virtual void EmitResponsiveness(size_t janky_slices);
 
   // Exposed for testing.
   base::TimeTicks GetLastCalculationTime();
@@ -120,6 +120,9 @@ class CONTENT_EXPORT Calculator {
   // Note that the process may be suspended while a task or event is being
   // executed, so a very long execution time should be treated similarly.
   base::TimeTicks most_recent_activity_time_;
+
+  // The number of times the responsiveness metric has been emitted.
+  int emission_count_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(Calculator);
 };

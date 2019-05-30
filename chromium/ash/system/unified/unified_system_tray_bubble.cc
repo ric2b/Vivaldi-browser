@@ -5,6 +5,7 @@
 #include "ash/system/unified/unified_system_tray_bubble.h"
 
 #include "ash/public/cpp/app_list/app_list_features.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/tray/tray_constants.h"
@@ -23,8 +24,6 @@
 namespace ash {
 
 namespace {
-
-constexpr int kPaddingFromScreenTop = 8;
 
 // Container view of UnifiedSystemTrayView to return fake preferred size for
 // animation optimization. See UnifiedSystemTrayBubble::UpdateTransform().
@@ -70,20 +69,26 @@ UnifiedSystemTrayBubble::UnifiedSystemTrayBubble(UnifiedSystemTray* tray,
   if (show_by_click)
     time_shown_by_click_ = base::TimeTicks::Now();
 
-  views::TrayBubbleView::InitParams init_params;
+  TrayBubbleView::InitParams init_params;
   init_params.anchor_alignment = tray_->GetAnchorAlignment();
   init_params.min_width = kTrayMenuWidth;
   init_params.max_width = kTrayMenuWidth;
   init_params.delegate = tray;
   init_params.parent_window = tray->GetBubbleWindowContainer();
-  init_params.anchor_view =
-      tray->shelf()->GetSystemTrayAnchor()->GetBubbleAnchor();
+  init_params.anchor_view = nullptr;
+  init_params.anchor_mode = TrayBubbleView::AnchorMode::kRect;
+  init_params.anchor_rect = tray->shelf()->GetSystemTrayAnchorRect();
+  // Decrease bottom and right insets to compensate for the adjustment of
+  // the respective edges in Shelf::GetSystemTrayAnchorRect().
+  init_params.insets =
+      gfx::Insets(kUnifiedMenuPadding, kUnifiedMenuPadding,
+                  kUnifiedMenuPadding - 1, kUnifiedMenuPadding - 1);
   init_params.corner_radius = kUnifiedTrayCornerRadius;
   init_params.has_shadow = false;
   init_params.show_by_click = show_by_click;
   init_params.close_on_deactivate = false;
 
-  bubble_view_ = new views::TrayBubbleView(init_params);
+  bubble_view_ = new TrayBubbleView(init_params);
 
   unified_view_ = controller_->CreateView();
   time_to_click_recorder_ =
@@ -92,8 +97,7 @@ UnifiedSystemTrayBubble::UnifiedSystemTrayBubble(UnifiedSystemTray* tray,
   unified_view_->SetMaxHeight(max_height);
   bubble_view_->SetMaxHeight(max_height);
   bubble_view_->AddChildView(new ContainerView(unified_view_));
-  bubble_view_->set_anchor_view_insets(
-      tray->shelf()->GetSystemTrayAnchor()->GetBubbleAnchorInsets());
+
   bubble_view_->set_color(SK_ColorTRANSPARENT);
   bubble_view_->layer()->SetFillsBoundsOpaquely(false);
 
@@ -103,12 +107,13 @@ UnifiedSystemTrayBubble::UnifiedSystemTrayBubble(UnifiedSystemTray* tray,
   TrayBackgroundView::InitializeBubbleAnimations(bubble_widget_);
   bubble_view_->InitializeAndShowBubble();
 
-  if (app_list::features::IsBackgroundBlurEnabled()) {
+  if (app_list_features::IsBackgroundBlurEnabled()) {
     bubble_widget_->client_view()->layer()->SetBackgroundBlur(
         kUnifiedMenuBackgroundBlur);
   }
 
   tray->tray_event_filter()->AddBubble(this);
+  tray->shelf()->AddObserver(this);
   Shell::Get()->tablet_mode_controller()->AddObserver(this);
   Shell::Get()->activation_client()->AddObserver(this);
 }
@@ -118,6 +123,7 @@ UnifiedSystemTrayBubble::~UnifiedSystemTrayBubble() {
   if (Shell::Get()->tablet_mode_controller())
     Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
   tray_->tray_event_filter()->RemoveBubble(this);
+  tray_->shelf()->RemoveObserver(this);
   if (bubble_widget_) {
     bubble_widget_->RemoveObserver(this);
     bubble_widget_->Close();
@@ -139,7 +145,7 @@ void UnifiedSystemTrayBubble::ActivateBubble() {
 
   if (bubble_widget_->IsClosed())
     return;
-  bubble_widget_->widget_delegate()->set_can_activate(true);
+  bubble_widget_->widget_delegate()->SetCanActivate(true);
   bubble_widget_->Activate();
 }
 
@@ -213,7 +219,7 @@ TrayBackgroundView* UnifiedSystemTrayBubble::GetTray() const {
   return tray_;
 }
 
-views::TrayBubbleView* UnifiedSystemTrayBubble::GetBubbleView() const {
+TrayBubbleView* UnifiedSystemTrayBubble::GetBubbleView() const {
   return bubble_view_;
 }
 
@@ -222,17 +228,13 @@ views::Widget* UnifiedSystemTrayBubble::GetBubbleWidget() const {
 }
 
 int UnifiedSystemTrayBubble::CalculateMaxHeight() const {
-  // TODO(yamaguchi): Reconsider this formula. The y-position of the top edge
-  // still differes by few pixels between the horizontal and vertical shelf
-  // modes.
   gfx::Rect anchor_bounds =
-      tray_->shelf()->GetSystemTrayAnchor()->GetBoundsInScreen();
+      tray_->shelf()->GetSystemTrayAnchorView()->GetBoundsInScreen();
   int bottom = tray_->shelf()->IsHorizontalAlignment() ? anchor_bounds.y()
                                                        : anchor_bounds.bottom();
   int free_space_height_above_anchor =
       bottom - tray_->shelf()->GetUserWorkAreaBounds().y();
-  return free_space_height_above_anchor - kPaddingFromScreenTop -
-         bubble_view_->GetBorderInsets().height();
+  return free_space_height_above_anchor - kUnifiedMenuPadding * 2;
 }
 
 void UnifiedSystemTrayBubble::OnDisplayConfigurationChanged() {
@@ -284,30 +286,21 @@ void UnifiedSystemTrayBubble::OnTabletModeEnded() {
   UpdateBubbleBounds();
 }
 
+void UnifiedSystemTrayBubble::OnAutoHideStateChanged(
+    ShelfAutoHideState new_state) {
+  UpdateBubbleBounds();
+}
+
 void UnifiedSystemTrayBubble::UpdateBubbleBounds() {
   int max_height = CalculateMaxHeight();
   unified_view_->SetMaxHeight(max_height);
   bubble_view_->SetMaxHeight(max_height);
-  // If the bubble is open while switching to and from tablet mode, change the
-  // bubble anchor if needed. The new anchor view may also have a translation
-  // applied to it so shift the bubble bounds so that it appears in the correct
-  // location.
-  bubble_view_->ChangeAnchorView(
-      tray_->shelf()->GetSystemTrayAnchor()->GetBubbleAnchor());
-  gfx::Rect bounds =
-      bubble_view_->GetWidget()->GetNativeWindow()->GetBoundsInScreen();
-  const gfx::Vector2dF translation = tray_->shelf()
-                                         ->GetSystemTrayAnchor()
-                                         ->layer()
-                                         ->transform()
-                                         .To2dTranslation();
-  bounds.set_x(bounds.x() - translation.x());
-  bounds.set_y(bounds.y() - translation.y());
-  bubble_view_->GetWidget()->GetNativeWindow()->SetBounds(bounds);
+  bubble_view_->ChangeAnchorAlignment(tray_->GetAnchorAlignment());
+  bubble_view_->ChangeAnchorRect(tray_->shelf()->GetSystemTrayAnchorRect());
 }
 
 void UnifiedSystemTrayBubble::CreateBlurLayerForAnimation() {
-  if (!app_list::features::IsBackgroundBlurEnabled())
+  if (!app_list_features::IsBackgroundBlurEnabled())
     return;
 
   if (blur_layer_)
@@ -330,7 +323,7 @@ void UnifiedSystemTrayBubble::CreateBlurLayerForAnimation() {
 }
 
 void UnifiedSystemTrayBubble::DestroyBlurLayerForAnimation() {
-  if (!app_list::features::IsBackgroundBlurEnabled())
+  if (!app_list_features::IsBackgroundBlurEnabled())
     return;
 
   if (!blur_layer_)

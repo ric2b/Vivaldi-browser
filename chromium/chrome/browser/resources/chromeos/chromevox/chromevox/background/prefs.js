@@ -10,6 +10,8 @@
 
 goog.provide('cvox.ChromeVoxPrefs');
 
+goog.require('ConsoleTts');
+goog.require('EventStreamLogger');
 goog.require('cvox.ChromeVox');
 goog.require('cvox.ExtensionBridge');
 goog.require('cvox.KeyMap');
@@ -73,18 +75,20 @@ cvox.ChromeVoxPrefs.DEFAULT_PREFS = {
   'currentKeyMap': cvox.KeyMap.DEFAULT_KEYMAP,
   'cvoxKey': '',
   'enableBrailleLogging': false,
-  'enableEarconLogging': true,
-  'enableSpeechLogging': true,
+  'enableEarconLogging': false,
+  'enableSpeechLogging': false,
   'earcons': true,
   'enableEventStreamLogging': false,
   'focusFollowsMouse': false,
   'granularity': undefined,
+  'languageSwitching': false,
   'position': '{}',
   'siteSpecificEnhancements': true,
   'siteSpecificScriptBase':
       'https://ssl.gstatic.com/accessibility/javascript/ext/',
   'siteSpecificScriptLoader':
       'https://ssl.gstatic.com/accessibility/javascript/ext/loader.js',
+  'speakTextUnderMouse': false,
   'sticky': false,
   'typingEcho': 0,
   'useIBeamCursor': cvox.ChromeVox.isMac,
@@ -283,6 +287,27 @@ cvox.ChromeVoxPrefs.prototype.setPref = function(key, value) {
     localStorage[key] = value;
     this.sendPrefsToAllTabs(true, false);
   }
+};
+
+/** @enum {string} */
+cvox.ChromeVoxPrefs.loggingPrefs = {
+  SPEECH: 'enableSpeechLogging',
+  BRAILLE: 'enableBrailleLogging',
+  EARCON: 'enableEarconLogging',
+  EVENT: 'enableEventStreamLogging',
+};
+
+/**
+ * Set the value of a pref of logging options.
+ * @param {cvox.ChromeVoxPrefs.loggingPrefs} key The pref key.
+ * @param {boolean} value The new value of the pref.
+ */
+cvox.ChromeVoxPrefs.prototype.setLoggingPrefs = function(key, value) {
+  localStorage[key] = value;
+  if (key == 'enableSpeechLogging')
+    ConsoleTts.getInstance().setEnabled(value);
+  else if (key == 'enableEventStreamLogging')
+    EventStreamLogger.instance.notifyEventStreamFilterChangedAll(value);
 };
 
 /**

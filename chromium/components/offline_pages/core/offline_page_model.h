@@ -19,8 +19,7 @@
 #include "components/offline_pages/core/offline_page_archiver.h"
 #include "components/offline_pages/core/offline_page_thumbnail.h"
 #include "components/offline_pages/core/offline_page_types.h"
-
-class GURL;
+#include "url/gurl.h"
 
 namespace offline_pages {
 
@@ -72,6 +71,12 @@ class OfflinePageModel : public base::SupportsUserData, public KeyedService {
                     const ClientId& client_id,
                     const std::string& request_origin,
                     const GURL& url);
+
+    const GURL& GetOriginalUrl() const {
+      return original_url_if_different.is_empty() ? url
+                                                  : original_url_if_different;
+    }
+
     // The ID of the deleted page.
     int64_t offline_id;
     // The system download manager id of the deleted page.  This will be 0 if
@@ -83,6 +88,9 @@ class OfflinePageModel : public base::SupportsUserData, public KeyedService {
     std::string request_origin;
     // URL of the page that was deleted.
     GURL url;
+    // Originally request URL of the page that was deleted. If this is empty,
+    // the final URL is not different than the original URL.
+    GURL original_url_if_different;
   };
 
   // Observer of the OfflinePageModel.

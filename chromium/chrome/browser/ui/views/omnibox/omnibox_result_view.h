@@ -10,19 +10,24 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/models/simple_menu_model.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/view.h"
 
+class OmniboxMatchCellView;
 class OmniboxPopupContentsView;
+class OmniboxTabSwitchButton;
 enum class OmniboxPart;
 enum class OmniboxPartState;
 enum class OmniboxTint;
@@ -31,14 +36,18 @@ namespace gfx {
 class Image;
 }
 
-class OmniboxMatchCellView;
-class OmniboxTabSwitchButton;
+namespace views {
+class MenuRunner;
+}
 
 class OmniboxResultView : public views::View,
                           private gfx::AnimationDelegate,
-                          public views::ButtonListener {
+                          public views::ButtonListener,
+                          public views::ContextMenuController,
+                          public ui::SimpleMenuModel::Delegate {
  public:
-  OmniboxResultView(OmniboxPopupContentsView* model, int model_index);
+  OmniboxResultView(OmniboxPopupContentsView* popup_contents_view,
+                    int model_index);
   ~OmniboxResultView() override;
 
   // Helper to get the color for |part| using the current state and tint.
@@ -55,6 +64,9 @@ class OmniboxResultView : public views::View,
 
   // Invoked when this result view has been selected.
   void OnSelected();
+
+  // Whether |this| matches the model's selected index.
+  bool IsSelected() const;
 
   OmniboxPartState GetThemeState() const;
   OmniboxTint GetTint() const;
@@ -84,7 +96,19 @@ class OmniboxResultView : public views::View,
   gfx::Size CalculatePreferredSize() const override;
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
 
+  // views::ContextMenuController:
+  void ShowContextMenuForViewImpl(views::View* source,
+                                  const gfx::Point& point,
+                                  ui::MenuSourceType source_type) override;
+
+  // ui::SimpleMenuModel::Delegate overrides:
+  bool IsCommandIdEnabled(int command_id) const override;
+  void ExecuteCommand(int command_id, int event_flags) override;
+
  private:
+  // TODO(tommycli): This will be removed once we get final strings from UX.
+  enum CommandID { COMMAND_REMOVE_SUGGESTION };
+
   // Returns the height of the text portion of the result view.
   int GetTextHeight() const;
 
@@ -93,11 +117,10 @@ class OmniboxResultView : public views::View,
   // Sets the hovered state of this result.
   void SetHovered(bool hovered);
 
-  // Whether |this| matches the model's selected index.
-  bool IsSelected() const;
-
-  // Call model's OpenMatch() with the selected index and provided disposition.
-  void OpenMatch(WindowOpenDisposition disposition);
+  // Call model's OpenMatch() with the selected index and provided disposition
+  // and timestamp the match was selected (base::TimeTicks() if unknown).
+  void OpenMatch(WindowOpenDisposition disposition,
+                 base::TimeTicks match_selection_timestamp);
 
   // views::View:
   const char* GetClassName() const override;
@@ -106,8 +129,10 @@ class OmniboxResultView : public views::View,
   // gfx::AnimationDelegate:
   void AnimationProgressed(const gfx::Animation* animation) override;
 
-  // This row's model and model index.
-  OmniboxPopupContentsView* model_;
+  // The parent view.
+  OmniboxPopupContentsView* const popup_contents_view_;
+
+  // This result's model index.
   size_t model_index_;
 
   // Whether this view is in the hovered state.
@@ -119,10 +144,16 @@ class OmniboxResultView : public views::View,
   // For sliding in the keyword search.
   std::unique_ptr<gfx::SlideAnimation> animation_;
 
+  // Context menu related members.
+  ui::SimpleMenuModel context_menu_contents_{this};
+  std::unique_ptr<views::MenuRunner> context_menu_runner_;
+
   // Weak pointers for easy reference.
   OmniboxMatchCellView* suggestion_view_;  // The leading (or left) view.
   OmniboxMatchCellView* keyword_view_;     // The trailing (or right) view.
   std::unique_ptr<OmniboxTabSwitchButton> suggestion_tab_switch_button_;
+
+  base::WeakPtrFactory<OmniboxResultView> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(OmniboxResultView);
 };

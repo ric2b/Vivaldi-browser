@@ -157,7 +157,7 @@ Tab::Tab(TabbedPane* tabbed_pane, const base::string16& title, View* contents)
 
   // Use leaf so that name is spoken by screen reader without exposing the
   // children.
-  GetViewAccessibility().OverrideIsLeaf();
+  GetViewAccessibility().OverrideIsLeaf(true);
 }
 
 Tab::~Tab() {}
@@ -383,6 +383,13 @@ void MdTab::OnFocus() {
                         ui::NativeTheme::kColorId_FocusedBorderColor),
                     0x66)));
   }
+
+  // When the tab gains focus, send an accessibility event indicating that the
+  // contents are focused. When the tab loses focus, whichever new View ends up
+  // with focus will send an ax::mojom::Event::kFocus of its own, so there's no
+  // need to send one in OnBlur().
+  if (contents())
+    contents()->NotifyAccessibilityEvent(ax::mojom::Event::kFocus, true);
   SchedulePaint();
 }
 
@@ -407,7 +414,7 @@ TabStrip::TabStrip(TabbedPane::Orientation orientation,
     layout->set_cross_axis_alignment(BoxLayout::CROSS_AXIS_ALIGNMENT_END);
   } else {
     const int kTabStripEdgePadding = 8;
-    const int kTabSpacing = 16;
+    const int kTabSpacing = 8;
     layout = std::make_unique<BoxLayout>(
         BoxLayout::kVertical, gfx::Insets(kTabStripEdgePadding, 0, 0, 0),
         kTabSpacing);

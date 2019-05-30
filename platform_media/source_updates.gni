@@ -240,17 +240,9 @@ update_target("//media:media") {
 
    deps += [ "//net" ]  # For GetMimeTypeFromFile
 
-   if (is_linux) {
-      defines = [
-        "MEDIA_IMPLEMENTATION",
-      ]
-   }
+   configs += [ "//media:subcomponent_config" ]
 
    if (is_mac) {
-      defines += [
-        "MEDIA_IMPLEMENTATION",
-      ]
-
       sources += [
        "//vivaldi/platform_media/common/mac/platform_media_pipeline_types_mac.h",
        "//vivaldi/platform_media/common/mac/platform_media_pipeline_types_mac.mm",
@@ -267,10 +259,6 @@ update_target("//media:media") {
    }
 
    if (is_win) {
-      defines = [
-        "MEDIA_IMPLEMENTATION",
-      ]
-
       sources += [
        "//vivaldi/platform_media/renderer/decoders/win/wmf_audio_decoder.cc",
        "//vivaldi/platform_media/renderer/decoders/win/wmf_audio_decoder.h",
@@ -286,7 +274,7 @@ update_target("//media:media") {
       ]
 
       deps += [
-       "//media/base/win:win",
+       "//media/base/win:media_foundation_util",
       ]
    }
 }
@@ -295,13 +283,18 @@ update_target("//media:media") {
 # Test files
 # ------------------
 
-#vivaldi/platform_media/test/data/bear_truncated.mp4
-#vivaldi/platform_media/test/data/config_change_audio.mp4
-#vivaldi/platform_media/test/data/config_change_video.mp4
-#vivaldi/platform_media/test/data/what-does-the-fox-say.mp4
-#vivaldi/platform_media/test/data/bear-320x240-16x9-aspect.mp4
-#vivaldi/platform_media/test/data/bear_corrupt.mp4
-#vivaldi/platform_media/test/data/nonzero-start-time.mp4
+#vivaldi/testdata/test/platform_media/bear_truncated.mp4
+#vivaldi/testdata/test/platform_media/config_change_audio.mp4
+#vivaldi/testdata/test/platform_media/config_change_video.mp4
+#vivaldi/testdata/test/platform_media/what-does-the-fox-say.mp4
+#vivaldi/testdata/test/platform_media/bear-320x240-16x9-aspect.mp4
+#vivaldi/testdata/test/platform_media/bear_corrupt.mp4
+#vivaldi/testdata/test/platform_media/nonzero-start-time.mp4
+#vivaldi/testdata/test/platform_media/vivaldi-bear-320x240-16x9-aspect.mp4
+#vivaldi/testdata/test/platform_media/vivaldi-bear_truncated.mp4
+#vivaldi/testdata/test/platform_media/vivaldi-config_change_audio.mp4
+#vivaldi/testdata/test/platform_media/vivaldi-config_change_video.mp4
+#vivaldi/testdata/test/platform_media/what-does-the-fox-say.mp4
 
 # ------------------
 # Filters : /media/base/BUILD.gn
@@ -322,17 +315,13 @@ update_target("//media/base:base") {
    }
 
    if (is_win) {
-    defines = [
-      "MEDIA_IMPLEMENTATION",
-    ]
-
     sources += [
       "//vivaldi/platform_media/common/win/mf_util.cc",
       "//vivaldi/platform_media/common/win/mf_util.h",
       "//vivaldi/platform_media/common/win/platform_mime_util_win.cc",
     ]
     deps += [
-     "//media/base/win:win",
+     "//media/base/win:media_foundation_util",
     ]
    }
 }

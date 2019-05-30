@@ -21,6 +21,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/hit_test_region_observer.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "ui/gfx/geometry/angle_conversions.h"
@@ -83,18 +84,16 @@ class CompositedScrollingBrowserTest : public ContentBrowserTest {
     NavigateToURL(shell(), data_url);
 
     RenderWidgetHostImpl* host = GetWidgetHost();
-    MainThreadFrameObserver observer(host);
+    HitTestRegionObserver observer(GetWidgetHost()->GetFrameSinkId());
     host->GetView()->SetSize(gfx::Size(400, 400));
 
     base::string16 ready_title(base::ASCIIToUTF16("ready"));
     TitleWatcher watcher(shell()->web_contents(), ready_title);
     ignore_result(watcher.WaitAndGetTitle());
 
-    // We need to wait until at least one frame has been composited
-    // otherwise the injection of the synthetic gestures may get
-    // dropped because of MainThread/Impl thread sync of touch event
-    // regions.
-    observer.Wait();
+    // Wait for the hit test data to be ready after initiating URL loading
+    // before returning
+    observer.WaitForHitTestData();
   }
 
   // ContentBrowserTest:
@@ -163,8 +162,7 @@ IN_PROC_BROWSER_TEST_F(CompositedScrollingBrowserTest,
   int scroll_distance =
       DoTouchScroll(gfx::Point(50, 150), gfx::Vector2d(0, 100));
   // The scroll distance is increased due to the rotation of the scroller.
-  EXPECT_EQ(std::floor(100 / std::cos(gfx::DegToRad(30.f))) - 1,
-            scroll_distance);
+  EXPECT_EQ(std::floor(100 / std::cos(gfx::DegToRad(30.f))), scroll_distance);
 }
 
 }  // namespace content

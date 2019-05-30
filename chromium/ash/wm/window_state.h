@@ -17,6 +17,9 @@
 #include "base/optional.h"
 #include "ui/aura/window_observer.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/compositor/layer_owner.h"
+#include "ui/display/display.h"
+#include "ui/gfx/animation/tween.h"
 
 namespace gfx {
 class Rect;
@@ -31,6 +34,7 @@ enum class WindowPinType;
 }
 
 namespace wm {
+class InitialStateTestState;
 class WindowState;
 class WindowStateDelegate;
 class WindowStateObserver;
@@ -59,6 +63,10 @@ ASH_EXPORT const WindowState* GetWindowState(const aura::Window* window);
 // accessing the window using |window()| is cheap.
 class ASH_EXPORT WindowState : public aura::WindowObserver {
  public:
+  // The default duration for an animation between two sets of bounds.
+  static constexpr base::TimeDelta kBoundsChangeSlideDuration =
+      base::TimeDelta::FromMilliseconds(120);
+
   // A subclass of State class represents one of the window's states
   // that corresponds to WindowStateType in Ash environment, e.g.
   // maximized, minimized or side snapped, as subclass.
@@ -270,13 +278,6 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   bool bounds_changed_by_user() const { return bounds_changed_by_user_; }
   void set_bounds_changed_by_user(bool bounds_changed_by_user);
 
-  // True if the window is ignored by the shelf layout manager for
-  // purposes of darkening the shelf.
-  bool ignored_by_shelf() const { return ignored_by_shelf_; }
-  void set_ignored_by_shelf(bool ignored_by_shelf) {
-    ignored_by_shelf_ = ignored_by_shelf;
-  }
-
   // True if the window should be offered a chance to consume special system
   // keys such as brightness, volume, etc. that are usually handled by the
   // shell.
@@ -288,7 +289,6 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // the top portion of the window through a touch / mouse gesture. It might
   // also allow the shelf to be shown in some situations.
   bool IsInImmersiveFullscreen() const;
-  void SetInImmersiveFullscreen(bool enabled);
 
   // True if the window should not adjust the window's bounds when
   // virtual keyboard bounds changes.
@@ -328,9 +328,15 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   void OnCompleteDrag(const gfx::Point& location);
   void OnRevertDrag(const gfx::Point& location);
 
+  // Notifies that the window lost the activation.
+  void OnActivationLost();
+
   // Returns a pointer to DragDetails during drag operations.
   const DragDetails* drag_details() const { return drag_details_.get(); }
   DragDetails* drag_details() { return drag_details_.get(); }
+
+  // Returns the Display that this WindowState is on.
+  display::Display GetDisplay();
 
   class TestApi {
    public:
@@ -342,6 +348,7 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
  private:
   friend class BaseState;
   friend class DefaultState;
+  friend class InitialStateTestState;
   friend class ash::wm::ClientControlledState;
   friend class ash::LockWindowState;
   friend class ash::TabletModeWindowState;
@@ -349,6 +356,8 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   FRIEND_TEST_ALL_PREFIXES(WindowAnimationsTest, CrossFadeToBounds);
   FRIEND_TEST_ALL_PREFIXES(WindowAnimationsTest,
                            CrossFadeToBoundsFromTransform);
+  FRIEND_TEST_ALL_PREFIXES(WindowStateTest, PipWindowMaskRecreated);
+  FRIEND_TEST_ALL_PREFIXES(WindowStateTest, PipWindowHasMaskLayer);
 
   explicit WindowState(aura::Window* window);
 
@@ -389,12 +398,25 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   void SetBoundsConstrained(const gfx::Rect& bounds);
 
   // Sets the wndow's |bounds| and transitions to the new bounds with
-  // a scale animation.
-  void SetBoundsDirectAnimated(const gfx::Rect& bounds);
+  // a scale animation, with duration specified by |duration|.
+  void SetBoundsDirectAnimated(
+      const gfx::Rect& bounds,
+      base::TimeDelta duration = kBoundsChangeSlideDuration);
 
   // Sets the window's |bounds| and transition to the new bounds with
   // a cross fade animation.
-  void SetBoundsDirectCrossFade(const gfx::Rect& bounds);
+  void SetBoundsDirectCrossFade(
+      const gfx::Rect& bounds,
+      gfx::Tween::Type animation_type = gfx::Tween::EASE_OUT);
+
+  // Update PIP related state, such as next window animation type, upon
+  // state change.
+  void UpdatePipState(mojom::WindowStateType old_window_state_type);
+
+  // Update the PIP bounds if necessary. This may need to happen when the
+  // display work area changes, or if system ui regions like the virtual
+  // keyboard position changes.
+  void UpdatePipBounds();
 
   // aura::WindowObserver:
   void OnWindowPropertyChanged(aura::Window* window,
@@ -408,7 +430,6 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   std::unique_ptr<WindowStateDelegate> delegate_;
 
   bool bounds_changed_by_user_;
-  bool ignored_by_shelf_;
   bool can_consume_system_keys_;
   std::unique_ptr<DragDetails> drag_details_;
 

@@ -4,7 +4,6 @@
 
 #include "content/browser/renderer_host/media/render_frame_audio_input_stream_factory.h"
 
-#include <memory>
 #include <string>
 #include <utility>
 
@@ -12,8 +11,12 @@
 #include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/task/post_task.h"
+#include "build/build_config.h"
 #include "content/browser/media/forwarding_audio_stream_factory.h"
+#include "content/browser/renderer_host/media/audio_input_device_manager.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -29,6 +32,7 @@
 #include "media/audio/fake_audio_manager.h"
 #include "media/audio/test_audio_thread.h"
 #include "media/base/audio_parameters.h"
+#include "media/mojo/interfaces/audio_data_pipe.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "services/audio/public/cpp/fake_stream_factory.h"
@@ -40,10 +44,19 @@
 
 namespace content {
 
-class RenderFrameAudioInputStreamFactoryTest
+// RenderViewHostTestHarness works poorly on Android.
+#if defined(OS_ANDROID)
+#define MAYBE_RenderFrameAudioInputStreamFactoryTest \
+  DISABLED_RenderFrameAudioInputStreamFactoryTest
+#else
+#define MAYBE_RenderFrameAudioInputStreamFactoryTest \
+  RenderFrameAudioInputStreamFactoryTest
+#endif
+
+class MAYBE_RenderFrameAudioInputStreamFactoryTest
     : public RenderViewHostTestHarness {
  public:
-  RenderFrameAudioInputStreamFactoryTest()
+  MAYBE_RenderFrameAudioInputStreamFactoryTest()
       : RenderViewHostTestHarness(),
         test_service_manager_context_(
             std::make_unique<TestServiceManagerContext>()),
@@ -52,23 +65,25 @@ class RenderFrameAudioInputStreamFactoryTest
         audio_system_(media::AudioSystemImpl::CreateInstance()),
         media_stream_manager_(std::make_unique<MediaStreamManager>(
             audio_system_.get(),
-            BrowserThread::GetTaskRunnerForThread(BrowserThread::UI))) {}
+            base::CreateSingleThreadTaskRunnerWithTraits(
+                {BrowserThread::UI}))) {}
 
-  ~RenderFrameAudioInputStreamFactoryTest() override {}
+  ~MAYBE_RenderFrameAudioInputStreamFactoryTest() override {}
 
   void SetUp() override {
     RenderViewHostTestHarness::SetUp();
     RenderFrameHostTester::For(main_rfh())->InitializeRenderFrameIfNeeded();
 
     // Set up the ForwardingAudioStreamFactory.
-    service_manager::Connector::TestApi connector_test_api(
+    service_manager::Connector* connector =
         ForwardingAudioStreamFactory::ForFrame(main_rfh())
-            ->get_connector_for_testing());
-    connector_test_api.OverrideBinderForTesting(
-        service_manager::Identity(audio::mojom::kServiceName),
+            ->core()
+            ->get_connector_for_testing();
+    connector->OverrideBinderForTesting(
+        service_manager::ServiceFilter::ByName(audio::mojom::kServiceName),
         audio::mojom::StreamFactory::Name_,
         base::BindRepeating(
-            &RenderFrameAudioInputStreamFactoryTest::BindFactory,
+            &MAYBE_RenderFrameAudioInputStreamFactoryTest::BindFactory,
             base::Unretained(this)));
 
     base::RunLoop().RunUntilIdle();
@@ -147,12 +162,14 @@ class RenderFrameAudioInputStreamFactoryTest
 
     ~StreamOpenedWaiter() override { aidm_->UnregisterListener(this); }
 
-    void Opened(MediaStreamType stream_type, int capture_session_id) override {
+    void Opened(blink::MediaStreamType stream_type,
+                int capture_session_id) override {
       std::move(cb_).Run();
     }
-    void Closed(MediaStreamType stream_type, int capture_session_id) override {}
-    void Aborted(MediaStreamType stream_type, int capture_session_id) override {
-    }
+    void Closed(blink::MediaStreamType stream_type,
+                int capture_session_id) override {}
+    void Aborted(blink::MediaStreamType stream_type,
+                 int capture_session_id) override {}
 
    private:
     scoped_refptr<AudioInputDeviceManager> aidm_;
@@ -160,8 +177,8 @@ class RenderFrameAudioInputStreamFactoryTest
   };
 
   void CallOpenWithTestDeviceAndStoreSessionIdOnIO(int* session_id) {
-    *session_id = audio_input_device_manager()->Open(
-        MediaStreamDevice(MEDIA_DEVICE_AUDIO_CAPTURE, kDeviceId, kDeviceName));
+    *session_id = audio_input_device_manager()->Open(blink::MediaStreamDevice(
+        blink::MEDIA_DEVICE_AUDIO_CAPTURE, kDeviceId, kDeviceName));
   }
 
   const media::AudioParameters kParams =
@@ -178,22 +195,20 @@ class RenderFrameAudioInputStreamFactoryTest
   std::unique_ptr<MediaStreamManager> media_stream_manager_;
 };
 
-TEST_F(RenderFrameAudioInputStreamFactoryTest, ConstructDestruct) {
+TEST_F(MAYBE_RenderFrameAudioInputStreamFactoryTest, ConstructDestruct) {
   mojom::RendererAudioInputStreamFactoryPtr factory_ptr;
-  RenderFrameAudioInputStreamFactory factory(mojo::MakeRequest(&factory_ptr),
-                                             audio_input_device_manager(),
-                                             main_rfh());
+  RenderFrameAudioInputStreamFactory factory(
+      mojo::MakeRequest(&factory_ptr), media_stream_manager_.get(), main_rfh());
 }
 
-TEST_F(RenderFrameAudioInputStreamFactoryTest,
+TEST_F(MAYBE_RenderFrameAudioInputStreamFactoryTest,
        CreateOpenedStream_ForwardsCall) {
   mojom::RendererAudioInputStreamFactoryPtr factory_ptr;
-  RenderFrameAudioInputStreamFactory factory(mojo::MakeRequest(&factory_ptr),
-                                             audio_input_device_manager(),
-                                             main_rfh());
+  RenderFrameAudioInputStreamFactory factory(
+      mojo::MakeRequest(&factory_ptr), media_stream_manager_.get(), main_rfh());
 
-  int session_id = audio_input_device_manager()->Open(
-      MediaStreamDevice(MEDIA_DEVICE_AUDIO_CAPTURE, kDeviceId, kDeviceName));
+  int session_id = audio_input_device_manager()->Open(blink::MediaStreamDevice(
+      blink::MEDIA_DEVICE_AUDIO_CAPTURE, kDeviceId, kDeviceName));
   base::RunLoop().RunUntilIdle();
 
   mojom::RendererAudioInputStreamFactoryClientPtr client;
@@ -206,19 +221,18 @@ TEST_F(RenderFrameAudioInputStreamFactoryTest,
   EXPECT_TRUE(!!audio_service_stream_factory_.last_created_callback);
 }
 
-TEST_F(RenderFrameAudioInputStreamFactoryTest,
+TEST_F(MAYBE_RenderFrameAudioInputStreamFactoryTest,
        CreateWebContentsCapture_ForwardsCall) {
   std::unique_ptr<WebContents> source_contents = CreateTestWebContents();
   mojom::RendererAudioInputStreamFactoryPtr factory_ptr;
-  RenderFrameAudioInputStreamFactory factory(mojo::MakeRequest(&factory_ptr),
-                                             audio_input_device_manager(),
-                                             main_rfh());
+  RenderFrameAudioInputStreamFactory factory(
+      mojo::MakeRequest(&factory_ptr), media_stream_manager_.get(), main_rfh());
 
   RenderFrameHost* main_frame = source_contents->GetMainFrame();
   WebContentsMediaCaptureId capture_id(main_frame->GetProcess()->GetID(),
                                        main_frame->GetRoutingID());
-  int session_id = audio_input_device_manager()->Open(MediaStreamDevice(
-      MEDIA_GUM_TAB_AUDIO_CAPTURE, capture_id.ToString(), kDeviceName));
+  int session_id = audio_input_device_manager()->Open(blink::MediaStreamDevice(
+      blink::MEDIA_GUM_TAB_AUDIO_CAPTURE, capture_id.ToString(), kDeviceName));
   base::RunLoop().RunUntilIdle();
 
   mojom::RendererAudioInputStreamFactoryClientPtr client;
@@ -231,19 +245,18 @@ TEST_F(RenderFrameAudioInputStreamFactoryTest,
   EXPECT_TRUE(!!audio_service_stream_factory_.last_created_loopback_callback);
 }
 
-TEST_F(RenderFrameAudioInputStreamFactoryTest,
+TEST_F(MAYBE_RenderFrameAudioInputStreamFactoryTest,
        CreateWebContentsCaptureAfterCaptureSourceDestructed_Fails) {
   std::unique_ptr<WebContents> source_contents = CreateTestWebContents();
   mojom::RendererAudioInputStreamFactoryPtr factory_ptr;
-  RenderFrameAudioInputStreamFactory factory(mojo::MakeRequest(&factory_ptr),
-                                             audio_input_device_manager(),
-                                             main_rfh());
+  RenderFrameAudioInputStreamFactory factory(
+      mojo::MakeRequest(&factory_ptr), media_stream_manager_.get(), main_rfh());
 
   RenderFrameHost* main_frame = source_contents->GetMainFrame();
   WebContentsMediaCaptureId capture_id(main_frame->GetProcess()->GetID(),
                                        main_frame->GetRoutingID());
-  int session_id = audio_input_device_manager()->Open(MediaStreamDevice(
-      MEDIA_GUM_TAB_AUDIO_CAPTURE, capture_id.ToString(), kDeviceName));
+  int session_id = audio_input_device_manager()->Open(blink::MediaStreamDevice(
+      blink::MEDIA_GUM_TAB_AUDIO_CAPTURE, capture_id.ToString(), kDeviceName));
   base::RunLoop().RunUntilIdle();
 
   source_contents.reset();
@@ -257,12 +270,11 @@ TEST_F(RenderFrameAudioInputStreamFactoryTest,
   EXPECT_FALSE(!!audio_service_stream_factory_.last_created_loopback_callback);
 }
 
-TEST_F(RenderFrameAudioInputStreamFactoryTest,
+TEST_F(MAYBE_RenderFrameAudioInputStreamFactoryTest,
        CreateStreamWithoutValidSessionId_Fails) {
   mojom::RendererAudioInputStreamFactoryPtr factory_ptr;
-  RenderFrameAudioInputStreamFactory factory(mojo::MakeRequest(&factory_ptr),
-                                             audio_input_device_manager(),
-                                             main_rfh());
+  RenderFrameAudioInputStreamFactory factory(
+      mojo::MakeRequest(&factory_ptr), media_stream_manager_.get(), main_rfh());
 
   int session_id = 123;
   mojom::RendererAudioInputStreamFactoryClientPtr client;

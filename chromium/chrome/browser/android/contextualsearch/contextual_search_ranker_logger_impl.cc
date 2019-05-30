@@ -30,6 +30,8 @@ const char kContextualSearchRankerDidPredict[] = "OutcomeRankerDidPredict";
 const char kContextualSearchRankerPrediction[] = "OutcomeRankerPrediction";
 const char kContextualSearchImportantFeature[] = "DidOptIn";
 const char kContextualSearchImportantOutcome[] = "OutcomeWasPanelOpened";
+const char kContextualSearchRankerPredictionScore[] =
+    "OutcomeRankerPredictionScore";
 
 }  // namespace
 
@@ -55,7 +57,7 @@ void ContextualSearchRankerLoggerImpl::SetupLoggingAndRanker(
 }
 
 void ContextualSearchRankerLoggerImpl::SetupRankerPredictor(
-    const content::WebContents& web_contents) {
+    content::WebContents& web_contents) {
   // Create one predictor for the current BrowserContext.
   if (browser_context_) {
     DCHECK(browser_context_ == web_contents.GetBrowserContext());
@@ -79,13 +81,13 @@ void ContextualSearchRankerLoggerImpl::LogFeature(
   features[feature_name].set_int32_value(value);
 }
 
-void ContextualSearchRankerLoggerImpl::LogLong(
+void ContextualSearchRankerLoggerImpl::LogInt32(
     JNIEnv* env,
     jobject obj,
     const base::android::JavaParamRef<jstring>& j_feature,
-    jlong j_long) {
+    jint j_int) {
   std::string feature = base::android::ConvertJavaStringToUTF8(env, j_feature);
-  LogFeature(feature, j_long);
+  LogFeature(feature, j_int);
 }
 
 AssistRankerPrediction ContextualSearchRankerLoggerImpl::RunInference(
@@ -105,6 +107,13 @@ AssistRankerPrediction ContextualSearchRankerLoggerImpl::RunInference(
     if (was_able_to_predict) {
       LogFeature(kContextualSearchRankerPrediction,
                  static_cast<int>(prediction));
+      // For offline validation also log the prediction score.
+      // TODO(donnd): remove when https://crbug.com/914179 is resolved.
+      float score;
+      bool was_able_to_predict_score =
+          predictor_->PredictScore(*ranker_example_, &score);
+      if (was_able_to_predict_score)
+        LogFeature(kContextualSearchRankerPredictionScore, score);
     }
   }
   AssistRankerPrediction prediction_enum;

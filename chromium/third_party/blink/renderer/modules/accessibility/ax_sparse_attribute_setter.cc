@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "third_party/blink/renderer/modules/accessibility/ax_object_cache_impl.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_sparse_attribute_setter.h"
+#include "third_party/blink/renderer/modules/accessibility/ax_object_cache_impl.h"
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 class BoolAttributeSetter : public AXSparseAttributeSetter {
  public:
@@ -96,7 +96,11 @@ class ObjectVectorAttributeSetter : public AXSparseAttributeSetter {
     for (const auto& id : ids) {
       if (Element* id_element = scope.getElementById(AtomicString(id))) {
         AXObject* ax_id_element = obj.AXObjectCache().GetOrCreate(id_element);
-        if (ax_id_element && !ax_id_element->AccessibilityIsIgnored())
+        if (!ax_id_element)
+          continue;
+        if (AXObject* parent = ax_id_element->ParentObject())
+          parent->UpdateChildrenIfNecessary();
+        if (!ax_id_element->AccessibilityIsIgnored())
           objects.push_back(ax_id_element);
       }
     }
@@ -114,28 +118,28 @@ AXSparseAttributeSetterMap& GetSparseAttributeSetterMap() {
                       ax_sparse_attribute_setter_map, ());
   if (ax_sparse_attribute_setter_map.IsEmpty()) {
     ax_sparse_attribute_setter_map.Set(
-        aria_activedescendantAttr,
+        kAriaActivedescendantAttr,
         new ObjectAttributeSetter(AXObjectAttribute::kAriaActiveDescendant));
     ax_sparse_attribute_setter_map.Set(
-        aria_controlsAttr, new ObjectVectorAttributeSetter(
+        kAriaControlsAttr, new ObjectVectorAttributeSetter(
                                AXObjectVectorAttribute::kAriaControls));
     ax_sparse_attribute_setter_map.Set(
-        aria_flowtoAttr,
+        kAriaFlowtoAttr,
         new ObjectVectorAttributeSetter(AXObjectVectorAttribute::kAriaFlowTo));
     ax_sparse_attribute_setter_map.Set(
-        aria_detailsAttr,
+        kAriaDetailsAttr,
         new ObjectAttributeSetter(AXObjectAttribute::kAriaDetails));
     ax_sparse_attribute_setter_map.Set(
-        aria_errormessageAttr,
+        kAriaErrormessageAttr,
         new ObjectAttributeSetter(AXObjectAttribute::kAriaErrorMessage));
     ax_sparse_attribute_setter_map.Set(
-        aria_keyshortcutsAttr,
+        kAriaKeyshortcutsAttr,
         new StringAttributeSetter(AXStringAttribute::kAriaKeyShortcuts));
     ax_sparse_attribute_setter_map.Set(
-        aria_roledescriptionAttr,
+        kAriaRoledescriptionAttr,
         new StringAttributeSetter(AXStringAttribute::kAriaRoleDescription));
     ax_sparse_attribute_setter_map.Set(
-        aria_busyAttr, new BoolAttributeSetter(AXBoolAttribute::kAriaBusy));
+        kAriaBusyAttr, new BoolAttributeSetter(AXBoolAttribute::kAriaBusy));
   }
   return ax_sparse_attribute_setter_map;
 }
@@ -222,7 +226,7 @@ void AXSparseAttributeAOMPropertyClient::AddRelationListProperty(
   }
 
   HeapVector<Member<AXObject>> objects;
-  for (size_t i = 0; i < relations.length(); ++i) {
+  for (unsigned i = 0; i < relations.length(); ++i) {
     AccessibleNode* accessible_node = relations.item(i);
     if (accessible_node) {
       Element* element = accessible_node->element();

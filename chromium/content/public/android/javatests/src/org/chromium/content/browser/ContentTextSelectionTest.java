@@ -20,6 +20,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
@@ -27,13 +28,13 @@ import org.chromium.base.test.util.UrlUtils;
 import org.chromium.content.browser.input.ChromiumBaseInputConnection;
 import org.chromium.content.browser.input.ImeTestUtils;
 import org.chromium.content.browser.selection.SelectionPopupControllerImpl;
-import org.chromium.content.browser.test.ContentJUnit4ClassRunner;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.DOMUtils;
-import org.chromium.content_public.browser.ImeAdapter;
 import org.chromium.content_public.browser.SelectionClient;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.test.ContentJUnit4ClassRunner;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_shell_apk.ContentShellActivityTestRule;
 
 import java.util.concurrent.Callable;
@@ -85,7 +86,8 @@ public class ContentTextSelectionTest {
                 result = new SelectionClient.Result();
             }
 
-            ThreadUtils.postOnUiThread(() -> mResultCallback.onClassified(result));
+            PostTask.postTask(
+                    UiThreadTaskTraits.DEFAULT, () -> mResultCallback.onClassified(result));
             return true;
         }
 
@@ -107,8 +109,7 @@ public class ContentTextSelectionTest {
         mActivityTestRule.waitForActiveShellToBeDoneLoading();
 
         mWebContents = mActivityTestRule.getWebContents();
-        mSelectionPopupController =
-                SelectionPopupControllerImpl.fromWebContents(mActivityTestRule.getWebContents());
+        mSelectionPopupController = mActivityTestRule.getSelectionPopupController();
         waitForSelectActionBarVisible(false);
         waitForPastePopupStatus(false);
     }
@@ -541,7 +542,7 @@ public class ContentTextSelectionTest {
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
         selectActionBarCut();
         waitForSelectActionBarVisible(false);
-        Assert.assertFalse(mSelectionPopupController.hasSelection());
+        Assert.assertEquals(mSelectionPopupController.getSelectedText(), "");
         waitForClipboardContents("SampleInputText");
         Assert.assertEquals(mSelectionPopupController.getSelectedText(), "");
     }
@@ -574,7 +575,7 @@ public class ContentTextSelectionTest {
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
         selectActionBarCut();
         waitForSelectActionBarVisible(false);
-        Assert.assertFalse(mSelectionPopupController.hasSelection());
+        Assert.assertEquals(mSelectionPopupController.getSelectedText(), "");
         waitForClipboardContents("SampleTextArea");
         Assert.assertEquals(mSelectionPopupController.getSelectedText(), "");
     }
@@ -635,8 +636,7 @@ public class ContentTextSelectionTest {
 
     private CharSequence getTextBeforeCursor(final int length, final int flags) {
         final ChromiumBaseInputConnection connection =
-                (ChromiumBaseInputConnection) ImeAdapter
-                        .fromWebContents(mActivityTestRule.getWebContents())
+                (ChromiumBaseInputConnection) mActivityTestRule.getImeAdapter()
                         .getInputConnectionForTest();
         return ImeTestUtils.runBlockingOnHandlerNoException(
                 connection.getHandler(), new Callable<CharSequence>() {
@@ -700,7 +700,7 @@ public class ContentTextSelectionTest {
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
         selectActionBarPaste();
         waitForSelectActionBarVisible(false);
-        Assert.assertFalse(mSelectionPopupController.hasSelection());
+        Assert.assertEquals(mSelectionPopupController.getSelectedText(), "");
 
         // Ensure the new text matches the pasted text.
         DOMUtils.longPressNode(mWebContents, "input_text");
@@ -727,7 +727,7 @@ public class ContentTextSelectionTest {
         Assert.assertTrue(mSelectionPopupController.isActionModeValid());
         selectActionBarPaste();
         waitForSelectActionBarVisible(false);
-        Assert.assertFalse(mSelectionPopupController.hasSelection());
+        Assert.assertEquals(mSelectionPopupController.getSelectedText(), "");
 
         // Ensure the new text matches the pasted text. Note that we can't
         // actually compare strings as password field selections only provide

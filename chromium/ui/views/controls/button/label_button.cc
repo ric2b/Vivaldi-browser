@@ -11,29 +11,30 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "build/build_config.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/gfx/animation/throb_animation.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/native_theme/native_theme.h"
-#include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop.h"
-#include "ui/views/animation/ink_drop_highlight.h"
-#include "ui/views/animation/ink_drop_impl.h"
-#include "ui/views/animation/square_ink_drop_ripple.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/controls/button/label_button_label.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/painter.h"
 #include "ui/views/style/platform_style.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/window/dialog_delegate.h"
 
 namespace views {
+namespace {
+// The length of the hover fade animation.
+constexpr int kHoverAnimationDurationMs = 170;
+}  // namespace
 
 // static
-const int LabelButton::kHoverAnimationDurationMs = 170;
 const char LabelButton::kViewClassName[] = "LabelButton";
 
 LabelButton::LabelButton(ButtonListener* listener,
@@ -70,9 +71,6 @@ LabelButton::LabelButton(ButtonListener* listener,
   AddChildView(label_);
   label_->SetAutoColorReadabilityEnabled(false);
   label_->SetHorizontalAlignment(gfx::ALIGN_TO_HEAD);
-
-  // Inset the button focus rect from the actual border; roughly match Windows.
-  SetFocusPainter(Painter::CreateDashedFocusPainterWithInsets(gfx::Insets(3)));
 }
 
 LabelButton::~LabelButton() {}
@@ -340,10 +338,6 @@ gfx::Rect LabelButton::GetChildAreaBounds() {
   return GetLocalBounds();
 }
 
-bool LabelButton::ShouldUseFloodFillInkDrop() const {
-  return !GetText().empty();
-}
-
 void LabelButton::OnFocus() {
   Button::OnFocus();
   // Typically the border renders differently when focused.
@@ -380,29 +374,10 @@ void LabelButton::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
   ink_drop_container_->RemoveInkDropLayer(ink_drop_layer);
 }
 
-std::unique_ptr<InkDrop> LabelButton::CreateInkDrop() {
-  return ShouldUseFloodFillInkDrop() ? CreateDefaultFloodFillInkDropImpl()
-                                     : Button::CreateInkDrop();
-}
-
-std::unique_ptr<views::InkDropRipple> LabelButton::CreateInkDropRipple() const {
-  return ShouldUseFloodFillInkDrop()
-             ? std::make_unique<views::FloodFillInkDropRipple>(
-                   size(), GetInkDropCenterBasedOnLastEvent(),
-                   GetInkDropBaseColor(), ink_drop_visible_opacity())
-             : CreateDefaultInkDropRipple(
-                   image()->GetMirroredBounds().CenterPoint());
-}
-
-std::unique_ptr<views::InkDropHighlight> LabelButton::CreateInkDropHighlight()
-    const {
-  return ShouldUseFloodFillInkDrop()
-             ? std::make_unique<views::InkDropHighlight>(
-                   size(), ink_drop_small_corner_radius(),
-                   gfx::RectF(GetLocalBounds()).CenterPoint(),
-                   GetInkDropBaseColor())
-             : CreateDefaultInkDropHighlight(
-                   gfx::RectF(image()->GetMirroredBounds()).CenterPoint());
+void LabelButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  if (is_default())
+    node_data->AddState(ax::mojom::State::kDefault);
+  Button::GetAccessibleNodeData(node_data);
 }
 
 void LabelButton::StateChanged(ButtonState old_state) {
@@ -484,7 +459,7 @@ void LabelButton::UpdateStyleToIndicateDefaultStatus() {
 }
 
 void LabelButton::UpdateImage() {
-  image_->SetImage(GetImage(state()));
+  image_->SetImage(GetImage(GetVisualState()));
   ResetCachedPreferredSize();
 }
 

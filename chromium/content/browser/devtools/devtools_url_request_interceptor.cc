@@ -4,16 +4,37 @@
 
 #include "content/browser/devtools/devtools_url_request_interceptor.h"
 
+#include "base/bind.h"
 #include "base/strings/pattern.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/post_task.h"
 #include "content/browser/devtools/devtools_interceptor_controller.h"
 #include "content/browser/devtools/devtools_url_interceptor_request_job.h"
 #include "content/browser/devtools/protocol/network_handler.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_request_info.h"
 #include "net/url_request/url_request.h"
+#include "services/network/public/cpp/features.h"
 
 namespace content {
+
+// static
+std::unique_ptr<DevToolsURLRequestInterceptor>
+DevToolsURLRequestInterceptor::MaybeCreate(BrowserContext* browser_context) {
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return nullptr;
+
+  // TODO(caseq): Technically, this is wrong -- we currently maintain one
+  // interception controller per browser context, while in reality it is
+  // created per StoragePartition.
+  // So we only support interception for the first StoragePartition, which
+  // results in extensions not being supported. Luckily, this implementation
+  // of the interception is going away when network service is enabled.
+  if (DevToolsInterceptorController::FromBrowserContext(browser_context))
+    return nullptr;
+  return std::make_unique<DevToolsURLRequestInterceptor>(browser_context);
+}
 
 // static
 bool DevToolsURLRequestInterceptor::IsNavigationRequest(
@@ -27,8 +48,8 @@ DevToolsURLRequestInterceptor::DevToolsURLRequestInterceptor(
     : next_id_(0), weak_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto target_registry = std::make_unique<DevToolsTargetRegistry>(
-      content::BrowserThread::GetTaskRunnerForThread(
-          content::BrowserThread::IO));
+      base::CreateSingleThreadTaskRunnerWithTraits(
+          {content::BrowserThread::IO}));
   target_resolver_ = target_registry->CreateResolver();
   // Controller lifetime is managed by the browser context.
   auto* controller = new DevToolsInterceptorController(
@@ -43,7 +64,7 @@ DevToolsURLRequestInterceptor::~DevToolsURLRequestInterceptor() {
 
 const DevToolsTargetRegistry::TargetInfo*
 DevToolsURLRequestInterceptor::TargetInfoForRequestInfo(
-    const ResourceRequestInfo* request_info) const {
+    ResourceRequestInfo* request_info) const {
   int frame_node_id = request_info->GetFrameTreeNodeId();
   if (frame_node_id != -1)
     return target_resolver_->GetInfoByFrameTreeNodeId(frame_node_id);
@@ -58,8 +79,8 @@ void DevToolsURLRequestInterceptor::ContinueInterceptedRequest(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DevToolsURLInterceptorRequestJob* job = GetJob(interception_id);
   if (!job) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(
             &ContinueInterceptedRequestCallback::sendFailure,
             std::move(callback),
@@ -97,8 +118,8 @@ void DevToolsURLRequestInterceptor::GetResponseBody(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DevToolsURLInterceptorRequestJob* job = GetJob(interception_id);
   if (!job) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(
             &GetResponseBodyForInterceptionCallback::sendFailure,
             std::move(callback),
@@ -119,7 +140,7 @@ net::URLRequestJob* DevToolsURLRequestInterceptor::InnerMaybeInterceptRequest(
   // Don't try to intercept blob resources.
   if (request->url().SchemeIsBlob())
     return nullptr;
-  const ResourceRequestInfo* resource_request_info =
+  ResourceRequestInfo* resource_request_info =
       ResourceRequestInfo::ForRequest(request);
   if (!resource_request_info)
     return nullptr;
@@ -144,8 +165,8 @@ net::URLRequestJob* DevToolsURLRequestInterceptor::InnerMaybeInterceptRequest(
   std::string interception_id = base::StringPrintf("id-%zu", ++next_id_);
 
   if (IsNavigationRequest(resource_type)) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&DevToolsInterceptorController::NavigationStarted,
                        controller_, interception_id,
                        resource_request_info->GetGlobalRequestID()));
@@ -275,8 +296,8 @@ void DevToolsURLRequestInterceptor::JobFinished(
   interception_id_to_job_map_.erase(interception_id);
   if (!is_navigation)
     return;
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&DevToolsInterceptorController::NavigationFinished,
                      controller_, interception_id));
 }

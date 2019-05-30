@@ -42,25 +42,25 @@ class Metadata final : public ScriptWrappable {
 
  public:
   static Metadata* Create(const FileMetadata& platform_metadata) {
-    return new Metadata(platform_metadata);
+    return MakeGarbageCollected<Metadata>(platform_metadata);
   }
 
   static Metadata* Create(Metadata* metadata) {
-    return new Metadata(metadata->platform_metadata_);
+    return MakeGarbageCollected<Metadata>(metadata->platform_metadata_);
   }
+
+  explicit Metadata(const FileMetadata& platform_metadata)
+      : platform_metadata_(platform_metadata) {}
 
   // Return Epoch time in milliseconds for Date.
   double modificationTime() const {
     return platform_metadata_.modification_time;
   }
-  unsigned long long size() const {
-    return static_cast<unsigned long long>(platform_metadata_.length);
+  uint64_t size() const {
+    return static_cast<uint64_t>(platform_metadata_.length);
   }
 
  private:
-  explicit Metadata(const FileMetadata& platform_metadata)
-      : platform_metadata_(platform_metadata) {}
-
   FileMetadata platform_metadata_;
 };
 

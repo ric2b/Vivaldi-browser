@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/chromeos/login/recommend_apps_screen_handler.h"
 
+#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/login/screens/recommend_apps_screen.h"
 #include "chrome/browser/profiles/profile.h"
@@ -23,12 +24,58 @@ constexpr const char kUserActionSkip[] = "recommendAppsSkip";
 constexpr const char kUserActionRetry[] = "recommendAppsRetry";
 constexpr const char kUserActionInstall[] = "recommendAppsInstall";
 
+constexpr const int kMaxAppCount = 21;
+
+enum class RecommendAppsScreenState {
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused. This should be kept in sync with
+  // RecommendAppsScreenState in enums.xml.
+  SHOW = 0,
+  NO_SHOW = 1,
+  ERROR = 2,
+
+  kMaxValue = ERROR
+};
+
+enum class RecommendAppsScreenAction {
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused. This should be kept in sync with
+  // RecommendAppsScreenAction in enums.xml.
+  SKIPPED = 0,
+  RETRIED = 1,
+  SELECTED_NONE = 2,
+  APP_SELECTED = 3,
+
+  kMaxValue = APP_SELECTED
+};
+
+void RecordUmaUserSelectionAppCount(int app_count) {
+  UMA_HISTOGRAM_EXACT_LINEAR("OOBE.RecommendApps.Screen.SelectedAppCount",
+                             app_count, kMaxAppCount);
+}
+
+void RecordUmaSelectedRecommendedPercentage(
+    int selected_recommended_percentage) {
+  UMA_HISTOGRAM_PERCENTAGE(
+      "OOBE.RecommendApps.Screen.SelectedRecommendedPercentage",
+      selected_recommended_percentage);
+}
+
+void RecordUmaScreenState(RecommendAppsScreenState state) {
+  UMA_HISTOGRAM_ENUMERATION("OOBE.RecommendApps.Screen.State", state);
+}
+
+void RecordUmaScreenAction(RecommendAppsScreenAction action) {
+  UMA_HISTOGRAM_ENUMERATION("OOBE.RecommendApps.Screen.Action", action);
+}
+
 }  // namespace
 
 namespace chromeos {
 
-RecommendAppsScreenHandler::RecommendAppsScreenHandler()
-    : BaseScreenHandler(kScreenId) {
+RecommendAppsScreenHandler::RecommendAppsScreenHandler(
+    JSCallsContainer* js_calls_container)
+    : BaseScreenHandler(kScreenId, js_calls_container) {
   set_call_js_prefix(kJsScreenPath);
 }
 
@@ -52,7 +99,7 @@ void RecommendAppsScreenHandler::DeclareLocalizedValues(
 
 void RecommendAppsScreenHandler::RegisterMessages() {
   BaseScreenHandler::RegisterMessages();
-  AddCallback(kUserActionSkip, &RecommendAppsScreenHandler::HandleSkip);
+  AddCallback(kUserActionSkip, &RecommendAppsScreenHandler::OnUserSkip);
   AddCallback(kUserActionRetry, &RecommendAppsScreenHandler::HandleRetry);
   AddRawCallback(kUserActionInstall,
                  &RecommendAppsScreenHandler::HandleInstall);
@@ -86,47 +133,73 @@ void RecommendAppsScreenHandler::Initialize() {}
 
 void RecommendAppsScreenHandler::LoadAppListInUI(const base::Value& app_list) {
   if (!page_is_ready()) {
-    CallJS("showError");
+    RecordUmaScreenState(RecommendAppsScreenState::ERROR);
+    CallJS("login.RecommendAppsScreen.showError");
     return;
   }
+
+  RecordUmaScreenState(RecommendAppsScreenState::SHOW);
   const ui::ResourceBundle& resource_bundle =
       ui::ResourceBundle::GetSharedInstance();
   base::StringPiece app_list_webview = resource_bundle.GetRawDataResource(
       IDR_ARC_SUPPORT_RECOMMEND_APP_LIST_VIEW_HTML);
-  CallJS("setWebview", app_list_webview.as_string());
-  CallJS("loadAppList", app_list);
+  CallJS("login.RecommendAppsScreen.setWebview", app_list_webview.as_string());
+  CallJS("login.RecommendAppsScreen.loadAppList", app_list);
 }
 
 void RecommendAppsScreenHandler::OnLoadError() {
-  CallJS("showError");
+  RecordUmaScreenState(RecommendAppsScreenState::ERROR);
+  CallJS("login.RecommendAppsScreen.showError");
 }
 
 void RecommendAppsScreenHandler::OnLoadSuccess(const base::Value& app_list) {
+  recommended_app_count_ = static_cast<int>(app_list.GetList().size());
   LoadAppListInUI(app_list);
 }
 
 void RecommendAppsScreenHandler::OnParseResponseError() {
+  RecordUmaScreenState(RecommendAppsScreenState::NO_SHOW);
+  HandleSkip();
+}
+void RecommendAppsScreenHandler::OnUserSkip() {
+  RecordUmaScreenAction(RecommendAppsScreenAction::SKIPPED);
   HandleSkip();
 }
 
+// There are three scenarios that HandleSkip() is called:
+// 1. The user clicks the Skip button.
+// 2. The user doesn't select any apps and click the Install button.
+// 3. The response from the fetcher cannot be parsed.
+// Each case has its own entry point to be logged.
 void RecommendAppsScreenHandler::HandleSkip() {
   for (auto& observer : observer_list_)
     observer.OnSkip();
 }
 
 void RecommendAppsScreenHandler::HandleRetry() {
+  RecordUmaScreenAction(RecommendAppsScreenAction::RETRIED);
   for (auto& observer : observer_list_)
     observer.OnRetry();
 }
 
 void RecommendAppsScreenHandler::HandleInstall(const base::ListValue* args) {
+  if (recommended_app_count_ != 0) {
+    int selected_app_count = static_cast<int>(args->GetSize());
+    int selected_recommended_percentage =
+        100 * selected_app_count / recommended_app_count_;
+    RecordUmaUserSelectionAppCount(selected_app_count);
+    RecordUmaSelectedRecommendedPercentage(selected_recommended_percentage);
+  }
+
   // If the user does not select any apps, we should skip the app downloading
   // screen.
   if (args->GetList().empty()) {
+    RecordUmaScreenAction(RecommendAppsScreenAction::SELECTED_NONE);
     HandleSkip();
     return;
   }
 
+  RecordUmaScreenAction(RecommendAppsScreenAction::APP_SELECTED);
   pref_service_->Set(arc::prefs::kArcFastAppReinstallPackages, *args);
 
   arc::ArcFastAppReinstallStarter* fast_app_reinstall_starter =

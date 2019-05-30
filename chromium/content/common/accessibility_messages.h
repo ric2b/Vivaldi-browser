@@ -10,7 +10,6 @@
 #include "content/common/ax_content_node_data.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
-#include "content/common/view_message_enums.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_message_utils.h"
 #include "ipc/ipc_param_traits.h"
@@ -55,8 +54,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::AXContentNodeData)
   IPC_STRUCT_TRAITS_MEMBER(role)
   IPC_STRUCT_TRAITS_MEMBER(state)
   IPC_STRUCT_TRAITS_MEMBER(actions)
-  IPC_STRUCT_TRAITS_MEMBER(location)
-  IPC_STRUCT_TRAITS_MEMBER(transform)
   IPC_STRUCT_TRAITS_MEMBER(string_attributes)
   IPC_STRUCT_TRAITS_MEMBER(int_attributes)
   IPC_STRUCT_TRAITS_MEMBER(float_attributes)
@@ -65,7 +62,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::AXContentNodeData)
   IPC_STRUCT_TRAITS_MEMBER(html_attributes)
   IPC_STRUCT_TRAITS_MEMBER(child_ids)
   IPC_STRUCT_TRAITS_MEMBER(content_int_attributes)
-  IPC_STRUCT_TRAITS_MEMBER(offset_container_id)
+  IPC_STRUCT_TRAITS_MEMBER(relative_bounds)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::AXContentTreeData)

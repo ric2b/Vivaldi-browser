@@ -177,7 +177,7 @@ std::unique_ptr<FileBrowserHandler> LoadFileBrowserHandler(
       if (!access_list_value->GetString(i, &access) ||
           result->AddFileAccessPermission(access)) {
         *error = extensions::ErrorUtils::FormatErrorMessageUTF16(
-            errors::kInvalidFileAccessValue, base::IntToString(i));
+            errors::kInvalidFileAccessValue, base::NumberToString(i));
         return nullptr;
       }
     }
@@ -200,7 +200,7 @@ std::unique_ptr<FileBrowserHandler> LoadFileBrowserHandler(
       std::string filter;
       if (!file_filters->GetString(i, &filter)) {
         *error = extensions::ErrorUtils::FormatErrorMessageUTF16(
-            errors::kInvalidFileFilterValue, base::IntToString(i));
+            errors::kInvalidFileFilterValue, base::NumberToString(i));
         return nullptr;
       }
       filter = base::ToLowerASCII(filter);
@@ -214,7 +214,7 @@ std::unique_ptr<FileBrowserHandler> LoadFileBrowserHandler(
       // wildcards in URLPattern, so transform to what will match correctly.
       filter.replace(0, 11, "chrome-extension://*/");
       URLPattern pattern(URLPattern::SCHEME_EXTENSION);
-      if (pattern.Parse(filter) != URLPattern::PARSE_SUCCESS) {
+      if (pattern.Parse(filter) != URLPattern::ParseResult::kSuccess) {
         *error = extensions::ErrorUtils::FormatErrorMessageUTF16(
             errors::kInvalidURLPatternError, filter);
         return nullptr;

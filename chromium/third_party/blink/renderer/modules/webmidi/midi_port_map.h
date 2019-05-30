@@ -21,7 +21,7 @@ class MIDIPortMap : public ScriptWrappable, public Maplike<String, T*> {
       : entries_(entries) {}
 
   // IDL attributes / methods
-  size_t size() const { return entries_.size(); }
+  uint32_t size() const { return entries_.size(); }
 
   void Trace(blink::Visitor* visitor) override {
     visitor->Trace(entries_);
@@ -36,7 +36,8 @@ class MIDIPortMap : public ScriptWrappable, public Maplike<String, T*> {
   typename PairIterable<String, T*>::IterationSource* StartIteration(
       ScriptState*,
       ExceptionState&) override {
-    return new MapIterationSource(this, entries_.begin(), entries_.end());
+    return MakeGarbageCollected<MapIterationSource>(this, entries_.begin(),
+                                                    entries_.end());
   }
 
   bool GetMapEntry(ScriptState*,

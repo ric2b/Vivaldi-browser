@@ -24,6 +24,7 @@
 
 #if defined(OS_WIN)
 #include <windows.h>
+#include <malloc.h>
 #elif defined(OS_MACOSX)
 #include <malloc/malloc.h>
 #include "base/allocator/allocator_interception_mac.h"
@@ -52,6 +53,11 @@ namespace {
 
 using testing::MockFunction;
 using testing::_;
+
+// Special sentinel values used for testing GetSizeEstimate() interception.
+const char kTestSizeEstimateData[] = "test_value";
+constexpr void* kTestSizeEstimateAddress = (void*)kTestSizeEstimateData;
+constexpr size_t kTestSizeEstimate = 1234;
 
 class AllocatorShimTest : public testing::Test {
  public:
@@ -107,9 +113,8 @@ class AllocatorShimTest : public testing::Test {
         if (!instance_->did_fail_realloc_0xfeed_once->Get()) {
           instance_->did_fail_realloc_0xfeed_once->Set(true);
           return nullptr;
-        } else {
-          return address;
         }
+        return address;
       }
 
       if (size < kMaxSizeTracked)
@@ -131,6 +136,9 @@ class AllocatorShimTest : public testing::Test {
   static size_t MockGetSizeEstimate(const AllocatorDispatch* self,
                                     void* address,
                                     void* context) {
+    // Special testing values for GetSizeEstimate() interception.
+    if (address == kTestSizeEstimateAddress)
+      return kTestSizeEstimate;
     return self->next->get_size_estimate_function(self->next, address, context);
   }
 
@@ -171,6 +179,40 @@ class AllocatorShimTest : public testing::Test {
     self->next->free_definite_size_function(self->next, ptr, size, context);
   }
 
+  static void* MockAlignedMalloc(const AllocatorDispatch* self,
+                                 size_t size,
+                                 size_t alignment,
+                                 void* context) {
+    if (instance_ && size < kMaxSizeTracked) {
+      ++instance_->aligned_mallocs_intercepted_by_size[size];
+    }
+    return self->next->aligned_malloc_function(self->next, size, alignment,
+                                               context);
+  }
+
+  static void* MockAlignedRealloc(const AllocatorDispatch* self,
+                                  void* address,
+                                  size_t size,
+                                  size_t alignment,
+                                  void* context) {
+    if (instance_) {
+      if (size < kMaxSizeTracked)
+        ++instance_->aligned_reallocs_intercepted_by_size[size];
+      ++instance_->aligned_reallocs_intercepted_by_addr[Hash(address)];
+    }
+    return self->next->aligned_realloc_function(self->next, address, size,
+                                                alignment, context);
+  }
+
+  static void MockAlignedFree(const AllocatorDispatch* self,
+                              void* address,
+                              void* context) {
+    if (instance_) {
+      ++instance_->aligned_frees_intercepted_by_addr[Hash(address)];
+    }
+    self->next->aligned_free_function(self->next, address, context);
+  }
+
   static void NewHandler() {
     if (!instance_)
       return;
@@ -188,10 +230,15 @@ class AllocatorShimTest : public testing::Test {
     memset(&aligned_allocs_intercepted_by_size, 0, array_size);
     memset(&aligned_allocs_intercepted_by_alignment, 0, array_size);
     memset(&reallocs_intercepted_by_size, 0, array_size);
+    memset(&reallocs_intercepted_by_addr, 0, array_size);
     memset(&frees_intercepted_by_addr, 0, array_size);
     memset(&batch_mallocs_intercepted_by_size, 0, array_size);
     memset(&batch_frees_intercepted_by_addr, 0, array_size);
     memset(&free_definite_sizes_intercepted_by_size, 0, array_size);
+    memset(&aligned_mallocs_intercepted_by_size, 0, array_size);
+    memset(&aligned_reallocs_intercepted_by_size, 0, array_size);
+    memset(&aligned_reallocs_intercepted_by_addr, 0, array_size);
+    memset(&aligned_frees_intercepted_by_addr, 0, array_size);
     did_fail_realloc_0xfeed_once.reset(new ThreadLocalBoolean());
     subtle::Release_Store(&num_new_handler_calls, 0);
     instance_ = this;
@@ -219,6 +266,10 @@ class AllocatorShimTest : public testing::Test {
   size_t batch_mallocs_intercepted_by_size[kMaxSizeTracked];
   size_t batch_frees_intercepted_by_addr[kMaxSizeTracked];
   size_t free_definite_sizes_intercepted_by_size[kMaxSizeTracked];
+  size_t aligned_mallocs_intercepted_by_size[kMaxSizeTracked];
+  size_t aligned_reallocs_intercepted_by_size[kMaxSizeTracked];
+  size_t aligned_reallocs_intercepted_by_addr[kMaxSizeTracked];
+  size_t aligned_frees_intercepted_by_addr[kMaxSizeTracked];
   std::unique_ptr<ThreadLocalBoolean> did_fail_realloc_0xfeed_once;
   subtle::Atomic32 num_new_handler_calls;
 
@@ -263,6 +314,9 @@ AllocatorDispatch g_mock_dispatch = {
     &AllocatorShimTest::MockBatchMalloc,      /* batch_malloc_function */
     &AllocatorShimTest::MockBatchFree,        /* batch_free_function */
     &AllocatorShimTest::MockFreeDefiniteSize, /* free_definite_size_function */
+    &AllocatorShimTest::MockAlignedMalloc,    /* aligned_malloc_function */
+    &AllocatorShimTest::MockAlignedRealloc,   /* aligned_realloc_function */
+    &AllocatorShimTest::MockAlignedFree,      /* aligned_free_function */
     nullptr,                                  /* next */
 };
 
@@ -391,6 +445,32 @@ TEST_F(AllocatorShimTest, InterceptLibcSymbolsFreeDefiniteSize) {
 }
 #endif  // defined(OS_MACOSX)
 
+#if defined(OS_WIN)
+TEST_F(AllocatorShimTest, InterceptUcrtAlignedAllocationSymbols) {
+  InsertAllocatorDispatch(&g_mock_dispatch);
+
+  constexpr size_t kAlignment = 32;
+  void* alloc_ptr = _aligned_malloc(123, kAlignment);
+  EXPECT_GE(aligned_mallocs_intercepted_by_size[123], 1u);
+
+  void* new_alloc_ptr = _aligned_realloc(alloc_ptr, 1234, kAlignment);
+  EXPECT_GE(aligned_reallocs_intercepted_by_size[1234], 1u);
+  EXPECT_GE(aligned_reallocs_intercepted_by_addr[Hash(alloc_ptr)], 1u);
+
+  _aligned_free(new_alloc_ptr);
+  EXPECT_GE(aligned_frees_intercepted_by_addr[Hash(new_alloc_ptr)], 1u);
+
+  RemoveAllocatorDispatchForTesting(&g_mock_dispatch);
+}
+
+TEST_F(AllocatorShimTest, AlignedReallocSizeZeroFrees) {
+  void* alloc_ptr = _aligned_malloc(123, 16);
+  CHECK(alloc_ptr);
+  alloc_ptr = _aligned_realloc(alloc_ptr, 0, 16);
+  CHECK(!alloc_ptr);
+}
+#endif  // defined(OS_WIN)
+
 TEST_F(AllocatorShimTest, InterceptCppSymbols) {
   InsertAllocatorDispatch(&g_mock_dispatch);
 
@@ -461,6 +541,38 @@ TEST_F(AllocatorShimTest, ShimReplacesCRTHeapWhenEnabled) {
   ASSERT_NE(::GetProcessHeap(), reinterpret_cast<HANDLE>(_get_heap_handle()));
 }
 #endif  // defined(OS_WIN) && BUILDFLAG(USE_ALLOCATOR_SHIM)
+
+#if defined(OS_WIN)
+static size_t GetAllocatedSize(void* ptr) {
+  return _msize(ptr);
+}
+#elif defined(OS_MACOSX)
+static size_t GetAllocatedSize(void* ptr) {
+  return malloc_size(ptr);
+}
+#else
+#define NO_MALLOC_SIZE
+#endif
+
+#if !defined(NO_MALLOC_SIZE) && BUILDFLAG(USE_ALLOCATOR_SHIM)
+TEST_F(AllocatorShimTest, ShimReplacesMallocSizeWhenEnabled) {
+  InsertAllocatorDispatch(&g_mock_dispatch);
+  EXPECT_EQ(GetAllocatedSize(kTestSizeEstimateAddress), kTestSizeEstimate);
+  RemoveAllocatorDispatchForTesting(&g_mock_dispatch);
+}
+
+TEST_F(AllocatorShimTest, ShimDoesntChangeMallocSizeWhenEnabled) {
+  void* alloc = malloc(16);
+  size_t sz = GetAllocatedSize(alloc);
+  EXPECT_GE(sz, 16U);
+
+  InsertAllocatorDispatch(&g_mock_dispatch);
+  EXPECT_EQ(GetAllocatedSize(alloc), sz);
+  RemoveAllocatorDispatchForTesting(&g_mock_dispatch);
+
+  free(alloc);
+}
+#endif  // !defined(NO_MALLOC_SIZE) && BUILDFLAG(USE_ALLOCATOR_SHIM)
 
 }  // namespace
 }  // namespace allocator

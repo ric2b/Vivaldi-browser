@@ -17,6 +17,7 @@
 #include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/trace_event/memory_dump_provider.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "media/base/overlay_info.h"
 #include "media/base/pipeline_status.h"
@@ -45,7 +46,8 @@ class MediaLog;
 // GetMessageLoop().
 class MEDIA_EXPORT GpuVideoDecoder
     : public VideoDecoder,
-      public VideoDecodeAccelerator::Client {
+      public VideoDecodeAccelerator::Client,
+      public base::trace_event::MemoryDumpProvider {
  public:
   GpuVideoDecoder(GpuVideoAcceleratorFactories* factories,
                   const RequestOverlayInfoCB& request_overlay_info_cb,
@@ -56,13 +58,12 @@ class MEDIA_EXPORT GpuVideoDecoder
   // VideoDecoder implementation.
   std::string GetDisplayName() const override;
   bool IsPlatformDecoder() const override;
-  void Initialize(
-      const VideoDecoderConfig& config,
-      bool low_delay,
-      CdmContext* cdm_context,
-      const InitCB& init_cb,
-      const OutputCB& output_cb,
-      const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) override;
+  void Initialize(const VideoDecoderConfig& config,
+                  bool low_delay,
+                  CdmContext* cdm_context,
+                  const InitCB& init_cb,
+                  const OutputCB& output_cb,
+                  const WaitingCB& waiting_cb) override;
   void Decode(scoped_refptr<DecoderBuffer> buffer,
               const DecodeCB& decode_cb) override;
   void Reset(const base::Closure& closure) override;
@@ -83,6 +84,10 @@ class MEDIA_EXPORT GpuVideoDecoder
   void NotifyFlushDone() override;
   void NotifyResetDone() override;
   void NotifyError(media::VideoDecodeAccelerator::Error error) override;
+
+  // base::trace_event::MemoryDumpProvider implementation.
+  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                    base::trace_event::ProcessMemoryDump* pmd) override;
 
   static const char kDecoderName[];
 
@@ -127,8 +132,9 @@ class MEDIA_EXPORT GpuVideoDecoder
   void PutSharedMemory(std::unique_ptr<base::SharedMemory> shm_buffer,
                        int32_t last_bitstream_buffer_id);
 
-  // Destroy all PictureBuffers in |buffers|, and delete their textures.
-  void DestroyPictureBuffers(PictureBufferMap* buffers);
+  // Destroy all the assigned picture buffers and delete their textures, but
+  // skip the textures of the buffers which is still at display.
+  void DestroyPictureBuffers();
 
   // Returns true if the video decoder with |capabilities| can support
   // |profile|, |coded_size|, and |is_encrypted|.
@@ -150,6 +156,11 @@ class MEDIA_EXPORT GpuVideoDecoder
   // the surface is known or immediately by Initialize() if external surfaces
   // are unsupported.
   void CompleteInitialization(const OverlayInfo& overlay_info);
+
+  // Return the number of picture buffers which ids are in
+  // |assigned_picture_buffers_| but not in |picture_buffers_at_display_|.
+  // It is used for checking and implementing CanReadWithoutStalling().
+  size_t AvailablePictures() const;
 
   bool needs_bitstream_conversion_;
 
@@ -207,11 +218,12 @@ class MEDIA_EXPORT GpuVideoDecoder
   PictureBufferMap assigned_picture_buffers_;
   // PictureBuffers given to us by VDA via PictureReady, which we sent forward
   // as VideoFrames to be rendered via decode_cb_, and which will be returned
-  // to us via ReusePictureBuffer.
-  typedef std::map<int32_t /* picture_buffer_id */,
-                   PictureBuffer::TextureIds /* texture_id */>
-      PictureBufferTextureMap;
-  PictureBufferTextureMap picture_buffers_at_display_;
+  // to us via ReusePictureBuffer. Note that a picture buffer might be sent from
+  // VDA multiple times. Therefore we use multimap to track the number of times
+  // we passed the picture buffer for display.
+  std::multimap<int32_t /* picture_buffer_id */,
+                PictureBuffer::TextureIds /* texture_id */>
+      picture_buffers_at_display_;
 
   struct BufferData {
     BufferData(int32_t bbid,
@@ -230,10 +242,6 @@ class MEDIA_EXPORT GpuVideoDecoder
   // frames that have been decoded but haven't been requested by a Decode() yet.
   int32_t next_picture_buffer_id_;
   int32_t next_bitstream_buffer_id_;
-
-  // Set during ProvidePictureBuffers(), used for checking and implementing
-  // HasAvailableOutputFrames().
-  int available_pictures_;
 
   // If true, the client cannot expect the VDA to produce any new decoded
   // frames, until it returns all PictureBuffers it may be holding back to the

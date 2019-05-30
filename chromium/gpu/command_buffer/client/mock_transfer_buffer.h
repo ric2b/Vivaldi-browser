@@ -36,7 +36,8 @@ class MockTransferBuffer : public TransferBufferInterface {
                   unsigned int /* max_buffer_size */,
                   unsigned int alignment) override;
   int GetShmId() override;
-  void* GetResultBuffer() override;
+  void* AcquireResultBuffer() override;
+  void ReleaseResultBuffer() override;
   int GetResultOffset() override;
   void Free() override;
   bool HaveBuffer() const override;
@@ -49,12 +50,13 @@ class MockTransferBuffer : public TransferBufferInterface {
   unsigned int GetFreeSize() const override;
   unsigned int GetFragmentedFreeSize() const override;
   void ShrinkLastBlock(unsigned int new_size) override;
+  unsigned int GetMaxSize() const override;
 
-  size_t MaxTransferBufferSize();
+  uint32_t MaxTransferBufferSize();
   unsigned int RoundToAlignment(unsigned int size);
   bool InSync();
-  ExpectedMemoryInfo GetExpectedMemory(size_t size);
-  ExpectedMemoryInfo GetExpectedResultMemory(size_t size);
+  ExpectedMemoryInfo GetExpectedMemory(uint32_t size);
+  ExpectedMemoryInfo GetExpectedResultMemory(uint32_t size);
 
  private:
   static const int kNumBuffers = 2;
@@ -67,15 +69,15 @@ class MockTransferBuffer : public TransferBufferInterface {
     return static_cast<uint8_t*>(buffers_[expected_buffer_index_]->memory());
   }
 
-  uint32_t AllocateExpectedTransferBuffer(size_t size);
-  void* GetExpectedTransferAddressFromOffset(uint32_t offset, size_t size);
+  uint32_t AllocateExpectedTransferBuffer(uint32_t size);
+  void* GetExpectedTransferAddressFromOffset(uint32_t offset, uint32_t size);
   int GetExpectedResultBufferId();
   uint32_t GetExpectedResultBufferOffset();
   int GetExpectedTransferBufferId();
 
   CommandBuffer* command_buffer_;
-  size_t size_;
-  size_t result_size_;
+  uint32_t size_;
+  uint32_t result_size_;
   uint32_t alignment_;
   int buffer_ids_[kNumBuffers];
   scoped_refptr<Buffer> buffers_[kNumBuffers];
@@ -85,6 +87,7 @@ class MockTransferBuffer : public TransferBufferInterface {
   uint32_t expected_offset_;
   uint32_t actual_offset_;
   bool initialize_fail_;
+  bool outstanding_result_pointer_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(MockTransferBuffer);
 };

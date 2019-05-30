@@ -30,7 +30,7 @@
 // compiler is buggy and only supports disabling it with a pragma, so we can't
 // disable it with other silly warnings in build/common.gypi. See:
 //   https://connect.microsoft.com/VisualStudio/feedback/details/1114440
-MSVC_PUSH_DISABLE_WARNING(4200);
+MSVC_PUSH_DISABLE_WARNING(4200)
 
 #if defined(COMPILER_MSVC)
 #define PACKED
@@ -92,10 +92,18 @@ enum MinidumpStreamType : uint32_t {
   //! \sa MemoryInfoListStream
   kMinidumpStreamTypeMemoryInfoList = MemoryInfoListStream,
 
+  //! \brief The last reserved minidump stream.
+  //!
+  //! \sa MemoryInfoListStream
+  kMinidumpStreamTypeLastReservedStream = LastReservedStream,
+
   // 0x4350 = "CP"
 
   //! \brief The stream type for MinidumpCrashpadInfo.
   kMinidumpStreamTypeCrashpadInfo = 0x43500001,
+
+  //! \brief The last reserved crashpad stream.
+  kMinidumpStreamTypeCrashpadLastReservedStream = 0x4350ffff,
 };
 
 //! \brief A variable-length UTF-8-encoded string carried within a minidump
@@ -493,7 +501,7 @@ struct ALIGNAS(4) PACKED MinidumpCrashpadInfo {
 #endif  // COMPILER_MSVC
 #undef PACKED
 
-MSVC_POP_WARNING();  // C4200
+MSVC_POP_WARNING()  // C4200
 
 }  // namespace crashpad
 

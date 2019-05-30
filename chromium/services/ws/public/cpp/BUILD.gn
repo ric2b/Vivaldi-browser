@@ -12,6 +12,8 @@ source_set("cpp") {
     "raster_thread_helper.h",
   ]
 
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
   public_deps = [
     "//base",
     "//cc",
@@ -49,6 +51,8 @@ source_set("internal") {
     "raster_thread_helper.cc",
   ]
 
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
   deps = [
     "//base",
     "//cc",
@@ -69,5 +73,26 @@ source_set("internal") {
 
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
+  }
+}
+
+source_set("manifest") {
+  sources = [
+    "manifest.cc",
+    "manifest.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/discardable_memory/public/interfaces",
+    "//services/service_manager/public/cpp",
+    "//services/ws/public/mojom",
+    "//services/ws/public/mojom/ime",
+    "//services/ws/public/mojom/input_devices",
+    "//ui/base/mojo",
+  ]
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone/public/interfaces" ]
   }
 }

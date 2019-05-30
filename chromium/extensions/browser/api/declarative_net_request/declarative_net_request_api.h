@@ -45,7 +45,7 @@ class DeclarativeNetRequestAddAllowedPagesFunction
  public:
   DeclarativeNetRequestAddAllowedPagesFunction();
   DECLARE_EXTENSION_FUNCTION("declarativeNetRequest.addAllowedPages",
-                             DECLARATIVENETREQUEST_ADDALLOWEDPAGES);
+                             DECLARATIVENETREQUEST_ADDALLOWEDPAGES)
 
  protected:
   ~DeclarativeNetRequestAddAllowedPagesFunction() override;
@@ -64,7 +64,7 @@ class DeclarativeNetRequestRemoveAllowedPagesFunction
  public:
   DeclarativeNetRequestRemoveAllowedPagesFunction();
   DECLARE_EXTENSION_FUNCTION("declarativeNetRequest.removeAllowedPages",
-                             DECLARATIVENETREQUEST_REMOVEALLOWEDPAGES);
+                             DECLARATIVENETREQUEST_REMOVEALLOWEDPAGES)
 
  protected:
   ~DeclarativeNetRequestRemoveAllowedPagesFunction() override;
@@ -83,7 +83,7 @@ class DeclarativeNetRequestGetAllowedPagesFunction
  public:
   DeclarativeNetRequestGetAllowedPagesFunction();
   DECLARE_EXTENSION_FUNCTION("declarativeNetRequest.getAllowedPages",
-                             DECLARATIVENETREQUEST_GETALLOWEDPAGES);
+                             DECLARATIVENETREQUEST_GETALLOWEDPAGES)
 
  protected:
   ~DeclarativeNetRequestGetAllowedPagesFunction() override;
@@ -94,6 +94,60 @@ class DeclarativeNetRequestGetAllowedPagesFunction
 
  private:
   DISALLOW_COPY_AND_ASSIGN(DeclarativeNetRequestGetAllowedPagesFunction);
+};
+
+class DeclarativeNetRequestAddDynamicRulesFunction
+    : public UIThreadExtensionFunction {
+ public:
+  DeclarativeNetRequestAddDynamicRulesFunction();
+  DECLARE_EXTENSION_FUNCTION("declarativeNetRequest.addDynamicRules",
+                             DECLARATIVENETREQUEST_ADDDYNAMICRULES)
+
+ protected:
+  ~DeclarativeNetRequestAddDynamicRulesFunction() override;
+
+  // ExtensionFunction override:
+  bool PreRunValidation(std::string* error) override;
+  ExtensionFunction::ResponseAction Run() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DeclarativeNetRequestAddDynamicRulesFunction);
+};
+
+class DeclarativeNetRequestRemoveDynamicRulesFunction
+    : public UIThreadExtensionFunction {
+ public:
+  DeclarativeNetRequestRemoveDynamicRulesFunction();
+  DECLARE_EXTENSION_FUNCTION("declarativeNetRequest.removeDynamicRules",
+                             DECLARATIVENETREQUEST_REMOVEDYNAMICRULES)
+
+ protected:
+  ~DeclarativeNetRequestRemoveDynamicRulesFunction() override;
+
+  // ExtensionFunction override:
+  bool PreRunValidation(std::string* error) override;
+  ExtensionFunction::ResponseAction Run() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DeclarativeNetRequestRemoveDynamicRulesFunction);
+};
+
+class DeclarativeNetRequestGetDynamicRulesFunction
+    : public UIThreadExtensionFunction {
+ public:
+  DeclarativeNetRequestGetDynamicRulesFunction();
+  DECLARE_EXTENSION_FUNCTION("declarativeNetRequest.getDynamicRules",
+                             DECLARATIVENETREQUEST_GETDYNAMICRULES)
+
+ protected:
+  ~DeclarativeNetRequestGetDynamicRulesFunction() override;
+
+  // ExtensionFunction override:
+  bool PreRunValidation(std::string* error) override;
+  ExtensionFunction::ResponseAction Run() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DeclarativeNetRequestGetDynamicRulesFunction);
 };
 
 }  // namespace extensions

@@ -43,6 +43,7 @@
 #include "third_party/blink/renderer/core/dom/document_fragment.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/node.h"
+#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
@@ -76,11 +77,11 @@
 #include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/drag_data.h"
+#include "third_party/blink/renderer/core/page/drag_image.h"
 #include "third_party/blink/renderer/core/page/drag_state.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_for_container.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
-#include "third_party/blink/renderer/platform/drag_image.h"
 #include "third_party/blink/renderer/platform/geometry/int_rect.h"
 #include "third_party/blink/renderer/platform/geometry/int_size.h"
 #include "third_party/blink/renderer/platform/graphics/bitmap_image.h"
@@ -140,7 +141,8 @@ static DataTransfer* CreateDraggingDataTransfer(DataTransferAccessPolicy policy,
 }
 
 DragController::DragController(Page* page)
-    : page_(page),
+    : ContextLifecycleObserver(nullptr),
+      page_(page),
       document_under_mouse_(nullptr),
       drag_initiator_(nullptr),
       file_input_element_under_mouse_(nullptr),
@@ -149,7 +151,7 @@ DragController::DragController(Page* page)
       did_initiate_drag_(false) {}
 
 DragController* DragController::Create(Page* page) {
-  return new DragController(page);
+  return MakeGarbageCollected<DragController>(page);
 }
 
 static DocumentFragment* DocumentFragmentFromDragData(
@@ -207,9 +209,7 @@ bool DragController::DragIsMove(FrameSelection& selection,
          !IsCopyKeyDown(drag_data);
 }
 
-// FIXME: This method is poorly named.  We're just clearing the selection from
-// the document this drag is exiting.
-void DragController::CancelDrag() {
+void DragController::ClearDragCaret() {
   page_->GetDragCaret().Clear();
 }
 
@@ -243,9 +243,10 @@ void DragController::PerformDrag(DragData* drag_data, LocalFrame& local_root) {
   DCHECK(drag_data);
   document_under_mouse_ =
       local_root.DocumentAtPoint(LayoutPoint(drag_data->ClientPosition()));
-  std::unique_ptr<UserGestureIndicator> gesture = Frame::NotifyUserActivation(
-      document_under_mouse_ ? document_under_mouse_->GetFrame() : nullptr,
-      UserGestureToken::kNewGesture);
+  std::unique_ptr<UserGestureIndicator> gesture =
+      LocalFrame::NotifyUserActivation(
+          document_under_mouse_ ? document_under_mouse_->GetFrame() : nullptr,
+          UserGestureToken::kNewGesture);
   if ((drag_destination_action_ & kDragDestinationActionDHTML) &&
       document_is_handling_drag_) {
     bool prevented_default = false;
@@ -276,7 +277,7 @@ void DragController::PerformDrag(DragData* drag_data, LocalFrame& local_root) {
     }
     if (prevented_default) {
       document_under_mouse_ = nullptr;
-      CancelDrag();
+      ClearDragCaret();
       return;
     }
   }
@@ -292,13 +293,23 @@ void DragController::PerformDrag(DragData* drag_data, LocalFrame& local_root) {
   if (OperationForLoad(drag_data, local_root) != kDragOperationNone) {
     if (page_->GetSettings().GetNavigateOnDragDrop()) {
       ResourceRequest resource_request(drag_data->AsURL());
-      // TODO(mkwst): Perhaps this should use a unique origin as the requestor
-      // origin rather than the origin of the dragged data URL?
-      resource_request.SetRequestorOrigin(
-          SecurityOrigin::Create(KURL(drag_data->AsURL())));
-      resource_request.SetHasUserGesture(Frame::HasTransientUserActivation(
+      resource_request.SetHasUserGesture(LocalFrame::HasTransientUserActivation(
           document_under_mouse_ ? document_under_mouse_->GetFrame() : nullptr));
-      page_->MainFrame()->Navigate(FrameLoadRequest(nullptr, resource_request));
+
+      // Use a unique origin to match other navigations that are initiated
+      // outside of a renderer process (e.g. omnibox navigations).  Here, the
+      // initiator of the navigation is a user dragging files from *outside* of
+      // the current page.  See also https://crbug.com/930049.
+      //
+      // TODO(lukasza): Once drag-and-drop remembers the source of the drag
+      // (unique origin for drags started from top-level Chrome like bookmarks
+      // or for drags started from other apps like Windows Explorer;  specific
+      // origin for drags started from another tab) we should use the source of
+      // the drag as the initiator of the navigation below.
+      resource_request.SetRequestorOrigin(SecurityOrigin::CreateUniqueOpaque());
+
+      page_->MainFrame()->Navigate(FrameLoadRequest(nullptr, resource_request),
+                                   WebFrameLoadType::kStandard);
     }
 
     // TODO(bokan): This case happens when we end a URL drag inside a guest
@@ -316,7 +327,7 @@ void DragController::MouseMovedIntoDocument(Document* new_document) {
 
   // If we were over another document clear the selection
   if (document_under_mouse_)
-    CancelDrag();
+    ClearDragCaret();
   document_under_mouse_ = new_document;
 }
 
@@ -347,7 +358,7 @@ static HTMLInputElement* AsFileInput(Node* node) {
   DCHECK(node);
   for (; node; node = node->OwnerShadowHost()) {
     if (IsHTMLInputElement(*node) &&
-        ToHTMLInputElement(node)->type() == InputTypeNames::file)
+        ToHTMLInputElement(node)->type() == input_type_names::kFile)
       return ToHTMLInputElement(node);
   }
   return nullptr;
@@ -931,7 +942,7 @@ bool DragController::PopulateDragDataTransfer(LocalFrame* src,
   HitTestResult hit_test_result =
       src->GetEventHandler().HitTestResultAtLocation(location);
   // FIXME: Can this even happen? I guess it's possible, but should verify
-  // with a layout test.
+  // with a web test.
   if (!state.drag_src_->IsShadowIncludingInclusiveAncestorOf(
           hit_test_result.InnerNode())) {
     // The original node being dragged isn't under the drag origin anymore...
@@ -984,6 +995,11 @@ bool DragController::PopulateDragDataTransfer(LocalFrame* src,
     // FIXME: For DHTML/draggable element drags, write element markup to
     // clipboard.
   }
+
+  // Observe context related to source to allow dropping drag_state_ when the
+  // Document goes away.
+  SetContext(src->GetDocument());
+
   return true;
 }
 
@@ -1053,11 +1069,12 @@ static std::unique_ptr<DragImage> DragImageForImage(
     image = svg_image.get();
   }
 
-  InterpolationQuality interpolation_quality =
-      element->EnsureComputedStyle()->ImageRendering() ==
-              EImageRendering::kPixelated
-          ? kInterpolationNone
-          : kInterpolationDefault;
+  InterpolationQuality interpolation_quality = kInterpolationDefault;
+  if (const ComputedStyle* style = element->GetComputedStyle()) {
+    if (style->ImageRendering() == EImageRendering::kPixelated)
+      interpolation_quality = kInterpolationNone;
+  }
+
   RespectImageOrientationEnum should_respect_image_orientation =
       LayoutObject::ShouldRespectImageOrientation(element->GetLayoutObject());
   ImageOrientation orientation;
@@ -1142,8 +1159,9 @@ std::unique_ptr<DragImage> DragController::DragImageForSelection(
       kGlobalPaintSelectionOnly | kGlobalPaintFlattenCompositingLayers;
 
   PaintRecordBuilder builder;
-  frame.View()->PaintContents(builder.Context(), paint_flags,
-                              EnclosingIntRect(painting_rect));
+  frame.View()->PaintContentsOutsideOfLifecycle(
+      builder.Context(), paint_flags,
+      CullRect(EnclosingIntRect(painting_rect)));
 
   PropertyTreeState property_tree_state =
       frame.View()->GetLayoutView()->FirstFragment().LocalBorderBoxProperties();
@@ -1290,6 +1308,7 @@ void DragController::DoSystemDrag(DragImage* image,
                                   bool for_link) {
   did_initiate_drag_ = true;
   drag_initiator_ = frame->GetDocument();
+  SetContext(drag_initiator_);
 
   // TODO(pdr): |drag_location| and |event_pos| should be passed in as
   // FloatPoints and we should calculate these adjusted values in floating
@@ -1298,7 +1317,7 @@ void DragController::DoSystemDrag(DragImage* image,
       frame->View()->FrameToViewport(drag_location);
   IntPoint adjusted_event_pos = frame->View()->FrameToViewport(event_pos);
   IntSize offset_size(adjusted_event_pos - adjusted_drag_location);
-  WebPoint offset_point(offset_size.Width(), offset_size.Height());
+  gfx::Point offset_point(offset_size.Width(), offset_size.Height());
   WebDragData drag_data = data_transfer->GetDataObject()->ToWebDragData();
   WebDragOperationsMask drag_operation_mask =
       static_cast<WebDragOperationsMask>(data_transfer->SourceOperation());
@@ -1342,8 +1361,12 @@ bool DragController::IsCopyKeyDown(DragData* drag_data) {
 
 DragState& DragController::GetDragState() {
   if (!drag_state_)
-    drag_state_ = new DragState;
+    drag_state_ = MakeGarbageCollected<DragState>();
   return *drag_state_;
+}
+
+void DragController::ContextDestroyed(ExecutionContext*) {
+  drag_state_ = nullptr;
 }
 
 void DragController::Trace(blink::Visitor* visitor) {
@@ -1352,6 +1375,7 @@ void DragController::Trace(blink::Visitor* visitor) {
   visitor->Trace(drag_initiator_);
   visitor->Trace(drag_state_);
   visitor->Trace(file_input_element_under_mouse_);
+  ContextLifecycleObserver::Trace(visitor);
 }
 
 }  // namespace blink

@@ -4,18 +4,25 @@
 
 package org.chromium.chrome.browser.autofill.keyboard_accessory;
 
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryProperties.VISIBLE;
+
+import android.support.annotation.Nullable;
 import android.support.annotation.Px;
 import android.support.v4.view.ViewPager;
-import android.view.ViewStub;
 
 import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryViewBinder.ActionViewHolder;
-import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryViewBinder.TabViewBinder;
-import org.chromium.chrome.browser.modelutil.LazyViewBinderAdapter;
-import org.chromium.chrome.browser.modelutil.ListModelChangeProcessor;
-import org.chromium.chrome.browser.modelutil.PropertyModelChangeProcessor;
-import org.chromium.chrome.browser.modelutil.RecyclerViewAdapter;
-import org.chromium.chrome.browser.modelutil.SimpleRecyclerViewMcp;
+import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryProperties.BarItem;
+import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryViewBinder.BarItemViewHolder;
+import org.chromium.components.autofill.AutofillDelegate;
+import org.chromium.components.autofill.AutofillSuggestion;
+import org.chromium.ui.ViewProvider;
+import org.chromium.ui.modelutil.LazyConstructionPropertyMcp;
+import org.chromium.ui.modelutil.ListModel;
+import org.chromium.ui.modelutil.PropertyKey;
+import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
+import org.chromium.ui.modelutil.RecyclerViewAdapter;
 
 /**
  * Creates and owns all elements which are part of the keyboard accessory component.
@@ -24,7 +31,8 @@ import org.chromium.chrome.browser.modelutil.SimpleRecyclerViewMcp;
  */
 public class KeyboardAccessoryCoordinator {
     private final KeyboardAccessoryMediator mMediator;
-    private LazyViewBinderAdapter.StubHolder<KeyboardAccessoryView> mViewHolder;
+    private final KeyboardAccessoryTabLayoutCoordinator mTabLayout =
+            new KeyboardAccessoryTabLayoutCoordinator();
 
     /**
      * The keyboard accessory provides signals when to show or change the accessory sheet below it.
@@ -56,62 +64,96 @@ public class KeyboardAccessoryCoordinator {
     }
 
     /**
+     * Describes a delegate manages all known tabs and is responsible to determine the active tab.
+     */
+    public interface TabSwitchingDelegate {
+        /**
+         * A {@link KeyboardAccessoryData.Tab} passed into this function will be represented as item
+         * at the start of the tab layout. It is meant to trigger various bottom sheets.
+         * @param tab The tab which contains representation data of a bottom sheet.
+         */
+        void addTab(KeyboardAccessoryData.Tab tab);
+
+        /**
+         * The {@link KeyboardAccessoryData.Tab} passed into this function will be completely
+         * removed from the tab layout.
+         * @param tab The tab to be removed.
+         */
+        void removeTab(KeyboardAccessoryData.Tab tab);
+
+        /**
+         * Clears all currently known tabs and adds the given tabs as replacement.
+         * @param tabs An array of {@link KeyboardAccessoryData.Tab}s.
+         */
+        void setTabs(KeyboardAccessoryData.Tab[] tabs);
+
+        /**
+         * Closes any active tab so that {@link #getActiveTab} returns null again.
+         */
+        void closeActiveTab();
+
+        /**
+         * Returns whether active tab or null if no tab is currently active. The returned property
+         * reflects the latest change while the view might still be in progress of being updated.
+         * @return The active {@link KeyboardAccessoryData.Tab}, null otherwise.
+         */
+        @Nullable
+        KeyboardAccessoryData.Tab getActiveTab();
+
+        /**
+         * Returns whether the model holds any tabs.
+         * @return True if there is at least one tab, false otherwise.
+         */
+        boolean hasTabs();
+    }
+
+    /**
      * Initializes the component as soon as the native library is loaded by e.g. starting to listen
      * to keyboard visibility events.
-     * @param viewStub the stub that will become the accessory.
+     * @param viewProvider A provider for the accessory.
      */
-    public KeyboardAccessoryCoordinator(ViewStub viewStub, VisibilityDelegate visibilityDelegate) {
-        KeyboardAccessoryModel model = new KeyboardAccessoryModel();
-        mMediator = new KeyboardAccessoryMediator(model, visibilityDelegate);
-        mViewHolder = new LazyViewBinderAdapter.StubHolder<>(viewStub);
+    public KeyboardAccessoryCoordinator(VisibilityDelegate visibilityDelegate,
+            ViewProvider<KeyboardAccessoryView> viewProvider) {
+        PropertyModel model = KeyboardAccessoryProperties.defaultModelBuilder().build();
+        mMediator = new KeyboardAccessoryMediator(
+                model, visibilityDelegate, mTabLayout.getTabSwitchingDelegate(), mTabLayout);
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.AUTOFILL_KEYBOARD_ACCESSORY)) {
+            viewProvider.whenLoaded(barView -> mTabLayout.assignNewView(barView.getTabLayout()));
+        }
 
-        model.addObserver(new PropertyModelChangeProcessor<>(model, mViewHolder,
-                new LazyViewBinderAdapter<>(
-                        new KeyboardAccessoryViewBinder(), this::onViewInflated)));
-        KeyboardAccessoryMetricsRecorder.registerMetricsObserver(model);
+        mTabLayout.setTabObserver(mMediator);
+        PropertyModelChangeProcessor
+                .ViewBinder<PropertyModel, KeyboardAccessoryView, PropertyKey> viewBinder =
+                KeyboardAccessoryViewBinder::bind;
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.AUTOFILL_KEYBOARD_ACCESSORY)) {
+            viewBinder = KeyboardAccessoryModernViewBinder::bind;
+        }
+        LazyConstructionPropertyMcp.create(model, VISIBLE, viewProvider, viewBinder);
+        KeyboardAccessoryMetricsRecorder.registerKeyboardAccessoryModelMetricsObserver(
+                model, mTabLayout.getTabSwitchingDelegate());
     }
 
     /**
-     * Creates an adapter to an {@link ActionViewHolder} that is wired
-     * up to the model change processor which listens to the given {@link KeyboardAccessoryModel}.
-     * @param model the {@link KeyboardAccessoryModel} the adapter gets its data from.
-     * @return Returns a fully initialized and wired adapter to an ActionViewHolder.
+     * Creates an adapter to an {@link BarItemViewHolder} that is wired
+     * up to the model change processor which listens to the given item list.
+     * @param barItems The list of shown items represented by the adapter.
+     * @return Returns a fully initialized and wired adapter to an BarItemViewHolder.
      */
-    static RecyclerViewAdapter<ActionViewHolder, Void> createActionsAdapter(
-            KeyboardAccessoryModel model) {
+    static RecyclerViewAdapter<BarItemViewHolder, Void> createBarItemsAdapter(
+            ListModel<BarItem> barItems) {
+        RecyclerViewAdapter.ViewHolderFactory<BarItemViewHolder> factory =
+                KeyboardAccessoryViewBinder::create;
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.AUTOFILL_KEYBOARD_ACCESSORY)) {
+            factory = KeyboardAccessoryModernViewBinder::create;
+        }
         return new RecyclerViewAdapter<>(
-                new SimpleRecyclerViewMcp<>(model.getActionList(),
-                        KeyboardAccessoryData.Action::getActionType, ActionViewHolder::bind),
-                ActionViewHolder::create);
-    }
-
-    /**
-     * Creates the {@link TabViewBinder} that is linked to the {@link ListModelChangeProcessor} that
-     * connects the given {@link KeyboardAccessoryView} to the given {@link KeyboardAccessoryModel}.
-     * @param model the {@link KeyboardAccessoryModel} whose data is used by the TabViewBinder.
-     * @param inflatedView the {@link KeyboardAccessoryView} to which the TabViewBinder binds data.
-     * @return Returns a fully initialized and wired {@link TabViewBinder}.
-     */
-    static TabViewBinder createTabViewBinder(
-            KeyboardAccessoryModel model, KeyboardAccessoryView inflatedView) {
-        TabViewBinder tabViewBinder = new TabViewBinder();
-        model.addTabListObserver(
-                new ListModelChangeProcessor<>(model.getTabList(), inflatedView, tabViewBinder));
-        return tabViewBinder;
+                new KeyboardAccessoryRecyclerViewMcp<>(barItems, BarItem::getViewType,
+                        BarItemViewHolder::bind, BarItemViewHolder::recycle),
+                factory);
     }
 
     public void closeActiveTab() {
-        mMediator.closeActiveTab();
-    }
-
-    /**
-     * Called by the {@link LazyViewBinderAdapter} as soon as the view is inflated so it can be
-     * initialized. This call happens before the {@link KeyboardAccessoryViewBinder} is called for
-     * the first time.
-     * @param view The view that was inflated from the initially given {@link ViewStub}.
-     */
-    private void onViewInflated(KeyboardAccessoryView view) {
-        view.setTabSelectionAdapter(mMediator);
+        mTabLayout.getTabSwitchingDelegate().closeActiveTab();
     }
 
     /**
@@ -120,7 +162,7 @@ public class KeyboardAccessoryCoordinator {
      * @param tab The tab which contains representation data and links back to a bottom sheet.
      */
     void addTab(KeyboardAccessoryData.Tab tab) {
-        mMediator.addTab(tab);
+        mTabLayout.getTabSwitchingDelegate().addTab(tab);
     }
 
     /**
@@ -129,11 +171,11 @@ public class KeyboardAccessoryCoordinator {
      * @param tab The tab to be removed.
      */
     void removeTab(KeyboardAccessoryData.Tab tab) {
-        mMediator.removeTab(tab);
+        mTabLayout.getTabSwitchingDelegate().removeTab(tab);
     }
 
     void setTabs(KeyboardAccessoryData.Tab[] tabs) {
-        mMediator.setTabs(tabs);
+        mTabLayout.getTabSwitchingDelegate().setTabs(tabs);
     }
 
     /**
@@ -144,9 +186,22 @@ public class KeyboardAccessoryCoordinator {
      *
      * @param provider The object providing action lists to observers in this component.
      */
-    public void registerActionListProvider(
-            KeyboardAccessoryData.Provider<KeyboardAccessoryData.Action> provider) {
+    public void registerActionProvider(
+            KeyboardAccessoryData.Provider<KeyboardAccessoryData.Action[]> provider) {
         provider.addObserver(mMediator);
+    }
+
+    /**
+     * Registers a KeyboardAccessoryData.Observer to the given KeyboardAccessoryData.Provider. The
+     * new observer will render chips into the accessory bar for every new suggestion and call the
+     * given {@link AutofillDelegate} when the user interacts with a chip.
+     * @param provider A {@link KeyboardAccessoryData.Provider<AutofillSuggestion[]>}.
+     * @param delegate A {@link AutofillDelegate}.
+     */
+    public void registerAutofillProvider(
+            KeyboardAccessoryData.Provider<AutofillSuggestion[]> provider,
+            AutofillDelegate delegate) {
+        provider.addObserver(mMediator.createAutofillSuggestionsObserver(delegate));
     }
 
     /**
@@ -203,10 +258,14 @@ public class KeyboardAccessoryCoordinator {
     /**
      * Returns whether the active tab is non-null. The returned property reflects the latest change
      * while the view might still be in progress of being updated accordingly.
-     * @return True if the accessory has an active tab, false otherwise.
+     * @return True if the accessory is visible and has an active tab, false otherwise.
      */
     public boolean hasActiveTab() {
         return mMediator.hasActiveTab();
+    }
+
+    ViewPager.OnPageChangeListener getOnPageChangeListener() {
+        return mTabLayout.getStablePageChangeListener();
     }
 
     @VisibleForTesting
@@ -214,12 +273,8 @@ public class KeyboardAccessoryCoordinator {
         return mMediator;
     }
 
-    /**
-     * Provides the PageChangeListener that is needed to wire up the TabLayout with the ViewPager.
-     * @return Returns a {@link ViewPager.OnPageChangeListener}.
-     */
-    ViewPager.OnPageChangeListener getPageChangeListener() {
-        assert mViewHolder.getView() != null : "Requested PageChangeListener before inflation.";
-        return mViewHolder.getView().getPageChangeListener();
+    @VisibleForTesting
+    KeyboardAccessoryTabLayoutCoordinator getTabLayoutForTesting() {
+        return mTabLayout;
     }
 }

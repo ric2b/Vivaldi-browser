@@ -52,7 +52,9 @@ bool EventDatabase::CreateEventTable() {
       "end_recurring INTEGER,"
       "location LONGVARCHAR,"
       "url LONGVARCHAR,"
-      "parent_event_id INTEGER,"
+      "etag LONGVARCHAR,"
+      "href LONGVARCHAR,"
+      "uid LONGVARCHAR,"
       "created INTEGER,"
       "last_modified INTEGER"
       ")");
@@ -66,8 +68,8 @@ EventID EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
       "INSERT OR REPLACE INTO events "
       "(calendar_id, alarm_id, title, description, "
       "start, end, all_day, is_recurring, start_recurring, end_recurring, "
-      "location, url) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+      "location, url, etag, href, uid) "
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
 
   statement.BindInt64(0, row.calendar_id());
   statement.BindInt64(1, row.alarm_id());
@@ -81,6 +83,9 @@ EventID EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
   statement.BindInt64(9, row.end_recurring().ToInternalValue());
   statement.BindString16(10, row.location());
   statement.BindString16(11, row.url());
+  statement.BindString(12, row.etag());
+  statement.BindString(13, row.href());
+  statement.BindString(14, row.uid());
 
   if (!statement.Run()) {
     return 0;
@@ -122,7 +127,7 @@ bool EventDatabase::UpdateEventRow(const EventRow& event) {
                                                       "UPDATE events SET \
         calendar_id=?, alarm_id=?, title=?, description=?, start=?, end=?, \
         all_day=?, is_recurring=?, start_recurring=?, end_recurring=?, \
-        location=?, url=? \
+        location=?, url=?, etag=?, href=?, uid=? \
         WHERE id=?"));
   statement.BindInt64(0, event.calendar_id());
   statement.BindInt64(1, event.alarm_id());
@@ -136,7 +141,10 @@ bool EventDatabase::UpdateEventRow(const EventRow& event) {
   statement.BindInt64(9, event.end_recurring().ToInternalValue());
   statement.BindString16(10, event.location());
   statement.BindString16(11, event.url());
-  statement.BindInt64(12, event.id());
+  statement.BindString(12, event.etag());
+  statement.BindString(13, event.href());
+  statement.BindString(14, event.uid());
+  statement.BindInt64(15, event.id());
 
   return statement.Run();
 }
@@ -157,6 +165,9 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
   base::Time end_recurring = base::Time::FromInternalValue(s.ColumnInt64(10));
   base::string16 location = s.ColumnString16(11);
   base::string16 url = s.ColumnString16(12);
+  std::string etag = s.ColumnString(13);
+  std::string href = s.ColumnString(14);
+  std::string uid = s.ColumnString(15);
 
   event->set_id(id);
   event->set_calendar_id(calendar_id);
@@ -171,6 +182,9 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
   event->set_end_recurring(end_recurring);
   event->set_location(location);
   event->set_url(url);
+  event->set_etag(etag);
+  event->set_href(href);
+  event->set_uid(uid);
 }
 
 bool EventDatabase::DeleteEvent(calendar::EventID event_id) {

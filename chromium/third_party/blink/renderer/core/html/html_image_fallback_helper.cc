@@ -20,15 +20,10 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 static bool NoImageSourceSpecified(const Element& element) {
-  bool no_src_specified = !element.hasAttribute(srcAttr) ||
-                          element.getAttribute(srcAttr).IsNull() ||
-                          element.getAttribute(srcAttr).IsEmpty();
-  bool no_srcset_specified = !element.hasAttribute(srcsetAttr) ||
-                             element.getAttribute(srcsetAttr).IsNull();
-  return no_src_specified && no_srcset_specified;
+  return element.getAttribute(kSrcAttr).IsEmpty();
 }
 
 static bool ElementRepresentsNothing(const Element& element) {
@@ -41,8 +36,8 @@ static bool ElementRepresentsNothing(const Element& element) {
 }
 
 static bool ImageSmallerThanAltImage(int pixels_for_alt_image,
-                                     const Length width,
-                                     const Length height) {
+                                     const Length& width,
+                                     const Length& height) {
   // We don't have a layout tree so can't compute the size of an image
   // relative dimensions - so we just assume we should display the alt image.
   if (!width.IsFixed() && !height.IsFixed())
@@ -57,22 +52,22 @@ void HTMLImageFallbackHelper::CreateAltTextShadowTree(Element& element) {
 
   HTMLSpanElement* container = HTMLSpanElement::Create(element.GetDocument());
   root.AppendChild(container);
-  container->setAttribute(idAttr, AtomicString("alttext-container"));
+  container->setAttribute(kIdAttr, AtomicString("alttext-container"));
 
   HTMLImageElement* broken_image =
       HTMLImageElement::Create(element.GetDocument());
   container->AppendChild(broken_image);
   broken_image->SetIsFallbackImage();
-  broken_image->setAttribute(idAttr, AtomicString("alttext-image"));
-  broken_image->setAttribute(widthAttr, AtomicString("16"));
-  broken_image->setAttribute(heightAttr, AtomicString("16"));
-  broken_image->setAttribute(alignAttr, AtomicString("left"));
+  broken_image->setAttribute(kIdAttr, AtomicString("alttext-image"));
+  broken_image->setAttribute(kWidthAttr, AtomicString("16"));
+  broken_image->setAttribute(kHeightAttr, AtomicString("16"));
+  broken_image->setAttribute(kAlignAttr, AtomicString("left"));
   broken_image->SetInlineStyleProperty(CSSPropertyMargin, 0,
                                        CSSPrimitiveValue::UnitType::kPixels);
 
   HTMLSpanElement* alt_text = HTMLSpanElement::Create(element.GetDocument());
   container->AppendChild(alt_text);
-  alt_text->setAttribute(idAttr, AtomicString("alttext"));
+  alt_text->setAttribute(kIdAttr, AtomicString("alttext"));
 
   Text* text =
       Text::Create(element.GetDocument(), ToHTMLElement(element).AltText());
@@ -121,7 +116,7 @@ scoped_refptr<ComputedStyle> HTMLImageFallbackHelper::CustomStyleForAltText(
       image_has_intrinsic_dimensions &&
       (element.GetDocument().InQuirksMode() || image_has_no_alt_attribute);
   if (treat_as_replaced) {
-    // https://html.spec.whatwg.org/multipage/rendering.html#images-3:
+    // https://html.spec.whatwg.org/C/#images-3:
     // "If the element does not represent an image, but the element already has
     // intrinsic dimensions (e.g. from the dimension attributes or CSS rules),
     // and either: the user agent has reason to believe that the image will

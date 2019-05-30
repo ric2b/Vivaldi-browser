@@ -35,6 +35,10 @@
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
+namespace base {
+class SingleThreadTaskRunner;
+}
+
 namespace blink {
 
 class Blob;
@@ -48,8 +52,10 @@ class FileReaderSync final : public ScriptWrappable {
 
  public:
   static FileReaderSync* Create(ExecutionContext* context) {
-    return new FileReaderSync(context);
+    return MakeGarbageCollected<FileReaderSync>(context);
   }
+
+  explicit FileReaderSync(ExecutionContext*);
 
   DOMArrayBuffer* readAsArrayBuffer(Blob*, ExceptionState&);
   String readAsBinaryString(Blob*, ExceptionState&);
@@ -60,9 +66,9 @@ class FileReaderSync final : public ScriptWrappable {
   String readAsDataURL(Blob*, ExceptionState&);
 
  private:
-  explicit FileReaderSync(ExecutionContext*);
-
   void StartLoading(FileReaderLoader&, const Blob&, ExceptionState&);
+
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 };
 
 }  // namespace blink

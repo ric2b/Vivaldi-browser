@@ -36,8 +36,13 @@ struct GammaRampRGBEntry;
 class DisplayLayoutManager;
 class DisplayMode;
 class DisplaySnapshot;
+class ManagedDisplayMode;
 class NativeDisplayDelegate;
 class UpdateDisplayConfigurationTask;
+
+namespace test {
+class DisplayManagerTestApi;
+}
 
 // This class interacts directly with the system display configurator.
 class DISPLAY_MANAGER_EXPORT DisplayConfigurator
@@ -98,10 +103,9 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
     virtual MultipleDisplayState GetStateForDisplayIds(
         const DisplayConfigurator::DisplayStateList& outputs) = 0;
 
-    // Queries the resolution (|size|) in pixels to select display mode for the
-    // given display id.
-    virtual bool GetResolutionForDisplayId(int64_t display_id,
-                                           gfx::Size* size) const = 0;
+    virtual bool GetSelectedModeForDisplayId(
+        int64_t display_id,
+        ManagedDisplayMode* out_mode) const = 0;
   };
 
   // Interface for classes that implement software based mirroring.
@@ -192,6 +196,7 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
   void set_configure_display(bool configure_display) {
     configure_display_ = configure_display;
   }
+  bool has_unassociated_display() const { return has_unassociated_display_; }
   chromeos::DisplayPowerState current_power_state() const {
     return current_power_state_;
   }
@@ -302,20 +307,18 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
   // Returns the requested power state if set or the default power state.
   chromeos::DisplayPowerState GetRequestedPowerState() const;
 
-  void set_is_multi_mirroring_enabled_for_test(bool enabled) {
-    is_multi_mirroring_enabled_ = enabled;
-  }
-
   void reset_requested_power_state_for_test() {
     requested_power_state_ = base::nullopt;
   }
 
-  base::Optional<chromeos::DisplayPowerState>
-  GetRequestedPowerStateForTest() const {
+  base::Optional<chromeos::DisplayPowerState> GetRequestedPowerStateForTest()
+      const {
     return requested_power_state_;
   }
 
  private:
+  friend class test::DisplayManagerTestApi;
+
   class DisplayLayoutManagerImpl;
 
   // Mapping a client to its protection request.
@@ -353,6 +356,7 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
   // this is called with the result (|success|) and the updated display state.
   void OnConfigured(bool success,
                     const std::vector<DisplaySnapshot*>& displays,
+                    const std::vector<DisplaySnapshot*>& unassociated_displays,
                     MultipleDisplayState new_display_state,
                     chromeos::DisplayPowerState new_power_state);
 
@@ -478,7 +482,10 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
 
   std::unique_ptr<UpdateDisplayConfigurationTask> configuration_task_;
 
-  bool is_multi_mirroring_enabled_;
+  // Indicates whether there is any connected display having no associated crtc.
+  // This can be caused by crtc shortage. When it is true, the corresponding
+  // notification will be created to inform user.
+  bool has_unassociated_display_;
 
   // This must be the last variable.
   base::WeakPtrFactory<DisplayConfigurator> weak_ptr_factory_;

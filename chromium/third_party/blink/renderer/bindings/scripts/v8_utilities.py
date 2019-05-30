@@ -35,6 +35,7 @@ import os
 import re
 import sys
 
+from blinkbuild.name_style_converter import NameStyleConverter
 from idl_types import IdlTypeBase
 import idl_types
 from idl_definitions import Exposure, IdlInterface, IdlAttribute
@@ -205,21 +206,17 @@ def activity_logging_world_check(member):
 
 # [CallWith]
 CALL_WITH_ARGUMENTS = {
-    'ScriptState': 'scriptState',
-    'ExecutionContext': 'executionContext',
-    'ScriptArguments': 'scriptArguments',
-    'CurrentWindow': 'CurrentDOMWindow(info.GetIsolate())',
-    'EnteredWindow': 'EnteredDOMWindow(info.GetIsolate())',
+    'Isolate': 'info.GetIsolate()',
+    'ScriptState': 'script_state',
+    'ExecutionContext': 'execution_context',
     'Document': 'document',
-    'ThisValue': 'ScriptValue(scriptState, info.Holder())',
+    'ThisValue': 'ScriptValue(script_state, info.Holder())',
 }
 # List because key order matters, as we want arguments in deterministic order
 CALL_WITH_VALUES = [
+    'Isolate',
     'ScriptState',
     'ExecutionContext',
-    'ScriptArguments',
-    'CurrentWindow',
-    'EnteredWindow',
     'Document',
     'ThisValue',
 ]
@@ -303,12 +300,12 @@ class ExposureSet:
 
     @staticmethod
     def _code(exposure):
-        exposed = ('executionContext->%s()' %
+        condition = ('execution_context->%s()' %
                    EXPOSED_EXECUTION_CONTEXT_METHOD[exposure.exposed])
         if exposure.runtime_enabled is not None:
             runtime_enabled = (runtime_enabled_function(exposure.runtime_enabled))
-            return '({0} && {1})'.format(exposed, runtime_enabled)
-        return exposed
+            return '({0} && {1})'.format(condition, runtime_enabled)
+        return condition
 
     def code(self):
         if len(self.exposures) == 0:
@@ -349,16 +346,29 @@ def exposed(member, interface):
 # [SecureContext]
 def secure_context(member, interface):
     """Returns C++ code that checks whether an interface/method/attribute/etc. is exposed
-    to the current context. Requires that the surrounding code defines an 'isSecureContext'
+    to the current context. Requires that the surrounding code defines an |is_secure_context|
     variable prior to this check."""
-    if 'SecureContext' in member.extended_attributes or 'SecureContext' in interface.extended_attributes:
-        conditions = ['isSecureContext']
-        if 'SecureContext' in member.extended_attributes and member.extended_attributes['SecureContext'] is not None:
-            conditions.append('!%s' % runtime_enabled_function(member.extended_attributes['SecureContext']))
-        if 'SecureContext' in interface.extended_attributes and interface.extended_attributes['SecureContext'] is not None:
-            conditions.append('!%s' % runtime_enabled_function(interface.extended_attributes['SecureContext']))
-        return ' || '.join(conditions)
-    return None
+    member_is_secure_context = 'SecureContext' in member.extended_attributes
+    interface_is_secure_context = ((member.defined_in is None or
+                                    member.defined_in == interface.name) and
+                                   'SecureContext' in interface.extended_attributes)
+
+    if not (member_is_secure_context or interface_is_secure_context):
+        return None
+
+    conditions = ['is_secure_context']
+
+    if member_is_secure_context:
+        conditional = member.extended_attributes['SecureContext']
+        if conditional:
+            conditions.append('!{}'.format(runtime_enabled_function(conditional)))
+
+    if interface_is_secure_context:
+        conditional = interface.extended_attributes['SecureContext']
+        if conditional:
+            conditions.append('!{}'.format(runtime_enabled_function(conditional)))
+
+    return ' || '.join(conditions)
 
 
 # [ImplementedAs]
@@ -366,6 +376,12 @@ def cpp_name(definition_or_member):
     extended_attributes = definition_or_member.extended_attributes
     if extended_attributes and 'ImplementedAs' in extended_attributes:
         return extended_attributes['ImplementedAs']
+    # WebIDL identifiers can contain hyphens[1], but C++ identifiers cannot.
+    # Therefore camelCase hyphen-containing identifiers.
+    #
+    # [1] https://heycam.github.io/webidl/#prod-identifier
+    if '-' in definition_or_member.name:
+        return NameStyleConverter(definition_or_member.name).to_lower_camel_case()
     return definition_or_member.name
 
 
@@ -395,6 +411,19 @@ def measure_as(definition_or_member, interface):
     return None
 
 
+# [HighEntropy]
+def high_entropy(definition_or_member):
+    extended_attributes = definition_or_member.extended_attributes
+    if 'HighEntropy' in extended_attributes:
+        includes.add('core/frame/dactyloscoper.h')
+        if not ('Measure' in extended_attributes or 'MeasureAs' in extended_attributes):
+            raise Exception('%s specified [HighEntropy], but does not include '
+                            'either [Measure] or [MeasureAs]'
+                            % definition_or_member.name)
+        return True
+    return False
+
+
 # [OriginTrialEnabled]
 def origin_trial_feature_name(definition_or_member):
     """Returns the name of the feature for the OriginTrialEnabled attribute.
@@ -419,7 +448,7 @@ def origin_trial_feature_name(definition_or_member):
 
 def origin_trial_function_call(feature_name, execution_context=None):
     """Returns a function call to determine if an origin trial is enabled."""
-    return 'OriginTrials::{feature_name}Enabled({context})'.format(
+    return 'origin_trials::{feature_name}Enabled({context})'.format(
         feature_name=feature_name,
         context=execution_context if execution_context else "execution_context")
 
@@ -449,10 +478,8 @@ def runtime_enabled_feature_name(definition_or_member):
 
 
 # [Unforgeable]
-def is_unforgeable(interface, member):
-    return (('Unforgeable' in interface.extended_attributes or
-             'Unforgeable' in member.extended_attributes) and
-            not member.is_static)
+def is_unforgeable(member):
+    return 'Unforgeable' in member.extended_attributes
 
 
 # [LegacyInterfaceTypeChecking]
@@ -461,14 +488,14 @@ def is_legacy_interface_type_checking(interface, member):
             'LegacyInterfaceTypeChecking' in member.extended_attributes)
 
 
-# [Unforgeable], [Global], [PrimaryGlobal]
+# [Unforgeable], [Global]
 def on_instance(interface, member):
     """Returns True if the interface's member needs to be defined on every
     instance object.
 
     The following members must be defined on an instance object.
     - [Unforgeable] members
-    - regular members of [Global] or [PrimaryGlobal] interfaces
+    - regular members of [Global] interfaces
     """
     if member.is_static:
         return False
@@ -483,10 +510,8 @@ def on_instance(interface, member):
     if is_constructor_attribute(member):
         return True
 
-    if ('PrimaryGlobal' in interface.extended_attributes or
-            'Global' in interface.extended_attributes or
-            'Unforgeable' in member.extended_attributes or
-            'Unforgeable' in interface.extended_attributes):
+    if ('Global' in interface.extended_attributes or
+            'Unforgeable' in member.extended_attributes):
         return True
     return False
 
@@ -499,8 +524,8 @@ def on_prototype(interface, member):
     follows.
     - static members (optional)
     - [Unforgeable] members
-    - members of [Global] or [PrimaryGlobal] interfaces
-    - named properties of [Global] or [PrimaryGlobal] interfaces
+    - members of [Global] interfaces
+    - named properties of [Global] interfaces
     """
     if member.is_static:
         return False
@@ -515,10 +540,8 @@ def on_prototype(interface, member):
     if is_constructor_attribute(member):
         return False
 
-    if ('PrimaryGlobal' in interface.extended_attributes or
-            'Global' in interface.extended_attributes or
-            'Unforgeable' in member.extended_attributes or
-            'Unforgeable' in interface.extended_attributes):
+    if ('Global' in interface.extended_attributes or
+            'Unforgeable' in member.extended_attributes):
         return False
     return True
 

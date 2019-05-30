@@ -29,7 +29,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_STYLE_COMPUTED_STYLE_CONSTANTS_H_
 
 #include <cstddef>
-#include "third_party/blink/renderer/core/computed_style_base_constants.h"
+#include "third_party/blink/renderer/core/style/computed_style_base_constants.h"
 
 namespace blink {
 
@@ -49,22 +49,11 @@ inline bool EnumHasFlags(Enum v, Enum mask) {
 // from top.
 enum class BoxSide : unsigned { kTop, kRight, kBottom, kLeft };
 
-// See core/style/stylerecalc.md for an explanation on what each state means
-enum StyleRecalcChange {
-  kNoChange,
-  kNoInherit,
-  kUpdatePseudoElements,
-  kIndependentInherit,
-  kInherit,
-  kForce,
-  kReattach
-};
-
 // Static pseudo styles. Dynamic ones are produced on the fly.
 enum PseudoId {
   // The order must be NOP ID, public IDs, and then internal IDs.
   // If you add or remove a public ID, you must update the field_size of
-  // "PseudoBits" in ComputedStyleExtraFields.json5.
+  // "PseudoBits" in computed_style_extra_fields.json5.
   kPseudoIdNone,
   kPseudoIdFirstLine,
   kPseudoIdFirstLetter,

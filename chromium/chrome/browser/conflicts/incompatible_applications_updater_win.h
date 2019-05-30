@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/conflicts/installed_applications_win.h"
@@ -32,9 +33,7 @@ class IncompatibleApplicationsUpdater : public ModuleDatabaseObserver {
   // ModuleBlacklistCacheUpdater. This is done so that it is easier to keep the
   // 2 features separate, as they can be independently enabled/disabled.
   enum ModuleWarningDecision {
-    // Explicitly defined as zero so it is the default value when a
-    // ModuleWarningDecision
-    // variable is value-initialized (std::vector::resize()).
+    // No decision was taken yet for the module.
     kUnknown = 0,
     // A shell extension or IME that is not loaded in the process yet.
     kNotLoaded,
@@ -54,6 +53,9 @@ class IncompatibleApplicationsUpdater : public ModuleDatabaseObserver {
     kAllowedMicrosoft,
     // Explicitly whitelisted by the Module List component.
     kAllowedWhitelisted,
+    // Module analysis was interrupted using DisableModuleAnalysis(). No warning
+    // will be emitted for that module.
+    kNotAnalyzed,
     // This module is already going to be blocked on next browser launch, so
     // don't warn about it.
     kAddedToBlacklist,
@@ -84,7 +86,8 @@ class IncompatibleApplicationsUpdater : public ModuleDatabaseObserver {
       ModuleDatabaseEventSource* module_database_event_source,
       const CertificateInfo& exe_certificate_info,
       scoped_refptr<ModuleListFilter> module_list_filter,
-      const InstalledApplications& installed_applications);
+      const InstalledApplications& installed_applications,
+      bool module_analysis_disabled);
   ~IncompatibleApplicationsUpdater() override;
 
   static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
@@ -110,7 +113,11 @@ class IncompatibleApplicationsUpdater : public ModuleDatabaseObserver {
 
   // Returns the warning decision for a module.
   ModuleWarningDecision GetModuleWarningDecision(
-      ModuleInfoKey module_key) const;
+      const ModuleInfoKey& module_key) const;
+
+  // Disables the analysis of newly found modules. This is a one way switch that
+  // will apply until Chrome is restarted.
+  void DisableModuleAnalysis();
 
  private:
   ModuleDatabaseEventSource* const module_database_event_source_;
@@ -125,9 +132,13 @@ class IncompatibleApplicationsUpdater : public ModuleDatabaseObserver {
   // Becomes false on the first call to OnModuleDatabaseIdle.
   bool before_first_idle_ = true;
 
-  // Holds the warning decision for all known modules. The index is the module
-  // id.
-  std::vector<ModuleWarningDecision> module_warning_decisions_;
+  // Holds the warning decision for all known modules.
+  base::flat_map<ModuleInfoKey, ModuleWarningDecision>
+      module_warning_decisions_;
+
+  // Indicates if the analysis of newly found modules is disabled. Used as a
+  // workaround for https://crbug.com/892294.
+  bool module_analysis_disabled_;
 
   DISALLOW_COPY_AND_ASSIGN(IncompatibleApplicationsUpdater);
 };

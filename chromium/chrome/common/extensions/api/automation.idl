@@ -35,6 +35,7 @@
     liveRegionCreated,
     liveRegionChanged,
     loadComplete,
+    loadStart,
     locationChanged,
     mediaStartedPlaying,
     mediaStoppedPlaying,
@@ -42,6 +43,7 @@
     menuListItemSelected,
     menuListValueChanged,
     menuPopupEnd,
+    menuPopupHide,
     menuPopupStart,
     menuStart,
     mouseCanceled,
@@ -62,6 +64,8 @@
     stateChanged,
     textChanged,
     textSelectionChanged,
+    windowActivated,
+    windowDeactivated,
     treeChanged,
     valueChanged
   };
@@ -187,6 +191,7 @@
     list,
     listBox,
     listBoxOption,
+    listGrid,  // Native
     listItem,
     listMarker,
     log,
@@ -280,6 +285,7 @@
 
   // All possible actions that can be performed on automation nodes.
   enum ActionType {
+    annotatePageImages,
     blur,
     clearAccessibilityFocus,
     customAction,
@@ -287,6 +293,7 @@
     doDefault,
     focus,
     getImageData,
+    getTextLocation,
     hitTest,
     increment,
     loadInlineTextBoxes,
@@ -296,9 +303,9 @@
     scrollForward,
     scrollLeft,
     scrollRight,
+    scrollUp,
     scrollToMakeVisible,
     scrollToPoint,
-    scrollUp,
     setAccessibilityFocus,
     setScrollOffset,
     setSelection,
@@ -353,9 +360,11 @@
     uninitialized,
     attribute,
     attributeExplicitlyEmpty,
+    caption,
     contents,
     placeholder,
     relatedElement,
+    title,
     value
   };
 
@@ -483,6 +492,8 @@
   // Callback called for actions with a response.
   callback PerformActionCallback = void(boolean result);
   callback PerformActionCallbackWithNode = void(AutomationNode node);
+  callback BoundsForRangeCallback = void(Rect bounds);
+
 
   dictionary CustomAction {
     long id;
@@ -509,11 +520,12 @@
     // screen coordinates.
     Rect? location;
 
-    // Computes the bounding box of a subrange of this node in global screen
-    // coordinates. Returns the same as |location| if range information
-    // is not available. The start and end indices are zero-based offsets
-    // into the node's "name" string attribute.
-    static Rect boundsForRange(long startIndex, long endIndex);
+    // Determines the location of the text within the node specified by
+    // |startIndex| and |endIndex|, inclusively. Invokes |callback| with the
+    // bounding rectangle, in screen coordinates. |callback| can be invoked
+    // either synchronously or asynchronously.
+    static void boundsForRange(long startIndex, long endIndex,
+        BoundsForRangeCallback callback);
 
     // The location (as a bounding box) of this node in global screen
     // coordinates without applying any clipping from ancestors.
@@ -535,6 +547,11 @@
 
     // The source of the name.
     NameFromType? nameFrom;
+
+    // The image annotation for image nodes, which may be a human-readable
+    // string that is the contextualized annotation or a status string related
+    // to annotations.
+    DOMString? imageAnnotation;
 
     // The value for this node: for example the <code>value</code> attribute of
     // an <code>&lt;input&gt; element.
@@ -652,6 +669,9 @@
     long? scrollYMin;
     long? scrollYMax;
 
+    // Indicates whether this node is scrollable.
+    boolean? scrollable;
+
     //
     // Editable text field attributes.
     //
@@ -666,9 +686,6 @@
 
     // The input type, like email or number.
     DOMString? textInputType;
-
-    // An array of indexes of the break between lines in editable text.
-    long[] lineBreaks;
 
     // An array of indexes of the start position of each text marker.
     long[] markerStarts;
@@ -833,8 +850,11 @@
     // A data url with the contents of this object's image or thumbnail.
     DOMString? imageDataUrl;
 
-    // The language code for this subtree.
+    // The author-provided language code for this subtree.
     DOMString? language;
+
+    // The detected language code for this subtree.
+    DOMString? detectedLanguage;
 
     // Indicates the availability and type of interactive popup element
     // true - the popup is a menu

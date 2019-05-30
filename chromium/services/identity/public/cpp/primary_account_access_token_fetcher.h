@@ -45,7 +45,7 @@ class PrimaryAccountAccessTokenFetcher : public IdentityManager::Observer {
   // the callback is not called.
   PrimaryAccountAccessTokenFetcher(const std::string& oauth_consumer_name,
                                    IdentityManager* identity_manager,
-                                   const OAuth2TokenService::ScopeSet& scopes,
+                                   const identity::ScopeSet& scopes,
                                    AccessTokenFetcher::TokenCallback callback,
                                    Mode mode);
 
@@ -62,9 +62,10 @@ class PrimaryAccountAccessTokenFetcher : public IdentityManager::Observer {
   void StartAccessTokenRequest();
 
   // IdentityManager::Observer implementation.
-  void OnPrimaryAccountSet(const AccountInfo& primary_account_info) override;
-  void OnRefreshTokenUpdatedForAccount(const AccountInfo& account_info,
-                                       bool is_valid) override;
+  void OnPrimaryAccountSet(
+      const CoreAccountInfo& primary_account_info) override;
+  void OnRefreshTokenUpdatedForAccount(
+      const CoreAccountInfo& account_info) override;
 
   // Checks whether credentials are now available and starts an access token
   // request if so. Should only be called in mode |kWaitUntilAvailable|.
@@ -76,7 +77,7 @@ class PrimaryAccountAccessTokenFetcher : public IdentityManager::Observer {
 
   std::string oauth_consumer_name_;
   IdentityManager* identity_manager_;
-  OAuth2TokenService::ScopeSet scopes_;
+  identity::ScopeSet scopes_;
 
   // Per the contract of this class, it is allowed for clients to delete this
   // object as part of the invocation of |callback_|. Hence, this object must

@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/component_export.h"
 #include "base/files/file.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -23,7 +24,6 @@
 #include "storage/browser/fileapi/plugin_private_file_system_backend.h"
 #include "storage/browser/fileapi/sandbox_file_system_backend_delegate.h"
 #include "storage/browser/fileapi/task_runner_bound_observer_list.h"
-#include "storage/browser/storage_browser_export.h"
 #include "storage/common/fileapi/file_system_types.h"
 
 namespace base {
@@ -87,7 +87,7 @@ using URLRequestAutoMountHandler = base::RepeatingCallback<bool(
 
 // This class keeps and provides a file system context for FileSystem API.
 // An instance of this class is created and owned by profile.
-class STORAGE_EXPORT FileSystemContext
+class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
     : public base::RefCountedThreadSafe<FileSystemContext,
                                         DefaultContextDeleter> {
  public:
@@ -308,9 +308,9 @@ class STORAGE_EXPORT FileSystemContext
                                    OpenFileSystemMode mode,
                                    StatusCallback callback);
 
- private:
-  using FileSystemBackendMap = std::map<FileSystemType, FileSystemBackend*>;
+  bool is_incognito() { return is_incognito_; }
 
+ private:
   // For CreateFileSystemOperation.
   friend class FileSystemOperationRunner;
 
@@ -395,7 +395,7 @@ class STORAGE_EXPORT FileSystemContext
   // This map itself doesn't retain each backend's ownership; ownerships
   // of the backends are held by additional_backends_ or other scoped_ptr
   // backend fields.
-  FileSystemBackendMap backend_map_;
+  std::map<FileSystemType, FileSystemBackend*> backend_map_;
 
   // External mount points visible in the file system context (excluding system
   // external mount points).

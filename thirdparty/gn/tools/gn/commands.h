@@ -69,6 +69,11 @@ extern const char kHelp_HelpShort[];
 extern const char kHelp_Help[];
 int RunHelp(const std::vector<std::string>& args);
 
+extern const char kMeta[];
+extern const char kMeta_HelpShort[];
+extern const char kMeta_Help[];
+int RunMeta(const std::vector<std::string>& args);
+
 extern const char kLs[];
 extern const char kLs_HelpShort[];
 extern const char kLs_Help[];
@@ -131,12 +136,16 @@ bool ResolveFromCommandLineInput(
 // force_check, if true, will override targets opting out of header checking
 // with "check_includes = false" and will check them anyway.
 //
+// Generated files are normally not checked since they do not exist
+// unless a build has been run, but passing true for |check_generated|
+// will attempt to check them anyway, assuming they exist.
+//
 // On success, returns true. If the check fails, the error(s) will be printed
 // to stdout and false will be returned.
 bool CheckPublicHeaders(const BuildSettings* build_settings,
                         const std::vector<const Target*>& all_targets,
                         const std::vector<const Target*>& to_check,
-                        bool force_check);
+                        bool force_check, bool check_generated);
 
 // Filters the given list of targets by the given pattern list.
 void FilterTargetsByPatterns(const std::vector<const Target*>& input,

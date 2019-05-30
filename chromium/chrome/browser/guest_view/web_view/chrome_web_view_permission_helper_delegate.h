@@ -98,7 +98,6 @@ class ChromeWebViewPermissionHelperDelegate
 
   void OnDownloadPermissionResponse(
       const base::Callback<void(bool)>& callback,
-      const base::Callback<void(bool, bool)>& open_flags_cb,
       bool allow,
       const std::string& user_input);
 

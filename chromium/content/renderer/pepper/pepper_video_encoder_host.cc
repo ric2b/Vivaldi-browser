@@ -11,8 +11,8 @@
 #include "base/numerics/safe_math.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "content/common/gpu_stream_constants.h"
 #include "content/common/pepper_file_util.h"
+#include "content/public/common/gpu_stream_constants.h"
 #include "content/public/renderer/renderer_ppapi_host.h"
 #include "content/renderer/pepper/gfx_conversion.h"
 #include "content/renderer/pepper/host_globals.h"
@@ -225,6 +225,11 @@ void PepperVideoEncoderHost::OnGpuControlLostContext() {
 
 void PepperVideoEncoderHost::OnGpuControlLostContextMaybeReentrant() {
   // No internal state to update on lost context.
+}
+
+void PepperVideoEncoderHost::OnGpuControlReturnData(
+    base::span<const uint8_t> data) {
+  NOTIMPLEMENTED();
 }
 
 int32_t PepperVideoEncoderHost::OnHostMsgGetSupportedProfiles(

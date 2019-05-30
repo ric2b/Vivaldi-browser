@@ -111,7 +111,7 @@ namespace internal {
 {%-   if enum|is_native_only_kind %}
 using {{enum|get_name_for_kind(flatten_nested_kind=True)}} = mojo::NativeEnum;
 {%-   else %}
-{{enum_decl(enum)}}
+{{enum_decl(enum, export_attribute)}}
 {%-   endif %}
 {%- endfor %}
 
@@ -138,18 +138,6 @@ using {{interface.name}}AssociatedRequestDataView =
 {%-   if not struct|is_native_only_kind %}
 {%      include "struct_data_view_declaration.tmpl" %}
 {%-   endif %}
-{%- endfor %}
-
-{#--- Interface parameter definitions #}
-{%- for interface in interfaces %}
-{%-   for method in interface.methods %}
-{%-     set struct = method.param_struct %}
-{%      include "struct_data_view_declaration.tmpl" %}
-{%-     if method.response_parameters != None %}
-{%-       set struct = method.response_param_struct %}
-{%        include "struct_data_view_declaration.tmpl" %}
-{%-     endif %}
-{%-   endfor %}
 {%- endfor %}
 
 {#--- Unions #}
@@ -203,17 +191,6 @@ namespace mojo {
 {%-   endif %}
 {%- endfor %}
 
-{%- for interface in interfaces %}
-{%-   for method in interface.methods %}
-{%-     set struct = method.param_struct %}
-{%      include "struct_data_view_definition.tmpl" %}
-{%-     if method.response_parameters != None %}
-{%-       set struct = method.response_param_struct %}
-{%        include "struct_data_view_definition.tmpl" %}
-{%-     endif %}
-{%-   endfor %}
-{%- endfor %}
-
 {%- for union in unions %}
 {%    include "union_data_view_definition.tmpl" %}
 {%- endfor %}
@@ -221,4 +198,3 @@ namespace mojo {
 {{namespace_end()}}
 
 #endif  // {{header_guard}}
-

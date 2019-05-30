@@ -23,6 +23,19 @@ WidgetDelegate::~WidgetDelegate() {
   CHECK(can_delete_this_) << "A WidgetDelegate must outlive its Widget";
 }
 
+void WidgetDelegate::SetCanActivate(bool can_activate) {
+  if (can_activate == can_activate_)
+    return;
+
+  const bool previous_value = CanActivate();
+  can_activate_ = can_activate;
+  if (previous_value != CanActivate()) {
+    Widget* widget = GetWidget();
+    if (widget)
+      widget->OnCanActivateChanged();
+  }
+}
+
 void WidgetDelegate::OnWidgetMove() {
 }
 
@@ -30,6 +43,10 @@ void WidgetDelegate::OnDisplayChanged() {
 }
 
 void WidgetDelegate::OnWorkAreaChanged() {
+}
+
+bool WidgetDelegate::OnCloseRequested(Widget::ClosedReason close_reason) {
+  return true;
 }
 
 View* WidgetDelegate::GetInitiallyFocusedView() {
@@ -169,7 +186,7 @@ bool WidgetDelegate::WidgetHasHitTestMask() const {
   return false;
 }
 
-void WidgetDelegate::GetWidgetHitTestMask(gfx::Path* mask) const {
+void WidgetDelegate::GetWidgetHitTestMask(SkPath* mask) const {
   DCHECK(mask);
 }
 

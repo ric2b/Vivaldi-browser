@@ -8,9 +8,9 @@
 //    clang-format -i -style=chromium filename
 // DO NOT EDIT!
 
-// The following line silences a presubmit warning that would otherwise be
-// triggered by this:
+// Silence presubmit and Tricium warnings about include guards
 // no-include-guard-because-multiply-included
+// NOLINT(build/header_guard)
 
 static EGLBoolean GL_BINDING_CALL Mock_eglBindAPI(EGLenum api);
 static EGLBoolean GL_BINDING_CALL Mock_eglBindTexImage(EGLDisplay dpy,
@@ -174,23 +174,6 @@ static EGLBoolean GL_BINDING_CALL Mock_eglPostSubBufferNV(EGLDisplay dpy,
                                                           EGLint y,
                                                           EGLint width,
                                                           EGLint height);
-static EGLint GL_BINDING_CALL
-Mock_eglProgramCacheGetAttribANGLE(EGLDisplay dpy, EGLenum attrib);
-static void GL_BINDING_CALL
-Mock_eglProgramCachePopulateANGLE(EGLDisplay dpy,
-                                  const void* key,
-                                  EGLint keysize,
-                                  const void* binary,
-                                  EGLint binarysize);
-static void GL_BINDING_CALL Mock_eglProgramCacheQueryANGLE(EGLDisplay dpy,
-                                                           EGLint index,
-                                                           void* key,
-                                                           EGLint* keysize,
-                                                           void* binary,
-                                                           EGLint* binarysize);
-static EGLint GL_BINDING_CALL Mock_eglProgramCacheResizeANGLE(EGLDisplay dpy,
-                                                              EGLint limit,
-                                                              EGLenum mode);
 static EGLenum GL_BINDING_CALL Mock_eglQueryAPI(void);
 static EGLBoolean GL_BINDING_CALL Mock_eglQueryContext(EGLDisplay dpy,
                                                        EGLContext ctx,
@@ -222,6 +205,10 @@ static EGLBoolean GL_BINDING_CALL Mock_eglReleaseTexImage(EGLDisplay dpy,
                                                           EGLSurface surface,
                                                           EGLint buffer);
 static EGLBoolean GL_BINDING_CALL Mock_eglReleaseThread(void);
+static void GL_BINDING_CALL
+Mock_eglSetBlobCacheFuncsANDROID(EGLDisplay dpy,
+                                 EGLSetBlobFuncANDROID set,
+                                 EGLGetBlobFuncANDROID get);
 static EGLBoolean GL_BINDING_CALL Mock_eglStreamAttribKHR(EGLDisplay dpy,
                                                           EGLStreamKHR stream,
                                                           EGLenum attribute,

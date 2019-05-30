@@ -13,16 +13,6 @@
   <message name="IDS_ERRORPAGES_BUTTON_SHOW_SAVED_COPY" desc="Label for the button on an error page to show a saved entry from the cache">
     Show saved copy
   </message>
-  <if expr="not is_android">
-    <message name="IDS_ERRORPAGES_BUTTON_SHOW_SAVED_COPY_HELP" desc="Explanation for the BUTTON_SHOW_SAVED button">
-      Show a saved (i.e. known to be out of date) copy of this page.
-    </message>
-  </if>
-  <if expr="is_android">
-    <message name="IDS_ERRORPAGES_BUTTON_SHOW_SAVED_COPY_HELP" desc="Mobile: Explanation for the BUTTON_SHOW_SAVED button">
-      Show saved copy
-    </message>
-  </if>
   <message name="IDS_ERRORPAGE_FUN_DISABLED" desc="Explanation for when easter egg has been disabled by administrator">
     The owner of this device turned off the dinosaur game.
   </message>
@@ -47,6 +37,12 @@
     </message>
     <message name="IDS_ERRORPAGES_OFFLINE_CONTENT_SUMMARY_BUTTON" desc="Label for the button that will take the user to the downloads home, attached to the offline content summary card shown in an error page">
       Take me there now
+    </message>
+    <message name="IDS_ERRORPAGES_SAVE_PAGE_BUTTON" desc="Label for the button that will save the page for later. The saved page is not retained in Downloads, unlike with the DOWNLOAD button.">
+      Load page later
+    </message>
+    <message name="IDS_ERRORPAGES_CANCEL_SAVE_PAGE_BUTTON" desc="Label for the button that will cancel the request to save the page for later. 'Cancel' is colored blue with the 'a' tag.">
+      Chrome will let you know when this page is ready. &lt;a&gt;Cancel&lt;/a&gt;
     </message>
   </if>
 

@@ -11,7 +11,6 @@
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/status_area_widget_delegate.h"
-#include "ash/system/tray/system_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_util.h"
 #include "ui/aura/test/test_windows.h"
@@ -45,7 +44,7 @@ class PanedWidgetDelegate : public views::WidgetDelegate {
     std::copy(accessible_panes_.begin(), accessible_panes_.end(),
               std::back_inserter(*panes));
   }
-  views::Widget* GetWidget() override { return widget_; };
+  views::Widget* GetWidget() override { return widget_; }
   const views::Widget* GetWidget() const override { return widget_; }
 
  private:

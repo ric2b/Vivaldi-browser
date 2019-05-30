@@ -51,7 +51,7 @@ InfoBubble::InfoBubble(View* anchor, const base::string16& message)
 
   set_margins(LayoutProvider::Get()->GetInsetsMetric(
       InsetsMetric::INSETS_TOOLTIP_BUBBLE));
-  set_can_activate(false);
+  SetCanActivate(false);
 
   SetLayoutManager(std::make_unique<FillLayout>());
   Label* label = new Label(message);
@@ -79,7 +79,7 @@ NonClientFrameView* InfoBubble::CreateNonClientFrameView(Widget* widget) {
   frame_ = new InfoBubbleFrame(margins());
   frame_->set_available_bounds(anchor_widget()->GetWindowBoundsInScreen());
   frame_->SetBubbleBorder(std::unique_ptr<BubbleBorder>(
-      new BubbleBorder(arrow(), shadow(), color())));
+      new BubbleBorder(arrow(), GetShadow(), color())));
   return frame_;
 }
 

@@ -374,6 +374,10 @@
   INTERNAL_TRACE_EVENT_ADD(TRACE_EVENT_PHASE_MARK, category_group, name, \
                            TRACE_EVENT_FLAG_COPY)
 
+#define TRACE_EVENT_COPY_MARK1(category_group, name, arg1_name, arg1_val) \
+  INTERNAL_TRACE_EVENT_ADD(TRACE_EVENT_PHASE_MARK, category_group, name,  \
+                           TRACE_EVENT_FLAG_COPY, arg1_name, arg1_val)
+
 #define TRACE_EVENT_COPY_MARK_WITH_TIMESTAMP(category_group, name, timestamp) \
   INTERNAL_TRACE_EVENT_ADD_WITH_TIMESTAMP(                                    \
       TRACE_EVENT_PHASE_MARK, category_group, name, timestamp,                \
@@ -980,8 +984,6 @@
   INTERNAL_TRACE_EVENT_ADD_WITH_ID(                                   \
       TRACE_EVENT_PHASE_LEAVE_CONTEXT, category_group, name, context, \
       TRACE_EVENT_FLAG_NONE)
-#define TRACE_EVENT_SCOPED_CONTEXT(category_group, name, context) \
-  INTERNAL_TRACE_EVENT_SCOPED_CONTEXT(category_group, name, context)
 
 // Macro to specify that two trace IDs are identical. For example,
 // TRACE_LINK_IDS(
@@ -1004,14 +1006,6 @@
       *ret = false;                                                         \
     }                                                                       \
   } while (0)
-
-// Macro to explicitly warm up a given category group. This could be useful in
-// cases where we want to initialize a category group before any trace events
-// for that category group is reported. For example, to have a category group
-// always show up in the "record categories" list for manually selecting
-// settings in about://tracing.
-#define TRACE_EVENT_WARMUP_CATEGORY(category_group) \
-  INTERNAL_TRACE_EVENT_GET_CATEGORY_INFO(category_group)
 
 // Macro to efficiently determine, through polling, if a new trace has begun.
 #define TRACE_EVENT_IS_NEW_TRACE(ret)                                      \

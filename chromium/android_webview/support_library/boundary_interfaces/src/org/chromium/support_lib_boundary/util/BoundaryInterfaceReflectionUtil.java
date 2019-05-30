@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 package org.chromium.support_lib_boundary.util;
 
+import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.os.Build;
 
@@ -10,11 +11,35 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.Arrays;
+import java.util.Collection;
 
 /**
  * A set of utility methods used for calling across the support library boundary.
  */
+// Although this is not enforced in chromium, this is a requirement enforced when this file is
+// mirrored into AndroidX. See http://b/120770118 for details.
+@SuppressLint("BanTargetApiAnnotation")
 public class BoundaryInterfaceReflectionUtil {
+    /**
+     * Check if an object is an instance of {@code className}, resolving {@code className} in
+     * the object's own ClassLoader. This is useful when {@code obj} may have been created in a
+     * ClassLoader other than the current one (in which case {@code obj instanceof Foo} would fail
+     * but {@code instanceOfInOwnClassLoader(obj, "Foo")} may succeed).
+     */
+    public static boolean instanceOfInOwnClassLoader(Object obj, String className) {
+        try {
+            ClassLoader loader = obj.getClass().getClassLoader();
+            // We intentionally set initialize = false because instanceof shouldn't trigger
+            // static initialization.
+            Class<?> clazz = Class.forName(className, false, loader);
+            return clazz.isInstance(obj);
+        } catch (ClassNotFoundException e) {
+            // If className is not in the ClassLoader, then this cannot be an instance.
+            return false;
+        }
+    }
+
     /**
      * Utility method for fetching a method from {@param delegateLoader}, with the same signature
      * (package + class + method name + parameters) as a given method defined in another
@@ -22,6 +47,9 @@ public class BoundaryInterfaceReflectionUtil {
      */
     public static Method dupeMethod(Method method, ClassLoader delegateLoader)
             throws ClassNotFoundException, NoSuchMethodException {
+        // We're converting one type to another. This is analogous to instantiating the type on the
+        // other side of the Boundary, so it makes sense to perform static initialization if it
+        // hasn't already happened (initialize = true).
         Class<?> declaringClass =
                 Class.forName(method.getDeclaringClass().getName(), true, delegateLoader);
         // We do not need to convert parameter types across ClassLoaders because we never pass
@@ -49,6 +77,20 @@ public class BoundaryInterfaceReflectionUtil {
     @TargetApi(Build.VERSION_CODES.KITKAT)
     public static InvocationHandler createInvocationHandlerFor(final Object delegate) {
         return new InvocationHandlerWithDelegateGetter(delegate);
+    }
+
+    /**
+     * Plural version of {@link #createInvocationHandlerFor(Object)}.
+     */
+    @TargetApi(Build.VERSION_CODES.KITKAT)
+    public static InvocationHandler[] createInvocationHandlersForArray(final Object[] delegates) {
+        if (delegates == null) return null;
+
+        InvocationHandler[] handlers = new InvocationHandler[delegates.length];
+        for (int i = 0; i < handlers.length; i++) {
+            handlers[i] = createInvocationHandlerFor(delegates[i]);
+        }
+        return handlers;
     }
 
     /**
@@ -94,13 +136,24 @@ public class BoundaryInterfaceReflectionUtil {
     }
 
     /**
+     * Check if this is a debuggable build of Android. Note: we copy BuildInfo's method because we
+     * cannot depend on the base-layer here (this folder is mirrored into Android).
+     */
+    private static boolean isDebuggable() {
+        return "eng".equals(Build.TYPE) || "userdebug".equals(Build.TYPE);
+    }
+
+    /**
      * Check whether a set of features {@param features} contains a certain feature {@param
      * soughtFeature}.
      */
+    public static boolean containsFeature(Collection<String> features, String soughtFeature) {
+        assert !soughtFeature.endsWith(Features.DEV_SUFFIX);
+        return features.contains(soughtFeature)
+                || (isDebuggable() && features.contains(soughtFeature + Features.DEV_SUFFIX));
+    }
+
     public static boolean containsFeature(String[] features, String soughtFeature) {
-        for (String feature : features) {
-            if (feature.equals(soughtFeature)) return true;
-        }
-        return false;
+        return containsFeature(Arrays.asList(features), soughtFeature);
     }
 }

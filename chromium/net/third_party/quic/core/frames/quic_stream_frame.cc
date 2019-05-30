@@ -8,7 +8,8 @@
 
 namespace quic {
 
-QuicStreamFrame::QuicStreamFrame() : QuicStreamFrame(0, false, 0, nullptr, 0) {}
+QuicStreamFrame::QuicStreamFrame()
+    : QuicStreamFrame(-1, false, 0, nullptr, 0) {}
 
 QuicStreamFrame::QuicStreamFrame(QuicStreamId stream_id,
                                  bool fin,
@@ -27,9 +28,10 @@ QuicStreamFrame::QuicStreamFrame(QuicStreamId stream_id,
                                  QuicStreamOffset offset,
                                  const char* data_buffer,
                                  QuicPacketLength data_length)
-    : stream_id(stream_id),
+    : QuicInlinedFrame(STREAM_FRAME),
       fin(fin),
       data_length(data_length),
+      stream_id(stream_id),
       data_buffer(data_buffer),
       offset(offset) {}
 

@@ -33,6 +33,7 @@
 #include <google/protobuf/stubs/once.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 #include <google/protobuf/wire_format_lite.h>
+#include <google/protobuf/wire_format_lite_inl.h>
 
 namespace google {
 namespace protobuf {
@@ -53,8 +54,9 @@ void InitImplicitWeakMessageDefaultInstance() {
 }
 
 const ImplicitWeakMessage* ImplicitWeakMessage::default_instance() {
-  ::google::protobuf::GoogleOnceInit(&implicit_weak_message_once_init_,
-                 &InitImplicitWeakMessageDefaultInstance);
+  ::google::protobuf::GoogleOnceInit(
+      &GOOGLE_PROTOBUF_GET_ONCE(implicit_weak_message_once_init_),
+      &InitImplicitWeakMessageDefaultInstance);
   return &implicit_weak_message_default_instance.get();
 }
 

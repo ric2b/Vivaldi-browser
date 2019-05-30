@@ -12,7 +12,8 @@ namespace extensions {
 
 // Only devtools undocked is still using app windows, so ignore it if it
 // comes from us.
-bool AppWindow::HandleContextMenu(const content::ContextMenuParams& params) {
+bool AppWindow::HandleContextMenu(content::RenderFrameHost* render_frame_host,
+                                  const content::ContextMenuParams& params) {
   return vivaldi::IsVivaldiRunning() &&
          (params.src_url.SchemeIs(content::kChromeDevToolsScheme) ||
           (params.src_url.GetOrigin() != GURL(vivaldi::kVivaldiAppURLDomain)));

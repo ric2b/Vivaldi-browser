@@ -25,6 +25,7 @@
 #include <cstddef>
 #include <type_traits>
 #include <utility>
+#include "base/compiler_specific.h"
 #include "base/template_util.h"
 #include "build/build_config.h"
 #include "third_party/blink/renderer/platform/wtf/compiler.h"
@@ -34,7 +35,7 @@ namespace WTF {
 // Returns a string that contains the type name of |T| as a substring.
 template <typename T>
 inline const char* GetStringWithTypeName() {
-  return WTF_PRETTY_FUNCTION;
+  return PRETTY_FUNCTION;
 }
 
 template <typename T>
@@ -45,14 +46,6 @@ struct IsWeak {
 enum WeakHandlingFlag {
   kNoWeakHandling,
   kWeakHandling,
-};
-
-template <typename T>
-struct IsTriviallyDestructible {
-  // TODO(slangley): crbug.com/783060 - std::is_trivially_destructible behaves
-  // differently on across platforms.
-  static constexpr bool value =
-      __has_trivial_destructor(T) && std::is_destructible<T>::value;
 };
 
 template <typename T, typename U>
@@ -168,10 +161,10 @@ struct IsTraceable<std::pair<T, U>> {
   static const bool value = IsTraceable<T>::value || IsTraceable<U>::value;
 };
 
-// This is used to check that DISALLOW_NEW_EXCEPT_PLACEMENT_NEW objects are not
+// This is used to check that DISALLOW_NEW objects are not
 // stored in off-heap Vectors, HashTables etc.
 template <typename T>
-struct AllowsOnlyPlacementNew {
+struct IsDisallowNew {
  private:
   using YesType = char;
   struct NoType {
@@ -179,7 +172,7 @@ struct AllowsOnlyPlacementNew {
   };
 
   template <typename U>
-  static YesType CheckMarker(typename U::IsAllowOnlyPlacementNew*);
+  static YesType CheckMarker(typename U::IsDisallowNewMarker*);
   template <typename U>
   static NoType CheckMarker(...);
 
@@ -229,22 +222,6 @@ template <>
 class IsGarbageCollectedType<void> {
  public:
   static const bool value = false;
-};
-
-template <typename T>
-class IsPersistentReferenceType {
-  typedef char YesType;
-  typedef struct NoType { char padding[8]; } NoType;
-
-  template <typename U>
-  static YesType CheckPersistentReferenceType(
-      typename U::IsPersistentReferenceTypeMarker*);
-  template <typename U>
-  static NoType CheckPersistentReferenceType(...);
-
- public:
-  static const bool value =
-      (sizeof(YesType) == sizeof(CheckPersistentReferenceType<T>(nullptr)));
 };
 
 template <typename T,

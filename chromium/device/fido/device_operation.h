@@ -20,8 +20,17 @@
 
 namespace device {
 
+// GenericDeviceOperation is a base class to allow a |DeviceOperation| to be
+// held in |std::unique_ptr| without having to know the concrete type of the
+// operation.
+class GenericDeviceOperation {
+ public:
+  virtual ~GenericDeviceOperation() {}
+  virtual void Start() = 0;
+};
+
 template <class Request, class Response>
-class DeviceOperation {
+class DeviceOperation : public GenericDeviceOperation {
  public:
   using DeviceResponseCallback =
       base::OnceCallback<void(CtapDeviceResponseCode,
@@ -29,9 +38,11 @@ class DeviceOperation {
   // Represents a per device logic that is owned by FidoTask. Thus,
   // DeviceOperation does not outlive |request|.
   DeviceOperation(FidoDevice* device,
-                  const Request& request,
+                  Request request,
                   DeviceResponseCallback callback)
-      : device_(device), request_(request), callback_(std::move(callback)) {}
+      : device_(device),
+        request_(std::move(request)),
+        callback_(std::move(callback)) {}
 
   virtual ~DeviceOperation() = default;
 
@@ -56,7 +67,7 @@ class DeviceOperation {
 
  private:
   FidoDevice* const device_ = nullptr;
-  const Request& request_;
+  Request request_;
   DeviceResponseCallback callback_;
 
   DISALLOW_COPY_AND_ASSIGN(DeviceOperation);

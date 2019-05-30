@@ -63,7 +63,7 @@ class Beacon {
 
  public:
   virtual void Serialize(ResourceRequest&) const = 0;
-  virtual unsigned long long size() const = 0;
+  virtual uint64_t size() const = 0;
   virtual const AtomicString GetContentType() const = 0;
 };
 
@@ -71,9 +71,7 @@ class BeaconString final : public Beacon {
  public:
   explicit BeaconString(const String& data) : data_(data) {}
 
-  unsigned long long size() const override {
-    return data_.CharactersSizeInBytes();
-  }
+  uint64_t size() const override { return data_.CharactersSizeInBytes(); }
 
   void Serialize(ResourceRequest& request) const override {
     scoped_refptr<EncodedFormData> entity_body =
@@ -98,14 +96,14 @@ class BeaconBlob final : public Beacon {
       content_type_ = AtomicString(blob_type);
   }
 
-  unsigned long long size() const override { return data_->size(); }
+  uint64_t size() const override { return data_->size(); }
 
   void Serialize(ResourceRequest& request) const override {
     DCHECK(data_);
 
     scoped_refptr<EncodedFormData> entity_body = EncodedFormData::Create();
     if (data_->HasBackingFile())
-      entity_body->AppendFile(ToFile(data_)->GetPath());
+      entity_body->AppendFile(To<File>(data_.Get())->GetPath());
     else
       entity_body->AppendBlob(data_->Uuid(), data_->GetBlobDataHandle());
 
@@ -126,7 +124,7 @@ class BeaconDOMArrayBufferView final : public Beacon {
  public:
   explicit BeaconDOMArrayBufferView(DOMArrayBufferView* data) : data_(data) {}
 
-  unsigned long long size() const override { return data_->byteLength(); }
+  uint64_t size() const override { return data_->byteLength(); }
 
   void Serialize(ResourceRequest& request) const override {
     DCHECK(data_);
@@ -154,9 +152,7 @@ class BeaconFormData final : public Beacon {
                     entity_body_->Boundary().data();
   }
 
-  unsigned long long size() const override {
-    return entity_body_->SizeInBytes();
-  }
+  uint64_t size() const override { return entity_body_->SizeInBytes(); }
 
   void Serialize(ResourceRequest& request) const override {
     request.SetHTTPBody(entity_body_.get());
@@ -185,9 +181,9 @@ bool SendBeaconCommon(LocalFrame* frame,
   }
 
   ResourceRequest request(url);
-  request.SetHTTPMethod(HTTPNames::POST);
+  request.SetHTTPMethod(http_names::kPOST);
   request.SetKeepalive(true);
-  request.SetRequestContext(WebURLRequest::kRequestContextBeacon);
+  request.SetRequestContext(mojom::RequestContextType::BEACON);
   beacon.Serialize(request);
   FetchParameters params(request);
   // The spec says:
@@ -196,7 +192,8 @@ bool SendBeaconCommon(LocalFrame* frame,
   //     Content-Type header, set corsMode to "no-cors".
   // As we don't support requests with non CORS-safelisted Content-Type, the
   // mode should always be "no-cors".
-  params.MutableOptions().initiator_info.name = FetchInitiatorTypeNames::beacon;
+  params.MutableOptions().initiator_info.name =
+      fetch_initiator_type_names::kBeacon;
 
   frame->Client()->DidDispatchPingLoader(request.Url());
   Resource* resource =
@@ -214,18 +211,18 @@ void PingLoader::SendLinkAuditPing(LocalFrame* frame,
     return;
 
   ResourceRequest request(ping_url);
-  request.SetHTTPMethod(HTTPNames::POST);
+  request.SetHTTPMethod(http_names::kPOST);
   request.SetHTTPContentType("text/ping");
   request.SetHTTPBody(EncodedFormData::Create("PING"));
-  request.SetHTTPHeaderField(HTTPNames::Cache_Control, "max-age=0");
-  request.SetHTTPHeaderField(HTTPNames::Ping_To,
+  request.SetHTTPHeaderField(http_names::kCacheControl, "max-age=0");
+  request.SetHTTPHeaderField(http_names::kPingTo,
                              AtomicString(destination_url.GetString()));
   scoped_refptr<const SecurityOrigin> ping_origin =
       SecurityOrigin::Create(ping_url);
   if (ProtocolIs(frame->GetDocument()->Url().GetString(), "http") ||
       frame->GetDocument()->GetSecurityOrigin()->CanAccess(ping_origin.get())) {
     request.SetHTTPHeaderField(
-        HTTPNames::Ping_From,
+        http_names::kPingFrom,
         AtomicString(frame->GetDocument()->Url().GetString()));
   }
 
@@ -233,10 +230,11 @@ void PingLoader::SendLinkAuditPing(LocalFrame* frame,
   // TODO(domfarolino): Add WPTs ensuring that pings do not have a referrer
   // header.
   request.SetReferrerString(Referrer::NoReferrer());
-  request.SetReferrerPolicy(kReferrerPolicyNever);
-  request.SetRequestContext(WebURLRequest::kRequestContextPing);
+  request.SetReferrerPolicy(network::mojom::ReferrerPolicy::kNever);
+  request.SetRequestContext(mojom::RequestContextType::PING);
   FetchParameters params(request);
-  params.MutableOptions().initiator_info.name = FetchInitiatorTypeNames::ping;
+  params.MutableOptions().initiator_info.name =
+      fetch_initiator_type_names::kPing;
 
   frame->Client()->DidDispatchPingLoader(request.Url());
   RawResource::Fetch(params, frame->GetDocument()->Fetcher(), nullptr);
@@ -247,7 +245,7 @@ void PingLoader::SendViolationReport(LocalFrame* frame,
                                      scoped_refptr<EncodedFormData> report,
                                      ViolationReportType type) {
   ResourceRequest request(report_url);
-  request.SetHTTPMethod(HTTPNames::POST);
+  request.SetHTTPMethod(http_names::kPOST);
   switch (type) {
     case kContentSecurityPolicyViolationReport:
       request.SetHTTPContentType("application/csp-report");
@@ -260,13 +258,12 @@ void PingLoader::SendViolationReport(LocalFrame* frame,
   request.SetHTTPBody(std::move(report));
   request.SetFetchCredentialsMode(
       network::mojom::FetchCredentialsMode::kSameOrigin);
-  request.SetRequestContext(WebURLRequest::kRequestContextCSPReport);
+  request.SetRequestContext(mojom::RequestContextType::CSP_REPORT);
+  request.SetRequestorOrigin(frame->GetDocument()->GetSecurityOrigin());
   request.SetFetchRedirectMode(network::mojom::FetchRedirectMode::kError);
   FetchParameters params(request);
   params.MutableOptions().initiator_info.name =
-      FetchInitiatorTypeNames::violationreport;
-  params.MutableOptions().security_origin =
-      frame->GetDocument()->GetSecurityOrigin();
+      fetch_initiator_type_names::kViolationreport;
 
   frame->Client()->DidDispatchPingLoader(request.Url());
   RawResource::Fetch(params, frame->GetDocument()->Fetcher(), nullptr);

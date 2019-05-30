@@ -11,6 +11,7 @@ import android.webkit.WebView;
 
 import com.android.webview.chromium.CallbackConverter;
 import com.android.webview.chromium.SharedStatics;
+import com.android.webview.chromium.SharedTracingControllerAdapter;
 import com.android.webview.chromium.WebViewChromiumAwInit;
 import com.android.webview.chromium.WebkitToSharedGlueConverter;
 
@@ -64,14 +65,19 @@ class SupportLibWebViewChromiumFactory implements WebViewProviderFactoryBoundary
                     Features.GET_WEB_VIEW_CLIENT,
                     Features.GET_WEB_CHROME_CLIENT,
                     Features.PROXY_OVERRIDE,
+                    Features.SUPPRESS_ERROR_PAGE + Features.DEV_SUFFIX,
                     Features.GET_WEB_VIEW_RENDERER,
                     Features.WEB_VIEW_RENDERER_TERMINATE,
+                    Features.TRACING_CONTROLLER_BASIC_USAGE,
+                    Features.WEB_VIEW_RENDERER_CLIENT_BASIC_USAGE,
             };
     // clang-format on
 
     // Initialization guarded by mAwInit.getLock()
     private InvocationHandler mStatics;
     private InvocationHandler mServiceWorkerController;
+    private InvocationHandler mTracingController;
+    private InvocationHandler mProxyController;
 
     public SupportLibWebViewChromiumFactory() {
         mCompatConverterAdapter = BoundaryInterfaceReflectionUtil.createInvocationHandlerFor(
@@ -113,16 +119,6 @@ class SupportLibWebViewChromiumFactory implements WebViewProviderFactoryBoundary
         public Uri getSafeBrowsingPrivacyPolicyUrl() {
             return mSharedStatics.getSafeBrowsingPrivacyPolicyUrl();
         }
-
-        @Override
-        public void setProxyOverride(String host, int port, String[] exclusionList) {
-            mSharedStatics.setProxyOverride(host, port, exclusionList);
-        }
-
-        @Override
-        public void clearProxyOverride() {
-            mSharedStatics.clearProxyOverride();
-        }
     }
 
     @Override
@@ -153,5 +149,29 @@ class SupportLibWebViewChromiumFactory implements WebViewProviderFactoryBoundary
             }
         }
         return mServiceWorkerController;
+    }
+
+    @Override
+    public InvocationHandler getTracingController() {
+        synchronized (mAwInit.getLock()) {
+            if (mTracingController == null) {
+                mTracingController = BoundaryInterfaceReflectionUtil.createInvocationHandlerFor(
+                        new SupportLibTracingControllerAdapter(new SharedTracingControllerAdapter(
+                                mAwInit.getRunQueue(), mAwInit.getAwTracingController())));
+            }
+        }
+        return mTracingController;
+    }
+
+    @Override
+    public InvocationHandler getProxyController() {
+        synchronized (mAwInit.getLock()) {
+            if (mProxyController == null) {
+                mProxyController = BoundaryInterfaceReflectionUtil.createInvocationHandlerFor(
+                        new SupportLibProxyControllerAdapter(
+                                mAwInit.getRunQueue(), mAwInit.getAwProxyController()));
+            }
+        }
+        return mProxyController;
     }
 }

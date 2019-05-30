@@ -20,6 +20,43 @@
             "type": "string"
           }
         }
+      },
+      {
+        "id": "MetaInfo",
+        "type": "object",
+        "description": "Meta for the bookmark",
+        "properties": {
+          "nickname": {
+            "type": "string",
+            "description": "The nickname for the node. Vivaldi extended property"
+          },
+          "description": {
+            "type": "string",
+            "description": "The description text for the node. Vivaldi extended property"
+          },
+          "partner": {
+            "type": "string",
+            "description": "Partner id for the node. Vivaldi extended property"
+          },
+          "speeddial": {
+            "type": "boolean",
+            "description": "Boolean variable, stating if a folder is a speeddial folder"
+          },
+          "bookmarkbar": {
+            "type": "boolean",
+            "description": "Boolean variable, stating if a folder is a bookmark bar folder"
+          },
+          "dateAdded": {
+            "type": "number",
+            "optional": true,
+            "description": "When this node was created, in milliseconds since the epoch (<code>new Date(dateAdded)</code>)."
+          },
+          "dateGroupModified": {
+            "type": "number",
+            "optional": true,
+            "description": "When the contents of this folder last changed, in milliseconds since the epoch."
+          }
+        }
       }
     ],
     "functions": [
@@ -50,6 +87,58 @@
                 "description": "true if the operation was successful, otherwise false."
               }
             ]
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onFaviconChanged",
+        "type": "function",
+        "description": "Fired when a favicon changes.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "id",
+            "description": "Bookmark id"
+          }
+        ]
+      },
+      {
+        "name": "onMetaInfoChanged",
+        "type": "function",
+        "description": "Fired when meta info changes.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "id",
+            "description": "Bookmark id"
+          },
+          {
+            "type": "object",
+            "name": "changeInfo",
+            "properties": {
+              "nickname": {
+                "type": "string",
+                "optional": true
+              },
+              "description": {
+                "type": "string",
+                "optional": true
+              },
+              "thumbnail": {
+                "type": "string",
+                "optional": true
+              },
+              "speeddial": {
+                "type": "boolean",
+                "optional": true
+              },
+              "bookmarkbar": {
+                "type": "boolean",
+                "optional": true
+              }
+            }
           }
         ]
       }

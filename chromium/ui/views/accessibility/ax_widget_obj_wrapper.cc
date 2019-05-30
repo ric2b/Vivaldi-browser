@@ -13,17 +13,16 @@
 
 namespace views {
 
-AXWidgetObjWrapper::AXWidgetObjWrapper(Widget* widget) : widget_(widget) {
+AXWidgetObjWrapper::AXWidgetObjWrapper(AXAuraObjCache* aura_obj_cache,
+                                       Widget* widget)
+    : aura_obj_cache_(aura_obj_cache), widget_(widget) {
   widget->AddObserver(this);
   widget->AddRemovalsObserver(this);
 }
 
 AXWidgetObjWrapper::~AXWidgetObjWrapper() {
-  if (!AXAuraObjCache::GetInstance()->is_destroying()) {
-    widget_->RemoveObserver(this);
-    widget_->RemoveRemovalsObserver(this);
-  }
-  widget_ = NULL;
+  widget_->RemoveObserver(this);
+  widget_->RemoveRemovalsObserver(this);
 }
 
 bool AXWidgetObjWrapper::IsIgnored() {
@@ -31,7 +30,7 @@ bool AXWidgetObjWrapper::IsIgnored() {
 }
 
 AXAuraObjWrapper* AXWidgetObjWrapper::GetParent() {
-  return AXAuraObjCache::GetInstance()->GetOrCreate(widget_->GetNativeView());
+  return aura_obj_cache_->GetOrCreate(widget_->GetNativeView());
 }
 
 void AXWidgetObjWrapper::GetChildren(
@@ -41,41 +40,43 @@ void AXWidgetObjWrapper::GetChildren(
     return;
   }
 
-  out_children->push_back(
-      AXAuraObjCache::GetInstance()->GetOrCreate(widget_->GetRootView()));
+  out_children->push_back(aura_obj_cache_->GetOrCreate(widget_->GetRootView()));
 }
 
 void AXWidgetObjWrapper::Serialize(ui::AXNodeData* out_node_data) {
-  out_node_data->id = GetUniqueId().Get();
+  out_node_data->id = GetUniqueId();
   out_node_data->role = widget_->widget_delegate()->GetAccessibleWindowRole();
   out_node_data->AddStringAttribute(
       ax::mojom::StringAttribute::kName,
       base::UTF16ToUTF8(
           widget_->widget_delegate()->GetAccessibleWindowTitle()));
-  out_node_data->location = gfx::RectF(widget_->GetWindowBoundsInScreen());
+  out_node_data->AddStringAttribute(ax::mojom::StringAttribute::kClassName,
+                                    "Widget");
+  out_node_data->relative_bounds.bounds =
+      gfx::RectF(widget_->GetWindowBoundsInScreen());
   out_node_data->state = 0;
 }
 
-const ui::AXUniqueId& AXWidgetObjWrapper::GetUniqueId() const {
-  return unique_id_;
+int32_t AXWidgetObjWrapper::GetUniqueId() const {
+  return unique_id_.Get();
 }
 
 void AXWidgetObjWrapper::OnWidgetDestroying(Widget* widget) {
-  AXAuraObjCache::GetInstance()->Remove(widget);
+  aura_obj_cache_->Remove(widget);
 }
 
 void AXWidgetObjWrapper::OnWidgetClosing(Widget* widget) {
-  AXAuraObjCache::GetInstance()->Remove(widget);
+  aura_obj_cache_->Remove(widget);
 }
 
 void AXWidgetObjWrapper::OnWidgetVisibilityChanged(Widget*, bool) {
   // If a widget changes visibility it may affect what's focused, in particular
   // when a widget that contains the focused view gets hidden.
-  AXAuraObjCache::GetInstance()->OnFocusedViewChanged();
+  aura_obj_cache_->OnFocusedViewChanged();
 }
 
 void AXWidgetObjWrapper::OnWillRemoveView(Widget* widget, View* view) {
-  AXAuraObjCache::GetInstance()->RemoveViewSubtree(view);
+  aura_obj_cache_->RemoveViewSubtree(view);
 }
 
 }  // namespace views

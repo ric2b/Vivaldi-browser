@@ -8,11 +8,11 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_property_source_data.h"
 #include "third_party/blink/renderer/core/css/css_property_value.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token_range.h"
-#include "third_party/blink/renderer/core/css_property_names.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -26,6 +26,7 @@ class CSSParserTokenStream;
 class StyleRule;
 class StyleRuleBase;
 class StyleRuleCharset;
+class StyleRuleFontFeatureValues;
 class StyleRuleFontFace;
 class StyleRuleImport;
 class StyleRuleKeyframe;
@@ -37,6 +38,11 @@ class StyleRuleSupports;
 class StyleRuleViewport;
 class StyleSheetContents;
 class Element;
+
+enum class ParseSheetResult {
+  kSucceeded,
+  kHasUnallowedImportRule,
+};
 
 class CSSParserImpl {
   STACK_ALLOCATED();
@@ -55,14 +61,15 @@ class CSSParserImpl {
     kAllowNamespaceRules,
     kRegularRules,
     kKeyframeRules,
-    kNoRules,     // For parsing at-rules inside declaration lists
+    kFontFeatureRules,
+    kNoRules,  // For parsing at-rules inside declaration lists
   };
 
   // Represents the start and end offsets of a CSSParserTokenRange.
   struct RangeOffset {
-    size_t start, end;
+    wtf_size_t start, end;
 
-    RangeOffset(size_t start, size_t end) : start(start), end(end) {
+    RangeOffset(wtf_size_t start, wtf_size_t end) : start(start), end(end) {
       DCHECK(start <= end);
     }
 
@@ -88,6 +95,8 @@ class CSSParserImpl {
   static ImmutableCSSPropertyValueSet* ParseInlineStyleDeclaration(
       const String&,
       Element*);
+  static ImmutableCSSPropertyValueSet*
+  ParseInlineStyleDeclaration(const String&, CSSParserMode, SecureContextMode);
   static bool ParseDeclarationList(MutableCSSPropertyValueSet*,
                                    const String&,
                                    const CSSParserContext*);
@@ -95,10 +104,12 @@ class CSSParserImpl {
                                   const CSSParserContext*,
                                   StyleSheetContents*,
                                   AllowedRulesType);
-  static void ParseStyleSheet(const String&,
-                              const CSSParserContext*,
-                              StyleSheetContents*,
-                              bool defer_property_parsing = false);
+  static ParseSheetResult ParseStyleSheet(
+      const String&,
+      const CSSParserContext*,
+      StyleSheetContents*,
+      CSSDeferPropertyParsing = CSSDeferPropertyParsing::kNo,
+      bool allow_import_rules = true);
   static CSSSelectorList ParsePageSelector(CSSParserTokenRange,
                                            StyleSheetContents*);
 
@@ -116,11 +127,16 @@ class CSSParserImpl {
 
   static CSSPropertyValueSet* ParseDeclarationListForLazyStyle(
       const String&,
-      size_t offset,
+      wtf_size_t offset,
       const CSSParserContext*);
 
  private:
-  enum RuleListType { kTopLevelRuleList, kRegularRuleList, kKeyframesRuleList };
+  enum RuleListType {
+    kTopLevelRuleList,
+    kRegularRuleList,
+    kKeyframesRuleList,
+    kFontFeatureRuleList,
+  };
 
   // Returns whether the first encountered rule was valid
   template <typename T>
@@ -147,6 +163,10 @@ class CSSParserImpl {
   StyleRuleFontFace* ConsumeFontFaceRule(CSSParserTokenRange prelude,
                                          const RangeOffset& prelude_offset,
                                          CSSParserTokenStream& block);
+  StyleRuleFontFeatureValues* ConsumeFontFeatureValuesRule(
+      CSSParserTokenRange prelude,
+      const RangeOffset& prelude_offset,
+      CSSParserTokenStream& block);
   StyleRuleKeyframes* ConsumeKeyframesRule(bool webkit_prefixed,
                                            CSSParserTokenRange prelude,
                                            const RangeOffset& prelude_offset,

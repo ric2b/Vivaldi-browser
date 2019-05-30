@@ -1,4 +1,17 @@
+// This file is generated from a similarly-named Perl script in the BoringSSL
+// source tree. Do not edit by hand.
+
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer) && !defined(OPENSSL_NO_ASM)
+#define OPENSSL_NO_ASM
+#endif
+#endif
+
+#if !defined(OPENSSL_NO_ASM)
 #if defined(__arm__)
+#if defined(BORINGSSL_PREFIX)
+#include <boringssl_prefix_symbols_asm.h>
+#endif
 @ Copyright 2007-2016 The OpenSSL Project Authors. All Rights Reserved.
 @
 @ Licensed under the OpenSSL license (the "License").  You may not use
@@ -1876,3 +1889,4 @@ sha512_block_data_order_neon:
 .hidden	OPENSSL_armcap_P
 #endif
 #endif
+#endif  // !OPENSSL_NO_ASM

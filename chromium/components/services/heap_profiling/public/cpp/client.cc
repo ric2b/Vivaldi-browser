@@ -5,6 +5,7 @@
 #include "components/services/heap_profiling/public/cpp/client.h"
 
 #include "base/allocator/allocator_interception_mac.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/platform_file.h"
 #include "base/metrics/field_trial_params.h"
@@ -13,7 +14,6 @@
 #include "base/task/task_traits.h"
 #include "base/trace_event/malloc_dump_provider.h"
 #include "build/build_config.h"
-#include "components/services/heap_profiling/public/cpp/allocator_shim.h"
 #include "components/services/heap_profiling/public/cpp/sampling_profiler_wrapper.h"
 #include "components/services/heap_profiling/public/cpp/sender_pipe.h"
 #include "components/services/heap_profiling/public/cpp/settings.h"
@@ -55,7 +55,8 @@ Client::~Client() {
   if (!started_profiling_)
     return;
 
-  StopAllocatorShimDangerous();
+  sampling_profiler_->StopProfiling();
+  SamplingProfilerWrapper::FlushBuffersAndClosePipe();
 
   base::trace_event::MallocDumpProvider::GetInstance()->EnableMetrics();
 
@@ -124,21 +125,15 @@ void Client::StartProfiling(mojom::ProfilingParamsPtr params) {
 }
 
 void Client::FlushMemlogPipe(uint32_t barrier_id) {
-  AllocatorShimFlushPipe(barrier_id);
+  SamplingProfilerWrapper::FlushPipe(barrier_id);
+}
+
+void Client::RetrieveHeapProfile(RetrieveHeapProfileCallback callback) {
+  std::move(callback).Run(sampling_profiler_->RetrieveHeapProfile());
 }
 
 void Client::StartProfilingInternal(mojom::ProfilingParamsPtr params) {
-  uint32_t sampling_rate = params->sampling_rate;
-  InitAllocationRecorder(sender_pipe_.get(), std::move(params));
-  bool sampling_v2_enabled = base::GetFieldTrialParamByFeatureAsBool(
-      kOOPHeapProfilingFeature, kOOPHeapProfilingFeatureSamplingV2,
-      /* default_value */ false);
-  if (sampling_v2_enabled) {
-    sampling_profiler_->StartProfiling(sampling_rate);
-  } else {
-    InitAllocatorShim();
-  }
-  AllocatorHooksHaveBeenInitialized();
+  sampling_profiler_->StartProfiling(sender_pipe_.get(), std::move(params));
 }
 
 }  // namespace heap_profiling

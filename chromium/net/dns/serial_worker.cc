@@ -7,11 +7,16 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/task/post_task.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
 
 namespace net {
 
-SerialWorker::SerialWorker() : state_(IDLE) {}
+SerialWorker::SerialWorker()
+    : base::RefCountedDeleteOnSequence<SerialWorker>(
+          base::SequencedTaskRunnerHandle::Get()),
+      state_(IDLE),
+      weak_factory_(this) {}
 
 SerialWorker::~SerialWorker() = default;
 
@@ -19,11 +24,16 @@ void SerialWorker::WorkNow() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   switch (state_) {
     case IDLE:
+      // We are posting weak pointer to OnWorkJobFinished to avoid leak when
+      // PostTaskWithTraitsAndReply fails to post task back to the original
+      // task runner. In this case the callback is not destroyed, and the
+      // weak reference allows SerialWorker instance to be deleted.
       base::PostTaskWithTraitsAndReply(
           FROM_HERE,
           {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
           base::BindOnce(&SerialWorker::DoWork, this),
-          base::BindOnce(&SerialWorker::OnWorkJobFinished, this));
+          base::BindOnce(&SerialWorker::OnWorkJobFinished,
+                         weak_factory_.GetWeakPtr()));
       state_ = WORKING;
       return;
     case WORKING:

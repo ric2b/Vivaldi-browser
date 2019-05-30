@@ -407,6 +407,7 @@ int RunRefs(const std::vector<std::string>& args) {
   bool all = cmdline->HasSwitch("all");
   bool all_toolchains = cmdline->HasSwitch(switches::kAllToolchains);
 
+  // Deliberately leaked to avoid expensive process teardown.
   Setup* setup = new Setup;
   if (!setup->DoSetup(args[0], false) || !setup->Run())
     return 1;

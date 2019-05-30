@@ -21,6 +21,14 @@ namespace download {
 struct DownloadCreateInfo;
 }  // namespace download
 
+namespace net {
+class UploadProgress;
+}  // namespace net
+
+namespace network {
+class UploadProgressTracker;
+}  // namespace network
+
 namespace content {
 class ByteStreamReader;
 
@@ -32,7 +40,10 @@ class UrlDownloader : public net::URLRequest::Delegate,
                 base::WeakPtr<UrlDownloadHandler::Delegate> delegate,
                 bool is_parallel_request,
                 const std::string& request_origin,
-                download::DownloadSource download_source);
+                bool follow_cross_origin_redirects,
+                download::DownloadSource download_source,
+                const download::DownloadUrlParameters::UploadProgressCallback&
+                    upload_callback);
   ~UrlDownloader() override;
 
   static std::unique_ptr<UrlDownloader> BeginDownload(
@@ -67,6 +78,9 @@ class UrlDownloader : public net::URLRequest::Delegate,
   void ResumeRequest() override;
   void CancelRequest() override;
 
+  // UploadProgressTracker callback.
+  void OnUploadProgressReport(const net::UploadProgress& upload_progress);
+
   // Called when the UrlDownloader is done with the request. Posts a task to
   // remove itself from its download manager, which in turn would cause the
   // UrlDownloader to be freed.
@@ -77,6 +91,11 @@ class UrlDownloader : public net::URLRequest::Delegate,
   // Live on UI thread, post task to call |delegate_| functions.
   base::WeakPtr<download::UrlDownloadHandler::Delegate> delegate_;
   DownloadRequestCore core_;
+
+  const bool follow_cross_origin_redirects_;
+
+  download::DownloadUrlParameters::UploadProgressCallback upload_callback_;
+  std::unique_ptr<network::UploadProgressTracker> upload_progress_tracker_;
 
   base::WeakPtrFactory<UrlDownloader> weak_ptr_factory_;
 };

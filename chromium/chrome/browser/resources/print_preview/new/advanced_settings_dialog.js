@@ -35,19 +35,14 @@ Polymer({
   /** @private {!Array<Node>} */
   bubbles_: [],
 
-  /** @private {!print_preview.PrintSettingsUiMetricsContext} */
-  metrics_: new print_preview.PrintSettingsUiMetricsContext(),
+  /** @private {!print_preview.MetricsContext} */
+  metrics_: print_preview.MetricsContext.printSettingsUi(),
 
   /** @override */
   attached: function() {
     this.metrics_.record(print_preview.Metrics.PrintSettingsUiBucket
                              .ADVANCED_SETTINGS_DIALOG_SHOWN);
-    // This async() call is a workaround to prevent a DCHECK - see
-    // https://crbug.com/804047.
-    // TODO (rbpotter): Remove after Polymer2 migration is complete.
-    this.async(() => {
-      this.$.dialog.showModal();
-    }, 1);
+    this.$.dialog.showModal();
   },
 
   /**
@@ -77,12 +72,14 @@ Polymer({
    * @private
    */
   computeHasMatching_: function() {
-    if (!this.shadowRoot)
+    if (!this.shadowRoot) {
       return true;
+    }
 
     cr.search_highlight_utils.removeHighlights(this.highlights_);
-    for (let bubble of this.bubbles_)
+    for (const bubble of this.bubbles_) {
       bubble.remove();
+    }
     this.highlights_ = [];
     this.bubbles_ = [];
 
@@ -94,8 +91,8 @@ Polymer({
       item.hidden = !matches;
       hasMatch = hasMatch || matches;
       const result = item.updateHighlighting(this.searchQuery_);
-      this.highlights_.push.apply(this.highlights_, result.highlights);
-      this.bubbles_.push.apply(this.bubbles_, result.bubbles);
+      this.highlights_.push(...result.highlights);
+      this.bubbles_.push(...result.bubbles);
     });
     return hasMatch;
   },
@@ -110,8 +107,9 @@ Polymer({
 
   /** @private */
   onCloseOrCancel_: function() {
-    if (this.searchQuery_)
+    if (this.searchQuery_) {
       this.$.searchBox.setValue('');
+    }
     if (this.$.dialog.getNative().returnValue == 'success') {
       this.metrics_.record(print_preview.Metrics.PrintSettingsUiBucket
                                .ADVANCED_SETTINGS_DIALOG_CANCELED);

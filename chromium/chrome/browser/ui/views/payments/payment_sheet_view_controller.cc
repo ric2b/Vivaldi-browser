@@ -11,8 +11,9 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/i18n/message_formatter.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -432,7 +433,7 @@ void PaymentSheetViewController::FillContentView(views::View* content_view) {
 
   if (spec()->request_shipping()) {
     std::unique_ptr<PaymentRequestRowView> shipping_row = CreateShippingRow();
-    shipping_row->set_previous_row(previous_row);
+    shipping_row->set_previous_row(previous_row->AsWeakPtr());
     previous_row = shipping_row.get();
     layout->StartRow(views::GridLayout::kFixedSize, 0);
     layout->AddView(shipping_row.release());
@@ -442,7 +443,7 @@ void PaymentSheetViewController::FillContentView(views::View* content_view) {
     std::unique_ptr<PaymentRequestRowView> shipping_option_row =
         CreateShippingOptionRow();
     if (shipping_option_row) {
-      shipping_option_row->set_previous_row(previous_row);
+      shipping_option_row->set_previous_row(previous_row->AsWeakPtr());
       previous_row = shipping_option_row.get();
       layout->StartRow(views::GridLayout::kFixedSize, 0);
       layout->AddView(shipping_option_row.release());
@@ -450,7 +451,7 @@ void PaymentSheetViewController::FillContentView(views::View* content_view) {
   }
   std::unique_ptr<PaymentRequestRowView> payment_method_row =
       CreatePaymentMethodRow();
-  payment_method_row->set_previous_row(previous_row);
+  payment_method_row->set_previous_row(previous_row->AsWeakPtr());
   previous_row = payment_method_row.get();
   layout->StartRow(views::GridLayout::kFixedSize, 0);
   layout->AddView(payment_method_row.release());
@@ -458,7 +459,7 @@ void PaymentSheetViewController::FillContentView(views::View* content_view) {
       spec()->request_payer_phone()) {
     std::unique_ptr<PaymentRequestRowView> contact_info_row =
         CreateContactInfoRow();
-    contact_info_row->set_previous_row(previous_row);
+    contact_info_row->set_previous_row(previous_row->AsWeakPtr());
     previous_row = contact_info_row.get();
     layout->StartRow(views::GridLayout::kFixedSize, 0);
     layout->AddView(contact_info_row.release());
@@ -555,7 +556,7 @@ void PaymentSheetViewController::StyledLabelLinkClicked(
   // The only thing that can trigger this is the user clicking on the "settings"
   // link in the data attribution text.
   chrome::ShowSettingsSubPageForProfile(dialog()->GetProfile(),
-                                        chrome::kAutofillSubPage);
+                                        chrome::kPaymentsSubPage);
 }
 
 void PaymentSheetViewController::UpdatePayButtonState(bool enabled) {
@@ -844,7 +845,7 @@ PaymentSheetViewController::CreateContactInfoRow() {
     } else if (state()->contact_profiles().size() == 1) {
       base::string16 truncated_content =
           state()->contact_profiles()[0]->ConstructInferredLabel(
-              kLabelFields, arraysize(kLabelFields), arraysize(kLabelFields),
+              kLabelFields, base::size(kLabelFields), base::size(kLabelFields),
               state()->GetApplicationLocale());
       return builder.CreateWithButton(truncated_content,
                                       l10n_util::GetStringUTF16(IDS_CHOOSE),
@@ -852,7 +853,7 @@ PaymentSheetViewController::CreateContactInfoRow() {
     } else {
       base::string16 preview =
           state()->contact_profiles()[0]->ConstructInferredLabel(
-              kLabelFields, arraysize(kLabelFields), arraysize(kLabelFields),
+              kLabelFields, base::size(kLabelFields), base::size(kLabelFields),
               state()->GetApplicationLocale());
       base::string16 format = l10n_util::GetPluralStringFUTF16(
           IDS_PAYMENT_REQUEST_CONTACTS_PREVIEW,

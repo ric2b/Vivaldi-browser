@@ -12,7 +12,6 @@
   "app": {
     "background": {
       "scripts": [
-        "localeSettings-bundle.js",
         "background-common-bundle.js",
         "background-bundle.js"
       ]
@@ -22,15 +21,22 @@
   "display_in_launcher": true,
   "display_in_new_tab_page": true,
   "offline_enabled": true,
+  "web_accessible_resources": [
+    "rss/showfeed.html",
+    "rss/showopml.html",
+    "rss/hidepage.css"
+  ],
   "permissions": [
     "<all_urls>",
     "accessibilityFeatures.read",
     "accessibilityFeatures.modify",
+    "accessKeys",
     "alarms",
     "alwaysOnTopWindows",
     "app.window.fullscreen.overrideEsc",
     "audioCapture",
     "autoUpdate",
+    "bookmarkContextMenu",
     "bookmarkManagerPrivate",
     "bookmarks",
     "bookmarksPrivate",
@@ -38,6 +44,8 @@
     "calendar",
     "contacts",
     "chrome://favicon/",
+    "chrome://vivaldi-data/",
+    "chrome://vivaldi-webui/",
     "clipboardRead",
     "commandLinePrivate",
     "contentSettings",
@@ -79,7 +87,10 @@
     "unlimitedStorage",
     "utilities",
     "videoCapture",
+    "vivaldiAccount",
     "webview",
+    "webRequest",
+    "webRequestBlocking",
     "windowPrivate",
     "zoom",
     {"fileSystem": ["write", "directory"]},
@@ -92,7 +103,6 @@
         "accessible_resources" : [
           "browser.html",
           "components/thumbnail/capture.html",
-          "components/startpage/startpage.html",
           "components/settings/settings.html",
           "components/mail/mail.html",
           "components/welcome/welcome.html",

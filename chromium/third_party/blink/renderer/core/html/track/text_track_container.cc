@@ -55,7 +55,7 @@ class VideoElementResizeDelegate final : public ResizeObserver::Delegate {
         entries[0]->target()->GetLayoutObject());
   }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(text_track_container_);
     ResizeObserver::Delegate::Trace(visitor);
   }
@@ -69,7 +69,7 @@ class VideoElementResizeDelegate final : public ResizeObserver::Delegate {
 TextTrackContainer::TextTrackContainer(Document& document)
     : HTMLDivElement(document), default_font_size_(0) {}
 
-void TextTrackContainer::Trace(blink::Visitor* visitor) {
+void TextTrackContainer::Trace(Visitor* visitor) {
   visitor->Trace(video_size_observer_);
   HTMLDivElement::Trace(visitor);
 }
@@ -77,7 +77,7 @@ void TextTrackContainer::Trace(blink::Visitor* visitor) {
 TextTrackContainer* TextTrackContainer::Create(
     HTMLMediaElement& media_element) {
   TextTrackContainer* element =
-      new TextTrackContainer(media_element.GetDocument());
+      MakeGarbageCollected<TextTrackContainer>(media_element.GetDocument());
   element->SetShadowPseudoId(
       AtomicString("-webkit-media-text-track-container"));
   if (IsHTMLVideoElement(media_element))
@@ -96,7 +96,7 @@ LayoutObject* TextTrackContainer::CreateLayoutObject(const ComputedStyle&) {
 
 void TextTrackContainer::ObserveSizeChanges(Element& element) {
   video_size_observer_ = ResizeObserver::Create(
-      GetDocument(), new VideoElementResizeDelegate(*this));
+      GetDocument(), MakeGarbageCollected<VideoElementResizeDelegate>(*this));
   video_size_observer_->observe(&element);
 }
 
@@ -108,8 +108,7 @@ void TextTrackContainer::UpdateDefaultFontSize(
   // for lack of per-spec vh/vw support) but the whole media element is used
   // for cue rendering. This is inconsistent. See also the somewhat related
   // spec bug: https://www.w3.org/Bugs/Public/show_bug.cgi?id=28105
-  LayoutSize video_size =
-      ToLayoutVideo(*media_layout_object).ReplacedContentRect().Size();
+  LayoutSize video_size = ToLayoutBox(media_layout_object)->ContentSize();
   LayoutUnit smallest_dimension =
       std::min(video_size.Height(), video_size.Width());
   float font_size = smallest_dimension * 0.05f;
@@ -118,9 +117,9 @@ void TextTrackContainer::UpdateDefaultFontSize(
 
   // Avoid excessive FP precision issue.
   // C11 5.2.4.2.2:9 requires assignment and cast to remove extra precision, but
-  // the behavior is currently not portable. fontSize may have precision higher
-  // than m_fontSize thus straight comparison can fail despite they cast to the
-  // same float value.
+  // the behavior is currently not portable. font_size may have precision higher
+  // than default_font_size_ thus straight comparison can fail despite they cast
+  // to the same float value.
   volatile float& current_font_size = default_font_size_;
   float old_font_size = current_font_size;
   current_font_size = font_size;

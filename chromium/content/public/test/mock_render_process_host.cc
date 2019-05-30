@@ -8,12 +8,14 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/process/process_handle.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "base/token.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
@@ -34,9 +36,10 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
+#include "content/test/not_implemented_network_url_loader_factory.h"
 #include "media/media_buildflags.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
-#include "services/resource_coordinator/public/mojom/coordination_unit.mojom.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 
 namespace content {
 
@@ -54,14 +57,17 @@ MockRenderProcessHost::MockRenderProcessHost(BrowserContext* browser_context)
       is_process_backgrounded_(false),
       is_unused_(true),
       keep_alive_ref_count_(0),
-      child_identity_(mojom::kRendererServiceName,
-                      BrowserContext::GetServiceUserIdFor(browser_context),
-                      base::StringPrintf("%d", id_)),
+      foreground_service_worker_count_(0),
+      child_identity_(
+          mojom::kRendererServiceName,
+          BrowserContext::GetServiceInstanceGroupFor(browser_context),
+          base::Token::CreateRandom(),
+          base::Token::CreateRandom()),
       url_loader_factory_(nullptr),
       weak_ptr_factory_(this) {
   // Child process security operations can't be unit tested unless we add
   // ourselves as an existing child process.
-  ChildProcessSecurityPolicyImpl::GetInstance()->Add(GetID());
+  ChildProcessSecurityPolicyImpl::GetInstance()->Add(GetID(), browser_context);
 
   RenderProcessHostImpl::RegisterHost(GetID(), this);
 }
@@ -153,7 +159,7 @@ void MockRenderProcessHost::ShutdownForBadMessage(
 
 void MockRenderProcessHost::UpdateClientPriority(PriorityClient* client) {}
 
-int MockRenderProcessHost::VisibleClientCount() const {
+int MockRenderProcessHost::VisibleClientCount() {
   int count = 0;
   for (auto* client : priority_clients_) {
     const Priority priority = client->GetPriority();
@@ -164,17 +170,17 @@ int MockRenderProcessHost::VisibleClientCount() const {
   return count;
 }
 
-unsigned int MockRenderProcessHost::GetFrameDepth() const {
+unsigned int MockRenderProcessHost::GetFrameDepth() {
   NOTIMPLEMENTED();
   return 0u;
 }
 
-bool MockRenderProcessHost::GetIntersectsViewport() const {
+bool MockRenderProcessHost::GetIntersectsViewport() {
   NOTIMPLEMENTED();
   return true;
 }
 
-bool MockRenderProcessHost::IsForGuestsOnly() const {
+bool MockRenderProcessHost::IsForGuestsOnly() {
   return is_for_guests_only_;
 }
 
@@ -187,7 +193,16 @@ void MockRenderProcessHost::OnMediaStreamAdded() {}
 
 void MockRenderProcessHost::OnMediaStreamRemoved() {}
 
-StoragePartition* MockRenderProcessHost::GetStoragePartition() const {
+void MockRenderProcessHost::OnForegroundServiceWorkerAdded() {
+  foreground_service_worker_count_ += 1;
+}
+
+void MockRenderProcessHost::OnForegroundServiceWorkerRemoved() {
+  DCHECK_GT(foreground_service_worker_count_, 0);
+  foreground_service_worker_count_ -= 1;
+}
+
+StoragePartition* MockRenderProcessHost::GetStoragePartition() {
   return BrowserContext::GetDefaultStoragePartition(browser_context_);
 }
 
@@ -208,11 +223,11 @@ bool MockRenderProcessHost::FastShutdownIfPossible(size_t page_count,
   return true;
 }
 
-bool MockRenderProcessHost::FastShutdownStarted() const {
+bool MockRenderProcessHost::FastShutdownStarted() {
   return fast_shutdown_started_;
 }
 
-const base::Process& MockRenderProcessHost::GetProcess() const {
+const base::Process& MockRenderProcessHost::GetProcess() {
   // Return the current-process handle for the IPC::GetPlatformFileForTransit
   // function.
   if (process.IsValid())
@@ -222,7 +237,7 @@ const base::Process& MockRenderProcessHost::GetProcess() const {
   return current_process;
 }
 
-bool MockRenderProcessHost::IsReady() const {
+bool MockRenderProcessHost::IsReady() {
   return false;
 }
 
@@ -233,19 +248,24 @@ bool MockRenderProcessHost::Send(IPC::Message* msg) {
   return true;
 }
 
-int MockRenderProcessHost::GetID() const {
+int MockRenderProcessHost::GetID() {
   return id_;
 }
 
-bool MockRenderProcessHost::IsInitializedAndNotDead() const {
+bool MockRenderProcessHost::IsInitializedAndNotDead() {
   return has_connection_;
 }
 
-void MockRenderProcessHost::SetIgnoreInputEvents(bool ignore_input_events) {
+void MockRenderProcessHost::SetBlocked(bool blocked) {}
+
+bool MockRenderProcessHost::IsBlocked() {
+  return false;
 }
 
-bool MockRenderProcessHost::IgnoreInputEvents() const {
-  return false;
+std::unique_ptr<base::CallbackList<void(bool)>::Subscription>
+MockRenderProcessHost::RegisterBlockStateChangedCallback(
+    const base::RepeatingCallback<void(bool)>& cb) {
+  return nullptr;
 }
 
 static void DeleteIt(base::WeakPtr<MockRenderProcessHost> h) {
@@ -272,12 +292,13 @@ void MockRenderProcessHost::AddPendingView() {
 void MockRenderProcessHost::RemovePendingView() {
 }
 
-void MockRenderProcessHost::AddWidget(RenderWidgetHost* widget) {
-  priority_clients_.insert(static_cast<RenderWidgetHostImpl*>(widget));
+void MockRenderProcessHost::AddPriorityClient(PriorityClient* priority_client) {
+  priority_clients_.insert(priority_client);
 }
 
-void MockRenderProcessHost::RemoveWidget(RenderWidgetHost* widget) {
-  priority_clients_.erase(static_cast<RenderWidgetHostImpl*>(widget));
+void MockRenderProcessHost::RemovePriorityClient(
+    PriorityClient* priority_client) {
+  priority_clients_.erase(priority_client);
 }
 
 #if defined(OS_ANDROID)
@@ -285,21 +306,23 @@ ChildProcessImportance MockRenderProcessHost::GetEffectiveImportance() {
   NOTIMPLEMENTED();
   return ChildProcessImportance::NORMAL;
 }
+
+void MockRenderProcessHost::DumpProcessStack() {}
 #endif
 
 void MockRenderProcessHost::SetSuddenTerminationAllowed(bool allowed) {
 }
 
-bool MockRenderProcessHost::SuddenTerminationAllowed() const {
+bool MockRenderProcessHost::SuddenTerminationAllowed() {
   return true;
 }
 
-BrowserContext* MockRenderProcessHost::GetBrowserContext() const {
+BrowserContext* MockRenderProcessHost::GetBrowserContext() {
   return browser_context_;
 }
 
 bool MockRenderProcessHost::InSameStoragePartition(
-    StoragePartition* partition) const {
+    StoragePartition* partition) {
   // Mock RPHs only have one partition.
   return true;
 }
@@ -311,7 +334,7 @@ IPC::ChannelProxy* MockRenderProcessHost::GetChannel() {
 void MockRenderProcessHost::AddFilter(BrowserMessageFilter* filter) {
 }
 
-base::TimeDelta MockRenderProcessHost::GetChildProcessIdleTime() const {
+base::TimeDelta MockRenderProcessHost::GetChildProcessIdleTime() {
   return base::TimeDelta::FromMilliseconds(0);
 }
 
@@ -322,23 +345,22 @@ void MockRenderProcessHost::BindInterface(
     binder_overrides_[interface_name].Run(std::move(interface_pipe));
 }
 
-const service_manager::Identity& MockRenderProcessHost::GetChildIdentity()
-    const {
+const service_manager::Identity& MockRenderProcessHost::GetChildIdentity() {
   return child_identity_;
 }
 
-std::unique_ptr<base::SharedPersistentMemoryAllocator>
+std::unique_ptr<base::PersistentMemoryAllocator>
 MockRenderProcessHost::TakeMetricsAllocator() {
   return nullptr;
 }
 
-const base::TimeTicks& MockRenderProcessHost::GetInitTimeForNavigationMetrics()
-    const {
+const base::TimeTicks&
+MockRenderProcessHost::GetInitTimeForNavigationMetrics() {
   static base::TimeTicks dummy_time = base::TimeTicks::Now();
   return dummy_time;
 }
 
-bool MockRenderProcessHost::IsProcessBackgrounded() const {
+bool MockRenderProcessHost::IsProcessBackgrounded() {
   return is_process_backgrounded_;
 }
 
@@ -386,19 +408,9 @@ mojom::Renderer* MockRenderProcessHost::GetRendererInterface() {
   return renderer_interface_->get();
 }
 
-resource_coordinator::ProcessResourceCoordinator*
-MockRenderProcessHost::GetProcessResourceCoordinator() {
-  if (!process_resource_coordinator_) {
-    service_manager::Connector* connector =
-        content::ServiceManagerConnection::GetForProcess()->GetConnector();
-    process_resource_coordinator_ =
-        std::make_unique<resource_coordinator::ProcessResourceCoordinator>(
-            connector);
-  }
-  return process_resource_coordinator_.get();
-}
-
 void MockRenderProcessHost::CreateURLLoaderFactory(
+    const base::Optional<url::Origin>& origin,
+    network::mojom::TrustedURLLoaderHeaderClientPtrInfo header_client,
     network::mojom::URLLoaderFactoryRequest request) {
   url_loader_factory_->Clone(std::move(request));
 }
@@ -423,9 +435,11 @@ bool MockRenderProcessHost::HostHasNotBeenUsed() {
   return IsUnused() && listeners_.IsEmpty() && GetKeepAliveRefCount() == 0;
 }
 
-void MockRenderProcessHost::LockToOrigin(const GURL& lock_url) {
-  ChildProcessSecurityPolicyImpl::GetInstance()->LockToOrigin(GetID(),
-                                                              lock_url);
+void MockRenderProcessHost::LockToOrigin(
+    const IsolationContext& isolation_context,
+    const GURL& lock_url) {
+  ChildProcessSecurityPolicyImpl::GetInstance()->LockToOrigin(
+      isolation_context, GetID(), lock_url);
   if (SiteInstanceImpl::IsOriginLockASite(lock_url))
     is_renderer_locked_to_site_ = true;
 }
@@ -434,6 +448,12 @@ void MockRenderProcessHost::BindCacheStorage(
     blink::mojom::CacheStorageRequest request,
     const url::Origin& origin) {
   cache_storage_request_ = std::move(request);
+}
+
+void MockRenderProcessHost::BindIndexedDB(
+    blink::mojom::IDBFactoryRequest request,
+    const url::Origin& origin) {
+  idb_factory_request_ = std::move(request);
 }
 
 void MockRenderProcessHost::CleanupCorbExceptionForPluginUponDestruction() {}
@@ -460,7 +480,9 @@ MockRenderProcessHost::StartRtpDump(
   return WebRtcStopRtpDumpCallback();
 }
 
-void MockRenderProcessHost::SetWebRtcEventLogOutput(int lid, bool enabled) {}
+void MockRenderProcessHost::EnableWebRtcEventLogOutput(int lid,
+                                                       int output_period_ms) {}
+void MockRenderProcessHost::DisableWebRtcEventLogOutput(int lid) {}
 
 bool MockRenderProcessHost::OnMessageReceived(const IPC::Message& msg) {
   IPC::Listener* listener = listeners_.Lookup(msg.routing_id());
@@ -488,7 +510,9 @@ void MockRenderProcessHost::OverrideURLLoaderFactory(
   url_loader_factory_ = factory;
 }
 
-MockRenderProcessHostFactory::MockRenderProcessHostFactory() {}
+MockRenderProcessHostFactory::MockRenderProcessHostFactory()
+    : default_mock_url_loader_factory_(
+          std::make_unique<NotImplementedNetworkURLLoaderFactory>()) {}
 
 MockRenderProcessHostFactory::~MockRenderProcessHostFactory() {
   // Detach this object from MockRenderProcesses to prevent them from calling
@@ -500,8 +524,10 @@ MockRenderProcessHostFactory::~MockRenderProcessHostFactory() {
 RenderProcessHost* MockRenderProcessHostFactory::CreateRenderProcessHost(
     BrowserContext* browser_context,
     SiteInstance* site_instance) const {
-  processes_.push_back(
-      std::make_unique<MockRenderProcessHost>(browser_context));
+  std::unique_ptr<MockRenderProcessHost> host =
+      std::make_unique<MockRenderProcessHost>(browser_context);
+  host->OverrideURLLoaderFactory(default_mock_url_loader_factory_.get());
+  processes_.push_back(std::move(host));
   processes_.back()->SetFactory(this);
   return processes_.back().get();
 }

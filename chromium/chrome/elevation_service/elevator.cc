@@ -4,32 +4,27 @@
 
 #include "chrome/elevation_service/elevator.h"
 
-#include "base/files/file_util.h"
-#include "base/process/process.h"
-#include "base/win/registry.h"
-#include "base/win/scoped_handle.h"
-#include "base/win/scoped_process_information.h"
-#include "chrome/elevation_service/service_main.h"
-#include "chrome/install_static/install_util.h"
+#include <stdint.h>
+
+#include "base/files/file_path.h"
+#include "base/win/win_util.h"
+#include "chrome/elevation_service/elevated_recovery_impl.h"
 
 namespace elevation_service {
 
-IFACEMETHODIMP Elevator::GetElevatorFactory(const base::char16* elevator_id,
-                                            IClassFactory** factory) {
-  DCHECK(elevator_id);
-  DCHECK(factory);
-
-  *factory = nullptr;
-
-  elevation_service::ServiceMain* service =
-      elevation_service::ServiceMain::GetInstance();
-  Microsoft::WRL::ComPtr<IClassFactory> f =
-      service->GetElevatorFactory(elevator_id);
-  f.CopyTo(factory);
-
-  return *factory ? S_OK : E_INVALIDARG;
+STDMETHODIMP Elevator::RunRecoveryCRXElevated(
+    const base::char16* crx_path,
+    const base::char16* browser_appid,
+    const base::char16* browser_version,
+    const base::char16* session_id,
+    DWORD caller_proc_id,
+    ULONG_PTR* proc_handle) {
+  base::win::ScopedHandle scoped_proc_handle;
+  HRESULT hr = RunChromeRecoveryCRX(base::FilePath(crx_path), browser_appid,
+                                    browser_version, session_id, caller_proc_id,
+                                    &scoped_proc_handle);
+  *proc_handle = base::win::HandleToUint32(scoped_proc_handle.Take());
+  return hr;
 }
-
-Elevator::~Elevator() = default;
 
 }  // namespace elevation_service

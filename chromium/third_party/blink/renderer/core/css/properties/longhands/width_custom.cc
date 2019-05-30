@@ -11,18 +11,18 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 
 namespace blink {
-namespace CSSLonghand {
+namespace css_longhand {
 
 const CSSValue* Width::ParseSingleValue(CSSParserTokenRange& range,
                                         const CSSParserContext& context,
                                         const CSSParserLocalContext&) const {
-  return CSSParsingUtils::ConsumeWidthOrHeight(
-      range, context, CSSPropertyParserHelpers::UnitlessQuirk::kAllow);
+  return css_parsing_utils::ConsumeWidthOrHeight(
+      range, context, css_property_parser_helpers::UnitlessQuirk::kAllow);
 }
 
 bool Width::IsLayoutDependent(const ComputedStyle* style,
                               LayoutObject* layout_object) const {
-  return layout_object && layout_object->IsBox();
+  return layout_object && (layout_object->IsBox() || layout_object->IsSVG());
 }
 
 const CSSValue* Width::CSSValueFromComputedStyleInternal(
@@ -33,11 +33,11 @@ const CSSValue* Width::CSSValueFromComputedStyleInternal(
     bool allow_visited_style) const {
   if (ComputedStyleUtils::WidthOrHeightShouldReturnUsedValue(layout_object)) {
     return ZoomAdjustedPixelValue(
-        ComputedStyleUtils::SizingBox(*layout_object).Width(), style);
+        ComputedStyleUtils::UsedBoxSize(*layout_object).Width(), style);
   }
   return ComputedStyleUtils::ZoomAdjustedPixelValueForLength(style.Width(),
                                                              style);
 }
 
-}  // namespace CSSLonghand
+}  // namespace css_longhand
 }  // namespace blink

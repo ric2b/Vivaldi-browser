@@ -6,7 +6,6 @@
 #define CONTENT_PUBLIC_BROWSER_WEB_DRAG_DEST_DELEGATE_H_
 
 #include "base/strings/string16.h"
-#include "third_party/blink/public/platform/web_drag_operation.h"
 
 namespace ui {
 class OSExchangeData;
@@ -14,7 +13,6 @@ class OSExchangeData;
 
 namespace content {
 class WebContents;
-struct DropData;
 
 // An optional delegate that listens for drags of bookmark data.
 class WebDragDestDelegate {
@@ -31,22 +29,11 @@ class WebDragDestDelegate {
   // This should also clear any state kept about this drag.
   virtual void OnDragLeave() = 0;
 
-  // Vivaldi addition
-  virtual blink::WebDragOperationsMask OnDragEnd(
-      int screen_x,
-      int screen_y,
-      blink::WebDragOperationsMask ops,
-      bool cancelled) = 0;
-
 #if defined(USE_AURA)
   // Called at the start of every drag to supply the data associated with the
   // drag.
   virtual void OnReceiveDragData(const ui::OSExchangeData& data) = 0;
 #endif  // USE_AURA
-
-#if defined(OS_MACOSX)
-  virtual void SetDragData(const content::DropData* data) {}
-#endif  // OS_MACOSX
 
   virtual ~WebDragDestDelegate() {}
 };

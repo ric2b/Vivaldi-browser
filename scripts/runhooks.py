@@ -1,18 +1,22 @@
+from __future__ import print_function
+from builtins import range
+
 import sys, os, os.path
 import subprocess
+import argparse
 import read_deps_file as deps_utils
 import datetime
 import platform
 import shlex
 import shutil
 
-SRC = os.path.dirname(os.path.dirname(__file__))
+SRC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 hooks_folder = os.path.join(SRC, "scripts", "templates", "hooks")
 chromium_hooks_folder = os.path.join(SRC, "scripts", "templates", "chromium_hooks")
 git_hooks_folder = os.path.join(SRC, ".git", "hooks")
 chromium_git_hooks_folder = os.path.join(SRC, ".git", "modules", "chromium", "hooks")
 
-depot_tools_path = os.path.abspath(os.path.join(SRC, "chromium/third_party/depot_tools"))
+depot_tools_path = os.path.join(SRC, "chromium/third_party/depot_tools")
 os.environ["PATH"] = os.pathsep.join([depot_tools_path, os.environ["PATH"]])
 os.environ["DEPOT_TOOLS_WIN_TOOLCHAIN"]="0"
 
@@ -36,7 +40,7 @@ OS_CHOICES = {
 
 def copy_files(src, dst):
   for f in os.listdir(src):
-    if not os.access(os.path.join(dst, f), os.R_OK):
+    if not os.access(os.path.join(dst, f), os.R_OK+os.X_OK):
       shutil.copy(os.path.join(src, f), os.path.join(dst, f))
 
 def IsAndroidEnabled():
@@ -87,31 +91,27 @@ if "target_cpu" in gnvars:
 
 checkout_cpu = "checkout_"+checkout_cpu
 
-script_name = sys.argv[0]
-if not os.path.isabs(script_name):
-  script_name = os.path.abspath(os.path.join(os.getcwd(), script_name ))
+parser = argparse.ArgumentParser()
+parser.add_argument("--clobber-out", action="store_true");
+parser.add_argument("--args-gn")
 
-sourcedir = os.path.abspath(os.path.join(os.path.split(script_name)[0],".."))
+args = parser.parse_args()
 
-prefix_name = os.path.split(sourcedir)[1]
+prefix_name = os.path.split(SRC)[1]
 
-workdir = os.path.abspath(os.path.join(sourcedir,".."))
+workdir = SRC
 extra_subprocess_flags = {}
 if platform.system() == "Windows":
-  import check_win_python
-  check_win_python.CheckPythonInstall()
+  try:
+    import check_win_python
+    check_win_python.CheckPythonInstall()
+  except:
+    pass
   try:
     import win32con
     extra_subprocess_flags["creationflags"] = win32con.NORMAL_PRIORITY_CLASS
   except:
     pass
-
-def fix_action(str):
-  if str.startswith("vivaldi/") or str.startswith("vivaldi\\"):
-    print "replacing vivaldi with %s for %s" % (prefix_name, str)
-    sys.stdout.flush()
-    str = str.replace("vivaldi", prefix_name,1)
-  return str
 
 def RunHooks(hooks, cwd, env=None, prefix_name=None):
   if not hooks:
@@ -126,29 +126,27 @@ def RunHooks(hooks, cwd, env=None, prefix_name=None):
   if checkout_os == "checkout_android":
     global_vars["checkout_linux"]= True # Always checking out android on linux systems
 
-  for an_os in set(list(OS_CHOICES.itervalues())+["telemetry_dependencies"]):
+  for an_os in set(list(OS_CHOICES.values())+["telemetry_dependencies"]):
     global_vars.setdefault("checkout_"+an_os, False)
   for hook in hooks:
     if 'condition' in hook and not eval(hook['condition'], global_vars):
       continue
     if "action" in hook:
       action = hook["action"]
-      if prefix_name and prefix_name != "vivaldi":
-        action = [fix_action(x) for x in action]
-      print 'running action "%s" in %s' %(action,cwd)
-      sys.stdout.flush()
+      if hook["name"] == "bootstrap-gn" and args.args_gn:
+        action.extend(["--args-gn", args.args_gn])
+      print('running action "%s" in %s' %(action,cwd))
       if subprocess.call(action, cwd=cwd, env=env, shell=(os.name=="nt"),
                          **extra_subprocess_flags) != 0:
         raise BaseException("Hook failed")
 
-if "--clobber-out" in sys.argv:
+if args.clobber_out:
   import shutil
   build_dir = "out"
-  out_dir = os.path.join(sourcedir,build_dir)
+  out_dir = os.path.join(SRC,build_dir)
   if os.access(out_dir, os.R_OK):
     start_time = datetime.datetime.now()
-    print "Deleting ", out_dir
-    sys.stdout.flush()
+    print("Deleting ", out_dir)
     for _ in range(4):
       try:
         shutil.rmtree(out_dir)
@@ -156,22 +154,21 @@ if "--clobber-out" in sys.argv:
         pass
       if not os.access(out_dir, os.R_OK):
         break
-      print "New delete try after", (datetime.datetime.now()-start_time).total_seconds(), "seconds"
-      sys.stdout.flush()
+      print("New delete try after", (datetime.datetime.now()-start_time).total_seconds(), "seconds")
     if os.access(out_dir, os.R_OK):
       raise Exception("Could not delete out directory")
     stop_time = datetime.datetime.now()
-    print "Deleted", out_dir, "in", (stop_time-start_time).total_seconds(), "seconds"
-    sys.stdout.flush()
+    print("Deleted", out_dir, "in", (stop_time-start_time).total_seconds(), "seconds")
   if IsAndroidEnabled() and int(os.environ.get("CHROME_HEADLESS",0)):
-    print "Cleaning checkout ", sourcedir
-    sys.stdout.flush()
-    subprocess.call(["git", "clean", "-fdx"], cwd=sourcedir)
-    subprocess.call(["git", "submodule", "foreach", "--recursive", "git clean -fdx"], cwd=sourcedir)
+    print("Cleaning checkout ", SRC)
+    subprocess.call(["git", "clean", "-fdx"], cwd=SRC)
+    subprocess.call(["git", "submodule", "foreach", "--recursive", "git clean -fdx"], cwd=SRC)
 
 if "CHROME_HEADLESS" not in os.environ:
-  copy_files(hooks_folder, git_hooks_folder)
-  copy_files(chromium_hooks_folder, chromium_git_hooks_folder)
+  if os.access(hooks_folder, os.F_OK):
+    copy_files(hooks_folder, git_hooks_folder)
+  if os.access(chromium_hooks_folder, os.F_OK):
+    copy_files(chromium_hooks_folder, chromium_git_hooks_folder)
 
 deps_content = deps_utils.GetDepsContent("DEPS")
 (deps, hooks, deps_vars, recursion) = deps_content

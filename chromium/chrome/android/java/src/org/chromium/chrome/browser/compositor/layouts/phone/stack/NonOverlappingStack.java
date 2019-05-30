@@ -39,7 +39,7 @@ public class NonOverlappingStack extends Stack {
     /**
      * The scale the tabs should be shown at when there are two or more tabs open.
      */
-    private static final float SCALE_FRACTION_MULTIPLE_TABS = 0.60f;
+    private static final float SCALE_FRACTION_MULTIPLE_TABS = 0.54f;
 
     /**
      * The percentage of the screen that defines the spacing between tabs by default (no pinch).
@@ -179,11 +179,7 @@ public class NonOverlappingStack extends Stack {
         updateScrollSnap();
     }
 
-    /**
-     * @return The index of the currently centered tab. If we're not currently snapped to a tab
-     *         (e.g. we're in the process of animating a scroll or the user is currently dragging),
-     *         returns the index of the tab closest to the center.
-     */
+    @Override
     public int getCenteredTabIndex() {
         return Math.round(-mScrollOffset / mSpacing);
     }

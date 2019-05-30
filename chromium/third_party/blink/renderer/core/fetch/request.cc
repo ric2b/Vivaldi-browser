@@ -25,8 +25,10 @@
 #include "third_party/blink/renderer/core/fetch/request_init.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
 #include "third_party/blink/renderer/core/fileapi/public_url_manager.h"
+#include "third_party/blink/renderer/core/frame/use_counter.h"
 #include "third_party/blink/renderer/core/html/forms/form_data.h"
 #include "third_party/blink/renderer/core/loader/threadable_loader.h"
+#include "third_party/blink/renderer/core/origin_trials/origin_trials.h"
 #include "third_party/blink/renderer/core/url/url_search_params.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/blob/blob_data.h"
@@ -77,15 +79,16 @@ FetchRequestData* CreateCopyOfFetchRequestDataForFetch(
     original->URLLoaderFactory()->Clone(MakeRequest(&factory_clone));
     request->SetURLLoaderFactory(std::move(factory_clone));
   }
+  request->SetWindowId(original->WindowId());
   return request;
 }
 
-static bool AreAnyMembersPresent(const RequestInit& init) {
-  return init.hasMethod() || init.hasHeaders() || init.hasBody() ||
-         init.hasReferrer() || init.hasReferrerPolicy() || init.hasMode() ||
-         init.hasCredentials() || init.hasCache() || init.hasRedirect() ||
-         init.hasIntegrity() || init.hasKeepalive() || init.hasImportance() ||
-         init.hasSignal();
+static bool AreAnyMembersPresent(const RequestInit* init) {
+  return init->hasMethod() || init->hasHeaders() || init->hasBody() ||
+         init->hasReferrer() || init->hasReferrerPolicy() || init->hasMode() ||
+         init->hasCredentials() || init->hasCache() || init->hasRedirect() ||
+         init->hasIntegrity() || init->hasKeepalive() ||
+         init->hasImportance() || init->hasSignal();
 }
 
 static BodyStreamBuffer* ExtractBody(ScriptState* script_state,
@@ -98,45 +101,49 @@ static BodyStreamBuffer* ExtractBody(ScriptState* script_state,
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   v8::Isolate* isolate = script_state->GetIsolate();
 
-  if (V8Blob::hasInstance(body, isolate)) {
+  if (V8Blob::HasInstance(body, isolate)) {
     Blob* blob = V8Blob::ToImpl(body.As<v8::Object>());
-    return_buffer = new BodyStreamBuffer(
+    return_buffer = MakeGarbageCollected<BodyStreamBuffer>(
         script_state,
-        new BlobBytesConsumer(execution_context, blob->GetBlobDataHandle()),
+        MakeGarbageCollected<BlobBytesConsumer>(execution_context,
+                                                blob->GetBlobDataHandle()),
         nullptr /* AbortSignal */);
     content_type = blob->type();
   } else if (body->IsArrayBuffer()) {
     // Avoid calling into V8 from the following constructor parameters, which
     // is potentially unsafe.
     DOMArrayBuffer* array_buffer = V8ArrayBuffer::ToImpl(body.As<v8::Object>());
-    return_buffer = new BodyStreamBuffer(
-        script_state, new FormDataBytesConsumer(array_buffer),
+    return_buffer = MakeGarbageCollected<BodyStreamBuffer>(
+        script_state, MakeGarbageCollected<FormDataBytesConsumer>(array_buffer),
         nullptr /* AbortSignal */);
   } else if (body->IsArrayBufferView()) {
     // Avoid calling into V8 from the following constructor parameters, which
     // is potentially unsafe.
     DOMArrayBufferView* array_buffer_view =
         V8ArrayBufferView::ToImpl(body.As<v8::Object>());
-    return_buffer = new BodyStreamBuffer(
-        script_state, new FormDataBytesConsumer(array_buffer_view),
+    return_buffer = MakeGarbageCollected<BodyStreamBuffer>(
+        script_state,
+        MakeGarbageCollected<FormDataBytesConsumer>(array_buffer_view),
         nullptr /* AbortSignal */);
-  } else if (V8FormData::hasInstance(body, isolate)) {
+  } else if (V8FormData::HasInstance(body, isolate)) {
     scoped_refptr<EncodedFormData> form_data =
         V8FormData::ToImpl(body.As<v8::Object>())->EncodeMultiPartFormData();
     // Here we handle formData->boundary() as a C-style string. See
     // FormDataEncoder::generateUniqueBoundaryString.
     content_type = AtomicString("multipart/form-data; boundary=") +
                    form_data->Boundary().data();
-    return_buffer = new BodyStreamBuffer(
+    return_buffer = MakeGarbageCollected<BodyStreamBuffer>(
         script_state,
-        new FormDataBytesConsumer(execution_context, std::move(form_data)),
+        MakeGarbageCollected<FormDataBytesConsumer>(execution_context,
+                                                    std::move(form_data)),
         nullptr /* AbortSignal */);
-  } else if (V8URLSearchParams::hasInstance(body, isolate)) {
+  } else if (V8URLSearchParams::HasInstance(body, isolate)) {
     scoped_refptr<EncodedFormData> form_data =
         V8URLSearchParams::ToImpl(body.As<v8::Object>())->ToEncodedFormData();
-    return_buffer = new BodyStreamBuffer(
+    return_buffer = MakeGarbageCollected<BodyStreamBuffer>(
         script_state,
-        new FormDataBytesConsumer(execution_context, std::move(form_data)),
+        MakeGarbageCollected<FormDataBytesConsumer>(execution_context,
+                                                    std::move(form_data)),
         nullptr /* AbortSignal */);
     content_type = "application/x-www-form-urlencoded;charset=UTF-8";
   } else {
@@ -145,9 +152,9 @@ static BodyStreamBuffer* ExtractBody(ScriptState* script_state,
     if (exception_state.HadException())
       return nullptr;
 
-    return_buffer =
-        new BodyStreamBuffer(script_state, new FormDataBytesConsumer(string),
-                             nullptr /* AbortSignal */);
+    return_buffer = MakeGarbageCollected<BodyStreamBuffer>(
+        script_state, MakeGarbageCollected<FormDataBytesConsumer>(string),
+        nullptr /* AbortSignal */);
     content_type = "text/plain;charset=UTF-8";
   }
 
@@ -158,7 +165,7 @@ Request* Request::CreateRequestWithRequestOrString(
     ScriptState* script_state,
     Request* input_request,
     const String& input_string,
-    const RequestInit& init,
+    const RequestInit* init,
     ExceptionState& exception_state) {
   // Setup RequestInit's body first
   // - "If |input| is a Request object and it is disturbed, throw a
@@ -188,15 +195,24 @@ Request* Request::CreateRequestWithRequestOrString(
   // "Let |signal| be null."
   AbortSignal* signal = nullptr;
 
-  // TODO(yhirano): Implement the following steps:
+  // The spec says:
   // - "Let |window| be client."
   // - "If |request|'s window is an environment settings object and its
-  //   origin is same origin with entry settings object's origin, set
+  //   origin is same origin with current settings object's origin, set
   //   |window| to |request|'s window."
   // - "If |init|'s window member is present and it is not null, throw a
   //   TypeError."
   // - "If |init|'s window member is present, set |window| to no-window."
   //
+  // We partially do this: if |request|'s window is present, it is copied to
+  // the new request in the following step. There is no same-origin check
+  // because |request|'s window is implemented as |FetchRequestData.window_id_|
+  // and is an opaque id that this renderer doesn't understand. It's only set on
+  // |input_request| when a service worker intercepted the request from a
+  // (same-origin) frame, so it must be same-origin.
+  //
+  // TODO(yhirano): Add support for |init.window|.
+
   // "Set |request| to a new request whose url is |request|'s current url,
   // method is |request|'s method, header list is a copy of |request|'s
   // header list, unsafe-request flag is set, client is entry settings object,
@@ -277,25 +293,25 @@ Request* Request::CreateRequestWithRequestOrString(
     request->SetReferrerString(AtomicString(Referrer::ClientReferrerString()));
 
     // "Set |request|’s referrer policy to the empty string."
-    request->SetReferrerPolicy(kReferrerPolicyDefault);
+    request->SetReferrerPolicy(network::mojom::ReferrerPolicy::kDefault);
   }
 
   // "If init’s referrer member is present, then:"
-  if (init.hasReferrer()) {
+  if (init->hasReferrer()) {
     // Nothing to do for the step "Let |referrer| be |init|'s referrer
     // member."
 
-    if (init.referrer().IsEmpty()) {
+    if (init->referrer().IsEmpty()) {
       // "If |referrer| is the empty string, set |request|'s referrer to
       // "no-referrer" and terminate these substeps."
       request->SetReferrerString(AtomicString(Referrer::NoReferrer()));
     } else {
       // "Let |parsedReferrer| be the result of parsing |referrer| with
       // |baseURL|."
-      KURL parsed_referrer(base_url, init.referrer());
+      KURL parsed_referrer(base_url, init->referrer());
       if (!parsed_referrer.IsValid()) {
         // "If |parsedReferrer| is failure, throw a TypeError."
-        exception_state.ThrowTypeError("Referrer '" + init.referrer() +
+        exception_state.ThrowTypeError("Referrer '" + init->referrer() +
                                        "' is not a valid URL.");
         return nullptr;
       }
@@ -326,16 +342,16 @@ Request* Request::CreateRequestWithRequestOrString(
 
   // "If init's referrerPolicy member is present, set request's referrer
   // policy to it."
-  if (init.hasReferrerPolicy()) {
+  if (init->hasReferrerPolicy()) {
     // In case referrerPolicy = "", the SecurityPolicy method below will not
     // actually set referrer_policy, so we'll default to
-    // kReferrerPolicyDefault.
-    ReferrerPolicy referrer_policy;
+    // network::mojom::ReferrerPolicy::kDefault.
+    network::mojom::ReferrerPolicy referrer_policy;
     if (!SecurityPolicy::ReferrerPolicyFromString(
-            init.referrerPolicy(), kDoNotSupportReferrerPolicyLegacyKeywords,
+            init->referrerPolicy(), kDoNotSupportReferrerPolicyLegacyKeywords,
             &referrer_policy)) {
-      DCHECK(init.referrerPolicy().IsEmpty());
-      referrer_policy = kReferrerPolicyDefault;
+      DCHECK(init->referrerPolicy().IsEmpty());
+      referrer_policy = network::mojom::ReferrerPolicy::kDefault;
     }
 
     request->SetReferrerPolicy(referrer_policy);
@@ -346,34 +362,37 @@ Request* Request::CreateRequestWithRequestOrString(
   //   |fallbackMode| otherwise."
   // - "If |mode| is "navigate", throw a TypeError."
   // - "If |mode| is non-null, set |request|'s mode to |mode|."
-  if (init.mode() == "navigate") {
+  if (init->mode() == "navigate") {
     exception_state.ThrowTypeError(
         "Cannot construct a Request with a RequestInit whose mode member is "
         "set as 'navigate'.");
     return nullptr;
   }
-  if (init.mode() == "same-origin") {
+  if (init->mode() == "same-origin") {
     request->SetMode(network::mojom::FetchRequestMode::kSameOrigin);
-  } else if (init.mode() == "no-cors") {
-    request->SetMode(network::mojom::FetchRequestMode::kNoCORS);
-  } else if (init.mode() == "cors") {
-    request->SetMode(network::mojom::FetchRequestMode::kCORS);
+  } else if (init->mode() == "no-cors") {
+    request->SetMode(network::mojom::FetchRequestMode::kNoCors);
+  } else if (init->mode() == "cors") {
+    request->SetMode(network::mojom::FetchRequestMode::kCors);
   } else {
     // |inputRequest| is directly checked here instead of setting and
     // checking |fallbackMode| as specified in the spec.
     if (!input_request)
-      request->SetMode(network::mojom::FetchRequestMode::kCORS);
+      request->SetMode(network::mojom::FetchRequestMode::kCors);
   }
 
   // This is not yet standardized, but we can assume the following:
   // "If |init|'s importance member is present, set |request|'s importance
   // mode to it." For more information see Priority Hints at
-  // https://crbug.com/821464
-  DCHECK(init.importance().IsNull() ||
-         RuntimeEnabledFeatures::PriorityHintsEnabled());
-  if (init.importance() == "low") {
+  // https://crbug.com/821464.
+  DCHECK(init->importance().IsNull() ||
+         origin_trials::PriorityHintsEnabled(execution_context));
+  if (!init->importance().IsNull())
+    UseCounter::Count(execution_context, WebFeature::kPriorityHints);
+
+  if (init->importance() == "low") {
     request->SetImportance(mojom::FetchImportanceMode::kImportanceLow);
-  } else if (init.importance() == "high") {
+  } else if (init->importance() == "high") {
     request->SetImportance(mojom::FetchImportanceMode::kImportanceHigh);
   }
 
@@ -383,24 +402,24 @@ Request* Request::CreateRequestWithRequestOrString(
   // |credentials|."
 
   network::mojom::FetchCredentialsMode credentials_mode;
-  if (ParseCredentialsMode(init.credentials(), &credentials_mode)) {
+  if (ParseCredentialsMode(init->credentials(), &credentials_mode)) {
     request->SetCredentials(credentials_mode);
   } else if (!input_request) {
     request->SetCredentials(network::mojom::FetchCredentialsMode::kSameOrigin);
   }
 
   // "If |init|'s cache member is present, set |request|'s cache mode to it."
-  if (init.cache() == "default") {
+  if (init->cache() == "default") {
     request->SetCacheMode(mojom::FetchCacheMode::kDefault);
-  } else if (init.cache() == "no-store") {
+  } else if (init->cache() == "no-store") {
     request->SetCacheMode(mojom::FetchCacheMode::kNoStore);
-  } else if (init.cache() == "reload") {
+  } else if (init->cache() == "reload") {
     request->SetCacheMode(mojom::FetchCacheMode::kBypassCache);
-  } else if (init.cache() == "no-cache") {
+  } else if (init->cache() == "no-cache") {
     request->SetCacheMode(mojom::FetchCacheMode::kValidateCache);
-  } else if (init.cache() == "force-cache") {
+  } else if (init->cache() == "force-cache") {
     request->SetCacheMode(mojom::FetchCacheMode::kForceCache);
-  } else if (init.cache() == "only-if-cached") {
+  } else if (init->cache() == "only-if-cached") {
     request->SetCacheMode(mojom::FetchCacheMode::kOnlyIfCached);
   }
 
@@ -415,46 +434,46 @@ Request* Request::CreateRequestWithRequestOrString(
 
   // "If |init|'s redirect member is present, set |request|'s redirect mode
   // to it."
-  if (init.redirect() == "follow") {
+  if (init->redirect() == "follow") {
     request->SetRedirect(network::mojom::FetchRedirectMode::kFollow);
-  } else if (init.redirect() == "error") {
+  } else if (init->redirect() == "error") {
     request->SetRedirect(network::mojom::FetchRedirectMode::kError);
-  } else if (init.redirect() == "manual") {
+  } else if (init->redirect() == "manual") {
     request->SetRedirect(network::mojom::FetchRedirectMode::kManual);
   }
 
   // "If |init|'s integrity member is present, set |request|'s
   // integrity metadata to it."
-  if (init.hasIntegrity())
-    request->SetIntegrity(init.integrity());
+  if (init->hasIntegrity())
+    request->SetIntegrity(init->integrity());
 
-  if (init.hasKeepalive())
-    request->SetKeepalive(init.keepalive());
+  if (init->hasKeepalive())
+    request->SetKeepalive(init->keepalive());
 
   // "If |init|'s method member is present, let |method| be it and run these
   // substeps:"
-  if (init.hasMethod()) {
+  if (init->hasMethod()) {
     // "If |method| is not a method or method is a forbidden method, throw
     // a TypeError."
-    if (!IsValidHTTPToken(init.method())) {
-      exception_state.ThrowTypeError("'" + init.method() +
+    if (!IsValidHTTPToken(init->method())) {
+      exception_state.ThrowTypeError("'" + init->method() +
                                      "' is not a valid HTTP method.");
       return nullptr;
     }
-    if (FetchUtils::IsForbiddenMethod(init.method())) {
-      exception_state.ThrowTypeError("'" + init.method() +
+    if (FetchUtils::IsForbiddenMethod(init->method())) {
+      exception_state.ThrowTypeError("'" + init->method() +
                                      "' HTTP method is unsupported.");
       return nullptr;
     }
     // "Normalize |method|."
     // "Set |request|'s method to |method|."
     request->SetMethod(
-        FetchUtils::NormalizeMethod(AtomicString(init.method())));
+        FetchUtils::NormalizeMethod(AtomicString(init->method())));
   }
 
   // "If |init|'s signal member is present, then set |signal| to it."
-  if (init.hasSignal()) {
-    signal = init.signal();
+  if (init->hasSignal()) {
+    signal = init->signal();
   }
 
   // "Let |r| be a new Request object associated with |request| and a new
@@ -468,30 +487,30 @@ Request* Request::CreateRequestWithRequestOrString(
   // We don't create a copy of r's Headers object when init's headers member
   // is present.
   Headers* headers = nullptr;
-  if (!init.hasHeaders()) {
+  if (!init->hasHeaders()) {
     headers = r->getHeaders()->Clone();
   }
   // "Empty |r|'s request's header list."
   r->request_->HeaderList()->ClearList();
   // "If |r|'s request's mode is "no-cors", run these substeps:
-  if (r->GetRequest()->Mode() == network::mojom::FetchRequestMode::kNoCORS) {
+  if (r->GetRequest()->Mode() == network::mojom::FetchRequestMode::kNoCors) {
     // "If |r|'s request's method is not a CORS-safelisted method, throw a
     // TypeError."
-    if (!CORS::IsCORSSafelistedMethod(r->GetRequest()->Method())) {
+    if (!cors::IsCorsSafelistedMethod(r->GetRequest()->Method())) {
       exception_state.ThrowTypeError("'" + r->GetRequest()->Method() +
                                      "' is unsupported in no-cors mode.");
       return nullptr;
     }
     // "Set |r|'s Headers object's guard to "request-no-cors"."
-    r->getHeaders()->SetGuard(Headers::kRequestNoCORSGuard);
+    r->getHeaders()->SetGuard(Headers::kRequestNoCorsGuard);
   }
   // "If |signal| is not null, then make |r|’s signal follow |signal|."
   if (signal)
     r->signal_->Follow(signal);
 
   // "Fill |r|'s Headers object with |headers|. Rethrow any exceptions."
-  if (init.hasHeaders()) {
-    r->getHeaders()->FillWith(init.headers(), exception_state);
+  if (init->hasHeaders()) {
+    r->getHeaders()->FillWith(init->headers(), exception_state);
   } else {
     DCHECK(headers);
     r->getHeaders()->FillWith(headers, exception_state);
@@ -502,10 +521,10 @@ Request* Request::CreateRequestWithRequestOrString(
   // "If either |init|'s body member is present or |temporaryBody| is
   // non-null, and |request|'s method is `GET` or `HEAD`, throw a TypeError.
   v8::Local<v8::Value> init_body =
-      init.hasBody() ? init.body().V8Value() : v8::Local<v8::Value>();
+      init->hasBody() ? init->body().V8Value() : v8::Local<v8::Value>();
   if ((!init_body.IsEmpty() && !init_body->IsNull()) || temporary_body) {
-    if (request->Method() == HTTPNames::GET ||
-        request->Method() == HTTPNames::HEAD) {
+    if (request->Method() == http_names::kGET ||
+        request->Method() == http_names::kHEAD) {
       exception_state.ThrowTypeError(
           "Request with GET/HEAD method cannot have body.");
       return nullptr;
@@ -529,8 +548,8 @@ Request* Request::CreateRequestWithRequestOrString(
     temporary_body =
         ExtractBody(script_state, exception_state, init_body, content_type);
     if (!content_type.IsEmpty() &&
-        !r->getHeaders()->has(HTTPNames::Content_Type, exception_state)) {
-      r->getHeaders()->append(HTTPNames::Content_Type, content_type,
+        !r->getHeaders()->has(http_names::kContentType, exception_state)) {
+      r->getHeaders()->append(http_names::kContentType, content_type,
                               exception_state);
     }
     if (exception_state.HadException())
@@ -549,7 +568,7 @@ Request* Request::CreateRequestWithRequestOrString(
   // non-null, run these substeps:"
   if (input_request && input_request->BodyBuffer()) {
     // "Let |dummyStream| be an empty ReadableStream object."
-    auto* dummy_stream = new BodyStreamBuffer(
+    auto* dummy_stream = MakeGarbageCollected<BodyStreamBuffer>(
         script_state, BytesConsumer::CreateClosed(), nullptr);
     // "Set |input|'s request's body to a new body whose stream is
     // |dummyStream|."
@@ -567,7 +586,7 @@ Request* Request::CreateRequestWithRequestOrString(
 
 Request* Request::Create(ScriptState* script_state,
                          const RequestInfo& input,
-                         const RequestInit& init,
+                         const RequestInit* init,
                          ExceptionState& exception_state) {
   DCHECK(!input.IsNull());
   if (input.IsUSVString())
@@ -578,12 +597,12 @@ Request* Request::Create(ScriptState* script_state,
 Request* Request::Create(ScriptState* script_state,
                          const String& input,
                          ExceptionState& exception_state) {
-  return Create(script_state, input, RequestInit(), exception_state);
+  return Create(script_state, input, RequestInit::Create(), exception_state);
 }
 
 Request* Request::Create(ScriptState* script_state,
                          const String& input,
-                         const RequestInit& init,
+                         const RequestInit* init,
                          ExceptionState& exception_state) {
   return CreateRequestWithRequestOrString(script_state, nullptr, input, init,
                                           exception_state);
@@ -592,26 +611,33 @@ Request* Request::Create(ScriptState* script_state,
 Request* Request::Create(ScriptState* script_state,
                          Request* input,
                          ExceptionState& exception_state) {
-  return Create(script_state, input, RequestInit(), exception_state);
+  return Create(script_state, input, RequestInit::Create(), exception_state);
 }
 
 Request* Request::Create(ScriptState* script_state,
                          Request* input,
-                         const RequestInit& init,
+                         const RequestInit* init,
                          ExceptionState& exception_state) {
   return CreateRequestWithRequestOrString(script_state, input, String(), init,
                                           exception_state);
 }
 
 Request* Request::Create(ScriptState* script_state, FetchRequestData* request) {
-  return new Request(script_state, request);
+  return MakeGarbageCollected<Request>(script_state, request);
 }
 
 Request* Request::Create(ScriptState* script_state,
                          const WebServiceWorkerRequest& web_request) {
-  FetchRequestData* request =
-      FetchRequestData::Create(script_state, web_request);
-  return new Request(script_state, request);
+  FetchRequestData* data = FetchRequestData::Create(script_state, web_request);
+  return MakeGarbageCollected<Request>(script_state, data);
+}
+
+Request* Request::Create(
+    ScriptState* script_state,
+    const mojom::blink::FetchAPIRequest& fetch_api_request) {
+  FetchRequestData* data =
+      FetchRequestData::Create(script_state, fetch_api_request);
+  return MakeGarbageCollected<Request>(script_state, data);
 }
 
 bool Request::ParseCredentialsMode(
@@ -646,7 +672,8 @@ Request::Request(ScriptState* script_state, FetchRequestData* request)
     : Request(script_state,
               request,
               Headers::Create(request->HeaderList()),
-              new AbortSignal(ExecutionContext::From(script_state))) {
+              MakeGarbageCollected<AbortSignal>(
+                  ExecutionContext::From(script_state))) {
   headers_->SetGuard(Headers::kRequestGuard);
 }
 
@@ -655,63 +682,63 @@ String Request::method() const {
   return request_->Method();
 }
 
-KURL Request::url() const {
+const KURL& Request::url() const {
   return request_->Url();
 }
 
 String Request::destination() const {
   // "The destination attribute’s getter must return request’s destination."
   switch (request_->Context()) {
-    case WebURLRequest::kRequestContextUnspecified:
-    case WebURLRequest::kRequestContextBeacon:
-    case WebURLRequest::kRequestContextDownload:
-    case WebURLRequest::kRequestContextEventSource:
-    case WebURLRequest::kRequestContextFetch:
-    case WebURLRequest::kRequestContextPing:
-    case WebURLRequest::kRequestContextXMLHttpRequest:
-    case WebURLRequest::kRequestContextSubresource:
-    case WebURLRequest::kRequestContextPrefetch:
+    case mojom::RequestContextType::UNSPECIFIED:
+    case mojom::RequestContextType::BEACON:
+    case mojom::RequestContextType::DOWNLOAD:
+    case mojom::RequestContextType::EVENT_SOURCE:
+    case mojom::RequestContextType::FETCH:
+    case mojom::RequestContextType::PING:
+    case mojom::RequestContextType::XML_HTTP_REQUEST:
+    case mojom::RequestContextType::SUBRESOURCE:
+    case mojom::RequestContextType::PREFETCH:
       return "";
-    case WebURLRequest::kRequestContextCSPReport:
+    case mojom::RequestContextType::CSP_REPORT:
       return "report";
-    case WebURLRequest::kRequestContextAudio:
+    case mojom::RequestContextType::AUDIO:
       return "audio";
-    case WebURLRequest::kRequestContextEmbed:
+    case mojom::RequestContextType::EMBED:
       return "embed";
-    case WebURLRequest::kRequestContextFont:
+    case mojom::RequestContextType::FONT:
       return "font";
-    case WebURLRequest::kRequestContextFrame:
-    case WebURLRequest::kRequestContextHyperlink:
-    case WebURLRequest::kRequestContextIframe:
-    case WebURLRequest::kRequestContextLocation:
-    case WebURLRequest::kRequestContextForm:
+    case mojom::RequestContextType::FRAME:
+    case mojom::RequestContextType::HYPERLINK:
+    case mojom::RequestContextType::IFRAME:
+    case mojom::RequestContextType::LOCATION:
+    case mojom::RequestContextType::FORM:
       return "document";
-    case WebURLRequest::kRequestContextImage:
-    case WebURLRequest::kRequestContextFavicon:
-    case WebURLRequest::kRequestContextImageSet:
+    case mojom::RequestContextType::IMAGE:
+    case mojom::RequestContextType::FAVICON:
+    case mojom::RequestContextType::IMAGE_SET:
       return "image";
-    case WebURLRequest::kRequestContextManifest:
+    case mojom::RequestContextType::MANIFEST:
       return "manifest";
-    case WebURLRequest::kRequestContextObject:
+    case mojom::RequestContextType::OBJECT:
       return "object";
-    case WebURLRequest::kRequestContextScript:
+    case mojom::RequestContextType::SCRIPT:
       return "script";
-    case WebURLRequest::kRequestContextSharedWorker:
+    case mojom::RequestContextType::SHARED_WORKER:
       return "sharedworker";
-    case WebURLRequest::kRequestContextStyle:
+    case mojom::RequestContextType::STYLE:
       return "style";
-    case WebURLRequest::kRequestContextTrack:
+    case mojom::RequestContextType::TRACK:
       return "track";
-    case WebURLRequest::kRequestContextVideo:
+    case mojom::RequestContextType::VIDEO:
       return "video";
-    case WebURLRequest::kRequestContextWorker:
+    case mojom::RequestContextType::WORKER:
       return "worker";
-    case WebURLRequest::kRequestContextXSLT:
+    case mojom::RequestContextType::XSLT:
       return "xslt";
-    case WebURLRequest::kRequestContextImport:
-    case WebURLRequest::kRequestContextInternal:
-    case WebURLRequest::kRequestContextPlugin:
-    case WebURLRequest::kRequestContextServiceWorker:
+    case mojom::RequestContextType::IMPORT:
+    case mojom::RequestContextType::INTERNAL:
+    case mojom::RequestContextType::PLUGIN:
+    case mojom::RequestContextType::SERVICE_WORKER:
       return "unknown";
   }
   NOTREACHED();
@@ -729,23 +756,24 @@ String Request::referrer() const {
 
 String Request::getReferrerPolicy() const {
   switch (request_->GetReferrerPolicy()) {
-    case kReferrerPolicyAlways:
+    case network::mojom::ReferrerPolicy::kAlways:
       return "unsafe-url";
-    case kReferrerPolicyDefault:
+    case network::mojom::ReferrerPolicy::kDefault:
       return "";
-    case kReferrerPolicyNoReferrerWhenDowngrade:
+    case network::mojom::ReferrerPolicy::kNoReferrerWhenDowngrade:
       return "no-referrer-when-downgrade";
-    case kReferrerPolicyNever:
+    case network::mojom::ReferrerPolicy::kNever:
       return "no-referrer";
-    case kReferrerPolicyOrigin:
+    case network::mojom::ReferrerPolicy::kOrigin:
       return "origin";
-    case kReferrerPolicyOriginWhenCrossOrigin:
+    case network::mojom::ReferrerPolicy::kOriginWhenCrossOrigin:
       return "origin-when-cross-origin";
-    case kReferrerPolicySameOrigin:
+    case network::mojom::ReferrerPolicy::kSameOrigin:
       return "same-origin";
-    case kReferrerPolicyStrictOrigin:
+    case network::mojom::ReferrerPolicy::kStrictOrigin:
       return "strict-origin";
-    case kReferrerPolicyStrictOriginWhenCrossOrigin:
+    case network::mojom::ReferrerPolicy::
+        kNoReferrerWhenDowngradeOriginWhenCrossOrigin:
       return "strict-origin-when-cross-origin";
   }
   NOTREACHED();
@@ -758,10 +786,10 @@ String Request::mode() const {
   switch (request_->Mode()) {
     case network::mojom::FetchRequestMode::kSameOrigin:
       return "same-origin";
-    case network::mojom::FetchRequestMode::kNoCORS:
+    case network::mojom::FetchRequestMode::kNoCors:
       return "no-cors";
-    case network::mojom::FetchRequestMode::kCORS:
-    case network::mojom::FetchRequestMode::kCORSWithForcedPreflight:
+    case network::mojom::FetchRequestMode::kCors:
+    case network::mojom::FetchRequestMode::kCorsWithForcedPreflight:
       return "cors";
     case network::mojom::FetchRequestMode::kNavigate:
       return "navigate";
@@ -852,14 +880,15 @@ Request* Request::clone(ScriptState* script_state,
     return nullptr;
   Headers* headers = Headers::Create(request->HeaderList());
   headers->SetGuard(headers_->GetGuard());
-  auto* signal = new AbortSignal(ExecutionContext::From(script_state));
+  auto* signal =
+      MakeGarbageCollected<AbortSignal>(ExecutionContext::From(script_state));
   signal->Follow(signal_);
-  return new Request(script_state, request, headers, signal);
+  return MakeGarbageCollected<Request>(script_state, request, headers, signal);
 }
 
 FetchRequestData* Request::PassRequestData(ScriptState* script_state,
                                            ExceptionState& exception_state) {
-  DCHECK(!IsBodyUsedForDCheck());
+  DCHECK(!IsBodyUsedForDCheck(exception_state));
   FetchRequestData* data = request_->Pass(script_state, exception_state);
   if (exception_state.HadException())
     return nullptr;
@@ -873,35 +902,49 @@ bool Request::HasBody() const {
   return BodyBuffer();
 }
 
-void Request::PopulateWebServiceWorkerRequest(
-    WebServiceWorkerRequest& web_request) const {
-  web_request.SetMethod(method());
-  web_request.SetMode(request_->Mode());
-  web_request.SetCredentialsMode(request_->Credentials());
-  web_request.SetCacheMode(request_->CacheMode());
-  web_request.SetRedirectMode(request_->Redirect());
-  web_request.SetIntegrity(request_->Integrity());
-  web_request.SetIsHistoryNavigation(request_->IsHistoryNavigation());
-  web_request.SetRequestContext(request_->Context());
+mojom::blink::FetchAPIRequestPtr Request::CreateFetchAPIRequest() const {
+  auto fetch_api_request = mojom::blink::FetchAPIRequest::New();
+  fetch_api_request->method = method();
+  fetch_api_request->mode = request_->Mode();
+  fetch_api_request->credentials_mode = request_->Credentials();
+  fetch_api_request->cache_mode = request_->CacheMode();
+  fetch_api_request->redirect_mode = request_->Redirect();
+  fetch_api_request->integrity = request_->Integrity();
+  fetch_api_request->is_history_navigation = request_->IsHistoryNavigation();
+  fetch_api_request->request_context_type = request_->Context();
 
-  // Strip off the fragment part of URL. So far, all users of
-  // WebServiceWorkerRequest expect the fragment to be excluded.
+  // Strip off the fragment part of URL. So far, all callers expect the fragment
+  // to be excluded.
   KURL url(request_->Url());
   if (request_->Url().HasFragmentIdentifier())
     url.RemoveFragmentIdentifier();
-  web_request.SetURL(url);
+  fetch_api_request->url = url;
 
-  const FetchHeaderList* header_list = headers_->HeaderList();
-  for (const auto& header : header_list->List()) {
-    web_request.AppendHeader(header.first, header.second);
+  HTTPHeaderMap headers;
+  for (const auto& header : headers_->HeaderList()->List()) {
+    if (DeprecatedEqualIgnoringCase(header.first, "referer"))
+      continue;
+    AtomicString key(header.first);
+    AtomicString value(header.second);
+    HTTPHeaderMap::AddResult result = headers.Add(key, value);
+    if (!result.is_new_entry) {
+      result.stored_value->value =
+          result.stored_value->value + ", " + String(value);
+    }
   }
+  for (const auto& pair : headers)
+    fetch_api_request->headers.insert(pair.key, pair.value);
 
-  web_request.SetReferrer(
-      request_->ReferrerString(),
-      static_cast<WebReferrerPolicy>(request_->GetReferrerPolicy()));
+  if (!request_->ReferrerString().IsEmpty()) {
+    fetch_api_request->referrer =
+        mojom::blink::Referrer::New(KURL(NullURL(), request_->ReferrerString()),
+                                    request_->GetReferrerPolicy());
+    DCHECK(fetch_api_request->referrer->url.IsValid());
+  }
   // FIXME: How can we set isReload properly? What is the correct place to load
   // it in to the Request object? We should investigate the right way to plumb
   // this information in to here.
+  return fetch_api_request;
 }
 
 String Request::MimeType() const {
@@ -910,7 +953,7 @@ String Request::MimeType() const {
 
 String Request::ContentType() const {
   String result;
-  request_->HeaderList()->Get(HTTPNames::Content_Type, result);
+  request_->HeaderList()->Get(http_names::kContentType, result);
   return result;
 }
 

@@ -31,7 +31,6 @@
 #include "third_party/blink/renderer/core/html/track/vtt/vtt_region.h"
 
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/renderer/core/dom/dom_token_list.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect.h"
@@ -40,6 +39,7 @@
 #include "third_party/blink/renderer/core/html/track/vtt/vtt_scanner.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 
 #define VTT_LOG_LEVEL 3
@@ -94,7 +94,7 @@ VTTRegion::VTTRegion()
       viewport_anchor_(DoublePoint(kDefaultAnchorPointX, kDefaultAnchorPointY)),
       scroll_(kDefaultScroll),
       current_top_(0),
-      scroll_timer_(Platform::Current()->CurrentThread()->GetTaskRunner(),
+      scroll_timer_(Thread::Current()->GetTaskRunner(),
                     this,
                     &VTTRegion::ScrollTimerFired) {}
 
@@ -413,7 +413,7 @@ void VTTRegion::ScrollTimerFired(TimerBase*) {
   DisplayLastVTTCueBox();
 }
 
-void VTTRegion::Trace(blink::Visitor* visitor) {
+void VTTRegion::Trace(Visitor* visitor) {
   visitor->Trace(cue_container_);
   visitor->Trace(region_display_tree_);
   ScriptWrappable::Trace(visitor);

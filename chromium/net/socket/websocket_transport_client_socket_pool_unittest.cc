@@ -10,9 +10,9 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -28,6 +28,7 @@
 #include "net/socket/socket_test_util.h"
 #include "net/socket/stream_socket.h"
 #include "net/socket/transport_client_socket_pool_test_util.h"
+#include "net/socket/transport_connect_job.h"
 #include "net/socket/websocket_endpoint_lock_manager.h"
 #include "net/test/gtest_util.h"
 #include "net/test/test_with_scoped_task_environment.h"
@@ -43,6 +44,8 @@ namespace {
 
 const int kMaxSockets = 32;
 const int kMaxSocketsPerGroup = 6;
+constexpr base::TimeDelta kUnusedIdleSocketTimeout =
+    base::TimeDelta::FromSeconds(10);
 const RequestPriority kDefaultPriority = LOW;
 
 // RunLoop doesn't support this natively but it is easy to emulate.
@@ -58,19 +61,31 @@ class WebSocketTransportClientSocketPoolTest
     : public TestWithScopedTaskEnvironment {
  protected:
   WebSocketTransportClientSocketPoolTest()
-      : params_(new TransportSocketParams(
-            HostPortPair("www.google.com", 80),
-            false,
-            OnHostResolutionCallback(),
-            TransportSocketParams::COMBINE_CONNECT_AND_WRITE_DEFAULT)),
+      : params_(TransportClientSocketPool::SocketParams::
+                    CreateFromTransportSocketParams(
+                        base::MakeRefCounted<TransportSocketParams>(
+                            HostPortPair("www.google.com", 80),
+                            false,
+                            OnHostResolutionCallback()))),
         host_resolver_(new MockHostResolver),
         client_socket_factory_(&net_log_),
         pool_(kMaxSockets,
               kMaxSocketsPerGroup,
-              host_resolver_.get(),
+              kUnusedIdleSocketTimeout,
               &client_socket_factory_,
+              host_resolver_.get(),
+              nullptr /* proxy_delegate */,
+              nullptr /* cert_verifier */,
+              nullptr /* channel_id_server */,
+              nullptr /* transport_security_state */,
+              nullptr /* cert_transparency_verifier */,
+              nullptr /* ct_policy_enforcer */,
+              nullptr /* ssl_client_session_cache */,
+              nullptr /* ssl_client_session_cache_privacy_mode */,
+              nullptr /* ssl_config_service */,
+              nullptr /* network_quality_estimator */,
               &websocket_endpoint_lock_manager_,
-              nullptr) {
+              nullptr /* netlog */) {
     websocket_endpoint_lock_manager_.SetUnlockDelayForTesting(
         base::TimeDelta());
   }
@@ -86,9 +101,12 @@ class WebSocketTransportClientSocketPoolTest
   static void RunUntilIdle() { base::RunLoop().RunUntilIdle(); }
 
   int StartRequest(const std::string& group_name, RequestPriority priority) {
-    scoped_refptr<TransportSocketParams> params(new TransportSocketParams(
-        HostPortPair("www.google.com", 80), false, OnHostResolutionCallback(),
-        TransportSocketParams::COMBINE_CONNECT_AND_WRITE_DEFAULT));
+    scoped_refptr<TransportClientSocketPool::SocketParams> params(
+        TransportClientSocketPool::SocketParams::
+            CreateFromTransportSocketParams(
+                base::MakeRefCounted<TransportSocketParams>(
+                    HostPortPair("www.google.com", 80), false,
+                    OnHostResolutionCallback())));
     return test_base_.StartRequestUsingPool(
         &pool_, group_name, priority, ClientSocketPool::RespectLimits::ENABLED,
         params);
@@ -114,7 +132,7 @@ class WebSocketTransportClientSocketPoolTest
   size_t completion_count() const { return test_base_.completion_count(); }
 
   TestNetLog net_log_;
-  scoped_refptr<TransportSocketParams> params_;
+  scoped_refptr<TransportClientSocketPool::SocketParams> params_;
   std::unique_ptr<MockHostResolver> host_resolver_;
   MockTransportClientSocketFactory client_socket_factory_;
   WebSocketEndpointLockManager websocket_endpoint_lock_manager_;
@@ -128,9 +146,10 @@ class WebSocketTransportClientSocketPoolTest
 TEST_F(WebSocketTransportClientSocketPoolTest, Basic) {
   TestCompletionCallback callback;
   ClientSocketHandle handle;
-  int rv = handle.Init("a", params_, LOW, SocketTag(),
-                       ClientSocketPool::RespectLimits::ENABLED,
-                       callback.callback(), &pool_, NetLogWithSource());
+  int rv = handle.Init(
+      "a", params_, LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+      callback.callback(), ClientSocketPool::ProxyAuthCallback(), &pool_,
+      NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_FALSE(handle.is_initialized());
   EXPECT_FALSE(handle.socket());
@@ -148,10 +167,12 @@ TEST_F(WebSocketTransportClientSocketPoolTest, SetResolvePriorityOnInit) {
     RequestPriority priority = static_cast<RequestPriority>(i);
     TestCompletionCallback callback;
     ClientSocketHandle handle;
-    EXPECT_EQ(ERR_IO_PENDING,
-              handle.Init("a", params_, priority, SocketTag(),
-                          ClientSocketPool::RespectLimits::ENABLED,
-                          callback.callback(), &pool_, NetLogWithSource()));
+    EXPECT_EQ(
+        ERR_IO_PENDING,
+        handle.Init("a", params_, priority, SocketTag(),
+                    ClientSocketPool::RespectLimits::ENABLED,
+                    callback.callback(), ClientSocketPool::ProxyAuthCallback(),
+                    &pool_, NetLogWithSource()));
     EXPECT_EQ(priority, host_resolver_->last_request_priority());
   }
 }
@@ -161,13 +182,16 @@ TEST_F(WebSocketTransportClientSocketPoolTest, InitHostResolutionFailure) {
   TestCompletionCallback callback;
   ClientSocketHandle handle;
   HostPortPair host_port_pair("unresolvable.host.name", 80);
-  scoped_refptr<TransportSocketParams> dest(new TransportSocketParams(
-      host_port_pair, false, OnHostResolutionCallback(),
-      TransportSocketParams::COMBINE_CONNECT_AND_WRITE_DEFAULT));
-  EXPECT_EQ(ERR_IO_PENDING,
-            handle.Init("a", dest, kDefaultPriority, SocketTag(),
-                        ClientSocketPool::RespectLimits::ENABLED,
-                        callback.callback(), &pool_, NetLogWithSource()));
+  scoped_refptr<TransportClientSocketPool::SocketParams> dest(
+      TransportClientSocketPool::SocketParams::CreateFromTransportSocketParams(
+          base::MakeRefCounted<TransportSocketParams>(
+              host_port_pair, false, OnHostResolutionCallback())));
+  EXPECT_EQ(
+      ERR_IO_PENDING,
+      handle.Init("a", dest, kDefaultPriority, SocketTag(),
+                  ClientSocketPool::RespectLimits::ENABLED, callback.callback(),
+                  ClientSocketPool::ProxyAuthCallback(), &pool_,
+                  NetLogWithSource()));
   EXPECT_THAT(callback.WaitForResult(), IsError(ERR_NAME_NOT_RESOLVED));
 }
 
@@ -176,18 +200,22 @@ TEST_F(WebSocketTransportClientSocketPoolTest, InitConnectionFailure) {
       MockTransportClientSocketFactory::MOCK_FAILING_CLIENT_SOCKET);
   TestCompletionCallback callback;
   ClientSocketHandle handle;
-  EXPECT_EQ(ERR_IO_PENDING,
-            handle.Init("a", params_, kDefaultPriority, SocketTag(),
-                        ClientSocketPool::RespectLimits::ENABLED,
-                        callback.callback(), &pool_, NetLogWithSource()));
+  EXPECT_EQ(
+      ERR_IO_PENDING,
+      handle.Init("a", params_, kDefaultPriority, SocketTag(),
+                  ClientSocketPool::RespectLimits::ENABLED, callback.callback(),
+                  ClientSocketPool::ProxyAuthCallback(), &pool_,
+                  NetLogWithSource()));
   EXPECT_THAT(callback.WaitForResult(), IsError(ERR_CONNECTION_FAILED));
 
   // Make the host resolutions complete synchronously this time.
   host_resolver_->set_synchronous_mode(true);
-  EXPECT_EQ(ERR_CONNECTION_FAILED,
-            handle.Init("a", params_, kDefaultPriority, SocketTag(),
-                        ClientSocketPool::RespectLimits::ENABLED,
-                        callback.callback(), &pool_, NetLogWithSource()));
+  EXPECT_EQ(
+      ERR_CONNECTION_FAILED,
+      handle.Init("a", params_, kDefaultPriority, SocketTag(),
+                  ClientSocketPool::RespectLimits::ENABLED, callback.callback(),
+                  ClientSocketPool::ProxyAuthCallback(), &pool_,
+                  NetLogWithSource()));
 }
 
 TEST_F(WebSocketTransportClientSocketPoolTest, PendingRequestsFinishFifo) {
@@ -261,10 +289,12 @@ TEST_F(WebSocketTransportClientSocketPoolTest, PendingRequests_NoKeepAlive) {
 TEST_F(WebSocketTransportClientSocketPoolTest, CancelRequestClearGroup) {
   TestCompletionCallback callback;
   ClientSocketHandle handle;
-  EXPECT_EQ(ERR_IO_PENDING,
-            handle.Init("a", params_, kDefaultPriority, SocketTag(),
-                        ClientSocketPool::RespectLimits::ENABLED,
-                        callback.callback(), &pool_, NetLogWithSource()));
+  EXPECT_EQ(
+      ERR_IO_PENDING,
+      handle.Init("a", params_, kDefaultPriority, SocketTag(),
+                  ClientSocketPool::RespectLimits::ENABLED, callback.callback(),
+                  ClientSocketPool::ProxyAuthCallback(), &pool_,
+                  NetLogWithSource()));
   handle.Reset();
 }
 
@@ -274,14 +304,18 @@ TEST_F(WebSocketTransportClientSocketPoolTest, TwoRequestsCancelOne) {
   ClientSocketHandle handle2;
   TestCompletionCallback callback2;
 
-  EXPECT_EQ(ERR_IO_PENDING,
-            handle.Init("a", params_, kDefaultPriority, SocketTag(),
-                        ClientSocketPool::RespectLimits::ENABLED,
-                        callback.callback(), &pool_, NetLogWithSource()));
-  EXPECT_EQ(ERR_IO_PENDING,
-            handle2.Init("a", params_, kDefaultPriority, SocketTag(),
-                         ClientSocketPool::RespectLimits::ENABLED,
-                         callback2.callback(), &pool_, NetLogWithSource()));
+  EXPECT_EQ(
+      ERR_IO_PENDING,
+      handle.Init("a", params_, kDefaultPriority, SocketTag(),
+                  ClientSocketPool::RespectLimits::ENABLED, callback.callback(),
+                  ClientSocketPool::ProxyAuthCallback(), &pool_,
+                  NetLogWithSource()));
+  EXPECT_EQ(
+      ERR_IO_PENDING,
+      handle2.Init("a", params_, kDefaultPriority, SocketTag(),
+                   ClientSocketPool::RespectLimits::ENABLED,
+                   callback2.callback(), ClientSocketPool::ProxyAuthCallback(),
+                   &pool_, NetLogWithSource()));
 
   handle.Reset();
 
@@ -294,18 +328,22 @@ TEST_F(WebSocketTransportClientSocketPoolTest, ConnectCancelConnect) {
       MockTransportClientSocketFactory::MOCK_PENDING_CLIENT_SOCKET);
   ClientSocketHandle handle;
   TestCompletionCallback callback;
-  EXPECT_EQ(ERR_IO_PENDING,
-            handle.Init("a", params_, kDefaultPriority, SocketTag(),
-                        ClientSocketPool::RespectLimits::ENABLED,
-                        callback.callback(), &pool_, NetLogWithSource()));
+  EXPECT_EQ(
+      ERR_IO_PENDING,
+      handle.Init("a", params_, kDefaultPriority, SocketTag(),
+                  ClientSocketPool::RespectLimits::ENABLED, callback.callback(),
+                  ClientSocketPool::ProxyAuthCallback(), &pool_,
+                  NetLogWithSource()));
 
   handle.Reset();
 
   TestCompletionCallback callback2;
-  EXPECT_EQ(ERR_IO_PENDING,
-            handle.Init("a", params_, kDefaultPriority, SocketTag(),
-                        ClientSocketPool::RespectLimits::ENABLED,
-                        callback2.callback(), &pool_, NetLogWithSource()));
+  EXPECT_EQ(
+      ERR_IO_PENDING,
+      handle.Init("a", params_, kDefaultPriority, SocketTag(),
+                  ClientSocketPool::RespectLimits::ENABLED,
+                  callback2.callback(), ClientSocketPool::ProxyAuthCallback(),
+                  &pool_, NetLogWithSource()));
 
   host_resolver_->set_synchronous_mode(true);
   // At this point, handle has two ConnectingSockets out for it.  Due to the
@@ -374,12 +412,15 @@ void RequestSocketOnComplete(ClientSocketHandle* handle,
   handle->socket()->Disconnect();
   handle->Reset();
 
-  scoped_refptr<TransportSocketParams> dest(new TransportSocketParams(
-      HostPortPair("www.google.com", 80), false, OnHostResolutionCallback(),
-      TransportSocketParams::COMBINE_CONNECT_AND_WRITE_DEFAULT));
-  int rv = handle->Init("a", dest, LOWEST, SocketTag(),
-                        ClientSocketPool::RespectLimits::ENABLED,
-                        nested_callback->callback(), pool, NetLogWithSource());
+  scoped_refptr<TransportClientSocketPool::SocketParams> dest(
+      TransportClientSocketPool::SocketParams::CreateFromTransportSocketParams(
+          base::MakeRefCounted<TransportSocketParams>(
+              HostPortPair("www.google.com", 80), false,
+              OnHostResolutionCallback())));
+  int rv = handle->Init(
+      "a", dest, LOWEST, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+      nested_callback->callback(), ClientSocketPool::ProxyAuthCallback(), pool,
+      NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   if (ERR_IO_PENDING != rv)
     nested_callback->callback().Run(rv);
@@ -390,15 +431,17 @@ void RequestSocketOnComplete(ClientSocketHandle* handle,
 // ClientSocketHandle for the second socket, after disconnecting the first.
 TEST_F(WebSocketTransportClientSocketPoolTest, RequestTwice) {
   ClientSocketHandle handle;
-  scoped_refptr<TransportSocketParams> dest(new TransportSocketParams(
-      HostPortPair("www.google.com", 80), false, OnHostResolutionCallback(),
-      TransportSocketParams::COMBINE_CONNECT_AND_WRITE_DEFAULT));
+  scoped_refptr<TransportClientSocketPool::SocketParams> dest(
+      TransportClientSocketPool::SocketParams::CreateFromTransportSocketParams(
+          base::MakeRefCounted<TransportSocketParams>(
+              HostPortPair("www.google.com", 80), false,
+              OnHostResolutionCallback())));
   TestCompletionCallback second_result_callback;
-  int rv = handle.Init("a", dest, LOWEST, SocketTag(),
-                       ClientSocketPool::RespectLimits::ENABLED,
-                       base::Bind(&RequestSocketOnComplete, &handle, &pool_,
-                                  &second_result_callback),
-                       &pool_, NetLogWithSource());
+  int rv = handle.Init(
+      "a", dest, LOWEST, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+      base::BindOnce(&RequestSocketOnComplete, &handle, &pool_,
+                     &second_result_callback),
+      ClientSocketPool::ProxyAuthCallback(), &pool_, NetLogWithSource());
   ASSERT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_THAT(second_result_callback.WaitForResult(), IsOk());
 
@@ -469,9 +512,10 @@ TEST_F(WebSocketTransportClientSocketPoolTest, LockReleasedOnHandleReset) {
 TEST_F(WebSocketTransportClientSocketPoolTest, LockReleasedOnHandleDelete) {
   TestCompletionCallback callback;
   std::unique_ptr<ClientSocketHandle> handle(new ClientSocketHandle);
-  int rv = handle->Init("a", params_, LOW, SocketTag(),
-                        ClientSocketPool::RespectLimits::ENABLED,
-                        callback.callback(), &pool_, NetLogWithSource());
+  int rv = handle->Init(
+      "a", params_, LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+      callback.callback(), ClientSocketPool::ProxyAuthCallback(), &pool_,
+      NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   EXPECT_THAT(StartRequest("a", kDefaultPriority), IsError(ERR_IO_PENDING));
@@ -505,7 +549,7 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
       MockTransportClientSocketFactory::MOCK_PENDING_CLIENT_SOCKET};
 
   client_socket_factory_.set_client_socket_types(case_types,
-                                                 arraysize(case_types));
+                                                 base::size(case_types));
 
   EXPECT_THAT(StartRequest("a", kDefaultPriority), IsError(ERR_IO_PENDING));
   EXPECT_THAT(StartRequest("a", kDefaultPriority), IsError(ERR_IO_PENDING));
@@ -519,8 +563,15 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
 TEST_F(WebSocketTransportClientSocketPoolTest,
        IPv6FallbackSocketIPv4FinishesFirst) {
   WebSocketTransportClientSocketPool pool(
-      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
-      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
+      kMaxSockets, kMaxSocketsPerGroup, kUnusedIdleSocketTimeout,
+      &client_socket_factory_, host_resolver_.get(),
+      nullptr /* proxy_delegate */, nullptr /* cert_verifier */,
+      nullptr /* channel_id_server */, nullptr /* transport_security_state */,
+      nullptr /* cert_transparency_verifier */,
+      nullptr /* ct_policy_enforcer */, nullptr /* ssl_client_session_cache */,
+      nullptr /* ssl_client_session_cache_privacy_mode */,
+      nullptr /* ssl_config_service */, nullptr /* network_quality_estimator */,
+      &websocket_endpoint_lock_manager_, nullptr /* netlog */);
 
   MockTransportClientSocketFactory::ClientSocketType case_types[] = {
       // This is the IPv6 socket.
@@ -536,9 +587,10 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
 
   TestCompletionCallback callback;
   ClientSocketHandle handle;
-  int rv = handle.Init("a", params_, LOW, SocketTag(),
-                       ClientSocketPool::RespectLimits::ENABLED,
-                       callback.callback(), &pool, NetLogWithSource());
+  int rv = handle.Init(
+      "a", params_, LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+      callback.callback(), ClientSocketPool::ProxyAuthCallback(), &pool,
+      NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_FALSE(handle.is_initialized());
   EXPECT_FALSE(handle.socket());
@@ -558,8 +610,15 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
 TEST_F(WebSocketTransportClientSocketPoolTest,
        IPv6FallbackSocketIPv6FinishesFirst) {
   WebSocketTransportClientSocketPool pool(
-      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
-      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
+      kMaxSockets, kMaxSocketsPerGroup, kUnusedIdleSocketTimeout,
+      &client_socket_factory_, host_resolver_.get(),
+      nullptr /* proxy_delegate */, nullptr /* cert_verifier */,
+      nullptr /* channel_id_server */, nullptr /* transport_security_state */,
+      nullptr /* cert_transparency_verifier */,
+      nullptr /* ct_policy_enforcer */, nullptr /* ssl_client_session_cache */,
+      nullptr /* ssl_client_session_cache_privacy_mode */,
+      nullptr /* ssl_config_service */, nullptr /* network_quality_estimator */,
+      &websocket_endpoint_lock_manager_, nullptr /* netlog */);
 
   MockTransportClientSocketFactory::ClientSocketType case_types[] = {
       // This is the IPv6 socket.
@@ -577,9 +636,10 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
 
   TestCompletionCallback callback;
   ClientSocketHandle handle;
-  int rv = handle.Init("a", params_, LOW, SocketTag(),
-                       ClientSocketPool::RespectLimits::ENABLED,
-                       callback.callback(), &pool, NetLogWithSource());
+  int rv = handle.Init(
+      "a", params_, LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+      callback.callback(), ClientSocketPool::ProxyAuthCallback(), &pool,
+      NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_FALSE(handle.is_initialized());
   EXPECT_FALSE(handle.socket());
@@ -596,8 +656,15 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
 TEST_F(WebSocketTransportClientSocketPoolTest,
        IPv6NoIPv4AddressesToFallbackTo) {
   WebSocketTransportClientSocketPool pool(
-      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
-      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
+      kMaxSockets, kMaxSocketsPerGroup, kUnusedIdleSocketTimeout,
+      &client_socket_factory_, host_resolver_.get(),
+      nullptr /* proxy_delegate */, nullptr /* cert_verifier */,
+      nullptr /* channel_id_server */, nullptr /* transport_security_state */,
+      nullptr /* cert_transparency_verifier */,
+      nullptr /* ct_policy_enforcer */, nullptr /* ssl_client_session_cache */,
+      nullptr /* ssl_client_session_cache_privacy_mode */,
+      nullptr /* ssl_config_service */, nullptr /* network_quality_estimator */,
+      &websocket_endpoint_lock_manager_, nullptr /* netlog */);
 
   client_socket_factory_.set_default_client_socket_type(
       MockTransportClientSocketFactory::MOCK_DELAYED_CLIENT_SOCKET);
@@ -608,9 +675,10 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
 
   TestCompletionCallback callback;
   ClientSocketHandle handle;
-  int rv = handle.Init("a", params_, LOW, SocketTag(),
-                       ClientSocketPool::RespectLimits::ENABLED,
-                       callback.callback(), &pool, NetLogWithSource());
+  int rv = handle.Init(
+      "a", params_, LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+      callback.callback(), ClientSocketPool::ProxyAuthCallback(), &pool,
+      NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_FALSE(handle.is_initialized());
   EXPECT_FALSE(handle.socket());
@@ -626,8 +694,15 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
 
 TEST_F(WebSocketTransportClientSocketPoolTest, IPv4HasNoFallback) {
   WebSocketTransportClientSocketPool pool(
-      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
-      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
+      kMaxSockets, kMaxSocketsPerGroup, kUnusedIdleSocketTimeout,
+      &client_socket_factory_, host_resolver_.get(),
+      nullptr /* proxy_delegate */, nullptr /* cert_verifier */,
+      nullptr /* channel_id_server */, nullptr /* transport_security_state */,
+      nullptr /* cert_transparency_verifier */,
+      nullptr /* ct_policy_enforcer */, nullptr /* ssl_client_session_cache */,
+      nullptr /* ssl_client_session_cache_privacy_mode */,
+      nullptr /* ssl_config_service */, nullptr /* network_quality_estimator */,
+      &websocket_endpoint_lock_manager_, nullptr /* netlog */);
 
   client_socket_factory_.set_default_client_socket_type(
       MockTransportClientSocketFactory::MOCK_DELAYED_CLIENT_SOCKET);
@@ -637,9 +712,10 @@ TEST_F(WebSocketTransportClientSocketPoolTest, IPv4HasNoFallback) {
 
   TestCompletionCallback callback;
   ClientSocketHandle handle;
-  int rv = handle.Init("a", params_, LOW, SocketTag(),
-                       ClientSocketPool::RespectLimits::ENABLED,
-                       callback.callback(), &pool, NetLogWithSource());
+  int rv = handle.Init(
+      "a", params_, LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+      callback.callback(), ClientSocketPool::ProxyAuthCallback(), &pool,
+      NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_FALSE(handle.is_initialized());
   EXPECT_FALSE(handle.socket());
@@ -657,8 +733,15 @@ TEST_F(WebSocketTransportClientSocketPoolTest, IPv4HasNoFallback) {
 // proceeed immediately.
 TEST_F(WebSocketTransportClientSocketPoolTest, IPv6InstantFail) {
   WebSocketTransportClientSocketPool pool(
-      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
-      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
+      kMaxSockets, kMaxSocketsPerGroup, kUnusedIdleSocketTimeout,
+      &client_socket_factory_, host_resolver_.get(),
+      nullptr /* proxy_delegate */, nullptr /* cert_verifier */,
+      nullptr /* channel_id_server */, nullptr /* transport_security_state */,
+      nullptr /* cert_transparency_verifier */,
+      nullptr /* ct_policy_enforcer */, nullptr /* ssl_client_session_cache */,
+      nullptr /* ssl_client_session_cache_privacy_mode */,
+      nullptr /* ssl_config_service */, nullptr /* network_quality_estimator */,
+      &websocket_endpoint_lock_manager_, nullptr /* netlog */);
 
   MockTransportClientSocketFactory::ClientSocketType case_types[] = {
       // First IPv6 socket.
@@ -669,7 +752,7 @@ TEST_F(WebSocketTransportClientSocketPoolTest, IPv6InstantFail) {
       MockTransportClientSocketFactory::MOCK_CLIENT_SOCKET};
 
   client_socket_factory_.set_client_socket_types(case_types,
-                                                 arraysize(case_types));
+                                                 base::size(case_types));
 
   // Resolve an AddressList with two IPv6 addresses and then an IPv4 address.
   host_resolver_->rules()->AddIPLiteralRule(
@@ -677,9 +760,10 @@ TEST_F(WebSocketTransportClientSocketPoolTest, IPv6InstantFail) {
   host_resolver_->set_synchronous_mode(true);
   TestCompletionCallback callback;
   ClientSocketHandle handle;
-  int rv = handle.Init("a", params_, LOW, SocketTag(),
-                       ClientSocketPool::RespectLimits::ENABLED,
-                       callback.callback(), &pool, NetLogWithSource());
+  int rv = handle.Init(
+      "a", params_, LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+      callback.callback(), ClientSocketPool::ProxyAuthCallback(), &pool,
+      NetLogWithSource());
   EXPECT_THAT(rv, IsOk());
   ASSERT_TRUE(handle.socket());
 
@@ -692,8 +776,15 @@ TEST_F(WebSocketTransportClientSocketPoolTest, IPv6InstantFail) {
 // connections proceed immediately.
 TEST_F(WebSocketTransportClientSocketPoolTest, IPv6RapidFail) {
   WebSocketTransportClientSocketPool pool(
-      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
-      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
+      kMaxSockets, kMaxSocketsPerGroup, kUnusedIdleSocketTimeout,
+      &client_socket_factory_, host_resolver_.get(),
+      nullptr /* proxy_delegate */, nullptr /* cert_verifier */,
+      nullptr /* channel_id_server */, nullptr /* transport_security_state */,
+      nullptr /* cert_transparency_verifier */,
+      nullptr /* ct_policy_enforcer */, nullptr /* ssl_client_session_cache */,
+      nullptr /* ssl_client_session_cache_privacy_mode */,
+      nullptr /* ssl_config_service */, nullptr /* network_quality_estimator */,
+      &websocket_endpoint_lock_manager_, nullptr /* netlog */);
 
   MockTransportClientSocketFactory::ClientSocketType case_types[] = {
       // First IPv6 socket.
@@ -704,7 +795,7 @@ TEST_F(WebSocketTransportClientSocketPoolTest, IPv6RapidFail) {
       MockTransportClientSocketFactory::MOCK_CLIENT_SOCKET};
 
   client_socket_factory_.set_client_socket_types(case_types,
-                                                 arraysize(case_types));
+                                                 base::size(case_types));
 
   // Resolve an AddressList with two IPv6 addresses and then an IPv4 address.
   host_resolver_->rules()->AddIPLiteralRule(
@@ -712,9 +803,10 @@ TEST_F(WebSocketTransportClientSocketPoolTest, IPv6RapidFail) {
 
   TestCompletionCallback callback;
   ClientSocketHandle handle;
-  int rv = handle.Init("a", params_, LOW, SocketTag(),
-                       ClientSocketPool::RespectLimits::ENABLED,
-                       callback.callback(), &pool, NetLogWithSource());
+  int rv = handle.Init(
+      "a", params_, LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+      callback.callback(), ClientSocketPool::ProxyAuthCallback(), &pool,
+      NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_FALSE(handle.socket());
 
@@ -735,8 +827,15 @@ TEST_F(WebSocketTransportClientSocketPoolTest, IPv6RapidFail) {
 // type do not race).
 TEST_F(WebSocketTransportClientSocketPoolTest, FirstSuccessWins) {
   WebSocketTransportClientSocketPool pool(
-      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
-      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
+      kMaxSockets, kMaxSocketsPerGroup, kUnusedIdleSocketTimeout,
+      &client_socket_factory_, host_resolver_.get(),
+      nullptr /* proxy_delegate */, nullptr /* cert_verifier */,
+      nullptr /* channel_id_server */, nullptr /* transport_security_state */,
+      nullptr /* cert_transparency_verifier */,
+      nullptr /* ct_policy_enforcer */, nullptr /* ssl_client_session_cache */,
+      nullptr /* ssl_client_session_cache_privacy_mode */,
+      nullptr /* ssl_config_service */, nullptr /* network_quality_estimator */,
+      &websocket_endpoint_lock_manager_, nullptr /* netlog */);
 
   client_socket_factory_.set_default_client_socket_type(
       MockTransportClientSocketFactory::MOCK_TRIGGERABLE_CLIENT_SOCKET);
@@ -747,9 +846,10 @@ TEST_F(WebSocketTransportClientSocketPoolTest, FirstSuccessWins) {
 
   TestCompletionCallback callback;
   ClientSocketHandle handle;
-  int rv = handle.Init("a", params_, LOW, SocketTag(),
-                       ClientSocketPool::RespectLimits::ENABLED,
-                       callback.callback(), &pool, NetLogWithSource());
+  int rv = handle.Init(
+      "a", params_, LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+      callback.callback(), ClientSocketPool::ProxyAuthCallback(), &pool,
+      NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   ASSERT_FALSE(handle.socket());
 
@@ -772,8 +872,15 @@ TEST_F(WebSocketTransportClientSocketPoolTest, FirstSuccessWins) {
 // We should not report failure until all connections have failed.
 TEST_F(WebSocketTransportClientSocketPoolTest, LastFailureWins) {
   WebSocketTransportClientSocketPool pool(
-      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
-      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
+      kMaxSockets, kMaxSocketsPerGroup, kUnusedIdleSocketTimeout,
+      &client_socket_factory_, host_resolver_.get(),
+      nullptr /* proxy_delegate */, nullptr /* cert_verifier */,
+      nullptr /* channel_id_server */, nullptr /* transport_security_state */,
+      nullptr /* cert_transparency_verifier */,
+      nullptr /* ct_policy_enforcer */, nullptr /* ssl_client_session_cache */,
+      nullptr /* ssl_client_session_cache_privacy_mode */,
+      nullptr /* ssl_config_service */, nullptr /* network_quality_estimator */,
+      &websocket_endpoint_lock_manager_, nullptr /* netlog */);
 
   client_socket_factory_.set_default_client_socket_type(
       MockTransportClientSocketFactory::MOCK_DELAYED_FAILING_CLIENT_SOCKET);
@@ -798,9 +905,10 @@ TEST_F(WebSocketTransportClientSocketPoolTest, LastFailureWins) {
   TestCompletionCallback callback;
   ClientSocketHandle handle;
   base::TimeTicks start(base::TimeTicks::Now());
-  int rv = handle.Init("a", params_, LOW, SocketTag(),
-                       ClientSocketPool::RespectLimits::ENABLED,
-                       callback.callback(), &pool, NetLogWithSource());
+  int rv = handle.Init(
+      "a", params_, LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+      callback.callback(), ClientSocketPool::ProxyAuthCallback(), &pool,
+      NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   EXPECT_THAT(callback.WaitForResult(), IsError(ERR_CONNECTION_FAILED));
@@ -813,9 +921,17 @@ TEST_F(WebSocketTransportClientSocketPoolTest, LastFailureWins) {
 // want to run it.
 TEST_F(WebSocketTransportClientSocketPoolTest, DISABLED_OverallTimeoutApplies) {
   WebSocketTransportClientSocketPool pool(
-      kMaxSockets, kMaxSocketsPerGroup, host_resolver_.get(),
-      &client_socket_factory_, &websocket_endpoint_lock_manager_, nullptr);
-  const base::TimeDelta connect_job_timeout = pool.ConnectionTimeout();
+      kMaxSockets, kMaxSocketsPerGroup, kUnusedIdleSocketTimeout,
+      &client_socket_factory_, host_resolver_.get(),
+      nullptr /* proxy_delegate */, nullptr /* cert_verifier */,
+      nullptr /* channel_id_server */, nullptr /* transport_security_state */,
+      nullptr /* cert_transparency_verifier */,
+      nullptr /* ct_policy_enforcer */, nullptr /* ssl_client_session_cache */,
+      nullptr /* ssl_client_session_cache_privacy_mode */,
+      nullptr /* ssl_config_service */, nullptr /* network_quality_estimator */,
+      &websocket_endpoint_lock_manager_, nullptr /* netlog */);
+  const base::TimeDelta connect_job_timeout =
+      TransportConnectJob::ConnectionTimeout();
 
   client_socket_factory_.set_default_client_socket_type(
       MockTransportClientSocketFactory::MOCK_DELAYED_FAILING_CLIENT_SOCKET);
@@ -834,9 +950,10 @@ TEST_F(WebSocketTransportClientSocketPoolTest, DISABLED_OverallTimeoutApplies) {
   TestCompletionCallback callback;
   ClientSocketHandle handle;
 
-  int rv = handle.Init("a", params_, LOW, SocketTag(),
-                       ClientSocketPool::RespectLimits::ENABLED,
-                       callback.callback(), &pool, NetLogWithSource());
+  int rv = handle.Init(
+      "a", params_, LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+      callback.callback(), ClientSocketPool::ProxyAuthCallback(), &pool,
+      NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   EXPECT_THAT(callback.WaitForResult(), IsError(ERR_TIMED_OUT));
@@ -961,7 +1078,7 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
     MockTransportClientSocketFactory::MOCK_PENDING_CLIENT_SOCKET
   };
   client_socket_factory_.set_client_socket_types(first_type,
-                                                 arraysize(first_type));
+                                                 base::size(first_type));
   // The rest of the sockets will connect synchronously.
   client_socket_factory_.set_default_client_socket_type(
       MockTransportClientSocketFactory::MOCK_CLIENT_SOCKET);
@@ -1028,7 +1145,7 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
       MockTransportClientSocketFactory::MOCK_CLIENT_SOCKET,
       MockTransportClientSocketFactory::MOCK_STALLED_CLIENT_SOCKET};
   client_socket_factory_.set_client_socket_types(socket_types,
-                                                 arraysize(socket_types));
+                                                 base::size(socket_types));
   EXPECT_THAT(StartRequest("a", kDefaultPriority), IsOk());
   // Socket has been "handed out".
   EXPECT_TRUE(request(0)->handle()->socket());
@@ -1052,7 +1169,7 @@ TEST_F(WebSocketTransportClientSocketPoolTest, CancelRequestReclaimsSockets) {
       MockTransportClientSocketFactory::MOCK_CLIENT_SOCKET};
 
   client_socket_factory_.set_client_socket_types(socket_types,
-                                                 arraysize(socket_types));
+                                                 base::size(socket_types));
 
   EXPECT_THAT(StartRequest("a", kDefaultPriority), IsError(ERR_IO_PENDING));
 

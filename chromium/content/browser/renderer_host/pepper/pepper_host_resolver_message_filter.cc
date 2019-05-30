@@ -7,16 +7,21 @@
 #include <stddef.h>
 
 #include <memory>
+#include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
+#include "base/task/post_task.h"
 #include "content/browser/renderer_host/pepper/browser_ppapi_host_impl.h"
 #include "content/browser/renderer_host/pepper/pepper_socket_utils.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/socket_permission_request.h"
 #include "net/base/address_list.h"
+#include "net/dns/public/dns_query_type.h"
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/c/private/ppb_host_resolver_private.h"
 #include "ppapi/c/private/ppb_net_address_private.h"
@@ -25,6 +30,7 @@
 #include "ppapi/host/host_message_context.h"
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ppapi/shared_impl/private/net_address_private_impl.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 
 using ppapi::host::NetErrorToPepperError;
 using ppapi::host::ReplyMessageContext;
@@ -37,13 +43,13 @@ void PrepareRequestInfo(const PP_HostResolver_Private_Hint& hint,
                         network::mojom::ResolveHostParameters* params) {
   switch (hint.family) {
     case PP_NETADDRESSFAMILY_PRIVATE_IPV4:
-      params->dns_query_type = net::HostResolver::DnsQueryType::A;
+      params->dns_query_type = net::DnsQueryType::A;
       break;
     case PP_NETADDRESSFAMILY_PRIVATE_IPV6:
-      params->dns_query_type = net::HostResolver::DnsQueryType::AAAA;
+      params->dns_query_type = net::DnsQueryType::AAAA;
       break;
     default:
-      params->dns_query_type = net::HostResolver::DnsQueryType::UNSPECIFIED;
+      params->dns_query_type = net::DnsQueryType::UNSPECIFIED;
   }
 
   if (hint.flags & PP_HOST_RESOLVER_PRIVATE_FLAGS_CANONNAME)
@@ -96,7 +102,7 @@ scoped_refptr<base::TaskRunner>
 PepperHostResolverMessageFilter::OverrideTaskRunnerForMessage(
     const IPC::Message& message) {
   if (message.type() == PpapiHostMsg_HostResolver_Resolve::ID)
-    return BrowserThread::GetTaskRunnerForThread(BrowserThread::UI);
+    return base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::UI});
   return nullptr;
 }
 
@@ -163,8 +169,8 @@ void PepperHostResolverMessageFilter::OnComplete(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   binding_.Close();
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
       base::BindOnce(&PepperHostResolverMessageFilter::OnLookupFinished, this,
                      result, std::move(resolved_addresses),
                      host_resolve_context_));

@@ -7,6 +7,8 @@
 #include "extensions/tools/vivaldi_tools.h"
 
 #include "base/time/time.h"
+#include "content/public/common/page_zoom.h"
+#include "components/zoom/zoom_controller.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "extensions/browser/event_router.h"
 
@@ -44,6 +46,30 @@ base::Time GetTime(double ms_from_epoch) {
   return (seconds_from_epoch == 0)
     ? base::Time::UnixEpoch()
     : base::Time::FromDoubleT(seconds_from_epoch);
+}
+
+blink::WebFloatPoint FromUICoordinates(content::WebContents* web_contents,
+                                       blink::WebFloatPoint p) {
+  // Account for the zoom factor in the UI.
+  zoom::ZoomController* zoom_controller =
+      zoom::ZoomController::FromWebContents(web_contents);
+  if (!zoom_controller)
+    return p;
+  double zoom_factor =
+      content::ZoomLevelToZoomFactor(zoom_controller->GetZoomLevel());
+  return blink::WebFloatPoint(p.x * zoom_factor, p.y * zoom_factor);
+}
+
+blink::WebFloatPoint ToUICoordinates(content::WebContents* web_contents,
+                                     blink::WebFloatPoint p) {
+  // Account for the zoom factor in the UI.
+  zoom::ZoomController* zoom_controller =
+      zoom::ZoomController::FromWebContents(web_contents);
+  if (!zoom_controller)
+    return p;
+  double zoom_factor =
+      content::ZoomLevelToZoomFactor(zoom_controller->GetZoomLevel());
+  return blink::WebFloatPoint(p.x / zoom_factor, p.y / zoom_factor);
 }
 
 }  // namespace vivaldi

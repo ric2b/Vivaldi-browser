@@ -14,7 +14,6 @@
 #include "base/base_paths.h"
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
@@ -41,6 +40,7 @@
 #include "components/update_client/update_client.h"
 #include "components/update_client/update_client_errors.h"
 #include "components/update_client/utils.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/common/content_constants.h"
@@ -81,7 +81,7 @@ const uint8_t kFlashSha2Hash[] = {
     0x86, 0x8c, 0x86, 0x2c, 0x11, 0xb9, 0x40, 0xc5, 0x55, 0xaf, 0x08,
     0x63, 0x70, 0x54, 0xf9, 0x56, 0xd3, 0xe7, 0x88, 0xba, 0x8c};
 #endif  // defined(OS_CHROMEOS)
-static_assert(arraysize(kFlashSha2Hash) == crypto::kSHA256Length,
+static_assert(base::size(kFlashSha2Hash) == crypto::kSHA256Length,
               "Wrong hash length");
 
 #if defined(OS_CHROMEOS)
@@ -291,7 +291,7 @@ FlashComponentInstallerPolicy::OnCustomInstall(
   }
 
 #if defined(OS_CHROMEOS)
-  content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::UI)
+  base::CreateSingleThreadTaskRunnerWithTraits({content::BrowserThread::UI})
       ->PostTask(FROM_HERE, base::BindOnce(&ImageLoaderRegistration, version,
                                            install_dir));
 #elif defined(OS_LINUX)
@@ -339,7 +339,7 @@ base::FilePath FlashComponentInstallerPolicy::GetRelativeInstallDir() const {
 }
 
 void FlashComponentInstallerPolicy::GetHash(std::vector<uint8_t>* hash) const {
-  hash->assign(kFlashSha2Hash, kFlashSha2Hash + arraysize(kFlashSha2Hash));
+  hash->assign(kFlashSha2Hash, kFlashSha2Hash + base::size(kFlashSha2Hash));
 }
 
 std::string FlashComponentInstallerPolicy::GetName() const {

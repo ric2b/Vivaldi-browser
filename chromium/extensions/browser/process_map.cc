@@ -16,17 +16,6 @@ namespace extensions {
 
 // Item
 struct ProcessMap::Item {
-  Item() : process_id(0), site_instance_id(0) {
-  }
-
-  // Purposely implicit constructor needed on older gcc's. See:
-  // http://codereview.chromium.org/8769022/
-  explicit Item(const ProcessMap::Item& other)
-      : extension_id(other.extension_id),
-        process_id(other.process_id),
-        site_instance_id(other.site_instance_id) {
-  }
-
   Item(const std::string& extension_id, int process_id,
        int site_instance_id)
       : extension_id(extension_id),
@@ -37,6 +26,9 @@ struct ProcessMap::Item {
   ~Item() {
   }
 
+  Item(ProcessMap::Item&&) = default;
+  Item& operator=(ProcessMap::Item&&) = default;
+
   bool operator<(const ProcessMap::Item& other) const {
     return std::tie(extension_id, process_id, site_instance_id) <
            std::tie(other.extension_id, other.process_id,
@@ -44,8 +36,11 @@ struct ProcessMap::Item {
   }
 
   std::string extension_id;
-  int process_id;
-  int site_instance_id;
+  int process_id = 0;
+  int site_instance_id = 0;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(Item);
 };
 
 
@@ -73,7 +68,7 @@ bool ProcessMap::Remove(const std::string& extension_id, int process_id,
 
 int ProcessMap::RemoveAllFromProcess(int process_id) {
   int result = 0;
-  for (ItemSet::iterator iter = items_.begin(); iter != items_.end(); ) {
+  for (auto iter = items_.begin(); iter != items_.end();) {
     if (iter->process_id == process_id) {
       items_.erase(iter++);
       ++result;
@@ -86,8 +81,7 @@ int ProcessMap::RemoveAllFromProcess(int process_id) {
 
 bool ProcessMap::Contains(const std::string& extension_id,
                           int process_id) const {
-  for (ItemSet::const_iterator iter = items_.begin(); iter != items_.end();
-       ++iter) {
+  for (auto iter = items_.cbegin(); iter != items_.cend(); ++iter) {
     if (iter->process_id == process_id && iter->extension_id == extension_id)
       return true;
   }
@@ -95,8 +89,7 @@ bool ProcessMap::Contains(const std::string& extension_id,
 }
 
 bool ProcessMap::Contains(int process_id) const {
-  for (ItemSet::const_iterator iter = items_.begin(); iter != items_.end();
-       ++iter) {
+  for (auto iter = items_.cbegin(); iter != items_.cend(); ++iter) {
     if (iter->process_id == process_id)
       return true;
   }
@@ -105,8 +98,7 @@ bool ProcessMap::Contains(int process_id) const {
 
 std::set<std::string> ProcessMap::GetExtensionsInProcess(int process_id) const {
   std::set<std::string> result;
-  for (ItemSet::const_iterator iter = items_.begin(); iter != items_.end();
-       ++iter) {
+  for (auto iter = items_.cbegin(); iter != items_.cend(); ++iter) {
     if (iter->process_id == process_id)
       result.insert(iter->extension_id);
   }

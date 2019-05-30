@@ -9,7 +9,7 @@
 
 #include "base/macros.h"
 #include "base/test/scoped_feature_list.h"
-#include "components/signin/core/browser/profile_management_switches.h"
+#include "components/signin/core/browser/account_consistency_method.h"
 
 // Changes the account consistency method while it is in scope. Useful for
 // tests.
@@ -40,8 +40,6 @@ class ScopedAccountConsistency {
 
 // ScopedAccountConsistencyMirror:
 SCOPED_ACCOUNT_CONSISTENCY_SPECIALIZATION(Mirror);
-// ScopedAccountConsistencyDiceFixAuthErrors:
-SCOPED_ACCOUNT_CONSISTENCY_SPECIALIZATION(DiceFixAuthErrors);
 // ScopedAccountConsistencyDiceMigration:
 SCOPED_ACCOUNT_CONSISTENCY_SPECIALIZATION(DiceMigration);
 // ScopedAccountConsistencyDice:

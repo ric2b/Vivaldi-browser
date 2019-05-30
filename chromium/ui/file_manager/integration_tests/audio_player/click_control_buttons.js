@@ -4,6 +4,27 @@
 
 'use strict';
 
+(function() {
+
+/**
+ * @param {string} query Query for an element inside <track-list> element.
+ * @return {!Array<string>} Deep query selector for an element inside
+ *   <track-list> polymer element.
+ */
+function trackListQuery(query) {
+  return ['audio-player', 'track-list', query];
+}
+
+/**
+ * @param {!Array<string>|string} query Query for an element inside
+ *     <control-panel> element.
+ * @return {!Array<string>} Deep query selector for an element inside
+ *   <control-panel> polymer element.
+ */
+function controlPanelQuery(query) {
+  return ['audio-player', 'control-panel'].concat(query);
+}
+
 /**
  * Confirms that clicking the play button changes the audio player state and
  * updates the play button label.
@@ -12,41 +33,125 @@
 testcase.togglePlayState = function() {
   var openAudio = launch('local', 'downloads', [ENTRIES.beautiful]);
   var appId;
-  return openAudio.then(function(args) {
-    appId = args[0];
-  }).then(function() {
-    // Audio player should start playing automatically,
-    return remoteCallAudioPlayer.waitForElement(
-        appId, 'audio-player[playing]');
-  }).then(function() {
-    // .. and the play button label should be 'Pause'.
-    return remoteCallAudioPlayer.waitForElement(
-        appId, ['#play[aria-label="Pause"]']);
-  }).then(function() {
-    // Clicking on the play button should
-    return remoteCallAudioPlayer.callRemoteTestUtil(
-        'fakeMouseClick', appId, ['#play']);
-  }).then(function() {
-    // ... change the audio playback state to pause,
-    return remoteCallAudioPlayer.waitForElement(
-        appId, 'audio-player:not([playing])');
-  }).then(function() {
-    // ... and the play button label should be 'Play'.
-    return remoteCallAudioPlayer.waitForElement(
-        appId, ['#play[aria-label="Play"]']);
-  }).then(function() {
-    // Clicking on the play button again should
-    return remoteCallAudioPlayer.callRemoteTestUtil(
-        'fakeMouseClick', appId, ['#play']);
-  }).then(function() {
-    // ... change the audio playback state to playing,
-    return remoteCallAudioPlayer.waitForElement(
-        appId, 'audio-player[playing]');
-  }).then(function() {
-    // ... and the play button label should be 'Pause'.
-    return remoteCallAudioPlayer.waitForElement(
-        appId, ['#play[aria-label="Pause"]']);
-  });
+  return openAudio
+      .then(function(args) {
+        appId = args[0];
+      })
+      .then(function() {
+        // Audio player should start playing automatically,
+        return remoteCallAudioPlayer.waitForElement(
+            appId, 'audio-player[playing]');
+      })
+      .then(function() {
+        // .. and the play button label should be 'Pause'.
+        return remoteCallAudioPlayer.waitForElement(
+            appId, [controlPanelQuery('#play[aria-label="Pause"]')]);
+      })
+      .then(function() {
+
+        // First test a media key, before any element may have acquired focus.
+        return remoteCallAudioPlayer.fakeKeyDown(
+            appId, null, 'MediaPlayPause', false, false, false);
+      })
+      .then(function(result) {
+        chrome.test.assertTrue(!!result, 'fakeKeyDown failed.');
+        return remoteCallAudioPlayer.waitForElement(
+            appId, 'audio-player:not([playing])');
+      })
+      .then(function(element) {
+        chrome.test.assertTrue(!!element);
+        return remoteCallAudioPlayer.fakeKeyDown(
+            appId, null, 'MediaPlayPause', false, false, false);
+      })
+      .then(function(result) {
+        chrome.test.assertTrue(!!result, 'fakeKeyDown failed.');
+        return remoteCallAudioPlayer.waitForElement(
+            appId, 'audio-player[playing]');
+      })
+      .then(function(element) {
+        chrome.test.assertTrue(!!element);
+
+        // Clicking on the play button should Play.
+        return remoteCallAudioPlayer.callRemoteTestUtil(
+            'fakeMouseClick', appId, [controlPanelQuery('#play')]);
+      })
+      .then(function(result) {
+        chrome.test.assertTrue(!!result, 'fakeMouseClick failed.');
+        // ... change the audio playback state to pause,
+        return remoteCallAudioPlayer.waitForElement(
+            appId, 'audio-player:not([playing])');
+      })
+      .then(function() {
+        // ... and the play button label should be 'Play'.
+        return remoteCallAudioPlayer.waitForElement(
+            appId, [controlPanelQuery('#play[aria-label="Play"]')]);
+      })
+      .then(function() {
+        // Clicking on the play button again should
+        return remoteCallAudioPlayer.callRemoteTestUtil(
+            'fakeMouseClick', appId, [controlPanelQuery('#play')]);
+      })
+      .then(function(result) {
+        chrome.test.assertTrue(!!result, 'fakeMouseClick failed.');
+        // ... change the audio playback state to playing,
+        return remoteCallAudioPlayer.waitForElement(
+            appId, 'audio-player[playing]');
+      })
+      .then(function() {
+        // ... and the play button label should be 'Pause'.
+        return remoteCallAudioPlayer.waitForElement(
+            appId, [controlPanelQuery('#play[aria-label="Pause"]')]);
+      });
+};
+
+
+/**
+ * Confirms that native media keys are dispatched correctly.
+ * @return {Promise} Promise to be fulfilled on success.
+ */
+testcase.mediaKeyNative = function() {
+  const openAudio = launch('local', 'downloads', [ENTRIES.beautiful]);
+  let appId;
+  function ensurePlaying() {
+    return remoteCallAudioPlayer.waitForElement(appId, 'audio-player[playing]')
+        .then((element) => {
+          chrome.test.assertTrue(!!element, 'Not Playing.');
+        });
+  }
+  function ensurePaused() {
+    return remoteCallAudioPlayer
+        .waitForElement(appId, 'audio-player:not([playing])')
+        .then((element) => {
+          chrome.test.assertTrue(!!element, 'Not Paused.');
+        });
+  }
+  function sendMediaKey() {
+    return sendTestMessage({name: 'dispatchNativeMediaKey'}).then((result) => {
+      chrome.test.assertEq(
+          result, 'mediaKeyDispatched', 'Key dispatch failure');
+    });
+  }
+  function pauseAndUnpause() {
+    // Audio player should be playing when this is called,
+    return Promise.resolve()
+        .then(ensurePlaying)
+        .then(sendMediaKey)
+        .then(ensurePaused)
+        .then(sendMediaKey)
+        .then(ensurePlaying);
+  }
+  function enableTabletMode() {
+    return sendTestMessage({name: 'enableTabletMode'}).then((result) => {
+      chrome.test.assertEq(result, 'tabletModeEnabled');
+    });
+  }
+  return openAudio
+      .then((args) => {
+        appId = args[0];
+      })
+      .then(pauseAndUnpause)
+      .then(enableTabletMode)
+      .then(pauseAndUnpause);
 };
 
 /**
@@ -62,7 +167,7 @@ testcase.changeVolumeLevel = function() {
   }).then(function() {
     // The Audio Player default volume level should be 50.
     return remoteCallAudioPlayer.waitForElement(
-        appId, ['control-panel[volume="50"]']);
+        appId, [['audio-player', 'control-panel[volume="50"]']]);
   }).then(function() {
     // Clicking the volume button should mute the player.
     return remoteCallAudioPlayer.callRemoteTestUtil(
@@ -70,9 +175,9 @@ testcase.changeVolumeLevel = function() {
   }).then(function() {
     return Promise.all([
       remoteCallAudioPlayer.waitForElement(
-          appId, ['control-panel[volume="0"]']),
+          appId, [['audio-player', 'control-panel[volume="0"]']]),
       remoteCallAudioPlayer.waitForElement(
-          appId, ['#volumeButton[aria-label="Unmute"]'])
+          appId, [controlPanelQuery('#volumeButton[aria-label="Unmute"]')])
     ]);
   }).then(function() {
     // Clicking it again should unmute and restore the volume.
@@ -81,9 +186,9 @@ testcase.changeVolumeLevel = function() {
   }).then(function() {
     return Promise.all([
       remoteCallAudioPlayer.waitForElement(
-          appId, ['control-panel[volume="50"]']),
+          appId, [['audio-player', 'control-panel[volume="50"]']]),
       remoteCallAudioPlayer.waitForElement(
-          appId, ['#volumeButton[aria-label="Mute"]'])
+          appId, [controlPanelQuery('#volumeButton[aria-label="Mute"]')])
     ]);
   });
 };
@@ -105,37 +210,39 @@ testcase.changeTracks = function() {
       remoteCallAudioPlayer.waitForElement(
           appId, 'audio-player[playing]'),
       remoteCallAudioPlayer.waitForElement(
-          appId, ['#play[aria-label="Pause"]'])
+          appId, [controlPanelQuery('#play[aria-label="Pause"]')])
     ]);
   }).then(function() {
     // ... and track 0 should be active.
     return remoteCallAudioPlayer.waitForElement(
-        appId, ['.track[index="0"][active]']);
+        appId, [trackListQuery('.track[index="0"][active]')]);
   }).then(function() {
     // Clicking the play button should
     return remoteCallAudioPlayer.callRemoteTestUtil(
-        'fakeMouseClick', appId, ['#play']);
-  }).then(function() {
+        'fakeMouseClick', appId, [controlPanelQuery('#play')]);
+  }).then(function(result) {
+    chrome.test.assertTrue(!!result, 'failed to click play on track #1');
     // ... change the playback state to pause
     return Promise.all([
       remoteCallAudioPlayer.waitForElement(
           appId, 'audio-player:not([playing])'),
       remoteCallAudioPlayer.waitForElement(
-          appId, ['#play[aria-label="Play"]'])
+          appId, [controlPanelQuery('#play[aria-label="Play"]')])
     ]);
   }).then(function() {
     // ... and track 0 should still be active.
     return remoteCallAudioPlayer.waitForElement(
-        appId, ['.track[index="0"][active]']);
+        appId, [trackListQuery('.track[index="0"][active]')]);
   }).then(function() {
     // Clicking the player's "next" button should
     return remoteCallAudioPlayer.callRemoteTestUtil(
-        'fakeMouseClick', appId, ['#next']);
-  }).then(function() {
+        'fakeMouseClick', appId, [controlPanelQuery('#next')]);
+  }).then(function(result) {
+    chrome.test.assertTrue(!!result, 'failed to click play on #next button');
     // ... activate and play track 1.
     return Promise.all([
       remoteCallAudioPlayer.waitForElement(
-          appId, ['.track[index="1"][active]']),
+          appId, [trackListQuery('.track[index="1"][active]')]),
       remoteCallAudioPlayer.waitForElement(
           appId, 'audio-player[playing]')
     ]);
@@ -159,45 +266,45 @@ testcase.changeTracksPlayList = function() {
       remoteCallAudioPlayer.waitForElement(
           appId, 'audio-player[playing]'),
       remoteCallAudioPlayer.waitForElement(
-          appId, ['#play[aria-label="Pause"]'])
+          appId, [controlPanelQuery('#play[aria-label="Pause"]')])
     ]);
   }).then(function() {
     // ... and track 0 should be active.
     return remoteCallAudioPlayer.waitForElement(
-        appId, ['.track[index="0"][active]']);
+        appId, [trackListQuery('.track[index="0"][active]')]);
   }).then(function() {
     // Clicking the play button should
     return remoteCallAudioPlayer.callRemoteTestUtil(
-        'fakeMouseClick', appId, ['#play']);
+        'fakeMouseClick', appId, [controlPanelQuery('#play')]);
   }).then(function() {
     // ... change the playback state to pause,
     return Promise.all([
       remoteCallAudioPlayer.waitForElement(
           appId, 'audio-player:not([playing])'),
       remoteCallAudioPlayer.waitForElement(
-          appId, ['#play[aria-label="Play"]'])
+          appId, [controlPanelQuery('#play[aria-label="Play"]')])
     ]);
   }).then(function() {
     // ... and track 0 should still be active.
     return remoteCallAudioPlayer.waitForElement(
-        appId, ['.track[index="0"][active]']);
+        appId, [trackListQuery('.track[index="0"][active]')]);
   }).then(function() {
     // Clicking the play-list button should
     return remoteCallAudioPlayer.callRemoteTestUtil(
-        'fakeMouseClick', appId, ['#playList']);
+        'fakeMouseClick', appId, [controlPanelQuery('#playList')]);
   }).then(function() {
     // ... expand the Audio Player track-list.
     return remoteCallAudioPlayer.waitForElement(
-        appId, 'track-list[expanded]');
+        appId, ['audio-player', 'track-list[expanded]']);
   }).then(function() {
     // Clicking on a track (track 0 here) should
     return remoteCallAudioPlayer.callRemoteTestUtil(
-        'fakeMouseClick', appId, ['.track[index="0"]']);
+        'fakeMouseClick', appId, [trackListQuery('.track[index="0"]')]);
   }).then(function() {
     // ... activate and start playing that track.
     return Promise.all([
       remoteCallAudioPlayer.waitForElement(
-          appId, '.track[index="0"][active]'),
+          appId, trackListQuery('.track[index="0"][active]')),
       remoteCallAudioPlayer.waitForElement(
           appId, 'audio-player[playing]')
     ]);
@@ -221,47 +328,50 @@ testcase.changeTracksPlayListIcon = function() {
       remoteCallAudioPlayer.waitForElement(
           appId, 'audio-player[playing]'),
       remoteCallAudioPlayer.waitForElement(
-          appId, ['#play[aria-label="Pause"]'])
+          appId, [controlPanelQuery('#play[aria-label="Pause"]')])
     ]);
   }).then(function() {
     // ... and track 0 should be active.
     return remoteCallAudioPlayer.waitForElement(
-        appId, ['.track[index="0"][active]']);
+        appId, [trackListQuery('.track[index="0"][active]')]);
   }).then(function() {
     // Clicking the play button should
     return remoteCallAudioPlayer.callRemoteTestUtil(
-        'fakeMouseClick', appId, ['#play']);
+        'fakeMouseClick', appId, [controlPanelQuery('#play')]);
   }).then(function() {
     // ... change the playback state to pause,
     return Promise.all([
       remoteCallAudioPlayer.waitForElement(
           appId, 'audio-player:not([playing])'),
       remoteCallAudioPlayer.waitForElement(
-          appId, ['#play[aria-label="Play"]'])
+          appId, [controlPanelQuery('#play[aria-label="Play"]')])
     ]);
   }).then(function() {
     // ... and track 0 should still be active.
     return remoteCallAudioPlayer.waitForElement(
-        appId, ['.track[index="0"][active]']);
+        appId, [trackListQuery('.track[index="0"][active]')]);
   }).then(function() {
     // Clicking the play-list button should
     return remoteCallAudioPlayer.callRemoteTestUtil(
-        'fakeMouseClick', appId, ['#playList']);
+        'fakeMouseClick', appId, [controlPanelQuery('#playList')]);
   }).then(function() {
     // ... expand the Audio Player track-list.
     return remoteCallAudioPlayer.waitForElement(
-        appId, 'track-list[expanded]');
+        appId, ['audio-player', 'track-list[expanded]']);
   }).then(function() {
     // Clicking a track (track 1 here) 'Play' icon should
     return remoteCallAudioPlayer.callRemoteTestUtil(
-        'fakeMouseClick', appId, ['.track[index="1"] .icon']);
-  }).then(function() {
+        'fakeMouseClick', appId, [trackListQuery('.track[index="1"] .icon')]);
+  }).then(function(result) {
+    chrome.test.assertTrue(!!result, 'failed to click play on track #1');
     // ... activate and start playing that track.
     return Promise.all([
       remoteCallAudioPlayer.waitForElement(
-          appId, '.track[index="1"][active]'),
+          appId, trackListQuery('.track[index="1"][active]')),
       remoteCallAudioPlayer.waitForElement(
           appId, 'audio-player[playing]')
     ]);
   });
 };
+
+})();

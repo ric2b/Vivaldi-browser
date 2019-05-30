@@ -36,6 +36,7 @@ import org.chromium.chrome.browser.compositor.layouts.phone.stack.Stack;
 import org.chromium.chrome.browser.compositor.layouts.phone.stack.StackTab;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabBuilder;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
@@ -52,7 +53,7 @@ import org.chromium.ui.test.util.UiRestriction;
 public class LayoutManagerTest implements MockTabModelDelegate {
     private static final String TAG = "LayoutManagerTest";
 
-    private long mLastDownTime = 0;
+    private long mLastDownTime;
 
     private TabModelSelector mTabModelSelector;
     private LayoutManagerChrome mManager;
@@ -132,9 +133,9 @@ public class LayoutManagerTest implements MockTabModelDelegate {
         FrameLayout container = new FrameLayout(context);
         parentContainer.addView(container);
 
-        mManagerPhone = new LayoutManagerChromePhone(layoutManagerHost);
+        mManagerPhone = new LayoutManagerChromePhone(layoutManagerHost, null);
         mManager = mManagerPhone;
-        mManager.getAnimationHandler().enableTestingMode();
+        mManager.getAnimationHandler().setTestingMode(true);
         mManager.init(mTabModelSelector, null, null, container, null, null);
         initializeMotionEvent();
     }
@@ -562,6 +563,6 @@ public class LayoutManagerTest implements MockTabModelDelegate {
 
     @Override
     public Tab createTab(int id, boolean incognito) {
-        return new Tab(id, incognito, null);
+        return new TabBuilder().setId(id).setIncognito(incognito).build();
     }
 }

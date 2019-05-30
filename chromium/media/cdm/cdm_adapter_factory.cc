@@ -31,10 +31,10 @@ void CdmAdapterFactory::Create(
     const CdmCreatedCB& cdm_created_cb) {
   DVLOG(1) << __func__ << ": key_system=" << key_system;
 
-  if (security_origin.unique()) {
+  if (security_origin.opaque()) {
     LOG(ERROR) << "Invalid Origin: " << security_origin;
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(cdm_created_cb, nullptr, "Invalid origin."));
+        FROM_HERE, base::BindOnce(cdm_created_cb, nullptr, "Invalid origin."));
     return;
   }
 
@@ -42,8 +42,8 @@ void CdmAdapterFactory::Create(
       CdmModule::GetInstance()->GetCreateCdmFunc();
   if (!create_cdm_func) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(cdm_created_cb, nullptr, "CreateCdmFunc not available."));
+        FROM_HERE, base::BindOnce(cdm_created_cb, nullptr,
+                                  "CreateCdmFunc not available."));
     return;
   }
 
@@ -51,7 +51,7 @@ void CdmAdapterFactory::Create(
   if (!cdm_helper) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(cdm_created_cb, nullptr, "CDM helper creation failed."));
+        base::BindOnce(cdm_created_cb, nullptr, "CDM helper creation failed."));
     return;
   }
 

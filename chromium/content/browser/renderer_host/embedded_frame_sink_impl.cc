@@ -25,7 +25,11 @@ EmbeddedFrameSinkImpl::EmbeddedFrameSinkImpl(
       parent_frame_sink_id_(parent_frame_sink_id),
       frame_sink_id_(frame_sink_id) {
   client_.set_connection_error_handler(std::move(destroy_callback));
-  host_frame_sink_manager_->RegisterFrameSinkId(frame_sink_id_, this);
+  host_frame_sink_manager_->RegisterFrameSinkId(
+      frame_sink_id_, this,
+      features::IsSurfaceSynchronizationEnabled()
+          ? viz::ReportFirstSurfaceActivation::kNo
+          : viz::ReportFirstSurfaceActivation::kYes);
   host_frame_sink_manager_->SetFrameSinkDebugLabel(frame_sink_id_,
                                                    "EmbeddedFrameSinkImpl");
 }
@@ -58,6 +62,11 @@ void EmbeddedFrameSinkImpl::CreateCompositorFrameSink(
       frame_sink_id_, std::move(request), std::move(client));
 
   has_created_compositor_frame_sink_ = true;
+}
+
+void EmbeddedFrameSinkImpl::ConnectToEmbedder(
+    blink::mojom::SurfaceEmbedderRequest surface_embedder_request) {
+  client_->BindSurfaceEmbedder(std::move(surface_embedder_request));
 }
 
 void EmbeddedFrameSinkImpl::OnFirstSurfaceActivation(

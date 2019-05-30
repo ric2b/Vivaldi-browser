@@ -9,13 +9,14 @@ namespace blink {
 EnterPictureInPictureEvent* EnterPictureInPictureEvent::Create(
     const AtomicString& type,
     PictureInPictureWindow* picture_in_picture_window) {
-  return new EnterPictureInPictureEvent(type, picture_in_picture_window);
+  return MakeGarbageCollected<EnterPictureInPictureEvent>(
+      type, picture_in_picture_window);
 }
 
 EnterPictureInPictureEvent* EnterPictureInPictureEvent::Create(
     const AtomicString& type,
-    const EnterPictureInPictureEventInit& initializer) {
-  return new EnterPictureInPictureEvent(type, initializer);
+    const EnterPictureInPictureEventInit* initializer) {
+  return MakeGarbageCollected<EnterPictureInPictureEvent>(type, initializer);
 }
 
 PictureInPictureWindow* EnterPictureInPictureEvent::pictureInPictureWindow()
@@ -31,9 +32,9 @@ EnterPictureInPictureEvent::EnterPictureInPictureEvent(
 
 EnterPictureInPictureEvent::EnterPictureInPictureEvent(
     AtomicString const& type,
-    const EnterPictureInPictureEventInit& initializer)
+    const EnterPictureInPictureEventInit* initializer)
     : Event(type, initializer),
-      picture_in_picture_window_(initializer.pictureInPictureWindow()) {}
+      picture_in_picture_window_(initializer->pictureInPictureWindow()) {}
 
 void EnterPictureInPictureEvent::Trace(blink::Visitor* visitor) {
   visitor->Trace(picture_in_picture_window_);

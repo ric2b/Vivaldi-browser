@@ -16,17 +16,18 @@ class TestPreviewsDecider : public previews::PreviewsDecider {
   ~TestPreviewsDecider() override;
 
   // previews::PreviewsDecider:
-  bool ShouldAllowPreviewAtECT(
-      const net::URLRequest& request,
-      previews::PreviewsType type,
-      net::EffectiveConnectionType effective_connection_type_threshold,
-      const std::vector<std::string>& host_blacklist_from_server,
-      bool ignore_long_term_black_list_rules) const override;
-  bool ShouldAllowPreview(const net::URLRequest& request,
-                          previews::PreviewsType type) const override;
-  bool IsURLAllowedForPreview(const net::URLRequest& request,
-                              PreviewsType type) const override;
-  void LoadResourceHints(const net::URLRequest& request) override;
+  bool ShouldAllowPreviewAtNavigationStart(PreviewsUserData* previews_data,
+                                           const GURL& url,
+                                           bool is_reload,
+                                           PreviewsType type) const override;
+  bool ShouldCommitPreview(PreviewsUserData* previews_data,
+                           const GURL& url,
+                           PreviewsType type) const override;
+  bool LoadPageHints(const GURL& url) override;
+  bool GetResourceLoadingHints(
+      const GURL& url,
+      std::vector<std::string>* out_resource_patterns_to_block) const override;
+  void LogHintCacheMatch(const GURL& url, bool is_committed) const override;
 
  private:
   bool allow_previews_;

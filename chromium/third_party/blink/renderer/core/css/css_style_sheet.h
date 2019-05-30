@@ -30,7 +30,7 @@
 #include "third_party/blink/renderer/core/dom/tree_scope.h"
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_member.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/wtf/noncopyable.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_encoding.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_position.h"
 
@@ -44,7 +44,9 @@ class CSSStyleSheetInit;
 class Document;
 class ExceptionState;
 class MediaQuerySet;
-class SecurityOrigin;
+class ScriptPromise;
+class ScriptPromiseResolver;
+class ScriptState;
 class StyleSheetContents;
 
 class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
@@ -53,8 +55,9 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
  public:
   static const Document* SingleOwnerDocument(const CSSStyleSheet*);
 
+  static CSSStyleSheet* Create(Document&, ExceptionState&);
   static CSSStyleSheet* Create(Document&,
-                               const CSSStyleSheetInit&,
+                               const CSSStyleSheetInit*,
                                ExceptionState&);
 
   static CSSStyleSheet* Create(StyleSheetContents*,
@@ -70,6 +73,11 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
       Node& owner_node,
       const TextPosition& start_position = TextPosition::MinimumPosition());
 
+  CSSStyleSheet(StyleSheetContents*, CSSImportRule* owner_rule);
+  CSSStyleSheet(StyleSheetContents*,
+                Node& owner_node,
+                bool is_inline_stylesheet,
+                const TextPosition& start_position);
   ~CSSStyleSheet() override;
 
   CSSStyleSheet* parentStyleSheet() const override;
@@ -94,6 +102,12 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
   void removeRule(unsigned index, ExceptionState& exception_state) {
     deleteRule(index, exception_state);
   }
+
+  ScriptPromise replace(ScriptState* script_state,
+                        const String& text,
+                        ExceptionState&);
+  void replaceSync(const String& text, ExceptionState&);
+  void ResolveReplacePromiseIfNeeded(bool load_error_occured);
 
   // For CSSRuleList.
   unsigned length() const;
@@ -121,10 +135,24 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
     return device_dependent_media_query_results_;
   }
   void SetTitle(const String& title) { title_ = title; }
-  // Set by LinkStyle iff CORS-enabled fetch of stylesheet succeeded from this
-  // origin.
-  void SetAllowRuleAccessFromOrigin(
-      scoped_refptr<const SecurityOrigin> allowed_origin);
+
+  void AddedAdoptedToTreeScope(TreeScope& tree_scope) {
+    adopted_tree_scopes_.insert(&tree_scope);
+  }
+
+  void RemovedAdoptedFromTreeScope(TreeScope& tree_scope) {
+    adopted_tree_scopes_.erase(&tree_scope);
+  }
+
+  Document* AssociatedDocument() { return associated_document_; }
+
+  void SetAssociatedDocument(Document* document) {
+    associated_document_ = document;
+  }
+
+  void AddToCustomElementTagNames(const AtomicString& local_tag_name) {
+    custom_element_tag_names_.insert(local_tag_name);
+  }
 
   class RuleMutationScope {
     STACK_ALLOCATED();
@@ -166,21 +194,21 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
   bool SheetLoaded();
   bool LoadCompleted() const { return load_completed_; }
   void StartLoadingDynamicSheet();
-  void SetText(const String&);
+  void SetText(const String&, bool allow_import_rules, ExceptionState&);
   void SetMedia(MediaList*);
   void SetAlternateFromConstructor(bool);
   bool IsAlternate() const;
   bool CanBeActivated(const String& current_preferrable_name) const;
 
+  void SetIsConstructed(bool is_constructed) {
+    is_constructed_ = is_constructed;
+  }
+
+  bool IsConstructed() { return is_constructed_; }
+
   void Trace(blink::Visitor*) override;
 
  private:
-  CSSStyleSheet(StyleSheetContents*, CSSImportRule* owner_rule);
-  CSSStyleSheet(StyleSheetContents*,
-                Node& owner_node,
-                bool is_inline_stylesheet,
-                const TextPosition& start_position);
-
   bool IsCSSStyleSheet() const override { return true; }
   String type() const override { return "text/css"; }
 
@@ -217,15 +245,20 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
   // For other CSSStyleSheet, consult the alternate attribute.
   bool alternate_from_constructor_ = false;
   bool enable_rule_access_for_inspector_ = false;
+
+  bool is_constructed_ = false;
+
   String title_;
   scoped_refptr<MediaQuerySet> media_queries_;
   MediaQueryResultList viewport_dependent_media_query_results_;
   MediaQueryResultList device_dependent_media_query_results_;
 
-  scoped_refptr<const SecurityOrigin> allow_rule_access_from_origin_;
-
   Member<Node> owner_node_;
   Member<CSSRule> owner_rule_;
+  HeapHashSet<Member<TreeScope>> adopted_tree_scopes_;
+  Member<Document> associated_document_;
+  HashSet<AtomicString> custom_element_tag_names_;
+  Member<ScriptPromiseResolver> resolver_;
 
   TextPosition start_position_;
   Member<MediaList> media_cssom_wrapper_;
@@ -250,11 +283,12 @@ inline CSSStyleSheet::RuleMutationScope::~RuleMutationScope() {
     style_sheet_->DidMutateRules();
 }
 
-DEFINE_TYPE_CASTS(CSSStyleSheet,
-                  StyleSheet,
-                  sheet,
-                  sheet->IsCSSStyleSheet(),
-                  sheet.IsCSSStyleSheet());
+template <>
+struct DowncastTraits<CSSStyleSheet> {
+  static bool AllowFrom(const StyleSheet& sheet) {
+    return sheet.IsCSSStyleSheet();
+  }
+};
 
 }  // namespace blink
 

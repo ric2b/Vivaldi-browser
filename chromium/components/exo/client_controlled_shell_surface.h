@@ -20,6 +20,7 @@
 namespace ash {
 class NonClientFrameViewAsh;
 class ImmersiveFullscreenController;
+class RoundedCornerDecorator;
 class WideFrameView;
 
 namespace mojom {
@@ -172,7 +173,7 @@ class ClientControlledShellSurface
 
   // Set the frame button state. The |visible_button_mask| and
   // |enabled_button_mask| is a bit mask whose position is defined
-  // in ash::CaptionButtonIcon enum.
+  // in views::CaptionButtonIcon enum.
   void SetFrameButtons(uint32_t frame_visible_button_mask,
                        uint32_t frame_enabled_button_mask);
 
@@ -293,6 +294,8 @@ class ClientControlledShellSurface
       immersive_fullscreen_controller_;
 
   std::unique_ptr<ash::WideFrameView> wide_frame_;
+
+  std::unique_ptr<ash::RoundedCornerDecorator> decorator_;
 
   std::unique_ptr<ui::CompositorLock> orientation_compositor_lock_;
 

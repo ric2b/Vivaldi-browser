@@ -6,19 +6,22 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chromeos/login/enrollment/enrollment_screen.h"
 #include "chrome/browser/chromeos/login/helper.h"
+#include "chrome/browser/chromeos/login/login_wizard.h"
 #include "chrome/browser/chromeos/login/mock_network_state_helper.h"
 #include "chrome/browser/chromeos/login/screens/base_screen.h"
 #include "chrome/browser/chromeos/login/screens/mock_base_screen_delegate.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
-#include "chrome/browser/chromeos/login/test/wizard_in_process_browser_test.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
-#include "chromeos/chromeos_switches.h"
+#include "chrome/test/base/in_process_browser_test.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
 #include "chromeos/dbus/shill_manager_client.h"
@@ -42,30 +45,34 @@ class DummyButtonListener : public views::ButtonListener {
   void ButtonPressed(views::Button* sender, const ui::Event& event) override {}
 };
 
-class NetworkScreenTest : public WizardInProcessBrowserTest {
+class NetworkScreenTest : public InProcessBrowserTest {
  public:
-  NetworkScreenTest()
-      : WizardInProcessBrowserTest(OobeScreen::SCREEN_OOBE_NETWORK) {}
+  NetworkScreenTest() = default;
   ~NetworkScreenTest() override = default;
 
- protected:
-  void SetUpInProcessBrowserTestFixture() override {
-    WizardInProcessBrowserTest::SetUpInProcessBrowserTestFixture();
+  // InProcessBrowserTest:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    InProcessBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendArg(switches::kLoginManager);
+  }
 
+  void SetUpInProcessBrowserTestFixture() override {
+    InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
     DBusThreadManager::GetSetterForTesting()->SetSessionManagerClient(
         std::make_unique<FakeSessionManagerClient>());
   }
 
   void SetUpOnMainThread() override {
-    WizardInProcessBrowserTest::SetUpOnMainThread();
+    InProcessBrowserTest::SetUpOnMainThread();
+    ShowLoginWizard(OobeScreen::SCREEN_OOBE_NETWORK);
     mock_base_screen_delegate_ = std::make_unique<MockBaseScreenDelegate>();
-    ASSERT_TRUE(WizardController::default_controller() != nullptr);
     network_screen_ = NetworkScreen::Get(
         WizardController::default_controller()->screen_manager());
-    ASSERT_TRUE(network_screen_ != nullptr);
     ASSERT_EQ(WizardController::default_controller()->current_screen(),
               network_screen_);
     network_screen_->base_screen_delegate_ = mock_base_screen_delegate_.get();
+    network_screen_->set_exit_callback_for_testing(base::BindRepeating(
+        &NetworkScreenTest::HandleScreenExit, base::Unretained(this)));
     ASSERT_TRUE(network_screen_->view_ != nullptr);
 
     mock_network_state_helper_ = new login::MockNetworkStateHelper;
@@ -74,66 +81,74 @@ class NetworkScreenTest : public WizardInProcessBrowserTest {
   }
 
   void EmulateContinueButtonExit(NetworkScreen* network_screen) {
-    EXPECT_CALL(*mock_base_screen_delegate_,
-                OnExit(ScreenExitCode::NETWORK_CONNECTED))
-        .Times(1);
-    EXPECT_CALL(*mock_network_state_helper_, IsConnected())
-        .WillOnce(Return(true));
+    EXPECT_CALL(*network_state_helper(), IsConnected()).WillOnce(Return(true));
     network_screen->OnContinueButtonClicked();
     base::RunLoop().RunUntilIdle();
+
+    ASSERT_TRUE(last_screen_result_.has_value());
+    EXPECT_EQ(NetworkScreen::Result::CONNECTED, last_screen_result_.value());
   }
 
   void SetDefaultNetworkStateHelperExpectations() {
-    EXPECT_CALL(*mock_network_state_helper_, GetCurrentNetworkName())
+    EXPECT_CALL(*network_state_helper(), GetCurrentNetworkName())
         .Times(AnyNumber())
         .WillRepeatedly((Return(base::string16())));
-    EXPECT_CALL(*mock_network_state_helper_, IsConnected())
+    EXPECT_CALL(*network_state_helper(), IsConnected())
         .Times(AnyNumber())
         .WillRepeatedly((Return(false)));
-    EXPECT_CALL(*mock_network_state_helper_, IsConnecting())
+    EXPECT_CALL(*network_state_helper(), IsConnecting())
         .Times(AnyNumber())
         .WillRepeatedly((Return(false)));
+  }
+
+  login::MockNetworkStateHelper* network_state_helper() {
+    return mock_network_state_helper_;
+  }
+  NetworkScreen* network_screen() { return network_screen_; }
+
+ private:
+  void HandleScreenExit(NetworkScreen::Result result) {
+    EXPECT_FALSE(last_screen_result_.has_value());
+    last_screen_result_ = result;
   }
 
   std::unique_ptr<MockBaseScreenDelegate> mock_base_screen_delegate_;
   login::MockNetworkStateHelper* mock_network_state_helper_;
   NetworkScreen* network_screen_;
+  base::Optional<NetworkScreen::Result> last_screen_result_;
 
- private:
   DISALLOW_COPY_AND_ASSIGN(NetworkScreenTest);
 };
 
 IN_PROC_BROWSER_TEST_F(NetworkScreenTest, CanConnect) {
-  EXPECT_CALL(*mock_network_state_helper_, IsConnecting())
-      .WillOnce((Return(true)));
+  EXPECT_CALL(*network_state_helper(), IsConnecting()).WillOnce((Return(true)));
   // EXPECT_FALSE(view_->IsContinueEnabled());
-  network_screen_->UpdateStatus();
+  network_screen()->UpdateStatus();
 
-  EXPECT_CALL(*mock_network_state_helper_, IsConnected())
+  EXPECT_CALL(*network_state_helper(), IsConnected())
       .Times(2)
       .WillRepeatedly(Return(true));
   // TODO(nkostylev): Add integration with WebUI view http://crosbug.com/22570
   // EXPECT_FALSE(view_->IsContinueEnabled());
   // EXPECT_FALSE(view_->IsConnecting());
-  network_screen_->UpdateStatus();
+  network_screen()->UpdateStatus();
 
   // EXPECT_TRUE(view_->IsContinueEnabled());
-  EmulateContinueButtonExit(network_screen_);
+  EmulateContinueButtonExit(network_screen());
 }
 
 IN_PROC_BROWSER_TEST_F(NetworkScreenTest, Timeout) {
-  EXPECT_CALL(*mock_network_state_helper_, IsConnecting())
-      .WillOnce((Return(true)));
+  EXPECT_CALL(*network_state_helper(), IsConnecting()).WillOnce((Return(true)));
   // EXPECT_FALSE(view_->IsContinueEnabled());
-  network_screen_->UpdateStatus();
+  network_screen()->UpdateStatus();
 
-  EXPECT_CALL(*mock_network_state_helper_, IsConnected())
+  EXPECT_CALL(*network_state_helper(), IsConnected())
       .Times(2)
       .WillRepeatedly(Return(false));
   // TODO(nkostylev): Add integration with WebUI view http://crosbug.com/22570
   // EXPECT_FALSE(view_->IsContinueEnabled());
   // EXPECT_FALSE(view_->IsConnecting());
-  network_screen_->OnConnectionTimeout();
+  network_screen()->OnConnectionTimeout();
 
   // Close infobubble with error message - it makes the test stable.
   // EXPECT_FALSE(view_->IsContinueEnabled());

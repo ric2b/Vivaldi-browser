@@ -26,6 +26,8 @@
 
 namespace content {
 
+class BackgroundFetchDataManager;
+
 // The JobController will be responsible for coordinating communication with the
 // DownloadManager. It will get requests from the RequestManager and dispatch
 // them to the DownloadService. It lives entirely on the IO thread.
@@ -35,27 +37,32 @@ namespace content {
 // DownloadService or Offline Items Collection is necessary (i.e. once the
 // registration has been aborted, or once it has completed/failed and the
 // waitUntil promise has been resolved so UpdateUI can no longer be called).
-class CONTENT_EXPORT BackgroundFetchJobController final
-    : public BackgroundFetchDelegateProxy::Controller,
-      public BackgroundFetchScheduler::Controller {
+class CONTENT_EXPORT BackgroundFetchJobController
+    : public BackgroundFetchDelegateProxy::Controller {
  public:
+  using ErrorCallback =
+      base::OnceCallback<void(blink::mojom::BackgroundFetchError)>;
   using FinishedCallback =
       base::OnceCallback<void(const BackgroundFetchRegistrationId&,
-                              BackgroundFetchReasonToAbort)>;
-  using ProgressCallback =
-      base::RepeatingCallback<void(const std::string& /* unique_id */,
-                                   uint64_t /* download_total */,
-                                   uint64_t /* downloaded */)>;
+                              blink::mojom::BackgroundFetchFailureReason,
+                              ErrorCallback)>;
+  using ProgressCallback = base::RepeatingCallback<void(
+      const blink::mojom::BackgroundFetchRegistration&)>;
+  using RequestFinishedCallback =
+      base::OnceCallback<void(const BackgroundFetchRegistrationId&,
+                              scoped_refptr<BackgroundFetchRequestInfo>)>;
 
   BackgroundFetchJobController(
+      BackgroundFetchDataManager* data_manager,
       BackgroundFetchDelegateProxy* delegate_proxy,
-      BackgroundFetchScheduler* scheduler,
       const BackgroundFetchRegistrationId& registration_id,
-      const BackgroundFetchOptions& options,
+      blink::mojom::BackgroundFetchOptionsPtr options,
       const SkBitmap& icon,
       uint64_t bytes_downloaded,
+      uint64_t bytes_uploaded,
+      uint64_t upload_total,
       ProgressCallback progress_callback,
-      BackgroundFetchScheduler::FinishedCallback finished_callback);
+      FinishedCallback finished_callback);
   ~BackgroundFetchJobController() override;
 
   // Initializes the job controller with the status of the active and completed
@@ -66,80 +73,119 @@ class CONTENT_EXPORT BackgroundFetchJobController final
       int total_downloads,
       std::vector<scoped_refptr<BackgroundFetchRequestInfo>>
           active_fetch_requests,
-      const std::string& ui_title);
+      bool start_paused);
 
-  // Gets the number of bytes downloaded for jobs that are currently running.
+  // Gets the number of bytes downloaded/uploaded for jobs that are currently
+  // running.
   uint64_t GetInProgressDownloadedBytes();
+  uint64_t GetInProgressUploadedBytes();
 
-  // Updates the UI that's shown to the user as part of a notification for
-  // instance.
-  void UpdateUI(const base::Optional<std::string>& title,
-                const base::Optional<SkBitmap>& icon);
-
-  // Returns a unique_ptr to a BackgroundFetchRegistration object
+  // Returns a blink::mojom::BackgroundFetchRegistrationPtr object
   // created with member fields.
-  std::unique_ptr<BackgroundFetchRegistration> NewRegistration(
-      blink::mojom::BackgroundFetchState state) const;
+  blink::mojom::BackgroundFetchRegistrationPtr NewRegistration() const;
 
-  // Returns the options with which this job is fetching data.
-  const BackgroundFetchOptions& options() const { return options_; }
-
-  // Returns total downloaded bytes.
-  int downloaded() const { return complete_requests_downloaded_bytes_cache_; }
-
-  // Returns total size of downloads, as indicated by the developer.
-  int download_total() const { return total_downloads_size_; }
-
-  // Returns the number of requests that comprise the whole job.
-  int total_downloads() const { return total_downloads_; }
-
-  base::WeakPtr<BackgroundFetchJobController> GetWeakPtr() {
-    return weak_ptr_factory_.GetWeakPtr();
+  const BackgroundFetchRegistrationId& registration_id() const {
+    return registration_id_;
   }
 
   // BackgroundFetchDelegateProxy::Controller implementation:
   void DidStartRequest(
-      const scoped_refptr<BackgroundFetchRequestInfo>& request) override;
-  void DidUpdateRequest(
-      const scoped_refptr<BackgroundFetchRequestInfo>& request,
-      uint64_t bytes_downloaded) override;
+      const std::string& guid,
+      std::unique_ptr<BackgroundFetchResponse> response) override;
+  void DidUpdateRequest(const std::string& guid,
+                        uint64_t bytes_uploaded,
+                        uint64_t bytes_downloaded) override;
   void DidCompleteRequest(
-      const scoped_refptr<BackgroundFetchRequestInfo>& request) override;
+      const std::string& guid,
+      std::unique_ptr<BackgroundFetchResult> result) override;
+  void AbortFromDelegate(
+      blink::mojom::BackgroundFetchFailureReason failure_reason) override;
+  void GetUploadData(
+      const std::string& guid,
+      BackgroundFetchDelegate::GetUploadDataCallback callback) override;
 
-  // BackgroundFetchScheduler::Controller implementation:
-  bool HasMoreRequests() override;
+  // Aborts the fetch. |callback| will run with the result of marking the
+  // registration for deletion.
+  void Abort(blink::mojom::BackgroundFetchFailureReason failure_reason,
+             ErrorCallback callback);
+
+  // Request processing.
+  void PopNextRequest(RequestFinishedCallback request_finished_callback);
+  void DidPopNextRequest(
+      RequestFinishedCallback request_finished_callback,
+      blink::mojom::BackgroundFetchError error,
+      scoped_refptr<BackgroundFetchRequestInfo> request_info);
   void StartRequest(scoped_refptr<BackgroundFetchRequestInfo> request,
-                    RequestFinishedCallback request_finished_callback) override;
-  void Abort(BackgroundFetchReasonToAbort reason_to_abort) override;
+                    RequestFinishedCallback request_finished_callback);
+  void MarkRequestAsComplete(scoped_refptr<BackgroundFetchRequestInfo> request);
+
+  // Whether there are more requests to process as part of this job.
+  bool HasMoreRequests();
+
+  int pending_downloads() const { return pending_downloads_; }
 
  private:
-  // Returns reason_to_abort_ as blink::mojom::BackgroundFetchFailureReason.
-  // TODO(crbug.com/876691): Get rid of BackgroundFetchReasonToAbort and remove
-  // this converter.
-  blink::mojom::BackgroundFetchFailureReason MojoFailureReason() const;
+  struct InProgressRequestBytes {
+    uint64_t uploaded = 0u;
+    uint64_t downloaded = 0u;
+  };
+
+  // Called after the request is completely processed, and the next one can be
+  // started.
+  void DidMarkRequestAsComplete(blink::mojom::BackgroundFetchError error);
+
+  // Notifies the scheduler that the download is complete, and hands the result
+  // over.
+  void NotifyDownloadComplete(
+      scoped_refptr<BackgroundFetchRequestInfo> request);
+
+  // Called when the job completes or has been aborted. |callback| will run
+  // with the result of marking the registration for deletion.
+  void Finish(blink::mojom::BackgroundFetchFailureReason reason_to_abort,
+              ErrorCallback callback);
+
+  void DidGetUploadData(BackgroundFetchDelegate::GetUploadDataCallback callback,
+                        blink::mojom::BackgroundFetchError error,
+                        blink::mojom::SerializedBlobPtr blob);
+
+  // Manager for interacting with the DB. It is owned by the
+  // BackgroundFetchContext.
+  BackgroundFetchDataManager* data_manager_;
+
+  // Proxy for interacting with the BackgroundFetchDelegate across thread
+  // boundaries. It is owned by the BackgroundFetchContext.
+  BackgroundFetchDelegateProxy* delegate_proxy_;
+
+  // A map from the download GUID to the active request.
+  std::map<std::string, scoped_refptr<BackgroundFetchRequestInfo>>
+      active_request_map_;
+
+  // A map from the download GUID to the in-progress bytes.
+  std::map<std::string, InProgressRequestBytes> active_bytes_map_;
+
+  // The registration ID of the fetch this controller represents.
+  BackgroundFetchRegistrationId registration_id_;
 
   // Options for the represented background fetch registration.
-  BackgroundFetchOptions options_;
+  blink::mojom::BackgroundFetchOptionsPtr options_;
 
   // Icon for the represented background fetch registration.
   SkBitmap icon_;
 
-  // Number of bytes downloaded for the active request.
-  uint64_t active_request_downloaded_bytes_ = 0;
-
-  // Finished callback to invoke when the active request has finished.
-  RequestFinishedCallback active_request_finished_callback_;
+  // Finished callback to invoke when the active request has finished mapped by
+  // its download GUID.
+  std::map<std::string, RequestFinishedCallback>
+      active_request_finished_callbacks_;
 
   // Cache of downloaded byte count stored by the DataManager, to enable
   // delivering progress events without having to read from the database.
   uint64_t complete_requests_downloaded_bytes_cache_;
 
-  // Total downloads size, as indicated by the developer.
-  int total_downloads_size_ = 0;
+  // Overall number of bytes that have been uploaded.
+  uint64_t complete_requests_uploaded_bytes_cache_;
 
-  // Proxy for interacting with the BackgroundFetchDelegate across thread
-  // boundaries. It is owned by the BackgroundFetchContext.
-  BackgroundFetchDelegateProxy* delegate_proxy_;
+  // Total number of bytes to upload.
+  uint64_t upload_total_;
 
   // Callback run each time download progress updates.
   ProgressCallback progress_callback_;
@@ -150,9 +196,15 @@ class CONTENT_EXPORT BackgroundFetchJobController final
   // Number of the requests that have been completed so far.
   int completed_downloads_ = 0;
 
+  // The number of requests that are currently being processed.
+  int pending_downloads_ = 0;
+
   // The reason background fetch was aborted.
-  BackgroundFetchReasonToAbort reason_to_abort_ =
-      BackgroundFetchReasonToAbort::NONE;
+  blink::mojom::BackgroundFetchFailureReason failure_reason_ =
+      blink::mojom::BackgroundFetchFailureReason::NONE;
+
+  // Custom callback that runs after the controller is finished.
+  FinishedCallback finished_callback_;
 
   base::WeakPtrFactory<BackgroundFetchJobController> weak_ptr_factory_;
 

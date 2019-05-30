@@ -11,12 +11,13 @@
 #include <map>
 #include <memory>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/mac/sdk_forward_declarations.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/timer/timer.h"
 #include "ui/display/display.h"
 #include "ui/display/display_change_notifier.h"
@@ -93,7 +94,7 @@ Display BuildDisplayForScreen(NSScreen* screen) {
   }
   icc_profile.HistogramDisplay(display.id());
   gfx::ColorSpace screen_color_space = icc_profile.GetColorSpace();
-  if (Display::HasForceColorProfile()) {
+  if (Display::HasForceDisplayColorProfile()) {
     if (Display::HasEnsureForcedColorProfile()) {
       CHECK_EQ(screen_color_space, display.color_space())
           << "The display's color space does not match the color space that "
@@ -168,7 +169,8 @@ class ScreenMac : public Screen {
     return gfx::ScreenPointFromNSPoint([NSEvent mouseLocation]);
   }
 
-  bool IsWindowUnderCursor(gfx::NativeWindow window) override {
+  bool IsWindowUnderCursor(gfx::NativeWindow native_window) override {
+    NSWindow* window = native_window.GetNativeNSWindow();
     return [NSWindow windowNumberAtPoint:[NSEvent mouseLocation]
              belowWindowWithWindowNumber:0] == [window windowNumber];
   }
@@ -184,7 +186,9 @@ class ScreenMac : public Screen {
     return displays_;
   }
 
-  Display GetDisplayNearestWindow(gfx::NativeWindow window) const override {
+  Display GetDisplayNearestWindow(
+      gfx::NativeWindow native_window) const override {
+    NSWindow* window = native_window.GetNativeNSWindow();
     EnsureDisplaysValid();
     if (displays_.size() == 1)
       return displays_[0];
@@ -202,7 +206,8 @@ class ScreenMac : public Screen {
     return GetCachedDisplayForScreen(match_screen);
   }
 
-  Display GetDisplayNearestView(gfx::NativeView view) const override {
+  Display GetDisplayNearestView(gfx::NativeView native_view) const override {
+    NSView* view = native_view.GetNativeNSView();
     NSWindow* window = [view window];
     if (!window)
       return GetPrimaryDisplay();
@@ -308,7 +313,7 @@ class ScreenMac : public Screen {
     // doesn't hurt.
     CGDirectDisplayID online_displays[128];
     CGDisplayCount online_display_count = 0;
-    if (CGGetOnlineDisplayList(arraysize(online_displays), online_displays,
+    if (CGGetOnlineDisplayList(base::size(online_displays), online_displays,
                                &online_display_count) != kCGErrorSuccess) {
       return std::vector<Display>(1, BuildPrimaryDisplay());
     }
@@ -366,12 +371,14 @@ class ScreenMac : public Screen {
 }  // namespace
 
 // static
-gfx::NativeWindow Screen::GetWindowForView(gfx::NativeView view) {
-  NSWindow* window = nil;
+gfx::NativeWindow Screen::GetWindowForView(gfx::NativeView native_view) {
 #if !defined(USE_AURA)
-  window = [view window];
-#endif
+  NSView* view = native_view.GetNativeNSView();
+  return [view window];
+#else
+  gfx::NativeWindow window = nil;
   return window;
+#endif
 }
 
 #if !defined(USE_AURA)

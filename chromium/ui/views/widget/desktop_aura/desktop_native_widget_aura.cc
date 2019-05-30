@@ -4,6 +4,9 @@
 
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 
+#include <memory>
+
+#include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/trace_event/trace_event.h"
@@ -23,7 +26,6 @@
 #include "ui/base/hit_test.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/compositor/layer.h"
-#include "ui/display/screen.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect.h"
@@ -65,12 +67,13 @@
 #endif
 
 DEFINE_EXPORTED_UI_CLASS_PROPERTY_TYPE(VIEWS_EXPORT,
-                                       views::DesktopNativeWidgetAura*);
+                                       views::DesktopNativeWidgetAura*)
 
 namespace views {
 
 DEFINE_UI_CLASS_PROPERTY_KEY(DesktopNativeWidgetAura*,
-                           kDesktopNativeWidgetAuraKey, NULL);
+                             kDesktopNativeWidgetAuraKey,
+                             NULL)
 
 namespace {
 
@@ -83,6 +86,7 @@ class DesktopNativeWidgetTopLevelHandler : public aura::WindowObserver {
   static aura::Window* CreateParentWindow(aura::Window* child_window,
                                           const gfx::Rect& bounds,
                                           bool full_screen,
+                                          bool is_menu,
                                           bool root_is_always_on_top) {
     // This instance will get deleted when the widget is destroyed.
     DesktopNativeWidgetTopLevelHandler* top_level_handler =
@@ -91,8 +95,9 @@ class DesktopNativeWidgetTopLevelHandler : public aura::WindowObserver {
     child_window->SetBounds(gfx::Rect(bounds.size()));
 
     Widget::InitParams init_params;
-    init_params.type = full_screen ? Widget::InitParams::TYPE_WINDOW :
-        Widget::InitParams::TYPE_POPUP;
+    init_params.type = full_screen ? Widget::InitParams::TYPE_WINDOW
+                                   : is_menu ? Widget::InitParams::TYPE_MENU
+                                             : Widget::InitParams::TYPE_POPUP;
     init_params.bounds = bounds;
     init_params.ownership = Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET;
     init_params.layer_type = ui::LAYER_NOT_DRAWN;
@@ -198,7 +203,7 @@ class DesktopNativeWidgetAuraWindowParentingClient
         root_is_always_on_top = native_widget->IsAlwaysOnTop();
 
       return DesktopNativeWidgetTopLevelHandler::CreateParentWindow(
-          window, bounds, is_fullscreen, root_is_always_on_top);
+          window, bounds, is_fullscreen, is_menu, root_is_always_on_top);
     }
     return root_window_;
   }
@@ -315,6 +320,8 @@ void DesktopNativeWidgetAura::OnHostClosed() {
   wm::SetActivationClient(host_->window(), NULL);
   focus_client_.reset();
 
+  host_->window()->RemovePreTargetHandler(root_window_event_filter_.get());
+
   host_->RemoveObserver(this);
   host_.reset();
   // WindowEventDispatcher owns |desktop_window_tree_host_|.
@@ -353,6 +360,13 @@ void DesktopNativeWidgetAura::OnDesktopWindowTreeHostDestroyed(
   event_client_.reset();
 }
 
+void DesktopNativeWidgetAura::NotifyAccessibilityEvent(
+    ax::mojom::Event event_type) {
+  if (!GetWidget() || !GetWidget()->GetRootView())
+    return;
+  GetWidget()->GetRootView()->NotifyAccessibilityEvent(event_type, true);
+}
+
 void DesktopNativeWidgetAura::HandleActivationChanged(bool active) {
   if (!native_widget_delegate_->OnNativeWidgetActivationChanged(active))
     return;
@@ -361,6 +375,11 @@ void DesktopNativeWidgetAura::HandleActivationChanged(bool active) {
   if (!activation_client)
     return;
   if (active) {
+    // TODO(nektar): We need to harmonize the firing of accessibility
+    // events between platforms.
+    // https://crbug.com/897177
+    NotifyAccessibilityEvent(ax::mojom::Event::kWindowActivated);
+
     if (GetWidget()->HasFocusManager()) {
       // This function can be called before the focus manager has had a
       // chance to set the focused view. In which case we should get the
@@ -392,12 +411,18 @@ void DesktopNativeWidgetAura::HandleActivationChanged(bool active) {
       GetInputMethod()->OnFocus();
     }
   } else {
+    // TODO(nektar): We need to harmonize the firing of accessibility
+    // events between platforms.
+    // https://crbug.com/897177
+    NotifyAccessibilityEvent(ax::mojom::Event::kWindowDeactivated);
+
     // If we're not active we need to deactivate the corresponding
     // aura::Window. This way if a child widget is active it gets correctly
     // deactivated (child widgets don't get native desktop activation changes,
     // only aura activation changes).
     aura::Window* active_window = activation_client->GetActiveWindow();
     if (active_window) {
+      base::AutoReset<bool> scoped(&is_handling_deactivation_, true);
       activation_client->DeactivateWindow(active_window);
       GetInputMethod()->OnBlur();
     }
@@ -495,7 +520,7 @@ void DesktopNativeWidgetAura::InitNativeWidget(
   wm::SetActivationClient(host_->window(), focus_controller);
   host_->window()->AddPreTargetHandler(focus_controller);
 
-  position_client_.reset(new DesktopScreenPositionClient(host_->window()));
+  position_client_ = desktop_window_tree_host_->CreateScreenPositionClient();
 
   drag_drop_client_ = desktop_window_tree_host_->CreateDragDropClient(
       native_cursor_manager_);
@@ -595,11 +620,15 @@ const ui::Layer* DesktopNativeWidgetAura::GetLayer() const {
 }
 
 void DesktopNativeWidgetAura::ReorderNativeViews() {
+  if (!content_window_)
+    return;
+
   // Reordering native views causes multiple changes to the window tree.
-  // Instantiate a ScopedPauseOcclusionTracking to recompute occlusion once at
-  // the end of this scope rather than after each individual change.
+  // Instantiate a ScopedPause to recompute occlusion once at the end of this
+  // scope rather than after each individual change.
   // https://crbug.com/829918
-  aura::WindowOcclusionTracker::ScopedPauseOcclusionTracking pause_occlusion;
+  aura::WindowOcclusionTracker::ScopedPause pause_occlusion(
+      content_window_->env());
   window_reorderer_->ReorderChildWindows();
 }
 
@@ -703,11 +732,7 @@ std::string DesktopNativeWidgetAura::GetWorkspace() const {
 void DesktopNativeWidgetAura::SetBounds(const gfx::Rect& bounds) {
   if (!content_window_)
     return;
-  aura::Window* root = host_->window();
-  display::Screen* screen = display::Screen::GetScreen();
-  gfx::Rect bounds_in_pixels = screen->DIPToScreenRectInWindow(root, bounds);
-  desktop_window_tree_host_->AsWindowTreeHost()->SetBoundsInPixels(
-      bounds_in_pixels);
+  desktop_window_tree_host_->SetBoundsInDIP(bounds);
 }
 
 void DesktopNativeWidgetAura::SetBoundsConstrained(const gfx::Rect& bounds) {
@@ -771,8 +796,8 @@ bool DesktopNativeWidgetAura::IsVisible() const {
   // platform code might show the desktop window tree host early, meaning we
   // aren't fully visible as we haven't shown the content window. Callers may
   // short-circuit a call to show this widget if they think its already visible.
-  return content_window_ && content_window_->IsVisible() &&
-      desktop_window_tree_host_->IsVisible();
+  return content_window_ && content_window_->TargetVisibility() &&
+         desktop_window_tree_host_->IsVisible();
 }
 
 void DesktopNativeWidgetAura::Activate() {
@@ -828,6 +853,9 @@ void DesktopNativeWidgetAura::Maximize() {
 void DesktopNativeWidgetAura::Minimize() {
   if (content_window_)
     desktop_window_tree_host_->Minimize();
+  internal::RootView* root_view =
+      static_cast<internal::RootView*>(GetWidget()->GetRootView());
+  root_view->ResetEventHandlers();
 }
 
 bool DesktopNativeWidgetAura::IsMaximized() const {
@@ -851,6 +879,9 @@ void DesktopNativeWidgetAura::SetFullscreen(bool fullscreen) {
 bool DesktopNativeWidgetAura::IsFullscreen() const {
   return content_window_ && desktop_window_tree_host_->IsFullscreen();
 }
+
+void DesktopNativeWidgetAura::SetCanAppearInExistingFullscreenSpaces(
+    bool can_appear_in_existing_fullscreen_spaces) {}
 
 void DesktopNativeWidgetAura::SetOpacity(float opacity) {
   if (content_window_)
@@ -982,8 +1013,8 @@ void DesktopNativeWidgetAura::OnSizeConstraintsChanged() {
   desktop_window_tree_host_->SizeConstraintsChanged();
 }
 
-void DesktopNativeWidgetAura::RepostNativeEvent(gfx::NativeEvent native_event) {
-  OnEvent(native_event);
+void DesktopNativeWidgetAura::OnCanActivateChanged() {
+  desktop_window_tree_host_->OnCanActivateChanged();
 }
 
 std::string DesktopNativeWidgetAura::GetName() const {
@@ -1050,7 +1081,7 @@ bool DesktopNativeWidgetAura::HasHitTestMask() const {
   return native_widget_delegate_->HasHitTestMask();
 }
 
-void DesktopNativeWidgetAura::GetHitTestMask(gfx::Path* mask) const {
+void DesktopNativeWidgetAura::GetHitTestMask(SkPath* mask) const {
   native_widget_delegate_->GetHitTestMask(mask);
 }
 
@@ -1119,10 +1150,11 @@ void DesktopNativeWidgetAura::OnWindowActivated(
   DCHECK(content_window_ == gained_active || content_window_ == lost_active);
   if (gained_active == content_window_ && restore_focus_on_activate_) {
     restore_focus_on_activate_ = false;
-    // For OS_LINUX, desktop native widget may not be activated when child
-    // widgets gets aura activation changes. Only when desktop native widget is
-    // active, we can rely on aura activation to restore focused view.
-    if (GetWidget()->IsActive())
+    // For OS_LINUX, desktop native widget may be activated during deactivation
+    // when the active aura::Window is not |content_window_|. In such case,
+    // skip RestoreFocusedView so that we don't activate the widget immediately
+    // after its deactivation.
+    if (!is_handling_deactivation_)
       GetWidget()->GetFocusManager()->RestoreFocusedView();
   } else if (lost_active == content_window_ && GetWidget()->HasFocusManager()) {
     DCHECK(!restore_focus_on_activate_);

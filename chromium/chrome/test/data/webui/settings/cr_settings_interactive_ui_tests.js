@@ -34,36 +34,8 @@ CrSettingsInteractiveUITest.prototype = {
     PolymerTest.prototype.setUp.call(this);
     // We aren't loading the main document.
     this.accessibilityAuditConfig.ignoreSelectors('humanLangMissing', 'html');
-
-    // TODO(michaelpg): Re-enable after bringing in fix for
-    // https://github.com/PolymerElements/paper-slider/issues/131.
-    this.accessibilityAuditConfig.ignoreSelectors(
-        'badAriaAttributeValue', 'paper-slider');
   },
 };
-
-/**
- * Test fixture for FocusRowBehavior.
- * @constructor
- * @extends {CrSettingsInteractiveUITest}
- */
-function CrSettingsFocusRowBehavior() {}
-
-CrSettingsFocusRowBehavior.prototype = {
-  __proto__: CrSettingsInteractiveUITest.prototype,
-
-  /** @override */
-  browsePreload: 'chrome://settings/focus_row_behavior.html',
-
-  /** @override */
-  extraLibraries: CrSettingsInteractiveUITest.prototype.extraLibraries.concat([
-    'focus_row_behavior_test.js',
-  ]),
-};
-
-TEST_F('CrSettingsFocusRowBehavior', 'FocusTest', function() {
-  mocha.run();
-});
 
 
 /**

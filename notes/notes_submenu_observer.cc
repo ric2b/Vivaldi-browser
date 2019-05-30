@@ -6,6 +6,7 @@
 #include "browser/menus/vivaldi_menu_enums.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/renderer_context_menu/render_view_context_menu_proxy.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
@@ -14,6 +15,7 @@
 #include "renderer/vivaldi_render_messages.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "vivaldi/grit/vivaldi_native_strings.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using content::BrowserThread;
 using vivaldi::NotesModelFactory;
@@ -31,18 +33,21 @@ void NotesSubMenuObserver::InitMenu(const content::ContextMenuParams& params) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   content::BrowserContext* browser_context = proxy_->GetBrowserContext();
+  Profile* profile = Profile::FromBrowserContext(browser_context);
 
-  vivaldi::Notes_Model* model =
-    NotesModelFactory::GetForBrowserContext(browser_context);
+  if (!profile->IsGuestSession()) {
+    vivaldi::Notes_Model* model =
+        NotesModelFactory::GetForBrowserContext(browser_context);
 
-  vivaldi::Notes_Node* node = model->main_node();
-  for (int i = 0; i < node->child_count(); i++) {
-    this->AddMenuItems(node->GetChild(i), &submenu_model_);
+    vivaldi::Notes_Node* node = model->main_node();
+    for (int i = 0; i < node->child_count(); i++) {
+      this->AddMenuItems(node->GetChild(i), &submenu_model_);
+    }
+
+    proxy_->AddSubMenu(IDC_VIV_CONTENT_INSERT_NOTE,
+                       l10n_util::GetStringUTF16(IDS_VIV_CONTENT_INSERT_NOTE),
+                       &submenu_model_);
   }
-
-  proxy_->AddSubMenu(IDC_VIV_CONTENT_INSERT_NOTE,
-                     l10n_util::GetStringUTF16(IDS_VIV_CONTENT_INSERT_NOTE),
-                     &submenu_model_);
 }
 
 void NotesSubMenuObserver::AddMenuItems(vivaldi::Notes_Node* node,
@@ -76,6 +81,20 @@ void NotesSubMenuObserver::AddMenuItems(vivaldi::Notes_Node* node,
       title = title.substr(0, kMaxMenuStringLength - 3) +
           base::UTF8ToUTF16("...");
     }
+    // Escape any '&' with a double set to prevent underlining.
+#if defined(OS_MACOSX)
+    bool underline_letter = false;
+#else
+    Profile* profile = Profile::FromBrowserContext(proxy_->GetBrowserContext());
+    bool underline_letter = profile->GetPrefs()->GetBoolean(
+          vivaldiprefs::kBookmarksUnderlineMenuLetter);
+#endif
+    if (!underline_letter) {
+      base::StringPiece16 s1 = base::StringPiece16(base::UTF8ToUTF16("&"));
+      base::string16 s2 = base::UTF8ToUTF16("&&");
+      base::ReplaceChars(title, s1, s2, &title);
+    }
+
     if (node->is_folder()) {
       ui::SimpleMenuModel* child_menu_model
           = new ui::SimpleMenuModel(delegate_);

@@ -54,25 +54,25 @@ class DeprecatedStorageQuota final : public ScriptWrappable {
   };
 
   static DeprecatedStorageQuota* Create(Type type) {
-    return new DeprecatedStorageQuota(type);
+    return MakeGarbageCollected<DeprecatedStorageQuota>(type);
   }
 
   static void EnqueueStorageErrorCallback(ScriptState*,
                                           V8StorageErrorCallback*,
                                           DOMExceptionCode);
 
+  explicit DeprecatedStorageQuota(Type);
+
   void queryUsageAndQuota(ScriptState*,
                           V8StorageUsageCallback*,
                           V8StorageErrorCallback* = nullptr);
 
   void requestQuota(ScriptState*,
-                    unsigned long long new_quota_in_bytes,
+                    uint64_t new_quota_in_bytes,
                     V8StorageQuotaCallback* = nullptr,
                     V8StorageErrorCallback* = nullptr);
 
  private:
-  explicit DeprecatedStorageQuota(Type);
-
   // Binds the interface (if not already bound) with the given interface
   // provider, and returns it,
   mojom::blink::QuotaDispatcherHost& GetQuotaHost(ExecutionContext*);

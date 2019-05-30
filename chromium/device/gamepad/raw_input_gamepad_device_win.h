@@ -18,6 +18,7 @@
 #include "device/gamepad/abstract_haptic_gamepad.h"
 #include "device/gamepad/dualshock4_controller_win.h"
 #include "device/gamepad/hid_dll_functions_win.h"
+#include "device/gamepad/hid_haptic_gamepad_win.h"
 #include "device/gamepad/public/cpp/gamepad.h"
 
 namespace device {
@@ -38,9 +39,9 @@ class RawInputGamepadDeviceWin : public AbstractHapticGamepad {
   static bool IsGamepadUsageId(uint16_t usage);
 
   int GetSourceId() const { return source_id_; }
-  int GetVendorId() const { return vendor_id_; }
-  int GetVersionNumber() const { return version_number_; }
-  int GetProductId() const { return product_id_; }
+  uint16_t GetVendorId() const { return vendor_id_; }
+  uint16_t GetVersionNumber() const { return version_number_; }
+  uint16_t GetProductId() const { return product_id_; }
   std::wstring GetDeviceName() const { return name_; }
   std::wstring GetProductString() const { return product_string_; }
 
@@ -111,13 +112,9 @@ class RawInputGamepadDeviceWin : public AbstractHapticGamepad {
   // Functions loaded from hid.dll. Not owned.
   HidDllFunctionsWin* hid_functions_ = nullptr;
 
-  // The report ID incremented each time an input message is received for this
-  // device. It is included in the pad info in place of a timestamp.
-  uint32_t report_id_ = 0;
-
-  uint32_t vendor_id_ = 0;
-  uint32_t product_id_ = 0;
-  uint32_t version_number_ = 0;
+  uint16_t vendor_id_ = 0;
+  uint16_t product_id_ = 0;
+  uint16_t version_number_ = 0;
   uint16_t usage_ = 0;
   std::wstring name_;
   std::wstring product_string_;
@@ -140,6 +137,9 @@ class RawInputGamepadDeviceWin : public AbstractHapticGamepad {
 
   // Dualshock4-specific functionality (e.g., haptics), if available.
   std::unique_ptr<Dualshock4ControllerWin> dualshock4_;
+
+  // A controller that uses a HID output report for vibration effects.
+  std::unique_ptr<HidHapticGamepadWin> hid_haptics_;
 };
 
 }  // namespace device

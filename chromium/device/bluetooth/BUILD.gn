@@ -156,6 +156,8 @@ component("bluetooth") {
     "bluetooth_low_energy_defs_win.h",
     "bluetooth_low_energy_device_mac.h",
     "bluetooth_low_energy_device_mac.mm",
+    "bluetooth_low_energy_device_watcher_mac.h",
+    "bluetooth_low_energy_device_watcher_mac.mm",
     "bluetooth_low_energy_discovery_manager_mac.h",
     "bluetooth_low_energy_discovery_manager_mac.mm",
     "bluetooth_low_energy_peripheral_delegate.h",
@@ -232,7 +234,10 @@ component("bluetooth") {
   }
 
   if (is_chromeos) {
-    deps += [ "//chromeos" ]
+    deps += [
+      "//chromeos/constants",
+      "//chromeos/dbus",
+    ]
   }
 
   if (is_mac) {
@@ -415,10 +420,10 @@ component("bluetooth") {
       ]
       if (is_linux) {
         sources += [
+          "dbus/bluez_dbus_thread_manager.cc",
+          "dbus/bluez_dbus_thread_manager.h",
           "dbus/dbus_bluez_manager_wrapper_linux.cc",
           "dbus/dbus_bluez_manager_wrapper_linux.h",
-          "dbus/dbus_thread_manager_linux.cc",
-          "dbus/dbus_thread_manager_linux.h",
         ]
       }
       if (is_chromeos) {

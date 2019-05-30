@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
@@ -23,6 +24,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/hit_test_region_observer.h"
@@ -41,7 +43,9 @@
 #include "extensions/shell/browser/shell_extension_system.h"
 #include "extensions/shell/test/shell_test.h"
 #include "extensions/test/extension_test_message_listener.h"
+#include "extensions/test/result_catcher.h"
 #include "net/base/filename_util.h"
+#include "net/test/embedded_test_server/default_handlers.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -173,16 +177,26 @@ content::WebContents* WebViewAPITest::GetFirstAppWindowWebContents() {
 }
 
 void WebViewAPITest::RunTest(const std::string& test_name,
-                             const std::string& app_location) {
+                             const std::string& app_location,
+                             bool ad_hoc_framework) {
   LaunchApp(app_location);
 
-  ExtensionTestMessageListener done_listener("TEST_PASSED", false);
-  done_listener.set_failure_message("TEST_FAILED");
-  ASSERT_TRUE(content::ExecuteScript(
-      embedder_web_contents_,
-      base::StringPrintf("runTest('%s')", test_name.c_str())))
-      << "Unable to start test.";
-  ASSERT_TRUE(done_listener.WaitUntilSatisfied());
+  if (ad_hoc_framework) {
+    ExtensionTestMessageListener done_listener("TEST_PASSED", false);
+    done_listener.set_failure_message("TEST_FAILED");
+    ASSERT_TRUE(content::ExecuteScript(
+        embedder_web_contents_,
+        base::StringPrintf("runTest('%s')", test_name.c_str())))
+        << "Unable to start test.";
+    ASSERT_TRUE(done_listener.WaitUntilSatisfied());
+  } else {
+    ResultCatcher catcher;
+    ASSERT_TRUE(content::ExecuteScript(
+        embedder_web_contents_,
+        base::StringPrintf("runTest('%s')", test_name.c_str())))
+        << "Unable to start test.";
+    ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
+  }
 }
 
 void WebViewAPITest::SetUpCommandLine(base::CommandLine* command_line) {
@@ -224,6 +238,8 @@ void WebViewAPITest::StartTestServer(const std::string& app_location) {
           &UserAgentResponseHandler,
           kUserAgentRedirectResponsePath,
           embedded_test_server()->GetURL(kRedirectResponseFullPath)));
+
+  net::test_server::RegisterDefaultHandlers(embedded_test_server());
 
   embedded_test_server()->StartAcceptingConnections();
 }
@@ -458,9 +474,16 @@ IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestContextMenu) {
 
   // Trigger the context menu. AppShell doesn't show a context menu; this is
   // just a sanity check that nothing breaks.
+  content::WebContents* root_web_contents =
+      guest_web_contents->GetOutermostWebContents();
+  content::RenderWidgetHostView* guest_view =
+      guest_web_contents->GetRenderWidgetHostView();
+  gfx::Point guest_context_menu_position(5, 5);
+  gfx::Point root_context_menu_position =
+      guest_view->TransformPointToRootCoordSpace(guest_context_menu_position);
   content::SimulateRoutedMouseClickAt(
-      guest_web_contents, blink::WebInputEvent::kNoModifiers,
-      blink::WebMouseEvent::Button::kRight, gfx::Point(10, 10));
+      root_web_contents, blink::WebInputEvent::kNoModifiers,
+      blink::WebMouseEvent::Button::kRight, root_context_menu_position);
   context_menu_filter->Wait();
 }
 #endif
@@ -500,7 +523,16 @@ IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestDialogConfirmDefaultCancel) {
   RunTest("testDialogConfirmDefaultCancel", "web_view/dialog");
 }
 
-IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestDialogConfirmDefaultGCCancel) {
+// This test is flaky and times out on windows.
+// https://crbug.com/937461.
+#if defined(OS_WIN)
+#define MAYBE_TestDialogConfirmDefaultGCCancel \
+  DISABLED_TestDialogConfirmDefaultGCCancel
+#else
+#define MAYBE_TestDialogConfirmDefaultGCCancel TestDialogConfirmDefaultGCCancel
+#endif
+
+IN_PROC_BROWSER_TEST_F(WebViewAPITest, MAYBE_TestDialogConfirmDefaultGCCancel) {
   RunTest("testDialogConfirmDefaultGCCancel", "web_view/dialog");
 }
 
@@ -765,6 +797,13 @@ IN_PROC_BROWSER_TEST_F(WebViewAPITest, MAYBE_TestWebRequestAPIWithHeaders) {
   StopTestServer();
 }
 
+IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestWebRequestAPIWithExtraHeaders) {
+  std::string app_location = "web_view/apitest";
+  StartTestServer(app_location);
+  RunTest("testWebRequestAPIWithExtraHeaders", app_location);
+  StopTestServer();
+}
+
 IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestLoadEventsSameDocumentNavigation) {
   std::string app_location = "web_view/apitest";
   StartTestServer(app_location);
@@ -789,6 +828,32 @@ IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestWebViewInsideFrame) {
 
 IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestCaptureVisibleRegion) {
   RunTest("testCaptureVisibleRegion", "web_view/apitest");
+}
+
+IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestNoUserCodeCreate) {
+  RunTest("testCreate", "web_view/no_internal_calls_to_user_code", false);
+}
+
+IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestNoUserCodeSetOnEventProperty) {
+  RunTest("testSetOnEventProperty", "web_view/no_internal_calls_to_user_code",
+          false);
+}
+
+IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestNoUserCodeGetSetAttributes) {
+  RunTest("testGetSetAttributes", "web_view/no_internal_calls_to_user_code",
+          false);
+}
+
+IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestNoUserCodeBackForward) {
+  RunTest("testBackForward", "web_view/no_internal_calls_to_user_code", false);
+}
+
+IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestNoUserCodeFocus) {
+  RunTest("testFocus", "web_view/no_internal_calls_to_user_code", false);
+}
+
+IN_PROC_BROWSER_TEST_F(WebViewAPITest, TestClosedShadowRoot) {
+  RunTest("testClosedShadowRoot", "web_view/apitest");
 }
 
 }  // namespace extensions

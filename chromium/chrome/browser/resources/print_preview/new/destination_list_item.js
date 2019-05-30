@@ -74,12 +74,6 @@ Polymer({
     }
   },
 
-  /** @private */
-  onLearnMoreLinkClick_: function() {
-    print_preview.NativeLayer.getInstance().forceOpenNewTab(
-        loadTimeData.getString('gcpCertificateErrorLearnMoreURL'));
-  },
-
   // <if expr="chromeos">
   /**
    * Called if the printer configuration request is accepted. Show the waiting
@@ -123,11 +117,13 @@ Polymer({
 
   /** @private */
   updateSearchHint_: function() {
-    this.searchHint_ = !this.searchQuery ?
-        '' :
-        this.destination.extraPropertiesToMatch
-            .filter(p => p.match(this.searchQuery))
-            .join(' ');
+    const matches = !this.searchQuery ?
+        [] :
+        this.destination.extraPropertiesToMatch.filter(
+            p => p.match(this.searchQuery));
+    this.searchHint_ = matches.length === 0 ?
+        (this.destination.extraPropertiesToMatch.find(p => !!p) || '') :
+        matches.join(' ');
   },
 
   /**
@@ -137,5 +133,17 @@ Polymer({
    */
   updateHighlighting_: function() {
     return print_preview.updateHighlights(this, this.searchQuery);
+  },
+
+  /**
+   * @return {string} A tooltip for the extension printer icon.
+   * @private
+   */
+  getExtensionPrinterTooltip_: function() {
+    if (!this.destination.isExtension) {
+      return '';
+    }
+    return loadTimeData.getStringF(
+        'extensionDestinationIconTooltip', this.destination.extensionName);
   },
 });

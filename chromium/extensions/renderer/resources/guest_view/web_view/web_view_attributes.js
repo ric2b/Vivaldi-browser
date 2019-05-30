@@ -4,6 +4,8 @@
 
 // This module implements the attributes of the <webview> tag.
 
+var $Element = require('safeMethods').SafeMethods.$Element;
+var $MutationObserver = require('safeMethods').SafeMethods.$MutationObserver;
 var GuestViewAttributes = require('guestViewAttributes').GuestViewAttributes;
 var GuestViewInternalNatives = requireNative('guest_view_internal');
 var WebViewConstants = require('webViewConstants').WebViewConstants;
@@ -129,9 +131,9 @@ NameAttribute.prototype.handleMutation = function(oldValue, newValue) {
 NameAttribute.prototype.setValue = function(value) {
   value = value || '';
   if (value === '')
-    this.view.element.removeAttribute(this.name);
+    $Element.removeAttribute(this.view.element, this.name);
   else
-    this.view.element.setAttribute(this.name, value);
+    $Element.setAttribute(this.view.element, this.name, value);
 };
 
 // -----------------------------------------------------------------------------
@@ -191,7 +193,7 @@ SrcAttribute.prototype.setValueIgnoreMutation = function(value) {
   // possible for this change to get picked up asyncronously by src's mutation
   // observer |observer|, and then get handled even though we do not want to
   // handle this mutation.
-  this.observer.takeRecords();
+  $MutationObserver.takeRecords(this.observer);
 };
 
 SrcAttribute.prototype.handleMutation = function(oldValue, newValue) {
@@ -220,9 +222,8 @@ SrcAttribute.prototype.detach = function() {
 // attribute without any changes to its value. This is useful in the case
 // where the webview guest has crashed and navigating to the same address
 // spawns off a new process.
-SrcAttribute.prototype.setupMutationObserver =
-    function() {
-  this.observer = new MutationObserver($Function.bind(function(mutations) {
+SrcAttribute.prototype.setupMutationObserver = function() {
+  this.observer = new $MutationObserver($Function.bind(function(mutations) {
     $Array.forEach(mutations, $Function.bind(function(mutation) {
       var oldValue = mutation.oldValue;
       var newValue = this.getValue();
@@ -237,7 +238,7 @@ SrcAttribute.prototype.setupMutationObserver =
     attributeOldValue: true,
     attributeFilter: [this.name]
   };
-  this.observer.observe(this.view.element, params);
+  $MutationObserver.observe(this.observer, this.view.element, params);
 };
 
 SrcAttribute.prototype.parse = function() {

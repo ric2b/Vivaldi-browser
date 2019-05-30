@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/time/time.h"
 
 namespace signin_metrics {
@@ -105,10 +106,6 @@ void RecordSigninUserActionForAccessPoint(AccessPoint access_point) {
       base::RecordAction(
           base::UserMetricsAction("Signin_Signin_FromTabSwitcher"));
       break;
-    case AccessPoint::ACCESS_POINT_FORCE_SIGNIN_WARNING:
-      base::RecordAction(
-          base::UserMetricsAction("Signin_Signin_FromForceSigninWarning"));
-      break;
     case AccessPoint::ACCESS_POINT_SAVE_CARD_BUBBLE:
       base::RecordAction(
           base::UserMetricsAction("Signin_Signin_FromSaveCardBubble"));
@@ -116,6 +113,14 @@ void RecordSigninUserActionForAccessPoint(AccessPoint access_point) {
     case AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
       base::RecordAction(
           base::UserMetricsAction("Signin_Signin_FromManageCardsBubble"));
+      break;
+    case AccessPoint::ACCESS_POINT_MACHINE_LOGON:
+      base::RecordAction(
+          base::UserMetricsAction("Signin_Signin_FromMachineLogon"));
+      break;
+    case AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
+      base::RecordAction(
+          base::UserMetricsAction("Signin_Signin_FromGoogleServicesSettings"));
       break;
     case AccessPoint::ACCESS_POINT_MAX:
       NOTREACHED();
@@ -184,7 +189,8 @@ void RecordSigninWithDefaultUserActionForAccessPoint(
     case AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN:
     case AccessPoint::ACCESS_POINT_RESIGNIN_INFOBAR:
     case AccessPoint::ACCESS_POINT_UNKNOWN:
-    case AccessPoint::ACCESS_POINT_FORCE_SIGNIN_WARNING:
+    case AccessPoint::ACCESS_POINT_MACHINE_LOGON:
+    case AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
       NOTREACHED() << "Signin_SigninWithDefault_From* user actions"
                    << " are not recorded for access_point "
                    << static_cast<int>(access_point)
@@ -257,7 +263,8 @@ void RecordSigninNotDefaultUserActionForAccessPoint(
     case AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN:
     case AccessPoint::ACCESS_POINT_RESIGNIN_INFOBAR:
     case AccessPoint::ACCESS_POINT_UNKNOWN:
-    case AccessPoint::ACCESS_POINT_FORCE_SIGNIN_WARNING:
+    case AccessPoint::ACCESS_POINT_MACHINE_LOGON:
+    case AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
       NOTREACHED() << "Signin_SigninNotDefault_From* user actions"
                    << " are not recorded for access point "
                    << static_cast<int>(access_point)
@@ -330,7 +337,8 @@ void RecordSigninNewAccountPreDiceUserActionForAccessPoint(
     case AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN:
     case AccessPoint::ACCESS_POINT_RESIGNIN_INFOBAR:
     case AccessPoint::ACCESS_POINT_UNKNOWN:
-    case AccessPoint::ACCESS_POINT_FORCE_SIGNIN_WARNING:
+    case AccessPoint::ACCESS_POINT_MACHINE_LOGON:
+    case AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
       // These access points do not support personalized sign-in promos, so
       // |Signin_SigninNewAccountPreDice_From*| user actions should not
       // be recorded for them. Note: To avoid bloating the sign-in APIs, the
@@ -414,7 +422,8 @@ void RecordSigninNewAccountNoExistingAccountUserActionForAccessPoint(
     case AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN:
     case AccessPoint::ACCESS_POINT_RESIGNIN_INFOBAR:
     case AccessPoint::ACCESS_POINT_UNKNOWN:
-    case AccessPoint::ACCESS_POINT_FORCE_SIGNIN_WARNING:
+    case AccessPoint::ACCESS_POINT_MACHINE_LOGON:
+    case AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
       // These access points do not support personalized sign-in promos, so
       // |Signin_SigninNewAccountNoExistingAccount_From*| user actions should
       // not be recorded for them. Note: To avoid bloating the sign-in APIs, the
@@ -494,7 +503,8 @@ void RecordSigninNewAccountExistingAccountUserActionForAccessPoint(
     case AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN:
     case AccessPoint::ACCESS_POINT_RESIGNIN_INFOBAR:
     case AccessPoint::ACCESS_POINT_UNKNOWN:
-    case AccessPoint::ACCESS_POINT_FORCE_SIGNIN_WARNING:
+    case AccessPoint::ACCESS_POINT_MACHINE_LOGON:
+    case AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
       // These access points do not support personalized sign-in promos, so
       // |Signin_SigninNewAccountExistingAccount_From*| user actions should not
       // be recorded for them. Note: To avoid bloating the sign-in APIs, the
@@ -654,8 +664,7 @@ void LogSigninAccountReconciliation(int total_number_accounts,
                                     bool primary_accounts_same,
                                     bool is_first_reconcile,
                                     int pre_count_gaia_cookies) {
-  UMA_HISTOGRAM_COUNTS_100("Profile.NumberOfAccountsPerProfile",
-                           total_number_accounts);
+  RecordAccountsPerProfile(total_number_accounts);
   // We want to include zeroes in the counts of added or removed accounts to
   // easily capture _relatively_ how often we merge accounts.
   if (is_first_reconcile) {
@@ -680,6 +689,11 @@ void LogSigninAccountReconciliation(int total_number_accounts,
   }
 }
 
+void RecordAccountsPerProfile(int total_number_accounts) {
+  UMA_HISTOGRAM_COUNTS_100("Profile.NumberOfAccountsPerProfile",
+                           total_number_accounts);
+}
+
 void LogSigninAccountReconciliationDuration(base::TimeDelta duration,
                                             bool successful) {
   if (successful) {
@@ -696,8 +710,8 @@ void LogSigninProfile(bool is_first_run, base::Time install_date) {
   // Determine how much time passed since install when this profile was signed
   // in.
   base::TimeDelta elapsed_time = base::Time::Now() - install_date;
-  UMA_HISTOGRAM_COUNTS("Signin.ElapsedTimeFromInstallToSignin",
-                       elapsed_time.InMinutes());
+  UMA_HISTOGRAM_COUNTS_1M("Signin.ElapsedTimeFromInstallToSignin",
+                          elapsed_time.InMinutes());
 }
 
 void LogSigninAddAccount() {
@@ -750,25 +764,6 @@ void LogSigninConfirmHistogramValue(ConfirmationUsage action) {
                             HISTOGRAM_CONFIRM_MAX);
 }
 
-void LogXDevicePromoEligible(CrossDevicePromoEligibility metric) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "Signin.XDevicePromo.Eligibility", metric,
-      NUM_CROSS_DEVICE_PROMO_ELIGIBILITY_METRICS);
-}
-
-void LogXDevicePromoInitialized(CrossDevicePromoInitialized metric) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "Signin.XDevicePromo.Initialized", metric,
-      NUM_CROSS_DEVICE_PROMO_INITIALIZED_METRICS);
-}
-
-void LogBrowsingSessionDuration(const base::Time& previous_activity_time) {
-  UMA_HISTOGRAM_CUSTOM_COUNTS(
-      "Signin.XDevicePromo.BrowsingSessionDuration",
-      (base::Time::Now() - previous_activity_time).InMinutes(), 1,
-      base::TimeDelta::FromDays(30).InMinutes(), 50);
-}
-
 void LogAccountReconcilorStateOnGaiaResponse(AccountReconcilorState state) {
   UMA_HISTOGRAM_ENUMERATION("Signin.AccountReconcilorState.OnGaiaResponse",
                             state, ACCOUNT_RECONCILOR_HISTOGRAM_COUNT);
@@ -783,8 +778,10 @@ void LogAccountEquality(AccountEquality equality) {
 void LogCookieJarStableAge(const base::TimeDelta stable_age,
                            const ReportingType type) {
   INVESTIGATOR_HISTOGRAM_CUSTOM_COUNTS(
-      "Signin.CookieJar.StableAge", type, stable_age.InSeconds(), 1,
-      base::TimeDelta::FromDays(365).InSeconds(), 100);
+      "Signin.CookieJar.StableAge", type,
+      base::saturated_cast<int>(stable_age.InSeconds()), 1,
+      base::saturated_cast<int>(base::TimeDelta::FromDays(365).InSeconds()),
+      100);
 }
 
 void LogCookieJarCounts(const int signed_in,
@@ -809,6 +806,23 @@ void LogAccountRelation(const AccountRelation relation,
 
 void LogIsShared(const bool is_shared, const ReportingType type) {
   INVESTIGATOR_HISTOGRAM_BOOLEAN("Signin.IsShared", type, is_shared);
+}
+
+void RecordRefreshTokenUpdatedFromSource(
+    bool refresh_token_is_valid,
+    SourceForRefreshTokenOperation source) {
+  if (refresh_token_is_valid) {
+    UMA_HISTOGRAM_ENUMERATION("Signin.RefreshTokenUpdated.ToValidToken.Source",
+                              source);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION(
+        "Signin.RefreshTokenUpdated.ToInvalidToken.Source", source);
+  }
+}
+
+void RecordRefreshTokenRevokedFromSource(
+    SourceForRefreshTokenOperation source) {
+  UMA_HISTOGRAM_ENUMERATION("Signin.RefreshTokenRevoked.Source", source);
 }
 
 // --------------------------------------------------------------
@@ -921,12 +935,16 @@ void RecordSigninImpressionUserActionForAccessPoint(AccessPoint access_point) {
       base::RecordAction(
           base::UserMetricsAction("Signin_Impression_FromManageCardsBubble"));
       break;
+    case AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
+      base::RecordAction(base::UserMetricsAction(
+          "Signin_Impression_FromGoogleServicesSettings"));
+      break;
     case AccessPoint::ACCESS_POINT_CONTENT_AREA:
     case AccessPoint::ACCESS_POINT_EXTENSIONS:
-    case AccessPoint::ACCESS_POINT_FORCE_SIGNIN_WARNING:
     case AccessPoint::ACCESS_POINT_SUPERVISED_USER:
     case AccessPoint::ACCESS_POINT_USER_MANAGER:
     case AccessPoint::ACCESS_POINT_UNKNOWN:
+    case AccessPoint::ACCESS_POINT_MACHINE_LOGON:
       NOTREACHED() << "Signin_Impression_From* user actions"
                    << " are not recorded for access point "
                    << static_cast<int>(access_point);
@@ -1054,7 +1072,8 @@ void RecordSigninImpressionWithAccountUserActionForAccessPoint(
     case AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN:
     case AccessPoint::ACCESS_POINT_RESIGNIN_INFOBAR:
     case AccessPoint::ACCESS_POINT_UNKNOWN:
-    case AccessPoint::ACCESS_POINT_FORCE_SIGNIN_WARNING:
+    case AccessPoint::ACCESS_POINT_MACHINE_LOGON:
+    case AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
       NOTREACHED() << "Signin_Impression{With|WithNo}Account_From* user actions"
                    << " are not recorded for access point "
                    << static_cast<int>(access_point)

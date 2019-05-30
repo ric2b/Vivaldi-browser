@@ -23,6 +23,7 @@ class Window;
 
 namespace gfx {
 class Insets;
+class Transform;
 }
 
 namespace ui {
@@ -65,29 +66,38 @@ class WindowTreeTestHelper {
   bool ReorderWindow(aura::Window* window,
                      aura::Window* relative_window,
                      mojom::OrderDirection direction);
-  bool SetWindowBounds(
-      aura::Window* window,
-      const gfx::Rect& bounds,
-      const base::Optional<viz::LocalSurfaceId>& local_surface_id =
-          base::Optional<viz::LocalSurfaceId>());
+  bool SetTransform(aura::Window* window, const gfx::Transform& transform);
+  bool SetWindowBounds(aura::Window* window,
+                       const gfx::Rect& bounds,
+                       const base::Optional<viz::LocalSurfaceIdAllocation>&
+                           local_surface_id_allocation =
+                               base::Optional<viz::LocalSurfaceIdAllocation>());
   // Same as SetWindowBounds(), but called in such a way that the ack
   // (OnChangeCompleted()) is called on the client.
-  void SetWindowBoundsWithAck(aura::Window* window,
-                              const gfx::Rect& bounds,
-                              uint32_t change_id = 1);
+  void SetWindowBoundsWithAck(
+      aura::Window* window,
+      const gfx::Rect& bounds,
+      const base::Optional<viz::LocalSurfaceIdAllocation>&
+          local_surface_id_allocation =
+              base::Optional<viz::LocalSurfaceIdAllocation>(),
+      uint32_t change_id = 1);
   void SetClientArea(
       aura::Window* window,
       const gfx::Insets& insets,
       base::Optional<std::vector<gfx::Rect>> additional_client_areas =
           base::Optional<std::vector<gfx::Rect>>());
-  void SetHitTestMask(aura::Window* window, base::Optional<gfx::Rect> mask);
+  void SetHitTestInsets(aura::Window* window,
+                        const gfx::Insets& mouse,
+                        const gfx::Insets& touch);
+  void SetShape(aura::Window* window, const std::vector<gfx::Rect>& shape);
+  bool SetWindowVisibility(aura::Window* window, bool visible);
   void SetWindowProperty(aura::Window* window,
                          const std::string& name,
                          const std::vector<uint8_t>& value,
                          uint32_t change_id = 1);
 
   // Creates a new embedding. On success the new Embedding is returned. The
-  // returned Embedding is owned by the ServerWindow for |window|.
+  // returned Embedding is owned by the ProxyWindow for |window|.
   Embedding* Embed(aura::Window* window,
                    mojom::WindowTreeClientPtr client_ptr,
                    mojom::WindowTreeClient* client,
@@ -96,7 +106,7 @@ class WindowTreeTestHelper {
                                mojom::EventTargetingPolicy policy);
   bool SetFocus(aura::Window* window);
   void SetCanFocus(aura::Window* window, bool can_focus);
-  void SetCursor(aura::Window* window, ui::CursorData cursor);
+  void SetCursor(aura::Window* window, ui::Cursor cursor);
   void OnWindowInputEventAck(uint32_t event_id, mojom::EventResult result);
   bool StackAbove(aura::Window* above_window, aura::Window* below_window);
   bool StackAtTop(aura::Window* window);

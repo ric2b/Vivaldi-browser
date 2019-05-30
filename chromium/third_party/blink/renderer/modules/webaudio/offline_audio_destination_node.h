@@ -28,10 +28,10 @@
 
 #include <memory>
 #include "base/memory/scoped_refptr.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_buffer.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_destination_node.h"
 #include "third_party/blink/renderer/modules/webaudio/offline_audio_context.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 
 namespace blink {
 
@@ -44,7 +44,7 @@ class OfflineAudioDestinationHandler final : public AudioDestinationHandler {
   static scoped_refptr<OfflineAudioDestinationHandler> Create(
       AudioNode&,
       unsigned number_of_channels,
-      size_t frames_to_process,
+      uint32_t frames_to_process,
       float sample_rate);
   ~OfflineAudioDestinationHandler() override;
 
@@ -62,14 +62,16 @@ class OfflineAudioDestinationHandler final : public AudioDestinationHandler {
   // AudioDestinationHandler
   void StartRendering() override;
   void StopRendering() override;
-  unsigned long MaxChannelCount() const override;
+  void Pause() override;
+  void Resume() override;
+  uint32_t MaxChannelCount() const override;
 
   void RestartRendering() override;
 
   double SampleRate() const override { return sample_rate_; }
 
   size_t RenderQuantumFrames() const {
-    return AudioUtilities::kRenderQuantumFrames;
+    return audio_utilities::kRenderQuantumFrames;
   }
 
   // This is called when rendering of the offline context is started
@@ -77,7 +79,6 @@ class OfflineAudioDestinationHandler final : public AudioDestinationHandler {
   // allows creation of the AudioBuffer when startRendering is called
   // instead of when the OfflineAudioContext is created.
   void InitializeOfflineRenderThread(AudioBuffer* render_target);
-  AudioBuffer* RenderTarget() const { return render_target_.Get(); }
 
   unsigned NumberOfChannels() const { return number_of_channels_; }
 
@@ -86,7 +87,7 @@ class OfflineAudioDestinationHandler final : public AudioDestinationHandler {
  private:
   OfflineAudioDestinationHandler(AudioNode&,
                                  unsigned number_of_channels,
-                                 size_t frames_to_process,
+                                 uint32_t frames_to_process,
                                  float sample_rate);
 
   // Set up the rendering and start. After setting the context up, it will
@@ -113,7 +114,7 @@ class OfflineAudioDestinationHandler final : public AudioDestinationHandler {
   // Otherwise, it returns false after rendering one quantum.
   bool RenderIfNotSuspended(AudioBus* source_bus,
                             AudioBus* destination_bus,
-                            size_t number_of_frames);
+                            uint32_t number_of_frames);
 
   // Prepares a task runner for the rendering based on the operation mode
   // (i.e. non-AudioWorklet or AudioWorklet). This is called when the
@@ -123,17 +124,15 @@ class OfflineAudioDestinationHandler final : public AudioDestinationHandler {
   // from AudioWorkletThread will be used until the rendering is finished.
   void PrepareTaskRunnerForRendering();
 
-  // This AudioHandler renders into this AudioBuffer.
-  // This Persistent doesn't make a reference cycle including the owner
-  // OfflineAudioDestinationNode. It is accessed by both audio and main thread.
-  CrossThreadPersistent<AudioBuffer> render_target_;
+  // This AudioHandler renders into this SharedAudioBuffer.
+  std::unique_ptr<SharedAudioBuffer> shared_render_target_;
   // Temporary AudioBus for each render quantum.
   scoped_refptr<AudioBus> render_bus_;
 
   // These variables are for counting the number of frames for the current
   // progress and the remaining frames to be processed.
   size_t frames_processed_;
-  size_t frames_to_process_;
+  uint32_t frames_to_process_;
 
   // This flag is necessary to distinguish the state of the context between
   // 'created' and 'suspended'. If this flag is false and the current state
@@ -145,7 +144,7 @@ class OfflineAudioDestinationHandler final : public AudioDestinationHandler {
 
   // The rendering thread for the non-AudioWorklet mode. For the AudioWorklet
   // node, AudioWorkletThread will drive the rendering.
-  std::unique_ptr<WebThread> render_thread_;
+  std::unique_ptr<Thread> render_thread_;
 
   scoped_refptr<base::SingleThreadTaskRunner> render_thread_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
@@ -155,14 +154,24 @@ class OfflineAudioDestinationNode final : public AudioDestinationNode {
  public:
   static OfflineAudioDestinationNode* Create(BaseAudioContext*,
                                              unsigned number_of_channels,
-                                             size_t frames_to_process,
+                                             uint32_t frames_to_process,
                                              float sample_rate);
 
- private:
   OfflineAudioDestinationNode(BaseAudioContext&,
                               unsigned number_of_channels,
-                              size_t frames_to_process,
+                              uint32_t frames_to_process,
                               float sample_rate);
+
+  AudioBuffer* DestinationBuffer() const { return destination_buffer_; }
+
+  void SetDestinationBuffer(AudioBuffer* buffer) {
+    destination_buffer_ = buffer;
+  }
+
+  void Trace(Visitor* visitor) override;
+
+ private:
+  Member<AudioBuffer> destination_buffer_;
 };
 
 }  // namespace blink

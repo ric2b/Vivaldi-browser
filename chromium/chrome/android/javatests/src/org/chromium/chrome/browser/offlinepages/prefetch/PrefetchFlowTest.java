@@ -33,7 +33,7 @@ import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.background_task_scheduler.TaskIds;
 import org.chromium.components.background_task_scheduler.TaskParameters;
-import org.chromium.components.download.internal.NetworkStatusListenerAndroid;
+import org.chromium.components.download.NetworkStatusListenerAndroid;
 import org.chromium.components.gcm_driver.instance_id.FakeInstanceIDWithSubtype;
 import org.chromium.components.offline_pages.core.prefetch.proto.StatusOuterClass;
 import org.chromium.net.NetworkChangeNotifier;
@@ -49,7 +49,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * Instrumentation tests for Prefetch.
+ * Instrumentation tests for Prefetch, using the Zine as the suggestion provider.
+ * Note: this test will eventually be removed along with Zine, and is replaced by
+ * PrefetchFeedFlowTest.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @RetryOnFailure
@@ -71,7 +73,7 @@ public class PrefetchFlowTest implements WebServer.RequestHandler {
         }
         @Override
         public NetworkState getCurrentNetworkState() {
-            return new NetworkState(true, ConnectivityManager.TYPE_WIFI, 0, null);
+            return new NetworkState(true, ConnectivityManager.TYPE_WIFI, 0, null, false);
         }
     }
 

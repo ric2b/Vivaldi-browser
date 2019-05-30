@@ -6,7 +6,7 @@
 
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "device/vr/openvr/test/test_hook.h"
+#include "device/vr/test/test_hook.h"
 
 namespace device {
 
@@ -29,7 +29,7 @@ vr::IVRSystem* OpenVRWrapper::GetSystem() {
   return system_;
 }
 
-void OpenVRWrapper::SetTestHook(OpenVRTestHook* hook) {
+void OpenVRWrapper::SetTestHook(VRTestHook* hook) {
   // This may be called from any thread - tests are responsible for
   // maintaining thread safety, typically by not changing the test hook
   // while presenting.
@@ -72,6 +72,7 @@ bool OpenVRWrapper::Initialize(bool for_rendering) {
         vr::VR_GetGenericInterface(kChromeOpenVRTestHookAPI, &eError));
     if (test_hook_registration_) {
       test_hook_registration_->SetTestHook(test_hook_);
+      test_hook_->AttachCurrentThread();
     }
   }
 
@@ -85,12 +86,14 @@ void OpenVRWrapper::Uninitialize() {
   compositor_ = nullptr;
   test_hook_registration_ = nullptr;
   current_task_runner_ = nullptr;
+  if (test_hook_)
+    test_hook_->DetachCurrentThread();
   vr::VR_Shutdown();
 
   any_initialized_ = false;
 }
 
-OpenVRTestHook* OpenVRWrapper::test_hook_ = nullptr;
+VRTestHook* OpenVRWrapper::test_hook_ = nullptr;
 bool OpenVRWrapper::any_initialized_ = false;
 TestHookRegistration* OpenVRWrapper::test_hook_registration_ = nullptr;
 

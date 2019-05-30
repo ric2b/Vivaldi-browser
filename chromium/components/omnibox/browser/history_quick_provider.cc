@@ -236,8 +236,6 @@ AutocompleteMatch HistoryQuickProvider::QuickMatchToACMatch(
     match.allowed_to_be_default_match = match.inline_autocompletion.empty() ||
         !PreventInlineAutocomplete(autocomplete_input_);
   }
-  match.EnsureUWYTIsAllowedToBeDefault(autocomplete_input_,
-                                       client()->GetTemplateURLService());
 
   // The term match offsets should be adjusted based on the formatting
   // applied to the suggestion contents displayed in the dropdown.
@@ -248,7 +246,7 @@ AutocompleteMatch HistoryQuickProvider::QuickMatchToACMatch(
       AutocompleteMatch::GetFormatTypes(
           autocomplete_input_.parts().scheme.len > 0 ||
               history_match.match_in_scheme,
-          history_match.match_in_subdomain, history_match.match_after_host),
+          history_match.match_in_subdomain),
       net::UnescapeRule::SPACES, nullptr, nullptr, &offsets);
 
   TermMatches new_matches =

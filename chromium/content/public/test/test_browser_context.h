@@ -45,7 +45,6 @@ class TestBrowserContext : public BrowserContext {
 
   // BrowserContext implementation.
   base::FilePath GetPath() const override;
-  base::FilePath GetCachePath() const override;
 #if !defined(OS_ANDROID)
   std::unique_ptr<ZoomLevelDelegate> CreateZoomLevelDelegate(
       const base::FilePath& partition_path) override;
@@ -58,6 +57,7 @@ class TestBrowserContext : public BrowserContext {
   PushMessagingService* GetPushMessagingService() override;
   SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   PermissionControllerDelegate* GetPermissionControllerDelegate() override;
+  ClientHintsControllerDelegate* GetClientHintsControllerDelegate() override;
   BackgroundFetchDelegate* GetBackgroundFetchDelegate() override;
   BackgroundSyncController* GetBackgroundSyncController() override;
   BrowsingDataRemoverDelegate* GetBrowsingDataRemoverDelegate() override;

@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.preferences;
 
-import android.accounts.Account;
 import android.content.Context;
 import android.preference.Preference;
 import android.preference.PreferenceFragment;
@@ -27,6 +26,7 @@ import org.chromium.chrome.browser.signin.SigninAccessPoint;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninManager.SignInAllowedObserver;
 import org.chromium.chrome.browser.signin.SigninPromoController;
+import org.chromium.chrome.browser.signin.SigninPromoUtil;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.browser.sync.ProfileSyncService.SyncStateChangedListener;
 import org.chromium.chrome.browser.util.ViewUtils;
@@ -90,7 +90,7 @@ public class SignInPreference
         SigninManager.get().addSignInAllowedObserver(this);
         mProfileDataCache.addObserver(this);
         FirstRunSignInProcessor.updateSigninManagerFirstRunCheckDone();
-        AndroidSyncSettings.registerObserver(this);
+        AndroidSyncSettings.get().registerObserver(this);
         ProfileSyncService syncService = ProfileSyncService.get();
         if (syncService != null) {
             syncService.addSyncStateChangedListener(this);
@@ -108,7 +108,7 @@ public class SignInPreference
         AccountManagerFacade.get().removeObserver(this);
         SigninManager.get().removeSignInAllowedObserver(this);
         mProfileDataCache.removeObserver(this);
-        AndroidSyncSettings.unregisterObserver(this);
+        AndroidSyncSettings.get().unregisterObserver(this);
         ProfileSyncService syncService = ProfileSyncService.get();
         if (syncService != null) {
             syncService.removeSyncStateChangedListener(this);
@@ -247,11 +247,14 @@ public class SignInPreference
 
         setLayoutResource(R.layout.account_management_account_row);
         setTitle(profileData.getFullNameOrEmail());
-        setSummary(SyncPreference.getSyncStatusSummary(getContext()));
+        boolean unifiedConsent = ChromeFeatureList.isEnabled(ChromeFeatureList.UNIFIED_CONSENT);
+        setSummary(unifiedConsent ? accountName
+                                  : SyncPreferenceUtils.getSyncStatusSummary(getContext()));
         setFragment(AccountManagementFragment.class.getName());
         setIcon(profileData.getImage());
-        setWidgetLayoutResource(
-                SyncPreference.showSyncErrorIcon(getContext()) ? R.layout.sync_error_widget : 0);
+        boolean showSyncError =
+                !unifiedConsent && SyncPreferenceUtils.showSyncErrorIcon(getContext());
+        setWidgetLayoutResource(showSyncError ? R.layout.sync_error_widget : 0);
         setViewEnabled(true);
 
         mSigninPromoController = null;
@@ -277,21 +280,15 @@ public class SignInPreference
             return;
         }
 
-        DisplayableProfileData profileData = null;
-        Account[] accounts = AccountManagerFacade.get().tryGetGoogleAccounts();
-        if (accounts.length > 0) {
-            String defaultAccountName = accounts[0].name;
-            mProfileDataCache.update(Collections.singletonList(defaultAccountName));
-            profileData = mProfileDataCache.getProfileDataOrDefault(defaultAccountName);
-        }
         PersonalizedSigninPromoView signinPromoView =
                 view.findViewById(R.id.signin_promo_view_container);
-        mSigninPromoController.detach();
-        mSigninPromoController.setupPromoView(getContext(), signinPromoView, profileData, () -> {
-            ChromePreferenceManager.getInstance().writeBoolean(
-                    ChromePreferenceManager.SETTINGS_PERSONALIZED_SIGNIN_PROMO_DISMISSED, true);
-            update();
-        });
+        SigninPromoUtil.setupPromoViewFromCache(
+                mSigninPromoController, mProfileDataCache, signinPromoView, () -> {
+                    ChromePreferenceManager.getInstance().writeBoolean(
+                            ChromePreferenceManager.SETTINGS_PERSONALIZED_SIGNIN_PROMO_DISMISSED,
+                            true);
+                    update();
+                });
 
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.UNIFIED_CONSENT)) {
             View divider = view.findViewById(R.id.divider);

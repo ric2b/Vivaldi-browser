@@ -5,22 +5,16 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_CANVAS_CANVAS2D_BASE_RENDERING_CONTEXT_2D_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_CANVAS_CANVAS2D_BASE_RENDERING_CONTEXT_2D_H_
 
+#include "base/macros.h"
 #include "third_party/blink/renderer/bindings/modules/v8/canvas_image_source.h"
 #include "third_party/blink/renderer/bindings/modules/v8/string_or_canvas_gradient_or_canvas_pattern.h"
 #include "third_party/blink/renderer/core/geometry/dom_matrix.h"
-#include "third_party/blink/renderer/core/geometry/dom_matrix_2d_init.h"
 #include "third_party/blink/renderer/core/html/canvas/image_data.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_gradient.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_path.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d_state.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_style.h"
-#include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_heuristic_parameters.h"
-#include "third_party/blink/renderer/platform/graphics/color_behavior.h"
-#include "third_party/blink/renderer/platform/graphics/paint/paint_canvas.h"
-#include "third_party/blink/renderer/platform/graphics/paint/paint_flags.h"
-#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
-#include "third_party/skia/include/effects/SkComposeImageFilter.h"
 
 namespace blink {
 class CanvasImageSource;
@@ -33,8 +27,6 @@ typedef CSSImageValueOrHTMLImageElementOrSVGImageElementOrHTMLVideoElementOrHTML
 
 class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
                                               public CanvasPath {
-  WTF_MAKE_NONCOPYABLE(BaseRenderingContext2D);
-
  public:
   ~BaseRenderingContext2D() override;
 
@@ -103,7 +95,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
                     double m22,
                     double dx,
                     double dy);
-  void setTransform(DOMMatrix2DInit&, ExceptionState&);
+  void setTransform(DOMMatrix2DInit*, ExceptionState&);
   DOMMatrix* getTransform();
   void resetTransform();
 
@@ -189,7 +181,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   ImageData* createImageData(int width, int height, ExceptionState&) const;
   ImageData* createImageData(unsigned,
                              unsigned,
-                             ImageDataColorSettings&,
+                             ImageDataColorSettings*,
                              ExceptionState&) const;
   ImageData* createImageData(ImageDataArray&,
                              unsigned,
@@ -198,7 +190,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   ImageData* createImageData(ImageDataArray&,
                              unsigned,
                              unsigned,
-                             ImageDataColorSettings&,
+                             ImageDataColorSettings*,
                              ExceptionState&) const;
 
   ImageData* getImageData(int sx, int sy, int sw, int sh, ExceptionState&);
@@ -219,7 +211,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   virtual bool OriginClean() const = 0;
   virtual void SetOriginTainted() = 0;
-  virtual bool WouldTaintOrigin(CanvasImageSource*, ExecutionContext*) = 0;
+  virtual bool WouldTaintOrigin(CanvasImageSource*) = 0;
 
   virtual int Width() const = 0;
   virtual int Height() const = 0;
@@ -330,7 +322,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
                         SkIRect*);
 
   template <typename DrawFunc, typename ContainsFunc>
-  bool Draw(const DrawFunc&,
+  void Draw(const DrawFunc&,
             const ContainsFunc&,
             const SkRect& bounds,
             CanvasRenderingContext2DState::PaintType,
@@ -341,7 +333,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   void UnwindStateStack();
 
-  virtual CanvasColorParams ColorParams() const { return CanvasColorParams(); };
+  virtual CanvasColorParams ColorParams() const { return CanvasColorParams(); }
   virtual bool WritePixels(const SkImageInfo& orig_info,
                            const void* pixels,
                            size_t row_bytes,
@@ -370,9 +362,9 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   mutable UsageCounters usage_counters_;
 
-  virtual void NeedsFinalizeFrame(){};
+  virtual void NeedsFinalizeFrame() {}
 
-  float GetFontBaseline(const FontMetrics&) const;
+  float GetFontBaseline(const SimpleFontData&) const;
 
   static const char kDefaultFont[];
   static const char kInheritDirectionString[];
@@ -424,7 +416,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   // such as tainting from a filter applied to the canvas.
   void SetOriginTaintedByContent();
 
-  ImageDataColorSettings GetColorSettingsAsImageDataColorSettings() const;
+  ImageDataColorSettings* GetColorSettingsAsImageDataColorSettings() const;
 
   void PutByteArray(const unsigned char* source,
                     const IntSize& source_size,
@@ -435,30 +427,28 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
     return false;
   }
 
+  int getScaledElapsedTime(float width,
+                           float height,
+                           base::TimeTicks start_time);
+
   bool origin_tainted_by_content_;
+
+  DISALLOW_COPY_AND_ASSIGN(BaseRenderingContext2D);
 };
 
 template <typename DrawFunc, typename ContainsFunc>
-bool BaseRenderingContext2D::Draw(
+void BaseRenderingContext2D::Draw(
     const DrawFunc& draw_func,
     const ContainsFunc& draw_covers_clip_bounds,
     const SkRect& bounds,
     CanvasRenderingContext2DState::PaintType paint_type,
     CanvasRenderingContext2DState::ImageType image_type) {
   if (!GetState().IsTransformInvertible())
-    return false;
+    return;
 
   SkIRect clip_bounds;
   if (!DrawingCanvas() || !DrawingCanvas()->getDeviceClipBounds(&clip_bounds))
-    return false;
-
-  // If gradient size is zero, then paint nothing.
-  CanvasStyle* style = GetState().Style(paint_type);
-  if (style) {
-    CanvasGradient* gradient = style->GetCanvasGradient();
-    if (gradient && gradient->IsZeroSize())
-      return false;
-  }
+    return;
 
   if (IsFullCanvasCompositeMode(GetState().GlobalComposite()) ||
       StateHasFilter()) {
@@ -482,7 +472,6 @@ bool BaseRenderingContext2D::Draw(
       DidDraw(dirty_rect);
     }
   }
-  return true;
 }
 
 template <typename DrawFunc>
@@ -502,6 +491,7 @@ void BaseRenderingContext2D::CompositedDraw(
     PaintFlags shadow_flags =
         *GetState().GetFlags(paint_type, kDrawShadowOnly, image_type);
     int save_count = c->getSaveCount();
+    c->save();
     if (filter) {
       PaintFlags foreground_flags =
           *GetState().GetFlags(paint_type, kDrawForegroundOnly, image_type);

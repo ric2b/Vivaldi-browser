@@ -18,7 +18,8 @@ import org.chromium.chrome.browser.permissions.PermissionTestRule.DialogShownCri
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.NavigationHandle;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 
 /**
  * Test suite for interaction between permissions requests and navigation.
@@ -63,10 +64,7 @@ public class PermissionNavigationTest {
         final CallbackHelper callbackHelper = new CallbackHelper();
         EmptyTabObserver navigationWaiter = new EmptyTabObserver() {
             @Override
-            public void onDidFinishNavigation(Tab tab, String url, boolean isInMainFrame,
-                    boolean isErrorPage, boolean hasCommitted, boolean isSameDocument,
-                    boolean isFragmentNavigation, Integer pageTransition, int errorCode,
-                    int httpStatusCode) {
+            public void onDidFinishNavigation(Tab tab, NavigationHandle navigation) {
                 callbackHelper.notifyCalled();
             }
         };

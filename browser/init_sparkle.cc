@@ -6,7 +6,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/message_loop/message_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/vivaldi_switches.h"
 #include "url/gurl.h"
 
@@ -16,6 +16,8 @@
 #endif
 
 #if defined(OS_WIN)
+#include <windows.h>
+
 #include "base/i18n/rtl.h"
 #include "base/win/registry.h"
 #include "base/win/windows_version.h"
@@ -59,7 +61,7 @@ void WinSparkleCheckForUpdates(base::Callback<bool()> should_check_update_cb,
     win_sparkle_check_update_without_ui();
   }
 
-  base::MessageLoop::current()->task_runner()->PostDelayedTask(
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::Bind(&WinSparkleCheckForUpdates, should_check_update_cb, false),
       base::TimeDelta::FromSeconds(interval_secs));
@@ -159,7 +161,7 @@ void InitializeSparkle(const base::CommandLine& command_line,
     if (key.Valid())
       key.ReadValue(kEnabled, &enabled);
     if (enabled == L"1") {
-      base::MessageLoop::current()->task_runner()->PostDelayedTask(
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
           FROM_HERE,
           base::Bind(&WinSparkleCheckForUpdates,
                      should_check_update_callback,

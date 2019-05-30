@@ -8,11 +8,11 @@
 
 #include <memory>
 
+#include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/cpp/window_state_type.h"
 #include "ash/public/interfaces/window_properties.mojom.h"
-#include "ash/public/interfaces/window_style.mojom.h"
 #include "chrome/browser/ui/browser_window_state.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/browser_frame_ash.h"
@@ -27,7 +27,6 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/views/mus/desktop_window_tree_host_mus.h"
 #include "ui/views/mus/mus_client.h"
-#include "ui/views/mus/window_manager_frame_values.h"
 
 BrowserFrameMash::BrowserFrameMash(BrowserFrame* browser_frame,
                                    BrowserView* browser_view)
@@ -41,33 +40,35 @@ BrowserFrameMash::BrowserFrameMash(BrowserFrame* browser_frame,
 
 BrowserFrameMash::~BrowserFrameMash() {}
 
+void BrowserFrameMash::OnWindowTargetVisibilityChanged(bool visible) {
+  if (visible && !browser_view_->browser()->is_type_popup()) {
+    // Once the window has been shown we know the requested bounds
+    // (if provided) have been honored and we can switch on window management.
+    GetNativeWindow()->GetRootWindow()->SetProperty(
+        ash::kWindowPositionManagedTypeKey, true);
+  }
+  views::DesktopNativeWidgetAura::OnWindowTargetVisibilityChanged(visible);
+}
+
 views::Widget::InitParams BrowserFrameMash::GetWidgetParams() {
   views::Widget::InitParams params;
-  params.name = "BrowserFrame";
   params.native_widget = this;
   chrome::GetSavedWindowBoundsAndShowState(browser_view_->browser(),
                                            &params.bounds, &params.show_state);
   params.delegate = browser_view_;
+  // The client will draw the frame.
+  params.remove_standard_frame = true;
+
   std::map<std::string, std::vector<uint8_t>> properties =
       views::MusClient::ConfigurePropertiesFromParams(params);
-  // Indicates mash shouldn't handle immersive, rather we will.
-  properties[ws::mojom::WindowManager::kDisableImmersive_InitProperty] =
-      mojo::ConvertTo<std::vector<uint8_t>>(true);
 
-  Browser* browser = browser_view_->browser();
-  properties[ash::mojom::kAshWindowStyle_InitProperty] =
-      mojo::ConvertTo<std::vector<uint8_t>>(static_cast<int32_t>(
-          BrowserNonClientFrameViewAsh::UsePackagedAppHeaderStyle(browser)
-              ? ash::mojom::WindowStyle::DEFAULT
-              : ash::mojom::WindowStyle::BROWSER));
   // ChromeLauncherController manages the browser shortcut shelf item; set the
   // window's shelf item type property to be ignored by ash::ShelfWindowWatcher.
   properties[ws::mojom::WindowManager::kShelfItemType_Property] =
       mojo::ConvertTo<std::vector<uint8_t>>(
           static_cast<int64_t>(ash::TYPE_BROWSER_SHORTCUT));
 
-  // TODO(estade): to match classic Ash, this property should be toggled to true
-  // for non-popups after the window is initially shown.
+  Browser* browser = browser_view_->browser();
   properties[ash::mojom::kWindowPositionManaged_Property] =
       mojo::ConvertTo<std::vector<uint8_t>>(static_cast<int64_t>(
           !browser->bounds_overridden() && !browser->is_session_restore() &&
@@ -75,6 +76,11 @@ views::Widget::InitParams BrowserFrameMash::GetWidgetParams() {
   properties[ash::mojom::kCanConsumeSystemKeys_Property] =
       mojo::ConvertTo<std::vector<uint8_t>>(
           static_cast<int64_t>(browser->is_app()));
+  properties[ash::mojom::kAppType_Property] =
+      mojo::ConvertTo<std::vector<uint8_t>>(static_cast<int64_t>(
+          BrowserNonClientFrameViewAsh::UsePackagedAppHeaderStyle(browser)
+              ? ash::AppType::CHROME_APP
+              : ash::AppType::BROWSER));
 
   aura::WindowTreeHostMusInitParams window_tree_host_init_params =
       aura::CreateInitParamsForTopLevel(
@@ -82,9 +88,6 @@ views::Widget::InitParams BrowserFrameMash::GetWidgetParams() {
   std::unique_ptr<views::DesktopWindowTreeHostMus> desktop_window_tree_host =
       std::make_unique<views::DesktopWindowTreeHostMus>(
           std::move(window_tree_host_init_params), browser_frame_, this);
-  // BrowserNonClientFrameViewAsh::OnBoundsChanged() takes care of updating
-  // the insets.
-  desktop_window_tree_host->set_auto_update_client_area(false);
   SetDesktopWindowTreeHost(std::move(desktop_window_tree_host));
   return params;
 }

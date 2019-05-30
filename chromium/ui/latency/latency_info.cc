@@ -38,6 +38,7 @@ const char* GetComponentName(ui::LatencyComponentType type) {
     CASE_TYPE(INPUT_EVENT_LATENCY_RENDERING_SCHEDULED_MAIN_COMPONENT);
     CASE_TYPE(INPUT_EVENT_LATENCY_RENDERING_SCHEDULED_IMPL_COMPONENT);
     CASE_TYPE(INPUT_EVENT_LATENCY_FORWARD_SCROLL_UPDATE_TO_MAIN_COMPONENT);
+    CASE_TYPE(INPUT_EVENT_LATENCY_SCROLL_UPDATE_LAST_EVENT_COMPONENT);
     CASE_TYPE(INPUT_EVENT_LATENCY_ACK_RWH_COMPONENT);
     CASE_TYPE(INPUT_EVENT_LATENCY_RENDERER_MAIN_COMPONENT);
     CASE_TYPE(INPUT_EVENT_LATENCY_RENDERER_SWAP_COMPONENT);
@@ -45,11 +46,10 @@ const char* GetComponentName(ui::LatencyComponentType type) {
     CASE_TYPE(INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT);
     CASE_TYPE(INPUT_EVENT_LATENCY_FRAME_SWAP_COMPONENT);
     default:
-      DLOG(WARNING) << "Unhandled LatencyComponentType.\n";
-      break;
+      NOTREACHED() << "Unhandled LatencyComponentType: " << type;
+      return "unknown";
   }
 #undef CASE_TYPE
-  return "unknown";
 }
 
 bool IsInputLatencyBeginComponent(ui::LatencyComponentType type) {
@@ -98,7 +98,8 @@ LatencyInfoTracedValue::LatencyInfoTracedValue(base::Value* value)
     : value_(value) {
 }
 
-const char kTraceCategoriesForAsyncEvents[] = "benchmark,latencyInfo,rail";
+constexpr const char kTraceCategoriesForAsyncEvents[] =
+    "benchmark,latencyInfo,rail";
 
 struct LatencyInfoEnabledInitializer {
   LatencyInfoEnabledInitializer() :
@@ -124,7 +125,8 @@ LatencyInfo::LatencyInfo(SourceEventType type)
       coalesced_(false),
       began_(false),
       terminated_(false),
-      source_event_type_(type) {}
+      source_event_type_(type),
+      scroll_update_delta_(0) {}
 
 LatencyInfo::LatencyInfo(const LatencyInfo& other) = default;
 
@@ -136,7 +138,8 @@ LatencyInfo::LatencyInfo(int64_t trace_id, bool terminated)
       coalesced_(false),
       began_(false),
       terminated_(terminated),
-      source_event_type_(SourceEventType::UNKNOWN) {}
+      source_event_type_(SourceEventType::UNKNOWN),
+      scroll_update_delta_(0) {}
 
 bool LatencyInfo::Verify(const std::vector<LatencyInfo>& latency_info,
                          const char* referring_msg) {
@@ -183,6 +186,7 @@ void LatencyInfo::CopyLatencyFrom(const LatencyInfo& other,
   }
 
   coalesced_ = other.coalesced();
+  scroll_update_delta_ = other.scroll_update_delta();
   // TODO(tdresser): Ideally we'd copy |began_| here as well, but |began_|
   // isn't very intuitive, and we can actually begin multiple times across
   // copied events.
@@ -206,6 +210,7 @@ void LatencyInfo::AddNewLatencyFrom(const LatencyInfo& other) {
   }
 
   coalesced_ = other.coalesced();
+  scroll_update_delta_ = other.scroll_update_delta();
   // TODO(tdresser): Ideally we'd copy |began_| here as well, but |began_| isn't
   // very intuitive, and we can actually begin multiple times across copied
   // events.
@@ -283,7 +288,7 @@ void LatencyInfo::AddLatencyNumberWithTimestampImpl(
                            "trace_id", trace_id_);
   }
 
-  LatencyMap::iterator it = latency_components_.find(component);
+  auto it = latency_components_.find(component);
   DCHECK(it == latency_components_.end());
   latency_components_[component] = time;
 
@@ -310,6 +315,18 @@ void LatencyInfo::Terminate() {
                          TRACE_EVENT_FLAG_FLOW_IN);
 }
 
+void LatencyInfo::CoalesceScrollUpdateWith(const LatencyInfo& other) {
+  base::TimeTicks other_timestamp;
+  if (other.FindLatency(INPUT_EVENT_LATENCY_SCROLL_UPDATE_LAST_EVENT_COMPONENT,
+                        &other_timestamp)) {
+    latency_components_
+        [INPUT_EVENT_LATENCY_SCROLL_UPDATE_LAST_EVENT_COMPONENT] =
+            other_timestamp;
+  }
+
+  scroll_update_delta_ += other.scroll_update_delta();
+}
+
 std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
 LatencyInfo::AsTraceableData() {
   std::unique_ptr<base::DictionaryValue> record_data(
@@ -327,7 +344,7 @@ LatencyInfo::AsTraceableData() {
 
 bool LatencyInfo::FindLatency(LatencyComponentType type,
                               base::TimeTicks* output) const {
-  LatencyMap::const_iterator it = latency_components_.find(type);
+  auto it = latency_components_.find(type);
   if (it == latency_components_.end())
     return false;
   if (output)

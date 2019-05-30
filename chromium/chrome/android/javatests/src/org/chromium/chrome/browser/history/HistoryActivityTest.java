@@ -20,7 +20,6 @@ import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Browser;
-import android.support.test.InstrumentationRegistry;
 import android.support.test.espresso.intent.rule.IntentsTestRule;
 import android.support.test.filters.SmallTest;
 import android.support.v7.widget.RecyclerView;
@@ -29,6 +28,7 @@ import android.text.TextUtils;
 import android.view.MenuItem;
 import android.view.View;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -50,8 +50,8 @@ import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
+import org.chromium.chrome.browser.signin.SignoutReason;
 import org.chromium.chrome.browser.widget.DateDividedAdapter;
-import org.chromium.chrome.browser.widget.TintedImageButton;
 import org.chromium.chrome.browser.widget.selection.SelectableItemView;
 import org.chromium.chrome.browser.widget.selection.SelectableItemViewHolder;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate.SelectionObserver;
@@ -59,8 +59,8 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
 import org.chromium.components.signin.ChromeSigninController;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.test.util.UiRestriction;
 
@@ -135,8 +135,7 @@ public class HistoryActivityTest {
         // Account not signed in by default. The clear browsing data header, one date view, and two
         // history item views should be shown, but the info header should not. We enforce a default
         // state because the number of headers shown depends on the signed-in state.
-        ChromeSigninController signinController = ChromeSigninController.get();
-        signinController.setSignedInAccountName(null);
+        SigninTestUtil.setUpAuthForTest();
 
         mHistoryProvider = new StubbedHistoryProvider();
 
@@ -170,6 +169,11 @@ public class HistoryActivityTest {
         Assert.assertEquals(4, mAdapter.getItemCount());
     }
 
+    @After
+    public void tearDown() {
+        SigninTestUtil.tearDownAuthForTest();
+    }
+
     private void launchHistoryActivity() throws Exception {
         HistoryActivity activity = mActivityTestRule.launchActivity(null);
         mHistoryManager = activity.getHistoryManagerForTests();
@@ -189,7 +193,7 @@ public class HistoryActivityTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                ((TintedImageButton) itemView.findViewById(R.id.remove)).performClick();
+                itemView.findViewById(R.id.remove).performClick();
             }
         });
 
@@ -675,7 +679,6 @@ public class HistoryActivityTest {
 
         // Sign in to account. Note that if supervised user is set before sign in, the supervised
         // user setting will be reset.
-        SigninTestUtil.setUpAuthForTest(InstrumentationRegistry.getInstrumentation());
         final Account account = SigninTestUtil.addTestAccount();
         ThreadUtils.runOnUiThreadBlocking(() -> {
             SigninManager.get().onFirstRunCheckDone();
@@ -737,11 +740,10 @@ public class HistoryActivityTest {
 
         // Sign out of account.
         int currentCallCount = mTestObserver.onSigninStateChangedCallback.getCallCount();
-        SigninTestUtil.resetSigninState();
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                SigninManager.get().signOut(null);
+                SigninManager.get().signOut(SignoutReason.SIGNOUT_TEST);
             }
         });
         mTestObserver.onSigninStateChangedCallback.waitForCallback(currentCallCount, 1);
@@ -754,6 +756,5 @@ public class HistoryActivityTest {
                 SigninManager.get().removeSignInStateObserver(mTestObserver);
             }
         });
-        SigninTestUtil.tearDownAuthForTest();
     }
 }

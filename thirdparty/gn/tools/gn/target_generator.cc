@@ -19,7 +19,9 @@
 #include "tools/gn/err.h"
 #include "tools/gn/filesystem_utils.h"
 #include "tools/gn/functions.h"
+#include "tools/gn/generated_file_target_generator.h"
 #include "tools/gn/group_target_generator.h"
+#include "tools/gn/metadata.h"
 #include "tools/gn/parse_tree.h"
 #include "tools/gn/scheduler.h"
 #include "tools/gn/scope.h"
@@ -48,6 +50,9 @@ void TargetGenerator::Run() {
     return;
 
   if (!FillDependencies())
+    return;
+
+  if (!FillMetadata())
     return;
 
   if (!FillTestonly())
@@ -134,6 +139,10 @@ void TargetGenerator::GenerateTarget(Scope* scope,
   } else if (output_type == functions::kStaticLibrary) {
     BinaryTargetGenerator generator(target.get(), scope, function_call,
                                     Target::STATIC_LIBRARY, err);
+    generator.Run();
+  } else if (output_type == functions::kGeneratedFile) {
+    GeneratedFileTargetGenerator generator(target.get(), scope, function_call,
+                                           Target::GENERATED_FILE, err);
     generator.Run();
   } else {
     *err = Err(function_call, "Not a known target type",
@@ -251,6 +260,36 @@ bool TargetGenerator::FillDependencies() {
       return false;
   }
 
+  return true;
+}
+
+bool TargetGenerator::FillMetadata() {
+  // Need to get a mutable value to mark all values in the scope as used. This
+  // cannot be done on a const Scope.
+  Value* value = scope_->GetMutableValue(variables::kMetadata,
+                                         Scope::SEARCH_CURRENT, true);
+
+  if (!value)
+    return true;
+
+  if (!value->VerifyTypeIs(Value::SCOPE, err_))
+    return false;
+
+  Scope* scope_value = value->scope_value();
+
+  scope_value->GetCurrentScopeValues(&target_->metadata().contents());
+  scope_value->MarkAllUsed();
+
+  // Metadata values should always hold lists of Values, such that they can be
+  // collected and concatenated. Any additional specific type verification is
+  // done at walk time.
+  for (const auto& iter : target_->metadata().contents()) {
+    if (!iter.second.VerifyTypeIs(Value::LIST, err_))
+      return false;
+  }
+
+  target_->metadata().set_source_dir(scope_->GetSourceDir());
+  target_->metadata().set_origin(value->origin());
   return true;
 }
 

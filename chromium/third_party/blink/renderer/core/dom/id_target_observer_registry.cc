@@ -30,10 +30,10 @@
 namespace blink {
 
 IdTargetObserverRegistry* IdTargetObserverRegistry::Create() {
-  return new IdTargetObserverRegistry();
+  return MakeGarbageCollected<IdTargetObserverRegistry>();
 }
 
-void IdTargetObserverRegistry::Trace(blink::Visitor* visitor) {
+void IdTargetObserverRegistry::Trace(Visitor* visitor) {
   visitor->Trace(registry_);
   visitor->Trace(notifying_observers_in_set_);
 }
@@ -45,7 +45,7 @@ void IdTargetObserverRegistry::AddObserver(const AtomicString& id,
 
   IdToObserverSetMap::AddResult result = registry_.insert(id.Impl(), nullptr);
   if (result.is_new_entry)
-    result.stored_value->value = new ObserverSet();
+    result.stored_value->value = MakeGarbageCollected<ObserverSet>();
 
   result.stored_value->value->insert(observer);
 }

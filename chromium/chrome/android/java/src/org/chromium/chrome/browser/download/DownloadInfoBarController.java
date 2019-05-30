@@ -11,7 +11,6 @@ import android.support.annotation.IntDef;
 import android.support.annotation.Nullable;
 import android.support.annotation.PluralsRes;
 import android.text.TextUtils;
-import android.text.format.Formatter;
 
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ContextUtils;
@@ -21,6 +20,7 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.DeviceConditions;
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
 import org.chromium.chrome.browser.infobar.DownloadProgressInfoBar;
 import org.chromium.chrome.browser.infobar.IPHInfoBarSupport;
@@ -222,6 +222,7 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
         }
     }
 
+    private final boolean mUseNewDownloadPath;
     private final boolean mIsIncognito;
     private final Handler mHandler = new Handler();
     private final DownloadProgressInfoBar.Client mClient = new DownloadProgressInfoBarClient();
@@ -259,6 +260,8 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
 
     /** Constructor. */
     public DownloadInfoBarController(boolean isIncognito) {
+        mUseNewDownloadPath =
+                ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOAD_OFFLINE_CONTENT_PROVIDER);
         mIsIncognito = isIncognito;
         mHandler.post(() -> getOfflineContentProvider().addObserver(this));
     }
@@ -274,6 +277,8 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
 
     /** Updates the InfoBar when new information about a download comes in. */
     public void onDownloadItemUpdated(DownloadItem downloadItem) {
+        if (mUseNewDownloadPath) return;
+
         OfflineItem offlineItem = DownloadInfo.createOfflineItem(downloadItem.getDownloadInfo());
         if (!isVisibleToUser(offlineItem)) return;
 
@@ -292,6 +297,7 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
 
     /** Updates the InfoBar after a download has been removed. */
     public void onDownloadItemRemoved(ContentId contentId) {
+        if (mUseNewDownloadPath) return;
         onItemRemoved(contentId);
     }
 
@@ -338,6 +344,11 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
     @Override
     public void onItemUpdated(OfflineItem item) {
         if (!isVisibleToUser(item)) return;
+
+        if (item.state == OfflineItemState.CANCELLED) {
+            onItemRemoved(item.id);
+            return;
+        }
 
         computeNextStepForUpdate(item);
     }
@@ -454,7 +465,7 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
                     if (currentlyShowingPending && itemResumedFromPending) {
                         nextState = DownloadInfoBarState.DOWNLOADING;
                     }
-                    if (itemWasRemoved && mTrackedItems.size() == 0) {
+                    if ((itemWasPaused || itemWasRemoved) && mTrackedItems.size() == 0) {
                         nextState = DownloadInfoBarState.INITIAL;
                     }
                 }
@@ -547,6 +558,10 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
             info.icon = showAccelerating ? R.drawable.infobar_downloading_sweep_animation
                                          : R.drawable.infobar_downloading_fill_animation;
             info.hasVectorDrawable = true;
+            if (areAnimationsDisabled()) {
+                info.icon = R.drawable.infobar_downloading;
+                info.hasVectorDrawable = false;
+            }
         } else if (offlineItemState == OfflineItemState.COMPLETE) {
             stringRes = R.plurals.multiple_download_complete;
             info.icon = R.drawable.infobar_download_complete;
@@ -583,8 +598,8 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
                             R.plurals.download_infobar_downloading_files, inProgressDownloadCount,
                             inProgressDownloadCount);
                 } else {
-                    String bytesString =
-                            Formatter.formatFileSize(getContext(), totalDownloadingSizeBytes);
+                    String bytesString = DownloadUtils.getStringForBytes(
+                            getContext(), totalDownloadingSizeBytes);
                     info.message = inProgressDownloadCount == 1
                             ? getContext().getString(
                                       R.string.downloading_file_with_bytes, bytesString)
@@ -593,7 +608,7 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
                 }
             }
 
-            info.hasAnimation = true;
+            info.hasAnimation = !areAnimationsDisabled();
             info.link = showAccelerating ? null : getContext().getString(R.string.details_link);
         } else if (infoBarState == DownloadInfoBarState.SHOW_RESULT) {
             int itemCount = getDownloadCount().getCount(offlineItemState);
@@ -705,6 +720,10 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
         return isSpeedingUpMessageEnabled() && offlineItem != null && offlineItem.isAccelerated;
     }
 
+    private boolean areAnimationsDisabled() {
+        return DeviceConditions.isCurrentlyInPowerSaveMode(getContext());
+    }
+
     /**
      * Central function called to show an InfoBar. If the previous InfoBar was on a different
      * tab which is currently not active, based on the value of |info.forceReparent|, it is
@@ -747,7 +766,7 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
         Tab currentTab = getCurrentTab();
         if (currentTab == null) return;
 
-        currentTab.getInfoBarContainer().addObserver(mInfoBarContainerObserver);
+        InfoBarContainer.get(currentTab).addObserver(mInfoBarContainerObserver);
         DownloadProgressInfoBar.createInfoBar(mClient, currentTab, info);
         recordInfoBarCreated();
     }
@@ -764,7 +783,7 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
 
         Tab prevTab = mCurrentInfoBar.getTab();
         if (prevTab != null) {
-            prevTab.getInfoBarContainer().removeObserver(mInfoBarContainerObserver);
+            InfoBarContainer.get(prevTab).removeObserver(mInfoBarContainerObserver);
         }
 
         mCurrentInfoBar.closeInfoBar();

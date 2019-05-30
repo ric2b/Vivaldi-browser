@@ -17,6 +17,7 @@
 #include "base/power_monitor/power_monitor.h"
 #include "base/power_monitor/power_monitor_device_source.h"
 #include "base/process/process_metrics.h"
+#include "base/task/post_task.h"
 #include "base/task/task_scheduler/scheduler_worker_pool_params.h"
 #include "base/task/task_scheduler/task_scheduler.h"
 #include "base/threading/thread_restrictions.h"
@@ -24,7 +25,9 @@
 #include "ios/web/public/app/web_main_parts.h"
 #include "ios/web/public/global_state/ios_global_state.h"
 #import "ios/web/public/web_client.h"
+#include "ios/web/public/web_task_traits.h"
 #include "ios/web/service_manager_context.h"
+#include "ios/web/web_sub_thread.h"
 #include "ios/web/web_thread_impl.h"
 #include "ios/web/webui/url_data_manager_ios.h"
 
@@ -126,8 +129,10 @@ int WebMainLoop::CreateThreads(
 
   base::Thread::Options io_message_loop_options;
   io_message_loop_options.message_loop_type = base::MessageLoop::TYPE_IO;
-  io_thread_ = std::make_unique<WebThreadImpl>(WebThread::IO);
-  io_thread_->StartWithOptions(io_message_loop_options);
+  io_thread_ = std::make_unique<WebSubThread>(WebThread::IO);
+  if (!io_thread_->StartWithOptions(io_message_loop_options))
+    LOG(FATAL) << "Failed to start WebThread::IO";
+  io_thread_->RegisterAsWebThread();
 
   // Only start IO thread above as this is the only WebThread besides UI (which
   // is the main thread).
@@ -143,9 +148,8 @@ int WebMainLoop::PreMainMessageLoopRun() {
   }
 
   // If the UI thread blocks, the whole UI is unresponsive.
-  // Do not allow disk IO from the UI thread.
-  base::ThreadRestrictions::SetIOAllowed(false);
-  base::ThreadRestrictions::DisallowWaiting();
+  // Do not allow unresponsive tasks from the UI thread.
+  base::DisallowUnresponsiveTasks();
   return result_code_;
 }
 
@@ -158,10 +162,21 @@ void WebMainLoop::ShutdownThreadsAndCleanUp() {
   // Teardown may start in PostMainMessageLoopRun, and during teardown we
   // need to be able to perform IO.
   base::ThreadRestrictions::SetIOAllowed(true);
-  WebThread::PostTask(
-      WebThread::IO, FROM_HERE,
-      base::Bind(base::IgnoreResult(&base::ThreadRestrictions::SetIOAllowed),
-                 true));
+  base::PostTaskWithTraits(
+      FROM_HERE, {WebThread::IO},
+      base::BindOnce(
+          base::IgnoreResult(&base::ThreadRestrictions::SetIOAllowed), true));
+
+  // Also allow waiting to join threads.
+  // TODO(crbug.com/800808): Ideally this (and the above SetIOAllowed()
+  // would be scoped allowances). That would be one of the first step to ensure
+  // no persistent work is being done after TaskScheduler::Shutdown() in order
+  // to move towards atomic shutdown.
+  base::ThreadRestrictions::SetWaitAllowed(true);
+  base::PostTaskWithTraits(
+      FROM_HERE, {WebThread::IO},
+      base::BindOnce(
+          base::IgnoreResult(&base::ThreadRestrictions::SetWaitAllowed), true));
 
   if (parts_) {
     parts_->PostMainMessageLoopRun();
@@ -194,8 +209,10 @@ void WebMainLoop::InitializeMainThread() {
   base::PlatformThread::SetName("CrWebMain");
 
   // Register the main thread by instantiating it, but don't call any methods.
-  main_thread_.reset(
-      new WebThreadImpl(WebThread::UI, base::MessageLoop::current()));
+  DCHECK(base::ThreadTaskRunnerHandle::IsSet());
+  main_thread_.reset(new WebThreadImpl(
+      WebThread::UI,
+      ios_global_state::GetMainThreadMessageLoop()->task_runner()));
 }
 
 int WebMainLoop::WebThreadsStarted() {

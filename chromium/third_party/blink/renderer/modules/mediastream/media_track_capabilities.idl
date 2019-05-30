@@ -8,11 +8,13 @@ dictionary MediaTrackCapabilities {
     DoubleRange aspectRatio;
     DoubleRange frameRate;
     sequence<DOMString> facingMode;
+    sequence<DOMString> resizeMode;
     sequence<boolean> echoCancellation;
     // See http://crbug.com/846270.
     [OriginTrialEnabled=ExperimentalHardwareEchoCancellation] sequence<DOMString> echoCancellationType;
     sequence<boolean> autoGainControl;
     sequence<boolean> noiseSuppression;
+    LongRange sampleSize;
     DOMString deviceId;
     DOMString groupId;
     // W3C Image Capture API
@@ -23,12 +25,14 @@ dictionary MediaTrackCapabilities {
     sequence<DOMString>  exposureMode;
     sequence<DOMString>  focusMode;
     MediaSettingsRange   exposureCompensation;
+    MediaSettingsRange   exposureTime;
     MediaSettingsRange   colorTemperature;
     MediaSettingsRange   iso;
     MediaSettingsRange   brightness;
     MediaSettingsRange   contrast;
     MediaSettingsRange   saturation;
     MediaSettingsRange   sharpness;
+    MediaSettingsRange   focusDistance;
     MediaSettingsRange   zoom;
     boolean              torch;
 };

@@ -5,13 +5,16 @@
 #include "chrome/browser/chromeos/arc/print/arc_print_service.h"
 
 #include <limits>
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/memory/singleton.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -27,6 +30,7 @@
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
@@ -155,8 +159,8 @@ void CreateQueryOnIOThread(std::unique_ptr<printing::PrintSettings> settings,
 // Send initialized PrinterQuery to UI thread.
 void OnSetSettingsDoneOnIOThread(scoped_refptr<printing::PrinterQuery> query,
                                  PrinterQueryCallback callback) {
-  content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                   base::BindOnce(std::move(callback), query));
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                           base::BindOnce(std::move(callback), query));
 }
 
 std::unique_ptr<printing::PrinterSemanticCapsAndDefaults>
@@ -374,8 +378,8 @@ class PrintJobHostImpl : public mojom::PrintJobHost,
                        data_size),
         base::BindOnce(&PrintJobHostImpl::OnFileRead,
                        weak_ptr_factory_.GetWeakPtr()));
-    content::BrowserThread::PostTask(
-        content::BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::IO},
         base::BindOnce(&CreateQueryOnIOThread, std::move(settings),
                        base::BindOnce(&PrintJobHostImpl::OnSetSettingsDone,
                                       weak_ptr_factory_.GetWeakPtr())));
@@ -424,7 +428,7 @@ class PrintJobHostImpl : public mojom::PrintJobHost,
       case printing::JobEventDetails::DOC_DONE:
         DCHECK(event_details.document());
         service_->JobIdGenerated(
-            this, chromeos::CupsPrintJob::GetUniqueId(
+            this, chromeos::CupsPrintJob::CreateUniqueId(
                       base::UTF16ToUTF8(
                           event_details.document()->settings().device_name()),
                       event_details.job_id()));
@@ -455,6 +459,7 @@ class PrintJobHostImpl : public mojom::PrintJobHost,
 
   // Create PrintJob and start printing if Metafile is created as well.
   void OnSetSettingsDone(scoped_refptr<printing::PrinterQuery> query) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     job_ = base::MakeRefCounted<printing::PrintJob>();
     job_->Initialize(query.get(), base::string16() /* name */,
                      1 /* page_count */);
@@ -472,6 +477,8 @@ class PrintJobHostImpl : public mojom::PrintJobHost,
     document->SetDocument(std::move(metafile_) /* metafile */,
                           gfx::Size() /* paper_size */,
                           gfx::Rect() /* page_rect */);
+    UMA_HISTOGRAM_COUNTS_1000("Arc.CupsPrinting.PageCount",
+                              document->page_count());
     job_->StartPrinting();
   }
 

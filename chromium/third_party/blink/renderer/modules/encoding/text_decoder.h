@@ -52,27 +52,28 @@ class TextDecoder final : public ScriptWrappable {
 
  public:
   static TextDecoder* Create(const String& label,
-                             const TextDecoderOptions&,
+                             const TextDecoderOptions*,
                              ExceptionState&);
+
+  TextDecoder(const WTF::TextEncoding&, bool fatal, bool ignore_bom);
   ~TextDecoder() override;
 
   // Implement the IDL
   String encoding() const;
   bool fatal() const { return fatal_; }
   bool ignoreBOM() const { return ignore_bom_; }
-  String decode(const BufferSource&, const TextDecodeOptions&, ExceptionState&);
+  String decode(const BufferSource&, const TextDecodeOptions*, ExceptionState&);
   String decode(ExceptionState&);
 
  private:
-  TextDecoder(const WTF::TextEncoding&, bool fatal, bool ignore_bom);
-
   String decode(const char* start,
-                size_t length,
-                const TextDecodeOptions&,
+                uint32_t length,
+                const TextDecodeOptions*,
                 ExceptionState&);
 
   WTF::TextEncoding encoding_;
   std::unique_ptr<WTF::TextCodec> codec_;
+  bool do_not_flush_ = false;
   bool fatal_;
   bool ignore_bom_;
   bool bom_seen_;

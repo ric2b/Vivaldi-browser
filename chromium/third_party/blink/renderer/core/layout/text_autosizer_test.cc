@@ -2,19 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "third_party/blink/renderer/core/layout/text_autosizer.h"
+
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
-#include "third_party/blink/renderer/core/layout/text_autosizer.h"
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
+#include "third_party/blink/renderer/core/testing/sim/sim_request.h"
+#include "third_party/blink/renderer/core/testing/sim/sim_test.h"
 #include "third_party/blink/renderer/platform/geometry/int_rect.h"
+#include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 
 namespace blink {
 class TextAutosizerClient : public EmptyChromeClient {
  public:
-  static TextAutosizerClient* Create() { return new TextAutosizerClient; }
+  static TextAutosizerClient* Create() {
+    return MakeGarbageCollected<TextAutosizerClient>();
+  }
   float WindowToViewportScalar(const float value) const override {
     return value * device_scale_factor_;
   }
@@ -38,9 +45,9 @@ class TextAutosizerTest : public RenderingTest {
     return GetTextAutosizerClient();
   }
   TextAutosizerClient& GetTextAutosizerClient() const {
-    DEFINE_STATIC_LOCAL(TextAutosizerClient, client,
+    DEFINE_STATIC_LOCAL(Persistent<TextAutosizerClient>, client,
                         (TextAutosizerClient::Create()));
-    return client;
+    return *client;
   }
   void set_device_scale_factor(float device_scale_factor) {
     GetTextAutosizerClient().set_device_scale_factor(device_scale_factor);
@@ -158,29 +165,29 @@ TEST_F(TextAutosizerTest, ParagraphWithChangingTextSizeAdjustment) {
   EXPECT_FLOAT_EQ(
       40.f, autosized_div->GetLayoutObject()->StyleRef().ComputedFontSize());
 
-  autosized_div->setAttribute(HTMLNames::classAttr, "none");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  autosized_div->setAttribute(html_names::kClassAttr, "none");
+  UpdateAllLifecyclePhasesForTest();
   EXPECT_FLOAT_EQ(
       16.f, autosized_div->GetLayoutObject()->StyleRef().SpecifiedFontSize());
   EXPECT_FLOAT_EQ(
       16.f, autosized_div->GetLayoutObject()->StyleRef().ComputedFontSize());
 
-  autosized_div->setAttribute(HTMLNames::classAttr, "small");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  autosized_div->setAttribute(html_names::kClassAttr, "small");
+  UpdateAllLifecyclePhasesForTest();
   EXPECT_FLOAT_EQ(
       16.f, autosized_div->GetLayoutObject()->StyleRef().SpecifiedFontSize());
   EXPECT_FLOAT_EQ(
       8.f, autosized_div->GetLayoutObject()->StyleRef().ComputedFontSize());
 
-  autosized_div->setAttribute(HTMLNames::classAttr, "large");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  autosized_div->setAttribute(html_names::kClassAttr, "large");
+  UpdateAllLifecyclePhasesForTest();
   EXPECT_FLOAT_EQ(
       16.f, autosized_div->GetLayoutObject()->StyleRef().SpecifiedFontSize());
   EXPECT_FLOAT_EQ(
       24.f, autosized_div->GetLayoutObject()->StyleRef().ComputedFontSize());
 
-  autosized_div->removeAttribute(HTMLNames::classAttr);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  autosized_div->removeAttribute(html_names::kClassAttr);
+  UpdateAllLifecyclePhasesForTest();
   EXPECT_FLOAT_EQ(
       16.f, autosized_div->GetLayoutObject()->StyleRef().SpecifiedFontSize());
   EXPECT_FLOAT_EQ(
@@ -414,7 +421,7 @@ TEST_F(TextAutosizerTest, ChangingAccessibilityFontScaleFactor) {
                   autosized->GetLayoutObject()->StyleRef().ComputedFontSize());
 
   GetDocument().GetSettings()->SetAccessibilityFontScaleFactor(2);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   EXPECT_FLOAT_EQ(16.f,
                   autosized->GetLayoutObject()->StyleRef().SpecifiedFontSize());
@@ -473,7 +480,7 @@ TEST_F(TextAutosizerTest, TextSizeAdjustDoesNotDisableAccessibility) {
   // Changing the accessibility font scale factor should change the adjusted
   // size.
   GetDocument().GetSettings()->SetAccessibilityFontScaleFactor(2);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   EXPECT_FLOAT_EQ(
       16.f,
@@ -534,7 +541,7 @@ TEST_F(TextAutosizerTest, DeviceScaleAdjustmentWithViewport) {
 
   GetDocument().GetSettings()->SetViewportMetaEnabled(true);
   GetDocument().GetSettings()->SetDeviceScaleAdjustment(1.5f);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   Element* autosized = GetDocument().getElementById("autosized");
   EXPECT_FLOAT_EQ(16.f,
@@ -546,7 +553,7 @@ TEST_F(TextAutosizerTest, DeviceScaleAdjustmentWithViewport) {
                   autosized->GetLayoutObject()->StyleRef().ComputedFontSize());
 
   GetDocument().GetSettings()->SetViewportMetaEnabled(false);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   autosized = GetDocument().getElementById("autosized");
   EXPECT_FLOAT_EQ(16.f,
@@ -572,7 +579,7 @@ TEST_F(TextAutosizerTest, ChangingSuperClusterFirstText) {
       <div id='shortText'>short blah blah</div>
     </div>
   )HTML");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   Element* long_text_element = GetDocument().getElementById("longText");
   long_text_element->SetInnerHTMLFromString(
@@ -588,7 +595,7 @@ TEST_F(TextAutosizerTest, ChangingSuperClusterFirstText) {
       "qui officia deserunt"
       "    mollit anim id est laborum.",
       ASSERT_NO_EXCEPTION);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutObject* long_text =
       GetDocument().getElementById("longText")->GetLayoutObject();
@@ -617,7 +624,7 @@ TEST_F(TextAutosizerTest, ChangingSuperClusterSecondText) {
       <div id='longText'>short blah blah</div>
     </div>
   )HTML");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   Element* long_text_element = GetDocument().getElementById("longText");
   long_text_element->SetInnerHTMLFromString(
@@ -633,7 +640,7 @@ TEST_F(TextAutosizerTest, ChangingSuperClusterSecondText) {
       "qui officia deserunt"
       "    mollit anim id est laborum.",
       ASSERT_NO_EXCEPTION);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutObject* long_text =
       GetDocument().getElementById("longText")->GetLayoutObject();
@@ -662,7 +669,7 @@ TEST_F(TextAutosizerTest, AddingSuperCluster) {
     </div>
     <div id='container'></div>
   )HTML");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   Element* container = GetDocument().getElementById("container");
   container->SetInnerHTMLFromString(
@@ -680,7 +687,7 @@ TEST_F(TextAutosizerTest, AddingSuperCluster) {
       "    mollit anim id est laborum."
       "</div>",
       ASSERT_NO_EXCEPTION);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutObject* long_text =
       GetDocument().getElementById("longText")->GetLayoutObject();
@@ -710,7 +717,7 @@ TEST_F(TextAutosizerTest, ChangingInheritedClusterTextInsideSuperCluster) {
       <div class='cluster' id='shortText'>short blah blah</div>
     </div>
   )HTML");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   Element* long_text_element = GetDocument().getElementById("longText");
   long_text_element->SetInnerHTMLFromString(
@@ -726,7 +733,7 @@ TEST_F(TextAutosizerTest, ChangingInheritedClusterTextInsideSuperCluster) {
       "qui officia deserunt"
       "    mollit anim id est laborum.",
       ASSERT_NO_EXCEPTION);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   LayoutObject* long_text =
       GetDocument().getElementById("longText")->GetLayoutObject();
@@ -776,7 +783,7 @@ TEST_F(TextAutosizerTest, AutosizeInnerContentOfRuby) {
       </ruby>
     </div>
   )HTML");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   Element* ruby_inline = GetDocument().getElementById("rubyInline");
   EXPECT_FLOAT_EQ(
@@ -826,15 +833,15 @@ TEST_F(TextAutosizerTest, ResizeAndGlyphOverflowChanged) {
       "  <span style='font-size:15px'>n</span>"
       "</body>",
       ASSERT_NO_EXCEPTION);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   GetDocument().GetSettings()->SetTextAutosizingWindowSizeOverride(
       IntSize(640, 360));
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   GetDocument().GetSettings()->SetTextAutosizingWindowSizeOverride(
       IntSize(360, 640));
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 }
 
 TEST_F(TextAutosizerTest, narrowContentInsideNestedWideBlock) {
@@ -864,7 +871,7 @@ TEST_F(TextAutosizerTest, narrowContentInsideNestedWideBlock) {
       "  </div>"
       "</body>",
       ASSERT_NO_EXCEPTION);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   Element* content = GetDocument().getElementById("content");
   //(content width = 200px) / (window width = 320px) < 1.0f, multiplier = 1.0,
@@ -896,7 +903,7 @@ TEST_F(TextAutosizerTest, LayoutViewWidthProvider) {
       "  <div id='panel'></div>"
       "</body>",
       ASSERT_NO_EXCEPTION);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   Element* content = GetDocument().getElementById("content");
   // (specified font-size = 16px) * (viewport width = 800px) /
@@ -906,7 +913,7 @@ TEST_F(TextAutosizerTest, LayoutViewWidthProvider) {
 
   GetDocument().getElementById("panel")->SetInnerHTMLFromString("insert text");
   content->SetInnerHTMLFromString(content->InnerHTMLAsString());
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   // (specified font-size = 16px) * (viewport width = 800px) /
   // (window width = 320px) = 40px.
@@ -939,7 +946,7 @@ TEST_F(TextAutosizerTest, MultiColumns) {
       "  <div> hello </div>"
       "</body>",
       ASSERT_NO_EXCEPTION);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   Element* target = GetDocument().getElementById("target");
   // (specified font-size = 16px) * ( thread flow layout width = 800px / 3) /
@@ -1063,4 +1070,52 @@ TEST_F(TextAutosizerTest, AfterPrint) {
   EXPECT_FLOAT_EQ(20.0f * device_scale,
                   target->GetLayoutObject()->StyleRef().ComputedFontSize());
 }
+
+class TextAutosizerSimTest : public SimTest {
+ private:
+  void SetUp() override {
+    SimTest::SetUp();
+
+    WebSettings* web_settings = WebView().GetSettings();
+    web_settings->SetViewportEnabled(true);
+    web_settings->SetViewportMetaEnabled(true);
+
+    Settings& settings = WebView().GetPage()->GetSettings();
+    settings.SetTextAutosizingEnabled(true);
+    settings.SetTextAutosizingWindowSizeOverride(IntSize(400, 400));
+  }
+};
+
+TEST_F(TextAutosizerSimTest, CrossSiteUseCounter) {
+  WebView().MainFrameWidget()->Resize(WebSize(800, 800));
+
+  SimRequest main_resource("https://example.com/", "text/html");
+  SimRequest child_resource("https://crosssite.com/", "text/html");
+
+  LoadURL("https://example.com/");
+  main_resource.Complete(
+      "<iframe width=700 src='https://crosssite.com/'></iframe>");
+
+  Compositor().BeginFrame();
+  test::RunPendingTasks();
+
+  child_resource.Complete(R"HTML(
+    <body style='font-size: 20px'>
+      Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed
+      do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+      Ut enim ad minim veniam, quis nostrud exercitation ullamco
+      laboris nisi ut aliquip ex ea commodo consequat.
+    </body>
+  )HTML");
+
+  Compositor().BeginFrame();
+  test::RunPendingTasks();
+
+  auto* child_frame = To<WebLocalFrameImpl>(MainFrame().FirstChild());
+  auto* child_doc = child_frame->GetFrame()->GetDocument();
+
+  EXPECT_TRUE(UseCounter::IsCounted(*child_doc,
+                                    WebFeature::kTextAutosizedCrossSiteIframe));
+}
+
 }  // namespace blink

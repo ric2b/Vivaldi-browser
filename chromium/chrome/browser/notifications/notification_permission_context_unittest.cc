@@ -128,7 +128,7 @@ class NotificationPermissionContextTest
   // Registers the given |extension| with the extension service and returns the
   // extension if it could be registered appropriately.
   scoped_refptr<const extensions::Extension> RegisterExtension(
-      scoped_refptr<extensions::Extension> extension) {
+      scoped_refptr<const extensions::Extension> extension) {
     base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
     extensions::TestExtensionSystem* test_extension_system =
         static_cast<extensions::TestExtensionSystem*>(
@@ -471,6 +471,14 @@ TEST_F(NotificationPermissionContextTest, GetNotificationsSettings) {
   // |settings| contains the default setting and 4 exceptions.
   ASSERT_EQ(5u, settings.size());
 
+  // The platform isn't guaranteed to return the settings in any particular
+  // order, so sort them first.
+  std::sort(
+      settings.begin(), settings.begin() + 4,
+      [](ContentSettingPatternSource& s1, ContentSettingPatternSource& s2) {
+        return s1.primary_pattern.GetHost() < s2.primary_pattern.GetHost();
+      });
+
   EXPECT_EQ(
       ContentSettingsPattern::FromURLNoWildcard(GURL("https://allowed.com")),
       settings[0].primary_pattern);
@@ -552,7 +560,7 @@ TEST_F(NotificationPermissionContextTest, ExtensionPermissionOverrideDenied) {
 
   // Disable the |extension|'s notification ability through the state tracker.
   message_center::NotifierId notifier_id(
-      message_center::NotifierId::APPLICATION, extension->id());
+      message_center::NotifierType::APPLICATION, extension->id());
   notifier_state_tracker->SetNotifierEnabled(notifier_id, /* enabled= */ false);
 
   ASSERT_EQ(CONTENT_SETTING_BLOCK,

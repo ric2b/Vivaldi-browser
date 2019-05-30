@@ -51,12 +51,13 @@ class MockDeviceManagementService : public DeviceManagementService {
       scoped_refptr<network::SharedURLLoaderFactory>);
 
   MOCK_METHOD2(CreateJob, CreateJobFunction);
-  MOCK_METHOD6(
+  MOCK_METHOD7(
       StartJob,
       void(const std::string& request_type,
            const std::string& gaia_token,
            const std::string& oauth_token,
            const std::string& dm_token,
+           const std::string& enrollment_token,
            const std::string& client_id,
            const enterprise_management::DeviceManagementRequest& request));
 

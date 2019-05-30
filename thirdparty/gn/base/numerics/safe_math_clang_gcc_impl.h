@@ -11,12 +11,7 @@
 
 #include "base/numerics/safe_conversions.h"
 
-#if !defined(__native_client__) && (defined(__ARMEL__) || defined(__arch64__))
-#include "base/numerics/safe_math_arm_impl.h"
-#define BASE_HAS_ASSEMBLER_SAFE_MATH (1)
-#else
 #define BASE_HAS_ASSEMBLER_SAFE_MATH (0)
-#endif
 
 namespace base {
 namespace internal {

@@ -8,8 +8,8 @@
 #include "base/macros.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/time/time.h"
+#include "base/timer/lap_timer.h"
 #include "build/build_config.h"
-#include "cc/base/lap_timer.h"
 #include "cc/raster/bitmap_raster_buffer_provider.h"
 #include "cc/raster/gpu_raster_buffer_provider.h"
 #include "cc/raster/one_copy_raster_buffer_provider.h"
@@ -86,7 +86,7 @@ class PerfContextProvider
     capabilities_.sync_query = true;
 
     raster_context_ = std::make_unique<gpu::raster::RasterImplementationGLES>(
-        context_gl_.get(), nullptr, capabilities_);
+        context_gl_.get());
   }
 
   // viz::ContextProvider implementation.
@@ -116,6 +116,12 @@ class PerfContextProvider
       test_context_provider_ = viz::TestContextProvider::Create();
     }
     return test_context_provider_->GrContext();
+  }
+  gpu::SharedImageInterface* SharedImageInterface() override {
+    if (!test_context_provider_) {
+      test_context_provider_ = viz::TestContextProvider::Create();
+    }
+    return test_context_provider_->SharedImageInterface();
   }
   viz::ContextCacheController* CacheController() override {
     return &cache_controller_;
@@ -305,7 +311,7 @@ class RasterBufferProviderPerfTestBase {
 
       for (auto& decode_task : raster_task->dependencies()) {
         // Add decode task if it doesn't already exist in graph.
-        TaskGraph::Node::Vector::iterator decode_it =
+        auto decode_it =
             std::find_if(graph->nodes.begin(), graph->nodes.end(),
                          [decode_task](const TaskGraph::Node& node) {
                            return node.task == decode_task;
@@ -334,7 +340,7 @@ class RasterBufferProviderPerfTestBase {
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
   std::unique_ptr<ResourcePool> resource_pool_;
   std::unique_ptr<SynchronousTaskGraphRunner> task_graph_runner_;
-  LapTimer timer_;
+  base::LapTimer timer_;
 };
 
 class RasterBufferProviderPerfTest
@@ -555,12 +561,13 @@ TEST_P(RasterBufferProviderPerfTest, ScheduleAndExecuteTasks) {
   RunScheduleAndExecuteTasksTest("32_4", 32, 4);
 }
 
-INSTANTIATE_TEST_CASE_P(RasterBufferProviderPerfTests,
-                        RasterBufferProviderPerfTest,
-                        ::testing::Values(RASTER_BUFFER_PROVIDER_TYPE_ZERO_COPY,
-                                          RASTER_BUFFER_PROVIDER_TYPE_ONE_COPY,
-                                          RASTER_BUFFER_PROVIDER_TYPE_GPU,
-                                          RASTER_BUFFER_PROVIDER_TYPE_BITMAP));
+INSTANTIATE_TEST_SUITE_P(
+    RasterBufferProviderPerfTests,
+    RasterBufferProviderPerfTest,
+    ::testing::Values(RASTER_BUFFER_PROVIDER_TYPE_ZERO_COPY,
+                      RASTER_BUFFER_PROVIDER_TYPE_ONE_COPY,
+                      RASTER_BUFFER_PROVIDER_TYPE_GPU,
+                      RASTER_BUFFER_PROVIDER_TYPE_BITMAP));
 
 class RasterBufferProviderCommonPerfTest
     : public RasterBufferProviderPerfTestBase,

@@ -7,6 +7,7 @@
 #include <bitset>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/strings/string_piece.h"
 #include "components/apdu/apdu_response.h"
 #include "device/bluetooth/bluetooth_uuid.h"
@@ -21,7 +22,7 @@ FidoBleDevice::FidoBleDevice(BluetoothAdapter* adapter, std::string address)
   connection_ = std::make_unique<FidoBleConnection>(
       adapter, std::move(address),
       base::BindRepeating(&FidoBleDevice::OnStatusMessage,
-                          base::Unretained(this)));
+                          weak_factory_.GetWeakPtr()));
 }
 
 FidoBleDevice::FidoBleDevice(std::unique_ptr<FidoBleConnection> connection)
@@ -36,7 +37,7 @@ void FidoBleDevice::Connect() {
   StartTimeout();
   state_ = State::kBusy;
   connection_->Connect(
-      base::BindOnce(&FidoBleDevice::OnConnected, base::Unretained(this)));
+      base::BindOnce(&FidoBleDevice::OnConnected, weak_factory_.GetWeakPtr()));
 }
 
 void FidoBleDevice::SendPing(std::vector<uint8_t> data,
@@ -65,6 +66,14 @@ void FidoBleDevice::Cancel() {
 
 std::string FidoBleDevice::GetId() const {
   return GetId(connection_->address());
+}
+
+base::string16 FidoBleDevice::GetDisplayName() const {
+  auto* device = connection_->GetBleDevice();
+  if (!device)
+    return base::string16();
+
+  return device->GetNameForDisplay();
 }
 
 FidoTransportProtocol FidoBleDevice::DeviceTransport() const {
@@ -100,9 +109,17 @@ bool FidoBleDevice::IsInPairingMode() const {
           static_cast<int>(FidoServiceDataFlags::kPairingMode)) != 0;
 }
 
+bool FidoBleDevice::IsPaired() const {
+  const BluetoothDevice* const ble_device = connection_->GetBleDevice();
+  if (!ble_device)
+    return false;
+
+  return ble_device->IsPaired();
+}
+
 FidoBleConnection::ReadCallback FidoBleDevice::GetReadCallbackForTesting() {
   return base::BindRepeating(&FidoBleDevice::OnStatusMessage,
-                             base::Unretained(this));
+                             weak_factory_.GetWeakPtr());
 }
 
 void FidoBleDevice::DeviceTransact(std::vector<uint8_t> command,
@@ -140,8 +157,9 @@ void FidoBleDevice::Transition() {
     case State::kConnected:
       StartTimeout();
       state_ = State::kBusy;
-      connection_->ReadControlPointLength(base::BindOnce(
-          &FidoBleDevice::OnReadControlPointLength, base::Unretained(this)));
+      connection_->ReadControlPointLength(
+          base::BindOnce(&FidoBleDevice::OnReadControlPointLength,
+                         weak_factory_.GetWeakPtr()));
       break;
     case State::kReady:
       if (!pending_frames_.empty()) {
@@ -207,8 +225,8 @@ void FidoBleDevice::SendRequestFrame(FidoBleFrame frame,
   transaction_.emplace(connection_.get(), control_point_length_);
   transaction_->WriteRequestFrame(
       std::move(frame),
-      base::BindOnce(&FidoBleDevice::OnResponseFrame, base::Unretained(this),
-                     std::move(callback)));
+      base::BindOnce(&FidoBleDevice::OnResponseFrame,
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void FidoBleDevice::StartTimeout() {

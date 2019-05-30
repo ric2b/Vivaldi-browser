@@ -40,8 +40,7 @@ std::unique_ptr<DirectoryCommitContribution> DirectoryCommitContribution::Build(
     return std::unique_ptr<DirectoryCommitContribution>();
 
   google::protobuf::RepeatedPtrField<sync_pb::SyncEntity> entities;
-  for (std::vector<int64_t>::iterator it = metahandles.begin();
-       it != metahandles.end(); ++it) {
+  for (auto it = metahandles.begin(); it != metahandles.end(); ++it) {
     sync_pb::SyncEntity* entity = entities.Add();
     syncable::ModelNeutralMutableEntry entry(&trans, GET_BY_HANDLE, *it);
     commit_util::BuildCommitItem(entry, entity);
@@ -135,11 +134,11 @@ SyncerError DirectoryCommitContribution::ProcessCommitResponse(
 
   int commit_count = static_cast<int>(metahandles_.size());
   if (commit_count == successes) {
-    return SYNCER_OK;
+    return SyncerError(SyncerError::SYNCER_OK);
   } else if (error_commits > 0) {
-    return SERVER_RETURN_UNKNOWN_ERROR;
+    return SyncerError(SyncerError::SERVER_RETURN_UNKNOWN_ERROR);
   } else if (transient_error_commits > 0) {
-    return SERVER_RETURN_TRANSIENT_ERROR;
+    return SyncerError(SyncerError::SERVER_RETURN_TRANSIENT_ERROR);
   } else if (conflicting_commits > 0) {
     // This means that the server already has an item with this version, but
     // we haven't seen that update yet.
@@ -151,10 +150,10 @@ SyncerError DirectoryCommitContribution::ProcessCommitResponse(
     // We don't currently have any code to support that exceptional control
     // flow.  Instead, we abort the current sync cycle and start a new one.  The
     // end result is the same.
-    return SERVER_RETURN_CONFLICT;
+    return SyncerError(SyncerError::SERVER_RETURN_CONFLICT);
   } else {
     LOG(FATAL) << "Inconsistent counts when processing commit response";
-    return SYNCER_OK;
+    return SyncerError(SyncerError::SYNCER_OK);
   }
 }
 
@@ -185,8 +184,7 @@ DirectoryCommitContribution::DirectoryCommitContribution(
 
 void DirectoryCommitContribution::UnsetSyncingBits() {
   syncable::ModelNeutralWriteTransaction trans(FROM_HERE, SYNCER, dir_);
-  for (std::vector<int64_t>::const_iterator it = metahandles_.begin();
-       it != metahandles_.end(); ++it) {
+  for (auto it = metahandles_.begin(); it != metahandles_.end(); ++it) {
     syncable::ModelNeutralMutableEntry entry(&trans, GET_BY_HANDLE, *it);
     // TODO(sync): this seems like it could be harmful if a sync cycle doesn't
     // complete but the Cleanup method is called anyways. It appears these are

@@ -7,6 +7,7 @@
 
 #include "cc/test/stub_decode_cache.h"
 #include "cc/tiles/image_decode_cache.h"
+#include "components/viz/test/test_context_provider.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/config/gpu_feature_info.h"
@@ -38,6 +39,7 @@ class FakeWebGraphicsContext3DProvider : public WebGraphicsContext3DProvider {
   const gpu::Capabilities& GetCapabilities() const override {
     return capabilities_;
   }
+  void SetCapabilities(const gpu::Capabilities& c) { capabilities_ = c; }
 
   const gpu::GpuFeatureInfo& GetGpuFeatureInfo() const override {
     return gpu_feature_info_;
@@ -47,18 +49,28 @@ class FakeWebGraphicsContext3DProvider : public WebGraphicsContext3DProvider {
 
   gpu::gles2::GLES2Interface* ContextGL() override { return gl_; }
   gpu::webgpu::WebGPUInterface* WebGPUInterface() override { return nullptr; }
+  gpu::SharedImageInterface* GetSharedImageInterface() const override {
+    NOTREACHED();
+    return nullptr;
+  }
 
   bool BindToCurrentThread() override { return false; }
   void SetLostContextCallback(base::Closure) override {}
   void SetErrorMessageCallback(
       base::RepeatingCallback<void(const char*, int32_t id)>) override {}
-  cc::ImageDecodeCache* ImageDecodeCache() override {
+  cc::ImageDecodeCache* ImageDecodeCache(
+      SkColorType color_type,
+      sk_sp<SkColorSpace> color_space) override {
     return image_decode_cache_;
+  }
+  viz::TestSharedImageInterface* SharedImageInterface() override {
+    return &test_shared_image_interface_;
   }
 
  private:
   cc::StubDecodeCache stub_image_decode_cache_;
 
+  viz::TestSharedImageInterface test_shared_image_interface_;
   gpu::gles2::GLES2Interface* gl_;
   sk_sp<GrContext> gr_context_;
   gpu::Capabilities capabilities_;

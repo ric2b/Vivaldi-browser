@@ -16,8 +16,12 @@
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "content/public/browser/cache_storage_context.h"
-#include "content/public/browser/cache_storage_usage_info.h"
 #include "url/gurl.h"
+#include "url/origin.h"
+
+namespace content {
+struct StorageUsageInfo;
+}
 
 // BrowsingDataCacheStorageHelper is an interface for classes dealing with
 // aggregating and deleting browsing data stored for Cache Storage.
@@ -28,7 +32,7 @@ class BrowsingDataCacheStorageHelper
     : public base::RefCountedThreadSafe<BrowsingDataCacheStorageHelper> {
  public:
   using FetchCallback =
-      base::Callback<void(const std::list<content::CacheStorageUsageInfo>&)>;
+      base::OnceCallback<void(const std::list<content::StorageUsageInfo>&)>;
 
   // Create a BrowsingDataCacheStorageHelper instance for the Cache Storage
   // stored in |context|'s associated profile's user data directory.
@@ -37,7 +41,7 @@ class BrowsingDataCacheStorageHelper
 
   // Starts the fetching process, which will notify its completion via
   // |callback|. This must be called only in the UI thread.
-  virtual void StartFetching(const FetchCallback& callback);
+  virtual void StartFetching(FetchCallback callback);
   // Requests the Cache Storage data for an origin be deleted.
   virtual void DeleteCacheStorage(const GURL& origin);
 
@@ -54,37 +58,23 @@ class BrowsingDataCacheStorageHelper
   void DeleteCacheStorageOnIOThread(const GURL& origin);
 
   // Enumerates all Cache Storage instances on the IO thread.
-  void FetchCacheStorageUsageInfoOnIOThread(const FetchCallback& callback);
+  void FetchCacheStorageUsageInfoOnIOThread(FetchCallback callback);
 
   DISALLOW_COPY_AND_ASSIGN(BrowsingDataCacheStorageHelper);
 };
 
 // This class is an implementation of BrowsingDataCacheStorageHelper that does
 // not fetch its information from the Cache Storage context, but is passed the
-// info as a parameter.
+// info by a call when accessed.
 class CannedBrowsingDataCacheStorageHelper
     : public BrowsingDataCacheStorageHelper {
  public:
-  // Contains information about a Cache Storage.
-  struct PendingCacheStorageUsageInfo {
-    PendingCacheStorageUsageInfo(const GURL& origin,
-                                 int64_t total_size_bytes,
-                                 const base::Time& last_modified);
-    ~PendingCacheStorageUsageInfo();
-
-    bool operator<(const PendingCacheStorageUsageInfo& other) const;
-
-    GURL origin;
-    int64_t total_size_bytes;
-    base::Time last_modified;
-  };
-
   explicit CannedBrowsingDataCacheStorageHelper(
       content::CacheStorageContext* context);
 
   // Add a Cache Storage to the set of canned Cache Storages that is
   // returned by this helper.
-  void AddCacheStorage(const GURL& origin);
+  void Add(const url::Origin& origin);
 
   // Clear the list of canned Cache Storages.
   void Reset();
@@ -93,23 +83,19 @@ class CannedBrowsingDataCacheStorageHelper
   bool empty() const;
 
   // Returns the number of currently stored Cache Storages.
-  size_t GetCacheStorageCount() const;
+  size_t GetCount() const;
 
   // Returns the current list of Cache Storages.
-  const std::set<
-      CannedBrowsingDataCacheStorageHelper::PendingCacheStorageUsageInfo>&
-  GetCacheStorageUsageInfo() const;
+  const std::set<url::Origin>& GetOrigins() const;
 
   // BrowsingDataCacheStorageHelper methods.
-  void StartFetching(const base::Callback<
-                     void(const std::list<content::CacheStorageUsageInfo>&)>&
-                         callback) override;
+  void StartFetching(FetchCallback callback) override;
   void DeleteCacheStorage(const GURL& origin) override;
 
  private:
   ~CannedBrowsingDataCacheStorageHelper() override;
 
-  std::set<PendingCacheStorageUsageInfo> pending_cache_storage_info_;
+  std::set<url::Origin> pending_origins_;
 
   DISALLOW_COPY_AND_ASSIGN(CannedBrowsingDataCacheStorageHelper);
 };

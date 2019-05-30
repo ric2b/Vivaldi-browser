@@ -6,19 +6,14 @@
 
 #include <fcntl.h>
 #include <stddef.h>
-
-#include <memory>
-
-#if defined(USE_GLIB)
-#include <glib.h>
-#endif
-
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/base_paths.h"
@@ -52,6 +47,10 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_family.h"
 #include "url/gurl.h"
+
+#if defined(USE_GLIB)
+#include <glib.h>
+#endif
 
 namespace shell_integration_linux {
 
@@ -140,7 +139,8 @@ shell_integration::DefaultWebClientState GetIsDefaultWebClient(
 #if defined(OS_CHROMEOS)
   return shell_integration::UNKNOWN_DEFAULT;
 #else
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   std::unique_ptr<base::Environment> env(base::Environment::Create());
 
@@ -233,8 +233,7 @@ std::string QuoteCommandLineForDesktopFileExec(
 
   std::string quoted_path = "";
   const base::CommandLine::StringVector& argv = command_line.argv();
-  for (base::CommandLine::StringVector::const_iterator i = argv.begin();
-       i != argv.end(); ++i) {
+  for (auto i = argv.begin(); i != argv.end(); ++i) {
     if (i != argv.begin())
       quoted_path += " ";
     quoted_path += QuoteArgForDesktopFileExec(*i);
@@ -298,7 +297,8 @@ base::FilePath GetDataWriteLocation(base::Environment* env) {
 }
 
 std::vector<base::FilePath> GetDataSearchLocations(base::Environment* env) {
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   std::vector<base::FilePath> search_paths;
   base::FilePath write_location = GetDataWriteLocation(env);
@@ -458,7 +458,8 @@ std::string GetIconName() {
 bool GetExistingShortcutContents(base::Environment* env,
                                  const base::FilePath& desktop_filename,
                                  std::string* output) {
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   std::vector<base::FilePath> search_paths = GetDataSearchLocations(env);
 
@@ -502,7 +503,8 @@ base::FilePath GetWebShortcutFilename(const GURL& url) {
 std::vector<base::FilePath> GetExistingProfileShortcutFilenames(
     const base::FilePath& profile_path,
     const base::FilePath& directory) {
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   // Use a prefix, because xdg-desktop-menu requires it.
   std::string prefix(chrome::kBrowserProcessExecutableName);
@@ -668,7 +670,8 @@ std::string GetDirectoryFileContents(const base::string16& title,
 bool CreateAppListDesktopShortcut(
     const std::string& wm_class,
     const std::string& title) {
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   base::FilePath desktop_name(kAppListDesktopName);
   base::FilePath shortcut_filename = desktop_name.AddExtension("desktop");

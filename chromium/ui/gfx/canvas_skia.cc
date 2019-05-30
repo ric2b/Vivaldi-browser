@@ -88,8 +88,9 @@ void UpdateRenderText(const Rect& rect,
 
   render_text->SetColor(color);
   const int font_style = font_list.GetFontStyle();
-  render_text->SetStyle(ITALIC, (font_style & Font::ITALIC) != 0);
-  render_text->SetStyle(UNDERLINE, (font_style & Font::UNDERLINE) != 0);
+  render_text->SetStyle(TEXT_STYLE_ITALIC, (font_style & Font::ITALIC) != 0);
+  render_text->SetStyle(TEXT_STYLE_UNDERLINE,
+                        (font_style & Font::UNDERLINE) != 0);
   render_text->SetWeight(font_list.GetFontWeight());
 }
 
@@ -108,7 +109,7 @@ void Canvas::SizeStringFloat(const base::string16& text,
 
   if ((flags & MULTI_LINE) && *width != 0) {
     WordWrapBehavior wrap_behavior = TRUNCATE_LONG_WORDS;
-    if (flags & CHARACTER_BREAK)
+    if (flags & CHARACTER_BREAKABLE)
       wrap_behavior = WRAP_LONG_WORDS;
     else if (!(flags & NO_ELLIPSIS))
       wrap_behavior = ELIDE_LONG_WORDS;
@@ -169,7 +170,7 @@ void Canvas::DrawStringRectWithFlags(const base::string16& text,
 
   if (flags & MULTI_LINE) {
     WordWrapBehavior wrap_behavior = IGNORE_LONG_WORDS;
-    if (flags & CHARACTER_BREAK)
+    if (flags & CHARACTER_BREAKABLE)
       wrap_behavior = WRAP_LONG_WORDS;
     else if (!(flags & NO_ELLIPSIS))
       wrap_behavior = ELIDE_LONG_WORDS;
@@ -198,7 +199,7 @@ void Canvas::DrawStringRectWithFlags(const base::string16& text,
       rect.set_height(line_height - line_padding);
 
       if (range.IsValid())
-        render_text->ApplyStyle(UNDERLINE, true, range);
+        render_text->ApplyStyle(TEXT_STYLE_UNDERLINE, true, range);
       render_text->SetDisplayRect(rect);
       render_text->Draw(this);
       rect += Vector2d(0, line_height);
@@ -229,7 +230,7 @@ void Canvas::DrawStringRectWithFlags(const base::string16& text,
     UpdateRenderText(rect, adjusted_text, font_list, flags, color,
                      render_text.get());
     if (range.IsValid())
-      render_text->ApplyStyle(UNDERLINE, true, range);
+      render_text->ApplyStyle(TEXT_STYLE_UNDERLINE, true, range);
     render_text->Draw(this);
   }
 

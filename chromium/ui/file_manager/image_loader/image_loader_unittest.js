@@ -3,6 +3,18 @@
 // found in the LICENSE file.
 
 /**
+ * Casts a map of options as an incoming load request to test CopyParameters.
+ *
+ * @param {Image} source
+ * @param {Object} options
+ * @return {!ImageLoaderUtil.CopyParameters} Calculated copy parameters.
+ */
+function calculateCopyParametersFromOptions(source, options) {
+  return ImageLoaderUtil.calculateCopyParameters(
+      source, /** @type{!LoadImageRequest} */ (options));
+}
+
+/**
  * Test case:
  * - Source image: 200x50
  * - Target: max size is 100x100
@@ -14,9 +26,9 @@ function testNormalImage() {
   var options = {
     maxWidth: 100,
     maxHeight: 100,
-    orientation: ImageOrientation.fromDriveOrientation(0)
+    orientation: ImageOrientation.fromClockwiseRotation(0)
   };
-  var result = ImageLoaderUtil.calculateCopyParameters(source, options);
+  var result = calculateCopyParametersFromOptions(source, options);
   assertEquals(0, result.source.x);
   assertEquals(0, result.source.y);
   assertEquals(200, result.source.width);
@@ -27,7 +39,7 @@ function testNormalImage() {
   assertEquals(25, result.target.height);
   assertEquals(100, result.canvas.width);
   assertEquals(25, result.canvas.height);
-};
+}
 
 /**
  * Test case:
@@ -41,9 +53,9 @@ function testRotatedImage() {
   var options = {
     maxWidth: 100,
     maxHeight: 100,
-    orientation: ImageOrientation.fromDriveOrientation(1)
+    orientation: ImageOrientation.fromClockwiseRotation(1)
   };
-  var result = ImageLoaderUtil.calculateCopyParameters(source, options);
+  var result = calculateCopyParametersFromOptions(source, options);
   assertEquals(0, result.source.x);
   assertEquals(0, result.source.y);
   assertEquals(50, result.source.width);
@@ -69,9 +81,9 @@ function testCroppedImage() {
     width: 50,
     height: 50,
     crop: true,
-    orientation: ImageOrientation.fromDriveOrientation(0)
+    orientation: ImageOrientation.fromClockwiseRotation(0)
   };
-  var result = ImageLoaderUtil.calculateCopyParameters(source, options);
+  var result = calculateCopyParametersFromOptions(source, options);
   assertEquals(350, result.source.x);
   assertEquals(0, result.source.y);
   assertEquals(100, result.source.width);
@@ -97,9 +109,9 @@ function testCroppedImageWithResize() {
     width: 50,
     height: 50,
     crop: true,
-    orientation: ImageOrientation.fromDriveOrientation(0)
+    orientation: ImageOrientation.fromClockwiseRotation(0)
   };
-  var result = ImageLoaderUtil.calculateCopyParameters(source, options);
+  var result = calculateCopyParametersFromOptions(source, options);
   assertEquals(87, result.source.x);
   assertEquals(0, result.source.y);
   assertEquals(25, result.source.width);
@@ -125,9 +137,9 @@ function testCroppedTinyImage() {
     width: 50,
     height: 50,
     crop: true,
-    orientation: ImageOrientation.fromDriveOrientation(0)
+    orientation: ImageOrientation.fromClockwiseRotation(0)
   };
-  var result = ImageLoaderUtil.calculateCopyParameters(source, options);
+  var result = calculateCopyParametersFromOptions(source, options);
   assertEquals(5, result.source.x);
   assertEquals(0, result.source.y);
   assertEquals(10, result.source.width);
@@ -153,9 +165,9 @@ function testCroppedRotatedImage() {
     width: 50,
     height: 50,
     crop: true,
-    orientation: ImageOrientation.fromDriveOrientation(1)
+    orientation: ImageOrientation.fromClockwiseRotation(1)
   };
-  var result = ImageLoaderUtil.calculateCopyParameters(source, options);
+  var result = calculateCopyParametersFromOptions(source, options);
   assertEquals(0, result.source.x);
   assertEquals(150, result.source.y);
   assertEquals(100, result.source.width);

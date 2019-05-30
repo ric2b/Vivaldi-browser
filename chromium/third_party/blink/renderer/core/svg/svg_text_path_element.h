@@ -31,19 +31,14 @@ enum SVGTextPathMethodType {
   kSVGTextPathMethodAlign,
   kSVGTextPathMethodStretch
 };
+DECLARE_SVG_ENUM_MAP(SVGTextPathMethodType);
 
 enum SVGTextPathSpacingType {
   kSVGTextPathSpacingUnknown = 0,
   kSVGTextPathSpacingAuto,
   kSVGTextPathSpacingExact
 };
-
-template <>
-const SVGEnumerationStringEntries&
-GetStaticStringEntries<SVGTextPathMethodType>();
-template <>
-const SVGEnumerationStringEntries&
-GetStaticStringEntries<SVGTextPathSpacingType>();
+DECLARE_SVG_ENUM_MAP(SVGTextPathSpacingType);
 
 class SVGTextPathElement final : public SVGTextContentElement,
                                  public SVGURIReference {
@@ -63,6 +58,8 @@ class SVGTextPathElement final : public SVGTextContentElement,
 
   DECLARE_NODE_FACTORY(SVGTextPathElement);
 
+  explicit SVGTextPathElement(Document&);
+
   SVGAnimatedLength* startOffset() const { return start_offset_.Get(); }
   SVGAnimatedEnumeration<SVGTextPathMethodType>* method() {
     return method_.Get();
@@ -74,8 +71,6 @@ class SVGTextPathElement final : public SVGTextContentElement,
   void Trace(blink::Visitor*) override;
 
  private:
-  explicit SVGTextPathElement(Document&);
-
   ~SVGTextPathElement() override;
 
   void ClearResourceReferences();

@@ -111,9 +111,24 @@ Polymer({
         return [];
       },
     },
+
+    /**
+     * Whether to show technology badge on mobile network icons.
+     * @private
+     */
+    showTechnologyBadge_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.valueExists('showTechnologyBadge') &&
+            loadTimeData.getBoolean('showTechnologyBadge');
+      }
+    },
   },
 
-  listeners: {'network-list-changed': 'getNetworkStateList_'},
+  listeners: {
+    'network-list-changed': 'getNetworkStateList_',
+    'networks-changed': 'getNetworkStateList_',
+  },
 
   observers: ['deviceStateChanged_(networkingPrivate, deviceState)'],
 
@@ -161,7 +176,8 @@ Polymer({
 
   /** @private */
   deviceStateChanged_: function() {
-    this.showSpinner = !!this.deviceState.Scanning;
+    this.showSpinner =
+        this.deviceState !== undefined && !!this.deviceState.Scanning;
 
     // Scans should only be triggered by the "networks" subpage.
     if (settings.getCurrentRoute() != settings.routes.INTERNET_NETWORKS) {
@@ -174,8 +190,9 @@ Polymer({
 
   /** @private */
   updateScanning_: function() {
-    if (!this.deviceState)
+    if (!this.deviceState) {
       return;
+    }
 
     if (this.shouldStartScan_()) {
       this.startScanning_();
@@ -192,8 +209,9 @@ Polymer({
    */
   shouldStartScan_: function() {
     // Scans should be kicked off from the Wi-Fi networks subpage.
-    if (this.deviceState.Type == CrOnc.Type.WI_FI)
+    if (this.deviceState.Type == CrOnc.Type.WI_FI) {
       return true;
+    }
 
     // Scans should be kicked off from the Mobile data subpage, as long as it
     // includes Tether networks.
@@ -208,8 +226,9 @@ Polymer({
 
   /** @private */
   startScanning_: function() {
-    if (this.scanIntervalId_ != null)
+    if (this.scanIntervalId_ != null) {
       return;
+    }
     const INTERVAL_MS = 10 * 1000;
     this.networkingPrivate.requestNetworkScan(this.deviceState.Type);
     this.scanIntervalId_ = window.setInterval(() => {
@@ -219,16 +238,18 @@ Polymer({
 
   /** @private */
   stopScanning_: function() {
-    if (this.scanIntervalId_ == null)
+    if (this.scanIntervalId_ == null) {
       return;
+    }
     window.clearInterval(this.scanIntervalId_);
     this.scanIntervalId_ = null;
   },
 
   /** @private */
   getNetworkStateList_: function() {
-    if (!this.deviceState)
+    if (!this.deviceState) {
       return;
+    }
     const filter = {
       networkType: this.deviceState.Type,
       visible: true,
@@ -242,8 +263,9 @@ Polymer({
    * @private
    */
   onGetNetworks_: function(networkStates) {
-    if (!this.deviceState)
-      return;  // Edge case when device states change before this callback.
+    if (!this.deviceState) {
+      return;
+    }  // Edge case when device states change before this callback.
 
     // For the Cellular/Mobile subpage, request Tether networks if available.
     if (this.deviceState.Type == CrOnc.Type.CELLULAR &&
@@ -272,8 +294,9 @@ Polymer({
           thirdPartyVpns[providerType].push(state);
         } else if (this.get('VPN.Type', state) == 'ARCVPN') {
           const arcProviderName = this.get('VPN.Host', state);
-          if (state.ConnectionState != CrOnc.ConnectionState.CONNECTED)
+          if (state.ConnectionState != CrOnc.ConnectionState.CONNECTED) {
             continue;
+          }
           arcVpns[arcProviderName] = arcVpns[arcProviderName] || [];
           arcVpns[arcProviderName].push(state);
         } else {
@@ -342,8 +365,9 @@ Polymer({
    * @private
    */
   getToggleA11yString_: function(deviceState) {
-    if (!this.enableToggleIsVisible_(deviceState))
+    if (!this.enableToggleIsVisible_(deviceState)) {
       return '';
+    }
     switch (deviceState.Type) {
       case CrOnc.Type.TETHER:
       case CrOnc.Type.CELLULAR:
@@ -392,10 +416,12 @@ Polymer({
    * @private
    */
   showAddButton_: function(deviceState, globalPolicy) {
-    if (!deviceState || deviceState.Type != CrOnc.Type.WI_FI)
+    if (!deviceState || deviceState.Type != CrOnc.Type.WI_FI) {
       return false;
-    if (!this.deviceIsEnabled_(deviceState))
+    }
+    if (!this.deviceIsEnabled_(deviceState)) {
       return false;
+    }
     return this.allowAddConnection_(globalPolicy);
   },
 
@@ -519,6 +545,7 @@ Polymer({
 
   /**
    * @param {!CrOnc.NetworkStateProperties} state The network state.
+   * @return {boolean}
    * @private
    */
   isBlockedByPolicy_: function(state) {
@@ -540,10 +567,12 @@ Polymer({
    * @private
    */
   canConnect_: function(state) {
-    if (state.ConnectionState != CrOnc.ConnectionState.NOT_CONNECTED)
+    if (state.ConnectionState != CrOnc.ConnectionState.NOT_CONNECTED) {
       return false;
-    if (this.isBlockedByPolicy_(state))
+    }
+    if (this.isBlockedByPolicy_(state)) {
       return false;
+    }
     if (state.Type == CrOnc.Type.VPN &&
         (!this.defaultNetwork ||
          this.defaultNetwork.ConnectionState !=

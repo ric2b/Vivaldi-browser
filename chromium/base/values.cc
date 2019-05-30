@@ -22,11 +22,25 @@
 
 namespace base {
 
+// base::Value must be standard layout to guarantee that writing to
+// |bool_type_| then reading |type_| is defined behaviour. See:
+//
+// [class.union]:
+//   If a standard-layout union contains several standard-layout structs that
+//   share a common initial sequence (9.2), and if an object of this
+//   standard-layout union type contains one of the standard-layout structs,
+//   it is permitted to inspect the common initial sequence of any of
+//   standard-layout struct members;
+//
+static_assert(std::is_standard_layout<Value>::value,
+              "base::Value should be a standard-layout C++ class in order "
+              "to avoid undefined behaviour in its implementation!");
+
 namespace {
 
 const char* const kTypeNames[] = {"null",   "boolean", "integer",    "double",
                                   "string", "binary",  "dictionary", "list"};
-static_assert(arraysize(kTypeNames) ==
+static_assert(base::size(kTypeNames) ==
                   static_cast<size_t>(Value::Type::LIST) + 1,
               "kTypeNames Has Wrong Size");
 
@@ -76,7 +90,7 @@ std::unique_ptr<Value> CopyWithoutEmptyChildren(const Value& node) {
 
 }  // namespace
 
-constexpr uint32_t Value::kMagicIsAlive;
+constexpr uint16_t Value::kMagicIsAlive;
 
 // static
 std::unique_ptr<Value> Value::CreateWithCopiedBuffer(const char* buffer,
@@ -98,9 +112,9 @@ Value::Value(Value&& that) noexcept {
   InternalMoveConstructFrom(std::move(that));
 }
 
-Value::Value() noexcept : type_(Type::NONE) {}
+Value::Value() noexcept : type_(Type::NONE), is_alive_(kMagicIsAlive) {}
 
-Value::Value(Type type) : type_(type) {
+Value::Value(Type type) : type_(type), is_alive_(kMagicIsAlive) {
   // Initialize with the default value.
   switch (type_) {
     case Type::NONE:
@@ -130,11 +144,20 @@ Value::Value(Type type) : type_(type) {
   }
 }
 
-Value::Value(bool in_bool) : type_(Type::BOOLEAN), bool_value_(in_bool) {}
+Value::Value(bool in_bool)
+    : bool_type_(Type::BOOLEAN),
+      bool_is_alive_(kMagicIsAlive),
+      bool_value_(in_bool) {}
 
-Value::Value(int in_int) : type_(Type::INTEGER), int_value_(in_int) {}
+Value::Value(int in_int)
+    : int_type_(Type::INTEGER),
+      int_is_alive_(kMagicIsAlive),
+      int_value_(in_int) {}
 
-Value::Value(double in_double) : type_(Type::DOUBLE), double_value_(in_double) {
+Value::Value(double in_double)
+    : double_type_(Type::DOUBLE),
+      double_is_alive_(kMagicIsAlive),
+      double_value_(in_double) {
   if (!std::isfinite(double_value_)) {
     NOTREACHED() << "Non-finite (i.e. NaN or positive/negative infinity) "
                  << "values cannot be represented in JSON";
@@ -147,7 +170,9 @@ Value::Value(const char* in_string) : Value(std::string(in_string)) {}
 Value::Value(StringPiece in_string) : Value(std::string(in_string)) {}
 
 Value::Value(std::string&& in_string) noexcept
-    : type_(Type::STRING), string_value_(std::move(in_string)) {
+    : string_type_(Type::STRING),
+      string_is_alive_(kMagicIsAlive),
+      string_value_(std::move(in_string)) {
   DCHECK(IsStringUTF8(string_value_));
 }
 
@@ -156,15 +181,22 @@ Value::Value(const char16* in_string16) : Value(StringPiece16(in_string16)) {}
 Value::Value(StringPiece16 in_string16) : Value(UTF16ToUTF8(in_string16)) {}
 
 Value::Value(const std::vector<char>& in_blob)
-    : type_(Type::BINARY), binary_value_(in_blob.begin(), in_blob.end()) {}
+    : binary_type_(Type::BINARY),
+      binary_is_alive_(kMagicIsAlive),
+      binary_value_(in_blob.begin(), in_blob.end()) {}
 
 Value::Value(base::span<const uint8_t> in_blob)
-    : type_(Type::BINARY), binary_value_(in_blob.begin(), in_blob.end()) {}
+    : binary_type_(Type::BINARY),
+      binary_is_alive_(kMagicIsAlive),
+      binary_value_(in_blob.begin(), in_blob.end()) {}
 
 Value::Value(BlobStorage&& in_blob) noexcept
-    : type_(Type::BINARY), binary_value_(std::move(in_blob)) {}
+    : binary_type_(Type::BINARY),
+      binary_is_alive_(kMagicIsAlive),
+      binary_value_(std::move(in_blob)) {}
 
-Value::Value(const DictStorage& in_dict) : type_(Type::DICTIONARY), dict_() {
+Value::Value(const DictStorage& in_dict)
+    : dict_type_(Type::DICTIONARY), dict_is_alive_(kMagicIsAlive), dict_() {
   dict_.reserve(in_dict.size());
   for (const auto& it : in_dict) {
     dict_.try_emplace(dict_.end(), it.first,
@@ -173,16 +205,21 @@ Value::Value(const DictStorage& in_dict) : type_(Type::DICTIONARY), dict_() {
 }
 
 Value::Value(DictStorage&& in_dict) noexcept
-    : type_(Type::DICTIONARY), dict_(std::move(in_dict)) {}
+    : dict_type_(Type::DICTIONARY),
+      dict_is_alive_(kMagicIsAlive),
+      dict_(std::move(in_dict)) {}
 
-Value::Value(const ListStorage& in_list) : type_(Type::LIST), list_() {
+Value::Value(const ListStorage& in_list)
+    : list_type_(Type::LIST), list_is_alive_(kMagicIsAlive), list_() {
   list_.reserve(in_list.size());
   for (const auto& val : in_list)
     list_.emplace_back(val.Clone());
 }
 
 Value::Value(ListStorage&& in_list) noexcept
-    : type_(Type::LIST), list_(std::move(in_list)) {}
+    : list_type_(Type::LIST),
+      list_is_alive_(kMagicIsAlive),
+      list_(std::move(in_list)) {}
 
 Value& Value::operator=(Value&& that) noexcept {
   InternalCleanup();
@@ -223,7 +260,7 @@ Value::~Value() {
 // static
 const char* Value::GetTypeName(Value::Type type) {
   DCHECK_GE(static_cast<int>(type), 0);
-  DCHECK_LT(static_cast<size_t>(type), arraysize(kTypeNames));
+  DCHECK_LT(static_cast<size_t>(type), base::size(kTypeNames));
   return kTypeNames[static_cast<size_t>(type)];
 }
 
@@ -288,6 +325,26 @@ const Value* Value::FindKeyOfType(StringPiece key, Type type) const {
   if (!result || result->type() != type)
     return nullptr;
   return result;
+}
+
+base::Optional<bool> Value::FindBoolKey(StringPiece key) const {
+  const Value* result = FindKeyOfType(key, Type::BOOLEAN);
+  return result ? base::make_optional(result->bool_value_) : base::nullopt;
+}
+
+base::Optional<int> Value::FindIntKey(StringPiece key) const {
+  const Value* result = FindKeyOfType(key, Type::INTEGER);
+  return result ? base::make_optional(result->int_value_) : base::nullopt;
+}
+
+base::Optional<double> Value::FindDoubleKey(StringPiece key) const {
+  const Value* result = FindKeyOfType(key, Type::DOUBLE);
+  return result ? base::make_optional(result->double_value_) : base::nullopt;
+}
+
+const std::string* Value::FindStringKey(StringPiece key) const {
+  const Value* result = FindKeyOfType(key, Type::STRING);
+  return result ? &result->string_value_ : nullptr;
 }
 
 bool Value::RemoveKey(StringPiece key) {
@@ -374,12 +431,12 @@ Value* Value::SetPath(std::initializer_list<StringPiece> path, Value value) {
 }
 
 Value* Value::SetPath(span<const StringPiece> path, Value value) {
-  DCHECK_NE(path.begin(), path.end());  // Can't be empty path.
+  DCHECK(path.begin() != path.end());  // Can't be empty path.
 
   // Walk/construct intermediate dictionaries. The last element requires
   // special handling so skip it in this loop.
   Value* cur = this;
-  const StringPiece* cur_path = path.begin();
+  auto cur_path = path.begin();
   for (; (cur_path + 1) < path.end(); ++cur_path) {
     if (!cur->is_dict())
       return nullptr;
@@ -486,7 +543,8 @@ bool Value::GetAsDouble(double* out_value) const {
   if (out_value && is_double()) {
     *out_value = double_value_;
     return true;
-  } else if (out_value && is_int()) {
+  }
+  if (out_value && is_int()) {
     // Allow promotion from int to double.
     *out_value = int_value_;
     return true;
@@ -675,6 +733,7 @@ size_t Value::EstimateMemoryUsage() const {
 
 void Value::InternalMoveConstructFrom(Value&& that) {
   type_ = that.type_;
+  is_alive_ = that.is_alive_;
 
   switch (type_) {
     case Type::NONE:
@@ -1403,7 +1462,7 @@ std::ostream& operator<<(std::ostream& out, const Value& value) {
 
 std::ostream& operator<<(std::ostream& out, const Value::Type& type) {
   if (static_cast<int>(type) < 0 ||
-      static_cast<size_t>(type) >= arraysize(kTypeNames))
+      static_cast<size_t>(type) >= base::size(kTypeNames))
     return out << "Invalid Type (index = " << static_cast<int>(type) << ")";
   return out << Value::GetTypeName(type);
 }

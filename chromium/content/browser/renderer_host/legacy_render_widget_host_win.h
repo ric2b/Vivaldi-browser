@@ -16,8 +16,10 @@
 #include "content/common/content_export.h"
 #include "ui/compositor/compositor_animation_observer.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/native_widget_types.h"
 
 namespace ui {
+class AXFragmentRootWin;
 class AXSystemCaretWin;
 class DirectManipulationHelper;
 class WindowEventTarget;
@@ -59,7 +61,7 @@ class CONTENT_EXPORT LegacyRenderWidgetHostHWND
                               ATL::CWindow,
                               ATL::CWinTraits<WS_CHILD>> {
  public:
-  DECLARE_WND_CLASS_EX(L"Chrome_RenderWidgetHostHWND", CS_DBLCLKS, 0);
+  DECLARE_WND_CLASS_EX(L"Chrome_RenderWidgetHostHWND", CS_DBLCLKS, 0)
 
   typedef ATL::CWindowImpl<LegacyRenderWidgetHostHWND,
                            ATL::CWindow,
@@ -127,6 +129,9 @@ class CONTENT_EXPORT LegacyRenderWidgetHostHWND
   // gesturing on touchpad.
   void PollForNextEvent();
 
+  // Return the root accessible object for either MSAA or UI Automation.
+  gfx::NativeViewAccessible GetOrCreateWindowRootAccessible();
+
  protected:
   void OnFinalMessage(HWND hwnd) override;
 
@@ -176,6 +181,9 @@ class CONTENT_EXPORT LegacyRenderWidgetHostHWND
 
   // Some assistive software need to track the location of the caret.
   std::unique_ptr<ui::AXSystemCaretWin> ax_system_caret_;
+
+  // Implements IRawElementProviderFragmentRoot when UIA is enabled
+  std::unique_ptr<ui::AXFragmentRootWin> ax_fragment_root_;
 
   // This class provides functionality to register the legacy window as a
   // Direct Manipulation consumer. This allows us to support smooth scroll

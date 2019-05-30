@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -14,8 +15,8 @@
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/omnibox/browser/omnibox_client.h"
 #include "components/omnibox/browser/omnibox_edit_controller.h"
-#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_popup_view.h"
+#include "components/omnibox/common/omnibox_features.h"
 #include "third_party/icu/source/common/unicode/ubidi.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -159,10 +160,6 @@ void OmniboxPopupModel::SetSelectedLine(size_t line,
     edit_model_->OnPopupDataChanged(match.fill_into_edit, &current_destination,
                                     keyword, is_keyword_hint);
   }
-
-  // Repaint old and new selected lines immediately, so that the edit doesn't
-  // appear to update [much] faster than the popup.
-  view_->PaintUpdatesNow();
 }
 
 void OmniboxPopupModel::ResetToDefaultMatch() {
@@ -187,19 +184,32 @@ void OmniboxPopupModel::SetSelectedLineState(LineState state) {
   DCHECK(!result().empty());
   DCHECK_NE(kNoMatch, selected_line_);
 
+  const AutocompleteResult& result = this->result();
+  if (result.empty())
+    return;
+
+  const AutocompleteMatch& match = result.match_at(selected_line_);
+  GURL current_destination(match.destination_url);
+
   if (state == KEYWORD) {
-    const AutocompleteMatch& match = result().match_at(selected_line_);
     DCHECK(match.associated_keyword.get());
   }
 
-  if (state == TAB_SWITCH) {
-    const AutocompleteMatch& match = result().match_at(selected_line_);
-    DCHECK(match.has_tab_match);
-    old_focused_url_ = result().match_at(selected_line_).destination_url;
+  if (state == BUTTON_FOCUSED) {
+    // TODO(orinj): If in-suggestion Pedals are kept, refactor a bit
+    // so that button presence doesn't always assume tab switching use case.
+    DCHECK(match.has_tab_match || match.pedal);
+    old_focused_url_ = current_destination;
   }
 
   selected_line_state_ = state;
   view_->InvalidateLine(selected_line_);
+
+  // Ensures update of accessibility data for button text.
+  if (state == BUTTON_FOCUSED) {
+    edit_model_->view()->OnTemporaryTextMaybeChanged(
+        edit_model_->view()->GetText(), match, false, false);
+  }
 }
 
 void OmniboxPopupModel::TryDeletingCurrentItem() {
@@ -248,10 +258,11 @@ void OmniboxPopupModel::OnResultChanged() {
   // There had better not be a nonempty result set with no default match.
   CHECK((selected_line_ != kNoMatch) || result.empty());
   has_selected_match_ = false;
-  // If selected line state was |TAB_SWITCH| and nothing has changed, leave it.
+  // If selected line state was |BUTTON_FOCUSED| and nothing has changed, leave
+  // it.
   if (selected_line_ != kNoMatch) {
     const bool has_focused_match =
-        selected_line_state_ == TAB_SWITCH &&
+        selected_line_state_ == BUTTON_FOCUSED &&
         result.match_at(selected_line_).has_tab_match;
     const bool has_changed =
         selected_line_ != old_selected_line ||
@@ -294,7 +305,9 @@ gfx::Image OmniboxPopupModel::GetMatchIcon(const AutocompleteMatch& match,
   if (!extension_icon.IsEmpty())
     return edit_model_->client()->GetSizedIcon(extension_icon);
 
-  if (OmniboxFieldTrial::IsShowSuggestionFaviconsEnabled() &&
+  // Get the favicon for navigational suggestions.
+  if (base::FeatureList::IsEnabled(
+          omnibox::kUIExperimentShowSuggestionFavicons) &&
       !AutocompleteMatch::IsSearchType(match.type)) {
     // Because the Views UI code calls GetMatchIcon in both the layout and
     // painting code, we may generate multiple OnFaviconFetched callbacks,
@@ -312,9 +325,7 @@ gfx::Image OmniboxPopupModel::GetMatchIcon(const AutocompleteMatch& match,
       return edit_model_->client()->GetSizedIcon(favicon);
   }
 
-  const auto& vector_icon_type = AutocompleteMatch::TypeToVectorIcon(
-      match.type, IsStarredMatch(match), match.has_tab_match,
-      match.document_type);
+  const auto& vector_icon_type = match.GetVectorIcon(IsStarredMatch(match));
 
   return edit_model_->client()->GetSizedIcon(vector_icon_type,
                                              vector_icon_color);
@@ -324,6 +335,11 @@ gfx::Image OmniboxPopupModel::GetMatchIcon(const AutocompleteMatch& match,
 bool OmniboxPopupModel::SelectedLineHasTabMatch() {
   return selected_line_ != kNoMatch &&
          result().match_at(selected_line_).ShouldShowTabMatch();
+}
+
+bool OmniboxPopupModel::SelectedLineHasButton() {
+  return selected_line_ != kNoMatch &&
+         result().match_at(selected_line_).ShouldShowButton();
 }
 
 void OmniboxPopupModel::OnFaviconFetched(const GURL& page_url,

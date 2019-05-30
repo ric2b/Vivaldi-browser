@@ -9,7 +9,7 @@
 
 #include "base/macros.h"
 #include "ios/web/public/web_state/web_state_observer.h"
-#include "ios/web/public/web_state/web_state_user_data.h"
+#import "ios/web/public/web_state/web_state_user_data.h"
 
 // Handles listening to WebState network activity to control network activity
 // indicator.
@@ -22,6 +22,8 @@ class NetworkActivityIndicatorTabHelper
   static void CreateForWebState(web::WebState* web_state, NSString* tab_id);
 
  private:
+  friend class web::WebStateUserData<NetworkActivityIndicatorTabHelper>;
+
   NetworkActivityIndicatorTabHelper(web::WebState* web_state, NSString* tab_id);
 
   // web::WebStateObserver overrides:
@@ -34,6 +36,8 @@ class NetworkActivityIndicatorTabHelper
 
   // Key used to uniquely identify this activity.
   NSString* network_activity_key_;
+
+  WEB_STATE_USER_DATA_KEY_DECL();
 
   DISALLOW_COPY_AND_ASSIGN(NetworkActivityIndicatorTabHelper);
 };

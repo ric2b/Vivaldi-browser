@@ -6,10 +6,15 @@
 
 #include "content/public/common/content_features.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace content {
 
 // static
 bool MimeHandlerViewMode::UsesCrossProcessFrame() {
+  if (vivaldi::IsVivaldiRunning()) {
+    return true;
+  }
   return base::FeatureList::IsEnabled(
       features::kMimeHandlerViewInCrossProcessFrame);
 }

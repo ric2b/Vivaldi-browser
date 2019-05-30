@@ -10,9 +10,9 @@
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/texture_holder.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 
 class GrContext;
 
@@ -23,21 +23,27 @@ class TextureHolder;
 class PLATFORM_EXPORT AcceleratedStaticBitmapImage final
     : public StaticBitmapImage {
  public:
+  enum class MailboxType { kSharedImageId, kDeprecatedMailbox };
+
   ~AcceleratedStaticBitmapImage() override;
   // SkImage with a texture backing.
   static scoped_refptr<AcceleratedStaticBitmapImage> CreateFromSkImage(
       sk_sp<SkImage>,
       base::WeakPtr<WebGraphicsContext3DProviderWrapper>);
+
   // Can specify the GrContext that created the texture backing. Ideally all
   // callers would use this option. The |mailbox| is a name for the texture
-  // backing, allowing other contexts to use the same backing.
+  // backing, allowing other contexts to use the same backing. |mailbox_type|
+  // indicates whether |mailbox| is a SharedImage identifier or a deprecated
+  // mailbox (generated via ProduceTextureDirectCHROMIUM).
   static scoped_refptr<AcceleratedStaticBitmapImage>
   CreateFromWebGLContextImage(
       const gpu::Mailbox&,
       const gpu::SyncToken&,
       unsigned texture_id,
       base::WeakPtr<WebGraphicsContext3DProviderWrapper>&&,
-      IntSize mailbox_size);
+      IntSize mailbox_size,
+      MailboxType mailbox_type = MailboxType::kDeprecatedMailbox);
 
   bool CurrentFrameKnownToBeOpaque() override;
   IntSize Size() const override;
@@ -88,8 +94,6 @@ class PLATFORM_EXPORT AcceleratedStaticBitmapImage final
 
   PaintImage PaintImageForCurrentFrame() override;
 
-  void Abandon() final;
-
   TextureHolder* TextureHolderForTesting() { return texture_holder_.get(); }
 
  private:
@@ -101,25 +105,25 @@ class PLATFORM_EXPORT AcceleratedStaticBitmapImage final
       const gpu::SyncToken&,
       unsigned texture_id,
       base::WeakPtr<WebGraphicsContext3DProviderWrapper>&&,
-      IntSize mailbox_size);
+      IntSize mailbox_size,
+      MailboxType mailbox_type);
 
   void CreateImageFromMailboxIfNeeded();
-  void CheckThread();
   void WaitSyncTokenIfNeeded();
   void RetainOriginalSkImage();
 
   std::unique_ptr<TextureHolder> texture_holder_;
 
-  base::ThreadChecker thread_checker_;
-  bool detach_thread_at_next_check_ = false;
+  THREAD_CHECKER(thread_checker_);
   PaintImage::ContentId paint_image_content_id_;
 
   // For RetainOriginalSkImageForCopyOnWrite()
   sk_sp<SkImage> original_skia_image_;
   scoped_refptr<base::SingleThreadTaskRunner> original_skia_image_task_runner_;
-  PlatformThreadId original_skia_image_thread_id_;
   base::WeakPtr<WebGraphicsContext3DProviderWrapper>
       original_skia_image_context_provider_wrapper_;
+
+  const MailboxType mailbox_type_;
 };
 
 }  // namespace blink

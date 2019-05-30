@@ -8,7 +8,6 @@
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/keyboard/keyboard_controller.h"
-#include "ui/keyboard/keyboard_util.h"
 
 namespace keyboard {
 
@@ -22,14 +21,20 @@ KeyboardLayoutManager::~KeyboardLayoutManager() = default;
 void KeyboardLayoutManager::OnWindowAddedToLayout(aura::Window* child) {
   // Reset the keyboard window bounds when it gets added to the keyboard
   // container to ensure that its bounds are valid.
-  SetChildBounds(child, gfx::Rect());
+  SetChildBounds(child, child->GetBoundsInRootWindow());
 }
 
 void KeyboardLayoutManager::SetChildBounds(aura::Window* child,
                                            const gfx::Rect& requested_bounds) {
   aura::Window* contents_window = controller_->GetKeyboardWindow();
-  if (contents_window != child)
+  if (contents_window != child) {
+    // Let the bounds change to go through for windows other than the virtual
+    // keyboard contents window. This is needed because IME candidate window is
+    // put in VirtualKeyboardContainer managed by this layout manager.
+    if (child->bounds() != requested_bounds)
+      SetChildBoundsDirect(child, requested_bounds);
     return;
+  }
 
   TRACE_EVENT0("vk", "KeyboardLayoutSetChildBounds");
 

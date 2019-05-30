@@ -6,7 +6,8 @@
 
 #include <stdint.h>
 
-#include "base/trace_event/trace_event_argument.h"
+#include "base/stl_util.h"
+#include "base/trace_event/traced_value.h"
 #include "cc/debug/debug_colors.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/trees/layer_tree_impl.h"
@@ -42,26 +43,27 @@ void SurfaceLayerImpl::SetRange(const viz::SurfaceRange& surface_range,
     return;
   }
 
-  if (surface_range_.end() != surface_range.end()) {
+  if (surface_range_.end() != surface_range.end() &&
+      surface_range.end().local_surface_id().is_valid()) {
     TRACE_EVENT_WITH_FLOW2(
         TRACE_DISABLED_BY_DEFAULT("viz.surface_id_flow"),
         "LocalSurfaceId.Embed.Flow",
         TRACE_ID_GLOBAL(
             surface_range.end().local_surface_id().embed_trace_id()),
         TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "step",
-        "ImplSetPrimarySurfaceId", "surface_id",
-        surface_range.end().ToString());
+        "ImplSetSurfaceId", "surface_id", surface_range.end().ToString());
   }
 
   if (surface_range.start() &&
-      surface_range_.start() != surface_range.start()) {
+      surface_range_.start() != surface_range.start() &&
+      surface_range.start()->local_surface_id().is_valid()) {
     TRACE_EVENT_WITH_FLOW2(
         TRACE_DISABLED_BY_DEFAULT("viz.surface_id_flow"),
         "LocalSurfaceId.Submission.Flow",
         TRACE_ID_GLOBAL(
             surface_range.start()->local_surface_id().submission_trace_id()),
         TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "step",
-        "ImplSetFallbackSurfaceId", "surface_id",
+        "ImplSetOldestAcceptableFallback", "surface_id",
         surface_range.start()->ToString());
   }
 
@@ -86,6 +88,14 @@ void SurfaceLayerImpl::SetSurfaceHitTestable(bool surface_hit_testable) {
   NoteLayerPropertyChanged();
 }
 
+void SurfaceLayerImpl::SetHasPointerEventsNone(bool has_pointer_events_none) {
+  if (has_pointer_events_none_ == has_pointer_events_none)
+    return;
+
+  has_pointer_events_none_ = has_pointer_events_none;
+  NoteLayerPropertyChanged();
+}
+
 void SurfaceLayerImpl::PushPropertiesTo(LayerImpl* layer) {
   LayerImpl::PushPropertiesTo(layer);
   SurfaceLayerImpl* layer_impl = static_cast<SurfaceLayerImpl*>(layer);
@@ -95,6 +105,7 @@ void SurfaceLayerImpl::PushPropertiesTo(LayerImpl* layer) {
   deadline_in_frames_ = 0u;
   layer_impl->SetStretchContentToFillBounds(stretch_content_to_fill_bounds_);
   layer_impl->SetSurfaceHitTestable(surface_hit_testable_);
+  layer_impl->SetHasPointerEventsNone(has_pointer_events_none_);
 }
 
 bool SurfaceLayerImpl::WillDraw(
@@ -141,6 +152,11 @@ bool SurfaceLayerImpl::is_surface_layer() const {
   return true;
 }
 
+gfx::Rect SurfaceLayerImpl::GetEnclosingRectInTargetSpace() const {
+  return GetScaledEnclosingRectInTargetSpace(
+      layer_tree_impl()->device_scale_factor());
+}
+
 viz::SurfaceDrawQuad* SurfaceLayerImpl::CreateSurfaceDrawQuad(
     viz::RenderPass* render_pass,
     const viz::SurfaceRange& surface_range) {
@@ -171,7 +187,8 @@ viz::SurfaceDrawQuad* SurfaceLayerImpl::CreateSurfaceDrawQuad(
       render_pass->CreateAndAppendDrawQuad<viz::SurfaceDrawQuad>();
   surface_draw_quad->SetNew(shared_quad_state, quad_rect, visible_quad_rect,
                             surface_range, background_color(),
-                            stretch_content_to_fill_bounds_);
+                            stretch_content_to_fill_bounds_,
+                            has_pointer_events_none_);
 
   return surface_draw_quad;
 }
@@ -203,7 +220,7 @@ void SurfaceLayerImpl::AppendRainbowDebugBorder(viz::RenderPass* render_pass) {
       0x800000ff,  // Blue.
       0x80ee82ee,  // Violet.
   };
-  const int kNumColors = arraysize(colors);
+  const int kNumColors = base::size(colors);
 
   const int kStripeWidth = 300;
   const int kStripeHeight = 300;

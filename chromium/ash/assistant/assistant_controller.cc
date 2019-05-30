@@ -7,53 +7,52 @@
 #include <algorithm>
 #include <utility>
 
-#include "ash/assistant/assistant_cache_controller.h"
-#include "ash/assistant/assistant_controller_observer.h"
-#include "ash/assistant/assistant_interaction_controller.h"
-#include "ash/assistant/assistant_notification_controller.h"
-#include "ash/assistant/assistant_screen_context_controller.h"
-#include "ash/assistant/assistant_setup_controller.h"
-#include "ash/assistant/assistant_ui_controller.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/assistant/util/deep_link_util.h"
 #include "ash/new_window_controller.h"
+#include "ash/public/cpp/ash_pref_names.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/utility/screenshot_controller.h"
 #include "ash/voice_interaction/voice_interaction_controller.h"
 #include "base/bind.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/unguessable_token.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "services/content/public/mojom/constants.mojom.h"
+#include "services/service_manager/public/cpp/connector.h"
 
 namespace ash {
 
 AssistantController::AssistantController()
     : assistant_volume_control_binding_(this),
-      assistant_cache_controller_(
-          std::make_unique<AssistantCacheController>(this)),
-      assistant_interaction_controller_(
-          std::make_unique<AssistantInteractionController>(this)),
-      assistant_notification_controller_(
-          std::make_unique<AssistantNotificationController>(this)),
-      assistant_screen_context_controller_(
-          std::make_unique<AssistantScreenContextController>(this)),
-      assistant_setup_controller_(
-          std::make_unique<AssistantSetupController>(this)),
-      assistant_ui_controller_(std::make_unique<AssistantUiController>(this)),
-      voice_interaction_binding_(this),
+      assistant_alarm_timer_controller_(this),
+      assistant_cache_controller_(this),
+      assistant_interaction_controller_(this),
+      assistant_notification_controller_(this),
+      assistant_screen_context_controller_(this),
+      assistant_setup_controller_(this),
+      assistant_ui_controller_(this),
+      view_delegate_(this),
       weak_factory_(this) {
-  mojom::VoiceInteractionObserverPtr ptr;
-  voice_interaction_binding_.Bind(mojo::MakeRequest(&ptr));
-  Shell::Get()->voice_interaction_controller()->AddObserver(std::move(ptr));
-
-  AddObserver(this);
-  NotifyConstructed();
+  Shell::Get()->voice_interaction_controller()->AddLocalObserver(this);
   chromeos::CrasAudioHandler::Get()->AddAudioObserver(this);
+  AddObserver(this);
+
+  NotifyConstructed();
 }
 
 AssistantController::~AssistantController() {
-  chromeos::CrasAudioHandler::Get()->RemoveAudioObserver(this);
   NotifyDestroying();
+
+  chromeos::CrasAudioHandler::Get()->RemoveAudioObserver(this);
+  Shell::Get()->accessibility_controller()->RemoveObserver(this);
+  Shell::Get()->voice_interaction_controller()->RemoveLocalObserver(this);
   RemoveObserver(this);
+}
+
+// static
+void AssistantController::RegisterProfilePrefs(PrefRegistrySimple* registry) {
+  registry->RegisterIntegerPref(prefs::kAssistantNumWarmerWelcomeTriggered, 0);
 }
 
 void AssistantController::BindRequest(
@@ -80,10 +79,16 @@ void AssistantController::SetAssistant(
   assistant_ = std::move(assistant);
 
   // Provide reference to sub-controllers.
-  assistant_interaction_controller_->SetAssistant(assistant_.get());
-  assistant_notification_controller_->SetAssistant(assistant_.get());
-  assistant_screen_context_controller_->SetAssistant(assistant_.get());
-  assistant_ui_controller_->SetAssistant(assistant_.get());
+  assistant_interaction_controller_.SetAssistant(assistant_.get());
+  assistant_notification_controller_.SetAssistant(assistant_.get());
+  assistant_screen_context_controller_.SetAssistant(assistant_.get());
+  assistant_ui_controller_.SetAssistant(assistant_.get());
+
+  // The Assistant service needs to have accessibility state synced with ash
+  // and be notified of any accessibility status changes in the future to
+  // provide an opportunity to turn on/off A11Y features.
+  Shell::Get()->accessibility_controller()->AddObserver(this);
+  OnAccessibilityStatusChanged();
 }
 
 void AssistantController::SetAssistantImageDownloader(
@@ -91,75 +96,24 @@ void AssistantController::SetAssistantImageDownloader(
   assistant_image_downloader_ = std::move(assistant_image_downloader);
 }
 
-// TODO(dmblack): Call SetAssistantSetup directly on AssistantSetupController
-// instead of going through AssistantController.
-void AssistantController::SetAssistantSetup(
-    mojom::AssistantSetupPtr assistant_setup) {
-  assistant_setup_ = std::move(assistant_setup);
-  assistant_setup_controller_->SetAssistantSetup(assistant_setup_.get());
-}
-
-void AssistantController::SetWebContentsManager(
-    mojom::WebContentsManagerPtr web_contents_manager) {
-  web_contents_manager_ = std::move(web_contents_manager);
-}
-
-// TODO(dmblack): Expose AssistantScreenContextController over mojo rather
-// than implementing RequestScreenshot here in AssistantController.
-void AssistantController::RequestScreenshot(
-    const gfx::Rect& rect,
-    RequestScreenshotCallback callback) {
-  assistant_screen_context_controller_->RequestScreenshot(rect,
-                                                          std::move(callback));
-}
-
 void AssistantController::OpenAssistantSettings() {
   // Launch Assistant settings via deeplink.
   OpenUrl(assistant::util::CreateAssistantSettingsDeepLink());
 }
 
-void AssistantController::ManageWebContents(
-    const base::UnguessableToken& id_token,
-    mojom::ManagedWebContentsParamsPtr params,
-    mojom::WebContentsManager::ManageWebContentsCallback callback) {
-  DCHECK(web_contents_manager_);
-
-  const mojom::UserSession* user_session =
-      Shell::Get()->session_controller()->GetUserSession(0);
-
-  if (!user_session) {
-    LOG(WARNING) << "Unable to retrieve active user session.";
-    std::move(callback).Run(base::nullopt);
-    return;
+void AssistantController::StartSpeakerIdEnrollmentFlow() {
+  mojom::ConsentStatus consent_status =
+      Shell::Get()->voice_interaction_controller()->consent_status().value_or(
+          mojom::ConsentStatus::kUnknown);
+  if (consent_status == mojom::ConsentStatus::kActivityControlAccepted) {
+    // If activity control has been accepted, launch the enrollment flow.
+    setup_controller()->StartOnboarding(false /* relaunch */,
+                                        mojom::FlowType::SPEAKER_ID_ENROLLMENT);
+  } else {
+    // If activity control has not been accepted, launch the opt-in flow.
+    setup_controller()->StartOnboarding(false /* relaunch */,
+                                        mojom::FlowType::CONSENT_FLOW);
   }
-
-  // Supply account ID.
-  params->account_id = user_session->user_info->account_id;
-
-  // Specify that we will handle top level browser requests.
-  ash::mojom::ManagedWebContentsOpenUrlDelegatePtr ptr;
-  web_contents_open_url_delegate_bindings_.AddBinding(this,
-                                                      mojo::MakeRequest(&ptr));
-  params->open_url_delegate_ptr_info = ptr.PassInterface();
-
-  web_contents_manager_->ManageWebContents(id_token, std::move(params),
-                                           std::move(callback));
-}
-
-void AssistantController::ReleaseWebContents(
-    const base::UnguessableToken& id_token) {
-  web_contents_manager_->ReleaseWebContents(id_token);
-}
-
-void AssistantController::ReleaseWebContents(
-    const std::vector<base::UnguessableToken>& id_tokens) {
-  web_contents_manager_->ReleaseAllWebContents(id_tokens);
-}
-
-void AssistantController::NavigateWebContentsBack(
-    const base::UnguessableToken& id_token,
-    mojom::WebContentsManager::NavigateWebContentsBackCallback callback) {
-  web_contents_manager_->NavigateWebContentsBack(id_token, std::move(callback));
 }
 
 void AssistantController::DownloadImage(
@@ -183,25 +137,33 @@ void AssistantController::DownloadImage(
 void AssistantController::OnDeepLinkReceived(
     assistant::util::DeepLinkType type,
     const std::map<std::string, std::string>& params) {
+  using assistant::util::DeepLinkParam;
   using assistant::util::DeepLinkType;
 
   switch (type) {
+    case DeepLinkType::kChromeSettings: {
+      // Chrome Settings deep links are opened in a new browser tab.
+      OpenUrl(assistant::util::GetChromeSettingsUrl(
+          assistant::util::GetDeepLinkParam(params, DeepLinkParam::kPage)));
+      break;
+    }
     case DeepLinkType::kFeedback:
-      // TODO(dmblack): Possibly use a new FeedbackSource (this method defaults
-      // to kFeedbackSourceAsh). This may be useful for differentiating feedback
-      // UI and behavior for Assistant.
-      Shell::Get()->new_window_controller()->OpenFeedbackPage();
+      Shell::Get()->new_window_controller()->OpenFeedbackPage(
+          /*from_assistant=*/true);
       break;
     case DeepLinkType::kScreenshot:
-      // TODO(dmblack): The user probably doesn't want their screenshot to
-      // include Assistant so we may want to hide it before calling this API.
-      // Unfortunately, hiding our UI immediately beforehand doesn't resolve the
-      // issue, so we may need to introduce a delay or visibility change
-      // callback to remedy this. For now, keeping Assistant UI open since it
-      // will be included in the screenshot anyway.
+      // We close the UI before taking the screenshot as it's probably not the
+      // user's intention to include the Assistant in the picture.
+      assistant_ui_controller_.CloseUi(AssistantExitPoint::kUnspecified);
       Shell::Get()->screenshot_controller()->TakeScreenshotForAllRootWindows();
       break;
+    case DeepLinkType::kTaskManager:
+      // Open task manager window.
+      Shell::Get()->new_window_controller()->ShowTaskManager();
+      break;
     case DeepLinkType::kUnsupported:
+    case DeepLinkType::kLists:
+    case DeepLinkType::kNotes:
     case DeepLinkType::kOnboarding:
     case DeepLinkType::kQuery:
     case DeepLinkType::kReminders:
@@ -210,30 +172,6 @@ void AssistantController::OnDeepLinkReceived(
       // No action needed.
       break;
   }
-}
-
-void AssistantController::ShouldOpenUrlFromTab(
-    const GURL& url,
-    ash::mojom::ManagedWebContentsOpenUrlDelegate::ShouldOpenUrlFromTabCallback
-        callback) {
-  // We always handle deep links ourselves.
-  if (assistant::util::IsDeepLinkUrl(url)) {
-    std::move(callback).Run(/*should_open=*/false);
-    NotifyDeepLinkReceived(url);
-    return;
-  }
-
-  // When in main UI mode, WebContents should not navigate as they are hosting
-  // Assistant cards. Instead, we route navigation attempts to the browser.
-  if (assistant_ui_controller_->model()->ui_mode() ==
-      AssistantUiMode::kMainUi) {
-    std::move(callback).Run(/*should_open=*/false);
-    OpenUrl(url);
-    return;
-  }
-
-  // In all other cases WebContents should be able to navigate freely.
-  std::move(callback).Run(/*should_open=*/true);
 }
 
 void AssistantController::SetVolume(int volume, bool user_initiated) {
@@ -270,14 +208,51 @@ void AssistantController::OnOutputNodeVolumeChanged(uint64_t node, int volume) {
   });
 }
 
-void AssistantController::OpenUrl(const GURL& url) {
+void AssistantController::OnAccessibilityStatusChanged() {
+  // The Assistant service needs to be informed of changes to accessibility
+  // state so that it can turn on/off A11Y features appropriately.
+  assistant_->OnAccessibilityStatusChanged(
+      Shell::Get()->accessibility_controller()->spoken_feedback_enabled());
+}
+
+void AssistantController::OpenUrl(const GURL& url, bool from_server) {
   if (assistant::util::IsDeepLinkUrl(url)) {
     NotifyDeepLinkReceived(url);
     return;
   }
 
-  Shell::Get()->new_window_controller()->NewTabWithUrl(url);
-  NotifyUrlOpened(url);
+  // The new tab should be opened with a user activation since the user
+  // interacted with the Assistant to open the url.
+  Shell::Get()->new_window_controller()->NewTabWithUrl(
+      url, /*from_user_interaction=*/true);
+  NotifyUrlOpened(url, from_server);
+}
+
+void AssistantController::GetNavigableContentsFactory(
+    content::mojom::NavigableContentsFactoryRequest request) {
+  const mojom::UserSession* user_session =
+      Shell::Get()->session_controller()->GetUserSession(0);
+
+  if (!user_session) {
+    LOG(WARNING) << "Unable to retrieve active user session.";
+    return;
+  }
+
+  const base::Optional<base::Token>& service_instance_group =
+      user_session->user_info->service_instance_group;
+  if (!service_instance_group) {
+    LOG(ERROR) << "Unable to retrieve service instance group.";
+    return;
+  }
+
+  Shell::Get()->connector()->BindInterface(
+      service_manager::ServiceFilter::ByNameInGroup(
+          content::mojom::kServiceName, *service_instance_group),
+      std::move(request));
+}
+
+bool AssistantController::IsAssistantReady() const {
+  return !!assistant_;
 }
 
 void AssistantController::NotifyConstructed() {
@@ -298,19 +273,35 @@ void AssistantController::NotifyDeepLinkReceived(const GURL& deep_link) {
   const std::map<std::string, std::string> params =
       assistant::util::GetDeepLinkParams(deep_link);
 
+  // TODO(wutao): Remove AssistantControllerObserver::OnDeepLinkReceived.
   for (AssistantControllerObserver& observer : observers_)
     observer.OnDeepLinkReceived(type, params);
+
+  view_delegate_.NotifyDeepLinkReceived(type, params);
 }
 
-void AssistantController::NotifyUrlOpened(const GURL& url) {
+void AssistantController::NotifyUrlOpened(const GURL& url, bool from_server) {
   for (AssistantControllerObserver& observer : observers_)
-    observer.OnUrlOpened(url);
+    observer.OnUrlOpened(url, from_server);
 }
 
 void AssistantController::OnVoiceInteractionStatusChanged(
     mojom::VoiceInteractionState state) {
   if (state == mojom::VoiceInteractionState::NOT_READY)
-    assistant_ui_controller_->HideUi(AssistantSource::kUnspecified);
+    assistant_ui_controller_.CloseUi(AssistantExitPoint::kUnspecified);
+}
+
+void AssistantController::SendAssistantFeedback(
+    bool assistant_debug_info_allowed,
+    const std::string& feedback_description,
+    const std::string& screenshot_png) {
+  chromeos::assistant::mojom::AssistantFeedbackPtr assistant_feedback =
+      chromeos::assistant::mojom::AssistantFeedback::New();
+  assistant_feedback->assistant_debug_info_allowed =
+      assistant_debug_info_allowed;
+  assistant_feedback->description = feedback_description;
+  assistant_feedback->screenshot_png = screenshot_png;
+  assistant_->SendAssistantFeedback(std::move(assistant_feedback));
 }
 
 base::WeakPtr<AssistantController> AssistantController::GetWeakPtr() {

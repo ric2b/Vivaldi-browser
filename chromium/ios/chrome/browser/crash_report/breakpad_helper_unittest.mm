@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/crash_report/breakpad_helper.h"
+#import "base/test/ios/wait_util.h"
+#include "ios/chrome/browser/crash_report/main_thread_freeze_detector.h"
 #import "ios/chrome/test/base/scoped_block_swizzler.h"
 #import "ios/chrome/test/ocmock/OCMockObject+BreakpadControllerTesting.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -16,6 +18,19 @@
 #endif
 
 namespace {
+
+// Wait for the UTE crash processing. This is needed the first time
+// |breakpad_helper::SetUploadingEnabled| is called.
+void WaitMainThreadFreezeCrashProcessingIfNeeded() {
+  if (!
+      [MainThreadFreezeDetector sharedInstance].canUploadBreakpadCrashReports) {
+    EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
+        base::test::ios::kWaitForActionTimeout, ^bool {
+          return [MainThreadFreezeDetector sharedInstance]
+              .canUploadBreakpadCrashReports;
+        }));
+  }
+}
 
 const int kCrashReportCount = 3;
 NSString* const kUploadedInRecoveryMode = @"uploaded_in_recovery_mode";
@@ -51,14 +66,19 @@ class BreakpadHelperTest : public PlatformTest {
       breakpad_controller_shared_instance_swizzler_;
 };
 
-TEST_F(BreakpadHelperTest, BrowserState) {
-  // Check that we do not overflow the size of a breakpad record.
+TEST_F(BreakpadHelperTest, CrashReportUserApplicationStateAllKeys) {
+  // Test that the serialized dictionary does not exceed the maximum size of a
+  // single breakpad record. This test should include all keys for
+  // CrashReportUserApplicationState, since the whole dictionary is considered a
+  // single breakpad record.
   breakpad_helper::SetCurrentOrientation(3, 7);
-}
-
-TEST_F(BreakpadHelperTest, HorizontalSizeClass) {
-  // Check that we do not overflow the size of a breakpad record.
   breakpad_helper::SetCurrentHorizontalSizeClass(2);
+  breakpad_helper::SetRegularTabCount(999);
+  breakpad_helper::SetIncognitoTabCount(999);
+  breakpad_helper::SetDestroyingAndRebuildingIncognitoBrowserState(true);
+  breakpad_helper::MediaStreamPlaybackDidStart();
+  breakpad_helper::SetCurrentTabIsPDF(true);
+  breakpad_helper::SetCurrentlySignedIn(true);
 }
 
 TEST_F(BreakpadHelperTest, GetCrashReportCount) {
@@ -84,9 +104,11 @@ TEST_F(BreakpadHelperTest, HasReportToUpload) {
 TEST_F(BreakpadHelperTest, IsUploadingEnabled) {
   // Test when crash reporter is disabled.
   breakpad_helper::SetEnabled(false);
+
   EXPECT_FALSE(breakpad_helper::IsUploadingEnabled());
 
   breakpad_helper::SetUploadingEnabled(false);
+  WaitMainThreadFreezeCrashProcessingIfNeeded();
   EXPECT_FALSE(breakpad_helper::IsUploadingEnabled());
 
   breakpad_helper::SetUploadingEnabled(true);

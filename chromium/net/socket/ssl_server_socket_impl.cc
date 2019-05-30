@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
@@ -502,7 +503,6 @@ bool SSLServerContextImpl::SocketImpl::GetSSLInfo(SSLInfo* ssl_info) {
 
   const SSL_CIPHER* cipher = SSL_get_current_cipher(ssl_.get());
   CHECK(cipher);
-  ssl_info->security_bits = SSL_CIPHER_get_bits(cipher, NULL);
 
   SSLConnectionStatusSetCipherSuite(
       static_cast<uint16_t>(SSL_CIPHER_get_id(cipher)),

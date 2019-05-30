@@ -6,20 +6,34 @@
  * @implements {Common.Runnable}
  */
 InspectorMain.InspectorMain = class extends Common.Object {
-  constructor() {
-    super();
-    /** @type {!Protocol.InspectorBackend.Connection} */
-    this._mainConnection;
-  }
-
   /**
    * @override
    */
-  run() {
-    this._connectAndCreateMainTarget();
-    InspectorFrontendHost.connectionReady();
+  async run() {
+    let firstCall = true;
+    await SDK.initMainConnection(async () => {
+      const type = Runtime.queryParam('v8only') ? SDK.Target.Type.Node : SDK.Target.Type.Frame;
+      const waitForDebuggerInPage = type === SDK.Target.Type.Frame && Runtime.queryParam('panel') === 'sources';
+      const target =
+          SDK.targetManager.createTarget('main', Common.UIString('Main'), type, null, undefined, waitForDebuggerInPage);
 
-    new InspectorMain.InspectedNodeRevealer();
+      // Only resume target during the first connection,
+      // subsequent connections are due to connection hand-over,
+      // there is no need to pause in debugger.
+      if (!firstCall)
+        return;
+      firstCall = false;
+
+      if (waitForDebuggerInPage) {
+        const debuggerModel = target.model(SDK.DebuggerModel);
+        if (!debuggerModel.isReadyToPause())
+          await debuggerModel.once(SDK.DebuggerModel.Events.DebuggerIsReadyToPause);
+        debuggerModel.pause();
+      }
+
+      target.runtimeAgent().runIfWaitingForDebugger();
+    }, Components.TargetDetachedDialog.webSocketConnectionLost);
+
     new InspectorMain.SourcesPanelIndicator();
     new InspectorMain.BackendSettingsSync();
     new MobileThrottling.NetworkPanelIndicator();
@@ -29,54 +43,6 @@ InspectorMain.InspectorMain = class extends Common.Object {
       SDK.ResourceTreeModel.reloadAllPages(hard);
     });
   }
-
-  _connectAndCreateMainTarget() {
-    const isNodeJS = !!Runtime.queryParam('v8only');
-    const target = SDK.targetManager.createTarget(
-        'main', Common.UIString('Main'), this._capabilitiesForMainTarget(), this._createMainConnection.bind(this), null,
-        isNodeJS);
-    target.runtimeAgent().runIfWaitingForDebugger();
-  }
-
-  /**
-   * @return {number}
-   */
-  _capabilitiesForMainTarget() {
-    if (Runtime.queryParam('v8only'))
-      return SDK.Target.Capability.JS;
-    return SDK.Target.Capability.Browser | SDK.Target.Capability.DOM | SDK.Target.Capability.DeviceEmulation |
-        SDK.Target.Capability.Emulation | SDK.Target.Capability.Input | SDK.Target.Capability.JS |
-        SDK.Target.Capability.Log | SDK.Target.Capability.Network | SDK.Target.Capability.ScreenCapture |
-        SDK.Target.Capability.Security | SDK.Target.Capability.Target | SDK.Target.Capability.Tracing |
-        SDK.Target.Capability.Inspector;
-  }
-
-  /**
-   * @param {!Protocol.InspectorBackend.Connection.Params} params
-   * @return {!Protocol.InspectorBackend.Connection}
-   */
-  _createMainConnection(params) {
-    this._mainConnection =
-        SDK.createMainConnection(params, () => Components.TargetDetachedDialog.webSocketConnectionLost());
-    return this._mainConnection;
-  }
-
-  /**
-   * @param {function(string)} onMessage
-   * @return {!Promise<!Protocol.InspectorBackend.Connection>}
-   */
-  _interceptMainConnection(onMessage) {
-    const params = {onMessage: onMessage, onDisconnect: this._connectAndCreateMainTarget.bind(this)};
-    return this._mainConnection.disconnect().then(this._createMainConnection.bind(this, params));
-  }
-};
-
-/**
- * @param {function(string)} onMessage
- * @return {!Promise<!Protocol.InspectorBackend.Connection>}
- */
-InspectorMain.interceptMainConnection = function(onMessage) {
-  return self.runtime.sharedInstance(InspectorMain.InspectorMain)._interceptMainConnection(onMessage);
 };
 
 /**
@@ -178,24 +144,6 @@ InspectorMain.SourcesPanelIndicator = class {
 };
 
 /**
- * @unrestricted
- */
-InspectorMain.InspectedNodeRevealer = class {
-  constructor() {
-    SDK.targetManager.addModelListener(
-        SDK.OverlayModel, SDK.OverlayModel.Events.InspectNodeRequested, this._inspectNode, this);
-  }
-
-  /**
-   * @param {!Common.Event} event
-   */
-  _inspectNode(event) {
-    const deferredNode = /** @type {!SDK.DeferredDOMNode} */ (event.data);
-    Common.Revealer.reveal(deferredNode);
-  }
-};
-
-/**
  * @implements {SDK.TargetManager.Observer}
  * @unrestricted
  */
@@ -208,15 +156,20 @@ InspectorMain.BackendSettingsSync = class {
     this._adBlockEnabledSetting = Common.settings.moduleSetting('network.adBlockingEnabled');
     this._adBlockEnabledSetting.addChangeListener(this._update, this);
 
-    SDK.targetManager.observeTargets(this, SDK.Target.Capability.Browser);
+    this._emulatePageFocusSetting = Common.settings.moduleSetting('emulatePageFocus');
+    this._emulatePageFocusSetting.addChangeListener(this._update, this);
+
+    SDK.targetManager.observeTargets(this);
   }
 
   /**
    * @param {!SDK.Target} target
    */
   _updateTarget(target) {
-    if (!target.parentTarget())
-      target.pageAgent().setAdBlockingEnabled(this._adBlockEnabledSetting.get());
+    if (target.type() !== SDK.Target.Type.Frame || target.parentTarget())
+      return;
+    target.pageAgent().setAdBlockingEnabled(this._adBlockEnabledSetting.get());
+    target.emulationAgent().setFocusEmulationEnabled(this._emulatePageFocusSetting.get());
   }
 
   _updateAutoAttach() {
@@ -224,7 +177,8 @@ InspectorMain.BackendSettingsSync = class {
   }
 
   _update() {
-    SDK.targetManager.targets(SDK.Target.Capability.Browser).forEach(this._updateTarget, this);
+    for (const target of SDK.targetManager.targets())
+      this._updateTarget(target);
   }
 
   /**

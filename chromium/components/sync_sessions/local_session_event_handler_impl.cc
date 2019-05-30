@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "components/sync/model/sync_change.h"
@@ -91,6 +92,9 @@ LocalSessionEventHandlerImpl::~LocalSessionEventHandlerImpl() {}
 
 void LocalSessionEventHandlerImpl::OnSessionRestoreComplete() {
   std::unique_ptr<WriteBatch> batch = delegate_->CreateLocalSessionWriteBatch();
+  // The initial state of the tracker may contain tabs that are unmmapped but
+  // haven't been marked as free yet.
+  CleanupLocalTabs(batch.get());
   AssociateWindows(RELOAD_TABS, batch.get());
   batch->Commit();
 }
@@ -99,6 +103,16 @@ sync_pb::SessionTab
 LocalSessionEventHandlerImpl::GetTabSpecificsFromDelegateForTest(
     const SyncedTabDelegate& tab_delegate) const {
   return GetTabSpecificsFromDelegate(tab_delegate);
+}
+
+void LocalSessionEventHandlerImpl::CleanupLocalTabs(WriteBatch* batch) {
+  std::set<int> deleted_tab_node_ids =
+      session_tracker_->CleanupLocalTabs(base::BindRepeating(
+          &Delegate::IsTabNodeUnsynced, base::Unretained(delegate_)));
+
+  for (int tab_node_id : deleted_tab_node_ids) {
+    batch->Delete(tab_node_id);
+  }
 }
 
 void LocalSessionEventHandlerImpl::AssociateWindows(ReloadTabsOption option,
@@ -138,7 +152,8 @@ void LocalSessionEventHandlerImpl::AssociateWindows(ReloadTabsOption option,
   for (auto& window_iter_pair : windows) {
     const SyncedWindowDelegate* window_delegate = window_iter_pair.second;
     if (option == RELOAD_TABS) {
-      UMA_HISTOGRAM_COUNTS("Sync.SessionTabs", window_delegate->GetTabCount());
+      UMA_HISTOGRAM_COUNTS_1M("Sync.SessionTabs",
+                              window_delegate->GetTabCount());
     }
 
     // Make sure the window has tabs and a viewable window. The viewable
@@ -218,11 +233,7 @@ void LocalSessionEventHandlerImpl::AssociateWindows(ReloadTabsOption option,
     }
   }
 
-  std::set<int> deleted_tab_node_ids;
-  session_tracker_->CleanupLocalTabs(&deleted_tab_node_ids);
-  for (int tab_node_id : deleted_tab_node_ids) {
-    batch->Delete(tab_node_id);
-  }
+  CleanupLocalTabs(batch);
 
   // Always update the header.  Sync takes care of dropping this update
   // if the entity specifics are identical (i.e windows, client name did
@@ -293,7 +304,7 @@ void LocalSessionEventHandlerImpl::AssociateTab(
 
   int current_index = tab_delegate->GetCurrentEntryIndex();
   const GURL new_url = tab_delegate->GetVirtualURLAtIndex(current_index);
-  if (new_url != old_url) {
+  if (current_index >= 0 && new_url != old_url) {
     delegate_->OnFaviconVisited(
         new_url, tab_delegate->GetFaviconURLAtIndex(current_index));
   }

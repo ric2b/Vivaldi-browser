@@ -7,12 +7,16 @@ import("//tools/grit/grit_rule.gni")
 
 blink_modules_sources("media_controls") {
   sources = [
+    "elements/media_control_animated_arrow_container_element.cc",
+    "elements/media_control_animated_arrow_container_element.h",
     "elements/media_control_animation_event_listener.cc",
     "elements/media_control_animation_event_listener.h",
     "elements/media_control_button_panel_element.cc",
     "elements/media_control_button_panel_element.h",
     "elements/media_control_cast_button_element.cc",
     "elements/media_control_cast_button_element.h",
+    "elements/media_control_consts.cc",
+    "elements/media_control_consts.h",
     "elements/media_control_current_time_display_element.cc",
     "elements/media_control_current_time_display_element.h",
     "elements/media_control_display_cutout_fullscreen_button_element.cc",
@@ -68,6 +72,8 @@ blink_modules_sources("media_controls") {
     "elements/media_control_timeline_metrics.h",
     "elements/media_control_toggle_closed_captions_button_element.cc",
     "elements/media_control_toggle_closed_captions_button_element.h",
+    "elements/media_control_volume_control_container_element.cc",
+    "elements/media_control_volume_control_container_element.h",
     "elements/media_control_volume_slider_element.cc",
     "elements/media_control_volume_slider_element.h",
     "media_controls_display_cutout_delegate.cc",
@@ -82,14 +88,11 @@ blink_modules_sources("media_controls") {
     "media_controls_resource_loader.h",
     "media_controls_rotate_to_fullscreen_delegate.cc",
     "media_controls_rotate_to_fullscreen_delegate.h",
-    "media_download_in_product_help_manager.cc",
-    "media_download_in_product_help_manager.h",
   ]
 
   deps = [
     ":media_controls_resources",
     "//services/service_manager/public/cpp",
-    "//third_party/blink/public:media_controls_resources_header",
   ]
 }
 

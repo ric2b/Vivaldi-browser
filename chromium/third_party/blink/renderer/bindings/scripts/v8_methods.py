@@ -34,6 +34,12 @@ Extends IdlTypeBase and IdlUnionType with property |union_arguments|.
 Design doc: http://www.chromium.org/developers/design-documents/idl-compiler
 """
 
+import os
+import sys
+
+sys.path.append(os.path.join(os.path.dirname(__file__),
+                             '..', '..', 'build', 'scripts'))
+from blinkbuild.name_style_converter import NameStyleConverter
 from idl_definitions import IdlArgument, IdlOperation
 from idl_types import IdlTypeBase, IdlUnionType, inherits_interface
 from v8_globals import includes
@@ -106,6 +112,7 @@ def use_local_result(method):
             'NewObject' in extended_attributes or
             'RaisesException' in extended_attributes or
             idl_type.is_union_type or
+            idl_type.is_dictionary or
             idl_type.is_explicit_nullable)
 
 
@@ -132,10 +139,6 @@ def method_context(interface, method, is_visible=True):
 
     this_cpp_value = cpp_value(interface, method, len(arguments))
 
-    is_call_with_script_arguments = has_extended_attribute_value(method, 'CallWith', 'ScriptArguments')
-    if is_call_with_script_arguments:
-        includes.update(['bindings/core/v8/script_call_stack.h',
-                         'core/inspector/script_arguments.h'])
     is_call_with_script_state = has_extended_attribute_value(method, 'CallWith', 'ScriptState')
     is_call_with_this_value = has_extended_attribute_value(method, 'CallWith', 'ThisValue')
     if is_call_with_script_state or is_call_with_this_value:
@@ -183,10 +186,13 @@ def method_context(interface, method, is_visible=True):
     return {
         'activity_logging_world_list': v8_utilities.activity_logging_world_list(method),  # [ActivityLogging]
         'arguments': argument_contexts,
+        'camel_case_name': NameStyleConverter(name).to_upper_camel_case(),
         'cpp_type': (v8_types.cpp_template_type('base::Optional', idl_type.cpp_type)
-                     if idl_type.is_explicit_nullable else idl_type.cpp_type),
+                     if idl_type.is_explicit_nullable
+                     else v8_types.cpp_type(idl_type, extended_attributes=extended_attributes)),
         'cpp_value': this_cpp_value,
         'cpp_type_initializer': idl_type.cpp_type_initializer,
+        'high_entropy': v8_utilities.high_entropy(method),  # [HighEntropy]
         'deprecate_as': v8_utilities.deprecate_as(method),  # [DeprecateAs]
         'do_not_test_new_object': 'DoNotTestNewObject' in extended_attributes,
         'exposed_test': v8_utilities.exposed(method, interface),  # [Exposed]
@@ -201,7 +207,6 @@ def method_context(interface, method, is_visible=True):
                 if argument_context['is_optional_without_default_value']),
         'idl_type': idl_type.base_type,
         'is_call_with_execution_context': has_extended_attribute_value(method, 'CallWith', 'ExecutionContext'),
-        'is_call_with_script_arguments': is_call_with_script_arguments,
         'is_call_with_script_state': is_call_with_script_state,
         'is_call_with_this_value': is_call_with_this_value,
         'is_ce_reactions': is_ce_reactions,
@@ -220,7 +225,7 @@ def method_context(interface, method, is_visible=True):
         'is_per_world_bindings': 'PerWorldBindings' in extended_attributes,
         'is_raises_exception': is_raises_exception,
         'is_static': is_static,
-        'is_unforgeable': is_unforgeable(interface, method),
+        'is_unforgeable': is_unforgeable(method),
         'is_variadic': arguments and arguments[-1].is_variadic,
         'measure_as': v8_utilities.measure_as(method, interface),  # [MeasureAs]
         'name': name,
@@ -241,6 +246,7 @@ def method_context(interface, method, is_visible=True):
         'runtime_enabled_feature_name': v8_utilities.runtime_enabled_feature_name(method),  # [RuntimeEnabled]
         'secure_context_test': v8_utilities.secure_context(method, interface),  # [SecureContext]
         'side_effect_type': side_effect_type,  # [Affects]
+        'snake_case_name': NameStyleConverter(name).to_snake_case(),
         'use_output_parameter_for_result': idl_type.use_output_parameter_for_result,
         'use_local_result': use_local_result(method),
         'v8_set_return_value': v8_set_return_value(interface.name, method, this_cpp_value),
@@ -267,6 +273,7 @@ def argument_context(interface, method, argument, index, is_visible=True):
     this_cpp_type = idl_type.cpp_type_args(extended_attributes=extended_attributes,
                                            raw_type=True,
                                            used_as_variadic_argument=argument.is_variadic)
+    snake_case_name = NameStyleConverter(argument.name).to_snake_case()
     context = {
         'cpp_type': (
             v8_types.cpp_template_type('base::Optional', this_cpp_type)
@@ -274,12 +281,12 @@ def argument_context(interface, method, argument, index, is_visible=True):
             else this_cpp_type),
         'cpp_value': this_cpp_value,
         # FIXME: check that the default value's type is compatible with the argument's
-        'set_default_value': set_default_value,
         'enum_type': idl_type.enum_type,
         'enum_values': idl_type.enum_values,
-        'handle': '%sHandle' % argument.name,
-        # FIXME: remove once [Default] removed and just use argument.default_value
-        'has_default': 'Default' in extended_attributes or set_default_value,
+        'handle': '%s_handle' % snake_case_name,
+        # TODO(peria): remove once [DefaultValue] removed and just use
+        # argument.default_value. https://crbug.com/924419
+        'has_default': 'DefaultValue' in extended_attributes or set_default_value,
         'has_type_checking_interface': has_type_checking_interface,
         # Dictionary is special-cased, but arrays and sequences shouldn't be
         'idl_type': idl_type.base_type,
@@ -295,7 +302,9 @@ def argument_context(interface, method, argument, index, is_visible=True):
         'is_variadic': argument.is_variadic,
         'is_variadic_wrapper_type': is_variadic_wrapper_type,
         'is_wrapper_type': idl_type.is_wrapper_type,
+        'local_cpp_variable': snake_case_name,
         'name': argument.name,
+        'set_default_value': set_default_value,
         'use_permissive_dictionary_conversion': 'PermissiveDictionaryConversion' in extended_attributes,
         'v8_set_return_value': v8_set_return_value(interface.name, method, this_cpp_value),
         'v8_set_return_value_for_main_world': v8_set_return_value(interface.name, method, this_cpp_value, for_main_world=True),
@@ -333,15 +342,16 @@ def cpp_value(interface, method, number_of_arguments):
             not method.is_static):
         cpp_arguments.append('*impl')
     for argument in arguments:
+        variable_name = NameStyleConverter(argument.name).to_snake_case()
         if argument.idl_type.base_type == 'SerializedScriptValue':
-            cpp_arguments.append('std::move(%s)' % argument.name)
+            cpp_arguments.append('std::move(%s)' % variable_name)
         else:
-            cpp_arguments.append(argument.name)
+            cpp_arguments.append(variable_name)
 
     if ('RaisesException' in method.extended_attributes or
           (method.is_constructor and
            has_extended_attribute_value(interface, 'RaisesException', 'Constructor'))):
-        cpp_arguments.append('exceptionState')
+        cpp_arguments.append('exception_state')
 
     # If a method returns an IDL dictionary or union type, the return value is
     # passed as an argument to impl classes.
@@ -385,9 +395,9 @@ def v8_value_to_local_cpp_variadic_value(argument, index):
                                                       argument.extended_attributes, True)
 
     return {
-        'assign_expression': 'ToImplArguments<%s>(info, %s, exceptionState)' % (idl_type, index),
-        'check_expression': 'exceptionState.HadException()',
-        'cpp_name': argument.name,
+        'assign_expression': 'ToImplArguments<%s>(info, %s, exception_state)' % (idl_type, index),
+        'check_expression': 'exception_state.HadException()',
+        'cpp_name': NameStyleConverter(argument.name).to_snake_case(),
         'declare_variable': False,
     }
 
@@ -400,7 +410,7 @@ def v8_value_to_local_cpp_ssv_value(extended_attributes, idl_type, v8_value, var
         'info.GetIsolate()',
         v8_value,
         '{ssv}::SerializeOptions({ssv}::{storage_policy})',
-        'exceptionState'
+        'exception_state'
     ])
     cpp_expression_format = 'NativeValueTraits<{ssv}>::NativeValue(%s)' % arguments
     this_cpp_value = cpp_expression_format.format(
@@ -410,7 +420,7 @@ def v8_value_to_local_cpp_ssv_value(extended_attributes, idl_type, v8_value, var
 
     return {
         'assign_expression': this_cpp_value,
-        'check_expression': 'exceptionState.HadException()',
+        'check_expression': 'exception_state.HadException()',
         'cpp_type': this_cpp_type,
         'cpp_name': variable_name,
         'declare_variable': False,
@@ -420,12 +430,12 @@ def v8_value_to_local_cpp_ssv_value(extended_attributes, idl_type, v8_value, var
 def v8_value_to_local_cpp_value(interface_name, method, argument, index):
     extended_attributes = argument.extended_attributes
     idl_type = argument.idl_type
-    name = argument.name
+    name = NameStyleConverter(argument.name).to_snake_case()
     v8_value = 'info[{index}]'.format(index=index)
 
     # History.pushState and History.replaceState are explicitly specified as
     # serializing the value for storage. The default is to not serialize for
-    # storage. See https://html.spec.whatwg.org/multipage/browsers.html#dom-history-pushstate
+    # storage. See https://html.spec.whatwg.org/C/#dom-history-pushstate
     if idl_type.name == 'SerializedScriptValue':
         for_storage = (interface_name == 'History' and
                        method.name in ('pushState', 'replaceState'))
@@ -450,7 +460,7 @@ def property_attributes(interface, method):
     property_attributes_list = []
     if 'NotEnumerable' in extended_attributes:
         property_attributes_list.append('v8::DontEnum')
-    if is_unforgeable(interface, method):
+    if is_unforgeable(method):
         property_attributes_list.append('v8::ReadOnly')
         property_attributes_list.append('v8::DontDelete')
     return property_attributes_list
@@ -459,6 +469,7 @@ def property_attributes(interface, method):
 def argument_set_default_value(argument):
     idl_type = argument.idl_type
     default_value = argument.default_value
+    variable_name = NameStyleConverter(argument.name).to_snake_case()
     if not default_value:
         return None
     if idl_type.is_dictionary:
@@ -493,9 +504,9 @@ def argument_set_default_value(argument):
         member_type_name = (member_type.inner_type.name
                             if member_type.is_nullable else
                             member_type.name)
-        return '%s.Set%s(%s)' % (argument.name, member_type_name,
+        return '%s.Set%s(%s)' % (variable_name, member_type_name,
                                  member_type.literal_cpp_value(default_value))
-    return '%s = %s' % (argument.name,
+    return '%s = %s' % (variable_name,
                         idl_type.literal_cpp_value(default_value))
 
 IdlArgument.set_default_value = property(argument_set_default_value)

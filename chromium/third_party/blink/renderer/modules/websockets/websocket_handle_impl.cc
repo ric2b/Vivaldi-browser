@@ -42,8 +42,8 @@ void WebSocketHandleImpl::Connect(network::mojom::blink::WebSocketPtr websocket,
                                   base::SingleThreadTaskRunner* task_runner) {
   DCHECK(!websocket_);
   websocket_ = std::move(websocket);
-  websocket_.set_connection_error_with_reason_handler(WTF::Bind(
-      &WebSocketHandleImpl::OnConnectionError, WTF::Unretained(this)));
+  // We intentionally ignore errors on |websocket_| in favour of catching them
+  // on |client_binding_|, which gives more reliable ordering semantics.
   DCHECK(websocket_);
 
   NETWORK_DVLOG(1) << this << " connect(" << url.GetString() << ")";
@@ -56,9 +56,12 @@ void WebSocketHandleImpl::Connect(network::mojom::blink::WebSocketPtr websocket,
   Vector<network::mojom::blink::HttpHeaderPtr> additional_headers;
   if (!user_agent_override.IsNull()) {
     additional_headers.push_back(network::mojom::blink::HttpHeader::New(
-        HTTPNames::User_Agent, user_agent_override));
+        http_names::kUserAgent, user_agent_override));
   }
-  client_binding_.Bind(mojo::MakeRequest(&client_proxy, task_runner));
+  client_binding_.Bind(mojo::MakeRequest(&client_proxy, task_runner),
+                       task_runner);
+  client_binding_.set_connection_error_handler(WTF::Bind(
+      &WebSocketHandleImpl::OnConnectionError, WTF::Unretained(this)));
   websocket_->AddChannelRequest(url, protocols, site_for_cookies,
                                 std::move(additional_headers),
                                 std::move(client_proxy));
@@ -67,7 +70,7 @@ void WebSocketHandleImpl::Connect(network::mojom::blink::WebSocketPtr websocket,
 void WebSocketHandleImpl::Send(bool fin,
                                WebSocketHandle::MessageType type,
                                const char* data,
-                               size_t size) {
+                               wtf_size_t size) {
   DCHECK(websocket_);
 
   network::mojom::blink::WebSocketMessageType type_to_pass;
@@ -104,7 +107,7 @@ void WebSocketHandleImpl::FlowControl(int64_t quota) {
   websocket_->SendFlowControl(quota);
 }
 
-void WebSocketHandleImpl::Close(unsigned short code, const String& reason) {
+void WebSocketHandleImpl::Close(uint16_t code, const String& reason) {
   DCHECK(websocket_);
 
   NETWORK_DVLOG(1) << this << " close(" << code << ", " << reason << ")";
@@ -118,22 +121,10 @@ void WebSocketHandleImpl::Disconnect() {
   client_ = nullptr;
 }
 
-void WebSocketHandleImpl::OnConnectionError(uint32_t custom_reason,
-                                            const std::string& description) {
+void WebSocketHandleImpl::OnConnectionError() {
   // Our connection to the WebSocket was dropped. This could be due to
   // exceeding the maximum number of concurrent websockets from this process.
-  String failure_message;
-  if (custom_reason ==
-      network::mojom::blink::WebSocket::kInsufficientResources) {
-    failure_message =
-        description.empty()
-            ? "Insufficient resources"
-            : String::FromUTF8(description.c_str(), description.size());
-  } else {
-    DCHECK(description.empty());
-    failure_message = "Unspecified reason";
-  }
-  OnFailChannel(failure_message);
+  OnFailChannel("Unknown reason");
 }
 
 void WebSocketHandleImpl::OnFailChannel(const String& message) {

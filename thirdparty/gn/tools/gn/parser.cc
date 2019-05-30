@@ -214,6 +214,11 @@ Scopes
 
     myvalues.foo += 2
     empty_scope.new_thing = [ 1, 2, 3 ]
+
+  Scope equality is defined as single-level scopes identical within the current
+  scope. That is, all values in the first scope must be present and identical
+  within the second, and vice versa. Note that this means inherited scopes are
+  always unequal by definition.
 )*";
 
 enum Precedence {
@@ -882,5 +887,51 @@ void Parser::AssignComments(ParseNode* file) {
     // the same node, they need to be reversed.
     if ((*i)->comments() && !(*i)->comments()->suffix().empty())
       const_cast<ParseNode*>(*i)->comments_mutable()->ReverseSuffix();
+  }
+}
+
+std::string IndentFor(int value) {
+  return std::string(value, ' ');
+}
+
+void RenderToText(const base::Value& node, int indent_level,
+    std::ostringstream& os) {
+  const base::Value* child = node.FindKey(std::string("child"));
+  std::string node_type(node.FindKey("type")->GetString());
+  if (node_type == "ACCESSOR") {
+    // AccessorNode is a bit special, in that it holds a Token, not a ParseNode
+    // for the base.
+    os << IndentFor(indent_level) << node_type << std::endl;
+    os << IndentFor(indent_level + 1) << node.FindKey("value")->GetString()
+        << std::endl;
+  } else {
+    os << IndentFor(indent_level) << node_type;
+    if (node.FindKey("value")) {
+      os << "(" << node.FindKey("value")->GetString() << ")";
+    }
+    os << std::endl;
+  }
+  if (node.FindKey(kJsonBeforeComment)) {
+    for (auto& v : node.FindKey(kJsonBeforeComment)->GetList()) {
+      os << IndentFor(indent_level + 1) <<
+          "+BEFORE_COMMENT(\"" << v.GetString() << "\")\n";
+    }
+  }
+  if (node.FindKey(kJsonSuffixComment)) {
+    for (auto& v : node.FindKey(kJsonSuffixComment)->GetList()) {
+      os << IndentFor(indent_level + 1) <<
+          "+SUFFIX_COMMENT(\"" << v.GetString() << "\")\n";
+    }
+  }
+  if (node.FindKey(kJsonAfterComment)) {
+    for (auto& v : node.FindKey(kJsonAfterComment)->GetList()) {
+      os << IndentFor(indent_level + 1) <<
+          "+AFTER_COMMENT(\"" << v.GetString() << "\")\n";
+    }
+  }
+  if (child) {
+    for (const base::Value& n : child->GetList()) {
+      RenderToText(n, indent_level + 1, os);
+    }
   }
 }

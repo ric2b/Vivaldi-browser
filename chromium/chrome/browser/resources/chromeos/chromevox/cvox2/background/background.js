@@ -12,6 +12,7 @@ goog.provide('Background');
 goog.require('AutomationPredicate');
 goog.require('AutomationUtil');
 goog.require('BackgroundKeyboardHandler');
+goog.require('BackgroundMouseHandler');
 goog.require('BrailleCommandData');
 goog.require('BrailleCommandHandler');
 goog.require('ChromeVoxState');
@@ -121,6 +122,13 @@ Background = function() {
   /** @type {!BackgroundKeyboardHandler} @private */
   this.keyboardHandler_ = new BackgroundKeyboardHandler();
 
+  /** @type {!BackgroundMouseHandler} @private */
+  this.mouseHandler_ = new BackgroundMouseHandler();
+
+  if (localStorage['speakTextUnderMouse'] == String(true)) {
+    chrome.accessibilityPrivate.enableChromeVoxMouseEvents(true);
+  }
+
   /** @type {!LiveRegions} @private */
   this.liveRegions_ = new LiveRegions(this);
 
@@ -139,15 +147,15 @@ Background = function() {
    */
   this.focusRecoveryMap_ = new WeakMap();
 
-  chrome.automation.getDesktop(function(desktop) {
-    /** @type {string} */
-    this.chromeChannel_ = desktop.chromeChannel;
-  }.bind(this));
-
   CommandHandler.init();
   FindHandler.init();
 
   Notifications.onStartup();
+
+  chrome.accessibilityPrivate.onAnnounceForAccessibility.addListener(
+      (announceText) => {
+        cvox.ChromeVox.tts.speak(announceText.join(' '), cvox.QueueMode.FLUSH);
+      });
 };
 
 Background.prototype = {
@@ -178,38 +186,53 @@ Background.prototype = {
     // the user navigates.
     cvox.ChromeVox.braille.thaw();
 
-    if (newRange && !newRange.isValid())
+    if (newRange && !newRange.isValid()) {
+      chrome.accessibilityPrivate.setFocusRings([{
+        rects: [],
+        type: chrome.accessibilityPrivate.FocusType.GLOW,
+        color: constants.FOCUS_COLOR
+      }]);
       return;
+    }
 
     this.currentRange_ = newRange;
     ChromeVoxState.observers.forEach(function(observer) {
       observer.onCurrentRangeChanged(newRange);
     });
 
-    if (this.currentRange_) {
-      var start = this.currentRange_.start.node;
-      start.makeVisible();
-
-      var root = AutomationUtil.getTopLevelRoot(start);
-      if (!root || root.role == RoleType.DESKTOP || root == start)
-        return;
-
-      var position = {};
-      var loc = start.unclippedLocation;
-      position.x = loc.left + loc.width / 2;
-      position.y = loc.top + loc.height / 2;
-      var url = root.docUrl;
-      url = url.substring(0, url.indexOf('#')) || url;
-      cvox.ChromeVox.position[url] = position;
+    if (!this.currentRange_) {
+      chrome.accessibilityPrivate.setFocusRings([{
+        rects: [],
+        type: chrome.accessibilityPrivate.FocusType.GLOW,
+        color: constants.FOCUS_COLOR
+      }]);
+      return;
     }
+
+    var start = this.currentRange_.start.node;
+    start.makeVisible();
+
+    var root = AutomationUtil.getTopLevelRoot(start);
+    if (!root || root.role == RoleType.DESKTOP || root == start)
+      return;
+
+    var position = {};
+    var loc = start.unclippedLocation;
+    position.x = loc.left + loc.width / 2;
+    position.y = loc.top + loc.height / 2;
+    var url = root.docUrl;
+    url = url.substring(0, url.indexOf('#')) || url;
+    cvox.ChromeVox.position[url] = position;
   },
 
   /**
    * @override
    */
-  navigateToRange: function(range, opt_focus, opt_speechProps) {
+  navigateToRange: function(
+      range, opt_focus, opt_speechProps, opt_skipSettingSelection) {
     opt_focus = opt_focus === undefined ? true : opt_focus;
     opt_speechProps = opt_speechProps || {};
+    opt_skipSettingSelection = opt_skipSettingSelection || false;
     var prevRange = this.currentRange_;
 
     // Specialization for math output.
@@ -228,7 +251,8 @@ Background.prototype = {
     var selectedRange;
     var msg;
 
-    if (this.pageSel_ && this.pageSel_.isValid() && range.isValid()) {
+    if (this.pageSel_ && this.pageSel_.isValid() && range.isValid() &&
+        !opt_skipSettingSelection) {
       // Suppress hints.
       o.withoutHints();
 
@@ -270,7 +294,7 @@ Background.prototype = {
         if (this.pageSel_)
           this.pageSel_.select();
       }
-    } else {
+    } else if (!opt_skipSettingSelection) {
       // Ensure we don't select the editable when we first encounter it.
       var lca = null;
       if (range.start.node && prevRange.start.node) {
@@ -293,8 +317,16 @@ Background.prototype = {
     for (var prop in opt_speechProps)
       o.format('!' + prop);
 
-    if (!skipOutput)
+    if (!skipOutput) {
       o.go();
+
+      if (range.start.node) {
+        // Update the DesktopAutomationHandler's state as well to ensure event
+        // handlers don't repeat this output.
+        DesktopAutomationHandler.instance.updateLastAttributeState(
+            range.start.node, o);
+      }
+    }
   },
 
   /**
@@ -370,18 +402,16 @@ Background.prototype = {
       cvox.ChromeVox.tts.speak(
           Msgs.getMsg(evt.type, [text]), cvox.QueueMode.QUEUE);
     } else if (evt.type == 'copy' || evt.type == 'cut') {
-      window.setTimeout(function() {
-        this.preventPasteOutput_ = true;
-        var textarea = document.createElement('textarea');
-        document.body.appendChild(textarea);
-        textarea.focus();
-        document.execCommand('paste');
-        var clipboardContent = textarea.value;
-        textarea.remove();
-        cvox.ChromeVox.tts.speak(
-            Msgs.getMsg(evt.type, [clipboardContent]), cvox.QueueMode.FLUSH);
-        ChromeVoxState.instance.pageSel_ = null;
-      }.bind(this), 20);
+      this.preventPasteOutput_ = true;
+      var textarea = document.createElement('textarea');
+      document.body.appendChild(textarea);
+      textarea.focus();
+      document.execCommand('paste');
+      var clipboardContent = textarea.value;
+      textarea.remove();
+      cvox.ChromeVox.tts.speak(
+          Msgs.getMsg(evt.type, [clipboardContent]), cvox.QueueMode.FLUSH);
+      ChromeVoxState.instance.pageSel_ = null;
     }
   },
 
@@ -454,7 +484,7 @@ Background.prototype = {
     // the next or previous focusable node from |start|.
     if (!start.state[StateType.OFFSCREEN])
       start.setSequentialFocusNavigationStartingPoint();
-  }
+  },
 };
 
 /**

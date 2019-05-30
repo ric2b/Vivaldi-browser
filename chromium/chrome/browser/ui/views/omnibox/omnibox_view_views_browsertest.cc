@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -22,7 +23,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
-#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
 #include "content/public/browser/web_contents.h"
@@ -34,11 +34,16 @@
 #include "ui/base/ime/text_edit_commands.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/test/ui_controls.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/events/event_processor.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/controls/textfield/textfield_test_api.h"
+
+#if defined(USE_AURA)
+#include "ui/aura/window.h"
+#endif
 
 namespace {
 
@@ -91,14 +96,19 @@ class OmniboxViewViewsTest : public InProcessBrowserTest {
   void TapBrowserWindowCenter() {
     gfx::Point center = BrowserView::GetBrowserViewForBrowser(
         browser())->GetBoundsInScreen().CenterPoint();
-    ui::test::EventGenerator generator(browser()->window()->GetNativeWindow());
+    ui::test::EventGenerator generator(GetRootWindow());
     generator.GestureTapAt(center);
   }
 
   // Touch down and release at the specified locations.
   void Tap(const gfx::Point& press_location,
            const gfx::Point& release_location) {
-    ui::test::EventGenerator generator(browser()->window()->GetNativeWindow());
+    gfx::NativeWindow window = GetRootWindow();
+#if defined(OS_CHROMEOS)
+    if (features::IsUsingWindowService())
+      window = nullptr;
+#endif
+    ui::test::EventGenerator generator(window);
     if (press_location == release_location) {
       generator.GestureTapAt(press_location);
     } else {
@@ -117,7 +127,13 @@ class OmniboxViewViewsTest : public InProcessBrowserTest {
     ASSERT_TRUE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_OMNIBOX));
   }
 
-  test::ScopedMacViewsBrowserMode views_mode_{true};
+  gfx::NativeWindow GetRootWindow() const {
+    gfx::NativeWindow native_window = browser()->window()->GetNativeWindow();
+#if defined(USE_AURA)
+    native_window = native_window->GetRootWindow();
+#endif
+    return native_window;
+  }
 
   DISALLOW_COPY_AND_ASSIGN(OmniboxViewViewsTest);
 };
@@ -131,7 +147,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, PasteAndGoDoesNotLeavePopupOpen) {
   SetClipboardText(ui::CLIPBOARD_TYPE_COPY_PASTE, "http://www.example.com/");
 
   // Paste and go.
-  omnibox_view_views->ExecuteCommand(IDS_PASTE_AND_GO, ui::EF_NONE);
+  omnibox_view_views->ExecuteCommand(IDC_PASTE_AND_GO, ui::EF_NONE);
 
   // The popup should not be open.
   EXPECT_FALSE(view->model()->popup_model()->IsOpen());
@@ -156,8 +172,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, DoNotNavigateOnDrop) {
       browser()->tab_strip_model()->GetActiveWebContents()->IsLoading());
 }
 
-// If this flakes, disable and log details in http://crbug.com/523255.
-IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, SelectAllOnClick) {
+// Flaky: https://crbug.com/915591.
+IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, DISABLED_SelectAllOnClick) {
   OmniboxView* omnibox_view = NULL;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &omnibox_view));
   omnibox_view->SetUserText(base::ASCIIToUTF16("http://www.google.com/"));
@@ -211,11 +227,10 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, SelectAllOnClick) {
                                 click_location, click_location));
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   EXPECT_TRUE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_OMNIBOX));
-  EXPECT_FALSE(omnibox_view->IsSelectAll());
 #else
   EXPECT_FALSE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_OMNIBOX));
-  EXPECT_FALSE(omnibox_view->IsSelectAll());
 #endif  // OS_LINUX && !OS_CHROMEOS
+  EXPECT_FALSE(omnibox_view->IsSelectAll());
 }
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
@@ -267,13 +282,10 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, SelectionClipboard) {
 }
 #endif  // OS_LINUX && !OS_CHROMEOS
 
-// MacOS does not support touch.
-#if defined(OS_MACOSX)
-#define MAYBE_SelectAllOnTap DISABLED_SelectAllOnTap
-#else
-#define MAYBE_SelectAllOnTap SelectAllOnTap
-#endif
-IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, MAYBE_SelectAllOnTap) {
+// No touch on desktop Mac. Tracked in http://crbug.com/445520.
+#if !defined(OS_MACOSX) || defined(USE_AURA)
+
+IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, SelectAllOnTap) {
   OmniboxView* omnibox_view = NULL;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &omnibox_view));
   omnibox_view->SetUserText(base::ASCIIToUTF16("http://www.google.com/"));
@@ -318,6 +330,32 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, MAYBE_SelectAllOnTap) {
   EXPECT_FALSE(omnibox_view->IsSelectAll());
 }
 
+// Tests if executing a command hides touch editing handles.
+IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest,
+                       DeactivateTouchEditingOnExecuteCommand) {
+  OmniboxView* view = NULL;
+  ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &view));
+  OmniboxViewViews* omnibox_view_views = static_cast<OmniboxViewViews*>(view);
+  views::TextfieldTestApi textfield_test_api(omnibox_view_views);
+
+  // Put a URL on the clipboard.
+  SetClipboardText(ui::CLIPBOARD_TYPE_COPY_PASTE, "http://www.example.com/");
+
+  // Tap to activate touch editing.
+  gfx::Point omnibox_center =
+      omnibox_view_views->GetBoundsInScreen().CenterPoint();
+  Tap(omnibox_center, omnibox_center);
+  EXPECT_TRUE(textfield_test_api.touch_selection_controller());
+
+  // Execute a command and check if it deactivate touch editing. Paste & Go is
+  // chosen since it is specific to Omnibox and its execution wouldn't be
+  // delegated to the base Textfield class.
+  omnibox_view_views->ExecuteCommand(IDC_PASTE_AND_GO, ui::EF_NONE);
+  EXPECT_FALSE(textfield_test_api.touch_selection_controller());
+}
+
+#endif  // !defined(OS_MACOSX) || defined(USE_AURA)
+
 IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, SelectAllOnTabToFocus) {
   OmniboxView* omnibox_view = NULL;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &omnibox_view));
@@ -336,14 +374,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, SelectAllOnTabToFocus) {
   EXPECT_TRUE(omnibox_view->IsSelectAll());
 }
 
-#if defined(OS_MACOSX)
-// Focusing or input is not completely working on Mac: http://crbug.com/824418
-#define MAYBE_CloseOmniboxPopupOnTextDrag DISABLED_CloseOmniboxPopupOnTextDrag
-#else
-#define MAYBE_CloseOmniboxPopupOnTextDrag CloseOmniboxPopupOnTextDrag
-#endif
-IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest,
-                       MAYBE_CloseOmniboxPopupOnTextDrag) {
+IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, CloseOmniboxPopupOnTextDrag) {
   OmniboxView* omnibox_view = nullptr;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &omnibox_view));
   OmniboxViewViews* omnibox_view_views =
@@ -377,7 +408,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest,
   EXPECT_TRUE(omnibox_view->IsSelectAll());
 
   // Simulate a mouse click before dragging the mouse.
-  gfx::Point point(omnibox_view_views->origin());
+  gfx::Point point(omnibox_view_views->origin() + gfx::Vector2d(10, 10));
   ui::MouseEvent pressed(ui::ET_MOUSE_PRESSED, point, point,
                          ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
                          ui::EF_LEFT_MOUSE_BUTTON);
@@ -451,38 +482,6 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, BackgroundIsOpaque) {
       toolbar()->location_bar()->omnibox_view();
   ASSERT_TRUE(view);
   EXPECT_FALSE(view->GetRenderText()->subpixel_rendering_suppressed());
-}
-
-// MacOS does not support touch.
-#if defined(OS_MACOSX)
-#define MAYBE_DeactivateTouchEditingOnExecuteCommand \
-  DISABLED_DeactivateTouchEditingOnExecuteCommand
-#else
-#define MAYBE_DeactivateTouchEditingOnExecuteCommand \
-  DeactivateTouchEditingOnExecuteCommand
-#endif
-// Tests if executing a command hides touch editing handles.
-IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest,
-                       MAYBE_DeactivateTouchEditingOnExecuteCommand) {
-  OmniboxView* view = NULL;
-  ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &view));
-  OmniboxViewViews* omnibox_view_views = static_cast<OmniboxViewViews*>(view);
-  views::TextfieldTestApi textfield_test_api(omnibox_view_views);
-
-  // Put a URL on the clipboard.
-  SetClipboardText(ui::CLIPBOARD_TYPE_COPY_PASTE, "http://www.example.com/");
-
-  // Tap to activate touch editing.
-  gfx::Point omnibox_center =
-      omnibox_view_views->GetBoundsInScreen().CenterPoint();
-  Tap(omnibox_center, omnibox_center);
-  EXPECT_TRUE(textfield_test_api.touch_selection_controller());
-
-  // Execute a command and check if it deactivate touch editing. Paste & Go is
-  // chosen since it is specific to Omnibox and its execution wouldn't be
-  // delegated to the base Textfield class.
-  omnibox_view_views->ExecuteCommand(IDS_PASTE_AND_GO, ui::EF_NONE);
-  EXPECT_FALSE(textfield_test_api.touch_selection_controller());
 }
 
 IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, FocusedTextInputClient) {
@@ -629,7 +628,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, AccessiblePopup) {
   match.allowed_to_be_default_match = true;
 
   OmniboxPopupContentsView* popup_view =
-      omnibox_view_views->GetPopupContentsView();
+      omnibox_view_views->GetPopupContentsViewForTesting();
   ui::AXNodeData popup_node_data_1;
   popup_view->GetAccessibleNodeData(&popup_node_data_1);
   EXPECT_FALSE(popup_node_data_1.HasState(ax::mojom::State::kExpanded));

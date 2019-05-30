@@ -8,7 +8,8 @@
     Constructor(optional (DOMString or sequence<unrestricted double>) init),
     RaisesException=Constructor,
     ConstructorCallWith=ExecutionContext,
-    Exposed=(Window,Worker)
+    Exposed=(Window,Worker),
+    Serializable
 ] interface DOMMatrixReadOnly {
     [RaisesException, NewObject] static DOMMatrixReadOnly fromMatrix(optional DOMMatrixInit other);
     [RaisesException, NewObject] static DOMMatrixReadOnly fromFloat32Array(Float32Array array32);
@@ -52,6 +53,8 @@
                     optional unrestricted double originX = 0,
                     optional unrestricted double originY = 0,
                     optional unrestricted double originZ = 0);
+    DOMMatrix scaleNonUniform(optional unrestricted double scaleX = 1,
+                              optional unrestricted double scaleY = 1);
     DOMMatrix scale3d(optional unrestricted double scale = 1,
                       optional unrestricted double originX = 0,
                       optional unrestricted double originY = 0,
@@ -76,5 +79,5 @@
     Float32Array toFloat32Array();
     Float64Array toFloat64Array();
     [Exposed=Window, RaisesException] stringifier;
-    serializer = { attribute };
+    [CallWith=ScriptState, ImplementedAs=toJSONForBinding] object toJSON();
 };

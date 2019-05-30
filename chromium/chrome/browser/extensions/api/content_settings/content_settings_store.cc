@@ -10,15 +10,20 @@
 #include <utility>
 
 #include "base/debug/alias.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/api/content_settings/content_settings_api_constants.h"
 #include "chrome/browser/extensions/api/content_settings/content_settings_helpers.h"
+#include "chrome/common/chrome_features.h"
+#include "components/content_settings/core/browser/content_settings_info.h"
 #include "components/content_settings/core/browser/content_settings_origin_identifier_value_map.h"
+#include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/content_settings_rule.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
+#include "components/content_settings/core/browser/website_settings_info.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -108,7 +113,7 @@ void ContentSettingsStore::SetExtensionContentSetting(
     } else {
       // Do not set a timestamp for extension settings.
       map->SetValue(primary_pattern, secondary_pattern, type, identifier,
-                    base::Time(), new base::Value(setting));
+                    base::Time(), base::Value(setting));
     }
   }
 
@@ -230,13 +235,36 @@ void ContentSettingsStore::ClearContentSettingsForExtension(
   {
     base::AutoLock lock(lock_);
     OriginIdentifierValueMap* map = GetValueMap(ext_id, scope);
-    if (!map) {
-      // Fail gracefully in Release builds.
-      NOTREACHED();
-      return;
-    }
+    DCHECK(map);
     notify = !map->empty();
     map->clear();
+  }
+  if (notify) {
+    NotifyOfContentSettingChanged(ext_id, scope != kExtensionPrefsScopeRegular);
+  }
+}
+
+void ContentSettingsStore::ClearContentSettingsForExtensionAndContentType(
+    const std::string& ext_id,
+    ExtensionPrefsScope scope,
+    ContentSettingsType content_type) {
+  bool notify = false;
+  {
+    base::AutoLock lock(lock_);
+    OriginIdentifierValueMap* map = GetValueMap(ext_id, scope);
+    DCHECK(map);
+
+    // Get all of the resource identifiers for this |content_type|.
+    std::set<ResourceIdentifier> resource_identifiers;
+    for (const auto& entry : *map) {
+      if (entry.first.content_type == content_type)
+        resource_identifiers.insert(entry.first.resource_identifier);
+    }
+
+    notify = !resource_identifiers.empty();
+
+    for (const ResourceIdentifier& resource_identifier : resource_identifiers)
+      map->DeleteValues(content_type, resource_identifier);
   }
   if (notify) {
     NotifyOfContentSettingChanged(ext_id, scope != kExtensionPrefsScopeRegular);
@@ -278,7 +306,7 @@ std::unique_ptr<base::ListValue> ContentSettingsStore::GetSettingsForExtension(
           content_settings_api_constants::kResourceIdentifierKey,
           key.resource_identifier);
       ContentSetting content_setting =
-          content_settings::ValueToContentSetting(rule.value.get());
+          content_settings::ValueToContentSetting(&rule.value);
       DCHECK_NE(CONTENT_SETTING_DEFAULT, content_setting);
 
       std::string setting_string =
@@ -333,6 +361,19 @@ void ContentSettingsStore::SetExtensionContentSettingFromList(
       // In this case, we just skip over that setting, effectively deleting it
       // from the in-memory model. This will implicitly delete these old
       // settings from the pref store when it is written back.
+      continue;
+    }
+
+    const content_settings::ContentSettingsInfo* info =
+        content_settings::ContentSettingsRegistry::GetInstance()->Get(
+            content_settings_type);
+    if (primary_pattern != secondary_pattern &&
+        secondary_pattern != ContentSettingsPattern::Wildcard() &&
+        !info->website_settings_info()->SupportsEmbeddedExceptions() &&
+        base::FeatureList::IsEnabled(::features::kPermissionDelegation)) {
+      // Some types may have had embedded exceptions written even though they
+      // aren't supported. This will implicitly delete these old settings from
+      // the pref store when it is written back.
       continue;
     }
 

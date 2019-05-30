@@ -42,14 +42,38 @@ const base::Feature kSyncAllowWalletDataInTransportModeWithCustomPassphrase{
     "SyncAllowAutofillWalletDataInTransportModeWithCustomPassphrase",
     base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables clearing of sync data when a user enables passphrase encryption.
-const base::Feature kSyncClearDataOnPassphraseEncryption{
-    "ClearSyncDataOnPassphraseEncryption", base::FEATURE_DISABLED_BY_DEFAULT};
+// For each below, if enabled, the SyncableService implementation of the
+// corresponding datatype(s) is wrapped within the USS architecture.
+const base::Feature kSyncPseudoUSSAppList{"SyncPseudoUSSAppList",
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kSyncPseudoUSSApps{"SyncPseudoUSSApps",
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kSyncPseudoUSSArcPackage{"SyncPseudoUSSArcPackage",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kSyncPseudoUSSDictionary{"SyncPseudoUSSDictionary",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kSyncPseudoUSSExtensionSettings{
+    "SyncPseudoUSSExtensionSettings", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kSyncPseudoUSSExtensions{"SyncPseudoUSSExtensions",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kSyncPseudoUSSFavicons{"SyncPseudoUSSFavicons",
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kSyncPseudoUSSHistoryDeleteDirectives{
+    "SyncPseudoUSSHistoryDeleteDirectives", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kSyncPseudoUSSPreferences{"SyncPseudoUSSPreferences",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kSyncPseudoUSSPriorityPreferences{
+    "SyncPseudoUSSPriorityPreferences", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kSyncPseudoUSSSearchEngines{
+    "SyncPseudoUSSSearchEngines", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kSyncPseudoUSSSupervisedUsers{
+    "SyncPseudoUSSSupervisedUsers", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kSyncPseudoUSSThemes{"SyncPseudoUSSThemes",
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
-// If enabled, allows the Sync machinery ("transport layer") to start
-// independently of Sync-the-feature.
-const base::Feature kSyncStandaloneTransport{"SyncStandaloneTransport",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
+// Controls whether a user can send tabs between synced devices
+const base::Feature kSyncSendTabToSelf{"SyncSendTabToSelf",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If enabled, allows the Sync machinery to start with a signed-in account that
 // has *not* been chosen as Chrome's primary account (see IdentityManager). Only
@@ -66,15 +90,6 @@ const base::Feature kSyncUserEvents{"SyncUserEvents",
 const base::Feature kSyncUserFieldTrialEvents{"SyncUserFieldTrialEvents",
                                               base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Gates emission of UserConsent events.
-const base::Feature kSyncUserConsentEvents{"SyncUserConsentEvents",
-                                           base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Emit user consents through a separate sync type USER_CONSENTS instead of
-// USER_EVENTS. This feature does not override kSyncUserConsentEvents.
-const base::Feature kSyncUserConsentSeparateType{
-    "SyncUserConsentSeparateType", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Gates registration for user language detection events.
 const base::Feature kSyncUserLanguageDetectionEvents{
     "SyncUserLanguageDetectionEvents", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -87,9 +102,9 @@ const base::Feature kSyncUserTranslationEvents{
 const base::Feature kSyncUSSBookmarks{"SyncUSSBookmarks",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enable USS implementation of sessions.
-const base::Feature kSyncUSSSessions{"SyncUSSSessions",
-                                     base::FEATURE_ENABLED_BY_DEFAULT};
+// Enable USS implementation of Passwords datatype.
+const base::Feature kSyncUSSPasswords{"SyncUSSPasswords",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enable USS implementation of autofill profile datatype.
 const base::Feature kSyncUSSAutofillProfile{"SyncUSSAutofillProfile",
@@ -97,7 +112,7 @@ const base::Feature kSyncUSSAutofillProfile{"SyncUSSAutofillProfile",
 
 // Enable USS implementation of autofill wallet datatype.
 const base::Feature kSyncUSSAutofillWalletData{
-    "SyncUSSAutofillWalletData", base::FEATURE_DISABLED_BY_DEFAULT};
+    "SyncUSSAutofillWalletData", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enable USS implementation of autofill wallet metadata datatype.
 const base::Feature kSyncUSSAutofillWalletMetadata{

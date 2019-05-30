@@ -16,6 +16,7 @@
 #include "media/base/video_codecs.h"
 #include "media/capabilities/video_decode_stats_db.h"
 #include "media/capabilities/video_decode_stats_db_provider.h"
+#include "media/learning/impl/feature_provider.h"
 #include "media/mojo/interfaces/video_decode_perf_history.mojom.h"
 #include "media/mojo/services/media_mojo_export.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
@@ -23,6 +24,8 @@
 #include "ui/gfx/geometry/size.h"
 
 namespace media {
+
+class LearningHelper;
 
 // This class saves and retrieves video decode performance statistics on behalf
 // of the MediaCapabilities API. It also helps to grade the accuracy of the API
@@ -49,8 +52,12 @@ class MEDIA_MOJO_EXPORT VideoDecodePerfHistory
       public VideoDecodeStatsDBProvider,
       public base::SupportsUserData::Data {
  public:
+  static const char kMaxSmoothDroppedFramesPercentParamName[];
+
   explicit VideoDecodePerfHistory(
-      std::unique_ptr<VideoDecodeStatsDBFactory> db_factory);
+      std::unique_ptr<VideoDecodeStatsDB> db,
+      learning::FeatureProviderFactoryCB feature_factory_cb =
+          learning::FeatureProviderFactoryCB());
   ~VideoDecodePerfHistory() override;
 
   // Bind the mojo request to this instance. Single instance will be used to
@@ -85,6 +92,10 @@ class MEDIA_MOJO_EXPORT VideoDecodePerfHistory
  private:
   friend class VideoDecodePerfHistoryTest;
 
+  // Decode capabilities will be described as "smooth" whenever the percentage
+  // of dropped frames is less-than-or-equal-to this value.
+  static double GetMaxSmoothDroppedFramesPercent();
+
   // Track the status of database lazy initialization.
   enum InitStatus {
     UNINITIALIZED,
@@ -93,17 +104,12 @@ class MEDIA_MOJO_EXPORT VideoDecodePerfHistory
     FAILED,
   };
 
-  // Decode capabilities will be described as "smooth" whenever the percentage
-  // of dropped frames is less-than-or-equal-to this value. 10% chosen as a
-  // lenient value after manual testing.
-  static constexpr double kMaxSmoothDroppedFramesPercent = .10;
-
   // Decode capabilities will be described as "power efficient" whenever the
   // percentage of power efficient decoded frames is higher-than-or-equal-to
   // this value.
   static constexpr double kMinPowerEfficientDecodedFramePercent = .50;
 
-  // Create and initialize the database. Will return early if initialization is
+  // Initialize the database. Will return early if initialization is
   // already PENDING.
   void InitDatabase();
 
@@ -162,16 +168,15 @@ class MEDIA_MOJO_EXPORT VideoDecodePerfHistory
   // |clear_done_cb|.
   void OnClearedHistory(base::OnceClosure clear_done_cb);
 
-  // Factory for creating |db_|.
-  std::unique_ptr<VideoDecodeStatsDBFactory> db_factory_;
+  // Underlying database for managing/coalescing decode stats. Const to enforce
+  // assignment during construction and never cleared. We hand out references to
+  // the db via GetVideoDecodeStatsDB(), so clearing or reassigning breaks those
+  // dependencies.
+  const std::unique_ptr<VideoDecodeStatsDB> db_;
 
   // Tracks whether we've received OnDatabaseIniti() callback. All database
   // operations should be deferred until initialization is complete.
   InitStatus db_init_status_;
-
-  // Database helper for managing/coalescing decode stats.
-  // TODO(chcunningham): tear down |db_| if idle for extended period.
-  std::unique_ptr<VideoDecodeStatsDB> db_;
 
   // Vector of bound public API calls, to be run once DB initialization
   // completes.
@@ -180,6 +185,12 @@ class MEDIA_MOJO_EXPORT VideoDecodePerfHistory
   // Maps bindings from several render-processes to this single browser-process
   // service.
   mojo::BindingSet<mojom::VideoDecodePerfHistory> bindings_;
+
+  // Optional helper for local learning.
+  std::unique_ptr<LearningHelper> learning_helper_;
+
+  // Optional callback to create a FeatureProvider for |learning_helper_|.
+  learning::FeatureProviderFactoryCB feature_factory_cb_;
 
   // Ensures all access to class members come on the same sequence.
   SEQUENCE_CHECKER(sequence_checker_);

@@ -32,6 +32,7 @@
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/text/unicode.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
 
 namespace WTF {
 
@@ -52,6 +53,10 @@ enum UnencodableHandling {
   // Encodes the character as a CSS entity.  For example U+06DE
   // would be \06de.  See: https://www.w3.org/TR/css-syntax-3/#escaping
   kCSSEncodedEntitiesForUnencodables,
+
+  // Used when all characters can be encoded in the character set. Only
+  // applicable to UTF-N encodings.
+  kNoUnencodables,
 };
 
 typedef char UnencodableReplacementArray[32];
@@ -75,20 +80,45 @@ class WTF_EXPORT TextCodec {
   TextCodec() = default;
   virtual ~TextCodec();
 
+  struct EncodeIntoResult {
+    wtf_size_t code_units_read;
+    wtf_size_t bytes_written;
+  };
+
   String Decode(const char* str,
-                size_t length,
+                wtf_size_t length,
                 FlushBehavior flush = FlushBehavior::kDoNotFlush) {
     bool ignored;
     return Decode(str, length, flush, false, ignored);
   }
 
   virtual String Decode(const char*,
-                        size_t length,
+                        wtf_size_t length,
                         FlushBehavior,
                         bool stop_on_error,
                         bool& saw_error) = 0;
-  virtual CString Encode(const UChar*, size_t length, UnencodableHandling) = 0;
-  virtual CString Encode(const LChar*, size_t length, UnencodableHandling) = 0;
+  virtual CString Encode(const UChar*,
+                         wtf_size_t length,
+                         UnencodableHandling) = 0;
+  virtual CString Encode(const LChar*,
+                         wtf_size_t length,
+                         UnencodableHandling) = 0;
+  // EncodeInto is meant only to encode UTF8 bytes into an unsigned char*
+  // buffer; therefore this method is only usefully overridden by TextCodecUTF8.
+  virtual EncodeIntoResult EncodeInto(const LChar*,
+                                      wtf_size_t length,
+                                      unsigned char* destination,
+                                      wtf_size_t capacity) {
+    NOTREACHED();
+    return EncodeIntoResult{0, 0};
+  }
+  virtual EncodeIntoResult EncodeInto(const UChar*,
+                                      wtf_size_t length,
+                                      unsigned char* destination,
+                                      wtf_size_t capacity) {
+    NOTREACHED();
+    return EncodeIntoResult{0, 0};
+  }
 
   // Fills a null-terminated string representation of the given
   // unencodable character into the given replacement buffer.

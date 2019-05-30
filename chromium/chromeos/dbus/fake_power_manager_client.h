@@ -13,13 +13,13 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/component_export.h"
 #include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "base/time/time.h"
-#include "chromeos/chromeos_export.h"
 #include "chromeos/dbus/power_manager/backlight.pb.h"
 #include "chromeos/dbus/power_manager/policy.pb.h"
 #include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
@@ -31,7 +31,8 @@ namespace chromeos {
 // A fake implementation of PowerManagerClient. This remembers the policy passed
 // to SetPolicy() and the user of this class can inspect the last set policy by
 // get_policy().
-class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
+class COMPONENT_EXPORT(CHROMEOS_DBUS) FakePowerManagerClient
+    : public PowerManagerClient {
  public:
   FakePowerManagerClient();
   ~FakePowerManagerClient() override;
@@ -44,6 +45,9 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
     return num_set_is_projecting_calls_;
   }
   int num_defer_screen_dim_calls() const { return num_defer_screen_dim_calls_; }
+  int num_wake_notification_calls() const {
+    return num_wake_notification_calls_;
+  }
   double screen_brightness_percent() const {
     return screen_brightness_percent_.value();
   }
@@ -67,15 +71,17 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
   }
 
   // PowerManagerClient overrides:
-  void Init(dbus::Bus* bus) override;
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
   bool HasObserver(const Observer* observer) const override;
+  void WaitForServiceToBeAvailable(
+      WaitForServiceToBeAvailableCallback callback) override;
   void SetRenderProcessManagerDelegate(
       base::WeakPtr<RenderProcessManagerDelegate> delegate) override;
   void DecreaseScreenBrightness(bool allow_off) override;
   void IncreaseScreenBrightness() override;
-  void SetScreenBrightnessPercent(double percent, bool gradual) override;
+  void SetScreenBrightness(
+      const power_manager::SetBacklightBrightnessRequest& request) override;
   void GetScreenBrightnessPercent(DBusMethodCallback<double> callback) override;
   void DecreaseKeyboardBrightness() override;
   void IncreaseKeyboardBrightness() override;
@@ -91,6 +97,7 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
                        const std::string& description) override;
   void NotifyUserActivity(power_manager::UserActivityType type) override;
   void NotifyVideoActivity(bool is_fullscreen) override;
+  void NotifyWakeNotification() override;
   void SetPolicy(const power_manager::PowerManagementPolicy& policy) override;
   void SetIsProjecting(bool is_projecting) override;
   void SetPowerSource(const std::string& id) override;
@@ -175,6 +182,8 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
     keyboard_brightness_percent_ = percent;
   }
 
+  static FakePowerManagerClient* Get();
+
  private:
   // Callback that will be run by asynchronous suspend delays to report
   // readiness.
@@ -182,6 +191,9 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
 
   // Notifies |observers_| that |props_| has been updated.
   void NotifyObservers();
+
+  // Deletes all timers, if any, associated with |tag|.
+  void DeleteArcTimersInternal(const std::string& tag);
 
   base::ObserverList<Observer>::Unchecked observers_;
 
@@ -198,6 +210,7 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
   int num_set_is_projecting_calls_ = 0;
   int num_set_backlights_forced_off_calls_ = 0;
   int num_defer_screen_dim_calls_ = 0;
+  int num_wake_notification_calls_ = 0;
 
   // Number of pending suspend readiness callbacks.
   int num_pending_suspend_readiness_callbacks_ = 0;
@@ -208,7 +221,7 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
   // Current keyboard brightness in the range [0.0, 100.0].
   base::Optional<double> keyboard_brightness_percent_;
 
-  // Last screen brightness requested via SetScreenBrightnessPercent().
+  // Last screen brightness requested via SetScreenBrightness().
   // Unlike |screen_brightness_percent_|, this value will not be changed by
   // SetBacklightsForcedOff() method - a method that implicitly changes screen
   // brightness.
@@ -270,7 +283,7 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.
-  base::WeakPtrFactory<FakePowerManagerClient> weak_ptr_factory_;
+  base::WeakPtrFactory<FakePowerManagerClient> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(FakePowerManagerClient);
 };

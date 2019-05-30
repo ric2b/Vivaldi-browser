@@ -5,13 +5,16 @@
 #include "chrome/browser/vr/ui_scene_creator.h"
 
 #include <memory>
+#include <string>
+#include <tuple>
+#include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/i18n/case_conversion.h"
 #include "base/numerics/math_constants.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "cc/animation/animation_curve.h"
@@ -38,8 +41,6 @@
 #include "chrome/browser/vr/elements/omnibox_formatting.h"
 #include "chrome/browser/vr/elements/omnibox_text_field.h"
 #include "chrome/browser/vr/elements/oval.h"
-#include "chrome/browser/vr/elements/paged_grid_layout.h"
-#include "chrome/browser/vr/elements/paged_scroll_view.h"
 #include "chrome/browser/vr/elements/platform_ui_element.h"
 #include "chrome/browser/vr/elements/rect.h"
 #include "chrome/browser/vr/elements/repositioner.h"
@@ -62,7 +63,6 @@
 #include "chrome/browser/vr/keyboard_delegate.h"
 #include "chrome/browser/vr/model/model.h"
 #include "chrome/browser/vr/model/platform_toast.h"
-#include "chrome/browser/vr/model/tab_model.h"
 #include "chrome/browser/vr/platform_ui_input_delegate.h"
 #include "chrome/browser/vr/speech_recognizer.h"
 #include "chrome/browser/vr/target_property.h"
@@ -70,12 +70,11 @@
 #include "chrome/browser/vr/ui_browser_interface.h"
 #include "chrome/browser/vr/ui_scene.h"
 #include "chrome/browser/vr/ui_scene_constants.h"
-#include "chrome/browser/vr/vector_icons/vector_icons.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/toolbar/vector_icons.h"
-#include "components/vector_icons/vector_icons.h"
+#include "components/url_formatter/elide_url.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/transform_util.h"
 
 namespace vr {
@@ -279,152 +278,6 @@ void OnSuggestionModelRemoved(UiScene* scene, SuggestionBinding* binding) {
   scene->RemoveUiElement(binding->view()->id());
 }
 
-typedef VectorBinding<TabModel, UiElement> TabSetBinding;
-typedef typename TabSetBinding::ElementBinding TabBinding;
-
-void OnTabModelAdded(UiScene* scene,
-                     Model* model,
-                     bool incognito,
-                     PagedGridLayout* tabs_view,
-                     AudioDelegate* audio_delegate,
-                     UiBrowserInterface* browser,
-                     TabBinding* element_binding) {
-  auto item = Create<Button>(kNone, kPhaseForeground, base::DoNothing(),
-                             audio_delegate);
-  item->SetButtonColors(
-      ColorScheme::GetColorScheme(incognito ? ColorScheme::kModeIncognito
-                                            : ColorScheme::kModeNormal)
-          .disc_button_colors);
-  item->SetSize(kTabItemWidthDMM, kTabItemHeightDMM);
-  item->SetTransitionedProperties({OPACITY});
-  item->set_corner_radius(kTabItemCornerRadiusDMM);
-  item->set_hover_offset(0.0f);
-  item->SetType(kTypeTabItem);
-  item->AddBinding(std::make_unique<Binding<PagedGridLayout::PageState>>(
-      VR_BIND_LAMBDA(
-          [](PagedGridLayout* paged_layout, UiElement* item) {
-            return paged_layout->GetPageState(item);
-          },
-          base::Unretained(tabs_view), base::Unretained(item.get())),
-      VR_BIND_LAMBDA(
-          [](Button* item, const PagedGridLayout::PageState& page_state) {
-            switch (page_state) {
-              case PagedGridLayout::kActive:
-                item->SetOpacity(kTabsViewActivePageOpacity);
-                item->SetEnabled(true);
-                break;
-              case PagedGridLayout::kInactive:
-                item->SetOpacity(kTabsViewInactivePageOpacity);
-                item->SetEnabled(false);
-                break;
-              default:
-                item->SetOpacity(kTabsViewHiddenPageOpacity);
-                item->SetEnabled(false);
-                break;
-            }
-          },
-          base::Unretained(item.get()))));
-  element_binding->bindings().push_back(std::make_unique<Binding<int>>(
-      VR_BIND_LAMBDA(
-          [](TabBinding* element_binding) {
-            return element_binding->model()->id;
-          },
-          base::Unretained(element_binding)),
-      VR_BIND_LAMBDA(
-          [](TabBinding* element_binding, UiBrowserInterface* browser,
-             Model* model, bool incognito, const int& id) {
-            static_cast<Button*>(
-                element_binding->view()->GetDescendantByType(kTypeTabItem))
-                ->set_click_handler(base::BindRepeating(
-                    [](UiBrowserInterface* browser, Model* model, int id,
-                       bool incognito) {
-                      browser->SelectTab(id, incognito);
-                      model->pop_mode(kModeTabsView);
-                    },
-                    base::Unretained(browser), base::Unretained(model), id,
-                    incognito));
-          },
-          base::Unretained(element_binding), base::Unretained(browser),
-          base::Unretained(model), incognito)));
-
-  // TODO(crbug.com/838937): This is just a placeholder text. Replace with
-  // proper tab item.
-  auto text = Create<Text>(kNone, kPhaseForeground, kTabItemTextSizeDMM);
-  text->SetLayoutMode(TextLayoutMode::kSingleLine);
-  element_binding->bindings().push_back(VR_BIND_FUNC(
-      base::string16, TabBinding, element_binding,
-      model->model()->title.empty() ? base::string16()
-                                    : model->model()->title.substr(0, 1),
-      Text, text.get(), SetText));
-  text->SetColor(ColorScheme::GetColorScheme(incognito
-                                                 ? ColorScheme::kModeIncognito
-                                                 : ColorScheme::kModeNormal)
-                     .tab_item_text);
-  item->background()->AddChild(std::move(text));
-
-  auto shadow = Create<Shadow>(kNone, kPhaseForeground);
-  shadow->set_contributes_to_parent_bounds(false);
-  shadow->set_x_anchoring(RIGHT);
-  shadow->set_y_anchoring(TOP);
-  shadow->set_intensity(kTabsViewRemoveButtonShadowIntensity);
-  shadow->SetTransitionedProperties({OPACITY});
-
-  auto remove_button =
-      Create<DiscButton>(kNone, kPhaseForeground, base::DoNothing(),
-                         vector_icons::kCloseRoundedIcon, nullptr);
-  remove_button->SetTranslate(0, 0, kTabsViewRemoveButtonDepthOffsetDMM);
-  remove_button->SetSize(kTabsViewRemoveButtonSizeDMM,
-                         kTabsViewRemoveButtonSizeDMM);
-  remove_button->SetType(kTypeTabItemRemoveButton);
-  remove_button->set_hover_offset(kTabsViewRemoveButtonHoverOffsetDMM);
-  Sounds sounds;
-  sounds.hover_enter = kSoundButtonHover;
-  sounds.button_down = kSoundButtonClick;
-  remove_button->SetSounds(sounds, audio_delegate);
-  VR_BIND_BUTTON_COLORS(model, remove_button.get(),
-                        &ColorScheme::disc_button_colors,
-                        &DiscButton::SetButtonColors);
-  element_binding->bindings().push_back(std::make_unique<Binding<int>>(
-      VR_BIND_LAMBDA(
-          [](TabBinding* element_binding) {
-            return element_binding->model()->id;
-          },
-          base::Unretained(element_binding)),
-      VR_BIND_LAMBDA(
-          [](TabBinding* element_binding, UiBrowserInterface* browser,
-             bool incognito, const int& id) {
-            static_cast<Button*>(element_binding->view()->GetDescendantByType(
-                                     kTypeTabItemRemoveButton))
-                ->set_click_handler(base::BindRepeating(
-                    [](UiBrowserInterface* browser, int id, bool incognito) {
-                      browser->CloseTab(id, incognito);
-                    },
-                    base::Unretained(browser), id, incognito));
-          },
-          base::Unretained(element_binding), base::Unretained(browser),
-          incognito)));
-
-  shadow->set_shadow_caster(remove_button->background());
-  shadow->AddBinding(std::make_unique<Binding<bool>>(
-      VR_BIND_LAMBDA(
-          [](Button* item, Button* remove_button) {
-            return item->hovered() || remove_button->hovered();
-          },
-          base::Unretained(item.get()), base::Unretained(remove_button.get())),
-      VR_BIND_LAMBDA([](UiElement* shadow,
-                        const bool& hovered) { shadow->SetVisible(hovered); },
-                     base::Unretained(shadow.get()))));
-  shadow->AddChild(std::move(remove_button));
-
-  item->background()->AddChild(std::move(shadow));
-  element_binding->set_view(item.get());
-  scene->AddUiElement(tabs_view, std::move(item));
-}
-
-void OnTabModelRemoved(UiScene* scene, TabBinding* binding) {
-  scene->RemoveUiElement(binding->view()->id());
-}
-
 std::unique_ptr<TransientElement> CreateTransientParent(UiElementName name,
                                                         int timeout_seconds,
                                                         bool animate_opacity) {
@@ -549,22 +402,27 @@ base::RepeatingCallback<void()> CreatePromptCallback(
       mode, choice, base::Unretained(model), base::Unretained(browser));
 }
 
-std::unique_ptr<UiElement> CreateControllerLabel(UiElementName name,
-                                                 float z_offset,
-                                                 const base::string16& text,
-                                                 Model* model) {
+typedef VectorBinding<ControllerModel, Controller> ControllerSetBinding;
+typedef typename ControllerSetBinding::ElementBinding ControllerBinding;
+
+std::unique_ptr<UiElement> CreateControllerLabel(
+    UiElementName name,
+    float z_offset,
+    const base::string16& text,
+    Model* model,
+    ControllerBinding* element_binding) {
   auto layout = Create<LinearLayout>(name, kPhaseNone, LinearLayout::kLeft);
   layout->set_margin(kControllerLabelLayoutMargin);
   layout->SetTranslate(0, 0, z_offset);
   layout->set_contributes_to_parent_bounds(false);
   layout->AddBinding(VR_BIND_FUNC(
-      LayoutAlignment, Model, model,
-      model->controller.handedness == ControllerModel::kRightHanded ? LEFT
-                                                                    : RIGHT,
+      LayoutAlignment, ControllerBinding, element_binding,
+      model->model()->handedness == ControllerModel::kRightHanded ? LEFT
+                                                                  : RIGHT,
       LinearLayout, layout.get(), set_x_centering));
   layout->AddBinding(
-      VR_BIND_FUNC(LinearLayout::Direction, Model, model,
-                   model->controller.handedness == ControllerModel::kRightHanded
+      VR_BIND_FUNC(LinearLayout::Direction, ControllerBinding, element_binding,
+                   model->model()->handedness == ControllerModel::kRightHanded
                        ? LinearLayout::kRight
                        : LinearLayout::kLeft,
                    LinearLayout, layout.get(), set_direction));
@@ -600,13 +458,16 @@ std::unique_ptr<UiElement> CreateControllerLabel(UiElementName name,
   return layout;
 }
 
-std::unique_ptr<UiElement> CreateControllerElement(Model* model) {
+std::unique_ptr<UiElement> CreateControllerElement(
+    Model* model,
+    ControllerBinding* element_binding) {
   auto controller = Create<Controller>(kController, kPhaseForeground);
-  controller->AddBinding(VR_BIND_FUNC(gfx::Transform, Model, model,
-                                      model->controller.transform, Controller,
+  controller->AddBinding(VR_BIND_FUNC(gfx::Transform, ControllerBinding,
+                                      element_binding,
+                                      model->model()->transform, Controller,
                                       controller.get(), set_local_transform));
-  controller->AddBinding(VR_BIND_FUNC(float, Model, model,
-                                      model->controller.opacity, Controller,
+  controller->AddBinding(VR_BIND_FUNC(float, ControllerBinding, element_binding,
+                                      model->model()->opacity, Controller,
                                       controller.get(), SetOpacity));
 
   auto touchpad_button =
@@ -618,43 +479,65 @@ std::unique_ptr<UiElement> CreateControllerElement(Model* model) {
                                 -(kControllerLength - kControllerWidth) / 2);
   touchpad_button->SetCornerRadii({kControllerWidth / 2, kControllerWidth / 2,
                                    kControllerWidth / 2, kControllerWidth / 2});
-  touchpad_button->AddBinding(
-      VR_BIND_FUNC(SkColor, Model, model,
-                   model->controller.touchpad_button_state ==
+  touchpad_button->AddBinding(std::make_unique<Binding<SkColor>>(
+      VR_BIND_LAMBDA(
+          [](ControllerBinding* m, Model* model) {
+            return m->model()->touchpad_button_state ==
                            ControllerModel::ButtonState::kDown
                        ? model->color_scheme().controller_button_down
-                       : model->color_scheme().controller_button,
-                   Rect, touchpad_button.get(), SetColor));
+                       : model->color_scheme().controller_button;
+          },
+          base::Unretained(element_binding), base::Unretained(model)),
+      VR_BIND_LAMBDA(
+          [](Rect* touchpad_button, const SkColor& value) {
+            touchpad_button->SetColor(value);
+          },
+          base::Unretained(touchpad_button.get()))));
+
   controller->AddChild(std::move(touchpad_button));
 
   auto app_button =
       Create<VectorIcon>(kControllerAppButton, kPhaseForeground, 100);
-  app_button->SetIcon(kDaydreamControllerAppButtonIcon);
+  app_button->SetIcon(GetVrIcon(kVrDaydreamControllerAppButtonIcon));
   app_button->SetColor(model->color_scheme().controller_button);
   app_button->SetSize(kControllerSmallButtonSize, kControllerSmallButtonSize);
   app_button->SetRotate(1, 0, 0, -base::kPiFloat / 2);
   app_button->SetTranslate(0.0f, 0.0f, kControllerAppButtonZ);
-  app_button->AddBinding(VR_BIND_FUNC(
-      SkColor, Model, model,
-      model->controller.app_button_state == ControllerModel::ButtonState::kDown
-          ? model->color_scheme().controller_button_down
-          : model->color_scheme().controller_button,
-      VectorIcon, app_button.get(), SetColor));
+  app_button->AddBinding(std::make_unique<Binding<SkColor>>(
+      VR_BIND_LAMBDA(
+          [](ControllerBinding* m, Model* model) {
+            return m->model()->app_button_state ==
+                           ControllerModel::ButtonState::kDown
+                       ? model->color_scheme().controller_button_down
+                       : model->color_scheme().controller_button;
+          },
+          base::Unretained(element_binding), base::Unretained(model)),
+      VR_BIND_LAMBDA([](VectorIcon* app_button,
+                        const SkColor& value) { app_button->SetColor(value); },
+                     base::Unretained(app_button.get()))));
+
   controller->AddChild(std::move(app_button));
 
   auto home_button =
       Create<VectorIcon>(kControllerHomeButton, kPhaseForeground, 100);
-  home_button->SetIcon(kDaydreamControllerHomeButtonIcon);
+  home_button->SetIcon(GetVrIcon(kVrDaydreamControllerHomeButtonIcon));
   home_button->SetColor(model->color_scheme().controller_button);
   home_button->SetSize(kControllerSmallButtonSize, kControllerSmallButtonSize);
   home_button->SetRotate(1, 0, 0, -base::kPiFloat / 2);
   home_button->SetTranslate(0.0f, 0.0f, kControllerHomeButtonZ);
-  home_button->AddBinding(VR_BIND_FUNC(
-      SkColor, Model, model,
-      model->controller.home_button_state == ControllerModel::ButtonState::kDown
-          ? model->color_scheme().controller_button_down
-          : model->color_scheme().controller_button,
-      VectorIcon, home_button.get(), SetColor));
+  home_button->AddBinding(std::make_unique<Binding<SkColor>>(
+      VR_BIND_LAMBDA(
+          [](ControllerBinding* m, Model* model) {
+            return m->model()->home_button_state ==
+                           ControllerModel::ButtonState::kDown
+                       ? model->color_scheme().controller_button_down
+                       : model->color_scheme().controller_button;
+          },
+          base::Unretained(element_binding), base::Unretained(model)),
+      VR_BIND_LAMBDA([](VectorIcon* home_button,
+                        const SkColor& value) { home_button->SetColor(value); },
+                     base::Unretained(home_button.get()))));
+
   controller->AddChild(std::move(home_button));
 
   auto battery_layout =
@@ -672,12 +555,12 @@ std::unique_ptr<UiElement> CreateControllerElement(Model* model) {
 
     battery_dot->AddBinding(std::make_unique<Binding<SkColor>>(
         VR_BIND_LAMBDA(
-            [](Model* model, int index) {
-              return model->controller.battery_level > index
+            [](ControllerBinding* m, Model* model, int index) {
+              return m->model()->battery_level > index
                          ? model->color_scheme().controller_battery_full
                          : model->color_scheme().controller_battery_empty;
             },
-            base::Unretained(model), i),
+            base::Unretained(element_binding), base::Unretained(model), i),
         VR_BIND_LAMBDA(
             [](Rect* battery_dot, const SkColor& value) {
               battery_dot->SetColor(value);
@@ -689,7 +572,77 @@ std::unique_ptr<UiElement> CreateControllerElement(Model* model) {
 
   controller->AddChild(std::move(battery_layout));
 
+  element_binding->set_view(controller.get());
+
   return controller;
+}
+
+void OnControllerModelAdded(UiScene* scene,
+                            Model* model,
+                            ControllerBinding* element_binding) {
+  auto controller = CreateControllerElement(model, element_binding);
+
+  auto callout_group = Create<UiElement>(kNone, kPhaseNone);
+  callout_group->SetVisible(false);
+  callout_group->SetTransitionedProperties({OPACITY});
+  callout_group->SetTransitionDuration(
+      base::TimeDelta::FromMilliseconds(kControllerLabelTransitionDurationMs));
+  callout_group->AddBinding(
+      VR_BIND_FUNC(bool, ControllerBinding, element_binding,
+                   model->model()->resting_in_viewport, UiElement,
+                   callout_group.get(), SetVisible));
+
+  auto trackpad_button =
+      CreateControllerLabel(kControllerTrackpadLabel, kControllerTrackpadOffset,
+                            l10n_util::GetStringUTF16(IDS_VR_BUTTON_TRACKPAD),
+                            model, element_binding);
+  trackpad_button->AddBinding(
+      VR_BIND_FUNC(bool, Model, model, !model->reposition_window_enabled(),
+                   UiElement, trackpad_button.get(), SetVisible));
+  callout_group->AddChild(std::move(trackpad_button));
+
+  auto reposition_button = CreateControllerLabel(
+      kControllerTrackpadRepositionLabel, kControllerTrackpadOffset,
+      l10n_util::GetStringUTF16(IDS_VR_BUTTON_TRACKPAD_REPOSITION), model,
+      element_binding);
+  reposition_button->AddBinding(
+      VR_BIND_FUNC(bool, Model, model, model->reposition_window_enabled(),
+                   UiElement, reposition_button.get(), SetVisible));
+  callout_group->AddChild(std::move(reposition_button));
+
+  auto exit_button_label = CreateControllerLabel(
+      kControllerExitButtonLabel, kControllerExitButtonOffset,
+      l10n_util::GetStringUTF16(IDS_VR_BUTTON_EXIT), model, element_binding);
+  exit_button_label->AddBinding(
+      VR_BIND_FUNC(bool, Model, model, model->fullscreen_enabled(), UiElement,
+                   exit_button_label.get(), SetVisible));
+  callout_group->AddChild(std::move(exit_button_label));
+
+  auto back_button_label = CreateControllerLabel(
+      kControllerBackButtonLabel, kControllerBackButtonOffset,
+      l10n_util::GetStringUTF16(IDS_VR_BUTTON_BACK), model, element_binding);
+  back_button_label->AddBinding(VR_BIND_FUNC(
+      bool, Model, model,
+      model->omnibox_editing_enabled() || model->voice_search_active(),
+      UiElement, back_button_label.get(), SetVisible));
+  callout_group->AddChild(std::move(back_button_label));
+
+  auto reposition_finish_button = CreateControllerLabel(
+      kControllerRepositionFinishLabel, kControllerBackButtonOffset,
+      l10n_util::GetStringUTF16(IDS_VR_BUTTON_APP_REPOSITION), model,
+      element_binding);
+  reposition_finish_button->AddBinding(
+      VR_BIND_FUNC(bool, Model, model, model->reposition_window_enabled(),
+                   UiElement, reposition_finish_button.get(), SetVisible));
+  callout_group->AddChild(std::move(reposition_finish_button));
+
+  controller->AddChild(std::move(callout_group));
+
+  scene->AddUiElement(kControllerGroup, std::move(controller));
+}
+
+void OnControllerModelRemoved(UiScene* scene, ControllerBinding* binding) {
+  scene->RemoveUiElement(binding->view()->id());
 }
 
 EventHandlers CreateRepositioningHandlers(Model* model, UiScene* scene) {
@@ -753,9 +706,10 @@ std::unique_ptr<UiElement> CreateWebVrIndicator(Model* model,
   icon_element->set_y_anchoring(TOP);
   icon_element->SetSize(kWebVrPermissionIconSize, kWebVrPermissionIconSize);
   if (spec.is_url) {
-    icon_element->AddBinding(VR_BIND_FUNC(
-        const gfx::VectorIcon*, Model, model, model->toolbar_state.vector_icon,
-        VectorIcon, icon_element.get(), SetIcon));
+    icon_element->AddBinding(VR_BIND_FUNC(const gfx::VectorIcon*, Model, model,
+                                          model->location_bar_state.vector_icon,
+                                          VectorIcon, icon_element.get(),
+                                          SetIcon));
   } else {
     icon_element->SetIcon(spec.icon);
   }
@@ -771,7 +725,7 @@ std::unique_ptr<UiElement> CreateWebVrIndicator(Model* model,
             );
     url_text->SetFieldWidth(kWebVrPermissionTextWidth);
     url_text->AddBinding(VR_BIND_FUNC(GURL, Model, model,
-                                      model->toolbar_state.gurl, UrlText,
+                                      model->location_bar_state.gurl, UrlText,
                                       url_text.get(), SetUrl));
     VR_BIND_COLOR(model, url_text.get(),
                   &ColorScheme::webvr_permission_foreground,
@@ -988,87 +942,6 @@ std::unique_ptr<TransientElement> CreateTextToast(
   return parent;
 }
 
-std::unique_ptr<UiElement> CreateTabsView(Model* model,
-                                          UiScene* scene,
-                                          AudioDelegate* audio_delegate,
-                                          UiBrowserInterface* browser,
-                                          bool incognito) {
-  auto tabs_scroll_view = Create<PagedScrollView>(
-      kNone, kPhaseNone,
-      kTabsViewColumnCount * kTabItemWidthDMM +
-          (kTabsViewColumnCount - 1) * kTabsViewGridMarginDMM);
-  tabs_scroll_view->set_margin(kTabsViewGridMarginDMM);
-  tabs_scroll_view->set_scrollable(true);
-  tabs_scroll_view->set_bounds_contain_children(true);
-  tabs_scroll_view->SetTransitionedProperties({SCROLL_OFFSET});
-
-  auto tabs_layout = Create<PagedGridLayout>(
-      kNone, kPhaseNone, kTabsViewRowCount, kTabsViewColumnCount,
-      gfx::SizeF(kTabItemWidthDMM, kTabItemHeightDMM));
-  tabs_layout->set_margin(kTabsViewGridMarginDMM);
-  tabs_layout->set_hit_testable(true);
-  tabs_layout->set_bounds_contain_children(false);
-  tabs_layout->AddBinding(VR_BIND(
-      size_t, PagedScrollView, tabs_scroll_view.get(), model->current_page(),
-      PagedGridLayout, tabs_layout.get(), view->SetCurrentPage(value)));
-
-  TabSetBinding::ModelAddedCallback added_callback = base::BindRepeating(
-      &OnTabModelAdded, base::Unretained(scene), base::Unretained(model),
-      incognito, base::Unretained(tabs_layout.get()),
-      base::Unretained(audio_delegate), base::Unretained(browser));
-  TabSetBinding::ModelRemovedCallback removed_callback =
-      base::BindRepeating(&OnTabModelRemoved, base::Unretained(scene));
-  tabs_layout->AddBinding(std::make_unique<TabSetBinding>(
-      incognito ? &model->incognito_tabs : &model->regular_tabs, added_callback,
-      removed_callback));
-  tabs_scroll_view->AddScrollingChild(std::move(tabs_layout));
-
-  return tabs_scroll_view;
-}
-
-std::unique_ptr<UiElement> CreateTabModeButton(Model* model,
-                                               AudioDelegate* audio_delegate,
-                                               bool select_incognito) {
-  auto button = Create<TextButton>(
-      kNone, kPhaseForeground, kTabsViewModeButtonTextSizeDMM, audio_delegate);
-  button->set_click_handler(base::BindRepeating(
-      [](Model* model, bool select_incognito) {
-        model->incognito_tabs_view_selected = select_incognito;
-      },
-      base::Unretained(model), select_incognito));
-  button->background()->SetSize(kTabsViewModeButtonWidthDMM,
-                                kTabsViewModeButtonHeightDMM);
-  button->background()->set_padding(0.0f, 0.0f);
-  button->background()->set_bounds_contain_children(false);
-  float radius = 0.5f * kTabsViewModeButtonHeightDMM;
-  button->SetCornerRadii(select_incognito
-                             ? CornerRadii({0, radius, 0, radius})
-                             : CornerRadii({radius, 0, radius, 0}));
-  button->set_hover_offset(0);
-  // TODO(https://crbug.com/787654): Uppercasing should be conditional.
-  button->SetText(base::i18n::ToUpper(l10n_util::GetStringUTF16(
-      select_incognito ? IDS_VR_TABS_BUTTON_INCOGNITO
-                       : IDS_VR_TABS_BUTTON_REGULAR)));
-  button->AddBinding(std::make_unique<Binding<std::pair<bool, bool>>>(
-      VR_BIND_LAMBDA(
-          [](Model* model, bool select_incognito) {
-            return std::make_pair(
-                model->incognito,
-                select_incognito == model->incognito_tabs_view_selected);
-          },
-          base::Unretained(model), select_incognito),
-      VR_BIND_LAMBDA(
-          [](Button* view, Model* model, const std::pair<bool, bool>& value) {
-            // Change color if selected.
-            view->SetButtonColors(
-                value.second ? model->color_scheme().tab_mode_button_selected
-                             : model->color_scheme().disc_button_colors);
-          },
-          base::Unretained(button.get()), base::Unretained(model))));
-
-  return button;
-}
-
 }  // namespace
 
 UiSceneCreator::UiSceneCreator(UiBrowserInterface* browser,
@@ -1106,11 +979,9 @@ void UiSceneCreator::CreateScene() {
   CreateToasts();
   CreateVoiceSearchUiGroup();
   CreateContentRepositioningAffordance();
-  CreateExitWarning();
   CreateWebVrSubtree();
   CreateKeyboard();
-  CreateController();
-  CreateTabsViews();
+  CreateControllers();
 }
 
 void UiSceneCreator::Create2dBrowsingHostedUi() {
@@ -1144,12 +1015,13 @@ void UiSceneCreator::Create2dBrowsingSubtreeRoots() {
   repositioner->AddBinding(
       VR_BIND_FUNC(bool, Model, model_, model->reposition_window_enabled(),
                    Repositioner, repositioner.get(), SetEnabled));
-  repositioner->AddBinding(VR_BIND_FUNC(
-      gfx::Vector3dF, Model, model_, model->controller.laser_direction,
-      Repositioner, repositioner.get(), set_laser_direction));
   repositioner->AddBinding(
-      VR_BIND(bool, Model, model_, model->controller.recentered, Repositioner,
-              repositioner.get(), if (value) { view->Reset(); }));
+      VR_BIND_FUNC(gfx::Vector3dF, Model, model_,
+                   model->primary_controller().laser_direction, Repositioner,
+                   repositioner.get(), set_laser_direction));
+  repositioner->AddBinding(VR_BIND(
+      bool, Model, model_, model->primary_controller().recentered, Repositioner,
+      repositioner.get(), if (value) { view->Reset(); }));
   scene_->AddUiElement(k2dBrowsingRoot, std::move(repositioner));
 
   auto hider = Create<UiElement>(k2dBrowsingVisibiltyHider, kPhaseNone);
@@ -1208,44 +1080,6 @@ void UiSceneCreator::CreateWebVrRoot() {
       float, Model, model_, model->floor_height, UiElement, element.get(),
       view->SetTranslate(0, value ? value - kFloorHeight : 0.0, 0.0)));
   scene_->AddUiElement(kRoot, std::move(element));
-}
-
-void UiSceneCreator::CreateExitWarning() {
-  auto scrim = std::make_unique<FullScreenRect>();
-  scrim->SetName(kScreenDimmer);
-  scrim->SetDrawPhase(kPhaseForeground);
-  scrim->SetVisible(false);
-  scrim->SetOpacity(kScreenDimmerOpacity);
-  scrim->SetCenterColor(model_->color_scheme().dimmer_inner);
-  scrim->SetEdgeColor(model_->color_scheme().dimmer_outer);
-  VR_BIND_VISIBILITY(scrim, model->exiting_vr);
-  scene_->AddUiElement(k2dBrowsingViewportAwareRoot, std::move(scrim));
-
-  // Create transient exit warning.
-  auto scaler = std::make_unique<ScaledDepthAdjuster>(kExitWarningDistance);
-  auto exit_warning_text = std::make_unique<Text>(kExitWarningFontHeightDMM);
-  exit_warning_text->SetName(kExitWarningText);
-  exit_warning_text->SetDrawPhase(kPhaseForeground);
-  exit_warning_text->SetText(
-      l10n_util::GetStringUTF16(IDS_VR_BROWSER_UNSUPPORTED_PAGE));
-  exit_warning_text->SetFieldWidth(kExitWarningTextWidthDMM);
-  exit_warning_text->SetVisible(true);
-  VR_BIND_COLOR(model_, exit_warning_text.get(),
-                &ColorScheme::exit_warning_foreground, &Text::SetColor);
-
-  auto exit_warning_bg = std::make_unique<Rect>();
-  exit_warning_bg->SetName(kExitWarningBackground);
-  exit_warning_bg->SetDrawPhase(kPhaseForeground);
-  exit_warning_bg->set_bounds_contain_children(true);
-  exit_warning_bg->set_padding(kExitWarningXPaddingDMM,
-                               kExitWarningYPaddingDMM);
-  exit_warning_bg->set_corner_radius(kExitWarningCornerRadiusDMM);
-  exit_warning_bg->AddChild(std::move(exit_warning_text));
-  VR_BIND_VISIBILITY(exit_warning_bg, model->exiting_vr);
-  VR_BIND_COLOR(model_, exit_warning_bg.get(),
-                &ColorScheme::exit_warning_background, &Rect::SetColor);
-  scaler->AddChild(std::move(exit_warning_bg));
-  scene_->AddUiElement(k2dBrowsingViewportAwareRoot, std::move(scaler));
 }
 
 void UiSceneCreator::CreateSystemIndicators() {
@@ -1379,12 +1213,13 @@ void UiSceneCreator::CreateContentQuad() {
   resizer->AddBinding(VR_BIND_FUNC(bool, Model, model_,
                                    model->reposition_window_enabled(), Resizer,
                                    resizer.get(), SetEnabled));
-  resizer->AddBinding(VR_BIND_FUNC(gfx::PointF, Model, model_,
-                                   model->controller.touchpad_touch_position,
-                                   Resizer, resizer.get(), set_touch_position));
-  resizer->AddBinding(VR_BIND_FUNC(bool, Model, model_,
-                                   model->controller.touching_touchpad, Resizer,
-                                   resizer.get(), SetTouchingTouchpad));
+  resizer->AddBinding(
+      VR_BIND_FUNC(gfx::PointF, Model, model_,
+                   model->primary_controller().touchpad_touch_position, Resizer,
+                   resizer.get(), set_touch_position));
+  resizer->AddBinding(VR_BIND_FUNC(
+      bool, Model, model_, model->primary_controller().touching_touchpad,
+      Resizer, resizer.get(), SetTouchingTouchpad));
 
   auto main_content = std::make_unique<ContentElement>(
       content_input_delegate_,
@@ -1532,9 +1367,129 @@ void UiSceneCreator::CreateContentQuad() {
                                   kBackgroundDistanceMultiplier);
 }
 
+void UiSceneCreator::CreateExternalPromptNotifcationOverlay() {
+#if !defined(OS_ANDROID)
+  auto phase = kPhaseForeground;
+  auto icon = Create<VectorIcon>(kNone, phase, 100);
+  icon->SetType(kTypePromptIcon);
+  icon->SetSize(kPromptIconSize, kPromptIconSize);
+  icon->set_y_anchoring(TOP);
+  VR_BIND_COLOR(model_, icon.get(), &ColorScheme::modal_prompt_icon_foreground,
+                &VectorIcon::SetColor);
+  VectorIcon* vector_icon = icon.get();
+
+  auto text1 = Create<Text>(kNone, phase, kPromptFontSize);
+  text1->SetType(kTypePromptText);
+  text1->SetLayoutMode(kMultiLineFixedWidth);
+  text1->SetAlignment(kTextAlignmentLeft);
+  text1->SetFieldWidth(kPromptTextWidth);
+  VR_BIND_COLOR(model_, text1.get(), &ColorScheme::modal_prompt_foreground,
+                &Text::SetColor);
+  Text* line1_text = text1.get();
+
+  auto text2 = Create<Text>(kNone, phase, kPromptFontSize);
+  text2->SetType(kTypePromptText);
+  text2->SetLayoutMode(kMultiLineFixedWidth);
+  text2->SetAlignment(kTextAlignmentLeft);
+  text2->SetFieldWidth(kPromptTextWidth);
+  text2->SetText(l10n_util::GetStringUTF16(IDS_DESKTOP_PROMPT_DOFF_HEADSET));
+  VR_BIND_COLOR(model_, text2.get(), &ColorScheme::modal_prompt_foreground,
+                &Text::SetColor);
+
+  // This spacer's padding ensures that the top line of text is aligned with the
+  // icon even in the multi-line case.
+  auto text_spacer1 = CreateSpacer(0, 0);
+  text_spacer1->set_bounds_contain_children(true);
+  text_spacer1->set_padding(0, (kPromptIconSize - kPromptFontSize) / 2, 0, 0);
+  text_spacer1->AddChild(std::move(text1));
+
+  // The second spacer gives space between the two strings.
+  auto text_spacer2 = CreateSpacer(0, 0);
+  text_spacer2->set_bounds_contain_children(true);
+  text_spacer2->set_padding(0, kPromptFontSize * 2, 0, 0);
+  text_spacer2->AddChild(std::move(text2));
+
+  // Two lines of text:
+  auto text_layout =
+      Create<LinearLayout>(kNone, kPhaseNone, LinearLayout::kDown);
+  text_layout->AddChild(std::move(text_spacer1));
+  text_layout->AddChild(std::move(text_spacer2));
+
+  // Contents of the message box.
+  auto message_layout =
+      Create<LinearLayout>(kNone, kPhaseNone, LinearLayout::kRight);
+  message_layout->set_margin(kPromptIconTextGap);
+  message_layout->AddChild(std::move(icon));
+  message_layout->AddChild(std::move(text_layout));
+
+  auto prompt_window = Create<Rect>(kNone, phase);
+  prompt_window->SetType(kTypePromptBackground);
+  prompt_window->set_bounds_contain_children(true);
+  prompt_window->set_hit_testable(false);
+  prompt_window->set_padding(kPromptPadding, kPromptPadding);
+  prompt_window->SetTranslate(0, 0, kPromptShadowOffsetDMM);
+  prompt_window->set_corner_radius(kPromptCornerRadius);
+  prompt_window->AddChild(std::move(message_layout));
+  VR_BIND_COLOR(model_, prompt_window.get(),
+                &ColorScheme::modal_prompt_background, &Rect::SetColor);
+
+  auto scaler = Create<ScaledDepthAdjuster>(kNone, kPhaseNone, kPromptDistance);
+  scaler->SetName(kWebXrExternalPromptNotification);
+  scaler->SetType(kTypeScaledDepthAdjuster);
+  scaler->AddChild(std::move(prompt_window));
+  scaler->set_contributes_to_parent_bounds(false);
+  VR_BIND_VISIBILITY(scaler, model->web_vr_enabled() &&
+                                 (model->web_vr.external_prompt_notification !=
+                                  ExternalPromptNotificationType::kPromptNone));
+
+  scaler->AddBinding(std::make_unique<
+                     Binding<std::tuple<ExternalPromptNotificationType, GURL>>>(
+      VR_BIND_LAMBDA(
+          [](Model* m) {
+            return std::tuple<ExternalPromptNotificationType, GURL>(
+                m->web_vr.external_prompt_notification,
+                m->location_bar_state.gurl);
+          },
+          base::Unretained(model_)),
+      VR_BIND_LAMBDA(
+          [](Text* text_element, VectorIcon* icon_element,
+             const std::tuple<ExternalPromptNotificationType, GURL>&
+                 prompt_data) {
+            ExternalPromptNotificationType prompt = std::get<0>(prompt_data);
+            if (prompt == ExternalPromptNotificationType::kPromptNone)
+              return;
+
+            int message_id = 0;
+            const gfx::VectorIcon* icon = nullptr;
+            switch (prompt) {
+              case ExternalPromptNotificationType::kPromptGenericPermission:
+                message_id = IDS_VR_DESKTOP_GENERIC_PERMISSION_PROMPT;
+                icon = &GetVrIcon(kVrOpenInBrowserIcon);
+                break;
+              case ExternalPromptNotificationType::kPromptNone:
+                NOTREACHED();
+            }
+
+            const GURL& gurl = std::get<1>(prompt_data);
+            base::string16 url_text =
+                url_formatter::FormatUrlForSecurityDisplay(
+                    gurl.GetOrigin(),
+                    url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC);
+
+            text_element->SetText(
+                l10n_util::GetStringFUTF16(message_id, url_text));
+            icon_element->SetIcon(icon);
+          },
+          base::Unretained(line1_text), base::Unretained(vector_icon))));
+
+  scene_->AddUiElement(kWebVrViewportAwareRoot, std::move(scaler));
+#endif  // !defined(OS_ANDROID)
+}
+
 void UiSceneCreator::CreateWebVrSubtree() {
   CreateWebVrOverlayElements();
   CreateWebVrTimeoutScreen();
+  CreateExternalPromptNotifcationOverlay();
 
   // This is needed to for accepting permissions in WebVR mode.
   auto hosted_ui_root =
@@ -1550,9 +1505,11 @@ void UiSceneCreator::CreateWebVrSubtree() {
   bg->SetVisible(false);
   bg->SetColor(model_->color_scheme().web_vr_background);
   bg->SetTransitionedProperties({OPACITY});
-  VR_BIND_VISIBILITY(
-      bg, model->web_vr_enabled() && (!model->web_vr.presenting_web_vr() ||
-                                      model->web_vr.showing_hosted_ui));
+  VR_BIND_VISIBILITY(bg, model->web_vr_enabled() &&
+                             (!model->web_vr.IsImmersiveWebXrVisible() ||
+                              model->web_vr.showing_hosted_ui ||
+                              model->web_vr.external_prompt_notification !=
+                                  ExternalPromptNotificationType::kPromptNone));
   auto grid = CreateGrid(model_, kNone);
   grid->set_owner_name_for_test(kWebVrFloor);
   VR_BIND_COLOR(model_, grid.get(), &ColorScheme::web_vr_floor_grid,
@@ -1623,7 +1580,7 @@ void UiSceneCreator::CreateWebVrTimeoutScreen() {
 
   auto timeout_icon =
       Create<VectorIcon>(kWebVrTimeoutMessageIcon, kPhaseForeground, 512);
-  timeout_icon->SetIcon(kSadTabIcon);
+  timeout_icon->SetIcon(GetVrIcon(kVrSadTabIcon));
   timeout_icon->set_hit_testable(true);
   timeout_icon->SetSize(kTimeoutMessageIconWidthDMM,
                         kTimeoutMessageIconHeightDMM);
@@ -1645,7 +1602,7 @@ void UiSceneCreator::CreateWebVrTimeoutScreen() {
       Create<DiscButton>(kWebVrTimeoutMessageButton, kPhaseForeground,
                          base::BindRepeating(&UiBrowserInterface::ExitPresent,
                                              base::Unretained(browser_)),
-                         vector_icons::kCloseRoundedIcon, audio_delegate_);
+                         GetVrIcon(kVrCloseRoundedIcon), audio_delegate_);
   button->SetVisible(false);
   button->SetTranslate(0, -kTimeoutMessageTextWidthDMM, 0);
   button->SetRotate(1, 0, 0, kTimeoutButtonRotationRad);
@@ -1770,7 +1727,7 @@ void UiSceneCreator::CreateVoiceSearchUiGroup() {
   speech_recognition_root->SetTransitionDuration(
       base::TimeDelta::FromMilliseconds(
           kSpeechRecognitionOpacityAnimationDurationMs));
-  VR_BIND_VISIBILITY(speech_recognition_root, model->voice_search_enabled());
+  VR_BIND_VISIBILITY(speech_recognition_root, model->voice_search_active());
 
   auto inner_circle = std::make_unique<Rect>();
   inner_circle->SetName(kSpeechRecognitionCircle);
@@ -1782,7 +1739,7 @@ void UiSceneCreator::CreateVoiceSearchUiGroup() {
                 &Rect::SetColor);
 
   auto microphone_icon = std::make_unique<VectorIcon>(512);
-  microphone_icon->SetIcon(vector_icons::kMicIcon);
+  microphone_icon->SetIcon(GetVrIcon(kVrMicIcon));
   microphone_icon->SetName(kSpeechRecognitionMicrophoneIcon);
   microphone_icon->SetDrawPhase(kPhaseForeground);
   microphone_icon->SetSize(kCloseButtonDiameter, kCloseButtonDiameter);
@@ -1849,7 +1806,7 @@ void UiSceneCreator::CreateVoiceSearchUiGroup() {
       kSpeechRecognitionListeningCloseButton, kPhaseForeground,
       base::BindRepeating(&UiBrowserInterface::SetVoiceSearchActive,
                           base::Unretained(browser_), false),
-      vector_icons::kCloseRoundedIcon, audio_delegate_);
+      GetVrIcon(kVrCloseRoundedIcon), audio_delegate_);
   close_button->SetSize(kVoiceSearchCloseButtonDiameter,
                         kVoiceSearchCloseButtonDiameter);
   close_button->set_hover_offset(kButtonZOffsetHoverDMM * kContentDistance);
@@ -1905,7 +1862,7 @@ void UiSceneCreator::CreateContentRepositioningAffordance() {
   scene_->AddUiElement(k2dBrowsingRepositioner, std::move(hit_plane));
 }
 
-void UiSceneCreator::CreateController() {
+void UiSceneCreator::CreateControllers() {
   auto root = std::make_unique<UiElement>();
   root->SetName(kControllerRoot);
   VR_BIND_VISIBILITY(root, model->browsing_enabled() ||
@@ -1913,54 +1870,20 @@ void UiSceneCreator::CreateController() {
                                model->hosted_platform_ui.hosted_ui_enabled);
   scene_->AddUiElement(kRoot, std::move(root));
 
-  auto group = std::make_unique<UiElement>();
+  auto group = Create<UiElement>(kNone, kPhaseNone);
   group->SetName(kControllerGroup);
+
+  // Set up the vector binding to manage controllers dynamically.
+  ControllerSetBinding::ModelAddedCallback added_callback =
+      base::BindRepeating(&OnControllerModelAdded, base::Unretained(scene_),
+                          base::Unretained(model_));
+  ControllerSetBinding::ModelRemovedCallback removed_callback =
+      base::BindRepeating(&OnControllerModelRemoved, base::Unretained(scene_));
+
+  group->AddBinding(std::make_unique<ControllerSetBinding>(
+      &model_->controllers, added_callback, removed_callback));
+
   scene_->AddUiElement(kControllerRoot, std::move(group));
-
-  auto controller = CreateControllerElement(model_);
-
-  auto callout_group = Create<UiElement>(kNone, kPhaseNone);
-  callout_group->SetVisible(false);
-  callout_group->SetTransitionedProperties({OPACITY});
-  callout_group->SetTransitionDuration(
-      base::TimeDelta::FromMilliseconds(kControllerLabelTransitionDurationMs));
-  VR_BIND_VISIBILITY(callout_group, model->controller.resting_in_viewport);
-
-  auto trackpad_button = CreateControllerLabel(
-      kControllerTrackpadLabel, kControllerTrackpadOffset,
-      l10n_util::GetStringUTF16(IDS_VR_BUTTON_TRACKPAD), model_);
-  VR_BIND_VISIBILITY(trackpad_button, !model->reposition_window_enabled());
-  callout_group->AddChild(std::move(trackpad_button));
-
-  auto reposition_button = CreateControllerLabel(
-      kControllerTrackpadRepositionLabel, kControllerTrackpadOffset,
-      l10n_util::GetStringUTF16(IDS_VR_BUTTON_TRACKPAD_REPOSITION), model_);
-  VR_BIND_VISIBILITY(reposition_button, model->reposition_window_enabled());
-  callout_group->AddChild(std::move(reposition_button));
-
-  auto exit_button_label = CreateControllerLabel(
-      kControllerExitButtonLabel, kControllerExitButtonOffset,
-      l10n_util::GetStringUTF16(IDS_VR_BUTTON_EXIT), model_);
-  VR_BIND_VISIBILITY(exit_button_label, model->fullscreen_enabled());
-  callout_group->AddChild(std::move(exit_button_label));
-
-  auto back_button_label = CreateControllerLabel(
-      kControllerBackButtonLabel, kControllerBackButtonOffset,
-      l10n_util::GetStringUTF16(IDS_VR_BUTTON_BACK), model_);
-  VR_BIND_VISIBILITY(back_button_label, model->omnibox_editing_enabled() ||
-                                            model->voice_search_enabled());
-  callout_group->AddChild(std::move(back_button_label));
-
-  auto reposition_finish_button = CreateControllerLabel(
-      kControllerRepositionFinishLabel, kControllerBackButtonOffset,
-      l10n_util::GetStringUTF16(IDS_VR_BUTTON_APP_REPOSITION), model_);
-  VR_BIND_VISIBILITY(reposition_finish_button,
-                     model->reposition_window_enabled());
-  callout_group->AddChild(std::move(reposition_finish_button));
-
-  controller->AddChild(std::move(callout_group));
-
-  scene_->AddUiElement(kControllerGroup, std::move(controller));
 
   auto reticle_laser_group = Create<UiElement>(kReticleLaserGroup, kPhaseNone);
   reticle_laser_group->SetTransitionedProperties({OPACITY});
@@ -1971,8 +1894,8 @@ void UiSceneCreator::CreateController() {
   auto laser = std::make_unique<Laser>(model_);
   laser->SetDrawPhase(kPhaseForeground);
   laser->AddBinding(VR_BIND_FUNC(float, Model, model_,
-                                 model->controller.opacity, Laser, laser.get(),
-                                 SetOpacity));
+                                 model->primary_controller().opacity, Laser,
+                                 laser.get(), SetOpacity));
 
   auto reticle = std::make_unique<Reticle>(scene_, model_);
   reticle->SetDrawPhase(kPhaseForeground);
@@ -1996,7 +1919,7 @@ void UiSceneCreator::CreateController() {
   auto reposition_icon = std::make_unique<VectorIcon>(128);
   reposition_icon->set_owner_name_for_test(kRepositionCursor);
   reposition_icon->SetType(kTypeCursorForeground);
-  reposition_icon->SetIcon(kRepositionIcon);
+  reposition_icon->SetIcon(GetVrIcon(kVrRepositionIcon));
   reposition_icon->SetDrawPhase(kPhaseForeground);
   reposition_icon->SetSize(kRepositionCursorSize, kRepositionCursorSize);
   VR_BIND_COLOR(model_, reposition_icon.get(), &ColorScheme::cursor_foreground,
@@ -2025,8 +1948,8 @@ void UiSceneCreator::CreateKeyboard() {
       VR_BIND_LAMBDA(
           [](Model* m) {
             return std::pair<bool, gfx::PointF>(
-                m->controller.touching_touchpad,
-                m->controller.touchpad_touch_position);
+                m->primary_controller().touching_touchpad,
+                m->primary_controller().touchpad_touch_position);
           },
           base::Unretained(model_)),
       VR_BIND_LAMBDA(
@@ -2090,7 +2013,7 @@ void UiSceneCreator::CreateUrlBar() {
       kUrlBarBackButton, kPhaseForeground,
       base::BindRepeating(&UiBrowserInterface::NavigateBack,
                           base::Unretained(browser_)),
-      vector_icons::kBackArrowIcon, audio_delegate_);
+      GetVrIcon(kVrBackArrowIcon), audio_delegate_);
   back_button->SetSize(kUrlBarEndButtonWidthDMM, kUrlBarHeightDMM);
   back_button->SetCornerRadii(
       {kUrlBarHeightDMM / 2, 0, kUrlBarHeightDMM / 2, 0});
@@ -2133,14 +2056,16 @@ void UiSceneCreator::CreateUrlBar() {
   // This layout contains the page info icon and URL.
   auto origin_layout = Create<LinearLayout>(kUrlBarOriginLayout, kPhaseNone,
                                             LinearLayout::kRight);
-  VR_BIND_VISIBILITY(origin_layout, model->toolbar_state.should_display_url);
+  VR_BIND_VISIBILITY(origin_layout,
+                     model->location_bar_state.should_display_url);
 
   scene_->AddUiElement(kUrlBarOriginRegion, std::move(origin_layout));
 
   // This layout contains hint-text items, shown when there's no origin.
   auto hint_layout =
       Create<LinearLayout>(kUrlBarHintLayout, kPhaseNone, LinearLayout::kRight);
-  VR_BIND_VISIBILITY(hint_layout, !model->toolbar_state.should_display_url);
+  VR_BIND_VISIBILITY(hint_layout,
+                     !model->location_bar_state.should_display_url);
   scene_->AddUiElement(kUrlBarOriginRegion, std::move(hint_layout));
 
   auto security_button_region =
@@ -2153,7 +2078,7 @@ void UiSceneCreator::CreateUrlBar() {
       kUrlBarSecurityButton, kPhaseForeground,
       base::BindRepeating(&UiBrowserInterface::ShowPageInfo,
                           base::Unretained(browser_)),
-      toolbar::kHttpsInvalidIcon, audio_delegate_);
+      GetVrIcon(kVrNoneIcon), audio_delegate_);
   security_button->SetIconScaleFactor(kUrlBarButtonIconScaleFactor);
   security_button->SetSize(kUrlBarButtonSizeDMM, kUrlBarButtonSizeDMM);
   security_button->set_corner_radius(kUrlBarItemCornerRadiusDMM);
@@ -2161,7 +2086,7 @@ void UiSceneCreator::CreateUrlBar() {
   VR_BIND_BUTTON_COLORS(model_, security_button.get(),
                         &ColorScheme::url_bar_button, &Button::SetButtonColors);
   security_button->AddBinding(std::make_unique<Binding<const gfx::VectorIcon*>>(
-      VR_BIND_LAMBDA([](Model* m) { return m->toolbar_state.vector_icon; },
+      VR_BIND_LAMBDA([](Model* m) { return m->location_bar_state.vector_icon; },
                      base::Unretained(model_)),
       VR_BIND_LAMBDA(
           [](VectorIconButton* e, const gfx::VectorIcon* const& icon) {
@@ -2174,7 +2099,7 @@ void UiSceneCreator::CreateUrlBar() {
       VR_BIND_LAMBDA(
           [](Model* m) {
             ButtonColors colors = m->color_scheme().url_bar_button;
-            if (m->toolbar_state.security_level ==
+            if (m->location_bar_state.security_level ==
                 security_state::SecurityLevel::DANGEROUS) {
               colors.foreground = m->color_scheme().url_bar_dangerous_icon;
             }
@@ -2195,7 +2120,7 @@ void UiSceneCreator::CreateUrlBar() {
                           UiUnsupportedMode::kUnhandledCodePoint));
   url_text->SetFieldWidth(kUrlBarUrlWidthDMM);
   url_text->AddBinding(VR_BIND_FUNC(GURL, Model, model_,
-                                    model->toolbar_state.gurl, UrlText,
+                                    model->location_bar_state.gurl, UrlText,
                                     url_text.get(), SetUrl));
   VR_BIND_COLOR(model_, url_text.get(), &ColorScheme::url_text_emphasized,
                 &UrlText::SetEmphasizedColor);
@@ -2231,54 +2156,12 @@ void UiSceneCreator::CreateUrlBar() {
                 &Rect::SetColor);
   scene_->AddUiElement(kUrlBarLayout, std::move(separator));
 
-  if (model_->create_tabs_view) {
-    auto tabs_button = Create<Button>(
-        kNone, kPhaseForeground,
-        base::BindRepeating(
-            [](Model* model) { model->push_mode(kModeTabsView); },
-            base::Unretained(model_)),
-        audio_delegate_);
-    tabs_button->SetSize(kUrlBarEndButtonWidthDMM, kUrlBarHeightDMM);
-    tabs_button->set_hover_offset(0);
-    VR_BIND_BUTTON_COLORS(model_, tabs_button.get(),
-                          &ColorScheme::url_bar_button,
-                          &Button::SetButtonColors);
-
-    auto tab_count_text =
-        Create<Text>(kNone, kPhaseForeground, kUrlBarFontHeightDMM);
-    tab_count_text->SetLayoutMode(TextLayoutMode::kSingleLine);
-    tab_count_text->AddBinding(std::make_unique<Binding<size_t>>(
-        VR_BIND_LAMBDA(
-            [](Model* model) {
-              return !model->incognito ? model->regular_tabs.size()
-                                       : model->incognito_tabs.size();
-            },
-            base::Unretained(model_)),
-        VR_BIND_LAMBDA(
-            [](Text* tab_count_text, const size_t& tab_count) {
-              tab_count_text->SetText(base::NumberToString16(tab_count));
-            },
-            base::Unretained(tab_count_text.get()))));
-    VR_BIND_COLOR(model_, tab_count_text.get(), &ColorScheme::url_bar_text,
-                  &Text::SetColor);
-    tabs_button->AddChild(std::move(tab_count_text));
-
-    scene_->AddUiElement(kUrlBarLayout, std::move(tabs_button));
-
-    separator = Create<Rect>(kUrlBarTabSeparator, kPhaseForeground);
-    separator->set_hit_testable(true);
-    separator->SetSize(kUrlBarSeparatorWidthDMM, kUrlBarHeightDMM);
-    VR_BIND_COLOR(model_, separator.get(), &ColorScheme::url_bar_separator,
-                  &Rect::SetColor);
-    scene_->AddUiElement(kUrlBarLayout, std::move(separator));
-  }
-
   auto overflow_button = Create<VectorIconButton>(
       kUrlBarOverflowButton, kPhaseForeground,
       base::BindRepeating(
           [](Model* model) { model->overflow_menu_enabled = true; },
           base::Unretained(model_)),
-      kMoreVertIcon, audio_delegate_);
+      GetVrIcon(kVrMoreVertIcon), audio_delegate_);
   overflow_button->SetSize(kUrlBarEndButtonWidthDMM, kUrlBarHeightDMM);
   overflow_button->SetCornerRadii(
       {0, kUrlBarHeightDMM / 2, 0, kUrlBarHeightDMM / 2});
@@ -2340,8 +2223,8 @@ void UiSceneCreator::CreateOverflowMenu() {
   std::vector<
       std::tuple<UiElementName, LayoutAlignment, const gfx::VectorIcon&>>
       menu_buttons = {
-          {kOverflowMenuForwardButton, LEFT, vector_icons::kForwardArrowIcon},
-          {kOverflowMenuReloadButton, RIGHT, vector_icons::kReloadIcon},
+          {kOverflowMenuForwardButton, LEFT, GetVrIcon(kVrForwardArrowIcon)},
+          {kOverflowMenuReloadButton, RIGHT, GetVrIcon(kVrReloadIcon)},
       };
   for (auto& item : menu_buttons) {
     auto button = Create<VectorIconButton>(std::get<0>(item), kPhaseForeground,
@@ -2416,8 +2299,7 @@ void UiSceneCreator::CreateOverflowMenu() {
        base::BindRepeating([](UiBrowserInterface* browser) {
          browser->CloseAllIncognitoTabs();
        }),
-       base::BindRepeating(
-           [](Model* m) { return !m->incognito_tabs.empty(); })},
+       base::BindRepeating([](Model* m) { return m->incognito_tabs_open; })},
       {kOverflowMenuPreferencesItem, IDS_VR_MENU_PREFERENCES,
        base::BindRepeating(
            [](UiBrowserInterface* browser) { browser->OpenSettings(); }),
@@ -2541,12 +2423,7 @@ void UiSceneCreator::CreateOmnibox() {
   // TODO(crbug.com/834308): Refactor this element to be resized by a
   // fixed-width layout, rather than adjusting based on other elements.
   omnibox_text_field->AddBinding(std::make_unique<Binding<bool>>(
-      VR_BIND_LAMBDA(
-          [](Model* m) {
-            return m->speech.has_or_can_request_audio_permission &&
-                   !m->incognito && !m->active_capturing.audio_capture_enabled;
-          },
-          base::Unretained(model_)),
+      VR_BIND_LAMBDA(&Model::voice_search_available, base::Unretained(model_)),
       VR_BIND_LAMBDA(
           [](TextInput* e, const bool& mic_button_visible) {
             float width = kOmniboxWidthDMM - 2 * kOmniboxTextMarginDMM;
@@ -2646,24 +2523,18 @@ void UiSceneCreator::CreateOmnibox() {
       base::BindRepeating(
           [](UiBrowserInterface* b, Ui* ui) { b->SetVoiceSearchActive(true); },
           base::Unretained(browser_), base::Unretained(ui_)),
-      vector_icons::kMicIcon, audio_delegate_);
+      GetVrIcon(kVrMicIcon), audio_delegate_);
   mic_button->SetSize(kUrlBarButtonSizeDMM, kUrlBarButtonSizeDMM);
   mic_button->SetIconScaleFactor(kUrlBarButtonIconScaleFactor);
   mic_button->set_hover_offset(kUrlBarButtonHoverOffsetDMM);
   mic_button->set_corner_radius(kUrlBarItemCornerRadiusDMM);
-  VR_BIND_VISIBILITY(mic_button,
-                     model->speech.has_or_can_request_audio_permission &&
-                         !model->incognito &&
-                         !model->active_capturing.audio_capture_enabled);
+  VR_BIND_VISIBILITY(mic_button, model->voice_search_available());
   VR_BIND_BUTTON_COLORS(model_, mic_button.get(), &ColorScheme::url_bar_button,
                         &Button::SetButtonColors);
 
   auto mic_button_spacer =
       CreateSpacer(kOmniboxMicIconRightMarginDMM, kOmniboxHeightDMM);
-  VR_BIND_VISIBILITY(mic_button_spacer,
-                     model->speech.has_or_can_request_audio_permission &&
-                         !model->incognito &&
-                         !model->active_capturing.audio_capture_enabled);
+  VR_BIND_VISIBILITY(mic_button_spacer, model->voice_search_available());
 
   auto text_field_layout = Create<LinearLayout>(
       kOmniboxTextFieldLayout, kPhaseNone, LinearLayout::kRight);
@@ -2696,7 +2567,7 @@ void UiSceneCreator::CreateOmnibox() {
       base::BindRepeating(
           [](Model* model) { model->pop_mode(kModeEditingOmnibox); },
           base::Unretained(model_)),
-      vector_icons::kBackArrowIcon, audio_delegate_);
+      GetVrIcon(kVrBackArrowIcon), audio_delegate_);
   close_button->SetSize(kOmniboxCloseButtonDiameterDMM,
                         kOmniboxCloseButtonDiameterDMM);
   close_button->SetTranslate(0, kOmniboxCloseButtonVerticalOffsetDMM, 0);
@@ -2750,7 +2621,7 @@ void UiSceneCreator::CreateOmnibox() {
           [](Model* m) {
             bool editing_omnibox = m->has_mode_in_stack(kModeEditingOmnibox);
             base::string16 url_text =
-                FormatUrlForVr(m->toolbar_state.gurl, nullptr);
+                FormatUrlForVr(m->location_bar_state.gurl, nullptr);
             return std::make_pair(editing_omnibox, url_text);
           },
           base::Unretained(model_)),
@@ -2776,7 +2647,7 @@ void UiSceneCreator::CreateCloseButton() {
       base::Unretained(model_), base::Unretained(browser_));
   std::unique_ptr<DiscButton> element =
       Create<DiscButton>(kCloseButton, kPhaseForeground, click_handler,
-                         vector_icons::kCloseRoundedIcon, audio_delegate_);
+                         GetVrIcon(kVrCloseRoundedIcon), audio_delegate_);
   element->set_contributes_to_parent_bounds(false);
   element->SetSize(kCloseButtonDiameter, kCloseButtonDiameter);
   element->set_hover_offset(kButtonZOffsetHoverDMM * kCloseButtonDistance);
@@ -2837,7 +2708,7 @@ void UiSceneCreator::CreatePrompts() {
             switch (type) {
               case kModalPromptTypeExitVRForVoiceSearchRecordAudioOsPermission:
                 message_id = IDS_VR_SHELL_AUDIO_PERMISSION_PROMPT_DESCRIPTION;
-                icon = &vector_icons::kMicIcon;
+                icon = &GetVrIcon(kVrMicIcon);
                 primary_button_text_id =
                     IDS_VR_SHELL_AUDIO_PERMISSION_PROMPT_CONTINUE_BUTTON;
                 secondary_button_text_id =
@@ -2845,7 +2716,7 @@ void UiSceneCreator::CreatePrompts() {
                 break;
               case kModalPromptTypeUpdateKeyboard:
                 message_id = IDS_VR_UPDATE_KEYBOARD_PROMPT;
-                icon = &vector_icons::kInfoOutlineIcon;
+                icon = &GetVrIcon(kVrInfoOutlineIcon);
                 primary_button_text_id =
                     IDS_VR_SHELL_AUDIO_PERMISSION_PROMPT_CONTINUE_BUTTON;
                 secondary_button_text_id =
@@ -2853,7 +2724,7 @@ void UiSceneCreator::CreatePrompts() {
                 break;
               case kModalPromptTypeExitVRForSiteInfo:
                 message_id = IDS_VR_SHELL_EXIT_PROMPT_DESCRIPTION_SITE_INFO;
-                icon = &vector_icons::kInfoOutlineIcon;
+                icon = &GetVrIcon(kVrInfoOutlineIcon);
                 primary_button_text_id =
                     IDS_VR_SHELL_EXIT_PROMPT_EXIT_VR_BUTTON;
                 secondary_button_text_id = IDS_VR_BUTTON_BACK;
@@ -2862,7 +2733,7 @@ void UiSceneCreator::CreatePrompts() {
               case kModalPromptTypeExitVRForConnectionSecurityInfo:
               case kModalPromptTypeGenericUnsupportedFeature:
                 message_id = IDS_VR_SHELL_EXIT_PROMPT_DESCRIPTION;
-                icon = &vector_icons::kInfoOutlineIcon;
+                icon = &GetVrIcon(kVrInfoOutlineIcon);
                 primary_button_text_id =
                     IDS_VR_SHELL_EXIT_PROMPT_EXIT_VR_BUTTON;
                 secondary_button_text_id = IDS_VR_BUTTON_BACK;
@@ -2898,7 +2769,6 @@ void UiSceneCreator::CreatePrompts() {
             event_handlers.button_up =
                 CreatePromptCallback(reason, CHOICE_NONE, model, browser);
             backplane->set_event_handlers(event_handlers);
-
           },
           base::Unretained(prompt.get()), base::Unretained(model_),
           base::Unretained(browser_))));
@@ -2914,7 +2784,7 @@ void UiSceneCreator::CreateWebVrOverlayElements() {
 
   IndicatorSpec app_button_spec = {kNone,
                                    kWebVrExclusiveScreenToast,
-                                   kRemoveCircleOutlineIcon,
+                                   GetVrIcon(kVrRemoveCircleOutlineIcon),
                                    IDS_PRESS_APP_TO_EXIT,
                                    0,
                                    0,
@@ -2933,7 +2803,8 @@ void UiSceneCreator::CreateWebVrOverlayElements() {
       VR_BIND_LAMBDA(
           [](Model* model) {
             return std::tuple<bool, bool, bool>(
-                model->web_vr_enabled() && model->web_vr.presenting_web_vr() &&
+                model->web_vr_enabled() &&
+                    model->web_vr.IsImmersiveWebXrVisible() &&
                     model->web_vr.has_received_permissions,
                 model->menu_button_long_pressed,
                 model->web_vr.showing_hosted_ui);
@@ -3069,66 +2940,6 @@ void UiSceneCreator::CreateToasts() {
           base::Unretained(text_element))));
 
   scene_->AddUiElement(k2dBrowsingContentGroup, std::move(platform_toast));
-}
-
-void UiSceneCreator::CreateTabsViews() {
-  if (!model_->create_tabs_view) {
-    return;
-  }
-
-  auto scaler =
-      Create<ScaledDepthAdjuster>(kNone, kPhaseNone, kTabsViewDistance);
-
-  auto tabs_view_root =
-      Create<LinearLayout>(kNone, kPhaseNone, LinearLayout::kDown);
-  tabs_view_root->SetTranslate(0, kTabsViewVerticalOffsetDMM, 0);
-  tabs_view_root->set_bounds_contain_children(true);
-  tabs_view_root->set_margin(kTabsViewRootMarginDMM);
-  tabs_view_root->SetVisible(false);
-  VR_BIND_VISIBILITY(tabs_view_root,
-                     model->get_last_opaque_mode() == kModeTabsView);
-
-  auto regular_tabs_view =
-      CreateTabsView(model_, scene_, audio_delegate_, browser_, false);
-  VR_BIND_VISIBILITY(regular_tabs_view, !model->incognito_tabs_view_selected);
-  tabs_view_root->AddChild(std::move(regular_tabs_view));
-
-  auto incognito_tabs_view =
-      CreateTabsView(model_, scene_, audio_delegate_, browser_, true);
-  VR_BIND_VISIBILITY(incognito_tabs_view, model->incognito_tabs_view_selected);
-  tabs_view_root->AddChild(std::move(incognito_tabs_view));
-
-  auto mode_switcher_layout =
-      Create<LinearLayout>(kNone, kPhaseNone, LinearLayout::kRight);
-  mode_switcher_layout->set_bounds_contain_children(true);
-  mode_switcher_layout->AddChild(
-      CreateTabModeButton(model_, audio_delegate_, false));
-  mode_switcher_layout->AddChild(
-      CreateTabModeButton(model_, audio_delegate_, true));
-
-  tabs_view_root->AddChild(std::move(mode_switcher_layout));
-
-  auto button_scaler = Create<ScaledDepthAdjuster>(
-      kNone, kPhaseNone, kTabsViewCloseButtonDepthOffset);
-
-  auto close_button = Create<DiscButton>(
-      kNone, kPhaseForeground,
-      base::BindRepeating([](Model* model) { model->pop_mode(kModeTabsView); },
-                          base::Unretained(model_)),
-      vector_icons::kBackArrowIcon, audio_delegate_);
-  close_button->SetSize(kButtonDiameterDMM, kButtonDiameterDMM);
-  close_button->SetTranslate(0, kTabsViewCloseButtonVerticalOffsetDMM, 0);
-  close_button->SetRotate(1, 0, 0, atan(kTabsViewCloseButtonVerticalOffsetDMM));
-  close_button->set_hover_offset(kButtonZOffsetHoverDMM);
-  VR_BIND_BUTTON_COLORS(model_, close_button.get(),
-                        &ColorScheme::disc_button_colors,
-                        &DiscButton::SetButtonColors);
-  button_scaler->AddChild(std::move(close_button));
-  tabs_view_root->AddChild(std::move(button_scaler));
-
-  scaler->AddChild(std::move(tabs_view_root));
-
-  scene_->AddUiElement(k2dBrowsingRepositioner, std::move(scaler));
 }
 
 }  // namespace vr

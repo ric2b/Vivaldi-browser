@@ -308,7 +308,7 @@ CreditCardEditorViewController::CreateCustomFieldView(
     constexpr int kInputFieldHeight = 28;
     EditorField tmp_month{
         autofill::CREDIT_CARD_EXP_MONTH,
-        l10n_util::GetStringUTF16(IDS_AUTOFILL_FIELD_LABEL_EXPIRATION_MONTH),
+        l10n_util::GetStringUTF16(IDS_SETTINGS_CREDIT_CARD_EXPIRATION_MONTH),
         EditorField::LengthHint::HINT_SHORT,
         /*required=*/true, EditorField::ControlType::COMBOBOX};
     std::unique_ptr<ValidatingCombobox> month_combobox =
@@ -320,7 +320,7 @@ CreditCardEditorViewController::CreateCustomFieldView(
 
     EditorField tmp_year{
         autofill::CREDIT_CARD_EXP_4_DIGIT_YEAR,
-        l10n_util::GetStringUTF16(IDS_AUTOFILL_FIELD_LABEL_EXPIRATION_YEAR),
+        l10n_util::GetStringUTF16(IDS_SETTINGS_CREDIT_CARD_EXPIRATION_YEAR),
         EditorField::LengthHint::HINT_SHORT,
         /*required=*/true, EditorField::ControlType::COMBOBOX};
     std::unique_ptr<ValidatingCombobox> year_combobox =
@@ -367,17 +367,17 @@ std::vector<EditorField> CreditCardEditorViewController::GetFieldDefinitions() {
   bool is_server_card = IsEditingServerCard();
   return std::vector<EditorField>{
       {autofill::CREDIT_CARD_NUMBER,
-       l10n_util::GetStringUTF16(IDS_AUTOFILL_FIELD_LABEL_CREDIT_CARD_NUMBER),
+       l10n_util::GetStringUTF16(IDS_SETTINGS_CREDIT_CARD_NUMBER),
        EditorField::LengthHint::HINT_SHORT, /*required=*/true,
        is_server_card ? EditorField::ControlType::READONLY_LABEL
                       : EditorField::ControlType::TEXTFIELD_NUMBER},
       {autofill::CREDIT_CARD_NAME_FULL,
-       l10n_util::GetStringUTF16(IDS_AUTOFILL_FIELD_LABEL_NAME_ON_CARD),
+       l10n_util::GetStringUTF16(IDS_SETTINGS_NAME_ON_CREDIT_CARD),
        EditorField::LengthHint::HINT_SHORT, /*required=*/true,
        is_server_card ? EditorField::ControlType::READONLY_LABEL
                       : EditorField::ControlType::TEXTFIELD},
       {autofill::CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR,
-       l10n_util::GetStringUTF16(IDS_AUTOFILL_FIELD_LABEL_EXPIRATION_DATE),
+       l10n_util::GetStringUTF16(IDS_SETTINGS_CREDIT_CARD_EXPIRATION_DATE),
        EditorField::LengthHint::HINT_SHORT, /*required=*/true,
        EditorField::ControlType::CUSTOMFIELD},
       {kBillingAddressType,
@@ -585,26 +585,12 @@ void CreditCardEditorViewController::FillContentView(
 bool CreditCardEditorViewController::IsValidCreditCardNumber(
     const base::string16& card_number,
     base::string16* error_message) {
-  if (!autofill::IsValidCreditCardNumberForBasicCardNetworks(
-          card_number, supported_card_networks_, error_message)) {
-    return false;
-  }
-  // Now check if another credit card has already been created with this number.
-  // TODO(crbug.com/725604): the UI should offer to load / update the existing
-  // credit card info.
-  autofill::CreditCard* existing_card =
-      state()->GetPersonalDataManager()->GetCreditCardByNumber(
-          base::UTF16ToASCII(card_number));
-  // If a card exists, it could be the one currently edited.
-  if (!existing_card || (credit_card_to_edit_ && credit_card_to_edit_->guid() ==
-                                                     existing_card->guid())) {
-    return true;
-  }
-  if (error_message) {
-    *error_message = l10n_util::GetStringUTF16(
-        IDS_PAYMENTS_VALIDATION_ALREADY_USED_CREDIT_CARD_NUMBER);
-  }
-  return false;
+  return autofill::IsValidCreditCardNumberForBasicCardNetworks(
+      card_number, supported_card_networks_, error_message);
+  // TODO(crbug.com/725604): The UI should offer to load / update the existing
+  // credit card info if another local credit card has already been created with
+  // this number. (Does not apply to server cards, which can be accessed only in
+  // tokenized form through Google Pay.)
 }
 
 base::string16 CreditCardEditorViewController::GetSheetTitle() {

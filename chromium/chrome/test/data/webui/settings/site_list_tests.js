@@ -75,6 +75,12 @@ let prefsIncognito;
 let prefsChromeExtension;
 
 /**
+ * An example Javascript pref for android_sms notification setting.
+ * @type {SiteSettingsPref}
+ */
+let prefsAndroidSms;
+
+/**
  * Creates all the test |SiteSettingsPref|s that are needed for the tests in
  * this file. They are populated after test setup in order to access the
  * |settings| constants required.
@@ -241,6 +247,16 @@ function populateTestExceptions() {
   ]);
 
   prefsGeolocationEmpty = test_util.createSiteSettingsPrefs([], []);
+
+  prefsAndroidSms = test_util.createSiteSettingsPrefs(
+      [], [test_util.createContentSettingTypeToValuePair(
+              settings.ContentSettingsTypes.NOTIFICATIONS, [
+                // android sms setting.
+                test_util.createRawSiteException(
+                    multidevice.TEST_ANDROID_SMS_ORIGIN),
+                // Non android sms setting that should be handled as usual.
+                test_util.createRawSiteException('http://bar.com')
+              ])]);
 }
 
 suite('SiteList', function() {
@@ -256,6 +272,11 @@ suite('SiteList', function() {
    */
   let browserProxy = null;
 
+  /**
+   * Mock MultiDeviceBrowserProxy to use during test.
+   * @type {TestMultideviceBrowserProxy}
+   */
+  let multiDeviceBrowserProxy = null;
 
   suiteSetup(function() {
     CrSettingsPrefs.setInitialized();
@@ -273,7 +294,13 @@ suite('SiteList', function() {
     settings.SiteSettingsPrefsBrowserProxyImpl.instance_ = browserProxy;
     PolymerTest.clearBody();
     testElement = document.createElement('site-list');
+    testElement.searchFilter = '';
     document.body.appendChild(testElement);
+
+    if (cr.isChromeOS) {
+      multiDeviceBrowserProxy = new multidevice.TestMultideviceBrowserProxy();
+      settings.MultiDeviceBrowserProxyImpl.instance_ = multiDeviceBrowserProxy;
+    }
   });
 
   teardown(function() {
@@ -281,6 +308,13 @@ suite('SiteList', function() {
     // The code being tested changes the Route. Reset so that state is not
     // leaked across tests.
     settings.resetRouteForTesting();
+
+    if (cr.isChromeOS) {
+      // Reset multidevice enabled flag.
+      loadTimeData.overrideValues({
+        multideviceAllowedByPolicy: false
+      });
+    }
   });
 
   /**
@@ -299,8 +333,9 @@ suite('SiteList', function() {
   /** Closes the action menu. */
   function closeActionMenu() {
     const menu = testElement.$$('cr-action-menu');
-    if (menu.open)
+    if (menu.open) {
       menu.close();
+    }
   }
 
   /**
@@ -312,8 +347,9 @@ suite('SiteList', function() {
     assertTrue(!!menu);
     const menuItems = menu.querySelectorAll('button:not([hidden])');
     assertEquals(items.length, menuItems.length);
-    for (let i = 0; i < items.length; i++)
+    for (let i = 0; i < items.length; i++) {
       assertEquals(items[i], menuItems[i].textContent.trim());
+    }
   }
 
   /**
@@ -362,6 +398,62 @@ suite('SiteList', function() {
           assertFalse(dotsMenu.hidden);
         });
   });
+
+  if (cr.isChromeOS) {
+    test('update androidSmsInfo', function() {
+      setUpCategory(
+          settings.ContentSettingsTypes.NOTIFICATIONS,
+          settings.ContentSetting.ALLOW, prefsAndroidSms);
+      assertEquals(
+          0, multiDeviceBrowserProxy.getCallCount('getAndroidSmsInfo'));
+
+      loadTimeData.overrideValues({multideviceAllowedByPolicy: true});
+      setUpCategory(
+          settings.ContentSettingsTypes.NOTIFICATIONS,
+          settings.ContentSetting.ALLOW, prefsAndroidSms);
+      // Assert 2 calls since the observer observes 2 properties.
+      assertEquals(
+          2, multiDeviceBrowserProxy.getCallCount('getAndroidSmsInfo'));
+
+      return multiDeviceBrowserProxy.whenCalled('getAndroidSmsInfo')
+          .then(() => browserProxy.whenCalled('getExceptionList'))
+          .then((contentType) => {
+            assertEquals(
+                settings.ContentSettingsTypes.NOTIFICATIONS, contentType);
+            assertEquals(2, testElement.sites.length);
+
+            assertEquals(
+                prefsAndroidSms.exceptions[contentType][0].origin,
+                testElement.sites[0].origin);
+            assertTrue(testElement.sites[0].showAndroidSmsNote);
+
+            assertEquals(
+                prefsAndroidSms.exceptions[contentType][1].origin,
+                testElement.sites[1].origin);
+            assertEquals(undefined, testElement.sites[1].showAndroidSmsNote);
+
+            browserProxy.resetResolver('getExceptionList');
+            multiDeviceBrowserProxy.setFeatureEnabledState(
+                settings.MultiDeviceFeature.MESSAGES, false);
+            return browserProxy.whenCalled('getExceptionList');
+          })
+          .then((contentType) => {
+            assertEquals(
+                settings.ContentSettingsTypes.NOTIFICATIONS, contentType);
+            assertEquals(2, testElement.sites.length);
+
+            assertEquals(
+                prefsAndroidSms.exceptions[contentType][0].origin,
+                testElement.sites[0].origin);
+            assertEquals(undefined, testElement.sites[0].showAndroidSmsNote);
+
+            assertEquals(
+                prefsAndroidSms.exceptions[contentType][1].origin,
+                testElement.sites[1].origin);
+            assertEquals(undefined, testElement.sites[1].showAndroidSmsNote);
+          });
+    });
+  }
 
   test('getExceptionList API used', function() {
     setUpCategory(
@@ -743,22 +835,26 @@ suite('SiteList', function() {
     return browserProxy.whenCalled('getExceptionList')
         .then(function(actualContentType) {
           assertEquals(contentType, actualContentType);
-          assertFalse(testElement.$.category.hidden);
+          return test_util.waitForRender(testElement);
         })
         .then(function() {
+          assertFalse(testElement.$.category.hidden);
           assertNotEquals(0, testElement.$.listContainer.offsetHeight);
         });
   });
 
-  test('Block list closed when Allow list is not empty', function() {
+  test('Block list open when Allow list is not empty', function() {
     // Prefs: Items in both Block and Allow list.
     const contentType = settings.ContentSettingsTypes.GEOLOCATION;
     setUpCategory(contentType, settings.ContentSetting.BLOCK, prefsGeolocation);
     return browserProxy.whenCalled('getExceptionList')
         .then(function(actualContentType) {
           assertEquals(contentType, actualContentType);
+          return test_util.waitForRender(testElement);
+        })
+        .then(function() {
           assertFalse(testElement.$.category.hidden);
-          assertEquals(0, testElement.$.listContainer.offsetHeight);
+          assertNotEquals(0, testElement.$.listContainer.offsetHeight);
         });
   });
 
@@ -769,9 +865,10 @@ suite('SiteList', function() {
     return browserProxy.whenCalled('getExceptionList')
         .then(function(actualContentType) {
           assertEquals(contentType, actualContentType);
-          assertFalse(testElement.$.category.hidden);
+          return test_util.waitForRender(testElement);
         })
         .then(function() {
+          assertFalse(testElement.$.category.hidden);
           assertNotEquals(0, testElement.$.listContainer.offsetHeight);
         });
   });
@@ -783,9 +880,10 @@ suite('SiteList', function() {
     return browserProxy.whenCalled('getExceptionList')
         .then(function(actualContentType) {
           assertEquals(contentType, actualContentType);
-          assertFalse(testElement.$.category.hidden);
+          return test_util.waitForRender(testElement);
         })
         .then(function() {
+          assertFalse(testElement.$.category.hidden);
           assertNotEquals(0, testElement.$.listContainer.offsetHeight);
         });
   });
@@ -962,16 +1060,17 @@ suite('EditExceptionDialog', function() {
     assertTrue(input.invalid);
 
     // Simulate user input of invalid text.
-    browserProxy.setIsPatternValid(false);
-    const expectedPattern = 'foobarbaz';
+    browserProxy.setIsPatternValidForType(false);
+    const expectedPattern = '*';
     input.value = expectedPattern;
     input.fire('input');
 
-    return browserProxy.whenCalled('isPatternValid').then(function(pattern) {
-      assertEquals(expectedPattern, pattern);
-      assertTrue(actionButton.disabled);
-      assertTrue(input.invalid);
-    });
+    return browserProxy.whenCalled('isPatternValidForType')
+        .then(function(pattern, category) {
+          assertEquals(expectedPattern, pattern);
+          assertTrue(actionButton.disabled);
+          assertTrue(input.invalid);
+        });
   });
 
   test('action button calls proxy', function() {
@@ -1050,15 +1149,16 @@ suite('AddExceptionDialog', function() {
     assertTrue(actionButton.disabled);
 
     // Simulate user input of invalid text.
-    browserProxy.setIsPatternValid(false);
+    browserProxy.setIsPatternValidForType(false);
     const expectedPattern = 'foobarbaz';
     input.value = expectedPattern;
     input.fire('input');
 
-    return browserProxy.whenCalled('isPatternValid').then(function(pattern) {
-      assertEquals(expectedPattern, pattern);
-      assertTrue(actionButton.disabled);
-      assertTrue(input.invalid);
-    });
+    return browserProxy.whenCalled('isPatternValidForType')
+        .then(function(pattern) {
+          assertEquals(expectedPattern, pattern);
+          assertTrue(actionButton.disabled);
+          assertTrue(input.invalid);
+        });
   });
 });

@@ -32,6 +32,7 @@ import logging
 import optparse
 import re
 
+from blinkpy.common.path_finder import WEB_TESTS_LAST_COMPONENT
 from blinkpy.common.memoized import memoized
 from blinkpy.common.net.buildbot import Build
 from blinkpy.tool.commands.command import Command
@@ -75,6 +76,10 @@ class AbstractRebaseliningCommand(Command):
     build_number_option = optparse.make_option(
         '--build-number', default=None, type='int',
         help='Optional build number; if not given, the latest build is used.')
+    step_name_option = optparse.make_option(
+        '--step-name',
+        help=('Name of the step which ran the actual tests, and which '
+              'should be used to retrieve results from.'))
 
     def __init__(self, options=None):
         super(AbstractRebaseliningCommand, self).__init__(options=options)
@@ -104,8 +109,8 @@ class AbstractRebaseliningCommand(Command):
 class ChangeSet(object):
     """A record of TestExpectation lines to remove.
 
-    TODO(qyearsley): Remove this class, track list of lines to remove directly
-    in an attribute of AbstractRebaseliningCommand.
+    Note: This class is probably more complicated than necessary; it is mainly
+    used to track the list of lines that we want to remove from TestExpectations.
     """
 
     def __init__(self, lines_to_remove=None):
@@ -304,6 +309,10 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
             if options.results_directory:
                 args.extend(['--results-directory', options.results_directory])
 
+            step_name = self._tool.buildbot.get_layout_test_step_name(build)
+            if step_name:
+                args.extend(['--step-name', step_name])
+
             rebaseline_command = [self._tool.executable, path_to_blink_tool, 'rebaseline-test-internal'] + args
             rebaseline_commands.append(tuple([rebaseline_command, cwd]))
 
@@ -323,7 +332,7 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
                 except ValueError:
                     _log.debug('"%s" is not a JSON object, ignoring', line)
             if not updated:
-                # TODO(qyearsley): This probably should be an error. See http://crbug.com/649412.
+                # TODO(crbug.com/649412): This could be made into an error.
                 _log.debug('Could not add file based off output "%s"', stdout)
         return change_set
 
@@ -403,8 +412,8 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
             test_baseline_set: A TestBaselineSet instance, which represents
                 a set of tests/platform combinations to rebaseline.
         """
-        if self._tool.git().has_working_directory_changes(pathspec=self._layout_tests_dir()):
-            _log.error('There are uncommitted changes in the layout tests directory; aborting.')
+        if self._tool.git().has_working_directory_changes(pathspec=self._web_tests_dir()):
+            _log.error('There are uncommitted changes in the web tests directory; aborting.')
             return
 
         for test in sorted({t for t, _, _ in test_baseline_set}):
@@ -435,7 +444,7 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
 
     def unstaged_baselines(self):
         """Returns absolute paths for unstaged (including untracked) baselines."""
-        baseline_re = re.compile(r'.*[\\/]LayoutTests[\\/].*-expected\.(txt|png|wav)$')
+        baseline_re = re.compile(r'.*[\\/]' + WEB_TESTS_LAST_COMPONENT + r'[\\/].*-expected\.(txt|png|wav)$')
         unstaged_changes = self._tool.git().unstaged_changes()
         return sorted(self._tool.git().absolute_path(path) for path in unstaged_changes if re.match(baseline_re, path))
 
@@ -449,12 +458,12 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
         baseline_paths = []
         for test in test_baseline_set.all_tests():
             filenames = [self._file_name_for_expected_result(test, suffix) for suffix in BASELINE_SUFFIX_LIST]
-            baseline_paths += [filesystem.join(self._layout_tests_dir(), filename) for filename in filenames]
+            baseline_paths += [filesystem.join(self._web_tests_dir(), filename) for filename in filenames]
         baseline_paths.sort()
         return baseline_paths
 
-    def _layout_tests_dir(self):
-        return self._tool.port_factory.get().layout_tests_dir()
+    def _web_tests_dir(self):
+        return self._tool.port_factory.get().web_tests_dir()
 
     def _suffixes_for_actual_failures(self, test, build):
         """Gets the baseline suffixes for actual mismatch failures in some results.

@@ -13,8 +13,9 @@
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
-#include "net/base/host_port_pair.h"
+#include "net/base/ip_endpoint.h"
 #include "net/base/load_timing_info.h"
+#include "net/base/proxy_server.h"
 #include "net/cert/ct_policy_status.h"
 #include "net/cert/signed_certificate_timestamp_and_status.h"
 #include "net/http/http_response_headers.h"
@@ -53,10 +54,6 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceResponseInfo {
 
   // The resource's compliance with the Certificate Transparency policy.
   net::ct::CTPolicyCompliance ct_policy_compliance;
-
-  // True if the resource was loaded with an otherwise-valid legacy Symantec
-  // certificate which will be distrusted in future.
-  bool is_legacy_symantec_cert;
 
   // Content length if available. -1 if not available
   int64_t content_length;
@@ -106,13 +103,13 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceResponseInfo {
   std::string alpn_negotiated_protocol;
 
   // Remote address of the socket which fetched this resource.
-  net::HostPortPair socket_address;
+  net::IPEndPoint remote_endpoint;
 
   // True if the response came from cache.
   bool was_fetched_via_cache = false;
 
-  // True if the response was delivered through a proxy.
-  bool was_fetched_via_proxy;
+  // The proxy server used for this request, if any.
+  net::ProxyServer proxy_server;
 
   // True if the response was fetched by a ServiceWorker.
   bool was_fetched_via_service_worker;
@@ -184,6 +181,16 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceResponseInfo {
   // True if mime sniffing has been done. In that case, we don't need to do
   // mime sniffing anymore.
   bool did_mime_sniff;
+
+  // True if the response is an inner response of a signed exchange.
+  bool is_signed_exchange_inner_response = false;
+
+  // True if the response was intercepted by a plugin.
+  bool intercepted_by_plugin = false;
+
+  // True if the response was sent over TLS 1.0 or 1.1, which are deprecated and
+  // will be removed in the future.
+  bool is_legacy_tls_version = false;
 
   // NOTE: When adding or changing fields here, also update
   // ResourceResponse::DeepCopy in resource_response.cc.

@@ -31,6 +31,10 @@
 #include "chrome/browser/notifications/notification_platform_bridge_message_center.h"
 #endif
 
+#if defined(OS_LINUX) || defined(OS_MACOSX)
+#include "chrome/browser/send_tab_to_self/desktop_notification_handler.h"
+#endif
+
 #if defined(OS_WIN)
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/notifications/notification_platform_bridge_win.h"
@@ -110,15 +114,26 @@ NotificationDisplayServiceImpl::NotificationDisplayServiceImpl(Profile* profile)
       bridge_(GetNativeNotificationPlatformBridge()),
       weak_factory_(this) {
   // TODO(peter): Move these to the NotificationDisplayServiceFactory.
-  AddNotificationHandler(NotificationHandler::Type::WEB_NON_PERSISTENT,
-                         std::make_unique<NonPersistentNotificationHandler>());
-  AddNotificationHandler(NotificationHandler::Type::WEB_PERSISTENT,
-                         std::make_unique<PersistentNotificationHandler>());
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  AddNotificationHandler(
-      NotificationHandler::Type::EXTENSION,
-      std::make_unique<extensions::ExtensionNotificationHandler>());
+  if (profile_) {
+    AddNotificationHandler(
+        NotificationHandler::Type::WEB_NON_PERSISTENT,
+        std::make_unique<NonPersistentNotificationHandler>());
+    AddNotificationHandler(NotificationHandler::Type::WEB_PERSISTENT,
+                           std::make_unique<PersistentNotificationHandler>());
+
+#if defined(OS_LINUX) || defined(OS_MACOSX)
+    AddNotificationHandler(
+        NotificationHandler::Type::SEND_TAB_TO_SELF,
+        std::make_unique<send_tab_to_self::DesktopNotificationHandler>(
+            profile));
 #endif
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+    AddNotificationHandler(
+        NotificationHandler::Type::EXTENSION,
+        std::make_unique<extensions::ExtensionNotificationHandler>());
+#endif
+  }
 
   // Initialize the bridge if native notifications are available, otherwise
   // signal that the bridge could not be initialized.
@@ -188,6 +203,16 @@ NotificationHandler* NotificationDisplayServiceImpl::GetNotificationHandler(
   return nullptr;
 }
 
+void NotificationDisplayServiceImpl::Shutdown() {
+  if (!bridge_initialized_)
+    return;
+
+  if (message_center_bridge_)
+    message_center_bridge_->DisplayServiceShutDown(profile_);
+  if (bridge_)
+    bridge_->DisplayServiceShutDown(profile_);
+}
+
 void NotificationDisplayServiceImpl::Display(
     NotificationHandler::Type notification_type,
     const message_center::Notification& notification,
@@ -196,6 +221,8 @@ void NotificationDisplayServiceImpl::Display(
   // non-TRANSIENT type implies no delegate.
   if (notification_type == NotificationHandler::Type::TRANSIENT)
     DCHECK(notification.delegate());
+
+  CHECK(profile_ || notification_type == NotificationHandler::Type::TRANSIENT);
 
   if (!bridge_initialized_) {
     actions_.push(base::BindOnce(&NotificationDisplayServiceImpl::Display,
@@ -223,6 +250,8 @@ void NotificationDisplayServiceImpl::Display(
 void NotificationDisplayServiceImpl::Close(
     NotificationHandler::Type notification_type,
     const std::string& notification_id) {
+  CHECK(profile_ || notification_type == NotificationHandler::Type::TRANSIENT);
+
   if (!bridge_initialized_) {
     actions_.push(base::BindOnce(&NotificationDisplayServiceImpl::Close,
                                  weak_factory_.GetWeakPtr(), notification_type,
@@ -245,7 +274,8 @@ void NotificationDisplayServiceImpl::GetDisplayed(
     DisplayedNotificationsCallback callback) {
   if (!bridge_initialized_) {
     actions_.push(base::BindOnce(&NotificationDisplayServiceImpl::GetDisplayed,
-                                 weak_factory_.GetWeakPtr(), callback));
+                                 weak_factory_.GetWeakPtr(),
+                                 std::move(callback)));
     return;
   }
 

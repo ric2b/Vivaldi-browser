@@ -5,9 +5,9 @@
 #ifndef MOJO_PUBLIC_CPP_BINDINGS_SYNC_CALL_RESTRICTIONS_H_
 #define MOJO_PUBLIC_CPP_BINDINGS_SYNC_CALL_RESTRICTIONS_H_
 
+#include "base/component_export.h"
 #include "base/macros.h"
 #include "base/threading/thread_restrictions.h"
-#include "mojo/public/cpp/bindings/bindings_export.h"
 
 #if (!defined(NDEBUG) || defined(DCHECK_ALWAYS_ON))
 #define ENABLE_SYNC_CALL_RESTRICTIONS 1
@@ -15,14 +15,8 @@
 #define ENABLE_SYNC_CALL_RESTRICTIONS 0
 #endif
 
-class ChromeSelectFileDialogFactory;
-
 namespace sync_preferences {
 class PrefServiceSyncable;
-}
-
-namespace content {
-class BlinkTestController;
 }
 
 namespace leveldb {
@@ -59,7 +53,7 @@ class ScopedAllowSyncCallForTesting;
 // disregard that (which should be very very rare), you can override it by
 // constructing a ScopedAllowSyncCall object which allows making sync calls on
 // the current sequence during its lifetime.
-class MOJO_CPP_BINDINGS_EXPORT SyncCallRestrictions {
+class COMPONENT_EXPORT(MOJO_CPP_BINDINGS) SyncCallRestrictions {
  public:
 #if ENABLE_SYNC_CALL_RESTRICTIONS
   // Checks whether the current sequence is allowed to make sync calls, and
@@ -89,15 +83,11 @@ class MOJO_CPP_BINDINGS_EXPORT SyncCallRestrictions {
   // Incognito pref service instances are created synchronously.
   friend class sync_preferences::PrefServiceSyncable;
   friend class mojo::ScopedAllowSyncCallForTesting;
-  // For file open and save dialogs created synchronously.
-  friend class ::ChromeSelectFileDialogFactory;
   // For synchronous system clipboard access.
   friend class ui::ClipboardClient;
   // For destroying the GL context/surface that draw to a platform window before
   // the platform window is destroyed.
   friend class viz::HostFrameSinkManager;
-  // Allow for layout test pixel dumps.
-  friend class content::BlinkTestController;
   // For preventing frame swaps of wrong size during resize on Windows.
   // (https://crbug.com/811945)
   friend class ui::HostContextFactoryPrivate;
@@ -123,7 +113,7 @@ class MOJO_CPP_BINDINGS_EXPORT SyncCallRestrictions {
 
    private:
 #if ENABLE_SYNC_CALL_RESTRICTIONS
-    base::ThreadRestrictions::ScopedAllowWait allow_wait_;
+    base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope allow_wait_;
 #endif
 
     DISALLOW_COPY_AND_ASSIGN(ScopedAllowSyncCall);

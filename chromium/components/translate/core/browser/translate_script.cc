@@ -113,8 +113,6 @@ GURL TranslateScript::GetTranslateScriptURL() {
       translate_script_url,
       kAlwaysUseSslQueryName,
       kAlwaysUseSslQueryValue);
-#if !defined(OS_IOS)
-  // iOS doesn't need to use specific loaders for the isolated world.
   translate_script_url = net::AppendQueryParameter(
       translate_script_url,
       kCssLoaderCallbackQueryName,
@@ -123,7 +121,6 @@ GURL TranslateScript::GetTranslateScriptURL() {
       translate_script_url,
       kJavascriptLoaderCallbackQueryName,
       kJavascriptLoaderCallbackQueryValue);
-#endif  // !defined(OS_IOS)
 
   translate_script_url = AddHostLocaleToUrl(translate_script_url);
   translate_script_url = AddApiKeyToUrl(translate_script_url);
@@ -167,9 +164,9 @@ void TranslateScript::OnScriptFetchComplete(bool success,
 #if defined(OS_IOS)
     // Append snippet to install callbacks on translate.js if available.
     const char* install_callbacks =
-        "if (installTranslateCallbacks) {"
-        "  installTranslateCallbacks();"
-        "}";
+        "try {"
+        "  __gCrWeb.translate.installCallbacks();"
+        "} catch (error) {};";
     base::StringPiece(install_callbacks).AppendToString(&data_);
 #endif  // defined(OS_IOS)
 
@@ -192,9 +189,7 @@ void TranslateScript::OnScriptFetchComplete(bool success,
         expiration_delay_);
   }
 
-  for (RequestCallbackList::iterator it = callback_list_.begin();
-       it != callback_list_.end();
-       ++it) {
+  for (auto it = callback_list_.begin(); it != callback_list_.end(); ++it) {
     it->Run(success, data);
   }
   callback_list_.clear();

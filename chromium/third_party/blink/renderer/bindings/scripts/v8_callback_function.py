@@ -12,6 +12,8 @@ import v8_types
 
 CALLBACK_FUNCTION_H_INCLUDES = frozenset([
     'platform/bindings/callback_function_base.h',
+    'platform/bindings/v8_value_or_script_wrappable_adapter.h',
+    'platform/wtf/forward.h',
 ])
 CALLBACK_FUNCTION_CPP_INCLUDES = frozenset([
     'base/stl_util.h',
@@ -46,6 +48,7 @@ def callback_function_context(callback_function):
         'forward_declarations': sorted(forward_declarations(callback_function)),
         'header_includes': sorted(CALLBACK_FUNCTION_H_INCLUDES),
         'idl_type': idl_type_str,
+        'is_treat_non_object_as_null': 'TreatNonObjectAsNull' in callback_function.extended_attributes,
         'native_value_traits_tag': v8_types.idl_type_to_native_value_traits_tag(idl_type),
         'return_cpp_type': idl_type.cpp_type,
     }
@@ -62,7 +65,7 @@ def forward_declarations(callback_function):
             return find_forward_declaration(idl_type.element_type)
         return None
 
-    declarations = set(['ScriptWrappable'])
+    declarations = set()
     for argument in callback_function.arguments:
         name = find_forward_declaration(argument.idl_type)
         if name:
@@ -91,7 +94,7 @@ def arguments_context(arguments):
         else:
             return cpp_type
 
-    argument_declarations = ['ScriptWrappable* callback_this_value']
+    argument_declarations = ['bindings::V8ValueOrScriptWrappableAdapter callback_this_value']
     argument_declarations.extend(
         '%s %s' % (argument_cpp_type(argument), argument.name)
         for argument in arguments)

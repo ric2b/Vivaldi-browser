@@ -11,13 +11,15 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/format_macros.h"
-#include "base/macros.h"
 #include "base/memory/aligned_memory.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/unsafe_shared_memory_region.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
+#include "media/base/simple_sync_token_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/libyuv/include/libyuv.h"
 
@@ -142,7 +144,7 @@ void ExpectFrameExtents(VideoPixelFormat format, const char* expected_hash) {
 
   base::MD5Context context;
   base::MD5Init(&context);
-  VideoFrame::HashFrameForTesting(&context, frame);
+  VideoFrame::HashFrameForTesting(&context, *frame.get());
   base::MD5Digest digest;
   base::MD5Final(&digest, &context);
   EXPECT_EQ(MD5DigestToBase16(digest), expected_hash);
@@ -169,7 +171,7 @@ TEST(VideoFrame, CreateFrame) {
   base::MD5Digest digest;
   base::MD5Context context;
   base::MD5Init(&context);
-  VideoFrame::HashFrameForTesting(&context, frame);
+  VideoFrame::HashFrameForTesting(&context, *frame.get());
   base::MD5Final(&digest, &context);
   EXPECT_EQ(MD5DigestToBase16(digest), "9065c841d9fca49186ef8b4ef547e79b");
   {
@@ -178,7 +180,7 @@ TEST(VideoFrame, CreateFrame) {
     ExpectFrameColor(frame.get(), 0xFFFFFFFF);
   }
   base::MD5Init(&context);
-  VideoFrame::HashFrameForTesting(&context, frame);
+  VideoFrame::HashFrameForTesting(&context, *frame.get());
   base::MD5Final(&digest, &context);
   EXPECT_EQ(MD5DigestToBase16(digest), "911991d51438ad2e1a40ed5f6fc7c796");
 
@@ -243,15 +245,15 @@ TEST(VideoFrame, CreateBlackFrame) {
   // Test frames themselves.
   uint8_t* y_plane = frame->data(VideoFrame::kYPlane);
   for (int y = 0; y < frame->coded_size().height(); ++y) {
-    EXPECT_EQ(0, memcmp(kExpectedYRow, y_plane, arraysize(kExpectedYRow)));
+    EXPECT_EQ(0, memcmp(kExpectedYRow, y_plane, base::size(kExpectedYRow)));
     y_plane += frame->stride(VideoFrame::kYPlane);
   }
 
   uint8_t* u_plane = frame->data(VideoFrame::kUPlane);
   uint8_t* v_plane = frame->data(VideoFrame::kVPlane);
   for (int y = 0; y < frame->coded_size().height() / 2; ++y) {
-    EXPECT_EQ(0, memcmp(kExpectedUVRow, u_plane, arraysize(kExpectedUVRow)));
-    EXPECT_EQ(0, memcmp(kExpectedUVRow, v_plane, arraysize(kExpectedUVRow)));
+    EXPECT_EQ(0, memcmp(kExpectedUVRow, u_plane, base::size(kExpectedUVRow)));
+    EXPECT_EQ(0, memcmp(kExpectedUVRow, v_plane, base::size(kExpectedUVRow)));
     u_plane += frame->stride(VideoFrame::kUPlane);
     v_plane += frame->stride(VideoFrame::kVPlane);
   }
@@ -387,6 +389,46 @@ TEST(VideoFrame, WrapExternalSharedMemory) {
   EXPECT_EQ(frame->data(media::VideoFrame::kYPlane)[0], 0xff);
 }
 
+#if defined(OS_LINUX)
+TEST(VideoFrame, WrapExternalDmabufs) {
+  gfx::Size coded_size = gfx::Size(256, 256);
+  gfx::Rect visible_rect(coded_size);
+  std::vector<int32_t> strides = {384, 192, 192};
+  std::vector<size_t> offsets = {0, 100, 200};
+  std::vector<size_t> buffer_sizes = {73728, 18432, 18432};
+  std::vector<VideoFrameLayout::Plane> planes(strides.size());
+
+  for (size_t i = 0; i < planes.size(); i++) {
+    planes[i].stride = strides[i];
+    planes[i].offset = offsets[i];
+  }
+  auto timestamp = base::TimeDelta::FromMilliseconds(1);
+  auto layout = VideoFrameLayout::CreateWithPlanes(
+      PIXEL_FORMAT_I420, coded_size, planes, buffer_sizes);
+  ASSERT_TRUE(layout);
+  std::vector<base::ScopedFD> dmabuf_fds(3u);
+  auto frame = VideoFrame::WrapExternalDmabufs(
+      *layout, visible_rect, visible_rect.size(), std::move(dmabuf_fds),
+      timestamp);
+
+  EXPECT_EQ(frame->layout().format(), PIXEL_FORMAT_I420);
+  EXPECT_EQ(frame->layout().coded_size(), coded_size);
+  EXPECT_EQ(frame->layout().num_planes(), 3u);
+  EXPECT_EQ(frame->layout().num_buffers(), 3u);
+  EXPECT_EQ(frame->layout().GetTotalBufferSize(), 110592u);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(frame->layout().planes()[i].stride, strides[i]);
+    EXPECT_EQ(frame->layout().planes()[i].offset, offsets[i]);
+    EXPECT_EQ(frame->layout().buffer_sizes()[i], buffer_sizes[i]);
+  }
+  EXPECT_TRUE(frame->HasDmaBufs());
+  EXPECT_EQ(frame->DmabufFds().size(), 3u);
+  EXPECT_EQ(frame->coded_size(), coded_size);
+  EXPECT_EQ(frame->visible_rect(), visible_rect);
+  EXPECT_EQ(frame->timestamp(), timestamp);
+}
+#endif
+
 // Ensure each frame is properly sized and allocated.  Will trigger OOB reads
 // and writes as well as incorrect frame hashes otherwise.
 TEST(VideoFrame, CheckFrameExtents) {
@@ -425,24 +467,6 @@ TEST(VideoFrame, TextureNoLongerNeededCallbackIsCalled) {
   // cleared to default value.
   EXPECT_FALSE(called_sync_token.HasData());
 }
-
-namespace {
-
-class SyncTokenClientImpl : public VideoFrame::SyncTokenClient {
- public:
-  explicit SyncTokenClientImpl(const gpu::SyncToken& sync_token)
-      : sync_token_(sync_token) {}
-  ~SyncTokenClientImpl() override = default;
-  void GenerateSyncToken(gpu::SyncToken* sync_token) override {
-    *sync_token = sync_token_;
-  }
-  void WaitSyncToken(const gpu::SyncToken& sync_token) override {}
-
- private:
-  gpu::SyncToken sync_token_;
-};
-
-}  // namespace
 
 // Verify the gpu::MailboxHolder::ReleaseCallback is called when VideoFrame is
 // destroyed with the release sync point, which was updated by clients.
@@ -491,7 +515,7 @@ TEST(VideoFrame,
       EXPECT_EQ(sync_token, mailbox_holder.sync_token);
     }
 
-    SyncTokenClientImpl client(release_sync_token);
+    SimpleSyncTokenClient client(release_sync_token);
     frame->UpdateReleaseSyncToken(&client);
     EXPECT_EQ(sync_token,
               frame->mailbox_holder(VideoFrame::kYPlane).sync_token);
@@ -586,6 +610,9 @@ TEST(VideoFrame, AllocationSize_OddSize) {
       case PIXEL_FORMAT_XRGB:
       case PIXEL_FORMAT_I420A:
       case PIXEL_FORMAT_RGB32:
+      case PIXEL_FORMAT_ABGR:
+      case PIXEL_FORMAT_XBGR:
+      case PIXEL_FORMAT_P016LE:
         EXPECT_EQ(60u, VideoFrame::AllocationSize(format, size))
             << VideoPixelFormatToString(format);
         break;

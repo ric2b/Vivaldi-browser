@@ -12,10 +12,13 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/optional.h"
 #include "url/gurl.h"
 
 namespace web_app {
+
+enum class InstallResultCode;
+enum class InstallSource;
+enum class LaunchContainer;
 
 // PendingAppManager installs, uninstalls, and updates apps.
 //
@@ -26,62 +29,45 @@ namespace web_app {
 class PendingAppManager {
  public:
   using OnceInstallCallback =
-      base::OnceCallback<void(const GURL& app_url,
-                              const base::Optional<std::string>&)>;
+      base::OnceCallback<void(const GURL& app_url, InstallResultCode code)>;
   using RepeatingInstallCallback =
       base::RepeatingCallback<void(const GURL& app_url,
-                                   const base::Optional<std::string>&)>;
+                                   InstallResultCode code)>;
   using UninstallCallback =
       base::RepeatingCallback<void(const GURL& app_url, bool succeeded)>;
 
-  // How the app will be launched after installation.
-  enum class LaunchContainer {
-    // When `kDefault` is used, the app will launch in a window if the site is
-    // "installable" (also referred to as Progressive Web App) and in a tab if
-    // the site is not "installable".
-    kDefault,
-    kTab,
-    kWindow,
-  };
-
-  // What flags will be used when installing the app.
-  enum class InstallationFlag {
-    kNone,
-    kDefaultApp,
-    kFromPolicy,
-  };
-
   struct AppInfo {
-    static AppInfo Create(GURL url,
-                          LaunchContainer launch_container,
-                          bool create_shortcuts = true);
-    static AppInfo CreateForDefaultApp(GURL url,
-                                       LaunchContainer launch_container,
-                                       bool create_shortcuts = true);
-    static AppInfo CreateForPolicy(GURL url,
-                                   LaunchContainer launch_container,
-                                   bool create_shortcuts = true);
-
-    // Prefer static methods above.
-    AppInfo(AppInfo&& other);
+    AppInfo(const GURL& url,
+            LaunchContainer launch_container,
+            InstallSource install_source);
     ~AppInfo();
-
-    std::unique_ptr<AppInfo> Clone() const;
+    AppInfo(const AppInfo& other);
+    AppInfo(AppInfo&& other);
+    AppInfo& operator=(const AppInfo& other);
 
     bool operator==(const AppInfo& other) const;
 
-    const GURL url;
-    const LaunchContainer launch_container;
-    const bool create_shortcuts;
-    const InstallationFlag installation_flag;
+    GURL url;
+    LaunchContainer launch_container;
+    InstallSource install_source;
 
-   private:
-    AppInfo(GURL url,
-            LaunchContainer launch_container,
-            bool create_shortcuts,
-            InstallationFlag installation_flag);
+    bool create_shortcuts = true;
 
-    DISALLOW_COPY_AND_ASSIGN(AppInfo);
+    // Whether the app should be reinstalled even if the user has previously
+    // uninstalled it.
+    bool override_previous_user_uninstall = false;
+
+    // This must only be used by pre-installed default or system apps that are
+    // valid PWAs if loading the real service worker is too costly to verify
+    // programmatically.
+    bool bypass_service_worker_check = false;
+
+    // This should be used for installing all default apps so that good metadata
+    // is ensured.
+    bool require_manifest = false;
+
+    // Whether the app should be reinstalled even if it is already installed.
+    bool always_update = false;
   };
 
   PendingAppManager();
@@ -114,6 +100,24 @@ class PendingAppManager {
   virtual void UninstallApps(std::vector<GURL> apps_to_uninstall,
                              const UninstallCallback& callback) = 0;
 
+  // Returns the URLs of those apps installed from |install_source|.
+  virtual std::vector<GURL> GetInstalledAppUrls(
+      InstallSource install_source) const = 0;
+
+  // Installs |desired_apps| and uninstalls any apps in
+  // GetInstalledAppUrls(install_source) that are not in |desired_apps|'s URLs.
+  //
+  // All apps in |desired_apps| should have |install_source| as their source.
+  //
+  // Note that this returns after queueing work (installation and
+  // uninstallation) to be done. It does not wait until that work is complete.
+  void SynchronizeInstalledApps(std::vector<AppInfo> desired_apps,
+                                InstallSource install_source);
+
+  // Returns the app id for |url| if the PendingAppManager is aware of it.
+  virtual base::Optional<std::string> LookupAppId(const GURL& url) const = 0;
+
+ private:
   DISALLOW_COPY_AND_ASSIGN(PendingAppManager);
 };
 

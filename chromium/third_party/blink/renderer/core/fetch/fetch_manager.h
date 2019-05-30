@@ -7,7 +7,7 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 
 namespace blink {
@@ -24,6 +24,9 @@ class CORE_EXPORT FetchManager final : public GarbageCollected<FetchManager>,
 
  public:
   static FetchManager* Create(ExecutionContext*);
+
+  explicit FetchManager(ExecutionContext*);
+
   ScriptPromise Fetch(ScriptState*,
                       FetchRequestData*,
                       AbortSignal*,
@@ -33,8 +36,6 @@ class CORE_EXPORT FetchManager final : public GarbageCollected<FetchManager>,
   void Trace(blink::Visitor*) override;
 
  private:
-  explicit FetchManager(ExecutionContext*);
-
   class Loader;
 
   // Removes loader from |m_loaders|.

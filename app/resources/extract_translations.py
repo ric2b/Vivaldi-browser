@@ -1,5 +1,7 @@
 # Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
 
+from __future__ import print_function
+
 import sys, os
 import argparse
 
@@ -12,7 +14,7 @@ from grit.node import empty
 from grit.node import include
 from grit.node import structure
 from grit.node import message
-from grit.node import io
+from grit.node import node_io
 from grit.node import misc
 from grit import util
 from grit import tclib
@@ -54,15 +56,15 @@ def write_message(f, options, node, locale=None):
     return
   generated_translation.add(unique)
 
-  print >> f, "#. Description:", node.attrs["desc"].encode("utf8")
-  print >> f, "#. TranslationId:", tid
-  print >> f, "#. vivaldi-file:", options.vivaldi_file
+  print("#. Description:", node.attrs["desc"].encode("utf8"), file=f)
+  print("#. TranslationId:", tid, file=f)
+  print("#. vivaldi-file:", options.vivaldi_file, file=f)
 
-  print >> f, '#, fuzzy'
-  print >> f, 'msgctxt "%s"' % name
-  print >> f, 'msgid "%s"' % message
-  print >> f, 'msgstr "%s"' % translated
-  print >> f
+  print('#, fuzzy', file=f)
+  print('msgctxt "%s"' % name, file=f)
+  print('msgid "%s"' % message, file=f)
+  print('msgstr "%s"' % translated, file=f)
+  print(file=f)
 
 def main():
 
@@ -117,14 +119,14 @@ def main():
         node_list[node.unique_id] = node
 
   with open(options.output_file, "w") as f:
-    print >> f, 'msgid ""'
-    print >> f, 'msgstr ""'
+    print('msgid ""', file=f)
+    print('msgstr ""', file=f)
     if options.locale:
-      print >> f, '"Language: %s\\n"' % options.locale
-    print >> f, '"MIME-Version: 1.0\\n"'
-    print >> f, '"Content-Type: text/plain; charset=UTF-8\\n"'
-    print >> f, ''
-    for _, node in sorted(node_list.iteritems()):
+      print('"Language: %s\\n"' % options.locale, file=f)
+    print('"MIME-Version: 1.0\\n"', file=f)
+    print('"Content-Type: text/plain; charset=UTF-8\\n"', file=f)
+    print('', file=f)
+    for _, node in sorted(node_list.items()):
       write_message(f, options, node, options.locale);
 
 if __name__ == "__main__":

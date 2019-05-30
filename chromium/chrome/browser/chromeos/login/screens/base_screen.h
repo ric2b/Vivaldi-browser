@@ -102,10 +102,6 @@ class BaseScreen {
   // Sends all pending context changes to the JS side.
   void CommitContextChanges();
 
-  // Screen can call this method to notify framework that it have finished
-  // it's work with |outcome|.
-  void Finish(ScreenExitCode exit_code);
-
   // The method is called each time some key in screen context is
   // updated by JS side. Default implementation does nothing, so
   // subclasses should override it in order to observe updates in
@@ -138,17 +134,8 @@ class BaseScreen {
   ::login::ScreenContext context_;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(EnrollmentScreenTest, TestCancel);
-  FRIEND_TEST_ALL_PREFIXES(EnrollmentScreenTest, TestSuccess);
-  FRIEND_TEST_ALL_PREFIXES(AttestationAuthEnrollmentScreenTest, TestCancel);
-  FRIEND_TEST_ALL_PREFIXES(ForcedAttestationAuthEnrollmentScreenTest,
-                           TestCancel);
-  FRIEND_TEST_ALL_PREFIXES(MultiAuthEnrollmentScreenTest, TestCancel);
-  FRIEND_TEST_ALL_PREFIXES(ProvisionedEnrollmentScreenTest, TestBackButton);
-  FRIEND_TEST_ALL_PREFIXES(HandsOffWelcomeScreenTest, RequiresNoInput);
-  FRIEND_TEST_ALL_PREFIXES(HandsOffWelcomeScreenTest, ContinueClickedOnlyOnce);
-
   friend class BaseWebUIHandler;
+  friend class EnrollmentScreenTest;
   friend class NetworkScreenTest;
   friend class ScreenEditor;
   friend class ScreenManager;

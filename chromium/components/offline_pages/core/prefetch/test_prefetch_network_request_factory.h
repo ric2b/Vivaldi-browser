@@ -13,7 +13,8 @@
 #include "components/offline_pages/core/prefetch/prefetch_network_request_factory_impl.h"
 #include "components/offline_pages/core/prefetch/prefetch_types.h"
 #include "components/version_info/channel.h"
-#include "net/url_request/url_request_test_util.h"
+
+class PrefService;
 
 namespace offline_pages {
 
@@ -22,12 +23,13 @@ namespace offline_pages {
 class TestPrefetchNetworkRequestFactory
     : public PrefetchNetworkRequestFactoryImpl {
  public:
-  TestPrefetchNetworkRequestFactory();
+  TestPrefetchNetworkRequestFactory(PrefService* prefs);
   explicit TestPrefetchNetworkRequestFactory(
-      net::TestURLRequestContextGetter* request_context);
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      PrefService* prefs);
   ~TestPrefetchNetworkRequestFactory() override;
 
-  scoped_refptr<net::TestURLRequestContextGetter> request_context;
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory;
 };
 
 }  // namespace offline_pages

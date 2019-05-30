@@ -10,7 +10,7 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/gcm_driver/fake_gcm_driver.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "net/base/ip_endpoint.h"
@@ -63,11 +63,10 @@ void VerifyAccountTokens(
     const std::vector<GCMClient::AccountTokenInfo>& expected_tokens,
     const std::vector<GCMClient::AccountTokenInfo>& actual_tokens) {
   EXPECT_EQ(expected_tokens.size(), actual_tokens.size());
-  for (std::vector<GCMClient::AccountTokenInfo>::const_iterator
-           expected_iter = expected_tokens.begin(),
-           actual_iter = actual_tokens.begin();
+  for (auto expected_iter = expected_tokens.begin(),
+            actual_iter = actual_tokens.begin();
        expected_iter != expected_tokens.end() &&
-           actual_iter != actual_tokens.end();
+       actual_iter != actual_tokens.end();
        ++expected_iter, ++actual_iter) {
     EXPECT_EQ(expected_iter->account_id, actual_iter->account_id);
     EXPECT_EQ(expected_iter->email, actual_iter->email);
@@ -205,7 +204,7 @@ class GCMAccountTrackerTest : public testing::Test {
  private:
   CustomFakeGCMDriver driver_;
 
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
   network::TestURLLoaderFactory test_url_loader_factory_;
   identity::IdentityTestEnvironment identity_test_env_;
 

@@ -38,17 +38,26 @@ class ChromePermissionMessageProviderUnittest : public testing::Test {
                                  Manifest::Type type) {
     return message_provider_->GetPermissionMessages(
         message_provider_->GetAllPermissionIDs(
-            PermissionSet(permissions, ManifestPermissionSet(), URLPatternSet(),
-                          URLPatternSet()),
+            PermissionSet(permissions.Clone(), ManifestPermissionSet(),
+                          URLPatternSet(), URLPatternSet()),
+            type));
+  }
+
+  PermissionMessages GetPowerfulMessages(const APIPermissionSet& permissions,
+                                         Manifest::Type type) {
+    return message_provider_->GetPowerfulPermissionMessages(
+        message_provider_->GetAllPermissionIDs(
+            PermissionSet(permissions.Clone(), ManifestPermissionSet(),
+                          URLPatternSet(), URLPatternSet()),
             type));
   }
 
   bool IsPrivilegeIncrease(const APIPermissionSet& granted_permissions,
                            const APIPermissionSet& requested_permissions) {
     return message_provider_->IsPrivilegeIncrease(
-        PermissionSet(granted_permissions, ManifestPermissionSet(),
+        PermissionSet(granted_permissions.Clone(), ManifestPermissionSet(),
                       URLPatternSet(), URLPatternSet()),
-        PermissionSet(requested_permissions, ManifestPermissionSet(),
+        PermissionSet(requested_permissions.Clone(), ManifestPermissionSet(),
                       URLPatternSet(), URLPatternSet()),
         Manifest::TYPE_EXTENSION);
   }
@@ -116,7 +125,7 @@ TEST_F(ChromePermissionMessageProviderUnittest,
   devices_list->Append(
       UsbDevicePermissionData(0x02ad, 0x138d, -1, -1).ToValue());
   ASSERT_TRUE(usb->FromValue(devices_list.get(), nullptr, nullptr));
-  permissions.insert(usb.release());
+  permissions.insert(std::move(usb));
 
   PermissionMessages messages =
       GetMessages(permissions, Manifest::TYPE_EXTENSION);
@@ -145,9 +154,9 @@ TEST_F(ChromePermissionMessageProviderUnittest,
       URLPattern(URLPattern::SCHEME_ALL, "https://ɡoogle.com/"));
   explicit_hosts.AddPattern(
       URLPattern(URLPattern::SCHEME_ALL, "https://*.ɡoogle.com/"));
-  extensions::PermissionSet permissions(APIPermissionSet(),
-                                        ManifestPermissionSet(), explicit_hosts,
-                                        URLPatternSet());
+  extensions::PermissionSet permissions(
+      APIPermissionSet(), ManifestPermissionSet(), std::move(explicit_hosts),
+      URLPatternSet());
 
   PermissionMessages messages = message_provider()->GetPermissionMessages(
       message_provider()->GetAllPermissionIDs(permissions,
@@ -159,6 +168,38 @@ TEST_F(ChromePermissionMessageProviderUnittest,
                 base::ASCIIToUTF16("all xn--oogle-qmc.com sites"),
                 base::ASCIIToUTF16("xn--oogle-qmc.com")),
             messages.front().message());
+}
+
+// Checks whether powerful permissions are returned correctly.
+TEST_F(ChromePermissionMessageProviderUnittest, PowerfulPermissions) {
+  {
+    APIPermissionSet permissions;
+    permissions.insert(APIPermission::kTab);
+    PermissionMessages messages =
+        GetPowerfulMessages(permissions, Manifest::TYPE_EXTENSION);
+    ASSERT_EQ(1U, messages.size());
+    EXPECT_EQ(
+        l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_WARNING_HISTORY_READ),
+        messages.front().message());
+  }
+  {
+    APIPermissionSet permissions;
+    permissions.insert(APIPermission::kBookmark);
+    PermissionMessages messages =
+        GetPowerfulMessages(permissions, Manifest::TYPE_EXTENSION);
+    ASSERT_EQ(0U, messages.size());
+  }
+  {
+    APIPermissionSet permissions;
+    permissions.insert(APIPermission::kTab);
+    permissions.insert(APIPermission::kBookmark);
+    PermissionMessages messages =
+        GetPowerfulMessages(permissions, Manifest::TYPE_EXTENSION);
+    ASSERT_EQ(1U, messages.size());
+    EXPECT_EQ(
+        l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_WARNING_HISTORY_READ),
+        messages.front().message());
+  }
 }
 
 }  // namespace extensions

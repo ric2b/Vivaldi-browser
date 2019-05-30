@@ -33,6 +33,7 @@
 #include "chrome/browser/extensions/event_router_forwarder.h"
 #include "chrome/browser/net/chrome_extensions_network_delegate.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
+#include "chrome/browser/renderer_host/chrome_navigation_ui_data.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
@@ -61,11 +62,12 @@
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "net/url_request/url_request_test_util.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest-message.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_CHROMEOS)
-#include "chromeos/login/scoped_test_public_session_login_state.h"
+#include "chromeos/login/login_state/scoped_test_public_session_login_state.h"
 #include "components/crx_file/id_util.h"
 #endif
 
@@ -85,7 +87,6 @@ using helpers::CalculateOnHeadersReceivedDelta;
 using helpers::CharListToString;
 using helpers::EventResponseDelta;
 using helpers::EventResponseDeltas;
-using helpers::EventResponseDeltas;
 using helpers::ExtraInfoSpec;
 using helpers::InDecreasingExtensionInstallationTimeOrder;
 using helpers::MergeCancelOfResponses;
@@ -95,6 +96,7 @@ using helpers::ResponseCookieModification;
 using helpers::ResponseHeader;
 using helpers::ResponseHeaders;
 using helpers::StringToCharList;
+using testing::ElementsAre;
 
 namespace extensions {
 
@@ -111,7 +113,7 @@ static void EventHandledOnIOThread(
     ExtensionWebRequestEventRouter::EventResponse* response) {
   ExtensionWebRequestEventRouter::GetInstance()->OnEventHandled(
       profile, extension_id, event_name, sub_event_name, request_id,
-      response);
+      0 /* embedder_process_id */, 0 /* web_view_instance_id */, response);
 }
 
 // Returns whether |warnings| contains an extension for |extension_id|.
@@ -153,13 +155,35 @@ base::Value FormStringValue(base::StringPiece str) {
   return list;
 }
 
+// Returns a main-frame request to |url|.
+std::unique_ptr<net::URLRequest> CreateRequestHelper(
+    const GURL& url,
+    net::TestURLRequestContext* context,
+    net::TestDelegate* delegate) {
+  CHECK(context);
+  CHECK(delegate);
+
+  std::unique_ptr<net::URLRequest> request = context->CreateRequest(
+      url, net::DEFAULT_PRIORITY, delegate, TRAFFIC_ANNOTATION_FOR_TESTS);
+  content::ResourceRequestInfo::AllocateForTesting(
+      request.get(), content::RESOURCE_TYPE_MAIN_FRAME, /*context*/ nullptr,
+      -1 /* render_process_id */, -1 /* render_view_id */,
+      -1 /* render_frame_id */, true /* is_main_frame */,
+      content::ResourceInterceptPolicy::kAllowNone, false /* is_async */,
+      content::PREVIEWS_OFF,
+      ChromeNavigationUIData::CreateForMainFrameNavigation(
+          nullptr /* web_contents */, WindowOpenDisposition::CURRENT_TAB,
+          0 /* data_reduction_proxy_page_id */));
+  return request;
+}
+
 }  // namespace
 
 // A mock event router that responds to events with a pre-arranged queue of
 // Tasks.
 class TestIPCSender : public IPC::Sender {
  public:
-  typedef std::list<linked_ptr<IPC::Message> > SentMessages;
+  using SentMessages = std::list<std::unique_ptr<IPC::Message>>;
 
   // Adds a Task to the queue. We will fire these in order as events are
   // dispatched.
@@ -188,7 +212,7 @@ class TestIPCSender : public IPC::Sender {
                                                   task_queue_.front());
     task_queue_.pop();
 
-    sent_messages_.push_back(linked_ptr<IPC::Message>(message));
+    sent_messages_.push_back(base::WrapUnique(message));
     return true;
   }
 
@@ -245,6 +269,11 @@ class ExtensionWebRequestTest : public testing::Test {
                               const std::vector<char>& bytes_1,
                               const std::vector<char>& bytes_2);
 
+  // Returns a main-frame request to |url|.
+  std::unique_ptr<net::URLRequest> CreateRequest(const GURL& url) {
+    return CreateRequestHelper(url, context_.get(), &delegate_);
+  }
+
   content::TestBrowserThreadBundle thread_bundle_;
   TestingProfile profile_;
   TestingProfileManager profile_manager_;
@@ -282,9 +311,7 @@ TEST_F(ExtensionWebRequestTest, BlockingEventPrecedenceRedirect) {
   GURL redirect_url("about:redirected");
   GURL not_chosen_redirect_url("about:not_chosen");
 
-  std::unique_ptr<net::URLRequest> request(
-      context_->CreateRequest(GURL("about:blank"), net::DEFAULT_PRIORITY,
-                              &delegate_, TRAFFIC_ANNOTATION_FOR_TESTS));
+  std::unique_ptr<net::URLRequest> request = CreateRequest(GURL("about:blank"));
   {
     // onBeforeRequest will be dispatched twice initially. The second response -
     // the redirect - should win, since it has a later |install_time|. The
@@ -337,9 +364,8 @@ TEST_F(ExtensionWebRequestTest, BlockingEventPrecedenceRedirect) {
   }
 
   // Now test the same thing but the extensions answer in reverse order.
-  std::unique_ptr<net::URLRequest> request2(
-      context_->CreateRequest(GURL("about:blank"), net::DEFAULT_PRIORITY,
-                              &delegate_, TRAFFIC_ANNOTATION_FOR_TESTS));
+  std::unique_ptr<net::URLRequest> request2 =
+      CreateRequest(GURL("about:blank"));
   {
     ExtensionWebRequestEventRouter::EventResponse* response = NULL;
 
@@ -415,9 +441,7 @@ TEST_F(ExtensionWebRequestTest, BlockingEventPrecedenceCancel) {
       ipc_sender_factory.GetWeakPtr());
 
   GURL request_url("about:blank");
-  std::unique_ptr<net::URLRequest> request(
-      context_->CreateRequest(request_url, net::DEFAULT_PRIORITY, &delegate_,
-                              TRAFFIC_ANNOTATION_FOR_TESTS));
+  std::unique_ptr<net::URLRequest> request = CreateRequest(request_url);
 
   // onBeforeRequest will be dispatched twice. The second response -
   // the redirect - would win, since it has a later |install_time|, but
@@ -487,9 +511,7 @@ TEST_F(ExtensionWebRequestTest, SimulateChancelWhileBlocked) {
       kEventName2 + "/1", filter, 0, 0, 0, ipc_sender_factory.GetWeakPtr());
 
   GURL request_url("about:blank");
-  std::unique_ptr<net::URLRequest> request(
-      context_->CreateRequest(request_url, net::DEFAULT_PRIORITY, &delegate_,
-                              TRAFFIC_ANNOTATION_FOR_TESTS));
+  std::unique_ptr<net::URLRequest> request = CreateRequest(request_url);
 
   ExtensionWebRequestEventRouter::EventResponse* response = NULL;
 
@@ -556,9 +578,7 @@ void ExtensionWebRequestTest::FireURLRequestWithData(
     const std::vector<char>& bytes_2) {
   // The request URL can be arbitrary but must have an HTTP or HTTPS scheme.
   GURL request_url("http://www.example.com");
-  std::unique_ptr<net::URLRequest> request(
-      context_->CreateRequest(request_url, net::DEFAULT_PRIORITY, &delegate_,
-                              TRAFFIC_ANNOTATION_FOR_TESTS));
+  std::unique_ptr<net::URLRequest> request = CreateRequest(request_url);
   request->set_method(method);
   if (content_type != NULL) {
     request->SetExtraRequestHeaderByName(net::HttpRequestHeaders::kContentType,
@@ -676,7 +696,7 @@ TEST_F(ExtensionWebRequestTest, AccessRequestBodyData) {
     &raw,
     &raw,
   };
-  static_assert(arraysize(kPath) == arraysize(kExpected),
+  static_assert(base::size(kPath) == base::size(kExpected),
                 "kPath and kExpected arrays should have the same number "
                 "of elements");
   // Header.
@@ -746,8 +766,8 @@ TEST_F(ExtensionWebRequestTest, AccessRequestBodyData) {
                                                                      false);
 
   IPC::Message* message = NULL;
-  TestIPCSender::SentMessages::const_iterator i = ipc_sender_.sent_begin();
-  for (size_t test = 0; test < arraysize(kExpected); ++test) {
+  auto i = ipc_sender_.sent_begin();
+  for (size_t test = 0; test < base::size(kExpected); ++test) {
     SCOPED_TRACE(testing::Message("iteration number ") << test);
     EXPECT_NE(i, ipc_sender_.sent_end());
     message = (i++)->get();
@@ -810,7 +830,7 @@ TEST_F(ExtensionWebRequestTest, MinimalAccessRequestBodyData) {
       ipc_sender_factory.GetWeakPtr());
 
   // Only one request is sent, but more than one event will be triggered.
-  for (size_t i = 1; i < arraysize(kExpected); ++i)
+  for (size_t i = 1; i < base::size(kExpected); ++i)
     ipc_sender_.PushTask(base::DoNothing());
 
   const std::vector<char> part_of_body(1);
@@ -836,9 +856,9 @@ TEST_F(ExtensionWebRequestTest, MinimalAccessRequestBodyData) {
   ExtensionWebRequestEventRouter::GetInstance()->RemoveEventListener(id4,
                                                                      false);
 
-  TestIPCSender::SentMessages::const_iterator i = ipc_sender_.sent_begin();
+  auto i = ipc_sender_.sent_begin();
 
-  for (size_t test = 0; test < arraysize(kExpected); ++test, ++i) {
+  for (size_t test = 0; test < base::size(kExpected); ++test, ++i) {
     SCOPED_TRACE(testing::Message("iteration number ") << test);
     EXPECT_NE(i, ipc_sender_.sent_end());
     IPC::Message* message = i->get();
@@ -883,7 +903,7 @@ TEST_F(ExtensionWebRequestTest, ProperFilteringInPublicSession) {
       ipc_sender_factory.GetWeakPtr());
 
   // Only one request is sent, but more than one event will be triggered.
-  for (size_t i = 1; i < arraysize(kExpected); ++i)
+  for (size_t i = 1; i < base::size(kExpected); ++i)
     ipc_sender_.PushTask(base::DoNothing());
 
   const std::vector<char> part_of_body(1);
@@ -903,7 +923,7 @@ TEST_F(ExtensionWebRequestTest, ProperFilteringInPublicSession) {
 
   TestIPCSender::SentMessages::const_iterator i = ipc_sender_.sent_begin();
 
-  for (size_t test = 0; test < arraysize(kExpected); ++test, ++i) {
+  for (size_t test = 0; test < base::size(kExpected); ++test, ++i) {
     SCOPED_TRACE(testing::Message("iteration number ") << test);
     EXPECT_NE(i, ipc_sender_.sent_end());
     IPC::Message* message = i->get();
@@ -944,10 +964,8 @@ TEST_F(ExtensionWebRequestTest, NoAccessRequestBodyData) {
   // The request URL can be arbitrary but must have an HTTP or HTTPS scheme.
   const GURL request_url("http://www.example.com");
 
-  for (size_t i = 0; i < arraysize(kMethods); ++i) {
-    std::unique_ptr<net::URLRequest> request(
-        context_->CreateRequest(request_url, net::DEFAULT_PRIORITY, &delegate_,
-                                TRAFFIC_ANNOTATION_FOR_TESTS));
+  for (size_t i = 0; i < base::size(kMethods); ++i) {
+    std::unique_ptr<net::URLRequest> request = CreateRequest(request_url);
     request->set_method(kMethods[i]);
     ipc_sender_.PushTask(base::DoNothing());
     request->Start();
@@ -961,8 +979,8 @@ TEST_F(ExtensionWebRequestTest, NoAccessRequestBodyData) {
   ExtensionWebRequestEventRouter::GetInstance()->RemoveEventListener(id1,
                                                                      false);
 
-  TestIPCSender::SentMessages::const_iterator i = ipc_sender_.sent_begin();
-  for (size_t test = 0; test < arraysize(kMethods); ++test, ++i) {
+  auto i = ipc_sender_.sent_begin();
+  for (size_t test = 0; test < base::size(kMethods); ++test, ++i) {
     SCOPED_TRACE(testing::Message("iteration number ") << test);
     EXPECT_NE(i, ipc_sender_.sent_end());
     IPC::Message* message = i->get();
@@ -1042,9 +1060,7 @@ TEST_F(ExtensionWebRequestTest, BlockedRequestsAreRemoved) {
 
   // Send a request. It should block. Wait for the run loop to become idle.
   GURL request_url("about:blank");
-  std::unique_ptr<net::URLRequest> request(
-      context_->CreateRequest(request_url, net::DEFAULT_PRIORITY, &delegate_,
-                              TRAFFIC_ANNOTATION_FOR_TESTS));
+  std::unique_ptr<net::URLRequest> request = CreateRequest(request_url);
   // Extension response for OnErrorOccurred: Terminate the message loop.
   {
     base::RunLoop run_loop;
@@ -1066,7 +1082,8 @@ TEST_F(ExtensionWebRequestTest, BlockedRequestsAreRemoved) {
   response->cancel = true;
   ExtensionWebRequestEventRouter::GetInstance()->OnEventHandled(
       &profile_, extension_id, kEventName, kEventName + "/1",
-      request->identifier(), response);
+      request->identifier(), 0 /* embedder_process_id */,
+      0 /* web_view_instance_id */, response);
   {
     base::RunLoop run_loop;
     run_loop.RunUntilIdle();
@@ -1132,6 +1149,11 @@ class ExtensionWebRequestHeaderModificationTest
     context_->Init();
   }
 
+  // Returns a main-frame request to |url|.
+  std::unique_ptr<net::URLRequest> CreateRequest(const GURL& url) {
+    return CreateRequestHelper(url, context_.get(), &delegate_);
+  }
+
   content::TestBrowserThreadBundle thread_bundle_;
   TestingProfile profile_;
   TestingProfileManager profile_manager_;
@@ -1170,9 +1192,7 @@ TEST_P(ExtensionWebRequestHeaderModificationTest, TestModifications) {
       ipc_sender_factory.GetWeakPtr());
 
   GURL request_url("http://doesnotexist/does_not_exist.html");
-  std::unique_ptr<net::URLRequest> request(
-      context_->CreateRequest(request_url, net::DEFAULT_PRIORITY, &delegate_,
-                              TRAFFIC_ANNOTATION_FOR_TESTS));
+  std::unique_ptr<net::URLRequest> request = CreateRequest(request_url);
 
   // Initialize headers available before extensions are notified of the
   // onBeforeSendHeaders event.
@@ -1298,7 +1318,7 @@ TEST_P(ExtensionWebRequestHeaderModificationTest, TestModifications) {
                                                                      false);
   ExtensionWebRequestEventRouter::GetInstance()->RemoveEventListener(id3,
                                                                      false);
-};
+}
 
 namespace {
 
@@ -1487,20 +1507,17 @@ HeaderModificationTest kTests[] = {
   },
 };
 
-INSTANTIATE_TEST_CASE_P(
-    ExtensionWebRequest,
-    ExtensionWebRequestHeaderModificationTest,
-    ::testing::ValuesIn(kTests));
+INSTANTIATE_TEST_SUITE_P(ExtensionWebRequest,
+                         ExtensionWebRequestHeaderModificationTest,
+                         ::testing::ValuesIn(kTests));
 
 }  // namespace
 
 
 TEST(ExtensionWebRequestHelpersTest,
      TestInDecreasingExtensionInstallationTimeOrder) {
-  linked_ptr<EventResponseDelta> a(
-      new EventResponseDelta("ext_1", base::Time::FromInternalValue(0)));
-  linked_ptr<EventResponseDelta> b(
-      new EventResponseDelta("ext_2", base::Time::FromInternalValue(1000)));
+  EventResponseDelta a("ext_1", base::Time::FromInternalValue(0));
+  EventResponseDelta b("ext_2", base::Time::FromInternalValue(1000));
   EXPECT_FALSE(InDecreasingExtensionInstallationTimeOrder(a, a));
   EXPECT_FALSE(InDecreasingExtensionInstallationTimeOrder(a, b));
   EXPECT_TRUE(InDecreasingExtensionInstallationTimeOrder(b, a));
@@ -1529,11 +1546,10 @@ TEST(ExtensionWebRequestHelpersTest, TestStringToCharList) {
 TEST(ExtensionWebRequestHelpersTest, TestCalculateOnBeforeRequestDelta) {
   const bool cancel = true;
   const GURL localhost("http://localhost");
-  std::unique_ptr<EventResponseDelta> delta(CalculateOnBeforeRequestDelta(
-      "extid", base::Time::Now(), cancel, localhost));
-  ASSERT_TRUE(delta.get());
-  EXPECT_TRUE(delta->cancel);
-  EXPECT_EQ(localhost, delta->new_url);
+  EventResponseDelta delta = CalculateOnBeforeRequestDelta(
+      "extid", base::Time::Now(), cancel, localhost);
+  EXPECT_TRUE(delta.cancel);
+  EXPECT_EQ(localhost, delta.new_url);
 }
 
 TEST(ExtensionWebRequestHelpersTest, TestCalculateOnBeforeSendHeadersDelta) {
@@ -1548,35 +1564,32 @@ TEST(ExtensionWebRequestHelpersTest, TestCalculateOnBeforeSendHeadersDelta) {
   new_headers_added.SetHeader("key1", "value1");
   new_headers_added.SetHeader("key3", "value3");
   new_headers_added.SetHeader("key2", "value2");
-  std::unique_ptr<EventResponseDelta> delta_added(
-      CalculateOnBeforeSendHeadersDelta("extid", base::Time::Now(), cancel,
-                                        &old_headers, &new_headers_added));
-  ASSERT_TRUE(delta_added.get());
-  EXPECT_TRUE(delta_added->cancel);
-  ASSERT_TRUE(delta_added->modified_request_headers.GetHeader("key3", &value));
+  EventResponseDelta delta_added = CalculateOnBeforeSendHeadersDelta(
+      "extid", base::Time::Now(), cancel, &old_headers, &new_headers_added,
+      0 /* extra_info_spec */);
+  EXPECT_TRUE(delta_added.cancel);
+  ASSERT_TRUE(delta_added.modified_request_headers.GetHeader("key3", &value));
   EXPECT_EQ("value3", value);
 
   // Test deleting a header.
   net::HttpRequestHeaders new_headers_deleted;
   new_headers_deleted.SetHeader("key1", "value1");
-  std::unique_ptr<EventResponseDelta> delta_deleted(
-      CalculateOnBeforeSendHeadersDelta("extid", base::Time::Now(), cancel,
-                                        &old_headers, &new_headers_deleted));
-  ASSERT_TRUE(delta_deleted.get());
-  ASSERT_EQ(1u, delta_deleted->deleted_request_headers.size());
-  ASSERT_EQ("key2", delta_deleted->deleted_request_headers.front());
+  EventResponseDelta delta_deleted = CalculateOnBeforeSendHeadersDelta(
+      "extid", base::Time::Now(), cancel, &old_headers, &new_headers_deleted,
+      0 /* extra_info_spec */);
+  ASSERT_EQ(1u, delta_deleted.deleted_request_headers.size());
+  ASSERT_EQ("key2", delta_deleted.deleted_request_headers.front());
 
   // Test modifying a header.
   net::HttpRequestHeaders new_headers_modified;
   new_headers_modified.SetHeader("key1", "value1");
   new_headers_modified.SetHeader("key2", "value3");
-  std::unique_ptr<EventResponseDelta> delta_modified(
-      CalculateOnBeforeSendHeadersDelta("extid", base::Time::Now(), cancel,
-                                        &old_headers, &new_headers_modified));
-  ASSERT_TRUE(delta_modified.get());
-  EXPECT_TRUE(delta_modified->deleted_request_headers.empty());
+  EventResponseDelta delta_modified = CalculateOnBeforeSendHeadersDelta(
+      "extid", base::Time::Now(), cancel, &old_headers, &new_headers_modified,
+      0 /* extra_info_spec */);
+  EXPECT_TRUE(delta_modified.deleted_request_headers.empty());
   ASSERT_TRUE(
-      delta_modified->modified_request_headers.GetHeader("key2", &value));
+      delta_modified.modified_request_headers.GetHeader("key2", &value));
   EXPECT_EQ("value3", value);
 
   // Test modifying a header if extension author just appended a new (key,
@@ -1586,19 +1599,58 @@ TEST(ExtensionWebRequestHelpersTest, TestCalculateOnBeforeSendHeadersDelta) {
   new_headers_modified2.SetHeader("key1", "value1");
   new_headers_modified2.SetHeader("key2", "value2");
   new_headers_modified2.SetHeader("key2", "value3");
-  std::unique_ptr<EventResponseDelta> delta_modified2(
-      CalculateOnBeforeSendHeadersDelta("extid", base::Time::Now(), cancel,
-                                        &old_headers, &new_headers_modified));
-  ASSERT_TRUE(delta_modified2.get());
-  EXPECT_TRUE(delta_modified2->deleted_request_headers.empty());
+  EventResponseDelta delta_modified2 = CalculateOnBeforeSendHeadersDelta(
+      "extid", base::Time::Now(), cancel, &old_headers, &new_headers_modified,
+      0 /* extra_info_spec */);
+  EXPECT_TRUE(delta_modified2.deleted_request_headers.empty());
   ASSERT_TRUE(
-      delta_modified2->modified_request_headers.GetHeader("key2", &value));
+      delta_modified2.modified_request_headers.GetHeader("key2", &value));
   EXPECT_EQ("value3", value);
+}
+
+TEST(ExtensionWebRequestHelpersTest,
+     TestCalculateOnBeforeSendHeadersDeltaWithExtraHeaders) {
+  for (const std::string& name :
+       {"accept-encoding", "accept-language", "cookie", "referer"}) {
+    net::HttpRequestHeaders old_headers;
+    old_headers.SetHeader("key1", "value1");
+
+    // Test adding a special header.
+    net::HttpRequestHeaders new_headers = old_headers;
+    new_headers.SetHeader(name, "value");
+    EventResponseDelta delta = CalculateOnBeforeSendHeadersDelta(
+        "extid", base::Time::Now(), false, &old_headers, &new_headers,
+        0 /* extra_info_spec */);
+    EXPECT_FALSE(delta.modified_request_headers.HasHeader(name));
+
+    // Test with extra headers in spec.
+    delta = CalculateOnBeforeSendHeadersDelta("extid", base::Time::Now(), false,
+                                              &old_headers, &new_headers,
+                                              ExtraInfoSpec::EXTRA_HEADERS);
+    std::string value;
+    EXPECT_TRUE(delta.modified_request_headers.GetHeader(name, &value));
+    EXPECT_EQ("value", value);
+
+    // Test removing a special header.
+    new_headers = old_headers;
+    // Add header to old headers, it will be treated as removed.
+    old_headers.SetHeader(name, "value");
+    delta = CalculateOnBeforeSendHeadersDelta("extid", base::Time::Now(), false,
+                                              &old_headers, &new_headers,
+                                              0 /* extra_info_spec */);
+    EXPECT_TRUE(delta.deleted_request_headers.empty());
+
+    // Test with extra headers in spec.
+    delta = CalculateOnBeforeSendHeadersDelta("extid", base::Time::Now(), false,
+                                              &old_headers, &new_headers,
+                                              ExtraInfoSpec::EXTRA_HEADERS);
+    EXPECT_THAT(delta.deleted_request_headers, ElementsAre(name));
+  }
 }
 
 TEST(ExtensionWebRequestHelpersTest, TestCalculateOnHeadersReceivedDelta) {
   const bool cancel = true;
-  char base_headers_string[] =
+  std::string base_headers_string =
       "HTTP/1.0 200 OK\r\n"
       "Key1: Value1\r\n"
       "Key2: Value2, Bar\r\n"
@@ -1606,62 +1658,97 @@ TEST(ExtensionWebRequestHelpersTest, TestCalculateOnHeadersReceivedDelta) {
       "Key5: Value5, end5\r\n"
       "X-Chrome-ID-Consistency-Response: Value6\r\n"
       "\r\n";
-  scoped_refptr<net::HttpResponseHeaders> base_headers(
-      new net::HttpResponseHeaders(
-        net::HttpUtil::AssembleRawHeaders(
-            base_headers_string, sizeof(base_headers_string))));
+  auto base_headers = base::MakeRefCounted<net::HttpResponseHeaders>(
+      net::HttpUtil::AssembleRawHeaders(base_headers_string.c_str(),
+                                        base_headers_string.size()));
 
-  ResponseHeaders new_headers;
-  new_headers.push_back(ResponseHeader("kEy1", "Value1"));  // Unchanged
-  new_headers.push_back(ResponseHeader("Key2", "Value1"));  // Modified
-  // Key3 is deleted
-  new_headers.push_back(ResponseHeader("Key4", "Value4"));  // Added
-  new_headers.push_back(ResponseHeader("Key5", "Value5, end5"));  // Unchanged
-  new_headers.push_back(ResponseHeader("X-Chrome-ID-Consistency-Response",
-                                       "Value1"));  // Modified
+  ResponseHeaders new_headers = {
+      {"kEy1", "Value1"},  // Unchanged
+      {"Key2", "Value1"},  // Modified
+      // Key3 is deleted
+      {"Key4", "Value4"},                             // Added
+      {"Key5", "Value5, end5"},                       // Unchanged
+      {"X-Chrome-ID-Consistency-Response", "Value1"}  // Modified
+  };
   GURL url;
 
   // The X-Chrome-ID-Consistency-Response is a protected header, but only for
   // Gaia URLs. It should be modifiable when sent from anywhere else.
   // Non-Gaia URL:
-  std::unique_ptr<EventResponseDelta> delta(
-      CalculateOnHeadersReceivedDelta("extid", base::Time::Now(), cancel, url,
-                                      url, base_headers.get(), &new_headers));
-  ASSERT_TRUE(delta.get());
-  EXPECT_TRUE(delta->cancel);
-  EXPECT_EQ(3u, delta->added_response_headers.size());
-  EXPECT_TRUE(base::ContainsValue(delta->added_response_headers,
-                                  ResponseHeader("Key2", "Value1")));
-  EXPECT_TRUE(base::ContainsValue(delta->added_response_headers,
-                                  ResponseHeader("Key4", "Value4")));
-  EXPECT_TRUE(base::ContainsValue(
-      delta->added_response_headers,
-      ResponseHeader("X-Chrome-ID-Consistency-Response", "Value1")));
-  EXPECT_EQ(3u, delta->deleted_response_headers.size());
-  EXPECT_TRUE(base::ContainsValue(delta->deleted_response_headers,
-                                  ResponseHeader("Key2", "Value2, Bar")));
-  EXPECT_TRUE(base::ContainsValue(delta->deleted_response_headers,
-                                  ResponseHeader("Key3", "Value3")));
-  EXPECT_TRUE(base::ContainsValue(
-      delta->deleted_response_headers,
-      ResponseHeader("X-Chrome-ID-Consistency-Response", "Value6")));
+  EventResponseDelta delta = CalculateOnHeadersReceivedDelta(
+      "extid", base::Time::Now(), cancel, url, url, base_headers.get(),
+      &new_headers, 0 /* extra_info_spec */);
+  EXPECT_TRUE(delta.cancel);
+  EXPECT_THAT(
+      delta.added_response_headers,
+      ElementsAre(
+          ResponseHeader("Key2", "Value1"), ResponseHeader("Key4", "Value4"),
+          ResponseHeader("X-Chrome-ID-Consistency-Response", "Value1")));
+  EXPECT_THAT(delta.deleted_response_headers,
+              ElementsAre(ResponseHeader("Key2", "Value2, Bar"),
+                          ResponseHeader("Key3", "Value3"),
+                          ResponseHeader("X-Chrome-ID-Consistency-Response",
+                                         "Value6")));
 
   // Gaia URL:
-  delta.reset(CalculateOnHeadersReceivedDelta(
+  delta = CalculateOnHeadersReceivedDelta(
       "extid", base::Time::Now(), cancel, GaiaUrls::GetInstance()->gaia_url(),
-      url, base_headers.get(), &new_headers));
-  ASSERT_TRUE(delta.get());
-  EXPECT_TRUE(delta->cancel);
-  EXPECT_EQ(2u, delta->added_response_headers.size());
-  EXPECT_TRUE(base::ContainsValue(delta->added_response_headers,
-                                  ResponseHeader("Key2", "Value1")));
-  EXPECT_TRUE(base::ContainsValue(delta->added_response_headers,
-                                  ResponseHeader("Key4", "Value4")));
-  EXPECT_EQ(2u, delta->deleted_response_headers.size());
-  EXPECT_TRUE(base::ContainsValue(delta->deleted_response_headers,
-                                  ResponseHeader("Key2", "Value2, Bar")));
-  EXPECT_TRUE(base::ContainsValue(delta->deleted_response_headers,
-                                  ResponseHeader("Key3", "Value3")));
+      url, base_headers.get(), &new_headers, 0 /* extra_info_spec */);
+  EXPECT_TRUE(delta.cancel);
+  EXPECT_THAT(delta.added_response_headers,
+              ElementsAre(ResponseHeader("Key2", "Value1"),
+                          ResponseHeader("Key4", "Value4")));
+  EXPECT_THAT(delta.deleted_response_headers,
+              ElementsAre(ResponseHeader("Key2", "Value2, Bar"),
+                          ResponseHeader("Key3", "Value3")));
+}
+
+TEST(ExtensionWebRequestHelpersTest,
+     TestCalculateOnHeadersReceivedDeltaWithExtraHeaders) {
+  std::string base_headers_string =
+      "HTTP/1.0 200 OK\r\n"
+      "Key1: Value1\r\n";
+  auto base_headers = base::MakeRefCounted<net::HttpResponseHeaders>(
+      net::HttpUtil::AssembleRawHeaders(base_headers_string.c_str(),
+                                        base_headers_string.size()));
+
+  ResponseHeaders new_headers = {
+      {"Key1", "Value1"},
+      {"Set-Cookie", "cookie"},
+  };
+
+  EventResponseDelta delta = CalculateOnHeadersReceivedDelta(
+      "extid", base::Time::Now(), false, GURL(), GURL(), base_headers.get(),
+      &new_headers, 0 /* extra_info_spec */);
+  EXPECT_TRUE(delta.added_response_headers.empty());
+  EXPECT_TRUE(delta.deleted_response_headers.empty());
+
+  // Set-Cookie can be added if extra headers is set in options.
+  delta = CalculateOnHeadersReceivedDelta(
+      "extid", base::Time::Now(), false, GURL(), GURL(), base_headers.get(),
+      &new_headers, ExtraInfoSpec::EXTRA_HEADERS);
+  EXPECT_THAT(delta.added_response_headers,
+              ElementsAre(ResponseHeader("Set-Cookie", "cookie")));
+  EXPECT_TRUE(delta.deleted_response_headers.empty());
+
+  // Test deleting Set-Cookie header.
+  new_headers = {
+      {"Key1", "Value1"},
+  };
+  base_headers->AddCookie("cookie");
+
+  delta = CalculateOnHeadersReceivedDelta(
+      "extid", base::Time::Now(), false, GURL(), GURL(), base_headers.get(),
+      &new_headers, 0 /* extra_info_spec */);
+  EXPECT_TRUE(delta.added_response_headers.empty());
+  EXPECT_TRUE(delta.deleted_response_headers.empty());
+
+  delta = CalculateOnHeadersReceivedDelta(
+      "extid", base::Time::Now(), false, GURL(), GURL(), base_headers.get(),
+      &new_headers, ExtraInfoSpec::EXTRA_HEADERS);
+  EXPECT_TRUE(delta.added_response_headers.empty());
+  EXPECT_THAT(delta.deleted_response_headers,
+              ElementsAre(ResponseHeader("Set-Cookie", "cookie")));
 }
 
 TEST(ExtensionWebRequestHelpersTest, TestCalculateOnAuthRequiredDelta) {
@@ -1669,16 +1756,14 @@ TEST(ExtensionWebRequestHelpersTest, TestCalculateOnAuthRequiredDelta) {
 
   base::string16 username = base::ASCIIToUTF16("foo");
   base::string16 password = base::ASCIIToUTF16("bar");
-  std::unique_ptr<net::AuthCredentials> credentials(
-      new net::AuthCredentials(username, password));
+  net::AuthCredentials credentials(username, password);
 
-  std::unique_ptr<EventResponseDelta> delta(CalculateOnAuthRequiredDelta(
-      "extid", base::Time::Now(), cancel, &credentials));
-  ASSERT_TRUE(delta.get());
-  EXPECT_TRUE(delta->cancel);
-  ASSERT_TRUE(delta->auth_credentials.get());
-  EXPECT_EQ(username, delta->auth_credentials->username());
-  EXPECT_EQ(password, delta->auth_credentials->password());
+  EventResponseDelta delta = CalculateOnAuthRequiredDelta(
+      "extid", base::Time::Now(), cancel, credentials);
+  EXPECT_TRUE(delta.cancel);
+  ASSERT_TRUE(delta.auth_credentials.has_value());
+  EXPECT_EQ(username, delta.auth_credentials->username());
+  EXPECT_EQ(password, delta.auth_credentials->password());
 }
 
 TEST(ExtensionWebRequestHelpersTest, TestMergeCancelOfResponses) {
@@ -1687,19 +1772,21 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeCancelOfResponses) {
   bool canceled = false;
 
   // Single event that does not cancel.
-  linked_ptr<EventResponseDelta> d1(
-      new EventResponseDelta("extid1", base::Time::FromInternalValue(1000)));
-  d1->cancel = false;
-  deltas.push_back(d1);
+  {
+    EventResponseDelta d1("extid1", base::Time::FromInternalValue(1000));
+    d1.cancel = false;
+    deltas.push_back(std::move(d1));
+  }
   MergeCancelOfResponses(deltas, &canceled, &logger);
   EXPECT_FALSE(canceled);
   EXPECT_EQ(0u, logger.log_size());
 
   // Second event that cancels the request
-  linked_ptr<EventResponseDelta> d2(
-      new EventResponseDelta("extid2", base::Time::FromInternalValue(500)));
-  d2->cancel = true;
-  deltas.push_back(d2);
+  {
+    EventResponseDelta d2("extid2", base::Time::FromInternalValue(500));
+    d2.cancel = true;
+    deltas.push_back(std::move(d2));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   MergeCancelOfResponses(deltas, &canceled, &logger);
   EXPECT_TRUE(canceled);
@@ -1713,19 +1800,21 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeRequestResponses) {
   GURL effective_new_url;
 
   // No redirect
-  linked_ptr<EventResponseDelta> d0(
-      new EventResponseDelta("extid0", base::Time::FromInternalValue(0)));
-  deltas.push_back(d0);
+  {
+    EventResponseDelta d0("extid0", base::Time::FromInternalValue(0));
+    deltas.push_back(std::move(d0));
+  }
   MergeOnBeforeRequestResponses(GURL(kExampleUrl), deltas, &effective_new_url,
                                 &ignored_actions, &logger);
   EXPECT_TRUE(effective_new_url.is_empty());
 
   // Single redirect.
   GURL new_url_1("http://foo.com");
-  linked_ptr<EventResponseDelta> d1(
-      new EventResponseDelta("extid1", base::Time::FromInternalValue(1000)));
-  d1->new_url = GURL(new_url_1);
-  deltas.push_back(d1);
+  {
+    EventResponseDelta d1("extid1", base::Time::FromInternalValue(1000));
+    d1.new_url = GURL(new_url_1);
+    deltas.push_back(std::move(d1));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   logger.clear();
   MergeOnBeforeRequestResponses(GURL(kExampleUrl), deltas, &effective_new_url,
@@ -1736,10 +1825,11 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeRequestResponses) {
 
   // Ignored redirect (due to precedence).
   GURL new_url_2("http://bar.com");
-  linked_ptr<EventResponseDelta> d2(
-      new EventResponseDelta("extid2", base::Time::FromInternalValue(500)));
-  d2->new_url = GURL(new_url_2);
-  deltas.push_back(d2);
+  {
+    EventResponseDelta d2("extid2", base::Time::FromInternalValue(500));
+    d2.new_url = GURL(new_url_2);
+    deltas.push_back(std::move(d2));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   ignored_actions.clear();
   logger.clear();
@@ -1753,10 +1843,11 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeRequestResponses) {
 
   // Overriding redirect.
   GURL new_url_3("http://baz.com");
-  linked_ptr<EventResponseDelta> d3(
-      new EventResponseDelta("extid3", base::Time::FromInternalValue(1500)));
-  d3->new_url = GURL(new_url_3);
-  deltas.push_back(d3);
+  {
+    EventResponseDelta d3("extid3", base::Time::FromInternalValue(1500));
+    d3.new_url = GURL(new_url_3);
+    deltas.push_back(std::move(d3));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   ignored_actions.clear();
   logger.clear();
@@ -1771,10 +1862,11 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeRequestResponses) {
   EXPECT_EQ(3u, logger.log_size());
 
   // Check that identical redirects don't cause a conflict.
-  linked_ptr<EventResponseDelta> d4(
-      new EventResponseDelta("extid4", base::Time::FromInternalValue(2000)));
-  d4->new_url = GURL(new_url_3);
-  deltas.push_back(d4);
+  {
+    EventResponseDelta d4("extid4", base::Time::FromInternalValue(2000));
+    d4.new_url = GURL(new_url_3);
+    deltas.push_back(std::move(d4));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   ignored_actions.clear();
   logger.clear();
@@ -1799,10 +1891,11 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeRequestResponses2) {
 
   // Single redirect.
   GURL new_url_0("http://foo.com");
-  linked_ptr<EventResponseDelta> d0(
-      new EventResponseDelta("extid0", base::Time::FromInternalValue(2000)));
-  d0->new_url = GURL(new_url_0);
-  deltas.push_back(d0);
+  {
+    EventResponseDelta d0("extid0", base::Time::FromInternalValue(2000));
+    d0.new_url = GURL(new_url_0);
+    deltas.push_back(std::move(d0));
+  }
   MergeOnBeforeRequestResponses(GURL(kExampleUrl), deltas, &effective_new_url,
                                 &ignored_actions, &logger);
   EXPECT_EQ(new_url_0, effective_new_url);
@@ -1810,10 +1903,11 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeRequestResponses2) {
   // Cancel request by redirecting to a data:// URL. This shall override
   // the other redirect but not cause any conflict warnings.
   GURL new_url_1("data://foo");
-  linked_ptr<EventResponseDelta> d1(
-      new EventResponseDelta("extid1", base::Time::FromInternalValue(1500)));
-  d1->new_url = GURL(new_url_1);
-  deltas.push_back(d1);
+  {
+    EventResponseDelta d1("extid1", base::Time::FromInternalValue(1500));
+    d1.new_url = GURL(new_url_1);
+    deltas.push_back(std::move(d1));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   ignored_actions.clear();
   logger.clear();
@@ -1826,10 +1920,11 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeRequestResponses2) {
   // Cancel request by redirecting to the same data:// URL. This shall
   // not create any conflicts as it is in line with d1.
   GURL new_url_2("data://foo");
-  linked_ptr<EventResponseDelta> d2(
-      new EventResponseDelta("extid2", base::Time::FromInternalValue(1000)));
-  d2->new_url = GURL(new_url_2);
-  deltas.push_back(d2);
+  {
+    EventResponseDelta d2("extid2", base::Time::FromInternalValue(1000));
+    d2.new_url = GURL(new_url_2);
+    deltas.push_back(std::move(d2));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   ignored_actions.clear();
   logger.clear();
@@ -1843,10 +1938,11 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeRequestResponses2) {
   // Cancel redirect by redirecting to a different data:// URL. This needs
   // to create a conflict.
   GURL new_url_3("data://something_totally_different");
-  linked_ptr<EventResponseDelta> d3(
-      new EventResponseDelta("extid3", base::Time::FromInternalValue(500)));
-  d3->new_url = GURL(new_url_3);
-  deltas.push_back(d3);
+  {
+    EventResponseDelta d3("extid3", base::Time::FromInternalValue(500));
+    d3.new_url = GURL(new_url_3);
+    deltas.push_back(std::move(d3));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   ignored_actions.clear();
   logger.clear();
@@ -1869,10 +1965,11 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeRequestResponses3) {
 
   // Single redirect.
   GURL new_url_0("http://foo.com");
-  linked_ptr<EventResponseDelta> d0(
-      new EventResponseDelta("extid0", base::Time::FromInternalValue(2000)));
-  d0->new_url = GURL(new_url_0);
-  deltas.push_back(d0);
+  {
+    EventResponseDelta d0("extid0", base::Time::FromInternalValue(2000));
+    d0.new_url = GURL(new_url_0);
+    deltas.push_back(std::move(d0));
+  }
   MergeOnBeforeRequestResponses(GURL(kExampleUrl), deltas, &effective_new_url,
                                 &ignored_actions, &logger);
   EXPECT_EQ(new_url_0, effective_new_url);
@@ -1880,10 +1977,11 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeRequestResponses3) {
   // Cancel request by redirecting to about:blank. This shall override
   // the other redirect but not cause any conflict warnings.
   GURL new_url_1("about:blank");
-  linked_ptr<EventResponseDelta> d1(
-      new EventResponseDelta("extid1", base::Time::FromInternalValue(1500)));
-  d1->new_url = GURL(new_url_1);
-  deltas.push_back(d1);
+  {
+    EventResponseDelta d1("extid1", base::Time::FromInternalValue(1500));
+    d1.new_url = GURL(new_url_1);
+    deltas.push_back(std::move(d1));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   ignored_actions.clear();
   logger.clear();
@@ -1902,10 +2000,11 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeRequestResponses4) {
   GURL effective_new_url;
 
   // Single redirect.
-  linked_ptr<EventResponseDelta> delta(
-      new EventResponseDelta("extid", base::Time::FromInternalValue(2000)));
-  delta->new_url = GURL("http://foo.com");
-  deltas.push_back(delta);
+  {
+    EventResponseDelta delta("extid", base::Time::FromInternalValue(2000));
+    delta.new_url = GURL("http://foo.com");
+    deltas.push_back(std::move(delta));
+  }
   MergeOnBeforeRequestResponses(GURL("ws://example.com"), deltas,
                                 &effective_new_url, &ignored_actions, &logger);
   EXPECT_EQ(GURL(), effective_new_url);
@@ -1921,14 +2020,17 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeSendHeadersResponses) {
   EventResponseDeltas deltas;
 
   // Check that we can handle not changing the headers.
-  linked_ptr<EventResponseDelta> d0(
-      new EventResponseDelta("extid0", base::Time::FromInternalValue(2500)));
-  deltas.push_back(d0);
+  {
+    EventResponseDelta d0("extid0", base::Time::FromInternalValue(2500));
+    deltas.push_back(std::move(d0));
+  }
   bool request_headers_modified0;
+  std::set<std::string> ignore1, ignore2;
   net::HttpRequestHeaders headers0;
   headers0.MergeFrom(base_headers);
   MergeOnBeforeSendHeadersResponses(GURL(), deltas, &headers0, &ignored_actions,
-                                    &logger, &request_headers_modified0);
+                                    &logger, &ignore1, &ignore2,
+                                    &request_headers_modified0);
   ASSERT_TRUE(headers0.GetHeader("key1", &header_value));
   EXPECT_EQ("value 1", header_value);
   ASSERT_TRUE(headers0.GetHeader("key2", &header_value));
@@ -1938,20 +2040,24 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeSendHeadersResponses) {
   EXPECT_FALSE(request_headers_modified0);
 
   // Delete, modify and add a header.
-  linked_ptr<EventResponseDelta> d1(
-      new EventResponseDelta("extid1", base::Time::FromInternalValue(2000)));
-  d1->deleted_request_headers.push_back("key1");
-  d1->modified_request_headers.SetHeader("key2", "value 3");
-  d1->modified_request_headers.SetHeader("key3", "value 3");
-  deltas.push_back(d1);
+  {
+    EventResponseDelta d1("extid1", base::Time::FromInternalValue(2000));
+    d1.deleted_request_headers.push_back("key1");
+    d1.modified_request_headers.SetHeader("key2", "value 3");
+    d1.modified_request_headers.SetHeader("key3", "value 3");
+    deltas.push_back(std::move(d1));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   ignored_actions.clear();
   logger.clear();
+  ignore1.clear();
+  ignore2.clear();
   bool request_headers_modified1;
   net::HttpRequestHeaders headers1;
   headers1.MergeFrom(base_headers);
   MergeOnBeforeSendHeadersResponses(GURL(), deltas, &headers1, &ignored_actions,
-                                    &logger, &request_headers_modified1);
+                                    &logger, &ignore1, &ignore2,
+                                    &request_headers_modified1);
   EXPECT_FALSE(headers1.HasHeader("key1"));
   ASSERT_TRUE(headers1.GetHeader("key2", &header_value));
   EXPECT_EQ("value 3", header_value);
@@ -1963,20 +2069,24 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeSendHeadersResponses) {
 
   // Check that conflicts are atomic, i.e. if one header modification
   // collides all other conflicts of the same extension are declined as well.
-  linked_ptr<EventResponseDelta> d2(
-      new EventResponseDelta("extid2", base::Time::FromInternalValue(1500)));
-  // This one conflicts:
-  d2->modified_request_headers.SetHeader("key3", "value 0");
-  d2->modified_request_headers.SetHeader("key4", "value 4");
-  deltas.push_back(d2);
+  {
+    EventResponseDelta d2("extid2", base::Time::FromInternalValue(1500));
+    // This one conflicts:
+    d2.modified_request_headers.SetHeader("key3", "value 0");
+    d2.modified_request_headers.SetHeader("key4", "value 4");
+    deltas.push_back(std::move(d2));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   ignored_actions.clear();
   logger.clear();
+  ignore1.clear();
+  ignore2.clear();
   bool request_headers_modified2;
   net::HttpRequestHeaders headers2;
   headers2.MergeFrom(base_headers);
   MergeOnBeforeSendHeadersResponses(GURL(), deltas, &headers2, &ignored_actions,
-                                    &logger, &request_headers_modified2);
+                                    &logger, &ignore1, &ignore2,
+                                    &request_headers_modified2);
   EXPECT_FALSE(headers2.HasHeader("key1"));
   ASSERT_TRUE(headers2.GetHeader("key2", &header_value));
   EXPECT_EQ("value 3", header_value);
@@ -1992,20 +2102,24 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeSendHeadersResponses) {
 
   // Check that identical modifications don't conflict and operations
   // can be merged.
-  linked_ptr<EventResponseDelta> d3(
-      new EventResponseDelta("extid3", base::Time::FromInternalValue(1000)));
-  d3->deleted_request_headers.push_back("key1");
-  d3->modified_request_headers.SetHeader("key2", "value 3");
-  d3->modified_request_headers.SetHeader("key5", "value 5");
-  deltas.push_back(d3);
+  {
+    EventResponseDelta d3("extid3", base::Time::FromInternalValue(1000));
+    d3.deleted_request_headers.push_back("key1");
+    d3.modified_request_headers.SetHeader("key2", "value 3");
+    d3.modified_request_headers.SetHeader("key5", "value 5");
+    deltas.push_back(std::move(d3));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   ignored_actions.clear();
   logger.clear();
+  ignore1.clear();
+  ignore2.clear();
   bool request_headers_modified3;
   net::HttpRequestHeaders headers3;
   headers3.MergeFrom(base_headers);
   MergeOnBeforeSendHeadersResponses(GURL(), deltas, &headers3, &ignored_actions,
-                                    &logger, &request_headers_modified3);
+                                    &logger, &ignore1, &ignore2,
+                                    &request_headers_modified3);
   EXPECT_FALSE(headers3.HasHeader("key1"));
   ASSERT_TRUE(headers3.GetHeader("key2", &header_value));
   EXPECT_EQ("value 3", header_value);
@@ -2031,51 +2145,49 @@ TEST(ExtensionWebRequestHelpersTest,
   std::string header_value;
   EventResponseDeltas deltas;
 
-  linked_ptr<RequestCookieModification> add_cookie =
-      make_linked_ptr(new RequestCookieModification);
-  add_cookie->type = helpers::ADD;
-  add_cookie->modification.reset(new helpers::RequestCookie);
-  add_cookie->modification->name.reset(new std::string("name4"));
-  add_cookie->modification->value.reset(new std::string("\"value 4\""));
+  RequestCookieModification add_cookie;
+  add_cookie.type = helpers::ADD;
+  add_cookie.modification.emplace();
+  add_cookie.modification->name = "name4";
+  add_cookie.modification->value = "\"value 4\"";
 
-  linked_ptr<RequestCookieModification> add_cookie_2 =
-      make_linked_ptr(new RequestCookieModification);
-  add_cookie_2->type = helpers::ADD;
-  add_cookie_2->modification.reset(new helpers::RequestCookie);
-  add_cookie_2->modification->name.reset(new std::string("name"));
-  add_cookie_2->modification->value.reset(new std::string("new value"));
+  RequestCookieModification add_cookie_2;
+  add_cookie_2.type = helpers::ADD;
+  add_cookie_2.modification.emplace();
+  add_cookie_2.modification->name = "name";
+  add_cookie_2.modification->value = "new value";
 
-  linked_ptr<RequestCookieModification> edit_cookie =
-      make_linked_ptr(new RequestCookieModification);
-  edit_cookie->type = helpers::EDIT;
-  edit_cookie->filter.reset(new helpers::RequestCookie);
-  edit_cookie->filter->name.reset(new std::string("name2"));
-  edit_cookie->modification.reset(new helpers::RequestCookie);
-  edit_cookie->modification->value.reset(new std::string("new value"));
+  RequestCookieModification edit_cookie;
+  edit_cookie.type = helpers::EDIT;
+  edit_cookie.filter.emplace();
+  edit_cookie.filter->name = "name2";
+  edit_cookie.modification.emplace();
+  edit_cookie.modification->value = "new value";
 
-  linked_ptr<RequestCookieModification> remove_cookie =
-      make_linked_ptr(new RequestCookieModification);
-  remove_cookie->type = helpers::REMOVE;
-  remove_cookie->filter.reset(new helpers::RequestCookie);
-  remove_cookie->filter->name.reset(new std::string("name3"));
+  RequestCookieModification remove_cookie;
+  remove_cookie.type = helpers::REMOVE;
+  remove_cookie.filter.emplace();
+  remove_cookie.filter->name = "name3";
 
-  linked_ptr<RequestCookieModification> operations[] = {
-      add_cookie, add_cookie_2, edit_cookie, remove_cookie
-  };
+  RequestCookieModification* operations[] = {&add_cookie, &add_cookie_2,
+                                             &edit_cookie, &remove_cookie};
 
-  for (size_t i = 0; i < arraysize(operations); ++i) {
-    linked_ptr<EventResponseDelta> delta(
-        new EventResponseDelta("extid0", base::Time::FromInternalValue(i * 5)));
-    delta->request_cookie_modifications.push_back(operations[i]);
-    deltas.push_back(delta);
+  int64_t time = 0;
+  for (auto* operation : operations) {
+    EventResponseDelta delta("extid0",
+                             base::Time::FromInternalValue(time++ * 5));
+    delta.request_cookie_modifications.push_back(std::move(*operation));
+    deltas.push_back(std::move(delta));
   }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   bool request_headers_modified1;
+  std::set<std::string> ignore1, ignore2;
   net::HttpRequestHeaders headers1;
   headers1.MergeFrom(base_headers);
   ignored_actions.clear();
   MergeOnBeforeSendHeadersResponses(GURL(), deltas, &headers1, &ignored_actions,
-                                    &logger, &request_headers_modified1);
+                                    &logger, &ignore1, &ignore2,
+                                    &request_headers_modified1);
   EXPECT_TRUE(headers1.HasHeader("Cookie"));
   ASSERT_TRUE(headers1.GetHeader("Cookie", &header_value));
   EXPECT_EQ("name=new value; name2=new value; name4=\"value 4\"", header_value);
@@ -2142,170 +2254,156 @@ TEST(ExtensionWebRequestHelpersTest,
               base_headers_string.c_str(), base_headers_string.size())));
 
   // Check that we can handle if not touching the response headers.
-  linked_ptr<EventResponseDelta> d0(
-      new EventResponseDelta("extid0", base::Time::FromInternalValue(3000)));
-  deltas.push_back(d0);
+  {
+    EventResponseDelta d0("extid0", base::Time::FromInternalValue(3000));
+    deltas.push_back(std::move(d0));
+  }
   scoped_refptr<net::HttpResponseHeaders> new_headers0;
   MergeCookiesInOnHeadersReceivedResponses(GURL(), deltas, base_headers.get(),
                                            &new_headers0, &logger);
   EXPECT_FALSE(new_headers0.get());
   EXPECT_EQ(0u, logger.log_size());
 
-  linked_ptr<ResponseCookieModification> add_cookie =
-      make_linked_ptr(new ResponseCookieModification);
-  add_cookie->type = helpers::ADD;
-  add_cookie->modification.reset(new helpers::ResponseCookie);
-  add_cookie->modification->name.reset(new std::string("name4"));
-  add_cookie->modification->value.reset(new std::string("\"value4\""));
+  ResponseCookieModification add_cookie;
+  add_cookie.type = helpers::ADD;
+  add_cookie.modification.emplace();
+  add_cookie.modification->name = "name4";
+  add_cookie.modification->value = "\"value4\"";
 
-  linked_ptr<ResponseCookieModification> edit_cookie =
-      make_linked_ptr(new ResponseCookieModification);
-  edit_cookie->type = helpers::EDIT;
-  edit_cookie->filter.reset(new helpers::FilterResponseCookie);
-  edit_cookie->filter->name.reset(new std::string("name2"));
-  edit_cookie->modification.reset(new helpers::ResponseCookie);
-  edit_cookie->modification->value.reset(new std::string("new value"));
+  ResponseCookieModification edit_cookie;
+  edit_cookie.type = helpers::EDIT;
+  edit_cookie.filter.emplace();
+  edit_cookie.filter->name = "name2";
+  edit_cookie.modification.emplace();
+  edit_cookie.modification->value = "new value";
 
-  linked_ptr<ResponseCookieModification> edit_cookie_2 =
-      make_linked_ptr(new ResponseCookieModification);
-  edit_cookie_2->type = helpers::EDIT;
-  edit_cookie_2->filter.reset(new helpers::FilterResponseCookie);
-  edit_cookie_2->filter->secure.reset(new bool(false));
-  edit_cookie_2->modification.reset(new helpers::ResponseCookie);
-  edit_cookie_2->modification->secure.reset(new bool(true));
+  ResponseCookieModification edit_cookie_2;
+  edit_cookie_2.type = helpers::EDIT;
+  edit_cookie_2.filter.emplace();
+  edit_cookie_2.filter->secure = false;
+  edit_cookie_2.modification.emplace();
+  edit_cookie_2.modification->secure = true;
 
   // Tests 'ageLowerBound' filter when cookie lifetime is set
   // in cookie's 'max-age' attribute and its value is greater than
   // the filter's value.
-  linked_ptr<ResponseCookieModification> edit_cookie_3 =
-      make_linked_ptr(new ResponseCookieModification);
-  edit_cookie_3->type = helpers::EDIT;
-  edit_cookie_3->filter.reset(new helpers::FilterResponseCookie);
-  edit_cookie_3->filter->name.reset(new std::string("lBound1"));
-  edit_cookie_3->filter->age_lower_bound.reset(new int(600));
-  edit_cookie_3->modification.reset(new helpers::ResponseCookie);
-  edit_cookie_3->modification->value.reset(new std::string("greater_1"));
+  ResponseCookieModification edit_cookie_3;
+  edit_cookie_3.type = helpers::EDIT;
+  edit_cookie_3.filter.emplace();
+  edit_cookie_3.filter->name = "lBound1";
+  edit_cookie_3.filter->age_lower_bound = 600;
+  edit_cookie_3.modification.emplace();
+  edit_cookie_3.modification->value = "greater_1";
 
   // Cookie lifetime is set in the cookie's 'expires' attribute.
-  linked_ptr<ResponseCookieModification> edit_cookie_4 =
-      make_linked_ptr(new ResponseCookieModification);
-  edit_cookie_4->type = helpers::EDIT;
-  edit_cookie_4->filter.reset(new helpers::FilterResponseCookie);
-  edit_cookie_4->filter->name.reset(new std::string("lBound2"));
-  edit_cookie_4->filter->age_lower_bound.reset(new int(600));
-  edit_cookie_4->modification.reset(new helpers::ResponseCookie);
-  edit_cookie_4->modification->value.reset(new std::string("greater_2"));
+  ResponseCookieModification edit_cookie_4;
+  edit_cookie_4.type = helpers::EDIT;
+  edit_cookie_4.filter.emplace();
+  edit_cookie_4.filter->name = "lBound2";
+  edit_cookie_4.filter->age_lower_bound = 600;
+  edit_cookie_4.modification.emplace();
+  edit_cookie_4.modification->value = "greater_2";
 
   // Tests equality of the cookie lifetime with the filter value when
   // lifetime is set in the cookie's 'max-age' attribute.
   // Note: we don't test the equality when the lifetime is set in the 'expires'
   // attribute because the tests will be flaky. The reason is calculations will
   // depend on fetching the current time.
-  linked_ptr<ResponseCookieModification> edit_cookie_5 =
-      make_linked_ptr(new ResponseCookieModification);
-  edit_cookie_5->type = helpers::EDIT;
-  edit_cookie_5->filter.reset(new helpers::FilterResponseCookie);
-  edit_cookie_5->filter->name.reset(new std::string("lBound3"));
-  edit_cookie_5->filter->age_lower_bound.reset(new int(2000));
-  edit_cookie_5->modification.reset(new helpers::ResponseCookie);
-  edit_cookie_5->modification->value.reset(new std::string("equal_2"));
+  ResponseCookieModification edit_cookie_5;
+  edit_cookie_5.type = helpers::EDIT;
+  edit_cookie_5.filter.emplace();
+  edit_cookie_5.filter->name = "lBound3";
+  edit_cookie_5.filter->age_lower_bound = 2000;
+  edit_cookie_5.modification.emplace();
+  edit_cookie_5.modification->value = "equal_2";
 
   // Tests 'ageUpperBound' filter when cookie lifetime is set
   // in cookie's 'max-age' attribute and its value is lower than
   // the filter's value.
-  linked_ptr<ResponseCookieModification> edit_cookie_6 =
-      make_linked_ptr(new ResponseCookieModification);
-  edit_cookie_6->type = helpers::EDIT;
-  edit_cookie_6->filter.reset(new helpers::FilterResponseCookie);
-  edit_cookie_6->filter->name.reset(new std::string("uBound1"));
-  edit_cookie_6->filter->age_upper_bound.reset(new int(2000));
-  edit_cookie_6->modification.reset(new helpers::ResponseCookie);
-  edit_cookie_6->modification->value.reset(new std::string("smaller_1"));
+  ResponseCookieModification edit_cookie_6;
+  edit_cookie_6.type = helpers::EDIT;
+  edit_cookie_6.filter.emplace();
+  edit_cookie_6.filter->name = "uBound1";
+  edit_cookie_6.filter->age_upper_bound = 2000;
+  edit_cookie_6.modification.emplace();
+  edit_cookie_6.modification->value = "smaller_1";
 
   // Cookie lifetime is set in the cookie's 'expires' attribute.
-  linked_ptr<ResponseCookieModification> edit_cookie_7 =
-      make_linked_ptr(new ResponseCookieModification);
-  edit_cookie_7->type = helpers::EDIT;
-  edit_cookie_7->filter.reset(new helpers::FilterResponseCookie);
-  edit_cookie_7->filter->name.reset(new std::string("uBound2"));
-  edit_cookie_7->filter->age_upper_bound.reset(new int(2000));
-  edit_cookie_7->modification.reset(new helpers::ResponseCookie);
-  edit_cookie_7->modification->value.reset(new std::string("smaller_2"));
+  ResponseCookieModification edit_cookie_7;
+  edit_cookie_7.type = helpers::EDIT;
+  edit_cookie_7.filter.emplace();
+  edit_cookie_7.filter->name = "uBound2";
+  edit_cookie_7.filter->age_upper_bound = 2000;
+  edit_cookie_7.modification.emplace();
+  edit_cookie_7.modification->value = "smaller_2";
 
   // Tests equality of the cookie lifetime with the filter value when
   // lifetime is set in the cookie's 'max-age' attribute.
-  linked_ptr<ResponseCookieModification> edit_cookie_8 =
-      make_linked_ptr(new ResponseCookieModification);
-  edit_cookie_8->type = helpers::EDIT;
-  edit_cookie_8->filter.reset(new helpers::FilterResponseCookie);
-  edit_cookie_8->filter->name.reset(new std::string("uBound3"));
-  edit_cookie_8->filter->age_upper_bound.reset(new int(2000));
-  edit_cookie_8->modification.reset(new helpers::ResponseCookie);
-  edit_cookie_8->modification->value.reset(new std::string("equal_4"));
+  ResponseCookieModification edit_cookie_8;
+  edit_cookie_8.type = helpers::EDIT;
+  edit_cookie_8.filter.emplace();
+  edit_cookie_8.filter->name = "uBound3";
+  edit_cookie_8.filter->age_upper_bound = 2000;
+  edit_cookie_8.modification.emplace();
+  edit_cookie_8.modification->value = "equal_4";
 
   // Tests 'ageUpperBound' filter when cookie lifetime is greater
   // than the filter value. No modification is expected to be applied.
-  linked_ptr<ResponseCookieModification> edit_cookie_9 =
-      make_linked_ptr(new ResponseCookieModification);
-  edit_cookie_9->type = helpers::EDIT;
-  edit_cookie_9->filter.reset(new helpers::FilterResponseCookie);
-  edit_cookie_9->filter->name.reset(new std::string("uBound4"));
-  edit_cookie_9->filter->age_upper_bound.reset(new int(2501));
-  edit_cookie_9->modification.reset(new helpers::ResponseCookie);
-  edit_cookie_9->modification->value.reset(new std::string("Will not change"));
+  ResponseCookieModification edit_cookie_9;
+  edit_cookie_9.type = helpers::EDIT;
+  edit_cookie_9.filter.emplace();
+  edit_cookie_9.filter->name = "uBound4";
+  edit_cookie_9.filter->age_upper_bound = 2501;
+  edit_cookie_9.modification.emplace();
+  edit_cookie_9.modification->value = "Will not change";
 
   // Tests 'ageUpperBound' filter when both 'max-age' and 'expires' cookie
   // attributes are provided. 'expires' value matches the filter, however
   // no modification to the cookie is expected because 'max-age' overrides
   // 'expires' and it does not match the filter.
-  linked_ptr<ResponseCookieModification> edit_cookie_10 =
-      make_linked_ptr(new ResponseCookieModification);
-  edit_cookie_10->type = helpers::EDIT;
-  edit_cookie_10->filter.reset(new helpers::FilterResponseCookie);
-  edit_cookie_10->filter->name.reset(new std::string("uBound5"));
-  edit_cookie_10->filter->age_upper_bound.reset(new int(800));
-  edit_cookie_10->modification.reset(new helpers::ResponseCookie);
-  edit_cookie_10->modification->value.reset(new std::string("Will not change"));
+  ResponseCookieModification edit_cookie_10;
+  edit_cookie_10.type = helpers::EDIT;
+  edit_cookie_10.filter.emplace();
+  edit_cookie_10.filter->name = "uBound5";
+  edit_cookie_10.filter->age_upper_bound = 800;
+  edit_cookie_10.modification.emplace();
+  edit_cookie_10.modification->value = "Will not change";
 
-  linked_ptr<ResponseCookieModification> remove_cookie =
-      make_linked_ptr(new ResponseCookieModification);
-  remove_cookie->type = helpers::REMOVE;
-  remove_cookie->filter.reset(new helpers::FilterResponseCookie);
-  remove_cookie->filter->name.reset(new std::string("name3"));
+  ResponseCookieModification remove_cookie;
+  remove_cookie.type = helpers::REMOVE;
+  remove_cookie.filter.emplace();
+  remove_cookie.filter->name = "name3";
 
-  linked_ptr<ResponseCookieModification> remove_cookie_2 =
-      make_linked_ptr(new ResponseCookieModification);
-  remove_cookie_2->type = helpers::REMOVE;
-  remove_cookie_2->filter.reset(new helpers::FilterResponseCookie);
-  remove_cookie_2->filter->name.reset(new std::string("uBound6"));
-  remove_cookie_2->filter->age_upper_bound.reset(new int(700));
+  ResponseCookieModification remove_cookie_2;
+  remove_cookie_2.type = helpers::REMOVE;
+  remove_cookie_2.filter.emplace();
+  remove_cookie_2.filter->name = "uBound6";
+  remove_cookie_2.filter->age_upper_bound = 700;
 
-  linked_ptr<ResponseCookieModification> remove_cookie_3 =
-      make_linked_ptr(new ResponseCookieModification);
-  remove_cookie_3->type = helpers::REMOVE;
-  remove_cookie_3->filter.reset(new helpers::FilterResponseCookie);
-  remove_cookie_3->filter->name.reset(new std::string("sessionCookie"));
-  remove_cookie_3->filter->session_cookie.reset(new bool(true));
+  ResponseCookieModification remove_cookie_3;
+  remove_cookie_3.type = helpers::REMOVE;
+  remove_cookie_3.filter.emplace();
+  remove_cookie_3.filter->name = "sessionCookie";
+  remove_cookie_3.filter->session_cookie = true;
 
-  linked_ptr<ResponseCookieModification> remove_cookie_4 =
-        make_linked_ptr(new ResponseCookieModification);
-  remove_cookie_4->type = helpers::REMOVE;
-  remove_cookie_4->filter.reset(new helpers::FilterResponseCookie);
-  remove_cookie_4->filter->name.reset(new std::string("sessionCookie2"));
-  remove_cookie_4->filter->session_cookie.reset(new bool(true));
+  ResponseCookieModification remove_cookie_4;
+  remove_cookie_4.type = helpers::REMOVE;
+  remove_cookie_4.filter.emplace();
+  remove_cookie_4.filter->name = "sessionCookie2";
+  remove_cookie_4.filter->session_cookie = true;
 
-  linked_ptr<ResponseCookieModification> operations[] = {
-      add_cookie, edit_cookie, edit_cookie_2, edit_cookie_3, edit_cookie_4,
-      edit_cookie_5, edit_cookie_6, edit_cookie_7, edit_cookie_8,
-      edit_cookie_9, edit_cookie_10, remove_cookie, remove_cookie_2,
-      remove_cookie_3, remove_cookie_4
-  };
+  ResponseCookieModification* operations[] = {
+      &add_cookie,      &edit_cookie,     &edit_cookie_2,  &edit_cookie_3,
+      &edit_cookie_4,   &edit_cookie_5,   &edit_cookie_6,  &edit_cookie_7,
+      &edit_cookie_8,   &edit_cookie_9,   &edit_cookie_10, &remove_cookie,
+      &remove_cookie_2, &remove_cookie_3, &remove_cookie_4};
 
-  for (size_t i = 0; i < arraysize(operations); ++i) {
-    linked_ptr<EventResponseDelta> delta(
-        new EventResponseDelta("extid0", base::Time::FromInternalValue(i * 5)));
-    delta->response_cookie_modifications.push_back(operations[i]);
-    deltas.push_back(delta);
+  int64_t time = 0;
+  for (auto* operation : operations) {
+    EventResponseDelta delta("extid0",
+                             base::Time::FromInternalValue(time++ * 5));
+    delta.response_cookie_modifications.push_back(std::move(*operation));
+    deltas.push_back(std::move(delta));
   }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   scoped_refptr<net::HttpResponseHeaders> headers1(
@@ -2358,9 +2456,10 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnHeadersReceivedResponses) {
             base_headers_string, sizeof(base_headers_string))));
 
   // Check that we can handle if not touching the response headers.
-  linked_ptr<EventResponseDelta> d0(
-      new EventResponseDelta("extid0", base::Time::FromInternalValue(3000)));
-  deltas.push_back(d0);
+  {
+    EventResponseDelta d0("extid0", base::Time::FromInternalValue(3000));
+    deltas.push_back(std::move(d0));
+  }
   bool response_headers_modified0;
   scoped_refptr<net::HttpResponseHeaders> new_headers0;
   GURL allowed_unsafe_redirect_url0;
@@ -2374,12 +2473,14 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnHeadersReceivedResponses) {
   EXPECT_EQ(0u, logger.log_size());
   EXPECT_FALSE(response_headers_modified0);
 
-  linked_ptr<EventResponseDelta> d1(
-      new EventResponseDelta("extid1", base::Time::FromInternalValue(2000)));
-  d1->deleted_response_headers.push_back(ResponseHeader("KEY1", "Value1"));
-  d1->deleted_response_headers.push_back(ResponseHeader("KEY2", "Value2, Foo"));
-  d1->added_response_headers.push_back(ResponseHeader("Key2", "Value3"));
-  deltas.push_back(d1);
+  {
+    EventResponseDelta d1("extid1", base::Time::FromInternalValue(2000));
+    d1.deleted_response_headers.push_back(ResponseHeader("KEY1", "Value1"));
+    d1.deleted_response_headers.push_back(
+        ResponseHeader("KEY2", "Value2, Foo"));
+    d1.added_response_headers.push_back(ResponseHeader("Key2", "Value3"));
+    deltas.push_back(std::move(d1));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   ignored_actions.clear();
   logger.clear();
@@ -2407,13 +2508,15 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnHeadersReceivedResponses) {
   EXPECT_TRUE(response_headers_modified1);
 
   // Check that we replace response headers only once.
-  linked_ptr<EventResponseDelta> d2(
-      new EventResponseDelta("extid2", base::Time::FromInternalValue(1500)));
-  // Note that we use a different capitalization of KeY2. This should not
-  // matter.
-  d2->deleted_response_headers.push_back(ResponseHeader("KeY2", "Value2, Foo"));
-  d2->added_response_headers.push_back(ResponseHeader("Key2", "Value4"));
-  deltas.push_back(d2);
+  {
+    EventResponseDelta d2("extid2", base::Time::FromInternalValue(1500));
+    // Note that we use a different capitalization of KeY2. This should not
+    // matter.
+    d2.deleted_response_headers.push_back(
+        ResponseHeader("KeY2", "Value2, Foo"));
+    d2.added_response_headers.push_back(ResponseHeader("Key2", "Value4"));
+    deltas.push_back(std::move(d2));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   ignored_actions.clear();
   logger.clear();
@@ -2460,10 +2563,11 @@ TEST(ExtensionWebRequestHelpersTest,
         net::HttpUtil::AssembleRawHeaders(
             base_headers_string, sizeof(base_headers_string))));
 
-  linked_ptr<EventResponseDelta> d1(
-      new EventResponseDelta("extid1", base::Time::FromInternalValue(2000)));
-  d1->deleted_response_headers.push_back(ResponseHeader("KEY1", "Value2"));
-  deltas.push_back(d1);
+  {
+    EventResponseDelta d1("extid1", base::Time::FromInternalValue(2000));
+    d1.deleted_response_headers.push_back(ResponseHeader("KEY1", "Value2"));
+    deltas.push_back(std::move(d1));
+  }
   bool response_headers_modified1;
   scoped_refptr<net::HttpResponseHeaders> new_headers1;
   GURL allowed_unsafe_redirect_url1;
@@ -2507,9 +2611,10 @@ TEST(ExtensionWebRequestHelpersTest,
           base_headers_string, sizeof(base_headers_string))));
 
   // No redirect
-  linked_ptr<EventResponseDelta> d0(
-      new EventResponseDelta("extid0", base::Time::FromInternalValue(0)));
-  deltas.push_back(d0);
+  {
+    EventResponseDelta d0("extid0", base::Time::FromInternalValue(0));
+    deltas.push_back(std::move(d0));
+  }
   bool response_headers_modified0;
   scoped_refptr<net::HttpResponseHeaders> new_headers0;
   GURL allowed_unsafe_redirect_url0;
@@ -2525,10 +2630,11 @@ TEST(ExtensionWebRequestHelpersTest,
 
   // Single redirect.
   GURL new_url_1("http://foo.com");
-  linked_ptr<EventResponseDelta> d1(
-      new EventResponseDelta("extid1", base::Time::FromInternalValue(1000)));
-  d1->new_url = GURL(new_url_1);
-  deltas.push_back(d1);
+  {
+    EventResponseDelta d1("extid1", base::Time::FromInternalValue(1000));
+    d1.new_url = GURL(new_url_1);
+    deltas.push_back(std::move(d1));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   logger.clear();
   bool response_headers_modified1;
@@ -2557,9 +2663,10 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnAuthRequiredResponses) {
   base::string16 password2 = base::ASCIIToUTF16("baz");
 
   // Check that we can handle if not returning credentials.
-  linked_ptr<EventResponseDelta> d0(
-      new EventResponseDelta("extid0", base::Time::FromInternalValue(3000)));
-  deltas.push_back(d0);
+  {
+    EventResponseDelta d0("extid0", base::Time::FromInternalValue(3000));
+    deltas.push_back(std::move(d0));
+  }
   net::AuthCredentials auth0;
   bool credentials_set =
       MergeOnAuthRequiredResponses(deltas, &auth0, &ignored_actions, &logger);
@@ -2569,10 +2676,11 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnAuthRequiredResponses) {
   EXPECT_EQ(0u, logger.log_size());
 
   // Check that we can set AuthCredentials.
-  linked_ptr<EventResponseDelta> d1(
-      new EventResponseDelta("extid1", base::Time::FromInternalValue(2000)));
-  d1->auth_credentials.reset(new net::AuthCredentials(username, password));
-  deltas.push_back(d1);
+  {
+    EventResponseDelta d1("extid1", base::Time::FromInternalValue(2000));
+    d1.auth_credentials = net::AuthCredentials(username, password);
+    deltas.push_back(std::move(d1));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   ignored_actions.clear();
   logger.clear();
@@ -2587,10 +2695,11 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnAuthRequiredResponses) {
   EXPECT_EQ(1u, logger.log_size());
 
   // Check that we set AuthCredentials only once.
-  linked_ptr<EventResponseDelta> d2(
-      new EventResponseDelta("extid2", base::Time::FromInternalValue(1500)));
-  d2->auth_credentials.reset(new net::AuthCredentials(username, password2));
-  deltas.push_back(d2);
+  {
+    EventResponseDelta d2("extid2", base::Time::FromInternalValue(1500));
+    d2.auth_credentials = net::AuthCredentials(username, password2);
+    deltas.push_back(std::move(d2));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   ignored_actions.clear();
   logger.clear();
@@ -2609,10 +2718,11 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnAuthRequiredResponses) {
 
   // Check that we can set identical AuthCredentials twice without causing
   // a conflict.
-  linked_ptr<EventResponseDelta> d3(
-      new EventResponseDelta("extid3", base::Time::FromInternalValue(1000)));
-  d3->auth_credentials.reset(new net::AuthCredentials(username, password));
-  deltas.push_back(d3);
+  {
+    EventResponseDelta d3("extid3", base::Time::FromInternalValue(1000));
+    d3.auth_credentials = net::AuthCredentials(username, password);
+    deltas.push_back(std::move(d3));
+  }
   deltas.sort(&InDecreasingExtensionInstallationTimeOrder);
   ignored_actions.clear();
   logger.clear();

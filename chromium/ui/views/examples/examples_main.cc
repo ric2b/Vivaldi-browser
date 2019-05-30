@@ -15,6 +15,7 @@
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/test/test_discardable_memory_allocator.h"
+#include "base/test/test_timeouts.h"
 #include "build/build_config.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
@@ -25,6 +26,7 @@
 #include "ui/base/ui_base_paths.h"
 #include "ui/compositor/test/in_process_context_factory.h"
 #include "ui/display/screen.h"
+#include "ui/gl/gl_switches.h"
 #include "ui/gl/init/gl_factory.h"
 #include "ui/views/examples/example_base.h"
 #include "ui/views/examples/examples_window.h"
@@ -58,6 +60,12 @@ int main(int argc, char** argv) {
 
   base::CommandLine::Init(argc, argv);
 
+  // Disabling Direct Composition works around the limitation that
+  // InProcessContextFactory doesn't work with Direct Composition, causing the
+  // window to not render. See http://crbug.com/936249.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kDisableDirectComposition);
+
   base::AtExitManager at_exit;
 
 #if defined(USE_X11)
@@ -67,6 +75,10 @@ int main(int argc, char** argv) {
 #endif
 
   gl::init::InitializeGLOneOff();
+
+  // The use of base::test::ScopedTaskEnvironment below relies on the timeout
+  // values from TestTimeouts. This ensures they're properly initialized.
+  TestTimeouts::Initialize();
 
   // The ContextFactory must exist before any Compositors are created.
   viz::HostFrameSinkManager host_frame_sink_manager;
@@ -118,9 +130,10 @@ int main(int argc, char** argv) {
     display::Screen::SetScreenInstance(desktop_screen.get());
 #endif
 
-    views::examples::ShowExamplesWindow(views::examples::QUIT_ON_CLOSE);
+    base::RunLoop run_loop;
+    views::examples::ShowExamplesWindow(run_loop.QuitClosure());
 
-    base::RunLoop().Run();
+    run_loop.Run();
 
     ui::ResourceBundle::CleanupSharedInstance();
   }

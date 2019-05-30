@@ -7,11 +7,11 @@
 #include <utility>
 
 #include "ash/public/cpp/app_list/app_list_config.h"
+#include "ash/public/cpp/app_list/app_list_metrics.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/launcher_search_provider/launcher_search_provider_service.h"
 #include "chrome/browser/ui/app_list/search/launcher_search/launcher_search_icon_image_loader_impl.h"
-#include "chrome/browser/ui/app_list/search/search_util.h"
 
 using chromeos::launcher_search_provider::Service;
 
@@ -62,10 +62,12 @@ std::unique_ptr<LauncherSearchResult> LauncherSearchResult::Duplicate() const {
 }
 
 void LauncherSearchResult::Open(int event_flags) {
-  RecordHistogram(LAUNCHER_SEARCH_PROVIDER_RESULT);
-
   Service* service = Service::Get(profile_);
   service->OnOpenResult(extension_->id(), item_id_);
+}
+
+SearchResultType LauncherSearchResult::GetSearchResultType() const {
+  return LAUNCHER_SEARCH_PROVIDER_RESULT;
 }
 
 void LauncherSearchResult::OnIconImageChanged(
@@ -77,7 +79,7 @@ void LauncherSearchResult::OnIconImageChanged(
 void LauncherSearchResult::OnBadgeIconImageChanged(
     LauncherSearchIconImageLoader* image_loader) {
   DCHECK_EQ(image_loader, icon_image_loader_.get());
-  SetBadgeIcon(icon_image_loader_->GetBadgeIconImage());
+  // No badging is required.
 }
 
 LauncherSearchResult::LauncherSearchResult(
@@ -106,7 +108,6 @@ void LauncherSearchResult::Initialize() {
   icon_image_loader_->AddObserver(this);
 
   SetIcon(icon_image_loader_->GetIconImage());
-  SetBadgeIcon(icon_image_loader_->GetBadgeIconImage());
 }
 
 std::string LauncherSearchResult::GetSearchResultId() {

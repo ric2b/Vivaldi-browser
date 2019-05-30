@@ -4,6 +4,7 @@
 
 module network.mojom;
 
+import "mojo/public/mojom/base/memory_pressure_level.mojom";
 import "services/network/public/mojom/network_change_manager.mojom";
 import "services/network/public/mojom/network_param.mojom";
 import "services/network/public/mojom/network_types.mojom";
@@ -64,6 +65,19 @@ interface NetworkServiceTest {
   [Sync]
   SetShouldRequireCT(ShouldRequireCT required) => ();
 
+  // Set the global transport security state preloaded static data source to
+  // the unittest_default source, with the reporting URIs rewritten to use
+  // |reporting_port|.  If |reporting_port| is 0, the source will be reset to
+  // the default.
+  [Sync]
+  SetTransportSecurityStateSource(uint16 reporting_port) => ();
+
   // Causes the next host resolve to the given hostname to crash the process.
   CrashOnResolveHost(string host);
+
+  // Gets the latest memory pressure level reported by the
+  // MemoryPressureListener.
+  [Sync]
+  GetLatestMemoryPressureLevel()
+      => (mojo_base.mojom.MemoryPressureLevel memory_pressure_level);
 };

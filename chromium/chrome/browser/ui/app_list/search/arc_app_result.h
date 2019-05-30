@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "ash/public/cpp/app_list/app_list_metrics.h"
 #include "base/macros.h"
 #include "chrome/browser/ui/app_icon_loader_delegate.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
@@ -33,6 +34,7 @@ class ArcAppResult : public AppResult,
   // ChromeSearchResult overrides:
   void Open(int event_flags) override;
   void GetContextMenuModel(GetMenuModelCallback callback) override;
+  SearchResultType GetSearchResultType() const override;
 
   // AppContextMenuDelegate overrides:
   void ExecuteLaunchCommand(int event_flags) override;
@@ -50,6 +52,7 @@ class ArcAppResult : public AppResult,
   arc::UserInteractionType GetContextMenuAppLaunchInteraction();
 
   std::unique_ptr<ArcAppIconLoader> icon_loader_;
+  std::unique_ptr<ArcAppIconLoader> chip_icon_loader_;
   std::unique_ptr<ArcAppContextMenu> context_menu_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcAppResult);

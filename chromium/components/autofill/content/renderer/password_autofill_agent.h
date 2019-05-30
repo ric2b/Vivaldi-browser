@@ -60,6 +60,61 @@ enum class PrefilledUsernameFillOutcome {
   kMaxValue = kPrefilledUsernameNotOverridden,
 };
 
+// Used in UMA histograms, please do NOT reorder.
+// Metric: "PasswordManager.SendPasswordFormToBrowserProcess".
+// This metrics is relevant for PasswordAutofillAgent::SendPasswordForms method.
+enum class SendPasswordFormToBrowserProcess {
+  // Password form wasn't sent to the browser process.
+  kPasswordFormWasNotSent = 0,
+  // Password form was sent, because only_visible == true.
+  kPasswordFormSentByOnlyVisible = 1,
+  // Password form was sent, because it's newly added form.
+  kPasswordFormSentAsNewlyAdded = 2,
+  // Password form was sent, because the form structure was changed.
+  kPasswordFormSentByStructureChange = 3,
+  // Password form was sent, because there is no form-tag.
+  kPasswordFormSentByNoFormTag = 4,
+  // Password form was sent, because there is no id. this should never happen;
+  // this enum value exists only for checking.
+  kPasswordFormWithoutId = 5,
+  kMaxValue = kPasswordFormWithoutId,
+};
+
+// Used in UMA histogram, please do NOT reorder.
+// Metric: "PasswordManager.FirstRendererFillingResult".
+// This metric records whether the PasswordAutofillAgent succeeded in filling
+// credentials after being instructed to do so by the browser process.
+enum class FillingResult {
+  kSuccess = 0,
+  // The password element to be filled has not been found.
+  kNoPasswordElement = 1,
+  // Filling only happens in iframes, if all parent frames PSL match the
+  // security origin of the iframe containing the password field.
+  kBlockedByFrameHierarchy = 2,
+  // Passwords are not filled into fields that are not editable.
+  kPasswordElementIsNotAutocompleteable = 3,
+  // The username field contains a string that does not match the username of
+  // any available credential.
+  kUsernamePrefilledWithIncompatibleValue = 4,
+  // No credential was filled due to mismatches with the username. This can
+  // happen in a number of cases: In case the username field is empty and
+  // readonly. In case of a username-first-flow where a user's credentials do
+  // contain a username but the form contains only a password field and no
+  // username field. In case of change password forms that contain no username
+  // field. In case the user name is given on a page but only PSL matched
+  // credentials exist for this username. There may be further cases.
+  kFoundNoPasswordForUsername = 5,
+  // Renderer was instructed to wait until user has manually picked a
+  // credential. This happens for example if the session is an incognito
+  // session, the credendial's URL matches the mainframe only via the PSL, the
+  // site is on HTTP, or the form has no current password field.
+  // PasswordManager.FirstWaitForUsernameReason records the root causes.
+  kWaitForUsername = 6,
+  // No fillable elements were found, only possible for old form parser.
+  kNoFillableElementsFound = 7,
+  kMaxValue = kNoFillableElementsFound,
+};
+
 // Names of HTML attributes to show form and field signatures for debugging.
 extern const char kDebugAttributeForFormSignature[];
 extern const char kDebugAttributeForFieldSignature[];
@@ -86,16 +141,13 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   const mojom::PasswordManagerDriverAssociatedPtr& GetPasswordManagerDriver();
 
   // mojom::PasswordAutofillAgent:
-  void FillPasswordForm(int key,
-                        const PasswordFormFillData& form_data) override;
+  void FillPasswordForm(const PasswordFormFillData& form_data) override;
   void FillIntoFocusedField(bool is_password,
                             const base::string16& credential,
                             FillIntoFocusedFieldCallback callback) override;
   void SetLoggingState(bool active) override;
   void AutofillUsernameAndPasswordDataReceived(
       const FormsPredictionsMap& predictions) override;
-  void FindFocusedPasswordForm(
-      FindFocusedPasswordFormCallback callback) override;
 
   // FormTracker::Observer
   void OnProvisionallySaveForm(const blink::WebFormElement& form,
@@ -109,6 +161,11 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // If they return true, it indicates the event was consumed and should not
   // be used for any other autofill activity.
   bool TextDidChangeInTextField(const blink::WebInputElement& element);
+
+  // Event forwarded by AutofillAgent from WebAutofillClient, informing that
+  // the text field editing has ended, which means that the field is not
+  // focused anymore.
+  void DidEndTextFieldEditing();
 
   // Function that should be called whenever the value of |element| changes due
   // to user input. This is separate from TextDidChangeInTextField() as that
@@ -161,18 +218,17 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // JavaScript.
   void UserGestureObserved();
 
-  // Given password form data |form_data| and a supplied key |key| for
-  // referencing the password info, returns a set of WebInputElements in
+  // Given password form data |form_data| returns a set of WebInputElements in
   // |elements|, which must be non-null, that the password manager has values
   // for filling. Also takes an optional logger |logger| for logging password
   // autofill behavior.
   void GetFillableElementFromFormData(
-      int key,
       const PasswordFormFillData& form_data,
       RendererSavePasswordProgressLogger* logger,
       std::vector<blink::WebInputElement>* elements);
 
-  // Called when the focused node has changed.
+  // Called when the focused node has changed. This is not called if the focus
+  // moves outside the frame.
   void FocusedNodeHasChanged(const blink::WebNode& node);
 
   // Creates a |PasswordForm| from |web_form|.
@@ -189,6 +245,16 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // unique origins aren't allowed access.
   virtual bool FrameCanAccessPasswordManager();
 
+  // RenderFrameObserver:
+  void DidFinishDocumentLoad() override;
+  void DidFinishLoad() override;
+  void ReadyToCommitNavigation(
+      blink::WebDocumentLoader* document_loader) override;
+  void WillCommitProvisionalLoad() override;
+  void DidCommitProvisionalLoad(bool is_same_document_navigation,
+                                ui::PageTransition transition) override;
+  void OnDestruct() override;
+
  private:
   // Ways to restrict which passwords are saved in ProvisionallySavePassword.
   enum ProvisionallySaveRestriction {
@@ -204,13 +270,32 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
     bool password_was_edited_last = false;
     // The user accepted a suggestion from a dropdown on a password field.
     bool password_field_suggestion_was_accepted = false;
-    // The key under which PasswordAutofillManager can find info for filling.
-    int key = -1;
   };
   using WebInputToPasswordInfoMap =
       std::map<blink::WebInputElement, PasswordInfo>;
   using PasswordToLoginMap =
       std::map<blink::WebInputElement, blink::WebInputElement>;
+
+  // Stores information about form field structure.
+  struct FormFieldInfo {
+    uint32_t unique_renderer_id = FormFieldData::kNotSetFormControlRendererId;
+    std::string form_control_type;
+    std::string autocomplete_attribute;
+    bool is_focusable = false;
+  };
+
+  // Stores information about form structure.
+  struct FormStructureInfo {
+    FormStructureInfo();
+    FormStructureInfo(const FormStructureInfo& other);
+    FormStructureInfo(FormStructureInfo&& other);
+    ~FormStructureInfo();
+
+    FormStructureInfo& operator=(FormStructureInfo&& other);
+
+    uint32_t unique_renderer_id = FormData::kNotSetFormRendererId;
+    std::vector<FormFieldInfo> fields;
+  };
 
   // This class ensures that the driver will only receive relevant signals by
   // caching the parameters of the last message sent to the driver.
@@ -259,17 +344,6 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
 
     DISALLOW_COPY_AND_ASSIGN(PasswordValueGatekeeper);
   };
-
-  // RenderFrameObserver:
-  void DidFinishDocumentLoad() override;
-  void DidFinishLoad() override;
-  void DidStartProvisionalLoad(
-      blink::WebDocumentLoader* document_loader) override;
-  void WillCommitProvisionalLoad() override;
-  void DidCommitProvisionalLoad(bool is_new_navigation,
-                                bool is_same_document_navigation) override;
-  void FocusedNodeChanged(const blink::WebNode& node) override;
-  void OnDestruct() override;
 
   // Scans the given frame for password forms and sends them up to the browser.
   // If |only_visible| is true, only forms visible in the layout are sent.
@@ -358,8 +432,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
                                   RendererSavePasswordProgressLogger* logger);
 
   // Helper function called when form submission is successful.
-  void FireSubmissionIfFormDisappear(
-      PasswordForm::SubmissionIndicatorEvent event);
+  void FireSubmissionIfFormDisappear(SubmissionIndicatorEvent event);
 
   void OnFrameDetached();
   void OnWillSubmitForm(const blink::WebFormElement& form);
@@ -368,7 +441,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
 
   // TODO(https://crbug.com/831123): Rename to FillPasswordForm when browser
   // form parsing is launched.
-  void FillUsingRendererIDs(int key, const PasswordFormFillData& form_data);
+  void FillUsingRendererIDs(const PasswordFormFillData& form_data);
 
   // Returns pair(username_element, password_element) based on renderer ids from
   // |username_field| and |password_field| from |form_data|.
@@ -378,8 +451,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // Populates |web_input_to_password_info_| and |password_to_username_| in
   // order to provide fill on account select on |username_element| and
   // |password_element| with credentials from |form_data|.
-  void StoreDataForFillOnAccountSelect(int key,
-                                       const PasswordFormFillData& form_data,
+  void StoreDataForFillOnAccountSelect(const PasswordFormFillData& form_data,
                                        blink::WebInputElement username_element,
                                        blink::WebInputElement password_element);
 
@@ -388,7 +460,23 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // |web_input_to_password_info_| in order to provide fill on account select on
   // any password field (aka filling fallback) with credentials from
   // |form_data|.
-  void MaybeStoreFallbackData(int key, const PasswordFormFillData& form_data);
+  void MaybeStoreFallbackData(const PasswordFormFillData& form_data);
+
+  // Records whether filling succeeded for the first attempt to fill on a site.
+  // The logging is a bit conservative: It is possible that user-perceived
+  // navigations (via dynamic HTML sites) not trigger any actual navigations
+  // and therefore, the |recorded_first_filling_result_| never gets reset.
+  void LogFirstFillingResult(const PasswordFormFillData& form_data,
+                             FillingResult result);
+
+  // Extracts information about form structure.
+  static FormStructureInfo ExtractFormStructureInfo(const FormData& form_data);
+  // Checks whether the form structure (amount of elements, element types etc)
+  // was changed.
+  bool WasFormStructureChanged(const FormStructureInfo& form_data) const;
+  // Tries to restore |control_elements| values with cached values.
+  void TryFixAutofilledForm(
+      std::vector<blink::WebFormControlElement>* control_elements) const;
 
   // The logins we have filled so far with their associated info.
   WebInputToPasswordInfoMap web_input_to_password_info_;
@@ -459,6 +547,21 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   mojo::AssociatedBinding<mojom::PasswordAutofillAgent> binding_;
 
   bool prefilled_username_metrics_logged_ = false;
+
+  // Keeps autofilled values for the form elements.
+  std::map<unsigned /*unique renderer element id*/, blink::WebString>
+      autofilled_elements_cache_;
+  // Keeps forms structure (amount of elements, element types etc).
+  // TODO(crbug/898109): It's too expensive to keep the whole FormData
+  // structure. Replace FormData with a smaller structure.
+  std::map<unsigned /*unique renderer element id*/, FormStructureInfo>
+      forms_structure_cache_;
+
+  // Flag to prevent that multiple PasswordManager.FirstRendererFillingResult
+  // UMA metrics are recorded per page load. This is reset on
+  // DidCommitProvisionalLoad() but only for non-same-document-navigations.
+  bool recorded_first_filling_result_ = false;
+
   DISALLOW_COPY_AND_ASSIGN(PasswordAutofillAgent);
 };
 

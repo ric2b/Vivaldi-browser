@@ -13,6 +13,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/values.h"
 #include "components/policy/core/common/external_data_fetcher.h"
@@ -20,6 +21,10 @@
 #include "components/policy/policy_export.h"
 
 namespace policy {
+
+class PolicyMapTest;
+FORWARD_DECLARE_TEST(PolicyMapTest, BlockedEntry);
+FORWARD_DECLARE_TEST(PolicyMapTest, MergeFrom);
 
 // A mapping of policy names to policy values for a given policy namespace.
 class POLICY_EXPORT PolicyMap {
@@ -30,13 +35,18 @@ class POLICY_EXPORT PolicyMap {
    public:
     PolicyLevel level = POLICY_LEVEL_RECOMMENDED;
     PolicyScope scope = POLICY_SCOPE_USER;
-    std::unique_ptr<base::Value> value;
-    std::unique_ptr<ExternalDataFetcher> external_data_fetcher;
-
     // For debugging and displaying only. Set by provider delivering the policy.
     PolicySource source = POLICY_SOURCE_ENTERPRISE_DEFAULT;
+    std::unique_ptr<base::Value> value;
+    std::unique_ptr<ExternalDataFetcher> external_data_fetcher;
+    std::vector<Entry> conflicts;
 
     Entry();
+    Entry(PolicyLevel level,
+          PolicyScope scope,
+          PolicySource source,
+          std::unique_ptr<base::Value> value,
+          std::unique_ptr<ExternalDataFetcher> external_data_fetcher);
     ~Entry();
 
     Entry(Entry&&) noexcept;
@@ -57,6 +67,13 @@ class POLICY_EXPORT PolicyMap {
     // Add a localized error given its l10n message ID.
     void AddError(int message_id);
 
+    // Adds a conflicting policy.
+    void AddConflictingPolicy(const Entry& conflict);
+
+    bool IsBlocked() const;
+
+    void SetBlocked();
+
     // Callback used to look up a localized string given its l10n message ID. It
     // should return a UTF-16 string.
     typedef base::RepeatingCallback<base::string16(int message_id)>
@@ -68,7 +85,7 @@ class POLICY_EXPORT PolicyMap {
 
    private:
     std::string error_strings_;
-    std::vector<int> error_message_ids_;
+    std::set<int> error_message_ids_;
   };
 
   typedef std::map<std::string, Entry> PolicyMapType;
@@ -78,7 +95,7 @@ class POLICY_EXPORT PolicyMap {
   virtual ~PolicyMap();
 
   // Returns a weak reference to the entry currently stored for key |policy|,
-  // or NULL if not found. Ownership is retained by the PolicyMap.
+  // or NULL if untrusted or not found. Ownership is retained by the PolicyMap.
   const Entry* Get(const std::string& policy) const;
   Entry* GetMutable(const std::string& policy);
 
@@ -161,6 +178,14 @@ class POLICY_EXPORT PolicyMap {
   void Clear();
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(PolicyMapTest, BlockedEntry);
+  FRIEND_TEST_ALL_PREFIXES(PolicyMapTest, MergeFrom);
+
+  // Returns a weak reference to the entry currently stored for key |policy|,
+  // or NULL if not found. Ownership is retained by the PolicyMap.
+  const Entry* GetUntrusted(const std::string& policy) const;
+  Entry* GetMutableUntrusted(const std::string& policy);
+
   // Helper function for Equals().
   static bool MapEntryEquals(const PolicyMapType::value_type& a,
                              const PolicyMapType::value_type& b);

@@ -5,6 +5,7 @@
 #include "ui/views/controls/menu/menu_config.h"
 
 #include "base/macros.h"
+#include "base/no_destructor.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_image_util.h"
 #include "ui/views/controls/menu/menu_item_view.h"
@@ -69,7 +70,8 @@ MenuConfig::MenuConfig()
       padded_separator_left_margin(64),
       arrow_key_selection_wraps(true),
       show_context_menu_accelerators(true),
-      all_menus_use_prefix_selection(false) {
+      all_menus_use_prefix_selection(false),
+      footnote_vertical_margin(11) {
   Init();
 }
 
@@ -78,7 +80,7 @@ MenuConfig::~MenuConfig() {}
 int MenuConfig::CornerRadiusForMenu(const MenuController* controller) const {
   if (controller && controller->use_touchable_layout())
     return touchable_corner_radius;
-  if (controller && (controller->is_combobox() || controller->IsContextMenu()))
+  if (controller && (controller->IsCombobox() || controller->IsContextMenu()))
     return auxiliary_corner_radius;
   return corner_radius;
 }
@@ -100,8 +102,8 @@ bool MenuConfig::ShouldShowAcceleratorText(const MenuItemView* item,
 
 // static
 const MenuConfig& MenuConfig::instance() {
-  CR_DEFINE_STATIC_LOCAL(MenuConfig, instance, ());
-  return instance;
+  static base::NoDestructor<MenuConfig> instance;
+  return *instance;
 }
 
 }  // namespace views

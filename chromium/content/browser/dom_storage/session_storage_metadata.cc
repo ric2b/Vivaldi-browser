@@ -5,10 +5,11 @@
 #include "content/browser/dom_storage/session_storage_metadata.h"
 
 #include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "components/services/leveldb/public/cpp/util.h"
-#include "content/common/dom_storage/dom_storage_namespace_ids.h"
+#include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -39,11 +40,11 @@ using leveldb::mojom::BatchedOperationPtr;
 constexpr const uint8_t kMapIdPrefixBytes[] = {'m', 'a', 'p', '-'};
 
 constexpr const size_t kNamespacePrefixLength =
-    arraysize(SessionStorageMetadata::kNamespacePrefixBytes);
+    base::size(SessionStorageMetadata::kNamespacePrefixBytes);
 constexpr const uint8_t kNamespaceOriginSeperatorByte = '-';
 constexpr const size_t kNamespaceOriginSeperatorLength = 1;
 constexpr const size_t kPrefixBeforeOriginLength =
-    kNamespacePrefixLength + kSessionStorageNamespaceIdLength +
+    kNamespacePrefixLength + blink::kSessionStorageNamespaceIdLength +
     kNamespaceOriginSeperatorLength;
 
 bool ValueToNumber(const std::vector<uint8_t>& value, int64_t* out) {
@@ -169,7 +170,7 @@ bool SessionStorageMetadata::ParseNamespaces(
       continue;
 
     base::StringPiece namespace_id = key_as_string.substr(
-        kNamespacePrefixLength, kSessionStorageNamespaceIdLength);
+        kNamespacePrefixLength, blink::kSessionStorageNamespaceIdLength);
 
     base::StringPiece origin_str =
         key_as_string.substr(kPrefixBeforeOriginLength);
@@ -347,7 +348,7 @@ void SessionStorageMetadata::DeleteArea(
     const std::string& namespace_id,
     const url::Origin& origin,
     std::vector<BatchedOperationPtr>* delete_operations) {
-  NamespaceEntry ns_entry = namespace_origin_map_.find(namespace_id);
+  auto ns_entry = namespace_origin_map_.find(namespace_id);
   if (ns_entry == namespace_origin_map_.end())
     return;
 

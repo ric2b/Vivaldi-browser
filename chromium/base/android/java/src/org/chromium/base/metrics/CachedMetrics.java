@@ -8,7 +8,6 @@ import org.chromium.base.library_loader.LibraryLoader;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Utility classes for recording UMA metrics before the native library
@@ -109,7 +108,7 @@ public class CachedMetrics {
         }
 
         private void recordWithNative(int sample) {
-            RecordHistogram.recordSparseSlowlyHistogram(mName, sample);
+            RecordHistogram.recordSparseHistogram(mName, sample);
         }
 
         @Override
@@ -158,12 +157,9 @@ public class CachedMetrics {
     /** Caches a set of times histogram samples. */
     public static class TimesHistogramSample extends CachedMetric {
         private final List<Long> mSamples = new ArrayList<Long>();
-        private final TimeUnit mTimeUnit;
 
-        public TimesHistogramSample(String histogramName, TimeUnit timeUnit) {
+        public TimesHistogramSample(String histogramName) {
             super(histogramName);
-            RecordHistogram.assertTimesHistogramSupportsUnit(timeUnit);
-            mTimeUnit = timeUnit;
         }
 
         public void record(long sample) {
@@ -177,8 +173,8 @@ public class CachedMetrics {
             }
         }
 
-        private void recordWithNative(long sample) {
-            RecordHistogram.recordTimesHistogram(mName, sample, mTimeUnit);
+        protected void recordWithNative(long sample) {
+            RecordHistogram.recordTimesHistogram(mName, sample);
         }
 
         @Override
@@ -187,6 +183,21 @@ public class CachedMetrics {
                 recordWithNative(sample);
             }
             mSamples.clear();
+        }
+    }
+
+    /**
+     * Caches a set of times histogram samples, calls
+     * {@link RecordHistogram#recordMediumTimesHistogram(String, long)}.
+     */
+    public static class MediumTimesHistogramSample extends TimesHistogramSample {
+        public MediumTimesHistogramSample(String histogramName) {
+            super(histogramName);
+        }
+
+        @Override
+        protected void recordWithNative(long sample) {
+            RecordHistogram.recordMediumTimesHistogram(mName, sample);
         }
     }
 

@@ -10,6 +10,7 @@
 #include "content/browser/webauth/authenticator_type_converters.h"
 #include "content/browser/webauth/virtual_authenticator.h"
 #include "content/browser/webauth/virtual_discovery.h"
+#include "device/fido/virtual_ctap2_device.h"
 
 namespace content {
 
@@ -31,8 +32,9 @@ ScopedVirtualAuthenticatorEnvironment::GetInstance() {
   return environment.get();
 }
 
-ScopedVirtualAuthenticatorEnvironment::ScopedVirtualAuthenticatorEnvironment() =
-    default;
+ScopedVirtualAuthenticatorEnvironment::ScopedVirtualAuthenticatorEnvironment()
+    : virtual_device_state_(new device::VirtualFidoDevice::State) {}
+
 ScopedVirtualAuthenticatorEnvironment::
     ~ScopedVirtualAuthenticatorEnvironment() = default;
 
@@ -96,16 +98,27 @@ void ScopedVirtualAuthenticatorEnvironment::ClearAuthenticators(
   std::move(callback).Run();
 }
 
-std::unique_ptr<::device::FidoDiscovery>
+std::unique_ptr<::device::FidoDiscoveryBase>
 ScopedVirtualAuthenticatorEnvironment::CreateFidoDiscovery(
     device::FidoTransportProtocol transport,
     ::service_manager::Connector* connector) {
   auto discovery = std::make_unique<VirtualFidoDiscovery>(this, transport);
-  for (auto& authenticator : authenticators_) {
-    if (discovery->transport() != authenticator.second->transport())
-      continue;
-    discovery->AddVirtualDevice(authenticator.second->ConstructDevice());
+
+  if (bindings_.empty()) {
+    // If no bindings are active then create a virtual device. This is useful
+    // for web-platform tests which assume that they can make webauthn calls,
+    // but which don't implement the Chromium-specific mock Mojo interfaces.
+    auto device = std::make_unique<device::VirtualCtap2Device>(
+        virtual_device_state_, false /* no PIN support */);
+    discovery->AddVirtualDevice(std::move(device));
+  } else {
+    for (auto& authenticator : authenticators_) {
+      if (discovery->transport() != authenticator.second->transport())
+        continue;
+      discovery->AddVirtualDevice(authenticator.second->ConstructDevice());
+    }
   }
+
   discoveries_.insert(discovery.get());
   return discovery;
 }

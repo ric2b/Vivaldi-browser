@@ -44,8 +44,8 @@ from blinkpy.style.checker import _all_categories
 from blinkpy.style.checker import _BASE_FILTER_RULES
 from blinkpy.style.checker import _MAX_REPORTS_PER_CATEGORY
 from blinkpy.style.checker import _PATH_RULES_SPECIFIER as PATH_RULES_SPECIFIER
-from blinkpy.style.checker import check_webkit_style_configuration
-from blinkpy.style.checker import check_webkit_style_parser
+from blinkpy.style.checker import check_blink_style_configuration
+from blinkpy.style.checker import check_blink_style_parser
 from blinkpy.style.checker import CheckerDispatcher
 from blinkpy.style.checker import configure_logging
 from blinkpy.style.checker import StyleProcessor
@@ -155,9 +155,11 @@ class GlobalVariablesTest(unittest.TestCase):
         return _all_categories()
 
     def defaults(self):
-        return style._check_webkit_style_defaults()
+        # Access to a protected member _check_blink_style_defaults
+        # pylint: disable=W0212
+        return style._check_blink_style_defaults()
 
-    def test_webkit_base_filter_rules(self):
+    def test_blink_base_filter_rules(self):
         base_filter_rules = _BASE_FILTER_RULES
         already_seen = []
         validate_filter_rules(base_filter_rules, self._all_categories())
@@ -224,18 +226,18 @@ class GlobalVariablesTest(unittest.TestCase):
                           'Key "%s" is not a category' % category)
 
 
-class CheckWebKitStyleFunctionTest(unittest.TestCase):
+class CheckBlinkStyleFunctionTest(unittest.TestCase):
 
-    """Tests the functions with names of the form check_webkit_style_*."""
+    """Tests the functions with names of the form check_blink_style_*."""
 
-    def test_check_webkit_style_configuration(self):
+    def test_check_blink_style_configuration(self):
         # Exercise the code path to make sure the function does not error out.
         option_values = CommandOptionValues()
-        check_webkit_style_configuration(option_values)
+        check_blink_style_configuration(option_values)
 
-    def test_check_webkit_style_parser(self):
+    def test_check_blink_style_parser(self):
         # Exercise the code path to make sure the function does not error out.
-        check_webkit_style_parser()
+        check_blink_style_parser()
 
 
 class CheckerDispatcherSkipTest(unittest.TestCase):
@@ -267,7 +269,7 @@ class CheckerDispatcherSkipTest(unittest.TestCase):
         # Check files with non-NONE file type.  These examples must be
         # drawn from the _SKIPPED_FILES_WITHOUT_WARNING configuration
         # variable.
-        path = os.path.join('LayoutTests', 'foo.txt')
+        path = os.path.join('web_tests', 'foo.txt')
         self._assert_should_skip_without_warning(path,
                                                  is_checker_none=False,
                                                  expected=True)
@@ -275,7 +277,7 @@ class CheckerDispatcherSkipTest(unittest.TestCase):
     def test_should_skip_without_warning__false(self):
         """Test should_skip_without_warning() for False return values."""
         paths = ['foo.txt',
-                 os.path.join('LayoutTests', 'TestExpectations'),
+                 os.path.join('web_tests', 'TestExpectations'),
                  ]
 
         for path in paths:

@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/sys_byteorder.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "jingle/glue/fake_ssl_client_socket.h"
@@ -19,7 +20,7 @@
 #include "services/network/proxy_resolving_client_socket.h"
 #include "services/network/proxy_resolving_client_socket_factory.h"
 #include "services/network/public/cpp/p2p_param_traits.h"
-#include "third_party/webrtc/media/base/rtputils.h"
+#include "third_party/webrtc/media/base/rtp_utils.h"
 #include "url/gurl.h"
 
 namespace network {
@@ -53,7 +54,7 @@ P2PSocketTcp::SendBuffer::SendBuffer(
       buffer(buffer),
       traffic_annotation(traffic_annotation) {}
 P2PSocketTcp::SendBuffer::SendBuffer(const SendBuffer& rhs) = default;
-P2PSocketTcp::SendBuffer::~SendBuffer() {}
+P2PSocketTcp::SendBuffer::~SendBuffer() = default;
 
 P2PSocketTcpBase::P2PSocketTcpBase(
     Delegate* delegate,
@@ -62,27 +63,17 @@ P2PSocketTcpBase::P2PSocketTcpBase(
     P2PSocketType type,
     ProxyResolvingClientSocketFactory* proxy_resolving_socket_factory)
     : P2PSocket(delegate, std::move(client), std::move(socket), P2PSocket::TCP),
-      write_pending_(false),
-      connected_(false),
       type_(type),
       proxy_resolving_socket_factory_(proxy_resolving_socket_factory) {}
 
-P2PSocketTcpBase::~P2PSocketTcpBase() {
-  if (state_ == STATE_OPEN) {
-    DCHECK(socket_.get());
-    socket_.reset();
-  }
-}
+P2PSocketTcpBase::~P2PSocketTcpBase() = default;
 
 void P2PSocketTcpBase::InitAccepted(const net::IPEndPoint& remote_address,
                                     std::unique_ptr<net::StreamSocket> socket) {
   DCHECK(socket);
-  DCHECK_EQ(state_, STATE_UNINITIALIZED);
-
   remote_address_.ip_address = remote_address;
   // TODO(ronghuawu): Add FakeSSLServerSocket.
   socket_ = std::move(socket);
-  state_ = STATE_OPEN;
   DoRead();
 }
 
@@ -90,10 +81,9 @@ void P2PSocketTcpBase::Init(const net::IPEndPoint& local_address,
                             uint16_t min_port,
                             uint16_t max_port,
                             const P2PHostAndIPEndPoint& remote_address) {
-  DCHECK_EQ(state_, STATE_UNINITIALIZED);
+  DCHECK(!socket_);
 
   remote_address_ = remote_address;
-  state_ = STATE_CONNECTING;
 
   net::HostPortPair dest_host_port_pair;
   // If there is a domain name, let's try it first, it's required by some proxy
@@ -129,7 +119,6 @@ void P2PSocketTcpBase::Init(const net::IPEndPoint& local_address,
 }
 
 void P2PSocketTcpBase::OnConnected(int result) {
-  DCHECK_EQ(state_, STATE_CONNECTING);
   DCHECK_NE(result, net::ERR_IO_PENDING);
 
   if (result != net::OK) {
@@ -142,7 +131,6 @@ void P2PSocketTcpBase::OnConnected(int result) {
 }
 
 void P2PSocketTcpBase::OnOpen() {
-  state_ = STATE_OPEN;
   // Setting socket send and receive buffer size.
   if (net::OK != socket_->SetReceiveBufferSize(kTcpRecvSocketBufferSize)) {
     LOG(WARNING) << "Failed to set socket receive buffer size to "
@@ -157,7 +145,6 @@ void P2PSocketTcpBase::OnOpen() {
   if (!DoSendSocketCreateMsg())
     return;
 
-  DCHECK_EQ(state_, STATE_OPEN);
   DoRead();
 }
 
@@ -208,7 +195,7 @@ bool P2PSocketTcpBase::DoSendSocketCreateMsg() {
 void P2PSocketTcpBase::DoRead() {
   while (true) {
     if (!read_buffer_.get()) {
-      read_buffer_ = new net::GrowableIOBuffer();
+      read_buffer_ = base::MakeRefCounted<net::GrowableIOBuffer>();
       read_buffer_->SetCapacity(kTcpReadBufferSize);
     } else if (read_buffer_->RemainingCapacity() < kTcpReadBufferSize) {
       // Make sure that we always have at least kTcpReadBufferSize of
@@ -326,8 +313,6 @@ bool P2PSocketTcpBase::HandleWriteResult(int result) {
 }
 
 bool P2PSocketTcpBase::HandleReadResult(int result) {
-  DCHECK_EQ(state_, STATE_OPEN);
-
   if (result < 0) {
     LOG(ERROR) << "Error when reading from TCP socket: " << result;
     OnError();
@@ -546,12 +531,14 @@ void P2PSocketStunTcp::DoSend(
     DCHECK_LE(pad_bytes, 4);
     memcpy(send_buffer.buffer->data() + data.size(), padding, pad_bytes);
   }
-  WriteOrQueue(send_buffer);
 
+  // WriteOrQueue may free the memory, so dump it first.
   delegate_->DumpPacket(
       base::make_span(reinterpret_cast<uint8_t*>(send_buffer.buffer->data()),
                       data.size()),
       false);
+
+  WriteOrQueue(send_buffer);
 }
 
 int P2PSocketStunTcp::GetExpectedPacketSize(const uint8_t* data,

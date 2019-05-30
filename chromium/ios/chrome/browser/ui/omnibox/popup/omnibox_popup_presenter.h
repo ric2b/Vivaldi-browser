@@ -5,14 +5,43 @@
 #ifndef IOS_CHROME_BROWSER_UI_OMNIBOX_OMNIBOX_POPUP_PRESENTER_H_
 #define IOS_CHROME_BROWSER_UI_OMNIBOX_OMNIBOX_POPUP_PRESENTER_H_
 
-#import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_generic_presenter.h"
+#import <UIKit/UIKit.h>
+
+@class OmniboxPopupPresenter;
+
+@protocol OmniboxPopupPresenterDelegate
+
+// View to which the popup view should be added as subview.
+- (UIView*)popupParentViewForPresenter:(OmniboxPopupPresenter*)presenter;
+
+// The view controller that will parent the popup.
+- (UIViewController*)popupParentViewControllerForPresenter:
+    (OmniboxPopupPresenter*)presenter;
+
+// Alert the delegate that the popup opened.
+- (void)popupDidOpenForPresenter:(OmniboxPopupPresenter*)presenter;
+
+// Alert the delegate that the popup closed.
+- (void)popupDidCloseForPresenter:(OmniboxPopupPresenter*)presenter;
+
+@end
 
 // The UI Refresh implementation of the popup presenter.
-@interface OmniboxPopupPresenter : NSObject<OmniboxPopupGenericPresenter>
+// TODO(crbug.com/936833): This class should be refactored to handle a nil
+// delegate.
+@interface OmniboxPopupPresenter : NSObject
 
-- (instancetype)initWithPopupPositioner:(id<OmniboxPopupPositioner>)positioner
-                    popupViewController:(UIViewController*)viewController
-                              incognito:(BOOL)incognito;
+// Whether the popup is open
+@property(nonatomic, assign, getter=isOpen) BOOL open;
+
+// Uses the popup's intrinsic content size to add or remove the popup view
+// if necessary.
+- (void)updatePopup;
+
+- (instancetype)initWithPopupPresenterDelegate:
+                    (id<OmniboxPopupPresenterDelegate>)presenterDelegate
+                           popupViewController:(UIViewController*)viewController
+                                     incognito:(BOOL)incognito;
 
 @end
 

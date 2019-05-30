@@ -24,8 +24,7 @@ DownloadInformation::DownloadInformation(
 DownloadInformation::DownloadInformation(const DownloadInformation& old)
     : size(old.size),
       mime_type(old.mime_type),
-      suggested_filename(old.suggested_filename),
-      open_flags_cb(old.open_flags_cb) {}
+      suggested_filename(old.suggested_filename) {}
 
 DownloadInformation::DownloadInformation() : size(0) {}
 

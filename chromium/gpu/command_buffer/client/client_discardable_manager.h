@@ -31,6 +31,7 @@ class GPU_EXPORT ClientDiscardableManager {
   void FreeHandle(ClientDiscardableHandle::Id handle_id);
   bool HandleIsValid(ClientDiscardableHandle::Id handle_id) const;
   ClientDiscardableHandle GetHandle(ClientDiscardableHandle::Id handle_id);
+  bool HandleIsDeleted(ClientDiscardableHandle::Id handle_id);
 
   // For diagnostic tracing only.
   bool HandleIsDeletedForTracing(ClientDiscardableHandle::Id handle_id) const;
@@ -61,10 +62,9 @@ class GPU_EXPORT ClientDiscardableManager {
   bool CreateNewAllocation(CommandBuffer* command_buffer);
 
  private:
-  size_t allocation_size_;
+  uint32_t allocation_size_;
   size_t element_size_ = sizeof(base::subtle::Atomic32);
-  uint32_t elements_per_allocation_ =
-      static_cast<uint32_t>(allocation_size_ / element_size_);
+  uint32_t elements_per_allocation_ = allocation_size_ / element_size_;
 
   struct Allocation;
   std::vector<std::unique_ptr<Allocation>> allocations_;

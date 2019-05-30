@@ -9,18 +9,19 @@
 
 #include "base/macros.h"
 #include "chromecast/graphics/cast_window_manager.h"
+#include "ui/aura/client/default_capture_client.h"
 #include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/window_tree_host_platform.h"
 
 namespace aura {
 namespace client {
-class DefaultCaptureClient;
 class ScreenPositionClient;
 }  // namespace client
 }  // namespace aura
 
 namespace chromecast {
 
+class CastTouchEventGate;
 class CastFocusClientAura;
 class CastGestureHandler;
 class CastSystemGestureEventHandler;
@@ -30,7 +31,8 @@ class SideSwipeDetector;
 // An aura::WindowTreeHost that correctly converts input events.
 class CastWindowTreeHost : public aura::WindowTreeHostPlatform {
  public:
-  CastWindowTreeHost(bool enable_input, const gfx::Rect& bounds);
+  CastWindowTreeHost(bool enable_input,
+                     ui::PlatformWindowInitProperties properties);
   ~CastWindowTreeHost() override;
 
   // aura::WindowTreeHostPlatform implementation:
@@ -52,6 +54,10 @@ class CastWindowManagerAura : public CastWindowManager,
   explicit CastWindowManagerAura(bool enable_input);
   ~CastWindowManagerAura() override;
 
+  aura::client::CaptureClient* capture_client() const {
+    return capture_client_.get();
+  }
+
   void Setup();
 
   // CastWindowManager implementation:
@@ -69,11 +75,14 @@ class CastWindowManagerAura : public CastWindowManager,
 
   void RemoveGestureHandler(CastGestureHandler* handler) override;
 
-  void SetColorInversion(bool enable) override;
-
   CastWindowTreeHost* window_tree_host() const;
 
   CastGestureHandler* GetGestureHandler() const;
+
+  void SetTouchInputDisabled(bool disabled) override;
+  void AddTouchActivityObserver(CastTouchActivityObserver* observer) override;
+  void RemoveTouchActivityObserver(
+      CastTouchActivityObserver* observer) override;
 
  private:
   const bool enable_input_;
@@ -81,6 +90,7 @@ class CastWindowManagerAura : public CastWindowManager,
   std::unique_ptr<aura::client::DefaultCaptureClient> capture_client_;
   std::unique_ptr<CastFocusClientAura> focus_client_;
   std::unique_ptr<aura::client::ScreenPositionClient> screen_position_client_;
+  std::unique_ptr<CastTouchEventGate> event_gate_;
   std::unique_ptr<CastSystemGestureDispatcher> system_gesture_dispatcher_;
   std::unique_ptr<CastSystemGestureEventHandler> system_gesture_event_handler_;
   std::unique_ptr<SideSwipeDetector> side_swipe_detector_;

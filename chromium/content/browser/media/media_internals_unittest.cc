@@ -12,41 +12,52 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_command_line.h"
-#include "base/test/test_message_loop.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/synchronization/lock.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
-#include "content/browser/media/session/audio_focus_manager.h"
 #include "content/browser/media/session/media_session_impl.h"
-#include "content/public/test/test_browser_context.h"
+#include "content/public/common/service_manager_connection.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_renderer_host.h"
+#include "content/public/test/test_service_manager_context.h"
 #include "content/test/test_web_contents.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/channel_layout.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
-#include "services/media_session/public/cpp/switches.h"
+#include "services/media_session/public/cpp/features.h"
 #include "services/media_session/public/mojom/audio_focus.mojom.h"
-#include "testing/gmock/include/gmock/gmock.h"
-#include "testing/gtest/include/gtest/gtest.h"
+#include "services/media_session/public/mojom/constants.mojom.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace {
 const int kTestComponentID = 0;
 const char kTestDeviceID[] = "test-device-id";
 
+using media_session::mojom::AudioFocusRequestStatePtr;
+
 // This class encapsulates a MediaInternals reference. It also has some useful
 // methods to receive a callback, deserialize its associated data and expect
 // integer/string values.
 class MediaInternalsTestBase {
  public:
-  MediaInternalsTestBase()
-      : media_internals_(content::MediaInternals::GetInstance()) {}
-  virtual ~MediaInternalsTestBase() {}
+  MediaInternalsTestBase() = default;
+  virtual ~MediaInternalsTestBase() = default;
+
+  void SetUpServiceManager() {
+    scoped_feature_list_.InitAndEnableFeature(
+        media_session::features::kMediaSessionService);
+
+    service_manager_context_ =
+        std::make_unique<content::TestServiceManagerContext>();
+  }
+
+  void TearDownServiceManager() { service_manager_context_.reset(); }
 
  protected:
   // Extracts and deserializes the JSON update data; merges into |update_data_|.
-  void UpdateCallbackImpl(const base::string16& update) {
+  virtual void UpdateCallbackImpl(const base::string16& update) {
     // Each update string looks like "<JavaScript Function Name>({<JSON>});"
     // or for video capabilities: "<JavaScript Function Name>([{<JSON>}]);".
     // In the second case we will be able to extract the dictionary if it is the
@@ -55,8 +66,9 @@ class MediaInternalsTestBase {
     std::string utf8_update = base::UTF16ToUTF8(update);
     const std::string::size_type first_brace = utf8_update.find('{');
     const std::string::size_type last_brace = utf8_update.rfind('}');
-    std::unique_ptr<base::Value> output_value = base::JSONReader::Read(
-        utf8_update.substr(first_brace, last_brace - first_brace + 1));
+    std::unique_ptr<base::Value> output_value =
+        base::JSONReader::ReadDeprecated(
+            utf8_update.substr(first_brace, last_brace - first_brace + 1));
     CHECK(output_value);
 
     base::DictionaryValue* output_dict = nullptr;
@@ -96,9 +108,15 @@ class MediaInternalsTestBase {
     }
   }
 
-  const content::TestBrowserThreadBundle thread_bundle_;
   base::DictionaryValue update_data_;
-  content::MediaInternals* const media_internals_;
+
+  content::MediaInternals* media_internals() const {
+    return content::MediaInternals::GetInstance();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+  std::unique_ptr<content::TestServiceManagerContext> service_manager_context_;
 };
 
 }  // namespace
@@ -114,14 +132,17 @@ class MediaInternalsVideoCaptureDeviceTest : public testing::Test,
       : update_cb_(base::Bind(
             &MediaInternalsVideoCaptureDeviceTest::UpdateCallbackImpl,
             base::Unretained(this))) {
-    media_internals_->AddUpdateCallback(update_cb_);
+    SetUpServiceManager();
+    media_internals()->AddUpdateCallback(update_cb_);
   }
 
   ~MediaInternalsVideoCaptureDeviceTest() override {
-    media_internals_->RemoveUpdateCallback(update_cb_);
+    media_internals()->RemoveUpdateCallback(update_cb_);
+    TearDownServiceManager();
   }
 
  protected:
+  const content::TestBrowserThreadBundle thread_bundle_;
   MediaInternals::UpdateCallback update_cb_;
 };
 
@@ -176,7 +197,7 @@ TEST_F(MediaInternalsVideoCaptureDeviceTest,
   // a JSON array of objects to string. So here, the |UpdateCallbackImpl| will
   // deserialize the first object in the array. This means we have to have
   // exactly one device_info in the |descriptors_and_formats|.
-  media_internals_->UpdateVideoCaptureDeviceCapabilities(
+  media_internals()->UpdateVideoCaptureDeviceCapabilities(
       descriptors_and_formats);
 
 #if defined(OS_LINUX)
@@ -208,13 +229,15 @@ class MediaInternalsAudioLogTest
                               base::Unretained(this))),
         test_params_(MakeAudioParams()),
         test_component_(GetParam()),
-        audio_log_(media_internals_->CreateAudioLog(test_component_,
-                                                    kTestComponentID)) {
-    media_internals_->AddUpdateCallback(update_cb_);
+        audio_log_(media_internals()->CreateAudioLog(test_component_,
+                                                     kTestComponentID)) {
+    SetUpServiceManager();
+    media_internals()->AddUpdateCallback(update_cb_);
   }
 
   virtual ~MediaInternalsAudioLogTest() {
-    media_internals_->RemoveUpdateCallback(update_cb_);
+    media_internals()->RemoveUpdateCallback(update_cb_);
+    TearDownServiceManager();
   }
 
  protected:
@@ -231,9 +254,19 @@ class MediaInternalsAudioLogTest
                        media::AudioParameters::DUCKING);
     return params;
   }
+
+  const content::TestBrowserThreadBundle thread_bundle_;
 };
 
-TEST_P(MediaInternalsAudioLogTest, AudioLogCreateStartStopErrorClose) {
+#if defined(OS_LINUX) || defined(OS_FUCHSIA) || defined(OS_ANDROID)
+#define MAYBE_AudioLogCreateStartStopErrorClose \
+  DISABLED_AudioLogCreateStartStopErrorClose
+#else
+#define MAYBE_AudioLogCreateStartStopErrorClose \
+  AudioLogCreateStartStopErrorClose
+#endif
+
+TEST_P(MediaInternalsAudioLogTest, MAYBE_AudioLogCreateStartStopErrorClose) {
   audio_log_->OnCreated(test_params_, kTestDeviceID);
   base::RunLoop().RunUntilIdle();
 
@@ -282,7 +315,7 @@ TEST_P(MediaInternalsAudioLogTest, AudioLogCreateClose) {
   ExpectStatus("closed");
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     MediaInternalsAudioLogTest,
     MediaInternalsAudioLogTest,
     testing::Values(media::AudioLogFactory::AUDIO_INPUT_CONTROLLER,
@@ -301,130 +334,191 @@ const char kTestTitle2[] = "Test Title 2";
 
 }  // namespace
 
-class MediaInternalsAudioFocusTest : public testing::Test,
+class MediaInternalsAudioFocusTest : public RenderViewHostTestHarness,
                                      public MediaInternalsTestBase {
  public:
+  MediaInternalsAudioFocusTest() = default;
+  ~MediaInternalsAudioFocusTest() override = default;
+
   void SetUp() override {
+    RenderViewHostTestHarness::SetUp();
+    SetUpServiceManager();
+
     update_cb_ =
         base::BindRepeating(&MediaInternalsAudioFocusTest::UpdateCallbackImpl,
                             base::Unretained(this));
+    run_loop_ = std::make_unique<base::RunLoop>();
 
-    scoped_command_line_.GetProcessCommandLine()->AppendSwitch(
-        media_session::switches::kEnableAudioFocus);
+    content::ServiceManagerConnection::GetForProcess()
+        ->GetConnector()
+        ->BindInterface(media_session::mojom::kServiceName, &audio_focus_ptr_);
 
     content::MediaInternals::GetInstance()->AddUpdateCallback(update_cb_);
-    browser_context_.reset(new TestBrowserContext());
   }
 
   void TearDown() override {
     content::MediaInternals::GetInstance()->RemoveUpdateCallback(update_cb_);
-    browser_context_.reset();
+    TearDownServiceManager();
+    RenderViewHostTestHarness::TearDown();
   }
 
  protected:
-  void ExpectValue(base::ListValue expected_list) {
-    base::DictionaryValue expected_data;
-    expected_data.SetKey("sessions", std::move(expected_list));
-    EXPECT_EQ(expected_data, update_data_);
+  void UpdateCallbackImpl(const base::string16& update) override {
+    base::AutoLock auto_lock(lock_);
+    MediaInternalsTestBase::UpdateCallbackImpl(update);
+    call_count_++;
+
+    if (call_count_ == wanted_call_count_)
+      run_loop_->Quit();
   }
 
-  std::unique_ptr<TestWebContents> CreateWebContents() {
-    return TestWebContents::Create(
-        browser_context_.get(), SiteInstance::Create(browser_context_.get()));
+  base::Value GetSessionsFromValueAndReset() {
+    base::AutoLock auto_lock(lock_);
+
+    base::Value session =
+        update_data_.FindKeyOfType("sessions", base::Value::Type::LIST)
+            ->Clone();
+
+    update_data_.Clear();
+    run_loop_ = std::make_unique<base::RunLoop>();
+    call_count_ = 0;
+
+    return session;
   }
 
-  base::Value GetAddressAsValue(MediaSessionImpl* media_session) {
-    std::stringstream stream;
-    stream << media_session;
-    return base::Value(stream.str());
+  void Reset() {
+    base::AutoLock auto_lock(lock_);
+
+    update_data_.Clear();
+    run_loop_ = std::make_unique<base::RunLoop>();
+    call_count_ = 0;
   }
 
   void RemoveAllPlayersForTest(MediaSessionImpl* session) {
     session->RemoveAllPlayersForTest();
   }
 
-  void WaitForCallback() {
-    AudioFocusManager::GetInstance()->FlushForTesting();
-    base::RunLoop().RunUntilIdle();
+  void WaitForCallbackCount(int count) {
+    wanted_call_count_ = count;
+
+    {
+      base::AutoLock auto_lock(lock_);
+      if (!update_data_.empty() && call_count_ == wanted_call_count_)
+        return;
+    }
+
+    run_loop_->Run();
+  }
+
+  std::string GetRequestIdForTopFocusRequest() {
+    std::string result;
+
+    audio_focus_ptr_->GetFocusRequests(base::BindOnce(
+        [](std::string* out, std::vector<AudioFocusRequestStatePtr> requests) {
+          DCHECK(!requests.empty());
+          *out = requests.back()->request_id.value().ToString();
+        },
+        &result));
+
+    audio_focus_ptr_.FlushForTesting();
+    return result;
   }
 
   MediaInternals::UpdateCallback update_cb_;
 
  private:
-  base::test::ScopedCommandLine scoped_command_line_;
-  std::unique_ptr<TestBrowserContext> browser_context_;
+  int call_count_ = 0;
+  int wanted_call_count_ = 0;
+
+  base::Lock lock_;
+  std::unique_ptr<base::RunLoop> run_loop_;
+
+  media_session::mojom::AudioFocusManagerPtr audio_focus_ptr_;
 };
 
 TEST_F(MediaInternalsAudioFocusTest, AudioFocusStateIsUpdated) {
   // Create a test media session and request audio focus.
-  std::unique_ptr<TestWebContents> web_contents1 = CreateWebContents();
-  web_contents1->SetTitle(base::UTF8ToUTF16(kTestTitle1));
+  std::unique_ptr<WebContents> web_contents1 = CreateTestWebContents();
+  static_cast<TestWebContents*>(web_contents1.get())
+      ->SetTitle(base::UTF8ToUTF16(kTestTitle1));
   MediaSessionImpl* media_session1 = MediaSessionImpl::Get(web_contents1.get());
   media_session1->RequestSystemAudioFocus(AudioFocusType::kGain);
-  WaitForCallback();
+  WaitForCallbackCount(1);
+
+  // Get the |request_id| for the top session.
+  std::string request_id1 = GetRequestIdForTopFocusRequest();
 
   // Check JSON is what we expect.
   {
-    base::DictionaryValue expected_session;
-    expected_session.SetKey("name", GetAddressAsValue(media_session1));
-    expected_session.SetKey("owner", base::Value(kTestTitle1));
-    expected_session.SetKey("state", base::Value("Active"));
+    base::Value found_sessions = GetSessionsFromValueAndReset();
+    EXPECT_EQ(1u, found_sessions.GetList().size());
 
-    base::ListValue expected_list;
-    expected_list.GetList().push_back(std::move(expected_session));
-    ExpectValue(std::move(expected_list));
+    const base::Value& session = found_sessions.GetList()[0];
+    EXPECT_TRUE(base::Value(request_id1).Equals(session.FindKey("id")));
+    EXPECT_TRUE(session.FindKeyOfType("name", base::Value::Type::STRING));
+    EXPECT_TRUE(session.FindKeyOfType("owner", base::Value::Type::STRING));
+    EXPECT_TRUE(session.FindKeyOfType("state", base::Value::Type::STRING));
   }
 
   // Create another media session.
-  std::unique_ptr<TestWebContents> web_contents2 = CreateWebContents();
-  web_contents2->SetTitle(base::UTF8ToUTF16(kTestTitle2));
+  std::unique_ptr<WebContents> web_contents2 = CreateTestWebContents();
+  static_cast<TestWebContents*>(web_contents2.get())
+      ->SetTitle(base::UTF8ToUTF16(kTestTitle2));
   MediaSessionImpl* media_session2 = MediaSessionImpl::Get(web_contents2.get());
   media_session2->RequestSystemAudioFocus(
       AudioFocusType::kGainTransientMayDuck);
-  WaitForCallback();
+  WaitForCallbackCount(2);
+
+  // Get the |request_id| for the top session.
+  std::string request_id2 = GetRequestIdForTopFocusRequest();
+  DCHECK_NE(request_id1, request_id2);
 
   // Check JSON is what we expect.
   {
-    base::DictionaryValue expected_session1;
-    expected_session1.SetKey("name", GetAddressAsValue(media_session2));
-    expected_session1.SetKey("owner", base::Value(kTestTitle2));
-    expected_session1.SetKey("state", base::Value("Active"));
+    base::Value found_sessions = GetSessionsFromValueAndReset();
+    EXPECT_EQ(2u, found_sessions.GetList().size());
 
-    base::DictionaryValue expected_session2;
-    expected_session2.SetKey("name", GetAddressAsValue(media_session1));
-    expected_session2.SetKey("owner", base::Value(kTestTitle1));
-    expected_session2.SetKey("state", base::Value("Active Ducked"));
+    const base::Value& session1 = found_sessions.GetList()[0];
+    EXPECT_TRUE(base::Value(request_id2).Equals(session1.FindKey("id")));
+    EXPECT_TRUE(session1.FindKeyOfType("name", base::Value::Type::STRING));
+    EXPECT_TRUE(session1.FindKeyOfType("owner", base::Value::Type::STRING));
+    EXPECT_TRUE(session1.FindKeyOfType("state", base::Value::Type::STRING));
 
-    base::ListValue expected_list;
-    expected_list.GetList().push_back(std::move(expected_session1));
-    expected_list.GetList().push_back(std::move(expected_session2));
-    ExpectValue(std::move(expected_list));
+    const base::Value& session2 = found_sessions.GetList()[1];
+    EXPECT_TRUE(base::Value(request_id1).Equals(session2.FindKey("id")));
+    EXPECT_TRUE(session2.FindKeyOfType("name", base::Value::Type::STRING));
+    EXPECT_TRUE(session2.FindKeyOfType("owner", base::Value::Type::STRING));
+    EXPECT_TRUE(session2.FindKeyOfType("state", base::Value::Type::STRING));
   }
 
   // Abandon audio focus.
   RemoveAllPlayersForTest(media_session2);
-  WaitForCallback();
+  WaitForCallbackCount(1);
 
   // Check JSON is what we expect.
   {
-    base::DictionaryValue expected_session;
-    expected_session.SetKey("name", GetAddressAsValue(media_session1));
-    expected_session.SetKey("owner", base::Value(kTestTitle1));
-    expected_session.SetKey("state", base::Value("Active"));
+    base::Value found_sessions = GetSessionsFromValueAndReset();
+    EXPECT_EQ(1u, found_sessions.GetList().size());
 
-    base::ListValue expected_list;
-    expected_list.GetList().push_back(std::move(expected_session));
-    ExpectValue(std::move(expected_list));
+    const base::Value& session = found_sessions.GetList()[0];
+    EXPECT_TRUE(base::Value(request_id1).Equals(session.FindKey("id")));
+    EXPECT_TRUE(session.FindKeyOfType("name", base::Value::Type::STRING));
+    EXPECT_TRUE(session.FindKeyOfType("owner", base::Value::Type::STRING));
+    EXPECT_TRUE(session.FindKeyOfType("state", base::Value::Type::STRING));
   }
 
   // Abandon audio focus.
   RemoveAllPlayersForTest(media_session1);
-  WaitForCallback();
+
+  // TODO(https://crbug.com/916177): This should wait on a more precise
+  // condition than RunLoop idling, but it's not clear exactly what that should
+  // be.
+  base::RunLoop().RunUntilIdle();
 
   // Check JSON is what we expect.
   {
-    base::ListValue expected_list;
-    ExpectValue(std::move(expected_list));
+    base::Value found_sessions = GetSessionsFromValueAndReset();
+    EXPECT_EQ(0u, found_sessions.GetList().size());
   }
 }
 

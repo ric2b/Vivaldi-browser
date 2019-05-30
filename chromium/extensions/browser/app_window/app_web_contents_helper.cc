@@ -49,7 +49,9 @@ bool AppWebContentsHelper::ShouldSuppressGestureEvent(
   if (blink::WebInputEvent::IsPinchGestureEventType(event.GetType())) {
     // Only suppress pinch events that cause a scale change. We still
     // allow synthetic wheel events for touchpad pinch to go to the page.
-    return !event.NeedsWheelEvent();
+    return !(event.SourceDevice() ==
+                 blink::WebGestureDevice::kWebGestureDeviceTouchpad &&
+             event.NeedsWheelEvent());
   }
 
   return false;
@@ -121,7 +123,7 @@ void AppWebContentsHelper::RequestMediaAccessPermission(
 bool AppWebContentsHelper::CheckMediaAccessPermission(
     content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
-    content::MediaStreamType type) const {
+    blink::MediaStreamType type) const {
   const Extension* extension = GetExtension();
   if (!extension)
     return false;

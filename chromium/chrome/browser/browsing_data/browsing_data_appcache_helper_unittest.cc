@@ -5,17 +5,18 @@
 #include "chrome/browser/browsing_data/browsing_data_appcache_helper.h"
 
 #include <set>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
-#include "base/test/scoped_task_environment.h"
 #include "build/build_config.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/appcache/appcache_info.mojom.h"
 
 namespace {
 class TestCompletionCallback {
@@ -44,19 +45,16 @@ class TestCompletionCallback {
 class CannedBrowsingDataAppCacheHelperTest : public testing::Test {
  public:
   CannedBrowsingDataAppCacheHelperTest()
-      : scoped_task_environment_(
-            base::test::ScopedTaskEnvironment::MainThreadType::UI),
-        thread_bundle_(content::TestBrowserThreadBundle::REAL_IO_THREAD) {}
+      : thread_bundle_(content::TestBrowserThreadBundle::REAL_IO_THREAD) {}
 
   void TearDown() override {
     // Make sure we run all pending tasks on IO thread before testing
     // profile is destructed.
     content::RunAllPendingInMessageLoop(content::BrowserThread::IO);
-    scoped_task_environment_.RunUntilIdle();
+    thread_bundle_.RunUntilIdle();
   }
 
  protected:
-  base::test::ScopedTaskEnvironment scoped_task_environment_;
   content::TestBrowserThreadBundle thread_bundle_;
   TestingProfile profile_;
 };
@@ -77,7 +75,7 @@ TEST_F(CannedBrowsingDataAppCacheHelperTest, SetInfo) {
                                    base::Unretained(&callback)));
   ASSERT_TRUE(callback.have_result());
 
-  std::map<url::Origin, content::AppCacheInfoVector>& collection =
+  std::map<url::Origin, std::vector<blink::mojom::AppCacheInfo>>& collection =
       callback.info_collection()->infos_by_origin;
 
   ASSERT_EQ(2u, collection.size());
@@ -110,7 +108,7 @@ TEST_F(CannedBrowsingDataAppCacheHelperTest, Unique) {
                                    base::Unretained(&callback)));
   ASSERT_TRUE(callback.have_result());
 
-  std::map<url::Origin, content::AppCacheInfoVector>& collection =
+  std::map<url::Origin, std::vector<blink::mojom::AppCacheInfo>>& collection =
       callback.info_collection()->infos_by_origin;
 
   ASSERT_EQ(1u, collection.size());

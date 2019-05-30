@@ -38,7 +38,7 @@ class Document;
 class ExceptionState;
 class Node;
 
-namespace XPath {
+namespace xpath {
 struct EvaluationContext;
 }
 
@@ -59,14 +59,16 @@ class XPathResult final : public ScriptWrappable {
     kFirstOrderedNodeType = 9
   };
 
-  static XPathResult* Create(XPath::EvaluationContext& context,
-                             const XPath::Value& value) {
-    return new XPathResult(context, value);
+  static XPathResult* Create(xpath::EvaluationContext& context,
+                             const xpath::Value& value) {
+    return MakeGarbageCollected<XPathResult>(context, value);
   }
 
-  void ConvertTo(unsigned short type, ExceptionState&);
+  XPathResult(xpath::EvaluationContext&, const xpath::Value&);
 
-  unsigned short resultType() const;
+  void ConvertTo(uint16_t type, ExceptionState&);
+
+  uint16_t resultType() const;
 
   double numberValue(ExceptionState&) const;
   String stringValue(ExceptionState&) const;
@@ -78,19 +80,18 @@ class XPathResult final : public ScriptWrappable {
   Node* iterateNext(ExceptionState&);
   Node* snapshotItem(unsigned index, ExceptionState&);
 
-  const XPath::Value& GetValue() const { return value_; }
+  const xpath::Value& GetValue() const { return value_; }
 
   void Trace(blink::Visitor*) override;
 
  private:
-  XPathResult(XPath::EvaluationContext&, const XPath::Value&);
-  XPath::NodeSet& GetNodeSet() { return *node_set_; }
+  xpath::NodeSet& GetNodeSet() { return *node_set_; }
 
-  XPath::Value value_;
+  xpath::Value value_;
   unsigned node_set_position_;
-  Member<XPath::NodeSet>
-      node_set_;  // FIXME: why duplicate the node set stored in m_value?
-  unsigned short result_type_;
+  // FIXME: why duplicate the node set stored in value_?
+  Member<xpath::NodeSet> node_set_;
+  uint16_t result_type_;
   Member<Document> document_;
   uint64_t dom_tree_version_;
 };

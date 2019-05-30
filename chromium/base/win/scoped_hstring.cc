@@ -6,6 +6,7 @@
 
 #include <winstring.h>
 
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 
@@ -41,7 +42,7 @@ decltype(&::WindowsGetStringRawBuffer) GetWindowsGetStringRawBuffer() {
   return function;
 }
 
-HRESULT WindowsCreateString(const base::char16* src,
+HRESULT WindowsCreateString(const wchar_t* src,
                             uint32_t len,
                             HSTRING* out_hstr) {
   decltype(&::WindowsCreateString) create_string_func =
@@ -59,7 +60,7 @@ HRESULT WindowsDeleteString(HSTRING hstr) {
   return delete_string_func(hstr);
 }
 
-const base::char16* WindowsGetStringRawBuffer(HSTRING hstr, uint32_t* out_len) {
+const wchar_t* WindowsGetStringRawBuffer(HSTRING hstr, uint32_t* out_len) {
   decltype(&::WindowsGetStringRawBuffer) get_string_raw_buffer_func =
       GetWindowsGetStringRawBuffer();
   if (!get_string_raw_buffer_func) {
@@ -83,10 +84,11 @@ void ScopedHStringTraits::Free(HSTRING hstr) {
 namespace win {
 
 // static
-ScopedHString ScopedHString::Create(StringPiece16 str) {
+ScopedHString ScopedHString::Create(WStringPiece str) {
   DCHECK(g_load_succeeded);
   HSTRING hstr;
-  HRESULT hr = base::WindowsCreateString(str.data(), str.length(), &hstr);
+  HRESULT hr = base::WindowsCreateString(
+      str.data(), checked_cast<UINT32>(str.length()), &hstr);
   if (SUCCEEDED(hr))
     return ScopedHString(hstr);
   DLOG(ERROR) << "Failed to create HSTRING" << std::hex << hr;
@@ -114,17 +116,14 @@ bool ScopedHString::ResolveCoreWinRTStringDelayload() {
   return load_succeeded;
 }
 
-StringPiece16 ScopedHString::Get() const {
+WStringPiece ScopedHString::Get() const {
   UINT32 length = 0;
   const wchar_t* buffer = base::WindowsGetStringRawBuffer(get(), &length);
-  return StringPiece16(buffer, length);
+  return WStringPiece(buffer, length);
 }
 
 std::string ScopedHString::GetAsUTF8() const {
-  std::string result;
-  const StringPiece16 wide_string = Get();
-  WideToUTF8(wide_string.data(), wide_string.length(), &result);
-  return result;
+  return WideToUTF8(Get());
 }
 
 }  // namespace win

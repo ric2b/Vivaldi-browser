@@ -51,8 +51,9 @@
 #include "third_party/blink/renderer/core/page/scrolling/sticky_position_scrolling_constraints.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_fragment.h"
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
+#include "third_party/blink/renderer/platform/graphics/scroll_types.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_types.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 
 namespace blink {
 
@@ -196,11 +197,11 @@ class CORE_EXPORT PaintLayerScrollableArea final
     static void ResetRelayoutNeeded();
 
    private:
+    static HeapVector<Member<PaintLayerScrollableArea>>& NeedsRelayoutList();
+
     static int count_;
     static SubtreeLayoutScope* layout_scope_;
     static bool relayout_needed_;
-    static PersistentHeapVector<Member<PaintLayerScrollableArea>>*
-        needs_relayout_;
   };
 
   // If a FreezeScrollbarScope object is alive, updateAfterLayout() will not
@@ -235,17 +236,18 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
    private:
     static void ClampScrollableAreas();
+    static HeapVector<Member<PaintLayerScrollableArea>>& NeedsClampList();
 
     static int count_;
-    static PersistentHeapVector<Member<PaintLayerScrollableArea>>* needs_clamp_;
   };
 
   // FIXME: We should pass in the LayoutBox but this opens a window
   // for crashers during PaintLayer setup (see crbug.com/368062).
   static PaintLayerScrollableArea* Create(PaintLayer& layer) {
-    return new PaintLayerScrollableArea(layer);
+    return MakeGarbageCollected<PaintLayerScrollableArea>(layer);
   }
 
+  explicit PaintLayerScrollableArea(PaintLayer&);
   ~PaintLayerScrollableArea() override;
   void Dispose();
   bool HasBeenDisposed() const override;
@@ -283,7 +285,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
   GraphicsLayer* LayerForScrollCorner() const override;
 
   bool ShouldScrollOnMainThread() const override;
-  bool ShouldUseIntegerScrollOffset() const override;
   bool IsActive() const override;
   bool IsScrollCornerVisible() const override;
   IntRect ScrollCornerRect() const override;
@@ -336,7 +337,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   bool ShouldPlaceVerticalScrollbarOnLeft() const override;
   int PageStep(ScrollbarOrientation) const override;
   ScrollBehavior ScrollBehaviorStyle() const override;
-  CompositorAnimationHost* GetCompositorAnimationHost() const override;
+  cc::AnimationHost* GetCompositorAnimationHost() const override;
   CompositorAnimationTimeline* GetCompositorAnimationTimeline() const override;
   void GetTickmarks(Vector<IntRect>&) const override;
 
@@ -547,9 +548,11 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   void Trace(blink::Visitor*) override;
 
- private:
-  explicit PaintLayerScrollableArea(PaintLayer&);
+  const DisplayItemClient& GetScrollingBackgroundDisplayItemClient() const {
+    return scrolling_background_display_item_client_;
+  }
 
+ private:
   bool NeedsScrollbarReconstruction() const;
 
   void ResetScrollOriginChanged() { scroll_origin_changed_ = false; }
@@ -561,7 +564,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   void UpdateScrollbarProportions();
 
   void UpdateScrollOffset(const ScrollOffset&, ScrollType) override;
-  void InvalidatePaintForScrollOffsetChange(bool offset_was_zero);
+  void InvalidatePaintForScrollOffsetChange();
 
   int VerticalScrollbarStart(int min_x, int max_x) const;
   int HorizontalScrollbarStart(int min_x) const;
@@ -696,6 +699,28 @@ class CORE_EXPORT PaintLayerScrollableArea final
   LayoutRect horizontal_scrollbar_visual_rect_;
   LayoutRect vertical_scrollbar_visual_rect_;
   LayoutRect scroll_corner_and_resizer_visual_rect_;
+
+  class ScrollingBackgroundDisplayItemClient final : public DisplayItemClient {
+    DISALLOW_NEW();
+
+   public:
+    ScrollingBackgroundDisplayItemClient(
+        const PaintLayerScrollableArea& scrollable_area)
+        : scrollable_area_(&scrollable_area) {}
+
+    void Trace(Visitor* visitor) { visitor->Trace(scrollable_area_); }
+
+   private:
+    LayoutRect VisualRect() const final;
+    String DebugName() const final;
+    DOMNodeId OwnerNodeId() const final;
+    bool PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const final;
+
+    Member<const PaintLayerScrollableArea> scrollable_area_;
+  };
+
+  ScrollingBackgroundDisplayItemClient
+      scrolling_background_display_item_client_;
 };
 
 DEFINE_TYPE_CASTS(PaintLayerScrollableArea,

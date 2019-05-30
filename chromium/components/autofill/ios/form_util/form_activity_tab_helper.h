@@ -33,6 +33,7 @@ class FormActivityTabHelper
 
  private:
   friend class web::WebStateUserData<FormActivityTabHelper>;
+
   // TestFormActivityTabHelper can be used by tests that want to simulate form
   // events without loading page and executing JavaScript.
   // To trigger events, TestFormActivityTabHelper will access |observer_|.
@@ -46,18 +47,21 @@ class FormActivityTabHelper
   // Handler for "form.activity" JavaScript command.
   bool HandleFormActivity(const base::DictionaryValue& message,
                           bool has_user_gesture,
-                          bool form_in_main_frame);
+                          bool form_in_main_frame,
+                          web::WebFrame* sender_frame);
 
   // Handler for "form.submit" JavaScript command.
   bool FormSubmissionHandler(const base::DictionaryValue& message,
                              bool has_user_gesture,
-                             bool form_in_main_frame);
+                             bool form_in_main_frame,
+                             web::WebFrame* sender_frame);
 
   // Handler for "form.*" JavaScript command. Dispatch to more specific handler.
   bool OnFormCommand(const base::DictionaryValue& message,
                      const GURL& url,
                      bool has_user_gesture,
-                     bool form_in_main_frame);
+                     bool form_in_main_frame,
+                     web::WebFrame* sender_frame);
 
   // The WebState this instance is observing. Will be null after
   // WebStateDestroyed has been called.
@@ -65,6 +69,8 @@ class FormActivityTabHelper
 
   // The observers.
   base::ObserverList<FormActivityObserver>::Unchecked observers_;
+
+  WEB_STATE_USER_DATA_KEY_DECL();
 
   DISALLOW_COPY_AND_ASSIGN(FormActivityTabHelper);
 };

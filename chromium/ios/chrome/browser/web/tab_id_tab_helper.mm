@@ -12,8 +12,6 @@
 #error "This file requires ARC support."
 #endif
 
-DEFINE_WEB_STATE_USER_DATA_KEY(TabIdTabHelper);
-
 namespace {
 // The key under which the tab ID is stored in the WebState's serializable user
 // data.
@@ -33,3 +31,5 @@ TabIdTabHelper::TabIdTabHelper(web::WebState* web_state) {
 }
 
 TabIdTabHelper::~TabIdTabHelper() = default;
+
+WEB_STATE_USER_DATA_KEY_IMPL(TabIdTabHelper)

@@ -5,7 +5,7 @@
 #ifndef NGColumnLayoutAlgorithm_h
 #define NGColumnLayoutAlgorithm_h
 
-#include "third_party/blink/renderer/core/layout/ng/ng_fragment_builder.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_box_fragment_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_algorithm.h"
 
 namespace blink {
@@ -18,14 +18,14 @@ struct NGLogicalSize;
 
 class CORE_EXPORT NGColumnLayoutAlgorithm
     : public NGLayoutAlgorithm<NGBlockNode,
-                               NGFragmentBuilder,
+                               NGBoxFragmentBuilder,
                                NGBlockBreakToken> {
  public:
   NGColumnLayoutAlgorithm(NGBlockNode node,
                           const NGConstraintSpace& space,
-                          NGBreakToken* break_token = nullptr);
+                          const NGBreakToken* break_token = nullptr);
 
-  scoped_refptr<NGLayoutResult> Layout() override;
+  scoped_refptr<const NGLayoutResult> Layout() override;
 
   base::Optional<MinMaxSize> ComputeMinMaxSize(
       const MinMaxSizeInput&) const override;
@@ -43,13 +43,13 @@ class CORE_EXPORT NGColumnLayoutAlgorithm
       LayoutUnit current_column_size,
       LayoutUnit container_content_box_block_size) const;
 
-  scoped_refptr<NGConstraintSpace> CreateConstraintSpaceForColumns(
+  NGConstraintSpace CreateConstraintSpaceForColumns(
       const NGLogicalSize& column_size,
       bool separate_leading_margins) const;
-  scoped_refptr<NGConstraintSpace> CreateConstaintSpaceForBalancing(
+  NGConstraintSpace CreateConstaintSpaceForBalancing(
       const NGLogicalSize& column_size) const;
 };
 
-}  // namespace Blink
+}  // namespace blink
 
 #endif  // NGColumnLayoutAlgorithm_h

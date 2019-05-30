@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/html/custom/v0_custom_element_sync_microtask_queue.h"
 #include "third_party/blink/renderer/core/html/imports/html_import_loader.h"
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 
 namespace blink {
 
@@ -40,7 +41,7 @@ void V0CustomElementMicrotaskRunQueue::RequestDispatchIfNeeded() {
   dispatch_is_pending_ = true;
 }
 
-void V0CustomElementMicrotaskRunQueue::Trace(blink::Visitor* visitor) {
+void V0CustomElementMicrotaskRunQueue::Trace(Visitor* visitor) {
   visitor->Trace(sync_queue_);
   visitor->Trace(async_queue_);
 }

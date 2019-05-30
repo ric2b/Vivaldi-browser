@@ -219,7 +219,7 @@ TEST_P(HistoryStateOperationsTest, NoOpPushDifferentOrigin) {
   // occurred as the result of the pushState() call.
   std::string empty_state;
   std::string empty_title;
-  std::string new_port_string = base::IntToString(
+  std::string new_port_string = base::NumberToString(
       web::test::HttpServer::GetSharedInstance().GetPort() + 1);
   url::Replacements<char> port_replacement;
   port_replacement.SetPort(new_port_string.c_str(),
@@ -241,7 +241,7 @@ TEST_P(HistoryStateOperationsTest, NoOpReplaceDifferentOrigin) {
   // occurred as the result of the pushState() call.
   std::string empty_state;
   std::string empty_title;
-  std::string new_port_string = base::IntToString(
+  std::string new_port_string = base::NumberToString(
       web::test::HttpServer::GetSharedInstance().GetPort() + 1);
   url::Replacements<char> port_replacement;
   port_replacement.SetPort(new_port_string.c_str(),
@@ -489,7 +489,7 @@ TEST_P(HistoryStateOperationsTest, ReplaceStateThenReload) {
   EXPECT_TRUE(completed);
 }
 
-INSTANTIATE_TEST_CASE_P(ProgrammaticHistoryStateOperationsTest,
-                        HistoryStateOperationsTest,
-                        ::testing::Values(NavigationManagerChoice::LEGACY,
-                                          NavigationManagerChoice::WK_BASED));
+INSTANTIATE_TEST_SUITE_P(ProgrammaticHistoryStateOperationsTest,
+                         HistoryStateOperationsTest,
+                         ::testing::Values(NavigationManagerChoice::LEGACY,
+                                           NavigationManagerChoice::WK_BASED));

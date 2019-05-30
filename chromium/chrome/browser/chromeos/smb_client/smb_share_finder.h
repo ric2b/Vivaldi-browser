@@ -23,6 +23,14 @@ namespace smb_client {
 using GatherSharesResponse =
     base::RepeatingCallback<void(const std::vector<SmbUrl>& shares_gathered)>;
 
+// The callback that will be passed to GatherSharesInNetwork. Used to implicitly
+// convert GatherSharesResponse to a OnceCallback.
+using GatherSharesInNetworkResponse =
+    base::OnceCallback<void(const std::vector<SmbUrl>& shares_gathered)>;
+
+// The callback run to indicate the scan for hosts on the network is complete.
+using HostDiscoveryResponse = base::OnceClosure;
+
 // This class is responsible for finding hosts in a network and getting the
 // available shares for each host found.
 class SmbShareFinder : public base::SupportsWeakPtr<SmbShareFinder> {
@@ -31,9 +39,17 @@ class SmbShareFinder : public base::SupportsWeakPtr<SmbShareFinder> {
   ~SmbShareFinder();
 
   // Gathers the hosts in the network using |scanner_| and gets the shares for
-  // each of the hosts found. |callback| will be called once per host and will
-  // contain the paths to the shares found (e.g. "smb://host/share").
-  void GatherSharesInNetwork(GatherSharesResponse callback);
+  // each of the hosts found. |discovery_callback| runs once when host
+  // disovery is complete. |shares_callback| only runs once when all entries
+  // from hosts are stored to |shares| and will contain the paths to the shares
+  // found (e.g. "smb://host/share").
+  void GatherSharesInNetwork(HostDiscoveryResponse discovery_callback,
+                             GatherSharesInNetworkResponse shares_callback);
+
+  // Gathers the hosts in the network using |scanner_|. Runs
+  // |discovery_callback| upon completion. No data is returned to the caller,
+  // but hosts are cached in |scanner_| and can be used for name resolution.
+  void DiscoverHostsInNetwork(HostDiscoveryResponse discovery_callback);
 
   // Registers HostLocator |locator| to |scanner_|.
   void RegisterHostLocator(std::unique_ptr<HostLocator> locator);
@@ -42,21 +58,52 @@ class SmbShareFinder : public base::SupportsWeakPtr<SmbShareFinder> {
   // otherwise returns ToString of |url|.
   std::string GetResolvedUrl(const SmbUrl& url) const;
 
+  // Attempts to resolve |url|. If able to resolve |url|, returns true and sets
+  // |resolved_url| the the resolved url. If unable, returns false and sets
+  // |resolved_url| to ToString of |url|.
+  bool TryResolveUrl(const SmbUrl& url, std::string* updated_url) const;
+
  private:
   // Handles the response from finding hosts in the network.
-  void OnHostsFound(GatherSharesResponse callback,
-                    bool success,
-                    const HostMap& hosts);
+  void OnHostsFound(bool success, const HostMap& hosts);
 
   // Handles the response from getting shares for a given host.
   void OnSharesFound(const std::string& host_name,
-                     GatherSharesResponse callback,
                      smbprovider::ErrorType error,
                      const smbprovider::DirectoryEntryListProto& entries);
+
+  // Executes all the DiscoveryCallbacks inside |discovery_callbacks_|.
+  void RunDiscoveryCallbacks();
+
+  // Executes all the SharesCallback inside |shares_callback_|.
+  void RunSharesCallbacks(const std::vector<SmbUrl>& shares);
+
+  // Executes all the SharesCallback inside |shares_callback_| with an empty
+  // vector of SmbUrl.
+  void RunEmptySharesCallbacks();
+
+  // Inserts HostDiscoveryResponse in |discovery_callbacks_| and inserts
+  // GatherSharesInNetworkResponse in |shares_callbacks_|.
+  void InsertDiscoveryAndShareCallbacks(
+      HostDiscoveryResponse discovery_callback,
+      GatherSharesInNetworkResponse shares_callback);
+
+  // Inserts |shares_callback| to |share_callbacks_|.
+  void InsertShareCallback(GatherSharesInNetworkResponse shares_callback);
+
+  // Inserts |discovery_callback| to |discovery_callbacks_|.
+  void InsertDiscoveryCallback(HostDiscoveryResponse discovery_callback);
 
   NetworkScanner scanner_;
 
   SmbProviderClient* client_;  // Not owned.
+
+  uint32_t host_counter_ = 0u;
+
+  std::vector<HostDiscoveryResponse> discovery_callbacks_;
+  std::vector<GatherSharesInNetworkResponse> share_callbacks_;
+
+  std::vector<SmbUrl> shares_;
 
   DISALLOW_COPY_AND_ASSIGN(SmbShareFinder);
 };

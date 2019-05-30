@@ -16,8 +16,6 @@
 #endif
 
 namespace web {
-TestFormActivityInfo::TestFormActivityInfo() {}
-TestFormActivityInfo::~TestFormActivityInfo() = default;
 TestUpdateFaviconUrlCandidatesInfo::TestUpdateFaviconUrlCandidatesInfo() {}
 TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
     default;
@@ -35,8 +33,6 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
   std::unique_ptr<web::TestDidStartNavigationInfo> _didStartNavigationInfo;
   // Arguments passed to |webState:didFinishNavigationForURL:|.
   std::unique_ptr<web::TestDidFinishNavigationInfo> _didFinishNavigationInfo;
-  // Arguments passed to |webState:didCommitNavigationWithDetails:|.
-  std::unique_ptr<web::TestCommitNavigationInfo> _commitNavigationInfo;
   // Arguments passed to |webState:didLoadPageWithSuccess:|.
   std::unique_ptr<web::TestLoadPageInfo> _loadPageInfo;
   // Arguments passed to |webState:didChangeLoadingProgress:|.
@@ -47,8 +43,6 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
   // Arguments passed to |webStateDidChangeVisibleSecurityState:|.
   std::unique_ptr<web::TestDidChangeVisibleSecurityStateInfo>
       _didChangeVisibleSecurityStateInfo;
-  // Arguments passed to |webStateDidSuppressDialog:|.
-  std::unique_ptr<web::TestDidSuppressDialogInfo> _didSuppressDialogInfo;
   // Arguments passed to |webState:didUpdateFaviconURLCandidates|.
   std::unique_ptr<web::TestUpdateFaviconUrlCandidatesInfo>
       _updateFaviconUrlCandidatesInfo;
@@ -82,10 +76,6 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
   return _didFinishNavigationInfo.get();
 }
 
-- (web::TestCommitNavigationInfo*)commitNavigationInfo {
-  return _commitNavigationInfo.get();
-}
-
 - (web::TestLoadPageInfo*)loadPageInfo {
   return _loadPageInfo.get();
 }
@@ -101,10 +91,6 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
 - (web::TestDidChangeVisibleSecurityStateInfo*)
     didChangeVisibleSecurityStateInfo {
   return _didChangeVisibleSecurityStateInfo.get();
-}
-
-- (web::TestDidSuppressDialogInfo*)didSuppressDialogInfo {
-  return _didSuppressDialogInfo.get();
 }
 
 - (web::TestUpdateFaviconUrlCandidatesInfo*)updateFaviconUrlCandidatesInfo {
@@ -163,14 +149,6 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
 }
 
 - (void)webState:(web::WebState*)webState
-    didCommitNavigationWithDetails:
-        (const web::LoadCommittedDetails&)load_details {
-  _commitNavigationInfo = std::make_unique<web::TestCommitNavigationInfo>();
-  _commitNavigationInfo->web_state = webState;
-  _commitNavigationInfo->load_details = load_details;
-}
-
-- (void)webState:(web::WebState*)webState
     didFinishNavigation:(web::NavigationContext*)navigation {
   ASSERT_TRUE(!navigation->GetError() || !navigation->IsSameDocument());
   _didFinishNavigationInfo =
@@ -209,11 +187,6 @@ TestUpdateFaviconUrlCandidatesInfo::~TestUpdateFaviconUrlCandidatesInfo() =
   _didChangeVisibleSecurityStateInfo =
       std::make_unique<web::TestDidChangeVisibleSecurityStateInfo>();
   _didChangeVisibleSecurityStateInfo->web_state = webState;
-}
-
-- (void)webStateDidSuppressDialog:(web::WebState*)webState {
-  _didSuppressDialogInfo = std::make_unique<web::TestDidSuppressDialogInfo>();
-  _didSuppressDialogInfo->web_state = webState;
 }
 
 - (void)webState:(web::WebState*)webState

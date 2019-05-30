@@ -22,6 +22,10 @@
 
 - (void)sentUploadCardRequest;
 
+- (void)receivedUploadCardResponse;
+
+- (void)strikeChangeComplete;
+
 @end
 
 namespace autofill {
@@ -41,6 +45,8 @@ class CreditCardSaveManagerTestObserverBridge
   void OnDecideToRequestUploadSave() override;
   void OnReceivedGetUploadDetailsResponse() override;
   void OnSentUploadCardRequest() override;
+  void OnReceivedUploadCardResponse() override;
+  void OnStrikeChangeComplete() override;
 
  private:
   __weak id<CreditCardSaveManagerTestObserver> observer_ = nil;

@@ -2,8 +2,17 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="cs">
 <translation id="1368832886055348810">Zleva doprava</translation>
+<translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
 <translation id="1859234291848436338">Směr textu</translation>
+<translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
 <translation id="3618849550573277856">Vyhledat „<ph name="LOOKUP_STRING" />“</translation>
+<translation id="3740362395218339114"><ph name="QUANTITY" /> GB/s</translation>
+<translation id="3889424535448813030">⇨</translation>
+<translation id="5076340679995252485">&amp;Vložit</translation>
+<translation id="5613020302032141669">⇦</translation>
+<translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
+<translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
 <translation id="6974053822202609517">Zprava doleva</translation>
+<translation id="8677655579646609597"><ph name="QUANTITY" /> kB/s</translation>
 <translation id="8798099450830957504">Výchozí</translation>
 </translationbundle>

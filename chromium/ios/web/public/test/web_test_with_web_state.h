@@ -22,6 +22,10 @@ class WebState;
 // Base test fixture that provides WebState for testing.
 class WebTestWithWebState : public WebTest,
                             public base::MessageLoop::TaskObserver {
+ public:
+  // Destroys underlying WebState. web_state() will return null after this call.
+  void DestroyWebState();
+
  protected:
   explicit WebTestWithWebState(
       TestWebThreadBundle::Options = TestWebThreadBundle::Options::DEFAULT);
@@ -47,6 +51,11 @@ class WebTestWithWebState : public WebTest,
   void LoadHtml(NSString* html);
   // Loads the specified HTML content into the WebState, using test url name.
   bool LoadHtml(const std::string& html) WARN_UNUSED_RESULT;
+  // Loads the specified HTML content with URL into the WebState. None of the
+  // subresources will be fetched.
+  // This function is only supported on iOS11+. On iOS10, this function simply
+  // calls |LoadHtml|.
+  bool LoadHtmlWithoutSubresources(const std::string& html);
   // Blocks until both known NSRunLoop-based and known message-loop-based
   // background tasks have completed
   void WaitForBackgroundTasks();
@@ -55,8 +64,6 @@ class WebTestWithWebState : public WebTest,
   void WaitForCondition(ConditionBlock condition);
   // Synchronously executes JavaScript and returns result as id.
   id ExecuteJavaScript(NSString* script);
-  // Destroys underlying WebState. web_state() will return null after this call.
-  void DestroyWebState();
 
   // Returns the base URL of the loaded page.
   std::string BaseUrl() const;

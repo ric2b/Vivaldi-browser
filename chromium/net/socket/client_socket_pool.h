@@ -25,6 +25,8 @@ class DictionaryValue;
 namespace net {
 
 class ClientSocketHandle;
+class HttpAuthController;
+class HttpResponseInfo;
 class NetLogWithSource;
 class StreamSocket;
 
@@ -70,6 +72,17 @@ class NET_EXPORT ClientSocketPool : public LowerLayeredPool {
   // SocketPool's global and per-group socket limits.
   enum class RespectLimits { DISABLED, ENABLED };
 
+  // ProxyAuthCallback is invoked when there is an auth challenge while
+  // connecting to a tunnel. When |restart_with_auth_callback| is invoked, the
+  // corresponding socket request is guaranteed not to be completed
+  // synchronously, nor will the ProxyAuthCallback be invoked against
+  // synchronously.
+  typedef base::RepeatingCallback<void(
+      const HttpResponseInfo& response,
+      HttpAuthController* auth_controller,
+      base::OnceClosure restart_with_auth_callback)>
+      ProxyAuthCallback;
+
   // Requests a connected socket for a group_name.
   //
   // There are five possible results from calling this function:
@@ -101,6 +114,11 @@ class NET_EXPORT ClientSocketPool : public LowerLayeredPool {
   // Profiling information for the request is saved to |net_log| if non-NULL.
   //
   // If |respect_limits| is DISABLED, priority must be HIGHEST.
+  //
+  // |on_proxy_auth_challenge_callback| will be invoked each time an auth
+  // challenge is seen while establishing a tunnel. It will never be invoked
+  // synchronously when RequestSocket is called, and will be invoked once for
+  // each challenge seen.
   virtual int RequestSocket(const std::string& group_name,
                             const void* params,
                             RequestPriority priority,
@@ -108,6 +126,7 @@ class NET_EXPORT ClientSocketPool : public LowerLayeredPool {
                             RespectLimits respect_limits,
                             ClientSocketHandle* handle,
                             CompletionOnceCallback callback,
+                            const ProxyAuthCallback& proxy_auth_challenge,
                             const NetLogWithSource& net_log) = 0;
 
   // RequestSockets is used to request that |num_sockets| be connected in the
@@ -170,7 +189,8 @@ class NET_EXPORT ClientSocketPool : public LowerLayeredPool {
   virtual int IdleSocketCount() const = 0;
 
   // The total number of idle sockets in a connection group.
-  virtual int IdleSocketCountInGroup(const std::string& group_name) const = 0;
+  virtual size_t IdleSocketCountInGroup(
+      const std::string& group_name) const = 0;
 
   // Determine the LoadState of a connecting ClientSocketHandle.
   virtual LoadState GetLoadState(const std::string& group_name,
@@ -182,14 +202,10 @@ class NET_EXPORT ClientSocketPool : public LowerLayeredPool {
   // ClientSocketPools will be included.
   virtual std::unique_ptr<base::DictionaryValue> GetInfoAsValue(
       const std::string& name,
-      const std::string& type,
-      bool include_nested_pools) const = 0;
+      const std::string& type) const = 0;
 
   // Returns the maximum amount of time to wait before retrying a connect.
   static const int kMaxConnectRetryIntervalMs = 250;
-
-  static base::TimeDelta unused_idle_socket_timeout();
-  static void set_unused_idle_socket_timeout(base::TimeDelta timeout);
 
   static base::TimeDelta used_idle_socket_timeout();
   static void set_used_idle_socket_timeout(base::TimeDelta timeout);
@@ -197,9 +213,6 @@ class NET_EXPORT ClientSocketPool : public LowerLayeredPool {
  protected:
   ClientSocketPool();
   ~ClientSocketPool() override;
-
-  // Return the connection timeout for this pool.
-  virtual base::TimeDelta ConnectionTimeout() const = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ClientSocketPool);

@@ -97,8 +97,6 @@ class LockScreenAshFocusRulesTest : public AshTestBase {
             Shell::Get()->session_controller()));
   }
 
-  void TearDown() override { AshTestBase::TearDown(); }
-
   aura::Window* CreateWindowInDefaultContainer() {
     return CreateWindowInContainer(kShellWindowId_DefaultContainer);
   }
@@ -112,6 +110,10 @@ class LockScreenAshFocusRulesTest : public AshTestBase {
 
   aura::Window* CreateWindowInLockContainer() {
     return CreateWindowInContainer(kShellWindowId_LockScreenContainer);
+  }
+
+  aura::Window* CreateWindowInShelfContainer() {
+    return CreateWindowInContainer(kShellWindowId_ShelfContainer);
   }
 
   aura::Window* CreateWindowInLockSystemModalContainer() {
@@ -252,6 +254,24 @@ TEST_F(LockScreenAshFocusRulesTest,
 
   // Upon unlocking the session, the system modal window should be reactivated.
   EXPECT_TRUE(wm::IsActiveWindow(system_modal_window.get()));
+}
+
+// Verifies that the shelf can be activated in login/lock screen even if there
+// is a lock system modal present.
+TEST_F(LockScreenAshFocusRulesTest,
+       AllowShelfActivationWithLockSystemModalWindow) {
+  BlockUserSession(BLOCKED_BY_LOCK_SCREEN);
+  EXPECT_TRUE(Shell::Get()->session_controller()->IsScreenLocked());
+
+  std::unique_ptr<aura::Window> lock_window(CreateWindowInLockContainer());
+  std::unique_ptr<aura::Window> lock_shelf_window(
+      CreateWindowInShelfContainer());
+  std::unique_ptr<aura::Window> lock_system_modal_window(
+      CreateWindowInLockSystemModalContainer());
+  EXPECT_TRUE(wm::IsActiveWindow(lock_system_modal_window.get()));
+
+  wm::ActivateWindow(lock_shelf_window.get());
+  EXPECT_TRUE(wm::IsActiveWindow(lock_shelf_window.get()));
 }
 
 }  // namespace ash

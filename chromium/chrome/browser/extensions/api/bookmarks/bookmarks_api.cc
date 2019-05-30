@@ -15,7 +15,6 @@
 #include "base/i18n/time_formatting.h"
 #include "base/lazy_instance.h"
 #include "base/path_service.h"
-#include "base/sha1.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -189,7 +188,8 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
     // NOTE(pettern): Vivaldi-specific properties, no extension are allowed to
     // set them.
     if (details.nickname.get() || details.description.get() ||
-        details.speeddial.get() || details.thumbnail.get()) {
+        details.speeddial.get() || details.thumbnail.get() ||
+        details.bookmarkbar.get() || details.partner.get()) {
       error_ = kVivaldiReservedApiError;
       return nullptr;
     }
@@ -207,9 +207,18 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
   if (details.speeddial.get())
     speeddial = *details.speeddial.get();
 
+  bool bookmarkbar = false;  // Optional.
+  if (details.bookmarkbar.get())
+    bookmarkbar = *details.bookmarkbar.get();
+
   base::string16 thumbnail;  // Optional.
   if (details.thumbnail.get()) {
     thumbnail = base::UTF8ToUTF16(*details.thumbnail.get());
+  }
+
+  base::string16 partner;  // Optional.
+  if (details.partner.get()) {
+    partner = base::UTF8ToUTF16(*details.partner.get());
   }
 
   // --- VIVALDI --- changed by Daniel Sig. @ 11-02-2015
@@ -217,10 +226,11 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
   if (url_string.length()) {
     node = model->AddURLWithCreationTimeAndMetaInfo(
         parent, index, title, url, base::Time::Now(), meta_info,
-        nickname, description, thumbnail, speeddial);
+        nickname, description, thumbnail, partner, speeddial);
   } else {
     node = model->AddFolderWithMetaInfo(parent, index, title, meta_info,
-                                        nickname, description, speeddial);
+                                        nickname, description, partner,
+                                        speeddial, bookmarkbar);
     model->SetDateFolderModified(parent, base::Time::Now());
   }
 
@@ -316,14 +326,14 @@ void BookmarkEventRouter::BookmarkNodeMoved(BookmarkModel* model,
                                             int new_index) {
   const BookmarkNode* node = new_parent->GetChild(new_index);
   api::bookmarks::OnMoved::MoveInfo move_info;
-  move_info.parent_id = base::Int64ToString(new_parent->id());
+  move_info.parent_id = base::NumberToString(new_parent->id());
   move_info.index = new_index;
-  move_info.old_parent_id = base::Int64ToString(old_parent->id());
+  move_info.old_parent_id = base::NumberToString(old_parent->id());
   move_info.old_index = old_index;
 
   DispatchEvent(events::BOOKMARKS_ON_MOVED, api::bookmarks::OnMoved::kEventName,
-                api::bookmarks::OnMoved::Create(base::Int64ToString(node->id()),
-                                                move_info));
+                api::bookmarks::OnMoved::Create(
+                    base::NumberToString(node->id()), move_info));
 }
 
 void BookmarkEventRouter::BookmarkNodeAdded(BookmarkModel* model,
@@ -335,7 +345,7 @@ void BookmarkEventRouter::BookmarkNodeAdded(BookmarkModel* model,
   DispatchEvent(events::BOOKMARKS_ON_CREATED,
                 api::bookmarks::OnCreated::kEventName,
                 api::bookmarks::OnCreated::Create(
-                    base::Int64ToString(node->id()), tree_node));
+                    base::NumberToString(node->id()), tree_node));
 }
 
 void BookmarkEventRouter::BookmarkNodeRemoved(
@@ -345,7 +355,7 @@ void BookmarkEventRouter::BookmarkNodeRemoved(
     const BookmarkNode* node,
     const std::set<GURL>& removed_urls) {
   api::bookmarks::OnRemoved::RemoveInfo remove_info;
-  remove_info.parent_id = base::Int64ToString(parent->id());
+  remove_info.parent_id = base::NumberToString(parent->id());
   remove_info.index = index;
   bookmark_api_helpers::PopulateBookmarkTreeNode(managed_, node, true, false,
                                                  &remove_info.node);
@@ -353,7 +363,7 @@ void BookmarkEventRouter::BookmarkNodeRemoved(
   DispatchEvent(events::BOOKMARKS_ON_REMOVED,
                 api::bookmarks::OnRemoved::kEventName,
                 api::bookmarks::OnRemoved::Create(
-                    base::Int64ToString(node->id()), remove_info));
+                    base::NumberToString(node->id()), remove_info));
 }
 
 void BookmarkEventRouter::BookmarkAllUserNodesRemoved(
@@ -376,12 +386,20 @@ void BookmarkEventRouter::BookmarkNodeChanged(BookmarkModel* model,
   change_info.title = base::UTF16ToUTF8(node->GetTitle());
   if (node->is_url())
     change_info.url.reset(new std::string(node->url().spec()));
+  // Additions for vivaldi
   change_info.speeddial.reset(new bool(node->GetSpeeddial()));
+  change_info.bookmarkbar.reset(new bool(node->GetBookmarkbar()));
+  change_info.description.reset(
+      new std::string(base::UTF16ToUTF8(node->GetDescription())));
+  change_info.thumbnail.reset(
+      new std::string(base::UTF16ToUTF8(node->GetThumbnail())));
+  change_info.nickname.reset(
+      new std::string(base::UTF16ToUTF8(node->GetNickName())));
 
   DispatchEvent(events::BOOKMARKS_ON_CHANGED,
                 api::bookmarks::OnChanged::kEventName,
                 api::bookmarks::OnChanged::Create(
-                    base::Int64ToString(node->id()), change_info));
+                    base::NumberToString(node->id()), change_info));
 }
 
 void BookmarkEventRouter::BookmarkNodeFaviconChanged(BookmarkModel* model,
@@ -396,13 +414,13 @@ void BookmarkEventRouter::BookmarkNodeChildrenReordered(
   int childCount = node->child_count();
   for (int i = 0; i < childCount; ++i) {
     const BookmarkNode* child = node->GetChild(i);
-    reorder_info.child_ids.push_back(base::Int64ToString(child->id()));
+    reorder_info.child_ids.push_back(base::NumberToString(child->id()));
   }
 
   DispatchEvent(events::BOOKMARKS_ON_CHILDREN_REORDERED,
                 api::bookmarks::OnChildrenReordered::kEventName,
                 api::bookmarks::OnChildrenReordered::Create(
-                    base::Int64ToString(node->id()), reorder_info));
+                    base::NumberToString(node->id()), reorder_info));
 }
 
 void BookmarkEventRouter::ExtensiveBookmarkChangesBeginning(
@@ -776,7 +794,8 @@ bool BookmarksUpdateFunction::RunOnReady() {
     // NOTE(pettern): Vivaldi-specific properties, no extension are allowed to
     // set them.
     if (params->changes.nickname.get() || params->changes.description.get() ||
-        params->changes.speeddial.get() || params->changes.thumbnail.get()) {
+        params->changes.speeddial.get() || params->changes.bookmarkbar.get() ||
+        params->changes.thumbnail.get()) {
       error_ = kVivaldiReservedApiError;
       return false;
     }
@@ -803,12 +822,27 @@ bool BookmarksUpdateFunction::RunOnReady() {
     has_thumbnail = true;
   }
 
+  std::string partner;
+  bool has_partner = false;
+  if (params->changes.partner.get()) {
+    partner = (*params->changes.partner);
+    has_partner = true;
+  }
+
   bool speeddial = false;
   std::string speeddial_str;
   bool has_speeddial = false;
   if (params->changes.speeddial.get()) {
     speeddial = (*params->changes.speeddial);
     has_speeddial = true;
+  }
+
+  bool bookmarkbar = false;
+  std::string bookmarkbar_str;
+  bool has_bookmarkbar = false;
+  if (params->changes.bookmarkbar.get()) {
+    bookmarkbar = (*params->changes.bookmarkbar);
+    has_bookmarkbar = true;
   }
 
   // Optional.
@@ -850,8 +884,14 @@ bool BookmarksUpdateFunction::RunOnReady() {
   if (has_thumbnail)
     model->SetNodeMetaInfo(node, "Thumbnail", thumbnail);
 
+  if (has_partner)
+    model->SetNodeMetaInfo(node, "Partner", partner);
+
   if (has_speeddial)
     model->SetNodeMetaInfo(node, "Speeddial", speeddial ? "true" : "false");
+
+  if (has_bookmarkbar)
+    model->SetNodeMetaInfo(node, "Bookmarkbar", bookmarkbar ? "true" : "false");
 
   BookmarkTreeNode tree_node = bookmark_api_helpers::GetBookmarkTreeNode(
       GetManagedBookmarkService(), node, false, false);
@@ -887,9 +927,9 @@ void BookmarksIOFunction::ShowSelectFileDialog(
   ui::SelectFileDialog::FileTypeInfo file_type_info;
   file_type_info.extensions.resize(1);
   file_type_info.extensions[0].push_back(FILE_PATH_LITERAL("html"));
-  gfx::NativeWindow owning_window = web_contents ?
-      platform_util::GetTopLevel(web_contents->GetNativeView())
-          : NULL;
+  gfx::NativeWindow owning_window =
+      web_contents ? platform_util::GetTopLevel(web_contents->GetNativeView())
+                   : gfx::kNullNativeWindow;
   // |web_contents| can be NULL (for background pages), which is fine. In such
   // a case if file-selection dialogs are forbidden by policy, we will not
   // show an InfoBar, which is better than letting one appear out of the blue.

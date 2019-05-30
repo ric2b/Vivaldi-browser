@@ -372,6 +372,20 @@ bool GURL::SchemeIsWSOrWSS() const {
   return SchemeIs(url::kWsScheme) || SchemeIs(url::kWssScheme);
 }
 
+bool GURL::SchemeIsCryptographic() const {
+  if (parsed_.scheme.len <= 0)
+    return false;
+  return SchemeIsCryptographic(scheme_piece());
+}
+
+bool GURL::SchemeIsCryptographic(base::StringPiece lower_ascii_scheme) {
+  DCHECK(base::IsStringASCII(lower_ascii_scheme));
+  DCHECK(base::ToLowerASCII(lower_ascii_scheme) == lower_ascii_scheme);
+
+  return lower_ascii_scheme == url::kHttpsScheme ||
+         lower_ascii_scheme == url::kWssScheme;
+}
+
 int GURL::IntPort() const {
   if (parsed_.port.is_nonempty())
     return url::ParsePort(spec_.data(), parsed_.port);
@@ -426,7 +440,12 @@ base::StringPiece GURL::HostNoBracketsPiece() const {
 }
 
 std::string GURL::GetContent() const {
-  return is_valid_ ? ComponentString(parsed_.GetContent()) : std::string();
+  if (!is_valid_)
+    return std::string();
+  std::string content = ComponentString(parsed_.GetContent());
+  if (!SchemeIs(url::kJavaScriptScheme) && parsed_.ref.len >= 0)
+    content.erase(content.size() - parsed_.ref.len - 1);
+  return content;
 }
 
 bool GURL::HostIsIPAddress() const {

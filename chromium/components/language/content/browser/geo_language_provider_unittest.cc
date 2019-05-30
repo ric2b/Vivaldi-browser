@@ -8,10 +8,15 @@
 #include <string>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/macros.h"
+#include "base/test/scoped_feature_list.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/timer/timer.h"
 #include "components/language/content/browser/test_utils.h"
+#include "components/language/content/browser/ulp_language_code_locator/ulp_language_code_locator.h"
+#include "components/language/core/common/language_experiments.h"
 #include "components/prefs/testing_pref_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -20,20 +25,19 @@ namespace language {
 class GeoLanguageProviderTest : public testing::Test {
  public:
   GeoLanguageProviderTest()
-      : task_runner_(base::MakeRefCounted<base::TestMockTimeTaskRunner>(
-            base::TestMockTimeTaskRunner::Type::kBoundToThread)),
-        scoped_context_(task_runner_.get()),
-        geo_language_provider_(task_runner_),
+      : geo_language_provider_(
+            scoped_task_environment_.GetMainThreadTaskRunner()),
         mock_ip_geo_location_provider_(&mock_geo_location_) {
     service_manager::mojom::ConnectorRequest request;
     connector_ = service_manager::Connector::Create(&request);
-    service_manager::Connector::TestApi test_api(connector_.get());
-    test_api.OverrideBinderForTesting(
-        service_manager::Identity(device::mojom::kServiceName),
+    connector_->OverrideBinderForTesting(
+        service_manager::ServiceFilter::ByName(device::mojom::kServiceName),
         device::mojom::PublicIpAddressGeolocationProvider::Name_,
         base::BindRepeating(&MockIpGeoLocationProvider::Bind,
                             base::Unretained(&mock_ip_geo_location_provider_)));
     language::GeoLanguageProvider::RegisterLocalStatePrefs(
+        local_state_.registry());
+    language::UlpLanguageCodeLocator::RegisterLocalStatePrefs(
         local_state_.registry());
   }
 
@@ -48,10 +52,6 @@ class GeoLanguageProviderTest : public testing::Test {
 
   void MoveToLocation(float latitude, float longitude) {
     mock_geo_location_.MoveToLocation(latitude, longitude);
-  }
-
-  const scoped_refptr<base::TestMockTimeTaskRunner>& GetTaskRunner() {
-    return task_runner_;
   }
 
   int GetQueryNextPositionCalledTimes() {
@@ -79,11 +79,12 @@ class GeoLanguageProviderTest : public testing::Test {
     }
     return languages;
   }
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  base::test::ScopedTaskEnvironment scoped_task_environment_{
+      base::test::ScopedTaskEnvironment::MainThreadType::MOCK_TIME};
 
  private:
-  scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
-  const base::TestMockTimeTaskRunner::ScopedContext scoped_context_;
-
   // Object under test.
   GeoLanguageProvider geo_language_provider_;
   MockGeoLocation mock_geo_location_;
@@ -96,8 +97,7 @@ TEST_F(GeoLanguageProviderTest, GetCurrentGeoLanguages) {
   // Setup a random place in Madhya Pradesh, India.
   MoveToLocation(23.0, 80.0);
   StartGeoLanguageProvider();
-  const auto task_runner = GetTaskRunner();
-  task_runner->RunUntilIdle();
+  scoped_task_environment_.RunUntilIdle();
 
   const std::vector<std::string>& result = GetCurrentGeoLanguages();
   std::vector<std::string> expected_langs = {"hi", "mr", "ur"};
@@ -106,18 +106,39 @@ TEST_F(GeoLanguageProviderTest, GetCurrentGeoLanguages) {
   EXPECT_EQ(expected_langs, GetCachedLanguages());
 }
 
+TEST_F(GeoLanguageProviderTest, GetCurrentGeoLanguagesImproved_India) {
+  scoped_feature_list_.InitAndEnableFeature(kImprovedGeoLanguageData);
+  // Setup a random place in West Bengal, India.
+  MoveToLocation(23.0, 85.7);
+  StartGeoLanguageProvider();
+  scoped_task_environment_.RunUntilIdle();
+
+  std::vector<std::string> expected_langs = {"hi", "bn", "en"};
+  EXPECT_EQ(expected_langs, GetCurrentGeoLanguages());
+}
+
+TEST_F(GeoLanguageProviderTest, GetCurrentGeoLanguagesImproved_OutsideIndia) {
+  scoped_feature_list_.InitAndEnableFeature(kImprovedGeoLanguageData);
+  // Setup a random place in Montreal, Canada.
+  MoveToLocation(45.5, 73.5);
+  StartGeoLanguageProvider();
+  scoped_task_environment_.RunUntilIdle();
+
+  std::vector<std::string> expected_langs = {};
+  EXPECT_EQ(expected_langs, GetCurrentGeoLanguages());
+}
+
 TEST_F(GeoLanguageProviderTest, NoFrequentCalls) {
   // Setup a random place in Madhya Pradesh, India.
   MoveToLocation(23.0, 80.0);
   StartGeoLanguageProvider();
-  const auto task_runner = GetTaskRunner();
-  task_runner->RunUntilIdle();
+  scoped_task_environment_.RunUntilIdle();
 
   const std::vector<std::string>& result = GetCurrentGeoLanguages();
   std::vector<std::string> expected_langs = {"hi", "mr", "ur"};
   EXPECT_EQ(expected_langs, result);
 
-  task_runner->FastForwardBy(base::TimeDelta::FromHours(12));
+  scoped_task_environment_.FastForwardBy(base::TimeDelta::FromHours(12));
   EXPECT_EQ(1, GetQueryNextPositionCalledTimes());
   EXPECT_EQ(expected_langs, GetCachedLanguages());
 }
@@ -126,8 +147,7 @@ TEST_F(GeoLanguageProviderTest, ButDoCallInTheNextDay) {
   // Setup a random place in Madhya Pradesh, India.
   MoveToLocation(23.0, 80.0);
   StartGeoLanguageProvider();
-  const auto task_runner = GetTaskRunner();
-  task_runner->RunUntilIdle();
+  scoped_task_environment_.RunUntilIdle();
 
   std::vector<std::string> result = GetCurrentGeoLanguages();
   std::vector<std::string> expected_langs = {"hi", "mr", "ur"};
@@ -136,7 +156,7 @@ TEST_F(GeoLanguageProviderTest, ButDoCallInTheNextDay) {
 
   // Move to another random place in Karnataka, India.
   MoveToLocation(15.0, 75.0);
-  task_runner->FastForwardBy(base::TimeDelta::FromHours(25));
+  scoped_task_environment_.FastForwardBy(base::TimeDelta::FromHours(25));
   EXPECT_EQ(2, GetQueryNextPositionCalledTimes());
 
   result = GetCurrentGeoLanguages();
@@ -153,8 +173,7 @@ TEST_F(GeoLanguageProviderTest, CachedLanguagesPresent) {
   std::vector<std::string> expected_langs = {"en", "fr"};
   EXPECT_EQ(expected_langs, GetCurrentGeoLanguages());
 
-  const auto task_runner = GetTaskRunner();
-  task_runner->RunUntilIdle();
+  scoped_task_environment_.RunUntilIdle();
 
   expected_langs = {"hi", "mr", "ur"};
   EXPECT_EQ(expected_langs, GetCurrentGeoLanguages());

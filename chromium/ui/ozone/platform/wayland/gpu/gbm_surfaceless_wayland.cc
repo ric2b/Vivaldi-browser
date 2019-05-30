@@ -59,8 +59,6 @@ bool GbmSurfacelessWayland::IsOffscreen() {
 }
 
 bool GbmSurfacelessWayland::SupportsPresentationCallback() {
-  // TODO(msisov): enable a real presentation callback for wayland. For now, we
-  // just blindly say it was successful. https://crbug.com/859012.
   return true;
 }
 
@@ -69,8 +67,7 @@ bool GbmSurfacelessWayland::SupportsAsyncSwap() {
 }
 
 bool GbmSurfacelessWayland::SupportsPostSubBuffer() {
-  // TODO(msisov): figure out how to enable subbuffers with wayland/dmabuf.
-  return false;
+  return true;
 }
 
 gfx::SwapResult GbmSurfacelessWayland::PostSubBuffer(
@@ -78,21 +75,21 @@ gfx::SwapResult GbmSurfacelessWayland::PostSubBuffer(
     int y,
     int width,
     int height,
-    const PresentationCallback& callback) {
+    PresentationCallback callback) {
   // The actual sub buffer handling is handled at higher layers.
   NOTREACHED();
   return gfx::SwapResult::SWAP_FAILED;
 }
 
 void GbmSurfacelessWayland::SwapBuffersAsync(
-    const SwapCompletionCallback& completion_callback,
-    const PresentationCallback& presentation_callback) {
+    SwapCompletionCallback completion_callback,
+    PresentationCallback presentation_callback) {
   TRACE_EVENT0("wayland", "GbmSurfacelessWayland::SwapBuffersAsync");
   // If last swap failed, don't try to schedule new ones.
   if (!last_swap_buffers_result_) {
-    completion_callback.Run(gfx::SwapResult::SWAP_FAILED, nullptr);
+    std::move(completion_callback).Run(gfx::SwapResult::SWAP_FAILED, nullptr);
     // Notify the caller, the buffer is never presented on a screen.
-    presentation_callback.Run(gfx::PresentationFeedback::Failure());
+    std::move(presentation_callback).Run(gfx::PresentationFeedback::Failure());
     return;
   }
 
@@ -102,19 +99,20 @@ void GbmSurfacelessWayland::SwapBuffersAsync(
   unsubmitted_frames_.back()->Flush();
 
   PendingFrame* frame = unsubmitted_frames_.back().get();
-  frame->completion_callback = completion_callback;
-  frame->presentation_callback = presentation_callback;
+  frame->completion_callback = std::move(completion_callback);
+  frame->presentation_callback = std::move(presentation_callback);
   unsubmitted_frames_.push_back(std::make_unique<PendingFrame>());
+
+  if (!use_egl_fence_sync_) {
+    frame->ready = true;
+    SubmitFrame();
+    return;
+  }
 
   // TODO: the following should be replaced by a per surface flush as it gets
   // implemented in GL drivers.
   EGLSyncKHR fence = InsertFence(has_implicit_external_sync_);
-  if (!fence) {
-    completion_callback.Run(gfx::SwapResult::SWAP_FAILED, nullptr);
-    // Notify the caller, the buffer is never presented on a screen.
-    presentation_callback.Run(gfx::PresentationFeedback::Failure());
-    return;
-  }
+  CHECK_NE(fence, EGL_NO_SYNC_KHR) << "eglCreateSyncKHR failed";
 
   base::OnceClosure fence_wait_task =
       base::BindOnce(&WaitForFence, GetDisplay(), fence);
@@ -133,10 +131,13 @@ void GbmSurfacelessWayland::PostSubBufferAsync(
     int y,
     int width,
     int height,
-    const SwapCompletionCallback& completion_callback,
-    const PresentationCallback& presentation_callback) {
-  // See the comment in SupportsPostSubBuffer.
-  NOTREACHED();
+    SwapCompletionCallback completion_callback,
+    PresentationCallback presentation_callback) {
+  PendingFrame* frame = unsubmitted_frames_.back().get();
+  frame->damage_region_ = gfx::Rect(x, y, width, height);
+
+  SwapBuffersAsync(std::move(completion_callback),
+                   std::move(presentation_callback));
 }
 
 EGLConfig GbmSurfacelessWayland::GetConfig() {
@@ -159,6 +160,10 @@ EGLConfig GbmSurfacelessWayland::GetConfig() {
     config_ = ChooseEGLConfig(GetDisplay(), config_attribs);
   }
   return config_;
+}
+
+void GbmSurfacelessWayland::SetRelyOnImplicitSync() {
+  use_egl_fence_sync_ = false;
 }
 
 GbmSurfacelessWayland::~GbmSurfacelessWayland() {
@@ -198,16 +203,13 @@ void GbmSurfacelessWayland::SubmitFrame() {
       return;
     }
 
+    auto callback =
+        base::BindOnce(&GbmSurfacelessWayland::OnScheduleBufferSwapDone,
+                       weak_factory_.GetWeakPtr());
     uint32_t buffer_id = planes_.back().pixmap->GetUniqueId();
-    surface_factory_->ScheduleBufferSwap(widget_, buffer_id);
-
-    // Check comment in ::SupportsPresentationCallback.
-    OnSubmission(gfx::SwapResult::SWAP_ACK, nullptr);
-    OnPresentation(
-        gfx::PresentationFeedback(base::TimeTicks::Now(), base::TimeDelta(),
-                                  gfx::PresentationFeedback::kZeroCopy));
-
-    planes_.clear();
+    surface_factory_->ScheduleBufferSwap(widget_, buffer_id,
+                                         submitted_frame_->damage_region_,
+                                         std::move(callback));
   }
 }
 
@@ -222,6 +224,14 @@ EGLSyncKHR GbmSurfacelessWayland::InsertFence(bool implicit) {
 void GbmSurfacelessWayland::FenceRetired(PendingFrame* frame) {
   frame->ready = true;
   SubmitFrame();
+}
+
+void GbmSurfacelessWayland::OnScheduleBufferSwapDone(
+    gfx::SwapResult result,
+    const gfx::PresentationFeedback& feedback) {
+  OnSubmission(result, nullptr);
+  OnPresentation(feedback);
+  planes_.clear();
 }
 
 void GbmSurfacelessWayland::OnSubmission(

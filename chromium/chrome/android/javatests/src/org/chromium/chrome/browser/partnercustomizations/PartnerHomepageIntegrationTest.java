@@ -40,10 +40,10 @@ import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.partnercustomizations.TestPartnerBrowserCustomizationsProvider;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.TouchCommon;
-import org.chromium.content.browser.test.util.UiUtils;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.TouchCommon;
+import org.chromium.content_public.browser.test.util.UiUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 
 import java.util.concurrent.Callable;
@@ -105,8 +105,8 @@ public class PartnerHomepageIntegrationTest {
                     Uri.parse(mActivityTestRule.getActivity().getActivityTab().getUrl()));
 
             // Click homepage button.
-            ChromeTabUtils.waitForTabPageLoaded(
-                    mActivityTestRule.getActivity().getActivityTab(), new Runnable() {
+            ChromeTabUtils.waitForTabPageLoaded(mActivityTestRule.getActivity().getActivityTab(),
+                    TestPartnerBrowserCustomizationsProvider.HOMEPAGE_URI, new Runnable() {
                         @Override
                         public void run() {
                             View homeButton =

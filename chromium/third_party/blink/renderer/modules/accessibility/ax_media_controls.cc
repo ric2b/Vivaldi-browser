@@ -38,7 +38,6 @@
 namespace blink {
 
 using blink::WebLocalizedString;
-using namespace HTMLNames;
 
 static inline String QueryString(WebLocalizedString::Name name) {
   return Locale::DefaultLocale().QueryString(name);
@@ -59,45 +58,20 @@ AXObject* AccessibilityMediaControl::Create(
     case kMediaSlider:
       return AccessibilityMediaTimeline::Create(layout_object, ax_object_cache);
 
-    case kMediaCurrentTimeDisplay:
-    case kMediaTimeRemainingDisplay:
-      return AccessibilityMediaTimeDisplay::Create(layout_object,
-                                                   ax_object_cache);
-
-    case kMediaControlsPanel:
-      return AXMediaControlsContainer::Create(layout_object, ax_object_cache);
-
-    case kMediaEnterFullscreenButton:
-    case kMediaMuteButton:
-    case kMediaPlayButton:
     case kMediaSliderThumb:
-    case kMediaShowClosedCaptionsButton:
-    case kMediaHideClosedCaptionsButton:
-    case kMediaTextTrackList:
-    case kMediaUnMuteButton:
-    case kMediaPauseButton:
     case kMediaTimelineContainer:
-    case kMediaTrackSelectionCheckmark:
-    case kMediaVolumeSliderContainer:
-    case kMediaVolumeSlider:
-    case kMediaVolumeSliderThumb:
-    case kMediaExitFullscreenButton:
-    case kMediaCastOffButton:
-    case kMediaCastOnButton:
-    case kMediaOverlayCastOffButton:
-    case kMediaOverlayCastOnButton:
-    case kMediaOverflowButton:
-    case kMediaOverflowList:
-    case kMediaDownloadButton:
-    case kMediaScrubbingMessage:
-    case kMediaEnterPictureInPictureButton:
-    case kMediaExitPictureInPictureButton:
-    case kMediaDisplayCutoutFullscreenButton:
-      return new AccessibilityMediaControl(layout_object, ax_object_cache);
+      return MakeGarbageCollected<AccessibilityMediaControl>(layout_object,
+                                                             ax_object_cache);
+    // Removed as a part of the a11y tree rewrite https://crbug/836549.
+    case kMediaIgnore:
+      NOTREACHED();
+      return MakeGarbageCollected<AccessibilityMediaControl>(layout_object,
+                                                             ax_object_cache);
   }
 
   NOTREACHED();
-  return new AccessibilityMediaControl(layout_object, ax_object_cache);
+  return MakeGarbageCollected<AccessibilityMediaControl>(layout_object,
+                                                         ax_object_cache);
 }
 
 MediaControlElementType AccessibilityMediaControl::ControlType() const {
@@ -108,82 +82,30 @@ MediaControlElementType AccessibilityMediaControl::ControlType() const {
       GetLayoutObject()->GetNode());
 }
 
-bool AccessibilityMediaControl::OnNativeScrollToGlobalPointAction(
-    const IntPoint& point) const {
+bool AccessibilityMediaControl::InternalSetAccessibilityFocusAction() {
   MediaControlElementsHelper::NotifyMediaControlAccessibleFocus(GetElement());
-  return AXLayoutObject::OnNativeScrollToGlobalPointAction(point);
+  return AXLayoutObject::InternalSetAccessibilityFocusAction();
 }
 
-bool AccessibilityMediaControl::OnNativeScrollToMakeVisibleAction() const {
-  MediaControlElementsHelper::NotifyMediaControlAccessibleFocus(GetElement());
-  return AXLayoutObject::OnNativeScrollToMakeVisibleAction();
-}
-
-bool AccessibilityMediaControl::OnNativeScrollToMakeVisibleWithSubFocusAction(
-    const IntRect& rect) const {
-  MediaControlElementsHelper::NotifyMediaControlAccessibleFocus(GetElement());
-  return AXLayoutObject::OnNativeScrollToMakeVisibleWithSubFocusAction(rect);
+bool AccessibilityMediaControl::InternalClearAccessibilityFocusAction() {
+  MediaControlElementsHelper::NotifyMediaControlAccessibleBlur(GetElement());
+  return AXLayoutObject::InternalClearAccessibilityFocusAction();
 }
 
 String AccessibilityMediaControl::TextAlternative(
     bool recursive,
     bool in_aria_labelled_by_traversal,
     AXObjectSet& visited,
-    AXNameFrom& name_from,
+    ax::mojom::NameFrom& name_from,
     AXRelatedObjectVector* related_objects,
     NameSources* name_sources) const {
   switch (ControlType()) {
-    case kMediaEnterFullscreenButton:
-      return QueryString(WebLocalizedString::kAXMediaEnterFullscreenButton);
-    case kMediaExitFullscreenButton:
-      return QueryString(WebLocalizedString::kAXMediaExitFullscreenButton);
-    case kMediaMuteButton:
-      return QueryString(WebLocalizedString::kAXMediaMuteButton);
-    case kMediaPlayButton:
-      return QueryString(WebLocalizedString::kAXMediaPlayButton);
-    case kMediaUnMuteButton:
-      return QueryString(WebLocalizedString::kAXMediaUnMuteButton);
-    case kMediaPauseButton:
-      return QueryString(WebLocalizedString::kAXMediaPauseButton);
-    case kMediaCurrentTimeDisplay:
-      return QueryString(WebLocalizedString::kAXMediaCurrentTimeDisplay);
-    case kMediaTimeRemainingDisplay:
-      return QueryString(WebLocalizedString::kAXMediaTimeRemainingDisplay);
-    case kMediaShowClosedCaptionsButton:
-      return QueryString(WebLocalizedString::kAXMediaShowClosedCaptionsButton);
-    case kMediaHideClosedCaptionsButton:
-      return QueryString(WebLocalizedString::kAXMediaHideClosedCaptionsButton);
-    case kMediaCastOffButton:
-    case kMediaOverlayCastOffButton:
-      return QueryString(WebLocalizedString::kAXMediaCastOffButton);
-    case kMediaCastOnButton:
-    case kMediaOverlayCastOnButton:
-      return QueryString(WebLocalizedString::kAXMediaCastOnButton);
-    case kMediaDownloadButton:
-      return QueryString(WebLocalizedString::kAXMediaDownloadButton);
-    case kMediaOverflowButton:
-      return QueryString(WebLocalizedString::kAXMediaOverflowButton);
     case kMediaSliderThumb:
-    case kMediaTextTrackList:
     case kMediaTimelineContainer:
-    case kMediaTrackSelectionCheckmark:
-    case kMediaControlsPanel:
-    case kMediaVolumeSliderContainer:
-    case kMediaVolumeSlider:
-    case kMediaVolumeSliderThumb:
-    case kMediaOverflowList:
-    case kMediaScrubbingMessage:
       return QueryString(WebLocalizedString::kAXMediaDefault);
-    case kMediaEnterPictureInPictureButton:
-      return QueryString(
-          WebLocalizedString::kAXMediaEnterPictureInPictureButton);
-    case kMediaExitPictureInPictureButton:
-      return QueryString(
-          WebLocalizedString::kAXMediaExitPictureInPictureButton);
-    case kMediaDisplayCutoutFullscreenButton:
-      return QueryString(
-          WebLocalizedString::kAXMediaDisplayCutoutFullscreenButton);
     case kMediaSlider:
+    // Removed as a part of the a11y tree rewrite https://crbug/836549.
+    case kMediaIgnore:
       NOTREACHED();
       return QueryString(WebLocalizedString::kAXMediaDefault);
   }
@@ -193,62 +115,16 @@ String AccessibilityMediaControl::TextAlternative(
 }
 
 String AccessibilityMediaControl::Description(
-    AXNameFrom name_from,
-    AXDescriptionFrom& description_from,
+    ax::mojom::NameFrom name_from,
+    ax::mojom::DescriptionFrom& description_from,
     AXObjectVector* description_objects) const {
   switch (ControlType()) {
-    case kMediaEnterFullscreenButton:
-      return QueryString(WebLocalizedString::kAXMediaEnterFullscreenButtonHelp);
-    case kMediaExitFullscreenButton:
-      return QueryString(WebLocalizedString::kAXMediaExitFullscreenButtonHelp);
-    case kMediaMuteButton:
-      return QueryString(WebLocalizedString::kAXMediaMuteButtonHelp);
-    case kMediaPlayButton:
-      return QueryString(WebLocalizedString::kAXMediaPlayButtonHelp);
-    case kMediaUnMuteButton:
-      return QueryString(WebLocalizedString::kAXMediaUnMuteButtonHelp);
-    case kMediaPauseButton:
-      return QueryString(WebLocalizedString::kAXMediaPauseButtonHelp);
-    case kMediaCurrentTimeDisplay:
-      return QueryString(WebLocalizedString::kAXMediaCurrentTimeDisplayHelp);
-    case kMediaTimeRemainingDisplay:
-      return QueryString(WebLocalizedString::kAXMediaTimeRemainingDisplayHelp);
-    case kMediaShowClosedCaptionsButton:
-      return QueryString(
-          WebLocalizedString::kAXMediaShowClosedCaptionsButtonHelp);
-    case kMediaHideClosedCaptionsButton:
-      return QueryString(
-          WebLocalizedString::kAXMediaHideClosedCaptionsButtonHelp);
-    case kMediaCastOffButton:
-    case kMediaOverlayCastOffButton:
-      return QueryString(WebLocalizedString::kAXMediaCastOffButtonHelp);
-    case kMediaCastOnButton:
-    case kMediaOverlayCastOnButton:
-      return QueryString(WebLocalizedString::kAXMediaCastOnButtonHelp);
-    case kMediaOverflowButton:
-      return QueryString(WebLocalizedString::kAXMediaOverflowButtonHelp);
-    case kMediaEnterPictureInPictureButton:
-      return QueryString(
-          WebLocalizedString::kAXMediaEnterPictureInPictureButtonHelp);
-    case kMediaExitPictureInPictureButton:
-      return QueryString(
-          WebLocalizedString::kAXMediaExitPictureInPictureButtonHelp);
-    case kMediaDisplayCutoutFullscreenButton:
-      return QueryString(
-          WebLocalizedString::kAXMediaDisplayCutoutFullscreenButtonHelp);
     case kMediaSliderThumb:
-    case kMediaTextTrackList:
     case kMediaTimelineContainer:
-    case kMediaTrackSelectionCheckmark:
-    case kMediaControlsPanel:
-    case kMediaVolumeSliderContainer:
-    case kMediaVolumeSlider:
-    case kMediaVolumeSliderThumb:
-    case kMediaOverflowList:
-    case kMediaDownloadButton:
-    case kMediaScrubbingMessage:
       return QueryString(WebLocalizedString::kAXMediaDefault);
     case kMediaSlider:
+    // Removed as a part of the a11y tree rewrite https://crbug/836549.
+    case kMediaIgnore:
       NOTREACHED();
       return QueryString(WebLocalizedString::kAXMediaDefault);
   }
@@ -267,100 +143,27 @@ bool AccessibilityMediaControl::ComputeAccessibilityIsIgnored(
   return AccessibilityIsIgnoredByDefault(ignored_reasons);
 }
 
-AccessibilityRole AccessibilityMediaControl::RoleValue() const {
+ax::mojom::Role AccessibilityMediaControl::RoleValue() const {
   switch (ControlType()) {
-    case kMediaEnterFullscreenButton:
-    case kMediaExitFullscreenButton:
-    case kMediaMuteButton:
-    case kMediaPlayButton:
-    case kMediaUnMuteButton:
-    case kMediaPauseButton:
-    case kMediaShowClosedCaptionsButton:
-    case kMediaHideClosedCaptionsButton:
-    case kMediaOverlayCastOffButton:
-    case kMediaOverlayCastOnButton:
-    case kMediaOverflowButton:
-    case kMediaDownloadButton:
-    case kMediaCastOnButton:
-    case kMediaCastOffButton:
-    case kMediaEnterPictureInPictureButton:
-    case kMediaExitPictureInPictureButton:
-    case kMediaDisplayCutoutFullscreenButton:
-      return kButtonRole;
-
     case kMediaTimelineContainer:
-    case kMediaVolumeSliderContainer:
-    case kMediaTextTrackList:
-    case kMediaOverflowList:
-      return kGroupRole;
+      return ax::mojom::Role::kGroup;
 
-    case kMediaControlsPanel:
-    case kMediaCurrentTimeDisplay:
-    case kMediaTimeRemainingDisplay:
     case kMediaSliderThumb:
-    case kMediaTrackSelectionCheckmark:
-    case kMediaVolumeSlider:
-    case kMediaVolumeSliderThumb:
-    case kMediaScrubbingMessage:
-      return kUnknownRole;
+      return ax::mojom::Role::kUnknown;
 
     case kMediaSlider:
+    case kMediaIgnore:
       // Not using AccessibilityMediaControl.
       NOTREACHED();
-      return kUnknownRole;
+      return ax::mojom::Role::kUnknown;
   }
 
   NOTREACHED();
-  return kUnknownRole;
-}
-
-//
-// AXMediaControlsContainer
-
-AXMediaControlsContainer::AXMediaControlsContainer(
-    LayoutObject* layout_object,
-    AXObjectCacheImpl& ax_object_cache)
-    : AccessibilityMediaControl(layout_object, ax_object_cache) {}
-
-AXObject* AXMediaControlsContainer::Create(LayoutObject* layout_object,
-                                           AXObjectCacheImpl& ax_object_cache) {
-  return new AXMediaControlsContainer(layout_object, ax_object_cache);
-}
-
-String AXMediaControlsContainer::TextAlternative(
-    bool recursive,
-    bool in_aria_labelled_by_traversal,
-    AXObjectSet& visited,
-    AXNameFrom& name_from,
-    AXRelatedObjectVector* related_objects,
-    NameSources* name_sources) const {
-  return QueryString(IsControllingVideoElement()
-                         ? WebLocalizedString::kAXMediaVideoElement
-                         : WebLocalizedString::kAXMediaAudioElement);
-}
-
-String AXMediaControlsContainer::Description(
-    AXNameFrom name_from,
-    AXDescriptionFrom& description_from,
-    AXObjectVector* description_objects) const {
-  return QueryString(IsControllingVideoElement()
-                         ? WebLocalizedString::kAXMediaVideoElementHelp
-                         : WebLocalizedString::kAXMediaAudioElementHelp);
-}
-
-bool AXMediaControlsContainer::ComputeAccessibilityIsIgnored(
-    IgnoredReasons* ignored_reasons) const {
-  return AccessibilityIsIgnoredByDefault(ignored_reasons);
+  return ax::mojom::Role::kUnknown;
 }
 
 //
 // AccessibilityMediaTimeline
-
-static String LocalizedMediaTimeDescription(float /*time*/) {
-  // FIXME: To be fixed. See
-  // http://trac.webkit.org/browser/trunk/Source/WebCore/platform/LocalizedStrings.cpp#L928
-  return String();
-}
 
 AccessibilityMediaTimeline::AccessibilityMediaTimeline(
     LayoutObject* layout_object,
@@ -370,64 +173,17 @@ AccessibilityMediaTimeline::AccessibilityMediaTimeline(
 AXObject* AccessibilityMediaTimeline::Create(
     LayoutObject* layout_object,
     AXObjectCacheImpl& ax_object_cache) {
-  return new AccessibilityMediaTimeline(layout_object, ax_object_cache);
+  return MakeGarbageCollected<AccessibilityMediaTimeline>(layout_object,
+                                                          ax_object_cache);
 }
 
 String AccessibilityMediaTimeline::Description(
-    AXNameFrom name_from,
-    AXDescriptionFrom& description_from,
+    ax::mojom::NameFrom name_from,
+    ax::mojom::DescriptionFrom& description_from,
     AXObjectVector* description_objects) const {
   return QueryString(IsControllingVideoElement()
                          ? WebLocalizedString::kAXMediaVideoSliderHelp
                          : WebLocalizedString::kAXMediaAudioSliderHelp);
-}
-
-//
-// AccessibilityMediaTimeDisplay
-
-AccessibilityMediaTimeDisplay::AccessibilityMediaTimeDisplay(
-    LayoutObject* layout_object,
-    AXObjectCacheImpl& ax_object_cache)
-    : AccessibilityMediaControl(layout_object, ax_object_cache) {}
-
-AXObject* AccessibilityMediaTimeDisplay::Create(
-    LayoutObject* layout_object,
-    AXObjectCacheImpl& ax_object_cache) {
-  return new AccessibilityMediaTimeDisplay(layout_object, ax_object_cache);
-}
-
-bool AccessibilityMediaTimeDisplay::ComputeAccessibilityIsIgnored(
-    IgnoredReasons* ignored_reasons) const {
-  if (!layout_object_ || !layout_object_->Style() ||
-      layout_object_->Style()->Visibility() != EVisibility::kVisible)
-    return true;
-
-  if (!layout_object_->Style()->Width().Value())
-    return true;
-
-  return AccessibilityIsIgnoredByDefault(ignored_reasons);
-}
-
-String AccessibilityMediaTimeDisplay::TextAlternative(
-    bool recursive,
-    bool in_aria_labelled_by_traversal,
-    AXObjectSet& visited,
-    AXNameFrom& name_from,
-    AXRelatedObjectVector* related_objects,
-    NameSources* name_sources) const {
-  if (ControlType() == kMediaCurrentTimeDisplay)
-    return QueryString(WebLocalizedString::kAXMediaCurrentTimeDisplay);
-  return QueryString(WebLocalizedString::kAXMediaTimeRemainingDisplay);
-}
-
-String AccessibilityMediaTimeDisplay::StringValue() const {
-  if (!layout_object_ || !layout_object_->GetNode())
-    return String();
-
-  MediaControlTimeDisplayElement* element =
-      static_cast<MediaControlTimeDisplayElement*>(layout_object_->GetNode());
-  float time = element->CurrentValue();
-  return LocalizedMediaTimeDescription(fabsf(time));
 }
 
 }  // namespace blink

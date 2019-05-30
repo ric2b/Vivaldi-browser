@@ -31,11 +31,9 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_FILESYSTEM_FILE_WRITER_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_FILESYSTEM_FILE_WRITER_H_
 
-#include "third_party/blink/public/platform/web_file_writer_client.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
-#include "third_party/blink/renderer/core/fileapi/file_error.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/filesystem/file_writer_base.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -43,20 +41,23 @@
 namespace blink {
 
 class Blob;
+class DOMException;
 class ExceptionState;
 class ExecutionContext;
+enum class FileErrorCode;
 
 class FileWriter final : public EventTargetWithInlineData,
                          public FileWriterBase,
                          public ActiveScriptWrappable<FileWriter>,
-                         public ContextLifecycleObserver,
-                         public WebFileWriterClient {
+                         public ContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(FileWriter);
   USING_PRE_FINALIZER(FileWriter, Dispose);
 
  public:
   static FileWriter* Create(ExecutionContext*);
+
+  explicit FileWriter(ExecutionContext*);
   ~FileWriter() override;
 
   enum ReadyState { kInit = 0, kWriting = 1, kDone = 2 };
@@ -68,10 +69,15 @@ class FileWriter final : public EventTargetWithInlineData,
   ReadyState getReadyState() const { return ready_state_; }
   DOMException* error() const { return error_.Get(); }
 
-  // WebFileWriterClient
-  void DidWrite(long long bytes, bool complete) override;
-  void DidTruncate() override;
-  void DidFail(WebFileError) override;
+  // FileWriterBase
+  void DidWriteImpl(int64_t bytes, bool complete) override;
+  void DidTruncateImpl() override;
+  void DidFailImpl(base::File::Error error) override;
+  void DoTruncate(const KURL& path, int64_t offset) override;
+  void DoWrite(const KURL& path,
+               const String& blob_id,
+               int64_t offset) override;
+  void DoCancel() override;
 
   // ContextLifecycleObserver
   void ContextDestroyed(ExecutionContext*) override;
@@ -85,12 +91,12 @@ class FileWriter final : public EventTargetWithInlineData,
     return ContextLifecycleObserver::GetExecutionContext();
   }
 
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(writestart);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(progress);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(write);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(abort);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(error);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(writeend);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(writestart, kWritestart)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(progress, kProgress)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(write, kWrite)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(abort, kAbort)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(error, kError)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(writeend, kWriteend)
 
   void Trace(blink::Visitor*) override;
 
@@ -102,17 +108,15 @@ class FileWriter final : public EventTargetWithInlineData,
     kOperationAbort
   };
 
-  explicit FileWriter(ExecutionContext*);
-
   void CompleteAbort();
 
   void DoOperation(Operation);
 
-  void SignalCompletion(FileError::ErrorCode);
+  void SignalCompletion(base::File::Error error_code);
 
   void FireEvent(const AtomicString& type);
 
-  void SetError(FileError::ErrorCode, ExceptionState&);
+  void SetError(FileErrorCode, ExceptionState&);
 
   void Dispose();
 
@@ -127,6 +131,7 @@ class FileWriter final : public EventTargetWithInlineData,
   long long recursion_depth_;
   double last_progress_notification_time_ms_;
   Member<Blob> blob_being_written_;
+  int request_id_;
 };
 
 }  // namespace blink

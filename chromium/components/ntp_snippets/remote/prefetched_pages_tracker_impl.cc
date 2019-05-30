@@ -19,12 +19,6 @@ bool IsOfflineItemPrefetchedPage(const OfflinePageItem& offline_page_item) {
          offline_pages::kSuggestedArticlesNamespace;
 }
 
-const GURL& GetOfflinePageUrl(const OfflinePageItem& offline_page_item) {
-  return offline_page_item.original_url != GURL()
-             ? offline_page_item.original_url
-             : offline_page_item.url;
-}
-
 }  // namespace
 
 PrefetchedPagesTrackerImpl::PrefetchedPagesTrackerImpl(
@@ -86,16 +80,14 @@ void PrefetchedPagesTrackerImpl::OfflinePageAdded(
 
 void PrefetchedPagesTrackerImpl::OfflinePageDeleted(
     const offline_pages::OfflinePageModel::DeletedPageInfo& page_info) {
-  std::map<int64_t, GURL>::iterator offline_id_it =
-      offline_id_to_url_mapping_.find(page_info.offline_id);
+  auto offline_id_it = offline_id_to_url_mapping_.find(page_info.offline_id);
 
   if (offline_id_it == offline_id_to_url_mapping_.end()) {
     // We did not know about this page, thus, nothing to delete.
     return;
   }
 
-  std::map<GURL, int>::iterator url_it =
-      prefetched_url_counts_.find(offline_id_it->second);
+  auto url_it = prefetched_url_counts_.find(offline_id_it->second);
   DCHECK(url_it != prefetched_url_counts_.end());
   --url_it->second;
   if (url_it->second == 0) {
@@ -121,7 +113,7 @@ void PrefetchedPagesTrackerImpl::OfflinePagesLoaded(
 
 void PrefetchedPagesTrackerImpl::AddOfflinePage(
     const OfflinePageItem& offline_page_item) {
-  const GURL& url = GetOfflinePageUrl(offline_page_item);
+  const GURL& url = offline_page_item.GetOriginalUrl();
   DCHECK(prefetched_url_counts_.count(url) == 0 ||
          prefetched_url_counts_.find(url)->second > 0);
   ++prefetched_url_counts_[url];

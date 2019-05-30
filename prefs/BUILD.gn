@@ -34,6 +34,13 @@ action("prefs_files_generator") {
   all_dependent_configs = [":prefs_include_dirs"]
 }
 
+static_library("prefs_files_generated") {
+  sources = get_target_outputs(":prefs_files_generator")
+  deps = [
+    ":prefs_files_generator",
+  ]
+}
+
 static_library("prefs") {
   sources = [
     "vivaldi_browser_prefs.h",
@@ -43,10 +50,9 @@ static_library("prefs") {
     "vivaldi_browser_prefs_mac.mm",
     "vivaldi_browser_prefs_win.cc",
   ]
-  sources += get_target_outputs(":prefs_files_generator")
   deps = [
     "//skia",
-    ":prefs_files_generator",
+    ":prefs_files_generated",
     ":prefs_strings",
   ]
   if(!is_android) {

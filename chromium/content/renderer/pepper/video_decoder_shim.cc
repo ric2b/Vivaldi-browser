@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/containers/queue.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -26,7 +27,6 @@
 #include "media/base/cdm_context.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/limits.h"
-#include "media/base/media_log.h"
 #include "media/base/media_util.h"
 #include "media/base/video_decoder.h"
 #include "media/filters/ffmpeg_video_decoder.h"
@@ -656,7 +656,7 @@ class VideoDecoderShim::DecoderImpl {
 
   // WeakPtr is bound to main_message_loop_. Use only in shim callbacks.
   base::WeakPtr<VideoDecoderShim> shim_;
-  media::MediaLog media_log_;
+  media::NullMediaLog media_log_;
   std::unique_ptr<media::VideoDecoder> decoder_;
   bool initialized_ = false;
   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
@@ -711,7 +711,7 @@ void VideoDecoderShim::DecoderImpl::Initialize(
                  weak_ptr_factory_.GetWeakPtr()),
       base::Bind(&VideoDecoderShim::DecoderImpl::OnOutputComplete,
                  weak_ptr_factory_.GetWeakPtr()),
-      media::VideoDecoder::WaitingForDecryptionKeyCB());
+      base::NullCallback());
 #else
   OnInitDone(false);
 #endif  // BUILDFLAG(ENABLE_LIBVPX) || BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
@@ -848,7 +848,7 @@ VideoDecoderShim::VideoDecoderShim(
 VideoDecoderShim::~VideoDecoderShim() {
   DCHECK(RenderThreadImpl::current());
   // Delete any remaining textures.
-  TextureIdMap::iterator it = texture_id_map_.begin();
+  auto it = texture_id_map_.begin();
   for (; it != texture_id_map_.end(); ++it)
     DeleteTexture(it->second);
   texture_id_map_.clear();
@@ -892,7 +892,7 @@ bool VideoDecoderShim::Initialize(const Config& vda_config, Client* client) {
 
   media::VideoDecoderConfig video_decoder_config(
       codec, vda_config.profile, media::PIXEL_FORMAT_I420,
-      media::COLOR_SPACE_UNSPECIFIED, media::VIDEO_ROTATION_0,
+      media::VideoColorSpace(), media::VIDEO_ROTATION_0,
       gfx::Size(32, 24),  // Small sizes that won't fail.
       gfx::Rect(32, 24), gfx::Size(32, 24),
       // TODO(bbudge): Verify extra data isn't needed.
@@ -1024,9 +1024,8 @@ void VideoDecoderShim::OnOutputComplete(std::unique_ptr<PendingFrame> frame) {
            ++it) {
         textures_to_dismiss_.insert(it->first);
       }
-      for (TextureIdSet::const_iterator it = available_textures_.begin();
-           it != available_textures_.end();
-           ++it) {
+      for (auto it = available_textures_.begin();
+           it != available_textures_.end(); ++it) {
         DismissTexture(*it);
       }
       available_textures_.clear();
@@ -1049,7 +1048,7 @@ void VideoDecoderShim::SendPictures() {
   while (!pending_frames_.empty() && !available_textures_.empty()) {
     const std::unique_ptr<PendingFrame>& frame = pending_frames_.front();
 
-    TextureIdSet::iterator it = available_textures_.begin();
+    auto it = available_textures_.begin();
     uint32_t texture_id = *it;
     available_textures_.erase(it);
 

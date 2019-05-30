@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/run_loop.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -51,7 +52,8 @@ class ManifestVerifierBrowserTest : public InProcessBrowserTest {
         content::BrowserContext::GetDefaultStoragePartition(context)
             ->GetURLLoaderFactoryForBrowserProcess());
     downloader->AddTestServerURL("https://", https_server_->GetURL("/"));
-    auto parser = std::make_unique<payments::PaymentManifestParser>();
+    auto parser = std::make_unique<payments::PaymentManifestParser>(
+        std::make_unique<ErrorLogger>());
     auto cache = WebDataServiceFactory::GetPaymentManifestWebDataForProfile(
         Profile::FromBrowserContext(context),
         ServiceAccessType::EXPLICIT_ACCESS);

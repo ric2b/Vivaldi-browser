@@ -6,11 +6,14 @@
 #define UI_VIEWS_WIDGET_DESKTOP_AURA_DESKTOP_WINDOW_TREE_HOST_PLATFORM_H_
 
 #include "base/memory/weak_ptr.h"
+#include "build/build_config.h"
 #include "ui/aura/window_tree_host_platform.h"
 #include "ui/views/views_export.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host.h"
 
 namespace views {
+
+class WindowEventFilter;
 
 class VIEWS_EXPORT DesktopWindowTreeHostPlatform
     : public aura::WindowTreeHostPlatform,
@@ -20,8 +23,6 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
       internal::NativeWidgetDelegate* native_widget_delegate,
       DesktopNativeWidgetAura* desktop_native_widget_aura);
   ~DesktopWindowTreeHostPlatform() override;
-
-  void SetBoundsInDIP(const gfx::Rect& bounds_in_dip);
 
   // DesktopWindowTreeHost:
   void Init(const Widget::InitParams& params) override;
@@ -77,7 +78,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   void SetFullscreen(bool fullscreen) override;
   bool IsFullscreen() const override;
   void SetOpacity(float opacity) override;
-  void SetAspectRatio(const gfx::SizeF& aspect_ratio) override {}
+  void SetAspectRatio(const gfx::SizeF& aspect_ratio) override;
   void SetWindowIcons(const gfx::ImageSkia& window_icon,
                       const gfx::ImageSkia& app_icon) override;
   void InitModalType(ui::ModalType modal_type) override;
@@ -90,13 +91,18 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   bool ShouldCreateVisibilityController() const override;
 
   // WindowTreeHostPlatform:
+  void DispatchEvent(ui::Event* event) override;
   void OnClosed() override;
   void OnWindowStateChanged(ui::PlatformWindowState new_state) override;
   void OnCloseRequest() override;
   void OnActivationChanged(bool active) override;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(DesktopWindowTreeHostPlatformTest, HitTest);
+
   void Relayout();
+
+  void RemoveNonClientEventFilter();
 
   Widget* GetWidget();
 
@@ -112,6 +118,11 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   bool got_on_closed_ = false;
 
   bool is_active_ = false;
+
+#if defined(OS_LINUX)
+  // A handler for events intended for non client area.
+  std::unique_ptr<WindowEventFilter> non_client_window_event_filter_;
+#endif
 
   base::WeakPtrFactory<DesktopWindowTreeHostPlatform> weak_factory_{this};
 

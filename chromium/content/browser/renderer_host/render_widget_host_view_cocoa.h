@@ -33,7 +33,7 @@ namespace mojom {
 class RenderWidgetHostNSViewClient;
 }
 
-class RenderWidgetHostNSViewLocalClient;
+class RenderWidgetHostNSViewClientHelper;
 class RenderWidgetHostViewMac;
 class RenderWidgetHostViewMacEditCommandHelper;
 }
@@ -57,6 +57,7 @@ struct DidOverscrollParams;
 @interface RenderWidgetHostViewCocoa
     : ToolTipBaseView<CommandDispatcherTarget,
                       RenderWidgetHostNSViewClientOwner,
+                      NSCandidateListTouchBarItemDelegate,
                       NSTextInputClient> {
  @private
   // The communications channel to the RenderWidgetHostViewMac. This pointer is
@@ -70,15 +71,13 @@ struct DidOverscrollParams;
   // This includes events (where the extra translation is unnecessary or loses
   // information) and access to accessibility structures (only present in the
   // browser process).
-  content::RenderWidgetHostNSViewLocalClient* localClient_;
+  content::RenderWidgetHostNSViewClientHelper* clientHelper_;
 
-  // An implementation of the in-process interface that will translate and
-  // forward messages through |client_|.
-  std::unique_ptr<content::RenderWidgetHostNSViewLocalClient>
-      forwardingLocalClient_;
-
-  // Dummy client that is always valid (see above comments about client_).
+  // Dummy client and client helper that are always valid (see above comments
+  // about client_).
   content::mojom::RenderWidgetHostNSViewClientPtr dummyClient_;
+  std::unique_ptr<content::RenderWidgetHostNSViewClientHelper>
+      dummyClientHelper_;
 
   // This ivar is the cocoa delegate of the NSResponder.
   base::scoped_nsobject<NSObject<RenderWidgetHostViewMacDelegate>>
@@ -204,6 +203,8 @@ struct DidOverscrollParams;
 @property(nonatomic, assign) NSRange markedRange;
 @property(nonatomic, assign) ui::TextInputType textInputType;
 
+@property(nonatomic, assign) NSSpellChecker* spellCheckerForTesting;
+
 // Common code path for handling begin gesture events. This helper method is
 // called via different codepaths based on OS version and SDK:
 // - On 10.11 and later, when linking with the 10.11 SDK, it is called from
@@ -255,7 +256,7 @@ struct DidOverscrollParams;
 
 // Methods previously marked as private.
 - (id)initWithClient:(content::mojom::RenderWidgetHostNSViewClient*)client
-     withLocalClient:(content::RenderWidgetHostNSViewLocalClient*)localClient;
+    withClientHelper:(content::RenderWidgetHostNSViewClientHelper*)clientHelper;
 - (void)setResponderDelegate:
     (NSObject<RenderWidgetHostViewMacDelegate>*)delegate;
 - (void)processedGestureScrollEvent:(const blink::WebGestureEvent&)event

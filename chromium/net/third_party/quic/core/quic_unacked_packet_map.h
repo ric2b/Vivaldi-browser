@@ -16,13 +16,17 @@
 
 namespace quic {
 
+namespace test {
+class QuicUnackedPacketMapPeer;
+}  // namespace test
+
 // Class which tracks unacked packets for three purposes:
 // 1) Track retransmittable data, including multiple transmissions of frames.
 // 2) Track packets and bytes in flight for congestion control.
 // 3) Track sent time of packets to provide RTT measurements from acks.
 class QUIC_EXPORT_PRIVATE QuicUnackedPacketMap {
  public:
-  QuicUnackedPacketMap();
+  QuicUnackedPacketMap(Perspective perspective);
   QuicUnackedPacketMap(const QuicUnackedPacketMap&) = delete;
   QuicUnackedPacketMap& operator=(const QuicUnackedPacketMap&) = delete;
   ~QuicUnackedPacketMap();
@@ -77,18 +81,19 @@ class QUIC_EXPORT_PRIVATE QuicUnackedPacketMap {
   // acked.
   bool HasRetransmittableFrames(const QuicTransmissionInfo& info) const;
 
-  // Returns true if there are any unacked packets.
-  bool HasUnackedPackets() const;
-
   // Returns true if there are any unacked packets which have retransmittable
   // frames.
   bool HasUnackedRetransmittableFrames() const;
+
+  // Returns true if there are no packets present in the unacked packet map.
+  bool empty() const { return unacked_packets_.empty(); }
 
   // Returns the largest packet number that has been sent.
   QuicPacketNumber largest_sent_packet() const { return largest_sent_packet_; }
 
   // Returns the largest retransmittable packet number that has been sent.
   QuicPacketNumber largest_sent_retransmittable_packet() const {
+    DCHECK(!use_uber_loss_algorithm_);
     return largest_sent_retransmittable_packet_;
   }
 
@@ -145,7 +150,7 @@ class QUIC_EXPORT_PRIVATE QuicUnackedPacketMap {
 
   // Returns true if there are any pending crypto packets.
   // TODO(fayang): Remove this method and call session_notifier_'s
-  // HasPendingCryptoData() when session_decides_what_to_write_ is default true.
+  // HasUnackedCryptoData() when session_decides_what_to_write_ is default true.
   bool HasPendingCryptoPackets() const;
 
   // Removes any retransmittable frames from this transmission or an associated
@@ -160,6 +165,12 @@ class QUIC_EXPORT_PRIVATE QuicUnackedPacketMap {
   // Increases the largest acked.  Any packets less or equal to
   // |largest_acked| are discarded if they are only for the RTT purposes.
   void IncreaseLargestAcked(QuicPacketNumber largest_acked);
+
+  // Called when |packet_number| gets acked. Maybe increase the largest acked of
+  // corresponding packet number space of |encryption_level|.
+  void MaybeUpdateLargestAckedOfPacketNumberSpace(
+      EncryptionLevel encryption_level,
+      QuicPacketNumber packet_number);
 
   // Remove any packets no longer needed for retransmission, congestion, or
   // RTT measurement purposes.
@@ -176,6 +187,24 @@ class QUIC_EXPORT_PRIVATE QuicUnackedPacketMap {
   // stream id.
   void NotifyAggregatedStreamFrameAcked(QuicTime::Delta ack_delay);
 
+  // Returns packet number space that |packet_number| belongs to. Please use
+  // GetPacketNumberSpace(EncryptionLevel) whenever encryption level is
+  // available.
+  PacketNumberSpace GetPacketNumberSpace(QuicPacketNumber packet_number) const;
+
+  // Returns packet number space of |encryption_level|.
+  PacketNumberSpace GetPacketNumberSpace(
+      EncryptionLevel encryption_level) const;
+
+  // Returns largest acked packet number of |packet_number_space|.
+  QuicPacketNumber GetLargestAckedOfPacketNumberSpace(
+      PacketNumberSpace packet_number_space) const;
+
+  // Returns largest sent retransmittable packet number of
+  // |packet_number_space|.
+  QuicPacketNumber GetLargestSentRetransmittableOfPacketNumberSpace(
+      PacketNumberSpace packet_number_space) const;
+
   // Called to start/stop letting session decide what to write.
   void SetSessionDecideWhatToWrite(bool session_decides_what_to_write);
 
@@ -185,11 +214,13 @@ class QUIC_EXPORT_PRIVATE QuicUnackedPacketMap {
     return session_decides_what_to_write_;
   }
 
-  bool fix_is_useful_for_retransmission() const {
-    return fix_is_useful_for_retransmission_;
-  }
+  bool use_uber_loss_algorithm() const { return use_uber_loss_algorithm_; }
+
+  Perspective perspective() const { return perspective_; }
 
  private:
+  friend class test::QuicUnackedPacketMapPeer;
+
   // Called when a packet is retransmitted with a new packet number.
   // |old_packet_number| will remain unacked, but will have no
   // retransmittable data associated with it. Retransmittable frames will be
@@ -216,13 +247,24 @@ class QUIC_EXPORT_PRIVATE QuicUnackedPacketMap {
   bool IsPacketUseless(QuicPacketNumber packet_number,
                        const QuicTransmissionInfo& info) const;
 
+  const Perspective perspective_;
+
   QuicPacketNumber largest_sent_packet_;
   // The largest sent packet we expect to receive an ack for.
+  // TODO(fayang): Remove largest_sent_retransmittable_packet_ when deprecating
+  // quic_use_uber_loss_algorithm.
   QuicPacketNumber largest_sent_retransmittable_packet_;
+  // The largest sent packet we expect to receive an ack for per packet number
+  // space. Only used if use_uber_loss_algorithm_ is true.
+  QuicPacketNumber
+      largest_sent_retransmittable_packets_[NUM_PACKET_NUMBER_SPACES];
   // The largest sent largest_acked in an ACK frame.
   QuicPacketNumber largest_sent_largest_acked_;
   // The largest received largest_acked from an ACK frame.
   QuicPacketNumber largest_acked_;
+  // The largest received largest_acked from ACK frame per packet number space.
+  // Only used if use_uber_loss_algorithm_ is true.
+  QuicPacketNumber largest_acked_packets_[NUM_PACKET_NUMBER_SPACES];
 
   // Newly serialized retransmittable packets are added to this map, which
   // contains owning pointers to any contained frames.  If a packet is
@@ -253,8 +295,8 @@ class QUIC_EXPORT_PRIVATE QuicUnackedPacketMap {
   // If true, let session decides what to write.
   bool session_decides_what_to_write_;
 
-  // Latched value of quic_reloadable_flag_quic_fix_is_useful_for_retrans.
-  const bool fix_is_useful_for_retransmission_;
+  // Latched value of quic_use_uber_loss_algorithm.
+  const bool use_uber_loss_algorithm_;
 };
 
 }  // namespace quic

@@ -2,12 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build_overrides/build.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/clang/clang.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/toolchain/toolchain.gni")
+import("//build_overrides/build.gni")
 
 if (is_ios) {
   import("//build/config/ios/ios_sdk.gni")
@@ -179,6 +179,9 @@ config("default_sanitizer_ldflags") {
         ldflags += [ "-fsanitize-address-use-after-scope" ]
       }
     }
+    if (is_hwasan) {
+      ldflags += [ "-fsanitize=hwaddress" ]
+    }
     if (is_lsan) {
       ldflags += [ "-fsanitize=leak" ]
     }
@@ -197,13 +200,15 @@ config("default_sanitizer_ldflags") {
     if (is_ubsan_vptr) {
       ldflags += [ "-fsanitize=vptr" ]
     }
-    if (is_safestack) {
-      ldflags += [ "-fsanitize=safe-stack" ]
-    }
 
     if (use_sanitizer_coverage) {
       if (use_libfuzzer) {
         ldflags += [ "-fsanitize=fuzzer-no-link" ]
+        if (is_mac) {
+          # TODO(crbug.com/926588): on macOS, dead code stripping does not work
+          # well with `pc-table` instrumentation enabled by `fuzzer-no-link`.
+          ldflags += [ "-fno-sanitize-coverage=pc-table" ]
+        }
       } else {
         ldflags += [ "-fsanitize-coverage=$sanitizer_coverage_flags" ]
       }
@@ -227,28 +232,36 @@ config("default_sanitizer_ldflags") {
         }
       }
     }
-  } else if (is_win && is_asan) {
+  } else if (is_win) {
     # Windows directly calls link.exe instead of the compiler driver when
-    # linking.  Hence, pass the runtime libraries instead of -fsanitize=address.
-    # In the static-library build, libraries are different for executables
-    # and dlls, see link_executable and link_shared_library below.
-    # This here handles only the component build.
-    if (target_cpu == "x64") {
-      # Windows 64-bit.
-      if (is_component_build) {
+    # linking.  Hence, pass the runtime libraries instead of -fsanitize=address
+    # or -fsanitize=fuzzer.
+    if (is_asan && is_component_build) {
+      # In the static-library build, ASan libraries are different for
+      # executables and dlls, see link_executable and link_shared_library below.
+      # This here handles only the component build.
+      if (target_cpu == "x64") {
+        # Windows 64-bit.
         libs = [
           "clang_rt.asan_dynamic-x86_64.lib",
           "clang_rt.asan_dynamic_runtime_thunk-x86_64.lib",
         ]
-      }
-    } else {
-      assert(target_cpu == "x86", "WinASan unsupported architecture")
-      if (is_component_build) {
+      } else {
+        assert(target_cpu == "x86", "WinASan unsupported architecture")
         libs = [
           "clang_rt.asan_dynamic-i386.lib",
           "clang_rt.asan_dynamic_runtime_thunk-i386.lib",
         ]
       }
+    }
+    if (use_libfuzzer) {
+      assert(target_cpu == "x64", "LibFuzzer unsupported architecture")
+      assert(!is_component_build,
+             "LibFuzzer only supports non-component builds on Windows")
+
+      # Incremental linking causes padding that messes up SanitizerCoverage.
+      # Don't do it.
+      ldflags = [ "/INCREMENTAL:NO" ]
     }
   }
 }
@@ -287,19 +300,22 @@ config("asan_flags") {
         "-asan-globals=0",
       ]
     }
-    if (is_win) {
-      if (!defined(asan_win_blacklist_path)) {
-        asan_win_blacklist_path =
-            rebase_path("//tools/memory/asan/blacklist_win.txt", root_build_dir)
+    if (asan_use_blacklist) {
+      if (is_win) {
+        if (!defined(asan_win_blacklist_path)) {
+          asan_win_blacklist_path =
+              rebase_path("//tools/memory/asan/blacklist_win.txt",
+                          root_build_dir)
+        }
+        cflags += [ "-fsanitize-blacklist=$asan_win_blacklist_path" ]
+      } else {
+        # TODO(rnk): Remove this as discussed in http://crbug.com/427202.
+        if (!defined(asan_blacklist_path)) {
+          asan_blacklist_path =
+              rebase_path("//tools/memory/asan/blacklist.txt", root_build_dir)
+        }
+        cflags += [ "-fsanitize-blacklist=$asan_blacklist_path" ]
       }
-      cflags += [ "-fsanitize-blacklist=$asan_win_blacklist_path" ]
-    } else {
-      # TODO(rnk): Remove this as discussed in http://crbug.com/427202.
-      if (!defined(asan_blacklist_path)) {
-        asan_blacklist_path =
-            rebase_path("//tools/memory/asan/blacklist.txt", root_build_dir)
-      }
-      cflags += [ "-fsanitize-blacklist=$asan_blacklist_path" ]
     }
   }
 }
@@ -379,13 +395,25 @@ config("cfi_icall_generalize_pointers") {
   }
 }
 
+config("cfi_icall_disable") {
+  if (is_clang && is_cfi && use_cfi_icall) {
+    cflags = [ "-fno-sanitize=cfi-icall" ]
+  }
+}
+
 config("coverage_flags") {
   cflags = []
   if (use_sanitizer_coverage) {
     # Used by sandboxing code to allow coverage dump to be written on the disk.
     defines = [ "SANITIZER_COVERAGE" ]
+
     if (use_libfuzzer) {
       cflags += [ "-fsanitize=fuzzer-no-link" ]
+      if (is_mac) {
+        # TODO(crbug.com/926588): on macOS, dead code stripping does not work
+        # well with `pc-table` instrumentation enabled by `fuzzer-no-link`.
+        cflags += [ "-fno-sanitize-coverage=pc-table" ]
+      }
     } else {
       cflags += [
         "-fsanitize-coverage=$sanitizer_coverage_flags",
@@ -400,6 +428,12 @@ config("coverage_flags") {
         ]
       }
     }
+  }
+}
+
+config("hwasan_flags") {
+  if (is_hwasan) {
+    cflags = [ "-fsanitize=hwaddress" ]
   }
 }
 
@@ -421,12 +455,6 @@ config("msan_flags") {
       "-fsanitize-memory-track-origins=$msan_track_origins",
       "-fsanitize-blacklist=$msan_blacklist_path",
     ]
-  }
-}
-
-config("safestack_flags") {
-  if (is_safestack) {
-    cflags = [ "-fsanitize=safe-stack" ]
   }
 }
 
@@ -543,9 +571,9 @@ all_sanitizer_configs = [
   ":default_sanitizer_ldflags",
   ":asan_flags",
   ":cfi_flags",
+  ":hwasan_flags",
   ":lsan_flags",
   ":msan_flags",
-  ":safestack_flags",
   ":tsan_flags",
   ":ubsan_flags",
   ":ubsan_no_recover",

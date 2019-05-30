@@ -26,20 +26,23 @@
 namespace blink {
 
 inline SVGLineElement::SVGLineElement(Document& document)
-    : SVGGeometryElement(SVGNames::lineTag, document),
+    : SVGGeometryElement(svg_names::kLineTag, document),
       x1_(SVGAnimatedLength::Create(this,
-                                    SVGNames::x1Attr,
-                                    SVGLength::Create(SVGLengthMode::kWidth))),
+                                    svg_names::kX1Attr,
+                                    SVGLengthMode::kWidth,
+                                    SVGLength::Initial::kUnitlessZero)),
       y1_(SVGAnimatedLength::Create(this,
-                                    SVGNames::y1Attr,
-                                    SVGLength::Create(SVGLengthMode::kHeight))),
+                                    svg_names::kY1Attr,
+                                    SVGLengthMode::kHeight,
+                                    SVGLength::Initial::kUnitlessZero)),
       x2_(SVGAnimatedLength::Create(this,
-                                    SVGNames::x2Attr,
-                                    SVGLength::Create(SVGLengthMode::kWidth))),
-      y2_(SVGAnimatedLength::Create(
-          this,
-          SVGNames::y2Attr,
-          SVGLength::Create(SVGLengthMode::kHeight))) {
+                                    svg_names::kX2Attr,
+                                    SVGLengthMode::kWidth,
+                                    SVGLength::Initial::kUnitlessZero)),
+      y2_(SVGAnimatedLength::Create(this,
+                                    svg_names::kY2Attr,
+                                    SVGLengthMode::kHeight,
+                                    SVGLength::Initial::kUnitlessZero)) {
   AddToPropertyMap(x1_);
   AddToPropertyMap(y1_);
   AddToPropertyMap(x2_);
@@ -69,8 +72,8 @@ Path SVGLineElement::AsPath() const {
 }
 
 void SVGLineElement::SvgAttributeChanged(const QualifiedName& attr_name) {
-  if (attr_name == SVGNames::x1Attr || attr_name == SVGNames::y1Attr ||
-      attr_name == SVGNames::x2Attr || attr_name == SVGNames::y2Attr) {
+  if (attr_name == svg_names::kX1Attr || attr_name == svg_names::kY1Attr ||
+      attr_name == svg_names::kX2Attr || attr_name == svg_names::kY2Attr) {
     UpdateRelativeLengthsInformation();
     GeometryAttributeChanged();
     return;

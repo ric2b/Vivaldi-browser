@@ -4,7 +4,6 @@
 
 import("//build/config/ui.gni")
 import("//services/content/public/features.gni")
-import("//services/service_manager/public/service_manifest.gni")
 
 source_set("impl") {
   visibility = [
@@ -25,6 +24,8 @@ source_set("impl") {
     "navigable_contents_impl.h",
     "service.cc",
   ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   public_deps = [
     "//base",
@@ -67,14 +68,10 @@ source_set("tests") {
     "//base",
     "//base/test:test_support",
     "//services/content/public/cpp",
+    "//services/content/public/cpp/test:tests",
     "//services/content/public/mojom",
     "//services/service_manager/public/cpp/test:test_support",
     "//testing/gtest",
     "//url",
   ]
-}
-
-service_manifest("manifest") {
-  name = "content"
-  source = "manifest.json"
 }

@@ -262,7 +262,7 @@ ExtensionFunction::ResponseAction FontSettingsSetFontFunction::Run() {
 
   PreferenceAPI::Get(profile)->SetExtensionControlledPref(
       extension_id(), pref_path, kExtensionPrefsScopeRegular,
-      new base::Value(params->details.font_id));
+      base::Value(params->details.font_id));
   return RespondNow(NoArguments());
 }
 
@@ -281,8 +281,7 @@ void FontSettingsGetFontListFunction::FontListHasLoaded(
 bool FontSettingsGetFontListFunction::CopyFontsToResult(
     base::ListValue* fonts) {
   std::unique_ptr<base::ListValue> result(new base::ListValue());
-  for (base::ListValue::iterator it = fonts->begin();
-       it != fonts->end(); ++it) {
+  for (auto it = fonts->begin(); it != fonts->end(); ++it) {
     base::ListValue* font_list_value;
     if (!it->GetAsList(&font_list_value)) {
       NOTREACHED();
@@ -356,7 +355,7 @@ ExtensionFunction::ResponseAction SetFontPrefExtensionFunction::Run() {
 
   PreferenceAPI::Get(profile)->SetExtensionControlledPref(
       extension_id(), GetPrefName(), kExtensionPrefsScopeRegular,
-      value->DeepCopy());
+      value->Clone());
   return RespondNow(NoArguments());
 }
 

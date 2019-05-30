@@ -23,7 +23,7 @@ Primary configurations:
 *   [Windows 10 Intel HD 630 Pool](http://shortn/_QsoGIGIFYd)
 *   [Linux Quadro P400 Pool](http://shortn/_fNgNs1uROQ)
 *   [Linux Intel HD 630 Pool](http://shortn/_dqEGjCGMHT)
-*   [Mac AMD Retina 10.13.5 GPU Pool](http://shortn/_c2CCVyT6Uj)
+*   [Mac AMD Retina 10.13.6 GPU Pool](http://shortn/_m26tivRkUp)
 *   [Mac Mini Chrome Pool](http://shortn/_Ru8NESapPM)
 *   [Android Nexus 5X Chrome Pool](http://shortn/_G3j7AVmuNR)
 
@@ -31,7 +31,7 @@ Secondary configurations:
 
 *   [Windows 7 Quadro P400 Pool](http://shortn/_cuxSKC15UX)
 *   [Windows AMD R7 240 GPU Pool](http://shortn/_XET7RTMHQm)
-*   [Mac NVIDIA Retina 10.13.5 GPU Pool](http://shortn/_sun7ISEg3F)
+*   [Mac NVIDIA Retina 10.13.6 GPU Pool](http://shortn/_ooNMNbCleT)
 
 ## GPU Bots' Waterfalls
 
@@ -83,11 +83,11 @@ test the code that is actually shipped. As of this writing, the tests included:
         `pixel_integration_test.py`
     *   Stress tests of the screenshot functionality other tests use:
         `screenshot_sync_integration_test.py`
-*   `angle_unittests`: see `src/gpu/gpu.gyp`
+*   `angle_unittests`: see `src/third_party/angle/src/tests/BUILD.gn`
 *   drawElements tests (on the chromium.gpu.fyi waterfall): see
     `src/third_party/angle/src/tests/BUILD.gn`
 *   `gles2_conform_test` (requires internal sources): see
-    `src/gpu/gles2_conform_support/gles2_conform_test.gyp`
+    `src/gpu/gles2_conform_support/BUILD.gn`
 *   `gl_tests`: see `src/gpu/BUILD.gn`
 *   `gl_unittests`: see `src/ui/gl/BUILD.gn`
 
@@ -179,20 +179,15 @@ shift, and a calendar appointment.
         waterfall, but instead run as part of the regular tryjobs on the
         Chromium waterfalls. The GPU tests run as part of the following
         tryservers' jobs:
-        1.  <code>[linux_chromium_rel_ng]</code> on the [luci.chromium.try]
-            waterfall
-        1.  <code>[mac_chromium_rel_ng]</code> on the [luci.chromium.try]
-            waterfall
-            <!-- TODO(kainino): update link to luci.chromium.try -->
-        1.  <code>[win7_chromium_rel_ng]</code> on the [tryserver.chromium.win]
-            waterfall
+        1.  `[linux-rel]` on the [luci.chromium.try] waterfall
+        1.  `[mac-rel]` on the [luci.chromium.try] waterfall
+        1.  `[win7-rel]` on the [luci.chromium.try] waterfall
     1.  The best tool to use to quickly find flakiness on the tryservers is the
         new [Chromium Try Flakes] tool. Look for the names of GPU tests (like
-        maps_pixel_test) as well as the test machines (e.g.
-        mac_chromium_rel_ng). If you see a flaky test, file a bug like [this
-        one](http://crbug.com/444430). Also look for compile flakes that may
-        indicate that a bot needs to be clobbered. Contact the Chromium
-        sheriffs or troopers if so.
+        maps_pixel_test) as well as the test machines (e.g. mac-rel). If you
+        see a flaky test, file a bug like [this one](http://crbug.com/444430).
+        Also look for compile flakes that may indicate that a bot needs to be
+        clobbered. Contact the Chromium sheriffs or troopers if so.
     1.  Glance at these trybots from time to time and see if any GPU tests are
         failing frequently. **Note** that test failures are **expected** on
         these bots: individuals' patches may fail to apply, fail to compile, or
@@ -258,17 +253,18 @@ shift, and a calendar appointment.
 [Sheriff-O-Matic now has support for the chromium.gpu.fyi waterfall]: https://sheriff-o-matic.appspot.com/chromium.gpu.fyi
 [Chromium tab]: https://sheriff-o-matic.appspot.com/chromium
 [tree sheriffing page]: https://sites.google.com/a/chromium.org/dev/developers/tree-sheriffs
-[linux_chromium_rel_ng]: https://ci.chromium.org/p/chromium/builders/luci.chromium.try/linux_chromium_rel_ng
+[linux-rel]: https://ci.chromium.org/p/chromium/builders/luci.chromium.try/linux-rel
 [luci.chromium.try]: https://ci.chromium.org/p/chromium/g/luci.chromium.try/builders
-[mac_chromium_rel_ng]: https://ci.chromium.org/p/chromium/builders/luci.chromium.try/mac_chromium_rel_ng
+[mac-rel]: https://ci.chromium.org/p/chromium/builders/luci.chromium.try/mac-rel
 [tryserver.chromium.mac]: https://ci.chromium.org/p/chromium/g/tryserver.chromium.mac/builders
-[win7_chromium_rel_ng]: https://ci.chromium.org/buildbot/tryserver.chromium.win/win7_chromium_rel_ng/
+[win7-rel]:
+https://ci.chromium.org/p/chromium/builders/luci.chromium.try/win7-rel
 [tryserver.chromium.win]: https://ci.chromium.org/p/chromium/g/tryserver.chromium.win/builders
 [Chromium Try Flakes]: http://chromium-try-flakes.appspot.com/
 <!-- TODO(kainino): link doesn't work, but is still included from chromium-swarm homepage so not removing it now -->
 [Swarming Server Stats]: https://chromium-swarm.appspot.com/stats
 [chromium-gpu-archive/reference-images]: https://console.developers.google.com/storage/chromium-gpu-archive/reference-images
-[instructions on the GPU testing page]: https://sites.google.com/a/chromium.org/dev/developers/testing/gpu-testing#TOC-Updating-and-Adding-New-Pixel-Tests-to-the-GPU-Bots
+[instructions on the GPU testing page]: https://chromium.googlesource.com/chromium/src/+/master/docs/gpu/gpu_testing.md
 [Chrome Internal GPU Pixel Wrangling Instructions]: https://sites.google.com/a/google.com/client3d/documents/chrome-internal-gpu-pixel-wrangling-instructions
 [src/content/test/gpu/gpu_tests/]: https://chromium.googlesource.com/chromium/src/+/master/content/test/gpu/gpu_tests/
 [webgl_conformance_expectations.py]: https://chromium.googlesource.com/chromium/src/+/master/content/test/gpu/gpu_tests/webgl_conformance_expectations.py

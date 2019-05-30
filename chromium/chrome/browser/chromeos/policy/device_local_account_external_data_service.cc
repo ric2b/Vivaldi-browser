@@ -12,9 +12,10 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/optional.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
-#include "chromeos/chromeos_paths.h"
+#include "chromeos/constants/chromeos_paths.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "components/policy/policy_constants.h"
 
@@ -27,7 +28,8 @@ DeviceLocalAccountExternalDataService::DeviceLocalAccountExternalDataService(
   base::FilePath cache_dir;
   CHECK(base::PathService::Get(chromeos::DIR_DEVICE_LOCAL_ACCOUNT_EXTERNAL_DATA,
                                &cache_dir));
-  resource_cache_.reset(new ResourceCache(cache_dir, backend_task_runner_));
+  resource_cache_.reset(new ResourceCache(cache_dir, backend_task_runner_,
+                                          /* max_cache_size */ base::nullopt));
   parent_->AddObserver(this);
 }
 

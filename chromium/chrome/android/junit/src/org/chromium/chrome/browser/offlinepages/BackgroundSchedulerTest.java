@@ -13,6 +13,8 @@ import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import android.text.format.DateUtils;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -60,8 +62,7 @@ public class BackgroundSchedulerTest {
         assertEquals(OfflineBackgroundTask.class, info.getBackgroundTaskClass());
         assertTrue(info.isPersisted());
         assertFalse(info.isPeriodic());
-        assertEquals(BackgroundScheduler.ONE_WEEK_IN_MILLISECONDS,
-                info.getOneOffInfo().getWindowEndTimeMs());
+        assertEquals(DateUtils.WEEK_IN_MILLIS, info.getOneOffInfo().getWindowEndTimeMs());
         assertTrue(info.getOneOffInfo().hasWindowStartTimeConstraint());
 
         long scheduledTimeMillis = TaskExtrasPacker.unpackTimeFromBundle(info.getExtras());
@@ -78,7 +79,7 @@ public class BackgroundSchedulerTest {
         TaskInfo info = mTaskInfo.getValue();
         verifyFixedTaskInfoValues(info);
 
-        assertEquals(TaskInfo.NETWORK_TYPE_UNMETERED, info.getRequiredNetworkType());
+        assertEquals(TaskInfo.NetworkType.UNMETERED, info.getRequiredNetworkType());
         assertTrue(info.requiresCharging());
 
         assertTrue(info.shouldUpdateCurrent());
@@ -98,7 +99,7 @@ public class BackgroundSchedulerTest {
         TaskInfo info = mTaskInfo.getValue();
         verifyFixedTaskInfoValues(info);
 
-        assertEquals(TaskInfo.NETWORK_TYPE_ANY, info.getRequiredNetworkType());
+        assertEquals(TaskInfo.NetworkType.ANY, info.getRequiredNetworkType());
         assertFalse(info.requiresCharging());
 
         assertTrue(info.shouldUpdateCurrent());
@@ -112,19 +113,18 @@ public class BackgroundSchedulerTest {
     @Feature({"OfflinePages"})
     public void testScheduleBackup() {
         BackgroundScheduler.getInstance().scheduleBackup(
-                mConditions1, BackgroundScheduler.FIVE_MINUTES_IN_MILLISECONDS);
+                mConditions1, 5 * DateUtils.MINUTE_IN_MILLIS);
         verify(mTaskScheduler, times(1))
                 .schedule(eq(RuntimeEnvironment.application), eq(mTaskInfo.getValue()));
 
         TaskInfo info = mTaskInfo.getValue();
         verifyFixedTaskInfoValues(info);
 
-        assertEquals(TaskInfo.NETWORK_TYPE_UNMETERED, info.getRequiredNetworkType());
+        assertEquals(TaskInfo.NetworkType.UNMETERED, info.getRequiredNetworkType());
         assertTrue(info.requiresCharging());
 
         assertFalse(info.shouldUpdateCurrent());
-        assertEquals(BackgroundScheduler.FIVE_MINUTES_IN_MILLISECONDS,
-                info.getOneOffInfo().getWindowStartTimeMs());
+        assertEquals(5 * DateUtils.MINUTE_IN_MILLIS, info.getOneOffInfo().getWindowStartTimeMs());
 
         assertEquals(
                 mConditions1, TaskExtrasPacker.unpackTriggerConditionsFromBundle(info.getExtras()));

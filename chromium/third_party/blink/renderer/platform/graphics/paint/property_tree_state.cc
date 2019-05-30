@@ -8,54 +8,54 @@
 
 namespace blink {
 
+const PropertyTreeState& PropertyTreeState::Uninitialized() {
+  DEFINE_STATIC_REF(TransformPaintPropertyNode, transform,
+                    TransformPaintPropertyNode::Create(
+                        TransformPaintPropertyNode::Root(), {}));
+  DEFINE_STATIC_REF(ClipPaintPropertyNode, clip,
+                    ClipPaintPropertyNode::Create(ClipPaintPropertyNode::Root(),
+                                                  {transform}));
+  DEFINE_STATIC_REF(EffectPaintPropertyNode, effect,
+                    EffectPaintPropertyNode::Create(
+                        EffectPaintPropertyNode::Root(), {transform}));
+  DEFINE_STATIC_LOCAL(PropertyTreeState, uninitialized,
+                      (*transform, *clip, *effect));
+  return uninitialized;
+}
+
 const PropertyTreeState& PropertyTreeState::Root() {
   DEFINE_STATIC_LOCAL(
       PropertyTreeState, root,
-      (&TransformPaintPropertyNode::Root(), &ClipPaintPropertyNode::Root(),
-       &EffectPaintPropertyNode::Root()));
+      (TransformPaintPropertyNode::Root(), ClipPaintPropertyNode::Root(),
+       EffectPaintPropertyNode::Root()));
   return root;
 }
 
-const CompositorElementId PropertyTreeState::GetCompositorElementId(
-    const CompositorElementIdSet& element_ids) const {
-  // The effect or transform nodes could have a compositor element id. The order
-  // doesn't matter as the element id should be the same on all that have a
-  // non-default CompositorElementId.
-  //
-  // Note that PropertyTreeState acts as a context that accumulates state as we
-  // traverse the tree building layers. This means that we could see a
-  // compositor element id 'A' for a parent layer in conjunction with a
-  // compositor element id 'B' for a child layer. To preserve uniqueness of
-  // element ids, then, we check for presence in the |element_ids| set (which
-  // represents element ids already previously attached to a layer). This is an
-  // interim step while we pursue broader rework of animation subsystem noted in
-  // http://crbug.com/709137.
-  if (Effect()->GetCompositorElementId() &&
-      !element_ids.Contains(Effect()->GetCompositorElementId()))
-    return Effect()->GetCompositorElementId();
-  if (Transform()->GetCompositorElementId() &&
-      !element_ids.Contains(Transform()->GetCompositorElementId()))
-    return Transform()->GetCompositorElementId();
-  return CompositorElementId();
+PropertyTreeState PropertyTreeState::Unalias() const {
+  return PropertyTreeState(Transform().Unalias(), Clip().Unalias(),
+                           Effect().Unalias());
 }
 
 String PropertyTreeState::ToString() const {
-  return String::Format("t:%p c:%p e:%p", Transform(), Clip(), Effect());
+  return String::Format("t:%p c:%p e:%p", transform_, clip_, effect_);
 }
 
 #if DCHECK_IS_ON()
 
 String PropertyTreeState::ToTreeString() const {
-  return "transform:\n" + (Transform() ? Transform()->ToTreeString() : "null") +
-         "\nclip:\n" + (Clip() ? Clip()->ToTreeString() : "null") +
-         "\neffect:\n" + (Effect() ? Effect()->ToTreeString() : "null");
+  return "transform:\n" + Transform().ToTreeString() + "\nclip:\n" +
+         Clip().ToTreeString() + "\neffect:\n" + Effect().ToTreeString();
 }
 
 #endif
 
 size_t PropertyTreeState::CacheMemoryUsageInBytes() const {
-  return Clip()->CacheMemoryUsageInBytes() +
-         Transform()->CacheMemoryUsageInBytes();
+  return Clip().CacheMemoryUsageInBytes() +
+         Transform().CacheMemoryUsageInBytes();
+}
+
+std::ostream& operator<<(std::ostream& os, const PropertyTreeState& state) {
+  return os << state.ToString().Utf8().data();
 }
 
 }  // namespace blink

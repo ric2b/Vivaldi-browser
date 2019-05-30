@@ -22,7 +22,7 @@ class RASTER_EXPORT ClientFontManager
    public:
     virtual ~Client() {}
 
-    virtual void* MapFontBuffer(size_t size) = 0;
+    virtual void* MapFontBuffer(uint32_t size) = 0;
   };
 
   ClientFontManager(Client* client, CommandBuffer* command_buffer);
@@ -31,6 +31,7 @@ class RASTER_EXPORT ClientFontManager
   // SkStrikeServer::DiscardableHandleManager implementation.
   SkDiscardableHandleId createHandle() override;
   bool lockHandle(SkDiscardableHandleId handle_id) override;
+  bool isHandleDeleted(SkDiscardableHandleId handle_id) override;
 
   void Serialize();
   SkStrikeServer* strike_server() { return &strike_server_; }

@@ -75,31 +75,30 @@ TEST_F(ViewAXPlatformNodeDelegateWinTest, TextfieldAccessibility) {
   ComPtr<IAccessible> content_accessible(content->GetNativeViewAccessible());
   LONG child_count = 0;
   ASSERT_EQ(S_OK, content_accessible->get_accChildCount(&child_count));
-  ASSERT_EQ(1L, child_count);
+  EXPECT_EQ(1, child_count);
 
   ComPtr<IDispatch> textfield_dispatch;
   ComPtr<IAccessible> textfield_accessible;
   ScopedVariant child_index(1);
-  ASSERT_EQ(S_OK, content_accessible->get_accChild(
-                      child_index, textfield_dispatch.GetAddressOf()));
   ASSERT_EQ(S_OK,
-            textfield_dispatch.CopyTo(textfield_accessible.GetAddressOf()));
+            content_accessible->get_accChild(child_index, &textfield_dispatch));
+  ASSERT_EQ(S_OK,
+            textfield_dispatch.CopyTo(IID_PPV_ARGS(&textfield_accessible)));
 
   ScopedBstr name;
   ScopedVariant childid_self(CHILDID_SELF);
   ASSERT_EQ(S_OK,
             textfield_accessible->get_accName(childid_self, name.Receive()));
-  ASSERT_STREQ(L"Name", name);
+  EXPECT_STREQ(L"Name", static_cast<BSTR>(name));
 
   ScopedBstr value;
   ASSERT_EQ(S_OK,
             textfield_accessible->get_accValue(childid_self, value.Receive()));
-  ASSERT_STREQ(L"Value", value);
+  EXPECT_STREQ(L"Value", static_cast<BSTR>(value));
 
   ScopedBstr new_value(L"New value");
   ASSERT_EQ(S_OK, textfield_accessible->put_accValue(childid_self, new_value));
-
-  ASSERT_STREQ(L"New value", textfield->text().c_str());
+  EXPECT_STREQ(L"New value", textfield->text().c_str());
 }
 
 TEST_F(ViewAXPlatformNodeDelegateWinTest, TextfieldAssociatedLabel) {
@@ -166,9 +165,9 @@ class ViewAXPlatformNodeDelegateWinTestWithBoolChildFlag
   DISALLOW_COPY_AND_ASSIGN(ViewAXPlatformNodeDelegateWinTestWithBoolChildFlag);
 };
 
-INSTANTIATE_TEST_CASE_P(,
-                        ViewAXPlatformNodeDelegateWinTestWithBoolChildFlag,
-                        testing::Bool());
+INSTANTIATE_TEST_SUITE_P(,
+                         ViewAXPlatformNodeDelegateWinTestWithBoolChildFlag,
+                         testing::Bool());
 
 TEST_P(ViewAXPlatformNodeDelegateWinTestWithBoolChildFlag, AuraChildWidgets) {
   // Create the parent widget.
@@ -363,7 +362,7 @@ TEST_F(ViewAXPlatformNodeDelegateWinTest, Overrides) {
   alert_view->GetViewAccessibility().OverrideRole(ax::mojom::Role::kAlert);
   alert_view->GetViewAccessibility().OverrideName(L"Name");
   alert_view->GetViewAccessibility().OverrideDescription("Description");
-  alert_view->GetViewAccessibility().OverrideIsLeaf();
+  alert_view->GetViewAccessibility().OverrideIsLeaf(true);
   contents_view->AddChildView(alert_view);
 
   // Descendant should be ignored because the parent uses OverrideIsLeaf().

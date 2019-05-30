@@ -15,6 +15,7 @@
 #include "base/task_runner_util.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/login/screens/core_oobe_view.h"
 #include "chrome/browser/chromeos/login/screens/welcome_screen.h"
 #include "chrome/browser/chromeos/login/ui/input_events_blocker.h"
@@ -24,7 +25,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "components/login/localized_values_builder.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
@@ -44,8 +45,10 @@ namespace chromeos {
 
 // WelcomeScreenHandler, public: -----------------------------------------------
 
-WelcomeScreenHandler::WelcomeScreenHandler(CoreOobeView* core_oobe_view)
-    : BaseScreenHandler(kScreenId), core_oobe_view_(core_oobe_view) {
+WelcomeScreenHandler::WelcomeScreenHandler(JSCallsContainer* js_calls_container,
+                                           CoreOobeView* core_oobe_view)
+    : BaseScreenHandler(kScreenId, js_calls_container),
+      core_oobe_view_(core_oobe_view) {
   set_call_js_prefix(kJsScreenPath);
   DCHECK(core_oobe_view_);
 }
@@ -106,6 +109,15 @@ void WelcomeScreenHandler::ReloadLocalizedContent() {
   core_oobe_view_->ReloadContent(localized_strings);
 }
 
+void WelcomeScreenHandler::SetInputMethodId(
+    const std::string& input_method_id) {
+  CallJS("login.WelcomeScreen.onInputMethodIdSetFromBackend", input_method_id);
+}
+
+void WelcomeScreenHandler::SetTimezoneId(const std::string& timezone_id) {
+  CallJS("login.WelcomeScreen.onTimezoneIdSetFromBackend", timezone_id);
+}
+
 // WelcomeScreenHandler, BaseScreenHandler implementation: --------------------
 
 void WelcomeScreenHandler::DeclareLocalizedValues(
@@ -129,10 +141,6 @@ void WelcomeScreenHandler::DeclareLocalizedValues(
   builder->Add("timezoneSectionTitle", IDS_TIMEZONE_SECTION_TITLE);
   builder->Add("advancedOptionsSectionTitle",
                IDS_OOBE_ADVANCED_OPTIONS_SCREEN_TITLE);
-  builder->Add("advancedOptionsEEBootstrappingTitle",
-               IDS_OOBE_ADVANCED_OPTIONS_EE_BOOTSTRAPPING_TITLE);
-  builder->Add("advancedOptionsEEBootstrappingSubtitle",
-               IDS_OOBE_ADVANCED_OPTIONS_EE_BOOTSTRAPPING_SUBTITLE);
   builder->Add("advancedOptionsCFMSetupTitle",
                IDS_OOBE_ADVANCED_OPTIONS_CFM_SETUP_TITLE);
   builder->Add("advancedOptionsCFMSetupSubtitle",
@@ -147,21 +155,23 @@ void WelcomeScreenHandler::DeclareLocalizedValues(
   builder->Add("keyboardDropdownTitle", IDS_KEYBOARD_DROPDOWN_TITLE);
   builder->Add("keyboardDropdownLabel", IDS_KEYBOARD_DROPDOWN_LABEL);
 
-  builder->Add("highContrastOptionOff", IDS_HIGH_CONTRAST_OPTION_OFF);
-  builder->Add("highContrastOptionOn", IDS_HIGH_CONTRAST_OPTION_ON);
+  builder->Add("a11ySettingToggleOptionOff",
+               IDS_A11Y_SETTING_TOGGLE_OPTION_OFF);
+  builder->Add("a11ySettingToggleOptionOn", IDS_A11Y_SETTING_TOGGLE_OPTION_ON);
   builder->Add("largeCursorOptionOff", IDS_LARGE_CURSOR_OPTION_OFF);
   builder->Add("largeCursorOptionOn", IDS_LARGE_CURSOR_OPTION_ON);
-  builder->Add("screenMagnifierOptionOff", IDS_SCREEN_MAGNIFIER_OPTION_OFF);
-  builder->Add("screenMagnifierOptionOn", IDS_SCREEN_MAGNIFIER_OPTION_ON);
-  builder->Add("spokenFeedbackOptionOff", IDS_SPOKEN_FEEDBACK_OPTION_OFF);
-  builder->Add("spokenFeedbackOptionOn", IDS_SPOKEN_FEEDBACK_OPTION_ON);
-  builder->Add("selectToSpeakOptionOff", IDS_SELECT_TO_SPEAK_OPTION_OFF);
-  builder->Add("selectToSpeakOptionOn", IDS_SELECT_TO_SPEAK_OPTION_ON);
-  builder->Add("virtualKeyboardOptionOff", IDS_VIRTUAL_KEYBOARD_OPTION_OFF);
-  builder->Add("virtualKeyboardOptionOn", IDS_VIRTUAL_KEYBOARD_OPTION_ON);
 
   builder->Add("timezoneDropdownTitle", IDS_TIMEZONE_DROPDOWN_TITLE);
   builder->Add("timezoneButtonText", IDS_TIMEZONE_BUTTON_TEXT);
+}
+
+void WelcomeScreenHandler::DeclareJSCallbacks() {
+  AddCallback("WelcomeScreen.setLocaleId",
+              &WelcomeScreenHandler::HandleSetLocaleId);
+  AddCallback("WelcomeScreen.setInputMethodId",
+              &WelcomeScreenHandler::HandleSetInputMethodId);
+  AddCallback("WelcomeScreen.setTimezoneId",
+              &WelcomeScreenHandler::HandleSetTimezoneId);
 }
 
 void WelcomeScreenHandler::GetAdditionalParameters(
@@ -188,7 +198,7 @@ void WelcomeScreenHandler::GetAdditionalParameters(
     language_list = GetMinimalUILanguageList();
 
   // GetAdditionalParameters() is called when OOBE language is updated.
-  // This happens in three different cases:
+  // This happens in two different cases:
   //
   // 1) User selects new locale on OOBE screen. We need to sync active input
   // methods with locale, so EnableLoginLayouts() is needed.
@@ -206,22 +216,16 @@ void WelcomeScreenHandler::GetAdditionalParameters(
   //
   // So we need to disable activation of login layouts if we are already in
   // active user session.
-  //
-  // 3) This is the bootstrapping process for a "Slave" device. The locale &
-  // input of the "Slave" device is set up by a "Master" device. In this case we
-  // don't want EnableLoginLayout() to reset the input method to the hardware
-  // default method.
-  const bool is_slave = g_browser_process->local_state()->GetBoolean(
-      prefs::kOobeControllerDetected);
-
   const bool enable_layouts =
-      !user_manager::UserManager::Get()->IsUserLoggedIn() && !is_slave;
+      !user_manager::UserManager::Get()->IsUserLoggedIn();
 
   dict->Set("languageList", std::move(language_list));
   dict->Set("inputMethodsList",
             GetAndActivateLoginKeyboardLayouts(
                 application_locale, selected_input_method, enable_layouts));
   dict->Set("timezoneList", GetTimezoneList());
+  dict->Set("demoModeCountryList",
+            base::Value::ToUniquePtrValue(DemoSession::GetCountryList()));
 }
 
 void WelcomeScreenHandler::Initialize() {
@@ -233,6 +237,22 @@ void WelcomeScreenHandler::Initialize() {
   // Reload localized strings if they are already resolved.
   if (screen_ && screen_->language_list())
     ReloadLocalizedContent();
+}
+
+void WelcomeScreenHandler::HandleSetLocaleId(const std::string& locale_id) {
+  if (screen_)
+    screen_->SetApplicationLocale(locale_id);
+}
+
+void WelcomeScreenHandler::HandleSetInputMethodId(
+    const std::string& input_method_id) {
+  if (screen_)
+    screen_->SetInputMethod(input_method_id);
+}
+
+void WelcomeScreenHandler::HandleSetTimezoneId(const std::string& timezone_id) {
+  if (screen_)
+    screen_->SetTimezone(timezone_id);
 }
 
 // WelcomeScreenHandler, private: ----------------------------------------------

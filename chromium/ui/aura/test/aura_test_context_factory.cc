@@ -5,6 +5,7 @@
 #include "ui/aura/test/aura_test_context_factory.h"
 
 #include "components/viz/test/fake_output_surface.h"
+#include "components/viz/test/fake_skia_output_surface.h"
 #include "components/viz/test/test_context_provider.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
 
@@ -19,6 +20,11 @@ class FrameSinkClient : public viz::TestLayerTreeFrameSinkClient {
       : display_context_provider_(std::move(display_context_provider)) {}
 
   // viz::TestLayerTreeFrameSinkClient:
+  std::unique_ptr<viz::SkiaOutputSurface> CreateDisplaySkiaOutputSurface()
+      override {
+    return viz::FakeSkiaOutputSurface::Create3d();
+  }
+
   std::unique_ptr<viz::OutputSurface> CreateDisplayOutputSurface(
       scoped_refptr<viz::ContextProvider> compositor_context_provider)
       override {
@@ -29,9 +35,8 @@ class FrameSinkClient : public viz::TestLayerTreeFrameSinkClient {
       const viz::LocalSurfaceId& local_surface_id) override {}
   void DisplayReceivedCompositorFrame(
       const viz::CompositorFrame& frame) override {}
-  void DisplayWillDrawAndSwap(
-      bool will_draw_and_swap,
-      const viz::RenderPassList& render_passes) override {}
+  void DisplayWillDrawAndSwap(bool will_draw_and_swap,
+                              viz::RenderPassList* render_passes) override {}
   void DisplayDidDrawAndSwap() override {}
 
  private:
@@ -54,7 +59,7 @@ void AuraTestContextFactory::CreateLayerTreeFrameSink(
       std::make_unique<FrameSinkClient>(context_provider);
   constexpr bool synchronous_composite = false;
   constexpr bool disable_display_vsync = false;
-  const double refresh_rate = GetRefreshRate();
+  const double refresh_rate = 200.0;
   auto frame_sink = std::make_unique<viz::TestLayerTreeFrameSink>(
       context_provider, viz::TestContextProvider::CreateWorker(),
       GetGpuMemoryBufferManager(), renderer_settings(),

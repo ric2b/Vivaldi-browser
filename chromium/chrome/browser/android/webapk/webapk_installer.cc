@@ -24,7 +24,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task_runner_util.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "base/timer/elapsed_timer.h"
 #include "chrome/browser/android/color_helpers.h"
 #include "chrome/browser/android/shortcut_helper.h"
@@ -46,6 +46,9 @@
 #include "net/base/load_flags.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/resource_response_info.h"
+#include "services/network/public/cpp/simple_url_loader.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "url/gurl.h"
@@ -97,11 +100,6 @@ class CacheClearer : public content::BrowsingDataRemover::Observer {
   DISALLOW_COPY_AND_ASSIGN(CacheClearer);
 };
 
-net::URLRequestContextGetter* GetRequestContext(
-    content::BrowserContext* browser_context) {
-  return Profile::FromBrowserContext(browser_context)->GetRequestContext();
-}
-
 // Returns the WebAPK server URL based on the command line.
 GURL GetServerUrl() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -145,6 +143,8 @@ webapk::WebApk_UpdateReason ConvertUpdateReasonToProtoEnum(
       return webapk::WebApk::ORIENTATION_DIFFERS;
     case WebApkUpdateReason::DISPLAY_MODE_DIFFERS:
       return webapk::WebApk::DISPLAY_MODE_DIFFERS;
+    case WebApkUpdateReason::WEB_SHARE_TARGET_DIFFERS:
+      return webapk::WebApk::WEB_SHARE_TARGET_DIFFERS;
   }
 }
 
@@ -217,6 +217,17 @@ std::unique_ptr<std::string> BuildProtoInBackground(
   if (shortcut_info.share_target) {
     webapk::ShareTarget* share_target = web_app_manifest->add_share_targets();
     share_target->set_action(shortcut_info.share_target->action.spec());
+    if (shortcut_info.share_target->method == ShareTarget::Method::kPost) {
+      share_target->set_method("POST");
+    } else {
+      share_target->set_method("GET");
+    }
+    if (shortcut_info.share_target->enctype ==
+        ShareTarget::Enctype::kMultipart) {
+      share_target->set_enctype("multipart/form-data");
+    } else {
+      share_target->set_enctype("application/x-www-form-urlencoded");
+    }
     webapk::ShareTargetParams* share_target_params =
         share_target->mutable_params();
     share_target_params->set_title(
@@ -225,6 +236,16 @@ std::unique_ptr<std::string> BuildProtoInBackground(
         base::UTF16ToUTF8(shortcut_info.share_target->params.text));
     share_target_params->set_url(
         base::UTF16ToUTF8(shortcut_info.share_target->params.url));
+
+    for (const ShareTargetParamsFile& share_target_params_file :
+         shortcut_info.share_target->params.files) {
+      webapk::ShareTargetParamsFile* share_files =
+          share_target_params->add_files();
+      share_files->set_name(base::UTF16ToUTF8(share_target_params_file.name));
+      for (base::string16 mime_type : share_target_params_file.accept) {
+        share_files->add_accept(base::UTF16ToUTF8(mime_type));
+      }
+    }
   }
 
   if (shortcut_info.best_primary_icon_url.is_empty()) {
@@ -276,7 +297,8 @@ bool StoreUpdateRequestToFileInBackground(
     const std::map<std::string, std::string>& icon_url_to_murmur2_hash,
     bool is_manifest_stale,
     WebApkUpdateReason update_reason) {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   std::unique_ptr<std::string> proto = BuildProtoInBackground(
       shortcut_info, primary_icon, badge_icon, package_name, version,
@@ -293,7 +315,8 @@ bool StoreUpdateRequestToFileInBackground(
 
 // Reads |file| and returns contents. Must be called on a background thread.
 std::unique_ptr<std::string> ReadFileInBackground(const base::FilePath& file) {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   std::unique_ptr<std::string> update_request = std::make_unique<std::string>();
   base::ReadFileToString(file, update_request.get());
   return update_request;
@@ -533,22 +556,23 @@ void WebApkInstaller::OnReadUpdateRequest(
   SendRequest(std::move(update_request));
 }
 
-void WebApkInstaller::OnURLFetchComplete(const net::URLFetcher* source) {
+void WebApkInstaller::OnURLLoaderComplete(
+    std::unique_ptr<std::string> response_body) {
   timer_.Stop();
 
-  if (!source->GetStatus().is_success() ||
-      source->GetResponseCode() != net::HTTP_OK) {
+  int response_code = -1;
+  if (loader_->ResponseInfo() && loader_->ResponseInfo()->headers)
+    response_code = loader_->ResponseInfo()->headers->response_code();
+
+  if (!response_body || response_code != net::HTTP_OK) {
     LOG(WARNING) << base::StringPrintf(
-        "WebAPK server returned response code %d.", source->GetResponseCode());
+        "WebAPK server returned response code %d.", response_code);
     OnResult(WebApkInstallResult::FAILURE);
     return;
   }
 
-  std::string response_string;
-  source->GetResponseAsString(&response_string);
-
   std::unique_ptr<webapk::WebApkResponse> response(new webapk::WebApkResponse);
-  if (!response->ParseFromString(response_string)) {
+  if (!response_body || !response->ParseFromString(*response_body)) {
     LOG(WARNING) << "WebAPK server did not return proto.";
     OnResult(WebApkInstallResult::FAILURE);
     return;
@@ -574,6 +598,13 @@ void WebApkInstaller::OnURLFetchComplete(const net::URLFetcher* source) {
   InstallOrUpdateWebApk(response->package_name(), version, token);
 }
 
+network::SharedURLLoaderFactory* GetURLLoaderFactory(
+    content::BrowserContext* browser_context) {
+  return content::BrowserContext::GetDefaultStoragePartition(browser_context)
+      ->GetURLLoaderFactoryForBrowserProcess()
+      .get();
+}
+
 void WebApkInstaller::OnHaveSufficientSpaceForInstall() {
   // We need to take the hash of the bitmap at the icon URL prior to any
   // transformations being applied to the bitmap (such as encoding/decoding
@@ -584,9 +615,7 @@ void WebApkInstaller::OnHaveSufficientSpaceForInstall() {
   // We redownload the icon in order to take the Murmur2 hash. The redownload
   // should be fast because the icon should be in the HTTP cache.
   WebApkIconHasher::DownloadAndComputeMurmur2Hash(
-      content::BrowserContext::GetDefaultStoragePartition(browser_context_)
-          ->GetURLLoaderFactoryForBrowserProcess()
-          .get(),
+      GetURLLoaderFactory(browser_context_),
       install_shortcut_info_->best_primary_icon_url,
       base::Bind(&WebApkInstaller::OnGotPrimaryIconMurmur2Hash,
                  weak_ptr_factory_.GetWeakPtr()));
@@ -604,9 +633,7 @@ void WebApkInstaller::OnGotPrimaryIconMurmur2Hash(
       install_shortcut_info_->best_badge_icon_url !=
           install_shortcut_info_->best_primary_icon_url) {
     WebApkIconHasher::DownloadAndComputeMurmur2Hash(
-        content::BrowserContext::GetDefaultStoragePartition(browser_context_)
-            ->GetURLLoaderFactoryForBrowserProcess()
-            .get(),
+        GetURLLoaderFactory(browser_context_),
         install_shortcut_info_->best_badge_icon_url,
         base::Bind(&WebApkInstaller::OnGotBadgeIconMurmur2Hash,
                    weak_ptr_factory_.GetWeakPtr(), true, primary_icon_hash));
@@ -650,11 +677,16 @@ void WebApkInstaller::SendRequest(
       base::Bind(&WebApkInstaller::OnResult, weak_ptr_factory_.GetWeakPtr(),
                  WebApkInstallResult::FAILURE));
 
-  url_fetcher_ =
-      net::URLFetcher::Create(server_url_, net::URLFetcher::POST, this);
-  url_fetcher_->SetRequestContext(GetRequestContext(browser_context_));
-  url_fetcher_->SetUploadData(kProtoMimeType, *serialized_proto);
-  url_fetcher_->SetLoadFlags(net::LOAD_DISABLE_CACHE);
-  url_fetcher_->SetAllowCredentials(false);
-  url_fetcher_->Start();
+  auto request = std::make_unique<network::ResourceRequest>();
+  request->url = server_url_;
+  request->method = "POST";
+  request->load_flags = net::LOAD_DISABLE_CACHE;
+  request->allow_credentials = false;
+  loader_ = network::SimpleURLLoader::Create(std::move(request),
+                                             NO_TRAFFIC_ANNOTATION_YET);
+  loader_->AttachStringForUpload(*serialized_proto, kProtoMimeType);
+  loader_->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
+      GetURLLoaderFactory(browser_context_),
+      base::BindOnce(&WebApkInstaller::OnURLLoaderComplete,
+                     weak_ptr_factory_.GetWeakPtr()));
 }

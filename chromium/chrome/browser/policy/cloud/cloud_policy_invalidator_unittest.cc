@@ -34,6 +34,7 @@
 #include "components/policy/core/common/cloud/mock_cloud_policy_store.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
+#include "services/network/test/test_network_connection_tracker.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -215,7 +216,8 @@ CloudPolicyInvalidatorTest::CloudPolicyInvalidatorTest()
     : core_(dm_protocol::kChromeUserPolicyType,
             std::string(),
             &store_,
-            loop_.task_runner()),
+            loop_.task_runner(),
+            network::TestNetworkConnectionTracker::CreateGetter()),
       client_(nullptr),
       task_runner_(new base::TestSimpleTaskRunner()),
       object_id_a_(135, "asdf"),
@@ -1082,21 +1084,19 @@ TEST_P(CloudPolicyInvalidatorUserTypedTest, ExpiredInvalidations) {
 }
 
 #if defined(OS_CHROMEOS)
-INSTANTIATE_TEST_CASE_P(
-    CloudPolicyInvalidatorUserTypedTestInstance,
-    CloudPolicyInvalidatorUserTypedTest,
-    testing::Values(em::DeviceRegisterRequest::USER,
-                    em::DeviceRegisterRequest::DEVICE));
+INSTANTIATE_TEST_SUITE_P(CloudPolicyInvalidatorUserTypedTestInstance,
+                         CloudPolicyInvalidatorUserTypedTest,
+                         testing::Values(em::DeviceRegisterRequest::USER,
+                                         em::DeviceRegisterRequest::DEVICE));
 #elif defined(OS_ANDROID)
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     CloudPolicyInvalidatorUserTypedTestInstance,
     CloudPolicyInvalidatorUserTypedTest,
     testing::Values(em::DeviceRegisterRequest::ANDROID_BROWSER));
 #else
-INSTANTIATE_TEST_CASE_P(
-    CloudPolicyInvalidatorUserTypedTestInstance,
-    CloudPolicyInvalidatorUserTypedTest,
-    testing::Values(em::DeviceRegisterRequest::BROWSER));
+INSTANTIATE_TEST_SUITE_P(CloudPolicyInvalidatorUserTypedTestInstance,
+                         CloudPolicyInvalidatorUserTypedTest,
+                         testing::Values(em::DeviceRegisterRequest::BROWSER));
 #endif
 
 }  // namespace policy

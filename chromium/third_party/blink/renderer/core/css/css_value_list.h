@@ -36,26 +36,29 @@ class CORE_EXPORT CSSValueList : public CSSValue {
   using const_iterator = HeapVector<Member<const CSSValue>, 4>::const_iterator;
 
   static CSSValueList* CreateCommaSeparated() {
-    return new CSSValueList(kCommaSeparator);
+    return MakeGarbageCollected<CSSValueList>(kCommaSeparator);
   }
   static CSSValueList* CreateSpaceSeparated() {
-    return new CSSValueList(kSpaceSeparator);
+    return MakeGarbageCollected<CSSValueList>(kSpaceSeparator);
   }
   static CSSValueList* CreateSlashSeparated() {
-    return new CSSValueList(kSlashSeparator);
+    return MakeGarbageCollected<CSSValueList>(kSlashSeparator);
   }
   static CSSValueList* CreateWithSeparatorFrom(const CSSValueList& list) {
-    return new CSSValueList(
+    return MakeGarbageCollected<CSSValueList>(
         static_cast<ValueListSeparator>(list.value_list_separator_));
   }
+
+  CSSValueList(ClassType, ValueListSeparator);
+  explicit CSSValueList(ValueListSeparator);
 
   iterator begin() { return values_.begin(); }
   iterator end() { return values_.end(); }
   const_iterator begin() const { return values_.begin(); }
   const_iterator end() const { return values_.end(); }
 
-  size_t length() const { return values_.size(); }
-  const CSSValue& Item(size_t index) const { return *values_[index]; }
+  wtf_size_t length() const { return values_.size(); }
+  const CSSValue& Item(wtf_size_t index) const { return *values_[index]; }
 
   void Append(const CSSValue& value) { values_.push_back(value); }
   bool RemoveAll(const CSSValue&);
@@ -72,12 +75,7 @@ class CORE_EXPORT CSSValueList : public CSSValue {
 
   void TraceAfterDispatch(blink::Visitor*);
 
- protected:
-  CSSValueList(ClassType, ValueListSeparator);
-
  private:
-  explicit CSSValueList(ValueListSeparator);
-
   HeapVector<Member<const CSSValue>, 4> values_;
   DISALLOW_COPY_AND_ASSIGN(CSSValueList);
 };

@@ -5,15 +5,19 @@
 #include "components/download/content/internal/download_driver_impl.h"
 
 #include <set>
+#include <string>
 #include <vector>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_usage_estimator.h"
 #include "components/download/internal/background_service/driver_entry.h"
 #include "components/download/public/common/download_interrupt_reasons.h"
 #include "components/download/public/common/download_url_parameters.h"
-#include "content/public/browser/storage_partition.h"
+#include "content/public/browser/browser_thread.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 
@@ -97,6 +101,13 @@ DriverEntry DownloadDriverImpl::CreateDriverEntry(
         !item->GetETag().empty() || !item->GetLastModifiedTime().empty();
   }
   entry.url_chain = item->GetUrlChain();
+
+  if (item->GetState() == DownloadItem::DownloadState::COMPLETE) {
+    std::string hash = item->GetHash();
+    if (!hash.empty())
+      entry.hash256 = base::HexEncode(hash.data(), hash.size());
+  }
+
   return entry;
 }
 
@@ -145,14 +156,8 @@ void DownloadDriverImpl::Start(
   if (!download_manager_)
     return;
 
-  content::StoragePartition* storage_partition =
-      content::BrowserContext::GetStoragePartitionForSite(
-          download_manager_->GetBrowserContext(), request_params.url);
-  DCHECK(storage_partition);
-
   std::unique_ptr<DownloadUrlParameters> download_url_params(
       new DownloadUrlParameters(request_params.url,
-                                storage_partition->GetURLRequestContext(),
                                 traffic_annotation));
 
   // TODO(xingliu): Make content::DownloadManager handle potential guid
@@ -170,28 +175,36 @@ void DownloadDriverImpl::Start(
   download_url_params->set_download_source(
       download::DownloadSource::INTERNAL_API);
   download_url_params->set_post_body(post_body);
-
+  download_url_params->set_follow_cross_origin_redirects(true);
+  download_url_params->set_upload_progress_callback(
+      base::BindRepeating(&DownloadDriverImpl::OnUploadProgress,
+                          weak_ptr_factory_.GetWeakPtr(), guid));
   download_manager_->DownloadUrl(std::move(download_url_params),
                                  nullptr /* blob_data_handle */,
                                  nullptr /* blob_url_loader_factory */);
 }
 
-void DownloadDriverImpl::Remove(const std::string& guid) {
+void DownloadDriverImpl::Remove(const std::string& guid, bool remove_file) {
   guid_to_remove_.emplace(guid);
 
   // DownloadItem::Remove will cause the item object removed from memory, post
   // the remove task to avoid the object being accessed in the same call stack.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(&DownloadDriverImpl::DoRemoveDownload,
-                                weak_ptr_factory_.GetWeakPtr(), guid));
+      FROM_HERE,
+      base::BindOnce(&DownloadDriverImpl::DoRemoveDownload,
+                     weak_ptr_factory_.GetWeakPtr(), guid, remove_file));
 }
 
-void DownloadDriverImpl::DoRemoveDownload(const std::string& guid) {
+void DownloadDriverImpl::DoRemoveDownload(const std::string& guid,
+                                          bool remove_file) {
   if (!download_manager_)
     return;
   DownloadItem* item = download_manager_->GetDownloadByGuid(guid);
   // Cancels the download and removes the persisted records in content layer.
   if (item) {
+    // Remove the download file for completed download.
+    if (remove_file)
+      item->DeleteFile(base::DoNothing());
     item->Remove();
   }
 }
@@ -209,7 +222,7 @@ void DownloadDriverImpl::Resume(const std::string& guid) {
     return;
   DownloadItem* item = download_manager_->GetDownloadByGuid(guid);
   if (item)
-    item->Resume();
+    item->Resume(true);
 }
 
 base::Optional<DriverEntry> DownloadDriverImpl::Find(const std::string& guid) {
@@ -278,9 +291,9 @@ void DownloadDriverImpl::OnDownloadCreated(content::DownloadManager* manager,
     // Client has removed the download before content persistence layer created
     // the record, remove the download immediately.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&DownloadDriverImpl::DoRemoveDownload,
-                       weak_ptr_factory_.GetWeakPtr(), item->GetGuid()));
+        FROM_HERE, base::BindOnce(&DownloadDriverImpl::DoRemoveDownload,
+                                  weak_ptr_factory_.GetWeakPtr(),
+                                  item->GetGuid(), false /* remove_file */));
     return;
   }
 
@@ -292,6 +305,12 @@ void DownloadDriverImpl::OnDownloadCreated(content::DownloadManager* manager,
   // be loaded before the driver is ready.
   if (IsReady())
     client_->OnDownloadCreated(entry);
+}
+
+void DownloadDriverImpl::OnUploadProgress(const std::string& guid,
+                                          uint64_t bytes_uploaded) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  client_->OnUploadProgress(guid, bytes_uploaded);
 }
 
 void DownloadDriverImpl::OnManagerInitialized(

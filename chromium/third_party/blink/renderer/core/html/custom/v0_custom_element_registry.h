@@ -51,7 +51,7 @@ class V0CustomElementRegistry final {
   DISALLOW_NEW();
 
  public:
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
   void DocumentWasDetached() { document_was_detached_ = true; }
 
  protected:
@@ -63,7 +63,6 @@ class V0CustomElementRegistry final {
       Document*,
       V0CustomElementConstructorBuilder*,
       const AtomicString& name,
-      V0CustomElement::NameSet valid_names,
       ExceptionState&);
   V0CustomElementDefinition* Find(const V0CustomElementDescriptor&) const;
 

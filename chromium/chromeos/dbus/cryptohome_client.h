@@ -11,8 +11,8 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/component_export.h"
 #include "base/macros.h"
-#include "chromeos/chromeos_export.h"
 #include "chromeos/dbus/attestation_constants.h"
 #include "chromeos/dbus/dbus_client.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
@@ -29,6 +29,8 @@ class FlushAndSignBootAttributesRequest;
 class GetBootAttributeRequest;
 class GetKeyDataRequest;
 class GetSupportedKeyPoliciesRequest;
+class GetTpmStatusRequest;
+class LockToSingleUserMountUntilRebootRequest;
 class MigrateKeyRequest;
 class MigrateToDircryptoRequest;
 class MountGuestRequest;
@@ -37,6 +39,7 @@ class RemoveFirmwareManagementParametersRequest;
 class RemoveKeyRequest;
 class SetBootAttributeRequest;
 class SetFirmwareManagementParametersRequest;
+class UnmountRequest;
 class UpdateKeyRequest;
 
 }  // namespace cryptohome
@@ -46,7 +49,7 @@ namespace chromeos {
 // CryptohomeClient is used to communicate with the Cryptohome service.
 // All method should be called from the origin thread (UI thread) which
 // initializes the DBusThreadManager instance.
-class CHROMEOS_EXPORT CryptohomeClient : public DBusClient {
+class COMPONENT_EXPORT(CHROMEOS_DBUS) CryptohomeClient : public DBusClient {
  public:
   class Observer {
    public:
@@ -145,8 +148,11 @@ class CHROMEOS_EXPORT CryptohomeClient : public DBusClient {
   // Calls IsMounted method and returns true when the call succeeds.
   virtual void IsMounted(DBusMethodCallback<bool> callback) = 0;
 
-  // Calls Unmount method and returns true when the call succeeds.
-  virtual void Unmount(DBusMethodCallback<bool> callback) = 0;
+  // Calls UnmountEx method. |callback| is called after the method call
+  // succeeds.
+  virtual void UnmountEx(
+      const cryptohome::UnmountRequest& request,
+      DBusMethodCallback<cryptohome::BaseReply> callback) = 0;
 
   // Calls MigrateKeyEx method. |callback| is called after the method call
   // succeeds.
@@ -497,6 +503,13 @@ class CHROMEOS_EXPORT CryptohomeClient : public DBusClient {
                        const cryptohome::MountRequest& request,
                        DBusMethodCallback<cryptohome::BaseReply> callback) = 0;
 
+  // Asynchronously calls DisableLoginUntilReboot method, locking the device
+  // into a state where only the user data for provided account_id from
+  // |request| can be accessed. After reboot all other user data are accessible.
+  virtual void LockToSingleUserMountUntilReboot(
+      const cryptohome::LockToSingleUserMountUntilRebootRequest& request,
+      DBusMethodCallback<cryptohome::BaseReply> callback) = 0;
+
   // Asynchronously calls AddKeyEx method. |callback| is called after method
   // call, and with reply protobuf.
   // AddKeyEx adds another key to the given key set. |request| also defines
@@ -548,6 +561,12 @@ class CHROMEOS_EXPORT CryptohomeClient : public DBusClient {
   // fails after any user, publuc, or guest session starts.
   virtual void FlushAndSignBootAttributes(
       const cryptohome::FlushAndSignBootAttributesRequest& request,
+      DBusMethodCallback<cryptohome::BaseReply> callback) = 0;
+
+  // Asynchronously gets the underlying TPM status information and passes it to
+  // the given callback with reply protobuf.
+  virtual void GetTpmStatus(
+      const cryptohome::GetTpmStatusRequest& request,
       DBusMethodCallback<cryptohome::BaseReply> callback) = 0;
 
   // Asynchronously calls MigrateToDircrypto method. It tells cryptohomed to

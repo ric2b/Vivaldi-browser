@@ -141,7 +141,6 @@ class CORE_EXPORT SVGImage final : public Image {
   String FilenameExtension() const override;
 
   IntSize ContainerSize() const;
-  bool UsesContainerSize() const override { return true; }
 
   SizeAvailability DataChanged(bool all_data_received) override;
 
@@ -181,12 +180,8 @@ class CORE_EXPORT SVGImage final : public Image {
       const KURL&,
       const IntSize& container_size);
 
-  // Paints the current frame. If a PaintCanvas is passed, paints into that
-  // canvas and returns nullptr.
-  // Otherwise returns a pointer to the new PaintRecord.
-  sk_sp<PaintRecord> PaintRecordForCurrentFrame(const IntRect& bounds,
-                                                const KURL&,
-                                                cc::PaintCanvas* = nullptr);
+  // Paints the current frame. Returns new PaintRecord.
+  sk_sp<PaintRecord> PaintRecordForCurrentFrame(const KURL&);
 
   void DrawInternal(cc::PaintCanvas*,
                     const cc::PaintFlags&,
@@ -241,6 +236,8 @@ class CORE_EXPORT SVGImage final : public Image {
   LoadState load_state_ = kDataChangedNotStarted;
 
   Persistent<SVGImageLocalFrameClient> frame_client_;
+  FRIEND_TEST_ALL_PREFIXES(ElementFragmentAnchorTest,
+                           SVGDocumentDoesntCreateFragment);
   FRIEND_TEST_ALL_PREFIXES(SVGImageTest, SupportsSubsequenceCaching);
   FRIEND_TEST_ALL_PREFIXES(SVGImageTest, JankTrackerDisabled);
   FRIEND_TEST_ALL_PREFIXES(SVGImageTest, SetSizeOnVisualViewport);

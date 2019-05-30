@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
+#include "third_party/blink/renderer/platform/shared_buffer.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 
 namespace blink {
@@ -87,8 +88,8 @@ void PageTestBase::LoadAhem(LocalFrame& frame) {
   StringOrArrayBufferOrArrayBufferView buffer =
       StringOrArrayBufferOrArrayBufferView::FromArrayBuffer(
           DOMArrayBuffer::Create(shared_buffer));
-  FontFace* ahem =
-      FontFace::Create(&document, "Ahem", buffer, FontFaceDescriptors());
+  FontFace* ahem = FontFace::Create(&document, "Ahem", buffer,
+                                    FontFaceDescriptors::Create());
 
   ScriptState* script_state = ToScriptStateForMainWorld(&frame);
   DummyExceptionStateForTesting exception_state;
@@ -100,7 +101,7 @@ void PageTestBase::LoadAhem(LocalFrame& frame) {
 void PageTestBase::SetBodyInnerHTML(const String& body_content) {
   GetDocument().body()->SetInnerHTMLFromString(body_content,
                                                ASSERT_NO_EXCEPTION);
-  UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 }
 
 void PageTestBase::SetBodyContent(const std::string& body_content) {
@@ -110,11 +111,13 @@ void PageTestBase::SetBodyContent(const std::string& body_content) {
 void PageTestBase::SetHtmlInnerHTML(const std::string& html_content) {
   GetDocument().documentElement()->SetInnerHTMLFromString(
       String::FromUTF8(html_content.c_str()));
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 }
 
-void PageTestBase::UpdateAllLifecyclePhases() {
-  GetDocument().View()->UpdateAllLifecyclePhases();
+void PageTestBase::UpdateAllLifecyclePhasesForTest() {
+  GetDocument().View()->UpdateAllLifecyclePhases(
+      DocumentLifecycle::LifecycleUpdateReason::kTest);
+  GetDocument().View()->RunPostLifecycleSteps();
 }
 
 StyleEngine& PageTestBase::GetStyleEngine() {

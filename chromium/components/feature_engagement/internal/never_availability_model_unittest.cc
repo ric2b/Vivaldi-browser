@@ -6,19 +6,19 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
-#include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace feature_engagement {
 
 namespace {
 
-const base::Feature kTestFeatureFoo{"test_foo",
-                                    base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kTestFeatureBar{"test_bar",
-                                    base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kAvailabilityTestFeatureFoo{
+    "test_foo", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kAvailabilityTestFeatureBar{
+    "test_bar", base::FEATURE_DISABLED_BY_DEFAULT};
 
 class NeverAvailabilityModelTest : public ::testing::Test {
  public:
@@ -31,7 +31,7 @@ class NeverAvailabilityModelTest : public ::testing::Test {
   base::Optional<bool> success_;
 
  private:
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
 
   DISALLOW_COPY_AND_ASSIGN(NeverAvailabilityModelTest);
 };
@@ -40,9 +40,9 @@ class NeverAvailabilityModelTest : public ::testing::Test {
 
 TEST_F(NeverAvailabilityModelTest, ShouldNeverHaveData) {
   EXPECT_EQ(base::nullopt,
-            availability_model_.GetAvailability(kTestFeatureFoo));
+            availability_model_.GetAvailability(kAvailabilityTestFeatureFoo));
   EXPECT_EQ(base::nullopt,
-            availability_model_.GetAvailability(kTestFeatureBar));
+            availability_model_.GetAvailability(kAvailabilityTestFeatureBar));
 
   availability_model_.Initialize(
       base::BindOnce(&NeverAvailabilityModelTest::OnInitializedCallback,
@@ -51,9 +51,9 @@ TEST_F(NeverAvailabilityModelTest, ShouldNeverHaveData) {
   base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(base::nullopt,
-            availability_model_.GetAvailability(kTestFeatureFoo));
+            availability_model_.GetAvailability(kAvailabilityTestFeatureFoo));
   EXPECT_EQ(base::nullopt,
-            availability_model_.GetAvailability(kTestFeatureBar));
+            availability_model_.GetAvailability(kAvailabilityTestFeatureBar));
 }
 
 TEST_F(NeverAvailabilityModelTest, ShouldBeReadyAfterInitialization) {

@@ -23,10 +23,13 @@ class MODULES_EXPORT BlobEvent final : public Event {
   ~BlobEvent() override = default;
 
   static BlobEvent* Create(const AtomicString& type,
-                           const BlobEventInit& initializer);
+                           const BlobEventInit* initializer);
   static BlobEvent* Create(const AtomicString& type,
                            Blob* blob,
                            double timecode);
+
+  BlobEvent(const AtomicString& type, const BlobEventInit* initializer);
+  BlobEvent(const AtomicString& type, Blob* blob, double timecode);
 
   Blob* data() const { return blob_.Get(); }
   DOMHighResTimeStamp timecode() const { return timecode_; }
@@ -37,9 +40,6 @@ class MODULES_EXPORT BlobEvent final : public Event {
   void Trace(blink::Visitor* visitor) override;
 
  private:
-  BlobEvent(const AtomicString& type, const BlobEventInit& initializer);
-  BlobEvent(const AtomicString& type, Blob* blob, double timecode);
-
   Member<Blob> blob_;
   DOMHighResTimeStamp timecode_;
 };

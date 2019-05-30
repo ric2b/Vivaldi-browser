@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -145,8 +146,7 @@ syncer::SyncError TestChangeProcessor::ProcessSyncChanges(
         syncer::SEARCH_ENGINES);
 
   change_map_.erase(change_map_.begin(), change_map_.end());
-  for (syncer::SyncChangeList::const_iterator iter = change_list.begin();
-      iter != change_list.end(); ++iter)
+  for (auto iter = change_list.begin(); iter != change_list.end(); ++iter)
     change_map_[GetGUID(iter->sync_data())] = *iter;
   return syncer::SyncError();
 }
@@ -333,9 +333,8 @@ void TemplateURLServiceSyncTest::AssertEquals(
   SyncDataMap map1 = TemplateURLService::CreateGUIDToSyncDataMap(data1);
   SyncDataMap map2 = TemplateURLService::CreateGUIDToSyncDataMap(data2);
 
-  for (SyncDataMap::const_iterator iter1 = map1.begin();
-      iter1 != map1.end(); iter1++) {
-    SyncDataMap::iterator iter2 = map2.find(iter1->first);
+  for (auto iter1 = map1.cbegin(); iter1 != map1.cend(); ++iter1) {
+    auto iter2 = map2.find(iter1->first);
     if (iter2 != map2.end()) {
       ASSERT_EQ(GetKeyword(iter1->second), GetKeyword(iter2->second));
       ASSERT_EQ(GetURL(iter1->second), GetURL(iter2->second));
@@ -589,7 +588,7 @@ TEST_F(TemplateURLServiceSyncTest, IsLocalTemplateURLBetter) {
     {100, 100, false, false, false},
   };
 
-  for (size_t i = 0; i < arraysize(test_cases); ++i) {
+  for (size_t i = 0; i < base::size(test_cases); ++i) {
     TemplateURL* local_turl = model()->Add(CreateTestTemplateURL(
         ASCIIToUTF16("localkey"), "www.local.com", "localguid",
         test_cases[i].local_time, true, test_cases[i].local_created_by_policy));
@@ -2185,7 +2184,7 @@ TEST_F(TemplateURLServiceSyncTest, MergeInSyncTemplateURL) {
     {NEITHER, SYNC, NEITHER, NEITHER, BOTH, false, {1, 0, 0}},
   };
 
-  for (size_t i = 0; i < arraysize(test_cases); ++i) {
+  for (size_t i = 0; i < base::size(test_cases); ++i) {
     // Assert all the valid states of ExpectedTemplateURLs.
     ASSERT_FALSE(test_cases[i].conflict_winner == BOTH);
     ASSERT_FALSE(test_cases[i].synced_at_start == NEITHER);

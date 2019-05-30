@@ -20,7 +20,7 @@
     A new version of Vivaldi is available.
   </message>
   <message name="IDS_UPDATE_NOTIFICATION_TEXT" desc="Text of the ballon notification shown when a new Vivaldi update becomes available">
-    Click here to update Vivaldi to version $1.
+    Click here to update Vivaldi to version <ph name="VERSION">$1</ph>.
   </message>
   <message name="IDS_UPDATE_NOTIFICATION_TOOLTIP" desc="Text of the tooltip shown when hovering the notification icon in the notification area">
     Click here to update Vivaldi.

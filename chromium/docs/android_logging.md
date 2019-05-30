@@ -1,16 +1,17 @@
-# Logging #
+# Logging
 
 [TOC]
 
 
 ## Overview
 
-Logging used to be done using Android's [android.util.Log]
-(https://developer.android.com/reference/android/util/Log.html).
+Logging used to be done using Android's
+[android.util.Log](https://developer.android.com/reference/android/util/Log.html).
 
-A wrapper on that is now available: org.chromium.base.Log. It is designed to
-write logs as belonging to logical groups going beyond single classes, and to
-make it easy to switch logging on or off for individual groups.
+A wrapper on that is now available:
+[org.chromium.base.Log](/base/android/java/src/org/chromium/base/Log.java). It
+is designed to write logs as belonging to logical groups going beyond single
+classes, and to make it easy to switch logging on or off for individual groups.
 
 Usage:
 
@@ -30,9 +31,9 @@ D/cr_YourModuleTag: ( 999): [MyClass.java:42] Some DEBUG info: data.toString
 
 Here, **TAG** will be a feature or package name, "MediaRemote" or "NFC" for
 example. In most cases, the class name is not needed. It will be prepended by
-the "cr_" prefix to make obvious which logs are coming from Chrome.
+the "cr\_" prefix to make obvious which logs are coming from Chrome.
 
-### Verbose and Debug logs have special handling ###
+### Verbose and Debug logs have special handling
 
 *   `Log.v` and `Log.d` Calls made using `org.chromium.base.Log` are stripped
     out of production binaries using Proguard. There is no way to get those logs
@@ -41,9 +42,9 @@ the "cr_" prefix to make obvious which logs are coming from Chrome.
 *   The file name and line number will be prepended to the log message.
     For higher priority logs, those are not added for performance concerns.
 
-### An exception trace is printed when the exception is the last parameter ###
+### An exception trace is printed when the exception is the last parameter
 
-As with `java.util.Log`, putting a throwable as last parameter will dump the
+As with `android.util.Log`, putting a throwable as last parameter will dump the
 corresponding stack trace:
 
 ```java
@@ -62,7 +63,7 @@ string formatting.
 
 ## Logging Best Practices
 
-### Rule #1: Never log PII (Personal Identification Information):
+### Rule #1: Never log user data or PII (Personal Identification Information)
 
 This is a huge concern, because other applications can access the log and
 extract a lot of data from your own by doing so. Even if JellyBean restricted
@@ -70,14 +71,15 @@ this, people are going to run your application on rooted devices and allow some
 apps to access it. Also anyone with USB access to the device can use ADB to get
 the full logcat and get the same data right now.
 
-If you really need to print something , print a series of Xs instead
-(e.g. "XXXXXX"), or print a truncated hash of the PII instead. Truncation is
+If you really need to print something, print a series of Xs instead
+(e.g. "XXXXXX"), or print a truncated hash of the data instead. Truncation is
 required to make it harder for an attacker to recover the full data through
 rainbow tables and similar methods.
 
-Similarly, avoid dumping API keys, cookies, etc...
+Similarly, avoid dumping API keys, cookies, IP addresses, URLs, page content,
+etc...
 
-### Rule #2: Do not build debug logs in production code:
+### Rule #2: Do not build debug logs in production code
 
 The log methods are removed in release builds using Proguard. Because log
 messages might not be written, the cost of creating them should also be avoided.
@@ -223,6 +225,6 @@ test:
 @Before
 public void setUp() {
   ShadowLog.stream = System.out;
-  //you other setup here
+  // Your other setup here
 }
 ```

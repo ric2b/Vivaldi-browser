@@ -4,26 +4,16 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import cStringIO
 import optparse
 import os
+import shutil
 import sys
 import tempfile
 
 from util import build_utils
+from util import diff_utils
 from util import proguard_util
-
-
-_DANGEROUS_OPTIMIZATIONS = [
-    # See crbug.com/825995 (can cause VerifyErrors)
-    "class/merging/vertical",
-    "class/unboxing/enum",
-    # See crbug.com/625992
-    "code/allocation/variable",
-    # See crbug.com/625994
-    "field/propagation/value",
-    "method/propagation/parameter",
-    "method/propagation/returnvalue",
-]
 
 
 # Example:
@@ -55,15 +45,37 @@ def _ParseOptions(args):
                     help='GN list of paths to proguard configuration files '
                          'included by --proguard-configs, but that should '
                          'not actually be included.')
-  parser.add_option('--mapping', help='Path to proguard mapping to apply.')
+  parser.add_option(
+      '--apply-mapping', help='Path to proguard mapping to apply.')
+  parser.add_option('--mapping-output',
+                    help='Path for proguard to output mapping file to.')
+  parser.add_option(
+      '--output-config',
+      help='Path to write the merged proguard config file to.')
+  parser.add_option(
+      '--expected-configs-file',
+      help='Path to a file containing the expected merged proguard configs')
+  parser.add_option(
+      '--verify-expected-configs',
+      action='store_true',
+      help='Fail if the expected merged proguard configs differ from the '
+      'generated merged proguard configs.')
   parser.add_option('--classpath', action='append',
                     help='Classpath for proguard.')
-  parser.add_option('--enable-dangerous-optimizations', action='store_true',
-                    help='Enable optimizations which are known to have issues.')
+  parser.add_option('--main-dex-rules-path', action='append',
+                    help='Paths to main dex rules for multidex'
+                         '- only works with R8.')
+  parser.add_option('--min-api', default='',
+                    help='Minimum Android API level compatibility.')
   parser.add_option('--verbose', '-v', action='store_true',
                     help='Print all proguard output')
 
   options, _ = parser.parse_args(args)
+
+  assert not options.main_dex_rules_path or options.r8_path, \
+      "R8 must be enabled to pass main dex rules."
+  assert not options.min_api or options.r8_path, \
+      "R8 must be enabled to pass min api."
 
   classpath = []
   for arg in options.classpath:
@@ -79,27 +91,81 @@ def _ParseOptions(args):
 
   options.input_paths = build_utils.ParseGnList(options.input_paths)
 
+  if not options.mapping_output:
+    options.mapping_output = options.output_path + ".mapping"
+
+  if options.apply_mapping:
+    options.apply_mapping = os.path.abspath(options.apply_mapping)
+
+
   return options
 
 
-def _CreateR8Command(options):
-  # TODO: R8 needs -applymapping equivalent.
+def _VerifyExpectedConfigs(expected_path, actual_path, fail_on_exit):
+  diff = diff_utils.DiffFileContents(expected_path, actual_path)
+  if not diff:
+    return
+
+  print """
+{}
+
+Detected Proguard flags change. Please update by running:
+
+cp {} {}
+
+See https://chromium.googlesource.com/chromium/src/+/HEAD/chrome/android/java/README.md
+for more info.
+""".format(diff, os.path.abspath(actual_path), os.path.abspath(expected_path))
+  if fail_on_exit:
+    sys.exit(1)
+
+
+def _MoveTempDexFile(tmp_dex_dir, dex_path):
+  """Move the temp dex file out of |tmp_dex_dir|.
+
+  Args:
+    tmp_dex_dir: Path to temporary directory created with tempfile.mkdtemp().
+      The directory should have just a single file.
+    dex_path: Target path to move dex file to.
+
+  Raises:
+    Exception if there are multiple files in |tmp_dex_dir|.
+  """
+  tempfiles = os.listdir(tmp_dex_dir)
+  if len(tempfiles) > 1:
+    raise Exception('%d files created, expected 1' % len(tempfiles))
+
+  tmp_dex_path = os.path.join(tmp_dex_dir, tempfiles[0])
+  shutil.move(tmp_dex_path, dex_path)
+
+
+def _CreateR8Command(options, map_output_path, output_dir, tmp_config_path,
+                     libraries):
   cmd = [
     'java', '-jar', options.r8_path,
     '--no-desugaring',
-    '--classfile',
-    '--output', options.output_path,
-    '--pg-map-output', options.output_path + '.mapping',
+    '--no-data-resources',
+    '--output', output_dir,
+    '--pg-map-output', map_output_path,
   ]
 
-  classpath = [
-      p for p in set(options.classpath) if p not in options.input_paths
-  ]
-  for lib in classpath:
+  for lib in libraries:
     cmd += ['--lib', lib]
 
   for config_file in options.proguard_configs:
     cmd += ['--pg-conf', config_file]
+
+  if options.apply_mapping:
+    with open(tmp_config_path, 'w') as f:
+      f.write('-applymapping ' + options.apply_mapping)
+    cmd += ['--pg-conf', tmp_config_path]
+
+  if options.min_api:
+    cmd += ['--min-api', options.min_api]
+
+  if options.main_dex_rules_path:
+    for main_dex_rule in options.main_dex_rules_path:
+      cmd += ['--main-dex-rules', main_dex_rule]
 
   cmd += options.input_paths
   return cmd
@@ -109,39 +175,83 @@ def main(args):
   args = build_utils.ExpandFileArgs(args)
   options = _ParseOptions(args)
 
-  proguard = proguard_util.ProguardCmdBuilder(options.proguard_path)
-  proguard.injars(options.input_paths)
-  proguard.configs(options.proguard_configs)
-  proguard.config_exclusions(options.proguard_config_exclusions)
-  proguard.outjar(options.output_path)
-
-  # If a jar is part of input no need to include it as library jar.
-  classpath = [
-      p for p in set(options.classpath) if p not in options.input_paths
-  ]
-  proguard.libraryjars(classpath)
-  proguard.verbose(options.verbose)
-  if not options.enable_dangerous_optimizations:
-    proguard.disable_optimizations(_DANGEROUS_OPTIMIZATIONS)
+  libraries = []
+  for p in options.classpath:
+    # If a jar is part of input no need to include it as library jar.
+    if p not in libraries and p not in options.input_paths:
+      libraries.append(p)
 
   # TODO(agrieve): Remove proguard usages.
   if options.r8_path:
-    cmd = _CreateR8Command(options)
-    build_utils.CheckOutput(cmd)
-    build_utils.WriteDepfile(options.depfile, options.output_path,
-                             inputs=proguard.GetDepfileDeps(),
-                             add_pydeps=False)
+    with build_utils.TempDir() as tmp_dir:
+      tmp_mapping_path = os.path.join(tmp_dir, 'mapping.txt')
+      tmp_proguard_config_path = os.path.join(tmp_dir, 'proguard_config.txt')
+      # If there is no output (no classes are kept), this prevents this script
+      # from failing.
+      build_utils.Touch(tmp_mapping_path)
+
+      f = cStringIO.StringIO()
+      proguard_util.WriteFlagsFile(
+          options.proguard_configs, f, exclude_generated=True)
+      merged_configs = f.getvalue()
+      f.close()
+      print_stdout = '-whyareyoukeeping' in merged_configs
+
+      if options.output_path.endswith('.dex'):
+        with build_utils.TempDir() as tmp_dex_dir:
+          cmd = _CreateR8Command(options, tmp_mapping_path, tmp_dex_dir,
+                                 tmp_proguard_config_path, libraries)
+          build_utils.CheckOutput(cmd, print_stdout=print_stdout)
+          _MoveTempDexFile(tmp_dex_dir, options.output_path)
+      else:
+        cmd = _CreateR8Command(options, tmp_mapping_path, options.output_path,
+                               tmp_proguard_config_path, libraries)
+        build_utils.CheckOutput(cmd, print_stdout=print_stdout)
+
+      # Copy output files to correct locations.
+      with build_utils.AtomicOutput(options.mapping_output) as mapping:
+        # Mapping files generated by R8 include comments that may break
+        # some of our tooling so remove those.
+        with open(tmp_mapping_path) as tmp:
+          mapping.writelines(l for l in tmp if not l.startswith("#"))
+
+    with build_utils.AtomicOutput(options.output_config) as f:
+      f.write(merged_configs)
+
+    if options.expected_configs_file:
+      _VerifyExpectedConfigs(options.expected_configs_file,
+                             options.output_config,
+                             options.verify_expected_configs)
+
+    other_inputs = []
+    if options.apply_mapping:
+      other_inputs += options.apply_mapping
+
+    build_utils.WriteDepfile(
+        options.depfile,
+        options.output_path,
+        inputs=options.proguard_configs + options.input_paths + libraries +
+        other_inputs,
+        add_pydeps=False)
   else:
+    proguard = proguard_util.ProguardCmdBuilder(options.proguard_path)
+    proguard.injars(options.input_paths)
+    proguard.configs(options.proguard_configs)
+    proguard.config_exclusions(options.proguard_config_exclusions)
+    proguard.outjar(options.output_path)
+    proguard.mapping_output(options.mapping_output)
+    proguard.libraryjars(libraries)
+    proguard.verbose(options.verbose)
     # Do not consider the temp file as an input since its name is random.
     input_paths = proguard.GetInputs()
 
     with tempfile.NamedTemporaryFile() as f:
-      if options.mapping:
-        input_paths.append(options.mapping)
+      if options.apply_mapping:
+        input_paths.append(options.apply_mapping)
         # Maintain only class name mappings in the .mapping file in order to
         # work around what appears to be a ProGuard bug in -applymapping:
         #     method 'int close()' is not being kept as 'a', but remapped to 'c'
-        _RemoveMethodMappings(options.mapping, f)
+        _RemoveMethodMappings(options.apply_mapping, f)
         proguard.mapping(f.name)
 
       input_strings = proguard.build()

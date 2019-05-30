@@ -42,10 +42,10 @@ class IntPoint;
 class IntRect;
 class LocalFrame;
 
-// |EWordSiste| is used as a parameter of |StartOfWord()| and |EndOfWord()|
+// |WordSiste| is used as a parameter of |StartOfWord()| and |EndOfWord()|
 // to control a returning position when they are called for a position before
 // word boundary.
-enum EWordSide {
+enum WordSide {
   kNextWordIfOnBoundary = false,
   kPreviousWordIfOnBoundary = true
 };
@@ -116,30 +116,36 @@ PreviousPositionOf(const VisiblePositionInFlatTree&,
 // TODO(yoichio): Replace |startOfWord| to |startOfWordPosition| because
 // returned Position should be canonicalized with |previousBoundary()| by
 // TextItetator.
-CORE_EXPORT Position StartOfWordPosition(const VisiblePosition&,
-                                         EWordSide = kNextWordIfOnBoundary);
+CORE_EXPORT Position StartOfWordPosition(const Position&,
+                                         WordSide = kNextWordIfOnBoundary);
 CORE_EXPORT VisiblePosition StartOfWord(const VisiblePosition&,
-                                        EWordSide = kNextWordIfOnBoundary);
+                                        WordSide = kNextWordIfOnBoundary);
 CORE_EXPORT PositionInFlatTree
-StartOfWordPosition(const VisiblePositionInFlatTree&,
-                    EWordSide = kNextWordIfOnBoundary);
+StartOfWordPosition(const PositionInFlatTree&,
+                    WordSide = kNextWordIfOnBoundary);
 CORE_EXPORT VisiblePositionInFlatTree
-StartOfWord(const VisiblePositionInFlatTree&,
-            EWordSide = kNextWordIfOnBoundary);
+StartOfWord(const VisiblePositionInFlatTree&, WordSide = kNextWordIfOnBoundary);
 CORE_EXPORT VisiblePosition EndOfWord(const VisiblePosition&,
-                                      EWordSide = kNextWordIfOnBoundary);
+                                      WordSide = kNextWordIfOnBoundary);
+CORE_EXPORT Position EndOfWordPosition(const Position&,
+                                       WordSide = kNextWordIfOnBoundary);
 CORE_EXPORT PositionInFlatTree
-EndOfWordPosition(const VisiblePositionInFlatTree&,
-                  EWordSide = kNextWordIfOnBoundary);
+EndOfWordPosition(const PositionInFlatTree&, WordSide = kNextWordIfOnBoundary);
 CORE_EXPORT VisiblePositionInFlatTree
-EndOfWord(const VisiblePositionInFlatTree&, EWordSide = kNextWordIfOnBoundary);
-CORE_EXPORT VisiblePosition PreviousWordPosition(const VisiblePosition&);
-CORE_EXPORT VisiblePosition NextWordPosition(const VisiblePosition&);
+EndOfWord(const VisiblePositionInFlatTree&, WordSide = kNextWordIfOnBoundary);
+CORE_EXPORT PositionWithAffinity PreviousWordPosition(const Position&);
+CORE_EXPORT PositionWithAffinity NextWordPosition(const Position&);
 
 // sentences
+CORE_EXPORT Position StartOfSentencePosition(const Position&);
+CORE_EXPORT PositionInFlatTree
+StartOfSentencePosition(const PositionInFlatTree&);
 CORE_EXPORT VisiblePosition StartOfSentence(const VisiblePosition&);
 CORE_EXPORT VisiblePositionInFlatTree
 StartOfSentence(const VisiblePositionInFlatTree&);
+CORE_EXPORT PositionWithAffinity EndOfSentence(const Position&);
+CORE_EXPORT PositionInFlatTreeWithAffinity
+EndOfSentence(const PositionInFlatTree&);
 CORE_EXPORT VisiblePosition EndOfSentence(const VisiblePosition&);
 CORE_EXPORT VisiblePositionInFlatTree
 EndOfSentence(const VisiblePositionInFlatTree&);
@@ -242,10 +248,11 @@ CORE_EXPORT bool IsEndOfEditableOrNonEditableContent(
 
 bool HasRenderedNonAnonymousDescendantsWithHeight(const LayoutObject*);
 
-// Returns a hit-tested VisiblePosition for the given point in contents-space
-// coordinates.
-CORE_EXPORT VisiblePosition VisiblePositionForContentsPoint(const IntPoint&,
-                                                            LocalFrame*);
+// TODO(editing-dev): We should move this functions to somewhere else.
+// Returns a hit-tested PositionWithAffinity for the given point in
+// contents-space coordinates.
+CORE_EXPORT PositionWithAffinity
+PositionForContentsPointRespectingEditingBoundary(const IntPoint&, LocalFrame*);
 
 CORE_EXPORT bool RendersInDifferentPosition(const Position&, const Position&);
 
@@ -258,22 +265,6 @@ FloatRect ComputeTextFloatRect(const EphemeralRange&);
 
 // |FirstRectForRange| requires up-to-date layout.
 IntRect FirstRectForRange(const EphemeralRange&);
-
-// Export below functions only for |VisibleUnit| family.
-enum BoundarySearchContextAvailability {
-  kDontHaveMoreContext,
-  kMayHaveMoreContext
-};
-
-typedef unsigned (*BoundarySearchFunction)(const UChar*,
-                                           unsigned length,
-                                           unsigned offset,
-                                           BoundarySearchContextAvailability,
-                                           bool& need_more_context);
-
-Position PreviousBoundary(const VisiblePosition&, BoundarySearchFunction);
-PositionInFlatTree PreviousBoundary(const VisiblePositionInFlatTree&,
-                                    BoundarySearchFunction);
 
 CORE_EXPORT PositionWithAffinity
 AdjustForwardPositionToAvoidCrossingEditingBoundaries(

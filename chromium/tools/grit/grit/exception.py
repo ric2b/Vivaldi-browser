@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # Copyright (c) 2012 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -95,11 +94,6 @@ class NotReady(Base):
   pass
 
 
-class TooManyPlaceholders(Base):
-  '''Too many placeholders for elements of the same type.'''
-  pass
-
-
 class MismatchingPlaceholders(Base):
   '''Placeholders do not match.'''
   pass
@@ -131,4 +125,14 @@ class IdRangeOverlap(Base):
 
 class ReservedHeaderCollision(Base):
   '''Resource included with first 3 bytes matching reserved header.'''
+  pass
+
+
+class PlaceholderNotInsidePhNode(Base):
+  '''Placeholder formatters should be inside <ph> element.'''
+  pass
+
+
+class InvalidCharactersInsidePhNode(Base):
+  '''Invalid characters found inside <ph> element.'''
   pass

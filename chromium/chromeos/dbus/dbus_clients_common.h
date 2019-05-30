@@ -7,8 +7,8 @@
 
 #include <memory>
 
+#include "base/component_export.h"
 #include "base/macros.h"
-#include "chromeos/chromeos_export.h"
 
 namespace dbus {
 class Bus;
@@ -21,11 +21,9 @@ class CecServiceClient;
 class CrasAudioClient;
 class CryptohomeClient;
 class GsmSMSClient;
-class HammerdClient;
 class MachineLearningClient;
 class ModemMessagingClient;
 class PermissionBrokerClient;
-class PowerManagerClient;
 class SessionManagerClient;
 class ShillDeviceClient;
 class ShillIPConfigClient;
@@ -34,12 +32,11 @@ class ShillProfileClient;
 class ShillServiceClient;
 class ShillThirdPartyVpnDriverClient;
 class SMSClient;
-class SystemClockClient;
 class UpdateEngineClient;
 class UpstartClient;
 
 // D-Bus clients used in multiple processes (e.g. ash, browser, mus).
-class CHROMEOS_EXPORT DBusClientsCommon {
+class COMPONENT_EXPORT(CHROMEOS_DBUS) DBusClientsCommon {
  public:
   // Creates real implementations if |use_real_clients| is true and fakes
   // otherwise. Fakes are used when running on Linux desktop and in tests.
@@ -58,7 +55,6 @@ class CHROMEOS_EXPORT DBusClientsCommon {
   std::unique_ptr<CrasAudioClient> cras_audio_client_;
   std::unique_ptr<CryptohomeClient> cryptohome_client_;
   std::unique_ptr<GsmSMSClient> gsm_sms_client_;
-  std::unique_ptr<HammerdClient> hammerd_client_;
   std::unique_ptr<MachineLearningClient> machine_learning_client_;
   std::unique_ptr<ModemMessagingClient> modem_messaging_client_;
   std::unique_ptr<ShillDeviceClient> shill_device_client_;
@@ -70,8 +66,6 @@ class CHROMEOS_EXPORT DBusClientsCommon {
       shill_third_party_vpn_driver_client_;
   std::unique_ptr<PermissionBrokerClient> permission_broker_client_;
   std::unique_ptr<SMSClient> sms_client_;
-  std::unique_ptr<SystemClockClient> system_clock_client_;
-  std::unique_ptr<PowerManagerClient> power_manager_client_;
   std::unique_ptr<SessionManagerClient> session_manager_client_;
   std::unique_ptr<UpdateEngineClient> update_engine_client_;
   std::unique_ptr<UpstartClient> upstart_client_;

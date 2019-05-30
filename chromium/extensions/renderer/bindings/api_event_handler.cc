@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/supports_user_data.h"
 #include "base/values.h"
 #include "content/public/renderer/v8_value_converter.h"
@@ -281,12 +282,14 @@ void APIEventHandler::FireEventInContext(
     // We don't store this in a template because the Data (event name) is
     // different for each instance. Luckily, this is called during dispatching
     // an event, rather than e.g. at initialization time.
-    v8::Local<v8::Function> dispatch_event = v8::Function::New(
-        isolate, &DispatchEvent, gin::StringToSymbol(isolate, event_name));
+    v8::Local<v8::Function> dispatch_event =
+        v8::Function::New(context, &DispatchEvent,
+                          gin::StringToSymbol(isolate, event_name))
+            .ToLocalChecked();
 
     v8::Local<v8::Value> massager_args[] = {args_array, dispatch_event};
     JSRunner::Get(context)->RunJSFunction(
-        massager, context, arraysize(massager_args), massager_args);
+        massager, context, base::size(massager_args), massager_args);
   }
 }
 

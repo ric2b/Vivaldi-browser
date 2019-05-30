@@ -18,6 +18,7 @@
 #include "third_party/blink/renderer/modules/mediastream/media_error_state.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_constraints.h"
+#include "third_party/blink/renderer/modules/mediastream/media_track_supported_constraints.h"
 #include "third_party/blink/renderer/modules/mediastream/navigator_media_stream.h"
 #include "third_party/blink/renderer/modules/mediastream/user_media_controller.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
@@ -32,9 +33,11 @@ namespace {
 class PromiseResolverCallbacks final : public UserMediaRequest::Callbacks {
  public:
   static PromiseResolverCallbacks* Create(ScriptPromiseResolver* resolver) {
-    return new PromiseResolverCallbacks(resolver);
+    return MakeGarbageCollected<PromiseResolverCallbacks>(resolver);
   }
 
+  explicit PromiseResolverCallbacks(ScriptPromiseResolver* resolver)
+      : resolver_(resolver) {}
   ~PromiseResolverCallbacks() override = default;
 
   void OnSuccess(ScriptWrappable* callback_this_value,
@@ -52,37 +55,24 @@ class PromiseResolverCallbacks final : public UserMediaRequest::Callbacks {
   }
 
  private:
-  explicit PromiseResolverCallbacks(ScriptPromiseResolver* resolver)
-      : resolver_(resolver) {}
-
   Member<ScriptPromiseResolver> resolver_;
 };
 
 }  // namespace
 
 MediaDevices* MediaDevices::Create(ExecutionContext* context) {
-  MediaDevices* media_devices = new MediaDevices(context);
-  media_devices->PauseIfNeeded();
-  return media_devices;
+  return MakeGarbageCollected<MediaDevices>(context);
 }
 
 MediaDevices::MediaDevices(ExecutionContext* context)
-    : PausableObject(context),
-      stopped_(false),
-      dispatch_scheduled_event_runner_(
-          context ? AsyncMethodRunner<MediaDevices>::Create(
-                        this,
-                        &MediaDevices::DispatchScheduledEvent,
-                        context->GetTaskRunner(TaskType::kMediaElementEvent))
-                  : nullptr),
-      binding_(this) {}
+    : ContextLifecycleObserver(context), stopped_(false), binding_(this) {}
 
 MediaDevices::~MediaDevices() = default;
 
 ScriptPromise MediaDevices::enumerateDevices(ScriptState* script_state) {
   Platform::Current()->UpdateWebRTCAPICount(WebRTCAPIName::kEnumerateDevices);
   LocalFrame* frame =
-      ToDocument(ExecutionContext::From(script_state))->GetFrame();
+      To<Document>(ExecutionContext::From(script_state))->GetFrame();
   if (!frame) {
     return ScriptPromise::RejectWithDOMException(
         script_state, DOMException::Create(DOMExceptionCode::kNotSupportedError,
@@ -101,8 +91,12 @@ ScriptPromise MediaDevices::enumerateDevices(ScriptState* script_state) {
   return promise;
 }
 
+MediaTrackSupportedConstraints* MediaDevices::getSupportedConstraints() const {
+  return MediaTrackSupportedConstraints::Create();
+}
+
 ScriptPromise MediaDevices::getUserMedia(ScriptState* script_state,
-                                         const MediaStreamConstraints& options,
+                                         const MediaStreamConstraints* options,
                                          ExceptionState& exception_state) {
   return SendUserMediaRequest(script_state,
                               WebUserMediaRequest::MediaType::kUserMedia,
@@ -112,13 +106,13 @@ ScriptPromise MediaDevices::getUserMedia(ScriptState* script_state,
 ScriptPromise MediaDevices::SendUserMediaRequest(
     ScriptState* script_state,
     WebUserMediaRequest::MediaType media_type,
-    const MediaStreamConstraints& options,
+    const MediaStreamConstraints* options,
     ExceptionState& exception_state) {
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   PromiseResolverCallbacks* callbacks =
       PromiseResolverCallbacks::Create(resolver);
 
-  Document* document = ToDocument(ExecutionContext::From(script_state));
+  Document* document = To<Document>(ExecutionContext::From(script_state));
   UserMediaController* user_media =
       UserMediaController::From(document->GetFrame());
   if (!user_media)
@@ -153,12 +147,21 @@ ScriptPromise MediaDevices::SendUserMediaRequest(
   return promise;
 }
 
+ScriptPromise MediaDevices::getDisplayMedia(
+    ScriptState* script_state,
+    const MediaStreamConstraints* options,
+    ExceptionState& exception_state) {
+  return SendUserMediaRequest(script_state,
+                              WebUserMediaRequest::MediaType::kDisplayMedia,
+                              options, exception_state);
+}
+
 const AtomicString& MediaDevices::InterfaceName() const {
-  return EventTargetNames::MediaDevices;
+  return event_target_names::kMediaDevices;
 }
 
 ExecutionContext* MediaDevices::GetExecutionContext() const {
-  return PausableObject::GetExecutionContext();
+  return ContextLifecycleObserver::GetExecutionContext();
 }
 
 void MediaDevices::RemoveAllEventListeners() {
@@ -199,24 +202,14 @@ void MediaDevices::ContextDestroyed(ExecutionContext*) {
   dispatcher_host_.reset();
 }
 
-void MediaDevices::Pause() {
-  DCHECK(dispatch_scheduled_event_runner_);
-  dispatch_scheduled_event_runner_->Pause();
-}
-
-void MediaDevices::Unpause() {
-  DCHECK(dispatch_scheduled_event_runner_);
-  dispatch_scheduled_event_runner_->Unpause();
-}
-
 void MediaDevices::OnDevicesChanged(
     MediaDeviceType type,
     Vector<mojom::blink::MediaDeviceInfoPtr> device_infos) {
-  Document* document = ToDocument(GetExecutionContext());
+  Document* document = To<Document>(GetExecutionContext());
   DCHECK(document);
 
   if (RuntimeEnabledFeatures::OnDeviceChangeEnabled())
-    ScheduleDispatchEvent(Event::Create(EventTypeNames::devicechange));
+    ScheduleDispatchEvent(Event::Create(event_type_names::kDevicechange));
 
   if (device_change_test_callback_)
     std::move(device_change_test_callback_).Run();
@@ -224,11 +217,19 @@ void MediaDevices::OnDevicesChanged(
 
 void MediaDevices::ScheduleDispatchEvent(Event* event) {
   scheduled_events_.push_back(event);
-  DCHECK(dispatch_scheduled_event_runner_);
-  dispatch_scheduled_event_runner_->RunAsync();
+  if (dispatch_scheduled_events_task_handle_.IsActive())
+    return;
+
+  auto* context = GetExecutionContext();
+  DCHECK(context);
+  dispatch_scheduled_events_task_handle_ = PostCancellableTask(
+      *context->GetTaskRunner(TaskType::kMediaElementEvent), FROM_HERE,
+      WTF::Bind(&MediaDevices::DispatchScheduledEvents, WrapPersistent(this)));
 }
 
-void MediaDevices::DispatchScheduledEvent() {
+void MediaDevices::DispatchScheduledEvents() {
+  if (stopped_)
+    return;
   HeapVector<Member<Event>> events;
   events.swap(scheduled_events_);
 
@@ -240,7 +241,7 @@ void MediaDevices::StartObserving() {
   if (binding_.is_bound() || stopped_)
     return;
 
-  Document* document = ToDocument(GetExecutionContext());
+  Document* document = To<Document>(GetExecutionContext());
   if (!document || !document->GetFrame())
     return;
 
@@ -277,20 +278,21 @@ void MediaDevices::DevicesEnumerated(
     return;
   }
 
-  DCHECK_EQ(static_cast<size_t>(MediaDeviceType::NUM_MEDIA_DEVICE_TYPES),
+  DCHECK_EQ(static_cast<wtf_size_t>(MediaDeviceType::NUM_MEDIA_DEVICE_TYPES),
             enumeration.size());
 
   if (!video_input_capabilities.IsEmpty()) {
     DCHECK_EQ(
-        enumeration[static_cast<size_t>(MediaDeviceType::MEDIA_VIDEO_INPUT)]
+        enumeration[static_cast<wtf_size_t>(MediaDeviceType::MEDIA_VIDEO_INPUT)]
             .size(),
         video_input_capabilities.size());
   }
 
   MediaDeviceInfoVector media_devices;
-  for (size_t i = 0;
-       i < static_cast<size_t>(MediaDeviceType::NUM_MEDIA_DEVICE_TYPES); ++i) {
-    for (size_t j = 0; j < enumeration[i].size(); ++j) {
+  for (wtf_size_t i = 0;
+       i < static_cast<wtf_size_t>(MediaDeviceType::NUM_MEDIA_DEVICE_TYPES);
+       ++i) {
+    for (wtf_size_t j = 0; j < enumeration[i].size(); ++j) {
       MediaDeviceType device_type = static_cast<MediaDeviceType>(i);
       mojom::blink::MediaDeviceInfoPtr device_info =
           std::move(enumeration[i][j]);
@@ -353,11 +355,10 @@ void MediaDevices::SetDispatcherHostForTesting(
 }
 
 void MediaDevices::Trace(blink::Visitor* visitor) {
-  visitor->Trace(dispatch_scheduled_event_runner_);
   visitor->Trace(scheduled_events_);
   visitor->Trace(requests_);
   EventTargetWithInlineData::Trace(visitor);
-  PausableObject::Trace(visitor);
+  ContextLifecycleObserver::Trace(visitor);
 }
 
 }  // namespace blink

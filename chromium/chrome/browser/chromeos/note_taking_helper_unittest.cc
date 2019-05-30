@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "ash/public/cpp/ash_switches.h"
+#include "ash/public/interfaces/constants.mojom.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -27,7 +28,7 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
 #include "components/arc/arc_bridge_service.h"
@@ -48,6 +49,7 @@
 #include "extensions/common/extension_id.h"
 #include "extensions/common/value_builder.h"
 #include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/cpp/service_binding.h"
 #include "services/service_manager/public/cpp/test/test_connector_factory.h"
 #include "url/gurl.h"
 
@@ -150,7 +152,9 @@ class TestObserver : public NoteTakingHelper::Observer {
 class TestNoteTakingController : public ash::mojom::NoteTakingController,
                                  public service_manager::Service {
  public:
-  TestNoteTakingController() : binding_(this) {}
+  explicit TestNoteTakingController(
+      service_manager::mojom::ServiceRequest request)
+      : service_binding_(this, std::move(request)) {}
 
   ~TestNoteTakingController() override = default;
 
@@ -185,7 +189,8 @@ class TestNoteTakingController : public ash::mojom::NoteTakingController,
     binding_.Close();
   }
 
-  mojo::Binding<ash::mojom::NoteTakingController> binding_;
+  service_manager::ServiceBinding service_binding_;
+  mojo::Binding<ash::mojom::NoteTakingController> binding_{this};
   ash::mojom::NoteTakingControllerClientPtr client_;
 
   DISALLOW_COPY_AND_ASSIGN(TestNoteTakingController);
@@ -193,16 +198,12 @@ class TestNoteTakingController : public ash::mojom::NoteTakingController,
 
 }  // namespace
 
-class NoteTakingHelperTest : public BrowserWithTestWindowTest,
-                             public ::testing::WithParamInterface<bool> {
+class NoteTakingHelperTest : public BrowserWithTestWindowTest {
  public:
   NoteTakingHelperTest() = default;
   ~NoteTakingHelperTest() override = default;
 
   void SetUp() override {
-    if (GetParam())
-      arc::SetArcAlwaysStartForTesting(true);
-
     // This is needed to avoid log spam due to ArcSessionManager's
     // RemoveArcData() calls failing.
     if (DBusThreadManager::IsInitialized())
@@ -242,13 +243,12 @@ class NoteTakingHelperTest : public BrowserWithTestWindowTest,
   enum InitFlags : uint32_t {
     ENABLE_PLAY_STORE = 1 << 0,
     ENABLE_PALETTE = 1 << 1,
-    ENABLE_LOCK_SCREEN_APPS = 1 << 2,
   };
 
   static NoteTakingHelper* helper() { return NoteTakingHelper::Get(); }
 
   TestNoteTakingController* test_note_taking_controller() {
-    return test_note_taking_controller_;
+    return test_note_taking_controller_.get();
   }
 
   NoteTakingControllerClient* note_taking_client() {
@@ -291,11 +291,6 @@ class NoteTakingHelperTest : public BrowserWithTestWindowTest,
           ash::switches::kAshForceEnableStylusTools);
     }
 
-    if (!(flags & ENABLE_LOCK_SCREEN_APPS)) {
-      base::CommandLine::ForCurrentProcess()->AppendSwitch(
-          chromeos::switches::kDisableLockScreenApps);
-    }
-
     // TODO(derat): Sigh, something in ArcAppTest appears to be re-enabling ARC.
     profile()->GetPrefs()->SetBoolean(arc::prefs::kArcEnabled,
                                       flags & ENABLE_PLAY_STORE);
@@ -304,15 +299,10 @@ class NoteTakingHelperTest : public BrowserWithTestWindowTest,
     NoteTakingHelper::Get()->set_launch_chrome_app_callback_for_test(base::Bind(
         &NoteTakingHelperTest::LaunchChromeApp, base::Unretained(this)));
 
-    auto test_note_taking_controller_ptr =
-        std::make_unique<TestNoteTakingController>();
-    test_note_taking_controller_ = test_note_taking_controller_ptr.get();
-    connector_factory_ =
-        service_manager::TestConnectorFactory::CreateForUniqueService(
-            std::move(test_note_taking_controller_ptr));
-    connector_ = connector_factory_->CreateConnector();
-
-    note_taking_client()->SetConnectorForTesting(connector_.get());
+    test_note_taking_controller_ = std::make_unique<TestNoteTakingController>(
+        connector_factory_.RegisterInstance(ash::mojom::kServiceName));
+    note_taking_client()->SetConnectorForTesting(
+        connector_factory_.GetDefaultConnector());
   }
 
   // Creates an extension.
@@ -512,17 +502,13 @@ class NoteTakingHelperTest : public BrowserWithTestWindowTest,
   FakeSessionManagerClient* session_manager_client_ = nullptr;  // Not owned.
   ArcAppTest arc_test_;
   std::unique_ptr<arc::ArcIntentHelperBridge> intent_helper_bridge_;
-  std::unique_ptr<service_manager::TestConnectorFactory> connector_factory_;
-  // |test_note_taking_controller_| is owned by |connector_factory_|.
-  TestNoteTakingController* test_note_taking_controller_;
-  std::unique_ptr<service_manager::Connector> connector_;
+  service_manager::TestConnectorFactory connector_factory_;
+  std::unique_ptr<TestNoteTakingController> test_note_taking_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(NoteTakingHelperTest);
 };
 
-INSTANTIATE_TEST_CASE_P(, NoteTakingHelperTest, ::testing::Bool());
-
-TEST_P(NoteTakingHelperTest, PaletteNotEnabled) {
+TEST_F(NoteTakingHelperTest, PaletteNotEnabled) {
   // Without the palette enabled, IsAppAvailable() should return false.
   Init(0);
   scoped_refptr<const extensions::Extension> extension =
@@ -531,7 +517,7 @@ TEST_P(NoteTakingHelperTest, PaletteNotEnabled) {
   EXPECT_FALSE(helper()->IsAppAvailable(profile()));
 }
 
-TEST_P(NoteTakingHelperTest, ListChromeApps) {
+TEST_F(NoteTakingHelperTest, ListChromeApps) {
   Init(ENABLE_PALETTE);
 
   // Start out without any note-taking apps installed.
@@ -590,8 +576,8 @@ TEST_P(NoteTakingHelperTest, ListChromeApps) {
        true /*preferred*/, NoteTakingLockScreenSupport::kNotSupported}));
 }
 
-TEST_P(NoteTakingHelperTest, ListChromeAppsWithLockScreenNotesSupported) {
-  Init(ENABLE_PALETTE | ENABLE_LOCK_SCREEN_APPS);
+TEST_F(NoteTakingHelperTest, ListChromeAppsWithLockScreenNotesSupported) {
+  Init(ENABLE_PALETTE);
 
   ASSERT_FALSE(helper()->IsAppAvailable(profile()));
   ASSERT_TRUE(helper()->GetAvailableApps(profile()).empty());
@@ -629,8 +615,8 @@ TEST_P(NoteTakingHelperTest, ListChromeAppsWithLockScreenNotesSupported) {
   EXPECT_TRUE(helper()->GetPreferredChromeAppInfo(profile()));
 }
 
-TEST_P(NoteTakingHelperTest, PreferredAppEnabledOnLockScreen) {
-  Init(ENABLE_PALETTE | ENABLE_LOCK_SCREEN_APPS);
+TEST_F(NoteTakingHelperTest, PreferredAppEnabledOnLockScreen) {
+  Init(ENABLE_PALETTE);
 
   ASSERT_FALSE(helper()->IsAppAvailable(profile()));
   ASSERT_TRUE(helper()->GetAvailableApps(profile()).empty());
@@ -673,8 +659,8 @@ TEST_P(NoteTakingHelperTest, PreferredAppEnabledOnLockScreen) {
        true /*preferred*/, NoteTakingLockScreenSupport::kSupported}));
 }
 
-TEST_P(NoteTakingHelperTest, PreferredAppWithNoLockScreenPermission) {
-  Init(ENABLE_PALETTE | ENABLE_LOCK_SCREEN_APPS);
+TEST_F(NoteTakingHelperTest, PreferredAppWithNoLockScreenPermission) {
+  Init(ENABLE_PALETTE);
 
   ASSERT_FALSE(helper()->IsAppAvailable(profile()));
   ASSERT_TRUE(helper()->GetAvailableApps(profile()).empty());
@@ -697,9 +683,9 @@ TEST_P(NoteTakingHelperTest, PreferredAppWithNoLockScreenPermission) {
        true /*preferred*/, NoteTakingLockScreenSupport::kNotSupported}));
 }
 
-TEST_P(NoteTakingHelperTest,
+TEST_F(NoteTakingHelperTest,
        PreferredAppWithotLockSupportClearsLockScreenPref) {
-  Init(ENABLE_PALETTE | ENABLE_LOCK_SCREEN_APPS);
+  Init(ENABLE_PALETTE);
 
   ASSERT_FALSE(helper()->IsAppAvailable(profile()));
   ASSERT_TRUE(helper()->GetAvailableApps(profile()).empty());
@@ -749,46 +735,9 @@ TEST_P(NoteTakingHelperTest,
                   NoteTakingLockScreenSupport::kNotSupported}));
 }
 
-TEST_P(NoteTakingHelperTest,
-       PreferredAppEnabledOnLockScreen_LockScreenAppsNotEnabled) {
-  Init(ENABLE_PALETTE);
-
-  ASSERT_FALSE(helper()->IsAppAvailable(profile()));
-  ASSERT_TRUE(helper()->GetAvailableApps(profile()).empty());
-
-  scoped_refptr<const extensions::Extension> dev_extension =
-      CreateAndInstallLockScreenApp(NoteTakingHelper::kDevKeepExtensionId,
-                                    kDevKeepAppName, profile());
-
-  helper()->SetPreferredApp(profile(), NoteTakingHelper::kDevKeepExtensionId);
-  helper()->SetPreferredAppEnabledOnLockScreen(profile(), true);
-
-  EXPECT_TRUE(AvailableAppsMatch(
-      profile(),
-      {{kDevKeepAppName, NoteTakingHelper::kDevKeepExtensionId,
-        true /*preferred*/, NoteTakingLockScreenSupport::kNotSupported}}));
-}
-
-// Verify that lock screen apps are not supported if the feature is not enabled.
-TEST_P(NoteTakingHelperTest, LockScreenAppsSupportNotEnabled) {
-  Init(ENABLE_PALETTE);
-
-  ASSERT_FALSE(helper()->IsAppAvailable(profile()));
-  ASSERT_TRUE(helper()->GetAvailableApps(profile()).empty());
-
-  scoped_refptr<const extensions::Extension> dev_extension =
-      CreateAndInstallLockScreenApp(NoteTakingHelper::kDevKeepExtensionId,
-                                    kDevKeepAppName, profile());
-
-  EXPECT_TRUE(AvailableAppsMatch(
-      profile(),
-      {{kDevKeepAppName, NoteTakingHelper::kDevKeepExtensionId,
-        false /*preferred*/, NoteTakingLockScreenSupport::kNotSupported}}));
-}
-
 // Verify the note helper detects apps with "new_note" "action_handler" manifest
 // entries.
-TEST_P(NoteTakingHelperTest, CustomChromeApps) {
+TEST_F(NoteTakingHelperTest, CustomChromeApps) {
   Init(ENABLE_PALETTE);
 
   const extensions::ExtensionId kNewNoteId = crx_file::id_util::GenerateId("a");
@@ -821,8 +770,8 @@ TEST_P(NoteTakingHelperTest, CustomChromeApps) {
 }
 
 // Verify that non-whitelisted apps cannot be enabled on lock screen.
-TEST_P(NoteTakingHelperTest, CustomLockScreenEnabledApps) {
-  Init(ENABLE_PALETTE & ENABLE_LOCK_SCREEN_APPS);
+TEST_F(NoteTakingHelperTest, CustomLockScreenEnabledApps) {
+  Init(ENABLE_PALETTE);
 
   const extensions::ExtensionId kNewNoteId = crx_file::id_util::GenerateId("a");
   const std::string kName = "Some App";
@@ -835,7 +784,7 @@ TEST_P(NoteTakingHelperTest, CustomLockScreenEnabledApps) {
                    NoteTakingLockScreenSupport::kNotSupported}}));
 }
 
-TEST_P(NoteTakingHelperTest, WhitelistedAndCustomAppsShowOnlyOnce) {
+TEST_F(NoteTakingHelperTest, WhitelistedAndCustomAppsShowOnlyOnce) {
   Init(ENABLE_PALETTE);
 
   scoped_refptr<const extensions::Extension> extension = CreateExtension(
@@ -851,7 +800,7 @@ TEST_P(NoteTakingHelperTest, WhitelistedAndCustomAppsShowOnlyOnce) {
         NoteTakingLockScreenSupport::kNotSupported}}));
 }
 
-TEST_P(NoteTakingHelperTest, LaunchChromeApp) {
+TEST_F(NoteTakingHelperTest, LaunchChromeApp) {
   Init(ENABLE_PALETTE);
   scoped_refptr<const extensions::Extension> extension =
       CreateExtension(NoteTakingHelper::kProdKeepExtensionId, "Keep");
@@ -874,7 +823,7 @@ TEST_P(NoteTakingHelperTest, LaunchChromeApp) {
       static_cast<int>(LaunchResult::CHROME_SUCCESS), 1);
 }
 
-TEST_P(NoteTakingHelperTest, FallBackIfPreferredAppUnavailable) {
+TEST_F(NoteTakingHelperTest, FallBackIfPreferredAppUnavailable) {
   Init(ENABLE_PALETTE);
   scoped_refptr<const extensions::Extension> prod_extension =
       CreateExtension(NoteTakingHelper::kProdKeepExtensionId, "prod");
@@ -913,13 +862,11 @@ TEST_P(NoteTakingHelperTest, FallBackIfPreferredAppUnavailable) {
       static_cast<int>(LaunchResult::CHROME_SUCCESS), 1);
 }
 
-TEST_P(NoteTakingHelperTest, PlayStoreInitiallyDisabled) {
+TEST_F(NoteTakingHelperTest, PlayStoreInitiallyDisabled) {
   Init(ENABLE_PALETTE);
   EXPECT_FALSE(helper()->play_store_enabled());
   EXPECT_FALSE(helper()->android_apps_received());
-  // TODO(victorhsieh): Implement opt-in.
-  if (arc::ShouldArcAlwaysStart())
-    return;
+
   // When Play Store is enabled, the helper's members should be updated
   // accordingly.
   profile()->GetPrefs()->SetBoolean(arc::prefs::kArcEnabled, true);
@@ -934,7 +881,7 @@ TEST_P(NoteTakingHelperTest, PlayStoreInitiallyDisabled) {
   EXPECT_TRUE(helper()->android_apps_received());
 }
 
-TEST_P(NoteTakingHelperTest, AddProfileWithPlayStoreEnabled) {
+TEST_F(NoteTakingHelperTest, AddProfileWithPlayStoreEnabled) {
   Init(ENABLE_PALETTE);
   EXPECT_FALSE(helper()->play_store_enabled());
   EXPECT_FALSE(helper()->android_apps_received());
@@ -973,7 +920,7 @@ TEST_P(NoteTakingHelperTest, AddProfileWithPlayStoreEnabled) {
   profile_manager()->DeleteTestingProfile(kSecondProfileName);
 }
 
-TEST_P(NoteTakingHelperTest, ListAndroidApps) {
+TEST_F(NoteTakingHelperTest, ListAndroidApps) {
   // Add two Android apps.
   std::vector<IntentHandlerInfoPtr> handlers;
   const std::string kName1 = "App 1";
@@ -1012,10 +959,6 @@ TEST_P(NoteTakingHelperTest, ListAndroidApps) {
                    NoteTakingLockScreenSupport::kNotSupported}}));
   EXPECT_FALSE(helper()->GetPreferredChromeAppInfo(profile()));
 
-  // TODO(victorhsieh): Opt-out on Persistent ARC is special.  Skip until
-  // implemented.
-  if (arc::ShouldArcAlwaysStart())
-    return;
   // Disable Play Store and check that the apps are no longer returned.
   profile()->GetPrefs()->SetBoolean(arc::prefs::kArcEnabled, false);
   EXPECT_FALSE(helper()->play_store_enabled());
@@ -1024,7 +967,7 @@ TEST_P(NoteTakingHelperTest, ListAndroidApps) {
   EXPECT_TRUE(helper()->GetAvailableApps(profile()).empty());
 }
 
-TEST_P(NoteTakingHelperTest, LaunchAndroidApp) {
+TEST_F(NoteTakingHelperTest, LaunchAndroidApp) {
   const std::string kPackage1 = "org.chromium.package1";
   std::vector<IntentHandlerInfoPtr> handlers;
   handlers.emplace_back(CreateIntentHandlerInfo("App 1", kPackage1));
@@ -1074,7 +1017,7 @@ TEST_P(NoteTakingHelperTest, LaunchAndroidApp) {
       NoteTakingHelper::kDefaultLaunchResultHistogramName, 0);
 }
 
-TEST_P(NoteTakingHelperTest, LaunchAndroidAppWithPath) {
+TEST_F(NoteTakingHelperTest, LaunchAndroidAppWithPath) {
   const std::string kPackage = "org.chromium.package";
   std::vector<IntentHandlerInfoPtr> handlers;
   handlers.emplace_back(CreateIntentHandlerInfo("App", kPackage));
@@ -1117,7 +1060,7 @@ TEST_P(NoteTakingHelperTest, LaunchAndroidAppWithPath) {
       static_cast<int>(LaunchResult::ANDROID_FAILED_TO_CONVERT_PATH), 1);
 }
 
-TEST_P(NoteTakingHelperTest, NoAppsAvailable) {
+TEST_F(NoteTakingHelperTest, NoAppsAvailable) {
   Init(ENABLE_PALETTE | ENABLE_PLAY_STORE);
 
   // When no note-taking apps are installed, the histograms should just be
@@ -1132,18 +1075,13 @@ TEST_P(NoteTakingHelperTest, NoAppsAvailable) {
       static_cast<int>(LaunchResult::NO_APPS_AVAILABLE), 1);
 }
 
-TEST_P(NoteTakingHelperTest, NotifyObserverAboutAndroidApps) {
+TEST_F(NoteTakingHelperTest, NotifyObserverAboutAndroidApps) {
   Init(ENABLE_PALETTE | ENABLE_PLAY_STORE);
   TestObserver observer;
 
   // Let the app-fetching callback run and check that the observer is notified.
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, observer.num_updates());
-
-  // TODO(victorhsieh): Opt-out on Persistent ARC is special.  Skip until
-  // implemented.
-  if (arc::ShouldArcAlwaysStart())
-    return;
 
   // Disabling and enabling Play Store should also notify the observer (and
   // enabling should request apps again).
@@ -1162,7 +1100,7 @@ TEST_P(NoteTakingHelperTest, NotifyObserverAboutAndroidApps) {
   EXPECT_EQ(4, observer.num_updates());
 }
 
-TEST_P(NoteTakingHelperTest, NotifyObserverAboutChromeApps) {
+TEST_F(NoteTakingHelperTest, NotifyObserverAboutChromeApps) {
   Init(ENABLE_PALETTE);
   TestObserver observer;
   ASSERT_EQ(0, observer.num_updates());
@@ -1201,7 +1139,7 @@ TEST_P(NoteTakingHelperTest, NotifyObserverAboutChromeApps) {
   profile_manager()->DeleteTestingProfile(kSecondProfileName);
 }
 
-TEST_P(NoteTakingHelperTest, NotifyObserverAboutPreferredAppChanges) {
+TEST_F(NoteTakingHelperTest, NotifyObserverAboutPreferredAppChanges) {
   Init(ENABLE_PALETTE);
   TestObserver observer;
 
@@ -1266,9 +1204,9 @@ TEST_P(NoteTakingHelperTest, NotifyObserverAboutPreferredAppChanges) {
   profile_manager()->DeleteTestingProfile(kSecondProfileName);
 }
 
-TEST_P(NoteTakingHelperTest,
+TEST_F(NoteTakingHelperTest,
        NotifyObserverAboutPreferredAppLockScreenSupportChanges) {
-  Init(ENABLE_PALETTE | ENABLE_LOCK_SCREEN_APPS);
+  Init(ENABLE_PALETTE);
   TestObserver observer;
 
   scoped_refptr<const extensions::Extension> dev_extension =
@@ -1316,8 +1254,8 @@ TEST_P(NoteTakingHelperTest,
   EXPECT_TRUE(observer.preferred_app_updates().empty());
 }
 
-TEST_P(NoteTakingHelperTest, SetAppEnabledOnLockScreen) {
-  Init(ENABLE_PALETTE | ENABLE_LOCK_SCREEN_APPS);
+TEST_F(NoteTakingHelperTest, SetAppEnabledOnLockScreen) {
+  Init(ENABLE_PALETTE);
 
   TestObserver observer;
 
@@ -1427,9 +1365,9 @@ TEST_P(NoteTakingHelperTest, SetAppEnabledOnLockScreen) {
   EXPECT_TRUE(observer.preferred_app_updates().empty());
 }
 
-TEST_P(NoteTakingHelperTest,
+TEST_F(NoteTakingHelperTest,
        UpdateLockScreenSupportStatusWhenWhitelistPolicyRemoved) {
-  Init(ENABLE_PALETTE | ENABLE_LOCK_SCREEN_APPS);
+  Init(ENABLE_PALETTE);
   TestObserver observer;
 
   // Add test app, set it as preferred and enable it on lock screen.
@@ -1471,9 +1409,9 @@ TEST_P(NoteTakingHelperTest,
         true /*preferred*/, NoteTakingLockScreenSupport::kEnabled}}));
 }
 
-TEST_P(NoteTakingHelperTest,
+TEST_F(NoteTakingHelperTest,
        NoObserverCallsIfPolicyChangesBeforeLockScreenStatusIsFetched) {
-  Init(ENABLE_PALETTE | ENABLE_LOCK_SCREEN_APPS);
+  Init(ENABLE_PALETTE);
   TestObserver observer;
 
   scoped_refptr<const extensions::Extension> app =
@@ -1504,8 +1442,8 @@ TEST_P(NoteTakingHelperTest,
         true /*preferred*/, NoteTakingLockScreenSupport::kEnabled}}));
 }
 
-TEST_P(NoteTakingHelperTest, LockScreenSupportInSecondaryProfile) {
-  Init(ENABLE_PALETTE | ENABLE_LOCK_SCREEN_APPS);
+TEST_F(NoteTakingHelperTest, LockScreenSupportInSecondaryProfile) {
+  Init(ENABLE_PALETTE);
   TestObserver observer;
 
   // Initialize secondary profile.
@@ -1567,7 +1505,7 @@ TEST_P(NoteTakingHelperTest, LockScreenSupportInSecondaryProfile) {
        true /*preferred*/, NoteTakingLockScreenSupport::kNotSupported}));
 }
 
-TEST_P(NoteTakingHelperTest, NoteTakingControllerClient) {
+TEST_F(NoteTakingHelperTest, NoteTakingControllerClient) {
   Init(ENABLE_PALETTE);
 
   auto has_note_taking_apps = [&]() {

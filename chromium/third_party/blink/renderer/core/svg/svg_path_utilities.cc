@@ -28,13 +28,13 @@
 
 namespace blink {
 
-bool BuildPathFromString(const String& d, Path& result) {
-  if (d.IsEmpty())
+bool BuildPathFromString(const StringView& path_string, Path& result) {
+  if (path_string.IsEmpty())
     return true;
 
   SVGPathBuilder builder(result);
-  SVGPathStringSource source(d);
-  return SVGPathParser::ParsePath(source, builder);
+  SVGPathStringSource source(path_string);
+  return svg_path_parser::ParsePath(source, builder);
 }
 
 bool BuildPathFromByteStream(const SVGPathByteStream& stream, Path& result) {
@@ -43,32 +43,38 @@ bool BuildPathFromByteStream(const SVGPathByteStream& stream, Path& result) {
 
   SVGPathBuilder builder(result);
   SVGPathByteStreamSource source(stream);
-  return SVGPathParser::ParsePath(source, builder);
+  return svg_path_parser::ParsePath(source, builder);
 }
 
-String BuildStringFromByteStream(const SVGPathByteStream& stream) {
+String BuildStringFromByteStream(const SVGPathByteStream& stream,
+                                 PathSerializationFormat format) {
   if (stream.IsEmpty())
     return String();
 
   SVGPathStringBuilder builder;
   SVGPathByteStreamSource source(stream);
-  SVGPathParser::ParsePath(source, builder);
+  if (format == kTransformToAbsolute) {
+    SVGPathAbsolutizer absolutizer(&builder);
+    svg_path_parser::ParsePath(source, absolutizer);
+  } else {
+    svg_path_parser::ParsePath(source, builder);
+  }
   return builder.Result();
 }
 
-SVGParsingError BuildByteStreamFromString(const String& d,
+SVGParsingError BuildByteStreamFromString(const StringView& path_string,
                                           SVGPathByteStream& result) {
   result.clear();
-  if (d.IsEmpty())
+  if (path_string.IsEmpty())
     return SVGParseStatus::kNoError;
 
   // The string length is typically a minor overestimate of eventual byte stream
   // size, so it avoids us a lot of reallocs.
-  result.ReserveInitialCapacity(d.length());
+  result.ReserveInitialCapacity(path_string.length());
 
   SVGPathByteStreamBuilder builder(result);
-  SVGPathStringSource source(d);
-  SVGPathParser::ParsePath(source, builder);
+  SVGPathStringSource source(path_string);
+  svg_path_parser::ParsePath(source, builder);
   result.ShrinkToFit();
   return source.ParseError();
 }

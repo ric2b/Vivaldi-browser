@@ -8,7 +8,9 @@ namespace extensions {
 void SkipVivaldiAPIPermissions(extensions::APIPermissionSet& skip) {
   // Skip vivaldi permissions in
 
+  skip.insert(APIPermission::kAccessKeys);
   skip.insert(APIPermission::kAutoUpdate);
+  skip.insert(APIPermission::kBookmarkContextMenu);
   skip.insert(APIPermission::kBookmarksPrivate);
   skip.insert(APIPermission::kCalendar);
   skip.insert(APIPermission::kContacts);
@@ -30,6 +32,7 @@ void SkipVivaldiAPIPermissions(extensions::APIPermissionSet& skip) {
   skip.insert(APIPermission::kTabsPrivate);
   skip.insert(APIPermission::kThumbnails);
   skip.insert(APIPermission::kUtilities);
+  skip.insert(APIPermission::kVivaldiAccount);
   skip.insert(APIPermission::kWebViewPrivate);
   skip.insert(APIPermission::kWindowPrivate);
   skip.insert(APIPermission::kZoom);

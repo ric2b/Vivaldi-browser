@@ -4,6 +4,7 @@
 
 #include "content/browser/browsing_data/clear_site_data_handler.h"
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/scoped_observer.h"
@@ -13,6 +14,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/browsing_data_remover.h"
+#include "content/public/browser/clear_site_data_utils.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/origin_util.h"
@@ -46,130 +48,6 @@ int ParametersMask(bool clear_cookies, bool clear_storage, bool clear_cache) {
          static_cast<int>(clear_storage) * (1 << 1) +
          static_cast<int>(clear_cache) * (1 << 2);
 }
-
-// Helper class to find the BrowserContext associated with the request and
-// requests the actual clearing of data for |origin|. The data types to be
-// deleted are determined by |clear_cookies|, |clear_storage|, and
-// |clear_cache|. |web_contents_getter| identifies the WebContents from which
-// the request originated.
-// TODO(crbug.com/876931): |SiteDataClearer| could be merged into
-// |ClearSiteDataHandler| to make things cleaner.
-class SiteDataClearer : public BrowsingDataRemover::Observer {
- public:
-  static void Run(
-      const base::RepeatingCallback<WebContents*()>& web_contents_getter,
-      const url::Origin& origin,
-      bool clear_cookies,
-      bool clear_storage,
-      bool clear_cache,
-      base::OnceClosure callback) {
-    WebContents* web_contents = web_contents_getter.Run();
-    if (!web_contents)
-      return;
-
-    (new SiteDataClearer(web_contents, origin, clear_cookies, clear_storage,
-                         clear_cache, std::move(callback)))
-        ->RunAndDestroySelfWhenDone();
-  }
-
- private:
-  SiteDataClearer(const WebContents* web_contents,
-                  const url::Origin& origin,
-                  bool clear_cookies,
-                  bool clear_storage,
-                  bool clear_cache,
-                  base::OnceClosure callback)
-      : origin_(origin),
-        clear_cookies_(clear_cookies),
-        clear_storage_(clear_storage),
-        clear_cache_(clear_cache),
-        callback_(std::move(callback)),
-        pending_task_count_(0),
-        remover_(nullptr),
-        scoped_observer_(this) {
-    remover_ = BrowserContext::GetBrowsingDataRemover(
-        web_contents->GetBrowserContext());
-    DCHECK(remover_);
-    scoped_observer_.Add(remover_);
-  }
-
-  ~SiteDataClearer() override {}
-
-  void RunAndDestroySelfWhenDone() {
-    // Cookies and channel IDs are scoped to
-    // a) eTLD+1 of |origin|'s host if |origin|'s host is a registrable domain
-    //    or a subdomain thereof
-    // b) |origin|'s host exactly if it is an IP address or an internal hostname
-    //    (e.g. "localhost" or "fileserver").
-    // TODO(msramek): What about plugin data?
-    if (clear_cookies_) {
-      std::string domain = GetDomainAndRegistry(
-          origin_.host(),
-          net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
-
-      if (domain.empty())
-        domain = origin_.host();  // IP address or internal hostname.
-
-      std::unique_ptr<BrowsingDataFilterBuilder> domain_filter_builder(
-          BrowsingDataFilterBuilder::Create(
-              BrowsingDataFilterBuilder::WHITELIST));
-      domain_filter_builder->AddRegisterableDomain(domain);
-
-      pending_task_count_++;
-      remover_->RemoveWithFilterAndReply(
-          base::Time(), base::Time::Max(),
-          BrowsingDataRemover::DATA_TYPE_COOKIES |
-              BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
-              BrowsingDataRemover::DATA_TYPE_AVOID_CLOSING_CONNECTIONS,
-          BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
-              BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB,
-          std::move(domain_filter_builder), this);
-    }
-
-    // Delete origin-scoped data.
-    int remove_mask = 0;
-    if (clear_storage_)
-      remove_mask |= BrowsingDataRemover::DATA_TYPE_DOM_STORAGE;
-    if (clear_cache_)
-      remove_mask |= BrowsingDataRemover::DATA_TYPE_CACHE;
-
-    if (remove_mask) {
-      std::unique_ptr<BrowsingDataFilterBuilder> origin_filter_builder(
-          BrowsingDataFilterBuilder::Create(
-              BrowsingDataFilterBuilder::WHITELIST));
-      origin_filter_builder->AddOrigin(origin_);
-
-      pending_task_count_++;
-      remover_->RemoveWithFilterAndReply(
-          base::Time(), base::Time::Max(), remove_mask,
-          BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
-              BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB,
-          std::move(origin_filter_builder), this);
-    }
-
-    DCHECK_GT(pending_task_count_, 0);
-  }
-
-  // BrowsingDataRemover::Observer:
-  void OnBrowsingDataRemoverDone() override {
-    DCHECK(pending_task_count_);
-    if (--pending_task_count_)
-      return;
-
-    std::move(callback_).Run();
-    delete this;
-  }
-
-  url::Origin origin_;
-  bool clear_cookies_;
-  bool clear_storage_;
-  bool clear_cache_;
-  base::OnceClosure callback_;
-  int pending_task_count_;
-  BrowsingDataRemover* remover_;
-  ScopedObserver<BrowsingDataRemover, BrowsingDataRemover::Observer>
-      scoped_observer_;
-};
 
 // Outputs a single |formatted_message| on the UI thread.
 void OutputFormattedMessage(WebContents* web_contents,
@@ -226,12 +104,13 @@ void ClearSiteDataHandler::ConsoleMessagesDelegate::
 
 // static
 void ClearSiteDataHandler::HandleHeader(
+    base::RepeatingCallback<BrowserContext*()> browser_context_getter,
     base::RepeatingCallback<WebContents*()> web_contents_getter,
     const GURL& url,
     const std::string& header_value,
     int load_flags,
     base::OnceClosure callback) {
-  ClearSiteDataHandler handler(std::move(web_contents_getter), url,
+  ClearSiteDataHandler handler(browser_context_getter, web_contents_getter, url,
                                header_value, load_flags, std::move(callback),
                                std::make_unique<ConsoleMessagesDelegate>());
   handler.HandleHeaderAndOutputConsoleMessages();
@@ -250,18 +129,21 @@ bool ClearSiteDataHandler::ParseHeaderForTesting(
 }
 
 ClearSiteDataHandler::ClearSiteDataHandler(
+    base::RepeatingCallback<BrowserContext*()> browser_context_getter,
     base::RepeatingCallback<WebContents*()> web_contents_getter,
     const GURL& url,
     const std::string& header_value,
     int load_flags,
     base::OnceClosure callback,
     std::unique_ptr<ConsoleMessagesDelegate> delegate)
-    : web_contents_getter_(std::move(web_contents_getter)),
+    : browser_context_getter_(browser_context_getter),
+      web_contents_getter_(web_contents_getter),
       url_(url),
       header_value_(header_value),
       load_flags_(load_flags),
       callback_(std::move(callback)),
       delegate_(std::move(delegate)) {
+  DCHECK(browser_context_getter_);
   DCHECK(web_contents_getter_);
   DCHECK(delegate_);
 }
@@ -290,7 +172,7 @@ bool ClearSiteDataHandler::Run() {
   }
 
   url::Origin origin = url::Origin::Create(url_);
-  if (origin.unique()) {
+  if (origin.opaque()) {
     delegate_->AddMessage(url_, "Not supported for unique origins.",
                           CONSOLE_MESSAGE_LEVEL_ERROR);
     return false;
@@ -415,8 +297,9 @@ void ClearSiteDataHandler::ExecuteClearingTask(const url::Origin& origin,
                                                bool clear_storage,
                                                bool clear_cache,
                                                base::OnceClosure callback) {
-  SiteDataClearer::Run(web_contents_getter_, origin, clear_cookies,
-                       clear_storage, clear_cache, std::move(callback));
+  ClearSiteData(browser_context_getter_, origin, clear_cookies, clear_storage,
+                clear_cache, true /*avoid_closing_connections*/,
+                std::move(callback));
 }
 
 // static

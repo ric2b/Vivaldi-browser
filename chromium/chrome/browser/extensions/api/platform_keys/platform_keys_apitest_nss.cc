@@ -8,10 +8,12 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service_factory.h"
 #include "chrome/browser/extensions/api/platform_keys/platform_keys_test_base.h"
@@ -20,6 +22,7 @@
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/policy/policy_constants.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "crypto/nss_util_internal.h"
 #include "crypto/scoped_nss_types.h"
 #include "crypto/scoped_test_nss_db.h"
@@ -51,8 +54,8 @@ class PlatformKeysTest : public PlatformKeysTestBase {
       // |PlatformKeysTestBase::SetUpOnMainThread| triggers the user sign-in.
       ASSERT_TRUE(user_private_slot_db_.is_open());
       base::RunLoop loop;
-      content::BrowserThread::PostTaskAndReply(
-          content::BrowserThread::IO, FROM_HERE,
+      base::PostTaskWithTraitsAndReply(
+          FROM_HERE, {content::BrowserThread::IO},
           base::BindOnce(&PlatformKeysTest::SetPrivateSoftwareSlotOnIO,
                          base::Unretained(this),
                          crypto::ScopedPK11Slot(
@@ -349,7 +352,7 @@ IN_PROC_BROWSER_TEST_P(UnmanagedPlatformKeysTest, Permissions) {
   ASSERT_TRUE(RunExtensionTest("permissionTests")) << message_;
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     Unmanaged,
     UnmanagedPlatformKeysTest,
     ::testing::Values(UnmanagedPlatformKeysTestParams(
@@ -399,7 +402,7 @@ IN_PROC_BROWSER_TEST_P(ManagedWithoutPermissionPlatformKeysTest,
       << message_;
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     ManagedWithoutPermission,
     ManagedWithoutPermissionPlatformKeysTest,
     ::testing::Values(
@@ -458,7 +461,7 @@ IN_PROC_BROWSER_TEST_P(ManagedWithPermissionPlatformKeysTest,
       << message_;
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     ManagedWithPermission,
     ManagedWithPermissionPlatformKeysTest,
     ::testing::Values(

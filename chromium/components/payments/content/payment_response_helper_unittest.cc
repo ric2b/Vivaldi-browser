@@ -45,7 +45,7 @@ class PaymentResponseHelperTest : public testing::Test,
   // PaymentRequestState::Delegate:
   void OnPaymentResponseReady(mojom::PaymentResponsePtr response) override {
     payment_response_ = std::move(response);
-  };
+  }
 
   // Convenience method to create a PaymentRequestSpec with specified |details|
   // and |method_data|.
@@ -121,7 +121,6 @@ TEST_F(PaymentResponseHelperTest, GeneratePaymentResponse_SupportedMethod) {
       "\"city\":\"Elysium\","
       "\"country\":\"US\","
       "\"dependentLocality\":\"\","
-      "\"languageCode\":\"\","
       "\"organization\":\"Underworld\","
       "\"phone\":\"16502111111\","
       "\"postalCode\":\"91111\","
@@ -160,7 +159,6 @@ TEST_F(PaymentResponseHelperTest, GeneratePaymentResponse_BasicCard) {
       "\"city\":\"Elysium\","
       "\"country\":\"US\","
       "\"dependentLocality\":\"\","
-      "\"languageCode\":\"\","
       "\"organization\":\"Underworld\","
       "\"phone\":\"16502111111\","
       "\"postalCode\":\"91111\","
@@ -204,7 +202,6 @@ TEST_F(PaymentResponseHelperTest, GeneratePaymentResponse_ShippingAddress) {
   EXPECT_EQ("", response()->shipping_address->dependent_locality);
   EXPECT_EQ("91111", response()->shipping_address->postal_code);
   EXPECT_EQ("", response()->shipping_address->sorting_code);
-  EXPECT_EQ("", response()->shipping_address->language_code);
   EXPECT_EQ("Underworld", response()->shipping_address->organization);
   EXPECT_EQ("John H. Doe", response()->shipping_address->recipient);
   EXPECT_EQ("16502111111", response()->shipping_address->phone);
@@ -225,9 +222,9 @@ TEST_F(PaymentResponseHelperTest, GeneratePaymentResponse_ContactDetails_All) {
                                test_address(), this);
 
   // Check that all the expected values were set.
-  EXPECT_EQ("John H. Doe", response()->payer_name.value());
-  EXPECT_EQ("+16502111111", response()->payer_phone.value());
-  EXPECT_EQ("johndoe@hades.com", response()->payer_email.value());
+  EXPECT_EQ("John H. Doe", response()->payer->name.value());
+  EXPECT_EQ("+16502111111", response()->payer->phone.value());
+  EXPECT_EQ("johndoe@hades.com", response()->payer->email.value());
 }
 
 // Tests the the generated PaymentResponse has the correct values for the
@@ -243,9 +240,9 @@ TEST_F(PaymentResponseHelperTest, GeneratePaymentResponse_ContactDetails_Some) {
                                test_address(), this);
 
   // Check that the name was set, but not the other values.
-  EXPECT_EQ("John H. Doe", response()->payer_name.value());
-  EXPECT_FALSE(response()->payer_phone.has_value());
-  EXPECT_FALSE(response()->payer_email.has_value());
+  EXPECT_EQ("John H. Doe", response()->payer->name.value());
+  EXPECT_FALSE(response()->payer->phone.has_value());
+  EXPECT_FALSE(response()->payer->email.has_value());
 }
 
 // Tests the the generated PaymentResponse has phone number formatted to E.164
@@ -264,7 +261,7 @@ TEST_F(PaymentResponseHelperTest,
                                test_address(), this);
 
   // Check that the phone was formatted.
-  EXPECT_EQ("+15152231234", response()->payer_phone.value());
+  EXPECT_EQ("+15152231234", response()->payer->phone.value());
 }
 
 // Tests the the generated PaymentResponse has phone number minimumly formatted
@@ -283,7 +280,7 @@ TEST_F(PaymentResponseHelperTest,
                                test_address(), this);
 
   // Check that the phone was formatted.
-  EXPECT_EQ("5151231234", response()->payer_phone.value());
+  EXPECT_EQ("5151231234", response()->payer->phone.value());
 }
 
 }  // namespace payments

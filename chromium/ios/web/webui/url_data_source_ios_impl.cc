@@ -8,7 +8,9 @@
 #include "base/location.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_util.h"
+#include "base/task/post_task.h"
 #include "ios/web/public/url_data_source_ios.h"
+#include "ios/web/public/web_task_traits.h"
 #include "ios/web/public/web_thread.h"
 #include "ios/web/webui/url_data_manager_ios_backend.h"
 
@@ -40,10 +42,10 @@ void URLDataSourceIOSImpl::SendResponse(
     // when the object is deleted.
     return;
   }
-  web::WebThread::PostTask(
-      web::WebThread::IO, FROM_HERE,
-      base::Bind(&URLDataSourceIOSImpl::SendResponseOnIOThread, this,
-                 request_id, std::move(bytes)));
+  base::PostTaskWithTraits(
+      FROM_HERE, {web::WebThread::IO},
+      base::BindOnce(&URLDataSourceIOSImpl::SendResponseOnIOThread, this,
+                     request_id, std::move(bytes)));
 }
 
 void URLDataSourceIOSImpl::SendResponseOnIOThread(

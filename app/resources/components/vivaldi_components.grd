@@ -1,6 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <grit base_dir="." latest_public_release="0" current_release="1"
       source_lang_id="en" enc_check="möl">
+  <outputs>
+    <if expr="not vivaldi_chromium_file">
+      <output filename="components_google_chrome_strings_be.pak" type="data_package" lang="be" />
+      <output filename="components_google_chrome_strings_eo.pak" type="data_package" lang="eo" />
+      <output filename="components_google_chrome_strings_es-PE.pak" type="data_package" lang="es-PE" />
+      <output filename="components_google_chrome_strings_eu.pak" type="data_package" lang="eu" />
+      <output filename="components_google_chrome_strings_fy.pak" type="data_package" lang="fy" />
+      <output filename="components_google_chrome_strings_gl.pak" type="data_package" lang="gl" />
+      <output filename="components_google_chrome_strings_hy.pak" type="data_package" lang="hy" />
+      <output filename="components_google_chrome_strings_io.pak" type="data_package" lang="io" />
+      <output filename="components_google_chrome_strings_is.pak" type="data_package" lang="is" />
+      <output filename="components_google_chrome_strings_jbo.pak" type="data_package" lang="jbo" />
+      <output filename="components_google_chrome_strings_ka.pak" type="data_package" lang="ka" />
+      <output filename="components_google_chrome_strings_ku.pak" type="data_package" lang="ku" />
+      <output filename="components_google_chrome_strings_mk.pak" type="data_package" lang="mk" />
+      <output filename="components_google_chrome_strings_sc.pak" type="data_package" lang="sc" />
+      <output filename="components_google_chrome_strings_sq.pak" type="data_package" lang="sq" />
+      <output filename="components_google_chrome_strings_nn.pak" type="data_package" lang="nn" />
+    </if>
+  </outputs>
   <translations>
     <file path="strings/vivaldi_components_am.xtb" lang="am" />
     <file path="strings/vivaldi_components_ar.xtb" lang="ar" />

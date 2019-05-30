@@ -23,7 +23,7 @@ class CORE_EXPORT CSSUnparsedValue final : public CSSStyleValue {
  public:
   static CSSUnparsedValue* Create(
       const HeapVector<CSSUnparsedSegment>& tokens) {
-    return new CSSUnparsedValue(tokens);
+    return MakeGarbageCollected<CSSUnparsedValue>(tokens);
   }
 
   // Blink-internal constructor
@@ -34,6 +34,9 @@ class CORE_EXPORT CSSUnparsedValue final : public CSSStyleValue {
   static CSSUnparsedValue* FromCSSValue(const CSSCustomPropertyDeclaration&);
   static CSSUnparsedValue* FromCSSVariableData(const CSSVariableData&);
 
+  CSSUnparsedValue(const HeapVector<CSSUnparsedSegment>& tokens)
+      : CSSStyleValue(), tokens_(tokens) {}
+
   const CSSValue* ToCSSValue() const override;
 
   StyleValueType GetType() const override { return kUnparsedType; }
@@ -43,16 +46,12 @@ class CORE_EXPORT CSSUnparsedValue final : public CSSStyleValue {
                               const CSSUnparsedSegment&,
                               ExceptionState&);
 
-  size_t length() const { return tokens_.size(); }
+  wtf_size_t length() const { return tokens_.size(); }
 
   void Trace(Visitor* visitor) override {
     visitor->Trace(tokens_);
     CSSStyleValue::Trace(visitor);
   }
-
- protected:
-  CSSUnparsedValue(const HeapVector<CSSUnparsedSegment>& tokens)
-      : CSSStyleValue(), tokens_(tokens) {}
 
  private:
   static CSSUnparsedValue* FromString(const String& string) {

@@ -21,6 +21,8 @@ source_set("video") {
     "gpu_video_accelerator_factories.h",
     "h264_bit_reader.cc",
     "h264_bit_reader.h",
+    "h264_level_limits.cc",
+    "h264_level_limits.h",
     "h264_parser.cc",
     "h264_parser.h",
     "h264_poc.cc",
@@ -33,6 +35,10 @@ source_set("video") {
     "jpeg_encode_accelerator.h",
     "picture.cc",
     "picture.h",
+    "supported_video_decoder_config.cc",
+    "supported_video_decoder_config.h",
+    "trace_util.cc",
+    "trace_util.h",
     "video_decode_accelerator.cc",
     "video_decode_accelerator.h",
     "video_encode_accelerator.cc",
@@ -51,6 +57,7 @@ source_set("video") {
   ]
 
   deps = [
+    "//gpu/command_buffer/client",
     "//gpu/command_buffer/common",
     "//media/base",
     "//third_party/libyuv",
@@ -102,6 +109,7 @@ source_set("unit_tests") {
     "h264_parser_unittest.cc",
     "h264_poc_unittest.cc",
     "half_float_maker_unittest.cc",
+    "supported_video_decoder_config_unittest.cc",
   ]
   if (enable_hevc_demuxing) {
     sources += [ "h265_parser_unittest.cc" ]
@@ -111,6 +119,7 @@ source_set("unit_tests") {
   deps = [
     "//base",
     "//base/test:test_support",
+    "//components/viz/test:test_support",
     "//gpu:test_support",
     "//gpu/command_buffer/client:gles2_interface",
     "//gpu/command_buffer/common",

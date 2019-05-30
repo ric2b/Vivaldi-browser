@@ -8,8 +8,10 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/chromeos/drive/fileapi/fileapi_worker.h"
 #include "components/drive/file_system_core_util.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "google_apis/drive/task_util.h"
 #include "net/base/io_buffer.h"
@@ -29,8 +31,8 @@ void CreateWritableSnapshotFile(
     const fileapi_internal::CreateWritableSnapshotFileCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(
           &fileapi_internal::RunFileSystemCallback, file_system_getter,
           base::Bind(&fileapi_internal::CreateWritableSnapshotFile, drive_path,
@@ -59,9 +61,8 @@ WebkitFileStreamWriterImpl::~WebkitFileStreamWriterImpl() {
     // It is necessary to close the local file in advance.
     local_file_writer_.reset();
     DCHECK(!close_callback_on_ui_thread_.is_null());
-    BrowserThread::PostTask(BrowserThread::UI,
-                            FROM_HERE,
-                            close_callback_on_ui_thread_);
+    base::PostTaskWithTraits(FROM_HERE, {BrowserThread::UI},
+                             close_callback_on_ui_thread_);
   }
 }
 
@@ -143,9 +144,8 @@ void WebkitFileStreamWriterImpl::WriteAfterCreateWritableSnapshotFile(
       // Here the file is internally created. To revert the operation, close
       // the file.
       DCHECK(!close_callback_on_ui_thread.is_null());
-      BrowserThread::PostTask(BrowserThread::UI,
-                              FROM_HERE,
-                              close_callback_on_ui_thread);
+      base::PostTaskWithTraits(FROM_HERE, {BrowserThread::UI},
+                               close_callback_on_ui_thread);
     }
 
     base::ResetAndReturn(&pending_cancel_callback_).Run(net::OK);
@@ -164,11 +164,9 @@ void WebkitFileStreamWriterImpl::WriteAfterCreateWritableSnapshotFile(
   // Keep |close_callback| to close the file when the stream is destructed.
   DCHECK(!close_callback_on_ui_thread.is_null());
   close_callback_on_ui_thread_ = close_callback_on_ui_thread;
-  local_file_writer_.reset(storage::FileStreamWriter::CreateForLocalFile(
-      file_task_runner_.get(),
-      local_path,
-      offset_,
-      storage::FileStreamWriter::OPEN_EXISTING_FILE));
+  local_file_writer_ = storage::FileStreamWriter::CreateForLocalFile(
+      file_task_runner_.get(), local_path, offset_,
+      storage::FileStreamWriter::OPEN_EXISTING_FILE);
   int result = local_file_writer_->Write(
       buf, buf_len,
       base::BindOnce(&WebkitFileStreamWriterImpl::OnWrite,

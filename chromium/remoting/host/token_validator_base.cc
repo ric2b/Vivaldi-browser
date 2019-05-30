@@ -40,19 +40,36 @@
 
 namespace {
 
-const int kBufferSize = 4096;
-const char kCertIssuerWildCard[] = "*";
+constexpr int kBufferSize = 4096;
+constexpr char kCertIssuerWildCard[] = "*";
 
-// The certificate is valid if:
+// Returns a value from the issuer field for certificate selection, in order of
+// preference.  If the O or OU entries are populated with multiple values, we
+// choose the first one.  This function should not be used for validation, only
+// for logging or determining which certificate to select for validation.
+std::string GetPreferredIssuerFieldValue(const net::X509Certificate* cert) {
+  if (!cert->issuer().common_name.empty())
+    return cert->issuer().common_name;
+  if (!cert->issuer().organization_names.empty() &&
+      !cert->issuer().organization_names[0].empty())
+    return cert->issuer().organization_names[0];
+  if (!cert->issuer().organization_unit_names.empty() &&
+      !cert->issuer().organization_unit_names[0].empty())
+    return cert->issuer().organization_unit_names[0];
+
+  return std::string();
+}
+
+// The certificate is valid if both are true:
 // * The certificate issuer matches exactly |issuer| or the |issuer| is a
-//   wildcard. And
+//   wildcard.
 // * |now| is within [valid_start, valid_expiry].
 bool IsCertificateValid(const std::string& issuer,
                         const base::Time& now,
                         const net::X509Certificate* cert) {
   return (issuer == kCertIssuerWildCard ||
-      issuer == cert->issuer().common_name) &&
-      cert->valid_start() <= now && cert->valid_expiry() > now;
+          issuer == GetPreferredIssuerFieldValue(cert)) &&
+         cert->valid_start() <= now && cert->valid_expiry() > now;
 }
 
 // Returns true if the certificate |c1| is worse than |c2|.
@@ -91,7 +108,7 @@ TokenValidatorBase::TokenValidatorBase(
     : third_party_auth_config_(third_party_auth_config),
       token_scope_(token_scope),
       request_context_getter_(request_context_getter),
-      buffer_(new net::IOBuffer(kBufferSize)),
+      buffer_(base::MakeRefCounted<net::IOBuffer>(kBufferSize)),
       weak_factory_(this) {
   DCHECK(third_party_auth_config_.token_url.is_valid());
   DCHECK(third_party_auth_config_.token_validation_url.is_valid());
@@ -239,10 +256,10 @@ void TokenValidatorBase::ContinueWithCertificate(
     scoped_refptr<net::SSLPrivateKey> client_private_key) {
   if (request_) {
     if (client_cert) {
-      HOST_LOG << "Using certificate issued by: '"
-               << client_cert->issuer().common_name << "' with start date: '"
-               << client_cert->valid_start() << "' and expiry date: '"
-               << client_cert->valid_expiry() << "'";
+      HOST_LOG << "Using client certificate issued by: '"
+               << GetPreferredIssuerFieldValue(client_cert.get())
+               << "' with start date: '" << client_cert->valid_start()
+               << "' and expiry date: '" << client_cert->valid_expiry() << "'";
     }
 
     request_->ContinueWithCertificate(std::move(client_cert),
@@ -270,7 +287,7 @@ std::string TokenValidatorBase::ProcessResponse(int net_result) {
   }
 
   // Decode the JSON data from the response.
-  std::unique_ptr<base::Value> value = base::JSONReader::Read(data_);
+  std::unique_ptr<base::Value> value = base::JSONReader::ReadDeprecated(data_);
   base::DictionaryValue* dict;
   if (!value || !value->GetAsDictionary(&dict)) {
     LOG(ERROR) << "Invalid token validation response: '" << data_ << "'";

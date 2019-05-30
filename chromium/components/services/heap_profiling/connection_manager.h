@@ -15,6 +15,7 @@
 #include "base/process/process_handle.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread.h"
+#include "base/timer/timer.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/services/heap_profiling/allocation_event.h"
@@ -86,6 +87,15 @@ class ConnectionManager {
  private:
   struct Connection;
   struct DumpProcessesForTracingTracking;
+
+  void HeapProfileRetrieved(
+      scoped_refptr<DumpProcessesForTracingTracking> tracking,
+      base::ProcessId pid,
+      mojom::ProcessType process_type,
+      bool keep_small_allocations,
+      bool strip_path_from_mapped_files,
+      uint32_t sampling_rate,
+      mojom::HeapProfilePtr profile);
 
   void DoDumpOneProcessForTracing(
       scoped_refptr<DumpProcessesForTracingTracking> tracking,

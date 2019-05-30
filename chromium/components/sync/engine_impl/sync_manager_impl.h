@@ -33,7 +33,7 @@
 #include "components/sync/syncable/change_reorder_buffer.h"
 #include "components/sync/syncable/directory_change_delegate.h"
 #include "components/sync/syncable/user_share.h"
-#include "net/base/network_change_notifier.h"
+#include "services/network/public/cpp/network_connection_tracker.h"
 
 namespace syncer {
 
@@ -51,7 +51,7 @@ class TypeDebugInfoObserver;
 // same thread.
 class SyncManagerImpl
     : public SyncManager,
-      public net::NetworkChangeNotifier::NetworkChangeObserver,
+      public network::NetworkConnectionTracker::NetworkConnectionObserver,
       public JsBackend,
       public SyncEngineEventListener,
       public ServerConnectionEventListener,
@@ -60,7 +60,10 @@ class SyncManagerImpl
       public NudgeHandler {
  public:
   // Create an uninitialized SyncManager.  Callers must Init() before using.
-  explicit SyncManagerImpl(const std::string& name);
+  // |network_connection_tracker| must not be null and must outlive this object.
+  SyncManagerImpl(
+      const std::string& name,
+      network::NetworkConnectionTracker* network_connection_tracker);
   ~SyncManagerImpl() override;
 
   // SyncManager implementation.
@@ -79,8 +82,7 @@ class SyncManagerImpl
   void ConfigureSyncer(ConfigureReason reason,
                        ModelTypeSet to_download,
                        SyncFeatureState sync_feature_state,
-                       const base::Closure& ready_task,
-                       const base::Closure& retry_task) override;
+                       const base::Closure& ready_task) override;
   void SetInvalidatorEnabled(bool invalidator_enabled) override;
   void OnIncomingInvalidation(
       ModelType type,
@@ -106,9 +108,9 @@ class SyncManagerImpl
   bool HasDirectoryTypeDebugInfoObserver(
       TypeDebugInfoObserver* observer) override;
   void RequestEmitDebugInfo() override;
-  void ClearServerData(const base::Closure& callback) override;
   void OnCookieJarChanged(bool account_mismatch, bool empty_jar) override;
   void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd) override;
+  void UpdateInvalidationClientId(const std::string& client_id) override;
 
   // SyncEncryptionHandler::Observer implementation.
   void OnPassphraseRequired(
@@ -124,8 +126,6 @@ class SyncManagerImpl
   void OnCryptographerStateChanged(Cryptographer* cryptographer) override;
   void OnPassphraseTypeChanged(PassphraseType type,
                                base::Time explicit_passphrase_time) override;
-  void OnLocalSetPassphraseEncryption(
-      const SyncEncryptionHandler::NigoriState& nigori_state) override;
 
   // SyncEngineEventListener implementation.
   void OnSyncCycleEvent(const SyncCycleEvent& event) override;
@@ -164,9 +164,8 @@ class SyncManagerImpl
   // Handle explicit requests to fetch updates for the given types.
   void RefreshTypes(ModelTypeSet types) override;
 
-  // NetworkChangeNotifier::NetworkChangeObserver implementation.
-  void OnNetworkChanged(
-      net::NetworkChangeNotifier::ConnectionType type) override;
+  // NetworkConnectionTracker::NetworkConnectionObserver implementation.
+  void OnConnectionChanged(network::mojom::ConnectionType type) override;
 
   // NudgeHandler implementation.
   void NudgeForInitialDownload(ModelType type) override;
@@ -217,8 +216,8 @@ class SyncManagerImpl
   bool VisiblePropertiesDiffer(const syncable::EntryKernelMutation& mutation,
                                Cryptographer* cryptographer) const;
 
-  // Open the directory named with |username|.
-  bool OpenDirectory(const std::string& username);
+  // Opens the directory.
+  bool OpenDirectory(const InitArgs* args);
 
   void RequestNudgeForDataTypes(const base::Location& nudge_location,
                                 ModelTypeSet type);
@@ -239,6 +238,8 @@ class SyncManagerImpl
   base::FilePath database_path_;
 
   const std::string name_;
+
+  network::NetworkConnectionTracker* network_connection_tracker_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

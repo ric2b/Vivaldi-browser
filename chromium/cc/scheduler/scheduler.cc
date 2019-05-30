@@ -7,10 +7,11 @@
 #include <algorithm>
 
 #include "base/auto_reset.h"
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
-#include "base/trace_event/trace_event_argument.h"
+#include "base/trace_event/traced_value.h"
 #include "cc/base/devtools_instrumentation.h"
 #include "cc/scheduler/compositor_timing_history.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
@@ -106,6 +107,12 @@ void Scheduler::SetBeginFrameSource(viz::BeginFrameSource* source) {
     return;
   if (observing_begin_frame_source_)
     begin_frame_source_->AddObserver(this);
+}
+
+void Scheduler::NotifyAnimationWorkletStateChange(AnimationWorkletState state,
+                                                  TreeType tree) {
+  state_machine_.NotifyAnimationWorkletStateChange(state, tree);
+  ProcessScheduledActions();
 }
 
 void Scheduler::SetNeedsBeginMainFrame() {
@@ -221,17 +228,12 @@ void Scheduler::BeginMainFrameNotExpectedUntil(base::TimeTicks time) {
   client_->ScheduledActionBeginMainFrameNotExpectedUntil(time);
 }
 
-void Scheduler::BeginImplFrameNotExpectedSoon() {
-  compositor_timing_history_->BeginImplFrameNotExpectedSoon();
+void Scheduler::BeginMainFrameNotExpectedSoon() {
+  TRACE_EVENT0("cc", "Scheduler::BeginMainFrameNotExpectedSoon");
 
-  // Tying this to SendBeginMainFrameNotExpectedSoon will have some
-  // false negatives, but we want to avoid running long idle tasks when
-  // we are actually active.
-  if (state_machine_.wants_begin_main_frame_not_expected_messages()) {
-    DCHECK(!inside_scheduled_action_);
-    base::AutoReset<bool> mark_inside(&inside_scheduled_action_, true);
-    client_->SendBeginMainFrameNotExpectedSoon();
-  }
+  DCHECK(!inside_scheduled_action_);
+  base::AutoReset<bool> mark_inside(&inside_scheduled_action_, true);
+  client_->SendBeginMainFrameNotExpectedSoon();
 }
 
 void Scheduler::StartOrStopBeginFrames() {
@@ -255,9 +257,10 @@ void Scheduler::StartOrStopBeginFrames() {
       begin_frame_source_->RemoveObserver(this);
     // We're going idle so drop pending begin frame.
     CancelPendingBeginFrameTask();
-    BeginImplFrameNotExpectedSoon();
+    compositor_timing_history_->BeginImplFrameNotExpectedSoon();
     devtools_instrumentation::NeedsBeginFrameChanged(layer_tree_host_id_,
                                                      false);
+    client_->WillNotReceiveBeginFrame();
   }
 }
 
@@ -265,7 +268,7 @@ void Scheduler::CancelPendingBeginFrameTask() {
   if (pending_begin_frame_args_.IsValid()) {
     TRACE_EVENT_INSTANT0("cc", "Scheduler::BeginFrameDropped",
                          TRACE_EVENT_SCOPE_THREAD);
-    SendBeginFrameAck(pending_begin_frame_args_, kBeginFrameSkipped);
+    SendDidNotProduceFrame(pending_begin_frame_args_);
     // Make pending begin frame invalid so that we don't accidentally use it.
     pending_begin_frame_args_ = viz::BeginFrameArgs();
   }
@@ -306,13 +309,23 @@ void Scheduler::OnBeginFrameSourcePausedChanged(bool paused) {
 bool Scheduler::OnBeginFrameDerivedImpl(const viz::BeginFrameArgs& args) {
   TRACE_EVENT1("cc,benchmark", "Scheduler::BeginFrame", "args", args.AsValue());
 
+  // If the begin frame interval is different than last frame and bigger than
+  // zero then let |client_| know about the new interval for animations. In
+  // theory the interval should always be bigger than zero but the value is
+  // provided by APIs outside our control.
+  if (args.interval != last_frame_interval_ &&
+      args.interval > base::TimeDelta()) {
+    last_frame_interval_ = args.interval;
+    client_->FrameIntervalUpdated(last_frame_interval_);
+  }
+
   if (ShouldDropBeginFrame(args)) {
     TRACE_EVENT_INSTANT0("cc", "Scheduler::BeginFrameDropped",
                          TRACE_EVENT_SCOPE_THREAD);
     // Since we don't use the BeginFrame, we may later receive the same
     // BeginFrame again. Thus, we can't confirm it at this point, even though we
     // don't have any updates right now.
-    SendBeginFrameAck(args, kBeginFrameSkipped);
+    SendDidNotProduceFrame(args);
     return false;
   }
 
@@ -340,7 +353,7 @@ bool Scheduler::OnBeginFrameDerivedImpl(const viz::BeginFrameArgs& args) {
     if (pending_begin_frame_args_.IsValid()) {
       TRACE_EVENT_INSTANT0("cc", "Scheduler::BeginFrameDropped",
                            TRACE_EVENT_SCOPE_THREAD);
-      SendBeginFrameAck(pending_begin_frame_args_, kBeginFrameSkipped);
+      SendDidNotProduceFrame(pending_begin_frame_args_);
     }
     pending_begin_frame_args_ = args;
     // ProcessScheduledActions() will post the previous frame's deadline if it
@@ -415,7 +428,7 @@ void Scheduler::BeginImplFrameWithDeadline(const viz::BeginFrameArgs& args) {
     TRACE_EVENT_INSTANT0("cc", "Scheduler::MissedBeginFrameDropped",
                          TRACE_EVENT_SCOPE_THREAD);
     skipped_last_frame_missed_exceeded_deadline_ = true;
-    SendBeginFrameAck(args, kBeginFrameSkipped);
+    SendDidNotProduceFrame(args);
     return;
   }
   skipped_last_frame_missed_exceeded_deadline_ = false;
@@ -515,7 +528,7 @@ void Scheduler::BeginImplFrameWithDeadline(const viz::BeginFrameArgs& args) {
     TRACE_EVENT_INSTANT0("cc", "SkipBeginImplFrameToReduceLatency",
                          TRACE_EVENT_SCOPE_THREAD);
     skipped_last_frame_to_reduce_latency_ = true;
-    SendBeginFrameAck(begin_main_frame_args_, kBeginFrameSkipped);
+    SendDidNotProduceFrame(args);
     return;
   }
 
@@ -545,7 +558,9 @@ void Scheduler::FinishImplFrame() {
   // Send ack before calling ProcessScheduledActions() because it might send an
   // ack for any pending begin frame if we are going idle after this. This
   // ensures that the acks are sent in order.
-  SendBeginFrameAck(begin_main_frame_args_, kBeginFrameFinished);
+  if (!state_machine_.did_submit_in_last_frame())
+    SendDidNotProduceFrame(begin_impl_frame_tracker_.Current());
+
   begin_impl_frame_tracker_.Finish();
 
   ProcessScheduledActions();
@@ -554,22 +569,17 @@ void Scheduler::FinishImplFrame() {
     base::AutoReset<bool> mark_inside(&inside_scheduled_action_, true);
     client_->DidFinishImplFrame();
   }
-}
-
-void Scheduler::SendBeginFrameAck(const viz::BeginFrameArgs& args,
-                                  BeginFrameResult result) {
-  bool did_submit = false;
-  if (result == kBeginFrameFinished)
-    did_submit = state_machine_.did_submit_in_last_frame();
-
-  if (!did_submit) {
-    DCHECK(!inside_scheduled_action_);
-    base::AutoReset<bool> mark_inside(&inside_scheduled_action_, true);
-    client_->DidNotProduceFrame(viz::BeginFrameAck(args, did_submit));
-  }
 
   if (begin_frame_source_)
     begin_frame_source_->DidFinishFrame(this);
+}
+
+void Scheduler::SendDidNotProduceFrame(const viz::BeginFrameArgs& args) {
+  if (last_begin_frame_ack_.source_id == args.source_id &&
+      last_begin_frame_ack_.sequence_number == args.sequence_number)
+    return;
+  last_begin_frame_ack_ = viz::BeginFrameAck(args, false /* has_damage */);
+  client_->DidNotProduceFrame(last_begin_frame_ack_);
 }
 
 // BeginImplFrame starts a compositor frame that will wait up until a deadline
@@ -605,21 +615,18 @@ void Scheduler::BeginImplFrame(const viz::BeginFrameArgs& args,
 }
 
 void Scheduler::ScheduleBeginImplFrameDeadline() {
-  base::TimeTicks new_deadline;
+  using DeadlineMode = SchedulerStateMachine::BeginImplFrameDeadlineMode;
+  deadline_mode_ = state_machine_.CurrentBeginImplFrameDeadlineMode();
 
-  begin_impl_frame_deadline_mode_ =
-      state_machine_.CurrentBeginImplFrameDeadlineMode();
-  // Avoid using Now() for immediate deadlines because it's expensive, and this
-  // method is called in every ProcessScheduledActions() call. Using
-  // base::TimeTicks() achieves the same result.
-  switch (begin_impl_frame_deadline_mode_) {
-    case SchedulerStateMachine::BeginImplFrameDeadlineMode::NONE:
+  base::TimeTicks new_deadline;
+  switch (deadline_mode_) {
+    case DeadlineMode::NONE:
       // NONE is returned when deadlines aren't used (synchronous compositor),
       // or when outside a begin frame. In either case deadline task shouldn't
       // be posted or should be cancelled already.
       DCHECK(begin_impl_frame_deadline_task_.IsCancelled());
       return;
-    case SchedulerStateMachine::BeginImplFrameDeadlineMode::BLOCKED: {
+    case DeadlineMode::BLOCKED: {
       // TODO(sunnyps): Posting the deadline for pending begin frame is required
       // for browser compositor (commit_to_active_tree) to make progress in some
       // cases. Change browser compositor deadline to LATE in state machine to
@@ -631,37 +638,44 @@ void Scheduler::ScheduleBeginImplFrameDeadline() {
       bool has_pending_begin_frame = pending_begin_frame_args_.IsValid();
       if (has_pending_begin_frame) {
         new_deadline = base::TimeTicks();
+        break;
       } else {
         begin_impl_frame_deadline_task_.Cancel();
         return;
       }
-      break;
     }
-    case SchedulerStateMachine::BeginImplFrameDeadlineMode::LATE:
-      // We are waiting for a commit without needing active tree draw or we have
-      // nothing to do.
+    case DeadlineMode::LATE: {
+      // We are waiting for a commit without needing active tree draw or we
+      // have nothing to do.
       new_deadline = begin_impl_frame_tracker_.Current().frame_time +
                      begin_impl_frame_tracker_.Current().interval;
+      // Send early DidNotProduceFrame if we don't expect to produce a frame
+      // soon so that display scheduler doesn't wait unnecessarily.
+      // Note: This will only send one DidNotProduceFrame ack per begin frame.
+      if (!state_machine_.NewActiveTreeLikely())
+        SendDidNotProduceFrame(begin_impl_frame_tracker_.Current());
       break;
-    case SchedulerStateMachine::BeginImplFrameDeadlineMode::REGULAR:
+    }
+    case DeadlineMode::REGULAR:
       // We are animating the active tree but we're also waiting for commit.
       new_deadline = begin_impl_frame_tracker_.Current().deadline;
       break;
-    case SchedulerStateMachine::BeginImplFrameDeadlineMode::IMMEDIATE:
+    case DeadlineMode::IMMEDIATE:
+      // Avoid using Now() for immediate deadlines because it's expensive, and
+      // this method is called in every ProcessScheduledActions() call. Using
+      // base::TimeTicks() achieves the same result.
       new_deadline = base::TimeTicks();
       break;
   }
 
-  bool has_no_deadline_task = begin_impl_frame_deadline_task_.IsCancelled();
   // Post deadline task only if we didn't have one already or something caused
-  // us to change the deadline. Comparing deadline mode is not sufficient
-  // because the calculated deadline also depends on whether we have a pending
-  // begin frame which the state machine doesn't know about.
+  // us to change the deadline.
+  bool has_no_deadline_task = begin_impl_frame_deadline_task_.IsCancelled();
   if (has_no_deadline_task || new_deadline != deadline_) {
     TRACE_EVENT2("cc", "Scheduler::ScheduleBeginImplFrameDeadline",
                  "new deadline", new_deadline, "deadline mode",
                  SchedulerStateMachine::BeginImplFrameDeadlineModeToString(
-                     begin_impl_frame_deadline_mode_));
+                     deadline_mode_));
     deadline_ = new_deadline;
     deadline_scheduled_at_ = Now();
 
@@ -728,10 +742,10 @@ void Scheduler::DrawForced() {
       client_->CurrentFrameHadRAF(), client_->NextFrameHasPendingRAF());
 }
 
-void Scheduler::SetDeferCommits(bool defer_commits) {
-  TRACE_EVENT1("cc", "Scheduler::SetDeferCommits", "defer_commits",
-               defer_commits);
-  state_machine_.SetDeferCommits(defer_commits);
+void Scheduler::SetDeferBeginMainFrame(bool defer_begin_main_frame) {
+  TRACE_EVENT1("cc", "Scheduler::SetDeferBeginMainFrame",
+               "defer_begin_main_frame", defer_begin_main_frame);
+  state_machine_.SetDeferBeginMainFrame(defer_begin_main_frame);
   ProcessScheduledActions();
 }
 
@@ -770,17 +784,16 @@ void Scheduler::ProcessScheduledActions() {
         // TODO(brianderson): Pass begin_main_frame_args_ directly to client.
         client_->ScheduledActionSendBeginMainFrame(begin_main_frame_args_);
         break;
-      case SchedulerStateMachine::Action::NOTIFY_BEGIN_MAIN_FRAME_NOT_SENT:
-        state_machine_.WillNotifyBeginMainFrameNotSent();
-        // If SendBeginMainFrameNotExpectedSoon was not previously sent by
-        // BeginImplFrameNotExpectedSoon (because the messages were not required
-        // at that time), then send it now.
-        if (!observing_begin_frame_source_) {
-          client_->SendBeginMainFrameNotExpectedSoon();
-        } else {
-          BeginMainFrameNotExpectedUntil(begin_main_frame_args_.frame_time +
-                                         begin_main_frame_args_.interval);
-        }
+      case SchedulerStateMachine::Action::
+          NOTIFY_BEGIN_MAIN_FRAME_NOT_EXPECTED_UNTIL:
+        state_machine_.WillNotifyBeginMainFrameNotExpectedUntil();
+        BeginMainFrameNotExpectedUntil(begin_main_frame_args_.frame_time +
+                                       begin_main_frame_args_.interval);
+        break;
+      case SchedulerStateMachine::Action::
+          NOTIFY_BEGIN_MAIN_FRAME_NOT_EXPECTED_SOON:
+        state_machine_.WillNotifyBeginMainFrameNotExpectedSoon();
+        BeginMainFrameNotExpectedSoon();
         break;
       case SchedulerStateMachine::Action::COMMIT: {
         bool commit_has_no_updates = false;
@@ -862,9 +875,9 @@ void Scheduler::AsValueInto(base::trace_event::TracedValue* state) const {
                     skipped_last_frame_to_reduce_latency_);
   state->SetString("inside_action",
                    SchedulerStateMachine::ActionToString(inside_action_));
-  state->SetString("begin_impl_frame_deadline_mode",
+  state->SetString("deadline_mode",
                    SchedulerStateMachine::BeginImplFrameDeadlineModeToString(
-                       begin_impl_frame_deadline_mode_));
+                       deadline_mode_));
 
   state->SetDouble("deadline_ms", deadline_.since_origin().InMillisecondsF());
   state->SetDouble("deadline_scheduled_at_ms",

@@ -53,7 +53,7 @@ constexpr char kCrostiniAppIdPrefix[] = "crostini:";
 //    desktop file id, vm name, and container name.
 //    - The Terminal is a special case, using kCrostiniTerminalId (see below).
 // 3) Exo Window App Ids (window_app_id):
-//    - Retrieved from exo::ShellSurface::GetApplicationId()
+//    - Retrieved from exo::GetShellApplicationId()
 //    - For Wayland apps, this is the surface class of the app
 //    - For X apps, this is of the form org.chromium.termina.wmclass.foo when
 //    WM_CLASS is set to foo, or otherwise some string prefixed by
@@ -82,14 +82,24 @@ class CrostiniRegistryService : public KeyedService {
 
     std::string Name() const;
     std::string Comment() const;
+    std::string ExecutableFileName() const;
     std::set<std::string> MimeTypes() const;
+    std::set<std::string> Keywords() const;
     bool NoDisplay() const;
 
     base::Time InstallTime() const;
     base::Time LastLaunchTime() const;
 
+    // Whether this app should scale up when displayed.
+    bool IsScaled() const;
+    bool CanUninstall() const;
+
+    // Whether this app is the default terminal app.
+    bool is_terminal_app() const { return is_terminal_app_; }
+
    private:
     std::string LocalizedString(base::StringPiece key) const;
+    std::set<std::string> LocalizedList(base::StringPiece key) const;
 
     // The pref can only be null when the registration is for the Terminal app.
     // If we do have a pref for the Terminal app, it contains only the last
@@ -156,9 +166,16 @@ class CrostiniRegistryService : public KeyedService {
   void MaybeRequestIcon(const std::string& app_id,
                         ui::ScaleFactor scale_factor);
 
-  // Remove all apps from the named container. Used in the uninstall process.
+  // Remove all apps from the named VM and container. If |container_name| is an
+  // empty string, this function removes all apps associated with the VM,
+  // regardless of container. Used in the uninstall process.
   void ClearApplicationList(const std::string& vm_name,
                             const std::string& container_name);
+
+  // Remove all apps from the named container. Used when deleting a container
+  // without deleting the whole VM.
+  void ClearApplicationListForContainer(const std::string& vm_name,
+                                        const std::string& container_name);
 
   // The existing list of apps is replaced by |application_list|.
   void UpdateApplicationList(const vm_tools::apps::ApplicationList& app_list);
@@ -171,6 +188,9 @@ class CrostiniRegistryService : public KeyedService {
 
   // Serializes the current time and stores it in |dictionary|.
   void SetCurrentTime(base::Value* dictionary, const char* key) const;
+
+  // Set the display scaled setting of the |app_id| to |scaled|.
+  void SetAppScaled(const std::string& app_id, bool scaled);
 
   void SetClockForTesting(base::Clock* clock) { clock_ = clock; }
 
@@ -185,7 +205,7 @@ class CrostiniRegistryService : public KeyedService {
   // Callback for when we request an icon from the container.
   void OnContainerAppIcon(const std::string& app_id,
                           ui::ScaleFactor scale_factor,
-                          ConciergeClientResult result,
+                          CrostiniResult result,
                           const std::vector<Icon>& icons);
   // Callback for our internal call for saving out icon data.
   void OnIconInstalled(const std::string& app_id,

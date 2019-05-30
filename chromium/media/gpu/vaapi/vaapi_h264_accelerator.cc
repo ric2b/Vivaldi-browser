@@ -6,17 +6,12 @@
 
 #include <va/va.h>
 
+#include "base/stl_util.h"
 #include "media/gpu/decode_surface_handler.h"
 #include "media/gpu/h264_dpb.h"
+#include "media/gpu/macros.h"
 #include "media/gpu/vaapi/vaapi_common.h"
 #include "media/gpu/vaapi/vaapi_wrapper.h"
-
-#define ARRAY_MEMCPY_CHECKED(to, from)                               \
-  do {                                                               \
-    static_assert(sizeof(to) == sizeof(from),                        \
-                  #from " and " #to " arrays must be of same size"); \
-    memcpy(to, from, sizeof(to));                                    \
-  } while (0)
 
 namespace media {
 
@@ -144,7 +139,7 @@ Status VaapiH264Accelerator::SubmitFrameMetadata(
 
   // And fill it with picture info from DPB.
   FillVARefFramesFromDPB(dpb, pic_param.ReferenceFrames,
-                         arraysize(pic_param.ReferenceFrames));
+                         base::size(pic_param.ReferenceFrames));
 
   pic_param.num_ref_frames = sps->max_num_ref_frames;
 
@@ -261,23 +256,23 @@ Status VaapiH264Accelerator::SubmitSlice(
     }
   }
 
-  static_assert(
-      arraysize(slice_param.RefPicList0) == arraysize(slice_param.RefPicList1),
-      "Invalid RefPicList sizes");
+  static_assert(base::size(slice_param.RefPicList0) ==
+                    base::size(slice_param.RefPicList1),
+                "Invalid RefPicList sizes");
 
-  for (size_t i = 0; i < arraysize(slice_param.RefPicList0); ++i) {
+  for (size_t i = 0; i < base::size(slice_param.RefPicList0); ++i) {
     InitVAPicture(&slice_param.RefPicList0[i]);
     InitVAPicture(&slice_param.RefPicList1[i]);
   }
 
   for (size_t i = 0;
-       i < ref_pic_list0.size() && i < arraysize(slice_param.RefPicList0);
+       i < ref_pic_list0.size() && i < base::size(slice_param.RefPicList0);
        ++i) {
     if (ref_pic_list0[i])
       FillVAPicture(&slice_param.RefPicList0[i], ref_pic_list0[i]);
   }
   for (size_t i = 0;
-       i < ref_pic_list1.size() && i < arraysize(slice_param.RefPicList1);
+       i < ref_pic_list1.size() && i < base::size(slice_param.RefPicList1);
        ++i) {
     if (ref_pic_list1[i])
       FillVAPicture(&slice_param.RefPicList1[i], ref_pic_list1[i]);

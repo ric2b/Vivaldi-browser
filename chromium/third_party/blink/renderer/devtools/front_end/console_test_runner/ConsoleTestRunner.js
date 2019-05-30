@@ -20,14 +20,6 @@ ConsoleTestRunner.dumpConsoleMessages = function(printOriginatingCommand, dumpCl
       ConsoleTestRunner.dumpConsoleMessagesIntoArray(printOriginatingCommand, dumpClassNames, formatter));
 };
 
-ConsoleTestRunner.renderCompleteMessages = async function() {
-  const consoleView = Console.ConsoleView.instance();
-  if (consoleView._needsFullUpdate)
-    consoleView._updateMessageList();
-  const viewMessages = consoleView._visibleViewMessages;
-  await Promise.all(viewMessages.map(uiMessage => uiMessage.completeElementForTest()));
-};
-
 /**
  * @param {boolean=} printOriginatingCommand
  * @param {boolean=} dumpClassNames
@@ -37,8 +29,10 @@ ConsoleTestRunner.renderCompleteMessages = async function() {
 ConsoleTestRunner.dumpConsoleMessagesIntoArray = function(printOriginatingCommand, dumpClassNames, formatter) {
   formatter = formatter || ConsoleTestRunner.prepareConsoleMessageText;
   const result = [];
-  ConsoleTestRunner.disableConsoleViewport();
   const consoleView = Console.ConsoleView.instance();
+  const originalViewportStyle = consoleView._viewport.element.style;
+  const originalSize = {width: originalViewportStyle.width, height: originalViewportStyle.height};
+  ConsoleTestRunner.disableConsoleViewport();
   if (consoleView._needsFullUpdate)
     consoleView._updateMessageList();
   const viewMessages = consoleView._visibleViewMessages;
@@ -80,6 +74,8 @@ ConsoleTestRunner.dumpConsoleMessagesIntoArray = function(printOriginatingComman
     if (printOriginatingCommand && uiMessage.consoleMessage().originatingMessage())
       result.push('Originating from: ' + uiMessage.consoleMessage().originatingMessage().messageText);
   }
+  consoleView._viewport.element.style.width = originalSize.width;
+  consoleView._viewport.element.style.height = originalSize.height;
   return result;
 };
 
@@ -444,6 +440,13 @@ ConsoleTestRunner.waitForRemoteObjectsConsoleMessages = function(callback) {
 /**
  * @return {!Promise}
  */
+ConsoleTestRunner.waitForRemoteObjectsConsoleMessagesPromise = function() {
+  return new Promise(resolve => ConsoleTestRunner.waitForRemoteObjectsConsoleMessages(resolve));
+};
+
+/**
+ * @return {!Promise}
+ */
 ConsoleTestRunner.waitUntilConsoleEditorLoaded = function() {
   let fulfill;
   const promise = new Promise(x => (fulfill = x));
@@ -529,7 +532,7 @@ ConsoleTestRunner.waitForConsoleMessages = function(expectedCount, callback) {
  */
 ConsoleTestRunner.waitForConsoleMessagesPromise = async function(expectedCount) {
   await new Promise(fulfill => ConsoleTestRunner.waitForConsoleMessages(expectedCount, fulfill));
-  return ConsoleTestRunner.renderCompleteMessages();
+  return ConsoleTestRunner.waitForPendingViewportUpdates();
 };
 
 /**

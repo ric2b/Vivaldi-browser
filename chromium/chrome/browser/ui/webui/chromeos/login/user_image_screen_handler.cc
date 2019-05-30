@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
@@ -38,8 +39,9 @@ const char kJsScreenPath[] = "login.UserImageScreen";
 
 namespace chromeos {
 
-UserImageScreenHandler::UserImageScreenHandler()
-    : BaseScreenHandler(kScreenId) {
+UserImageScreenHandler::UserImageScreenHandler(
+    JSCallsContainer* js_calls_container)
+    : BaseScreenHandler(kScreenId, js_calls_container) {
   set_call_js_prefix(kJsScreenPath);
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
   media::SoundsManager* manager = media::SoundsManager::Get();
@@ -126,7 +128,7 @@ void UserImageScreenHandler::HandleGetImages() {
   std::unique_ptr<base::ListValue> default_images =
       default_user_image::GetAsDictionary(true /* all */);
   result.Set("images", std::move(default_images));
-  CallJS("setDefaultImages", result);
+  CallJS("login.UserImageScreen.setDefaultImages", result);
 }
 
 void UserImageScreenHandler::HandleScreenReady() {
@@ -142,7 +144,7 @@ void UserImageScreenHandler::HandlePhotoTaken(const std::string& image_url) {
   std::string raw_data;
   base::StringPiece url(image_url);
   const char kDataUrlPrefix[] = "data:image/png;base64,";
-  const size_t kDataUrlPrefixLength = arraysize(kDataUrlPrefix) - 1;
+  const size_t kDataUrlPrefixLength = base::size(kDataUrlPrefix) - 1;
   if (!url.starts_with(kDataUrlPrefix) ||
       !base::Base64Decode(url.substr(kDataUrlPrefixLength), &raw_data)) {
     LOG(WARNING) << "Invalid image URL";
@@ -179,7 +181,7 @@ void UserImageScreenHandler::HandleScreenShown() {
 }
 
 void UserImageScreenHandler::HideCurtain() {
-  CallJS("hideCurtain");
+  CallJS("login.UserImageScreen.hideCurtain");
 }
 
 }  // namespace chromeos

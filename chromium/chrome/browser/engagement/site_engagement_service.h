@@ -18,7 +18,7 @@
 #include "chrome/browser/engagement/site_engagement_details.mojom.h"
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "third_party/blink/public/platform/site_engagement.mojom.h"
+#include "third_party/blink/public/mojom/site_engagement/site_engagement.mojom.h"
 #include "ui/base/page_transition_types.h"
 
 namespace base {
@@ -126,6 +126,13 @@ class SiteEngagementService : public KeyedService,
   static double GetScoreFromSettings(HostContentSettingsMap* settings,
                                      const GURL& origin);
 
+  // Retrieves all details. Can be called from a background thread. |now| must
+  // be the current timestamp. Takes a scoped_refptr to keep
+  // HostContentSettingsMap alive. See crbug.com/901287.
+  static std::vector<mojom::SiteEngagementDetails> GetAllDetailsInBackground(
+      base::Time now,
+      scoped_refptr<HostContentSettingsMap> map);
+
   explicit SiteEngagementService(Profile* profile);
   ~SiteEngagementService() override;
 
@@ -138,6 +145,9 @@ class SiteEngagementService : public KeyedService,
   // Returns an array of engagement score details for all origins which have
   // a score, whether due to direct engagement, or other factors that cause
   // an engagement bonus to be applied.
+  //
+  // Note that this method is quite expensive, so try to avoid calling it in
+  // performance-critical code.
   std::vector<mojom::SiteEngagementDetails> GetAllDetails() const;
 
   // Update the engagement score of |url| for a notification interaction.
@@ -176,8 +186,8 @@ class SiteEngagementService : public KeyedService,
   void AddPointsForTesting(const GURL& url, double points);
 
  private:
+  friend class BookmarkAppTest;
   friend class SiteEngagementObserver;
-  friend class SiteEngagementServiceAndroid;
   friend class SiteEngagementServiceTest;
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, CheckHistograms);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, CleanupEngagementScores);
@@ -211,6 +221,7 @@ class SiteEngagementService : public KeyedService,
 
 #if defined(OS_ANDROID)
   // Shim class to expose the service to Java.
+  friend class SiteEngagementServiceAndroid;
   SiteEngagementServiceAndroid* GetAndroidService() const;
   void SetAndroidService(
       std::unique_ptr<SiteEngagementServiceAndroid> android_service);
@@ -240,8 +251,11 @@ class SiteEngagementService : public KeyedService,
   // left it once they return.
   void CleanupEngagementScores(bool update_last_engagement_time) const;
 
-  // Records UMA metrics.
-  void RecordMetrics();
+  // Possibly records UMA metrics if we haven't recorded them lately.
+  void MaybeRecordMetrics();
+
+  // Actually records metrics for the engagement in |details|.
+  void RecordMetrics(std::vector<mojom::SiteEngagementDetails>);
 
   // Returns true if we should record engagement for this URL. Currently,
   // engagement is only earned for HTTP and HTTPS.
@@ -284,11 +298,6 @@ class SiteEngagementService : public KeyedService,
                          const GURL& url,
                          EngagementType type);
 
-  // Called if |url| changes to |level| engagement, and informs every Helper of
-  // the change.
-  void SendLevelChangeToHelpers(const GURL& url,
-                                blink::mojom::EngagementLevel level);
-
   // Returns true if the last engagement increasing event seen by the site
   // engagement service was sufficiently long ago that we need to reset all
   // scores to be relative to now. This ensures that users who do not use the
@@ -302,8 +311,6 @@ class SiteEngagementService : public KeyedService,
   // Returns the number of origins with maximum daily and total engagement
   // respectively.
   int OriginsWithMaxDailyEngagement() const;
-  int OriginsWithMaxEngagement(
-      const std::vector<mojom::SiteEngagementDetails>& details) const;
 
   // Update site engagement scores after a history deletion.
   void UpdateEngagementScores(
@@ -330,9 +337,6 @@ class SiteEngagementService : public KeyedService,
   // origin's engagement score after an hour has elapsed triggers the next
   // upload.
   base::Time last_metrics_time_;
-
-  // All helpers currently attached to a WebContents.
-  std::set<SiteEngagementService::Helper*> helpers_;
 
   // A list of observers. When any origin registers an engagement-increasing
   // event, each observer's OnEngagementEvent method will be called.

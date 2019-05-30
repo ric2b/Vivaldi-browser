@@ -12,7 +12,6 @@
 
 namespace app_list {
 
-class AppListViewDelegate;
 class ContentsView;
 class SearchResultSuggestionChipView;
 
@@ -34,12 +33,14 @@ class SuggestionChipContainerView : public SearchResultContainerView {
   // trap focus within the folder when it is opened.
   void DisableFocusForShowingActiveFolder(bool disabled);
 
+  // Called when tablet mode starts and ends.
+  void OnTabletModeChanged(bool started);
+
  private:
   // Returns true if update and layout should be ignored.
   bool IgnoreUpdateAndLayout() const;
 
   ContentsView* contents_view_ = nullptr;  // Not owned
-  AppListViewDelegate* view_delegate_ = nullptr;
 
   std::vector<SearchResultSuggestionChipView*> suggestion_chip_views_;  // Owned
 

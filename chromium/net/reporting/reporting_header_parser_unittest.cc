@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/json/json_reader.h"
+#include "base/stl_util.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -25,7 +26,7 @@ class ReportingHeaderParserTest : public ReportingTestBase {
  protected:
   void ParseHeader(const GURL& url, const std::string& json) {
     std::unique_ptr<base::Value> value =
-        base::JSONReader::Read("[" + json + "]");
+        base::JSONReader::ReadDeprecated("[" + json + "]");
     if (value)
       ReportingHeaderParser::ParseHeader(context(), url, std::move(value));
   }
@@ -81,7 +82,7 @@ TEST_F(ReportingHeaderParserTest, Invalid) {
        "{\"max_age\":1, \"endpoints\": [{\"url\":\"https://b/\"}]}]",
        "wrapped in list"}};
 
-  for (size_t i = 0; i < arraysize(kInvalidHeaderTestCases); ++i) {
+  for (size_t i = 0; i < base::size(kInvalidHeaderTestCases); ++i) {
     auto& test_case = kInvalidHeaderTestCases[i];
     ParseHeader(kUrl_, test_case.header_value);
 
@@ -113,11 +114,25 @@ TEST_F(ReportingHeaderParserTest, ZeroMaxAge) {
       kOrigin_, kEndpoint_, ReportingClient::Subdomains::EXCLUDE, kGroup_,
       tick_clock()->NowTicks() + base::TimeDelta::FromDays(1),
       ReportingClient::kDefaultPriority, ReportingClient::kDefaultWeight);
+  EXPECT_NE(nullptr, FindClientInCache(cache(), kOrigin_, kEndpoint_));
 
   ParseHeader(kUrl_, "{\"endpoints\":[{\"url\":\"" + kEndpoint_.spec() +
                          "\"}],\"max_age\":0}");
 
+  // max_age: 0 should clear the pre-existing client.
   EXPECT_EQ(nullptr, FindClientInCache(cache(), kOrigin_, kEndpoint_));
+
+  std::vector<const ReportingClient*> clients;
+  cache()->GetClients(&clients);
+  EXPECT_TRUE(clients.empty());
+
+  // Without a pre-existing client, max_age: 0 should do nothing.
+  ParseHeader(kUrl_, "{\"endpoints\":[{\"url\":\"" + kEndpoint_.spec() +
+                         "\"}],\"max_age\":0}");
+
+  EXPECT_EQ(nullptr, FindClientInCache(cache(), kOrigin_, kEndpoint_));
+  cache()->GetClients(&clients);
+  EXPECT_TRUE(clients.empty());
 }
 
 TEST_F(ReportingHeaderParserTest, Subdomains) {

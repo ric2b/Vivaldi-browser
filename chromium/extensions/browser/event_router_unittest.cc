@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/values.h"
 #include "content/public/browser/browser_context.h"
@@ -66,10 +67,11 @@ class MockEventRouterObserver : public EventRouter::Observer {
   DISALLOW_COPY_AND_ASSIGN(MockEventRouterObserver);
 };
 
-using EventListenerConstructor = base::Callback<std::unique_ptr<EventListener>(
-    const std::string& /* event_name */,
-    content::RenderProcessHost* /* process */,
-    std::unique_ptr<base::DictionaryValue> /* filter */)>;
+using EventListenerConstructor =
+    base::RepeatingCallback<std::unique_ptr<EventListener>(
+        const std::string& /* event_name */,
+        content::RenderProcessHost* /* process */,
+        std::unique_ptr<base::DictionaryValue> /* filter */)>;
 
 std::unique_ptr<EventListener> CreateEventListenerForExtension(
     const std::string& extension_id,
@@ -92,7 +94,8 @@ std::unique_ptr<EventListener> CreateEventListenerForURL(
 // Creates an extension.  If |component| is true, it is created as a component
 // extension.  If |persistent| is true, it is created with a persistent
 // background page; otherwise it is created with an event page.
-scoped_refptr<Extension> CreateExtension(bool component, bool persistent) {
+scoped_refptr<const Extension> CreateExtension(bool component,
+                                               bool persistent) {
   ExtensionBuilder builder;
   std::unique_ptr<base::DictionaryValue> manifest =
       std::make_unique<base::DictionaryValue>();
@@ -309,17 +312,17 @@ void EventRouterTest::RunEventRouterObserverTest(
 
 TEST_F(EventRouterTest, EventRouterObserverForExtensions) {
   RunEventRouterObserverTest(
-      base::Bind(&CreateEventListenerForExtension, "extension_id"));
+      base::BindRepeating(&CreateEventListenerForExtension, "extension_id"));
 }
 
 TEST_F(EventRouterTest, EventRouterObserverForURLs) {
-  RunEventRouterObserverTest(
-      base::Bind(&CreateEventListenerForURL, GURL("http://google.com/path")));
+  RunEventRouterObserverTest(base::BindRepeating(
+      &CreateEventListenerForURL, GURL("http://google.com/path")));
 }
 
 TEST_F(EventRouterTest, TestReportEvent) {
   EventRouter router(browser_context(), nullptr);
-  scoped_refptr<Extension> normal = ExtensionBuilder("Test").Build();
+  scoped_refptr<const Extension> normal = ExtensionBuilder("Test").Build();
   router.ReportEvent(events::HistogramValue::FOR_TEST, normal.get(),
                      false /** did_enqueue */);
   ExpectHistogramCounts(1 /** Dispatch */, 0 /** DispatchToComponent */,
@@ -328,18 +331,18 @@ TEST_F(EventRouterTest, TestReportEvent) {
                         0 /** DispatchToComponentWithSuspendedEventPage */,
                         0 /** DispatchWithRunningEventPage */);
 
-  scoped_refptr<Extension> component =
+  scoped_refptr<const Extension> component =
       CreateExtension(true /** component */, true /** persistent */);
   router.ReportEvent(events::HistogramValue::FOR_TEST, component.get(),
                      false /** did_enqueue */);
   ExpectHistogramCounts(2, 1, 1, 0, 0, 0);
 
-  scoped_refptr<Extension> persistent = CreateExtension(false, true);
+  scoped_refptr<const Extension> persistent = CreateExtension(false, true);
   router.ReportEvent(events::HistogramValue::FOR_TEST, persistent.get(),
                      false /** did_enqueue */);
   ExpectHistogramCounts(3, 1, 2, 0, 0, 0);
 
-  scoped_refptr<Extension> event = CreateExtension(false, false);
+  scoped_refptr<const Extension> event = CreateExtension(false, false);
   router.ReportEvent(events::HistogramValue::FOR_TEST, event.get(),
                      false /** did_enqueue */);
   ExpectHistogramCounts(4, 1, 2, 0, 0, 0);
@@ -347,7 +350,7 @@ TEST_F(EventRouterTest, TestReportEvent) {
                      true /** did_enqueue */);
   ExpectHistogramCounts(5, 1, 2, 1, 0, 1);
 
-  scoped_refptr<Extension> component_event = CreateExtension(true, false);
+  scoped_refptr<const Extension> component_event = CreateExtension(true, false);
   router.ReportEvent(events::HistogramValue::FOR_TEST, component_event.get(),
                      false /** did_enqueue */);
   ExpectHistogramCounts(6, 2, 2, 1, 0, 2);
@@ -365,7 +368,7 @@ TEST_F(EventRouterFilterTest, Basic) {
   const std::string kExtensionId = "mbflcebpggnecokmikipoihdbecnjfoj";
   const std::string kHostSuffixes[] = {"foo.com", "bar.com", "baz.com"};
   std::vector<std::unique_ptr<DictionaryValue>> filters;
-  for (size_t i = 0; i < arraysize(kHostSuffixes); ++i) {
+  for (size_t i = 0; i < base::size(kHostSuffixes); ++i) {
     std::unique_ptr<base::DictionaryValue> filter =
         CreateHostSuffixFilter(kHostSuffixes[i]);
     event_router()->AddFilteredEventListener(kEventName, render_process_host(),

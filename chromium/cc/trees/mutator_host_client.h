@@ -20,6 +20,13 @@ class FilterOperations;
 
 enum class ElementListType { ACTIVE, PENDING };
 
+enum class AnimationWorkletMutationState {
+  STARTED,
+  COMPLETED_WITH_UPDATE,
+  COMPLETED_NO_UPDATE,
+  CANCELED
+};
+
 class MutatorHostClient {
  public:
   virtual bool IsElementInList(ElementId element_id,
@@ -44,7 +51,7 @@ class MutatorHostClient {
 
   // Allows to change IsAnimating value for a set of properties.
   virtual void ElementIsAnimatingChanged(
-      ElementId element_id,
+      const PropertyToElementIdMap& element_id_map,
       ElementListType list_type,
       const PropertyAnimationState& mask,
       const PropertyAnimationState& state) = 0;
@@ -52,6 +59,10 @@ class MutatorHostClient {
   virtual void ScrollOffsetAnimationFinished() = 0;
   virtual gfx::ScrollOffset GetScrollOffsetForAnimation(
       ElementId element_id) const = 0;
+
+  virtual void NotifyAnimationWorkletStateChange(
+      AnimationWorkletMutationState state,
+      ElementListType tree_type) = 0;
 };
 
 }  // namespace cc

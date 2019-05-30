@@ -8,10 +8,6 @@ assert(is_chromeos, "ProximityAuth is Chrome OS only")
 
 static_library("proximity_auth") {
   sources = [
-    "bluetooth_low_energy_connection_finder.cc",
-    "bluetooth_low_energy_connection_finder.h",
-    "bluetooth_low_energy_setup_connection_finder.cc",
-    "bluetooth_low_energy_setup_connection_finder.h",
     "messenger.h",
     "messenger_impl.cc",
     "messenger_impl.h",
@@ -29,6 +25,7 @@ static_library("proximity_auth") {
     "proximity_auth_profile_pref_manager.h",
     "proximity_auth_system.cc",
     "proximity_auth_system.h",
+    "proximity_monitor.cc",
     "proximity_monitor.h",
     "proximity_monitor_impl.cc",
     "proximity_monitor_impl.h",
@@ -43,6 +40,8 @@ static_library("proximity_auth") {
     "screenlock_bridge.h",
     "screenlock_state.cc",
     "screenlock_state.h",
+    "smart_lock_metrics_recorder.cc",
+    "smart_lock_metrics_recorder.h",
     "switches.cc",
     "switches.h",
     "unlock_manager.h",
@@ -52,19 +51,16 @@ static_library("proximity_auth") {
 
   deps = [
     "//base",
-    "//chromeos",
-    "//chromeos/components/proximity_auth/logging",
+    "//chromeos/components/multidevice",
+    "//chromeos/components/multidevice/logging",
     "//chromeos/components/proximity_auth/public/interfaces",
-
-    # TODO(hansberry): Remove this dependency once https://crbug.com/870123 is
-    # fixed.
+    "//chromeos/constants",
+    "//chromeos/dbus",
     "//chromeos/services/multidevice_setup/public/cpp",
     "//chromeos/services/multidevice_setup/public/cpp:prefs",
     "//chromeos/services/secure_channel/public/cpp/client",
     "//chromeos/services/secure_channel/public/mojom",
     "//components/account_id",
-    "//components/cryptauth",
-    "//components/cryptauth/ble",
     "//components/pref_registry:pref_registry",
     "//components/prefs",
     "//device/bluetooth",
@@ -90,9 +86,12 @@ static_library("test_support") {
 
   deps = [
     "//base",
-    "//chromeos/components/proximity_auth/logging",
+    "//chromeos/components/multidevice",
+    "//chromeos/components/multidevice:test_support",
+    "//chromeos/components/multidevice/logging",
+    "//chromeos/services/device_sync/proto",
+    "//chromeos/services/secure_channel:test_support",
     "//chromeos/services/secure_channel/public/cpp/client",
-    "//components/cryptauth:test_support",
     "//testing/gmock",
   ]
 }
@@ -100,7 +99,6 @@ static_library("test_support") {
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "bluetooth_low_energy_connection_finder_unittest.cc",
     "messenger_impl_unittest.cc",
     "proximity_auth_local_state_pref_manager_unittest.cc",
     "proximity_auth_profile_pref_manager_unittest.cc",
@@ -118,15 +116,15 @@ source_set("unit_tests") {
     ":test_support",
     "//base",
     "//base/test:test_support",
-    "//chromeos",
-    "//chromeos/components/proximity_auth/logging",
-    "//chromeos/components/proximity_auth/logging:unit_tests",
-
-    # TODO(hansberry): Remove this dependency once https://crbug.com/870123 is
-    # fixed.
+    "//chromeos/components/multidevice",
+    "//chromeos/components/multidevice:test_support",
+    "//chromeos/components/multidevice/logging",
+    "//chromeos/constants",
+    "//chromeos/dbus:test_support",
     "//chromeos/services/multidevice_setup/public/cpp:prefs",
+    "//chromeos/services/multidevice_setup/public/cpp:test_support",
+    "//chromeos/services/secure_channel:test_support",
     "//chromeos/services/secure_channel/public/cpp/client:test_support",
-    "//components/cryptauth:test_support",
     "//components/prefs:test_support",
     "//components/sync_preferences:test_support",
     "//device/bluetooth:mocks",

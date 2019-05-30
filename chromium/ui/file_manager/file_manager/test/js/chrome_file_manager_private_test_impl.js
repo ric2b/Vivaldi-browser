@@ -11,13 +11,6 @@
 
 const mockVolumeManager = new MockVolumeManager();
 
-// Create drive /root/ immediately.
-/** @type {MockFileSystem} */ (
-    mockVolumeManager
-        .getCurrentProfileVolumeInfo(VolumeManagerCommon.VolumeType.DRIVE)
-        .fileSystem)
-    .populate(['/root/', '/team_drives/']);
-
 /**
  * Suppress compiler warning for overwriting chrome.fileManagerPrivate.
  * @suppress {checkTypes}
@@ -32,10 +25,8 @@ chrome.fileManagerPrivate = {
   currentId_: 'test@example.com',
   displayedId_: 'test@example.com',
   preferences_: {
-    allowRedeemOffers: true,
     cellularDisabled: true,
     driveEnabled: true,
-    hostedFilesDisabled: true,
     searchSuggestEnabled: true,
     timezone: 'Australia/Sydney',
     use24hourClock: false,
@@ -79,7 +70,7 @@ chrome.fileManagerPrivate = {
     // Returns chrome.fileManagerPrivate.FileTask[].
     var results = [];
     // Support for view-in-browser on single text file used by QuickView.
-    if (entries.length == 1 &&
+    if (entries.length == 1 && entries[0].metadata &&
         entries[0].metadata.contentMimeType == 'text/plain') {
       results.push({
         taskId: 'hhaomjibdihmijegdhdafkllkbggdgoj|file|view-in-browser',
@@ -88,6 +79,17 @@ chrome.fileManagerPrivate = {
       });
     }
     setTimeout(callback, 0, results);
+  },
+  getCrostiniSharedPaths: (observeFirstForSession, callback) => {
+    // Returns Entry[], firstForSession.
+    setTimeout(callback, 0, [], observeFirstForSession);
+  },
+  getLinuxPackageInfo: (entry, callback) => {
+    // Returns chrome.fileManagerPrivate.LinuxPackageInfo.
+    setTimeout(callback, 0, {
+      name: 'dummy-package',
+      version: '1.0',
+    });
   },
   getPreferences: (callback) => {
     setTimeout(callback, 0, chrome.fileManagerPrivate.preferences_);
@@ -126,23 +128,20 @@ chrome.fileManagerPrivate = {
   grantAccess: (entryUrls, callback) => {
     setTimeout(callback, 0);
   },
-  crostiniEnabled_: true,
-  isCrostiniEnabled: (callback) => {
-    setTimeout(callback, 0, chrome.fileManagerPrivate.crostiniEnabled_);
-  },
   isUMAEnabled: (callback) => {
     setTimeout(callback, 0, false);
   },
   // Simulate startup of vm and container by taking 1s.
-  mountCrostiniContainerDelay_: 1000,
-  mountCrostiniContainer: (callback) => {
+  mountCrostiniDelay_: 1000,
+  mountCrostini: (callback) => {
     setTimeout(() => {
       test.mountCrostini();
       callback();
-    }, chrome.fileManagerPrivate.mountCrostiniContainerDelay_);
+    }, chrome.fileManagerPrivate.mountCrostiniDelay_);
   },
   onAppsUpdated: new test.Event(),
   onCopyProgress: new test.Event(),
+  onCrostiniChanged: new test.Event(),
   onDeviceChanged: new test.Event(),
   onDirectoryChanged: new test.Event(),
   onDriveConnectionStatusChanged: new test.Event(),
@@ -175,6 +174,12 @@ chrome.fileManagerPrivate = {
     // chrome.fileManagerPrivate.SearchResult { entry: Entry,
     // highlightedBaseName: string }
     setTimeout(callback, 0, []);
+  },
+  sharePathsWithCrostini: (entries, persist, callback) => {
+    setTimeout(callback, 0);
+  },
+  unsharePathWithCrostini: (entry, callback) => {
+    setTimeout(callback, 0);
   },
   nextCopyId_: 0,
   startCopy: (entry, parentEntry, newName, callback) => {
@@ -236,9 +241,15 @@ chrome.mediaGalleries = {
  */
 chrome.fileSystem = {
   requestFileSystem: (options, callback) => {
-    var volume =
-        mockVolumeManager.volumeInfoList.findByVolumeId(options.volumeId);
-    setTimeout(callback, 0, volume ? volume.fileSystem : null);
+    let fs = null;
+    for (let i = 0; i < mockVolumeManager.volumeInfoList.length; i++) {
+      const volume = mockVolumeManager.volumeInfoList.item(i);
+      if (volume.volumeId === options.volumeId) {
+        fs = volume.fileSystem;
+        break;
+      }
+    }
+    setTimeout(callback, 0, fs);
   },
 };
 
@@ -264,8 +275,9 @@ var webkitResolveLocalFileSystemURL = (url, successCallback, errorCallback) => {
       }
     }
   }
-  var error =
-      new Error('webkitResolveLocalFileSystemURL not found: [' + url + ']');
+  const message = `webkitResolveLocalFileSystemURL not found: ${url}`;
+  console.warn(message);
+  const error = new DOMException(message, 'NotFoundError');
   if (errorCallback) {
     setTimeout(errorCallback, 0, error);
   } else {

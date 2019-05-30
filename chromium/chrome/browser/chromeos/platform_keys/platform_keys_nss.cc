@@ -33,6 +33,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "crypto/nss_key_util.h"
 #include "crypto/openssl_util.h"
@@ -148,13 +149,10 @@ void GetCertDatabase(const std::string& token_id,
                      const GetCertDBCallback& callback,
                      BrowserContext* browser_context,
                      NSSOperationState* state) {
-  BrowserThread::PostTask(BrowserThread::IO,
-                          FROM_HERE,
-                          base::Bind(&GetCertDatabaseOnIOThread,
-                                     token_id,
-                                     callback,
-                                     browser_context->GetResourceContext(),
-                                     state));
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
+      base::BindOnce(&GetCertDatabaseOnIOThread, token_id, callback,
+                     browser_context->GetResourceContext(), state));
 }
 
 class GenerateRSAKeyState : public NSSOperationState {
@@ -478,7 +476,7 @@ void GenerateRSAKeyWithDB(std::unique_ptr<GenerateRSAKeyState> state,
       FROM_HERE,
       {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::Bind(&GenerateRSAKeyOnWorkerThread, base::Passed(&state)));
+      base::BindOnce(&GenerateRSAKeyOnWorkerThread, std::move(state)));
 }
 
 // Does the actual signing on a worker thread. Used by SignRSAWithDB().
@@ -572,7 +570,7 @@ void SignRSAWithDB(std::unique_ptr<SignRSAState> state,
       FROM_HERE,
       {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::Bind(&SignRSAOnWorkerThread, base::Passed(&state)));
+      base::BindOnce(&SignRSAOnWorkerThread, std::move(state)));
 }
 
 // Called when ClientCertStoreChromeOS::GetClientCerts is done. Builds the list
@@ -656,7 +654,7 @@ void DidGetCertificates(std::unique_ptr<GetCertificatesState> state,
       FROM_HERE,
       {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::Bind(&FilterCertificatesOnWorkerThread, base::Passed(&state)));
+      base::BindOnce(&FilterCertificatesOnWorkerThread, std::move(state)));
 }
 
 // Continues getting certificates with the obtained NSSCertDatabase. Used by
@@ -667,7 +665,7 @@ void GetCertificatesWithDB(std::unique_ptr<GetCertificatesState> state,
   // Get the pointer to slot before base::Passed releases |state|.
   PK11SlotInfo* slot = state->slot_.get();
   cert_db->ListCertsInSlot(
-      base::Bind(&DidGetCertificates, base::Passed(&state)), slot);
+      base::BindOnce(&DidGetCertificates, std::move(state)), slot);
 }
 
 // Does the actual certificate importing on the IO thread. Used by
@@ -895,9 +893,9 @@ void SelectClientCertificates(
   std::unique_ptr<SelectCertificatesState> state(new SelectCertificatesState(
       user->username_hash(), use_system_key_slot, cert_request_info, callback));
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(&SelectCertificatesOnIOThread, base::Passed(&state)));
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
+      base::BindOnce(&SelectCertificatesOnIOThread, std::move(state)));
 }
 
 }  // namespace subtle

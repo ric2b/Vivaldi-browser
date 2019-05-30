@@ -79,6 +79,8 @@ class BasicLockAcquireAndWaitThread : public SimpleThread {
   DISALLOW_COPY_AND_ASSIGN(BasicLockAcquireAndWaitThread);
 };
 
+}  // namespace
+
 TEST(TaskSchedulerLock, Basic) {
   SchedulerLock lock;
   BasicLockTestThread thread(&lock);
@@ -285,6 +287,92 @@ TEST(TaskSchedulerLock, PredecessorLongerCycle) {
   EXPECT_DCHECK_DEATH({ LockCycle cycle; });
 }
 
+TEST(TaskSchedulerLock, AcquireLockAfterUniversalPredecessor) {
+  // Acquisition of a universal-predecessor lock should not prevent acquisition
+  // of a SchedulerLock after it.
+  SchedulerLock universal_predecessor((UniversalPredecessor()));
+  SchedulerLock lock;
+
+  universal_predecessor.Acquire();
+  lock.Acquire();
+  lock.Release();
+  universal_predecessor.Release();
+}
+
+TEST(TaskSchedulerLock, AcquireMultipleLocksAfterUniversalPredecessor) {
+  // Acquisition of a universal-predecessor lock does not affect acquisition
+  // rules for locks beyond the one acquired directly after it.
+  SchedulerLock universal_predecessor((UniversalPredecessor()));
+  SchedulerLock lock;
+  SchedulerLock lock2(&lock);
+  SchedulerLock lock3;
+
+  universal_predecessor.Acquire();
+  lock.Acquire();
+  lock2.Acquire();
+  lock2.Release();
+  lock.Release();
+  universal_predecessor.Release();
+
+  EXPECT_DCHECK_DEATH({
+    universal_predecessor.Acquire();
+    lock.Acquire();
+    lock3.Acquire();
+  });
+}
+
+TEST(TaskSchedulerLock, AcquireUniversalPredecessorAfterLock) {
+  // A universal-predecessor lock may not be acquired after any other lock.
+  SchedulerLock universal_predecessor((UniversalPredecessor()));
+  SchedulerLock lock;
+
+  EXPECT_DCHECK_DEATH({
+    lock.Acquire();
+    universal_predecessor.Acquire();
+  });
+}
+
+TEST(TaskSchedulerLock, AcquireUniversalPredecessorAfterUniversalPredecessor) {
+  // A universal-predecessor lock may not be acquired after any other lock, not
+  // even another universal predecessor.
+  SchedulerLock universal_predecessor((UniversalPredecessor()));
+  SchedulerLock universal_predecessor2((UniversalPredecessor()));
+
+  EXPECT_DCHECK_DEATH({
+    universal_predecessor.Acquire();
+    universal_predecessor2.Acquire();
+  });
+}
+
+TEST(TaskSchedulerLock, AssertNoLockHeldOnCurrentThread) {
+  // AssertNoLockHeldOnCurrentThread() shouldn't fail when no lock is acquired.
+  SchedulerLock::AssertNoLockHeldOnCurrentThread();
+
+  // AssertNoLockHeldOnCurrentThread() should fail when a lock is acquired.
+  SchedulerLock lock;
+  {
+    AutoSchedulerLock auto_lock(lock);
+    EXPECT_DCHECK_DEATH({ SchedulerLock::AssertNoLockHeldOnCurrentThread(); });
+  }
+}
+
+namespace {
+
+class MemberGuardedByLock {
+ public:
+  SchedulerLock lock_;
+  int value GUARDED_BY(lock_) = 0;
+};
+
 }  // namespace
+
+TEST(TaskSchedulerLock, AnnotateAcquiredLockAlias) {
+  MemberGuardedByLock member_guarded_by_lock;
+  SchedulerLock* acquired = &member_guarded_by_lock.lock_;
+  AutoSchedulerLock auto_lock(*acquired);
+  AnnotateAcquiredLockAlias annotate(*acquired, member_guarded_by_lock.lock_);
+  member_guarded_by_lock.value = 42;  // Doesn't compile without |annotate|.
+}
+
 }  // namespace internal
 }  // namespace base

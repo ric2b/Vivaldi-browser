@@ -16,6 +16,7 @@
 #include "third_party/webrtc/api/video/i420_buffer.h"
 #include "third_party/webrtc/api/video_codecs/video_encoder.h"
 #include "third_party/webrtc/modules/video_coding/include/video_codec_interface.h"
+#include "third_party/webrtc/rtc_base/time_utils.h"
 
 using ::testing::_;
 using ::testing::AtLeast;
@@ -52,7 +53,7 @@ class EncodedImageCallbackWrapper : public webrtc::EncodedImageCallback {
       const webrtc::RTPFragmentationHeader* fragmentation) override {
     encoded_callback_.Run(encoded_image, codec_specific_info, fragmentation);
     return Result(Result::OK);
-  };
+  }
 
  private:
   EncodedCallback encoded_callback_;
@@ -188,7 +189,7 @@ class RTCVideoEncoderTest
                        const webrtc::CodecSpecificInfo* codec_specific_info,
                        const webrtc::RTPFragmentationHeader* fragmentation) {
     DVLOG(3) << __func__;
-    EXPECT_EQ(rtp_timestamp, encoded_image._timeStamp);
+    EXPECT_EQ(rtp_timestamp, encoded_image.Timestamp());
     EXPECT_EQ(capture_time_ms, encoded_image.capture_time_ms_);
   }
 
@@ -223,10 +224,10 @@ TEST_P(RTCVideoEncoderTest, RepeatedInitSucceeds) {
   EXPECT_EQ(WEBRTC_VIDEO_CODEC_OK, rtc_encoder_->InitEncode(&codec, 1, 12345));
 }
 
-INSTANTIATE_TEST_CASE_P(CodecProfiles,
-                        RTCVideoEncoderTest,
-                        Values(webrtc::kVideoCodecVP8,
-                               webrtc::kVideoCodecH264));
+INSTANTIATE_TEST_SUITE_P(CodecProfiles,
+                         RTCVideoEncoderTest,
+                         Values(webrtc::kVideoCodecVP8,
+                                webrtc::kVideoCodecH264));
 
 // Checks that WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE is returned when there is
 // platform error.

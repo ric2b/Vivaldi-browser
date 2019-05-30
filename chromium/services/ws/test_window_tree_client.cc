@@ -19,13 +19,6 @@ TestWindowTreeClient::InputEvent::InputEvent(InputEvent&& other) = default;
 
 TestWindowTreeClient::InputEvent::~InputEvent() = default;
 
-TestWindowTreeClient::ObservedPointerEvent::ObservedPointerEvent() = default;
-
-TestWindowTreeClient::ObservedPointerEvent::ObservedPointerEvent(
-    ObservedPointerEvent&& other) = default;
-
-TestWindowTreeClient::ObservedPointerEvent::~ObservedPointerEvent() = default;
-
 TestWindowTreeClient::TestWindowTreeClient() {
   tracker_.set_delegate(this);
 }
@@ -45,13 +38,12 @@ void TestWindowTreeClient::ClearInputEvents() {
   input_events_ = std::queue<InputEvent>();
 }
 
-TestWindowTreeClient::ObservedPointerEvent
-TestWindowTreeClient::PopObservedPointerEvent() {
-  if (observed_pointer_events_.empty())
-    return ObservedPointerEvent();
+std::unique_ptr<ui::Event> TestWindowTreeClient::PopObservedEvent() {
+  if (observed_events_.empty())
+    return nullptr;
 
-  ObservedPointerEvent event = std::move(observed_pointer_events_.front());
-  observed_pointer_events_.pop();
+  std::unique_ptr<ui::Event> event = std::move(observed_events_.front());
+  observed_events_.pop();
   return event;
 }
 
@@ -72,13 +64,16 @@ bool TestWindowTreeClient::AckFirstEvent(WindowTree* tree,
 
 void TestWindowTreeClient::OnChangeAdded() {}
 
+void TestWindowTreeClient::OnClientId(uint32_t client_id) {}
+
 void TestWindowTreeClient::OnEmbed(
     mojom::WindowDataPtr root,
     mojom::WindowTreePtr tree,
     int64_t display_id,
     Id focused_window_id,
     bool drawn,
-    const base::Optional<viz::LocalSurfaceId>& local_surface_id) {
+    const base::Optional<viz::LocalSurfaceIdAllocation>&
+        local_surface_id_allocation) {
   root_window_id_ = root->window_id;
   tree_ = std::move(tree);
   tracker_.OnEmbed(std::move(root), drawn);
@@ -88,8 +83,13 @@ void TestWindowTreeClient::OnEmbedFromToken(
     const base::UnguessableToken& token,
     mojom::WindowDataPtr root,
     int64_t display_id,
-    const base::Optional<viz::LocalSurfaceId>& local_surface_id) {
-  tracker_.OnEmbedFromToken(std::move(root), display_id, local_surface_id);
+    const base::Optional<viz::LocalSurfaceIdAllocation>&
+        local_surface_id_allocation) {
+  tracker_.OnEmbedFromToken(
+      std::move(root), display_id,
+      local_surface_id_allocation
+          ? local_surface_id_allocation->local_surface_id()
+          : viz::LocalSurfaceId());
 }
 
 void TestWindowTreeClient::OnEmbeddedAppDisconnected(Id window_id) {
@@ -116,27 +116,27 @@ void TestWindowTreeClient::OnTopLevelCreated(
     mojom::WindowDataPtr data,
     int64_t display_id,
     bool drawn,
-    const base::Optional<viz::LocalSurfaceId>& local_surface_id) {
-  tracker_.OnTopLevelCreated(change_id, std::move(data), drawn);
+    const viz::LocalSurfaceIdAllocation& local_surface_id_allocation) {
+  tracker_.OnTopLevelCreated(change_id, std::move(data), display_id, drawn,
+                             local_surface_id_allocation);
 }
 
 void TestWindowTreeClient::OnWindowBoundsChanged(
     Id window_id,
-    const gfx::Rect& old_bounds,
     const gfx::Rect& new_bounds,
-    const base::Optional<viz::LocalSurfaceId>& local_surface_id) {
+    const base::Optional<viz::LocalSurfaceIdAllocation>&
+        local_surface_id_allocation) {
   // The bounds of the root may change during startup on Android at random
   // times. As this doesn't matter, and shouldn't impact test exepctations,
   // it is ignored.
   if (window_id == root_window_id_ && !track_root_bounds_changes_)
     return;
-  tracker_.OnWindowBoundsChanged(window_id, old_bounds, new_bounds,
-                                 local_surface_id);
+  tracker_.OnWindowBoundsChanged(window_id, new_bounds,
+                                 local_surface_id_allocation);
 }
 
 void TestWindowTreeClient::OnWindowTransformChanged(
     Id window_id,
-    const gfx::Transform& old_transform,
     const gfx::Transform& new_transform) {
   tracker_.OnWindowTransformChanged(window_id);
 }
@@ -175,9 +175,13 @@ void TestWindowTreeClient::OnWindowVisibilityChanged(Id window, bool visible) {
 }
 
 void TestWindowTreeClient::OnWindowOpacityChanged(Id window,
-                                                  float old_opacity,
                                                   float new_opacity) {
   tracker_.OnWindowOpacityChanged(window, new_opacity);
+}
+
+void TestWindowTreeClient::OnWindowDisplayChanged(Id window_id,
+                                                  int64_t display_id) {
+  tracker_.OnWindowDisplayChanged(window_id, display_id);
 }
 
 void TestWindowTreeClient::OnWindowParentDrawnStateChanged(Id window,
@@ -189,31 +193,26 @@ void TestWindowTreeClient::OnWindowInputEvent(uint32_t event_id,
                                               Id window_id,
                                               int64_t display_id,
                                               std::unique_ptr<ui::Event> event,
-                                              bool matches_pointer_watcher) {
+                                              bool matches_event_observer) {
   tracker_.OnWindowInputEvent(window_id, *event, display_id,
-                              matches_pointer_watcher);
+                              matches_event_observer);
 
   InputEvent input_event;
   input_event.event_id = event_id;
   input_event.window_id = window_id;
   input_event.display_id = display_id;
   input_event.event = std::move(event);
-  input_event.matches_pointer_watcher = matches_pointer_watcher;
+  input_event.matches_event_observer = matches_event_observer;
   input_events_.push(std::move(input_event));
 
   if (tree_)
     tree_->OnWindowInputEventAck(event_id, mojom::EventResult::HANDLED);
 }
 
-void TestWindowTreeClient::OnPointerEventObserved(
-    std::unique_ptr<ui::Event> event,
-    Id window_id,
-    int64_t display_id) {
-  ObservedPointerEvent observed_pointer_event;
-  observed_pointer_event.window_id = window_id;
-  observed_pointer_event.display_id = display_id;
-  observed_pointer_event.event = std::move(event);
-  observed_pointer_events_.push(std::move(observed_pointer_event));
+void TestWindowTreeClient::OnObservedInputEvent(
+    std::unique_ptr<ui::Event> event) {
+  tracker_.OnObservedInputEvent(*event);
+  observed_events_.push(std::move(event));
 }
 
 void TestWindowTreeClient::OnWindowSharedPropertyChanged(
@@ -228,14 +227,8 @@ void TestWindowTreeClient::OnWindowFocused(Id focused_window_id) {
 }
 
 void TestWindowTreeClient::OnWindowCursorChanged(Id window_id,
-                                                 ui::CursorData cursor) {
+                                                 ui::Cursor cursor) {
   tracker_.OnWindowCursorChanged(window_id, cursor);
-}
-
-void TestWindowTreeClient::OnWindowSurfaceChanged(
-    Id window_id,
-    const viz::SurfaceInfo& surface_info) {
-  tracker_.OnWindowSurfaceChanged(window_id, surface_info);
 }
 
 void TestWindowTreeClient::OnDragDropStart(
@@ -245,7 +238,8 @@ void TestWindowTreeClient::OnDragDropStart(
 
 void TestWindowTreeClient::OnDragEnter(Id window,
                                        uint32_t key_state,
-                                       const gfx::Point& position,
+                                       const gfx::PointF& location_in_root,
+                                       const gfx::PointF& location,
                                        uint32_t effect_bitmask,
                                        OnDragEnterCallback callback) {
   tracker_.OnDragEnter(window);
@@ -253,7 +247,8 @@ void TestWindowTreeClient::OnDragEnter(Id window,
 
 void TestWindowTreeClient::OnDragOver(Id window,
                                       uint32_t key_state,
-                                      const gfx::Point& position,
+                                      const gfx::PointF& location_in_root,
+                                      const gfx::PointF& location,
                                       uint32_t effect_bitmask,
                                       OnDragOverCallback callback) {
   tracker_.OnDragOver(window);
@@ -265,7 +260,8 @@ void TestWindowTreeClient::OnDragLeave(Id window) {
 
 void TestWindowTreeClient::OnCompleteDrop(Id window,
                                           uint32_t key_state,
-                                          const gfx::Point& position,
+                                          const gfx::PointF& location_in_root,
+                                          const gfx::PointF& location,
                                           uint32_t effect_bitmask,
                                           OnCompleteDropCallback callback) {
   tracker_.OnCompleteDrop(window);
@@ -298,5 +294,12 @@ void TestWindowTreeClient::GetScreenProviderObserver(
     mojom::ScreenProviderObserverAssociatedRequest observer) {
   screen_provider_observer_binding_.Bind(std::move(observer));
 }
+
+void TestWindowTreeClient::OnOcclusionStatesChanged(
+    const base::flat_map<Id, mojom::OcclusionState>& occlusion_changes) {
+  tracker_.OnOcclusionStatesChanged(occlusion_changes);
+}
+
+void TestWindowTreeClient::CleanupGestureState(Id window_id) {}
 
 }  // namespace ws

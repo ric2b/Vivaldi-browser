@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.signin;
 
 import android.accounts.Account;
-import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 
 import org.junit.After;
@@ -14,7 +13,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -30,12 +28,11 @@ import org.chromium.components.signin.test.util.FakeAccountManagerDelegate;
 @RunWith(ChromeJUnit4ClassRunner.class)
 public class SigninHelperTest {
     private FakeAccountManagerDelegate mAccountManager;
-    private AdvancedMockContext mContext;
     private MockChangeEventChecker mEventChecker;
 
     @Before
     public void setUp() {
-        mContext = new AdvancedMockContext(InstrumentationRegistry.getTargetContext());
+        SigninHelper.resetSharedPrefs();
         mEventChecker = new MockChangeEventChecker();
 
         mAccountManager = new FakeAccountManagerDelegate(
@@ -46,6 +43,7 @@ public class SigninHelperTest {
     @After
     public void tearDown() {
         AccountManagerFacade.resetAccountManagerFacadeForTests();
+        SigninHelper.resetSharedPrefs();
     }
 
     @Test
@@ -53,29 +51,29 @@ public class SigninHelperTest {
     @RetryOnFailure
     public void testAccountsChangedPref() {
         Assert.assertEquals("Should never return true before the pref has ever been set.", false,
-                SigninHelper.checkAndClearAccountsChangedPref(mContext));
+                SigninHelper.checkAndClearAccountsChangedPref());
         Assert.assertEquals("Should never return true before the pref has ever been set.", false,
-                SigninHelper.checkAndClearAccountsChangedPref(mContext));
+                SigninHelper.checkAndClearAccountsChangedPref());
 
         // Mark the pref as set.
-        SigninHelper.markAccountsChangedPref(mContext);
+        SigninHelper.markAccountsChangedPref();
 
         Assert.assertEquals("Should return true first time after marking accounts changed", true,
-                SigninHelper.checkAndClearAccountsChangedPref(mContext));
+                SigninHelper.checkAndClearAccountsChangedPref());
         Assert.assertEquals("Should only return true first time after marking accounts changed",
-                false, SigninHelper.checkAndClearAccountsChangedPref(mContext));
+                false, SigninHelper.checkAndClearAccountsChangedPref());
         Assert.assertEquals("Should only return true first time after marking accounts changed",
-                false, SigninHelper.checkAndClearAccountsChangedPref(mContext));
+                false, SigninHelper.checkAndClearAccountsChangedPref());
 
         // Mark the pref as set again.
-        SigninHelper.markAccountsChangedPref(mContext);
+        SigninHelper.markAccountsChangedPref();
 
         Assert.assertEquals("Should return true first time after marking accounts changed", true,
-                SigninHelper.checkAndClearAccountsChangedPref(mContext));
+                SigninHelper.checkAndClearAccountsChangedPref());
         Assert.assertEquals("Should only return true first time after marking accounts changed",
-                false, SigninHelper.checkAndClearAccountsChangedPref(mContext));
+                false, SigninHelper.checkAndClearAccountsChangedPref());
         Assert.assertEquals("Should only return true first time after marking accounts changed",
-                false, SigninHelper.checkAndClearAccountsChangedPref(mContext));
+                false, SigninHelper.checkAndClearAccountsChangedPref());
     }
 
     @Test
@@ -84,7 +82,7 @@ public class SigninHelperTest {
     public void testSimpleAccountRename() {
         setSignedInAccountName("A");
         mEventChecker.insertRenameEvent("A", "B");
-        SigninHelper.updateAccountRenameData(mContext, mEventChecker);
+        SigninHelper.updateAccountRenameData(mEventChecker);
         Assert.assertEquals("B", getNewSignedInAccountName());
     }
 
@@ -94,7 +92,7 @@ public class SigninHelperTest {
     public void testNotSignedInAccountRename() {
         setSignedInAccountName("A");
         mEventChecker.insertRenameEvent("B", "C");
-        SigninHelper.updateAccountRenameData(mContext, mEventChecker);
+        SigninHelper.updateAccountRenameData(mEventChecker);
         Assert.assertEquals(null, getNewSignedInAccountName());
     }
 
@@ -103,10 +101,10 @@ public class SigninHelperTest {
     public void testSimpleAccountRenameTwice() {
         setSignedInAccountName("A");
         mEventChecker.insertRenameEvent("A", "B");
-        SigninHelper.updateAccountRenameData(mContext, mEventChecker);
+        SigninHelper.updateAccountRenameData(mEventChecker);
         Assert.assertEquals("B", getNewSignedInAccountName());
         mEventChecker.insertRenameEvent("B", "C");
-        SigninHelper.updateAccountRenameData(mContext, mEventChecker);
+        SigninHelper.updateAccountRenameData(mEventChecker);
         Assert.assertEquals("C", getNewSignedInAccountName());
     }
 
@@ -117,7 +115,7 @@ public class SigninHelperTest {
         setSignedInAccountName("A");
         mEventChecker.insertRenameEvent("B", "C");
         mEventChecker.insertRenameEvent("C", "D");
-        SigninHelper.updateAccountRenameData(mContext, mEventChecker);
+        SigninHelper.updateAccountRenameData(mEventChecker);
         Assert.assertEquals(null, getNewSignedInAccountName());
     }
 
@@ -131,7 +129,7 @@ public class SigninHelperTest {
         mEventChecker.insertRenameEvent("Y", "X"); // Unrelated.
         mEventChecker.insertRenameEvent("B", "C");
         mEventChecker.insertRenameEvent("C", "D");
-        SigninHelper.updateAccountRenameData(mContext, mEventChecker);
+        SigninHelper.updateAccountRenameData(mEventChecker);
         Assert.assertEquals("D", getNewSignedInAccountName());
     }
 
@@ -149,7 +147,7 @@ public class SigninHelperTest {
         Account account = AccountManagerFacade.createAccountFromName("D");
         AccountHolder accountHolder = AccountHolder.builder(account).build();
         mAccountManager.addAccountHolderBlocking(accountHolder);
-        SigninHelper.updateAccountRenameData(mContext, mEventChecker);
+        SigninHelper.updateAccountRenameData(mEventChecker);
         Assert.assertEquals("D", getNewSignedInAccountName());
     }
 
@@ -162,6 +160,6 @@ public class SigninHelperTest {
     }
 
     private String getNewSignedInAccountName() {
-        return SigninHelper.getNewSignedInAccountName(mContext);
+        return SigninHelper.getNewSignedInAccountName();
     }
 }

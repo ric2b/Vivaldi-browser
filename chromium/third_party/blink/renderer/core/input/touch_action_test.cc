@@ -64,7 +64,7 @@ using blink::test::RunPendingTasks;
 namespace blink {
 
 class TouchActionTrackingWebWidgetClient
-    : public FrameTestHelpers::TestWebWidgetClient {
+    : public frame_test_helpers::TestWebWidgetClient {
  public:
   TouchActionTrackingWebWidgetClient()
       : action_set_count_(0), action_(TouchAction::kTouchActionAuto) {}
@@ -93,13 +93,13 @@ class TouchActionTrackingWebWidgetClient
 class TouchActionTest : public testing::Test {
  public:
   TouchActionTest() : base_url_("http://www.test.com/") {
-    URLTestHelpers::RegisterMockedURLLoadFromBase(
+    url_test_helpers::RegisterMockedURLLoadFromBase(
         WebString::FromUTF8(base_url_), test::CoreTestDataPath(),
         "touch-action-tests.css", "text/css");
-    URLTestHelpers::RegisterMockedURLLoadFromBase(
+    url_test_helpers::RegisterMockedURLLoadFromBase(
         WebString::FromUTF8(base_url_), test::CoreTestDataPath(),
         "touch-action-tests.js", "text/javascript");
-    URLTestHelpers::RegisterMockedURLLoadFromBase(
+    url_test_helpers::RegisterMockedURLLoadFromBase(
         WebString::FromUTF8(base_url_), test::CoreTestDataPath(),
         "white-1x1.png", "image/png");
   }
@@ -115,13 +115,13 @@ class TouchActionTest : public testing::Test {
   void RunShadowDOMTest(std::string file);
   void RunIFrameTest(std::string file);
   void SendTouchEvent(WebView*, WebInputEvent::Type, IntPoint client_point);
-  WebViewImpl* SetupTest(std::string file, TouchActionTrackingWebWidgetClient&);
+  WebViewImpl* SetupTest(std::string file, TouchActionTrackingWebWidgetClient*);
   void RunTestOnTree(ContainerNode* root,
                      WebView*,
                      TouchActionTrackingWebWidgetClient&);
 
   std::string base_url_;
-  FrameTestHelpers::WebViewHelper web_view_helper_;
+  frame_test_helpers::WebViewHelper web_view_helper_;
 };
 
 void TouchActionTest::RunTouchActionTest(std::string file) {
@@ -137,7 +137,7 @@ void TouchActionTest::RunTouchActionTest(std::string file) {
   // turn them into persistent, stack allocated references. This
   // workaround is sufficient to handle this artificial test
   // scenario.
-  WebViewImpl* web_view = SetupTest(file, client);
+  WebViewImpl* web_view = SetupTest(file, &client);
 
   Persistent<Document> document =
       static_cast<Document*>(web_view->MainFrameImpl()->GetDocument());
@@ -150,7 +150,7 @@ void TouchActionTest::RunTouchActionTest(std::string file) {
 void TouchActionTest::RunShadowDOMTest(std::string file) {
   TouchActionTrackingWebWidgetClient client;
 
-  WebViewImpl* web_view = SetupTest(file, client);
+  WebViewImpl* web_view = SetupTest(file, &client);
 
   DummyExceptionStateForTesting es;
 
@@ -178,7 +178,7 @@ void TouchActionTest::RunShadowDOMTest(std::string file) {
 void TouchActionTest::RunIFrameTest(std::string file) {
   TouchActionTrackingWebWidgetClient client;
 
-  WebViewImpl* web_view = SetupTest(file, client);
+  WebViewImpl* web_view = SetupTest(file, &client);
   WebFrame* cur_frame = web_view->MainFrame()->FirstChild();
   ASSERT_TRUE(cur_frame);
 
@@ -196,17 +196,17 @@ void TouchActionTest::RunIFrameTest(std::string file) {
 
 WebViewImpl* TouchActionTest::SetupTest(
     std::string file,
-    TouchActionTrackingWebWidgetClient& client) {
-  URLTestHelpers::RegisterMockedURLLoadFromBase(WebString::FromUTF8(base_url_),
-                                                test::CoreTestDataPath(),
-                                                WebString::FromUTF8(file));
+    TouchActionTrackingWebWidgetClient* client) {
+  url_test_helpers::RegisterMockedURLLoadFromBase(
+      WebString::FromUTF8(base_url_), test::CoreTestDataPath(),
+      WebString::FromUTF8(file));
   // Note that JavaScript must be enabled for shadow DOM tests.
   WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
-      base_url_ + file, nullptr, nullptr, &client);
+      base_url_ + file, nullptr, nullptr, client);
 
   // Set size to enable hit testing, and avoid line wrapping for consistency
   // with browser.
-  web_view->Resize(WebSize(900, 1600));
+  web_view->MainFrameWidget()->Resize(WebSize(900, 1600));
 
   // Scroll to verify the code properly transforms windows to client co-ords.
   const int kScrollOffset = 100;
@@ -299,7 +299,7 @@ void TouchActionTest::RunTestOnTree(
       std::string failure_context_pos = context_stream.str();
 
       LocalFrame* main_frame =
-          ToLocalFrame(WebFrame::ToCoreFrame(*web_view->MainFrame()));
+          To<LocalFrame>(WebFrame::ToCoreFrame(*web_view->MainFrame()));
       LocalFrameView* main_frame_view = main_frame->View();
       IntRect visible_rect = WindowClipRect(*main_frame_view);
       ASSERT_TRUE(visible_rect.Contains(window_point))
@@ -387,8 +387,8 @@ void TouchActionTest::SendTouchEvent(WebView* web_view,
   if (type == WebInputEvent::kPointerCancel)
     event.dispatch_type = WebInputEvent::kEventNonBlocking;
 
-  web_view->HandleInputEvent(WebCoalescedInputEvent(event));
-  web_view->DispatchBufferedTouchEvents();
+  web_view->MainFrameWidget()->HandleInputEvent(WebCoalescedInputEvent(event));
+  web_view->MainFrameWidget()->DispatchBufferedTouchEvents();
   RunPendingTasks();
 }
 

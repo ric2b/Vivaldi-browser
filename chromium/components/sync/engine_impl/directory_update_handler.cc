@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/engine_impl/conflict_resolver.h"
 #include "components/sync/engine_impl/cycle/data_type_debug_info_emitter.h"
@@ -75,7 +76,7 @@ SyncerError DirectoryUpdateHandler::ProcessGetUpdatesResponse(
       // set. Fail this get updates cycle, to force a retry.
       DVLOG(1) << "GU Context conflict detected, forcing GU retry.";
       debug_info_emitter_->EmitUpdateCountersUpdate();
-      return DATATYPE_TRIGGERED_RETRY;
+      return SyncerError(SyncerError::DATATYPE_TRIGGERED_RETRY);
     }
   }
 
@@ -87,7 +88,10 @@ SyncerError DirectoryUpdateHandler::ProcessGetUpdatesResponse(
     CreateTypeRoot(&trans);
   }
 
-  UpdateSyncEntities(&trans, applicable_updates, status);
+  UpdateSyncEntities(
+      &trans, applicable_updates,
+      /*is_initial_sync=*/!dir_->InitialSyncEndedForType(&trans, type_),
+      status);
 
   if (IsValidProgressMarker(progress_marker)) {
     ExpireEntriesIfNeeded(&trans, progress_marker);
@@ -95,7 +99,7 @@ SyncerError DirectoryUpdateHandler::ProcessGetUpdatesResponse(
   }
 
   debug_info_emitter_->EmitUpdateCountersUpdate();
-  return SYNCER_OK;
+  return SyncerError(SyncerError::SYNCER_OK);
 }
 
 void DirectoryUpdateHandler::CreateTypeRoot(
@@ -214,7 +218,7 @@ SyncerError DirectoryUpdateHandler::ApplyUpdatesImpl(StatusController* status) {
     DCHECK(conflict_applicator.simple_conflict_ids().empty());
   }
 
-  return SYNCER_OK;
+  return SyncerError(SyncerError::SYNCER_OK);
 }
 
 void DirectoryUpdateHandler::PostApplyUpdates() {
@@ -242,11 +246,16 @@ bool DirectoryUpdateHandler::IsApplyUpdatesRequired() {
 void DirectoryUpdateHandler::UpdateSyncEntities(
     syncable::ModelNeutralWriteTransaction* trans,
     const SyncEntityList& applicable_updates,
+    bool is_initial_sync,
     StatusController* status) {
   UpdateCounters* counters = debug_info_emitter_->GetMutableUpdateCounters();
-  counters->num_updates_received += applicable_updates.size();
-  ProcessDownloadedUpdates(dir_, trans, type_, applicable_updates, status,
-                           counters);
+  if (is_initial_sync) {
+    counters->num_initial_updates_received += applicable_updates.size();
+  } else {
+    counters->num_non_initial_updates_received += applicable_updates.size();
+  }
+  ProcessDownloadedUpdates(dir_, trans, type_, applicable_updates,
+                           is_initial_sync, status, counters);
 }
 
 bool DirectoryUpdateHandler::IsValidProgressMarker(

@@ -6,7 +6,7 @@
 
 #include "base/big_endian.h"
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 
 using base::BigEndianReader;
 
@@ -91,6 +91,31 @@ const JpegHuffmanTable kDefaultAcTable[kJpegMaxHuffmanTableNumBaseline] = {
     },
 };
 
+constexpr uint8_t kZigZag8x8[64] = {
+    0,  1,  8,  16, 9,  2,  3,  10, 17, 24, 32, 25, 18, 11, 4,  5,
+    12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13, 6,  7,  14, 21, 28,
+    35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51,
+    58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63};
+
+constexpr JpegQuantizationTable kDefaultQuantTable[2] = {
+    // Table K.1 Luminance quantization table values.
+    {
+        true,
+        {16, 11, 10, 16, 24,  40,  51,  61,  12, 12, 14, 19, 26,  58,  60,  55,
+         14, 13, 16, 24, 40,  57,  69,  56,  14, 17, 22, 29, 51,  87,  80,  62,
+         18, 22, 37, 56, 68,  109, 103, 77,  24, 35, 55, 64, 81,  104, 113, 92,
+         49, 64, 78, 87, 103, 121, 120, 101, 72, 92, 95, 98, 112, 100, 103, 99},
+    },
+    // Table K.2 Chrominance quantization table values.
+    {
+        true,
+        {17, 18, 24, 47, 99, 99, 99, 99, 18, 21, 26, 66, 99, 99, 99, 99,
+         24, 26, 56, 99, 99, 99, 99, 99, 47, 66, 99, 99, 99, 99, 99, 99,
+         99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99,
+         99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99},
+    },
+};
+
 static bool InRange(int value, int a, int b) {
   return a <= value && value <= b;
 }
@@ -124,7 +149,7 @@ static bool ParseSOF(const char* buffer,
     return false;
   }
   if (!InRange(frame_header->num_components, 1,
-               arraysize(frame_header->components))) {
+               base::size(frame_header->components))) {
     DLOG(ERROR) << "num_components="
                 << static_cast<int>(frame_header->num_components)
                 << " is not supported";
@@ -243,7 +268,7 @@ static bool ParseDHT(const char* buffer,
     size_t count = 0;
     if (!reader.ReadBytes(&table->code_length, sizeof(table->code_length)))
       return false;
-    for (size_t i = 0; i < arraysize(table->code_length); i++)
+    for (size_t i = 0; i < base::size(table->code_length); i++)
       count += table->code_length[i];
 
     if (!InRange(count, 0, sizeof(table->code_value))) {

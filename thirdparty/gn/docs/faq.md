@@ -50,3 +50,9 @@ See [GNCrossCompiles](cross_compiles.md) for more info.
 Yes! If you create a group target called "default" in the top-level (root)
 build file, i.e., "//:default", GN will tell Ninja to build that by
 default, rather than building everything.
+
+## Are there any public presentations on GN?
+
+[There's at least one](https://docs.google.com/presentation/d/15Zwb53JcncHfEwHpnG_PoIbbzQ3GQi_cpujYwbpcbZo/edit?usp=sharing), from 2015. There
+haven't been big changes since then apart from moving it to a standalone
+repo, so it should still be relevant.

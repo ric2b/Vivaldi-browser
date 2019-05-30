@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include <array>
 #include <memory>
 #include <string>
 #include <vector>
@@ -172,8 +173,8 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   // otherwise.
   gfx::Rect GetTargetBounds() const;
 
-  // Sets/gets whether or not drawing of child layers should be clipped to the
-  // bounds of this layer.
+  // Sets/gets whether or not drawing of child layers, including drawing in
+  // this layer, should be clipped to the bounds of this layer.
   void SetMasksToBounds(bool masks_to_bounds);
   bool GetMasksToBounds() const;
 
@@ -249,8 +250,10 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   void SetMaskLayer(Layer* layer_mask);
   Layer* layer_mask_layer() { return layer_mask_; }
 
-  // Sets the visibility of the Layer. A Layer may be visible but not
-  // drawn. This happens if any ancestor of a Layer is not visible.
+  // Sets the visibility of the Layer. A Layer may be visible but not drawn.
+  // This happens if any ancestor of a Layer is not visible.
+  // Any changes made to this in the source layer will override the visibility
+  // of its mirror layer.
   void SetVisible(bool visible);
   bool visible() const { return visible_; }
 
@@ -265,6 +268,14 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   // Returns true if this layer can have a texture (has_texture_ is true)
   // and is not completely obscured by a child.
   bool ShouldDraw() const;
+
+  // Sets a rounded corner clip radius on the layer. This will clip the layer to
+  // bounds. The ordering for the array is:
+  //    top left, top right, bottom right, bottom left
+  void SetRoundedCornerRadius(const std::array<uint32_t, 4>& corner_radii);
+  const std::array<uint32_t, 4>& rounded_corner_radii() const {
+    return cc_layer_->corner_radii();
+  }
 
   // Converts a point from the coordinates of |source| to the coordinates of
   // |target|. Necessarily, |source| and |target| must inhabit the same Layer
@@ -304,21 +315,26 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
 
   // TODO(fsamuel): Update this comment.
   // Begins showing content from a surface with a particular ID.
-  void SetShowPrimarySurface(const viz::SurfaceId& surface_id,
-                             const gfx::Size& frame_size_in_dip,
-                             SkColor default_background_color,
-                             const cc::DeadlinePolicy& deadline_policy,
-                             bool stretch_content_to_fill_bounds);
+  void SetShowSurface(const viz::SurfaceId& surface_id,
+                      const gfx::Size& frame_size_in_dip,
+                      SkColor default_background_color,
+                      const cc::DeadlinePolicy& deadline_policy,
+                      bool stretch_content_to_fill_bounds);
 
   // In the event that the primary surface is not yet available in the
   // display compositor, the fallback surface will be used.
-  void SetFallbackSurfaceId(const viz::SurfaceId& surface_id);
+  void SetOldestAcceptableFallback(const viz::SurfaceId& surface_id);
 
-  // Returns the primary SurfaceId set by SetShowPrimarySurface.
-  const viz::SurfaceId* GetPrimarySurfaceId() const;
+  // Begins mirroring content from a reflected surface, e.g. a software mirrored
+  // display. |surface_id| should be the root surface for a display.
+  void SetShowReflectedSurface(const viz::SurfaceId& surface_id,
+                               const gfx::Size& frame_size_in_pixels);
 
-  // Returns the fallback SurfaceId set by SetFallbackSurfaceId.
-  const viz::SurfaceId* GetFallbackSurfaceId() const;
+  // Returns the primary SurfaceId set by SetShowSurface.
+  const viz::SurfaceId* GetSurfaceId() const;
+
+  // Returns the fallback SurfaceId set by SetOldestAcceptableFallback.
+  const viz::SurfaceId* GetOldestAcceptableFallback() const;
 
   bool has_external_content() const {
     return texture_layer_.get() || surface_layer_.get();
@@ -428,6 +444,14 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   void AddDeferredPaintRequest();
   void RemoveDeferredPaintRequest();
 
+  // |quality| is used as a multiplier to scale the temporary surface
+  // that might be created by the compositor to apply the backdrop filters.
+  // The filter will be applied on a surface |quality|^2 times the area of the
+  // original background.
+  // |quality| lower than one will decrease memory usage and increase
+  // performance.
+  void SetBackdropFilterQuality(const float quality);
+
   bool IsPaintDeferredForTesting() const { return deferred_paint_requests_; }
 
   // Request trilinear filtering for layer.
@@ -513,6 +537,8 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   void ResetCompositorForAnimatorsInTree(Compositor* compositor);
 
   void OnMirrorDestroyed(LayerMirror* mirror);
+
+  void CreateSurfaceLayerIfNecessary();
 
   const LayerType type_;
 
@@ -621,6 +647,8 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   // value > 0, means we need to defer painting the layer. If the value == 0,
   // means we should paint the layer.
   unsigned deferred_paint_requests_;
+
+  float backdrop_filter_quality_;
 
   // The counter to maintain how many trilinear filtering requests we have. If
   // the value > 0, means we need to perform trilinear filtering on the layer.

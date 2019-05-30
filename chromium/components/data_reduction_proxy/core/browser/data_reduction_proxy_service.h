@@ -18,12 +18,15 @@
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_metrics.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_pingback_client.h"
 #include "components/data_reduction_proxy/core/browser/db_data_owner.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_storage_delegate.h"
+#include "components/data_use_measurement/core/data_use_measurement.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
-#include "net/http/http_request_headers.h"
 #include "net/nqe/effective_connection_type.h"
+#include "services/network/public/cpp/network_connection_tracker.h"
 #include "services/network/public/cpp/network_quality_tracker.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/mojom/network_context.mojom-forward.h"
 
 class PrefService;
 
@@ -31,28 +34,28 @@ namespace base {
 class SequencedTaskRunner;
 class SingleThreadTaskRunner;
 class TimeDelta;
-class Value;
 }
 
 namespace net {
+class HttpRequestHeaders;
 class URLRequestContextGetter;
+class ProxyList;
 }
 
 namespace data_reduction_proxy {
 
 class DataReductionProxyCompressionStats;
-class DataReductionProxyEventStore;
 class DataReductionProxyIOData;
-class DataReductionProxyPingbackClient;
 class DataReductionProxyServiceObserver;
 class DataReductionProxySettings;
 
 // Contains and initializes all Data Reduction Proxy objects that have a
 // lifetime based on the UI thread.
 class DataReductionProxyService
-    : public DataReductionProxyEventStorageDelegate,
+    : public data_use_measurement::DataUseMeasurement::ServicesDataUseObserver,
       public network::NetworkQualityTracker::EffectiveConnectionTypeObserver,
-      public network::NetworkQualityTracker::RTTAndThroughputEstimatesObserver {
+      public network::NetworkQualityTracker::RTTAndThroughputEstimatesObserver,
+      public network::NetworkConnectionTracker::NetworkConnectionObserver {
  public:
   // The caller must ensure that |settings|, |prefs|, |request_context|, and
   // |io_task_runner| remain alive for the lifetime of the
@@ -64,9 +67,12 @@ class DataReductionProxyService
       DataReductionProxySettings* settings,
       PrefService* prefs,
       net::URLRequestContextGetter* request_context_getter,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       std::unique_ptr<DataStore> store,
       std::unique_ptr<DataReductionProxyPingbackClient> pingback_client,
       network::NetworkQualityTracker* network_quality_tracker,
+      network::NetworkConnectionTracker* network_connection_tracker,
+      data_use_measurement::DataUseMeasurement* data_use_measurement,
       const scoped_refptr<base::SequencedTaskRunner>& ui_task_runner,
       const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
       const scoped_refptr<base::SequencedTaskRunner>& db_task_runner,
@@ -101,15 +107,6 @@ class DataReductionProxyService
       data_use_measurement::DataUseUserData::DataUseContentType content_type,
       int32_t service_hash_code);
 
-  // Overrides of DataReductionProxyEventStorageDelegate.
-  void AddEvent(std::unique_ptr<base::Value> event) override;
-  void AddEnabledEvent(std::unique_ptr<base::Value> event,
-                       bool enabled) override;
-  void AddEventAndSecureProxyCheckState(std::unique_ptr<base::Value> event,
-                                        SecureProxyCheckState state) override;
-  void AddAndSetLastBypassEvent(std::unique_ptr<base::Value> event,
-                                int64_t expiration_ticks) override;
-
   // Records whether the Data Reduction Proxy is unreachable or not.
   void SetUnreachable(bool unreachable);
 
@@ -138,37 +135,49 @@ class DataReductionProxyService
   // Sets the reporting fraction in the pingback client.
   void SetPingbackReportingFraction(float pingback_reporting_fraction);
 
+  // Sets |pingback_client_| to be used for testing purposes.
+  void SetPingbackClientForTesting(
+      DataReductionProxyPingbackClient* pingback_client) {
+    pingback_client_.reset(pingback_client);
+  }
+
   // Notifies |this| that the user has requested to clear the browser
   // cache. This method is not called if only a subset of site entries are
   // cleared.
   void OnCacheCleared(const base::Time start, const base::Time end);
 
+  // When triggering previews, prevent long term black list rules.
+  void SetIgnoreLongTermBlackListRules(bool ignore_long_term_black_list_rules);
+
   // Returns the current network quality estimates.
   net::EffectiveConnectionType GetEffectiveConnectionType() const;
   base::Optional<base::TimeDelta> GetHttpRttEstimate() const;
 
-  // Sets |proxy_request_headers_| with a forwarded value from the IO thread.
-  void SetProxyRequestHeaders(net::HttpRequestHeaders headers) {
-    proxy_request_headers_ = headers;
-  }
+  network::mojom::ConnectionType GetConnectionType() const;
 
-  // Returns |proxy_request_headers_|. Note: The chrome-proxy header does not
-  // include the page id.
-  const net::HttpRequestHeaders GetProxyRequestHeaders() const {
-    return proxy_request_headers_;
-  }
+  // Sends the given |headers| to |DataReductionProxySettings|.
+  void SetProxyRequestHeadersOnUI(const net::HttpRequestHeaders& headers);
+
+  // Sends the given |proxies| to |DataReductionProxySettings|.
+  void SetConfiguredProxiesOnUI(const net::ProxyList& proxies);
+
+  // Sets a config client that can be used to update Data Reduction Proxy
+  // settings when the network service is enabled.
+  void SetCustomProxyConfigClient(
+      network::mojom::CustomProxyConfigClientPtrInfo config_client_info);
 
   // Accessor methods.
   DataReductionProxyCompressionStats* compression_stats() const {
     return compression_stats_.get();
   }
 
-  DataReductionProxyEventStore* event_store() const {
-    return event_store_.get();
-  }
-
   net::URLRequestContextGetter* url_request_context_getter() const {
     return url_request_context_getter_;
+  }
+
+  std::unique_ptr<network::SharedURLLoaderFactoryInfo> url_loader_factory_info()
+      const {
+    return url_loader_factory_->Clone();
   }
 
   DataReductionProxyPingbackClient* pingback_client() const {
@@ -192,12 +201,18 @@ class DataReductionProxyService
   // Loads the Data Reduction Proxy configuration from |prefs_| and applies it.
   void ReadPersistedClientConfig();
 
+  void OnServicesDataUse(int32_t service_hash_code,
+                         int64_t recv_bytes,
+                         int64_t sent_bytes) override;
+
+  // NetworkConnectionTracker::NetworkConnectionObserver
+  void OnConnectionChanged(network::mojom::ConnectionType type) override;
+
   net::URLRequestContextGetter* url_request_context_getter_;
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
   // Tracks compression statistics to be displayed to the user.
   std::unique_ptr<DataReductionProxyCompressionStats> compression_stats_;
-
-  std::unique_ptr<DataReductionProxyEventStore> event_store_;
 
   std::unique_ptr<DataReductionProxyPingbackClient> pingback_client_;
 
@@ -221,19 +236,23 @@ class DataReductionProxyService
   base::ObserverList<DataReductionProxyServiceObserver>::Unchecked
       observer_list_;
 
-  // Authentication headers for the Data Reduction Proxy, if any. This is
-  // forwarded from the IO thread in PostTask.
-  net::HttpRequestHeaders proxy_request_headers_;
-
   bool initialized_;
 
   // Must be accessed on UI thread. Guaranteed to be non-null during the
   // lifetime of |this|.
   network::NetworkQualityTracker* network_quality_tracker_;
+  network::NetworkConnectionTracker* network_connection_tracker_;
+
+  // Must be accessed on UI thread. Guaranteed to be non-null during the
+  // lifetime of |this|.
+  data_use_measurement::DataUseMeasurement* data_use_measurement_;
 
   // Current network quality estimates.
   net::EffectiveConnectionType effective_connection_type_;
   base::Optional<base::TimeDelta> http_rtt_;
+
+  network::mojom::ConnectionType connection_type_ =
+      network::mojom::ConnectionType::CONNECTION_UNKNOWN;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

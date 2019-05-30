@@ -8,7 +8,6 @@
 <translation id="129863573139666797"><ph name="BEGIN_LINK" />Încercați să goliți cookie-urile<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Despre versiune</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> nu a trimis date.</translation>
-<translation id="1506687042165942984">Arată o copie salvată (adică despre care se știe că este învechită) a acestei pagini.</translation>
 <translation id="1559528461873125649">Nu există un astfel de fișier sau director</translation>
 <translation id="1640244768702815859">Încercați <ph name="BEGIN_LINK" />vizitarea paginii inițiale a site-ului<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protocol nesuportat</translation>
@@ -17,6 +16,7 @@
 <translation id="1734878702283171397">Încearcați să contactați administratorul de sistem.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Încercați să rulați diagnosticul de rețea Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Acest site web conține programe dăunătoare</translation>
+<translation id="1916770123977586577">Pentru a aplica setările actualizate de la acest site web, reîncărcați această pagină</translation>
 <translation id="194030505837763158">Accesați <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Avansate</translation>
 <translation id="2030481566774242610">Ați dorit să scrieți <ph name="LINK" />?</translation>

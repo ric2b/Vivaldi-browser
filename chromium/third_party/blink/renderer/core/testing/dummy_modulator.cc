@@ -17,10 +17,10 @@ class EmptyScriptModuleResolver final : public ScriptModuleResolver {
 
   // We ignore {Unr,R}egisterModuleScript() calls caused by
   // ModuleScript::CreateForTest().
-  void RegisterModuleScript(ModuleScript*) override {}
-  void UnregisterModuleScript(ModuleScript*) override {}
+  void RegisterModuleScript(const ModuleScript*) override {}
+  void UnregisterModuleScript(const ModuleScript*) override {}
 
-  ModuleScript* GetHostDefined(const ScriptModule&) const override {
+  const ModuleScript* GetHostDefined(const ScriptModule&) const override {
     NOTREACHED();
     return nullptr;
   }
@@ -35,7 +35,8 @@ class EmptyScriptModuleResolver final : public ScriptModuleResolver {
 
 }  // namespace
 
-DummyModulator::DummyModulator() : resolver_(new EmptyScriptModuleResolver()) {}
+DummyModulator::DummyModulator()
+    : resolver_(MakeGarbageCollected<EmptyScriptModuleResolver>()) {}
 
 DummyModulator::~DummyModulator() = default;
 
@@ -49,9 +50,23 @@ ScriptState* DummyModulator::GetScriptState() {
   return nullptr;
 }
 
+V8CacheOptions DummyModulator::GetV8CacheOptions() const {
+  return kV8CacheOptionsDefault;
+}
+
 bool DummyModulator::IsScriptingDisabled() const {
   return false;
 }
+
+bool DummyModulator::BuiltInModuleInfraEnabled() const {
+  return false;
+}
+
+bool DummyModulator::BuiltInModuleEnabled(blink::layered_api::Module) const {
+  return false;
+}
+
+void DummyModulator::BuiltInModuleUseCount(blink::layered_api::Module) const {}
 
 ScriptModuleResolver* DummyModulator::GetScriptModuleResolver() {
   return resolver_.Get();
@@ -60,11 +75,11 @@ ScriptModuleResolver* DummyModulator::GetScriptModuleResolver() {
 base::SingleThreadTaskRunner* DummyModulator::TaskRunner() {
   NOTREACHED();
   return nullptr;
-};
+}
 
 void DummyModulator::FetchTree(const KURL&,
-                               FetchClientSettingsObjectSnapshot*,
-                               WebURLRequest::RequestContext,
+                               ResourceFetcher*,
+                               mojom::RequestContextType,
                                const ScriptFetchOptions&,
                                ModuleScriptCustomFetchType,
                                ModuleTreeClient*) {
@@ -72,18 +87,17 @@ void DummyModulator::FetchTree(const KURL&,
 }
 
 void DummyModulator::FetchSingle(const ModuleScriptFetchRequest&,
-                                 FetchClientSettingsObjectSnapshot*,
+                                 ResourceFetcher*,
                                  ModuleGraphLevel,
                                  ModuleScriptCustomFetchType,
                                  SingleModuleClient*) {
   NOTREACHED();
 }
 
-void DummyModulator::FetchDescendantsForInlineScript(
-    ModuleScript*,
-    FetchClientSettingsObjectSnapshot* fetch_client_settings_object,
-    WebURLRequest::RequestContext,
-    ModuleTreeClient*) {
+void DummyModulator::FetchDescendantsForInlineScript(ModuleScript*,
+                                                     ResourceFetcher*,
+                                                     mojom::RequestContextType,
+                                                     ModuleTreeClient*) {
   NOTREACHED();
 }
 
@@ -110,6 +124,19 @@ void DummyModulator::ResolveDynamically(const String&,
   NOTREACHED();
 }
 
+void DummyModulator::RegisterImportMap(const ImportMap*) {
+  NOTREACHED();
+}
+
+bool DummyModulator::IsAcquiringImportMaps() const {
+  NOTREACHED();
+  return true;
+}
+
+void DummyModulator::ClearIsAcquiringImportMaps() {
+  NOTREACHED();
+}
+
 ModuleImportMeta DummyModulator::HostGetImportMetaProperties(
     ScriptModule) const {
   NOTREACHED();
@@ -127,8 +154,7 @@ Vector<Modulator::ModuleRequest> DummyModulator::ModuleRequestsFromScriptModule(
   return Vector<ModuleRequest>();
 }
 
-ScriptValue DummyModulator::ExecuteModule(const ModuleScript*,
-                                          CaptureEvalErrorFlag) {
+ScriptValue DummyModulator::ExecuteModule(ModuleScript*, CaptureEvalErrorFlag) {
   NOTREACHED();
   return ScriptValue();
 }

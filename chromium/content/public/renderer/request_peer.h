@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 
+#include "base/task_runner.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 
@@ -45,8 +46,8 @@ class CONTENT_EXPORT RequestPeer {
   class CONTENT_EXPORT ReceivedData {
    public:
     virtual ~ReceivedData() {}
-    virtual const char* payload() const = 0;
-    virtual int length() const = 0;
+    virtual const char* payload() = 0;
+    virtual int length() = 0;
   };
 
   // A ThreadSafeReceivedData can be deleted on ANY thread.
@@ -95,6 +96,9 @@ class CONTENT_EXPORT RequestPeer {
   // the resource load.
   virtual void OnCompletedRequest(
       const network::URLLoaderCompletionStatus& status) = 0;
+
+  // Returns the task runner on which this request peer is running.
+  virtual scoped_refptr<base::TaskRunner> GetTaskRunner() = 0;
 
   virtual ~RequestPeer() {}
 };

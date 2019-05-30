@@ -15,7 +15,7 @@
 #include "base/logging.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_config.h"
 #include "base/values.h"
@@ -23,6 +23,7 @@
 #include "components/tracing/common/trace_startup_config.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/tracing/file_tracing_provider_impl.h"
+#include "content/browser/tracing/perfetto_file_tracer.h"
 #include "content/browser/tracing/tracing_ui.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -35,6 +36,7 @@
 #include "net/base/network_change_notifier.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/tracing/public/cpp/trace_event_agent.h"
+#include "services/tracing/public/cpp/traced_process_impl.h"
 #include "services/tracing/public/mojom/constants.mojom.h"
 #include "v8/include/v8-version-string.h"
 
@@ -49,11 +51,12 @@
 #endif
 
 #if defined(OS_WIN)
-#include "content/browser/tracing/etw_tracing_agent_win.h"
+#include "base/win/registry.h"
+#include "base/win/windows_version.h"
 #endif
 
 #if defined(OS_ANDROID)
-#include "base/debug/elf_reader_linux.h"
+#include "base/debug/elf_reader.h"
 
 // Symbol with virtual address of the start of ELF header of the current binary.
 extern char __ehdr_start;
@@ -108,6 +111,32 @@ std::string GetClockString() {
   return std::string();
 }
 
+#if defined(OS_WIN)
+// The following code detect whether the current session is a remote session.
+// See:
+// https://docs.microsoft.com/en-us/windows/desktop/TermServ/detecting-the-terminal-services-environment
+bool IsCurrentSessionRemote() {
+  static const wchar_t kRdpSettingsKeyName[] =
+      L"SYSTEM\\CurrentControlSet\\Control\\Terminal Server";
+  static const wchar_t kGlassSessionIdValueName[] = L"GlassSessionId";
+
+  if (::GetSystemMetrics(SM_REMOTESESSION))
+    return true;
+
+  DWORD glass_session_id = 0;
+  DWORD current_session_id = 0;
+  base::win::RegKey key(HKEY_LOCAL_MACHINE, kRdpSettingsKeyName, KEY_READ);
+  if (!::ProcessIdToSessionId(::GetCurrentProcessId(), &current_session_id) ||
+      !key.Valid() ||
+      key.ReadValueDW(kGlassSessionIdValueName, &glass_session_id) !=
+          ERROR_SUCCESS) {
+    return false;
+  }
+
+  return current_session_id != glass_session_id;
+}
+#endif
+
 }  // namespace
 
 TracingController* TracingController::GetInstance() {
@@ -122,28 +151,30 @@ TracingControllerImpl::TracingControllerImpl()
   base::FileTracing::SetProvider(new FileTracingProviderImpl);
   AddAgents();
   g_tracing_controller = this;
+
+  // TODO(oysteine): Startup tracing using Perfetto
+  // is enabled by the Mojo consumer in content/browser
+  // for now; this is too late in the browser startup
+  // process however.
+  if (PerfettoFileTracer::ShouldEnable())
+    perfetto_file_tracer_ = std::make_unique<PerfettoFileTracer>();
 }
 
 TracingControllerImpl::~TracingControllerImpl() = default;
 
 void TracingControllerImpl::AddAgents() {
-  auto* connector =
-      content::ServiceManagerConnection::GetForProcess()->GetConnector();
-  connector->BindInterface(tracing::mojom::kServiceName, &coordinator_);
+  tracing::TracedProcessImpl::GetInstance()->SetTaskRunner(
+      base::SequencedTaskRunnerHandle::Get());
 
 #if defined(OS_CHROMEOS)
-  agents_.push_back(std::make_unique<CrOSTracingAgent>(connector));
+  agents_.push_back(std::make_unique<CrOSTracingAgent>());
 #elif defined(CAST_TRACING_AGENT)
-  agents_.push_back(std::make_unique<CastTracingAgent>(connector));
-#elif defined(OS_WIN)
-  agents_.push_back(std::make_unique<EtwTracingAgent>(connector));
+  agents_.push_back(std::make_unique<CastTracingAgent>());
 #endif
-
-  auto trace_event_agent = tracing::TraceEventAgent::Create(
-      connector, true /* request_clock_sync_marker_on_android */);
 
   // For adding general CPU, network, OS, and other system information to the
   // metadata.
+  auto* trace_event_agent = tracing::TraceEventAgent::GetInstance();
   trace_event_agent->AddMetadataGeneratorFunction(base::BindRepeating(
       &TracingControllerImpl::GenerateMetadataDict, base::Unretained(this)));
   if (delegate_) {
@@ -151,14 +182,20 @@ void TracingControllerImpl::AddAgents() {
         base::BindRepeating(&TracingDelegate::GenerateMetadataDict,
                             base::Unretained(delegate_.get())));
   }
-  trace_event_agent_ = std::move(trace_event_agent);
 }
 
-tracing::TraceEventAgent* TracingControllerImpl::GetTraceEventAgent() const {
-  DCHECK(trace_event_agent_);
-  return trace_event_agent_.get();
+void TracingControllerImpl::ConnectToServiceIfNeeded() {
+  if (!coordinator_) {
+    ServiceManagerConnection::GetForProcess()->GetConnector()->BindInterface(
+        tracing::mojom::kServiceName, &coordinator_);
+  }
 }
 
+void TracingControllerImpl::DisconnectFromService() {
+  coordinator_ = nullptr;
+}
+
+// Can be called on any thread.
 std::unique_ptr<base::DictionaryValue>
 TracingControllerImpl::GenerateMetadataDict() const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -175,39 +212,47 @@ TracingControllerImpl::GenerateMetadataDict() const {
   }
 
   metadata_dict->SetString("network-type", GetNetworkTypeString());
-  metadata_dict->SetString("product-version", GetContentClient()->GetProduct());
+  metadata_dict->SetString("product-version",
+                           GetContentClient()->browser()->GetProduct());
   metadata_dict->SetString("v8-version", V8_VERSION_STRING);
-  metadata_dict->SetString("user-agent", GetContentClient()->GetUserAgent());
+  metadata_dict->SetString("user-agent",
+                           GetContentClient()->browser()->GetUserAgent());
 
 #if defined(OS_ANDROID)
   // The library name is used for symbolizing heap profiles. This cannot be
   // obtained from process maps since library can be mapped from apk directly.
   // This is not added as part of memory-infra os dumps since it is special case
   // only for chrome library.
-  base::Optional<std::string> soname =
+  base::Optional<base::StringPiece> soname =
       base::debug::ReadElfLibraryName(&__ehdr_start);
   if (soname)
-    metadata_dict->SetString("chrome-library-name", soname.value());
+    metadata_dict->SetString("chrome-library-name", *soname);
 #endif  // defined(OS_ANDROID)
+  metadata_dict->SetInteger("chrome-bitness", 8 * sizeof(uintptr_t));
 
   // OS
 #if defined(OS_CHROMEOS)
   metadata_dict->SetString("os-name", "CrOS");
-  int32_t major_version;
-  int32_t minor_version;
-  int32_t bugfix_version;
-  // OperatingSystemVersion only has a POSIX implementation which returns the
-  // wrong versions for CrOS.
-  base::SysInfo::OperatingSystemVersionNumbers(&major_version, &minor_version,
-                                               &bugfix_version);
-  metadata_dict->SetString(
-      "os-version", base::StringPrintf("%d.%d.%d", major_version, minor_version,
-                                       bugfix_version));
 #else
   metadata_dict->SetString("os-name", base::SysInfo::OperatingSystemName());
+#endif
   metadata_dict->SetString("os-version",
                            base::SysInfo::OperatingSystemVersion());
+#if defined(OS_WIN)
+  if (base::win::OSInfo::GetInstance()->architecture() ==
+      base::win::OSInfo::X64_ARCHITECTURE) {
+    if (base::win::OSInfo::GetInstance()->wow64_status() ==
+        base::win::OSInfo::WOW64_ENABLED) {
+      metadata_dict->SetString("os-wow64", "enabled");
+    } else {
+      metadata_dict->SetString("os-wow64", "disabled");
+    }
+  }
+
+  metadata_dict->SetString("os-session",
+                           IsCurrentSessionRemote() ? "remote" : "local");
 #endif
+
   metadata_dict->SetString("os-arch",
                            base::SysInfo::OperatingSystemArchitecture());
 
@@ -261,10 +306,10 @@ TracingControllerImpl::GenerateMetadataDict() const {
   // TODO(crbug.com/737049): The central controller doesn't know about
   // metadata filters, so we temporarily filter here as the controller is
   // what assembles the full trace data.
-  MetadataFilterPredicate metadata_filter;
-  if (trace_config_->IsArgumentFilterEnabled()) {
-    if (delegate_)
-      metadata_filter = delegate_->GetMetadataFilterPredicate();
+  base::trace_event::MetadataFilterPredicate metadata_filter;
+  if (trace_config_ && trace_config_->IsArgumentFilterEnabled()) {
+    metadata_filter = base::trace_event::TraceLog::GetInstance()
+                          ->GetMetadataFilterPredicate();
   }
 
   if (!metadata_filter.is_null()) {
@@ -284,29 +329,17 @@ TracingControllerImpl* TracingControllerImpl::GetInstance() {
   return g_tracing_controller;
 }
 
-bool TracingControllerImpl::GetCategories(
-    const GetCategoriesDoneCallback& callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  coordinator_->GetCategories(base::BindRepeating(
-      [](const GetCategoriesDoneCallback& callback, bool success,
-         const std::string& categories) {
-        const std::vector<std::string> split = base::SplitString(
-            categories, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-        std::set<std::string> category_set;
-        for (const auto& category : split) {
-          category_set.insert(category);
-        }
-        callback.Run(category_set);
-      },
-      callback));
-  // TODO(chiniforooshan): The actual success value should be sent by the
-  // callback asynchronously.
+bool TracingControllerImpl::GetCategories(GetCategoriesDoneCallback callback) {
+  std::set<std::string> category_set;
+  tracing::TracedProcessImpl::GetInstance()->GetCategories(&category_set);
+
+  std::move(callback).Run(category_set);
   return true;
 }
 
 bool TracingControllerImpl::StartTracing(
     const base::trace_event::TraceConfig& trace_config,
-    const StartTracingDoneCallback& callback) {
+    StartTracingDoneCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // TODO(chiniforooshan): The actual value should be received by callback and
   // this function should return void.
@@ -329,14 +362,16 @@ bool TracingControllerImpl::StartTracing(
   }
   trace_config_ =
       std::make_unique<base::trace_event::TraceConfig>(trace_config);
+
+  ConnectToServiceIfNeeded();
   coordinator_->StartTracing(
       trace_config.ToString(),
-      base::BindRepeating(
-          [](const StartTracingDoneCallback& callback, bool success) {
+      base::BindOnce(
+          [](StartTracingDoneCallback callback, bool success) {
             if (!callback.is_null())
-              callback.Run();
+              std::move(callback).Run();
           },
-          callback));
+          std::move(callback)));
   // TODO(chiniforooshan): The actual success value should be sent by the
   // callback asynchronously.
   return true;
@@ -353,6 +388,10 @@ bool TracingControllerImpl::StopTracing(
   if (!IsTracing() || drainer_)
     return false;
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+#if defined(OS_ANDROID)
+  base::trace_event::TraceLog::GetInstance()->AddClockSyncMetadataEvent();
+#endif
 
   tracing::TraceStartupConfig::GetInstance()->SetDisabled();
   trace_data_endpoint_ = std::move(trace_data_endpoint);
@@ -379,15 +418,16 @@ bool TracingControllerImpl::StopTracing(
 }
 
 bool TracingControllerImpl::GetTraceBufferUsage(
-    const GetTraceBufferUsageCallback& callback) {
+    GetTraceBufferUsageCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  coordinator_->RequestBufferUsage(base::BindRepeating(
-      [](const GetTraceBufferUsageCallback& callback, bool success,
-         float percent_full, uint32_t approximate_count) {
-        callback.Run(percent_full, approximate_count);
+  ConnectToServiceIfNeeded();
+  coordinator_->RequestBufferUsage(base::BindOnce(
+      [](GetTraceBufferUsageCallback callback, bool success, float percent_full,
+         uint32_t approximate_count) {
+        std::move(callback).Run(percent_full, approximate_count);
       },
-      callback));
+      std::move(callback)));
   // TODO(chiniforooshan): The actual success value should be sent by the
   // callback asynchronously.
   return true;
@@ -403,7 +443,7 @@ void TracingControllerImpl::RegisterTracingUI(TracingUI* tracing_ui) {
 }
 
 void TracingControllerImpl::UnregisterTracingUI(TracingUI* tracing_ui) {
-  std::set<TracingUI*>::iterator it = tracing_uis_.find(tracing_ui);
+  auto it = tracing_uis_.find(tracing_ui);
   DCHECK(it != tracing_uis_.end());
   tracing_uis_.erase(it);
 }
@@ -437,10 +477,10 @@ void TracingControllerImpl::OnDataComplete() {
 void TracingControllerImpl::OnMetadataAvailable(base::Value metadata) {
   DCHECK(!filtered_metadata_);
   is_metadata_available_ = true;
-  MetadataFilterPredicate metadata_filter;
+  base::trace_event::MetadataFilterPredicate metadata_filter;
   if (trace_config_->IsArgumentFilterEnabled()) {
-    if (delegate_)
-      metadata_filter = delegate_->GetMetadataFilterPredicate();
+    metadata_filter = base::trace_event::TraceLog::GetInstance()
+                          ->GetMetadataFilterPredicate();
   }
   if (metadata_filter.is_null()) {
     filtered_metadata_ = base::DictionaryValue::From(
@@ -457,6 +497,15 @@ void TracingControllerImpl::OnMetadataAvailable(base::Value metadata) {
   }
   if (is_data_complete_)
     CompleteFlush();
+}
+
+void TracingControllerImpl::SetTracingDelegateForTesting(
+    std::unique_ptr<TracingDelegate> delegate) {
+  if (!delegate) {
+    delegate_.reset(GetContentClient()->browser()->GetTracingDelegate());
+  } else {
+    delegate_ = std::move(delegate);
+  }
 }
 
 }  // namespace content

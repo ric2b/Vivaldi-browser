@@ -296,13 +296,6 @@ Status ExecuteScreenshot(Session* session,
                          std::unique_ptr<base::Value>* value,
                          Timeout* timeout);
 
-// Retrieve a screenshot of a specific element
-Status ExecuteElementScreenshot(Session* session,
-                                WebView* web_view,
-                                const std::string& element_id,
-                                const base::DictionaryValue& params,
-                                std::unique_ptr<base::Value>* value);
-
 // Retrieve all cookies visible to the current page.
 Status ExecuteGetCookies(Session* session,
                          WebView* web_view,
@@ -369,7 +362,82 @@ Status ExecutePerformActions(Session* session,
                              std::unique_ptr<base::Value>* value,
                              Timeout* timeout);
 
-Status ProcessInputActionSequence(Session* session,
-                                  const base::DictionaryValue* action_sequence,
-                                  std::unique_ptr<base::ListValue>* result);
+Status ProcessInputActionSequence(
+    Session* session,
+    const base::DictionaryValue* action_sequence,
+    std::unique_ptr<base::DictionaryValue>* result);
+
+Status ExecuteReleaseActions(Session* session,
+                             WebView* web_view,
+                             const base::DictionaryValue& params,
+                             std::unique_ptr<base::Value>* value,
+                             Timeout* timeout);
+
+Status ExecuteGetWindowRect(Session* session,
+                            WebView* web_view,
+                            const base::DictionaryValue& params,
+                            std::unique_ptr<base::Value>* value,
+                            Timeout* timeout);
+
+Status ExecuteSetWindowRect(Session* session,
+                            WebView* web_view,
+                            const base::DictionaryValue& params,
+                            std::unique_ptr<base::Value>* value,
+                            Timeout* timeout);
+
+Status ExecuteMaximizeWindow(Session* session,
+                             WebView* web_view,
+                             const base::DictionaryValue& params,
+                             std::unique_ptr<base::Value>* value,
+                             Timeout* timeout);
+
+Status ExecuteMinimizeWindow(Session* session,
+                             WebView* web_view,
+                             const base::DictionaryValue& params,
+                             std::unique_ptr<base::Value>* value,
+                             Timeout* timeout);
+
+Status ExecuteFullScreenWindow(Session* session,
+                               WebView* web_view,
+                               const base::DictionaryValue& params,
+                               std::unique_ptr<base::Value>* value,
+                               Timeout* timeout);
+
+// Sets the sink to be used when the web page invokes Presentation or Remote
+// Playback API. Uses the "sinkName" value in |params|.
+Status ExecuteSetSinkToUse(Session* session,
+                           WebView* web_view,
+                           const base::DictionaryValue& params,
+                           std::unique_ptr<base::Value>* value,
+                           Timeout* timeout);
+
+// Starts mirroring the tab to the sink specified by the "sinkName" value in
+// |params|.
+Status ExecuteStartTabMirroring(Session* session,
+                                WebView* web_view,
+                                const base::DictionaryValue& params,
+                                std::unique_ptr<base::Value>* value,
+                                Timeout* timeout);
+
+// Stops casting to the sink specified by the "sinkName" value in |params|.
+Status ExecuteStopCasting(Session* session,
+                          WebView* web_view,
+                          const base::DictionaryValue& params,
+                          std::unique_ptr<base::Value>* value,
+                          Timeout* timeout);
+
+// Returns a list of names of Cast sinks that are available.
+Status ExecuteGetSinks(Session* session,
+                       WebView* web_view,
+                       const base::DictionaryValue& params,
+                       std::unique_ptr<base::Value>* value,
+                       Timeout* timeout);
+
+// Returns the outstanding issue in the Cast UI.
+Status ExecuteGetIssueMessage(Session* session,
+                              WebView* web_view,
+                              const base::DictionaryValue& params,
+                              std::unique_ptr<base::Value>* value,
+                              Timeout* timeout);
+
 #endif  // CHROME_TEST_CHROMEDRIVER_WINDOW_COMMANDS_H_

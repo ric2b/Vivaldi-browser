@@ -7,6 +7,10 @@
 
 #include <stdint.h>
 
+#include <string>
+#include <vector>
+
+#include "chromecast_export.h"
 #include "output_restrictions.h"
 #include "task_runner.h"
 
@@ -80,15 +84,6 @@ class AvSettings {
     // On this event, GetActiveState() will be called on the thread where
     // Initialize() was called.
     ACTIVE_STATE_CHANGED = 0,
-
-    // DEPRECATED - Prefer to implement volume control in the media shlib using
-    // the VolumeControl API (see chromecast/public/volume_control.h).
-    // This event shall be fired whenever the system volume level or muted state
-    // are changed including when user changed volume via a remote controller,
-    // or after a call to SetAudioVolume() or SetAudioMuted().
-    // On this event, GetAudioVolume() and IsAudioMuted() will be called on
-    // the thread where Initialize() was called.
-    AUDIO_VOLUME_CHANGED = 1,
 
     // This event shall be fired whenever the audio codecs supported by the
     // device (or HDMI sinks connected to the device) are changed.
@@ -254,32 +249,6 @@ class AvSettings {
   //  - UNKNOWN_VOLUME: 0.01 (1%)
   virtual bool GetAudioVolumeStepInterval(float* step_inteval) = 0;
 
-  // DEPRECATED - Prefer to implement volume control in the media shlib using
-  // the VolumeControl API (see chromecast/public/volume_control.h).
-  // Returns the current volume level, which must be from 0.0 (inclusive) to
-  // 1.0 (inclusive).
-  virtual float GetAudioVolume() = 0;
-
-  // DEPRECATED - Prefer to implement volume control in the media shlib using
-  // the VolumeControl API (see chromecast/public/volume_control.h).
-  // Sets new volume level of the device (or HDMI sinks). |level| is from 0.0
-  // (inclusive) to 1.0 (inclusive).
-  // If successful and the level has changed, it must return true and fire
-  // AUDIO_VOLUME_CHANGED.
-  virtual bool SetAudioVolume(float level) = 0;
-
-  // DEPRECATED - Prefer to implement volume control in the media shlib using
-  // the VolumeControl API (see chromecast/public/volume_control.h).
-  // Whether or not the device (or HDMI sinks) is muted.
-  virtual bool IsAudioMuted() = 0;
-
-  // DEPRECATED - Prefer to implement volume control in the media shlib using
-  // the VolumeControl API (see chromecast/public/volume_control.h).
-  // Sets the device (or HDMI sinks) muted.
-  // If successful and the muted state has changed, it must return true and fire
-  // AUDIO_VOLUME_CHANGED.
-  virtual bool SetAudioMuted(bool muted) = 0;
-
   // Gets audio codecs supported by the device (or HDMI sinks).
   // The result is an integer of OR'ed AudioCodec values.
   virtual int GetAudioCodecsSupported() = 0;
@@ -386,6 +355,12 @@ class AvSettings {
   // Non-HDMI devices should return false.
   virtual bool IsHdrOutputSupportedByCurrentHdmiVideoMode(
       HdrOutputType output_type) = 0;
+};
+
+// Entrypoint for overridable AvSettings shared library.
+class CHROMECAST_EXPORT AvSettingsShlib {
+ public:
+  static AvSettings* Create(const std::vector<std::string>& argv);
 };
 
 }  // namespace chromecast

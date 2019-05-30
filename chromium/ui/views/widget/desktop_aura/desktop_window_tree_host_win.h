@@ -128,9 +128,10 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   void ShowImpl() override;
   void HideImpl() override;
   gfx::Rect GetBoundsInPixels() const override;
-  void SetBoundsInPixels(const gfx::Rect& bounds,
-                         const viz::LocalSurfaceId& local_surface_id =
-                             viz::LocalSurfaceId()) override;
+  void SetBoundsInPixels(
+      const gfx::Rect& bounds,
+      const viz::LocalSurfaceIdAllocation& local_surface_id_allocation =
+          viz::LocalSurfaceIdAllocation()) override;
   gfx::Point GetLocationOnScreenInPixels() const override;
   void SetCapture() override;
   void ReleaseCapture() override;
@@ -168,9 +169,10 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   int GetInitialShowState() const override;
   bool WillProcessWorkAreaChange() const override;
   int GetNonClientComponent(const gfx::Point& point) const override;
-  void GetWindowMask(const gfx::Size& size, gfx::Path* path) override;
+  void GetWindowMask(const gfx::Size& size, SkPath* path) override;
   bool GetClientAreaInsets(gfx::Insets* insets,
                            HMONITOR monitor) const override;
+  bool GetDwmFrameInsetsInPixels(gfx::Insets* insets) const override;
   void GetMinMaxSize(gfx::Size* min_size, gfx::Size* max_size) const override;
   gfx::Size GetRootViewSize() const override;
   gfx::Size DIPToScreenSize(const gfx::Size& dip_size) const override;
@@ -195,12 +197,12 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   void HandleWorkAreaChanged() override;
   void HandleVisibilityChanging(bool visible) override;
   void HandleVisibilityChanged(bool visible) override;
+  void HandleWindowMinimizedOrRestored(bool restored) override;
   void HandleClientSizeChanged(const gfx::Size& new_size) override;
   void HandleFrameChanged() override;
   void HandleNativeFocus(HWND last_focused_window) override;
   void HandleNativeBlur(HWND focused_window) override;
   bool HandleMouseEvent(ui::MouseEvent* event) override;
-  bool HandlePointerEvent(ui::PointerEvent* event) override;
   void HandleKeyEvent(ui::KeyEvent* event) override;
   void HandleTouchEvent(ui::TouchEvent* event) override;
   bool HandleIMEMessage(UINT message,

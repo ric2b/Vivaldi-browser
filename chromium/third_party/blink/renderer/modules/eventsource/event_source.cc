@@ -60,15 +60,15 @@
 
 namespace blink {
 
-const unsigned long long EventSource::kDefaultReconnectDelay = 3000;
+const uint64_t EventSource::kDefaultReconnectDelay = 3000;
 
 inline EventSource::EventSource(ExecutionContext* context,
                                 const KURL& url,
-                                const EventSourceInit& event_source_init)
+                                const EventSourceInit* event_source_init)
     : ContextLifecycleObserver(context),
       url_(url),
       current_url_(url),
-      with_credentials_(event_source_init.withCredentials()),
+      with_credentials_(event_source_init->withCredentials()),
       state_(kConnecting),
       connect_timer_(context->GetTaskRunner(TaskType::kRemoteEvent),
                      this,
@@ -77,12 +77,11 @@ inline EventSource::EventSource(ExecutionContext* context,
 
 EventSource* EventSource::Create(ExecutionContext* context,
                                  const String& url,
-                                 const EventSourceInit& event_source_init,
+                                 const EventSourceInit* event_source_init,
                                  ExceptionState& exception_state) {
-  if (context->IsDocument())
-    UseCounter::Count(ToDocument(context), WebFeature::kEventSourceDocument);
-  else
-    UseCounter::Count(context, WebFeature::kEventSourceWorker);
+  UseCounter::Count(context, IsA<Document>(context)
+                                 ? WebFeature::kEventSourceDocument
+                                 : WebFeature::kEventSourceWorker);
 
   if (url.IsEmpty()) {
     exception_state.ThrowDOMException(
@@ -99,7 +98,8 @@ EventSource* EventSource::Create(ExecutionContext* context,
     return nullptr;
   }
 
-  EventSource* source = new EventSource(context, full_url, event_source_init);
+  EventSource* source =
+      MakeGarbageCollected<EventSource>(context, full_url, event_source_init);
 
   source->ScheduleInitialConnect();
   return source;
@@ -124,19 +124,19 @@ void EventSource::Connect() {
 
   ExecutionContext& execution_context = *this->GetExecutionContext();
   ResourceRequest request(current_url_);
-  request.SetHTTPMethod(HTTPNames::GET);
-  request.SetHTTPHeaderField(HTTPNames::Accept, "text/event-stream");
-  request.SetHTTPHeaderField(HTTPNames::Cache_Control, "no-cache");
-  request.SetRequestContext(WebURLRequest::kRequestContextEventSource);
-  request.SetFetchRequestMode(network::mojom::FetchRequestMode::kCORS);
+  request.SetHTTPMethod(http_names::kGET);
+  request.SetHTTPHeaderField(http_names::kAccept, "text/event-stream");
+  request.SetHTTPHeaderField(http_names::kCacheControl, "no-cache");
+  request.SetRequestContext(mojom::RequestContextType::EVENT_SOURCE);
+  request.SetFetchRequestMode(network::mojom::FetchRequestMode::kCors);
   request.SetFetchCredentialsMode(
       with_credentials_ ? network::mojom::FetchCredentialsMode::kInclude
                         : network::mojom::FetchCredentialsMode::kSameOrigin);
   request.SetCacheMode(blink::mojom::FetchCacheMode::kNoStore);
   request.SetExternalRequestStateFromRequestorAddressSpace(
       execution_context.GetSecurityContext().AddressSpace());
-  request.SetCORSPreflightPolicy(
-      network::mojom::CORSPreflightPolicy::kPreventPreflight);
+  request.SetCorsPreflightPolicy(
+      network::mojom::CorsPreflightPolicy::kPreventPreflight);
   if (parser_ && !parser_->LastEventId().IsEmpty()) {
     // HTTP headers are Latin-1 byte strings, but the Last-Event-ID header is
     // encoded as UTF-8.
@@ -144,20 +144,17 @@ void EventSource::Connect() {
     // setHTTPHeaderField's arguments.
     CString last_event_id_utf8 = parser_->LastEventId().Utf8();
     request.SetHTTPHeaderField(
-        HTTPNames::Last_Event_ID,
+        http_names::kLastEventID,
         AtomicString(reinterpret_cast<const LChar*>(last_event_id_utf8.data()),
                      last_event_id_utf8.length()));
   }
 
-  const SecurityOrigin* origin = execution_context.GetSecurityOrigin();
-
   ResourceLoaderOptions resource_loader_options;
   resource_loader_options.data_buffering_policy = kDoNotBufferData;
-  resource_loader_options.security_origin = origin;
 
-  probe::willSendEventSourceRequest(&execution_context, this);
-  loader_ =
-      new ThreadableLoader(execution_context, this, resource_loader_options);
+  probe::WillSendEventSourceRequest(&execution_context);
+  loader_ = MakeGarbageCollected<ThreadableLoader>(execution_context, this,
+                                                   resource_loader_options);
   loader_->Start(request);
 }
 
@@ -172,7 +169,7 @@ void EventSource::ScheduleReconnect() {
   state_ = kConnecting;
   connect_timer_.StartOneShot(TimeDelta::FromMilliseconds(reconnect_delay_),
                               FROM_HERE);
-  DispatchEvent(*Event::Create(EventTypeNames::error));
+  DispatchEvent(*Event::Create(event_type_names::kError));
 }
 
 void EventSource::ConnectTimerFired(TimerBase*) {
@@ -215,24 +212,22 @@ void EventSource::close() {
 }
 
 const AtomicString& EventSource::InterfaceName() const {
-  return EventTargetNames::EventSource;
+  return event_target_names::kEventSource;
 }
 
 ExecutionContext* EventSource::GetExecutionContext() const {
   return ContextLifecycleObserver::GetExecutionContext();
 }
 
-void EventSource::DidReceiveResponse(
-    unsigned long identifier,
-    const ResourceResponse& response,
-    std::unique_ptr<WebDataConsumerHandle> handle) {
-  DCHECK(!handle);
+void EventSource::DidReceiveResponse(unsigned long identifier,
+                                     const ResourceResponse& response) {
   DCHECK_EQ(kConnecting, state_);
   DCHECK(loader_);
 
   resource_identifier_ = identifier;
-  current_url_ = response.Url();
-  event_stream_origin_ = SecurityOrigin::Create(response.Url())->ToString();
+  current_url_ = response.CurrentRequestUrl();
+  event_stream_origin_ =
+      SecurityOrigin::Create(response.CurrentRequestUrl())->ToString();
   int status_code = response.HttpStatusCode();
   bool mime_type_is_valid = response.MimeType() == "text/event-stream";
   bool response_is_valid = status_code == 200 && mime_type_is_valid;
@@ -248,7 +243,8 @@ void EventSource::DidReceiveResponse(
       message.Append("\") that is not UTF-8. Aborting the connection.");
       // FIXME: We are missing the source line.
       GetExecutionContext()->AddConsoleMessage(ConsoleMessage::Create(
-          kJSMessageSource, kErrorMessageLevel, message.ToString()));
+          kJSMessageSource, mojom::ConsoleMessageLevel::kError,
+          message.ToString()));
     }
   } else {
     // To keep the signal-to-noise ratio low, we only log 200-response with an
@@ -261,7 +257,8 @@ void EventSource::DidReceiveResponse(
           "\") that is not \"text/event-stream\". Aborting the connection.");
       // FIXME: We are missing the source line.
       GetExecutionContext()->AddConsoleMessage(ConsoleMessage::Create(
-          kJSMessageSource, kErrorMessageLevel, message.ToString()));
+          kJSMessageSource, mojom::ConsoleMessageLevel::kError,
+          message.ToString()));
     }
   }
 
@@ -272,8 +269,8 @@ void EventSource::DidReceiveResponse(
       // The new parser takes over the event ID.
       last_event_id = parser_->LastEventId();
     }
-    parser_ = new EventSourceParser(last_event_id, this);
-    DispatchEvent(*Event::Create(EventTypeNames::open));
+    parser_ = MakeGarbageCollected<EventSourceParser>(last_event_id, this);
+    DispatchEvent(*Event::Create(event_type_names::kOpen));
   } else {
     loader_->Cancel();
   }
@@ -330,13 +327,13 @@ void EventSource::OnMessageEvent(const AtomicString& event_type,
   e->initMessageEvent(event_type, false, false, data, event_stream_origin_,
                       last_event_id, nullptr, nullptr);
 
-  probe::willDispatchEventSourceEvent(GetExecutionContext(),
+  probe::WillDispatchEventSourceEvent(GetExecutionContext(),
                                       resource_identifier_, event_type,
                                       last_event_id, data);
   DispatchEvent(*e);
 }
 
-void EventSource::OnReconnectionTimeSet(unsigned long long reconnection_time) {
+void EventSource::OnReconnectionTimeSet(uint64_t reconnection_time) {
   reconnect_delay_ = reconnection_time;
 }
 
@@ -347,7 +344,7 @@ void EventSource::AbortConnectionAttempt() {
   state_ = kClosed;
   NetworkRequestEnded();
 
-  DispatchEvent(*Event::Create(EventTypeNames::error));
+  DispatchEvent(*Event::Create(event_type_names::kError));
 }
 
 void EventSource::ContextDestroyed(ExecutionContext*) {
@@ -362,6 +359,7 @@ void EventSource::Trace(blink::Visitor* visitor) {
   visitor->Trace(parser_);
   visitor->Trace(loader_);
   EventTargetWithInlineData::Trace(visitor);
+  ThreadableLoaderClient::Trace(visitor);
   ContextLifecycleObserver::Trace(visitor);
   EventSourceParser::Client::Trace(visitor);
 }

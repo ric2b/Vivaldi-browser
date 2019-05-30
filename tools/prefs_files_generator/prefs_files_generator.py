@@ -151,7 +151,7 @@ def main():
                 'enum_values': '\n'.join([ENUM_VALUE_TEMPLATE % {
                     'name': name.upper(),
                     'value': value
-                } for name, value in pref['enum_values'].iteritems()])
+                } for name, value in pref['enum_values'].items()])
             } for pref in prefs_list if 'enum' in pref])
     })
 

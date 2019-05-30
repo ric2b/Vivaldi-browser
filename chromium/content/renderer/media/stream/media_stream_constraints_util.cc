@@ -5,22 +5,19 @@
 #include "content/renderer/media/stream/media_stream_constraints_util.h"
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "content/public/common/media_stream_request.h"
 #include "content/renderer/media/stream/media_stream_constraints_util_sets.h"
 #include "content/renderer/media/stream/media_stream_constraints_util_video_device.h"
+#include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "third_party/blink/public/platform/web_string.h"
 
 namespace content {
 
 namespace {
-
-// TODO(c.padhi): Allow frame rates lower than 1Hz,
-// see https://crbug.com/814131.
-const float kMinDeviceCaptureFrameRate = 1.0f;
 
 template <typename P, typename T>
 bool ScanConstraintsForExactValue(const blink::WebMediaConstraints& constraints,
@@ -104,6 +101,8 @@ bool ScanConstraintsForMinValue(const blink::WebMediaConstraints& constraints,
 
 }  // namespace
 
+const double kMinDeviceCaptureFrameRate = std::numeric_limits<double>::min();
+
 VideoCaptureSettings::VideoCaptureSettings() : VideoCaptureSettings("") {}
 
 VideoCaptureSettings::VideoCaptureSettings(const char* failed_constraint_name)
@@ -127,10 +126,12 @@ VideoCaptureSettings::VideoCaptureSettings(
       max_frame_rate_(max_frame_rate) {
   DCHECK(!min_frame_rate ||
          *min_frame_rate_ <= capture_params.requested_format.frame_rate);
-  DCHECK_LE(track_adapter_settings.max_width,
-            capture_params.requested_format.frame_size.width());
-  DCHECK_LE(track_adapter_settings.max_height,
-            capture_params.requested_format.frame_size.height());
+  DCHECK(!track_adapter_settings.target_size() ||
+         track_adapter_settings.target_size()->width() <=
+             capture_params.requested_format.frame_size.width());
+  DCHECK(!track_adapter_settings_.target_size() ||
+         track_adapter_settings_.target_size()->height() <=
+             capture_params.requested_format.frame_size.height());
 }
 
 VideoCaptureSettings::VideoCaptureSettings(const VideoCaptureSettings& other) =
@@ -152,15 +153,11 @@ AudioCaptureSettings::AudioCaptureSettings(const char* failed_constraint_name)
 
 AudioCaptureSettings::AudioCaptureSettings(
     std::string device_id,
-    const media::AudioParameters& audio_parameters,
-    bool enable_hotword,
     bool disable_local_echo,
     bool enable_automatic_output_device_selection,
     const AudioProcessingProperties& audio_processing_properties)
     : failed_constraint_name_(nullptr),
       device_id_(std::move(device_id)),
-      audio_parameters_(audio_parameters),
-      hotword_enabled_(enable_hotword),
       disable_local_echo_(disable_local_echo),
       render_to_associated_sink_(enable_automatic_output_device_selection),
       audio_processing_properties_(audio_processing_properties) {}
@@ -258,13 +255,18 @@ VideoTrackAdapterSettings SelectVideoTrackAdapterSettings(
     const blink::WebMediaTrackConstraintSet& basic_constraint_set,
     const media_constraints::ResolutionSet& resolution_set,
     const media_constraints::NumericRangeSet<double>& frame_rate_set,
-    const media::VideoCaptureFormat& source_format) {
-  media_constraints::ResolutionSet::Point resolution =
-      resolution_set.SelectClosestPointToIdeal(
-          basic_constraint_set, source_format.frame_size.height(),
-          source_format.frame_size.width());
-  int track_max_height = static_cast<int>(std::round(resolution.height()));
-  int track_max_width = static_cast<int>(std::round(resolution.width()));
+    const media::VideoCaptureFormat& source_format,
+    bool enable_rescale) {
+  base::Optional<gfx::Size> target_resolution;
+  if (enable_rescale) {
+    media_constraints::ResolutionSet::Point resolution =
+        resolution_set.SelectClosestPointToIdeal(
+            basic_constraint_set, source_format.frame_size.height(),
+            source_format.frame_size.width());
+    int track_target_height = static_cast<int>(std::round(resolution.height()));
+    int track_target_width = static_cast<int>(std::round(resolution.width()));
+    target_resolution = gfx::Size(track_target_width, track_target_height);
+  }
   double track_min_aspect_ratio =
       std::max(resolution_set.min_aspect_ratio(),
                static_cast<double>(resolution_set.min_width()) /
@@ -277,7 +279,8 @@ VideoTrackAdapterSettings SelectVideoTrackAdapterSettings(
   // adjustment.
   double track_max_frame_rate = frame_rate_set.Max().value_or(0.0);
   if (basic_constraint_set.frame_rate.HasIdeal()) {
-    track_max_frame_rate = basic_constraint_set.frame_rate.Ideal();
+    track_max_frame_rate = std::max(basic_constraint_set.frame_rate.Ideal(),
+                                    kMinDeviceCaptureFrameRate);
     if (frame_rate_set.Min() && track_max_frame_rate < *frame_rate_set.Min())
       track_max_frame_rate = *frame_rate_set.Min();
     if (frame_rate_set.Max() && track_max_frame_rate > *frame_rate_set.Max())
@@ -288,9 +291,9 @@ VideoTrackAdapterSettings SelectVideoTrackAdapterSettings(
   if (track_max_frame_rate >= source_format.frame_rate)
     track_max_frame_rate = 0.0;
 
-  return VideoTrackAdapterSettings(
-      track_max_width, track_max_height, track_min_aspect_ratio,
-      track_max_aspect_ratio, track_max_frame_rate);
+  return VideoTrackAdapterSettings(target_resolution, track_min_aspect_ratio,
+                                   track_max_aspect_ratio,
+                                   track_max_frame_rate);
 }
 
 double NumericConstraintFitnessDistance(double value1, double value2) {

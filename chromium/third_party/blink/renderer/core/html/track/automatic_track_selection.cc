@@ -34,7 +34,7 @@ static int TextTrackLanguageSelectionScore(const TextTrack& track) {
     return 0;
 
   Vector<AtomicString> languages = UserPreferredLanguages();
-  size_t language_match_index =
+  wtf_size_t language_match_index =
       IndexOfBestMatchingLanguageInList(track.language(), languages);
   if (language_match_index >= languages.size())
     return 0;
@@ -141,7 +141,7 @@ void AutomaticTrackSelection::EnableDefaultMetadataTextTracks(
     const TrackGroup& group) {
   DCHECK(group.tracks.size());
 
-  // https://html.spec.whatwg.org/multipage/embedded-content.html#honor-user-preferences-for-automatic-text-track-selection
+  // https://html.spec.whatwg.org/C/#honor-user-preferences-for-automatic-text-track-selection
 
   // 4. If there are any text tracks in the media element's list of text
   // tracks whose text track kind is metadata that correspond to track
@@ -162,7 +162,7 @@ void AutomaticTrackSelection::Perform(TextTrackList& text_tracks) {
   TrackGroup chapter_tracks(TrackGroup::kChapter);
   TrackGroup metadata_tracks(TrackGroup::kMetadata);
 
-  for (size_t i = 0; i < text_tracks.length(); ++i) {
+  for (wtf_size_t i = 0; i < text_tracks.length(); ++i) {
     TextTrack* text_track = text_tracks.AnonymousIndexedGetter(i);
     if (!text_track)
       continue;

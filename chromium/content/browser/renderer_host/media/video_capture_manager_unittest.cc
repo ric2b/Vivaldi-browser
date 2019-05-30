@@ -18,21 +18,26 @@
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "content/browser/renderer_host/media/in_process_video_capture_provider.h"
 #include "content/browser/renderer_host/media/media_stream_provider.h"
 #include "content/browser/renderer_host/media/video_capture_controller_event_handler.h"
-#include "content/public/common/media_stream_request.h"
+#include "content/browser/screenlock_monitor/screenlock_monitor.h"
+#include "content/browser/screenlock_monitor/screenlock_monitor_source.h"
+#include "content/public/browser/desktop_media_id.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "media/capture/video/fake_video_capture_device_factory.h"
 #include "media/capture/video/video_capture_system_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/mediastream/media_stream_request.h"
 
 using ::testing::_;
 using ::testing::AnyNumber;
 using ::testing::DoAll;
 using ::testing::InSequence;
 using ::testing::InvokeWithoutArgs;
+using ::testing::Mock;
 using ::testing::Return;
 using ::testing::SaveArg;
 
@@ -144,9 +149,9 @@ class MockMediaStreamProviderListener : public MediaStreamProviderListener {
   MockMediaStreamProviderListener() {}
   ~MockMediaStreamProviderListener() override {}
 
-  MOCK_METHOD2(Opened, void(MediaStreamType, int));
-  MOCK_METHOD2(Closed, void(MediaStreamType, int));
-  MOCK_METHOD2(Aborted, void(MediaStreamType, int));
+  MOCK_METHOD2(Opened, void(blink::MediaStreamType, int));
+  MOCK_METHOD2(Closed, void(blink::MediaStreamType, int));
+  MOCK_METHOD2(Aborted, void(blink::MediaStreamType, int));
 };  // class MockMediaStreamProviderListener
 
 // Needed as an input argument to ConnectClient().
@@ -160,7 +165,6 @@ class MockFrameObserver : public VideoCaptureControllerEventHandler {
 
   void OnNewBuffer(VideoCaptureControllerID id,
                    media::mojom::VideoBufferHandlePtr buffer_handle,
-                   int length,
                    int buffer_id) override {}
   void OnBufferDestroyed(VideoCaptureControllerID id, int buffer_id) override {}
   void OnBufferReady(
@@ -179,6 +183,18 @@ class MockVideoCaptureObserver : public media::VideoCaptureObserver {
   MOCK_METHOD1(OnVideoCaptureStopped, void(media::VideoFacingMode));
 };
 
+// Needed to generate ScreenLocked event to |vcm_|.
+class ScreenlockMonitorTestSource : public ScreenlockMonitorSource {
+ public:
+  ScreenlockMonitorTestSource() = default;
+  ~ScreenlockMonitorTestSource() override = default;
+
+  void GenerateScreenLockedEvent() {
+    ProcessScreenlockEvent(SCREEN_LOCK_EVENT);
+    base::RunLoop().RunUntilIdle();
+  }
+};
+
 }  // namespace
 
 // Test class
@@ -188,15 +204,30 @@ class VideoCaptureManagerTest : public testing::Test {
   ~VideoCaptureManagerTest() override {}
 
   void HandleEnumerationResult(
-      const base::Closure& quit_closure,
+      base::OnceClosure quit_closure,
       const media::VideoCaptureDeviceDescriptors& descriptors) {
-    MediaStreamDevices devices;
+    blink::MediaStreamDevices devices;
     for (const auto& descriptor : descriptors) {
-      devices.emplace_back(MEDIA_DEVICE_VIDEO_CAPTURE, descriptor.device_id,
+      devices.emplace_back(blink::MEDIA_DEVICE_VIDEO_CAPTURE,
+                           descriptor.device_id, descriptor.GetNameAndModel());
+    }
+    devices_ = devices;
+    std::move(quit_closure).Run();
+  }
+
+  void HandleEnumerationResultAsDisplayMediaDevices(
+      base::OnceClosure quit_closure,
+      const media::VideoCaptureDeviceDescriptors& descriptors) {
+    blink::MediaStreamDevices devices;
+    for (const auto& descriptor : descriptors) {
+      devices.emplace_back(blink::MEDIA_DISPLAY_VIDEO_CAPTURE,
+                           DesktopMediaID(DesktopMediaID::TYPE_SCREEN,
+                                          DesktopMediaID::kFakeId, false)
+                               .ToString(),
                            descriptor.GetNameAndModel());
     }
     devices_ = devices;
-    quit_closure.Run();
+    std::move(quit_closure).Run();
   }
 
  protected:
@@ -211,9 +242,14 @@ class VideoCaptureManagerTest : public testing::Test {
         std::make_unique<InProcessVideoCaptureProvider>(
             std::move(video_capture_system),
             base::ThreadTaskRunnerHandle::Get(), kIgnoreLogMessageCB);
+    screenlock_monitor_source_ = new ScreenlockMonitorTestSource();
+    screenlock_monitor_ = std::make_unique<ScreenlockMonitor>(
+        std::unique_ptr<ScreenlockMonitorSource>(screenlock_monitor_source_));
+
     vcm_ =
         new VideoCaptureManager(std::move(video_capture_provider),
-                                base::BindRepeating([](const std::string&) {}));
+                                base::BindRepeating([](const std::string&) {}),
+                                ScreenlockMonitor::Get());
     const int32_t kNumberOfFakeDevices = 2;
     video_capture_device_factory_->SetToDefaultDevicesConfig(
         kNumberOfFakeDevices);
@@ -222,8 +258,8 @@ class VideoCaptureManagerTest : public testing::Test {
 
     base::RunLoop run_loop;
     vcm_->EnumerateDevices(
-        base::Bind(&VideoCaptureManagerTest::HandleEnumerationResult,
-                   base::Unretained(this), run_loop.QuitClosure()));
+        base::BindOnce(&VideoCaptureManagerTest::HandleEnumerationResult,
+                       base::Unretained(this), run_loop.QuitClosure()));
     run_loop.Run();
     ASSERT_GE(devices_.size(), 2u);
   }
@@ -295,13 +331,15 @@ class VideoCaptureManagerTest : public testing::Test {
 #endif
 
   int next_client_id_;
+  ScreenlockMonitorTestSource* screenlock_monitor_source_;
+  std::unique_ptr<ScreenlockMonitor> screenlock_monitor_;
   std::map<VideoCaptureControllerID, VideoCaptureController*> controllers_;
   scoped_refptr<VideoCaptureManager> vcm_;
   std::unique_ptr<MockMediaStreamProviderListener> listener_;
   TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<MockFrameObserver> frame_observer_;
   WrappedDeviceFactory* video_capture_device_factory_;
-  MediaStreamDevices devices_;
+  blink::MediaStreamDevices devices_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(VideoCaptureManagerTest);
@@ -312,9 +350,9 @@ class VideoCaptureManagerTest : public testing::Test {
 // Try to open, start, stop and close a device.
 TEST_F(VideoCaptureManagerTest, CreateAndClose) {
   InSequence s;
-  EXPECT_CALL(*listener_, Opened(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Opened(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
   EXPECT_CALL(*frame_observer_, OnStarted(_));
-  EXPECT_CALL(*listener_, Closed(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Closed(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
 
   int video_session_id = vcm_->Open(devices_.front());
   VideoCaptureControllerID client_id = StartClient(video_session_id, true);
@@ -330,9 +368,9 @@ TEST_F(VideoCaptureManagerTest, CreateAndClose) {
 TEST_F(VideoCaptureManagerTest, CreateAndCloseMultipleTimes) {
   InSequence s;
   for (int i = 1 ; i < 3 ; ++i) {
-    EXPECT_CALL(*listener_, Opened(MEDIA_DEVICE_VIDEO_CAPTURE, i));
+    EXPECT_CALL(*listener_, Opened(blink::MEDIA_DEVICE_VIDEO_CAPTURE, i));
     EXPECT_CALL(*frame_observer_, OnStarted(_));
-    EXPECT_CALL(*listener_, Closed(MEDIA_DEVICE_VIDEO_CAPTURE, i));
+    EXPECT_CALL(*listener_, Closed(blink::MEDIA_DEVICE_VIDEO_CAPTURE, i));
     int video_session_id = vcm_->Open(devices_.front());
     VideoCaptureControllerID client_id = StartClient(video_session_id, true);
 
@@ -348,9 +386,9 @@ TEST_F(VideoCaptureManagerTest, CreateAndCloseMultipleTimes) {
 // Try to open, start, and abort a device.
 TEST_F(VideoCaptureManagerTest, CreateAndAbort) {
   InSequence s;
-  EXPECT_CALL(*listener_, Opened(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Opened(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
   EXPECT_CALL(*frame_observer_, OnStarted(_));
-  EXPECT_CALL(*listener_, Aborted(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Aborted(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
 
   int video_session_id = vcm_->Open(devices_.front());
   VideoCaptureControllerID client_id = StartClient(video_session_id, true);
@@ -391,8 +429,10 @@ TEST_F(VideoCaptureManagerTest, AddObserver) {
 // Open the same device twice.
 TEST_F(VideoCaptureManagerTest, OpenTwice) {
   InSequence s;
-  EXPECT_CALL(*listener_, Opened(MEDIA_DEVICE_VIDEO_CAPTURE, _)).Times(2);
-  EXPECT_CALL(*listener_, Closed(MEDIA_DEVICE_VIDEO_CAPTURE, _)).Times(2);
+  EXPECT_CALL(*listener_, Opened(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _))
+      .Times(2);
+  EXPECT_CALL(*listener_, Closed(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _))
+      .Times(2);
 
   int video_session_id_first = vcm_->Open(devices_.front());
 
@@ -418,8 +458,8 @@ TEST_F(VideoCaptureManagerTest, ConnectAndDisconnectDevices) {
   video_capture_device_factory_->SetToDefaultDevicesConfig(1);
   base::RunLoop run_loop;
   vcm_->EnumerateDevices(
-      base::Bind(&VideoCaptureManagerTest::HandleEnumerationResult,
-                 base::Unretained(this), run_loop.QuitClosure()));
+      base::BindOnce(&VideoCaptureManagerTest::HandleEnumerationResult,
+                     base::Unretained(this), run_loop.QuitClosure()));
   run_loop.Run();
   ASSERT_EQ(devices_.size(), 1u);
 
@@ -427,8 +467,8 @@ TEST_F(VideoCaptureManagerTest, ConnectAndDisconnectDevices) {
   video_capture_device_factory_->SetToDefaultDevicesConfig(3);
   base::RunLoop run_loop2;
   vcm_->EnumerateDevices(
-      base::Bind(&VideoCaptureManagerTest::HandleEnumerationResult,
-                 base::Unretained(this), run_loop2.QuitClosure()));
+      base::BindOnce(&VideoCaptureManagerTest::HandleEnumerationResult,
+                     base::Unretained(this), run_loop2.QuitClosure()));
   run_loop2.Run();
   ASSERT_EQ(devices_.size(), 3u);
 
@@ -449,7 +489,7 @@ TEST_F(VideoCaptureManagerTest, ManipulateDeviceAndCheckCapabilities) {
       vcm_->GetDeviceSupportedFormats(video_session_id, &supported_formats));
 
   InSequence s;
-  EXPECT_CALL(*listener_, Opened(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Opened(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
   video_session_id = vcm_->Open(devices_.front());
   base::RunLoop().RunUntilIdle();
 
@@ -480,7 +520,7 @@ TEST_F(VideoCaptureManagerTest, ManipulateDeviceAndCheckCapabilities) {
   EXPECT_GT(supported_formats[1].frame_size.height(), 1);
   EXPECT_GT(supported_formats[1].frame_rate, 1);
 
-  EXPECT_CALL(*listener_, Closed(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Closed(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
   StopClient(client_id);
   supported_formats.clear();
   EXPECT_TRUE(
@@ -517,7 +557,7 @@ TEST_F(VideoCaptureManagerTest,
   EXPECT_GT(supported_formats[1].frame_rate, 1);
 
   InSequence s;
-  EXPECT_CALL(*listener_, Opened(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Opened(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
   int video_session_id = vcm_->Open(devices_.front());
   base::RunLoop().RunUntilIdle();
 
@@ -546,7 +586,7 @@ TEST_F(VideoCaptureManagerTest,
   EXPECT_GT(supported_formats[1].frame_size.height(), 1);
   EXPECT_GT(supported_formats[1].frame_rate, 1);
 
-  EXPECT_CALL(*listener_, Closed(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Closed(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
   StopClient(client_id);
   supported_formats.clear();
   EXPECT_TRUE(vcm_->GetDeviceSupportedFormats(device_id, &supported_formats));
@@ -570,7 +610,7 @@ TEST_F(VideoCaptureManagerTest,
 // use is an empty vector.
 TEST_F(VideoCaptureManagerTest, StartDeviceAndGetDeviceFormatInUse) {
   InSequence s;
-  EXPECT_CALL(*listener_, Opened(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Opened(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
   int video_session_id = vcm_->Open(devices_.front());
   base::RunLoop().RunUntilIdle();
 
@@ -594,7 +634,7 @@ TEST_F(VideoCaptureManagerTest, StartDeviceAndGetDeviceFormatInUse) {
   }
   formats_in_use.clear();
 
-  EXPECT_CALL(*listener_, Closed(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Closed(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
   StopClient(client_id);
   base::RunLoop().RunUntilIdle();
   // After StopClient(), the device's formats in use should be empty again.
@@ -615,32 +655,32 @@ TEST_F(VideoCaptureManagerTest,
        StartDeviceAndGetDeviceFormatInUseWithDeviceId) {
   std::string device_id = devices_.front().id;
   InSequence s;
-  EXPECT_CALL(*listener_, Opened(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Opened(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
   int video_session_id = vcm_->Open(devices_.front());
   base::RunLoop().RunUntilIdle();
 
   // Right after opening the device, we should see no format in use.
-  EXPECT_EQ(base::nullopt,
-            vcm_->GetDeviceFormatInUse(MEDIA_DEVICE_VIDEO_CAPTURE, device_id));
+  EXPECT_EQ(base::nullopt, vcm_->GetDeviceFormatInUse(
+                               blink::MEDIA_DEVICE_VIDEO_CAPTURE, device_id));
 
   EXPECT_CALL(*frame_observer_, OnStarted(_));
   VideoCaptureControllerID client_id = StartClient(video_session_id, true);
   base::RunLoop().RunUntilIdle();
   // After StartClient(), device's format in use should be valid.
   base::Optional<media::VideoCaptureFormat> format_in_use =
-      vcm_->GetDeviceFormatInUse(MEDIA_DEVICE_VIDEO_CAPTURE, device_id);
+      vcm_->GetDeviceFormatInUse(blink::MEDIA_DEVICE_VIDEO_CAPTURE, device_id);
   EXPECT_TRUE(format_in_use.has_value());
   EXPECT_TRUE(format_in_use->IsValid());
   EXPECT_GT(format_in_use->frame_size.width(), 1);
   EXPECT_GT(format_in_use->frame_size.height(), 1);
   EXPECT_GT(format_in_use->frame_rate, 1);
 
-  EXPECT_CALL(*listener_, Closed(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Closed(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
   StopClient(client_id);
   base::RunLoop().RunUntilIdle();
   // After StopClient(), the device's format in use should be empty again.
-  EXPECT_EQ(base::nullopt,
-            vcm_->GetDeviceFormatInUse(MEDIA_DEVICE_VIDEO_CAPTURE, device_id));
+  EXPECT_EQ(base::nullopt, vcm_->GetDeviceFormatInUse(
+                               blink::MEDIA_DEVICE_VIDEO_CAPTURE, device_id));
 
   vcm_->Close(video_session_id);
   base::RunLoop().RunUntilIdle();
@@ -650,10 +690,12 @@ TEST_F(VideoCaptureManagerTest,
 // Open two different devices.
 TEST_F(VideoCaptureManagerTest, OpenTwo) {
   InSequence s;
-  EXPECT_CALL(*listener_, Opened(MEDIA_DEVICE_VIDEO_CAPTURE, _)).Times(2);
-  EXPECT_CALL(*listener_, Closed(MEDIA_DEVICE_VIDEO_CAPTURE, _)).Times(2);
+  EXPECT_CALL(*listener_, Opened(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _))
+      .Times(2);
+  EXPECT_CALL(*listener_, Closed(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _))
+      .Times(2);
 
-  MediaStreamDevices::iterator it = devices_.begin();
+  auto it = devices_.begin();
 
   int video_session_id_first = vcm_->Open(*it);
   ++it;
@@ -671,13 +713,13 @@ TEST_F(VideoCaptureManagerTest, OpenTwo) {
 TEST_F(VideoCaptureManagerTest, OpenNotExisting) {
   InSequence s;
   EXPECT_CALL(*frame_observer_, OnError(_, _));
-  EXPECT_CALL(*listener_, Opened(MEDIA_DEVICE_VIDEO_CAPTURE, _));
-  EXPECT_CALL(*listener_, Closed(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Opened(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Closed(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
 
-  MediaStreamType stream_type = MEDIA_DEVICE_VIDEO_CAPTURE;
+  blink::MediaStreamType stream_type = blink::MEDIA_DEVICE_VIDEO_CAPTURE;
   std::string device_name("device_doesnt_exist");
   std::string device_id("id_doesnt_exist");
-  MediaStreamDevice dummy_device(stream_type, device_id, device_name);
+  blink::MediaStreamDevice dummy_device(stream_type, device_id, device_name);
 
   // This should fail with an error to the controller.
   int session_id = vcm_->Open(dummy_device);
@@ -703,9 +745,9 @@ TEST_F(VideoCaptureManagerTest, StartInvalidSession) {
 // Open and start a device, close it before calling Stop.
 TEST_F(VideoCaptureManagerTest, CloseWithoutStop) {
   InSequence s;
-  EXPECT_CALL(*listener_, Opened(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Opened(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
   EXPECT_CALL(*frame_observer_, OnStarted(_));
-  EXPECT_CALL(*listener_, Closed(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Closed(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
 
   int video_session_id = vcm_->Open(devices_.front());
 
@@ -725,7 +767,7 @@ TEST_F(VideoCaptureManagerTest, CloseWithoutStop) {
 // paused/resumed at the correct times in both single-client and multiple-client
 // scenarios.
 TEST_F(VideoCaptureManagerTest, PauseAndResumeClient) {
-  EXPECT_CALL(*listener_, Opened(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Opened(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
   EXPECT_CALL(*frame_observer_, OnStarted(_));
 
   const int video_session_id = vcm_->Open(devices_.front());
@@ -754,7 +796,7 @@ TEST_F(VideoCaptureManagerTest, PauseAndResumeClient) {
   StopClient(client_id);
   StopClient(client_id2);
 
-  EXPECT_CALL(*listener_, Closed(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Closed(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
   vcm_->Close(video_session_id);
 
   // Wait to check callbacks before removing the listener.
@@ -766,9 +808,9 @@ TEST_F(VideoCaptureManagerTest, PauseAndResumeClient) {
 // Try to open, start, pause and resume a device.
 TEST_F(VideoCaptureManagerTest, PauseAndResumeDevice) {
   InSequence s;
-  EXPECT_CALL(*listener_, Opened(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Opened(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
   EXPECT_CALL(*frame_observer_, OnStarted(_));
-  EXPECT_CALL(*listener_, Closed(MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*listener_, Closed(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
 
   int video_session_id = vcm_->Open(devices_.front());
   VideoCaptureControllerID client_id = StartClient(video_session_id, true);
@@ -794,6 +836,66 @@ TEST_F(VideoCaptureManagerTest, PauseAndResumeDevice) {
   vcm_->UnregisterListener(listener_.get());
 }
 #endif
+
+// Try to open, start a device capture device, and confirm it's not affected by
+// the ScreenLocked event.
+TEST_F(VideoCaptureManagerTest, DeviceCaptureDeviceNotClosedOnScreenlock) {
+  InSequence s;
+  // ScreenLocked event shouldn't affect camera capture device.
+  EXPECT_CALL(*listener_, Opened(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*frame_observer_, OnStarted(_));
+  EXPECT_CALL(*listener_, Closed(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _))
+      .Times(0);
+
+  int video_session_id = vcm_->Open(devices_.front());
+  VideoCaptureControllerID client_id = StartClient(video_session_id, true);
+
+  // Pretend screen is locked, which should not close the device.
+  screenlock_monitor_source_->GenerateScreenLockedEvent();
+  Mock::VerifyAndClearExpectations(listener_.get());
+
+  EXPECT_CALL(*listener_, Closed(blink::MEDIA_DEVICE_VIDEO_CAPTURE, _));
+  StopClient(client_id);
+  vcm_->Close(video_session_id);
+
+  // Wait to check callbacks before removing the listener.
+  base::RunLoop().RunUntilIdle();
+  vcm_->UnregisterListener(listener_.get());
+}
+
+#if defined(ENABLE_SCREEN_CAPTURE) && !defined(OS_ANDROID)
+// Try to open, start a desktop capture device, and confirm it's closed on
+// ScreenLocked event on desktop platforms.
+TEST_F(VideoCaptureManagerTest, DesktopCaptureDeviceClosedOnScreenlock) {
+  InSequence s;
+  // ScreenLocked event should stop desktop capture device.
+  EXPECT_CALL(*listener_, Opened(blink::MEDIA_DISPLAY_VIDEO_CAPTURE, _));
+  EXPECT_CALL(*frame_observer_, OnStarted(_));
+  EXPECT_CALL(*listener_, Closed(blink::MEDIA_DISPLAY_VIDEO_CAPTURE, _));
+
+  // Simulate we add 1 fake display media device.
+  video_capture_device_factory_->SetToDefaultDevicesConfig(1);
+  base::RunLoop run_loop;
+  vcm_->EnumerateDevices(base::BindOnce(
+      &VideoCaptureManagerTest::HandleEnumerationResultAsDisplayMediaDevices,
+      base::Unretained(this), run_loop.QuitClosure()));
+  run_loop.Run();
+  ASSERT_EQ(devices_.size(), 1u);
+
+  int video_session_id = vcm_->Open(devices_.front());
+  VideoCaptureControllerID client_id = StartClient(video_session_id, true);
+
+  // Pretend screen is locked, which should close the device.
+  screenlock_monitor_source_->GenerateScreenLockedEvent();
+  Mock::VerifyAndClearExpectations(listener_.get());
+
+  StopClient(client_id);
+
+  // Wait to check callbacks before removing the listener.
+  base::RunLoop().RunUntilIdle();
+  vcm_->UnregisterListener(listener_.get());
+}
+#endif  // ENABLE_SCREEN_CAPTURE && !OS_ANDROID
 
 // TODO(mcasas): Add a test to check consolidation of the supported formats
 // provided by the device when http://crbug.com/323913 is closed.

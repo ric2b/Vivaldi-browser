@@ -26,8 +26,10 @@
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/spatial_navigation.h"
+#include "third_party/blink/renderer/core/page/spatial_navigation_controller.h"
 #include "third_party/blink/renderer/platform/keyboard_codes.h"
 #include "third_party/blink/renderer/platform/windows_keyboard_codes.h"
+#include "ui/events/keycodes/dom/keycode_converter.h"
 
 #if defined(OS_WIN)
 #include <windows.h>
@@ -35,31 +37,17 @@
 #import <Carbon/Carbon.h>
 #endif
 
+#include "app/vivaldi_apptools.h"
+
 namespace blink {
 
 namespace {
 
 #if defined(OS_WIN)
-static const unsigned short kHIGHBITMASKSHORT = 0x8000;
+static const uint16_t kHIGHBITMASKSHORT = 0x8000;
 #endif
 
 const int kVKeyProcessKey = 229;
-
-WebFocusType FocusDirectionForKey(KeyboardEvent* event) {
-  if (event->ctrlKey() || event->metaKey() || event->shiftKey())
-    return kWebFocusTypeNone;
-
-  WebFocusType ret_val = kWebFocusTypeNone;
-  if (event->key() == "ArrowDown")
-    ret_val = kWebFocusTypeDown;
-  else if (event->key() == "ArrowUp")
-    ret_val = kWebFocusTypeUp;
-  else if (event->key() == "ArrowLeft")
-    ret_val = kWebFocusTypeLeft;
-  else if (event->key() == "ArrowRight")
-    ret_val = kWebFocusTypeRight;
-  return ret_val;
-}
 
 bool MapKeyCodeForScroll(int key_code,
                          WebInputEvent::Modifiers modifiers,
@@ -153,10 +141,26 @@ bool KeyboardEventManager::HandleAccessKey(const WebKeyboardEvent& evt) {
   // but if both upper and lower case variants are present in a document, the
   // correct element is matched based on Shift key state.  Firefox only matches
   // an access key if Shift is not pressed, and does that case-insensitively.
+
+  // NOTE(daniel@vivaldi.com): We use shift+alt for access keys, since we're
+  // using alt-key combos for menu access, unlike chrome. Access keys on mac
+  // are triggered by ctrl+alt and don't conflict with any existing key
+  // shortcuts.
+#if !defined(OS_MACOSX)
+  if (vivaldi::IsVivaldiRunning()) {
+    if ((evt.GetModifiers() & WebKeyboardEvent::kKeyModifiers) !=
+        (kAccessKeyModifiers | WebInputEvent::kShiftKey)) {
+      return false;
+    }
+  } else {
+#endif
   DCHECK(!(kAccessKeyModifiers & WebInputEvent::kShiftKey));
   if ((evt.GetModifiers() & (WebKeyboardEvent::kKeyModifiers &
                              ~WebInputEvent::kShiftKey)) != kAccessKeyModifiers)
     return false;
+#if !defined(OS_MACOSX)
+  }
+#endif
   String key = String(evt.unmodified_text);
   Element* elem =
       frame_->GetDocument()->GetElementByAccessKey(key.DeprecatedLower());
@@ -194,12 +198,12 @@ WebInputEventResult KeyboardEventManager::KeyEvent(
   // To be meaningful enough to indicate user intention, a keyboard event needs
   // - not to be a modifier event
   // https://crbug.com/709765
-  bool is_modifier =
-      Platform::Current()->IsDomKeyForModifier(initial_key_event.dom_key);
+  bool is_modifier = ui::KeycodeConverter::IsDomKeyForModifier(
+      static_cast<ui::DomKey>(initial_key_event.dom_key));
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator;
   if (!is_modifier)
-    gesture_indicator = Frame::NotifyUserActivation(frame_);
+    gesture_indicator = LocalFrame::NotifyUserActivation(frame_);
 
   // In IE, access keys are special, they are handled after default keydown
   // processing, but cannot be canceled - this is hard to match.  On Mac OS X,
@@ -221,7 +225,7 @@ WebInputEventResult KeyboardEventManager::KeyEvent(
     KeyboardEvent* dom_event = KeyboardEvent::Create(
         initial_key_event, frame_->GetDocument()->domWindow());
 
-    return EventHandlingUtil::ToWebInputEventResult(
+    return event_handling_util::ToWebInputEventResult(
         node->DispatchEvent(*dom_event));
   }
 
@@ -236,7 +240,7 @@ WebInputEventResult KeyboardEventManager::KeyEvent(
 
   DispatchEventResult dispatch_result = node->DispatchEvent(*keydown);
   if (dispatch_result != DispatchEventResult::kNotCanceled)
-    return EventHandlingUtil::ToWebInputEventResult(dispatch_result);
+    return event_handling_util::ToWebInputEventResult(dispatch_result);
   // If frame changed as a result of keydown dispatch, then return early to
   // avoid sending a subsequent keypress message to the new frame.
   bool changed_focused_frame =
@@ -273,7 +277,7 @@ WebInputEventResult KeyboardEventManager::KeyEvent(
   KeyboardEvent* keypress = KeyboardEvent::Create(
       key_press_event, frame_->GetDocument()->domWindow());
   keypress->SetTarget(node);
-  return EventHandlingUtil::ToWebInputEventResult(
+  return event_handling_util::ToWebInputEventResult(
       node->DispatchEvent(*keypress));
 }
 
@@ -289,7 +293,7 @@ void KeyboardEventManager::CapsLockStateMayHaveChanged() {
 void KeyboardEventManager::DefaultKeyboardEventHandler(
     KeyboardEvent* event,
     Node* possible_focused_node) {
-  if (event->type() == EventTypeNames::keydown) {
+  if (event->type() == event_type_names::kKeydown) {
     frame_->GetEditor().HandleKeyboardEvent(event);
     if (event->DefaultHandled())
       return;
@@ -302,11 +306,15 @@ void KeyboardEventManager::DefaultKeyboardEventHandler(
       DefaultTabEventHandler(event);
     } else if (event->key() == "Escape") {
       DefaultEscapeEventHandler(event);
+    } else if (event->key() == "Enter") {
+      DefaultEnterEventHandler(event);
     } else {
+      // TODO(bokan): Seems odd to call the default _arrow_ event handler on
+      // events that aren't necessarily arrow keys.
       DefaultArrowEventHandler(event, possible_focused_node);
     }
   }
-  if (event->type() == EventTypeNames::keypress) {
+  if (event->type() == event_type_names::kKeypress) {
     frame_->GetEditor().HandleKeyboardEvent(event);
     if (event->DefaultHandled())
       return;
@@ -318,7 +326,7 @@ void KeyboardEventManager::DefaultKeyboardEventHandler(
 void KeyboardEventManager::DefaultSpaceEventHandler(
     KeyboardEvent* event,
     Node* possible_focused_node) {
-  DCHECK_EQ(event->type(), EventTypeNames::keypress);
+  DCHECK_EQ(event->type(), event_type_names::kKeypress);
 
   if (event->ctrlKey() || event->metaKey() || event->altKey())
     return;
@@ -339,16 +347,16 @@ void KeyboardEventManager::DefaultSpaceEventHandler(
 void KeyboardEventManager::DefaultArrowEventHandler(
     KeyboardEvent* event,
     Node* possible_focused_node) {
-  DCHECK_EQ(event->type(), EventTypeNames::keydown);
+  DCHECK_EQ(event->type(), event_type_names::kKeydown);
 
   Page* page = frame_->GetPage();
   if (!page)
     return;
 
-  WebFocusType type = FocusDirectionForKey(event);
-  if (type != kWebFocusTypeNone && IsSpatialNavigationEnabled(frame_) &&
+  if (IsSpatialNavigationEnabled(frame_) &&
       !frame_->GetDocument()->InDesignMode()) {
-    if (page->GetFocusController().AdvanceFocus(type)) {
+    if (page->GetSpatialNavigationController().HandleArrowKeyboardEvent(
+            event)) {
       event->SetDefaultHandled();
       return;
     }
@@ -374,7 +382,7 @@ void KeyboardEventManager::DefaultArrowEventHandler(
 }
 
 void KeyboardEventManager::DefaultTabEventHandler(KeyboardEvent* event) {
-  DCHECK_EQ(event->type(), EventTypeNames::keydown);
+  DCHECK_EQ(event->type(), event_type_names::kKeydown);
 
   // We should only advance focus on tabs if no special modifier keys are held
   // down.
@@ -410,8 +418,28 @@ void KeyboardEventManager::DefaultTabEventHandler(KeyboardEvent* event) {
 }
 
 void KeyboardEventManager::DefaultEscapeEventHandler(KeyboardEvent* event) {
+  Page* page = frame_->GetPage();
+  if (!page)
+    return;
+
+  if (IsSpatialNavigationEnabled(frame_) &&
+      !frame_->GetDocument()->InDesignMode()) {
+    page->GetSpatialNavigationController().HandleEscapeKeyboardEvent(event);
+  }
+
   if (HTMLDialogElement* dialog = frame_->GetDocument()->ActiveModalDialog())
-    dialog->DispatchEvent(*Event::CreateCancelable(EventTypeNames::cancel));
+    dialog->DispatchEvent(*Event::CreateCancelable(event_type_names::kCancel));
+}
+
+void KeyboardEventManager::DefaultEnterEventHandler(KeyboardEvent* event) {
+  Page* page = frame_->GetPage();
+  if (!page)
+    return;
+
+  if (IsSpatialNavigationEnabled(frame_) &&
+      !frame_->GetDocument()->InDesignMode()) {
+    page->GetSpatialNavigationController().HandleEnterKeyboardEvent(event);
+  }
 }
 
 static OverrideCapsLockState g_override_caps_lock_state;

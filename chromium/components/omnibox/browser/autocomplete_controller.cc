@@ -13,6 +13,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/format_macros.h"
 #include "base/logging.h"
@@ -28,15 +29,15 @@
 #include "components/omnibox/browser/autocomplete_controller_delegate.h"
 #include "components/omnibox/browser/bookmark_provider.h"
 #include "components/omnibox/browser/builtin_provider.h"
-#include "components/omnibox/browser/clipboard_url_provider.h"
+#include "components/omnibox/browser/clipboard_provider.h"
 #include "components/omnibox/browser/document_provider.h"
 #include "components/omnibox/browser/history_quick_provider.h"
 #include "components/omnibox/browser/history_url_provider.h"
 #include "components/omnibox/browser/keyword_provider.h"
-#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/search_provider.h"
 #include "components/omnibox/browser/shortcuts_provider.h"
 #include "components/omnibox/browser/zero_suggest_provider.h"
+#include "components/omnibox/common/omnibox_features.h"
 #include "components/open_from_clipboard/clipboard_recent_content.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
@@ -63,16 +64,24 @@ void AutocompleteMatchToAssistedQuery(
   // Default value, indicating no subtype.
   *subtype = base::string16::npos;
 
-  // If provider is TYPE_ZERO_SUGGEST, set the subtype accordingly.
-  // Type will be set in the switch statement below where we'll enter one of
-  // SEARCH_SUGGEST or NAVSUGGEST. This subtype indicates context-aware zero
-  // suggest.
-  if (provider &&
-      (provider->type() == AutocompleteProvider::TYPE_ZERO_SUGGEST) &&
-      (match != AutocompleteMatchType::SEARCH_SUGGEST_PERSONALIZED)) {
-    DCHECK((match == AutocompleteMatchType::SEARCH_SUGGEST) ||
-           (match == AutocompleteMatchType::NAVSUGGEST));
-    *subtype = 66;
+  // If provider is TYPE_ZERO_SUGGEST or TYPE_ON_DEVICE_HEAD, set the subtype
+  // accordingly. Type will be set in the switch statement below where we'll
+  // enter one of SEARCH_SUGGEST or NAVSUGGEST.
+  if (provider) {
+    if (provider->type() == AutocompleteProvider::TYPE_ZERO_SUGGEST &&
+        (match != AutocompleteMatchType::SEARCH_SUGGEST_PERSONALIZED)) {
+      DCHECK((match == AutocompleteMatchType::SEARCH_SUGGEST) ||
+             (match == AutocompleteMatchType::NAVSUGGEST));
+      // We abuse this subtype and use it to for zero-suggest suggestions that
+      // aren't personalized by the server. That is, it indicates either
+      // client-side most-likely URL suggestions or server-side suggestions
+      // that depend only on the URL as context.
+      *subtype = 66;
+    } else if (provider->type() == AutocompleteProvider::TYPE_ON_DEVICE_HEAD) {
+      DCHECK(match == AutocompleteMatchType::SEARCH_SUGGEST);
+      // This subtype indicates a match from an on-device head provider.
+      *subtype = 271;
+    }
   }
 
   switch (match) {
@@ -144,8 +153,16 @@ void AutocompleteMatchToAssistedQuery(
       *type = 6;
       return;
     }
-    case AutocompleteMatchType::CLIPBOARD: {
+    case AutocompleteMatchType::CLIPBOARD_URL: {
       *subtype = 177;
+      return;
+    }
+    case AutocompleteMatchType::CLIPBOARD_TEXT: {
+      *subtype = 176;
+      return;
+    }
+    case AutocompleteMatchType::CLIPBOARD_IMAGE: {
+      *subtype = 327;
       return;
     }
     default: {
@@ -185,7 +202,6 @@ bool IsTrivialAutocompletion(const AutocompleteMatch& match) {
 // Whether this autocomplete match type supports custom descriptions.
 bool AutocompleteMatchHasCustomDescription(const AutocompleteMatch& match) {
   if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_DESKTOP &&
-      OmniboxFieldTrial::IsNewAnswerLayoutEnabled() &&
       match.type == AutocompleteMatchType::CALCULATOR) {
     return true;
   }
@@ -209,6 +225,7 @@ AutocompleteController::AutocompleteController(
       stop_timer_duration_(OmniboxFieldTrial::StopTimerFieldTrialDuration()),
       done_(true),
       in_start_(false),
+      first_query_(true),
       search_service_worker_signal_sent_(false),
       template_url_service_(provider_client_->GetTemplateURLService()) {
   provider_types &= ~OmniboxFieldTrial::GetDisabledProviderTypes();
@@ -218,11 +235,6 @@ AutocompleteController::AutocompleteController(
     providers_.push_back(new BuiltinProvider(provider_client_.get()));
   if (provider_types & AutocompleteProvider::TYPE_HISTORY_QUICK)
     providers_.push_back(new HistoryQuickProvider(provider_client_.get()));
-  if (provider_types & AutocompleteProvider::TYPE_HISTORY_URL) {
-    history_url_provider_ =
-        new HistoryURLProvider(provider_client_.get(), this);
-    providers_.push_back(history_url_provider_);
-  }
   if (provider_types & AutocompleteProvider::TYPE_KEYWORD) {
     keyword_provider_ = new KeywordProvider(provider_client_.get(), this);
     providers_.push_back(keyword_provider_);
@@ -230,6 +242,29 @@ AutocompleteController::AutocompleteController(
   if (provider_types & AutocompleteProvider::TYPE_SEARCH) {
     search_provider_ = new SearchProvider(provider_client_.get(), this);
     providers_.push_back(search_provider_);
+  }
+  // It's important that the HistoryURLProvider gets added after SearchProvider:
+  // AutocompleteController::Start() calls each providers' Start() function
+  // synchronously in the order they're in in providers_.
+  // - SearchProvider::Start() synchronously queries the history database's
+  //   keyword_search_terms and url table.
+  // - HistoryUrlProvider::Start schedules a background task that also accesses
+  //   the history database.
+  // If both db accesses happen concurrently, TSan complains.
+  // So put HistoryURLProvider later to make sure that SearchProvider is done
+  // doing its thing by the time the HistoryURLProvider task runs.
+  // (And hope that it completes before AutocompleteController::Start() is
+  // called the next time.)
+  // ZeroSuggestProvider and ClipboardURLProvider take a reference to
+  // HistoryURLProvider. If we're going to need either, we should initialize
+  // history_url_provider_.
+  if (provider_types & (AutocompleteProvider::TYPE_HISTORY_URL |
+                        AutocompleteProvider::TYPE_ZERO_SUGGEST |
+                        AutocompleteProvider::TYPE_CLIPBOARD)) {
+    history_url_provider_ =
+        new HistoryURLProvider(provider_client_.get(), this);
+    if (provider_types & AutocompleteProvider::TYPE_HISTORY_URL)
+      providers_.push_back(history_url_provider_);
   }
   if (provider_types & AutocompleteProvider::TYPE_SHORTCUTS)
     providers_.push_back(new ShortcutsProvider(provider_client_.get()));
@@ -243,7 +278,7 @@ AutocompleteController::AutocompleteController(
     document_provider_ = DocumentProvider::Create(provider_client_.get(), this);
     providers_.push_back(document_provider_);
   }
-  if (provider_types & AutocompleteProvider::TYPE_CLIPBOARD_URL) {
+  if (provider_types & AutocompleteProvider::TYPE_CLIPBOARD) {
 #if !defined(OS_IOS)
     // On iOS, a global ClipboardRecentContent should've been created by now
     // (if enabled).  If none has been created (e.g., we're on a different
@@ -259,8 +294,8 @@ AutocompleteController::AutocompleteController(
     // ClipboardRecentContent can be null in iOS tests.  For non-iOS, we
     // create a ClipboardRecentContent as above (for both Chrome and tests).
     if (ClipboardRecentContent::GetInstance()) {
-      providers_.push_back(new ClipboardURLProvider(
-          provider_client_.get(), history_url_provider_,
+      providers_.push_back(new ClipboardProvider(
+          provider_client_.get(), this, history_url_provider_,
           ClipboardRecentContent::GetInstance()));
     }
   }
@@ -313,7 +348,7 @@ void AutocompleteController::Start(const AutocompleteInput& input) {
   // Start the new query.
   in_start_ = true;
   base::TimeTicks start_time = base::TimeTicks::Now();
-  for (Providers::iterator i(providers_.begin()); i != providers_.end(); ++i) {
+  for (auto i(providers_.begin()); i != providers_.end(); ++i) {
     // TODO(mpearson): Remove timing code once bug 178705 is resolved.
     base::TimeTicks provider_start_time = base::TimeTicks::Now();
     (*i)->Start(input_, minimal_changes);
@@ -351,6 +386,17 @@ void AutocompleteController::Start(const AutocompleteInput& input) {
   // need the edit model to update the display.
   UpdateResult(false, true);
 
+  // Omnibox has dependencies that may be lazily initialized. This metric will
+  // help tracking regression on the first use.
+  if (first_query_) {
+    base::TimeTicks end_time = base::TimeTicks::Now();
+    base::HistogramBase* counter =
+        base::Histogram::FactoryGet("Omnibox.WarmupTime", 1, 1000, 50,
+                                    base::Histogram::kUmaTargetedHistogramFlag);
+    counter->Add(static_cast<int>((end_time - start_time).InMilliseconds()));
+    first_query_ = false;
+  }
+
   // If the input looks like a query, send a signal predicting that the user is
   // going to issue a search (either to the default search engine or to a
   // keyword search engine, as indicated by the destination_url). This allows
@@ -383,7 +429,7 @@ void AutocompleteController::DeleteMatch(const AutocompleteMatch& match) {
   DCHECK(match.SupportsDeletion());
 
   // Delete duplicate matches attached to the main match first.
-  for (ACMatches::const_iterator it(match.duplicate_matches.begin());
+  for (auto it(match.duplicate_matches.begin());
        it != match.duplicate_matches.end(); ++it) {
     if (it->deletable)
       it->provider->DeleteMatch(*it);
@@ -417,8 +463,7 @@ void AutocompleteController::OnProviderUpdate(bool updated_matches) {
 void AutocompleteController::AddProvidersInfo(
     ProvidersInfo* provider_info) const {
   provider_info->clear();
-  for (Providers::const_iterator i(providers_.begin()); i != providers_.end();
-       ++i) {
+  for (auto i(providers_.begin()); i != providers_.end(); ++i) {
     // Add per-provider info, if any.
     (*i)->AddProviderInfo(provider_info);
 
@@ -501,6 +546,9 @@ void AutocompleteController::UpdateResult(
        i != providers_.end(); ++i)
     result_.AppendMatches(input_, (*i)->matches());
 
+  if (OmniboxFieldTrial::IsPedalSuggestionsEnabled())
+    result_.AppendDedicatedPedalMatches(provider_client_.get(), input_);
+
   // Sort the matches and trim to a small number of "best" matches.
   result_.SortAndCull(input_, template_url_service_);
 
@@ -564,8 +612,7 @@ void AutocompleteController::UpdateAssociatedKeywords(
       keyword_provider_->GetKeywordForText(input_.text());
 
   std::set<base::string16> keywords;
-  for (ACMatches::iterator match(result->begin()); match != result->end();
-       ++match) {
+  for (auto match(result->begin()); match != result->end(); ++match) {
     base::string16 keyword(
         match->GetSubstitutingExplicitlyInvokedKeyword(template_url_service_));
     if (!keyword.empty()) {
@@ -606,16 +653,18 @@ void AutocompleteController::UpdateAssociatedKeywords(
 
 void AutocompleteController::UpdateKeywordDescriptions(
     AutocompleteResult* result) {
+  bool show_suffix_on_all_search_suggestions = base::FeatureList::IsEnabled(
+      omnibox::kUIExperimentShowSuffixOnAllSearchSuggestions);
+
   base::string16 last_keyword;
-  for (AutocompleteResult::iterator i(result->begin()); i != result->end();
-       ++i) {
+  for (auto i(result->begin()); i != result->end(); ++i) {
     if (AutocompleteMatch::IsSearchType(i->type)) {
       if (AutocompleteMatchHasCustomDescription(*i))
         continue;
       i->description.clear();
       i->description_class.clear();
       DCHECK(!i->keyword.empty());
-      if (i->keyword != last_keyword) {
+      if (i->keyword != last_keyword || show_suffix_on_all_search_suggestions) {
         const TemplateURL* template_url =
             i->GetTemplateURL(template_url_service_, false);
         if (template_url) {
@@ -648,8 +697,7 @@ void AutocompleteController::UpdateAssistedQueryStats(
   int count = 0;
   size_t last_type = base::string16::npos;
   size_t last_subtype = base::string16::npos;
-  for (ACMatches::iterator match(result->begin()); match != result->end();
-       ++match) {
+  for (auto match(result->begin()); match != result->end(); ++match) {
     size_t type = base::string16::npos;
     size_t subtype = base::string16::npos;
     AutocompleteMatchToAssistedQuery(

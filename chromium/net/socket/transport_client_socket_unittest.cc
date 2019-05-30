@@ -13,7 +13,6 @@
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
-#include "net/dns/mock_host_resolver.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source.h"
 #include "net/log/net_log_with_source.h"
@@ -117,17 +116,8 @@ void TransportClientSocketTest::SetUp() {
                        base::Bind(&TransportClientSocketTest::AcceptCallback,
                                   base::Unretained(this)));
 
-  AddressList addr;
-  // MockHostResolver resolves everything to 127.0.0.1.
-  std::unique_ptr<HostResolver> resolver(new MockHostResolver());
-  HostResolver::RequestInfo info(HostPortPair("localhost", listen_port_));
-  TestCompletionCallback callback;
-  std::unique_ptr<HostResolver::Request> request;
-  int rv = resolver->Resolve(info, DEFAULT_PRIORITY, &addr, callback.callback(),
-                             &request, NetLogWithSource());
-  CHECK_EQ(ERR_IO_PENDING, rv);
-  rv = callback.WaitForResult();
-  CHECK_EQ(rv, OK);
+  AddressList addr = AddressList::CreateFromIPAddress(
+      IPAddress::IPv4Localhost(), listen_port_);
   sock_ = socket_factory_->CreateTransportClientSocket(addr, NULL, &net_log_,
                                                        NetLogSource());
 }
@@ -234,9 +224,9 @@ std::string TransportClientSocketTest::ReadServerData(int expected_bytes_read) {
 }
 
 // TODO(leighton):  Add SCTP to this list when it is ready.
-INSTANTIATE_TEST_CASE_P(StreamSocket,
-                        TransportClientSocketTest,
-                        ::testing::Values(TCP));
+INSTANTIATE_TEST_SUITE_P(StreamSocket,
+                         TransportClientSocketTest,
+                         ::testing::Values(TCP));
 
 TEST_P(TransportClientSocketTest, Connect) {
   TestCompletionCallback callback;
@@ -477,12 +467,8 @@ TEST_P(TransportClientSocketTest, DISABLED_FullDuplex_WriteFirst) {
   int rv = write_callback.WaitForResult();
   EXPECT_GE(rv, 0);
 
-  // It's possible the read is blocked because it's already read all the data.
-  // Close the server socket, so there will at least be a 0-byte read.
-  CloseServerSocket();
-
   rv = callback.WaitForResult();
-  EXPECT_GE(rv, 0);
+  EXPECT_GT(rv, 0);
 }
 
 }  // namespace net

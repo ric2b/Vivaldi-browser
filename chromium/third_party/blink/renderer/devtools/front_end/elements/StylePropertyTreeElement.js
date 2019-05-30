@@ -126,24 +126,10 @@ Elements.StylePropertyTreeElement = class extends UI.TreeElement {
       return swatch;
     }
 
-    const swatchPopoverHelper = this._parentPane.swatchPopoverHelper();
     const swatch = InlineEditor.ColorSwatch.create();
     swatch.setColor(color);
     swatch.setFormat(Common.Color.detectColorFormat(swatch.color()));
-    const swatchIcon = new Elements.ColorSwatchPopoverIcon(this, swatchPopoverHelper, swatch);
-
-    /**
-     * @param {?SDK.CSSModel.ContrastInfo} contrastInfo
-     */
-    function computedCallback(contrastInfo) {
-      swatchIcon.setContrastInfo(contrastInfo);
-    }
-
-    if (Runtime.experiments.isEnabled('colorContrastRatio') && this.property.name === 'color' &&
-        this._parentPane.cssModel() && this.node()) {
-      const cssModel = this._parentPane.cssModel();
-      cssModel.backgroundColorsPromise(this.node().id).then(computedCallback);
-    }
+    this._addColorContrastInfo(swatch);
 
     return swatch;
   }
@@ -170,13 +156,25 @@ Elements.StylePropertyTreeElement = class extends UI.TreeElement {
       return swatch;
     }
 
-    const swatchPopoverHelper = this._parentPane.swatchPopoverHelper();
     const swatch = InlineEditor.ColorSwatch.create();
     swatch.setColor(color);
     swatch.setFormat(Common.Color.detectColorFormat(swatch.color()));
     swatch.setText(text, computedValue);
-    new Elements.ColorSwatchPopoverIcon(this, swatchPopoverHelper, swatch);
+    this._addColorContrastInfo(swatch);
     return swatch;
+  }
+
+  /**
+   * @param {!InlineEditor.ColorSwatch} swatch
+   */
+  async _addColorContrastInfo(swatch) {
+    const swatchPopoverHelper = this._parentPane.swatchPopoverHelper();
+    const swatchIcon = new Elements.ColorSwatchPopoverIcon(this, swatchPopoverHelper, swatch);
+    if (this.property.name !== 'color' || !this._parentPane.cssModel() || !this.node())
+      return;
+    const cssModel = this._parentPane.cssModel();
+    const contrastInfo = new ColorPicker.ContrastInfo(await cssModel.backgroundColorsPromise(this.node().id));
+    swatchIcon.setContrastInfo(contrastInfo);
   }
 
   /**
@@ -605,7 +603,7 @@ Elements.StylePropertyTreeElement = class extends UI.TreeElement {
 
     this._originalPropertyText = this.property.propertyText;
 
-    this._parentPane.setEditingStyle(true);
+    this._parentPane.setEditingStyle(true, this);
     if (selectElement.parentElement)
       selectElement.parentElement.scrollIntoViewIfNeeded(false);
 

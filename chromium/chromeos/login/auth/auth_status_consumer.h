@@ -7,8 +7,8 @@
 
 #include <string>
 
+#include "base/component_export.h"
 #include "base/logging.h"
-#include "chromeos/chromeos_export.h"
 #include "google_apis/gaia/gaia_auth_consumer.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "net/base/net_errors.h"
@@ -17,10 +17,10 @@ namespace chromeos {
 
 class UserContext;
 
-class CHROMEOS_EXPORT AuthFailure {
+class COMPONENT_EXPORT(CHROMEOS_LOGIN_AUTH) AuthFailure {
  public:
   // Enum used for UMA. Do NOT reorder or remove entry. Don't forget to
-  // update histograms.xml when adding new entries.
+  // update LoginFailureReason enum in enums.xml when adding new entries.
   enum FailureReason {
     NONE = 0,
     COULD_NOT_MOUNT_CRYPTOHOME = 1,
@@ -39,6 +39,7 @@ class CHROMEOS_EXPORT AuthFailure {
     USERNAME_HASH_FAILED = 11,        // Could not get username hash.
     FAILED_TO_INITIALIZE_TOKEN = 12,  // Could not get OAuth2 Token,
     MISSING_CRYPTOHOME = 13,          // cryptohome missing from disk.
+    AUTH_DISABLED = 14,               // Authentication disabled for user.
     NUM_FAILURE_REASONS,              // This has to be the last item.
   };
 
@@ -91,6 +92,8 @@ class CHROMEOS_EXPORT AuthFailure {
         return "OAuth2 token fetch failed.";
       case MISSING_CRYPTOHOME:
         return "Cryptohome missing from disk.";
+      case AUTH_DISABLED:
+        return "Auth disabled for user.";
       default:
         NOTREACHED();
         return std::string();
@@ -119,7 +122,7 @@ enum SuccessReason {
 // An interface that defines the callbacks for objects that the
 // Authenticator class will call to report the success/failure of
 // authentication for Chromium OS.
-class CHROMEOS_EXPORT AuthStatusConsumer {
+class COMPONENT_EXPORT(CHROMEOS_LOGIN_AUTH) AuthStatusConsumer {
  public:
   virtual ~AuthStatusConsumer() {}
   // The current login attempt has ended in failure, with error |error|.

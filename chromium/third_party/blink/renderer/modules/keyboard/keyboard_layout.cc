@@ -5,7 +5,6 @@
 #include "third_party/blink/renderer/modules/keyboard/keyboard_layout.h"
 
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/blink/public/mojom/page/page_visibility_state.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -28,8 +27,6 @@ constexpr char kKeyboardMapRequestFailedErrorMsg[] =
     "getLayoutMap() request could not be completed.";
 
 }  // namespace
-
-using mojom::PageVisibilityState;
 
 KeyboardLayout::KeyboardLayout(ExecutionContext* context)
     : ContextLifecycleObserver(context) {}
@@ -99,7 +96,7 @@ void KeyboardLayout::GotKeyboardLayoutMap(
   switch (result->status) {
     case mojom::blink::GetKeyboardLayoutMapStatus::kSuccess:
       script_promise_resolver_->Resolve(
-          new KeyboardLayoutMap(result->layout_map));
+          MakeGarbageCollected<KeyboardLayoutMap>(result->layout_map));
       break;
     case mojom::blink::GetKeyboardLayoutMapStatus::kFail:
       script_promise_resolver_->Reject(

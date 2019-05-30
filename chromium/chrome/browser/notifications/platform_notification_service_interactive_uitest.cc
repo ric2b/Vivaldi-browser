@@ -319,9 +319,7 @@ IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
   EXPECT_FALSE(notification.icon().IsEmpty());
   EXPECT_EQ(kIconWidth, notification.icon().Width());
   EXPECT_EQ(kIconHeight, notification.icon().Height());
-
-  // Small images (badges) are only supported on Android.
-  EXPECT_TRUE(notification.small_image().IsEmpty());
+  EXPECT_FALSE(notification.small_image().IsEmpty());
 
   // Test that notifications with the same tag replace each other and have
   // identical ids.
@@ -421,7 +419,7 @@ IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
   EXPECT_FALSE(all_options_notification.icon().IsEmpty());
   EXPECT_EQ(kIconWidth, all_options_notification.icon().Width());
   EXPECT_EQ(kIconHeight, all_options_notification.icon().Height());
-  EXPECT_TRUE(all_options_notification.small_image().IsEmpty());
+  EXPECT_FALSE(all_options_notification.small_image().IsEmpty());
   EXPECT_TRUE(all_options_notification.renotify());
   EXPECT_TRUE(all_options_notification.silent());
   EXPECT_TRUE(all_options_notification.never_timeout());
@@ -557,6 +555,51 @@ IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
   histogram_tester_.ExpectUniqueSample(
       "Notifications.PersistentWebNotificationCloseResult",
       0 /* SERVICE_WORKER_OK */, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
+                       CloseAndUserClosePersistentNotificationWithTag) {
+  GrantNotificationPermissionForTest();
+  {
+    std::string script_result;
+    ASSERT_TRUE(RunScript(
+        R"(DisplayPersistentNotification('action_close', {
+            tag: 'tag-1'
+        }))",
+        &script_result));
+    EXPECT_EQ("ok", script_result);
+
+    std::vector<message_center::Notification> notifications =
+        GetDisplayedNotifications(true /* is_persistent */);
+    ASSERT_EQ(1u, notifications.size());
+
+    display_service_tester_->SimulateClick(
+        NotificationHandler::Type::WEB_PERSISTENT, notifications[0].id(),
+        base::nullopt /* action_index */, base::nullopt /* reply */);
+
+    ASSERT_TRUE(RunScript("GetMessageFromWorker()", &script_result));
+    EXPECT_EQ("action_close", script_result);
+  }
+  {
+    std::string script_result;
+    ASSERT_TRUE(RunScript(
+        R"(DisplayPersistentNotification('close_test', {
+            tag: 'tag-1'
+        }))",
+        &script_result));
+    EXPECT_EQ("ok", script_result);
+
+    std::vector<message_center::Notification> notifications =
+        GetDisplayedNotifications(true /* is_persistent */);
+    ASSERT_EQ(1u, notifications.size());
+
+    display_service_tester_->RemoveNotification(
+        NotificationHandler::Type::WEB_PERSISTENT, notifications[0].id(),
+        true /* by_user */);
+
+    ASSERT_TRUE(RunScript("GetMessageFromWorker()", &script_result));
+    EXPECT_EQ("closing notification: close_test", script_result);
+  }
 }
 
 IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,

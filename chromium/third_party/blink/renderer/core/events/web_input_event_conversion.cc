@@ -36,6 +36,7 @@
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/events/touch_event.h"
 #include "third_party/blink/renderer/core/events/wheel_event.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/input/touch.h"
@@ -176,17 +177,17 @@ WebMouseEventBuilder::WebMouseEventBuilder(const LocalFrameView* plugin_parent,
   // OOPIF will prevent synthetic events being dispatched into
   // other frames; but for now we allow the fallback to generate
   // WebMouseEvents from synthetic events.
-  if (event.type() == EventTypeNames::mousemove)
+  if (event.type() == event_type_names::kMousemove)
     type_ = WebInputEvent::kMouseMove;
-  else if (event.type() == EventTypeNames::mouseout)
+  else if (event.type() == event_type_names::kMouseout)
     type_ = WebInputEvent::kMouseLeave;
-  else if (event.type() == EventTypeNames::mouseover)
+  else if (event.type() == event_type_names::kMouseover)
     type_ = WebInputEvent::kMouseEnter;
-  else if (event.type() == EventTypeNames::mousedown)
+  else if (event.type() == event_type_names::kMousedown)
     type_ = WebInputEvent::kMouseDown;
-  else if (event.type() == EventTypeNames::mouseup)
+  else if (event.type() == event_type_names::kMouseup)
     type_ = WebInputEvent::kMouseUp;
-  else if (event.type() == EventTypeNames::contextmenu)
+  else if (event.type() == event_type_names::kContextmenu)
     type_ = WebInputEvent::kContextMenu;
   else
     return;  // Skip all other mouse events.
@@ -197,37 +198,37 @@ WebMouseEventBuilder::WebMouseEventBuilder(const LocalFrameView* plugin_parent,
                                         *this);
 
   switch (event.button()) {
-    case short(WebPointerProperties::Button::kLeft):
+    case int16_t(WebPointerProperties::Button::kLeft):
       button = WebMouseEvent::Button::kLeft;
       break;
-    case short(WebPointerProperties::Button::kMiddle):
+    case int16_t(WebPointerProperties::Button::kMiddle):
       button = WebMouseEvent::Button::kMiddle;
       break;
-    case short(WebPointerProperties::Button::kRight):
+    case int16_t(WebPointerProperties::Button::kRight):
       button = WebMouseEvent::Button::kRight;
       break;
-    case short(WebPointerProperties::Button::kBack):
+    case int16_t(WebPointerProperties::Button::kBack):
       button = WebMouseEvent::Button::kBack;
       break;
-    case short(WebPointerProperties::Button::kForward):
+    case int16_t(WebPointerProperties::Button::kForward):
       button = WebMouseEvent::Button::kForward;
       break;
   }
   if (event.ButtonDown()) {
     switch (event.button()) {
-      case short(WebPointerProperties::Button::kLeft):
+      case int16_t(WebPointerProperties::Button::kLeft):
         modifiers_ |= WebInputEvent::kLeftButtonDown;
         break;
-      case short(WebPointerProperties::Button::kMiddle):
+      case int16_t(WebPointerProperties::Button::kMiddle):
         modifiers_ |= WebInputEvent::kMiddleButtonDown;
         break;
-      case short(WebPointerProperties::Button::kRight):
+      case int16_t(WebPointerProperties::Button::kRight):
         modifiers_ |= WebInputEvent::kRightButtonDown;
         break;
-      case short(WebPointerProperties::Button::kBack):
+      case int16_t(WebPointerProperties::Button::kBack):
         modifiers_ |= WebInputEvent::kBackButtonDown;
         break;
-      case short(WebPointerProperties::Button::kForward):
+      case int16_t(WebPointerProperties::Button::kForward):
         modifiers_ |= WebInputEvent::kForwardButtonDown;
         break;
     }
@@ -249,7 +250,8 @@ WebMouseEventBuilder::WebMouseEventBuilder(const LocalFrameView* plugin_parent,
   if (!event.touches())
     return;
   if (event.touches()->length() != 1) {
-    if (event.touches()->length() || event.type() != EventTypeNames::touchend ||
+    if (event.touches()->length() ||
+        event.type() != event_type_names::kTouchend ||
         !event.changedTouches() || event.changedTouches()->length() != 1)
       return;
   }
@@ -260,11 +262,11 @@ WebMouseEventBuilder::WebMouseEventBuilder(const LocalFrameView* plugin_parent,
   if (touch->identifier())
     return;
 
-  if (event.type() == EventTypeNames::touchstart)
+  if (event.type() == event_type_names::kTouchstart)
     type_ = kMouseDown;
-  else if (event.type() == EventTypeNames::touchmove)
+  else if (event.type() == event_type_names::kTouchmove)
     type_ = kMouseMove;
-  else if (event.type() == EventTypeNames::touchend)
+  else if (event.type() == event_type_names::kTouchend)
     type_ = kMouseUp;
   else
     return;
@@ -303,11 +305,11 @@ WebKeyboardEventBuilder::WebKeyboardEventBuilder(const KeyboardEvent& event) {
     return;
   }
 
-  if (event.type() == EventTypeNames::keydown)
+  if (event.type() == event_type_names::kKeydown)
     type_ = kKeyDown;
-  else if (event.type() == EventTypeNames::keyup)
+  else if (event.type() == event_type_names::kKeyup)
     type_ = WebInputEvent::kKeyUp;
-  else if (event.type() == EventTypeNames::keypress)
+  else if (event.type() == event_type_names::kKeypress)
     type_ = WebInputEvent::kChar;
   else
     return;  // Skip all other keyboard events.

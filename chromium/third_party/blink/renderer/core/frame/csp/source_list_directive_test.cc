@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/core/frame/csp/source_list_directive.h"
 
+#include <vector>
+
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
@@ -34,7 +36,7 @@ class SourceListDirectiveTest : public testing::Test {
         SecurityOrigin::Create(secure_url));
     document = Document::CreateForTest();
     document->SetSecurityOrigin(secure_origin);
-    csp->BindToExecutionContext(document.Get());
+    csp->BindToDelegate(document->GetContentSecurityPolicyDelegate());
   }
 
   ContentSecurityPolicy* SetUpWithOrigin(const String& origin) {
@@ -44,7 +46,7 @@ class SourceListDirectiveTest : public testing::Test {
     Document* document = Document::CreateForTest();
     document->SetSecurityOrigin(secure_origin);
     ContentSecurityPolicy* csp = ContentSecurityPolicy::Create();
-    csp->BindToExecutionContext(document);
+    csp->BindToDelegate(document->GetContentSecurityPolicyDelegate());
     return csp;
   }
 
@@ -272,7 +274,7 @@ TEST_F(SourceListDirectiveTest, GetIntersectCSPSources) {
                                            csp.Get());
     HeapVector<Member<CSPSource>> expected = helper_source_list.list_;
     EXPECT_EQ(normalized.size(), expected.size());
-    for (size_t i = 0; i < normalized.size(); i++) {
+    for (wtf_size_t i = 0; i < normalized.size(); i++) {
       Source a = {normalized[i]->scheme_,        normalized[i]->host_,
                   normalized[i]->port_,          normalized[i]->path_,
                   normalized[i]->host_wildcard_, normalized[i]->port_wildcard_};
@@ -327,7 +329,7 @@ TEST_F(SourceListDirectiveTest, GetIntersectCSPSourcesSchemes) {
                                            csp.Get());
     HeapVector<Member<CSPSource>> expected = helper_source_list.list_;
     EXPECT_EQ(normalized.size(), expected.size());
-    for (size_t i = 0; i < expected.size(); i++) {
+    for (wtf_size_t i = 0; i < expected.size(); i++) {
       Source a = {expected[i]->scheme_,        expected[i]->host_,
                   expected[i]->port_,          expected[i]->path_,
                   expected[i]->host_wildcard_, expected[i]->port_wildcard_};
@@ -414,8 +416,8 @@ TEST_F(SourceListDirectiveTest, Subsumes) {
     HeapVector<Member<SourceListDirective>> returned;
 
     for (const auto& sources : test.sources_vector) {
-      SourceListDirective* member =
-          new SourceListDirective("script-src", sources, csp.Get());
+      SourceListDirective* member = MakeGarbageCollected<SourceListDirective>(
+          "script-src", sources, csp.Get());
       returned.push_back(member);
     }
 
@@ -531,8 +533,8 @@ TEST_F(SourceListDirectiveTest, SubsumesWithSelf) {
 
     HeapVector<Member<SourceListDirective>> vector_b;
     for (auto* const sources : test.sources_b) {
-      SourceListDirective* member =
-          new SourceListDirective("script-src", sources, csp_b);
+      SourceListDirective* member = MakeGarbageCollected<SourceListDirective>(
+          "script-src", sources, csp_b);
       vector_b.push_back(member);
     }
 
@@ -697,7 +699,7 @@ TEST_F(SourceListDirectiveTest, SubsumesAllowAllInline) {
 
     HeapVector<Member<SourceListDirective>> vector_b;
     for (const auto& sources : test.sources_b) {
-      SourceListDirective* member = new SourceListDirective(
+      SourceListDirective* member = MakeGarbageCollected<SourceListDirective>(
           test.is_script_src ? "script-src" : "style-src", sources, csp_b);
       vector_b.push_back(member);
     }
@@ -786,7 +788,7 @@ TEST_F(SourceListDirectiveTest, SubsumesUnsafeAttributes) {
 
     HeapVector<Member<SourceListDirective>> vector_b;
     for (const auto& sources : test.sources_b) {
-      SourceListDirective* member = new SourceListDirective(
+      SourceListDirective* member = MakeGarbageCollected<SourceListDirective>(
           test.is_script_src ? "script-src" : "style-src", sources, csp_b);
       vector_b.push_back(member);
     }
@@ -1039,7 +1041,6 @@ TEST_F(SourceListDirectiveTest, SubsumesNoncesAndHashes) {
        {"http://example1.com/foo/ 'nonce-xyz' 'sha512-xyz'",
         "http://example1.com/foo/ 'nonce-zyx' 'nonce-xyz' 'sha512-xyz'"},
        false},
-
   };
 
   for (const auto& test : cases) {
@@ -1050,7 +1051,7 @@ TEST_F(SourceListDirectiveTest, SubsumesNoncesAndHashes) {
 
     HeapVector<Member<SourceListDirective>> vector_b;
     for (const auto& sources : test.sources_b) {
-      SourceListDirective* member = new SourceListDirective(
+      SourceListDirective* member = MakeGarbageCollected<SourceListDirective>(
           test.is_script_src ? "script-src" : "style-src", sources, csp_b);
       vector_b.push_back(member);
     }
@@ -1226,7 +1227,7 @@ TEST_F(SourceListDirectiveTest, SubsumesStrictDynamic) {
 
     HeapVector<Member<SourceListDirective>> vector_b;
     for (const auto& sources : test.sources_b) {
-      SourceListDirective* member = new SourceListDirective(
+      SourceListDirective* member = MakeGarbageCollected<SourceListDirective>(
           test.is_script_src ? "script-src" : "style-src", sources, csp_b);
       vector_b.push_back(member);
     }
@@ -1297,8 +1298,8 @@ TEST_F(SourceListDirectiveTest, SubsumesListWildcard) {
 
     HeapVector<Member<SourceListDirective>> vector_b;
     for (auto* const sources : test.sources_b) {
-      SourceListDirective* member =
-          new SourceListDirective("script-src", sources, csp_b);
+      SourceListDirective* member = MakeGarbageCollected<SourceListDirective>(
+          "script-src", sources, csp_b);
       vector_b.push_back(member);
     }
 
@@ -1332,7 +1333,7 @@ TEST_F(SourceListDirectiveTest, GetSources) {
     SourceListDirective expected_list("script-src", test.expected, csp.Get());
     HeapVector<Member<CSPSource>> expected = expected_list.list_;
     EXPECT_EQ(normalized.size(), expected.size());
-    for (size_t i = 0; i < expected.size(); i++) {
+    for (wtf_size_t i = 0; i < expected.size(); i++) {
       Source a = {expected[i]->scheme_,        expected[i]->host_,
                   expected[i]->port_,          expected[i]->path_,
                   expected[i]->host_wildcard_, expected[i]->port_wildcard_};
@@ -1375,7 +1376,7 @@ TEST_F(SourceListDirectiveTest, ParseHost) {
     const UChar* start = characters.data();
     const UChar* end = start + characters.size();
     EXPECT_EQ(test.expected,
-              SourceListDirective::ParseHost(start, end, host, disposition))
+              SourceListDirective::ParseHost(start, end, &host, &disposition))
         << "SourceListDirective::parseHost fail to parse: " << test.sources;
   }
 }
@@ -1404,6 +1405,22 @@ TEST_F(SourceListDirectiveTest, AllowHostWildcard) {
     String sources = "http://*";
     SourceListDirective source_list("default-src", sources, csp.Get());
     EXPECT_TRUE(source_list.Allows(KURL(base, "http://a.com")));
+  }
+}
+
+TEST_F(SourceListDirectiveTest, AllowHostMixedCase) {
+  KURL base;
+  // Non-wildcard sources should match hosts case-insensitively.
+  {
+    String sources = "http://ExAmPle.com";
+    SourceListDirective source_list("default-src", sources, csp.Get());
+    EXPECT_TRUE(source_list.Allows(KURL(base, "http://example.com")));
+  }
+  // Wildcard sources should match hosts case-insensitively.
+  {
+    String sources = "http://*.ExAmPle.com";
+    SourceListDirective source_list("default-src", sources, csp.Get());
+    EXPECT_TRUE(source_list.Allows(KURL(base, "http://www.example.com")));
   }
 }
 

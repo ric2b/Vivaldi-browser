@@ -6,16 +6,18 @@
 
 #include <utility>
 
+#include "base/bind.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/common/cast_messages.h"
 #include "components/net_log/chrome_net_log.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/service_manager_connection.h"
 #include "media/cast/net/cast_transport.h"
 #include "media/cast/net/udp_transport_impl.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "net/url_request/url_request_context.h"
 #include "services/device/public/mojom/constants.mojom.h"
 #include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -119,10 +121,8 @@ void CastBindConnectorRequest(
 
 namespace cast {
 
-CastTransportHostFilter::CastTransportHostFilter(Profile* profile)
-    : BrowserMessageFilter(CastMsgStart),
-      url_request_context_getter_(profile->GetRequestContext()),
-      weak_factory_(this) {}
+CastTransportHostFilter::CastTransportHostFilter()
+    : BrowserMessageFilter(CastMsgStart), weak_factory_(this) {}
 
 CastTransportHostFilter::~CastTransportHostFilter() {}
 
@@ -175,8 +175,8 @@ void CastTransportHostFilter::OnNew(int32_t channel_id,
   }
 
   auto udp_transport = std::make_unique<media::cast::UdpTransportImpl>(
-      url_request_context_getter_->GetURLRequestContext()->net_log(),
-      base::ThreadTaskRunnerHandle::Get(), local_end_point, remote_end_point,
+      g_browser_process->net_log(), base::ThreadTaskRunnerHandle::Get(),
+      local_end_point, remote_end_point,
       base::BindRepeating(&CastTransportHostFilter::OnStatusChanged,
                           weak_factory_.GetWeakPtr(), channel_id));
   udp_transport->SetUdpOptions(options);
@@ -410,8 +410,8 @@ device::mojom::WakeLock* CastTransportHostFilter::GetWakeLock() {
 
   service_manager::mojom::ConnectorRequest connector_request;
   auto connector = service_manager::Connector::Create(&connector_request);
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
       base::BindOnce(&CastBindConnectorRequest, std::move(connector_request)));
 
   device::mojom::WakeLockProviderPtr wake_lock_provider;

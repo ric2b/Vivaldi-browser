@@ -26,6 +26,7 @@
 
 #include "third_party/blink/renderer/core/editing/editing_style.h"
 
+#include "base/stl_util.h"
 #include "third_party/blink/renderer/core/css/css_color_value.h"
 #include "third_party/blink/renderer/core/css/css_computed_style_declaration.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
@@ -98,9 +99,9 @@ static const Vector<const CSSProperty*>& AllEditingProperties() {
   DEFINE_STATIC_LOCAL(Vector<const CSSProperty*>, properties, ());
   if (properties.IsEmpty()) {
     CSSProperty::FilterEnabledCSSPropertiesIntoVector(
-        kStaticEditingProperties, arraysize(kStaticEditingProperties),
+        kStaticEditingProperties, base::size(kStaticEditingProperties),
         properties);
-    for (size_t index = 0; index < properties.size(); index++) {
+    for (wtf_size_t index = 0; index < properties.size(); index++) {
       if (properties[index]->IDEquals(CSSPropertyTextDecoration)) {
         properties.EraseAt(index);
         break;
@@ -114,9 +115,9 @@ static const Vector<const CSSProperty*>& InheritableEditingProperties() {
   DEFINE_STATIC_LOCAL(Vector<const CSSProperty*>, properties, ());
   if (properties.IsEmpty()) {
     CSSProperty::FilterEnabledCSSPropertiesIntoVector(
-        kStaticEditingProperties, arraysize(kStaticEditingProperties),
+        kStaticEditingProperties, base::size(kStaticEditingProperties),
         properties);
-    for (size_t index = 0; index < properties.size();) {
+    for (wtf_size_t index = 0; index < properties.size();) {
       if (!properties[index]->IsInherited()) {
         properties.EraseAt(index);
         continue;
@@ -138,7 +139,7 @@ static MutableCSSPropertyValueSet* CopyEditingProperties(
 
 static inline bool IsEditingProperty(CSSPropertyID id) {
   static const Vector<const CSSProperty*>& properties = AllEditingProperties();
-  for (size_t index = 0; index < properties.size(); index++) {
+  for (wtf_size_t index = 0; index < properties.size(); index++) {
     if (properties[index]->IDEquals(id))
       return true;
   }
@@ -171,8 +172,15 @@ class HTMLElementEquivalent : public GarbageCollected<HTMLElementEquivalent> {
   static HTMLElementEquivalent* Create(CSSPropertyID property_id,
                                        CSSValueID primitive_value,
                                        const HTMLQualifiedName& tag_name) {
-    return new HTMLElementEquivalent(property_id, primitive_value, tag_name);
+    return MakeGarbageCollected<HTMLElementEquivalent>(
+        property_id, primitive_value, tag_name);
   }
+
+  HTMLElementEquivalent(CSSPropertyID);
+  HTMLElementEquivalent(CSSPropertyID, const HTMLQualifiedName& tag_name);
+  HTMLElementEquivalent(CSSPropertyID,
+                        CSSValueID primitive_value,
+                        const HTMLQualifiedName& tag_name);
 
   virtual bool Matches(const Element* element) const {
     return !tag_name_ || element->HasTagName(*tag_name_);
@@ -184,16 +192,9 @@ class HTMLElementEquivalent : public GarbageCollected<HTMLElementEquivalent> {
   virtual bool ValueIsPresentInStyle(HTMLElement*, CSSPropertyValueSet*) const;
   virtual void AddToStyle(Element*, EditingStyle*) const;
 
-  virtual void Trace(blink::Visitor* visitor) {
-    visitor->Trace(identifier_value_);
-  }
+  virtual void Trace(Visitor* visitor) { visitor->Trace(identifier_value_); }
 
  protected:
-  HTMLElementEquivalent(CSSPropertyID);
-  HTMLElementEquivalent(CSSPropertyID, const HTMLQualifiedName& tag_name);
-  HTMLElementEquivalent(CSSPropertyID,
-                        CSSValueID primitive_value,
-                        const HTMLQualifiedName& tag_name);
   const CSSPropertyID property_id_;
   const Member<CSSIdentifierValue> identifier_value_;
   // We can store a pointer because HTML tag names are const global.
@@ -251,18 +252,19 @@ class HTMLTextDecorationEquivalent final : public HTMLElementEquivalent {
  public:
   static HTMLElementEquivalent* Create(CSSValueID primitive_value,
                                        const HTMLQualifiedName& tag_name) {
-    return new HTMLTextDecorationEquivalent(primitive_value, tag_name);
+    return MakeGarbageCollected<HTMLTextDecorationEquivalent>(primitive_value,
+                                                              tag_name);
   }
+
+  HTMLTextDecorationEquivalent(CSSValueID primitive_value,
+                               const HTMLQualifiedName& tag_name);
+
   bool PropertyExistsInStyle(const CSSPropertyValueSet*) const override;
   bool ValueIsPresentInStyle(HTMLElement*, CSSPropertyValueSet*) const override;
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     HTMLElementEquivalent::Trace(visitor);
   }
-
- private:
-  HTMLTextDecorationEquivalent(CSSValueID primitive_value,
-                               const HTMLQualifiedName& tag_name);
 };
 
 HTMLTextDecorationEquivalent::HTMLTextDecorationEquivalent(
@@ -271,7 +273,7 @@ HTMLTextDecorationEquivalent::HTMLTextDecorationEquivalent(
     : HTMLElementEquivalent(CSSPropertyTextDecorationLine,
                             primitive_value,
                             tag_name)
-// m_propertyID is used in HTMLElementEquivalent::addToStyle
+// CSSPropertyTextDecorationLine is used in HTMLElementEquivalent::AddToStyle
 {}
 
 bool HTMLTextDecorationEquivalent::PropertyExistsInStyle(
@@ -296,12 +298,19 @@ class HTMLAttributeEquivalent : public HTMLElementEquivalent {
   static HTMLAttributeEquivalent* Create(CSSPropertyID property_id,
                                          const HTMLQualifiedName& tag_name,
                                          const QualifiedName& attr_name) {
-    return new HTMLAttributeEquivalent(property_id, tag_name, attr_name);
+    return MakeGarbageCollected<HTMLAttributeEquivalent>(property_id, tag_name,
+                                                         attr_name);
   }
   static HTMLAttributeEquivalent* Create(CSSPropertyID property_id,
                                          const QualifiedName& attr_name) {
-    return new HTMLAttributeEquivalent(property_id, attr_name);
+    return MakeGarbageCollected<HTMLAttributeEquivalent>(property_id,
+                                                         attr_name);
   }
+
+  HTMLAttributeEquivalent(CSSPropertyID,
+                          const HTMLQualifiedName& tag_name,
+                          const QualifiedName& attr_name);
+  HTMLAttributeEquivalent(CSSPropertyID, const QualifiedName& attr_name);
 
   bool Matches(const Element* element) const override {
     return HTMLElementEquivalent::Matches(element) &&
@@ -313,15 +322,11 @@ class HTMLAttributeEquivalent : public HTMLElementEquivalent {
   virtual const CSSValue* AttributeValueAsCSSValue(Element*) const;
   inline const QualifiedName& AttributeName() const { return attr_name_; }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     HTMLElementEquivalent::Trace(visitor);
   }
 
  protected:
-  HTMLAttributeEquivalent(CSSPropertyID,
-                          const HTMLQualifiedName& tag_name,
-                          const QualifiedName& attr_name);
-  HTMLAttributeEquivalent(CSSPropertyID, const QualifiedName& attr_name);
   // We can store a reference because HTML attribute names are const global.
   const QualifiedName& attr_name_;
 };
@@ -370,22 +375,22 @@ const CSSValue* HTMLAttributeEquivalent::AttributeValueAsCSSValue(
 class HTMLFontSizeEquivalent final : public HTMLAttributeEquivalent {
  public:
   static HTMLFontSizeEquivalent* Create() {
-    return new HTMLFontSizeEquivalent();
+    return MakeGarbageCollected<HTMLFontSizeEquivalent>();
   }
+
+  HTMLFontSizeEquivalent();
+
   const CSSValue* AttributeValueAsCSSValue(Element*) const override;
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     HTMLAttributeEquivalent::Trace(visitor);
   }
-
- private:
-  HTMLFontSizeEquivalent();
 };
 
 HTMLFontSizeEquivalent::HTMLFontSizeEquivalent()
     : HTMLAttributeEquivalent(CSSPropertyFontSize,
-                              HTMLNames::fontTag,
-                              HTMLNames::sizeAttr) {}
+                              html_names::kFontTag,
+                              html_names::kSizeAttr) {}
 
 const CSSValue* HTMLFontSizeEquivalent::AttributeValueAsCSSValue(
     Element* element) const {
@@ -706,7 +711,7 @@ static Vector<const CSSProperty*>& BlockPropertiesVector() {
   DEFINE_STATIC_LOCAL(Vector<const CSSProperty*>, properties, ());
   if (properties.IsEmpty()) {
     CSSProperty::FilterEnabledCSSPropertiesIntoVector(
-        kStaticBlockProperties, arraysize(kStaticBlockProperties), properties);
+        kStaticBlockProperties, base::size(kStaticBlockProperties), properties);
   }
   return properties;
 }
@@ -831,7 +836,7 @@ EditingTriState EditingStyle::TriStateOfStyle(
   };
   if (should_ignore_text_only_properties == kIgnoreTextOnlyProperties) {
     difference->RemovePropertiesInSet(kTextOnlyProperties,
-                                      arraysize(kTextOnlyProperties));
+                                      base::size(kTextOnlyProperties));
   }
 
   if (difference->IsEmpty())
@@ -970,32 +975,33 @@ bool EditingStyle::ConflictsWithInlineStyleOfElement(
 
 static const HeapVector<Member<HTMLElementEquivalent>>&
 HtmlElementEquivalents() {
-  DEFINE_STATIC_LOCAL(HeapVector<Member<HTMLElementEquivalent>>,
-                      html_element_equivalents,
-                      (new HeapVector<Member<HTMLElementEquivalent>>));
-  if (!html_element_equivalents.size()) {
-    html_element_equivalents.push_back(HTMLElementEquivalent::Create(
-        CSSPropertyFontWeight, CSSValueBold, HTMLNames::bTag));
-    html_element_equivalents.push_back(HTMLElementEquivalent::Create(
-        CSSPropertyFontWeight, CSSValueBold, HTMLNames::strongTag));
-    html_element_equivalents.push_back(HTMLElementEquivalent::Create(
-        CSSPropertyVerticalAlign, CSSValueSub, HTMLNames::subTag));
-    html_element_equivalents.push_back(HTMLElementEquivalent::Create(
-        CSSPropertyVerticalAlign, CSSValueSuper, HTMLNames::supTag));
-    html_element_equivalents.push_back(HTMLElementEquivalent::Create(
-        CSSPropertyFontStyle, CSSValueItalic, HTMLNames::iTag));
-    html_element_equivalents.push_back(HTMLElementEquivalent::Create(
-        CSSPropertyFontStyle, CSSValueItalic, HTMLNames::emTag));
+  DEFINE_STATIC_LOCAL(
+      Persistent<HeapVector<Member<HTMLElementEquivalent>>>,
+      html_element_equivalents,
+      (MakeGarbageCollected<HeapVector<Member<HTMLElementEquivalent>>>()));
+  if (!html_element_equivalents->size()) {
+    html_element_equivalents->push_back(HTMLElementEquivalent::Create(
+        CSSPropertyFontWeight, CSSValueBold, html_names::kBTag));
+    html_element_equivalents->push_back(HTMLElementEquivalent::Create(
+        CSSPropertyFontWeight, CSSValueBold, html_names::kStrongTag));
+    html_element_equivalents->push_back(HTMLElementEquivalent::Create(
+        CSSPropertyVerticalAlign, CSSValueSub, html_names::kSubTag));
+    html_element_equivalents->push_back(HTMLElementEquivalent::Create(
+        CSSPropertyVerticalAlign, CSSValueSuper, html_names::kSupTag));
+    html_element_equivalents->push_back(HTMLElementEquivalent::Create(
+        CSSPropertyFontStyle, CSSValueItalic, html_names::kITag));
+    html_element_equivalents->push_back(HTMLElementEquivalent::Create(
+        CSSPropertyFontStyle, CSSValueItalic, html_names::kEmTag));
 
-    html_element_equivalents.push_back(HTMLTextDecorationEquivalent::Create(
-        CSSValueUnderline, HTMLNames::uTag));
-    html_element_equivalents.push_back(HTMLTextDecorationEquivalent::Create(
-        CSSValueLineThrough, HTMLNames::sTag));
-    html_element_equivalents.push_back(HTMLTextDecorationEquivalent::Create(
-        CSSValueLineThrough, HTMLNames::strikeTag));
+    html_element_equivalents->push_back(HTMLTextDecorationEquivalent::Create(
+        CSSValueUnderline, html_names::kUTag));
+    html_element_equivalents->push_back(HTMLTextDecorationEquivalent::Create(
+        CSSValueLineThrough, html_names::kSTag));
+    html_element_equivalents->push_back(HTMLTextDecorationEquivalent::Create(
+        CSSValueLineThrough, html_names::kStrikeTag));
   }
 
-  return html_element_equivalents;
+  return *html_element_equivalents;
 }
 
 bool EditingStyle::ConflictsWithImplicitStyleOfElement(
@@ -1007,7 +1013,7 @@ bool EditingStyle::ConflictsWithImplicitStyleOfElement(
 
   const HeapVector<Member<HTMLElementEquivalent>>& html_element_equivalents =
       HtmlElementEquivalents();
-  for (size_t i = 0; i < html_element_equivalents.size(); ++i) {
+  for (wtf_size_t i = 0; i < html_element_equivalents.size(); ++i) {
     const HTMLElementEquivalent* equivalent = html_element_equivalents[i].Get();
     if (equivalent->Matches(element) &&
         equivalent->PropertyExistsInStyle(mutable_style_.Get()) &&
@@ -1023,26 +1029,27 @@ bool EditingStyle::ConflictsWithImplicitStyleOfElement(
 
 static const HeapVector<Member<HTMLAttributeEquivalent>>&
 HtmlAttributeEquivalents() {
-  DEFINE_STATIC_LOCAL(HeapVector<Member<HTMLAttributeEquivalent>>,
-                      html_attribute_equivalents,
-                      (new HeapVector<Member<HTMLAttributeEquivalent>>));
-  if (!html_attribute_equivalents.size()) {
+  DEFINE_STATIC_LOCAL(
+      Persistent<HeapVector<Member<HTMLAttributeEquivalent>>>,
+      html_attribute_equivalents,
+      (MakeGarbageCollected<HeapVector<Member<HTMLAttributeEquivalent>>>()));
+  if (!html_attribute_equivalents->size()) {
     // elementIsStyledSpanOrHTMLEquivalent depends on the fact each
     // HTMLAttriuteEquivalent matches exactly one attribute of exactly one
     // element except dirAttr.
-    html_attribute_equivalents.push_back(HTMLAttributeEquivalent::Create(
-        CSSPropertyColor, HTMLNames::fontTag, HTMLNames::colorAttr));
-    html_attribute_equivalents.push_back(HTMLAttributeEquivalent::Create(
-        CSSPropertyFontFamily, HTMLNames::fontTag, HTMLNames::faceAttr));
-    html_attribute_equivalents.push_back(HTMLFontSizeEquivalent::Create());
+    html_attribute_equivalents->push_back(HTMLAttributeEquivalent::Create(
+        CSSPropertyColor, html_names::kFontTag, html_names::kColorAttr));
+    html_attribute_equivalents->push_back(HTMLAttributeEquivalent::Create(
+        CSSPropertyFontFamily, html_names::kFontTag, html_names::kFaceAttr));
+    html_attribute_equivalents->push_back(HTMLFontSizeEquivalent::Create());
 
-    html_attribute_equivalents.push_back(HTMLAttributeEquivalent::Create(
-        CSSPropertyDirection, HTMLNames::dirAttr));
-    html_attribute_equivalents.push_back(HTMLAttributeEquivalent::Create(
-        CSSPropertyUnicodeBidi, HTMLNames::dirAttr));
+    html_attribute_equivalents->push_back(HTMLAttributeEquivalent::Create(
+        CSSPropertyDirection, html_names::kDirAttr));
+    html_attribute_equivalents->push_back(HTMLAttributeEquivalent::Create(
+        CSSPropertyUnicodeBidi, html_names::kDirAttr));
   }
 
-  return html_attribute_equivalents;
+  return *html_attribute_equivalents;
 }
 
 bool EditingStyle::ConflictsWithImplicitStyleOfAttributes(
@@ -1086,7 +1093,7 @@ bool EditingStyle::ExtractConflictingImplicitStyleOfAttributes(
     // unicode-bidi and direction are pushed down separately so don't push down
     // with other styles.
     if (should_preserve_writing_direction == kPreserveWritingDirection &&
-        equivalent->AttributeName() == HTMLNames::dirAttr)
+        equivalent->AttributeName() == html_names::kDirAttr)
       continue;
 
     if (!equivalent->Matches(element) ||
@@ -1121,7 +1128,7 @@ bool EditingStyle::ElementIsStyledSpanOrHTMLEquivalent(
   } else {
     const HeapVector<Member<HTMLElementEquivalent>>& html_element_equivalents =
         HtmlElementEquivalents();
-    size_t i;
+    wtf_size_t i;
     for (i = 0; i < html_element_equivalents.size(); ++i) {
       if (html_element_equivalents[i]->Matches(element)) {
         element_is_span_or_element_equivalent = true;
@@ -1141,7 +1148,7 @@ bool EditingStyle::ElementIsStyledSpanOrHTMLEquivalent(
       html_attribute_equivalents = HtmlAttributeEquivalents();
   for (const auto& equivalent : html_attribute_equivalents) {
     if (equivalent->Matches(element) &&
-        equivalent->AttributeName() != HTMLNames::dirAttr)
+        equivalent->AttributeName() != html_names::kDirAttr)
       matched_attributes++;
   }
 
@@ -1150,7 +1157,7 @@ bool EditingStyle::ElementIsStyledSpanOrHTMLEquivalent(
     return false;
   }
 
-  if (element->hasAttribute(HTMLNames::styleAttr)) {
+  if (element->hasAttribute(html_names::kStyleAttr)) {
     if (const CSSPropertyValueSet* style = element->InlineStyle()) {
       unsigned property_count = style->PropertyCount();
       for (unsigned i = 0; i < property_count; ++i) {
@@ -1306,7 +1313,7 @@ void EditingStyle::MergeInlineAndImplicitStyleOfElement(
   const HeapVector<Member<HTMLAttributeEquivalent>>& attribute_equivalents =
       HtmlAttributeEquivalents();
   for (const auto& attribute : attribute_equivalents) {
-    if (attribute->AttributeName() == HTMLNames::dirAttr)
+    if (attribute->AttributeName() == html_names::kDirAttr)
       continue;  // We don't want to include directionality
     if (ElementMatchesAndPropertyIsNotInInlineStyleDecl(
             attribute.Get(), element, mode, mutable_style_.Get()))
@@ -1317,17 +1324,17 @@ void EditingStyle::MergeInlineAndImplicitStyleOfElement(
 static const CSSValueList& MergeTextDecorationValues(
     const CSSValueList& merged_value,
     const CSSValueList& value_to_merge) {
-  DEFINE_STATIC_LOCAL(CSSIdentifierValue, underline,
+  DEFINE_STATIC_LOCAL(Persistent<CSSIdentifierValue>, underline,
                       (CSSIdentifierValue::Create(CSSValueUnderline)));
-  DEFINE_STATIC_LOCAL(CSSIdentifierValue, line_through,
+  DEFINE_STATIC_LOCAL(Persistent<CSSIdentifierValue>, line_through,
                       (CSSIdentifierValue::Create(CSSValueLineThrough)));
   CSSValueList& result = *merged_value.Copy();
-  if (value_to_merge.HasValue(underline) && !merged_value.HasValue(underline))
-    result.Append(underline);
+  if (value_to_merge.HasValue(*underline) && !merged_value.HasValue(*underline))
+    result.Append(*underline);
 
-  if (value_to_merge.HasValue(line_through) &&
-      !merged_value.HasValue(line_through))
-    result.Append(line_through);
+  if (value_to_merge.HasValue(*line_through) &&
+      !merged_value.HasValue(*line_through))
+    result.Append(*line_through);
 
   return result;
 }
@@ -1529,7 +1536,7 @@ int EditingStyle::LegacyFontSize(Document* document) const {
                                     kAlwaysUseLegacyFontSize);
 }
 
-void EditingStyle::Trace(blink::Visitor* visitor) {
+void EditingStyle::Trace(Visitor* visitor) {
   visitor->Trace(mutable_style_);
 }
 
@@ -1540,7 +1547,7 @@ static void ReconcileTextDecorationProperties(
       style->GetPropertyCSSValue(CSSPropertyWebkitTextDecorationsInEffect);
   const CSSValue* text_decoration =
       style->GetPropertyCSSValue(CSSPropertyTextDecorationLine);
-  // "LayoutTests/editing/execCommand/insert-list-and-strikethrough.html" makes
+  // "web_tests/editing/execCommand/insert-list-and-strikethrough.html" makes
   // both |textDecorationsInEffect| and |textDecoration| non-null.
   if (text_decorations_in_effect) {
     style->SetProperty(CSSPropertyTextDecorationLine,
@@ -1655,14 +1662,14 @@ void StyleChange::ExtractTextStyles(Document* document,
   const CSSValue* text_decoration =
       style->GetPropertyCSSValue(CSSPropertyTextDecorationLine);
   if (text_decoration && text_decoration->IsValueList()) {
-    DEFINE_STATIC_LOCAL(CSSIdentifierValue, underline,
+    DEFINE_STATIC_LOCAL(Persistent<CSSIdentifierValue>, underline,
                         (CSSIdentifierValue::Create(CSSValueUnderline)));
-    DEFINE_STATIC_LOCAL(CSSIdentifierValue, line_through,
+    DEFINE_STATIC_LOCAL(Persistent<CSSIdentifierValue>, line_through,
                         (CSSIdentifierValue::Create(CSSValueLineThrough)));
     CSSValueList* new_text_decoration = ToCSSValueList(text_decoration)->Copy();
-    if (new_text_decoration->RemoveAll(underline))
+    if (new_text_decoration->RemoveAll(*underline))
       apply_underline_ = true;
-    if (new_text_decoration->RemoveAll(line_through))
+    if (new_text_decoration->RemoveAll(*line_through))
       apply_line_through_ = true;
 
     // If trimTextDecorations, delete underline and line-through
@@ -1721,7 +1728,7 @@ static void DiffTextDecorations(MutableCSSPropertyValueSet* style,
   const CSSValueList* values_in_ref_text_decoration =
       ToCSSValueList(ref_text_decoration);
 
-  for (size_t i = 0; i < values_in_ref_text_decoration->length(); i++)
+  for (wtf_size_t i = 0; i < values_in_ref_text_decoration->length(); i++)
     new_text_decoration->RemoveAll(values_in_ref_text_decoration->Item(i));
 
   SetTextDecorationProperty(style, new_text_decoration, property_id,

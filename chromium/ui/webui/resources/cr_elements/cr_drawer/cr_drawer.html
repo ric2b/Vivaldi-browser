@@ -1,5 +1,7 @@
 <link rel="import" href="../../html/polymer.html">
 
+<link rel="import" href="../../html/assert.html">
+<link rel="import" href="../../html/util.html">
 <link rel="import" href="../shared_vars_css.html">
 
 <dom-module id="cr-drawer">
@@ -21,13 +23,18 @@
         width: var(--drawer-width);
       }
 
+      :host-context([dark]) dialog {
+        background: var(--google-grey-900)
+            linear-gradient(rgba(255, 255, 255, .04), rgba(255, 255, 255, .04));
+      }
+
       :host dialog,
       #container {
         height: 100%;
         word-break: break-word;
       }
 
-      :host(.opening) dialog {
+      :host([show_]) dialog {
         left: 0;
       }
 
@@ -37,7 +44,7 @@
         transition: right var(--transition-timing);
       }
 
-      :host(.opening[align=rtl]) dialog {
+      :host([show_][align=rtl]) dialog {
         right: 0;
       }
 
@@ -52,7 +59,7 @@
         transition: opacity var(--transition-timing);
       }
 
-      :host(.opening) dialog::backdrop {
+      :host([show_]) dialog::backdrop {
         opacity: 1;
       }
 
@@ -66,13 +73,17 @@
         padding-inline-start: 24px;
       }
 
+      :host-context([dark]) .drawer-header {
+        color: var(--cr-primary-text-color);
+      }
+
       :host ::slotted(.drawer-content) {
         height: calc(100% - 56px);
         overflow: auto;
       }
     </style>
     <dialog id="dialog" on-cancel="onDialogCancel_" on-tap="onDialogTap_"
-        on-transitionend="onDialogTransitionEnd_" on-close="onDialogClose_">
+        on-close="onDialogClose_">
       <div id="container" on-tap="onContainerTap_">
         <div class="drawer-header" tabindex="-1">[[heading]]</div>
         <slot></slot>

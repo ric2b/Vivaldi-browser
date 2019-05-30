@@ -77,7 +77,7 @@ bool RemoveCookieTester::GetCookie(const std::string& host,
                      base::Unretained(this)));
   BlockUntilNotified();
   DCHECK_GE(1u, last_cookies_.size());
-  if (0u == last_cookies_.size())
+  if (last_cookies_.empty())
     return false;
   *cookie = last_cookies_[0];
   return true;
@@ -93,7 +93,7 @@ void RemoveCookieTester::AddCookie(const std::string& host,
                            base::Time(), false, false,
                            net::CookieSameSite::NO_RESTRICTION,
                            net::COOKIE_PRIORITY_MEDIUM),
-      false /* secure_source */, true /* modify_http_only */,
+      "http", true /* modify_http_only */,
       base::BindOnce(&RemoveCookieTester::SetCanonicalCookieCallback,
                      base::Unretained(this)));
   BlockUntilNotified();

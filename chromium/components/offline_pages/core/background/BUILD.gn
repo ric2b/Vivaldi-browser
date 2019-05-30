@@ -8,8 +8,6 @@ if (is_android) {
 
 static_library("background_offliner") {
   sources = [
-    "add_request_task.cc",
-    "add_request_task.h",
     "change_requests_state_task.cc",
     "change_requests_state_task.h",
     "cleanup_task.cc",
@@ -28,9 +26,13 @@ static_library("background_offliner") {
     "mark_attempt_aborted_task.h",
     "mark_attempt_completed_task.cc",
     "mark_attempt_completed_task.h",
+    "mark_attempt_deferred_task.cc",
+    "mark_attempt_deferred_task.h",
     "mark_attempt_started_task.cc",
     "mark_attempt_started_task.h",
     "offliner.h",
+    "offliner_client.cc",
+    "offliner_client.h",
     "offliner_policy.h",
     "offliner_policy_utils.cc",
     "offliner_policy_utils.h",
@@ -50,9 +52,8 @@ static_library("background_offliner") {
     "request_queue.cc",
     "request_queue.h",
     "request_queue_results.h",
+    "request_queue_store.cc",
     "request_queue_store.h",
-    "request_queue_store_sql.cc",
-    "request_queue_store_sql.h",
     "save_page_request.cc",
     "save_page_request.h",
     "scheduler.h",
@@ -66,6 +67,7 @@ static_library("background_offliner") {
     "//components/offline_items_collection/core",
     "//components/offline_pages/core",
     "//components/offline_pages/core:switches",
+    "//components/offline_pages/task",
     "//net",
     "//services/network/public/cpp",
     "//sql:sql",
@@ -80,15 +82,19 @@ static_library("test_support") {
     "offliner_stub.h",
     "request_coordinator_stub_taco.cc",
     "request_coordinator_stub_taco.h",
-    "request_queue_in_memory_store.cc",
-    "request_queue_in_memory_store.h",
+    "request_queue_task_test_base.cc",
+    "request_queue_task_test_base.h",
     "scheduler_stub.cc",
     "scheduler_stub.h",
+    "test_request_queue_store.cc",
+    "test_request_queue_store.h",
+    "test_util.cc",
   ]
 
   deps = [
     ":background_offliner",
     "//base",
+    "//base/test:test_support",
     "//components/offline_items_collection/core/test_support",
     "//components/offline_pages/core",
     "//net",
@@ -100,7 +106,6 @@ static_library("test_support") {
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "add_request_task_unittest.cc",
     "change_requests_state_task_unittest.cc",
     "cleanup_task_unittest.cc",
     "get_requests_task_unittest.cc",
@@ -108,6 +113,7 @@ source_set("unit_tests") {
     "mark_attempt_aborted_task_unittest.cc",
     "mark_attempt_completed_task_unittest.cc",
     "mark_attempt_started_task_unittest.cc",
+    "offliner_client_unittest.cc",
     "pick_request_task_unittest.cc",
     "reconcile_task_unittest.cc",
     "remove_requests_task_unittest.cc",
@@ -129,6 +135,7 @@ source_set("unit_tests") {
     "//services/network:test_support",
     "//services/network/public/cpp",
     "//sql:sql",
+    "//testing/gmock",
     "//testing/gtest",
     "//url",
   ]

@@ -53,8 +53,6 @@ class GbmSurfaceFactory : public SurfaceFactoryOzone {
 
   std::unique_ptr<OverlaySurface> CreateOverlaySurface(
       gfx::AcceleratedWidget window) override;
-  std::vector<gfx::BufferFormat> GetScanoutFormats(
-      gfx::AcceleratedWidget widget) override;
   std::unique_ptr<SurfaceOzoneCanvas> CreateCanvasForWidget(
       gfx::AcceleratedWidget widget) override;
   scoped_refptr<gfx::NativePixmap> CreateNativePixmap(
@@ -87,7 +85,7 @@ class GbmSurfaceFactory : public SurfaceFactoryOzone {
 
   base::ThreadChecker thread_checker_;
 
-  DrmThreadProxy* drm_thread_proxy_;
+  DrmThreadProxy* const drm_thread_proxy_;
 
   std::map<gfx::AcceleratedWidget, GbmSurfaceless*> widget_to_surface_map_;
 

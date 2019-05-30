@@ -79,6 +79,17 @@ std::string GetReasonDescription(PreviewsEligibilityReason reason,
                  : "Cache-control no-transform received";
     case PreviewsEligibilityReason::LAST:
       break;
+    case PreviewsEligibilityReason::NETWORK_NOT_SLOW_FOR_SESSION:
+      return want_inverse_description
+                 ? "Network is slow enough for the session"
+                 : "Network not slow enough for the session";
+    case PreviewsEligibilityReason::DEVICE_OFFLINE:
+      return want_inverse_description ? "Device is online"
+                                      : "Device is offline";
+    case PreviewsEligibilityReason::URL_HAS_BASIC_AUTH:
+      return want_inverse_description
+                 ? "URL did not contain basic authentication"
+                 : "URL contained basic authentication";
   }
   NOTREACHED();
   return "";

@@ -38,7 +38,8 @@ class AXMenuList final : public AXLayoutObject {
  public:
   static AXMenuList* Create(LayoutMenuList* layout_object, AXObjectCacheImpl&);
 
-  bool IsCollapsed() const override;
+  AXMenuList(LayoutMenuList*, AXObjectCacheImpl&);
+
   AccessibilityExpanded IsExpanded() const final;
   bool OnNativeClickAction() override;
   void ClearChildren() override;
@@ -50,12 +51,12 @@ class AXMenuList final : public AXLayoutObject {
  private:
   friend class AXMenuListOption;
 
-  AXMenuList(LayoutMenuList*, AXObjectCacheImpl&);
-
   bool IsMenuList() const override { return true; }
-  AccessibilityRole DetermineAccessibilityRole() final;
+  ax::mojom::Role DetermineAccessibilityRole() final;
 
   void AddChildren() override;
+
+  bool IsCollapsed() const;
 
   DISALLOW_COPY_AND_ASSIGN(AXMenuList);
 };

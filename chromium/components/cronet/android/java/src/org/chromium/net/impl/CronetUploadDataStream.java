@@ -5,6 +5,7 @@
 package org.chromium.net.impl;
 
 import android.annotation.SuppressLint;
+import android.support.annotation.IntDef;
 
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
@@ -15,6 +16,8 @@ import org.chromium.net.UploadDataProvider;
 import org.chromium.net.UploadDataSink;
 
 import java.io.IOException;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.nio.ByteBuffer;
 import java.util.concurrent.Executor;
 
@@ -69,7 +72,7 @@ public final class CronetUploadDataStream extends UploadDataSink {
     // ByteBuffer created in the native code and passed to
     // UploadDataProvider for reading. It is only valid from the
     // call to mDataProvider.read until onError or onReadSucceeded.
-    private ByteBuffer mByteBuffer = null;
+    private ByteBuffer mByteBuffer;
 
     // Lock that protects all subsequent variables. The adapter has to be
     // protected to ensure safe shutdown, mReading and mRewinding are protected
@@ -80,17 +83,22 @@ public final class CronetUploadDataStream extends UploadDataSink {
     // deleted after the native UploadDataStream object is destroyed. All access
     // to the adapter is synchronized, for safe usage and cleanup.
     @GuardedBy("mLock")
-    private long mUploadDataStreamAdapter = 0;
-    enum UserCallback {
-        READ,
-        REWIND,
-        GET_LENGTH,
-        NOT_IN_CALLBACK,
+    private long mUploadDataStreamAdapter;
+
+    @IntDef({UserCallback.READ, UserCallback.REWIND, UserCallback.GET_LENGTH,
+            UserCallback.NOT_IN_CALLBACK})
+    @Retention(RetentionPolicy.SOURCE)
+    private @interface UserCallback {
+        int READ = 0;
+        int REWIND = 1;
+        int GET_LENGTH = 2;
+        int NOT_IN_CALLBACK = 3;
     }
+
     @GuardedBy("mLock")
-    private UserCallback mInWhichUserCallback = UserCallback.NOT_IN_CALLBACK;
+    private @UserCallback int mInWhichUserCallback = UserCallback.NOT_IN_CALLBACK;
     @GuardedBy("mLock")
-    private boolean mDestroyAdapterPostponed = false;
+    private boolean mDestroyAdapterPostponed;
     private Runnable mOnDestroyedCallbackForTesting;
 
     /**
@@ -152,7 +160,7 @@ public final class CronetUploadDataStream extends UploadDataSink {
     }
 
     @GuardedBy("mLock")
-    private void checkState(UserCallback mode) {
+    private void checkState(@UserCallback int mode) {
         if (mInWhichUserCallback != mode) {
             throw new IllegalStateException(
                     "Expected " + mode + ", but was " + mInWhichUserCallback);

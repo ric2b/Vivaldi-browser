@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/test/base/in_process_browser_test.h"
-
 #include <signal.h>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "chrome/browser/first_run/first_run_dialog.h"
+#include "chrome/browser/first_run/first_run_internal.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 
@@ -20,11 +20,11 @@ class FirstRunInternalPosixTest : public InProcessBrowserTest {
   // InProcessBrowserTest:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kForceFirstRun);
-    command_line->AppendSwitch(switches::kForceFirstRunDialog);
   }
 
   void SetUpInProcessBrowserTestFixture() override {
     InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
+    internal::ForceFirstRunDialogShownForTesting(true);
     // The modal dialog will spawn and spin a nested RunLoop when
     // content::BrowserTestBase::SetUp() invokes content::ContentMain().
     // BrowserTestBase sets GetContentMainParams()->ui_task before this, but the
@@ -53,8 +53,8 @@ class FirstRunInternalPosixTest : public InProcessBrowserTest {
   void SetupNestedTask() {
     EXPECT_TRUE(base::SequencedTaskRunnerHandle::Get());
     base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&FirstRunInternalPosixTest::InspectState,
-                              base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&FirstRunInternalPosixTest::InspectState,
+                                  base::Unretained(this)));
   }
 
   // A task queued up to run once the first-run dialog starts pumping messages
@@ -63,7 +63,7 @@ class FirstRunInternalPosixTest : public InProcessBrowserTest {
     // Send a signal to myself. This should post a task for the next run loop
     // iteration to set browser_shutdown::IsTryingToQuit(), and interrupt the
     // RunLoop.
-    raise(SIGTERM);
+    raise(SIGINT);
     inspected_state_ = true;
   }
 
@@ -75,7 +75,7 @@ class FirstRunInternalPosixTest : public InProcessBrowserTest {
 // Test the first run flow for showing the modal dialog that surfaces the first
 // run dialog. Ensure browser startup safely handles a signal while the modal
 // RunLoop is running.
-IN_PROC_BROWSER_TEST_F(FirstRunInternalPosixTest, HandleSigterm) {
+IN_PROC_BROWSER_TEST_F(FirstRunInternalPosixTest, HandleSigint) {
   // Never reached. PreMainMessageLoopRunImpl() should return before this task
   // is run.
   ADD_FAILURE() << "Should never be called";

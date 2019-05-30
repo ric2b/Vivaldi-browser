@@ -48,7 +48,7 @@ class TreeOrderedList final {
   void Remove(const Node*);
   bool IsEmpty() const { return nodes_.IsEmpty(); }
   void Clear() { nodes_.clear(); }
-  size_t size() const { return nodes_.size(); }
+  wtf_size_t size() const { return nodes_.size(); }
 
   using iterator = HeapListHashSet<Member<Node>, 32>::iterator;
   using const_iterator = HeapListHashSet<Member<Node>, 32>::const_iterator;
@@ -63,7 +63,7 @@ class TreeOrderedList final {
   const_reverse_iterator rbegin() const { return nodes_.rbegin(); }
   const_reverse_iterator rend() const { return nodes_.rend(); }
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
  private:
   HeapListHashSet<Member<Node>, 32> nodes_;

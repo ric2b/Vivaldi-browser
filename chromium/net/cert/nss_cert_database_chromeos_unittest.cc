@@ -179,9 +179,9 @@ TEST_F(NSSCertDatabaseChromeOSTest, ImportCACerts) {
   ScopedCERTCertificateList user_1_certlist_async;
   ScopedCERTCertificateList user_2_certlist_async;
   db_1_->ListCerts(
-      base::Bind(&SwapCertLists, base::Unretained(&user_1_certlist_async)));
+      base::BindOnce(&SwapCertLists, base::Unretained(&user_1_certlist_async)));
   db_2_->ListCerts(
-      base::Bind(&SwapCertLists, base::Unretained(&user_2_certlist_async)));
+      base::BindOnce(&SwapCertLists, base::Unretained(&user_2_certlist_async)));
 
   RunUntilIdle();
 
@@ -240,9 +240,9 @@ TEST_F(NSSCertDatabaseChromeOSTest, ImportServerCert) {
   ScopedCERTCertificateList user_1_certlist_async;
   ScopedCERTCertificateList user_2_certlist_async;
   db_1_->ListCerts(
-      base::Bind(&SwapCertLists, base::Unretained(&user_1_certlist_async)));
+      base::BindOnce(&SwapCertLists, base::Unretained(&user_1_certlist_async)));
   db_2_->ListCerts(
-      base::Bind(&SwapCertLists, base::Unretained(&user_2_certlist_async)));
+      base::BindOnce(&SwapCertLists, base::Unretained(&user_2_certlist_async)));
 
   RunUntilIdle();
 
@@ -259,7 +259,7 @@ TEST_F(NSSCertDatabaseChromeOSTest, ImportServerCert) {
 // is being processed on the worker pool.
 TEST_F(NSSCertDatabaseChromeOSTest, NoCrashIfShutdownBeforeDoneOnWorkerPool) {
   ScopedCERTCertificateList certlist;
-  db_1_->ListCerts(base::Bind(&SwapCertLists, base::Unretained(&certlist)));
+  db_1_->ListCerts(base::BindOnce(&SwapCertLists, base::Unretained(&certlist)));
   EXPECT_EQ(0U, certlist.size());
 
   db_1_.reset();
@@ -284,20 +284,6 @@ TEST_F(NSSCertDatabaseChromeOSTest, ListCertsReadsSystemSlot) {
   ScopedCERTCertificateList certs = db_1_->ListCertsSync();
   EXPECT_TRUE(IsCertInCertificateList(cert_1.get(), certs));
   EXPECT_TRUE(IsCertInCertificateList(cert_2.get(), certs));
-}
-
-// TODO(https://crbug.com/844537): Remove this after we've collected logs that
-// show device-wide certificates disappearing.
-TEST_F(NSSCertDatabaseChromeOSTest, LogUserCerts) {
-  scoped_refptr<X509Certificate> cert_1(ImportClientCertAndKeyFromFile(
-      GetTestCertsDirectory(), "client_1.pem", "client_1.pk8",
-      db_1_->GetPublicSlot().get()));
-
-  scoped_refptr<X509Certificate> cert_2(ImportClientCertAndKeyFromFile(
-      GetTestCertsDirectory(), "client_2.pem", "client_2.pk8",
-      db_1_->GetSystemSlot().get()));
-  db_1_->LogUserCertificates("UnitTest");
-  RunUntilIdle();
 }
 
 TEST_F(NSSCertDatabaseChromeOSTest, ListCertsDoesNotCrossReadSystemSlot) {

@@ -168,7 +168,8 @@ class FaviconHandler {
     // Builds a scored candidate by selecting the best bitmap sizes.
     static FaviconCandidate FromFaviconURL(
         const favicon::FaviconURL& favicon_url,
-        const std::vector<int>& desired_pixel_sizes);
+        const std::vector<int>& desired_pixel_sizes,
+        bool want_largest_icon);
 
     // Compare function used for std::stable_sort to sort in descending order.
     static bool CompareScore(const FaviconCandidate& lhs,
@@ -245,9 +246,9 @@ class FaviconHandler {
       const std::vector<SkBitmap>& bitmaps,
       const std::vector<gfx::Size>& original_bitmap_sizes);
 
-  // Updates |best_favicon_| and returns true if it was considered a satisfying
-  // image (e.g. exact size match).
-  bool UpdateFaviconCandidate(const DownloadedFavicon& downloaded_favicon);
+  // Returns true if the next candidate in |final_candidates_| should be
+  // downloaded.
+  bool ShouldDownloadNextCandidate() const;
 
   // Sets the image data for the favicon.
   void SetFavicon(const GURL& icon_url,

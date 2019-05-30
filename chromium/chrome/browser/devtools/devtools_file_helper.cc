@@ -121,14 +121,12 @@ class SelectFileDialog : public ui::SelectFileDialog::Listener,
 };
 
 void WriteToFile(const base::FilePath& path, const std::string& content) {
-  base::AssertBlockingAllowed();
   DCHECK(!path.empty());
 
   base::WriteFile(path, content.c_str(), content.length());
 }
 
 void AppendToFile(const base::FilePath& path, const std::string& content) {
-  base::AssertBlockingAllowed();
   DCHECK(!path.empty());
 
   base::AppendToFile(path, content.c_str(), content.size());
@@ -231,7 +229,7 @@ void DevToolsFileHelper::Save(const std::string& url,
                               bool save_as,
                               const SaveCallback& saveCallback,
                               const CancelCallback& cancelCallback) {
-  PathsMap::iterator it = saved_files_.find(url);
+  auto it = saved_files_.find(url);
   if (it != saved_files_.end() && !save_as) {
     SaveAsFileSelected(url, content, saveCallback, it->second);
     return;
@@ -242,8 +240,11 @@ void DevToolsFileHelper::Save(const std::string& url,
   base::FilePath initial_path;
 
   const base::Value* path_value;
-  if (file_map->Get(base::MD5String(url), &path_value))
-    base::GetValueAsFilePath(*path_value, &initial_path);
+  if (file_map->Get(base::MD5String(url), &path_value)) {
+    // Ignore base::GetValueAsFilePath() failure since we handle empty
+    // |initial_path| below.
+    ignore_result(base::GetValueAsFilePath(*path_value, &initial_path));
+  }
 
   if (initial_path.empty()) {
     GURL gurl(url);
@@ -278,7 +279,7 @@ void DevToolsFileHelper::Save(const std::string& url,
 void DevToolsFileHelper::Append(const std::string& url,
                                 const std::string& content,
                                 const AppendCallback& callback) {
-  PathsMap::iterator it = saved_files_.find(url);
+  auto it = saved_files_.find(url);
   if (it == saved_files_.end())
     return;
   callback.Run();

@@ -292,8 +292,8 @@ void ExtensionDisabledGlobalError::BubbleViewCancelButtonPressed(
   // there is only an "OK" button.
   // Supervised users may never remove custodian-installed extensions.
   DCHECK(!util::IsExtensionSupervised(extension_, service_->profile()));
-  uninstall_dialog_.reset(ExtensionUninstallDialog::Create(
-      service_->profile(), browser->window()->GetNativeWindow(), this));
+  uninstall_dialog_ = ExtensionUninstallDialog::Create(
+      service_->profile(), browser->window()->GetNativeWindow(), this);
   user_response_ = UNINSTALL;
   // Delay showing the uninstall dialog, so that this function returns
   // immediately, to close the bubble properly. See crbug.com/121544.
@@ -385,13 +385,10 @@ void AddExtensionDisabledError(ExtensionService* service,
       extension, kIconSize, ExtensionIconSet::MATCH_BIGGER);
   gfx::Size size(kIconSize, kIconSize);
   ImageLoader::Get(service->profile())
-      ->LoadImageAsync(extension,
-                       image,
-                       size,
-                       base::Bind(&AddExtensionDisabledErrorWithIcon,
-                                  service->AsWeakPtr(),
-                                  extension->id(),
-                                  is_remote_install));
+      ->LoadImageAsync(extension, image, size,
+                       base::BindOnce(&AddExtensionDisabledErrorWithIcon,
+                                      service->AsWeakPtr(), extension->id(),
+                                      is_remote_install));
 }
 
 }  // namespace extensions

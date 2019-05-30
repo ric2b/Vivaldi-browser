@@ -2,9 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/stl_util.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/wait.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/renderer/bindings/core/v8/sanitize_script_errors.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
@@ -72,7 +74,8 @@ v8::Local<v8::Value> ExecuteScript(const String& script_path,
                                    LocalFrame& frame) {
   scoped_refptr<SharedBuffer> script_src = test::ReadFromFile(script_path);
   return frame.GetScriptController().ExecuteScriptInMainWorldAndReturnValue(
-      ScriptSourceCode(String(script_src->Data(), script_src->size())));
+      ScriptSourceCode(String(script_src->Data(), script_src->size())), KURL(),
+      SanitizeScriptErrors::kSanitize);
 }
 
 void CheckDataPipe(mojo::DataPipeConsumerHandle data_pipe_handle) {
@@ -163,7 +166,7 @@ void CheckSampleEchoArgsList(const js_to_cpp::blink::EchoArgsListPtr& list) {
 // messages. The values don't matter so long as all accesses are within
 // bounds.
 void CheckCorruptedString(const String& arg) {
-  for (size_t i = 0; i < arg.length(); ++i)
+  for (wtf_size_t i = 0; i < arg.length(); ++i)
     g_waste_accumulator += arg[i];
 }
 
@@ -171,8 +174,8 @@ void CheckCorruptedStringArray(
     const base::Optional<Vector<String>>& string_array) {
   if (!string_array)
     return;
-  for (size_t i = 0; i < string_array->size(); ++i)
-    CheckCorruptedString((*string_array)[i]);
+  for (const String& element : *string_array)
+    CheckCorruptedString(element);
 }
 
 void CheckCorruptedDataPipe(mojo::DataPipeConsumerHandle data_pipe_handle) {
@@ -399,7 +402,7 @@ class JsToCppTest : public testing::Test {
              global_proxy, scope.GetIsolate())};
     V8ScriptRunner::CallFunction(start_fn.As<v8::Function>(),
                                  scope.GetExecutionContext(), global_proxy,
-                                 arraysize(args), args, scope.GetIsolate());
+                                 base::size(args), args, scope.GetIsolate());
     test::EnterRunLoop();
   }
 };

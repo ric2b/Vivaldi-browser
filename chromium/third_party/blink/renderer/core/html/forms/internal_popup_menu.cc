@@ -22,6 +22,7 @@
 #include "third_party/blink/renderer/core/html/html_hr_element.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_names.h"
+#include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page_popup.h"
@@ -67,9 +68,11 @@ class PopupMenuCSSFontSelector : public CSSFontSelector,
   static PopupMenuCSSFontSelector* Create(
       Document* document,
       CSSFontSelector* owner_font_selector) {
-    return new PopupMenuCSSFontSelector(document, owner_font_selector);
+    return MakeGarbageCollected<PopupMenuCSSFontSelector>(document,
+                                                          owner_font_selector);
   }
 
+  PopupMenuCSSFontSelector(Document*, CSSFontSelector*);
   ~PopupMenuCSSFontSelector() override;
 
   // We don't override willUseFontData() for now because the old PopupListBox
@@ -77,11 +80,9 @@ class PopupMenuCSSFontSelector : public CSSFontSelector,
   scoped_refptr<FontData> GetFontData(const FontDescription&,
                                       const AtomicString&) override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
-  PopupMenuCSSFontSelector(Document*, CSSFontSelector*);
-
   void FontsNeedUpdate(FontSelector*) override;
 
   Member<CSSFontSelector> owner_font_selector_;
@@ -106,7 +107,7 @@ void PopupMenuCSSFontSelector::FontsNeedUpdate(FontSelector* font_selector) {
   DispatchInvalidationCallbacks();
 }
 
-void PopupMenuCSSFontSelector::Trace(blink::Visitor* visitor) {
+void PopupMenuCSSFontSelector::Trace(Visitor* visitor) {
   visitor->Trace(owner_font_selector_);
   CSSFontSelector::Trace(visitor);
   FontSelectorClient::Trace(visitor);
@@ -208,7 +209,7 @@ class InternalPopupMenu::ItemIterationContext {
 
 InternalPopupMenu* InternalPopupMenu::Create(ChromeClient* chrome_client,
                                              HTMLSelectElement& owner_element) {
-  return new InternalPopupMenu(chrome_client, owner_element);
+  return MakeGarbageCollected<InternalPopupMenu>(chrome_client, owner_element);
 }
 
 InternalPopupMenu::InternalPopupMenu(ChromeClient* chrome_client,
@@ -222,7 +223,7 @@ InternalPopupMenu::~InternalPopupMenu() {
   DCHECK(!popup_);
 }
 
-void InternalPopupMenu::Trace(blink::Visitor* visitor) {
+void InternalPopupMenu::Trace(Visitor* visitor) {
   visitor->Trace(chrome_client_);
   visitor->Trace(owner_element_);
   PopupMenu::Trace(visitor);
@@ -230,6 +231,10 @@ void InternalPopupMenu::Trace(blink::Visitor* visitor) {
 
 void InternalPopupMenu::WriteDocument(SharedBuffer* data) {
   HTMLSelectElement& owner_element = *owner_element_;
+  // When writing the document, we ensure the ComputedStyle of the select
+  // element's items (see AddElementStyle). This requires a style-clean tree.
+  // See Element::EnsureComputedStyle for further explanation.
+  owner_element.GetDocument().UpdateStyleAndLayoutTree();
   IntRect anchor_rect_in_screen = chrome_client_->ViewportToScreen(
       owner_element.VisibleBoundsInVisualViewport(),
       owner_element.GetDocument().View());
@@ -375,7 +380,7 @@ void InternalPopupMenu::AddOption(ItemIterationContext& context,
   if (!element.title().IsEmpty())
     AddProperty("title", element.title(), data);
   const AtomicString& aria_label =
-      element.FastGetAttribute(HTMLNames::aria_labelAttr);
+      element.FastGetAttribute(html_names::kAriaLabelAttr);
   if (!aria_label.IsEmpty())
     AddProperty("ariaLabel", aria_label, data);
   if (element.IsDisabledFormControl())
@@ -391,7 +396,7 @@ void InternalPopupMenu::AddOptGroup(ItemIterationContext& context,
   PagePopupClient::AddString("type: \"optgroup\",\n", data);
   AddProperty("label", element.GroupLabelText(), data);
   AddProperty("title", element.title(), data);
-  AddProperty("ariaLabel", element.FastGetAttribute(HTMLNames::aria_labelAttr),
+  AddProperty("ariaLabel", element.FastGetAttribute(html_names::kAriaLabelAttr),
               data);
   AddProperty("disabled", element.IsDisabledFormControl(), data);
   AddElementStyle(context, element);
@@ -405,7 +410,7 @@ void InternalPopupMenu::AddSeparator(ItemIterationContext& context,
   PagePopupClient::AddString("{\n", data);
   PagePopupClient::AddString("type: \"separator\",\n", data);
   AddProperty("title", element.title(), data);
-  AddProperty("ariaLabel", element.FastGetAttribute(HTMLNames::aria_labelAttr),
+  AddProperty("ariaLabel", element.FastGetAttribute(html_names::kAriaLabelAttr),
               data);
   AddProperty("disabled", element.IsDisabledFormControl(), data);
   AddElementStyle(context, element);
@@ -445,8 +450,14 @@ void InternalPopupMenu::SetValueAndClosePopup(int num_value,
     WebMouseEvent event;
     event.SetFrameScale(1);
     Element* owner = &OwnerElement();
-    owner->DispatchMouseEvent(event, EventTypeNames::mouseup);
-    owner->DispatchMouseEvent(event, EventTypeNames::click);
+    if (LocalFrame* frame = owner->GetDocument().GetFrame()) {
+      frame->GetEventHandler().HandleTargetedMouseEvent(
+          owner, event, event_type_names::kMouseup, Vector<WebMouseEvent>(),
+          Vector<WebMouseEvent>());
+      frame->GetEventHandler().HandleTargetedMouseEvent(
+          owner, event, event_type_names::kClick, Vector<WebMouseEvent>(),
+          Vector<WebMouseEvent>());
+    }
   }
 }
 
@@ -459,7 +470,7 @@ void InternalPopupMenu::SetValue(const String& value) {
 }
 
 void InternalPopupMenu::DidClosePopup() {
-  // Clearing m_popup first to prevent from trying to close the popup again.
+  // Clearing popup_ first to prevent from trying to close the popup again.
   popup_ = nullptr;
   if (owner_element_)
     owner_element_->PopupDidHide();
@@ -473,7 +484,7 @@ Locale& InternalPopupMenu::GetLocale() {
   return Locale::DefaultLocale();
 }
 
-void InternalPopupMenu::ClosePopup() {
+void InternalPopupMenu::CancelPopup() {
   if (popup_)
     chrome_client_->ClosePagePopup(popup_);
   if (owner_element_)
@@ -491,7 +502,7 @@ void InternalPopupMenu::Show() {
 }
 
 void InternalPopupMenu::Hide() {
-  ClosePopup();
+  CancelPopup();
 }
 
 void InternalPopupMenu::UpdateFromElement(UpdateReason) {

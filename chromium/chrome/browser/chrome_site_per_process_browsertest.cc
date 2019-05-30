@@ -5,19 +5,24 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_browsertest_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/app_modal/javascript_app_modal_dialog.h"
@@ -26,6 +31,7 @@
 #include "components/guest_view/browser/guest_view_manager_delegate.h"
 #include "components/guest_view/browser/test_guest_view_manager.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/navigation_entry.h"
@@ -198,14 +204,21 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHighDPIExpiredCertBrowserTest,
   ui_test_utils::NavigateToURL(browser(), bad_cert_url);
   content::WebContents* active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  WaitForInterstitialAttach(active_web_contents);
-  EXPECT_TRUE(active_web_contents->ShowingInterstitialPage());
 
-  // Here we check the device scale factor in use via the interstitial's
-  // RenderFrameHost; doing the check directly via the 'active web contents'
-  // does not give us the device scale factor for the interstitial.
-  content::RenderFrameHost* interstitial_frame_host =
-      active_web_contents->GetInterstitialPage()->GetMainFrame();
+  content::RenderFrameHost* interstitial_frame_host;
+
+  if (base::FeatureList::IsEnabled(features::kSSLCommittedInterstitials)) {
+    interstitial_frame_host = active_web_contents->GetMainFrame();
+  } else {
+    WaitForInterstitialAttach(active_web_contents);
+    EXPECT_TRUE(active_web_contents->ShowingInterstitialPage());
+
+    // Here we check the device scale factor in use via the interstitial's
+    // RenderFrameHost; doing the check directly via the 'active web contents'
+    // does not give us the device scale factor for the interstitial.
+    interstitial_frame_host =
+        active_web_contents->GetInterstitialPage()->GetMainFrame();
+  }
 
   EXPECT_EQ(SitePerProcessHighDPIExpiredCertBrowserTest::kDeviceScaleFactor,
             GetFrameDeviceScaleFactor(interstitial_frame_host));
@@ -882,8 +895,8 @@ class MockSpellCheckHost : spellcheck::mojom::SpellCheckHost {
     if (text_received_)
       return;
 
-    auto ui_task_runner = content::BrowserThread::GetTaskRunnerForThread(
-        content::BrowserThread::UI);
+    auto ui_task_runner = base::CreateSingleThreadTaskRunnerWithTraits(
+        {content::BrowserThread::UI});
     ui_task_runner->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&MockSpellCheckHost::Timeout, base::Unretained(this)),
@@ -935,12 +948,16 @@ class MockSpellCheckHost : spellcheck::mojom::SpellCheckHost {
     TextReceived(text);
   }
 
-  void ToggleSpellCheck(bool, bool) override {}
   void CheckSpelling(const base::string16& word,
                      int,
                      CheckSpellingCallback) override {}
   void FillSuggestionList(const base::string16& word,
                           FillSuggestionListCallback) override {}
+#endif
+
+#if defined(OS_ANDROID)
+  // spellcheck::mojom::SpellCheckHost:
+  void DisconnectSessionBridge() override {}
 #endif
 
   content::RenderProcessHost* process_host_;
@@ -967,8 +984,8 @@ class TestBrowserClientForSpellCheck : public ChromeContentBrowserClient {
     spellcheck::mojom::SpellCheckHostRequest request(std::move(*handle));
 
     // Override the default SpellCheckHost interface.
-    auto ui_task_runner = content::BrowserThread::GetTaskRunnerForThread(
-        content::BrowserThread::UI);
+    auto ui_task_runner = base::CreateSingleThreadTaskRunnerWithTraits(
+        {content::BrowserThread::UI});
     ui_task_runner->PostTask(
         FROM_HERE,
         base::BindOnce(
@@ -990,7 +1007,7 @@ class TestBrowserClientForSpellCheck : public ChromeContentBrowserClient {
   }
 
   void RunUntilBind() {
-    if (spell_check_hosts_.size())
+    if (!spell_check_hosts_.empty())
       return;
 
     base::RunLoop run_loop;
@@ -999,11 +1016,11 @@ class TestBrowserClientForSpellCheck : public ChromeContentBrowserClient {
   }
 
   void RunUntilBindOrTimeout() {
-    if (spell_check_hosts_.size())
+    if (!spell_check_hosts_.empty())
       return;
 
-    auto ui_task_runner = content::BrowserThread::GetTaskRunnerForThread(
-        content::BrowserThread::UI);
+    auto ui_task_runner = base::CreateSingleThreadTaskRunnerWithTraits(
+        {content::BrowserThread::UI});
     ui_task_runner->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&TestBrowserClientForSpellCheck::Timeout,
@@ -1019,11 +1036,9 @@ class TestBrowserClientForSpellCheck : public ChromeContentBrowserClient {
   void BindSpellCheckHostRequest(
       spellcheck::mojom::SpellCheckHostRequest request,
       const service_manager::BindSourceInfo& source_info) {
-    service_manager::Identity renderer_identity(
-        content::mojom::kRendererServiceName, source_info.identity.user_id(),
-        source_info.identity.instance());
     content::RenderProcessHost* host =
-        content::RenderProcessHost::FromRendererIdentity(renderer_identity);
+        content::RenderProcessHost::FromRendererInstanceId(
+            source_info.identity.instance_id());
     auto spell_check_host = std::make_unique<MockSpellCheckHost>(host);
     spell_check_host->SpellCheckHostRequest(std::move(request));
     spell_check_hosts_.push_back(std::move(spell_check_host));

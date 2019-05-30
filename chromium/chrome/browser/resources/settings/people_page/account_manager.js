@@ -14,6 +14,7 @@ Polymer({
   behaviors: [
     I18nBehavior,
     WebUIListenerBehavior,
+    settings.RouteObserverBehavior,
   ],
 
   properties: {
@@ -50,6 +51,16 @@ Polymer({
   },
 
   /**
+   * @param {!settings.Route} newRoute
+   * @param {settings.Route} oldRoute
+   */
+  currentRouteChanged: function(newRoute, oldRoute) {
+    if (newRoute == settings.routes.ACCOUNT_MANAGER) {
+      this.browserProxy_.showWelcomeDialogIfRequired();
+    }
+  },
+
+  /**
    * @param {string} iconUrl
    * @return {string} A CSS image-set for multiple scale factors.
    * @private
@@ -64,6 +75,28 @@ Polymer({
    */
   addAccount_: function(event) {
     this.browserProxy_.addAccount();
+  },
+
+  /**
+   * @param {!settings.Account} account
+   * @return {boolean} True if the account reauthentication button should be
+   *    shown, false otherwise.
+   * @private
+   */
+  shouldShowReauthenticationButton_: function(account) {
+    // Device account re-authentication cannot be handled in-session, primarily
+    // because the user may have changed their password (leading to an LST
+    // invalidation) and we do not have a mechanism to change the cryptohome
+    // password in-session.
+    return !account.isDeviceAccount && !account.isSignedIn;
+  },
+
+  /**
+   * @param {!CustomEvent<!{model: !{item: !settings.Account}}>} event
+   * @private
+   */
+  onReauthenticationTap_: function(event) {
+    this.browserProxy_.reauthenticateAccount(event.model.item.email);
   },
 
   /**

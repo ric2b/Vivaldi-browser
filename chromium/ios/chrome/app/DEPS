@@ -1,7 +1,6 @@
 include_rules = [
   "+components/bookmarks/browser",
   "+components/bookmarks/test",
-  "+components/browser_sync",
   "+components/browsing_data/core",
   "+components/component_updater",
   "+components/content_settings",
@@ -17,8 +16,9 @@ include_rules = [
   "+components/payments/core",
   "+components/prefs",
   "+components/reading_list/core",
-  "+components/signin/core/browser",
+  "+components/search_engines",
   "+components/suggestions",
+  "+components/sync/driver",
   "+components/task_scheduler_util",
   "+components/url_formatter",
   "+components/web_resource",
@@ -27,6 +27,7 @@ include_rules = [
   "+ios/net",
   "+ios/public/provider/chrome",
   "+mojo/core/embedder/embedder.h",
+  "+services/identity/public/cpp/identity_manager.h",
   "+third_party/breakpad/breakpad/src/client/ios",
 
   # Strings and resources.

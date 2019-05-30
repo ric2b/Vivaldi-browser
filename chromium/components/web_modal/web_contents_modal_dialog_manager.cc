@@ -61,11 +61,10 @@ content::WebContents* WebContentsModalDialogManager::GetWebContents() const {
 }
 
 void WebContentsModalDialogManager::WillClose(gfx::NativeWindow dialog) {
-  WebContentsModalDialogList::iterator dlg =
-      std::find_if(child_dialogs_.begin(), child_dialogs_.end(),
-                   [dialog](const DialogState& child_dialog) {
-                     return child_dialog.dialog == dialog;
-                   });
+  auto dlg = std::find_if(child_dialogs_.begin(), child_dialogs_.end(),
+                          [dialog](const DialogState& child_dialog) {
+                            return child_dialog.dialog == dialog;
+                          });
 
   // The Views tab contents modal dialog calls WillClose twice.  Ignore the
   // second invocation.
@@ -174,5 +173,7 @@ void WebContentsModalDialogManager::WebContentsDestroyed() {
 void WebContentsModalDialogManager::DidAttachInterstitialPage() {
   CloseAllDialogs();
 }
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(WebContentsModalDialogManager)
 
 }  // namespace web_modal

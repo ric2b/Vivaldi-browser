@@ -5,12 +5,9 @@
 #ifndef UI_VIVALDI_MAIN_MENU_H_
 #define UI_VIVALDI_MAIN_MENU_H_
 
-#include <string>
-#include <vector>
+#include "extensions/schema/show_menu.h"
 
-namespace show_menu {
-class MenuItem;
-}
+class Profile;
 
 namespace vivaldi {
 

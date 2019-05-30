@@ -8,15 +8,15 @@
 
 if (is_android) {
   import("//build/config/android/config.gni")
+  import("//build/config/android/extract_unwind_tables.gni")
   import("//build/config/android/rules.gni")
   import("//build/config/sanitizers/sanitizers.gni")
-  import("//build/config/android/extract_unwind_tables.gni")
 }
 
 if (is_fuchsia) {
   import("//build/config/chromecast_build.gni")
-  import("//build/config/fuchsia/rules.gni")
   import("//build/config/fuchsia/package.gni")
+  import("//build/config/fuchsia/rules.gni")
 }
 
 if (is_chromeos) {
@@ -76,9 +76,6 @@ template("test") {
 
         # Don't output to the root or else conflict with the group() below.
         output_name = rebase_path(_exec_output, root_out_dir)
-        if (is_component_build || is_asan) {
-          data_deps += [ "//build/android:cpplib_stripped" ]
-        }
       }
 
       create_native_executable_dist(_dist_target) {
@@ -138,12 +135,18 @@ template("test") {
         }
       }
       unittest_apk(_apk_target) {
-        forward_variables_from(invoker, _apk_specific_vars + [ "deps" ])
+        forward_variables_from(invoker, _apk_specific_vars)
         shared_library = ":$_library_target"
         apk_name = invoker.target_name
         if (defined(invoker.output_name)) {
           apk_name = invoker.output_name
           install_script_name = "install_${invoker.output_name}"
+        }
+
+        if (defined(invoker.deps)) {
+          deps = invoker.deps
+        } else {
+          deps = []
         }
 
         # Add the Java classes so that each target does not have to do it.
@@ -257,7 +260,11 @@ template("test") {
 
     fuchsia_package_runner(target_name) {
       testonly = true
-      forward_variables_from(invoker, [ "use_test_server" ])
+      forward_variables_from(invoker,
+                             [
+                               "use_test_server",
+                               "package_deps",
+                             ])
       runner_script = "//build/fuchsia/test_runner.py"
       package = ":$_pkg_target"
       package_name_override = _output_name
@@ -275,7 +282,6 @@ template("test") {
 
     fuchsia_package(_pkg_target) {
       testonly = true
-      sandbox_policy = "//build/config/fuchsia/testing_sandbox_policy"
       binary = ":$_exec_target"
       package_name_override = _output_name
     }
@@ -323,19 +329,18 @@ template("test") {
       }
       bundle_deps += [ ":$_resources_bundle_data" ]
     }
-  } else if (is_chromeos && cros_board != "") {
-    # When the arg cros_board is set, assume we're in the cros chrome-sdk
-    # building simplechrome.
+  } else if (is_chromeos && is_cros_chrome_sdk) {
+    # Building for a cros board (ie: not linux-chromeos).
 
     _gen_runner_target = "${target_name}__runner"
     _runtime_deps_file =
         "$root_out_dir/gen.runtime/" + get_label_info(target_name, "dir") +
         "/" + get_label_info(target_name, "name") + ".runtime_deps"
 
-    generate_vm_runner_script(_gen_runner_target) {
+    generate_runner_script(_gen_runner_target) {
       testonly = true
       generated_script = "$root_build_dir/bin/run_" + invoker.target_name
-      test_exe = "$root_out_dir/" + get_label_info(invoker.target_name, "name")
+      test_exe = invoker.target_name
       runtime_deps_file = _runtime_deps_file
     }
 
@@ -347,6 +352,9 @@ template("test") {
       if (!defined(data)) {
         data = []
       }
+
+      # We use a special trigger script for CrOS hardware tests.
+      data += [ "//testing/trigger_scripts/chromeos_device_trigger.py" ]
 
       testonly = true
       output_name = target_name
@@ -367,6 +375,62 @@ template("test") {
         "//build/win:default_exe_manifest",
       ]
     }
+  }
+}
+
+template("generated_script_test") {
+  # Invoker must define generator_script location which is used to generate
+  # the executable script. The generator_script will be invoked as follows:
+  # $ <generator_script> --script-output-path=<path to generate the executable>
+  #                      [extra args]
+  # For this template, it's expected to generate the executable script in bin/
+  # directory of the output directory.
+  assert(defined(invoker.generator_script), "Generator script must be defined")
+
+  # Invoker can add extra arguments to be passed to the generator script
+  # through defining |extra_args|.
+  _extra_args = []
+  if (defined(invoker.extra_args)) {
+    _extra_args += invoker.extra_args
+  }
+
+  _generator_script = invoker.generator_script
+  _gen_runner_target = "${target_name}__runner"
+  _target_name = target_name
+
+  action(_gen_runner_target) {
+    if (is_win) {
+      _target_executable = "run_${_target_name}.bat"
+    } else {
+      _target_executable = "run_${_target_name}"
+    }
+    _wrapper_dir = "${root_build_dir}/bin"
+    script = _generator_script
+    inputs = []
+    outputs = [
+      "$_wrapper_dir/$_target_executable",
+    ]
+    args = [
+      "--script-output-path",
+      rebase_path(outputs[0], root_build_dir),
+    ]
+    args += _extra_args
+  }
+
+  group(target_name) {
+    testonly = true
+    forward_variables_from(invoker,
+                           [
+                             "deps",
+                             "testonly",
+                             "data",
+                             "data_deps",
+                           ])
+
+    if (!defined(invoker.deps)) {
+      deps = []
+    }
+    deps += [ ":$_gen_runner_target" ]
   }
 }
 

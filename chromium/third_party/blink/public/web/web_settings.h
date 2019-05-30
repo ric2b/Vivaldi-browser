@@ -49,31 +49,16 @@ class WebString;
 // WebCore/page/Settings.h.
 class WebSettings {
  public:
-  enum ImageAnimationPolicy {
-    kImageAnimationPolicyAllowed,
-    kImageAnimationPolicyAnimateOnce,
-    kImageAnimationPolicyNoAnimation
-  };
+  enum class ImageAnimationPolicy { kAllowed, kAnimateOnce, kNoAnimation };
 
-  enum EditingBehavior {
-    kEditingBehaviorMac,
-    kEditingBehaviorWin,
-    kEditingBehaviorUnix,
-    kEditingBehaviorAndroid
-  };
+  enum class EditingBehavior { kMac, kWin, kUnix, kAndroid };
 
-  enum V8CacheOptions {
-    kV8CacheOptionsDefault,
-    kV8CacheOptionsNone,
-    kV8CacheOptionsCode,
-    kV8CacheOptionsCodeWithoutHeatCheck,
-    kV8CacheOptionsFullCodeWithoutHeatCheck
-  };
-
-  enum class SavePreviousDocumentResources {
-    kNever,
-    kUntilOnDOMContentLoaded,
-    kUntilOnLoad
+  enum class V8CacheOptions {
+    kDefault,
+    kNone,
+    kCode,
+    kCodeWithoutHeatCheck,
+    kFullCodeWithoutHeatCheck
   };
 
   // Selection strategy defines how the selection granularity changes when the
@@ -113,7 +98,6 @@ class WebSettings {
   enum class AutoplayPolicy {
     kNoUserGestureRequired = 0,
     kUserGestureRequired,
-    kUserGestureRequiredForCrossOrigin,
     kDocumentUserActivationRequired,
   };
 
@@ -126,7 +110,6 @@ class WebSettings {
   virtual bool ShrinksViewportContentToFit() const = 0;
   virtual bool ViewportEnabled() const = 0;
   virtual void SetAccelerated2dCanvasMSAASampleCount(int) = 0;
-  virtual void SetAcceleratedCompositingEnabled(bool) = 0;
   virtual void SetPreferCompositingToLCDTextEnabled(bool) = 0;
   // Not implemented yet, see http://crbug.com/178119
   virtual void SetAcceleratedCompositingForTransitionEnabled(bool) {}
@@ -170,6 +153,7 @@ class WebSettings {
   virtual void SetDownloadableBinaryFontsEnabled(bool) = 0;
   virtual void SetEditingBehavior(EditingBehavior) = 0;
   virtual void SetEnableScrollAnimator(bool) = 0;
+  virtual void SetPrefersReducedMotion(bool) = 0;
   virtual void SetEnableTouchAdjustment(bool) = 0;
   virtual void SetSmoothScrollForFindEnabled(bool) = 0;
   virtual void SetWebGL1Enabled(bool) = 0;
@@ -180,10 +164,10 @@ class WebSettings {
                                   UScriptCode = USCRIPT_COMMON) = 0;
   virtual void SetNetworkQuietTimeout(double timeout) = 0;
   virtual void SetForceMainWorldInitialization(bool) = 0;
-  virtual void SetForcePreloadNoneForMediaElements(bool) = 0;
   virtual void SetForceZeroLayoutHeight(bool) = 0;
   virtual void SetFullscreenSupported(bool) = 0;
   virtual void SetHideDownloadUI(bool) = 0;
+  virtual void SetHighlightAds(bool) = 0;
   virtual void SetHistoryEntryRequiresUserGesture(bool) = 0;
   virtual void SetHyperlinkAuditingEnabled(bool) = 0;
   virtual void SetIgnoreMainFrameOverflowHiddenQuirk(bool) = 0;
@@ -195,16 +179,13 @@ class WebSettings {
   virtual void SetLoadsImagesAutomatically(bool) = 0;
   virtual void SetLoadWithOverviewMode(bool) = 0;
   virtual void SetShouldReuseGlobalForUnownedMainFrame(bool) = 0;
-  virtual void SetSavePreviousDocumentResources(
-      SavePreviousDocumentResources) = 0;
   virtual void SetLocalStorageEnabled(bool) = 0;
   virtual void SetMainFrameClipsContent(bool) = 0;
   virtual void SetMainFrameResizesAreOrientationChanges(bool) = 0;
   virtual void SetMaxTouchPoints(int) = 0;
   virtual void SetPictureInPictureEnabled(bool) = 0;
   virtual void SetDataSaverHoldbackWebApi(bool) = 0;
-  virtual void SetDataSaverHoldbackMediaApi(bool) = 0;
-  virtual void SetMediaPlaybackGestureWhitelistScope(const WebString&) = 0;
+  virtual void SetWebAppScope(const WebString&) = 0;
   virtual void SetPresentationRequiresUserGesture(bool) = 0;
   virtual void SetEmbeddedMediaExperienceEnabled(bool) = 0;
   virtual void SetImmersiveModeEnabled(bool) = 0;
@@ -217,7 +198,6 @@ class WebSettings {
   virtual void SetPassiveEventListenerDefault(PassiveEventListenerDefault) = 0;
   virtual void SetPasswordEchoDurationInSeconds(double) = 0;
   virtual void SetPasswordEchoEnabled(bool) = 0;
-  virtual void SetPerTilePaintingEnabled(bool) = 0;
   virtual void SetPictographFontFamily(const WebString&,
                                        UScriptCode = USCRIPT_COMMON) = 0;
   virtual void SetPluginsEnabled(bool) = 0;
@@ -227,7 +207,7 @@ class WebSettings {
   virtual void SetAvailableHoverTypes(int) = 0;
   virtual void SetPrimaryHoverType(HoverType) = 0;
   virtual void SetPreferHiddenVolumeControls(bool) = 0;
-  virtual void SetShouldThrottlePushState(bool) = 0;
+  virtual void SetShouldProtectAgainstIpcFlooding(bool) = 0;
   virtual void SetRenderVSyncNotificationEnabled(bool) = 0;
   virtual void SetReportScreenSizeInPhysicalPixelsQuirk(bool) = 0;
   virtual void SetRubberBandingOnCompositorThread(bool) = 0;
@@ -242,8 +222,6 @@ class WebSettings {
   virtual void SetShouldClearDocumentBackground(bool) = 0;
   virtual void SetShouldRespectImageOrientation(bool) = 0;
   virtual void SetShowContextMenuOnMouseUp(bool) = 0;
-  virtual void SetShowFPSCounter(bool) = 0;
-  virtual void SetShowPaintRects(bool) = 0;
   virtual void SetShrinksViewportContentToFit(bool) = 0;
   virtual void SetSmartInsertDeleteEnabled(bool) = 0;
   // Spatial navigation feature, when enabled, improves the experience
@@ -298,8 +276,8 @@ class WebSettings {
   virtual void SetXSSAuditorEnabled(bool) = 0;
   virtual void SetMediaControlsEnabled(bool) = 0;
   virtual void SetDoNotUpdateSelectionOnMutatingSelectionRange(bool) = 0;
-  virtual void SetMediaDownloadInProductHelpEnabled(bool) = 0;
   virtual void SetLowPriorityIframesThreshold(WebEffectiveConnectionType) = 0;
+  virtual void SetLazyLoadEnabled(bool) = 0;
   virtual void SetLazyFrameLoadingDistanceThresholdPxUnknown(int) = 0;
   virtual void SetLazyFrameLoadingDistanceThresholdPxOffline(int) = 0;
   virtual void SetLazyFrameLoadingDistanceThresholdPxSlow2G(int) = 0;
@@ -312,6 +290,7 @@ class WebSettings {
   virtual void SetLazyImageLoadingDistanceThresholdPx2G(int) = 0;
   virtual void SetLazyImageLoadingDistanceThresholdPx3G(int) = 0;
   virtual void SetLazyImageLoadingDistanceThresholdPx4G(int) = 0;
+  virtual void SetForceDarkModeEnabled(bool) = 0;
 
  protected:
   ~WebSettings() = default;

@@ -4,8 +4,11 @@
 
 #include "content/browser/blob_storage/blob_registry_wrapper.h"
 
+#include "base/bind.h"
+#include "base/task/post_task.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/child_process_security_policy_impl.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/common/content_features.h"
 #include "storage/browser/blob/blob_registry_impl.h"
 #include "storage/browser/blob/blob_storage_context.h"
@@ -35,6 +38,11 @@ class BindingDelegate : public storage::BlobRegistryImpl::Delegate {
         ChildProcessSecurityPolicyImpl::GetInstance();
     return security_policy->CanCommitURL(process_id_, url);
   }
+  bool IsProcessValid() override {
+    ChildProcessSecurityPolicyImpl* security_policy =
+        ChildProcessSecurityPolicyImpl::GetInstance();
+    return security_policy->HasSecurityState(process_id_);
+  }
 
  private:
   const int process_id_;
@@ -47,8 +55,8 @@ scoped_refptr<BlobRegistryWrapper> BlobRegistryWrapper::Create(
     scoped_refptr<ChromeBlobStorageContext> blob_storage_context,
     scoped_refptr<storage::FileSystemContext> file_system_context) {
   scoped_refptr<BlobRegistryWrapper> result(new BlobRegistryWrapper());
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
       base::BindOnce(&BlobRegistryWrapper::InitializeOnIOThread, result,
                      std::move(blob_storage_context),
                      std::move(file_system_context)));

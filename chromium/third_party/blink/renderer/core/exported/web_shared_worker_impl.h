@@ -39,10 +39,10 @@
 #include "base/memory/weak_ptr.h"
 #include "services/service_manager/public/mojom/interface_provider.mojom-blink.h"
 #include "third_party/blink/public/common/privacy_preferences.h"
+#include "third_party/blink/public/mojom/csp/content_security_policy.mojom-blink.h"
 #include "third_party/blink/public/mojom/net/ip_address_space.mojom-shared.h"
-#include "third_party/blink/public/platform/web_content_security_policy.h"
+#include "third_party/blink/public/mojom/worker/worker_content_settings_proxy.mojom-blink.h"
 #include "third_party/blink/public/web/web_shared_worker_client.h"
-#include "third_party/blink/public/web/worker_content_settings_proxy.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/exported/worker_shadow_page.h"
 #include "third_party/blink/renderer/core/workers/shared_worker_reporting_proxy.h"
@@ -51,11 +51,11 @@
 
 namespace base {
 class SingleThreadTaskRunner;
-};
+}
 
 namespace network {
 class SharedURLLoaderFactory;
-};
+}
 
 namespace blink {
 
@@ -65,7 +65,6 @@ class WebSharedWorkerClient;
 class WebString;
 class WebURL;
 class WorkerClassicScriptLoader;
-class WorkerInspectorProxy;
 
 // This class is used by the worker process code to talk to the SharedWorker
 // implementation. This is basically accessed on the main thread, but some
@@ -93,7 +92,7 @@ class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
       const WebURL&,
       const WebString& name,
       const WebString& content_security_policy,
-      WebContentSecurityPolicyType,
+      mojom::ContentSecurityPolicyType,
       mojom::IPAddressSpace,
       const base::UnguessableToken& devtools_worker_token,
       PrivacyPreferences privacy_preferences,
@@ -104,12 +103,15 @@ class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
   void TerminateWorkerContext() override;
   void PauseWorkerContextOnStart() override;
   void BindDevToolsAgent(
+      mojo::ScopedInterfaceEndpointHandle devtools_agent_host_ptr_info,
       mojo::ScopedInterfaceEndpointHandle devtools_agent_request) override;
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(TaskType) override;
 
   // Callback methods for SharedWorkerReportingProxy.
   void CountFeature(WebFeature);
-  void PostMessageToPageInspector(int session_id, const String& message);
+  void DidFetchScript();
+  void DidFailToFetchClassicScript();
+  void DidEvaluateClassicScript(bool success);
   void DidCloseWorkerGlobalScope();
   void DidTerminateWorkerThread();
 
@@ -121,7 +123,13 @@ class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
 
   void DidReceiveScriptLoaderResponse();
   void OnScriptLoaderFinished();
-  void ContinueOnScriptLoaderFinished();
+  void ContinueStartWorkerContext();
+  void StartWorkerThread(
+      std::unique_ptr<GlobalScopeCreationParams>,
+      const KURL& script_response_url,
+      const String& source_code,
+      const FetchClientSettingsObjectSnapshot& outside_settings_object);
+  WorkerClients* CreateWorkerClients();
 
   void ConnectTaskOnWorkerThread(MessagePortChannel);
 
@@ -129,8 +137,6 @@ class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
   // Unique worker token used by DevTools to attribute different instrumentation
   // to the same worker.
   base::UnguessableToken devtools_worker_token_;
-
-  Persistent<WorkerInspectorProxy> worker_inspector_proxy_;
 
   Persistent<SharedWorkerReportingProxy> reporting_proxy_;
   std::unique_ptr<WorkerThread> worker_thread_;
@@ -144,7 +150,7 @@ class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
   bool is_paused_on_start_ = false;
 
   // Kept around only while main script loading is ongoing.
-  scoped_refptr<WorkerClassicScriptLoader> main_script_loader_;
+  Persistent<WorkerClassicScriptLoader> main_script_loader_;
 
   WebURL script_request_url_;
   WebString name_;

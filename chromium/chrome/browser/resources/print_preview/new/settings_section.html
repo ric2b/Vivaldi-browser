@@ -1,13 +1,22 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
+
 <dom-module id="print-preview-settings-section">
   <template>
     <style>
       :host {
-        align-items: center;
         display: flex;
-        margin-top: 10px;
-        padding: 5px 20px;
+        padding: 0 20px;
+      }
+
+      ::slotted([slot=controls]),
+      ::slotted([slot=title]) {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: 38px;
+        word-break: break-word;
       }
 
       ::slotted([slot=controls]) {
@@ -16,33 +25,14 @@
       }
 
       ::slotted([slot=title]) {
-        color: #646464;
+        color: var(--google-grey-900);
+        flex: none;
         font-size: 1em;
-        max-width: 70px;
-        min-width: 70px;
-        padding-inline-end: 20px;
-        word-break: break-word;
-      }
-
-      :host(.multirow-controls) ::slotted([slot=title]) {
-        align-self: flex-start;
-        padding-top: 7px;
-      }
-
-      :host([managed]) ::slotted([slot=title]) {
-        max-width: 60px;
-        min-width: 60px;
-        padding-inline-end: 5px;
-      }
-
-      .policy-icon {
-        padding-inline-end: 5px;
-        width: 20px;
+        line-height: calc(20/13 * 1em);
+        width: 75px;
       }
     </style>
     <slot name="title"></slot>
-    <img src="../../../../../ui/webui/resources/images/business.svg"
-         hidden$="[[!managed]]" class="policy-icon">
     <slot name="controls"></slot>
   </template>
   <script src="settings_section.js"></script>

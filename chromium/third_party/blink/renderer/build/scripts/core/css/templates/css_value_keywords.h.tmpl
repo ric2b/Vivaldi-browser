@@ -2,11 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef BLINK_CORE_CSS_VALUE_KEYWORDS_H_
-#define BLINK_CORE_CSS_VALUE_KEYWORDS_H_
+#ifndef {{header_guard}}
+#define {{header_guard}}
+
+#include <string.h>
+#include <stdint.h>
 
 #include "third_party/blink/renderer/core/css/parser/css_parser_mode.h"
-#include <string.h>
 
 namespace blink {
 
@@ -21,8 +23,8 @@ const int numCSSValueKeywords = {{value_keywords_count}};
 const size_t maxCSSValueKeywordLength = {{max_value_keyword_length}};
 
 const char* getValueName(CSSValueID);
-bool isValueAllowedInMode(unsigned short id, CSSParserMode mode);
+bool isValueAllowedInMode(uint16_t id, CSSParserMode mode);
 
-} // namespace blink
+}  // namespace blink
 
-#endif  // BLINK_CORE_CSS_VALUE_KEYWORDS_H_
+#endif  // {{header_guard}}

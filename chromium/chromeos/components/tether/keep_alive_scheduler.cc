@@ -20,13 +20,11 @@ KeepAliveScheduler::KeepAliveScheduler(
     device_sync::DeviceSyncClient* device_sync_client,
     secure_channel::SecureChannelClient* secure_channel_client,
     ActiveHost* active_host,
-    BleConnectionManager* connection_manager,
     HostScanCache* host_scan_cache,
     DeviceIdTetherNetworkGuidMap* device_id_tether_network_guid_map)
     : KeepAliveScheduler(device_sync_client,
                          secure_channel_client,
                          active_host,
-                         connection_manager,
                          host_scan_cache,
                          device_id_tether_network_guid_map,
                          std::make_unique<base::RepeatingTimer>()) {}
@@ -35,14 +33,12 @@ KeepAliveScheduler::KeepAliveScheduler(
     device_sync::DeviceSyncClient* device_sync_client,
     secure_channel::SecureChannelClient* secure_channel_client,
     ActiveHost* active_host,
-    BleConnectionManager* connection_manager,
     HostScanCache* host_scan_cache,
     DeviceIdTetherNetworkGuidMap* device_id_tether_network_guid_map,
     std::unique_ptr<base::RepeatingTimer> timer)
     : device_sync_client_(device_sync_client),
       secure_channel_client_(secure_channel_client),
       active_host_(active_host),
-      connection_manager_(connection_manager),
       host_scan_cache_(host_scan_cache),
       device_id_tether_network_guid_map_(device_id_tether_network_guid_map),
       timer_(std::move(timer)),
@@ -78,10 +74,10 @@ void KeepAliveScheduler::OnActiveHostChanged(
 }
 
 void KeepAliveScheduler::OnOperationFinished(
-    cryptauth::RemoteDeviceRef remote_device,
+    multidevice::RemoteDeviceRef remote_device,
     std::unique_ptr<DeviceStatus> device_status) {
   // Make a copy before destroying the operation below.
-  const cryptauth::RemoteDeviceRef device_copy = remote_device;
+  const multidevice::RemoteDeviceRef device_copy = remote_device;
 
   keep_alive_operation_->RemoveObserver(this);
   keep_alive_operation_.reset();
@@ -117,8 +113,7 @@ void KeepAliveScheduler::SendKeepAliveTickle() {
   DCHECK(active_host_device_);
 
   keep_alive_operation_ = KeepAliveOperation::Factory::NewInstance(
-      *active_host_device_, device_sync_client_, secure_channel_client_,
-      connection_manager_);
+      *active_host_device_, device_sync_client_, secure_channel_client_);
   keep_alive_operation_->AddObserver(this);
   keep_alive_operation_->Initialize();
 }

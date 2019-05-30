@@ -52,6 +52,9 @@ extern const char kExtensions[];
 // policy.
 extern const char kExtensionManagement[];
 
+// Policy that indicates whether CRX2 extension updates are allowed.
+extern const char kInsecureExtensionUpdatesEnabled[];
+
 // A whitelist of extension ids the user can install: exceptions from the
 // following blacklist.
 extern const char kInstallAllowList[];
@@ -78,9 +81,6 @@ extern const char kInstallLoginScreenAppList[];
 // String pref for what version chrome was last time the extension prefs were
 // loaded.
 extern const char kLastChromeVersion[];
-
-// Time of the last extensions auto-update check.
-extern const char kLastUpdateCheck[];
 
 // Blacklist and whitelist for Native Messaging Hosts.
 extern const char kNativeMessagingBlacklist[];

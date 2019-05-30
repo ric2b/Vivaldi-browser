@@ -9,6 +9,7 @@
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_state.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
@@ -16,9 +17,9 @@
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/keyboard/keyboard_controller.h"
-#include "ui/keyboard/keyboard_switches.h"
 #include "ui/keyboard/keyboard_ui.h"
 #include "ui/keyboard/keyboard_util.h"
+#include "ui/keyboard/public/keyboard_switches.h"
 #include "ui/keyboard/test/keyboard_test_util.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -26,8 +27,6 @@
 namespace ash {
 
 namespace {
-
-const int kVirtualKeyboardHeight = 100;
 
 // A login implementation of WidgetDelegate.
 class LoginTestWidgetDelegate : public views::WidgetDelegate {
@@ -57,13 +56,9 @@ class LockLayoutManagerTest : public AshTestBase {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         keyboard::switches::kEnableVirtualKeyboard);
     AshTestBase::SetUp();
-    Shell::GetPrimaryRootWindowController()->ActivateKeyboard(
-        keyboard::KeyboardController::Get());
   }
 
   void TearDown() override {
-    Shell::GetPrimaryRootWindowController()->DeactivateKeyboard(
-        keyboard::KeyboardController::Get());
     AshTestBase::TearDown();
   }
 
@@ -86,24 +81,25 @@ class LockLayoutManagerTest : public AshTestBase {
   // Show or hide the keyboard.
   void ShowKeyboard(bool show) {
     auto* keyboard = keyboard::KeyboardController::Get();
-    ASSERT_TRUE(keyboard->enabled());
+    ASSERT_TRUE(keyboard->IsEnabled());
     if (show == keyboard->IsKeyboardVisible())
       return;
 
     if (show) {
       keyboard->ShowKeyboard(false);
-      if (keyboard->ui()->GetKeyboardWindow()->bounds().height() == 0) {
-        keyboard->ui()->GetKeyboardWindow()->SetBounds(
-            keyboard::KeyboardBoundsFromRootBounds(
-                Shell::GetPrimaryRootWindow()->bounds(),
-                kVirtualKeyboardHeight));
-        keyboard->NotifyKeyboardWindowLoaded();
-      }
+      ASSERT_TRUE(keyboard::WaitUntilShown());
     } else {
       keyboard->HideKeyboardByUser();
     }
 
     DCHECK_EQ(show, keyboard->IsKeyboardVisible());
+  }
+
+  void SetKeyboardOverscrollBehavior(
+      keyboard::mojom::KeyboardOverscrollBehavior overscroll_behavior) {
+    auto config = keyboard::KeyboardController::Get()->keyboard_config();
+    config.overscroll_behavior = overscroll_behavior;
+    keyboard::KeyboardController::Get()->UpdateKeyboardConfig(config);
   }
 };
 
@@ -232,22 +228,22 @@ TEST_F(LockLayoutManagerTest, KeyboardBounds) {
 
   // When virtual keyboard overscroll is enabled keyboard bounds should not
   // affect window bounds.
-  keyboard::SetKeyboardOverscrollOverride(
-      keyboard::KEYBOARD_OVERSCROLL_OVERRIDE_ENABLED);
+  keyboard::KeyboardController* keyboard = keyboard::KeyboardController::Get();
+  SetKeyboardOverscrollBehavior(
+      keyboard::mojom::KeyboardOverscrollBehavior::kEnabled);
   ShowKeyboard(true);
   EXPECT_EQ(screen_bounds.ToString(), window->GetBoundsInScreen().ToString());
-  gfx::Rect keyboard_bounds =
-      keyboard::KeyboardController::Get()->visual_bounds_in_screen();
+  gfx::Rect keyboard_bounds = keyboard->visual_bounds_in_screen();
   EXPECT_NE(keyboard_bounds, gfx::Rect());
   ShowKeyboard(false);
 
   // When keyboard is hidden make sure that rotating the screen gives 100% of
   // screen size to window.
   // Repro steps for http://crbug.com/401667:
-  // 1. Set up login screen defaults: VK override disabled
+  // 1. Set up login screen defaults: VK overscroll disabled
   // 2. Show/hide keyboard, make sure that no stale keyboard bounds are cached.
-  keyboard::SetKeyboardOverscrollOverride(
-      keyboard::KEYBOARD_OVERSCROLL_OVERRIDE_DISABLED);
+  SetKeyboardOverscrollBehavior(
+      keyboard::mojom::KeyboardOverscrollBehavior::kDisabled);
   ShowKeyboard(true);
   ShowKeyboard(false);
   display_manager()->SetDisplayRotation(
@@ -262,23 +258,22 @@ TEST_F(LockLayoutManagerTest, KeyboardBounds) {
 
   // When virtual keyboard overscroll is disabled keyboard bounds do
   // affect window bounds.
-  keyboard::SetKeyboardOverscrollOverride(
-      keyboard::KEYBOARD_OVERSCROLL_OVERRIDE_DISABLED);
+  SetKeyboardOverscrollBehavior(
+      keyboard::mojom::KeyboardOverscrollBehavior::kDisabled);
   ShowKeyboard(true);
-  keyboard::KeyboardController* keyboard = keyboard::KeyboardController::Get();
+
   primary_display = display::Screen::GetScreen()->GetPrimaryDisplay();
   screen_bounds = primary_display.bounds();
   gfx::Rect target_bounds(screen_bounds);
-  target_bounds.set_height(
-      target_bounds.height() -
-      keyboard->ui()->GetKeyboardWindow()->bounds().height());
+  target_bounds.set_height(target_bounds.height() -
+                           keyboard->GetKeyboardWindow()->bounds().height());
   EXPECT_EQ(target_bounds.ToString(), window->GetBoundsInScreen().ToString());
   ShowKeyboard(false);
 
-  keyboard::SetKeyboardOverscrollOverride(
-      keyboard::KEYBOARD_OVERSCROLL_OVERRIDE_NONE);
+  SetKeyboardOverscrollBehavior(
+      keyboard::mojom::KeyboardOverscrollBehavior::kDefault);
 
-  keyboard->SetContainerType(keyboard::ContainerType::FLOATING,
+  keyboard->SetContainerType(keyboard::mojom::ContainerType::kFloating,
                              base::nullopt /* target_bounds */,
                              base::BindOnce([](bool success) {}));
   ShowKeyboard(true);

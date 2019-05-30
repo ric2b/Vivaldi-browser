@@ -62,14 +62,19 @@ bool ShouldCountTowardNonIncludeLines(const base::StringPiece& line) {
 IncludeType ExtractInclude(const base::StringPiece& line,
                            base::StringPiece* path,
                            int* begin_char) {
-  static const char kInclude[] = "#include";
+  static const char kInclude[] = "include";
   static const size_t kIncludeLen = arraysize(kInclude) - 1;  // No null.
-  static const char kImport[] = "#import";
+  static const char kImport[] = "import";
   static const size_t kImportLen = arraysize(kImport) - 1;  // No null.
 
   base::StringPiece trimmed = TrimLeadingWhitespace(line);
   if (trimmed.empty())
     return INCLUDE_NONE;
+
+  if (trimmed[0] != '#')
+    return INCLUDE_NONE;
+
+  trimmed = TrimLeadingWhitespace(trimmed.substr(1));
 
   base::StringPiece contents;
   if (base::StartsWith(trimmed, base::StringPiece(kInclude, kIncludeLen),

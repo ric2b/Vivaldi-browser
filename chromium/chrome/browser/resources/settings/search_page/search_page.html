@@ -4,7 +4,6 @@
 <link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/md_select_css.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="../controls/extension_controlled_indicator.html">
@@ -43,7 +42,7 @@
     </style>
     <settings-animated-pages id="pages" section="search"
         focus-config="[[focusConfig_]]">
-      <neon-animatable route-path="default">
+      <div route-path="default">
         <!-- Omnibox search engine -->
         <div class="settings-box first block">
           <div id="search-wrapper">
@@ -80,15 +79,9 @@
         </div>
 
         <!-- Manage search engines -->
-        <div id="engines-subpage-trigger" class="settings-box"
-            on-click="onManageSearchEnginesTap_" actionable>
-          <div class="start">
-            $i18n{searchEnginesManage}
-          </div>
-          <paper-icon-button-light class="subpage-arrow">
-            <button aria-label="$i18n{searchEnginesManage}"></button>
-          </paper-icon-button-light>
-        </div>
+        <cr-link-row class="hr" id="engines-subpage-trigger"
+            label="$i18n{searchEnginesManage}"
+            on-click="onManageSearchEnginesTap_"></cr-link-row>
 
 <if expr="chromeos">
         <!-- Google Assistant -->
@@ -119,7 +112,7 @@
           </div>
         </template>
 </if>
-      </neon-animatable>
+      </div>
       <template is="dom-if" route-path="/searchEngines">
         <settings-subpage
             associated-control="[[$$('#engines-subpage-trigger')]]"

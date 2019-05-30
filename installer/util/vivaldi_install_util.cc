@@ -12,6 +12,7 @@
 #include <tlhelp32.h>
 
 #include "base/path_service.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -187,24 +188,6 @@ bool ShellExecuteFromExplorer(const base::FilePath& application_path,
   return (hr == S_OK);
 }
 
-base::string16 GetNewFeaturesUrl(const base::Version& version) {
-  const base::string16 kVersionParam = L"version";
-  const base::string16 kOSParam = L"os";
-  const wchar_t kBaseUrl[] = L"https://vivaldi.com/newfeatures?hl=$1";
-
-  const base::win::OSInfo* os_info = base::win::OSInfo::GetInstance();
-  base::win::OSInfo::VersionNumber version_number = os_info->version_number();
-  base::string16 os_version =
-      base::StringPrintf(L"W%d.%d.%d", version_number.major,
-                         version_number.minor, version_number.build);
-
-  base::string16 url = LocalizeUrl(kBaseUrl);
-  url = url + L"&" + kVersionParam + L"=" +
-        base::ASCIIToUTF16(version.GetString()) + L"&" + kOSParam + L"=" +
-        os_version;
-  return url;
-}
-
 std::vector<base::win::ScopedHandle> GetRunningProcessesForPath(
   const base::FilePath& path) {
   std::vector<base::win::ScopedHandle> processes;
@@ -232,7 +215,7 @@ std::vector<base::win::ScopedHandle> GetRunningProcessesForPath(
       continue;
 
     wchar_t process_image_name[MAX_PATH];
-    DWORD size = arraysize(process_image_name);
+    DWORD size = base::size(process_image_name);
     if (QueryFullProcessImageName(process.Get(), 0, process_image_name,
       &size) == FALSE)
       continue;

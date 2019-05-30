@@ -4,13 +4,13 @@
 
 #include "extensions/browser/content_verifier/content_hash.h"
 
+#include "base/bind.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequence_checker.h"
 #include "base/task/post_task.h"
-#include "base/threading/thread_restrictions.h"
 #include "base/timer/elapsed_timer.h"
 #include "content/public/browser/browser_thread.h"
 #include "crypto/sha2.h"
@@ -30,7 +30,6 @@ using SortedFilePathSet = std::set<base::FilePath>;
 
 bool CreateDirAndWriteFile(const base::FilePath& destination,
                            const std::string& content) {
-  base::AssertBlockingAllowed();
   DCHECK(GetExtensionFileTaskRunner()->RunsTasksInCurrentSequence());
   base::FilePath dir = destination.DirName();
   if (!base::CreateDirectory(dir))
@@ -45,7 +44,6 @@ bool CreateDirAndWriteFile(const base::FilePath& destination,
 std::unique_ptr<VerifiedContents> GetVerifiedContents(
     const ContentHash::ExtensionKey& key,
     bool delete_invalid_file) {
-  base::AssertBlockingAllowed();
   DCHECK(GetExtensionFileTaskRunner()->RunsTasksInCurrentSequence());
   base::FilePath verified_contents_path =
       file_util::GetVerifiedContentsPath(key.extension_root);
@@ -95,7 +93,6 @@ void ContentHash::Create(const ExtensionKey& key,
                          FetchParams fetch_params,
                          const IsCancelledCallback& is_cancelled,
                          CreatedCallback created_callback) {
-  base::AssertBlockingAllowed();
   // Step 1/2: verified_contents.json:
   std::unique_ptr<VerifiedContents> verified_contents = GetVerifiedContents(
       key,
@@ -173,7 +170,6 @@ void ContentHash::DidFetchVerifiedContents(
     const ContentHash::IsCancelledCallback& is_cancelled,
     const ContentHash::ExtensionKey& key,
     std::unique_ptr<std::string> fetched_contents) {
-  base::AssertBlockingAllowed();
   if (!fetched_contents) {
     ContentHash::DispatchFetchFailure(key, std::move(created_callback),
                                       is_cancelled);
@@ -187,7 +183,7 @@ void ContentHash::DidFetchVerifiedContents(
   // the right cookies).  TODO(asargent) - It would be a nice enhancement to
   // move to parsing this in a sandboxed helper (https://crbug.com/372878).
   std::unique_ptr<base::Value> parsed =
-      base::JSONReader::Read(*fetched_contents);
+      base::JSONReader::ReadDeprecated(*fetched_contents);
   if (!parsed) {
     ContentHash::DispatchFetchFailure(key, std::move(created_callback),
                                       is_cancelled);
@@ -272,7 +268,7 @@ bool ContentHash::CreateHashes(const base::FilePath& hashes_file,
   // Now iterate over all the paths in sorted order and compute the block hashes
   // for each one.
   ComputedHashes::Writer writer;
-  for (SortedFilePathSet::iterator i = paths.begin(); i != paths.end(); ++i) {
+  for (auto i = paths.begin(); i != paths.end(); ++i) {
     if (is_cancelled && is_cancelled.Run())
       return false;
 

@@ -31,44 +31,52 @@ ProcessInfoNativeHandler::ProcessInfoNativeHandler(
       send_request_disabled_(send_request_disabled) {}
 
 void ProcessInfoNativeHandler::AddRoutes() {
-  RouteHandlerFunction("GetExtensionId",
-                       base::Bind(&ProcessInfoNativeHandler::GetExtensionId,
-                                  base::Unretained(this)));
-  RouteHandlerFunction("GetContextType",
-                       base::Bind(&ProcessInfoNativeHandler::GetContextType,
-                                  base::Unretained(this)));
-  RouteHandlerFunction("InIncognitoContext",
-                       base::Bind(&ProcessInfoNativeHandler::InIncognitoContext,
-                                  base::Unretained(this)));
+  RouteHandlerFunction(
+      "GetExtensionId",
+      base::BindRepeating(&ProcessInfoNativeHandler::GetExtensionId,
+                          base::Unretained(this)));
+  RouteHandlerFunction(
+      "GetContextType",
+      base::BindRepeating(&ProcessInfoNativeHandler::GetContextType,
+                          base::Unretained(this)));
+  RouteHandlerFunction(
+      "InIncognitoContext",
+      base::BindRepeating(&ProcessInfoNativeHandler::InIncognitoContext,
+                          base::Unretained(this)));
   RouteHandlerFunction(
       "IsComponentExtension",
-      base::Bind(&ProcessInfoNativeHandler::IsComponentExtension,
-                 base::Unretained(this)));
-  RouteHandlerFunction("GetManifestVersion",
-                       base::Bind(&ProcessInfoNativeHandler::GetManifestVersion,
-                                  base::Unretained(this)));
+      base::BindRepeating(&ProcessInfoNativeHandler::IsComponentExtension,
+                          base::Unretained(this)));
+  RouteHandlerFunction(
+      "GetManifestVersion",
+      base::BindRepeating(&ProcessInfoNativeHandler::GetManifestVersion,
+                          base::Unretained(this)));
   RouteHandlerFunction(
       "IsSendRequestDisabled",
-      base::Bind(&ProcessInfoNativeHandler::IsSendRequestDisabled,
-                 base::Unretained(this)));
+      base::BindRepeating(&ProcessInfoNativeHandler::IsSendRequestDisabled,
+                          base::Unretained(this)));
+  RouteHandlerFunction("HasSwitch",
+                       base::BindRepeating(&ProcessInfoNativeHandler::HasSwitch,
+                                           base::Unretained(this)));
   RouteHandlerFunction(
-      "HasSwitch",
-      base::Bind(&ProcessInfoNativeHandler::HasSwitch, base::Unretained(this)));
-  RouteHandlerFunction("GetPlatform",
-                       base::Bind(&ProcessInfoNativeHandler::GetPlatform,
-                                  base::Unretained(this)));
+      "GetPlatform", base::BindRepeating(&ProcessInfoNativeHandler::GetPlatform,
+                                         base::Unretained(this)));
 }
 
 void ProcessInfoNativeHandler::GetExtensionId(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
-  args.GetReturnValue().Set(
-      v8::String::NewFromUtf8(args.GetIsolate(), extension_id_.c_str()));
+  args.GetReturnValue().Set(v8::String::NewFromUtf8(args.GetIsolate(),
+                                                    extension_id_.c_str(),
+                                                    v8::NewStringType::kNormal)
+                                .ToLocalChecked());
 }
 
 void ProcessInfoNativeHandler::GetContextType(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
   args.GetReturnValue().Set(
-      v8::String::NewFromUtf8(args.GetIsolate(), context_type_.c_str()));
+      v8::String::NewFromUtf8(args.GetIsolate(), context_type_.c_str(),
+                              v8::NewStringType::kInternalized)
+          .ToLocalChecked());
 }
 
 void ProcessInfoNativeHandler::InIncognitoContext(
@@ -89,10 +97,13 @@ void ProcessInfoNativeHandler::GetManifestVersion(
 void ProcessInfoNativeHandler::IsSendRequestDisabled(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
   if (send_request_disabled_) {
-    args.GetReturnValue().Set(v8::String::NewFromUtf8(
-        args.GetIsolate(),
-        "sendRequest and onRequest are obsolete."
-        " Please use sendMessage and onMessage instead."));
+    args.GetReturnValue().Set(
+        v8::String::NewFromUtf8(
+            args.GetIsolate(),
+            "sendRequest and onRequest are obsolete."
+            " Please use sendMessage and onMessage instead.",
+            v8::NewStringType::kNormal)
+            .ToLocalChecked());
   }
 }
 

@@ -7,6 +7,7 @@
 #include "android_webview/browser/aw_print_manager.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
+#include "base/bind.h"
 #include "content/public/browser/browser_thread.h"
 #include "jni/AwPdfExporter_jni.h"
 #include "printing/print_settings.h"
@@ -21,7 +22,7 @@ namespace android_webview {
 namespace {
 
 void JNI_AwPdfExporter_GetPageRanges(JNIEnv* env,
-                                     jintArray int_arr,
+                                     const JavaRef<jintArray>& int_arr,
                                      printing::PageRanges* range_vector) {
   std::vector<int> pages;
   base::android::JavaIntArrayToIntVector(env, int_arr, &pages);
@@ -56,7 +57,7 @@ AwPdfExporter::~AwPdfExporter() {
 void AwPdfExporter::ExportToPdf(JNIEnv* env,
                                 const JavaParamRef<jobject>& obj,
                                 int fd,
-                                jintArray pages,
+                                const JavaParamRef<jintArray>& pages,
                                 const JavaParamRef<jobject>& cancel_signal) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   printing::PrintSettings print_settings;
@@ -64,11 +65,11 @@ void AwPdfExporter::ExportToPdf(JNIEnv* env,
   JNI_AwPdfExporter_GetPageRanges(env, pages, &page_ranges);
   InitPdfSettings(env, obj, page_ranges, print_settings);
   AwPrintManager* print_manager = AwPrintManager::CreateForWebContents(
-      web_contents_, print_settings, base::FileDescriptor(fd, false),
+      web_contents_, print_settings, fd,
       base::Bind(&AwPdfExporter::DidExportPdf, base::Unretained(this)));
 
   if (!print_manager->PrintNow())
-    DidExportPdf(fd, 0);
+    DidExportPdf(0);
 }
 
 namespace {
@@ -113,7 +114,7 @@ void AwPdfExporter::InitPdfSettings(JNIEnv* env,
   settings.set_should_print_backgrounds(true);
 }
 
-void AwPdfExporter::DidExportPdf(int fd, int page_count) {
+void AwPdfExporter::DidExportPdf(int page_count) {
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())

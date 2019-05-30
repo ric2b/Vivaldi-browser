@@ -31,14 +31,14 @@
 #include "third_party/blink/renderer/modules/filesystem/local_file_system_client.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/renderer/core/dom/document.h"
-#include "third_party/blink/renderer/core/frame/content_settings_client.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/workers/worker_content_settings_client.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
-#include "third_party/blink/renderer/platform/content_setting_callbacks.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
@@ -54,30 +54,32 @@ LocalFileSystemClient::~LocalFileSystemClient() = default;
 bool LocalFileSystemClient::RequestFileSystemAccessSync(
     ExecutionContext* context) {
   DCHECK(context);
-  if (context->IsDocument()) {
+  if (IsA<Document>(context)) {
+    // TODO(dcheng): Why is this NOTREACHED and handled?
     NOTREACHED();
     return false;
   }
 
-  DCHECK(context->IsWorkerGlobalScope());
-  return WorkerContentSettingsClient::From(*ToWorkerGlobalScope(context))
+  return WorkerContentSettingsClient::From(*To<WorkerGlobalScope>(context))
       ->RequestFileSystemAccessSync();
 }
 
 void LocalFileSystemClient::RequestFileSystemAccessAsync(
     ExecutionContext* context,
-    std::unique_ptr<ContentSettingCallbacks> callbacks) {
+    base::OnceCallback<void(bool)> callback) {
   DCHECK(context);
-  if (!context->IsDocument()) {
+  auto* document = DynamicTo<Document>(context);
+  if (!document) {
+    // TODO(dcheng): Why is this NOTREACHED and handled?
     NOTREACHED();
     return;
   }
 
-  Document* document = ToDocument(context);
-  DCHECK(document->GetFrame());
-  document->GetFrame()
-      ->GetContentSettingsClient()
-      ->RequestFileSystemAccessAsync(std::move(callbacks));
+  if (auto* client = document->GetFrame()->GetContentSettingsClient()) {
+    client->RequestFileSystemAccessAsync(std::move(callback));
+  } else {
+    std::move(callback).Run(true);
+  }
 }
 
 LocalFileSystemClient::LocalFileSystemClient() = default;

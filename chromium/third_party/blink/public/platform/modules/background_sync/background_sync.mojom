@@ -4,17 +4,8 @@
 
 module blink.mojom;
 
-enum BackgroundSyncNetworkState {
-  ANY,
-  AVOID_CELLULAR,
-  ONLINE,
-  MAX=ONLINE
-};
-
-struct SyncRegistration {
-  int64 id = -1;
+struct SyncRegistrationOptions {
   string tag = "";
-  BackgroundSyncNetworkState network_state = ONLINE;
 };
 
 enum BackgroundSyncError {
@@ -39,8 +30,9 @@ enum BackgroundSyncEventLastChance {
 };
 
 interface BackgroundSyncService {
-  Register(SyncRegistration options, int64 service_worker_registration_id)
-      => (BackgroundSyncError err, SyncRegistration options);
+  Register(SyncRegistrationOptions options, int64 service_worker_registration_id)
+      => (BackgroundSyncError err, SyncRegistrationOptions options);
+  DidResolveRegistration(int64 service_worker_registration_id, string tag);
   GetRegistrations(int64 service_worker_registration_id)
-      => (BackgroundSyncError err, array<SyncRegistration> registrations);
+      => (BackgroundSyncError err, array<SyncRegistrationOptions> registrations);
 };

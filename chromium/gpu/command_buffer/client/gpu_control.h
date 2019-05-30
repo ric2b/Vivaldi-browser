@@ -43,12 +43,11 @@ class GPU_EXPORT GpuControl {
 
   virtual const Capabilities& GetCapabilities() const = 0;
 
-  // Create an image for a client buffer with the given dimensions and
-  // format. Returns its ID or -1 on error.
+  // Create an image for a client buffer with the given dimensions. Returns its
+  // ID or -1 on error.
   virtual int32_t CreateImage(ClientBuffer buffer,
                               size_t width,
-                              size_t height,
-                              unsigned internalformat) = 0;
+                              size_t height) = 0;
 
   // Destroy an image. The ID must be positive.
   virtual void DestroyImage(int32_t id) = 0;
@@ -105,11 +104,9 @@ class GPU_EXPORT GpuControl {
                                base::OnceClosure callback) = 0;
 
   // This allows the command buffer proxy to mark the next flush with sync token
-  // dependencies for the gpu scheduler. This is used in addition to the
-  // WaitSyncToken command in the command buffer which is still needed. For
-  // example, the WaitSyncToken command is used to pull texture updates when
-  // used in conjunction with MailboxManagerSync.
-  virtual void WaitSyncTokenHint(const SyncToken& sync_token) = 0;
+  // dependencies for the gpu scheduler, or to block prior to the flush in case
+  // of android webview.
+  virtual void WaitSyncToken(const SyncToken& sync_token) = 0;
 
   // Under some circumstances a sync token may be used which has not been
   // verified to have been flushed. For example, fence syncs queued on the same

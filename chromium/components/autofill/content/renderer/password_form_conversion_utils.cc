@@ -139,57 +139,6 @@ enum class FieldFilteringLevel {
   USER_INPUT = 2
 };
 
-// Layout classification of password forms
-// A layout sequence of a form is the sequence of it's non-password and password
-// input fields, represented by "N" and "P", respectively. A form like this
-// <form>
-//   <input type='text' ...>
-//   <input type='hidden' ...>
-//   <input type='password' ...>
-//   <input type='submit' ...>
-// </form>
-// has the layout sequence "NP" -- "N" for the first field, and "P" for the
-// third. The second and fourth fields are ignored, because they are not text
-// fields.
-//
-// The code below classifies the layout (see PasswordForm::Layout) of a form
-// based on its layout sequence. This is done by assigning layouts regular
-// expressions over the alphabet {N, P}. LAYOUT_OTHER is implicitly the type
-// corresponding to all layout sequences not matching any other layout.
-//
-// LAYOUT_LOGIN_AND_SIGNUP is classified by NPN+P.*. This corresponds to a form
-// which starts with a login section (NP) and continues with a sign-up section
-// (N+P.*). The aim is to distinguish such forms from change password-forms
-// (N*PPP?.*) and forms which use password fields to store private but
-// non-password data (could look like, e.g., PN+P.*).
-const char kLoginAndSignupRegex[] =
-    "NP"   // Login section.
-    "N+P"  // Sign-up section.
-    ".*";  // Anything beyond that.
-
-struct LoginAndSignupLazyInstanceTraits
-    : public base::internal::DestructorAtExitLazyInstanceTraits<re2::RE2> {
-  static re2::RE2* New(void* instance) {
-    return CreateMatcher(instance, kLoginAndSignupRegex);
-  }
-};
-
-base::LazyInstance<re2::RE2, LoginAndSignupLazyInstanceTraits>
-    g_login_and_signup_matcher = LAZY_INSTANCE_INITIALIZER;
-
-// Given the sequence of non-password and password text input fields of a form,
-// represented as a string of Ns (non-password) and Ps (password), computes the
-// layout type of that form.
-PasswordForm::Layout SequenceToLayout(base::StringPiece layout_sequence) {
-  if (re2::RE2::FullMatch(
-          re2::StringPiece(layout_sequence.data(),
-                           base::checked_cast<int>(layout_sequence.size())),
-          g_login_and_signup_matcher.Get())) {
-    return PasswordForm::Layout::LAYOUT_LOGIN_AND_SIGNUP;
-  }
-  return PasswordForm::Layout::LAYOUT_OTHER;
-}
-
 // Helper to determine which password is the main (current) one, and which is
 // the new password (e.g., on a sign-up or change password form), if any. If the
 // new password is found and there is another password field with the same user
@@ -395,11 +344,24 @@ bool StringMatchesCVC(const base::string16& str) {
   return MatchesPattern(str, *kCardCvcReCached);
 }
 
-bool IsEnabledPasswordFieldPresent(const std::vector<FormFieldData>& fields) {
-  return std::find_if(
-             fields.begin(), fields.end(), [](const FormFieldData& field) {
-               return field.is_enabled && field.form_control_type == "password";
-             }) != fields.end();
+// Which types of password fields are present in a form?
+enum class PasswordContents {
+  kEnabled,       // At least one enabled password field.
+  kOnlyDisabled,  // At least one password field, but not enabled.
+  kNone           // No password fields present.
+};
+
+// Returns the PasswordContents reflecting the contents of |fields|.
+PasswordContents GetPasswordContents(const std::vector<FormFieldData>& fields) {
+  PasswordContents result = PasswordContents::kNone;
+  for (const FormFieldData& field : fields) {
+    if (field.form_control_type != "password")
+      continue;
+    result = PasswordContents::kOnlyDisabled;
+    if (field.is_enabled)
+      return PasswordContents::kEnabled;
+  }
+  return result;
 }
 
 // Find the first element in |username_predictions| (i.e. the most reliable
@@ -459,9 +421,21 @@ bool GetPasswordForm(
 
   const FormData& form_data = password_form->form_data;
 
-  // Early exit if no passwords to be typed into.
-  if (!IsEnabledPasswordFieldPresent(form_data.fields))
-    return false;
+  PasswordContents password_contents = GetPasswordContents(form_data.fields);
+  switch (password_contents) {
+    case PasswordContents::kEnabled:
+      // All well, continue parsing.
+      break;
+    case PasswordContents::kOnlyDisabled:
+      // The current parser gives up, but returns a fallback form so that the
+      // newer parser can try parsing as well.
+      password_form->scheme = PasswordForm::SCHEME_HTML;
+      password_form->origin = form_origin;
+      password_form->signon_realm = GetSignOnRealm(password_form->origin);
+      return true;
+    case PasswordContents::kNone:
+      return false;
+  }
 
   // Evaluate the context of the fields.
   if (base::FeatureList::IsEnabled(
@@ -515,7 +489,8 @@ bool GetPasswordForm(
     } else if (flag != AutocompleteFlag::CREDIT_CARD) {
       const bool is_credit_card_verification =
           input->form_control_type == "password" &&
-          (StringMatchesCVC(input->name) || StringMatchesCVC(input->id));
+          (StringMatchesCVC(input->name_attribute) ||
+           StringMatchesCVC(input->id_attribute));
       if (!is_credit_card_verification) {
         // Otherwise ensure that nothing hints that |input| is a credit-card
         // field.
@@ -649,15 +624,6 @@ bool GetPasswordForm(
     }
   }
 
-  // Evaluate the structure of the form for determining the form type (e.g.,
-  // sign-up, sign-in, etc.).
-  std::string layout_sequence;
-  layout_sequence.reserve(plausible_inputs.size());
-  for (const FormFieldData* input : plausible_inputs) {
-    layout_sequence.push_back((input->form_control_type == "password") ? 'P'
-                                                                       : 'N');
-  }
-
   // Populate all_possible_passwords and form_has_autofilled_value in
   // |password_form|.
   // Contains the first password element for each non-empty password value.
@@ -694,8 +660,8 @@ bool GetPasswordForm(
   // attributes) the passwords list is empty, build list based on user input (if
   // there is any non-empty password field) and the type of a field. Also mark
   // that the form should be available only for fallback saving (automatic
-  // bubble will not pop up).
-  password_form->only_for_fallback_saving = plausible_passwords.empty();
+  // bubble will not pop up) and filling.
+  password_form->only_for_fallback = plausible_passwords.empty();
   if (plausible_passwords.empty()) {
     plausible_passwords = std::move(passwords_without_heuristics);
     preceding_text_input_for_plausible_password =
@@ -820,26 +786,12 @@ bool GetPasswordForm(
   }
   password_form->other_possible_usernames = std::move(other_possible_usernames);
 
-  // Report metrics.
-  if (!username_field) {
-    // To get a better idea on how password forms without a username field
-    // look like, report the total number of text and password fields.
-    UMA_HISTOGRAM_COUNTS_100(
-        "PasswordManager.EmptyUsernames.TextAndPasswordFieldCount",
-        layout_sequence.size());
-    // For comparison, also report the number of password fields.
-    UMA_HISTOGRAM_COUNTS_100(
-        "PasswordManager.EmptyUsernames.PasswordFieldCount",
-        std::count(layout_sequence.begin(), layout_sequence.end(), 'P'));
-  }
-
   password_form->origin = std::move(form_origin);
   password_form->signon_realm = GetSignOnRealm(password_form->origin);
   password_form->scheme = PasswordForm::SCHEME_HTML;
   password_form->preferred = false;
   password_form->blacklisted_by_user = false;
   password_form->type = PasswordForm::TYPE_MANUAL;
-  password_form->layout = SequenceToLayout(layout_sequence);
 
   return true;
 }
@@ -883,9 +835,9 @@ bool IsGaiaReauthenticationForm(const blink::WebFormElement& form) {
   for (const blink::WebFormControlElement& element : web_control_elements) {
     // We're only interested in the presence
     // of <input type="hidden" /> elements.
-    CR_DEFINE_STATIC_LOCAL(WebString, kHidden, ("hidden"));
+    static base::NoDestructor<WebString> kHidden("hidden");
     const blink::WebInputElement* input = blink::ToWebInputElement(&element);
-    if (!input || input->FormControlTypeForAutofill() != kHidden)
+    if (!input || input->FormControlTypeForAutofill() != *kHidden)
       continue;
 
     // There must be a hidden input named "rart".

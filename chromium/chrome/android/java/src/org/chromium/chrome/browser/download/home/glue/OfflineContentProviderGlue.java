@@ -4,14 +4,19 @@
 
 package org.chromium.chrome.browser.download.home.glue;
 
+import android.os.Handler;
+import android.os.Looper;
+
 import org.chromium.base.Callback;
 import org.chromium.base.ObserverList;
+import org.chromium.chrome.browser.download.home.DownloadManagerUiConfig;
 import org.chromium.chrome.browser.widget.ThumbnailProvider;
 import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.components.offline_items_collection.LaunchLocation;
 import org.chromium.components.offline_items_collection.LegacyHelpers;
 import org.chromium.components.offline_items_collection.OfflineContentProvider;
 import org.chromium.components.offline_items_collection.OfflineItem;
+import org.chromium.components.offline_items_collection.RenameResult;
 import org.chromium.components.offline_items_collection.ShareCallback;
 import org.chromium.components.offline_items_collection.VisualsCallback;
 
@@ -29,16 +34,19 @@ public class OfflineContentProviderGlue implements OfflineContentProvider.Observ
     private final OfflineContentProvider mProvider;
     private final boolean mIncludeOffTheRecord;
 
+    private final boolean mUseNewDownloadPathThumbnails;
+
     private final DownloadGlue mDownloadProvider;
 
     private Query mOutstandingQuery;
 
     /** Creates an {@link OfflineContentProviderGlue} instance. */
     public OfflineContentProviderGlue(
-            OfflineContentProvider provider, boolean includeOffTheRecord) {
+            OfflineContentProvider provider, DownloadManagerUiConfig config) {
         mProvider = provider;
-        mIncludeOffTheRecord = includeOffTheRecord;
-        mDownloadProvider = new DownloadGlue(this);
+        mIncludeOffTheRecord = config.isOffTheRecord;
+        mDownloadProvider = config.useNewDownloadPath ? null : new DownloadGlue(this);
+        mUseNewDownloadPathThumbnails = config.useNewDownloadPathThumbnails;
 
         mProvider.addObserver(this);
     }
@@ -48,7 +56,7 @@ public class OfflineContentProviderGlue implements OfflineContentProvider.Observ
      * is no longer in use.
      */
     public void destroy() {
-        mDownloadProvider.destroy();
+        if (mDownloadProvider != null) mDownloadProvider.destroy();
         mProvider.removeObserver(this);
     }
 
@@ -57,7 +65,7 @@ public class OfflineContentProviderGlue implements OfflineContentProvider.Observ
     // easy use without this layer (we would only pass ID through).
     /** @see OfflineContentProvider#openItem(ContentId) */
     public void openItem(OfflineItem item) {
-        if (LegacyHelpers.isLegacyDownload(item.id)) {
+        if (mDownloadProvider != null && LegacyHelpers.isLegacyDownload(item.id)) {
             mDownloadProvider.openItem(item);
         } else {
             mProvider.openItem(LaunchLocation.DOWNLOAD_HOME, item.id);
@@ -66,16 +74,23 @@ public class OfflineContentProviderGlue implements OfflineContentProvider.Observ
 
     /** @see OfflineContentProvider#removeItem(ContentId) */
     public void removeItem(OfflineItem item) {
-        if (LegacyHelpers.isLegacyDownload(item.id)) {
+        if (mDownloadProvider != null && LegacyHelpers.isLegacyDownload(item.id)) {
             mDownloadProvider.removeItem(item);
         } else {
             mProvider.removeItem(item.id);
         }
     }
 
+    /** @see OfflineContentProvider#renameItem(ContentId, String, Callback) */
+    public void renameItem(
+            OfflineItem item, String targetName, Callback</*RenameResult*/ Integer> callback) {
+        // TODO(hesen):Implement glue.
+        new Handler(Looper.getMainLooper()).post(() -> callback.onResult(RenameResult.SUCCESS));
+    }
+
     /** @see OfflineContentProvider#cancelDownload(ContentId) */
     public void cancelDownload(OfflineItem item) {
-        if (LegacyHelpers.isLegacyDownload(item.id)) {
+        if (mDownloadProvider != null && LegacyHelpers.isLegacyDownload(item.id)) {
             mDownloadProvider.cancelDownload(item);
         } else {
             mProvider.cancelDownload(item.id);
@@ -84,7 +99,7 @@ public class OfflineContentProviderGlue implements OfflineContentProvider.Observ
 
     /** @see OfflineContentProvider#pauseDownload(ContentId) */
     public void pauseDownload(OfflineItem item) {
-        if (LegacyHelpers.isLegacyDownload(item.id)) {
+        if (mDownloadProvider != null && LegacyHelpers.isLegacyDownload(item.id)) {
             mDownloadProvider.pauseDownload(item);
         } else {
             mProvider.pauseDownload(item.id);
@@ -93,7 +108,7 @@ public class OfflineContentProviderGlue implements OfflineContentProvider.Observ
 
     /** @see OfflineContentProvider#resumeDownload(ContentId) */
     public void resumeDownload(OfflineItem item, boolean hasUserGesture) {
-        if (LegacyHelpers.isLegacyDownload(item.id)) {
+        if (mDownloadProvider != null && LegacyHelpers.isLegacyDownload(item.id)) {
             mDownloadProvider.resumeDownload(item, hasUserGesture);
         } else {
             mProvider.resumeDownload(item.id, hasUserGesture);
@@ -102,7 +117,7 @@ public class OfflineContentProviderGlue implements OfflineContentProvider.Observ
 
     /** @see OfflineContentProvider#getItemById(ContentId, Callback) */
     public void getItemById(ContentId id, Callback<OfflineItem> callback) {
-        if (LegacyHelpers.isLegacyDownload(id)) {
+        if (mDownloadProvider != null && LegacyHelpers.isLegacyDownload(id)) {
             mDownloadProvider.getItemById(id, callback);
         } else {
             mProvider.getItemById(id, callback);
@@ -120,7 +135,7 @@ public class OfflineContentProviderGlue implements OfflineContentProvider.Observ
      * @see OfflineContentProvider#getVisualsForItem(ContentId, VisualsCallback)
      */
     public boolean getVisualsForItem(ContentId id, VisualsCallback callback) {
-        if (LegacyHelpers.isLegacyDownload(id)) return false;
+        if (!mUseNewDownloadPathThumbnails && LegacyHelpers.isLegacyDownload(id)) return false;
         mProvider.getVisualsForItem(id, callback);
         return true;
     }
@@ -131,13 +146,13 @@ public class OfflineContentProviderGlue implements OfflineContentProvider.Observ
      * layer needs to determine what to do with downloads that have externally managed thumbnails.
      */
     public void removeVisualsForItem(ThumbnailProvider provider, ContentId id) {
-        if (!LegacyHelpers.isLegacyDownload(id)) return;
+        if (mUseNewDownloadPathThumbnails || !LegacyHelpers.isLegacyDownload(id)) return;
         provider.removeThumbnailsFromDisk(id.id);
     }
 
     /** @see OfflineContentProvider#getShareInfoForItem(ContentId, ShareCallback) */
     public void getShareInfoForItem(OfflineItem item, ShareCallback callback) {
-        if (LegacyHelpers.isLegacyDownload(item.id)) {
+        if (mDownloadProvider != null && LegacyHelpers.isLegacyDownload(item.id)) {
             mDownloadProvider.getShareInfoForItem(item, callback);
         } else {
             mProvider.getShareInfoForItem(item.id, callback);
@@ -188,11 +203,17 @@ public class OfflineContentProviderGlue implements OfflineContentProvider.Observ
         public Query() {
             mDownloadProviderOffTheRecordResponded = !mIncludeOffTheRecord;
 
-            if (mIncludeOffTheRecord) {
+            if (mDownloadProvider == null) {
+                mDownloadProviderResponded = true;
+                mDownloadProviderOffTheRecordResponded = true;
+            } else {
+                if (mIncludeOffTheRecord) {
+                    mDownloadProvider.getAllItems(
+                            items -> addOffTheRecordDownloads(items), true /* offTheRecord */);
+                }
                 mDownloadProvider.getAllItems(
-                        items -> addOffTheRecordDownloads(items), true /* offTheRecord */);
+                        items -> addDownloads(items), false /* offTheRecord */);
             }
-            mDownloadProvider.getAllItems(items -> addDownloads(items), false /* offTheRecord */);
 
             mProvider.getAllItems(items -> addOfflineItems(items));
         }

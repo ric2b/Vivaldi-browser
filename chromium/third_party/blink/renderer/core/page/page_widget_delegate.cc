@@ -37,8 +37,9 @@
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
+#include "third_party/blink/renderer/core/layout/jank_tracker.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
-#include "third_party/blink/renderer/core/loader/interactive_detector.h"
+#include "third_party/blink/renderer/core/origin_trials/origin_trials.h"
 #include "third_party/blink/renderer/core/page/autoscroll_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
@@ -60,27 +61,30 @@ void PageWidgetDelegate::Animate(Page& page,
 void PageWidgetDelegate::UpdateLifecycle(
     Page& page,
     LocalFrame& root,
-    WebWidget::LifecycleUpdate requested_update) {
+    WebWidget::LifecycleUpdate requested_update,
+    WebWidget::LifecycleUpdateReason reason) {
   if (requested_update == WebWidget::LifecycleUpdate::kLayout) {
     page.Animator().UpdateLifecycleToLayoutClean(root);
   } else if (requested_update == WebWidget::LifecycleUpdate::kPrePaint) {
     page.Animator().UpdateAllLifecyclePhasesExceptPaint(root);
   } else {
-    page.Animator().UpdateAllLifecyclePhases(root);
+    page.Animator().UpdateAllLifecyclePhases(
+        root, static_cast<DocumentLifecycle::LifecycleUpdateReason>(reason));
   }
 }
 
-static void PaintContentInternal(Page& page,
-                                 cc::PaintCanvas* canvas,
-                                 const WebRect& rect,
-                                 LocalFrame& root,
-                                 const GlobalPaintFlags global_paint_flags) {
+void PageWidgetDelegate::DidBeginFrame(LocalFrame& root) {
+  if (LocalFrameView* frame_view = root.View())
+    frame_view->RunPostLifecycleSteps();
+}
+
+void PageWidgetDelegate::PaintContent(cc::PaintCanvas* canvas,
+                                      const WebRect& rect,
+                                      LocalFrame& root) {
   if (rect.IsEmpty())
     return;
 
-  // FIXME: device scale factor settings are layering violations and should
-  // not be used within Blink paint code.
-  float scale_factor = page.DeviceScaleFactorDeprecated();
+  float scale_factor = root.DevicePixelRatio();
   canvas->save();
   canvas->scale(scale_factor, scale_factor);
 
@@ -93,8 +97,8 @@ static void PaintContentInternal(Page& page,
 
     PaintRecordBuilder builder;
     builder.Context().SetDeviceScaleFactor(scale_factor);
-    view->PaintWithLifecycleUpdate(builder.Context(), global_paint_flags,
-                                   CullRect(dirty_rect));
+    view->PaintOutsideOfLifecycle(builder.Context(), kGlobalPaintNormalPhase,
+                                  CullRect(dirty_rect));
     builder.EndRecording(
         *canvas,
         view->GetLayoutView()->FirstFragment().LocalBorderBoxProperties());
@@ -107,22 +111,6 @@ static void PaintContentInternal(Page& page,
   canvas->restore();
 }
 
-void PageWidgetDelegate::PaintContent(Page& page,
-                                      cc::PaintCanvas* canvas,
-                                      const WebRect& rect,
-                                      LocalFrame& root) {
-  PaintContentInternal(page, canvas, rect, root, kGlobalPaintNormalPhase);
-}
-
-void PageWidgetDelegate::PaintContentIgnoringCompositing(
-    Page& page,
-    cc::PaintCanvas* canvas,
-    const WebRect& rect,
-    LocalFrame& root) {
-  PaintContentInternal(page, canvas, rect, root,
-                       kGlobalPaintFlattenCompositingLayers);
-}
-
 WebInputEventResult PageWidgetDelegate::HandleInputEvent(
     PageWidgetEventHandler& handler,
     const WebCoalescedInputEvent& coalesced_event,
@@ -132,16 +120,10 @@ WebInputEventResult PageWidgetDelegate::HandleInputEvent(
     Document* document = root->GetDocument();
     DCHECK(document);
 
-    InteractiveDetector* interactive_detector(
-        InteractiveDetector::From(*document));
-
-    // interactive_detector is null in the OOPIF case.
-    // TODO(crbug.com/808089): report across OOPIFs.
-    if (interactive_detector)
-      interactive_detector->HandleForInputDelay(event);
-
-    if (LocalFrameView* view = document->View())
-      view->GetJankTracker().NotifyInput(event);
+    if (origin_trials::JankTrackingEnabled(document)) {
+      if (LocalFrameView* view = document->View())
+        view->GetJankTracker().NotifyInput(event);
+    }
   }
 
   if (event.GetModifiers() & WebInputEvent::kIsTouchAccessibility &&
@@ -176,7 +158,8 @@ WebInputEventResult PageWidgetDelegate::HandleInputEvent(
       if (!root || !root->View())
         return WebInputEventResult::kHandledSuppressed;
       handler.HandleMouseMove(*root, static_cast<const WebMouseEvent&>(event),
-                              coalesced_event.GetCoalescedEventsPointers());
+                              coalesced_event.GetCoalescedEventsPointers(),
+                              coalesced_event.GetPredictedEventsPointers());
       return WebInputEventResult::kHandledSystem;
     case WebInputEvent::kMouseLeave:
       if (!root || !root->View())
@@ -235,7 +218,8 @@ WebInputEventResult PageWidgetDelegate::HandleInputEvent(
         return WebInputEventResult::kNotHandled;
       return handler.HandlePointerEvent(
           *root, static_cast<const WebPointerEvent&>(event),
-          coalesced_event.GetCoalescedEventsPointers());
+          coalesced_event.GetCoalescedEventsPointers(),
+          coalesced_event.GetPredictedEventsPointers());
 
     case WebInputEvent::kTouchStart:
     case WebInputEvent::kTouchMove:
@@ -263,12 +247,14 @@ WebInputEventResult PageWidgetDelegate::HandleInputEvent(
 void PageWidgetEventHandler::HandleMouseMove(
     LocalFrame& main_frame,
     const WebMouseEvent& event,
-    const std::vector<const WebInputEvent*>& coalesced_events) {
+    const std::vector<const WebInputEvent*>& coalesced_events,
+    const std::vector<const WebInputEvent*>& predicted_events) {
   WebMouseEvent transformed_event =
       TransformWebMouseEvent(main_frame.View(), event);
   main_frame.GetEventHandler().HandleMouseMoveEvent(
       transformed_event,
-      TransformWebMouseEventVector(main_frame.View(), coalesced_events));
+      TransformWebMouseEventVector(main_frame.View(), coalesced_events),
+      TransformWebMouseEventVector(main_frame.View(), predicted_events));
 }
 
 void PageWidgetEventHandler::HandleMouseLeave(LocalFrame& main_frame,
@@ -303,12 +289,14 @@ WebInputEventResult PageWidgetEventHandler::HandleMouseWheel(
 WebInputEventResult PageWidgetEventHandler::HandlePointerEvent(
     LocalFrame& main_frame,
     const WebPointerEvent& event,
-    const std::vector<const WebInputEvent*>& coalesced_events) {
+    const std::vector<const WebInputEvent*>& coalesced_events,
+    const std::vector<const WebInputEvent*>& predicted_events) {
   WebPointerEvent transformed_event =
       TransformWebPointerEvent(main_frame.View(), event);
   return main_frame.GetEventHandler().HandlePointerEvent(
       transformed_event,
-      TransformWebPointerEventVector(main_frame.View(), coalesced_events));
+      TransformWebPointerEventVector(main_frame.View(), coalesced_events),
+      TransformWebPointerEventVector(main_frame.View(), predicted_events));
 }
 
 }  // namespace blink

@@ -27,7 +27,7 @@ namespace policy {
 class PolicyOAuth2TokenFetcher {
  public:
   // Allocates a PolicyOAuth2TokenFetcher instance.
-  static PolicyOAuth2TokenFetcher* CreateInstance();
+  static std::unique_ptr<PolicyOAuth2TokenFetcher> CreateInstance();
 
   // Makes CreateInstance() return a fake token fetcher that does not make
   // network calls so tests can avoid a dependency on GAIA.
@@ -41,10 +41,6 @@ class PolicyOAuth2TokenFetcher {
 
   // Fetches the device management service's oauth2 token. This may be fetched
   // via signin context, auth code, or oauth2 refresh token.
-  virtual void StartWithSigninURLLoaderFactory(
-      scoped_refptr<network::SharedURLLoaderFactory> auth_url_loader_factory,
-      scoped_refptr<network::SharedURLLoaderFactory> system_url_loader_factory,
-      const TokenCallback& callback) = 0;
   virtual void StartWithAuthCode(
       const std::string& auth_code,
       scoped_refptr<network::SharedURLLoaderFactory> system_url_loader_factory,

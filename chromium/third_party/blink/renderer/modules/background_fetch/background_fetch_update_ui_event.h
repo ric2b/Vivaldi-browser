@@ -5,7 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_BACKGROUND_FETCH_BACKGROUND_FETCH_UPDATE_UI_EVENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_BACKGROUND_FETCH_BACKGROUND_FETCH_UPDATE_UI_EVENT_H_
 
-#include "third_party/blink/public/platform/modules/background_fetch/background_fetch.mojom-blink.h"
+#include "third_party/blink/public/mojom/background_fetch/background_fetch.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/modules/background_fetch/background_fetch_event.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_registration.h"
@@ -29,39 +29,39 @@ class MODULES_EXPORT BackgroundFetchUpdateUIEvent final
  public:
   static BackgroundFetchUpdateUIEvent* Create(
       const AtomicString& type,
-      const BackgroundFetchEventInit& initializer) {
-    return new BackgroundFetchUpdateUIEvent(type, initializer);
+      const BackgroundFetchEventInit* initializer) {
+    return MakeGarbageCollected<BackgroundFetchUpdateUIEvent>(type,
+                                                              initializer);
   }
 
   static BackgroundFetchUpdateUIEvent* Create(
       const AtomicString& type,
-      const BackgroundFetchEventInit& initializer,
+      const BackgroundFetchEventInit* initializer,
       WaitUntilObserver* observer,
       ServiceWorkerRegistration* registration) {
-    return new BackgroundFetchUpdateUIEvent(type, initializer, observer,
-                                            registration);
+    return MakeGarbageCollected<BackgroundFetchUpdateUIEvent>(
+        type, initializer, observer, registration);
   }
 
+  BackgroundFetchUpdateUIEvent(const AtomicString& type,
+                               const BackgroundFetchEventInit* initializer);
+  BackgroundFetchUpdateUIEvent(const AtomicString& type,
+                               const BackgroundFetchEventInit* init,
+                               WaitUntilObserver* observer,
+                               ServiceWorkerRegistration* registration);
   ~BackgroundFetchUpdateUIEvent() override;
 
   // Web Exposed method defined in the IDL file.
   ScriptPromise updateUI(ScriptState* script_state,
-                         const BackgroundFetchUIOptions& ui_options);
+                         const BackgroundFetchUIOptions* ui_options);
 
   void Trace(blink::Visitor* visitor) override;
 
  private:
-  BackgroundFetchUpdateUIEvent(const AtomicString& type,
-                               const BackgroundFetchEventInit& initializer);
-
-  BackgroundFetchUpdateUIEvent(const AtomicString& type,
-                               const BackgroundFetchEventInit& init,
-                               WaitUntilObserver* observer,
-                               ServiceWorkerRegistration* registration);
-
   void DidGetIcon(ScriptPromiseResolver* resolver,
                   const String& title,
-                  const SkBitmap& icon);
+                  const SkBitmap& icon,
+                  int64_t ideal_to_chosen_icon_size);
 
   void DidUpdateUI(ScriptPromiseResolver* resolver,
                    mojom::blink::BackgroundFetchError error);

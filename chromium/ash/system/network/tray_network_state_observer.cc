@@ -7,8 +7,7 @@
 #include <set>
 #include <string>
 
-#include "ash/system/network/network_icon.h"
-#include "ash/system/tray/system_tray.h"
+#include "base/bind.h"
 #include "base/location.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
@@ -31,27 +30,20 @@ bool IsWifiEnabled() {
 namespace ash {
 
 TrayNetworkStateObserver::TrayNetworkStateObserver(Delegate* delegate)
-    : delegate_(delegate),
-      purge_icons_(false),
-      update_frequency_(kUpdateFrequencyMs) {
+    : delegate_(delegate), update_frequency_(kUpdateFrequencyMs) {
   if (ui::ScopedAnimationDurationScaleMode::duration_scale_mode() !=
       ui::ScopedAnimationDurationScaleMode::NORMAL_DURATION) {
     update_frequency_ = 0;  // Send updates immediately for tests.
   }
-  // TODO(mash): Figure out what to do about NetworkHandler and
-  // NetworkPortalDetector.
+  // TODO(mash): Figure out what to do about NetworkHandler.
   if (NetworkHandler::IsInitialized()) {
     NetworkHandler::Get()->network_state_handler()->AddObserver(this,
                                                                 FROM_HERE);
     wifi_enabled_ = IsWifiEnabled();
   }
-  if (chromeos::network_portal_detector::IsInitialized())
-    chromeos::network_portal_detector::GetInstance()->AddObserver(this);
 }
 
 TrayNetworkStateObserver::~TrayNetworkStateObserver() {
-  if (chromeos::network_portal_detector::IsInitialized())
-    chromeos::network_portal_detector::GetInstance()->RemoveObserver(this);
   if (NetworkHandler::IsInitialized()) {
     NetworkHandler::Get()->network_state_handler()->RemoveObserver(this,
                                                                    FROM_HERE);
@@ -59,7 +51,6 @@ TrayNetworkStateObserver::~TrayNetworkStateObserver() {
 }
 
 void TrayNetworkStateObserver::NetworkListChanged() {
-  purge_icons_ = true;
   SignalUpdate(false /* notify_a11y */);
 }
 
@@ -67,18 +58,8 @@ void TrayNetworkStateObserver::DeviceListChanged() {
   SignalUpdate(false /* notify_a11y */);
 }
 
-// Any change to the Default (primary connected) network, including Strength
-// changes, should trigger a NetworkStateChanged update.
-void TrayNetworkStateObserver::DefaultNetworkChanged(
-    const chromeos::NetworkState* network) {
-  SignalUpdate(true /* notify_a11y */);
-}
-
-// Any change to the Connection State should trigger a NetworkStateChanged
-// update. This is important when both a VPN and a physical network are
-// connected.
-void TrayNetworkStateObserver::NetworkConnectionStateChanged(
-    const chromeos::NetworkState* network) {
+void TrayNetworkStateObserver::ActiveNetworksChanged(
+    const std::vector<const chromeos::NetworkState*>& active_networks) {
   SignalUpdate(true /* notify_a11y */);
 }
 
@@ -90,15 +71,10 @@ void TrayNetworkStateObserver::NetworkPropertiesUpdated(
   SignalUpdate(false /* notify_a11y */);
 }
 
+// Required to propagate changes to the "scanning" property of DeviceStates.
 void TrayNetworkStateObserver::DevicePropertiesUpdated(
     const chromeos::DeviceState* device) {
   SignalUpdate(false /* notify_a11y */);
-}
-
-void TrayNetworkStateObserver::OnPortalDetectionCompleted(
-    const chromeos::NetworkState* network,
-    const chromeos::NetworkPortalDetector::CaptivePortalState& state) {
-  SignalUpdate(true /* notify_a11y */);
 }
 
 void TrayNetworkStateObserver::SignalUpdate(bool notify_a11y) {
@@ -120,10 +96,6 @@ void TrayNetworkStateObserver::SignalUpdate(bool notify_a11y) {
 
 void TrayNetworkStateObserver::SendNetworkStateChanged(bool notify_a11y) {
   delegate_->NetworkStateChanged(notify_a11y);
-  if (purge_icons_) {
-    network_icon::PurgeNetworkIconCache();
-    purge_icons_ = false;
-  }
 }
 
 }  // namespace ash

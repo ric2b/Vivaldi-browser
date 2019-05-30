@@ -13,6 +13,7 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/sha1.h"
+#include "base/strings/string_util.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/metrics/log_store.h"
@@ -41,6 +42,9 @@ class TestLogStore : public LogStore {
   const std::string& staged_log() const override { return logs_.front(); }
   const std::string& staged_log_hash() const override {
     return staged_log_hash_;
+  }
+  const std::string& staged_log_signature() const override {
+    return base::EmptyString();
   }
   void StageNextLog() override {
     if (has_unsent_logs())
@@ -73,8 +77,8 @@ class TestReportingService : public ReportingService {
  private:
   // ReportingService:
   LogStore* log_store() override { return &log_store_; }
-  std::string GetUploadUrl() const override { return kTestUploadUrl; }
-  std::string GetInsecureUploadUrl() const override { return kTestUploadUrl; }
+  GURL GetUploadUrl() const override { return GURL(kTestUploadUrl); }
+  GURL GetInsecureUploadUrl() const override { return GURL(kTestUploadUrl); }
   base::StringPiece upload_mime_type() const override { return kTestMimeType; }
   MetricsLogUploader::MetricServiceType service_type() const override {
     return MetricsLogUploader::MetricServiceType::UMA;

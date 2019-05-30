@@ -2,52 +2,40 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/** @type {!importer.DuplicateFinder} */
-var duplicateFinder;
+/** @type {!importer.DriveDuplicateFinder} */
+let duplicateFinder;
 
-/** @type {!VolumeInfo} */
-var drive;
+/** @type {VolumeInfo} */
+let drive;
 
 /**
  * Map of file URL to hash code.
  * @type {!Object<string>}
  */
-var hashes = {};
+const hashes = {};
 
 /**
  * Map of hash code to file URL.
  * @type {!Object<string>}
  */
-var fileUrls = {};
+const fileUrls = {};
 
 /** @type {!MockFileSystem} */
-var fileSystem;
+let fileSystem;
 
 /** @type {!importer.TestImportHistory} */
-var testHistory;
+let testHistory;
 
-/** @type {function(!FileEntry, !importer.Destination):
-    !importer.Disposition} */
-var getDisposition;
+/** @type {importer.DispositionChecker.CheckerFunction} */
+let getDisposition;
 
-// Set up string assets.
-loadTimeData.data = {
-  CLOUD_IMPORT_ITEMS_REMAINING: '',
-  DRIVE_DIRECTORY_LABEL: 'My Drive',
-  DOWNLOADS_DIRECTORY_LABEL: 'Downloads'
+window.metrics = {
+  recordTime: function() {},
 };
 
 function setUp() {
-  new MockCommandLinePrivate();
-  // importer.setupTestLogger();
-  fileSystem = new MockFileSystem('fake-filesystem');
-
-  var volumeManager = new MockVolumeManager();
-  drive = volumeManager.getCurrentProfileVolumeInfo(
-      VolumeManagerCommon.VolumeType.DRIVE);
-  MockVolumeManager.installMockSingleton(volumeManager);
-
-  chrome = {
+  window.loadTimeData.getString = id => id;
+  let mockChrome = {
     fileManagerPrivate: {
       /**
        * @param {!Entry} entry
@@ -62,115 +50,120 @@ function setUp() {
        * @param {function(!Object<Array<string>>)} callback
        */
       searchFilesByHashes: function(volumeId, hashes, callback) {
-        var result = {};
+        const result = {};
         hashes.forEach(
             /** @param {string} hash */
-            function(hash) {
+            hash => {
               result[hash] = fileUrls[hash] || [];
             });
         callback(result);
-      }
+      },
     },
-    runtime: {
-      lastError: null
-    }
+    runtime: {lastError: null},
   };
 
-  testHistory = new importer.TestImportHistory();
-  var tracker = new TestTracker();
-  duplicateFinder = new importer.DriveDuplicateFinder(tracker);
+  installMockChrome(mockChrome);
+  new MockCommandLinePrivate();
+  // importer.setupTestLogger();
+  fileSystem = new MockFileSystem('fake-filesystem');
 
-  getDisposition = importer.DispositionChecker.createChecker(
-      testHistory, tracker);
+  const volumeManager = new MockVolumeManager();
+  drive = volumeManager.getCurrentProfileVolumeInfo(
+      VolumeManagerCommon.VolumeType.DRIVE);
+  assertTrue(drive != null);
+
+  MockVolumeManager.installMockSingleton(volumeManager);
+
+  testHistory = new importer.TestImportHistory();
+  duplicateFinder = new importer.DriveDuplicateFinder();
+  getDisposition = importer.DispositionChecker.createChecker(testHistory);
 }
 
 // Verifies the correct result when a duplicate exists.
 function testCheckDuplicateTrue(callback) {
-  var filePaths = ['/foo.txt'];
-  var fileHashes = ['abc123'];
-  var files = setupHashes(filePaths, fileHashes);
+  const filePaths = ['/foo.txt'];
+  const fileHashes = ['abc123'];
+  const files = setupHashes(filePaths, fileHashes);
 
   reportPromise(
       duplicateFinder.isDuplicate(files[0])
           .then(
-              function(isDuplicate) {
+              isDuplicate => {
                 assertTrue(isDuplicate);
               }),
       callback);
-};
+}
 
 // Verifies the correct result when a duplicate doesn't exist.
 function testCheckDuplicateFalse(callback) {
-  var filePaths = ['/foo.txt'];
-  var fileHashes = ['abc123'];
-  var files = setupHashes(filePaths, fileHashes);
+  const filePaths = ['/foo.txt'];
+  const fileHashes = ['abc123'];
+  const files = setupHashes(filePaths, fileHashes);
 
   // Make another file.
-  var newFilePath = '/bar.txt';
+  const newFilePath = '/bar.txt';
   fileSystem.populate([newFilePath]);
-  var newFile = fileSystem.entries[newFilePath];
+  const newFile = /** @type {!FileEntry} */ (fileSystem.entries[newFilePath]);
 
   reportPromise(
       duplicateFinder.isDuplicate(newFile)
           .then(
-              function(isDuplicate) {
+              isDuplicate => {
                 assertFalse(isDuplicate);
               }),
       callback);
-};
+}
 
 function testDispositionChecker_ContentDupe(callback) {
-  var filePaths = ['/foo.txt'];
-  var fileHashes = ['abc123'];
-  var files = setupHashes(filePaths, fileHashes);
+  const filePaths = ['/foo.txt'];
+  const fileHashes = ['abc123'];
+  const files = setupHashes(filePaths, fileHashes);
 
   reportPromise(
-      getDisposition(files[0], importer.Destination.GOOGLE_DRIVE)
-          .then(
-              function(disposition) {
-                assertEquals(
-                    importer.Disposition.CONTENT_DUPLICATE,
-                    disposition);
-              }),
+      getDisposition(
+          files[0], importer.Destination.GOOGLE_DRIVE,
+          importer.ScanMode.CONTENT)
+          .then(disposition => {
+            assertEquals(importer.Disposition.CONTENT_DUPLICATE, disposition);
+          }),
       callback);
-};
+}
 
 function testDispositionChecker_HistoryDupe(callback) {
-  var filePaths = ['/foo.txt'];
-  var fileHashes = ['abc123'];
-  var files = setupHashes(filePaths, fileHashes);
+  const filePaths = ['/foo.txt'];
+  const fileHashes = ['abc123'];
+  const files = setupHashes(filePaths, fileHashes);
 
   testHistory.importedPaths['/foo.txt'] =
       [importer.Destination.GOOGLE_DRIVE];
 
   reportPromise(
-      getDisposition(files[0], importer.Destination.GOOGLE_DRIVE)
-          .then(
-              function(disposition) {
-                assertEquals(
-                    importer.Disposition.HISTORY_DUPLICATE,
-                    disposition);
-              }),
+      getDisposition(
+          files[0], importer.Destination.GOOGLE_DRIVE,
+          importer.ScanMode.CONTENT)
+          .then(disposition => {
+            assertEquals(importer.Disposition.HISTORY_DUPLICATE, disposition);
+          }),
       callback);
-};
+}
 
 function testDispositionChecker_Original(callback) {
-  var filePaths = ['/foo.txt'];
-  var fileHashes = ['abc123'];
-  var files = setupHashes(filePaths, fileHashes);
+  const filePaths = ['/foo.txt'];
+  const fileHashes = ['abc123'];
+  const files = setupHashes(filePaths, fileHashes);
 
-  var newFilePath = '/bar.txt';
+  const newFilePath = '/bar.txt';
   fileSystem.populate([newFilePath]);
-  var newFile = fileSystem.entries[newFilePath];
+  const newFile = /** @type {!FileEntry} */ (fileSystem.entries[newFilePath]);
 
   reportPromise(
-      getDisposition(newFile, importer.Destination.GOOGLE_DRIVE)
-          .then(
-              function(disposition) {
-                assertEquals(importer.Disposition.ORIGINAL, disposition);
-              }),
+      getDisposition(
+          newFile, importer.Destination.GOOGLE_DRIVE, importer.ScanMode.CONTENT)
+          .then(disposition => {
+            assertEquals(importer.Disposition.ORIGINAL, disposition);
+          }),
       callback);
-};
+}
 
 /**
  * @param {!Array<string>} filePaths
@@ -181,12 +174,12 @@ function setupHashes(filePaths, fileHashes) {
   // Set up a filesystem with some files.
   fileSystem.populate(filePaths);
 
-  var files = filePaths.map(
-      function(filename) {
+  const files = filePaths.map(
+      filename => {
         return fileSystem.entries[filename];
       });
 
-  files.forEach(function(file, index) {
+  files.forEach((file, index) => {
     hashes[file.toURL()] = fileHashes[index];
     fileUrls[fileHashes[index]] = file.toURL();
   });

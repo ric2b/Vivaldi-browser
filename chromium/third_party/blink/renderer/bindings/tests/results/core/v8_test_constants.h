@@ -8,8 +8,8 @@
 // DO NOT MODIFY!
 
 // clang-format off
-#ifndef V8TestConstants_h
-#define V8TestConstants_h
+#ifndef THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_CORE_V8_TEST_CONSTANTS_H_
+#define THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_CORE_V8_TEST_CONSTANTS_H_
 
 #include "third_party/blink/renderer/bindings/core/v8/generated_code_helper.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits.h"
@@ -25,30 +25,37 @@
 namespace blink {
 
 class ScriptState;
+
+CORE_EXPORT extern const WrapperTypeInfo v8_test_constants_wrapper_type_info;
+
 class V8TestConstants {
   STATIC_ONLY(V8TestConstants);
  public:
-  CORE_EXPORT static bool hasInstance(v8::Local<v8::Value>, v8::Isolate*);
-  static v8::Local<v8::Object> findInstanceInPrototypeChain(v8::Local<v8::Value>, v8::Isolate*);
-  CORE_EXPORT static v8::Local<v8::FunctionTemplate> domTemplate(v8::Isolate*, const DOMWrapperWorld&);
+  CORE_EXPORT static bool HasInstance(v8::Local<v8::Value>, v8::Isolate*);
+  static v8::Local<v8::Object> FindInstanceInPrototypeChain(v8::Local<v8::Value>, v8::Isolate*);
+  CORE_EXPORT static v8::Local<v8::FunctionTemplate> DomTemplate(v8::Isolate*, const DOMWrapperWorld&);
   static TestConstants* ToImpl(v8::Local<v8::Object> object) {
     return ToScriptWrappable(object)->ToImpl<TestConstants>();
   }
   CORE_EXPORT static TestConstants* ToImplWithTypeCheck(v8::Isolate*, v8::Local<v8::Value>);
-  CORE_EXPORT static const WrapperTypeInfo wrapperTypeInfo;
-  static const int internalFieldCount = kV8DefaultWrapperInternalFieldCount;
 
-  static void installFeatureName1(v8::Isolate*, const DOMWrapperWorld&, v8::Local<v8::Object> instance, v8::Local<v8::Object> prototype, v8::Local<v8::Function> interface);
-  static void installFeatureName1(ScriptState*, v8::Local<v8::Object> instance);
-  static void installFeatureName1(ScriptState*);
+  CORE_EXPORT static constexpr const WrapperTypeInfo* GetWrapperTypeInfo() {
+    return &v8_test_constants_wrapper_type_info;
+  }
 
-  static void installFeatureName2(v8::Isolate*, const DOMWrapperWorld&, v8::Local<v8::Object> instance, v8::Local<v8::Object> prototype, v8::Local<v8::Function> interface);
-  static void installFeatureName2(ScriptState*, v8::Local<v8::Object> instance);
-  static void installFeatureName2(ScriptState*);
+  static constexpr int kInternalFieldCount = kV8DefaultWrapperInternalFieldCount;
+
+  static void InstallFeatureName1(v8::Isolate*, const DOMWrapperWorld&, v8::Local<v8::Object> instance, v8::Local<v8::Object> prototype, v8::Local<v8::Function> interface);
+  static void InstallFeatureName1(ScriptState*, v8::Local<v8::Object> instance);
+  static void InstallFeatureName1(ScriptState*);
+
+  static void InstallFeatureName2(v8::Isolate*, const DOMWrapperWorld&, v8::Local<v8::Object> instance, v8::Local<v8::Object> prototype, v8::Local<v8::Function> interface);
+  static void InstallFeatureName2(ScriptState*, v8::Local<v8::Object> instance);
+  static void InstallFeatureName2(ScriptState*);
 
   // Callback functions
-  CORE_EXPORT static void DEPRECATED_CONSTANTConstantGetterCallback(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>&);
-  CORE_EXPORT static void MEASURED_CONSTANTConstantGetterCallback(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void DEPRECATEDCONSTANTConstantGetterCallback(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void MEASUREDCONSTANTConstantGetterCallback(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>&);
 
   static void InstallRuntimeEnabledFeaturesOnTemplate(
       v8::Isolate*,
@@ -69,4 +76,4 @@ struct V8TypeOf<TestConstants> {
 
 }  // namespace blink
 
-#endif  // V8TestConstants_h
+#endif  // THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_CORE_V8_TEST_CONSTANTS_H_

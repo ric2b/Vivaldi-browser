@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/base64url.h"
+#include "base/bind.h"
 #include "base/i18n/time_formatting.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
@@ -117,15 +118,17 @@ void RecordOutgoingMessageStatus(OutgoingMessageStatus status) {
 
 GCMNetworkChannel::GCMNetworkChannel(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    network::NetworkConnectionTracker* network_connection_tracker,
     std::unique_ptr<GCMNetworkChannelDelegate> delegate)
     : url_loader_factory_(std::move(url_loader_factory)),
+      network_connection_tracker_(network_connection_tracker),
       delegate_(std::move(delegate)),
       register_backoff_entry_(new net::BackoffEntry(&kRegisterBackoffPolicy)),
       gcm_channel_online_(false),
       http_channel_online_(false),
       diagnostic_info_(this),
       weak_factory_(this) {
-  net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
+  network_connection_tracker_->AddNetworkConnectionObserver(this);
   delegate_->Initialize(
       base::Bind(&GCMNetworkChannel::OnConnectionStateChanged,
                  weak_factory_.GetWeakPtr()),
@@ -135,7 +138,7 @@ GCMNetworkChannel::GCMNetworkChannel(
 
 GCMNetworkChannel::~GCMNetworkChannel() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
+  network_connection_tracker_->RemoveNetworkConnectionObserver(this);
 }
 
 void GCMNetworkChannel::Register() {
@@ -364,12 +367,12 @@ void GCMNetworkChannel::OnStoreReset() {
   registration_id_.clear();
 }
 
-void GCMNetworkChannel::OnNetworkChanged(
-    net::NetworkChangeNotifier::ConnectionType connection_type) {
+void GCMNetworkChannel::OnConnectionChanged(
+    network::mojom::ConnectionType connection_type) {
   // Network connection is restored. Let's notify cacheinvalidations so it has
   // chance to retry.
-  NotifyNetworkStatusChange(
-      connection_type != net::NetworkChangeNotifier::CONNECTION_NONE);
+  NotifyNetworkStatusChange(connection_type !=
+                            network::mojom::ConnectionType::CONNECTION_NONE);
 }
 
 void GCMNetworkChannel::UpdateGcmChannelState(bool online) {

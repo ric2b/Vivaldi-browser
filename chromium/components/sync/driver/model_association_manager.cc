@@ -12,10 +12,14 @@
 #include <utility>
 
 #include "base/barrier_closure.h"
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
 #include "components/sync/base/model_type.h"
+#include "components/sync/base/sync_stop_metadata_fate.h"
 #include "components/sync/model/sync_merge_result.h"
 
 namespace syncer {
@@ -32,21 +36,21 @@ static const ModelType kStartOrder[] = {
     // in parallel with the UI types.
     PASSWORDS, AUTOFILL, AUTOFILL_PROFILE, AUTOFILL_WALLET_DATA,
     AUTOFILL_WALLET_METADATA, EXTENSION_SETTINGS, APP_SETTINGS, TYPED_URLS,
-    HISTORY_DELETE_DIRECTIVES, SYNCED_NOTIFICATIONS,
-    SYNCED_NOTIFICATION_APP_INFO,
+    HISTORY_DELETE_DIRECTIVES, DEPRECATED_SYNCED_NOTIFICATIONS,
+    DEPRECATED_SYNCED_NOTIFICATION_APP_INFO,
 
     // UI thread data types.
     BOOKMARKS, PREFERENCES, PRIORITY_PREFERENCES, EXTENSIONS, APPS, APP_LIST,
     ARC_PACKAGE, READING_LIST, THEMES, SEARCH_ENGINES, SESSIONS,
-    APP_NOTIFICATIONS, DICTIONARY, FAVICON_IMAGES, FAVICON_TRACKING, PRINTERS,
-    USER_CONSENTS, USER_EVENTS, SUPERVISED_USER_SETTINGS,
-    SUPERVISED_USER_WHITELISTS, WIFI_CREDENTIALS,
+    DEPRECATED_APP_NOTIFICATIONS, DICTIONARY, FAVICON_IMAGES, FAVICON_TRACKING,
+    PRINTERS, USER_CONSENTS, USER_EVENTS, SUPERVISED_USER_SETTINGS,
+    SUPERVISED_USER_WHITELISTS, DEPRECATED_WIFI_CREDENTIALS,
     NOTES,
-    DEPRECATED_SUPERVISED_USERS,
-    MOUNTAIN_SHARES, DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS,
-    DEPRECATED_ARTICLES};
+    DEPRECATED_SUPERVISED_USERS, MOUNTAIN_SHARES,
+    DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS, DEPRECATED_ARTICLES,
+    SEND_TAB_TO_SELF, SECURITY_EVENTS};
 
-static_assert(arraysize(kStartOrder) ==
+static_assert(base::size(kStartOrder) ==
                   MODEL_TYPE_COUNT - FIRST_REAL_MODEL_TYPE,
               "When adding a new type, update kStartOrder.");
 
@@ -112,6 +116,9 @@ void ModelAssociationManager::Initialize(ModelTypeSet desired_types,
   // |desired_types| must be a subset of |preferred_types|.
   DCHECK(preferred_types.HasAll(desired_types));
 
+  bool storage_option_changed =
+      configure_context_.storage_option != context.storage_option;
+
   configure_context_ = context;
 
   // Only keep types that have controllers.
@@ -128,18 +135,31 @@ void ModelAssociationManager::Initialize(ModelTypeSet desired_types,
   notified_about_ready_for_configure_ = false;
 
   DVLOG(1) << "ModelAssociationManager: Stopping disabled types.";
-  std::map<DataTypeController*, SyncStopMetadataFate> types_to_stop;
+  std::map<DataTypeController*, ShutdownReason> types_to_stop;
   for (const auto& type_and_dtc : *controllers_) {
     DataTypeController* dtc = type_and_dtc.second.get();
-    // We stop a datatype if it's not desired. Independently of being desired,
-    // if the datatype is already STOPPING, we also wait for it to stop, to make
+    // We generally stop all data types which are not desired. When the storage
+    // option changes, we need to restart all data types so that they can
+    // re-wire to the correct storage.
+    bool should_stop =
+        !desired_types_.Has(dtc->type()) || storage_option_changed;
+    // If the datatype is already STOPPING, we also wait for it to stop, to make
     // sure it's ready to start again (if appropriate).
-    if ((dtc->state() != DataTypeController::NOT_RUNNING &&
-         !desired_types_.Has(dtc->type())) ||
+    if ((should_stop && dtc->state() != DataTypeController::NOT_RUNNING) ||
         dtc->state() == DataTypeController::STOPPING) {
-      const SyncStopMetadataFate metadata_fate =
-          preferred_types.Has(dtc->type()) ? KEEP_METADATA : CLEAR_METADATA;
-      types_to_stop[dtc] = metadata_fate;
+      // Note: STOP_SYNC means we'll keep the Sync data around; DISABLE_SYNC
+      // means we'll clear it.
+      ShutdownReason reason =
+          preferred_types.Has(dtc->type()) ? STOP_SYNC : DISABLE_SYNC;
+      // If we're switchingt o in-memory storage, don't clear any old data. The
+      // reason is that if a user temporarily disables Sync, we don't want to
+      // wipe (and later redownload) all their data, just because Sync restarted
+      // in transport-only mode.
+      if (storage_option_changed &&
+          configure_context_.storage_option == STORAGE_IN_MEMORY) {
+        reason = STOP_SYNC;
+      }
+      types_to_stop[dtc] = reason;
     }
   }
 
@@ -151,18 +171,34 @@ void ModelAssociationManager::Initialize(ModelTypeSet desired_types,
       base::BindOnce(&ModelAssociationManager::LoadEnabledTypes,
                      weak_ptr_factory_.GetWeakPtr()));
 
-  for (const auto& dtc_and_metadata_fate : types_to_stop) {
-    DataTypeController* dtc = dtc_and_metadata_fate.first;
-    const SyncStopMetadataFate metadata_fate = dtc_and_metadata_fate.second;
-    DVLOG(1) << "ModelAssociationManager: stop " << dtc->name() << " with "
-             << SyncStopMetadataFateToString(metadata_fate);
-    StopDatatype(SyncError(), metadata_fate, dtc, barrier_closure);
+  for (const auto& dtc_and_reason : types_to_stop) {
+    DataTypeController* dtc = dtc_and_reason.first;
+    const ShutdownReason reason = dtc_and_reason.second;
+    DVLOG(1) << "ModelAssociationManager: stop " << dtc->name() << " due to "
+             << ShutdownReasonToString(reason);
+    StopDatatypeImpl(SyncError(), reason, dtc, barrier_closure);
   }
 }
 
-void ModelAssociationManager::StopDatatype(
+void ModelAssociationManager::StopDatatype(ModelType type,
+                                           ShutdownReason shutdown_reason,
+                                           SyncError error) {
+  DCHECK(error.IsSet());
+  desired_types_.Remove(type);
+
+  DataTypeController* dtc = controllers_->find(type)->second.get();
+  if (dtc->state() != DataTypeController::NOT_RUNNING &&
+      dtc->state() != DataTypeController::STOPPING) {
+    StopDatatypeImpl(error, shutdown_reason, dtc, base::DoNothing());
+  }
+
+  // Removing a desired type may mean all models are now loaded.
+  NotifyDelegateIfReadyForConfigure();
+}
+
+void ModelAssociationManager::StopDatatypeImpl(
     const SyncError& error,
-    SyncStopMetadataFate metadata_fate,
+    ShutdownReason shutdown_reason,
     DataTypeController* dtc,
     DataTypeController::StopCallback callback) {
   loaded_types_.Remove(dtc->type());
@@ -172,7 +208,11 @@ void ModelAssociationManager::StopDatatype(
   DCHECK(error.IsSet() || (dtc->state() != DataTypeController::NOT_RUNNING));
 
   delegate_->OnSingleDataTypeWillStop(dtc->type(), error);
-  dtc->Stop(metadata_fate, std::move(callback));
+
+  // Note: Depending on |shutdown_reason|, USS types might clear their metadata
+  // in response to Stop(). For directory types, the clearing happens in
+  // SyncManager::PurgeDisabledTypes() instead.
+  dtc->Stop(shutdown_reason, std::move(callback));
 }
 
 void ModelAssociationManager::LoadEnabledTypes() {
@@ -187,7 +227,7 @@ void ModelAssociationManager::LoadEnabledTypes() {
     }
   }
   // Load in kStartOrder.
-  for (size_t i = 0; i < arraysize(kStartOrder); i++) {
+  for (size_t i = 0; i < base::size(kStartOrder); i++) {
     ModelType type = kStartOrder[i];
     if (!desired_types_.Has(type))
       continue;
@@ -237,7 +277,7 @@ void ModelAssociationManager::StartAssociationAsync(
                               weak_ptr_factory_.GetWeakPtr(), INITIALIZED));
 
   // Start association of types that are loaded in specified order.
-  for (size_t i = 0; i < arraysize(kStartOrder); i++) {
+  for (size_t i = 0; i < base::size(kStartOrder); i++) {
     ModelType type = kStartOrder[i];
     if (!associating_types_.Has(type) || !loaded_types_.Has(type))
       continue;
@@ -256,7 +296,7 @@ void ModelAssociationManager::StartAssociationAsync(
   }
 }
 
-void ModelAssociationManager::Stop(SyncStopMetadataFate metadata_fate) {
+void ModelAssociationManager::Stop(ShutdownReason shutdown_reason) {
   // Ignore callbacks from controllers.
   weak_ptr_factory_.InvalidateWeakPtrs();
 
@@ -267,7 +307,7 @@ void ModelAssociationManager::Stop(SyncStopMetadataFate metadata_fate) {
         dtc->state() != DataTypeController::STOPPING) {
       // We don't really wait until all datatypes have been fully stopped, which
       // is only required (and in fact waited for) when Initialize() is called.
-      StopDatatype(SyncError(), metadata_fate, dtc, base::DoNothing());
+      StopDatatypeImpl(SyncError(), shutdown_reason, dtc, base::DoNothing());
       DVLOG(1) << "ModelAssociationManager: Stopped " << dtc->name();
     }
   }
@@ -302,7 +342,8 @@ void ModelAssociationManager::ModelLoadCallback(ModelType type,
     return;
   }
 
-  // This happens when slow loading type is disabled by new configuration.
+  // This happens when slow loading type is disabled by new configuration or
+  // the model came unready during loading.
   if (!desired_types_.Has(type))
     return;
 
@@ -337,8 +378,8 @@ void ModelAssociationManager::TypeStartCallback(
     DVLOG(1) << "ModelAssociationManager: Type encountered an error.";
     desired_types_.Remove(type);
     DataTypeController* dtc = controllers_->find(type)->second.get();
-    StopDatatype(local_merge_result.error(), KEEP_METADATA, dtc,
-                 base::DoNothing());
+    StopDatatypeImpl(local_merge_result.error(), STOP_SYNC, dtc,
+                     base::DoNothing());
     NotifyDelegateIfReadyForConfigure();
 
     // Update configuration result.
@@ -410,9 +451,9 @@ void ModelAssociationManager::ModelAssociationDone(State new_state) {
       UMA_HISTOGRAM_ENUMERATION("Sync.ConfigureFailed",
                                 ModelTypeToHistogramInt(dtc->type()),
                                 static_cast<int>(MODEL_TYPE_COUNT));
-      StopDatatype(SyncError(FROM_HERE, SyncError::DATATYPE_ERROR,
-                             "Association timed out.", dtc->type()),
-                   KEEP_METADATA, dtc, base::DoNothing());
+      StopDatatypeImpl(SyncError(FROM_HERE, SyncError::DATATYPE_ERROR,
+                                 "Association timed out.", dtc->type()),
+                       STOP_SYNC, dtc, base::DoNothing());
     }
   }
 

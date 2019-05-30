@@ -34,7 +34,7 @@
 
 namespace blink {
 
-namespace XPath {
+namespace xpath {
 
 Number::Number(double value) : value_(value) {}
 
@@ -268,13 +268,13 @@ bool Predicate::Evaluate(EvaluationContext& context) const {
   // foo[3] means foo[position()=3]
   if (result.IsNumber())
     return EqTestOp(EqTestOp::kOpcodeEqual, CreateFunction("position"),
-                    new Number(result.ToNumber()))
+                    MakeGarbageCollected<Number>(result.ToNumber()))
         .Evaluate(context)
         .ToBoolean();
 
   return result.ToBoolean();
 }
 
-}  // namespace XPath
+}  // namespace xpath
 
 }  // namespace blink

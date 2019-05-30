@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
@@ -36,6 +37,7 @@ namespace favicon {
 namespace {
 
 using favicon_base::FaviconRawBitmapResult;
+using testing::_;
 using testing::AnyNumber;
 using testing::Assign;
 using testing::Contains;
@@ -45,7 +47,7 @@ using testing::Invoke;
 using testing::IsEmpty;
 using testing::Not;
 using testing::Return;
-using testing::_;
+using testing::SizeIs;
 
 using IntVector = std::vector<int>;
 using URLVector = std::vector<GURL>;
@@ -1403,6 +1405,68 @@ TEST_F(FaviconHandlerMultipleFaviconsTest,
 
 TEST_F(FaviconHandlerMultipleFaviconsTest, ChooseMinorUpsamplingOverHugeIcon) {
   EXPECT_EQ(17, DownloadTillDoneIgnoringHistory(IntVector{17, 256}));
+}
+
+// Test a page with multiple favicon candidates with explicit sizes information.
+// Only the best one should be downloaded.
+TEST_F(FaviconHandlerMultipleFaviconsTest,
+       StopsDownloadingWhenRemainingCandidatesWorse) {
+  RunHandlerWithCandidates(FaviconDriverObserver::NON_TOUCH_16_DIP,
+                           {
+                               FaviconURL(kIconURL16x16, kFavicon,
+                                          SizeVector(1U, gfx::Size(16, 16))),
+                               FaviconURL(kIconURL64x64, kFavicon,
+                                          SizeVector(1U, gfx::Size(64, 64))),
+                           });
+
+  EXPECT_THAT(delegate_.downloads(), SizeIs(1));
+}
+
+// Mostly for behavioral documentation purposes: test that downloads stops when
+// remaining candidates are worse or equal, for the following advanced scenario:
+// - The page provides multiple favicons: various with explicit sizes
+//   information and one without.
+// - Among the ones with explicit sizes information, downloading the best
+//   returns a 404.
+// - The remaining ones (with explicit sizes information) are worse than the one
+//   without sizes information, and shouldn't be downloaded.
+TEST_F(FaviconHandlerTest,
+       StopsDownloadingWhenRemainingCandidatesWorseDespite404) {
+  const GURL k404IconURL("http://www.google.com/404.png");
+  const GURL kIconURL192x192 = GURL("http://www.google.com/favicon192x192");
+
+  RunHandlerWithCandidates(
+      FaviconDriverObserver::NON_TOUCH_16_DIP,
+      {
+          FaviconURL(kIconURL64x64, kFavicon, kEmptySizes),
+          FaviconURL(k404IconURL, kFavicon, SizeVector(1U, gfx::Size(32, 32))),
+          FaviconURL(kIconURL192x192, kFavicon,
+                     SizeVector(1U, gfx::Size(192, 192))),
+      });
+
+  EXPECT_THAT(delegate_.downloads(), ElementsAre(kIconURL64x64, k404IconURL));
+}
+
+TEST_F(FaviconHandlerMultipleFaviconsTest,
+       DownloadsAllIconsWithoutSizesAttributeIfNotWantsLargest) {
+  RunHandlerWithCandidates(FaviconDriverObserver::NON_TOUCH_16_DIP,
+                           {
+                               FaviconURL(kIconURL16x16, kFavicon, kEmptySizes),
+                               FaviconURL(kIconURL64x64, kFavicon, kEmptySizes),
+                           });
+
+  EXPECT_THAT(delegate_.downloads(), SizeIs(2));
+}
+
+TEST_F(FaviconHandlerMultipleFaviconsTest,
+       DownloadsOnlyOneIconWithoutSizesAttributeIfWantsLargest) {
+  RunHandlerWithCandidates(FaviconDriverObserver::NON_TOUCH_LARGEST,
+                           {
+                               FaviconURL(kIconURL16x16, kFavicon, kEmptySizes),
+                               FaviconURL(kIconURL64x64, kFavicon, kEmptySizes),
+                           });
+
+  EXPECT_THAT(delegate_.downloads(), ElementsAre(kIconURL16x16));
 }
 
 TEST_F(FaviconHandlerTest, Report404) {

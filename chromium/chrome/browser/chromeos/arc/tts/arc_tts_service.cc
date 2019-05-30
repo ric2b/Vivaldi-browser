@@ -8,9 +8,9 @@
 
 #include "base/logging.h"
 #include "base/memory/singleton.h"
-#include "chrome/browser/speech/tts_controller.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
+#include "content/public/browser/tts_controller.h"
 
 namespace arc {
 namespace {
@@ -50,8 +50,7 @@ ArcTtsService* ArcTtsService::GetForBrowserContextForTesting(
 
 ArcTtsService::ArcTtsService(content::BrowserContext* context,
                              ArcBridgeService* bridge_service)
-    : arc_bridge_service_(bridge_service),
-      tts_controller_(nullptr) {
+    : arc_bridge_service_(bridge_service), tts_controller_(nullptr) {
   arc_bridge_service_->tts()->SetHost(this);
 }
 
@@ -66,29 +65,29 @@ void ArcTtsService::OnTtsEvent(uint32_t id,
   if (!tts_controller_) {
     // GetInstance() returns a base::Singleton<> object which always outlives
     // |this| object.
-    tts_controller_ = TtsController::GetInstance();
+    tts_controller_ = content::TtsController::GetInstance();
     if (!tts_controller_) {
       LOG(WARNING) << "TtsController is not available.";
       return;
     }
   }
 
-  TtsEventType chrome_event_type;
+  content::TtsEventType chrome_event_type;
   switch (event_type) {
     case mojom::TtsEventType::START:
-      chrome_event_type = TTS_EVENT_START;
+      chrome_event_type = content::TTS_EVENT_START;
       break;
     case mojom::TtsEventType::END:
-      chrome_event_type = TTS_EVENT_END;
+      chrome_event_type = content::TTS_EVENT_END;
       break;
     case mojom::TtsEventType::INTERRUPTED:
-      chrome_event_type = TTS_EVENT_INTERRUPTED;
+      chrome_event_type = content::TTS_EVENT_INTERRUPTED;
       break;
     case mojom::TtsEventType::ERROR:
-      chrome_event_type = TTS_EVENT_ERROR;
+      chrome_event_type = content::TTS_EVENT_ERROR;
       break;
   }
-  tts_controller_->OnTtsEvent(id, chrome_event_type, char_index, error_msg);
+  tts_controller_->OnTtsEvent(id, chrome_event_type, char_index, -1, error_msg);
 }
 
 }  // namespace arc

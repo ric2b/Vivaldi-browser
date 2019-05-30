@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_BROWSER_WINDOW_H_
 #define CHROME_BROWSER_UI_BROWSER_WINDOW_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -17,14 +18,18 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_bubble_type.h"
-#include "chrome/browser/ui/sync/one_click_signin_sync_starter.h"
 #include "chrome/common/buildflags.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/feature_engagement/buildflags.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/translate/core/common/translate_errors.h"
 #include "ui/base/base_window.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/native_widget_types.h"
+
+#if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
+#include "chrome/browser/ui/in_product_help/in_product_help.h"
+#endif  // BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/apps/intent_helper/apps_navigation_types.h"
@@ -84,6 +89,8 @@ enum class ShowTranslateBubbleResult {
   EDITABLE_FIELD_IS_ACTIVE,
 };
 
+enum class BrowserThemeChangeType { kBrowserTheme, kNativeTheme };
+
 ////////////////////////////////////////////////////////////////////////////////
 // BrowserWindow interface
 //  An interface implemented by the "view" of the Browser window.
@@ -113,6 +120,55 @@ class BrowserWindow : public ui::BaseWindow {
 
   //////////////////////////////////////////////////////////////////////////////
   // Browser specific methods:
+
+  // Sets the shown |ratio| of the browser's top controls (a.k.a. top-chrome) as
+  // a result of gesture scrolling in |web_contents|.
+  virtual void SetTopControlsShownRatio(content::WebContents* web_contents,
+                                        float ratio) = 0;
+
+  // Whether or not the renderer's viewport size should be shrunk by the height
+  // of the browser's top controls.
+  // As top-chrome is slided up or down, we don't actually resize the web
+  // contents (for perf reasons) but we have to do a bunch of adjustments on the
+  // renderer side to make it appear to the user like we're resizing things
+  // smoothly:
+  //
+  // 1) Expose content beyond the web contents rect by expanding the clip.
+  // 2) Push bottom-fixed elements around until we get a resize. As top-chrome
+  //    hides, we push the fixed elements down by an equivalent amount so that
+  //    they appear to stay fixed to the viewport bottom.
+  //
+  // Only when the user releases their finger to finish the scroll do we
+  // actually resize the web contents and clear these adjustments. So web
+  // contents has two possible sizes, viewport filling and shrunk by the top
+  // controls.
+  //
+  // The GetTopControlsHeight is a static number that never changes (as long as
+  // the top-chrome slide with gesture scrolls feature is enabled). To get the
+  // actual "showing" height as the user sees, you multiply this by the shown
+  // ratio. However, it's not enough to know this value, the renderer also needs
+  // to know which direction it should be doing the above-mentioned adjustments.
+  // That's what the DoBrowserControlsShrinkRendererSize bit is for. It tells
+  // the renderer whether it's currently in the "viewport filling" or the
+  // "shrunk by top controls" state.
+  // The returned value should never change while sliding top-chrome is in
+  // progress (either due to an in-progress gesture scroll, or due to a
+  // renderer-initiated animation of the top controls shown ratio).
+  virtual bool DoBrowserControlsShrinkRendererSize(
+      const content::WebContents* contents) const = 0;
+
+  // Returns the height of the browser's top controls. This height doesn't
+  // change with the current shown ratio above. Renderers will call this to
+  // calculate the top-chrome shown ratio from the gesture scroll offset.
+  //
+  // Note: This should always return 0 if hiding top-chrome with page gesture
+  // scrolls is disabled. This is needed so the renderer scrolls the page
+  // immediately rather than changing the shown ratio, thinking that top-chrome
+  // and the page's top edge are moving.
+  virtual int GetTopControlsHeight() const = 0;
+
+  // Propagates to the browser that gesture scrolling has changed state.
+  virtual void SetTopControlsGestureScrollInProgress(bool in_progress) = 0;
 
   // Return the status bubble associated with the frame
   virtual StatusBubble* GetStatusBubble() = 0;
@@ -149,6 +205,17 @@ class BrowserWindow : public ui::BaseWindow {
                                   int index,
                                   int reason) = 0;
 
+  // Called when a tab is detached. Subclasses which implement
+  // TabStripModelObserver should implement this instead of processing this
+  // in OnTabStripModelChanged(); the Browser will call this method.
+  virtual void OnTabDetached(content::WebContents* contents,
+                             bool was_active) = 0;
+
+  // Called when the user restores a tab. |command_id| may be IDC_RESTORE_TAB or
+  // the menu command, depending on whether the tab was restored via keyboard or
+  // main menu.
+  virtual void OnTabRestored(int command_id) = 0;
+
   // Called to force the zoom state to for the active tab to be recalculated.
   // |can_show_bubble| is true when a user presses the zoom up or down keyboard
   // shortcuts and will be false in other cases (e.g. switching tabs, "clicking"
@@ -183,6 +250,10 @@ class BrowserWindow : public ui::BaseWindow {
   // Updates the toolbar with the state for the specified |contents|.
   virtual void UpdateToolbar(content::WebContents* contents) = 0;
 
+  // Updates whether or not the toolbar is visible. Animates the transition if
+  // |animate| is true.
+  virtual void UpdateToolbarVisibility(bool visible, bool animate) = 0;
+
   // Resets the toolbar's tab state for |contents|.
   virtual void ResetToolbarTabState(content::WebContents* contents) = 0;
 
@@ -194,6 +265,9 @@ class BrowserWindow : public ui::BaseWindow {
 
   // Called from toolbar subviews during their show/hide animations.
   virtual void ToolbarSizeChanged(bool is_animating) = 0;
+
+  // Called when the accociated window's tab dragging status changed.
+  virtual void TabDraggingStatusChanged(bool is_dragging) = 0;
 
   // Focuses the app menu like it was a menu bar.
   //
@@ -270,21 +344,17 @@ class BrowserWindow : public ui::BaseWindow {
   virtual ShowTranslateBubbleResult ShowTranslateBubble(
       content::WebContents* contents,
       translate::TranslateStep step,
+      const std::string& source_language,
+      const std::string& target_language,
       translate::TranslateErrors::Type error_type,
       bool is_user_gesture) = 0;
 
 #if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
-  // Callback type used with the ShowOneClickSigninConfirmation() method. If the
-  // user chooses to accept the sign in, the callback is called to start the
-  // sync process.
-  typedef base::Callback<void(OneClickSigninSyncStarter::StartSyncMode)>
-      StartSyncCallback;
-
   // Shows the one-click sign in confirmation UI. |email| holds the full email
   // address of the account that has signed in.
   virtual void ShowOneClickSigninConfirmation(
       const base::string16& email,
-      const StartSyncCallback& start_sync_callback) = 0;
+      base::OnceCallback<void(bool)> confirmed_callback) = 0;
 #endif
 
   // Whether or not the shelf view is visible.
@@ -304,7 +374,7 @@ class BrowserWindow : public ui::BaseWindow {
 
   // ThemeService calls this when a user has changed their theme, indicating
   // that it's time to redraw everything.
-  virtual void UserChangedTheme() = 0;
+  virtual void UserChangedTheme(BrowserThemeChangeType theme_change_type) = 0;
 
   // Vivaldi version of ShowWebsiteSettings.  For Vivaldi the difference is more
   // than just the anchor (pos) as now the ShowWebsiteSettings (which called
@@ -329,7 +399,7 @@ class BrowserWindow : public ui::BaseWindow {
 
   // Allows the BrowserWindow object to handle the specified keyboard event,
   // if the renderer did not process it.
-  virtual void HandleKeyboardEvent(
+  virtual bool HandleKeyboardEvent(
       const content::NativeWebKeyboardEvent& event) = 0;
 
   // Clipboard commands applied to the whole browser window.
@@ -345,7 +415,7 @@ class BrowserWindow : public ui::BaseWindow {
       GetWebContentsModalDialogHost() = 0;
 
   // Construct a BrowserWindow implementation for the specified |browser|.
-  static BrowserWindow* CreateBrowserWindow(Browser* browser,
+  static BrowserWindow* CreateBrowserWindow(std::unique_ptr<Browser> browser,
                                             bool user_gesture);
 
   // Shows the avatar bubble on the window frame off of the avatar button with
@@ -360,12 +430,18 @@ class BrowserWindow : public ui::BaseWindow {
     AVATAR_BUBBLE_MODE_REAUTH,
     AVATAR_BUBBLE_MODE_CONFIRM_SIGNIN,
     AVATAR_BUBBLE_MODE_SHOW_ERROR,
+    AVATAR_BUBBLE_MODE_INCOGNITO,
   };
   virtual void ShowAvatarBubbleFromAvatarButton(
       AvatarBubbleMode mode,
       const signin::ManageAccountsParams& manage_accounts_params,
       signin_metrics::AccessPoint access_point,
       bool is_source_keyboard) = 0;
+
+#if defined(OS_CHROMEOS) || defined(OS_MACOSX) || defined(OS_WIN) || \
+    defined(OS_LINUX)
+  virtual void ShowHatsBubbleFromAppMenuButton() = 0;
+#endif
 
   // Returns the height inset for RenderView when detached bookmark bar is
   // shown.  Invoked when a new RenderHostView is created for a non-NTP
@@ -385,22 +461,23 @@ class BrowserWindow : public ui::BaseWindow {
       const base::Callback<void(ImeWarningBubblePermissionStatus status)>&
           callback) = 0;
 
+#if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
+  // Shows in-product help for the given feature.
+  virtual void ShowInProductHelpPromo(InProductHelpFeature iph_feature) = 0;
+#endif
+
   // Returns the platform-specific ID of the workspace the browser window
   // currently resides in.
   virtual std::string GetWorkspace() const = 0;
   virtual bool IsVisibleOnAllWorkspaces() const = 0;
 
+  // Shows the platform specific emoji picker.
+  virtual void ShowEmojiPanel() = 0;
+
  protected:
   friend class BrowserCloseManager;
   friend class BrowserView;
   virtual void DestroyBrowser() = 0;
-
-#if defined(OS_MACOSX)
-  // Creates a Cocoa browser window, in browser builds where both Views and
-  // Cocoa browsers windows are present.
-  static BrowserWindow* CreateBrowserWindowCocoa(Browser* browser,
-                                                 bool user_gesture);
-#endif
 };
 
 #endif  // CHROME_BROWSER_UI_BROWSER_WINDOW_H_

@@ -5,8 +5,10 @@
 #include "ui/gl/android/surface_texture.h"
 
 #include <android/native_window_jni.h>
+#include <utility>
 
 #include "base/android/jni_android.h"
+#include "base/debug/crash_logging.h"
 #include "base/logging.h"
 #include "jni/SurfaceTexturePlatformWrapper_jni.h"
 #include "ui/gl/android/scoped_java_surface.h"
@@ -31,22 +33,29 @@ SurfaceTexture::~SurfaceTexture() {
   Java_SurfaceTexturePlatformWrapper_destroy(env, j_surface_texture_);
 }
 
-void SurfaceTexture::SetFrameAvailableCallback(const base::Closure& callback) {
+void SurfaceTexture::SetFrameAvailableCallback(
+    base::RepeatingClosure callback) {
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_SurfaceTexturePlatformWrapper_setFrameAvailableCallback(
       env, j_surface_texture_,
-      reinterpret_cast<intptr_t>(new SurfaceTextureListener(callback, false)));
+      reinterpret_cast<intptr_t>(
+          new SurfaceTextureListener(std::move(callback), false)));
 }
 
 void SurfaceTexture::SetFrameAvailableCallbackOnAnyThread(
-    const base::Closure& callback) {
+    base::RepeatingClosure callback) {
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_SurfaceTexturePlatformWrapper_setFrameAvailableCallback(
       env, j_surface_texture_,
-      reinterpret_cast<intptr_t>(new SurfaceTextureListener(callback, true)));
+      reinterpret_cast<intptr_t>(
+          new SurfaceTextureListener(std::move(callback), true)));
 }
 
 void SurfaceTexture::UpdateTexImage() {
+  static auto* kCrashKey = base::debug::AllocateCrashKeyString(
+      "inside_surface_texture_update_tex_image",
+      base::debug::CrashKeySize::Size256);
+  base::debug::ScopedCrashKeyString scoped_crash_key(kCrashKey, "1");
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_SurfaceTexturePlatformWrapper_updateTexImage(env, j_surface_texture_);
 }
@@ -59,8 +68,7 @@ void SurfaceTexture::GetTransformMatrix(float mtx[16]) {
   Java_SurfaceTexturePlatformWrapper_getTransformMatrix(env, j_surface_texture_,
                                                         jmatrix);
 
-  jboolean is_copy;
-  jfloat* elements = env->GetFloatArrayElements(jmatrix.obj(), &is_copy);
+  jfloat* elements = env->GetFloatArrayElements(jmatrix.obj(), nullptr);
   for (int i = 0; i < 16; ++i) {
     mtx[i] = static_cast<float>(elements[i]);
   }

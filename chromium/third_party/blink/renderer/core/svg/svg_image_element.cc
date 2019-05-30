@@ -21,44 +21,59 @@
 
 #include "third_party/blink/renderer/core/svg/svg_image_element.h"
 
+#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
-#include "third_party/blink/renderer/core/css_property_names.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
+#include "third_party/blink/renderer/core/html/media/media_element_parser_helpers.h"
+#include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/layout/layout_image_resource.h"
+#include "third_party/blink/renderer/core/layout/layout_replaced.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_image.h"
 #include "third_party/blink/renderer/core/svg_names.h"
 
 namespace blink {
 
 inline SVGImageElement::SVGImageElement(Document& document)
-    : SVGGraphicsElement(SVGNames::imageTag, document),
+    : SVGGraphicsElement(svg_names::kImageTag, document),
       SVGURIReference(this),
+      is_default_overridden_intrinsic_size_(false),
       x_(SVGAnimatedLength::Create(this,
-                                   SVGNames::xAttr,
-                                   SVGLength::Create(SVGLengthMode::kWidth),
+                                   svg_names::kXAttr,
+                                   SVGLengthMode::kWidth,
+                                   SVGLength::Initial::kUnitlessZero,
                                    CSSPropertyX)),
       y_(SVGAnimatedLength::Create(this,
-                                   SVGNames::yAttr,
-                                   SVGLength::Create(SVGLengthMode::kHeight),
+                                   svg_names::kYAttr,
+                                   SVGLengthMode::kHeight,
+                                   SVGLength::Initial::kUnitlessZero,
                                    CSSPropertyY)),
       width_(SVGAnimatedLength::Create(this,
-                                       SVGNames::widthAttr,
-                                       SVGLength::Create(SVGLengthMode::kWidth),
+                                       svg_names::kWidthAttr,
+                                       SVGLengthMode::kWidth,
+                                       SVGLength::Initial::kUnitlessZero,
                                        CSSPropertyWidth)),
-      height_(
-          SVGAnimatedLength::Create(this,
-                                    SVGNames::heightAttr,
-                                    SVGLength::Create(SVGLengthMode::kHeight),
-                                    CSSPropertyHeight)),
+      height_(SVGAnimatedLength::Create(this,
+                                        svg_names::kHeightAttr,
+                                        SVGLengthMode::kHeight,
+                                        SVGLength::Initial::kUnitlessZero,
+                                        CSSPropertyHeight)),
       preserve_aspect_ratio_(SVGAnimatedPreserveAspectRatio::Create(
           this,
-          SVGNames::preserveAspectRatioAttr)),
+          svg_names::kPreserveAspectRatioAttr)),
       image_loader_(SVGImageLoader::Create(this)) {
   AddToPropertyMap(x_);
   AddToPropertyMap(y_);
   AddToPropertyMap(width_);
   AddToPropertyMap(height_);
   AddToPropertyMap(preserve_aspect_ratio_);
+
+  if (media_element_parser_helpers::IsMediaElement(this) &&
+      !document.IsFeatureEnabled(mojom::FeaturePolicyFeature::kUnsizedMedia)) {
+    is_default_overridden_intrinsic_size_ = true;
+    overridden_intrinsic_size_ =
+        IntSize(LayoutReplaced::kDefaultWidth, LayoutReplaced::kDefaultHeight);
+  }
 }
 
 DEFINE_NODE_FACTORY(SVGImageElement)
@@ -117,10 +132,10 @@ void SVGImageElement::CollectStyleForPresentationAttribute(
 
 void SVGImageElement::SvgAttributeChanged(const QualifiedName& attr_name) {
   bool is_length_attribute =
-      attr_name == SVGNames::xAttr || attr_name == SVGNames::yAttr ||
-      attr_name == SVGNames::widthAttr || attr_name == SVGNames::heightAttr;
+      attr_name == svg_names::kXAttr || attr_name == svg_names::kYAttr ||
+      attr_name == svg_names::kWidthAttr || attr_name == svg_names::kHeightAttr;
 
-  if (is_length_attribute || attr_name == SVGNames::preserveAspectRatioAttr) {
+  if (is_length_attribute || attr_name == svg_names::kPreserveAspectRatioAttr) {
     SVGElement::InvalidationGuard invalidation_guard(this);
 
     if (is_length_attribute) {
@@ -154,9 +169,26 @@ void SVGImageElement::SvgAttributeChanged(const QualifiedName& attr_name) {
 
 void SVGImageElement::ParseAttribute(
     const AttributeModificationParams& params) {
-  if (params.name == SVGNames::decodingAttr) {
+  if (params.name == svg_names::kDecodingAttr) {
     UseCounter::Count(GetDocument(), WebFeature::kImageDecodingAttribute);
     decoding_mode_ = ParseImageDecodingMode(params.new_value);
+  } else if (params.name == svg_names::kIntrinsicsizeAttr &&
+             RuntimeEnabledFeatures::
+                 ExperimentalProductivityFeaturesEnabled()) {
+    String message;
+    bool intrinsic_size_changed =
+        media_element_parser_helpers::ParseIntrinsicSizeAttribute(
+            params.new_value, this, &overridden_intrinsic_size_,
+            &is_default_overridden_intrinsic_size_, &message);
+    if (!message.IsEmpty()) {
+      GetDocument().AddConsoleMessage(ConsoleMessage::Create(
+          kOtherMessageSource, mojom::ConsoleMessageLevel::kWarning, message));
+    }
+
+    if (intrinsic_size_changed) {
+      if (LayoutSVGImage* layout_obj = ToLayoutSVGImage(GetLayoutObject()))
+        MarkForLayoutAndParentResourceInvalidation(*layout_obj);
+    }
   } else {
     SVGElement::ParseAttribute(params);
   }
@@ -192,7 +224,7 @@ Node::InsertionNotificationRequest SVGImageElement::InsertedInto(
   // A previous loader update may have failed to actually fetch the image if
   // the document was inactive. In that case, force a re-update (but don't
   // clear previous errors).
-  if (root_parent.isConnected() && !GetImageLoader().GetContent())
+  if (GetImageLoader().ShouldUpdateOnInsertedInto(root_parent))
     GetImageLoader().UpdateFromElement(ImageLoader::kUpdateNormal);
 
   return SVGGraphicsElement::InsertedInto(root_parent);

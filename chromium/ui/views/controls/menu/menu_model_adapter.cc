@@ -22,9 +22,13 @@ MenuModelAdapter::MenuModelAdapter(ui::MenuModel* menu_model,
                                ui::EF_RIGHT_MOUSE_BUTTON),
       on_menu_closed_callback_(on_menu_closed_callback) {
   DCHECK(menu_model);
+  menu_model_->SetMenuModelDelegate(nullptr);
+  menu_model_->SetMenuModelDelegate(this);
 }
 
 MenuModelAdapter::~MenuModelAdapter() {
+  if (menu_model_)
+    menu_model_->SetMenuModelDelegate(nullptr);
 }
 
 void MenuModelAdapter::BuildMenu(MenuItemView* menu) {
@@ -50,9 +54,9 @@ void MenuModelAdapter::BuildMenu(MenuItemView* menu) {
 }
 
 MenuItemView* MenuModelAdapter::CreateMenu() {
-  MenuItemView* item = new MenuItemView(this);
-  BuildMenu(item);
-  return item;
+  menu_ = new MenuItemView(this);
+  BuildMenu(menu_);
+  return menu_;
 }
 
 // Static.
@@ -82,6 +86,9 @@ MenuItemView* MenuModelAdapter::AddMenuItemFromModelAt(ui::MenuModel* model,
       break;
     case ui::MenuModel::TYPE_ACTIONABLE_SUBMENU:
       type = MenuItemView::ACTIONABLE_SUBMENU;
+      break;
+    case ui::MenuModel::TYPE_HIGHLIGHTED:
+      type = MenuItemView::HIGHLIGHTED;
       break;
   }
 
@@ -217,22 +224,6 @@ bool MenuModelAdapter::IsItemChecked(int id) const {
   return false;
 }
 
-void MenuModelAdapter::SelectionChanged(MenuItemView* menu) {
-  // Ignore selection of the root menu.
-  if (menu == menu->GetRootMenuItem())
-    return;
-
-  const int id = menu->GetCommand();
-  ui::MenuModel* model = menu_model_;
-  int index = 0;
-  if (ui::MenuModel::GetModelAndIndexForCommandId(id, &model, &index)) {
-    model->HighlightChangedTo(index);
-    return;
-  }
-
-  NOTREACHED();
-}
-
 void MenuModelAdapter::WillShowMenu(MenuItemView* menu) {
   // Look up the menu model for this menu.
   const std::map<MenuItemView*, ui::MenuModel*>::const_iterator map_iterator =
@@ -260,6 +251,16 @@ void MenuModelAdapter::WillHideMenu(MenuItemView* menu) {
 void MenuModelAdapter::OnMenuClosed(MenuItemView* menu) {
   if (!on_menu_closed_callback_.is_null())
     on_menu_closed_callback_.Run();
+}
+
+// MenuModelDelegate overrides:
+void MenuModelAdapter::OnMenuStructureChanged() {
+  if (menu_)
+    BuildMenu(menu_);
+}
+
+void MenuModelAdapter::OnMenuClearingDelegate() {
+  menu_model_ = nullptr;
 }
 
 // MenuModelAdapter, private:

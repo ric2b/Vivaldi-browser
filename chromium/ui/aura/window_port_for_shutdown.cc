@@ -9,7 +9,8 @@
 
 namespace aura {
 
-WindowPortForShutdown::WindowPortForShutdown() {}
+WindowPortForShutdown::WindowPortForShutdown()
+    : WindowPort(WindowPort::Type::kShutdown) {}
 
 WindowPortForShutdown::~WindowPortForShutdown() {}
 
@@ -57,20 +58,19 @@ WindowPortForShutdown::CreateLayerTreeFrameSink() {
 }
 
 void WindowPortForShutdown::AllocateLocalSurfaceId() {}
+void WindowPortForShutdown::InvalidateLocalSurfaceId() {}
 void WindowPortForShutdown::UpdateLocalSurfaceIdFromEmbeddedClient(
-    const viz::LocalSurfaceId& embedded_client_local_surface_id) {}
-
-bool WindowPortForShutdown::IsLocalSurfaceIdAllocationSuppressed() const {
-  return false;
-}
+    const viz::LocalSurfaceIdAllocation&
+        embedded_client_local_surface_id_allocation) {}
 
 viz::ScopedSurfaceIdAllocator WindowPortForShutdown::GetSurfaceIdAllocator(
     base::OnceCallback<void()> allocation_task) {
   return viz::ScopedSurfaceIdAllocator(std::move(allocation_task));
 }
 
-const viz::LocalSurfaceId& WindowPortForShutdown::GetLocalSurfaceId() {
-  return local_surface_id_;
+const viz::LocalSurfaceIdAllocation&
+WindowPortForShutdown::GetLocalSurfaceIdAllocation() {
+  return local_surface_id_allocation_;
 }
 
 void WindowPortForShutdown::OnEventTargetingPolicyChanged() {}

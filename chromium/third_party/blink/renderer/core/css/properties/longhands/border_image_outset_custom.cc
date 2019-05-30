@@ -9,13 +9,13 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 
 namespace blink {
-namespace CSSLonghand {
+namespace css_longhand {
 
 const CSSValue* BorderImageOutset::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext&,
     const CSSParserLocalContext&) const {
-  return CSSParsingUtils::ConsumeBorderImageOutset(range);
+  return css_parsing_utils::ConsumeBorderImageOutset(range);
 }
 
 const CSSValue* BorderImageOutset::CSSValueFromComputedStyleInternal(
@@ -30,14 +30,12 @@ const CSSValue* BorderImageOutset::CSSValueFromComputedStyleInternal(
 
 const CSSValue* BorderImageOutset::InitialValue() const {
   DEFINE_STATIC_LOCAL(
-      CSSValue, zeroInteger,
-      (CSSPrimitiveValue::Create(0, CSSPrimitiveValue::UnitType::kInteger)));
-  DEFINE_STATIC_LOCAL(
-      CSSQuadValue, value,
-      (CSSQuadValue::Create(&zeroInteger, &zeroInteger, &zeroInteger,
-                            &zeroInteger, CSSQuadValue::kSerializeAsQuad)));
-  return &value;
+      Persistent<CSSQuadValue>, value,
+      (CSSQuadValue::Create(
+          CSSPrimitiveValue::Create(0, CSSPrimitiveValue::UnitType::kInteger),
+          CSSQuadValue::kSerializeAsQuad)));
+  return value;
 }
 
-}  // namespace CSSLonghand
+}  // namespace css_longhand
 }  // namespace blink

@@ -161,14 +161,6 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   // user's next sign-in.
   bool force_online_signin() const { return force_online_signin_; }
 
-  // Whether the user's session has completed initialization yet.
-  bool profile_ever_initialized() const { return profile_ever_initialized_; }
-
-  // Public so it can be called via tests.
-  void set_profile_ever_initialized(bool profile_ever_initialized) {
-    profile_ever_initialized_ = profile_ever_initialized;
-  }
-
   // True if the user's session can be locked (i.e. the user has a password with
   // which to unlock the session).
   bool can_lock() const;
@@ -184,6 +176,9 @@ class USER_MANAGER_EXPORT User : public UserInfo {
 
   // True if the user Profile is created.
   bool is_profile_created() const { return profile_is_created_; }
+
+  // True if user has google account (not a guest or managed user).
+  bool has_gaia_account() const;
 
   static User* CreatePublicAccountUserForTesting(const AccountId& account_id) {
     return CreatePublicAccountUser(account_id);
@@ -274,9 +269,6 @@ class USER_MANAGER_EXPORT User : public UserInfo {
 
   void SetProfileIsCreated();
 
-  // True if user has google account (not a guest or managed user).
-  bool has_gaia_account() const;
-
   virtual void SetAffiliation(bool is_affiliated);
 
  private:
@@ -289,7 +281,6 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   std::unique_ptr<UserImage> user_image_;
   OAuthTokenStatus oauth_token_status_ = OAUTH_TOKEN_STATUS_UNKNOWN;
   bool force_online_signin_ = false;
-  bool profile_ever_initialized_ = false;
 
   // This is set to chromeos locale if account data has been downloaded.
   // (Or failed to download, but at least one download attempt finished).

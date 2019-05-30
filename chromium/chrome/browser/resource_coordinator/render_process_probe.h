@@ -14,8 +14,8 @@
 #include "base/process/process.h"
 #include "base/process/process_metrics.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/performance_manager/performance_manager.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/memory_instrumentation.h"
-#include "services/resource_coordinator/public/cpp/system_resource_coordinator.h"
 
 namespace resource_coordinator {
 
@@ -94,8 +94,6 @@ class RenderProcessProbeImpl : public RenderProcessProbe {
   virtual base::ProcessId GetProcessId(int host_id,
                                        const RenderProcessInfo& info);
 
-  SystemResourceCoordinator* EnsureSystemResourceCoordinator();
-
   // Dispatch the collected metrics.
   // Virtual for testing.
   virtual void DispatchMetricsOnUIThread(
@@ -111,9 +109,6 @@ class RenderProcessProbeImpl : public RenderProcessProbe {
 
   // True while a gathering cycle is underways on a background thread.
   bool is_gathering_ = false;
-
-  // Used to signal the end of a CPU measurement cycle to the RC.
-  std::unique_ptr<SystemResourceCoordinator> system_resource_coordinator_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderProcessProbeImpl);
 };

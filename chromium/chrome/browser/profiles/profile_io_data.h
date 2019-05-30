@@ -25,7 +25,7 @@
 #include "chrome/browser/profiles/storage_partition_descriptor.h"
 #include "chrome/common/buildflags.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "components/signin/core/browser/profile_management_switches.h"
+#include "components/signin/core/browser/account_consistency_method.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/resource_context.h"
 #include "net/http/http_cache.h"
@@ -55,10 +55,6 @@ namespace data_reduction_proxy {
 class DataReductionProxyIOData;
 }
 
-namespace domain_reliability {
-class DomainReliabilityMonitor;
-}
-
 namespace extensions {
 class InfoMap;
 }
@@ -71,20 +67,11 @@ class CookieStore;
 class HttpTransactionFactory;
 class URLRequestContextBuilder;
 class URLRequestJobFactoryImpl;
-
-#if BUILDFLAG(ENABLE_REPORTING)
-class NetworkErrorLoggingService;
-class ReportingService;
-#endif  // BUILDFLAG(ENABLE_REPORTING)
 }  // namespace net
 
-namespace policy {
-class PolicyCertVerifier;
-}  // namespace policy
-
-namespace previews {
-class PreviewsDeciderImpl;
-}
+namespace network {
+class CertVerifierWithTrustAnchors;
+}  // namespace network
 
 // Conceptually speaking, the ProfileIOData represents data that lives on the IO
 // thread that is owned by a Profile, such as, but not limited to, network
@@ -130,17 +117,16 @@ class ProfileIOData {
 
   // Initializes the ProfileIOData object and primes the RequestContext
   // generation. Must be called prior to any of the Get*() methods other than
-  // GetResouceContext or GetMetricsEnabledStateOnIOThread.
+  // GetResouceContext.
   void Init(
       content::ProtocolHandlerMap* protocol_handlers,
       content::URLRequestInterceptorScopedVector request_interceptors) const;
 
   net::URLRequestContext* GetMainRequestContext() const;
   net::URLRequestContext* GetMediaRequestContext() const;
-  net::URLRequestContext* GetExtensionsRequestContext() const;
+  virtual net::CookieStore* GetExtensionsCookieStore() const = 0;
   net::URLRequestContext* GetIsolatedAppRequestContext(
       IOThread* io_thread,
-      net::URLRequestContext* main_context,
       const StoragePartitionDescriptor& partition_descriptor,
       std::unique_ptr<ProtocolHandlerRegistry::JobInterceptorFactory>
           protocol_handler_interceptor,
@@ -165,11 +151,6 @@ class ProfileIOData {
 
   // Gets Sync state, for Dice account consistency.
   bool IsSyncEnabled() const;
-  bool SyncHasAuthError() const;
-
-  net::URLRequestContext* extensions_request_context() const {
-    return extensions_request_context_.get();
-  }
 
   BooleanPrefMember* safe_browsing_enabled() const {
     return &safe_browsing_enabled_;
@@ -231,15 +212,6 @@ class ProfileIOData {
   }
 #endif
 
-  // Initialize the member needed to track the metrics enabled state. This is
-  // only to be called on the UI thread.
-  void InitializeMetricsEnabledStateOnUIThread();
-
-  // Returns whether or not metrics reporting is enabled in the browser instance
-  // on which this profile resides. This is safe for use from the IO thread, and
-  // should only be called from there.
-  bool GetMetricsEnabledStateOnIOThread() const;
-
   void set_client_cert_store_factory_for_testing(
       const base::Callback<std::unique_ptr<net::ClientCertStore>()>& factory) {
     client_cert_store_factory_ = factory;
@@ -250,8 +222,9 @@ class ProfileIOData {
     return data_reduction_proxy_io_data_.get();
   }
 
-  previews::PreviewsDeciderImpl* previews_decider_impl() const {
-    return previews_decider_impl_.get();
+  ProtocolHandlerRegistry::IOThreadDelegate*
+  protocol_handler_registry_io_thread_delegate() const {
+    return protocol_handler_registry_io_thread_delegate_.get();
   }
 
   // Returns the predictor service for this Profile. Returns nullptr if there is
@@ -308,13 +281,6 @@ class ProfileIOData {
     void SetHttpTransactionFactory(
         std::unique_ptr<net::HttpTransactionFactory> http_factory);
     void SetJobFactory(std::unique_ptr<net::URLRequestJobFactory> job_factory);
-#if BUILDFLAG(ENABLE_REPORTING)
-    void SetReportingService(
-        std::unique_ptr<net::ReportingService> reporting_service);
-    void SetNetworkErrorLoggingService(
-        std::unique_ptr<net::NetworkErrorLoggingService>
-            network_error_logging_service);
-#endif  // BUILDFLAG(ENABLE_REPORTING)
 
    private:
     ~AppRequestContext() override;
@@ -324,11 +290,6 @@ class ProfileIOData {
     std::unique_ptr<net::HttpNetworkSession> http_network_session_;
     std::unique_ptr<net::HttpTransactionFactory> http_factory_;
     std::unique_ptr<net::URLRequestJobFactory> job_factory_;
-#if BUILDFLAG(ENABLE_REPORTING)
-    std::unique_ptr<net::ReportingService> reporting_service_;
-    std::unique_ptr<net::NetworkErrorLoggingService>
-        network_error_logging_service_;
-#endif  // BUILDFLAG(ENABLE_REPORTING)
   };
 
   // Created on the UI thread, read on the IO thread during ProfileIOData lazy
@@ -365,7 +326,7 @@ class ProfileIOData {
     std::unique_ptr<net::URLRequestInterceptor> new_tab_page_interceptor;
 
 #if defined(OS_CHROMEOS)
-    std::unique_ptr<policy::PolicyCertVerifier> policy_cert_verifier;
+    std::unique_ptr<network::CertVerifierWithTrustAnchors> policy_cert_verifier;
     std::string username_hash;
     SystemKeySlotUseType system_key_slot_use_type = SystemKeySlotUseType::kNone;
     std::unique_ptr<chromeos::CertificateProvider> certificate_provider;
@@ -427,9 +388,6 @@ class ProfileIOData {
       std::unique_ptr<data_reduction_proxy::DataReductionProxyIOData>
           data_reduction_proxy_io_data) const;
 
-  void set_previews_decider_impl(std::unique_ptr<previews::PreviewsDeciderImpl>
-                                     previews_decider_impl) const;
-
   net::URLRequestContext* main_request_context() const {
     return main_request_context_;
   }
@@ -449,25 +407,16 @@ class ProfileIOData {
       net::HttpTransactionFactory* main_http_factory,
       std::unique_ptr<net::HttpCache::BackendFactory> backend) const;
 
-  // Deletes the media cache at the specified path if the media cache is
-  // disabled.
-  static void MaybeDeleteMediaCache(const base::FilePath& media_cache_path);
-
  private:
   class ResourceContext : public content::ResourceContext {
    public:
     explicit ResourceContext(ProfileIOData* io_data);
     ~ResourceContext() override;
 
-    // ResourceContext implementation:
-    net::URLRequestContext* GetRequestContext() override;
-
    private:
     friend class ProfileIOData;
 
     ProfileIOData* const io_data_;
-
-    net::URLRequestContext* request_context_;
   };
 
   typedef std::map<StoragePartitionDescriptor,
@@ -501,8 +450,8 @@ class ProfileIOData {
   virtual void OnMainRequestContextCreated(
       ProfileParams* profile_params) const = 0;
 
-  // Initializes the RequestContext for extensions.
-  virtual void InitializeExtensionsRequestContext(
+  // Initializes the cookie store for extensions.
+  virtual void InitializeExtensionsCookieStore(
       ProfileParams* profile_params) const = 0;
 
   // Does an on-demand initialization of a media RequestContext for the given
@@ -546,7 +495,6 @@ class ProfileIOData {
       client_cert_store_factory_;
 
   mutable StringPrefMember google_services_user_account_id_;
-  mutable BooleanPrefMember sync_has_auth_error_;
   mutable BooleanPrefMember sync_suppress_start_;
   mutable BooleanPrefMember sync_first_setup_complete_;
   mutable signin::AccountConsistencyMethod account_consistency_;
@@ -570,17 +518,16 @@ class ProfileIOData {
   mutable BooleanPrefMember account_consistency_mirror_required_pref_;
 #endif
 
-  BooleanPrefMember enable_metrics_;
-
   // Pointed to by URLRequestContext.
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   mutable scoped_refptr<extensions::InfoMap> extension_info_map_;
 #endif
 
-  mutable std::unique_ptr<previews::PreviewsDeciderImpl> previews_decider_impl_;
-
   mutable std::unique_ptr<data_reduction_proxy::DataReductionProxyIOData>
       data_reduction_proxy_io_data_;
+
+  mutable scoped_refptr<ProtocolHandlerRegistry::IOThreadDelegate>
+      protocol_handler_registry_io_thread_delegate_;
 
 #if defined(OS_CHROMEOS)
   mutable std::string username_hash_;
@@ -599,7 +546,6 @@ class ProfileIOData {
   mutable network::URLRequestContextOwner main_request_context_owner_;
   mutable net::URLRequestContext* main_request_context_;
 
-  mutable std::unique_ptr<net::URLRequestContext> extensions_request_context_;
   // One URLRequestContext per isolated app for main and media requests.
   mutable URLRequestContextMap app_request_context_map_;
   mutable URLRequestContextMap isolated_media_request_context_map_;
@@ -613,9 +559,6 @@ class ProfileIOData {
   // Owned (possibly with one or more layers of LayeredNetworkDelegate) by the
   // URLRequestContext, which is owned by the |main_network_context_|.
   mutable ChromeNetworkDelegate* chrome_network_delegate_unowned_;
-  // Owned by |chrome_network_delegate_unowned_|.
-  mutable domain_reliability::DomainReliabilityMonitor*
-      domain_reliability_monitor_unowned_;
 
   const Profile::ProfileType profile_type_;
 

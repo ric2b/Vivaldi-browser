@@ -12,6 +12,7 @@
 #include "ios/web/public/test/http_server/http_server_util.h"
 #import "ios/web/shell/test/earl_grey/shell_earl_grey.h"
 #import "ios/web/shell/test/earl_grey/shell_matchers.h"
+#import "ios/web/shell/test/earl_grey/shell_matchers_shorthand.h"
 #import "ios/web/shell/test/earl_grey/web_shell_test_case.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -122,7 +123,7 @@ using web::test::HttpServer;
         performAction:grey_scrollInDirection(kGREYDirectionDown, offset)];
     // Add a query parameter so the next load creates another NavigationItem.
     GURL::Replacements replacements;
-    replacements.SetQueryStr(base::IntToString(i));
+    replacements.SetQueryStr(base::NumberToString(i));
     [ShellEarlGrey loadURL:baseURL.ReplaceComponents(replacements)];
     // Wait for the content offset to be set to {0, 0}.
     WaitForOffset(0.0);

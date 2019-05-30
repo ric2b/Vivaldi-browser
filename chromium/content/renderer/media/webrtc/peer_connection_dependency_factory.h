@@ -17,8 +17,8 @@
 #include "content/renderer/media/webrtc/stun_field_trial.h"
 #include "content/renderer/p2p/socket_dispatcher.h"
 #include "ipc/ipc_platform_file.h"
-#include "third_party/webrtc/api/peerconnectioninterface.h"
-#include "third_party/webrtc/p2p/stunprober/stunprober.h"
+#include "third_party/webrtc/api/peer_connection_interface.h"
+#include "third_party/webrtc/p2p/stunprober/stun_prober.h"
 
 namespace base {
 class WaitableEvent;
@@ -42,6 +42,7 @@ namespace content {
 
 class IpcNetworkManager;
 class IpcPacketSocketFactory;
+class MdnsResponderAdapter;
 class P2PPortAllocator;
 class WebRtcAudioDeviceImpl;
 
@@ -49,8 +50,7 @@ class WebRtcAudioDeviceImpl;
 class CONTENT_EXPORT PeerConnectionDependencyFactory
     : base::MessageLoopCurrent::DestructionObserver {
  public:
-  PeerConnectionDependencyFactory(
-      P2PSocketDispatcher* p2p_socket_dispatcher);
+  PeerConnectionDependencyFactory(P2PSocketDispatcher* p2p_socket_dispatcher);
   ~PeerConnectionDependencyFactory() override;
 
   // Create a RTCPeerConnectionHandler object that implements the
@@ -86,6 +86,10 @@ class CONTENT_EXPORT PeerConnectionDependencyFactory
   // controls according to the permissions granted on the page.
   virtual std::unique_ptr<P2PPortAllocator> CreatePortAllocator(
       blink::WebLocalFrame* web_frame);
+
+  // Creates an AsyncResolverFactory that uses the networking Mojo service.
+  virtual std::unique_ptr<webrtc::AsyncResolverFactory>
+  CreateAsyncResolverFactory();
 
   // Creates a libjingle representation of a Session description. Used by a
   // RTCPeerConnectionHandler instance.
@@ -146,13 +150,15 @@ class CONTENT_EXPORT PeerConnectionDependencyFactory
   void InitializeWorkerThread(rtc::Thread** thread,
                               base::WaitableEvent* event);
 
-  void CreateIpcNetworkManagerOnWorkerThread(base::WaitableEvent* event);
+  void CreateIpcNetworkManagerOnWorkerThread(
+      base::WaitableEvent* event,
+      std::unique_ptr<MdnsResponderAdapter> mdns_responder);
   void DeleteIpcNetworkManager();
   void CleanupPeerConnectionFactory();
 
-  // We own network_manager_, must be deleted on the worker thread.
-  // The network manager uses |p2p_socket_dispatcher_|.
-  IpcNetworkManager* network_manager_;
+  // network_manager_ must be deleted on the worker thread. The network manager
+  // uses |p2p_socket_dispatcher_|.
+  std::unique_ptr<IpcNetworkManager> network_manager_;
   std::unique_ptr<IpcPacketSocketFactory> socket_factory_;
 
   scoped_refptr<webrtc::PeerConnectionFactoryInterface> pc_factory_;

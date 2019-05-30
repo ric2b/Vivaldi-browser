@@ -39,36 +39,6 @@ bool HistoryProvider::PreventInlineAutocomplete(
       (!input.text().empty() && base::IsUnicodeWhitespace(input.text().back()));
 }
 
-HistoryProvider::HistoryProvider(AutocompleteProvider::Type type,
-                                 AutocompleteProviderClient* client)
-    : AutocompleteProvider(type), client_(client) {
-}
-
-HistoryProvider::~HistoryProvider() {}
-
-void HistoryProvider::DeleteMatchFromMatches(const AutocompleteMatch& match) {
-  bool found = false;
-  BookmarkModel* bookmark_model = client_->GetBookmarkModel();
-  for (ACMatches::iterator i(matches_.begin()); i != matches_.end(); ++i) {
-    if (i->destination_url == match.destination_url && i->type == match.type) {
-      found = true;
-      if ((i->type == AutocompleteMatchType::URL_WHAT_YOU_TYPED) ||
-          (bookmark_model &&
-           bookmark_model->IsBookmarked(i->destination_url))) {
-        // We can't get rid of What-You-Typed or Bookmarked matches,
-        // but we can make them look like they have no backing data.
-        i->deletable = false;
-        i->description.clear();
-        i->description_class.clear();
-      } else {
-        matches_.erase(i);
-      }
-      break;
-    }
-  }
-  DCHECK(found) << "Asked to delete a URL that isn't in our set of matches";
-}
-
 // static
 ACMatchClassifications HistoryProvider::SpansFromTermMatch(
     const TermMatches& matches,
@@ -87,8 +57,8 @@ ACMatchClassifications HistoryProvider::SpansFromTermMatch(
   size_t match_count = matches.size();
   for (size_t i = 0; i < match_count;) {
     size_t offset = matches[i].offset;
-    spans.push_back(ACMatchClassification(offset,
-        ACMatchClassification::MATCH | url_style));
+    spans.push_back(ACMatchClassification(
+        offset, ACMatchClassification::MATCH | url_style));
     // Skip all adjacent matches.
     do {
       offset += matches[i].length;
@@ -99,4 +69,33 @@ ACMatchClassifications HistoryProvider::SpansFromTermMatch(
   }
 
   return spans;
+}
+
+HistoryProvider::HistoryProvider(AutocompleteProvider::Type type,
+                                 AutocompleteProviderClient* client)
+    : AutocompleteProvider(type), client_(client) {}
+
+HistoryProvider::~HistoryProvider() {}
+
+void HistoryProvider::DeleteMatchFromMatches(const AutocompleteMatch& match) {
+  bool found = false;
+  BookmarkModel* bookmark_model = client_->GetBookmarkModel();
+  for (auto i(matches_.begin()); i != matches_.end(); ++i) {
+    if (i->destination_url == match.destination_url && i->type == match.type) {
+      found = true;
+      if ((i->type == AutocompleteMatchType::URL_WHAT_YOU_TYPED) ||
+          (bookmark_model &&
+           bookmark_model->IsBookmarked(i->destination_url))) {
+        // We can't get rid of What-You-Typed or Bookmarked matches,
+        // but we can make them look like they have no backing data.
+        i->deletable = false;
+        i->description.clear();
+        i->description_class.clear();
+      } else {
+        matches_.erase(i);
+      }
+      break;
+    }
+  }
+  DCHECK(found) << "Asked to delete a URL that isn't in our set of matches";
 }

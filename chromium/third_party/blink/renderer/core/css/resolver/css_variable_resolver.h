@@ -5,15 +5,11 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_CSS_RESOLVER_CSS_VARIABLE_RESOLVER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_RESOLVER_CSS_VARIABLE_RESOLVER_H_
 
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token.h"
-#include "third_party/blink/renderer/core/css_property_names.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string_hash.h"
-
-namespace WTF {
-class TextEncoding;
-}  // namespace WTF
 
 namespace blink {
 
@@ -22,7 +18,6 @@ class CSSParserTokenRange;
 class CSSPendingSubstitutionValue;
 class CSSVariableData;
 class CSSVariableReferenceValue;
-class KURL;
 class PropertyRegistration;
 class PropertyRegistry;
 class StyleInheritedVariables;
@@ -33,7 +28,7 @@ class CORE_EXPORT CSSVariableResolver {
   STACK_ALLOCATED();
 
  public:
-  CSSVariableResolver(const StyleResolverState&);
+  explicit CSSVariableResolver(const StyleResolverState&);
 
   scoped_refptr<CSSVariableData> ResolveCustomPropertyAnimationKeyframe(
       const CSSCustomPropertyDeclaration& keyframe,
@@ -47,6 +42,11 @@ class CORE_EXPORT CSSVariableResolver {
                                             bool disallow_animation_tainted);
 
   void ComputeRegisteredVariables();
+
+ protected:
+  // Called before looking up the value of some var()-reference to make it
+  // possible to apply animated properties during variable resolution.
+  virtual void ApplyAnimation(const AtomicString& name) {}
 
  private:
   struct Options {
@@ -79,6 +79,29 @@ class CORE_EXPORT CSSVariableResolver {
     //
     // https://drafts.css-houdini.org/css-properties-values-api-1/#dependency-cycles-via-relative-units
     bool disallow_registered_root_font_units = false;
+
+    // Absolutize CSSVariableData during variable resolution.
+    //
+    // Absolutization is a process where the substitution tokens of a registered
+    // custom property are "synthetically" created to represent the computed
+    // value of the custom property. For instance, a <length>-registered custom
+    // property may be specified with the value "10em". However, this property
+    // should substitute into others as the computed value, hence an equivalent
+    // token stream is needed. Assuming a font-size of 12px (for instance),
+    // the absolutization process would produce a token stream of "120px".
+    //
+    // Absolutization must take place after high-priority properties have been
+    // applied, to be able to resolve the relative units correctly. However,
+    // registered custom properties must also be usable for the high-priority
+    // properties themselves (e.g. color). When a high-priority property refers
+    // to a custom property with an (inner) var()-reference, that custom
+    // property is resolved "on the fly" with absolutize=false. This means that
+    // 1) a non- absolute value is returned, and 2) the resolved token stream
+    // for that custom property is not stored on the ComputedStyle. Storing the
+    // token stream on the ComputedStyle can only be done with absolutize=true,
+    // otherwise can permanently end up with the wrong token stream if one
+    // unregistered property reference a registered property, for instance.
+    bool absolutize = false;
   };
 
   struct Result {
@@ -90,6 +113,7 @@ class CORE_EXPORT CSSVariableResolver {
     bool is_animation_tainted = false;
     bool has_font_units = false;
     bool has_root_font_units = false;
+    bool absolutized = false;
   };
 
   const CSSValue* ResolvePendingSubstitutions(
@@ -105,9 +129,26 @@ class CORE_EXPORT CSSVariableResolver {
 
   // Resolves a range which may contain var() or env() references.
   bool ResolveTokenRange(CSSParserTokenRange, const Options&, Result&);
+
+  // Return value for ResolveFallback.
+  enum class Fallback {
+    // Fallback not present.
+    kNone,
+    // Fallback present, but resolution failed (i.e. invalid variables
+    // referenced), or the result did not match the syntax registered for
+    // the referenced variable (if applicable).
+    kFail,
+    // Fallback present, resolution succeeded, and syntax matched (if
+    // applicable).
+    kSuccess
+  };
+
   // Resolves the fallback (if present) of a var() or env() reference, starting
   // from the comma.
-  bool ResolveFallback(CSSParserTokenRange, const Options&, Result&);
+  Fallback ResolveFallback(CSSParserTokenRange,
+                           const Options&,
+                           const PropertyRegistration*,
+                           Result&);
   // Resolves the contents of a var() or env() reference.
   bool ResolveVariableReference(CSSParserTokenRange,
                                 const Options&,
@@ -117,21 +158,25 @@ class CORE_EXPORT CSSVariableResolver {
   // These return null if the custom property is invalid.
 
   // Returns the CSSVariableData for an environment variable.
-  CSSVariableData* ValueForEnvironmentVariable(const AtomicString& name);
+  scoped_refptr<CSSVariableData> ValueForEnvironmentVariable(
+      const AtomicString& name);
   // Returns the CSSVariableData for a custom property, resolving and storing it
   // if necessary.
-  CSSVariableData* ValueForCustomProperty(AtomicString name);
+  scoped_refptr<CSSVariableData> ValueForCustomProperty(AtomicString name,
+                                                        const Options&);
   // Resolves the CSSVariableData from a custom property declaration.
   scoped_refptr<CSSVariableData> ResolveCustomProperty(AtomicString name,
                                                        const CSSVariableData&,
+                                                       const Options&,
                                                        bool resolve_urls,
                                                        bool& cycle_detected);
-  // Rewrites (in-place) kUrlTokens and kFunctionToken/CSSValueUrls to contain
-  // absolute URLs.
-  void ResolveRelativeUrls(Vector<CSSParserToken>& tokens,
-                           Vector<String>& backing_strings,
-                           const KURL& base_url,
-                           const WTF::TextEncoding& charset);
+  // Like ResolveCustomProperty, but returns the incoming CSSVariableData if
+  // no resolution is needed.
+  scoped_refptr<CSSVariableData> ResolveCustomPropertyIfNeeded(
+      AtomicString name,
+      CSSVariableData*,
+      const Options&,
+      bool& cycle_detected);
 
   bool ShouldResolveRelativeUrls(const AtomicString& name,
                                  const CSSVariableData&);
@@ -139,6 +184,24 @@ class CORE_EXPORT CSSVariableResolver {
   bool IsVariableDisallowed(const CSSVariableData&,
                             const Options&,
                             const PropertyRegistration*);
+
+  // The following utilities get/set variables on either StyleInheritedVariables
+  // or StyleNonInheritedVariables, according to their PropertyRegistration.
+
+  CSSVariableData* GetVariable(const AtomicString& name,
+                               const PropertyRegistration*);
+  const CSSValue* GetRegisteredVariable(const AtomicString& name,
+                                        const PropertyRegistration&);
+  void SetVariable(const AtomicString& name,
+                   const PropertyRegistration*,
+                   scoped_refptr<CSSVariableData>);
+  void SetRegisteredVariable(const AtomicString& name,
+                             const PropertyRegistration&,
+                             const CSSValue*);
+  void SetInvalidVariable(const AtomicString& name,
+                          const PropertyRegistration*);
+  bool IsRegisteredVariableInvalid(const AtomicString& name,
+                                   const PropertyRegistration&);
 
   const StyleResolverState& state_;
   StyleInheritedVariables* inherited_variables_;

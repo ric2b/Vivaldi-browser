@@ -32,7 +32,8 @@ bool AppendArgumentFromJSONValue(const std::string& key,
       int value;
       bool result = value_node.GetAsInteger(&value);
       DCHECK(result);
-      command_line->AppendArg(argument_name + "=" + base::IntToString(value));
+      command_line->AppendArg(argument_name + "=" +
+                              base::NumberToString(value));
       break;
     }
     case base::Value::Type::STRING: {
@@ -95,14 +96,20 @@ bool LocalTestServer::StartInBackground() {
 
   // Get path to Python server script.
   base::FilePath testserver_path;
-  if (!GetTestServerPath(&testserver_path))
+  if (!GetTestServerPath(&testserver_path)) {
+    LOG(ERROR) << "Could not get test server path.";
     return false;
+  }
 
-  if (!SetPythonPath())
+  if (!SetPythonPath()) {
+    LOG(ERROR) << "Could not set Python path.";
     return false;
+  }
 
-  if (!LaunchPython(testserver_path))
+  if (!LaunchPython(testserver_path)) {
+    LOG(ERROR) << "Could not launch Python with path " << testserver_path;
     return false;
+  }
 
   return true;
 }
@@ -201,8 +208,7 @@ bool LocalTestServer::AddCommandLineArguments(
       const base::ListValue* list = NULL;
       if (!value.GetAsList(&list) || !list || list->empty())
         return false;
-      for (base::ListValue::const_iterator list_it = list->begin();
-           list_it != list->end(); ++list_it) {
+      for (auto list_it = list->begin(); list_it != list->end(); ++list_it) {
         if (!AppendArgumentFromJSONValue(key, *list_it, command_line))
           return false;
       }

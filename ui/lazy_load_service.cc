@@ -8,6 +8,7 @@
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_source.h"
+#include "chrome/browser/resource_coordinator/utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -22,12 +23,12 @@ const char LazyLoadService::kLazyLoadIsSafe[] = "lazy_load_is_safe";
 LazyLoadService::LazyLoadService(Profile* profile) : profile_(profile) {
   // Make sure the TabLifecycleUnitSource instance has been set up.
   g_browser_process->GetTabManager();
-  resource_coordinator::TabLifecycleUnitSource::GetInstance()->AddObserver(
+  resource_coordinator::GetTabLifecycleUnitSource()->AddObserver(
       this);
 }
 
 void LazyLoadService::Shutdown() {
-  resource_coordinator::TabLifecycleUnitSource::GetInstance()->RemoveObserver(
+  resource_coordinator::GetTabLifecycleUnitSource()->RemoveObserver(
       this);
 }
 
@@ -61,7 +62,7 @@ void LazyLoadService::OnLifecycleUnitCreated(
 
   bool is_active_tab =
       static_cast<resource_coordinator::LifecycleUnit*>(
-          resource_coordinator::TabLifecycleUnitSource::GetInstance()
+          resource_coordinator::GetTabLifecycleUnitSource()
               ->GetFocusedLifecycleUnit()) == lifecycle_unit;
 
   if (is_active_tab || !tab_strip_model ||

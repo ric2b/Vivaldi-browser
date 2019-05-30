@@ -49,7 +49,6 @@ IdlDefinitions
         IdlLiteral
         IdlOperation < TypedObject
             IdlArgument < TypedObject
-        IdlSerializer
         IdlStringifier
         IdlIterable < IdlIterableOrMaplikeOrSetlike
         IdlMaplike < IdlIterableOrMaplikeOrSetlike
@@ -64,6 +63,7 @@ Design doc: http://www.chromium.org/developers/design-documents/idl-compiler
 
 import abc
 
+from idl_types import IdlAnnotatedType
 from idl_types import IdlFrozenArrayType
 from idl_types import IdlNullableType
 from idl_types import IdlRecordType
@@ -297,7 +297,6 @@ class IdlInterface(object):
         self.extended_attributes = {}
         self.operations = []
         self.parent = None
-        self.serializer = None
         self.stringifier = None
         self.iterable = None
         self.has_indexed_elements = False
@@ -349,9 +348,6 @@ class IdlInterface(object):
                 self.operations.append(op)
             elif child_class == 'Inherit':
                 self.parent = child.GetName()
-            elif child_class == 'Serializer':
-                self.serializer = IdlSerializer(child)
-                self.process_serializer()
             elif child_class == 'Stringifier':
                 self.stringifier = IdlStringifier(child)
                 self.process_stringifier()
@@ -383,6 +379,9 @@ class IdlInterface(object):
                 raise ValueError('Value iterators (iterable<V>) must be accompanied by an indexed '
                                  'property getter and an integer-typed length attribute.')
 
+        if 'Unforgeable' in self.extended_attributes:
+            raise ValueError('[Unforgeable] cannot appear on interfaces.')
+
     def accept(self, visitor):
         visitor.visit_interface(self)
         for attribute in self.attributes:
@@ -402,12 +401,6 @@ class IdlInterface(object):
         elif self.setlike:
             self.setlike.accept(visitor)
 
-    def process_serializer(self):
-        """Add the serializer's named operation child, if it has one, as a regular
-        operation of this interface."""
-        if self.serializer.operation:
-            self.operations.append(self.serializer.operation)
-
     def process_stringifier(self):
         """Add the stringifier's attribute or named operation child, if it has
         one, as a regular attribute/operation of this interface."""
@@ -421,8 +414,6 @@ class IdlInterface(object):
         self.attributes.extend(other.attributes)
         self.constants.extend(other.constants)
         self.operations.extend(other.operations)
-        if self.serializer is None:
-            self.serializer = other.serializer
         if self.stringifier is None:
             self.stringifier = other.stringifier
 
@@ -438,6 +429,9 @@ class IdlAttribute(TypedObject):
         self.name = node.GetName() if node else None
         self.idl_type = None
         self.extended_attributes = {}
+        # In what interface the attribute is (originally) defined when the
+        # attribute is inherited from an ancestor interface.
+        self.defined_in = None
 
         if node:
             children = node.GetChildren()
@@ -449,6 +443,9 @@ class IdlAttribute(TypedObject):
                     self.extended_attributes = ext_attributes_node_to_extended_attributes(child)
                 else:
                     raise ValueError('Unrecognized node class: %s' % child_class)
+
+        if 'Unforgeable' in self.extended_attributes and self.is_static:
+            raise ValueError('[Unforgeable] cannot appear on static attributes.')
 
     def accept(self, visitor):
         visitor.visit_attribute(self)
@@ -475,6 +472,9 @@ class IdlConstant(TypedObject):
         # we don't use the full type_node_to_type function.
         self.idl_type = type_node_inner_to_type(type_node)
         self.value = value_node.GetProperty('VALUE')
+        # In what interface the attribute is (originally) defined when the
+        # attribute is inherited from an ancestor interface.
+        self.defined_in = None
 
         if num_children == 3:
             ext_attributes_node = children[2]
@@ -551,6 +551,9 @@ class IdlOperation(TypedObject):
         self.is_constructor = False
         self.idl_type = None
         self.is_static = False
+        # In what interface the attribute is (originally) defined when the
+        # attribute is inherited from an ancestor interface.
+        self.defined_in = None
 
         if not node:
             return
@@ -574,6 +577,9 @@ class IdlOperation(TypedObject):
                 self.extended_attributes = ext_attributes_node_to_extended_attributes(child)
             else:
                 raise ValueError('Unrecognized node class: %s' % child_class)
+
+        if 'Unforgeable' in self.extended_attributes and self.is_static:
+            raise ValueError('[Unforgeable] cannot appear on static operations.')
 
     @classmethod
     def constructor_from_arguments_node(cls, name, arguments_node):
@@ -636,42 +642,6 @@ def arguments_node_to_arguments(node):
     if node is None:
         return []
     return [IdlArgument(argument_node) for argument_node in node.GetChildren()]
-
-
-################################################################################
-# Serializers
-################################################################################
-
-class IdlSerializer(object):
-    def __init__(self, node):
-        self.attribute_name = node.GetProperty('ATTRIBUTE')
-        self.attribute_names = None
-        self.operation = None
-        self.extended_attributes = {}
-        self.is_attribute = False
-        self.is_getter = False
-        self.is_inherit = False
-        self.is_list = False
-        self.is_map = False
-
-        for child in node.GetChildren():
-            child_class = child.GetClass()
-            if child_class == 'Operation':
-                self.operation = IdlOperation(child)
-            elif child_class == 'List':
-                self.is_list = True
-                self.is_getter = bool(child.GetProperty('GETTER'))
-                self.attributes = child.GetProperty('ATTRIBUTES')
-            elif child_class == 'Map':
-                self.is_map = True
-                self.is_attribute = bool(child.GetProperty('ATTRIBUTE'))
-                self.is_getter = bool(child.GetProperty('GETTER'))
-                self.is_inherit = bool(child.GetProperty('INHERIT'))
-                self.attributes = child.GetProperty('ATTRIBUTES')
-            elif child_class == 'ExtAttributes':
-                self.extended_attributes = ext_attributes_node_to_extended_attributes(child)
-            else:
-                raise ValueError('Unrecognized node class: %s' % child_class)
 
 
 ################################################################################
@@ -942,7 +912,7 @@ def type_node_to_type(node):
     base_type = type_node_inner_to_type(children[0])
     if len(children) == 2:
         extended_attributes = ext_attributes_node_to_extended_attributes(children[1])
-        base_type.set_extended_attributes(extended_attributes)
+        base_type = IdlAnnotatedType(base_type, extended_attributes)
 
     if node.GetProperty('NULLABLE'):
         base_type = IdlNullableType(base_type)

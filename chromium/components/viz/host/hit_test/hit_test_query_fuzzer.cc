@@ -6,16 +6,13 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <vector>
+
 #include "base/command_line.h"
 #include "base/test/fuzzed_data_provider.h"
 #include "components/viz/host/hit_test/hit_test_query.h"
 
 namespace {
-
-uint32_t GetNextUInt32(base::FuzzedDataProvider* fuzz) {
-  return fuzz->ConsumeUint32InRange(std::numeric_limits<uint32_t>::min(),
-                                    std::numeric_limits<uint32_t>::max());
-}
 
 void AddHitTestRegion(base::FuzzedDataProvider* fuzz,
                       std::vector<viz::AggregatedHitTestRegion>* regions,
@@ -24,18 +21,30 @@ void AddHitTestRegion(base::FuzzedDataProvider* fuzz,
   constexpr uint32_t kMaxDepthAllowed = 25;
   if (fuzz->remaining_bytes() < sizeof(viz::AggregatedHitTestRegion))
     return;
-  viz::FrameSinkId frame_sink_id(GetNextUInt32(fuzz), GetNextUInt32(fuzz));
-  uint32_t flags = GetNextUInt32(fuzz);
-  gfx::Rect rect(fuzz->ConsumeUint8(), fuzz->ConsumeUint8(),
-                 fuzz->ConsumeUint16(), fuzz->ConsumeUint16());
+  viz::FrameSinkId frame_sink_id(fuzz->ConsumeIntegral<uint32_t>(),
+                                 fuzz->ConsumeIntegral<uint32_t>());
+  uint32_t flags = fuzz->ConsumeIntegral<uint32_t>();
+  // The reasons' value is kNotAsyncHitTest if the flag's value is kHitTestAsk.
+  uint32_t reasons = (flags & viz::HitTestRegionFlags::kHitTestAsk)
+                         ? fuzz->ConsumeIntegralInRange<uint32_t>(
+                               1, std::numeric_limits<uint32_t>::max())
+                         : viz::AsyncHitTestReasons::kNotAsyncHitTest;
+  gfx::Rect rect(
+      fuzz->ConsumeIntegralInRange<int>(std::numeric_limits<int>::min() + 1,
+                                        std::numeric_limits<int>::max()),
+      fuzz->ConsumeIntegralInRange<int>(std::numeric_limits<int>::min() + 1,
+                                        std::numeric_limits<int>::max()),
+      fuzz->ConsumeIntegral<int>(), fuzz->ConsumeIntegral<int>());
   int32_t child_count =
-      depth < kMaxDepthAllowed ? fuzz->ConsumeUint32InRange(0, 10) : 0;
+      depth < kMaxDepthAllowed ? fuzz->ConsumeIntegralInRange(0, 10) : 0;
   gfx::Transform transform;
   if (fuzz->ConsumeBool() && fuzz->remaining_bytes() >= sizeof(transform)) {
-    std::string matrix_bytes = fuzz->ConsumeBytes(sizeof(gfx::Transform));
-    memcpy(&transform, matrix_bytes.data(), sizeof(gfx::Transform));
+    std::vector<uint8_t> matrix_bytes =
+        fuzz->ConsumeBytes(sizeof(gfx::Transform));
+    memcpy(&transform, matrix_bytes.data(), matrix_bytes.size());
   }
-  regions->emplace_back(frame_sink_id, flags, rect, transform, child_count);
+  regions->emplace_back(frame_sink_id, flags, rect, transform, child_count,
+                        reasons);
   // Always add the first frame sink id, because the root needs to be in the
   // list of FrameSinkId.
   if (regions->size() == 1 || fuzz->ConsumeBool())
@@ -44,9 +53,17 @@ void AddHitTestRegion(base::FuzzedDataProvider* fuzz,
     AddHitTestRegion(fuzz, regions, frame_sink_ids, depth + 1);
 }
 
+class Environment {
+ public:
+  Environment() { base::CommandLine::Init(0, nullptr); }
+};
+
 }  // namespace
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t num_bytes) {
+  // Initialize the environment only once.
+  static Environment environment;
+
   // If there isn't enough memory to have a single AggregatedHitTestRegion, then
   // skip.
   if (num_bytes < sizeof(viz::AggregatedHitTestRegion))
@@ -66,8 +83,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t num_bytes) {
     for (float y = 0; y < 1000.; y += 10) {
       gfx::PointF location(x, y);
       query.FindTargetForLocation(viz::EventSource::MOUSE, location);
-      query.TransformLocationForTarget(viz::EventSource::MOUSE, frame_sink_ids,
-                                       location, &location);
+      query.TransformLocationForTarget(frame_sink_ids, location, &location);
     }
   }
 

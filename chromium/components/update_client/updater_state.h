@@ -21,8 +21,7 @@ class UpdaterState {
 
   static const char kIsEnterpriseManaged[];
 
-  // Returns a map of items representing the state of an updater. These items
-  // can be serialized as XML attributes in the request building.
+  // Returns a map of items representing the state of an updater.
   // If |is_machine| is true, this indicates that the updater state corresponds
   // to the machine instance of the updater. Returns nullptr on
   // the platforms and builds where this feature is not supported.
@@ -45,7 +44,6 @@ class UpdaterState {
   static std::string GetUpdaterName();
   static base::Version GetUpdaterVersion(bool is_machine);
   static bool IsAutoupdateCheckEnabled();
-  static bool IsEnterpriseManaged();
   static base::Time GetUpdaterLastStartedAU(bool is_machine);
   static base::Time GetUpdaterLastChecked(bool is_machine);
 

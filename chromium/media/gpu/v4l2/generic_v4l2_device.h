@@ -12,6 +12,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <vector>
 
 #include "base/files/scoped_file.h"
 #include "base/macros.h"
@@ -60,7 +61,7 @@ class GenericV4L2Device : public V4L2Device {
   EGLBoolean DestroyEGLImage(EGLDisplay egl_display,
                              EGLImageKHR egl_image) override;
   GLenum GetTextureTarget() override;
-  uint32_t PreferredInputFormat(Type type) override;
+  std::vector<uint32_t> PreferredInputFormat(Type type) override;
 
   std::vector<uint32_t> GetSupportedImageProcessorPixelformats(
       v4l2_buf_type buf_type) override;
@@ -75,6 +76,7 @@ class GenericV4L2Device : public V4L2Device {
   bool IsImageProcessingSupported() override;
 
   bool IsJpegDecodingSupported() override;
+  bool IsJpegEncodingSupported() override;
 
  private:
   // Vector of video device node paths and corresponding pixelformats supported

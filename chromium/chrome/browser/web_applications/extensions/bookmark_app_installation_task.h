@@ -13,6 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "chrome/browser/web_applications/components/pending_app_manager.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_ids_map.h"
 
 class Profile;
 enum class WebappInstallSource;
@@ -22,29 +23,26 @@ namespace content {
 class WebContents;
 }
 
+namespace web_app {
+class WebAppDataRetriever;
+enum class InstallResultCode;
+}
+
 namespace extensions {
 
-class BookmarkAppDataRetriever;
 class BookmarkAppHelper;
-class BookmarkAppInstaller;
 class Extension;
 
 // Class to install a BookmarkApp-based Shortcut or WebApp from a WebContents
 // or WebApplicationInfo. Can only be called from the UI thread.
 class BookmarkAppInstallationTask {
  public:
-  enum class ResultCode {
-    kSuccess,
-    kGetWebApplicationInfoFailed,
-    kInstallationFailed,
-  };
-
   struct Result {
-    Result(ResultCode code, base::Optional<std::string> app_id);
+    Result(web_app::InstallResultCode code, base::Optional<std::string> app_id);
     Result(Result&&);
     ~Result();
 
-    const ResultCode code;
+    const web_app::InstallResultCode code;
     const base::Optional<std::string> app_id;
 
     DISALLOW_COPY_AND_ASSIGN(Result);
@@ -71,21 +69,15 @@ class BookmarkAppInstallationTask {
 
   virtual ~BookmarkAppInstallationTask();
 
-  virtual void InstallWebAppOrShortcutFromWebContents(
-      content::WebContents* web_contents,
-      ResultCallback callback);
+  virtual void Install(content::WebContents* web_contents,
+                       ResultCallback callback);
 
   const web_app::PendingAppManager::AppInfo& app_info() { return app_info_; }
 
   void SetBookmarkAppHelperFactoryForTesting(
       BookmarkAppHelperFactory helper_factory);
   void SetDataRetrieverForTesting(
-      std::unique_ptr<BookmarkAppDataRetriever> data_retriever);
-  void SetInstallerForTesting(std::unique_ptr<BookmarkAppInstaller> installer);
-
- protected:
-  BookmarkAppDataRetriever& data_retriever() { return *data_retriever_; }
-  BookmarkAppInstaller& installer() { return *installer_; }
+      std::unique_ptr<web_app::WebAppDataRetriever> data_retriever);
 
  private:
   void OnGetWebApplicationInfo(
@@ -98,6 +90,8 @@ class BookmarkAppInstallationTask {
 
   Profile* profile_;
 
+  web_app::ExtensionIdsMap extension_ids_map_;
+
   const web_app::PendingAppManager::AppInfo app_info_;
 
   // We temporarily use a BookmarkAppHelper until the WebApp and WebShortcut
@@ -105,8 +99,7 @@ class BookmarkAppInstallationTask {
   std::unique_ptr<BookmarkAppHelper> helper_;
   BookmarkAppHelperFactory helper_factory_;
 
-  std::unique_ptr<BookmarkAppDataRetriever> data_retriever_;
-  std::unique_ptr<BookmarkAppInstaller> installer_;
+  std::unique_ptr<web_app::WebAppDataRetriever> data_retriever_;
 
   base::WeakPtrFactory<BookmarkAppInstallationTask> weak_ptr_factory_{this};
 

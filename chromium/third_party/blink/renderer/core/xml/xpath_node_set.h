@@ -32,15 +32,18 @@
 
 namespace blink {
 
-namespace XPath {
+namespace xpath {
 
 class NodeSet final : public GarbageCollected<NodeSet> {
  public:
-  static NodeSet* Create() { return new NodeSet; }
+  static NodeSet* Create() { return MakeGarbageCollected<NodeSet>(); }
   static NodeSet* Create(const NodeSet&);
+
+  NodeSet() : is_sorted_(true), subtrees_are_disjoint_(false) {}
+
   void Trace(blink::Visitor* visitor) { visitor->Trace(nodes_); }
 
-  size_t size() const { return nodes_.size(); }
+  wtf_size_t size() const { return nodes_.size(); }
   bool IsEmpty() const { return !nodes_.size(); }
   Node* operator[](unsigned i) const { return nodes_.at(i).Get(); }
   HeapVector<Member<Node>>::iterator begin() { return nodes_.begin(); }
@@ -49,7 +52,7 @@ class NodeSet final : public GarbageCollected<NodeSet> {
     return nodes_.begin();
   }
   HeapVector<Member<Node>>::const_iterator end() const { return nodes_.end(); }
-  void ReserveCapacity(size_t new_capacity) {
+  void ReserveCapacity(wtf_size_t new_capacity) {
     nodes_.ReserveCapacity(new_capacity);
   }
   void clear() { nodes_.clear(); }
@@ -88,7 +91,6 @@ class NodeSet final : public GarbageCollected<NodeSet> {
   void Reverse();
 
  private:
-  NodeSet() : is_sorted_(true), subtrees_are_disjoint_(false) {}
   void TraversalSort() const;
 
   bool is_sorted_;
@@ -96,7 +98,7 @@ class NodeSet final : public GarbageCollected<NodeSet> {
   HeapVector<Member<Node>> nodes_;
 };
 
-}  // namespace XPath
+}  // namespace xpath
 
 }  // namespace blink
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_XML_XPATH_NODE_SET_H_

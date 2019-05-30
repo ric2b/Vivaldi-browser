@@ -36,7 +36,7 @@ void Semaphore::Wait() {
   }
 }
 
-#elif defined(OS_LINUX) || defined(OS_AIX)
+#elif defined(OS_POSIX)
 
 Semaphore::Semaphore(int count) {
   DCHECK_GE(count, 0);

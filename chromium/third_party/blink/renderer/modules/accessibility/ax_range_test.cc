@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/modules/accessibility/testing/accessibility_test.h"
 
 namespace blink {
+namespace test {
 
 TEST_F(AccessibilityTest, CommonAncestorContainerOfRange) {
   SetBodyInnerHTML(R"HTML(<input id='input' type='text' value='value'>"
@@ -24,12 +25,12 @@ TEST_F(AccessibilityTest, CommonAncestorContainerOfRange) {
   ASSERT_NE(nullptr, paragraph);
   const AXObject* text1 = paragraph->FirstChild();
   ASSERT_NE(nullptr, text1);
-  ASSERT_EQ(AccessibilityRole::kStaticTextRole, text1->RoleValue());
+  ASSERT_EQ(ax::mojom::Role::kStaticText, text1->RoleValue());
   const AXObject* br = GetAXObjectByElementId("br");
   ASSERT_NE(nullptr, br);
   const AXObject* text2 = paragraph->LastChild();
   ASSERT_NE(nullptr, text2);
-  ASSERT_EQ(AccessibilityRole::kStaticTextRole, text2->RoleValue());
+  ASSERT_EQ(ax::mojom::Role::kStaticText, text2->RoleValue());
   const AXObject* button = GetAXObjectByElementId("button");
   ASSERT_NE(nullptr, button);
 
@@ -54,7 +55,7 @@ TEST_F(AccessibilityTest, IsCollapsedRange) {
   ASSERT_NE(nullptr, paragraph);
   const AXObject* text = paragraph->FirstChild();
   ASSERT_NE(nullptr, text);
-  ASSERT_EQ(AccessibilityRole::kStaticTextRole, text->RoleValue());
+  ASSERT_EQ(ax::mojom::Role::kStaticText, text->RoleValue());
 
   const AXRange paragraph_range(
       AXPosition::CreateLastPositionInObject(*paragraph),
@@ -79,4 +80,5 @@ TEST_F(AccessibilityTest, RangeOfContents) {
             paragraph_range.End());
 }
 
+}  // namespace test
 }  // namespace blink

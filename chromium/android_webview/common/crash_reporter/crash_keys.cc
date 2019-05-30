@@ -4,7 +4,7 @@
 
 #include "android_webview/common/crash_reporter/crash_keys.h"
 
-#include "components/crash/content/app/breakpad_linux.h"
+#include "components/crash/core/common/crash_key.h"
 
 namespace android_webview {
 namespace crash_keys {
@@ -20,6 +20,12 @@ const char* const kWebViewCrashKeyWhiteList[] = {
     kAppPackageName,
     kAppPackageVersionCode,
     kAndroidSdkInt,
+
+    // process type
+    "ptype",
+
+    // Java exception stack traces
+    "exception_info",
 
     // gpu
     "gpu-driver",
@@ -39,11 +45,23 @@ const char* const kWebViewCrashKeyWhiteList[] = {
     "mojo-message-error__3",
     "mojo-message-error__4",
     "total-discardable-memory-allocated",
+
+    // crash keys needed for recording finch trials
+    "variations",
+    "variations__1",
+    "variations__2",
+    "variations__3",
+    "variations__4",
+    "variations__5",
+    "variations__6",
+    "variations__7",
+    "variations__8",
+    "num-experiments",
     nullptr};
 // clang-format on
 
 void InitCrashKeysForWebViewTesting() {
-  breakpad::InitCrashKeysForTesting();
+  crash_reporter::InitializeCrashKeys();
 }
 
 }  // namespace crash_keys

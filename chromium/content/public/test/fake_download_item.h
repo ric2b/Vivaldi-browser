@@ -30,7 +30,7 @@ class FakeDownloadItem : public download::DownloadItem {
   void UpdateObservers() override;
   void Remove() override;
   void Pause() override;
-  void Resume() override;
+  void Resume(bool user_resume) override;
   void Cancel(bool user_cancel) override;
   void OpenDownload() override;
   void ShowDownloadInShell() override;
@@ -53,13 +53,16 @@ class FakeDownloadItem : public download::DownloadItem {
   base::Time GetLastAccessTime() const override;
   bool IsTransient() const override;
   bool IsParallelDownload() const override;
+  DownloadCreationType GetDownloadCreationType() const override;
   bool IsDone() const override;
   const std::string& GetETag() const override;
   const std::string& GetLastModifiedTime() const override;
   bool IsPaused() const override;
+  bool AllowMetered() const override;
   bool IsTemporary() const override;
   bool CanResume() const override;
   int64_t GetBytesWasted() const override;
+  int32_t GetAutoResumeCount() const override;
   const GURL& GetReferrerUrl() const override;
   const GURL& GetSiteUrl() const override;
   const GURL& GetTabUrl() const override;
@@ -132,6 +135,7 @@ class FakeDownloadItem : public download::DownloadItem {
   void SetIsDone(bool is_done);
   void SetETag(const std::string& etag);
   void SetLastModifiedTime(const std::string& last_modified_time);
+  void SetHash(const std::string& hash);
 
  private:
   base::ObserverList<Observer>::Unchecked observers_;
@@ -160,6 +164,7 @@ class FakeDownloadItem : public download::DownloadItem {
   bool is_done_ = false;
   std::string etag_;
   std::string last_modified_time_;
+  std::string hash_;
 
   // The members below are to be returned by methods, which return by reference.
   std::string dummy_string;

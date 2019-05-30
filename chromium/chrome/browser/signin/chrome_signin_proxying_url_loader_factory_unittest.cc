@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <memory>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/test/mock_callback.h"
@@ -81,8 +83,7 @@ class ChromeSigninProxyingURLLoaderFactoryTest : public testing::Test {
     auto delegate = std::make_unique<MockDelegate>();
     base::WeakPtr<MockDelegate> delegate_weak = delegate->GetWeakPtr();
 
-    proxying_factory_ = std::make_unique<ProxyingURLLoaderFactory>();
-    proxying_factory_->StartProxying(
+    proxying_factory_ = std::make_unique<ProxyingURLLoaderFactory>(
         std::move(delegate), NullWebContentsGetter(),
         std::move(factory_request), std::move(test_factory_ptr_info),
         base::BindOnce(&ChromeSigninProxyingURLLoaderFactoryTest::OnDisconnect,
@@ -102,7 +103,10 @@ class ChromeSigninProxyingURLLoaderFactoryTest : public testing::Test {
   }
 
  private:
-  void OnDisconnect() { proxying_factory_.reset(); }
+  void OnDisconnect(ProxyingURLLoaderFactory* factory) {
+    EXPECT_EQ(factory, proxying_factory_.get());
+    proxying_factory_.reset();
+  }
 
   content::TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<network::SimpleURLLoader> loader_;
@@ -278,8 +282,7 @@ TEST_F(ChromeSigninProxyingURLLoaderFactoryTest, TargetFactoryFailure) {
   auto delegate = std::make_unique<MockDelegate>();
   EXPECT_CALL(*delegate, ProcessRequest(_, _)).Times(0);
 
-  auto proxying_factory = std::make_unique<ProxyingURLLoaderFactory>();
-  proxying_factory->StartProxying(
+  auto proxying_factory = std::make_unique<ProxyingURLLoaderFactory>(
       std::move(delegate), NullWebContentsGetter(), std::move(factory_request),
       std::move(target_factory_ptr_info), base::DoNothing());
 

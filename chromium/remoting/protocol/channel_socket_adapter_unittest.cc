@@ -9,6 +9,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "net/base/io_buffer.h"
@@ -16,7 +17,7 @@
 #include "net/socket/socket.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/webrtc/p2p/base/mockicetransport.h"
+#include "third_party/webrtc/p2p/base/mock_ice_transport.h"
 
 using net::IOBuffer;
 
@@ -59,19 +60,19 @@ class TransportChannelSocketAdapterTest : public testing::Test {
 
 // Verify that Read() returns net::ERR_IO_PENDING.
 TEST_F(TransportChannelSocketAdapterTest, Read) {
-  scoped_refptr<IOBuffer> buffer(new IOBuffer(kBufferSize));
+  scoped_refptr<IOBuffer> buffer = base::MakeRefCounted<IOBuffer>(kBufferSize);
 
   int result = target_->Recv(buffer.get(), kBufferSize, callback_);
   ASSERT_EQ(net::ERR_IO_PENDING, result);
 
   channel_.SignalReadPacket(&channel_, kTestData, kTestDataSize,
-                            rtc::CreatePacketTime(0), 0);
+                            rtc::TimeMicros(), 0);
   EXPECT_EQ(kTestDataSize, callback_result_);
 }
 
 // Verify that Read() after Close() returns error.
 TEST_F(TransportChannelSocketAdapterTest, ReadClose) {
-  scoped_refptr<IOBuffer> buffer(new IOBuffer(kBufferSize));
+  scoped_refptr<IOBuffer> buffer = base::MakeRefCounted<IOBuffer>(kBufferSize);
 
   int result = target_->Recv(buffer.get(), kBufferSize, callback_);
   ASSERT_EQ(net::ERR_IO_PENDING, result);
@@ -85,7 +86,8 @@ TEST_F(TransportChannelSocketAdapterTest, ReadClose) {
 
 // Verify that Send sends the packet and returns correct result.
 TEST_F(TransportChannelSocketAdapterTest, Send) {
-  scoped_refptr<IOBuffer> buffer(new IOBuffer(kTestDataSize));
+  scoped_refptr<IOBuffer> buffer =
+      base::MakeRefCounted<IOBuffer>(kTestDataSize);
 
   EXPECT_CALL(channel_, SendPacket(buffer->data(), kTestDataSize, _, 0))
       .WillOnce(Return(kTestDataSize));
@@ -97,7 +99,8 @@ TEST_F(TransportChannelSocketAdapterTest, Send) {
 // Verify that the message is still sent if Send() is called while
 // socket is not open yet. The result is the packet is lost.
 TEST_F(TransportChannelSocketAdapterTest, SendPending) {
-  scoped_refptr<IOBuffer> buffer(new IOBuffer(kTestDataSize));
+  scoped_refptr<IOBuffer> buffer =
+      base::MakeRefCounted<IOBuffer>(kTestDataSize);
 
   EXPECT_CALL(channel_, SendPacket(buffer->data(), kTestDataSize, _, 0))
       .Times(1)

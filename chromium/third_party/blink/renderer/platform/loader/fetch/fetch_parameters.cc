@@ -75,10 +75,10 @@ void FetchParameters::SetCrossOriginAccessControl(
   // Currently FetchParametersMode is only used when the request goes to
   // Service Worker.
   resource_request_.SetFetchRequestMode(
-      network::mojom::FetchRequestMode::kCORS);
+      network::mojom::FetchRequestMode::kCors);
   resource_request_.SetFetchCredentialsMode(credentials_mode);
 
-  options_.security_origin = origin;
+  resource_request_.SetRequestorOrigin(origin);
 
   // TODO: Credentials should be removed only when the request is cross origin.
   resource_request_.RemoveUserAndPassFromURL();
@@ -115,6 +115,19 @@ void FetchParameters::SetClientLoFiPlaceholder() {
   resource_request_.SetPreviewsState(resource_request_.GetPreviewsState() |
                                      WebURLRequest::kClientLoFiOn);
   SetAllowImagePlaceholder();
+}
+
+void FetchParameters::SetLazyImagePlaceholder() {
+  resource_request_.SetPreviewsState(resource_request_.GetPreviewsState() |
+                                     WebURLRequest::kLazyImageLoadDeferred);
+  SetAllowImagePlaceholder();
+}
+
+void FetchParameters::SetLazyImageDeferred() {
+  resource_request_.SetPreviewsState(resource_request_.GetPreviewsState() |
+                                     WebURLRequest::kLazyImageLoadDeferred);
+  DCHECK_EQ(kNone, image_request_optimization_);
+  image_request_optimization_ = kDeferImageLoad;
 }
 
 void FetchParameters::SetAllowImagePlaceholder() {

@@ -12,11 +12,12 @@
 #include "ash/shell.h"
 #include "ash/wm/fullscreen_window_finder.h"
 #include "ash/wm/mru_window_tracker.h"
+#include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/wm_window_animations.h"
 #include "ash/wm/workspace/backdrop_controller.h"
 #include "ash/wm/workspace/backdrop_delegate.h"
-#include "ash/wm/workspace/workspace_event_handler_classic.h"
+#include "ash/wm/workspace/workspace_event_handler.h"
 #include "ash/wm/workspace/workspace_layout_manager.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/layer.h"
@@ -37,7 +38,7 @@ const int kInitialAnimationDurationMS = 200;
 
 WorkspaceController::WorkspaceController(aura::Window* viewport)
     : viewport_(viewport),
-      event_handler_(std::make_unique<WorkspaceEventHandlerClassic>(viewport)),
+      event_handler_(std::make_unique<WorkspaceEventHandler>(viewport)),
       layout_manager_(new WorkspaceLayoutManager(viewport)) {
   viewport_->AddObserver(this);
   ::wm::SetWindowVisibilityAnimationTransition(viewport_, ::wm::ANIMATE_NONE);
@@ -56,12 +57,18 @@ wm::WorkspaceWindowState WorkspaceController::GetWindowState() const {
   if (!viewport_)
     return wm::WORKSPACE_WINDOW_STATE_DEFAULT;
 
+  // Always use DEFAULT state in overview mode so that work area stays
+  // the same regardles of the window we have.
+  // The |overview_controller| can be null during shutdown.
+  if (Shell::Get()->overview_controller() &&
+      Shell::Get()->overview_controller()->IsSelecting()) {
+    return wm::WORKSPACE_WINDOW_STATE_DEFAULT;
+  }
+
   const aura::Window* fullscreen = wm::GetWindowForFullscreenMode(viewport_);
-  if (fullscreen && !wm::GetWindowState(fullscreen)->ignored_by_shelf())
+  if (fullscreen)
     return wm::WORKSPACE_WINDOW_STATE_FULL_SCREEN;
 
-  const gfx::Rect shelf_bounds(Shelf::ForWindow(viewport_)->GetIdealBounds());
-  bool window_overlaps_launcher = false;
   auto mru_list =
       Shell::Get()->mru_window_tracker()->BuildWindowListIgnoreModal();
 
@@ -69,18 +76,12 @@ wm::WorkspaceWindowState WorkspaceController::GetWindowState() const {
     if (window->GetRootWindow() != viewport_->GetRootWindow())
       continue;
     wm::WindowState* window_state = wm::GetWindowState(window);
-    if (window_state->ignored_by_shelf() ||
-        (window->layer() && !window->layer()->GetTargetVisibility())) {
+    if (window->layer() && !window->layer()->GetTargetVisibility())
       continue;
-    }
     if (window_state->IsMaximized())
       return wm::WORKSPACE_WINDOW_STATE_MAXIMIZED;
-    window_overlaps_launcher |= window->bounds().Intersects(shelf_bounds);
   }
-
-  return window_overlaps_launcher
-             ? wm::WORKSPACE_WINDOW_STATE_WINDOW_OVERLAPS_SHELF
-             : wm::WORKSPACE_WINDOW_STATE_DEFAULT;
+  return wm::WORKSPACE_WINDOW_STATE_DEFAULT;
 }
 
 void WorkspaceController::DoInitialAnimation() {

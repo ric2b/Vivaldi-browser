@@ -56,7 +56,7 @@ void GetStackRegions(
     LOG(ERROR) << "stack range has unexpected type, continuing anyway";
   }
 
-  if (range_with_sp.u.mapping.mmu_flags & ZX_VM_FLAG_PERM_EXECUTE) {
+  if (range_with_sp.u.mapping.mmu_flags & ZX_VM_PERM_EXECUTE) {
     LOG(ERROR)
         << "stack range is unexpectedly marked executable, continuing anyway";
   }
@@ -276,15 +276,26 @@ void ProcessReaderFuchsia::InitializeThreads() {
         thread.state = thread_info.state;
       }
 
-      zx_thread_state_general_regs_t regs;
+      zx_thread_state_general_regs_t general_regs;
       status = thread_handles[i].read_state(
-          ZX_THREAD_STATE_GENERAL_REGS, &regs, sizeof(regs));
+          ZX_THREAD_STATE_GENERAL_REGS, &general_regs, sizeof(general_regs));
       if (status != ZX_OK) {
-        ZX_LOG(WARNING, status) << "zx_thread_read_state";
+        ZX_LOG(WARNING, status)
+            << "zx_thread_read_state(ZX_THREAD_STATE_GENERAL_REGS)";
       } else {
-        thread.general_registers = regs;
+        thread.general_registers = general_regs;
 
-        GetStackRegions(regs, memory_map_, &thread.stack_regions);
+        GetStackRegions(general_regs, memory_map_, &thread.stack_regions);
+      }
+
+      zx_thread_state_vector_regs_t vector_regs;
+      status = thread_handles[i].read_state(
+          ZX_THREAD_STATE_VECTOR_REGS, &vector_regs, sizeof(vector_regs));
+      if (status != ZX_OK) {
+        ZX_LOG(WARNING, status)
+            << "zx_thread_read_state(ZX_THREAD_STATE_VECTOR_REGS)";
+      } else {
+        thread.vector_registers = vector_regs;
       }
     }
 

@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -90,28 +91,53 @@ GURL GetRequestUrl(const std::string& path) {
   return GetBaseSecureUrl().Resolve(path);
 }
 
-base::DictionaryValue BuildCustomerContextDictionary(
-    int64_t external_customer_id) {
-  base::DictionaryValue customer_context;
-  customer_context.SetString("external_customer_id",
-                             std::to_string(external_customer_id));
+// Tries to get the string |out_value| from the |dictionary| with the given
+// |key|.
+// Returns true if the string value was found, false otherwise.
+bool TryGetString(std::string key,
+                  base::Value& dictionary,
+                  std::string* out_value) {
+  base::Value* str_ptr = dictionary.FindKey(key);
+  if (str_ptr) {
+    *out_value = str_ptr->GetString();
+  }
+  return str_ptr;
+}
+
+// Tries to get the string |out_value| from the |dictionary| with the given
+// |path|.
+// Returns true if the string value was found, false otherwise.
+bool TryGetStringByPath(std::initializer_list<base::StringPiece> path,
+                        base::Value& dictionary,
+                        std::string* out_value) {
+  base::Value* str_ptr = dictionary.FindPath(path);
+  if (str_ptr) {
+    *out_value = str_ptr->GetString();
+  }
+  return str_ptr;
+}
+
+base::Value BuildCustomerContextDictionary(int64_t external_customer_id) {
+  base::Value customer_context(base::Value::Type::DICTIONARY);
+  customer_context.SetKey("external_customer_id",
+                          base::Value(std::to_string(external_customer_id)));
   return customer_context;
 }
 
-base::DictionaryValue BuildRiskDictionary(
-    const std::string& encoded_risk_data) {
-  base::DictionaryValue risk_data;
+base::Value BuildRiskDictionary(const std::string& encoded_risk_data) {
+  base::Value risk_data(base::Value::Type::DICTIONARY);
 #if defined(OS_IOS)
   // Browser fingerprinting is not available on iOS. Instead, we generate
   // RiskAdvisoryData.
-  risk_data.SetString("message_type", "RISK_ADVISORY_DATA");
-  risk_data.SetString("encoding_type", "BASE_64_URL");
+  risk_data.SetKey("message_type", base::Value("RISK_ADVISORY_DATA"));
+  risk_data.SetKey("encoding_type", base::Value("BASE_64_URL"));
 #else
-  risk_data.SetString("message_type", "BROWSER_NATIVE_FINGERPRINTING");
-  risk_data.SetString("encoding_type", "BASE_64");
+  risk_data.SetKey("message_type",
+                   base::Value("BROWSER_NATIVE_FINGERPRINTING"));
+  risk_data.SetKey("encoding_type", base::Value("BASE_64"));
 #endif
 
-  risk_data.SetString("value", encoded_risk_data);
+  risk_data.SetKey("value", base::Value(encoded_risk_data));
 
   return risk_data;
 }
@@ -120,65 +146,63 @@ void SetStringIfNotEmpty(const AutofillDataModel& profile,
                          const ServerFieldType& type,
                          const std::string& app_locale,
                          const std::string& path,
-                         base::DictionaryValue* dictionary) {
+                         base::Value& dictionary) {
   const base::string16 value = profile.GetInfo(AutofillType(type), app_locale);
   if (!value.empty())
-    dictionary->SetString(path, value);
+    dictionary.SetKey(path, base::Value(value));
 }
 
 void AppendStringIfNotEmpty(const AutofillProfile& profile,
                             const ServerFieldType& type,
                             const std::string& app_locale,
-                            base::ListValue* list) {
+                            base::Value& list) {
   const base::string16 value = profile.GetInfo(type, app_locale);
   if (!value.empty())
-    list->AppendString(value);
+    list.GetList().emplace_back(value);
 }
 
 // Returns a dictionary with the structure expected by Payments RPCs, containing
 // each of the fields in |profile|, formatted according to |app_locale|. If
 // |include_non_location_data| is false, the name and phone number in |profile|
 // are not included.
-std::unique_ptr<base::DictionaryValue> BuildAddressDictionary(
-    const AutofillProfile& profile,
-    const std::string& app_locale,
-    bool include_non_location_data) {
-  std::unique_ptr<base::DictionaryValue> postal_address(
-      new base::DictionaryValue());
+base::Value BuildAddressDictionary(const AutofillProfile& profile,
+                                   const std::string& app_locale,
+                                   bool include_non_location_data) {
+  base::Value postal_address(base::Value::Type::DICTIONARY);
 
   if (include_non_location_data) {
     SetStringIfNotEmpty(profile, NAME_FULL, app_locale,
-                        PaymentsClient::kRecipientName, postal_address.get());
+                        PaymentsClient::kRecipientName, postal_address);
   }
 
-  std::unique_ptr<base::ListValue> address_lines(new base::ListValue());
+  base::Value address_lines(base::Value::Type::LIST);
   AppendStringIfNotEmpty(profile, ADDRESS_HOME_LINE1, app_locale,
-                         address_lines.get());
+                         address_lines);
   AppendStringIfNotEmpty(profile, ADDRESS_HOME_LINE2, app_locale,
-                         address_lines.get());
+                         address_lines);
   AppendStringIfNotEmpty(profile, ADDRESS_HOME_LINE3, app_locale,
-                         address_lines.get());
-  if (!address_lines->empty())
-    postal_address->Set("address_line", std::move(address_lines));
+                         address_lines);
+  if (!address_lines.GetList().empty())
+    postal_address.SetKey("address_line", std::move(address_lines));
 
   SetStringIfNotEmpty(profile, ADDRESS_HOME_CITY, app_locale, "locality_name",
-                      postal_address.get());
+                      postal_address);
   SetStringIfNotEmpty(profile, ADDRESS_HOME_STATE, app_locale,
-                      "administrative_area_name", postal_address.get());
+                      "administrative_area_name", postal_address);
   SetStringIfNotEmpty(profile, ADDRESS_HOME_ZIP, app_locale,
-                      "postal_code_number", postal_address.get());
+                      "postal_code_number", postal_address);
 
   // Use GetRawInfo to get a country code instead of the country name:
   const base::string16 country_code = profile.GetRawInfo(ADDRESS_HOME_COUNTRY);
   if (!country_code.empty())
-    postal_address->SetString("country_name_code", country_code);
+    postal_address.SetKey("country_name_code", base::Value(country_code));
 
-  std::unique_ptr<base::DictionaryValue> address(new base::DictionaryValue());
-  address->Set("postal_address", std::move(postal_address));
+  base::Value address(base::Value::Type::DICTIONARY);
+  address.SetKey("postal_address", std::move(postal_address));
 
   if (include_non_location_data) {
     SetStringIfNotEmpty(profile, PHONE_HOME_WHOLE_NUMBER, app_locale,
-                        PaymentsClient::kPhoneNumber, address.get());
+                        PaymentsClient::kPhoneNumber, address);
   }
 
   return address;
@@ -189,12 +213,11 @@ std::unique_ptr<base::DictionaryValue> BuildAddressDictionary(
 // name (if any) fields in |credit_card|, formatted according to |app_locale|.
 // |pan_field_name| is the field name for the encrypted pan. We use each credit
 // card's guid as the unique id.
-std::unique_ptr<base::DictionaryValue> BuildCreditCardDictionary(
-    const CreditCard& credit_card,
-    const std::string& app_locale,
-    const std::string& pan_field_name) {
-  std::unique_ptr<base::DictionaryValue> card(new base::DictionaryValue());
-  card->SetString("unique_id", credit_card.guid());
+base::Value BuildCreditCardDictionary(const CreditCard& credit_card,
+                                      const std::string& app_locale,
+                                      const std::string& pan_field_name) {
+  base::Value card(base::Value::Type::DICTIONARY);
+  card.SetKey("unique_id", base::Value(credit_card.guid()));
 
   const base::string16 exp_month =
       credit_card.GetInfo(AutofillType(CREDIT_CARD_EXP_MONTH), app_locale);
@@ -202,30 +225,29 @@ std::unique_ptr<base::DictionaryValue> BuildCreditCardDictionary(
       AutofillType(CREDIT_CARD_EXP_4_DIGIT_YEAR), app_locale);
   int value = 0;
   if (base::StringToInt(exp_month, &value))
-    card->SetInteger("expiration_month", value);
+    card.SetKey("expiration_month", base::Value(value));
   if (base::StringToInt(exp_year, &value))
-    card->SetInteger("expiration_year", value);
+    card.SetKey("expiration_year", base::Value(value));
   SetStringIfNotEmpty(credit_card, CREDIT_CARD_NAME_FULL, app_locale,
-                      "cardholder_name", card.get());
+                      "cardholder_name", card);
 
-  card->SetString("encrypted_pan", "__param:" + pan_field_name);
+  card.SetKey("encrypted_pan", base::Value("__param:" + pan_field_name));
   return card;
 }
 
 // Populates the list of active experiments that affect either the data sent in
 // payments RPCs or whether the RPCs are sent or not.
 void SetActiveExperiments(const std::vector<const char*>& active_experiments,
-                          base::DictionaryValue* request_dict) {
+                          base::Value& request_dict) {
   if (active_experiments.empty())
     return;
 
-  std::unique_ptr<base::ListValue> active_chrome_experiments(
-      std::make_unique<base::ListValue>());
+  base::Value active_chrome_experiments(base::Value::Type::LIST);
   for (const char* it : active_experiments)
-    active_chrome_experiments->AppendString(it);
+    active_chrome_experiments.GetList().emplace_back(it);
 
-  request_dict->Set("active_chrome_experiments",
-                    std::move(active_chrome_experiments));
+  request_dict.SetKey("active_chrome_experiments",
+                      std::move(active_chrome_experiments));
 }
 
 class UnmaskCardRequest : public PaymentsRequest {
@@ -250,32 +272,35 @@ class UnmaskCardRequest : public PaymentsRequest {
   }
 
   std::string GetRequestContent() override {
-    base::DictionaryValue request_dict;
-    request_dict.SetString("encrypted_cvc", "__param:s7e_13_cvc");
-    request_dict.SetString("credit_card_id", request_details_.card.server_id());
+    base::Value request_dict(base::Value::Type::DICTIONARY);
+    request_dict.SetKey("encrypted_cvc", base::Value("__param:s7e_13_cvc"));
+    request_dict.SetKey("credit_card_id",
+                        base::Value(request_details_.card.server_id()));
     request_dict.SetKey("risk_data_encoded",
                         BuildRiskDictionary(request_details_.risk_data));
-    std::unique_ptr<base::DictionaryValue> context(new base::DictionaryValue());
-    context->SetInteger("billable_service", kUnmaskCardBillableServiceNumber);
+    base::Value context(base::Value::Type::DICTIONARY);
+    context.SetKey("billable_service",
+                   base::Value(kUnmaskCardBillableServiceNumber));
     if (request_details_.billing_customer_number != 0) {
-      context->SetKey("customer_context",
-                      BuildCustomerContextDictionary(
-                          request_details_.billing_customer_number));
+      context.SetKey("customer_context",
+                     BuildCustomerContextDictionary(
+                         request_details_.billing_customer_number));
     }
-    request_dict.Set("context", std::move(context));
+    request_dict.SetKey("context", std::move(context));
 
     if (ShouldUseActiveSignedInAccount()) {
-      std::unique_ptr<base::DictionaryValue> chrome_user_context(
-          new base::DictionaryValue());
-      chrome_user_context->SetBoolean("full_sync_enabled", full_sync_enabled_);
-      request_dict.Set("chrome_user_context", std::move(chrome_user_context));
+      base::Value chrome_user_context(base::Value::Type::DICTIONARY);
+      chrome_user_context.SetKey("full_sync_enabled",
+                                 base::Value(full_sync_enabled_));
+      request_dict.SetKey("chrome_user_context",
+                          std::move(chrome_user_context));
     }
 
     int value = 0;
     if (base::StringToInt(request_details_.user_response.exp_month, &value))
-      request_dict.SetInteger("expiration_month", value);
+      request_dict.SetKey("expiration_month", base::Value(value));
     if (base::StringToInt(request_details_.user_response.exp_year, &value))
-      request_dict.SetInteger("expiration_year", value);
+      request_dict.SetKey("expiration_year", base::Value(value));
 
     std::string json_request;
     base::JSONWriter::Write(request_dict, &json_request);
@@ -289,8 +314,8 @@ class UnmaskCardRequest : public PaymentsRequest {
     return request_content;
   }
 
-  void ParseResponse(std::unique_ptr<base::DictionaryValue> response) override {
-    response->GetString("pan", &real_pan_);
+  void ParseResponse(base::Value response) override {
+    TryGetString("pan", response, &real_pan_);
   }
 
   bool IsResponseComplete() override { return !real_pan_.empty(); }
@@ -313,22 +338,23 @@ class GetUploadDetailsRequest : public PaymentsRequest {
   GetUploadDetailsRequest(
       const std::vector<AutofillProfile>& addresses,
       const int detected_values,
-      const std::string& pan_first_six,
       const std::vector<const char*>& active_experiments,
       const bool full_sync_enabled,
       const std::string& app_locale,
       base::OnceCallback<void(AutofillClient::PaymentsRpcResult,
                               const base::string16&,
-                              std::unique_ptr<base::DictionaryValue>)> callback,
-      const int billable_service_number)
+                              std::unique_ptr<base::Value>,
+                              std::vector<std::pair<int, int>>)> callback,
+      const int billable_service_number,
+      PaymentsClient::UploadCardSource upload_card_source)
       : addresses_(addresses),
         detected_values_(detected_values),
-        pan_first_six_(pan_first_six),
         active_experiments_(active_experiments),
         full_sync_enabled_(full_sync_enabled),
         app_locale_(app_locale),
         callback_(std::move(callback)),
-        billable_service_number_(billable_service_number) {}
+        billable_service_number_(billable_service_number),
+        upload_card_source_(upload_card_source) {}
   ~GetUploadDetailsRequest() override {}
 
   std::string GetRequestUrlPath() override {
@@ -338,20 +364,21 @@ class GetUploadDetailsRequest : public PaymentsRequest {
   std::string GetRequestContentType() override { return "application/json"; }
 
   std::string GetRequestContent() override {
-    base::DictionaryValue request_dict;
-    std::unique_ptr<base::DictionaryValue> context(new base::DictionaryValue());
-    context->SetString("language_code", app_locale_);
-    context->SetInteger("billable_service", billable_service_number_);
-    request_dict.Set("context", std::move(context));
+    base::Value request_dict(base::Value::Type::DICTIONARY);
+    base::Value context(base::Value::Type::DICTIONARY);
+    context.SetKey("language_code", base::Value(app_locale_));
+    context.SetKey("billable_service", base::Value(billable_service_number_));
+    request_dict.SetKey("context", std::move(context));
 
     if (ShouldUseActiveSignedInAccount()) {
-      std::unique_ptr<base::DictionaryValue> chrome_user_context(
-          new base::DictionaryValue());
-      chrome_user_context->SetBoolean("full_sync_enabled", full_sync_enabled_);
-      request_dict.Set("chrome_user_context", std::move(chrome_user_context));
+      base::Value chrome_user_context(base::Value::Type::DICTIONARY);
+      chrome_user_context.SetKey("full_sync_enabled",
+                                 base::Value(full_sync_enabled_));
+      request_dict.SetKey("chrome_user_context",
+                          std::move(chrome_user_context));
     }
 
-    std::unique_ptr<base::ListValue> addresses(new base::ListValue());
+    base::Value addresses(base::Value::Type::LIST);
     for (const AutofillProfile& profile : addresses_) {
       // These addresses are used by Payments to (1) accurately determine the
       // user's country in order to show the correct legal documents and (2) to
@@ -360,20 +387,46 @@ class GetUploadDetailsRequest : public PaymentsRequest {
       // min address is not possible). The final parameter directs
       // BuildAddressDictionary to omit names and phone numbers, which aren't
       // useful for these purposes.
-      addresses->Append(BuildAddressDictionary(profile, app_locale_, false));
+      addresses.GetList().push_back(
+          BuildAddressDictionary(profile, app_locale_, false));
     }
-    request_dict.Set("address", std::move(addresses));
+    request_dict.SetKey("address", std::move(addresses));
 
     // It's possible we may not have found name/address/CVC in the checkout
     // flow. The detected_values_ bitmask tells Payments what *was* found, and
     // Payments will decide if the provided data is enough to offer upload save.
-    request_dict.SetInteger("detected_values", detected_values_);
+    request_dict.SetKey("detected_values", base::Value(detected_values_));
 
-    if (features::IsAutofillUpstreamSendPanFirstSixExperimentEnabled() &&
-        !pan_first_six_.empty())
-      request_dict.SetString("pan_first6", pan_first_six_);
+    SetActiveExperiments(active_experiments_, request_dict);
 
-    SetActiveExperiments(active_experiments_, &request_dict);
+    switch (upload_card_source_) {
+      case PaymentsClient::UploadCardSource::UNKNOWN_UPLOAD_CARD_SOURCE:
+        request_dict.SetKey("upload_card_source",
+                            base::Value("UNKNOWN_UPLOAD_CARD_SOURCE"));
+        break;
+      case PaymentsClient::UploadCardSource::UPSTREAM_CHECKOUT_FLOW:
+        request_dict.SetKey("upload_card_source",
+                            base::Value("UPSTREAM_CHECKOUT_FLOW"));
+        break;
+      case PaymentsClient::UploadCardSource::UPSTREAM_SETTINGS_PAGE:
+        request_dict.SetKey("upload_card_source",
+                            base::Value("UPSTREAM_SETTINGS_PAGE"));
+        break;
+      case PaymentsClient::UploadCardSource::UPSTREAM_CARD_OCR:
+        request_dict.SetKey("upload_card_source",
+                            base::Value("UPSTREAM_CARD_OCR"));
+        break;
+      case PaymentsClient::UploadCardSource::LOCAL_CARD_MIGRATION_CHECKOUT_FLOW:
+        request_dict.SetKey("upload_card_source",
+                            base::Value("LOCAL_CARD_MIGRATION_CHECKOUT_FLOW"));
+        break;
+      case PaymentsClient::UploadCardSource::LOCAL_CARD_MIGRATION_SETTINGS_PAGE:
+        request_dict.SetKey("upload_card_source",
+                            base::Value("LOCAL_CARD_MIGRATION_SETTINGS_PAGE"));
+        break;
+      default:
+        NOTREACHED();
+    }
 
     std::string request_content;
     base::JSONWriter::Write(request_dict, &request_content);
@@ -381,11 +434,25 @@ class GetUploadDetailsRequest : public PaymentsRequest {
     return request_content;
   }
 
-  void ParseResponse(std::unique_ptr<base::DictionaryValue> response) override {
-    response->GetString("context_token", &context_token_);
-    base::DictionaryValue* unowned_legal_message;
-    if (response->GetDictionary("legal_message", &unowned_legal_message))
-      legal_message_ = unowned_legal_message->CreateDeepCopy();
+  void ParseResponse(base::Value response) override {
+    std::string context_token_utf8;
+    if (TryGetString("context_token", response, &context_token_utf8)) {
+      context_token_ = base::UTF8ToUTF16(context_token_utf8);
+    }
+
+    base::Value* dictionary_value = response.FindKey("legal_message");
+    if (dictionary_value)
+      legal_message_ = std::make_unique<base::Value>(dictionary_value->Clone());
+
+    base::Value* list_ptr = response.FindKey("supported_card_bin_ranges");
+    if (list_ptr && list_ptr->is_list()) {
+      for (base::Value& result : list_ptr->GetList()) {
+        DCHECK(result.is_dict());
+        base::Optional<int> start = response.FindIntKey("start");
+        base::Optional<int> end = response.FindIntKey("end");
+        supported_card_bin_ranges_.push_back(std::make_pair(*start, *end));
+      }
+    }
   }
 
   bool IsResponseComplete() override {
@@ -393,23 +460,26 @@ class GetUploadDetailsRequest : public PaymentsRequest {
   }
 
   void RespondToDelegate(AutofillClient::PaymentsRpcResult result) override {
-    std::move(callback_).Run(result, context_token_, std::move(legal_message_));
+    std::move(callback_).Run(result, context_token_, std::move(legal_message_),
+                             supported_card_bin_ranges_);
   }
 
  private:
   const std::vector<AutofillProfile> addresses_;
   const int detected_values_;
-  const std::string pan_first_six_;
   const std::vector<const char*> active_experiments_;
   const bool full_sync_enabled_;
   std::string app_locale_;
   base::OnceCallback<void(AutofillClient::PaymentsRpcResult,
                           const base::string16&,
-                          std::unique_ptr<base::DictionaryValue>)>
+                          std::unique_ptr<base::Value>,
+                          std::vector<std::pair<int, int>>)>
       callback_;
   base::string16 context_token_;
-  std::unique_ptr<base::DictionaryValue> legal_message_;
+  std::unique_ptr<base::Value> legal_message_;
+  std::vector<std::pair<int, int>> supported_card_bin_ranges_;
   const int billable_service_number_;
+  PaymentsClient::UploadCardSource upload_card_source_;
 };
 
 class UploadCardRequest : public PaymentsRequest {
@@ -430,41 +500,45 @@ class UploadCardRequest : public PaymentsRequest {
   }
 
   std::string GetRequestContent() override {
-    base::DictionaryValue request_dict;
-    request_dict.SetString("encrypted_pan", "__param:s7e_1_pan");
+    base::Value request_dict(base::Value::Type::DICTIONARY);
+    request_dict.SetKey("encrypted_pan", base::Value("__param:s7e_1_pan"));
     if (!request_details_.cvc.empty())
-      request_dict.SetString("encrypted_cvc", "__param:s7e_13_cvc");
+      request_dict.SetKey("encrypted_cvc", base::Value("__param:s7e_13_cvc"));
     request_dict.SetKey("risk_data_encoded",
                         BuildRiskDictionary(request_details_.risk_data));
 
     const std::string& app_locale = request_details_.app_locale;
-    std::unique_ptr<base::DictionaryValue> context(new base::DictionaryValue());
-    context->SetString("language_code", app_locale);
-    context->SetInteger("billable_service", kUploadCardBillableServiceNumber);
+    base::Value context(base::Value::Type::DICTIONARY);
+    context.SetKey("language_code", base::Value(app_locale));
+    context.SetKey("billable_service",
+                   base::Value(kUploadCardBillableServiceNumber));
     if (request_details_.billing_customer_number != 0) {
-      context->SetKey("customer_context",
-                      BuildCustomerContextDictionary(
-                          request_details_.billing_customer_number));
+      context.SetKey("customer_context",
+                     BuildCustomerContextDictionary(
+                         request_details_.billing_customer_number));
     }
-    request_dict.Set("context", std::move(context));
+    request_dict.SetKey("context", std::move(context));
 
     if (ShouldUseActiveSignedInAccount()) {
-      std::unique_ptr<base::DictionaryValue> chrome_user_context(
-          new base::DictionaryValue());
-      chrome_user_context->SetBoolean("full_sync_enabled", full_sync_enabled_);
-      request_dict.Set("chrome_user_context", std::move(chrome_user_context));
+      base::Value chrome_user_context(base::Value::Type::DICTIONARY);
+      chrome_user_context.SetKey("full_sync_enabled",
+                                 base::Value(full_sync_enabled_));
+      request_dict.SetKey("chrome_user_context",
+                          std::move(chrome_user_context));
     }
 
     SetStringIfNotEmpty(request_details_.card, CREDIT_CARD_NAME_FULL,
-                        app_locale, "cardholder_name", &request_dict);
+                        app_locale, "cardholder_name", request_dict);
 
-    std::unique_ptr<base::ListValue> addresses(new base::ListValue());
+    base::Value addresses(base::Value::Type::LIST);
     for (const AutofillProfile& profile : request_details_.profiles) {
-      addresses->Append(BuildAddressDictionary(profile, app_locale, true));
+      addresses.GetList().push_back(
+          BuildAddressDictionary(profile, app_locale, true));
     }
-    request_dict.Set("address", std::move(addresses));
+    request_dict.SetKey("address", std::move(addresses));
 
-    request_dict.SetString("context_token", request_details_.context_token);
+    request_dict.SetKey("context_token",
+                        base::Value(request_details_.context_token));
 
     int value = 0;
     const base::string16 exp_month = request_details_.card.GetInfo(
@@ -472,11 +546,11 @@ class UploadCardRequest : public PaymentsRequest {
     const base::string16 exp_year = request_details_.card.GetInfo(
         AutofillType(CREDIT_CARD_EXP_4_DIGIT_YEAR), app_locale);
     if (base::StringToInt(exp_month, &value))
-      request_dict.SetInteger("expiration_month", value);
+      request_dict.SetKey("expiration_month", base::Value(value));
     if (base::StringToInt(exp_year, &value))
-      request_dict.SetInteger("expiration_year", value);
+      request_dict.SetKey("expiration_year", base::Value(value));
 
-    SetActiveExperiments(request_details_.active_experiments, &request_dict);
+    SetActiveExperiments(request_details_.active_experiments, request_dict);
 
     const base::string16 pan = request_details_.card.GetInfo(
         AutofillType(CREDIT_CARD_NUMBER), app_locale);
@@ -501,8 +575,8 @@ class UploadCardRequest : public PaymentsRequest {
     return request_content;
   }
 
-  void ParseResponse(std::unique_ptr<base::DictionaryValue> response) override {
-    response->GetString("credit_card_id", &server_id_);
+  void ParseResponse(base::Value response) override {
+    TryGetString("credit_card_id", response, &server_id_);
   }
 
   bool IsResponseComplete() override { return true; }
@@ -539,49 +613,49 @@ class MigrateCardsRequest : public PaymentsRequest {
     return "application/x-www-form-urlencoded";
   }
 
-  // TODO(crbug.com/877281):Refactor DictionaryValue to base::Value
   std::string GetRequestContent() override {
-    base::DictionaryValue request_dict;
+    base::Value request_dict(base::Value::Type::DICTIONARY);
 
     request_dict.SetKey("risk_data_encoded",
                         BuildRiskDictionary(request_details_.risk_data));
 
     const std::string& app_locale = request_details_.app_locale;
-    std::unique_ptr<base::DictionaryValue> context(new base::DictionaryValue());
-    context->SetString("language_code", app_locale);
-    context->SetInteger("billable_service", kMigrateCardsBillableServiceNumber);
+    base::Value context(base::Value::Type::DICTIONARY);
+    context.SetKey("language_code", base::Value(app_locale));
+    context.SetKey("billable_service",
+                   base::Value(kMigrateCardsBillableServiceNumber));
     if (request_details_.billing_customer_number != 0) {
-      context->SetKey("customer_context",
-                      BuildCustomerContextDictionary(
-                          request_details_.billing_customer_number));
+      context.SetKey("customer_context",
+                     BuildCustomerContextDictionary(
+                         request_details_.billing_customer_number));
     }
-    request_dict.Set("context", std::move(context));
+    request_dict.SetKey("context", std::move(context));
 
     if (ShouldUseActiveSignedInAccount()) {
-      std::unique_ptr<base::DictionaryValue> chrome_user_context(
-          new base::DictionaryValue());
-      chrome_user_context->SetBoolean("full_sync_enabled", full_sync_enabled_);
-      request_dict.Set("chrome_user_context", std::move(chrome_user_context));
+      base::Value chrome_user_context(base::Value::Type::DICTIONARY);
+      chrome_user_context.SetKey("full_sync_enabled",
+                                 base::Value(full_sync_enabled_));
+      request_dict.SetKey("chrome_user_context",
+                          std::move(chrome_user_context));
     }
 
-    request_dict.SetString("context_token", request_details_.context_token);
+    request_dict.SetKey("context_token",
+                        base::Value(request_details_.context_token));
 
     std::string all_pans_data = std::string();
-    std::unique_ptr<base::ListValue> migrate_cards(new base::ListValue());
+    base::Value migrate_cards(base::Value::Type::LIST);
     for (size_t index = 0; index < migratable_credit_cards_.size(); ++index) {
-      if (migratable_credit_cards_[index].is_chosen()) {
-        std::string pan_field_name = GetPanFieldName(index);
-        // Generate credit card dictionary.
-        migrate_cards->Append(BuildCreditCardDictionary(
-            migratable_credit_cards_[index].credit_card(), app_locale,
-            pan_field_name));
-        // Append pan data to the |all_pans_data|.
-        all_pans_data +=
-            GetAppendPan(migratable_credit_cards_[index].credit_card(),
-                         app_locale, pan_field_name);
-      }
+      std::string pan_field_name = GetPanFieldName(index);
+      // Generate credit card dictionary.
+      migrate_cards.GetList().push_back(BuildCreditCardDictionary(
+          migratable_credit_cards_[index].credit_card(), app_locale,
+          pan_field_name));
+      // Append pan data to the |all_pans_data|.
+      all_pans_data +=
+          GetAppendPan(migratable_credit_cards_[index].credit_card(),
+                       app_locale, pan_field_name);
     }
-    request_dict.Set("local_card", std::move(migrate_cards));
+    request_dict.SetKey("local_card", std::move(migrate_cards));
 
     std::string json_request;
     base::JSONWriter::Write(request_dict, &json_request);
@@ -592,23 +666,26 @@ class MigrateCardsRequest : public PaymentsRequest {
     return request_content;
   }
 
-  void ParseResponse(std::unique_ptr<base::DictionaryValue> response) override {
-    const base::ListValue* save_result_list = nullptr;
-    if (!response->GetList("save_result", &save_result_list))
+  void ParseResponse(base::Value response) override {
+    base::Value* list_ptr = response.FindKey("save_result");
+    if (!list_ptr || !list_ptr->is_list())
       return;
     save_result_ =
         std::make_unique<std::unordered_map<std::string, std::string>>();
-    for (size_t i = 0; i < save_result_list->GetSize(); ++i) {
-      const base::DictionaryValue* single_card_save_result;
-      if (save_result_list->GetDictionary(i, &single_card_save_result)) {
+
+    for (base::Value& result : list_ptr->GetList()) {
+      if (result.is_dict()) {
         std::string unique_id;
-        single_card_save_result->GetString("unique_id", &unique_id);
+        TryGetString("unique_id", result, &unique_id);
+
         std::string save_result;
-        single_card_save_result->GetString("status", &save_result);
+        TryGetString("status", result, &save_result);
+
         save_result_->insert(std::make_pair(unique_id, save_result));
       }
     }
-    response->GetString("value_prop_display_text", &display_text_);
+
+    TryGetString("value_prop_display_text", response, &display_text_);
   }
 
   bool IsResponseComplete() override {
@@ -704,18 +781,19 @@ void PaymentsClient::UnmaskCard(
 void PaymentsClient::GetUploadDetails(
     const std::vector<AutofillProfile>& addresses,
     const int detected_values,
-    const std::string& pan_first_six,
     const std::vector<const char*>& active_experiments,
     const std::string& app_locale,
     base::OnceCallback<void(AutofillClient::PaymentsRpcResult,
                             const base::string16&,
-                            std::unique_ptr<base::DictionaryValue>)> callback,
-    const int billable_service_number) {
+                            std::unique_ptr<base::Value>,
+                            std::vector<std::pair<int, int>>)> callback,
+    const int billable_service_number,
+    UploadCardSource upload_card_source) {
   IssueRequest(
       std::make_unique<GetUploadDetailsRequest>(
-          addresses, detected_values, pan_first_six, active_experiments,
+          addresses, detected_values, active_experiments,
           account_info_getter_->IsSyncFeatureEnabled(), app_locale,
-          std::move(callback), billable_service_number),
+          std::move(callback), billable_service_number, upload_card_source),
       false);
 }
 
@@ -783,11 +861,11 @@ void PaymentsClient::InitializeResourceRequest() {
     // Add Chrome experiment state to the request headers.
     net::HttpRequestHeaders headers;
     // User is always signed-in to be able to upload card to Google Payments.
-    variations::AppendVariationHeaders(
+    variations::AppendVariationsHeader(
         resource_request_->url,
         is_off_the_record_ ? variations::InIncognito::kYes
                            : variations::InIncognito::kNo,
-        variations::SignedIn::kYes, &resource_request_->headers);
+        variations::SignedIn::kYes, resource_request_.get());
   }
 }
 
@@ -807,7 +885,7 @@ void PaymentsClient::OnSimpleLoaderComplete(
 
 void PaymentsClient::OnSimpleLoaderCompleteInternal(int response_code,
                                                     const std::string& data) {
-  std::unique_ptr<base::DictionaryValue> response_dict;
+  base::Value response_dict(base::Value::Type::DICTIONARY);
   VLOG(2) << "Got data: " << data;
 
   AutofillClient::PaymentsRpcResult result = AutofillClient::SUCCESS;
@@ -816,11 +894,12 @@ void PaymentsClient::OnSimpleLoaderCompleteInternal(int response_code,
     // Valid response.
     case net::HTTP_OK: {
       std::string error_code;
-      std::unique_ptr<base::Value> message_value = base::JSONReader::Read(data);
+      std::unique_ptr<base::Value> message_value =
+          base::JSONReader::ReadDeprecated(data);
       if (message_value.get() && message_value->is_dict()) {
-        response_dict.reset(
-            static_cast<base::DictionaryValue*>(message_value.release()));
-        response_dict->GetString("error.code", &error_code);
+        response_dict =
+            base::Value::FromUniquePtrValue(std::move(message_value));
+        TryGetStringByPath({"error", "code"}, response_dict, &error_code);
         request_->ParseResponse(std::move(response_dict));
       }
 
@@ -897,7 +976,7 @@ void PaymentsClient::StartTokenFetch(bool invalidate_old) {
 
   DCHECK(account_info_getter_);
 
-  OAuth2TokenService::ScopeSet payments_scopes;
+  identity::ScopeSet payments_scopes;
   payments_scopes.insert(kPaymentsOAuth2Scope);
   std::string account_id =
       account_info_getter_->GetAccountInfoForPaymentsServer().account_id;
@@ -916,9 +995,8 @@ void PaymentsClient::StartTokenFetch(bool invalidate_old) {
 
 void PaymentsClient::SetOAuth2TokenAndStartRequest() {
   DCHECK(resource_request_);
-  resource_request_->headers.AddHeaderFromString(
-      net::HttpRequestHeaders::kAuthorization + std::string(": Bearer ") +
-      access_token_);
+  resource_request_->headers.SetHeader(net::HttpRequestHeaders::kAuthorization,
+                                       std::string("Bearer ") + access_token_);
   StartRequest();
 }
 

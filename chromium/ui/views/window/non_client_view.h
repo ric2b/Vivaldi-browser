@@ -9,10 +9,6 @@
 #include "ui/views/view.h"
 #include "ui/views/view_targeter_delegate.h"
 
-namespace gfx {
-class Path;
-}
-
 namespace views {
 
 class ClientView;
@@ -68,8 +64,7 @@ class VIEWS_EXPORT NonClientFrameView : public View,
   // Gets the clip mask (in this View's parent's coordinates) that should be
   // applied to the client view. Returns false if no special clip should be
   // used.
-  virtual bool GetClientMask(const gfx::Size& size,
-                             gfx::Path* mask) const;
+  virtual bool GetClientMask(const gfx::Size& size, SkPath* mask) const;
 
   // This function must ask the ClientView to do a hittest.  We don't do this in
   // the parent NonClientView because that makes it more difficult to calculate
@@ -81,8 +76,7 @@ class VIEWS_EXPORT NonClientFrameView : public View,
   // Used to make the hosting widget shaped (non-rectangular). For a
   // rectangular window do nothing. For a shaped window update |window_mask|
   // accordingly. |size| is the size of the widget.
-  virtual void GetWindowMask(const gfx::Size& size,
-                             gfx::Path* window_mask) = 0;
+  virtual void GetWindowMask(const gfx::Size& size, SkPath* window_mask) = 0;
   virtual void ResetWindowControls() = 0;
   virtual void UpdateWindowIcon() = 0;
   virtual void UpdateWindowTitle() = 0;
@@ -96,6 +90,7 @@ class VIEWS_EXPORT NonClientFrameView : public View,
   // View:
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   const char* GetClassName() const override;
+  void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
 
  protected:
   NonClientFrameView();
@@ -192,7 +187,7 @@ class VIEWS_EXPORT NonClientView : public View, public ViewTargeterDelegate {
 
   // Returns a mask to be used to clip the top level window for the given
   // size. This is used to create the non-rectangular window shape.
-  void GetWindowMask(const gfx::Size& size, gfx::Path* window_mask);
+  void GetWindowMask(const gfx::Size& size, SkPath* window_mask);
 
   // Tells the window controls as rendered by the NonClientView to reset
   // themselves to a normal state. This happens in situations where the
@@ -216,8 +211,6 @@ class VIEWS_EXPORT NonClientView : public View, public ViewTargeterDelegate {
   void set_client_view(ClientView* client_view) {
     client_view_ = client_view;
   }
-
-  void set_mirror_client_in_rtl(bool mirror) { mirror_client_in_rtl_ = mirror; }
 
   // Layout just the frame view. This is necessary on Windows when non-client
   // metrics such as the position of the window controls changes independently
@@ -250,9 +243,6 @@ class VIEWS_EXPORT NonClientView : public View, public ViewTargeterDelegate {
   // of the window, hit testing and perhaps other tasks depending on the
   // implementation.
   ClientView* client_view_;
-
-  // Set to false if client_view_ position shouldn't be mirrored in RTL.
-  bool mirror_client_in_rtl_;
 
   // The NonClientFrameView that renders the non-client portions of the window.
   // This object is not owned by the view hierarchy because it can be replaced

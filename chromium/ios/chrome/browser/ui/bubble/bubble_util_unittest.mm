@@ -6,7 +6,7 @@
 
 #include <CoreGraphics/CoreGraphics.h>
 
-#include "ios/chrome/browser/ui/ui_util.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
@@ -16,11 +16,7 @@
 
 namespace {
 CGFloat TestBubbleAlignmentOffset() {
-  if (IsUIRefreshPhase1Enabled()) {
-    return 29;
-  } else {
-    return 26;
-  }
+  return 29;
 }
 }  // namespace
 

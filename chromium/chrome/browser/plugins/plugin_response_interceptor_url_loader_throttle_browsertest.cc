@@ -2,13 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/plugin_service.h"
@@ -47,8 +50,8 @@ class PluginResponseInterceptorURLLoaderThrottleBrowserTest
   int CountPDFProcesses() {
     int result = -1;
     base::RunLoop run_loop;
-    content::BrowserThread::PostTaskAndReply(
-        content::BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraitsAndReply(
+        FROM_HERE, {content::BrowserThread::IO},
         base::BindOnce(&PluginResponseInterceptorURLLoaderThrottleBrowserTest::
                            CountPDFProcessesOnIOThread,
                        base::Unretained(this), base::Unretained(&result)),

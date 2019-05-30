@@ -11,9 +11,16 @@ cr.exportPath('settings');
 Polymer({
   is: 'settings-multidevice-page',
 
-  behaviors: [MultiDeviceFeatureBehavior],
+  behaviors: [
+    settings.RouteObserverBehavior,
+    MultiDeviceFeatureBehavior,
+    WebUIListenerBehavior,
+  ],
 
   properties: {
+    /** Preferences state. */
+    prefs: {type: Object},
+
     /**
      * A Map specifying which element should be focused when exiting a subpage.
      * The key of the map holds a settings.Route path, and the value holds a
@@ -24,10 +31,11 @@ Polymer({
       type: Object,
       value: function() {
         const map = new Map();
-        if (settings.routes.MULTIDEVICE_FEATURES)
+        if (settings.routes.MULTIDEVICE_FEATURES) {
           map.set(
               settings.routes.MULTIDEVICE_FEATURES.path,
               '#multidevice-item .subpage-arrow');
+        }
         return map;
       },
     },
@@ -39,7 +47,6 @@ Polymer({
     authToken_: {
       type: String,
       value: '',
-      observer: 'authTokenChanged_',
     },
 
     /**
@@ -63,8 +70,7 @@ Polymer({
   },
 
   listeners: {
-    'auth-token-changed': 'onAuthTokenChanged_',
-    'close': 'onPasswordPromptDialogClose_',
+    'close': 'onDialogClose_',
     'feature-toggle-clicked': 'onFeatureToggleClicked_',
     'forget-device-requested': 'onForgetDeviceRequested_',
   },
@@ -73,8 +79,23 @@ Polymer({
   browserProxy_: null,
 
   /** @override */
-  created: function() {
+  ready: function() {
     this.browserProxy_ = settings.MultiDeviceBrowserProxyImpl.getInstance();
+
+    this.addWebUIListener(
+        'settings.updateMultidevicePageContentData',
+        this.onPageContentDataChanged_.bind(this));
+
+    this.browserProxy_.getPageContentData().then(
+        this.onPageContentDataChanged_.bind(this));
+  },
+
+  /**
+   * Overridden from settings.RouteObserverBehavior.
+   * @protected
+   */
+  currentRouteChanged: function() {
+    this.leaveNestedPageIfNoHostIsSet_();
   },
 
   /**
@@ -102,15 +123,16 @@ Polymer({
    * @private
    */
   getSubLabelInnerHtml_: function() {
-    if (!this.isSuiteAllowedByPolicy())
+    if (!this.isSuiteAllowedByPolicy()) {
       return this.i18nAdvanced('multideviceSetupSummary');
+    }
     switch (this.pageContentData.mode) {
       case settings.MultiDeviceSettingsMode.NO_ELIGIBLE_HOSTS:
         return this.i18nAdvanced('multideviceNoHostText');
       case settings.MultiDeviceSettingsMode.NO_HOST_SET:
         return this.i18nAdvanced('multideviceSetupSummary');
       case settings.MultiDeviceSettingsMode.HOST_SET_WAITING_FOR_SERVER:
-        return this.i18nAdvanced('multideviceCouldNotConnect');
+      // Intentional fall-through.
       case settings.MultiDeviceSettingsMode.HOST_SET_WAITING_FOR_VERIFICATION:
         return this.i18nAdvanced('multideviceVerificationText');
       default:
@@ -128,7 +150,7 @@ Polymer({
       case settings.MultiDeviceSettingsMode.NO_HOST_SET:
         return this.i18n('multideviceSetupButton');
       case settings.MultiDeviceSettingsMode.HOST_SET_WAITING_FOR_SERVER:
-        return this.i18n('multideviceVerifyButton');
+      // Intentional fall-through.
       case settings.MultiDeviceSettingsMode.HOST_SET_WAITING_FOR_VERIFICATION:
         return this.i18n('multideviceVerifyButton');
       default:
@@ -146,15 +168,6 @@ Polymer({
       settings.MultiDeviceSettingsMode.HOST_SET_WAITING_FOR_SERVER,
       settings.MultiDeviceSettingsMode.HOST_SET_WAITING_FOR_VERIFICATION,
     ].includes(this.pageContentData.mode);
-  },
-
-  /**
-   * @return {boolean}
-   * @private
-   */
-  shouldDisableButton_: function() {
-    return this.pageContentData.mode ===
-        settings.MultiDeviceSettingsMode.HOST_SET_WAITING_FOR_SERVER;
   },
 
   /**
@@ -186,9 +199,16 @@ Polymer({
   },
 
   /** @private */
-  handleItemClick_: function() {
-    if (!this.isHostSet())
+  handleItemClick_: function(event) {
+    // We do not open the subpage if the click was on a link.
+    if (event.path[0].tagName === 'A') {
+      event.stopPropagation();
       return;
+    }
+
+    if (!this.isHostSet()) {
+      return;
+    }
 
     settings.navigateTo(settings.routes.MULTIDEVICE_FEATURES);
   },
@@ -212,6 +232,14 @@ Polymer({
   /** @private */
   openPasswordPromptDialog_: function() {
     this.showPasswordPromptDialog_ = true;
+  },
+
+  onDialogClose_: function(event) {
+    event.stopPropagation();
+    if (event.path.some(
+            element => element.id === 'multidevicePasswordPrompt')) {
+      this.onPasswordPromptDialogClose_();
+    }
   },
 
   /** @private */
@@ -244,24 +272,19 @@ Polymer({
   },
 
   /**
-   * @param {!{detail: !Object}} event
-   * @private
-   */
-  onAuthTokenChanged_: function(event) {
-    this.authToken_ = event.detail.value;
-  },
-
-  /**
    * Attempt to enable the provided feature. If not authenticated (i.e.,
    * |authToken_| is invalid), display the password prompt to begin the
    * authentication process.
    *
-   * @param {!{detail: !Object}} event
+   * @param {!CustomEvent<!{
+   *     feature: !settings.MultiDeviceFeature,
+   *     enabled: boolean
+   * }>} event
    * @private
    */
   onFeatureToggleClicked_: function(event) {
-    let feature = event.detail.feature;
-    let enabled = event.detail.enabled;
+    const feature = event.detail.feature;
+    const enabled = event.detail.enabled;
 
     // Disabling any feature does not require authentication, and enable some
     // features does not require authentication.
@@ -284,13 +307,15 @@ Polymer({
    */
   isAuthenticationRequiredToEnable_: function(feature) {
     // Enabling SmartLock always requires authentication.
-    if (feature == settings.MultiDeviceFeature.SMART_LOCK)
+    if (feature == settings.MultiDeviceFeature.SMART_LOCK) {
       return true;
+    }
 
     // Enabling any feature besides SmartLock and the Better Together suite does
     // not require authentication.
-    if (feature != settings.MultiDeviceFeature.BETTER_TOGETHER_SUITE)
+    if (feature != settings.MultiDeviceFeature.BETTER_TOGETHER_SUITE) {
       return false;
+    }
 
     const smartLockState =
         this.getFeatureState(settings.MultiDeviceFeature.SMART_LOCK);
@@ -310,5 +335,35 @@ Polymer({
   onForgetDeviceRequested_: function() {
     this.browserProxy_.removeHostDevice();
     settings.navigateTo(settings.routes.MULTIDEVICE);
+  },
+
+  /**
+   * Checks if the user is in a nested page without a host set and, if so,
+   * navigates them back to the main page.
+   * @private
+   */
+  leaveNestedPageIfNoHostIsSet_: function() {
+    // Wait for data to arrive.
+    if (!this.pageContentData) {
+      return;
+    }
+
+    // If the user gets to the a nested page without a host (e.g. by clicking a
+    // stale 'existing user' notifications after forgetting their host) we
+    // direct them back to the main settings page.
+    if (settings.routes.MULTIDEVICE != settings.getCurrentRoute() &&
+        settings.routes.MULTIDEVICE.contains(settings.getCurrentRoute()) &&
+        !this.isHostSet()) {
+      settings.navigateTo(settings.routes.MULTIDEVICE);
+    }
+  },
+
+  /**
+   * @param {!MultiDevicePageContentData} newData
+   * @private
+   */
+  onPageContentDataChanged_: function(newData) {
+    this.pageContentData = newData;
+    this.leaveNestedPageIfNoHostIsSet_();
   },
 });

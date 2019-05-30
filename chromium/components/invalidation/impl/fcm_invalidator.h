@@ -7,7 +7,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "components/invalidation/impl/fcm_sync_invalidation_listener.h"
+#include "components/invalidation/impl/fcm_invalidation_listener.h"
 #include "components/invalidation/impl/invalidator.h"
 #include "components/invalidation/impl/invalidator_registrar.h"
 #include "components/invalidation/public/invalidator_state.h"
@@ -23,16 +23,17 @@ namespace syncer {
 
 class FCMSyncNetworkChannel;
 
-// This class inplements the Invalidator interface and serves as a
+// This class implements the Invalidator interface and serves as a
 // bridge betwen invalidation Listener and invalidationr Service.
 class FCMInvalidator : public Invalidator,
-                       public FCMSyncInvalidationListener::Delegate {
+                       public FCMInvalidationListener::Delegate {
  public:
   FCMInvalidator(std::unique_ptr<FCMSyncNetworkChannel> network_channel,
                  invalidation::IdentityProvider* identity_provider,
                  PrefService* pref_service,
                  network::mojom::URLLoaderFactory* loader_factory,
-                 const ParseJSONCallback& parse_json);
+                 const ParseJSONCallback& parse_json,
+                 const std::string& project_id);
 
   ~FCMInvalidator() override;
 
@@ -62,7 +63,7 @@ class FCMInvalidator : public Invalidator,
   InvalidatorRegistrar registrar_;
 
   // The invalidation listener.
-  FCMSyncInvalidationListener invalidation_listener_;
+  FCMInvalidationListener invalidation_listener_;
 
   DISALLOW_COPY_AND_ASSIGN(FCMInvalidator);
 };

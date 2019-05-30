@@ -11,14 +11,16 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/common/media_stream_request.h"
 #include "media/audio/audio_input_ipc.h"
 #include "media/audio/audio_system.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/channel_layout.h"
 #include "media/base/media_switches.h"
+#include "third_party/blink/public/common/mediastream/media_stream_request.h"
 
 #if defined(OS_CHROMEOS)
 #include "chromeos/audio/cras_audio_handler.h"
@@ -54,10 +56,10 @@ AudioInputDeviceManager::AudioInputDeviceManager(
 AudioInputDeviceManager::~AudioInputDeviceManager() {
 }
 
-const MediaStreamDevice* AudioInputDeviceManager::GetOpenedDeviceById(
+const blink::MediaStreamDevice* AudioInputDeviceManager::GetOpenedDeviceById(
     int session_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  MediaStreamDevices::iterator device = GetDevice(session_id);
+  auto device = GetDevice(session_id);
   if (device == devices_.end())
     return nullptr;
 
@@ -78,7 +80,7 @@ void AudioInputDeviceManager::UnregisterListener(
   listeners_.RemoveObserver(listener);
 }
 
-int AudioInputDeviceManager::Open(const MediaStreamDevice& device) {
+int AudioInputDeviceManager::Open(const blink::MediaStreamDevice& device) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   // Generate a new id for this device.
   int session_id = next_capture_session_id_++;
@@ -115,17 +117,17 @@ int AudioInputDeviceManager::Open(const MediaStreamDevice& device) {
 
 void AudioInputDeviceManager::Close(int session_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  MediaStreamDevices::iterator device = GetDevice(session_id);
+  auto device = GetDevice(session_id);
   if (device == devices_.end())
     return;
-  const MediaStreamType stream_type = device->type;
+  const blink::MediaStreamType stream_type = device->type;
   if (session_id != kFakeOpenSessionId)
     devices_.erase(device);
 
   // Post a callback through the listener on IO thread since
   // MediaStreamManager is expecting the callback asynchronously.
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
       base::BindOnce(&AudioInputDeviceManager::ClosedOnIOThread, this,
                      stream_type, session_id));
 }
@@ -155,8 +157,8 @@ void AudioInputDeviceManager::KeyboardMicRegistration::DeregisterIfNeeded() {
     --*shared_registration_count_;
     DCHECK_GE(*shared_registration_count_, 0);
     if (*shared_registration_count_ == 0) {
-      BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE,
+      base::PostTaskWithTraits(
+          FROM_HERE, {BrowserThread::UI},
           base::BindOnce(&SetKeyboardMicStreamActiveOnUIThread, false));
     }
   }
@@ -172,8 +174,8 @@ void AudioInputDeviceManager::RegisterKeyboardMicStream(
 
   ++keyboard_mic_streams_count_;
   if (keyboard_mic_streams_count_ == 1) {
-    BrowserThread::PostTaskAndReply(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraitsAndReply(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&SetKeyboardMicStreamActiveOnUIThread, true),
         base::BindOnce(std::move(callback),
                        KeyboardMicRegistration(&keyboard_mic_streams_count_)));
@@ -186,7 +188,7 @@ void AudioInputDeviceManager::RegisterKeyboardMicStream(
 
 void AudioInputDeviceManager::OpenedOnIOThread(
     int session_id,
-    const MediaStreamDevice& device,
+    const blink::MediaStreamDevice& device,
     base::TimeTicks start_time,
     const base::Optional<media::AudioParameters>& input_params,
     const base::Optional<std::string>& matched_output_device_id) {
@@ -198,7 +200,8 @@ void AudioInputDeviceManager::OpenedOnIOThread(
   UMA_HISTOGRAM_TIMES("Media.AudioInputDeviceManager.OpenOnDeviceThreadTime",
                       base::TimeTicks::Now() - start_time);
 
-  MediaStreamDevice media_stream_device(device.type, device.id, device.name);
+  blink::MediaStreamDevice media_stream_device(device.type, device.id,
+                                               device.name);
   media_stream_device.session_id = session_id;
   media_stream_device.input =
       input_params.value_or(media::AudioParameters::UnavailableDeviceParams());
@@ -212,17 +215,17 @@ void AudioInputDeviceManager::OpenedOnIOThread(
     listener.Opened(media_stream_device.type, session_id);
 }
 
-void AudioInputDeviceManager::ClosedOnIOThread(MediaStreamType stream_type,
-                                               int session_id) {
+void AudioInputDeviceManager::ClosedOnIOThread(
+    blink::MediaStreamType stream_type,
+    int session_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   for (auto& listener : listeners_)
     listener.Closed(stream_type, session_id);
 }
 
-MediaStreamDevices::iterator AudioInputDeviceManager::GetDevice(
+blink::MediaStreamDevices::iterator AudioInputDeviceManager::GetDevice(
     int session_id) {
-  for (MediaStreamDevices::iterator it = devices_.begin(); it != devices_.end();
-       ++it) {
+  for (auto it = devices_.begin(); it != devices_.end(); ++it) {
     if (it->session_id == session_id)
       return it;
   }

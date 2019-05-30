@@ -18,6 +18,8 @@ cr.define('print_preview', function() {
         'print',
         'saveAppState',
         'setupPrinter',
+        'showSystemDialog',
+        'signIn',
       ]);
 
       /**
@@ -27,11 +29,16 @@ cr.define('print_preview', function() {
       this.initialSettings_ = null;
 
       /**
-       *
        * @private {!Array<!print_preview.LocalDestinationInfo>} Local
        *     destination list to be used for the response to |getPrinters|.
        */
       this.localDestinationInfos_ = [];
+
+      /**
+       * @private {!Array<!print_preview.ProvisionalDestinationInfo>} Local
+       *     destination list to be used for the response to |getPrinters|.
+       */
+      this.extensionDestinationInfos_ = [];
 
       /**
        * @private {!Map<string,
@@ -81,27 +88,34 @@ cr.define('print_preview', function() {
     /** @override */
     getPrinters(type) {
       this.methodCalled('getPrinters', type);
-      if (type == print_preview.PrinterType.LOCAL_PRINTER) {
+      if (type == print_preview.PrinterType.LOCAL_PRINTER &&
+          this.localDestinationInfos_.length > 0) {
         cr.webUIListenerCallback(
             'printers-added', type, this.localDestinationInfos_);
+      } else if (
+          type == print_preview.PrinterType.EXTENSION_PRINTER &&
+          this.extensionDestinationInfos_.length > 0) {
+        cr.webUIListenerCallback(
+            'printers-added', type, this.extensionDestinationInfos_);
       }
       return Promise.resolve();
     }
 
     /** @override */
-    getPreview(printTicket, pageCount) {
-      this.methodCalled(
-          'getPreview', {printTicket: printTicket, pageCount: pageCount});
+    getPreview(printTicket) {
+      this.methodCalled('getPreview', {printTicket: printTicket});
       const printTicketParsed = JSON.parse(printTicket);
-      if (printTicketParsed.deviceName == this.badPrinterId_)
+      if (printTicketParsed.deviceName == this.badPrinterId_) {
         return Promise.reject('SETTINGS_INVALID');
+      }
       const pageRanges = printTicketParsed.pageRange;
       const requestId = printTicketParsed.requestID;
       if (pageRanges.length == 0) {  // assume full length document, 1 page.
         cr.webUIListenerCallback(
             'page-count-ready', this.pageCount_, requestId, 100);
-        for (let i = 0; i < this.pageCount_; i++)
+        for (let i = 0; i < this.pageCount_; i++) {
           cr.webUIListenerCallback('page-preview-ready', i, 0, requestId);
+        }
       } else {
         const pages = pageRanges.reduce(function(soFar, range) {
           for (let page = range.from; page <= range.to; page++) {
@@ -130,14 +144,25 @@ cr.define('print_preview', function() {
       this.methodCalled(
           'getPrinterCapabilities',
           {destinationId: printerId, printerType: type});
-      if (type != print_preview.PrinterType.LOCAL_PRINTER)
+      if (printerId == print_preview.Destination.GooglePromotedId.SAVE_AS_PDF) {
+        return Promise.resolve({
+          deviceName: 'Save as PDF',
+          capabilities: print_preview_test_utils.getPdfPrinter(),
+        });
+      }
+      if (type != print_preview.PrinterType.LOCAL_PRINTER) {
         return Promise.reject();
-      return this.localDestinationCapabilities_.get(printerId);
+      }
+      return this.localDestinationCapabilities_.get(printerId) ||
+          Promise.reject();
     }
 
     /** @override */
     print(printTicket) {
       this.methodCalled('print', printTicket);
+      if (JSON.parse(printTicket).printWithCloudPrint) {
+        return Promise.resolve('sample data');
+      }
       return Promise.resolve();
     }
 
@@ -155,6 +180,11 @@ cr.define('print_preview', function() {
     }
 
     /** @override */
+    showSystemDialog() {
+      this.methodCalled('showSystemDialog');
+    }
+
+    /** @override */
     recordAction() {}
 
     /** @override */
@@ -163,6 +193,12 @@ cr.define('print_preview', function() {
     /** @override */
     saveAppState(appState) {
       this.methodCalled('saveAppState', appState);
+    }
+
+    /** @override */
+    signIn(addAccount) {
+      this.methodCalled('signIn', addAccount);
+      return Promise.resolve();
     }
 
     /**
@@ -182,9 +218,18 @@ cr.define('print_preview', function() {
     }
 
     /**
+     * @param {!Array<!print_preview.ProvisionalDestinationInfo>}
+     *     extensionDestinations The extension destinations to return as a
+     *     response to |getPrinters|.
+     */
+    setExtensionDestinations(extensionDestinations) {
+      this.extensionDestinationInfos_ = extensionDestinations;
+    }
+
+    /**
      * @param {!print_preview.CapabilitiesResponse} response The
      *     response to send for the destination whose ID is in the response.
-     * @param {boolean?} opt_reject Whether to reject the callback for this
+     * @param {?boolean} opt_reject Whether to reject the callback for this
      *     destination. Defaults to false (will resolve callback) if not
      *     provided.
      */
@@ -195,12 +240,13 @@ cr.define('print_preview', function() {
     }
 
     /**
-     * @param {boolean} reject Whether printSetup requests should be rejected.
      * @param {!print_preview.PrinterSetupResponse} The response to send when
      *     |setupPrinter| is called.
+     * @param {?boolean} opt_reject Whether printSetup requests should be
+     *     rejected. Defaults to false (will resolve callback) if not provided.
      */
-    setSetupPrinterResponse(reject, response) {
-      this.shouldRejectPrinterSetup_ = reject;
+    setSetupPrinterResponse(response, opt_reject) {
+      this.shouldRejectPrinterSetup_ = opt_reject || false;
       this.setupPrinterResponse_ = response;
     }
 

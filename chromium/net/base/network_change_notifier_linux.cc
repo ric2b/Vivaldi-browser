@@ -5,6 +5,7 @@
 #include "net/base/network_change_notifier_linux.h"
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
@@ -63,6 +64,7 @@ NetworkChangeNotifierLinux::Thread::~Thread() {
 
 void NetworkChangeNotifierLinux::Thread::Init() {
   address_tracker_->Init();
+  last_type_ = GetCurrentConnectionType();
   dns_config_service_ = DnsConfigService::CreateSystemService();
   dns_config_service_->WatchConfig(
       base::Bind(&NetworkChangeNotifier::SetDnsConfig));

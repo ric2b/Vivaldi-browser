@@ -11,8 +11,11 @@
 #include <vector>
 
 #include "base/test/metrics/histogram_tester.h"
+#include "chrome/browser/net/prediction_options.h"
 #include "chrome/browser/predictors/loading_test_util.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "net/url_request/url_request_context.h"
@@ -60,17 +63,22 @@ MockPreconnectManager::MockPreconnectManager(base::WeakPtr<Delegate> delegate,
                                              Profile* profile)
     : PreconnectManager(delegate, profile) {}
 
+LoadingPredictorConfig CreateConfig() {
+  LoadingPredictorConfig config;
+  PopulateTestConfig(&config);
+  return config;
+}
+
 }  // namespace
 
 class LoadingPredictorTest : public testing::Test {
  public:
-  LoadingPredictorTest();
   ~LoadingPredictorTest() override;
   void SetUp() override;
   void TearDown() override;
 
  protected:
-  virtual LoadingPredictorConfig CreateConfig();
+  virtual void SetPreference();
 
   content::TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<TestingProfile> profile_;
@@ -78,12 +86,11 @@ class LoadingPredictorTest : public testing::Test {
   StrictMock<MockResourcePrefetchPredictor>* mock_predictor_;
 };
 
-LoadingPredictorTest::LoadingPredictorTest()
-    : profile_(std::make_unique<TestingProfile>()) {}
-
 LoadingPredictorTest::~LoadingPredictorTest() = default;
 
 void LoadingPredictorTest::SetUp() {
+  profile_ = std::make_unique<TestingProfile>();
+  SetPreference();
   auto config = CreateConfig();
   predictor_ = std::make_unique<LoadingPredictor>(config, profile_.get());
 
@@ -107,10 +114,10 @@ void LoadingPredictorTest::TearDown() {
   predictor_->Shutdown();
 }
 
-LoadingPredictorConfig LoadingPredictorTest::CreateConfig() {
-  LoadingPredictorConfig config;
-  PopulateTestConfig(&config);
-  return config;
+void LoadingPredictorTest::SetPreference() {
+  profile_->GetPrefs()->SetInteger(
+      prefs::kNetworkPredictionOptions,
+      chrome_browser_net::NETWORK_PREDICTION_NEVER);
 }
 
 class LoadingPredictorPreconnectTest : public LoadingPredictorTest {
@@ -118,7 +125,8 @@ class LoadingPredictorPreconnectTest : public LoadingPredictorTest {
   void SetUp() override;
 
  protected:
-  LoadingPredictorConfig CreateConfig() override;
+  void SetPreference() override;
+
   StrictMock<MockPreconnectManager>* mock_preconnect_manager_;
 };
 
@@ -131,42 +139,10 @@ void LoadingPredictorPreconnectTest::SetUp() {
   predictor_->set_mock_preconnect_manager(std::move(mock_preconnect_manager));
 }
 
-LoadingPredictorConfig LoadingPredictorPreconnectTest::CreateConfig() {
-  LoadingPredictorConfig config = LoadingPredictorTest::CreateConfig();
-  config.mode |= LoadingPredictorConfig::PRECONNECT;
-  return config;
-}
-
-TEST_F(LoadingPredictorTest, TestPrefetchingDurationHistogram) {
-  base::HistogramTester histogram_tester;
-  const GURL url = GURL(kUrl);
-  const GURL url2 = GURL(kUrl2);
-  const GURL url3 = GURL(kUrl3);
-
-  predictor_->PrepareForPageLoad(url, HintOrigin::NAVIGATION);
-  predictor_->CancelPageLoadHint(url);
-  histogram_tester.ExpectTotalCount(
-      internal::kResourcePrefetchPredictorPrefetchingDurationHistogram, 1);
-
-  // Mismatched start / end.
-  predictor_->PrepareForPageLoad(url, HintOrigin::NAVIGATION);
-  predictor_->CancelPageLoadHint(url2);
-  // No increment.
-  histogram_tester.ExpectTotalCount(
-      internal::kResourcePrefetchPredictorPrefetchingDurationHistogram, 1);
-
-  // Can track a navigation (url2) while one is still in progress (url).
-  predictor_->PrepareForPageLoad(url2, HintOrigin::NAVIGATION);
-  predictor_->CancelPageLoadHint(url2);
-  histogram_tester.ExpectTotalCount(
-      internal::kResourcePrefetchPredictorPrefetchingDurationHistogram, 2);
-
-  // Do not track non-prefetchable URLs.
-  predictor_->PrepareForPageLoad(url3, HintOrigin::NAVIGATION);
-  predictor_->CancelPageLoadHint(url3);
-  // No increment.
-  histogram_tester.ExpectTotalCount(
-      internal::kResourcePrefetchPredictorPrefetchingDurationHistogram, 2);
+void LoadingPredictorPreconnectTest::SetPreference() {
+  profile_->GetPrefs()->SetInteger(
+      prefs::kNetworkPredictionOptions,
+      chrome_browser_net::NETWORK_PREDICTION_ALWAYS);
 }
 
 TEST_F(LoadingPredictorTest, TestMainFrameResponseCancelsHint) {
@@ -250,6 +226,64 @@ TEST_F(LoadingPredictorTest, TestMainFrameRequestDoesntCancelExternalHint) {
   EXPECT_NE(active_navigations.find(navigation_id), active_navigations.end());
   it = active_hints.find(url);
   EXPECT_NE(it, active_hints.end());
+  EXPECT_EQ(start_time, it->second);
+}
+
+TEST_F(LoadingPredictorTest, TestDuplicateHintAfterPreconnectCompleteCalled) {
+  const GURL url = GURL(kUrl);
+  const auto& active_navigations = predictor_->active_navigations_;
+  auto& active_hints = predictor_->active_hints_;
+
+  predictor_->PrepareForPageLoad(url, HintOrigin::EXTERNAL);
+  auto it = active_hints.find(url);
+  EXPECT_NE(it, active_hints.end());
+  EXPECT_TRUE(active_navigations.empty());
+
+  // To check that the hint is replaced, set the start time in the past,
+  // and check later that it changed.
+  base::TimeTicks start_time = it->second - base::TimeDelta::FromSeconds(10);
+  it->second = start_time;
+
+  std::unique_ptr<PreconnectStats> preconnect_stats =
+      std::make_unique<PreconnectStats>(url);
+  predictor_->PreconnectFinished(std::move(preconnect_stats));
+
+  predictor_->PrepareForPageLoad(url, HintOrigin::NAVIGATION_PREDICTOR);
+  it = active_hints.find(url);
+  EXPECT_NE(it, active_hints.end());
+  EXPECT_TRUE(active_navigations.empty());
+
+  // Calling PreconnectFinished() must have cleared the hint, and duplicate
+  // PrepareForPageLoad() call should be honored.
+  EXPECT_LT(start_time, it->second);
+}
+
+TEST_F(LoadingPredictorTest,
+       TestDuplicateHintAfterPreconnectCompleteNotCalled) {
+  const GURL url = GURL(kUrl);
+  const auto& active_navigations = predictor_->active_navigations_;
+  auto& active_hints = predictor_->active_hints_;
+
+  predictor_->PrepareForPageLoad(url, HintOrigin::EXTERNAL);
+  auto it = active_hints.find(url);
+  EXPECT_NE(it, active_hints.end());
+  EXPECT_TRUE(active_navigations.empty());
+
+  content::RunAllTasksUntilIdle();
+  it = active_hints.find(url);
+  EXPECT_NE(it, active_hints.end());
+
+  // To check that the hint is not replaced, set the start time in the recent
+  // past, and check later that it didn't change.
+  base::TimeTicks start_time = it->second - base::TimeDelta::FromSeconds(10);
+  it->second = start_time;
+
+  predictor_->PrepareForPageLoad(url, HintOrigin::NAVIGATION_PREDICTOR);
+  it = active_hints.find(url);
+  EXPECT_NE(it, active_hints.end());
+  EXPECT_TRUE(active_navigations.empty());
+
+  // Duplicate PrepareForPageLoad() call should not be honored.
   EXPECT_EQ(start_time, it->second);
 }
 

@@ -8,7 +8,7 @@
 
 #include <memory>
 
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "extensions/common/constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -31,22 +31,22 @@ TEST(ExtensionURLPatternTest, ParseInvalid) {
     const char* pattern;
     URLPattern::ParseResult expected_result;
   } kInvalidPatterns[] = {
-      {"http", URLPattern::PARSE_ERROR_MISSING_SCHEME_SEPARATOR},
-      {"http:", URLPattern::PARSE_ERROR_WRONG_SCHEME_SEPARATOR},
-      {"http:/", URLPattern::PARSE_ERROR_WRONG_SCHEME_SEPARATOR},
-      {"about://", URLPattern::PARSE_ERROR_WRONG_SCHEME_SEPARATOR},
-      {"http://", URLPattern::PARSE_ERROR_EMPTY_HOST},
-      {"http:///", URLPattern::PARSE_ERROR_EMPTY_HOST},
-      {"http:// /", URLPattern::PARSE_ERROR_EMPTY_HOST},
-      {"http://:1234/", URLPattern::PARSE_ERROR_EMPTY_HOST},
-      {"http://*foo/bar", URLPattern::PARSE_ERROR_INVALID_HOST_WILDCARD},
-      {"http://foo.*.bar/baz", URLPattern::PARSE_ERROR_INVALID_HOST_WILDCARD},
-      {"http://fo.*.ba:123/baz", URLPattern::PARSE_ERROR_INVALID_HOST_WILDCARD},
-      {"http:/bar", URLPattern::PARSE_ERROR_WRONG_SCHEME_SEPARATOR},
-      {"http://bar", URLPattern::PARSE_ERROR_EMPTY_PATH},
-      {"http://foo.*/bar", URLPattern::PARSE_ERROR_INVALID_HOST_WILDCARD}};
+      {"http", URLPattern::ParseResult::kMissingSchemeSeparator},
+      {"http:", URLPattern::ParseResult::kWrongSchemeSeparator},
+      {"http:/", URLPattern::ParseResult::kWrongSchemeSeparator},
+      {"about://", URLPattern::ParseResult::kWrongSchemeSeparator},
+      {"http://", URLPattern::ParseResult::kEmptyHost},
+      {"http:///", URLPattern::ParseResult::kEmptyHost},
+      {"http:// /", URLPattern::ParseResult::kEmptyHost},
+      {"http://:1234/", URLPattern::ParseResult::kEmptyHost},
+      {"http://*foo/bar", URLPattern::ParseResult::kInvalidHostWildcard},
+      {"http://foo.*.bar/baz", URLPattern::ParseResult::kInvalidHostWildcard},
+      {"http://fo.*.ba:123/baz", URLPattern::ParseResult::kInvalidHostWildcard},
+      {"http:/bar", URLPattern::ParseResult::kWrongSchemeSeparator},
+      {"http://bar", URLPattern::ParseResult::kEmptyPath},
+      {"http://foo.*/bar", URLPattern::ParseResult::kInvalidHostWildcard}};
 
-  for (size_t i = 0; i < arraysize(kInvalidPatterns); ++i) {
+  for (size_t i = 0; i < base::size(kInvalidPatterns); ++i) {
     URLPattern pattern(URLPattern::SCHEME_ALL);
     EXPECT_EQ(kInvalidPatterns[i].expected_result,
               pattern.Parse(kInvalidPatterns[i].pattern))
@@ -57,8 +57,7 @@ TEST(ExtensionURLPatternTest, ParseInvalid) {
     // Cannot use a C string, because this contains a null byte.
     std::string null_host("http://\0www/", 12);
     URLPattern pattern(URLPattern::SCHEME_ALL);
-    EXPECT_EQ(URLPattern::PARSE_ERROR_INVALID_HOST,
-              pattern.Parse(null_host))
+    EXPECT_EQ(URLPattern::ParseResult::kInvalidHost, pattern.Parse(null_host))
         << null_host;
   }
 }
@@ -69,28 +68,28 @@ TEST(ExtensionURLPatternTest, Ports) {
     URLPattern::ParseResult expected_result;
     const char* expected_port;
   } kTestPatterns[] = {
-      {"http://foo:1234/", URLPattern::PARSE_SUCCESS, "1234"},
-      {"http://foo:1234/bar", URLPattern::PARSE_SUCCESS, "1234"},
-      {"http://*.foo:1234/", URLPattern::PARSE_SUCCESS, "1234"},
-      {"http://*.foo:1234/bar", URLPattern::PARSE_SUCCESS, "1234"},
-      {"http://foo:/", URLPattern::PARSE_ERROR_INVALID_PORT, "*"},
-      {"http://*:1234/", URLPattern::PARSE_SUCCESS, "1234"},
-      {"http://*:*/", URLPattern::PARSE_SUCCESS, "*"},
-      {"http://foo:*/", URLPattern::PARSE_SUCCESS, "*"},
-      {"http://*.foo:/", URLPattern::PARSE_ERROR_INVALID_PORT, "*"},
-      {"http://foo:com/", URLPattern::PARSE_ERROR_INVALID_PORT, "*"},
-      {"http://foo:123456/", URLPattern::PARSE_ERROR_INVALID_PORT, "*"},
-      {"http://foo:80:80/monkey", URLPattern::PARSE_ERROR_INVALID_PORT, "*"},
-      {"file://foo:1234/bar", URLPattern::PARSE_SUCCESS, "*"},
-      {"chrome://foo:1234/bar", URLPattern::PARSE_ERROR_INVALID_PORT, "*"},
+      {"http://foo:1234/", URLPattern::ParseResult::kSuccess, "1234"},
+      {"http://foo:1234/bar", URLPattern::ParseResult::kSuccess, "1234"},
+      {"http://*.foo:1234/", URLPattern::ParseResult::kSuccess, "1234"},
+      {"http://*.foo:1234/bar", URLPattern::ParseResult::kSuccess, "1234"},
+      {"http://foo:/", URLPattern::ParseResult::kInvalidPort, "*"},
+      {"http://*:1234/", URLPattern::ParseResult::kSuccess, "1234"},
+      {"http://*:*/", URLPattern::ParseResult::kSuccess, "*"},
+      {"http://foo:*/", URLPattern::ParseResult::kSuccess, "*"},
+      {"http://*.foo:/", URLPattern::ParseResult::kInvalidPort, "*"},
+      {"http://foo:com/", URLPattern::ParseResult::kInvalidPort, "*"},
+      {"http://foo:123456/", URLPattern::ParseResult::kInvalidPort, "*"},
+      {"http://foo:80:80/monkey", URLPattern::ParseResult::kInvalidPort, "*"},
+      {"file://foo:1234/bar", URLPattern::ParseResult::kSuccess, "*"},
+      {"chrome://foo:1234/bar", URLPattern::ParseResult::kInvalidPort, "*"},
 
       // Port-like strings in the path should not trigger a warning.
-      {"http://*/:1234", URLPattern::PARSE_SUCCESS, "*"},
-      {"http://*.foo/bar:1234", URLPattern::PARSE_SUCCESS, "*"},
-      {"http://foo/bar:1234/path", URLPattern::PARSE_SUCCESS, "*"},
-      {"http://*.foo.*/:1234", URLPattern::PARSE_SUCCESS, "*"}};
+      {"http://*/:1234", URLPattern::ParseResult::kSuccess, "*"},
+      {"http://*.foo/bar:1234", URLPattern::ParseResult::kSuccess, "*"},
+      {"http://foo/bar:1234/path", URLPattern::ParseResult::kSuccess, "*"},
+      {"http://*.foo.*/:1234", URLPattern::ParseResult::kSuccess, "*"}};
 
-  for (size_t i = 0; i < arraysize(kTestPatterns); ++i) {
+  for (size_t i = 0; i < base::size(kTestPatterns); ++i) {
     URLPattern pattern(URLPattern::SCHEME_ALL);
     EXPECT_EQ(kTestPatterns[i].expected_result,
               pattern.Parse(kTestPatterns[i].pattern,
@@ -118,7 +117,8 @@ TEST(ExtensionURLPatternTest, IPv6Patterns) {
   for (const auto& test_case : kSuccessTestPatterns) {
     SCOPED_TRACE(test_case.pattern);
     URLPattern pattern(URLPattern::SCHEME_HTTP);
-    EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern.Parse(test_case.pattern));
+    EXPECT_EQ(URLPattern::ParseResult::kSuccess,
+              pattern.Parse(test_case.pattern));
     EXPECT_EQ(test_case.expected_host, pattern.host());
     EXPECT_EQ(test_case.expected_port, pattern.port());
   }
@@ -129,26 +129,26 @@ TEST(ExtensionURLPatternTest, IPv6Patterns) {
   } kFailureTestPatterns[] = {
       // No port specified, but port separator.
       {"http://[2607:f8b0:4005:805::200e]:/*",
-       URLPattern::PARSE_ERROR_INVALID_PORT},
+       URLPattern::ParseResult::kInvalidPort},
       // No host.
-      {"http://[]:8888/*", URLPattern::PARSE_ERROR_EMPTY_HOST},
+      {"http://[]:8888/*", URLPattern::ParseResult::kEmptyHost},
       // No closing bracket (`]`).
       {"http://[2607:f8b0:4005:805::200e/*",
-       URLPattern::PARSE_ERROR_INVALID_HOST},
+       URLPattern::ParseResult::kInvalidHost},
       // Two closing brackets (`]]`).
       {"http://[2607:f8b0:4005:805::200e]]/*",
-       URLPattern::PARSE_ERROR_INVALID_HOST},
+       URLPattern::ParseResult::kInvalidHost},
       // Two open brackets (`[[`).
       {"http://[[2607:f8b0:4005:805::200e]/*",
-       URLPattern::PARSE_ERROR_INVALID_HOST},
+       URLPattern::ParseResult::kInvalidHost},
       // Too few colons in the last chunk.
       {"http://[2607:f8b0:4005:805:200e]/*",
-       URLPattern::PARSE_ERROR_INVALID_HOST},
+       URLPattern::ParseResult::kInvalidHost},
       // Non-hex piece.
       {"http://[2607:f8b0:4005:805:200e:12:bogus]/*",
-       URLPattern::PARSE_ERROR_INVALID_HOST},
+       URLPattern::ParseResult::kInvalidHost},
       {"http://[[2607:f8b0:4005:805::200e]:abc/*",
-       URLPattern::PARSE_ERROR_INVALID_PORT},
+       URLPattern::ParseResult::kInvalidPort},
   };
 
   for (const auto& test_case : kFailureTestPatterns) {
@@ -161,7 +161,7 @@ TEST(ExtensionURLPatternTest, IPv6Patterns) {
 // all pages for a given scheme
 TEST(ExtensionURLPatternTest, Match1) {
   URLPattern pattern(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern.Parse("http://*/*"));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess, pattern.Parse("http://*/*"));
   EXPECT_EQ("http", pattern.scheme());
   EXPECT_EQ("", pattern.host());
   EXPECT_TRUE(pattern.match_subdomains());
@@ -178,7 +178,7 @@ TEST(ExtensionURLPatternTest, Match1) {
 // all domains
 TEST(ExtensionURLPatternTest, Match2) {
   URLPattern pattern(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern.Parse("https://*/foo*"));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess, pattern.Parse("https://*/foo*"));
   EXPECT_EQ("https", pattern.scheme());
   EXPECT_EQ("", pattern.host());
   EXPECT_TRUE(pattern.match_subdomains());
@@ -196,7 +196,7 @@ TEST(ExtensionURLPatternTest, Match2) {
 // subdomains
 TEST(URLPatternTest, Match3) {
   URLPattern pattern(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS,
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess,
             pattern.Parse("http://*.google.com/foo*bar"));
   EXPECT_EQ("http", pattern.scheme());
   EXPECT_EQ("google.com", pattern.host());
@@ -218,7 +218,8 @@ TEST(URLPatternTest, Match3) {
 // glob escaping
 TEST(ExtensionURLPatternTest, Match5) {
   URLPattern pattern(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern.Parse("file:///foo?bar\\*baz"));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess,
+            pattern.Parse("file:///foo?bar\\*baz"));
   EXPECT_EQ("file", pattern.scheme());
   EXPECT_EQ("", pattern.host());
   EXPECT_FALSE(pattern.match_subdomains());
@@ -232,7 +233,8 @@ TEST(ExtensionURLPatternTest, Match5) {
 // ip addresses
 TEST(ExtensionURLPatternTest, Match6) {
   URLPattern pattern(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern.Parse("http://127.0.0.1/*"));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess,
+            pattern.Parse("http://127.0.0.1/*"));
   EXPECT_EQ("http", pattern.scheme());
   EXPECT_EQ("127.0.0.1", pattern.host());
   EXPECT_FALSE(pattern.match_subdomains());
@@ -246,7 +248,8 @@ TEST(ExtensionURLPatternTest, Match6) {
 TEST(ExtensionURLPatternTest, Match7) {
   URLPattern pattern(kAllSchemes);
   // allowed, but useless
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern.Parse("http://*.0.0.1/*"));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess,
+            pattern.Parse("http://*.0.0.1/*"));
   EXPECT_EQ("http", pattern.scheme());
   // Canonicalization forces 0.0.1 to 0.0.0.1.
   EXPECT_EQ("0.0.0.1", pattern.host());
@@ -263,7 +266,7 @@ TEST(ExtensionURLPatternTest, Match8) {
   URLPattern pattern(kAllSchemes);
   // The below is the ASCII encoding of the following URL:
   // http://*.\xe1\x80\xbf/a\xc2\x81\xe1*
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS,
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess,
             pattern.Parse("http://*.xn--gkd/a%C2%81%E1*"));
   EXPECT_EQ("http", pattern.scheme());
   EXPECT_EQ("xn--gkd", pattern.host());
@@ -280,7 +283,8 @@ TEST(ExtensionURLPatternTest, Match8) {
 // chrome://
 TEST(ExtensionURLPatternTest, Match9) {
   URLPattern pattern(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern.Parse("chrome://favicon/*"));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess,
+            pattern.Parse("chrome://favicon/*"));
   EXPECT_EQ("chrome", pattern.scheme());
   EXPECT_EQ("favicon", pattern.host());
   EXPECT_FALSE(pattern.match_subdomains());
@@ -295,7 +299,7 @@ TEST(ExtensionURLPatternTest, Match9) {
 // *://
 TEST(ExtensionURLPatternTest, Match10) {
   URLPattern pattern(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern.Parse("*://*/*"));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess, pattern.Parse("*://*/*"));
   EXPECT_TRUE(pattern.MatchesScheme("http"));
   EXPECT_TRUE(pattern.MatchesScheme("https"));
   EXPECT_FALSE(pattern.MatchesScheme("chrome"));
@@ -314,7 +318,7 @@ TEST(ExtensionURLPatternTest, Match10) {
 // <all_urls>
 TEST(ExtensionURLPatternTest, Match11) {
   URLPattern pattern(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern.Parse("<all_urls>"));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess, pattern.Parse("<all_urls>"));
   EXPECT_TRUE(pattern.MatchesScheme("chrome"));
   EXPECT_TRUE(pattern.MatchesScheme("http"));
   EXPECT_TRUE(pattern.MatchesScheme("https"));
@@ -347,7 +351,7 @@ TEST(ExtensionURLPatternTest, Match11) {
 // SCHEME_ALL matches all schemes.
 TEST(ExtensionURLPatternTest, Match12) {
   URLPattern pattern(URLPattern::SCHEME_ALL);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern.Parse("<all_urls>"));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess, pattern.Parse("<all_urls>"));
   EXPECT_TRUE(pattern.MatchesScheme("chrome"));
   EXPECT_TRUE(pattern.MatchesScheme("http"));
   EXPECT_TRUE(pattern.MatchesScheme("https"));
@@ -386,9 +390,9 @@ static const struct MatchPatterns {
 
 // SCHEME_ALL and specific schemes.
 TEST(ExtensionURLPatternTest, Match13) {
-  for (size_t i = 0; i < arraysize(kMatch13UrlPatternTestCases); ++i) {
+  for (size_t i = 0; i < base::size(kMatch13UrlPatternTestCases); ++i) {
     URLPattern pattern(URLPattern::SCHEME_ALL);
-    EXPECT_EQ(URLPattern::PARSE_SUCCESS,
+    EXPECT_EQ(URLPattern::ParseResult::kSuccess,
               pattern.Parse(kMatch13UrlPatternTestCases[i].pattern))
         << " while parsing " << kMatch13UrlPatternTestCases[i].pattern;
     EXPECT_TRUE(pattern.MatchesURL(
@@ -398,14 +402,14 @@ TEST(ExtensionURLPatternTest, Match13) {
 
   // Negative test.
   URLPattern pattern(URLPattern::SCHEME_ALL);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern.Parse("data:*"));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess, pattern.Parse("data:*"));
   EXPECT_FALSE(pattern.MatchesURL(GURL("about:blank")));
 }
 
 // file scheme with empty hostname
 TEST(ExtensionURLPatternTest, Match14) {
   URLPattern pattern(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern.Parse("file:///foo*"));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess, pattern.Parse("file:///foo*"));
   EXPECT_EQ("file", pattern.scheme());
   EXPECT_EQ("", pattern.host());
   EXPECT_FALSE(pattern.match_subdomains());
@@ -422,7 +426,7 @@ TEST(ExtensionURLPatternTest, Match14) {
 // file scheme without hostname part
 TEST(ExtensionURLPatternTest, Match15) {
   URLPattern pattern(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern.Parse("file://foo*"));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess, pattern.Parse("file://foo*"));
   EXPECT_EQ("file", pattern.scheme());
   EXPECT_EQ("", pattern.host());
   EXPECT_FALSE(pattern.match_subdomains());
@@ -439,7 +443,8 @@ TEST(ExtensionURLPatternTest, Match15) {
 // file scheme with hostname
 TEST(ExtensionURLPatternTest, Match16) {
   URLPattern pattern(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern.Parse("file://localhost/foo*"));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess,
+            pattern.Parse("file://localhost/foo*"));
   EXPECT_EQ("file", pattern.scheme());
   // Since hostname is ignored for file://.
   EXPECT_EQ("", pattern.host());
@@ -457,7 +462,7 @@ TEST(ExtensionURLPatternTest, Match16) {
 // Specific port
 TEST(ExtensionURLPatternTest, Match17) {
   URLPattern pattern(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS,
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess,
             pattern.Parse("http://www.example.com:80/foo"));
   EXPECT_EQ("http", pattern.scheme());
   EXPECT_EQ("www.example.com", pattern.host());
@@ -477,7 +482,7 @@ TEST(ExtensionURLPatternTest, Match17) {
 // Explicit port wildcard
 TEST(ExtensionURLPatternTest, Match18) {
   URLPattern pattern(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS,
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess,
             pattern.Parse("http://www.example.com:*/foo"));
   EXPECT_EQ("http", pattern.scheme());
   EXPECT_EQ("www.example.com", pattern.host());
@@ -495,7 +500,7 @@ TEST(ExtensionURLPatternTest, Match18) {
 // chrome-extension://
 TEST(ExtensionURLPatternTest, Match19) {
   URLPattern pattern(URLPattern::SCHEME_EXTENSION);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS,
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess,
             pattern.Parse("chrome-extension://ftw/*"));
   EXPECT_EQ(extensions::kExtensionScheme, pattern.scheme());
   EXPECT_EQ("ftw", pattern.host());
@@ -515,7 +520,7 @@ TEST(ExtensionURLPatternTest, Match19) {
 // effective TLD wildcard
 TEST(URLPatternTest, EffectiveTldWildcard) {
   URLPattern pattern(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS,
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess,
             pattern.Parse("http://*.google.*/foo*bar",
                           URLPattern::ALLOW_WILDCARD_FOR_EFFECTIVE_TLD));
   EXPECT_EQ("http", pattern.scheme());
@@ -533,7 +538,7 @@ TEST(URLPatternTest, EffectiveTldWildcard) {
   EXPECT_FALSE(pattern.MatchesURL(
       GURL("filesystem:http://google.com/temporary/foobar")));
   URLPattern pattern_sub(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS,
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess,
             pattern_sub.Parse("https://maps.google.*/",
                               URLPattern::ALLOW_WILDCARD_FOR_EFFECTIVE_TLD));
   EXPECT_EQ("https", pattern_sub.scheme());
@@ -564,9 +569,9 @@ static const struct GetAsStringPatterns {
 };
 
 TEST(ExtensionURLPatternTest, GetAsString) {
-  for (size_t i = 0; i < arraysize(kGetAsStringTestCases); ++i) {
+  for (size_t i = 0; i < base::size(kGetAsStringTestCases); ++i) {
     URLPattern pattern(URLPattern::SCHEME_ALL);
-    EXPECT_EQ(URLPattern::PARSE_SUCCESS,
+    EXPECT_EQ(URLPattern::ParseResult::kSuccess,
               pattern.Parse(kGetAsStringTestCases[i].pattern))
         << "Error parsing " << kGetAsStringTestCases[i].pattern;
     EXPECT_EQ(kGetAsStringTestCases[i].pattern,
@@ -676,7 +681,7 @@ TEST(ExtensionURLPatternTest, IgnorePorts) {
   GURL url("http://www.example.com:1234/foo");
 
   URLPattern pattern(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern.Parse(pattern_str));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess, pattern.Parse(pattern_str));
 
   EXPECT_EQ(pattern_str, pattern.GetAsString());
   EXPECT_FALSE(pattern.MatchesURL(url));
@@ -689,9 +694,9 @@ TEST(ExtensionURLPatternTest, IgnoreMissingBackslashes) {
   GURL url2("http://www.example.com/example/");
 
   URLPattern pattern1(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern1.Parse(pattern_str1));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess, pattern1.Parse(pattern_str1));
   URLPattern pattern2(kAllSchemes);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern2.Parse(pattern_str2));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess, pattern2.Parse(pattern_str2));
 
   // Same patterns should match same urls.
   EXPECT_TRUE(pattern1.MatchesURL(url1));
@@ -781,7 +786,7 @@ TEST(ExtensionURLPatternTest, Equals) {
     }
   };
 
-  for (size_t i = 0; i < arraysize(kEqualsTestCases); ++i) {
+  for (size_t i = 0; i < base::size(kEqualsTestCases); ++i) {
     std::string message = kEqualsTestCases[i].pattern1;
     message += " ";
     message += kEqualsTestCases[i].pattern2;
@@ -798,21 +803,25 @@ TEST(ExtensionURLPatternTest, Equals) {
 
 TEST(ExtensionURLPatternTest, CanReusePatternWithParse) {
   URLPattern pattern1(URLPattern::SCHEME_ALL);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern1.Parse("http://aa.com/*"));
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern1.Parse("http://bb.com/*"));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess,
+            pattern1.Parse("http://aa.com/*"));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess,
+            pattern1.Parse("http://bb.com/*"));
 
   EXPECT_TRUE(pattern1.MatchesURL(GURL("http://bb.com/path")));
   EXPECT_FALSE(pattern1.MatchesURL(GURL("http://aa.com/path")));
 
   URLPattern pattern2(URLPattern::SCHEME_ALL, URLPattern::kAllUrlsPattern);
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern2.Parse("http://aa.com/*"));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess,
+            pattern2.Parse("http://aa.com/*"));
 
   EXPECT_FALSE(pattern2.MatchesURL(GURL("http://bb.com/path")));
   EXPECT_TRUE(pattern2.MatchesURL(GURL("http://aa.com/path")));
   EXPECT_FALSE(pattern2.MatchesURL(GURL("http://sub.aa.com/path")));
 
   URLPattern pattern3(URLPattern::SCHEME_ALL, "http://aa.com/*");
-  EXPECT_EQ(URLPattern::PARSE_SUCCESS, pattern3.Parse("http://aa.com:88/*"));
+  EXPECT_EQ(URLPattern::ParseResult::kSuccess,
+            pattern3.Parse("http://aa.com:88/*"));
   EXPECT_FALSE(pattern3.MatchesURL(GURL("http://aa.com/path")));
   EXPECT_TRUE(pattern3.MatchesURL(GURL("http://aa.com:88/path")));
 }
@@ -1088,7 +1097,7 @@ TEST(ExtensionURLPatternTest, UncanonicalizedUrl) {
     // Sometimes, canonicalization can fail (such as here, where we have invalid
     // unicode characters). In that case, URLPattern parsing should also fail.
     URLPattern pattern(URLPattern::SCHEME_ALL);
-    EXPECT_EQ(URLPattern::PARSE_ERROR_INVALID_HOST,
+    EXPECT_EQ(URLPattern::ParseResult::kInvalidHost,
               pattern.Parse("https://\xef\xb7\x90zyx.com/*"));
   }
 }
@@ -1170,10 +1179,12 @@ TEST(ExtensionURLPatternTest, Intersection) {
         test_case.pattern2.c_str(), test_case.expected_intersection.c_str()));
 
     URLPattern pattern1(kValidSchemes);
-    ASSERT_EQ(URLPattern::PARSE_SUCCESS, pattern1.Parse(test_case.pattern1))
+    ASSERT_EQ(URLPattern::ParseResult::kSuccess,
+              pattern1.Parse(test_case.pattern1))
         << "Pattern failed to parse: " << test_case.pattern1;
     URLPattern pattern2(kValidSchemes);
-    ASSERT_EQ(URLPattern::PARSE_SUCCESS, pattern2.Parse(test_case.pattern2))
+    ASSERT_EQ(URLPattern::ParseResult::kSuccess,
+              pattern2.Parse(test_case.pattern2))
         << "Pattern failed to parse: " << test_case.pattern2;
 
     // Intersection of two URLPatterns should be identical regardless of which
@@ -1218,10 +1229,10 @@ TEST(ExtensionURLPatternTest, ValidSchemeIntersection) {
                                     test_case.scheme2,
                                     test_case.expected_scheme));
     URLPattern pattern1(test_case.scheme1);
-    ASSERT_EQ(URLPattern::PARSE_SUCCESS,
+    ASSERT_EQ(URLPattern::ParseResult::kSuccess,
               pattern1.Parse(URLPattern::kAllUrlsPattern));
     URLPattern pattern2(test_case.scheme2);
-    ASSERT_EQ(URLPattern::PARSE_SUCCESS,
+    ASSERT_EQ(URLPattern::ParseResult::kSuccess,
               pattern2.Parse(URLPattern::kAllUrlsPattern));
     base::Optional<URLPattern> intersection1 =
         pattern1.CreateIntersection(pattern2);
@@ -1238,6 +1249,55 @@ TEST(ExtensionURLPatternTest, ValidSchemeIntersection) {
       EXPECT_EQ(test_case.expected_scheme, intersection2->valid_schemes());
     }
   }
+}
+
+// Tests that <all_urls> patterns correctly check schemes when testing if one
+// contains the other.
+TEST(ExtensionURLPatternTest, ContainsSchemes) {
+  const URLPattern http(URLPattern::SCHEME_HTTP, URLPattern::kAllUrlsPattern);
+  const URLPattern chrome(URLPattern::SCHEME_CHROMEUI,
+                          URLPattern::kAllUrlsPattern);
+  const URLPattern http_and_https(
+      URLPattern::SCHEME_HTTP | URLPattern::SCHEME_HTTPS,
+      URLPattern::kAllUrlsPattern);
+  const URLPattern http_https_and_chrome(URLPattern::SCHEME_HTTP |
+                                             URLPattern::SCHEME_HTTPS |
+                                             URLPattern::SCHEME_CHROMEUI,
+                                         URLPattern::kAllUrlsPattern);
+
+  // A map between each URLPattern and the other patterns it should contain.
+  const std::map<const URLPattern*, std::set<const URLPattern*>> contains_map =
+      {
+          {&http, {}},
+          {&chrome, {}},
+          {&http_and_https, {&http}},
+          {&http_https_and_chrome, {&http, &http_and_https, &chrome}},
+      };
+
+  const URLPattern* all_patterns[] = {&http, &chrome, &http_and_https,
+                                      &http_https_and_chrome};
+
+  // Verify that each pattern contains exactly the expected patterns.
+  for (const auto& entry : contains_map) {
+    const URLPattern* pattern = entry.first;
+    const std::set<const URLPattern*>& contains_patterns = entry.second;
+    for (const URLPattern* other_pattern : all_patterns) {
+      SCOPED_TRACE(base::StringPrintf("Checking if %d contains %d",
+                                      pattern->valid_schemes(),
+                                      other_pattern->valid_schemes()));
+      bool expect_contains =
+          // Patterns should always contain themselves.
+          pattern == other_pattern || contains_patterns.count(other_pattern);
+      EXPECT_EQ(expect_contains, pattern->Contains(*other_pattern));
+    }
+  }
+
+  // Fun edge case for bonus points: |http| doesn't contain all the valid
+  // schemes of the other pattern, but does in practice (since the scheme is
+  // restricted to http by the match pattern).
+  EXPECT_TRUE(http.Contains(
+      URLPattern(URLPattern::SCHEME_HTTP | URLPattern::SCHEME_HTTPS,
+                 "http://google.com/*")));
 }
 
 }  // namespace

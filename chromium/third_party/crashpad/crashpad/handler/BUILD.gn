@@ -14,6 +14,10 @@
 
 import("../build/crashpad_buildconfig.gni")
 
+if (crashpad_is_in_chromium) {
+  import("//build/config/sanitizers/sanitizers.gni")
+}
+
 static_library("handler") {
   sources = [
     "crash_report_upload_thread.cc",
@@ -67,14 +71,16 @@ static_library("handler") {
 
   public_configs = [ "..:crashpad_config" ]
 
-  deps = [
+  public_deps = [
     "../client",
-    "../compat",
+    "../third_party/mini_chromium:base",
+    "../util",
+  ]
+
+  deps = [
     "../minidump",
     "../snapshot",
-    "../third_party/mini_chromium:base",
     "../tools:tool_support",
-    "../util",
   ]
 
   if (crashpad_is_win) {
@@ -133,26 +139,8 @@ crashpad_executable("crashpad_handler") {
     "../third_party/mini_chromium:base",
   ]
 
-  if (crashpad_is_mac && crashpad_is_in_chromium) {
-    if (is_component_build) {
-      ldflags = [
-        # The handler is in
-        # Chromium.app/Contents/Versions/X/Chromium Framework.framework/Versions/A/Helpers/
-        # so set rpath up to the base.
-        "-rpath",
-        "@loader_path/../../../../../../../..",
-
-        # The handler is also in
-        # Content Shell.app/Contents/Frameworks/Content Shell Framework.framework/Versions/C/Helpers/
-        # so set the rpath for that too.
-        "-rpath",
-        "@loader_path/../../../../../../..",
-      ]
-    }
-  }
-
   if (crashpad_is_win) {
-    if (crashpad_is_in_chromium) {
+    if (crashpad_is_in_chromium || crashpad_is_in_dart) {
       remove_configs = [ "//build/config/win:console" ]
       configs = [ "//build/config/win:windowed" ]
     } else {
@@ -181,6 +169,22 @@ if (crashpad_is_android) {
     outputs = [
       "$root_out_dir/libcrashpad_handler.so",
     ]
+  }
+
+  crashpad_executable("crashpad_handler_trampoline") {
+    set_sources_assignment_filter([])
+    output_name = "libcrashpad_handler_trampoline.so"
+
+    sources = [
+      "linux/handler_trampoline.cc",
+    ]
+
+    ldflags = [ "-llog" ]
+
+    # TODO(thakis): Remove !using_sanitizer, https://crbug.com/936418
+    if (crashpad_is_in_chromium && !using_sanitizer) {
+      no_default_deps = true
+    }
   }
 }
 

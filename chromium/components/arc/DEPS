@@ -1,6 +1,6 @@
 include_rules = [
   "+ash/public/cpp",
-  "+chromeos/chromeos_switches.h",
+  "+chromeos/constants",
   "+chromeos/cryptohome",
   "+chromeos/dbus",
   "+components/account_id",
@@ -17,6 +17,7 @@ include_rules = [
   "+storage/browser/fileapi",
   "+third_party/re2",
   "+third_party/skia",
+  "+ui/base/ime",
   "+ui/gfx/geometry",
   "+ui/gfx/range/range.h",
 ]

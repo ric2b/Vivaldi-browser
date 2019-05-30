@@ -6,13 +6,16 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/persistent_histogram_allocator.h"
 #include "base/metrics/persistent_memory_allocator.h"
+#include "base/task/post_task.h"
 #include "components/metrics/metrics_service.h"
 #include "content/public/browser/browser_child_process_host.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/notification_service.h"
@@ -123,13 +126,12 @@ void SubprocessMetricsProvider::BrowserChildProcessHostConnected(
   // managing the child in order to extract the metrics memory from it.
   // Unfortunately, the required lookup can only be performed on the IO
   // thread so do the necessary dance.
-  content::BrowserThread::PostTaskAndReplyWithResult(
-      content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&SubprocessMetricsProvider::
-                     GetSubprocessHistogramAllocatorOnIOThread,
-                 data.id),
-      base::Bind(&SubprocessMetricsProvider::
-                     RegisterSubprocessAllocator,
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, {content::BrowserThread::IO},
+      base::Bind(
+          &SubprocessMetricsProvider::GetSubprocessHistogramAllocatorOnIOThread,
+          data.id),
+      base::Bind(&SubprocessMetricsProvider::RegisterSubprocessAllocator,
                  weak_ptr_factory_.GetWeakPtr(), data.id));
 }
 
@@ -175,7 +177,7 @@ void SubprocessMetricsProvider::RenderProcessReady(
 
   // If the render-process-host passed a persistent-memory-allocator to the
   // renderer process, extract it and register it here.
-  std::unique_ptr<base::SharedPersistentMemoryAllocator> allocator =
+  std::unique_ptr<base::PersistentMemoryAllocator> allocator =
       host->TakeMetricsAllocator();
   if (allocator) {
     RegisterSubprocessAllocator(
@@ -214,7 +216,7 @@ SubprocessMetricsProvider::GetSubprocessHistogramAllocatorOnIOThread(int id) {
   if (!host)
     return nullptr;
 
-  std::unique_ptr<base::SharedPersistentMemoryAllocator> allocator =
+  std::unique_ptr<base::PersistentMemoryAllocator> allocator =
       host->TakeMetricsAllocator();
   if (!allocator)
     return nullptr;

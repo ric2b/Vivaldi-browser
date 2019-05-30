@@ -7,6 +7,7 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/sanitizer_buildflags.h"
 #include "base/strings/string_piece.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
@@ -465,7 +466,7 @@ void CrashChildMain(int death_location) {
   // Should never reach this point.
   const uintptr_t failed = 0;
   HANDLE_EINTR(write(g_child_crash_pipe, &failed, sizeof(uintptr_t)));
-};
+}
 
 void SpawnChildAndCrash(int death_location, uintptr_t* child_crash_addr) {
   int pipefd[2];
@@ -540,7 +541,7 @@ void DcheckEmptyFunction1() {
 }
 void DcheckEmptyFunction2() {}
 
-#if DCHECK_IS_CONFIGURABLE
+#if defined(DCHECK_IS_CONFIGURABLE)
 class ScopedDcheckSeverity {
  public:
   ScopedDcheckSeverity(LogSeverity new_severity) : old_severity_(LOG_DCHECK) {
@@ -552,7 +553,7 @@ class ScopedDcheckSeverity {
  private:
   LogSeverity old_severity_;
 };
-#endif  // DCHECK_IS_CONFIGURABLE
+#endif  // defined(DCHECK_IS_CONFIGURABLE)
 
 // https://crbug.com/709067 tracks test flakiness on iOS.
 #if defined(OS_IOS)
@@ -561,12 +562,12 @@ class ScopedDcheckSeverity {
 #define MAYBE_Dcheck Dcheck
 #endif
 TEST_F(LoggingTest, MAYBE_Dcheck) {
-#if DCHECK_IS_CONFIGURABLE
+#if defined(DCHECK_IS_CONFIGURABLE)
   // DCHECKs are enabled, and LOG_DCHECK is mutable, but defaults to non-fatal.
   // Set it to LOG_FATAL to get the expected behavior from the rest of this
   // test.
   ScopedDcheckSeverity dcheck_severity(LOG_FATAL);
-#endif  // DCHECK_IS_CONFIGURABLE
+#endif  // defined(DCHECK_IS_CONFIGURABLE)
 
 #if defined(NDEBUG) && !defined(DCHECK_ALWAYS_ON)
   // Release build.
@@ -727,7 +728,7 @@ namespace nested_test {
   }
 }  // namespace nested_test
 
-#if DCHECK_IS_CONFIGURABLE
+#if defined(DCHECK_IS_CONFIGURABLE)
 TEST_F(LoggingTest, ConfigurableDCheck) {
   // Verify that DCHECKs default to non-fatal in configurable-DCHECK builds.
   // Note that we require only that DCHECK is non-fatal by default, rather
@@ -777,7 +778,7 @@ TEST_F(LoggingTest, ConfigurableDCheckFeature) {
     EXPECT_LT(LOG_DCHECK, LOG_FATAL);
   }
 }
-#endif  // DCHECK_IS_CONFIGURABLE
+#endif  // defined(DCHECK_IS_CONFIGURABLE)
 
 #if defined(OS_FUCHSIA)
 TEST_F(LoggingTest, FuchsiaLogging) {
@@ -828,6 +829,57 @@ TEST_F(LoggingTest, LogPrefix) {
   SetLogMessageHandler(old_log_message_handler);
   log_string_ptr = nullptr;
 }
+
+#if !defined(ADDRESS_SANITIZER) && !defined(MEMORY_SANITIZER) && \
+    !BUILDFLAG(IS_HWASAN)
+// Since we scan potentially uninitialized portions of the stack, we can't run
+// this test under any sanitizer that checks for uninitialized reads.
+TEST_F(LoggingTest, LogMessageMarkersOnStack) {
+  const uint32_t kLogStartMarker = 0xbedead01;
+  const uint32_t kLogEndMarker = 0x5050dead;
+  const char kTestMessage[] = "Oh noes! I have crashed! 💩";
+
+  uint32_t stack_start = 0;
+
+  // Install a LogAssertHandler which will scan between |stack_start| and its
+  // local-scope stack for the start & end markers, and verify the message.
+  ScopedLogAssertHandler assert_handler(base::BindRepeating(
+      [](uint32_t* stack_start_ptr, const char* file, int line,
+         const base::StringPiece message, const base::StringPiece stack_trace) {
+        uint32_t stack_end;
+        uint32_t* stack_end_ptr = &stack_end;
+
+        // Scan the stack for the expected markers.
+        uint32_t* start_marker = nullptr;
+        uint32_t* end_marker = nullptr;
+        for (uint32_t* ptr = stack_end_ptr; ptr <= stack_start_ptr; ++ptr) {
+          if (*ptr == kLogStartMarker)
+            start_marker = ptr;
+          else if (*ptr == kLogEndMarker)
+            end_marker = ptr;
+        }
+
+        // Verify that start & end markers were found, somewhere, in-between
+        // this and the LogAssertHandler scope, in the LogMessage destructor's
+        // stack frame.
+        ASSERT_TRUE(start_marker);
+        ASSERT_TRUE(end_marker);
+
+        // Verify that the |message| is found in-between the markers.
+        const char* start_char_marker =
+            reinterpret_cast<char*>(start_marker + 1);
+        const char* end_char_marker = reinterpret_cast<char*>(end_marker);
+
+        const base::StringPiece stack_view(start_char_marker,
+                                           end_char_marker - start_char_marker);
+        ASSERT_FALSE(stack_view.find(message) == base::StringPiece::npos);
+      },
+      &stack_start));
+
+  // Trigger a log assertion, with a test message we can check for.
+  LOG(FATAL) << kTestMessage;
+}
+#endif  // !defined(ADDRESS_SANITIZER)
 
 }  // namespace
 

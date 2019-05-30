@@ -9,11 +9,11 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
+#include "components/policy/core/common/cloud/dm_auth.h"
 #include "net/base/escape.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
@@ -30,11 +30,6 @@ namespace policy {
 namespace {
 
 const char kPostContentType[] = "application/protobuf";
-
-const char kAuthHeader[] = "Authorization";
-const char kServiceTokenAuthHeaderPrefix[] = "GoogleLogin auth=";
-const char kDMTokenAuthHeaderPrefix[] = "GoogleDMToken token=";
-const char kEnrollmentTokenAuthHeaderPrefix[] = "GoogleEnrollmentToken token=";
 
 // Number of times to retry on ERR_NETWORK_CHANGED errors.
 const int kMaxRetries = 3;
@@ -69,7 +64,7 @@ bool IsProxyError(int net_error) {
     case net::ERR_PROXY_CONNECTION_FAILED:
     case net::ERR_TUNNEL_CONNECTION_FAILED:
     case net::ERR_PROXY_AUTH_UNSUPPORTED:
-    case net::ERR_HTTPS_PROXY_TUNNEL_RESPONSE:
+    case net::ERR_HTTPS_PROXY_TUNNEL_RESPONSE_REDIRECT:
     case net::ERR_MANDATORY_PROXY_CONFIGURATION_FAILED:
     case net::ERR_PROXY_CERTIFICATE_INVALID:
     case net::ERR_SOCKS_CONNECTION_FAILED:
@@ -309,7 +304,13 @@ void DeviceManagementRequestJobImpl::HandleResponse(int net_error,
     UMA_HISTOGRAM_ENUMERATION("Enterprise.DMServerRequestSuccess",
                               DMServerRequestSuccess::REQUEST_ERROR,
                               DMServerRequestSuccess::REQUEST_MAX);
-    LOG(WARNING) << "DMServer sent an error response: " << response_code;
+    em::DeviceManagementResponse response;
+    if (response.ParseFromString(data)) {
+      LOG(WARNING) << "DMServer sent an error response: " << response_code
+                   << ". " << response.error_message();
+    } else {
+      LOG(WARNING) << "DMServer sent an error response: " << response_code;
+    }
   } else {
     // Success with retries_count_ retries.
     UMA_HISTOGRAM_EXACT_LINEAR(
@@ -413,18 +414,27 @@ void DeviceManagementRequestJobImpl::ConfigureRequest(
   resource_request->load_flags =
       net::LOAD_DO_NOT_SEND_COOKIES | net::LOAD_DO_NOT_SAVE_COOKIES |
       net::LOAD_DISABLE_CACHE | (bypass_proxy_ ? net::LOAD_BYPASS_PROXY : 0);
-  if (!gaia_token_.empty()) {
+  CHECK(auth_data_ || oauth_token_);
+  if (!auth_data_)
+    return;
+
+  if (!auth_data_->gaia_token().empty()) {
     resource_request->headers.SetHeader(
-        kAuthHeader, std::string(kServiceTokenAuthHeaderPrefix) + gaia_token_);
+        dm_protocol::kAuthHeader,
+        std::string(dm_protocol::kServiceTokenAuthHeaderPrefix) +
+            auth_data_->gaia_token());
   }
-  if (!dm_token_.empty()) {
+  if (!auth_data_->dm_token().empty()) {
     resource_request->headers.SetHeader(
-        kAuthHeader, std::string(kDMTokenAuthHeaderPrefix) + dm_token_);
+        dm_protocol::kAuthHeader,
+        std::string(dm_protocol::kDMTokenAuthHeaderPrefix) +
+            auth_data_->dm_token());
   }
-  if (!enrollment_token_.empty()) {
+  if (!auth_data_->enrollment_token().empty()) {
     resource_request->headers.SetHeader(
-        kAuthHeader,
-        std::string(kEnrollmentTokenAuthHeaderPrefix) + enrollment_token_);
+        dm_protocol::kAuthHeader,
+        std::string(dm_protocol::kEnrollmentTokenAuthHeaderPrefix) +
+            auth_data_->enrollment_token());
   }
 }
 
@@ -493,24 +503,19 @@ void DeviceManagementRequestJobImpl::ReportError(DeviceManagementStatus code) {
 
 DeviceManagementRequestJob::~DeviceManagementRequestJob() {}
 
-void DeviceManagementRequestJob::SetGaiaToken(const std::string& gaia_token) {
-  gaia_token_ = gaia_token;
+void DeviceManagementRequestJob::SetAuthData(std::unique_ptr<DMAuth> auth) {
+  CHECK(!auth->has_oauth_token()) << "This method does not accept OAuth2";
+  auth_data_ = std::move(auth);
 }
 
-void DeviceManagementRequestJob::SetOAuthToken(const std::string& oauth_token) {
-  AddParameter(dm_protocol::kParamOAuthToken, oauth_token);
-}
-
-void DeviceManagementRequestJob::SetDMToken(const std::string& dm_token) {
-  dm_token_ = dm_token;
+void DeviceManagementRequestJob::SetOAuthTokenParameter(
+    const std::string& oauth_token) {
+  oauth_token_ = oauth_token;
+  AddParameter(dm_protocol::kParamOAuthToken, *oauth_token_);
 }
 
 void DeviceManagementRequestJob::SetClientID(const std::string& client_id) {
   AddParameter(dm_protocol::kParamDeviceID, client_id);
-}
-
-void DeviceManagementRequestJob::SetEnrollmentToken(const std::string& token) {
-  enrollment_token_ = token;
 }
 
 void DeviceManagementRequestJob::SetCritical(bool critical) {
@@ -593,9 +598,7 @@ void DeviceManagementService::Initialize() {
 void DeviceManagementService::Shutdown() {
   DCHECK(thread_checker_.CalledOnValidThread());
   weak_ptr_factory_.InvalidateWeakPtrs();
-  for (JobFetcherMap::iterator job(pending_jobs_.begin());
-       job != pending_jobs_.end();
-       ++job) {
+  for (auto job(pending_jobs_.begin()); job != pending_jobs_.end(); ++job) {
     delete job->first;
     queued_jobs_.push_back(job->second);
   }
@@ -694,7 +697,9 @@ void DeviceManagementService::OnURLLoaderComplete(
   bool was_fetched_via_proxy = false;
   std::string mime_type;
   if (url_loader->ResponseInfo()) {
-    was_fetched_via_proxy = url_loader->ResponseInfo()->was_fetched_via_proxy;
+    was_fetched_via_proxy =
+        url_loader->ResponseInfo()->proxy_server.is_valid() &&
+        !url_loader->ResponseInfo()->proxy_server.is_direct();
     mime_type = url_loader->ResponseInfo()->mime_type;
     if (url_loader->ResponseInfo()->headers)
       response_code = url_loader->ResponseInfo()->headers->response_code();
@@ -716,7 +721,7 @@ void DeviceManagementService::OnURLLoaderCompleteInternal(
     int net_error,
     int response_code,
     bool was_fetched_via_proxy) {
-  JobFetcherMap::iterator entry(pending_jobs_.find(url_loader));
+  auto entry(pending_jobs_.find(url_loader));
   if (entry == pending_jobs_.end()) {
     NOTREACHED() << "Callback from foreign URL loader";
     return;
@@ -757,8 +762,7 @@ void DeviceManagementService::AddJob(DeviceManagementRequestJobImpl* job) {
 }
 
 void DeviceManagementService::RemoveJob(DeviceManagementRequestJobImpl* job) {
-  for (JobFetcherMap::iterator entry(pending_jobs_.begin());
-       entry != pending_jobs_.end();
+  for (auto entry(pending_jobs_.begin()); entry != pending_jobs_.end();
        ++entry) {
     if (entry->second == job) {
       delete entry->first;

@@ -9,9 +9,11 @@
 #include <string>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_storage_monitor.h"
@@ -197,7 +199,7 @@ class ExtensionStorageMonitorTest : public ExtensionBrowserTest {
     // Setting a testing factory function deletes the current
     // ExtensionStorageMonitor; see KeyedServiceFactory::SetTestingFactory().
     ExtensionStorageMonitorFactory::GetInstance()->SetTestingFactoryAndUse(
-        profile(), &CreateExtensionStorageMonitorInstance);
+        profile(), base::BindRepeating(&CreateExtensionStorageMonitorInstance));
     InitStorageMonitor();
   }
 
@@ -252,7 +254,7 @@ class ExtensionStorageMonitorTest : public ExtensionBrowserTest {
     ASSERT_TRUE(launched_listener.WaitUntilSatisfied());
 
     // Instruct the app to write |num_bytes| of data.
-    launched_listener.Reply(base::IntToString(num_bytes));
+    launched_listener.Reply(base::NumberToString(num_bytes));
     ASSERT_TRUE(write_complete_listener.WaitUntilSatisfied());
   }
 
@@ -394,9 +396,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionStorageMonitorTest,
 // Exercises the case where two hosted apps are same-origin but have non-
 // overlapping extents. Disabling one should not suppress storage monitoring for
 // the other.
-// Disabled for flakiness. crbug.com/799022
-IN_PROC_BROWSER_TEST_F(ExtensionStorageMonitorTest,
-                       DISABLED_TwoHostedAppsInSameOrigin) {
+IN_PROC_BROWSER_TEST_F(ExtensionStorageMonitorTest, TwoHostedAppsInSameOrigin) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url1 = embedded_test_server()->GetURL(

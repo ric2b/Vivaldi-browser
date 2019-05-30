@@ -192,7 +192,7 @@ Examples
   # result will be "//foo/bar"
 
   # Extract the source-absolute directory name,
-  result = get_path_info(get_path_info(path, "dir"), "abspath"
+  result = get_path_info(get_path_info(path, "dir"), "abspath")
 )";
 
 Value RunGetPathInfo(Scope* scope,

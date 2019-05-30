@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <utility>
 #include <vector>
 
 #include "base/logging.h"
@@ -13,8 +14,8 @@
 #include "content/renderer/media/webrtc/mock_data_channel_impl.h"
 #include "content/renderer/media/webrtc/mock_peer_connection_dependency_factory.h"
 #include "content/renderer/media/webrtc/webrtc_util.h"
-#include "third_party/webrtc/api/rtpreceiverinterface.h"
-#include "third_party/webrtc/rtc_base/refcountedobject.h"
+#include "third_party/webrtc/api/rtp_receiver_interface.h"
+#include "third_party/webrtc/rtc_base/ref_counted_object.h"
 
 using testing::_;
 using webrtc::AudioTrackInterface;
@@ -64,7 +65,7 @@ class MockStreamCollection : public webrtc::StreamCollectionInterface {
     streams_.push_back(stream);
   }
   void RemoveStream(MediaStreamInterface* stream) {
-    StreamVector::iterator it = streams_.begin();
+    auto it = streams_.begin();
     for (; it != streams_.end(); ++it) {
       if (it->get() == stream) {
         streams_.erase(it);
@@ -125,6 +126,11 @@ rtc::scoped_refptr<webrtc::MediaStreamTrackInterface> FakeRtpSender::track()
   return track_;
 }
 
+rtc::scoped_refptr<webrtc::DtlsTransportInterface>
+FakeRtpSender::dtls_transport() const {
+  return transport_;
+}
+
 uint32_t FakeRtpSender::ssrc() const {
   NOTIMPLEMENTED();
   return 0;
@@ -144,7 +150,12 @@ std::vector<std::string> FakeRtpSender::stream_ids() const {
   return stream_ids_;
 }
 
-webrtc::RtpParameters FakeRtpSender::GetParameters() {
+std::vector<webrtc::RtpEncodingParameters> FakeRtpSender::init_send_encodings()
+    const {
+  return {};
+}
+
+webrtc::RtpParameters FakeRtpSender::GetParameters() const {
   NOTIMPLEMENTED();
   return webrtc::RtpParameters();
 }
@@ -172,9 +183,21 @@ rtc::scoped_refptr<webrtc::MediaStreamTrackInterface> FakeRtpReceiver::track()
   return track_;
 }
 
+rtc::scoped_refptr<webrtc::DtlsTransportInterface>
+FakeRtpReceiver::dtls_transport() const {
+  return transport_;
+}
+
 std::vector<rtc::scoped_refptr<webrtc::MediaStreamInterface>>
 FakeRtpReceiver::streams() const {
   return streams_;
+}
+
+std::vector<std::string> FakeRtpReceiver::stream_ids() const {
+  std::vector<std::string> stream_ids;
+  for (const auto& stream : streams_)
+    stream_ids.push_back(stream->id());
+  return stream_ids;
 }
 
 cricket::MediaType FakeRtpReceiver::media_type() const {
@@ -209,8 +232,8 @@ std::vector<webrtc::RtpSource> FakeRtpReceiver::GetSources() const {
 
 FakeRtpTransceiver::FakeRtpTransceiver(
     cricket::MediaType media_type,
-    rtc::scoped_refptr<webrtc::RtpSenderInterface> sender,
-    rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver,
+    rtc::scoped_refptr<FakeRtpSender> sender,
+    rtc::scoped_refptr<FakeRtpReceiver> receiver,
     base::Optional<std::string> mid,
     bool stopped,
     webrtc::RtpTransceiverDirection direction,
@@ -218,7 +241,7 @@ FakeRtpTransceiver::FakeRtpTransceiver(
     : media_type_(media_type),
       sender_(std::move(sender)),
       receiver_(std::move(receiver)),
-      mid_(ToAbslOptional(mid)),
+      mid_(ToAbslOptional(std::move(mid))),
       stopped_(stopped),
       direction_(direction),
       current_direction_(ToAbslOptional(current_direction)) {}
@@ -265,9 +288,21 @@ void FakeRtpTransceiver::Stop() {
   NOTIMPLEMENTED();
 }
 
-void FakeRtpTransceiver::SetCodecPreferences(
-    rtc::ArrayView<webrtc::RtpCodecCapability> codecs) {
-  NOTIMPLEMENTED();
+void FakeRtpTransceiver::SetTransport(
+    rtc::scoped_refptr<webrtc::DtlsTransportInterface> transport) {
+  sender_->SetTransport(transport);
+  receiver_->SetTransport(transport);
+}
+
+FakeDtlsTransport::FakeDtlsTransport() {}
+
+rtc::scoped_refptr<webrtc::IceTransportInterface>
+FakeDtlsTransport::ice_transport() {
+  return nullptr;
+}
+
+webrtc::DtlsTransportInformation FakeDtlsTransport::Information() {
+  return webrtc::DtlsTransportInformation(webrtc::DtlsTransportState::kNew);
 }
 
 const char MockPeerConnectionImpl::kDummyOffer[] = "dummy offer";

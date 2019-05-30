@@ -9,14 +9,15 @@
 
 #include <vector>
 
+#include "base/component_export.h"
 #include "base/macros.h"
-#include "chromeos/chromeos_export.h"
 #include "chromeos/dbus/cras_audio_client.h"
 
 namespace chromeos {
 
 // The CrasAudioClient implementation used on Linux desktop.
-class CHROMEOS_EXPORT FakeCrasAudioClient : public CrasAudioClient {
+class COMPONENT_EXPORT(CHROMEOS_DBUS) FakeCrasAudioClient
+    : public CrasAudioClient {
  public:
   FakeCrasAudioClient();
   ~FakeCrasAudioClient() override;
@@ -29,6 +30,7 @@ class CHROMEOS_EXPORT FakeCrasAudioClient : public CrasAudioClient {
   void GetVolumeState(DBusMethodCallback<VolumeState> callback) override;
   void GetDefaultOutputBufferSize(DBusMethodCallback<int> callback) override;
   void GetSystemAecSupported(DBusMethodCallback<bool> callback) override;
+  void GetSystemAecGroupId(DBusMethodCallback<int32_t> callback) override;
   void GetNodes(DBusMethodCallback<AudioNodeList> callback) override;
   void GetNumberOfActiveOutputStreams(
       DBusMethodCallback<int> callback) override;

@@ -5,8 +5,10 @@
 #include "chrome/browser/chromeos/login/screenshot_testing/screenshot_testing_mixin.h"
 
 #include "base/run_loop.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
@@ -14,20 +16,11 @@
 
 namespace chromeos {
 
-ScreenshotTestingMixin::ScreenshotTestingMixin()
-    : enable_test_screenshots_(false) {}
+ScreenshotTestingMixin::ScreenshotTestingMixin(
+    InProcessBrowserTestMixinHost* host)
+    : InProcessBrowserTestMixin(host) {}
 
-ScreenshotTestingMixin::~ScreenshotTestingMixin() {}
-
-void ScreenshotTestingMixin::SetUpInProcessBrowserTestFixture() {
-  enable_test_screenshots_ = screenshot_tester_.TryInitialize();
-}
-
-void ScreenshotTestingMixin::SetUpCommandLine(base::CommandLine* command_line) {
-  if (enable_test_screenshots_) {
-    command_line->AppendSwitch(switches::kEnablePixelOutputInTests);
-  }
-}
+ScreenshotTestingMixin::~ScreenshotTestingMixin() = default;
 
 void ScreenshotTestingMixin::RunScreenshotTesting(
     const std::string& test_name) {
@@ -39,6 +32,16 @@ void ScreenshotTestingMixin::RunScreenshotTesting(
 
 void ScreenshotTestingMixin::IgnoreArea(const SkIRect& area) {
   screenshot_tester_.IgnoreArea(area);
+}
+
+void ScreenshotTestingMixin::SetUpInProcessBrowserTestFixture() {
+  enable_test_screenshots_ = screenshot_tester_.TryInitialize();
+}
+
+void ScreenshotTestingMixin::SetUpCommandLine(base::CommandLine* command_line) {
+  if (enable_test_screenshots_) {
+    command_line->AppendSwitch(switches::kEnablePixelOutputInTests);
+  }
 }
 
 // Current implementation is a mockup.
@@ -56,8 +59,8 @@ void ScreenshotTestingMixin::SynchronizeAnimationLoadWithCompositor() {
 
 void ScreenshotTestingMixin::HandleAnimationLoad() {
   timer_.Stop();
-  content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                   animation_waiter_quitter_);
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                           animation_waiter_quitter_);
 }
 
 }  // namespace chromeos

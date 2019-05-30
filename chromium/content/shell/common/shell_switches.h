@@ -12,15 +12,12 @@
 
 namespace switches {
 
-extern const char kContentBrowserTest[];
 extern const char kContentShellDataPath[];
 extern const char kCrashDumpsDir[];
 extern const char kExposeInternalsForTesting[];
-extern const char kIsolateSitesForTesting[];
 extern const char kRegisterFontFiles[];
 extern const char kContentShellHostWindowSize[];
 extern const char kContentShellHideToolbar[];
-extern const char kContentShellAlwaysFork[];
 
 // Returns list of extra font files to be made accessible to the renderer.
 std::vector<std::string> GetSideloadFontFiles();

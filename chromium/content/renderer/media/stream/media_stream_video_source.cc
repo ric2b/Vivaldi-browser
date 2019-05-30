@@ -10,12 +10,13 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "base/trace_event/trace_event.h"
 #include "content/child/child_process.h"
 #include "content/public/common/content_features.h"
 #include "content/renderer/media/stream/media_stream_constraints_util_video_device.h"
@@ -31,14 +32,16 @@ MediaStreamVideoSource* MediaStreamVideoSource::GetVideoSource(
       source.GetType() != blink::WebMediaStreamSource::kTypeVideo) {
     return nullptr;
   }
-  return static_cast<MediaStreamVideoSource*>(source.GetExtraData());
+  return static_cast<MediaStreamVideoSource*>(source.GetPlatformSource());
 }
 
 MediaStreamVideoSource::MediaStreamVideoSource()
-    : state_(NEW),
-      track_adapter_(
-          new VideoTrackAdapter(ChildProcess::current()->io_task_runner())),
-      weak_factory_(this) {}
+    : state_(NEW), weak_factory_(this) {
+  track_adapter_ = base::MakeRefCounted<VideoTrackAdapter>(
+      ChildProcess::current()->io_task_runner(),
+      base::BindRepeating(&MediaStreamVideoSource::OnFrameDropped,
+                          weak_factory_.GetWeakPtr()));
+}
 
 MediaStreamVideoSource::~MediaStreamVideoSource() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -47,15 +50,17 @@ MediaStreamVideoSource::~MediaStreamVideoSource() {
 void MediaStreamVideoSource::AddTrack(
     MediaStreamVideoTrack* track,
     const VideoTrackAdapterSettings& track_adapter_settings,
-    const VideoCaptureDeliverFrameCB& frame_callback,
+    const blink::VideoCaptureDeliverFrameCB& frame_callback,
+    const blink::VideoTrackSettingsCallback& settings_callback,
+    const blink::VideoTrackFormatCallback& format_callback,
     const ConstraintsCallback& callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(std::find(tracks_.begin(), tracks_.end(), track) == tracks_.end());
+  DCHECK(!base::ContainsValue(tracks_, track));
   tracks_.push_back(track);
   secure_tracker_.Add(track, true);
 
   pending_tracks_.push_back(PendingTrackInfo(
-      track, frame_callback,
+      track, frame_callback, settings_callback, format_callback,
       std::make_unique<VideoTrackAdapterSettings>(track_adapter_settings),
       callback));
 
@@ -86,8 +91,7 @@ void MediaStreamVideoSource::RemoveTrack(MediaStreamVideoTrack* video_track,
                                          base::OnceClosure callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   {
-    std::vector<MediaStreamVideoTrack*>::iterator it =
-        std::find(tracks_.begin(), tracks_.end(), video_track);
+    auto it = std::find(tracks_.begin(), tracks_.end(), video_track);
     DCHECK(it != tracks_.end());
     tracks_.erase(it);
   }
@@ -125,8 +129,8 @@ void MediaStreamVideoSource::RemoveTrack(MediaStreamVideoTrack* video_track,
       // underlying implementation results in failed source creation since
       // stopping a source with StopSource() can have side effects that affect
       // sources created after that StopSource() call, but before the actual
-      // stop takes place. See http://crbug.com/778039.
-      StopForRestart(base::BindOnce(&MediaStreamVideoSource::DidRemoveLastTrack,
+      // stop takes place. See https://crbug.com/778039.
+      StopForRestart(base::BindOnce(&MediaStreamVideoSource::DidStopSource,
                                     weak_factory_.GetWeakPtr(),
                                     std::move(callback)));
       if (state_ == STOPPING_FOR_RESTART || state_ == STOPPED_FOR_RESTART) {
@@ -139,7 +143,7 @@ void MediaStreamVideoSource::RemoveTrack(MediaStreamVideoTrack* video_track,
         FinalizeStopSource();
       } else {
         // If the source does not support restarting, call StopSource()
-        // to ensure stop on this task. DidRemoveLastTrack() will be called on
+        // to ensure stop on this task. DidStopSource() will be called on
         // another task even if the source does not support restarting, as
         // StopForRestart() always posts a task to run its callback.
         StopSource();
@@ -152,13 +156,10 @@ void MediaStreamVideoSource::RemoveTrack(MediaStreamVideoTrack* video_track,
   }
 }
 
-void MediaStreamVideoSource::DidRemoveLastTrack(base::OnceClosure callback,
-                                                RestartResult result) {
+void MediaStreamVideoSource::DidStopSource(base::OnceClosure callback,
+                                           RestartResult result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(callback);
-  DCHECK(tracks_.empty());
-  DCHECK_EQ(Owner().GetReadyState(),
-            blink::WebMediaStreamSource::kReadyStateEnded);
   if (result == RestartResult::IS_STOPPED) {
     state_ = ENDED;
   }
@@ -313,6 +314,19 @@ MediaStreamVideoSource::GetCurrentCaptureParams() const {
   return base::Optional<media::VideoCaptureParams>();
 }
 
+void MediaStreamVideoSource::DoChangeSource(
+    const blink::MediaStreamDevice& new_device) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DVLOG(1) << "MediaStreamVideoSource::DoChangeSource: "
+           << ", new device id = " << new_device.id
+           << ", session id = " << new_device.session_id;
+  if (state_ != STARTED) {
+    return;
+  }
+
+  ChangeSourceImpl(new_device);
+}
+
 void MediaStreamVideoSource::DoStopSource() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(3) << "DoStopSource()";
@@ -324,14 +338,20 @@ void MediaStreamVideoSource::DoStopSource() {
   SetReadyState(blink::WebMediaStreamSource::kReadyStateEnded);
 }
 
-void MediaStreamVideoSource::OnStartDone(MediaStreamRequestResult result) {
+void MediaStreamVideoSource::OnStartDone(
+    blink::MediaStreamRequestResult result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(3) << "OnStartDone({result =" << result << "})";
-  if (state_ == ENDED)
+  if (state_ == ENDED) {
+    OnLog(
+        "MediaStreamVideoSource::OnStartDone dropping event because state_ == "
+        "ENDED.");
     return;
+  }
 
-  if (result == MEDIA_DEVICE_OK) {
+  if (result == blink::MEDIA_DEVICE_OK) {
     DCHECK_EQ(STARTING, state_);
+    OnLog("MediaStreamVideoSource changing state to STARTED");
     state_ = STARTED;
     SetReadyState(blink::WebMediaStreamSource::kReadyStateLive);
     StartFrameMonitoring();
@@ -349,18 +369,28 @@ void MediaStreamVideoSource::FinalizeAddPendingTracks() {
   std::vector<PendingTrackInfo> pending_track_descriptors;
   pending_track_descriptors.swap(pending_tracks_);
   for (const auto& track_info : pending_track_descriptors) {
-    MediaStreamRequestResult result = MEDIA_DEVICE_OK;
+    blink::MediaStreamRequestResult result = blink::MEDIA_DEVICE_OK;
     if (state_ != STARTED)
-      result = MEDIA_DEVICE_TRACK_START_FAILURE_VIDEO;
+      result = blink::MEDIA_DEVICE_TRACK_START_FAILURE_VIDEO;
 
-    if (result == MEDIA_DEVICE_OK) {
+    if (result == blink::MEDIA_DEVICE_OK) {
       track_adapter_->AddTrack(track_info.track, track_info.frame_callback,
+                               track_info.settings_callback,
+                               track_info.format_callback,
                                *track_info.adapter_settings);
       UpdateTrackSettings(track_info.track, *track_info.adapter_settings);
     }
 
-    if (!track_info.callback.is_null())
+    if (!track_info.callback.is_null()) {
+      OnLog(
+          "MediaStreamVideoSource invoking callback indicating result of "
+          "starting track.");
       track_info.callback.Run(this, result, blink::WebString());
+    } else {
+      OnLog(
+          "MediaStreamVideoSource dropping event indicating result of starting "
+          "track.");
+    }
   }
 }
 
@@ -407,20 +437,27 @@ void MediaStreamVideoSource::UpdateTrackSettings(
   // Calculate resulting frame size if the source delivers frames
   // according to the current format. Note: Format may change later.
   gfx::Size desired_size;
-  VideoTrackAdapter::CalculateTargetSize(false /* is_rotated */,
-                                         GetCurrentFormat()->frame_size,
-                                         adapter_settings, &desired_size);
-  track->SetTargetSizeAndFrameRate(desired_size.width(), desired_size.height(),
-                                   adapter_settings.max_frame_rate);
+  if (VideoTrackAdapter::CalculateDesiredSize(
+          false /* is_rotated */, GetCurrentFormat()->frame_size,
+          adapter_settings, &desired_size)) {
+    track->SetTargetSizeAndFrameRate(desired_size.width(),
+                                     desired_size.height(),
+                                     adapter_settings.max_frame_rate());
+  }
+  track->SetTrackAdapterSettings(adapter_settings);
 }
 
 MediaStreamVideoSource::PendingTrackInfo::PendingTrackInfo(
     MediaStreamVideoTrack* track,
-    const VideoCaptureDeliverFrameCB& frame_callback,
+    const blink::VideoCaptureDeliverFrameCB& frame_callback,
+    const blink::VideoTrackSettingsCallback& settings_callback,
+    const blink::VideoTrackFormatCallback& format_callback,
     std::unique_ptr<VideoTrackAdapterSettings> adapter_settings,
     const ConstraintsCallback& callback)
     : track(track),
       frame_callback(frame_callback),
+      settings_callback(settings_callback),
+      format_callback(format_callback),
       adapter_settings(std::move(adapter_settings)),
       callback(callback) {}
 

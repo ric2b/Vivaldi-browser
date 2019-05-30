@@ -126,6 +126,16 @@ class SourceDir {
     return base::StringPiece(&value_[1], value_.size() - 1);
   }
 
+  // Returns a path that does not end with a slash.
+  //
+  // This function simply returns the reference to the value if the path is a
+  // root, e.g. "/" or "//".
+  base::StringPiece SourceWithNoTrailingSlash() const {
+    if (value_.size() > 2)
+      return base::StringPiece(&value_[0], value_.size() - 1);
+    return base::StringPiece(value_);
+  }
+
   void SwapValue(std::string* v);
 
   bool operator==(const SourceDir& other) const {

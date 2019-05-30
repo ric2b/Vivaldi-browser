@@ -8,9 +8,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/message_loop/message_loop.h"
+#include "base/bind.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "build/build_config.h"
+#include "components/viz/common/features.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
@@ -51,9 +53,11 @@ void WaitForConnectionError(T* endpoint) {
 
 // Stub EmbeddedFrameSinkClient that stores the latest SurfaceInfo.
 class StubEmbeddedFrameSinkClient
-    : public blink::mojom::EmbeddedFrameSinkClient {
+    : public blink::mojom::EmbeddedFrameSinkClient,
+      public blink::mojom::SurfaceEmbedder {
  public:
-  StubEmbeddedFrameSinkClient() : binding_(this) {}
+  StubEmbeddedFrameSinkClient()
+      : surface_embedder_binding_(this), binding_(this) {}
   ~StubEmbeddedFrameSinkClient() override {}
 
   blink::mojom::EmbeddedFrameSinkClientPtr GetInterfacePtr() {
@@ -71,6 +75,10 @@ class StubEmbeddedFrameSinkClient
     return last_surface_info_;
   }
 
+  const viz::LocalSurfaceId& last_received_local_surface_id() const {
+    return last_received_local_surface_id_;
+  }
+
   bool connection_error() const { return connection_error_; }
 
  private:
@@ -78,9 +86,20 @@ class StubEmbeddedFrameSinkClient
   void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override {
     last_surface_info_ = surface_info;
   }
+  void BindSurfaceEmbedder(
+      blink::mojom::SurfaceEmbedderRequest request) override {
+    surface_embedder_binding_.Bind(std::move(request));
+  }
 
+  // blink::mojom::SurfaceEmbedder implementation:
+  void SetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id) override {
+    last_received_local_surface_id_ = local_surface_id;
+  }
+
+  mojo::Binding<blink::mojom::SurfaceEmbedder> surface_embedder_binding_;
   mojo::Binding<blink::mojom::EmbeddedFrameSinkClient> binding_;
   viz::SurfaceInfo last_surface_info_;
+  viz::LocalSurfaceId last_received_local_surface_id_;
   bool connection_error_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(StubEmbeddedFrameSinkClient);
@@ -128,8 +147,9 @@ class EmbeddedFrameSinkProviderImplTest : public testing::Test {
     provider_ = std::make_unique<EmbeddedFrameSinkProviderImpl>(
         host_frame_sink_manager_.get(), kRendererClientId);
 
-    host_frame_sink_manager_->RegisterFrameSinkId(kFrameSinkParent,
-                                                  &host_frame_sink_client_);
+    host_frame_sink_manager_->RegisterFrameSinkId(
+        kFrameSinkParent, &host_frame_sink_client_,
+        viz::ReportFirstSurfaceActivation::kYes);
   }
   void TearDown() override {
     host_frame_sink_manager_->InvalidateFrameSinkId(kFrameSinkParent);
@@ -141,7 +161,7 @@ class EmbeddedFrameSinkProviderImplTest : public testing::Test {
  private:
   // A MessageLoop is required for mojo bindings which are used to
   // connect to graphics services.
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
   viz::ServerSharedBitmapManager shared_bitmap_manager_;
   viz::FakeHostFrameSinkClient host_frame_sink_client_;
   std::unique_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
@@ -149,9 +169,13 @@ class EmbeddedFrameSinkProviderImplTest : public testing::Test {
   std::unique_ptr<EmbeddedFrameSinkProviderImpl> provider_;
 };
 
-// Mimics the workflow of OffscreenCanvas.commit() on renderer process.
+// Mimics the workflow of OffscreenCanvas.commit() on renderer process. Assumes
+// surface sync is disabled.
 TEST_F(EmbeddedFrameSinkProviderImplTest,
        SingleHTMLCanvasElementTransferToOffscreen) {
+  if (features::IsSurfaceSynchronizationEnabled())
+    return;
+
   // Mimic connection from the renderer main thread to browser.
   StubEmbeddedFrameSinkClient efs_client;
   provider()->RegisterEmbeddedFrameSink(kFrameSinkParent, kFrameSinkA,
@@ -174,8 +198,7 @@ TEST_F(EmbeddedFrameSinkProviderImplTest,
   // Renderer submits a CompositorFrame with |local_id|.
   const viz::LocalSurfaceId local_id(1, base::UnguessableToken::Create());
   compositor_frame_sink->SubmitCompositorFrame(
-      local_id, viz::MakeDefaultCompositorFrame(), base::nullopt,
-      base::TimeTicks::Now().since_origin().InMicroseconds());
+      local_id, viz::MakeDefaultCompositorFrame(), base::nullopt, 0);
 
   RunUntilIdle();
 
@@ -188,6 +211,55 @@ TEST_F(EmbeddedFrameSinkProviderImplTest,
   const auto& surface_info = efs_client.last_surface_info();
   EXPECT_EQ(kFrameSinkA, surface_info.id().frame_sink_id());
   EXPECT_EQ(local_id, surface_info.id().local_surface_id());
+}
+
+// Mimics the workflow of OffscreenCanvas.commit() on renderer process. Assumes
+// surface sync is enabled.
+TEST_F(EmbeddedFrameSinkProviderImplTest,
+       SingleHTMLCanvasElementTransferToOffscreenSurfaceSync) {
+  if (!features::IsSurfaceSynchronizationEnabled())
+    return;
+
+  // Mimic connection from the renderer main thread to browser.
+  StubEmbeddedFrameSinkClient efs_client;
+  provider()->RegisterEmbeddedFrameSink(kFrameSinkParent, kFrameSinkA,
+                                        efs_client.GetInterfacePtr());
+
+  EmbeddedFrameSinkImpl* efs_impl = GetEmbeddedFrameSink(kFrameSinkA);
+
+  // There should be a single EmbeddedFrameSinkImpl and it should have the
+  // provided FrameSinkId.
+  EXPECT_EQ(kFrameSinkA, efs_impl->frame_sink_id());
+  EXPECT_THAT(GetAllCanvases(), ElementsAre(kFrameSinkA));
+
+  // Mimic connection from the renderer main or worker thread to browser.
+  viz::mojom::CompositorFrameSinkPtr compositor_frame_sink;
+  viz::MockCompositorFrameSinkClient compositor_frame_sink_client;
+  blink::mojom::SurfaceEmbedderPtr surface_embedder;
+  provider()->CreateCompositorFrameSink(
+      kFrameSinkA, compositor_frame_sink_client.BindInterfacePtr(),
+      mojo::MakeRequest(&compositor_frame_sink));
+  provider()->ConnectToEmbedder(kFrameSinkA,
+                                mojo::MakeRequest(&surface_embedder));
+
+  // Renderer submits a CompositorFrame with |local_id|.
+  const viz::LocalSurfaceId local_id(1, base::UnguessableToken::Create());
+  compositor_frame_sink->SubmitCompositorFrame(
+      local_id, viz::MakeDefaultCompositorFrame(), base::nullopt, 0);
+
+  RunUntilIdle();
+
+  // EmbeddedFrameSinkImpl in browser should not be obversing surface
+  // activations so it should not know about |local_id|.
+  EXPECT_NE(local_id, efs_impl->local_surface_id());
+  EXPECT_FALSE(efs_impl->local_surface_id().is_valid());
+
+  // Notify the embedder of the new LocalSurfaceId.
+  surface_embedder->SetLocalSurfaceId(local_id);
+  RunUntilIdle();
+
+  // EmbeddedFrameSinkClient in the renderer should now know about |local_id|.
+  EXPECT_EQ(local_id, efs_client.last_received_local_surface_id());
 }
 
 // Check that renderer closing the mojom::EmbeddedFrameSinkClient connection

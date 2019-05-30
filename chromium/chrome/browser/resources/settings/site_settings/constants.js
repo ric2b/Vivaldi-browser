@@ -53,6 +53,17 @@ settings.ContentSetting = {
 };
 
 /**
+ * All possible ChooserTypes that we currently support configuring in the UI.
+ * This should be kept in sync with the |kChooserTypeGroupNames| array in
+ * chrome/browser/ui/webui/site_settings_helper.cc
+ * @enum {string}
+ */
+settings.ChooserType = {
+  NONE: '',
+  USB_DEVICES: 'usb-devices-data',
+};
+
+/**
  * Contains the possible sources of a ContentSetting.
  * This should be kept in sync with the |SiteSettingSource| enum in
  * chrome/browser/ui/webui/site_settings_helper.h
@@ -83,3 +94,26 @@ settings.ALL_SITES = 'all-sites';
  * @type {string}
  */
 settings.INVALID_CATEGORY_SUBTYPE = '';
+
+/**
+ * Contains the possible record action types.
+ * This should be kept in sync with the |AllSitesAction| enum in
+ * chrome/browser/ui/webui/settings/site_settings_handler.cc
+ * @enum {number}
+ */
+settings.AllSitesAction = {
+  LOAD_PAGE: 0,
+  RESET_PERMISSIONS: 1,
+  CLEAR_DATA: 2,
+  ENTER_SITE_DETAILS: 3,
+};
+
+/**
+ * Contains the possible sort methods.
+ * @enum {string}
+ */
+settings.SortMethod = {
+  NAME: 'name',
+  MOST_VISITED: 'most-visited',
+  STORAGE: 'data-stored',
+};

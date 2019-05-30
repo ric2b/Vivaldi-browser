@@ -69,7 +69,8 @@ class CONTENT_EXPORT RenderFrameMetadataProviderImpl
 
   cc::RenderFrameMetadata last_render_frame_metadata_;
 
-  base::Optional<viz::LocalSurfaceId> last_local_surface_id_;
+  base::Optional<viz::LocalSurfaceIdAllocation>
+      last_local_surface_id_allocation_;
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
@@ -79,6 +80,8 @@ class CONTENT_EXPORT RenderFrameMetadataProviderImpl
   mojo::Binding<mojom::RenderFrameMetadataObserverClient>
       render_frame_metadata_observer_client_binding_;
   mojom::RenderFrameMetadataObserverPtr render_frame_metadata_observer_ptr_;
+
+  base::Optional<bool> pending_report_all_frame_submission_;
 
   base::WeakPtrFactory<RenderFrameMetadataProviderImpl> weak_factory_;
 

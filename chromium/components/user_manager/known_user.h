@@ -136,17 +136,6 @@ void USER_MANAGER_EXPORT UpdateUsingSAML(const AccountId& account_id,
 // returns false.
 bool USER_MANAGER_EXPORT IsUsingSAML(const AccountId& account_id);
 
-// Returns true if the user's session has already completed initialization
-// (set to false when session is created, and then is set to true once
-// the profile is intiaiized - this allows us to detect crashes/restarts during
-// initial session creation so we can recover gracefully).
-bool USER_MANAGER_EXPORT WasProfileEverInitialized(const AccountId& account_id);
-
-// Sets the flag that denotes whether the session associated with a user has
-// completed initialization at least once.
-void USER_MANAGER_EXPORT SetProfileEverInitialized(const AccountId& account_id,
-                                                   bool initialized);
-
 // Enum describing whether a user's profile requires policy. If kPolicyRequired,
 // the profile initialization code will ensure that valid policy is loaded
 // before session initialization completes.
@@ -192,10 +181,6 @@ void RemovePrefs(const AccountId& account_id);
 
 // Removes all ephemeral users.
 void CleanEphemeralUsers();
-
-// Clears kProfileEverInitialized for a user.
-void USER_MANAGER_EXPORT
-RemoveSetProfileEverInitializedPrefForTesting(const AccountId& account_id);
 
 // Register known user prefs.
 void USER_MANAGER_EXPORT RegisterPrefs(PrefRegistrySimple* registry);

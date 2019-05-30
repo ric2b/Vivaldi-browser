@@ -15,15 +15,15 @@
 #include "third_party/blink/public/platform/blame_context.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
-#include "third_party/blink/renderer/platform/scheduler/child/features.h"
+#include "third_party/blink/renderer/platform/scheduler/common/features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/throttling/budget_pool.h"
+#include "third_party/blink/renderer/platform/scheduler/common/tracing_helper.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/auto_advancing_virtual_time_domain.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/page_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/page_visibility_state.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/resource_loading_task_runner_handle_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/task_type_names.h"
-#include "third_party/blink/renderer/platform/scheduler/util/tracing_helper.h"
 #include "third_party/blink/renderer/platform/scheduler/worker/worker_scheduler_proxy.h"
 
 namespace blink {
@@ -245,7 +245,6 @@ void CleanUpQueue(MainThreadTaskQueue* queue) {
   queue->DetachFromMainThreadScheduler();
   queue->DetachFromFrameScheduler();
   queue->SetBlameContext(nullptr);
-  queue->SetQueuePriority(TaskQueue::QueuePriority::kLowPriority);
 }
 
 }  // namespace
@@ -372,8 +371,8 @@ void FrameSchedulerImpl::InitializeTaskTypeQueueTraitsMap(
     TaskType type = static_cast<TaskType>(i);
     base::Optional<QueueTraits> queue_traits =
         CreateQueueTraitsForTaskType(type);
-    if (queue_traits && (throttleable_task_type_names.size() ||
-                         freezable_task_type_names.size())) {
+    if (queue_traits && (!throttleable_task_type_names.empty() ||
+                         !freezable_task_type_names.empty())) {
       const char* task_type_name = TaskTypeNames::TaskTypeToString(type);
       if (throttleable_task_type_names.erase(task_type_name))
         queue_traits->SetCanBeThrottled(true);
@@ -392,6 +391,9 @@ base::Optional<QueueTraits> FrameSchedulerImpl::CreateQueueTraitsForTaskType(
     TaskType type) {
   // TODO(haraken): Optimize the mapping from TaskTypes to task runners.
   switch (type) {
+    // kInternalContentCapture uses BestEffortTaskQueue and is handled
+    // sparately.
+    case TaskType::kInternalContentCapture:
     case TaskType::kJavascriptTimer:
       return ThrottleableTaskQueueTraits();
     case TaskType::kInternalLoading:
@@ -400,12 +402,15 @@ base::Optional<QueueTraits> FrameSchedulerImpl::CreateQueueTraitsForTaskType(
     case TaskType::kNetworkingControl:
       // Loading task queues are handled separately.
       return base::nullopt;
+    case TaskType::kExperimentalWebSchedulingUserInteraction:
+    case TaskType::kExperimentalWebSchedulingBestEffort:
+      // WebScheduling queues are handled separately.
+      return base::nullopt;
     // Throttling following tasks may break existing web pages, so tentatively
     // these are unthrottled.
     // TODO(nhiroki): Throttle them again after we're convinced that it's safe
     // or provide a mechanism that web pages can opt-out it if throttling is not
     // desirable.
-    case TaskType::kDatabaseAccess:
     case TaskType::kDOMManipulation:
     case TaskType::kHistoryTraversal:
     case TaskType::kEmbed:
@@ -422,20 +427,24 @@ base::Optional<QueueTraits> FrameSchedulerImpl::CreateQueueTraitsForTaskType(
     case TaskType::kIdleTask:
     case TaskType::kInternalDefault:
     case TaskType::kMiscPlatformAPI:
+    case TaskType::kFontLoading:
+    case TaskType::kApplicationLifeCycle:
+    case TaskType::kBackgroundFetch:
+    case TaskType::kPermission:
       // TODO(altimin): Move appropriate tasks to throttleable task queue.
       return DeferrableTaskQueueTraits();
     // PostedMessage can be used for navigation, so we shouldn't defer it
     // when expecting a user gesture.
     case TaskType::kPostedMessage:
+    case TaskType::kServiceWorkerClientMessage:
     case TaskType::kWorkerAnimation:
     // UserInteraction tasks should be run even when expecting a user gesture.
     case TaskType::kUserInteraction:
     // Media events should not be deferred to ensure that media playback is
     // smooth.
     case TaskType::kMediaElementEvent:
-    case TaskType::kInternalTest:
+    case TaskType::kDatabaseAccess:
     case TaskType::kInternalWebCrypto:
-    case TaskType::kInternalIndexedDB:
     case TaskType::kInternalMedia:
     case TaskType::kInternalMediaRealTime:
     case TaskType::kInternalUserInteraction:
@@ -449,7 +458,12 @@ base::Optional<QueueTraits> FrameSchedulerImpl::CreateQueueTraitsForTaskType(
     // unthrottled and undeferred) not to prevent service workers that may
     // control browser navigation on multiple tabs.
     case TaskType::kInternalWorker:
+    // Some tasks in the tests need to run when objects are paused e.g. to hook
+    // when recovering from debugger JavaScript statetment.
+    case TaskType::kInternalTest:
       return UnpausableTaskQueueTraits();
+    case TaskType::kInternalTranslation:
+      return ForegroundOnlyTaskQueueTraits();
     case TaskType::kDeprecatedNone:
     case TaskType::kMainThreadTaskQueueV8:
     case TaskType::kMainThreadTaskQueueCompositor:
@@ -491,6 +505,18 @@ scoped_refptr<MainThreadTaskQueue> FrameSchedulerImpl::GetTaskQueue(
       return frame_task_queue_controller_->LoadingTaskQueue();
     case TaskType::kNetworkingControl:
       return frame_task_queue_controller_->LoadingControlTaskQueue();
+    case TaskType::kInternalInspector:
+      return frame_task_queue_controller_->InspectorTaskQueue();
+    case TaskType::kInternalContentCapture:
+      return frame_task_queue_controller_->BestEffortTaskQueue();
+    case TaskType::kExperimentalWebSchedulingUserInteraction:
+      return frame_task_queue_controller_->ExperimentalWebSchedulingTaskQueue(
+          FrameTaskQueueController::WebSchedulingTaskQueueType::
+              kWebSchedulingUserVisiblePriority);
+    case TaskType::kExperimentalWebSchedulingBestEffort:
+      return frame_task_queue_controller_->ExperimentalWebSchedulingTaskQueue(
+          FrameTaskQueueController::WebSchedulingTaskQueueType::
+              kWebSchedulingBestEffortPriority);
     default:
       // Non-loading task queue.
       DCHECK_LT(static_cast<size_t>(type),
@@ -516,7 +542,7 @@ std::unique_ptr<ResourceLoadingTaskRunnerHandleImpl>
 FrameSchedulerImpl::CreateResourceLoadingTaskRunnerHandleImpl() {
   if (main_thread_scheduler_->scheduling_settings()
           .use_resource_fetch_priority ||
-      (parent_page_scheduler_->IsLoading() &&
+      (parent_page_scheduler_ && parent_page_scheduler_->IsLoading() &&
        main_thread_scheduler_->scheduling_settings()
            .use_resource_priorities_only_during_loading)) {
     scoped_refptr<MainThreadTaskQueue> task_queue =
@@ -690,7 +716,8 @@ void FrameSchedulerImpl::UpdateQueuePolicy(
   if (!voter)
     return;
   DCHECK(parent_page_scheduler_);
-  bool queue_paused = frame_paused_ && queue->CanBePaused();
+  bool queue_disabled = false;
+  queue_disabled |= frame_paused_ && queue->CanBePaused();
   // Per-frame freezable task queues will be frozen after 5 mins in background
   // on Android, and if the browser freezes the page in the background. They
   // will be resumed when the page is visible.
@@ -699,7 +726,12 @@ void FrameSchedulerImpl::UpdateQueuePolicy(
   // Override freezing if keep-active is true.
   if (queue_frozen && !queue->FreezeWhenKeepActive())
     queue_frozen = !parent_page_scheduler_->KeepActive();
-  voter->SetQueueEnabled(!queue_paused && !queue_frozen);
+  queue_disabled |= queue_frozen;
+  // Per-frame freezable queues of tasks which are specified as getting frozen
+  // immediately when their frame becomes invisible get frozen. They will be
+  // resumed when the frame becomes visible again.
+  queue_disabled |= !frame_visible_ && !queue->CanRunInBackground();
+  voter->SetQueueEnabled(!queue_disabled);
 }
 
 SchedulingLifecycleState FrameSchedulerImpl::CalculateLifecycleState(
@@ -785,6 +817,12 @@ TaskQueue::QueuePriority FrameSchedulerImpl::ComputePriority(
   if (fixed_priority)
     return fixed_priority.value();
 
+  if (!parent_page_scheduler_) {
+    // Frame might be detached during its shutdown. Return a default priority
+    // in that case.
+    return TaskQueue::QueuePriority::kNormalPriority;
+  }
+
   // A hidden page with no audio.
   if (parent_page_scheduler_->IsBackgrounded()) {
     if (main_thread_scheduler_->scheduling_settings()
@@ -854,6 +892,16 @@ TaskQueue::QueuePriority FrameSchedulerImpl::ComputePriority(
     }
   }
 
+  if (task_queue->queue_type() ==
+      MainThreadTaskQueue::QueueType::kWebSchedulingUserInteraction) {
+    return TaskQueue::QueuePriority::kNormalPriority;
+  }
+
+  if (task_queue->queue_type() ==
+      MainThreadTaskQueue::QueueType::kWebSchedulingBestEffort) {
+    return TaskQueue::QueuePriority::kLowPriority;
+  }
+
   return task_queue->queue_type() ==
                  MainThreadTaskQueue::QueueType::kFrameLoadingControl
              ? TaskQueue::QueuePriority::kHighPriority
@@ -921,6 +969,20 @@ void FrameSchedulerImpl::OnTaskQueueCreated(
   }
 }
 
+void FrameSchedulerImpl::AddTaskTime(base::TimeDelta time) {
+  // The duration of task time under which AddTaskTime buffers rather than
+  // sending the task time update to the delegate.
+  constexpr base::TimeDelta kTaskDurationSendThreshold =
+      base::TimeDelta::FromMilliseconds(100);
+  if (!delegate_)
+    return;
+  task_time_ += time;
+  if (task_time_ >= kTaskDurationSendThreshold) {
+    delegate_->UpdateTaskTime(task_time_);
+    task_time_ = base::TimeDelta();
+  }
+}
+
 // static
 MainThreadTaskQueue::QueueTraits
 FrameSchedulerImpl::ThrottleableTaskQueueTraits() {
@@ -953,6 +1015,11 @@ MainThreadTaskQueue::QueueTraits FrameSchedulerImpl::PausableTaskQueueTraits() {
 MainThreadTaskQueue::QueueTraits
 FrameSchedulerImpl::UnpausableTaskQueueTraits() {
   return QueueTraits();
+}
+
+MainThreadTaskQueue::QueueTraits
+FrameSchedulerImpl::ForegroundOnlyTaskQueueTraits() {
+  return ThrottleableTaskQueueTraits().SetCanRunInBackground(false);
 }
 
 }  // namespace scheduler

@@ -13,17 +13,19 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
 #include "chrome/browser/chromeos/file_manager/open_util.h"
+#include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/chromeos/file_manager/volume_manager.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
@@ -35,11 +37,9 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/components/drivefs/drivefs_host.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/disks/disk.h"
-#include "chromeos/login/login_state.h"
-#include "chromeos/network/network_handler.h"
-#include "chromeos/network/network_state_handler.h"
+#include "chromeos/login/login_state/login_state.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
 #include "components/drive/chromeos/file_system_interface.h"
 #include "components/drive/drive_pref_names.h"
@@ -48,17 +48,18 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_prefs.h"
+#include "storage/browser/fileapi/external_mount_points.h"
 #include "storage/common/fileapi/file_system_types.h"
 #include "storage/common/fileapi/file_system_util.h"
 
 using chromeos::disks::Disk;
 using chromeos::disks::DiskMountManager;
-using chromeos::NetworkHandler;
 using content::BrowserThread;
 using drive::DriveIntegrationService;
 using drive::DriveIntegrationServiceFactory;
@@ -94,7 +95,7 @@ bool IsRecoveryToolRunning(Profile* profile) {
       "jndclpdbaamdhonoechobihbbiimdgai"   // Recovery tool prod
   };
 
-  for (size_t i = 0; i < arraysize(kRecoveryToolIds); ++i) {
+  for (size_t i = 0; i < base::size(kRecoveryToolIds); ++i) {
     const std::string extension_id = kRecoveryToolIds[i];
     if (extension_prefs->IsExtensionRunning(extension_id))
       return true;
@@ -305,6 +306,20 @@ bool ShouldShowNotificationForVolume(
   return true;
 }
 
+std::set<std::string> GetEventListenerExtensionIds(
+    Profile* profile,
+    const std::string& event_name) {
+  const extensions::EventListenerMap::ListenerList& listeners =
+      extensions::EventRouter::Get(profile)
+          ->listeners()
+          .GetEventListenersByName(event_name);
+  std::set<std::string> extension_ids;
+  for (const auto& listener : listeners) {
+    extension_ids.insert(listener->extension_id());
+  }
+  return extension_ids;
+}
+
 // Sub-part of the event router for handling device events.
 class DeviceEventRouterImpl : public DeviceEventRouter {
  public:
@@ -347,19 +362,8 @@ class JobEventRouterImpl : public JobEventRouter {
  protected:
   std::set<std::string> GetFileTransfersUpdateEventListenerExtensionIds()
       override {
-    const extensions::EventListenerMap::ListenerList& listeners =
-        extensions::EventRouter::Get(profile_)
-            ->listeners()
-            .GetEventListenersByName(
-                file_manager_private::OnFileTransfersUpdated::kEventName);
-
-    std::set<std::string> extension_ids;
-
-    for (const auto& listener : listeners) {
-      extension_ids.insert(listener->extension_id());
-    }
-
-    return extension_ids;
+    return GetEventListenerExtensionIds(
+        profile_, file_manager_private::OnFileTransfersUpdated::kEventName);
   }
 
   GURL ConvertDrivePathToFileSystemUrl(
@@ -387,23 +391,16 @@ class JobEventRouterImpl : public JobEventRouter {
 
 class DriveFsEventRouterImpl : public DriveFsEventRouter {
  public:
-  explicit DriveFsEventRouterImpl(Profile* profile) : profile_(profile) {}
+  DriveFsEventRouterImpl(
+      Profile* profile,
+      const std::map<base::FilePath, std::unique_ptr<FileWatcher>>*
+          file_watchers)
+      : profile_(profile), file_watchers_(file_watchers) {}
 
  private:
   std::set<std::string> GetEventListenerExtensionIds(
       const std::string& event_name) override {
-    const extensions::EventListenerMap::ListenerList& listeners =
-        extensions::EventRouter::Get(profile_)
-            ->listeners()
-            .GetEventListenersByName(event_name);
-
-    std::set<std::string> extension_ids;
-
-    for (const auto& listener : listeners) {
-      extension_ids.insert(listener->extension_id());
-    }
-
-    return extension_ids;
+    return ::file_manager::GetEventListenerExtensionIds(profile_, event_name);
   }
 
   GURL ConvertDrivePathToFileSystemUrl(
@@ -427,6 +424,14 @@ class DriveFsEventRouterImpl : public DriveFsEventRouter {
         .value();
   }
 
+  bool IsPathWatched(const base::FilePath& path) override {
+    base::FilePath absolute_path =
+        DriveIntegrationServiceFactory::FindForProfile(profile_)
+            ->GetMountPointPath();
+    return base::FilePath("/").AppendRelativePath(path, &absolute_path) &&
+           base::ContainsKey(*file_watchers_, absolute_path);
+  }
+
   void DispatchEventToExtension(
       const std::string& extension_id,
       extensions::events::HistogramValue histogram_value,
@@ -438,6 +443,8 @@ class DriveFsEventRouterImpl : public DriveFsEventRouter {
   }
 
   Profile* const profile_;
+  const std::map<base::FilePath, std::unique_ptr<FileWatcher>>* const
+      file_watchers_;
 
   DISALLOW_COPY_AND_ASSIGN(DriveFsEventRouterImpl);
 };
@@ -449,7 +456,8 @@ EventRouter::EventRouter(Profile* profile)
       profile_(profile),
       device_event_router_(std::make_unique<DeviceEventRouterImpl>(profile)),
       job_event_router_(std::make_unique<JobEventRouterImpl>(profile)),
-      drivefs_event_router_(std::make_unique<DriveFsEventRouterImpl>(profile)),
+      drivefs_event_router_(
+          std::make_unique<DriveFsEventRouterImpl>(profile, &file_watchers_)),
       dispatch_directory_change_event_impl_(
           base::Bind(&EventRouter::DispatchDirectoryChangeEventImpl,
                      base::Unretained(this))),
@@ -489,14 +497,12 @@ void EventRouter::Shutdown() {
 
   pref_change_registrar_->RemoveAll();
 
-  if (NetworkHandler::IsInitialized()) {
-    NetworkHandler::Get()->network_state_handler()->RemoveObserver(this,
-                                                                   FROM_HERE);
-  }
+  content::GetNetworkConnectionTracker()->RemoveNetworkConnectionObserver(this);
 
   DriveIntegrationService* const integration_service =
       DriveIntegrationServiceFactory::FindForProfile(profile_);
   if (integration_service) {
+    integration_service->RemoveObserver(this);
     if (integration_service->GetDriveFsHost()) {
       integration_service->GetDriveFsHost()->RemoveObserver(
           drivefs_event_router_.get());
@@ -514,7 +520,7 @@ void EventRouter::Shutdown() {
   }
 
   chromeos::PowerManagerClient* const power_manager_client =
-      chromeos::DBusThreadManager::Get()->GetPowerManagerClient();
+      chromeos::PowerManagerClient::Get();
   power_manager_client->RemoveObserver(device_event_router_.get());
 
   profile_ = nullptr;
@@ -543,12 +549,13 @@ void EventRouter::ObserveEvents() {
   }
 
   chromeos::PowerManagerClient* const power_manager_client =
-      chromeos::DBusThreadManager::Get()->GetPowerManagerClient();
+      chromeos::PowerManagerClient::Get();
   power_manager_client->AddObserver(device_event_router_.get());
 
   DriveIntegrationService* const integration_service =
       DriveIntegrationServiceFactory::FindForProfile(profile_);
   if (integration_service) {
+    integration_service->AddObserver(this);
     if (integration_service->GetDriveFsHost()) {
       integration_service->GetDriveFsHost()->AddObserver(
           drivefs_event_router_.get());
@@ -559,10 +566,7 @@ void EventRouter::ObserveEvents() {
     }
   }
 
-  if (NetworkHandler::IsInitialized()) {
-    NetworkHandler::Get()->network_state_handler()->AddObserver(this,
-                                                                FROM_HERE);
-  }
+  content::GetNetworkConnectionTracker()->AddNetworkConnectionObserver(this);
 
   pref_change_registrar_->Init(profile_->GetPrefs());
   base::Closure callback =
@@ -570,10 +574,13 @@ void EventRouter::ObserveEvents() {
                  weak_factory_.GetWeakPtr());
   pref_change_registrar_->Add(drive::prefs::kDisableDriveOverCellular,
                               callback);
-  pref_change_registrar_->Add(drive::prefs::kDisableDriveHostedFiles, callback);
   pref_change_registrar_->Add(drive::prefs::kDisableDrive, callback);
   pref_change_registrar_->Add(prefs::kSearchSuggestEnabled, callback);
   pref_change_registrar_->Add(prefs::kUse24HourClock, callback);
+  pref_change_registrar_->Add(
+      crostini::prefs::kCrostiniEnabled,
+      base::BindRepeating(&EventRouter::OnCrostiniEnabledChanged,
+                          weak_factory_.GetWeakPtr()));
 
   chromeos::system::TimezoneSettings::GetInstance()->AddObserver(this);
 
@@ -581,6 +588,11 @@ void EventRouter::ObserveEvents() {
       arc::ArcIntentHelperBridge::GetForBrowserContext(profile_);
   if (intent_helper)
     intent_helper->AddObserver(this);
+
+  auto* crostini_share_path =
+      crostini::CrostiniSharePath::GetForProfile(profile_);
+  if (crostini_share_path)
+    crostini_share_path->AddObserver(this);
 }
 
 // File watch setup routines.
@@ -720,7 +732,7 @@ void EventRouter::OnWatcherManagerNotification(
                                false /* error */, extension_ids);
 }
 
-void EventRouter::DefaultNetworkChanged(const chromeos::NetworkState* network) {
+void EventRouter::OnConnectionChanged(network::mojom::ConnectionType type) {
   if (!profile_ || !extensions::EventRouter::Get(profile_)) {
     NOTREACHED();
     return;
@@ -905,9 +917,9 @@ void EventRouter::DispatchDirectoryChangeEventImpl(
     NOTREACHED();
     return;
   }
-  linked_ptr<drive::FileChange> changes;
+  std::unique_ptr<drive::FileChange> changes;
   if (list)
-    changes.reset(new drive::FileChange(*list));  // Copy
+    changes = std::make_unique<drive::FileChange>(*list);  // Copy
 
   for (size_t i = 0; i < extension_ids.size(); ++i) {
     std::string* extension_id = new std::string(extension_ids[i]);
@@ -919,20 +931,16 @@ void EventRouter::DispatchDirectoryChangeEventImpl(
     file_definition.is_directory = true;
 
     file_manager::util::ConvertFileDefinitionToEntryDefinition(
-        profile_,
-        *extension_id,
-        file_definition,
-        base::Bind(
+        profile_, *extension_id, file_definition,
+        base::BindOnce(
             &EventRouter::DispatchDirectoryChangeEventWithEntryDefinition,
-            weak_factory_.GetWeakPtr(),
-            changes,
-            base::Owned(extension_id),
-            got_error));
+            weak_factory_.GetWeakPtr(), std::move(changes),
+            base::Owned(extension_id), got_error));
   }
 }
 
 void EventRouter::DispatchDirectoryChangeEventWithEntryDefinition(
-    const linked_ptr<drive::FileChange> list,
+    std::unique_ptr<drive::FileChange> list,
     const std::string* extension_id,
     bool watcher_error,
     const EntryDefinition& entry_definition) {
@@ -950,7 +958,7 @@ void EventRouter::DispatchDirectoryChangeEventWithEntryDefinition(
       : file_manager_private::FILE_WATCH_EVENT_TYPE_CHANGED;
 
   // Detailed information is available.
-  if (list.get()) {
+  if (list) {
     event.changed_files =
         std::make_unique<std::vector<file_manager_private::FileChange>>();
 
@@ -1086,6 +1094,66 @@ void EventRouter::OnRenameCompleted(const std::string& device_path,
 void EventRouter::SetDispatchDirectoryChangeEventImplForTesting(
     const DispatchDirectoryChangeEventImplCallback& callback) {
   dispatch_directory_change_event_impl_ = callback;
+}
+
+void EventRouter::OnFileSystemMountFailed() {
+  OnFileManagerPrefsChanged();
+}
+
+void EventRouter::PopulateCrostiniUnshareEvent(
+    file_manager_private::CrostiniEvent& event,
+    const std::string& extension_id,
+    const std::string& mount_name,
+    const std::string& file_system_name,
+    const std::string& full_path) {
+  event.event_type = file_manager_private::CROSTINI_EVENT_TYPE_UNSHARE;
+  file_manager_private::CrostiniEvent::EntriesType entry;
+  entry.additional_properties.SetString(
+      "fileSystemRoot",
+      storage::GetExternalFileSystemRootURIString(
+          extensions::Extension::GetBaseURLFromExtensionId(extension_id),
+          mount_name));
+  entry.additional_properties.SetString("fileSystemName", file_system_name);
+  entry.additional_properties.SetString("fileFullPath", full_path);
+  entry.additional_properties.SetBoolean("fileIsDirectory", true);
+  event.entries.emplace_back(std::move(entry));
+}
+
+void EventRouter::OnUnshare(const base::FilePath& path) {
+  std::string mount_name;
+  std::string file_system_name;
+  std::string full_path;
+  if (!util::ExtractMountNameFileSystemNameFullPath(
+          path, &mount_name, &file_system_name, &full_path))
+    return;
+
+  for (const auto& extension_id : GetEventListenerExtensionIds(
+           profile_, file_manager_private::OnCrostiniChanged::kEventName)) {
+    file_manager_private::CrostiniEvent event;
+    PopulateCrostiniUnshareEvent(event, extension_id, mount_name,
+                                 file_system_name, full_path);
+    DispatchEventToExtension(
+        profile_, extension_id,
+        extensions::events::FILE_MANAGER_PRIVATE_ON_CROSTINI_CHANGED,
+        file_manager_private::OnCrostiniChanged::kEventName,
+        file_manager_private::OnCrostiniChanged::Create(event));
+  }
+}
+
+void EventRouter::OnCrostiniEnabledChanged() {
+  for (const auto& extension_id : GetEventListenerExtensionIds(
+           profile_, file_manager_private::OnCrostiniChanged::kEventName)) {
+    file_manager_private::CrostiniEvent event;
+    event.event_type =
+        profile_->GetPrefs()->GetBoolean(crostini::prefs::kCrostiniEnabled)
+            ? file_manager_private::CROSTINI_EVENT_TYPE_ENABLE
+            : file_manager_private::CROSTINI_EVENT_TYPE_DISABLE;
+    DispatchEventToExtension(
+        profile_, extension_id,
+        extensions::events::FILE_MANAGER_PRIVATE_ON_CROSTINI_CHANGED,
+        file_manager_private::OnCrostiniChanged::kEventName,
+        file_manager_private::OnCrostiniChanged::Create(event));
+  }
 }
 
 base::WeakPtr<EventRouter> EventRouter::GetWeakPtr() {

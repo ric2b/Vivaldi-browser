@@ -5,19 +5,23 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_RENDER_WIDGET_HOST_OWNER_DELEGATE_H_
 #define CONTENT_BROWSER_RENDERER_HOST_RENDER_WIDGET_HOST_OWNER_DELEGATE_H_
 
+#include "build/build_config.h"
 #include "content/common/content_export.h"
-
-namespace IPC {
-class Message;
-}
 
 namespace blink {
 class WebMouseEvent;
 }
 
-namespace content {
+namespace gfx {
+class Rect;
+}
 
+namespace content {
+struct ContextMenuParams;
+class FrameTreeNode;
 struct NativeWebKeyboardEvent;
+class RenderFrameHost;
+struct WebPreferences;
 
 //
 // RenderWidgetHostOwnerDelegate
@@ -28,15 +32,23 @@ struct NativeWebKeyboardEvent;
 //  and http://crbug.com/478281.
 class CONTENT_EXPORT RenderWidgetHostOwnerDelegate {
  public:
-  // The RenderWidgetHost received an IPC message. Return true if this delegate
-  // handles it.
-  virtual bool OnMessageReceived(const IPC::Message& msg) = 0;
-
   // The RenderWidgetHost has been initialized.
   virtual void RenderWidgetDidInit() = 0;
 
-  // The RenderWidgetHost will be setting its loading state.
-  virtual void RenderWidgetWillSetIsLoading(bool is_loading) = 0;
+  // The RenderWidget was closed. Only swapped-in RenderWidgets receive this.
+  virtual void RenderWidgetDidClose() = 0;
+
+  // The RenderWidget was closed while in a swapped out state. Used to
+  // notify the swapped in render widget to close, which will result in a
+  // RenderWidgetDidClose() on the swapped in widget eventually.
+  virtual void RenderWidgetNeedsToRouteCloseEvent() = 0;
+
+  // The RenderWidget finished the first visually non-empty paint.
+  virtual void RenderWidgetDidFirstVisuallyNonEmptyPaint() = 0;
+
+  // The RenderWidget has issued a draw command, signaling the widget
+  // has been visually updated.
+  virtual void RenderWidgetDidCommitAndDrawCompositorFrame() = 0;
 
   // The RenderWidgetHost got the focus.
   virtual void RenderWidgetGotFocus() = 0;
@@ -57,8 +69,31 @@ class CONTENT_EXPORT RenderWidgetHostOwnerDelegate {
   // priority to the RenderProcessHost.
   virtual bool ShouldContributePriorityToProcess() = 0;
 
-  // Called when the RenderWidgetHost has shutdown.
-  virtual void RenderWidgetDidShutdown() = 0;
+  // Notify the OwnerDelegate that the renderer has requested a change in
+  // the bounds of the content area.
+  virtual void RequestSetBounds(const gfx::Rect& bounds) = 0;
+
+  // When false, this allows the renderer's output to be transparent. By default
+  // the renderer's background is forced to be opaque.
+  virtual void SetBackgroundOpaque(bool opaque) = 0;
+
+  // Returns true if the main frame is active, false if it is swapped out.
+  virtual bool IsMainFrameActive() = 0;
+
+  // Returns true if the page, including any widgets, will never be visible.
+  virtual bool IsNeverVisible() = 0;
+
+  // Returns the WebkitPreferences for the page. The preferences are shared
+  // between all widgets for the page.
+  virtual WebPreferences GetWebkitPreferencesForWidget() = 0;
+
+  // Returns the focused frame.
+  virtual FrameTreeNode* GetFocusedFrame() = 0;
+
+  // Shows a context menu that is built using the context information
+  // provided in |params|.
+  virtual void ShowContextMenu(RenderFrameHost* render_frame_host,
+                               const ContextMenuParams& params) = 0;
 
  protected:
   virtual ~RenderWidgetHostOwnerDelegate() {}

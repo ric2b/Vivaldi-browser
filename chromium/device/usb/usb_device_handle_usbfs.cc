@@ -19,7 +19,7 @@
 #include "base/posix/eintr_wrapper.h"
 #include "base/sequence_checker.h"
 #include "base/stl_util.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/device_event_log/device_event_log.h"
 #include "device/usb/usb_device_linux.h"
@@ -127,12 +127,12 @@ UsbTransferStatus ConvertTransferResult(int rc) {
 
 }  // namespace
 
-class UsbDeviceHandleUsbfs::FileThreadHelper {
+class UsbDeviceHandleUsbfs::BlockingTaskHelper {
  public:
-  FileThreadHelper(base::ScopedFD fd,
-                   scoped_refptr<UsbDeviceHandleUsbfs> device_handle,
-                   scoped_refptr<base::SequencedTaskRunner> task_runner);
-  ~FileThreadHelper();
+  BlockingTaskHelper(base::ScopedFD fd,
+                     scoped_refptr<UsbDeviceHandleUsbfs> device_handle,
+                     scoped_refptr<base::SequencedTaskRunner> task_runner);
+  ~BlockingTaskHelper();
 
   void Start();
   void ReleaseFileDescriptor();
@@ -156,14 +156,13 @@ class UsbDeviceHandleUsbfs::FileThreadHelper {
   std::unique_ptr<base::FileDescriptorWatcher::Controller> watch_controller_;
   base::SequenceChecker sequence_checker_;
 
-  DISALLOW_COPY_AND_ASSIGN(FileThreadHelper);
+  DISALLOW_COPY_AND_ASSIGN(BlockingTaskHelper);
 };
 
 struct UsbDeviceHandleUsbfs::Transfer {
   Transfer() = delete;
   Transfer(scoped_refptr<base::RefCountedBytes> buffer,
-           TransferCallback callback,
-           scoped_refptr<base::SingleThreadTaskRunner> callback_runner);
+           TransferCallback callback);
   Transfer(scoped_refptr<base::RefCountedBytes> buffer,
            IsochronousTransferCallback callback);
   ~Transfer();
@@ -187,8 +186,6 @@ struct UsbDeviceHandleUsbfs::Transfer {
   IsochronousTransferCallback isoc_callback;
 
  private:
-  scoped_refptr<base::SingleThreadTaskRunner> callback_runner;
-
   DISALLOW_COPY_AND_ASSIGN(Transfer);
 
  public:
@@ -198,7 +195,7 @@ struct UsbDeviceHandleUsbfs::Transfer {
   usbdevfs_urb urb;
 };
 
-UsbDeviceHandleUsbfs::FileThreadHelper::FileThreadHelper(
+UsbDeviceHandleUsbfs::BlockingTaskHelper::BlockingTaskHelper(
     base::ScopedFD fd,
     scoped_refptr<UsbDeviceHandleUsbfs> device_handle,
     scoped_refptr<base::SequencedTaskRunner> task_runner)
@@ -206,34 +203,36 @@ UsbDeviceHandleUsbfs::FileThreadHelper::FileThreadHelper(
       device_handle_(std::move(device_handle)),
       task_runner_(std::move(task_runner)) {}
 
-UsbDeviceHandleUsbfs::FileThreadHelper::~FileThreadHelper() {
+UsbDeviceHandleUsbfs::BlockingTaskHelper::~BlockingTaskHelper() {
   DCHECK(sequence_checker_.CalledOnValidSequence());
 }
 
-void UsbDeviceHandleUsbfs::FileThreadHelper::Start() {
-  base::AssertBlockingAllowed();
+void UsbDeviceHandleUsbfs::BlockingTaskHelper::Start() {
   sequence_checker_.DetachFromSequence();
   DCHECK(sequence_checker_.CalledOnValidSequence());
 
   // Linux indicates that URBs are available to reap by marking the file
   // descriptor writable.
   watch_controller_ = base::FileDescriptorWatcher::WatchWritable(
-      fd_.get(), base::Bind(&FileThreadHelper::OnFileCanWriteWithoutBlocking,
-                            base::Unretained(this)));
+      fd_.get(),
+      base::BindRepeating(&BlockingTaskHelper::OnFileCanWriteWithoutBlocking,
+                          base::Unretained(this)));
 }
 
-void UsbDeviceHandleUsbfs::FileThreadHelper::ReleaseFileDescriptor() {
+void UsbDeviceHandleUsbfs::BlockingTaskHelper::ReleaseFileDescriptor() {
   // This method intentionally leaks the file descriptor.
   DCHECK(sequence_checker_.CalledOnValidSequence());
   watch_controller_.reset();
   ignore_result(fd_.release());
 }
 
-void UsbDeviceHandleUsbfs::FileThreadHelper::SetConfiguration(
+void UsbDeviceHandleUsbfs::BlockingTaskHelper::SetConfiguration(
     int configuration_value,
     ResultCallback callback) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
 
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   int rc = HANDLE_EINTR(
       ioctl(fd_.get(), USBDEVFS_SETCONFIGURATION, &configuration_value));
   if (rc)
@@ -244,11 +243,13 @@ void UsbDeviceHandleUsbfs::FileThreadHelper::SetConfiguration(
                                 std::move(callback)));
 }
 
-void UsbDeviceHandleUsbfs::FileThreadHelper::ReleaseInterface(
+void UsbDeviceHandleUsbfs::BlockingTaskHelper::ReleaseInterface(
     int interface_number,
     ResultCallback callback) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
 
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   int rc = HANDLE_EINTR(
       ioctl(fd_.get(), USBDEVFS_RELEASEINTERFACE, &interface_number));
   if (rc) {
@@ -263,7 +264,7 @@ void UsbDeviceHandleUsbfs::FileThreadHelper::ReleaseInterface(
   }
 }
 
-void UsbDeviceHandleUsbfs::FileThreadHelper::SetInterface(
+void UsbDeviceHandleUsbfs::BlockingTaskHelper::SetInterface(
     int interface_number,
     int alternate_setting,
     ResultCallback callback) {
@@ -272,6 +273,9 @@ void UsbDeviceHandleUsbfs::FileThreadHelper::SetInterface(
   usbdevfs_setinterface cmd = {0};
   cmd.interface = interface_number;
   cmd.altsetting = alternate_setting;
+
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   int rc = HANDLE_EINTR(ioctl(fd_.get(), USBDEVFS_SETINTERFACE, &cmd));
   if (rc) {
     USB_PLOG(DEBUG) << "Failed to set interface " << interface_number
@@ -281,10 +285,12 @@ void UsbDeviceHandleUsbfs::FileThreadHelper::SetInterface(
                          base::BindOnce(std::move(callback), rc == 0));
 }
 
-void UsbDeviceHandleUsbfs::FileThreadHelper::ResetDevice(
+void UsbDeviceHandleUsbfs::BlockingTaskHelper::ResetDevice(
     ResultCallback callback) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
 
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   // TODO(reillyg): libusb releases interfaces before and then reclaims
   // interfaces after a reset. We should probably do this too or document that
   // callers have to call ClaimInterface as well.
@@ -295,12 +301,14 @@ void UsbDeviceHandleUsbfs::FileThreadHelper::ResetDevice(
                          base::BindOnce(std::move(callback), rc == 0));
 }
 
-void UsbDeviceHandleUsbfs::FileThreadHelper::ClearHalt(
+void UsbDeviceHandleUsbfs::BlockingTaskHelper::ClearHalt(
     uint8_t endpoint_address,
     ResultCallback callback) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
 
   int tmp_endpoint = endpoint_address;
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   int rc = HANDLE_EINTR(ioctl(fd_.get(), USBDEVFS_CLEAR_HALT, &tmp_endpoint));
   if (rc) {
     USB_PLOG(DEBUG) << "Failed to clear the stall condition on endpoint "
@@ -310,9 +318,11 @@ void UsbDeviceHandleUsbfs::FileThreadHelper::ClearHalt(
                          base::BindOnce(std::move(callback), rc == 0));
 }
 
-void UsbDeviceHandleUsbfs::FileThreadHelper::DiscardUrb(Transfer* transfer) {
+void UsbDeviceHandleUsbfs::BlockingTaskHelper::DiscardUrb(Transfer* transfer) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
 
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   HANDLE_EINTR(ioctl(fd_.get(), USBDEVFS_DISCARDURB, &transfer->urb));
 
   task_runner_->PostTask(FROM_HERE,
@@ -320,13 +330,15 @@ void UsbDeviceHandleUsbfs::FileThreadHelper::DiscardUrb(Transfer* transfer) {
                                         device_handle_, transfer));
 }
 
-void UsbDeviceHandleUsbfs::FileThreadHelper::OnFileCanWriteWithoutBlocking() {
+void UsbDeviceHandleUsbfs::BlockingTaskHelper::OnFileCanWriteWithoutBlocking() {
   DCHECK(sequence_checker_.CalledOnValidSequence());
 
   const size_t MAX_URBS_PER_EVENT = 10;
   std::vector<usbdevfs_urb*> urbs;
   urbs.reserve(MAX_URBS_PER_EVENT);
   for (size_t i = 0; i < MAX_URBS_PER_EVENT; ++i) {
+    base::ScopedBlockingCall scoped_blocking_call(
+        FROM_HERE, base::BlockingType::MAY_BLOCK);
     usbdevfs_urb* urb;
     int rc = HANDLE_EINTR(ioctl(fd_.get(), USBDEVFS_REAPURBNDELAY, &urb));
     if (rc) {
@@ -351,11 +363,8 @@ void UsbDeviceHandleUsbfs::FileThreadHelper::OnFileCanWriteWithoutBlocking() {
 
 UsbDeviceHandleUsbfs::Transfer::Transfer(
     scoped_refptr<base::RefCountedBytes> buffer,
-    TransferCallback callback,
-    scoped_refptr<base::SingleThreadTaskRunner> callback_runner)
-    : buffer(buffer),
-      callback(std::move(callback)),
-      callback_runner(callback_runner) {
+    TransferCallback callback)
+    : buffer(buffer), callback(std::move(callback)) {
   memset(&urb, 0, sizeof(urb));
   urb.usercontext = this;
   urb.buffer = buffer->front();
@@ -387,14 +396,7 @@ void UsbDeviceHandleUsbfs::Transfer::RunCallback(UsbTransferStatus status,
                                                  size_t bytes_transferred) {
   DCHECK_NE(urb.type, USBDEVFS_URB_TYPE_ISO);
   DCHECK(callback);
-  if (!callback_runner || callback_runner->BelongsToCurrentThread()) {
-    std::move(callback).Run(status, buffer, bytes_transferred);
-  } else {
-    callback_runner->PostTask(
-        FROM_HERE,
-        base::BindOnce(std::move(callback), status, buffer, bytes_transferred));
-  }
-  callback.Reset();
+  std::move(callback).Run(status, buffer, bytes_transferred);
 }
 
 void UsbDeviceHandleUsbfs::Transfer::RunIsochronousCallback(
@@ -416,9 +418,9 @@ UsbDeviceHandleUsbfs::UsbDeviceHandleUsbfs(
   DCHECK(fd.is_valid());
   DCHECK(blocking_task_runner_);
 
-  helper_.reset(new FileThreadHelper(std::move(fd), this, task_runner_));
+  helper_.reset(new BlockingTaskHelper(std::move(fd), this, task_runner_));
   blocking_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&FileThreadHelper::Start,
+      FROM_HERE, base::BindOnce(&BlockingTaskHelper::Start,
                                 base::Unretained(helper_.get())));
 }
 
@@ -463,9 +465,10 @@ void UsbDeviceHandleUsbfs::SetConfiguration(int configuration_value,
   // block.
   blocking_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&UsbDeviceHandleUsbfs::FileThreadHelper::SetConfiguration,
-                     base::Unretained(helper_.get()), configuration_value,
-                     std::move(callback)));
+      base::BindOnce(
+          &UsbDeviceHandleUsbfs::BlockingTaskHelper::SetConfiguration,
+          base::Unretained(helper_.get()), configuration_value,
+          std::move(callback)));
 }
 
 void UsbDeviceHandleUsbfs::ClaimInterface(int interface_number,
@@ -510,9 +513,10 @@ void UsbDeviceHandleUsbfs::ReleaseInterface(int interface_number,
   // where it is okay to block.
   blocking_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&UsbDeviceHandleUsbfs::FileThreadHelper::ReleaseInterface,
-                     base::Unretained(helper_.get()), interface_number,
-                     std::move(callback)));
+      base::BindOnce(
+          &UsbDeviceHandleUsbfs::BlockingTaskHelper::ReleaseInterface,
+          base::Unretained(helper_.get()), interface_number,
+          std::move(callback)));
 }
 
 void UsbDeviceHandleUsbfs::SetInterfaceAlternateSetting(
@@ -531,7 +535,7 @@ void UsbDeviceHandleUsbfs::SetInterfaceAlternateSetting(
   // to block.
   blocking_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&UsbDeviceHandleUsbfs::FileThreadHelper::SetInterface,
+      base::BindOnce(&UsbDeviceHandleUsbfs::BlockingTaskHelper::SetInterface,
                      base::Unretained(helper_.get()), interface_number,
                      alternate_setting, std::move(callback)));
 }
@@ -549,7 +553,7 @@ void UsbDeviceHandleUsbfs::ResetDevice(ResultCallback callback) {
   // is okay to block.
   blocking_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&UsbDeviceHandleUsbfs::FileThreadHelper::ResetDevice,
+      base::BindOnce(&UsbDeviceHandleUsbfs::BlockingTaskHelper::ResetDevice,
                      base::Unretained(helper_.get()), std::move(callback)));
 }
 
@@ -567,7 +571,7 @@ void UsbDeviceHandleUsbfs::ClearHalt(uint8_t endpoint_address,
   // to block.
   blocking_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&UsbDeviceHandleUsbfs::FileThreadHelper::ClearHalt,
+      base::BindOnce(&UsbDeviceHandleUsbfs::BlockingTaskHelper::ClearHalt,
                      base::Unretained(helper_.get()), endpoint_address,
                      std::move(callback)));
 }
@@ -590,8 +594,8 @@ void UsbDeviceHandleUsbfs::ControlTransfer(
     return;
   }
 
-  std::unique_ptr<Transfer> transfer(
-      new (0) Transfer(buffer, std::move(callback), nullptr));
+  std::unique_ptr<Transfer> transfer(new (0)
+                                         Transfer(buffer, std::move(callback)));
   transfer->control_transfer_buffer = BuildControlTransferBuffer(
       direction, request_type, recipient, request, value, index, buffer);
   transfer->urb.type = USBDEVFS_URB_TYPE_CONTROL;
@@ -648,16 +652,47 @@ void UsbDeviceHandleUsbfs::GenericTransfer(
     scoped_refptr<base::RefCountedBytes> buffer,
     unsigned int timeout,
     TransferCallback callback) {
-  if (task_runner_->BelongsToCurrentThread()) {
-    GenericTransferInternal(direction, endpoint_number, buffer, timeout,
-                            std::move(callback), task_runner_);
-  } else {
+  DCHECK(sequence_checker_.CalledOnValidSequence());
+  if (!device_) {
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback),
+                                  UsbTransferStatus::DISCONNECT, nullptr, 0));
+    return;
+  }
+
+  uint8_t endpoint_address =
+      ConvertEndpointDirection(direction) | endpoint_number;
+  auto it = endpoints_.find(endpoint_address);
+  if (it == endpoints_.end()) {
+    USB_LOG(USER) << "Endpoint address " << static_cast<int>(endpoint_address)
+                  << " is not part of a claimed interface.";
     task_runner_->PostTask(
         FROM_HERE,
-        base::BindOnce(&UsbDeviceHandleUsbfs::GenericTransferInternal, this,
-                       direction, endpoint_number, buffer, timeout,
-                       std::move(callback),
-                       base::ThreadTaskRunnerHandle::Get()));
+        base::BindOnce(std::move(callback), UsbTransferStatus::TRANSFER_ERROR,
+                       nullptr, 0));
+    return;
+  }
+
+  std::unique_ptr<Transfer> transfer(new (0)
+                                         Transfer(buffer, std::move(callback)));
+  transfer->urb.endpoint = endpoint_address;
+  transfer->urb.buffer_length = buffer->size();
+  transfer->urb.type = ConvertTransferType(it->second.type);
+
+  // USBDEVFS_SUBMITURB appears to be non-blocking as completion is reported
+  // by USBDEVFS_REAPURBNDELAY. This code assumes a recent kernel that can
+  // accept arbitrarily large transfer requests, hopefully also using a scatter-
+  // gather list.
+  int rc = HANDLE_EINTR(ioctl(fd_, USBDEVFS_SUBMITURB, &transfer->urb));
+  if (rc) {
+    rc = logging::GetLastSystemErrorCode();
+    USB_PLOG(DEBUG) << "Failed to submit transfer";
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(std::move(transfer->callback),
+                                  ConvertTransferResult(rc), nullptr, 0));
+  } else {
+    SetUpTimeoutCallback(transfer.get(), timeout);
+    transfers_.push_back(std::move(transfer));
   }
 }
 
@@ -751,57 +786,6 @@ void UsbDeviceHandleUsbfs::IsochronousTransferInternal(
     USB_PLOG(DEBUG) << "Failed to submit transfer";
     ReportIsochronousError(packet_lengths, std::move(transfer->isoc_callback),
                            ConvertTransferResult(rc));
-  } else {
-    SetUpTimeoutCallback(transfer.get(), timeout);
-    transfers_.push_back(std::move(transfer));
-  }
-}
-
-void UsbDeviceHandleUsbfs::GenericTransferInternal(
-    UsbTransferDirection direction,
-    uint8_t endpoint_number,
-    scoped_refptr<base::RefCountedBytes> buffer,
-    unsigned int timeout,
-    TransferCallback callback,
-    scoped_refptr<base::SingleThreadTaskRunner> callback_runner) {
-  DCHECK(sequence_checker_.CalledOnValidSequence());
-  if (!device_) {
-    callback_runner->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback),
-                                  UsbTransferStatus::DISCONNECT, nullptr, 0));
-    return;
-  }
-
-  uint8_t endpoint_address =
-      ConvertEndpointDirection(direction) | endpoint_number;
-  auto it = endpoints_.find(endpoint_address);
-  if (it == endpoints_.end()) {
-    USB_LOG(USER) << "Endpoint address " << static_cast<int>(endpoint_address)
-                  << " is not part of a claimed interface.";
-    callback_runner->PostTask(
-        FROM_HERE,
-        base::BindOnce(std::move(callback), UsbTransferStatus::TRANSFER_ERROR,
-                       nullptr, 0));
-    return;
-  }
-
-  std::unique_ptr<Transfer> transfer(
-      new (0) Transfer(buffer, std::move(callback), callback_runner));
-  transfer->urb.endpoint = endpoint_address;
-  transfer->urb.buffer_length = buffer->size();
-  transfer->urb.type = ConvertTransferType(it->second.type);
-
-  // USBDEVFS_SUBMITURB appears to be non-blocking as completion is reported
-  // by USBDEVFS_REAPURBNDELAY. This code assumes a recent kernel that can
-  // accept arbitrarily large transfer requests, hopefully also using a scatter-
-  // gather list.
-  int rc = HANDLE_EINTR(ioctl(fd_, USBDEVFS_SUBMITURB, &transfer->urb));
-  if (rc) {
-    rc = logging::GetLastSystemErrorCode();
-    USB_PLOG(DEBUG) << "Failed to submit transfer";
-    callback_runner->PostTask(
-        FROM_HERE, base::BindOnce(std::move(transfer->callback),
-                                  ConvertTransferResult(rc), nullptr, 0));
   } else {
     SetUpTimeoutCallback(transfer.get(), timeout);
     transfers_.push_back(std::move(transfer));
@@ -947,7 +931,7 @@ void UsbDeviceHandleUsbfs::CancelTransfer(Transfer* transfer,
 
   blocking_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&UsbDeviceHandleUsbfs::FileThreadHelper::DiscardUrb,
+      base::BindOnce(&UsbDeviceHandleUsbfs::BlockingTaskHelper::DiscardUrb,
                      base::Unretained(helper_.get()), transfer));
 
   // Cancelling |timeout_closure| and running completion callbacks may free

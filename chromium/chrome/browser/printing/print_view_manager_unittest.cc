@@ -6,10 +6,10 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/bind.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/printing/print_preview_test.h"
 #include "chrome/browser/printing/print_test_utils.h"
 #include "chrome/browser/printing/print_view_manager.h"
 #include "chrome/browser/printing/print_view_manager_base.h"
@@ -17,12 +17,13 @@
 #include "chrome/browser/printing/test_printer_query.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/test/base/browser_with_test_window_test.h"
 #include "components/printing/common/print_messages.h"
 #include "content/public/test/test_renderer_host.h"
 
 namespace printing {
 
-using PrintViewManagerTest = PrintPreviewTest;
+using PrintViewManagerTest = BrowserWithTestWindowTest;
 
 class TestPrintViewManager : public PrintViewManagerBase {
  public:
@@ -135,17 +136,13 @@ TEST_F(PrintViewManagerTest, PostScriptHasCorrectOffsets) {
   print_view_manager->PrintPreviewNow(web_contents->GetMainFrame(), false);
 
   base::Value print_ticket = GetPrintTicket(printing::kLocalPrinter, false);
-  std::unique_ptr<base::DictionaryValue> job_settings =
-      base::DictionaryValue::From(
-          base::Value::ToUniquePtrValue(std::move(print_ticket)));
-
   const char kTestData[] = "abc";
   auto print_data = base::MakeRefCounted<base::RefCountedStaticMemory>(
       kTestData, sizeof(kTestData));
   PrinterHandler::PrintCallback callback =
       base::BindOnce(&TestPrintViewManager::FakePrintCallback,
                      base::Unretained(print_view_manager.get()));
-  print_view_manager->PrintForPrintPreview(std::move(job_settings), print_data,
+  print_view_manager->PrintForPrintPreview(std::move(print_ticket), print_data,
                                            web_contents->GetMainFrame(),
                                            std::move(callback));
   print_view_manager->WaitForCallback();

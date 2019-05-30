@@ -104,7 +104,7 @@ class InputMethodManagerImpl : public InputMethodManager,
     void SetInputMethodLoginDefaultFromVPD(const std::string& locale,
                                            const std::string& layout) override;
     void SwitchToNextInputMethod() override;
-    void SwitchToPreviousInputMethod() override;
+    void SwitchToLastUsedInputMethod() override;
     InputMethodDescriptor GetCurrentInputMethod() const override;
     bool ReplaceEnabledInputMethods(
         const std::vector<std::string>& new_active_input_method_ids) override;
@@ -120,7 +120,7 @@ class InputMethodManagerImpl : public InputMethodManager,
     Profile* const profile;
 
     // The input method which was/is selected.
-    InputMethodDescriptor previous_input_method;
+    InputMethodDescriptor last_used_input_method;
     InputMethodDescriptor current_input_method;
 
     // The active input method ids cache.
@@ -272,6 +272,9 @@ class InputMethodManagerImpl : public InputMethodManager,
   // Notifies the current input method or the list of active input method IDs
   // changed.
   void NotifyImeMenuListChanged();
+
+  // Request that the virtual keyboard be reloaded.
+  void ReloadKeyboard();
 
   std::unique_ptr<InputMethodDelegate> delegate_;
 

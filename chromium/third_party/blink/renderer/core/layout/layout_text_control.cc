@@ -22,6 +22,7 @@
 
 #include "third_party/blink/renderer/core/layout/layout_text_control.h"
 
+#include "base/stl_util.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
@@ -56,7 +57,7 @@ void LayoutTextControl::StyleDidChange(StyleDifference diff,
   if (inner_editor_layout_object) {
     inner_editor->SetNeedsStyleRecalc(
         kSubtreeStyleChange,
-        StyleChangeReasonForTracing::Create(StyleChangeReason::kControl));
+        StyleChangeReasonForTracing::Create(style_change_reason::kControl));
 
     // The inner editor element uses the LayoutTextControl's ::selection style
     // (see: GetUncachedSelectionStyle in SelectionPaintingUtils.cpp) so ensure
@@ -67,7 +68,6 @@ void LayoutTextControl::StyleDidChange(StyleDifference diff,
       inner_editor_layout_object->InvalidateSelectedChildrenOnStyleChange();
     }
   }
-  GetTextControlElement()->UpdatePlaceholderVisibility();
 }
 
 int LayoutTextControl::TextBlockLogicalHeight() const {
@@ -205,7 +205,7 @@ bool LayoutTextControl::HasValidAvgCharWidth(const SimpleFontData* font_data,
   if (!font_families_with_invalid_char_width_map) {
     font_families_with_invalid_char_width_map = new HashSet<AtomicString>;
 
-    for (size_t i = 0; i < arraysize(kFontFamiliesWithInvalidCharWidth); ++i)
+    for (size_t i = 0; i < base::size(kFontFamiliesWithInvalidCharWidth); ++i)
       font_families_with_invalid_char_width_map->insert(
           AtomicString(kFontFamiliesWithInvalidCharWidth[i]));
   }
@@ -302,7 +302,7 @@ void LayoutTextControl::ComputePreferredLogicalWidths() {
 
 void LayoutTextControl::AddOutlineRects(Vector<LayoutRect>& rects,
                                         const LayoutPoint& additional_offset,
-                                        IncludeBlockVisualOverflowOrNot) const {
+                                        NGOutlineType) const {
   rects.push_back(LayoutRect(additional_offset, Size()));
 }
 
@@ -320,6 +320,9 @@ LayoutObject* LayoutTextControl::LayoutSpecialExcludedChild(
 }
 
 LayoutUnit LayoutTextControl::FirstLineBoxBaseline() const {
+  if (ShouldApplyLayoutContainment())
+    return LayoutUnit(-1);
+
   LayoutUnit result = LayoutBlock::FirstLineBoxBaseline();
   if (result != -1)
     return result;

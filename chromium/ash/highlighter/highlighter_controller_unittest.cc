@@ -8,7 +8,6 @@
 
 #include "ash/components/fast_ink/fast_ink_points.h"
 #include "ash/highlighter/highlighter_controller_test_api.h"
-#include "ash/public/cpp/config.h"
 #include "ash/shell.h"
 #include "ash/system/palette/mock_palette_tool_delegate.h"
 #include "ash/system/palette/palette_tool.h"
@@ -295,7 +294,8 @@ TEST_F(HighlighterControllerTest, HighlighterGestures) {
   controller_->RemoveObserver(&observer);
 }
 
-TEST_F(HighlighterControllerTest, HighlighterGesturesScaled) {
+// Disabled due to https://crbug.com/917113.
+TEST_F(HighlighterControllerTest, DISABLED_HighlighterGesturesScaled) {
   controller_test_api_->SetEnabled(true);
   ui::test::EventGenerator* event_generator = GetEventGenerator();
   event_generator->EnterPenPointerMode();
@@ -414,7 +414,9 @@ TEST_F(HighlighterControllerTest, InterruptedStroke) {
 }
 
 // Test that the selection is never crossing the screen bounds.
-TEST_F(HighlighterControllerTest, SelectionInsideScreen) {
+//
+// Disabled due to https://crbug.com/917113.
+TEST_F(HighlighterControllerTest, DISABLED_SelectionInsideScreen) {
   controller_test_api_->SetEnabled(true);
   ui::test::EventGenerator* event_generator = GetEventGenerator();
   event_generator->EnterPenPointerMode();
@@ -422,8 +424,9 @@ TEST_F(HighlighterControllerTest, SelectionInsideScreen) {
   constexpr float display_scales[] = {1.f, 1.5f, 2.0f};
 
   for (size_t i = 0; i < sizeof(display_scales) / sizeof(float); ++i) {
-    std::string display_spec =
-        base::StringPrintf("1000x1000*%.2f", display_scales[i]);
+    // 2nd display is for offscreen test.
+    std::string display_spec = base::StringPrintf(
+        "1000x1000*%.2f,500x1000*%.2f", display_scales[i], display_scales[i]);
     SCOPED_TRACE(display_spec);
     UpdateDisplayAndWaitForCompositingEnded(display_spec);
 
@@ -463,11 +466,11 @@ TEST_F(HighlighterControllerTest, SelectionInsideScreen) {
     EXPECT_TRUE(controller_test_api_->HandleSelectionCalled());
     EXPECT_TRUE(screen.Contains(controller_test_api_->selection()));
 
-    // Horizontal stroke completely offscreen.
+    // Vertical stroke completely offscreen.
     controller_test_api_->ResetSelection();
-    event_generator->MoveTouch(gfx::Point(0, -100));
+    event_generator->MoveTouch(gfx::Point(1100, 100));
     event_generator->PressTouch();
-    event_generator->MoveTouch(gfx::Point(1000, -100));
+    event_generator->MoveTouch(gfx::Point(1100, 500));
     event_generator->ReleaseTouch();
     controller_test_api_->SimulateInterruptedStrokeTimeout();
     EXPECT_FALSE(controller_test_api_->HandleSelectionCalled());

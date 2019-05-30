@@ -7,6 +7,7 @@
 
 #include <map>
 #include <string>
+#include <utility>
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
@@ -165,21 +166,13 @@ class SessionService : public sessions::BaseSessionServiceDelegate,
   void SetWindowAppName(const SessionID& window_id,
                         const std::string& app_name);
 
-  // Sets the ext data of the specified window.
-  void SetWindowExtData(const SessionID& window_id,
-                        const std::string& ext_data);
-
-  // Invoked when the NavigationController has removed entries from the back of
-  // the list. |count| gives the number of entries in the navigation controller.
-  void TabNavigationPathPrunedFromBack(const SessionID& window_id,
-                                       const SessionID& tab_id,
-                                       int count);
-
-  // Invoked when the NavigationController has removed entries from the front of
-  // the list. |count| gives the number of entries that were removed.
-  void TabNavigationPathPrunedFromFront(const SessionID& window_id,
-                                        const SessionID& tab_id,
-                                        int count);
+  // Invoked when the NavigationController has removed entries from the list.
+  // |index| gives the the starting index from which entries were deleted.
+  // |count| gives the number of entries that were removed.
+  void TabNavigationPathPruned(const SessionID& window_id,
+                               const SessionID& tab_id,
+                               int index,
+                               int count);
 
   // Invoked when the NavigationController has deleted entries because of a
   // history deletion.
@@ -210,10 +203,6 @@ class SessionService : public sessions::BaseSessionServiceDelegate,
                                const SessionID& tab_id,
                                const std::string& user_agent_override);
 
-  void SetTabExtData(const SessionID& window_id,
-                     const SessionID& tab_id,
-                      const std::string& ext_data);
-
   // Sets the application extension id of the specified tab.
   void SetTabExtensionAppID(const SessionID& window_id,
                             const SessionID& tab_id,
@@ -234,6 +223,15 @@ class SessionService : public sessions::BaseSessionServiceDelegate,
   // BaseSessionServiceDelegate:
   bool ShouldUseDelayedSave() override;
   void OnWillSaveCommands() override;
+
+  // Vivaldi
+  // Sets the ext data of the specified window.
+  void SetWindowExtData(const SessionID& window_id,
+                        const std::string& ext_data);
+
+  void SetTabExtData(const SessionID& window_id,
+                     const SessionID& tab_id,
+                      const std::string& ext_data);
 
   // Tests Vivaldi specific attributes on the Browser to see if we should
   // track this in the session.
@@ -265,10 +263,6 @@ class SessionService : public sessions::BaseSessionServiceDelegate,
   // to restore, the tabs are added to it, otherwise a new browser is created.
   bool RestoreIfNecessary(const std::vector<GURL>& urls_to_open,
                           Browser* browser);
-
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
 
   // BrowserListObserver
   void OnBrowserAdded(Browser* browser) override {}
@@ -348,6 +342,16 @@ class SessionService : public sessions::BaseSessionServiceDelegate,
 
   // Unit test accessors.
   sessions::BaseSessionService* GetBaseSessionServiceForTest();
+
+  void SetAvailableRangeForTest(const SessionID& tab_id,
+                                const std::pair<int, int>& range);
+  bool GetAvailableRangeForTest(const SessionID& tab_id,
+                                std::pair<int, int>* range);
+
+  // Vivaldi
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override;
 
   // The profile. This may be null during testing.
   Profile* profile_;

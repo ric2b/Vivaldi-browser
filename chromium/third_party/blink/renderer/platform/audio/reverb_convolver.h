@@ -30,23 +30,23 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_AUDIO_REVERB_CONVOLVER_H_
 
 #include <memory>
+
 #include "third_party/blink/renderer/platform/audio/audio_array.h"
 #include "third_party/blink/renderer/platform/audio/direct_convolver.h"
 #include "third_party/blink/renderer/platform/audio/fft_convolver.h"
 #include "third_party/blink/renderer/platform/audio/reverb_accumulation_buffer.h"
 #include "third_party/blink/renderer/platform/audio/reverb_convolver_stage.h"
 #include "third_party/blink/renderer/platform/audio/reverb_input_buffer.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
 
 class AudioChannel;
-class WebThread;
 
 class PLATFORM_EXPORT ReverbConvolver {
   USING_FAST_MALLOC(ReverbConvolver);
-  WTF_MAKE_NONCOPYABLE(ReverbConvolver);
 
  public:
   // maxFFTSize can be adjusted (from say 2048 to 32768) depending on how much
@@ -63,7 +63,7 @@ class PLATFORM_EXPORT ReverbConvolver {
 
   void Process(const AudioChannel* source_channel,
                AudioChannel* destination_channel,
-               size_t frames_to_process);
+               uint32_t frames_to_process);
   void Reset();
 
   ReverbInputBuffer* InputBuffer() { return &input_buffer_; }
@@ -93,7 +93,9 @@ class PLATFORM_EXPORT ReverbConvolver {
   size_t max_realtime_fft_size_;
 
   // Background thread and synchronization
-  std::unique_ptr<WebThread> background_thread_;
+  std::unique_ptr<Thread> background_thread_;
+
+  DISALLOW_COPY_AND_ASSIGN(ReverbConvolver);
 };
 
 }  // namespace blink

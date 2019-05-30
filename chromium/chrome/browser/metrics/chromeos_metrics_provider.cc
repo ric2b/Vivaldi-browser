@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/barrier_closure.h"
+#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -17,11 +18,12 @@
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/arc_optin_uma.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/system/statistics_provider.h"
+#include "components/arc/metrics/stability_metrics_manager.h"
 #include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -105,10 +107,14 @@ const base::Feature kUmaShortHWClass{"UmaShortHWClass",
 
 }  // namespace features
 
-ChromeOSMetricsProvider::ChromeOSMetricsProvider()
+ChromeOSMetricsProvider::ChromeOSMetricsProvider(
+    metrics::MetricsLogUploader::MetricServiceType service_type)
     : registered_user_count_at_log_initialization_(false),
       user_count_at_log_initialization_(0),
-      weak_ptr_factory_(this) {}
+      weak_ptr_factory_(this) {
+  if (service_type == metrics::MetricsLogUploader::UMA)
+    profile_provider_ = std::make_unique<metrics::ProfileProvider>();
+}
 
 ChromeOSMetricsProvider::~ChromeOSMetricsProvider() {
 }
@@ -151,7 +157,8 @@ void ChromeOSMetricsProvider::Init() {
     hardware_class_ =
         variations::VariationsFieldTrialCreator::GetShortHardwareClass();
   }
-  perf_provider_.Init();
+  if (profile_provider_ != nullptr)
+    profile_provider_->Init();
 }
 
 void ChromeOSMetricsProvider::AsyncInit(const base::Closure& done_callback) {
@@ -186,8 +193,8 @@ void ChromeOSMetricsProvider::InitTaskGetFullHardwareClass(
 void ChromeOSMetricsProvider::InitTaskGetBluetoothAdapter(
     const base::Closure& callback) {
   device::BluetoothAdapterFactory::GetAdapter(
-      base::Bind(&ChromeOSMetricsProvider::SetBluetoothAdapter,
-                 weak_ptr_factory_.GetWeakPtr(), callback));
+      base::BindOnce(&ChromeOSMetricsProvider::SetBluetoothAdapter,
+                     weak_ptr_factory_.GetWeakPtr(), callback));
 }
 
 void ChromeOSMetricsProvider::ProvideSystemProfileMetrics(
@@ -229,30 +236,27 @@ void ChromeOSMetricsProvider::ProvideStabilityMetrics(
     stability_proto->set_unclean_system_shutdown_count(count);
     pref->SetInteger(prefs::kStabilitySystemUncleanShutdownCount, 0);
   }
-}
 
-void ChromeOSMetricsProvider::ProvidePreviousSessionData(
-    metrics::ChromeUserMetricsExtension* uma_proto) {
-  ProvideStabilityMetrics(uma_proto->mutable_system_profile());
-  // The enrollment status and ARC state of a client are not likely to change
-  // between browser restarts.  Hence, it's safe and useful to attach these
-  // values to a previous session log.
-  RecordEnrollmentStatus();
-  RecordArcState();
+  // Use current enrollment status for initial stability logs, since it's not
+  // likely to change between browser restarts.
+  UMA_STABILITY_HISTOGRAM_ENUMERATION(
+      "UMA.EnrollmentStatus", GetEnrollmentStatus(), ENROLLMENT_STATUS_MAX);
+
+  // Record ARC-related stability metrics that should be included in initial
+  // stability logs and all regular UMA logs.
+  arc::StabilityMetricsManager::Get()->RecordMetricsToUMA();
 }
 
 void ChromeOSMetricsProvider::ProvideCurrentSessionData(
     metrics::ChromeUserMetricsExtension* uma_proto) {
   ProvideStabilityMetrics(uma_proto->mutable_system_profile());
   std::vector<SampledProfile> sampled_profiles;
-  if (perf_provider_.GetSampledProfiles(&sampled_profiles)) {
+  if (profile_provider_->GetSampledProfiles(&sampled_profiles)) {
     for (auto& profile : sampled_profiles) {
       uma_proto->add_sampled_profile()->Swap(&profile);
     }
   }
-
-  RecordEnrollmentStatus();
-  RecordArcState();
+  arc::UpdateEnabledStateByUserTypeUMA();
 }
 
 void ChromeOSMetricsProvider::WriteBluetoothProto(
@@ -343,15 +347,4 @@ void ChromeOSMetricsProvider::SetFullHardwareClass(
   }
   full_hardware_class_ = full_hardware_class;
   callback.Run();
-}
-
-void ChromeOSMetricsProvider::RecordEnrollmentStatus() {
-  UMA_STABILITY_HISTOGRAM_ENUMERATION(
-      "UMA.EnrollmentStatus", GetEnrollmentStatus(), ENROLLMENT_STATUS_MAX);
-}
-
-void ChromeOSMetricsProvider::RecordArcState() {
-  arc::ArcSessionManager* arc_session_manager = arc::ArcSessionManager::Get();
-  if (arc_session_manager)
-    arc_session_manager->RecordArcState();
 }

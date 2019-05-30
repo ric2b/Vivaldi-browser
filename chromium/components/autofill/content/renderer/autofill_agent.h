@@ -29,7 +29,6 @@
 namespace blink {
 class WebNode;
 class WebView;
-class WebString;
 class WebFormControlElement;
 template <typename T>
 class WebVector;
@@ -85,12 +84,14 @@ class AutofillAgent : public content::RenderFrameObserver,
   void PreviewPasswordSuggestion(const base::string16& username,
                                  const base::string16& password) override;
   void ShowInitialPasswordAccountSuggestions(
-      int32_t key,
       const PasswordFormFillData& form_data) override;
   void SetUserGestureRequired(bool required) override;
   void SetSecureContextRequired(bool required) override;
   void SetFocusRequiresScroll(bool require) override;
   void SetQueryPasswordSuggestion(bool required) override;
+  void GetElementFormAndFieldData(
+      const std::vector<std::string>& selectors,
+      GetElementFormAndFieldDataCallback callback) override;
 
   void FormControlElementClicked(const blink::WebFormControlElement& element,
                                  bool was_focused);
@@ -160,8 +161,8 @@ class AutofillAgent : public content::RenderFrameObserver,
   };
 
   // content::RenderFrameObserver:
-  void DidCommitProvisionalLoad(bool is_new_navigation,
-                                bool is_same_document_navigation) override;
+  void DidCommitProvisionalLoad(bool is_same_document_navigation,
+                                ui::PageTransition transition) override;
   void DidFinishDocumentLoad() override;
   void DidChangeScrollOffset() override;
   void FocusedNodeChanged(const blink::WebNode& node) override;
@@ -271,12 +272,16 @@ class AutofillAgent : public content::RenderFrameObserver,
   void OnFormNoLongerSubmittable();
 
   // For no name forms, and unowned elements, try to see if there is a unique
-  // element in the updated form that corresponds to the old |element_|.
-  // Returns false if more than one element matches the |element_|.
+  // element in the updated form that corresponds to the |original_element|.
+  // Returns false if more than one element matches the |original_element|.
+  // Sets the matching element to |matching_element| and updates the
+  // |potential_match_encountered|, based on the search result. Returns false if
+  // more than one element match the name and section, therefore finding a
+  // unique match is impossible.
   bool FindTheUniqueNewVersionOfOldElement(
-      blink::WebVector<blink::WebFormControlElement>& elements,
-      bool& element_found,
-      const blink::WebString& original_element_section,
+      const blink::WebVector<blink::WebFormControlElement>& elements,
+      bool& potential_match_encountered,
+      blink::WebFormControlElement& matching_element,
       const blink::WebFormControlElement& original_element);
 
   // Check whether |element_| was removed or replaced dynamically on the page.
@@ -288,6 +293,12 @@ class AutofillAgent : public content::RenderFrameObserver,
   // properties of the form (name, number of fields), or fields (name, id,
   // label, visibility, control type) have changed after an autofill.
   void TriggerRefillIfNeeded(const FormData& form);
+
+  // Find the unique element given by |selectors| in the associated web frame.
+  // Empty blink::WebElement is returned if there is no matching element or
+  // there are multiple matching elements.
+  blink::WebElement FindUniqueWebElement(
+      const std::vector<std::string>& selectors);
 
   // Formerly cached forms for all frames, now only caches forms for the current
   // frame.

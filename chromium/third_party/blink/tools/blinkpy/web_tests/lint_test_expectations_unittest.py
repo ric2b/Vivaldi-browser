@@ -69,10 +69,10 @@ class FakePort(object):
         return ''
 
     def extra_expectations_files(self):
-        return ['/fake-port-base-directory/LayoutTests/ExtraExpectations']
+        return ['/fake-port-base-directory/web_tests/ExtraExpectations']
 
-    def layout_tests_dir(self):
-        return '/fake-port-base-directory/LayoutTests'
+    def web_tests_dir(self):
+        return '/fake-port-base-directory/web_tests'
 
 
 class FakeFactory(object):
@@ -139,7 +139,7 @@ class LintTest(LoggingTestCase):
 
         host.port_factory.get = lambda platform, options=None: port
         host.port_factory.all_port_names = lambda platform=None: [port.name()]
-        host.filesystem.write_text_file('/test.checkout/LayoutTests/LeakExpectations', '-- syntax error')
+        host.filesystem.write_text_file('/test.checkout/wtests/LeakExpectations', '-- syntax error')
 
         res = lint_test_expectations.lint(host, options)
 

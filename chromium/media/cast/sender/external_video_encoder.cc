@@ -10,9 +10,9 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/shared_memory.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
@@ -430,16 +430,15 @@ class ExternalVideoEncoder::VEAClientImpl
 
   // Note: This method can be called on any thread.
   void OnCreateSharedMemory(std::unique_ptr<base::SharedMemory> memory) {
-    task_runner_->PostTask(FROM_HERE,
-                           base::Bind(&VEAClientImpl::OnReceivedSharedMemory,
-                                      this,
-                                      base::Passed(&memory)));
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&VEAClientImpl::OnReceivedSharedMemory, this,
+                                  std::move(memory)));
   }
 
   void OnCreateInputSharedMemory(std::unique_ptr<base::SharedMemory> memory) {
     task_runner_->PostTask(
-        FROM_HERE, base::Bind(&VEAClientImpl::OnReceivedInputSharedMemory, this,
-                              base::Passed(&memory)));
+        FROM_HERE, base::BindOnce(&VEAClientImpl::OnReceivedInputSharedMemory,
+                                  this, std::move(memory)));
   }
 
   void OnReceivedSharedMemory(std::unique_ptr<base::SharedMemory> memory) {
@@ -624,9 +623,9 @@ ExternalVideoEncoder::ExternalVideoEncoder(
   DCHECK(cast_environment_->CurrentlyOn(CastEnvironment::MAIN));
   DCHECK_GT(video_config.max_frame_rate, 0);
   DCHECK(!frame_size_.IsEmpty());
-  DCHECK(!status_change_cb.is_null());
-  DCHECK(!create_vea_cb.is_null());
-  DCHECK(!create_video_encode_memory_cb_.is_null());
+  DCHECK(status_change_cb);
+  DCHECK(create_vea_cb);
+  DCHECK(create_video_encode_memory_cb_);
   DCHECK_GT(bit_rate_, 0);
 
   create_vea_cb.Run(
@@ -663,13 +662,10 @@ bool ExternalVideoEncoder::EncodeVideoFrame(
   if (!client_ || video_frame->visible_rect().size() != frame_size_)
     return false;
 
-  client_->task_runner()->PostTask(FROM_HERE,
-                                   base::Bind(&VEAClientImpl::EncodeVideoFrame,
-                                              client_,
-                                              video_frame,
-                                              reference_time,
-                                              key_frame_requested_,
-                                              frame_encoded_callback));
+  client_->task_runner()->PostTask(
+      FROM_HERE, base::BindOnce(&VEAClientImpl::EncodeVideoFrame, client_,
+                                video_frame, reference_time,
+                                key_frame_requested_, frame_encoded_callback));
   key_frame_requested_ = false;
   return true;
 }
@@ -682,7 +678,8 @@ void ExternalVideoEncoder::SetBitRate(int new_bit_rate) {
   if (!client_)
     return;
   client_->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&VEAClientImpl::SetBitRate, client_, bit_rate_));
+      FROM_HERE,
+      base::BindOnce(&VEAClientImpl::SetBitRate, client_, bit_rate_));
 }
 
 void ExternalVideoEncoder::GenerateKeyFrame() {
@@ -761,13 +758,10 @@ void ExternalVideoEncoder::OnCreateVideoEncodeAccelerator(
                               std::move(vea), video_config.max_frame_rate,
                               std::move(wrapped_status_change_cb),
                               create_video_encode_memory_cb_);
-  client_->task_runner()->PostTask(FROM_HERE,
-                                   base::Bind(&VEAClientImpl::Initialize,
-                                              client_,
-                                              frame_size_,
-                                              codec_profile,
-                                              bit_rate_,
-                                              first_frame_id));
+  client_->task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&VEAClientImpl::Initialize, client_, frame_size_,
+                     codec_profile, bit_rate_, first_frame_id));
 }
 
 SizeAdaptableExternalVideoEncoder::SizeAdaptableExternalVideoEncoder(
@@ -847,7 +841,7 @@ double QuantizerEstimator::EstimateForKeyFrame(const VideoFrame& frame) {
   // histogram and return it.
   const int num_samples = (size.width() - 1) * rows_in_subset;
   return ToQuantizerEstimate(ComputeEntropyFromHistogram(
-      histogram, arraysize(histogram), num_samples));
+      histogram, base::size(histogram), num_samples));
 }
 
 double QuantizerEstimator::EstimateForDeltaFrame(const VideoFrame& frame) {
@@ -892,7 +886,7 @@ double QuantizerEstimator::EstimateForDeltaFrame(const VideoFrame& frame) {
   // histogram and return it.
   const int num_samples = size.width() * rows_in_subset;
   return ToQuantizerEstimate(ComputeEntropyFromHistogram(
-      histogram, arraysize(histogram), num_samples));
+      histogram, base::size(histogram), num_samples));
 }
 
 // static

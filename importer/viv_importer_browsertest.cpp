@@ -8,6 +8,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -179,9 +180,9 @@ class OperaImportObserver : public ProfileWriter,
   void ImportItemEnded(importer::ImportItem item) override {}
   void ImportEnded() override {
     base::RunLoop().QuitCurrentWhenIdleDeprecated();
-    EXPECT_EQ(arraysize(OperaBookmarks), bookmark_count);
-    EXPECT_EQ(arraysize(OperaNotes), notes_count);
-    EXPECT_EQ(arraysize(OperaPasswords), password_count);
+    EXPECT_EQ(base::size(OperaBookmarks), bookmark_count);
+    EXPECT_EQ(base::size(OperaNotes), notes_count);
+    EXPECT_EQ(base::size(OperaPasswords), password_count);
   }
 
   bool BookmarkModelIsLoaded() const override { return true; }
@@ -203,7 +204,7 @@ class OperaImportObserver : public ProfileWriter,
   }
   void AddBookmarks(const std::vector<ImportedBookmarkEntry>& bookmarks,
                     const base::string16& top_level_folder_name) override {
-    ASSERT_LE(bookmark_count + bookmarks.size(), arraysize(OperaBookmarks));
+    ASSERT_LE(bookmark_count + bookmarks.size(), base::size(OperaBookmarks));
 
     for (size_t i = 0; i < bookmarks.size(); i++) {
       EXPECT_NO_FATAL_FAILURE(
@@ -214,7 +215,7 @@ class OperaImportObserver : public ProfileWriter,
   }
   void AddNotes(const std::vector<ImportedNotesEntry>& notes,
                 const base::string16& top_level_folder_name) override {
-    ASSERT_LE(notes_count + notes.size(), arraysize(OperaNotes));
+    ASSERT_LE(notes_count + notes.size(), base::size(OperaNotes));
 
     for (size_t i = 0; i < notes.size(); i++) {
       EXPECT_NO_FATAL_FAILURE(

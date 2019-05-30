@@ -33,6 +33,8 @@ AppListItem* AppListItemList::FindItem(const std::string& id) {
   return nullptr;
 }
 
+// TODO(https://crbug.com/883971): Make it return iterator to avoid unnecessary
+// check in this code.
 bool AppListItemList::FindItemIndex(const std::string& id, size_t* index) {
   for (size_t i = 0; i < app_list_items_.size(); ++i) {
     if (app_list_items_[i]->id() == id) {
@@ -162,7 +164,6 @@ void AppListItemList::HighlightItemInstalledFromUI(const std::string& id) {
   // folder initially). So just search the top-level list.
   size_t index;
   if (FindItemIndex(highlighted_id_, &index)) {
-    item_at(index)->set_highlighted(false);
     for (auto& observer : observers_)
       observer.OnAppListItemHighlight(index, false);
   }
@@ -173,7 +174,6 @@ void AppListItemList::HighlightItemInstalledFromUI(const std::string& id) {
     return;
   }
 
-  item_at(index)->set_highlighted(true);
   for (auto& observer : observers_)
     observer.OnAppListItemHighlight(index, true);
 }
@@ -217,7 +217,6 @@ AppListItem* AppListItemList::AddItem(std::unique_ptr<AppListItem> item_ptr) {
 
   if (item->id() == highlighted_id_) {
     // Item not present when highlight requested, so highlight it now.
-    item->set_highlighted(true);
     for (auto& observer : observers_)
       observer.OnAppListItemHighlight(index, true);
   }
@@ -249,11 +248,6 @@ std::unique_ptr<AppListItem> AppListItemList::RemoveItemAt(size_t index) {
 void AppListItemList::DeleteItemAt(size_t index) {
   std::unique_ptr<AppListItem> item = RemoveItemAt(index);
   // |item| will be deleted on destruction.
-}
-
-void AppListItemList::DeleteAllItems() {
-  while (!app_list_items_.empty())
-    DeleteItemAt(app_list_items_.size() - 1);
 }
 
 void AppListItemList::EnsureValidItemPosition(AppListItem* item) {

@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <unordered_set>
 #include <utility>
 
 #include "base/bind.h"
@@ -95,7 +96,7 @@ void CheckExtensionDirectory(const base::FilePath& path,
        !version_dir.empty();
        version_dir = versions_enumerator.Next()) {
     bool known_version = false;
-    for (Iter iter = iter_pair.first; iter != iter_pair.second; ++iter) {
+    for (auto iter = iter_pair.first; iter != iter_pair.second; ++iter) {
       if (version_dir.BaseName() == iter->second.BaseName()) {
         known_version = true;
         break;
@@ -221,8 +222,8 @@ void ExtensionGarbageCollector::GarbageCollectIsolatedStorageIfNeeded() {
     return;
   extension_prefs->SetNeedsStorageGarbageCollection(false);
 
-  std::unique_ptr<base::hash_set<base::FilePath>> active_paths(
-      new base::hash_set<base::FilePath>());
+  std::unique_ptr<std::unordered_set<base::FilePath>> active_paths(
+      new std::unordered_set<base::FilePath>());
   std::unique_ptr<ExtensionSet> extensions =
       ExtensionRegistry::Get(context_)->GenerateInstalledExtensionsSet();
   for (ExtensionSet::const_iterator iter = extensions->begin();

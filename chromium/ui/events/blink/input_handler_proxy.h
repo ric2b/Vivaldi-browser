@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "cc/input/input_handler.h"
 #include "cc/input/snap_fling_controller.h"
@@ -186,7 +185,7 @@ class InputHandlerProxy : public cc::InputHandlerClient,
   SynchronousInputHandler* synchronous_input_handler_;
   bool allow_root_animate_;
 
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
   bool expect_scroll_update_end_;
 #endif
   bool gesture_scroll_on_impl_thread_;
@@ -223,6 +222,8 @@ class InputHandlerProxy : public cc::InputHandlerClient,
   std::unique_ptr<cc::SnapFlingController> snap_fling_controller_;
 
   std::unique_ptr<ScrollPredictor> scroll_predictor_;
+
+  bool compositor_touch_action_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(InputHandlerProxy);
 };

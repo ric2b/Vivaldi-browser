@@ -14,6 +14,7 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/driver/sync_service.h"
+#include "components/sync/driver/sync_user_settings.h"
 #include "components/variations/variations_associated_data.h"
 
 #include "app/vivaldi_apptools.h"
@@ -69,7 +70,7 @@ bool ShouldShowChromeSignInPasswordPromo(
           syncer::SyncService::DISABLE_REASON_PLATFORM_OVERRIDE) ||
       sync_service->HasDisableReason(
           syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY) ||
-      sync_service->IsFirstSetupComplete()) {
+      sync_service->GetUserSettings()->IsFirstSetupComplete()) {
     return false;
   }
   // Don't show the promo more than 3 times.

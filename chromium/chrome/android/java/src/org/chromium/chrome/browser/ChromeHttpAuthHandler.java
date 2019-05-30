@@ -6,7 +6,12 @@ package org.chromium.chrome.browser;
 
 import android.app.Activity;
 
+import org.chromium.base.Callback;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.chrome.browser.tab.EmptyTabObserver;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.Tab.TabHidingType;
 import org.chromium.ui.base.WindowAndroid;
 
 /**
@@ -18,20 +23,31 @@ import org.chromium.ui.base.WindowAndroid;
  * extend HttpAuthHandler due to the private access of HttpAuthHandler's
  * constructor.
  */
-public class ChromeHttpAuthHandler {
-    private final long mNativeChromeHttpAuthHandler;
+public class ChromeHttpAuthHandler extends EmptyTabObserver {
+    private static Callback<ChromeHttpAuthHandler> sTestCreationCallback;
+
+    private long mNativeChromeHttpAuthHandler;
     private AutofillObserver mAutofillObserver;
     private String mAutofillUsername;
     private String mAutofillPassword;
+    private LoginPrompt mLoginPrompt;
+    private Tab mTab;
 
     private ChromeHttpAuthHandler(long nativeChromeHttpAuthHandler) {
         assert nativeChromeHttpAuthHandler != 0;
         mNativeChromeHttpAuthHandler = nativeChromeHttpAuthHandler;
+        if (sTestCreationCallback != null) sTestCreationCallback.onResult(this);
     }
 
     @CalledByNative
     private static ChromeHttpAuthHandler create(long nativeChromeHttpAuthHandler) {
         return new ChromeHttpAuthHandler(nativeChromeHttpAuthHandler);
+    }
+
+    /** Set a test callback to be notified of all ChromeHttpAuthHandlers created. */
+    public static void setTestCreationCallback(Callback<ChromeHttpAuthHandler> callback) {
+        ThreadUtils.assertOnUiThread();
+        sTestCreationCallback = callback;
     }
 
     // ---------------------------------------------
@@ -66,14 +82,44 @@ public class ChromeHttpAuthHandler {
         return nativeGetMessageBody(mNativeChromeHttpAuthHandler);
     }
 
+    /** Return whether the auth dialog is being shown. */
+    public boolean isShowingAuthDialog() {
+        return mLoginPrompt != null && mLoginPrompt.isShowing();
+    }
+
     @CalledByNative
-    private void showDialog(WindowAndroid windowAndroid) {
-        if (windowAndroid == null) cancel();
+    private void showDialog(Tab tab, WindowAndroid windowAndroid) {
+        if (tab == null || tab.isHidden() || windowAndroid == null) {
+            cancel();
+            return;
+        }
         Activity activity = windowAndroid.getActivity().get();
-        if (activity == null) cancel();
-        LoginPrompt authDialog = new LoginPrompt(activity, this);
-        setAutofillObserver(authDialog);
-        authDialog.show();
+        if (activity == null) {
+            cancel();
+            return;
+        }
+        mTab = tab;
+        mTab.addObserver(this);
+        mLoginPrompt = new LoginPrompt(activity, this);
+        setAutofillObserver(mLoginPrompt);
+        mLoginPrompt.show();
+    }
+
+    @CalledByNative
+    private void closeDialog() {
+        if (mLoginPrompt != null) mLoginPrompt.dismiss();
+    }
+
+    @CalledByNative
+    private void onNativeDestroyed() {
+        mNativeChromeHttpAuthHandler = 0;
+        if (mTab != null) mTab.removeObserver(this);
+        mTab = null;
+    }
+
+    @Override
+    public void onHidden(Tab tab, @TabHidingType int reason) {
+        cancel();
     }
 
     // ---------------------------------------------

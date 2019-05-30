@@ -10,11 +10,10 @@
 #include <string>
 #include <vector>
 
-#include "ash/frame/detached_title_area_renderer.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/frame/non_client_frame_view_ash.h"
 #include "ash/public/cpp/ash_constants.h"
-#include "ash/public/cpp/ash_layout_constants.h"
-#include "ash/public/cpp/immersive/immersive_fullscreen_controller_delegate.h"
+#include "ash/public/cpp/frame_utils.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
 #include "ash/wm/property_util.h"
@@ -24,13 +23,15 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "services/ws/public/cpp/property_type_converters.h"
 #include "services/ws/public/mojom/window_manager.mojom.h"
+#include "services/ws/top_level_proxy_window.h"
 #include "services/ws/window_properties.h"
-#include "services/ws/window_service.h"
+#include "services/ws/window_utils.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/accessibility/ax_tree_id.h"
+#include "ui/accessibility/platform/aura_window_properties.h"
 #include "ui/aura/client/aura_constants.h"
-#include "ui/aura/client/transient_window_client.h"
-#include "ui/aura/mus/property_converter.h"
 #include "ui/aura/mus/property_utils.h"
 #include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/window.h"
@@ -38,22 +39,29 @@
 #include "ui/base/hit_test.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/vector2d.h"
-#include "ui/views/mus/ax_remote_host.h"
 #include "ui/views/widget/native_widget_aura.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/window/caption_button_layout_constants.h"
 #include "ui/wm/core/coordinate_conversion.h"
 
-DEFINE_UI_CLASS_PROPERTY_TYPE(ash::NonClientFrameController*);
+DEFINE_UI_CLASS_PROPERTY_TYPE(ash::NonClientFrameController*)
 
 namespace ash {
 namespace {
 
 DEFINE_UI_CLASS_PROPERTY_KEY(NonClientFrameController*,
                              kNonClientFrameControllerKey,
-                             nullptr);
+                             nullptr)
+
+bool DoesClientProvideFrame(
+    std::map<std::string, std::vector<uint8_t>>* properties) {
+  auto iter = properties->find(
+      ws::mojom::WindowManager::kClientProvidesFrame_InitProperty);
+  return iter != properties->end() && mojo::ConvertTo<bool>(iter->second);
+}
 
 // This class supports draggable app windows that paint their own custom frames.
-// It uses empty insets, doesn't paint anything, and hit tests return HTCAPTION.
+// It uses empty insets and doesn't paint anything.
 class EmptyDraggableNonClientFrameView : public views::NonClientFrameView {
  public:
   EmptyDraggableNonClientFrameView() = default;
@@ -65,8 +73,19 @@ class EmptyDraggableNonClientFrameView : public views::NonClientFrameView {
       const gfx::Rect& client_bounds) const override {
     return bounds();
   }
-  int NonClientHitTest(const gfx::Point& point) override { return HTCAPTION; }
-  void GetWindowMask(const gfx::Size& size, gfx::Path* window_mask) override {}
+  int NonClientHitTest(const gfx::Point& point) override {
+    int component = FrameBorderNonClientHitTest(this, point);
+
+    // For non-standard frame window, the located event in the non-client area
+    // in the window should be used for window dragging to allow dragging
+    // frameless app windows. See https://crbug.com/920469
+    if (component == HTCLIENT &&
+        ws::IsLocationInNonClientArea(GetWidget()->GetNativeWindow(), point)) {
+      return HTCAPTION;
+    }
+    return component;
+  }
+  void GetWindowMask(const gfx::Size& size, SkPath* window_mask) override {}
   void ResetWindowControls() override {}
   void UpdateWindowIcon() override {}
   void UpdateWindowTitle() override {}
@@ -76,119 +95,17 @@ class EmptyDraggableNonClientFrameView : public views::NonClientFrameView {
   DISALLOW_COPY_AND_ASSIGN(EmptyDraggableNonClientFrameView);
 };
 
-// Creates a Window to host the top container when in immersive mode. The
-// top container contains a DetachedTitleAreaRenderer, which handles drawing and
-// events.
-class ImmersiveFullscreenControllerDelegateMus
-    : public ImmersiveFullscreenControllerDelegate {
- public:
-  ImmersiveFullscreenControllerDelegateMus(views::Widget* frame,
-                                           aura::Window* frame_window)
-      : frame_(frame), frame_window_(frame_window) {}
-  ~ImmersiveFullscreenControllerDelegateMus() override {
-    DestroyTitleAreaWindow();
-  }
-
-  // WmImmersiveFullscreenControllerDelegate:
-  void OnImmersiveRevealStarted() override {
-    CreateTitleAreaWindow();
-    SetVisibleFraction(0);
-  }
-  void OnImmersiveRevealEnded() override { DestroyTitleAreaWindow(); }
-  void OnImmersiveFullscreenEntered() override {}
-  void OnImmersiveFullscreenExited() override { DestroyTitleAreaWindow(); }
-  void SetVisibleFraction(double visible_fraction) override {
-    aura::Window* title_area_window = GetTitleAreaWindow();
-    if (!title_area_window)
-      return;
-    gfx::Rect bounds = title_area_window->bounds();
-    bounds.set_y(frame_window_->bounds().y() - bounds.height() +
-                 visible_fraction * bounds.height());
-    title_area_window->SetBounds(bounds);
-  }
-  std::vector<gfx::Rect> GetVisibleBoundsInScreen() const override {
-    std::vector<gfx::Rect> result;
-    const aura::Window* title_area_window = GetTitleAreaWindow();
-    if (!title_area_window)
-      return result;
-
-    // Clip the bounds of the title area to that of the |frame_window_|.
-    gfx::Rect visible_bounds = title_area_window->bounds();
-    visible_bounds.Intersect(frame_window_->bounds());
-    // The intersection is in the coordinates of |title_area_window|'s parent,
-    // convert to be in |title_area_window| and then to screen.
-    visible_bounds -= title_area_window->bounds().origin().OffsetFromOrigin();
-    // TODO: this needs updating when parent of |title_area_window| is changed,
-    // DCHECK is to ensure when parent changes this code is updated.
-    // http://crbug.com/640392.
-    DCHECK_EQ(frame_window_->parent(), title_area_window->parent());
-    ::wm::ConvertRectToScreen(title_area_window, &visible_bounds);
-    result.push_back(visible_bounds);
-    return result;
-  }
-
- private:
-  void CreateTitleAreaWindow() {
-    if (GetTitleAreaWindow())
-      return;
-
-    // TODO(sky): bounds aren't right here. Need to convert to display.
-    gfx::Rect bounds = frame_window_->bounds();
-    // Use the preferred size as when fullscreen the client area is generally
-    // set to 0.
-    bounds.set_height(
-        NonClientFrameController::GetPreferredClientAreaInsets().top());
-    bounds.set_y(bounds.y() - bounds.height());
-    title_area_renderer_ =
-        std::make_unique<DetachedTitleAreaRendererForInternal>(frame_);
-    title_area_renderer_->widget()->SetBounds(bounds);
-    title_area_renderer_->widget()->ShowInactive();
-  }
-
-  void DestroyTitleAreaWindow() { title_area_renderer_.reset(); }
-
-  aura::Window* GetTitleAreaWindow() {
-    return const_cast<aura::Window*>(
-        const_cast<const ImmersiveFullscreenControllerDelegateMus*>(this)
-            ->GetTitleAreaWindow());
-  }
-  const aura::Window* GetTitleAreaWindow() const {
-    return title_area_renderer_
-               ? title_area_renderer_->widget()->GetNativeView()
-               : nullptr;
-  }
-
-  // The Widget immersive mode is operating on.
-  views::Widget* frame_;
-
-  // The ui::Window associated with |frame_|.
-  aura::Window* frame_window_;
-
-  std::unique_ptr<DetachedTitleAreaRendererForInternal> title_area_renderer_;
-
-  DISALLOW_COPY_AND_ASSIGN(ImmersiveFullscreenControllerDelegateMus);
-};
-
 class WmNativeWidgetAura : public views::NativeWidgetAura {
  public:
   WmNativeWidgetAura(views::internal::NativeWidgetDelegate* delegate,
-                     bool remove_standard_frame,
-                     bool enable_immersive,
-                     mojom::WindowStyle window_style)
+                     bool client_provides_frame)
       // The NativeWidget is mirroring the real Widget created in client code.
       // |is_parallel_widget_in_window_manager| is used to indicate this
       : views::NativeWidgetAura(delegate,
                                 true /* is_parallel_widget_in_window_manager */,
                                 Shell::Get()->aura_env()),
-        remove_standard_frame_(remove_standard_frame),
-        enable_immersive_(enable_immersive),
-        window_style_(window_style) {}
+        client_provides_frame_(client_provides_frame) {}
   ~WmNativeWidgetAura() override = default;
-
-  void SetHeaderHeight(int height) {
-    if (custom_frame_view_)
-      custom_frame_view_->SetHeaderHeight({height});
-  }
 
   void set_cursor(const ui::Cursor& cursor) { cursor_ = cursor; }
 
@@ -196,42 +113,54 @@ class WmNativeWidgetAura : public views::NativeWidgetAura {
   views::NonClientFrameView* CreateNonClientFrameView() override {
     // TODO(sky): investigate why we have this. Seems this should be the same
     // as not specifying client area insets.
-    if (remove_standard_frame_)
+    if (client_provides_frame_) {
+      wm::InstallResizeHandleWindowTargeterForWindow(GetNativeWindow());
       return new EmptyDraggableNonClientFrameView();
-    aura::Window* window = GetNativeView();
-    immersive_delegate_ =
-        std::make_unique<ImmersiveFullscreenControllerDelegateMus>(GetWidget(),
-                                                                   window);
+    }
+
     // See description for details on ownership.
-    custom_frame_view_ =
-        new NonClientFrameViewAsh(GetWidget(), immersive_delegate_.get(),
-                                  enable_immersive_, window_style_);
+    auto* custom_frame_view = new NonClientFrameViewAsh(GetWidget());
 
     // Only the header actually paints any content. So the rest of the region is
     // marked as transparent content (see below in NonClientFrameController()
     // ctor). So, it is necessary to provide a texture-layer for the header
     // view.
-    views::View* header_view = custom_frame_view_->GetHeaderView();
-    header_view->SetPaintToLayer(ui::LAYER_TEXTURED);
-    header_view->layer()->SetFillsBoundsOpaquely(false);
+    views::View* header_view = custom_frame_view->GetHeaderView();
+    if (header_view) {
+      header_view->SetPaintToLayer(ui::LAYER_TEXTURED);
+      header_view->layer()->set_name("WindowService Frame Header");
+      header_view->layer()->SetFillsBoundsOpaquely(false);
+    }
 
-    return custom_frame_view_;
+    return custom_frame_view;
   }
 
   gfx::NativeCursor GetCursor(const gfx::Point& point) override {
     return cursor_;
   }
 
+  gfx::Size GetMaximumSize() const override {
+    aura::Window* window = GetNativeWindow();
+    if (window && client_provides_frame_ &&
+        window->GetProperty(aura::client::kMaximumSize)) {
+      return *window->GetProperty(aura::client::kMaximumSize);
+    }
+    return views::NativeWidgetAura::GetMaximumSize();
+  }
+
+  gfx::Size GetMinimumSize() const override {
+    aura::Window* window = GetNativeWindow();
+    if (window && client_provides_frame_ &&
+        window->GetProperty(aura::client::kMinimumSize)) {
+      return *window->GetProperty(aura::client::kMinimumSize);
+    }
+    return views::NativeWidgetAura::GetMinimumSize();
+  }
+
  private:
-  const bool remove_standard_frame_;
-  const bool enable_immersive_;
-  const mojom::WindowStyle window_style_;
-
-  std::unique_ptr<ImmersiveFullscreenControllerDelegateMus> immersive_delegate_;
-
-  // Not used for panels or if |remove_standard_frame_| is true. This is owned
-  // by the Widget's view hierarchy (e.g. it's a child of Widget's root View).
-  NonClientFrameViewAsh* custom_frame_view_ = nullptr;
+  // True if the client has asked to be responsible for the window's frame. In
+  // this case, Ash won't create a NonClientFrameViewAsh.
+  const bool client_provides_frame_;
 
   // The cursor for this widget. CompoundEventFilter will retrieve this cursor
   // via GetCursor and update the CursorManager's active cursor as appropriate
@@ -253,8 +182,14 @@ class ContentsViewMus : public views::View {
   // views::View:
   const char* GetClassName() const override { return "ContentsViewMus"; }
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
-    node_data->AddIntAttribute(ax::mojom::IntAttribute::kChildTreeId,
-                               views::AXRemoteHost::kRemoteAXTreeID);
+    std::string* tree_id =
+        GetWidget()->GetNativeWindow()->GetProperty(ui::kChildAXTreeID);
+    // Property may not be available immediately, but focus is eventually
+    // consistent.
+    if (!tree_id)
+      return;
+    node_data->AddStringAttribute(ax::mojom::StringAttribute::kChildTreeId,
+                                  *tree_id);
     node_data->role = ax::mojom::Role::kClient;
   }
 
@@ -266,9 +201,9 @@ class ClientViewMus : public views::ClientView {
  public:
   ClientViewMus(views::Widget* widget,
                 views::View* contents_view,
-                NonClientFrameController* frame_controller)
+                ws::TopLevelProxyWindow* top_level_proxy_window)
       : views::ClientView(widget, contents_view),
-        frame_controller_(frame_controller) {}
+        top_level_proxy_window_(top_level_proxy_window) {}
   ~ClientViewMus() override = default;
 
   // views::ClientView:
@@ -278,8 +213,7 @@ class ClientViewMus : public views::ClientView {
     // pass the request to the remote client and return false (to cancel the
     // close). If the remote client wants the window to close, it will close it
     // in a way that does not reenter this code path.
-    Shell::Get()->window_service_owner()->window_service()->RequestClose(
-        frame_controller_->window());
+    top_level_proxy_window_->RequestClose();
     return false;
   }
 
@@ -287,7 +221,7 @@ class ClientViewMus : public views::ClientView {
   const char* GetClassName() const override { return "ClientViewMus"; }
 
  private:
-  NonClientFrameController* frame_controller_;
+  ws::TopLevelProxyWindow* top_level_proxy_window_;
 
   DISALLOW_COPY_AND_ASSIGN(ClientViewMus);
 };
@@ -295,22 +229,19 @@ class ClientViewMus : public views::ClientView {
 }  // namespace
 
 NonClientFrameController::NonClientFrameController(
+    ws::TopLevelProxyWindow* top_level_proxy_window,
     aura::Window* parent,
     aura::Window* context,
     const gfx::Rect& bounds,
-    ws::mojom::WindowType window_type,
     aura::PropertyConverter* property_converter,
     std::map<std::string, std::vector<uint8_t>>* properties)
-    : widget_(new views::Widget), window_(nullptr) {
+    : widget_(new views::Widget),
+      top_level_proxy_window_(top_level_proxy_window) {
   // To simplify things this code creates a Widget. While a Widget is created
   // we need to ensure we don't inadvertently change random properties of the
   // underlying ui::Window. For example, showing the Widget shouldn't change
   // the bounds of the ui::Window in anyway.
-  //
-  // Assertions around InitParams::Type matching ws::mojom::WindowType exist in
-  // MusClient.
-  views::Widget::InitParams params(
-      static_cast<views::Widget::InitParams::Type>(window_type));
+  views::Widget::InitParams params;
   DCHECK((parent && !context) || (!parent && context));
   params.parent = parent;
   params.context = context;
@@ -319,16 +250,15 @@ NonClientFrameController::NonClientFrameController(
   params.delegate = this;
   params.bounds = bounds;
   params.opacity = views::Widget::InitParams::OPAQUE_WINDOW;
-  params.layer_type = ui::LAYER_SOLID_COLOR;
-  WmNativeWidgetAura* native_widget = new WmNativeWidgetAura(
-      widget_, ShouldRemoveStandardFrame(*properties),
-      ShouldEnableImmersive(*properties), GetWindowStyle(*properties));
+  params.layer_type = ui::LAYER_NOT_DRAWN;
+  WmNativeWidgetAura* native_widget =
+      new WmNativeWidgetAura(widget_, DoesClientProvideFrame(properties));
   window_ = native_widget->GetNativeView();
   window_->SetProperty(kNonClientFrameControllerKey, this);
   window_->SetProperty(kWidgetCreationTypeKey, WidgetCreationType::FOR_CLIENT);
   window_->AddObserver(this);
   params.native_widget = native_widget;
-  aura::SetWindowType(window_, window_type);
+  aura::SetWindowType(window_, ws::mojom::WindowType::WINDOW);
   for (auto& property_pair : *properties) {
     property_converter->SetPropertyFromTransportValue(
         window_, property_pair.first, &property_pair.second);
@@ -340,16 +270,7 @@ NonClientFrameController::NonClientFrameController(
   widget_->Init(params);
   did_init_native_widget_ = true;
 
-  // Only the caption draws any content. So the caption has its own layer (see
-  // above in WmNativeWidgetAura::CreateNonClientFrameView()). The rest of the
-  // region needs to take part in occlusion in the compositor, but not generate
-  // any content to draw. So the layer is marked as opaque and to draw
-  // solid-color (but the color is transparent, so nothing is actually drawn).
-  ui::Layer* layer = widget_->GetNativeWindow()->layer();
-  layer->SetColor(SK_ColorTRANSPARENT);
-  layer->SetFillsBoundsOpaquely(true);
-
-  aura::client::GetTransientWindowClient()->AddObserver(this);
+  wm::MakeGestureDraggableInImmersiveMode(window_);
 }
 
 // static
@@ -359,18 +280,18 @@ NonClientFrameController* NonClientFrameController::Get(aura::Window* window) {
 
 // static
 gfx::Insets NonClientFrameController::GetPreferredClientAreaInsets() {
-  return gfx::Insets(
-      GetAshLayoutSize(AshLayoutSize::kNonBrowserCaption).height(), 0, 0, 0);
+  return gfx::Insets(views::GetCaptionButtonLayoutSize(
+                         views::CaptionButtonLayoutSize::kNonBrowserCaption)
+                         .height(),
+                     0, 0, 0);
 }
 
 // static
 int NonClientFrameController::GetMaxTitleBarButtonWidth() {
-  return GetAshLayoutSize(AshLayoutSize::kNonBrowserCaption).width() * 3;
-}
-
-void NonClientFrameController::SetClientArea(const gfx::Insets& insets) {
-  static_cast<WmNativeWidgetAura*>(widget_->native_widget())
-      ->SetHeaderHeight(insets.top());
+  return views::GetCaptionButtonLayoutSize(
+             views::CaptionButtonLayoutSize::kNonBrowserCaption)
+             .width() *
+         3;
 }
 
 void NonClientFrameController::StoreCursor(const ui::Cursor& cursor) {
@@ -435,7 +356,15 @@ views::ClientView* NonClientFrameController::CreateClientView(
     views::Widget* widget) {
   DCHECK(!contents_view_);
   contents_view_ = new ContentsViewMus();  // Owned by views hierarchy.
-  return new ClientViewMus(widget, contents_view_, this);
+  return new ClientViewMus(widget, contents_view_, top_level_proxy_window_);
+}
+
+void NonClientFrameController::OnWindowBeginUserBoundsChange() {
+  top_level_proxy_window_->OnWindowResizeLoopStarted();
+}
+
+void NonClientFrameController::OnWindowEndUserBoundsChange() {
+  top_level_proxy_window_->OnWindowResizeLoopEnded();
 }
 
 void NonClientFrameController::OnWindowPropertyChanged(aura::Window* window,
@@ -461,36 +390,7 @@ void NonClientFrameController::OnWindowDestroyed(aura::Window* window) {
   window_ = nullptr;
 }
 
-void NonClientFrameController::OnTransientChildWindowAdded(
-    aura::Window* parent,
-    aura::Window* transient_child) {
-  if (parent != window_ ||
-      !transient_child->GetProperty(kRenderTitleAreaProperty)) {
-    return;
-  }
-
-  DetachedTitleAreaRendererForClient* renderer =
-      DetachedTitleAreaRendererForClient::ForWindow(transient_child);
-  if (!renderer || renderer->is_attached())
-    return;
-
-  renderer->Attach(widget_);
-}
-
-void NonClientFrameController::OnTransientChildWindowRemoved(
-    aura::Window* parent,
-    aura::Window* transient_child) {
-  if (parent != window_)
-    return;
-
-  DetachedTitleAreaRendererForClient* renderer =
-      DetachedTitleAreaRendererForClient::ForWindow(transient_child);
-  if (renderer)
-    renderer->Detach();
-}
-
 NonClientFrameController::~NonClientFrameController() {
-  aura::client::GetTransientWindowClient()->RemoveObserver(this);
   if (window_)
     window_->RemoveObserver(this);
 }

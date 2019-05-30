@@ -5,7 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_PRESENTATION_PRESENTATION_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_PRESENTATION_PRESENTATION_H_
 
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
@@ -27,6 +27,8 @@ class Presentation final : public ScriptWrappable, public ContextClient {
  public:
   static Presentation* Create(LocalFrame*);
 
+  explicit Presentation(LocalFrame*);
+
   void Trace(blink::Visitor*) override;
 
   PresentationRequest* defaultRequest() const;
@@ -35,8 +37,6 @@ class Presentation final : public ScriptWrappable, public ContextClient {
   PresentationReceiver* receiver();
 
  private:
-  explicit Presentation(LocalFrame*);
-
   // Default PresentationRequest used by the embedder.
   Member<PresentationRequest> default_request_;
 

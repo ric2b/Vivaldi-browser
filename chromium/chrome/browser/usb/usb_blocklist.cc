@@ -5,13 +5,13 @@
 #include "chrome/browser/usb/usb_blocklist.h"
 
 #include <algorithm>
+#include <string>
 #include <tuple>
 
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "components/variations/variations_associated_data.h"
 #include "device/usb/public/mojom/device.mojom.h"
-#include "device/usb/usb_device.h"
 
 namespace {
 
@@ -68,6 +68,8 @@ const UsbBlocklist::Entry kStaticEntries[] = {
     {0x096e, 0x085b, kMaxVersion},  // Feitian
     {0x096e, 0x0880, kMaxVersion},  // HyperFIDO
 
+    {0x09c3, 0x0023, kMaxVersion},  // HID Global BlueTrust Token
+
     // Yubikey devices. https://crbug.com/818807
     {0x1050, 0x0010, kMaxVersion},
     {0x1050, 0x0018, kMaxVersion},
@@ -122,12 +124,6 @@ bool UsbBlocklist::IsExcluded(const Entry& entry) const {
   return EntryMatches(std::begin(kStaticEntries), std::end(kStaticEntries),
                       entry) ||
          EntryMatches(dynamic_entries_.begin(), dynamic_entries_.end(), entry);
-}
-
-bool UsbBlocklist::IsExcluded(
-    const scoped_refptr<const device::UsbDevice>& device) const {
-  return IsExcluded(Entry(device->vendor_id(), device->product_id(),
-                          device->device_version()));
 }
 
 bool UsbBlocklist::IsExcluded(

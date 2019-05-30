@@ -41,24 +41,18 @@ class DEVICE_GAMEPAD_EXPORT GamepadPlatformDataFetcherLinux
   // GamepadDataFetcher implementation.
   void GetGamepadData(bool devices_changed_hint) override;
 
-  void PlayEffect(
-      int pad_index,
-      mojom::GamepadHapticEffectType,
-      mojom::GamepadEffectParametersPtr,
-      mojom::GamepadHapticsManager::PlayVibrationEffectOnceCallback) override;
+  void PlayEffect(int pad_index,
+                  mojom::GamepadHapticEffectType,
+                  mojom::GamepadEffectParametersPtr,
+                  mojom::GamepadHapticsManager::PlayVibrationEffectOnceCallback,
+                  scoped_refptr<base::SequencedTaskRunner>) override;
 
   void ResetVibration(
       int pad_index,
-      mojom::GamepadHapticsManager::ResetVibrationActuatorCallback) override;
+      mojom::GamepadHapticsManager::ResetVibrationActuatorCallback,
+      scoped_refptr<base::SequencedTaskRunner>) override;
 
  private:
-  // Updates the ID and mapper strings in |pad| with new device info.
-  static void UpdateGamepadStrings(const std::string& name,
-                                   const std::string& vendor_id,
-                                   const std::string& product_id,
-                                   bool has_standard_mapping,
-                                   Gamepad* pad);
-
   void OnAddedToProvider() override;
 
   void RefreshDevice(udev_device* dev);

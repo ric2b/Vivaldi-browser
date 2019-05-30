@@ -14,7 +14,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
+#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_client.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "components/account_id/account_id.h"
 #endif
@@ -50,11 +50,11 @@ Profile* GetFeedbackProfile(Browser* browser) {
 
 #if defined(OS_CHROMEOS)
   // Obtains the display profile ID on which the Feedback window should show.
-  MultiUserWindowManager* const window_manager =
-      MultiUserWindowManager::GetInstance();
+  MultiUserWindowManagerClient* const window_manager_client =
+      MultiUserWindowManagerClient::GetInstance();
   const AccountId display_account_id =
-      window_manager && browser
-          ? window_manager->GetUserPresentingWindow(
+      window_manager_client && browser
+          ? window_manager_client->GetUserPresentingWindow(
                 browser->window()->GetNativeWindow())
           : EmptyAccountId();
   if (display_account_id.is_valid())

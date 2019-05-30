@@ -29,7 +29,7 @@
  * @type {number}
  * @const
  */
-var REPEAT_BACKSPACE_DELAY_MS = 150;
+const REPEAT_BACKSPACE_DELAY_MS = 150;
 
 /**
  * How long the backspace button must be held down before auto backspace
@@ -37,7 +37,7 @@ var REPEAT_BACKSPACE_DELAY_MS = 150;
  * @type {number}
  * @const
  */
-var INITIAL_BACKSPACE_DELAY_MS = 500;
+const INITIAL_BACKSPACE_DELAY_MS = 500;
 
 /**
  * The key codes of the keys allowed to be used on the pin input, in addition to
@@ -45,7 +45,7 @@ var INITIAL_BACKSPACE_DELAY_MS = 500;
  * @type {Array<number>}
  * @const
  */
-var PIN_INPUT_ALLOWED_NON_NUMBER_KEY_CODES = [8, 9, 37, 39];
+const PIN_INPUT_ALLOWED_NON_NUMBER_KEY_CODES = [8, 9, 37, 39];
 
 Polymer({
   is: 'pin-keyboard',
@@ -103,6 +103,36 @@ Polymer({
       value: '',
       observer: 'onPinValueChange_',
     },
+
+    /**
+     * @private
+     */
+    forceUnderline_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /**
+     * Enables pin placeholder.
+     */
+    enablePlaceholder: {
+      type: Boolean,
+      value: false,
+    },
+
+    /**
+     * Turns on "incognito mode". (FIXME after https://crbug.com/900351 is
+     * fixed).
+     */
+    isIncognitoUi: {
+      type: Boolean,
+      value: false,
+    },
+  },
+
+  listeners: {
+    'blur': 'onBlur_',
+    'focus': 'onFocus_',
   },
 
   /**
@@ -155,7 +185,7 @@ Polymer({
    * @param {number=} opt_selectionStart
    * @param {number=} opt_selectionEnd
    */
-  focus: function(opt_selectionStart, opt_selectionEnd) {
+  focusInput: function(opt_selectionStart, opt_selectionEnd) {
     setTimeout(function() {
       this.passwordElement_().focus();
       this.selectionStart_ = opt_selectionStart || 0;
@@ -167,11 +197,21 @@ Polymer({
    * Transfers focus to the input. Called when a non button element on the
    * PIN button area is clicked to prevent focus from leaving the input.
    */
-  focusInput_: function() {
+  onRootTap_: function() {
     // Focus the input and place the selected region to its exact previous
     // location, as this function will not be called by something that will also
     // modify the input value.
-    this.focus(this.selectionStart_, this.selectionEnd_);
+    this.focusInput(this.selectionStart_, this.selectionEnd_);
+  },
+
+  /** @private */
+  onFocus_: function() {
+    this.forceUnderline_ = true;
+  },
+
+  /** @private */
+  onBlur_: function() {
+    this.forceUnderline_ = false;
   },
 
   /**
@@ -180,11 +220,11 @@ Polymer({
    * @private
    */
   onNumberTap_: function(event) {
-    var numberValue = event.target.getAttribute('value');
+    const numberValue = event.target.getAttribute('value');
 
     // Add the number where the caret is, then update the selection range of the
     // input element.
-    var selectionStart = this.selectionStart_;
+    const selectionStart = this.selectionStart_;
     this.value = this.value.substring(0, this.selectionStart_) + numberValue +
         this.value.substring(this.selectionEnd_);
 
@@ -192,8 +232,9 @@ Polymer({
     // button, therefore we transfer focus back to the input, but if a number
     // button is tabbed into, it should keep focus, so users can use tab and
     // spacebar/return to enter their PIN.
-    if (!event.target.receivedFocusFromKeyboard)
-      this.focus(selectionStart + 1, selectionStart + 1);
+    if (!event.target.receivedFocusFromKeyboard) {
+      this.focusInput(selectionStart + 1, selectionStart + 1);
+    }
     event.stopImmediatePropagation();
   },
 
@@ -209,8 +250,9 @@ Polymer({
    * @param {string} previous
    */
   onPinValueChange_: function(value, previous) {
-    if (this.passwordElement)
+    if (this.passwordElement) {
       this.passwordElement.value = value;
+    }
     this.fire('pin-change', {pin: value});
   },
 
@@ -223,10 +265,11 @@ Polymer({
     // If the input is shown, clear the text based on the caret location or
     // selected region of the input element. If it is just a caret, remove the
     // character in front of the caret.
-    var selectionStart = this.selectionStart_;
-    var selectionEnd = this.selectionEnd_;
-    if (selectionStart == selectionEnd && selectionStart)
+    let selectionStart = this.selectionStart_;
+    const selectionEnd = this.selectionEnd_;
+    if (selectionStart == selectionEnd && selectionStart) {
       selectionStart--;
+    }
 
     this.value = this.value.substring(0, selectionStart) +
         this.value.substring(selectionEnd);
@@ -234,6 +277,25 @@ Polymer({
     // Move the caret or selected region to the correct new place.
     this.selectionStart_ = selectionStart;
     this.selectionEnd_ = selectionStart;
+  },
+
+  /**
+   * Called when user taps the backspace the button. Only does something when
+   * the tap comes from the keyboard. onBackspacePointerDown_ and
+   * onBackspacePointerUp_ will handle the events if they come from mouse or
+   * touch. Note: This does not support repeatedly backspacing by holding down
+   * the space or enter key like touch or mouse does.
+   * @param {Event} event The event object.
+   * @private
+   */
+  onBackspaceTap_: function(event) {
+    if (!event.target.receivedFocusFromKeyboard) {
+      return;
+    }
+
+    this.onPinClear_();
+    this.clearAndReset_();
+    event.stopImmediatePropagation();
   },
 
   /**
@@ -249,8 +311,9 @@ Polymer({
           setInterval(this.onPinClear_.bind(this), REPEAT_BACKSPACE_DELAY_MS);
     }.bind(this), INITIAL_BACKSPACE_DELAY_MS);
 
-    if (!event.target.receivedFocusFromKeyboard)
-      this.focus(this.selectionStart_, this.selectionEnd_);
+    if (!event.target.receivedFocusFromKeyboard) {
+      this.focusInput(this.selectionStart_, this.selectionEnd_);
+    }
     event.stopImmediatePropagation();
   },
 
@@ -274,17 +337,19 @@ Polymer({
    */
   onBackspacePointerUp_: function(event) {
     // If an interval has started, do not fire event on pointer up.
-    if (!this.repeatBackspaceIntervalId_)
+    if (!this.repeatBackspaceIntervalId_) {
       this.onPinClear_();
+    }
     this.clearAndReset_();
 
     // Since on-down gives the input element focus, the input element will
     // already have focus when on-up is called. This will actually bring up the
-    // virtual keyboard, even if focus() is wrapped in a setTimeout. Blur the
-    // input element first to workaround this.
+    // virtual keyboard, even if focusInput() is wrapped in a setTimeout. Blur
+    // the input element first to workaround this.
     this.blur();
-    if (!event.target.receivedFocusFromKeyboard)
-      this.focus(this.selectionStart_, this.selectionEnd_);
+    if (!event.target.receivedFocusFromKeyboard) {
+      this.focusInput(this.selectionStart_, this.selectionEnd_);
+    }
     event.stopImmediatePropagation();
   },
 
@@ -296,18 +361,21 @@ Polymer({
    */
   isValidEventForInput_: function(event) {
     // Valid if the key is a number, and shift is not pressed.
-    if ((event.keyCode >= 48 && event.keyCode <= 57) && !event.shiftKey)
+    if ((event.keyCode >= 48 && event.keyCode <= 57) && !event.shiftKey) {
       return true;
+    }
 
     // Valid if the key is one of the selected special keys defined in
     // |PIN_INPUT_ALLOWED_NON_NUMBER_KEY_CODES|.
-    if (PIN_INPUT_ALLOWED_NON_NUMBER_KEY_CODES.indexOf(event.keyCode) > -1)
+    if (PIN_INPUT_ALLOWED_NON_NUMBER_KEY_CODES.indexOf(event.keyCode) > -1) {
       return true;
+    }
 
     // Valid if the key is CTRL+A to allow users to quickly select the entire
     // PIN.
-    if (event.keyCode == 65 && event.ctrlKey)
+    if (event.keyCode == 65 && event.ctrlKey) {
       return true;
+    }
 
     // The rest of the keys are invalid.
     return false;
@@ -355,9 +423,14 @@ Polymer({
   /**
    * Computes the value of the pin input placeholder.
    * @param {boolean} enablePassword
+   * @param {boolean} enablePlaceholder
    * @private
    */
-  getInputPlaceholder_: function(enablePassword) {
+  getInputPlaceholder_: function(enablePassword, enablePlaceholder) {
+    if (!enablePlaceholder) {
+      return '';
+    }
+
     return enablePassword ? this.i18n('pinKeyboardPlaceholderPinPassword') :
                             this.i18n('pinKeyboardPlaceholderPin');
   },

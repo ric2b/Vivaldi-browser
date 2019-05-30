@@ -20,8 +20,6 @@
 #error "This file requires ARC support."
 #endif
 
-DEFINE_WEB_STATE_USER_DATA_KEY(PassKitTabHelper);
-
 const char kUmaDownloadPassKitResult[] = "Download.IOSDownloadPassKitResult";
 
 namespace {
@@ -98,3 +96,5 @@ void PassKitTabHelper::OnDownloadUpdated(web::DownloadTask* updated_task) {
   updated_task->RemoveObserver(this);
   tasks_.erase(it);
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(PassKitTabHelper)

@@ -17,7 +17,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
@@ -25,23 +24,15 @@
 #include "chrome/browser/policy/cloud/user_policy_signin_service_factory.h"
 #include "chrome/browser/policy/cloud/user_policy_signin_service_mobile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/signin/account_tracker_service_factory.h"
-#include "chrome/browser/signin/oauth2_token_service_delegate_android.h"
-#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/common/pref_names.h"
-#include "components/bookmarks/browser/bookmark_model.h"
 #include "components/google/core/common/google_util.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/account_tracker_service.h"
-#include "components/signin/core/browser/profile_management_switches.h"
-#include "components/signin/core/browser/profile_oauth2_token_service.h"
-#include "components/signin/core/browser/signin_manager.h"
-#include "components/signin/core/browser/signin_metrics.h"
 #include "components/signin/core/browser/signin_pref_names.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/browsing_data_remover.h"
@@ -49,9 +40,9 @@
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "jni/SigninManager_jni.h"
+#include "services/identity/public/cpp/primary_account_mutator.h"
 
 using base::android::JavaParamRef;
-using bookmarks::BookmarkModel;
 
 namespace {
 
@@ -68,10 +59,10 @@ class ProfileDataRemover : public content::BrowsingDataRemover::Observer {
  public:
   ProfileDataRemover(Profile* profile,
                      bool all_data,
-                     const base::Closure& callback)
+                     base::OnceClosure callback)
       : profile_(profile),
         all_data_(all_data),
-        callback_(callback),
+        callback_(std::move(callback)),
         origin_runner_(base::ThreadTaskRunnerHandle::Get()),
         remover_(content::BrowserContext::GetBrowsingDataRemover(profile)) {
     remover_->AddObserver(this);
@@ -113,14 +104,14 @@ class ProfileDataRemover : public content::BrowsingDataRemover::Observer {
       ClearLastSignedInUserForProfile(profile_);
     }
 
-    origin_runner_->PostTask(FROM_HERE, callback_);
+    origin_runner_->PostTask(FROM_HERE, std::move(callback_));
     origin_runner_->DeleteSoon(FROM_HERE, this);
   }
 
  private:
   Profile* profile_;
   bool all_data_;
-  base::Closure callback_;
+  base::OnceClosure callback_;
   scoped_refptr<base::SingleThreadTaskRunner> origin_runner_;
   content::BrowsingDataRemover* remover_;
 
@@ -141,7 +132,7 @@ SigninManagerAndroid::SigninManagerAndroid(JNIEnv* env, jobject obj)
   java_signin_manager_.Reset(env, obj);
   profile_ = ProfileManager::GetActiveUserProfile();
   DCHECK(profile_);
-  SigninManagerFactory::GetForProfile(profile_)->AddObserver(this);
+  IdentityManagerFactory::GetForProfile(profile_)->AddObserver(this);
   pref_change_registrar_.Init(profile_->GetPrefs());
   pref_change_registrar_.Add(
       prefs::kSigninAllowed,
@@ -149,7 +140,9 @@ SigninManagerAndroid::SigninManagerAndroid(JNIEnv* env, jobject obj)
                  base::Unretained(this)));
 }
 
-SigninManagerAndroid::~SigninManagerAndroid() {}
+SigninManagerAndroid::~SigninManagerAndroid() {
+  IdentityManagerFactory::GetForProfile(profile_)->RemoveObserver(this);
+}
 
 void SigninManagerAndroid::CheckPolicyBeforeSignIn(
     JNIEnv* env,
@@ -160,8 +153,9 @@ void SigninManagerAndroid::CheckPolicyBeforeSignIn(
       policy::UserPolicySigninServiceFactory::GetForProfile(profile_);
   service->RegisterForPolicyWithAccountId(
       username_,
-      AccountTrackerServiceFactory::GetForProfile(profile_)
-          ->FindAccountInfoByEmail(username_)
+      IdentityManagerFactory::GetForProfile(profile_)
+          ->FindAccountInfoForAccountWithRefreshTokenByEmailAddress(username_)
+          .value()
           .account_id,
       base::Bind(&SigninManagerAndroid::OnPolicyRegisterDone,
                  weak_factory_.GetWeakPtr()));
@@ -178,8 +172,10 @@ void SigninManagerAndroid::FetchPolicyBeforeSignIn(
             ->GetURLLoaderFactoryForBrowserProcess();
     service->FetchPolicyForSignedInUser(
         AccountIdFromAccountInfo(
-            AccountTrackerServiceFactory::GetForProfile(profile_)
-                ->FindAccountInfoByEmail(username_)),
+            IdentityManagerFactory::GetForProfile(profile_)
+                ->FindAccountInfoForAccountWithRefreshTokenByEmailAddress(
+                    username_)
+                .value()),
         dm_token_, client_id_, url_loader_factory,
         base::Bind(&SigninManagerAndroid::OnPolicyFetchDone,
                    weak_factory_.GetWeakPtr()));
@@ -207,17 +203,28 @@ void SigninManagerAndroid::OnSignInCompleted(
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jstring>& username) {
   DVLOG(1) << "SigninManagerAndroid::OnSignInCompleted";
+
+  // TODO(crbug.com/889902): Migrate to IdentityManager once there's an
+  // API mapping for SigninManager::OnExternalSigninCompleted().
   SigninManagerFactory::GetForProfile(profile_)->OnExternalSigninCompleted(
       base::android::ConvertJavaStringToUTF8(env, username));
 }
 
 void SigninManagerAndroid::SignOut(JNIEnv* env,
-                                   const JavaParamRef<jobject>& obj) {
-  // TODO(bauerb): This is not only called for a user-triggered signout.
-  // We should pass the reason in here from Java.
-  SigninManagerFactory::GetForProfile(profile_)
-      ->SignOut(signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS,
-                signin_metrics::SignoutDelete::IGNORE_METRIC);
+                                   const JavaParamRef<jobject>& obj,
+                                   jint signoutReason) {
+  auto* account_mutator = IdentityManagerFactory::GetForProfile(profile_)
+                              ->GetPrimaryAccountMutator();
+
+  // GetPrimaryAccountMutator() returns nullptr on ChromeOS only.
+  DCHECK(account_mutator);
+  account_mutator->ClearPrimaryAccount(
+      identity::PrimaryAccountMutator::ClearAccountsAction::kDefault,
+      static_cast<signin_metrics::ProfileSignout>(signoutReason),
+      // Always use IGNORE_METRIC for the profile deletion argument. Chrome
+      // Android has just a single-profile which is never deleted upon
+      // sign-out.
+      signin_metrics::SignoutDelete::IGNORE_METRIC);
 }
 
 base::android::ScopedJavaLocalRef<jstring>
@@ -238,28 +245,19 @@ SigninManagerAndroid::GetManagementDomain(JNIEnv* env,
   return domain;
 }
 
-void SigninManagerAndroid::WipeProfileData(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jobject>& callback) {
-  base::android::ScopedJavaGlobalRef<jobject> java_callback;
-  java_callback.Reset(env, callback);
-
+void SigninManagerAndroid::WipeProfileData(JNIEnv* env,
+                                           const JavaParamRef<jobject>& obj) {
   WipeData(profile_, true /* all data */,
            base::Bind(&SigninManagerAndroid::OnBrowsingDataRemoverDone,
-                      weak_factory_.GetWeakPtr(), java_callback));
+                      weak_factory_.GetWeakPtr()));
 }
 
 void SigninManagerAndroid::WipeGoogleServiceWorkerCaches(
     JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jobject>& callback) {
-  base::android::ScopedJavaGlobalRef<jobject> java_callback;
-  java_callback.Reset(env, callback);
-
+    const JavaParamRef<jobject>& obj) {
   WipeData(profile_, false /* only Google service worker caches */,
            base::Bind(&SigninManagerAndroid::OnBrowsingDataRemoverDone,
-                      weak_factory_.GetWeakPtr(), java_callback));
+                      weak_factory_.GetWeakPtr()));
 }
 
 void SigninManagerAndroid::OnPolicyRegisterDone(
@@ -288,10 +286,9 @@ void SigninManagerAndroid::OnPolicyFetchDone(bool success) {
       base::android::AttachCurrentThread(), java_signin_manager_);
 }
 
-void SigninManagerAndroid::OnBrowsingDataRemoverDone(
-    const base::android::ScopedJavaGlobalRef<jobject>& callback) {
+void SigninManagerAndroid::OnBrowsingDataRemoverDone() {
   Java_SigninManager_onProfileDataWiped(base::android::AttachCurrentThread(),
-                                        java_signin_manager_, callback);
+                                        java_signin_manager_);
 }
 
 void SigninManagerAndroid::ClearLastSignedInUser(
@@ -302,22 +299,18 @@ void SigninManagerAndroid::ClearLastSignedInUser(
 
 void SigninManagerAndroid::LogInSignedInUser(JNIEnv* env,
                                              const JavaParamRef<jobject>& obj) {
-  SigninManagerBase* signin_manager =
-      SigninManagerFactory::GetForProfile(profile_);
+  identity::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(profile_);
   // With the account consistency enabled let the account Reconcilor handles
   // everything.
-  ProfileOAuth2TokenService* token_service =
-      ProfileOAuth2TokenServiceFactory::GetForProfile(profile_);
-  const std::string& primary_acct = signin_manager->GetAuthenticatedAccountId();
-
-  static_cast<OAuth2TokenServiceDelegateAndroid*>(token_service->GetDelegate())
-      ->ValidateAccounts(primary_acct, true);
+  // TODO(https://crbug.com/930094): Determine the right long-term flow here.
+  identity_manager->LegacyReloadAccountsFromSystem();
 }
 
 jboolean SigninManagerAndroid::IsSigninAllowedByPolicy(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  return SigninManagerFactory::GetForProfile(profile_)->IsSigninAllowed();
+  return profile_->GetPrefs()->GetBoolean(prefs::kSigninAllowed);
 }
 
 jboolean SigninManagerAndroid::IsForceSigninEnabled(
@@ -331,24 +324,11 @@ jboolean SigninManagerAndroid::IsForceSigninEnabled(
 jboolean SigninManagerAndroid::IsSignedInOnNative(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  return SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated();
+  return IdentityManagerFactory::GetForProfile(profile_)->HasPrimaryAccount();
 }
 
-void SigninManagerAndroid::ProhibitSignout(JNIEnv* env,
-                                           const JavaParamRef<jobject>& obj,
-                                           jboolean prohibit_signout) {
-  SigninManagerFactory::GetForProfile(profile_)->ProhibitSignout(
-      prohibit_signout);
-}
-
-void SigninManagerAndroid::GoogleSigninFailed(
-    const GoogleServiceAuthError& error) {}
-
-void SigninManagerAndroid::GoogleSigninSucceeded(const std::string& account_id,
-                                                 const std::string& username) {}
-
-void SigninManagerAndroid::GoogleSignedOut(const std::string& account_id,
-                                           const std::string& username) {
+void SigninManagerAndroid::OnPrimaryAccountCleared(
+    const CoreAccountInfo& previous_primary_account_info) {
   DCHECK(thread_checker_.CalledOnValidThread());
   Java_SigninManager_onNativeSignOut(base::android::AttachCurrentThread(),
                                      java_signin_manager_);
@@ -357,15 +337,15 @@ void SigninManagerAndroid::GoogleSignedOut(const std::string& account_id,
 void SigninManagerAndroid::OnSigninAllowedPrefChanged() {
   Java_SigninManager_onSigninAllowedByPolicyChanged(
       base::android::AttachCurrentThread(), java_signin_manager_,
-      SigninManagerFactory::GetForProfile(profile_)->IsSigninAllowed());
+      profile_->GetPrefs()->GetBoolean(prefs::kSigninAllowed));
 }
 
 // static
 void SigninManagerAndroid::WipeData(Profile* profile,
                                     bool all_data,
-                                    const base::Closure& callback) {
+                                    base::OnceClosure callback) {
   // The ProfileDataRemover deletes itself once done.
-  new ProfileDataRemover(profile, all_data, callback);
+  new ProfileDataRemover(profile, all_data, std::move(callback));
 }
 
 static jlong JNI_SigninManager_Init(JNIEnv* env,
@@ -377,7 +357,7 @@ static jlong JNI_SigninManager_Init(JNIEnv* env,
 
 static jboolean JNI_SigninManager_ShouldLoadPolicyForUser(
     JNIEnv* env,
-    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jobject>& obj,
     const JavaParamRef<jstring>& j_username) {
   std::string username =
       base::android::ConvertJavaStringToUTF8(env, j_username);
@@ -386,7 +366,7 @@ static jboolean JNI_SigninManager_ShouldLoadPolicyForUser(
 
 static void JNI_SigninManager_IsUserManaged(
     JNIEnv* env,
-    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jobject>& obj,
     const JavaParamRef<jstring>& j_username,
     const JavaParamRef<jobject>& j_callback) {
   base::android::ScopedJavaGlobalRef<jobject> callback(env, j_callback);
@@ -398,15 +378,16 @@ static void JNI_SigninManager_IsUserManaged(
       policy::UserPolicySigninServiceFactory::GetForProfile(profile);
   service->RegisterForPolicyWithAccountId(
       username,
-      AccountTrackerServiceFactory::GetForProfile(profile)
-          ->FindAccountInfoByEmail(username)
+      IdentityManagerFactory::GetForProfile(profile)
+          ->FindAccountInfoForAccountWithRefreshTokenByEmailAddress(username)
+          .value()
           .account_id,
       base::Bind(&UserManagementDomainFetched, callback));
 }
 
 base::android::ScopedJavaLocalRef<jstring> JNI_SigninManager_ExtractDomainName(
     JNIEnv* env,
-    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jobject>& obj,
     const JavaParamRef<jstring>& j_email) {
   std::string email = base::android::ConvertJavaStringToUTF8(env, j_email);
   std::string domain = gaia::ExtractDomainName(email);

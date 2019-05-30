@@ -32,12 +32,10 @@
 
 #include <stddef.h>
 #include <memory>
-#include "third_party/blink/public/platform/web_feature.mojom-shared.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/web/web_array_buffer.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/renderer/core/dom/document.h"
-#include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/inspector/console_types.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
 #include "third_party/blink/renderer/modules/websockets/web_pepper_socket_channel_client_proxy.h"
@@ -66,7 +64,6 @@ WebPepperSocketImpl::WebPepperSocketImpl(const WebDocument& document,
   Document* core_document = document;
   private_ = WebSocketChannelImpl::Create(core_document, channel_proxy_.Get(),
                                           SourceLocation::Capture());
-  Deprecation::CountDeprecation(*core_document, WebFeature::kPPAPIWebSocket);
   DCHECK(private_);
 }
 
@@ -125,7 +122,7 @@ void WebPepperSocketImpl::Close(int code, const WebString& reason) {
 }
 
 void WebPepperSocketImpl::Fail(const WebString& reason) {
-  private_->Fail(reason, kErrorMessageLevel,
+  private_->Fail(reason, mojom::ConsoleMessageLevel::kError,
                  SourceLocation::Create(String(), 0, 0, nullptr));
 }
 
@@ -157,7 +154,7 @@ void WebPepperSocketImpl::DidError() {
   client_->DidReceiveMessageError();
 }
 
-void WebPepperSocketImpl::DidConsumeBufferedAmount(unsigned long consumed) {
+void WebPepperSocketImpl::DidConsumeBufferedAmount(uint64_t consumed) {
   client_->DidConsumeBufferedAmount(consumed);
 
   // FIXME: Deprecate the following statements.
@@ -171,7 +168,7 @@ void WebPepperSocketImpl::DidStartClosingHandshake() {
 
 void WebPepperSocketImpl::DidClose(
     WebSocketChannelClient::ClosingHandshakeCompletionStatus status,
-    unsigned short code,
+    uint16_t code,
     const String& reason) {
   is_closing_or_closed_ = true;
   client_->DidClose(

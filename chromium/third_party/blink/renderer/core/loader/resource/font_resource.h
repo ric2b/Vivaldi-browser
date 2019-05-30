@@ -33,7 +33,7 @@
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_client.h"
-#include "third_party/blink/renderer/platform/web_task_runner.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
 
 namespace blink {
 
@@ -47,6 +47,8 @@ class CORE_EXPORT FontResource final : public Resource {
   static FontResource* Fetch(FetchParameters&,
                              ResourceFetcher*,
                              FontResourceClient*);
+
+  FontResource(const ResourceRequest&, const ResourceLoaderOptions&);
   ~FontResource() override;
 
   void DidAddClient(ResourceClient*) override;
@@ -73,14 +75,13 @@ class CORE_EXPORT FontResource final : public Resource {
  private:
   class FontResourceFactory : public NonTextResourceFactory {
    public:
-    FontResourceFactory() : NonTextResourceFactory(Resource::kFont) {}
+    FontResourceFactory() : NonTextResourceFactory(ResourceType::kFont) {}
 
     Resource* Create(const ResourceRequest& request,
                      const ResourceLoaderOptions& options) const override {
-      return new FontResource(request, options);
+      return MakeGarbageCollected<FontResource>(request, options);
     }
   };
-  FontResource(const ResourceRequest&, const ResourceLoaderOptions&);
 
   void NotifyFinished() override;
   void FontLoadShortLimitCallback();
@@ -105,7 +106,7 @@ class CORE_EXPORT FontResource final : public Resource {
   TaskHandle font_load_long_limit_;
 
   friend class MemoryCache;
-  FRIEND_TEST_ALL_PREFIXES(FontResourceTest, CacheAwareFontLoading);
+  FRIEND_TEST_ALL_PREFIXES(CacheAwareFontResourceTest, CacheAwareFontLoading);
 };
 
 DEFINE_RESOURCE_TYPE_CASTS(Font);
@@ -113,10 +114,8 @@ DEFINE_RESOURCE_TYPE_CASTS(Font);
 class FontResourceClient : public ResourceClient {
  public:
   ~FontResourceClient() override = default;
-  static bool IsExpectedType(ResourceClient* client) {
-    return client->GetResourceClientType() == kFontType;
-  }
-  ResourceClientType GetResourceClientType() const final { return kFontType; }
+
+  bool IsFontResourceClient() const final { return true; }
 
   // If cache-aware loading is activated, both callbacks will be blocked until
   // disk cache miss. Calls to addClient() and removeClient() in both callbacks

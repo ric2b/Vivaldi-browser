@@ -7,7 +7,6 @@
 
 #import <UIKit/UIKit.h>
 
-#include "ios/chrome/browser/infobars/infobar_container_ios.h"
 #import "ios/chrome/browser/snapshots/snapshot_generator_delegate.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/web/web_state/ui/crw_swipe_recognizer_provider.h"
@@ -22,24 +21,6 @@
 extern NSString* const kSideSwipeWillStartNotification;
 // Notification sent when the user finishes a side swipe (on tablet).
 extern NSString* const kSideSwipeDidStopNotification;
-
-// A protocol for the Side Swipe controller sources.
-@protocol SideSwipeContentProvider
-// Returns whether this source can provide content for a back/forward side swipe
-// gesture.
-- (BOOL)canGoBack;
-- (BOOL)canGoForward;
-
-// Called on completion of a back/forward gesture.
-- (void)goBack:(web::WebState*)webState;
-- (void)goForward:(web::WebState*)webState;
-
-// The icon to display in the side panel.
-- (UIImage*)paneIcon;
-
-// Whether the icon is oriented and should be reflected on forward pane.
-- (BOOL)rotateForwardIcon;
-@end
 
 @protocol SideSwipeControllerDelegate
 @required
@@ -65,6 +46,7 @@ extern NSString* const kSideSwipeDidStopNotification;
 - (BOOL)canBeginToolbarSwipe;
 // Returns the top toolbar's view.
 - (UIView*)topToolbarView;
+
 @end
 
 // Controls how an edge gesture is processed, either as tab change or a page

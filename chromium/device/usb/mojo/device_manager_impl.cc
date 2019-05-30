@@ -16,42 +16,48 @@
 #include "device/base/device_client.h"
 #include "device/usb/mojo/device_impl.h"
 #include "device/usb/mojo/type_converters.h"
-#include "device/usb/public/cpp/filter_utils.h"
+#include "device/usb/public/cpp/usb_utils.h"
 #include "device/usb/public/mojom/device.mojom.h"
+#include "device/usb/public/mojom/device_enumeration_options.mojom.h"
+#include "device/usb/public/mojom/device_manager_client.mojom.h"
 #include "device/usb/usb_device.h"
 #include "device/usb/usb_service.h"
+
+#if defined(OS_CHROMEOS)
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/permission_broker_client.h"
+#include "device/usb/usb_device_linux.h"
+#endif  // defined(OS_CHROMEOS)
 
 namespace device {
 namespace usb {
 
-// static
-void DeviceManagerImpl::Create(
-    mojom::UsbDeviceManagerRequest request) {
-  DCHECK(DeviceClient::Get());
-  UsbService* service = DeviceClient::Get()->GetUsbService();
-  if (!service)
-    return;
-
-  auto* device_manager_impl = new DeviceManagerImpl(service);
-  device_manager_impl->binding_ = mojo::MakeStrongBinding(
-      base::WrapUnique(device_manager_impl), std::move(request));
-}
-
-DeviceManagerImpl::DeviceManagerImpl(UsbService* usb_service)
-    : usb_service_(usb_service), observer_(this), weak_factory_(this) {
-  // This object owns itself and will be destroyed if the message pipe it is
-  // bound to is closed, the message loop is destructed, or the UsbService is
-  // shut down.
-  observer_.Add(usb_service_);
+DeviceManagerImpl::DeviceManagerImpl() : observer_(this), weak_factory_(this) {
+  usb_service_ = DeviceClient::Get()->GetUsbService();
+  if (usb_service_)
+    observer_.Add(usb_service_);
 }
 
 DeviceManagerImpl::~DeviceManagerImpl() = default;
 
+void DeviceManagerImpl::AddBinding(mojom::UsbDeviceManagerRequest request) {
+  if (usb_service_)
+    bindings_.AddBinding(this, std::move(request));
+}
+
+void DeviceManagerImpl::EnumerateDevicesAndSetClient(
+    mojom::UsbDeviceManagerClientAssociatedPtrInfo client,
+    EnumerateDevicesAndSetClientCallback callback) {
+  usb_service_->GetDevices(base::Bind(
+      &DeviceManagerImpl::OnGetDevices, weak_factory_.GetWeakPtr(),
+      /*options=*/nullptr, base::Passed(&client), base::Passed(&callback)));
+}
+
 void DeviceManagerImpl::GetDevices(mojom::UsbEnumerationOptionsPtr options,
                                    GetDevicesCallback callback) {
-  usb_service_->GetDevices(
-      base::Bind(&DeviceManagerImpl::OnGetDevices, weak_factory_.GetWeakPtr(),
-                 base::Passed(&options), base::Passed(&callback)));
+  usb_service_->GetDevices(base::Bind(
+      &DeviceManagerImpl::OnGetDevices, weak_factory_.GetWeakPtr(),
+      base::Passed(&options), /*client=*/nullptr, base::Passed(&callback)));
 }
 
 void DeviceManagerImpl::GetDevice(const std::string& guid,
@@ -65,12 +71,69 @@ void DeviceManagerImpl::GetDevice(const std::string& guid,
                      std::move(device_client));
 }
 
-void DeviceManagerImpl::SetClient(mojom::UsbDeviceManagerClientPtr client) {
-  client_ = std::move(client);
+#if defined(OS_CHROMEOS)
+void DeviceManagerImpl::CheckAccess(const std::string& guid,
+                                    CheckAccessCallback callback) {
+  scoped_refptr<UsbDevice> device = usb_service_->GetDevice(guid);
+  if (device) {
+    device->CheckUsbAccess(std::move(callback));
+  } else {
+    LOG(ERROR) << "Was asked to check access to non-existent USB device: "
+               << guid;
+    std::move(callback).Run(false);
+  }
+}
+
+void DeviceManagerImpl::OpenFileDescriptor(
+    const std::string& guid,
+    OpenFileDescriptorCallback callback) {
+  auto* client =
+      chromeos::DBusThreadManager::Get()->GetPermissionBrokerClient();
+  scoped_refptr<UsbDevice> device = usb_service_->GetDevice(guid);
+  if (!device) {
+    LOG(ERROR) << "Was asked to open non-existent USB device: " << guid;
+    std::move(callback).Run(base::File());
+  } else {
+    auto copyable_callback =
+        base::AdaptCallbackForRepeating(std::move(callback));
+    auto devpath =
+        static_cast<device::UsbDeviceLinux*>(device.get())->device_path();
+    client->OpenPath(
+        devpath,
+        base::BindRepeating(&DeviceManagerImpl::OnOpenFileDescriptor,
+                            weak_factory_.GetWeakPtr(), copyable_callback),
+        base::BindRepeating(&DeviceManagerImpl::OnOpenFileDescriptorError,
+                            weak_factory_.GetWeakPtr(), copyable_callback));
+  }
+}
+
+void DeviceManagerImpl::OnOpenFileDescriptor(
+    OpenFileDescriptorCallback callback,
+    base::ScopedFD fd) {
+  std::move(callback).Run(base::File(fd.release()));
+}
+
+void DeviceManagerImpl::OnOpenFileDescriptorError(
+    OpenFileDescriptorCallback callback,
+    const std::string& error_name,
+    const std::string& message) {
+  LOG(ERROR) << "Failed to open USB device file: " << error_name << " "
+             << message;
+  std::move(callback).Run(base::File());
+}
+#endif  // defined(OS_CHROMEOS)
+
+void DeviceManagerImpl::SetClient(
+    mojom::UsbDeviceManagerClientAssociatedPtrInfo client) {
+  DCHECK(client);
+  mojom::UsbDeviceManagerClientAssociatedPtr client_ptr;
+  client_ptr.Bind(std::move(client));
+  clients_.AddPtr(std::move(client_ptr));
 }
 
 void DeviceManagerImpl::OnGetDevices(
     mojom::UsbEnumerationOptionsPtr options,
+    mojom::UsbDeviceManagerClientAssociatedPtrInfo client,
     GetDevicesCallback callback,
     const std::vector<scoped_refptr<UsbDevice>>& devices) {
   std::vector<mojom::UsbDeviceFilterPtr> filters;
@@ -85,20 +148,34 @@ void DeviceManagerImpl::OnGetDevices(
   }
 
   std::move(callback).Run(std::move(device_infos));
+
+  if (client)
+    SetClient(std::move(client));
 }
 
 void DeviceManagerImpl::OnDeviceAdded(scoped_refptr<UsbDevice> device) {
-  if (client_)
-    client_->OnDeviceAdded(mojom::UsbDeviceInfo::From(*device));
+  auto device_info = device::mojom::UsbDeviceInfo::From(*device);
+  DCHECK(device_info);
+  clients_.ForAllPtrs([&device_info](mojom::UsbDeviceManagerClient* client) {
+    client->OnDeviceAdded(device_info->Clone());
+  });
 }
 
 void DeviceManagerImpl::OnDeviceRemoved(scoped_refptr<UsbDevice> device) {
-  if (client_)
-    client_->OnDeviceRemoved(mojom::UsbDeviceInfo::From(*device));
+  auto device_info = device::mojom::UsbDeviceInfo::From(*device);
+  DCHECK(device_info);
+  clients_.ForAllPtrs([&device_info](mojom::UsbDeviceManagerClient* client) {
+    client->OnDeviceRemoved(device_info->Clone());
+  });
 }
 
 void DeviceManagerImpl::WillDestroyUsbService() {
-  binding_->Close();
+  observer_.RemoveAll();
+  usb_service_ = nullptr;
+
+  // Close all the connections.
+  bindings_.CloseAllBindings();
+  clients_.CloseAll();
 }
 
 }  // namespace usb

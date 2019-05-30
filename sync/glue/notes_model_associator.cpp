@@ -6,11 +6,11 @@
 #include "sync/glue/notes_model_associator.h"
 
 #include <memory>
+#include <unordered_map>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/containers/hash_tables.h"
 #include "base/format_macros.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -93,7 +93,7 @@ class NotesNodeFinder {
   // Maps nodes node titles to instances, duplicates allowed.
   // Titles are converted to the sync internal format before
   // being used as keys for the map.
-  typedef base::hash_multimap<std::string, const Notes_Node*> NotesNodeMap;
+  typedef std::unordered_multimap<std::string, const Notes_Node*> NotesNodeMap;
   typedef std::pair<NotesNodeMap::iterator, NotesNodeMap::iterator>
       NotesNodeRange;
 

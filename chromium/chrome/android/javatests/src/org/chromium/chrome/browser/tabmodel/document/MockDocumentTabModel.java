@@ -8,8 +8,12 @@ import org.junit.Assert;
 
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
+import org.chromium.chrome.browser.tabmodel.TabSelectionType;
+
+import java.util.List;
 
 /**
  * Mocks out all of the DocumentTabModel calls to fail.  Override specific ones as needed.
@@ -43,6 +47,11 @@ public class MockDocumentTabModel implements DocumentTabModel {
     public Tab getNextTabIfClosed(int id) {
         Assert.fail();
         return null;
+    }
+
+    @Override
+    public void closeMultipleTabs(List<Tab> tabs, boolean canUndo) {
+        Assert.fail();
     }
 
     @Override

@@ -51,13 +51,19 @@ namespace base {
 class ListValue;
 }
 
+namespace content {
+class RenderThread;
+}  // namespace content
+
 namespace extensions {
 class ContentWatcher;
 class DispatcherDelegate;
 class ExtensionBindingsSystem;
 class IPCMessageSender;
 class ScriptContext;
+class ScriptContextSetIterable;
 class ScriptInjectionManager;
+class WorkerScriptContextSet;
 struct EventFilteringInfo;
 struct Message;
 struct PortId;
@@ -70,8 +76,16 @@ class Dispatcher : public content::RenderThreadObserver,
   explicit Dispatcher(std::unique_ptr<DispatcherDelegate> delegate);
   ~Dispatcher() override;
 
+  // Returns Service Worker ScriptContexts belonging to current worker thread.
+  static WorkerScriptContextSet* GetWorkerScriptContextSet();
+
   const ScriptContextSet& script_context_set() const {
     return *script_context_set_;
+  }
+
+  // Returns iterator to iterate over all main thread ScriptContexts.
+  ScriptContextSetIterable* script_context_set_iterator() {
+    return script_context_set_.get();
   }
 
   V8SchemaRegistry* v8_schema_registry() { return v8_schema_registry_.get(); }
@@ -79,6 +93,8 @@ class Dispatcher : public content::RenderThreadObserver,
   const std::string& webview_partition_id() { return webview_partition_id_; }
 
   bool activity_logging_enabled() const { return activity_logging_enabled_; }
+
+  void OnRenderThreadStarted(content::RenderThread* render_thread);
 
   void OnRenderFrameCreated(content::RenderFrame* render_frame);
 
@@ -99,6 +115,12 @@ class Dispatcher : public content::RenderThreadObserver,
   void WillReleaseScriptContext(blink::WebLocalFrame* frame,
                                 const v8::Local<v8::Context>& context,
                                 int world_id);
+
+  // Runs on worker thread and should not use any member variables.
+  static void DidStartServiceWorkerContextOnWorkerThread(
+      int64_t service_worker_version_id,
+      const GURL& service_worker_scope,
+      const GURL& script_url);
 
   // Runs on a different thread and should not use any member variables.
   static void WillDestroyServiceWorkerContextOnWorkerThread(
@@ -161,13 +183,16 @@ class Dispatcher : public content::RenderThreadObserver,
 
   void OnActivateExtension(const std::string& extension_id);
   void OnCancelSuspend(const std::string& extension_id);
-  void OnDeliverMessage(const PortId& target_port_id, const Message& message);
-  void OnDispatchOnConnect(const PortId& target_port_id,
+  void OnDeliverMessage(int worker_thread_id,
+                        const PortId& target_port_id,
+                        const Message& message);
+  void OnDispatchOnConnect(int worker_thread_id,
+                           const PortId& target_port_id,
                            const std::string& channel_name,
                            const ExtensionMsg_TabConnectionInfo& source,
-                           const ExtensionMsg_ExternalConnectionInfo& info,
-                           const std::string& tls_channel_id);
-  void OnDispatchOnDisconnect(const PortId& port_id,
+                           const ExtensionMsg_ExternalConnectionInfo& info);
+  void OnDispatchOnDisconnect(int worker_thread_id,
+                              const PortId& port_id,
                               const std::string& error_message);
   void OnLoaded(
       const std::vector<ExtensionMsg_Loaded_Params>& loaded_extensions);
@@ -252,9 +277,6 @@ class Dispatcher : public content::RenderThreadObserver,
 
   // The delegate for this dispatcher to handle embedder-specific logic.
   std::unique_ptr<DispatcherDelegate> delegate_;
-
-  // True if the IdleNotification timer should be set.
-  bool set_idle_notifications_;
 
   // The IDs of extensions that failed to load, mapped to the error message
   // generated on failure.

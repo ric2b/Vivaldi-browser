@@ -91,13 +91,13 @@ void LoadingPredictor::PrepareForPageLoad(const GURL& url,
   has_preconnect_prediction =
       AddInitialUrlToPreconnectPrediction(url, &prediction);
 
-  if (has_preconnect_prediction) {
-    // To report hint durations and deduplicate hints to the same url.
-    active_hints_.emplace(url, base::TimeTicks::Now());
-    if (config_.IsPreconnectEnabledForOrigin(profile_, origin)) {
-      MaybeAddPreconnect(url, std::move(prediction.requests), origin);
-    }
-  }
+  if (!has_preconnect_prediction)
+    return;
+
+  ++total_hints_activated_;
+  active_hints_.emplace(url, base::TimeTicks::Now());
+  if (IsPreconnectAllowed(profile_))
+    MaybeAddPreconnect(url, std::move(prediction.requests), origin);
 }
 
 void LoadingPredictor::CancelPageLoadHint(const GURL& url) {
@@ -123,11 +123,10 @@ ResourcePrefetchPredictor* LoadingPredictor::resource_prefetch_predictor() {
 }
 
 PreconnectManager* LoadingPredictor::preconnect_manager() {
-  if (shutdown_)
+  if (shutdown_ || !IsPreconnectFeatureEnabled())
     return nullptr;
 
-  if (!preconnect_manager_ &&
-      config_.IsPreconnectEnabledForSomeOrigin(profile_)) {
+  if (!preconnect_manager_) {
     preconnect_manager_ =
         std::make_unique<PreconnectManager>(GetWeakPtr(), profile_);
   }
@@ -171,9 +170,6 @@ std::map<GURL, base::TimeTicks>::iterator LoadingPredictor::CancelActiveHint(
 
   const GURL& url = hint_it->first;
   MaybeRemovePreconnect(url);
-  UMA_HISTOGRAM_TIMES(
-      internal::kResourcePrefetchPredictorPrefetchingDurationHistogram,
-      base::TimeTicks::Now() - hint_it->second);
   return active_hints_.erase(hint_it);
 }
 
@@ -225,10 +221,8 @@ void LoadingPredictor::MaybeRemovePreconnect(const GURL& url) {
 }
 
 void LoadingPredictor::HandleOmniboxHint(const GURL& url, bool preconnectable) {
-  if (!url.is_valid() || !url.has_host() ||
-      !config_.IsPreconnectEnabledForOrigin(profile_, HintOrigin::OMNIBOX)) {
+  if (!url.is_valid() || !url.has_host() || !IsPreconnectAllowed(profile_))
     return;
-  }
 
   GURL origin = url.GetOrigin();
   bool is_new_origin = origin != last_omnibox_origin_;
@@ -257,6 +251,7 @@ void LoadingPredictor::PreconnectFinished(
     return;
 
   DCHECK(stats);
+  active_hints_.erase(stats->url);
   stats_collector_->RecordPreconnectStats(std::move(stats));
 }
 

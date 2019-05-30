@@ -8,12 +8,14 @@
 
 #include <utility>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/run_loop.h"
+#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
-#include "content/browser/service_worker/embedded_worker_registry.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
@@ -22,8 +24,8 @@
 #include "content/browser/service_worker/service_worker_object_host.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/common/service_worker/service_worker_utils.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/child_process_termination_info.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "mojo/core/embedder/embedder.h"
@@ -43,22 +45,22 @@ static void SaveStatusCallback(bool* called,
 }
 
 struct RemoteProviderInfo {
-  mojom::ServiceWorkerContainerHostAssociatedPtr host_ptr;
-  mojom::ServiceWorkerContainerAssociatedRequest client_request;
+  blink::mojom::ServiceWorkerContainerHostAssociatedPtr host_ptr;
+  blink::mojom::ServiceWorkerContainerAssociatedRequest client_request;
 };
 
 std::unique_ptr<ServiceWorkerNavigationHandleCore> CreateNavigationHandleCore(
     ServiceWorkerContextWrapper* context_wrapper) {
   std::unique_ptr<ServiceWorkerNavigationHandleCore> navigation_handle_core;
-  BrowserThread::PostTaskAndReplyWithResult(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, {BrowserThread::UI},
+      base::BindOnce(
           [](ServiceWorkerContextWrapper* wrapper) {
             return std::make_unique<ServiceWorkerNavigationHandleCore>(nullptr,
                                                                        wrapper);
           },
           base::RetainedRef(context_wrapper)),
-      base::Bind(
+      base::BindOnce(
           [](std::unique_ptr<ServiceWorkerNavigationHandleCore>* dest,
              std::unique_ptr<ServiceWorkerNavigationHandleCore> src) {
             *dest = std::move(src);
@@ -107,7 +109,8 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
     options.scope = scope;
     registration_ =
         new ServiceWorkerRegistration(options, 1L, context()->AsWeakPtr());
-    version_ = new ServiceWorkerVersion(registration_.get(), script_url, 1L,
+    version_ = new ServiceWorkerVersion(registration_.get(), script_url,
+                                        blink::mojom::ScriptType::kClassic, 1L,
                                         context()->AsWeakPtr());
     std::vector<ServiceWorkerDatabase::ResourceRecord> records;
     records.push_back(
@@ -134,17 +137,17 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
   }
 
   RemoteProviderInfo SendProviderCreated(
-      mojom::ServiceWorkerProviderHostInfoPtr host_info) {
+      blink::mojom::ServiceWorkerProviderHostInfoPtr host_info) {
     DCHECK(!host_info->host_request.is_pending());
     DCHECK(!host_info->client_ptr_info.is_valid());
 
     RemoteProviderInfo remote_info;
-    mojom::ServiceWorkerContainerAssociatedPtrInfo client;
+    blink::mojom::ServiceWorkerContainerAssociatedPtrInfo client;
     remote_info.client_request = mojo::MakeRequest(&client);
     host_info->host_request = mojo::MakeRequest(&remote_info.host_ptr);
     host_info->client_ptr_info = std::move(client);
 
-    mojom::ServiceWorkerDispatcherHostAssociatedPtr ptr;
+    blink::mojom::ServiceWorkerDispatcherHostAssociatedPtr ptr;
     dispatcher_host_->AddBinding(
         mojo::MakeRequestAssociatedWithDedicatedPipe(&ptr));
     ptr->OnProviderCreated(std::move(host_info));
@@ -172,7 +175,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, ProviderCreatedForNavigation) {
           context()->AsWeakPtr(), true /* are_ancestors_secure */,
           base::RepeatingCallback<WebContents*(void)>());
   int provider_id = host->provider_id();
-  mojom::ServiceWorkerProviderHostInfoPtr host_info =
+  blink::mojom::ServiceWorkerProviderHostInfoPtr host_info =
       CreateProviderHostInfoForWindow(provider_id, 1 /* route_id */);
   EXPECT_TRUE(context()->GetProviderHost(ChildProcessHost::kInvalidUniqueID,
                                          provider_id));
@@ -201,7 +204,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, ReusedProviderCreatedForNavigation) {
           base::RepeatingCallback<WebContents*(void)>());
   int provider_id = host->provider_id();
   EXPECT_EQ(provider_id, host->provider_id());
-  mojom::ServiceWorkerProviderHostInfoPtr host_info =
+  blink::mojom::ServiceWorkerProviderHostInfoPtr host_info =
       CreateProviderHostInfoForWindow(provider_id, 1 /* route_id */);
   EXPECT_TRUE(context()->GetProviderHost(ChildProcessHost::kInvalidUniqueID,
                                          provider_id));
@@ -237,7 +240,7 @@ TEST_F(ServiceWorkerDispatcherHostTest,
           context()->AsWeakPtr(), true /* are_ancestors_secure */,
           base::RepeatingCallback<WebContents*(void)>());
   int provider_id = host->provider_id();
-  mojom::ServiceWorkerProviderHostInfoPtr host_info =
+  blink::mojom::ServiceWorkerProviderHostInfoPtr host_info =
       CreateProviderHostInfoForWindow(provider_id, 2 /* route_id */);
   navigation_handle_core->DidPreCreateProviderHost(provider_id);
   RemoteProviderInfo remote_provider =
@@ -271,18 +274,18 @@ TEST_F(ServiceWorkerDispatcherHostTest, DuplicateProvider) {
 }
 
 TEST_F(ServiceWorkerDispatcherHostTest, CleanupOnRendererCrash) {
-  GURL pattern = GURL("https://www.example.com/");
+  GURL scope = GURL("https://www.example.com/");
   GURL script_url = GURL("https://www.example.com/service_worker.js");
   int process_id = helper_->mock_render_process_id();
 
   const int64_t kProviderId = 99;
-  mojom::ServiceWorkerProviderHostInfoPtr host_info_1 =
+  blink::mojom::ServiceWorkerProviderHostInfoPtr host_info_1 =
       CreateProviderHostInfoForWindow(kProviderId, MSG_ROUTING_NONE);
   RemoteProviderInfo remote_provider_1 =
       SendProviderCreated(std::move(host_info_1));
   ServiceWorkerProviderHost* provider_host = context()->GetProviderHost(
       helper_->mock_render_process_id(), kProviderId);
-  SetUpRegistration(pattern, script_url);
+  SetUpRegistration(scope, script_url);
   EXPECT_EQ(kProviderId, provider_host->provider_id());
 
   // Start up the worker.
@@ -312,7 +315,7 @@ TEST_F(ServiceWorkerDispatcherHostTest, CleanupOnRendererCrash) {
   // renderer process creates a provider with the same |kProviderId|. Since the
   // dispatcher host already cleaned up the old provider host, the new one won't
   // complain.
-  mojom::ServiceWorkerProviderHostInfoPtr host_info_2 =
+  blink::mojom::ServiceWorkerProviderHostInfoPtr host_info_2 =
       CreateProviderHostInfoForWindow(kProviderId, MSG_ROUTING_NONE);
   RemoteProviderInfo remote_provider_2 =
       SendProviderCreated(std::move(host_info_2));

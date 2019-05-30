@@ -9,6 +9,7 @@
 
 #include <iosfwd>
 #include <list>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -21,34 +22,23 @@
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/contact_info.h"
 #include "components/autofill/core/browser/phone_number.h"
+#include "components/autofill/core/browser/proto/server.pb.h"
 
 namespace autofill {
+
+struct AutofillMetadata;
 
 // A collection of FormGroups stored in a profile.  AutofillProfile also
 // implements the FormGroup interface so that owners of this object can request
 // form information from the profile, and the profile will delegate the request
 // to the requested form group type.
-class AutofillProfile : public AutofillDataModel,
-                        public base::SupportsWeakPtr<AutofillProfile> {
+class AutofillProfile : public AutofillDataModel {
  public:
   enum RecordType {
     // A profile stored and editable locally.
     LOCAL_PROFILE,
     // A profile synced down from the server. These are read-only locally.
     SERVER_PROFILE,
-  };
-
-  enum ValidityState {
-    // The field has not been validated.
-    UNVALIDATED = 0,
-    // The field is empty.
-    EMPTY = 1,
-    // The field is valid.
-    VALID = 2,
-    // The field is invalid.
-    INVALID = 3,
-    // The validation for the field is unsupported.
-    UNSUPPORTED = 4,
   };
 
   AutofillProfile(const std::string& guid, const std::string& origin);
@@ -65,10 +55,25 @@ class AutofillProfile : public AutofillDataModel,
 
   AutofillProfile& operator=(const AutofillProfile& profile);
 
+  // AutofillDataModel:
+  AutofillMetadata GetMetadata() const override;
+  bool SetMetadata(const AutofillMetadata metadata) override;
+  // Returns whether the profile is deletable: if it is not verified and has not
+  // been used for longer than |kDisusedAddressDeletionTimeDelta|.
+  bool IsDeletable() const override;
+
   // FormGroup:
   void GetMatchingTypes(const base::string16& text,
                         const std::string& app_locale,
                         ServerFieldTypeSet* matching_types) const override;
+
+  void GetMatchingTypesAndValidities(
+      const base::string16& text,
+      const std::string& app_locale,
+      ServerFieldTypeSet* matching_types,
+      std::map<ServerFieldType, AutofillProfile::ValidityState>*
+          matching_types_validities) const;
+
   base::string16 GetRawInfo(ServerFieldType type) const override;
   void SetRawInfo(ServerFieldType type, const base::string16& value) override;
 
@@ -101,6 +106,11 @@ class AutofillProfile : public AutofillDataModel,
   // Same as operator==, but ignores differences in guid and cares about
   // differences in usage stats.
   bool EqualsForSyncPurposes(const AutofillProfile& profile) const;
+
+  bool EqualsForUpdatePurposes(const AutofillProfile& profile) const;
+
+  // Compares the values of kSupportedTypesByClientForValidation fields.
+  bool EqualsForClientValidationPurpose(const AutofillProfile& profile) const;
 
   // Same as operator==, but cares about differences in usage stats.
   bool EqualsIncludingUsageStatsForTesting(
@@ -195,6 +205,24 @@ class AutofillProfile : public AutofillDataModel,
   // use and updates |previous_use_date_| to the last value of |use_date_|.
   void RecordAndLogUse();
 
+  // Returns true if the current profile has greater frescocency than the
+  // |other|. Frescocency is a combination of validation score and frecency to
+  // determine the relevance of the profile. Frescocency is a total order: it
+  // puts all the valid profiles before the invalid ones, and uses frecency
+  // (another total order) in case of tie. Please see
+  // AutofillDataModel::HasGreaterFrecencyThan.
+  bool HasGreaterFrescocencyThan(const AutofillProfile* other,
+                                 base::Time comparison_time,
+                                 bool use_client_validation,
+                                 bool use_server_validation) const;
+
+  // Returns false if the profile has any invalid field, according to the client
+  // source of validation.
+  bool IsValidByClient() const;
+  // Returns false if the profile has any invalid field, according to the server
+  // source of validation.
+  bool IsValidByServer() const;
+
   const base::Time& previous_use_date() const { return previous_use_date_; }
   void set_previous_use_date(const base::Time& time) {
     previous_use_date_ = time;
@@ -205,20 +233,54 @@ class AutofillProfile : public AutofillDataModel,
   void set_has_converted(bool has_converted) { has_converted_ = has_converted; }
 
   // Returns the validity state of the specified autofill type.
-  ValidityState GetValidityState(ServerFieldType type) const;
+  ValidityState GetValidityState(ServerFieldType type,
+                                 ValidationSource source) const override;
 
   // Sets the validity state of the specified autofill type.
-  void SetValidityState(ServerFieldType type, ValidityState validity);
+  // This should only be called from autofill profile validtion API or in tests.
+  void SetValidityState(ServerFieldType type,
+                        ValidityState validity,
+                        ValidationSource validation_source) const;
+
+  // Update the validity map based on the server side validity maps from the
+  // prefs.
+  void UpdateServerValidityMap(const ProfileValidityMap& validity_states) const;
 
   // Returns whether autofill does the validation of the specified |type|.
-  static bool IsValidationSupportedForType(ServerFieldType type);
+  static bool IsClientValidationSupportedForType(ServerFieldType type);
 
-  // Returns the bitfield value representing the validity state of this profile.
-  int GetValidityBitfieldValue() const;
+  // Returns the bitfield value representing the validity state of this profile
+  // based on client validation source.
+  int GetClientValidityBitfieldValue() const;
 
   // Sets the validity state of the profile based on the specified
-  // |bitfield_value|.
-  void SetValidityFromBitfieldValue(int bitfield_value);
+  // |bitfield_value| based on client validation source.
+  void SetClientValidityFromBitfieldValue(int bitfield_value) const;
+
+  // Returns true if type is a phone type and it's invalid, either explicitly,
+  // or by looking at its components.
+  bool IsAnInvalidPhoneNumber(ServerFieldType type) const;
+
+  const std::map<ServerFieldType, ValidityState>& GetServerValidityMap() const {
+    return server_validity_states_;
+  }
+
+  bool is_client_validity_states_updated() const {
+    return is_client_validity_states_updated_;
+  }
+
+  void set_is_client_validity_states_updated(
+      bool is_client_validity_states_updated) const {
+    is_client_validity_states_updated_ = is_client_validity_states_updated;
+  }
+
+  // Check for the validity of the data. Leave the field empty if the data is
+  // invalid and the relevant feature is enabled.
+  bool ShouldSkipFillingOrSuggesting(ServerFieldType type) const override;
+
+  base::WeakPtr<const AutofillProfile> GetWeakPtr() const {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
 
  private:
   typedef std::vector<const FormGroup*> FormGroupList;
@@ -275,8 +337,16 @@ class AutofillProfile : public AutofillDataModel,
   // converted to a local profile.
   bool has_converted_;
 
-  // A map identifying what fields are valid.
-  std::map<ServerFieldType, ValidityState> validity_states_;
+  // This flag denotes whether the client_validity_states_ are updated according
+  // to the changes in the autofill profile values.
+  mutable bool is_client_validity_states_updated_ = false;
+
+  // A map identifying what fields are valid according to server validation.
+  mutable std::map<ServerFieldType, ValidityState> server_validity_states_;
+
+  // A map identifying what fields are valid according to client validation.
+  mutable std::map<ServerFieldType, ValidityState> client_validity_states_;
+  mutable base::WeakPtrFactory<AutofillProfile> weak_ptr_factory_;
 };
 
 // So we can compare AutofillProfiles with EXPECT_EQ().

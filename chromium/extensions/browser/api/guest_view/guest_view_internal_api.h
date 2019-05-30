@@ -13,7 +13,7 @@ namespace extensions {
 class GuestViewInternalCreateGuestFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("guestViewInternal.createGuest",
-                             GUESTVIEWINTERNAL_CREATEGUEST);
+                             GUESTVIEWINTERNAL_CREATEGUEST)
   GuestViewInternalCreateGuestFunction();
 
  protected:
@@ -35,7 +35,7 @@ class GuestViewInternalCreateGuestFunction : public UIThreadExtensionFunction {
 class GuestViewInternalDestroyGuestFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("guestViewInternal.destroyGuest",
-                             GUESTVIEWINTERNAL_DESTROYGUEST);
+                             GUESTVIEWINTERNAL_DESTROYGUEST)
   GuestViewInternalDestroyGuestFunction();
 
  protected:
@@ -52,7 +52,7 @@ class GuestViewInternalDestroyGuestFunction : public UIThreadExtensionFunction {
 class GuestViewInternalSetSizeFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("guestViewInternal.setSize",
-                             GUESTVIEWINTERNAL_SETAUTOSIZE);
+                             GUESTVIEWINTERNAL_SETAUTOSIZE)
 
   GuestViewInternalSetSizeFunction();
 

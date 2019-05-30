@@ -33,11 +33,12 @@
 #include "third_party/blink/renderer/modules/webaudio/audio_node.h"
 #include "third_party/blink/renderer/platform/audio/audio_source_provider_client.h"
 #include "third_party/blink/renderer/platform/audio/multi_channel_resampler.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/wtf/threading_primitives.h"
 
 namespace blink {
 
-class BaseAudioContext;
+class AudioContext;
 class HTMLMediaElement;
 class MediaElementAudioSourceOptions;
 
@@ -52,7 +53,7 @@ class MediaElementAudioSourceHandler final : public AudioHandler {
 
   // AudioHandler
   void Dispose() override;
-  void Process(size_t frames_to_process) override;
+  void Process(uint32_t frames_to_process) override;
 
   // AudioNode
   double TailTime() const override { return 0; }
@@ -60,7 +61,7 @@ class MediaElementAudioSourceHandler final : public AudioHandler {
 
   // Helpers for AudioSourceProviderClient implementation of
   // MediaElementAudioSourceNode.
-  void SetFormat(size_t number_of_channels, float sample_rate);
+  void SetFormat(uint32_t number_of_channels, float sample_rate);
   void lock() EXCLUSIVE_LOCK_FUNCTION(GetProcessLock());
   void unlock() UNLOCK_FUNCTION(GetProcessLock());
 
@@ -83,15 +84,16 @@ class MediaElementAudioSourceHandler final : public AudioHandler {
 
   // Print warning if CORS restrictions cause MediaElementAudioSource to output
   // zeroes.
-  void PrintCORSMessage(const String& message);
+  void PrintCorsMessage(const String& message);
 
-  // This Persistent doesn't make a reference cycle. The reference from
-  // HTMLMediaElement to AudioSourceProvideClient, which
-  // MediaElementAudioSourceNode implements, is weak.
+  // The HTMLMediaElement is held alive by MediaElementAudioSourceNode which is
+  // an AudioNode. AudioNode uses pre-finalizers to dispose the handler, so
+  // holding a weak reference is ok here and will not interfer with garbage
+  // collection.
   //
   // It is accessed by both audio and main thread. TODO: we really should
   // try to minimize or avoid the audio thread touching this element.
-  CrossThreadPersistent<HTMLMediaElement> media_element_;
+  CrossThreadWeakPersistent<HTMLMediaElement> media_element_;
   Mutex process_lock_;
 
   unsigned source_number_of_channels_;
@@ -114,13 +116,13 @@ class MediaElementAudioSourceNode final : public AudioNode,
   USING_GARBAGE_COLLECTED_MIXIN(MediaElementAudioSourceNode);
 
  public:
-  static MediaElementAudioSourceNode* Create(BaseAudioContext&,
+  static MediaElementAudioSourceNode* Create(AudioContext&,
                                              HTMLMediaElement&,
                                              ExceptionState&);
-  static MediaElementAudioSourceNode* Create(
-      BaseAudioContext*,
-      const MediaElementAudioSourceOptions&,
-      ExceptionState&);
+  static MediaElementAudioSourceNode*
+  Create(AudioContext*, const MediaElementAudioSourceOptions*, ExceptionState&);
+
+  MediaElementAudioSourceNode(AudioContext&, HTMLMediaElement&);
 
   void Trace(blink::Visitor*) override;
   MediaElementAudioSourceHandler& GetMediaElementAudioSourceHandler() const;
@@ -128,14 +130,14 @@ class MediaElementAudioSourceNode final : public AudioNode,
   HTMLMediaElement* mediaElement() const;
 
   // AudioSourceProviderClient functions:
-  void SetFormat(size_t number_of_channels, float sample_rate) override;
+  void SetFormat(uint32_t number_of_channels, float sample_rate) override;
   void lock() override EXCLUSIVE_LOCK_FUNCTION(
       GetMediaElementAudioSourceHandler().GetProcessLock());
   void unlock() override
       UNLOCK_FUNCTION(GetMediaElementAudioSourceHandler().GetProcessLock());
 
  private:
-  MediaElementAudioSourceNode(BaseAudioContext&, HTMLMediaElement&);
+  TraceWrapperMember<HTMLMediaElement> media_element_;
 };
 
 }  // namespace blink

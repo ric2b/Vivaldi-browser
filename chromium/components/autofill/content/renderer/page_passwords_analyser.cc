@@ -95,7 +95,7 @@ struct FormInputCollection {
     }                                                                         \
   };                                                                          \
   base::LazyInstance<re2::RE2, LabelPatternLazyInstanceTraits_##NAME> NAME =  \
-      LAZY_INSTANCE_INITIALIZER;
+      LAZY_INSTANCE_INITIALIZER
 
 DECLARE_LAZY_MATCHER(ignored_characters_matcher, R"(\W)");
 DECLARE_LAZY_MATCHER(username_matcher, R"(user(name)?|login)");
@@ -242,12 +242,12 @@ std::vector<FormInputCollection> ExtractFormsForAnalysis(
       logger->Send(LinkDocumentation(base::StringPrintf(
                        "Found %zu elements with non-unique id #%s:",
                        nodes.size(), id_attr.c_str())),
-                   PageFormAnalyserLogger::kError, nodes);
+                   PageFormAnalyserLogger::kWarning, nodes);
     } else {
       logger->Send(LinkDocumentation(base::StringPrintf(
                        "Found %zu elements with non-unique id #%s:",
                        nodes.size(), id_attr.c_str())),
-                   PageFormAnalyserLogger::kError, nodes);
+                   PageFormAnalyserLogger::kWarning, nodes);
     }
   }
 

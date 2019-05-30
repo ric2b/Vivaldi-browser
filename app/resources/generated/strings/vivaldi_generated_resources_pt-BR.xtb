@@ -6,7 +6,7 @@
 <translation id="1049795001945932310">&amp;Configurações de idioma</translation>
 <translation id="1056898198331236512">Aviso</translation>
 <translation id="1084824384139382525">&amp;Copiar endereço do link</translation>
-<translation id="1128109161498068552">Não permitir que os site usem mensagens exclusivas do sistema para acessar dispositivos MIDI</translation>
+<translation id="1128109161498068552">Não permitir que os sites usem mensagens exclusivas do sistema para acessar dispositivos MIDI</translation>
 <translation id="1163931534039071049">Exibir código &amp;fonte do frame</translation>
 <translation id="1165039591588034296">Erro</translation>
 <translation id="1175364870820465910">Im&amp;primir...</translation>
@@ -24,12 +24,12 @@
 <translation id="1603914832182249871">(privada)</translation>
 <translation id="1620510694547887537">Câmera</translation>
 <translation id="1635033183663317347">Instalada pelo seu tutor legal.</translation>
+<translation id="1682548588986054654">Nova janela privada</translation>
 <translation id="1698122934742150150">Aplicar somente durante a sessão privada atual</translation>
 <translation id="1706625117072057435">Níveis de zoom</translation>
 <translation id="1708338024780164500">(inativa)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
 <translation id="1723824996674794290">Nova &amp;janela</translation>
-<translation id="1731589410171062430">Total: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /> (<ph name="NUMBER_OF_PAGES" /> <ph name="PAGE_OR_PAGES_LABEL" />)</translation>
 <translation id="1744108098763830590">Página de fundo</translation>
 <translation id="1805822111539868586">Inspecionar</translation>
 <translation id="1886996562706621347">Permitir que os sites peçam para se tornar manipuladores padrão de protocolos (recomendado)</translation>
@@ -101,12 +101,10 @@
 <translation id="329838636886466101">Reparar</translation>
 <translation id="3303818374450886607">Cópias</translation>
 <translation id="3317459757438853210">Frente e verso</translation>
-<translation id="3319048459796106952">Nova janela &amp;privada</translation>
 <translation id="3341703758641437857">Permitir execução em arquivos locais</translation>
 <translation id="3347086966102161372">&amp;Copiar endereço da imagem</translation>
 <translation id="3378503599595235699">Excluir dados ao fechar o navegador</translation>
 <translation id="3378572629723696641">Esta extensão pode ter sido corrompida.</translation>
-<translation id="3396331542604645348">A impressora selecionada não está disponível ou instalada corretamente.  Verifique sua impressora ou selecione outra.</translation>
 <translation id="3432227430032737297">Excluir Cookies Pesquisados</translation>
 <translation id="3440761377721825626">Perguntar quando um site quiser usar um plugin para acessar seu computador</translation>
 <translation id="345693547134384690">Abrir imagem em nova &amp;guia</translation>
@@ -178,14 +176,12 @@
 <translation id="5362741141255528695">Selecionar arquivo de chave privada.</translation>
 <translation id="5370819323174483825">Atualiza&amp;r</translation>
 <translation id="5431318178759467895">Colorido</translation>
-<translation id="5451285724299252438">caixa de texto de intervalo de páginas</translation>
 <translation id="5487521232677179737">Excluir Dados</translation>
 <translation id="5488468185303821006">Permitir em navegação privada</translation>
 <translation id="5532223876348815659">Global</translation>
 <translation id="5542132724887566711">Perfil</translation>
 <translation id="5556459405103347317">Recarregar</translation>
 <translation id="5575473780076478375">Extensão Privada: <ph name="EXTENSION_NAME" /></translation>
-<translation id="5581700288664681403">Carregando <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="5623842676595125836">Log</translation>
 <translation id="563535393368633106">Perguntar antes de acessar (recomendado)</translation>
 <translation id="5649053991847567735">Downloads automáticos</translation>
@@ -303,7 +299,6 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8615618338313291042">Aplicativo Privado: <ph name="APP_NAME" /></translation>
 <translation id="8627151598708688654">O que transmitir</translation>
 <translation id="862750493060684461">Cache de CSS</translation>
-<translation id="8652487083013326477">botão de opção de intervalo de páginas</translation>
 <translation id="8664389313780386848">Exibir código &amp;fonte da página</translation>
 <translation id="8708000541097332489">Excluir ao sair</translation>
 <translation id="8757090071857742562">Não foi possível transmitir a área de trabalho. Verifique se você confirmou a solicitação para iniciar a compartilhar sua tela.</translation>

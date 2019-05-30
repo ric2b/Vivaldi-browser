@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 
+#include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
@@ -22,6 +23,7 @@
 namespace blink {
 
 using testing::Return;
+using testing::MatchesRegex;
 
 class LayoutObjectTest : public RenderingTest {
  public:
@@ -54,8 +56,8 @@ TEST_F(LayoutObjectTest, LayoutDecoratedNameCalledWithPositionedObject) {
   DCHECK(div);
   LayoutObject* obj = div->GetLayoutObject();
   DCHECK(obj);
-  EXPECT_STREQ("LayoutBlockFlow (positioned)",
-               obj->DecoratedName().Ascii().data());
+  EXPECT_THAT(obj->DecoratedName().Ascii().data(),
+              MatchesRegex("LayoutN?G?BlockFlow \\(positioned\\)"));
 }
 
 // Some display checks.
@@ -276,8 +278,13 @@ TEST_F(LayoutObjectTest, InlineFloatMismatch) {
       ToLayoutBoxModelObject(GetLayoutObjectByElementId("float_obj"));
   LayoutObject* span =
       ToLayoutBoxModelObject(GetLayoutObjectByElementId("span"));
-  // 10px for margin, -40px because float is to the left of the span.
-  EXPECT_EQ(LayoutSize(-30, 0), float_obj->OffsetFromAncestor(span));
+  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
+    // 10px for margin.
+    EXPECT_EQ(LayoutSize(10, 0), float_obj->OffsetFromAncestor(span));
+  } else {
+    // 10px for margin, -40px because float is to the left of the span.
+    EXPECT_EQ(LayoutSize(-30, 0), float_obj->OffsetFromAncestor(span));
+  }
 }
 
 TEST_F(LayoutObjectTest, FloatUnderInline) {
@@ -301,17 +308,30 @@ TEST_F(LayoutObjectTest, FloatUnderInline) {
 
   EXPECT_EQ(layered_div->Layer(), layered_div->PaintingLayer());
   EXPECT_EQ(layered_span->Layer(), layered_span->PaintingLayer());
-  EXPECT_EQ(layered_div->Layer(), floating->PaintingLayer());
-  EXPECT_EQ(container, floating->Container());
+  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
+    // LayoutNG inline-level floats are children of their inline-level
+    // containers. As such LayoutNG paints these within the correct
+    // inline-level layer.
+    EXPECT_EQ(layered_span->Layer(), floating->PaintingLayer());
+    EXPECT_EQ(layered_span, floating->Container());
+  } else {
+    EXPECT_EQ(layered_div->Layer(), floating->PaintingLayer());
+    EXPECT_EQ(container, floating->Container());
+  }
   EXPECT_EQ(container, floating->ContainingBlock());
 
   LayoutObject::AncestorSkipInfo skip_info(layered_span);
-  EXPECT_EQ(container, floating->Container(&skip_info));
-  EXPECT_TRUE(skip_info.AncestorSkipped());
+  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
+    EXPECT_EQ(layered_span, floating->Container(&skip_info));
+    EXPECT_FALSE(skip_info.AncestorSkipped());
+  } else {
+    EXPECT_EQ(container, floating->Container(&skip_info));
+    EXPECT_TRUE(skip_info.AncestorSkipped());
 
-  skip_info = LayoutObject::AncestorSkipInfo(container);
-  EXPECT_EQ(container, floating->Container(&skip_info));
-  EXPECT_FALSE(skip_info.AncestorSkipped());
+    skip_info = LayoutObject::AncestorSkipInfo(container);
+    EXPECT_EQ(container, floating->Container(&skip_info));
+    EXPECT_FALSE(skip_info.AncestorSkipped());
+  }
 }
 
 TEST_F(LayoutObjectTest, MutableForPaintingClearPaintFlags) {
@@ -327,8 +347,8 @@ TEST_F(LayoutObjectTest, MutableForPaintingClearPaintFlags) {
   EXPECT_TRUE(object->MayNeedPaintInvalidationAnimatedBackgroundImage());
   object->SetShouldInvalidateSelection();
   EXPECT_TRUE(object->ShouldInvalidateSelection());
-  object->SetBackgroundChangedSinceLastPaintInvalidation();
-  EXPECT_TRUE(object->BackgroundChangedSinceLastPaintInvalidation());
+  object->SetBackgroundNeedsFullPaintInvalidation();
+  EXPECT_TRUE(object->BackgroundNeedsFullPaintInvalidation());
   object->SetNeedsPaintPropertyUpdate();
   EXPECT_TRUE(object->NeedsPaintPropertyUpdate());
   EXPECT_TRUE(object->Parent()->DescendantNeedsPaintPropertyUpdate());
@@ -343,22 +363,23 @@ TEST_F(LayoutObjectTest, MutableForPaintingClearPaintFlags) {
   EXPECT_FALSE(object->SubtreeShouldCheckForPaintInvalidation());
   EXPECT_FALSE(object->MayNeedPaintInvalidationAnimatedBackgroundImage());
   EXPECT_FALSE(object->ShouldInvalidateSelection());
-  EXPECT_FALSE(object->BackgroundChangedSinceLastPaintInvalidation());
+  EXPECT_FALSE(object->BackgroundNeedsFullPaintInvalidation());
   EXPECT_FALSE(object->NeedsPaintPropertyUpdate());
   EXPECT_FALSE(object->DescendantNeedsPaintPropertyUpdate());
 }
 
-TEST_F(LayoutObjectTest, SubtreeNeedsPaintPropertyUpdate) {
+TEST_F(LayoutObjectTest, SubtreePaintPropertyUpdateReasons) {
   LayoutObject* object = GetDocument().body()->GetLayoutObject();
-  object->SetSubtreeNeedsPaintPropertyUpdate();
-  EXPECT_TRUE(object->SubtreeNeedsPaintPropertyUpdate());
+  object->AddSubtreePaintPropertyUpdateReason(
+      SubtreePaintPropertyUpdateReason::kFragmentsChanged);
+  EXPECT_TRUE(object->SubtreePaintPropertyUpdateReasons());
   EXPECT_TRUE(object->NeedsPaintPropertyUpdate());
   EXPECT_TRUE(object->Parent()->DescendantNeedsPaintPropertyUpdate());
 
   GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInPrePaint);
   object->GetMutableForPainting().ClearPaintFlags();
 
-  EXPECT_FALSE(object->SubtreeNeedsPaintPropertyUpdate());
+  EXPECT_FALSE(object->SubtreePaintPropertyUpdateReasons());
   EXPECT_FALSE(object->NeedsPaintPropertyUpdate());
 }
 
@@ -370,55 +391,60 @@ TEST_F(LayoutObjectTest, NeedsPaintOffsetAndVisualRectUpdate) {
   EXPECT_TRUE(object->ShouldDoFullPaintInvalidation());
   EXPECT_TRUE(object->NeedsPaintOffsetAndVisualRectUpdate());
   EXPECT_TRUE(parent->ShouldCheckForPaintInvalidation());
-  EXPECT_TRUE(parent->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_TRUE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
   object->ClearPaintInvalidationFlags();
   EXPECT_FALSE(object->ShouldDoFullPaintInvalidation());
   EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
   parent->ClearPaintInvalidationFlags();
   EXPECT_FALSE(parent->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
 
   object->SetShouldCheckForPaintInvalidation();
   EXPECT_TRUE(object->ShouldCheckForPaintInvalidation());
   EXPECT_TRUE(object->NeedsPaintOffsetAndVisualRectUpdate());
   EXPECT_TRUE(parent->ShouldCheckForPaintInvalidation());
-  EXPECT_TRUE(parent->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_TRUE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
   object->ClearPaintInvalidationFlags();
   EXPECT_FALSE(object->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
   parent->ClearPaintInvalidationFlags();
   EXPECT_FALSE(parent->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
 
   object->SetShouldDoFullPaintInvalidationWithoutGeometryChange();
   EXPECT_TRUE(object->ShouldDoFullPaintInvalidation());
   EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
   EXPECT_TRUE(parent->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
   object->SetShouldCheckForPaintInvalidation();
   EXPECT_TRUE(object->NeedsPaintOffsetAndVisualRectUpdate());
-  EXPECT_TRUE(parent->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_TRUE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
   object->ClearPaintInvalidationFlags();
   EXPECT_FALSE(object->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
   parent->ClearPaintInvalidationFlags();
   EXPECT_FALSE(parent->ShouldCheckForPaintInvalidation());
-  EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
 
   object->SetShouldCheckForPaintInvalidationWithoutGeometryChange();
   EXPECT_TRUE(object->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
   EXPECT_TRUE(parent->ShouldCheckForPaintInvalidation());
-  EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
   object->SetShouldCheckForPaintInvalidation();
   EXPECT_TRUE(object->NeedsPaintOffsetAndVisualRectUpdate());
-  EXPECT_TRUE(parent->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_TRUE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
   object->ClearPaintInvalidationFlags();
   EXPECT_FALSE(object->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(object->NeedsPaintOffsetAndVisualRectUpdate());
   parent->ClearPaintInvalidationFlags();
   EXPECT_FALSE(parent->ShouldCheckForPaintInvalidation());
-  EXPECT_FALSE(parent->NeedsPaintOffsetAndVisualRectUpdate());
+  EXPECT_FALSE(parent->DescendantNeedsPaintOffsetAndVisualRectUpdate());
 }
 
 TEST_F(LayoutObjectTest, AssociatedLayoutObjectOfFirstLetterPunctuations) {
@@ -459,7 +485,7 @@ TEST_F(LayoutObjectTest, AssociatedLayoutObjectOfFirstLetterSplit) {
   Node* first_letter = sample->firstChild();
   // Split "abc" into "a" "bc"
   ToText(first_letter)->splitText(1, ASSERT_NO_EXCEPTION);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   const LayoutTextFragment* layout_object0 =
       ToLayoutTextFragment(AssociatedLayoutObjectOf(*first_letter, 0));
@@ -559,7 +585,7 @@ TEST_F(LayoutObjectTest, DisplayContentsAddInlineWrapper) {
   ExpectAnonymousInlineWrapperFor<false>(text);
 
   div->SetInlineStyleProperty(CSSPropertyColor, "pink");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
   ExpectAnonymousInlineWrapperFor<true>(text);
 }
 
@@ -572,7 +598,7 @@ TEST_F(LayoutObjectTest, DisplayContentsRemoveInlineWrapper) {
   ExpectAnonymousInlineWrapperFor<true>(text);
 
   div->RemoveInlineStyleProperty(CSSPropertyColor);
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
   ExpectAnonymousInlineWrapperFor<false>(text);
 }
 
@@ -612,7 +638,7 @@ TEST_F(LayoutObjectTest, DisplayContentsWrapperInTable) {
   ExpectAnonymousInlineWrapperFor<true>(contents->firstChild());
 
   none->SetInlineStyleProperty(CSSPropertyDisplay, "inline");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
   ASSERT_TRUE(none->GetLayoutObject());
   LayoutObject* inline_parent = none->GetLayoutObject()->Parent();
   ASSERT_TRUE(inline_parent);
@@ -638,7 +664,7 @@ TEST_F(LayoutObjectTest, DisplayContentsWrapperInTableSection) {
   ExpectAnonymousInlineWrapperFor<true>(contents->firstChild());
 
   none->SetInlineStyleProperty(CSSPropertyDisplay, "inline");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
   ASSERT_TRUE(none->GetLayoutObject());
   LayoutObject* inline_parent = none->GetLayoutObject()->Parent();
   ASSERT_TRUE(inline_parent);
@@ -664,7 +690,7 @@ TEST_F(LayoutObjectTest, DisplayContentsWrapperInTableRow) {
   ExpectAnonymousInlineWrapperFor<true>(contents->firstChild());
 
   none->SetInlineStyleProperty(CSSPropertyDisplay, "inline");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
   ASSERT_TRUE(none->GetLayoutObject());
   LayoutObject* inline_parent = none->GetLayoutObject()->Parent();
   ASSERT_TRUE(inline_parent);
@@ -691,7 +717,7 @@ TEST_F(LayoutObjectTest, DisplayContentsWrapperInTableCell) {
   ExpectAnonymousInlineWrapperFor<true>(contents->firstChild());
 
   none->SetInlineStyleProperty(CSSPropertyDisplay, "inline");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
   ASSERT_TRUE(none->GetLayoutObject());
   EXPECT_EQ(cell->GetLayoutObject(), none->GetLayoutObject()->Parent());
 }
@@ -713,9 +739,9 @@ lime'>
 
   StringBuilder result;
   block->DumpLayoutObject(result, false, 0);
-  EXPECT_EQ(
-      result.ToString(),
-      String("LayoutBlockFlow\tDIV id=\"block\" style=\"background:\\nlime\""));
+  EXPECT_THAT(result.ToString().Utf8().data(),
+              MatchesRegex("LayoutN?G?BlockFlow\tDIV id=\"block\" "
+                           "style=\"background:\\\\nlime\""));
 
   result.Clear();
   text->DumpLayoutObject(result, false, 0);
@@ -738,7 +764,7 @@ TEST_F(LayoutObjectTest, DisplayContentsSVGGElementInHTML) {
   svg_element->appendChild(text);
   span->appendChild(svg_element);
 
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   ASSERT_FALSE(svg_element->GetLayoutObject());
   ASSERT_FALSE(text->GetLayoutObject());
@@ -757,7 +783,7 @@ TEST_F(LayoutObjectTest, HasDistortingVisualEffects) {
       <div class=inner></div>
     </div>
   )HTML");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   Element* outer = GetDocument().getElementById("opaque");
   Element* inner = outer->QuerySelector(".inner");
@@ -784,10 +810,52 @@ TEST_F(LayoutObjectTest, HasDistortingVisualEffects) {
   ASSERT_TRUE(inner->GetLayoutObject()->HasDistortingVisualEffects());
 }
 
+TEST_F(LayoutObjectTest, DistortingVisualEffectsUnaliases) {
+  SetBodyInnerHTML(R"HTML(
+    <div style="opacity: 0.2;">
+      <div style="width: 100px height:100px; contain: paint">
+        <div id="child"
+             style="position: relative; width: 100px; height:100px;"></div>
+      </div>
+    </div>
+  )HTML");
+
+  const auto* child = GetDocument().getElementById("child");
+  const auto* object = child->GetLayoutObject();
+  // This should pass and not DCHECK if the nodes are unaliased correctly.
+  EXPECT_TRUE(object->HasDistortingVisualEffects());
+  EXPECT_TRUE(object->HasNonZeroEffectiveOpacity());
+}
+
+TEST_F(LayoutObjectTest, UpdateVisualRectAfterAncestorLayout) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      #target {
+        width: 50px;
+        height: 0;
+        position: relative;
+      }
+    </style>
+    <div id=ancestor style="width: 100px; height: 100px; position: relative">
+      <div>
+        <div id=target></div>
+      </div>
+    </div>
+  )HTML");
+
+  auto* target = GetDocument().getElementById("target");
+  target->setAttribute(html_names::kStyleAttr, "height: 300px");
+  UpdateAllLifecyclePhasesForTest();
+  const auto* container = GetLayoutObjectByElementId("ancestor");
+  EXPECT_EQ(LayoutRect(0, 0, 100, 300),
+            ToLayoutBox(container)->VisualOverflowRect());
+}
+
 class LayoutObjectSimTest : public SimTest {
  public:
   bool DocumentHasTouchActionRegion(const EventHandlerRegistry& registry) {
-    GetDocument().View()->UpdateAllLifecyclePhases();
+    GetDocument().View()->UpdateAllLifecyclePhases(
+        DocumentLifecycle::LifecycleUpdateReason::kTest);
     return registry.HasEventHandlers(
         EventHandlerRegistry::EventHandlerClass::kTouchAction);
   }
@@ -810,8 +878,7 @@ TEST_F(LayoutObjectSimTest, TouchActionUpdatesSubframeEventHandler) {
       "</body></html>");
 
   Element* iframe_element = GetDocument().QuerySelector("iframe");
-  HTMLFrameOwnerElement* frame_owner_element =
-      ToHTMLFrameOwnerElement(iframe_element);
+  auto* frame_owner_element = To<HTMLFrameOwnerElement>(iframe_element);
   Document* iframe_doc = frame_owner_element->contentDocument();
   Element* inner = iframe_doc->getElementById("inner");
   Element* iframe_doc_element = iframe_doc->documentElement();
@@ -861,20 +928,119 @@ TEST_F(LayoutObjectSimTest, HitTestForOcclusionInIframe) {
     <div id='target'>target</div>
   )HTML");
 
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  GetDocument().View()->UpdateAllLifecyclePhases(
+      DocumentLifecycle::LifecycleUpdateReason::kTest);
   Element* iframe_element = GetDocument().QuerySelector("iframe");
-  HTMLFrameOwnerElement* frame_owner_element =
-      ToHTMLFrameOwnerElement(iframe_element);
+  auto* frame_owner_element = To<HTMLFrameOwnerElement>(iframe_element);
   Document* iframe_doc = frame_owner_element->contentDocument();
   Element* target = iframe_doc->getElementById("target");
   HitTestResult result = target->GetLayoutObject()->HitTestForOcclusion();
-  EXPECT_TRUE(result.InnerNode() == target);
+  EXPECT_EQ(result.InnerNode(), target);
 
   Element* occluder = GetDocument().getElementById("occluder");
   occluder->SetInlineStyleProperty(CSSPropertyMarginTop, "-150px");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  GetDocument().View()->UpdateAllLifecyclePhases(
+      DocumentLifecycle::LifecycleUpdateReason::kTest);
   result = target->GetLayoutObject()->HitTestForOcclusion();
-  EXPECT_TRUE(result.InnerNode() == occluder);
+  EXPECT_EQ(result.InnerNode(), occluder);
+}
+
+TEST_F(LayoutObjectSimTest, FirstLineBackgroundImage) {
+  SimRequest main_resource("https://example.com/test.html", "text/html");
+
+  LoadURL("https://example.com/test.html");
+  main_resource.Complete(R"HTML(
+    <style>
+      div::first-line {
+        background-image: url(data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==);
+      }
+      span { background: rgba(0, 255, 0, 0.3); }
+    </style>
+    <div id="target">
+      <span id="first-line1">Text</span><span id="first-line2">Text</span><br>
+      <span id="second-line">Text</span>
+    </div>
+    <div>To keep the image alive when target is set display: none</div>
+  )HTML");
+
+  GetDocument().View()->UpdateAllLifecyclePhases(
+      DocumentLifecycle::LifecycleUpdateReason::kTest);
+
+  auto* target = GetDocument().getElementById("target");
+  auto* target_object = target->GetLayoutObject();
+  auto* image_resource_content = target_object->FirstLineStyleRef()
+                                     .BackgroundLayers()
+                                     .GetImage()
+                                     ->CachedImage();
+
+  // Simulate an image change notification, and we should invalidate the objects
+  // in the first line.
+  static_cast<ImageObserver*>(image_resource_content)
+      ->Changed(image_resource_content->GetImage());
+
+  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
+    // The block itself doesn't paint the first line, so we don't need to
+    // invalidate it for the image change in the first line style.
+    EXPECT_FALSE(target_object->ShouldDoFullPaintInvalidation());
+  } else {
+    // In legacy layout mode, the block is the layout object of the first line's
+    // root line box, so we invalidate it.
+    EXPECT_TRUE(target_object->ShouldDoFullPaintInvalidation());
+  }
+  auto* first_line1 =
+      GetDocument().getElementById("first-line1")->GetLayoutObject();
+  EXPECT_TRUE(first_line1->ShouldDoFullPaintInvalidation());
+  EXPECT_TRUE(first_line1->SlowFirstChild()->ShouldDoFullPaintInvalidation());
+  auto* first_line2 =
+      GetDocument().getElementById("first-line2")->GetLayoutObject();
+  EXPECT_TRUE(first_line2->ShouldDoFullPaintInvalidation());
+  EXPECT_TRUE(first_line2->SlowFirstChild()->ShouldDoFullPaintInvalidation());
+  auto* second_line =
+      GetDocument().getElementById("second-line")->GetLayoutObject();
+  EXPECT_FALSE(second_line->ShouldDoFullPaintInvalidation());
+  EXPECT_FALSE(second_line->SlowFirstChild()->ShouldDoFullPaintInvalidation());
+
+  target->setAttribute(html_names::kStyleAttr, "display: none");
+  GetDocument().View()->UpdateAllLifecyclePhases(
+      DocumentLifecycle::LifecycleUpdateReason::kTest);
+  target_object = target->GetLayoutObject();
+  EXPECT_EQ(nullptr, target_object);
+  // The image is still alive because the other div's first line style still
+  // reference it. The following statement should not crash.
+  static_cast<ImageObserver*>(image_resource_content)
+      ->Changed(image_resource_content->GetImage());
+}
+
+TEST_F(LayoutObjectTest, FirstLineBackgroundImageNestedCrash) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      *::first-line { background-image: linear-gradient(red, blue); }
+    </style>
+    <div><span><div>ABCDE</div></span></div>
+  )HTML");
+
+  // The following code should not crash due to incorrectly paired
+  // StyleImage::AddClient() and RemoveClient().
+  GetDocument().documentElement()->setAttribute(html_names::kStyleAttr,
+                                                "display: none");
+  UpdateAllLifecyclePhasesForTest();
+}
+
+TEST_F(LayoutObjectTest, FirstLineBackgroundImageAddBlockBackgroundImageCrash) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      #target::first-line { background-image: linear-gradient(red, blue); }
+    </style>
+    <div id="target"></div>
+  )HTML");
+
+  // The following code should not crash due to incorrectly paired
+  // StyleImage::AddClient() and RemoveClient().
+  GetDocument().getElementById("target")->setAttribute(
+      html_names::kStyleAttr,
+      "background-image: url(data:image/gif;base64,"
+      "R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==)");
+  UpdateAllLifecyclePhasesForTest();
 }
 
 }  // namespace blink

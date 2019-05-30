@@ -7,9 +7,10 @@
 #include "base/macros.h"
 #include "chrome/browser/chromeos/device_sync/device_sync_client_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chromeos/chromeos_features.h"
 #include "chromeos/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
 #include "chromeos/services/multidevice_setup/public/cpp/multidevice_setup_client_impl.h"
+#include "chromeos/services/multidevice_setup/public/cpp/prefs.h"
+#include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_service.h"
@@ -18,6 +19,15 @@
 namespace chromeos {
 
 namespace multidevice_setup {
+
+namespace {
+
+bool IsAllowedByPolicy(content::BrowserContext* context) {
+  return multidevice_setup::AreAnyMultiDeviceFeaturesAllowed(
+      Profile::FromBrowserContext(context)->GetPrefs());
+}
+
+}  // namespace
 
 // Class that wraps MultiDeviceSetupClient in a KeyedService.
 class MultiDeviceSetupClientHolder : public KeyedService {
@@ -32,6 +42,9 @@ class MultiDeviceSetupClientHolder : public KeyedService {
   }
 
  private:
+  // KeyedService:
+  void Shutdown() override { multidevice_setup_client_.reset(); }
+
   std::unique_ptr<MultiDeviceSetupClient> multidevice_setup_client_;
 
   DISALLOW_COPY_AND_ASSIGN(MultiDeviceSetupClientHolder);
@@ -63,13 +76,14 @@ MultiDeviceSetupClientFactory* MultiDeviceSetupClientFactory::GetInstance() {
 
 KeyedService* MultiDeviceSetupClientFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  if (base::FeatureList::IsEnabled(
-          chromeos::features::kEnableUnifiedMultiDeviceSetup) &&
-      base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi)) {
+  if (IsAllowedByPolicy(context))
     return new MultiDeviceSetupClientHolder(context);
-  }
 
   return nullptr;
+}
+
+bool MultiDeviceSetupClientFactory::ServiceIsNULLWhileTesting() const {
+  return true;
 }
 
 }  // namespace multidevice_setup

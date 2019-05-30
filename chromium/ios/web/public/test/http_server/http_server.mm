@@ -8,10 +8,12 @@
 
 #include <string>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
+#include "ios/net/url_test_util.h"
 #import "net/base/mac/url_conversions.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
@@ -155,7 +157,8 @@ GURL HttpServer::MakeUrl(const std::string& url) {
 GURL HttpServer::MakeUrlForHttpServer(const std::string& url) const {
   GURL result(url);
   DCHECK(result.is_valid());
-  return embedded_test_server_->GetURL("/" + result.GetContent());
+  return embedded_test_server_->GetURL(
+      "/" + net::GetContentAndFragmentForUrl(result));
 }
 
 scoped_refptr<RefCountedResponseProviderWrapper>

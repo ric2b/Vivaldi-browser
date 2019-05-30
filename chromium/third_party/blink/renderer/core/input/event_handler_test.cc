@@ -126,7 +126,7 @@ void EventHandlerTest::SetUp() {
 void EventHandlerTest::SetHtmlInnerHTML(const char* html_content) {
   GetDocument().documentElement()->SetInnerHTMLFromString(
       String::FromUTF8(html_content));
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 }
 
 ShadowRoot* EventHandlerTest::SetShadowContent(const char* shadow_content,
@@ -178,7 +178,7 @@ TEST_F(EventHandlerTest, dragSelectionAfterScroll) {
       WebInputEvent::GetStaticTimeStampForTests());
   mouse_move_event.SetFrameScale(1);
   GetDocument().GetFrame()->GetEventHandler().HandleMouseMoveEvent(
-      mouse_move_event, Vector<WebMouseEvent>());
+      mouse_move_event, Vector<WebMouseEvent>(), Vector<WebMouseEvent>());
 
   GetPage().GetAutoscrollController().Animate();
   GetPage().Animator().ServiceScriptedAnimations(WTF::CurrentTimeTicks());
@@ -301,7 +301,7 @@ TEST_F(EventHandlerTest, draggedInlinePositionTest) {
       WebInputEvent::GetStaticTimeStampForTests());
   mouse_move_event.SetFrameScale(1);
   GetDocument().GetFrame()->GetEventHandler().HandleMouseMoveEvent(
-      mouse_move_event, Vector<WebMouseEvent>());
+      mouse_move_event, Vector<WebMouseEvent>(), Vector<WebMouseEvent>());
 
   EXPECT_EQ(IntPoint(12, 29), GetDocument()
                                   .GetFrame()
@@ -339,7 +339,7 @@ TEST_F(EventHandlerTest, draggedSVGImagePositionTest) {
       WebInputEvent::GetStaticTimeStampForTests());
   mouse_move_event.SetFrameScale(1);
   GetDocument().GetFrame()->GetEventHandler().HandleMouseMoveEvent(
-      mouse_move_event, Vector<WebMouseEvent>());
+      mouse_move_event, Vector<WebMouseEvent>(), Vector<WebMouseEvent>());
 
   EXPECT_EQ(IntPoint(45, 44), GetDocument()
                                   .GetFrame()
@@ -596,7 +596,7 @@ TEST_F(EventHandlerTest, sendContextMenuEventWithHover) {
       "<style>*:hover { color: red; }</style>"
       "<div>foo</div>");
   GetDocument().GetSettings()->SetScriptEnabled(true);
-  Element* script = GetDocument().CreateRawElement(HTMLNames::scriptTag);
+  Element* script = GetDocument().CreateRawElement(html_names::kScriptTag);
   script->SetInnerHTMLFromString(
       "document.addEventListener('contextmenu', event => "
       "event.preventDefault());");
@@ -777,7 +777,7 @@ TEST_F(EventHandlerTest, dragEndInNewDrag) {
       WebInputEvent::Modifiers::kLeftButtonDown, CurrentTimeTicks());
   mouse_move_event.SetFrameScale(1);
   GetDocument().GetFrame()->GetEventHandler().HandleMouseMoveEvent(
-      mouse_move_event, Vector<WebMouseEvent>());
+      mouse_move_event, Vector<WebMouseEvent>(), Vector<WebMouseEvent>());
 
   // This reproduces what might be the conditions of http://crbug.com/677916
   //
@@ -824,9 +824,10 @@ TEST_F(EventHandlerTest, FakeMouseMoveNotStartDrag) {
           WebInputEvent::Modifiers::kRelativeMotionEvent,
       WebInputEvent::GetStaticTimeStampForTests());
   fake_mouse_move.SetFrameScale(1);
-  EXPECT_EQ(WebInputEventResult::kHandledSuppressed,
-            GetDocument().GetFrame()->GetEventHandler().HandleMouseMoveEvent(
-                fake_mouse_move, Vector<WebMouseEvent>()));
+  EXPECT_EQ(
+      WebInputEventResult::kHandledSuppressed,
+      GetDocument().GetFrame()->GetEventHandler().HandleMouseMoveEvent(
+          fake_mouse_move, Vector<WebMouseEvent>(), Vector<WebMouseEvent>()));
 
   EXPECT_EQ(IntPoint(0, 0), GetDocument()
                                 .GetFrame()
@@ -853,7 +854,7 @@ class EventHandlerTooltipTest : public EventHandlerTest {
   EventHandlerTooltipTest() = default;
 
   void SetUp() override {
-    chrome_client_ = new TooltipCapturingChromeClient();
+    chrome_client_ = MakeGarbageCollected<TooltipCapturingChromeClient>();
     Page::PageClients clients;
     FillWithEmptyClients(clients);
     clients.chrome_client = chrome_client_.Get();
@@ -880,7 +881,7 @@ TEST_F(EventHandlerTooltipTest, mouseLeaveClearsTooltip) {
       CurrentTimeTicks());
   mouse_move_event.SetFrameScale(1);
   GetDocument().GetFrame()->GetEventHandler().HandleMouseMoveEvent(
-      mouse_move_event, Vector<WebMouseEvent>());
+      mouse_move_event, Vector<WebMouseEvent>(), Vector<WebMouseEvent>());
 
   EXPECT_EQ("tooltip", LastToolTip());
 
@@ -916,7 +917,8 @@ class UnbufferedInputEventsTrackingChromeClient : public EmptyChromeClient {
 class EventHandlerLatencyTest : public PageTestBase {
  protected:
   void SetUp() override {
-    chrome_client_ = new UnbufferedInputEventsTrackingChromeClient();
+    chrome_client_ =
+        MakeGarbageCollected<UnbufferedInputEventsTrackingChromeClient>();
     Page::PageClients page_clients;
     FillWithEmptyClients(page_clients);
     page_clients.chrome_client = chrome_client_.Get();
@@ -926,7 +928,7 @@ class EventHandlerLatencyTest : public PageTestBase {
   void SetHtmlInnerHTML(const char* html_content) {
     GetDocument().documentElement()->SetInnerHTMLFromString(
         String::FromUTF8(html_content));
-    GetDocument().View()->UpdateAllLifecyclePhases();
+    UpdateAllLifecyclePhasesForTest();
   }
 
   Persistent<UnbufferedInputEventsTrackingChromeClient> chrome_client_;
@@ -984,7 +986,7 @@ class EventHandlerNavigationTest : public EventHandlerTest {
   EventHandlerNavigationTest() = default;
 
   void SetUp() override {
-    frame_client_ = new NavigationCapturingFrameClient();
+    frame_client_ = MakeGarbageCollected<NavigationCapturingFrameClient>();
     Page::PageClients clients;
     FillWithEmptyClients(clients);
     SetupPageWithClients(&clients, frame_client_);
@@ -1025,7 +1027,7 @@ TEST_F(EventHandlerNavigationTest, MouseButtonsNavigate) {
 TEST_F(EventHandlerNavigationTest, MouseButtonsDontNavigate) {
   SetHtmlInnerHTML("<div>");
   GetDocument().GetSettings()->SetScriptEnabled(true);
-  Element* script = GetDocument().CreateRawElement(HTMLNames::scriptTag);
+  Element* script = GetDocument().CreateRawElement(html_names::kScriptTag);
   script->SetInnerHTMLFromString(
       "document.addEventListener('mouseup', event => "
       "event.preventDefault());");
@@ -1083,7 +1085,7 @@ TEST_F(EventHandlerTest, MouseLeaveResetsUnknownState) {
 // Test that leaving an iframe sets the mouse position to unknown on that
 // iframe.
 TEST_F(EventHandlerSimTest, MouseLeaveIFrameResets) {
-  WebView().Resize(WebSize(800, 600));
+  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
 
   SimRequest main_resource("https://example.com/test.html", "text/html");
   SimRequest frame_resource("https://example.com/frame.html", "text/html");
@@ -1115,7 +1117,8 @@ TEST_F(EventHandlerSimTest, MouseLeaveIFrameResets) {
       WebInputEvent::GetStaticTimeStampForTests());
   mouse_move_inside_event.SetFrameScale(1);
   GetDocument().GetFrame()->GetEventHandler().HandleMouseMoveEvent(
-      mouse_move_inside_event, Vector<WebMouseEvent>());
+      mouse_move_inside_event, Vector<WebMouseEvent>(),
+      Vector<WebMouseEvent>());
   EXPECT_FALSE(
       GetDocument().GetFrame()->GetEventHandler().IsMousePositionUnknown());
   auto* child_frame =
@@ -1123,8 +1126,7 @@ TEST_F(EventHandlerSimTest, MouseLeaveIFrameResets) {
   child_frame->contentDocument()
       ->UpdateStyleAndLayoutIgnorePendingStylesheets();
   EXPECT_TRUE(GetDocument().GetFrame()->Tree().FirstChild());
-  EXPECT_TRUE(GetDocument().GetFrame()->Tree().FirstChild()->IsLocalFrame());
-  EXPECT_FALSE(ToLocalFrame(GetDocument().GetFrame()->Tree().FirstChild())
+  EXPECT_FALSE(To<LocalFrame>(GetDocument().GetFrame()->Tree().FirstChild())
                    ->GetEventHandler()
                    .IsMousePositionUnknown());
 
@@ -1135,12 +1137,12 @@ TEST_F(EventHandlerSimTest, MouseLeaveIFrameResets) {
       WebInputEvent::GetStaticTimeStampForTests());
   mouse_move_outside_event.SetFrameScale(1);
   GetDocument().GetFrame()->GetEventHandler().HandleMouseMoveEvent(
-      mouse_move_outside_event, Vector<WebMouseEvent>());
+      mouse_move_outside_event, Vector<WebMouseEvent>(),
+      Vector<WebMouseEvent>());
   EXPECT_FALSE(
       GetDocument().GetFrame()->GetEventHandler().IsMousePositionUnknown());
   EXPECT_TRUE(GetDocument().GetFrame()->Tree().FirstChild());
-  EXPECT_TRUE(GetDocument().GetFrame()->Tree().FirstChild()->IsLocalFrame());
-  EXPECT_TRUE(ToLocalFrame(GetDocument().GetFrame()->Tree().FirstChild())
+  EXPECT_TRUE(To<LocalFrame>(GetDocument().GetFrame()->Tree().FirstChild())
                   ->GetEventHandler()
                   .IsMousePositionUnknown());
 }
@@ -1148,7 +1150,7 @@ TEST_F(EventHandlerSimTest, MouseLeaveIFrameResets) {
 // Test that mouse down and move a small distance on a draggable element will
 // not change cursor style.
 TEST_F(EventHandlerSimTest, CursorStyleBeforeStartDragging) {
-  WebView().Resize(WebSize(800, 600));
+  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1180,7 +1182,7 @@ TEST_F(EventHandlerSimTest, CursorStyleBeforeStartDragging) {
                                  WebInputEvent::GetStaticTimeStampForTests());
   mouse_move_event.SetFrameScale(1);
   GetDocument().GetFrame()->GetEventHandler().HandleMouseMoveEvent(
-      mouse_move_event, Vector<WebMouseEvent>());
+      mouse_move_event, Vector<WebMouseEvent>(), Vector<WebMouseEvent>());
   EXPECT_EQ(Cursor::Type::kHelp, GetDocument()
                                      .GetFrame()
                                      ->GetChromeClient()
@@ -1190,7 +1192,7 @@ TEST_F(EventHandlerSimTest, CursorStyleBeforeStartDragging) {
 
 // Ensure that tap on element in iframe should apply active state.
 TEST_F(EventHandlerSimTest, TapActiveInFrame) {
-  WebView().Resize(WebSize(800, 600));
+  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
 
   SimRequest main_resource("https://example.com/test.html", "text/html");
   SimRequest frame_resource("https://example.com/iframe.html", "text/html");
@@ -1250,6 +1252,90 @@ TEST_F(EventHandlerSimTest, TapActiveInFrame) {
   test::RunDelayedTasks(TimeDelta::FromSecondsD(0.2));
   EXPECT_FALSE(GetDocument().GetActiveElement());
   EXPECT_FALSE(iframe_doc->GetActiveElement());
+}
+
+// Test that the hover is updated at the next begin frame after the scroll ends.
+TEST_F(EventHandlerSimTest, TestUpdateHoverAfterScrollAtBeginFrame) {
+  RuntimeEnabledFeatures::SetNoHoverDuringScrollEnabled(true);
+  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+    <style>
+      body, html {
+        margin: 0;
+      }
+      div {
+        height: 300px;
+        width: 100%;
+      }
+    </style>
+    <body>
+    <div class="hoverme" id="line1">hover over me</div>
+    <div class="hoverme" id="line2">hover over me</div>
+    <div class="hoverme" id="line3">hover over me</div>
+    <div class="hoverme" id="line4">hover over me</div>
+    <div class="hoverme" id="line5">hover over me</div>
+    </body>
+    <script>
+      let array = document.getElementsByClassName('hoverme');
+      for (let element of array) {
+        element.addEventListener('mouseover', function (e) {
+          this.innerHTML = "currently hovered";
+        });
+        element.addEventListener('mouseout', function (e) {
+          this.innerHTML = "was hovered";
+        });
+      }
+    </script>
+  )HTML");
+  Compositor().BeginFrame();
+
+  // Set mouse position and active web view.
+  WebMouseEvent mouse_down_event(WebMouseEvent::kMouseDown, WebFloatPoint(1, 1),
+                                 WebFloatPoint(1, 1),
+                                 WebPointerProperties::Button::kLeft, 1,
+                                 WebInputEvent::Modifiers::kLeftButtonDown,
+                                 WebInputEvent::GetStaticTimeStampForTests());
+  mouse_down_event.SetFrameScale(1);
+  GetDocument().GetFrame()->GetEventHandler().HandleMousePressEvent(
+      mouse_down_event);
+
+  WebMouseEvent mouse_up_event(
+      WebInputEvent::kMouseUp, WebFloatPoint(1, 1), WebFloatPoint(1, 1),
+      WebPointerProperties::Button::kLeft, 1, WebInputEvent::kNoModifiers,
+      WebInputEvent::GetStaticTimeStampForTests());
+  mouse_up_event.SetFrameScale(1);
+  GetDocument().GetFrame()->GetEventHandler().HandleMouseReleaseEvent(
+      mouse_up_event);
+
+  WebView().MainFrameWidget()->SetFocus(true);
+  WebView().SetIsActive(true);
+
+  WebElement element1 = GetDocument().getElementById("line1");
+  WebElement element2 = GetDocument().getElementById("line2");
+  WebElement element3 = GetDocument().getElementById("line3");
+  EXPECT_EQ("currently hovered", element1.InnerHTML().Utf8());
+  EXPECT_EQ("hover over me", element2.InnerHTML().Utf8());
+  EXPECT_EQ("hover over me", element3.InnerHTML().Utf8());
+
+  // Do a compositor scroll and set |scroll_gesture_did_end| to be true.
+  LocalFrameView* frame_view = GetDocument().View();
+  frame_view->LayoutViewport()->DidScroll(FloatPoint(0, 500));
+  WebView().MainFrameWidget()->ApplyViewportChanges(
+      {gfx::ScrollOffset(), gfx::Vector2dF(), 1.0f, 0,
+       cc::BrowserControlsState::kBoth, true});
+  ASSERT_EQ(500, frame_view->LayoutViewport()->GetScrollOffset().Height());
+  EXPECT_EQ("currently hovered", element1.InnerHTML().Utf8());
+  EXPECT_EQ("hover over me", element2.InnerHTML().Utf8());
+  EXPECT_EQ("hover over me", element3.InnerHTML().Utf8());
+
+  // The fake mouse move event is dispatched at the begin frame to update hover.
+  Compositor().BeginFrame();
+  EXPECT_EQ("was hovered", element1.InnerHTML().Utf8());
+  EXPECT_EQ("currently hovered", element2.InnerHTML().Utf8());
+  EXPECT_EQ("hover over me", element3.InnerHTML().Utf8());
 }
 
 }  // namespace blink

@@ -14,13 +14,16 @@
 #include "base/macros.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/paint/display_item_list.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -36,9 +39,9 @@
 #include "ui/events/scoped_target_handler.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/path.h"
 #include "ui/gfx/transform.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/native_theme/test_native_theme.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/native/native_view_host.h"
@@ -2140,7 +2143,7 @@ TEST_F(ViewTest, HandleAccelerator) {
 
   // TYPE_POPUP widgets default to non-activatable, so the Show() above wouldn't
   // have activated the Widget. First, allow activation.
-  widget->widget_delegate()->set_can_activate(true);
+  widget->widget_delegate()->SetCanActivate(true);
 
   // When a non-child view is active, it should handle accelerators.
   view->accelerator_count_map_[return_accelerator] = 0;
@@ -3570,15 +3573,11 @@ TEST_F(ViewTest, GetIndexOf) {
 TEST_F(ViewTest, ReorderChildren) {
   View root;
 
-  View* child = new View();
-  root.AddChildView(child);
+  View* child = root.AddChildView(std::make_unique<View>());
 
-  View* foo1 = new View();
-  child->AddChildView(foo1);
-  View* foo2 = new View();
-  child->AddChildView(foo2);
-  View* foo3 = new View();
-  child->AddChildView(foo3);
+  View* foo1 = child->AddChildView(std::make_unique<View>());
+  View* foo2 = child->AddChildView(std::make_unique<View>());
+  View* foo3 = child->AddChildView(std::make_unique<View>());
   foo1->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   foo2->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   foo3->SetFocusBehavior(View::FocusBehavior::ALWAYS);
@@ -3664,8 +3663,8 @@ TEST_F(ViewTest, GetViewByID) {
   View::Views views;
   v1.GetViewsInGroup(kGroup, &views);
   EXPECT_EQ(2U, views.size());
-  EXPECT_NE(views.cend(), std::find(views.cbegin(), views.cend(), &v3));
-  EXPECT_NE(views.cend(), std::find(views.cbegin(), views.cend(), &v4));
+  EXPECT_TRUE(base::ContainsValue(views, &v3));
+  EXPECT_TRUE(base::ContainsValue(views, &v4));
 }
 
 TEST_F(ViewTest, AddExistingChild) {
@@ -3725,13 +3724,11 @@ TEST_F(ViewTest, AdvanceFocusIfNecessaryForUnfocusableView) {
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   widget.Init(params);
 
-  View* view1 = new View();
+  View* view1 = widget.GetRootView()->AddChildView(std::make_unique<View>());
   view1->SetFocusBehavior(View::FocusBehavior::ALWAYS);
 
-  widget.GetRootView()->AddChildView(view1);
-  View* view2 = new View();
+  View* view2 = widget.GetRootView()->AddChildView(std::make_unique<View>());
   view2->SetFocusBehavior(View::FocusBehavior::ALWAYS);
-  widget.GetRootView()->AddChildView(view2);
 
   FocusManager* focus_manager = widget.GetFocusManager();
   ASSERT_TRUE(focus_manager);
@@ -3902,16 +3899,13 @@ TEST_F(ViewLayerTest, NestedLayerToggling) {
   widget()->SetContentsView(content_view);
 
   // Create v1, give it a bounds and verify everything is set up correctly.
-  View* v1 = new View;
-  content_view->AddChildView(v1);
+  View* v1 = content_view->AddChildView(std::make_unique<View>());
   v1->SetBoundsRect(gfx::Rect(20, 30, 140, 150));
 
-  View* v2 = new View;
-  v1->AddChildView(v2);
+  View* v2 = v1->AddChildView(std::make_unique<View>());
 
-  View* v3 = new View;
+  View* v3 = v2->AddChildView(std::make_unique<View>());
   v3->SetPaintToLayer();
-  v2->AddChildView(v3);
   ASSERT_TRUE(v3->layer() != NULL);
 
   // At this point we have v1-v2-v3. v3 has a layer, v1 and v2 don't.
@@ -3924,8 +3918,7 @@ TEST_F(ViewLayerTest, LayerAnimator) {
   View* content_view = new View;
   widget()->SetContentsView(content_view);
 
-  View* v1 = new View;
-  content_view->AddChildView(v1);
+  View* v1 = content_view->AddChildView(std::make_unique<View>());
   v1->SetPaintToLayer();
   EXPECT_TRUE(v1->layer() != NULL);
 
@@ -3945,13 +3938,11 @@ TEST_F(ViewLayerTest, BoundsChangeWithLayer) {
   View* content_view = new View;
   widget()->SetContentsView(content_view);
 
-  View* v1 = new View;
-  content_view->AddChildView(v1);
+  View* v1 = content_view->AddChildView(std::make_unique<View>());
   v1->SetBoundsRect(gfx::Rect(20, 30, 140, 150));
 
-  View* v2 = new View;
+  View* v2 = v1->AddChildView(std::make_unique<View>());
   v2->SetBoundsRect(gfx::Rect(10, 11, 40, 50));
-  v1->AddChildView(v2);
   v2->SetPaintToLayer();
   ASSERT_TRUE(v2->layer() != NULL);
   EXPECT_EQ(gfx::Rect(30, 41, 40, 50), v2->layer()->bounds());
@@ -4035,10 +4026,9 @@ TEST_F(ViewLayerTest, ResizeParentInRTL) {
   int content_width = view->width();
 
   // Create a paints-to-layer view |v1|.
-  View* v1 = new View;
+  View* v1 = view->AddChildView(std::make_unique<View>());
   v1->SetPaintToLayer();
   v1->SetBounds(10, 10, 20, 10);
-  view->AddChildView(v1);
   EXPECT_EQ(gfx::Rect(content_width - 30, 10, 20, 10),
             v1->layer()->bounds());
 
@@ -4236,9 +4226,8 @@ TEST_F(ViewLayerTest, ScheduledRectsInParentAfterSchedulingPaint) {
   TestView parent_view;
   parent_view.SetBounds(10, 10, 100, 100);
 
-  TestView* child_view = new TestView;
+  TestView* child_view = parent_view.AddChildView(std::make_unique<TestView>());
   child_view->SetBounds(5, 6, 10, 20);
-  parent_view.AddChildView(child_view);
 
   parent_view.scheduled_paint_rects_.clear();
   SchedulePaintOnParent(child_view);
@@ -4251,8 +4240,7 @@ TEST_F(ViewLayerTest, ParentPaintWhenSwitchingPaintToLayerFromFalseToTrue) {
   TestView parent_view;
   parent_view.SetBounds(10, 11, 12, 13);
 
-  TestView* child_view = new TestView;
-  parent_view.AddChildView(child_view);
+  TestView* child_view = parent_view.AddChildView(std::make_unique<TestView>());
 
   parent_view.scheduled_paint_rects_.clear();
   child_view->SetPaintToLayer();
@@ -4263,9 +4251,8 @@ TEST_F(ViewLayerTest, NoParentPaintWhenSwitchingPaintToLayerFromTrueToTrue) {
   TestView parent_view;
   parent_view.SetBounds(10, 11, 12, 13);
 
-  TestView* child_view = new TestView;
+  TestView* child_view = parent_view.AddChildView(std::make_unique<TestView>());
   child_view->SetPaintToLayer();
-  parent_view.AddChildView(child_view);
 
   parent_view.scheduled_paint_rects_.clear();
   EXPECT_EQ(0U, parent_view.scheduled_paint_rects_.size());
@@ -4278,16 +4265,13 @@ TEST_F(ViewLayerTest, VisibilityChildLayers) {
   v1->SetPaintToLayer();
   widget()->SetContentsView(v1);
 
-  View* v2 = new View;
-  v1->AddChildView(v2);
+  View* v2 = v1->AddChildView(std::make_unique<View>());
 
-  View* v3 = new View;
-  v2->AddChildView(v3);
+  View* v3 = v2->AddChildView(std::make_unique<View>());
   v3->SetVisible(false);
 
-  View* v4 = new View;
+  View* v4 = v3->AddChildView(std::make_unique<View>());
   v4->SetPaintToLayer();
-  v3->AddChildView(v4);
 
   EXPECT_TRUE(v1->layer()->IsDrawn());
   EXPECT_FALSE(v4->layer()->IsDrawn());
@@ -4344,12 +4328,10 @@ TEST_F(ViewLayerTest, DISABLED_ViewLayerTreesInSync) {
 TEST_F(ViewLayerTest, ReorderUnderWidget) {
   View* content = new View;
   widget()->SetContentsView(content);
-  View* c1 = new View;
+  View* c1 = content->AddChildView(std::make_unique<View>());
   c1->SetPaintToLayer();
-  content->AddChildView(c1);
-  View* c2 = new View;
+  View* c2 = content->AddChildView(std::make_unique<View>());
   c2->SetPaintToLayer();
-  content->AddChildView(c2);
 
   ui::Layer* parent_layer = c1->layer()->parent();
   ASSERT_TRUE(parent_layer);
@@ -4387,12 +4369,10 @@ TEST_F(ViewLayerTest, RecreateLayerZOrder) {
   std::unique_ptr<View> v(new View());
   v->SetPaintToLayer();
 
-  View* v1 = new View();
+  View* v1 = v->AddChildView(std::make_unique<View>());
   v1->SetPaintToLayer();
-  v->AddChildView(v1);
-  View* v2 = new View();
+  View* v2 = v->AddChildView(std::make_unique<View>());
   v2->SetPaintToLayer();
-  v->AddChildView(v2);
 
   // Test the initial z-order.
   const std::vector<ui::Layer*>& child_layers_pre = v->layer()->children();
@@ -4417,12 +4397,10 @@ TEST_F(ViewLayerTest, RecreateLayerZOrderWidgetParent) {
   View* v = new View();
   widget()->SetContentsView(v);
 
-  View* v1 = new View();
+  View* v1 = v->AddChildView(std::make_unique<View>());
   v1->SetPaintToLayer();
-  v->AddChildView(v1);
-  View* v2 = new View();
+  View* v2 = v->AddChildView(std::make_unique<View>());
   v2->SetPaintToLayer();
-  v->AddChildView(v2);
 
   ui::Layer* root_layer = GetRootLayer();
 
@@ -4483,16 +4461,17 @@ std::string ToString(const gfx::Vector2dF& vector) {
 }  // namespace
 
 TEST_F(ViewLayerTest, SnapLayerToPixel) {
+  viz::ParentLocalSurfaceIdAllocator allocator;
+  allocator.GenerateId();
   View* v1 = new View;
 
-  View* v11 = new View;
-  v1->AddChildView(v11);
+  View* v11 = v1->AddChildView(std::make_unique<View>());
 
   widget()->SetContentsView(v1);
 
   const gfx::Size& size = GetRootLayer()->GetCompositor()->size();
-  GetRootLayer()->GetCompositor()->SetScaleAndSize(1.25f, size,
-                                                   viz::LocalSurfaceId());
+  GetRootLayer()->GetCompositor()->SetScaleAndSize(
+      1.25f, size, allocator.GetCurrentLocalSurfaceIdAllocation());
 
   v11->SetBoundsRect(gfx::Rect(1, 1, 10, 10));
   v1->SetBoundsRect(gfx::Rect(1, 1, 10, 10));
@@ -4506,8 +4485,8 @@ TEST_F(ViewLayerTest, SnapLayerToPixel) {
   EXPECT_EQ("-0.20 -0.20", ToString(v11->layer()->subpixel_position_offset()));
 
   // DSF change should get propagated and update offsets.
-  GetRootLayer()->GetCompositor()->SetScaleAndSize(1.5f, size,
-                                                   viz::LocalSurfaceId());
+  GetRootLayer()->GetCompositor()->SetScaleAndSize(
+      1.5f, size, allocator.GetCurrentLocalSurfaceIdAllocation());
   EXPECT_EQ("0.33 0.33", ToString(v1->layer()->subpixel_position_offset()));
   EXPECT_EQ("0.33 0.33", ToString(v11->layer()->subpixel_position_offset()));
 
@@ -4520,8 +4499,8 @@ TEST_F(ViewLayerTest, SnapLayerToPixel) {
   EXPECT_EQ("0.33 0.33", ToString(v11->layer()->subpixel_position_offset()));
 
   // Setting integral DSF should reset the offset.
-  GetRootLayer()->GetCompositor()->SetScaleAndSize(2.0f, size,
-                                                   viz::LocalSurfaceId());
+  GetRootLayer()->GetCompositor()->SetScaleAndSize(
+      2.0f, size, allocator.GetCurrentLocalSurfaceIdAllocation());
   EXPECT_EQ("0.00 0.00", ToString(v11->layer()->subpixel_position_offset()));
 }
 
@@ -4581,17 +4560,17 @@ class ViewLayerPixelCanvasTest : public ViewLayerTest {
 };
 
 TEST_F(ViewLayerPixelCanvasTest, SnapLayerToPixel) {
+  viz::ParentLocalSurfaceIdAllocator allocator;
+  allocator.GenerateId();
   View* v1 = new View;
-  View* v2 = new View;
-  PaintLayerView* v3 = new PaintLayerView;
-  v1->AddChildView(v2);
-  v2->AddChildView(v3);
+  View* v2 = v1->AddChildView(std::make_unique<View>());
+  PaintLayerView* v3 = v2->AddChildView(std::make_unique<PaintLayerView>());
 
   widget()->SetContentsView(v1);
 
   const gfx::Size& size = GetRootLayer()->GetCompositor()->size();
-  GetRootLayer()->GetCompositor()->SetScaleAndSize(1.6f, size,
-                                                   viz::LocalSurfaceId());
+  GetRootLayer()->GetCompositor()->SetScaleAndSize(
+      1.6f, size, allocator.GetCurrentLocalSurfaceIdAllocation());
 
   v3->SetBoundsRect(gfx::Rect(14, 13, 13, 5));
   v2->SetBoundsRect(gfx::Rect(7, 7, 50, 50));
@@ -4606,8 +4585,8 @@ TEST_F(ViewLayerPixelCanvasTest, SnapLayerToPixel) {
   EXPECT_EQ("-0.37 -0.00", ToString(v3->layer()->subpixel_position_offset()));
 
   // DSF change should get propagated and update offsets.
-  GetRootLayer()->GetCompositor()->SetScaleAndSize(1.5f, size,
-                                                   viz::LocalSurfaceId());
+  GetRootLayer()->GetCompositor()->SetScaleAndSize(
+      1.5f, size, allocator.GetCurrentLocalSurfaceIdAllocation());
 
   EXPECT_EQ("0.33 0.33", ToString(v1->layer()->subpixel_position_offset()));
   EXPECT_EQ("0.33 0.67", ToString(v3->layer()->subpixel_position_offset()));
@@ -4616,8 +4595,8 @@ TEST_F(ViewLayerPixelCanvasTest, SnapLayerToPixel) {
   PaintRecordingSizeTest(v3, gfx::Size(20, 7));  // Enclosing Rect = (20, 8)
   v1->SetPaintToLayer();
 
-  GetRootLayer()->GetCompositor()->SetScaleAndSize(1.33f, size,
-                                                   viz::LocalSurfaceId());
+  GetRootLayer()->GetCompositor()->SetScaleAndSize(
+      1.33f, size, allocator.GetCurrentLocalSurfaceIdAllocation());
 
   EXPECT_EQ("0.02 0.02", ToString(v1->layer()->subpixel_position_offset()));
   EXPECT_EQ("0.05 -0.45", ToString(v3->layer()->subpixel_position_offset()));
@@ -4633,8 +4612,8 @@ TEST_F(ViewLayerPixelCanvasTest, SnapLayerToPixel) {
   EXPECT_EQ("0.06 -0.44", ToString(v3->layer()->subpixel_position_offset()));
 
   // Setting integral DSF should reset the offset.
-  GetRootLayer()->GetCompositor()->SetScaleAndSize(2.0f, size,
-                                                   viz::LocalSurfaceId());
+  GetRootLayer()->GetCompositor()->SetScaleAndSize(
+      2.0f, size, allocator.GetCurrentLocalSurfaceIdAllocation());
   EXPECT_EQ("0.00 0.00", ToString(v3->layer()->subpixel_position_offset()));
 }
 
@@ -4667,12 +4646,12 @@ void TestView::OnNativeThemeChanged(const ui::NativeTheme* native_theme) {
 TEST_F(ViewTest, OnNativeThemeChanged) {
   TestView* test_view = new TestView();
   EXPECT_FALSE(test_view->native_theme_);
-  TestView* test_view_child = new TestView();
-  EXPECT_FALSE(test_view_child->native_theme_);
 
   // Child view added before the widget hierarchy exists should get the
   // new native theme notification.
-  test_view->AddChildView(test_view_child);
+  TestView* test_view_child =
+      test_view->AddChildView(std::make_unique<TestView>());
+  EXPECT_FALSE(test_view_child->native_theme_);
 
   std::unique_ptr<Widget> widget(new Widget);
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
@@ -4687,8 +4666,8 @@ TEST_F(ViewTest, OnNativeThemeChanged) {
 
   // Child view added after the widget hierarchy exists should also get the
   // notification.
-  TestView* test_view_child_2 = new TestView();
-  test_view->AddChildView(test_view_child_2);
+  TestView* test_view_child_2 =
+      test_view->AddChildView(std::make_unique<TestView>());
   EXPECT_TRUE(test_view_child_2->native_theme_);
   EXPECT_EQ(widget->GetNativeTheme(), test_view_child_2->native_theme_);
 
@@ -4711,16 +4690,14 @@ class TestEventHandler : public ui::EventHandler {
 };
 
 TEST_F(ViewTest, ScopedTargetHandlerReceivesEvents) {
-  TestView* v = new TestView();
-  v->SetBoundsRect(gfx::Rect(0, 0, 300, 300));
-
   std::unique_ptr<Widget> widget(new Widget);
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.bounds = gfx::Rect(50, 50, 350, 350);
   widget->Init(params);
   View* root = widget->GetRootView();
-  root->AddChildView(v);
+  TestView* v = root->AddChildView(std::make_unique<TestView>());
+  v->SetBoundsRect(gfx::Rect(0, 0, 300, 300));
   v->Reset();
   {
     TestEventHandler handler(v);
@@ -4776,7 +4753,7 @@ class ViewThatAddsViewInOnNativeThemeChanged : public View {
   // View:
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override {
     on_native_theme_changed_called_ = true;
-    GetWidget()->GetRootView()->AddChildView(new View);
+    GetWidget()->GetRootView()->AddChildView(std::make_unique<View>());
   }
 
  private:
@@ -4785,45 +4762,10 @@ class ViewThatAddsViewInOnNativeThemeChanged : public View {
   DISALLOW_COPY_AND_ASSIGN(ViewThatAddsViewInOnNativeThemeChanged);
 };
 
-// See comment above test for details.
-class TestNativeTheme : public ui::NativeTheme {
- public:
-  TestNativeTheme() {}
-  ~TestNativeTheme() override {}
-
-  // ui::NativeTheme:
-  SkColor GetSystemColor(ColorId color_id) const override {
-    return SK_ColorRED;
-  }
-  gfx::Size GetPartSize(Part part,
-                        State state,
-                        const ExtraParams& extra) const override {
-    return gfx::Size();
-  }
-  void Paint(cc::PaintCanvas* canvas,
-             Part part,
-             State state,
-             const gfx::Rect& rect,
-             const ExtraParams& extra) const override {}
-
-  bool SupportsNinePatch(Part part) const override { return false; }
-  gfx::Size GetNinePatchCanvasSize(Part part) const override {
-    return gfx::Size();
-  }
-  gfx::Rect GetNinePatchAperture(Part part) const override {
-    return gfx::Rect();
-  }
-  bool UsesHighContrastColors() const override { return false; }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestNativeTheme);
-};
-
 // Creates and adds a new child view to |parent| that has a layer.
 void AddViewWithChildLayer(View* parent) {
-  View* child = new View;
+  View* child = parent->AddChildView(std::make_unique<View>());
   child->SetPaintToLayer();
-  parent->AddChildView(child);
 }
 
 // This test does the following:
@@ -4835,7 +4777,7 @@ void AddViewWithChildLayer(View* parent) {
 // before the layer hierarchy was updated. OnNativeThemeChanged() should be
 // called after the layer hierarchy matches the view hierarchy.
 TEST_F(ViewTest, CrashOnAddFromFromOnNativeThemeChanged) {
-  TestNativeTheme theme;
+  ui::TestNativeTheme theme;
   WidgetWithCustomTheme widget(&theme);
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
@@ -4844,8 +4786,8 @@ TEST_F(ViewTest, CrashOnAddFromFromOnNativeThemeChanged) {
 
   AddViewWithChildLayer(widget.GetRootView());
   ViewThatAddsViewInOnNativeThemeChanged* v =
-      new ViewThatAddsViewInOnNativeThemeChanged;
-  widget.GetRootView()->AddChildView(v);
+      widget.GetRootView()->AddChildView(
+          std::make_unique<ViewThatAddsViewInOnNativeThemeChanged>());
   EXPECT_TRUE(v->on_native_theme_changed_called());
 }
 
@@ -4968,18 +4910,15 @@ TEST_F(ViewTest, AttachChildViewWithComplicatedLayers) {
   parent_view->SetPaintToLayer();
 
   // child_view1 has layer and has id OrderableView::VIEW_ID_RAISED.
-  View* child_view1 = new View;
+  View* child_view1 = parent_view->AddChildView(std::make_unique<View>());
   child_view1->SetPaintToLayer();
   child_view1->set_id(OrderableView::VIEW_ID_RAISED);
-  parent_view->AddChildView(child_view1);
 
   // child_view2 has no layer.
-  View* child_view2 = new View;
+  View* child_view2 = parent_view->AddChildView(std::make_unique<View>());
   // grand_child_view has layer.
-  View* grand_child_view = new View();
+  View* grand_child_view = child_view2->AddChildView(std::make_unique<View>());
   grand_child_view->SetPaintToLayer();
-  child_view2->AddChildView(grand_child_view);
-  parent_view->AddChildView(child_view2);
   const std::vector<ui::Layer*>& layers = parent_view->layer()->children();
   EXPECT_EQ(2u, layers.size());
   EXPECT_EQ(layers[0], grand_child_view->layer());
@@ -5155,12 +5094,10 @@ TEST_F(ViewObserverTest, ViewBoundsChanged) {
 
 TEST_F(ViewObserverTest, ChildViewReordered) {
   std::unique_ptr<View> view = NewView();
-  std::unique_ptr<View> child_view = NewView();
-  std::unique_ptr<View> child_view2 = NewView();
-  view->AddChildView(child_view.get());
-  view->AddChildView(child_view2.get());
-  view->ReorderChildView(child_view2.get(), 0);
-  EXPECT_EQ(child_view2.get(), view_reordered());
+  view->AddChildView(NewView());
+  View* child_view2 = view->AddChildView(NewView());
+  view->ReorderChildView(child_view2, 0);
+  EXPECT_EQ(child_view2, view_reordered());
 }
 
 // Provides a simple parent view implementation which tracks layer change

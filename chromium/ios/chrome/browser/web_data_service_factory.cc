@@ -5,9 +5,11 @@
 #include "ios/chrome/browser/web_data_service_factory.h"
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
+#include "base/task/post_task.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
@@ -18,6 +20,7 @@
 #include "ios/chrome/browser/browser_state/browser_state_otr_helper.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/sync/glue/sync_start_util.h"
+#include "ios/web/public/web_task_traits.h"
 #include "ios/web/public/web_thread.h"
 
 namespace ios {
@@ -84,7 +87,8 @@ WebDataServiceFactory::GetTokenWebDataForBrowserState(
 
 // static
 WebDataServiceFactory* WebDataServiceFactory::GetInstance() {
-  return base::Singleton<WebDataServiceFactory>::get();
+  static base::NoDestructor<WebDataServiceFactory> instance;
+  return instance.get();
 }
 
 WebDataServiceFactory::WebDataServiceFactory()
@@ -101,7 +105,7 @@ std::unique_ptr<KeyedService> WebDataServiceFactory::BuildServiceInstanceFor(
   const base::FilePath& browser_state_path = context->GetStatePath();
   return std::make_unique<WebDataServiceWrapper>(
       browser_state_path, GetApplicationContext()->GetApplicationLocale(),
-      web::WebThread::GetTaskRunnerForThread(web::WebThread::UI),
+      base::CreateSingleThreadTaskRunnerWithTraits({web::WebThread::UI}),
       ios::sync_start_util::GetFlareForSyncableService(browser_state_path),
       base::DoNothing());
 }

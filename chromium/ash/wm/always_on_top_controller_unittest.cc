@@ -4,24 +4,28 @@
 
 #include "ash/wm/always_on_top_controller.h"
 
+#include "ash/keyboard/ash_keyboard_controller.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/wm/window_state.h"
+#include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/workspace_layout_manager.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/keyboard/keyboard_controller.h"
-#include "ui/keyboard/keyboard_switches.h"
 #include "ui/keyboard/keyboard_ui.h"
+#include "ui/keyboard/public/keyboard_switches.h"
 #include "ui/keyboard/test/keyboard_test_util.h"
 
 namespace ash {
 
-class VirtualKeyboardAlwaysOnTopControllerTest : public AshTestBase {
+class AlwaysOnTopControllerTest : public AshTestBase {
  public:
-  VirtualKeyboardAlwaysOnTopControllerTest() = default;
-  ~VirtualKeyboardAlwaysOnTopControllerTest() override = default;
+  AlwaysOnTopControllerTest() = default;
+  ~AlwaysOnTopControllerTest() override = default;
 
   void SetUp() override {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
@@ -30,7 +34,7 @@ class VirtualKeyboardAlwaysOnTopControllerTest : public AshTestBase {
   }
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(VirtualKeyboardAlwaysOnTopControllerTest);
+  DISALLOW_COPY_AND_ASSIGN(AlwaysOnTopControllerTest);
 };
 
 class TestLayoutManager : public WorkspaceLayoutManager {
@@ -55,32 +59,101 @@ class TestLayoutManager : public WorkspaceLayoutManager {
 
 // Verifies that the always on top controller is notified of keyboard bounds
 // changing events.
-TEST_F(VirtualKeyboardAlwaysOnTopControllerTest, NotifyKeyboardBoundsChanging) {
-  auto* keyboard_controller = keyboard::KeyboardController::Get();
+TEST_F(AlwaysOnTopControllerTest, NotifyKeyboardBoundsChanging) {
   aura::Window* root_window = Shell::GetPrimaryRootWindow();
   aura::Window* always_on_top_container =
       Shell::GetContainer(root_window, kShellWindowId_AlwaysOnTopContainer);
   // Install test layout manager.
   TestLayoutManager* manager = new TestLayoutManager(always_on_top_container);
   RootWindowController* controller = Shell::GetPrimaryRootWindowController();
-  // Deactivates keyboard to unregister existing listeners.
-  controller->DeactivateKeyboard(keyboard_controller);
   AlwaysOnTopController* always_on_top_controller =
       controller->always_on_top_controller();
   always_on_top_controller->SetLayoutManagerForTest(base::WrapUnique(manager));
-  // Activate keyboard. This triggers keyboard listeners to be registered.
-  controller->ActivateKeyboard(keyboard_controller);
 
   // Show the keyboard.
+  auto* keyboard_controller = keyboard::KeyboardController::Get();
   keyboard_controller->ShowKeyboard(false /* locked */);
-  const int kKeyboardHeight = 200;
-  gfx::Rect keyboard_bounds = keyboard::KeyboardBoundsFromRootBounds(
-      root_window->bounds(), kKeyboardHeight);
-  keyboard_controller->GetKeyboardWindow()->SetBounds(keyboard_bounds);
-  keyboard_controller->NotifyKeyboardWindowLoaded();
+  ASSERT_TRUE(keyboard::WaitUntilShown());
 
   // Verify that test manager was notified of bounds change.
   ASSERT_TRUE(manager->keyboard_bounds_changed());
+}
+
+TEST_F(AlwaysOnTopControllerTest,
+       AlwaysOnTopContainerReturnedForAlwaysOnTopWindow) {
+  RootWindowController* controller = Shell::GetPrimaryRootWindowController();
+  AlwaysOnTopController* always_on_top_controller =
+      controller->always_on_top_controller();
+
+  const gfx::Rect bounds(100, 100, 200, 200);
+  std::unique_ptr<aura::Window> always_on_top_window(
+      CreateTestWindowInShellWithBounds(bounds));
+  always_on_top_window->SetProperty(aura::client::kAlwaysOnTopKey, true);
+
+  aura::Window* container =
+      always_on_top_controller->GetContainer(always_on_top_window.get());
+  ASSERT_TRUE(container);
+  EXPECT_EQ(kShellWindowId_AlwaysOnTopContainer, container->id());
+}
+
+TEST_F(AlwaysOnTopControllerTest, PipContainerReturnedForAlwaysOnTopPipWindow) {
+  RootWindowController* controller = Shell::GetPrimaryRootWindowController();
+  AlwaysOnTopController* always_on_top_controller =
+      controller->always_on_top_controller();
+
+  const gfx::Rect bounds(100, 100, 200, 200);
+  std::unique_ptr<aura::Window> pip_window(
+      CreateTestWindowInShellWithBounds(bounds));
+
+  wm::WindowState* window_state = wm::GetWindowState(pip_window.get());
+  const wm::WMEvent enter_pip(wm::WM_EVENT_PIP);
+  window_state->OnWMEvent(&enter_pip);
+  pip_window->SetProperty(aura::client::kAlwaysOnTopKey, true);
+  EXPECT_TRUE(window_state->IsPip());
+
+  aura::Window* container =
+      always_on_top_controller->GetContainer(pip_window.get());
+  ASSERT_TRUE(container);
+  EXPECT_EQ(kShellWindowId_PipContainer, container->id());
+}
+
+TEST_F(AlwaysOnTopControllerTest,
+       DefaultContainerReturnedForWindowNotAlwaysOnTop) {
+  RootWindowController* controller = Shell::GetPrimaryRootWindowController();
+  AlwaysOnTopController* always_on_top_controller =
+      controller->always_on_top_controller();
+
+  const gfx::Rect bounds(100, 100, 200, 200);
+  std::unique_ptr<aura::Window> window(
+      CreateTestWindowInShellWithBounds(bounds));
+
+  aura::Window* container =
+      always_on_top_controller->GetContainer(window.get());
+  ASSERT_TRUE(container);
+  EXPECT_EQ(kShellWindowId_DefaultContainer, container->id());
+}
+
+TEST_F(AlwaysOnTopControllerTest,
+       AlwaysOnTopWindowMovedBetweenContainersWhenPipStateChanges) {
+  const gfx::Rect bounds(100, 100, 200, 200);
+  std::unique_ptr<aura::Window> window(
+      CreateTestWindowInShellWithBounds(bounds));
+  window->SetProperty(aura::client::kAlwaysOnTopKey, true);
+
+  EXPECT_EQ(kShellWindowId_AlwaysOnTopContainer, window->parent()->id());
+
+  wm::WindowState* window_state = wm::GetWindowState(window.get());
+  const wm::WMEvent enter_pip(wm::WM_EVENT_PIP);
+  window_state->OnWMEvent(&enter_pip);
+  EXPECT_TRUE(window_state->IsPip());
+
+  EXPECT_EQ(kShellWindowId_PipContainer, window->parent()->id());
+
+  const wm::WMEvent enter_normal(wm::WM_EVENT_NORMAL);
+  window_state->OnWMEvent(&enter_normal);
+  EXPECT_FALSE(window_state->IsPip());
+
+  EXPECT_EQ(kShellWindowId_AlwaysOnTopContainer, window->parent()->id());
 }
 
 }  // namespace ash

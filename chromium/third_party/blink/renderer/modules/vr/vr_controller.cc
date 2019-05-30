@@ -21,13 +21,16 @@ VRController::VRController(NavigatorVR* navigator_vr)
       navigator_vr_(navigator_vr),
       display_synced_(false),
       binding_(this) {
+  // See https://bit.ly/2S0zRAS for task types.
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+      navigator_vr->GetDocument()->GetTaskRunner(TaskType::kMiscPlatformAPI);
   navigator_vr->GetDocument()->GetFrame()->GetInterfaceProvider().GetInterface(
-      mojo::MakeRequest(&service_));
+      mojo::MakeRequest(&service_, task_runner));
   service_.set_connection_error_handler(
       WTF::Bind(&VRController::Dispose, WrapWeakPersistent(this)));
 
   device::mojom::blink::VRServiceClientPtr client;
-  binding_.Bind(mojo::MakeRequest(&client));
+  binding_.Bind(mojo::MakeRequest(&client, task_runner), task_runner);
   service_->SetClient(std::move(client));
 
   service_->RequestDevice(
@@ -87,7 +90,7 @@ void VRController::OnRequestDeviceReturned(
   device->GetImmersiveVRDisplayInfo(WTF::Bind(
       &VRController::OnImmersiveDisplayInfoReturned, WrapPersistent(this)));
 
-  display_ = new VRDisplay(navigator_vr_, std::move(device));
+  display_ = VRDisplay::Create(navigator_vr_, std::move(device));
 
   if (pending_listening_for_activate_) {
     SetListeningForActivate(pending_listening_for_activate_);

@@ -87,12 +87,6 @@ namespace {
 // upon, instead of multiple in close succession (debounce time).
 size_t kWaitTimeForSelectOptionsChangesMs = 50;
 
-// Whether the "single click" autofill feature is enabled, through command-line
-// or field trial.
-bool IsSingleClickEnabled() {
-  return base::FeatureList::IsEnabled(features::kSingleClickAutofill);
-}
-
 // Gets all the data list values (with corresponding label) for the given
 // element.
 void GetDataListSuggestions(const WebInputElement& element,
@@ -169,8 +163,8 @@ bool AutofillAgent::FormDataCompare::operator()(const FormData& lhs,
          std::tie(rhs.name, rhs.origin, rhs.action, rhs.is_form_tag);
 }
 
-void AutofillAgent::DidCommitProvisionalLoad(bool is_new_navigation,
-                                             bool is_same_document_navigation) {
+void AutofillAgent::DidCommitProvisionalLoad(bool is_same_document_navigation,
+                                             ui::PageTransition transition) {
   blink::WebFrame* frame = render_frame()->GetWebFrame();
   // TODO(dvadym): check if we need to check if it is main frame navigation
   // http://crbug.com/443155
@@ -301,8 +295,7 @@ void AutofillAgent::FireHostSubmitEvents(const FormData& form_data,
   if (!submitted_forms_.insert(form_data).second)
     return;
 
-  GetAutofillDriver()->FormSubmitted(form_data, known_success, source,
-                                     base::TimeTicks::Now());
+  GetAutofillDriver()->FormSubmitted(form_data, known_success, source);
 }
 
 void AutofillAgent::Shutdown() {
@@ -311,7 +304,16 @@ void AutofillAgent::Shutdown() {
 }
 
 void AutofillAgent::TextFieldDidEndEditing(const WebInputElement& element) {
+  // Sometimes "blur" events are side effects of the password generation
+  // handling the page. They should not affect any UI in the browser.
+  if (password_generation_agent_ &&
+      password_generation_agent_->ShouldIgnoreBlur()) {
+    return;
+  }
   GetAutofillDriver()->DidEndTextFieldEditing();
+  password_autofill_agent_->DidEndTextFieldEditing();
+  if (password_generation_agent_)
+    password_generation_agent_->DidEndTextFieldEditing(element);
 }
 
 void AutofillAgent::SetUserGestureRequired(bool required) {
@@ -447,7 +449,9 @@ void AutofillAgent::FillForm(int32_t id, const FormData& form) {
 
   was_last_action_fill_ = true;
 
-  if (base::FeatureList::IsEnabled(features::kAutofillDynamicForms))
+  // If this is a re-fill, replace the triggering element if it's invalid.
+  if (base::FeatureList::IsEnabled(features::kAutofillDynamicForms) &&
+      id == kNoQueryId)
     ReplaceElementIfNowInvalid(form);
 
   query_node_autofill_state_ = element_.GetAutofillState();
@@ -549,7 +553,6 @@ void AutofillAgent::PreviewPasswordSuggestion(const base::string16& username,
 }
 
 void AutofillAgent::ShowInitialPasswordAccountSuggestions(
-    int32_t key,
     const PasswordFormFillData& form_data) {
   std::vector<blink::WebInputElement> elements;
   std::unique_ptr<RendererSavePasswordProgressLogger> logger;
@@ -560,7 +563,7 @@ void AutofillAgent::ShowInitialPasswordAccountSuggestions(
                            STRING_ON_SHOW_INITIAL_PASSWORD_ACCOUNT_SUGGESTIONS);
   }
   password_autofill_agent_->GetFillableElementFromFormData(
-      key, form_data, logger.get(), &elements);
+      form_data, logger.get(), &elements);
 
   // If wait_for_username is true, we don't want to initially show form options
   // until the user types in a valid username.
@@ -650,7 +653,14 @@ void AutofillAgent::ShowSuggestions(const WebFormControlElement& element,
 
   // Password field elements should only have suggestions shown by the password
   // autofill agent.
-  if (input_element && input_element->IsPasswordFieldForAutofill() &&
+  // The /*disable presubmit*/ comment below is used to disable a presubmit
+  // script that ensures that only IsPasswordFieldForAutofill() is used in this
+  // code (it has to appear between the function name and the parentesis to not
+  // match a regex). In this specific case we are actually interested in whether
+  // the field is currently a password field, not whether it has ever been a
+  // password field.
+  if (input_element &&
+      input_element->IsPasswordField /*disable presubmit*/ () &&
       !query_password_suggestion_) {
     return;
   }
@@ -668,6 +678,67 @@ void AutofillAgent::SetSecureContextRequired(bool required) {
 
 void AutofillAgent::SetFocusRequiresScroll(bool require) {
   focus_requires_scroll_ = require;
+}
+
+void AutofillAgent::GetElementFormAndFieldData(
+    const std::vector<std::string>& selectors,
+    GetElementFormAndFieldDataCallback callback) {
+  FormData form;
+  FormFieldData field;
+  blink::WebElement target_element = FindUniqueWebElement(selectors);
+  if (target_element.IsNull() || !target_element.IsFormControlElement()) {
+    return std::move(callback).Run(form, field);
+  }
+
+  blink::WebFormControlElement target_form_control_element =
+      target_element.To<blink::WebFormControlElement>();
+  bool success = form_util::FindFormAndFieldForFormControlElement(
+      target_form_control_element, &form, &field);
+  if (success) {
+    // Remember this element so as to autofill the form without focusing the
+    // field for Autofill Assistant.
+    element_ = target_form_control_element;
+  }
+  // Do not expect failure.
+  DCHECK(success);
+
+  return std::move(callback).Run(form, field);
+}
+
+blink::WebElement AutofillAgent::FindUniqueWebElement(
+    const std::vector<std::string>& selectors) {
+  DCHECK(selectors.size() > 0);
+
+  blink::WebVector<blink::WebElement> elements =
+      render_frame()->GetWebFrame()->GetDocument().QuerySelectorAll(
+          blink::WebString::FromUTF8(selectors[0]));
+  if (elements.size() != 1) {
+    return blink::WebElement();
+  }
+
+  // Get the unique element in |elements| and match the next selector inside it
+  // if there are remaining selectors haven't been matched.
+  blink::WebElement query_element = elements[0];
+  for (size_t i = 1; i < selectors.size(); i++) {
+    elements = query_element.QuerySelectorAll(
+        blink::WebString::FromUTF8(selectors[i]));
+
+    // Query shadow DOM if necessary.
+    if (elements.size() == 0 && !query_element.ShadowRoot().IsNull()) {
+      // TODO(806868): Query shadow dom when Autofill is available for forms in
+      // shadow DOM (crbug.com/746593).
+      return blink::WebElement();
+    }
+
+    // Return an empty element if there are multiple matching elements.
+    if (elements.size() != 1) {
+      return blink::WebElement();
+    }
+
+    query_element = elements[0];
+  }
+
+  return query_element;
 }
 
 void AutofillAgent::QueryAutofillSuggestions(
@@ -855,10 +926,6 @@ void AutofillAgent::FormControlElementClicked(
   // Show full suggestions when clicking on an already-focused form field.
   options.show_full_suggestion_list = element.IsAutofilled() || was_focused;
 
-  if (!IsSingleClickEnabled()) {
-    // On  the initial click (not focused yet), only show password suggestions.
-    options.show_password_suggestions_only = !was_focused;
-  }
   ShowSuggestions(element, options);
 }
 
@@ -1035,37 +1102,53 @@ void AutofillAgent::OnFormNoLongerSubmittable() {
 }
 
 bool AutofillAgent::FindTheUniqueNewVersionOfOldElement(
-    WebVector<WebFormControlElement>& elements,
-    bool& element_found,
-    const WebString& original_element_section,
+    const WebVector<WebFormControlElement>& elements,
+    bool& potential_match_encountered,
+    WebFormControlElement& matching_element,
     const WebFormControlElement& original_element) {
+  if (original_element.IsNull())
+    return false;
+
+  const auto original_element_section = original_element.AutofillSection();
   for (const WebFormControlElement& current_element : elements) {
     if (current_element.IsFocusable() &&
         original_element.NameForAutofill() ==
             current_element.NameForAutofill()) {
-      if (!element_found) {
-        element_ = current_element;
-        element_found = true;
+      // If this is the first matching element, or is the first with the right
+      // section, this is the best match so far.
+      // In other words: bad, then good. => pick good.
+      if (!potential_match_encountered ||
+          (current_element.AutofillSection() == original_element_section &&
+           (matching_element.IsNull() ||
+            matching_element.AutofillSection() != original_element_section))) {
+        matching_element = current_element;
+        potential_match_encountered = true;
+      } else if (current_element.AutofillSection() !=
+                     original_element_section &&
+                 !matching_element.IsNull() &&
+                 matching_element.AutofillSection() !=
+                     original_element_section) {
+        // The so far matching fields are equally bad. Continue the search if
+        // none of them have the correct section.
+        // In other words: bad, then bad => pick none.
+        matching_element.Reset();
       } else if (current_element.AutofillSection() ==
-                     element_.AutofillSection() ||
-                 (current_element.AutofillSection() !=
-                      original_element_section &&
-                  element_.AutofillSection() != original_element_section)) {
-        // If there are two elements that share the same name with the element_,
-        // and the section can't tell them apart, we can't decide between the
-        // two.
-        element_ = original_element;
+                     original_element_section &&
+                 !matching_element.IsNull() &&
+                 matching_element.AutofillSection() ==
+                     original_element_section) {
+        // If two or more fields have the matching name and section, we can't
+        // decide. Two equally good fields => fail.
+        matching_element.Reset();
         return false;
-      } else if (current_element.AutofillSection() ==
-                 original_element_section) {
-        // If the current element has the right section, update the element_.
-        element_ = current_element;
-      }
+      }  // For the good, then bad case => keep good. Continue the search.
     }
   }
   return true;
 }
 
+// TODO(crbug.com/896689): Update this method to use the unique ids once they
+// are implemented.
 void AutofillAgent::ReplaceElementIfNowInvalid(const FormData& original_form) {
   // If the document is invalid, bail out.
   if (element_.GetDocument().IsNull())
@@ -1074,20 +1157,26 @@ void AutofillAgent::ReplaceElementIfNowInvalid(const FormData& original_form) {
   WebVector<WebFormElement> forms;
   WebVector<WebFormControlElement> elements;
 
+  const auto original_element = element_;
+  WebFormControlElement matching_element;
+  bool potential_match_encountered = false;
+
   if (original_form.name.empty()) {
     // If the form has no name, check all the forms.
-    bool element_found = false;
     element_.GetDocument().Forms(forms);
     for (const WebFormElement& form : forms) {
       form.GetFormControlElements(elements);
-      // If finding a unique element is impossible, return.
+      // If finding a unique element is impossible, don't look further.
       if (!FindTheUniqueNewVersionOfOldElement(
-              elements, element_found, element_.AutofillSection(), element_))
+              elements, potential_match_encountered, matching_element,
+              original_element))
         return;
     }
     // If the element is not found, we should still check for unowned elements.
-    if (element_found)
+    if (!matching_element.IsNull()) {
+      element_ = matching_element;
       return;
+    }
   }
 
   if (!element_.Form().IsNull()) {
@@ -1100,14 +1189,17 @@ void AutofillAgent::ReplaceElementIfNowInvalid(const FormData& original_form) {
   }
 
   WebFormElement form_element;
+  bool form_is_found = false;
   if (!original_form.name.empty()) {
     // Try to find the new version of the form.
     element_.GetDocument().Forms(forms);
     for (const WebFormElement& form : forms) {
       if (original_form.name == form.GetName().Utf16() ||
           original_form.name == form.GetAttribute("id").Utf16()) {
-        form_element = form;
-        break;
+        if (!form_is_found)
+          form_element = form;
+        else  // multiple forms with the matching name.
+          return;
       }
     }
   }
@@ -1117,20 +1209,23 @@ void AutofillAgent::ReplaceElementIfNowInvalid(const FormData& original_form) {
     std::vector<WebElement> fieldsets;
     elements = form_util::GetUnownedAutofillableFormFieldElements(
         element_.GetDocument().All(), &fieldsets);
-    bool element_found = false;
-    FindTheUniqueNewVersionOfOldElement(elements, element_found,
-                                        element_.AutofillSection(), element_);
+    // If a unique match was found.
+    if (FindTheUniqueNewVersionOfOldElement(
+            elements, potential_match_encountered, matching_element,
+            original_element) &&
+        !matching_element.IsNull()) {
+      element_ = matching_element;
+    }
     return;
   }
   // This is the case for owned fields that belong to the right named form.
   // Get all the elements of the new version of the form.
   form_element.GetFormControlElements(elements);
-  // Try to find the new version of the last interacted element.
-  for (const WebFormControlElement& element : elements) {
-    if (element_.NameForAutofill() == element.NameForAutofill()) {
-      element_ = element;
-      return;
-    }
+  // If a unique match was found.
+  if (FindTheUniqueNewVersionOfOldElement(elements, potential_match_encountered,
+                                          matching_element, original_element) &&
+      !matching_element.IsNull()) {
+    element_ = matching_element;
   }
 }
 

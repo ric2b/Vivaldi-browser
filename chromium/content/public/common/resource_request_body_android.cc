@@ -35,7 +35,6 @@ JNI_ResourceRequestBody_ConvertResourceRequestBodyToJavaArray(
 base::android::ScopedJavaLocalRef<jbyteArray>
 JNI_ResourceRequestBody_CreateResourceRequestBodyFromBytes(
     JNIEnv* env,
-    const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jbyteArray>& j_post_data) {
   base::android::ScopedJavaLocalRef<jbyteArray> result;
   if (!j_post_data)
@@ -79,7 +78,7 @@ ExtractResourceRequestBodyFromJavaObject(
     return nullptr;
 
   std::vector<uint8_t> encoded;
-  base::android::JavaByteArrayToByteVector(env, j_encoded.obj(), &encoded);
+  base::android::JavaByteArrayToByteVector(env, j_encoded, &encoded);
 
   return DecodeResourceRequestBody(
       reinterpret_cast<const char*>(encoded.data()), encoded.size());

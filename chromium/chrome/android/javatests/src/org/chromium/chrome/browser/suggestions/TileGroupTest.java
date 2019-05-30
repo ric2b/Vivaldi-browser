@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.suggestions;
 
 import android.support.test.InstrumentationRegistry;
+import android.support.test.espresso.matcher.ViewMatchers;
 import android.support.test.filters.MediumTest;
 import android.view.View;
 import android.view.ViewGroup;
@@ -26,7 +27,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.UrlConstants;
-import org.chromium.chrome.browser.ntp.ContextMenuManager;
+import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
@@ -34,13 +35,13 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
-import org.chromium.chrome.test.util.browser.RecyclerViewTestUtils;
+import org.chromium.chrome.test.util.ViewUtils;
 import org.chromium.chrome.test.util.browser.suggestions.FakeMostVisitedSites;
 import org.chromium.chrome.test.util.browser.suggestions.FakeSuggestionsSource;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.TestTouchUtils;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.TestTouchUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 
 import java.util.concurrent.ExecutionException;
@@ -88,7 +89,8 @@ public class TileGroupTest {
         Assert.assertTrue(mTab.getNativePage() instanceof NewTabPage);
         mNtp = (NewTabPage) mTab.getNativePage();
 
-        RecyclerViewTestUtils.waitForStableRecyclerView(getRecyclerView());
+        ViewUtils.waitForView(
+                (ViewGroup) mNtp.getView(), ViewMatchers.withId(R.id.tile_grid_layout));
     }
 
     @After
@@ -216,7 +218,7 @@ public class TileGroupTest {
     private void waitForTileRemoved(final SiteSuggestion suggestion)
             throws TimeoutException, InterruptedException {
         TileGridLayout tileContainer = getTileGridLayout();
-        final TileView removedTile = tileContainer.getTileView(suggestion);
+        final SuggestionsTileView removedTile = tileContainer.getTileView(suggestion);
         if (removedTile == null) return;
 
         final CallbackHelper callback = new CallbackHelper();
@@ -242,8 +244,8 @@ public class TileGroupTest {
         tileContainer.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
             @Override
             public void onChildViewAdded(View parent, View child) {
-                if (!(child instanceof TileView)) return;
-                if (!((TileView) child).getData().equals(suggestion)) return;
+                if (!(child instanceof SuggestionsTileView)) return;
+                if (!((SuggestionsTileView) child).getData().equals(suggestion)) return;
 
                 callback.notifyCalled();
             }

@@ -5,14 +5,18 @@
 #ifndef CONTENT_BROWSER_LOADER_PREFETCH_URL_LOADER_SERVICE_H_
 #define CONTENT_BROWSER_LOADER_PREFETCH_URL_LOADER_SERVICE_H_
 
+#include <string>
+
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "content/browser/web_package/signed_exchange_prefetch_metric_recorder.h"
 #include "content/common/content_export.h"
-#include "content/common/url_loader_factory_bundle.h"
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/strong_binding_set.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
+#include "third_party/blink/public/common/loader/url_loader_factory_bundle.h"
+#include "third_party/blink/public/mojom/renderer_preference_watcher.mojom.h"
 
 namespace net {
 class URLRequestContextGetter;
@@ -20,11 +24,11 @@ class URLRequestContextGetter;
 
 namespace network {
 class SharedURLLoaderFactory;
-class URLLoaderFactoryBundleInfo;
 }
 
 namespace content {
 
+class BrowserContext;
 class ResourceContext;
 class URLLoaderFactoryGetter;
 class URLLoaderThrottle;
@@ -32,9 +36,10 @@ class URLLoaderThrottle;
 class CONTENT_EXPORT PrefetchURLLoaderService final
     : public base::RefCountedThreadSafe<PrefetchURLLoaderService,
                                         BrowserThread::DeleteOnIOThread>,
+      public blink::mojom::RendererPreferenceWatcher,
       public network::mojom::URLLoaderFactory {
  public:
-  PrefetchURLLoaderService();
+  explicit PrefetchURLLoaderService(BrowserContext* browser_context);
 
   // Must be called on the IO thread. The given |resource_context| will
   // be valid as far as request_context_getter returns non-null context.
@@ -42,9 +47,10 @@ class CONTENT_EXPORT PrefetchURLLoaderService final
       ResourceContext* resource_context,
       scoped_refptr<net::URLRequestContextGetter> request_context_getter);
 
-  void GetFactory(network::mojom::URLLoaderFactoryRequest request,
-                  int frame_tree_node_id,
-                  std::unique_ptr<URLLoaderFactoryBundleInfo> factory_info);
+  void GetFactory(
+      network::mojom::URLLoaderFactoryRequest request,
+      int frame_tree_node_id,
+      std::unique_ptr<network::SharedURLLoaderFactoryInfo> factory_info);
 
   // Used only when NetworkService is not enabled (or indirectly via the
   // other CreateLoaderAndStart when NetworkService is enabled).
@@ -70,6 +76,14 @@ class CONTENT_EXPORT PrefetchURLLoaderService final
     prefetch_load_callback_for_testing_ = prefetch_load_callback;
   }
 
+  scoped_refptr<SignedExchangePrefetchMetricRecorder>
+  signed_exchange_prefetch_metric_recorder() {
+    return signed_exchange_prefetch_metric_recorder_;
+  }
+  void SetAcceptLanguages(const std::string& accept_langs) {
+    accept_langs_ = accept_langs;
+  }
+
  private:
   friend class base::DeleteHelper<content::PrefetchURLLoaderService>;
   friend struct BrowserThread::DeleteOnThread<BrowserThread::IO>;
@@ -88,6 +102,9 @@ class CONTENT_EXPORT PrefetchURLLoaderService final
                                 traffic_annotation) override;
   void Clone(network::mojom::URLLoaderFactoryRequest request) override;
 
+  // blink::mojom::RendererPreferenceWatcher.
+  void NotifyUpdate(blink::mojom::RendererPreferencesPtr new_prefs) override;
+
   // For URLLoaderThrottlesGetter.
   std::vector<std::unique_ptr<content::URLLoaderThrottle>>
   CreateURLLoaderThrottles(
@@ -101,8 +118,19 @@ class CONTENT_EXPORT PrefetchURLLoaderService final
   mojo::BindingSet<network::mojom::URLLoaderFactory,
                    std::unique_ptr<BindContext>>
       loader_factory_bindings_;
+  // Used in the IO thread.
+  mojo::Binding<blink::mojom::RendererPreferenceWatcher>
+      preference_watcher_binding_;
+  // Created in the ctor and bound to |preference_watcher_binding_| in the
+  // IO thread.
+  blink::mojom::RendererPreferenceWatcherRequest preference_watcher_request_;
 
   base::RepeatingClosure prefetch_load_callback_for_testing_;
+
+  scoped_refptr<SignedExchangePrefetchMetricRecorder>
+      signed_exchange_prefetch_metric_recorder_;
+
+  std::string accept_langs_;
 
   DISALLOW_COPY_AND_ASSIGN(PrefetchURLLoaderService);
 };

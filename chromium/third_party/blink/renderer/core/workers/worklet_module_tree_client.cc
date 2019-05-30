@@ -9,6 +9,7 @@
 #include "third_party/blink/renderer/core/workers/worker_reporting_proxy.h"
 #include "third_party/blink/renderer/core/workers/worklet_global_scope.h"
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 
 namespace blink {
 
@@ -25,6 +26,9 @@ WorkletModuleTreeClient::WorkletModuleTreeClient(
 // https://drafts.css-houdini.org/worklets/#fetch-and-invoke-a-worklet-script
 void WorkletModuleTreeClient::NotifyModuleTreeLoadFinished(
     ModuleScript* module_script) {
+  // TODO(nhiroki): Call reporting proxy functions appropriately (e.g.,
+  // DidFailToFetchModuleScript(), WillEvaluateModuleScript()).
+
   if (!module_script) {
     // Step 3: "If script is null, then queue a task on outsideSettings's
     // responsible event loop to run these steps:"
@@ -58,7 +62,7 @@ void WorkletModuleTreeClient::NotifyModuleTreeLoadFinished(
   ScriptValue error = modulator_->ExecuteModule(
       module_script, Modulator::CaptureEvalErrorFlag::kReport);
 
-  WorkletGlobalScope* global_scope = ToWorkletGlobalScope(
+  WorkletGlobalScope* global_scope = To<WorkletGlobalScope>(
       ExecutionContext::From(modulator_->GetScriptState()));
 
   global_scope->ReportingProxy().DidEvaluateModuleScript(error.IsEmpty());
@@ -70,7 +74,7 @@ void WorkletModuleTreeClient::NotifyModuleTreeLoadFinished(
       *outside_settings_task_runner_, FROM_HERE,
       CrossThreadBind(&WorkletPendingTasks::DecrementCounter,
                       WrapCrossThreadPersistent(pending_tasks_.Get())));
-};
+}
 
 void WorkletModuleTreeClient::Trace(blink::Visitor* visitor) {
   visitor->Trace(modulator_);

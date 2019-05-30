@@ -13,7 +13,7 @@
 #include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
 #include "base/strings/string16.h"
-#include "chrome/browser/ui/app_list/app_list_model_updater_delegate.h"
+#include "chrome/browser/ui/app_list/app_list_model_updater_observer.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
 
 class ChromeAppListItem;
@@ -38,6 +38,8 @@ class AppListModelUpdater {
   };
 
   virtual ~AppListModelUpdater() {}
+
+  int model_id() const { return model_id_; }
 
   // Set whether this model updater is active.
   // When we have multiple user profiles, only the active one has access to the
@@ -74,6 +76,7 @@ class AppListModelUpdater {
                                        const std::string& short_name) {}
   virtual void SetItemPosition(const std::string& id,
                                const syncer::StringOrdinal& new_position) {}
+  virtual void SetItemIsPersistent(const std::string& id, bool is_persistent) {}
   virtual void SetItemFolderId(const std::string& id,
                                const std::string& folder_id) {}
   virtual void SetItemIsInstalling(const std::string& id, bool is_installing) {}
@@ -107,6 +110,7 @@ class AppListModelUpdater {
   virtual void ContextMenuItemSelected(const std::string& id,
                                        int command_id,
                                        int event_flags) {}
+  virtual syncer::StringOrdinal GetFirstAvailablePosition() const = 0;
 
   // Methods for AppListSyncableService:
   virtual void AddItemToOemFolder(
@@ -138,8 +142,22 @@ class AppListModelUpdater {
   virtual void OnItemUpdated(ash::mojom::AppListItemMetadataPtr item) = 0;
   virtual void OnPageBreakItemAdded(const std::string& id,
                                     const syncer::StringOrdinal& position) = 0;
+  virtual void OnPageBreakItemDeleted(const std::string& id) = 0;
 
-  virtual void SetDelegate(AppListModelUpdaterDelegate* delegate) = 0;
+  virtual void AddObserver(AppListModelUpdaterObserver* observer) = 0;
+  virtual void RemoveObserver(AppListModelUpdaterObserver* observer) = 0;
+
+ protected:
+  AppListModelUpdater();
+
+  // Returns the first available position in app list. |top_level_items| are
+  // items without parents. Note that all items in |top_level_items| should have
+  // valid position.
+  static syncer::StringOrdinal GetFirstAvailablePositionInternal(
+      const std::vector<ChromeAppListItem*>& top_level_items);
+
+ private:
+  const int model_id_;
 };
 
 #endif  // CHROME_BROWSER_UI_APP_LIST_APP_LIST_MODEL_UPDATER_H_

@@ -6,7 +6,8 @@
 
 #include <stddef.h>
 
-#include "base/macros.h"
+#include "base/no_destructor.h"
+#include "base/stl_util.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "printing/buildflags/buildflags.h"
@@ -215,15 +216,14 @@ const int kRepeatableCommandIds[] = {
   IDC_SELECT_NEXT_TAB,
   IDC_SELECT_PREVIOUS_TAB,
 };
-const size_t kRepeatableCommandIdsLength = arraysize(kRepeatableCommandIds);
+const size_t kRepeatableCommandIdsLength = base::size(kRepeatableCommandIds);
 
 } // namespace
 
 std::vector<AcceleratorMapping> GetAcceleratorList() {
-  CR_DEFINE_STATIC_LOCAL(
-      std::vector<AcceleratorMapping>, accelerators,
-      (std::begin(kAcceleratorMap), std::end(kAcceleratorMap)));
-  return accelerators;
+  static base::NoDestructor<std::vector<AcceleratorMapping>> accelerators(
+      std::begin(kAcceleratorMap), std::end(kAcceleratorMap));
+  return *accelerators;
 }
 
 bool GetStandardAcceleratorForCommandId(int command_id,

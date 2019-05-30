@@ -7,8 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/sys_byteorder.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_task_environment.h"
@@ -64,7 +64,6 @@ class P2PSocketTcpTestBase : public testing::Test {
     local_address_ = ParseAddress(kTestLocalIpAddress, kTestPort1);
 
     socket_impl_->remote_address_ = dest_;
-    socket_impl_->state_ = P2PSocket::STATE_CONNECTING;
     socket_impl_->OnConnected(net::OK);
     base::RunLoop().RunUntilIdle();
   }
@@ -179,7 +178,7 @@ TEST_F(P2PSocketTcpTest, ReceiveStun) {
     size_t step_size = std::min(step_sizes[step], received_data.size() - pos);
     socket_->AppendInputData(&received_data[pos], step_size);
     pos += step_size;
-    if (++step >= arraysize(step_sizes))
+    if (++step >= base::size(step_sizes))
       step = 0;
   }
 
@@ -407,7 +406,7 @@ TEST_F(P2PSocketStunTcpTest, ReceiveStun) {
     size_t step_size = std::min(step_sizes[step], received_data.size() - pos);
     socket_->AppendInputData(&received_data[pos], step_size);
     pos += step_size;
-    if (++step >= arraysize(step_sizes))
+    if (++step >= base::size(step_sizes))
       step = 0;
   }
 
@@ -516,7 +515,7 @@ TEST(P2PSocketTcpWithPseudoTlsTest, Basic) {
 class P2PSocketTcpWithTlsTest
     : public testing::TestWithParam<std::tuple<net::IoMode, P2PSocketType>> {};
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     /* no prefix */,
     P2PSocketTcpWithTlsTest,
     ::testing::Combine(::testing::Values(net::SYNCHRONOUS, net::ASYNC),

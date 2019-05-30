@@ -14,7 +14,6 @@
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
-#include "base/memory/linked_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -71,29 +70,6 @@ const char kListAccountsResponseFormat[] =
 const char kDummySAMLContinuePath[] = "DummySAMLContinue";
 
 typedef std::map<std::string, std::string> CookieMap;
-
-// Parses cookie name-value map our of |request|.
-CookieMap GetRequestCookies(const HttpRequest& request) {
-  CookieMap result;
-  auto iter = request.headers.find("Cookie");
-  if (iter != request.headers.end()) {
-    for (const std::string& cookie_line :
-         base::SplitString(iter->second, " ", base::TRIM_WHITESPACE,
-                           base::SPLIT_WANT_ALL)) {
-      std::vector<std::string> name_value = base::SplitString(
-          cookie_line, "=", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-      if (name_value.size() != 2)
-        continue;
-
-      std::string value = name_value[1];
-      if (value.size() && value.back() == ';')
-        value = value.substr(0, value.size() -1);
-
-      result.insert(std::make_pair(name_value[0], value));
-    }
-  }
-  return result;
-}
 
 // Extracts the |access_token| from authorization header of |request|.
 bool GetAccessToken(const HttpRequest& request,
@@ -203,7 +179,6 @@ void FakeGaia::MapEmailToGaiaId(const std::string& email,
 }
 
 std::string FakeGaia::GetGaiaIdOfEmail(const std::string& email) const {
-  DCHECK(!email.empty());
   const auto it = email_to_gaia_id_map_.find(email);
   return it == email_to_gaia_id_map_.end() ? std::string(kDefaultGaiaId) :
       it->second;
@@ -212,7 +187,6 @@ std::string FakeGaia::GetGaiaIdOfEmail(const std::string& email) const {
 void FakeGaia::AddGoogleAccountsSigninHeader(
     net::test_server::BasicHttpResponse* http_response,
     const std::string& email) const {
-  DCHECK(!email.empty());
   http_response->AddCustomHeader("google-accounts-signin",
       base::StringPrintf(
           "email=\"%s\", obfuscatedid=\"%s\", sessionindex=0",
@@ -223,9 +197,8 @@ void FakeGaia::SetOAuthCodeCookie(
     net::test_server::BasicHttpResponse* http_response) const {
   http_response->AddCustomHeader(
       "Set-Cookie",
-      base::StringPrintf(
-          "oauth_code=%s; Path=/o/GetOAuth2Token; Secure; HttpOnly;",
-          merge_session_params_.auth_code.c_str()));
+      base::StringPrintf("oauth_code=%s; Path=/; Secure; HttpOnly;",
+                         merge_session_params_.auth_code.c_str()));
 }
 
 void FakeGaia::Initialize() {
@@ -233,10 +206,6 @@ void FakeGaia::Initialize() {
   // Handles /MergeSession GAIA call.
   REGISTER_RESPONSE_HANDLER(
       gaia_urls->merge_session_url(), HandleMergeSession);
-
-  // Handles /o/oauth2/programmatic_auth GAIA call.
-  REGISTER_RESPONSE_HANDLER(gaia_urls->deprecated_client_login_to_oauth2_url(),
-                            HandleProgramaticAuth);
 
   // Handles /ServiceLogin GAIA call.
   REGISTER_RESPONSE_HANDLER(
@@ -400,54 +369,6 @@ void FakeGaia::HandleMergeSession(const HttpRequest& request,
   // TODO(zelidrag): Not used now.
   http_response->set_content("OK");
   http_response->set_code(net::HTTP_OK);
-}
-
-void FakeGaia::HandleProgramaticAuth(
-    const HttpRequest& request,
-    BasicHttpResponse* http_response) {
-  http_response->set_code(net::HTTP_UNAUTHORIZED);
-  if (merge_session_params_.auth_code.empty()) {
-    http_response->set_code(net::HTTP_BAD_REQUEST);
-    return;
-  }
-
-  GURL request_url = GURL("http://localhost").Resolve(request.relative_url);
-  std::string request_query = request_url.query();
-
-  GaiaUrls* gaia_urls = GaiaUrls::GetInstance();
-  std::string scope;
-  if (!GetQueryParameter(request_query, "scope", &scope) ||
-      GaiaConstants::kOAuth1LoginScope != scope) {
-    return;
-  }
-
-  CookieMap cookies = GetRequestCookies(request);
-  CookieMap::const_iterator sid_iter = cookies.find("SID");
-  if (sid_iter == cookies.end() ||
-      sid_iter->second != merge_session_params_.auth_sid_cookie) {
-    LOG(ERROR) << "/o/oauth2/programmatic_auth missing SID cookie";
-    return;
-  }
-  CookieMap::const_iterator lsid_iter = cookies.find("LSID");
-  if (lsid_iter == cookies.end() ||
-      lsid_iter->second != merge_session_params_.auth_lsid_cookie) {
-    LOG(ERROR) << "/o/oauth2/programmatic_auth missing LSID cookie";
-    return;
-  }
-
-  std::string client_id;
-  if (!GetQueryParameter(request_query, "client_id", &client_id) ||
-      gaia_urls->oauth2_chrome_client_id() != client_id) {
-    return;
-  }
-
-  http_response->AddCustomHeader(
-      "Set-Cookie",
-      base::StringPrintf(
-          "oauth_code=%s; Path=/o/GetOAuth2Token; Secure; HttpOnly;",
-          merge_session_params_.auth_code.c_str()));
-  http_response->set_code(net::HTTP_OK);
-  http_response->set_content_type("text/html");
 }
 
 void FakeGaia::FormatJSONResponse(const base::Value& value,
@@ -656,8 +577,7 @@ void FakeGaia::HandleSSO(const HttpRequest& request,
   http_response->AddCustomHeader("Location", redirect_url);
   http_response->AddCustomHeader("Google-Accounts-SAML", "End");
 
-  if (!merge_session_params_.email.empty())
-    AddGoogleAccountsSigninHeader(http_response, merge_session_params_.email);
+  AddGoogleAccountsSigninHeader(http_response, merge_session_params_.email);
 
   if (issue_oauth_code_cookie_)
     SetOAuthCodeCookie(http_response);
@@ -781,7 +701,7 @@ void FakeGaia::HandleIssueToken(const HttpRequest& request,
       base::DictionaryValue response_dict;
       response_dict.SetString("issueAdvice", "auto");
       response_dict.SetString("expiresIn",
-                              base::IntToString(token_info->expires_in));
+                              base::NumberToString(token_info->expires_in));
       response_dict.SetString("token", token_info->token);
       response_dict.SetString("id_token", token_info->id_token);
       FormatJSONResponse(response_dict, http_response);

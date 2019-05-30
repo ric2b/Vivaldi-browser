@@ -31,20 +31,25 @@
 #include "third_party/blink/renderer/core/svg/svg_geometry_element.h"
 
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
-#include "third_party/blink/renderer/core/layout/hit_test_request.h"
-#include "third_party/blink/renderer/core/layout/pointer_events_hit_rules.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_path.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_shape.h"
+#include "third_party/blink/renderer/core/layout/svg/svg_layout_support.h"
 #include "third_party/blink/renderer/core/svg/svg_point_tear_off.h"
 #include "third_party/blink/renderer/core/svg_names.h"
+#include "third_party/blink/renderer/platform/graphics/stroke_data.h"
 
 namespace blink {
 
 class SVGAnimatedPathLength final : public SVGAnimatedNumber {
  public:
   static SVGAnimatedPathLength* Create(SVGGeometryElement* context_element) {
-    return new SVGAnimatedPathLength(context_element);
+    return MakeGarbageCollected<SVGAnimatedPathLength>(context_element);
   }
+
+  explicit SVGAnimatedPathLength(SVGGeometryElement* context_element)
+      : SVGAnimatedNumber(context_element,
+                          svg_names::kPathLengthAttr,
+                          SVGNumber::Create()) {}
 
   SVGParsingError AttributeChanged(const String& value) override {
     SVGParsingError parse_status = SVGAnimatedNumber::AttributeChanged(value);
@@ -52,12 +57,6 @@ class SVGAnimatedPathLength final : public SVGAnimatedNumber {
       parse_status = SVGParseStatus::kNegativeValue;
     return parse_status;
   }
-
- private:
-  explicit SVGAnimatedPathLength(SVGGeometryElement* context_element)
-      : SVGAnimatedNumber(context_element,
-                          SVGNames::pathLengthAttr,
-                          SVGNumber::Create()) {}
 };
 
 SVGGeometryElement::SVGGeometryElement(const QualifiedName& tag_name,
@@ -69,7 +68,7 @@ SVGGeometryElement::SVGGeometryElement(const QualifiedName& tag_name,
 }
 
 void SVGGeometryElement::SvgAttributeChanged(const QualifiedName& attr_name) {
-  if (attr_name == SVGNames::pathLengthAttr) {
+  if (attr_name == svg_names::kPathLengthAttr) {
     SVGElement::InvalidationGuard invalidation_guard(this);
     if (LayoutObject* layout_object = GetLayoutObject())
       MarkForLayoutAndParentResourceInvalidation(*layout_object);
@@ -85,37 +84,44 @@ void SVGGeometryElement::Trace(blink::Visitor* visitor) {
 }
 
 bool SVGGeometryElement::isPointInFill(SVGPointTearOff* point) const {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
+  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
 
   // FIXME: Eventually we should support isPointInFill for display:none
   // elements.
-  if (!GetLayoutObject() || !GetLayoutObject()->IsSVGShape())
+  const LayoutObject* layout_object = GetLayoutObject();
+  if (!layout_object)
     return false;
 
-  HitTestRequest request(HitTestRequest::kReadOnly);
-  PointerEventsHitRules hit_rules(
-      PointerEventsHitRules::SVG_GEOMETRY_HITTESTING, request,
-      GetLayoutObject()->StyleRef().PointerEvents());
-  hit_rules.can_hit_stroke = false;
-  return ToLayoutSVGShape(GetLayoutObject())
-      ->NodeAtFloatPointInternal(request, point->Target()->Value(), hit_rules);
+  // Path::Contains will reject points with a non-finite component.
+  WindRule fill_rule = layout_object->StyleRef().SvgStyle().FillRule();
+  return AsPath().Contains(point->Target()->Value(), fill_rule);
 }
 
 bool SVGGeometryElement::isPointInStroke(SVGPointTearOff* point) const {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
+  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
 
   // FIXME: Eventually we should support isPointInStroke for display:none
   // elements.
-  if (!GetLayoutObject() || !GetLayoutObject()->IsSVGShape())
+  const LayoutObject* layout_object = GetLayoutObject();
+  if (!layout_object)
     return false;
+  const LayoutSVGShape& layout_shape = ToLayoutSVGShape(*layout_object);
 
-  HitTestRequest request(HitTestRequest::kReadOnly);
-  PointerEventsHitRules hit_rules(
-      PointerEventsHitRules::SVG_GEOMETRY_HITTESTING, request,
-      GetLayoutObject()->StyleRef().PointerEvents());
-  hit_rules.can_hit_fill = false;
-  return ToLayoutSVGShape(GetLayoutObject())
-      ->NodeAtFloatPointInternal(request, point->Target()->Value(), hit_rules);
+  StrokeData stroke_data;
+  SVGLayoutSupport::ApplyStrokeStyleToStrokeData(
+      stroke_data, layout_shape.StyleRef(), layout_shape,
+      PathLengthScaleFactor());
+
+  Path path = AsPath();
+  FloatPoint local_point(point->Target()->Value());
+  if (layout_shape.HasNonScalingStroke()) {
+    const AffineTransform transform =
+        layout_shape.ComputeNonScalingStrokeTransform();
+    path.Transform(transform);
+    local_point = transform.MapPoint(local_point);
+  }
+  // Path::StrokeContains will reject points with a non-finite component.
+  return path.StrokeContains(local_point, stroke_data);
 }
 
 Path SVGGeometryElement::ToClipPath() const {
@@ -129,7 +135,7 @@ Path SVGGeometryElement::ToClipPath() const {
 }
 
 float SVGGeometryElement::getTotalLength() {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
+  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
 
   if (!GetLayoutObject())
     return 0;
@@ -137,7 +143,7 @@ float SVGGeometryElement::getTotalLength() {
 }
 
 SVGPointTearOff* SVGGeometryElement::getPointAtLength(float length) {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
+  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
 
   FloatPoint point;
   if (GetLayoutObject()) {

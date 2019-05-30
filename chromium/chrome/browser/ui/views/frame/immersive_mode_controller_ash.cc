@@ -5,15 +5,18 @@
 #include "chrome/browser/ui/views/frame/immersive_mode_controller_ash.h"
 
 #include "ash/public/cpp/immersive/immersive_revealed_lock.h"
+#include "ash/public/cpp/window_pin_type.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/cpp/window_state_type.h"
 #include "ash/public/interfaces/window_state_type.mojom.h"
+#include "ash/shell.h"  // mash-ok
 #include "base/macros.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/ui/ash/tablet_mode_client.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/immersive_context_mus.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "content/public/browser/notification_service.h"
@@ -26,12 +29,14 @@
 #include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
 #include "ui/aura/window.h"
+#include "ui/aura/window_targeter.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/paint_context.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/events/event_rewriter.h"
 #include "ui/views/background.h"
+#include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/mus/mus_client.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/native_widget_aura.h"
@@ -49,24 +54,18 @@ class LocatedEventRetargeter : public ui::EventRewriter {
   LocatedEventRetargeter() {}
   ~LocatedEventRetargeter() override {}
 
-  ui::EventRewriteStatus RewriteEvent(
+  ui::EventDispatchDetails RewriteEvent(
       const ui::Event& event,
-      std::unique_ptr<ui::Event>* rewritten_event) override {
+      const Continuation continuation) override {
     if (!event.IsLocatedEvent())
-      return ui::EVENT_REWRITE_CONTINUE;
+      return SendEvent(continuation, &event);
 
-    *rewritten_event = ui::Event::Clone(event);
+    std::unique_ptr<ui::Event> replacement_event = ui::Event::Clone(event);
     // Cloning strips the EventTarget. The only goal of this EventRewriter is to
     // null the target, so there's no need to do anything extra here.
-    DCHECK(!(*rewritten_event)->target());
+    DCHECK(!replacement_event->target());
 
-    return ui::EVENT_REWRITE_REWRITTEN;
-  }
-
-  ui::EventRewriteStatus NextDispatchEvent(
-      const ui::Event& last_event,
-      std::unique_ptr<ui::Event>* new_event) override {
-    return ui::EVENT_REWRITE_CONTINUE;
+    return SendEventFinally(continuation, replacement_event.get());
   }
 
  private:
@@ -103,7 +102,10 @@ class ImmersiveRevealedLockAsh : public ImmersiveRevealedLock {
 
 ImmersiveModeControllerAsh::ImmersiveModeControllerAsh()
     : ImmersiveModeController(Type::ASH),
-      controller_(new ash::ImmersiveFullscreenController),
+      controller_(std::make_unique<ash::ImmersiveFullscreenController>(
+          features::IsUsingWindowService()
+              ? ImmersiveContextMus::Get()
+              : ash::Shell::Get()->immersive_context())),
       event_rewriter_(std::make_unique<LocatedEventRetargeter>()) {}
 
 ImmersiveModeControllerAsh::~ImmersiveModeControllerAsh() = default;
@@ -111,12 +113,19 @@ ImmersiveModeControllerAsh::~ImmersiveModeControllerAsh() = default;
 void ImmersiveModeControllerAsh::Init(BrowserView* browser_view) {
   browser_view_ = browser_view;
   controller_->Init(this, browser_view_->frame(),
-      browser_view_->top_container());
+                    browser_view_->top_container());
 
   observed_windows_.Add(
       !features::IsUsingWindowService()
           ? browser_view_->GetNativeWindow()
           : browser_view_->GetNativeWindow()->GetRootWindow());
+
+  browser_view_->GetNativeWindow()->SetProperty(
+      ash::kImmersiveWindowType,
+      static_cast<int>(
+          browser_view_->browser()->is_app()
+              ? ash::ImmersiveFullscreenController::WINDOW_TYPE_HOSTED_APP
+              : ash::ImmersiveFullscreenController::WINDOW_TYPE_BROWSER));
 }
 
 void ImmersiveModeControllerAsh::SetEnabled(bool enabled) {
@@ -131,11 +140,8 @@ void ImmersiveModeControllerAsh::SetEnabled(bool enabled) {
     registrar_.Add(this, chrome::NOTIFICATION_FULLSCREEN_CHANGED, source);
   }
 
-  controller_->SetEnabled(
-      browser_view_->browser()->is_app()
-          ? ash::ImmersiveFullscreenController::WINDOW_TYPE_HOSTED_APP
-          : ash::ImmersiveFullscreenController::WINDOW_TYPE_BROWSER,
-      enabled);
+  ash::ImmersiveFullscreenController::EnableForWidget(browser_view_->frame(),
+                                                      enabled);
 }
 
 bool ImmersiveModeControllerAsh::IsEnabled() const {
@@ -175,10 +181,6 @@ bool ImmersiveModeControllerAsh::ShouldStayImmersiveAfterExitingFullscreen() {
          TabletModeClient::Get()->tablet_mode_enabled();
 }
 
-views::Widget* ImmersiveModeControllerAsh::GetRevealWidget() {
-  return mash_reveal_widget_.get();
-}
-
 void ImmersiveModeControllerAsh::OnWidgetActivationChanged(
     views::Widget* widget,
     bool active) {
@@ -188,13 +190,17 @@ void ImmersiveModeControllerAsh::OnWidgetActivationChanged(
   if (!TabletModeClient::Get()->tablet_mode_enabled())
     return;
 
+  // Don't use immersive mode as long as we are in the locked fullscreen mode
+  // since immersive shows browser controls which allow exiting the mode.
+  aura::Window* window = widget->GetNativeWindow();
+  window = features::IsUsingWindowService() ? window->GetRootWindow() : window;
+  if (ash::IsWindowTrustedPinned(window))
+    return;
+
   // Enable immersive mode if the widget is activated. Do not disable immersive
   // mode if the widget deactivates, but is not minimized.
-  controller_->SetEnabled(
-      browser_view_->browser()->is_app()
-          ? ash::ImmersiveFullscreenController::WINDOW_TYPE_HOSTED_APP
-          : ash::ImmersiveFullscreenController::WINDOW_TYPE_BROWSER,
-      active || !widget->IsMinimized());
+  ash::ImmersiveFullscreenController::EnableForWidget(
+      browser_view_->frame(), active || !widget->IsMinimized());
 }
 
 void ImmersiveModeControllerAsh::LayoutBrowserRootView() {
@@ -206,31 +212,9 @@ void ImmersiveModeControllerAsh::LayoutBrowserRootView() {
   widget->GetRootView()->Layout();
 }
 
-void ImmersiveModeControllerAsh::CreateMashRevealWidget() {
+void ImmersiveModeControllerAsh::InstallEventRewriter() {
   if (!features::IsUsingWindowService())
     return;
-
-  DCHECK(!mash_reveal_widget_);
-  mash_reveal_widget_ = std::make_unique<views::Widget>();
-  views::Widget::InitParams init_params(views::Widget::InitParams::TYPE_POPUP);
-  init_params.mus_properties
-      [ws::mojom::WindowManager::kRenderParentTitleArea_Property] =
-      mojo::ConvertTo<std::vector<uint8_t>>(
-          static_cast<aura::PropertyConverter::PrimitiveType>(true));
-  init_params.mus_properties
-      [ws::mojom::WindowManager::kWindowIgnoredByShelf_InitProperty] =
-      mojo::ConvertTo<std::vector<uint8_t>>(true);
-  init_params.name = "ChromeImmersiveRevealWindow";
-  init_params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  init_params.activatable = views::Widget::InitParams::ACTIVATABLE_NO;
-  init_params.parent = browser_view_->GetNativeWindow()->GetRootWindow();
-  // The widget needs to be translucent so the frame decorations drawn by the
-  // window manager are visible.
-  init_params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
-  init_params.bounds = GetScreenBoundsForRevealWidget();
-  mash_reveal_widget_->Init(init_params);
-  mash_reveal_widget_->StackAtTop();
-  mash_reveal_widget_->Show();
 
   browser_view_->GetWidget()
       ->GetNativeWindow()
@@ -239,29 +223,26 @@ void ImmersiveModeControllerAsh::CreateMashRevealWidget() {
       ->AddEventRewriter(event_rewriter_.get());
 }
 
-void ImmersiveModeControllerAsh::DestroyMashRevealWidget() {
-  if (mash_reveal_widget_) {
-    browser_view_->GetWidget()
-        ->GetNativeWindow()
-        ->GetHost()
-        ->GetEventSource()
-        ->RemoveEventRewriter(event_rewriter_.get());
-
-    mash_reveal_widget_.reset();
-  }
+void ImmersiveModeControllerAsh::UninstallEventRewriter() {
+  browser_view_->GetWidget()
+      ->GetNativeWindow()
+      ->GetHost()
+      ->GetEventSource()
+      ->RemoveEventRewriter(event_rewriter_.get());
 }
 
 void ImmersiveModeControllerAsh::OnImmersiveRevealStarted() {
-  DestroyMashRevealWidget();
+  UninstallEventRewriter();
   visible_fraction_ = 0;
-  CreateMashRevealWidget();
+  InstallEventRewriter();
   for (Observer& observer : observers_)
     observer.OnImmersiveRevealStarted();
 }
 
 void ImmersiveModeControllerAsh::OnImmersiveRevealEnded() {
-  DestroyMashRevealWidget();
+  UninstallEventRewriter();
   visible_fraction_ = 0;
+  browser_view_->contents_web_view()->holder()->SetHitTestTopInset(0);
   for (Observer& observer : observers_)
     observer.OnImmersiveRevealEnded();
 }
@@ -269,7 +250,8 @@ void ImmersiveModeControllerAsh::OnImmersiveRevealEnded() {
 void ImmersiveModeControllerAsh::OnImmersiveFullscreenEntered() {}
 
 void ImmersiveModeControllerAsh::OnImmersiveFullscreenExited() {
-  DestroyMashRevealWidget();
+  UninstallEventRewriter();
+  browser_view_->contents_web_view()->holder()->SetHitTestTopInset(0);
   for (Observer& observer : observers_)
     observer.OnImmersiveFullscreenExited();
 }
@@ -278,23 +260,32 @@ void ImmersiveModeControllerAsh::SetVisibleFraction(double visible_fraction) {
   if (visible_fraction_ == visible_fraction)
     return;
 
+  // Sets the top inset only when the top-of-window views is fully visible. This
+  // means some gesture may not be recognized well during the animation, but
+  // that's fine since a complicated gesture wouldn't be involved during the
+  // animation duration. See: https://crbug.com/901544.
+  if (browser_view_->IsBrowserTypeNormal()) {
+    if (visible_fraction == 1.0) {
+      browser_view_->contents_web_view()->holder()->SetHitTestTopInset(
+          browser_view_->top_container()->height());
+    } else if (visible_fraction_ == 1.0) {
+      browser_view_->contents_web_view()->holder()->SetHitTestTopInset(0);
+    }
+  }
   visible_fraction_ = visible_fraction;
   browser_view_->Layout();
   browser_view_->frame()->GetFrameView()->UpdateClientArea();
-
-  if (mash_reveal_widget_)
-    mash_reveal_widget_->SetBounds(GetScreenBoundsForRevealWidget());
 }
 
-std::vector<gfx::Rect>
-ImmersiveModeControllerAsh::GetVisibleBoundsInScreen() const {
+std::vector<gfx::Rect> ImmersiveModeControllerAsh::GetVisibleBoundsInScreen()
+    const {
   views::View* top_container_view = browser_view_->top_container();
   gfx::Rect top_container_view_bounds = top_container_view->GetVisibleBounds();
   // TODO(tdanderson): Implement View::ConvertRectToScreen().
   gfx::Point top_container_view_bounds_in_screen_origin(
       top_container_view_bounds.origin());
-  views::View::ConvertPointToScreen(top_container_view,
-      &top_container_view_bounds_in_screen_origin);
+  views::View::ConvertPointToScreen(
+      top_container_view, &top_container_view_bounds_in_screen_origin);
   gfx::Rect top_container_view_bounds_in_screen(
       top_container_view_bounds_in_screen_origin,
       top_container_view_bounds.size());
@@ -314,8 +305,8 @@ void ImmersiveModeControllerAsh::Observe(
     return;
 
   // Auto hide the shelf in immersive browser fullscreen.
-  bool in_tab_fullscreen = content::Source<FullscreenController>(source)->
-      IsWindowFullscreenForTabOrPending();
+  bool in_tab_fullscreen = content::Source<FullscreenController>(source)
+                               ->IsWindowFullscreenForTabOrPending();
   browser_view_->GetNativeWindow()->SetProperty(
       ash::kHideShelfWhenFullscreenKey, in_tab_fullscreen);
 }
@@ -323,23 +314,17 @@ void ImmersiveModeControllerAsh::Observe(
 void ImmersiveModeControllerAsh::OnWindowPropertyChanged(aura::Window* window,
                                                          const void* key,
                                                          intptr_t old) {
-  if (key == ash::kWindowStateTypeKey) {
-    ash::mojom::WindowStateType new_state =
-        window->GetProperty(ash::kWindowStateTypeKey);
-    ash::mojom::WindowStateType old_state =
-        static_cast<ash::mojom::WindowStateType>(old);
-    if (new_state == ash::mojom::WindowStateType::TRUSTED_PINNED ||
-        old_state == ash::mojom::WindowStateType::TRUSTED_PINNED ||
-        new_state == ash::mojom::WindowStateType::PINNED ||
-        old_state == ash::mojom::WindowStateType::PINNED) {
-      browser_view_->FullscreenStateChanged();
-    }
+  // Track locked fullscreen changes.
+  if (key == ash::kWindowPinTypeKey) {
+    browser_view_->FullscreenStateChanged();
+    return;
   }
 
   if (key == aura::client::kShowStateKey) {
     ui::WindowShowState new_state =
         window->GetProperty(aura::client::kShowStateKey);
     auto old_state = static_cast<ui::WindowShowState>(old);
+
     // Make sure the browser stays up to date with the window's state. This is
     // necessary in classic Ash if the user exits fullscreen with the restore
     // button, and it's necessary in OopAsh if the window manager initiates a
@@ -358,18 +343,4 @@ void ImmersiveModeControllerAsh::OnWindowDestroying(aura::Window* window) {
   // BrowserView has already destroyed the aura::Window.
   observed_windows_.Remove(window);
   DCHECK(!observed_windows_.IsObservingSources());
-}
-
-gfx::Rect ImmersiveModeControllerAsh::GetScreenBoundsForRevealWidget() {
-  const gfx::Rect* inverted_caption_button_bounds =
-      browser_view_->GetWidget()
-          ->GetNativeWindow()
-          ->GetRootWindow()
-          ->GetProperty(ash::kCaptionButtonBoundsKey);
-  if (!inverted_caption_button_bounds)
-    return gfx::Rect();
-  gfx::Rect top_container_bounds =
-      browser_view_->top_container()->GetBoundsInScreen();
-  return *inverted_caption_button_bounds +
-         gfx::Vector2d(top_container_bounds.right(), top_container_bounds.y());
 }

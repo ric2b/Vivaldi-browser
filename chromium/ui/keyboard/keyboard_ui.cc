@@ -5,10 +5,12 @@
 #include "ui/keyboard/keyboard_ui.h"
 
 #include "base/command_line.h"
+#include "base/unguessable_token.h"
 #include "ui/aura/window.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/keyboard/keyboard_controller.h"
 
 namespace keyboard {
@@ -18,29 +20,25 @@ KeyboardUI::KeyboardUI() = default;
 KeyboardUI::~KeyboardUI() = default;
 
 void KeyboardUI::ShowKeyboardWindow() {
-  if (HasKeyboardWindow()) {
+  DVLOG(1) << "ShowKeyboardWindow";
+  aura::Window* window = GetKeyboardWindow();
+  if (window) {
     TRACE_EVENT0("vk", "ShowKeyboardWindow");
-    GetKeyboardWindow()->Show();
+    window->Show();
   }
 }
 
 void KeyboardUI::HideKeyboardWindow() {
-  if (HasKeyboardWindow())
-    GetKeyboardWindow()->Hide();
+  DVLOG(1) << "HideKeyboardWindow";
+  aura::Window* window = GetKeyboardWindow();
+  if (window)
+    window->Hide();
 }
 
-void KeyboardUI::EnsureCaretInWorkArea(const gfx::Rect& occluded_bounds) {
-  if (!GetInputMethod())
-    return;
-
-  TRACE_EVENT0("vk", "EnsureCaretInWorkArea");
-
-  if (keyboard_controller_->IsOverscrollAllowed()) {
-    GetInputMethod()->SetOnScreenKeyboardBounds(occluded_bounds);
-  } else if (GetInputMethod()->GetTextInputClient()) {
-    GetInputMethod()->GetTextInputClient()->EnsureCaretNotInRect(
-        occluded_bounds);
-  }
+void KeyboardUI::KeyboardContentsLoaded(const base::UnguessableToken& token,
+                                        const gfx::Size& size) {
+  NOTREACHED() << "Unexpected call to KeyboardContentsLoaded. Token: " << token
+               << " Size: " << size.ToString();
 }
 
 void KeyboardUI::SetController(KeyboardController* controller) {

@@ -34,7 +34,7 @@
 
 #include "third_party/blink/public/platform/web_layer_tree_view.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/frame/performance_monitor.h"
 #include "third_party/blink/renderer/core/timing/memory_info.h"
 #include "third_party/blink/renderer/core/timing/performance.h"
@@ -52,8 +52,10 @@ class CORE_EXPORT WindowPerformance final : public Performance,
 
  public:
   static WindowPerformance* Create(LocalDOMWindow* window) {
-    return new WindowPerformance(window);
+    return MakeGarbageCollected<WindowPerformance>(window);
   }
+
+  explicit WindowPerformance(LocalDOMWindow*);
   ~WindowPerformance() override;
 
   ExecutionContext* GetExecutionContext() const override;
@@ -63,12 +65,11 @@ class CORE_EXPORT WindowPerformance final : public Performance,
 
   MemoryInfo* memory() const override;
 
-  bool shouldYield() const override;
-
   void UpdateLongTaskInstrumentation() override;
 
-  bool ObservingEventTimingEntries();
-  bool ShouldBufferEventTiming();
+  bool ShouldBufferEntries();
+
+  bool FirstInputDetected() const { return !!first_input_timing_; }
 
   // This method creates a PerformanceEventTiming and if needed creates a swap
   // promise to calculate the |duration| attribute when such promise is
@@ -79,11 +80,17 @@ class CORE_EXPORT WindowPerformance final : public Performance,
                            TimeTicks processing_end,
                            bool cancelable);
 
+  void AddElementTiming(const AtomicString& name,
+                        const IntRect& rect,
+                        TimeTicks start_time,
+                        TimeTicks response_end,
+                        const AtomicString& identifier);
+
+  void AddLayoutJankFraction(double jank_fraction);
+
   void Trace(blink::Visitor*) override;
 
  private:
-  explicit WindowPerformance(LocalDOMWindow*);
-
   PerformanceNavigationTiming* CreateNavigationTimingInstance() override;
 
   static std::pair<AtomicString, DOMWindow*> SanitizedAttribution(
@@ -112,10 +119,6 @@ class CORE_EXPORT WindowPerformance final : public Performance,
   // dispatch has been completed but the swap promise used to determine
   // |duration| has not been resolved.
   HeapVector<Member<PerformanceEventTiming>> event_timings_;
-  // We use a bool separate from |first_input_timing_| because if the first
-  // input does not happen before onload then |first_input_timing_| will never
-  // be populated since it should not be accessible from the performance buffer.
-  bool first_input_detected_ = false;
   Member<PerformanceEventTiming> first_pointer_down_event_timing_;
   mutable Member<PerformanceNavigation> navigation_;
   mutable Member<PerformanceTiming> timing_;

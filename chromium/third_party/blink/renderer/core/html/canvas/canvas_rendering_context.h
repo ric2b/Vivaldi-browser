@@ -27,7 +27,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_HTML_CANVAS_CANVAS_RENDERING_CONTEXT_H_
 
 #include "base/macros.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
@@ -35,8 +34,7 @@
 #include "third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_color_params.h"
 #include "third_party/blink/renderer/platform/graphics/color_behavior.h"
-#include "third_party/blink/renderer/platform/wtf/hash_set.h"
-#include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 
@@ -47,16 +45,15 @@ class HTMLCanvasElement;
 class ImageBitmap;
 
 constexpr const char* kSRGBCanvasColorSpaceName = "srgb";
+constexpr const char* kLinearRGBCanvasColorSpaceName = "linear-rgb";
 constexpr const char* kRec2020CanvasColorSpaceName = "rec2020";
 constexpr const char* kP3CanvasColorSpaceName = "p3";
 
-constexpr const char* kRGBA8CanvasPixelFormatName = "8-8-8-8";
-constexpr const char* kRGB10A2CanvasPixelFormatName = "10-10-10-2";
-constexpr const char* kRGBA12CanvasPixelFormatName = "12-12-12-12";
+constexpr const char* kRGBA8CanvasPixelFormatName = "uint8";
 constexpr const char* kF16CanvasPixelFormatName = "float16";
 
 class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
-                                           public WebThread::TaskObserver {
+                                           public Thread::TaskObserver {
   USING_PRE_FINALIZER(CanvasRenderingContext, Dispose);
 
  public:
@@ -74,7 +71,8 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
     kContextImageBitmap = 5,
     kContextXRPresent = 6,
     kContextWebgl2Compute = 7,
-    kContextTypeCount,
+    kContextTypeUnknown = 8,
+    kMaxValue = kContextTypeUnknown,
   };
 
   static ContextType ContextTypeFromId(const String& id);
@@ -101,7 +99,7 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
   virtual void SetIsHidden(bool) = 0;
   virtual bool isContextLost() const { return true; }
   // TODO(fserb): remove SetCanvasGetContextResult.
-  virtual void SetCanvasGetContextResult(RenderingContext&) { NOTREACHED(); };
+  virtual void SetCanvasGetContextResult(RenderingContext&) { NOTREACHED(); }
   virtual void SetOffscreenCanvasGetContextResult(OffscreenRenderingContext&) {
     NOTREACHED();
   }
@@ -137,9 +135,9 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
 
   void NeedsFinalizeFrame();
 
-  // WebThread::TaskObserver implementation
-  void DidProcessTask() override;
-  void WillProcessTask() final {}
+  // Thread::TaskObserver implementation
+  void DidProcessTask(const base::PendingTask&) override;
+  void WillProcessTask(const base::PendingTask&) final {}
 
   // Canvas2D-specific interface
   virtual bool Is2d() const { return false; }
@@ -158,7 +156,7 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
     return HitTestCanvasResult::Create(String(), nullptr);
   }
   virtual String GetIdFromControl(const Element* element) { return String(); }
-  virtual void ResetUsageTracking(){};
+  virtual void ResetUsageTracking() {}
 
   // WebGL-specific interface
   virtual bool Is3d() const { return false; }
@@ -170,6 +168,7 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
     NOTREACHED();
     return nullptr;
   }
+  virtual void ProvideBackBufferToResourceProvider() const { NOTREACHED(); }
   virtual int ExternallyAllocatedBufferCountPerPixel() {
     NOTREACHED();
     return 0;
@@ -183,7 +182,7 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
   virtual void PushFrame() {}
   virtual ImageBitmap* TransferToImageBitmap(ScriptState*) { return nullptr; }
 
-  bool WouldTaintOrigin(CanvasImageSource*, const SecurityOrigin*);
+  bool WouldTaintOrigin(CanvasImageSource*);
   void DidMoveToNewDocument(Document*);
 
   void DetachHost() { host_ = nullptr; }
@@ -192,7 +191,7 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
     return creation_attributes_;
   }
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
   virtual void Stop() = 0;
 
  protected:
@@ -203,11 +202,12 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
   void Dispose();
 
   Member<CanvasRenderingContextHost> host_;
-  HashSet<String> clean_urls_;
-  HashSet<String> dirty_urls_;
   CanvasColorParams color_params_;
   CanvasContextCreationAttributesCore creation_attributes_;
-  bool finalize_frame_scheduled_ = false;
+
+  void StartListeningForDidProcessTask();
+  void StopListeningForDidProcessTask();
+  bool listening_for_did_process_task_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(CanvasRenderingContext);
 };

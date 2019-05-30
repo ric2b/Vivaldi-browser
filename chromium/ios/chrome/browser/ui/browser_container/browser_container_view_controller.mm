@@ -5,17 +5,11 @@
 #import "ios/chrome/browser/ui/browser_container/browser_container_view_controller.h"
 
 #include "base/logging.h"
+#import "ios/chrome/browser/ui/dialogs/dialog_features.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-@interface BrowserContainerViewController () {
-  // Weak reference to content view, so old _contentView can be removed from
-  // superview when new one is added.
-  __weak UIView* _contentView;
-}
-@end
 
 @implementation BrowserContainerViewController
 
@@ -26,6 +20,8 @@
 - (void)viewDidLoad {
   [super viewDidLoad];
 
+  self.definesPresentationContext =
+      base::FeatureList::IsEnabled(dialogs::kNonModalDialogs);
   self.view.autoresizingMask =
       UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 }
@@ -53,16 +49,59 @@
 
 #pragma mark - Public
 
-- (void)displayContentView:(UIView*)contentView {
+- (void)setContentViewController:(UIViewController*)contentViewController {
+  if (_contentViewController == contentViewController)
+    return;
+
+  [self removeOldContentViewController];
+  _contentViewController = contentViewController;
+
+  if (contentViewController) {
+    [contentViewController willMoveToParentViewController:self];
+    [self addChildViewController:contentViewController];
+    [self.view insertSubview:contentViewController.view atIndex:0];
+    if (_contentView) {
+      [self.view insertSubview:contentViewController.view
+                  aboveSubview:self.contentView];
+    } else {
+      [self.view insertSubview:contentViewController.view atIndex:0];
+    }
+    [contentViewController didMoveToParentViewController:self];
+  }
+}
+
+- (void)setContentView:(UIView*)contentView {
+  [self removeOldContentViewController];
+
   if (_contentView == contentView)
     return;
 
-  DCHECK(![_contentView superview] || [_contentView superview] == self.view);
-  [_contentView removeFromSuperview];
+  [self removeOldContentView];
   _contentView = contentView;
 
   if (contentView)
-    [self.view addSubview:contentView];
+    [self.view insertSubview:contentView atIndex:0];
+}
+
+#pragma mark - Private
+
+// Unloads and nils any any previous content viewControllers if they exist.
+- (void)removeOldContentViewController {
+  if (_contentViewController) {
+    [_contentViewController willMoveToParentViewController:nil];
+    [_contentViewController.view removeFromSuperview];
+    [_contentViewController removeFromParentViewController];
+    _contentViewController = nil;
+  }
+}
+
+// Unloads and nils any any previous content views if they exist.
+- (void)removeOldContentView {
+  if (_contentView) {
+    DCHECK(![_contentView superview] || [_contentView superview] == self.view);
+    [_contentView removeFromSuperview];
+    _contentView = nil;
+  }
 }
 
 @end

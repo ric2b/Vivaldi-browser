@@ -47,8 +47,12 @@ class HeaderChecker : public base::RefCountedThreadSafe<HeaderChecker> {
   };
   typedef std::vector<ChainLink> Chain;
 
+  // check_generated, if true, will also check generated
+  // files. Something that can only be done after running a build that
+  // has generated them.
   HeaderChecker(const BuildSettings* build_settings,
-                const std::vector<const Target*>& targets);
+                const std::vector<const Target*>& targets,
+                bool check_generated = false);
 
   // Runs the check. The targets in to_check will be checked.
   //
@@ -119,15 +123,15 @@ class HeaderChecker : public base::RefCountedThreadSafe<HeaderChecker> {
                  const SourceFile& file,
                  std::vector<Err>* err) const;
 
-  // Checks that the given file in the given target can include the given
-  // include file. If disallowed, returns false and sets the error. The
-  // range indicates the location of the include in the file for error
-  // reporting.
-  bool CheckInclude(const Target* from_target,
+  // Checks that the given file in the given target can include the
+  // given include file. If disallowed, adds the error or errors to
+  // the errors array.  The range indicates the location of the
+  // include in the file for error reporting.
+  void CheckInclude(const Target* from_target,
                     const InputFile& source_file,
                     const SourceFile& include_file,
                     const LocationRange& range,
-                    Err* err) const;
+                    std::vector<Err>* errors) const;
 
   // Returns true if the given search_for target is a dependency of
   // search_from.
@@ -170,6 +174,8 @@ class HeaderChecker : public base::RefCountedThreadSafe<HeaderChecker> {
   // and are not modified after, so any thread can read these without locking.
 
   const BuildSettings* build_settings_;
+
+  bool check_generated_;
 
   // Maps source files to targets it appears in (usually just one target).
   FileMap file_map_;

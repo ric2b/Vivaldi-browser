@@ -39,20 +39,26 @@ enum class PrefetchBackgroundTaskRescheduleType {
 // in enums.xml which must be adjusted if we add any new values here.
 enum class PrefetchRequestStatus {
   // Request completed successfully.
-  SUCCESS = 0,
+  kSuccess = 0,
   // Request failed due to to local network problem, unrelated to server load
   // levels. The caller will simply reschedule the retry in the next available
   // WiFi window after 15 minutes have passed.
-  SHOULD_RETRY_WITHOUT_BACKOFF = 1,
+  kShouldRetryWithoutBackoff = 1,
   // Request failed probably related to transient server problems. The caller
   // will reschedule the retry with backoff included.
-  SHOULD_RETRY_WITH_BACKOFF = 2,
+  kShouldRetryWithBackoff = 2,
   // Request failed with error indicating that the server no longer knows how
   // to service a request. The caller will prevent network requests for the
   // period of 1 day.
-  SHOULD_SUSPEND = 3,
-  // MAX should always be the last type
-  COUNT = SHOULD_SUSPEND + 1
+  kShouldSuspendNotImplemented = 3,
+  // Request failed with error indicating that the client is forbidden. The
+  // caller will prevent network requests for the period of 1 day.
+  kShouldSuspendForbidden = 4,
+  // The request was blocked by a URL blacklist configured by the domain
+  // administrator.
+  kShouldSuspendBlockedByAdministrator = 5,
+  // kMaxValue should always be the last type.
+  kMaxValue = kShouldSuspendBlockedByAdministrator
 };
 
 // Status indicating the page rendering status in the server.
@@ -131,7 +137,7 @@ enum class PrefetchItemState {
   // client.
   ZOMBIE = 100,
   // Max item state, needed for histograms
-  MAX = ZOMBIE
+  kMaxValue = ZOMBIE
 };
 
 // Error codes used to identify the reason why a prefetch entry has finished
@@ -141,7 +147,7 @@ enum class PrefetchItemState {
 // New entries can be added anywhere as long as they are assigned unique values
 // and kept in ascending order. Deprecated entries should be labeled as such but
 // never removed. Assigned values should never be reused. Remember to update the
-// MAX value if adding a new trailing item.
+// kMaxValue value if adding a new trailing item.
 //
 // Changes to this enum must be reflected in the respective metrics enum named
 // OflinePrefetchItemErrorCode in enums.xml. Use the exact same integer value
@@ -176,8 +182,8 @@ enum class PrefetchItemErrorCode {
   STALE_AT_DOWNLOADING = 1000,
   STALE_AT_IMPORTING = 1050,
   STALE_AT_UNKNOWN = 1100,
-  // The item was terminated due to not being concluded after being more than 7
-  // days in the pipeline.
+  // The item was terminated because it remained in the pipeline for more than
+  // 7 days.
   STUCK = 1150,
   // Exceeded maximum retries for get operation request.
   GET_OPERATION_MAX_ATTEMPTS_REACHED = 1200,
@@ -194,7 +200,7 @@ enum class PrefetchItemErrorCode {
   // downloaded.
   SUGGESTION_INVALIDATED = 1700,
   // Note: Must always have the same value as the last actual entry.
-  MAX = SUGGESTION_INVALIDATED
+  kMaxValue = SUGGESTION_INVALIDATED
 };
 
 // Callback invoked upon completion of a prefetch request.
@@ -207,8 +213,9 @@ using PrefetchRequestFinishedCallback =
 struct PrefetchURL {
   PrefetchURL(const std::string& id,
               const GURL& url,
-              const base::string16& title)
-      : id(id), url(url), title(title) {}
+              const base::string16& title);
+  ~PrefetchURL();
+  PrefetchURL(const PrefetchURL& other);
 
   // Client provided ID to allow the matching of provided URLs to the respective
   // work item in the prefetching system within that client's assigned
@@ -221,6 +228,10 @@ struct PrefetchURL {
 
   // The title of the page.
   base::string16 title;
+
+  // URL for a thumbnail that represents the page. May be empty if no thumbnail
+  // is available.
+  GURL thumbnail_url;
 };
 
 // Result of a completed download.

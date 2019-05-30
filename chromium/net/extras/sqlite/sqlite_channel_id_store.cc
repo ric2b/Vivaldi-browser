@@ -355,8 +355,8 @@ void SQLiteChannelIDStore::Backend::DatabaseErrorCallback(
   // TODO(shess): Consider just calling RazeAndClose() immediately.
   // db_ may not be safe to reset at this point, but RazeAndClose()
   // would cause the stack to unwind safely with errors.
-  background_task_runner_->PostTask(FROM_HERE,
-                                    base::Bind(&Backend::KillDatabase, this));
+  background_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&Backend::KillDatabase, this));
 }
 
 void SQLiteChannelIDStore::Backend::KillDatabase() {
@@ -388,9 +388,8 @@ void SQLiteChannelIDStore::Backend::DeleteAllInList(
     return;
   // Perform deletion on background task runner.
   background_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(
-          &Backend::BackgroundDeleteAllInList, this, server_identifiers));
+      FROM_HERE, base::BindOnce(&Backend::BackgroundDeleteAllInList, this,
+                                server_identifiers));
 }
 
 void SQLiteChannelIDStore::Backend::BatchOperation(
@@ -421,13 +420,12 @@ void SQLiteChannelIDStore::Backend::BatchOperation(
   if (num_pending == 1) {
     // We've gotten our first entry for this batch, fire off the timer.
     background_task_runner_->PostDelayedTask(
-        FROM_HERE,
-        base::Bind(&Backend::Commit, this),
+        FROM_HERE, base::BindOnce(&Backend::Commit, this),
         base::TimeDelta::FromMilliseconds(kCommitIntervalMs));
   } else if (num_pending == kCommitAfterBatchSize) {
     // We've reached a big enough batch, fire off a commit now.
     background_task_runner_->PostTask(FROM_HERE,
-                                      base::Bind(&Backend::Commit, this));
+                                      base::BindOnce(&Backend::Commit, this));
   }
 }
 
@@ -436,8 +434,7 @@ void SQLiteChannelIDStore::Backend::PrunePendingOperationsForDeletes(
   DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
   base::AutoLock locked(lock_);
 
-  for (PendingOperationsList::iterator it = pending_.begin();
-       it != pending_.end();) {
+  for (auto it = pending_.begin(); it != pending_.end();) {
     if (base::ContainsValue(server_identifiers,
                             (*it)->channel_id().server_identifier())) {
       std::unique_ptr<PendingOperation> po(std::move(*it));
@@ -454,7 +451,7 @@ void SQLiteChannelIDStore::Backend::Flush() {
     Commit();
   } else {
     background_task_runner_->PostTask(FROM_HERE,
-                                      base::Bind(&Backend::Commit, this));
+                                      base::BindOnce(&Backend::Commit, this));
   }
 }
 
@@ -488,8 +485,7 @@ void SQLiteChannelIDStore::Backend::Commit() {
   if (!transaction.Begin())
     return;
 
-  for (PendingOperationsList::iterator it = ops.begin(); it != ops.end();
-       ++it) {
+  for (auto it = ops.begin(); it != ops.end(); ++it) {
     // Free the certs as we commit them to the database.
     std::unique_ptr<PendingOperation> po(std::move(*it));
     switch (po->op()) {
@@ -528,7 +524,7 @@ void SQLiteChannelIDStore::Backend::Commit() {
 void SQLiteChannelIDStore::Backend::Close() {
   // Must close the backend on the background task runner.
   background_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&Backend::InternalBackgroundClose, this));
+      FROM_HERE, base::BindOnce(&Backend::InternalBackgroundClose, this));
 }
 
 void SQLiteChannelIDStore::Backend::InternalBackgroundClose() {
@@ -560,8 +556,7 @@ void SQLiteChannelIDStore::Backend::BackgroundDeleteAllInList(
     return;
   }
 
-  for (std::list<std::string>::const_iterator it = server_identifiers.begin();
-       it != server_identifiers.end();
+  for (auto it = server_identifiers.begin(); it != server_identifiers.end();
        ++it) {
     del_smt.Reset(true);
     del_smt.BindString(0, *it);

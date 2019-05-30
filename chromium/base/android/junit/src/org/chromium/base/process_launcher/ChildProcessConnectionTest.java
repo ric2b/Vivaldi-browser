@@ -116,7 +116,7 @@ public class ChildProcessConnectionTest {
 
     // Parameters captured from the IChildProcessService.setupConnection() call
     private Bundle mConnectionBundle;
-    private ICallbackInt mConnectionPidCallback;
+    private IParentProcess mConnectionParentProcess;
     private IBinder mConnectionIBinderCallback;
 
     @Before
@@ -129,7 +129,7 @@ public class ChildProcessConnectionTest {
             @Override
             public Void answer(InvocationOnMock invocation) {
                 mConnectionBundle = (Bundle) invocation.getArgument(0);
-                mConnectionPidCallback = (ICallbackInt) invocation.getArgument(1);
+                mConnectionParentProcess = (IParentProcess) invocation.getArgument(1);
                 mConnectionIBinderCallback = (IBinder) invocation.getArgument(2);
                 return null;
             }
@@ -305,9 +305,27 @@ public class ChildProcessConnectionTest {
         verify(mConnectionCallback, never()).onConnected(any());
         mFirstServiceConnection.notifyServiceConnected(mChildProcessServiceBinder);
         ShadowLooper.runUiThreadTasks();
-        assertNotNull(mConnectionPidCallback);
-        mConnectionPidCallback.call(34 /* pid */);
+        assertNotNull(mConnectionParentProcess);
+        mConnectionParentProcess.sendPid(34);
         verify(mConnectionCallback, times(1)).onConnected(connection);
+    }
+
+    @Test
+    public void testSendPidOnlyWorksOnce() throws RemoteException {
+        ChildProcessConnection connection = createDefaultTestConnection();
+        assertNotNull(mFirstServiceConnection);
+        connection.start(false /* useStrongBinding */, null /* serviceCallback */);
+        connection.setupConnection(
+                null /* connectionBundle */, null /* callback */, mConnectionCallback);
+        verify(mConnectionCallback, never()).onConnected(any());
+        mFirstServiceConnection.notifyServiceConnected(mChildProcessServiceBinder);
+        ShadowLooper.runUiThreadTasks();
+        assertNotNull(mConnectionParentProcess);
+
+        mConnectionParentProcess.sendPid(34);
+        assertEquals(34, connection.getPid());
+        mConnectionParentProcess.sendPid(543);
+        assertEquals(34, connection.getPid());
     }
 
     @Test
@@ -320,8 +338,8 @@ public class ChildProcessConnectionTest {
                 null /* connectionBundle */, null /* callback */, mConnectionCallback);
         verify(mConnectionCallback, never()).onConnected(any());
         ShadowLooper.runUiThreadTasks();
-        assertNotNull(mConnectionPidCallback);
-        mConnectionPidCallback.call(34 /* pid */);
+        assertNotNull(mConnectionParentProcess);
+        mConnectionParentProcess.sendPid(34);
         verify(mConnectionCallback, times(1)).onConnected(connection);
     }
 
@@ -335,8 +353,8 @@ public class ChildProcessConnectionTest {
                 null /* connectionBundle */, null /* callback */, mConnectionCallback);
         verify(mConnectionCallback, never()).onConnected(any());
         ShadowLooper.runUiThreadTasks();
-        assertNotNull(mConnectionPidCallback);
-        mConnectionPidCallback.call(34 /* pid */);
+        assertNotNull(mConnectionParentProcess);
+        mConnectionParentProcess.sendPid(34);
         verify(mConnectionCallback, times(1)).onConnected(connection);
 
         // Add strong binding so that connection is oom protected.
@@ -368,19 +386,19 @@ public class ChildProcessConnectionTest {
         mFirstServiceConnection = null;
 
         assertArrayEquals(
-                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 0, 0});
+                connection0.remainingBindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 0, 0});
 
         connection0.start(false /* useStrongBinding */, null /* serviceCallback */);
         assertArrayEquals(
-                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 0});
+                connection0.remainingBindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 0, 0});
 
         connection1.start(true /* useStrongBinding */, null /* serviceCallback */);
         assertArrayEquals(
-                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 1});
+                connection0.remainingBindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 0, 1});
 
         connection2.start(false /* useStrongBinding */, null /* serviceCallback */);
         assertArrayEquals(
-                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 2, 1});
+                connection0.remainingBindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 1});
 
         Binder binder0 = new Binder();
         Binder binder1 = new Binder();
@@ -396,30 +414,30 @@ public class ChildProcessConnectionTest {
         // Add and remove moderate binding works as expected.
         connection2.removeModerateBinding();
         assertArrayEquals(
-                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 1, 1, 1});
+                connection0.remainingBindingStateCountsCurrentOrWhenDied(), new int[] {0, 1, 0, 1});
         connection2.addModerateBinding();
         assertArrayEquals(
-                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 2, 1});
+                connection0.remainingBindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 1});
 
         // Add and remove strong binding works as expected.
         connection0.addStrongBinding();
         assertArrayEquals(
-                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 2});
+                connection0.remainingBindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 1});
         connection0.removeStrongBinding();
         assertArrayEquals(
-                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 2, 1});
+                connection0.remainingBindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 1});
 
         // Stopped connection should no longe update.
         connection0.stop();
         assertArrayEquals(
-                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 1});
+                connection0.remainingBindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 1});
         assertArrayEquals(
-                connection1.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 1});
+                connection1.remainingBindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 0});
 
         connection2.removeModerateBinding();
         assertArrayEquals(
-                connection0.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 1});
+                connection0.remainingBindingStateCountsCurrentOrWhenDied(), new int[] {0, 0, 1, 1});
         assertArrayEquals(
-                connection1.bindingStateCountsCurrentOrWhenDied(), new int[] {0, 1, 0, 1});
+                connection1.remainingBindingStateCountsCurrentOrWhenDied(), new int[] {0, 1, 0, 0});
     }
 }

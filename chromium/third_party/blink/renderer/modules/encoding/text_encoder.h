@@ -43,21 +43,24 @@ namespace blink {
 
 class ExecutionContext;
 class ExceptionState;
+class TextEncoderEncodeIntoResult;
 
 class TextEncoder final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   static TextEncoder* Create(ExecutionContext*, ExceptionState&);
+
+  TextEncoder(const WTF::TextEncoding&);
   ~TextEncoder() override;
 
   // Implement the IDL
   String encoding() const;
   NotShared<DOMUint8Array> encode(const String&);
+  TextEncoderEncodeIntoResult* encodeInto(const String&,
+                                          NotShared<DOMUint8Array>&);
 
  private:
-  TextEncoder(const WTF::TextEncoding&);
-
   WTF::TextEncoding encoding_;
   std::unique_ptr<WTF::TextCodec> codec_;
 };

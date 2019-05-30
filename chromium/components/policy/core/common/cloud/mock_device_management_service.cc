@@ -6,6 +6,7 @@
 
 #include "base/macros.h"
 #include "base/strings/string_util.h"
+#include "components/policy/core/common/cloud/dm_auth.h"
 #include "net/base/net_errors.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
@@ -32,18 +33,17 @@ class MockRequestJobBase : public DeviceManagementRequestJob {
  protected:
   void Run() override {
     service_->StartJob(ExtractParameter(dm_protocol::kParamRequest),
-                       gaia_token_,
+                       auth_data_ ? auth_data_->gaia_token() : "",
                        ExtractParameter(dm_protocol::kParamOAuthToken),
-                       dm_token_,
-                       ExtractParameter(dm_protocol::kParamDeviceID),
-                       request_);
+                       auth_data_ ? auth_data_->dm_token() : "",
+                       auth_data_ ? auth_data_->enrollment_token() : "",
+                       ExtractParameter(dm_protocol::kParamDeviceID), request_);
   }
 
  private:
   // Searches for a query parameter and returns the associated value.
   const std::string& ExtractParameter(const std::string& name) const {
-    for (ParameterMap::const_iterator entry(query_params_.begin());
-         entry != query_params_.end();
+    for (auto entry(query_params_.begin()); entry != query_params_.end();
          ++entry) {
       if (name == entry->first)
         return entry->second;

@@ -16,11 +16,19 @@ void SplitIntoMainAndTail(const std::string& locale,
                           std::string* main_part,
                           std::string* tail_part);
 
+// Given a language code, extract the base language only.
+// Example: from "en-US", extract "en".
+std::string ExtractBaseLanguage(const std::string& language_code);
+
 // Returns whether or not the given list includes at least one language with
 // the same base as the input language.
 // For example: "en-US" and "en-UK" share the same base "en".
 bool ContainsSameBaseLanguage(const std::vector<std::string>& list,
                               const std::string& language_code);
+
+// Converts |input_locale| to a fallback if needed and checks that the
+// resulting locale is supported as a UI locale.
+bool ConvertToFallbackUILocale(std::string* input_locale);
 
 // Converts the input locale into its corresponding actual UI locale that
 // Chrome should use for display and returns whether such locale exist.

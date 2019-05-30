@@ -9,17 +9,18 @@
 #include "ash/accessibility/accessibility_focus_ring_layer.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/interfaces/constants.mojom.h"
-#include "ash/public/interfaces/status_area_widget_test_api.mojom.h"
+#include "ash/public/interfaces/status_area_widget_test_api.test-mojom-test-utils.h"
+#include "ash/public/interfaces/status_area_widget_test_api.test-mojom.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
-#include "ash/system/tray/system_tray.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "base/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/pattern.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/speech_monitor.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -33,7 +34,6 @@
 #include "extensions/browser/notification_types.h"
 #include "extensions/browser/process_manager.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/events/test/event_generator.h"
 #include "url/url_constants.h"
 
@@ -84,8 +84,7 @@ class SelectToSpeakTest : public InProcessBrowserTest {
   gfx::Rect GetWebContentsBounds() const {
     // TODO(katie): Find a way to get the exact bounds programmatically.
     gfx::Rect bounds = browser()->window()->GetBounds();
-    const int top_inset = ui::MaterialDesignController::IsRefreshUi() ? 75 : 50;
-    bounds.Inset(8, 8, top_inset, 8);
+    bounds.Inset(8, 8, 75, 8);
     return bounds;
   }
 
@@ -160,14 +159,11 @@ class SelectToSpeakTest : public InProcessBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, SpeakStatusTray) {
-  gfx::Rect tray_bounds =
-      ash::features::IsSystemTrayUnifiedEnabled()
-          ? ash::Shell::Get()
-                ->GetPrimaryRootWindowController()
-                ->GetStatusAreaWidget()
-                ->unified_system_tray()
-                ->GetBoundsInScreen()
-          : ash::Shell::Get()->GetPrimarySystemTray()->GetBoundsInScreen();
+  gfx::Rect tray_bounds = ash::Shell::Get()
+                              ->GetPrimaryRootWindowController()
+                              ->GetStatusAreaWidget()
+                              ->unified_system_tray()
+                              ->GetBoundsInScreen();
 
   // Hold down Search and click a few pixels into the status tray bounds.
   generator_->PressKey(ui::VKEY_LWIN, 0 /* flags */);
@@ -291,11 +287,15 @@ IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, FocusRingMovesWithMouse) {
       base::BindRepeating(&SelectToSpeakTest::OnFocusRingChanged, GetWeakPtr());
   chromeos::AccessibilityManager::Get()->SetFocusRingObserverForTest(callback);
 
+  std::string focus_ring_id =
+      chromeos::AccessibilityManager::Get()->GetFocusRingId(
+          extension_misc::kSelectToSpeakExtensionId, "");
+
   ash::AccessibilityFocusRingController* controller =
       ash::Shell::Get()->accessibility_focus_ring_controller();
+  controller->SetNoFadeForTesting();
   const ash::AccessibilityFocusRingGroup* focus_ring_group =
-      controller->GetFocusRingGroupForTesting(
-          extension_misc::kSelectToSpeakExtensionId);
+      controller->GetFocusRingGroupForTesting(focus_ring_id);
   // No focus rings to start.
   EXPECT_EQ(nullptr, focus_ring_group);
 
@@ -309,8 +309,7 @@ IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, FocusRingMovesWithMouse) {
 
   // Expect a focus ring to have been drawn.
   WaitForFocusRingChanged();
-  focus_ring_group = controller->GetFocusRingGroupForTesting(
-      extension_misc::kSelectToSpeakExtensionId);
+  focus_ring_group = controller->GetFocusRingGroupForTesting(focus_ring_id);
   ASSERT_NE(nullptr, focus_ring_group);
   std::vector<std::unique_ptr<ash::AccessibilityFocusRingLayer>> const&
       focus_rings = focus_ring_group->focus_layers_for_testing();

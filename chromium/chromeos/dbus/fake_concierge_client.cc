@@ -6,11 +6,14 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/fake_cicerone_client.h"
 
 namespace chromeos {
 
-FakeConciergeClient::FakeConciergeClient() {
+FakeConciergeClient::FakeConciergeClient() : weak_ptr_factory_(this) {
   InitializeProtoResponses();
 }
 FakeConciergeClient::~FakeConciergeClient() = default;
@@ -64,6 +67,27 @@ void FakeConciergeClient::StartTerminaVm(
   start_termina_vm_called_ = true;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), start_vm_response_));
+
+  if (start_vm_response_.status() != vm_tools::concierge::VM_STATUS_STARTING) {
+    // Don't send the tremplin signal unless the VM was STARTING.
+    return;
+  }
+
+  // Trigger CiceroneClient::Observer::NotifyTremplinStartedSignal.
+  vm_tools::cicerone::TremplinStartedSignal tremplin_started_signal;
+  tremplin_started_signal.set_vm_name(request.name());
+  tremplin_started_signal.set_owner_id(request.owner_id());
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(&FakeConciergeClient::NotifyTremplinStarted,
+                                weak_ptr_factory_.GetWeakPtr(),
+                                std::move(tremplin_started_signal)));
+}
+
+void FakeConciergeClient::NotifyTremplinStarted(
+    const vm_tools::cicerone::TremplinStartedSignal& signal) {
+  static_cast<FakeCiceroneClient*>(
+      chromeos::DBusThreadManager::Get()->GetCiceroneClient())
+      ->NotifyTremplinStarted(signal);
 }
 
 void FakeConciergeClient::StopVm(
@@ -72,16 +96,6 @@ void FakeConciergeClient::StopVm(
   stop_vm_called_ = true;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), stop_vm_response_));
-}
-
-void FakeConciergeClient::StartContainer(
-    const vm_tools::concierge::StartContainerRequest& request,
-    DBusMethodCallback<vm_tools::concierge::StartContainerResponse> callback) {
-  start_container_called_ = true;
-
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(std::move(callback), start_container_response_));
 }
 
 void FakeConciergeClient::WaitForServiceToBeAvailable(
@@ -101,6 +115,36 @@ void FakeConciergeClient::GetContainerSshKeys(
       base::BindOnce(std::move(callback), container_ssh_keys_response_));
 }
 
+void FakeConciergeClient::AttachUsbDevice(base::ScopedFD fd,
+    const vm_tools::concierge::AttachUsbDeviceRequest& request,
+    DBusMethodCallback<vm_tools::concierge::AttachUsbDeviceResponse> callback) {
+  attach_usb_device_called_ = true;
+
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), attach_usb_device_response_));
+}
+
+void FakeConciergeClient::DetachUsbDevice(
+    const vm_tools::concierge::DetachUsbDeviceRequest& request,
+    DBusMethodCallback<vm_tools::concierge::DetachUsbDeviceResponse> callback) {
+  detach_usb_device_called_ = true;
+
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), detach_usb_device_response_));
+}
+
+void FakeConciergeClient::ListUsbDevices(
+    const vm_tools::concierge::ListUsbDeviceRequest& request,
+    DBusMethodCallback<vm_tools::concierge::ListUsbDeviceResponse> callback) {
+  list_usb_devices_called_ = true;
+
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), list_usb_devices_response_));
+}
+
 void FakeConciergeClient::InitializeProtoResponses() {
   create_disk_image_response_.Clear();
   create_disk_image_response_.set_status(
@@ -115,19 +159,25 @@ void FakeConciergeClient::InitializeProtoResponses() {
   list_vm_disks_response_.set_success(true);
 
   start_vm_response_.Clear();
-  start_vm_response_.set_success(true);
+  start_vm_response_.set_status(vm_tools::concierge::VM_STATUS_STARTING);
 
   stop_vm_response_.Clear();
   stop_vm_response_.set_success(true);
-
-  start_container_response_.Clear();
-  start_container_response_.set_status(
-      vm_tools::concierge::CONTAINER_STATUS_RUNNING);
 
   container_ssh_keys_response_.Clear();
   container_ssh_keys_response_.set_container_public_key("pubkey");
   container_ssh_keys_response_.set_host_private_key("privkey");
   container_ssh_keys_response_.set_hostname("hostname");
+
+  attach_usb_device_response_.Clear();
+  attach_usb_device_response_.set_success(true);
+  attach_usb_device_response_.set_guest_port(0);
+
+  detach_usb_device_response_.Clear();
+  detach_usb_device_response_.set_success(true);
+
+  list_usb_devices_response_.Clear();
+  list_usb_devices_response_.set_success(true);
 }
 
 }  // namespace chromeos

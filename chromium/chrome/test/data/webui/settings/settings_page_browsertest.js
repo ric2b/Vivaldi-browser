@@ -51,7 +51,8 @@ SettingsPageBrowserTest.prototype = {
    * Toggles the Advanced sections.
    */
   toggleAdvanced: function() {
-    const settingsMain = document.querySelector('* /deep/ settings-main');
+    const settingsMain =
+        document.querySelector('settings-ui').$$('settings-main');
     assert(!!settingsMain);
     settingsMain.advancedToggleExpanded = !settingsMain.advancedToggleExpanded;
     Polymer.dom.flush();
@@ -70,8 +71,9 @@ SettingsPageBrowserTest.prototype = {
     const page = settingsMain.$$(pageType);
 
     const idleRender = page && page.$$('settings-idle-load');
-    if (!idleRender)
+    if (!idleRender) {
       return Promise.resolve(page);
+    }
 
     return idleRender.get().then(function() {
       Polymer.dom.flush();
@@ -90,8 +92,9 @@ SettingsPageBrowserTest.prototype = {
     assertTrue(!!sections);
     for (let i = 0; i < sections.length; ++i) {
       const s = sections[i];
-      if (s.section == section)
+      if (s.section == section) {
         return s;
+      }
     }
     return undefined;
   },
@@ -103,9 +106,11 @@ SettingsPageBrowserTest.prototype = {
    */
   verifySubpagesHidden: function(section) {
     // Check if there are sub-pages to verify.
-    const pages = section.querySelector('* /deep/ settings-animated-pages');
-    if (!pages)
+    const pages = section.firstElementChild.shadowRoot.querySelector(
+        'settings-animated-pages');
+    if (!pages) {
       return;
+    }
 
     const children = pages.getContentChildren();
     const stampedChildren = children.filter(function(element) {

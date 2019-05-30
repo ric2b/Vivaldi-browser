@@ -108,7 +108,6 @@ class CompositorWatcher : public ui::CompositorObserver {
 
     RunCallbackIfAllCompositingEnded();
   }
-  void OnCompositingChildResizing(ui::Compositor* compositor) override {}
   void OnCompositingShuttingDown(ui::Compositor* compositor) override {
     compositor_observer_.Remove(compositor);
     pending_compositing_.erase(compositor);
@@ -219,13 +218,11 @@ PowerEventObserver::PowerEventObserver()
                       ? LockState::kLocked
                       : LockState::kUnlocked),
       session_observer_(this) {
-  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->AddObserver(
-      this);
+  chromeos::PowerManagerClient::Get()->AddObserver(this);
 }
 
 PowerEventObserver::~PowerEventObserver() {
-  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->RemoveObserver(
-      this);
+  chromeos::PowerManagerClient::Get()->RemoveObserver(this);
 }
 
 void PowerEventObserver::OnLockAnimationsComplete() {
@@ -252,9 +249,9 @@ void PowerEventObserver::SuspendImminent(
     power_manager::SuspendImminent::Reason reason) {
   suspend_in_progress_ = true;
 
-  displays_suspended_callback_ = chromeos::DBusThreadManager::Get()
-                                     ->GetPowerManagerClient()
-                                     ->GetSuspendReadinessCallback(FROM_HERE);
+  displays_suspended_callback_ =
+      chromeos::PowerManagerClient::Get()->GetSuspendReadinessCallback(
+          FROM_HERE);
 
   // Stop compositing immediately if
   // * the screen lock flow has already completed

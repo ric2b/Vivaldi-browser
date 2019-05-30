@@ -20,10 +20,12 @@
 #include "base/task/task_scheduler/delayed_task_manager.h"
 #include "base/task/task_scheduler/environment_config.h"
 #include "base/task/task_scheduler/scheduler_single_thread_task_runner_manager.h"
+#include "base/task/task_scheduler/scheduler_task_runner_delegate.h"
 #include "base/task/task_scheduler/scheduler_worker_pool_impl.h"
 #include "base/task/task_scheduler/task_scheduler.h"
 #include "base/task/task_scheduler/task_tracker.h"
 #include "base/task/task_traits.h"
+#include "base/updateable_sequenced_task_runner.h"
 #include "build/build_config.h"
 
 #if defined(OS_POSIX) && !defined(OS_NACL_SFI)
@@ -36,13 +38,14 @@
 
 namespace base {
 
-class HistogramBase;
 class Thread;
 
 namespace internal {
 
 // Default TaskScheduler implementation. This class is thread-safe.
-class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
+class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler,
+                                      public SchedulerWorkerPool::Delegate,
+                                      public SchedulerTaskRunnerDelegate {
  public:
   using TaskTrackerImpl =
 #if defined(OS_POSIX) && !defined(OS_NACL_SFI)
@@ -64,7 +67,6 @@ class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
   // TaskScheduler:
   void Start(const TaskScheduler::InitParams& init_params,
              SchedulerWorkerObserver* scheduler_worker_observer) override;
-  std::vector<const HistogramBase*> GetHistograms() const override;
   int GetMaxConcurrentNonBlockedTasksWithTraitsDeprecated(
       const TaskTraits& traits) const override;
   void Shutdown() override;
@@ -90,17 +92,30 @@ class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
       const TaskTraits& traits,
       SingleThreadTaskRunnerThreadMode thread_mode) override;
 #endif  // defined(OS_WIN)
+  scoped_refptr<UpdateableSequencedTaskRunner>
+  CreateUpdateableSequencedTaskRunnerWithTraitsForTesting(
+      const TaskTraits& traits);
 
  private:
-  // Returns the worker pool that runs Tasks with |traits|.
-  SchedulerWorkerPoolImpl* GetWorkerPoolForTraits(
-      const TaskTraits& traits) const;
-
   // Returns |traits|, with priority set to TaskPriority::USER_BLOCKING if
   // |all_tasks_user_blocking_| is set.
   TaskTraits SetUserBlockingPriorityIfNeeded(const TaskTraits& traits) const;
 
   void ReportHeartbeatMetrics() const;
+
+  const SchedulerWorkerPool* GetWorkerPoolForTraits(
+      const TaskTraits& traits) const;
+
+  // SchedulerWorkerPool::Delegate:
+  SchedulerWorkerPool* GetWorkerPoolForTraits(
+      const TaskTraits& traits) override;
+
+  // SchedulerTaskRunnerDelegate:
+  bool PostTaskWithSequence(Task task,
+                            scoped_refptr<Sequence> sequence) override;
+  bool IsRunningPoolWithTraits(const TaskTraits& traits) const override;
+  void UpdatePriority(scoped_refptr<Sequence> sequence,
+                      TaskPriority priority) override;
 
   const std::unique_ptr<TaskTrackerImpl> task_tracker_;
   std::unique_ptr<Thread> service_thread_;
@@ -115,12 +130,8 @@ class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
   // TODO(fdoray): Remove after experiment. https://crbug.com/757022
   AtomicFlag all_tasks_user_blocking_;
 
-  // Owns all the pools managed by this TaskScheduler.
-  std::vector<std::unique_ptr<SchedulerWorkerPoolImpl>> worker_pools_;
-
-  // Maps an environment from EnvironmentType to a pool in |worker_pools_|.
-  SchedulerWorkerPoolImpl* environment_to_worker_pool_[static_cast<int>(
-      EnvironmentType::ENVIRONMENT_COUNT)];
+  Optional<SchedulerWorkerPoolImpl> foreground_pool_;
+  Optional<SchedulerWorkerPoolImpl> background_pool_;
 
 #if DCHECK_IS_ON()
   // Set once JoinForTesting() has returned.
@@ -131,6 +142,8 @@ class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
   // Provides COM initialization verification for supported builds.
   base::win::ComInitCheckHook com_init_check_hook_;
 #endif
+
+  TrackedRefFactory<SchedulerWorkerPool::Delegate> tracked_ref_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(TaskSchedulerImpl);
 };

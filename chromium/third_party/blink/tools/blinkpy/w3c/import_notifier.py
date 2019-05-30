@@ -16,6 +16,7 @@ from collections import defaultdict
 import logging
 import re
 
+from blinkpy.common.net.luci_auth import LuciAuth
 from blinkpy.common.path_finder import PathFinder
 from blinkpy.w3c.common import WPT_GH_URL
 from blinkpy.w3c.directory_owners_extractor import DirectoryOwnersExtractor
@@ -35,6 +36,7 @@ class ImportNotifier(object):
         self.git = chromium_git
         self.local_wpt = local_wpt
 
+        self._monorail_api = MonorailAPI
         self.default_port = host.port_factory.get()
         self.finder = PathFinder(host.filesystem)
         self.owners_extractor = DirectoryOwnersExtractor(host.filesystem)
@@ -56,11 +58,10 @@ class ImportNotifier(object):
             patchset: The patchset number of the import CL (a string).
             dry_run: If True, no bugs will be actually filed to crbug.com.
             service_account_key_json: The path to a JSON private key of a
-                service account for accessing Monorail. If None, try to load
-                from the default location, i.e. the path stored in the
-                environment variable GOOGLE_APPLICATION_CREDENTIALS.
+                service account for accessing Monorail. If None, try to get an
+                access token from luci-auth.
 
-        Note: "test names" are paths of the tests relative to LayoutTests.
+        Note: "test names" are paths of the tests relative to web_tests.
         """
         gerrit_url = SHORT_GERRIT_PREFIX + issue
         gerrit_url_with_ps = gerrit_url + '/' + patchset + '/'
@@ -87,7 +88,7 @@ class ImportNotifier(object):
         for test_name in rebaselined_tests:
             test_without_ext, _ = self.host.filesystem.splitext(test_name)
             changed_baselines = []
-            # TODO(robertma): Refactor this into layout_tests.port.base.
+            # TODO(robertma): Refactor this into web_tests.port.base.
             baseline_name = test_without_ext + '-expected.txt'
             for changed_file in changed_files:
                 if changed_file.endswith(baseline_name):
@@ -164,13 +165,13 @@ class ImportNotifier(object):
         for directory, failures in self.new_failures_by_directory.iteritems():
             summary = '[WPT] New failures introduced in {} by import {}'.format(directory, gerrit_url)
 
-            full_directory = self.host.filesystem.join(self.finder.layout_tests_dir(), directory)
+            full_directory = self.host.filesystem.join(self.finder.web_tests_dir(), directory)
             owners_file = self.host.filesystem.join(full_directory, 'OWNERS')
             is_wpt_notify_enabled = self.owners_extractor.is_wpt_notify_enabled(owners_file)
 
             owners = self.owners_extractor.extract_owners(owners_file)
             # owners may be empty but not None.
-            cc = owners + ['robertma@chromium.org']
+            cc = owners
 
             component = self.owners_extractor.extract_component(owners_file)
             # component could be None.
@@ -213,7 +214,7 @@ class ImportNotifier(object):
             A multi-line string.
         """
         path_from_wpt = self.host.filesystem.relpath(
-            directory, self.finder.path_from_layout_tests('external', 'wpt'))
+            directory, self.finder.path_from_web_tests('external', 'wpt'))
         commit_list = ''
         for sha, subject in imported_commits:
             # subject is a Unicode string and can contain non-ASCII characters.
@@ -227,22 +228,22 @@ class ImportNotifier(object):
         """Finds the lowest directory that contains the test and has OWNERS.
 
         Args:
-            The name of the test (a path relative to LayoutTests).
+            The name of the test (a path relative to web_tests).
 
         Returns:
-            The path of the found directory relative to LayoutTests.
+            The path of the found directory relative to web_tests.
         """
         # Always use non-virtual test names when looking up OWNERS.
         if self.default_port.lookup_virtual_test_base(test_name):
             test_name = self.default_port.lookup_virtual_test_base(test_name)
         # find_owners_file takes either a relative path from the *root* of the
         # repository, or an absolute path.
-        abs_test_path = self.finder.path_from_layout_tests(test_name)
+        abs_test_path = self.finder.path_from_web_tests(test_name)
         owners_file = self.owners_extractor.find_owners_file(self.host.filesystem.dirname(abs_test_path))
         if not owners_file:
             return None
         owned_directory = self.host.filesystem.dirname(owners_file)
-        short_directory = self.host.filesystem.relpath(owned_directory, self.finder.layout_tests_dir())
+        short_directory = self.host.filesystem.relpath(owned_directory, self.finder.web_tests_dir())
         return short_directory
 
     def file_bugs(self, bugs, dry_run, service_account_key_json=None):
@@ -265,7 +266,10 @@ class ImportNotifier(object):
             _log.info('[%d] Filed bug: %s', index, MonorailIssue.crbug_link(response['id']))
 
     def _get_monorail_api(self, service_account_key_json):
-        return MonorailAPI(service_account_key_json=service_account_key_json)
+        if service_account_key_json:
+            return self._monorail_api(service_account_key_json=service_account_key_json)
+        token = LuciAuth(self.host).get_access_token()
+        return self._monorail_api(access_token=token)
 
 
 class TestFailure(object):

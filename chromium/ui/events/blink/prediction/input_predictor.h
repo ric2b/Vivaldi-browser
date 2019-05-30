@@ -25,6 +25,9 @@ class InputPredictor {
     base::TimeTicks time_stamp;
   };
 
+  // Returns the name of the predictor.
+  virtual const char* GetName() const = 0;
+
   // Reset should be called each time when a new line start.
   virtual void Reset() = 0;
 
@@ -35,7 +38,8 @@ class InputPredictor {
   virtual bool HasPrediction() const = 0;
 
   // Generate the prediction based on current points.
-  virtual bool GeneratePrediction(base::TimeTicks frame_time,
+  virtual bool GeneratePrediction(base::TimeTicks predict_time,
+                                  bool is_resampling,
                                   InputData* result) const = 0;
 
  protected:

@@ -200,6 +200,11 @@ void FakeModelTypeSyncBridge::DeleteItem(const std::string& key) {
   }
 }
 
+void FakeModelTypeSyncBridge::MimicBugToLooseItemWithoutNotifyingProcessor(
+    const std::string& key) {
+  db_->RemoveData(key);
+}
+
 std::unique_ptr<MetadataChangeList>
 FakeModelTypeSyncBridge::CreateMetadataChangeList() {
   return std::make_unique<InMemoryMetadataChangeList>();
@@ -223,7 +228,8 @@ base::Optional<ModelError> FakeModelTypeSyncBridge::MergeSyncData(
     if (storage_key.empty()) {
       storage_key = GetStorageKeyImpl(change.data());
       if (base::ContainsKey(keys_to_ignore_, storage_key)) {
-        change_processor()->UntrackEntity(change.data());
+        change_processor()->UntrackEntityForClientTagHash(
+            change.data().client_tag_hash);
       } else {
         change_processor()->UpdateStorageKey(change.data(), storage_key,
                                              metadata_change_list.get());
@@ -300,8 +306,11 @@ void FakeModelTypeSyncBridge::GetData(StorageKeyList keys,
 
   auto batch = std::make_unique<MutableDataBatch>();
   for (const std::string& key : keys) {
-    DCHECK(db_->HasData(key)) << "No data for " << key;
-    batch->Put(key, CopyEntityData(db_->GetData(key)));
+    if (db_->HasData(key)) {
+      batch->Put(key, CopyEntityData(db_->GetData(key)));
+    } else {
+      DLOG(WARNING) << "No data for " << key;
+    }
   }
   std::move(callback).Run(std::move(batch));
 }
@@ -350,6 +359,12 @@ ConflictResolution FakeModelTypeSyncBridge::ResolveConflict(
     const EntityData& remote_data) const {
   DCHECK(conflict_resolution_);
   return std::move(*conflict_resolution_);
+}
+
+void FakeModelTypeSyncBridge::ApplyStopSyncChanges(
+    std::unique_ptr<MetadataChangeList> delete_metadata_change_list) {
+  ModelTypeSyncBridge::ApplyStopSyncChanges(
+      std::move(delete_metadata_change_list));
 }
 
 void FakeModelTypeSyncBridge::SetConflictResolution(

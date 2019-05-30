@@ -11,6 +11,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/task/task_scheduler/task_scheduler.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "content/browser/browser_process_sub_thread.h"
@@ -18,7 +19,7 @@
 #include "media/media_buildflags.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/viz/public/interfaces/compositing/compositing_mode_watcher.mojom.h"
-#include "ui/base/ui_features.h"
+#include "ui/base/buildflags.h"
 
 #if defined(OS_CHROMEOS)
 #include "content/browser/media/keyboard_mic_registration.h"
@@ -35,13 +36,9 @@ class CommandLine;
 class FilePath;
 class HighResolutionTimerManager;
 class MemoryPressureMonitor;
-class MessageLoop;
 class PowerMonitor;
 class SingleThreadTaskRunner;
 class SystemMonitor;
-namespace trace_event {
-class TraceEventSystemStatsMonitor;
-}  // namespace trace_event
 }  // namespace base
 
 namespace discardable_memory {
@@ -80,6 +77,12 @@ namespace net {
 class NetworkChangeNotifier;
 }  // namespace net
 
+#if defined(OS_MACOSX)
+namespace now_playing {
+class RemoteCommandCenterDelegate;
+}  // namespace now_playing
+#endif
+
 namespace viz {
 class CompositingModeReporterImpl;
 class FrameSinkManagerImpl;
@@ -92,9 +95,11 @@ class BrowserMainParts;
 class BrowserOnlineStateObserver;
 class BrowserThreadImpl;
 class LoaderDelegateImpl;
+class MediaKeysListenerManagerImpl;
 class MediaStreamManager;
 class ResourceDispatcherHostImpl;
 class SaveFileManager;
+class ScreenlockMonitor;
 class ServiceManagerContext;
 class SpeechRecognitionManagerImpl;
 class StartupTaskRunner;
@@ -128,7 +133,9 @@ class CONTENT_EXPORT BrowserMainLoop {
 
   // The TaskScheduler instance must exist but not to be started when building
   // BrowserMainLoop.
-  explicit BrowserMainLoop(const MainFunctionParams& parameters);
+  explicit BrowserMainLoop(
+      const MainFunctionParams& parameters,
+      std::unique_ptr<base::TaskScheduler::ScopedExecutionFence> fence);
   virtual ~BrowserMainLoop();
 
   void Init();
@@ -169,6 +176,12 @@ class CONTENT_EXPORT BrowserMainLoop {
   }
   media::UserInputMonitor* user_input_monitor() const {
     return user_input_monitor_.get();
+  }
+  net::NetworkChangeNotifier* network_change_notifier() const {
+    return network_change_notifier_.get();
+  }
+  MediaKeysListenerManagerImpl* media_keys_listener_manager() const {
+    return media_keys_listener_manager_.get();
   }
 
 #if defined(OS_CHROMEOS)
@@ -284,9 +297,17 @@ class CONTENT_EXPORT BrowserMainLoop {
   const base::CommandLine& parsed_command_line_;
   int result_code_;
   bool created_threads_;  // True if the non-UI threads were created.
+  // //content must be initialized single-threaded until
+  // BrowserMainLoop::CreateThreads() as things initialized before it require an
+  // initialize-once happens-before relationship with all eventual content tasks
+  // running on other threads. This ScopedExecutionFence ensures that no tasks
+  // posted to TaskScheduler gets to run before CreateThreads(); satisfying this
+  // requirement even though the TaskScheduler is created and started before
+  // content is entered.
+  std::unique_ptr<base::TaskScheduler::ScopedExecutionFence>
+      scoped_execution_fence_;
 
   // Members initialized in |MainMessageLoopStart()| ---------------------------
-  std::unique_ptr<base::MessageLoop> main_message_loop_;
 
   // Members initialized in |PostMainMessageLoopStart()| -----------------------
   std::unique_ptr<BrowserProcessSubThread> io_thread_;
@@ -294,12 +315,10 @@ class CONTENT_EXPORT BrowserMainLoop {
   std::unique_ptr<base::PowerMonitor> power_monitor_;
   std::unique_ptr<base::HighResolutionTimerManager> hi_res_timer_manager_;
   std::unique_ptr<net::NetworkChangeNotifier> network_change_notifier_;
+  std::unique_ptr<ScreenlockMonitor> screenlock_monitor_;
 
   // Per-process listener for online state changes.
   std::unique_ptr<BrowserOnlineStateObserver> online_state_observer_;
-
-  std::unique_ptr<base::trace_event::TraceEventSystemStatsMonitor>
-      system_stats_monitor_;
 
 #if defined(USE_AURA)
   std::unique_ptr<aura::Env> env_;
@@ -337,9 +356,16 @@ class CONTENT_EXPORT BrowserMainLoop {
       gpu_data_manager_visual_proxy_;
 #endif
 
+  ServiceManagerContext* service_manager_context_ = nullptr;
+  std::unique_ptr<ServiceManagerContext> owned_service_manager_context_;
+
   // Members initialized in |BrowserThreadsStarted()| --------------------------
-  std::unique_ptr<ServiceManagerContext> service_manager_context_;
   std::unique_ptr<mojo::core::ScopedIPCSupport> mojo_ipc_support_;
+  std::unique_ptr<MediaKeysListenerManagerImpl> media_keys_listener_manager_;
+#if defined(OS_MACOSX)
+  std::unique_ptr<now_playing::RemoteCommandCenterDelegate>
+      remote_command_center_delegate_;
+#endif
 
   // |user_input_monitor_| has to outlive |audio_manager_|, so declared first.
   std::unique_ptr<media::UserInputMonitor> user_input_monitor_;

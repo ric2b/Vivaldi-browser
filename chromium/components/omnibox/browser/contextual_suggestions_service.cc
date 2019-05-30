@@ -7,13 +7,16 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/json/json_writer.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
+#include "components/omnibox/browser/base_search_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
+#include "components/omnibox/common/omnibox_features.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/sync/base/time.h"
 #include "components/variations/net/variations_http_headers.h"
@@ -39,8 +42,8 @@ void AddVariationHeaders(network::ResourceRequest* request) {
   // Note: It's OK to pass InIncognito::kNo since we are expected to be in
   // non-incognito state here (i.e. contextual sugestions are not served in
   // incognito mode).
-  variations::AppendVariationHeadersUnknownSignedIn(
-      request->url, variations::InIncognito::kNo, &request->headers);
+  variations::AppendVariationsHeaderUnknownSignedIn(
+      request->url, variations::InIncognito::kNo, request);
 }
 
 // Returns API request body. The final result depends on the following input
@@ -100,6 +103,7 @@ ContextualSuggestionsService::~ContextualSuggestionsService() {}
 void ContextualSuggestionsService::CreateContextualSuggestionsRequest(
     const std::string& current_url,
     const base::Time& visit_time,
+    const AutocompleteInput& input,
     const TemplateURLService* template_url_service,
     StartCallback start_callback,
     CompletionCallback completion_callback) {
@@ -110,7 +114,7 @@ void ContextualSuggestionsService::CreateContextualSuggestionsRequest(
                               std::move(start_callback),
                               std::move(completion_callback));
   else
-    CreateDefaultRequest(current_url, template_url_service,
+    CreateDefaultRequest(current_url, input, template_url_service,
                          std::move(start_callback),
                          std::move(completion_callback));
 }
@@ -123,6 +127,7 @@ void ContextualSuggestionsService::StopCreatingContextualSuggestionsRequest() {
 // static
 GURL ContextualSuggestionsService::ContextualSuggestionsUrl(
     const std::string& current_url,
+    const AutocompleteInput& input,
     const TemplateURLService* template_url_service) {
   if (template_url_service == nullptr) {
     return GURL();
@@ -143,6 +148,13 @@ GURL ContextualSuggestionsService::ContextualSuggestionsUrl(
   if (!current_url.empty()) {
     search_term_args.current_page_url = current_url;
   }
+
+  search_term_args.page_classification = input.current_page_classification();
+
+  // Append a specific suggest client in ChromeOS app_list launcher contexts.
+  BaseSearchProvider::AppendSuggestClientToAdditionalQueryParams(
+      search_engine, search_terms_data, input.current_page_classification(),
+      &search_term_args);
   return GURL(suggestion_url_ref.ReplaceSearchTerms(search_term_args,
                                                     search_terms_data));
 }
@@ -188,11 +200,12 @@ GURL ContextualSuggestionsService::ExperimentalContextualSuggestionsUrl(
 
 void ContextualSuggestionsService::CreateDefaultRequest(
     const std::string& current_url,
+    const AutocompleteInput& input,
     const TemplateURLService* template_url_service,
     StartCallback start_callback,
     CompletionCallback completion_callback) {
   const GURL suggest_url =
-      ContextualSuggestionsUrl(current_url, template_url_service);
+      ContextualSuggestionsUrl(current_url, input, template_url_service);
   DCHECK(suggest_url.is_valid());
 
   net::NetworkTrafficAnnotationTag traffic_annotation =
@@ -228,6 +241,9 @@ void ContextualSuggestionsService::CreateDefaultRequest(
   auto request = std::make_unique<network::ResourceRequest>();
   request->url = suggest_url;
   request->load_flags = net::LOAD_DO_NOT_SAVE_COOKIES;
+  // Try to attach cookies for signed in user.
+  request->attach_same_site_cookies = true;
+  request->site_for_cookies = suggest_url;
   AddVariationHeaders(request.get());
   // TODO(https://crbug.com/808498) re-add data use measurement once
   // SimpleURLLoader supports it.
@@ -301,7 +317,7 @@ void ContextualSuggestionsService::CreateExperimentalRequest(
   }
 
   // Create the oauth2 token fetcher.
-  const OAuth2TokenService::ScopeSet scopes{
+  const identity::ScopeSet scopes{
       "https://www.googleapis.com/auth/cusco-chrome-extension"};
   token_fetcher_ = std::make_unique<identity::PrimaryAccountAccessTokenFetcher>(
       "contextual_suggestions_service", identity_manager_, scopes,

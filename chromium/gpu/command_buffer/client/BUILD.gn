@@ -2,6 +2,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/jumbo.gni")
+
+declare_args() {
+  # Enable GPU client logging without DCHECK being on.
+  enable_gpu_client_logging = false
+}
+
 # The files here go into the "gpu" component in a component build (with
 # "command_buffer_client" and "gles2_cmd_helper" just forwarding) and goes into
 # separate static libraries in non-component build.
@@ -53,7 +60,7 @@ group("webgpu") {
   }
 }
 
-source_set("client_sources") {
+jumbo_source_set("client_sources") {
   # External code should depend on this via //gpu/client above rather than
   # depending on this directly or the component build will break.
   visibility = [ "//gpu/*" ]
@@ -70,6 +77,7 @@ source_set("client_sources") {
     "gpu_control.h",
     "gpu_memory_buffer_manager.cc",
     "gpu_memory_buffer_manager.h",
+    "image_decode_accelerator_interface.h",
     "mapped_memory.cc",
     "mapped_memory.h",
     "ring_buffer.cc",
@@ -77,6 +85,7 @@ source_set("client_sources") {
     "shared_image_interface.h",
     "transfer_buffer.cc",
     "transfer_buffer.h",
+    "transfer_buffer_cmd_copy_helpers.h",
   ]
 
   configs += [ "//gpu:gpu_implementation" ]
@@ -103,7 +112,10 @@ source_set("gles2_cmd_helper_sources") {
     "gles2_cmd_helper_autogen.h",
   ]
 
-  configs += [ "//gpu:gpu_gles2_implementation" ]
+  configs += [
+    "//build/config/compiler:no_shorten_64_warnings",
+    "//gpu:gpu_gles2_implementation",
+  ]
 
   deps = [
     ":client",
@@ -179,6 +191,7 @@ source_set("raster_interface") {
   deps = [
     "//base",
     "//components/viz/common:resource_format",
+    "//gpu/command_buffer/common",
     "//ui/gfx:buffer_types",
   ]
 }
@@ -194,10 +207,13 @@ source_set("webgpu_interface") {
 }
 
 # Library emulates GLES2 using command_buffers.
-component("gles2_implementation") {
+jumbo_component("gles2_implementation") {
   sources = gles2_implementation_source_files
 
   defines = [ "GLES2_IMPL_IMPLEMENTATION" ]
+  if (enable_gpu_client_logging) {
+    defines += [ "GPU_ENABLE_CLIENT_LOGGING" ]
+  }
   all_dependent_configs = [ "//third_party/khronos:khronos_headers" ]
 
   deps = [
@@ -281,13 +297,16 @@ source_set("webgpu_sources") {
 }
 
 # Library emulates GLES2 using command_buffers.
-component("gles2_implementation_no_check") {
+jumbo_component("gles2_implementation_no_check") {
   sources = gles2_implementation_source_files
 
   defines = [
     "GLES2_IMPL_IMPLEMENTATION",
     "GLES2_CONFORMANCE_TESTS=1",
   ]
+  if (enable_gpu_client_logging) {
+    defines += [ "GPU_ENABLE_CLIENT_LOGGING" ]
+  }
 
   deps = [
     ":client",
@@ -324,7 +343,7 @@ component("gles2_c_lib") {
 
 # Same as gles2_c_lib except with no parameter checking. Required for
 # OpenGL ES 2.0 conformance tests.
-component("gles2_c_lib_nocheck") {
+jumbo_component("gles2_c_lib_nocheck") {
   sources = gles2_c_lib_source_files
 
   defines = [

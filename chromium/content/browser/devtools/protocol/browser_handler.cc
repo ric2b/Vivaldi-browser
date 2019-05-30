@@ -14,8 +14,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "content/browser/devtools/devtools_manager.h"
+#include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/permissions/permission_controller_impl.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/permission_type.h"
 #include "content/public/common/content_client.h"
@@ -60,8 +62,8 @@ Response BrowserHandler::GetVersion(std::string* protocol_version,
                                     std::string* js_version) {
   *protocol_version = DevToolsAgentHost::GetProtocolVersion();
   *revision = GetWebKitRevision();
-  *product = GetContentClient()->GetProduct();
-  *user_agent = GetContentClient()->GetUserAgent();
+  *product = GetContentClient()->browser()->GetProduct();
+  *user_agent = GetContentClient()->browser()->GetUserAgent();
   *js_version = V8_VERSION_STRING;
   return Response::OK();
 }
@@ -138,6 +140,10 @@ Response FromProtocolPermissionType(
     *out_type = PermissionType::CLIPBOARD_WRITE;
   } else if (type == protocol::Browser::PermissionTypeEnum::PaymentHandler) {
     *out_type = PermissionType::PAYMENT_HANDLER;
+  } else if (type == protocol::Browser::PermissionTypeEnum::BackgroundFetch) {
+    *out_type = PermissionType::BACKGROUND_FETCH;
+  } else if (type == protocol::Browser::PermissionTypeEnum::IdleDetection) {
+    *out_type = PermissionType::IDLE_DETECTION;
   } else {
     return Response::InvalidParams("Unknown permission type: " + type);
   }
@@ -266,6 +272,21 @@ Response BrowserHandler::GetBrowserCommandLine(
     return Response::Error(
         "Command line not returned because --enable-automation not set.");
   }
+}
+
+Response BrowserHandler::Crash() {
+  CHECK(false);
+  return Response::OK();
+}
+
+Response BrowserHandler::CrashGpuProcess() {
+  GpuProcessHost::CallOnIO(GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
+                           false /* force_create */,
+                           base::BindOnce([](GpuProcessHost* host) {
+                             if (host)
+                               host->gpu_service()->Crash();
+                           }));
+  return Response::OK();
 }
 
 }  // namespace protocol

@@ -102,9 +102,9 @@ RenderWidgetHostViewBase* WebContentsViewChildFrame::CreateViewForWidget(
   return RenderWidgetHostViewChildFrame::Create(render_widget_host);
 }
 
-RenderWidgetHostViewBase* WebContentsViewChildFrame::CreateViewForPopupWidget(
+RenderWidgetHostViewBase* WebContentsViewChildFrame::CreateViewForChildWidget(
     RenderWidgetHost* render_widget_host) {
-  return GetOuterView()->CreateViewForPopupWidget(render_widget_host);
+  return GetOuterView()->CreateViewForChildWidget(render_widget_host);
 }
 
 void WebContentsViewChildFrame::SetPageTitle(const base::string16& title) {
@@ -124,20 +124,7 @@ void WebContentsViewChildFrame::SetOverscrollControllerEnabled(bool enabled) {
 }
 
 #if defined(OS_MACOSX)
-bool WebContentsViewChildFrame::IsEventTracking() const {
-  return false;
-}
-
-void WebContentsViewChildFrame::CloseTabAfterEventTracking() {
-  NOTREACHED();
-}
-
-void WebContentsViewChildFrame::SetAllowOtherViews(bool allow) {
-  NOTREACHED();
-}
-
-bool WebContentsViewChildFrame::GetAllowOtherViews() const {
-  NOTREACHED();
+bool WebContentsViewChildFrame::CloseTabAfterEventTrackingIfNeeded() {
   return false;
 }
 #endif

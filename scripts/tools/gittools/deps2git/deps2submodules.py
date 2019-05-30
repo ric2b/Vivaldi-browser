@@ -4,6 +4,8 @@
 # found in the LICENSE file.
 
 """Read .DEPS.git and use the information to update git submodules"""
+from __future__ import print_function
+from __future__ import absolute_import
 
 import optparse
 import os
@@ -11,7 +13,7 @@ import re
 import subprocess
 import sys
 
-from deps_utils import GetDepsContent
+from .deps_utils import GetDepsContent
 
 
 SHA1_RE = re.compile('[0-9a-fA-F]{40}')
@@ -23,14 +25,14 @@ def SanitizeDeps(submods):
   case of a conflict, the higher-level (shallower) submodule takes precedence.
   Modifies the submods argument in-place.
   """
-  for submod_name in submods.keys():
+  for submod_name in list(submods.keys()):
     parts = submod_name.split('/')[:-1]
     while parts:
       may_conflict = '/'.join(parts)
       if may_conflict in submods:
         msg = ('Warning: dropping submodule "%s", because '
                'it is nested in submodule "%s".' % (submod_name, may_conflict))
-        print >> sys.stderr, msg
+        print(msg, file=sys.stderr)
         submods.pop(submod_name)
         break
       parts.pop()
@@ -48,11 +50,11 @@ def CollateDeps(deps_content):
   submods = {}
   # Non-OS-specific DEPS always override OS-specific deps. This is an interim
   # hack until there is a better way to handle OS-specific DEPS.
-  for (deps_os, val) in deps_content[1].iteritems():
-    for (dep, url) in val.iteritems():
+  for (deps_os, val) in deps_content[1].items():
+    for (dep, url) in val.items():
       submod_data = submods.setdefault(fixdep(dep), [[]] + spliturl(url))
       submod_data[0].append(deps_os)
-  for (dep, url) in deps_content[0].iteritems():
+  for (dep, url) in deps_content[0].items():
     submods[fixdep(dep)] = [['all']] + spliturl(url)
   return submods
 
@@ -76,10 +78,10 @@ def WriteGitmodules(submods, gitless=False, rewrite_rules=None):
   for submod in sorted(submods.keys()):
     [submod_os, submod_url, submod_sha1] = submods[submod]
     submod_url = _rewrite(submod_url)
-    print >> fh, '[submodule "%s"]' % submod
-    print >> fh, '\tpath = %s' % submod
-    print >> fh, '\turl = %s' % (submod_url if submod_url else '')
-    print >> fh, '\tos = %s' % ','.join(submod_os)
+    print('[submodule "%s"]' % submod, file=fh)
+    print('\tpath = %s' % submod, file=fh)
+    print('\turl = %s' % (submod_url if submod_url else ''), file=fh)
+    print('\tos = %s' % ','.join(submod_os), file=fh)
     if submod_sha1 and not SHA1_RE.match(submod_sha1):
       raise RuntimeError('sha1 hash "%s" for submodule "%s" is malformed' %
                          (submod_sha1, submod))
@@ -143,7 +145,7 @@ def main():
   for rule in options.rewrite_url:
     (old_url, new_url) = rule.split('=', 1)
     if not old_url or not new_url:
-      print 'Bad url rewrite rule: "%s"' % rule
+      print('Bad url rewrite rule: "%s"' % rule)
       parser.print_help()
       return 1
     rewrite_rules.append((old_url, new_url))
@@ -158,7 +160,7 @@ def main():
                   rewrite_rules=rewrite_rules, gitless=options.gitless)
   if not options.gitless:
     RemoveObsoleteSubmodules()
-    for submod_path, submod_sha1 in adds.iteritems():
+    for submod_path, submod_sha1 in adds.items():
       subprocess.check_call(['git', 'update-index', '--add',
                              '--cacheinfo', '160000', submod_sha1, submod_path])
   return 0

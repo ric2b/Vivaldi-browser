@@ -5,258 +5,232 @@
 package org.chromium.chrome.browser.modaldialog;
 
 import android.content.Context;
-import android.support.annotation.IntDef;
-import android.support.annotation.NonNull;
-import android.support.annotation.StringRes;
+import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
-import android.view.ContextThemeWrapper;
-import android.view.LayoutInflater;
+import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.LinearLayout.LayoutParams;
+import android.widget.ImageView;
 import android.widget.TextView;
 
-import org.chromium.base.ContextUtils;
+import org.chromium.base.Callback;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.widget.BoundedLinearLayout;
 import org.chromium.chrome.browser.widget.FadingEdgeScrollView;
 import org.chromium.ui.UiUtils;
-
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
+import org.chromium.ui.modaldialog.ModalDialogProperties;
 
 /**
- * Generic builder for app modal or tab modal alert dialogs.
+ * Generic dialog view for app modal or tab modal alert dialogs.
  */
-public class ModalDialogView implements View.OnClickListener {
-    /**
-     * Interface that controls the actions on the modal dialog.
-     */
-    public interface Controller {
-        /**
-         * Handle click event of the buttons on the dialog.
-         * @param buttonType The type of the button.
-         */
-        void onClick(@ButtonType int buttonType);
+public class ModalDialogView extends BoundedLinearLayout implements View.OnClickListener {
+    private ModalDialogProperties.Controller mController;
 
-        /**
-         * Handle cancel event when the dialog is not dismissed by actions on the dialog such as
-         * back press, and on tab modal dialog, tab switcher button click.
-         */
-        void onCancel();
-
-        /**
-         * Handle dismiss event when the dialog is dismissed by actions on the dialog.
-         */
-        void onDismiss();
-    }
-
-    /** Parameters that can be used to create a new ModalDialogView. */
-    public static class Params {
-        /** Optional: The String to show as the dialog title. */
-        public String title;
-
-        /** Optional: The String to show as descriptive text. */
-        public String message;
-
-        /**
-         * Optional: The customized View to show in the dialog. Note that the message and the
-         * custom view cannot be set together.
-         */
-        public View customView;
-
-        /** Optional: Resource ID of the String to show on the positive button. */
-        public @StringRes int positiveButtonTextId;
-
-        /** Optional: Resource ID of the String to show on the negative button. */
-        public @StringRes int negativeButtonTextId;
-
-        /**
-         * Optional: The String to show on the positive button. Note that String
-         * must be null if positiveButtonTextId is not zero.
-         */
-        public String positiveButtonText;
-
-        /**
-         * Optional: The String to show on the negative button.  Note that String
-         * must be null if negativeButtonTextId is not zero
-         */
-        public String negativeButtonText;
-
-        /**
-         * Optional: If true the dialog gets cancelled when the user touches outside of the dialog.
-         */
-        public boolean cancelOnTouchOutside;
-
-        /**
-         * Optional: If true, the dialog title is scrollable with the message. Note that the
-         * {@link #customView} will have height WRAP_CONTENT if this is set to true.
-         */
-        public boolean titleScrollable;
-    }
-
-    @IntDef({ButtonType.POSITIVE, ButtonType.NEGATIVE})
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface ButtonType {
-        int POSITIVE = 0;
-        int NEGATIVE = 1;
-    }
-
-    private final Controller mController;
-    private final Params mParams;
-
-    private final View mDialogView;
-    private final TextView mTitleView;
-    private final TextView mMessageView;
-    private final ViewGroup mCustomView;
-    private final Button mPositiveButton;
-    private final Button mNegativeButton;
+    private FadingEdgeScrollView mScrollView;
+    private ViewGroup mTitleContainer;
+    private TextView mTitleView;
+    private ImageView mTitleIcon;
+    private TextView mMessageView;
+    private ViewGroup mCustomViewContainer;
+    private View mButtonBar;
+    private Button mPositiveButton;
+    private Button mNegativeButton;
+    private Callback<Integer> mOnButtonClickedCallback;
+    private boolean mTitleScrollable;
 
     /**
-     * @return The {@link Context} with the modal dialog theme set.
+     * Constructor for inflating from XML.
      */
-    public static Context getContext() {
-        return new ContextThemeWrapper(
-                ContextUtils.getApplicationContext(), R.style.ModalDialogTheme);
+    public ModalDialogView(Context context, AttributeSet attrs) {
+        super(context, attrs);
     }
 
-    /**
-     * Constructor for initializing controller and views.
-     * @param controller The controller for this dialog.
-     */
-    public ModalDialogView(@NonNull Controller controller, @NonNull Params params) {
-        mController = controller;
-        mParams = params;
+    @Override
+    protected void onFinishInflate() {
+        super.onFinishInflate();
 
-        mDialogView = LayoutInflater.from(getContext()).inflate(R.layout.modal_dialog_view, null);
-        mTitleView = mDialogView.findViewById(
-                mParams.titleScrollable ? R.id.scrollable_title : R.id.title);
-        mMessageView = mDialogView.findViewById(R.id.message);
-        mCustomView = mDialogView.findViewById(R.id.custom);
-        mPositiveButton = mDialogView.findViewById(R.id.positive_button);
-        mNegativeButton = mDialogView.findViewById(R.id.negative_button);
+        mScrollView = findViewById(R.id.modal_dialog_scroll_view);
+        mTitleContainer = findViewById(R.id.title_container);
+        mTitleView = mTitleContainer.findViewById(R.id.title);
+        mTitleIcon = mTitleContainer.findViewById(R.id.title_icon);
+        mMessageView = findViewById(R.id.message);
+        mCustomViewContainer = findViewById(R.id.custom);
+        mButtonBar = findViewById(R.id.button_bar);
+        mPositiveButton = findViewById(R.id.positive_button);
+        mNegativeButton = findViewById(R.id.negative_button);
+
+        mPositiveButton.setOnClickListener(this);
+        mNegativeButton.setOnClickListener(this);
+        updateContentVisibility();
+        updateButtonVisibility();
+
+        // If the scroll view can not be scrolled, make the scroll view not focusable so that the
+        // focusing behavior for hardware keyboard is less confusing.
+        // See https://codereview.chromium.org/2939883002.
+        mScrollView.addOnLayoutChangeListener(
+                (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                    boolean isScrollable = v.canScrollVertically(-1) || v.canScrollVertically(1);
+                    v.setFocusable(isScrollable);
+                });
     }
+
+    // View.OnClickListener implementation.
 
     @Override
     public void onClick(View view) {
         if (view == mPositiveButton) {
-            mController.onClick(ButtonType.POSITIVE);
+            mOnButtonClickedCallback.onResult(ModalDialogProperties.ButtonType.POSITIVE);
         } else if (view == mNegativeButton) {
-            mController.onClick(ButtonType.NEGATIVE);
+            mOnButtonClickedCallback.onResult(ModalDialogProperties.ButtonType.NEGATIVE);
         }
-    }
-
-    /**
-     * Prepare the contents before showing the dialog.
-     */
-    protected void prepareBeforeShow() {
-        FadingEdgeScrollView scrollView = mDialogView.findViewById(R.id.modal_dialog_scroll_view);
-
-        if (!TextUtils.isEmpty(mParams.title)) {
-            mTitleView.setText(mParams.title);
-            mTitleView.setVisibility(View.VISIBLE);
-        }
-
-        if (TextUtils.isEmpty(mParams.message)) {
-            if (mParams.titleScrollable && mTitleView.getVisibility() != View.GONE) {
-                mMessageView.setVisibility(View.GONE);
-            } else {
-                scrollView.setVisibility(View.GONE);
-            }
-        } else {
-            assert mParams.titleScrollable || mParams.customView == null;
-            mMessageView.setText(mParams.message);
-        }
-
-        if (mParams.customView != null) {
-            UiUtils.removeViewFromParent(mParams.customView);
-            mCustomView.addView(mParams.customView);
-        } else {
-            mCustomView.setVisibility(View.GONE);
-        }
-
-        assert(mParams.positiveButtonTextId == 0 || mParams.positiveButtonText == null);
-        if (mParams.positiveButtonTextId != 0) {
-            mPositiveButton.setText(mParams.positiveButtonTextId);
-            mPositiveButton.setOnClickListener(this);
-        } else if (mParams.positiveButtonText != null) {
-            mPositiveButton.setText(mParams.positiveButtonText);
-            mPositiveButton.setOnClickListener(this);
-        } else {
-            mPositiveButton.setVisibility(View.GONE);
-        }
-
-        assert(mParams.negativeButtonTextId == 0 || mParams.negativeButtonText == null);
-        if (mParams.negativeButtonTextId != 0) {
-            mNegativeButton.setText(mParams.negativeButtonTextId);
-            mNegativeButton.setOnClickListener(this);
-        } else if (mParams.negativeButtonText != null) {
-            mNegativeButton.setText(mParams.negativeButtonText);
-            mNegativeButton.setOnClickListener(this);
-        } else {
-            mNegativeButton.setVisibility(View.GONE);
-        }
-
-        if (mParams.titleScrollable) {
-            LayoutParams layoutParams = (LayoutParams) mCustomView.getLayoutParams();
-            layoutParams.height = LayoutParams.WRAP_CONTENT;
-            layoutParams.weight = 0;
-            mCustomView.setLayoutParams(layoutParams);
-        } else {
-            scrollView.setEdgeVisibility(
-                    FadingEdgeScrollView.EdgeType.NONE, FadingEdgeScrollView.EdgeType.NONE);
-        }
-    }
-
-    /**
-     * @return The content view of this dialog.
-     */
-    public View getView() {
-        return mDialogView;
-    }
-
-    /**
-     * @return The button that was added to the dialog using {@link Params}.
-     * @param button indicates which button should be returned.
-     */
-    public Button getButton(@ButtonType int button) {
-        if (button == ButtonType.POSITIVE) {
-            return mPositiveButton;
-        } else if (button == ButtonType.NEGATIVE) {
-            return mNegativeButton;
-        }
-        assert false;
-        return null;
     }
 
     /**
      * @return The controller that controls the actions on the dialogs.
      */
-    public Controller getController() {
+    public ModalDialogProperties.Controller getController() {
         return mController;
     }
 
     /**
-     * @return The content description of the dialog view.
+     * @param controller The {@link ModalDialogProperties.Controller} that handles events on user
+     *         actions.
      */
-    public String getContentDescription() {
-        return mParams.title;
+    void setController(ModalDialogProperties.Controller controller) {
+        mController = controller;
     }
 
     /**
-     * TODO(huayinz): Should we consider adding a model change processor now that the params are
-     * mutable
-     *
-     * @param title Updates the title string to the new title.
+     * @param callback The {@link Callback<Integer>} when a button on the dialog button bar is
+     *                 clicked. The {@link Integer} indicates the button type.
      */
-    public void setTitle(String title) {
+    void setOnButtonClickedCallback(Callback<Integer> callback) {
+        mOnButtonClickedCallback = callback;
+    }
+
+    /** @param title The title of the dialog. */
+    public void setTitle(CharSequence title) {
         mTitleView.setText(title);
+        updateContentVisibility();
     }
 
     /**
-     * @return Returns true if the dialog is dismissed when the user touches outside of the dialog.
+     * @param drawable The icon drawable on the title.
      */
-    public boolean getCancelOnTouchOutside() {
-        return mParams.cancelOnTouchOutside;
+    public void setTitleIcon(Drawable drawable) {
+        mTitleIcon.setImageDrawable(drawable);
+        updateContentVisibility();
+    }
+
+    /** @param titleScrollable Whether the title is scrollable with the message. */
+    void setTitleScrollable(boolean titleScrollable) {
+        if (mTitleScrollable == titleScrollable) return;
+
+        mTitleScrollable = titleScrollable;
+        CharSequence title = mTitleView.getText();
+        Drawable icon = mTitleIcon.getDrawable();
+
+        // Hide the previous title container since the scrollable and non-scrollable title container
+        // should not be shown at the same time.
+        mTitleContainer.setVisibility(View.GONE);
+
+        mTitleContainer = findViewById(
+                titleScrollable ? R.id.scrollable_title_container : R.id.title_container);
+        mTitleView = mTitleContainer.findViewById(R.id.title);
+        mTitleIcon = mTitleContainer.findViewById(R.id.title_icon);
+        setTitle(title);
+        setTitleIcon(icon);
+
+        LayoutParams layoutParams = (LayoutParams) mCustomViewContainer.getLayoutParams();
+        if (titleScrollable) {
+            layoutParams.height = LayoutParams.WRAP_CONTENT;
+            layoutParams.weight = 0;
+            mScrollView.setEdgeVisibility(
+                    FadingEdgeScrollView.EdgeType.FADING, FadingEdgeScrollView.EdgeType.FADING);
+        } else {
+            layoutParams.height = 0;
+            layoutParams.weight = 1;
+            mScrollView.setEdgeVisibility(
+                    FadingEdgeScrollView.EdgeType.NONE, FadingEdgeScrollView.EdgeType.NONE);
+        }
+        mCustomViewContainer.setLayoutParams(layoutParams);
+    }
+
+    /** @param message The message in the dialog content. */
+    void setMessage(String message) {
+        mMessageView.setText(message);
+        updateContentVisibility();
+    }
+
+    /** @param view The customized view in the dialog content. */
+    void setCustomView(View view) {
+        if (mCustomViewContainer.getChildCount() > 0) mCustomViewContainer.removeAllViews();
+
+        if (view != null) {
+            UiUtils.removeViewFromParent(view);
+            mCustomViewContainer.addView(view);
+            mCustomViewContainer.setVisibility(View.VISIBLE);
+        } else {
+            mCustomViewContainer.setVisibility(View.GONE);
+        }
+    }
+
+    /**
+     * @param buttonType Indicates which button should be returned.
+     */
+    private Button getButton(@ModalDialogProperties.ButtonType int buttonType) {
+        switch (buttonType) {
+            case ModalDialogProperties.ButtonType.POSITIVE:
+                return mPositiveButton;
+            case ModalDialogProperties.ButtonType.NEGATIVE:
+                return mNegativeButton;
+            default:
+                assert false;
+                return null;
+        }
+    }
+
+    /**
+     * Sets button text for the specified button. If {@code buttonText} is empty or null, the
+     * specified button will not be visible.
+     * @param buttonType The {@link ModalDialogProperties.ButtonType} of the button.
+     * @param buttonText The text to be set on the specified button.
+     */
+    void setButtonText(@ModalDialogProperties.ButtonType int buttonType, String buttonText) {
+        getButton(buttonType).setText(buttonText);
+        updateButtonVisibility();
+    }
+
+    /**
+     * @param buttonType The {@link ModalDialogProperties.ButtonType} of the button.
+     * @param enabled Whether the specified button should be enabled.
+     */
+    void setButtonEnabled(@ModalDialogProperties.ButtonType int buttonType, boolean enabled) {
+        getButton(buttonType).setEnabled(enabled);
+    }
+
+    private void updateContentVisibility() {
+        boolean titleVisible = !TextUtils.isEmpty(mTitleView.getText());
+        boolean titleIconVisible = mTitleIcon.getDrawable() != null;
+        boolean titleContainerVisible = titleVisible || titleIconVisible;
+        boolean messageVisible = !TextUtils.isEmpty(mMessageView.getText());
+        boolean scrollViewVisible = (mTitleScrollable && titleContainerVisible) || messageVisible;
+
+        mTitleView.setVisibility(titleVisible ? View.VISIBLE : View.GONE);
+        mTitleIcon.setVisibility(titleIconVisible ? View.VISIBLE : View.GONE);
+        mTitleContainer.setVisibility(titleContainerVisible ? View.VISIBLE : View.GONE);
+        mMessageView.setVisibility(messageVisible ? View.VISIBLE : View.GONE);
+        mScrollView.setVisibility(scrollViewVisible ? View.VISIBLE : View.GONE);
+    }
+
+    private void updateButtonVisibility() {
+        boolean positiveButtonVisible = !TextUtils.isEmpty(mPositiveButton.getText());
+        boolean negativeButtonVisible = !TextUtils.isEmpty(mNegativeButton.getText());
+        boolean buttonBarVisible = positiveButtonVisible || negativeButtonVisible;
+
+        mPositiveButton.setVisibility(positiveButtonVisible ? View.VISIBLE : View.GONE);
+        mNegativeButton.setVisibility(negativeButtonVisible ? View.VISIBLE : View.GONE);
+        mButtonBar.setVisibility(buttonBarVisible ? View.VISIBLE : View.GONE);
     }
 }

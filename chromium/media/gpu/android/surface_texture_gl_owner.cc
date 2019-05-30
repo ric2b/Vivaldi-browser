@@ -4,11 +4,16 @@
 
 #include "media/gpu/android/surface_texture_gl_owner.h"
 
+#include <memory>
+
+#include "base/android/scoped_hardware_buffer_fence_sync.h"
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "gpu/command_buffer/service/abstract_texture.h"
 #include "ui/gl/scoped_binders.h"
 #include "ui/gl/scoped_make_current.h"
 
@@ -30,9 +35,10 @@ struct FrameAvailableEvent
   ~FrameAvailableEvent() = default;
 };
 
-SurfaceTextureGLOwner::SurfaceTextureGLOwner(GLuint texture_id)
-    : surface_texture_(gl::SurfaceTexture::Create(texture_id)),
-      texture_id_(texture_id),
+SurfaceTextureGLOwner::SurfaceTextureGLOwner(
+    std::unique_ptr<gpu::gles2::AbstractTexture> texture)
+    : TextureOwner(true /*binds_texture_on_update */, std::move(texture)),
+      surface_texture_(gl::SurfaceTexture::Create(GetTextureId())),
       context_(gl::GLContext::GetCurrent()),
       surface_(gl::GLSurface::GetCurrent()),
       frame_available_event_(new FrameAvailableEvent()) {
@@ -45,47 +51,47 @@ SurfaceTextureGLOwner::SurfaceTextureGLOwner(GLuint texture_id)
 SurfaceTextureGLOwner::~SurfaceTextureGLOwner() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  // Make sure that the SurfaceTexture isn't using the GL objects.
-  surface_texture_ = nullptr;
-
-  std::unique_ptr<ui::ScopedMakeCurrent> scoped_make_current;
-
-  // If the context is current, skip ScopedMakeCurrent to prevent (a) a
-  // potentially heavyweight virtual context switch and (b) a potential crash
-  // during stub destruction (https://crbug.com/839605).
-  if (!context_->IsCurrent(nullptr)) {
-    scoped_make_current =
-        std::make_unique<ui::ScopedMakeCurrent>(context_.get(), surface_.get());
-    if (!context_->IsCurrent(surface_.get()))
-      return;
-  }
-
-  glDeleteTextures(1, &texture_id_);
-  DCHECK_EQ(static_cast<GLenum>(GL_NO_ERROR), glGetError());
+  // Clear the texture before we return, so that it can OnTextureDestroyed() if
+  // it hasn't already.
+  ClearAbstractTexture();
 }
 
-GLuint SurfaceTextureGLOwner::GetTextureId() const {
+void SurfaceTextureGLOwner::OnTextureDestroyed(gpu::gles2::AbstractTexture*) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  return texture_id_;
+
+  // Make sure that the SurfaceTexture isn't using the GL objects.
+  surface_texture_ = nullptr;
 }
 
 gl::ScopedJavaSurface SurfaceTextureGLOwner::CreateJavaSurface() const {
+  // |surface_texture_| might be null, but that's okay.
   return gl::ScopedJavaSurface(surface_texture_.get());
 }
 
 void SurfaceTextureGLOwner::UpdateTexImage() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  surface_texture_->UpdateTexImage();
+  if (surface_texture_)
+    surface_texture_->UpdateTexImage();
+}
+
+void SurfaceTextureGLOwner::EnsureTexImageBound() {
+  NOTREACHED();
 }
 
 void SurfaceTextureGLOwner::GetTransformMatrix(float mtx[]) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  surface_texture_->GetTransformMatrix(mtx);
+  // If we don't have a SurfaceTexture, then the matrix doesn't matter.  We
+  // still initialize it for good measure.
+  if (surface_texture_)
+    surface_texture_->GetTransformMatrix(mtx);
+  else
+    memset(mtx, 0, sizeof(mtx[0]) * 16);
 }
 
 void SurfaceTextureGLOwner::ReleaseBackBuffers() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  surface_texture_->ReleaseBackBuffers();
+  if (surface_texture_)
+    surface_texture_->ReleaseBackBuffers();
 }
 
 gl::GLContext* SurfaceTextureGLOwner::GetContext() const {
@@ -124,25 +130,35 @@ void SurfaceTextureGLOwner::WaitForFrameAvailable() {
   const base::TimeDelta elapsed = call_time - release_time_;
   const base::TimeDelta remaining = max_wait - elapsed;
   release_time_ = base::TimeTicks();
+  bool timed_out = false;
 
   if (remaining <= base::TimeDelta()) {
     if (!frame_available_event_->event.IsSignaled()) {
       DVLOG(1) << "Deferred WaitForFrameAvailable() timed out, elapsed: "
                << elapsed.InMillisecondsF() << "ms";
+      timed_out = true;
     }
-    return;
+  } else {
+    DCHECK_LE(remaining, max_wait);
+    SCOPED_UMA_HISTOGRAM_TIMER(
+        "Media.CodecImage.SurfaceTextureGLOwner.WaitTimeForFrame");
+    if (!frame_available_event_->event.TimedWait(remaining)) {
+      DVLOG(1) << "WaitForFrameAvailable() timed out, elapsed: "
+               << elapsed.InMillisecondsF()
+               << "ms, additionally waited: " << remaining.InMillisecondsF()
+               << "ms, total: " << (elapsed + remaining).InMillisecondsF()
+               << "ms";
+      timed_out = true;
+    }
   }
+  UMA_HISTOGRAM_BOOLEAN("Media.CodecImage.SurfaceTextureGLOwner.FrameTimedOut",
+                        timed_out);
+}
 
-  DCHECK_LE(remaining, max_wait);
-  SCOPED_UMA_HISTOGRAM_TIMER(
-      "Media.CodecImage.SurfaceTextureGLOwner.WaitTimeForFrame");
-  if (!frame_available_event_->event.TimedWait(remaining)) {
-    DVLOG(1) << "WaitForFrameAvailable() timed out, elapsed: "
-             << elapsed.InMillisecondsF()
-             << "ms, additionally waited: " << remaining.InMillisecondsF()
-             << "ms, total: " << (elapsed + remaining).InMillisecondsF()
-             << "ms";
-  }
+std::unique_ptr<base::android::ScopedHardwareBufferFenceSync>
+SurfaceTextureGLOwner::GetAHardwareBuffer() {
+  NOTREACHED() << "Don't use AHardwareBuffers with SurfaceTextureGLOwner";
+  return nullptr;
 }
 
 }  // namespace media

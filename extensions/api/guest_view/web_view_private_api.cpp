@@ -13,9 +13,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
-#include "chrome/browser/thumbnails/thumbnail_service.h"
-#include "chrome/browser/thumbnails/thumbnail_service_factory.h"
-#include "chrome/browser/thumbnails/thumbnailing_context.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/renderer_host/dip_util.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -24,6 +21,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "components/datasource/vivaldi_data_source_api.h"
 #include "extensions/api/history/history_private_api.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/helper/vivaldi_frame_observer.h"
@@ -69,9 +67,6 @@ bool VivaldiWebViewChromeAsyncExtensionFunction::PreRunValidation(
     *error = "Could not find guest";
     return false;
   }
-  guest_->InitListeners();  // Make sure we set a mouse event callback.
-                            // Note: This can be removed if all mouse-gestures
-                            //       are moved to the client.
   return true;
 }
 
@@ -149,24 +144,26 @@ void WebViewInternalThumbnailFunction::SendResultFromBitmap(
 }
 
 bool WebViewInternalThumbnailFunction::InternalRunAsyncSafe(
-    const std::unique_ptr<vivaldi::web_view_private::ThumbnailParams>& params) {
-  if (params.get()) {
-    if (params->scale.get()) {
-      scale_ = *params->scale.get();
-    }
-    if (params->width.get()) {
-      width_ = *params->width.get();
-    }
-    if (params.get()->height.get()) {
-      height_ = *params->height.get();
-    }
-    Profile* profile = Profile::FromBrowserContext(browser_context());
-    is_incognito_ = profile->IsOffTheRecord();
-    // The thumbnail service should not store data in incognito so
-    // only allow overriding it if we're not in incognito already.
-    if (is_incognito_ == false && params->incognito.get()) {
-      is_incognito_ = *params->incognito.get();
-    }
+    const vivaldi::web_view_private::ThumbnailParams& params) {
+  if (params.scale) {
+    scale_ = *params.scale;
+  }
+  if (params.width) {
+    width_ = *params.width;
+  }
+  if (params.height) {
+    height_ = *params.height;
+  }
+  if (params.bookmark_id) {
+    bookmark_id_ = *params.bookmark_id;
+  }
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  is_incognito_ = profile->IsOffTheRecord();
+  // The thumbnail service should not store data in incognito so
+  // only allow overriding it if we're not in incognito already.
+  if (is_incognito_ == false && params.incognito.get()) {
+    is_incognito_ = *params.incognito.get();
   }
   WebContents* web_contents = guest_->web_contents();
 
@@ -231,7 +228,8 @@ bool WebViewPrivateGetThumbnailFunction::RunAsync() {
       vivaldi::web_view_private::GetThumbnail::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  return WebViewInternalThumbnailFunction::InternalRunAsyncSafe(params->params);
+  return WebViewInternalThumbnailFunction::InternalRunAsyncSafe(
+      params->params);
 }
 
 void WebViewPrivateGetThumbnailFunction::SendInternalError() {
@@ -259,44 +257,34 @@ bool WebViewPrivateGetThumbnailFromServiceFunction::RunAsync() {
 // and call SendResponse().
 void WebViewPrivateGetThumbnailFromServiceFunction::SendResultFromBitmap(
     const SkBitmap& screen_capture) {
-  // NOTE(pettern): We partially use the thumbnail_service, as we take our own
-  // thumbnail but store it in the service. See also (http://crbug.com//327035).
-
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  scoped_refptr<thumbnails::ThumbnailService> thumbnail_service =
-      ThumbnailServiceFactory::GetForProfile(profile);
+  extensions::VivaldiDataSourcesAPI* api =
+    extensions::VivaldiDataSourcesAPI::GetFactoryInstance()->Get(profile);
 
   // Scale the  bitmap.
   gfx::Size dst_size_pixels;
-  SkBitmap bitmap;
 
   if (scale_ != kDefaultThumbnailScale) {
     // Scale has changed, use that.
     dst_size_pixels = gfx::ScaleToRoundedSize(
-        gfx::Size(screen_capture.width(), screen_capture.height()), scale_);
-    bitmap = skia::ImageOperations::Resize(
-        screen_capture, skia::ImageOperations::RESIZE_BEST,
-        dst_size_pixels.width(), dst_size_pixels.height());
+      gfx::Size(screen_capture.width(), screen_capture.height()), scale_);
+    bitmap_ = std::make_unique<SkBitmap>(skia::ImageOperations::Resize(
+      screen_capture, skia::ImageOperations::RESIZE_BEST,
+      dst_size_pixels.width(), dst_size_pixels.height()));
   } else {
-    bitmap = SmartCropAndSize(screen_capture, width_, height_);
+    bitmap_ = std::make_unique<SkBitmap>(SmartCropAndSize(screen_capture, width_, height_));
   }
-  gfx::Image image = gfx::Image::CreateFrom1xBitmap(bitmap);
-  scoped_refptr<thumbnails::ThumbnailingContext> context(
-      new thumbnails::ThumbnailingContext(url_, false, true));
-  context->score.force_update = true;
+  api->AddImageDataForBookmark(
+      bookmark_id_, std::move(bitmap_),
+      base::Bind(&WebViewPrivateGetThumbnailFromServiceFunction::
+                     OnBookmarkThumbnailStored,
+                 this));
+}
 
-  if (!context->url.is_valid()) {
-    SendResponse(false);
-    return;
-  }
-  // NOTE(pettern@vivaldi.com): Do not store any urls for private windows.
-  if (!is_incognito_) {
-    thumbnail_service->AddForcedURL(context->url);
-    thumbnail_service->SetPageThumbnail(*context, image);
-  }
-
-  SetResult(std::make_unique<base::Value>(std::string("chrome://thumb/") +
-                                          context->url.spec()));
+void WebViewPrivateGetThumbnailFromServiceFunction::OnBookmarkThumbnailStored(
+    int bookmark_id,
+    std::string& image_url) {
+  SetResult(std::make_unique<base::Value>(image_url));
   SendResponse(true);
 }
 
@@ -312,82 +300,44 @@ bool WebViewPrivateAddToThumbnailServiceFunction::RunAsync() {
           *args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  if (!params->key.empty())
-    key_ = params->key;
-
   url_ = guest_->web_contents()->GetURL();
 
   return WebViewInternalThumbnailFunction::InternalRunAsyncSafe(params->params);
-}
-
-void WebViewPrivateAddToThumbnailServiceFunction::SetPageThumbnailOnUIThread(
-    bool send_result,
-    scoped_refptr<thumbnails::ThumbnailService> thumbnail_service,
-    scoped_refptr<thumbnails::ThumbnailingContext> context,
-    const gfx::Image& thumbnail) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  thumbnail_service->SetPageThumbnail(*context, thumbnail);
-
-  if (send_result) {
-    SetResult(std::make_unique<base::Value>(std::string("chrome://thumb/") +
-                                            context->url.spec()));
-    SendResponse(true);
-  }
-  Release();
 }
 
 // Turn a bitmap of the screen into an image, set that image as the result,
 // and call SendResponse().
 void WebViewPrivateAddToThumbnailServiceFunction::SendResultFromBitmap(
     const SkBitmap& screen_capture) {
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  scoped_refptr<thumbnails::ThumbnailService> thumbnail_service =
-      ThumbnailServiceFactory::GetForProfile(profile);
+  extensions::VivaldiDataSourcesAPI* api =
+    extensions::VivaldiDataSourcesAPI::GetFactoryInstance()->Get(GetProfile());
 
   // Scale the  bitmap.
   gfx::Size dst_size_pixels;
-  SkBitmap bitmap;
 
   if (scale_ != kDefaultThumbnailScale) {
     // Scale has changed, use that.
     dst_size_pixels = gfx::ScaleToRoundedSize(
         gfx::Size(screen_capture.width(), screen_capture.height()), scale_);
-    bitmap = skia::ImageOperations::Resize(
+    bitmap_ = std::make_unique<SkBitmap>(skia::ImageOperations::Resize(
         screen_capture, skia::ImageOperations::RESIZE_BEST,
-        dst_size_pixels.width(), dst_size_pixels.height());
+        dst_size_pixels.width(), dst_size_pixels.height()));
   } else {
-    bitmap = SmartCropAndSize(screen_capture, width_, height_);
+    bitmap_ = std::make_unique<SkBitmap>(
+        SmartCropAndSize(screen_capture, width_, height_));
   }
-  gfx::Image image = gfx::Image::CreateFrom1xBitmap(bitmap);
+  api->AddImageDataForBookmark(
+      bookmark_id_, std::move(bitmap_),
+      base::Bind(&WebViewPrivateAddToThumbnailServiceFunction::
+                     OnBookmarkThumbnailStored,
+                 this));
+}
 
-  scoped_refptr<thumbnails::ThumbnailingContext> context(
-      new thumbnails::ThumbnailingContext(GURL(key_), false, true));
-  context->score.force_update = true;
-
-  if (!context->url.is_valid()) {
-    SendResponse(false);
-    return;
-  }
-  // Do not store any urls for private windows.
-  if (is_incognito_) {
-    SetResult(std::make_unique<base::Value>(std::string("chrome://thumb/") +
-                                            context->url.spec()));
-    SendResponse(true);
-  } else {
-    AddRef();
-
-    thumbnail_service->AddForcedURL(context->url);
-
-    // NOTE(pettern): AddForcedURL is async, so we need to ensure adding the
-    // thumbnail is too, to avoid it being added as a non-known url.
-    content::BrowserThread::PostDelayedTask(
-        content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&WebViewPrivateAddToThumbnailServiceFunction::
-                       SetPageThumbnailOnUIThread,
-                   this, true, thumbnail_service, context, image),
-        base::TimeDelta::FromMilliseconds(200));
-  }
+void WebViewPrivateAddToThumbnailServiceFunction::OnBookmarkThumbnailStored(
+    int bookmark_id,
+    std::string& image_url) {
+  SetResult(std::make_unique<base::Value>(image_url));
+  SendResponse(true);
 }
 
 WebViewPrivateShowPageInfoFunction::WebViewPrivateShowPageInfoFunction() {}
@@ -482,10 +432,18 @@ bool WebViewPrivateGetFocusedElementInfoFunction::RunAsync() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   ::vivaldi::VivaldiFrameObserver* frame_observer = NULL;
-  if (guest_->web_contents()) {
-    frame_observer = ::vivaldi::VivaldiFrameObserver::FromWebContents(
-        guest_->web_contents());
+
+  // A plugin like the PDF viewer will have its own embedded web contents,
+  // so we need to explicitly get the focused one.
+  WebContents *web_contents = guest_->web_contents();
+  if (web_contents) {
+    content::WebContentsImpl* impl =
+        static_cast<content::WebContentsImpl*>(web_contents);
+    web_contents = impl->GetFocusedWebContents()->GetAsWebContents();
+    frame_observer =
+        ::vivaldi::VivaldiFrameObserver::FromWebContents(web_contents);
   }
+
   std::string tagname = "";
   std::string type = "";
   bool editable = false;

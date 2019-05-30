@@ -5,6 +5,10 @@
 #ifndef ASH_ACCESSIBILITY_TOUCH_EXPLORATION_CONTROLLER_H_
 #define ASH_ACCESSIBILITY_TOUCH_EXPLORATION_CONTROLLER_H_
 
+#include <map>
+#include <memory>
+#include <vector>
+
 #include "ash/ash_export.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -210,50 +214,39 @@ class ASH_EXPORT TouchExplorationController
   friend class TouchExplorationControllerTestApi;
 
   // Overridden from ui::EventRewriter
-  ui::EventRewriteStatus RewriteEvent(
+  ui::EventDispatchDetails RewriteEvent(
       const ui::Event& event,
-      std::unique_ptr<ui::Event>* rewritten_event) override;
-  ui::EventRewriteStatus NextDispatchEvent(
-      const ui::Event& last_event,
-      std::unique_ptr<ui::Event>* new_event) override;
+      const Continuation continuation) override;
 
   // Event handlers based on the current state - see State, below.
-  ui::EventRewriteStatus InNoFingersDown(
+  ui::EventDispatchDetails InNoFingersDown(const ui::TouchEvent& event,
+                                           const Continuation continuation);
+  ui::EventDispatchDetails InSingleTapPressed(const ui::TouchEvent& event,
+                                              const Continuation continuation);
+  ui::EventDispatchDetails InSingleTapOrTouchExploreReleased(
       const ui::TouchEvent& event,
-      std::unique_ptr<ui::Event>* rewritten_event);
-  ui::EventRewriteStatus InSingleTapPressed(
+      const Continuation continuation);
+  ui::EventDispatchDetails InDoubleTapPending(const ui::TouchEvent& event,
+                                              const Continuation continuation);
+  ui::EventDispatchDetails InTouchReleasePending(
       const ui::TouchEvent& event,
-      std::unique_ptr<ui::Event>* rewritten_event);
-  ui::EventRewriteStatus InSingleTapOrTouchExploreReleased(
+      const Continuation continuation);
+  ui::EventDispatchDetails InTouchExploration(const ui::TouchEvent& event,
+                                              const Continuation continuation);
+  ui::EventDispatchDetails InOneFingerPassthrough(
       const ui::TouchEvent& event,
-      std::unique_ptr<ui::Event>* rewritten_event);
-  ui::EventRewriteStatus InDoubleTapPending(
+      const Continuation continuation);
+  ui::EventDispatchDetails InGestureInProgress(const ui::TouchEvent& event,
+                                               const Continuation continuation);
+  ui::EventDispatchDetails InTouchExploreSecondPress(
       const ui::TouchEvent& event,
-      std::unique_ptr<ui::Event>* rewritten_event);
-  ui::EventRewriteStatus InTouchReleasePending(
-      const ui::TouchEvent& event,
-      std::unique_ptr<ui::Event>* rewritten_event);
-  ui::EventRewriteStatus InTouchExploration(
-      const ui::TouchEvent& event,
-      std::unique_ptr<ui::Event>* rewritten_event);
-  ui::EventRewriteStatus InOneFingerPassthrough(
-      const ui::TouchEvent& event,
-      std::unique_ptr<ui::Event>* rewritten_event);
-  ui::EventRewriteStatus InGestureInProgress(
-      const ui::TouchEvent& event,
-      std::unique_ptr<ui::Event>* rewritten_event);
-  ui::EventRewriteStatus InTouchExploreSecondPress(
-      const ui::TouchEvent& event,
-      std::unique_ptr<ui::Event>* rewritten_event);
-  ui::EventRewriteStatus InWaitForNoFingers(
-      const ui::TouchEvent& event,
-      std::unique_ptr<ui::Event>* rewritten_event);
-  ui::EventRewriteStatus InSlideGesture(
-      const ui::TouchEvent& event,
-      std::unique_ptr<ui::Event>* rewritten_event);
-  ui::EventRewriteStatus InTwoFingerTap(
-      const ui::TouchEvent& event,
-      std::unique_ptr<ui::Event>* rewritten_event);
+      const Continuation continuation);
+  ui::EventDispatchDetails InWaitForNoFingers(const ui::TouchEvent& event,
+                                              const Continuation continuation);
+  ui::EventDispatchDetails InSlideGesture(const ui::TouchEvent& event,
+                                          const Continuation continuation);
+  ui::EventDispatchDetails InTwoFingerTap(const ui::TouchEvent& event,
+                                          const Continuation continuation);
 
   // Returns the current time of the tick clock.
   base::TimeTicks Now();
@@ -266,7 +259,7 @@ class ASH_EXPORT TouchExplorationController
   void OnTapTimerFired();
 
   // Dispatch a new event outside of the event rewriting flow.
-  void DispatchEvent(ui::Event* event);
+  void DispatchEvent(ui::Event* event, const Continuation continuation);
 
   // Overridden from GestureProviderAuraClient.
   //
@@ -285,10 +278,14 @@ class ASH_EXPORT TouchExplorationController
   void SideSlideControl(ui::GestureEvent* gesture);
 
   // Dispatches a single key with the given flags.
-  void DispatchKeyWithFlags(const ui::KeyboardCode key, int flags);
+  void DispatchKeyWithFlags(const ui::KeyboardCode key,
+                            int flags,
+                            const Continuation continuation);
 
   // Binds DispatchKeyWithFlags to a specific key and flags.
-  base::Closure BindKeyEventWithFlags(const ui::KeyboardCode key, int flags);
+  base::Closure BindKeyEventWithFlags(const ui::KeyboardCode key,
+                                      int flags,
+                                      const Continuation continuation);
 
   std::unique_ptr<ui::MouseEvent> CreateMouseMoveEvent(
       const gfx::PointF& location,
@@ -300,15 +297,16 @@ class ASH_EXPORT TouchExplorationController
 
   // Sends a simulated click, if an anchor point was set explicitly. Otherwise,
   // sends a simulated tap at anchor point.
-  void SendSimulatedClickOrTap();
+  void SendSimulatedClickOrTap(const Continuation continuation);
 
   // Sends a simulated tap at anchor point.
-  void SendSimulatedTap();
+  void SendSimulatedTap(const Continuation continuation);
 
   // Sends a simulated tap, if the anchor point falls within lift activation
   // bounds.
-  void MaybeSendSimulatedTapInLiftActivationBounds(const ui::TouchEvent& event);
-
+  void MaybeSendSimulatedTapInLiftActivationBounds(
+      const ui::TouchEvent& event,
+      const Continuation continuation);
   // Some constants used in touch_exploration_controller:
 
   // Within this many dips of the screen edge, the release event generated will
@@ -327,8 +325,12 @@ class ASH_EXPORT TouchExplorationController
   // fingers in place is a bit harder.
   float GetSplitTapTouchSlop();
 
-  // Convert a gfx::PointF from DIP back to raw screen coordinates.
-  gfx::PointF ConvertDIPToScreenInPixels(const gfx::PointF& location);
+  // Convert a gfx::PointF from DIP back to raw screen coordinates. Origin is
+  // based on its root window host.
+  gfx::PointF ConvertDIPToPixels(const gfx::PointF& location);
+
+  // Returns true if the touch event is targeted to Arc virtual keyboard.
+  bool IsTargetedToArcVirtualKeyboard(const gfx::Point& location_in_host);
 
   enum State {
     // No fingers are down and no events are pending.
@@ -461,6 +463,7 @@ class ASH_EXPORT TouchExplorationController
 
   // A copy of the event from the initial touch press.
   std::unique_ptr<ui::TouchEvent> initial_press_;
+  Continuation initial_press_continuation_;
 
   // The timestamp of the most recent press event for the main touch id.
   // The difference between this and |initial_press_->time_stamp| is that
@@ -479,13 +482,14 @@ class ASH_EXPORT TouchExplorationController
   // sending events through, but might in the future (e.g. before a finger
   // enters double-tap-hold passthrough, we need to update its location.)
   std::unique_ptr<ui::TouchEvent> last_unused_finger_event_;
+  Continuation last_unused_finger_continuation_;
 
   // The anchor point used as the location of a synthesized tap when the
   // user double-taps anywhere on the screen, and similarly the initial
   // point used when the user double-taps, holds, and drags. This can be
   // set either via touch exploration, or by a call to
   // SetTouchAccessibilityAnchorPoint when focus moves due to something other
-  // than touch exploration.
+  // than touch exploration. Origin of this coordinate is its root window host.
   gfx::PointF anchor_point_dip_;
 
   // The current state of the anchor point.
@@ -517,6 +521,8 @@ class ASH_EXPORT TouchExplorationController
   bool VLOG_on_;
 
   // LocatedEvents within this area should be left alone.
+  // TODO(crbug.com/616793): Multi display support. With this implementation, we
+  // cannot specify display.
   gfx::Rect exclude_bounds_;
 
   // Code that detects a touch-screen gesture to enable or disable
@@ -528,6 +534,8 @@ class ASH_EXPORT TouchExplorationController
   // Any touch exploration that both starts and ends (touch pressed, and
   // released) within this rectangle, triggers a simulated single finger tap at
   // the anchor point on release.
+  // TODO(crbug.com/616793): Multi display support. With this implementation, we
+  // cannot specify display.
   gfx::Rect lift_activation_bounds_;
 
   // Whether or not we've seen a touch press event yet.

@@ -22,7 +22,9 @@ CrElementsBrowserTest.prototype = {
   __proto__: PolymerTest.prototype,
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH),
+  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+    ROOT_PATH + 'ui/webui/resources/js/assert.js',
+  ]),
 
   /** @override */
   get browsePreload() {
@@ -94,6 +96,29 @@ TEST_F('CrElementsProfileAvatarSelectorTest', 'All', function() {
  * @constructor
  * @extends {CrElementsBrowserTest}
  */
+function CrElementsSearchFieldTest() {}
+
+CrElementsSearchFieldTest.prototype = {
+  __proto__: CrElementsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload:
+      'chrome://resources/cr_elements/cr_search_field/cr_search_field.html',
+
+  /** @override */
+  extraLibraries: CrElementsBrowserTest.prototype.extraLibraries.concat([
+    'cr_search_field_tests.js',
+  ]),
+};
+
+TEST_F('CrElementsSearchFieldTest', 'All', function() {
+  mocha.run();
+});
+
+/**
+ * @constructor
+ * @extends {CrElementsBrowserTest}
+ */
 function CrElementsToolbarSearchFieldTest() {}
 
 CrElementsToolbarSearchFieldTest.prototype = {
@@ -151,6 +176,7 @@ CrElementsScrollableBehaviorTest.prototype = {
 
   /** @override */
   extraLibraries: CrElementsBrowserTest.prototype.extraLibraries.concat([
+    '../settings/test_util.js',
     'cr_scrollable_behavior_tests.js',
   ]),
 };
@@ -256,6 +282,30 @@ CrElementsPolicyNetworkIndicatorTest.prototype = {
 TEST_F('CrElementsPolicyNetworkIndicatorTest', 'All', function() {
   mocha.run();
 });
+
+/**
+ * @constructor
+ * @extends {CrElementsBrowserTest}
+ */
+function CrElementsFingerprintProgressArcTest() {}
+
+CrElementsFingerprintProgressArcTest.prototype = {
+  __proto__: CrElementsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://resources/cr_elements/chromeos/fingerprint/' +
+      'cr_fingerprint_progress_arc.html',
+
+  /** @override */
+  extraLibraries: CrElementsBrowserTest.prototype.extraLibraries.concat([
+    'cr_fingerprint_progress_arc_tests.js',
+  ]),
+};
+
+TEST_F('CrElementsFingerprintProgressArcTest', 'All', function() {
+  mocha.run();
+});
+
 GEN('#endif');
 
 /**
@@ -355,6 +405,55 @@ TEST_F('CrElementsRadioButtonTest', 'All', function() {
  * @constructor
  * @extends {CrElementsBrowserTest}
  */
+function CrElementsRadioGroupTest() {}
+
+CrElementsRadioGroupTest.prototype = {
+  __proto__: CrElementsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload:
+      'chrome://resources/cr_elements/cr_radio_group/cr_radio_group.html',
+
+  /** @override */
+  extraLibraries: CrElementsBrowserTest.prototype.extraLibraries.concat([
+    '../settings/test_util.js',
+    'cr_radio_group_test.js',
+  ]),
+};
+
+TEST_F('CrElementsRadioGroupTest', 'All', function() {
+  mocha.run();
+});
+
+/**
+ * @constructor
+ * @extends {CrElementsBrowserTest}
+ */
+function CrElementsIconButtonTest() {}
+
+CrElementsIconButtonTest.prototype = {
+  __proto__: CrElementsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload:
+      'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.html',
+
+  /** @override */
+  extraLibraries: CrElementsBrowserTest.prototype.extraLibraries.concat([
+    '../settings/test_util.js',
+    'cr_icon_button_tests.js',
+  ]),
+};
+
+TEST_F('CrElementsIconButtonTest', 'All', function() {
+  mocha.run();
+});
+
+GEN('#if defined(OS_CHROMEOS)');
+/**
+ * @constructor
+ * @extends {CrElementsBrowserTest}
+ */
 function CrElementsSearchableDropDownTest() {}
 
 CrElementsSearchableDropDownTest.prototype = {
@@ -373,4 +472,36 @@ CrElementsSearchableDropDownTest.prototype = {
 
 TEST_F('CrElementsSearchableDropDownTest', 'All', function() {
   mocha.run();
+});
+GEN('#endif');
+
+////////////////////////////////////////////////////////////////////////////////
+// View Manager Tests
+
+CrElementsViewManagerTest = class extends CrElementsBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://resources/cr_elements/cr_view_manager/cr_view_manager.html';
+  }
+
+  /** @override */
+  get extraLibraries() {
+    return super.extraLibraries.concat([
+      '../extensions/test_util.js',
+      'cr_view_manager_test.js',
+    ]);
+  }
+
+  /** @override */
+  get suiteName() {
+    return cr_view_manager_test.suiteName;
+  }
+};
+
+TEST_F('CrElementsViewManagerTest', 'VisibilityTest', function() {
+  runMochaTest(this.suiteName, cr_view_manager_test.TestNames.Visibility);
+});
+
+TEST_F('CrElementsViewManagerTest', 'EventFiringTest', function() {
+  runMochaTest(this.suiteName, cr_view_manager_test.TestNames.EventFiring);
 });

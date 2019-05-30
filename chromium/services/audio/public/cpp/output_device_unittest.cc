@@ -6,11 +6,13 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "build/build_config.h"
 #include "media/audio/audio_sync_reader.h"
 #include "media/base/audio_renderer_sink.h"
+#include "media/mojo/interfaces/audio_data_pipe.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "services/audio/public/cpp/fake_stream_factory.h"
@@ -140,9 +142,8 @@ class AudioServiceOutputDeviceTest : public testing::Test {
     service_manager::mojom::ConnectorRequest connector_request;
     connector_ = service_manager::Connector::Create(&connector_request);
     stream_factory_ = std::make_unique<FakeOutputStreamFactory>();
-    service_manager::Connector::TestApi connector_test_api(connector_.get());
-    connector_test_api.OverrideBinderForTesting(
-        service_manager::Identity(audio::mojom::kServiceName),
+    connector_->OverrideBinderForTesting(
+        service_manager::ServiceFilter::ByName(audio::mojom::kServiceName),
         audio::mojom::StreamFactory::Name_,
         base::BindRepeating(&AudioServiceOutputDeviceTest::BindStreamFactory,
                             base::Unretained(this)));
@@ -182,7 +183,13 @@ TEST_F(AudioServiceOutputDeviceTest, CreatePlayPause) {
   task_env_.RunUntilIdle();
 }
 
-TEST_F(AudioServiceOutputDeviceTest, VerifyDataFlow) {
+// Flaky on Linux Chromium OS ASan LSan (https://crbug.com/889845)
+#if defined(OS_CHROMEOS) && defined(ADDRESS_SANITIZER)
+#define MAYBE_VerifyDataFlow DISABLED_VerifyDataFlow
+#else
+#define MAYBE_VerifyDataFlow VerifyDataFlow
+#endif
+TEST_F(AudioServiceOutputDeviceTest, MAYBE_VerifyDataFlow) {
   auto params(media::AudioParameters::UnavailableDeviceParams());
   params.set_frames_per_buffer(kFrames);
   ASSERT_EQ(2, params.channels());

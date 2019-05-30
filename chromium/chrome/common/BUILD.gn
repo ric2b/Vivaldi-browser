@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import("//build/buildflag_header.gni")
-import("//build/util/lastchange.gni")
 import("//build/util/process_version.gni")
 import("//chrome/common/features.gni")
 import("//chrome/process_version_rc_template.gni")  # For branding_file_path.
@@ -15,6 +14,7 @@ import("//media/media_options.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//pdf/features.gni")
 import("//ppapi/buildflags/buildflags.gni")
+import("//third_party/widevine/cdm/widevine.gni")
 import("//tools/grit/grit_rule.gni")
 
 if (enable_pdf) {
@@ -134,15 +134,19 @@ static_library("common") {
     "descriptors_android.h",
     "google_url_loader_throttle.cc",
     "google_url_loader_throttle.h",
+    "heap_profiler_controller.cc",
+    "heap_profiler_controller.h",
     "instant_struct_traits.h",
     "logging_chrome.cc",
     "logging_chrome.h",
     "mac/app_shim_launch.h",
-    "mac/app_shim_messages.h",
+    "mac/app_shim_param_traits.h",
     "mac/cfbundle_blocker.h",
     "mac/cfbundle_blocker.mm",
     "mac/launchd.h",
     "mac/launchd.mm",
+    "mac/service_management.h",
+    "mac/service_management.mm",
     "media/media_resource_provider.cc",
     "media/media_resource_provider.h",
     "media/webrtc_logging_message_data.cc",
@@ -162,8 +166,8 @@ static_library("common") {
     "page_load_metrics/page_load_timing.h",
     "page_load_metrics/page_track_decider.cc",
     "page_load_metrics/page_track_decider.h",
-    "pdf_uma.cc",
-    "pdf_uma.h",
+    "pdf_util.cc",
+    "pdf_util.h",
     "pref_names_util.cc",
     "pref_names_util.h",
     "prerender_messages.h",
@@ -172,8 +176,6 @@ static_library("common") {
     "prerender_url_loader_throttle.h",
     "prerender_util.cc",
     "prerender_util.h",
-    "profiling.cc",
-    "profiling.h",
     "ref_counted_util.h",
     "render_messages.h",
     "search/instant_types.cc",
@@ -187,8 +189,6 @@ static_library("common") {
     "stack_sampling_configuration.h",
     "thread_profiler.cc",
     "thread_profiler.h",
-    "trace_event_args_whitelist.cc",
-    "trace_event_args_whitelist.h",
     "tts_messages.h",
     "tts_utterance_request.cc",
     "tts_utterance_request.h",
@@ -215,6 +215,7 @@ static_library("common") {
     ":common_param_traits_macros",
     ":ini_parser",
     ":mojo_bindings",
+    ":offline_page_auto_fetcher_mojom",
     ":page_load_metrics_mojom",
     ":supervised_user_commands_mojom",
     "//base:base",
@@ -277,7 +278,7 @@ static_library("common") {
     "//skia",
     "//third_party/icu",
     "//third_party/re2",
-    "//third_party/widevine/cdm:headers",
+    "//third_party/widevine/cdm:buildflags",
     "//ui/accessibility",
     "//ui/base",
     "//ui/gfx/ipc",
@@ -301,7 +302,6 @@ static_library("common") {
     sources += [
       "cast_messages.cc",
       "cast_messages.h",
-      "extensions/api/automation_api_constants.h",
       "extensions/api/commands/commands_handler.cc",
       "extensions/api/commands/commands_handler.h",
       "extensions/api/extension_action/action_info.cc",
@@ -320,10 +320,6 @@ static_library("common") {
       "extensions/api/system_indicator/system_indicator_handler.h",
       "extensions/api/url_handlers/url_handlers_parser.cc",
       "extensions/api/url_handlers/url_handlers_parser.h",
-      "extensions/api/webstore/webstore_api_constants.cc",
-      "extensions/api/webstore/webstore_api_constants.h",
-      "extensions/chrome_aliases.cc",
-      "extensions/chrome_aliases.h",
       "extensions/chrome_extension_messages.h",
       "extensions/chrome_extensions_api_provider.cc",
       "extensions/chrome_extensions_api_provider.h",
@@ -359,7 +355,6 @@ static_library("common") {
       "extensions/manifest_handlers/theme_handler.h",
       "extensions/manifest_handlers/ui_overrides_handler.cc",
       "extensions/manifest_handlers/ui_overrides_handler.h",
-      "extensions/mojom/inline_install_traits.h",
       "extensions/permissions/chrome_api_permissions.cc",
       "extensions/permissions/chrome_api_permissions.h",
       "extensions/permissions/chrome_permission_message_provider.cc",
@@ -373,8 +368,8 @@ static_library("common") {
       "initialize_extensions_client.cc",
       "initialize_extensions_client.h",
     ]
+    deps += [ "//chrome/common/apps/platform_apps" ]
     public_deps += [
-      "//chrome/common/extensions:mojo_bindings",
       "//chrome/common/extensions/api",
       "//chrome/common/extensions/api:extensions_features",
       "//device/usb",
@@ -469,6 +464,8 @@ static_library("common") {
       "//third_party/google_toolbox_for_mac",
       "//third_party/mach_override",
     ]
+
+    libs = [ "ServiceManagement.framework" ]
   }
 
   if (enable_plugins) {
@@ -487,6 +484,10 @@ static_library("common") {
       "pepper_permission_util.cc",
       "pepper_permission_util.h",
     ]
+  }
+
+  if (enable_widevine && enable_library_cdms) {
+    deps += [ "//third_party/widevine/cdm:headers" ]
   }
 
   if (safe_browsing_mode != 0) {
@@ -514,7 +515,6 @@ process_version("version_header") {
   sources = [
     "//chrome/VERSION",
     branding_file_path,
-    lastchange_file,
   ]
 
   template_file = "chrome_version.h.in"
@@ -544,7 +544,7 @@ static_library("non_code_constants") {
 
   public_deps = [
     "//printing/buildflags",
-    "//ui/base:ui_features",
+    "//ui/base:buildflags",
   ]
 }
 
@@ -570,7 +570,7 @@ component("chrome_features") {
   ]
 
   public_deps = [
-    "//ui/base:ui_features",
+    "//ui/base:buildflags",
   ]
 }
 
@@ -607,10 +607,10 @@ static_library("constants") {
     "//components/nacl/common:switches",
     "//components/offline_pages/buildflags",
     "//extensions/buildflags",
-    "//media/cdm:cdm_paths",  # Needed by chrome_paths.cc.
+    "//media:media_buildflags",
     "//ppapi/buildflags",
     "//printing/buildflags",
-    "//third_party/widevine/cdm:headers",
+    "//third_party/widevine/cdm:buildflags",
   ]
 
   if (is_android) {
@@ -629,6 +629,13 @@ static_library("constants") {
 
   if (is_win) {
     deps += [ "//chrome/install_static:install_static_util" ]
+  }
+
+  if (enable_widevine && enable_library_cdms) {
+    deps += [
+      "//media/cdm:cdm_paths",  # Needed by chrome_paths.cc.
+      "//third_party/widevine/cdm:headers",
+    ]
   }
 }
 
@@ -705,11 +712,14 @@ mojom("mojo_bindings") {
     "navigation_corrector.mojom",
     "net_benchmarking.mojom",
     "network_diagnostics.mojom",
+    "network_easter_egg.mojom",
     "open_search_description_document_handler.mojom",
     "plugin.mojom",
     "prerender.mojom",
     "renderer_configuration.mojom",
   ]
+
+  deps = []
 
   if (is_android) {
     sources += [ "sandbox_status_extension_android.mojom" ]
@@ -725,6 +735,7 @@ mojom("mojo_bindings") {
 
   if (enable_offline_pages) {
     sources += [ "mhtml_page_notifier.mojom" ]
+    deps += [ "//third_party/blink/public/mojom:mojom_mhtml_load_result" ]
   }
 
   public_deps = [
@@ -736,6 +747,10 @@ mojom("mojo_bindings") {
     "//url/mojom:url_mojom_gurl",
     "//url/mojom:url_mojom_origin",
   ]
+
+  if (is_mac) {
+    public_deps += [ "//ui/views_bridge_mac:mojo" ]
+  }
 
   if (safe_browsing_mode == 1) {
     public_deps += [ "//chrome/services/file_util/public/mojom" ]
@@ -767,7 +782,8 @@ mojom("page_load_metrics_mojom") {
 
   public_deps = [
     "//mojo/public/mojom/base",
-    "//third_party/blink/public:web_feature_mojo_bindings",
+    "//third_party/blink/public/mojom:web_feature_mojo_bindings",
+    "//url/mojom:url_mojom_origin",
   ]
 }
 
@@ -778,7 +794,7 @@ mojom("client_hints_mojom") {
 
   public_deps = [
     "//mojo/public/mojom/base",
-    "//third_party/blink/public:web_client_hints_types_mojo_bindings",
+    "//third_party/blink/public/mojom:web_client_hints_types_mojo_bindings",
     "//url/mojom:url_mojom_origin",
   ]
 }
@@ -804,6 +820,15 @@ mojom("supervised_user_commands_mojom") {
 mojom("available_offline_content_mojom") {
   sources = [
     "available_offline_content.mojom",
+  ]
+  public_deps = [
+    "//url/mojom:url_mojom_gurl",
+  ]
+}
+
+mojom("offline_page_auto_fetcher_mojom") {
+  sources = [
+    "offline_page_auto_fetcher.mojom",
   ]
   public_deps = [
     "//url/mojom:url_mojom_gurl",

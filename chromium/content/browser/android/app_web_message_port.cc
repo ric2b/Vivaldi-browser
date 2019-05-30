@@ -10,7 +10,7 @@
 #include "base/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "jni/AppWebMessagePort_jni.h"
-#include "third_party/blink/public/common/message_port/string_message_codec.h"
+#include "third_party/blink/public/common/messaging/string_message_codec.h"
 
 using blink::MessagePortChannel;
 
@@ -37,11 +37,9 @@ std::vector<blink::MessagePortChannel> AppWebMessagePort::UnwrapJavaArray(
 base::android::ScopedJavaLocalRef<jstring>
 JNI_AppWebMessagePort_DecodeStringMessage(
     JNIEnv* env,
-    const base::android::JavaParamRef<jclass>& jcaller,
     const base::android::JavaParamRef<jbyteArray>& encoded_data) {
   std::vector<uint8_t> encoded_message;
-  base::android::JavaByteArrayToByteVector(env, encoded_data.obj(),
-                                           &encoded_message);
+  base::android::JavaByteArrayToByteVector(env, encoded_data, &encoded_message);
 
   base::string16 message;
   if (!blink::DecodeStringMessage(encoded_message, &message))
@@ -55,7 +53,6 @@ JNI_AppWebMessagePort_DecodeStringMessage(
 base::android::ScopedJavaLocalRef<jbyteArray>
 JNI_AppWebMessagePort_EncodeStringMessage(
     JNIEnv* env,
-    const base::android::JavaParamRef<jclass>& jcaller,
     const base::android::JavaParamRef<jstring>& jmessage) {
   std::vector<uint8_t> encoded_message = blink::EncodeStringMessage(
       base::android::ConvertJavaStringToUTF16(jmessage));

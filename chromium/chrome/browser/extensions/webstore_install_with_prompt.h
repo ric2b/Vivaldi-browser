@@ -35,14 +35,14 @@ class WebstoreInstallWithPrompt : public WebstoreStandaloneInstaller {
   // will be centered on the screen.
   WebstoreInstallWithPrompt(const std::string& webstore_item_id,
                             Profile* profile,
-                            const Callback& callback);
+                            Callback callback);
 
   // If this constructor is used, the parent of the install dialog will be
   // |parent_window|.
   WebstoreInstallWithPrompt(const std::string& webstore_item_id,
                             Profile* profile,
                             gfx::NativeWindow parent_window,
-                            const Callback& callback);
+                            Callback callback);
 
  protected:
   friend class base::RefCountedThreadSafe<WebstoreInstallWithPrompt>;
@@ -52,22 +52,15 @@ class WebstoreInstallWithPrompt : public WebstoreStandaloneInstaller {
 
   // extensions::WebstoreStandaloneInstaller overrides:
   bool CheckRequestorAlive() const override;
-  const GURL& GetRequestorURL() const override;
   bool ShouldShowPostInstallUI() const override;
   bool ShouldShowAppInstalledBubble() const override;
   content::WebContents* GetWebContents() const override;
   std::unique_ptr<ExtensionInstallPrompt::Prompt> CreateInstallPrompt()
       const override;
   std::unique_ptr<ExtensionInstallPrompt> CreateInstallUI() override;
-  bool CheckInlineInstallPermitted(const base::DictionaryValue& webstore_data,
-                                   std::string* error) const override;
-  bool CheckRequestorPermitted(const base::DictionaryValue& webstore_data,
-                               std::string* error) const override;
 
  private:
   bool show_post_install_ui_;
-
-  GURL dummy_requestor_url_;
 
   // A non-visible WebContents used to download data from the webstore.
   std::unique_ptr<content::WebContents> dummy_web_contents_;

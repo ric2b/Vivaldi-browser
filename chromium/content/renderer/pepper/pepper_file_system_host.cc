@@ -10,7 +10,6 @@
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/renderer/render_view.h"
 #include "content/public/renderer/renderer_ppapi_host.h"
-#include "content/renderer/fileapi/file_system_dispatcher.h"
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "ppapi/c/pp_errors.h"
@@ -109,7 +108,7 @@ int32_t PepperFileSystemHost::OnHostMsgOpen(
 
   reply_context_ = context->MakeReplyMessageContext();
   GetFileSystemManager().Open(
-      document_url.GetOrigin(),
+      url::Origin::Create(document_url),
       mojo::ConvertTo<blink::mojom::FileSystemType>(file_system_type),
       base::BindOnce(&PepperFileSystemHost::DidOpenFileSystem, AsWeakPtr()));
   return PP_OK_COMPLETIONPENDING;

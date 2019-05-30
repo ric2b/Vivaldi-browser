@@ -6,10 +6,11 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/default_clock.h"
-#include "chromeos/components/proximity_auth/logging/logging.h"
+#include "chromeos/components/multidevice/logging/logging.h"
 #include "chromeos/components/tether/connection_preserver.h"
 #include "chromeos/components/tether/host_scan_device_prioritizer.h"
 #include "chromeos/components/tether/message_wrapper.h"
@@ -22,10 +23,10 @@ namespace tether {
 
 namespace {
 
-cryptauth::RemoteDeviceRefList PrioritizeDevices(
-    const cryptauth::RemoteDeviceRefList& devices_to_connect,
+multidevice::RemoteDeviceRefList PrioritizeDevices(
+    const multidevice::RemoteDeviceRefList& devices_to_connect,
     HostScanDevicePrioritizer* host_scan_device_prioritizer) {
-  cryptauth::RemoteDeviceRefList mutable_devices_to_connect =
+  multidevice::RemoteDeviceRefList mutable_devices_to_connect =
       devices_to_connect;
   host_scan_device_prioritizer->SortByHostScanOrder(
       &mutable_devices_to_connect);
@@ -50,7 +51,10 @@ bool IsTetheringAvailableWithValidDeviceStatus(
               TetherAvailabilityResponse_ResponseCode_SETUP_NEEDED ||
       response_code ==
           TetherAvailabilityResponse_ResponseCode::
-              TetherAvailabilityResponse_ResponseCode_TETHER_AVAILABLE) {
+              TetherAvailabilityResponse_ResponseCode_TETHER_AVAILABLE ||
+      response_code ==
+          TetherAvailabilityResponse_ResponseCode::
+              TetherAvailabilityResponse_ResponseCode_LAST_PROVISIONING_FAILED) {
     return true;
   }
 
@@ -82,10 +86,9 @@ HostScannerOperation::Factory*
 // static
 std::unique_ptr<HostScannerOperation>
 HostScannerOperation::Factory::NewInstance(
-    const cryptauth::RemoteDeviceRefList& devices_to_connect,
+    const multidevice::RemoteDeviceRefList& devices_to_connect,
     device_sync::DeviceSyncClient* device_sync_client,
     secure_channel::SecureChannelClient* secure_channel_client,
-    BleConnectionManager* connection_manager,
     HostScanDevicePrioritizer* host_scan_device_prioritizer,
     TetherHostResponseRecorder* tether_host_response_recorder,
     ConnectionPreserver* connection_preserver) {
@@ -94,8 +97,8 @@ HostScannerOperation::Factory::NewInstance(
   }
   return factory_instance_->BuildInstance(
       devices_to_connect, device_sync_client, secure_channel_client,
-      connection_manager, host_scan_device_prioritizer,
-      tether_host_response_recorder, connection_preserver);
+      host_scan_device_prioritizer, tether_host_response_recorder,
+      connection_preserver);
 }
 
 // static
@@ -105,21 +108,20 @@ void HostScannerOperation::Factory::SetInstanceForTesting(Factory* factory) {
 
 std::unique_ptr<HostScannerOperation>
 HostScannerOperation::Factory::BuildInstance(
-    const cryptauth::RemoteDeviceRefList& devices_to_connect,
+    const multidevice::RemoteDeviceRefList& devices_to_connect,
     device_sync::DeviceSyncClient* device_sync_client,
     secure_channel::SecureChannelClient* secure_channel_client,
-    BleConnectionManager* connection_manager,
     HostScanDevicePrioritizer* host_scan_device_prioritizer,
     TetherHostResponseRecorder* tether_host_response_recorder,
     ConnectionPreserver* connection_preserver) {
   return base::WrapUnique(new HostScannerOperation(
       devices_to_connect, device_sync_client, secure_channel_client,
-      connection_manager, host_scan_device_prioritizer,
-      tether_host_response_recorder, connection_preserver));
+      host_scan_device_prioritizer, tether_host_response_recorder,
+      connection_preserver));
 }
 
 HostScannerOperation::ScannedDeviceInfo::ScannedDeviceInfo(
-    cryptauth::RemoteDeviceRef remote_device,
+    multidevice::RemoteDeviceRef remote_device,
     const DeviceStatus& device_status,
     bool setup_required)
     : remote_device(remote_device),
@@ -137,10 +139,9 @@ bool operator==(const HostScannerOperation::ScannedDeviceInfo& first,
 }
 
 HostScannerOperation::HostScannerOperation(
-    const cryptauth::RemoteDeviceRefList& devices_to_connect,
+    const multidevice::RemoteDeviceRefList& devices_to_connect,
     device_sync::DeviceSyncClient* device_sync_client,
     secure_channel::SecureChannelClient* secure_channel_client,
-    BleConnectionManager* connection_manager,
     HostScanDevicePrioritizer* host_scan_device_prioritizer,
     TetherHostResponseRecorder* tether_host_response_recorder,
     ConnectionPreserver* connection_preserver)
@@ -148,8 +149,7 @@ HostScannerOperation::HostScannerOperation(
           PrioritizeDevices(devices_to_connect, host_scan_device_prioritizer),
           secure_channel::ConnectionPriority::kLow,
           device_sync_client,
-          secure_channel_client,
-          connection_manager),
+          secure_channel_client),
       tether_host_response_recorder_(tether_host_response_recorder),
       connection_preserver_(connection_preserver),
       clock_(base::DefaultClock::GetInstance()),
@@ -176,7 +176,7 @@ void HostScannerOperation::NotifyObserversOfScannedDeviceList(
 }
 
 void HostScannerOperation::OnDeviceAuthenticated(
-    cryptauth::RemoteDeviceRef remote_device) {
+    multidevice::RemoteDeviceRef remote_device) {
   DCHECK(!base::ContainsKey(
       device_id_to_tether_availability_request_start_time_map_,
       remote_device.GetDeviceId()));
@@ -189,7 +189,7 @@ void HostScannerOperation::OnDeviceAuthenticated(
 
 void HostScannerOperation::OnMessageReceived(
     std::unique_ptr<MessageWrapper> message_wrapper,
-    cryptauth::RemoteDeviceRef remote_device) {
+    multidevice::RemoteDeviceRef remote_device) {
   if (message_wrapper->GetMessageType() !=
       MessageType::TETHER_AVAILABILITY_RESPONSE) {
     // If another type of message has been received, ignore it.
@@ -200,28 +200,31 @@ void HostScannerOperation::OnMessageReceived(
       static_cast<TetherAvailabilityResponse*>(
           message_wrapper->GetProto().get());
   if (AreGmsCoreNotificationsDisabled(response)) {
-    PA_LOG(INFO) << "Received TetherAvailabilityResponse from device with ID "
-                 << remote_device.GetTruncatedDeviceIdForLogs() << " which "
-                 << "indicates that Google Play Services notifications are "
-                 << "disabled. Response code: " << response->response_code();
+    PA_LOG(VERBOSE)
+        << "Received TetherAvailabilityResponse from device with ID "
+        << remote_device.GetTruncatedDeviceIdForLogs() << " which "
+        << "indicates that Google Play Services notifications are "
+        << "disabled. Response code: " << response->response_code();
     gms_core_notifications_disabled_devices_.push_back(remote_device);
     NotifyObserversOfScannedDeviceList(false /* is_final_scan_result */);
   } else if (!IsTetheringAvailableWithValidDeviceStatus(response)) {
     // If the received message is invalid or if it states that tethering is
     // unavailable, ignore it.
-    PA_LOG(INFO) << "Received TetherAvailabilityResponse from device with ID "
-                 << remote_device.GetTruncatedDeviceIdForLogs() << " which "
-                 << "indicates that tethering is not available.";
+    PA_LOG(VERBOSE)
+        << "Received TetherAvailabilityResponse from device with ID "
+        << remote_device.GetTruncatedDeviceIdForLogs() << " which "
+        << "indicates that tethering is not available.";
   } else {
     bool setup_required =
         response->response_code() ==
         TetherAvailabilityResponse_ResponseCode::
             TetherAvailabilityResponse_ResponseCode_SETUP_NEEDED;
 
-    PA_LOG(INFO) << "Received TetherAvailabilityResponse from device with ID "
-                 << remote_device.GetTruncatedDeviceIdForLogs() << " which "
-                 << "indicates that tethering is available. setup_required = "
-                 << setup_required;
+    PA_LOG(VERBOSE)
+        << "Received TetherAvailabilityResponse from device with ID "
+        << remote_device.GetTruncatedDeviceIdForLogs() << " which "
+        << "indicates that tethering is available. setup_required = "
+        << setup_required;
 
     tether_host_response_recorder_->RecordSuccessfulTetherAvailabilityResponse(
         remote_device);

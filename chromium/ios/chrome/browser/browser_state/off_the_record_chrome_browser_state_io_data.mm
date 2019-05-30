@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
@@ -23,16 +24,14 @@
 #include "ios/chrome/browser/net/ios_chrome_url_request_context_getter.h"
 #include "ios/chrome/browser/pref_names.h"
 #import "ios/net/cookies/system_cookie_store.h"
+#include "ios/web/public/web_task_traits.h"
 #include "ios/web/public/web_thread.h"
 #include "net/cookies/cookie_store.h"
 #include "net/disk_cache/disk_cache.h"
-#include "net/extras/sqlite/sqlite_channel_id_store.h"
 #include "net/ftp/ftp_network_layer.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties_impl.h"
-#include "net/ssl/channel_id_service.h"
-#include "net/ssl/default_channel_id_store.h"
 #include "net/url_request/url_request_job_factory_impl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -58,8 +57,8 @@ void OffTheRecordChromeBrowserStateIOData::Handle::DoomIncognitoCache() {
   // The cache for the incognito profile is in RAM.
   scoped_refptr<net::URLRequestContextGetter> getter =
       main_request_context_getter_;
-  web::WebThread::PostTask(
-      web::WebThread::IO, FROM_HERE, base::BindOnce(^{
+  base::PostTaskWithTraits(
+      FROM_HERE, {web::WebThread::IO}, base::BindOnce(^{
         DCHECK_CURRENTLY_ON(web::WebThread::IO);
         net::HttpCache* cache = getter->GetURLRequestContext()
                                     ->http_transaction_factory()
@@ -79,8 +78,6 @@ OffTheRecordChromeBrowserStateIOData::Handle::Handle(
   DCHECK(browser_state);
   io_data_->cookie_path_ =
       browser_state->GetStatePath().Append(kIOSChromeCookieFilename);
-  io_data_->channel_id_path_ =
-      browser_state->GetStatePath().Append(kIOSChromeChannelIDFilename);
 }
 
 OffTheRecordChromeBrowserStateIOData::Handle::~Handle() {
@@ -176,20 +173,6 @@ void OffTheRecordChromeBrowserStateIOData::InitializeInternal(
       new net::HttpServerPropertiesImpl()));
   main_context->set_http_server_properties(http_server_properties());
 
-  // For incognito, we use a non-persistent channel ID store.
-  scoped_refptr<net::DefaultChannelIDStore::PersistentStore> channel_id_store;
-
-  // On iOS, certificates are persisted to the disk in incognito.
-  DCHECK(!channel_id_path_.empty());
-  channel_id_store = new net::SQLiteChannelIDStore(
-      channel_id_path_,
-      base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BEST_EFFORT}));
-
-  net::ChannelIDService* channel_id_service = new net::ChannelIDService(
-      new net::DefaultChannelIDStore(channel_id_store.get()));
-  set_channel_id_service(channel_id_service);
-  main_context->set_channel_id_service(channel_id_service);
   main_cookie_store_ = cookie_util::CreateCookieStore(
       cookie_util::CookieStoreConfig(
           cookie_path_,
@@ -197,7 +180,6 @@ void OffTheRecordChromeBrowserStateIOData::InitializeInternal(
           cookie_util::CookieStoreConfig::COOKIE_STORE_IOS, nullptr),
       std::move(profile_params->system_cookie_store), io_thread->net_log());
   main_context->set_cookie_store(main_cookie_store_.get());
-  main_cookie_store_->SetChannelIDServiceID(channel_id_service->GetUniqueID());
 
   http_network_session_ = CreateHttpNetworkSession(*profile_params);
   main_http_factory_ = CreateMainHttpFactory(

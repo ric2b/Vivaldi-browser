@@ -15,7 +15,7 @@
 
 #if defined(OS_ANDROID)
 #include "base/android/build_info.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #endif
 
 #if BUILDFLAG(ENABLE_MOJO_RENDERER)
@@ -63,8 +63,6 @@ class WebRtcCaptureFromElementBrowserTest
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     WebRtcContentBrowserTestBase::SetUpCommandLine(command_line);
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kEnableBlinkFeatures, "MediaCaptureFromVideo");
 
     // Allow <video>/<audio>.play() when not initiated by user gesture.
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
@@ -109,9 +107,11 @@ IN_PROC_BROWSER_TEST_F(WebRtcCaptureFromElementBrowserTest,
   MakeTypicalCall("testCanvasCapture(drawWebGL);", kCanvasCaptureTestHtmlFile);
 }
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_MACOSX)
 // https://crbug.com/869723
 // Flaky on Windows 10 with Viz (i.e. in viz_content_browsertests).
+// https://crbug.com/916928
+// Flaky on chromium.mac/Mac10.10 Tests
 #define MAYBE_VerifyCanvasCaptureOffscreenCanvasFrames \
   DISABLED_VerifyCanvasCaptureOffscreenCanvasFrames
 #else
@@ -154,13 +154,21 @@ IN_PROC_BROWSER_TEST_F(WebRtcCaptureFromElementBrowserTest,
                   kCanvasCaptureColorTestHtmlFile);
 }
 
+// See https://crbug.com/898286.
+#if defined(OS_ANDROID)
+#define MAYBE_CaptureFromOpaqueCanvas2DHandlesContextLoss \
+  DISABLED_CaptureFromOpaqueCanvas2DHandlesContextLoss
+#else
+#define MAYBE_CaptureFromOpaqueCanvas2DHandlesContextLoss \
+  CaptureFromOpaqueCanvas2DHandlesContextLoss
+#endif
 IN_PROC_BROWSER_TEST_F(WebRtcCaptureFromElementBrowserTest,
-                       CaptureFromOpaqueCanvas2DHandlesContextLoss) {
+                       MAYBE_CaptureFromOpaqueCanvas2DHandlesContextLoss) {
   MakeTypicalCall("testCanvas2DContextLoss(false);",
                   kCanvasCaptureColorTestHtmlFile);
 }
 
-INSTANTIATE_TEST_CASE_P(,
-                        WebRtcCaptureFromElementBrowserTest,
-                        testing::ValuesIn(kFileAndTypeParameters));
+INSTANTIATE_TEST_SUITE_P(,
+                         WebRtcCaptureFromElementBrowserTest,
+                         testing::ValuesIn(kFileAndTypeParameters));
 }  // namespace content

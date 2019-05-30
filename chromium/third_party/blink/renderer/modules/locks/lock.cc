@@ -30,9 +30,13 @@ class Lock::ThenFunction final : public ScriptFunction {
   static v8::Local<v8::Function> CreateFunction(ScriptState* script_state,
                                                 Lock* lock,
                                                 ResolveType type) {
-    ThenFunction* self = new ThenFunction(script_state, lock, type);
+    ThenFunction* self =
+        MakeGarbageCollected<ThenFunction>(script_state, lock, type);
     return self->BindToV8Function();
   }
+
+  ThenFunction(ScriptState* script_state, Lock* lock, ResolveType type)
+      : ScriptFunction(script_state), lock_(lock), resolve_type_(type) {}
 
   void Trace(blink::Visitor* visitor) override {
     visitor->Trace(lock_);
@@ -40,9 +44,6 @@ class Lock::ThenFunction final : public ScriptFunction {
   }
 
  private:
-  ThenFunction(ScriptState* script_state, Lock* lock, ResolveType type)
-      : ScriptFunction(script_state), lock_(lock), resolve_type_(type) {}
-
   ScriptValue Call(ScriptValue value) override {
     DCHECK(lock_);
     DCHECK(resolve_type_ == Fulfilled || resolve_type_ == Rejected);
@@ -63,23 +64,22 @@ class Lock::ThenFunction final : public ScriptFunction {
 Lock* Lock::Create(ScriptState* script_state,
                    const String& name,
                    mojom::blink::LockMode mode,
-                   mojom::blink::LockHandlePtr handle,
+                   mojom::blink::LockHandleAssociatedPtr handle,
                    LockManager* manager) {
-  return new Lock(script_state, name, mode, std::move(handle), manager);
+  return MakeGarbageCollected<Lock>(script_state, name, mode, std::move(handle),
+                                    manager);
 }
 
 Lock::Lock(ScriptState* script_state,
            const String& name,
            mojom::blink::LockMode mode,
-           mojom::blink::LockHandlePtr handle,
+           mojom::blink::LockHandleAssociatedPtr handle,
            LockManager* manager)
-    : PausableObject(ExecutionContext::From(script_state)),
+    : ContextLifecycleObserver(ExecutionContext::From(script_state)),
       name_(name),
       mode_(mode),
       handle_(std::move(handle)),
       manager_(manager) {
-  PauseIfNeeded();
-
   handle_.set_connection_error_handler(
       WTF::Bind(&Lock::OnConnectionError, WrapWeakPersistent(this)));
 }
@@ -128,7 +128,7 @@ void Lock::ContextDestroyed(ExecutionContext* context) {
 }
 
 void Lock::Trace(blink::Visitor* visitor) {
-  PausableObject::Trace(visitor);
+  ContextLifecycleObserver::Trace(visitor);
   ScriptWrappable::Trace(visitor);
   visitor->Trace(resolver_);
   visitor->Trace(manager_);

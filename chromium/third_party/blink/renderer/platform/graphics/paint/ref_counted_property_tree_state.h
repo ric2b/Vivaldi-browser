@@ -6,9 +6,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_PAINT_REF_COUNTED_PROPERTY_TREE_STATE_H_
 
 #include "third_party/blink/renderer/platform/graphics/paint/property_tree_state.h"
-#include "third_party/blink/renderer/platform/wtf/hash_functions.h"
-#include "third_party/blink/renderer/platform/wtf/hash_traits.h"
-#include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
 namespace blink {
 
@@ -18,51 +15,25 @@ class PLATFORM_EXPORT RefCountedPropertyTreeState {
   USING_FAST_MALLOC(RefCountedPropertyTreeState);
 
  public:
-  RefCountedPropertyTreeState(const TransformPaintPropertyNode* transform,
-                              const ClipPaintPropertyNode* clip,
-                              const EffectPaintPropertyNode* effect)
-      : transform_(transform), clip_(clip), effect_(effect) {}
-
   RefCountedPropertyTreeState(const PropertyTreeState& property_tree_state)
-      : transform_(property_tree_state.Transform()),
-        clip_(property_tree_state.Clip()),
-        effect_(property_tree_state.Effect()) {}
+      : transform_(&property_tree_state.Transform()),
+        clip_(&property_tree_state.Clip()),
+        effect_(&property_tree_state.Effect()) {}
 
   bool HasDirectCompositingReasons() const;
 
-  const TransformPaintPropertyNode* Transform() const {
-    return transform_.get();
-  }
-  void SetTransform(scoped_refptr<const TransformPaintPropertyNode> node) {
-    transform_ = std::move(node);
-  }
-
-  const ClipPaintPropertyNode* Clip() const { return clip_.get(); }
-  void SetClip(scoped_refptr<const ClipPaintPropertyNode> node) {
-    clip_ = std::move(node);
-  }
-
-  const EffectPaintPropertyNode* Effect() const { return effect_.get(); }
-  void SetEffect(scoped_refptr<const EffectPaintPropertyNode> node) {
-    effect_ = std::move(node);
-  }
-
-  static const RefCountedPropertyTreeState& Root();
+  const TransformPaintPropertyNode& Transform() const { return *transform_; }
+  const ClipPaintPropertyNode& Clip() const { return *clip_; }
+  const EffectPaintPropertyNode& Effect() const { return *effect_; }
 
   PropertyTreeState GetPropertyTreeState() const {
-    return PropertyTreeState(transform_.get(), clip_.get(), effect_.get());
+    return PropertyTreeState(Transform(), Clip(), Effect());
   }
 
-  // Returns the compositor element id, if any, for this property state. If
-  // neither the effect nor transform nodes have a compositor element id then a
-  // default instance is returned.
-  const CompositorElementId GetCompositorElementId(
-      const CompositorElementIdSet& element_ids) const;
-
   void ClearChangedToRoot() const {
-    Transform()->ClearChangedToRoot();
-    Clip()->ClearChangedToRoot();
-    Effect()->ClearChangedToRoot();
+    Transform().ClearChangedToRoot();
+    Clip().ClearChangedToRoot();
+    Effect().ClearChangedToRoot();
   }
 
   String ToString() const { return GetPropertyTreeState().ToString(); }
@@ -79,8 +50,13 @@ class PLATFORM_EXPORT RefCountedPropertyTreeState {
 
 inline bool operator==(const RefCountedPropertyTreeState& a,
                        const RefCountedPropertyTreeState& b) {
-  return a.Transform() == b.Transform() && a.Clip() == b.Clip() &&
-         a.Effect() == b.Effect();
+  return &a.Transform() == &b.Transform() && &a.Clip() == &b.Clip() &&
+         &a.Effect() == &b.Effect();
+}
+
+inline bool operator!=(const RefCountedPropertyTreeState& a,
+                       const RefCountedPropertyTreeState& b) {
+  return !(a == b);
 }
 
 }  // namespace blink

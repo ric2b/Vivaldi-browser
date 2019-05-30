@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/fallback_video_decoder.h"
 #include "media/base/gmock_callback_support.h"
@@ -70,6 +71,8 @@ class FallbackVideoDecoderUnittest : public ::testing::TestWithParam<bool> {
 
   bool PreferredShouldSucceed() { return GetParam(); }
 
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
+
   StrictMock<MockVideoDecoder>* backup_decoder_;
   StrictMock<MockVideoDecoder>* preferred_decoder_;
   VideoDecoder* fallback_decoder_;
@@ -79,9 +82,9 @@ class FallbackVideoDecoderUnittest : public ::testing::TestWithParam<bool> {
   DISALLOW_COPY_AND_ASSIGN(FallbackVideoDecoderUnittest);
 };
 
-INSTANTIATE_TEST_CASE_P(DoesPreferredInitFail,
-                        FallbackVideoDecoderUnittest,
-                        testing::ValuesIn({true, false}));
+INSTANTIATE_TEST_SUITE_P(DoesPreferredInitFail,
+                         FallbackVideoDecoderUnittest,
+                         testing::ValuesIn({true, false}));
 
 #define EXPECT_ON_CORRECT_DECODER(method)     \
   if (PreferredShouldSucceed())               \

@@ -8,9 +8,11 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_registration.h"
@@ -40,19 +42,19 @@ const int64_t kNonExistentResourceId = 12;
 const int64_t kResourceSize = 100;
 
 void DidStoreRegistration(blink::ServiceWorkerStatusCode* status_out,
-                          const base::Closure& quit_closure,
+                          base::OnceClosure quit_closure,
                           blink::ServiceWorkerStatusCode status) {
   *status_out = status;
-  quit_closure.Run();
+  std::move(quit_closure).Run();
 }
 
 void DidFindRegistration(
     blink::ServiceWorkerStatusCode* status_out,
-    const base::Closure& quit_closure,
+    base::OnceClosure quit_closure,
     blink::ServiceWorkerStatusCode status,
     scoped_refptr<ServiceWorkerRegistration> registration) {
   *status_out = status;
-  quit_closure.Run();
+  std::move(quit_closure).Run();
 }
 
 }  // namespace
@@ -96,6 +98,7 @@ class ServiceWorkerReadFromCacheJobTest : public testing::Test {
     registration_ = new ServiceWorkerRegistration(options, kRegistrationId,
                                                   context()->AsWeakPtr());
     version_ = new ServiceWorkerVersion(registration_.get(), main_script_.url,
+                                        blink::mojom::ScriptType::kClassic,
                                         kVersionId, context()->AsWeakPtr());
     std::vector<ServiceWorkerDatabase::ResourceRecord> resources;
     resources.push_back(main_script_);
@@ -111,9 +114,10 @@ class ServiceWorkerReadFromCacheJobTest : public testing::Test {
   bool WriteResource(int64_t resource_id) {
     const char kHttpHeaders[] = "HTTP/1.0 200 OK\0Content-Length: 5\0\0";
     const char kHttpBody[] = "Hello";
-    const int length = arraysize(kHttpBody);
-    std::string headers(kHttpHeaders, arraysize(kHttpHeaders));
-    scoped_refptr<net::IOBuffer> body(new net::WrappedIOBuffer(kHttpBody));
+    const int length = base::size(kHttpBody);
+    std::string headers(kHttpHeaders, base::size(kHttpHeaders));
+    scoped_refptr<net::IOBuffer> body =
+        base::MakeRefCounted<net::WrappedIOBuffer>(kHttpBody);
 
     std::unique_ptr<ServiceWorkerResponseWriter> writer =
         context()->storage()->CreateResponseWriter(resource_id);
@@ -159,7 +163,7 @@ class ServiceWorkerReadFromCacheJobTest : public testing::Test {
     blink::ServiceWorkerStatusCode status =
         blink::ServiceWorkerStatusCode::kErrorFailed;
     context()->storage()->FindRegistrationForId(
-        registration_->id(), registration_->pattern().GetOrigin(),
+        registration_->id(), registration_->scope().GetOrigin(),
         base::BindOnce(&DidFindRegistration, &status, run_loop.QuitClosure()));
     run_loop.Run();
     return status;

@@ -15,7 +15,6 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "storage/browser/storage_browser_export.h"
 #include "storage/common/fileapi/file_system_types.h"
 #include "url/origin.h"
 
@@ -66,12 +65,9 @@ class QuotaReservationBuffer : public base::RefCounted<QuotaReservationBuffer> {
       base::File::Error error,
       int64_t delta);
 
-  using OpenFileHandleContextByPath =
-      std::map<base::FilePath, OpenFileHandleContext*>;
-
   // Not owned.  The destructor of OpenFileHandler should erase itself from
   // |open_files_|.
-  OpenFileHandleContextByPath open_files_;
+  std::map<base::FilePath, OpenFileHandleContext*> open_files_;
 
   base::WeakPtr<QuotaReservationManager> reservation_manager_;
 

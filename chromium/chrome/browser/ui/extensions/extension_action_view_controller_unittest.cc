@@ -81,7 +81,7 @@ TEST_P(ToolbarActionsBarUnitTest, ExtensionActionBlockedActions) {
   // Blocked actions are only present with the runtime host permissions feature.
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(
-      extensions::features::kRuntimeHostPermissions);
+      extensions_features::kRuntimeHostPermissions);
 
   scoped_refptr<const extensions::Extension> browser_action_ext =
       extensions::ExtensionBuilder("browser action")
@@ -253,7 +253,7 @@ void ExtensionActionViewControllerGrayscaleTest::RunGrayscaleTest(
     PermissionType permission_type) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(
-      extensions::features::kRuntimeHostPermissions);
+      extensions_features::kRuntimeHostPermissions);
 
   scoped_refptr<const extensions::Extension> extension =
       CreateExtension(permission_type);
@@ -379,8 +379,9 @@ ExtensionActionViewControllerGrayscaleTest::CreateExtension(
       .SetLocation(extensions::Manifest::INTERNAL);
   switch (permission_type) {
     case PermissionType::kScriptableHost: {
-      std::unique_ptr<base::Value> content_scripts = base::JSONReader::Read(
-          R"([{
+      std::unique_ptr<base::Value> content_scripts =
+          base::JSONReader::ReadDeprecated(
+              R"([{
                      "matches": ["https://www.google.com/*"],
                      "js": ["script.js"]
                  }])");
@@ -407,19 +408,14 @@ TEST_P(ExtensionActionViewControllerGrayscaleTest,
   RunGrayscaleTest(PermissionType::kScriptableHost);
 }
 
-INSTANTIATE_TEST_CASE_P(
-    ,
-    ExtensionActionViewControllerGrayscaleTest,
-    testing::Values(ui::MaterialDesignController::MATERIAL_NORMAL,
-                    ui::MaterialDesignController::MATERIAL_HYBRID,
-                    ui::MaterialDesignController::MATERIAL_TOUCH_OPTIMIZED,
-                    ui::MaterialDesignController::MATERIAL_REFRESH,
-                    ui::MaterialDesignController::MATERIAL_TOUCH_REFRESH));
+INSTANTIATE_TEST_SUITE_P(,
+                         ExtensionActionViewControllerGrayscaleTest,
+                         testing::Values(false, true));
 
 TEST_P(ToolbarActionsBarUnitTest, RuntimeHostsTooltip) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(
-      extensions::features::kRuntimeHostPermissions);
+      extensions_features::kRuntimeHostPermissions);
 
   scoped_refptr<const extensions::Extension> extension =
       extensions::ExtensionBuilder("extension name")
@@ -475,7 +471,7 @@ TEST_P(ToolbarActionsBarUnitTest, RuntimeHostsTooltip) {
 TEST_P(ToolbarActionsBarUnitTest, TestGetIconWithNullWebContents) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(
-      extensions::features::kRuntimeHostPermissions);
+      extensions_features::kRuntimeHostPermissions);
 
   scoped_refptr<const extensions::Extension> extension =
       extensions::ExtensionBuilder("extension name")

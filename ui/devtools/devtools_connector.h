@@ -139,7 +139,7 @@ class DevtoolsConnectorItem
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
                          content::WebContents* source,
                          const content::NativeWebKeyboardEvent& event) override;
-  void HandleKeyboardEvent(
+  bool HandleKeyboardEvent(
     content::WebContents* source,
     const content::NativeWebKeyboardEvent& event) override;
   content::JavaScriptDialogManager* GetJavaScriptDialogManager(
@@ -149,10 +149,16 @@ class DevtoolsConnectorItem
     SkColor color,
     const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions) override;
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
-                      const content::FileChooserParams& params) override;
+                      std::unique_ptr<content::FileSelectListener> listener,
+                      const blink::mojom::FileChooserParams& params) override;
   bool PreHandleGestureEvent(content::WebContents* source,
                              const blink::WebGestureEvent& event) override;
   bool HasOwnerShipOfContents() override;
+  bool HandleContextMenu(content::RenderFrameHost* render_frame_host,
+                         const content::ContextMenuParams& params) override;
+  content::WebContents* OpenURLFromTab(
+      content::WebContents* source,
+      const content::OpenURLParams& params) override;
 
   // These are the original delegates Chromium would normally use
   // and we call into them to allow existing functionality to work.

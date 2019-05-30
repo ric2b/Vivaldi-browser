@@ -28,7 +28,7 @@ class VIZ_SERVICE_EXPORT DisplaySchedulerClient {
   virtual ~DisplaySchedulerClient() {}
 
   virtual bool DrawAndSwap() = 0;
-  virtual bool SurfaceHasUndrawnFrame(const SurfaceId& surface_id) const = 0;
+  virtual bool SurfaceHasUnackedFrame(const SurfaceId& surface_id) const = 0;
   virtual bool SurfaceDamaged(const SurfaceId& surface_id,
                               const BeginFrameAck& ack) = 0;
   virtual void SurfaceDiscarded(const SurfaceId& surface_id) = 0;
@@ -77,7 +77,6 @@ class VIZ_SERVICE_EXPORT DisplayScheduler : public BeginFrameObserverBase,
   void OnBeginFrameSourcePausedChanged(bool paused) override;
 
   // SurfaceObserver implementation.
-  void OnSurfaceCreated(const SurfaceId& surface_id) override;
   void OnFirstSurfaceActivation(const SurfaceInfo& surface_info) override;
   void OnSurfaceActivated(const SurfaceId& surface_id,
                           base::Optional<base::TimeDelta> duration) override;
@@ -127,18 +126,17 @@ class VIZ_SERVICE_EXPORT DisplayScheduler : public BeginFrameObserverBase,
   void DidFinishFrame(bool did_draw);
   // Updates |has_pending_surfaces_| and returns whether its value changed.
   bool UpdateHasPendingSurfaces();
-  void ReportNotDrawReason();
 
   DisplaySchedulerClient* client_;
   BeginFrameSource* begin_frame_source_;
   base::SingleThreadTaskRunner* task_runner_;
 
   BeginFrameArgs current_begin_frame_args_;
-  base::Closure begin_frame_deadline_closure_;
-  base::CancelableClosure begin_frame_deadline_task_;
+  base::RepeatingClosure begin_frame_deadline_closure_;
+  base::CancelableOnceClosure begin_frame_deadline_task_;
   base::TimeTicks begin_frame_deadline_task_time_;
 
-  base::CancelableClosure missed_begin_frame_task_;
+  base::CancelableOnceClosure missed_begin_frame_task_;
   bool inside_surface_damaged_;
 
   bool visible_;

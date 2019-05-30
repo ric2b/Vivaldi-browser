@@ -8,8 +8,10 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/json/json_reader.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/extensions/api/declarative_net_request/dnr_test_base.h"
@@ -20,7 +22,9 @@
 #include "extensions/browser/api/declarative_net_request/parse_info.h"
 #include "extensions/browser/api/declarative_net_request/test_utils.h"
 #include "extensions/browser/test_extension_registry_observer.h"
+#include "extensions/common/api/declarative_net_request.h"
 #include "extensions/common/api/declarative_net_request/test_utils.h"
+#include "extensions/common/error_utils.h"
 #include "extensions/common/file_util.h"
 #include "extensions/common/install_warning.h"
 #include "extensions/common/manifest_constants.h"
@@ -131,11 +135,10 @@ class RuleIndexingTest : public DNRTestBase {
     if (rules_value_) {
       WriteManifestAndRuleset(extension_dir_, kJSONRulesetFilepath,
                               kJSONRulesFilename, *rules_value_,
-                              {URLPattern::kAllUrlsPattern});
+                              {} /* hosts */);
     } else {
       WriteManifestAndRuleset(extension_dir_, kJSONRulesetFilepath,
-                              kJSONRulesFilename, rules_list_,
-                              {URLPattern::kAllUrlsPattern});
+                              kJSONRulesFilename, rules_list_, {} /* hosts */);
     }
 
     // Overwrite the JSON rules file with some invalid json.
@@ -173,8 +176,9 @@ TEST_P(RuleIndexingTest, DuplicateResourceTypes) {
       std::vector<std::string>({"image", "stylesheet"});
   rule.condition->excluded_resource_types = std::vector<std::string>({"image"});
   AddRule(rule);
-  LoadAndExpectError(ParseInfo(ParseResult::ERROR_RESOURCE_TYPE_DUPLICATED, 0u)
-                         .GetErrorDescription(kJSONRulesFilename));
+  LoadAndExpectError(
+      ParseInfo(ParseResult::ERROR_RESOURCE_TYPE_DUPLICATED, *rule.id)
+          .GetErrorDescription(kJSONRulesFilename));
 }
 
 TEST_P(RuleIndexingTest, EmptyRedirectRulePriority) {
@@ -183,7 +187,7 @@ TEST_P(RuleIndexingTest, EmptyRedirectRulePriority) {
   rule.action->redirect_url = std::string("https://google.com");
   AddRule(rule);
   LoadAndExpectError(
-      ParseInfo(ParseResult::ERROR_EMPTY_REDIRECT_RULE_PRIORITY, 0u)
+      ParseInfo(ParseResult::ERROR_EMPTY_REDIRECT_RULE_PRIORITY, *rule.id)
           .GetErrorDescription(kJSONRulesFilename));
 }
 
@@ -197,7 +201,7 @@ TEST_P(RuleIndexingTest, EmptyRedirectRuleUrl) {
   rule.priority = kMinValidPriority;
   AddRule(rule);
 
-  LoadAndExpectError(ParseInfo(ParseResult::ERROR_EMPTY_REDIRECT_URL, 1u)
+  LoadAndExpectError(ParseInfo(ParseResult::ERROR_EMPTY_REDIRECT_URL, *rule.id)
                          .GetErrorDescription(kJSONRulesFilename));
 }
 
@@ -205,7 +209,7 @@ TEST_P(RuleIndexingTest, InvalidRuleID) {
   TestRule rule = CreateGenericRule();
   rule.id = kMinValidID - 1;
   AddRule(rule);
-  LoadAndExpectError(ParseInfo(ParseResult::ERROR_INVALID_RULE_ID, 0u)
+  LoadAndExpectError(ParseInfo(ParseResult::ERROR_INVALID_RULE_ID, *rule.id)
                          .GetErrorDescription(kJSONRulesFilename));
 }
 
@@ -216,7 +220,7 @@ TEST_P(RuleIndexingTest, InvalidRedirectRulePriority) {
   rule.priority = kMinValidPriority - 1;
   AddRule(rule);
   LoadAndExpectError(
-      ParseInfo(ParseResult::ERROR_INVALID_REDIRECT_RULE_PRIORITY, 0u)
+      ParseInfo(ParseResult::ERROR_INVALID_REDIRECT_RULE_PRIORITY, *rule.id)
           .GetErrorDescription(kJSONRulesFilename));
 }
 
@@ -228,7 +232,7 @@ TEST_P(RuleIndexingTest, NoApplicableResourceTypes) {
        "other"});
   AddRule(rule);
   LoadAndExpectError(
-      ParseInfo(ParseResult::ERROR_NO_APPLICABLE_RESOURCE_TYPES, 0u)
+      ParseInfo(ParseResult::ERROR_NO_APPLICABLE_RESOURCE_TYPES, *rule.id)
           .GetErrorDescription(kJSONRulesFilename));
 }
 
@@ -236,7 +240,7 @@ TEST_P(RuleIndexingTest, EmptyDomainsList) {
   TestRule rule = CreateGenericRule();
   rule.condition->domains = std::vector<std::string>();
   AddRule(rule);
-  LoadAndExpectError(ParseInfo(ParseResult::ERROR_EMPTY_DOMAINS_LIST, 0u)
+  LoadAndExpectError(ParseInfo(ParseResult::ERROR_EMPTY_DOMAINS_LIST, *rule.id)
                          .GetErrorDescription(kJSONRulesFilename));
 }
 
@@ -244,15 +248,16 @@ TEST_P(RuleIndexingTest, EmptyResourceTypeList) {
   TestRule rule = CreateGenericRule();
   rule.condition->resource_types = std::vector<std::string>();
   AddRule(rule);
-  LoadAndExpectError(ParseInfo(ParseResult::ERROR_EMPTY_RESOURCE_TYPES_LIST, 0u)
-                         .GetErrorDescription(kJSONRulesFilename));
+  LoadAndExpectError(
+      ParseInfo(ParseResult::ERROR_EMPTY_RESOURCE_TYPES_LIST, *rule.id)
+          .GetErrorDescription(kJSONRulesFilename));
 }
 
 TEST_P(RuleIndexingTest, EmptyURLFilter) {
   TestRule rule = CreateGenericRule();
   rule.condition->url_filter = std::string();
   AddRule(rule);
-  LoadAndExpectError(ParseInfo(ParseResult::ERROR_EMPTY_URL_FILTER, 0u)
+  LoadAndExpectError(ParseInfo(ParseResult::ERROR_EMPTY_URL_FILTER, *rule.id)
                          .GetErrorDescription(kJSONRulesFilename));
 }
 
@@ -262,8 +267,9 @@ TEST_P(RuleIndexingTest, InvalidRedirectURL) {
   rule.action->redirect_url = std::string("google");
   rule.priority = kMinValidPriority;
   AddRule(rule);
-  LoadAndExpectError(ParseInfo(ParseResult::ERROR_INVALID_REDIRECT_URL, 0u)
-                         .GetErrorDescription(kJSONRulesFilename));
+  LoadAndExpectError(
+      ParseInfo(ParseResult::ERROR_INVALID_REDIRECT_URL, *rule.id)
+          .GetErrorDescription(kJSONRulesFilename));
 }
 
 TEST_P(RuleIndexingTest, ListNotPassed) {
@@ -276,28 +282,206 @@ TEST_P(RuleIndexingTest, DuplicateIDS) {
   TestRule rule = CreateGenericRule();
   AddRule(rule);
   AddRule(rule);
-  LoadAndExpectError(ParseInfo(ParseResult::ERROR_DUPLICATE_IDS, 1u)
+  LoadAndExpectError(ParseInfo(ParseResult::ERROR_DUPLICATE_IDS, *rule.id)
                          .GetErrorDescription(kJSONRulesFilename));
+}
+
+// Ensure that we limit the number of parse failure warnings shown.
+TEST_P(RuleIndexingTest, TooManyParseFailures) {
+  const size_t kNumInvalidRules = 10;
+  const size_t kNumValidRules = 6;
+  const size_t kMaxUnparsedRulesWarnings = 5;
+
+  size_t rule_id = kMinValidID;
+  for (size_t i = 0; i < kNumInvalidRules; i++) {
+    TestRule rule = CreateGenericRule();
+    rule.id = rule_id++;
+    rule.action->type = std::string("invalid_action_type");
+    AddRule(rule);
+  }
+
+  for (size_t i = 0; i < kNumValidRules; i++) {
+    TestRule rule = CreateGenericRule();
+    rule.id = rule_id++;
+    AddRule(rule);
+  }
+
+  extension_loader()->set_ignore_manifest_warnings(true);
+  LoadAndExpectSuccess(kNumValidRules);
+
+  // TODO(crbug.com/879355): CrxInstaller reloads the extension after moving it,
+  // which causes it to lose the install warning. This should be fixed.
+  if (GetParam() != ExtensionLoadType::PACKED) {
+    const std::vector<InstallWarning>& expected_warnings =
+        extension()->install_warnings();
+    ASSERT_EQ(1u + kMaxUnparsedRulesWarnings, expected_warnings.size());
+
+    InstallWarning warning("");
+    warning.key = manifest_keys::kDeclarativeNetRequestKey;
+    warning.specific = manifest_keys::kDeclarativeRuleResourcesKey;
+
+    // The initial warnings should correspond to the first
+    // |kMaxUnparsedRulesWarnings| rules, which couldn't be parsed.
+    for (size_t i = 0; i < kMaxUnparsedRulesWarnings; i++) {
+      warning.message = ErrorUtils::FormatErrorMessage(
+          kRuleNotParsedWarning, base::StringPrintf("id %zu", i + 1),
+          "'RuleActionType': expected \"block\" or \"redirect\" or \"allow\", "
+          "got \"invalid_action_type\"");
+      EXPECT_EQ(expected_warnings[i], warning);
+    }
+
+    warning.message = ErrorUtils::FormatErrorMessage(
+        kTooManyParseFailuresWarning,
+        std::to_string(kMaxUnparsedRulesWarnings));
+    EXPECT_EQ(warning, expected_warnings[kMaxUnparsedRulesWarnings]);
+  }
 }
 
 // Ensures that rules which can't be parsed are ignored and cause an install
 // warning.
-TEST_P(RuleIndexingTest, InvalidJSONRule) {
-  TestRule rule = CreateGenericRule();
-  AddRule(rule);
+TEST_P(RuleIndexingTest, InvalidJSONRules_StrongTypes) {
+  {
+    TestRule rule = CreateGenericRule();
+    rule.id = 1;
+    AddRule(rule);
+  }
 
-  rule.id = kMinValidID + 1;
-  rule.action->type = std::string("invalid action");
-  AddRule(rule);
+  {
+    TestRule rule = CreateGenericRule();
+    rule.id = 2;
+    rule.action->type = std::string("invalid action");
+    AddRule(rule);
+  }
+
+  {
+    TestRule rule = CreateGenericRule();
+    rule.id = 3;
+    AddRule(rule);
+  }
+
+  {
+    TestRule rule = CreateGenericRule();
+    rule.id = 4;
+    rule.condition->domain_type = std::string("invalid_domain_type");
+    AddRule(rule);
+  }
+
+  extension_loader()->set_ignore_manifest_warnings(true);
+  LoadAndExpectSuccess(2 /* rules count */);
+
+  // TODO(crbug.com/879355): CrxInstaller reloads the extension after moving it,
+  // which causes it to lose the install warning. This should be fixed.
+  if (GetParam() != ExtensionLoadType::PACKED) {
+    ASSERT_EQ(2u, extension()->install_warnings().size());
+    std::vector<InstallWarning> expected_warnings;
+
+    expected_warnings.emplace_back(
+        ErrorUtils::FormatErrorMessage(
+            kRuleNotParsedWarning, "id 2",
+            "'RuleActionType': expected \"block\" or \"redirect\" or \"allow\","
+            " got \"invalid action\""),
+        manifest_keys::kDeclarativeNetRequestKey,
+        manifest_keys::kDeclarativeRuleResourcesKey);
+    expected_warnings.emplace_back(
+        ErrorUtils::FormatErrorMessage(
+            kRuleNotParsedWarning, "id 4",
+            "'DomainType': expected \"firstParty\" or \"thirdParty\", got "
+            "\"invalid_domain_type\""),
+        manifest_keys::kDeclarativeNetRequestKey,
+        manifest_keys::kDeclarativeRuleResourcesKey);
+    EXPECT_EQ(expected_warnings, extension()->install_warnings());
+  }
+}
+
+// Ensures that rules which can't be parsed are ignored and cause an install
+// warning.
+TEST_P(RuleIndexingTest, InvalidJSONRules_Parsed) {
+  const char* kRules = R"(
+    [
+      {
+        "id" : 1,
+        "condition" : [],
+        "action" : {"type" : "block" }
+      },
+      {
+        "id" : 2,
+        "condition" : {"urlFilter" : "abc"},
+        "action" : {"type" : "block" }
+      },
+      {
+        "id" : 3,
+        "invalidKey" : "invalidKeyValue",
+        "condition" : {"urlFilter" : "example"},
+        "action" : {"type" : "block" }
+      },
+      {
+        "id" : "6",
+        "condition" : {"urlFilter" : "google"},
+        "action" : {"type" : "block" }
+      }
+    ]
+  )";
+  SetRules(base::JSONReader::ReadDeprecated(kRules));
 
   extension_loader()->set_ignore_manifest_warnings(true);
   LoadAndExpectSuccess(1 /* rules count */);
 
-  // TODO(crbug.com/696822): CrxInstaller reloads the extension after moving it,
+  // TODO(crbug.com/879355): CrxInstaller reloads the extension after moving it,
+  // which causes it to lose the install warning. This should be fixed.
+  if (GetParam() != ExtensionLoadType::PACKED) {
+    ASSERT_EQ(3u, extension()->install_warnings().size());
+    std::vector<InstallWarning> expected_warnings;
+
+    expected_warnings.emplace_back(
+        ErrorUtils::FormatErrorMessage(
+            kRuleNotParsedWarning, "id 1",
+            "'condition': expected dictionary, got list"),
+        manifest_keys::kDeclarativeNetRequestKey,
+        manifest_keys::kDeclarativeRuleResourcesKey);
+    expected_warnings.emplace_back(
+        ErrorUtils::FormatErrorMessage(kRuleNotParsedWarning, "id 3",
+                                       "found unexpected key 'invalidKey'"),
+        manifest_keys::kDeclarativeNetRequestKey,
+        manifest_keys::kDeclarativeRuleResourcesKey);
+    expected_warnings.emplace_back(
+        ErrorUtils::FormatErrorMessage(kRuleNotParsedWarning, "index 4",
+                                       "'id': expected id, got string"),
+        manifest_keys::kDeclarativeNetRequestKey,
+        manifest_keys::kDeclarativeRuleResourcesKey);
+    EXPECT_EQ(expected_warnings, extension()->install_warnings());
+  }
+}
+
+// Ensure that we can add up to MAX_NUMBER_OF_RULES.
+TEST_P(RuleIndexingTest, RuleCountLimitMatched) {
+  namespace dnr_api = extensions::api::declarative_net_request;
+  TestRule rule = CreateGenericRule();
+  for (int i = 0; i < dnr_api::MAX_NUMBER_OF_RULES; ++i) {
+    rule.id = kMinValidID + i;
+    rule.condition->url_filter = std::to_string(i);
+    AddRule(rule);
+  }
+  LoadAndExpectSuccess(dnr_api::MAX_NUMBER_OF_RULES);
+}
+
+// Ensure that we get an install warning on exceeding the rule count limit.
+TEST_P(RuleIndexingTest, RuleCountLimitExceeded) {
+  namespace dnr_api = extensions::api::declarative_net_request;
+  TestRule rule = CreateGenericRule();
+  for (int i = 1; i <= dnr_api::MAX_NUMBER_OF_RULES + 1; ++i) {
+    rule.id = kMinValidID + i;
+    rule.condition->url_filter = std::to_string(i);
+    AddRule(rule);
+  }
+
+  extension_loader()->set_ignore_manifest_warnings(true);
+  LoadAndExpectSuccess(dnr_api::MAX_NUMBER_OF_RULES);
+
+  // TODO(crbug.com/879355): CrxInstaller reloads the extension after moving it,
   // which causes it to lose the install warning. This should be fixed.
   if (GetParam() != ExtensionLoadType::PACKED) {
     ASSERT_EQ(1u, extension()->install_warnings().size());
-    EXPECT_EQ(InstallWarning(kRulesNotParsedWarning,
+    EXPECT_EQ(InstallWarning(kRuleCountExceeded,
                              manifest_keys::kDeclarativeNetRequestKey,
                              manifest_keys::kDeclarativeRuleResourcesKey),
               extension()->install_warnings()[0]);
@@ -306,9 +490,9 @@ TEST_P(RuleIndexingTest, InvalidJSONRule) {
 
 TEST_P(RuleIndexingTest, InvalidJSONFile) {
   set_persist_invalid_json_file();
-  // The error is returned by the JSON parser we use. Hence just test that an
-  // error is thrown without verifying what it is.
-  LoadAndExpectError("");
+  // The error is returned by the JSON parser we use. Hence just test that it's
+  // prepended with |kJSONRulesFilename|.
+  LoadAndExpectError(base::StringPrintf("%s: ", kJSONRulesFilename));
 }
 
 TEST_P(RuleIndexingTest, EmptyRuleset) {
@@ -371,10 +555,10 @@ TEST_P(RuleIndexingTest, ExtensionWithIndexedRuleset) {
   LoadAndExpectSuccess(1 /* rules count */);
 }
 
-INSTANTIATE_TEST_CASE_P(,
-                        RuleIndexingTest,
-                        ::testing::Values(ExtensionLoadType::PACKED,
-                                          ExtensionLoadType::UNPACKED));
+INSTANTIATE_TEST_SUITE_P(,
+                         RuleIndexingTest,
+                         ::testing::Values(ExtensionLoadType::PACKED,
+                                           ExtensionLoadType::UNPACKED));
 
 }  // namespace
 }  // namespace declarative_net_request

@@ -28,8 +28,8 @@
 
 #include "third_party/blink/renderer/core/css/media_query_list_listener.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
 #include "third_party/blink/renderer/platform/timer.h"
-#include "third_party/blink/renderer/platform/web_task_runner.h"
 
 namespace blink {
 
@@ -42,7 +42,12 @@ class HTMLSourceElement final : public HTMLElement {
   class Listener;
 
   DECLARE_NODE_FACTORY(HTMLSourceElement);
+
+  explicit HTMLSourceElement(Document&);
   ~HTMLSourceElement() override;
+
+  // Returns attributes that should be checked against Trusted Types
+  const AttrNameToTrustedType& GetCheckedAttributeTypes() const override;
 
   const AtomicString& type() const;
   void SetSrc(const String&);
@@ -57,11 +62,9 @@ class HTMLSourceElement final : public HTMLElement {
   void RemoveMediaQueryListListener();
   void AddMediaQueryListListener();
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
-  explicit HTMLSourceElement(Document&);
-
   void DispatchPendingEvent();
 
   void DidMoveToNewDocument(Document& old_document) override;

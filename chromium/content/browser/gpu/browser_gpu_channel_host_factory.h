@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
+#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
@@ -40,6 +41,10 @@ class CONTENT_EXPORT BrowserGpuChannelHostFactory
   // Closes the channel to the GPU process. This should be called before the IO
   // thread stops.
   void CloseChannel();
+
+  // Notify the BrowserGpuChannelHostFactory of visibility, used to prevent
+  // timeouts while backgrounded.
+  void SetApplicationVisible(bool is_visible);
 
   // Overridden from gpu::GpuChannelEstablishFactory:
   // The factory will return a null GpuChannelHost in the callback during
@@ -72,6 +77,7 @@ class CONTENT_EXPORT BrowserGpuChannelHostFactory
   std::unique_ptr<gpu::GpuMemoryBufferManager, BrowserThread::DeleteOnIOThread>
       gpu_memory_buffer_manager_;
   scoped_refptr<EstablishRequest> pending_request_;
+  bool is_visible_ = true;
 
   base::OneShotTimer timeout_;
 

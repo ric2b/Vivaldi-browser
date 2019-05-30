@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 #include "base/logging.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "build/build_config.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/config/gpu_info_collector.h"
@@ -69,10 +69,14 @@ GPUTestConfig::OS GetCurrentOS() {
         return GPUTestConfig::kOsMacSierra;
       case 13:
         return GPUTestConfig::kOsMacHighSierra;
+      case 14:
+        return GPUTestConfig::kOsMacMojave;
     }
   }
 #elif defined(OS_ANDROID)
   return GPUTestConfig::kOsAndroid;
+#elif defined(OS_FUCHSIA)
+  return GPUTestConfig::kOsFuchsia;
 #endif
   return GPUTestConfig::kOsUnknown;
 }
@@ -90,7 +94,8 @@ GPUTestConfig::GPUTestConfig(const GPUTestConfig& other) = default;
 GPUTestConfig::~GPUTestConfig() = default;
 
 void GPUTestConfig::set_os(int32_t os) {
-  DCHECK_EQ(0, os & ~(kOsAndroid | kOsWin | kOsMac | kOsLinux | kOsChromeOS));
+  DCHECK_EQ(0, os & ~(kOsAndroid | kOsWin | kOsMac | kOsLinux | kOsChromeOS |
+                      kOsFuchsia));
   os_ = os;
 }
 
@@ -188,9 +193,11 @@ bool GPUTestBotConfig::IsValid() const {
     case kOsMacElCapitan:
     case kOsMacSierra:
     case kOsMacHighSierra:
+    case kOsMacMojave:
     case kOsLinux:
     case kOsChromeOS:
     case kOsAndroid:
+    case kOsFuchsia:
       break;
     default:
       return false;

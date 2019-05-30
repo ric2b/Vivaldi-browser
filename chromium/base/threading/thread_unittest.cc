@@ -14,11 +14,10 @@
 #include "base/debug/leak_annotations.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/sequence_manager/sequence_manager_impl.h"
 #include "base/test/gtest_util.h"
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
 #include "base/threading/platform_thread.h"
@@ -152,7 +151,7 @@ TEST_F(ThreadTest, StartWithOptions_StackSize) {
   options.stack_size = 3072 * sizeof(uintptr_t);
 #endif
   EXPECT_TRUE(a.StartWithOptions(options));
-  EXPECT_TRUE(a.message_loop());
+  EXPECT_TRUE(a.task_runner());
   EXPECT_TRUE(a.IsRunning());
 
   base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
@@ -175,7 +174,7 @@ TEST_F(ThreadTest, StartWithOptions_NonJoinable) {
   Thread::Options options;
   options.joinable = false;
   EXPECT_TRUE(a->StartWithOptions(options));
-  EXPECT_TRUE(a->message_loop());
+  EXPECT_TRUE(a->task_runner());
   EXPECT_TRUE(a->IsRunning());
 
   // Without this call this test is racy. The above IsRunning() succeeds because
@@ -212,7 +211,7 @@ TEST_F(ThreadTest, TwoTasksOnJoinableThread) {
   {
     Thread a("TwoTasksOnJoinableThread");
     EXPECT_TRUE(a.Start());
-    EXPECT_TRUE(a.message_loop());
+    EXPECT_TRUE(a.task_runner());
 
     // Test that all events are dispatched before the Thread object is
     // destroyed.  We do this by dispatching a sleep event before the
@@ -252,18 +251,18 @@ TEST_F(ThreadTest, DISABLED_DestroyWhileRunningNonJoinableIsSafe) {
 TEST_F(ThreadTest, StopSoon) {
   Thread a("StopSoon");
   EXPECT_TRUE(a.Start());
-  EXPECT_TRUE(a.message_loop());
+  EXPECT_TRUE(a.task_runner());
   EXPECT_TRUE(a.IsRunning());
   a.StopSoon();
   a.Stop();
-  EXPECT_FALSE(a.message_loop());
+  EXPECT_FALSE(a.task_runner());
   EXPECT_FALSE(a.IsRunning());
 }
 
 TEST_F(ThreadTest, StopTwiceNop) {
   Thread a("StopTwiceNop");
   EXPECT_TRUE(a.Start());
-  EXPECT_TRUE(a.message_loop());
+  EXPECT_TRUE(a.task_runner());
   EXPECT_TRUE(a.IsRunning());
   a.StopSoon();
   // Calling StopSoon() a second time should be a nop.
@@ -271,7 +270,7 @@ TEST_F(ThreadTest, StopTwiceNop) {
   a.Stop();
   // Same with Stop().
   a.Stop();
-  EXPECT_FALSE(a.message_loop());
+  EXPECT_FALSE(a.task_runner());
   EXPECT_FALSE(a.IsRunning());
   // Calling them when not running should also nop.
   a.StopSoon();
@@ -324,23 +323,23 @@ TEST_F(ThreadTest, TransferOwnershipAndStop) {
 TEST_F(ThreadTest, StartTwice) {
   Thread a("StartTwice");
 
-  EXPECT_FALSE(a.message_loop());
+  EXPECT_FALSE(a.task_runner());
   EXPECT_FALSE(a.IsRunning());
 
   EXPECT_TRUE(a.Start());
-  EXPECT_TRUE(a.message_loop());
+  EXPECT_TRUE(a.task_runner());
   EXPECT_TRUE(a.IsRunning());
 
   a.Stop();
-  EXPECT_FALSE(a.message_loop());
+  EXPECT_FALSE(a.task_runner());
   EXPECT_FALSE(a.IsRunning());
 
   EXPECT_TRUE(a.Start());
-  EXPECT_TRUE(a.message_loop());
+  EXPECT_TRUE(a.task_runner());
   EXPECT_TRUE(a.IsRunning());
 
   a.Stop();
-  EXPECT_FALSE(a.message_loop());
+  EXPECT_FALSE(a.task_runner());
   EXPECT_FALSE(a.IsRunning());
 }
 
@@ -357,7 +356,7 @@ TEST_F(ThreadTest, StartTwiceNonJoinableNotAllowed) {
   Thread::Options options;
   options.joinable = false;
   EXPECT_TRUE(a->StartWithOptions(options));
-  EXPECT_TRUE(a->message_loop());
+  EXPECT_TRUE(a->task_runner());
   EXPECT_TRUE(a->IsRunning());
 
   // Signaled when last task on |a| is processed.
@@ -456,7 +455,7 @@ TEST_F(ThreadTest, CleanUp) {
     // Start a thread which writes its event into |captured_events|.
     CaptureToEventList t(&captured_events);
     EXPECT_TRUE(t.Start());
-    EXPECT_TRUE(t.message_loop());
+    EXPECT_TRUE(t.task_runner());
     EXPECT_TRUE(t.IsRunning());
 
     // Register an observer that writes into |captured_events| once the
@@ -525,55 +524,52 @@ TEST_F(ThreadTest, FlushForTesting) {
 
 namespace {
 
-// A Thread which uses a MessageLoop on the stack. It won't start a real
-// underlying thread (instead its messages can be processed by a RunLoop on the
-// stack).
-class ExternalMessageLoopThread : public Thread {
+class SequenceManagerTaskEnvironment : public Thread::TaskEnvironment {
  public:
-  ExternalMessageLoopThread() : Thread("ExternalMessageLoopThread") {}
+  SequenceManagerTaskEnvironment()
+      : sequence_manager_(
+            base::sequence_manager::CreateUnboundSequenceManager()),
+        task_queue_(
+            sequence_manager_
+                ->CreateTaskQueueWithType<base::sequence_manager::TaskQueue>(
+                    base::sequence_manager::TaskQueue::Spec("default_tq"))) {
+    sequence_manager_->SetDefaultTaskRunner(GetDefaultTaskRunner());
+  }
 
-  ~ExternalMessageLoopThread() override { Stop(); }
+  ~SequenceManagerTaskEnvironment() override {}
 
-  void InstallMessageLoop() { SetMessageLoop(&external_message_loop_); }
+  scoped_refptr<base::SingleThreadTaskRunner> GetDefaultTaskRunner() override {
+    return task_queue_->task_runner();
+  }
 
-  void VerifyUsingExternalMessageLoop(
-      bool expected_using_external_message_loop) {
-    EXPECT_EQ(expected_using_external_message_loop,
-              using_external_message_loop());
+  void BindToCurrentThread(base::TimerSlack timer_slack) override {
+    sequence_manager_->BindToMessagePump(
+        base::MessageLoop::CreateMessagePumpForType(
+            base::MessageLoop::TYPE_DEFAULT));
+    sequence_manager_->SetTimerSlack(timer_slack);
   }
 
  private:
-  base::MessageLoop external_message_loop_;
+  std::unique_ptr<base::sequence_manager::SequenceManager> sequence_manager_;
+  scoped_refptr<base::sequence_manager::TaskQueue> task_queue_;
 
-  DISALLOW_COPY_AND_ASSIGN(ExternalMessageLoopThread);
+  DISALLOW_COPY_AND_ASSIGN(SequenceManagerTaskEnvironment);
 };
 
 }  // namespace
 
-TEST_F(ThreadTest, ExternalMessageLoop) {
-  ExternalMessageLoopThread a;
-  EXPECT_FALSE(a.message_loop());
-  EXPECT_FALSE(a.IsRunning());
-  a.VerifyUsingExternalMessageLoop(false);
+TEST_F(ThreadTest, ProvidedTaskEnvironment) {
+  Thread thread("TaskEnvironment");
+  base::Thread::Options options;
+  options.task_environment = new SequenceManagerTaskEnvironment();
+  thread.StartWithOptions(options);
 
-  a.InstallMessageLoop();
-  EXPECT_TRUE(a.message_loop());
-  EXPECT_TRUE(a.IsRunning());
-  a.VerifyUsingExternalMessageLoop(true);
+  base::WaitableEvent event;
 
-  bool ran = false;
-  a.task_runner()->PostTask(
-      FROM_HERE, base::BindOnce([](bool* toggled) { *toggled = true; }, &ran));
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(ran);
+  options.task_environment->GetDefaultTaskRunner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&base::WaitableEvent::Signal, base::Unretained(&event)));
+  event.Wait();
 
-  a.Stop();
-  EXPECT_FALSE(a.message_loop());
-  EXPECT_FALSE(a.IsRunning());
-  a.VerifyUsingExternalMessageLoop(true);
-
-  // Confirm that running any remaining tasks posted from Stop() goes smoothly
-  // (e.g. https://codereview.chromium.org/2135413003/#ps300001 crashed if
-  // StopSoon() posted Thread::ThreadQuitHelper() while |run_loop_| was null).
-  base::RunLoop().RunUntilIdle();
+  thread.Stop();
 }

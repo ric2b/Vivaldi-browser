@@ -7,12 +7,13 @@
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "media/blink/webmediacapabilitiesclient_impl.h"
+#include "media/mojo/interfaces/media_types.mojom.h"
 #include "media/mojo/interfaces/video_decode_perf_history.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/modules/media_capabilities/web_media_capabilities_info.h"
-#include "third_party/blink/public/platform/modules/media_capabilities/web_media_configuration.h"
+#include "third_party/blink/public/platform/modules/media_capabilities/web_media_capabilities_callbacks.h"
+#include "third_party/blink/public/platform/modules/media_capabilities/web_media_decoding_configuration.h"
 
 using ::testing::_;
 
@@ -34,11 +35,12 @@ class MockVideoDecodePerfHistory : public mojom::VideoDecodePerfHistory {
 };
 
 class MockWebMediaCapabilitiesQueryCallbacks
-    : public blink::WebMediaCapabilitiesQueryCallbacks {
+    : public blink::WebMediaCapabilitiesDecodingInfoCallbacks {
  public:
   ~MockWebMediaCapabilitiesQueryCallbacks() override = default;
 
-  void OnSuccess(std::unique_ptr<blink::WebMediaCapabilitiesInfo>) override {}
+  void OnSuccess(
+      std::unique_ptr<blink::WebMediaCapabilitiesDecodingInfo>) override {}
   MOCK_METHOD0(OnError, void());
 };
 
@@ -55,10 +57,11 @@ TEST(WebMediaCapabilitiesClientImplTest, RunCallbackEvenIfMojoDisconnects) {
       25,                                                        // framerate
   };
 
-  static const blink::WebMediaConfiguration kFakeMediaConfiguration{
+  static const blink::WebMediaDecodingConfiguration kFakeMediaConfiguration{
       blink::MediaConfigurationType::kFile,
       base::nullopt,            // audio configuration
       kFakeVideoConfiguration,  // video configuration
+      base::nullopt,            // key system configuration
   };
 
   using ::testing::InvokeWithoutArgs;

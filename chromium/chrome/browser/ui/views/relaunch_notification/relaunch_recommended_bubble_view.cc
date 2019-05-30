@@ -7,6 +7,7 @@
 #include <tuple>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -20,8 +21,8 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/vector_icons/vector_icons.h"
+#include "ui/base/buildflags.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/ui_features.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -36,50 +37,22 @@
 
 #if defined(OS_MACOSX)
 #include "chrome/browser/platform_util.h"
-#if BUILDFLAG(MAC_VIEWS_BROWSER)
-#include "chrome/browser/ui/views_mode_controller.h"
-#endif  // BUILDFLAG(MAC_VIEWS_BROWSER)
-#include "chrome/browser/ui/views/relaunch_notification/get_app_menu_anchor_point.h"
 #endif  // defined(OS_MACOSX)
-
-namespace {
-
-// Returns the anchor for |browser|'s app menu, accounting for macOS running
-// with views or Cocoa.
-std::pair<views::Button*, gfx::Point> GetAnchor(Browser* browser) {
-#if defined(OS_MACOSX)
-#if BUILDFLAG(MAC_VIEWS_BROWSER)
-  if (views_mode_controller::IsViewsBrowserCocoa())
-    return std::make_pair(nullptr, GetAppMenuAnchorPoint(browser));
-#else   // BUILDFLAG(MAC_VIEWS_BROWSER)
-  return std::make_pair(nullptr, GetAppMenuAnchorPoint(browser));
-#endif  // BUILDFLAG(MAC_VIEWS_BROWSER)
-#endif  // defined(OS_MACOSX)
-#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
-  return std::make_pair(BrowserView::GetBrowserViewForBrowser(browser)
-                            ->toolbar()
-                            ->app_menu_button(),
-                        gfx::Point());
-#endif  // !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
-}
-
-}  // namespace
 
 // static
 views::Widget* RelaunchRecommendedBubbleView::ShowBubble(
     Browser* browser,
-    base::TimeTicks detection_time,
+    base::Time detection_time,
     base::RepeatingClosure on_accept) {
   DCHECK(browser);
 
-  views::Button* anchor_button;
-  gfx::Point anchor_point;
-
   // Anchor the popup to the browser's app menu.
-  std::tie(anchor_button, anchor_point) = GetAnchor(browser);
+  auto* anchor_button = BrowserView::GetBrowserViewForBrowser(browser)
+                            ->toolbar_button_provider()
+                            ->GetAppMenuButton();
   auto* bubble_view = new RelaunchRecommendedBubbleView(
-      anchor_button, anchor_point, detection_time, std::move(on_accept));
-  bubble_view->set_arrow(views::BubbleBorder::TOP_RIGHT);
+      anchor_button, gfx::Point(), detection_time, std::move(on_accept));
+  bubble_view->SetArrow(views::BubbleBorder::TOP_RIGHT);
 
 #if defined(OS_MACOSX)
   // Parent the bubble to the browser window when there is no anchor view.
@@ -197,7 +170,7 @@ void RelaunchRecommendedBubbleView::VisibilityChanged(
 RelaunchRecommendedBubbleView::RelaunchRecommendedBubbleView(
     views::Button* anchor_button,
     const gfx::Point& anchor_point,
-    base::TimeTicks detection_time,
+    base::Time detection_time,
     base::RepeatingClosure on_accept)
     : LocationBarBubbleDelegateView(anchor_button, anchor_point, nullptr),
       on_accept_(std::move(on_accept)),

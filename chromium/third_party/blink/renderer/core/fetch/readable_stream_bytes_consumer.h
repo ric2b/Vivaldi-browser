@@ -9,28 +9,25 @@
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/fetch/bytes_consumer.h"
+#include "third_party/blink/renderer/core/streams/readable_stream.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
+#include "third_party/blink/renderer/platform/bindings/trace_wrapper_member.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/loader/fetch/bytes_consumer.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 
 namespace blink {
 
 class ScriptState;
 
-// This class is a BytesConsumer pulling bytes from ReadableStream
-// implemented with V8 Extras.
+// This class is a BytesConsumer pulling bytes from a ReadableStream.
 // The stream will be immediately locked by the consumer and will never be
 // released.
-//
-// The ReadableStreamReader handle held in a ReadableStreamDataConsumerHandle
-// is weak. A user must guarantee that the ReadableStreamReader object is kept
-// alive appropriately.
 class CORE_EXPORT ReadableStreamBytesConsumer final : public BytesConsumer {
   USING_PRE_FINALIZER(ReadableStreamBytesConsumer, Dispose);
 
  public:
-  ReadableStreamBytesConsumer(ScriptState*, ScriptValue stream_reader);
+  ReadableStreamBytesConsumer(ScriptState*, ReadableStream*, ExceptionState&);
   ~ReadableStreamBytesConsumer() override;
 
   Result BeginRead(const char** buffer, size_t* available) override;
@@ -55,11 +52,7 @@ class CORE_EXPORT ReadableStreamBytesConsumer final : public BytesConsumer {
   void OnRejected();
   void Notify();
 
-  // |m_reader| is a weak persistent. It should be kept alive by someone
-  // outside of ReadableStreamBytesConsumer.
-  // Holding a ScopedPersistent here is safe in terms of cross-world wrapper
-  // leakage because we read only Uint8Array chunks from the reader.
-  ScopedPersistent<v8::Value> reader_;
+  TraceWrapperMember<ReadableStream::ReadHandle> read_handle_;
   Member<ScriptState> script_state_;
   Member<BytesConsumer::Client> client_;
   Member<DOMUint8Array> pending_buffer_;

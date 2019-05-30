@@ -18,6 +18,17 @@ if (is_win) {
       "//vivaldi/browser:browser",
     ]
   }
+  update_target("//chrome:chrome_initial") {
+    data_deps -= [
+      "//chrome/chrome_proxy",
+      "//chrome/elevation_service",
+    ]
+  }
+  update_target("//chrome/installer/mini_installer:chrome_runtime_deps") {
+    data_deps -= [
+      "//chrome/chrome_proxy",
+    ]
+  }
 }
 
 update_target("//chrome:browser_dependencies") {

@@ -24,7 +24,6 @@ import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
@@ -81,7 +80,7 @@ public class ChromeTabCreatorTest {
         Assert.assertFalse(bgTab.isLoading());
 
         // Switch tabs and verify that the tab is loaded as it gets foregrounded.
-        ChromeTabUtils.waitForTabPageLoaded(bgTab, new Runnable() {
+        ChromeTabUtils.waitForTabPageLoaded(bgTab, mTestServer.getURL(TEST_PATH), new Runnable() {
             @Override
             public void run() {
                 ThreadUtils.runOnUiThreadBlocking(new Runnable() {

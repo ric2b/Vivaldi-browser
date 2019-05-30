@@ -17,7 +17,7 @@ class AutofillPrivateSaveAddressFunction : public UIThreadExtensionFunction {
  public:
   AutofillPrivateSaveAddressFunction();
   DECLARE_EXTENSION_FUNCTION("autofillPrivate.saveAddress",
-                             AUTOFILLPRIVATE_SAVEADDRESS);
+                             AUTOFILLPRIVATE_SAVEADDRESS)
 
  protected:
   ~AutofillPrivateSaveAddressFunction() override;
@@ -35,7 +35,7 @@ class AutofillPrivateGetCountryListFunction : public UIThreadExtensionFunction {
  public:
   AutofillPrivateGetCountryListFunction();
   DECLARE_EXTENSION_FUNCTION("autofillPrivate.getCountryList",
-                             AUTOFILLPRIVATE_GETCOUNTRYLIST);
+                             AUTOFILLPRIVATE_GETCOUNTRYLIST)
 
  protected:
   ~AutofillPrivateGetCountryListFunction() override;
@@ -54,7 +54,7 @@ class AutofillPrivateGetAddressComponentsFunction :
  public:
   AutofillPrivateGetAddressComponentsFunction() {}
   DECLARE_EXTENSION_FUNCTION("autofillPrivate.getAddressComponents",
-                             AUTOFILLPRIVATE_GETADDRESSCOMPONENTS);
+                             AUTOFILLPRIVATE_GETADDRESSCOMPONENTS)
 
  protected:
   ~AutofillPrivateGetAddressComponentsFunction() override;
@@ -70,7 +70,7 @@ class AutofillPrivateGetAddressListFunction : public UIThreadExtensionFunction {
  public:
   AutofillPrivateGetAddressListFunction();
   DECLARE_EXTENSION_FUNCTION("autofillPrivate.getAddressList",
-                             AUTOFILLPRIVATE_GETADDRESSLIST);
+                             AUTOFILLPRIVATE_GETADDRESSLIST)
 
  protected:
   ~AutofillPrivateGetAddressListFunction() override;
@@ -88,7 +88,7 @@ class AutofillPrivateSaveCreditCardFunction : public UIThreadExtensionFunction {
  public:
   AutofillPrivateSaveCreditCardFunction();
   DECLARE_EXTENSION_FUNCTION("autofillPrivate.saveCreditCard",
-                             AUTOFILLPRIVATE_SAVECREDITCARD);
+                             AUTOFILLPRIVATE_SAVECREDITCARD)
 
  protected:
   ~AutofillPrivateSaveCreditCardFunction() override;
@@ -106,7 +106,7 @@ class AutofillPrivateRemoveEntryFunction : public UIThreadExtensionFunction {
  public:
   AutofillPrivateRemoveEntryFunction();
   DECLARE_EXTENSION_FUNCTION("autofillPrivate.removeEntry",
-                             AUTOFILLPRIVATE_REMOVEENTRY);
+                             AUTOFILLPRIVATE_REMOVEENTRY)
 
  protected:
   ~AutofillPrivateRemoveEntryFunction() override;
@@ -125,7 +125,7 @@ class AutofillPrivateValidatePhoneNumbersFunction :
  public:
   AutofillPrivateValidatePhoneNumbersFunction() {}
   DECLARE_EXTENSION_FUNCTION("autofillPrivate.validatePhoneNumbers",
-                             AUTOFILLPRIVATE_VALIDATEPHONENUMBERS);
+                             AUTOFILLPRIVATE_VALIDATEPHONENUMBERS)
 
  protected:
   ~AutofillPrivateValidatePhoneNumbersFunction() override;
@@ -141,7 +141,7 @@ class AutofillPrivateMaskCreditCardFunction : public UIThreadExtensionFunction {
  public:
   AutofillPrivateMaskCreditCardFunction();
   DECLARE_EXTENSION_FUNCTION("autofillPrivate.maskCreditCard",
-                             AUTOFILLPRIVATE_MASKCREDITCARD);
+                             AUTOFILLPRIVATE_MASKCREDITCARD)
 
  protected:
   ~AutofillPrivateMaskCreditCardFunction() override;
@@ -160,7 +160,7 @@ class AutofillPrivateGetCreditCardListFunction
  public:
   AutofillPrivateGetCreditCardListFunction();
   DECLARE_EXTENSION_FUNCTION("autofillPrivate.getCreditCardList",
-                             AUTOFILLPRIVATE_GETCREDITCARDLIST);
+                             AUTOFILLPRIVATE_GETCREDITCARDLIST)
 
  protected:
   ~AutofillPrivateGetCreditCardListFunction() override;
@@ -174,12 +174,50 @@ class AutofillPrivateGetCreditCardListFunction
   DISALLOW_COPY_AND_ASSIGN(AutofillPrivateGetCreditCardListFunction);
 };
 
+class AutofillPrivateGetLocalCreditCardListFunction
+    : public UIThreadExtensionFunction {
+ public:
+  AutofillPrivateGetLocalCreditCardListFunction();
+  DECLARE_EXTENSION_FUNCTION("autofillPrivate.getLocalCreditCardList",
+                             AUTOFILLPRIVATE_GETLOCALCREDITCARDLIST)
+
+ protected:
+  ~AutofillPrivateGetLocalCreditCardListFunction() override;
+
+  // ExtensionFunction overrides.
+  ResponseAction Run() override;
+
+ private:
+  ChromeExtensionFunctionDetails chrome_details_;
+
+  DISALLOW_COPY_AND_ASSIGN(AutofillPrivateGetLocalCreditCardListFunction);
+};
+
+class AutofillPrivateGetServerCreditCardListFunction
+    : public UIThreadExtensionFunction {
+ public:
+  AutofillPrivateGetServerCreditCardListFunction();
+  DECLARE_EXTENSION_FUNCTION("autofillPrivate.getServerCreditCardList",
+                             AUTOFILLPRIVATE_GETSERVERCREDITCARDLIST)
+
+ protected:
+  ~AutofillPrivateGetServerCreditCardListFunction() override;
+
+  // ExtensionFunction overrides.
+  ResponseAction Run() override;
+
+ private:
+  ChromeExtensionFunctionDetails chrome_details_;
+
+  DISALLOW_COPY_AND_ASSIGN(AutofillPrivateGetServerCreditCardListFunction);
+};
+
 class AutofillPrivateMigrateCreditCardsFunction
     : public UIThreadExtensionFunction {
  public:
   AutofillPrivateMigrateCreditCardsFunction();
   DECLARE_EXTENSION_FUNCTION("autofillPrivate.migrateCreditCards",
-                             AUTOFILLPRIVATE_MIGRATECREDITCARDS);
+                             AUTOFILLPRIVATE_MIGRATECREDITCARDS)
 
  protected:
   ~AutofillPrivateMigrateCreditCardsFunction() override;
@@ -191,6 +229,25 @@ class AutofillPrivateMigrateCreditCardsFunction
   ChromeExtensionFunctionDetails chrome_details_;
 
   DISALLOW_COPY_AND_ASSIGN(AutofillPrivateMigrateCreditCardsFunction);
+};
+
+class AutofillPrivateLogServerCardLinkClickedFunction
+    : public UIThreadExtensionFunction {
+ public:
+  AutofillPrivateLogServerCardLinkClickedFunction();
+  DECLARE_EXTENSION_FUNCTION("autofillPrivate.logServerCardLinkClicked",
+                             AUTOFILLPRIVATE_SERVERCARDLINKCLICKED)
+
+ protected:
+  ~AutofillPrivateLogServerCardLinkClickedFunction() override;
+
+  // ExtensionFunction overrides.
+  ResponseAction Run() override;
+
+ private:
+  ChromeExtensionFunctionDetails chrome_details_;
+
+  DISALLOW_COPY_AND_ASSIGN(AutofillPrivateLogServerCardLinkClickedFunction);
 };
 
 }  // namespace extensions

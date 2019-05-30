@@ -24,8 +24,8 @@ import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.offline_items_collection.LegacyHelpers;
 import org.chromium.components.offline_items_collection.OfflineItem;
 import org.chromium.components.offline_items_collection.OfflineItemState;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 
 import java.util.UUID;
 
@@ -164,6 +164,7 @@ public class DownloadInfoBarControllerTest {
     @Test
     @SmallTest
     @Feature({"Download"})
+    @Features.DisableFeatures(ChromeFeatureList.DOWNLOAD_OFFLINE_CONTENT_PROVIDER)
     public void testAccelerated() {
         OfflineItem offlineItem = createOfflineItem(OfflineItemState.IN_PROGRESS);
         offlineItem.isAccelerated = true;
@@ -174,6 +175,7 @@ public class DownloadInfoBarControllerTest {
     @Test
     @SmallTest
     @Feature({"Download"})
+    @Features.DisableFeatures(ChromeFeatureList.DOWNLOAD_OFFLINE_CONTENT_PROVIDER)
     public void testMultipleDownloadInProgress() {
         OfflineItem item1 = createOfflineItem(OfflineItemState.IN_PROGRESS);
         mTestController.onDownloadItemUpdated(createDownloadItem(item1));
@@ -187,6 +189,7 @@ public class DownloadInfoBarControllerTest {
     @Test
     @SmallTest
     @Feature({"Download"})
+    @Features.DisableFeatures(ChromeFeatureList.DOWNLOAD_OFFLINE_CONTENT_PROVIDER)
     public void testAcceleratedChangesToDownloadingAfterDelay() {
         OfflineItem item1 = createOfflineItem(OfflineItemState.IN_PROGRESS);
         item1.isAccelerated = true;
@@ -325,6 +328,19 @@ public class DownloadInfoBarControllerTest {
     @Test
     @SmallTest
     @Feature({"Download"})
+    public void testCancelledItemWillCloseInfoBar() {
+        OfflineItem item = createOfflineItem(OfflineItemState.PENDING);
+        mTestController.onItemUpdated(item);
+        mTestController.verify(MESSAGE_DOWNLOAD_PENDING);
+
+        item.state = OfflineItemState.CANCELLED;
+        mTestController.onItemUpdated(item);
+        mTestController.verifyInfoBarClosed();
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Download"})
     public void testCompleteFailedComplete() {
         OfflineItem item1 = createOfflineItem(OfflineItemState.COMPLETE);
         mTestController.onItemUpdated(item1);
@@ -414,5 +430,22 @@ public class DownloadInfoBarControllerTest {
         item1.state = OfflineItemState.IN_PROGRESS;
         mTestController.onItemUpdated(item1);
         mTestController.verify(MESSAGE_DOWNLOADING_TWO_FILES);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Download"})
+    public void testPausedAfterPendingWillCloseInfoBar() {
+        OfflineItem item = createOfflineItem(OfflineItemState.PENDING);
+        mTestController.onItemUpdated(item);
+        mTestController.verify(MESSAGE_DOWNLOAD_PENDING);
+
+        item.state = OfflineItemState.PAUSED;
+        mTestController.onItemUpdated(item);
+        mTestController.verifyInfoBarClosed();
+
+        item.state = OfflineItemState.IN_PROGRESS;
+        mTestController.onItemUpdated(item);
+        mTestController.verifyInfoBarClosed();
     }
 }

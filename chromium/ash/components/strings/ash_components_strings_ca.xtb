@@ -11,11 +11,11 @@
 <translation id="1299858300159559687">Imprimeix la pàgina actual</translation>
 <translation id="1383876407941801731">Cerca</translation>
 <translation id="1454364489140280055"><ph name="CTRL" /><ph name="SEPARATOR1" /><ph name="SHIFT1" /><ph name="SEPARATOR2" /><ph name="G" /> o <ph name="SHIFT2" /><ph name="SEPARATOR3" /><ph name="ENTER" /></translation>
+<translation id="1477442857810932985">Ves al final de la línia</translation>
 <translation id="1510238584712386396">Menú d'aplicacions</translation>
 <translation id="152892567002884378">Apuja el volum</translation>
 <translation id="1560480564179555003"><ph name="SHIFT" /><ph name="SEPARATOR1" /><ph name="ALT" /><ph name="SEPARATOR2" /><ph name="L" /> i després <ph name="ESC" /></translation>
 <translation id="1652741121070700329">Mou el cursor a l'inici de la paraula anterior</translation>
-<translation id="1671169355475348905">Canvia al mètode d'introducció de text de l'idioma anterior</translation>
 <translation id="1679841710523778799">Augmenta la brillantor</translation>
 <translation id="168356808214100546">Mantén premuda la tecla <ph name="ALT" />, toca <ph name="TAB" /> fins a arribar a la finestra que vulguis obrir i deixa anar la tecla.</translation>
 <translation id="169515659049020177">Maj</translation>
@@ -32,6 +32,7 @@
 <translation id="2181097965834437145">Mostra o amaga la barra d'adreces d'interès</translation>
 <translation id="2185166372312820725">Ves a la pestanya anterior</translation>
 <translation id="2194790690264064655">Prem <ph name="CTRL" /> i fes clic en un enllaç</translation>
+<translation id="2246352309084894470">Obre o tanca el menú d'aplicacions en pantalla completa</translation>
 <translation id="2382644247745281995">No és compatible amb la disposició actual del teclat</translation>
 <translation id="2397416548179033562">Mostra el menú de Chrome</translation>
 <translation id="2424073332829844142">Activa i desactiva el bloqueig de majúscules</translation>
@@ -43,7 +44,6 @@
 <translation id="2574014812750545982">Restableix el nivell de zoom de la pàgina</translation>
 <translation id="2596078834055697711">Fa una captura de pantalla de la finestra</translation>
 <translation id="2685170433750953446"><ph name="SHIFT" /><ph name="SEPARATOR1" /><ph name="ALT" /><ph name="SEPARATOR2" /><ph name="L" /> i després <ph name="TAB" /> o <ph name="RIGHT" /></translation>
-<translation id="2687057317448262550">Canvia al mètode d'introducció de text de l'idioma següent</translation>
 <translation id="2699509451653686398">Desa la pàgina web actual a les adreces d'interès</translation>
 <translation id="2750942583782703988">Torna a carregar la pàgina actual</translation>
 <translation id="2764005613199379871">Situa el focus a la barra d'adreces</translation>
@@ -92,7 +92,7 @@
 <translation id="4240486403425279990">Mode de visió general</translation>
 <translation id="4382340674111381977">Torna a la pàgina anterior</translation>
 <translation id="4472417192667361414">Configuració del sistema i de la pantalla</translation>
-<translation id="4556221320735744018">Consulta l'ajuda de les tecles de drecera</translation>
+<translation id="4556221320735744018">Consulta l'aplicació d'ajuda de les tecles de drecera</translation>
 <translation id="4628718545549558538">Obre l'àrea d'estat (on es mostra la imatge del compte)</translation>
 <translation id="4642092649622328492">Fes una captura de pantalla parcial</translation>
 <translation id="4698850295812410683">Mostra les eines del llapis òptic</translation>
@@ -143,9 +143,10 @@
 <translation id="6681606577947445973"><ph name="REFRESH" /> o <ph name="CTRL" /><ph name="SEPARATOR" /><ph name="R" /></translation>
 <translation id="6690765639083431875">Fixa una finestra a l'esquerra</translation>
 <translation id="6692847073476874842">Previsualitza un fitxer a l'aplicació Fitxers</translation>
-<translation id="671928215901716392">Bloqueja la pantalla</translation>
+<translation id="671928215901716392">Pantalla de bloqueig</translation>
 <translation id="6727005317916125192">Subfinestra anterior</translation>
 <translation id="6740781404993465795">Selecciona la paraula o lletra següent</translation>
+<translation id="6755851152783057058">Canvia a l'últim mètode d'introducció de text que s'ha utilitzat</translation>
 <translation id="6760706756348334449">Abaixa el volum</translation>
 <translation id="6941333068993625698">Envia suggeriments</translation>
 <translation id="6981982820502123353">Accessibilitat</translation>
@@ -156,6 +157,7 @@
 <translation id="7237562915163138771">Escriu una adreça web a la barra d'adreces i prem <ph name="ALT" /><ph name="SEPARATOR" /><ph name="ENTER" /></translation>
 <translation id="7254764037241667478">Posa el dispositiu en mode de repòs (suspès)</translation>
 <translation id="7379254767514753910"><ph name="ALT" /> o <ph name="SEARCH" /><ph name="SEPARATOR" /><ph name="UP" /></translation>
+<translation id="7422707470576323858">Canvia al següent mètode d'introducció de text que estigui disponible</translation>
 <translation id="743754632698445141">Deixa de fixar una aplicació</translation>
 <translation id="7439718573248533901">Suprimeix la lletra següent (supressió cap endavant)</translation>
 <translation id="7611271430932669992">Mou el focus a les finestres emergents i als quadres de diàleg</translation>
@@ -191,6 +193,7 @@
 <translation id="9041599225465145264">Enganxa el contingut del porta-retalls</translation>
 <translation id="9052808072970550123">Canvia a l'usuari següent</translation>
 <translation id="906458777597946297">Maximitza la finestra</translation>
+<translation id="9091855755813503076">Ves al principi de la línia</translation>
 <translation id="9106898733795143799">Pàgina i navegador web</translation>
 <translation id="9162942292291287644">No hi ha resultats de cerca per a <ph name="QUERY" /></translation>
 <translation id="9179672198516322668">Dreceres populars</translation>

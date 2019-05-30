@@ -4,11 +4,18 @@
 
 #include "content/browser/scheduler/responsiveness/watcher.h"
 
+#include "base/bind.h"
 #include "base/pending_task.h"
+#include "base/task/post_task.h"
 #include "content/browser/scheduler/responsiveness/calculator.h"
 #include "content/browser/scheduler/responsiveness/message_loop_observer.h"
 #include "content/browser/scheduler/responsiveness/native_event_observer.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+
+#if defined(OS_CHROMEOS)
+#include "ui/base/ui_base_features.h"
+#endif
 
 namespace content {
 namespace responsiveness {
@@ -30,11 +37,12 @@ void Watcher::SetUp() {
 
   calculator_ = CreateCalculator();
   native_event_observer_ui_ = CreateNativeEventObserver();
+  currently_running_metadata_ui_.reserve(5);
 
   RegisterMessageLoopObserverUI();
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
       base::BindOnce(&Watcher::SetUpOnIOThread, base::Unretained(this),
                      calculator_.get()));
 }
@@ -48,8 +56,8 @@ void Watcher::Destroy() {
   message_loop_observer_ui_.reset();
   native_event_observer_ui_.reset();
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
       base::BindOnce(&Watcher::TearDownOnIOThread, base::Unretained(this)));
 }
 
@@ -96,6 +104,7 @@ void Watcher::RegisterMessageLoopObserverIO() {
 void Watcher::SetUpOnIOThread(Calculator* calculator) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
+  currently_running_metadata_io_.reserve(5);
   RegisterMessageLoopObserverIO();
   calculator_io_ = calculator;
 }
@@ -106,8 +115,8 @@ void Watcher::TearDownOnIOThread() {
   message_loop_observer_io_.reset();
 
   calculator_io_ = nullptr;
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
       base::BindOnce(&Watcher::TearDownOnUIThread, base::Unretained(this)));
 }
 
@@ -156,23 +165,23 @@ void Watcher::DidRunTaskOnIOThread(const base::PendingTask* task) {
 }
 
 void Watcher::WillRunTask(const base::PendingTask* task,
-                          std::stack<Metadata>* currently_running_metadata) {
+                          std::vector<Metadata>* currently_running_metadata) {
   // Reentrancy should be rare.
   if (UNLIKELY(!currently_running_metadata->empty())) {
-    currently_running_metadata->top().caused_reentrancy = true;
+    currently_running_metadata->back().caused_reentrancy = true;
   }
 
-  currently_running_metadata->emplace(task);
+  currently_running_metadata->emplace_back(task);
 
   // For delayed tasks, record the time right before the task is run.
   if (!task->delayed_run_time.is_null()) {
-    currently_running_metadata->top().delayed_task_start =
+    currently_running_metadata->back().execution_start_time =
         base::TimeTicks::Now();
   }
 }
 
 void Watcher::DidRunTask(const base::PendingTask* task,
-                         std::stack<Metadata>* currently_running_metadata,
+                         std::vector<Metadata>* currently_running_metadata,
                          int* mismatched_task_identifiers,
                          TaskOrEventFinishedCallback callback) {
   // Calls to DidRunTask should always be paired with WillRunTask. The only time
@@ -180,16 +189,26 @@ void Watcher::DidRunTask(const base::PendingTask* task,
   // TaskRunner Observers may be added while a task is being run, which means
   // that there was no corresponding WillRunTask.
   if (UNLIKELY(currently_running_metadata->empty() ||
-               (task != currently_running_metadata->top().identifier))) {
+               (task != currently_running_metadata->back().identifier))) {
     *mismatched_task_identifiers += 1;
+#if defined(OS_CHROMEOS)
+    // Mismatches can happen often on ChromeOS with window service when
+    // tab-dragging is involved. Simply ignore the mismatches for now. See
+    // https://crbug.com/929813 for the details of why the mismatch happens.
+    // TODO(mukai): fix the event order issue.
+    if (features::IsUsingWindowService()) {
+      currently_running_metadata_ui_.clear();
+      return;
+    }
+#endif
     DCHECK_LE(*mismatched_task_identifiers, 1);
     return;
   }
 
-  bool caused_reentrancy = currently_running_metadata->top().caused_reentrancy;
-  base::TimeTicks delayed_task_start =
-      currently_running_metadata->top().delayed_task_start;
-  currently_running_metadata->pop();
+  bool caused_reentrancy = currently_running_metadata->back().caused_reentrancy;
+  base::TimeTicks execution_start_time =
+      currently_running_metadata->back().execution_start_time;
+  currently_running_metadata->pop_back();
 
   // Ignore tasks that caused reentrancy, since their execution latency will
   // be very large, but Chrome was still responsive.
@@ -199,16 +218,16 @@ void Watcher::DidRunTask(const base::PendingTask* task,
   // For delayed tasks, measure the duration of the task itself, rather than the
   // duration from schedule time to finish time.
   base::TimeTicks schedule_time;
-  if (delayed_task_start.is_null()) {
+  if (execution_start_time.is_null()) {
     // Tasks which were posted before the MessageLoopObserver was created will
     // not have a queue_time, and should be ignored. This doesn't affect delayed
     // tasks.
-    if (UNLIKELY(!task->queue_time))
+    if (UNLIKELY(task->queue_time.is_null()))
       return;
 
-    schedule_time = task->queue_time.value();
+    schedule_time = task->queue_time;
   } else {
-    schedule_time = delayed_task_start;
+    schedule_time = execution_start_time;
   }
 
   std::move(callback).Run(schedule_time, base::TimeTicks::Now());
@@ -218,14 +237,15 @@ void Watcher::WillRunEventOnUIThread(const void* opaque_identifier) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   // Reentrancy should be rare.
   if (UNLIKELY(!currently_running_metadata_ui_.empty())) {
-    currently_running_metadata_ui_.top().caused_reentrancy = true;
+    currently_running_metadata_ui_.back().caused_reentrancy = true;
   }
 
-  currently_running_metadata_ui_.emplace(opaque_identifier);
+  currently_running_metadata_ui_.emplace_back(opaque_identifier);
+  currently_running_metadata_ui_.back().execution_start_time =
+      base::TimeTicks::Now();
 }
 
-void Watcher::DidRunEventOnUIThread(const void* opaque_identifier,
-                                    base::TimeTicks creation_time) {
+void Watcher::DidRunEventOnUIThread(const void* opaque_identifier) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // Calls to DidRunEventOnUIThread should always be paired with
@@ -234,22 +254,34 @@ void Watcher::DidRunEventOnUIThread(const void* opaque_identifier,
   // task is being run, which means that there was no corresponding WillRunTask.
   if (UNLIKELY(currently_running_metadata_ui_.empty() ||
                (opaque_identifier !=
-                currently_running_metadata_ui_.top().identifier))) {
+                currently_running_metadata_ui_.back().identifier))) {
     mismatched_event_identifiers_ui_ += 1;
+#if defined(OS_CHROMEOS)
+    // Mismatches can happen often on ChromeOS with window service when
+    // tab-dragging is involved. Simply ignore the mismatches for now. See
+    // https://crbug.com/929813 for the details of why the mismatch happens.
+    // TODO(mukai): fix the event order issue.
+    if (features::IsUsingWindowService()) {
+      currently_running_metadata_ui_.clear();
+      return;
+    }
+#endif
     DCHECK_LE(mismatched_event_identifiers_ui_, 1);
     return;
   }
 
   bool caused_reentrancy =
-      currently_running_metadata_ui_.top().caused_reentrancy;
-  currently_running_metadata_ui_.pop();
+      currently_running_metadata_ui_.back().caused_reentrancy;
+  base::TimeTicks execution_start_time =
+      currently_running_metadata_ui_.back().execution_start_time;
+  currently_running_metadata_ui_.pop_back();
 
   // Ignore events that caused reentrancy, since their execution latency will
   // be very large, but Chrome was still responsive.
   if (UNLIKELY(caused_reentrancy))
     return;
 
-  calculator_->TaskOrEventFinishedOnUIThread(creation_time,
+  calculator_->TaskOrEventFinishedOnUIThread(execution_start_time,
                                              base::TimeTicks::Now());
 }
 

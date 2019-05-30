@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/bind.h"
 #include "net/base/io_buffer.h"
 
 namespace content {
@@ -33,7 +34,7 @@ std::string DataPipeToSourceStream::Description() const {
 int DataPipeToSourceStream::Read(net::IOBuffer* buf,
                                  int buf_size,
                                  net::CompletionOnceCallback callback) {
-  base::AutoReset<bool>(&inside_read_, true);
+  base::AutoReset<bool> inside_read_checker(&inside_read_, true);
 
   if (!body_.get()) {
     // We have finished reading the pipe.

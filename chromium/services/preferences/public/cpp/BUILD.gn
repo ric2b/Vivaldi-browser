@@ -20,6 +20,8 @@ source_set("cpp") {
     "scoped_pref_update.h",
   ]
 
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
   public_deps = [
     "//base",
     "//components/prefs",
@@ -30,6 +32,30 @@ source_set("cpp") {
   deps = [
     "//mojo/public/cpp/bindings",
     "//services/preferences/public/cpp/lib",
+  ]
+}
+
+source_set("manifest") {
+  sources = [
+    "manifest.cc",
+    "manifest.h",
+  ]
+  deps = [
+    "//base",
+    "//services/preferences/public/mojom",
+    "//services/service_manager/public/cpp",
+  ]
+}
+
+source_set("local_state_manifest") {
+  sources = [
+    "local_state_manifest.cc",
+    "local_state_manifest.h",
+  ]
+  deps = [
+    "//base",
+    "//services/preferences/public/mojom",
+    "//services/service_manager/public/cpp",
   ]
 }
 
@@ -47,4 +73,5 @@ source_set("service_main") {
     "pref_service_main.cc",
     "pref_service_main.h",
   ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
 }

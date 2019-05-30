@@ -11,7 +11,7 @@
 #include "components/offline_pages/core/offline_page_types.h"
 #include "components/offline_pages/core/offline_store_types.h"
 #include "components/offline_pages/core/offline_store_utils.h"
-#include "components/offline_pages/core/task.h"
+#include "components/offline_pages/task/task.h"
 #include "sql/database.h"
 #include "sql/statement.h"
 
@@ -57,7 +57,7 @@ ItemActionStatus AddOfflinePageSync(const OfflinePageItem& item,
   statement.BindInt64(7, store_utils::ToDatabaseTime(item.last_access_time));
   statement.BindInt(8, item.access_count);
   statement.BindString16(9, item.title);
-  statement.BindString(10, item.original_url.spec());
+  statement.BindString(10, item.original_url_if_different.spec());
   statement.BindString(11, item.request_origin);
   statement.BindInt64(12, item.system_download_id);
   statement.BindInt64(13, store_utils::ToDatabaseTime(item.file_missing_time));

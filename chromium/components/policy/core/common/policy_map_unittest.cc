@@ -13,6 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/policy/core/common/external_data_manager.h"
 #include "components/policy/core/common/policy_types.h"
+#include "components/strings/grit/components_strings.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace policy {
@@ -209,6 +210,10 @@ TEST_F(PolicyMapTest, MergeFrom) {
   a.Set(kTestPolicyName7, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
         POLICY_SOURCE_ENTERPRISE_DEFAULT, std::make_unique<base::Value>(false),
         nullptr);
+  a.Set(kTestPolicyName8, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+        POLICY_SOURCE_ACTIVE_DIRECTORY,
+        std::make_unique<base::Value>("blocked AD policy"), nullptr);
+  a.GetMutable(kTestPolicyName8)->SetBlocked();
 
   PolicyMap b;
   b.Set(kTestPolicyName1, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
@@ -220,7 +225,7 @@ TEST_F(PolicyMapTest, MergeFrom) {
         POLICY_SOURCE_ENTERPRISE_DEFAULT, nullptr,
         CreateExternalDataFetcher("b"));
   b.Set(kTestPolicyName4, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_PUBLIC_SESSION_OVERRIDE,
+        POLICY_SOURCE_DEVICE_LOCAL_ACCOUNT_OVERRIDE,
         std::make_unique<base::Value>(true), nullptr);
   b.Set(kTestPolicyName5, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
         POLICY_SOURCE_PLATFORM, std::make_unique<base::Value>(std::string()),
@@ -230,7 +235,18 @@ TEST_F(PolicyMapTest, MergeFrom) {
   b.Set(kTestPolicyName7, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
         POLICY_SOURCE_ACTIVE_DIRECTORY, std::make_unique<base::Value>(true),
         nullptr);
+  b.Set(kTestPolicyName8, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+        POLICY_SOURCE_CLOUD,
+        std::make_unique<base::Value>("non blocked cloud policy"), nullptr);
 
+  auto conflicted_policy_1 = a.Get(kTestPolicyName1)->DeepCopy();
+  auto conflicted_policy_4 = a.Get(kTestPolicyName4)->DeepCopy();
+  auto conflicted_policy_5 = a.Get(kTestPolicyName5)->DeepCopy();
+  auto conflicted_policy_7 = a.Get(kTestPolicyName7)->DeepCopy();
+  auto conflicted_policy_8 = b.Get(kTestPolicyName8)->DeepCopy();
+
+  a.GetMutable(kTestPolicyName7)->SetBlocked();
+  b.GetMutable(kTestPolicyName7)->SetBlocked();
   a.MergeFrom(b);
 
   PolicyMap c;
@@ -238,20 +254,32 @@ TEST_F(PolicyMapTest, MergeFrom) {
   c.Set(kTestPolicyName1, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
         POLICY_SOURCE_CLOUD, std::make_unique<base::Value>("chromium.org"),
         nullptr);
+  c.GetMutable(kTestPolicyName1)->AddError(IDS_POLICY_CONFLICT_DIFF_VALUE);
+  c.GetMutable(kTestPolicyName1)->AddConflictingPolicy(conflicted_policy_1);
   // |a| has precedence over |b|.
   c.Set(kTestPolicyName2, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
         POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(true), nullptr);
+  c.GetMutable(kTestPolicyName2)->AddError(IDS_POLICY_CONFLICT_DIFF_VALUE);
+  c.GetMutable(kTestPolicyName2)
+      ->AddConflictingPolicy(*b.Get(kTestPolicyName2));
   c.Set(kTestPolicyName3, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
         POLICY_SOURCE_ENTERPRISE_DEFAULT, nullptr,
         CreateExternalDataFetcher("a"));
+  c.GetMutable(kTestPolicyName3)->AddError(IDS_POLICY_CONFLICT_DIFF_VALUE);
+  c.GetMutable(kTestPolicyName3)
+      ->AddConflictingPolicy(*b.Get(kTestPolicyName3));
   // POLICY_SCOPE_MACHINE over POLICY_SCOPE_USER for POLICY_LEVEL_RECOMMENDED.
   c.Set(kTestPolicyName4, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_PUBLIC_SESSION_OVERRIDE,
+        POLICY_SOURCE_DEVICE_LOCAL_ACCOUNT_OVERRIDE,
         std::make_unique<base::Value>(true), nullptr);
+  c.GetMutable(kTestPolicyName4)->AddError(IDS_POLICY_CONFLICT_DIFF_VALUE);
+  c.GetMutable(kTestPolicyName4)->AddConflictingPolicy(conflicted_policy_4);
   // POLICY_LEVEL_MANDATORY over POLICY_LEVEL_RECOMMENDED.
   c.Set(kTestPolicyName5, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
         POLICY_SOURCE_PLATFORM, std::make_unique<base::Value>(std::string()),
         nullptr);
+  c.GetMutable(kTestPolicyName5)->AddError(IDS_POLICY_CONFLICT_DIFF_VALUE);
+  c.GetMutable(kTestPolicyName5)->AddConflictingPolicy(conflicted_policy_5);
   // Merge new ones.
   c.Set(kTestPolicyName6, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_USER,
         POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(true), nullptr);
@@ -259,6 +287,16 @@ TEST_F(PolicyMapTest, MergeFrom) {
   c.Set(kTestPolicyName7, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
         POLICY_SOURCE_ACTIVE_DIRECTORY, std::make_unique<base::Value>(true),
         nullptr);
+  c.GetMutable(kTestPolicyName7)->AddError(IDS_POLICY_CONFLICT_DIFF_VALUE);
+  c.GetMutable(kTestPolicyName7)->AddConflictingPolicy(conflicted_policy_7);
+  c.GetMutable(kTestPolicyName7)->SetBlocked();
+
+  c.Set(kTestPolicyName8, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+        POLICY_SOURCE_ACTIVE_DIRECTORY,
+        std::make_unique<base::Value>("blocked AD policy"), nullptr);
+  c.GetMutable(kTestPolicyName8)->AddError(IDS_POLICY_CONFLICT_DIFF_VALUE);
+  c.GetMutable(kTestPolicyName8)->AddConflictingPolicy(conflicted_policy_8);
+  c.GetMutable(kTestPolicyName8)->SetBlocked();
 
   EXPECT_TRUE(a.Equals(c));
 }
@@ -371,4 +409,76 @@ TEST_F(PolicyMapTest, EraseNonmatching) {
   EXPECT_TRUE(a.Equals(b));
 }
 
+TEST_F(PolicyMapTest, EntryAddConflict) {
+  PolicyMap::Entry entry_a;
+  entry_a.level = POLICY_LEVEL_MANDATORY;
+  entry_a.source = POLICY_SOURCE_CLOUD;
+  entry_a.value = std::make_unique<base::Value>(true);
+  entry_a.scope = POLICY_SCOPE_USER;
+  PolicyMap::Entry entry_b = entry_a.DeepCopy();
+  entry_b.value = std::make_unique<base::Value>(false);
+  PolicyMap::Entry entry_b_no_conflicts = entry_b.DeepCopy();
+  PolicyMap::Entry entry_c = entry_a.DeepCopy();
+  entry_c.source = POLICY_SOURCE_PLATFORM;
+
+  entry_b.AddConflictingPolicy(entry_c);
+  entry_a.AddConflictingPolicy(entry_b);
+
+  EXPECT_TRUE(entry_a.conflicts.size() == 2);
+  EXPECT_TRUE(entry_b.conflicts.size() == 1);
+  EXPECT_TRUE(entry_c.conflicts.empty());
+
+  EXPECT_TRUE(entry_a.conflicts[0].Equals(entry_c));
+  EXPECT_TRUE(entry_a.conflicts[1].Equals(entry_b_no_conflicts));
+  EXPECT_TRUE(entry_b.conflicts[0].Equals(entry_c));
+}
+
+TEST_F(PolicyMapTest, BlockedEntry) {
+  PolicyMap::Entry entry_a(POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+                           POLICY_SOURCE_CLOUD,
+                           std::make_unique<base::Value>("a"), nullptr);
+  PolicyMap::Entry entry_b = entry_a.DeepCopy();
+  entry_b.value = std::make_unique<base::Value>("b");
+  PolicyMap::Entry entry_c_blocked = entry_a.DeepCopy();
+  entry_c_blocked.value = std::make_unique<base::Value>("c");
+  entry_c_blocked.SetBlocked();
+
+  PolicyMap policies;
+  policies.Set("a", entry_a.DeepCopy());
+  policies.Set("b", entry_b.DeepCopy());
+  policies.Set("c", entry_c_blocked.DeepCopy());
+
+  const size_t expected_size = 3;
+  EXPECT_TRUE(policies.size() == expected_size);
+
+  EXPECT_TRUE(policies.Get("a")->Equals(entry_a));
+  EXPECT_TRUE(policies.Get("b")->Equals(entry_b));
+  EXPECT_TRUE(policies.Get("c") == nullptr);
+
+  EXPECT_TRUE(policies.GetMutable("a")->Equals(entry_a));
+  EXPECT_TRUE(policies.GetMutable("b")->Equals(entry_b));
+  EXPECT_TRUE(policies.GetMutable("c") == nullptr);
+
+  EXPECT_TRUE(policies.GetValue("a")->Equals(entry_a.value.get()));
+  EXPECT_TRUE(policies.GetValue("b")->Equals(entry_b.value.get()));
+  EXPECT_TRUE(policies.GetValue("c") == nullptr);
+
+  EXPECT_TRUE(policies.GetMutableValue("a")->Equals(entry_a.value.get()));
+  EXPECT_TRUE(policies.GetMutableValue("b")->Equals(entry_b.value.get()));
+  EXPECT_TRUE(policies.GetMutableValue("c") == nullptr);
+
+  EXPECT_TRUE(policies.GetUntrusted("a")->Equals(entry_a));
+  EXPECT_TRUE(policies.GetUntrusted("b")->Equals(entry_b));
+  EXPECT_TRUE(policies.GetUntrusted("c")->Equals(entry_c_blocked));
+
+  EXPECT_TRUE(policies.GetMutableUntrusted("a")->Equals(entry_a));
+  EXPECT_TRUE(policies.GetMutableUntrusted("b")->Equals(entry_b));
+  EXPECT_TRUE(policies.GetMutableUntrusted("c")->Equals(entry_c_blocked));
+
+  size_t iterated_values = 0;
+  for (auto it = policies.begin(); it != policies.end();
+       ++it, ++iterated_values) {
+  }
+  EXPECT_TRUE(iterated_values == expected_size);
+}
 }  // namespace policy

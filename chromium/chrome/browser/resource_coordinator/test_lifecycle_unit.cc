@@ -33,7 +33,7 @@ TabLifecycleUnitExternal* TestLifecycleUnit::AsTabLifecycleUnitExternal() {
 }
 
 base::string16 TestLifecycleUnit::GetTitle() const {
-  return base::string16();
+  return title_;
 }
 
 base::TimeTicks TestLifecycleUnit::GetLastFocusedTime() const {
@@ -87,6 +87,10 @@ bool TestLifecycleUnit::Unfreeze() {
 
 bool TestLifecycleUnit::Discard(LifecycleUnitDiscardReason discard_reason) {
   return false;
+}
+
+LifecycleUnitDiscardReason TestLifecycleUnit::GetDiscardReason() const {
+  return mojom::LifecycleUnitDiscardReason::EXTERNAL;
 }
 
 void ExpectCanDiscardTrue(const LifecycleUnit* lifecycle_unit,

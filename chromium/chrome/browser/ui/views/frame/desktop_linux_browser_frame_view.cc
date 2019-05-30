@@ -8,22 +8,45 @@
 #include "chrome/browser/ui/views/nav_button_provider.h"
 #include "ui/views/controls/button/image_button.h"
 
+bool DesktopLinuxBrowserFrameView::DrawFrameButtonParams::operator==(
+    const DrawFrameButtonParams& other) const {
+  return top_area_height == other.top_area_height &&
+         maximized == other.maximized && active == other.active;
+}
+
 DesktopLinuxBrowserFrameView::DesktopLinuxBrowserFrameView(
     BrowserFrame* frame,
     BrowserView* browser_view,
     OpaqueBrowserFrameViewLayout* layout,
     std::unique_ptr<views::NavButtonProvider> nav_button_provider)
     : OpaqueBrowserFrameView(frame, browser_view, layout),
-      nav_button_provider_(std::move(nav_button_provider)) {
-  profile_switcher()->set_nav_button_provider(nav_button_provider_.get());
-}
+      nav_button_provider_(std::move(nav_button_provider)) {}
 
 DesktopLinuxBrowserFrameView::~DesktopLinuxBrowserFrameView() {}
 
-void DesktopLinuxBrowserFrameView::MaybeRedrawFrameButtons() {
-  nav_button_provider_->RedrawImages(
-      GetTopAreaHeight() - layout()->TitlebarTopThickness(!IsMaximized()),
-      IsMaximized(), ShouldPaintAsActive());
+void DesktopLinuxBrowserFrameView::Layout() {
+  // Calling MaybeUpdateCachedFrameButtonImages() from Layout() is sufficient to
+  // catch all cases that could update the appearance, since
+  // DesktopWindowTreeHostX11::UpdateWindowProperties() does a layout any time
+  // any properties change.
+  MaybeUpdateCachedFrameButtonImages();
+  OpaqueBrowserFrameView::Layout();
+}
+
+DesktopLinuxBrowserFrameView::FrameButtonStyle
+DesktopLinuxBrowserFrameView::GetFrameButtonStyle() const {
+  return FrameButtonStyle::kImageButton;
+}
+
+void DesktopLinuxBrowserFrameView::MaybeUpdateCachedFrameButtonImages() {
+  DrawFrameButtonParams params{
+      GetTopAreaHeight() - layout()->FrameTopThickness(!IsMaximized()),
+      IsMaximized(), ShouldPaintAsActive()};
+  if (cache_ == params)
+    return;
+  cache_ = params;
+  nav_button_provider_->RedrawImages(params.top_area_height, params.maximized,
+                                     params.active);
   for (auto type : {
            chrome::FrameButtonDisplayType::kMinimize,
            IsMaximized() ? chrome::FrameButtonDisplayType::kRestore
@@ -33,13 +56,16 @@ void DesktopLinuxBrowserFrameView::MaybeRedrawFrameButtons() {
     for (size_t state = 0; state < views::Button::STATE_COUNT; state++) {
       views::Button::ButtonState button_state =
           static_cast<views::Button::ButtonState>(state);
-      GetButtonFromDisplayType(type)->SetImage(
+      views::Button* button = GetButtonFromDisplayType(type);
+      DCHECK_EQ(std::string(views::ImageButton::kViewClassName),
+                button->GetClassName());
+      static_cast<views::ImageButton*>(button)->SetImage(
           button_state, nav_button_provider_->GetImage(type, button_state));
     }
   }
 }
 
-views::ImageButton* DesktopLinuxBrowserFrameView::GetButtonFromDisplayType(
+views::Button* DesktopLinuxBrowserFrameView::GetButtonFromDisplayType(
     chrome::FrameButtonDisplayType type) {
   switch (type) {
     case chrome::FrameButtonDisplayType::kMinimize:

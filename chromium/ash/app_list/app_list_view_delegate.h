@@ -8,17 +8,22 @@
 #include <string>
 #include <vector>
 
+#include "ash/app_list/app_list_metrics.h"
+#include "ash/assistant/ui/assistant_view_delegate.h"
 #include "ash/public/cpp/ash_public_export.h"
+#include "ash/public/interfaces/app_list.mojom.h"
 #include "ash/public/interfaces/menu.mojom.h"
 #include "base/callback_forward.h"
 #include "base/strings/string16.h"
+#include "services/content/public/mojom/navigable_contents_factory.mojom.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/events/event_constants.h"
 #include "ui/gfx/geometry/point.h"
 
-namespace ws {
-class WindowService;
-}  // namespace ws
+namespace ui {
+class GestureEvent;
+}  // namespace ui
 
 namespace app_list {
 
@@ -44,9 +49,28 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   // box by the user.
   virtual void StartSearch(const base::string16& raw_query) = 0;
 
-  // Invoked to open the search result.
+  // Invoked to open the search result and log a click. If the result is
+  // represented by a SuggestedChipView or is a zero state result,
+  // |suggested_index| is the index of the view in the list of suggestions.
+  // |launched_from| values must match the LaunchedFrom enum in
+  // chrome/browser/ui/app_list/app_launch_event_logger.proto. |launch_type| is
+  // either kAppSearchResult or kSearchResult and is used to determine which
+  // histograms to log to.
   virtual void OpenSearchResult(const std::string& result_id,
-                                int event_flags) = 0;
+                                int event_flags,
+                                ash::mojom::AppListLaunchedFrom launched_from,
+                                ash::mojom::AppListLaunchType launch_type,
+                                int suggestion_index) = 0;
+
+  // Called to log UMA metrics for the launch of an item either in the app tile
+  // list or the search result list. The |launch_location| argument determines
+  // which histogram to log to. |suggestion_index| represents the index of the
+  // launched item in its list view, not the overall position in the suggestion
+  // window. For instance, the first launcher result item is index 0, regardless
+  // of if there is an answer card above it.
+  virtual void LogResultLaunchHistogram(
+      app_list::SearchResultLaunchLocation launch_location,
+      int suggestion_index) = 0;
 
   // Called to invoke a custom action on a result with |result_id|.
   // |action_index| corresponds to the index of an icon in
@@ -82,6 +106,9 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   // Invoked when the app list is closing.
   virtual void ViewClosing() = 0;
 
+  // Invoked when the app list is closed.
+  virtual void ViewClosed() = 0;
+
   // Gets the wallpaper prominent colors.
   using GetWallpaperProminentColorsCallback =
       base::OnceCallback<void(const std::vector<SkColor>&)>;
@@ -109,7 +136,32 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   virtual void ShowWallpaperContextMenu(const gfx::Point& onscreen_location,
                                         ui::MenuSourceType source_type) = 0;
 
-  virtual ws::WindowService* GetWindowService() = 0;
+  // Forwards events to the home launcher gesture handler and returns true if
+  // they have been processed.
+  virtual bool ProcessHomeLauncherGesture(
+      ui::GestureEvent* event,
+      const gfx::Point& screen_location) = 0;
+
+  // Checks if we are allowed to process events on the app list main view and
+  // its descendants.
+  virtual bool CanProcessEventsOnApplistViews() = 0;
+
+  // Acquires a factory interface from the client which can be used to acquire
+  // initialize new NavigableContents objects for embedding web contents into
+  // the app list UI.
+  virtual void GetNavigableContentsFactory(
+      content::mojom::NavigableContentsFactoryRequest request) = 0;
+
+  // Returns the AssistantViewDelegate.
+  virtual ash::AssistantViewDelegate* GetAssistantViewDelegate() = 0;
+
+  // Called if a search result has its visibility updated and wants to
+  // be notified (i.e. its notify_visibility_change() returns true).
+  virtual void OnSearchResultVisibilityChanged(const std::string& id,
+                                               bool visibility) = 0;
+
+  // Returns if the Assistant feature is allowed and enabled.
+  virtual bool IsAssistantAllowedAndEnabled() const = 0;
 };
 
 }  // namespace app_list

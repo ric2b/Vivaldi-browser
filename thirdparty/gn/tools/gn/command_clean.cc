@@ -63,6 +63,7 @@ int RunClean(const std::vector<std::string>& args) {
     return 1;
   }
 
+  // Deliberately leaked to avoid expensive process teardown.
   Setup* setup = new Setup;
   if (!setup->DoSetup(args[0], false))
     return 1;

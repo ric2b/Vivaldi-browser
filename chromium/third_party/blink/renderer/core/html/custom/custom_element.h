@@ -17,7 +17,9 @@ namespace blink {
 
 class Document;
 class Element;
+class FileOrUSVString;
 class HTMLElement;
+class HTMLFormElement;
 class QualifiedName;
 class CustomElementDefinition;
 class CustomElementReaction;
@@ -35,7 +37,17 @@ class CORE_EXPORT CustomElement {
 
   static CustomElementDefinition* DefinitionForElement(const Element*);
 
+  static void AddEmbedderCustomElementName(const AtomicString& name);
+
   static bool IsValidName(const AtomicString& name) {
+    return IsValidName(name, true);
+  }
+
+  static bool IsValidName(const AtomicString& name,
+                          bool including_embedder_names) {
+    if (including_embedder_names && EmbedderCustomElementNames().Contains(name))
+      return true;
+
     // This quickly rejects all common built-in element names.
     if (name.find('-', 1) == kNotFound)
       return false;
@@ -45,13 +57,13 @@ class CORE_EXPORT CustomElement {
 
     if (name.Is8Bit()) {
       const LChar* characters = name.Characters8();
-      for (size_t i = 1; i < name.length(); ++i) {
+      for (wtf_size_t i = 1; i < name.length(); ++i) {
         if (!Character::IsPotentialCustomElementName8BitChar(characters[i]))
           return false;
       }
     } else {
       const UChar* characters = name.Characters16();
-      for (size_t i = 1; i < name.length();) {
+      for (wtf_size_t i = 1; i < name.length();) {
         UChar32 ch;
         U16_NEXT(characters, i, name.length(), ch);
         if (!Character::IsPotentialCustomElementNameChar(ch))
@@ -83,25 +95,38 @@ class CORE_EXPORT CustomElement {
       const AtomicString& is_value);
   static HTMLElement* CreateFailedElement(Document&, const QualifiedName&);
 
-  static void Enqueue(Element*, CustomElementReaction*);
-  static void EnqueueConnectedCallback(Element*);
-  static void EnqueueDisconnectedCallback(Element*);
-  static void EnqueueAdoptedCallback(Element*,
-                                     Document* old_owner,
-                                     Document* new_owner);
-  static void EnqueueAttributeChangedCallback(Element*,
+  static void Enqueue(Element&, CustomElementReaction&);
+  static void EnqueueConnectedCallback(Element&);
+  static void EnqueueDisconnectedCallback(Element&);
+  static void EnqueueAdoptedCallback(Element&,
+                                     Document& old_owner,
+                                     Document& new_owner);
+  static void EnqueueAttributeChangedCallback(Element&,
                                               const QualifiedName&,
                                               const AtomicString& old_value,
                                               const AtomicString& new_value);
+  static void EnqueueFormAssociatedCallback(Element& element,
+                                            HTMLFormElement* nullable_form);
+  static void EnqueueFormResetCallback(Element& element);
+  static void EnqueueDisabledStateChangedCallback(Element& element,
+                                                  bool is_disabled);
+  static void EnqueueRestoreValueCallback(Element& element,
+                                          const FileOrUSVString& value,
+                                          const String& mode);
 
-  static void TryToUpgrade(Element*);
+  static void TryToUpgrade(Element&, bool upgrade_invisible_elements = false);
+
+  static void AddEmbedderCustomElementNameForTesting(const AtomicString& name,
+                                                     ExceptionState&);
 
  private:
   // Some existing specs have element names with hyphens in them,
   // like font-face in SVG. The custom elements spec explicitly
   // disallows these as custom element names.
-  // https://html.spec.whatwg.org/#valid-custom-element-name
+  // https://html.spec.whatwg.org/C/#valid-custom-element-name
   static bool IsHyphenatedSpecElementName(const AtomicString&);
+
+  static Vector<AtomicString>& EmbedderCustomElementNames();
 
   enum CreateUUCheckLevel {
     kCheckAll,

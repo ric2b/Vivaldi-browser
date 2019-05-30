@@ -5,18 +5,19 @@
 #include "chrome/browser/offline_pages/android/load_termination_listener_impl.h"
 
 #include "base/android/application_status_listener.h"
+#include "base/bind.h"
 #include "base/logging.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 
 namespace offline_pages {
 
 LoadTerminationListenerImpl::LoadTerminationListenerImpl()
     : weak_ptr_factory_(this) {
-  if (base::SysInfo::IsLowEndDevice()) {
-    app_listener_ = std::make_unique<base::android::ApplicationStatusListener>(
-        base::Bind(&LoadTerminationListenerImpl::OnApplicationStateChange,
-                   weak_ptr_factory_.GetWeakPtr()));
-  }
+  if (base::SysInfo::IsLowEndDevice())
+    app_listener_ =
+        base::android::ApplicationStatusListener::New(base::BindRepeating(
+            &LoadTerminationListenerImpl::OnApplicationStateChange,
+            weak_ptr_factory_.GetWeakPtr()));
 }
 
 LoadTerminationListenerImpl::~LoadTerminationListenerImpl() {

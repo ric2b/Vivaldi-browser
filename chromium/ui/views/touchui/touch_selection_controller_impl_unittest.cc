@@ -12,8 +12,8 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/pointer/touch_editing_controller.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/base/touch/touch_editing_controller.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
@@ -75,10 +75,6 @@ class TouchSelectionControllerImplTest : public ViewsTestBase {
 
   void SetUp() override {
     ViewsTestBase::SetUp();
-    // TODO: test uses GetContext(), which is not applicable to aura-mus.
-    // http://crbug.com/663809.
-    if (IsMus())
-      return;
     test_cursor_client_.reset(new aura::test::TestCursorClient(GetContext()));
   }
 
@@ -94,7 +90,8 @@ class TouchSelectionControllerImplTest : public ViewsTestBase {
   void CreateTextfield() {
     textfield_ = new Textfield();
     textfield_widget_ = new Widget;
-    Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
+    Widget::InitParams params =
+        CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
     params.bounds = gfx::Rect(0, 0, 200, 200);
     textfield_widget_->Init(params);
     View* container = new View();
@@ -321,10 +318,6 @@ class TouchSelectionControllerImplTest : public ViewsTestBase {
 // Tests that the selection handles are placed appropriately when selection in
 // a Textfield changes.
 TEST_F(TouchSelectionControllerImplTest, SelectionInTextfieldTest) {
-  // TODO: see comment in SetUp().
-  if (IsMus())
-    return;
-
   CreateTextfield();
   textfield_->SetText(ASCIIToUTF16("some text"));
   // Tap the textfield to invoke touch selection.
@@ -358,10 +351,6 @@ TEST_F(TouchSelectionControllerImplTest, SelectionInTextfieldTest) {
 
 // Tests that the selection handles are placed appropriately in bidi text.
 TEST_F(TouchSelectionControllerImplTest, SelectionInBidiTextfieldTest) {
-  // TODO: see comment in SetUp().
-  if (IsMus())
-    return;
-
   CreateTextfield();
   textfield_->SetText(WideToUTF16(L"abc\x05d0\x05d1\x05d2"));
   // Tap the textfield to invoke touch selection.
@@ -414,10 +403,6 @@ TEST_F(TouchSelectionControllerImplTest, SelectionInBidiTextfieldTest) {
 // Tests if the SelectRect callback is called appropriately when selection
 // handles are moved.
 TEST_F(TouchSelectionControllerImplTest, SelectRectCallbackTest) {
-  // TODO: see comment in SetUp().
-  if (IsMus())
-    return;
-
   CreateTextfield();
   textfield_->SetText(ASCIIToUTF16("textfield with selected text"));
   // Tap the textfield to invoke touch selection.
@@ -460,10 +445,6 @@ TEST_F(TouchSelectionControllerImplTest, SelectRectCallbackTest) {
 }
 
 TEST_F(TouchSelectionControllerImplTest, SelectRectInBidiCallbackTest) {
-  // TODO: see comment in SetUp().
-  if (IsMus())
-    return;
-
   CreateTextfield();
   textfield_->SetText(WideToUTF16(L"abc\x05e1\x05e2\x05e3" L"def"));
   // Tap the textfield to invoke touch selection.
@@ -592,10 +573,6 @@ TEST_F(TouchSelectionControllerImplTest, SelectRectInBidiCallbackTest) {
 
 TEST_F(TouchSelectionControllerImplTest,
        HiddenSelectionHandleRetainsCursorPosition) {
-  // TODO: see comment in SetUp().
-  if (IsMus())
-    return;
-
   static const uint32_t selection_start = 10u;
   SetupSelectionInvisibleHandle(selection_start);
   // Drag the visible handle around and make sure the selection end point of the
@@ -614,10 +591,6 @@ TEST_F(TouchSelectionControllerImplTest,
 // Tests that we can handle the hidden handle getting exposed as a result of a
 // drag and that it maintains the correct orientation when exposed.
 TEST_F(TouchSelectionControllerImplTest, HiddenSelectionHandleExposed) {
-  // TODO: see comment in SetUp().
-  if (IsMus())
-    return;
-
   static const uint32_t selection_start = 0u;
   SetupSelectionInvisibleHandle(selection_start);
 
@@ -635,10 +608,6 @@ TEST_F(TouchSelectionControllerImplTest, HiddenSelectionHandleExposed) {
 
 TEST_F(TouchSelectionControllerImplTest,
        DoubleTapInTextfieldWithCursorHandleShouldSelectText) {
-  // TODO: see comment in SetUp().
-  if (IsMus())
-    return;
-
   CreateTextfield();
   textfield_->SetText(ASCIIToUTF16("some text"));
   ui::test::EventGenerator generator(
@@ -738,10 +707,6 @@ class TestTouchEditable : public ui::TouchEditable {
 // the cursor position relative to the client boundaries.
 TEST_F(TouchSelectionControllerImplTest,
        VisibilityOfHandleRegardingClientBounds) {
-  // TODO: see comment in SetUp().
-  if (IsMus())
-    return;
-
   CreateWidget();
 
   TestTouchEditable touch_editable(widget_->GetNativeView());
@@ -789,10 +754,6 @@ TEST_F(TouchSelectionControllerImplTest,
 }
 
 TEST_F(TouchSelectionControllerImplTest, HandlesStackAboveParent) {
-  // TODO: see comment in SetUp().
-  if (IsMus())
-    return;
-
   aura::Window* root = GetContext();
   ui::EventTargeter* targeter =
       root->GetHost()->dispatcher()->GetDefaultEventTargeter();
@@ -832,17 +793,13 @@ TEST_F(TouchSelectionControllerImplTest, HandlesStackAboveParent) {
 }
 
 TEST_F(TouchSelectionControllerImplTest, MouseEventDeactivatesTouchSelection) {
-  // TODO: see comment in SetUp().
-  if (IsMus())
-    return;
-
   CreateTextfield();
   EXPECT_FALSE(GetSelectionController());
 
   ui::test::EventGenerator generator(
       textfield_widget_->GetNativeView()->GetRootWindow());
 
-  generator.set_current_location(gfx::Point(5, 5));
+  generator.set_current_screen_location(gfx::Point(5, 5));
   RunPendingMessages();
 
   // Start touch editing; then move mouse over the textfield and ensure it
@@ -877,10 +834,6 @@ TEST_F(TouchSelectionControllerImplTest, MouseEventDeactivatesTouchSelection) {
 }
 
 TEST_F(TouchSelectionControllerImplTest, MouseCaptureChangedEventIgnored) {
-  // TODO: see comment in SetUp().
-  if (IsMus())
-    return;
-
   CreateTextfield();
   EXPECT_FALSE(GetSelectionController());
 
@@ -900,10 +853,6 @@ TEST_F(TouchSelectionControllerImplTest, MouseCaptureChangedEventIgnored) {
 }
 
 TEST_F(TouchSelectionControllerImplTest, KeyEventDeactivatesTouchSelection) {
-  // TODO: see comment in SetUp().
-  if (IsMus())
-    return;
-
   CreateTextfield();
   EXPECT_FALSE(GetSelectionController());
 

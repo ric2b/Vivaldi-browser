@@ -23,9 +23,9 @@
 #include "third_party/blink/renderer/core/css/css_rule_list.h"
 #include "third_party/blink/renderer/core/css/css_style_rule.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
-#include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/inspector/add_string_to_digestor.h"
+#include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
 #include "third_party/blink/renderer/core/inspector/inspected_frames.h"
 #include "third_party/blink/renderer/core/inspector/inspector_css_agent.h"
 #include "third_party/blink/renderer/core/inspector/inspector_style_sheet.h"
@@ -55,7 +55,7 @@ void InspectorAnimationAgent::Restore() {
 
 Response InspectorAnimationAgent::enable() {
   enabled_.Set(true);
-  instrumenting_agents_->addInspectorAnimationAgent(this);
+  instrumenting_agents_->AddInspectorAnimationAgent(this);
   return Response::OK();
 }
 
@@ -64,7 +64,7 @@ Response InspectorAnimationAgent::disable() {
   for (const auto& clone : id_to_animation_clone_.Values())
     clone->cancel();
   enabled_.Clear();
-  instrumenting_agents_->removeInspectorAnimationAgent(this);
+  instrumenting_agents_->RemoveInspectorAnimationAgent(this);
   id_to_animation_.clear();
   id_to_animation_type_.clear();
   id_to_animation_clone_.clear();
@@ -84,9 +84,9 @@ void InspectorAnimationAgent::DidCommitLoadForLocalFrame(LocalFrame* frame) {
 
 static std::unique_ptr<protocol::Animation::AnimationEffect>
 BuildObjectForAnimationEffect(KeyframeEffect* effect, bool is_transition) {
-  ComputedEffectTiming computed_timing = effect->getComputedTiming();
-  double delay = computed_timing.delay();
-  double duration = computed_timing.duration().GetAsUnrestrictedDouble();
+  ComputedEffectTiming* computed_timing = effect->getComputedTiming();
+  double delay = computed_timing->delay();
+  double duration = computed_timing->duration().GetAsUnrestrictedDouble();
   String easing = effect->SpecifiedTiming().timing_function->ToString();
 
   if (is_transition) {
@@ -105,16 +105,18 @@ BuildObjectForAnimationEffect(KeyframeEffect* effect, bool is_transition) {
   std::unique_ptr<protocol::Animation::AnimationEffect> animation_object =
       protocol::Animation::AnimationEffect::create()
           .setDelay(delay)
-          .setEndDelay(computed_timing.endDelay())
-          .setIterationStart(computed_timing.iterationStart())
-          .setIterations(computed_timing.iterations())
+          .setEndDelay(computed_timing->endDelay())
+          .setIterationStart(computed_timing->iterationStart())
+          .setIterations(computed_timing->iterations())
           .setDuration(duration)
-          .setDirection(computed_timing.direction())
-          .setFill(computed_timing.fill())
+          .setDirection(computed_timing->direction())
+          .setFill(computed_timing->fill())
           .setEasing(easing)
           .build();
-  if (effect->target())
-    animation_object->setBackendNodeId(DOMNodeIds::IdForNode(effect->target()));
+  if (effect->target()) {
+    animation_object->setBackendNodeId(
+        IdentifiersFactory::IntIdForNode(effect->target()));
+  }
   return animation_object;
 }
 
@@ -142,7 +144,7 @@ BuildObjectForAnimationKeyframes(const KeyframeEffect* effect) {
   std::unique_ptr<protocol::Array<protocol::Animation::KeyframeStyle>>
       keyframes = protocol::Array<protocol::Animation::KeyframeStyle>::create();
 
-  for (size_t i = 0; i < model->GetFrames().size(); i++) {
+  for (wtf_size_t i = 0; i < model->GetFrames().size(); i++) {
     const Keyframe* keyframe = model->GetFrames().at(i);
     // Ignore CSS Transitions
     if (!keyframe->IsStringKeyframe())
@@ -362,36 +364,12 @@ Response InspectorAnimationAgent::setTiming(const String& animation_id,
   animation = AnimationClone(animation);
   NonThrowableExceptionState exception_state;
 
-  String type = id_to_animation_type_.at(animation_id);
-  if (type == AnimationType::CSSTransition) {
-    KeyframeEffect* effect = ToKeyframeEffect(animation->effect());
-    const TransitionKeyframeEffectModel* old_model =
-        ToTransitionKeyframeEffectModel(effect->Model());
-    // Refer to CSSAnimations::calculateTransitionUpdateForProperty() for the
-    // structure of transitions.
-    const KeyframeVector& frames = old_model->GetFrames();
-    DCHECK(frames.size() == 3);
-    KeyframeVector new_frames;
-    for (int i = 0; i < 3; i++)
-      new_frames.push_back(ToTransitionKeyframe(frames[i]->Clone()));
-    // Update delay, represented by the distance between the first two
-    // keyframes.
-    new_frames[1]->SetOffset(delay / (delay + duration));
-    effect->Model()->SetFrames(new_frames);
-
-    UnrestrictedDoubleOrString unrestricted_duration;
-    unrestricted_duration.SetUnrestrictedDouble(duration + delay);
-    OptionalEffectTiming timing;
-    timing.setDuration(unrestricted_duration);
-    effect->updateTiming(timing, exception_state);
-  } else {
-    OptionalEffectTiming timing;
-    UnrestrictedDoubleOrString unrestricted_duration;
-    unrestricted_duration.SetUnrestrictedDouble(duration);
-    timing.setDuration(unrestricted_duration);
-    timing.setDelay(delay);
-    animation->effect()->updateTiming(timing, exception_state);
-  }
+  OptionalEffectTiming* timing = OptionalEffectTiming::Create();
+  UnrestrictedDoubleOrString unrestricted_duration;
+  unrestricted_duration.SetUnrestrictedDouble(duration);
+  timing->setDuration(unrestricted_duration);
+  timing->setDelay(delay);
+  animation->effect()->updateTiming(timing, exception_state);
   return Response::OK();
 }
 
@@ -476,7 +454,7 @@ String InspectorAnimationAgent::CreateCSSId(blink::Animation& animation) {
     AddStringToDigestor(digestor.get(),
                         css_agent_->StyleSheetId(style->ParentStyleSheet()));
     AddStringToDigestor(digestor.get(),
-                        ToCSSStyleRule(style->parentRule())->selectorText());
+                        To<CSSStyleRule>(style->parentRule())->selectorText());
   }
   DigestValue digest_result;
   FinishDigestor(digestor.get(), digest_result);

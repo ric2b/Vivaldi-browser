@@ -13,6 +13,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/stl_util.h"
 #include "gpu/command_buffer/client/client_test_helper.h"
 #include "gpu/command_buffer/client/gles2_cmd_helper.h"
 #include "gpu/command_buffer/client/mapped_memory.h"
@@ -59,7 +60,7 @@ TEST_F(QuerySyncManagerTest, Basic) {
   QuerySyncManager::QueryInfo infos[4];
   memset(&infos, 0xBD, sizeof(infos));
 
-  for (size_t ii = 0; ii < arraysize(infos); ++ii) {
+  for (size_t ii = 0; ii < base::size(infos); ++ii) {
     EXPECT_TRUE(sync_manager_->Alloc(&infos[ii]));
     ASSERT_TRUE(infos[ii].sync != nullptr);
     EXPECT_EQ(0, infos[ii].sync->process_count);
@@ -67,7 +68,7 @@ TEST_F(QuerySyncManagerTest, Basic) {
     EXPECT_EQ(0, infos[ii].submit_count);
   }
 
-  for (size_t ii = 0; ii < arraysize(infos); ++ii) {
+  for (size_t ii = 0; ii < base::size(infos); ++ii) {
     sync_manager_->Free(infos[ii]);
   }
 }
@@ -76,7 +77,7 @@ TEST_F(QuerySyncManagerTest, DontFree) {
   QuerySyncManager::QueryInfo infos[4];
   memset(&infos, 0xBD, sizeof(infos));
 
-  for (size_t ii = 0; ii < arraysize(infos); ++ii) {
+  for (size_t ii = 0; ii < base::size(infos); ++ii) {
     EXPECT_TRUE(sync_manager_->Alloc(&infos[ii]));
   }
 }
@@ -301,19 +302,30 @@ TEST_F(QueryTrackerTest, Query) {
   // Store FlushGeneration count after EndQuery is called
   uint32_t gen1 = GetFlushGeneration();
 
-  // Check CheckResultsAvailable.
-  EXPECT_FALSE(query->CheckResultsAvailable(helper_.get()));
+  bool flush_if_pending = false;
+  EXPECT_FALSE(query->CheckResultsAvailable(helper_.get(), flush_if_pending));
   EXPECT_FALSE(query->NeverUsed());
   EXPECT_TRUE(query->Pending());
 
+  // No flush should happen if |flush_if_pending| is false.
   uint32_t gen2 = GetFlushGeneration();
+  EXPECT_EQ(gen1, gen2);
+
+  flush_if_pending = true;
+
+  // Check CheckResultsAvailable.
+  EXPECT_FALSE(query->CheckResultsAvailable(helper_.get(), flush_if_pending));
+  EXPECT_FALSE(query->NeverUsed());
+  EXPECT_TRUE(query->Pending());
+
+  gen2 = GetFlushGeneration();
   EXPECT_NE(gen1, gen2);
 
   // Repeated calls to CheckResultsAvailable should not flush unnecessarily
-  EXPECT_FALSE(query->CheckResultsAvailable(helper_.get()));
+  EXPECT_FALSE(query->CheckResultsAvailable(helper_.get(), flush_if_pending));
   gen1 = GetFlushGeneration();
   EXPECT_EQ(gen1, gen2);
-  EXPECT_FALSE(query->CheckResultsAvailable(helper_.get()));
+  EXPECT_FALSE(query->CheckResultsAvailable(helper_.get(), flush_if_pending));
   gen1 = GetFlushGeneration();
   EXPECT_EQ(gen1, gen2);
 
@@ -323,7 +335,7 @@ TEST_F(QueryTrackerTest, Query) {
   sync->result = kResult;
 
   // Check CheckResultsAvailable.
-  EXPECT_TRUE(query->CheckResultsAvailable(helper_.get()));
+  EXPECT_TRUE(query->CheckResultsAvailable(helper_.get(), flush_if_pending));
   EXPECT_EQ(kResult, query->GetResult());
   EXPECT_FALSE(query->NeverUsed());
   EXPECT_FALSE(query->Pending());
@@ -391,7 +403,7 @@ TEST_F(QueryTrackerTest, ManyQueries) {
   const int32_t kToken = 46;
   const uint32_t kResult = 456;
 
-  const size_t kTestSize = 4000;
+  const uint32_t kTestSize = 4000;
   static_assert(kTestSize > QuerySyncManager::kSyncsPerBucket,
                 "We want to use more than one bucket");
   // Create lots of queries.

@@ -15,6 +15,7 @@ source_set("pup_data_base") {
 
   deps = [
     "//base:base",
+    "//chrome/chrome_cleaner/chrome_utils:force_installed_extension",
     "//chrome/chrome_cleaner/os:common_os",
     "//chrome/chrome_cleaner/proto:shared_pup_enums_proto",
   ]
@@ -42,6 +43,18 @@ source_set("cleaner_pup_util") {
 
   public_deps = [
     "//chrome/chrome_cleaner/logging/proto:shared_data_proto",
+  ]
+}
+
+source_set("dummy_signatures") {
+  # This is not testonly because the real engine will be linked with these
+  # signatures when the private internal signatures are not available.
+  sources = [
+    "dummy_signatures.cc",
+  ]
+
+  deps = [
+    ":pup_data_base",
   ]
 }
 

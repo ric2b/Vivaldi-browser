@@ -9,12 +9,14 @@
 #include <utility>
 
 #include "base/at_exit.h"
+#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
@@ -26,6 +28,7 @@
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/fake_safe_browsing_database_manager.h"
+#include "chrome/browser/extensions/forced_extensions/installation_reporter.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -63,7 +66,7 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/extensions/extension_assets_manager_chromeos.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "components/user_manager/scoped_user_manager.h"
 #endif
 
@@ -158,7 +161,8 @@ class MockInstallPrompt : public ExtensionInstallPrompt {
       proxy_(proxy) {}
 
   // Overriding some of the ExtensionInstallUI API.
-  void OnInstallSuccess(const Extension* extension, SkBitmap* icon) override {
+  void OnInstallSuccess(scoped_refptr<const Extension> extension,
+                        SkBitmap* icon) override {
     proxy_->set_extension_id(extension->id());
     proxy_->set_confirmation_requested(did_call_show_dialog());
   }
@@ -572,7 +576,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTestWithExperimentalApis,
 IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, AllowOffStore) {
   const bool kTestData[] = {false, true};
 
-  for (size_t i = 0; i < arraysize(kTestData); ++i) {
+  for (size_t i = 0; i < base::size(kTestData); ++i) {
     std::unique_ptr<MockPromptProxy> mock_prompt =
         CreateMockPromptProxyForBrowser(browser());
 
@@ -691,11 +695,19 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, Blacklist) {
       new FakeSafeBrowsingDatabaseManager(true));
   Blacklist::ScopedDatabaseManagerForTest scoped_blacklist_db(blacklist_db);
 
-  blacklist_db->SetUnsafe("gllekhaobjnhgeagipipnkpmmmpchacm");
+  const std::string extension_id = "gllekhaobjnhgeagipipnkpmmmpchacm";
+  blacklist_db->SetUnsafe(extension_id);
 
   base::FilePath crx_path = test_data_dir_.AppendASCII("theme_hidpi_crx")
                                           .AppendASCII("theme_hidpi.crx");
   EXPECT_FALSE(InstallExtension(crx_path, 0));
+
+  auto installation_failure =
+      InstallationReporter::Get(profile(), extension_id);
+  EXPECT_EQ(InstallationReporter::FailureReason::CRX_INSTALL_ERROR_DECLINED,
+            installation_failure.failure_reason);
+  EXPECT_EQ(CrxInstallErrorDetail::EXTENSION_IS_BLOCKLISTED,
+            installation_failure.install_error_detail);
 }
 #endif
 
@@ -707,7 +719,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, NonStrictManifestCheck) {
   // version of the manifest, but the downloaded .crx file is old since
   // the newly published version hasn't fully propagated to all the download
   // servers yet. So load the v2 manifest, but then install the v1 crx file.
-  std::string id = "lhnaeclnpobnlbjbgogdanmhadigfnjp";
+  std::string id = "ooklpoaelmiimcjipecogjfcejghbogp";
   std::unique_ptr<WebstoreInstaller::Approval> approval =
       GetApproval("crx_installer/v2_no_permission_change/", id, false);
 
@@ -727,7 +739,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest,
   // version of the manifest, but the downloaded .crx file is old since
   // the newly published version hasn't fully propagated to all the download
   // servers yet. So load the v2 manifest, but then install the v1 crx file.
-  const std::string id = "lhnaeclnpobnlbjbgogdanmhadigfnjp";
+  const std::string id = "ooklpoaelmiimcjipecogjfcejghbogp";
   std::unique_ptr<WebstoreInstaller::Approval> approval =
       GetApproval("crx_installer/v2_no_permission_change/", id, false);
 
@@ -952,6 +964,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest,
   const Extension* extension = GetInstalledExtension(extension_id);
   ASSERT_NE(nullptr, extension);
   EXPECT_EQ("0.0", extension->VersionString());
+
+  auto installation_failure =
+      InstallationReporter::Get(profile(), extension_id);
+  EXPECT_EQ(InstallationReporter::FailureReason::
+                CRX_INSTALL_ERROR_SANDBOXED_UNPACKER_FAILURE,
+            installation_failure.failure_reason);
+  EXPECT_EQ(base::nullopt, installation_failure.install_error_detail);
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest,
@@ -988,10 +1007,18 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest,
   const Extension* extension = GetInstalledExtension(extension_id);
   ASSERT_NE(nullptr, extension);
   EXPECT_EQ("0.0", extension->VersionString());
+
+  auto installation_failure =
+      InstallationReporter::Get(profile(), extension_id);
+  EXPECT_EQ(InstallationReporter::FailureReason::CRX_INSTALL_ERROR_OTHER,
+            installation_failure.failure_reason);
+  EXPECT_EQ(CrxInstallErrorDetail::UNEXPECTED_ID,
+            *installation_failure.install_error_detail);
 }
 
 #if defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, KioskOnlyTest) {
+  base::ScopedAllowBlockingForTesting allow_io;
   // kiosk_only is whitelisted from non-chromeos.
   base::FilePath crx_path =
       test_data_dir_.AppendASCII("kiosk/kiosk_only.crx");
@@ -1009,6 +1036,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, KioskOnlyTest) {
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, InstallToSharedLocation) {
+  base::ScopedAllowBlockingForTesting allow_io;
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       chromeos::switches::kEnableExtensionAssetsSharing);
   base::ScopedTempDir cache_dir;
@@ -1021,7 +1049,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, InstallToSharedLocation) {
       crx_path, 1, extensions::Manifest::EXTERNAL_PREF);
   base::FilePath extension_path = extension->path();
   EXPECT_TRUE(cache_dir.GetPath().IsParent(extension_path));
-  base::ScopedAllowBlockingForTesting allow_io;
   EXPECT_TRUE(base::PathExists(extension_path));
 
   std::string extension_id = extension->id();

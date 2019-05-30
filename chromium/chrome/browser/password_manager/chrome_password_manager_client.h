@@ -15,13 +15,14 @@
 #include "components/autofill/content/common/autofill_driver.mojom.h"
 #include "components/password_manager/content/browser/content_credential_manager.h"
 #include "components/password_manager/content/browser/content_password_manager_driver_factory.h"
+#include "components/password_manager/core/browser/manage_passwords_referrer.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_client_helper.h"
 #include "components/password_manager/core/browser/password_manager_metrics_recorder.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_reuse_detection_manager.h"
-#include "components/password_manager/sync/browser/sync_credentials_filter.h"
+#include "components/password_manager/core/browser/sync_credentials_filter.h"
 #include "components/prefs/pref_member.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents_binding_set.h"
@@ -50,15 +51,15 @@ class ChromePasswordManagerClient
       public content::WebContentsObserver,
       public content::WebContentsUserData<ChromePasswordManagerClient>,
       public autofill::mojom::PasswordManagerDriver,
-      public autofill::mojom::PasswordManagerClient,
+      public autofill::mojom::PasswordGenerationDriver,
       public content::RenderWidgetHost::InputEventObserver {
  public:
   ~ChromePasswordManagerClient() override;
 
   // PasswordManagerClient implementation.
-  bool IsSavingAndFillingEnabledForCurrentPage() const override;
-  bool IsFillingEnabledForCurrentPage() const override;
-  bool IsFillingFallbackEnabledForCurrentPage() const override;
+  bool IsSavingAndFillingEnabled(const GURL& url) const override;
+  bool IsFillingEnabled(const GURL& url) const override;
+  bool IsFillingFallbackEnabled(const GURL& url) const override;
   void PostHSTSQueryForHost(
       const GURL& origin,
       password_manager::HSTSCallback callback) const override;
@@ -95,32 +96,32 @@ class ChromePasswordManagerClient
   PrefService* GetPrefs() const override;
   password_manager::PasswordStore* GetPasswordStore() const override;
   password_manager::SyncState GetPasswordSyncState() const override;
-  password_manager::SyncState GetHistorySyncState() const override;
   bool WasLastNavigationHTTPError() const override;
   net::CertStatus GetMainFrameCertStatus() const override;
   bool IsIncognito() const override;
   const password_manager::PasswordManager* GetPasswordManager() const override;
-  autofill::AutofillManager* GetAutofillManagerForMainFrame() override;
+  autofill::AutofillDownloadManager* GetAutofillDownloadManager() override;
   const GURL& GetMainFrameURL() const override;
   bool IsMainFrameSecure() const override;
   const GURL& GetLastCommittedEntryURL() const override;
   void AnnotateNavigationEntry(bool has_password_field) override;
+  std::string GetPageLanguage() const override;
   const password_manager::CredentialsFilter* GetStoreResultFilter()
       const override;
   const password_manager::LogManager* GetLogManager() const override;
   password_manager::PasswordRequirementsService*
   GetPasswordRequirementsService() override;
   favicon::FaviconService* GetFaviconService() override;
+  bool IsUnderAdvancedProtection() const override;
   void UpdateFormManagers() override;
+  void NavigateToManagePasswordsPage(
+      password_manager::ManagePasswordsReferrer referrer) override;
 
-  // autofill::mojom::PasswordManagerClient overrides.
+  // autofill::mojom::PasswordGenerationDriver overrides.
   void AutomaticGenerationStatusChanged(
       bool available,
       const base::Optional<
           autofill::password_generation::PasswordGenerationUIData>& ui_data)
-      override;
-  void ShowManualPasswordGenerationPopup(
-      const autofill::password_generation::PasswordGenerationUIData& ui_data)
       override;
   void ShowPasswordEditingPopup(const gfx::RectF& bounds,
                                 const autofill::PasswordForm& form) override;
@@ -164,10 +165,6 @@ class ChromePasswordManagerClient
   // on this |url|.
   static bool CanShowBubbleOnURL(const GURL& url);
 
-  // Informs the embedder that the user has manually requested to save the
-  // password in the focused password field.
-  void ForceSavePassword();
-
 #if defined(UNIT_TEST)
   bool was_store_ever_called() const { return was_store_ever_called_; }
   bool has_binding_for_credential_manager() const {
@@ -198,8 +195,7 @@ class ChromePasswordManagerClient
   void HideManualFallbackForSaving() override;
   void SameDocumentNavigation(
       const autofill::PasswordForm& password_form) override;
-  void ShowPasswordSuggestions(int key,
-                               base::i18n::TextDirection text_direction,
+  void ShowPasswordSuggestions(base::i18n::TextDirection text_direction,
                                const base::string16& typed_username,
                                int options,
                                const gfx::RectF& bounds) override;
@@ -208,6 +204,8 @@ class ChromePasswordManagerClient
   void CheckSafeBrowsingReputation(const GURL& form_action,
                                    const GURL& frame_url) override;
   void FocusedInputChanged(bool is_fillable, bool is_password_field) override;
+  void LogFirstFillingResult(uint32_t form_renderer_id,
+                             int32_t result) override;
 
   // content::WebContentsObserver overrides.
   void DidStartNavigation(
@@ -226,10 +224,9 @@ class ChromePasswordManagerClient
   // in the screens coordinate system.
   gfx::RectF GetBoundsInScreenSpace(const gfx::RectF& bounds);
 
-  // Checks if the current page fulfils the conditions for the password manager
-  // to be active on it, for example Sync credentials are not saved or auto
-  // filled.
-  bool IsPasswordManagementEnabledForCurrentPage() const;
+  // Checks if the current page specified in |url| fulfils the conditions for
+  // the password manager to be active on it.
+  bool IsPasswordManagementEnabledForCurrentPage(const GURL& url) const;
 
   // Returns true if this profile has metrics reporting and active sync
   // without custom sync passphrase.
@@ -239,7 +236,15 @@ class ChromePasswordManagerClient
   void PromptUserToEnableAutosignin() override;
   password_manager::PasswordManager* GetPasswordManager() override;
 
+  // |ui_data| is empty in case the renderer failed to start manual generation.
+  // In this case nothing should happen.
+  void ShowManualPasswordGenerationPopup(
+      base::WeakPtr<password_manager::ContentPasswordManagerDriver> driver,
+      const base::Optional<
+          autofill::password_generation::PasswordGenerationUIData>& ui_data);
+
   void ShowPasswordGenerationPopup(
+      password_manager::ContentPasswordManagerDriver* driver,
       const autofill::password_generation::PasswordGenerationUIData& ui_data,
       bool is_manually_triggered);
 
@@ -264,8 +269,8 @@ class ChromePasswordManagerClient
   // once main frame host was created.
   password_manager::ContentCredentialManager content_credential_manager_;
 
-  content::WebContentsFrameBindingSet<autofill::mojom::PasswordManagerClient>
-      password_manager_client_bindings_;
+  content::WebContentsFrameBindingSet<autofill::mojom::PasswordGenerationDriver>
+      password_generation_driver_bindings_;
   content::WebContentsFrameBindingSet<autofill::mojom::PasswordManagerDriver>
       password_manager_driver_bindings_;
 
@@ -296,6 +301,8 @@ class ChromePasswordManagerClient
   // Helper for performing logic that is common between
   // ChromePasswordManagerClient and IOSChromePasswordManagerClient.
   password_manager::PasswordManagerClientHelper helper_;
+
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
 
   DISALLOW_COPY_AND_ASSIGN(ChromePasswordManagerClient);
 };

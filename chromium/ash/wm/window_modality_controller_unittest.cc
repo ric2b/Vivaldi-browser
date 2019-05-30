@@ -8,6 +8,7 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/test_child_modal_parent.h"
 #include "ash/wm/window_util.h"
+#include "base/stl_util.h"
 #include "services/ws/public/mojom/window_manager.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
@@ -67,14 +68,14 @@ TEST_F(WindowModalityControllerTest, BasicActivation) {
   EXPECT_TRUE(wm::IsActiveWindow(w11.get()));
 
   int check1[] = {-1, -12, -11};
-  EXPECT_TRUE(ValidateStacking(w1->parent(), check1, arraysize(check1)));
+  EXPECT_TRUE(ValidateStacking(w1->parent(), check1, base::size(check1)));
 
   wm::ActivateWindow(w1.get());
   EXPECT_TRUE(wm::IsActiveWindow(w12.get()));
   // Transient children are always stacked above their transient parent, which
   // is why this order is not -11, -1, -12.
   int check2[] = {-1, -11, -12};
-  EXPECT_TRUE(ValidateStacking(w1->parent(), check2, arraysize(check2)));
+  EXPECT_TRUE(ValidateStacking(w1->parent(), check2, base::size(check2)));
 
   w12.reset();
   EXPECT_TRUE(wm::IsActiveWindow(w11.get()));
@@ -114,20 +115,20 @@ TEST_F(WindowModalityControllerTest, NestedModals) {
   wm::ActivateWindow(w1.get());
   EXPECT_TRUE(wm::IsActiveWindow(w111.get()));
   int check1[] = {-2, -1, -11, -111};
-  EXPECT_TRUE(ValidateStacking(w1->parent(), check1, arraysize(check1)));
+  EXPECT_TRUE(ValidateStacking(w1->parent(), check1, base::size(check1)));
 
   wm::ActivateWindow(w11.get());
   EXPECT_TRUE(wm::IsActiveWindow(w111.get()));
-  EXPECT_TRUE(ValidateStacking(w1->parent(), check1, arraysize(check1)));
+  EXPECT_TRUE(ValidateStacking(w1->parent(), check1, base::size(check1)));
 
   wm::ActivateWindow(w111.get());
   EXPECT_TRUE(wm::IsActiveWindow(w111.get()));
-  EXPECT_TRUE(ValidateStacking(w1->parent(), check1, arraysize(check1)));
+  EXPECT_TRUE(ValidateStacking(w1->parent(), check1, base::size(check1)));
 
   wm::ActivateWindow(w2.get());
   EXPECT_TRUE(wm::IsActiveWindow(w2.get()));
   int check2[] = {-1, -11, -111, -2};
-  EXPECT_TRUE(ValidateStacking(w1->parent(), check2, arraysize(check2)));
+  EXPECT_TRUE(ValidateStacking(w1->parent(), check2, base::size(check2)));
 
   w2.reset();
   EXPECT_TRUE(wm::IsActiveWindow(w111.get()));
@@ -405,45 +406,127 @@ class TouchTrackerWindowDelegate : public aura::test::TestWindowDelegate {
   DISALLOW_COPY_AND_ASSIGN(TouchTrackerWindowDelegate);
 };
 
-// Modality should prevent events from being passed to the transient parent.
+// Modality should prevent events from being passed to transient window tree
+// rooted to the top level window.
 TEST_F(WindowModalityControllerTest, TouchEvent) {
   TouchTrackerWindowDelegate d1;
   std::unique_ptr<aura::Window> w1(
       CreateTestWindowInShellWithDelegate(&d1, -1, gfx::Rect(0, 0, 100, 100)));
   TouchTrackerWindowDelegate d11;
   std::unique_ptr<aura::Window> w11(CreateTestWindowInShellWithDelegate(
-      &d11, -11, gfx::Rect(20, 20, 50, 50)));
-  // Make |w11| non-resizable to avoid touch events inside its transient parent
-  // |w1| from going to |w11| because of EasyResizeWindowTargeter.
+      &d11, -11, gfx::Rect(20, 20, 20, 20)));
+  TouchTrackerWindowDelegate d12;
+  std::unique_ptr<aura::Window> w12(CreateTestWindowInShellWithDelegate(
+      &d12, -12, gfx::Rect(40, 20, 20, 20)));
+  TouchTrackerWindowDelegate d2;
+  std::unique_ptr<aura::Window> w2(CreateTestWindowInShellWithDelegate(
+      &d2, -2, gfx::Rect(100, 0, 100, 100)));
+
+  // Make |w11| and |w12| non-resizable to avoid touch events inside its
+  // transient parent |w1| from going to them because of
+  // EasyResizeWindowTargeter.
   w11->SetProperty(aura::client::kResizeBehaviorKey,
+                   ws::mojom::kResizeBehaviorCanMaximize |
+                       ws::mojom::kResizeBehaviorCanMinimize);
+  w12->SetProperty(aura::client::kResizeBehaviorKey,
                    ws::mojom::kResizeBehaviorCanMaximize |
                        ws::mojom::kResizeBehaviorCanMinimize);
   ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow(),
                                      gfx::Point(10, 10));
 
   ::wm::AddTransientChild(w1.get(), w11.get());
+  ::wm::AddTransientChild(w1.get(), w12.get());
   d1.reset();
   d11.reset();
+  d12.reset();
+  d2.reset();
 
   {
-    // Clicking a point within w1 should activate that window.
-    generator.PressMoveAndReleaseTouchTo(gfx::Point(10, 10));
-    EXPECT_TRUE(wm::IsActiveWindow(w1.get()));
-    EXPECT_TRUE(d1.received_touch());
-    EXPECT_FALSE(d11.received_touch());
-  }
-
-  {
-    // Adding a modal window while a touch is down should fire a touch cancel.
+    // Adding a modal window while a touch is down in top level transient window
+    // should fire a touch cancel.
     generator.PressTouch();
-    generator.MoveTouch(gfx::Point(10, 10));
+    generator.MoveTouch(gfx::Point(10, 15));
+    EXPECT_TRUE(d1.received_touch());
+    EXPECT_TRUE(wm::IsActiveWindow(w1.get()));
     d1.reset();
     d11.reset();
+    d12.reset();
+    d2.reset();
 
     w11->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_WINDOW);
     EXPECT_TRUE(d1.received_touch());
     EXPECT_EQ(ui::ET_TOUCH_CANCELLED, d1.last_event_type());
     EXPECT_FALSE(d11.received_touch());
+    EXPECT_FALSE(d12.received_touch());
+    EXPECT_FALSE(d2.received_touch());
+    w11->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_NONE);
+  }
+
+  {
+    // Adding a modal window while a touch is down in window tree rooted to top
+    // level transient window should fire a touch cancel.
+    generator.MoveTouch(gfx::Point(50, 30));
+    generator.PressTouch();
+    generator.MoveTouch(gfx::Point(50, 35));
+    EXPECT_TRUE(d12.received_touch());
+    EXPECT_TRUE(wm::IsActiveWindow(w12.get()));
+    d1.reset();
+    d11.reset();
+    d12.reset();
+    d2.reset();
+
+    w11->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_WINDOW);
+    EXPECT_FALSE(d1.received_touch());
+    EXPECT_FALSE(d11.received_touch());
+    EXPECT_TRUE(d12.received_touch());
+    EXPECT_EQ(ui::ET_TOUCH_CANCELLED, d12.last_event_type());
+    EXPECT_FALSE(d2.received_touch());
+    w11->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_NONE);
+  }
+
+  {
+    // Adding a modal window while a touch is down in other transient window
+    // tree should not fire a touch cancel.
+    wm::ActivateWindow(w2.get());
+    generator.MoveTouch(gfx::Point(110, 10));
+    generator.PressTouch();
+    generator.MoveTouch(gfx::Point(110, 15));
+    EXPECT_TRUE(d2.received_touch());
+    EXPECT_TRUE(wm::IsActiveWindow(w2.get()));
+    d1.reset();
+    d11.reset();
+    d12.reset();
+    d2.reset();
+
+    w11->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_WINDOW);
+    EXPECT_FALSE(d1.received_touch());
+    EXPECT_FALSE(d11.received_touch());
+    EXPECT_FALSE(d12.received_touch());
+    EXPECT_FALSE(d2.received_touch());
+    w11->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_NONE);
+  }
+
+  {
+    // Adding a child type modal window while a touch is down in other transient
+    // window tree should not fire a touch cancel. (See
+    // https://crbug.com/900321)
+    wm::ActivateWindow(w2.get());
+    generator.MoveTouch(gfx::Point(110, 10));
+    generator.PressTouch();
+    generator.MoveTouch(gfx::Point(110, 15));
+    EXPECT_TRUE(d2.received_touch());
+    EXPECT_TRUE(wm::IsActiveWindow(w2.get()));
+    d1.reset();
+    d11.reset();
+    d12.reset();
+    d2.reset();
+
+    w11->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_CHILD);
+    EXPECT_FALSE(d1.received_touch());
+    EXPECT_FALSE(d11.received_touch());
+    EXPECT_FALSE(d12.received_touch());
+    EXPECT_FALSE(d2.received_touch());
+    w11->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_NONE);
   }
 }
 

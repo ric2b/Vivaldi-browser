@@ -109,6 +109,9 @@ message DeviceReportingProto {
   optional bool report_session_status = 8 [default = true];
   optional bool report_os_update_status = 10 [default = false];
   optional bool report_running_kiosk_app = 11 [default = false];
+  optional bool report_power_status = 12 [default = false];
+  optional bool report_storage_status = 13 [default = false];
+  optional bool report_board_status = 14 [default = false];
 
   // Frequency to report device status, default to 3 hours.
   optional int64 device_status_frequency = 9 [default = 10800000];
@@ -254,7 +257,7 @@ message AutoUpdateSettingsProto {
     // installed Chrome OS version, the device should roll back to a Chrome OS
     // version starting with |target_version_prefix|. The device does a full
     // powerwash during the rollback, including TPM reset.
-    ROLLBACK_WITH_FULL_POWERWASH = 2;
+    ROLLBACK_AND_POWERWASH = 2;
     // If |target_version_prefix| specifies an older version than the currently
     // installed Chrome OS version, the device should roll back to a Chrome OS
     // version starting with |target_version_prefix|.
@@ -269,7 +272,7 @@ message AutoUpdateSettingsProto {
     // OS version starting with |target_version_prefix|.
     // If this is not possible, the device will stay on the current version
     // (same as ROLLBACK_DISABLED).
-    ROLLBACK_WITH_RESTORE_ONLY = 4;
+    ROLLBACK_ONLY_IF_RESTORE_POSSIBLE = 4;
   }
 
   // Specifies what should happen if |target_version_prefix| specifies an older
@@ -761,6 +764,25 @@ message DisplayRotationDefaultProto {
   optional Rotation display_rotation_default = 1;
 }
 
+// This setting is configured by the device policy DeviceDisplayResolution.
+// If |device_display_resolution| contains a value, then it's treated as a JSON
+// object that uses the schema defined for DeviceDisplayResolution policy.
+// Example of the policy value:
+// {
+//   "external_width": 1920,
+//   "external_height": 1080,
+//   "external_scale_percentage": 50,
+//   "internal_scale_percentage": 150,
+//   "recommended": true
+// }
+// It sets a 1920x1080 display mode for any external displays and
+// scales them to 50%, also scales the built-in display to 150%.
+// If "recommended" flag is set to true, user is able to override
+// any settings via the settings page.
+message DeviceDisplayResolutionProto {
+  optional string device_display_resolution = 1;
+}
+
 // Settings that control whether to allow Chrome to be pinned to a specific
 // version according to the auto-launched kiosk app’s requirement.
 message AllowKioskAppControlChromeVersionProto {
@@ -812,6 +834,12 @@ message LoginVideoCaptureAllowedUrlsProto {
   repeated string urls = 1;
 }
 
+// Settings that control whether a device can connect to a 802.11r enabled
+// WiFi network.
+message DeviceWiFiFastTransitionEnabledProto {
+  optional bool device_wifi_fast_transition_enabled = 1;
+}
+
 message NetworkThrottlingEnabledProto {
   optional bool enabled = 1 [default = false];
   optional int32 upload_rate_kbits = 2 [default = 0];
@@ -835,7 +863,7 @@ message LoginScreenInputMethodsProto {
   repeated string login_screen_input_methods = 1;
 }
 
-// The url and hash that specified in JSON format that can be used to set the
+// The url and hash specified in JSON format that can be used to set the
 // device-level wallpaper on the login screen before any user logs in.
 message DeviceWallpaperImageProto {
   optional string device_wallpaper_image = 1;
@@ -923,7 +951,7 @@ message DeviceOffHoursProto {
   repeated int32 ignored_policy_proto_tags = 3;
 }
 
-// The url and hash that specified in JSON format that can be used to retrieve
+// The url and hash specified in JSON format that can be used to retrieve
 // the device-level printers configuration file.
 message DeviceNativePrintersProto {
   // External policy blob encoded as JSON.
@@ -1060,6 +1088,21 @@ message DeviceMachinePasswordChangeRateProto {
   optional int32 rate_days = 1;
 }
 
+// Specifies how long cached Active Directory Group Policy Objects (GPOs) may be
+// reused until they are re-downloaded (a version change also forces a
+// re-download).
+// Applies to Active Directory management mode only.
+message DeviceGpoCacheLifetimeProto {
+  optional int32 lifetime_hours = 1;
+}
+
+// Specifies how long cached Active Directory authentication data may be reused
+// until it is refreshed. This can significantly speed up user authentication.
+// Applies to Active Directory management mode only.
+message DeviceAuthDataCacheLifetimeProto {
+  optional int32 lifetime_hours = 1;
+}
+
 // Setting to control the authentication type for newly added users which log in
 // via SAML.
 message SamlLoginAuthenticationTypeProto {
@@ -1076,6 +1119,38 @@ message SamlLoginAuthenticationTypeProto {
 // (true by default)
 message DeviceUnaffiliatedCrostiniAllowedProto {
   optional bool device_unaffiliated_crostini_allowed = 1;
+}
+
+// Setting that controls whether PluginVm is allowed to run on this device.
+message PluginVmAllowedProto {
+  optional bool plugin_vm_allowed = 1;
+}
+
+// Setting that specifies PluginVm license key for this device.
+message PluginVmLicenseKeyProto {
+  optional string plugin_vm_license_key = 1;
+}
+
+// Setting that controls whether the device should reboot when user sign out.
+message DeviceRebootOnUserSignoutProto {
+  enum RebootOnSignoutMode {
+    // No value set. Default is NEVER.
+    REBOOT_ON_SIGNOUT_MODE_UNSPECIFIED = 0;
+    // Do not reboot on signout.
+    NEVER = 1;
+    // Reboot on signout if an ARC session was active during the user session.
+    ARC_SESSION = 2;
+    // Always reboot on signout.
+    ALWAYS = 3;
+  }
+
+  optional RebootOnSignoutMode reboot_on_signout_mode = 1 [default = NEVER];
+}
+
+// Setting that controls whether wilco diagnostics and telemetry controller is
+// allowed on this device.
+message DeviceWilcoDtcAllowedProto {
+  optional bool device_wilco_dtc_allowed = 1;
 }
 
 message ChromeDeviceSettingsProto {
@@ -1170,4 +1245,14 @@ message ChromeDeviceSettingsProto {
   optional SamlLoginAuthenticationTypeProto saml_login_authentication_type = 71;
   optional DeviceUnaffiliatedCrostiniAllowedProto
       device_unaffiliated_crostini_allowed = 72;
+  optional DeviceWiFiFastTransitionEnabledProto
+      device_wifi_fast_transition_enabled = 73;
+  optional DeviceDisplayResolutionProto device_display_resolution = 74;
+  optional PluginVmAllowedProto plugin_vm_allowed = 75;
+  optional DeviceGpoCacheLifetimeProto device_gpo_cache_lifetime = 76;
+  optional DeviceAuthDataCacheLifetimeProto device_auth_data_cache_lifetime =
+      77;
+  optional PluginVmLicenseKeyProto plugin_vm_license_key = 78;
+  optional DeviceRebootOnUserSignoutProto device_reboot_on_user_signout = 79;
+  optional DeviceWilcoDtcAllowedProto device_wilco_dtc_allowed = 80;
 }

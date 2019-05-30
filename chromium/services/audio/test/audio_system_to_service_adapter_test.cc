@@ -4,6 +4,7 @@
 
 #include "services/audio/public/cpp/audio_system_to_service_adapter.h"
 
+#include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_task_environment.h"
@@ -43,9 +44,8 @@ class AudioSystemToServiceAdapterTestBase : public testing::Test {
 
     service_manager::mojom::ConnectorRequest ignored_request;
     auto connector = service_manager::Connector::Create(&ignored_request);
-    service_manager::Connector::TestApi connector_test_api(connector.get());
-    connector_test_api.OverrideBinderForTesting(
-        service_manager::Identity(mojom::kServiceName),
+    connector->OverrideBinderForTesting(
+        service_manager::ServiceFilter::ByName(mojom::kServiceName),
         mojom::SystemInfo::Name_,
         base::BindRepeating(
             &AudioSystemToServiceAdapterTestBase::BindSystemInfoRequest,
@@ -407,9 +407,8 @@ class AudioSystemToServiceAdapterDisconnectTest : public testing::Test {
   std::unique_ptr<service_manager::Connector> GetConnector() {
     service_manager::mojom::ConnectorRequest ignored_request;
     auto connector = service_manager::Connector::Create(&ignored_request);
-    service_manager::Connector::TestApi connector_test_api(connector.get());
-    connector_test_api.OverrideBinderForTesting(
-        service_manager::Identity(mojom::kServiceName),
+    connector->OverrideBinderForTesting(
+        service_manager::ServiceFilter::ByName(mojom::kServiceName),
         mojom::SystemInfo::Name_,
         base::BindRepeating(
             &AudioSystemToServiceAdapterDisconnectTest::BindSystemInfoRequest,
@@ -519,7 +518,7 @@ namespace media {
 using AudioSystemToServiceAdapterTestVariations =
     testing::Types<audio::AudioSystemToServiceAdapterTestBase>;
 
-INSTANTIATE_TYPED_TEST_CASE_P(AudioSystemToServiceAdapter,
-                              AudioSystemTestTemplate,
-                              AudioSystemToServiceAdapterTestVariations);
+INSTANTIATE_TYPED_TEST_SUITE_P(AudioSystemToServiceAdapter,
+                               AudioSystemTestTemplate,
+                               AudioSystemToServiceAdapterTestVariations);
 }  // namespace media

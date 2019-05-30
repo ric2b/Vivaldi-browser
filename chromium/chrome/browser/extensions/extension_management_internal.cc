@@ -34,7 +34,7 @@ IndividualSettings::IndividualSettings(
     const IndividualSettings* default_settings) {
   installation_mode = default_settings->installation_mode;
   update_url = default_settings->installation_mode;
-  blocked_permissions = default_settings->blocked_permissions;
+  blocked_permissions = default_settings->blocked_permissions.Clone();
   // We are not initializing |minimum_version_required| from |default_settings|
   // here since it's not applicable to default settings.
 }
@@ -135,9 +135,11 @@ bool IndividualSettings::Parse(const base::DictionaryValue* dict,
         URLPattern pattern(extension_scheme_mask);
         if (unparsed_str != URLPattern::kAllUrlsPattern)
           unparsed_str.append("/*");
+        // TODO(nrpeter): Remove effective TLD wildcard capability from
+        // URLPattern.
         URLPattern::ParseResult parse_result = pattern.Parse(
-            unparsed_str, URLPattern::ALLOW_WILDCARD_FOR_EFFECTIVE_TLD);
-        if (parse_result != URLPattern::PARSE_SUCCESS) {
+            unparsed_str, URLPattern::DENY_WILDCARD_FOR_EFFECTIVE_TLD);
+        if (parse_result != URLPattern::ParseResult::kSuccess) {
           LOG(WARNING) << kMalformedPreferenceWarning;
           LOG(WARNING) << "Invalid URL pattern '" + unparsed_str +
                               "' for attribute " + key;

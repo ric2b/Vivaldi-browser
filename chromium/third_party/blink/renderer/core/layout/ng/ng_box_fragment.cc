@@ -30,8 +30,9 @@ NGLineHeightMetrics NGBoxFragment::BaselineMetricsWithoutSynthesize(
   }
 
   // Check if we have a propagated baseline.
-  if (const NGBaseline* baseline = physical_fragment.Baseline(request)) {
-    LayoutUnit ascent = baseline->offset;
+  if (base::Optional<LayoutUnit> baseline =
+          physical_fragment.Baseline(request)) {
+    LayoutUnit ascent = *baseline;
     LayoutUnit descent = BlockSize() - ascent;
 
     // For replaced elements, inline-block elements, and inline-table
@@ -78,21 +79,9 @@ NGLineHeightMetrics NGBoxFragment::BaselineMetrics(
       block_size += layout_box.MarginLogicalWidth();
   }
 
-  if (request.baseline_type == kAlphabeticBaseline)
+  if (request.BaselineType() == kAlphabeticBaseline)
     return NGLineHeightMetrics(block_size, LayoutUnit());
   return NGLineHeightMetrics(block_size - block_size / 2, block_size / 2);
-}
-
-NGBoxStrut NGBoxFragment::Borders() const {
-  const auto& physical_fragment = ToNGPhysicalBoxFragment(physical_fragment_);
-  return physical_fragment.Borders().ConvertToLogical(GetWritingMode(),
-                                                      direction_);
-}
-
-NGBoxStrut NGBoxFragment::Padding() const {
-  const auto& physical_fragment = ToNGPhysicalBoxFragment(physical_fragment_);
-  return physical_fragment.Padding().ConvertToLogical(GetWritingMode(),
-                                                      direction_);
 }
 
 }  // namespace blink

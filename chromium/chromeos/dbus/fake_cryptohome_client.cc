@@ -18,8 +18,8 @@
 #include "base/stl_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chromeos/chromeos_paths.h"
 #include "chromeos/dbus/attestation/attestation.pb.h"
+#include "chromeos/dbus/constants/dbus_paths.h"
 #include "chromeos/dbus/cryptohome/key.pb.h"
 #include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "chromeos/dbus/util/account_identifier_operators.h"
@@ -44,14 +44,15 @@ constexpr size_t kInstallAttributesFileMaxSize = 16384;
 
 FakeCryptohomeClient::FakeCryptohomeClient()
     : service_is_available_(true),
+      remove_firmware_management_parameters_from_tpm_call_count_(0),
       async_call_id_(1),
       unmount_result_(true),
       system_salt_(GetStubSystemSalt()),
       weak_ptr_factory_(this) {
   base::FilePath cache_path;
-  locked_ =
-      base::PathService::Get(chromeos::FILE_INSTALL_ATTRIBUTES, &cache_path) &&
-      base::PathExists(cache_path);
+  locked_ = base::PathService::Get(dbus_paths::FILE_INSTALL_ATTRIBUTES,
+                                   &cache_path) &&
+            base::PathExists(cache_path);
   if (locked_)
     LoadInstallAttributes();
 }
@@ -84,9 +85,10 @@ void FakeCryptohomeClient::IsMounted(DBusMethodCallback<bool> callback) {
       FROM_HERE, base::BindOnce(std::move(callback), true));
 }
 
-void FakeCryptohomeClient::Unmount(DBusMethodCallback<bool> callback) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), unmount_result_));
+void FakeCryptohomeClient::UnmountEx(
+    const cryptohome::UnmountRequest& request,
+    DBusMethodCallback<cryptohome::BaseReply> callback) {
+  ReturnProtobufMethodCallback(cryptohome::BaseReply(), std::move(callback));
 }
 
 void FakeCryptohomeClient::MigrateKeyEx(
@@ -263,8 +265,10 @@ bool FakeCryptohomeClient::InstallAttributesFinalize(bool* successful) {
   // browser is restarted. This is used for ease of development when device
   // enrollment is required.
   base::FilePath cache_path;
-  if (!base::PathService::Get(chromeos::FILE_INSTALL_ATTRIBUTES, &cache_path))
+  if (!base::PathService::Get(dbus_paths::FILE_INSTALL_ATTRIBUTES,
+                              &cache_path)) {
     return false;
+  }
 
   cryptohome::SerializedInstallAttributes install_attrs_proto;
   for (const auto& it : install_attrs_) {
@@ -585,6 +589,12 @@ void FakeCryptohomeClient::MountEx(
   ReturnProtobufMethodCallback(reply, std::move(callback));
 }
 
+void FakeCryptohomeClient::LockToSingleUserMountUntilReboot(
+    const cryptohome::LockToSingleUserMountUntilRebootRequest& request,
+    DBusMethodCallback<cryptohome::BaseReply> callback) {
+  ReturnProtobufMethodCallback(cryptohome::BaseReply(), std::move(callback));
+}
+
 void FakeCryptohomeClient::AddKeyEx(
     const cryptohome::AccountIdentifier& cryptohome_id,
     const cryptohome::AuthorizationRequest& auth,
@@ -638,6 +648,12 @@ void FakeCryptohomeClient::FlushAndSignBootAttributes(
   ReturnProtobufMethodCallback(cryptohome::BaseReply(), std::move(callback));
 }
 
+void FakeCryptohomeClient::GetTpmStatus(
+    const cryptohome::GetTpmStatusRequest& request,
+    DBusMethodCallback<cryptohome::BaseReply> callback) {
+  ReturnProtobufMethodCallback(cryptohome::BaseReply(), std::move(callback));
+}
+
 void FakeCryptohomeClient::MigrateToDircrypto(
     const cryptohome::AccountIdentifier& cryptohome_id,
     const cryptohome::MigrateToDircryptoRequest& request,
@@ -656,6 +672,7 @@ void FakeCryptohomeClient::MigrateToDircrypto(
 void FakeCryptohomeClient::RemoveFirmwareManagementParametersFromTpm(
     const cryptohome::RemoveFirmwareManagementParametersRequest& request,
     DBusMethodCallback<cryptohome::BaseReply> callback) {
+  remove_firmware_management_parameters_from_tpm_call_count_++;
   ReturnProtobufMethodCallback(cryptohome::BaseReply(), std::move(callback));
 }
 
@@ -740,8 +757,8 @@ void FakeCryptohomeClient::NotifyLowDiskSpace(uint64_t disk_free_bytes) {
 // static
 std::vector<uint8_t> FakeCryptohomeClient::GetStubSystemSalt() {
   const char kStubSystemSalt[] = "stub_system_salt";
-  return std::vector<uint8_t>(kStubSystemSalt,
-                              kStubSystemSalt + arraysize(kStubSystemSalt) - 1);
+  return std::vector<uint8_t>(
+      kStubSystemSalt, kStubSystemSalt + base::size(kStubSystemSalt) - 1);
 }
 
 void FakeCryptohomeClient::ReturnProtobufMethodCallback(
@@ -831,10 +848,11 @@ void FakeCryptohomeClient::NotifyDircryptoMigrationProgress(
 bool FakeCryptohomeClient::LoadInstallAttributes() {
   base::FilePath cache_file;
   const bool file_exists =
-      base::PathService::Get(FILE_INSTALL_ATTRIBUTES, &cache_file) &&
+      base::PathService::Get(dbus_paths::FILE_INSTALL_ATTRIBUTES,
+                             &cache_file) &&
       base::PathExists(cache_file);
   DCHECK(file_exists);
-  // Mostly copied from chrome/browser/chromeos/settings/install_attributes.cc.
+  // Mostly copied from chrome/browser/chromeos/tpm/install_attributes.cc.
   std::string file_blob;
   if (!base::ReadFileToStringWithMaxSize(cache_file, &file_blob,
                                          kInstallAttributesFileMaxSize)) {

@@ -46,9 +46,10 @@ class V0CustomElementRegistrationContext final
     : public GarbageCollectedFinalized<V0CustomElementRegistrationContext> {
  public:
   static V0CustomElementRegistrationContext* Create() {
-    return new V0CustomElementRegistrationContext();
+    return MakeGarbageCollected<V0CustomElementRegistrationContext>();
   }
 
+  V0CustomElementRegistrationContext();
   ~V0CustomElementRegistrationContext() = default;
   void DocumentWasDetached() { registry_.DocumentWasDetached(); }
 
@@ -56,7 +57,6 @@ class V0CustomElementRegistrationContext final
   void RegisterElement(Document*,
                        V0CustomElementConstructorBuilder*,
                        const AtomicString& type,
-                       V0CustomElement::NameSet valid_names,
                        ExceptionState&);
 
   Element* CreateCustomTagElement(Document&, const QualifiedName&);
@@ -69,10 +69,7 @@ class V0CustomElementRegistrationContext final
   bool NameIsDefined(const AtomicString& name) const;
   void SetV1(const CustomElementRegistry*);
 
-  void Trace(blink::Visitor*);
-
- protected:
-  V0CustomElementRegistrationContext();
+  void Trace(Visitor*);
 
   // Instance creation
   void DidGiveTypeExtension(Element*, const AtomicString& type);

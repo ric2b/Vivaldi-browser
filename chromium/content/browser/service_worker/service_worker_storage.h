@@ -108,20 +108,20 @@ class CONTENT_EXPORT ServiceWorkerStorage
       const base::WeakPtr<ServiceWorkerContextCore>& context,
       ServiceWorkerStorage* old_storage);
 
-  // Finds registration for |document_url| or |pattern| or |registration_id|.
+  // Finds registration for |document_url| or |scope| or |registration_id|.
   // The Find methods will find stored and initially installing registrations.
   // Returns blink::ServiceWorkerStatusCode::kOk with non-null
   // registration if registration is found, or returns
   // blink::ServiceWorkerStatusCode::kErrorNotFound if no
-  // matching registration is found.  The FindRegistrationForPattern method is
+  // matching registration is found.  The FindRegistrationForScope method is
   // guaranteed to return asynchronously. However, the methods to find
   // for |document_url| or |registration_id| may complete immediately
   // (the callback may be called prior to the method returning) or
   // asynchronously.
   void FindRegistrationForDocument(const GURL& document_url,
                                    FindRegistrationCallback callback);
-  void FindRegistrationForPattern(const GURL& scope,
-                                  FindRegistrationCallback callback);
+  void FindRegistrationForScope(const GURL& scope,
+                                FindRegistrationCallback callback);
   void FindRegistrationForId(int64_t registration_id,
                              const GURL& origin,
                              FindRegistrationCallback callback);
@@ -176,6 +176,9 @@ class CONTENT_EXPORT ServiceWorkerStorage
   void DeleteRegistration(int64_t registration_id,
                           const GURL& origin,
                           StatusCallback callback);
+
+  // Removes traces of deleted data on disk.
+  void PerformStorageCleanup(base::OnceClosure callback);
 
   // Creates a resource accessor. Never returns nullptr but an accessor may be
   // associated with the disabled disk cache if the storage is disabled.
@@ -239,6 +242,11 @@ class CONTENT_EXPORT ServiceWorkerStorage
   void GetUserDataForAllRegistrationsByKeyPrefix(
       const std::string& key_prefix,
       GetUserDataForAllRegistrationsCallback callback);
+  // Responds OK if all are successfully deleted or not found in the database.
+  // |key_prefix| cannot be empty.
+  void ClearUserDataForAllRegistrationsByKeyPrefix(
+      const std::string& key_prefix,
+      StatusCallback callback);
 
   // Deletes the storage and starts over.
   void DeleteAndStartOver(StatusCallback callback);
@@ -375,7 +383,7 @@ class CONTENT_EXPORT ServiceWorkerStorage
       const ServiceWorkerDatabase::RegistrationData& data,
       const ResourceList& resources,
       ServiceWorkerDatabase::Status status);
-  void DidFindRegistrationForPattern(
+  void DidFindRegistrationForScope(
       const GURL& scope,
       FindRegistrationCallback callback,
       const ServiceWorkerDatabase::RegistrationData& data,
@@ -437,7 +445,7 @@ class CONTENT_EXPORT ServiceWorkerStorage
       const ResourceList& resources);
   ServiceWorkerRegistration* FindInstallingRegistrationForDocument(
       const GURL& document_url);
-  ServiceWorkerRegistration* FindInstallingRegistrationForPattern(
+  ServiceWorkerRegistration* FindInstallingRegistrationForScope(
       const GURL& scope);
   ServiceWorkerRegistration* FindInstallingRegistrationForId(
       int64_t registration_id);
@@ -489,7 +497,7 @@ class CONTENT_EXPORT ServiceWorkerStorage
       scoped_refptr<base::SequencedTaskRunner> original_task_runner,
       const GURL& document_url,
       FindInDBCallback callback);
-  static void FindForPatternInDB(
+  static void FindForScopeInDB(
       ServiceWorkerDatabase* database,
       scoped_refptr<base::SequencedTaskRunner> original_task_runner,
       const GURL& scope,
@@ -536,6 +544,7 @@ class CONTENT_EXPORT ServiceWorkerStorage
   static void DeleteAllDataForOriginsFromDB(
       ServiceWorkerDatabase* database,
       const std::set<GURL>& origins);
+  static void PerformStorageCleanupInDB(ServiceWorkerDatabase* database);
 
   bool IsDisabled() const;
   void ScheduleDeleteAndStartOver();
@@ -563,10 +572,10 @@ class CONTENT_EXPORT ServiceWorkerStorage
   int64_t next_resource_id_;
 
   enum State {
-    UNINITIALIZED,
-    INITIALIZING,
-    INITIALIZED,
-    DISABLED,
+    STORAGE_STATE_UNINITIALIZED,
+    STORAGE_STATE_INITIALIZING,
+    STORAGE_STATE_INITIALIZED,
+    STORAGE_STATE_DISABLED,
   };
   State state_;
 

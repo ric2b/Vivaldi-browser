@@ -30,14 +30,14 @@ class QUIC_EXPORT_PRIVATE QuicDefaultPacketWriter : public QuicPacketWriter {
                           const QuicIpAddress& self_address,
                           const QuicSocketAddress& peer_address,
                           PerPacketOptions* options) override;
-  bool IsWriteBlockedDataBuffered() const override;
   bool IsWriteBlocked() const override;
   void SetWritable() override;
   QuicByteCount GetMaxPacketSize(
       const QuicSocketAddress& peer_address) const override;
   bool SupportsReleaseTime() const override;
   bool IsBatchMode() const override;
-  char* GetNextWriteLocation() const override;
+  char* GetNextWriteLocation(const QuicIpAddress& self_address,
+                             const QuicSocketAddress& peer_address) override;
   WriteResult Flush() override;
 
   void set_fd(int fd) { fd_ = fd; }

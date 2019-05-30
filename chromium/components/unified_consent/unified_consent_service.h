@@ -5,31 +5,35 @@
 #ifndef COMPONENTS_UNIFIED_CONSENT_UNIFIED_CONSENT_SERVICE_H_
 #define COMPONENTS_UNIFIED_CONSENT_UNIFIED_CONSENT_SERVICE_H_
 
+#include <map>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "base/values.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/sync_service_observer.h"
-#include "components/unified_consent/unified_consent_service_client.h"
+#include "components/sync_preferences/pref_service_syncable_observer.h"
+#include "components/unified_consent/unified_consent_metrics.h"
 #include "services/identity/public/cpp/identity_manager.h"
 
 namespace user_prefs {
 class PrefRegistrySyncable;
 }
 
-class PrefChangeRegistrar;
-class PrefService;
+namespace sync_preferences {
+class PrefServiceSyncable;
+}
 
 namespace syncer {
 class SyncService;
 }
 
 namespace unified_consent {
-
-using Service = UnifiedConsentServiceClient::Service;
-using ServiceState = UnifiedConsentServiceClient::ServiceState;
 
 enum class MigrationState : int {
   kNotInitialized = 0,
@@ -38,58 +42,28 @@ enum class MigrationState : int {
   kCompleted = 10,
 };
 
-// Used in histograms. Do not change existing values, append new values at the
-// end.
-enum class ConsentBumpSuppressReason {
-  // There is no suppress reason. The consent bump was shown.
-  kNone,
-  // The user wasn't signed in during the migration.
-  kNotSignedIn,
-  // The user wasn't syncing everything during the migration.
-  kSyncEverythingOff,
-  // The user didn't have all on-by-default privacy settings enabled during
-  // migration.
-  kPrivacySettingOff,
-  kSettingsOptIn,
-  // The user was eligible for seeing the consent bump, but then signed out.
-  kUserSignedOut,
-  kSyncPaused,
-  // The user was eligible for seeing the consent bump, but turned an individual
-  // sync data type off.
-  kUserTurnedSyncDatatypeOff,
-  // The user was eligible for seeing the consent bump, but turned an
-  // on-by-default privacy setting off.
-  kUserTurnedPrivacySettingOff,
-
-  kMaxValue = kUserTurnedPrivacySettingOff
-};
-
-// Google services that can be toggled in user settings.
-// Used in histograms. Do not change existing values, append new values at the
-// end.
-enum class SettingsHistogramValue {
-  kNone = 0,
-  kUnifiedConsentGiven = 1,
-  kUserEvents = 2,
-  kUrlKeyedAnonymizedDataCollection = 3,
-  kSafeBrowsingExtendedReporting = 4,
-  kSpellCheck = 5,
-
-  kMaxValue = kSpellCheck
-};
-
 // A browser-context keyed service that is used to manage the user consent
 // when UnifiedConsent feature is enabled.
-class UnifiedConsentService : public KeyedService,
-                              public UnifiedConsentServiceClient::Observer,
-                              public identity::IdentityManager::Observer,
-                              public syncer::SyncServiceObserver {
+//
+// This service makes sure that UrlKeyedAnonymizedDataCollection is turned on
+// during sync opt-in and turned off when the user opts out.
+//
+// During the advanced opt-in through settings, the changes the user makes to
+// the service toggles(prefs) are applied after prefs start syncing. This is
+// done to prevent changes the user makes during sync setup to be overridden by
+// syncing down older changes.
+class UnifiedConsentService
+    : public KeyedService,
+      public identity::IdentityManager::Observer,
+      public syncer::SyncServiceObserver,
+      public sync_preferences::PrefServiceSyncableObserver {
  public:
-  UnifiedConsentService(
-      std::unique_ptr<UnifiedConsentServiceClient> service_client,
-      PrefService* pref_service,
-      identity::IdentityManager* identity_manager,
-      syncer::SyncService* sync_service);
+  // Initializes the service. The |service_pref_names| vector is used to track
+  // pref changes during the first sync setup.
+  UnifiedConsentService(sync_preferences::PrefServiceSyncable* pref_service,
+                        identity::IdentityManager* identity_manager,
+                        syncer::SyncService* sync_service,
+                        const std::vector<std::string>& service_pref_names);
   ~UnifiedConsentService() override;
 
   // Register the prefs used by this UnifiedConsentService.
@@ -100,31 +74,15 @@ class UnifiedConsentService : public KeyedService,
   static void RollbackIfNeeded(PrefService* user_pref_service,
                                syncer::SyncService* sync_service);
 
-  // This updates the consent pref and if |unified_consent_given| is true, all
-  // unified consent services are enabled.
-  void SetUnifiedConsentGiven(bool unified_consent_given);
-  bool IsUnifiedConsentGiven();
-
-  // Returns true if all criteria is met to show the consent bump.
-  bool ShouldShowConsentBump();
-  // Marks the consent bump as shown. Any future calls to
-  // |ShouldShowConsentBump| are guaranteed to return false.
-  void MarkConsentBumpShown();
-  // Records the consent bump suppress reason and updates the state whether the
-  // consent bump should be shown. Note: In some cases, e.g. sync paused,
-  // |ShouldShowConsentBump| will still return true.
-  void RecordConsentBumpSuppressReason(
-      ConsentBumpSuppressReason suppress_reason);
+  // Enables or disables URL-keyed anonymized data collection.
+  void SetUrlKeyedAnonymizedDataCollectionEnabled(bool enabled);
 
   // KeyedService:
   void Shutdown() override;
 
-  // UnifiedConsentServiceClient::Observer:
-  void OnServiceStateChanged(Service service) override;
-
   // IdentityManager::Observer:
   void OnPrimaryAccountCleared(
-      const AccountInfo& previous_primary_account_info) override;
+      const CoreAccountInfo& previous_primary_account_info) override;
 
  private:
   friend class UnifiedConsentServiceTest;
@@ -132,66 +90,32 @@ class UnifiedConsentService : public KeyedService,
   // syncer::SyncServiceObserver:
   void OnStateChanged(syncer::SyncService* sync) override;
 
-  // Updates the sync settings if sync isn't disabled and the sync engine is
-  // initialized.
-  // When |sync_everything| is false:
-  //  - All sync data types in |enable_data_types| will be enabled.
-  //  - All sync data types in |disable_data_types| will be disabled.
-  //  - All data types in neither of the two sets will remain in the same state.
-  // When |sync_everything| is true, |enable_data_types| and
-  // |disable_data_types| will be ignored.
-  void UpdateSyncSettingsIfPossible(
-      bool sync_everything,
-      syncer::ModelTypeSet enable_data_types = syncer::ModelTypeSet(),
-      syncer::ModelTypeSet disable_data_types = syncer::ModelTypeSet());
+  // sync_preferences::PrefServiceSyncableObserver:
+  void OnIsSyncingChanged() override;
 
-  // Posts a task to call |UpdateSyncSettingsIfPossible|.
-  void PostTaskToUpdateSyncSettings(
-      bool sync_everything,
-      syncer::ModelTypeSet enable_data_types = syncer::ModelTypeSet(),
-      syncer::ModelTypeSet disable_data_types = syncer::ModelTypeSet());
-
-  // Called when |prefs::kUnifiedConsentGiven| pref value changes.
-  // When set to true, it enables syncing of all data types and it enables all
-  // non-personalized services. Otherwise it does nothing.
-  void OnUnifiedConsentGivenPrefChanged();
+  // Helpers for observing changes in the service prefs.
+  void StartObservingServicePrefChanges();
+  void StopObservingServicePrefChanges();
+  void ServicePrefChanged(const std::string& name);
 
   // Migration helpers.
   MigrationState GetMigrationState();
   void SetMigrationState(MigrationState migration_state);
-  // Called when the unified consent service is created. This sets the
-  // |kShouldShowUnifiedConsentBump| pref to true if the user is eligible and
-  // calls |UpdateSettingsForMigration| at the end.
+  // Called when the unified consent service is created.
   void MigrateProfileToUnifiedConsent();
   // Updates the settings preferences for the migration when the sync engine is
   // initialized. When it is not, this function will be called again from
   // |OnStateChanged| when the sync engine is initialized.
   void UpdateSettingsForMigration();
 
-  // Returns true if all non-personalized services are enabled.
-  bool AreAllNonPersonalizedServicesEnabled();
-
-  // Checks if all on-by-default non-personalized services are on.
-  bool AreAllOnByDefaultPrivacySettingsOn();
-
-  // Records a sample for each bucket enabled by the user (except kNone).
-  // kNone is recorded when none of the other buckets are recorded.
-  void RecordSettingsHistogram();
-
-  // This method is called on startup to check the eligibility criteria for
-  // showing the consent bump. The check is only done when the profile was
-  // eligible before. If the user is not eligible anymore, the
-  // kShouldShowUnifiedConsentBump pref is set to false.
-  void CheckConsentBumpEligibility();
-
-  std::unique_ptr<UnifiedConsentServiceClient> service_client_;
-  PrefService* pref_service_;
+  sync_preferences::PrefServiceSyncable* pref_service_;
   identity::IdentityManager* identity_manager_;
   syncer::SyncService* sync_service_;
 
-  std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
-
-  base::WeakPtrFactory<UnifiedConsentService> weak_ptr_factory_;
+  // Used for tracking the service pref states during the advanced sync opt-in.
+  const std::vector<std::string> service_pref_names_;
+  std::map<std::string, base::Value> service_pref_changes_;
+  PrefChangeRegistrar service_pref_change_registrar_;
 
   DISALLOW_COPY_AND_ASSIGN(UnifiedConsentService);
 };

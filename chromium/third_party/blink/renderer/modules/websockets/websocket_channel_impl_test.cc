@@ -25,6 +25,7 @@
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
+#include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
 
 using testing::_;
 using testing::InSequence;
@@ -45,7 +46,8 @@ class MockWebSocketChannelClient
 
  public:
   static MockWebSocketChannelClient* Create() {
-    return new testing::StrictMock<MockWebSocketChannelClient>();
+    return MakeGarbageCollected<
+        testing::StrictMock<MockWebSocketChannelClient>>();
   }
 
   MockWebSocketChannelClient() = default;
@@ -62,9 +64,7 @@ class MockWebSocketChannelClient
   MOCK_METHOD1(DidConsumeBufferedAmount, void(uint64_t));
   MOCK_METHOD0(DidStartClosingHandshake, void());
   MOCK_METHOD3(DidClose,
-               void(ClosingHandshakeCompletionStatus,
-                    unsigned short,
-                    const String&));
+               void(ClosingHandshakeCompletionStatus, uint16_t, const String&));
 
   void Trace(blink::Visitor* visitor) override {
     WebSocketChannelClient::Trace(visitor);
@@ -96,10 +96,11 @@ class MockWebSocketHandle : public WebSocketHandle {
                     const KURL&,
                     const String&,
                     WebSocketHandleClient*));
-  MOCK_METHOD4(Send,
-               void(bool, WebSocketHandle::MessageType, const char*, size_t));
+  MOCK_METHOD4(
+      Send,
+      void(bool, WebSocketHandle::MessageType, const char*, wtf_size_t));
   MOCK_METHOD1(FlowControl, void(int64_t));
-  MOCK_METHOD2(Close, void(unsigned short, const String&));
+  MOCK_METHOD2(Close, void(uint16_t, const String&));
 };
 
 class MockWebSocketHandshakeThrottle : public WebSocketHandshakeThrottle {
@@ -155,7 +156,7 @@ class WebSocketChannelImplTest : public PageTestBase {
 
   MockWebSocketHandle* Handle() { return handle_; }
 
-  void DidConsumeBufferedAmount(unsigned long a) {
+  void DidConsumeBufferedAmount(uint64_t a) {
     sum_of_consumed_buffered_amount_ += a;
   }
 
@@ -798,7 +799,8 @@ TEST_F(WebSocketChannelImplTest, failFromWebSocket) {
                  WebSocketChannel::kCloseEventCodeAbnormalClosure, String()));
   }
 
-  Channel()->Fail("fail message from WebSocket", kErrorMessageLevel,
+  Channel()->Fail("fail message from WebSocket",
+                  mojom::ConsoleMessageLevel::kError,
                   SourceLocation::Create(String(), 0, 0, nullptr));
 }
 
@@ -875,7 +877,8 @@ TEST_F(WebSocketChannelImplHandshakeThrottleTest, FailDuringThrottle) {
     EXPECT_CALL(checkpoint, Call(1));
   }
   Channel()->Connect(url(), "");
-  Channel()->Fail("close during handshake", kWarningMessageLevel,
+  Channel()->Fail("close during handshake",
+                  mojom::ConsoleMessageLevel::kWarning,
                   SourceLocation::Create(String(), 0, 0, nullptr));
   checkpoint.Call(1);
 }
@@ -895,7 +898,8 @@ TEST_F(WebSocketChannelImplHandshakeThrottleTest,
   }
   Channel()->Connect(url(), "");
   HandleClient()->DidConnect(Handle(), String("a"), String("b"));
-  Channel()->Fail("close during handshake", kWarningMessageLevel,
+  Channel()->Fail("close during handshake",
+                  mojom::ConsoleMessageLevel::kWarning,
                   SourceLocation::Create(String(), 0, 0, nullptr));
   checkpoint.Call(1);
 }

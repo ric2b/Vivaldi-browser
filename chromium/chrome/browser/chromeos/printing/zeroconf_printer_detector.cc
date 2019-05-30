@@ -12,6 +12,8 @@
 #include "base/md5.h"
 #include "base/observer_list_threadsafe.h"
 #include "base/stl_util.h"
+#include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
 #include "chrome/browser/local_discovery/service_discovery_device_lister.h"
@@ -20,14 +22,14 @@
 
 namespace chromeos {
 // Supported service names for printers.
-const char* ZeroconfPrinterDetector::kIppServiceName = "_ipp._tcp.local";
-const char* ZeroconfPrinterDetector::kIppsServiceName = "_ipps._tcp.local";
+const char ZeroconfPrinterDetector::kIppServiceName[] = "_ipp._tcp.local";
+const char ZeroconfPrinterDetector::kIppsServiceName[] = "_ipps._tcp.local";
 
 // IppEverywhere printers are also required to advertise these services.
-const char* ZeroconfPrinterDetector::kIppEverywhereServiceName =
-    "_ipp._tcp.local,_print";
-const char* ZeroconfPrinterDetector::kIppsEverywhereServiceName =
-    "_ipps._tcp.local,_print";
+const char ZeroconfPrinterDetector::kIppEverywhereServiceName[] =
+    "_print._sub._ipp._tcp.local";
+const char ZeroconfPrinterDetector::kIppsEverywhereServiceName[] =
+    "_print._sub._ipps._tcp.local";
 
 namespace {
 
@@ -125,7 +127,8 @@ std::string ZeroconfPrinterId(const ServiceDescription& service,
 // Attempt to fill |detected_printer| using the information in
 // |service_description| and |metadata|.  Return true on success, false on
 // failure.
-bool ConvertToPrinter(const ServiceDescription& service_description,
+bool ConvertToPrinter(const std::string& service_type,
+                      const ServiceDescription& service_description,
                       const ParsedMetadata& metadata,
                       PrinterDetector::DetectedPrinter* detected_printer) {
   // If we don't have the minimum information needed to attempt a setup, fail.
@@ -144,16 +147,12 @@ bool ConvertToPrinter(const ServiceDescription& service_description,
   printer.set_description(metadata.note);
   printer.set_make_and_model(metadata.product);
   const char* uri_protocol;
-  if ((service_description.service_type() ==
-       base::StringPiece(ZeroconfPrinterDetector::kIppServiceName)) ||
-      (service_description.service_type() ==
-       base::StringPiece(ZeroconfPrinterDetector::kIppEverywhereServiceName))) {
+  if (service_type == ZeroconfPrinterDetector::kIppServiceName ||
+      service_type == ZeroconfPrinterDetector::kIppEverywhereServiceName) {
     uri_protocol = "ipp";
-  } else if ((service_description.service_type() ==
-              base::StringPiece(ZeroconfPrinterDetector::kIppsServiceName)) ||
-             (service_description.service_type() ==
-              base::StringPiece(
-                  ZeroconfPrinterDetector::kIppsEverywhereServiceName))) {
+  } else if (service_type == ZeroconfPrinterDetector::kIppsServiceName ||
+             service_type ==
+                 ZeroconfPrinterDetector::kIppsEverywhereServiceName) {
     uri_protocol = "ipps";
   } else {
     // Since we only register for these services, we should never get back
@@ -174,14 +173,15 @@ bool ConvertToPrinter(const ServiceDescription& service_description,
       service_description.address.port(), metadata.rp.c_str()));
 
   // Per the IPP Everywhere Standard 5100.14-2013, section 4.2.1, IPP
-  // everywhere-capable printers advertise services suffixed with ",_print"
-  // (possibly in addition to suffix-free versions).  If we get a printer from a
-  // ,_print service type, it should be auto-configurable with IPP Everywhere.
+  // everywhere-capable printers advertise services prefixed with "_print"
+  // (possibly in addition to prefix-free versions).  If we get a printer from a
+  // _print service type, it should be auto-configurable with IPP Everywhere.
   printer.mutable_ppd_reference()->autoconf =
-      base::StringPiece(service_description.service_type())
-          .ends_with(",_print");
+      base::StringPiece(service_type).starts_with("_print._sub");
 
-  // gather ppd identification candidates.
+  // Gather ppd identification candidates.
+  detected_printer->ppd_search_data.discovery_type =
+      PrinterSearchData::PrinterDiscoveryType::kZeroconf;
   if (!metadata.ty.empty()) {
     detected_printer->ppd_search_data.make_and_model.push_back(metadata.ty);
   }
@@ -193,6 +193,22 @@ bool ConvertToPrinter(const ServiceDescription& service_description,
     detected_printer->ppd_search_data.make_and_model.push_back(
         base::StringPrintf("%s %s", metadata.usb_MFG.c_str(),
                            metadata.usb_MDL.c_str()));
+  }
+  if (!metadata.pdl.empty()) {
+    // Per Bonjour Printer Spec v1.2 section 9.2.8, it is invalid for the pdl to
+    // end with a comma.
+    auto media_types = base::SplitString(
+        metadata.pdl, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+    if (!media_types.empty() && !media_types.back().empty()) {
+      // Prune any empty splits.
+      base::EraseIf(media_types, [](base::StringPiece s) { return s.empty(); });
+
+      std::transform(
+          media_types.begin(), media_types.end(),
+          std::back_inserter(
+              detected_printer->ppd_search_data.supported_document_formats),
+          [](base::StringPiece s) { return base::ToLowerASCII(s); });
+    }
   }
   return true;
 }
@@ -243,7 +259,8 @@ class ZeroconfPrinterDetectorImpl : public ZeroconfPrinterDetector {
     // We don't care if it was added or not; we generate an update either way.
     ParsedMetadata metadata(service_description);
     DetectedPrinter printer;
-    if (!ConvertToPrinter(service_description, metadata, &printer)) {
+    if (!ConvertToPrinter(service_type, service_description, metadata,
+                          &printer)) {
       return;
     }
     base::AutoLock auto_lock(printers_lock_);

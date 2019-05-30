@@ -9,7 +9,9 @@
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/common/pref_names.h"
+#include "components/renderer_context_menu/context_menu_delegate.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
@@ -269,12 +271,24 @@ bool DevtoolsConnectorItem::HasOwnerShipOfContents() {
   return false;
 }
 
-void DevtoolsConnectorItem::HandleKeyboardEvent(
+bool DevtoolsConnectorItem::HandleContextMenu(
+    content::RenderFrameHost* render_frame_host,
+    const content::ContextMenuParams& params) {
+  if (guest_delegate_) {
+    return guest_delegate_->HandleContextMenu(render_frame_host, params);
+  } else if (devtools_delegate_) {
+    return devtools_delegate_->HandleContextMenu(render_frame_host, params);
+  }
+  return false;
+}
+
+bool DevtoolsConnectorItem::HandleKeyboardEvent(
   content::WebContents* source,
   const content::NativeWebKeyboardEvent& event) {
   if (devtools_delegate_) {
-    devtools_delegate_->HandleKeyboardEvent(source, event);
+    return devtools_delegate_->HandleKeyboardEvent(source, event);
   }
+  return false;
 }
 
 content::JavaScriptDialogManager*
@@ -306,11 +320,14 @@ content::ColorChooser* DevtoolsConnectorItem::OpenColorChooser(
 
 void DevtoolsConnectorItem::RunFileChooser(
     content::RenderFrameHost* render_frame_host,
-    const content::FileChooserParams& params) {
+    std::unique_ptr<content::FileSelectListener> listener,
+    const blink::mojom::FileChooserParams& params) {
   if (devtools_delegate_) {
-    devtools_delegate_->RunFileChooser(render_frame_host, params);
+    devtools_delegate_->RunFileChooser(render_frame_host, std::move(listener),
+                                       params);
   } else if (guest_delegate_) {
-    guest_delegate_->RunFileChooser(render_frame_host, params);
+    guest_delegate_->RunFileChooser(render_frame_host, std::move(listener),
+                                    params);
   }
   NOTREACHED();
 }
@@ -325,6 +342,19 @@ bool DevtoolsConnectorItem::PreHandleGestureEvent(
   }
   NOTREACHED();
   return true;
+}
+
+content::WebContents* DevtoolsConnectorItem::OpenURLFromTab(
+    content::WebContents* source,
+    const content::OpenURLParams& params) {
+  if (devtools_delegate_) {
+    return devtools_delegate_->OpenURLFromTab(source, params);
+  }
+  if (guest_delegate_) {
+    return guest_delegate_->OpenURLFromTab(source, params);
+  }
+  NOTREACHED();
+  return nullptr;
 }
 
 // DevToolsUIBindings::Delegate implementation

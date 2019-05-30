@@ -1,7 +1,18 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
- * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+ * @license
+ * Copyright 2017 Google Inc. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS-IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 'use strict';
 
@@ -13,9 +24,8 @@
  */
 
 /** @typedef {import('./dom.js')} DOM */
-/** @typedef {import('./details-renderer.js').DetailsJSON} DetailsJSON */
 
-/* globals self, Util, DetailsRenderer, CategoryRenderer, PerformanceCategoryRenderer */
+/* globals self, Util, DetailsRenderer, CategoryRenderer, PerformanceCategoryRenderer, PwaCategoryRenderer */
 
 class ReportRenderer {
   /**
@@ -29,21 +39,23 @@ class ReportRenderer {
   }
 
   /**
-   * @param {LH.ReportResult} report
+   * @param {LH.Result} result
    * @param {Element} container Parent element to render the report into.
+   * @return {Element}
    */
-  renderReport(report, container) {
-    // If any mutations happen to the report within the renderers, we want the original object untouched
-    const clone = /** @type {LH.ReportResult} */ (JSON.parse(JSON.stringify(report)));
+  renderReport(result, container) {
+    // Mutate the UIStrings if necessary (while saving originals)
+    const originalUIStrings = JSON.parse(JSON.stringify(Util.UIStrings));
 
-    // TODO(phulce): we all agree this is technical debt we should fix
-    if (typeof clone.categories !== 'object') throw new Error('No categories provided.');
-    clone.reportCategories = Object.values(clone.categories);
-    ReportRenderer.smooshAuditResultsIntoCategories(clone.audits, clone.reportCategories);
+    const report = Util.prepareReportResult(result);
 
     container.textContent = ''; // Remove previous report.
-    container.appendChild(this._renderReport(clone));
-    return /** @type {Element} **/ (container);
+    container.appendChild(this._renderReport(report));
+
+    // put the UIStrings back into original state
+    Util.updateAllUIStrings(originalUIStrings);
+
+    return container;
   }
 
   /**
@@ -103,8 +115,14 @@ class ReportRenderer {
       {name: 'URL', description: report.finalUrl},
       {name: 'Fetch time', description: Util.formatDateTime(report.fetchTime)},
       ...envValues,
-      {name: 'User agent', description: report.userAgent},
+      {name: 'User agent (host)', description: report.userAgent},
+      {name: 'User agent (network)', description: report.environment &&
+        report.environment.networkUserAgent},
+      {name: 'CPU/Memory Power', description: report.environment &&
+        report.environment.benchmarkIndex.toFixed(0)},
     ].forEach(runtime => {
+      if (!runtime.description) return;
+
       const item = this._dom.cloneTemplate('#tmpl-lh-env__items', env);
       this._dom.find('.lh-env__name', item).textContent = `${runtime.name}:`;
       this._dom.find('.lh-env__description', item).textContent = runtime.description;
@@ -126,6 +144,9 @@ class ReportRenderer {
     }
 
     const container = this._dom.cloneTemplate('#tmpl-lh-warnings--toplevel', this._templateContext);
+    const message = this._dom.find('.lh-warnings__msg', container);
+    message.textContent = Util.UIStrings.toplevelWarningsMessage;
+
     const warnings = this._dom.find('ul', container);
     for (const warningString of report.runWarnings) {
       const warning = warnings.appendChild(this._dom.createElement('li'));
@@ -150,7 +171,6 @@ class ReportRenderer {
       header = this._renderReportHeader(report);
     }
     headerContainer.appendChild(header);
-    const scoresContainer = this._dom.find('.lh-scores-container', headerContainer);
 
     const container = this._dom.createElement('div', 'lh-container');
     const reportSection = container.appendChild(this._dom.createElement('div', 'lh-report'));
@@ -168,25 +188,52 @@ class ReportRenderer {
     const detailsRenderer = new DetailsRenderer(this._dom);
     const categoryRenderer = new CategoryRenderer(this._dom, detailsRenderer);
     categoryRenderer.setTemplateContext(this._templateContext);
-    const perfCategoryRenderer = new PerformanceCategoryRenderer(this._dom, detailsRenderer);
-    perfCategoryRenderer.setTemplateContext(this._templateContext);
+
+    /** @type {Record<string, CategoryRenderer>} */
+    const specificCategoryRenderers = {
+      performance: new PerformanceCategoryRenderer(this._dom, detailsRenderer),
+      pwa: new PwaCategoryRenderer(this._dom, detailsRenderer),
+    };
+    Object.values(specificCategoryRenderers).forEach(renderer => {
+      renderer.setTemplateContext(this._templateContext);
+    });
 
     const categories = reportSection.appendChild(this._dom.createElement('div', 'lh-categories'));
 
     for (const category of report.reportCategories) {
-      if (scoreHeader) {
-        scoreHeader.appendChild(categoryRenderer.renderScoreGauge(category));
-      }
-
-      let renderer = categoryRenderer;
-      if (category.id === 'performance') {
-        renderer = perfCategoryRenderer;
-      }
+      const renderer = specificCategoryRenderers[category.id] || categoryRenderer;
       categories.appendChild(renderer.render(category, report.categoryGroups));
     }
 
+    // Fireworks
+    const scoresAll100 = report.reportCategories.every(cat => cat.score === 1);
+    if (!this._dom.isDevTools() && scoresAll100) {
+      headerContainer.classList.add('score100');
+      this._dom.find('.lh-header', headerContainer).addEventListener('click', _ => {
+        headerContainer.classList.toggle('fireworks-paused');
+      });
+    }
+
     if (scoreHeader) {
+      const defaultGauges = [];
+      const customGauges = [];
+      for (const category of report.reportCategories) {
+        const renderer = specificCategoryRenderers[category.id] || categoryRenderer;
+        const categoryGauge = renderer.renderScoreGauge(category, report.categoryGroups || {});
+
+        // Group gauges that aren't default at the end of the header
+        if (renderer.renderScoreGauge === categoryRenderer.renderScoreGauge) {
+          defaultGauges.push(categoryGauge);
+        } else {
+          customGauges.push(categoryGauge);
+        }
+      }
+      scoreHeader.append(...defaultGauges, ...customGauges);
+
       const scoreScale = this._dom.cloneTemplate('#tmpl-lh-scorescale', this._templateContext);
+      this._dom.find('.lh-scorescale-label', scoreScale).textContent =
+        Util.UIStrings.scorescaleLabel;
+      const scoresContainer = this._dom.find('.lh-scores-container', headerContainer);
       scoresContainer.appendChild(scoreHeader);
       scoresContainer.appendChild(scoreScale);
     }
@@ -199,21 +246,10 @@ class ReportRenderer {
 
     return reportFragment;
   }
-
-  /**
-   * Place the AuditResult into the auditDfn (which has just weight & group)
-   * @param {Object<string, LH.Audit.Result>} audits
-   * @param {Array<LH.ReportResult.Category>} reportCategories
-   */
-  static smooshAuditResultsIntoCategories(audits, reportCategories) {
-    for (const category of reportCategories) {
-      category.auditRefs.forEach(auditMeta => {
-        const result = audits[auditMeta.id];
-        auditMeta.result = result;
-      });
-    }
-  }
 }
+
+/** @type {LH.I18NRendererStrings} */
+ReportRenderer._UIStringsStash = {};
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = ReportRenderer;

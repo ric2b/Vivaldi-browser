@@ -39,7 +39,6 @@ class AudioResampler;
 
 class PLATFORM_EXPORT AudioResamplerKernel {
   USING_FAST_MALLOC(AudioResamplerKernel);
-  WTF_MAKE_NONCOPYABLE(AudioResamplerKernel);
 
  public:
   AudioResamplerKernel(AudioResampler*);
@@ -50,14 +49,14 @@ class PLATFORM_EXPORT AudioResamplerKernel {
   // be copied. This sample data provides the input to the resampler when
   // process() is called.  framesToProcess must be less than or equal to
   // MaxFramesToProcess.
-  float* GetSourcePointer(size_t frames_to_process,
+  float* GetSourcePointer(uint32_t frames_to_process,
                           size_t* number_of_source_frames_needed);
 
   // process() resamples framesToProcess frames from the source into
   // destination.  Each call to process() must be preceded by a call to
   // getSourcePointer() so that source input may be supplied.  framesToProcess
   // must be less than or equal to MaxFramesToProcess.
-  void Process(float* destination, size_t frames_to_process);
+  void Process(float* destination, uint32_t frames_to_process);
 
   // Resets the processing state.
   void Reset();
@@ -80,6 +79,8 @@ class PLATFORM_EXPORT AudioResamplerKernel {
   // there will be no buffered samples.
   float last_values_[2];
   unsigned fill_index_;
+
+  DISALLOW_COPY_AND_ASSIGN(AudioResamplerKernel);
 };
 
 }  // namespace blink

@@ -30,6 +30,10 @@ class CORE_EXPORT CSSTransformValue final : public CSSStyleValue {
 
   static CSSTransformValue* FromCSSValue(const CSSValue&);
 
+  CSSTransformValue(
+      const HeapVector<Member<CSSTransformComponent>>& transform_components)
+      : CSSStyleValue(), transform_components_(transform_components) {}
+
   bool is2D() const;
 
   DOMMatrix* toMatrix(ExceptionState&) const;
@@ -38,14 +42,14 @@ class CORE_EXPORT CSSTransformValue final : public CSSStyleValue {
 
   StyleValueType GetType() const override { return kTransformType; }
 
-  CSSTransformComponent* AnonymousIndexedGetter(uint32_t index) {
+  CSSTransformComponent* AnonymousIndexedGetter(wtf_size_t index) {
     return transform_components_.at(index);
   }
   bool AnonymousIndexedSetter(unsigned,
                               const Member<CSSTransformComponent>,
                               ExceptionState&);
 
-  size_t length() const { return transform_components_.size(); }
+  wtf_size_t length() const { return transform_components_.size(); }
 
   void Trace(blink::Visitor* visitor) override {
     visitor->Trace(transform_components_);
@@ -53,10 +57,6 @@ class CORE_EXPORT CSSTransformValue final : public CSSStyleValue {
   }
 
  private:
-  CSSTransformValue(
-      const HeapVector<Member<CSSTransformComponent>>& transform_components)
-      : CSSStyleValue(), transform_components_(transform_components) {}
-
   HeapVector<Member<CSSTransformComponent>> transform_components_;
   DISALLOW_COPY_AND_ASSIGN(CSSTransformValue);
 };

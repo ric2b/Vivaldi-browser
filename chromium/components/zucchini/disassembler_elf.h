@@ -39,6 +39,7 @@ struct Elf32IntelTraits : public Elf32Traits {
   static const char kExeTypeString[];
   static constexpr elf::MachineArchitecture kMachineValue = elf::EM_386;
   static constexpr uint32_t kRelType = elf::R_386_RELATIVE;
+  enum : uint32_t { kVAWidth = 4 };
   using Rel32FinderUse = Rel32FinderX86;
 };
 
@@ -58,6 +59,7 @@ struct Elf64IntelTraits : public Elf64Traits {
   static const char kExeTypeString[];
   static constexpr elf::MachineArchitecture kMachineValue = elf::EM_X86_64;
   static constexpr uint32_t kRelType = elf::R_X86_64_RELATIVE;
+  enum : uint32_t { kVAWidth = 8 };
   using Rel32FinderUse = Rel32FinderX64;
 };
 
@@ -65,8 +67,6 @@ struct Elf64IntelTraits : public Elf64Traits {
 template <class Traits>
 class DisassemblerElf : public Disassembler {
  public:
-  using HeaderVector = std::vector<const typename Traits::Elf_Shdr*>;
-
   // Applies quick checks to determine whether |image| *may* point to the start
   // of an executable. Returns true iff the check passes.
   static bool QuickDetect(ConstBufferView image);
@@ -81,8 +81,6 @@ class DisassemblerElf : public Disassembler {
   // Find/Receive functions that are common among different architectures.
   std::unique_ptr<ReferenceReader> MakeReadRelocs(offset_t lo, offset_t hi);
   std::unique_ptr<ReferenceWriter> MakeWriteRelocs(MutableBufferView image);
-  std::unique_ptr<ReferenceReader> MakeReadAbs32(offset_t lo, offset_t hi);
-  std::unique_ptr<ReferenceWriter> MakeWriteAbs32(MutableBufferView image);
 
   const AddressTranslator& translator() const { return translator_; }
 
@@ -110,9 +108,8 @@ class DisassemblerElf : public Disassembler {
   // Processes rel32 data after they are extracted from executable sections.
   virtual void PostProcessRel32() = 0;
 
-  // The parsing routines below return true on success, and false on failure.
-
   // Parses ELF header and section headers, and performs basic validation.
+  // Returns whether parsing was successful.
   bool ParseHeader();
 
   // Extracts and stores section headers that we need.
@@ -171,6 +168,8 @@ class DisassemblerElfIntel : public DisassemblerElf<Traits> {
   void PostProcessRel32() override;
 
   // Specialized Find/Receive functions.
+  std::unique_ptr<ReferenceReader> MakeReadAbs32(offset_t lo, offset_t hi);
+  std::unique_ptr<ReferenceWriter> MakeWriteAbs32(MutableBufferView image);
   std::unique_ptr<ReferenceReader> MakeReadRel32(offset_t lo, offset_t hi);
   std::unique_ptr<ReferenceWriter> MakeWriteRel32(MutableBufferView image);
 

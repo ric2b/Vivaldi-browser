@@ -29,8 +29,8 @@
 namespace blink {
 
 inline SVGPathElement::SVGPathElement(Document& document)
-    : SVGGeometryElement(SVGNames::pathTag, document),
-      path_(SVGAnimatedPath::Create(this, SVGNames::dAttr, CSSPropertyD)) {
+    : SVGGeometryElement(svg_names::kPathTag, document),
+      path_(SVGAnimatedPath::Create(this, svg_names::kDAttr, CSSPropertyD)) {
   AddToPropertyMap(path_);
 }
 
@@ -64,12 +64,12 @@ Path SVGPathElement::AsPath() const {
 }
 
 float SVGPathElement::getTotalLength() {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
+  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
   return SVGPathQuery(PathByteStream()).GetTotalLength();
 }
 
 SVGPointTearOff* SVGPathElement::getPointAtLength(float length) {
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
+  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
   SVGPathQuery path_query(PathByteStream());
   if (length < 0) {
     length = 0;
@@ -83,7 +83,7 @@ SVGPointTearOff* SVGPathElement::getPointAtLength(float length) {
 }
 
 void SVGPathElement::SvgAttributeChanged(const QualifiedName& attr_name) {
-  if (attr_name == SVGNames::dAttr) {
+  if (attr_name == svg_names::kDAttr) {
     InvalidateMPathDependencies();
     GeometryPresentationAttributeChanged(attr_name);
     return;

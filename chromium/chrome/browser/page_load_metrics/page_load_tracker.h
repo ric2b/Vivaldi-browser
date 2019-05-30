@@ -13,7 +13,6 @@
 #include "base/time/time.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_update_dispatcher.h"
-#include "chrome/browser/page_load_metrics/user_input_tracker.h"
 #include "chrome/common/page_load_metrics/page_load_timing.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -176,12 +175,19 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client {
   void OnTimingChanged() override;
   void OnSubFrameTimingChanged(content::RenderFrameHost* rfh,
                                const mojom::PageLoadTiming& timing) override;
+  void OnSubFrameRenderDataChanged(
+      content::RenderFrameHost* rfh,
+      const mojom::PageRenderData& render_data) override;
   void OnMainFrameMetadataChanged() override;
   void OnSubframeMetadataChanged() override;
   void UpdateFeaturesUsage(
+      content::RenderFrameHost* rfh,
       const mojom::PageLoadFeatures& new_features) override;
   void UpdateResourceDataUse(
+      int frame_tree_node_id,
       const std::vector<mojom::ResourceDataUpdatePtr>& resources) override;
+  void UpdateFrameCpuTiming(content::RenderFrameHost* rfh,
+                            const mojom::CpuTiming& timing) override;
 
   void Redirect(content::NavigationHandle* navigation_handle);
   void WillProcessNavigationResponse(
@@ -189,12 +195,15 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client {
   void Commit(content::NavigationHandle* navigation_handle);
   void DidCommitSameDocumentNavigation(
       content::NavigationHandle* navigation_handle);
+  void DidInternalNavigationAbort(content::NavigationHandle* navigation_handle);
+  void ReadyToCommitNavigation(content::NavigationHandle* navigation_handle);
   void DidFinishSubFrameNavigation(
       content::NavigationHandle* navigation_handle);
   void FailedProvisionalLoad(content::NavigationHandle* navigation_handle,
                              base::TimeTicks failed_load_time);
   void WebContentsHidden();
   void WebContentsShown();
+  void FrameDeleted(content::RenderFrameHost* rfh);
 
   void OnInputEvent(const blink::WebInputEvent& event);
 
@@ -208,6 +217,12 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client {
 
   void OnLoadedResource(
       const ExtraRequestCompleteInfo& extra_request_complete_info);
+
+  void FrameReceivedFirstUserActivation(content::RenderFrameHost* rfh);
+  void FrameDisplayStateChanged(content::RenderFrameHost* render_frame_host,
+                                bool is_display_none);
+  void FrameSizeChanged(content::RenderFrameHost* render_frame_host,
+                        const gfx::Size& frame_size);
 
   // Signals that we should stop tracking metrics for the associated page load.
   // We may stop tracking a page load if it doesn't meet the criteria for
@@ -260,8 +275,6 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client {
 
   UserInitiatedInfo user_initiated_info() const { return user_initiated_info_; }
 
-  UserInputTracker* input_tracker() { return &input_tracker_; }
-
   PageLoadMetricsUpdateDispatcher* metrics_update_dispatcher() {
     return &metrics_update_dispatcher_;
   }
@@ -277,7 +290,7 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client {
   // Invoked when a media element starts playing.
   void MediaStartedPlaying(
       const content::WebContentsObserver::MediaPlayerInfo& video_type,
-      bool is_in_main_frame);
+      content::RenderFrameHost* render_frame_host);
 
   // Informs the observers that the event corresponding to |event_key| has
   // occurred.
@@ -301,8 +314,6 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client {
   // and represents a sequence of provisional aborts that never ends with a
   // committed load.
   void LogAbortChainHistograms(content::NavigationHandle* final_navigation);
-
-  UserInputTracker input_tracker_;
 
   // Whether we stopped tracking this navigation after it was initiated. We may
   // stop tracking a navigation if it doesn't meet the criteria for tracking

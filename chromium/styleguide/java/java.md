@@ -30,6 +30,9 @@ is encouraged, but there are some gotchas:
 
 ### Lambdas and Method References
  * These are syntactic sugar for creating anonymous inner classes.
+   * Furthermore, stateless lambdas 
+     [become singletons](https://stackoverflow.com/questions/27524445/does-a-lambda-expression-create-an-object-on-the-heap-every-time-its-executed)
+     and so do not result in new instances when used in loops.
  * Use them only where the cost of an extra class & method definition is
    justified.
 
@@ -110,6 +113,18 @@ if (org.chromium.base.BuildConfig.DCHECK_IS_ON) {
   ...
 }
 ```
+
+### Finalizers
+In line with [Google's Java style guide](https://google.github.io/styleguide/javaguide.html#s6.4-finalizers),
+never override `Object.finalize()`.
+
+Custom finalizers:
+* are called on a background thread, and at an unpredicatble point in time,
+* swallow all exceptions (asserts won't work),
+* causes additional garbage collector jank.
+
+Classes that need destructor logic should provide an explicit `destroy()`
+method.
 
 ### Other Android Support Library Annotations
 * Use them! They are [documented here](https://developer.android.com/studio/write/annotations).

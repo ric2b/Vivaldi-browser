@@ -136,7 +136,7 @@ bool IsSupportedMediaType(const std::string& container_mime_type,
     return false;
 
   std::vector<std::string> codec_vector;
-  SplitCodecsToVector(codecs, &codec_vector, false);
+  SplitCodecs(codecs, &codec_vector);
   for (const std::string& codec : codec_vector) {
     DCHECK_NE(codec, kExtendedVideoCodecStripped)
         << "codecs passed into this function should not be stripped";
@@ -247,8 +247,6 @@ class FakeKeySystems : public KeySystems {
 
     for (const std::string& codec : codecs) {
       DCHECK(IsValidCodec(codec)) << "Invalid codec should not be passed in";
-      DCHECK_NE(codec, kExtendedVideoCodec)
-          << "Extended codec should already been stripped";
 
       if (codec == kUnsupportedCodec ||
           !IsCompatibleWithEmeMediaType(media_type, codec)) {
@@ -490,9 +488,9 @@ TEST_F(KeySystemConfigSelectorTest, UsableConfig) {
   SelectConfigReturnsConfig();
 
   EXPECT_EQ("", config_.label);
-  EXPECT_TRUE(config_.init_data_types.IsEmpty());
+  EXPECT_TRUE(config_.init_data_types.empty());
   EXPECT_EQ(1u, config_.audio_capabilities.size());
-  EXPECT_TRUE(config_.video_capabilities.IsEmpty());
+  EXPECT_TRUE(config_.video_capabilities.empty());
   EXPECT_EQ(MediaKeysRequirement::kNotAllowed, config_.distinctive_identifier);
   EXPECT_EQ(MediaKeysRequirement::kNotAllowed, config_.persistent_state);
   ASSERT_EQ(1u, config_.session_types.size());
@@ -702,7 +700,7 @@ TEST_F(KeySystemConfigSelectorTest, SessionTypes_Empty) {
   configs_.push_back(config);
 
   SelectConfigReturnsConfig();
-  EXPECT_TRUE(config_.session_types.IsEmpty());
+  EXPECT_TRUE(config_.session_types.empty());
 }
 
 TEST_F(KeySystemConfigSelectorTest, SessionTypes_SubsetSupported) {

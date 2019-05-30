@@ -56,11 +56,6 @@ struct ContextMenuParams;
 - (void)executeJavaScript:(NSString*)script
         completionHandler:(web::JavaScriptResultBlock)handler;
 
-// Returns |YES| if CRWNativeContent wants the hint text displayed.
-// TODO(crbug.com/374984): Remove this. This is chrome level concept and should
-// not exist in the web/ layer.
-- (BOOL)wantsLocationBarHintText;
-
 // Dismisses any outstanding modal interaction elements (e.g. modal view
 // controllers, context menus, etc).
 - (void)dismissModals;
@@ -85,8 +80,9 @@ struct ContextMenuParams;
 // content.
 - (GURL)virtualURL;
 
-// The scroll offset of this native view.
-- (CGPoint)scrollOffset;
+// The content inset and offset of this native view.
+- (CGPoint)contentOffset;
+- (UIEdgeInsets)contentInset;
 
 @end
 

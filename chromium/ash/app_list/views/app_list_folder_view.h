@@ -109,6 +109,15 @@ class APP_LIST_EXPORT AppListFolderView : public views::View,
   // Sets the layer mask's corner radius and insets in background.
   void UpdateBackgroundMask(int corner_radius, const gfx::Insets& insets);
 
+  // Called when tablet mode starts and ends.
+  void OnTabletModeChanged(bool started) {
+    folder_header_view()->set_tablet_mode(started);
+  }
+
+  // When transform in |contents_view_| is updated, notify accessibility to show
+  // ChromeVox focus in correct locations.
+  void NotifyAccessibilityLocationChanges();
+
  private:
   void CalculateIdealBounds();
 
@@ -146,6 +155,10 @@ class APP_LIST_EXPORT AppListFolderView : public views::View,
   // Returns nullptr if there isn't one associated with this widget.
   ui::Compositor* GetCompositor();
 
+  // Creates accessibility event for opening folder if |open| is true.
+  // Otherwise, creates the event for closing folder.
+  void CreateOpenOrCloseFolderAccessibilityEvent(bool open);
+
   // Views below are not owned by views hierarchy.
   AppsContainerView* container_view_;
   ContentsView* contents_view_;
@@ -172,8 +185,6 @@ class APP_LIST_EXPORT AppListFolderView : public views::View,
   gfx::Rect preferred_bounds_;
 
   bool hide_for_reparent_;
-
-  base::string16 accessible_name_;
 
   std::unique_ptr<gfx::SlideAnimation> background_animation_;
   std::unique_ptr<gfx::SlideAnimation> folder_item_title_animation_;

@@ -19,6 +19,8 @@
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/widget/widget.h"
 
+#include "app/vivaldi_apptools.h"
+
 using base::UserMetricsAction;
 using bookmarks::BookmarkNode;
 using content::PageNavigator;
@@ -41,6 +43,10 @@ BookmarkMenuController::BookmarkMenuController(Browser* browser,
   int run_type = 0;
   if (for_drop)
     run_type |= views::MenuRunner::FOR_DROP;
+  if (vivaldi::IsVivaldiRunning()) {
+    // Enables the menu to draw mnemonics
+    run_type |= views::MenuRunner::HAS_MNEMONICS;
+  }
   menu_runner_.reset(new views::MenuRunner(menu_delegate_->menu(), run_type));
 }
 
@@ -99,7 +105,7 @@ bool BookmarkMenuController::ShouldExecuteCommandWithoutClosingMenu(
 bool BookmarkMenuController::GetDropFormats(
     MenuItemView* menu,
     int* formats,
-    std::set<ui::Clipboard::FormatType>* format_types) {
+    std::set<ui::ClipboardFormatType>* format_types) {
   return menu_delegate_->GetDropFormats(menu, formats, format_types);
 }
 
@@ -186,6 +192,22 @@ void BookmarkMenuController::WillShowMenu(MenuItemView* menu) {
 void BookmarkMenuController::BookmarkModelChanged() {
   if (!menu_delegate_->is_mutating_model())
     menu()->Cancel();
+}
+
+bool BookmarkMenuController::ShouldTryPositioningBesideAnchor() const {
+  if (vivaldi::IsVivaldiRunning()) {
+    // NOTE(espen@vivaldi.com): We do not have the same layout. Beside is fine.
+    return true;
+  }
+  // The bookmark menu appears from the bookmark bar, which has a set of buttons positioned next to
+  // each other; if the bookmark menu appears beside its anchor button, it will likely overlay the
+  // adjacent bookmark button, which prevents easy scrubbing through the bookmark bar's menus.
+  return false;
+}
+
+// Added by vivaldi
+void BookmarkMenuController::VivaldiSelectionChanged(MenuItemView* menu) {
+  menu_delegate_->VivaldiSelectionChanged(menu);
 }
 
 BookmarkMenuController::~BookmarkMenuController() {

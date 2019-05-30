@@ -4,6 +4,8 @@
 
 #include "content/browser/service_worker/service_worker_object_host.h"
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "content/browser/service_worker/service_worker_client_utils.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_provider_host.h"
@@ -12,7 +14,6 @@
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 
 namespace content {
 
@@ -20,7 +21,7 @@ namespace {
 
 using StatusCallback = base::OnceCallback<void(blink::ServiceWorkerStatusCode)>;
 using PrepareExtendableMessageEventCallback =
-    base::OnceCallback<bool(mojom::ExtendableMessageEventPtr*)>;
+    base::OnceCallback<bool(blink::mojom::ExtendableMessageEventPtr*)>;
 
 void DispatchExtendableMessageEventAfterStartWorker(
     scoped_refptr<ServiceWorkerVersion> worker,
@@ -35,7 +36,8 @@ void DispatchExtendableMessageEventAfterStartWorker(
     return;
   }
 
-  mojom::ExtendableMessageEventPtr event = mojom::ExtendableMessageEvent::New();
+  blink::mojom::ExtendableMessageEventPtr event =
+      blink::mojom::ExtendableMessageEvent::New();
   event->message = std::move(message);
   event->source_origin = source_origin;
   if (!std::move(prepare_callback).Run(&event)) {
@@ -81,14 +83,14 @@ bool PrepareExtendableMessageEventFromClient(
     base::WeakPtr<ServiceWorkerContextCore> context,
     int64_t registration_id,
     blink::mojom::ServiceWorkerClientInfoPtr source_client_info,
-    mojom::ExtendableMessageEventPtr* event) {
+    blink::mojom::ExtendableMessageEventPtr* event) {
   if (!context) {
     return false;
   }
   DCHECK(source_client_info && !source_client_info->client_uuid.empty());
   (*event)->source_info_for_client = std::move(source_client_info);
   // Hide the client url if the client has a unique origin.
-  if ((*event)->source_origin.unique())
+  if ((*event)->source_origin.opaque())
     (*event)->source_info_for_client->url = GURL();
 
   // Reset |registration->self_update_delay| iff postMessage is coming from a
@@ -109,7 +111,7 @@ bool PrepareExtendableMessageEventFromServiceWorker(
     scoped_refptr<ServiceWorkerVersion> worker,
     base::WeakPtr<ServiceWorkerProviderHost>
         source_service_worker_provider_host,
-    mojom::ExtendableMessageEventPtr* event) {
+    blink::mojom::ExtendableMessageEventPtr* event) {
   // The service worker execution context may have been destroyed by the time we
   // get here.
   if (!source_service_worker_provider_host)
@@ -130,7 +132,7 @@ bool PrepareExtendableMessageEventFromServiceWorker(
 
   (*event)->source_info_for_service_worker = std::move(source_worker_info);
   // Hide the service worker url if the service worker has a unique origin.
-  if ((*event)->source_origin.unique())
+  if ((*event)->source_origin.opaque())
     (*event)->source_info_for_service_worker->url = GURL();
   return true;
 }
@@ -189,7 +191,7 @@ ServiceWorkerObjectHost::ServiceWorkerObjectHost(
     scoped_refptr<ServiceWorkerVersion> version)
     : context_(context),
       provider_host_(provider_host),
-      provider_origin_(url::Origin::Create(provider_host->document_url())),
+      provider_origin_(url::Origin::Create(provider_host->url())),
       version_(std::move(version)),
       weak_ptr_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -276,8 +278,7 @@ void ServiceWorkerObjectHost::DispatchExtendableMessageEvent(
     std::move(callback).Run(blink::ServiceWorkerStatusCode::kErrorAbort);
     return;
   }
-  DCHECK_EQ(provider_origin_,
-            url::Origin::Create(provider_host_->document_url()));
+  DCHECK_EQ(provider_origin_, url::Origin::Create(provider_host_->url()));
   switch (provider_host_->provider_type()) {
     case blink::mojom::ServiceWorkerProviderType::kForWindow:
       service_worker_client_utils::GetClient(

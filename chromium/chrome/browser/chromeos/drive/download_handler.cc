@@ -11,7 +11,7 @@
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/supports_user_data.h"
 #include "base/task/post_task.h"
@@ -19,11 +19,9 @@
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/drive/write_on_cache_file.h"
-#include "chrome/browser/download/download_core_service.h"
-#include "chrome/browser/download/download_core_service_factory.h"
-#include "chrome/browser/download/download_history.h"
 #include "components/drive/chromeos/file_system_interface.h"
 #include "components/drive/drive.pb.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_item_utils.h"
 
@@ -119,20 +117,15 @@ bool IsPersistedDriveDownload(const base::FilePath& drive_tmp_download_path,
   if (!drive_tmp_download_path.IsParent(download->GetTargetFilePath()))
     return false;
 
-  DownloadCoreService* download_core_service =
-      DownloadCoreServiceFactory::GetForBrowserContext(
-          content::DownloadItemUtils::GetBrowserContext(download));
-  DownloadHistory* download_history =
-      download_core_service->GetDownloadHistory();
-
-  return download_history && download_history->WasRestoredFromHistory(download);
+  return download->GetDownloadCreationType() ==
+         download::DownloadItem::TYPE_HISTORY_IMPORT;
 }
 
 // Returns an empty string |mime_type| was too generic that can be a result of
 // 'default' fallback choice on the HTTP server. In such a case, we ignore the
 // type so that our logic can guess by its own while uploading to Drive.
 std::string FilterOutGenericMimeType(const std::string& mime_type) {
-  for (size_t i = 0; i < arraysize(kGenericMimeTypes); ++i) {
+  for (size_t i = 0; i < base::size(kGenericMimeTypes); ++i) {
     if (base::LowerCaseEqualsASCII(mime_type, kGenericMimeTypes[i]))
       return std::string();
   }
@@ -322,8 +315,8 @@ void DownloadHandler::OnDownloadCreated(DownloadManager* manager,
   // Remove any persisted Drive DownloadItem. crbug.com/171384
   if (IsPersistedDriveDownload(drive_tmp_download_path_, download)) {
     // Remove download later, since doing it here results in a crash.
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&DownloadHandler::RemoveDownload,
                        weak_ptr_factory_.GetWeakPtr(),
                        static_cast<void*>(manager), download->GetId()));

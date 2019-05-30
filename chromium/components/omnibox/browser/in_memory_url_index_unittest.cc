@@ -16,9 +16,9 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/i18n/case_conversion.h"
-#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -278,7 +278,7 @@ void InMemoryURLIndexTest::SetUp() {
 
   // Set up a simple template URL service with a default search engine.
   template_url_service_ = std::make_unique<TemplateURLService>(
-      kTemplateURLData, arraysize(kTemplateURLData));
+      kTemplateURLData, base::size(kTemplateURLData));
   TemplateURL* template_url = template_url_service_->GetTemplateURLForKeyword(
       base::ASCIIToUTF16(kDefaultTemplateURLKeyword));
   template_url_service_->SetUserSelectedDefaultSearchProvider(template_url);
@@ -318,8 +318,7 @@ void InMemoryURLIndexTest::InitializeInMemoryURLIndex() {
 void InMemoryURLIndexTest::CheckTerm(
     const URLIndexPrivateData::SearchTermCacheMap& cache,
     base::string16 term) const {
-  URLIndexPrivateData::SearchTermCacheMap::const_iterator cache_iter(
-      cache.find(term));
+  auto cache_iter(cache.find(term));
   ASSERT_TRUE(cache.end() != cache_iter)
       << "Cache does not contain '" << term << "' but should.";
   URLIndexPrivateData::SearchTermCacheItem cache_item = cache_iter->second;
@@ -356,15 +355,15 @@ void InMemoryURLIndexTest::ExpectPrivateDataEmpty(
 template<typename T>
 void ExpectMapOfContainersIdentical(const T& expected, const T& actual) {
   ASSERT_EQ(expected.size(), actual.size());
-  for (typename T::const_iterator expected_iter = expected.begin();
-       expected_iter != expected.end(); ++expected_iter) {
-    typename T::const_iterator actual_iter = actual.find(expected_iter->first);
+  for (auto expected_iter = expected.begin(); expected_iter != expected.end();
+       ++expected_iter) {
+    auto actual_iter = actual.find(expected_iter->first);
     ASSERT_TRUE(actual.end() != actual_iter);
     typename T::mapped_type const& expected_values(expected_iter->second);
     typename T::mapped_type const& actual_values(actual_iter->second);
     ASSERT_EQ(expected_values.size(), actual_values.size());
-    for (typename T::mapped_type::const_iterator set_iter =
-         expected_values.begin(); set_iter != expected_values.end(); ++set_iter)
+    for (auto set_iter = expected_values.begin();
+         set_iter != expected_values.end(); ++set_iter)
       EXPECT_EQ(actual_values.count(*set_iter),
                 expected_values.count(*set_iter));
   }
@@ -394,11 +393,9 @@ void InMemoryURLIndexTest::ExpectPrivateDataEqual(
   ExpectMapOfContainersIdentical(expected.history_id_word_map_,
                                  actual.history_id_word_map_);
 
-  for (HistoryInfoMap::const_iterator expected_info =
-      expected.history_info_map_.begin();
-      expected_info != expected.history_info_map_.end(); ++expected_info) {
-    HistoryInfoMap::const_iterator actual_info =
-        actual.history_info_map_.find(expected_info->first);
+  for (auto expected_info = expected.history_info_map_.begin();
+       expected_info != expected.history_info_map_.end(); ++expected_info) {
+    auto actual_info = actual.history_info_map_.find(expected_info->first);
     // NOTE(yfriedman): ASSERT_NE can't be used due to incompatibility between
     // gtest and STLPort in the Android build. See
     // http://code.google.com/p/googletest/issues/detail?id=359
@@ -420,12 +417,9 @@ void InMemoryURLIndexTest::ExpectPrivateDataEqual(
     }
   }
 
-  for (WordStartsMap::const_iterator expected_starts =
-      expected.word_starts_map_.begin();
-      expected_starts != expected.word_starts_map_.end();
-      ++expected_starts) {
-    WordStartsMap::const_iterator actual_starts =
-        actual.word_starts_map_.find(expected_starts->first);
+  for (auto expected_starts = expected.word_starts_map_.begin();
+       expected_starts != expected.word_starts_map_.end(); ++expected_starts) {
+    auto actual_starts = actual.word_starts_map_.find(expected_starts->first);
     // NOTE(yfriedman): ASSERT_NE can't be used due to incompatibility between
     // gtest and STLPort in the Android build. See
     // http://code.google.com/p/googletest/issues/detail?id=359
@@ -1100,7 +1094,7 @@ TEST_F(InMemoryURLIndexTest, WhitelistedURLs) {
   };
 
   const SchemeSet& whitelist(scheme_whitelist());
-  for (size_t i = 0; i < arraysize(data); ++i) {
+  for (size_t i = 0; i < base::size(data); ++i) {
     GURL url(data[i].url_spec);
     EXPECT_EQ(data[i].expected_is_whitelisted,
               URLIndexPrivateData::URLSchemeIsWhitelisted(url, whitelist));
@@ -1117,7 +1111,7 @@ TEST_F(InMemoryURLIndexTest, ReadVisitsFromHistory) {
   // assume that if the count and transitions show up with the right
   // information, we're getting the right information from the history
   // database file.)
-  HistoryInfoMap::const_iterator entry = history_info_map.find(1);
+  auto entry = history_info_map.find(1);
   ASSERT_TRUE(entry != history_info_map.end());
   {
     const VisitInfoVector& visits = entry->second.visits;
@@ -1348,7 +1342,7 @@ TEST_F(InMemoryURLIndexTest, CalculateWordStartsOffsets) {
                     {"abcd :", 5, 2, {0, 1, kInvalid}},
                     {"abcd :", 2, 3, {0, 0, 1}}};
 
-  for (size_t i = 0; i < arraysize(test_cases); ++i) {
+  for (size_t i = 0; i < base::size(test_cases); ++i) {
     SCOPED_TRACE(testing::Message()
                  << "search_string = " << test_cases[i].search_string
                  << ", cursor_position = " << test_cases[i].cursor_position);
@@ -1388,7 +1382,7 @@ TEST_F(InMemoryURLIndexTest, CalculateWordStartsOffsetsUnderscore) {
                     {"abcd_", 4, 2, {0, 1, kInvalid}},
                     {"ab_cd", 5, 1, {0, kInvalid, kInvalid}}};
 
-  for (size_t i = 0; i < arraysize(test_cases); ++i) {
+  for (size_t i = 0; i < base::size(test_cases); ++i) {
     SCOPED_TRACE(testing::Message()
                  << "search_string = " << test_cases[i].search_string
                  << ", cursor_position = " << test_cases[i].cursor_position);
@@ -1399,7 +1393,7 @@ TEST_F(InMemoryURLIndexTest, CalculateWordStartsOffsetsUnderscore) {
                   &lower_string, &lower_terms);
     WordStarts lower_terms_to_word_starts_offsets;
     URLIndexPrivateData::CalculateWordStartsOffsets(
-        lower_terms, true, &lower_terms_to_word_starts_offsets);
+        lower_terms, &lower_terms_to_word_starts_offsets);
 
     // Verify against expectations.
     EXPECT_EQ(test_cases[i].expected_word_starts_offsets_size,

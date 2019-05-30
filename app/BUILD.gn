@@ -2,6 +2,7 @@ import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/gn/config/product.gni")
 import("//build/config/locales.gni")
 import("//build/util/process_version.gni")
+import("//tools/grit/repack.gni")
 
 import("resources/vivaldi_grit.gni")
 
@@ -13,7 +14,6 @@ source_set("app") {
   public_deps = [
     ":resources",
   ]
-  deps = []
 }
 
 group("resources") {
@@ -23,6 +23,14 @@ group("resources") {
     ":vivaldi_unscaled_native_resources",
     "resources",
   ]
+}
+
+if (generate_untranslated){
+  group("generate_untranslated") {
+    deps = [
+      ":Extract_strings_vivaldi_native_strings"
+    ]
+  }
 }
 
 single_grit_action("vivaldi_native_strings") {
@@ -81,4 +89,37 @@ process_version("vivaldi_icon") {
     "-e",
     "VIVALDI_RELEASE_KIND=\"$VIVALDI_RELEASE_KIND\"",
   ]
+}
+
+repack_locales("vivaldi_merge_repacks") {
+  if (is_mac) {
+    output_dir = "$root_gen_dir/repack"
+    copy_data_to_bundle = true
+  } else {
+    output_dir = "$root_out_dir/locales"
+  }
+
+  # Each input pak file should also have a deps line.
+  source_patterns = [
+    "${root_gen_dir}/components/strings/components_google_chrome_strings_",
+    "${root_gen_dir}/components/strings/components_strings_",
+    "${root_gen_dir}/content/app/strings/content_strings_",
+    "${root_gen_dir}/chrome/generated_resources_",
+    "${root_gen_dir}/chrome/google_chrome_strings_",
+    "${root_gen_dir}/chrome/platform_locale_settings_",
+    "${root_gen_dir}/ui/strings/ui_strings_",
+    "${root_gen_dir}/vivaldi/vivaldi_native_strings_",
+  ]
+  deps = [
+    "//chrome/app:generated_resources",
+    "//chrome/app:google_chrome_strings",
+    "//chrome/app/resources:platform_locale_settings",
+    "//components/strings:components_google_chrome_strings",
+    "//components/strings:components_strings",
+    "//content/app/strings:strings",
+    "//ui/strings:ui_strings",
+    "//vivaldi/app:vivaldi_native_strings",
+  ]
+  input_locales = vivaldi_pending_locales
+  output_locales = vivaldi_pending_locales
 }

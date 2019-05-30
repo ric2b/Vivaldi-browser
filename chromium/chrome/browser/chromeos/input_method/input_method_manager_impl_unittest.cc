@@ -16,14 +16,17 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "chrome/browser/chromeos/input_method/mock_candidate_window_controller.h"
 #include "chrome/browser/chromeos/input_method/mock_input_method_engine.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/ime_controller_client.h"
+#include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client_test_helper.h"
 #include "chrome/browser/ui/ash/test_ime_controller.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "content/public/test/test_service_manager_context.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
@@ -130,11 +133,16 @@ class TestCandidateWindowObserver
 class InputMethodManagerImplTest :  public BrowserWithTestWindowTest {
  public:
   InputMethodManagerImplTest()
-      : delegate_(NULL),
-        candidate_window_controller_(NULL),
-        keyboard_(NULL) {
+      : delegate_(nullptr),
+        candidate_window_controller_(nullptr),
+        keyboard_(nullptr) {
+    chrome_keyboard_controller_client_test_helper_ =
+        ChromeKeyboardControllerClientTestHelper::InitializeWithFake();
   }
-  ~InputMethodManagerImplTest() override {}
+
+  ~InputMethodManagerImplTest() override {
+    chrome_keyboard_controller_client_test_helper_.reset();
+  }
 
   void SetUp() override {
     ui::InitializeInputMethodForTesting();
@@ -164,9 +172,9 @@ class InputMethodManagerImplTest :  public BrowserWithTestWindowTest {
 
     ui::ShutdownInputMethodForTesting();
 
-    delegate_ = NULL;
-    candidate_window_controller_ = NULL;
-    keyboard_ = NULL;
+    delegate_ = nullptr;
+    candidate_window_controller_ = nullptr;
+    keyboard_ = nullptr;
     manager_.reset();
   }
 
@@ -183,8 +191,8 @@ class InputMethodManagerImplTest :  public BrowserWithTestWindowTest {
     std::unique_ptr<ComponentExtensionIMEManagerDelegate> delegate(
         mock_delegate_);
 
-    // CreateNewState(NULL) returns state with non-empty current_input_method.
-    // So SetState() triggers ChangeInputMethod().
+    // CreateNewState(nullptr) returns state with non-empty
+    // current_input_method. So SetState() triggers ChangeInputMethod().
     manager_->SetState(
         manager_->CreateNewState(ProfileManager::GetActiveUserProfile()));
 
@@ -352,6 +360,9 @@ class InputMethodManagerImplTest :  public BrowserWithTestWindowTest {
     ime_list_.push_back(ext2);
   }
 
+  content::TestServiceManagerContext service_manager_context_;
+  std::unique_ptr<ChromeKeyboardControllerClientTestHelper>
+      chrome_keyboard_controller_client_test_helper_;
   std::unique_ptr<InputMethodManagerImpl> manager_;
   FakeInputMethodDelegate* delegate_;
   MockCandidateWindowController* candidate_window_controller_;
@@ -988,7 +999,7 @@ TEST_F(InputMethodManagerImplTest, TestNextInputMethod) {
   manager_->RemoveObserver(&observer);
 }
 
-TEST_F(InputMethodManagerImplTest, TestPreviousInputMethod) {
+TEST_F(InputMethodManagerImplTest, TestLastUsedInputMethod) {
   TestObserver observer;
   InitComponentExtension();
   manager_->AddObserver(&observer);
@@ -1005,17 +1016,17 @@ TEST_F(InputMethodManagerImplTest, TestPreviousInputMethod) {
   EXPECT_EQ(ImeIdFromEngineId("xkb:us:intl:eng"),
             manager_->GetActiveIMEState()->GetCurrentInputMethod().id());
   EXPECT_EQ("us(intl)", keyboard_->last_layout_);
-  manager_->GetActiveIMEState()->SwitchToPreviousInputMethod();
+  manager_->GetActiveIMEState()->SwitchToLastUsedInputMethod();
   EXPECT_TRUE(observer.last_show_message_);
   EXPECT_EQ(ImeIdFromEngineId("xkb:us::eng"),
             manager_->GetActiveIMEState()->GetCurrentInputMethod().id());
   EXPECT_EQ("us", keyboard_->last_layout_);
-  manager_->GetActiveIMEState()->SwitchToPreviousInputMethod();
+  manager_->GetActiveIMEState()->SwitchToLastUsedInputMethod();
   EXPECT_TRUE(observer.last_show_message_);
   EXPECT_EQ(ImeIdFromEngineId("xkb:us:intl:eng"),
             manager_->GetActiveIMEState()->GetCurrentInputMethod().id());
   EXPECT_EQ("us(intl)", keyboard_->last_layout_);
-  manager_->GetActiveIMEState()->SwitchToPreviousInputMethod();
+  manager_->GetActiveIMEState()->SwitchToLastUsedInputMethod();
   EXPECT_TRUE(observer.last_show_message_);
   EXPECT_EQ(ImeIdFromEngineId("xkb:us::eng"),
             manager_->GetActiveIMEState()->GetCurrentInputMethod().id());
@@ -1030,12 +1041,12 @@ TEST_F(InputMethodManagerImplTest, TestPreviousInputMethod) {
   EXPECT_EQ(ImeIdFromEngineId("xkb:us:altgr-intl:eng"),
             manager_->GetActiveIMEState()->GetCurrentInputMethod().id());
   EXPECT_EQ("us(altgr-intl)", keyboard_->last_layout_);
-  manager_->GetActiveIMEState()->SwitchToPreviousInputMethod();
+  manager_->GetActiveIMEState()->SwitchToLastUsedInputMethod();
   EXPECT_TRUE(observer.last_show_message_);
   EXPECT_EQ(ImeIdFromEngineId("xkb:us:intl:eng"),
             manager_->GetActiveIMEState()->GetCurrentInputMethod().id());
   EXPECT_EQ("us(intl)", keyboard_->last_layout_);
-  manager_->GetActiveIMEState()->SwitchToPreviousInputMethod();
+  manager_->GetActiveIMEState()->SwitchToLastUsedInputMethod();
   EXPECT_TRUE(observer.last_show_message_);
   EXPECT_EQ(ImeIdFromEngineId("xkb:us:altgr-intl:eng"),
             manager_->GetActiveIMEState()->GetCurrentInputMethod().id());
@@ -1058,8 +1069,8 @@ TEST_F(InputMethodManagerImplTest, CycleInputMethodForOneActiveInputMethod) {
   EXPECT_EQ(ImeIdFromEngineId("xkb:us::eng"),
             manager_->GetActiveIMEState()->GetCurrentInputMethod().id());
 
-  // Switching to previous does nothing.
-  manager_->GetActiveIMEState()->SwitchToPreviousInputMethod();
+  // Switching to last-used does nothing.
+  manager_->GetActiveIMEState()->SwitchToLastUsedInputMethod();
   EXPECT_EQ(ImeIdFromEngineId("xkb:us::eng"),
             manager_->GetActiveIMEState()->GetCurrentInputMethod().id());
 }

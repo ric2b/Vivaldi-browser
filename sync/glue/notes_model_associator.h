@@ -11,10 +11,10 @@
 #include <set>
 #include <stack>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "base/compiler_specific.h"
-#include "base/containers/hash_tables.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/threading/thread_checker.h"
@@ -211,7 +211,7 @@ class NotesModelAssociator
     // for the purpose of detecting duplicates. A small number of
     // false positives due to hash collisions is OK because this
     // data is used for reporting purposes only.
-    base::hash_set<size_t> hashes_;
+    std::unordered_set<size_t> hashes_;
     // Overall number of notes collisions from RecordDuplicates call.
     int duplicate_count_;
     // Result of the most recent NotesModelAssociator::CheckModelSyncState.

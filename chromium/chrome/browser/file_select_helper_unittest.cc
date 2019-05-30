@@ -10,9 +10,9 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
+#include "base/stl_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/file_select_helper.h"
 #include "chrome/common/chrome_paths.h"
@@ -20,7 +20,7 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using content::FileChooserParams;
+using blink::mojom::FileChooserParams;
 
 class FileSelectHelperTest : public testing::Test {
  public:
@@ -77,7 +77,7 @@ TEST_F(FileSelectHelperTest, ZipPackage) {
   const char* files_to_verify[] = {"Contents/Info.plist",
                                    "Contents/MacOS/Calculator",
                                    "Contents/_CodeSignature/CodeResources"};
-  size_t file_count = arraysize(files_to_verify);
+  size_t file_count = base::size(files_to_verify);
   for (size_t i = 0; i < file_count; i++) {
     const char* relative_path = files_to_verify[i];
     base::FilePath orig_file = src.Append(relative_path);
@@ -143,9 +143,8 @@ TEST_F(FileSelectHelperTest, LastSelectedDirectory) {
 
   // Modes where the parent of the selection is remembered.
   const std::vector<FileChooserParams::Mode> modes = {
-    FileChooserParams::Open,
-    FileChooserParams::OpenMultiple,
-    FileChooserParams::Save,
+      FileChooserParams::Mode::kOpen, FileChooserParams::Mode::kOpenMultiple,
+      FileChooserParams::Mode::kSave,
   };
 
   for (const auto& mode : modes) {
@@ -169,7 +168,7 @@ TEST_F(FileSelectHelperTest, LastSelectedDirectory) {
   }
 
   // Type where the selected folder itself is remembered.
-  file_select_helper->dialog_mode_ = FileChooserParams::UploadFolder;
+  file_select_helper->dialog_mode_ = FileChooserParams::Mode::kUploadFolder;
 
   file_select_helper->AddRef();  // Normally called by RunFileChooser().
   file_select_helper->FileSelected(dir_path_1, index, params);

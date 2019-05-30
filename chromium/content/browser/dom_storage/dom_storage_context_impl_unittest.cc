@@ -3,21 +3,22 @@
 // found in the LICENSE file.
 
 #include "content/browser/dom_storage/dom_storage_context_impl.h"
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/browser/dom_storage/dom_storage_area.h"
 #include "content/browser/dom_storage/dom_storage_namespace.h"
 #include "content/browser/dom_storage/dom_storage_task_runner.h"
-#include "content/public/browser/local_storage_usage_info.h"
 #include "content/public/browser/session_storage_usage_info.h"
+#include "content/public/browser/storage_usage_info.h"
 #include "storage/browser/test/mock_special_storage_policy.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -58,7 +59,7 @@ class DOMStorageContextImplTest : public testing::Test {
   }
 
  protected:
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
   base::ScopedTempDir temp_dir_;
   scoped_refptr<MockSpecialStoragePolicy> storage_policy_;
   scoped_refptr<MockDOMStorageTaskRunner> task_runner_;

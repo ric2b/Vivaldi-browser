@@ -42,12 +42,15 @@ static_assert(kInvalidWebRtcEventLogWebAppId < kMinWebRtcEventLogWebAppId ||
 
 const char kRemoteBoundWebRtcEventLogFileNamePrefix[] = "webrtc_event_log";
 
+// Important! These values may be relied on by web-apps. Do not change.
 const char kStartRemoteLoggingFailureFeatureDisabled[] = "Feature disabled.";
 const char kStartRemoteLoggingFailureUnlimitedSizeDisallowed[] =
     "Unlimited size disallowed.";
 const char kStartRemoteLoggingFailureMaxSizeTooSmall[] = "Max size too small.";
 const char kStartRemoteLoggingFailureMaxSizeTooLarge[] =
     "Excessively large max log size.";
+const char kStartRemoteLoggingFailureOutputPeriodMsTooLarge[] =
+    "Excessively large output period (ms).";
 const char kStartRemoteLoggingFailureIllegalWebAppId[] = "Illegal web-app ID.";
 const char kStartRemoteLoggingFailureUnknownOrInactivePeerConnection[] =
     "Unknown or inactive peer connection.";

@@ -22,11 +22,13 @@ bool IsWhitelistedPermissionType(PermissionType permission) {
          permission == PermissionType::MIDI ||
          permission == PermissionType::SENSORS ||
          permission == PermissionType::PAYMENT_HANDLER ||
-         // Background sync browser tests require permission to be granted by
-         // default.
+         permission == PermissionType::IDLE_DETECTION ||
+         // Background Sync and Background Fetch browser tests require
+         // permission to be granted by default.
          // TODO(nsatragno): add a command line flag so that it's only granted
          // for tests.
          permission == PermissionType::BACKGROUND_SYNC ||
+         permission == PermissionType::BACKGROUND_FETCH ||
          permission == PermissionType::ACCESSIBILITY_EVENTS;
 }
 

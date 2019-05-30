@@ -80,7 +80,7 @@ class CursorWindowDelegate : public aura::WindowDelegate {
   void OnWindowDestroyed(aura::Window* window) override {}
   void OnWindowTargetVisibilityChanged(bool visible) override {}
   bool HasHitTestMask() const override { return false; }
-  void GetHitTestMask(gfx::Path* mask) const override {}
+  void GetHitTestMask(SkPath* mask) const override {}
 
   // Sets the cursor image for the |display|'s scale factor.
   void SetCursorImage(const gfx::Size& size, const gfx::ImageSkia& image) {
@@ -133,8 +133,7 @@ bool CursorWindowController::ShouldEnableCursorCompositing() {
   // early outing when there isn't a PrefService yet.
   Shell* shell = Shell::Get();
   display::DisplayManager* display_manager = shell->display_manager();
-  if ((display_manager->is_multi_mirroring_enabled() &&
-       display_manager->IsInSoftwareMirrorMode()) ||
+  if ((display_manager->IsInSoftwareMirrorMode()) ||
       display_manager->IsInUnifiedMode() ||
       display_manager->screen_capture_is_active()) {
     return true;
@@ -340,7 +339,7 @@ void CursorWindowController::UpdateCursorImage() {
   const gfx::ImageSkiaRep& image_rep = resized.GetRepresentation(cursor_scale);
   delegate_->SetCursorImage(
       resized.size(),
-      gfx::ImageSkia(gfx::ImageSkiaRep(image_rep.sk_bitmap(), cursor_scale)));
+      gfx::ImageSkia(gfx::ImageSkiaRep(image_rep.GetBitmap(), cursor_scale)));
   hot_point_ = gfx::ConvertPointToDIP(cursor_scale, hot_point_);
 
   if (cursor_view_) {

@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -19,7 +20,7 @@
 #include "ios/web/public/certificate_policy_cache.h"
 #include "ios/web/public/ssl_status.h"
 #include "ios/web/public/test/fakes/test_browser_state.h"
-#include "ios/web/public/test/test_web_thread.h"
+#include "ios/web/public/test/test_web_thread_bundle.h"
 #include "net/cert/x509_certificate.h"
 #include "net/http/http_response_headers.h"
 #include "net/test/cert_test_util.h"
@@ -95,9 +96,7 @@ class DummyURLRequestDelegate : public net::URLRequest::Delegate {
 class RequestTrackerTest : public PlatformTest {
  public:
   RequestTrackerTest()
-      : loop_(base::MessageLoop::TYPE_IO),
-        ui_thread_(web::WebThread::UI, &loop_),
-        io_thread_(web::WebThread::IO, &loop_){};
+      : thread_bundle_(web::TestWebThreadBundle::IO_MAINLOOP) {}
 
   ~RequestTrackerTest() override {}
 
@@ -114,9 +113,7 @@ class RequestTrackerTest : public PlatformTest {
     tracker_->Close();
   }
 
-  base::MessageLoop loop_;
-  web::TestWebThread ui_thread_;
-  web::TestWebThread io_thread_;
+  web::TestWebThreadBundle thread_bundle_;
 
   scoped_refptr<web::RequestTrackerImpl> tracker_;
   NSString* request_group_id_;
@@ -199,7 +196,6 @@ class RequestTrackerTest : public PlatformTest {
         response->ssl_info.cert = net::ImportCertFromFile(
             net::GetTestCertsDirectory(), "ok_cert.pem");
         response->ssl_info.cert_status = 0;  // No errors.
-        response->ssl_info.security_bits = 128;
 
         EXPECT_TRUE(requests_[i]->ssl_info().is_valid());
       }

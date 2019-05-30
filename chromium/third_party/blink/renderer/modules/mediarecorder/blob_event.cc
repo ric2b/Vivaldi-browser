@@ -11,19 +11,19 @@ namespace blink {
 
 // static
 BlobEvent* BlobEvent::Create(const AtomicString& type,
-                             const BlobEventInit& initializer) {
-  return new BlobEvent(type, initializer);
+                             const BlobEventInit* initializer) {
+  return MakeGarbageCollected<BlobEvent>(type, initializer);
 }
 
 // static
 BlobEvent* BlobEvent::Create(const AtomicString& type,
                              Blob* blob,
                              double timecode) {
-  return new BlobEvent(type, blob, timecode);
+  return MakeGarbageCollected<BlobEvent>(type, blob, timecode);
 }
 
 const AtomicString& BlobEvent::InterfaceName() const {
-  return EventNames::BlobEvent;
+  return event_interface_names::kBlobEvent;
 }
 
 void BlobEvent::Trace(blink::Visitor* visitor) {
@@ -31,11 +31,11 @@ void BlobEvent::Trace(blink::Visitor* visitor) {
   Event::Trace(visitor);
 }
 
-BlobEvent::BlobEvent(const AtomicString& type, const BlobEventInit& initializer)
+BlobEvent::BlobEvent(const AtomicString& type, const BlobEventInit* initializer)
     : Event(type, initializer),
-      blob_(initializer.data()),
-      timecode_(initializer.hasTimecode()
-                    ? initializer.timecode()
+      blob_(initializer->data()),
+      timecode_(initializer->hasTimecode()
+                    ? initializer->timecode()
                     : WTF::double_conversion::Double::NaN()) {}
 
 BlobEvent::BlobEvent(const AtomicString& type, Blob* blob, double timecode)

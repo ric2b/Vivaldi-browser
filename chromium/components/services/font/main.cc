@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "services/service_manager/public/c/main.h"
+#include "base/message_loop/message_loop.h"
 #include "components/services/font/font_service_app.h"
-#include "services/service_manager/public/cpp/service_runner.h"
+#include "services/service_manager/public/cpp/service_executable/service_main.h"
 
-MojoResult ServiceMain(MojoHandle service_request_handle) {
-  service_manager::ServiceRunner runner(new font_service::FontServiceApp);
-  return runner.Run(service_request_handle);
+void ServiceMain(service_manager::mojom::ServiceRequest request) {
+  base::MessageLoop message_loop;
+  font_service::FontServiceApp(std::move(request)).RunUntilTermination();
 }

@@ -10,16 +10,16 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 
 namespace blink {
-namespace CSSLonghand {
+namespace css_longhand {
 
 const CSSValue* AnimationDirection::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext&,
     const CSSParserLocalContext&) const {
-  return CSSPropertyParserHelpers::ConsumeCommaSeparatedList(
-      CSSPropertyParserHelpers::ConsumeIdent<CSSValueNormal, CSSValueAlternate,
-                                             CSSValueReverse,
-                                             CSSValueAlternateReverse>,
+  return css_property_parser_helpers::ConsumeCommaSeparatedList(
+      css_property_parser_helpers::ConsumeIdent<
+          CSSValueNormal, CSSValueAlternate, CSSValueReverse,
+          CSSValueAlternateReverse>,
       range);
 }
 
@@ -32,7 +32,7 @@ const CSSValue* AnimationDirection::CSSValueFromComputedStyleInternal(
   CSSValueList* list = CSSValueList::CreateCommaSeparated();
   const CSSAnimationData* animation_data = style.Animations();
   if (animation_data) {
-    for (size_t i = 0; i < animation_data->DirectionList().size(); ++i) {
+    for (wtf_size_t i = 0; i < animation_data->DirectionList().size(); ++i) {
       list->Append(*ComputedStyleUtils::ValueForAnimationDirection(
           animation_data->DirectionList()[i]));
     }
@@ -43,10 +43,10 @@ const CSSValue* AnimationDirection::CSSValueFromComputedStyleInternal(
 }
 
 const CSSValue* AnimationDirection::InitialValue() const {
-  DEFINE_STATIC_LOCAL(CSSValue, value,
+  DEFINE_STATIC_LOCAL(Persistent<CSSValue>, value,
                       (CSSIdentifierValue::Create(CSSValueNormal)));
-  return &value;
+  return value;
 }
 
-}  // namespace CSSLonghand
+}  // namespace css_longhand
 }  // namespace blink

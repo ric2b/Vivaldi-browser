@@ -65,6 +65,13 @@ void ChromeSearchResult::SetDetailsTags(const Tags& tags) {
     updater->SetSearchResultMetadata(id(), CloneMetadata());
 }
 
+void ChromeSearchResult::SetAccessibleName(const base::string16& name) {
+  metadata_->accessible_name = name;
+  AppListModelUpdater* updater = model_updater();
+  if (updater)
+    updater->SetSearchResultMetadata(id(), CloneMetadata());
+}
+
 void ChromeSearchResult::SetRating(float rating) {
   metadata_->rating = rating;
   AppListModelUpdater* updater = model_updater();
@@ -101,30 +108,38 @@ void ChromeSearchResult::SetIsOmniboxSearch(bool is_omnibox_search) {
     updater->SetSearchResultMetadata(id(), CloneMetadata());
 }
 
-void ChromeSearchResult::SetAnswerCardContentsToken(
-    const base::UnguessableToken& token) {
-  metadata_->answer_card_contents_token = token;
-  AppListModelUpdater* updater = model_updater();
-  if (updater)
-    updater->SetSearchResultMetadata(id(), CloneMetadata());
-}
-
-void ChromeSearchResult::SetAnswerCardSize(const gfx::Size& size) {
-  metadata_->answer_card_size = size;
-  AppListModelUpdater* updater = model_updater();
-  if (updater)
-    updater->SetSearchResultMetadata(id(), CloneMetadata());
-}
-
 void ChromeSearchResult::SetPercentDownloaded(int percent_downloaded) {
   AppListModelUpdater* updater = model_updater();
   if (updater)
     updater->SetSearchResultPercentDownloaded(id(), percent_downloaded);
 }
 
+void ChromeSearchResult::SetQueryUrl(const GURL& url) {
+  metadata_->query_url = url;
+  auto* updater = model_updater();
+  if (updater)
+    updater->SetSearchResultMetadata(id(), CloneMetadata());
+}
+
+void ChromeSearchResult::SetEquivalentResutlId(
+    const std::string& equivlanet_result_id) {
+  metadata_->equivalent_result_id = equivlanet_result_id;
+  auto* updater = model_updater();
+  if (updater)
+    updater->SetSearchResultMetadata(id(), CloneMetadata());
+}
+
 void ChromeSearchResult::SetIcon(const gfx::ImageSkia& icon) {
   icon.EnsureRepsForSupportedScales();
   metadata_->icon = icon;
+  AppListModelUpdater* updater = model_updater();
+  if (updater)
+    updater->SetSearchResultMetadata(id(), CloneMetadata());
+}
+
+void ChromeSearchResult::SetChipIcon(const gfx::ImageSkia& chip_icon) {
+  chip_icon.EnsureRepsForSupportedScales();
+  metadata_->chip_icon = chip_icon;
   AppListModelUpdater* updater = model_updater();
   if (updater)
     updater->SetSearchResultMetadata(id(), CloneMetadata());
@@ -138,6 +153,11 @@ void ChromeSearchResult::SetBadgeIcon(const gfx::ImageSkia& badge_icon) {
     updater->SetSearchResultMetadata(id(), CloneMetadata());
 }
 
+void ChromeSearchResult::SetNotifyVisibilityChange(
+    bool notify_visibility_change) {
+  metadata_->notify_visibility_change = notify_visibility_change;
+}
+
 void ChromeSearchResult::NotifyItemInstalled() {
   AppListModelUpdater* updater = model_updater();
   if (updater)
@@ -145,6 +165,10 @@ void ChromeSearchResult::NotifyItemInstalled() {
 }
 
 void ChromeSearchResult::InvokeAction(int action_index, int event_flags) {}
+
+void ChromeSearchResult::OnVisibilityChanged(bool visibility) {
+  VLOG(1) << " Visibility change to " << visibility << " and ID is " << id();
+}
 
 void ChromeSearchResult::UpdateFromMatch(
     const app_list::TokenizedString& title,
@@ -167,8 +191,9 @@ void ChromeSearchResult::GetContextMenuModel(GetMenuModelCallback callback) {
 
 void ChromeSearchResult::ContextMenuItemSelected(int command_id,
                                                  int event_flags) {
-  if (GetAppContextMenu())
-    GetAppContextMenu()->ExecuteCommand(command_id, event_flags);
+  app_list::AppContextMenu* menu = GetAppContextMenu();
+  if (menu)
+    menu->ExecuteCommand(command_id, event_flags);
 }
 
 // static
@@ -197,6 +222,10 @@ std::string ChromeSearchResult::TagsDebugStringForTest(const std::string& text,
     result.insert(insert.first, insert.second);
 
   return result;
+}
+
+int ChromeSearchResult::GetSubType() const {
+  return -1;
 }
 
 app_list::AppContextMenu* ChromeSearchResult::GetAppContextMenu() {

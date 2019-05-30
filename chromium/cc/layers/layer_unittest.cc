@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include "base/bind.h"
+#include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_id_provider.h"
@@ -53,46 +55,41 @@ using ::testing::_;
     Mock::VerifyAndClearExpectations(layer_tree_host_.get());               \
   } while (false)
 
-#define EXECUTE_AND_VERIFY_SUBTREE_CHANGED(code_to_test)                    \
-  code_to_test;                                                             \
-  root->layer_tree_host()->BuildPropertyTreesForTesting();                  \
-  EXPECT_TRUE(root->subtree_property_changed());                            \
-  EXPECT_TRUE(root->layer_tree_host()->LayerNeedsPushPropertiesForTesting(  \
-      root.get()));                                                         \
-  EXPECT_TRUE(child->subtree_property_changed());                           \
-  EXPECT_TRUE(child->layer_tree_host()->LayerNeedsPushPropertiesForTesting( \
-      child.get()));                                                        \
-  EXPECT_TRUE(grand_child->subtree_property_changed());                     \
-  EXPECT_TRUE(                                                              \
-      grand_child->layer_tree_host()->LayerNeedsPushPropertiesForTesting(   \
-          grand_child.get()));
+#define EXECUTE_AND_VERIFY_SUBTREE_CHANGED(code_to_test)                       \
+  code_to_test;                                                                \
+  root->layer_tree_host()->BuildPropertyTreesForTesting();                     \
+  EXPECT_TRUE(root->subtree_property_changed());                               \
+  EXPECT_TRUE(base::ContainsKey(                                               \
+      root->layer_tree_host()->LayersThatShouldPushProperties(), root.get())); \
+  EXPECT_TRUE(child->subtree_property_changed());                              \
+  EXPECT_TRUE(base::ContainsKey(                                               \
+      child->layer_tree_host()->LayersThatShouldPushProperties(),              \
+      child.get()));                                                           \
+  EXPECT_TRUE(grand_child->subtree_property_changed());                        \
+  EXPECT_TRUE(base::ContainsKey(                                               \
+      grand_child->layer_tree_host()->LayersThatShouldPushProperties(),        \
+      grand_child.get()));
 
-#define EXECUTE_AND_VERIFY_SUBTREE_NOT_CHANGED(code_to_test)                 \
-  code_to_test;                                                              \
-  root->layer_tree_host()->BuildPropertyTreesForTesting();                   \
-  EXPECT_FALSE(root->subtree_property_changed());                            \
-  EXPECT_FALSE(root->layer_tree_host()->LayerNeedsPushPropertiesForTesting(  \
-      root.get()));                                                          \
-  EXPECT_FALSE(child->subtree_property_changed());                           \
-  EXPECT_FALSE(child->layer_tree_host()->LayerNeedsPushPropertiesForTesting( \
-      child.get()));                                                         \
-  EXPECT_FALSE(grand_child->subtree_property_changed());                     \
-  EXPECT_FALSE(                                                              \
-      grand_child->layer_tree_host()->LayerNeedsPushPropertiesForTesting(    \
-          grand_child.get()));
+#define EXECUTE_AND_VERIFY_SUBTREE_NOT_CHANGED(code_to_test)                   \
+  code_to_test;                                                                \
+  root->layer_tree_host()->BuildPropertyTreesForTesting();                     \
+  EXPECT_FALSE(root->subtree_property_changed());                              \
+  EXPECT_FALSE(base::ContainsKey(                                              \
+      root->layer_tree_host()->LayersThatShouldPushProperties(), root.get())); \
+  EXPECT_FALSE(child->subtree_property_changed());                             \
+  EXPECT_FALSE(base::ContainsKey(                                              \
+      child->layer_tree_host()->LayersThatShouldPushProperties(),              \
+      child.get()));                                                           \
+  EXPECT_FALSE(grand_child->subtree_property_changed());                       \
+  EXPECT_FALSE(base::ContainsKey(                                              \
+      grand_child->layer_tree_host()->LayersThatShouldPushProperties(),        \
+      grand_child.get()));
 
-#define EXECUTE_AND_VERIFY_SUBTREE_CHANGES_RESET(code_to_test)               \
-  code_to_test;                                                              \
-  EXPECT_FALSE(root->subtree_property_changed());                            \
-  EXPECT_FALSE(root->layer_tree_host()->LayerNeedsPushPropertiesForTesting(  \
-      root.get()));                                                          \
-  EXPECT_FALSE(child->subtree_property_changed());                           \
-  EXPECT_FALSE(child->layer_tree_host()->LayerNeedsPushPropertiesForTesting( \
-      child.get()));                                                         \
-  EXPECT_FALSE(grand_child->subtree_property_changed());                     \
-  EXPECT_FALSE(                                                              \
-      grand_child->layer_tree_host()->LayerNeedsPushPropertiesForTesting(    \
-          grand_child.get()));
+#define EXECUTE_AND_VERIFY_SUBTREE_CHANGES_RESET(code_to_test) \
+  code_to_test;                                                \
+  EXPECT_FALSE(root->subtree_property_changed());              \
+  EXPECT_FALSE(child->subtree_property_changed());             \
+  EXPECT_FALSE(grand_child->subtree_property_changed());
 
 namespace cc {
 
@@ -106,8 +103,8 @@ static auto kArbitrarySourceId2 =
 class MockLayerTreeHost : public LayerTreeHost {
  public:
   MockLayerTreeHost(LayerTreeHostSingleThreadClient* single_thread_client,
-                    LayerTreeHost::InitParams* params)
-      : LayerTreeHost(params, CompositorMode::SINGLE_THREADED) {
+                    LayerTreeHost::InitParams params)
+      : LayerTreeHost(std::move(params), CompositorMode::SINGLE_THREADED) {
     InitializeSingleThreaded(single_thread_client,
                              base::ThreadTaskRunnerHandle::Get());
   }
@@ -146,8 +143,8 @@ class LayerTest : public testing::Test {
     params.task_graph_runner = &task_graph_runner_;
     params.mutator_host = animation_host_.get();
 
-    layer_tree_host_.reset(
-        new StrictMock<MockLayerTreeHost>(&single_thread_client_, &params));
+    layer_tree_host_.reset(new StrictMock<MockLayerTreeHost>(
+        &single_thread_client_, std::move(params)));
   }
 
   void TearDown() override {
@@ -354,6 +351,23 @@ TEST_F(LayerTest, LayerPropertyChangedForSubtree) {
       grand_child->PushPropertiesTo(grand_child_impl.get()));
 
   EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(1);
+  const std::array<uint32_t, 4> radii{1, 2, 3, 4};
+  EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetRoundedCorner(radii));
+  EXECUTE_AND_VERIFY_SUBTREE_CHANGES_RESET(
+      root->PushPropertiesTo(root_impl.get());
+      child->PushPropertiesTo(child_impl.get());
+      child2->PushPropertiesTo(child2_impl.get());
+      grand_child->PushPropertiesTo(grand_child_impl.get()));
+
+  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(1);
+  EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetRoundedCorner({0, 0, 0, 0}));
+  EXECUTE_AND_VERIFY_SUBTREE_CHANGES_RESET(
+      root->PushPropertiesTo(root_impl.get());
+      child->PushPropertiesTo(child_impl.get());
+      child2->PushPropertiesTo(child2_impl.get());
+      grand_child->PushPropertiesTo(grand_child_impl.get()));
+
+  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(1);
   EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetDoubleSided(false));
   EXECUTE_AND_VERIFY_SUBTREE_CHANGES_RESET(
       root->PushPropertiesTo(root_impl.get());
@@ -401,7 +415,7 @@ TEST_F(LayerTest, LayerPropertyChangedForSubtree) {
 
   EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(1);
   EXECUTE_AND_VERIFY_SUBTREE_CHANGED(
-      root->SetBackgroundFilters(arbitrary_filters));
+      root->SetBackdropFilters(arbitrary_filters));
   EXECUTE_AND_VERIFY_SUBTREE_CHANGES_RESET(
       root->PushPropertiesTo(root_impl.get());
       child->PushPropertiesTo(child_impl.get());
@@ -668,8 +682,8 @@ TEST_F(LayerTest, DeleteRemovedScrollParent) {
   SimulateCommitForLayer(child1.get());
 
   EXPECT_SET_NEEDS_COMMIT(1, child1->SetScrollParent(nullptr));
-  EXPECT_TRUE(
-      layer_tree_host_->LayerNeedsPushPropertiesForTesting(child1.get()));
+  EXPECT_TRUE(base::ContainsKey(
+      layer_tree_host_->LayersThatShouldPushProperties(), child1.get()));
 
   EXPECT_SET_NEEDS_FULL_TREE_SYNC(1, layer_tree_host_->SetRootLayer(nullptr));
 }
@@ -881,22 +895,22 @@ TEST_F(LayerTest, TestSettingMainThreadScrollingReason) {
   EXPECT_SET_NEEDS_COMMIT(1,
                           test_layer->AddMainThreadScrollingReasons(
                               MainThreadScrollingReason::kScrollbarScrolling));
-  EXPECT_EQ(reasons, test_layer->main_thread_scrolling_reasons());
+  EXPECT_EQ(reasons, test_layer->GetMainThreadScrollingReasons());
 
   // Check that the reasons can be selectively cleared.
   EXPECT_SET_NEEDS_COMMIT(
       1, test_layer->ClearMainThreadScrollingReasons(reasons_to_clear));
   EXPECT_EQ(reasons_after_clearing,
-            test_layer->main_thread_scrolling_reasons());
+            test_layer->GetMainThreadScrollingReasons());
 
   // Check that clearing non-set reasons doesn't set needs commit.
   reasons_to_clear = 0;
   reasons_to_clear |= MainThreadScrollingReason::kCustomScrollbarScrolling;
-  reasons_to_clear |= MainThreadScrollingReason::kPageOverlay;
+  reasons_to_clear |= MainThreadScrollingReason::kFrameOverlay;
   EXPECT_SET_NEEDS_COMMIT(
       0, test_layer->ClearMainThreadScrollingReasons(reasons_to_clear));
   EXPECT_EQ(reasons_after_clearing,
-            test_layer->main_thread_scrolling_reasons());
+            test_layer->GetMainThreadScrollingReasons());
 
   // Check that adding an existing condition doesn't set needs commit.
   EXPECT_SET_NEEDS_COMMIT(
@@ -923,6 +937,7 @@ TEST_F(LayerTest, CheckPropertyChangeCausesCorrectBehavior) {
       1, test_layer->SetTransformOrigin(gfx::Point3F(1.23f, 4.56f, 0.f)));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetBackgroundColor(SK_ColorLTGRAY));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetMasksToBounds(true));
+  EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetRoundedCorner({1, 2, 3, 4}));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetOpacity(0.5f));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetBlendMode(SkBlendMode::kHue));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetIsRootForIsolatedGroup(true));
@@ -1012,6 +1027,26 @@ TEST_F(LayerTest, PushPropertiesCausesLayerPropertyChangedForTransform) {
   EXPECT_TRUE(impl_layer->LayerPropertyChangedNotFromPropertyTrees());
 }
 
+TEST_F(LayerTest, PushPropertiesCausesLayerPropertyChangedForRoundCorner) {
+  scoped_refptr<Layer> test_layer = Layer::Create();
+  test_layer->SetMasksToBounds(true);
+  std::unique_ptr<LayerImpl> impl_layer =
+      LayerImpl::Create(host_impl_.active_tree(), 1);
+
+  EXPECT_SET_NEEDS_FULL_TREE_SYNC(1,
+                                  layer_tree_host_->SetRootLayer(test_layer));
+
+  EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetRoundedCorner({1, 2, 3, 4}));
+
+  EXPECT_FALSE(impl_layer->LayerPropertyChanged());
+
+  test_layer->PushPropertiesTo(impl_layer.get());
+
+  EXPECT_TRUE(impl_layer->LayerPropertyChanged());
+  EXPECT_FALSE(impl_layer->LayerPropertyChangedFromPropertyTrees());
+  EXPECT_TRUE(impl_layer->LayerPropertyChangedNotFromPropertyTrees());
+}
+
 TEST_F(LayerTest, PushPropertiesCausesLayerPropertyChangedForOpacity) {
   scoped_refptr<Layer> test_layer = Layer::Create();
   std::unique_ptr<LayerImpl> impl_layer =
@@ -1064,7 +1099,8 @@ class LayerTreeHostFactory {
     params.main_task_runner = base::ThreadTaskRunnerHandle::Get();
     params.mutator_host = mutator_host;
 
-    return LayerTreeHost::CreateSingleThreaded(&single_thread_client_, &params);
+    return LayerTreeHost::CreateSingleThreaded(&single_thread_client_,
+                                               std::move(params));
   }
 
  private:
@@ -1349,7 +1385,7 @@ TEST_F(LayerTest, PushUpdatesShouldHitTest) {
   root_layer->PushPropertiesTo(impl_layer.get());
   EXPECT_TRUE(impl_layer->DrawsContent());
   EXPECT_FALSE(impl_layer->hit_testable_without_draws_content());
-  EXPECT_TRUE(impl_layer->should_hit_test());
+  EXPECT_TRUE(impl_layer->ShouldHitTest());
 
   // A layer that does not draw content and does not hit test without drawing
   // content should not be hit testable.
@@ -1357,7 +1393,7 @@ TEST_F(LayerTest, PushUpdatesShouldHitTest) {
   root_layer->PushPropertiesTo(impl_layer.get());
   EXPECT_FALSE(impl_layer->DrawsContent());
   EXPECT_FALSE(impl_layer->hit_testable_without_draws_content());
-  EXPECT_FALSE(impl_layer->should_hit_test());
+  EXPECT_FALSE(impl_layer->ShouldHitTest());
 
   // |SetHitTestableWithoutDrawsContent| should cause a layer to become hit
   // testable even though it does not draw content.
@@ -1365,7 +1401,7 @@ TEST_F(LayerTest, PushUpdatesShouldHitTest) {
   root_layer->PushPropertiesTo(impl_layer.get());
   EXPECT_FALSE(impl_layer->DrawsContent());
   EXPECT_TRUE(impl_layer->hit_testable_without_draws_content());
-  EXPECT_TRUE(impl_layer->should_hit_test());
+  EXPECT_TRUE(impl_layer->ShouldHitTest());
 }
 
 void ReceiveCopyOutputResult(int* result_count,
@@ -1551,25 +1587,71 @@ class LayerTestWithLayerLists : public LayerTest {
   }
 };
 
-TEST_F(LayerTestWithLayerLists,
-       SetLayerTreeHostUsingLayerListsDoesNotManageElementId) {
+TEST_F(LayerTestWithLayerLists, LayerTreeHostRegistersScrollingElementId) {
+  scoped_refptr<Layer> normal_layer = Layer::Create();
+  scoped_refptr<Layer> scrolling_layer = Layer::Create();
+  scrolling_layer->SetScrollable(gfx::Size(1000, 1000));
+  ElementId normal_element_id = ElementId(2);
+  ElementId scrolling_element_id = ElementId(3);
+  normal_layer->SetElementId(normal_element_id);
+  scrolling_layer->SetElementId(scrolling_element_id);
+
+  EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(normal_element_id));
+  EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(scrolling_element_id));
+  normal_layer->SetLayerTreeHost(layer_tree_host_.get());
+  scrolling_layer->SetLayerTreeHost(layer_tree_host_.get());
+  EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(normal_element_id));
+  EXPECT_EQ(scrolling_layer,
+            layer_tree_host_->LayerByElementId(scrolling_element_id));
+
+  normal_layer->SetLayerTreeHost(nullptr);
+  scrolling_layer->SetLayerTreeHost(nullptr);
+  EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(scrolling_element_id));
+}
+
+TEST_F(LayerTestWithLayerLists, ChangingScrollableElementIdRegistersElement) {
   scoped_refptr<Layer> test_layer = Layer::Create();
-  ElementId element_id = ElementId(2);
-  test_layer->SetElementId(element_id);
-
-  // Only one call expected since we should skip the has-animation check.
+  test_layer->SetScrollable(gfx::Size(1000, 1000));
   EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(1);
-  scoped_refptr<AnimationTimeline> timeline =
-      AnimationTimeline::Create(AnimationIdProvider::NextTimelineId());
-  animation_host_->AddAnimationTimeline(timeline);
-
-  AddOpacityTransitionToElementWithAnimation(element_id, timeline, 10.0, 1.f,
-                                             0.f, false);
-  EXPECT_TRUE(animation_host_->IsElementAnimating(element_id));
-
-  EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(element_id));
   test_layer->SetLayerTreeHost(layer_tree_host_.get());
-  // Layer shouldn't have been registered by element id.
+
+  ElementId element_id = ElementId(2);
+  EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(element_id));
+
+  // Setting the element id should register the layer.
+  test_layer->SetElementId(element_id);
+  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(1);
+  EXPECT_EQ(test_layer, layer_tree_host_->LayerByElementId(element_id));
+
+  // Unsetting the element id should unregister the layer.
+  test_layer->SetElementId(ElementId());
+  EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(element_id));
+
+  test_layer->SetLayerTreeHost(nullptr);
+  EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(element_id));
+}
+
+TEST_F(LayerTestWithLayerLists, ChangingScrollableRegistersElement) {
+  scoped_refptr<Layer> test_layer = Layer::Create();
+  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(1);
+  test_layer->SetLayerTreeHost(layer_tree_host_.get());
+
+  ElementId element_id = ElementId(2);
+  EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(element_id));
+
+  // Setting the element id commits the element id but should not register
+  // the layer.
+  test_layer->SetElementId(element_id);
+  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(1);
+  EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(element_id));
+
+  // Making the layer scrollable should register it.
+  test_layer->SetScrollable(gfx::Size(1000, 1000));
+  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(1);
+  EXPECT_EQ(test_layer, layer_tree_host_->LayerByElementId(element_id));
+
+  // Unsetting the element id should unregister the layer.
+  test_layer->SetElementId(ElementId());
   EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(element_id));
 
   test_layer->SetLayerTreeHost(nullptr);

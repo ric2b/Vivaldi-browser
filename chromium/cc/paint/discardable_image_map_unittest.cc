@@ -18,6 +18,7 @@
 #include "cc/test/fake_content_layer_client.h"
 #include "cc/test/fake_recording_source.h"
 #include "cc/test/skia_common.h"
+#include "cc/test/test_paint_worklet_input.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkGraphics.h"
@@ -55,17 +56,16 @@ class DiscardableImageMapTest : public testing::Test {
       const DiscardableImageMap& image_map,
       const gfx::Rect& rect) {
     std::vector<const DrawImage*> draw_image_ptrs;
-    // Choose a not-SRGB-and-not-invalid target color space to verify that it
-    // is passed correctly to the resulting DrawImages.
-    gfx::ColorSpace target_color_space = gfx::ColorSpace::CreateXYZD50();
     image_map.GetDiscardableImagesInRect(rect, &draw_image_ptrs);
     std::vector<DrawImage> draw_images;
     for (const auto* image : draw_image_ptrs)
-      draw_images.push_back(DrawImage(
-          *image, 1.f, PaintImage::kDefaultFrameIndex, target_color_space));
+      draw_images.push_back(
+          DrawImage(*image, 1.f, PaintImage::kDefaultFrameIndex));
 
     std::vector<PositionScaleDrawImage> position_draw_images;
-    for (DrawImage& image : image_map.images_rtree_.Search(rect)) {
+    std::vector<DrawImage> results;
+    image_map.images_rtree_.Search(rect, &results);
+    for (DrawImage& image : results) {
       auto image_id = image.paint_image().stable_id();
       position_draw_images.push_back(PositionScaleDrawImage(
           image.paint_image(),
@@ -77,7 +77,6 @@ class DiscardableImageMapTest : public testing::Test {
     for (size_t i = 0; i < draw_images.size(); ++i) {
       EXPECT_TRUE(draw_images[i].paint_image() ==
                   position_draw_images[i].image);
-      EXPECT_EQ(draw_images[i].target_color_space(), target_color_space);
     }
     return position_draw_images;
   }
@@ -883,6 +882,19 @@ TEST_F(DiscardableImageMapTest, EmbeddedShaderWithAnimatedImages) {
             ImageAnalysisState::kAnimatedImages);
 }
 
+TEST_F(DiscardableImageMapTest, BuildPaintWorkletImage) {
+  gfx::SizeF size(100, 50);
+  scoped_refptr<TestPaintWorkletInput> input =
+      base::MakeRefCounted<TestPaintWorkletInput>(size);
+  PaintImage paint_image = PaintImageBuilder::WithDefault()
+                               .set_id(1)
+                               .set_paint_worklet_input(std::move(input))
+                               .TakePaintImage();
+  EXPECT_TRUE(paint_image.paint_worklet_input());
+  EXPECT_EQ(paint_image.width(), size.width());
+  EXPECT_EQ(paint_image.height(), size.height());
+}
+
 TEST_F(DiscardableImageMapTest, DecodingModeHintsBasic) {
   gfx::Rect visible_rect(100, 100);
   PaintImage unspecified_image =
@@ -1070,8 +1082,8 @@ gfx::ColorSpace test_color_spaces[] = {
     gfx::ColorSpace::CreateDisplayP3D65(),
 };
 
-INSTANTIATE_TEST_CASE_P(ColorSpace,
-                        DiscardableImageMapColorSpaceTest,
-                        testing::ValuesIn(test_color_spaces));
+INSTANTIATE_TEST_SUITE_P(ColorSpace,
+                         DiscardableImageMapColorSpaceTest,
+                         testing::ValuesIn(test_color_spaces));
 
 }  // namespace cc

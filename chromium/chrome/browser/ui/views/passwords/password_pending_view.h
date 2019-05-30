@@ -7,19 +7,15 @@
 
 #include "chrome/browser/ui/views/passwords/password_bubble_view_base.h"
 #include "ui/views/controls/button/button.h"
-#include "ui/views/controls/styled_label_listener.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/view.h"
 
 namespace views {
 class Combobox;
-class GridLayout;
 class Label;
-class StyledLabel;
 class ToggleImageButton;
 }  // namespace views
 
-class DesktopIOSPromotionBubbleView;
 class PasswordSignInPromoView;
 
 // A view offering the user the ability to save or update credentials (depending
@@ -27,20 +23,12 @@ class PasswordSignInPromoView;
 // "Save"/"Update" button and a "Never"/"Nope" button.
 class PasswordPendingView : public PasswordBubbleViewBase,
                             public views::ButtonListener,
-                            public views::StyledLabelListener,
                             public views::TextfieldController {
  public:
   PasswordPendingView(content::WebContents* web_contents,
                       views::View* anchor_view,
                       const gfx::Point& anchor_point,
                       DisplayReason reason);
-
-  static void BuildCredentialRows(
-      views::GridLayout* layout,
-      views::View* username_field,
-      views::View* password_field,
-      views::ToggleImageButton* password_view_button,
-      bool show_password_label);
 
 #if defined(UNIT_TEST)
   const View* username_field() const { return username_field_; }
@@ -52,11 +40,6 @@ class PasswordPendingView : public PasswordBubbleViewBase,
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
-  // views::StyledLabelListener:
-  void StyledLabelLinkClicked(views::StyledLabel* label,
-                              const gfx::Range& range,
-                              int event_flags) override;
-
   // views::TextfieldController:
   void ContentsChanged(views::Textfield* sender,
                        const base::string16& new_contents) override;
@@ -67,7 +50,6 @@ class PasswordPendingView : public PasswordBubbleViewBase,
   views::View* GetInitiallyFocusedView() override;
   int GetDialogButtons() const override;
   base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
-  void AddedToWidget() override;
   gfx::ImageSkia GetWindowIcon() override;
   bool ShouldShowWindowIcon() const override;
   bool ShouldShowCloseButton() const override;
@@ -75,11 +57,12 @@ class PasswordPendingView : public PasswordBubbleViewBase,
   bool Cancel() override;
   bool Close() override;
 
-  void CreateAndSetLayout(bool show_password_label);
+  // View:
+  void AddedToWidget() override;
+
   void TogglePasswordVisibility();
   void UpdateUsernameAndPasswordInModel();
   void ReplaceWithPromo();
-  void UpdateTitleText(views::StyledLabel* title_view);
 
   // True iff it is an update password bubble on creation. False iff it is a
   // save bubble.
@@ -89,7 +72,6 @@ class PasswordPendingView : public PasswordBubbleViewBase,
   // across devices. One of these are non-null when the promotion dialog is
   // active.
   PasswordSignInPromoView* sign_in_promo_;
-  DesktopIOSPromotionBubbleView* desktop_ios_promo_;
 
   views::View* username_field_;
   views::ToggleImageButton* password_view_button_;

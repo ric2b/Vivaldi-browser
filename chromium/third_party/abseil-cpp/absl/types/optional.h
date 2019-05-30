@@ -59,6 +59,7 @@ using std::nullopt;
 #include <type_traits>
 #include <utility>
 
+#include "absl/base/attributes.h"
 #include "absl/memory/memory.h"
 #include "absl/meta/type_traits.h"
 #include "absl/types/bad_optional_access.h"
@@ -162,7 +163,7 @@ struct empty_struct {};
 // This class stores the data in optional<T>.
 // It is specialized based on whether T is trivially destructible.
 // This is the specialization for non trivially destructible type.
-template <typename T, bool = std::is_trivially_destructible<T>::value>
+template <typename T, bool unused = std::is_trivially_destructible<T>::value>
 class optional_data_dtor_base {
   struct dummy_type {
     static_assert(sizeof(T) % sizeof(empty_struct) == 0, "");
@@ -260,10 +261,10 @@ class optional_data_base : public optional_data_dtor_base<T> {
 // have trivial move but nontrivial copy.
 // Also, we should be checking is_trivially_copyable here, which is not
 // supported now, so we use is_trivially_* traits instead.
-template <typename T, bool = absl::is_trivially_copy_constructible<T>::value&&
-                          absl::is_trivially_copy_assignable<
-                              typename std::remove_cv<T>::type>::value&&
-                              std::is_trivially_destructible<T>::value>
+template <typename T,
+          bool unused = absl::is_trivially_copy_constructible<T>::value&&
+              absl::is_trivially_copy_assignable<typename std::remove_cv<
+                  T>::type>::value&& std::is_trivially_destructible<T>::value>
 class optional_data;
 
 // Trivially copyable types
@@ -294,7 +295,7 @@ class optional_data<T, false> : public optional_data_base<T> {
 
   optional_data() = default;
 
-  optional_data(const optional_data& rhs) {
+  optional_data(const optional_data& rhs) : optional_data_base<T>() {
     if (rhs.engaged_) {
       this->construct(rhs.data_);
     }
@@ -302,7 +303,8 @@ class optional_data<T, false> : public optional_data_base<T> {
 
   optional_data(optional_data&& rhs) noexcept(
       absl::default_allocator_is_nothrow::value ||
-      std::is_nothrow_move_constructible<T>::value) {
+      std::is_nothrow_move_constructible<T>::value)
+      : optional_data_base<T>() {
     if (rhs.engaged_) {
       this->construct(std::move(rhs.data_));
     }
@@ -411,10 +413,10 @@ constexpr copy_traits get_ctor_copy_traits() {
 
 template <typename T>
 constexpr copy_traits get_assign_copy_traits() {
-  return std::is_copy_assignable<T>::value &&
+  return absl::is_copy_assignable<T>::value &&
                  std::is_copy_constructible<T>::value
              ? copy_traits::copyable
-             : std::is_move_assignable<T>::value &&
+             : absl::is_move_assignable<T>::value &&
                        std::is_move_constructible<T>::value
                    ? copy_traits::movable
                    : copy_traits::non_movable;
@@ -466,6 +468,7 @@ struct optional_hash_base<T, decltype(std::hash<absl::remove_const_t<T> >()(
   using argument_type = absl::optional<T>;
   using result_type = size_t;
   size_t operator()(const absl::optional<T>& opt) const {
+    absl::type_traits_internal::AssertHashEnabled<absl::remove_const_t<T>>();
     if (opt) {
       return std::hash<absl::remove_const_t<T> >()(*opt);
     } else {
@@ -700,7 +703,7 @@ class optional : private optional_internal::optional_data<T>,
   // optional::reset()
   //
   // Destroys the inner `T` value of an `absl::optional` if one is present.
-  void reset() noexcept { this->destruct(); }
+  ABSL_ATTRIBUTE_REINITIALIZES void reset() noexcept { this->destruct(); }
 
   // optional::emplace()
   //

@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
@@ -624,13 +625,13 @@ TEST_P(CastRemotingConnectorFullSessionTest, GoesThroughAllTheMotions) {
   }
 }
 
-INSTANTIATE_TEST_CASE_P(,
-                        CastRemotingConnectorFullSessionTest,
-                        ::testing::Values(SOURCE_TERMINATES,
-                                          MOJO_PIPE_CLOSES,
-                                          ROUTE_TERMINATES,
-                                          EXTERNAL_FAILURE,
-                                          USER_DISABLED));
+INSTANTIATE_TEST_SUITE_P(,
+                         CastRemotingConnectorFullSessionTest,
+                         ::testing::Values(SOURCE_TERMINATES,
+                                           MOJO_PIPE_CLOSES,
+                                           ROUTE_TERMINATES,
+                                           EXTERNAL_FAILURE,
+                                           USER_DISABLED));
 
 // TODO(xjz): Remove the following tests after Mirroring Service is launched.
 TEST_F(CastRemotingConnectorTest,
@@ -935,10 +936,10 @@ TEST_P(DeprecatedCastRemotingConnectorFullSessionTest,
   }
 }
 
-INSTANTIATE_TEST_CASE_P(,
-                        DeprecatedCastRemotingConnectorFullSessionTest,
-                        ::testing::Values(SOURCE_TERMINATES,
-                                          MOJO_PIPE_CLOSES,
-                                          ROUTE_TERMINATES,
-                                          EXTERNAL_FAILURE,
-                                          USER_DISABLED));
+INSTANTIATE_TEST_SUITE_P(,
+                         DeprecatedCastRemotingConnectorFullSessionTest,
+                         ::testing::Values(SOURCE_TERMINATES,
+                                           MOJO_PIPE_CLOSES,
+                                           ROUTE_TERMINATES,
+                                           EXTERNAL_FAILURE,
+                                           USER_DISABLED));

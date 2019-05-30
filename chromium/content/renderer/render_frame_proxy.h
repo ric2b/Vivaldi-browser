@@ -112,6 +112,11 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
       const FrameReplicationState& replicated_state,
       const base::UnguessableToken& devtools_frame_token);
 
+  // Creates a RenderFrameProxy to be used with a portal owned by |parent|.
+  // |routing_id| is the routing id of this new RenderFrameProxy.
+  static RenderFrameProxy* CreateProxyForPortal(RenderFrameImpl* parent,
+                                                int proxy_routing_id);
+
   // Returns the RenderFrameProxy for the given routing ID.
   static RenderFrameProxy* FromRoutingID(int routing_id);
 
@@ -138,6 +143,10 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   // Out-of-process child frames receive a signal from RenderWidget when the
   // zoom level has changed.
   void OnZoomLevelChanged(double zoom_level);
+
+  // Out-of-process child frames receive a signal from RenderWidget when the
+  // page scale factor has changed.
+  void OnPageScaleFactorChanged(float page_scale_factor);
 
   // Invoked by RenderWidget when a new capture sequence number was set,
   // indicating that surfaces should be synchronized.
@@ -192,13 +201,15 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
                           bool has_user_gesture) override;
   void Navigate(const blink::WebURLRequest& request,
                 bool should_replace_current_entry,
+                bool is_opener_navigation,
+                bool prevent_sandboxed_download,
                 mojo::ScopedMessagePipeHandle blob_url_token) override;
   void FrameRectsChanged(const blink::WebRect& local_frame_rect,
                          const blink::WebRect& screen_space_rect) override;
   void UpdateRemoteViewportIntersection(
       const blink::WebRect& viewport_intersection,
-      bool occluded_or_obscured) override;
-  void VisibilityChanged(bool visible) override;
+      blink::FrameOcclusionState occlusion_state) override;
+  void VisibilityChanged(blink::mojom::FrameVisibility visibility) override;
   void SetIsInert(bool) override;
   void SetInheritedEffectiveTouchAction(cc::TouchAction) override;
   void UpdateRenderThrottlingStatus(bool is_throttled,
@@ -212,6 +223,8 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
 
   // IPC handlers
   void OnDidStartLoading();
+
+  void WasEvicted();
 
  private:
   RenderFrameProxy(int routing_id);
@@ -240,6 +253,7 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   void OnForwardResourceTimingToParent(
       const ResourceTimingInfo& resource_timing);
   void OnDispatchLoad();
+  void OnSetNeedsOcclusionTracking(bool);
   void OnCollapse(bool collapsed);
   void OnDidUpdateName(const std::string& name, const std::string& unique_name);
   void OnAddContentSecurityPolicies(
@@ -262,11 +276,10 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   void OnEnableAutoResize(const gfx::Size& min_size, const gfx::Size& max_size);
   void OnDisableAutoResize();
   void OnSetHasReceivedUserGestureBeforeNavigation(bool value);
+  void OnRenderFallbackContent() const;
 
 #if defined(USE_AURA)
   // MusEmbeddedFrameDelegate
-  void OnMusEmbeddedFrameSurfaceChanged(
-      const viz::SurfaceInfo& surface_info) override;
   void OnMusEmbeddedFrameSinkIdAllocated(
       const viz::FrameSinkId& frame_sink_id) override;
 #endif
@@ -274,7 +287,8 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   // ChildFrameCompositor:
   cc::Layer* GetLayer() override;
   void SetLayer(scoped_refptr<cc::Layer> layer,
-                bool prevent_contents_opaque_changes) override;
+                bool prevent_contents_opaque_changes,
+                bool is_surface_layer) override;
   SkBitmap* GetSadPageBitmap() override;
 
   const viz::LocalSurfaceId& GetLocalSurfaceId() const;
@@ -314,13 +328,14 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   bool crashed_ = false;
 
   viz::FrameSinkId frame_sink_id_;
-  viz::ParentLocalSurfaceIdAllocator parent_local_surface_id_allocator_;
+  std::unique_ptr<viz::ParentLocalSurfaceIdAllocator>
+      parent_local_surface_id_allocator_;
 
   bool enable_surface_synchronization_ = false;
 
   gfx::Rect last_intersection_rect_;
   gfx::Rect last_compositor_visible_rect_;
-  bool last_occluded_or_obscured_ = false;
+  blink::FrameOcclusionState last_occlusion_state_;
 
 #if defined(USE_AURA)
   std::unique_ptr<MusEmbeddedFrame> mus_embedded_frame_;

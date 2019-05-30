@@ -7,7 +7,9 @@
 #include <utility>
 
 #include "ash/public/cpp/app_list/app_list_config.h"
+#include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
@@ -46,8 +48,12 @@ constexpr char kAppVmNameKey[] = "vm_name";
 constexpr char kAppContainerNameKey[] = "container_name";
 constexpr char kAppCommentKey[] = "comment";
 constexpr char kAppMimeTypesKey[] = "mime_types";
+constexpr char kAppKeywordsKey[] = "keywords";
+constexpr char kAppExecutableFileNameKey[] = "executable_file_name";
 constexpr char kAppNameKey[] = "name";
 constexpr char kAppNoDisplayKey[] = "no_display";
+constexpr char kAppScaledKey[] = "scaled";
+constexpr char kAppPackageIdKey[] = "package_id";
 constexpr char kAppStartupWMClassKey[] = "startup_wm_class";
 constexpr char kAppStartupNotifyKey[] = "startup_notify";
 constexpr char kAppInstallTimeKey[] = "install_time";
@@ -61,12 +67,12 @@ const std::string* GetAppNameForWMClass(base::StringPiece wmclass) {
   // This is used to deal with the Linux apps that don't specify the correct
   // WMClass in their desktop files so that their aura windows can be identified
   // with their respective app IDs.
-  static const std::map<std::string, std::string> kWMClassToNname = {
-      {"Octave-gui", "GNU Octave"},
-      {"MuseScore2", "MuseScore 2"},
-      {"XnViewMP", "XnView Multi Platform"}};
-  const auto it = kWMClassToNname.find(wmclass.as_string());
-  if (it == kWMClassToNname.end())
+  static const base::NoDestructor<std::map<std::string, std::string>>
+      kWMClassToNname({{"Octave-gui", "GNU Octave"},
+                       {"MuseScore2", "MuseScore 2"},
+                       {"XnViewMP", "XnView Multi Platform"}});
+  const auto it = kWMClassToNname->find(wmclass.as_string());
+  if (it == kWMClassToNname->end())
     return nullptr;
   return &it->second;
 }
@@ -112,6 +118,51 @@ base::Value ProtoToList(
   for (const std::string& string : strings)
     result.GetList().emplace_back(string);
   return result;
+}
+
+base::Value LocaleStringsProtoToDictionary(
+    const App::LocaleStrings& repeated_locale_string) {
+  base::Value result(base::Value::Type::DICTIONARY);
+  for (const auto& strings_with_locale : repeated_locale_string.values()) {
+    const std::string& locale = strings_with_locale.locale();
+
+    std::string locale_with_dashes(locale);
+    std::replace(locale_with_dashes.begin(), locale_with_dashes.end(), '_',
+                 '-');
+    if (!locale.empty() && !l10n_util::IsValidLocaleSyntax(locale_with_dashes))
+      continue;
+    result.SetKey(locale, ProtoToList(strings_with_locale.value()));
+  }
+  return result;
+}
+
+// Construct a registration based on the given App proto.
+// |name| should be |app.name()| in Dictionary form.
+base::Value AppPrefRegistrationFromApp(
+    const vm_tools::apps::App& app,
+    base::Value name,
+    const vm_tools::apps::ApplicationList& app_list) {
+  base::Value pref_registration(base::Value::Type::DICTIONARY);
+  pref_registration.SetKey(kAppDesktopFileIdKey,
+                           base::Value(app.desktop_file_id()));
+  pref_registration.SetKey(kAppVmNameKey, base::Value(app_list.vm_name()));
+  pref_registration.SetKey(kAppContainerNameKey,
+                           base::Value(app_list.container_name()));
+  pref_registration.SetKey(kAppNameKey, std::move(name));
+  pref_registration.SetKey(kAppCommentKey, ProtoToDictionary(app.comment()));
+  pref_registration.SetKey(kAppExecutableFileNameKey,
+                           base::Value(app.executable_file_name()));
+  pref_registration.SetKey(kAppMimeTypesKey, ProtoToList(app.mime_types()));
+  pref_registration.SetKey(kAppKeywordsKey,
+                           LocaleStringsProtoToDictionary(app.keywords()));
+  pref_registration.SetKey(kAppNoDisplayKey, base::Value(app.no_display()));
+  pref_registration.SetKey(kAppStartupWMClassKey,
+                           base::Value(app.startup_wm_class()));
+  pref_registration.SetKey(kAppStartupNotifyKey,
+                           base::Value(app.startup_notify()));
+  pref_registration.SetKey(kAppPackageIdKey, base::Value(app.package_id()));
+
+  return pref_registration;
 }
 
 // This is the companion to CrostiniRegistryService::SetCurrentTime().
@@ -291,11 +342,31 @@ std::string CrostiniRegistryService::Registration::Comment() const {
   return LocalizedString(kAppCommentKey);
 }
 
+std::string CrostiniRegistryService::Registration::ExecutableFileName() const {
+  if (pref_.is_none())
+    return std::string();
+  const base::Value* executable_file_name =
+      pref_.FindKeyOfType(kAppExecutableFileNameKey, base::Value::Type::STRING);
+  if (!executable_file_name)
+    return std::string();
+  return executable_file_name->GetString();
+}
+
 std::set<std::string> CrostiniRegistryService::Registration::MimeTypes() const {
   if (pref_.is_none())
     return {};
   return ListToStringSet(
       pref_.FindKeyOfType(kAppMimeTypesKey, base::Value::Type::LIST));
+}
+
+std::set<std::string> CrostiniRegistryService::Registration::Keywords() const {
+  if (is_terminal_app_) {
+    std::set<std::string> result = {"linux", "terminal", "crostini"};
+    result.insert(
+        l10n_util::GetStringUTF8(IDS_CROSTINI_TERMINAL_APP_SEARCH_TERMS));
+    return result;
+  }
+  return LocalizedList(kAppKeywordsKey);
 }
 
 bool CrostiniRegistryService::Registration::NoDisplay() const {
@@ -308,12 +379,42 @@ bool CrostiniRegistryService::Registration::NoDisplay() const {
   return false;
 }
 
+bool CrostiniRegistryService::Registration::CanUninstall() const {
+  if (pref_.is_none())
+    return false;
+  // We can uninstall if and only if there is a package that owns the
+  // application. If no package owns the application, we don't know how to
+  // uninstall the app.
+  //
+  // We don't check other things that might prevent us from uninstalling the
+  // app. In particular, we don't check if there are other packages which
+  // depend on the owning package. This should be rare for packages that have
+  // desktop files, and it's better to show an error message (which the user can
+  // then Google to learn more) than to just not have an uninstall option at
+  // all.
+  const base::Value* package_id =
+      pref_.FindKeyOfType(kAppPackageIdKey, base::Value::Type::STRING);
+  if (package_id)
+    return !package_id->GetString().empty();
+  return false;
+}
+
 base::Time CrostiniRegistryService::Registration::InstallTime() const {
   return GetTime(pref_, kAppInstallTimeKey);
 }
 
 base::Time CrostiniRegistryService::Registration::LastLaunchTime() const {
   return GetTime(pref_, kAppLastLaunchTimeKey);
+}
+
+bool CrostiniRegistryService::Registration::IsScaled() const {
+  if (pref_.is_none())
+    return false;
+  const base::Value* scaled =
+      pref_.FindKeyOfType(kAppScaledKey, base::Value::Type::BOOLEAN);
+  if (!scaled)
+    return false;
+  return scaled->GetBool();
 }
 
 // We store in prefs all the localized values for given fields (formatted with
@@ -342,6 +443,31 @@ std::string CrostiniRegistryService::Registration::LocalizedString(
       return value->GetString();
   }
   return std::string();
+}
+
+std::set<std::string> CrostiniRegistryService::Registration::LocalizedList(
+    base::StringPiece key) const {
+  if (pref_.is_none())
+    return {};
+  const base::Value* dict =
+      pref_.FindKeyOfType(key, base::Value::Type::DICTIONARY);
+  if (!dict)
+    return {};
+
+  std::string current_locale =
+      l10n_util::NormalizeLocale(g_browser_process->GetApplicationLocale());
+  std::vector<std::string> locales;
+  l10n_util::GetParentLocales(current_locale, &locales);
+  // We use an empty locale as fallback.
+  locales.push_back(std::string());
+
+  for (const std::string& locale : locales) {
+    const base::Value* value =
+        dict->FindKeyOfType(locale, base::Value::Type::LIST);
+    if (value)
+      return ListToStringSet(value);
+  }
+  return {};
 }
 
 CrostiniRegistryService::CrostiniRegistryService(Profile* profile)
@@ -414,7 +540,9 @@ std::string CrostiniRegistryService::GetCrostiniShelfAppId(
   // If an app had StartupWMClass set to the given WM class, use that,
   // otherwise look for a desktop file id matching the WM class.
   base::StringPiece key = suffix.substr(strlen(kWMClassPrefix));
-  FindAppIdResult result = FindAppId(apps, kAppStartupWMClassKey, key, &app_id);
+  FindAppIdResult result = FindAppId(apps, kAppStartupWMClassKey, key, &app_id,
+                                     false /* require_startup_notification */,
+                                     true /* need_display */);
   if (result == FindAppIdResult::UniqueMatch)
     return app_id;
   if (result == FindAppIdResult::NonUniqueMatch)
@@ -574,10 +702,10 @@ void CrostiniRegistryService::ClearApplicationList(
       if (item.first == kCrostiniTerminalId)
         continue;
       if (item.second.FindKey(kAppVmNameKey)->GetString() == vm_name &&
-          item.second.FindKey(kAppContainerNameKey)->GetString() ==
-              container_name) {
+          (container_name.empty() ||
+           item.second.FindKey(kAppContainerNameKey)->GetString() ==
+               container_name))
         removed_apps.push_back(item.first);
-      }
     }
     for (const std::string& removed_app : removed_apps) {
       RemoveAppData(removed_app);
@@ -633,21 +761,8 @@ void CrostiniRegistryService::UpdateApplicationList(
           app.desktop_file_id(), app_list.vm_name(), app_list.container_name());
       new_app_ids.insert(app_id);
 
-      base::Value pref_registration(base::Value::Type::DICTIONARY);
-      pref_registration.SetKey(kAppDesktopFileIdKey,
-                               base::Value(app.desktop_file_id()));
-      pref_registration.SetKey(kAppVmNameKey, base::Value(app_list.vm_name()));
-      pref_registration.SetKey(kAppContainerNameKey,
-                               base::Value(app_list.container_name()));
-      pref_registration.SetKey(kAppNameKey, std::move(name));
-      pref_registration.SetKey(kAppCommentKey,
-                               ProtoToDictionary(app.comment()));
-      pref_registration.SetKey(kAppMimeTypesKey, ProtoToList(app.mime_types()));
-      pref_registration.SetKey(kAppNoDisplayKey, base::Value(app.no_display()));
-      pref_registration.SetKey(kAppStartupWMClassKey,
-                               base::Value(app.startup_wm_class()));
-      pref_registration.SetKey(kAppStartupNotifyKey,
-                               base::Value(app.startup_notify()));
+      base::Value pref_registration =
+          AppPrefRegistrationFromApp(app, std::move(name), app_list);
 
       base::Value* old_app = apps->FindKey(app_id);
       if (old_app && EqualsExcludingTimestamps(pref_registration, *old_app))
@@ -753,7 +868,24 @@ void CrostiniRegistryService::SetCurrentTime(base::Value* dictionary,
                                              const char* key) const {
   DCHECK(dictionary);
   int64_t time = clock_->Now().ToDeltaSinceWindowsEpoch().InMicroseconds();
-  dictionary->SetKey(key, base::Value(base::Int64ToString(time)));
+  dictionary->SetKey(key, base::Value(base::NumberToString(time)));
+}
+
+void CrostiniRegistryService::SetAppScaled(const std::string& app_id,
+                                           bool scaled) {
+  DCHECK_NE(app_id, kCrostiniTerminalId);
+
+  DictionaryPrefUpdate update(prefs_, prefs::kCrostiniRegistry);
+  base::DictionaryValue* apps = update.Get();
+
+  base::Value* app = apps->FindKey(app_id);
+  if (!app) {
+    LOG(ERROR)
+        << "Tried to set display scaled property on the app with this app_id "
+        << app_id << " that doesn't exist in the registry.";
+    return;
+  }
+  app->SetKey(kAppScaledKey, base::Value(scaled));
 }
 
 void CrostiniRegistryService::RequestIcon(const std::string& app_id,
@@ -791,9 +923,8 @@ void CrostiniRegistryService::RequestIcon(const std::string& app_id,
       break;
   }
 
-  crostini::CrostiniManager::GetInstance()->GetContainerAppIcons(
-      profile_, registration->VmName(), registration->ContainerName(),
-      desktop_file_ids,
+  crostini::CrostiniManager::GetForProfile(profile_)->GetContainerAppIcons(
+      registration->VmName(), registration->ContainerName(), desktop_file_ids,
       app_list::AppListConfig::instance().grid_icon_dimension(), icon_scale,
       base::BindOnce(&CrostiniRegistryService::OnContainerAppIcon,
                      weak_ptr_factory_.GetWeakPtr(), app_id, scale_factor));
@@ -802,9 +933,9 @@ void CrostiniRegistryService::RequestIcon(const std::string& app_id,
 void CrostiniRegistryService::OnContainerAppIcon(
     const std::string& app_id,
     ui::ScaleFactor scale_factor,
-    ConciergeClientResult result,
+    CrostiniResult result,
     const std::vector<Icon>& icons) {
-  if (result != ConciergeClientResult::SUCCESS) {
+  if (result != CrostiniResult::SUCCESS) {
     // Add this to the list of retryable icon requests so we redo this when
     // we get feedback from the container that it's available.
     retry_icon_requests_[app_id] |= (1 << scale_factor);

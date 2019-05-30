@@ -4,11 +4,12 @@
 
 #include "content/browser/accessibility/accessibility_tree_formatter_blink.h"
 
-#include <math.h>
-#include <stddef.h>
+#include <cmath>
+#include <cstddef>
 
 #include <utility>
 
+#include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -16,46 +17,41 @@
 #include "base/values.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/ax_node_data.h"
+#include "ui/accessibility/platform/ax_platform_node_delegate.h"
+#include "ui/accessibility/platform/compute_attributes.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/transform.h"
 
 namespace content {
+namespace {
 
-AccessibilityTreeFormatterBlink::AccessibilityTreeFormatterBlink()
-    : AccessibilityTreeFormatterBrowser() {}
-
-AccessibilityTreeFormatterBlink::~AccessibilityTreeFormatterBlink() {
-}
-
-const char* const TREE_DATA_ATTRIBUTES[] = {"TreeData.textSelStartOffset",
-                                            "TreeData.textSelEndOffset"};
-
-const char* STATE_FOCUSED = "focused";
-const char* STATE_OFFSCREEN = "offscreen";
-
-uint32_t AccessibilityTreeFormatterBlink::ChildCount(
-    const BrowserAccessibility& node) const {
-  if (node.HasIntAttribute(ax::mojom::IntAttribute::kChildTreeId))
-    return node.PlatformChildCount();
-  else
-    return node.InternalChildCount();
-}
-
-BrowserAccessibility* AccessibilityTreeFormatterBlink::GetChild(
+base::Optional<std::string> GetStringAttribute(
     const BrowserAccessibility& node,
-    uint32_t i) const {
-  if (node.HasIntAttribute(ax::mojom::IntAttribute::kChildTreeId))
-    return node.PlatformGetChild(i);
-  else
-    return node.InternalGetChild(i);
+    ax::mojom::StringAttribute attr) {
+  // Language and Font Family are different from other string attributes
+  // in that they inherit.
+  if (attr == ax::mojom::StringAttribute::kFontFamily ||
+      attr == ax::mojom::StringAttribute::kLanguage) {
+    std::string value = node.GetInheritedStringAttribute(attr);
+    if (value.empty()) {
+      return base::nullopt;
+    }
+    return value;
+  }
+
+  // Always return the attribute if the node has it, even if the value is an
+  // empty string.
+  std::string value;
+  if (node.GetStringAttribute(attr, &value)) {
+    return value;
+  }
+  return base::nullopt;
 }
 
-// TODO(aleventhal) Convert ax enums to friendly strings, e.g.
-// ax::mojom::CheckedState.
-std::string AccessibilityTreeFormatterBlink::IntAttrToString(
-    const BrowserAccessibility& node,
-    ax::mojom::IntAttribute attr,
-    int value) const {
+std::string IntAttrToString(const BrowserAccessibility& node,
+                            ax::mojom::IntAttribute attr,
+                            int32_t value) {
   if (ui::IsNodeIdIntAttribute(attr)) {
     // Relation
     BrowserAccessibility* target = node.manager()->GetFromID(value);
@@ -85,6 +81,8 @@ std::string AccessibilityTreeFormatterBlink::IntAttrToString(
       return ui::ToString(static_cast<ax::mojom::TextDirection>(value));
     case ax::mojom::IntAttribute::kTextPosition:
       return ui::ToString(static_cast<ax::mojom::TextPosition>(value));
+    case ax::mojom::IntAttribute::kImageAnnotationStatus:
+      return ui::ToString(static_cast<ax::mojom::ImageAnnotationStatus>(value));
     // No pretty printing necessary for these:
     case ax::mojom::IntAttribute::kActivedescendantId:
     case ax::mojom::IntAttribute::kAriaCellColumnIndex:
@@ -92,7 +90,6 @@ std::string AccessibilityTreeFormatterBlink::IntAttrToString(
     case ax::mojom::IntAttribute::kAriaColumnCount:
     case ax::mojom::IntAttribute::kAriaRowCount:
     case ax::mojom::IntAttribute::kBackgroundColor:
-    case ax::mojom::IntAttribute::kChildTreeId:
     case ax::mojom::IntAttribute::kColor:
     case ax::mojom::IntAttribute::kColorValue:
     case ax::mojom::IntAttribute::kDetailsId:
@@ -134,6 +131,75 @@ std::string AccessibilityTreeFormatterBlink::IntAttrToString(
   return std::to_string(value);
 }
 
+}  // namespace
+
+AccessibilityTreeFormatterBlink::AccessibilityTreeFormatterBlink()
+    : AccessibilityTreeFormatterBrowser() {}
+
+AccessibilityTreeFormatterBlink::~AccessibilityTreeFormatterBlink() {}
+
+void AccessibilityTreeFormatterBlink::AddDefaultFilters(
+    std::vector<PropertyFilter>* property_filters) {
+  // Noisy, perhaps add later:
+  //   editable, focus*, horizontal, linked, richlyEditable, vertical
+  // Too flaky: hovered, offscreen
+  // States
+  AddPropertyFilter(property_filters, "collapsed");
+  AddPropertyFilter(property_filters, "haspopup");
+  AddPropertyFilter(property_filters, "invisible");
+  AddPropertyFilter(property_filters, "multiline");
+  AddPropertyFilter(property_filters, "protected");
+  AddPropertyFilter(property_filters, "required");
+  AddPropertyFilter(property_filters, "select*");
+  AddPropertyFilter(property_filters, "visited");
+  // Other attributes
+  AddPropertyFilter(property_filters, "busy=true");
+  AddPropertyFilter(property_filters, "valueForRange*");
+  AddPropertyFilter(property_filters, "minValueForRange*");
+  AddPropertyFilter(property_filters, "maxValueForRange*");
+  AddPropertyFilter(property_filters, "hierarchicalLevel*");
+  AddPropertyFilter(property_filters, "autoComplete*");
+  AddPropertyFilter(property_filters, "restriction*");
+  AddPropertyFilter(property_filters, "keyShortcuts*");
+  AddPropertyFilter(property_filters, "activedescendantId*");
+  AddPropertyFilter(property_filters, "controlsIds*");
+  AddPropertyFilter(property_filters, "flowtoIds*");
+  AddPropertyFilter(property_filters, "detailsIds*");
+  AddPropertyFilter(property_filters, "invalidState=*");
+  AddPropertyFilter(property_filters, "invalidState=false",
+                    PropertyFilter::DENY);  // Don't show false value
+  AddPropertyFilter(property_filters, "roleDescription=*");
+  AddPropertyFilter(property_filters, "errormessageId=*");
+}
+// static
+std::unique_ptr<AccessibilityTreeFormatter>
+AccessibilityTreeFormatterBlink::CreateBlink() {
+  return std::make_unique<AccessibilityTreeFormatterBlink>();
+}
+
+const char* const TREE_DATA_ATTRIBUTES[] = {"TreeData.textSelStartOffset",
+                                            "TreeData.textSelEndOffset"};
+
+const char* STATE_FOCUSED = "focused";
+const char* STATE_OFFSCREEN = "offscreen";
+
+uint32_t AccessibilityTreeFormatterBlink::ChildCount(
+    const BrowserAccessibility& node) const {
+  if (node.HasStringAttribute(ax::mojom::StringAttribute::kChildTreeId))
+    return node.PlatformChildCount();
+  else
+    return node.InternalChildCount();
+}
+
+BrowserAccessibility* AccessibilityTreeFormatterBlink::GetChild(
+    const BrowserAccessibility& node,
+    uint32_t i) const {
+  if (node.HasStringAttribute(ax::mojom::StringAttribute::kChildTreeId))
+    return node.PlatformGetChild(i);
+  else
+    return node.InternalGetChild(i);
+}
+
 void AccessibilityTreeFormatterBlink::AddProperties(
     const BrowserAccessibility& node,
     base::DictionaryValue* dict) {
@@ -142,7 +208,8 @@ void AccessibilityTreeFormatterBlink::AddProperties(
 
   dict->SetString("internalRole", ui::ToString(node.GetData().role));
 
-  gfx::Rect bounds = gfx::ToEnclosingRect(node.GetData().location);
+  gfx::Rect bounds =
+      gfx::ToEnclosingRect(node.GetData().relative_bounds.bounds);
   dict->SetInteger("boundsX", bounds.x());
   dict->SetInteger("boundsY", bounds.y());
   dict->SetInteger("boundsWidth", bounds.width());
@@ -156,25 +223,14 @@ void AccessibilityTreeFormatterBlink::AddProperties(
   dict->SetInteger("pageBoundsHeight", page_bounds.height());
 
   dict->SetBoolean("transform",
-                   node.GetData().transform &&
-                   !node.GetData().transform->IsIdentity());
+                   node.GetData().relative_bounds.transform &&
+                       !node.GetData().relative_bounds.transform->IsIdentity());
 
   gfx::Rect unclipped_bounds = node.GetPageBoundsRect(&offscreen, false);
   dict->SetInteger("unclippedBoundsX", unclipped_bounds.x());
   dict->SetInteger("unclippedBoundsY", unclipped_bounds.y());
   dict->SetInteger("unclippedBoundsWidth", unclipped_bounds.width());
   dict->SetInteger("unclippedBoundsHeight", unclipped_bounds.height());
-
-  // Language and Font Family are different from other string attributes
-  // in that they inherit.
-  std::string font_family =
-      node.GetInheritedStringAttribute(ax::mojom::StringAttribute::kFontFamily);
-  if (!font_family.empty())
-    dict->SetString("fontFamily", font_family);
-  std::string language =
-      node.GetInheritedStringAttribute(ax::mojom::StringAttribute::kLanguage);
-  if (!language.empty())
-    dict->SetString("language", language);
 
   for (int32_t state_index = static_cast<int32_t>(ax::mojom::State::kNone);
        state_index <= static_cast<int32_t>(ax::mojom::State::kMaxValue);
@@ -193,11 +249,9 @@ void AccessibilityTreeFormatterBlink::AddProperties(
        static_cast<int32_t>(ax::mojom::StringAttribute::kMaxValue);
        ++attr_index) {
     auto attr = static_cast<ax::mojom::StringAttribute>(attr_index);
-    if (attr != ax::mojom::StringAttribute::kFontFamily &&
-        attr != ax::mojom::StringAttribute::kLanguage) {
-      if (node.HasStringAttribute(attr))
-        dict->SetString(ui::ToString(attr), node.GetStringAttribute(attr));
-    }
+    auto maybe_value = GetStringAttribute(node, attr);
+    if (maybe_value.has_value())
+      dict->SetString(ui::ToString(attr), maybe_value.value());
   }
 
   for (int32_t attr_index =
@@ -205,9 +259,10 @@ void AccessibilityTreeFormatterBlink::AddProperties(
        attr_index <= static_cast<int32_t>(ax::mojom::IntAttribute::kMaxValue);
        ++attr_index) {
     auto attr = static_cast<ax::mojom::IntAttribute>(attr_index);
-    if (node.HasIntAttribute(attr)) {
-      int value = node.GetIntAttribute(attr);
-      dict->SetString(ui::ToString(attr), IntAttrToString(node, attr, value));
+    auto maybe_value = ui::ComputeAttribute(&node, attr);
+    if (maybe_value.has_value()) {
+      dict->SetString(ui::ToString(attr),
+                      IntAttrToString(node, attr, maybe_value.value()));
     }
   }
 
@@ -292,7 +347,7 @@ base::string16 AccessibilityTreeFormatterBlink::ProcessTreeForOutput(
   if (show_ids()) {
     int id_value;
     dict.GetInteger("id", &id_value);
-    WriteAttribute(true, base::IntToString16(id_value), &line);
+    WriteAttribute(true, base::NumberToString16(id_value), &line);
   }
 
   base::string16 role_value;
@@ -320,20 +375,19 @@ base::string16 AccessibilityTreeFormatterBlink::ProcessTreeForOutput(
   if (focused)
     WriteAttribute(false, STATE_FOCUSED, &line);
 
-  WriteAttribute(false,
-                 FormatCoordinates("location", "boundsX", "boundsY", dict),
-                 &line);
+  WriteAttribute(
+      false, FormatCoordinates("location", "boundsX", "boundsY", dict), &line);
   WriteAttribute(false,
                  FormatCoordinates("size", "boundsWidth", "boundsHeight", dict),
                  &line);
 
+  WriteAttribute(
+      false,
+      FormatCoordinates("pageLocation", "pageBoundsX", "pageBoundsY", dict),
+      &line);
   WriteAttribute(false,
-                 FormatCoordinates("pageLocation",
-                                   "pageBoundsX", "pageBoundsY", dict),
-                 &line);
-  WriteAttribute(false,
-                 FormatCoordinates("pageSize",
-                                   "pageBoundsWidth", "pageBoundsHeight", dict),
+                 FormatCoordinates("pageSize", "pageBoundsWidth",
+                                   "pageBoundsHeight", dict),
                  &line);
   WriteAttribute(false,
                  FormatCoordinates("unclippedLocation", "unclippedBoundsX",
@@ -421,7 +475,7 @@ base::string16 AccessibilityTreeFormatterBlink::ProcessTreeForOutput(
       } else {
         int int_value;
         value->GetInteger(i, &int_value);
-        attr_string += base::IntToString(int_value);
+        attr_string += base::NumberToString(int_value);
       }
     }
     WriteAttribute(false, attr_string, &line);
@@ -489,6 +543,10 @@ const std::string AccessibilityTreeFormatterBlink::GetAllowString() {
 
 const std::string AccessibilityTreeFormatterBlink::GetDenyString() {
   return "@BLINK-DENY:";
+}
+
+const std::string AccessibilityTreeFormatterBlink::GetDenyNodeString() {
+  return "@BLINK-DENY-NODE:";
 }
 
 }  // namespace content

@@ -122,7 +122,7 @@ void SetEncryptableProtoValues(const EntryKernel& kernel,
 // Helper functions for SetFieldValues().
 
 std::unique_ptr<base::Value> Int64ToValue(int64_t i) {
-  return std::make_unique<base::Value>(base::Int64ToString(i));
+  return std::make_unique<base::Value>(base::NumberToString(i));
 }
 
 std::unique_ptr<base::Value> TimeToValue(const base::Time& t) {
@@ -232,8 +232,7 @@ size_t EntryKernel::EstimateMemoryUsage() const {
 std::unique_ptr<base::ListValue> EntryKernelMutationMapToValue(
     const EntryKernelMutationMap& mutations) {
   std::unique_ptr<base::ListValue> list(new base::ListValue());
-  for (EntryKernelMutationMap::const_iterator it = mutations.begin();
-       it != mutations.end(); ++it) {
+  for (auto it = mutations.begin(); it != mutations.end(); ++it) {
     list->Append(EntryKernelMutationToValue(it->second));
   }
   return list;

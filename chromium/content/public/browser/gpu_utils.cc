@@ -6,15 +6,21 @@
 
 #include <string>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
+#include "components/viz/common/features.h"
+#include "components/viz/common/viz_utils.h"
+#include "content/browser/browser_main_loop.h"
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/command_buffer/service/service_utils.h"
+#include "gpu/config/gpu_finch_features.h"
 #include "gpu/config/gpu_switches.h"
 #include "media/media_buildflags.h"
 
@@ -47,16 +53,22 @@ void StopGpuProcessImpl(const base::Closure& callback,
 
 namespace content {
 
+bool ShouldEnableAndroidSurfaceControl(const base::CommandLine& cmd_line) {
+#if !defined(OS_ANDROID)
+  return false;
+#else
+  if (viz::PreferRGB565ResourcesForDisplay())
+    return false;
+  return features::IsAndroidSurfaceControlEnabled();
+#endif
+}
+
 const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
   DCHECK(base::CommandLine::InitializedForCurrentProcess());
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
   gpu::GpuPreferences gpu_preferences =
       gpu::gles2::ParseGpuPreferences(command_line);
-  gpu_preferences.single_process =
-      command_line->HasSwitch(switches::kSingleProcess);
-  gpu_preferences.in_process_gpu =
-      command_line->HasSwitch(switches::kInProcessGPU);
   gpu_preferences.disable_accelerated_video_decode =
       command_line->HasSwitch(switches::kDisableAcceleratedVideoDecode);
   gpu_preferences.disable_accelerated_video_encode =
@@ -87,7 +99,8 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
       command_line->HasSwitch(switches::kGpuStartupDialog);
   gpu_preferences.disable_gpu_watchdog =
       command_line->HasSwitch(switches::kDisableGpuWatchdog) ||
-      (gpu_preferences.single_process || gpu_preferences.in_process_gpu);
+      command_line->HasSwitch(switches::kSingleProcess) ||
+      command_line->HasSwitch(switches::kInProcessGPU);
   gpu_preferences.gpu_sandbox_start_early =
       command_line->HasSwitch(switches::kGpuSandboxStartEarly);
 
@@ -96,11 +109,22 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
   gpu_preferences.disable_oop_rasterization =
       command_line->HasSwitch(switches::kDisableOopRasterization);
 
+  gpu_preferences.enable_oop_rasterization_ddl =
+      command_line->HasSwitch(switches::kEnableOopRasterizationDDL);
+  gpu_preferences.enable_passthrough_raster_decoder =
+      command_line->HasSwitch(switches::kEnablePassthroughRasterDecoder);
+#if defined(OS_WIN)
+  gpu_preferences.enable_passthrough_raster_decoder = true;
+#endif
+
   gpu_preferences.enable_vulkan =
       command_line->HasSwitch(switches::kEnableVulkan);
 
   gpu_preferences.enable_gpu_benchmarking_extension =
       command_line->HasSwitch(cc::switches::kEnableGpuBenchmarking);
+
+  gpu_preferences.enable_android_surface_control =
+      ShouldEnableAndroidSurfaceControl(*command_line);
 
   // Some of these preferences are set or adjusted in
   // GpuDataManagerImplPrivate::AppendGpuCommandLine.
@@ -114,6 +138,11 @@ void StopGpuProcess(const base::Closure& callback) {
       base::Bind(&StopGpuProcessImpl,
                  base::Bind(RunTaskOnTaskRunner,
                             base::ThreadTaskRunnerHandle::Get(), callback)));
+}
+
+gpu::GpuChannelEstablishFactory* GetGpuChannelEstablishFactory() {
+  return content::BrowserMainLoop::GetInstance()
+      ->gpu_channel_establish_factory();
 }
 
 }  // namespace content

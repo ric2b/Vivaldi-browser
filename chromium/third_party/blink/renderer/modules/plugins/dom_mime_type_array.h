@@ -21,7 +21,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_PLUGINS_DOM_MIME_TYPE_ARRAY_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_PLUGINS_DOM_MIME_TYPE_ARRAY_H_
 
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/page/plugins_changed_observer.h"
 #include "third_party/blink/renderer/modules/plugins/dom_mime_type.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
@@ -42,8 +42,11 @@ class DOMMimeTypeArray final : public ScriptWrappable,
 
  public:
   static DOMMimeTypeArray* Create(LocalFrame* frame) {
-    return new DOMMimeTypeArray(frame);
+    return MakeGarbageCollected<DOMMimeTypeArray>(frame);
   }
+
+  explicit DOMMimeTypeArray(LocalFrame*);
+
   void UpdatePluginData();
 
   unsigned length() const;
@@ -58,7 +61,6 @@ class DOMMimeTypeArray final : public ScriptWrappable,
   void Trace(blink::Visitor*) override;
 
  private:
-  explicit DOMMimeTypeArray(LocalFrame*);
   PluginData* GetPluginData() const;
   void ContextDestroyed(ExecutionContext*) override;
 

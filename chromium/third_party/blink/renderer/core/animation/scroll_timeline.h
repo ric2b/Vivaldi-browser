@@ -7,7 +7,9 @@
 
 #include "third_party/blink/renderer/core/animation/animation_timeline.h"
 #include "third_party/blink/renderer/core/animation/scroll_timeline_options.h"
+#include "third_party/blink/renderer/core/animation/timing.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -30,11 +32,20 @@ class CORE_EXPORT ScrollTimeline final : public AnimationTimeline {
   enum ScrollDirection {
     Block,
     Inline,
+    Horizontal,
+    Vertical,
   };
 
   static ScrollTimeline* Create(Document&,
-                                ScrollTimelineOptions,
+                                ScrollTimelineOptions*,
                                 ExceptionState&);
+
+  ScrollTimeline(Element*,
+                 ScrollDirection,
+                 CSSPrimitiveValue*,
+                 CSSPrimitiveValue*,
+                 double,
+                 Timing::FillMode);
 
   // AnimationTimeline implementation.
   double currentTime(bool& is_null) final;
@@ -43,14 +54,27 @@ class CORE_EXPORT ScrollTimeline final : public AnimationTimeline {
   // IDL API implementation.
   Element* scrollSource();
   String orientation();
+  String startScrollOffset();
+  String endScrollOffset();
   void timeRange(DoubleOrScrollTimelineAutoKeyword&);
+  String fill();
 
   // Returns the Node that should actually have the ScrollableArea (if one
   // exists). This can differ from |scrollSource| when |scroll_source_| is the
-  // Document's scrollingElement.
-  Node* ResolvedScrollSource() const;
+  // Document's scrollingElement, and it may be null if the document was removed
+  // before the ScrollTimeline was created.
+  Node* ResolvedScrollSource() const { return resolved_scroll_source_; }
 
   ScrollDirection GetOrientation() const { return orientation_; }
+  Timing::FillMode GetFillMode() const { return fill_; }
+
+  void GetCurrentAndMaxOffset(const LayoutBox*,
+                              double& current_offset,
+                              double& max_offset) const;
+  void ResolveScrollStartAndEnd(const LayoutBox*,
+                                double max_offset,
+                                double& resolved_start_scroll_offset,
+                                double& resolved_end_scroll_offset) const;
 
   // Must be called when this ScrollTimeline is attached/detached from an
   // animation.
@@ -67,11 +91,16 @@ class CORE_EXPORT ScrollTimeline final : public AnimationTimeline {
   static bool HasActiveScrollTimeline(Node* node);
 
  private:
-  ScrollTimeline(Element*, ScrollDirection, double);
-
+  // Use |scroll_source_| only to implement the web-exposed API but use
+  // resolved_scroll_source_ to actually access the scroll related properties.
   Member<Element> scroll_source_;
+  Member<Node> resolved_scroll_source_;
+
   ScrollDirection orientation_;
+  Member<CSSPrimitiveValue> start_scroll_offset_;
+  Member<CSSPrimitiveValue> end_scroll_offset_;
   double time_range_;
+  Timing::FillMode fill_;
 };
 
 DEFINE_TYPE_CASTS(ScrollTimeline,

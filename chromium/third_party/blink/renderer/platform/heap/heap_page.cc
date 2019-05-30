@@ -47,7 +47,7 @@
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/web_memory_allocator_dump.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/web_process_memory_dump.h"
-#include "third_party/blink/renderer/platform/memory_coordinator.h"
+#include "third_party/blink/renderer/platform/memory_pressure_listener.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/container_annotations.h"
@@ -99,8 +99,8 @@ void HeapObjectHeader::ZapMagic() {
 void HeapObjectHeader::Finalize(Address object, size_t object_size) {
   HeapAllocHooks::FreeHookIfEnabled(object);
   const GCInfo* gc_info = GCInfoTable::Get().GCInfoFromIndex(GcInfoIndex());
-  if (gc_info->HasFinalizer())
-    gc_info->finalize_(object);
+  if (gc_info->non_trivial_finalizer)
+    gc_info->finalize(object);
 
   ASAN_RETIRE_CONTAINER_ANNOTATION(object, object_size);
 }
@@ -740,12 +740,17 @@ void NormalPageArena::PromptlyFreeObject(HeapObjectHeader* header) {
           ->ClearBit(address);
       return;
     }
+    // The object may be on a page that has not been swept yet and requires
+    // manual unmarking.
+    if (header->IsMarked())
+      header->Unmark();
     PromptlyFreeObjectInFreeList(header, size);
   }
 }
 
 void NormalPageArena::PromptlyFreeObjectInFreeList(HeapObjectHeader* header,
                                                    size_t size) {
+  DCHECK(!header->IsMarked());
   Address address = reinterpret_cast<Address>(header);
   NormalPage* page = reinterpret_cast<NormalPage*>(PageFromObject(header));
   if (page->HasBeenSwept()) {
@@ -759,10 +764,6 @@ void NormalPageArena::PromptlyFreeObjectInFreeList(HeapObjectHeader* header,
     CHECK_MEMORY_INACCESSIBLE(payload, payload_size);
     AddToFreeList(address, size);
     promptly_freed_size_ += size;
-  } else {
-    // If we do not have free list entries the sweeper will take care of
-    // coalescing.
-    header->Unmark();
   }
   GetThreadState()->Heap().DecreaseAllocatedObjectSize(size);
 }
@@ -1352,7 +1353,7 @@ bool NormalPage::Sweep() {
 #if !DCHECK_IS_ON() && !defined(LEAK_SANITIZER) && !defined(ADDRESS_SANITIZER)
       // Discarding pages increases page faults and may regress performance.
       // So we enable this only on low-RAM devices.
-      if (MemoryCoordinator::IsLowEndDevice())
+      if (MemoryPressureListenerRegistry::IsLowEndDevice())
         DiscardPages(start_of_gap + sizeof(FreeListEntry), header_address);
 #endif
     }
@@ -1368,7 +1369,7 @@ bool NormalPage::Sweep() {
   if (start_of_gap != Payload() && start_of_gap != PayloadEnd()) {
     page_arena->AddToFreeList(start_of_gap, PayloadEnd() - start_of_gap);
 #if !DCHECK_IS_ON() && !defined(LEAK_SANITIZER) && !defined(ADDRESS_SANITIZER)
-    if (MemoryCoordinator::IsLowEndDevice())
+    if (MemoryPressureListenerRegistry::IsLowEndDevice())
       DiscardPages(start_of_gap + sizeof(FreeListEntry), PayloadEnd());
 #endif
   }
@@ -1785,8 +1786,9 @@ uint32_t ComputeRandomMagic() {
   // Get an ASLR'd address from one of our own DLLs/.sos, and then another from
   // a system DLL/.so:
 
-  const uint32_t random1 = ~(RotateLeft16(reinterpret_cast<uintptr_t>(
-      base::trace_event::MemoryAllocatorDump::kNameSize)));
+  const uint32_t random1 =
+      ~(RotateLeft16(static_cast<uint32_t>(reinterpret_cast<uintptr_t>(
+          base::trace_event::MemoryAllocatorDump::kNameSize))));
 
 #if defined(OS_WIN)
   uintptr_t random2 = reinterpret_cast<uintptr_t>(::ReadFile);
@@ -1810,7 +1812,7 @@ uint32_t ComputeRandomMagic() {
 #error architecture not supported
 #endif
 
-  random2 = ~(RotateLeft16(random2));
+  random2 = ~(RotateLeft16(static_cast<uint32_t>(random2)));
 
   // Combine the 2 values:
   const uint32_t random = (random1 & 0x0000FFFFUL) |

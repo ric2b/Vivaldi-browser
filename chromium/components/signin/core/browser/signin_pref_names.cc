@@ -17,6 +17,10 @@ const char kAccountConsistencyMirrorRequired[] =
 // for possible values.
 const char kAccountIdMigrationState[] = "account_id_migration_state";
 
+// Name of the preference property that persists the account information
+// tracked by this signin.
+const char kAccountInfo[] = "account_info";
+
 // Boolean identifying whether reverse auto-login is enabled.
 const char kAutologinEnabled[] = "autologin.enabled";
 
@@ -39,8 +43,8 @@ const char kGaiaCookiePeriodicReportTime[] = "gaia_cookie.periodic_report_time";
 // eventually be fixed, allowing the removal of kGoogleServicesUserAccountId.
 const char kGoogleServicesAccountId[] = "google.services.account_id";
 
-// The profile's hosted domain; empty if unset;
-// AccountTrackerService::kNoHostedDomainFound if there is none.
+// The profile's hosted domain; empty if unset; kNoHostedDomainFound if there
+// is none.
 const char kGoogleServicesHostedDomain[] = "google.services.hosted_domain";
 
 // Similar to kGoogleServicesLastUsername, this is the corresponding version of
@@ -77,9 +81,6 @@ const char kGoogleServicesUsername[] = "google.services.username";
 const char kGoogleServicesUsernamePattern[] =
     "google.services.username_pattern";
 
-// Boolean identifying whether reverse auto-logins is enabled.
-const char kReverseAutologinEnabled[] = "reverse_autologin.enabled";
-
 // List to keep track of emails for which the user has rejected one-click
 // sign-in.
 const char kReverseAutologinRejectedEmailList[] =
@@ -88,6 +89,11 @@ const char kReverseAutologinRejectedEmailList[] =
 // Int64 which tracks, as time from epoch, when last time the user signed in
 // to the browser.
 const char kSignedInTime[] = "signin.signedin_time";
+
+// Boolean indicating if this profile was signed in with information from a
+// credential provider.
+const char kSignedInWithCredentialProvider[] =
+    "signin.with_credential_provider";
 
 // Boolean which stores if the user is allowed to signin to chrome.
 const char kSigninAllowed[] = "signin.allowed";

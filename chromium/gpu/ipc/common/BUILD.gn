@@ -128,6 +128,8 @@ source_set("ipc_common_sources") {
     "//gpu/command_buffer/common:common_sources",
     "//gpu/config:config_sources",
     "//ui/base",
+    "//ui/gfx:color_space",
+    "//ui/gfx/geometry",
     "//ui/gfx/ipc",
     "//ui/gfx/ipc/buffer_types",
     "//ui/gfx/ipc/color",
@@ -137,8 +139,6 @@ source_set("ipc_common_sources") {
 
   if (is_android) {
     sources += [
-      "android/android_image_reader_utils.cc",
-      "android/android_image_reader_utils.h",
       "android/scoped_surface_request_conduit.cc",
       "android/scoped_surface_request_conduit.h",
       "android/surface_owner_android.cc",
@@ -149,10 +149,29 @@ source_set("ipc_common_sources") {
       "gpu_surface_tracker.h",
     ]
     libs = [ "android" ]
+    deps += [ ":android_image_reader_utils" ]
   }
 
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
+  }
+}
+
+if (is_android) {
+  source_set("android_image_reader_utils") {
+    sources = [
+      "android/android_image_reader_utils.cc",
+      "android/android_image_reader_utils.h",
+    ]
+    configs += [ "//gpu:gpu_implementation" ]
+    deps = [
+      "//base",
+      "//ui/gl",
+    ]
+    visibility = [
+      "//gpu/*",
+      "//media/gpu:gpu",
+    ]
   }
 }
 
@@ -170,6 +189,7 @@ source_set("surface_handle_type") {
 mojom("interfaces") {
   sources = [
     "capabilities.mojom",
+    "context_result.mojom",
     "dx_diag_node.mojom",
     "gpu_feature_info.mojom",
     "gpu_info.mojom",
@@ -212,6 +232,7 @@ mojom("test_interfaces") {
 
 source_set("struct_traits") {
   sources = [
+    "context_result_struct_traits.h",
     "mailbox_holder_struct_traits.h",
     "mailbox_struct_traits.h",
     "memory_stats_struct_traits.h",

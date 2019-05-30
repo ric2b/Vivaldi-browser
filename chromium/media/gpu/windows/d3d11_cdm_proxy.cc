@@ -9,13 +9,15 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/power_monitor/power_observer.h"
+#include "base/stl_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/win/object_watcher.h"
 #include "media/base/callback_registry.h"
 #include "media/base/cdm_context.h"
-#include "media/base/cdm_proxy_context.h"
+#include "media/cdm/cdm_proxy_context.h"
 #include "media/gpu/windows/d3d11_decryptor.h"
 
 namespace media {
@@ -64,16 +66,19 @@ class D3D11CdmProxyContext : public CdmProxyContext {
   // The pointers are owned by the caller.
   void SetKey(ID3D11CryptoSession* crypto_session,
               const std::vector<uint8_t>& key_id,
+              CdmProxy::KeyType key_type,
               const std::vector<uint8_t>& key_blob) {
     std::string key_id_str(key_id.begin(), key_id.end());
     KeyInfo key_info(crypto_session, key_blob);
     // Note that this would overwrite an entry but it is completely valid, e.g.
     // updating the keyblob due to a configuration change.
-    key_info_map_[key_id_str] = std::move(key_info);
+    key_info_map_[key_id_str][key_type] = std::move(key_info);
   }
 
   void RemoveKey(ID3D11CryptoSession* crypto_session,
                  const std::vector<uint8_t>& key_id) {
+    // There's no need for a keytype for Remove() at the moment, because it's
+    // used for completely removing keys associated to |key_id|.
     std::string key_id_str(key_id.begin(), key_id.end());
     key_info_map_.erase(key_id_str);
   }
@@ -83,12 +88,18 @@ class D3D11CdmProxyContext : public CdmProxyContext {
 
   // CdmProxyContext implementation.
   base::Optional<D3D11DecryptContext> GetD3D11DecryptContext(
+      CdmProxy::KeyType key_type,
       const std::string& key_id) override {
-    auto key_info_it = key_info_map_.find(key_id);
-    if (key_info_it == key_info_map_.end())
+    auto key_id_find_it = key_info_map_.find(key_id);
+    if (key_id_find_it == key_info_map_.end())
       return base::nullopt;
 
-    auto& key_info = key_info_it->second;
+    auto& key_type_to_key_info = key_id_find_it->second;
+    auto key_type_find_it = key_type_to_key_info.find(key_type);
+    if (key_type_find_it == key_type_to_key_info.end())
+      return base::nullopt;
+
+    auto& key_info = key_type_find_it->second;
     D3D11DecryptContext context = {};
     context.crypto_session = key_info.crypto_session;
     context.key_blob = key_info.key_blob.data();
@@ -106,17 +117,18 @@ class D3D11CdmProxyContext : public CdmProxyContext {
         : crypto_session(crypto_session), key_blob(std::move(key_blob)) {}
     KeyInfo(const KeyInfo&) = default;
     ~KeyInfo() = default;
+
     ID3D11CryptoSession* crypto_session;
     std::vector<uint8_t> key_blob;
   };
 
-  // Maps key ID to KeyInfo.
+  // Maps key ID -> key type -> KeyInfo.
   // The key ID's type is string, which is converted from |key_id| in
   // SetKey(). It's better to use string here rather than convert
   // vector<uint8_t> to string every time in GetD3D11DecryptContext() because
   // in most cases it would be called more often than SetKey() and RemoveKey()
   // combined.
-  std::map<std::string, KeyInfo> key_info_map_;
+  std::map<std::string, std::map<CdmProxy::KeyType, KeyInfo>> key_info_map_;
 
   const GUID key_info_guid_;
 
@@ -152,7 +164,7 @@ class D3D11CdmProxy::HardwareEventWatcher
   // Return true on success.
   bool RegisterHardwareContentProtectionTeardown(ComPtr<ID3D11Device> device);
 
-  // Regiesters for power events, specifically power suspend event.
+  // Regiesters for power events, specifically power resume event.
   // Returns true on success.
   bool RegisterPowerEvents();
 
@@ -161,7 +173,7 @@ class D3D11CdmProxy::HardwareEventWatcher
 
   // base::PowerObserver implementation. Other power events are not relevant to
   // this class.
-  void OnSuspend() override;
+  void OnResume() override;
 
   // Stops watching for events. Good for clean up.
   void StopWatching();
@@ -190,26 +202,30 @@ class D3D11CdmContext : public CdmContext {
   // The pointers are owned by the caller.
   void SetKey(ID3D11CryptoSession* crypto_session,
               const std::vector<uint8_t>& key_id,
+              CdmProxy::KeyType key_type,
               const std::vector<uint8_t>& key_blob) {
-    cdm_proxy_context_.SetKey(crypto_session, key_id, key_blob);
-    new_key_callbacks_.Notify();
+    cdm_proxy_context_.SetKey(crypto_session, key_id, key_type, key_blob);
+    event_callbacks_.Notify(Event::kHasAdditionalUsableKey);
   }
   void RemoveKey(ID3D11CryptoSession* crypto_session,
                  const std::vector<uint8_t>& key_id) {
     cdm_proxy_context_.RemoveKey(crypto_session, key_id);
   }
 
-  // Removes all keys from the context.
-  void RemoveAllKeys() { cdm_proxy_context_.RemoveAllKeys(); }
+  // Notifies of hardware reset.
+  void OnHardwareReset() {
+    cdm_proxy_context_.RemoveAllKeys();
+    event_callbacks_.Notify(Event::kHardwareContextLost);
+  }
 
   base::WeakPtr<D3D11CdmContext> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
   }
 
   // CdmContext implementation.
-  std::unique_ptr<CallbackRegistration> RegisterNewKeyCB(
-      base::RepeatingClosure new_key_cb) override {
-    return new_key_callbacks_.Register(std::move(new_key_cb));
+  std::unique_ptr<CallbackRegistration> RegisterEventCB(
+      EventCB event_cb) override {
+    return event_callbacks_.Register(std::move(event_cb));
   }
   CdmProxyContext* GetCdmProxyContext() override { return &cdm_proxy_context_; }
 
@@ -225,7 +241,7 @@ class D3D11CdmContext : public CdmContext {
 
   std::unique_ptr<D3D11Decryptor> decryptor_;
 
-  ClosureRegistry new_key_callbacks_;
+  CallbackRegistry<EventCB::RunType> event_callbacks_;
 
   base::WeakPtrFactory<D3D11CdmContext> weak_factory_;
 
@@ -249,11 +265,14 @@ base::WeakPtr<CdmContext> D3D11CdmProxy::GetCdmContext() {
 }
 
 void D3D11CdmProxy::Initialize(Client* client, InitializeCB init_cb) {
+  DCHECK(client);
+
   auto failed = [this, &init_cb]() {
     // The value doesn't matter as it shouldn't be used on a failure.
     const uint32_t kFailedCryptoSessionId = 0xFF;
     std::move(init_cb).Run(Status::kFail, protocol_, kFailedCryptoSessionId);
   };
+
   if (initialized_) {
     failed();
     NOTREACHED() << "CdmProxy should not be initialized more than once.";
@@ -268,7 +287,7 @@ void D3D11CdmProxy::Initialize(Client* client, InitializeCB init_cb) {
       nullptr,                            // No adapter.
       D3D_DRIVER_TYPE_HARDWARE, nullptr,  // No software rasterizer.
       0,                                  // flags, none.
-      feature_levels, arraysize(feature_levels), D3D11_SDK_VERSION,
+      feature_levels, base::size(feature_levels), D3D11_SDK_VERSION,
       device_.GetAddressOf(), nullptr, device_context_.GetAddressOf());
   if (FAILED(hresult)) {
     DLOG(ERROR) << "Failed to create the D3D11Device:" << hresult;
@@ -277,7 +296,7 @@ void D3D11CdmProxy::Initialize(Client* client, InitializeCB init_cb) {
   }
 
   // TODO(rkuroiwa): This should be registered iff
-  // D3D11_CONTENT_PROTECTION_CAPS_HARDWARE_TEARDOWN is set in the capabilties.
+  // D3D11_CONTENT_PROTECTION_CAPS_HARDWARE_TEARDOWN is set in the capabilities.
   hardware_event_watcher_ = HardwareEventWatcher::Create(
       device_, base::BindRepeating(
                    &D3D11CdmProxy::NotifyHardwareContentProtectionTeardown,
@@ -297,7 +316,7 @@ void D3D11CdmProxy::Initialize(Client* client, InitializeCB init_cb) {
   }
 
   if (!CanDoHardwareProtectedKeyExchange(video_device_, crypto_type_)) {
-    DLOG(ERROR) << "Cannot do hardware proteted key exhange.";
+    DLOG(ERROR) << "Cannot do hardware protected key exchange.";
     failed();
     return;
   }
@@ -486,25 +505,35 @@ void D3D11CdmProxy::CreateMediaCryptoSession(
 
 void D3D11CdmProxy::SetKey(uint32_t crypto_session_id,
                            const std::vector<uint8_t>& key_id,
-                           const std::vector<uint8_t>& key_blob) {
+                           KeyType key_type,
+                           const std::vector<uint8_t>& key_blob,
+                           SetKeyCB set_key_cb) {
   auto crypto_session_it = crypto_session_map_.find(crypto_session_id);
   if (crypto_session_it == crypto_session_map_.end()) {
     DLOG(WARNING) << crypto_session_id
                   << " did not map to a crypto session instance.";
+    std::move(set_key_cb).Run(Status::kFail);
     return;
   }
-  cdm_context_->SetKey(crypto_session_it->second.Get(), key_id, key_blob);
+
+  cdm_context_->SetKey(crypto_session_it->second.Get(), key_id, key_type,
+                       key_blob);
+  std::move(set_key_cb).Run(Status::kOk);
 }
 
 void D3D11CdmProxy::RemoveKey(uint32_t crypto_session_id,
-                              const std::vector<uint8_t>& key_id) {
+                              const std::vector<uint8_t>& key_id,
+                              RemoveKeyCB remove_key_cb) {
   auto crypto_session_it = crypto_session_map_.find(crypto_session_id);
   if (crypto_session_it == crypto_session_map_.end()) {
     DLOG(WARNING) << crypto_session_id
                   << " did not map to a crypto session instance.";
+    std::move(remove_key_cb).Run(Status::kFail);
     return;
   }
+
   cdm_context_->RemoveKey(crypto_session_it->second.Get(), key_id);
+  std::move(remove_key_cb).Run(Status::kOk);
 }
 
 void D3D11CdmProxy::SetCreateDeviceCallbackForTesting(
@@ -513,9 +542,28 @@ void D3D11CdmProxy::SetCreateDeviceCallbackForTesting(
 }
 
 void D3D11CdmProxy::NotifyHardwareContentProtectionTeardown() {
-  cdm_context_->RemoveAllKeys();
-  if (client_)
-    client_->NotifyHardwareReset();
+  cdm_context_->OnHardwareReset();
+  client_->NotifyHardwareReset();
+  Reset();
+}
+
+void D3D11CdmProxy::Reset() {
+  client_ = nullptr;
+  initialized_ = false;
+  crypto_session_map_.clear();
+  device_.Reset();
+  device_context_.Reset();
+  video_device_.Reset();
+  video_device1_.Reset();
+  video_context_.Reset();
+  video_context1_.Reset();
+  // Note that this deregisters hardware reset event watcher. It shouldn't
+  // notify the clients until this is reinitialized. Also the client is set to
+  // null in this method.
+  hardware_event_watcher_ = nullptr;
+  crypto_session_map_.clear();
+  private_input_size_ = 0;
+  private_output_size_ = 0;
 }
 
 D3D11CdmProxy::HardwareEventWatcher::~HardwareEventWatcher() {
@@ -600,7 +648,7 @@ void D3D11CdmProxy::HardwareEventWatcher::OnObjectSignaled(HANDLE object) {
   teardown_callback_.Run();
 }
 
-void D3D11CdmProxy::HardwareEventWatcher::OnSuspend() {
+void D3D11CdmProxy::HardwareEventWatcher::OnResume() {
   teardown_callback_.Run();
 }
 

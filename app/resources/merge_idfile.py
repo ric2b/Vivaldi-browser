@@ -1,5 +1,7 @@
 # Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
 
+from builtins import str
+
 import  os
 import argparse
 import sys

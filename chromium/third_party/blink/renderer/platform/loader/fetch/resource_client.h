@@ -41,14 +41,8 @@ class Resource;
 
 class PLATFORM_EXPORT ResourceClient : public GarbageCollectedMixin {
   USING_PRE_FINALIZER(ResourceClient, ClearResource);
-
  public:
-  enum ResourceClientType {
-    kBaseResourceType,
-    kFontType,
-    kRawResourceType
-  };
-
+  ResourceClient() = default;
   virtual ~ResourceClient() = default;
 
   // DataReceived() is called each time a chunk of data is received.
@@ -64,10 +58,9 @@ class PLATFORM_EXPORT ResourceClient : public GarbageCollectedMixin {
                             size_t /* length */) {}
   virtual void NotifyFinished(Resource*) {}
 
-  static bool IsExpectedType(ResourceClient*) { return true; }
-  virtual ResourceClientType GetResourceClientType() const {
-    return kBaseResourceType;
-  }
+  virtual bool IsFontResourceClient() const { return false; }
+
+  virtual bool IsRawResourceClient() const { return false; }
 
   Resource* GetResource() const { return resource_; }
 
@@ -77,8 +70,6 @@ class PLATFORM_EXPORT ResourceClient : public GarbageCollectedMixin {
   void Trace(Visitor* visitor) override;
 
  protected:
-  ResourceClient() = default;
-
   void ClearResource() { SetResource(nullptr, nullptr); }
 
  private:

@@ -43,6 +43,20 @@
 
 namespace blink {
 
+namespace {
+
+class DummyLocalFrameClient : public EmptyLocalFrameClient {
+ public:
+  DummyLocalFrameClient() = default;
+
+ private:
+  std::unique_ptr<WebURLLoaderFactory> CreateURLLoaderFactory() override {
+    return Platform::Current()->CreateDefaultURLLoaderFactory();
+  }
+};
+
+}  // namespace
+
 std::unique_ptr<DummyPageHolder> DummyPageHolder::Create(
     const IntSize& initial_view_size,
     Page::PageClients* page_clients,
@@ -64,15 +78,12 @@ DummyPageHolder::DummyPageHolder(
     page_clients.chrome_client = page_clients_argument->chrome_client;
   page_ = Page::Create(page_clients);
   Settings& settings = page_->GetSettings();
-  // FIXME: http://crbug.com/363843. This needs to find a better way to
-  // not create graphics layers.
-  settings.SetAcceleratedCompositingEnabled(false);
   if (setting_overrider)
     (*setting_overrider)(settings);
 
   local_frame_client_ = local_frame_client;
   if (!local_frame_client_)
-    local_frame_client_ = EmptyLocalFrameClient::Create();
+    local_frame_client_ = MakeGarbageCollected<DummyLocalFrameClient>();
 
   frame_ = LocalFrame::Create(local_frame_client_.Get(), *page_, nullptr);
   frame_->SetView(LocalFrameView::Create(*frame_, initial_view_size));

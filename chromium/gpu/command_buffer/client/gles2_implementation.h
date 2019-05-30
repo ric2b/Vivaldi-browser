@@ -13,6 +13,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -135,7 +136,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
       uint32_t texture_id) override;
   bool ThreadsafeDiscardableTextureIsDeletedForTracing(
       uint32_t texture_id) override;
-  void* MapTransferCacheEntry(size_t serialized_size) override;
+  void* MapTransferCacheEntry(uint32_t serialized_size) override;
   void UnmapAndCreateTransferCacheEntry(uint32_t type, uint32_t id) override;
   bool ThreadsafeLockTransferCacheEntry(uint32_t type, uint32_t id) override;
   void UnlockTransferCacheEntries(
@@ -148,6 +149,12 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
   GLint GetUniformLocationHelper(GLuint program, const char* name);
   GLint GetFragDataIndexEXTHelper(GLuint program, const char* name);
   GLint GetFragDataLocationHelper(GLuint program, const char* name);
+
+  // Writes the result bucket into a buffer pointed by name and of maximum size
+  // buffsize. If length is !null, it receives the number of characters written
+  // (excluding the final \0). This is a helper function for GetActive*Helper
+  // functions that return names.
+  void GetResultNameHelper(GLsizei bufsize, GLsizei* length, char* name);
   bool GetActiveAttribHelper(
       GLuint program, GLuint index, GLsizei bufsize, GLsizei* length,
       GLint* size, GLenum* type, char* name);
@@ -179,6 +186,19 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
       GLint* values);
   bool GetQueryObjectValueHelper(
       const char* function_name, GLuint id, GLenum pname, GLuint64* params);
+  bool GetProgramInterfaceivHelper(
+      GLuint program, GLenum program_interface, GLenum pname, GLint* params);
+  GLuint GetProgramResourceIndexHelper(
+      GLuint program, GLenum program_interface, const char* name);
+  bool GetProgramResourceNameHelper(
+      GLuint program, GLenum program_interface, GLuint index, GLsizei bufsize,
+      GLsizei* length, char* name);
+  bool GetProgramResourceivHelper(
+      GLuint program, GLenum program_interface, GLuint index,
+      GLsizei prop_count, const GLenum* props, GLsizei bufsize, GLsizei* length,
+      GLint* params);
+  GLint GetProgramResourceLocationHelper(
+      GLuint program, GLenum program_interface, const char* name);
 
   const scoped_refptr<ShareGroup>& share_group() const { return share_group_; }
 
@@ -311,21 +331,22 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
   };
 
   struct TextureUnit {
-    TextureUnit()
-        : bound_texture_2d(0),
-          bound_texture_cube_map(0),
-          bound_texture_external_oes(0) {}
+    TextureUnit() {}
 
     // texture currently bound to this unit's GL_TEXTURE_2D with glBindTexture
-    GLuint bound_texture_2d;
+    GLuint bound_texture_2d = 0;
 
     // texture currently bound to this unit's GL_TEXTURE_CUBE_MAP with
     // glBindTexture
-    GLuint bound_texture_cube_map;
+    GLuint bound_texture_cube_map = 0;
 
     // texture currently bound to this unit's GL_TEXTURE_EXTERNAL_OES with
     // glBindTexture
-    GLuint bound_texture_external_oes;
+    GLuint bound_texture_external_oes = 0;
+
+    // texture currently bound to this unit's GL_TEXTURE_RECTANGLE_ARB with
+    // glBindTexture
+    GLuint bound_texture_rectangle_arb = 0;
   };
 
   // Prevents problematic reentrancy during error callbacks.
@@ -369,6 +390,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
       const SwapBuffersCompleteParams& params) final;
   void OnSwapBufferPresented(uint64_t swap_id,
                              const gfx::PresentationFeedback& feedback) final;
+  void OnGpuControlReturnData(base::span<const uint8_t> data) final;
 
   void SendErrorMessage(std::string message, int32_t id);
   void CallDeferredErrorCallbacks();
@@ -468,6 +490,30 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
   void BufferSubDataHelperImpl(
       GLenum target, GLintptr offset, GLsizeiptr size, const void* data,
       ScopedTransferBufferPtr* buffer);
+
+  void MultiDrawArraysWEBGLHelper(GLenum mode,
+                                  const GLint* firsts,
+                                  const GLsizei* counts,
+                                  GLsizei drawcount);
+
+  void MultiDrawArraysInstancedWEBGLHelper(GLenum mode,
+                                           const GLint* firsts,
+                                           const GLsizei* counts,
+                                           const GLsizei* instanceCounts,
+                                           GLsizei drawcount);
+
+  void MultiDrawElementsWEBGLHelper(GLenum mode,
+                                    const GLsizei* counts,
+                                    GLenum type,
+                                    const GLsizei* offsets,
+                                    GLsizei drawcount);
+
+  void MultiDrawElementsInstancedWEBGLHelper(GLenum mode,
+                                             const GLsizei* counts,
+                                             GLenum type,
+                                             const GLsizei* offsets,
+                                             const GLsizei* instanceCounts,
+                                             GLsizei drawcount);
 
   GLuint CreateImageCHROMIUMHelper(ClientBuffer buffer,
                                    GLsizei width,
@@ -602,9 +648,9 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
                                    const GLfloat* transform_values,
                                    ScopedTransferBufferPtr* buffer,
                                    uint32_t* out_paths_shm_id,
-                                   size_t* out_paths_offset,
+                                   uint32_t* out_paths_offset,
                                    uint32_t* out_transforms_shm_id,
-                                   size_t* out_transforms_offset);
+                                   uint32_t* out_transforms_offset);
 
 // Set to 1 to have the client fail when a GL error is generated.
 // This helps find bugs in the renderer since the debugger stops on the error.
@@ -752,7 +798,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
   MappedBufferMap mapped_buffers_;
 
   // TODO(zmo): Consolidate |mapped_buffers_| and |mapped_buffer_range_map_|.
-  typedef base::hash_map<GLuint, MappedBuffer> MappedBufferRangeMap;
+  typedef std::unordered_map<GLuint, MappedBuffer> MappedBufferRangeMap;
   MappedBufferRangeMap mapped_buffer_range_map_;
 
   typedef std::map<const void*, MappedTexture> MappedTextureMap;
@@ -770,7 +816,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
   base::Optional<ScopedMappedMemoryPtr> font_mapped_buffer_;
   base::Optional<ScopedTransferBufferPtr> raster_mapped_buffer_;
 
-  base::Callback<void(const char*, int32_t)> error_message_callback_;
+  base::RepeatingCallback<void(const char*, int32_t)> error_message_callback_;
   bool deferring_error_callbacks_ = false;
   std::deque<DeferredErrorCallback> deferred_error_callbacks_;
 
@@ -796,6 +842,8 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
   base::flat_map<uint64_t, SwapCompletedCallback> pending_swap_callbacks_;
   base::flat_map<uint64_t, PresentationCallback>
       pending_presentation_callbacks_;
+
+  std::string last_active_url_;
 
   base::WeakPtrFactory<GLES2Implementation> weak_ptr_factory_;
 

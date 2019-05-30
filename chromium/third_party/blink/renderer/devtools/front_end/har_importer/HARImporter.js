@@ -22,7 +22,18 @@ HARImporter.Importer = class {
     for (const entry of log.entries) {
       let pageLoad = pageLoads.get(entry.pageref);
       const documentURL = pageLoad ? pageLoad.mainRequest.url() : entry.request.url;
-      const request = new SDK.NetworkRequest('har-' + requests.length, entry.request.url, documentURL, '', '', null);
+
+      let initiator = null;
+      if (entry._initiator) {
+        initiator = {
+          type: entry._initiator.type,
+          url: entry._initiator.url,
+          lineNumber: entry._initiator.lineNumber
+        };
+      }
+
+      const request = new SDK.NetworkRequest(
+          'har-' + requests.length, entry.request.url, documentURL, '', '', initiator);
       const page = pages.get(entry.pageref);
       if (!pageLoad && page) {
         pageLoad = HARImporter.Importer._buildPageLoad(page, request);
@@ -105,14 +116,41 @@ HARImporter.Importer = class {
 
     // Meta data.
     request.setRemoteAddress(entry.serverIPAddress || '', 80);  // Har does not support port numbers.
-    let resourceType = (pageLoad && pageLoad.mainRequest === request) ?
-        Common.resourceTypes.Document :
-        Common.ResourceType.fromMimeType(entry.response.content.mimeType);
-    if (!resourceType)
-      resourceType = Common.ResourceType.fromURL(entry.request.url) || Common.resourceTypes.Other;
-    request.setResourceType(resourceType);
+    request.setResourceType(HARImporter.Importer._getResourceType(request, entry, pageLoad));
+
+    const priority = entry.customAsString('priority');
+    if (Protocol.Network.ResourcePriority.hasOwnProperty(priority))
+      request.setPriority(/** @type {!Protocol.Network.ResourcePriority} */ (priority));
 
     request.finished = true;
+  }
+
+  /**
+   * @param {!SDK.NetworkRequest} request
+   * @param {!HARImporter.HAREntry} entry
+   * @param {?SDK.NetworkLog.PageLoad} pageLoad
+   * @return {!Common.ResourceType}
+   */
+  static _getResourceType(request, entry, pageLoad) {
+    const customResourceTypeName = entry.customAsString('resourceType');
+    if (customResourceTypeName) {
+      const customResourceType = Common.ResourceType.fromName(customResourceTypeName);
+      if (customResourceType)
+        return customResourceType;
+    }
+
+    if (pageLoad && pageLoad.mainRequest === request)
+      return Common.resourceTypes.Document;
+
+    const resourceTypeFromMime = Common.ResourceType.fromMimeType(entry.response.content.mimeType);
+    if (resourceTypeFromMime !== Common.resourceTypes.Other)
+      return resourceTypeFromMime;
+
+    const resourceTypeFromUrl = Common.ResourceType.fromURL(entry.request.url);
+    if (resourceTypeFromUrl)
+      return resourceTypeFromUrl;
+
+    return Common.resourceTypes.Other;
   }
 
   /**

@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "base/bind.h"
 #include "base/location.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -414,13 +415,13 @@ class NativeBackendLibsecretTest : public testing::Test {
     CheckUint32Attribute(item, "scheme", form.scheme);
     CheckStringAttribute(
         item, "date_synced",
-        base::Int64ToString(form.date_synced.ToInternalValue()));
+        base::NumberToString(form.date_synced.ToInternalValue()));
     CheckStringAttribute(item, "display_name", UTF16ToUTF8(form.display_name));
     CheckStringAttribute(item, "avatar_url", form.icon_url.spec());
     // We serialize unique origins as "", in order to make other systems that
     // read from the login database happy. https://crbug.com/591310
     CheckStringAttribute(item, "federation_url",
-                         form.federation_origin.unique()
+                         form.federation_origin.opaque()
                              ? ""
                              : form.federation_origin.Serialize());
     CheckUint32Attribute(item, "should_skip_zero_click", form.skip_zero_click);
@@ -707,8 +708,6 @@ TEST_F(NativeBackendLibsecretTest, PSLUpdatingStrictUpdateLogin) {
 }
 
 TEST_F(NativeBackendLibsecretTest, PSLUpdatingStrictAddLogin) {
-  // TODO(vabr): if AddLogin becomes no longer valid for existing logins, then
-  // just delete this test.
   CheckPSLUpdate(UPDATE_BY_ADDLOGIN);
 }
 

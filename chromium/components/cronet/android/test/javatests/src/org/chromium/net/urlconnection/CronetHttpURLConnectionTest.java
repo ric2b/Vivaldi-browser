@@ -22,6 +22,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.Log;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.net.CronetEngine;
@@ -53,6 +54,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -66,6 +68,8 @@ import java.util.regex.Pattern;
  */
 @RunWith(BaseJUnit4ClassRunner.class)
 public class CronetHttpURLConnectionTest {
+    private static final String TAG = CronetHttpURLConnectionTest.class.getSimpleName();
+
     @Rule
     public final CronetTestRule mTestRule = new CronetTestRule();
 
@@ -304,9 +308,10 @@ public class CronetHttpURLConnectionTest {
             fail();
         } catch (IOException e) {
             assertTrue(e instanceof java.net.ConnectException || e instanceof CronetException);
-            assertTrue((e.getMessage().contains("ECONNREFUSED")
-                    || (e.getMessage().contains("Connection refused"))
-                    || e.getMessage().contains("net::ERR_CONNECTION_REFUSED")));
+            assertTrue(e.getMessage().contains("ECONNREFUSED")
+                    || e.getMessage().contains("Connection refused")
+                    || e.getMessage().contains("net::ERR_CONNECTION_REFUSED")
+                    || e.getMessage().contains("Failed to connect"));
         }
         checkExceptionsAreThrown(secondConnection);
         urlConnection.disconnect();
@@ -331,9 +336,10 @@ public class CronetHttpURLConnectionTest {
             fail();
         } catch (IOException e) {
             assertTrue(e instanceof java.net.ConnectException || e instanceof CronetException);
-            assertTrue((e.getMessage().contains("ECONNREFUSED")
-                    || (e.getMessage().contains("Connection refused"))
-                    || e.getMessage().contains("net::ERR_CONNECTION_REFUSED")));
+            assertTrue(e.getMessage().contains("ECONNREFUSED")
+                    || e.getMessage().contains("Connection refused")
+                    || e.getMessage().contains("net::ERR_CONNECTION_REFUSED")
+                    || e.getMessage().contains("Failed to connect"));
         }
         checkExceptionsAreThrown(urlConnection);
     }
@@ -1358,6 +1364,10 @@ public class CronetHttpURLConnectionTest {
     @Feature({"Cronet"})
     @RequiresMinApi(9) // Tagging support added in API level 9: crrev.com/c/chromium/src/+/930086
     public void testTagging() throws Exception {
+        if (!CronetTestUtil.nativeCanGetTaggedBytes()) {
+            Log.i(TAG, "Skipping test - GetTaggedBytes unsupported.");
+            return;
+        }
         URL url = new URL(NativeTestServer.getEchoMethodURL());
 
         // Test untagged requests are given tag 0.
@@ -1464,5 +1474,32 @@ public class CronetHttpURLConnectionTest {
         assertNotNull(task.get());
         s.close();
         connection.disconnect();
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Cronet"})
+    @OnlyRunCronetHttpURLConnection // Not interested in system crashes.
+    // Regression test for crashes in disconnect() impl.
+    public void testCancelRace() throws Exception {
+        URL url = new URL(NativeTestServer.getEchoMethodURL());
+        final HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
+        final AtomicBoolean connected = new AtomicBoolean();
+        // Start request on another thread.
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    assertEquals(200, urlConnection.getResponseCode());
+                } catch (IOException e) {
+                }
+                connected.set(true);
+            }
+        })
+                .start();
+        // Repeatedly call disconnect().  This used to crash.
+        do {
+            urlConnection.disconnect();
+        } while (!connected.get());
     }
 }

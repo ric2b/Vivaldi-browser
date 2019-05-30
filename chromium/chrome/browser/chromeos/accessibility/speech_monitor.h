@@ -8,18 +8,20 @@
 #include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "chrome/browser/speech/tts_platform.h"
+#include "content/public/browser/tts_platform.h"
 #include "content/public/test/test_utils.h"
+
+// TODO(katie): This may need to move into Content as part of the TTS refactor.
 
 namespace chromeos {
 
 // For testing purpose installs itself as the platform speech synthesis engine,
 // allowing it to intercept all speech calls, and then provides a method to
 // block until the next utterance is spoken.
-class SpeechMonitor : public TtsPlatformImpl {
+class SpeechMonitor : public content::TtsPlatform {
  public:
   SpeechMonitor();
-  ~SpeechMonitor() override;
+  virtual ~SpeechMonitor();
 
   // Blocks until the next utterance is spoken, and returns its text.
   std::string GetNextUtterance();
@@ -36,27 +38,30 @@ class SpeechMonitor : public TtsPlatformImpl {
   void BlockUntilStop();
 
  private:
-  // TtsPlatformImpl implementation.
+  // TtsPlatform implementation.
   bool PlatformImplAvailable() override;
   bool Speak(int utterance_id,
              const std::string& utterance,
              const std::string& lang,
-             const VoiceData& voice,
-             const UtteranceContinuousParameters& params) override;
+             const content::VoiceData& voice,
+             const content::UtteranceContinuousParameters& params) override;
   bool StopSpeaking() override;
   bool IsSpeaking() override;
-  void GetVoices(std::vector<VoiceData>* out_voices) override;
+  void GetVoices(std::vector<content::VoiceData>* out_voices) override;
   void Pause() override {}
   void Resume() override {}
-  std::string error() override;
-  void clear_error() override {}
-  void set_error(const std::string& error) override {}
-  void WillSpeakUtteranceWithVoice(const Utterance* utterance,
-                                   const VoiceData& voice_data) override;
+  void WillSpeakUtteranceWithVoice(
+      const content::TtsUtterance* utterance,
+      const content::VoiceData& voice_data) override;
+  bool LoadBuiltInTtsEngine(content::BrowserContext* browser_context) override;
+  std::string GetError() override;
+  void ClearError() override;
+  void SetError(const std::string& error) override;
 
   scoped_refptr<content::MessageLoopRunner> loop_runner_;
   base::circular_deque<std::string> utterance_queue_;
   bool did_stop_ = false;
+  std::string error_;
 
   DISALLOW_COPY_AND_ASSIGN(SpeechMonitor);
 };

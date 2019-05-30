@@ -24,9 +24,6 @@ const int kBlankCharactersThreshold = 200;
 
 }  // namespace
 
-constexpr TimeDelta FirstMeaningfulPaintDetector::kNetwork2QuietWindowTimeout;
-constexpr TimeDelta FirstMeaningfulPaintDetector::kNetwork0QuietWindowTimeout;
-
 FirstMeaningfulPaintDetector& FirstMeaningfulPaintDetector::From(
     Document& document) {
   return PaintTiming::From(document).GetFirstMeaningfulPaintDetector();
@@ -67,7 +64,7 @@ void FirstMeaningfulPaintDetector::MarkNextPaintAsMeaningfulIfNeeded(
 
   // If the page has many blank characters, the significance value is
   // accumulated until the text become visible.
-  int approximate_blank_character_count =
+  size_t approximate_blank_character_count =
       FontFaceSetDocument::ApproximateBlankCharacterCount(*GetDocument());
   if (approximate_blank_character_count > kBlankCharactersThreshold) {
     accumulated_significance_while_having_blank_text_ += significance;
@@ -155,8 +152,7 @@ void FirstMeaningfulPaintDetector::OnNetwork2Quiet() {
     if (defer_first_meaningful_paint_ == kDoNotDefer) {
       // Report FirstMeaningfulPaint when the page reached network 2-quiet if
       // we aren't waiting for a swap timestamp.
-      SetFirstMeaningfulPaint(first_meaningful_paint2_quiet_,
-                              first_meaningful_paint2_quiet_swap);
+      SetFirstMeaningfulPaint(first_meaningful_paint2_quiet_swap);
     }
   }
   ReportHistograms();
@@ -236,8 +232,8 @@ void FirstMeaningfulPaintDetector::ReportSwapTime(
   paint_timing_->ReportSwapResultHistogram(result);
   provisional_first_meaningful_paint_swap_ = timestamp;
 
-  probe::paintTiming(GetDocument(), "firstMeaningfulPaintCandidate",
-                     TimeTicksInSeconds(timestamp));
+  probe::PaintTiming(GetDocument(), "firstMeaningfulPaintCandidate",
+                     timestamp.since_origin().InSecondsF());
 
   // Ignore the first meaningful paint candidate as this generally is the first
   // contentful paint itself.
@@ -251,8 +247,7 @@ void FirstMeaningfulPaintDetector::ReportSwapTime(
   if (defer_first_meaningful_paint_ == kDeferOutstandingSwapPromises &&
       outstanding_swap_promise_count_ == 0) {
     DCHECK(!first_meaningful_paint2_quiet_.is_null());
-    SetFirstMeaningfulPaint(first_meaningful_paint2_quiet_,
-                            provisional_first_meaningful_paint_swap_);
+    SetFirstMeaningfulPaint(provisional_first_meaningful_paint_swap_);
   }
 }
 
@@ -260,18 +255,17 @@ void FirstMeaningfulPaintDetector::NotifyFirstContentfulPaint(
     TimeTicks swap_stamp) {
   if (defer_first_meaningful_paint_ != kDeferFirstContentfulPaintNotSet)
     return;
-  SetFirstMeaningfulPaint(first_meaningful_paint2_quiet_, swap_stamp);
+  SetFirstMeaningfulPaint(swap_stamp);
 }
 
 void FirstMeaningfulPaintDetector::SetFirstMeaningfulPaint(
-    TimeTicks stamp,
     TimeTicks swap_stamp) {
   DCHECK(paint_timing_->FirstMeaningfulPaint().is_null());
   DCHECK(!swap_stamp.is_null());
   DCHECK(network2_quiet_reached_);
 
-  double swap_time_seconds = TimeTicksInSeconds(swap_stamp);
-  probe::paintTiming(GetDocument(), "firstMeaningfulPaint", swap_time_seconds);
+  double swap_time_seconds = swap_stamp.since_origin().InSecondsF();
+  probe::PaintTiming(GetDocument(), "firstMeaningfulPaint", swap_time_seconds);
 
   // If there's only been one contentful paint, then there won't have been
   // a meaningful paint signalled to the Scheduler, so mark one now.
@@ -279,8 +273,7 @@ void FirstMeaningfulPaintDetector::SetFirstMeaningfulPaint(
   paint_timing_->SetFirstMeaningfulPaintCandidate(swap_stamp);
 
   paint_timing_->SetFirstMeaningfulPaint(
-      stamp, swap_stamp,
-      had_user_input_before_provisional_first_meaningful_paint_);
+      swap_stamp, had_user_input_before_provisional_first_meaningful_paint_);
 }
 
 void FirstMeaningfulPaintDetector::Trace(blink::Visitor* visitor) {

@@ -12,6 +12,7 @@ import android.support.test.annotation.UiThreadTest;
 import android.support.test.filters.SmallTest;
 import android.support.test.rule.UiThreadTestRule;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -54,8 +55,8 @@ public class DelayedInvalidationsControllerTest {
      * It intercepts access to the Android Sync Adapter.
      */
     private static class MockDelayedInvalidationsController extends DelayedInvalidationsController {
-        private boolean mInvalidated = false;
-        private List<Bundle> mBundles = null;
+        private boolean mInvalidated;
+        private List<Bundle> mBundles;
 
         private MockDelayedInvalidationsController() {}
 
@@ -73,6 +74,11 @@ public class DelayedInvalidationsControllerTest {
         mPlaceholderActivity = new Activity();
         setApplicationState(ActivityState.CREATED);
         setApplicationState(ActivityState.RESUMED);
+    }
+
+    @After
+    public void tearDown() {
+        setApplicationState(ActivityState.DESTROYED);
     }
 
     private void setApplicationState(int newState) {

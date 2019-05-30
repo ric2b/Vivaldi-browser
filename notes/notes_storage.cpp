@@ -15,9 +15,11 @@
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
 #include "notes/notes_codec.h"
@@ -64,7 +66,7 @@ void LoadCallback(const base::FilePath& path,
     }
   }
 
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(FROM_HERE, { BrowserThread::UI },
                           base::Bind(&NotesStorage::OnLoadFinished, storage,
                                      base::Passed(&details)));
 }

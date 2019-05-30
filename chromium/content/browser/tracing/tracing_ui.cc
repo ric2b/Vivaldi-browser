@@ -46,8 +46,7 @@ namespace {
 void OnGotCategories(const WebUIDataSource::GotDataCallback& callback,
                      const std::set<std::string>& categorySet) {
   base::ListValue category_list;
-  for (std::set<std::string>::const_iterator it = categorySet.begin();
-       it != categorySet.end(); it++) {
+  for (auto it = categorySet.begin(); it != categorySet.end(); it++) {
     category_list.AppendString(*it);
   }
 
@@ -65,8 +64,7 @@ bool BeginRecording(const std::string& data64,
     return false;
 
   return TracingController::GetInstance()->StartTracing(
-      trace_config,
-      base::Bind(&OnRecordingEnabledAck, callback));
+      trace_config, base::BindOnce(&OnRecordingEnabledAck, callback));
 }
 
 void OnRecordingEnabledAck(const WebUIDataSource::GotDataCallback& callback) {
@@ -109,7 +107,7 @@ bool OnBeginJSONRequest(const std::string& path,
                         const WebUIDataSource::GotDataCallback& callback) {
   if (path == "json/categories") {
     return TracingController::GetInstance()->GetCategories(
-        base::Bind(OnGotCategories, callback));
+        base::BindOnce(OnGotCategories, callback));
   }
 
   const char kBeginRecordingPath[] = "json/begin_recording?";
@@ -120,11 +118,11 @@ bool OnBeginJSONRequest(const std::string& path,
   }
   if (path == "json/get_buffer_percent_full") {
     return TracingController::GetInstance()->GetTraceBufferUsage(
-        base::Bind(OnTraceBufferUsageResult, callback));
+        base::BindOnce(OnTraceBufferUsageResult, callback));
   }
   if (path == "json/get_buffer_status") {
     return TracingController::GetInstance()->GetTraceBufferUsage(
-        base::Bind(OnTraceBufferStatusResult, callback));
+        base::BindOnce(OnTraceBufferStatusResult, callback));
   }
   if (path == "json/end_recording_compressed") {
     if (!TracingController::GetInstance()->IsTracing())
@@ -178,9 +176,12 @@ TracingUI::TracingUI(WebUI* web_ui)
       web_ui->GetWebContents()->GetBrowserContext();
 
   WebUIDataSource* source = WebUIDataSource::Create(kChromeUITracingHost);
-  source->UseGzip({"json/begin_recording", "json/categories",
-                   "json/end_recording_compressed",
-                   "json/get_buffer_percent_full", "json/get_buffer_status"});
+  source->UseGzip(base::BindRepeating([](const std::string& path) {
+    return path != "json/begin_recording" && path != "json/categories" &&
+           path != "json/end_recording_compressed" &&
+           path != "json/get_buffer_percent_full" &&
+           path != "json/get_buffer_status";
+  }));
   source->SetJsonPath("strings.js");
   source->SetDefaultResource(IDR_TRACING_HTML);
   source->AddResourcePath("tracing.js", IDR_TRACING_JS);
@@ -261,7 +262,8 @@ bool TracingUI::GetTracingOptions(
     return false;
   }
 
-  std::unique_ptr<base::Value> optionsRaw = base::JSONReader::Read(data);
+  std::unique_ptr<base::Value> optionsRaw =
+      base::JSONReader::ReadDeprecated(data);
   if (!optionsRaw) {
     LOG(ERROR) << "Options were not valid JSON";
     return false;

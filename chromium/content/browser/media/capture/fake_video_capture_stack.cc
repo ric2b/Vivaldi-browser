@@ -8,12 +8,14 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "content/browser/media/capture/frame_test_util.h"
 #include "media/base/video_frame.h"
 #include "media/capture/video/video_frame_receiver.h"
 #include "media/capture/video_capture_types.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/libyuv/include/libyuv.h"
+#include "third_party/skia/include/core/SkColorSpace.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace content {
@@ -65,6 +67,8 @@ class FakeVideoCaptureStack::Receiver : public media::VideoFrameReceiver {
         mapping.size(), frame_info->timestamp);
     CHECK(frame);
     frame->metadata()->MergeInternalValuesFrom(frame_info->metadata);
+    if (frame_info->color_space.has_value())
+      frame->set_color_space(frame_info->color_space.value());
     // This destruction observer will unmap the shared memory when the
     // VideoFrame goes out-of-scope.
     frame->AddDestructionObserver(base::BindOnce(
@@ -99,6 +103,8 @@ class FakeVideoCaptureStack::Receiver : public media::VideoFrameReceiver {
 
   void OnStartedUsingGpuDecode() final { NOTREACHED(); }
 
+  void OnStopped() final {}
+
   FakeVideoCaptureStack* const capture_stack_;
   base::flat_map<int, media::mojom::VideoBufferHandlePtr> buffers_;
 
@@ -113,20 +119,7 @@ FakeVideoCaptureStack::CreateFrameReceiver() {
 SkBitmap FakeVideoCaptureStack::NextCapturedFrame() {
   CHECK(!frames_.empty());
   media::VideoFrame& frame = *(frames_.front());
-  SkBitmap bitmap;
-  bitmap.allocN32Pixels(frame.visible_rect().width(),
-                        frame.visible_rect().height());
-  // TODO(crbug/810131): This is not Rec.709 colorspace conversion, and so will
-  // introduce inaccuracies.
-  libyuv::I420ToARGB(frame.visible_data(media::VideoFrame::kYPlane),
-                     frame.stride(media::VideoFrame::kYPlane),
-                     frame.visible_data(media::VideoFrame::kUPlane),
-                     frame.stride(media::VideoFrame::kUPlane),
-                     frame.visible_data(media::VideoFrame::kVPlane),
-                     frame.stride(media::VideoFrame::kVPlane),
-                     reinterpret_cast<uint8_t*>(bitmap.getPixels()),
-                     static_cast<int>(bitmap.rowBytes()), bitmap.width(),
-                     bitmap.height());
+  SkBitmap bitmap = FrameTestUtil::ConvertToBitmap(frame);
   frames_.pop_front();
   return bitmap;
 }
@@ -155,6 +148,8 @@ void FakeVideoCaptureStack::OnReceivedFrame(
   // Frame timestamps should be monotionically increasing.
   EXPECT_LT(last_frame_timestamp_, frame->timestamp());
   last_frame_timestamp_ = frame->timestamp();
+
+  EXPECT_TRUE(frame->ColorSpace().IsValid());
 
   frames_.emplace_back(std::move(frame));
 }

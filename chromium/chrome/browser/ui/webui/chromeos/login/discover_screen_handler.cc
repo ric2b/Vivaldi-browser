@@ -14,7 +14,9 @@ const char kJsScreenPath[] = "login.DiscoverScreen";
 
 namespace chromeos {
 
-DiscoverScreenHandler::DiscoverScreenHandler() : BaseScreenHandler(kScreenId) {
+DiscoverScreenHandler::DiscoverScreenHandler(
+    JSCallsContainer* js_calls_container)
+    : BaseScreenHandler(kScreenId, js_calls_container) {
   set_call_js_prefix(kJsScreenPath);
 }
 
@@ -40,7 +42,9 @@ void DiscoverScreenHandler::Bind(DiscoverScreen* screen) {
 
 void DiscoverScreenHandler::Hide() {}
 
-void DiscoverScreenHandler::Initialize() {}
+void DiscoverScreenHandler::Initialize() {
+  discover_ui_.Initialize();
+}
 
 void DiscoverScreenHandler::Show() {
   ShowScreen(kScreenId);

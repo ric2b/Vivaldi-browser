@@ -14,6 +14,7 @@ sources += [
 ]
 
 # NOSORT
+# This is NOSORT because reason.
 sources = [
   "z",
   "z2",
@@ -21,6 +22,7 @@ sources = [
   "y.cc",
 ]
 
+# This is NOSORT because reason:
 # NOSORT
 sources += [
   "z",

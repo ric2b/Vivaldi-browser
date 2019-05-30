@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/net_export.h"
+#include "net/base/request_priority.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/stream_socket.h"
 
@@ -18,7 +19,6 @@ namespace net {
 
 class HostPortPair;
 class HttpAuthController;
-class HttpStream;
 class HttpResponseInfo;
 class HttpRequestHeaders;
 class HttpAuthController;
@@ -32,10 +32,6 @@ class NET_EXPORT_PRIVATE ProxyClientSocket : public StreamSocket {
   // Returns the HttpResponseInfo (including HTTP Headers) from
   // the response to the CONNECT request.
   virtual const HttpResponseInfo* GetConnectResponseInfo() const = 0;
-
-  // Transfers ownership of a newly created HttpStream to the caller
-  // which can be used to read the response body.
-  virtual std::unique_ptr<HttpStream> CreateConnectResponseStream() = 0;
 
   // Returns the HttpAuthController which can be used
   // to interact with an HTTP Proxy Authorization Required (407) request.
@@ -58,12 +54,15 @@ class NET_EXPORT_PRIVATE ProxyClientSocket : public StreamSocket {
   // Returns the protocol negotiated with the proxy.
   virtual NextProto GetProxyNegotiatedProtocol() const = 0;
 
+  // Set the priority of the underlying stream (for SPDY and QUIC)
+  virtual void SetStreamPriority(RequestPriority priority);
+
  protected:
   // The HTTP CONNECT method for establishing a tunnel connection is documented
   // in draft-luotonen-web-proxy-tunneling-01.txt and RFC 2817, Sections 5.2
   // and 5.3.
   static void BuildTunnelRequest(const HostPortPair& endpoint,
-                                 const HttpRequestHeaders& auth_headers,
+                                 const HttpRequestHeaders& extra_headers,
                                  const std::string& user_agent,
                                  std::string* request_line,
                                  HttpRequestHeaders* request_headers);

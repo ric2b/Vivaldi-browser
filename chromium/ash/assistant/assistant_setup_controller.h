@@ -9,38 +9,48 @@
 #include <string>
 
 #include "ash/assistant/assistant_controller_observer.h"
-#include "ash/assistant/ui/main_stage/assistant_opt_in_view.h"
+#include "ash/assistant/ui/assistant_view_delegate.h"
+#include "ash/public/interfaces/assistant_controller.mojom.h"
 #include "ash/public/interfaces/assistant_setup.mojom.h"
 #include "base/macros.h"
+#include "mojo/public/cpp/bindings/binding.h"
 
 namespace ash {
 
 class AssistantController;
 
-class AssistantSetupController : public AssistantControllerObserver,
-                                 public AssistantOptInDelegate {
+class AssistantSetupController : public mojom::AssistantSetupController,
+                                 public AssistantControllerObserver,
+                                 public AssistantViewDelegateObserver {
  public:
   explicit AssistantSetupController(AssistantController* assistant_controller);
   ~AssistantSetupController() override;
 
-  // Sets the controller's internal |assistant_setup_| reference.
-  void SetAssistantSetup(mojom::AssistantSetup* assistant_setup);
+  void BindRequest(mojom::AssistantSetupControllerRequest request);
+
+  // mojom::AssistantSetupController:
+  void SetAssistantSetup(mojom::AssistantSetupPtr assistant_setup) override;
 
   // AssistantControllerObserver:
+  void OnAssistantControllerConstructed() override;
+  void OnAssistantControllerDestroying() override;
   void OnDeepLinkReceived(
       assistant::util::DeepLinkType type,
       const std::map<std::string, std::string>& params) override;
 
-  // AssistantOptInDelegate:
+  // AssistantViewDelegateObserver:
   void OnOptInButtonPressed() override;
 
- private:
-  void StartOnboarding(bool relaunch);
+  void StartOnboarding(bool relaunch,
+                       mojom::FlowType type = mojom::FlowType::CONSENT_FLOW);
 
+ private:
   AssistantController* const assistant_controller_;  // Owned by Shell.
 
-  mojom::AssistantSetup* assistant_setup_ =
-      nullptr;  // Owned by AssistantController.
+  mojo::Binding<mojom::AssistantSetupController> binding_;
+
+  // Interface to AssistantSetup in chrome/browser.
+  mojom::AssistantSetupPtr assistant_setup_;
 
   DISALLOW_COPY_AND_ASSIGN(AssistantSetupController);
 };

@@ -36,7 +36,6 @@
 #include "third_party/blink/public/common/experiments/memory_ablation_experiment.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_initializer.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_context_snapshot_external_references.h"
@@ -51,6 +50,7 @@
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/histogram.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
@@ -65,16 +65,18 @@ namespace blink {
 
 namespace {
 
-class EndOfTaskRunner : public WebThread::TaskObserver {
+class EndOfTaskRunner : public Thread::TaskObserver {
  public:
-  void WillProcessTask() override { AnimationClock::NotifyTaskStart(); }
-  void DidProcessTask() override {
+  void WillProcessTask(const base::PendingTask&) override {
+    AnimationClock::NotifyTaskStart();
+  }
+  void DidProcessTask(const base::PendingTask&) override {
     Microtask::PerformCheckpoint(V8PerIsolateData::MainThreadIsolate());
     V8Initializer::ReportRejectedPromisesOnMainThread();
   }
 };
 
-WebThread::TaskObserver* g_end_of_task_runner = nullptr;
+Thread::TaskObserver* g_end_of_task_runner = nullptr;
 
 BlinkInitializer& GetBlinkInitializer() {
   DEFINE_STATIC_LOCAL(std::unique_ptr<BlinkInitializer>, initializer,
@@ -121,28 +123,29 @@ void InitializeCommon(Platform* platform,
 
   GetBlinkInitializer().RegisterInterfaces(*registry);
 
-  // currentThread is null if we are running on a thread without a message loop.
-  if (WebThread* current_thread = platform->CurrentThread()) {
-    DCHECK(!g_end_of_task_runner);
-    g_end_of_task_runner = new EndOfTaskRunner;
-    current_thread->AddTaskObserver(g_end_of_task_runner);
-  }
+  DCHECK(!g_end_of_task_runner);
+  g_end_of_task_runner = new EndOfTaskRunner;
+  Thread::Current()->AddTaskObserver(g_end_of_task_runner);
 
-  if (WebThread* main_thread = Platform::Current()->MainThread()) {
-    scoped_refptr<base::SequencedTaskRunner> task_runner =
-        main_thread->GetTaskRunner();
-    if (task_runner)
-      MemoryAblationExperiment::MaybeStartForRenderer(task_runner);
-  }
+  scoped_refptr<base::SequencedTaskRunner> task_runner =
+      Thread::MainThread()->GetTaskRunner();
+  if (task_runner)
+    MemoryAblationExperiment::MaybeStartForRenderer(task_runner);
+
+#if defined(OS_ANDROID)
+  // Initialize CrashMemoryMetricsReporterImpl in order to assure that memory
+  // allocation does not happen in OnOOMCallback.
+  CrashMemoryMetricsReporterImpl::Instance();
+#endif
 }
 
 }  // namespace
 
 void Initialize(Platform* platform,
                 service_manager::BinderRegistry* registry,
-                WebThread* main_thread) {
+                scheduler::WebThreadScheduler* main_thread_scheduler) {
   DCHECK(registry);
-  Platform::Initialize(platform, main_thread);
+  Platform::Initialize(platform, main_thread_scheduler);
   InitializeCommon(platform, registry);
 }
 
@@ -156,10 +159,10 @@ void CreateMainThreadAndInitialize(Platform* platform,
 void BlinkInitializer::RegisterInterfaces(
     service_manager::BinderRegistry& registry) {
   ModulesInitializer::RegisterInterfaces(registry);
-  WebThread* main_thread = Platform::Current()->MainThread();
+  Thread* main_thread = Thread::MainThread();
   // GetSingleThreadTaskRunner() uses GetTaskRunner() internally.
   // crbug.com/781664
-  if (!main_thread || !main_thread->GetTaskRunner())
+  if (!main_thread->GetTaskRunner())
     return;
 
 #if defined(OS_ANDROID)

@@ -8,7 +8,6 @@
 
 #include "ash/public/interfaces/constants.mojom.h"
 #include "base/bind.h"
-#include "base/macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -68,7 +67,7 @@ void LocaleChangeGuard::OnLogin() {
                  content::NotificationService::AllBrowserContextsAndSources());
 }
 
-void LocaleChangeGuard::ConnectToLocaleNotificationController() {
+void LocaleChangeGuard::ConnectToLocaleUpdateController() {
   content::ServiceManagerConnection* connection =
       content::ServiceManagerConnection::GetForProcess();
   service_manager::Connector* connector =
@@ -168,7 +167,7 @@ void LocaleChangeGuard::Check() {
 
     // Ensure that synchronization does not change the locale to a value not
     // allowed by enterprise policy.
-    if (!chromeos::locale_util::IsAllowedUILocale(to_locale, prefs))
+    if (!chromeos::locale_util::IsAllowedUILanguage(to_locale, prefs))
       prefs->SetString(language::prefs::kApplicationLocale, cur_locale);
     return;
   }
@@ -193,7 +192,7 @@ void LocaleChangeGuard::Check() {
   }
 
   if (!notification_controller_)
-    ConnectToLocaleNotificationController();
+    ConnectToLocaleUpdateController();
 
   notification_controller_->OnLocaleChanged(
       cur_locale, from_locale_, to_locale_,
@@ -268,7 +267,7 @@ LocaleChangeGuard::GetSkipShowNotificationLanguagesForTesting() {
 
 // static
 size_t LocaleChangeGuard::GetSkipShowNotificationLanguagesSizeForTesting() {
-  return arraysize(kSkipShowNotificationLanguages);
+  return base::size(kSkipShowNotificationLanguages);
 }
 
 }  // namespace chromeos

@@ -14,132 +14,153 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/optional.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
+#include "base/timer/mock_timer.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
+#include "chrome/browser/chromeos/login/demo_mode/demo_resources.h"
+#include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/component_updater/fake_cros_component_manager.h"
+#include "chrome/browser/prefs/browser_prefs.h"
+#include "chrome/browser/ui/apps/chrome_app_delegate.h"
+#include "chrome/browser/ui/ash/test_wallpaper_controller.h"
+#include "chrome/browser/ui/ash/wallpaper_controller_client.h"
+#include "chrome/common/pref_names.h"
+#include "chrome/test/base/browser_process_platform_part_test_api_chromeos.h"
+#include "chrome/test/base/scoped_testing_local_state.h"
+#include "chrome/test/base/testing_browser_process.h"
+#include "chrome/test/base/testing_profile.h"
+#include "chrome/test/base/testing_profile_manager.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/fake_image_loader_client.h"
+#include "components/language/core/browser/pref_names.h"
 #include "components/session_manager/core/session_manager.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "components/user_manager/scoped_user_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "extensions/browser/app_window/app_window.h"
+#include "extensions/common/extension_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using component_updater::FakeCrOSComponentManager;
 
 namespace chromeos {
 
 namespace {
 
-// TODO(michaelpg): Clean up tests for offline resources and differentiate
-// between the CrOS component and the preinstalled resources image.
 constexpr char kOfflineResourcesComponent[] = "demo-mode-resources";
 constexpr char kTestDemoModeResourcesMountPoint[] =
     "/run/imageloader/demo_mode_resources";
-constexpr char kDemoAppsImageFile[] = "android_demo_apps.squash";
-constexpr char kExternalExtensionsPrefsFile[] = "demo_extensions.json";
 
 void SetBoolean(bool* value) {
   *value = true;
 }
 
-class TestImageLoaderClient : public FakeImageLoaderClient {
- public:
-  TestImageLoaderClient() = default;
-  ~TestImageLoaderClient() override = default;
-
-  const std::list<std::string>& pending_loads() const { return pending_loads_; }
-
-  // FakeImageLoaderClient:
-  void LoadComponentAtPath(
-      const std::string& name,
-      const base::FilePath& path,
-      DBusMethodCallback<base::FilePath> callback) override {
-    ASSERT_FALSE(path.empty());
-
-    components_[name].source = path;
-    components_[name].load_callbacks.emplace_back(std::move(callback));
-    pending_loads_.push_back(name);
-  }
-
-  bool FinishComponentLoad(const std::string& component_name,
-                           const base::FilePath& mount_point) {
-    if (pending_loads_.empty() || pending_loads_.front() != component_name)
-      return false;
-    pending_loads_.pop_front();
-
-    components_[component_name].loaded = true;
-    RunPendingLoadCallback(component_name, mount_point);
-    return true;
-  }
-
-  bool FailComponentLoad(const std::string& component_name) {
-    if (pending_loads_.empty() || pending_loads_.front() != component_name)
-      return false;
-    pending_loads_.pop_front();
-    RunPendingLoadCallback(component_name, base::nullopt);
-    return true;
-  }
-
-  bool ComponentLoadedFromPath(const std::string& name,
-                               const base::FilePath& file_path) const {
-    const auto& component = components_.find(name);
-    if (component == components_.end())
-      return false;
-    return component->second.loaded && component->second.source == file_path;
-  }
-
- private:
-  struct ComponentInfo {
-    ComponentInfo() = default;
-    ~ComponentInfo() = default;
-
-    base::FilePath source;
-    bool loaded = false;
-    std::list<DBusMethodCallback<base::FilePath>> load_callbacks;
-  };
-
-  void RunPendingLoadCallback(const std::string& component_name,
-                              base::Optional<base::FilePath> mount_point) {
-    DBusMethodCallback<base::FilePath> callback =
-        std::move(components_[component_name].load_callbacks.front());
-    components_[component_name].load_callbacks.pop_front();
-
-    std::move(callback).Run(std::move(mount_point));
-  }
-
-  // Map containing known components.
-  std::map<std::string, ComponentInfo> components_;
-
-  // List of components whose load has been requested.
-  std::list<std::string> pending_loads_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestImageLoaderClient);
-};
-
 }  // namespace
 
 class DemoSessionTest : public testing::Test {
  public:
-  DemoSessionTest() = default;
+  DemoSessionTest()
+      : profile_manager_(std::make_unique<TestingProfileManager>(
+            TestingBrowserProcess::GetGlobal())),
+        browser_process_platform_part_test_api_(
+            g_browser_process->platform_part()),
+        scoped_user_manager_(std::make_unique<FakeChromeUserManager>()) {}
+
   ~DemoSessionTest() override = default;
 
   void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(
+        chromeos::switches::kShowSplashScreenInDemoMode);
+
+    ASSERT_TRUE(profile_manager_->SetUp());
+    chromeos::DBusThreadManager::Initialize();
     DemoSession::SetDemoConfigForTesting(DemoSession::DemoModeConfig::kOnline);
-    auto image_loader_client = std::make_unique<TestImageLoaderClient>();
-    image_loader_client_ = image_loader_client.get();
-    chromeos::DBusThreadManager::GetSetterForTesting()->SetImageLoaderClient(
-        std::move(image_loader_client));
+    InitializeCrosComponentManager();
     session_manager_ = std::make_unique<session_manager::SessionManager>();
+    wallpaper_controller_client_ =
+        std::make_unique<WallpaperControllerClient>();
+    wallpaper_controller_client_->InitForTesting(
+        test_wallpaper_controller_.CreateInterfacePtr());
   }
 
   void TearDown() override {
     DemoSession::ShutDownIfInitialized();
     DemoSession::ResetDemoConfigForTesting();
-    image_loader_client_ = nullptr;
+
+    wallpaper_controller_client_.reset();
     chromeos::DBusThreadManager::Shutdown();
+
+    cros_component_manager_ = nullptr;
+    browser_process_platform_part_test_api_.ShutdownCrosComponentManager();
+    profile_manager_->DeleteAllTestingProfiles();
   }
 
  protected:
-  // Points to the image loader client passed to the test DBusTestManager.
-  TestImageLoaderClient* image_loader_client_ = nullptr;
+  bool FinishResourcesComponentLoad(const base::FilePath& mount_path) {
+    EXPECT_TRUE(
+        cros_component_manager_->HasPendingInstall(kOfflineResourcesComponent));
+    EXPECT_TRUE(
+        cros_component_manager_->UpdateRequested(kOfflineResourcesComponent));
+
+    return cros_component_manager_->FinishLoadRequest(
+        kOfflineResourcesComponent,
+        FakeCrOSComponentManager::ComponentInfo(
+            component_updater::CrOSComponentManager::Error::NONE,
+            base::FilePath("/dev/null"), mount_path));
+  }
+
+  void InitializeCrosComponentManager() {
+    auto fake_cros_component_manager =
+        std::make_unique<FakeCrOSComponentManager>();
+    fake_cros_component_manager->set_queue_load_requests(true);
+    fake_cros_component_manager->set_supported_components(
+        {kOfflineResourcesComponent});
+    cros_component_manager_ = fake_cros_component_manager.get();
+
+    browser_process_platform_part_test_api_.InitializeCrosComponentManager(
+        std::move(fake_cros_component_manager));
+  }
+
+  // Creates a dummy demo user with a testing profile and logs in.
+  TestingProfile* LoginDemoUser() {
+    const AccountId account_id(
+        AccountId::FromUserEmailGaiaId("demo@test.com", "demo_user"));
+    FakeChromeUserManager* user_manager =
+        static_cast<FakeChromeUserManager*>(user_manager::UserManager::Get());
+    const user_manager::User* user =
+        user_manager->AddPublicAccountUser(account_id);
+
+    auto prefs =
+        std::make_unique<sync_preferences::TestingPrefServiceSyncable>();
+    RegisterUserProfilePrefs(prefs->registry());
+    TestingProfile* profile = profile_manager_->CreateTestingProfile(
+        "test-profile", std::move(prefs), base::ASCIIToUTF16("Test profile"),
+        1 /* avatar_id */, std::string() /* supervised_user_id */,
+        TestingProfile::TestingFactories());
+    chromeos::ProfileHelper::Get()->SetUserToProfileMappingForTesting(user,
+                                                                      profile);
+
+    user_manager->LoginUser(account_id);
+    profile_manager_->SetLoggedIn(true);
+    return profile;
+  }
+
+  FakeCrOSComponentManager* cros_component_manager_ = nullptr;
   content::TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<session_manager::SessionManager> session_manager_;
+  std::unique_ptr<WallpaperControllerClient> wallpaper_controller_client_;
+  TestWallpaperController test_wallpaper_controller_;
+  std::unique_ptr<TestingProfileManager> profile_manager_;
 
  private:
+  BrowserProcessPlatformPartTestApi browser_process_platform_part_test_api_;
+  user_manager::ScopedUserManager scoped_user_manager_;
+  chromeos::ScopedCrosSettingsTestHelper cros_settings_test_helper_;
+  base::test::ScopedFeatureList scoped_feature_list_;
+
   DISALLOW_COPY_AND_ASSIGN(DemoSessionTest);
 };
 
@@ -156,35 +177,16 @@ TEST_F(DemoSessionTest, StartInitiatesOfflineResourcesLoad) {
   DemoSession* demo_session = DemoSession::StartIfInDemoMode();
   ASSERT_TRUE(demo_session);
 
-  EXPECT_FALSE(demo_session->offline_resources_loaded());
-  EXPECT_EQ(std::list<std::string>({kOfflineResourcesComponent}),
-            image_loader_client_->pending_loads());
+  EXPECT_FALSE(demo_session->resources()->loaded());
 
   const base::FilePath component_mount_point =
       base::FilePath(kTestDemoModeResourcesMountPoint);
-  ASSERT_TRUE(image_loader_client_->FinishComponentLoad(
-      kOfflineResourcesComponent, component_mount_point));
+  ASSERT_TRUE(FinishResourcesComponentLoad(component_mount_point));
 
-  EXPECT_TRUE(demo_session->offline_resources_loaded());
-  EXPECT_EQ(component_mount_point.AppendASCII(kDemoAppsImageFile),
-            demo_session->GetDemoAppsPath());
-  EXPECT_EQ(component_mount_point.AppendASCII(kExternalExtensionsPrefsFile),
-            demo_session->GetExternalExtensionsPrefsPath());
+  EXPECT_TRUE(demo_session->resources()->loaded());
   EXPECT_EQ(
       component_mount_point.AppendASCII("foo.txt"),
-      demo_session->GetOfflineResourceAbsolutePath(base::FilePath("foo.txt")));
-  EXPECT_EQ(component_mount_point.AppendASCII("foo/bar.txt"),
-            demo_session->GetOfflineResourceAbsolutePath(
-                base::FilePath("foo/bar.txt")));
-  EXPECT_EQ(
-      component_mount_point.AppendASCII("foo/"),
-      demo_session->GetOfflineResourceAbsolutePath(base::FilePath("foo/")));
-  EXPECT_TRUE(
-      demo_session->GetOfflineResourceAbsolutePath(base::FilePath("../foo/"))
-          .empty());
-  EXPECT_TRUE(
-      demo_session->GetOfflineResourceAbsolutePath(base::FilePath("foo/../bar"))
-          .empty());
+      demo_session->resources()->GetAbsolutePath(base::FilePath("foo.txt")));
 }
 
 TEST_F(DemoSessionTest, StartForDemoDeviceNotInDemoMode) {
@@ -193,7 +195,8 @@ TEST_F(DemoSessionTest, StartForDemoDeviceNotInDemoMode) {
   EXPECT_FALSE(DemoSession::StartIfInDemoMode());
   EXPECT_FALSE(DemoSession::Get());
 
-  EXPECT_EQ(std::list<std::string>(), image_loader_client_->pending_loads());
+  EXPECT_FALSE(
+      cros_component_manager_->HasPendingInstall(kOfflineResourcesComponent));
 }
 
 TEST_F(DemoSessionTest, StartIfInOfflineEnrolledDemoMode) {
@@ -206,9 +209,9 @@ TEST_F(DemoSessionTest, StartIfInOfflineEnrolledDemoMode) {
   EXPECT_TRUE(demo_session->offline_enrolled());
   EXPECT_EQ(demo_session, DemoSession::Get());
 
-  EXPECT_FALSE(demo_session->offline_resources_loaded());
-  EXPECT_EQ(std::list<std::string>({kOfflineResourcesComponent}),
-            image_loader_client_->pending_loads());
+  EXPECT_FALSE(demo_session->resources()->loaded());
+  EXPECT_FALSE(
+      cros_component_manager_->HasPendingInstall(kOfflineResourcesComponent));
 }
 
 TEST_F(DemoSessionTest, PreloadOfflineResourcesIfInDemoMode) {
@@ -219,28 +222,24 @@ TEST_F(DemoSessionTest, PreloadOfflineResourcesIfInDemoMode) {
   EXPECT_FALSE(demo_session->started());
   EXPECT_FALSE(demo_session->offline_enrolled());
 
-  EXPECT_FALSE(demo_session->offline_resources_loaded());
-  EXPECT_EQ(std::list<std::string>({kOfflineResourcesComponent}),
-            image_loader_client_->pending_loads());
+  EXPECT_FALSE(demo_session->resources()->loaded());
 
   const base::FilePath component_mount_point =
       base::FilePath(kTestDemoModeResourcesMountPoint);
-  ASSERT_TRUE(image_loader_client_->FinishComponentLoad(
-      kOfflineResourcesComponent, component_mount_point));
+  ASSERT_TRUE(FinishResourcesComponentLoad(component_mount_point));
+  EXPECT_FALSE(
+      cros_component_manager_->HasPendingInstall(kOfflineResourcesComponent));
 
   EXPECT_FALSE(demo_session->started());
-  EXPECT_TRUE(demo_session->offline_resources_loaded());
-  EXPECT_EQ(component_mount_point.AppendASCII(kDemoAppsImageFile),
-            demo_session->GetDemoAppsPath());
-  EXPECT_EQ(component_mount_point.AppendASCII(kExternalExtensionsPrefsFile),
-            demo_session->GetExternalExtensionsPrefsPath());
+  EXPECT_TRUE(demo_session->resources()->loaded());
 }
 
 TEST_F(DemoSessionTest, PreloadOfflineResourcesIfNotInDemoMode) {
   DemoSession::SetDemoConfigForTesting(DemoSession::DemoModeConfig::kNone);
   DemoSession::PreloadOfflineResourcesIfInDemoMode();
   EXPECT_FALSE(DemoSession::Get());
-  EXPECT_EQ(std::list<std::string>(), image_loader_client_->pending_loads());
+  EXPECT_FALSE(
+      cros_component_manager_->HasPendingInstall(kOfflineResourcesComponent));
 }
 
 TEST_F(DemoSessionTest, PreloadOfflineResourcesIfInOfflineDemoMode) {
@@ -252,9 +251,9 @@ TEST_F(DemoSessionTest, PreloadOfflineResourcesIfInOfflineDemoMode) {
   EXPECT_FALSE(demo_session->started());
   EXPECT_TRUE(demo_session->offline_enrolled());
 
-  EXPECT_FALSE(demo_session->offline_resources_loaded());
-  EXPECT_EQ(std::list<std::string>({kOfflineResourcesComponent}),
-            image_loader_client_->pending_loads());
+  EXPECT_FALSE(demo_session->resources()->loaded());
+  EXPECT_FALSE(
+      cros_component_manager_->HasPendingInstall(kOfflineResourcesComponent));
 }
 
 TEST_F(DemoSessionTest, ShutdownResetsInstance) {
@@ -278,43 +277,39 @@ TEST_F(DemoSessionTest, StartDemoSessionWhilePreloadingResources) {
   ASSERT_TRUE(demo_session);
   EXPECT_TRUE(demo_session->started());
 
-  EXPECT_FALSE(demo_session->offline_resources_loaded());
-  EXPECT_EQ(std::list<std::string>({kOfflineResourcesComponent}),
-            image_loader_client_->pending_loads());
+  EXPECT_FALSE(demo_session->resources()->loaded());
 
   const base::FilePath component_mount_point =
       base::FilePath(kTestDemoModeResourcesMountPoint);
-  ASSERT_TRUE(image_loader_client_->FinishComponentLoad(
-      kOfflineResourcesComponent, component_mount_point));
+  ASSERT_TRUE(FinishResourcesComponentLoad(component_mount_point));
+  EXPECT_FALSE(
+      cros_component_manager_->HasPendingInstall(kOfflineResourcesComponent));
 
   EXPECT_TRUE(demo_session->started());
-  EXPECT_TRUE(demo_session->offline_resources_loaded());
-  EXPECT_EQ(component_mount_point.AppendASCII(kDemoAppsImageFile),
-            demo_session->GetDemoAppsPath());
-  EXPECT_EQ(component_mount_point.AppendASCII(kExternalExtensionsPrefsFile),
-            demo_session->GetExternalExtensionsPrefsPath());
+  EXPECT_TRUE(demo_session->resources()->loaded());
+  EXPECT_EQ(
+      component_mount_point.AppendASCII("foo.txt"),
+      demo_session->resources()->GetAbsolutePath(base::FilePath("foo.txt")));
 }
 
 TEST_F(DemoSessionTest, StartDemoSessionAfterPreloadingResources) {
   DemoSession::PreloadOfflineResourcesIfInDemoMode();
 
-  EXPECT_EQ(std::list<std::string>({kOfflineResourcesComponent}),
-            image_loader_client_->pending_loads());
-
   const base::FilePath component_mount_point =
       base::FilePath(kTestDemoModeResourcesMountPoint);
-  ASSERT_TRUE(image_loader_client_->FinishComponentLoad(
-      kOfflineResourcesComponent, component_mount_point));
+  ASSERT_TRUE(FinishResourcesComponentLoad(component_mount_point));
+  EXPECT_FALSE(
+      cros_component_manager_->HasPendingInstall(kOfflineResourcesComponent));
 
   DemoSession* demo_session = DemoSession::StartIfInDemoMode();
   EXPECT_TRUE(demo_session->started());
-  EXPECT_TRUE(demo_session->offline_resources_loaded());
-  EXPECT_EQ(component_mount_point.AppendASCII(kDemoAppsImageFile),
-            demo_session->GetDemoAppsPath());
-  EXPECT_EQ(component_mount_point.AppendASCII(kExternalExtensionsPrefsFile),
-            demo_session->GetExternalExtensionsPrefsPath());
+  EXPECT_TRUE(demo_session->resources()->loaded());
+  EXPECT_EQ(
+      component_mount_point.AppendASCII("foo.txt"),
+      demo_session->resources()->GetAbsolutePath(base::FilePath("foo.txt")));
 
-  EXPECT_EQ(std::list<std::string>(), image_loader_client_->pending_loads());
+  EXPECT_FALSE(
+      cros_component_manager_->HasPendingInstall(kOfflineResourcesComponent));
 }
 
 TEST_F(DemoSessionTest, EnsureOfflineResourcesLoadedAfterStart) {
@@ -326,46 +321,42 @@ TEST_F(DemoSessionTest, EnsureOfflineResourcesLoadedAfterStart) {
       base::BindOnce(&SetBoolean, &callback_called));
 
   EXPECT_FALSE(callback_called);
-  EXPECT_FALSE(demo_session->offline_resources_loaded());
-
-  EXPECT_EQ(std::list<std::string>({kOfflineResourcesComponent}),
-            image_loader_client_->pending_loads());
+  EXPECT_FALSE(demo_session->resources()->loaded());
 
   const base::FilePath component_mount_point =
       base::FilePath(kTestDemoModeResourcesMountPoint);
-  ASSERT_TRUE(image_loader_client_->FinishComponentLoad(
-      kOfflineResourcesComponent, component_mount_point));
+  ASSERT_TRUE(FinishResourcesComponentLoad(component_mount_point));
+  EXPECT_FALSE(
+      cros_component_manager_->HasPendingInstall(kOfflineResourcesComponent));
 
   EXPECT_TRUE(callback_called);
-  EXPECT_TRUE(demo_session->offline_resources_loaded());
-  EXPECT_EQ(component_mount_point.AppendASCII(kDemoAppsImageFile),
-            demo_session->GetDemoAppsPath());
-  EXPECT_EQ(component_mount_point.AppendASCII(kExternalExtensionsPrefsFile),
-            demo_session->GetExternalExtensionsPrefsPath());
+  EXPECT_TRUE(demo_session->resources()->loaded());
+  EXPECT_EQ(
+      component_mount_point.AppendASCII("foo.txt"),
+      demo_session->resources()->GetAbsolutePath(base::FilePath("foo.txt")));
 }
 
 TEST_F(DemoSessionTest, EnsureOfflineResourcesLoadedAfterOfflineResourceLoad) {
   DemoSession* demo_session = DemoSession::StartIfInDemoMode();
   ASSERT_TRUE(demo_session);
-  EXPECT_EQ(std::list<std::string>({kOfflineResourcesComponent}),
-            image_loader_client_->pending_loads());
 
   const base::FilePath component_mount_point =
       base::FilePath(kTestDemoModeResourcesMountPoint);
-  ASSERT_TRUE(image_loader_client_->FinishComponentLoad(
-      kOfflineResourcesComponent, component_mount_point));
+  ASSERT_TRUE(FinishResourcesComponentLoad(component_mount_point));
+  EXPECT_FALSE(
+      cros_component_manager_->HasPendingInstall(kOfflineResourcesComponent));
 
   bool callback_called = false;
   demo_session->EnsureOfflineResourcesLoaded(
       base::BindOnce(&SetBoolean, &callback_called));
-  EXPECT_EQ(std::list<std::string>(), image_loader_client_->pending_loads());
+  EXPECT_FALSE(
+      cros_component_manager_->HasPendingInstall(kOfflineResourcesComponent));
 
   EXPECT_TRUE(callback_called);
-  EXPECT_TRUE(demo_session->offline_resources_loaded());
-  EXPECT_EQ(component_mount_point.AppendASCII(kDemoAppsImageFile),
-            demo_session->GetDemoAppsPath());
-  EXPECT_EQ(component_mount_point.AppendASCII(kExternalExtensionsPrefsFile),
-            demo_session->GetExternalExtensionsPrefsPath());
+  EXPECT_TRUE(demo_session->resources()->loaded());
+  EXPECT_EQ(
+      component_mount_point.AppendASCII("foo.txt"),
+      demo_session->resources()->GetAbsolutePath(base::FilePath("foo.txt")));
 }
 
 TEST_F(DemoSessionTest, EnsureOfflineResourcesLoadedAfterPreload) {
@@ -379,22 +370,19 @@ TEST_F(DemoSessionTest, EnsureOfflineResourcesLoadedAfterPreload) {
       base::BindOnce(&SetBoolean, &callback_called));
 
   EXPECT_FALSE(callback_called);
-  EXPECT_FALSE(demo_session->offline_resources_loaded());
-
-  EXPECT_EQ(std::list<std::string>({kOfflineResourcesComponent}),
-            image_loader_client_->pending_loads());
+  EXPECT_FALSE(demo_session->resources()->loaded());
 
   const base::FilePath component_mount_point =
       base::FilePath(kTestDemoModeResourcesMountPoint);
-  ASSERT_TRUE(image_loader_client_->FinishComponentLoad(
-      kOfflineResourcesComponent, component_mount_point));
+  ASSERT_TRUE(FinishResourcesComponentLoad(component_mount_point));
+  EXPECT_FALSE(
+      cros_component_manager_->HasPendingInstall(kOfflineResourcesComponent));
 
   EXPECT_TRUE(callback_called);
-  EXPECT_TRUE(demo_session->offline_resources_loaded());
-  EXPECT_EQ(component_mount_point.AppendASCII(kDemoAppsImageFile),
-            demo_session->GetDemoAppsPath());
-  EXPECT_EQ(component_mount_point.AppendASCII(kExternalExtensionsPrefsFile),
-            demo_session->GetExternalExtensionsPrefsPath());
+  EXPECT_TRUE(demo_session->resources()->loaded());
+  EXPECT_EQ(
+      component_mount_point.AppendASCII("foo.txt"),
+      demo_session->resources()->GetAbsolutePath(base::FilePath("foo.txt")));
 }
 
 TEST_F(DemoSessionTest, MultipleEnsureOfflineResourcesLoaded) {
@@ -416,22 +404,201 @@ TEST_F(DemoSessionTest, MultipleEnsureOfflineResourcesLoaded) {
   EXPECT_FALSE(first_callback_called);
   EXPECT_FALSE(second_callback_called);
   EXPECT_FALSE(third_callback_called);
-  EXPECT_FALSE(demo_session->offline_resources_loaded());
-
-  EXPECT_EQ(std::list<std::string>({kOfflineResourcesComponent}),
-            image_loader_client_->pending_loads());
+  EXPECT_FALSE(demo_session->resources()->loaded());
 
   const base::FilePath component_mount_point =
       base::FilePath(kTestDemoModeResourcesMountPoint);
-  ASSERT_TRUE(image_loader_client_->FinishComponentLoad(
-      kOfflineResourcesComponent, component_mount_point));
+  ASSERT_TRUE(FinishResourcesComponentLoad(component_mount_point));
+  EXPECT_FALSE(
+      cros_component_manager_->HasPendingInstall(kOfflineResourcesComponent));
 
   EXPECT_TRUE(first_callback_called);
   EXPECT_TRUE(second_callback_called);
   EXPECT_TRUE(third_callback_called);
-  EXPECT_TRUE(demo_session->offline_resources_loaded());
-  EXPECT_EQ(component_mount_point.AppendASCII(kDemoAppsImageFile),
-            demo_session->GetDemoAppsPath());
+  EXPECT_TRUE(demo_session->resources()->loaded());
+  EXPECT_EQ(
+      component_mount_point.AppendASCII("foo.txt"),
+      demo_session->resources()->GetAbsolutePath(base::FilePath("foo.txt")));
+}
+
+// TODO(crbug.com/939687): Reenable the test.
+TEST_F(DemoSessionTest, DISABLED_ShowAndRemoveSplashScreen) {
+  DemoSession* demo_session = DemoSession::StartIfInDemoMode();
+  ASSERT_TRUE(demo_session);
+
+  std::unique_ptr<base::MockOneShotTimer> timer =
+      std::make_unique<base::MockOneShotTimer>();
+  demo_session->SetTimerForTesting(std::move(timer));
+
+  EXPECT_EQ(0, test_wallpaper_controller_.show_always_on_top_wallpaper_count());
+  EXPECT_EQ(0,
+            test_wallpaper_controller_.remove_always_on_top_wallpaper_count());
+  session_manager_->SetSessionState(
+      session_manager::SessionState::LOGIN_PRIMARY);
+  wallpaper_controller_client_->FlushForTesting();
+  EXPECT_EQ(0, test_wallpaper_controller_.show_always_on_top_wallpaper_count());
+  EXPECT_EQ(0,
+            test_wallpaper_controller_.remove_always_on_top_wallpaper_count());
+
+  ASSERT_TRUE(FinishResourcesComponentLoad(
+      base::FilePath(kTestDemoModeResourcesMountPoint)));
+  wallpaper_controller_client_->FlushForTesting();
+  EXPECT_EQ(1, test_wallpaper_controller_.show_always_on_top_wallpaper_count());
+  EXPECT_EQ(0,
+            test_wallpaper_controller_.remove_always_on_top_wallpaper_count());
+
+  TestingProfile* profile = LoginDemoUser();
+  scoped_refptr<const extensions::Extension> screensaver_app =
+      extensions::ExtensionBuilder()
+          .SetManifest(extensions::DictionaryBuilder()
+                           .Set("name", "Test App")
+                           .Set("version", "1.0")
+                           .Set("manifest_version", 2)
+                           .Build())
+          .SetID(DemoSession::GetScreensaverAppId())
+          .Build();
+  extensions::AppWindow* app_window = new extensions::AppWindow(
+      profile, new ChromeAppDelegate(true /* keep_alive */),
+      screensaver_app.get());
+  demo_session->OnAppWindowActivated(app_window);
+  wallpaper_controller_client_->FlushForTesting();
+  // The splash screen is not removed until active session starts.
+  EXPECT_EQ(1, test_wallpaper_controller_.show_always_on_top_wallpaper_count());
+  EXPECT_EQ(0,
+            test_wallpaper_controller_.remove_always_on_top_wallpaper_count());
+  session_manager_->SetSessionState(session_manager::SessionState::ACTIVE);
+  wallpaper_controller_client_->FlushForTesting();
+  EXPECT_EQ(1, test_wallpaper_controller_.show_always_on_top_wallpaper_count());
+  EXPECT_EQ(1,
+            test_wallpaper_controller_.remove_always_on_top_wallpaper_count());
+  // The timer is cleared after splash screen is removed.
+  EXPECT_FALSE(demo_session->GetTimerForTesting());
+
+  app_window->OnNativeClose();
+}
+
+// TODO(crbug.com/939687): Reenable the test.
+TEST_F(DemoSessionTest, DISABLED_RemoveSplashScreenWhenTimeout) {
+  DemoSession* demo_session = DemoSession::StartIfInDemoMode();
+  ASSERT_TRUE(demo_session);
+
+  std::unique_ptr<base::MockOneShotTimer> timer =
+      std::make_unique<base::MockOneShotTimer>();
+  demo_session->SetTimerForTesting(std::move(timer));
+
+  EXPECT_EQ(0, test_wallpaper_controller_.show_always_on_top_wallpaper_count());
+  EXPECT_EQ(0,
+            test_wallpaper_controller_.remove_always_on_top_wallpaper_count());
+  session_manager_->SetSessionState(
+      session_manager::SessionState::LOGIN_PRIMARY);
+  wallpaper_controller_client_->FlushForTesting();
+  EXPECT_EQ(0, test_wallpaper_controller_.show_always_on_top_wallpaper_count());
+  EXPECT_EQ(0,
+            test_wallpaper_controller_.remove_always_on_top_wallpaper_count());
+
+  ASSERT_TRUE(FinishResourcesComponentLoad(
+      base::FilePath(kTestDemoModeResourcesMountPoint)));
+  wallpaper_controller_client_->FlushForTesting();
+  EXPECT_EQ(1, test_wallpaper_controller_.show_always_on_top_wallpaper_count());
+  EXPECT_EQ(0,
+            test_wallpaper_controller_.remove_always_on_top_wallpaper_count());
+
+  base::MockOneShotTimer* timer_ptr =
+      static_cast<base::MockOneShotTimer*>(demo_session->GetTimerForTesting());
+  ASSERT_TRUE(timer_ptr);
+  timer_ptr->Fire();
+  wallpaper_controller_client_->FlushForTesting();
+  EXPECT_EQ(1, test_wallpaper_controller_.show_always_on_top_wallpaper_count());
+  EXPECT_EQ(1,
+            test_wallpaper_controller_.remove_always_on_top_wallpaper_count());
+
+  // Launching the screensaver will not trigger splash screen removal anymore.
+  TestingProfile* profile = LoginDemoUser();
+  scoped_refptr<const extensions::Extension> screensaver_app =
+      extensions::ExtensionBuilder()
+          .SetManifest(extensions::DictionaryBuilder()
+                           .Set("name", "Test App")
+                           .Set("version", "1.0")
+                           .Set("manifest_version", 2)
+                           .Build())
+          .SetID(DemoSession::GetScreensaverAppId())
+          .Build();
+  extensions::AppWindow* app_window = new extensions::AppWindow(
+      profile, new ChromeAppDelegate(true /* keep_alive */),
+      screensaver_app.get());
+  demo_session->OnAppWindowActivated(app_window);
+  wallpaper_controller_client_->FlushForTesting();
+  EXPECT_EQ(1, test_wallpaper_controller_.show_always_on_top_wallpaper_count());
+  EXPECT_EQ(1,
+            test_wallpaper_controller_.remove_always_on_top_wallpaper_count());
+  // Entering active session will not trigger splash screen removal anymore.
+  session_manager_->SetSessionState(session_manager::SessionState::ACTIVE);
+  wallpaper_controller_client_->FlushForTesting();
+  EXPECT_EQ(1, test_wallpaper_controller_.show_always_on_top_wallpaper_count());
+  EXPECT_EQ(1,
+            test_wallpaper_controller_.remove_always_on_top_wallpaper_count());
+
+  app_window->OnNativeClose();
+}
+
+using DemoSessionLocaleTest = DemoSessionTest;
+
+TEST_F(DemoSessionLocaleTest, InitializeDefaultLocale) {
+  DemoSession* demo_session = DemoSession::StartIfInDemoMode();
+  ASSERT_TRUE(demo_session);
+
+  TestingProfile* profile = LoginDemoUser();
+  // When the default locale is empty, verify that it's initialized with the
+  // current locale.
+  constexpr char kCurrentLocale[] = "en-US";
+  profile->GetPrefs()->SetString(language::prefs::kApplicationLocale,
+                                 kCurrentLocale);
+  EXPECT_EQ("", TestingBrowserProcess::GetGlobal()->local_state()->GetString(
+                    prefs::kDemoModeDefaultLocale));
+  session_manager_->SetSessionState(session_manager::SessionState::ACTIVE);
+  EXPECT_EQ(kCurrentLocale,
+            TestingBrowserProcess::GetGlobal()->local_state()->GetString(
+                prefs::kDemoModeDefaultLocale));
+  EXPECT_FALSE(profile->requested_locale().has_value());
+}
+
+TEST_F(DemoSessionLocaleTest, DefaultAndCurrentLocaleDifferent) {
+  DemoSession* demo_session = DemoSession::StartIfInDemoMode();
+  ASSERT_TRUE(demo_session);
+
+  TestingProfile* profile = LoginDemoUser();
+  // When the default locale is different from the current locale, verify that
+  // reverting to default locale is requested.
+  constexpr char kCurrentLocale[] = "zh-CN";
+  constexpr char kDefaultLocale[] = "en-US";
+  profile->GetPrefs()->SetString(language::prefs::kApplicationLocale,
+                                 kCurrentLocale);
+  TestingBrowserProcess::GetGlobal()->local_state()->SetString(
+      prefs::kDemoModeDefaultLocale, kDefaultLocale);
+  session_manager_->SetSessionState(session_manager::SessionState::ACTIVE);
+  EXPECT_EQ(kDefaultLocale,
+            TestingBrowserProcess::GetGlobal()->local_state()->GetString(
+                prefs::kDemoModeDefaultLocale));
+  EXPECT_EQ(kDefaultLocale, profile->requested_locale().value());
+}
+
+TEST_F(DemoSessionLocaleTest, DefaultAndCurrentLocaleIdentical) {
+  DemoSession* demo_session = DemoSession::StartIfInDemoMode();
+  ASSERT_TRUE(demo_session);
+
+  TestingProfile* profile = LoginDemoUser();
+  // When the default locale is the same with the current locale, verify that
+  // it's no-op.
+  constexpr char kDefaultLocale[] = "en-US";
+  profile->GetPrefs()->SetString(language::prefs::kApplicationLocale,
+                                 kDefaultLocale);
+  TestingBrowserProcess::GetGlobal()->local_state()->SetString(
+      prefs::kDemoModeDefaultLocale, kDefaultLocale);
+  session_manager_->SetSessionState(session_manager::SessionState::ACTIVE);
+  EXPECT_EQ(kDefaultLocale,
+            TestingBrowserProcess::GetGlobal()->local_state()->GetString(
+                prefs::kDemoModeDefaultLocale));
+  EXPECT_FALSE(profile->requested_locale().has_value());
 }
 
 }  // namespace chromeos

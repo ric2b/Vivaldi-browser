@@ -12,6 +12,8 @@
 #include "third_party/blink/renderer/core/workers/worker_fetch_test_helper.h"
 #include "third_party/blink/renderer/platform/loader/testing/fetch_testing_platform_support.h"
 #include "third_party/blink/renderer/platform/loader/testing/mock_fetch_context.h"
+#include "third_party/blink/renderer/platform/loader/testing/test_loader_factory.h"
+#include "third_party/blink/renderer/platform/loader/testing/test_resource_fetcher_properties.h"
 #include "third_party/blink/renderer/platform/testing/testing_platform_support.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/url_test_helpers.h"
@@ -22,59 +24,60 @@ namespace blink {
 
 class WorkletModuleResponsesMapTest : public testing::Test {
  public:
-  WorkletModuleResponsesMapTest() = default;
-
-  void SetUp() override {
+  WorkletModuleResponsesMapTest() {
     platform_->AdvanceClockSeconds(1.);  // For non-zero DocumentParserTimings
-    auto* context =
-        MockFetchContext::Create(MockFetchContext::kShouldLoadNewResource);
-    fetcher_ = ResourceFetcher::Create(context);
-    map_ = new WorkletModuleResponsesMap;
+    auto* properties = MakeGarbageCollected<TestResourceFetcherProperties>();
+    auto* context = MakeGarbageCollected<MockFetchContext>();
+    fetcher_ = MakeGarbageCollected<ResourceFetcher>(ResourceFetcherInit(
+        *properties, context, base::MakeRefCounted<scheduler::FakeTaskRunner>(),
+        MakeGarbageCollected<TestLoaderFactory>()));
+    map_ = MakeGarbageCollected<WorkletModuleResponsesMap>();
   }
 
   void Fetch(const KURL& url, ClientImpl* client) {
     ResourceRequest resource_request(url);
     // TODO(nhiroki): Specify worklet-specific request context (e.g.,
     // "paintworklet").
-    resource_request.SetRequestContext(WebURLRequest::kRequestContextScript);
+    resource_request.SetRequestContext(mojom::RequestContextType::SCRIPT);
     FetchParameters fetch_params(resource_request);
     WorkletModuleScriptFetcher* module_fetcher =
-        new WorkletModuleScriptFetcher(fetcher_.Get(), map_.Get());
-    module_fetcher->Fetch(fetch_params, ModuleGraphLevel::kTopLevelModuleFetch,
-                          client);
+        MakeGarbageCollected<WorkletModuleScriptFetcher>(map_.Get());
+    module_fetcher->Fetch(fetch_params, fetcher_.Get(),
+                          nullptr /* modulator_for_built_in_modules */,
+                          ModuleGraphLevel::kTopLevelModuleFetch, client);
   }
 
   void RunUntilIdle() {
-    base::SingleThreadTaskRunner* runner =
-        fetcher_->Context().GetLoadingTaskRunner().get();
-    static_cast<scheduler::FakeTaskRunner*>(runner)->RunUntilIdle();
+    static_cast<scheduler::FakeTaskRunner*>(fetcher_->GetTaskRunner().get())
+        ->RunUntilIdle();
   }
 
  protected:
   ScopedTestingPlatformSupport<FetchTestingPlatformSupport> platform_;
   Persistent<ResourceFetcher> fetcher_;
   Persistent<WorkletModuleResponsesMap> map_;
+  const scoped_refptr<scheduler::FakeTaskRunner> task_runner_;
 };
 
 TEST_F(WorkletModuleResponsesMapTest, Basic) {
   const KURL kUrl("https://example.com/module.js");
-  URLTestHelpers::RegisterMockedURLLoad(
+  url_test_helpers::RegisterMockedURLLoad(
       kUrl, test::CoreTestDataPath("module.js"), "text/javascript");
   HeapVector<Member<ClientImpl>> clients;
 
   // An initial read call initiates a fetch request.
-  clients.push_back(new ClientImpl);
+  clients.push_back(MakeGarbageCollected<ClientImpl>());
   Fetch(kUrl, clients[0]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[0]->GetResult());
   EXPECT_FALSE(clients[0]->GetParams().has_value());
 
   // The entry is now being fetched. Following read calls should wait for the
   // completion.
-  clients.push_back(new ClientImpl);
+  clients.push_back(MakeGarbageCollected<ClientImpl>());
   Fetch(kUrl, clients[1]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[1]->GetResult());
 
-  clients.push_back(new ClientImpl);
+  clients.push_back(MakeGarbageCollected<ClientImpl>());
   Fetch(kUrl, clients[2]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[2]->GetResult());
 
@@ -89,22 +92,22 @@ TEST_F(WorkletModuleResponsesMapTest, Basic) {
 
 TEST_F(WorkletModuleResponsesMapTest, Failure) {
   const KURL kUrl("https://example.com/module.js");
-  URLTestHelpers::RegisterMockedErrorURLLoad(kUrl);
+  url_test_helpers::RegisterMockedErrorURLLoad(kUrl);
   HeapVector<Member<ClientImpl>> clients;
 
   // An initial read call initiates a fetch request.
-  clients.push_back(new ClientImpl);
+  clients.push_back(MakeGarbageCollected<ClientImpl>());
   Fetch(kUrl, clients[0]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[0]->GetResult());
   EXPECT_FALSE(clients[0]->GetParams().has_value());
 
   // The entry is now being fetched. Following read calls should wait for the
   // completion.
-  clients.push_back(new ClientImpl);
+  clients.push_back(MakeGarbageCollected<ClientImpl>());
   Fetch(kUrl, clients[1]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[1]->GetResult());
 
-  clients.push_back(new ClientImpl);
+  clients.push_back(MakeGarbageCollected<ClientImpl>());
   Fetch(kUrl, clients[2]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[2]->GetResult());
 
@@ -120,32 +123,32 @@ TEST_F(WorkletModuleResponsesMapTest, Failure) {
 TEST_F(WorkletModuleResponsesMapTest, Isolation) {
   const KURL kUrl1("https://example.com/module?1.js");
   const KURL kUrl2("https://example.com/module?2.js");
-  URLTestHelpers::RegisterMockedErrorURLLoad(kUrl1);
-  URLTestHelpers::RegisterMockedURLLoad(
+  url_test_helpers::RegisterMockedErrorURLLoad(kUrl1);
+  url_test_helpers::RegisterMockedURLLoad(
       kUrl2, test::CoreTestDataPath("module.js"), "text/javascript");
   HeapVector<Member<ClientImpl>> clients;
 
   // An initial read call for |kUrl1| initiates a fetch request.
-  clients.push_back(new ClientImpl);
+  clients.push_back(MakeGarbageCollected<ClientImpl>());
   Fetch(kUrl1, clients[0]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[0]->GetResult());
   EXPECT_FALSE(clients[0]->GetParams().has_value());
 
   // The entry is now being fetched. Following read calls for |kUrl1| should
   // wait for the completion.
-  clients.push_back(new ClientImpl);
+  clients.push_back(MakeGarbageCollected<ClientImpl>());
   Fetch(kUrl1, clients[1]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[1]->GetResult());
 
   // An initial read call for |kUrl2| initiates a fetch request.
-  clients.push_back(new ClientImpl);
+  clients.push_back(MakeGarbageCollected<ClientImpl>());
   Fetch(kUrl2, clients[2]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[2]->GetResult());
   EXPECT_FALSE(clients[2]->GetParams().has_value());
 
   // The entry is now being fetched. Following read calls for |kUrl2| should
   // wait for the completion.
-  clients.push_back(new ClientImpl);
+  clients.push_back(MakeGarbageCollected<ClientImpl>());
   Fetch(kUrl2, clients[3]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[3]->GetResult());
 
@@ -168,7 +171,7 @@ TEST_F(WorkletModuleResponsesMapTest, Isolation) {
 TEST_F(WorkletModuleResponsesMapTest, InvalidURL) {
   const KURL kEmptyURL;
   ASSERT_TRUE(kEmptyURL.IsEmpty());
-  ClientImpl* client1 = new ClientImpl;
+  ClientImpl* client1 = MakeGarbageCollected<ClientImpl>();
   Fetch(kEmptyURL, client1);
   RunUntilIdle();
   EXPECT_EQ(ClientImpl::Result::kFailed, client1->GetResult());
@@ -176,7 +179,7 @@ TEST_F(WorkletModuleResponsesMapTest, InvalidURL) {
 
   const KURL kNullURL = NullURL();
   ASSERT_TRUE(kNullURL.IsNull());
-  ClientImpl* client2 = new ClientImpl;
+  ClientImpl* client2 = MakeGarbageCollected<ClientImpl>();
   Fetch(kNullURL, client2);
   RunUntilIdle();
   EXPECT_EQ(ClientImpl::Result::kFailed, client2->GetResult());
@@ -184,7 +187,7 @@ TEST_F(WorkletModuleResponsesMapTest, InvalidURL) {
 
   const KURL kInvalidURL;
   ASSERT_FALSE(kInvalidURL.IsValid());
-  ClientImpl* client3 = new ClientImpl;
+  ClientImpl* client3 = MakeGarbageCollected<ClientImpl>();
   Fetch(kInvalidURL, client3);
   RunUntilIdle();
   EXPECT_EQ(ClientImpl::Result::kFailed, client3->GetResult());
@@ -194,35 +197,35 @@ TEST_F(WorkletModuleResponsesMapTest, InvalidURL) {
 TEST_F(WorkletModuleResponsesMapTest, Dispose) {
   const KURL kUrl1("https://example.com/module?1.js");
   const KURL kUrl2("https://example.com/module?2.js");
-  URLTestHelpers::RegisterMockedURLLoad(
+  url_test_helpers::RegisterMockedURLLoad(
       kUrl1, test::CoreTestDataPath("module.js"), "text/javascript");
-  URLTestHelpers::RegisterMockedURLLoad(
+  url_test_helpers::RegisterMockedURLLoad(
       kUrl2, test::CoreTestDataPath("module.js"), "text/javascript");
   HeapVector<Member<ClientImpl>> clients;
 
   // An initial read call for |kUrl1| creates a placeholder entry and asks the
   // client to fetch a module script.
-  clients.push_back(new ClientImpl);
+  clients.push_back(MakeGarbageCollected<ClientImpl>());
   Fetch(kUrl1, clients[0]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[0]->GetResult());
   EXPECT_FALSE(clients[0]->GetParams().has_value());
 
   // The entry is now being fetched. Following read calls for |kUrl1| should
   // wait for the completion.
-  clients.push_back(new ClientImpl);
+  clients.push_back(MakeGarbageCollected<ClientImpl>());
   Fetch(kUrl1, clients[1]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[1]->GetResult());
 
   // An initial read call for |kUrl2| also creates a placeholder entry and asks
   // the client to fetch a module script.
-  clients.push_back(new ClientImpl);
+  clients.push_back(MakeGarbageCollected<ClientImpl>());
   Fetch(kUrl2, clients[2]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[2]->GetResult());
   EXPECT_FALSE(clients[2]->GetParams().has_value());
 
   // The entry is now being fetched. Following read calls for |kUrl2| should
   // wait for the completion.
-  clients.push_back(new ClientImpl);
+  clients.push_back(MakeGarbageCollected<ClientImpl>());
   Fetch(kUrl2, clients[3]);
   EXPECT_EQ(ClientImpl::Result::kInitial, clients[3]->GetResult());
 

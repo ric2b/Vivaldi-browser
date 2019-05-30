@@ -17,6 +17,7 @@ class Window;
 }
 
 namespace ash {
+class AutoclickTray;
 class FlagWarningTray;
 class ImeMenuTray;
 class LogoutButtonTray;
@@ -26,11 +27,9 @@ class PaletteTray;
 class SelectToSpeakTray;
 class Shelf;
 class StatusAreaWidgetDelegate;
-class SystemTray;
 class UnifiedSystemTray;
 class TrayBackgroundView;
 class VirtualKeyboardTray;
-class NotificationTray;
 
 // Widget showing the system tray, notification tray, and other tray views in
 // the bottom-right of the screen. Exists separately from ShelfView/ShelfWidget
@@ -59,19 +58,17 @@ class ASH_EXPORT StatusAreaWidget : public views::Widget,
   void SetSystemTrayVisibility(bool visible);
 
   // Get the tray button that the system tray bubble and the notification center
-  // bubble will be anchored. Usually |system_tray_|, but when the overview
-  // button is visible (i.e. tablet mode is enabled), it returns
+  // bubble will be anchored. Usually |unified_system_tray_|, but when the
+  // overview button is visible (i.e. tablet mode is enabled), it returns
   // |overview_button_tray_|.
   TrayBackgroundView* GetSystemTrayAnchor() const;
 
   StatusAreaWidgetDelegate* status_area_widget_delegate() {
     return status_area_widget_delegate_;
   }
-  SystemTray* system_tray() { return system_tray_.get(); }
   UnifiedSystemTray* unified_system_tray() {
     return unified_system_tray_.get();
   }
-  NotificationTray* notification_tray() { return notification_tray_.get(); }
   DictationButtonTray* dictation_button_tray() {
     return dictation_button_tray_.get();
   }
@@ -83,6 +80,7 @@ class ASH_EXPORT StatusAreaWidget : public views::Widget,
   SelectToSpeakTray* select_to_speak_tray() {
     return select_to_speak_tray_.get();
   }
+  AutoclickTray* autoclick_tray() { return autoclick_tray_.get(); }
 
   Shelf* shelf() { return shelf_; }
 
@@ -104,9 +102,6 @@ class ASH_EXPORT StatusAreaWidget : public views::Widget,
   const ui::NativeTheme* GetNativeTheme() const override;
   bool OnNativeWidgetActivationChanged(bool active) override;
 
-  // ShelfBackgroundAnimatorObserver:
-  void UpdateShelfItemBackground(SkColor color) override;
-
   // TODO(jamescook): Introduce a test API instead of these methods.
   LogoutButtonTray* logout_button_tray_for_testing() {
     return logout_button_tray_.get();
@@ -121,18 +116,21 @@ class ASH_EXPORT StatusAreaWidget : public views::Widget,
  private:
   friend class StatusAreaWidgetTestApi;
 
+  // views::Widget:
+  void OnMouseEvent(ui::MouseEvent* event) override;
+  void OnGestureEvent(ui::GestureEvent* event) override;
+
   StatusAreaWidgetDelegate* status_area_widget_delegate_;
 
   std::unique_ptr<OverviewButtonTray> overview_button_tray_;
   std::unique_ptr<DictationButtonTray> dictation_button_tray_;
-  std::unique_ptr<SystemTray> system_tray_;
   std::unique_ptr<UnifiedSystemTray> unified_system_tray_;
-  std::unique_ptr<NotificationTray> notification_tray_;
   std::unique_ptr<LogoutButtonTray> logout_button_tray_;
   std::unique_ptr<PaletteTray> palette_tray_;
   std::unique_ptr<VirtualKeyboardTray> virtual_keyboard_tray_;
   std::unique_ptr<ImeMenuTray> ime_menu_tray_;
   std::unique_ptr<SelectToSpeakTray> select_to_speak_tray_;
+  std::unique_ptr<AutoclickTray> autoclick_tray_;
   std::unique_ptr<FlagWarningTray> flag_warning_tray_;
 
   LoginStatus login_status_ = LoginStatus::NOT_LOGGED_IN;

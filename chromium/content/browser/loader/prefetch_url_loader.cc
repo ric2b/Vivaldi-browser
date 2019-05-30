@@ -4,15 +4,25 @@
 
 #include "content/browser/loader/prefetch_url_loader.h"
 
+#include "base/bind.h"
 #include "base/feature_list.h"
 #include "content/browser/web_package/signed_exchange_prefetch_handler.h"
+#include "content/browser/web_package/signed_exchange_prefetch_metric_recorder.h"
 #include "content/browser/web_package/signed_exchange_utils.h"
 #include "content/public/common/content_features.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/loader_util.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace content {
+
+namespace {
+
+constexpr char kSignedExchangeEnabledAcceptHeaderForPrefetch[] =
+    "application/signed-exchange;v=b3;q=0.9,*/*;q=0.8";
+
+}  // namespace
 
 PrefetchURLLoader::PrefetchURLLoader(
     int32_t routing_id,
@@ -25,22 +35,29 @@ PrefetchURLLoader::PrefetchURLLoader(
     scoped_refptr<network::SharedURLLoaderFactory> network_loader_factory,
     URLLoaderThrottlesGetter url_loader_throttles_getter,
     ResourceContext* resource_context,
-    scoped_refptr<net::URLRequestContextGetter> request_context_getter)
+    scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+    scoped_refptr<SignedExchangePrefetchMetricRecorder>
+        signed_exchange_prefetch_metric_recorder,
+    const std::string& accept_langs)
     : frame_tree_node_id_getter_(frame_tree_node_id_getter),
-      url_(resource_request.url),
-      report_raw_headers_(resource_request.report_raw_headers),
-      load_flags_(resource_request.load_flags),
-      throttling_profile_id_(resource_request.throttling_profile_id),
+      resource_request_(resource_request),
       network_loader_factory_(std::move(network_loader_factory)),
       client_binding_(this),
       forwarding_client_(std::move(client)),
       url_loader_throttles_getter_(url_loader_throttles_getter),
       resource_context_(resource_context),
-      request_context_getter_(std::move(request_context_getter)) {
+      request_context_getter_(std::move(request_context_getter)),
+      signed_exchange_prefetch_metric_recorder_(
+          std::move(signed_exchange_prefetch_metric_recorder)),
+      accept_langs_(accept_langs) {
   DCHECK(network_loader_factory_);
 
-  if (resource_request.request_initiator)
-    request_initiator_ = *resource_request.request_initiator;
+  if (signed_exchange_utils::IsSignedExchangeHandlingEnabled()) {
+    // Set the SignedExchange accept header.
+    // (https://wicg.github.io/webpackage/draft-yasskin-http-origin-signed-responses.html#internet-media-type-applicationsigned-exchange).
+    resource_request_.headers.SetHeader(
+        network::kAcceptHeader, kSignedExchangeEnabledAcceptHeaderForPrefetch);
+  }
 
   network::mojom::URLLoaderClientPtr network_client;
   client_binding_.Bind(mojo::MakeRequest(&network_client));
@@ -48,18 +65,20 @@ PrefetchURLLoader::PrefetchURLLoader(
       &PrefetchURLLoader::OnNetworkConnectionError, base::Unretained(this)));
   network_loader_factory_->CreateLoaderAndStart(
       mojo::MakeRequest(&loader_), routing_id, request_id, options,
-      resource_request, std::move(network_client), traffic_annotation);
+      resource_request_, std::move(network_client), traffic_annotation);
 }
 
 PrefetchURLLoader::~PrefetchURLLoader() = default;
 
 void PrefetchURLLoader::FollowRedirect(
-    const base::Optional<std::vector<std::string>>&
-        to_be_removed_request_headers,
-    const base::Optional<net::HttpRequestHeaders>& modified_request_headers) {
-  DCHECK(!modified_request_headers.has_value()) << "Redirect with modified "
-                                                   "headers was not supported "
-                                                   "yet. crbug.com/845683";
+    const std::vector<std::string>& removed_headers,
+    const net::HttpRequestHeaders& modified_headers,
+    const base::Optional<GURL>& new_url) {
+  DCHECK(modified_headers.IsEmpty())
+      << "Redirect with modified headers was not supported yet. "
+         "crbug.com/845683";
+  DCHECK(!new_url) << "Redirect with modified URL was not "
+                      "supported yet. crbug.com/845683";
   if (signed_exchange_prefetch_handler_) {
     // Rebind |client_binding_| and |loader_|.
     client_binding_.Bind(signed_exchange_prefetch_handler_->FollowRedirect(
@@ -67,40 +86,52 @@ void PrefetchURLLoader::FollowRedirect(
     return;
   }
 
-  loader_->FollowRedirect(base::nullopt, base::nullopt);
+  DCHECK(loader_);
+  loader_->FollowRedirect(removed_headers,
+                          net::HttpRequestHeaders() /* modified_headers */,
+                          base::nullopt);
 }
 
 void PrefetchURLLoader::ProceedWithResponse() {
-  loader_->ProceedWithResponse();
+  if (loader_)
+    loader_->ProceedWithResponse();
 }
 
 void PrefetchURLLoader::SetPriority(net::RequestPriority priority,
                                     int intra_priority_value) {
-  loader_->SetPriority(priority, intra_priority_value);
+  if (loader_)
+    loader_->SetPriority(priority, intra_priority_value);
 }
 
 void PrefetchURLLoader::PauseReadingBodyFromNet() {
-  loader_->PauseReadingBodyFromNet();
+  // TODO(kinuko): Propagate or handle the case where |loader_| is
+  // detached (for SignedExchanges), see OnReceiveResponse.
+  if (loader_)
+    loader_->PauseReadingBodyFromNet();
 }
 
 void PrefetchURLLoader::ResumeReadingBodyFromNet() {
-  loader_->ResumeReadingBodyFromNet();
+  // TODO(kinuko): Propagate or handle the case where |loader_| is
+  // detached (for SignedExchanges), see OnReceiveResponse.
+  if (loader_)
+    loader_->ResumeReadingBodyFromNet();
 }
 
 void PrefetchURLLoader::OnReceiveResponse(
     const network::ResourceResponseHead& response) {
-  if (signed_exchange_utils::ShouldHandleAsSignedHTTPExchange(url_, response)) {
+  if (signed_exchange_utils::ShouldHandleAsSignedHTTPExchange(
+          resource_request_.url, response)) {
     DCHECK(!signed_exchange_prefetch_handler_);
 
     // Note that after this point this doesn't directly get upcalls from the
     // network. (Until |this| calls the handler's FollowRedirect.)
     signed_exchange_prefetch_handler_ =
         std::make_unique<SignedExchangePrefetchHandler>(
-            frame_tree_node_id_getter_, report_raw_headers_, load_flags_,
-            throttling_profile_id_, response, std::move(loader_),
-            client_binding_.Unbind(), network_loader_factory_,
-            request_initiator_, url_, url_loader_throttles_getter_,
-            resource_context_, request_context_getter_, this);
+            frame_tree_node_id_getter_, resource_request_, response,
+            std::move(loader_), client_binding_.Unbind(),
+            network_loader_factory_, url_loader_throttles_getter_,
+            resource_context_, request_context_getter_, this,
+            signed_exchange_prefetch_metric_recorder_, accept_langs_);
     return;
   }
   forwarding_client_->OnReceiveResponse(response);
@@ -109,6 +140,11 @@ void PrefetchURLLoader::OnReceiveResponse(
 void PrefetchURLLoader::OnReceiveRedirect(
     const net::RedirectInfo& redirect_info,
     const network::ResourceResponseHead& head) {
+  resource_request_.url = redirect_info.new_url;
+  resource_request_.site_for_cookies = redirect_info.new_site_for_cookies;
+  resource_request_.top_frame_origin = redirect_info.new_top_frame_origin;
+  resource_request_.referrer = GURL(redirect_info.new_referrer);
+  resource_request_.referrer_policy = redirect_info.new_referrer_policy;
   forwarding_client_->OnReceiveRedirect(redirect_info, head);
 }
 
@@ -131,11 +167,25 @@ void PrefetchURLLoader::OnTransferSizeUpdated(int32_t transfer_size_diff) {
 
 void PrefetchURLLoader::OnStartLoadingResponseBody(
     mojo::ScopedDataPipeConsumerHandle body) {
-  // Just drain this here; we don't need to forward the body data to
-  // the renderer for prefetch.
+  // Just drain the original response's body here.
   DCHECK(!pipe_drainer_);
   pipe_drainer_ =
       std::make_unique<mojo::DataPipeDrainer>(this, std::move(body));
+
+  // Send an empty response's body instead.
+  mojo::ScopedDataPipeProducerHandle producer;
+  mojo::ScopedDataPipeConsumerHandle consumer;
+  if (CreateDataPipe(nullptr, &producer, &consumer) == MOJO_RESULT_OK) {
+    forwarding_client_->OnStartLoadingResponseBody(std::move(consumer));
+    return;
+  }
+
+  // No more resources available for creating a data pipe. Close the connection,
+  // which will in turn make this loader destroyed.
+  forwarding_client_->OnComplete(
+      network::URLLoaderCompletionStatus(net::ERR_INSUFFICIENT_RESOURCES));
+  forwarding_client_.reset();
+  client_binding_.Close();
 }
 
 void PrefetchURLLoader::OnComplete(

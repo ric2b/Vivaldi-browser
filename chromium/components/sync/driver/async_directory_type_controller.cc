@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/sync/base/bind_to_task_runner.h"
@@ -31,13 +32,15 @@ AsyncDirectoryTypeController::CreateSharedChangeProcessor() {
 AsyncDirectoryTypeController::AsyncDirectoryTypeController(
     ModelType type,
     const base::Closure& dump_stack,
+    SyncService* sync_service,
     SyncClient* sync_client,
     ModelSafeGroup model_safe_group,
     scoped_refptr<base::SequencedTaskRunner> model_thread)
     : DirectoryDataTypeController(type,
                                   dump_stack,
-                                  sync_client,
+                                  sync_service,
                                   model_safe_group),
+      sync_client_(sync_client),
       user_share_(nullptr),
       processor_factory_(new GenericChangeProcessorFactory()),
       state_(NOT_RUNNING),
@@ -47,15 +50,15 @@ void AsyncDirectoryTypeController::LoadModels(
     const ConfigureContext& configure_context,
     const ModelLoadCallback& model_load_callback) {
   DCHECK(CalledOnValidThread());
-  DCHECK_EQ(configure_context.storage_option, ConfigureContext::STORAGE_ON_DISK)
+  DCHECK_EQ(configure_context.storage_option, STORAGE_ON_DISK)
       << " for type " << ModelTypeToString(type());
 
   model_load_callback_ = model_load_callback;
 
   if (state() != NOT_RUNNING) {
-    model_load_callback.Run(type(),
-                            SyncError(FROM_HERE, SyncError::DATATYPE_ERROR,
-                                      "Model already running", type()));
+    model_load_callback_.Run(type(),
+                             SyncError(FROM_HERE, SyncError::DATATYPE_ERROR,
+                                       "Model already running", type()));
     return;
   }
 
@@ -102,7 +105,7 @@ bool AsyncDirectoryTypeController::PostTaskOnModelThread(
 }
 
 void AsyncDirectoryTypeController::StartAssociating(
-    const StartCallback& start_callback) {
+    StartCallback start_callback) {
   DCHECK(CalledOnValidThread());
   DCHECK(!start_callback.is_null());
   DCHECK_EQ(state_, MODEL_LOADED);
@@ -110,10 +113,9 @@ void AsyncDirectoryTypeController::StartAssociating(
 
   // Store UserShare now while on UI thread to avoid potential race
   // condition in StartAssociationWithSharedChangeProcessor.
-  DCHECK(sync_client_->GetSyncService());
-  user_share_ = sync_client_->GetSyncService()->GetUserShare();
+  user_share_ = sync_service()->GetUserShare();
 
-  start_callback_ = start_callback;
+  start_callback_ = std::move(start_callback);
   if (!StartAssociationAsync()) {
     SyncError error(FROM_HERE, SyncError::DATATYPE_ERROR,
                     "Failed to post StartAssociation", type());
@@ -126,8 +128,7 @@ void AsyncDirectoryTypeController::StartAssociating(
   }
 }
 
-// For directory datatypes metadata clears by SyncManager::PurgeDisabledTypes().
-void AsyncDirectoryTypeController::Stop(SyncStopMetadataFate metadata_fate) {
+void AsyncDirectoryTypeController::Stop(ShutdownReason shutdown_reason) {
   DCHECK(CalledOnValidThread());
 
   if (state() == NOT_RUNNING)
@@ -164,7 +165,8 @@ AsyncDirectoryTypeController::AsyncDirectoryTypeController()
     : DirectoryDataTypeController(UNSPECIFIED,
                                   base::Closure(),
                                   nullptr,
-                                  GROUP_PASSIVE) {}
+                                  GROUP_PASSIVE),
+      sync_client_(nullptr) {}
 
 AsyncDirectoryTypeController::~AsyncDirectoryTypeController() {}
 
@@ -203,13 +205,14 @@ void AsyncDirectoryTypeController::StartDone(
     RecordStartFailure(start_result);
   }
 
-  start_callback_.Run(start_result, local_merge_result, syncer_merge_result);
+  std::move(start_callback_)
+      .Run(start_result, local_merge_result, syncer_merge_result);
 }
 
 void AsyncDirectoryTypeController::RecordStartFailure(ConfigureResult result) {
   DCHECK(CalledOnValidThread());
   // TODO(wychen): enum uma should be strongly typed. crbug.com/661401
-  UMA_HISTOGRAM_ENUMERATION("Sync.DataTypeStartFailures",
+  UMA_HISTOGRAM_ENUMERATION("Sync.DataTypeStartFailures2",
                             ModelTypeToHistogramInt(type()),
                             static_cast<int>(MODEL_TYPE_COUNT));
 #define PER_DATA_TYPE_MACRO(type_str)                                    \
@@ -221,7 +224,7 @@ void AsyncDirectoryTypeController::RecordStartFailure(ConfigureResult result) {
 
 void AsyncDirectoryTypeController::DisableImpl(const SyncError& error) {
   DCHECK(CalledOnValidThread());
-  if (!model_load_callback_.is_null()) {
+  if (model_load_callback_) {
     model_load_callback_.Run(type(), error);
   }
 }

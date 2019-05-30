@@ -4,8 +4,14 @@
 
 package org.chromium.chrome.browser.contacts_picker;
 
+import android.content.res.Resources;
 import android.support.annotation.Nullable;
+import android.util.JsonWriter;
 
+import org.chromium.chrome.R;
+
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -14,32 +20,51 @@ import java.util.List;
  */
 public class ContactDetails implements Comparable<ContactDetails> {
     // The unique id for the contact.
-    private String mId;
+    private final String mId;
 
     // The display name for this contact.
-    private String mDisplayName;
+    private final String mDisplayName;
 
     // The list of emails registered for this contact.
-    private List<String> mEmails;
+    private final List<String> mEmails;
+
+    // The list of phone numbers registered for this contact.
+    private final List<String> mPhoneNumbers;
 
     /**
      * The ContactDetails constructor.
      * @param id The unique identifier of this contact.
      * @param displayName The display name of this contact.
      * @param emails The emails registered for this contact.
+     * @param phoneNumbers The phone numbers registered for this contact.
      */
-    public ContactDetails(String id, String displayName, List<String> emails) {
+    public ContactDetails(
+            String id, String displayName, List<String> emails, List<String> phoneNumbers) {
         mDisplayName = displayName;
-        mEmails = emails;
+        mEmails = emails != null ? new ArrayList<String>(emails) : new ArrayList<String>();
+        mPhoneNumbers = phoneNumbers != null ? new ArrayList<String>(phoneNumbers)
+                                             : new ArrayList<String>();
         mId = id;
     }
 
-    /**
-     * Accessor for the display name.
-     * @return The full display name.
-     */
+    public List<String> getDisplayNames() {
+        return Arrays.asList(mDisplayName);
+    }
+
+    public List<String> getEmails() {
+        return mEmails;
+    }
+
+    public List<String> getPhoneNumbers() {
+        return mPhoneNumbers;
+    }
+
     public String getDisplayName() {
         return mDisplayName;
+    }
+
+    public String getId() {
+        return mId;
     }
 
     /**
@@ -62,10 +87,15 @@ public class ContactDetails implements Comparable<ContactDetails> {
     }
 
     /**
-     * Accessor for the list of emails (as strings separated by newline).
-     * @return A string containing all the emails registered for this contact.
+     * Accessor for the list of contact details (emails and phone numbers). Returned as strings
+     * separated by newline).
+     * @param longVersion Whether to get all the details (for emails and phone numbers) or only what
+     *                    will fit in the allotted space on the dialog.
+     * @param resources The resources to use for fetching the string. Must be provided if
+     *                  longVersion is false, otherwise it can be null.
+     * @return A string containing all the contact details registered for this contact.
      */
-    public String getEmailsAsString() {
+    public String getContactDetailsAsString(boolean longVersion, @Nullable Resources resources) {
         int count = 0;
         StringBuilder builder = new StringBuilder();
         for (String email : mEmails) {
@@ -73,9 +103,58 @@ public class ContactDetails implements Comparable<ContactDetails> {
                 builder.append("\n");
             }
             builder.append(email);
+            if (!longVersion && mEmails.size() > 1) {
+                int size = mEmails.size() - 1;
+                builder.append(resources.getQuantityString(
+                        R.plurals.contacts_picker_more_details, size, size));
+                break;
+            }
+        }
+        for (String phoneNumber : mPhoneNumbers) {
+            if (count++ > 0) {
+                builder.append("\n");
+            }
+            builder.append(phoneNumber);
+            if (!longVersion && mPhoneNumbers.size() > 1) {
+                int size = mPhoneNumbers.size() - 1;
+                builder.append(resources.getQuantityString(
+                        R.plurals.contacts_picker_more_details, size, size));
+                break;
+            }
         }
 
         return builder.toString();
+    }
+
+    /**
+     * Appends to a string |builder| this contact (in json form).
+     * @param writer The JsonWriter object to add the data to.
+     */
+    public void appendJson(JsonWriter writer) throws IOException {
+        writer.beginObject();
+        writer.name("name");
+
+        writer.value(getDisplayName());
+        writer.name("emails");
+
+        writer.beginArray();
+        if (mEmails != null) {
+            for (String email : mEmails) {
+                writer.value(email);
+            }
+        }
+        writer.endArray();
+
+        writer.name("phoneNumbers");
+        writer.beginArray();
+        if (mPhoneNumbers != null) {
+            for (String phoneNumber : mPhoneNumbers) {
+                writer.value(phoneNumber);
+            }
+        }
+        writer.endArray();
+
+        writer.endObject();
     }
 
     /**
@@ -90,7 +169,7 @@ public class ContactDetails implements Comparable<ContactDetails> {
 
     @Override
     public int hashCode() {
-        Object[] values = {mId, mDisplayName, mEmails};
+        Object[] values = {mId, mDisplayName};
         return Arrays.hashCode(values);
     }
 

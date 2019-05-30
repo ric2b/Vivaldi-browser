@@ -15,8 +15,10 @@
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "components/policy/core/common/cloud/component_cloud_policy_service.h"
 #include "components/policy/core/common/configuration_policy_provider.h"
+#include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_export.h"
 #include "components/prefs/pref_member.h"
+#include "services/network/public/cpp/network_connection_tracker.h"
 
 namespace base {
 class FilePath;
@@ -44,7 +46,9 @@ class POLICY_EXPORT CloudPolicyManager
       const std::string& policy_type,
       const std::string& settings_entity_id,
       CloudPolicyStore* cloud_policy_store,
-      const scoped_refptr<base::SequencedTaskRunner>& task_runner);
+      const scoped_refptr<base::SequencedTaskRunner>& task_runner,
+      network::NetworkConnectionTrackerGetter
+          network_connection_tracker_getter);
   ~CloudPolicyManager() override;
 
   CloudPolicyCore* core() { return &core_; }
@@ -76,6 +80,7 @@ class POLICY_EXPORT CloudPolicyManager
   void CreateComponentCloudPolicyService(
       const std::string& policy_type,
       const base::FilePath& policy_cache_path,
+      PolicySource policy_source,
       CloudPolicyClient* client,
       SchemaRegistry* schema_registry);
 

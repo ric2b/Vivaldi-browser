@@ -11,10 +11,9 @@
 #include "components/arc/common/tts.mojom.h"
 #include "components/keyed_service/core/keyed_service.h"
 
-class TtsController;
-
 namespace content {
 class BrowserContext;
+class TtsController;
 }  // namespace content
 
 namespace arc {
@@ -42,14 +41,14 @@ class ArcTtsService : public KeyedService,
                   uint32_t char_index,
                   const std::string& error_msg) override;
 
-  void set_tts_controller_for_testing(TtsController* tts_controller) {
+  void set_tts_controller_for_testing(content::TtsController* tts_controller) {
     tts_controller_ = tts_controller;
   }
 
  private:
   ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager.
 
-  TtsController* tts_controller_;
+  content::TtsController* tts_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcTtsService);
 };

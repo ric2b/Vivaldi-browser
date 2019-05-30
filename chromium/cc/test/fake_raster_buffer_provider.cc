@@ -58,11 +58,15 @@ bool FakeRasterBufferProviderImpl::IsResourceReadyToDraw(
 
 uint64_t FakeRasterBufferProviderImpl::SetReadyToDrawCallback(
     const std::vector<const ResourcePool::InUsePoolResource*>& resources,
-    const base::Callback<void()>& callback,
+    base::OnceClosure callback,
     uint64_t pending_callback_id) const {
   return 0;
 }
 
 void FakeRasterBufferProviderImpl::Shutdown() {}
+
+bool FakeRasterBufferProviderImpl::CheckRasterFinishedQueries() {
+  return false;
+}
 
 }  // namespace cc

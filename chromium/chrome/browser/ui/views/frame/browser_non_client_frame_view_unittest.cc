@@ -4,18 +4,24 @@
 
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 
+#include "base/bind.h"
 #include "base/command_line.h"
+#include "build/build_config.h"
+#include "chrome/browser/themes/theme_properties.h"
+#include "chrome/browser/themes/theme_service.h"
+#include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/test_with_browser_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/views/test/widget_test.h"
 #include "url/gurl.h"
 
 class BrowserNonClientFrameViewTest : public TestWithBrowserView {
  public:
   explicit BrowserNonClientFrameViewTest(Browser::Type type)
-      : TestWithBrowserView(type, false), frame_view_(nullptr) {}
+      : TestWithBrowserView(type), frame_view_(nullptr) {}
 
   // TestWithBrowserView override:
   void SetUp() override {

@@ -11,22 +11,34 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
+#include "base/feature_list.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "base/task/task_scheduler/delayed_task_manager.h"
-#include "base/task/task_scheduler/environment_config.h"
+#include "base/task/task_features.h"
+#include "base/task/task_scheduler/scheduler_parallel_task_runner.h"
+#include "base/task/task_scheduler/scheduler_sequenced_task_runner.h"
 #include "base/task/task_scheduler/scheduler_worker_pool_params.h"
 #include "base/task/task_scheduler/sequence.h"
 #include "base/task/task_scheduler/sequence_sort_key.h"
 #include "base/task/task_scheduler/service_thread.h"
 #include "base/task/task_scheduler/task.h"
-#include "base/task/task_scheduler/task_tracker.h"
+#include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 
 namespace base {
 namespace internal {
+
+namespace {
+
+constexpr EnvironmentParams kForegroundPoolEnvironmentParams{
+    "Foreground", base::ThreadPriority::NORMAL};
+
+constexpr EnvironmentParams kBackgroundPoolEnvironmentParams{
+    "Background", base::ThreadPriority::BACKGROUND};
+
+}  // namespace
 
 TaskSchedulerImpl::TaskSchedulerImpl(StringPiece histogram_label)
     : TaskSchedulerImpl(histogram_label,
@@ -40,46 +52,27 @@ TaskSchedulerImpl::TaskSchedulerImpl(
           task_tracker_.get(),
           BindRepeating(&TaskSchedulerImpl::ReportHeartbeatMetrics,
                         Unretained(this)))),
+      delayed_task_manager_(histogram_label),
       single_thread_task_runner_manager_(task_tracker_->GetTrackedRef(),
-                                         &delayed_task_manager_) {
+                                         &delayed_task_manager_),
+      tracked_ref_factory_(this) {
   DCHECK(!histogram_label.empty());
 
-  static_assert(arraysize(environment_to_worker_pool_) == ENVIRONMENT_COUNT,
-                "The size of |environment_to_worker_pool_| must match "
-                "ENVIRONMENT_COUNT.");
-  static_assert(
-      size(kEnvironmentParams) == ENVIRONMENT_COUNT,
-      "The size of |kEnvironmentParams| must match ENVIRONMENT_COUNT.");
-
-  int num_pools_to_create = CanUseBackgroundPriorityForSchedulerWorker()
-                                ? ENVIRONMENT_COUNT
-                                : ENVIRONMENT_COUNT_WITHOUT_BACKGROUND_PRIORITY;
-  for (int environment_type = 0; environment_type < num_pools_to_create;
-       ++environment_type) {
-    worker_pools_.emplace_back(std::make_unique<SchedulerWorkerPoolImpl>(
-        JoinString(
-            {histogram_label, kEnvironmentParams[environment_type].name_suffix},
-            "."),
-        kEnvironmentParams[environment_type].name_suffix,
-        kEnvironmentParams[environment_type].priority_hint,
-        task_tracker_->GetTrackedRef(), &delayed_task_manager_));
-  }
-
-  // Map environment indexes to pools.
-  environment_to_worker_pool_[FOREGROUND] = worker_pools_[FOREGROUND].get();
-  environment_to_worker_pool_[FOREGROUND_BLOCKING] =
-      worker_pools_[FOREGROUND_BLOCKING].get();
+  foreground_pool_.emplace(
+      JoinString(
+          {histogram_label, kForegroundPoolEnvironmentParams.name_suffix}, "."),
+      kForegroundPoolEnvironmentParams.name_suffix,
+      kForegroundPoolEnvironmentParams.priority_hint,
+      task_tracker_->GetTrackedRef(), tracked_ref_factory_.GetTrackedRef());
 
   if (CanUseBackgroundPriorityForSchedulerWorker()) {
-    environment_to_worker_pool_[BACKGROUND] = worker_pools_[BACKGROUND].get();
-    environment_to_worker_pool_[BACKGROUND_BLOCKING] =
-        worker_pools_[BACKGROUND_BLOCKING].get();
-  } else {
-    // On platforms without background thread priority, tasks posted to the
-    // background environment are run by foreground pools.
-    environment_to_worker_pool_[BACKGROUND] = worker_pools_[FOREGROUND].get();
-    environment_to_worker_pool_[BACKGROUND_BLOCKING] =
-        worker_pools_[FOREGROUND_BLOCKING].get();
+    background_pool_.emplace(
+        JoinString(
+            {histogram_label, kBackgroundPoolEnvironmentParams.name_suffix},
+            "."),
+        kBackgroundPoolEnvironmentParams.name_suffix,
+        kBackgroundPoolEnvironmentParams.priority_hint,
+        task_tracker_->GetTrackedRef(), tracked_ref_factory_.GetTrackedRef());
   }
 }
 
@@ -87,17 +80,21 @@ TaskSchedulerImpl::~TaskSchedulerImpl() {
 #if DCHECK_IS_ON()
   DCHECK(join_for_testing_returned_.IsSet());
 #endif
+
+  // Reset worker pools to release held TrackedRefs, which block teardown.
+  foreground_pool_.reset();
+  background_pool_.reset();
 }
 
 void TaskSchedulerImpl::Start(
     const TaskScheduler::InitParams& init_params,
     SchedulerWorkerObserver* scheduler_worker_observer) {
+  internal::InitializeThreadPrioritiesFeature();
+
   // This is set in Start() and not in the constructor because variation params
   // are usually not ready when TaskSchedulerImpl is instantiated in a process.
-  if (base::GetFieldTrialParamValue("BrowserScheduler",
-                                    "AllTasksUserBlocking") == "true") {
+  if (FeatureList::IsEnabled(kAllTasksUserBlocking))
     all_tasks_user_blocking_.Set();
-  }
 
   // Start the service thread. On platforms that support it (POSIX except NaCL
   // SFI), the service thread runs a MessageLoopForIO which is used to support
@@ -114,13 +111,8 @@ void TaskSchedulerImpl::Start(
 
 #if defined(OS_POSIX) && !defined(OS_NACL_SFI)
   // Needs to happen after starting the service thread to get its
-  // message_loop().
-  task_tracker_->set_watch_file_descriptor_message_loop(
-      static_cast<MessageLoopForIO*>(service_thread_->message_loop()));
-
-#if DCHECK_IS_ON()
-  task_tracker_->set_service_thread_handle(service_thread_->GetThreadHandle());
-#endif  // DCHECK_IS_ON()
+  // task_runner().
+  task_tracker_->set_io_thread_task_runner(service_thread_->task_runner());
 #endif  // defined(OS_POSIX) && !defined(OS_NACL_SFI)
 
   // Needs to happen after starting the service thread to get its task_runner().
@@ -140,38 +132,23 @@ void TaskSchedulerImpl::Start(
       SchedulerWorkerPoolImpl::WorkerEnvironment::NONE;
 #endif
 
-  // On platforms that can't use the background thread priority, background
+  // On platforms that can't use the background thread priority, best-effort
   // tasks run in foreground pools. A cap is set on the number of background
   // tasks that can run in foreground pools to ensure that there is always room
   // for incoming foreground tasks and to minimize the performance impact of
-  // background tasks.
-  const int max_background_tasks_in_foreground_pool = std::max(
+  // best-effort tasks.
+  const int max_best_effort_tasks_in_foreground_pool = std::max(
       1, std::min(init_params.background_worker_pool_params.max_tasks(),
                   init_params.foreground_worker_pool_params.max_tasks() / 2));
-  worker_pools_[FOREGROUND]->Start(
-      init_params.foreground_worker_pool_params,
-      max_background_tasks_in_foreground_pool, service_thread_task_runner,
-      scheduler_worker_observer, worker_environment);
-  const int max_background_tasks_in_foreground_blocking_pool = std::max(
-      1,
-      std::min(
-          init_params.background_blocking_worker_pool_params.max_tasks(),
-          init_params.foreground_blocking_worker_pool_params.max_tasks() / 2));
-  worker_pools_[FOREGROUND_BLOCKING]->Start(
-      init_params.foreground_blocking_worker_pool_params,
-      max_background_tasks_in_foreground_blocking_pool,
-      service_thread_task_runner, scheduler_worker_observer,
-      worker_environment);
+  foreground_pool_->Start(init_params.foreground_worker_pool_params,
+                          max_best_effort_tasks_in_foreground_pool,
+                          service_thread_task_runner, scheduler_worker_observer,
+                          worker_environment);
 
-  if (CanUseBackgroundPriorityForSchedulerWorker()) {
-    worker_pools_[BACKGROUND]->Start(
+  if (background_pool_.has_value()) {
+    background_pool_->Start(
         init_params.background_worker_pool_params,
         init_params.background_worker_pool_params.max_tasks(),
-        service_thread_task_runner, scheduler_worker_observer,
-        worker_environment);
-    worker_pools_[BACKGROUND_BLOCKING]->Start(
-        init_params.background_blocking_worker_pool_params,
-        init_params.background_blocking_worker_pool_params.max_tasks(),
         service_thread_task_runner, scheduler_worker_observer,
         worker_environment);
   }
@@ -183,25 +160,21 @@ bool TaskSchedulerImpl::PostDelayedTaskWithTraits(const Location& from_here,
                                                   TimeDelta delay) {
   // Post |task| as part of a one-off single-task Sequence.
   const TaskTraits new_traits = SetUserBlockingPriorityIfNeeded(traits);
-  return GetWorkerPoolForTraits(new_traits)
-      ->PostTaskWithSequence(
-          Task(from_here, std::move(task), new_traits, delay),
-          MakeRefCounted<Sequence>());
+  return PostTaskWithSequence(Task(from_here, std::move(task), delay),
+                              MakeRefCounted<Sequence>(new_traits));
 }
 
 scoped_refptr<TaskRunner> TaskSchedulerImpl::CreateTaskRunnerWithTraits(
     const TaskTraits& traits) {
   const TaskTraits new_traits = SetUserBlockingPriorityIfNeeded(traits);
-  return GetWorkerPoolForTraits(new_traits)
-      ->CreateTaskRunnerWithTraits(new_traits);
+  return MakeRefCounted<SchedulerParallelTaskRunner>(new_traits, this);
 }
 
 scoped_refptr<SequencedTaskRunner>
 TaskSchedulerImpl::CreateSequencedTaskRunnerWithTraits(
     const TaskTraits& traits) {
   const TaskTraits new_traits = SetUserBlockingPriorityIfNeeded(traits);
-  return GetWorkerPoolForTraits(new_traits)
-      ->CreateSequencedTaskRunnerWithTraits(new_traits);
+  return MakeRefCounted<SchedulerSequencedTaskRunner>(new_traits, this);
 }
 
 scoped_refptr<SingleThreadTaskRunner>
@@ -223,12 +196,11 @@ TaskSchedulerImpl::CreateCOMSTATaskRunnerWithTraits(
 }
 #endif  // defined(OS_WIN)
 
-std::vector<const HistogramBase*> TaskSchedulerImpl::GetHistograms() const {
-  std::vector<const HistogramBase*> histograms;
-  for (const auto& worker_pool : worker_pools_)
-    worker_pool->GetHistograms(&histograms);
-
-  return histograms;
+scoped_refptr<UpdateableSequencedTaskRunner>
+TaskSchedulerImpl::CreateUpdateableSequencedTaskRunnerWithTraitsForTesting(
+    const TaskTraits& traits) {
+  const TaskTraits new_traits = SetUserBlockingPriorityIfNeeded(traits);
+  return MakeRefCounted<SchedulerSequencedTaskRunner>(new_traits, this);
 }
 
 int TaskSchedulerImpl::GetMaxConcurrentNonBlockedTasksWithTraitsDeprecated(
@@ -262,8 +234,9 @@ void TaskSchedulerImpl::JoinForTesting() {
   // https://crbug.com/771701.
   service_thread_->Stop();
   single_thread_task_runner_manager_.JoinForTesting();
-  for (const auto& worker_pool : worker_pools_)
-    worker_pool->JoinForTesting();
+  foreground_pool_->JoinForTesting();
+  if (background_pool_.has_value())
+    background_pool_->JoinForTesting();
 #if DCHECK_IS_ON()
   join_for_testing_returned_.Set();
 #endif
@@ -273,9 +246,86 @@ void TaskSchedulerImpl::SetExecutionFenceEnabled(bool execution_fence_enabled) {
   task_tracker_->SetExecutionFenceEnabled(execution_fence_enabled);
 }
 
-SchedulerWorkerPoolImpl* TaskSchedulerImpl::GetWorkerPoolForTraits(
+bool TaskSchedulerImpl::PostTaskWithSequence(Task task,
+                                             scoped_refptr<Sequence> sequence) {
+  // Use CHECK instead of DCHECK to crash earlier. See http://crbug.com/711167
+  // for details.
+  CHECK(task.task);
+  DCHECK(sequence);
+
+  if (!task_tracker_->WillPostTask(&task, sequence->shutdown_behavior()))
+    return false;
+
+  if (task.delayed_run_time.is_null()) {
+    auto sequence_and_transaction =
+        SequenceAndTransaction::FromSequence(std::move(sequence));
+    const TaskTraits traits = sequence_and_transaction.transaction.traits();
+    GetWorkerPoolForTraits(traits)->PostTaskWithSequenceNow(
+        std::move(task), std::move(sequence_and_transaction));
+  } else {
+    delayed_task_manager_.AddDelayedTask(
+        std::move(task),
+        BindOnce(
+            [](scoped_refptr<Sequence> sequence,
+               TaskSchedulerImpl* task_scheduler_impl, Task task) {
+              auto sequence_and_transaction =
+                  SequenceAndTransaction::FromSequence(std::move(sequence));
+              const TaskTraits traits =
+                  sequence_and_transaction.transaction.traits();
+              task_scheduler_impl->GetWorkerPoolForTraits(traits)
+                  ->PostTaskWithSequenceNow(
+                      std::move(task), std::move(sequence_and_transaction));
+            },
+            std::move(sequence), Unretained(this)));
+  }
+
+  return true;
+}
+
+bool TaskSchedulerImpl::IsRunningPoolWithTraits(
     const TaskTraits& traits) const {
-  return environment_to_worker_pool_[GetEnvironmentIndexForTraits(traits)];
+  return GetWorkerPoolForTraits(traits)->IsBoundToCurrentThread();
+}
+
+void TaskSchedulerImpl::UpdatePriority(scoped_refptr<Sequence> sequence,
+                                       TaskPriority priority) {
+  auto sequence_and_transaction =
+      SequenceAndTransaction::FromSequence(std::move(sequence));
+
+  SchedulerWorkerPool* const current_worker_pool =
+      GetWorkerPoolForTraits(sequence_and_transaction.transaction.traits());
+  sequence_and_transaction.transaction.UpdatePriority(priority);
+  SchedulerWorkerPool* const new_worker_pool =
+      GetWorkerPoolForTraits(sequence_and_transaction.transaction.traits());
+
+  if (new_worker_pool == current_worker_pool) {
+    // |sequence|'s position needs to be updated within its current pool.
+    current_worker_pool->UpdateSortKey(std::move(sequence_and_transaction));
+  } else {
+    // |sequence| is changing pools; remove it from its current pool and
+    // reenqueue it.
+    const bool sequence_was_found =
+        current_worker_pool->RemoveSequence(sequence_and_transaction.sequence);
+    if (sequence_was_found) {
+      DCHECK(sequence_and_transaction.sequence);
+      new_worker_pool->ReEnqueueSequenceChangingPool(
+          std::move(sequence_and_transaction));
+    }
+  }
+}
+
+const SchedulerWorkerPool* TaskSchedulerImpl::GetWorkerPoolForTraits(
+    const TaskTraits& traits) const {
+  return const_cast<TaskSchedulerImpl*>(this)->GetWorkerPoolForTraits(traits);
+}
+
+SchedulerWorkerPool* TaskSchedulerImpl::GetWorkerPoolForTraits(
+    const TaskTraits& traits) {
+  if (traits.priority() == TaskPriority::BEST_EFFORT &&
+      background_pool_.has_value()) {
+    return &background_pool_.value();
+  }
+  return &foreground_pool_.value();
 }
 
 TaskTraits TaskSchedulerImpl::SetUserBlockingPriorityIfNeeded(
@@ -286,8 +336,9 @@ TaskTraits TaskSchedulerImpl::SetUserBlockingPriorityIfNeeded(
 }
 
 void TaskSchedulerImpl::ReportHeartbeatMetrics() const {
-  for (const auto& worker_pool : worker_pools_)
-    worker_pool->RecordNumWorkersHistogram();
+  foreground_pool_->ReportHeartbeatMetrics();
+  if (background_pool_.has_value())
+    background_pool_->ReportHeartbeatMetrics();
 }
 
 }  // namespace internal

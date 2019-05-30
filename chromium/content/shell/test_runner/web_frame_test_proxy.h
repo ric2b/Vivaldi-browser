@@ -20,34 +20,15 @@
 
 namespace content {
 class RenderViewImpl;
-}
+}  // namespace content
 
 namespace test_runner {
 class WebTestInterfaces;
 
-class TEST_RUNNER_EXPORT WebFrameTestProxyBase {
- public:
-  blink::WebLocalFrame* web_frame() const { return web_frame_; }
-  void set_web_frame(blink::WebLocalFrame* frame) {
-    DCHECK(frame);
-    DCHECK(!web_frame_);
-    web_frame_ = frame;
-  }
-
- protected:
-  WebFrameTestProxyBase() = default;
-  ~WebFrameTestProxyBase() = default;
-
- private:
-  blink::WebLocalFrame* web_frame_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(WebFrameTestProxyBase);
-};
-
-// WebFrameTestProxy is used during LayoutTests instead of a RenderFrameImpl to
-// inject test-only behaviour by overriding methods in the base class.
-class TEST_RUNNER_EXPORT WebFrameTestProxy : public content::RenderFrameImpl,
-                                             public WebFrameTestProxyBase {
+// WebFrameTestProxy is used during running web tests instead of a
+// RenderFrameImpl to inject test-only behaviour by overriding methods in the
+// base class.
+class TEST_RUNNER_EXPORT WebFrameTestProxy : public content::RenderFrameImpl {
  public:
   template <typename... Args>
   explicit WebFrameTestProxy(Args&&... args)
@@ -67,25 +48,12 @@ class TEST_RUNNER_EXPORT WebFrameTestProxy : public content::RenderFrameImpl,
                    blink::WebLocalFrameClient::CrossOriginRedirects
                        cross_origin_redirect_behavior,
                    mojo::ScopedMessagePipeHandle blob_url_token) override;
-  void DidStartProvisionalLoad(blink::WebDocumentLoader* document_loader,
-                               blink::WebURLRequest& request) override;
-  void DidFailProvisionalLoad(const blink::WebURLError& error,
-                              blink::WebHistoryCommitType commit_type) override;
-  void DidCommitProvisionalLoad(
-      const blink::WebHistoryItem& item,
-      blink::WebHistoryCommitType commit_type,
-      blink::WebGlobalObjectReusePolicy global_object_reuse_policy) override;
-  void DidFinishSameDocumentNavigation(const blink::WebHistoryItem& item,
-                                       blink::WebHistoryCommitType commit_type,
-                                       bool content_initiated) override;
   void DidReceiveTitle(const blink::WebString& title,
                        blink::WebTextDirection direction) override;
   void DidChangeIcon(blink::WebIconURL::Type icon_type) override;
-  void DidFinishDocumentLoad() override;
-  void DidHandleOnloadEvents() override;
   void DidFailLoad(const blink::WebURLError& error,
                    blink::WebHistoryCommitType commit_type) override;
-  void DidFinishLoad() override;
+  void DidStartLoading() override;
   void DidStopLoading() override;
   void DidChangeSelection(bool is_selection_empty) override;
   void DidChangeContents() override;
@@ -98,21 +66,18 @@ class TEST_RUNNER_EXPORT WebFrameTestProxy : public content::RenderFrameImpl,
   bool RunModalBeforeUnloadDialog(bool is_reload) override;
   void ShowContextMenu(
       const blink::WebContextMenuData& context_menu_data) override;
-  void DidDetectXSS(const blink::WebURL& insecure_url,
-                    bool did_block_entire_page) override;
   void DidDispatchPingLoader(const blink::WebURL& url) override;
   void WillSendRequest(blink::WebURLRequest& request) override;
   void DidReceiveResponse(const blink::WebURLResponse& response) override;
-  blink::WebNavigationPolicy DecidePolicyForNavigation(
-      const blink::WebLocalFrameClient::NavigationPolicyInfo& info) override;
+  void BeginNavigation(std::unique_ptr<blink::WebNavigationInfo> info) override;
   void PostAccessibilityEvent(const blink::WebAXObject& object,
-                              blink::WebAXEvent event) override;
+                              ax::mojom::Event event) override;
+  void MarkWebAXObjectDirty(const blink::WebAXObject& object,
+                            bool subtree) override;
   void CheckIfAudioSinkExistsAndIsAuthorized(
       const blink::WebString& sink_id,
-      blink::WebSetSinkIdCallbacks* web_callbacks) override;
+      std::unique_ptr<blink::WebSetSinkIdCallbacks> web_callbacks) override;
   void DidClearWindowObject() override;
-  bool RunFileChooser(const blink::WebFileChooserParams& params,
-                      blink::WebFileChooserCompletion* completion) override;
 
  private:
   std::unique_ptr<WebFrameTestClient> test_client_;

@@ -60,12 +60,6 @@ void CastExtensionHost::LoadInitialURL() {
   extensions::ExtensionHost::LoadInitialURL();
 }
 
-void CastExtensionHost::LoadingStateChanged(content::WebContents* source,
-                                            bool to_different_document) {
-  extensions::ExtensionHost::LoadingStateChanged(source, to_different_document);
-  delegate_->OnLoadingStateChanged(source->IsLoading());
-}
-
 void CastExtensionHost::ActivateContents(content::WebContents* contents) {
   DCHECK_EQ(contents, host_contents());
   contents->GetRenderViewHost()->GetWidget()->Focus();
@@ -89,8 +83,8 @@ bool CastExtensionHost::DidAddMessageToConsole(
     const base::string16& message,
     int32_t line_no,
     const base::string16& source_id) {
-  return delegate_->OnAddMessageToConsoleReceived(source, level, message,
-                                                  line_no, source_id);
+  return delegate_->OnAddMessageToConsoleReceived(level, message, line_no,
+                                                  source_id);
 }
 
 void CastExtensionHost::Observe(int type,

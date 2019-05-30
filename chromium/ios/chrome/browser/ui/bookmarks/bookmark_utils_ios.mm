@@ -12,16 +12,17 @@
 #include "base/hash.h"
 #include "base/i18n/string_compare.h"
 #include "base/metrics/user_metrics_action.h"
+#include "base/stl_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/query_parser/query_parser.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/bookmarks/bookmarks_utils.h"
-#include "ios/chrome/browser/experimental_flags.h"
+#include "ios/chrome/browser/system_flags.h"
 #include "ios/chrome/browser/ui/bookmarks/undo_manager_wrapper.h"
-#include "ios/chrome/browser/ui/ui_util.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -87,7 +88,7 @@ NSString* TitleForBookmarkNode(const BookmarkNode* node) {
 
 UIColor* DefaultColor(const GURL& url) {
   uint32_t hash = base::Hash(url.possibly_invalid_spec());
-  SkColor color = colors[hash % arraysize(colors)];
+  SkColor color = colors[hash % base::size(colors)];
   return ColorFromSkColor(color);
 }
 
@@ -514,7 +515,7 @@ class FolderNodeComparator : public std::binary_function<const BookmarkNode*,
  private:
   icu::Collator* collator_;
 };
-};
+}  // namespace
 
 bool FolderHasAncestorInBookmarkNodes(const BookmarkNode* folder,
                                       const NodeSet& bookmarkNodes) {

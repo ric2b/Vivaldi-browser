@@ -32,11 +32,12 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_CROSS_THREAD_COPIER_H_
 
 #include <memory>
+#include <vector>
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "mojo/public/cpp/bindings/interface_ptr_info.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "third_party/blink/public/common/message_port/message_port_channel.h"
+#include "third_party/blink/public/common/messaging/message_port_channel.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
@@ -180,6 +181,20 @@ struct CrossThreadCopier<
   static Type Copy(Type pointer) {
     return pointer;  // This is in fact a move.
   }
+};
+
+template <wtf_size_t inlineCapacity, typename Allocator>
+struct CrossThreadCopier<Vector<uint8_t, inlineCapacity, Allocator>> {
+  STATIC_ONLY(CrossThreadCopier);
+  using Type = Vector<uint8_t, inlineCapacity, Allocator>;
+  static Type Copy(Type value) { return value; }
+};
+
+template <>
+struct CrossThreadCopier<std::vector<uint8_t>> {
+  STATIC_ONLY(CrossThreadCopier);
+  using Type = std::vector<uint8_t>;
+  static Type Copy(Type value) { return value; }
 };
 
 template <wtf_size_t inlineCapacity, typename Allocator>

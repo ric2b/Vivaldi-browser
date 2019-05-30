@@ -30,6 +30,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/common/network_service_util.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/cert/test_root_certs.h"
@@ -40,7 +41,7 @@
 #include "services/network/public/mojom/network_service_test.mojom.h"
 
 #if defined(OS_CHROMEOS)
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #endif
 
 namespace {
@@ -164,7 +165,7 @@ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsFalse, QuicDisallowedForSystem) {
 
   // If using the network service, crash the service, and make sure QUIC is
   // still disabled.
-  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+  if (content::IsOutOfProcessNetworkService()) {
     CrashNetworkServiceAndRestartQuicServer();
     // Make sure the NetworkContext has noticed the pipe was closed.
     g_browser_process->system_network_context_manager()
@@ -179,7 +180,7 @@ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsFalse,
 
   // If using the network service, crash the service, and make sure QUIC is
   // still disabled.
-  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+  if (content::IsOutOfProcessNetworkService()) {
     CrashNetworkServiceAndRestartQuicServer();
     // Make sure the NetworkContext has noticed the pipe was closed.
     g_browser_process->safe_browsing_service()
@@ -193,7 +194,7 @@ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsFalse, QuicDisallowedForProfile) {
 
   // If using the network service, crash the service, and make sure QUIC is
   // still disabled.
-  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+  if (content::IsOutOfProcessNetworkService()) {
     CrashNetworkServiceAndRestartQuicServer();
     // Make sure the NetworkContext has noticed the pipe was closed.
     content::BrowserContext::GetDefaultStoragePartition(browser()->profile())
@@ -223,12 +224,18 @@ class QuicAllowedPolicyIsTrue: public QuicAllowedPolicyTestBase {
 // just crash the network service once, and then test all network contexts in
 // some particular order.
 
-IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsTrue, QuicAllowedForSystem) {
+// TODO(crbug.com/938139): Flaky on ChromeOS with Network Service
+#if defined(OS_CHROMEOS)
+#define MAYBE_QuicAllowedForSystem DISABLED_QuicAllowedForSystem
+#else
+#define MAYBE_QuicAllowedForSystem QuicAllowedForSystem
+#endif
+IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsTrue, MAYBE_QuicAllowedForSystem) {
   EXPECT_TRUE(IsQuicEnabledForSystem());
 
   // If using the network service, crash the service, and make sure QUIC is
   // still enabled.
-  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+  if (content::IsOutOfProcessNetworkService()) {
     CrashNetworkServiceAndRestartQuicServer();
     // Make sure the NetworkContext has noticed the pipe was closed.
     g_browser_process->system_network_context_manager()
@@ -242,7 +249,7 @@ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsTrue, QuicAllowedForSafeBrowsing) {
 
   // If using the network service, crash the service, and make sure QUIC is
   // still enabled.
-  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+  if (content::IsOutOfProcessNetworkService()) {
     CrashNetworkServiceAndRestartQuicServer();
     // Make sure the NetworkContext has noticed the pipe was closed.
     g_browser_process->safe_browsing_service()
@@ -256,7 +263,7 @@ IN_PROC_BROWSER_TEST_F(QuicAllowedPolicyIsTrue, QuicAllowedForProfile) {
 
   // If using the network service, crash the service, and make sure QUIC is
   // still enabled.
-  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+  if (content::IsOutOfProcessNetworkService()) {
     CrashNetworkServiceAndRestartQuicServer();
     // Make sure the NetworkContext has noticed the pipe was closed.
     content::BrowserContext::GetDefaultStoragePartition(browser()->profile())

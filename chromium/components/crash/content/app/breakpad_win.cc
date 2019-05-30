@@ -24,16 +24,17 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/environment.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
+#include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/stl_util.h"
 #include "base/strings/string16.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/pe_image.h"
 #include "base/win/win_util.h"
-#include "components/crash/content/app/crash_keys_win.h"
 #include "components/crash/content/app/crash_reporter_client.h"
 #include "components/crash/content/app/hard_error_handler_win.h"
 #include "components/crash/core/common/crash_keys.h"
@@ -104,6 +105,65 @@ typedef NTSTATUS (WINAPI* NtTerminateProcessPtr)(HANDLE ProcessHandle,
                                                  NTSTATUS ExitStatus);
 char* g_real_terminate_process_stub = nullptr;
 
+// Returns the custom info structure based on the dll in parameter and the
+// process type.
+google_breakpad::CustomClientInfo* GetCustomInfo(
+    const std::wstring& exe_path,
+    const std::wstring& type,
+    const std::wstring& profile_type,
+    base::CommandLine* cmd_line,
+    crash_reporter::CrashReporterClient* crash_client) {
+  base::string16 version, product, special_build, channel_name;
+  crash_client->GetProductNameAndVersion(exe_path, &product, &version,
+                                         &special_build, &channel_name);
+
+  // We only expect this method to be called once per process.
+  // Common enties
+  static base::NoDestructor<std::vector<google_breakpad::CustomInfoEntry>>
+      custom_entries;
+  custom_entries->push_back(
+      google_breakpad::CustomInfoEntry(L"ver", version.c_str()));
+  custom_entries->push_back(
+      google_breakpad::CustomInfoEntry(L"prod", product.c_str()));
+  custom_entries->push_back(
+      google_breakpad::CustomInfoEntry(L"plat", L"Win32"));
+  custom_entries->push_back(
+      google_breakpad::CustomInfoEntry(L"ptype", type.c_str()));
+  custom_entries->push_back(google_breakpad::CustomInfoEntry(
+      L"pid", base::NumberToString16(::GetCurrentProcessId()).c_str()));
+  custom_entries->push_back(
+      google_breakpad::CustomInfoEntry(L"channel", channel_name.c_str()));
+  custom_entries->push_back(
+      google_breakpad::CustomInfoEntry(L"profile-type", profile_type.c_str()));
+
+  if (!special_build.empty()) {
+    custom_entries->push_back(
+        google_breakpad::CustomInfoEntry(L"special", special_build.c_str()));
+  }
+
+  // Check whether configuration management controls crash reporting.
+  bool crash_reporting_enabled = true;
+  bool controlled_by_policy =
+      crash_client->ReportingIsEnforcedByPolicy(&crash_reporting_enabled);
+  bool use_crash_service = !controlled_by_policy &&
+                           (cmd_line->HasSwitch(switches::kNoErrorDialogs) ||
+                            crash_client->IsRunningUnattended());
+  if (use_crash_service) {
+    base::string16 crash_dumps_dir_path;
+    if (crash_client->GetAlternativeCrashDumpLocation(&crash_dumps_dir_path)) {
+      custom_entries->push_back(google_breakpad::CustomInfoEntry(
+          L"breakpad-dump-location", crash_dumps_dir_path.c_str()));
+    }
+  }
+
+  static base::NoDestructor<google_breakpad::CustomClientInfo>
+      custom_client_info;
+  custom_client_info->entries = &custom_entries->front();
+  custom_client_info->count = custom_entries->size();
+
+  return custom_client_info.get();
+}
+
 }  // namespace
 
 // Dumps the current process memory.
@@ -150,7 +210,7 @@ std::wstring GetProfileType() {
       { PT_ROAMING, L"roaming" },
       { PT_TEMPORARY, L"temporary" },
     };
-    for (size_t i = 0; i < arraysize(kBitNames); ++i) {
+    for (size_t i = 0; i < base::size(kBitNames); ++i) {
       const DWORD this_bit = kBitNames[i].bit;
       if ((profile_bits & this_bit) != 0) {
         profile_type.append(kBitNames[i].name);
@@ -257,32 +317,6 @@ long WINAPI CloudPrintServiceExceptionFilter(EXCEPTION_POINTERS* info) {
 }
 
 }  // namespace
-
-// NOTE: This function is used by SyzyASAN to annotate crash reports. If you
-// change the name or signature of this function you will break SyzyASAN
-// instrumented releases of Chrome. Please contact syzygy-team@chromium.org
-// before doing so!
-extern "C" void __declspec(dllexport) __cdecl SetCrashKeyValueImpl(
-    const wchar_t* key, const wchar_t* value) {
-  CrashKeysWin* keeper = CrashKeysWin::keeper();
-  if (!keeper)
-    return;
-
-  // TODO(siggi): This doesn't look quite right - there's NULL deref potential
-  //    here, and an implicit std::wstring conversion. Fixme.
-  keeper->SetCrashKeyValue(key, value);
-}
-
-extern "C" void __declspec(dllexport) __cdecl ClearCrashKeyValueImpl(
-    const wchar_t* key) {
-  CrashKeysWin* keeper = CrashKeysWin::keeper();
-  if (!keeper)
-    return;
-
-  // TODO(siggi): This doesn't look quite right - there's NULL deref potential
-  //    here, and an implicit std::wstring conversion. Fixme.
-  keeper->ClearCrashKeyValue(key);
-}
 
 static bool WrapMessageBoxWithSEH(const wchar_t* text, const wchar_t* caption,
                                   UINT flags, bool* exit_now) {
@@ -491,13 +525,9 @@ void InitCrashReporter(const std::string& process_type_switch) {
   exe_path[0] = 0;
   GetModuleFileNameW(nullptr, exe_path, MAX_PATH);
 
-  // This is intentionally leaked.
-  CrashKeysWin* keeper = new CrashKeysWin();
-
-  google_breakpad::CustomClientInfo* custom_info =
-      keeper->GetCustomInfo(exe_path, process_type, GetProfileType(),
-                            base::CommandLine::ForCurrentProcess(),
-                            GetCrashReporterClient());
+  google_breakpad::CustomClientInfo* custom_info = GetCustomInfo(
+      exe_path, process_type, GetProfileType(),
+      base::CommandLine::ForCurrentProcess(), GetCrashReporterClient());
 
   google_breakpad::ExceptionHandler::MinidumpCallback callback = nullptr;
   LPTOP_LEVEL_EXCEPTION_FILTER default_filter = nullptr;
@@ -604,7 +634,7 @@ ClearBreakpadPipeEnvironmentVariable() {
   env->UnSetVar(kPipeNameVar);
 }
 
-#ifdef _WIN64
+#ifdef _M_X64
 int CrashForExceptionInNonABICompliantCodeRange(
     PEXCEPTION_RECORD ExceptionRecord,
     ULONG64 EstablisherFrame,

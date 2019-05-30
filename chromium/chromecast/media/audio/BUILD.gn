@@ -1,9 +1,16 @@
 # Copyright 2015 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-
+import("//build/buildflag_header.gni")
 import("//chromecast/chromecast.gni")
 import("//media/media_options.gni")
+
+declare_args() {
+  # Defines bounds for the output buffer size (in frames)
+  minimum_output_buffer_size_in_frames = 512
+  maximum_output_buffer_size_in_frames = 8192
+  default_output_buffer_size_in_frames = 2048
+}
 
 cast_source_set("audio") {
   sources = [
@@ -16,9 +23,12 @@ cast_source_set("audio") {
   ]
 
   deps = [
+    ":audio_buildflags",
     "//base",
     "//chromecast/base",
     "//chromecast/common/mojom",
+    "//chromecast/media/audio/mixer_service:connection",
+    "//chromecast/media/audio/mixer_service:proto",
     "//chromecast/media/base",
     "//chromecast/media/cma/backend",
     "//chromecast/media/cma/base",
@@ -46,5 +56,28 @@ cast_shared_library("libcast_external_audio_pipeline_1.0") {
 
   public_deps = [
     "//chromecast/public/media",
+  ]
+}
+
+source_set("fake_external_audio_pipeline") {
+  sources = [
+    "fake_external_audio_pipeline.cc",
+    "fake_external_audio_pipeline_support.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/public",
+    "//chromecast/public/media",
+  ]
+}
+
+buildflag_header("audio_buildflags") {
+  header = "audio_buildflags.h"
+
+  flags = [
+    "MINIMUM_OUTPUT_BUFFER_SIZE_IN_FRAMES=$minimum_output_buffer_size_in_frames",
+    "MAXIMUM_OUTPUT_BUFFER_SIZE_IN_FRAMES=$maximum_output_buffer_size_in_frames",
+    "DEFAULT_OUTPUT_BUFFER_SIZE_IN_FRAMES=$default_output_buffer_size_in_frames",
   ]
 }

@@ -18,10 +18,13 @@ struct PasswordFormFillData;
 namespace password_manager {
 class PasswordAutofillManager;
 class PasswordManager;
+class PasswordGenerationManager;
 }  // namespace password_manager
 
 // Defines the interface the driver needs to the controller.
 @protocol PasswordManagerDriverDelegate
+
+@property(readonly, nonatomic) const GURL& lastCommittedURL;
 
 - (password_manager::PasswordManager*)passwordManager;
 
@@ -34,6 +37,14 @@ class PasswordManager;
 
 // Informs delegate that there are no saved credentials for the current page.
 - (void)onNoSavedCredentials;
+
+// Gets the PasswordGenerationManager owned by this delegate.
+- (password_manager::PasswordGenerationManager*)passwordGenerationManager;
+
+// Informs delegate of form for password generation found.
+- (void)formEligibleForGenerationFound:
+    (const autofill::NewPasswordFormGenerationData&)form;
+
 @end
 
 // An iOS implementation of password_manager::PasswordManagerDriver.
@@ -52,6 +63,8 @@ class IOSChromePasswordManagerDriver
       const autofill::PasswordForm& form) override;
   void FormsEligibleForGenerationFound(
       const std::vector<autofill::PasswordFormGenerationData>& forms) override;
+  void FormEligibleForGenerationFound(
+      const autofill::NewPasswordFormGenerationData& form) override;
   void GeneratedPasswordAccepted(const base::string16& password) override;
   void FillSuggestion(const base::string16& username,
                       const base::string16& password) override;
@@ -65,9 +78,9 @@ class IOSChromePasswordManagerDriver
   password_manager::PasswordManager* GetPasswordManager() override;
   password_manager::PasswordAutofillManager* GetPasswordAutofillManager()
       override;
-  void ForceSavePassword() override;
   autofill::AutofillDriver* GetAutofillDriver() override;
   bool IsMainFrame() const override;
+  GURL GetLastCommittedURL() const override;
 
  private:
   id<PasswordManagerDriverDelegate> delegate_;  // (weak)

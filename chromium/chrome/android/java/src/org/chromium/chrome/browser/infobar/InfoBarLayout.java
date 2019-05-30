@@ -10,6 +10,7 @@ import android.content.res.TypedArray;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.support.annotation.Nullable;
+import android.support.v7.content.res.AppCompatResources;
 import android.text.SpannableString;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -22,7 +23,6 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.widget.DualControlLayout;
 import org.chromium.ui.UiUtils;
@@ -304,7 +304,7 @@ public final class InfoBarLayout extends ViewGroup implements View.OnClickListen
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         // Place all the views in the positions already determined during onMeasure().
         int width = right - left;
-        boolean isRtl = ApiCompatibilityUtils.isLayoutRtl(this);
+        boolean isRtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
 
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
@@ -502,7 +502,7 @@ public final class InfoBarLayout extends ViewGroup implements View.OnClickListen
     }
 
     private NoUnderlineClickableSpan createClickableSpan() {
-        return new NoUnderlineClickableSpan((view) -> mInfoBarView.onLinkClicked());
+        return new NoUnderlineClickableSpan(getResources(), (view) -> mInfoBarView.onLinkClicked());
     }
 
     /**
@@ -518,7 +518,7 @@ public final class InfoBarLayout extends ViewGroup implements View.OnClickListen
         if (iconResourceId != 0 || iconBitmap != null) {
             iconView = new ImageView(context);
             if (iconResourceId != 0) {
-                iconView.setImageResource(iconResourceId);
+                iconView.setImageDrawable(AppCompatResources.getDrawable(context, iconResourceId));
             } else if (iconBitmap != null) {
                 iconView.setImageBitmap(iconBitmap);
             }

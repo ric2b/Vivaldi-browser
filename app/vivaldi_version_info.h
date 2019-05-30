@@ -17,8 +17,6 @@
 
 namespace vivaldi {
 
-std::string VivaldiLastChange();
-
 // Returns a version string to be displayed in "About Vivaldi" dialog.
 std::string GetVivaldiVersionString();
 

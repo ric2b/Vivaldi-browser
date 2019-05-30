@@ -11,18 +11,11 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/component_export.h"
 #include "base/macros.h"
-#include "chromeos/chromeos_export.h"
-
-namespace ash {
-namespace network_icon {
-class NetworkIconTest;
-}  // namespace network_icon
-}  // namesapce ash
 
 namespace base {
 class Value;
-class DictionaryValue;
 }
 
 namespace chromeos {
@@ -37,7 +30,7 @@ class NetworkListSorterTest;
 
 // Base class for states managed by NetworkStateManger which are associated
 // with a Shill path (e.g. service path or device path).
-class CHROMEOS_EXPORT ManagedState {
+class COMPONENT_EXPORT(CHROMEOS_NETWORK) ManagedState {
  public:
   enum ManagedType {
     MANAGED_TYPE_NETWORK,
@@ -69,15 +62,15 @@ class CHROMEOS_EXPORT ManagedState {
 
   // Called by NetworkStateHandler after all calls to PropertyChanged for the
   // initial set of properties. Used to update state requiring multiple
-  // properties, e.g. name from hex_ssid in NetworkState.
-  // |properties| contains the complete set of initial properties.
+  // properties, e.g. name from hex_ssid in NetworkState. |properties| must be
+  // of type DICTIONARY and contain the complete set of initial properties.
   // Returns true if any additional properties are updated.
-  virtual bool InitialPropertiesReceived(
-      const base::DictionaryValue& properties);
+  virtual bool InitialPropertiesReceived(const base::Value& properties);
 
-  // Fills |dictionary| with a minimal set of state properties for the network
-  // type. See implementations for which properties are included.
-  virtual void GetStateProperties(base::DictionaryValue* dictionary) const;
+  // Fills |dictionary|, which must be of type DICTIONARY, with a minimal set of
+  // state properties for the network type. See implementations for which
+  // properties are included.
+  virtual void GetStateProperties(base::Value* dictionary) const;
 
   ManagedType managed_type() const { return managed_type_; }
   const std::string& path() const { return path_; }
@@ -89,6 +82,9 @@ class CHROMEOS_EXPORT ManagedState {
   void set_update_requested(bool update_requested) {
     update_requested_ = update_requested;
   }
+
+  void set_path_for_testing(const std::string& path) { path_ = path; }
+  void set_type_for_testing(const std::string& type) { type_ = type; }
 
   // Returns true if |type_| matches |pattern|.
   bool Matches(const NetworkTypePattern& pattern) const;
@@ -121,9 +117,8 @@ class CHROMEOS_EXPORT ManagedState {
   void set_type(const std::string& type) { type_ = type; }
 
  private:
-  friend class NetworkChangeNotifierChromeosUpdateTest;
   friend class NetworkStateHandler;
-  friend class ash::network_icon::NetworkIconTest;
+  friend class NetworkStateTestHelper;
   friend class chromeos::tether::NetworkListSorterTest;
 
   ManagedType managed_type_;

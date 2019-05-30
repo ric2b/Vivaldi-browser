@@ -36,7 +36,7 @@
 #include "third_party/blink/public/platform/web_vector.h"
 
 #if INSIDE_BLINK
-#include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/handle.h"  // nogncheck
 #endif
 
 namespace blink {
@@ -76,10 +76,10 @@ class WebCryptoKeyAlgorithmParams {
 
 class WebCryptoAesKeyAlgorithmParams : public WebCryptoKeyAlgorithmParams {
  public:
-  explicit WebCryptoAesKeyAlgorithmParams(unsigned short length_bits)
+  explicit WebCryptoAesKeyAlgorithmParams(uint16_t length_bits)
       : length_bits_(length_bits) {}
 
-  unsigned short LengthBits() const { return length_bits_; }
+  uint16_t LengthBits() const { return length_bits_; }
 
   WebCryptoKeyAlgorithmParamsType GetType() const override {
     return kWebCryptoKeyAlgorithmParamsTypeAes;
@@ -90,7 +90,7 @@ class WebCryptoAesKeyAlgorithmParams : public WebCryptoKeyAlgorithmParams {
   }
 
  private:
-  unsigned short length_bits_;
+  uint16_t length_bits_;
 };
 
 class WebCryptoHmacKeyAlgorithmParams : public WebCryptoKeyAlgorithmParams {

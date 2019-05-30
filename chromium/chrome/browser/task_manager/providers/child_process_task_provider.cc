@@ -4,9 +4,12 @@
 
 #include "chrome/browser/task_manager/providers/child_process_task_provider.h"
 
+#include "base/bind.h"
 #include "base/process/process.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/task_manager/providers/child_process_task.h"
 #include "content/public/browser/browser_child_process_host_iterator.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
 
@@ -31,7 +34,7 @@ std::unique_ptr<std::vector<ChildProcessData>> CollectChildProcessData() {
     const ChildProcessData& process_data = itr.GetData();
 
     // Only add processes that have already started, i.e. with valid handles.
-    if (!process_data.IsHandleValid())
+    if (!process_data.GetProcess().IsValid())
       continue;
 
     child_processes->push_back(process_data.Duplicate());
@@ -62,7 +65,7 @@ Task* ChildProcessTaskProvider::GetTaskOfUrlRequest(int child_id,
 void ChildProcessTaskProvider::BrowserChildProcessLaunchedAndConnected(
     const content::ChildProcessData& data) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (!data.IsHandleValid())
+  if (!data.GetProcess().IsValid())
     return;
 
   CreateTask(data);
@@ -71,7 +74,7 @@ void ChildProcessTaskProvider::BrowserChildProcessLaunchedAndConnected(
 void ChildProcessTaskProvider::BrowserChildProcessHostDisconnected(
     const content::ChildProcessData& data) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DeleteTask(data.GetHandle());
+  DeleteTask(data.GetProcess().Handle());
 }
 
 void ChildProcessTaskProvider::StartUpdating() {
@@ -80,10 +83,8 @@ void ChildProcessTaskProvider::StartUpdating() {
   DCHECK(tasks_by_child_id_.empty());
 
   // First, get the pre-existing child processes data.
-  BrowserThread::PostTaskAndReplyWithResult(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&CollectChildProcessData),
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, {BrowserThread::IO}, base::Bind(&CollectChildProcessData),
       base::Bind(&ChildProcessTaskProvider::ChildProcessDataCollected,
                  weak_ptr_factory_.GetWeakPtr()));
 }
@@ -121,7 +122,7 @@ void ChildProcessTaskProvider::ChildProcessDataCollected(
 void ChildProcessTaskProvider::CreateTask(
     const content::ChildProcessData& data) {
   std::unique_ptr<ChildProcessTask>& task =
-      tasks_by_processid_[base::GetProcId(data.GetHandle())];
+      tasks_by_processid_[data.GetProcess().Pid()];
   if (task) {
     // This task is already known to us. This case can happen when some of the
     // child process data we collect upon StartUpdating() might be of

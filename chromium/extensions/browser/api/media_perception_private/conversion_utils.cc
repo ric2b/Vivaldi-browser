@@ -4,12 +4,22 @@
 
 #include "extensions/browser/api/media_perception_private/conversion_utils.h"
 
-
 namespace extensions {
 namespace api {
 namespace media_perception_private {
 
 namespace {
+
+std::unique_ptr<Metadata> MetadataProtoToIdl(const mri::Metadata& metadata) {
+  std::unique_ptr<Metadata> metadata_result = std::make_unique<Metadata>();
+  if (metadata.has_visual_experience_controller_version()) {
+    metadata_result->visual_experience_controller_version =
+        std::make_unique<std::string>(
+            metadata.visual_experience_controller_version());
+  }
+
+  return metadata_result;
+}
 
 HotwordType HotwordTypeProtoToIdl(const mri::HotwordDetection::Type& type) {
   switch (type) {
@@ -466,6 +476,10 @@ PerceptionSample PerceptionSampleProtoToIdl(
         std::make_unique<AudioVisualPerception>(AudioVisualPerceptionProtoToIdl(
             perception_sample.audio_visual_perception()));
   }
+  if (perception_sample.has_metadata()) {
+    perception_sample_result.metadata =
+        MetadataProtoToIdl(perception_sample.metadata());
+  }
   return perception_sample_result;
 }
 
@@ -510,6 +524,101 @@ mri::State::Status StateStatusIdlToProto(const State& state) {
   }
   NOTREACHED() << "Reached status not in switch.";
   return mri::State::STATUS_UNSPECIFIED;
+}
+
+Feature FeatureProtoToIdl(int feature) {
+  switch (feature) {
+    case mri::State::FEATURE_AUTOZOOM:
+      return FEATURE_AUTOZOOM;
+    case mri::State::FEATURE_HOTWORD_DETECTION:
+      return FEATURE_HOTWORD_DETECTION;
+    case mri::State::FEATURE_OCCUPANCY_DETECTION:
+      return FEATURE_OCCUPANCY_DETECTION;
+    case mri::State::FEATURE_EDGE_EMBEDDINGS:
+      return FEATURE_EDGE_EMBEDDINGS;
+    case mri::State::FEATURE_SOFTWARE_CROPPING:
+      return FEATURE_SOFTWARE_CROPPING;
+    case mri::State::FEATURE_UNSET:
+      return FEATURE_NONE;
+  }
+  NOTREACHED() << "Reached feature not in switch.";
+  return FEATURE_NONE;
+}
+
+mri::State::Feature FeatureIdlToProto(const Feature& feature) {
+  switch (feature) {
+    case FEATURE_AUTOZOOM:
+      return mri::State::FEATURE_AUTOZOOM;
+    case FEATURE_HOTWORD_DETECTION:
+      return mri::State::FEATURE_HOTWORD_DETECTION;
+    case FEATURE_OCCUPANCY_DETECTION:
+      return mri::State::FEATURE_OCCUPANCY_DETECTION;
+    case FEATURE_EDGE_EMBEDDINGS:
+      return mri::State::FEATURE_EDGE_EMBEDDINGS;
+    case FEATURE_SOFTWARE_CROPPING:
+      return mri::State::FEATURE_SOFTWARE_CROPPING;
+    case FEATURE_NONE:
+      return mri::State::FEATURE_UNSET;
+  }
+  NOTREACHED() << "Reached feature not in switch.";
+  return mri::State::FEATURE_UNSET;
+}
+
+base::Value NamedTemplateArgumentValueProtoToValue(
+    const mri::State::NamedTemplateArgument& named_template_argument) {
+  switch (named_template_argument.value_case()) {
+    case mri::State::NamedTemplateArgument::ValueCase::kStr:
+      return base::Value(named_template_argument.str());
+    case mri::State::NamedTemplateArgument::ValueCase::kNum:
+      return base::Value(named_template_argument.num());
+    case mri::State::NamedTemplateArgument::ValueCase::VALUE_NOT_SET:
+      return base::Value();
+  }
+  NOTREACHED() << "Unknown NamedTemplateArgument::ValueCase "
+               << named_template_argument.value_case();
+  return base::Value();
+}
+
+bool NamedTemplateArgumentProtoToIdl(
+    const mri::State::NamedTemplateArgument named_template_argument_proto,
+    NamedTemplateArgument* named_template_argument) {
+  named_template_argument->name =
+      std::make_unique<std::string>(named_template_argument_proto.name());
+
+  base::Value value =
+      NamedTemplateArgumentValueProtoToValue(named_template_argument_proto);
+
+  named_template_argument->value =
+      std::make_unique<NamedTemplateArgument::Value>();
+  if (!NamedTemplateArgument::Value::Populate(
+          value, named_template_argument->value.get())) {
+    return false;
+  }
+
+  return true;
+}
+
+mri::State::NamedTemplateArgument NamedTemplateArgumentIdlToProto(
+    const NamedTemplateArgument& named_template_argument) {
+  mri::State::NamedTemplateArgument named_template_argument_proto;
+
+  if (named_template_argument.name)
+    named_template_argument_proto.set_name(*named_template_argument.name);
+
+  if (named_template_argument.value) {
+    if (named_template_argument.value->as_string) {
+      named_template_argument_proto.set_str(
+          *named_template_argument.value->as_string);
+    } else if (named_template_argument.value->as_number) {
+      named_template_argument_proto.set_num(
+          *named_template_argument.value->as_number);
+    } else {
+      NOTREACHED() << "Failed to convert NamedTemplateARgument::Value IDL to "
+                      "Proto, unkown value type.";
+    }
+  }
+
+  return named_template_argument_proto;
 }
 
 void VideoStreamParamIdlToProto(mri::VideoStreamParam* param_result,
@@ -599,6 +708,29 @@ State StateProtoToIdl(const mri::State& state) {
   }
   if (state.has_whiteboard())
     state_result.whiteboard = WhiteboardProtoToIdl(state.whiteboard());
+  if (state.features_size() > 0) {
+    state_result.features = std::make_unique<std::vector<Feature>>();
+    for (const auto& feature : state.features()) {
+      const Feature feature_result = FeatureProtoToIdl(feature);
+      if (feature_result != FEATURE_NONE)
+        state_result.features->emplace_back(feature_result);
+    }
+  }
+
+  if (state.named_template_arguments_size() > 0) {
+    state_result.named_template_arguments =
+        std::make_unique<std::vector<NamedTemplateArgument>>(
+            state.named_template_arguments_size());
+
+    for (int i = 0; i < state.named_template_arguments_size(); ++i) {
+      const mri::State::NamedTemplateArgument& named_template_argument_proto =
+          state.named_template_arguments(i);
+
+      NamedTemplateArgumentProtoToIdl(
+          named_template_argument_proto,
+          &state_result.named_template_arguments->at(i));
+    }
+  }
 
   return state_result;
 }
@@ -623,6 +755,22 @@ mri::State StateIdlToProto(const State& state) {
 
   if (state.whiteboard)
     WhiteboardIdlToProto(*state.whiteboard, state_result.mutable_whiteboard());
+
+  if (state.features && state.features.get() != nullptr) {
+    for (size_t i = 0; i < state.features.get()->size(); ++i)
+      state_result.add_features(FeatureIdlToProto(state.features.get()->at(i)));
+  }
+
+  if (state.named_template_arguments) {
+    for (const NamedTemplateArgument& named_template_argument_idl :
+         *state.named_template_arguments) {
+      mri::State::NamedTemplateArgument* new_named_template_argument_proto =
+          state_result.add_named_template_arguments();
+
+      *new_named_template_argument_proto =
+          NamedTemplateArgumentIdlToProto(named_template_argument_idl);
+    }
+  }
 
   return state_result;
 }
@@ -660,6 +808,11 @@ MediaPerception MediaPerceptionProtoToIdl(
       media_perception_result.audio_visual_perceptions->emplace_back(
           AudioVisualPerceptionProtoToIdl(perception));
     }
+  }
+
+  if (media_perception.has_metadata()) {
+    media_perception_result.metadata =
+        MetadataProtoToIdl(media_perception.metadata());
   }
 
   return media_perception_result;

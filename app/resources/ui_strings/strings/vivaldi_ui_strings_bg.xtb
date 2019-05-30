@@ -7,6 +7,7 @@
 <translation id="1591184457164800433">{MINUTES, plural, =1 {1 минута и } one {# минута и } other {# минути и }}</translation>
 <translation id="1752946267035950200">{MINUTES, plural, =1 {1 минута} one {# минута} other {# минути}}</translation>
 <translation id="1761785978543082658"><ph name="QUANTITY" /> Б</translation>
+<translation id="1801827354178857021">Период</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MБ/сек</translation>
 <translation id="1830179671306812954">{HOURS, plural, =1 {1 час и } one {# час и } other {# часа и }}</translation>
 <translation id="1859234291848436338">Посока на писане</translation>

@@ -6,17 +6,21 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
+#include "chromeos/services/assistant/platform/power_manager_provider_impl.h"
 
 namespace chromeos {
 namespace assistant {
 
 SystemProviderImpl::SystemProviderImpl(
+    std::unique_ptr<PowerManagerProviderImpl> power_manager_provider,
     device::mojom::BatteryMonitorPtr battery_monitor)
-    : battery_monitor_(std::move(battery_monitor)) {
+    : power_manager_provider_(std::move(power_manager_provider)),
+      battery_monitor_(std::move(battery_monitor)) {
   battery_monitor_->QueryNextStatus(base::BindOnce(
       &SystemProviderImpl::OnBatteryStatus, base::Unretained(this)));
 }
@@ -35,8 +39,7 @@ void SystemProviderImpl::RegisterMicMuteChangeCallback(
 
 assistant_client::PowerManagerProvider*
 SystemProviderImpl::GetPowerManagerProvider() {
-  // TODO(xiaohuic): implement power manager provider
-  return nullptr;
+  return power_manager_provider_.get();
 }
 
 bool SystemProviderImpl::GetBatteryState(BatteryState* state) {
@@ -64,15 +67,6 @@ void SystemProviderImpl::OnBatteryStatus(
 
 void SystemProviderImpl::FlushForTesting() {
   battery_monitor_.FlushForTesting();
-}
-
-void SystemProviderImpl::ProcessTpm(TpmProcessingType type,
-                                    const std::string& data,
-                                    TpmCallback on_done) {
-  // This method is used for processing data from the TPM chip. This is inorder
-  // to access secure storage. The work is currently not complete (b:111559586).
-  // The default implementation by other platforms is to call on_done for now.
-  on_done(data);
 }
 
 }  // namespace assistant

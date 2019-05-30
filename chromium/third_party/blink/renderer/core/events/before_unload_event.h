@@ -26,7 +26,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_EVENTS_BEFORE_UNLOAD_EVENT_H_
 
 #include "third_party/blink/renderer/core/dom/events/event.h"
-#include "third_party/blink/renderer/core/event_names.h"
+#include "third_party/blink/renderer/core/event_interface_names.h"
 
 namespace blink {
 
@@ -34,9 +34,12 @@ class BeforeUnloadEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
+  BeforeUnloadEvent();
   ~BeforeUnloadEvent() override;
 
-  static BeforeUnloadEvent* Create() { return new BeforeUnloadEvent; }
+  static BeforeUnloadEvent* Create() {
+    return MakeGarbageCollected<BeforeUnloadEvent>();
+  }
 
   bool IsBeforeUnloadEvent() const override;
 
@@ -46,14 +49,19 @@ class BeforeUnloadEvent final : public Event {
   String returnValue() const { return return_value_; }
 
   const AtomicString& InterfaceName() const override {
-    return EventNames::BeforeUnloadEvent;
+    return event_interface_names::kBeforeUnloadEvent;
+  }
+
+  // A confirmation dialog for leaving a page is expected to be shown
+  // regardless of the state of the page.  So, beforeunload's event
+  // listeners should always run regardless of pause.
+  bool ShouldDispatchEvenWhenExecutionContextIsPaused() const override {
+    return true;
   }
 
   void Trace(blink::Visitor*) override;
 
  private:
-  BeforeUnloadEvent();
-
   String return_value_;
 };
 

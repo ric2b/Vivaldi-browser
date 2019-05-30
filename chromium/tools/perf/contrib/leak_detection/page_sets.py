@@ -112,13 +112,13 @@ class LeakDetectionStorySet(story_module.StorySet):
       'https://www.tripadvisor.com/',
       'https://9gag.com/',
       'https://www.expedia.com/',
-      'https://www.hotels.com/',
       'https://www.roblox.com/',
       'https://www.gamespot.com/',
       'https://www.blizzard.com',
       'https://ign.com/',
       'https://www.yelp.com/',
-      'https://gizmodo.com/',
+      # Times out waiting for HasReachedQuiescence - crbug.com/927427
+      # 'https://gizmodo.com/',
       'https://www.gsmarena.com/',
       'https://www.theverge.com/',
       'https://www.nlm.nih.gov/',
@@ -140,7 +140,6 @@ class LeakDetectionStorySet(story_module.StorySet):
       'https://www.weebly.com/',
       'https://www.deviantart.com/',
       'https://www.scribd.com/',
-      'https://www.livejournal.com/',
       'https://www.hulu.com/',
       'https://www.xfinity.com/',
       # India Alexa top websites
@@ -160,7 +159,9 @@ class LeakDetectionStorySet(story_module.StorySet):
       'https://imgur.com/',
       'https://www.craigslist.org/',
       'https://www.chase.com/',
-      'https://www.tumblr.com/',
+      # TODO(892352): tumblr started timing out due to a catapult roll. See
+      # https://crbug.com/892352
+      # 'https://www.tumblr.com/',
       'https://www.paypal.com/',
       'http://www.espn.com/',
       'https://edition.cnn.com/',
@@ -250,6 +251,8 @@ class LeakDetectionStorySet(story_module.StorySet):
       'http://www.railsguides.jp',
     ]
     resource_loading_urls_list = [
+      'https://www.hotels.com/',
+      'https://www.livejournal.com/',
       'https://www.yahoo.com',
       'http://www.quora.com',
       'https://www.macys.com',

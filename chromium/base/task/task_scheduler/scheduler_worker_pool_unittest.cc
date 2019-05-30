@@ -35,8 +35,8 @@ namespace internal {
 namespace {
 
 constexpr size_t kMaxTasks = 4;
-// By default, tests allow half of the pool to be used by background tasks.
-constexpr size_t kMaxBackgroundTasks = kMaxTasks / 2;
+// By default, tests allow half of the pool to be used by best-effort tasks.
+constexpr size_t kMaxBestEffortTasks = kMaxTasks / 2;
 constexpr size_t kNumThreadsPostingTasks = 4;
 constexpr size_t kNumTasksPostedPerThread = 150;
 
@@ -60,17 +60,16 @@ class ThreadPostingTasks : public SimpleThread {
   // |worker_pool| through an |execution_mode| task runner. If
   // |post_nested_task| is YES, each task posted by this thread posts another
   // task when it runs.
-  ThreadPostingTasks(SchedulerWorkerPool* worker_pool,
+  ThreadPostingTasks(test::MockSchedulerTaskRunnerDelegate*
+                         mock_scheduler_task_runner_delegate_,
                      test::ExecutionMode execution_mode,
                      PostNestedTask post_nested_task)
       : SimpleThread("ThreadPostingTasks"),
-        worker_pool_(worker_pool),
         post_nested_task_(post_nested_task),
-        factory_(test::CreateTaskRunnerWithExecutionMode(worker_pool,
-                                                         execution_mode),
-                 execution_mode) {
-    DCHECK(worker_pool_);
-  }
+        factory_(test::CreateTaskRunnerWithExecutionMode(
+                     execution_mode,
+                     mock_scheduler_task_runner_delegate_),
+                 execution_mode) {}
 
   const test::TestTaskFactory* factory() const { return &factory_; }
 
@@ -82,7 +81,6 @@ class ThreadPostingTasks : public SimpleThread {
       EXPECT_TRUE(factory_.PostTask(post_nested_task_, Closure()));
   }
 
-  SchedulerWorkerPool* const worker_pool_;
   const scoped_refptr<TaskRunner> task_runner_;
   const PostNestedTask post_nested_task_;
   test::TestTaskFactory factory_;
@@ -91,10 +89,12 @@ class ThreadPostingTasks : public SimpleThread {
 };
 
 class TaskSchedulerWorkerPoolTest
-    : public testing::TestWithParam<PoolExecutionType> {
+    : public testing::TestWithParam<PoolExecutionType>,
+      public SchedulerWorkerPool::Delegate {
  protected:
   TaskSchedulerWorkerPoolTest()
-      : service_thread_("TaskSchedulerServiceThread") {}
+      : service_thread_("TaskSchedulerServiceThread"),
+        tracked_ref_factory_(this) {}
 
   void SetUp() override {
     service_thread_.Start();
@@ -106,6 +106,7 @@ class TaskSchedulerWorkerPoolTest
     service_thread_.Stop();
     if (worker_pool_)
       worker_pool_->JoinForTesting();
+    worker_pool_.reset();
   }
 
   void CreateWorkerPool() {
@@ -114,16 +115,20 @@ class TaskSchedulerWorkerPoolTest
       case PoolType::GENERIC:
         worker_pool_ = std::make_unique<SchedulerWorkerPoolImpl>(
             "TestWorkerPool", "A", ThreadPriority::NORMAL,
-            task_tracker_.GetTrackedRef(), &delayed_task_manager_);
+            task_tracker_.GetTrackedRef(),
+            tracked_ref_factory_.GetTrackedRef());
         break;
 #if defined(OS_WIN)
       case PoolType::WINDOWS:
         worker_pool_ = std::make_unique<PlatformNativeWorkerPoolWin>(
-            task_tracker_.GetTrackedRef(), &delayed_task_manager_);
+            task_tracker_.GetTrackedRef(),
+            tracked_ref_factory_.GetTrackedRef());
         break;
 #endif
     }
     ASSERT_TRUE(worker_pool_);
+
+    mock_scheduler_task_runner_delegate_.SetWorkerPool(worker_pool_.get());
   }
 
   void StartWorkerPool() {
@@ -134,7 +139,7 @@ class TaskSchedulerWorkerPoolTest
             static_cast<SchedulerWorkerPoolImpl*>(worker_pool_.get());
         scheduler_worker_pool_impl->Start(
             SchedulerWorkerPoolParams(kMaxTasks, TimeDelta::Max()),
-            kMaxBackgroundTasks, service_thread_.task_runner(), nullptr,
+            kMaxBestEffortTasks, service_thread_.task_runner(), nullptr,
             SchedulerWorkerPoolImpl::WorkerEnvironment::NONE);
         break;
       }
@@ -152,10 +157,20 @@ class TaskSchedulerWorkerPoolTest
   Thread service_thread_;
   TaskTracker task_tracker_ = {"Test"};
   DelayedTaskManager delayed_task_manager_;
+  test::MockSchedulerTaskRunnerDelegate mock_scheduler_task_runner_delegate_ = {
+      task_tracker_.GetTrackedRef(), &delayed_task_manager_};
 
   std::unique_ptr<SchedulerWorkerPool> worker_pool_;
 
  private:
+  // SchedulerWorkerPool::Delegate:
+  SchedulerWorkerPool* GetWorkerPoolForTraits(
+      const TaskTraits& traits) override {
+    return worker_pool_.get();
+  }
+
+  TrackedRefFactory<SchedulerWorkerPool::Delegate> tracked_ref_factory_;
+
   DISALLOW_COPY_AND_ASSIGN(TaskSchedulerWorkerPoolTest);
 };
 
@@ -171,7 +186,8 @@ TEST_P(TaskSchedulerWorkerPoolTest, PostTasks) {
   std::vector<std::unique_ptr<ThreadPostingTasks>> threads_posting_tasks;
   for (size_t i = 0; i < kNumThreadsPostingTasks; ++i) {
     threads_posting_tasks.push_back(std::make_unique<ThreadPostingTasks>(
-        worker_pool_.get(), GetParam().execution_mode, PostNestedTask::NO));
+        &mock_scheduler_task_runner_delegate_, GetParam().execution_mode,
+        PostNestedTask::NO));
     threads_posting_tasks.back()->Start();
   }
 
@@ -193,7 +209,8 @@ TEST_P(TaskSchedulerWorkerPoolTest, NestedPostTasks) {
   std::vector<std::unique_ptr<ThreadPostingTasks>> threads_posting_tasks;
   for (size_t i = 0; i < kNumThreadsPostingTasks; ++i) {
     threads_posting_tasks.push_back(std::make_unique<ThreadPostingTasks>(
-        worker_pool_.get(), GetParam().execution_mode, PostNestedTask::YES));
+        &mock_scheduler_task_runner_delegate_, GetParam().execution_mode,
+        PostNestedTask::YES));
     threads_posting_tasks.back()->Start();
   }
 
@@ -212,7 +229,7 @@ TEST_P(TaskSchedulerWorkerPoolTest, NestedPostTasks) {
 TEST_P(TaskSchedulerWorkerPoolTest, PostTaskAfterShutdown) {
   StartWorkerPool();
   auto task_runner = test::CreateTaskRunnerWithExecutionMode(
-      worker_pool_.get(), GetParam().execution_mode);
+      GetParam().execution_mode, &mock_scheduler_task_runner_delegate_);
   task_tracker_.Shutdown();
   EXPECT_FALSE(task_runner->PostTask(FROM_HERE, BindOnce(&ShouldNotRun)));
 }
@@ -222,7 +239,7 @@ TEST_P(TaskSchedulerWorkerPoolTest, PostTaskAfterShutdown) {
 TEST_P(TaskSchedulerWorkerPoolTest, PostAfterDestroy) {
   StartWorkerPool();
   auto task_runner = test::CreateTaskRunnerWithExecutionMode(
-      worker_pool_.get(), GetParam().execution_mode);
+      GetParam().execution_mode, &mock_scheduler_task_runner_delegate_);
   EXPECT_TRUE(task_runner->PostTask(FROM_HERE, DoNothing()));
   task_tracker_.Shutdown();
   worker_pool_->JoinForTesting();
@@ -238,7 +255,7 @@ TEST_P(TaskSchedulerWorkerPoolTest, PostDelayedTask) {
                          WaitableEvent::InitialState::NOT_SIGNALED);
 
   auto task_runner = test::CreateTaskRunnerWithExecutionMode(
-      worker_pool_.get(), GetParam().execution_mode);
+      GetParam().execution_mode, &mock_scheduler_task_runner_delegate_);
 
   // Wait until the task runner is up and running to make sure the test below is
   // solely timing the delayed task, not bringing up a physical thread.
@@ -272,9 +289,9 @@ TEST_P(TaskSchedulerWorkerPoolTest, PostDelayedTask) {
 TEST_P(TaskSchedulerWorkerPoolTest, SequencedRunsTasksInCurrentSequence) {
   StartWorkerPool();
   auto task_runner = test::CreateTaskRunnerWithExecutionMode(
-      worker_pool_.get(), GetParam().execution_mode);
-  auto sequenced_task_runner =
-      worker_pool_->CreateSequencedTaskRunnerWithTraits(TaskTraits());
+      GetParam().execution_mode, &mock_scheduler_task_runner_delegate_);
+  auto sequenced_task_runner = test::CreateSequencedTaskRunnerWithTraits(
+      TaskTraits(), &mock_scheduler_task_runner_delegate_);
 
   WaitableEvent task_ran;
   task_runner->PostTask(
@@ -294,8 +311,8 @@ TEST_P(TaskSchedulerWorkerPoolTest, PostBeforeStart) {
   WaitableEvent task_1_running;
   WaitableEvent task_2_running;
 
-  scoped_refptr<TaskRunner> task_runner =
-      worker_pool_->CreateTaskRunnerWithTraits({WithBaseSyncPrimitives()});
+  scoped_refptr<TaskRunner> task_runner = test::CreateTaskRunnerWithTraits(
+      {WithBaseSyncPrimitives()}, &mock_scheduler_task_runner_delegate_);
 
   task_runner->PostTask(
       FROM_HERE, BindOnce(&WaitableEvent::Signal, Unretained(&task_1_running)));
@@ -317,26 +334,28 @@ TEST_P(TaskSchedulerWorkerPoolTest, PostBeforeStart) {
   task_tracker_.FlushForTesting();
 }
 
-INSTANTIATE_TEST_CASE_P(GenericParallel,
-                        TaskSchedulerWorkerPoolTest,
-                        ::testing::Values(PoolExecutionType{
-                            PoolType::GENERIC, test::ExecutionMode::PARALLEL}));
-INSTANTIATE_TEST_CASE_P(GenericSequenced,
-                        TaskSchedulerWorkerPoolTest,
-                        ::testing::Values(PoolExecutionType{
-                            PoolType::GENERIC,
-                            test::ExecutionMode::SEQUENCED}));
+INSTANTIATE_TEST_SUITE_P(GenericParallel,
+                         TaskSchedulerWorkerPoolTest,
+                         ::testing::Values(PoolExecutionType{
+                             PoolType::GENERIC,
+                             test::ExecutionMode::PARALLEL}));
+INSTANTIATE_TEST_SUITE_P(GenericSequenced,
+                         TaskSchedulerWorkerPoolTest,
+                         ::testing::Values(PoolExecutionType{
+                             PoolType::GENERIC,
+                             test::ExecutionMode::SEQUENCED}));
 
 #if defined(OS_WIN)
-INSTANTIATE_TEST_CASE_P(WinParallel,
-                        TaskSchedulerWorkerPoolTest,
-                        ::testing::Values(PoolExecutionType{
-                            PoolType::WINDOWS, test::ExecutionMode::PARALLEL}));
-INSTANTIATE_TEST_CASE_P(WinSequenced,
-                        TaskSchedulerWorkerPoolTest,
-                        ::testing::Values(PoolExecutionType{
-                            PoolType::WINDOWS,
-                            test::ExecutionMode::SEQUENCED}));
+INSTANTIATE_TEST_SUITE_P(WinParallel,
+                         TaskSchedulerWorkerPoolTest,
+                         ::testing::Values(PoolExecutionType{
+                             PoolType::WINDOWS,
+                             test::ExecutionMode::PARALLEL}));
+INSTANTIATE_TEST_SUITE_P(WinSequenced,
+                         TaskSchedulerWorkerPoolTest,
+                         ::testing::Values(PoolExecutionType{
+                             PoolType::WINDOWS,
+                             test::ExecutionMode::SEQUENCED}));
 #endif
 
 }  // namespace internal

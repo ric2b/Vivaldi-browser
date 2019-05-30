@@ -19,7 +19,7 @@ IPC_ENUM_TRAITS_MAX_VALUE(media::PlatformMediaDataType,
                           media::PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT - 1)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::MediaDataStatus,
-                          media::MediaDataStatus::kCount - 1)
+                          int(media::MediaDataStatus::kCount) - 1)
 
 IPC_STRUCT_TRAITS_BEGIN(media::PlatformMediaTimeInfo)
   IPC_STRUCT_TRAITS_MEMBER(duration)

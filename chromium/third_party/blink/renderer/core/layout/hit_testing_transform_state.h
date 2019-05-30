@@ -26,13 +26,12 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_HIT_TESTING_TRANSFORM_STATE_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_HIT_TESTING_TRANSFORM_STATE_H_
 
-#include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/platform/geometry/float_point.h"
 #include "third_party/blink/renderer/platform/geometry/float_quad.h"
 #include "third_party/blink/renderer/platform/geometry/int_size.h"
 #include "third_party/blink/renderer/platform/transforms/affine_transform.h"
 #include "third_party/blink/renderer/platform/transforms/transformation_matrix.h"
-#include "third_party/blink/renderer/platform/wtf/ref_counted.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 
 namespace blink {
 
@@ -42,18 +41,24 @@ namespace blink {
 // removed and replaced with TransformState. There are some minor differences
 // (like the way translate() works slightly differently than move()) so care has
 // to be taken when this is done.
-class HitTestingTransformState : public RefCounted<HitTestingTransformState> {
- public:
-  static scoped_refptr<HitTestingTransformState> Create(const FloatPoint& p,
-                                                        const FloatQuad& quad,
-                                                        const FloatQuad& area) {
-    return base::AdoptRef(new HitTestingTransformState(p, quad, area));
-  }
+class HitTestingTransformState {
+  STACK_ALLOCATED();
 
-  static scoped_refptr<HitTestingTransformState> Create(
-      const HitTestingTransformState& other) {
-    return base::AdoptRef(new HitTestingTransformState(other));
-  }
+ public:
+  HitTestingTransformState(const FloatPoint& p,
+                           const FloatQuad& quad,
+                           const FloatQuad& area)
+      : last_planar_point_(p),
+        last_planar_quad_(quad),
+        last_planar_area_(area),
+        accumulating_transform_(false) {}
+
+  HitTestingTransformState(const HitTestingTransformState& other)
+      : last_planar_point_(other.last_planar_point_),
+        last_planar_quad_(other.last_planar_quad_),
+        last_planar_area_(other.last_planar_area_),
+        accumulated_transform_(other.accumulated_transform_),
+        accumulating_transform_(other.accumulating_transform_) {}
 
   enum TransformAccumulation { kFlattenTransform, kAccumulateTransform };
   void Translate(int x, int y, TransformAccumulation);
@@ -73,21 +78,6 @@ class HitTestingTransformState : public RefCounted<HitTestingTransformState> {
   bool accumulating_transform_;
 
  private:
-  HitTestingTransformState(const FloatPoint& p,
-                           const FloatQuad& quad,
-                           const FloatQuad& area)
-      : last_planar_point_(p),
-        last_planar_quad_(quad),
-        last_planar_area_(area),
-        accumulating_transform_(false) {}
-
-  HitTestingTransformState(const HitTestingTransformState& other)
-      : RefCounted<HitTestingTransformState>(),
-        last_planar_point_(other.last_planar_point_),
-        last_planar_quad_(other.last_planar_quad_),
-        last_planar_area_(other.last_planar_area_),
-        accumulated_transform_(other.accumulated_transform_),
-        accumulating_transform_(other.accumulating_transform_) {}
 
   void FlattenWithTransform(const TransformationMatrix&);
 };

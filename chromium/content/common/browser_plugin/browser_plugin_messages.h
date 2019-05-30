@@ -156,9 +156,8 @@ IPC_MESSAGE_CONTROL1(BrowserPluginHostMsg_UnlockMouse_ACK,
                      int /* browser_plugin_instance_id */)
 
 // Sent when plugin's position has changed.
-IPC_MESSAGE_CONTROL3(BrowserPluginHostMsg_SynchronizeVisualProperties,
+IPC_MESSAGE_CONTROL2(BrowserPluginHostMsg_SynchronizeVisualProperties,
                      int /* browser_plugin_instance_id */,
-                     viz::LocalSurfaceId /* local_surface_id */,
                      content::FrameVisualProperties /* resize_params */)
 
 // -----------------------------------------------------------------------------
@@ -167,10 +166,8 @@ IPC_MESSAGE_CONTROL3(BrowserPluginHostMsg_SynchronizeVisualProperties,
 // Indicates that an attach request has completed. The provided
 // |child_local_surface_id| is used as the seed for the
 // ParentLocalSurfaceIdAllocator.
-IPC_MESSAGE_CONTROL2(
-    BrowserPluginMsg_Attach_ACK,
-    int /* browser_plugin_instance_id */,
-    base::Optional<viz::LocalSurfaceId> /* child_local_surface_id */)
+IPC_MESSAGE_CONTROL1(BrowserPluginMsg_Attach_ACK,
+                     int /* browser_plugin_instance_id */)
 
 // When the guest crashes, the browser process informs the embedder through this
 // message.
@@ -214,10 +211,6 @@ IPC_MESSAGE_CONTROL2(BrowserPluginMsg_ShouldAcceptTouchEvents,
 IPC_MESSAGE_CONTROL2(BrowserPluginMsg_SetCursor,
                      int /* browser_plugin_instance_id */,
                      content::WebCursor /* cursor */)
-
-IPC_MESSAGE_CONTROL2(BrowserPluginMsg_FirstSurfaceActivation,
-                     int /* browser_plugin_instance_id */,
-                     viz::SurfaceInfo /* surface_info */)
 
 // Forwards a PointerLock Unlock request to the BrowserPlugin.
 IPC_MESSAGE_CONTROL2(BrowserPluginMsg_SetMouseLock,

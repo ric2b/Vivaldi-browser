@@ -10,9 +10,9 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/component_export.h"
 #include "base/macros.h"
 #include "base/values.h"
-#include "chromeos/chromeos_export.h"
 #include "chromeos/dbus/shill_manager_client.h"
 
 namespace chromeos {
@@ -20,7 +20,7 @@ namespace chromeos {
 // A fake implementation of ShillManagerClient. This works in close coordination
 // with FakeShillServiceClient. FakeShillDeviceClient, and
 // FakeShillProfileClient, and is not intended to be used independently.
-class CHROMEOS_EXPORT FakeShillManagerClient
+class COMPONENT_EXPORT(CHROMEOS_DBUS) FakeShillManagerClient
     : public ShillManagerClient,
       public ShillManagerClient::TestInterface {
  public:
@@ -59,18 +59,6 @@ class CHROMEOS_EXPORT FakeShillManagerClient
   void GetService(const base::DictionaryValue& properties,
                   const ObjectPathCallback& callback,
                   const ErrorCallback& error_callback) override;
-  void VerifyDestination(const VerificationProperties& properties,
-                         const BooleanCallback& callback,
-                         const ErrorCallback& error_callback) override;
-  void VerifyAndEncryptCredentials(
-      const VerificationProperties& properties,
-      const std::string& service_path,
-      const StringCallback& callback,
-      const ErrorCallback& error_callback) override;
-  void VerifyAndEncryptData(const VerificationProperties& properties,
-                            const std::string& data,
-                            const StringCallback& callback,
-                            const ErrorCallback& error_callback) override;
   void ConnectToBestServices(const base::Closure& callback,
                              const ErrorCallback& error_callback) override;
   void SetNetworkThrottlingStatus(const NetworkThrottlingStatus& status,
@@ -104,6 +92,7 @@ class CHROMEOS_EXPORT FakeShillManagerClient
   int GetInteractiveDelay() const override;
   void SetBestServiceToConnect(const std::string& service_path) override;
   const NetworkThrottlingStatus& GetNetworkThrottlingStatus() override;
+  bool GetFastTransitionStatus() override;
 
   // Constants used for testing.
   static const char kFakeEthernetNetworkGuid[];

@@ -18,6 +18,7 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/stl_util.h"
 #include "device/usb/mojo/type_converters.h"
+#include "device/usb/public/cpp/usb_utils.h"
 #include "device/usb/usb_descriptors.h"
 #include "device/usb/usb_device.h"
 
@@ -52,20 +53,6 @@ void OnTransferOut(mojom::UsbDevice::GenericTransferOutCallback callback,
                    scoped_refptr<base::RefCountedBytes> buffer,
                    size_t buffer_size) {
   std::move(callback).Run(mojo::ConvertTo<mojom::UsbTransferStatus>(status));
-}
-
-std::vector<mojom::UsbIsochronousPacketPtr> BuildIsochronousPacketArray(
-    const std::vector<uint32_t>& packet_lengths,
-    mojom::UsbTransferStatus status) {
-  std::vector<mojom::UsbIsochronousPacketPtr> packets;
-  packets.reserve(packet_lengths.size());
-  for (uint32_t packet_length : packet_lengths) {
-    auto packet = mojom::UsbIsochronousPacket::New();
-    packet->length = packet_length;
-    packet->status = status;
-    packets.push_back(std::move(packet));
-  }
-  return packets;
 }
 
 void OnIsochronousTransferIn(
@@ -122,6 +109,11 @@ DeviceImpl::DeviceImpl(scoped_refptr<device::UsbDevice> device,
       weak_factory_(this) {
   DCHECK(device_);
   observer_.Add(device_.get());
+
+  if (client_) {
+    client_.set_connection_error_handler(base::BindOnce(
+        &DeviceImpl::OnClientConnectionError, weak_factory_.GetWeakPtr()));
+  }
 }
 
 void DeviceImpl::CloseHandle() {
@@ -402,6 +394,12 @@ void DeviceImpl::IsochronousTransferOut(
 
 void DeviceImpl::OnDeviceRemoved(scoped_refptr<device::UsbDevice> device) {
   DCHECK_EQ(device_, device);
+  binding_->Close();
+}
+
+void DeviceImpl::OnClientConnectionError() {
+  // Close the connection with Blink when WebUsbServiceImpl notifies the
+  // permission revocation from settings UI.
   binding_->Close();
 }
 

@@ -5,10 +5,10 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_WORKERS_WORKLET_THREAD_HOLDER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_WORKERS_WORKLET_THREAD_HOLDER_H_
 
+#include "base/synchronization/waitable_event.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/workers/worker_backing_thread.h"
 #include "third_party/blink/renderer/core/workers/worker_backing_thread_startup_data.h"
-#include "third_party/blink/renderer/platform/waitable_event.h"
 #include "third_party/blink/renderer/platform/web_thread_supporting_gc.h"
 
 namespace blink {
@@ -24,36 +24,13 @@ class WorkletThreadHolder {
     return thread_holder_instance_;
   }
 
-  static void EnsureInstance(const WebThreadCreationParams& params) {
+  static void EnsureInstance(const ThreadCreationParams& params) {
     DCHECK(IsMainThread());
     MutexLocker locker(HolderInstanceMutex());
     if (thread_holder_instance_)
       return;
     thread_holder_instance_ = new WorkletThreadHolder<DerivedWorkletThread>;
     thread_holder_instance_->Initialize(WorkerBackingThread::Create(params));
-  }
-
-  static void EnsureInstance(WebThread* thread) {
-    DCHECK(IsMainThread());
-    MutexLocker locker(HolderInstanceMutex());
-    if (thread_holder_instance_)
-      return;
-    thread_holder_instance_ = new WorkletThreadHolder<DerivedWorkletThread>;
-    thread_holder_instance_->Initialize(WorkerBackingThread::Create(thread));
-  }
-
-  static void CreateForTest(const WebThreadCreationParams& params) {
-    MutexLocker locker(HolderInstanceMutex());
-    DCHECK(!thread_holder_instance_);
-    thread_holder_instance_ = new WorkletThreadHolder<DerivedWorkletThread>;
-    thread_holder_instance_->Initialize(WorkerBackingThread::Create(params));
-  }
-
-  static void CreateForTest(WebThread* thread) {
-    MutexLocker locker(HolderInstanceMutex());
-    DCHECK(!thread_holder_instance_);
-    thread_holder_instance_ = new WorkletThreadHolder<DerivedWorkletThread>;
-    thread_holder_instance_->Initialize(WorkerBackingThread::Create(thread));
   }
 
   static void ClearInstance() {
@@ -87,15 +64,13 @@ class WorkletThreadHolder {
 
   void InitializeOnWorkletThread() {
     MutexLocker locker(HolderInstanceMutex());
-    DCHECK(!initialized_);
     thread_->InitializeOnBackingThread(
         WorkerBackingThreadStartupData::CreateDefault());
-    initialized_ = true;
   }
 
   void ShutdownAndWait() {
     DCHECK(IsMainThread());
-    WaitableEvent waitable_event;
+    base::WaitableEvent waitable_event;
     thread_->BackingThread().PostTask(
         FROM_HERE,
         CrossThreadBind(&WorkletThreadHolder::ShutdownOnWorkletThread,
@@ -104,13 +79,12 @@ class WorkletThreadHolder {
     waitable_event.Wait();
   }
 
-  void ShutdownOnWorkletThread(WaitableEvent* waitable_event) {
+  void ShutdownOnWorkletThread(base::WaitableEvent* waitable_event) {
     thread_->ShutdownOnBackingThread();
     waitable_event->Signal();
   }
 
   std::unique_ptr<WorkerBackingThread> thread_;
-  bool initialized_ = false;
 
   static WorkletThreadHolder<DerivedWorkletThread>* thread_holder_instance_;
 };

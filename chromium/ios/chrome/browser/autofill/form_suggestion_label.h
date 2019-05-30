@@ -7,9 +7,11 @@
 
 #import <UIKit/UIKit.h>
 
+// a11y identifier used to locate the autofill suggestion in automation
+extern NSString* const kFormSuggestionLabelAccessibilityIdentifier;
 
 @class FormSuggestion;
-@protocol FormSuggestionViewClient;
+@protocol FormSuggestionClient;
 
 // Class for Autofill suggestion in the customized keyboard.
 @interface FormSuggestionLabel : UIView
@@ -21,7 +23,7 @@
                              index:(NSUInteger)index
             userInteractionEnabled:(BOOL)userInteractionEnabled
                     numSuggestions:(NSUInteger)numSuggestions
-                            client:(id<FormSuggestionViewClient>)client
+                            client:(id<FormSuggestionClient>)client
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)initWithFrame:(CGRect)frame NS_UNAVAILABLE;

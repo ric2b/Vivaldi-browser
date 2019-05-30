@@ -23,30 +23,37 @@ namespace blink {
 
 SimCompositor::SimCompositor() {
   LocalFrameView::SetInitialTracksPaintInvalidationsForTesting(true);
-
-  // SimCompositor overrides the LayerTreeViewDelegate to respond to
-  // BeginMainFrame(), which will update and paint the WebViewImpl given to
-  // SetWebView().
-  layer_tree_view_ = layer_tree_view_factory_.Initialize(this);
-  // SimCompositor starts with defer commits enabled, but uses synchronous
-  // compositing which does not use defer commits anyhow, it only uses it for
-  // reading defered state in tests.
-  layer_tree_view_->SetDeferCommits(true);
 }
 
 SimCompositor::~SimCompositor() {
   LocalFrameView::SetInitialTracksPaintInvalidationsForTesting(false);
 }
 
-void SimCompositor::SetWebView(WebViewImpl& web_view) {
+void SimCompositor::SetWebView(
+    WebViewImpl& web_view,
+    content::LayerTreeView& layer_tree_view,
+    frame_test_helpers::TestWebViewClient& view_client,
+    frame_test_helpers::TestWebWidgetClient& widget_client) {
   web_view_ = &web_view;
+  layer_tree_view_ = &layer_tree_view;
+  test_web_view_client_ = &view_client;
+  test_web_widget_client_ = &widget_client;
+
+  // SimCompositor starts with defer commits enabled, but uses synchronous
+  // compositing which does not use defer commits anyhow, it only uses it for
+  // reading deferred state in tests.
+  web_view_->DeferMainFrameUpdateForTesting();
 }
 
 SimCanvas::Commands SimCompositor::BeginFrame(double time_delta_in_seconds) {
   DCHECK(web_view_);
-  DCHECK(!layer_tree_view_->layer_tree_host()->defer_commits());
-  DCHECK(layer_tree_view_->layer_tree_host()->RequestedMainFramePending());
+  DCHECK(!layer_tree_view_->layer_tree_host()->defer_main_frame_update());
+  // Verify that the need for a BeginMainFrame has been registered, and would
+  // have caused the compositor to schedule one if we were using its scheduler.
+  DCHECK(NeedsBeginFrame());
   DCHECK_GT(time_delta_in_seconds, 0);
+
+  test_web_widget_client_->ClearAnimationScheduled();
 
   last_frame_time_ += base::TimeDelta::FromSecondsD(time_delta_in_seconds);
 
@@ -66,14 +73,19 @@ SimCanvas::Commands SimCompositor::PaintFrame() {
   auto* frame = web_view_->MainFrameImpl()->GetFrame();
   DocumentLifecycle::AllowThrottlingScope throttling_scope(
       frame->GetDocument()->Lifecycle());
+  frame->View()->UpdateAllLifecyclePhases(DocumentLifecycle::kTest);
   PaintRecordBuilder builder;
-  auto infinite_rect = LayoutRect::InfiniteIntRect();
-  frame->View()->Paint(builder.Context(), kGlobalPaintFlattenCompositingLayers,
-                       CullRect(infinite_rect));
+  frame->View()->PaintOutsideOfLifecycle(builder.Context(),
+                                         kGlobalPaintFlattenCompositingLayers);
 
+  auto infinite_rect = LayoutRect::InfiniteIntRect();
   SimCanvas canvas(infinite_rect.Width(), infinite_rect.Height());
   builder.EndRecording()->Playback(&canvas);
   return canvas.GetCommands();
+}
+
+void SimCompositor::ApplyViewportChanges(const ApplyViewportChangesArgs& args) {
+  web_view_->MainFrameWidget()->ApplyViewportChanges(args);
 }
 
 void SimCompositor::RequestNewLayerTreeFrameSink(
@@ -86,8 +98,9 @@ void SimCompositor::RequestNewLayerTreeFrameSink(
 void SimCompositor::BeginMainFrame(base::TimeTicks frame_time) {
   // There is no WebWidget like RenderWidget would have..? So go right to the
   // WebViewImpl.
-  web_view_->BeginFrame(last_frame_time_);
-  web_view_->UpdateAllLifecyclePhases();
+  web_view_->MainFrameWidget()->BeginFrame(last_frame_time_, false);
+  web_view_->MainFrameWidget()->UpdateAllLifecyclePhases(
+      WebWidget::LifecycleUpdateReason::kTest);
   *paint_commands_ = PaintFrame();
 }
 

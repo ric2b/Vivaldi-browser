@@ -8,7 +8,7 @@ WebAssembly Migration Guide
 
 Given the momentum of cross-browser WebAssembly support, we plan to focus our
 native code efforts on WebAssembly going forward and plan to remove support for
-PNaCl in Q1 2018 (except for Chrome Apps). We believe that the vibrant
+PNaCl in Q2 2019 (except for Chrome Apps). We believe that the vibrant
 ecosystem around `WebAssembly <http://webassembly.org>`_
 makes it a better fit for new and existing high-performance
 web apps and that usage of PNaCl is sufficiently low to warrant deprecation.
@@ -16,7 +16,7 @@ web apps and that usage of PNaCl is sufficiently low to warrant deprecation.
 We also recently announced the deprecation Q1 2018 of
 `Chrome Apps
 <https://blog.chromium.org/2016/08/from-chrome-apps-to-web.html>`_
-outside of ChromeOS.
+outside of Chrome OS.
 
 
 Toolchain Migration

@@ -340,6 +340,7 @@ TEST(CSSSelectorParserTest, InternalPseudo) {
                               ":-internal-list-box",
                               ":-internal-shadow-host-has-appearance",
                               ":-internal-spatial-navigation-focus",
+                              ":-internal-spatial-navigation-interest",
                               ":-internal-video-persistent",
                               ":-internal-video-persistent-ancestor"};
   for (auto* test_case : test_cases) {
@@ -364,86 +365,12 @@ TEST(CSSSelectorParserTest, InternalPseudo) {
   }
 }
 
-TEST(CSSSelectorParserTest, InvalidNestingPseudoMatches) {
-  // :matches() is currently not supported within these pseudo classes as they
-  // currently do not support complex selector arguments (:matches() does
-  // support this and the expansion of :matches() may provide complex selector
+TEST(CSSSelectorParserTest, InvalidNestingPseudoIs) {
+  // :is() is currently not supported within these pseudo classes as they
+  // currently do not support complex selector arguments (:is() does
+  // support this and the expansion of :is() may provide complex selector
   // arguments to these pseudo classes). Most of these test cases should
   // eventually be removed once they support complex selector arguments.
-  const char* test_cases[] = {":-webkit-any(:matches(.a))",
-                              "::cue(:matches(.a))",
-                              ":cue(:matches(.a))",
-                              ":host(:matches(.a))",
-                              ":host-context(:matches(.a))",
-                              ":lang(:matches(.a))",
-                              ":not(:matches(.a))",
-                              ":nth-child(:matches(.a))",
-                              ":nth-last-child(:matches(.a))",
-                              ":nth-last-of-type(:matches(.a))",
-                              ":nth-of-type(:matches(.a))",
-                              "::slotted(:matches(.a))"};
-
-  CSSParserContext* context = CSSParserContext::Create(
-      kHTMLStandardMode, SecureContextMode::kInsecureContext);
-  StyleSheetContents* sheet = StyleSheetContents::Create(context);
-
-  for (auto* test_case : test_cases) {
-    SCOPED_TRACE(test_case);
-    CSSTokenizer tokenizer(test_case);
-    const auto tokens = tokenizer.TokenizeToEOF();
-    CSSParserTokenRange range(tokens);
-    CSSSelectorList list =
-        CSSSelectorParser::ParseSelector(range, context, sheet);
-    EXPECT_FALSE(list.IsValid());
-  }
-}
-
-TEST(CSSSelectorParserTest, InvalidPseudoMatchesArguments) {
-  // Pseudo-elements are not valid within :matches() as per the spec:
-  // https://drafts.csswg.org/selectors-4/#matches
-  const char* test_cases[] = {":matches(::-webkit-progress-bar)",
-                              ":matches(::-webkit-progress-value)",
-                              ":matches(::-webkit-slider-runnable-track)",
-                              ":matches(::-webkit-slider-thumb)",
-                              ":matches(::after)",
-                              ":matches(::backdrop)",
-                              ":matches(::before)",
-                              ":matches(::cue)",
-                              ":matches(::first-letter)",
-                              ":matches(::first-line)",
-                              ":matches(::grammar-error)",
-                              ":matches(::marker)",
-                              ":matches(::placeholder)",
-                              ":matches(::selection)",
-                              ":matches(::slotted)",
-                              ":matches(::spelling-error)",
-                              ":matches(:after)",
-                              ":matches(:before)",
-                              ":matches(:cue)",
-                              ":matches(:first-letter)",
-                              ":matches(:first-line)"};
-
-  CSSParserContext* context = CSSParserContext::Create(
-      kHTMLStandardMode, SecureContextMode::kInsecureContext);
-  StyleSheetContents* sheet = StyleSheetContents::Create(context);
-
-  for (auto* test_case : test_cases) {
-    SCOPED_TRACE(test_case);
-    CSSTokenizer tokenizer(test_case);
-    const auto tokens = tokenizer.TokenizeToEOF();
-    CSSParserTokenRange range(tokens);
-    CSSSelectorList list =
-        CSSSelectorParser::ParseSelector(range, context, sheet);
-    EXPECT_FALSE(list.IsValid());
-  }
-}
-
-TEST(CSSSelectorParserTest, InvalidNestingPseudoIS) {
-  // :is() is currently not supported within these pseudo classes as they
-  // currently do not support complex selector arguments (:is() does support
-  // this and the expansion of :is() may provide complex selector arguments to
-  // these pseudo classes). Most of these test cases should eventually be
-  // removed once they support complex selector arguments.
   const char* test_cases[] = {":-webkit-any(:is(.a))",
                               "::cue(:is(.a))",
                               ":cue(:is(.a))",
@@ -456,6 +383,80 @@ TEST(CSSSelectorParserTest, InvalidNestingPseudoIS) {
                               ":nth-last-of-type(:is(.a))",
                               ":nth-of-type(:is(.a))",
                               "::slotted(:is(.a))"};
+
+  CSSParserContext* context = CSSParserContext::Create(
+      kHTMLStandardMode, SecureContextMode::kInsecureContext);
+  StyleSheetContents* sheet = StyleSheetContents::Create(context);
+
+  for (auto* test_case : test_cases) {
+    SCOPED_TRACE(test_case);
+    CSSTokenizer tokenizer(test_case);
+    const auto tokens = tokenizer.TokenizeToEOF();
+    CSSParserTokenRange range(tokens);
+    CSSSelectorList list =
+        CSSSelectorParser::ParseSelector(range, context, sheet);
+    EXPECT_FALSE(list.IsValid());
+  }
+}
+
+TEST(CSSSelectorParserTest, InvalidPseudoIsArguments) {
+  // Pseudo-elements are not valid within :is() as per the spec:
+  // https://drafts.csswg.org/selectors-4/#matches
+  const char* test_cases[] = {":is(::-webkit-progress-bar)",
+                              ":is(::-webkit-progress-value)",
+                              ":is(::-webkit-slider-runnable-track)",
+                              ":is(::-webkit-slider-thumb)",
+                              ":is(::after)",
+                              ":is(::backdrop)",
+                              ":is(::before)",
+                              ":is(::cue)",
+                              ":is(::first-letter)",
+                              ":is(::first-line)",
+                              ":is(::grammar-error)",
+                              ":is(::marker)",
+                              ":is(::placeholder)",
+                              ":is(::selection)",
+                              ":is(::slotted)",
+                              ":is(::spelling-error)",
+                              ":is(:after)",
+                              ":is(:before)",
+                              ":is(:cue)",
+                              ":is(:first-letter)",
+                              ":is(:first-line)"};
+
+  CSSParserContext* context = CSSParserContext::Create(
+      kHTMLStandardMode, SecureContextMode::kInsecureContext);
+  StyleSheetContents* sheet = StyleSheetContents::Create(context);
+
+  for (auto* test_case : test_cases) {
+    SCOPED_TRACE(test_case);
+    CSSTokenizer tokenizer(test_case);
+    const auto tokens = tokenizer.TokenizeToEOF();
+    CSSParserTokenRange range(tokens);
+    CSSSelectorList list =
+        CSSSelectorParser::ParseSelector(range, context, sheet);
+    EXPECT_FALSE(list.IsValid());
+  }
+}
+
+TEST(CSSSelectorParserTest, InvalidNestingPseudoWhere) {
+  // :where() is currently not supported within these pseudo classes as they
+  // currently do not support complex selector arguments (:where() does support
+  // this and the expansion of :where() may provide complex selector arguments
+  // to these pseudo classes). Most of these test cases should eventually be
+  // removed once they support complex selector arguments.
+  const char* test_cases[] = {":-webkit-any(:where(.a))",
+                              "::cue(:where(.a))",
+                              ":cue(:where(.a))",
+                              ":host(:where(.a))",
+                              ":host-context(:where(.a))",
+                              ":lang(:where(.a))",
+                              ":not(:where(.a))",
+                              ":nth-child(:where(.a))",
+                              ":nth-last-child(:where(.a))",
+                              ":nth-last-of-type(:where(.a))",
+                              ":nth-of-type(:where(.a))",
+                              "::slotted(:where(.a))"};
 
   CSSParserContext* context = CSSParserContext::Create(
       kHTMLStandardMode, SecureContextMode::kInsecureContext);
@@ -548,6 +549,26 @@ TEST(CSSSelectorParserTest, ShadowPartPseudoElementValid) {
   const char* test_cases[] = {"::part(ident)",
                               "host::part(ident)",
                               "host::part(ident):hover"};
+
+  for (auto* test_case : test_cases) {
+    SCOPED_TRACE(test_case);
+    CSSTokenizer tokenizer(test_case);
+    const auto tokens = tokenizer.TokenizeToEOF();
+    CSSParserTokenRange range(tokens);
+    CSSSelectorList list = CSSSelectorParser::ParseSelector(
+        range,
+        CSSParserContext::Create(kHTMLStandardMode,
+                                 SecureContextMode::kInsecureContext),
+        nullptr);
+    EXPECT_STREQ(test_case, list.SelectorsText().Ascii().data());
+  }
+}
+
+TEST(CSSSelectorParserTest, ShadowPartAndBeforeAfterPseudoElementValid) {
+  const char* test_cases[] = {
+      "::part(ident)::before",       "::part(ident)::after",
+      "::part(ident)::placeholder",  "::part(ident)::first-line",
+      "::part(ident)::first-letter", "::part(ident)::selection"};
 
   for (auto* test_case : test_cases) {
     SCOPED_TRACE(test_case);
@@ -698,6 +719,77 @@ TEST(CSSSelectorParserTest, UseCountShadowPseudo) {
               WebFeature::kCSSSelectorWebkitTextfieldDecorationContainer);
   ExpectCount("::-webkit-unrecognized",
               WebFeature::kCSSSelectorWebkitUnknownPseudo);
+}
+
+TEST(CSSSelectorParserTest, ImplicitShadowCrossingCombinators) {
+  struct ShadowCombinatorTest {
+    const char* input;
+    std::vector<std::pair<AtomicString, CSSSelector::RelationType>> expectation;
+  };
+
+  const ShadowCombinatorTest test_cases[] = {
+      {
+          "*::placeholder",
+          {
+              {"placeholder", CSSSelector::kShadowPseudo},
+              {g_null_atom, CSSSelector::kSubSelector},
+          },
+      },
+      {
+          "div::slotted(*)",
+          {
+              {"slotted", CSSSelector::kShadowSlot},
+              {"div", CSSSelector::kSubSelector},
+          },
+      },
+      {
+          "::slotted(*)::placeholder",
+          {
+              {"placeholder", CSSSelector::kShadowPseudo},
+              {"slotted", CSSSelector::kShadowSlot},
+              {g_null_atom, CSSSelector::kSubSelector},
+          },
+      },
+      {
+          "span::part(my-part)",
+          {
+              {"part", CSSSelector::kShadowPart},
+              {"span", CSSSelector::kSubSelector},
+          },
+      },
+      {
+          "video::-webkit-media-controls",
+          {
+              {"-webkit-media-controls", CSSSelector::kShadowPseudo},
+              {"video", CSSSelector::kSubSelector},
+          },
+      },
+  };
+
+  CSSParserContext* context = CSSParserContext::Create(
+      kHTMLStandardMode, SecureContextMode::kInsecureContext);
+  StyleSheetContents* sheet = StyleSheetContents::Create(context);
+
+  for (auto test_case : test_cases) {
+    SCOPED_TRACE(test_case.input);
+    CSSTokenizer tokenizer(test_case.input);
+    const auto tokens = tokenizer.TokenizeToEOF();
+    CSSParserTokenRange range(tokens);
+    CSSSelectorList list =
+        CSSSelectorParser::ParseSelector(range, context, sheet);
+    EXPECT_TRUE(list.IsValid());
+    const CSSSelector* selector = list.First();
+    for (auto sub_expectation : test_case.expectation) {
+      ASSERT_TRUE(selector);
+      AtomicString selector_value = selector->Match() == CSSSelector::kTag
+                                        ? selector->TagQName().LocalName()
+                                        : selector->Value();
+      EXPECT_EQ(sub_expectation.first, selector_value);
+      EXPECT_EQ(sub_expectation.second, selector->Relation());
+      selector = selector->TagHistory();
+    }
+    EXPECT_FALSE(selector);
+  }
 }
 
 }  // namespace blink

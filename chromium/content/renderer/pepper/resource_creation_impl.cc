@@ -78,10 +78,6 @@ PP_Resource ResourceCreationImpl::CreateAudioOutput(PP_Instance instance) {
   return 0;  // Not supported in-process.
 }
 
-PP_Resource ResourceCreationImpl::CreateCompositor(PP_Instance instance) {
-  return 0;  // Not supported in-process.
-}
-
 PP_Resource ResourceCreationImpl::CreateBroker(PP_Instance instance) {
   return (new PPB_Broker_Impl(instance))->GetReference();
 }
@@ -331,15 +327,7 @@ PP_Resource ResourceCreationImpl::CreateVideoDecoderDev(
   return PPB_VideoDecoder_Impl::Create(instance, graphics3d_id, profile);
 }
 
-PP_Resource ResourceCreationImpl::CreateVideoDestination(PP_Instance instance) {
-  return 0;  // Not supported in-process.
-}
-
 PP_Resource ResourceCreationImpl::CreateVideoEncoder(PP_Instance instance) {
-  return 0;  // Not supported in-process.
-}
-
-PP_Resource ResourceCreationImpl::CreateVideoSource(PP_Instance instance) {
   return 0;  // Not supported in-process.
 }
 

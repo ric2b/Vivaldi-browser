@@ -1,20 +1,14 @@
 {
   "flags": {
-    "bookmark_menu": {
-      "friendly_name": "Bookmark menu",
-      "description": "Enables a bookmark entry in the main menu for Windows and Linux. Always enabled for Mac.",
+    "profile_management": {
+      "friendly_name": "User profile management",
+      "description": "Enables a menu entry to do user profile management and open guest windows",
       "value": "true",
       "internal_value": "true"
     },
-    "docked_devtools": {
-      "friendly_name": "Allow for docking devtools",
-      "description": "Lets Vivaldi support docking devtools with the main window",
-      "value": "true",
-      "internal_value": "true"
-    },
-    "sync": {
-      "friendly_name": "Sync",
-      "description": "Enables the synchronization functionality",
+    "razer_chroma_support": {
+      "friendly_name": "Razer Chroma support",
+      "description": "Enables Razer Chroma color device integration (on Windows). Requires a restart of Vivaldi to be active.",
       "value": "true",
       "internal_value": "true"
     }

@@ -5,9 +5,11 @@
 package org.chromium.chrome.browser.payments;
 
 import android.graphics.drawable.Drawable;
+import android.support.annotation.Nullable;
 
-import org.chromium.base.ThreadUtils;
+import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.widget.prefeditor.EditableOption;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.payments.mojom.PaymentDetailsModifier;
 import org.chromium.payments.mojom.PaymentItem;
 import org.chromium.payments.mojom.PaymentMethodData;
@@ -15,8 +17,6 @@ import org.chromium.payments.mojom.PaymentMethodData;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import javax.annotation.Nullable;
 
 /**
  * The base class for a single payment instrument, e.g., a credit card.
@@ -179,7 +179,7 @@ public abstract class PaymentInstrument extends EditableOption {
      * @param callback The callback to return abort result.
      */
     public void abortPaymentApp(AbortCallback callback) {
-        ThreadUtils.postOnUiThread(new Runnable() {
+        PostTask.postTask(UiThreadTaskTraits.DEFAULT, new Runnable() {
             @Override
             public void run() {
                 callback.onInstrumentAbortResult(false);

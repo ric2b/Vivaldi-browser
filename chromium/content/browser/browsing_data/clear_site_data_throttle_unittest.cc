@@ -6,11 +6,15 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/post_task.h"
 #include "base/test/scoped_command_line.h"
 #include "base/test/scoped_task_environment.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/test_browser_thread.h"
@@ -38,7 +42,8 @@ const char kClearCookiesHeader[] = "Clear-Site-Data: \"cookies\"";
 
 void WaitForUIThread() {
   base::RunLoop run_loop;
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, run_loop.QuitClosure());
+  base::PostTaskWithTraits(FROM_HERE, {BrowserThread::UI},
+                           run_loop.QuitClosure());
   run_loop.Run();
 }
 
@@ -159,9 +164,9 @@ TEST_F(ClearSiteDataThrottleTest, MaybeCreateThrottleForRequest) {
       ClearSiteDataThrottle::MaybeCreateThrottleForRequest(request.get()));
 
   // We can create the throttle for a valid ResourceRequestInfo.
-  ResourceRequestInfo::AllocateForTesting(request.get(), RESOURCE_TYPE_IMAGE,
-                                          nullptr, 0, 0, 0, false, true, true,
-                                          false, nullptr);
+  ResourceRequestInfo::AllocateForTesting(
+      request.get(), RESOURCE_TYPE_IMAGE, nullptr, 0, 0, 0, false,
+      ResourceInterceptPolicy::kAllowAll, true, false, nullptr);
   EXPECT_TRUE(
       ClearSiteDataThrottle::MaybeCreateThrottleForRequest(request.get()));
 }
@@ -605,7 +610,7 @@ TEST_F(ClearSiteDataThrottleTest, FormattedConsoleOutput) {
     ResourceRequestInfo::AllocateForTesting(
         request.get(),
         navigation ? RESOURCE_TYPE_SUB_FRAME : RESOURCE_TYPE_IMAGE, nullptr, 0,
-        0, 0, false, true, true, false, nullptr);
+        0, 0, false, ResourceInterceptPolicy::kAllowAll, true, false, nullptr);
 
     std::string output_buffer;
     std::unique_ptr<RedirectableTestThrottle> throttle =
@@ -623,7 +628,7 @@ TEST_F(ClearSiteDataThrottleTest, FormattedConsoleOutput) {
     bool defer;
     throttle->WillStartRequest(&defer);
 
-    for (size_t i = 0; i < arraysize(kTestCases); i++) {
+    for (size_t i = 0; i < base::size(kTestCases); i++) {
       throttle->SetResponseHeaders(std::string(kClearSiteDataHeaderPrefix) +
                                    kTestCases[i].header);
 
@@ -632,7 +637,7 @@ TEST_F(ClearSiteDataThrottleTest, FormattedConsoleOutput) {
       throttle->SetCurrentURLForTesting(GURL(kTestCases[i].url));
 
       net::RedirectInfo redirect_info;
-      if (i < arraysize(kTestCases) - 1)
+      if (i < base::size(kTestCases) - 1)
         throttle->WillRedirectRequest(redirect_info, &defer);
       else
         throttle->WillProcessResponse(&defer);

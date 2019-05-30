@@ -21,20 +21,16 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.test.params.ParameterAnnotations;
-import org.chromium.base.test.params.ParameterSet;
-import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.UrlConstants;
-import org.chromium.chrome.browser.ntp.ContextMenuManager;
+import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.ntp.NewTabPageView;
 import org.chromium.chrome.browser.ntp.snippets.CategoryInt;
@@ -44,7 +40,7 @@ import org.chromium.chrome.browser.ntp.snippets.KnownCategories;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.suggestions.ContentSuggestionsAdditionalAction;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
+import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
@@ -53,8 +49,8 @@ import org.chromium.chrome.test.util.browser.RecyclerViewTestUtils;
 import org.chromium.chrome.test.util.browser.suggestions.FakeMostVisitedSites;
 import org.chromium.chrome.test.util.browser.suggestions.FakeSuggestionsSource;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
-import org.chromium.content.browser.test.util.TestTouchUtils;
-import org.chromium.content.browser.test.util.TouchCommon;
+import org.chromium.content_public.browser.test.util.TestTouchUtils;
+import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.test.util.UiRestriction;
 
@@ -67,22 +63,20 @@ import java.util.concurrent.TimeoutException;
 /**
  * Instrumentation tests for {@link NewTabPageRecyclerView}.
  */
-@RunWith(ParameterizedRunner.class)
-@ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
+// TODO(https://crbug.com/894334): Remove format suppression once formatting bug is fixed.
+// clang-format off
+@RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
-@Features.DisableFeatures("NetworkPrediction")
+@Features.DisableFeatures(ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS)
 @RetryOnFailure
 public class NewTabPageRecyclerViewTest {
+    // clang-format on
+
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     @Rule
     public SuggestionsDependenciesRule mSuggestionsDeps = new SuggestionsDependenciesRule();
-
-    @ParameterAnnotations.ClassParameter
-    private static List<ParameterSet> sClassParams =
-            Arrays.asList(new ParameterSet().value(false).name("DisableExpandableHeader"),
-                    new ParameterSet().value(true).name("EnableExpandableHeader"));
 
     private static final String TEST_PAGE = "/chrome/test/data/android/navigate/simple.html";
     private static final long FAKE_PUBLISH_TIMESTAMP = 1466614774;
@@ -95,26 +89,13 @@ public class NewTabPageRecyclerViewTest {
     @CategoryInt
     private static final int TEST_CATEGORY = KnownCategories.ARTICLES;
 
-    private final boolean mEnableExpandableHeader;
-
     private Tab mTab;
     private NewTabPage mNtp;
     private EmbeddedTestServer mTestServer;
     private FakeSuggestionsSource mSource;
 
-    public NewTabPageRecyclerViewTest(boolean enableExpandableHeader) {
-        mEnableExpandableHeader = enableExpandableHeader;
-    }
-
     @Before
     public void setUp() throws Exception {
-        if (mEnableExpandableHeader) {
-            Features.getInstance().enable(
-                    ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER);
-        } else {
-            Features.getInstance().disable(
-                    ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER);
-        }
 
         mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
 
@@ -163,7 +144,6 @@ public class NewTabPageRecyclerViewTest {
     @Test
     @MediumTest
     @Feature({"NewTabPage"})
-    @FlakyTest(message = "crbug.com/875544")
     public void testClickSuggestion() throws InterruptedException {
         setSuggestionsAndWaitForUpdate(10);
         List<SnippetArticle> suggestions = mSource.getSuggestionsForCategory(TEST_CATEGORY);
@@ -172,11 +152,9 @@ public class NewTabPageRecyclerViewTest {
         SnippetArticle suggestion = suggestions.get(suggestions.size() - 1);
         int suggestionPosition = getLastCardPosition();
         final View suggestionView = getViewHolderAtPosition(suggestionPosition).itemView;
-        ChromeTabUtils.waitForTabPageLoaded(mTab, new Runnable() {
-            @Override
-            public void run() {
-                TouchCommon.singleClickView(suggestionView);
-            }
+        ChromeTabUtils.waitForTabPageLoaded(mTab, suggestion.mUrl, () -> {
+            TestTouchUtils.performClickOnMainSync(
+                    InstrumentationRegistry.getInstrumentation(), suggestionView);
         });
         assertEquals(suggestion.mUrl, mTab.getUrl());
     }

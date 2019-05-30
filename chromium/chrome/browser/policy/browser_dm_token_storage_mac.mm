@@ -17,6 +17,7 @@
 #include "base/mac/scoped_cftyperef.h"
 #include "base/mac/scoped_ioobject.h"
 #include "base/no_destructor.h"
+#include "base/optional.h"
 #include "base/path_service.h"
 #include "base/sha1.h"
 #include "base/strings/string16.h"
@@ -37,15 +38,27 @@ namespace {
 const char kDmTokenBaseDir[] =
     FILE_PATH_LITERAL("Policy/Enrollment/");
 const CFStringRef kEnrollmentTokenPolicyName =
+    CFSTR("CloudManagementEnrollmentToken");
+// TODO(crbug.com/907589) : Remove once no longer in use.
+const CFStringRef kEnrollmentTokenOldPolicyName =
     CFSTR("MachineLevelUserCloudPolicyEnrollmentToken");
 const char kEnrollmentTokenFilePath[] =
-#if defined(GOOGLE_CHROME_BUILD)
-    FILE_PATH_LITERAL(
-        "/Library/Google/Chrome/MachineLevelUserCloudPolicyEnrollmentToken");
-#else
-    FILE_PATH_LITERAL(
-        "MachineLevelUserCloudPolicyEnrollmentToken");
-#endif
+    FILE_PATH_LITERAL("CloudManagementEnrollmentToken");
+// TODO(crbug.com/907589) : Remove once no longer in use.
+const char kEnrollmentTokenOldFilePath[] = FILE_PATH_LITERAL(
+    "MachineLevelUserCloudPolicyEnrollmentToken");
+
+// Enrollment Mandatory Option
+const CFStringRef kEnrollmentMandatoryOptionPolicyName =
+    CFSTR("CloudManagementEnrollmentMandatory");
+const char kEnrollmentOptionsFilePath[] = FILE_PATH_LITERAL(
+    "/Library/Google/Chrome/CloudManagementEnrollmentOptions");
+const char kEnrollmentMandatoryOption[] = "Mandatory";
+
+// Explicitly access the "com.google.Chrome" bundle ID, no matter what this
+// app's bundle ID actually is. All channels of Chrome should obey the same
+// policies.
+const CFStringRef kBundleId = CFSTR("com.vivaldi.Vivaldi");
 
 bool GetDmTokenFilePath(base::FilePath* token_file_path,
                         const std::string& client_id,
@@ -80,24 +93,23 @@ bool StoreDMTokenInDirAppDataDir(const std::string& token,
 // Get the enrollment token from policy file: /Library/com.google.Chrome.plist.
 // Return true if policy is set, otherwise false.
 bool GetEnrollmentTokenFromPolicy(std::string* enrollment_token) {
-// Since the configuration management infrastructure is not initialized when
-// this code runs, read the policy preference directly.
-#if defined(GOOGLE_CHROME_BUILD)
-  // Explicitly access the "com.google.Chrome" bundle ID, no matter what this
-  // app's bundle ID actually is. All channels of Chrome should obey the same
-  // policies.
-  CFStringRef bundle_id = CFSTR("com.google.Chrome");
-#else
-  base::ScopedCFTypeRef<CFStringRef> bundle_id(
-      base::SysUTF8ToCFStringRef(base::mac::BaseBundleID()));
-#endif
-
+  // Since the configuration management infrastructure is not initialized when
+  // this code runs, read the policy preference directly.
   base::ScopedCFTypeRef<CFPropertyListRef> value(
-      CFPreferencesCopyAppValue(kEnrollmentTokenPolicyName, bundle_id));
+      CFPreferencesCopyAppValue(kEnrollmentTokenPolicyName, kBundleId));
 
+  // Read the enrollment token from the new location. If that fails, try the old
+  // location (which will be deprecated soon). If that also fails, bail as there
+  // is no token set.
   if (!value ||
-      !CFPreferencesAppValueIsForced(kEnrollmentTokenPolicyName, bundle_id)) {
-    return false;
+      !CFPreferencesAppValueIsForced(kEnrollmentTokenPolicyName, kBundleId)) {
+    // TODO(crbug.com/907589) : Remove once no longer in use.
+    value.reset(
+        CFPreferencesCopyAppValue(kEnrollmentTokenOldPolicyName, kBundleId));
+    if (!value || !CFPreferencesAppValueIsForced(kEnrollmentTokenOldPolicyName,
+                                                 kBundleId)) {
+      return false;
+    }
   }
   CFStringRef value_string = base::mac::CFCast<CFStringRef>(value);
   if (!value_string)
@@ -112,13 +124,45 @@ bool GetEnrollmentTokenFromFile(std::string* enrollment_token) {
   if (!base::PathService::Get(chrome::DIR_USER_DATA, &token_file_path))
     return false;
 
-  token_file_path = token_file_path.Append(kEnrollmentTokenFilePath);
-  if (!base::ReadFileToString(token_file_path, enrollment_token)) {
-    return false;
+  // Read the enrollment token from the new location. If that fails, try the old
+  // location (which will be deprecated soon). If that also fails, bail as there
+  // is no token set.
+  if (!base::ReadFileToString(token_file_path.Append(kEnrollmentTokenFilePath),
+                              enrollment_token)) {
+    // TODO(crbug.com/907589) : Remove once no longer in use.
+    if (!base::ReadFileToString(token_file_path.Append(kEnrollmentTokenOldFilePath),
+                                enrollment_token)) {
+      return false;
+    }
   }
   *enrollment_token =
       base::TrimWhitespaceASCII(*enrollment_token, base::TRIM_ALL).as_string();
   return true;
+}
+
+base::Optional<bool> IsEnrollmentMandatoryByPolicy() {
+  base::ScopedCFTypeRef<CFPropertyListRef> value(CFPreferencesCopyAppValue(
+      kEnrollmentMandatoryOptionPolicyName, kBundleId));
+
+  if (!value || !CFPreferencesAppValueIsForced(
+                    kEnrollmentMandatoryOptionPolicyName, kBundleId)) {
+    return base::Optional<bool>();
+  }
+
+  CFBooleanRef value_bool = base::mac::CFCast<CFBooleanRef>(value);
+  if (!value_bool)
+    return base::Optional<bool>();
+  return value_bool == kCFBooleanTrue;
+}
+
+base::Optional<bool> IsEnrollmentMandatoryByFile() {
+  std::string options;
+  if (!base::ReadFileToString(base::FilePath(kEnrollmentOptionsFilePath),
+                              &options)) {
+    return base::Optional<bool>();
+  }
+  return base::TrimWhitespaceASCII(options, base::TRIM_ALL).as_string() ==
+         kEnrollmentMandatoryOption;
 }
 
 }  // namespace
@@ -157,7 +201,6 @@ std::string BrowserDMTokenStorageMac::InitClientId() {
     return std::string();
   }
 
-  ignore_result(serial_number.release());
   return base::SysCFStringRefToUTF8(serial_number_cfstring);
 }
 
@@ -184,6 +227,14 @@ std::string BrowserDMTokenStorageMac::InitDMToken() {
   return token;
 }
 
+bool BrowserDMTokenStorageMac::InitEnrollmentErrorOption() {
+  base::Optional<bool> is_mandatory = IsEnrollmentMandatoryByPolicy();
+  if (is_mandatory)
+    return is_mandatory.value();
+
+  return IsEnrollmentMandatoryByFile().value_or(false);
+}
+
 void BrowserDMTokenStorageMac::SaveDMToken(const std::string& token) {
   std::string client_id = RetrieveClientId();
   base::PostTaskWithTraitsAndReplyWithResult(
@@ -191,6 +242,19 @@ void BrowserDMTokenStorageMac::SaveDMToken(const std::string& token) {
       base::BindOnce(&StoreDMTokenInDirAppDataDir, token, client_id),
       base::BindOnce(&BrowserDMTokenStorage::OnDMTokenStored,
                      weak_factory_.GetWeakPtr()));
+}
+
+void BrowserDMTokenStorageMac::DeletePolicyDirectory() {
+  base::FilePath token_file_path;
+  std::string dummy_id = "id";
+  if (!GetDmTokenFilePath(&token_file_path, dummy_id, /* create_dir = */ false))
+    return;
+
+  base::FilePath token_dir_path = token_file_path.DirName();
+  if (base::DirectoryExists(token_dir_path) &&
+      base::IsDirectoryEmpty(token_dir_path)) {
+    base::DeleteFile(token_dir_path, /* recursive = */ false);
+  }
 }
 
 }  // namespace policy

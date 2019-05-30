@@ -6,29 +6,55 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_CSSOM_CSS_UNSUPPORTED_STYLE_VALUE_H_
 
 #include "base/macros.h"
+#include "base/optional.h"
+#include "third_party/blink/renderer/core/css/css_property_name.h"
 #include "third_party/blink/renderer/core/css/cssom/css_style_value.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
 
 // CSSUnsupportedStyleValue is the internal representation of a base
 // CSSStyleValue that is returned when we do not yet support a CSS Typed OM type
-// for a given CSS Value. It is tied to a specific CSS property and is only
-// considered valid for that property.
+// for a given CSS Value.
+//
+// It is either:
+//
+// * Tied to a specific CSS property, and therefore only valid for that
+//   property, or
+// * Tied to no CSS property at all, in which case it's not valid for any
+//   property.
+
 class CORE_EXPORT CSSUnsupportedStyleValue final : public CSSStyleValue {
  public:
-  static CSSUnsupportedStyleValue* Create(CSSPropertyID property,
-                                          const String& css_text) {
-    return new CSSUnsupportedStyleValue(property, css_text);
+  static CSSUnsupportedStyleValue* Create(const CSSValue& value) {
+    return MakeGarbageCollected<CSSUnsupportedStyleValue>(value.CssText());
   }
-  static CSSUnsupportedStyleValue* Create(CSSPropertyID property,
+  static CSSUnsupportedStyleValue* Create(const String& css_text) {
+    return MakeGarbageCollected<CSSUnsupportedStyleValue>(css_text);
+  }
+  static CSSUnsupportedStyleValue* Create(const CSSPropertyName& name,
+                                          const String& css_text) {
+    return MakeGarbageCollected<CSSUnsupportedStyleValue>(name, css_text);
+  }
+  static CSSUnsupportedStyleValue* Create(const CSSPropertyName& name,
                                           const CSSValue& value) {
-    return new CSSUnsupportedStyleValue(property, value.CssText());
+    return MakeGarbageCollected<CSSUnsupportedStyleValue>(name,
+                                                          value.CssText());
+  }
+
+  CSSUnsupportedStyleValue(const String& css_text) { SetCSSText(css_text); }
+  CSSUnsupportedStyleValue(const CSSPropertyName& name, const String& css_text)
+      : name_(name) {
+    SetCSSText(css_text);
   }
 
   StyleValueType GetType() const override {
     return StyleValueType::kUnknownType;
   }
-  CSSPropertyID GetProperty() const { return property_; }
+  bool IsValidFor(const CSSPropertyName& name) const {
+    return name_ && *name_ == name;
+  }
+
   const CSSValue* ToCSSValue() const override {
     NOTREACHED();
     return nullptr;
@@ -37,22 +63,16 @@ class CORE_EXPORT CSSUnsupportedStyleValue final : public CSSStyleValue {
   String toString() const final { return CSSText(); }
 
  private:
-  CSSUnsupportedStyleValue(CSSPropertyID property, const String& css_text)
-      : property_(property) {
-    SetCSSText(css_text);
-  }
-
-  const CSSPropertyID property_;
+  base::Optional<CSSPropertyName> name_;
   DISALLOW_COPY_AND_ASSIGN(CSSUnsupportedStyleValue);
 };
 
-DEFINE_TYPE_CASTS(CSSUnsupportedStyleValue,
-                  CSSStyleValue,
-                  value,
-                  value->GetType() ==
-                      CSSStyleValue::StyleValueType::kUnknownType,
-                  value.GetType() ==
-                      CSSStyleValue::StyleValueType::kUnknownType);
+template <>
+struct DowncastTraits<CSSUnsupportedStyleValue> {
+  static bool AllowFrom(const CSSStyleValue& value) {
+    return value.GetType() == CSSStyleValue::StyleValueType::kUnknownType;
+  }
+};
 
 }  // namespace blink
 

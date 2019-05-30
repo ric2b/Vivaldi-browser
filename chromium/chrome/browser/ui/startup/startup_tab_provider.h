@@ -65,22 +65,12 @@ class StartupTabProvider {
 class StartupTabProviderImpl : public StartupTabProvider {
  public:
   struct StandardOnboardingTabsParams {
-    StandardOnboardingTabsParams();
-    ~StandardOnboardingTabsParams();
-
     bool is_first_run = false;
     bool has_seen_welcome_page = false;
     bool is_signin_allowed = false;
     bool is_signed_in = false;
-    bool is_signin_in_progress = false;
     bool is_supervised_user = false;
     bool is_force_signin_enabled = false;
-#if defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
-    bool has_seen_apps_promo = false;
-    bool is_apps_promo_allowed = false;
-    bool has_seen_email_promo = false;
-    bool is_email_promo_allowed = false;
-#endif  // defined(OS_WIN) && defined(GOOGLE_CHROME_BUILD)
   };
 
   struct Win10OnboardingTabsParams {
@@ -104,8 +94,7 @@ class StartupTabProviderImpl : public StartupTabProvider {
   // Returns true if the standard welcome page should be shown in a tab. This
   // should only be used following a positive result from CanShowWelcome.
   static bool ShouldShowWelcomeForOnboarding(bool has_seen_welcome_page,
-                                             bool is_signed_in,
-                                             bool is_signin_in_progress);
+                                             bool is_signed_in);
 
   // Determines which tabs should be shown according to onboarding/first
   // run policy.
@@ -127,13 +116,6 @@ class StartupTabProviderImpl : public StartupTabProvider {
   static StartupTabs GetWin10OnboardingTabsForState(
       const StandardOnboardingTabsParams& standard_params,
       const Win10OnboardingTabsParams& win10_params);
-
-#if defined(GOOGLE_CHROME_BUILD)
-  // Returns true if showing one of the new user experience experiments is
-  // permissible.
-  static bool ShouldShowNewUserExperience(bool is_promo_allowed,
-                                          bool has_seen_promo);
-#endif  // defined(GOOGLE_CHROME_BUILD)
 #endif  // defined(OS_WIN)
 
   // Processes first run URLs specified in Master Preferences file, replacing

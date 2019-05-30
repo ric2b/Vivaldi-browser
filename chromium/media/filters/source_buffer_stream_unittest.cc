@@ -70,7 +70,7 @@ MATCHER_P(ContainsTrackBufferExhaustionSkipLog, skip_milliseconds, "") {
                          "Media append that overlapped current playback "
                          "position caused time gap in playing VIDEO stream "
                          "because the next keyframe is " +
-                             base::IntToString(skip_milliseconds) +
+                             base::NumberToString(skip_milliseconds) +
                              "ms beyond last overlapped frame. Media may "
                              "appear temporarily frozen.");
 }
@@ -3960,17 +3960,21 @@ TEST_P(SourceBufferStreamTest, SameTimestamp_Video_TwoAppends) {
 }
 
 // Verify that a non-keyframe followed by a keyframe with the same timestamp
-// is allowed, but also results in a MediaLog.
+// is allowed (and also results in a MediaLog when buffering by DTS).
 TEST_P(SourceBufferStreamTest, SameTimestamp_Video_SingleAppend_Warning) {
-  EXPECT_MEDIA_LOG(ContainsSameTimestampAt30MillisecondsLog());
+  if (buffering_api_ == BufferingApi::kLegacyByDts)
+    EXPECT_MEDIA_LOG(ContainsSameTimestampAt30MillisecondsLog());
 
   Seek(0);
   NewCodedFrameGroupAppend("0K 30 30K 60");
   CheckExpectedBuffers("0K 30 30K 60");
 }
 
+// Verify that a non-keyframe followed by a keyframe with the same timestamp
+// is allowed (and also results in a MediaLog when buffering by DTS).
 TEST_P(SourceBufferStreamTest, SameTimestamp_Video_TwoAppends_Warning) {
-  EXPECT_MEDIA_LOG(ContainsSameTimestampAt30MillisecondsLog());
+  if (buffering_api_ == BufferingApi::kLegacyByDts)
+    EXPECT_MEDIA_LOG(ContainsSameTimestampAt30MillisecondsLog());
 
   Seek(0);
   NewCodedFrameGroupAppend("0K 30D0");
@@ -4026,22 +4030,8 @@ TEST_P(SourceBufferStreamTest, SameTimestamp_Audio) {
                             44100, EmptyExtraData(), Unencrypted());
   STREAM_RESET(config);
   Seek(0);
-  NewCodedFrameGroupAppend("0K 0K 30K 30 60 60");
-  CheckExpectedBuffers("0K 0K 30K 30 60 60");
-}
-
-TEST_P(SourceBufferStreamTest, SameTimestamp_Audio_SingleAppend_Warning) {
-  EXPECT_MEDIA_LOG(ContainsSameTimestampAt30MillisecondsLog());
-
-  AudioDecoderConfig config(kCodecMP3, kSampleFormatF32, CHANNEL_LAYOUT_STEREO,
-                            44100, EmptyExtraData(), Unencrypted());
-  STREAM_RESET(config);
-  Seek(0);
-
-  // Note, in reality, a non-keyframe audio frame is rare or perhaps not
-  // possible.
-  NewCodedFrameGroupAppend("0K 30 30K 60");
-  CheckExpectedBuffers("0K 30 30K 60");
+  NewCodedFrameGroupAppend("0K 0K 30K 30K");
+  CheckExpectedBuffers("0K 0K 30K 30K");
 }
 
 // If seeking past any existing range and the seek is pending
@@ -5914,11 +5904,11 @@ TEST_P(SourceBufferStreamTest,
   CheckNoNextBuffer();
 }
 
-INSTANTIATE_TEST_CASE_P(LegacyByDts,
-                        SourceBufferStreamTest,
-                        Values(BufferingApi::kLegacyByDts));
-INSTANTIATE_TEST_CASE_P(NewByPts,
-                        SourceBufferStreamTest,
-                        Values(BufferingApi::kNewByPts));
+INSTANTIATE_TEST_SUITE_P(LegacyByDts,
+                         SourceBufferStreamTest,
+                         Values(BufferingApi::kLegacyByDts));
+INSTANTIATE_TEST_SUITE_P(NewByPts,
+                         SourceBufferStreamTest,
+                         Values(BufferingApi::kNewByPts));
 
 }  // namespace media

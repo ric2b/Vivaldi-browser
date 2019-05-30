@@ -6,9 +6,9 @@ import unittest
 import mock
 from mock import call
 
-#from core import results_dashboard
+from core import results_dashboard
 
-@unittest.skip("Does not work in Vivaldi environment")
+
 class ResultsDashboardTest(unittest.TestCase):
 
   def setUp(self):

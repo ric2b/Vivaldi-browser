@@ -8,6 +8,7 @@
 
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -48,7 +49,7 @@ bool IsEventExpired(const base::Time& event_time, double ttl_in_second) {
 // Helper function to determine if the URL type should be LANDING_REFERRER or
 // LANDING_PAGE, and modify AttributionResult accordingly.
 ReferrerChainEntry::URLType GetURLTypeAndAdjustAttributionResult(
-    bool at_user_gesture_limit,
+    size_t user_gesture_count,
     SafeBrowsingNavigationObserverManager::AttributionResult* out_result) {
   // Landing page refers to the page user directly interacts with to trigger
   // this event (e.g. clicking on download button). Landing referrer page is the
@@ -56,13 +57,19 @@ ReferrerChainEntry::URLType GetURLTypeAndAdjustAttributionResult(
   // Since we are tracing navigations backwards, if we've reached
   // user gesture limit before this navigation event, this is a navigation
   // leading to the landing referrer page, otherwise it leads to landing page.
-  if (at_user_gesture_limit) {
+  if (user_gesture_count == 0) {
+    *out_result = SafeBrowsingNavigationObserverManager::SUCCESS;
+    return ReferrerChainEntry::EVENT_URL;
+  } else if (user_gesture_count == 2) {
     *out_result =
         SafeBrowsingNavigationObserverManager::SUCCESS_LANDING_REFERRER;
     return ReferrerChainEntry::LANDING_REFERRER;
-  } else {
+  } else if (user_gesture_count == 1) {
     *out_result = SafeBrowsingNavigationObserverManager::SUCCESS_LANDING_PAGE;
     return ReferrerChainEntry::LANDING_PAGE;
+  } else {
+    *out_result = SafeBrowsingNavigationObserverManager::SUCCESS_REFERRER;
+    return ReferrerChainEntry::REFERRER;
   }
 }
 
@@ -81,7 +88,7 @@ static const double kUserGestureTTLInSecond = 1.0;
 // expired. So we clean up these navigation footprints every 2 minutes.
 static const double kNavigationFootprintTTLInSecond = 120.0;
 // The maximum number of latest NavigationEvent we keep. It is used to limit
-// memory usage of navigation tracking. This number if picked based on UMA
+// memory usage of navigation tracking. This number is picked based on UMA
 // metric "SafeBrowsing.NavigationObserver.NavigationEventCleanUpCount".
 // Lowering it could make room for abuse.
 static const int kNavigationRecordMaxSize = 100;
@@ -159,6 +166,10 @@ NavigationEvent* NavigationEventList::FindNavigationEvent(
           // Adjust retargeting navigation event's attributes.
           retargeting_nav_event->server_redirect_urls.push_back(
               std::move(search_url));
+        } else {
+          // The retargeting_nav_event original request url is unreliable, since
+          // that navigation can be canceled.
+          retargeting_nav_event->original_request_url = std::move(search_url);
         }
         return retargeting_nav_event;
       } else {
@@ -208,7 +219,7 @@ std::size_t NavigationEventList::CleanUpNavigationEvents() {
   // Remove any stale NavigationEnvent, if it is older than
   // kNavigationFootprintTTLInSecond.
   std::size_t removal_count = 0;
-  while (navigation_events_.size() > 0 &&
+  while (!navigation_events_.empty() &&
          IsEventExpired(navigation_events_[0]->last_updated,
                         kNavigationFootprintTTLInSecond)) {
     navigation_events_.pop_front();
@@ -423,8 +434,7 @@ SafeBrowsingNavigationObserverManager::IdentifyReferrerChainByHostingPage(
     user_gesture_count = 1;
     AddToReferrerChain(
         out_referrer_chain, nav_event, initiating_main_frame_url,
-        GetURLTypeAndAdjustAttributionResult(
-            user_gesture_count == user_gesture_count_limit, &result));
+        GetURLTypeAndAdjustAttributionResult(user_gesture_count, &result));
   } else {
     AddToReferrerChain(out_referrer_chain, nav_event, initiating_main_frame_url,
                        ReferrerChainEntry::CLIENT_REDIRECT);
@@ -443,7 +453,7 @@ void SafeBrowsingNavigationObserverManager::RecordNewWebContents(
     content::WebContents* source_web_contents,
     int source_render_process_id,
     int source_render_frame_id,
-    GURL target_url,
+    const GURL& target_url,
     ui::PageTransition page_transition,
     content::WebContents* target_web_contents,
     bool renderer_initiated) {
@@ -549,13 +559,10 @@ void SafeBrowsingNavigationObserverManager::CleanUpIpAddresses() {
   std::size_t remove_count = 0;
   for (auto it = host_to_ip_map_.begin(); it != host_to_ip_map_.end();) {
     std::size_t size_before_removal = it->second.size();
-    it->second.erase(std::remove_if(it->second.begin(), it->second.end(),
-                                    [](const ResolvedIPAddress& resolved_ip) {
-                                      return IsEventExpired(
-                                          resolved_ip.timestamp,
-                                          kNavigationFootprintTTLInSecond);
-                                    }),
-                     it->second.end());
+    base::EraseIf(it->second, [](const ResolvedIPAddress& resolved_ip) {
+      return IsEventExpired(resolved_ip.timestamp,
+                            kNavigationFootprintTTLInSecond);
+    });
     std::size_t size_after_removal = it->second.size();
     remove_count += (size_before_removal - size_after_removal);
     if (size_after_removal == 0)
@@ -563,8 +570,6 @@ void SafeBrowsingNavigationObserverManager::CleanUpIpAddresses() {
     else
       ++it;
   }
-  UMA_HISTOGRAM_COUNTS_10000(
-      "SafeBrowsing.NavigationObserver.IPAddressCleanUpCount", remove_count);
 }
 
 bool SafeBrowsingNavigationObserverManager::IsCleanUpScheduled() const {
@@ -598,7 +603,7 @@ void SafeBrowsingNavigationObserverManager::AddToReferrerChain(
   referrer_chain_entry->set_type(type);
   auto ip_it = host_to_ip_map_.find(destination_url.host());
   if (ip_it != host_to_ip_map_.end()) {
-    for (ResolvedIPAddress entry : ip_it->second) {
+    for (const ResolvedIPAddress& entry : ip_it->second) {
       referrer_chain_entry->add_ip_addresses(entry.ip);
     }
   }
@@ -671,11 +676,10 @@ void SafeBrowsingNavigationObserverManager::GetRemainingReferrerChain(
     if (!last_nav_event_traced)
       return;
 
-    AddToReferrerChain(
-        out_referrer_chain, last_nav_event_traced, last_main_frame_url_traced,
-        GetURLTypeAndAdjustAttributionResult(
-            current_user_gesture_count == user_gesture_count_limit,
-            out_result));
+    AddToReferrerChain(out_referrer_chain, last_nav_event_traced,
+                       last_main_frame_url_traced,
+                       GetURLTypeAndAdjustAttributionResult(
+                           current_user_gesture_count, out_result));
     // Stop searching if the size of out_referrer_chain already reached its
     // limit.
     if (out_referrer_chain->size() == kReferrerChainMaxLength)

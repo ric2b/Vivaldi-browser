@@ -111,10 +111,7 @@ LocalCaretRect LocalSelectionRectOfPositionTemplate(
     return LocalCaretRect();
 
   if (NGInlineFormattingContextOf(adjusted.GetPosition())) {
-    // TODO(editing-dev): Use selection height instead of caret height, or
-    // decide if we need to keep the distinction between caret height and
-    // selection height in NG.
-    return ComputeNGLocalCaretRect(adjusted);
+    return ComputeNGLocalSelectionRect(adjusted);
   }
 
   // TODO(editing-dev): This DCHECK is for ensuring the correctness of
@@ -178,17 +175,15 @@ LocalCaretRect LocalSelectionRectOfPosition(
 
 template <typename Strategy>
 static IntRect AbsoluteCaretBoundsOfAlgorithm(
-    const VisiblePositionTemplate<Strategy>& visible_position) {
-  DCHECK(visible_position.IsValid()) << visible_position;
-  const LocalCaretRect& caret_rect =
-      LocalCaretRectOfPosition(visible_position.ToPositionWithAffinity());
+    const PositionWithAffinityTemplate<Strategy>& position) {
+  const LocalCaretRect& caret_rect = LocalCaretRectOfPosition(position);
   if (caret_rect.IsEmpty())
     return IntRect();
   return LocalToAbsoluteQuadOf(caret_rect).EnclosingBoundingBox();
 }
 
-IntRect AbsoluteCaretBoundsOf(const VisiblePosition& visible_position) {
-  return AbsoluteCaretBoundsOfAlgorithm<EditingStrategy>(visible_position);
+IntRect AbsoluteCaretBoundsOf(const PositionWithAffinity& position) {
+  return AbsoluteCaretBoundsOfAlgorithm<EditingStrategy>(position);
 }
 
 // TODO(editing-dev): This function does pretty much the same thing as
@@ -223,10 +218,8 @@ IntRect AbsoluteSelectionBoundsOf(const VisiblePosition& visible_position) {
   return AbsoluteSelectionBoundsOfAlgorithm<EditingStrategy>(visible_position);
 }
 
-IntRect AbsoluteCaretBoundsOf(
-    const VisiblePositionInFlatTree& visible_position) {
-  return AbsoluteCaretBoundsOfAlgorithm<EditingInFlatTreeStrategy>(
-      visible_position);
+IntRect AbsoluteCaretBoundsOf(const PositionInFlatTreeWithAffinity& position) {
+  return AbsoluteCaretBoundsOfAlgorithm<EditingInFlatTreeStrategy>(position);
 }
 
 }  // namespace blink

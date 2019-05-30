@@ -13,12 +13,14 @@
 #include <utility>
 
 #include "base/barrier_closure.h"
+#include "base/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "build/build_config.h"
 #include "components/services/leveldb/public/cpp/util.h"
@@ -29,7 +31,7 @@
 #include "content/browser/dom_storage/local_storage_database.pb.h"
 #include "content/browser/dom_storage/storage_area_impl.h"
 #include "content/common/dom_storage/dom_storage_types.h"
-#include "content/public/browser/local_storage_usage_info.h"
+#include "content/public/browser/storage_usage_info.h"
 #include "services/file/public/mojom/constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "sql/database.h"
@@ -81,8 +83,8 @@ static const uint8_t kLatin1Format = 1;
 std::vector<uint8_t> CreateMetaDataKey(const url::Origin& origin) {
   auto serialized_origin = leveldb::StdStringToUint8Vector(origin.Serialize());
   std::vector<uint8_t> key;
-  key.reserve(arraysize(kMetaPrefix) + serialized_origin.size());
-  key.insert(key.end(), kMetaPrefix, kMetaPrefix + arraysize(kMetaPrefix));
+  key.reserve(base::size(kMetaPrefix) + serialized_origin.size());
+  key.insert(key.end(), kMetaPrefix, kMetaPrefix + base::size(kMetaPrefix));
   key.insert(key.end(), serialized_origin.begin(), serialized_origin.end());
   return key;
 }
@@ -228,7 +230,7 @@ class LocalStorageContextMojo::StorageAreaHolder final
       item->type = leveldb::mojom::BatchOperationType::PUT_KEY;
       item->key = leveldb::StdStringToUint8Vector(kVersionKey);
       item->value = leveldb::StdStringToUint8Vector(
-          base::Int64ToString(kCurrentLocalStorageSchemaVersion));
+          base::NumberToString(kCurrentLocalStorageSchemaVersion));
       operations.push_back(std::move(item));
       context_->database_initialized_ = true;
     }
@@ -427,6 +429,26 @@ void LocalStorageContextMojo::DeleteStorage(const url::Origin& origin,
     AddDeleteOriginOperations(&operations, origin);
     database_->Write(
         std::move(operations),
+        base::BindOnce(&DatabaseErrorResponse, std::move(callback)));
+  } else {
+    std::move(callback).Run();
+  }
+}
+
+void LocalStorageContextMojo::PerformStorageCleanup(
+    base::OnceClosure callback) {
+  if (connection_state_ != CONNECTION_FINISHED) {
+    RunWhenConnected(
+        base::BindOnce(&LocalStorageContextMojo::PerformStorageCleanup,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+    return;
+  }
+  if (database_) {
+    // Try to commit all changes before rewriting the database. If
+    // an area is not ready to commit its changes, nothing breaks but the
+    // rewrite doesn't remove all traces of old data.
+    Flush();
+    database_->RewriteDB(
         base::BindOnce(&DatabaseErrorResponse, std::move(callback)));
   } else {
     std::move(callback).Run();
@@ -682,6 +704,19 @@ void LocalStorageContextMojo::InitiateConnection(bool in_memory_only) {
   }
 }
 
+void LocalStorageContextMojo::OnMojoConnectionDestroyed() {
+  UMA_HISTOGRAM_BOOLEAN("LocalStorageContext.OnConnectionDestroyed", true);
+  LOG(ERROR) << "Lost connection to database";
+  // We're about to set database_ to null, so delete the StorageAreaImpls
+  // that might still be using the old database.
+  for (const auto& it : areas_)
+    it.second->storage_area()->CancelAllPendingRequests();
+  areas_.clear();
+  database_ = nullptr;
+  // TODO(dullweber): Should we try to recover? E.g. try to reopen and if this
+  // fails, call DeleteAndRecreateDatabase().
+}
+
 void LocalStorageContextMojo::OnDirectoryOpened(base::File::Error err) {
   if (err != base::File::Error::FILE_OK) {
     // We failed to open the directory; continue with startup so that we create
@@ -740,6 +775,9 @@ void LocalStorageContextMojo::OnDatabaseOpened(
 
   // Verify DB schema version.
   if (database_) {
+    database_.set_connection_error_handler(
+        base::BindOnce(&LocalStorageContextMojo::OnMojoConnectionDestroyed,
+                       weak_ptr_factory_.GetWeakPtr()));
     database_->Get(
         leveldb::StdStringToUint8Vector(kVersionKey),
         base::BindOnce(&LocalStorageContextMojo::OnGotDatabaseVersion,
@@ -798,6 +836,7 @@ void LocalStorageContextMojo::OnConnectionFinished() {
   if (database_)
     tried_to_recreate_during_open_ = false;
 
+  LogDatabaseOpenResult(OpenResult::SUCCESS);
   open_result_histogram_ = nullptr;
 
   // |database_| should be known to either be valid or invalid by now. Run our
@@ -904,20 +943,16 @@ void LocalStorageContextMojo::RetrieveStorageUsage(
   if (!database_) {
     // If for whatever reason no leveldb database is available, no storage is
     // used, so return an array only containing the current areas.
-    std::vector<LocalStorageUsageInfo> result;
+    std::vector<StorageUsageInfo> result;
     base::Time now = base::Time::Now();
-    for (const auto& it : areas_) {
-      LocalStorageUsageInfo info;
-      info.origin = it.first.GetURL();
-      info.last_modified = now;
-      result.push_back(std::move(info));
-    }
+    for (const auto& it : areas_)
+      result.emplace_back(it.first, 0, now);
     std::move(callback).Run(std::move(result));
     return;
   }
 
   database_->GetPrefixed(
-      std::vector<uint8_t>(kMetaPrefix, kMetaPrefix + arraysize(kMetaPrefix)),
+      std::vector<uint8_t>(kMetaPrefix, kMetaPrefix + base::size(kMetaPrefix)),
       base::BindOnce(&LocalStorageContextMojo::OnGotMetaData,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
@@ -926,15 +961,15 @@ void LocalStorageContextMojo::OnGotMetaData(
     GetStorageUsageCallback callback,
     leveldb::mojom::DatabaseError status,
     std::vector<leveldb::mojom::KeyValuePtr> data) {
-  std::vector<LocalStorageUsageInfo> result;
+  std::vector<StorageUsageInfo> result;
   std::set<url::Origin> origins;
   for (const auto& row : data) {
-    DCHECK_GT(row->key.size(), arraysize(kMetaPrefix));
-    LocalStorageUsageInfo info;
-    info.origin = GURL(leveldb::Uint8VectorToStdString(row->key).substr(
-        arraysize(kMetaPrefix)));
-    origins.insert(url::Origin::Create(info.origin));
-    if (!info.origin.is_valid()) {
+    DCHECK_GT(row->key.size(), base::size(kMetaPrefix));
+    GURL origin(leveldb::Uint8VectorToStdString(row->key).substr(
+        base::size(kMetaPrefix)));
+
+    origins.insert(url::Origin::Create(origin));
+    if (!origin.is_valid()) {
       // TODO(mek): Deal with database corruption.
       continue;
     }
@@ -944,10 +979,9 @@ void LocalStorageContextMojo::OnGotMetaData(
       // TODO(mek): Deal with database corruption.
       continue;
     }
-    info.data_size = row_data.size_bytes();
-    info.last_modified =
-        base::Time::FromInternalValue(row_data.last_modified());
-    result.push_back(std::move(info));
+    result.emplace_back(
+        url::Origin::Create(origin), row_data.size_bytes(),
+        base::Time::FromInternalValue(row_data.last_modified()));
   }
   // Add any origins for which StorageAreas exist, but which haven't
   // committed any data to disk yet.
@@ -960,24 +994,21 @@ void LocalStorageContextMojo::OnGotMetaData(
         it.second->storage_area()->empty()) {
       continue;
     }
-    LocalStorageUsageInfo info;
-    info.origin = it.first.GetURL();
-    info.last_modified = now;
-    result.push_back(std::move(info));
+    result.emplace_back(it.first, 0, now);
   }
   std::move(callback).Run(std::move(result));
 }
 
 void LocalStorageContextMojo::OnGotStorageUsageForShutdown(
-    std::vector<LocalStorageUsageInfo> usage) {
+    std::vector<StorageUsageInfo> usage) {
   std::vector<leveldb::mojom::BatchedOperationPtr> operations;
   for (const auto& info : usage) {
-    if (special_storage_policy_->IsStorageProtected(info.origin))
+    if (special_storage_policy_->IsStorageProtected(info.origin.GetURL()))
       continue;
-    if (!special_storage_policy_->IsStorageSessionOnly(info.origin))
+    if (!special_storage_policy_->IsStorageSessionOnly(info.origin.GetURL()))
       continue;
 
-    AddDeleteOriginOperations(&operations, url::Origin::Create(info.origin));
+    AddDeleteOriginOperations(&operations, info.origin);
   }
 
   if (!operations.empty()) {

@@ -38,10 +38,14 @@ ComputedStyle* SVGElementRareData::OverrideComputedStyle(
   return override_computed_style_.get();
 }
 
+void SVGElementRareData::ClearOverriddenComputedStyle() {
+  override_computed_style_ = nullptr;
+}
+
 SVGResourceClient& SVGElementRareData::EnsureSVGResourceClient(
     SVGElement* element) {
   if (!resource_client_)
-    resource_client_ = new SVGElementResourceClient(element);
+    resource_client_ = MakeGarbageCollected<SVGElementResourceClient>(element);
   return *resource_client_;
 }
 

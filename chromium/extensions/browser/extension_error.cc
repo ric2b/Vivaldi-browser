@@ -36,7 +36,7 @@ ExtensionError::~ExtensionError() {
 std::string ExtensionError::GetDebugString() const {
   return std::string("Extension Error:") +
          "\n  OTR:     " + std::string(from_incognito_ ? "true" : "false") +
-         "\n  Level:   " + base::IntToString(static_cast<int>(level_)) +
+         "\n  Level:   " + base::NumberToString(level_) +
          "\n  Source:  " + base::UTF16ToUTF8(source_) +
          "\n  Message: " + base::UTF16ToUTF8(message_) +
          "\n  ID:      " + extension_id_;
@@ -115,8 +115,7 @@ std::string RuntimeError::GetDebugString() const {
          "\n  Type:    RuntimeError"
          "\n  Context: " + context_url_.spec() +
          "\n  Stack Trace: ";
-  for (StackTrace::const_iterator iter = stack_trace_.begin();
-       iter != stack_trace_.end(); ++iter) {
+  for (auto iter = stack_trace_.cbegin(); iter != stack_trace_.cend(); ++iter) {
     result += "\n    {";
     result += "\n      Line:     " + base::NumberToString(iter->line_number) +
               "\n      Column:   " + base::NumberToString(iter->column_number) +

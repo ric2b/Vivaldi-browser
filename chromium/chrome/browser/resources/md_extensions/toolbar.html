@@ -20,19 +20,15 @@
   <template>
     <style include="cr-hidden-style paper-button-style">
       :host {
-        /* The constant is the height of the tallest control. */
-        --button-row-height: calc(2 * var(--padding-top-bottom) + 36px);
+        --border-bottom-height: 1px;
+        --button-row-height: calc(2 * var(--padding-top-bottom) +
+            var(--cr-button-height));
         --drawer-transition: 0.3s cubic-bezier(.25, .1, .25, 1);
-        --padding-top-bottom: 8px;
-        --toolbar-color: var(--md-toolbar-color);
-      }
-
-      cr-toolbar {
-        background: var(--toolbar-color);
+        --padding-top-bottom: 10px;
       }
 
       /* This toggle needs special styling because it's on blue background. */
-      cr-toolbar cr-toggle {
+      :host-context(html:not([dark])) cr-toolbar cr-toggle {
         --cr-toggle-checked-bar-color: var(--google-grey-refresh-100);
         --cr-toggle-checked-button-color: white;
         --cr-toggle-checked-ink-color: white;
@@ -49,17 +45,22 @@
       }
 
       #devDrawer {
-        background: white;
+        background: #fff;
         border-bottom: 1px solid var(--google-grey-300);
-        box-sizing: border-box;
         height: 0;
-        overflow: hidden;
+        overflow-x: hidden;
+        overflow-y: auto;
         position: relative;
         transition: height var(--drawer-transition);
       }
 
+      :host-context([dark]) #devDrawer {
+        background: none;
+        border-bottom-color: var(--cr-separator-color);
+      }
+
       #devDrawer[expanded] {
-        height: var(--button-row-height);
+        height: calc(var(--button-row-height) + var(--border-bottom-height));
       }
 
       #buttonStrip {
@@ -89,7 +90,6 @@
       }
 
       cr-toast > div {
-        color: #fff;
         display: flex;
         flex: 1;
         overflow: hidden;

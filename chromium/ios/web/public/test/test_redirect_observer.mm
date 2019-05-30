@@ -15,8 +15,6 @@
 
 namespace web {
 
-DEFINE_WEB_STATE_USER_DATA_KEY(TestRedirectObserver);
-
 #pragma mark - TestRedirectObserver
 
 TestRedirectObserver::TestRedirectObserver(WebState* web_state) {
@@ -63,5 +61,7 @@ void TestRedirectObserver::DidStartNavigation(web::WebState* web_state,
 void TestRedirectObserver::WebStateDestroyed(web::WebState* web_state) {
   web_state->RemoveObserver(this);
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(TestRedirectObserver)
 
 }  // namespace web

@@ -18,6 +18,7 @@ enum WebGLExtensionName {
   kEXTFragDepthName,
   kEXTShaderTextureLODName,
   kEXTsRGBName,
+  kKHRParallelShaderCompileName,
   kEXTTextureFilterAnisotropicName,
   kOESElementIndexUintName,
   kOESStandardDerivativesName,
@@ -39,6 +40,8 @@ enum WebGLExtensionName {
   kWebGLDrawBuffersName,
   kWebGLGetBufferSubDataAsyncName,
   kWebGLLoseContextName,
+  kWebGLMultiDrawName,
+  kWebGLMultiDrawInstancedName,
   kWebGLMultiviewName,
   kWebGLExtensionNameCount,  // Must be the last entry
 };

@@ -322,6 +322,18 @@ void CalendarBackend::UpdateEvent(EventID event_id,
       event_row.set_url(event.url);
     }
 
+    if (event.updateFields & calendar::ETAG) {
+      event_row.set_etag(event.etag);
+    }
+
+    if (event.updateFields & calendar::HREF) {
+      event_row.set_href(event.href);
+    }
+
+    if (event.updateFields & calendar::UID) {
+      event_row.set_uid(event.uid);
+    }
+
     if (event.updateFields & calendar::RECURRENCE) {
       RecurrenceRow recurrence_row;
       db_->GetRecurrenceRow(event_id, &recurrence_row);
@@ -439,6 +451,22 @@ void CalendarBackend::UpdateCalendar(
 
     if (calendar.updateFields & calendar::CALENDAR_HIDDEN) {
       calendar_row.set_hidden(calendar.hidden);
+    }
+
+    if (calendar.updateFields & calendar::CALENDAR_ACTIVE) {
+      calendar_row.set_active(calendar.active);
+    }
+
+    if (calendar.updateFields & calendar::CALENDAR_ICONINDEX) {
+      calendar_row.set_iconindex(calendar.iconindex);
+    }
+
+    if (calendar.updateFields & calendar::CALENDAR_CTAG) {
+      calendar_row.set_ctag(calendar.ctag);
+    }
+
+    if (calendar.updateFields & calendar::CALENDAR_USERNAME) {
+      calendar_row.set_username(calendar.username);
     }
 
     result->success = db_->UpdateCalendarRow(calendar_row);

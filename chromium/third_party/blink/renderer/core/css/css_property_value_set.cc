@@ -41,7 +41,7 @@
 
 namespace blink {
 
-static size_t SizeForImmutableCSSPropertyValueSetWithPropertyCount(
+static wtf_size_t SizeForImmutableCSSPropertyValueSetWithPropertyCount(
     unsigned count) {
   return sizeof(ImmutableCSSPropertyValueSet) - sizeof(void*) +
          sizeof(Member<CSSValue>) * count +
@@ -59,14 +59,20 @@ ImmutableCSSPropertyValueSet* ImmutableCSSPropertyValueSet::Create(
       ImmutableCSSPropertyValueSet(properties, count, css_parser_mode);
 }
 
+CSSPropertyName CSSPropertyValueSet::PropertyReference::Name() const {
+  if (Id() != CSSPropertyVariable)
+    return CSSPropertyName(Id());
+  return CSSPropertyName(ToCSSCustomPropertyDeclaration(Value()).GetName());
+}
+
 ImmutableCSSPropertyValueSet* CSSPropertyValueSet::ImmutableCopyIfNeeded()
     const {
-  if (!IsMutable()) {
-    return ToImmutableCSSPropertyValueSet(
-        const_cast<CSSPropertyValueSet*>(this));
-  }
-  const MutableCSSPropertyValueSet* mutable_this =
-      ToMutableCSSPropertyValueSet(this);
+  auto* immutable_property_set = DynamicTo<ImmutableCSSPropertyValueSet>(
+      const_cast<CSSPropertyValueSet*>(this));
+  if (immutable_property_set)
+    return immutable_property_set;
+
+  const auto* mutable_this = To<MutableCSSPropertyValueSet>(this);
   return ImmutableCSSPropertyValueSet::Create(
       mutable_this->property_vector_.data(),
       mutable_this->property_vector_.size(), CssParserMode());
@@ -176,8 +182,9 @@ void ImmutableCSSPropertyValueSet::TraceAfterDispatch(blink::Visitor* visitor) {
 MutableCSSPropertyValueSet::MutableCSSPropertyValueSet(
     const CSSPropertyValueSet& other)
     : CSSPropertyValueSet(other.CssParserMode()) {
-  if (other.IsMutable()) {
-    property_vector_ = ToMutableCSSPropertyValueSet(other).property_vector_;
+  if (auto* other_mutable_property_set =
+          DynamicTo<MutableCSSPropertyValueSet>(other)) {
+    property_vector_ = other_mutable_property_set->property_vector_;
   } else {
     property_vector_.ReserveInitialCapacity(other.PropertyCount());
     for (unsigned i = 0; i < other.PropertyCount(); ++i) {
@@ -243,16 +250,16 @@ template CORE_EXPORT const CSSValue*
 
 void CSSPropertyValueSet::Trace(blink::Visitor* visitor) {
   if (is_mutable_)
-    ToMutableCSSPropertyValueSet(this)->TraceAfterDispatch(visitor);
+    To<MutableCSSPropertyValueSet>(this)->TraceAfterDispatch(visitor);
   else
-    ToImmutableCSSPropertyValueSet(this)->TraceAfterDispatch(visitor);
+    To<ImmutableCSSPropertyValueSet>(this)->TraceAfterDispatch(visitor);
 }
 
 void CSSPropertyValueSet::FinalizeGarbageCollectedObject() {
   if (is_mutable_)
-    ToMutableCSSPropertyValueSet(this)->~MutableCSSPropertyValueSet();
+    To<MutableCSSPropertyValueSet>(this)->~MutableCSSPropertyValueSet();
   else
-    ToImmutableCSSPropertyValueSet(this)->~ImmutableCSSPropertyValueSet();
+    To<ImmutableCSSPropertyValueSet>(this)->~ImmutableCSSPropertyValueSet();
 }
 
 bool MutableCSSPropertyValueSet::RemoveShorthandProperty(
@@ -410,12 +417,8 @@ void MutableCSSPropertyValueSet::SetProperty(CSSPropertyID property_id,
 
 bool MutableCSSPropertyValueSet::SetProperty(const CSSPropertyValue& property,
                                              CSSPropertyValue* slot) {
-  const AtomicString& name =
-      (property.Id() == CSSPropertyVariable)
-          ? ToCSSCustomPropertyDeclaration(property.Value())->GetName()
-          : g_null_atom;
   CSSPropertyValue* to_replace =
-      slot ? slot : FindCSSPropertyWithID(property.Id(), name);
+      slot ? slot : FindCSSPropertyWithName(property.Name());
   if (to_replace && *to_replace == property)
     return false;
   if (to_replace) {
@@ -479,8 +482,7 @@ void MutableCSSPropertyValueSet::MergeAndOverrideOnConflict(
   unsigned size = other->PropertyCount();
   for (unsigned n = 0; n < size; ++n) {
     PropertyReference to_merge = other->PropertyAt(n);
-    // TODO(leviw): This probably doesn't work correctly with Custom Properties
-    CSSPropertyValue* old = FindCSSPropertyWithID(to_merge.Id());
+    CSSPropertyValue* old = FindCSSPropertyWithName(to_merge.Name());
     if (old) {
       SetProperty(
           CSSPropertyValue(to_merge.PropertyMetadata(), to_merge.Value()), old);
@@ -537,18 +539,11 @@ bool MutableCSSPropertyValueSet::RemovePropertiesInSet(const CSSProperty** set,
   return false;
 }
 
-CSSPropertyValue* MutableCSSPropertyValueSet::FindCSSPropertyWithID(
-    CSSPropertyID property_id,
-    const AtomicString& custom_property_name) {
-  int found_property_index = -1;
-  if (property_id == CSSPropertyVariable && !custom_property_name.IsNull()) {
-    // TODO(shanestephens): fix call sites so we always have a
-    // customPropertyName here.
-    found_property_index = FindPropertyIndex(custom_property_name);
-  } else {
-    DCHECK(custom_property_name.IsNull());
-    found_property_index = FindPropertyIndex(property_id);
-  }
+CSSPropertyValue* MutableCSSPropertyValueSet::FindCSSPropertyWithName(
+    const CSSPropertyName& name) {
+  int found_property_index = name.IsCustomProperty()
+                                 ? FindPropertyIndex(name.ToAtomicString())
+                                 : FindPropertyIndex(name.Id());
   if (found_property_index == -1)
     return nullptr;
   return &property_vector_.at(found_property_index);
@@ -592,7 +587,7 @@ void MutableCSSPropertyValueSet::RemoveEquivalentProperties(
 }
 
 MutableCSSPropertyValueSet* CSSPropertyValueSet::MutableCopy() const {
-  return new MutableCSSPropertyValueSet(*this);
+  return MakeGarbageCollected<MutableCSSPropertyValueSet>(*this);
 }
 
 MutableCSSPropertyValueSet* CSSPropertyValueSet::CopyPropertiesInSet(
@@ -617,7 +612,7 @@ CSSStyleDeclaration* MutableCSSPropertyValueSet::EnsureCSSStyleDeclaration() {
     DCHECK(!cssom_wrapper_->ParentElement());
     return cssom_wrapper_.Get();
   }
-  cssom_wrapper_ = new PropertySetCSSStyleDeclaration(*this);
+  cssom_wrapper_ = MakeGarbageCollected<PropertySetCSSStyleDeclaration>(*this);
   return cssom_wrapper_.Get();
 }
 
@@ -634,7 +629,7 @@ int MutableCSSPropertyValueSet::FindPropertyIndex(T property) const {
                                id, property);
       });
 
-  return (it == end) ? -1 : it - begin;
+  return (it == end) ? -1 : static_cast<int>(it - begin);
 }
 template CORE_EXPORT int MutableCSSPropertyValueSet::FindPropertyIndex(
     CSSPropertyID) const;
@@ -670,13 +665,13 @@ void CSSPropertyValueSet::ShowStyle() {
 
 MutableCSSPropertyValueSet* MutableCSSPropertyValueSet::Create(
     CSSParserMode css_parser_mode) {
-  return new MutableCSSPropertyValueSet(css_parser_mode);
+  return MakeGarbageCollected<MutableCSSPropertyValueSet>(css_parser_mode);
 }
 
 MutableCSSPropertyValueSet* MutableCSSPropertyValueSet::Create(
     const CSSPropertyValue* properties,
     unsigned count) {
-  return new MutableCSSPropertyValueSet(properties, count);
+  return MakeGarbageCollected<MutableCSSPropertyValueSet>(properties, count);
 }
 
 void CSSLazyPropertyParser::Trace(blink::Visitor* visitor) {}

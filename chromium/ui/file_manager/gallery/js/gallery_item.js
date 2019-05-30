@@ -70,7 +70,9 @@ GalleryItem.PREFETCH_PROPERTY_NAMES =
 /**
  * @return {!FileEntry} Image entry.
  */
-GalleryItem.prototype.getEntry = function() { return this.entry_; };
+GalleryItem.prototype.getEntry = function() {
+  return this.entry_;
+};
 
 /**
  * @return {!EntryLocation} Entry location information.
@@ -117,7 +119,9 @@ GalleryItem.prototype.getFileName = function() {
 /**
  * @return {boolean} True if this image has not been created in this session.
  */
-GalleryItem.prototype.isOriginal = function() { return this.original_; };
+GalleryItem.prototype.isOriginal = function() {
+  return this.original_;
+};
 
 /**
  * Sets an item as original.
@@ -234,7 +238,7 @@ GalleryItem.prototype.isWritableFormat = function() {
 
 /**
  * Returns true if the entry of item is writable.
- * @param {!VolumeManagerWrapper} volumeManager Volume manager.
+ * @param {!VolumeManager} volumeManager Volume manager.
  * @return {boolean} True if the entry of item is writable.
  */
 GalleryItem.prototype.isWritableFile = function(volumeManager) {
@@ -266,7 +270,7 @@ GalleryItem.prototype.getCopyName = function(dirEntry) {
 /**
  * Writes the new item content to either the existing or a new file.
  *
- * @param {!VolumeManagerWrapper} volumeManager Volume manager instance.
+ * @param {!VolumeManager} volumeManager Volume manager instance.
  * @param {!MetadataModel} metadataModel
  * @param {!DirectoryEntry} fallbackDir Fallback directory in case the current
  *     directory is read only.
@@ -342,8 +346,9 @@ GalleryItem.prototype.saveToFile = function(
   }.bind(this)).catch(function(error) {
     console.error('Error saving from gallery', this.entry_.name, error);
 
-    if (!saveResultRecorded)
+    if (!saveResultRecorded) {
       metrics.recordEnum(ImageUtil.getMetricName('SaveResult'), 0, 2);
+    }
 
     callback(false);
   }.bind(this));
@@ -354,7 +359,7 @@ GalleryItem.prototype.saveToFile = function(
  * @param {boolean} overwrite True to overwrite original file.
  * @param {!DirectoryEntry} fallbackDirectory Directory to fallback if current
  *     directory is not writable.
- * @param {!VolumeManagerWrapper} volumeManager
+ * @param {!VolumeManager} volumeManager
  * @return {!Promise<!FileEntry>}
  * @private
  */
@@ -430,11 +435,13 @@ GalleryItem.prototype.rename = function(displayName) {
   var newFileName = this.entry_.name.replace(
       ImageUtil.getDisplayNameFromName(this.entry_.name), displayName);
 
-  if (newFileName === this.entry_.name)
+  if (newFileName === this.entry_.name) {
     return Promise.reject('NOT_CHANGED');
+  }
 
-  if (/^\s*$/.test(displayName))
+  if (/^\s*$/.test(displayName)) {
     return Promise.reject(str('ERROR_WHITESPACE_NAME'));
+  }
 
   var parentDirectoryPromise = new Promise(
       this.entry_.getParent.bind(this.entry_));
@@ -472,9 +479,10 @@ GalleryItem.HEAVY_RENDERING_THRESHOLD_PIXELS = 4000 * 3000;
  */
 GalleryItem.prototype.requireLongRenderingTime = function() {
   // Check for undefined values.
-  if (!this.metadataItem_ ||
-      !this.metadataItem_.imageHeight || !this.metadataItem_.imageWidth)
+  if (!this.metadataItem_ || !this.metadataItem_.imageHeight ||
+      !this.metadataItem_.imageWidth) {
     return false;
+  }
   var numPixels = this.metadataItem_.imageHeight *
       this.metadataItem_.imageWidth;
   return numPixels > GalleryItem.HEAVY_RENDERING_THRESHOLD_PIXELS;

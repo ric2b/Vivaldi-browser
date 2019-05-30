@@ -24,11 +24,13 @@
 #include "base/macros.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
+#include "third_party/blink/renderer/core/css/css_property_name.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_property_value.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_mode.h"
 #include "third_party/blink/renderer/core/css/property_set_css_style_declaration.h"
-#include "third_party/blink/renderer/core/css_property_names.h"
-#include "third_party/blink/renderer/platform/wtf/noncopyable.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -65,6 +67,8 @@ class CORE_EXPORT CSSPropertyValueSet
     CSSPropertyID ShorthandID() const {
       return PropertyMetadata().ShorthandID();
     }
+
+    CSSPropertyName Name() const;
 
     bool IsImportant() const { return PropertyMetadata().important_; }
     bool IsInherited() const { return PropertyMetadata().inherited_; }
@@ -174,7 +178,11 @@ class CSSLazyPropertyParser
 
 class CORE_EXPORT ImmutableCSSPropertyValueSet : public CSSPropertyValueSet {
  public:
+  ImmutableCSSPropertyValueSet(const CSSPropertyValue*,
+                               unsigned count,
+                               CSSParserMode);
   ~ImmutableCSSPropertyValueSet();
+
   static ImmutableCSSPropertyValueSet*
   Create(const CSSPropertyValue* properties, unsigned count, CSSParserMode);
 
@@ -191,11 +199,6 @@ class CORE_EXPORT ImmutableCSSPropertyValueSet : public CSSPropertyValueSet {
   void* operator new(std::size_t, void* location) { return location; }
 
   void* storage_;
-
- private:
-  ImmutableCSSPropertyValueSet(const CSSPropertyValue*,
-                               unsigned count,
-                               CSSParserMode);
 };
 
 inline const Member<const CSSValue>* ImmutableCSSPropertyValueSet::ValueArray()
@@ -211,15 +214,21 @@ ImmutableCSSPropertyValueSet::MetadataArray() const {
           &(this->storage_))[array_size_ * sizeof(Member<CSSValue>)]);
 }
 
-DEFINE_TYPE_CASTS(ImmutableCSSPropertyValueSet,
-                  CSSPropertyValueSet,
-                  set,
-                  !set->IsMutable(),
-                  !set.IsMutable());
+template <>
+struct DowncastTraits<ImmutableCSSPropertyValueSet> {
+  static bool AllowFrom(const CSSPropertyValueSet& set) {
+    return !set.IsMutable();
+  }
+};
 
 class CORE_EXPORT MutableCSSPropertyValueSet : public CSSPropertyValueSet {
  public:
+  explicit MutableCSSPropertyValueSet(CSSParserMode);
+  explicit MutableCSSPropertyValueSet(const CSSPropertyValueSet&);
+  MutableCSSPropertyValueSet(const CSSPropertyValue* properties,
+                             unsigned count);
   ~MutableCSSPropertyValueSet() = default;
+
   static MutableCSSPropertyValueSet* Create(CSSParserMode);
   static MutableCSSPropertyValueSet* Create(const CSSPropertyValue* properties,
                                             unsigned count);
@@ -276,20 +285,13 @@ class CORE_EXPORT MutableCSSPropertyValueSet : public CSSPropertyValueSet {
   void TraceAfterDispatch(blink::Visitor*);
 
  private:
-  explicit MutableCSSPropertyValueSet(CSSParserMode);
-  explicit MutableCSSPropertyValueSet(const CSSPropertyValueSet&);
-  MutableCSSPropertyValueSet(const CSSPropertyValue* properties,
-                             unsigned count);
-
   bool RemovePropertyAtIndex(int, String* return_text);
 
   bool RemoveShorthandProperty(CSSPropertyID);
   bool RemoveShorthandProperty(const AtomicString& custom_property_name) {
     return false;
   }
-  CSSPropertyValue* FindCSSPropertyWithID(
-      CSSPropertyID,
-      const AtomicString& custom_property_name = g_null_atom);
+  CSSPropertyValue* FindCSSPropertyWithName(const CSSPropertyName&);
   Member<PropertySetCSSStyleDeclaration> cssom_wrapper_;
 
   friend class CSSPropertyValueSet;
@@ -297,45 +299,35 @@ class CORE_EXPORT MutableCSSPropertyValueSet : public CSSPropertyValueSet {
   HeapVector<CSSPropertyValue, 4> property_vector_;
 };
 
-DEFINE_TYPE_CASTS(MutableCSSPropertyValueSet,
-                  CSSPropertyValueSet,
-                  set,
-                  set->IsMutable(),
-                  set.IsMutable());
-
-inline MutableCSSPropertyValueSet* ToMutableCSSPropertyValueSet(
-    const Persistent<CSSPropertyValueSet>& set) {
-  return ToMutableCSSPropertyValueSet(set.Get());
-}
-
-inline MutableCSSPropertyValueSet* ToMutableCSSPropertyValueSet(
-    const Member<CSSPropertyValueSet>& set) {
-  return ToMutableCSSPropertyValueSet(set.Get());
-}
+template <>
+struct DowncastTraits<MutableCSSPropertyValueSet> {
+  static bool AllowFrom(const CSSPropertyValueSet& set) {
+    return set.IsMutable();
+  }
+};
 
 inline const CSSPropertyValueMetadata&
 CSSPropertyValueSet::PropertyReference::PropertyMetadata() const {
-  if (property_set_->IsMutable()) {
-    return ToMutableCSSPropertyValueSet(*property_set_)
-        .property_vector_.at(index_)
-        .Metadata();
+  if (auto* mutable_property_set =
+          DynamicTo<MutableCSSPropertyValueSet>(property_set_.Get())) {
+    return mutable_property_set->property_vector_.at(index_).Metadata();
   }
-  return ToImmutableCSSPropertyValueSet(*property_set_).MetadataArray()[index_];
+  return To<ImmutableCSSPropertyValueSet>(*property_set_)
+      .MetadataArray()[index_];
 }
 
 inline const CSSValue& CSSPropertyValueSet::PropertyReference::PropertyValue()
     const {
-  if (property_set_->IsMutable()) {
-    return *ToMutableCSSPropertyValueSet(*property_set_)
-                .property_vector_.at(index_)
-                .Value();
+  if (auto* mutable_property_set =
+          DynamicTo<MutableCSSPropertyValueSet>(property_set_.Get())) {
+    return *mutable_property_set->property_vector_.at(index_).Value();
   }
-  return *ToImmutableCSSPropertyValueSet(*property_set_).ValueArray()[index_];
+  return *To<ImmutableCSSPropertyValueSet>(*property_set_).ValueArray()[index_];
 }
 
 inline unsigned CSSPropertyValueSet::PropertyCount() const {
-  if (is_mutable_)
-    return ToMutableCSSPropertyValueSet(this)->property_vector_.size();
+  if (auto* mutable_property_set = DynamicTo<MutableCSSPropertyValueSet>(this))
+    return mutable_property_set->property_vector_.size();
   return array_size_;
 }
 
@@ -345,9 +337,9 @@ inline bool CSSPropertyValueSet::IsEmpty() const {
 
 template <typename T>
 inline int CSSPropertyValueSet::FindPropertyIndex(T property) const {
-  if (is_mutable_)
-    return ToMutableCSSPropertyValueSet(this)->FindPropertyIndex(property);
-  return ToImmutableCSSPropertyValueSet(this)->FindPropertyIndex(property);
+  if (auto* mutable_property_set = DynamicTo<MutableCSSPropertyValueSet>(this))
+    return mutable_property_set->FindPropertyIndex(property);
+  return To<ImmutableCSSPropertyValueSet>(this)->FindPropertyIndex(property);
 }
 
 }  // namespace blink

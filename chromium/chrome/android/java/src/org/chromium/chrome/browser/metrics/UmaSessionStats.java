@@ -9,8 +9,9 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.text.TextUtils;
 
-import org.chromium.base.AsyncTask;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.DefaultBrowserInfo;
 import org.chromium.chrome.browser.instantapps.InstantAppsHandler;
 import org.chromium.chrome.browser.preferences.privacy.PrivacyPreferencesManager;
@@ -59,7 +60,7 @@ public class UmaSessionStats {
 
         String url = tab.getUrl();
         if (!TextUtils.isEmpty(url) && UrlUtilities.isHttpOrHttps(url)) {
-            AsyncTask.THREAD_POOL_EXECUTOR.execute(() -> {
+            PostTask.postTask(TaskTraits.BEST_EFFORT_MAY_BLOCK, () -> {
                 boolean isEligible =
                         InstantAppsHandler.getInstance().getInstantAppIntentForUrl(url) != null;
                 RecordHistogram.recordBooleanHistogram(
@@ -106,7 +107,7 @@ public class UmaSessionStats {
                     .keyboard != Configuration.KEYBOARD_NOKEYS;
             mTabModelSelectorTabObserver = new TabModelSelectorTabObserver(mTabModelSelector) {
                 @Override
-                public void onPageLoadFinished(Tab tab) {
+                public void onPageLoadFinished(Tab tab, String url) {
                     recordPageLoadStats(tab);
                 }
             };

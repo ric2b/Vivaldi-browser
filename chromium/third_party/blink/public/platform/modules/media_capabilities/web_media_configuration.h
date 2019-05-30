@@ -12,8 +12,12 @@
 namespace blink {
 
 enum class MediaConfigurationType {
+  // for decodingInfo
   kFile,
   kMediaSource,
+  // for encodingInfo
+  kRecord,
+  kTransmission,
 };
 
 // Represents a MediaConfiguration dictionary to be used outside of Blink. At
@@ -21,6 +25,16 @@ enum class MediaConfigurationType {
 // It is created by Blink and passed to consumers that can assume that all
 // required fields are properly set.
 struct WebMediaConfiguration {
+  WebMediaConfiguration() = default;
+
+  WebMediaConfiguration(
+      MediaConfigurationType type,
+      base::Optional<WebAudioConfiguration> audio_configuration,
+      base::Optional<WebVideoConfiguration> video_configuration)
+      : type(type),
+        audio_configuration(audio_configuration),
+        video_configuration(video_configuration) {}
+
   MediaConfigurationType type;
 
   base::Optional<WebAudioConfiguration> audio_configuration;

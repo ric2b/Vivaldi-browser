@@ -6,7 +6,7 @@
 
 #include <memory>
 #include "base/optional.h"
-#include "base/trace_event/trace_event_argument.h"
+#include "base/trace_event/traced_value.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_op_buffer.h"
 #include "third_party/blink/renderer/platform/geometry/geometry_as_json.h"
@@ -27,21 +27,23 @@ ContentLayerClientImpl::ContentLayerClientImpl()
       raster_invalidator_([this](const IntRect& rect) {
         cc_picture_layer_->SetNeedsDisplayRect(rect);
       }),
-      layer_state_(nullptr, nullptr, nullptr),
+      layer_state_(PropertyTreeState::Uninitialized()),
       weak_ptr_factory_(this) {
   cc_picture_layer_->SetLayerClient(weak_ptr_factory_.GetWeakPtr());
 }
 
-ContentLayerClientImpl::~ContentLayerClientImpl() = default;
+ContentLayerClientImpl::~ContentLayerClientImpl() {
+  cc_picture_layer_->ClearClient();
+}
 
 static int GetTransformId(const TransformPaintPropertyNode* transform,
                           ContentLayerClientImpl::LayerAsJSONContext& context) {
   if (!transform)
     return 0;
 
-  auto it = context.transform_id_map.find(transform);
-  if (it != context.transform_id_map.end())
-    return it->value;
+  auto transform_lookup_result = context.transform_id_map.find(transform);
+  if (transform_lookup_result != context.transform_id_map.end())
+    return transform_lookup_result->value;
 
   int parent_id = GetTransformId(transform->Parent(), context);
   if (transform->Matrix().IsIdentity() && !transform->RenderingContextId()) {
@@ -67,12 +69,13 @@ static int GetTransformId(const TransformPaintPropertyNode* transform,
     json->SetBoolean("flattenInheritedTransform", false);
 
   if (auto rendering_context = transform->RenderingContextId()) {
-    auto it = context.rendering_context_map.find(rendering_context);
+    auto context_lookup_result =
+        context.rendering_context_map.find(rendering_context);
     int rendering_id = context.rendering_context_map.size() + 1;
-    if (it == context.rendering_context_map.end())
+    if (context_lookup_result == context.rendering_context_map.end())
       context.rendering_context_map.Set(rendering_context, rendering_id);
     else
-      rendering_id = it->value;
+      rendering_id = context_lookup_result->value;
 
     json->SetInteger("renderingContext", rendering_id);
   }
@@ -84,7 +87,7 @@ static int GetTransformId(const TransformPaintPropertyNode* transform,
   return transform_id;
 }
 
-// This is the SPv2 version of GraphicsLayer::LayerAsJSONInternal().
+// This is the CAP version of GraphicsLayer::LayerAsJSONInternal().
 std::unique_ptr<JSONObject> ContentLayerClientImpl::LayerAsJSON(
     LayerAsJSONContext& context) const {
   std::unique_ptr<JSONObject> json = JSONObject::Create();
@@ -127,7 +130,7 @@ std::unique_ptr<JSONObject> ContentLayerClientImpl::LayerAsJSON(
       raster_invalidator_.GetTracking())
     raster_invalidator_.GetTracking()->AsJSON(json.get());
 
-  if (int transform_id = GetTransformId(layer_state_.Transform(), context))
+  if (int transform_id = GetTransformId(&layer_state_.Transform(), context))
     json->SetInteger("transform", transform_id);
 
 #if DCHECK_IS_ON()
@@ -156,29 +159,6 @@ ContentLayerClientImpl::TakeDebugInfo(cc::Layer* layer) {
   return traced_value;
 }
 
-static SkColor DisplayItemBackgroundColor(const DisplayItem& item) {
-  if (item.GetType() != DisplayItem::kBoxDecorationBackground &&
-      item.GetType() != DisplayItem::kDocumentBackground)
-    return SK_ColorTRANSPARENT;
-
-  const auto& drawing_item = static_cast<const DrawingDisplayItem&>(item);
-  const auto record = drawing_item.GetPaintRecord();
-  if (!record)
-    return SK_ColorTRANSPARENT;
-
-  for (cc::PaintOpBuffer::Iterator it(record.get()); it; ++it) {
-    const auto* op = *it;
-    if (op->GetType() == cc::PaintOpType::DrawRect ||
-        op->GetType() == cc::PaintOpType::DrawRRect) {
-      const auto& flags = static_cast<const cc::PaintOpWithFlags*>(op)->flags;
-      // Skip op with looper which may modify the color.
-      if (!flags.getLooper() && flags.getStyle() == cc::PaintFlags::kFill_Style)
-        return flags.getColor();
-    }
-  }
-  return SK_ColorTRANSPARENT;
-}
-
 scoped_refptr<cc::PictureLayer> ContentLayerClientImpl::UpdateCcPictureLayer(
     scoped_refptr<const PaintArtifact> paint_artifact,
     const PaintChunkSubset& paint_chunks,
@@ -201,9 +181,7 @@ scoped_refptr<cc::PictureLayer> ContentLayerClientImpl::UpdateCcPictureLayer(
     json->SetArray("displayItems",
                    paint_artifact->GetDisplayItemList().SubsequenceAsJSON(
                        chunk.begin_index, chunk.end_index,
-                       DisplayItemList::kSkipNonDrawings |
-                           DisplayItemList::kShownOnlyDisplayItemTypes));
-    json->SetString("propertyTreeState", chunk.properties.ToTreeString());
+                       DisplayItemList::kShownOnlyDisplayItemTypes));
     paint_chunk_debug_data_->PushObject(std::move(json));
   }
 #endif
@@ -212,6 +190,13 @@ scoped_refptr<cc::PictureLayer> ContentLayerClientImpl::UpdateCcPictureLayer(
                                layer_state);
   layer_state_ = layer_state;
 
+  // Note: cc::Layer API assumes the layer bounds start at (0, 0), but the
+  // bounding box of a paint chunk does not necessarily start at (0, 0) (and
+  // could even be negative). Internally the generated layer translates the
+  // paint chunk to align the bounding box to (0, 0) and we set the layer's
+  // offset_to_transform_parent with the origin of the paint chunk here.
+  cc_picture_layer_->SetOffsetToTransformParent(
+      layer_bounds.OffsetFromOrigin());
   cc_picture_layer_->SetBounds(layer_bounds.size());
   cc_picture_layer_->SetIsDrawable(true);
 
@@ -226,11 +211,14 @@ scoped_refptr<cc::PictureLayer> ContentLayerClientImpl::UpdateCcPictureLayer(
       display_item_list, cc::DisplayItemList::kTopLevelDisplayItemList,
       base::OptionalOrNullptr(params));
 
-  if (paint_chunks[0].size()) {
-    cc_picture_layer_->SetBackgroundColor(DisplayItemBackgroundColor(
-        display_item_list[paint_chunks[0].begin_index]));
-  }
-
+  cc_picture_layer_->SetSafeOpaqueBackgroundColor(
+      paint_chunks[0].safe_opaque_background_color);
+  // TODO(masonfreed): We don't need to set the background color here; only the
+  // safe opaque background color matters. But making that change would require
+  // rebaselining 787 tests to remove the "background_color" property from the
+  // layer dumps.
+  cc_picture_layer_->SetBackgroundColor(
+      paint_chunks[0].safe_opaque_background_color);
   return cc_picture_layer_;
 }
 

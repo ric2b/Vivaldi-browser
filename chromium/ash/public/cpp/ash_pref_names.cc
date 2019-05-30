@@ -46,9 +46,21 @@ const char kAccessibilityMonoAudioEnabled[] = "settings.a11y.mono_audio";
 // A boolean pref which determines whether autoclick is enabled.
 const char kAccessibilityAutoclickEnabled[] = "settings.a11y.autoclick";
 // An integer pref which determines time in ms between when the mouse cursor
-// stops and when an autoclick is triggered.
+// stops and when an autoclick event is triggered.
 const char kAccessibilityAutoclickDelayMs[] =
     "settings.a11y.autoclick_delay_ms";
+// An integer pref which determines the event type for an autoclick event. This
+// maps to mojom::AccessibilityController::AutoclickEventType.
+const char kAccessibilityAutoclickEventType[] =
+    "settings.a11y.autoclick_event_type";
+// Whether Autoclick should immediately return to left click after performing
+// another event type action, or whether it should stay as the other event type.
+const char kAccessibilityAutoclickRevertToLeftClick[] =
+    "settings.a11y.autoclick_revert_to_left_click";
+// The default threshold of mouse movement, measured in DIP, that will initiate
+// a new autoclick.
+const char kAccessibilityAutoclickMovementThreshold[] =
+    "settings.a11y.autoclick_movement_threshold";
 // A boolean pref which determines whether caret highlighting is enabled.
 const char kAccessibilityCaretHighlightEnabled[] =
     "settings.a11y.caret_highlight";
@@ -68,6 +80,10 @@ const char kAccessibilityDictationEnabled[] = "settings.a11y.dictation";
 // A boolean pref which determines whether the accessibility menu shows
 // regardless of the state of a11y features.
 const char kShouldAlwaysShowAccessibilityMenu[] = "settings.a11y.enable_menu";
+
+// A boolean pref that stores whether the Kiosk Next Shell is enabled. When it
+// is, we start it after sign in.
+const char kKioskNextShellEnabled[] = "ash.kiosk_next_shell.enabled";
 
 // A boolean pref storing the enabled status of the Docked Magnifier feature.
 const char kDockedMagnifierEnabled[] = "ash.docked_magnifier.enabled";
@@ -91,6 +107,10 @@ const char kScreenMagnifierAcceleratorDialogHasBeenAccepted[] =
 // ever been shown.
 const char kDictationAcceleratorDialogHasBeenAccepted[] =
     "settings.a11y.dictation_accelerator_dialog_has_been_accepted";
+// A boolean pref which indicates whether the display rotation confirmation
+// dialog has ever been shown.
+const char kDisplayRotationAcceleratorDialogHasBeenAccepted[] =
+    "settings.a11y.display_rotation_accelerator_dialog_has_been_accepted";
 
 // A dictionary pref that stores the mixed mirror mode parameters.
 const char kDisplayMixedMirrorModeParams[] =
@@ -167,11 +187,22 @@ const char kNightLightScheduleType[] = "ash.night_light.schedule_type";
 const char kNightLightCustomStartTime[] = "ash.night_light.custom_start_time";
 const char kNightLightCustomEndTime[] = "ash.night_light.custom_end_time";
 
+// Double prefs storing the most recent valid geoposition, which is only used
+// when the device lacks connectivity and we're unable to retrieve a valid
+// geoposition to calculate the sunset / sunrise times.
+const char kNightLightCachedLatitude[] = "ash.night_light.cached_latitude";
+const char kNightLightCachedLongitude[] = "ash.night_light.cached_longitude";
+
 // Whether the Chrome OS lock screen is allowed.
 const char kAllowScreenLock[] = "allow_screen_lock";
 
 // A boolean pref that turns on automatic screen locking.
 const char kEnableAutoScreenLock[] = "settings.enable_screen_lock";
+
+// Screen brightness percent values to be used when running on AC power.
+// Specified by the policy.
+const char kPowerAcScreenBrightnessPercent[] =
+    "power.ac_screen_brightness_percent";
 
 // Inactivity time in milliseconds while the system is on AC power before
 // the screen should be dimmed, turned off, or locked, before an
@@ -182,6 +213,11 @@ const char kPowerAcScreenDimDelayMs[] = "power.ac_screen_dim_delay_ms";
 const char kPowerAcScreenOffDelayMs[] = "power.ac_screen_off_delay_ms";
 const char kPowerAcScreenLockDelayMs[] = "power.ac_screen_lock_delay_ms";
 const char kPowerAcIdleWarningDelayMs[] = "power.ac_idle_warning_delay_ms";
+
+// Screen brightness percent values to be used when running on battery power.
+// Specified by the policy.
+const char kPowerBatteryScreenBrightnessPercent[] =
+    "power.battery_screen_brightness_percent";
 
 // Similar delays while the system is on battery power.
 const char kPowerBatteryScreenDimDelayMs[] =
@@ -214,8 +250,14 @@ const char kPowerLidClosedAction[] = "power.lid_closed_action";
 const char kPowerUseAudioActivity[] = "power.use_audio_activity";
 const char kPowerUseVideoActivity[] = "power.use_video_activity";
 
-// Should extensions be able to use the chrome.power API to override
-// screen-related power management (including locking)?
+// Should extensions, ARC apps, and other code within Chrome be able to override
+// system power management (preventing automatic actions like sleeping, locking,
+// or screen dimming)?
+const char kPowerAllowWakeLocks[] = "power.allow_wake_locks";
+
+// Should extensions, ARC apps, and other code within Chrome be able to override
+// display-related power management? (Disallowing wake locks in general takes
+// precedence over this.)
 const char kPowerAllowScreenWakeLocks[] = "power.allow_screen_wake_locks";
 
 // Amount by which the screen-dim delay should be scaled while the system
@@ -297,6 +339,13 @@ const char kQuickUnlockPinSalt[] = "quick_unlock.pin.salt";
 // Dictionary prefs in local state that keeps information about detachable
 // bases - for exmaple the last used base per user.
 const char kDetachableBaseDevices[] = "ash.detachable_base.devices";
+
+// Integer pref storing the number of Assistant warmer welcome triggered times.
+const char kAssistantNumWarmerWelcomeTriggered[] =
+    "ash.assistant.num_warmer_welcome_triggered";
+
+// Whether the user is allowed to disconnect and configure VPN connections.
+const char kVpnConfigAllowed[] = "vpn_config_allowed";
 
 // NOTE: New prefs should start with the "ash." prefix. Existing prefs moved
 // into this file should not be renamed, since they may be synced.

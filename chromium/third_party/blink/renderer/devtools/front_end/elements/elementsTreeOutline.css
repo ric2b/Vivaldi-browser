@@ -13,7 +13,7 @@
 .elements-disclosure li {
     /** Keep margin-left & padding-left in sync with ElementsTreeElements.updateDecorators **/
     padding: 0 0 0 14px;
-    margin-top: 1px;
+    border-top: 1px solid transparent;
     margin-left: -2px;
     word-wrap: break-word;
     position: relative;
@@ -34,13 +34,8 @@
     white-space: pre;
 }
 
-.elements-disclosure li.selected .selected-hint:before {
+.elements-disclosure .elements-tree-outline:not(.hide-selection-when-blurred) li.selected .selected-hint:before {
     opacity: 0.6;
-    color: var(--selection-inactive-fg-color);
-}
-
-.elements-disclosure li.selected:focus .selected-hint:before {
-    color: var(--selection-fg-color);
 }
 
 .elements-disclosure li.parent::before {
@@ -91,13 +86,22 @@
 
 .elements-disclosure li.selected .selection {
     display: block;
-    background-color: var(--selection-inactive-bg-color);
+}
+
+.elements-disclosure .elements-tree-outline:not(.hide-selection-when-blurred) .selection {
+    background-color: var(--editor-selection-inactive-bg-color);
+}
+
+.elements-disclosure .elements-tree-outline.hide-selection-when-blurred .selected:focus[data-keyboard-focus="true"] .highlight > * {
+    background: var(--focus-bg-color);
+    border-radius: 2px;
+    box-shadow: 0px 0px 0px 2px var(--focus-bg-color);
 }
 
 .elements-disclosure ol {
     list-style-type: none;
     /** Keep it in sync with ElementsTreeElements.updateDecorators **/
-    -webkit-padding-start: 12px;
+    padding-inline-start: 12px;
     margin: 0;
 }
 
@@ -122,20 +126,8 @@
     padding-left: 2px;
 }
 
-.elements-disclosure ol li.selected:focus {
-    color: var(--selection-fg-color);
-}
-
-.elements-disclosure ol li.parent.selected:focus::before {
-    background-color: var(--selection-fg-color);
-}
-
-.elements-disclosure ol li.selected:focus * {
-    color: inherit;
-}
-
-.elements-disclosure ol li.selected:focus .selection {
-    background-color: var(--selection-bg-color);
+.elements-disclosure .elements-tree-outline:not(.hide-selection-when-blurred) li.selected:focus .selection {
+    background-color: var(--editor-selection-bg-color);
 }
 
 .elements-tree-outline ol.shadow-root-depth-4 {
@@ -299,13 +291,6 @@ ol:hover > li > .elements-tree-shortcut-link {
     display: none;
 }
 
-ol li.selected:focus .webkit-html-tag-name,
-ol li.selected:focus .webkit-html-close-tag-name,
-ol li.selected:focus .webkit-html-attribute-value,
-ol li.selected:focus .devtools-link {
-    color: var(--selection-fg-color);
-}
-
 .elements-disclosure .gutter-container {
     position: absolute;
     top: 0;
@@ -313,6 +298,10 @@ ol li.selected:focus .devtools-link {
     cursor: pointer;
     width: 15px;
     height: 15px;
+}
+
+.elements-hide-gutter .gutter-container {
+    display: none;
 }
 
 .gutter-menu-icon {
@@ -335,7 +324,7 @@ li.selected {
 
 li.hovered:not(.always-parent) + ol.children, .elements-tree-outline ol.shadow-root, li.selected:not(.always-parent) + ol.children {
     margin-left: 5px;
-    -webkit-padding-start: 6px;
+    padding-inline-start: 6px;
     border-width: 1px;
     border-left-style: solid;
 }

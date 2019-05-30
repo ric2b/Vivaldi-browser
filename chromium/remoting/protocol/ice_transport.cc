@@ -53,14 +53,14 @@ void IceTransport::Start(
       base::Bind(&IceTransport::OnChannelError, weak_factory_.GetWeakPtr())));
 }
 
-bool IceTransport::ProcessTransportInfo(buzz::XmlElement* transport_info_xml) {
+bool IceTransport::ProcessTransportInfo(jingle_xmpp::XmlElement* transport_info_xml) {
   IceTransportInfo transport_info;
   if (!transport_info.ParseXml(transport_info_xml))
     return false;
 
   for (auto it = transport_info.ice_credentials.begin();
        it != transport_info.ice_credentials.end(); ++it) {
-    ChannelsMap::iterator channel = channels_.find(it->channel);
+    auto channel = channels_.find(it->channel);
     if (channel != channels_.end()) {
       channel->second->SetRemoteCredentials(it->ufrag, it->password);
     } else {
@@ -72,7 +72,7 @@ bool IceTransport::ProcessTransportInfo(buzz::XmlElement* transport_info_xml) {
 
   for (auto it = transport_info.candidates.begin();
        it != transport_info.candidates.end(); ++it) {
-    ChannelsMap::iterator channel = channels_.find(it->name);
+    auto channel = channels_.find(it->name);
     rtc::SocketAddress address = ToNativeSocket(it->candidate.address());
     it->candidate.set_address(address);
     if (channel != channels_.end()) {
@@ -114,7 +114,7 @@ void IceTransport::CreateChannel(const std::string& name,
 }
 
 void IceTransport::CancelChannelCreation(const std::string& name) {
-  ChannelsMap::iterator it = channels_.find(name);
+  auto it = channels_.find(name);
   if (it != channels_.end()) {
     DCHECK(!it->second->is_connected());
     delete it->second;
@@ -123,8 +123,7 @@ void IceTransport::CancelChannelCreation(const std::string& name) {
 }
 
 void IceTransport::AddPendingRemoteTransportInfo(IceTransportChannel* channel) {
-  std::list<IceTransportInfo::IceCredentials>::iterator credentials =
-      pending_remote_ice_credentials_.begin();
+  auto credentials = pending_remote_ice_credentials_.begin();
   while (credentials != pending_remote_ice_credentials_.end()) {
     if (credentials->channel == channel->name()) {
       channel->SetRemoteCredentials(credentials->ufrag, credentials->password);
@@ -134,8 +133,7 @@ void IceTransport::AddPendingRemoteTransportInfo(IceTransportChannel* channel) {
     }
   }
 
-  std::list<IceTransportInfo::NamedCandidate>::iterator candidate =
-      pending_remote_candidates_.begin();
+  auto candidate = pending_remote_candidates_.begin();
   while (candidate != pending_remote_candidates_.end()) {
     if (candidate->name == channel->name()) {
       channel->AddRemoteCandidate(candidate->candidate);
@@ -172,7 +170,7 @@ void IceTransport::OnChannelFailed(IceTransportChannel* channel) {
 }
 
 void IceTransport::OnChannelDeleted(IceTransportChannel* channel) {
-  ChannelsMap::iterator it = channels_.find(channel->name());
+  auto it = channels_.find(channel->name());
   DCHECK_EQ(it->second, channel);
   channels_.erase(it);
 }
@@ -196,7 +194,7 @@ void IceTransport::EnsurePendingTransportInfoMessage() {
 void IceTransport::SendTransportInfo() {
   DCHECK(pending_transport_info_message_);
 
-  std::unique_ptr<buzz::XmlElement> transport_info_xml =
+  std::unique_ptr<jingle_xmpp::XmlElement> transport_info_xml =
       pending_transport_info_message_->ToXml();
   pending_transport_info_message_.reset();
   send_transport_info_callback_.Run(std::move(transport_info_xml));

@@ -11,8 +11,6 @@
 #error "This file requires ARC support."
 #endif
 
-DEFINE_WEB_STATE_USER_DATA_KEY(DOMAlteringLock);
-
 DOMAlteringLock::DOMAlteringLock(web::WebState* web_state) {
 }
 
@@ -50,3 +48,5 @@ void DOMAlteringLock::Release(id<DOMAltering> feature) {
   if (current_dom_altering_feature_ == feature)
     current_dom_altering_feature_ = nil;
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(DOMAlteringLock)

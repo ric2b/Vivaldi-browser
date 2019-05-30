@@ -24,6 +24,7 @@ import android.view.ActionMode;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -41,13 +42,11 @@ import org.chromium.chrome.browser.tab.TabWebContentsDelegateAndroid;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
-import org.chromium.chrome.browser.widget.TintedImageButton;
+import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 import org.chromium.chrome.browser.widget.VerticallyFixedEditText;
-import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.WindowAndroid;
 
 import java.lang.annotation.Retention;
@@ -61,10 +60,10 @@ public class FindToolbar extends LinearLayout
 
     private static final long ACCESSIBLE_ANNOUNCEMENT_DELAY_MILLIS = 500;
 
-    @IntDef({FindToolbarState.SHOWN, FindToolbarState.SHOWING, FindToolbarState.HIDDEN,
-            FindToolbarState.HIDING})
+    @IntDef({FindLocationBarState.SHOWN, FindLocationBarState.SHOWING, FindLocationBarState.HIDDEN,
+            FindLocationBarState.HIDING})
     @Retention(RetentionPolicy.SOURCE)
-    private @interface FindToolbarState {
+    private @interface FindLocationBarState {
         int SHOWN = 0;
         int SHOWING = 1;
         int HIDDEN = 2;
@@ -74,9 +73,9 @@ public class FindToolbar extends LinearLayout
     // Toolbar UI
     private TextView mFindStatus;
     protected FindQuery mFindQuery;
-    protected TintedImageButton mCloseFindButton;
-    protected TintedImageButton mFindPrevButton;
-    protected TintedImageButton mFindNextButton;
+    protected ImageButton mCloseFindButton;
+    protected ImageButton mFindPrevButton;
+    protected ImageButton mFindNextButton;
 
     private FindResultBar mResultBar;
 
@@ -98,10 +97,10 @@ public class FindToolbar extends LinearLayout
     /** Whether the search key should trigger a new search. */
     private boolean mSearchKeyShouldTriggerSearch;
 
-    @FindToolbarState
-    private int mCurrentState = FindToolbarState.HIDDEN;
-    @FindToolbarState
-    private int mDesiredState = FindToolbarState.HIDDEN;
+    @FindLocationBarState
+    private int mCurrentState = FindLocationBarState.HIDDEN;
+    @FindLocationBarState
+    private int mDesiredState = FindLocationBarState.HIDDEN;
 
     private Handler mHandler = new Handler();
     private Runnable mAccessibleAnnouncementRunnable;
@@ -244,7 +243,7 @@ public class FindToolbar extends LinearLayout
                     if (mFindQuery.getText().length() > 0) {
                         mSearchKeyShouldTriggerSearch = true;
                     }
-                    UiUtils.hideKeyboard(mFindQuery);
+                    mWindowAndroid.getKeyboardDelegate().hideKeyboard(mFindQuery);
                 }
             }
         });
@@ -301,7 +300,7 @@ public class FindToolbar extends LinearLayout
                     mSearchKeyShouldTriggerSearch = false;
                     hideKeyboardAndStartFinding(true);
                 } else {
-                    UiUtils.hideKeyboard(mFindQuery);
+                    mWindowAndroid.getKeyboardDelegate().hideKeyboard(mFindQuery);
                     mFindInPageBridge.activateFindInPageResultForAccessibility();
                     mAccessibilityDidActivateResult = true;
                 }
@@ -311,7 +310,7 @@ public class FindToolbar extends LinearLayout
 
         mFindStatus = (TextView) findViewById(R.id.find_status);
 
-        mFindPrevButton = (TintedImageButton) findViewById(R.id.find_prev_button);
+        mFindPrevButton = findViewById(R.id.find_prev_button);
         mFindPrevButton.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -319,7 +318,7 @@ public class FindToolbar extends LinearLayout
             }
         });
 
-        mFindNextButton = (TintedImageButton) findViewById(R.id.find_next_button);
+        mFindNextButton = findViewById(R.id.find_next_button);
         mFindNextButton.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -329,7 +328,7 @@ public class FindToolbar extends LinearLayout
 
         setPrevNextEnabled(false);
 
-        mCloseFindButton = (TintedImageButton) findViewById(R.id.close_find_button);
+        mCloseFindButton = findViewById(R.id.close_find_button);
         mCloseFindButton.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -348,7 +347,7 @@ public class FindToolbar extends LinearLayout
         final String findQuery = mFindQuery.getText().toString();
         if (findQuery.length() == 0) return;
 
-        UiUtils.hideKeyboard(mFindQuery);
+        mWindowAndroid.getKeyboardDelegate().hideKeyboard(mFindQuery);
         mFindInPageBridge.startFinding(findQuery, forward, false);
         mFindInPageBridge.activateFindInPageResultForAccessibility();
         mAccessibilityDidActivateResult = true;
@@ -561,14 +560,14 @@ public class FindToolbar extends LinearLayout
         ThreadUtils.checkUiThread();
         if (!isWebContentAvailable()) return;
 
-        if (mCurrentState == FindToolbarState.SHOWN) {
+        if (mCurrentState == FindLocationBarState.SHOWN) {
             requestQueryFocus();
             return;
         }
 
-        mDesiredState = FindToolbarState.SHOWN;
-        if (mCurrentState != FindToolbarState.HIDDEN) return;
-        setCurrentState(FindToolbarState.SHOWING);
+        mDesiredState = FindLocationBarState.SHOWN;
+        if (mCurrentState != FindLocationBarState.HIDDEN) return;
+        setCurrentState(FindLocationBarState.SHOWING);
         handleActivate();
     }
 
@@ -593,7 +592,7 @@ public class FindToolbar extends LinearLayout
         setResultsBarVisibility(true);
         updateVisualsForTabModel(mTabModelSelector.isIncognitoSelected());
 
-        setCurrentState(FindToolbarState.SHOWN);
+        setCurrentState(FindLocationBarState.SHOWN);
     }
 
     /**
@@ -610,9 +609,9 @@ public class FindToolbar extends LinearLayout
     public final void deactivate(boolean clearSelection) {
         ThreadUtils.checkUiThread();
 
-        mDesiredState = FindToolbarState.HIDDEN;
-        if (mCurrentState != FindToolbarState.SHOWN) return;
-        setCurrentState(FindToolbarState.HIDING);
+        mDesiredState = FindLocationBarState.HIDDEN;
+        if (mCurrentState != FindLocationBarState.SHOWN) return;
+        setCurrentState(FindLocationBarState.HIDING);
         handleDeactivation(clearSelection);
     }
 
@@ -635,7 +634,7 @@ public class FindToolbar extends LinearLayout
 
         mCurrentTab.removeObserver(mTabObserver);
 
-        UiUtils.hideKeyboard(mFindQuery);
+        mWindowAndroid.getKeyboardDelegate().hideKeyboard(mFindQuery);
         if (mFindQuery.getText().length() > 0) {
             clearResults();
             mFindInPageBridge.stopFinding(clearSelection);
@@ -645,28 +644,30 @@ public class FindToolbar extends LinearLayout
         mFindInPageBridge = null;
         mCurrentTab = null;
 
-        setCurrentState(FindToolbarState.HIDDEN);
+        setCurrentState(FindLocationBarState.HIDDEN);
     }
 
-    private void setCurrentState(@FindToolbarState int state) {
+    private void setCurrentState(@FindLocationBarState int state) {
         mCurrentState = state;
 
         // Notify the observers if we hit the transition states.
         if (mObserver != null) {
-            if (mCurrentState == FindToolbarState.HIDDEN) {
+            if (mCurrentState == FindLocationBarState.HIDDEN) {
                 mObserver.onFindToolbarHidden();
-            } else if (mCurrentState == FindToolbarState.SHOWN) {
+            } else if (mCurrentState == FindLocationBarState.SHOWN) {
                 mObserver.onFindToolbarShown();
             }
         }
 
         // Ensure the current state reflects the desired state if the state change happened while
         // processing the previous state change.
-        assert mDesiredState == FindToolbarState.HIDDEN || mDesiredState == FindToolbarState.SHOWN;
-        if (mCurrentState == FindToolbarState.HIDDEN && mDesiredState == FindToolbarState.SHOWN) {
+        assert mDesiredState == FindLocationBarState.HIDDEN
+                || mDesiredState == FindLocationBarState.SHOWN;
+        if (mCurrentState == FindLocationBarState.HIDDEN
+                && mDesiredState == FindLocationBarState.SHOWN) {
             activate();
-        } else if (mCurrentState == FindToolbarState.SHOWN
-                && mDesiredState == FindToolbarState.HIDDEN) {
+        } else if (mCurrentState == FindLocationBarState.SHOWN
+                && mDesiredState == FindLocationBarState.HIDDEN) {
             deactivate();
         }
     }
@@ -785,6 +786,6 @@ public class FindToolbar extends LinearLayout
             mShowKeyboardOnceWindowIsFocused = true;
             return;
         }
-        UiUtils.showKeyboard(mFindQuery);
+        mWindowAndroid.getKeyboardDelegate().showKeyboard(mFindQuery);
     }
 }

@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
-#include "base/memory/linked_ptr.h"
 #include "base/values.h"
 #include "chrome/test/chromedriver/chrome/chrome.h"
 
@@ -37,7 +36,15 @@ class ChromeImpl : public Chrome {
                        bool w3c_compliant) override;
   Status GetWebViewById(const std::string& id, WebView** web_view) override;
   Status GetWindowSize(const std::string& id, int* width, int* height) override;
+  Status SetWindowSize(const std::string& target_id,
+                       int width, int height) override;
+  Status SetWindowRect(const std::string& target_id,
+                       const base::DictionaryValue& params) override;
   Status GetWindowPosition(const std::string& id, int* x, int* y) override;
+  Status SetWindowPosition(const std::string& target_id, int x, int y) override;
+  Status MaximizeWindow(const std::string& target_id) override;
+  Status MinimizeWindow(const std::string& target_id) override;
+  Status FullScreenWindow(const std::string& target_id) override;
   Status CloseWebView(const std::string& id) override;
   Status ActivateWebView(const std::string& id) override;
   Status SetAcceptInsecureCerts() override;
@@ -68,18 +75,19 @@ class ChromeImpl : public Chrome {
                      Window* window);
   Status ParseWindowBounds(std::unique_ptr<base::DictionaryValue> params,
                            Window* window);
+  Status GetWindowBounds(int window_id, Window* window);
+  Status SetWindowBounds(int window_id,
+                         std::unique_ptr<base::DictionaryValue> bounds);
 
   bool quit_;
   std::unique_ptr<DevToolsHttpClient> devtools_http_client_;
   std::unique_ptr<DevToolsClient> devtools_websocket_client_;
 
  private:
-  typedef std::list<linked_ptr<WebViewImpl> > WebViewList;
-
   void UpdateWebViews(const WebViewsInfo& views_info, bool w3c_compliant);
 
   // Web views in this list are in the same order as they are opened.
-  WebViewList web_views_;
+  std::list<std::unique_ptr<WebViewImpl>> web_views_;
   std::vector<std::unique_ptr<DevToolsEventListener>> devtools_event_listeners_;
   std::string page_load_strategy_;
 };

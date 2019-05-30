@@ -31,16 +31,6 @@ enum EventType {
   ET_TOUCH_CANCELLED,
   ET_DROP_TARGET_EVENT,
 
-  // PointerEvent types
-  ET_POINTER_DOWN,
-  ET_POINTER_MOVED,
-  ET_POINTER_UP,
-  ET_POINTER_CANCELLED,
-  ET_POINTER_ENTERED,
-  ET_POINTER_EXITED,
-  ET_POINTER_WHEEL_CHANGED,
-  ET_POINTER_CAPTURE_CHANGED,
-
   // GestureEvent types
   ET_GESTURE_SCROLL_BEGIN,
   ET_GESTURE_TYPE_START = ET_GESTURE_SCROLL_BEGIN,
@@ -128,14 +118,17 @@ enum EventFlags {
 };
 
 // Flags specific to key events.
+// WARNING: If you add or remove values make sure traits for serializing these
+// values are updated.
 enum KeyEventFlags {
   EF_IME_FABRICATED_KEY = 1 << 15,  // Key event fabricated by the underlying
                                     // IME without a user action.
                                     // (Linux X11 only)
-  EF_IS_REPEAT          = 1 << 16,
-  EF_FINAL              = 1 << 17,  // Do not remap; the event was created with
-                                    // the desired final values.
-  EF_IS_EXTENDED_KEY    = 1 << 18,  // Windows extended key (see WM_KEYDOWN doc)
+  EF_IS_REPEAT = 1 << 16,
+  EF_FINAL = 1 << 17,            // Do not remap; the event was created with
+                                 // the desired final values.
+  EF_IS_EXTENDED_KEY = 1 << 18,  // Windows extended key (see WM_KEYDOWN doc)
+  EF_MAX_KEY_EVENT_FLAGS_VALUE = (1 << 19) - 1,
 };
 
 // Flags specific to mouse events.

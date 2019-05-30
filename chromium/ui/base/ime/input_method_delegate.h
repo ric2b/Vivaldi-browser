@@ -5,12 +5,14 @@
 #ifndef UI_BASE_IME_INPUT_METHOD_DELEGATE_H_
 #define UI_BASE_IME_INPUT_METHOD_DELEGATE_H_
 
+#include "base/callback_forward.h"
 #include "ui/base/ime/ui_base_ime_export.h"
-#include "ui/events/event_dispatcher.h"
 
 namespace ui {
 
 class KeyEvent;
+
+struct EventDispatchDetails;
 
 namespace internal {
 
@@ -20,10 +22,22 @@ class UI_BASE_IME_EXPORT InputMethodDelegate {
  public:
   virtual ~InputMethodDelegate() {}
 
-  // Dispatch a key event already processed by the input method.
-  // Returns true if the event was processed.
-  virtual ui::EventDispatchDetails DispatchKeyEventPostIME(
-      ui::KeyEvent* key_event) = 0;
+  using DispatchKeyEventPostIMECallback = base::OnceCallback<void(bool, bool)>;
+  // Dispatch a key event already processed by the input method. Returns the
+  // status of processing, as well as running the callback |callback| with the
+  // result of processing. |callback| may be run asynchronously (if the
+  // delegate does processing async). Subclasses can use
+  // RunDispatchKeyEventPostIMECallback() to run the callback. |callback| is
+  // supplied two booleans that correspond to event->handled() and
+  // event->stopped_propagation().
+  virtual EventDispatchDetails DispatchKeyEventPostIME(
+      KeyEvent* key_event,
+      DispatchKeyEventPostIMECallback callback) = 0;
+
+ protected:
+  static void RunDispatchKeyEventPostIMECallback(
+      KeyEvent* key_event,
+      DispatchKeyEventPostIMECallback callback);
 };
 
 }  // namespace internal

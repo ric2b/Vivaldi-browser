@@ -17,7 +17,6 @@
 #include "content/renderer/pepper/pepper_audio_input_host.h"
 #include "content/renderer/pepper/pepper_audio_output_host.h"
 #include "content/renderer/pepper/pepper_camera_device_host.h"
-#include "content/renderer/pepper/pepper_compositor_host.h"
 #include "content/renderer/pepper/pepper_file_chooser_host.h"
 #include "content/renderer/pepper/pepper_file_ref_renderer_host.h"
 #include "content/renderer/pepper/pepper_file_system_host.h"
@@ -27,9 +26,7 @@
 #include "content/renderer/pepper/pepper_url_loader_host.h"
 #include "content/renderer/pepper/pepper_video_capture_host.h"
 #include "content/renderer/pepper/pepper_video_decoder_host.h"
-#include "content/renderer/pepper/pepper_video_destination_host.h"
 #include "content/renderer/pepper/pepper_video_encoder_host.h"
-#include "content/renderer/pepper/pepper_video_source_host.h"
 #include "content/renderer/pepper/pepper_websocket_host.h"
 #include "content/renderer/pepper/ppb_image_data_impl.h"
 #include "content/renderer/pepper/renderer_ppapi_host_impl.h"
@@ -55,19 +52,7 @@ namespace content {
 
 namespace {
 
-bool CanUseMediaStreamAPI(const RendererPpapiHost* host, PP_Instance instance) {
-  blink::WebPluginContainer* container =
-      host->GetContainerForInstance(instance);
-  if (!container)
-    return false;
-
-  GURL document_url = container->GetDocument().Url();
-  ContentRendererClient* content_renderer_client =
-      GetContentClient()->renderer();
-  return content_renderer_client->AllowPepperMediaStreamAPI(document_url);
-}
-
-static bool CanUseCameraDeviceAPI(const RendererPpapiHost* host,
+static bool CanUseCameraDeviceAPI(RendererPpapiHost* host,
                                   PP_Instance instance) {
   blink::WebPluginContainer* container =
       host->GetContainerForInstance(instance);
@@ -78,19 +63,6 @@ static bool CanUseCameraDeviceAPI(const RendererPpapiHost* host,
   ContentRendererClient* content_renderer_client =
       GetContentClient()->renderer();
   return content_renderer_client->IsPluginAllowedToUseCameraDeviceAPI(
-      document_url);
-}
-
-bool CanUseCompositorAPI(const RendererPpapiHost* host, PP_Instance instance) {
-  blink::WebPluginContainer* container =
-      host->GetContainerForInstance(instance);
-  if (!container)
-    return false;
-
-  GURL document_url = container->GetDocument().Url();
-  ContentRendererClient* content_renderer_client =
-      GetContentClient()->renderer();
-  return content_renderer_client->IsPluginAllowedToUseCompositorAPI(
       document_url);
 }
 
@@ -121,11 +93,6 @@ ContentRendererPepperHostFactory::CreateResourceHost(
 
   // Public interfaces.
   switch (message.type()) {
-    case PpapiHostMsg_Compositor_Create::ID: {
-      if (!CanUseCompositorAPI(host_, instance))
-        return nullptr;
-      return std::make_unique<PepperCompositorHost>(host_, instance, resource);
-    }
     case PpapiHostMsg_FileRef_CreateForFileAPI::ID: {
       PP_Resource file_system;
       std::string internal_path;
@@ -187,19 +154,6 @@ ContentRendererPepperHostFactory::CreateResourceHost(
     case PpapiHostMsg_MediaStreamVideoTrack_Create::ID:
       return std::make_unique<PepperMediaStreamVideoTrackHost>(host_, instance,
                                                                resource);
-    // These private MediaStream interfaces are exposed as if they were public
-    // so they can be used by NaCl plugins. However, they are available only
-    // for whitelisted apps.
-    case PpapiHostMsg_VideoDestination_Create::ID:
-      if (CanUseMediaStreamAPI(host_, instance))
-        return std::make_unique<PepperVideoDestinationHost>(host_, instance,
-                                                            resource);
-      return nullptr;
-    case PpapiHostMsg_VideoSource_Create::ID:
-      if (CanUseMediaStreamAPI(host_, instance))
-        return std::make_unique<PepperVideoSourceHost>(host_, instance,
-                                                       resource);
-      return nullptr;
   }
 
   // Dev interfaces.

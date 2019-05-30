@@ -3,23 +3,17 @@
 // found in the LICENSE file.
 
 #include "services/test/user_id/user_id_service.h"
-
-#include "services/service_manager/public/cpp/service_context.h"
+#include "base/bind.h"
 
 namespace user_id {
 
-std::unique_ptr<service_manager::Service> CreateUserIdService() {
-  return std::make_unique<UserIdService>();
-}
-
-UserIdService::UserIdService() {
+UserIdService::UserIdService(service_manager::mojom::ServiceRequest request)
+    : service_binding_(this, std::move(request)) {
   registry_.AddInterface<mojom::UserId>(
       base::Bind(&UserIdService::BindUserIdRequest, base::Unretained(this)));
 }
 
-UserIdService::~UserIdService() {}
-
-void UserIdService::OnStart() {}
+UserIdService::~UserIdService() = default;
 
 void UserIdService::OnBindInterface(
     const service_manager::BindSourceInfo& source_info,
@@ -33,8 +27,8 @@ void UserIdService::BindUserIdRequest(
   bindings_.AddBinding(this, std::move(request));
 }
 
-void UserIdService::GetUserId(GetUserIdCallback callback) {
-  std::move(callback).Run(context()->identity().user_id());
+void UserIdService::GetInstanceGroup(GetInstanceGroupCallback callback) {
+  std::move(callback).Run(service_binding_.identity().instance_group());
 }
 
 }  // namespace user_id

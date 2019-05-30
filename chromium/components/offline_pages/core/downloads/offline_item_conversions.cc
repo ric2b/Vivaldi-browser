@@ -33,8 +33,7 @@ const std::string GetDisplayName(
 }
 
 const std::string GetMimeType() {
-  return offline_pages::IsOfflinePagesSharingEnabled() ? "multipart/related"
-                                                       : "text/html";
+  return "multipart/related";
 }
 
 }  // namespace
@@ -50,12 +49,15 @@ OfflineItem OfflineItemConversions::CreateOfflineItem(
   item.filter = OfflineItemFilter::FILTER_PAGE;
   item.state = OfflineItemState::COMPLETE;
   item.total_size_bytes = page.file_size;
+  item.received_bytes = page.file_size;
   item.creation_time = page.creation_time;
+  // Completion time is the time when the offline archive was created.
+  item.completion_time = page.creation_time;
   item.last_accessed_time = page.last_access_time;
   item.file_path = page.file_path;
   item.mime_type = GetMimeType();
   item.page_url = page.url;
-  item.original_url = page.original_url;
+  item.original_url = page.original_url_if_different;
   item.progress.value = 100;
   item.progress.max = 100;
   item.progress.unit = OfflineItemProgressUnit::PERCENTAGE;

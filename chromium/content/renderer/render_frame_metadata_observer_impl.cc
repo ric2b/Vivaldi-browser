@@ -34,7 +34,8 @@ void RenderFrameMetadataObserverImpl::BindToCurrentThread() {
 
 void RenderFrameMetadataObserverImpl::OnRenderFrameSubmission(
     const cc::RenderFrameMetadata& render_frame_metadata,
-    viz::CompositorFrameMetadata* compositor_frame_metadata) {
+    viz::CompositorFrameMetadata* compositor_frame_metadata,
+    bool force_send) {
   // By default only report metadata changes for fields which have a low
   // frequency of change. However if there are changes in high frequency
   // fields these can be reported while testing is enabled.
@@ -54,6 +55,7 @@ void RenderFrameMetadataObserverImpl::OnRenderFrameSubmission(
                           *last_render_frame_metadata_, render_frame_metadata,
                           &needs_activation_notification);
     }
+    send_metadata |= force_send;
   }
 
   // Allways cache the full metadata, so that it can correctly be sent upon
@@ -79,6 +81,21 @@ void RenderFrameMetadataObserverImpl::OnRenderFrameSubmission(
         needs_activation_notification;
     render_frame_metadata_observer_client_->OnRenderFrameMetadataChanged(
         needs_activation_notification ? last_frame_token_ : 0u, metadata_copy);
+    TRACE_EVENT_WITH_FLOW1(
+        TRACE_DISABLED_BY_DEFAULT("viz.surface_id_flow"),
+        "RenderFrameMetadataObserverImpl::OnRenderFrameSubmission",
+        metadata_copy.local_surface_id_allocation &&
+                metadata_copy.local_surface_id_allocation->IsValid()
+            ? metadata_copy.local_surface_id_allocation->local_surface_id()
+                      .submission_trace_id() +
+                  metadata_copy.local_surface_id_allocation->local_surface_id()
+                      .embed_trace_id()
+            : 0,
+        TRACE_EVENT_FLAG_FLOW_OUT, "local_surface_id_allocation",
+        metadata_copy.local_surface_id_allocation
+            ? metadata_copy.local_surface_id_allocation->local_surface_id()
+                  .ToString()
+            : "null");
   }
 
   // Always cache the initial frame token, so that if a test connects later on
@@ -113,18 +130,19 @@ bool RenderFrameMetadataObserverImpl::ShouldSendRenderFrameMetadata(
       rfm1.is_scroll_offset_at_top != rfm2.is_scroll_offset_at_top ||
       rfm1.selection != rfm2.selection ||
       rfm1.page_scale_factor != rfm2.page_scale_factor ||
+      rfm1.external_page_scale_factor != rfm2.external_page_scale_factor ||
       rfm1.is_mobile_optimized != rfm2.is_mobile_optimized ||
       rfm1.device_scale_factor != rfm2.device_scale_factor ||
       rfm1.viewport_size_in_pixels != rfm2.viewport_size_in_pixels ||
-      rfm1.local_surface_id != rfm2.local_surface_id) {
+      rfm1.top_controls_height != rfm2.top_controls_height ||
+      rfm1.top_controls_shown_ratio != rfm2.top_controls_shown_ratio ||
+      rfm1.local_surface_id_allocation != rfm2.local_surface_id_allocation) {
     *needs_activation_notification = true;
     return true;
   }
 
 #if defined(OS_ANDROID)
-  if (rfm1.top_controls_height != rfm2.top_controls_height ||
-      rfm1.top_controls_shown_ratio != rfm2.top_controls_shown_ratio ||
-      rfm1.bottom_controls_height != rfm2.bottom_controls_height ||
+  if (rfm1.bottom_controls_height != rfm2.bottom_controls_height ||
       rfm1.bottom_controls_shown_ratio != rfm2.bottom_controls_shown_ratio ||
       rfm1.min_page_scale_factor != rfm2.min_page_scale_factor ||
       rfm1.max_page_scale_factor != rfm2.max_page_scale_factor ||

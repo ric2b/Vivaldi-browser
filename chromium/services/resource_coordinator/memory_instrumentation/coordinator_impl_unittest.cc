@@ -83,7 +83,8 @@ class CoordinatorImplTest : public testing::Test {
   void RegisterClientProcess(mojom::ClientProcessPtr client_process,
                              base::ProcessId pid,
                              mojom::ProcessType process_type) {
-    auto identity = service_manager::Identity(std::to_string(pid));
+    service_manager::Identity identity(std::to_string(pid), base::Token{1, 1},
+                                       base::Token{}, base::Token{1, 1});
 
     ON_CALL(*coordinator_, GetClientIdentityForCurrentRequest())
         .WillByDefault(Return(identity));
@@ -275,7 +276,7 @@ mojom::RawOSMemDumpPtr FillRawOSDump(int pid) {
     raw_os_dump->memory_maps.push_back(std::move(vm_region));
   }
   return raw_os_dump;
-};
+}
 
 // Tests that the global dump is acked even in absence of clients.
 TEST_F(CoordinatorImplTest, NoClients) {

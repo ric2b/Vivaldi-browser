@@ -52,6 +52,7 @@ class PageSignalObserver {
   virtual void OnLoadTimePerformanceEstimate(
       content::WebContents* web_contents,
       const PageNavigationIdentity& page_navigation_id,
+      base::TimeDelta load_duration,
       base::TimeDelta cpu_usage_estimate,
       uint64_t private_footprint_kb_estimate) {}
 };
@@ -68,10 +69,6 @@ class PageSignalReceiver : public mojom::PageSignalReceiver {
   PageSignalReceiver();
   ~PageSignalReceiver() override;
 
-  static bool IsEnabled();
-  // Callers do not take ownership.
-  static PageSignalReceiver* GetInstance();
-
   // mojom::PageSignalReceiver implementation.
   void NotifyPageAlmostIdle(
       const PageNavigationIdentity& page_navigation_id) override;
@@ -86,6 +83,7 @@ class PageSignalReceiver : public mojom::PageSignalReceiver {
       const PageNavigationIdentity& page_navigation_id) override;
   void OnLoadTimePerformanceEstimate(
       const PageNavigationIdentity& page_navigation_id,
+      base::TimeDelta load_duration,
       base::TimeDelta cpu_usage_estimate,
       uint64_t private_footprint_kb_estimate) override;
 

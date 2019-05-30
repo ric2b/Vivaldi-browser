@@ -153,7 +153,8 @@ void GetCurrentProxyConfig(const NetworkTrafficAnnotationTag traffic_annotation,
   if (GetBoolFromDictionary(config_dict.get(),
                             kSCPropNetProxiesExcludeSimpleHostnames,
                             false)) {
-    proxy_config.proxy_rules().bypass_rules.AddRuleToBypassLocal();
+    proxy_config.proxy_rules()
+        .bypass_rules.PrependRuleToBypassSimpleHostnames();
   }
 
   *config = ProxyConfigWithAnnotation(proxy_config, traffic_annotation);
@@ -268,7 +269,7 @@ void ProxyConfigServiceMac::OnNetworkConfigChange(CFArrayRef changed_keys) {
   // Call OnProxyConfigChanged() on the TakeRunner to notify our observers.
   sequenced_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&Helper::OnProxyConfigChanged, helper_.get(), new_config));
+      base::BindOnce(&Helper::OnProxyConfigChanged, helper_.get(), new_config));
 }
 
 void ProxyConfigServiceMac::OnProxyConfigChanged(

@@ -7,7 +7,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
-#include "third_party/blink/renderer/core/dom/events/event_listener.h"
+#include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/dom/processing_instruction.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -21,24 +21,23 @@
 namespace blink {
 
 class DOMContentLoadedListener final
-    : public EventListener,
+    : public NativeEventListener,
       public ProcessingInstruction::DetachableEventListener {
   USING_GARBAGE_COLLECTED_MIXIN(DOMContentLoadedListener);
 
  public:
   static DOMContentLoadedListener* Create(ProcessingInstruction* pi) {
-    return new DOMContentLoadedListener(pi);
+    return MakeGarbageCollected<DOMContentLoadedListener>(pi);
   }
 
-  bool operator==(const EventListener& rhs) const override {
-    return this == &rhs;
-  }
+  DOMContentLoadedListener(ProcessingInstruction* pi)
+      : processing_instruction_(pi) {}
 
-  void handleEvent(ExecutionContext* execution_context, Event* event) override {
+  void Invoke(ExecutionContext* execution_context, Event* event) override {
     DCHECK(RuntimeEnabledFeatures::XSLTEnabled());
     DCHECK_EQ(event->type(), "DOMContentLoaded");
 
-    Document& document = *ToDocument(execution_context);
+    Document& document = *To<Document>(execution_context);
     DCHECK(!document.Parsing());
 
     // Processing instruction (XML documents only).
@@ -60,15 +59,11 @@ class DOMContentLoadedListener final
 
   void Trace(blink::Visitor* visitor) override {
     visitor->Trace(processing_instruction_);
-    EventListener::Trace(visitor);
+    NativeEventListener::Trace(visitor);
     ProcessingInstruction::DetachableEventListener::Trace(visitor);
   }
 
  private:
-  DOMContentLoadedListener(ProcessingInstruction* pi)
-      : EventListener(EventListener::kCPPEventListenerType),
-        processing_instruction_(pi) {}
-
   // If this event listener is attached to a ProcessingInstruction, keep a
   // weak reference back to it. That ProcessingInstruction is responsible for
   // detaching itself and clear out the reference.
@@ -98,7 +93,7 @@ void DocumentXSLT::ApplyXSLTransform(Document& document,
   LocalFrame* owner_frame = document.GetFrame();
   processor->CreateDocumentFromSource(new_source, result_encoding,
                                       result_mime_type, &document, owner_frame);
-  probe::frameDocumentUpdated(owner_frame);
+  probe::FrameDocumentUpdated(owner_frame);
   document.SetParsingState(Document::kFinishedParsing);
 }
 
@@ -124,7 +119,8 @@ bool DocumentXSLT::ProcessingInstructionInsertedIntoDocument(
     return true;
 
   DOMContentLoadedListener* listener = DOMContentLoadedListener::Create(pi);
-  document.addEventListener(EventTypeNames::DOMContentLoaded, listener, false);
+  document.addEventListener(event_type_names::kDOMContentLoaded, listener,
+                            false);
   DCHECK(!pi->EventListenerForXSLT());
   pi->SetEventListenerForXSLT(listener);
   return true;
@@ -140,7 +136,7 @@ bool DocumentXSLT::ProcessingInstructionRemovedFromDocument(
     return true;
 
   DCHECK(RuntimeEnabledFeatures::XSLTEnabled());
-  document.removeEventListener(EventTypeNames::DOMContentLoaded,
+  document.removeEventListener(event_type_names::kDOMContentLoaded,
                                pi->EventListenerForXSLT(), false);
   pi->ClearEventListenerForXSLT();
   return true;
@@ -168,7 +164,7 @@ bool DocumentXSLT::HasTransformSourceDocument(Document& document) {
 DocumentXSLT& DocumentXSLT::From(Document& document) {
   DocumentXSLT* supplement = Supplement<Document>::From<DocumentXSLT>(document);
   if (!supplement) {
-    supplement = new DocumentXSLT(document);
+    supplement = MakeGarbageCollected<DocumentXSLT>(document);
     Supplement<Document>::ProvideTo(document, supplement);
   }
   return *supplement;

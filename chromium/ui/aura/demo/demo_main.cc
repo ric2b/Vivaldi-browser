@@ -35,6 +35,7 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/skia_util.h"
+#include "ui/gl/gl_switches.h"
 #include "ui/gl/init/gl_factory.h"
 
 #if defined(USE_X11)
@@ -92,7 +93,7 @@ class DemoWindowDelegate : public aura::WindowDelegate {
   void OnWindowDestroyed(aura::Window* window) override {}
   void OnWindowTargetVisibilityChanged(bool visible) override {}
   bool HasHitTestMask() const override { return false; }
-  void GetHitTestMask(gfx::Path* mask) const override {}
+  void GetHitTestMask(SkPath* mask) const override {}
 
  private:
   SkColor color_;
@@ -211,6 +212,12 @@ int DemoMain() {
 
 int main(int argc, char** argv) {
   base::CommandLine::Init(argc, argv);
+
+  // Disabling Direct Composition works around the limitation that
+  // InProcessContextFactory doesn't work with Direct Composition, causing the
+  // window to not render. See http://crbug.com/936249.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kDisableDirectComposition);
 
   // The exit manager is in charge of calling the dtors of singleton objects.
   base::AtExitManager exit_manager;

@@ -19,10 +19,12 @@
 
 namespace net {
 
+void ProxyClientSocket::SetStreamPriority(RequestPriority priority) {}
+
 // static
 void ProxyClientSocket::BuildTunnelRequest(
     const HostPortPair& endpoint,
-    const HttpRequestHeaders& auth_headers,
+    const HttpRequestHeaders& extra_headers,
     const std::string& user_agent,
     std::string* request_line,
     HttpRequestHeaders* request_headers) {
@@ -39,7 +41,7 @@ void ProxyClientSocket::BuildTunnelRequest(
   if (!user_agent.empty())
     request_headers->SetHeader(HttpRequestHeaders::kUserAgent, user_agent);
 
-  request_headers->MergeFrom(auth_headers);
+  request_headers->MergeFrom(extra_headers);
 }
 
 // static

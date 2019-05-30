@@ -16,37 +16,21 @@
 
 using base::TimeTicks;
 
-namespace network {
-class SharedURLLoaderFactory;
-}
-
 namespace autofill {
-
-namespace payments {
-class TestPaymentsClient;
-}  // namespace payments
 
 class AutofillClient;
 class AutofillDriver;
 class FormStructure;
-class TestFormDataImporter;
 class TestPersonalDataManager;
+class MockAutocompleteHistoryManager;
 
 class TestAutofillManager : public AutofillManager {
  public:
-  // Called by AutofillManagerTest and AutofillMetricsTest.
-  TestAutofillManager(AutofillDriver* driver,
-                      AutofillClient* client,
-                      TestPersonalDataManager* personal_data);
-  // Called by CreditCardSaveManagerTest and LocalCardMigrationManagerTest.
   TestAutofillManager(
       AutofillDriver* driver,
       AutofillClient* client,
       TestPersonalDataManager* personal_data,
-      std::unique_ptr<CreditCardSaveManager> credit_card_save_manager,
-      payments::TestPaymentsClient* payments_client,
-      std::unique_ptr<LocalCardMigrationManager> local_card_migration_manager =
-          nullptr);
+      MockAutocompleteHistoryManager* autocomplete_history_manager);
   ~TestAutofillManager() override;
 
   // AutofillManager overrides.
@@ -57,10 +41,8 @@ class TestAutofillManager : public AutofillManager {
                       bool observed_submission) override;
   bool MaybeStartVoteUploadProcess(
       std::unique_ptr<FormStructure> form_structure,
-      const base::TimeTicks& timestamp,
       bool observed_submission) override;
   void UploadFormDataAsyncCallback(const FormStructure* submitted_form,
-                                   const base::TimeTicks& load_time,
                                    const base::TimeTicks& interaction_time,
                                    const base::TimeTicks& submission_time,
                                    bool observed_submission) override;
@@ -92,10 +74,10 @@ class TestAutofillManager : public AutofillManager {
 
   void SetCallParentUploadFormData(bool value);
 
+  using AutofillManager::is_rich_query_enabled;
+
  private:
-  TestPersonalDataManager* personal_data_;                  // Weak reference.
-  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
-  TestFormDataImporter* test_form_data_importer_ = nullptr;
+  TestPersonalDataManager* personal_data_;  // Weak reference.
   bool autofill_enabled_ = true;
   bool profile_enabled_ = true;
   bool credit_card_enabled_ = true;
@@ -106,7 +88,6 @@ class TestAutofillManager : public AutofillManager {
 
   std::string submitted_form_signature_;
   std::vector<ServerFieldTypeSet> expected_submitted_field_types_;
-  AutofillClient* client_;
 
   DISALLOW_COPY_AND_ASSIGN(TestAutofillManager);
 };

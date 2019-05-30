@@ -35,6 +35,7 @@ import sys
 import threading
 
 from blinkpy.common import exit_codes
+from blinkpy.common.path_finder import WEB_TESTS_LAST_COMPONENT
 from blinkpy.common.path_finder import get_chromium_src_dir
 from blinkpy.web_tests.port import base
 from blinkpy.web_tests.port import driver
@@ -70,16 +71,21 @@ def _import_fuchsia_runner():
 # Path to the content shell package relative to the build directory.
 CONTENT_SHELL_PACKAGE_PATH = 'gen/content/shell/content_shell/content_shell.far'
 
-# HTTP path prefix for the HTTP server.
-PERF_TEST_PATH_PREFIX = '/PerformanceTests'
-LAYOUT_TEST_PATH_PREFIX = '/LayoutTests'
+# HTTP path prefixes for the HTTP server.
+# WEB_TEST_PATH_PREFIX should be matched to the local directory name of
+# web_tests because some tests and test_runner find test root directory
+# with it.
+WEB_TESTS_PATH_PREFIX = '/third_party/blink/' + WEB_TESTS_LAST_COMPONENT
 
 # Paths to the directory where the fonts are copied to. Must match the path in
 # content/shell/app/blink_test_platform_support_fuchsia.cc .
 FONTS_DEVICE_PATH = '/system/fonts'
 
-# Number of content_shell instances to run in parallel.
-MAX_WORKERS = 8
+# Number of CPU cores in qemu.
+CPU_CORES = 4
+
+# Number of content_shell instances to run in parallel. 1 per CPU core.
+MAX_WORKERS = CPU_CORES
 
 PROCESS_START_TIMEOUT = 20
 
@@ -113,13 +119,13 @@ class SubprocessOutputLogger(object):
     def close(self):
         self._process.kill()
 
-
 class _TargetHost(object):
     def __init__(self, build_path, ports_to_forward):
         try:
             self._target = None
             self._target = qemu_target.QemuTarget(
-                build_path, 'x64', ram_size_mb=8192)
+                build_path, 'x64', cpu_cores=CPU_CORES, system_log_file=None,
+                require_kvm=True, ram_size_mb=8192)
             self._target.Start()
             self._setup_target(build_path, ports_to_forward)
         except:
@@ -159,13 +165,17 @@ class _TargetHost(object):
             raise Exception('Failed to install content_shell: %s' % \
                             '\n'.join(output))
 
+        # Process will be forked for each worker, which may make QemuTarget
+        # unusable (e.g. waitpid() for qemu process returns ECHILD after
+        # fork() ). Save command runner before fork()ing, to use it later to
+        # connect to the target.
+        self.target_command_runner = self._target.GetCommandRunner()
 
-    def run_command(self, *args, **kvargs):
-        return self._target.RunCommandPiped(*args,
-                                            stdin=subprocess.PIPE,
-                                            stdout=subprocess.PIPE,
-                                            stderr=subprocess.PIPE,
-                                            **kvargs)
+    def run_command(self, command):
+        return self.target_command_runner.RunCommandPiped(
+            command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
+
     def cleanup(self):
         if self._target:
             # TODO(sergeyu): Currently __init__() always starts Qemu, so we can
@@ -238,10 +248,11 @@ class FuchsiaPort(base.Port):
         # Run a single qemu instance.
         return min(MAX_WORKERS, requested_num_workers)
 
-    def check_sys_deps(self, needs_http):
-        # There is nothing to check here. If we have the package built we should
-        # be able to run it.
-        return exit_codes.OK_EXIT_STATUS
+    def default_timeout_ms(self):
+        # Use 20s timeout instead of the default 6s. This is necessary because
+        # the tests are executed in qemu, so they run slower compared to other
+        # platforms.
+        return 20 * 1000
 
     def requires_http_server(self):
         """HTTP server is always required to avoid copying the tests to the VM.
@@ -249,8 +260,12 @@ class FuchsiaPort(base.Port):
         return True
 
     def start_http_server(self, additional_dirs, number_of_drivers):
-        additional_dirs[PERF_TEST_PATH_PREFIX] = self._perf_tests_dir()
-        additional_dirs[LAYOUT_TEST_PATH_PREFIX] = self.layout_tests_dir()
+        additional_dirs['/third_party/blink/PerformanceTests'] = \
+            self._perf_tests_dir()
+        additional_dirs[WEB_TESTS_PATH_PREFIX] = self.web_tests_dir()
+        additional_dirs['/gen'] = self.generated_sources_directory()
+        additional_dirs['/third_party/blink'] = \
+            self._path_from_chromium_base('third_party', 'blink')
         super(FuchsiaPort, self).start_http_server(
             additional_dirs, number_of_drivers)
 
@@ -268,20 +283,22 @@ class FuchsiaPort(base.Port):
 
 
 class ChromiumFuchsiaDriver(driver.Driver):
-    def __init__(self, port, worker_number, pixel_tests, no_timeout=False):
+    def __init__(self, port, worker_number, no_timeout=False):
         super(ChromiumFuchsiaDriver, self).__init__(
-            port, worker_number, pixel_tests, no_timeout)
+            port, worker_number, no_timeout)
 
     def _base_cmd_line(self):
-        return ['run', 'content_shell']
+        return ['run',
+                'fuchsia-pkg://fuchsia.com/content_shell#meta/content_shell.cmx',
+                '--ozone-platform=headless']
 
     def _command_from_driver_input(self, driver_input):
         command = super(ChromiumFuchsiaDriver, self)._command_from_driver_input(
             driver_input)
         if command.startswith('/'):
             relative_test_filename = \
-                os.path.relpath(command, self._port.layout_tests_dir())
-            command = 'http://127.0.0.1:8000' + LAYOUT_TEST_PATH_PREFIX + \
+                os.path.relpath(command, self._port.web_tests_dir())
+            command = 'http://127.0.0.1:8000' + WEB_TESTS_PATH_PREFIX + \
                 '/' + relative_test_filename
         return command
 

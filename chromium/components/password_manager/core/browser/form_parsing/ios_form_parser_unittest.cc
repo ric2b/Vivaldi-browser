@@ -7,6 +7,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/password_form.h"
@@ -18,7 +19,7 @@ using autofill::FormData;
 using autofill::FormFieldData;
 using autofill::PasswordForm;
 using base::ASCIIToUTF16;
-using base::UintToString16;
+using base::NumberToString16;
 
 namespace password_manager {
 
@@ -77,7 +78,16 @@ FormData GetFormData(const FormParsingTestCase& test_form) {
     FormFieldData field;
     // An exact id is not important, set id such that different fields have
     // different id.
-    field.id = ASCIIToUTF16("field_id") + UintToString16(i);
+    field.name_attribute = ASCIIToUTF16("field_name") + NumberToString16(i);
+    field.id_attribute = ASCIIToUTF16("field_id") + NumberToString16(i);
+
+// The fuzzing infrastructure doez not run on iOS, so the iOS specific parts of
+// PasswordForm are also built on fuzzer enabled platforms.
+// See http://crbug.com/896594
+#if defined(OS_IOS)
+    field.unique_id = field.id_attribute;
+#endif
+
     if (field_data.form_control_type)
       field.form_control_type = field_data.form_control_type;
     else
@@ -88,7 +98,7 @@ FormData GetFormData(const FormParsingTestCase& test_form) {
     } else if (!field_data.is_empty) {
       // An exact value is not important, set a value with simple pattern, such
       // that different fields have different values.
-      field.value = ASCIIToUTF16("field_value") + UintToString16(i);
+      field.value = ASCIIToUTF16("field_value") + NumberToString16(i);
     }
     if (field_data.autocomplete_attribute)
       field.autocomplete_attribute = field_data.autocomplete_attribute;
@@ -111,7 +121,16 @@ void CheckField(const std::vector<FormFieldData>& fields,
   base::string16 expected_value;
   if (field_index != kFieldNotFound) {
     const FormFieldData& field = fields[field_index];
-    expected_element = field.id;
+
+// The fuzzing infrastructure doez not run on iOS, so the iOS specific parts of
+// PasswordForm are also built on fuzzer enabled platforms.
+// See http://crbug.com/896594
+#if defined(OS_IOS)
+    expected_element = field.unique_id;
+#else
+    expected_element = field.name;
+#endif
+
     expected_value = field.value;
   }
   EXPECT_EQ(expected_element, element);

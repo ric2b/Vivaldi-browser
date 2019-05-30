@@ -384,12 +384,14 @@ function testAPIMethodExistence() {
     'go',
     'insertCSS',
     'isAudioMuted',
+    'isSpatialNavigationEnabled',
     'isUserAgentOverridden',
     'loadDataWithBaseUrl',
     'print',
     'removeContentScripts',
     'reload',
     'setAudioMuted',
+    'setSpatialNavigationEnabled',
     'setUserAgentOverride',
     'setZoom',
     'setZoomMode',
@@ -420,15 +422,6 @@ function testAPIMethodExistence() {
 
 function testCustomElementCallbacksInaccessible() {
   var CUSTOM_ELEMENT_CALLBACKS = [
-    // Custom Elements V0
-    // TODO(867831): Once we migrate to V1, we'll no longer need to check
-    // the V0 callbacks.
-    'createdCallback',
-    'attachedCallback',
-    'detachedCallback',
-    'attributeChangedCallback',
-
-    // Custom Elements V1
     'connectedCallback',
     'disconnectedCallback',
     'attributeChangedCallback',
@@ -441,6 +434,11 @@ function testCustomElementCallbacksInaccessible() {
         'undefined', typeof webview[callbackName],
         callbackName + ' should not be accessible');
   }
+
+  embedder.test.assertEq(
+      'undefined', typeof webview.constructor['observedAttributes'],
+      'observedAttributes should not be accessible');
+
   embedder.test.succeed();
 }
 
@@ -3076,8 +3074,11 @@ function testFocusWhileFocused() {
     // Focus twice, then make sure that the internal element is still focused.
     webview.focus();
     webview.focus();
-    embedder.test.assertTrue(document.activeElement = webview);
-    embedder.test.assertTrue(webview.shadowRoot.activeElement);
+    embedder.test.assertEq(document.activeElement, webview);
+    var webviewPrivates =
+        chrome.test.getModuleSystem(webview).privates(webview);
+    var shadowRoot = webviewPrivates.internal.shadowRoot;
+    embedder.test.assertTrue(shadowRoot.activeElement);
     embedder.test.succeed();
   });
 

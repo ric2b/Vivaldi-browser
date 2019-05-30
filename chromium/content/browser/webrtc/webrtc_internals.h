@@ -7,8 +7,8 @@
 
 #include <memory>
 #include <string>
+#include <unordered_set>
 
-#include "base/containers/hash_tables.h"
 #include "base/containers/queue.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
@@ -122,7 +122,7 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
   bool IsEventLogRecordingsEnabled() const;
   bool CanToggleEventLogRecordings() const;
 
-  int num_open_connections() const { return num_open_connections_; }
+  int num_connected_connections() const { return num_connected_connections_; }
 
  protected:
   // Constructor/Destructor are protected to allow tests to derive from the
@@ -169,6 +169,9 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
   // Updates the number of open PeerConnections. Called when a PeerConnection
   // is stopped or removed.
   void MaybeClosePeerConnection(base::DictionaryValue* record);
+
+  void MaybeMarkPeerConnectionAsConnected(base::DictionaryValue* record);
+  void MaybeMarkPeerConnectionAsNotConnected(base::DictionaryValue* record);
 
   // Called whenever a PeerConnection is created or stopped in order to
   // request/cancel a wake lock on suspending the current application for power
@@ -235,13 +238,14 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
   bool event_log_recordings_;
   base::FilePath event_log_recordings_file_path_;
 
-  // While |num_open_connections_| is greater than zero, request a wake lock
-  // service. This prevents the application from being suspended while remoting.
-  int num_open_connections_;
+  // While |num_connected_connections_| is greater than zero, request a wake
+  // lock service. This prevents the application from being suspended while
+  // remoting.
+  int num_connected_connections_;
   const bool should_block_power_saving_;
 
   // Set of render process hosts that |this| is registered as an observer on.
-  base::hash_set<int> render_process_id_set_;
+  std::unordered_set<int> render_process_id_set_;
 
   // Used to bulk up updates that we send to javascript.
   // The class owns the value/dictionary and command name of an update.

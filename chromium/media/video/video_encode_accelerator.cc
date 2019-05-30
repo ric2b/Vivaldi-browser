@@ -42,13 +42,17 @@ VideoEncodeAccelerator::Config::Config(
     uint32_t initial_bitrate,
     base::Optional<uint32_t> initial_framerate,
     base::Optional<uint8_t> h264_output_level,
+    base::Optional<StorageType> storage_type,
     ContentType content_type)
     : input_format(input_format),
       input_visible_size(input_visible_size),
       output_profile(output_profile),
       initial_bitrate(initial_bitrate),
-      initial_framerate(initial_framerate),
-      h264_output_level(h264_output_level),
+      initial_framerate(initial_framerate.value_or(
+          VideoEncodeAccelerator::kDefaultFramerate)),
+      h264_output_level(h264_output_level.value_or(
+          VideoEncodeAccelerator::kDefaultH264Level)),
+      storage_type(storage_type),
       content_type(content_type) {}
 
 VideoEncodeAccelerator::Config::~Config() = default;
@@ -64,7 +68,8 @@ std::string VideoEncodeAccelerator::Config::AsHumanReadableString() const {
     str += base::StringPrintf(", initial_framerate: %u",
                               initial_framerate.value());
   }
-  if (h264_output_level) {
+  if (h264_output_level &&
+      VideoCodecProfileToVideoCodec(output_profile) == kCodecH264) {
     str += base::StringPrintf(", h264_output_level: %u",
                               h264_output_level.value());
   }
@@ -79,12 +84,26 @@ VideoEncodeAccelerator::SupportedProfile::SupportedProfile()
       max_framerate_denominator(0) {
 }
 
+VideoEncodeAccelerator::SupportedProfile::SupportedProfile(
+    VideoCodecProfile profile,
+    const gfx::Size& max_resolution,
+    uint32_t max_framerate_numerator,
+    uint32_t max_framerate_denominator)
+    : profile(profile),
+      max_resolution(max_resolution),
+      max_framerate_numerator(max_framerate_numerator),
+      max_framerate_denominator(max_framerate_denominator) {}
+
 VideoEncodeAccelerator::SupportedProfile::~SupportedProfile() = default;
 
 void VideoEncodeAccelerator::Flush(FlushCallback flush_callback) {
   // TODO(owenlin): implements this https://crbug.com/755889.
   NOTIMPLEMENTED();
   std::move(flush_callback).Run(false);
+}
+
+bool VideoEncodeAccelerator::IsFlushSupported() {
+  return false;
 }
 
 void VideoEncodeAccelerator::RequestEncodingParametersChange(

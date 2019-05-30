@@ -19,10 +19,10 @@
 #include "net/base/address_list.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
-#include "net/dns/dns_protocol.h"
 #include "net/dns/dns_query.h"
 #include "net/dns/dns_response.h"
 #include "net/dns/dns_util.h"
+#include "net/dns/public/dns_protocol.h"
 
 namespace {
 
@@ -62,7 +62,7 @@ bool ReadTestCase(const char* filename,
     return false;
   }
 
-  std::unique_ptr<base::Value> value = base::JSONReader::Read(json);
+  std::unique_ptr<base::Value> value = base::JSONReader::ReadDeprecated(json);
   if (!value.get()) {
     LOG(ERROR) << filename << ": couldn't parse JSON.";
     return false;

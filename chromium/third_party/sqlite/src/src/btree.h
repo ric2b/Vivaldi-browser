@@ -78,9 +78,7 @@ int sqlite3BtreeGetOptimalReserve(Btree*);
 int sqlite3BtreeGetReserveNoMutex(Btree *p);
 int sqlite3BtreeSetAutoVacuum(Btree *, int);
 int sqlite3BtreeGetAutoVacuum(Btree *);
-int sqlite3BtreeSetAutoVacuumSlackPages(Btree *, int);
-int sqlite3BtreeGetAutoVacuumSlackPages(Btree *);
-int sqlite3BtreeBeginTrans(Btree*,int);
+int sqlite3BtreeBeginTrans(Btree*,int,int*);
 int sqlite3BtreeCommitPhaseOne(Btree*, const char *zMaster);
 int sqlite3BtreeCommitPhaseTwo(Btree*, int);
 int sqlite3BtreeCommit(Btree*);
@@ -303,6 +301,9 @@ struct BtreePayload {
 int sqlite3BtreeInsert(BtCursor*, const BtreePayload *pPayload,
                        int flags, int seekResult);
 int sqlite3BtreeFirst(BtCursor*, int *pRes);
+#ifndef SQLITE_OMIT_WINDOWFUNC
+void sqlite3BtreeSkipNext(BtCursor*);
+#endif
 int sqlite3BtreeLast(BtCursor*, int *pRes);
 int sqlite3BtreeNext(BtCursor*, int flags);
 int sqlite3BtreeEof(BtCursor*);
@@ -314,6 +315,7 @@ i64 sqlite3BtreeOffset(BtCursor*);
 int sqlite3BtreePayload(BtCursor*, u32 offset, u32 amt, void*);
 const void *sqlite3BtreePayloadFetch(BtCursor*, u32 *pAmt);
 u32 sqlite3BtreePayloadSize(BtCursor*);
+sqlite3_int64 sqlite3BtreeMaxRecordSize(BtCursor*);
 
 char *sqlite3BtreeIntegrityCheck(Btree*, int *aRoot, int nRoot, int, int*);
 struct Pager *sqlite3BtreePager(Btree*);

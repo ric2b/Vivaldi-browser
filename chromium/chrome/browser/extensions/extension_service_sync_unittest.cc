@@ -12,10 +12,10 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial.h"
+#include "base/stl_util.h"
 #include "base/test/mock_entropy_provider.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -37,12 +37,14 @@
 #include "chrome/common/extensions/extension_test_util.h"
 #include "chrome/common/extensions/sync_helper.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/browser_sync/profile_sync_service.h"
 #include "components/crx_file/id_util.h"
+#include "components/sync/driver/sync_service.h"
+#include "components/sync/driver/sync_user_settings.h"
 #include "components/sync/model/fake_sync_change_processor.h"
 #include "components/sync/model/sync_change_processor_wrapper_for_test.h"
 #include "components/sync/model/sync_data.h"
 #include "components/sync/model/sync_error_factory_mock.h"
+#include "components/sync/protocol/sync.pb.h"
 #include "components/variations/variations_associated_data.h"
 #include "extensions/browser/api_test_utils.h"
 #include "extensions/browser/app_sorting.h"
@@ -87,11 +89,11 @@ namespace {
 const char autoupdate[] = "ogjcoiohnmldgjemafoockdghcjciccf";
 const char good0[] = "behllobkkfkfnphdnhnkndlbkcpglgmj";
 const char good2[] = "bjafgdebaacbbbecmhlhpofkepfkgcpa";
-const char good2048[] = "nmgjhmhbleinmjpbdhgajfjkbijcmgbh";
+const char good2048[] = "dfhpodpjggiioolfhoimofdbfjibmedp";
 const char good_crx[] = "ldnnhddmnhbkjipkidpdiheffobcpfmf";
 const char page_action[] = "obcimlgaoabeegjmmpldobjndiealpln";
 const char permissions_increase[] = "pgdpcfcocojkjfbgpiianjngphoopgmo";
-const char theme2_crx[] = "pjpgmfcmabopnnfonnhmdjglfpjjfkbf";
+const char theme2_crx[] = "ibcijncamhmjjdodjamgiipcgnnaeagd";
 
 ExtensionSyncData GetDisableSyncData(const Extension& extension,
                                      int disable_reasons) {
@@ -344,9 +346,9 @@ TEST_F(ExtensionServiceSyncTest, DisableExtensionFromSync) {
   InitializeInstalledExtensionService(pref_path, source_install_dir);
 
   // The user has enabled sync.
-  browser_sync::ProfileSyncService* sync_service =
+  syncer::SyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile());
-  sync_service->SetFirstSetupComplete();
+  sync_service->GetUserSettings()->SetFirstSetupComplete();
 
   service()->Init();
   ASSERT_TRUE(service()->is_ready());
@@ -380,9 +382,9 @@ TEST_F(ExtensionServiceSyncTest, ReenableDisabledExtensionFromSync) {
   InitializeEmptyExtensionService();
 
   // Enable sync.
-  browser_sync::ProfileSyncService* sync_service =
+  syncer::SyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile());
-  sync_service->SetFirstSetupComplete();
+  sync_service->GetUserSettings()->SetFirstSetupComplete();
 
   service()->Init();
 
@@ -462,9 +464,9 @@ TEST_F(ExtensionServiceSyncTest,
   InitializeEmptyExtensionService();
 
   // Enable sync.
-  browser_sync::ProfileSyncService* sync_service =
+  syncer::SyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile());
-  sync_service->SetFirstSetupComplete();
+  sync_service->GetUserSettings()->SetFirstSetupComplete();
 
   service()->Init();
 
@@ -528,9 +530,9 @@ TEST_F(ExtensionServiceSyncTest, IgnoreSyncChangesWhenLocalStateIsMoreRecent) {
   InitializeInstalledExtensionService(pref_path, source_install_dir);
 
   // The user has enabled sync.
-  browser_sync::ProfileSyncService* sync_service =
+  syncer::SyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile());
-  sync_service->SetFirstSetupComplete();
+  sync_service->GetUserSettings()->SetFirstSetupComplete();
   // Make sure ExtensionSyncService is created, so it'll be notified of changes.
   extension_sync_service();
 
@@ -589,7 +591,9 @@ TEST_F(ExtensionServiceSyncTest, DontSelfNotify) {
   InitializeInstalledExtensionService(pref_path, source_install_dir);
 
   // The user has enabled sync.
-  ProfileSyncServiceFactory::GetForProfile(profile())->SetFirstSetupComplete();
+  ProfileSyncServiceFactory::GetForProfile(profile())
+      ->GetUserSettings()
+      ->SetFirstSetupComplete();
   // Make sure ExtensionSyncService is created, so it'll be notified of changes.
   extension_sync_service();
 
@@ -1706,7 +1710,9 @@ TEST_F(ExtensionServiceSyncTest, DontSyncThemes) {
   InitializeEmptyExtensionService();
 
   // The user has enabled sync.
-  ProfileSyncServiceFactory::GetForProfile(profile())->SetFirstSetupComplete();
+  ProfileSyncServiceFactory::GetForProfile(profile())
+      ->GetUserSettings()
+      ->SetFirstSetupComplete();
   // Make sure ExtensionSyncService is created, so it'll be notified of changes.
   extension_sync_service();
 
@@ -1947,8 +1953,9 @@ class MockPermissionRequestCreator : public PermissionRequestCreator {
 };
 
 TEST_F(ExtensionServiceTestSupervised, InstallOnlyAllowedByCustodian) {
-  InitServices(true /* profile_is_supervised */);
   InitSupervisedUserInitiatedExtensionInstallFeature(false);
+
+  InitServices(true /* profile_is_supervised */);
 
   extensions::util::SetWasInstalledByCustodian(good2048, profile(), true);
 
@@ -1969,8 +1976,9 @@ TEST_F(ExtensionServiceTestSupervised, InstallOnlyAllowedByCustodian) {
 
 TEST_F(ExtensionServiceTestSupervised,
        DelegatedAndPreinstalledExtensionIsSUFirst) {
-  InitServices(false /* profile_is_supervised */);
   InitSupervisedUserInitiatedExtensionInstallFeature(false);
+
+  InitServices(false /* profile_is_supervised */);
 
   // Install an extension.
   base::FilePath path = data_dir().AppendASCII("good.crx");
@@ -2008,8 +2016,9 @@ TEST_F(ExtensionServiceTestSupervised,
 
 TEST_F(ExtensionServiceTestSupervised,
        DelegatedAndPreinstalledExtensionSyncFirst) {
-  InitServices(false /* profile_is_supervised */);
   InitSupervisedUserInitiatedExtensionInstallFeature(false);
+
+  InitServices(false /* profile_is_supervised */);
 
   // Install an extension.
   base::FilePath path = data_dir().AppendASCII("good.crx");
@@ -2040,8 +2049,9 @@ TEST_F(ExtensionServiceTestSupervised,
 
 TEST_F(ExtensionServiceTestSupervised,
        InstallAllowedByCustodianAndSupervisedUser) {
-  InitServices(true /* profile_is_supervised */);
   InitSupervisedUserInitiatedExtensionInstallFeature(true);
+
+  InitServices(true /* profile_is_supervised */);
 
   extensions::util::SetWasInstalledByCustodian(good2048, profile(), true);
 
@@ -2066,8 +2076,9 @@ TEST_F(ExtensionServiceTestSupervised,
 
 TEST_F(ExtensionServiceTestSupervised,
        PreinstalledExtensionWithSUInitiatedInstalls) {
-  InitServices(false /* profile_is_supervised */);
   InitSupervisedUserInitiatedExtensionInstallFeature(true);
+
+  InitServices(false /* profile_is_supervised */);
 
   // Install an extension.
   base::FilePath path = data_dir().AppendASCII("good.crx");
@@ -2097,8 +2108,9 @@ TEST_F(ExtensionServiceTestSupervised,
 
 TEST_F(ExtensionServiceTestSupervised,
        PreinstalledExtensionWithoutSUInitiatedInstalls) {
-  InitServices(false /* profile_is_supervised */);
   InitSupervisedUserInitiatedExtensionInstallFeature(false);
+
+  InitServices(false /* profile_is_supervised */);
 
   // Install an extension.
   base::FilePath path = data_dir().AppendASCII("good.crx");
@@ -2131,8 +2143,9 @@ TEST_F(ExtensionServiceTestSupervised,
 TEST_F(ExtensionServiceTestSupervised, ExtensionApprovalBeforeInstallation) {
   // This tests the case when the sync entity flagging the extension as approved
   // arrives before the extension itself is installed.
-  InitServices(true /* profile_is_supervised */);
   InitSupervisedUserInitiatedExtensionInstallFeature(true);
+
+  InitServices(true /* profile_is_supervised */);
 
   MockPermissionRequestCreator* creator = new MockPermissionRequestCreator;
   supervised_user_service()->AddPermissionRequestCreator(
@@ -2483,7 +2496,7 @@ TEST_F(ExtensionServiceSyncTest, SyncUninstallByCustodianSkipsPolicy) {
 
   // Create a sync deletion for each extension.
   SyncChangeList list;
-  for (size_t i = 0; i < arraysize(extensions); i++) {
+  for (size_t i = 0; i < base::size(extensions); i++) {
     const std::string& id = extensions[i]->id();
     sync_pb::EntitySpecifics specifics;
     sync_pb::ExtensionSpecifics* ext_specifics = specifics.mutable_extension();
@@ -2620,9 +2633,9 @@ class BlacklistedExtensionSyncServiceTest : public ExtensionServiceSyncTest {
     InitializeEmptyExtensionService();
 
     // Enable sync.
-    browser_sync::ProfileSyncService* sync_service =
+    syncer::SyncService* sync_service =
         ProfileSyncServiceFactory::GetForProfile(profile());
-    sync_service->SetFirstSetupComplete();
+    sync_service->GetUserSettings()->SetFirstSetupComplete();
 
     test_blacklist_.Attach(service()->blacklist_);
     service()->Init();

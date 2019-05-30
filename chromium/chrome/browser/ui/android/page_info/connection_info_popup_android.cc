@@ -34,7 +34,6 @@ using content::WebContents;
 // static
 static jlong JNI_ConnectionInfoPopup_Init(
     JNIEnv* env,
-    const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jobject>& java_web_contents) {
   content::WebContents* web_contents =
@@ -146,6 +145,11 @@ void ConnectionInfoPopupAndroid::SetIdentityInfo(
 
 void ConnectionInfoPopupAndroid::SetCookieInfo(
     const CookieInfoList& cookie_info_list) {
+  NOTIMPLEMENTED();
+}
+
+void ConnectionInfoPopupAndroid::SetPageFeatureInfo(
+    const PageFeatureInfo& info) {
   NOTIMPLEMENTED();
 }
 

@@ -43,13 +43,69 @@ _log = logging.getLogger(__name__)
 DRIVER_START_TIMEOUT_SECS = 30
 
 
+def coalesce_repeated_switches(cmd):
+    """Combines known repeated command line switches.
+
+    Repetition of a switch notably happens when both per-test switches and the
+    additional driver flags specify different --enable-features. For instance:
+
+    --enable-features=X --enable-features=Y
+
+    Conceptually, this indicates to enable features X and Y. However
+    Chrome's command line parsing only applies the last seen switch, resulting
+    in only feature Y being enabled.
+
+    To solve this, transform it to:
+
+    --enable-features=X,Y
+    """
+
+    def parse_csv_switch(prefix, switch, values_set):
+        """If |switch| starts with |prefix|, parses it as a comma-separated
+        list of values and adds them all to |values_set|. Returns False if the
+        switch was not a match for |prefix|."""
+        if not switch.startswith(prefix):
+            return False
+
+        values = switch[len(prefix):].split(',')
+        for value in values:
+            values_set.add(value)
+        return True
+
+    def add_csv_switch(prefix, values_set, result):
+        if len(values_set) == 0:
+            return
+        sorted_values = sorted(list(values_set))
+        result.append('%s%s' % (prefix, ','.join(sorted_values)))
+
+    result = []
+
+    ENABLE_FEATURES_FLAG = '--enable-features='
+    DISABLE_FEATURES_FLAG = '--disable-features='
+
+    enabled_set = set()
+    disabled_set = set()
+
+    for switch in cmd:
+        if parse_csv_switch(ENABLE_FEATURES_FLAG, switch, enabled_set):
+            continue
+        if parse_csv_switch(DISABLE_FEATURES_FLAG, switch, disabled_set):
+            continue
+        result.append(switch)
+
+    # Append any coalesced (comma separated) flags to the end.
+    add_csv_switch(ENABLE_FEATURES_FLAG, enabled_set, result)
+    add_csv_switch(DISABLE_FEATURES_FLAG, disabled_set, result)
+
+    return result
+
+
 class DriverInput(object):
 
-    def __init__(self, test_name, timeout, image_hash, should_run_pixel_test, args):
+    def __init__(self, test_name, timeout, image_hash, args):
         self.test_name = test_name
         self.timeout = timeout  # in ms
         self.image_hash = image_hash
-        self.should_run_pixel_test = should_run_pixel_test
         self.args = args
 
 
@@ -91,7 +147,7 @@ class DeviceFailure(Exception):
 class Driver(object):
     """object for running test(s) using content_shell or other driver."""
 
-    def __init__(self, port, worker_number, pixel_tests, no_timeout=False):
+    def __init__(self, port, worker_number, no_timeout=False):
         """Initialize a Driver to subsequently run tests.
 
         Typically this routine will spawn content_shell in a config
@@ -144,7 +200,7 @@ class Driver(object):
     def __del__(self):
         self.stop()
 
-    def run_test(self, driver_input, stop_when_done):
+    def run_test(self, driver_input):
         """Run a single test and return the results.
 
         Note that it is okay if a test times out or crashes. content_shell
@@ -156,7 +212,7 @@ class Driver(object):
         """
         start_time = time.time()
         stdin_deadline = start_time + int(driver_input.timeout) / 2000.0
-        self.start(driver_input.should_run_pixel_test, driver_input.args, stdin_deadline)
+        self.start(driver_input.args, stdin_deadline)
         test_begin_time = time.time()
         self.error_from_test = str()
         self.err_seen_eof = False
@@ -182,10 +238,10 @@ class Driver(object):
                 self._crashed_process_name = 'unknown process name'
                 self._crashed_pid = 0
 
-        if stop_when_done or crashed or timed_out or leaked:
+        if crashed or timed_out or leaked:
             # We call stop() even if we crashed or timed out in order to get any remaining stdout/stderr output.
             # In the timeout case, we kill the hung process as well.
-            out, err = self._server_process.stop(self._port.driver_stop_timeout() if stop_when_done else 0.0)
+            out, err = self._server_process.stop(0.0)
             if out:
                 text += out
             if err:
@@ -227,27 +283,27 @@ class Driver(object):
         # used by e.g. tools/valgrind/valgrind_tests.py.
         return shlex.split(wrapper_option) if wrapper_option else []
 
+    # The *_HOST_AND_PORTS tuples are (hostname, insecure_port, secure_port),
+    # i.e. the information needed to create HTTP and HTTPS URLs.
+    # TODO(burnik): Read from config or args.
     HTTP_DIR = 'http/tests/'
     HTTP_LOCAL_DIR = 'http/tests/local/'
+    HTTP_HOST_AND_PORTS = ('127.0.0.1', 8000, 8443)
     WPT_DIR = 'external/wpt/'
+    WPT_HOST_AND_PORTS = ('web-platform.test', 8001, 8444)
 
     def is_http_test(self, test_name):
         return test_name.startswith(self.HTTP_DIR) and not test_name.startswith(self.HTTP_LOCAL_DIR)
 
-    def _get_http_host_and_ports_for_test(self, test_name):
-        if self._port.should_use_wptserve(test_name):
-            # TODO(burnik): Read from config or args.
-            return ('web-platform.test', 8001, 8444)
-        else:
-            return ('127.0.0.1', 8000, 8443)
-
     def test_to_uri(self, test_name):
         """Convert a test name to a URI.
 
-        Tests which have an 'https' directory in their paths (e.g.
-        '/http/tests/security/mixedContent/https/test1.html') or '.https.' in
-        their name (e.g. 'http/tests/security/mixedContent/test1.https.html') will
-        be loaded over HTTPS; all other tests over HTTP.
+        Tests which have an 'https' directory in their paths or '.https.' or
+        '.serviceworker.' in their name will be loaded over HTTPS; all other
+        tests over HTTP. Example paths loaded over HTTPS:
+        http/tests/security/mixedContent/https/test1.html
+        http/tests/security/mixedContent/test1.https.html
+        external/wpt/encoding/idlharness.any.serviceworker.html
         """
         using_wptserve = self._port.should_use_wptserve(test_name)
 
@@ -256,36 +312,42 @@ class Driver(object):
 
         if using_wptserve:
             test_dir_prefix = self.WPT_DIR
+            hostname, insecure_port, secure_port = self.WPT_HOST_AND_PORTS
         else:
             test_dir_prefix = self.HTTP_DIR
+            hostname, insecure_port, secure_port = self.HTTP_HOST_AND_PORTS
 
         relative_path = test_name[len(test_dir_prefix):]
-        hostname, insecure_port, secure_port = self._get_http_host_and_ports_for_test(test_name)
 
-        if '/https/' in test_name or '.https.' in test_name:
+        if '/https/' in test_name or '.https.' in test_name or '.serviceworker.' in test_name:
             return 'https://%s:%d/%s' % (hostname, secure_port, relative_path)
         return 'http://%s:%d/%s' % (hostname, insecure_port, relative_path)
 
+    def _get_uri_prefixes(self, hostname, insecure_port, secure_port):
+        """Returns the HTTP and HTTPS URI prefix for a hostname."""
+        return ['http://%s:%d/' % (hostname, insecure_port),
+                'https://%s:%d/' % (hostname, secure_port)]
+
     def uri_to_test(self, uri):
-        """Return the base layout test name for a given URI.
+        """Return the base web test name for a given URI.
 
         This returns the test name for a given URI, e.g., if you passed in
-        "file:///src/LayoutTests/fast/html/keygen.html" it would return
+        "file:///src/web_tests/fast/html/keygen.html" it would return
         "fast/html/keygen.html".
         """
 
-        # This looks like a bit of a hack, since the uri is used instead of test name.
-        hostname, insecure_port, secure_port = self._get_http_host_and_ports_for_test(uri)
-
         if uri.startswith('file:///'):
-            prefix = path.abspath_to_uri(self._port.host.platform, self._port.layout_tests_dir())
+            prefix = path.abspath_to_uri(self._port.host.platform, self._port.web_tests_dir())
             if not prefix.endswith('/'):
                 prefix += '/'
             return uri[len(prefix):]
-        if uri.startswith('http://'):
-            return uri.replace('http://%s:%d/' % (hostname, insecure_port), self.HTTP_DIR)
-        if uri.startswith('https://'):
-            return uri.replace('https://%s:%d/' % (hostname, secure_port), self.HTTP_DIR)
+
+        for prefix in self._get_uri_prefixes(*self.HTTP_HOST_AND_PORTS):
+            if uri.startswith(prefix):
+                return self.HTTP_DIR + uri[len(prefix):]
+        for prefix in self._get_uri_prefixes(*self.WPT_HOST_AND_PORTS):
+            if uri.startswith(prefix):
+                return self.WPT_DIR + uri[len(prefix):]
         raise NotImplementedError('unknown url type: %s' % uri)
 
     def has_crashed(self):
@@ -299,10 +361,10 @@ class Driver(object):
             return True
         return False
 
-    def start(self, pixel_tests, per_test_args, deadline):
-        new_cmd_line = self.cmd_line(pixel_tests, per_test_args)
+    def start(self, per_test_args, deadline):
+        new_cmd_line = self.cmd_line(per_test_args)
         if not self._server_process or new_cmd_line != self._current_cmd_line:
-            self._start(pixel_tests, per_test_args)
+            self._start(per_test_args)
             self._run_post_start_tasks()
 
     def _setup_environ_for_driver(self, environment):
@@ -310,7 +372,7 @@ class Driver(object):
             environment = self._profiler.adjusted_environment(environment)
         return environment
 
-    def _start(self, pixel_tests, per_test_args, wait_for_ready=True):
+    def _start(self, per_test_args, wait_for_ready=True):
         self.stop()
         self._driver_tempdir = self._port.host.filesystem.mkdtemp(prefix='%s-' % self._port.driver_name())
         server_name = self._port.driver_name()
@@ -320,7 +382,7 @@ class Driver(object):
         self._crashed_pid = None
         self._leaked = False
         self._leak_log = None
-        cmd_line = self.cmd_line(pixel_tests, per_test_args)
+        cmd_line = self.cmd_line(per_test_args)
         self._server_process = self._port.server_process_constructor(
             self._port, server_name, cmd_line, environment, more_logging=self._port.get_option('driver_logging'))
         self._server_process.start()
@@ -374,7 +436,7 @@ class Driver(object):
     def _base_cmd_line(self):
         return [self._port._path_to_driver()]  # pylint: disable=protected-access
 
-    def cmd_line(self, pixel_tests, per_test_args):
+    def cmd_line(self, per_test_args):
         cmd = self._command_wrapper(self._port.get_option('wrapper'))
         cmd += self._base_cmd_line()
         if self._no_timeout:
@@ -386,6 +448,7 @@ class Driver(object):
         if self._port.get_option('enable_leak_detection'):
             cmd.append('--enable-leak-detection')
         cmd.extend(per_test_args)
+        cmd = coalesce_repeated_switches(cmd)
         cmd.append('-')
         return cmd
 
@@ -430,13 +493,9 @@ class Driver(object):
         else:
             command = self._port.abspath_for_test(driver_input.test_name)
 
-        assert not driver_input.image_hash or driver_input.should_run_pixel_test
-
         # ' is the separator between arguments.
         if self._port.supports_per_test_timeout():
             command += "'--timeout'%s" % driver_input.timeout
-        if driver_input.should_run_pixel_test:
-            command += "'--pixel-test"
         if driver_input.image_hash:
             command += "'" + driver_input.image_hash
         return command + '\n'

@@ -10,17 +10,11 @@ const ROOT_PATH = '../../../../../';
 // Polymer BrowserTest fixture.
 GEN_INCLUDE(
     [ROOT_PATH + 'chrome/test/data/webui/polymer_interactive_ui_test.js']);
-GEN('#include "chrome/common/chrome_features.h"');
 
 const PrintPreviewInteractiveUITest = class extends PolymerInteractiveUITest {
   /** @override */
   get browsePreload() {
     throw 'this is abstract and should be overriden by subclasses';
-  }
-
-  /** @override */
-  get featureList() {
-    return ['features::kNewPrintPreview', ''];
   }
 
   /** @override */
@@ -79,7 +73,7 @@ PrintPreviewDestinationDialogInteractiveTest =
   get extraLibraries() {
     return super.extraLibraries.concat([
       ROOT_PATH + 'chrome/test/data/webui/settings/test_util.js',
-      ROOT_PATH + 'ui/webui/resources/js/webui_listener_tracker.js',
+      ROOT_PATH + 'ui/webui/resources/js/web_ui_listener_behavior.js',
       '../test_browser_proxy.js',
       'native_layer_stub.js',
       'print_preview_test_utils.js',
@@ -98,4 +92,78 @@ TEST_F(
     function() {
       this.runMochaTest(
           destination_dialog_interactive_test.TestNames.FocusSearchBox);
+    });
+
+TEST_F(
+    'PrintPreviewDestinationDialogInteractiveTest', 'EscapeSearchBox',
+    function() {
+      this.runMochaTest(
+          destination_dialog_interactive_test.TestNames.EscapeSearchBox);
+    });
+
+PrintPreviewPagesSettingsTest = class extends PrintPreviewInteractiveUITest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://print/new/pages_settings.html';
+  }
+
+  /** @override */
+  get extraLibraries() {
+    return super.extraLibraries.concat([
+      '../settings/test_util.js',
+      'print_preview_test_utils.js',
+      'pages_settings_test.js',
+    ]);
+  }
+
+  /** @override */
+  get suiteName() {
+    return pages_settings_test.suiteName;
+  }
+};
+
+TEST_F('PrintPreviewPagesSettingsTest', 'ClearInput', function() {
+  this.runMochaTest(pages_settings_test.TestNames.ClearInput);
+});
+
+TEST_F(
+    'PrintPreviewPagesSettingsTest', 'InputNotDisabledOnValidityChange',
+    function() {
+      this.runMochaTest(
+          pages_settings_test.TestNames.InputNotDisabledOnValidityChange);
+    });
+
+TEST_F(
+    'PrintPreviewPagesSettingsTest', 'EnterOnInputTriggersPrint', function() {
+      this.runMochaTest(
+          pages_settings_test.TestNames.EnterOnInputTriggersPrint);
+    });
+
+PrintPreviewNumberSettingsSectionInteractiveTest =
+    class extends PrintPreviewInteractiveUITest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://print/new/number_settings_section.html';
+  }
+
+  /** @override */
+  get extraLibraries() {
+    return super.extraLibraries.concat([
+      '../settings/test_util.js',
+      'print_preview_test_utils.js',
+      'number_settings_section_interactive_test.js',
+    ]);
+  }
+
+  /** @override */
+  get suiteName() {
+    return number_settings_section_interactive_test.suiteName;
+  }
+};
+
+TEST_F(
+    'PrintPreviewNumberSettingsSectionInteractiveTest', 'BlurResetsEmptyInput',
+    function() {
+      this.runMochaTest(number_settings_section_interactive_test.TestNames
+                            .BlurResetsEmptyInput);
     });

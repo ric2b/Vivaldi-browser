@@ -41,6 +41,10 @@ viz::DrawQuad* AllocateAndConstruct(
       quad = list->AllocateAndConstruct<viz::TileDrawQuad>();
       quad->material = viz::DrawQuad::TILED_CONTENT;
       return quad;
+    case viz::mojom::DrawQuadStateDataView::Tag::VIDEO_HOLE_QUAD_STATE:
+      quad = list->AllocateAndConstruct<viz::VideoHoleDrawQuad>();
+      quad->material = viz::DrawQuad::VIDEO_HOLE;
+      return quad;
     case viz::mojom::DrawQuadStateDataView::Tag::YUV_VIDEO_QUAD_STATE:
       quad = list->AllocateAndConstruct<viz::YUVVideoDrawQuad>();
       quad->material = viz::DrawQuad::YUV_VIDEO_CONTENT;
@@ -79,6 +83,7 @@ bool StructTraits<viz::mojom::RenderPassQuadStateDataView, viz::DrawQuad>::Read(
     return false;
   }
   quad->force_anti_aliasing_off = data.force_anti_aliasing_off();
+  quad->backdrop_filter_quality = data.backdrop_filter_quality();
   return true;
 }
 
@@ -102,7 +107,8 @@ bool StructTraits<viz::mojom::StreamVideoQuadStateDataView, viz::DrawQuad>::
   return data.ReadResourceSizeInPixels(
              &quad->overlay_resources.size_in_pixels
                   [viz::StreamVideoDrawQuad::kResourceIdIndex]) &&
-         data.ReadMatrix(&quad->matrix);
+         data.ReadUvTopLeft(&quad->uv_top_left) &&
+         data.ReadUvBottomRight(&quad->uv_bottom_right);
 }
 
 // static
@@ -132,7 +138,8 @@ bool StructTraits<viz::mojom::TextureQuadStateDataView, viz::DrawQuad>::Read(
   quad->resources.count = 1;
   quad->premultiplied_alpha = data.premultiplied_alpha();
   if (!data.ReadUvTopLeft(&quad->uv_top_left) ||
-      !data.ReadUvBottomRight(&quad->uv_bottom_right)) {
+      !data.ReadUvBottomRight(&quad->uv_bottom_right) ||
+      !data.ReadProtectedVideoType(&quad->protected_video_type)) {
     return false;
   }
   quad->background_color = data.background_color();
@@ -166,6 +173,15 @@ bool StructTraits<viz::mojom::TileQuadStateDataView, viz::DrawQuad>::Read(
 }
 
 // static
+bool StructTraits<viz::mojom::VideoHoleQuadStateDataView, viz::DrawQuad>::Read(
+    viz::mojom::VideoHoleQuadStateDataView data,
+    viz::DrawQuad* out) {
+  viz::VideoHoleDrawQuad* video_hole_quad =
+      static_cast<viz::VideoHoleDrawQuad*>(out);
+  return data.ReadOverlayPlaneId(&video_hole_quad->overlay_plane_id);
+}
+
+// static
 bool StructTraits<viz::mojom::YUVVideoQuadStateDataView, viz::DrawQuad>::Read(
     viz::mojom::YUVVideoQuadStateDataView data,
     viz::DrawQuad* out) {
@@ -174,7 +190,8 @@ bool StructTraits<viz::mojom::YUVVideoQuadStateDataView, viz::DrawQuad>::Read(
       !data.ReadUvTexCoordRect(&quad->uv_tex_coord_rect) ||
       !data.ReadYaTexSize(&quad->ya_tex_size) ||
       !data.ReadUvTexSize(&quad->uv_tex_size) ||
-      !data.ReadVideoColorSpace(&quad->video_color_space)) {
+      !data.ReadVideoColorSpace(&quad->video_color_space) ||
+      !data.ReadProtectedVideoType(&quad->protected_video_type)) {
     return false;
   }
   quad->resources.ids[viz::YUVVideoDrawQuad::kYPlaneResourceIdIndex] =
@@ -197,8 +214,6 @@ bool StructTraits<viz::mojom::YUVVideoQuadStateDataView, viz::DrawQuad>::Read(
       quad->bits_per_channel > viz::YUVVideoDrawQuad::kMaxBitsPerChannel) {
     return false;
   }
-  quad->require_overlay = data.require_overlay();
-  quad->is_protected_video = data.is_protected_video();
   return true;
 }
 

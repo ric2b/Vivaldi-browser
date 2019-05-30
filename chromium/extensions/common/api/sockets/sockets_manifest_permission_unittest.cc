@@ -6,8 +6,8 @@
 #include <tuple>
 
 #include "base/json/json_reader.h"
-#include "base/macros.h"
 #include "base/pickle.h"
+#include "base/stl_util.h"
 #include "base/values.h"
 #include "extensions/common/api/sockets/sockets_manifest_permission.h"
 #include "extensions/common/manifest_constants.h"
@@ -42,7 +42,7 @@ static void AssertEmptyPermission(const SocketsManifestPermission* permission) {
 
 static std::unique_ptr<base::Value> ParsePermissionJSON(
     const std::string& json) {
-  std::unique_ptr<base::Value> result(base::JSONReader::Read(json));
+  std::unique_ptr<base::Value> result(base::JSONReader::ReadDeprecated(json));
   EXPECT_TRUE(result) << "Invalid JSON string: " << json;
   return result;
 }
@@ -99,9 +99,8 @@ static testing::AssertionResult CheckFormat(
   // Note: We use multiset because SocketsManifestPermission does not have to
   // store entries in the order found in the json message.
   std::multiset<CheckFormatEntry> parsed_permissions;
-  for (SocketPermissionEntrySet::const_iterator it =
-           permission->entries().begin();
-       it != permission->entries().end(); ++it) {
+  for (auto it = permission->entries().cbegin();
+       it != permission->entries().cend(); ++it) {
     parsed_permissions.insert(
         CheckFormatEntry(it->pattern().type, it->GetHostPatternAsString()));
   }
@@ -121,7 +120,7 @@ static testing::AssertionResult CheckFormat(const std::string& json,
                                             const CheckFormatEntry& op1) {
   CheckFormatEntry entries[] = {op1};
   return CheckFormat(
-      std::multiset<CheckFormatEntry>(entries, entries + arraysize(entries)),
+      std::multiset<CheckFormatEntry>(entries, entries + base::size(entries)),
       json);
 }
 
@@ -130,7 +129,7 @@ static testing::AssertionResult CheckFormat(const std::string& json,
                                             const CheckFormatEntry& op2) {
   CheckFormatEntry entries[] = {op1, op2};
   return CheckFormat(
-      std::multiset<CheckFormatEntry>(entries, entries + arraysize(entries)),
+      std::multiset<CheckFormatEntry>(entries, entries + base::size(entries)),
       json);
 }
 
@@ -146,7 +145,7 @@ static testing::AssertionResult CheckFormat(const std::string& json,
                                             const CheckFormatEntry& op9) {
   CheckFormatEntry entries[] = {op1, op2, op3, op4, op5, op6, op7, op8, op9};
   return CheckFormat(
-      std::multiset<CheckFormatEntry>(entries, entries + arraysize(entries)),
+      std::multiset<CheckFormatEntry>(entries, entries + base::size(entries)),
       json);
 }
 
@@ -159,11 +158,11 @@ TEST(SocketsManifestPermissionTest, Empty) {
   AssertEmptyPermission(permission.get());
 
   // Clone()/Equal()
-  std::unique_ptr<SocketsManifestPermission> clone(
-      static_cast<SocketsManifestPermission*>(permission->Clone()));
-  AssertEmptyPermission(clone.get());
+  std::unique_ptr<ManifestPermission> manifest_clone = permission->Clone();
+  auto* clone = static_cast<SocketsManifestPermission*>(manifest_clone.get());
+  AssertEmptyPermission(clone);
 
-  EXPECT_TRUE(permission->Equal(clone.get()));
+  EXPECT_TRUE(permission->Equal(clone));
 
   // ToValue()/FromValue()
   std::unique_ptr<const base::Value> value(permission->ToValue());
@@ -175,18 +174,20 @@ TEST(SocketsManifestPermissionTest, Empty) {
   AssertEmptyPermission(permission2.get());
 
   // Union/Diff/Intersection
-  std::unique_ptr<SocketsManifestPermission> diff_perm(
-      static_cast<SocketsManifestPermission*>(permission->Diff(clone.get())));
-  AssertEmptyPermission(diff_perm.get());
+  std::unique_ptr<ManifestPermission> manifest_diff = permission->Diff(clone);
+  auto* diff = static_cast<SocketsManifestPermission*>(manifest_diff.get());
+  AssertEmptyPermission(diff);
 
-  std::unique_ptr<SocketsManifestPermission> union_perm(
-      static_cast<SocketsManifestPermission*>(permission->Union(clone.get())));
-  AssertEmptyPermission(union_perm.get());
+  std::unique_ptr<ManifestPermission> manifest_union = permission->Union(clone);
+  auto* union_perm =
+      static_cast<SocketsManifestPermission*>(manifest_union.get());
+  AssertEmptyPermission(union_perm);
 
-  std::unique_ptr<SocketsManifestPermission> intersect_perm(
-      static_cast<SocketsManifestPermission*>(
-          permission->Intersect(clone.get())));
-  AssertEmptyPermission(intersect_perm.get());
+  std::unique_ptr<ManifestPermission> manifest_intersect =
+      permission->Intersect(clone);
+  auto* intersect =
+      static_cast<SocketsManifestPermission*>(manifest_intersect.get());
+  AssertEmptyPermission(intersect);
 
   // IPC
   std::unique_ptr<SocketsManifestPermission> ipc_perm(
@@ -354,10 +355,12 @@ TEST(SocketsManifestPermissionTest, SetOperations) {
       PermissionFromJSON(kTcpServerListenPermission));
 
   // Union
-  std::unique_ptr<SocketsManifestPermission> union_perm(
-      static_cast<SocketsManifestPermission*>(
-          permission1->Union(permission2.get())));
-  EXPECT_TRUE(union_perm);
+  std::unique_ptr<ManifestPermission> manifest_union =
+      permission1->Union(permission2.get());
+  auto* union_perm =
+      static_cast<SocketsManifestPermission*>(manifest_union.get());
+
+  ASSERT_TRUE(union_perm);
   EXPECT_EQ(4u, union_perm->entries().size());
 
   EXPECT_TRUE(union_perm->Contains(permission1.get()));
@@ -366,43 +369,46 @@ TEST(SocketsManifestPermissionTest, SetOperations) {
   EXPECT_FALSE(union_perm->Contains(permission4.get()));
 
   // Diff
-  std::unique_ptr<SocketsManifestPermission> diff_perm1(
-      static_cast<SocketsManifestPermission*>(
-          permission1->Diff(permission2.get())));
-  EXPECT_TRUE(diff_perm1);
-  EXPECT_EQ(2u, diff_perm1->entries().size());
+  std::unique_ptr<ManifestPermission> manifest_diff1 =
+      permission1->Diff(permission2.get());
+  auto* diff1 = static_cast<SocketsManifestPermission*>(manifest_diff1.get());
 
-  EXPECT_TRUE(permission1->Equal(diff_perm1.get()));
-  EXPECT_TRUE(diff_perm1->Equal(permission1.get()));
+  ASSERT_TRUE(diff1);
+  EXPECT_EQ(2u, diff1->entries().size());
 
-  std::unique_ptr<SocketsManifestPermission> diff_perm2(
-      static_cast<SocketsManifestPermission*>(
-          permission1->Diff(union_perm.get())));
-  EXPECT_TRUE(diff_perm2);
-  AssertEmptyPermission(diff_perm2.get());
+  EXPECT_TRUE(permission1->Equal(diff1));
+  EXPECT_TRUE(diff1->Equal(permission1.get()));
+
+  std::unique_ptr<ManifestPermission> manifest_diff2 =
+      permission1->Diff(union_perm);
+  auto* diff2 = static_cast<SocketsManifestPermission*>(manifest_diff2.get());
+  ASSERT_TRUE(diff2);
+  AssertEmptyPermission(diff2);
 
   // Intersection
-  std::unique_ptr<SocketsManifestPermission> intersect_perm1(
-      static_cast<SocketsManifestPermission*>(
-          union_perm->Intersect(permission1.get())));
-  EXPECT_TRUE(intersect_perm1);
-  EXPECT_EQ(2u, intersect_perm1->entries().size());
+  std::unique_ptr<ManifestPermission> manifest_intersect1 =
+      union_perm->Intersect(permission1.get());
+  auto* intersect1 =
+      static_cast<SocketsManifestPermission*>(manifest_intersect1.get());
+  ASSERT_TRUE(intersect1);
+  EXPECT_EQ(2u, intersect1->entries().size());
 
-  EXPECT_TRUE(permission1->Equal(intersect_perm1.get()));
-  EXPECT_TRUE(intersect_perm1->Equal(permission1.get()));
+  EXPECT_TRUE(permission1->Equal(intersect1));
+  EXPECT_TRUE(intersect1->Equal(permission1.get()));
 }
 
 TEST(SocketsManifestPermissionTest, IPC) {
   std::unique_ptr<SocketsManifestPermission> permission(
       PermissionFromJSON(kUdpBindPermission));
 
-  std::unique_ptr<SocketsManifestPermission> ipc_perm(
-      static_cast<SocketsManifestPermission*>(permission->Clone()));
-  std::unique_ptr<SocketsManifestPermission> ipc_perm2(
-      new SocketsManifestPermission());
+  std::unique_ptr<ManifestPermission> manifest_ipc_perm1 = permission->Clone();
+  auto* ipc_perm1 =
+      static_cast<SocketsManifestPermission*>(manifest_ipc_perm1.get());
+
+  auto ipc_perm2 = std::make_unique<SocketsManifestPermission>();
 
   IPC::Message m;
-  ipc_perm->Write(&m);
+  ipc_perm1->Write(&m);
   base::PickleIterator iter(m);
   EXPECT_TRUE(ipc_perm2->Read(&m, &iter));
   EXPECT_TRUE(permission->Equal(ipc_perm2.get()));

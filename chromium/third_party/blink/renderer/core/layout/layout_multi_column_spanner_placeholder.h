@@ -42,8 +42,10 @@ class LayoutMultiColumnSpannerPlaceholder final : public LayoutBox {
     SetChildNeedsLayout(kMarkOnlyThis);
   }
 
+  bool AnonymousHasStylePropagationOverride() final { return true; }
+
   void LayoutObjectInFlowThreadStyleDidChange(const ComputedStyle* old_style);
-  void UpdateMarginProperties();
+  void UpdateProperties(const ComputedStyle& parent_style);
 
   const char* GetName() const override {
     return "LayoutMultiColumnSpannerPlaceholder";
@@ -53,6 +55,7 @@ class LayoutMultiColumnSpannerPlaceholder final : public LayoutBox {
   void InsertedIntoTree() override;
   void WillBeRemovedFromTree() override;
   bool NeedsPreferredWidthsRecalculation() const override;
+  void RecalcVisualOverflow() override;
   LayoutUnit MinPreferredLogicalWidth() const override;
   LayoutUnit MaxPreferredLogicalWidth() const override;
   void UpdateLayout() override;

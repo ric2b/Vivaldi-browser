@@ -13,6 +13,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browsing_data/cookies_tree_model.h"
@@ -20,9 +21,11 @@
 #include "content/public/browser/cache_storage_context.h"
 #include "content/public/browser/indexed_db_context.h"
 #include "content/public/browser/service_worker_context.h"
+#include "content/public/browser/storage_usage_info.h"
 #include "extensions/buildflags/buildflags.h"
 #include "net/cookies/canonical_cookie.h"
 #include "storage/common/fileapi/file_system_types.h"
+#include "third_party/blink/public/mojom/appcache/appcache_info.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/text/bytes_formatting.h"
 
@@ -46,11 +49,9 @@ const char kKeyDomain[] = "domain";
 const char kKeyPath[] = "path";
 const char kKeySendFor[] = "sendfor";
 const char kKeyAccessibleToScript[] = "accessibleToScript";
-const char kKeyDesc[] = "desc";
 const char kKeySize[] = "size";
 const char kKeyOrigin[] = "origin";
 const char kKeyManifest[] = "manifest";
-const char kKeyServerId[] = "serverId";
 
 const char kKeyAccessed[] = "accessed";
 const char kKeyCreated[] = "created";
@@ -63,10 +64,6 @@ const char kKeyTemporary[] = "temporary";
 const char kKeyTotalUsage[] = "totalUsage";
 const char kKeyTemporaryUsage[] = "temporaryUsage";
 const char kKeyPersistentUsage[] = "persistentUsage";
-
-const char kKeyCertType[] = "certType";
-
-const char kKeyScopes[] = "scopes";
 
 const int64_t kNegligibleUsage = 1024;  // 1KiB
 
@@ -81,11 +78,11 @@ CookiesTreeModelUtil::~CookiesTreeModelUtil() {
 std::string CookiesTreeModelUtil::GetTreeNodeId(const CookieTreeNode* node) {
   CookieTreeNodeMap::const_iterator iter = node_map_.find(node);
   if (iter != node_map_.end())
-    return base::IntToString(iter->second);
+    return base::NumberToString(iter->second);
 
   int32_t new_id = id_map_.Add(node);
   node_map_[node] = new_id;
-  return base::IntToString(new_id);
+  return base::NumberToString(new_id);
 }
 
 bool CookiesTreeModelUtil::GetCookieTreeNodeDictionary(
@@ -129,27 +126,26 @@ bool CookiesTreeModelUtil::GetCookieTreeNodeDictionary(
     case CookieTreeNode::DetailedInfo::TYPE_DATABASE: {
       dict->SetString(kKeyType, "database");
 
-      const BrowsingDataDatabaseHelper::DatabaseInfo& database_info =
-          *node.GetDetailedInfo().database_info;
+      const content::StorageUsageInfo& usage_info =
+          *node.GetDetailedInfo().usage_info;
 
-      dict->SetString(kKeyName, database_info.database_name.empty() ?
-          l10n_util::GetStringUTF8(IDS_COOKIES_WEB_DATABASE_UNNAMED_NAME) :
-          database_info.database_name);
-      dict->SetString(kKeyDesc, database_info.description);
-      dict->SetString(kKeySize, ui::FormatBytes(database_info.size));
-      dict->SetString(kKeyModified, base::UTF16ToUTF8(
-          base::TimeFormatFriendlyDateAndTime(database_info.last_modified)));
+      dict->SetString(kKeyOrigin, usage_info.origin.Serialize());
+      dict->SetString(kKeySize, ui::FormatBytes(usage_info.total_size_bytes));
+      dict->SetString(kKeyModified,
+                      base::UTF16ToUTF8(base::TimeFormatFriendlyDateAndTime(
+                          usage_info.last_modified)));
 
       break;
     }
     case CookieTreeNode::DetailedInfo::TYPE_LOCAL_STORAGE: {
       dict->SetString(kKeyType, "local_storage");
 
-      const BrowsingDataLocalStorageHelper::LocalStorageInfo&
-         local_storage_info = *node.GetDetailedInfo().local_storage_info;
+      const content::StorageUsageInfo& local_storage_info =
+          *node.GetDetailedInfo().usage_info;
 
-      dict->SetString(kKeyOrigin, local_storage_info.origin_url.spec());
-      dict->SetString(kKeySize, ui::FormatBytes(local_storage_info.size));
+      dict->SetString(kKeyOrigin, local_storage_info.origin.Serialize());
+      dict->SetString(kKeySize,
+                      ui::FormatBytes(local_storage_info.total_size_bytes));
       dict->SetString(kKeyModified, base::UTF16ToUTF8(
           base::TimeFormatFriendlyDateAndTime(
               local_storage_info.last_modified)));
@@ -159,7 +155,7 @@ bool CookiesTreeModelUtil::GetCookieTreeNodeDictionary(
     case CookieTreeNode::DetailedInfo::TYPE_APPCACHE: {
       dict->SetString(kKeyType, "app_cache");
 
-      const content::AppCacheInfo& appcache_info =
+      const blink::mojom::AppCacheInfo& appcache_info =
           *node.GetDetailedInfo().appcache_info;
 
       dict->SetString(kKeyManifest, appcache_info.manifest_url.spec());
@@ -174,14 +170,14 @@ bool CookiesTreeModelUtil::GetCookieTreeNodeDictionary(
     case CookieTreeNode::DetailedInfo::TYPE_INDEXED_DB: {
       dict->SetString(kKeyType, "indexed_db");
 
-      const content::IndexedDBInfo& indexed_db_info =
-          *node.GetDetailedInfo().indexed_db_info;
+      const content::StorageUsageInfo& usage_info =
+          *node.GetDetailedInfo().usage_info;
 
-      dict->SetString(kKeyOrigin, indexed_db_info.origin.spec());
-      dict->SetString(kKeySize, ui::FormatBytes(indexed_db_info.size));
+      dict->SetString(kKeyOrigin, usage_info.origin.Serialize());
+      dict->SetString(kKeySize, ui::FormatBytes(usage_info.total_size_bytes));
       dict->SetString(kKeyModified,
                       base::UTF16ToUTF8(base::TimeFormatFriendlyDateAndTime(
-                          indexed_db_info.last_modified)));
+                          usage_info.last_modified)));
       break;
     }
     case CookieTreeNode::DetailedInfo::TYPE_FILE_SYSTEM: {
@@ -192,7 +188,7 @@ bool CookiesTreeModelUtil::GetCookieTreeNodeDictionary(
       const storage::FileSystemType kPerm = storage::kFileSystemTypePersistent;
       const storage::FileSystemType kTemp = storage::kFileSystemTypeTemporary;
 
-      dict->SetString(kKeyOrigin, file_system_info.origin.spec());
+      dict->SetString(kKeyOrigin, file_system_info.origin.Serialize());
       dict->SetString(
           kKeyPersistent,
           base::ContainsKey(file_system_info.usage_map, kPerm)
@@ -232,37 +228,15 @@ bool CookiesTreeModelUtil::GetCookieTreeNodeDictionary(
                           quota_info.persistent_usage)));
       break;
     }
-    case CookieTreeNode::DetailedInfo::TYPE_CHANNEL_ID: {
-      dict->SetString(kKeyType, "channel_id");
-
-      const net::ChannelIDStore::ChannelID& channel_id =
-          *node.GetDetailedInfo().channel_id;
-
-      dict->SetString(kKeyServerId, channel_id.server_identifier());
-      dict->SetString(kKeyCertType,
-                      l10n_util::GetStringUTF8(IDS_CLIENT_CERT_ECDSA_SIGN));
-      dict->SetString(kKeyCreated, base::UTF16ToUTF8(
-          base::TimeFormatFriendlyDateAndTime(
-              channel_id.creation_time())));
-      break;
-    }
     case CookieTreeNode::DetailedInfo::TYPE_SERVICE_WORKER: {
       dict->SetString(kKeyType, "service_worker");
 
-      const content::ServiceWorkerUsageInfo& service_worker_info =
-          *node.GetDetailedInfo().service_worker_info;
+      const content::StorageUsageInfo& usage_info =
+          *node.GetDetailedInfo().usage_info;
 
-      dict->SetString(kKeyOrigin, service_worker_info.origin.spec());
-      dict->SetString(kKeySize,
-                      ui::FormatBytes(service_worker_info.total_size_bytes));
-      auto scopes = std::make_unique<base::ListValue>();
-      for (std::vector<GURL>::const_iterator it =
-               service_worker_info.scopes.begin();
-           it != service_worker_info.scopes.end();
-           ++it) {
-        scopes->AppendString(it->spec());
-      }
-      dict->Set(kKeyScopes, std::move(scopes));
+      dict->SetString(kKeyOrigin, usage_info.origin.Serialize());
+      dict->SetString(kKeySize, ui::FormatBytes(usage_info.total_size_bytes));
+      // TODO(jsbell): Include kKeyModified like other storage types.
       break;
     }
     case CookieTreeNode::DetailedInfo::TYPE_SHARED_WORKER: {
@@ -278,15 +252,14 @@ bool CookiesTreeModelUtil::GetCookieTreeNodeDictionary(
     case CookieTreeNode::DetailedInfo::TYPE_CACHE_STORAGE: {
       dict->SetString(kKeyType, "cache_storage");
 
-      const content::CacheStorageUsageInfo& cache_storage_info =
-          *node.GetDetailedInfo().cache_storage_info;
+      const content::StorageUsageInfo& usage_info =
+          *node.GetDetailedInfo().usage_info;
 
-      dict->SetString(kKeyOrigin, cache_storage_info.origin.spec());
-      dict->SetString(kKeySize,
-                      ui::FormatBytes(cache_storage_info.total_size_bytes));
+      dict->SetString(kKeyOrigin, usage_info.origin.Serialize());
+      dict->SetString(kKeySize, ui::FormatBytes(usage_info.total_size_bytes));
       dict->SetString(kKeyModified,
                       base::UTF16ToUTF8(base::TimeFormatFriendlyDateAndTime(
-                          cache_storage_info.last_modified)));
+                          usage_info.last_modified)));
       break;
     }
     case CookieTreeNode::DetailedInfo::TYPE_FLASH_LSO: {

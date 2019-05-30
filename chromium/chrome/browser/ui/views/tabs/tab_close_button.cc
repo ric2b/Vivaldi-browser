@@ -15,11 +15,9 @@
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_controller.h"
-#include "chrome/common/chrome_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/material_design/material_design_controller.h"
-#include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/image/image_skia_operations.h"
@@ -29,8 +27,6 @@
 #if defined(USE_AURA)
 #include "ui/aura/env.h"
 #endif
-
-using MD = ui::MaterialDesignController;
 
 namespace {
 constexpr int kGlyphWidth = 16;
@@ -43,19 +39,20 @@ TabCloseButton::TabCloseButton(views::ButtonListener* listener,
       mouse_event_callback_(std::move(mouse_event_callback)) {
   SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
   SetAccessibleName(l10n_util::GetStringUTF16(IDS_ACCNAME_CLOSE));
+  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
   // Disable animation so that the red danger sign shows up immediately
   // to help avoid mis-clicks.
   SetAnimationDuration(0);
 
-  if (focus_ring())
-    SetFocusPainter(nullptr);
+  SetInstallFocusRingOnFocus(true);
 }
 
 TabCloseButton::~TabCloseButton() {}
 
 // static
 int TabCloseButton::GetWidth() {
-  return MD::IsTouchOptimizedUiEnabled() ? kTouchGlyphWidth : kGlyphWidth;
+  return ui::MaterialDesignController::touch_ui() ? kTouchGlyphWidth
+                                                  : kGlyphWidth;
 }
 
 void TabCloseButton::SetIconColors(SkColor icon_color,
@@ -128,13 +125,11 @@ gfx::Size TabCloseButton::CalculatePreferredSize() const {
 }
 
 void TabCloseButton::PaintButtonContents(gfx::Canvas* canvas) {
-  canvas->SaveLayerAlpha(GetOpacity());
   ButtonState button_state = state();
   // Draw the background circle highlight.
   if (button_state != views::Button::STATE_NORMAL)
     DrawHighlight(canvas, button_state);
   DrawCloseGlyph(canvas, button_state);
-  canvas->Restore();
 }
 
 views::View* TabCloseButton::TargetForRect(views::View* root,
@@ -164,14 +159,14 @@ views::View* TabCloseButton::TargetForRect(views::View* root,
   return contents_bounds.Intersects(rect) ? this : parent();
 }
 
-bool TabCloseButton::GetHitTestMask(gfx::Path* mask) const {
+bool TabCloseButton::GetHitTestMask(SkPath* mask) const {
   // We need to define this so hit-testing won't include the border region.
   mask->addRect(gfx::RectToSkRect(GetMirroredRect(GetContentsBounds())));
   return true;
 }
 
 void TabCloseButton::DrawHighlight(gfx::Canvas* canvas, ButtonState state) {
-  gfx::Path path;
+  SkPath path;
   gfx::Point center = GetContentsBounds().CenterPoint();
   path.setFillType(SkPath::kEvenOdd_FillType);
   path.addCircle(center.x(), center.y(), GetWidth() / 2);
@@ -194,14 +189,4 @@ void TabCloseButton::DrawCloseGlyph(gfx::Canvas* canvas, ButtonState state) {
   flags.setColor(icon_colors_[state]);
   canvas->DrawLine(glyph_bounds.origin(), glyph_bounds.bottom_right(), flags);
   canvas->DrawLine(glyph_bounds.bottom_left(), glyph_bounds.top_right(), flags);
-}
-
-SkAlpha TabCloseButton::GetOpacity() {
-  Tab* tab = static_cast<Tab*>(parent());
-  if (base::FeatureList::IsEnabled(features::kCloseButtonsInactiveTabs) ||
-      IsMouseHovered() || tab->IsActive())
-    return SK_AlphaOPAQUE;
-  const double animation_value = tab->hover_controller()->GetAnimationValue();
-  return gfx::Tween::IntValueBetween(animation_value, SK_AlphaTRANSPARENT,
-                                     SK_AlphaOPAQUE);
 }

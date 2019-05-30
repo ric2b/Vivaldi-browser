@@ -11,6 +11,7 @@
 
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/bind.h"
 #include "base/containers/stack.h"
 #include "base/containers/stack_container.h"
 #include "base/i18n/string_compare.h"
@@ -19,7 +20,7 @@
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
@@ -30,11 +31,11 @@
 #include "components/bookmarks/managed/managed_bookmark_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/query_parser/query_parser.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "components/undo/bookmark_undo_service.h"
 #include "components/undo/undo_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "jni/BookmarkBridge_jni.h"
+#include "services/identity/public/cpp/identity_manager.h"
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertUTF8ToJavaString;
@@ -458,7 +459,11 @@ jint BookmarkBridge::GetTotalBookmarkCount(
     nodes.pop();
 
     for (int i = 0; i < node->child_count(); ++i) {
+      // Empty title means deleted partner bookmarks or folders. See
+      // PartnerBookmarksShim::RemoveBookmark().
       const BookmarkNode* child = node->GetChild(i);
+      if (GetTitle(child).empty())
+        continue;
       if (child->is_folder()) {
         nodes.push(child);
       } else {
@@ -874,11 +879,11 @@ bool BookmarkBridge::IsFolderAvailable(
   if (folder == managed_bookmark_service_->managed_node() && folder->empty())
     return false;
 
-  SigninManager* signin = SigninManagerFactory::GetForProfile(
-      profile_->GetOriginalProfile());
+  auto* identity_manager =
+      IdentityManagerFactory::GetForProfile(profile_->GetOriginalProfile());
   return (folder->type() != BookmarkNode::BOOKMARK_BAR &&
-      folder->type() != BookmarkNode::OTHER_NODE) ||
-      (signin && signin->IsAuthenticated());
+          folder->type() != BookmarkNode::OTHER_NODE) ||
+         (identity_manager && identity_manager->HasPrimaryAccount());
 }
 
 void BookmarkBridge::NotifyIfDoneLoading() {

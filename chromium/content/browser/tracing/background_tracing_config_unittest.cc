@@ -6,28 +6,26 @@
 
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
-#include "base/message_loop/message_loop.h"
 #include "base/values.h"
 #include "content/browser/tracing/background_tracing_config_impl.h"
 #include "content/browser/tracing/background_tracing_rule.h"
-#include "content/public/test/test_browser_thread.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace content {
 
 class BackgroundTracingConfigTest : public testing::Test {
  public:
-  BackgroundTracingConfigTest()
-      : ui_thread_(BrowserThread::UI, &message_loop_) {}
+  BackgroundTracingConfigTest() = default;
 
  protected:
-  base::MessageLoop message_loop_;
-  TestBrowserThread ui_thread_;
+  TestBrowserThreadBundle test_browser_thread_bundle_;
 };
 
 std::unique_ptr<BackgroundTracingConfigImpl> ReadFromJSONString(
     const std::string& json_text) {
-  std::unique_ptr<base::Value> json_value(base::JSONReader::Read(json_text));
+  std::unique_ptr<base::Value> json_value(
+      base::JSONReader::ReadDeprecated(json_text));
 
   base::DictionaryValue* dict = nullptr;
   if (json_value)
@@ -288,6 +286,9 @@ TEST_F(BackgroundTracingConfigTest, ValidPreemptiveCategoryToString) {
       BackgroundTracingConfigImpl::BENCHMARK_MEMORY_LIGHT,
       BackgroundTracingConfigImpl::BENCHMARK_EXECUTION_METRIC,
       BackgroundTracingConfigImpl::BENCHMARK_NAVIGATION,
+      BackgroundTracingConfigImpl::BENCHMARK_RENDERERS,
+      BackgroundTracingConfigImpl::BENCHMARK_SERVICEWORKER,
+      BackgroundTracingConfigImpl::BENCHMARK_POWER,
       BackgroundTracingConfigImpl::BLINK_STYLE,
   };
 
@@ -301,6 +302,9 @@ TEST_F(BackgroundTracingConfigTest, ValidPreemptiveCategoryToString) {
                                     "BENCHMARK_MEMORY_LIGHT",
                                     "BENCHMARK_EXECUTION_METRIC",
                                     "BENCHMARK_NAVIGATION",
+                                    "BENCHMARK_RENDERERS",
+                                    "BENCHMARK_SERVICEWORKER",
+                                    "BENCHMARK_POWER",
                                     "BLINK_STYLE"};
   for (size_t i = 0;
        i <

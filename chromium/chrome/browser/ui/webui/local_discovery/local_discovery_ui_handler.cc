@@ -55,8 +55,6 @@ namespace {
 const char kDictionaryKeyServiceName[] = "service_name";
 const char kDictionaryKeyDisplayName[] = "display_name";
 const char kDictionaryKeyDescription[] = "description";
-const char kDictionaryKeyType[] = "type";
-const char kDictionaryKeyIsWifi[] = "is_wifi";
 const char kDictionaryKeyID[] = "id";
 
 const char kKeyPrefixMDns[] = "MDns:";
@@ -73,7 +71,6 @@ std::unique_ptr<base::DictionaryValue> CreateDeviceInfo(
   return_value->SetString(kDictionaryKeyID, description.id);
   return_value->SetString(kDictionaryKeyDisplayName, description.display_name);
   return_value->SetString(kDictionaryKeyDescription, description.description);
-  return_value->SetString(kDictionaryKeyType, "printer");
 
   return return_value;
 }
@@ -116,9 +113,8 @@ LocalDiscoveryUIHandler::SetURLLoaderFactoryForTesting::
 }
 
 LocalDiscoveryUIHandler::LocalDiscoveryUIHandler()
-    : is_visible_(false),
-      failed_list_count_(0),
-      succeded_list_count_(0) {
+    : failed_list_count_(0), succeded_list_count_(0) {
+  g_num_visible++;
 }
 
 LocalDiscoveryUIHandler::~LocalDiscoveryUIHandler() {
@@ -128,7 +124,7 @@ LocalDiscoveryUIHandler::~LocalDiscoveryUIHandler() {
   if (identity_manager)
     identity_manager->RemoveObserver(this);
   ResetCurrentRegistration();
-  SetIsVisible(false);
+  g_num_visible--;
 }
 
 // static
@@ -140,10 +136,6 @@ void LocalDiscoveryUIHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "start", base::BindRepeating(&LocalDiscoveryUIHandler::HandleStart,
                                    base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
-      "isVisible",
-      base::BindRepeating(&LocalDiscoveryUIHandler::HandleIsVisible,
-                          base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "registerDevice",
       base::BindRepeating(&LocalDiscoveryUIHandler::HandleRegisterDevice,
@@ -160,10 +152,12 @@ void LocalDiscoveryUIHandler::RegisterMessages() {
       "openCloudPrintURL",
       base::BindRepeating(&LocalDiscoveryUIHandler::HandleOpenCloudPrintURL,
                           base::Unretained(this)));
+#if !defined(OS_CHROMEOS)
   web_ui()->RegisterMessageCallback(
       "showSyncUI",
       base::BindRepeating(&LocalDiscoveryUIHandler::HandleShowSyncUI,
                           base::Unretained(this)));
+#endif
 
   // Cloud print connector related messages
 #if defined(CLOUD_PRINT_CONNECTOR_UI_AVAILABLE)
@@ -215,20 +209,13 @@ void LocalDiscoveryUIHandler::HandleStart(const base::ListValue* args) {
   CheckUserLoggedIn();
 }
 
-void LocalDiscoveryUIHandler::HandleIsVisible(const base::ListValue* args) {
-  bool is_visible = false;
-  bool rv = args->GetBoolean(0, &is_visible);
-  DCHECK(rv);
-  SetIsVisible(is_visible);
-}
-
 void LocalDiscoveryUIHandler::HandleRegisterDevice(
     const base::ListValue* args) {
   std::string device;
   bool rv = args->GetString(0, &device);
   DCHECK(rv);
 
-  DeviceDescriptionMap::iterator it = device_descriptions_.find(device);
+  auto it = device_descriptions_.find(device);
   if (it == device_descriptions_.end()) {
     OnSetupError();
     return;
@@ -281,6 +268,7 @@ void LocalDiscoveryUIHandler::HandleOpenCloudPrintURL(
                                 ui::PAGE_TRANSITION_FROM_API);
 }
 
+#if !defined(OS_CHROMEOS)
 void LocalDiscoveryUIHandler::HandleShowSyncUI(
     const base::ListValue* args) {
   Browser* browser = chrome::FindBrowserWithWebContents(
@@ -289,6 +277,7 @@ void LocalDiscoveryUIHandler::HandleShowSyncUI(
   chrome::ShowBrowserSignin(
       browser, signin_metrics::AccessPoint::ACCESS_POINT_DEVICES_PAGE);
 }
+#endif
 
 void LocalDiscoveryUIHandler::StartRegisterHTTP(
     std::unique_ptr<cloud_print::PrivetHTTPClient> http_client) {
@@ -388,8 +377,6 @@ void LocalDiscoveryUIHandler::DeviceChanged(
     info.SetString(kDictionaryKeyServiceName, name);
     info.SetString(kDictionaryKeyDisplayName, description.name);
     info.SetString(kDictionaryKeyDescription, description.description);
-    info.SetString(kDictionaryKeyType, description.type);
-    info.SetBoolean(kDictionaryKeyIsWifi, false);
 
     web_ui()->CallJavascriptFunctionUnsafe(
         "local_discovery.onUnregisteredDeviceUpdate", service_key, info);
@@ -429,12 +416,12 @@ void LocalDiscoveryUIHandler::OnDeviceListUnavailable() {
 }
 
 void LocalDiscoveryUIHandler::OnPrimaryAccountSet(
-    const AccountInfo& primary_account_info) {
+    const CoreAccountInfo& primary_account_info) {
   CheckUserLoggedIn();
 }
 
 void LocalDiscoveryUIHandler::OnPrimaryAccountCleared(
-    const AccountInfo& previous_primary_account_info) {
+    const CoreAccountInfo& previous_primary_account_info) {
   CheckUserLoggedIn();
 }
 
@@ -449,7 +436,7 @@ void LocalDiscoveryUIHandler::SendRegisterDone(
   // block the printer's announcement.
   privet_lister_->DiscoverNewDevices();
 
-  DeviceDescriptionMap::iterator it = device_descriptions_.find(service_name);
+  auto it = device_descriptions_.find(service_name);
 
   if (it == device_descriptions_.end()) {
     // TODO(noamsml): Handle the case where a printer's record is not present at
@@ -461,7 +448,6 @@ void LocalDiscoveryUIHandler::SendRegisterDone(
   const DeviceDescription& device = it->second;
   base::DictionaryValue device_value;
 
-  device_value.SetString(kDictionaryKeyType, device.type);
   device_value.SetString(kDictionaryKeyID, device.id);
   device_value.SetString(kDictionaryKeyDisplayName, device.name);
   device_value.SetString(kDictionaryKeyDescription, device.description);
@@ -469,14 +455,6 @@ void LocalDiscoveryUIHandler::SendRegisterDone(
 
   web_ui()->CallJavascriptFunctionUnsafe(
       "local_discovery.onRegistrationSuccess", device_value);
-}
-
-void LocalDiscoveryUIHandler::SetIsVisible(bool visible) {
-  if (visible == is_visible_)
-    return;
-
-  g_num_visible += visible ? 1 : -1;
-  is_visible_ = visible;
 }
 
 std::string LocalDiscoveryUIHandler::GetSyncAccount() const {

@@ -76,7 +76,7 @@ class PerformanceMonitorTest : public testing::Test {
 void PerformanceMonitorTest::SetUp() {
   page_holder_ = DummyPageHolder::Create(IntSize(800, 600));
   page_holder_->GetDocument().SetURL(KURL("https://example.com/foo"));
-  monitor_ = new PerformanceMonitor(GetFrame());
+  monitor_ = MakeGarbageCollected<PerformanceMonitor>(GetFrame());
 
   // Create another dummy page holder and pretend this is the iframe.
   another_page_holder_ = DummyPageHolder::Create(IntSize(400, 300));
@@ -90,9 +90,10 @@ void PerformanceMonitorTest::TearDown() {
 String PerformanceMonitorTest::FrameContextURL() {
   // This is reported only if there is a single frameContext URL.
   if (monitor_->task_has_multiple_contexts_)
-    return "";
-  Frame* frame = ToDocument(monitor_->task_execution_context_)->GetFrame();
-  return ToLocalFrame(frame)->GetDocument()->location()->toString();
+    return g_empty_string;
+  return To<Document>(monitor_->task_execution_context_.Get())
+      ->location()
+      ->toString();
 }
 
 int PerformanceMonitorTest::NumUniqueFrameContextsSeen() {

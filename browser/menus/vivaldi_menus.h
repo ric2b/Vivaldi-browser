@@ -33,6 +33,7 @@ void VivaldiAddPageItems(SimpleMenuModel* menu,
                          WebContents* web_contents,
                          const ContextMenuParams& params);
 void VivaldiAddEditableItems(SimpleMenuModel* menu,
+                             WebContents* web_contents,
                              const ContextMenuParams& params);
 void VivaldiAddDeveloperItems(SimpleMenuModel* menu,
                               WebContents* web_contents,

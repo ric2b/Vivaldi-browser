@@ -13,12 +13,12 @@ import android.support.customtabs.trusted.TrustedWebActivityService;
 public class TestTrustedWebActivityService extends TrustedWebActivityService {
     // TODO(peconn): Add an image resource to chrome_public_test_support, supply that in
     // getSmallIconId and verify it is used in notifyNotificationWithChannel.
-    private static final int RESOURCE_ID = -1;
+    public static final int SMALL_ICON_ID = 42;
 
     @Override
     public void onCreate() {
         super.onCreate();
-        TrustedWebActivityService.setVerifiedProviderForTesting(this, "org.chromium.chrome");
+        TrustedWebActivityService.setVerifiedProviderForTesting(this, "org.chromium.chrome.tests");
     }
 
     @Override
@@ -37,6 +37,6 @@ public class TestTrustedWebActivityService extends TrustedWebActivityService {
     @Override
     protected int getSmallIconId() {
         MessengerService.sMessageHandler.recordGetSmallIconId();
-        return RESOURCE_ID;
+        return SMALL_ICON_ID;
     }
 }

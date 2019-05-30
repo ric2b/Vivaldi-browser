@@ -15,13 +15,15 @@ namespace blink {
 
 class CSSParserLocalContext;
 
-namespace CSSLonghand {
+namespace css_longhand {
 
-const CSSValue* Top::ParseSingleValue(CSSParserTokenRange& range,
-                                      const CSSParserContext& context,
-                                      const CSSParserLocalContext&) const {
-  return CSSParsingUtils::ConsumeMarginOrOffset(
-      range, context.Mode(), CSSPropertyParserHelpers::UnitlessQuirk::kAllow);
+const CSSValue* Top::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext& local_context) const {
+  return css_parsing_utils::ConsumeMarginOrOffset(
+      range, context.Mode(),
+      css_parsing_utils::UnitlessUnlessShorthand(local_context));
 }
 
 bool Top::IsLayoutDependent(const ComputedStyle* style,
@@ -39,5 +41,5 @@ const CSSValue* Top::CSSValueFromComputedStyleInternal(
                                                     layout_object);
 }
 
-}  // namespace CSSLonghand
+}  // namespace css_longhand
 }  // namespace blink

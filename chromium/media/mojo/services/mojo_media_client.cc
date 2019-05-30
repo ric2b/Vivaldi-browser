@@ -28,6 +28,11 @@ std::unique_ptr<AudioDecoder> MojoMediaClient::CreateAudioDecoder(
   return nullptr;
 }
 
+std::vector<SupportedVideoDecoderConfig>
+MojoMediaClient::GetSupportedVideoDecoderConfigs() {
+  return {};
+}
+
 std::unique_ptr<VideoDecoder> MojoMediaClient::CreateVideoDecoder(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     MediaLog* media_log,
@@ -52,7 +57,7 @@ std::unique_ptr<CdmFactory> MojoMediaClient::CreateCdmFactory(
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 std::unique_ptr<CdmProxy> MojoMediaClient::CreateCdmProxy(
-    const std::string& cdm_guid) {
+    const base::Token& cdm_guid) {
   return nullptr;
 }
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)

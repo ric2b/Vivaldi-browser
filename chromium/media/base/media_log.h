@@ -15,6 +15,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/thread_annotations.h"
 #include "media/base/buffering_state.h"
 #include "media/base/media_export.h"
 #include "media/base/media_log_event.h"
@@ -73,7 +74,8 @@ class MEDIA_EXPORT MediaLog {
   // with whitespace in the latter kind of events.
   static std::string MediaEventToMessageString(const MediaLogEvent& event);
 
-  MediaLog();
+  // Constructor is protected, see below.
+
   virtual ~MediaLog();
 
   // Add an event to this log.  Inheritors should override AddEventLocked to
@@ -107,8 +109,10 @@ class MEDIA_EXPORT MediaLog {
   std::unique_ptr<MediaLogEvent> CreateTimeEvent(MediaLogEvent::Type type,
                                                  const std::string& property,
                                                  base::TimeDelta value);
+  std::unique_ptr<MediaLogEvent> CreateTimeEvent(MediaLogEvent::Type type,
+                                                 const std::string& property,
+                                                 double value);
   std::unique_ptr<MediaLogEvent> CreateLoadEvent(const std::string& url);
-  std::unique_ptr<MediaLogEvent> CreateSeekEvent(double seconds);
   std::unique_ptr<MediaLogEvent> CreatePipelineStateChangedEvent(
       PipelineImpl::State state);
   std::unique_ptr<MediaLogEvent> CreatePipelineErrorEvent(PipelineStatus error);
@@ -138,6 +142,9 @@ class MEDIA_EXPORT MediaLog {
   virtual std::unique_ptr<MediaLog> Clone();
 
  protected:
+  // Ensures only subclasses and factories (e.g. Clone()) can create MediaLog.
+  MediaLog();
+
   // Methods that may be overridden by inheritors.  All calls may arrive on any
   // thread, but will be synchronized with respect to any other *Locked calls on
   // any other thread, and with any parent log invalidation.
@@ -161,7 +168,7 @@ class MEDIA_EXPORT MediaLog {
     base::Lock lock;
 
     // Original media log, or null.
-    MediaLog* media_log = nullptr;
+    MediaLog* media_log GUARDED_BY(lock) = nullptr;
 
    protected:
     friend class base::RefCountedThreadSafe<ParentLogRecord>;
@@ -174,13 +181,7 @@ class MEDIA_EXPORT MediaLog {
   MediaLog(scoped_refptr<ParentLogRecord> parent_log_record);
 
  private:
-  // Return a lock that will be taken during InvalidateLog on the parent log,
-  // and before calls to the *Locked methods.
-  base::Lock& lock() { return parent_log_record_->lock; }
-
-  // The underlying media log.
-  scoped_refptr<ParentLogRecord> parent_log_record_;
-
+  // Allows MediaLogTest to construct MediaLog directly for testing.
   friend class MediaLogTest;
   FRIEND_TEST_ALL_PREFIXES(MediaLogTest, EventsAreForwarded);
   FRIEND_TEST_ALL_PREFIXES(MediaLogTest, EventsAreNotForwardedAfterInvalidate);
@@ -194,6 +195,9 @@ class MEDIA_EXPORT MediaLog {
   // untrusted renderer. This method truncates to |kMaxUrlLength| before storing
   // the event, and sets the last 3 characters to an ellipsis.
   static std::string TruncateUrlString(std::string log_string);
+
+  // The underlying media log.
+  scoped_refptr<ParentLogRecord> parent_log_record_;
 
   // A unique (to this process) id for this MediaLog.
   int32_t id_;

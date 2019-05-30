@@ -286,7 +286,7 @@ bool TimeZoneInfo::EquivTransitions(std::uint_fast8_t tt1_index,
   return true;
 }
 
-// Use the POSIX-TZ-environment-variable-style std::string to handle times
+// Use the POSIX-TZ-environment-variable-style string to handle times
 // in years after the last transition stored in the zoneinfo data.
 void TimeZoneInfo::ExtendTransitions(const std::string& name,
                                      const Header& hdr) {
@@ -921,7 +921,7 @@ bool TimeZoneInfo::NextTransition(const time_point<seconds>& tp,
     ++begin;
   }
   std::int_fast64_t unix_time = ToUnixSeconds(tp);
-  const Transition target = { unix_time };
+  const Transition target = {unix_time, 0, civil_second(), civil_second()};
   const Transition* tr = std::upper_bound(begin, end, target,
                                           Transition::ByUnixTime());
   for (; tr != end; ++tr) {  // skip no-op transitions
@@ -956,7 +956,7 @@ bool TimeZoneInfo::PrevTransition(const time_point<seconds>& tp,
     }
     unix_time += 1;  // ceils
   }
-  const Transition target = { unix_time };
+  const Transition target = {unix_time, 0, civil_second(), civil_second()};
   const Transition* tr = std::lower_bound(begin, end, target,
                                           Transition::ByUnixTime());
   for (; tr != begin; --tr) {  // skip no-op transitions

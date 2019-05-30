@@ -14,14 +14,12 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
 #include "base/optional.h"
 #include "components/download/public/common/download_interrupt_reasons.h"
 #include "components/download/public/common/download_save_info.h"
 #include "components/download/public/common/download_source.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/resource_request_body.h"
 #include "storage/browser/blob/blob_data_handle.h"
 #include "url/gurl.h"
@@ -65,6 +63,8 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
 
   using BlobStorageContextGetter =
       base::OnceCallback<storage::BlobStorageContext*()>;
+  using UploadProgressCallback =
+      base::RepeatingCallback<void(uint64_t bytes_uploaded)>;
 
   // Constructs a download not associated with a frame.
   //
@@ -78,7 +78,6 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
   // non-privileged frame.
   DownloadUrlParameters(
       const GURL& url,
-      net::URLRequestContextGetter* url_request_context_getter,
       const net::NetworkTrafficAnnotationTag& traffic_annotation);
 
   // The RenderView routing ID must correspond to the RenderView of the
@@ -89,7 +88,6 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
       int render_process_host_id,
       int render_view_host_routing_id,
       int render_frame_host_routing_id,
-      net::URLRequestContextGetter* url_request_context_getter,
       const net::NetworkTrafficAnnotationTag& traffic_annotation);
 
   ~DownloadUrlParameters();
@@ -102,11 +100,6 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
   }
   void add_request_header(const std::string& name, const std::string& value) {
     request_headers_.push_back(make_pair(name, value));
-  }
-
-  void set_url_request_context_getter(
-      net::URLRequestContextGetter* url_request_context_getter) {
-    url_request_context_getter_ = url_request_context_getter;
   }
 
   // HTTP Referrer, referrer policy and encoding.
@@ -213,7 +206,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
 
   // If |follow_cross_origin_redirects| is true, we will follow cross origin
   // redirects while downloading, otherwise, we'll attempt to navigate to the
-  // URL.
+  // URL or cancel the download.
   void set_follow_cross_origin_redirects(bool follow_cross_origin_redirects) {
     follow_cross_origin_redirects_ = follow_cross_origin_redirects;
   }
@@ -224,9 +217,10 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
     fetch_error_body_ = fetch_error_body;
   }
 
-  // Sets whether the download is to be treated as transient. A transient
-  // download is short-lived and is not shown in the UI, and will not prompt
-  // to user for target file path determination.
+  // A transient download will not be shown in the UI, and will not prompt
+  // to user for target file path determination. Transient download should be
+  // cleared properly through DownloadManager to avoid the database and
+  // in-memory DownloadItem objects accumulated for the user.
   void set_transient(bool transient) { transient_ = transient; }
 
   // Sets the optional guid for the download, the guid serves as the unique
@@ -243,6 +237,18 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
   // Sets the download source, which will be used in metrics recording.
   void set_download_source(DownloadSource download_source) {
     download_source_ = download_source;
+  }
+
+  // Sets the callback to run if there are upload progress updates.
+  void set_upload_progress_callback(
+      const UploadProgressCallback& upload_callback) {
+    upload_callback_ = upload_callback;
+  }
+
+  // Sets whether the download will require safety checks for its URL chain and
+  // downloaded content.
+  void set_require_safety_checks(bool require_safety_checks) {
+    require_safety_checks_ = require_safety_checks;
   }
 
   const OnStartedCallback& callback() const { return callback_; }
@@ -275,10 +281,10 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
     return render_frame_host_routing_id_;
   }
 
+  void set_frame_tree_node_id(int id) { frame_tree_node_id_ = id; }
+  int frame_tree_node_id() const { return frame_tree_node_id_; }
+
   const RequestHeadersType& request_headers() const { return request_headers_; }
-  net::URLRequestContextGetter* url_request_context_getter() {
-    return url_request_context_getter_.get();
-  }
   const base::FilePath& file_path() const { return save_info_.file_path; }
   const base::string16& suggested_name() const {
     return save_info_.suggested_name;
@@ -297,6 +303,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
   bool fetch_error_body() const { return fetch_error_body_; }
   bool is_transient() const { return transient_; }
   std::string guid() const { return guid_; }
+  bool require_safety_checks() const { return require_safety_checks_; }
 
   // STATE CHANGING: All save_info_ sub-objects will be in an indeterminate
   // state following this call.
@@ -307,6 +314,10 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
   }
 
   DownloadSource download_source() const { return download_source_; }
+
+  const UploadProgressCallback& upload_callback() const {
+    return upload_callback_;
+  }
 
  private:
   OnStartedCallback callback_;
@@ -327,7 +338,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
   int render_process_host_id_;
   int render_view_host_routing_id_;
   int render_frame_host_routing_id_;
-  scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
+  int frame_tree_node_id_;
   DownloadSaveInfo save_info_;
   GURL url_;
   bool do_not_prompt_for_login_;
@@ -338,6 +349,8 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
   const net::NetworkTrafficAnnotationTag traffic_annotation_;
   std::string request_origin_;
   DownloadSource download_source_;
+  UploadProgressCallback upload_callback_;
+  bool require_safety_checks_;
 
   DISALLOW_COPY_AND_ASSIGN(DownloadUrlParameters);
 };

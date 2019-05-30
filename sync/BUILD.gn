@@ -26,7 +26,8 @@ jumbo_source_set("browser") {
     "vivaldi_sync_auth_manager.cc",
     "vivaldi_sync_client.cc",
     "vivaldi_sync_client.h",
-    "vivaldi_sync_manager_observer.h",
+    "vivaldi_sync_ui_helper.cc",
+    "vivaldi_sync_ui_helper.h",
     "vivaldi_syncmanager.cpp",
     "vivaldi_syncmanager.h",
     "vivaldi_syncmanager_factory.h",
@@ -43,10 +44,12 @@ jumbo_source_set("browser") {
     "//components/signin/core/browser",
     "//components/sync/protocol",
     "//components/translate/content/common",
-    "//vivaldi/prefs:prefs_files_generator",
     "//skia",
     "//third_party/icu",
     "//third_party/cacheinvalidation",
+    "//third_party/libaddressinput",
+    "//vivaldi/prefs:prefs_files_generator",
+    "//vivaldi/vivaldi_account",
   ]
   public_deps = [
     ":sync",

@@ -12,6 +12,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
@@ -39,6 +41,7 @@
 #include "components/viz/test/test_shared_bitmap_manager.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/context_support.h"
+#include "gpu/config/gpu_finch_features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkMatrix.h"
@@ -227,7 +230,7 @@ class GLRendererShaderPixelTest : public cc::GLRendererPixelTest {
 
   void TestColorShaders() {
     const size_t kNumTransferFns = 7;
-    SkColorSpaceTransferFn transfer_fns[kNumTransferFns] = {
+    skcms_TransferFunction transfer_fns[kNumTransferFns] = {
         // The identity.
         {1.f, 1.f, 0.f, 1.f, 0.f, 0.f, 0.f},
         // The identity, with an if statement.
@@ -245,7 +248,7 @@ class GLRendererShaderPixelTest : public cc::GLRendererPixelTest {
     };
 
     for (size_t i = 0; i < kNumTransferFns; ++i) {
-      SkMatrix44 primaries;
+      skcms_Matrix3x3 primaries;
       gfx::ColorSpace::CreateSRGB().GetPrimaryMatrix(&primaries);
       gfx::ColorSpace src =
           gfx::ColorSpace::CreateCustom(primaries, transfer_fns[i]);
@@ -399,9 +402,9 @@ TEST_P(PrecisionShaderPixelTest, ShadersCompile) {
   TestShadersWithPrecision(GetParam());
 }
 
-INSTANTIATE_TEST_CASE_P(PrecisionShadersCompile,
-                        PrecisionShaderPixelTest,
-                        ::testing::ValuesIn(kPrecisionList));
+INSTANTIATE_TEST_SUITE_P(PrecisionShadersCompile,
+                         PrecisionShaderPixelTest,
+                         ::testing::ValuesIn(kPrecisionList));
 
 class PrecisionBlendShaderPixelTest
     : public GLRendererShaderPixelTest,
@@ -413,7 +416,7 @@ TEST_P(PrecisionBlendShaderPixelTest, ShadersCompile) {
                                    std::get<1>(GetParam()));
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     PrecisionBlendShadersCompile,
     PrecisionBlendShaderPixelTest,
     ::testing::Combine(::testing::ValuesIn(kPrecisionList),
@@ -429,10 +432,10 @@ TEST_P(PrecisionSamplerShaderPixelTest, ShadersCompile) {
                                      std::get<1>(GetParam()));
 }
 
-INSTANTIATE_TEST_CASE_P(PrecisionSamplerShadersCompile,
-                        PrecisionSamplerShaderPixelTest,
-                        ::testing::Combine(::testing::ValuesIn(kPrecisionList),
-                                           ::testing::ValuesIn(kSamplerList)));
+INSTANTIATE_TEST_SUITE_P(PrecisionSamplerShadersCompile,
+                         PrecisionSamplerShaderPixelTest,
+                         ::testing::Combine(::testing::ValuesIn(kPrecisionList),
+                                            ::testing::ValuesIn(kSamplerList)));
 
 class MaskShaderPixelTest
     : public GLRendererShaderPixelTest,
@@ -444,12 +447,12 @@ TEST_P(MaskShaderPixelTest, ShadersCompile) {
                        std::get<2>(GetParam()), std::get<3>(GetParam()));
 }
 
-INSTANTIATE_TEST_CASE_P(MaskShadersCompile,
-                        MaskShaderPixelTest,
-                        ::testing::Combine(::testing::ValuesIn(kPrecisionList),
-                                           ::testing::ValuesIn(kSamplerList),
-                                           ::testing::ValuesIn(kBlendModeList),
-                                           ::testing::Bool()));
+INSTANTIATE_TEST_SUITE_P(MaskShadersCompile,
+                         MaskShaderPixelTest,
+                         ::testing::Combine(::testing::ValuesIn(kPrecisionList),
+                                            ::testing::ValuesIn(kSamplerList),
+                                            ::testing::ValuesIn(kBlendModeList),
+                                            ::testing::Bool()));
 
 #endif
 
@@ -496,9 +499,7 @@ class GLRendererWithDefaultHarnessTest : public GLRendererTest {
     renderer_->SetVisible(true);
   }
 
-  void SwapBuffers() {
-    renderer_->SwapBuffers(std::vector<ui::LatencyInfo>(), false);
-  }
+  void SwapBuffers() { renderer_->SwapBuffers(std::vector<ui::LatencyInfo>()); }
 
   RendererSettings settings_;
   cc::FakeOutputSurfaceClient output_surface_client_;
@@ -698,7 +699,8 @@ TEST_F(GLRendererWithDefaultHarnessTest, TextureDrawQuadShaderPrecisionHigh) {
                        gfx::Rect(1023, 1023), needs_blending, resource_id,
                        premultiplied_alpha, uv_top_left, uv_bottom_right,
                        SK_ColorTRANSPARENT, vertex_opacity, flipped,
-                       nearest_neighbor, false);
+                       nearest_neighbor, /*secure_output_only=*/false,
+                       ui::ProtectedVideoType::kClear);
 
   DrawFrame(renderer_.get(), viewport_size);
 
@@ -759,7 +761,8 @@ TEST_F(GLRendererWithDefaultHarnessTest, TextureDrawQuadShaderPrecisionMedium) {
                        gfx::Rect(1025, 1025), needs_blending, resource_id,
                        premultiplied_alpha, uv_top_left, uv_bottom_right,
                        SK_ColorTRANSPARENT, vertex_opacity, flipped,
-                       nearest_neighbor, false);
+                       nearest_neighbor, /*secure_output_only=*/false,
+                       ui::ProtectedVideoType::kClear);
 
   DrawFrame(renderer_.get(), viewport_size);
 
@@ -2046,12 +2049,6 @@ class MockOutputSurface : public OutputSurface {
   MOCK_METHOD0(GetFramebufferCopyTextureFormat, GLenum());
   MOCK_METHOD1(SwapBuffers_, void(OutputSurfaceFrame& frame));  // NOLINT
   void SwapBuffers(OutputSurfaceFrame frame) override { SwapBuffers_(frame); }
-#if BUILDFLAG(ENABLE_VULKAN)
-  gpu::VulkanSurface* GetVulkanSurface() override {
-    NOTREACHED();
-    return nullptr;
-  }
-#endif
   MOCK_CONST_METHOD0(GetOverlayCandidateValidator,
                      OverlayCandidateValidator*());
   MOCK_CONST_METHOD0(IsDisplayedAsOverlayPlane, bool());
@@ -2090,9 +2087,7 @@ class MockOutputSurfaceTest : public GLRendererTest {
     Mock::VerifyAndClearExpectations(output_surface_.get());
   }
 
-  void SwapBuffers() {
-    renderer_->SwapBuffers(std::vector<ui::LatencyInfo>(), false);
-  }
+  void SwapBuffers() { renderer_->SwapBuffers(std::vector<ui::LatencyInfo>()); }
 
   void DrawFrame(float device_scale_factor,
                  const gfx::Size& viewport_size,
@@ -2151,9 +2146,9 @@ class TestOverlayProcessor : public OverlayProcessor {
     MOCK_METHOD6(Attempt,
                  bool(const SkMatrix44& output_color_matrix,
                       const OverlayProcessor::FilterOperationsMap&
-                          render_pass_background_filters,
+                          render_pass_backdrop_filters,
                       DisplayResourceProvider* resource_provider,
-                      RenderPass* render_pass,
+                      RenderPassList* render_pass_list,
                       OverlayCandidateList* candidates,
                       std::vector<gfx::Rect>* content_bounds));
   };
@@ -2225,8 +2220,9 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
   std::vector<ResourceId> resource_ids_to_transfer;
   resource_ids_to_transfer.push_back(resource_id);
   std::vector<TransferableResource> list;
-  child_resource_provider->PrepareSendToParent(resource_ids_to_transfer, &list,
-                                               child_context_provider.get());
+  child_resource_provider->PrepareSendToParent(
+      resource_ids_to_transfer, &list,
+      static_cast<RasterContextProvider*>(child_context_provider.get()));
   parent_resource_provider->ReceiveFromChild(child_id, list);
 
   // In DisplayResourceProvider's namespace, use the mapped resource id.
@@ -2268,7 +2264,8 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
       root_pass->CreateAndAppendSharedQuadState(), gfx::Rect(viewport_size),
       gfx::Rect(viewport_size), needs_blending, parent_resource_id,
       premultiplied_alpha, gfx::PointF(0, 0), gfx::PointF(1, 1),
-      SK_ColorTRANSPARENT, vertex_opacity, flipped, nearest_neighbor, false);
+      SK_ColorTRANSPARENT, vertex_opacity, flipped, nearest_neighbor,
+      /*secure_output_only=*/false, ui::ProtectedVideoType::kClear);
 
   // DirectRenderer::DrawFrame calls into OverlayProcessor::ProcessForOverlays.
   // Attempt will be called for each strategy in OverlayProcessor. We have
@@ -2293,7 +2290,8 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
       root_pass->CreateAndAppendSharedQuadState(), gfx::Rect(viewport_size),
       gfx::Rect(viewport_size), needs_blending, parent_resource_id,
       premultiplied_alpha, gfx::PointF(0, 0), gfx::PointF(1, 1),
-      SK_ColorTRANSPARENT, vertex_opacity, flipped, nearest_neighbor, false);
+      SK_ColorTRANSPARENT, vertex_opacity, flipped, nearest_neighbor,
+      /*secure_output_only=*/false, ui::ProtectedVideoType::kClear);
   EXPECT_CALL(*validator, AllowCALayerOverlays())
       .Times(1)
       .WillOnce(::testing::Return(false));
@@ -2315,7 +2313,8 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
       root_pass->CreateAndAppendSharedQuadState(), gfx::Rect(viewport_size),
       gfx::Rect(viewport_size), needs_blending, parent_resource_id,
       premultiplied_alpha, gfx::PointF(0, 0), gfx::PointF(1, 1),
-      SK_ColorTRANSPARENT, vertex_opacity, flipped, nearest_neighbor, false);
+      SK_ColorTRANSPARENT, vertex_opacity, flipped, nearest_neighbor,
+      /*secure_output_only=*/false, ui::ProtectedVideoType::kClear);
   EXPECT_CALL(*validator, AllowCALayerOverlays())
       .Times(1)
       .WillOnce(::testing::Return(true));
@@ -2398,7 +2397,7 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
   provider->BindToCurrentThread();
 
   MockOverlayScheduler overlay_scheduler;
-  provider->support()->SetScheduleOverlayPlaneCallback(base::Bind(
+  provider->support()->SetScheduleOverlayPlaneCallback(base::BindRepeating(
       &MockOverlayScheduler::Schedule, base::Unretained(&overlay_scheduler)));
 
   cc::FakeOutputSurfaceClient output_surface_client;
@@ -2434,8 +2433,9 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
   std::vector<ResourceId> resource_ids_to_transfer;
   resource_ids_to_transfer.push_back(resource_id);
   std::vector<TransferableResource> list;
-  child_resource_provider->PrepareSendToParent(resource_ids_to_transfer, &list,
-                                               child_context_provider.get());
+  child_resource_provider->PrepareSendToParent(
+      resource_ids_to_transfer, &list,
+      static_cast<RasterContextProvider*>(child_context_provider.get()));
   parent_resource_provider->ReceiveFromChild(child_id, list);
 
   // In DisplayResourceProvider's namespace, use the mapped resource id.
@@ -2479,7 +2479,8 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
                        gfx::Rect(viewport_size), needs_blending,
                        parent_resource_id, premultiplied_alpha, uv_top_left,
                        uv_bottom_right, SK_ColorTRANSPARENT, vertex_opacity,
-                       flipped, nearest_neighbor, false);
+                       flipped, nearest_neighbor, /*secure_output_only=*/false,
+                       ui::ProtectedVideoType::kClear);
 
   // The verified flush flag will be set by
   // ClientResourceProvider::PrepareSendToParent. Before checking if the
@@ -2819,8 +2820,9 @@ TEST_F(GLRendererTest, DCLayerOverlaySwitch) {
   std::vector<ResourceId> resource_ids_to_transfer;
   resource_ids_to_transfer.push_back(resource_id);
   std::vector<TransferableResource> list;
-  child_resource_provider->PrepareSendToParent(resource_ids_to_transfer, &list,
-                                               child_context_provider.get());
+  child_resource_provider->PrepareSendToParent(
+      resource_ids_to_transfer, &list,
+      static_cast<RasterContextProvider*>(child_context_provider.get()));
   parent_resource_provider->ReceiveFromChild(child_id, list);
   // In DisplayResourceProvider's namespace, use the mapped resource id.
   std::unordered_map<ResourceId, ResourceId> resource_map =
@@ -2836,6 +2838,7 @@ TEST_F(GLRendererTest, DCLayerOverlaySwitch) {
   TestOverlayProcessor* processor =
       new TestOverlayProcessor(output_surface.get());
   processor->Initialize();
+  processor->SetDCHasHwOverlaySupportForTesting();
   renderer.SetOverlayProcessor(processor);
   std::unique_ptr<DCLayerValidator> validator(new DCLayerValidator);
   output_surface->SetOverlayCandidateValidator(validator.get());
@@ -2955,9 +2958,9 @@ class ContentBoundsOverlayProcessor : public OverlayProcessor {
 
     bool Attempt(const SkMatrix44& output_color_matrix,
                  const OverlayProcessor::FilterOperationsMap&
-                     render_pass_background_filters,
+                     render_pass_backdrop_filters,
                  DisplayResourceProvider* resource_provider,
-                 RenderPass* render_pass,
+                 RenderPassList* render_pass_list,
                  OverlayCandidateList* candidates,
                  std::vector<gfx::Rect>* content_bounds) override {
       content_bounds->insert(content_bounds->end(), content_bounds_.begin(),
@@ -3026,7 +3029,7 @@ class GLRendererSwapWithBoundsTest : public GLRendererTest {
       renderer.DecideRenderPassAllocationsForFrame(
           render_passes_in_draw_order_);
       DrawFrame(&renderer, viewport_size);
-      renderer.SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+      renderer.SwapBuffers(std::vector<ui::LatencyInfo>());
 
       std::vector<gfx::Rect> expected_content_bounds;
       EXPECT_EQ(content_bounds,
@@ -3177,7 +3180,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysWithAllQuadsPromoted) {
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
 
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
 
   // The damage was eliminated when everything was promoted to CALayers.
   ASSERT_TRUE(output_surface().last_sent_frame()->sub_buffer_rect);
@@ -3215,7 +3218,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysWithAllQuadsPromoted) {
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
 
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
 }
 
 TEST_F(CALayerGLRendererTest, CALayerOverlaysReusesTextureWithDifferentSizes) {
@@ -3264,7 +3267,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReusesTextureWithDifferentSizes) {
   }
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
 
   // ScheduleCALayerCHROMIUM happened and used a non-0 texture.
   EXPECT_NE(saved_texture_id, 0u);
@@ -3317,7 +3320,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReusesTextureWithDifferentSizes) {
   }
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
 
   // There are now 2 textures to check if they are free.
   EXPECT_CALL(gl(), ScheduleCALayerInUseQueryCHROMIUM(2, _));
@@ -3367,7 +3370,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReusesTextureWithDifferentSizes) {
   }
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
 }
 
 TEST_F(CALayerGLRendererTest, CALayerOverlaysDontReuseTooBigTexture) {
@@ -3416,7 +3419,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysDontReuseTooBigTexture) {
   }
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
 
   // ScheduleCALayerCHROMIUM happened and used a non-0 texture.
   EXPECT_NE(saved_texture_id, 0u);
@@ -3467,7 +3470,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysDontReuseTooBigTexture) {
   }
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
 
   // There are now 2 textures to check if they are free.
   EXPECT_CALL(gl(), ScheduleCALayerInUseQueryCHROMIUM(2, _));
@@ -3515,7 +3518,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysDontReuseTooBigTexture) {
   }
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
 }
 
 TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseAfterNoSwapBuffers) {
@@ -3601,7 +3604,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseAfterNoSwapBuffers) {
   Mock::VerifyAndClearExpectations(&gl());
 
   // SwapBuffers() *does* happen this time.
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
 
   // There are 2 textures to check if they are free.
   EXPECT_CALL(gl(), ScheduleCALayerInUseQueryCHROMIUM(2, _));
@@ -3646,7 +3649,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseAfterNoSwapBuffers) {
   }
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
 }
 
 TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseManyIfReturnedSlowly) {
@@ -3690,7 +3693,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseManyIfReturnedSlowly) {
             }));
     DrawFrame(&renderer(), viewport_size);
     Mock::VerifyAndClearExpectations(&gl());
-    renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+    renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
 
     // ScheduleCALayerCHROMIUM happened and used a non-0 texture.
     EXPECT_NE(sent_texture_ids[i], 0u);
@@ -3764,7 +3767,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysReuseManyIfReturnedSlowly) {
         }));
     DrawFrame(&renderer(), viewport_size);
     Mock::VerifyAndClearExpectations(&gl());
-    renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+    renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
 
     // All sent textures will be checked to verify if they are free yet. There's
     // also 1 outstanding texture to check for that wasn't returned yet from the
@@ -3815,7 +3818,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysCachedTexturesAreFreed) {
             }));
     DrawFrame(&renderer(), viewport_size);
     Mock::VerifyAndClearExpectations(&gl());
-    renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+    renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
 
     // ScheduleCALayerCHROMIUM happened and used a non-0 texture.
     EXPECT_NE(sent_texture_ids[i], 0u);
@@ -3855,7 +3858,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysCachedTexturesAreFreed) {
     EXPECT_CALL(gl(), ScheduleCALayerCHROMIUM(_, _, _, _, _, _));
     DrawFrame(&renderer(), viewport_size);
     Mock::VerifyAndClearExpectations(&gl());
-    renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+    renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
 
     // There's just 1 outstanding RenderPass texture to query for.
     EXPECT_CALL(gl(), ScheduleCALayerInUseQueryCHROMIUM(1, _));
@@ -3901,7 +3904,7 @@ TEST_F(CALayerGLRendererTest, CALayerOverlaysCachedTexturesAreFreed) {
       }));
   DrawFrame(&renderer(), viewport_size);
   Mock::VerifyAndClearExpectations(&gl());
-  renderer().SwapBuffers(std::vector<ui::LatencyInfo>(), false);
+  renderer().SwapBuffers(std::vector<ui::LatencyInfo>());
 }
 
 class FramebufferWatchingGLRenderer : public FakeRendererGL {
@@ -4089,6 +4092,7 @@ class GLRendererWithGpuFenceTest : public GLRendererTest {
 
   static constexpr unsigned kSurfaceOverlayTextureId = 33;
   static constexpr unsigned kGpuFenceId = 66;
+  static constexpr unsigned kGpuNoFenceId = 0;
 
   TestContextSupport* test_context_support_;
 
@@ -4102,7 +4106,7 @@ class GLRendererWithGpuFenceTest : public GLRendererTest {
   MockOverlayScheduler overlay_scheduler;
 };
 
-TEST_F(GLRendererWithGpuFenceTest, GpuFenceIdIsUsedWithRootRenderPass) {
+TEST_F(GLRendererWithGpuFenceTest, GpuFenceIdIsUsedWithRootRenderPassOverlay) {
   gfx::Size viewport_size(100, 100);
   RenderPass* root_pass = cc::AddRenderPass(
       &render_passes_in_draw_order_, 1, gfx::Rect(viewport_size),
@@ -4116,7 +4120,8 @@ TEST_F(GLRendererWithGpuFenceTest, GpuFenceIdIsUsedWithRootRenderPass) {
   DrawFrame(renderer_.get(), viewport_size);
 }
 
-TEST_F(GLRendererWithGpuFenceTest, GpuFenceIdIsUsedWithoutRootRenderPass) {
+TEST_F(GLRendererWithGpuFenceTest,
+       GpuFenceIdIsUsedOnlyForRootRenderPassOverlay) {
   gfx::Size viewport_size(100, 100);
   RenderPass* root_pass = cc::AddRenderPass(
       &render_passes_in_draw_order_, 1, gfx::Rect(viewport_size),
@@ -4131,19 +4136,18 @@ TEST_F(GLRendererWithGpuFenceTest, GpuFenceIdIsUsedWithoutRootRenderPass) {
   gfx::PointF uv_top_left(0, 0);
   gfx::PointF uv_bottom_right(1, 1);
 
-  // Add a draw quad covering the whole viewport. This causes the root
-  // render pass to be skipped.
   TextureDrawQuad* overlay_quad =
       root_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
   SharedQuadState* shared_state = root_pass->CreateAndAppendSharedQuadState();
   shared_state->SetAll(gfx::Transform(), gfx::Rect(viewport_size),
-                       gfx::Rect(viewport_size), gfx::Rect(viewport_size),
-                       false, false, 1, SkBlendMode::kSrcOver, 0);
-  overlay_quad->SetNew(shared_state, gfx::Rect(viewport_size),
-                       gfx::Rect(viewport_size), needs_blending,
-                       create_overlay_resource(), premultiplied_alpha,
-                       uv_top_left, uv_bottom_right, SK_ColorTRANSPARENT,
-                       vertex_opacity, flipped, nearest_neighbor, false);
+                       gfx::Rect(50, 50), gfx::Rect(viewport_size), false,
+                       false, 1, SkBlendMode::kSrcOver, 0);
+  overlay_quad->SetNew(
+      shared_state, gfx::Rect(viewport_size), gfx::Rect(viewport_size),
+      needs_blending, create_overlay_resource(), premultiplied_alpha,
+      uv_top_left, uv_bottom_right, SK_ColorTRANSPARENT, vertex_opacity,
+      flipped, nearest_neighbor,
+      /*secure_output_only=*/false, ui::ProtectedVideoType::kClear);
 
   EXPECT_CALL(overlay_scheduler,
               Schedule(0, gfx::OVERLAY_TRANSFORM_NONE, kSurfaceOverlayTextureId,
@@ -4151,7 +4155,7 @@ TEST_F(GLRendererWithGpuFenceTest, GpuFenceIdIsUsedWithoutRootRenderPass) {
       .Times(1);
   EXPECT_CALL(overlay_scheduler,
               Schedule(1, gfx::OVERLAY_TRANSFORM_NONE, _,
-                       gfx::Rect(viewport_size), _, _, kGpuFenceId))
+                       gfx::Rect(viewport_size), _, _, kGpuNoFenceId))
       .Times(1);
   DrawFrame(renderer_.get(), viewport_size);
 }

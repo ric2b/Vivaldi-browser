@@ -15,7 +15,7 @@
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -40,14 +40,15 @@ std::unique_ptr<base::DictionaryValue> LoadSchemaDictionary(
     const base::StringPiece& schema) {
   std::string error_message;
   std::unique_ptr<base::Value> result(
-      base::JSONReader::ReadAndReturnError(schema,
-                                           base::JSON_PARSE_RFC,  // options
-                                           NULL,                  // error code
-                                           &error_message));
+      base::JSONReader::ReadAndReturnErrorDeprecated(
+          schema,
+          base::JSON_PARSE_RFC,  // options
+          NULL,                  // error code
+          &error_message));
 
   // Tracking down http://crbug.com/121424
   char buf[128];
-  base::snprintf(buf, arraysize(buf), "%s: (%d) '%s'", name.c_str(),
+  base::snprintf(buf, base::size(buf), "%s: (%d) '%s'", name.c_str(),
                  result.get() ? static_cast<int>(result->type()) : -1,
                  error_message.c_str());
 
@@ -75,7 +76,7 @@ const base::DictionaryValue* GetSchemaChild(
     const base::DictionaryValue* schema_node,
     const std::string& child_name) {
   const base::DictionaryValue* child_node = NULL;
-  for (size_t i = 0; i < arraysize(kChildKinds); ++i) {
+  for (size_t i = 0; i < base::size(kChildKinds); ++i) {
     const base::ListValue* list_node = NULL;
     if (!schema_node->GetList(kChildKinds[i], &list_node))
       continue;
@@ -156,7 +157,7 @@ ExtensionAPI::~ExtensionAPI() {
 
 void ExtensionAPI::InitDefaultConfiguration() {
   const char* names[] = {"api", "manifest", "permission"};
-  for (size_t i = 0; i < arraysize(names); ++i)
+  for (size_t i = 0; i < base::size(names); ++i)
     RegisterDependencyProvider(names[i], FeatureProvider::GetByName(names[i]));
 
   default_configuration_initialized_ = true;
@@ -173,7 +174,7 @@ bool ExtensionAPI::IsAnyFeatureAvailableToContext(
     Feature::Context context,
     const GURL& url,
     CheckAliasStatus check_alias) {
-  FeatureProviderMap::iterator provider = dependency_providers_.find("api");
+  auto provider = dependency_providers_.find("api");
   CHECK(provider != dependency_providers_.end());
 
   if (api.IsAvailableToContext(extension, context, url).is_available())
@@ -226,7 +227,7 @@ Feature::Availability ExtensionAPI::IsAvailable(const std::string& full_name,
 base::StringPiece ExtensionAPI::GetSchemaStringPiece(
     const std::string& api_name) {
   DCHECK_EQ(api_name, GetAPINameFromFullName(api_name, nullptr));
-  StringPieceMap::iterator cached = schema_strings_.find(api_name);
+  auto cached = schema_strings_.find(api_name);
   if (cached != schema_strings_.end())
     return cached->second;
 
@@ -247,7 +248,7 @@ const base::DictionaryValue* ExtensionAPI::GetSchema(
   std::string api_name = GetAPINameFromFullName(full_name, &child_name);
 
   const base::DictionaryValue* result = NULL;
-  SchemaMap::iterator maybe_schema = schemas_.find(api_name);
+  auto maybe_schema = schemas_.find(api_name);
   if (maybe_schema != schemas_.end()) {
     result = maybe_schema->second.get();
   } else {
@@ -273,8 +274,7 @@ const Feature* ExtensionAPI::GetFeatureDependency(
   std::string feature_name;
   SplitDependencyName(full_name, &feature_type, &feature_name);
 
-  FeatureProviderMap::iterator provider =
-      dependency_providers_.find(feature_type);
+  auto provider = dependency_providers_.find(feature_type);
   if (provider == dependency_providers_.end())
     return NULL;
 
@@ -332,7 +332,7 @@ Feature::Availability ExtensionAPI::IsAliasAvailable(
   if (alias.empty())
     return Feature::Availability(Feature::NOT_PRESENT, "Alias not defined");
 
-  FeatureProviderMap::iterator provider = dependency_providers_.find("api");
+  auto provider = dependency_providers_.find("api");
   CHECK(provider != dependency_providers_.end());
 
   // Check if there is a child feature associated with full name for alias API.

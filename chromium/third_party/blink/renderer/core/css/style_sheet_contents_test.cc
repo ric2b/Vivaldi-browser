@@ -5,7 +5,6 @@
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/renderer/core/css/css_test_helper.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
 
 namespace blink {
@@ -94,7 +93,7 @@ TEST(StyleSheetContentsTest, HasViewportRuleAfterInsertionIntoMediaRule) {
   ASSERT_EQ(1U, style_sheet->RuleCount());
   EXPECT_FALSE(style_sheet->HasViewportRule());
 
-  StyleRuleMedia* media_rule = ToStyleRuleMedia(style_sheet->RuleAt(0));
+  auto* media_rule = To<StyleRuleMedia>(style_sheet->RuleAt(0));
   style_sheet->SetMutable();
   media_rule->WrapperInsertRule(
       0,

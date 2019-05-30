@@ -1,11 +1,24 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
- * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+ * @license
+ * Copyright 2017 Google Inc. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS-IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 'use strict';
 
 /* globals URL self */
+
+/** @typedef {HTMLElementTagNameMap & {[id: string]: HTMLElement}} HTMLElmentByTagName */
 
 class DOM {
   /**
@@ -16,14 +29,14 @@ class DOM {
     this._document = document;
   }
 
-  // TODO(bckenny): can pass along `createElement`'s inferred type
   /**
-   * @param {string} name
+   * @template {string} T
+   * @param {T} name
    * @param {string=} className
    * @param {Object<string, (string|undefined)>=} attrs Attribute key/val pairs.
    *     Note: if an attribute key has an undefined value, this method does not
    *     set the attribute on the node.
-   * @return {Element}
+   * @return {HTMLElmentByTagName[T]}
    */
   createElement(name, className, attrs = {}) {
     const element = this._document.createElement(name);
@@ -47,13 +60,14 @@ class DOM {
   }
 
   /**
+   * @template {string} T
    * @param {Element} parentElem
-   * @param {string} elementName
+   * @param {T} elementName
    * @param {string=} className
    * @param {Object<string, (string|undefined)>=} attrs Attribute key/val pairs.
    *     Note: if an attribute key has an undefined value, this method does not
    *     set the attribute on the node.
-   * @return {Element}
+   * @return {HTMLElmentByTagName[T]}
    */
   createChildOf(parentElem, elementName, className, attrs) {
     const element = this.createElement(elementName, className, attrs);
@@ -111,7 +125,7 @@ class DOM {
 
       // Append link if there are any.
       if (linkText && linkHref) {
-        const a = /** @type {HTMLAnchorElement} */ (this.createElement('a'));
+        const a = this.createElement('a');
         a.rel = 'noopener';
         a.target = '_blank';
         a.textContent = linkText;
@@ -136,7 +150,7 @@ class DOM {
       const [preambleText, codeText] = parts.splice(0, 2);
       element.appendChild(this._document.createTextNode(preambleText));
       if (codeText) {
-        const pre = /** @type {HTMLPreElement} */ (this.createElement('code'));
+        const pre = this.createElement('code');
         pre.textContent = codeText;
         element.appendChild(pre);
       }

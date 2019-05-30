@@ -6,8 +6,8 @@
 
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/testing/testing_platform_support_with_mock_scheduler.h"
-#include "third_party/blink/renderer/platform/web_task_runner.h"
 #include "third_party/blink/renderer/platform/wtf/time.h"
 
 namespace blink {
@@ -54,7 +54,7 @@ class LongTaskDetectorTest : public testing::Test {
 
   void SimulateTask(base::TimeDelta duration) {
     PostCrossThreadTask(
-        *platform_->CurrentThread()->GetTaskRunner(), FROM_HERE,
+        *Thread::Current()->GetTaskRunner(), FROM_HERE,
         CrossThreadBind(&LongTaskDetectorTest::DummyTaskWithDuration,
                         CrossThreadUnretained(this), duration));
     platform_->RunUntilIdle();
@@ -69,7 +69,8 @@ class LongTaskDetectorTest : public testing::Test {
 };
 
 TEST_F(LongTaskDetectorTest, DeliversLongTaskNotificationOnlyWhenRegistered) {
-  TestLongTaskObserver* long_task_observer = new TestLongTaskObserver();
+  TestLongTaskObserver* long_task_observer =
+      MakeGarbageCollected<TestLongTaskObserver>();
   SimulateTask(LongTaskDetector::kLongTaskThreshold +
                base::TimeDelta::FromMilliseconds(10));
   EXPECT_EQ(long_task_observer->last_long_task_end, TimeTicks());
@@ -92,7 +93,8 @@ TEST_F(LongTaskDetectorTest, DeliversLongTaskNotificationOnlyWhenRegistered) {
 }
 
 TEST_F(LongTaskDetectorTest, DoesNotGetNotifiedOfShortTasks) {
-  TestLongTaskObserver* long_task_observer = new TestLongTaskObserver();
+  TestLongTaskObserver* long_task_observer =
+      MakeGarbageCollected<TestLongTaskObserver>();
   LongTaskDetector::Instance().RegisterObserver(long_task_observer);
   SimulateTask(LongTaskDetector::kLongTaskThreshold -
                base::TimeDelta::FromMilliseconds(10));
@@ -105,7 +107,8 @@ TEST_F(LongTaskDetectorTest, DoesNotGetNotifiedOfShortTasks) {
 }
 
 TEST_F(LongTaskDetectorTest, RegisterSameObserverTwice) {
-  TestLongTaskObserver* long_task_observer = new TestLongTaskObserver();
+  TestLongTaskObserver* long_task_observer =
+      MakeGarbageCollected<TestLongTaskObserver>();
   LongTaskDetector::Instance().RegisterObserver(long_task_observer);
   LongTaskDetector::Instance().RegisterObserver(long_task_observer);
 

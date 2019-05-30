@@ -1,3 +1,4 @@
+import("//vivaldi/gn/config/product.gni")
 
 if (is_win) {
   update_target("//chrome/installer/setup:setup") {
@@ -17,6 +18,26 @@ if (is_win) {
     ]
   }
 
+  update_target("//chrome/installer/setup:lib") {
+    sources -= [
+      "vivaldi_behaviors.cc", # wrong path
+    ]
+    sources += [
+      "//vivaldi/installer/vivaldi_behaviors.cc",
+    ]
+    if (release_kind == "final") {
+      color = "#EF3939"
+    } else if (is_official_build) {
+      color = "#373737"
+    } else {
+      color = "#30c27c"
+    }
+    if (!defined(defines)) {
+      defines = []
+    }
+    defines += ["VIVALDI_RELEASE_BACKGROUND_COLOR=\"$color\""]
+  }
+
   update_target("//chrome/install_static:install_static_util") {
     sources -= [
       "chromium_install_modes.cc",
@@ -34,6 +55,26 @@ update_target("//chrome/installer/util:with_no_strings") {
     sources += [
       "//vivaldi/installer/util/vivaldi_install_util.cc",
       "//vivaldi/installer/util/vivaldi_install_util.h",
+    ]
+  }
+}
+
+if (is_linux && !is_component_build) {
+  update_target("//chrome/installer/linux:rpm_packaging_files") {
+    sources += [
+      "//vivaldi/installer/linux/rpm/vivaldi.spec.template",
+    ]
+  }
+  update_target("//chrome/installer/linux:common_packaging_files") {
+    sources -= [
+      "common/wrapper",
+    ]
+    sources += [
+      "//vivaldi/installer/linux/common/appdata.xml.template",
+      "//vivaldi/installer/linux/common/update-widevine",
+      "//vivaldi/installer/linux/common/vivaldi.info",
+      "//vivaldi/installer/linux/common/wrapper",
+      "//vivaldi/installer/linux/common/xfce-helper.template",
     ]
   }
 }

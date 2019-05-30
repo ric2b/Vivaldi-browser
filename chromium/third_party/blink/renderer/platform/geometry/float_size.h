@@ -63,6 +63,7 @@ class PLATFORM_EXPORT FloatSize {
   constexpr FloatSize() : width_(0), height_(0) {}
   constexpr FloatSize(float width, float height)
       : width_(width), height_(height) {}
+  explicit FloatSize(const gfx::SizeF&);
   explicit FloatSize(const IntSize& size)
       : width_(size.Width()), height_(size.Height()) {}
   FloatSize(const SkSize&);
@@ -218,6 +219,6 @@ PLATFORM_EXPORT WTF::TextStream& operator<<(WTF::TextStream&, const FloatSize&);
 }  // namespace blink
 
 // Allows this class to be stored in a HeapVector.
-WTF_ALLOW_CLEAR_UNUSED_SLOTS_WITH_MEM_FUNCTIONS(blink::FloatSize);
+WTF_ALLOW_CLEAR_UNUSED_SLOTS_WITH_MEM_FUNCTIONS(blink::FloatSize)
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_GEOMETRY_FLOAT_SIZE_H_

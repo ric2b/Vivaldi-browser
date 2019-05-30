@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/settings/downloads_handler.h"
 
+#include "base/bind.h"
 #include "base/metrics/user_metrics.h"
 #include "base/values.h"
 #include "chrome/browser/download/download_prefs.h"
@@ -127,7 +128,8 @@ void DownloadsHandler::HandleGetDownloadLocationText(
 
   ResolveJavascriptCallback(
       base::Value(callback_id),
-      base::Value(file_manager::util::GetDownloadLocationText(profile_, path)));
+      base::Value(
+          file_manager::util::GetPathDisplayTextForSettings(profile_, path)));
 }
 #endif
 

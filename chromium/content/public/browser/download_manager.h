@@ -38,7 +38,7 @@
 #include "base/time/time.h"
 #include "components/download/public/common/download_interrupt_reasons.h"
 #include "components/download/public/common/download_item.h"
-#include "components/download/public/common/download_stream.mojom.h"
+#include "components/download/public/common/download_stream.mojom-forward.h"
 #include "components/download/public/common/download_url_parameters.h"
 #include "components/download/public/common/input_stream.h"
 #include "content/common/content_export.h"
@@ -239,6 +239,11 @@ class CONTENT_EXPORT DownloadManager : public base::SupportsUserData::Data {
   // Get the download item for |guid|.
   virtual download::DownloadItem* GetDownloadByGuid(
       const std::string& guid) = 0;
+
+  using GetNextIdCallback = base::OnceCallback<void(uint32_t)>;
+  // Called to get an ID for a new download. |callback| may be called
+  // synchronously.
+  virtual void GetNextId(GetNextIdCallback callback) = 0;
 };
 
 }  // namespace content

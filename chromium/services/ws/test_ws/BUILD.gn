@@ -2,10 +2,24 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//services/service_manager/public/cpp/service.gni")
-import("//services/service_manager/public/service_manifest.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//services/service_manager/public/cpp/service_executable.gni")
 
-service("test_ws") {
+service_executable("test_ws") {
+  testonly = true
+  sources = [
+    "test_ws.cc",
+  ]
+
+  deps = [
+    ":lib",
+    "//base",
+    "//services/service_manager/public/cpp",
+    "//ui/base",
+  ]
+}
+
+source_set("lib") {
   testonly = true
 
   sources = [
@@ -13,17 +27,24 @@ service("test_ws") {
     "test_drag_drop_client.h",
     "test_gpu_interface_provider.cc",
     "test_gpu_interface_provider.h",
-    "test_ws.cc",
+    "test_window_service.cc",
+    "test_window_service.h",
+    "test_window_service_factory.cc",
+    "test_window_service_factory.h",
   ]
 
   deps = [
+    ":mojom",
     "//base",
     "//components/discardable_memory/service",
+    "//mojo/public/cpp/bindings",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/mojom",
     "//services/ws:lib",
+    "//services/ws:test_support",
     "//services/ws/gpu_host",
     "//services/ws/public/cpp",
+    "//services/ws/public/cpp/host",
     "//services/ws/public/mojom",
     "//ui/aura",
     "//ui/aura:test_support",
@@ -32,8 +53,25 @@ service("test_ws") {
   ]
 }
 
-service_manifest("manifest") {
-  name = "test_ws"
-  source = "manifest.json"
-  packaged_services = [ "//services/ws:manifest" ]
+source_set("manifest") {
+  testonly = true
+  sources = [
+    "test_manifest.cc",
+    "test_manifest.h",
+  ]
+  deps = [
+    ":mojom",
+    "//base",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/mojom",
+    "//services/ws/public/cpp:manifest",
+  ]
+}
+
+mojom("mojom") {
+  testonly = true
+
+  sources = [
+    "test_ws.mojom",
+  ]
 }

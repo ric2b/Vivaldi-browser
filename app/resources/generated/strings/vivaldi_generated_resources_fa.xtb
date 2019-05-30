@@ -30,13 +30,11 @@
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (شناسه: <ph name="ID_PH" />)</translation>
 <translation id="1723824996674794290">پنجره &amp;جدید</translation>
 <translation id="1729533290416704613">‏این برنامه صفحه‌ای را که هنگام جستجو از Omnibox نشان داده می‌شود، کنترل می‌کند.</translation>
-<translation id="1731589410171062430">مجموع: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /> (<ph name="NUMBER_OF_PAGES" /> <ph name="PAGE_OR_PAGES_LABEL" />)</translation>
 <translation id="1744108098763830590">صفحه‌ی پس‌زمینه</translation>
 <translation id="1828901632669367785">چاپ به کمک پیام‌های سیستمی...</translation>
 <translation id="1850508293116537636">چرخاندن در جهت &amp;عقربه‌های ساعت</translation>
 <translation id="1901303067676059328">انتخاب &amp;همه</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> نقطه در اینچ</translation>
-<translation id="1974060860693918893">پیشرفته</translation>
 <translation id="1989112275319619282">فهرست</translation>
 <translation id="1992397118740194946">تنظیم نشده است</translation>
 <translation id="2050339315714019657">عمودی</translation>
@@ -77,16 +75,13 @@
 <translation id="2580924999637585241">مجموع: <ph name="SHEETS_LABEL" /><ph name="NUMBER_OF_SHEETS" /></translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">فعال کردن مجدد</translation>
-<translation id="2679385451463308372">چاپ با استفاده از کادر گفتگوی سیستم…</translation>
 <translation id="2721037002783622288">&amp;جستجوی <ph name="SEARCH_ENGINE" /> برای تصویر</translation>
-<translation id="2726934403674109201">(مجموعاً <ph name="COUNT" />)</translation>
 <translation id="2785873697295365461">توصیف‌گرهای فایل</translation>
 <translation id="2809586584051668049">و <ph name="NUMBER_ADDITIONAL_DISABLED" /> مورد دیگر</translation>
 <translation id="2847759467426165163">Cast to</translation>
 <translation id="2850541429955027218">افزودن طرح زمینه</translation>
 <translation id="2861941300086904918">‏مدیر امنیت Native Client</translation>
 <translation id="2889064240420137087">بازکردن پیوند با...</translation>
-<translation id="2890678560483811744">محدوده‌ی تعیین شده بیش از حد مجاز است</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> نتوانست با این چاپگر ارتباط برقرار کند. مطمئن شوید چاپگر روشن است و دوباره امتحان کنید.</translation>
 <translation id="2916745397441987255">جستجوی افزونه‌ها</translation>
 <translation id="2932883381142163287">گزارش سوءاستفاده</translation>
@@ -109,19 +104,16 @@
 <translation id="3222066309010235055">پیش رندر: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">میکروفن</translation>
 <translation id="3241680850019875542">دایرکتوری ریشه برنامهٔ افزودنی را برای فشرده کردن انتخاب کنید. همچنین برای به‌روزرسانی برنامهٔ افزودنی، فایل کلید خصوصی را برای استفاده مجدد انتخاب کنید.</translation>
-<translation id="3269093882174072735">بارگیری تصویر</translation>
 <translation id="3280237271814976245">ذخیره &amp;بعنوان...</translation>
 <translation id="3288047731229977326">افزونه‌هایی که در حالت برنامه‌نوبس اجرا می‌شوند می‌توانند به رایانه شما آسیب برسانند. اگر برنامه‌نویس نیستید، باید این برنامه‌های افزودنی را که در حالت برنامه‌نویس اجرا می‌شوند غیرفعال کنید تا ایمن بمانید.</translation>
 <translation id="329838636886466101">تعمیر</translation>
 <translation id="3303818374450886607">کپی‌ها</translation>
 <translation id="3305661444342691068">گشودن PDF در پیش‌نمایش</translation>
 <translation id="3317459757438853210">دو طرفه</translation>
-<translation id="3319048459796106952">&amp;پنجره جدید حالت ناشناس</translation>
 <translation id="3341703758641437857">اجازه‌ی دسترسی به آدرس فایل‌ها</translation>
 <translation id="3347086966102161372">کپی آدرس تصویر</translation>
 <translation id="3360297538363969800">چاپ ناموفق بود. لطفاً چاپگرتان را بررسی کنید و دوباره امتحان کنید.</translation>
 <translation id="3378572629723696641">ممکن است این برنامه افزودنی خراب شده باشد.</translation>
-<translation id="3396331542604645348">چاپگر انتخابی موجود نیست یا به درستی نصب نشده است.  چاپگر خود را بررسی کرده یا چاپگر دیگری را انتخاب کنید.</translation>
 <translation id="3435896845095436175">فعال کردن</translation>
 <translation id="345693547134384690">باز کردن &amp;تصویر در برگهٔ جدید</translation>
 <translation id="3467267818798281173">‏درخواست از Google برای پیشنهادات</translation>
@@ -178,7 +170,6 @@
 <translation id="4593021220803146968">&amp;رفتن به <ph name="URL" /></translation>
 <translation id="4595560905247879544">برنامه‌ها و افزونه‌ها فقط توسط مدیر (<ph name="CUSTODIAN_NAME" />) قابل تغییر هستند.</translation>
 <translation id="4613271546271159013">یک برنامه افزودنی صفحه‌ای را که موقع باز کردن برگه جدید نشان داده می‌شود، تغییر داده است.</translation>
-<translation id="4628314759732363424">تغییر…</translation>
 <translation id="4677772697204437347">‏حافظه GPU</translation>
 <translation id="4681930562518940301">باز کردن تصویر اصلی در برگه جدید</translation>
 <translation id="4688541352655220763">‏می‌توانید از این قابلیت برای نمایش محتوا از Vivaldi روی تلویزیون یا دستگاه‌های دیگر استفاده کنید.</translation>
@@ -204,17 +195,14 @@
 <translation id="5233736638227740678">&amp;چسباندن</translation>
 <translation id="5265562206369321422">آفلاین برای مدت بیش از یک هفته</translation>
 <translation id="5269977353971873915">چاپ نشد</translation>
-<translation id="5271549068863921519">ذخیره گذرواژه</translation>
 <translation id="52912272896845572">فایل کلید خصوصی نامعتبر است.</translation>
 <translation id="5301954838959518834">بله، متوجه شدم</translation>
 <translation id="5317780077021120954">ذخیره</translation>
-<translation id="5329858601952122676">&amp;حذف</translation>
 <translation id="5355926466126177564">‏افزونه «<ph name="EXTENSION_NAME" />»، صفحه‌ای را تغییر داده است که هنگام جستجو از Omnibox نشان داده می‌شود.</translation>
 <translation id="5362741141255528695">فایل کلید خصوصی را انتخاب کنید.</translation>
 <translation id="5370819323174483825">&amp;تازه‌سازی</translation>
 <translation id="5398572795982417028">محدوده‌ی تعیین شده بیش از حد مجاز است، حداکثر مجاز <ph name="MAXIMUM_PAGE" /> است</translation>
 <translation id="5431318178759467895">رنگ</translation>
-<translation id="5451285724299252438">کادر متنی محدوده صفحه</translation>
 <translation id="5483785310822538350">لغو دسترسی به فایل و دستگاه</translation>
 <translation id="5485102783864353244">افزودن برنامه</translation>
 <translation id="5488468185303821006">اجازه‌ی کار در حالت ناشناس</translation>
@@ -223,7 +211,6 @@
 <translation id="5542132724887566711">نمایه</translation>
 <translation id="5556459405103347317">تازه‌سازی</translation>
 <translation id="5575473780076478375">افزونه ناشناس: <ph name="EXTENSION_NAME" /></translation>
-<translation id="5581700288664681403">بارگذاری <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="5623842676595125836">گزارش</translation>
 <translation id="5627086634964711283">این برنامه افزودنی همچنین صفحه‌ای را که هنگام کلیک کردن روی دکمه اصلی نشان داده می‌شود، کنترل می‌کند.</translation>
 <translation id="5649053991847567735">دانلود‌های خودکار</translation>
@@ -236,7 +223,6 @@
 <translation id="5780973441651030252">پردازش اولویت‌دار</translation>
 <translation id="5804241973901381774">مجوزها</translation>
 <translation id="5828633471261496623">در حال چاپ...</translation>
-<translation id="5829401023154985950">مدیریت...</translation>
 <translation id="583281660410589416">ناشناس</translation>
 <translation id="5956585768868398362">آیا این همان صفحه جستجویی است که انتظار داشتید؟</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> اوج مصرف)</translation>
@@ -283,7 +269,6 @@
 <translation id="6787839852456839824">میان‌برهای صفحه‌کلید</translation>
 <translation id="6788210894632713004">افزونه‌ی غیرفشرده</translation>
 <translation id="6798954102094737107">افزایه: <ph name="PLUGIN_NAME" /></translation>
-<translation id="6807889908376551050">نمایش همه...</translation>
 <translation id="6812841287760418429">حفظ تغییرات</translation>
 <translation id="682123305478866682">ارسال محتوای میزکار</translation>
 <translation id="6886871292305414135">باز کردن پیوند در &amp;برگه جدید</translation>
@@ -350,7 +335,6 @@
 <translation id="8294431847097064396">منبع</translation>
 <translation id="8351419472474436977">این برنامه افزودنی کنترل تنظیمات پروکسی شما را در اختیار گرفته است یعنی می‌تواند هر چیزی را در که حالت آنلاین انجام می‌دهید تغییر دهد، خراب کند یا استراق سمع کند. اگر مطمئن نیستید چرا این تغییر اتفاق افتاده، احتمالاً این برنامه را نمی‌خواهید.</translation>
 <translation id="8382913212082956454">کپی آدرس ایمیل</translation>
-<translation id="839736845446313156">ثبت‌نام</translation>
 <translation id="8523849605371521713">افزوده شده به واسطه‌ی خط مشی‌ها</translation>
 <translation id="8546306075665861288">حافظهٔ پنهان تصویر</translation>
 <translation id="8569682776816196752">مقصدی یافت نشد</translation>
@@ -358,8 +342,6 @@
 <translation id="8615618338313291042">برنامه ناشناس: <ph name="APP_NAME" /></translation>
 <translation id="8627151598708688654">انتخاب منبع</translation>
 <translation id="862750493060684461">‏حافظهٔ پنهان CSS</translation>
-<translation id="8652487083013326477">دکمه رادیویی محدوده صفحه</translation>
-<translation id="8658595122208653918">تغییر تنظیمات چاپگر...</translation>
 <translation id="8664389313780386848">&amp;مشاهده منبع صفحه</translation>
 <translation id="8714838604780058252">گرافیک‌های پس‌زمینه</translation>
 <translation id="8757090071857742562">ارسال محتوای میزکار امکان‌پذیر نیست.  ببینید آیا فرمان شروع اشتراک‌گذاری صفحه‌تان را تأیید کرده‌اید.</translation>

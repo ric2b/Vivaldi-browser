@@ -15,8 +15,9 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
-import org.chromium.base.AsyncTask;
 import org.chromium.base.Log;
+import org.chromium.base.task.AsyncTask;
+import org.chromium.base.task.BackgroundOnlyAsyncTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.download.home.list.UiUtils;
@@ -832,12 +833,11 @@ public abstract class DateDividedAdapter extends Adapter<RecyclerView.ViewHolder
      * Wraps {@link Calendar#getInstance()} in an {@link AsyncTask} to avoid Strict mode violation.
      */
     private static AsyncTask<Calendar> createCalendar() {
-        return new AsyncTask<Calendar>() {
+        return new BackgroundOnlyAsyncTask<Calendar>() {
             @Override
             protected Calendar doInBackground() {
                 return Calendar.getInstance();
             }
-        }
-                .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
     }

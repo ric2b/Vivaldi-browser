@@ -8,15 +8,13 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "ui/base/ui_features.h"
+#include "base/test/scoped_feature_list.h"
+#include "build/buildflag.h"
+#include "ui/base/buildflags.h"
 
 namespace ui {
 class ContextFactory;
 }  // namespace ui
-
-namespace ws {
-class InputDeviceClient;
-}
 
 namespace aura {
 
@@ -34,6 +32,12 @@ class AuraTestSuiteSetup {
   AuraTestSuiteSetup();
   ~AuraTestSuiteSetup();
 
+#if BUILDFLAG(ENABLE_MUS)
+  // Disables window service feature flags for test suites that do not exercise
+  // mus client code. Must be called before this object is constructed.
+  static void DisableMusFeatures();
+#endif
+
  private:
 #if BUILDFLAG(ENABLE_MUS)
   void ConfigureMus();
@@ -42,14 +46,11 @@ class AuraTestSuiteSetup {
   std::unique_ptr<aura::Env> env_;
 
 #if BUILDFLAG(ENABLE_MUS)
+  base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<ui::ContextFactory> context_factory_;
   std::unique_ptr<TestWindowTreeClientDelegate>
       test_window_tree_client_delegate_;
   std::unique_ptr<TestWindowTreeClientSetup> window_tree_client_setup_;
-#endif
-
-#if defined(USE_OZONE)
-  std::unique_ptr<ws::InputDeviceClient> input_device_client_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(AuraTestSuiteSetup);

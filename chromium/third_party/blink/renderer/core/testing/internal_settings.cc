@@ -110,7 +110,7 @@ void InternalSettings::Backup::RestoreTo(Settings* settings) {
 InternalSettings* InternalSettings::From(Page& page) {
   InternalSettings* supplement = Supplement<Page>::From<InternalSettings>(page);
   if (!supplement) {
-    supplement = new InternalSettings(page);
+    supplement = MakeGarbageCollected<InternalSettings>(page);
     ProvideTo(page, supplement);
   }
   return supplement;
@@ -375,8 +375,8 @@ void InternalSettings::setAvailablePointerTypes(
   pointers.Split(",", false, tokens);
 
   int pointer_types = 0;
-  for (size_t i = 0; i < tokens.size(); ++i) {
-    String token = tokens[i].StripWhiteSpace();
+  for (const String& split_token : tokens) {
+    String token = split_token.StripWhiteSpace();
 
     if (token == "coarse") {
       pointer_types |= kPointerTypeCoarse;
@@ -451,9 +451,8 @@ void InternalSettings::setAvailableHoverTypes(const String& types,
   types.Split(",", false, tokens);
 
   int hover_types = 0;
-  for (size_t i = 0; i < tokens.size(); ++i) {
-    String token = tokens[i].StripWhiteSpace();
-
+  for (const String& split_token : tokens) {
+    String token = split_token.StripWhiteSpace();
     if (token == "none") {
       hover_types |= kHoverTypeNone;
     } else if (token == "hover") {
@@ -539,8 +538,6 @@ void InternalSettings::setAutoplayPolicy(const String& policy_str,
     policy = AutoplayPolicy::Type::kNoUserGestureRequired;
   } else if (policy_str == "user-gesture-required") {
     policy = AutoplayPolicy::Type::kUserGestureRequired;
-  } else if (policy_str == "user-gesture-required-for-cross-origin") {
-    policy = AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin;
   } else if (policy_str == "document-user-activation-required") {
     policy = AutoplayPolicy::Type::kDocumentUserActivationRequired;
   } else {
@@ -550,6 +547,14 @@ void InternalSettings::setAutoplayPolicy(const String& policy_str,
   }
 
   GetSettings()->SetAutoplayPolicy(policy);
+}
+
+void InternalSettings::PrepareForLeakDetection() {
+  // Prepares for leak detection by removing all InternalSetting objects from
+  // Pages.
+  for (Page* page : Page::OrdinaryPages()) {
+    page->RemoveSupplement<InternalSettings>();
+  }
 }
 
 }  // namespace blink

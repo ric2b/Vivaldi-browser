@@ -10,14 +10,22 @@
 #include "base/macros.h"
 #include "chrome/browser/ui/webui/chromeos/system_web_dialog_delegate.h"
 
+class GURL;
+
 namespace chromeos {
 
+// Extends from |SystemWebDialogDelegate| to create an always-on-top but movable
+// dialog. It is intentionally made movable so that users can copy-paste account
+// passwords from password managers.
 class InlineLoginHandlerDialogChromeOS : public SystemWebDialogDelegate {
  public:
-  static void Show();
+  // Displays the dialog. |email| is an optional parameter that if provided,
+  // pre-fills the account email field in the sign-in dialog - useful for
+  // account re-authentication.
+  static void Show(const std::string& email = std::string());
 
  protected:
-  InlineLoginHandlerDialogChromeOS();
+  explicit InlineLoginHandlerDialogChromeOS(const GURL& url);
   ~InlineLoginHandlerDialogChromeOS() override;
 
   // ui::WebDialogDelegate overrides

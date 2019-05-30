@@ -9,6 +9,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
@@ -26,7 +27,6 @@
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/shell_integration_win.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/shell_util.h"
 #include "chrome/installer/util/util_constants.h"
 #include "content/public/browser/browser_thread.h"
@@ -38,8 +38,17 @@
 
 namespace {
 
-const base::FilePath::CharType kIconChecksumFileExt[] =
+constexpr base::FilePath::CharType kIconChecksumFileExt[] =
     FILE_PATH_LITERAL(".ico.md5");
+
+constexpr base::FilePath::CharType kChromeProxyExecutable[] =
+    FILE_PATH_LITERAL("chrome_proxy.exe");
+
+base::FilePath GetChromeProxyPath() {
+  base::FilePath chrome_dir;
+  CHECK(base::PathService::Get(base::DIR_EXE, &chrome_dir));
+  return chrome_dir.Append(kChromeProxyExecutable);
+}
 
 // Calculates checksum of an icon family using MD5.
 // The checksum is derived from all of the icons in the family.
@@ -186,14 +195,10 @@ bool CreateShortcutsInPaths(const base::FilePath& web_app_path,
     return false;
   }
 
-  base::FilePath chrome_exe;
-  if (!base::PathService::Get(base::FILE_EXE, &chrome_exe)) {
-    NOTREACHED();
-    return false;
-  }
+  base::FilePath chrome_proxy_path = GetChromeProxyPath();
 
   // Working directory.
-  base::FilePath working_dir(chrome_exe.DirName());
+  base::FilePath working_dir(chrome_proxy_path.DirName());
 
   base::CommandLine cmd_line(base::CommandLine::NO_PROGRAM);
   cmd_line = shell_integration::CommandLineArgsForLauncher(
@@ -244,7 +249,9 @@ bool CreateShortcutsInPaths(const base::FilePath& web_app_path,
       }
     }
     base::win::ShortcutProperties shortcut_properties;
-    shortcut_properties.set_target(chrome_exe);
+    // Target a proxy executable instead of Chrome directly to ensure start menu
+    // pinning uses the correct icon. See https://crbug.com/732357 for details.
+    shortcut_properties.set_target(chrome_proxy_path);
     shortcut_properties.set_working_dir(working_dir);
     shortcut_properties.set_arguments(wide_switches);
     shortcut_properties.set_description(description);
@@ -339,12 +346,7 @@ void CreateIconAndSetRelaunchDetails(
                                                     shortcut_info.extension_id,
                                                     shortcut_info.profile_path);
 
-  base::FilePath chrome_exe;
-  if (!base::PathService::Get(base::FILE_EXE, &chrome_exe)) {
-    NOTREACHED();
-    return;
-  }
-  command_line.SetProgram(chrome_exe);
+  command_line.SetProgram(GetChromeProxyPath());
   ui::win::SetRelaunchDetailsForWindow(command_line.GetCommandLineString(),
                                        shortcut_info.title, hwnd);
 
@@ -443,7 +445,8 @@ bool CreatePlatformShortcuts(const base::FilePath& web_app_path,
 void UpdatePlatformShortcuts(const base::FilePath& web_app_path,
                              const base::string16& old_app_title,
                              const ShortcutInfo& shortcut_info) {
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   // Generates file name to use with persisted ico and shortcut file.
   base::FilePath file_name =
@@ -488,15 +491,15 @@ void DeletePlatformShortcuts(const base::FilePath& web_app_path,
   base::FilePath chrome_apps_dir;
   if (ShellUtil::GetShortcutPath(
           ShellUtil::SHORTCUT_LOCATION_START_MENU_CHROME_APPS_DIR,
-          BrowserDistribution::GetDistribution(), ShellUtil::CURRENT_USER,
-          &chrome_apps_dir)) {
+          ShellUtil::CURRENT_USER, &chrome_apps_dir)) {
     if (base::IsDirectoryEmpty(chrome_apps_dir))
       base::DeleteFile(chrome_apps_dir, false);
   }
 }
 
 void DeleteAllShortcutsForProfile(const base::FilePath& profile_path) {
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   GetShortcutLocationsAndDeleteShortcuts(base::FilePath(), profile_path, L"",
                                          NULL, NULL);
 
@@ -504,8 +507,7 @@ void DeleteAllShortcutsForProfile(const base::FilePath& profile_path) {
   base::FilePath chrome_apps_dir;
   if (ShellUtil::GetShortcutPath(
           ShellUtil::SHORTCUT_LOCATION_START_MENU_CHROME_APPS_DIR,
-          BrowserDistribution::GetDistribution(), ShellUtil::CURRENT_USER,
-          &chrome_apps_dir)) {
+          ShellUtil::CURRENT_USER, &chrome_apps_dir)) {
     if (base::IsDirectoryEmpty(chrome_apps_dir))
       base::DeleteFile(chrome_apps_dir, false);
   }
@@ -530,12 +532,11 @@ std::vector<base::FilePath> GetShortcutPaths(
            base::win::CanPinShortcutToTaskbar(),
        ShellUtil::SHORTCUT_LOCATION_QUICK_LAUNCH}};
 
-  BrowserDistribution* dist = BrowserDistribution::GetDistribution();
   // Populate shortcut_paths.
   for (size_t i = 0; i < base::size(locations); ++i) {
     if (locations[i].use_this_location) {
       base::FilePath path;
-      if (!ShellUtil::GetShortcutPath(locations[i].location_id, dist,
+      if (!ShellUtil::GetShortcutPath(locations[i].location_id,
                                       ShellUtil::CURRENT_USER, &path)) {
         NOTREACHED();
         continue;

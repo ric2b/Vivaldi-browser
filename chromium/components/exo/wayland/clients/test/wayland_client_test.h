@@ -8,15 +8,15 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/single_thread_task_runner.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ash {
-class AshTestEnvironment;
 class AshTestHelper;
 }  // namespace ash
 
 namespace base {
-class MessageLoop;
 class ScopedTempDir;
 class WaitableEvent;
 }  // namespace base
@@ -34,10 +34,11 @@ class WaylandClientTest : public testing::Test {
   WaylandClientTest();
   ~WaylandClientTest() override;
 
-  static void SetUIMessageLoop(base::MessageLoop* message_loop);
+  static void SetUIThreadTaskRunner(
+      scoped_refptr<base::SingleThreadTaskRunner> ui_thread_task_runner);
 
  protected:
-  // Overridden from AshTestBase:
+  // Overridden from testing::Test:
   void SetUp() override;
   void TearDown() override;
 
@@ -49,7 +50,6 @@ class WaylandClientTest : public testing::Test {
 
   // Below objects can only be accessed from UI thread.
   std::unique_ptr<base::ScopedTempDir> xdg_temp_dir_;
-  std::unique_ptr<ash::AshTestEnvironment> ash_test_environment_;
   std::unique_ptr<ash::AshTestHelper> ash_test_helper_;
   std::unique_ptr<WMHelper> wm_helper_;
   std::unique_ptr<Display> display_;

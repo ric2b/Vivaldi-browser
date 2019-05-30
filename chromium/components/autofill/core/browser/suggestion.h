@@ -47,11 +47,13 @@ struct Suggestion {
   base::string16 value;
   base::string16 label;
   // Used only for passwords to show the password value.
+  // Also used to display an extra line of information if two line
+  // display is enabled.
   base::string16 additional_label;
   // Contains an image to display for the suggestion.
   gfx::Image custom_icon;
   // If |custom_icon| is empty, the name of the fallback built-in icon.
-  base::string16 icon;
+  std::string icon;
   MatchMode match;
   bool is_value_secondary;  // |value| should be displayed as secondary text.
 };

@@ -6,9 +6,12 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "chrome/chrome_cleaner/os/file_path_set.h"
+#include "chrome/chrome_cleaner/pup_data/pup_data.h"
 #include "chrome/chrome_cleaner/settings/settings.h"
 
 namespace chrome_cleaner {
@@ -26,11 +29,10 @@ bool ChromeProxyMainDialog::Create() {
   return true;
 }
 
-void ChromeProxyMainDialog::StartScanning() {}
-
 void ChromeProxyMainDialog::NoPUPsFound() {
   chrome_prompt_ipc_->PostPromptUserTask(
       std::vector<base::FilePath>(), std::vector<base::string16>(),
+      std::vector<base::string16>(),
       base::BindOnce(
           &ChromeProxyMainDialog::PostCloseAfterReceivingResponseTask,
           base::Unretained(this), base::SequencedTaskRunnerHandle::Get()));
@@ -42,14 +44,25 @@ void ChromeProxyMainDialog::ConfirmCleanup(
     const std::vector<base::string16>& registry_keys) {
   std::vector<base::FilePath> files_out = files.ToVector();
   std::vector<base::string16> registry_keys_out = registry_keys;
+  std::vector<base::string16> extension_ids;
+  for (const UwSId& pup_id : found_pups) {
+    if (!PUPData::IsKnownPUP(pup_id)) {
+      continue;
+    }
+    PUPData::PUP* pup = PUPData::GetPUP(pup_id);
+    for (const ForceInstalledExtension& matched_extension :
+         pup->matched_extensions) {
+      extension_ids.push_back(
+          base::UTF8ToUTF16(matched_extension.id.AsString()));
+    }
+  }
   chrome_prompt_ipc_->PostPromptUserTask(
       std::move(files_out), std::move(registry_keys_out),
+      std::move(extension_ids),
       base::BindOnce(&ChromeProxyMainDialog::PostPromptResultReceivedTask,
                      base::Unretained(this),
                      base::SequencedTaskRunnerHandle::Get()));
 }
-
-void ChromeProxyMainDialog::StartCleanup(size_t num_pups) {}
 
 void ChromeProxyMainDialog::CleanupDone(ResultCode cleanup_result) {
   delegate()->OnClose();
@@ -57,6 +70,13 @@ void ChromeProxyMainDialog::CleanupDone(ResultCode cleanup_result) {
 
 void ChromeProxyMainDialog::Close() {
   delegate()->OnClose();
+}
+
+void ChromeProxyMainDialog::DisableExtensions(
+    const std::vector<base::string16>& extensions,
+    base::OnceCallback<void(bool)> on_disable) {
+  chrome_prompt_ipc_->PostDisableExtensionsTask(extensions,
+                                                std::move(on_disable));
 }
 
 void ChromeProxyMainDialog::PostPromptResultReceivedTask(

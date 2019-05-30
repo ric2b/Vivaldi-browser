@@ -21,6 +21,7 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
@@ -30,7 +31,7 @@ import org.chromium.chrome.browser.notifications.NotificationConstants;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
 import org.chromium.chrome.browser.notifications.channels.ChannelDefinitions;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
+import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorImpl;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabModelSelectorMetadata;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabPersistentStoreObserver;
@@ -39,7 +40,6 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.ui.widget.Toast;
 
-import java.lang.ref.WeakReference;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -173,13 +173,13 @@ public class BrowserActionsService extends Service {
     }
 
     private Tab launchTabInRunningTabbedActivity(LoadUrlParams loadUrlParams) {
-        for (WeakReference<Activity> ref : ApplicationStatus.getRunningActivities()) {
-            if (!(ref.get() instanceof ChromeTabbedActivity)) continue;
+        for (Activity activity : ApplicationStatus.getRunningActivities()) {
+            if (!(activity instanceof ChromeTabbedActivity)) continue;
 
-            ChromeTabbedActivity activity = (ChromeTabbedActivity) ref.get();
-            if (activity == null) continue;
-            if (activity.getTabModelSelector() != null) {
-                mTabbedModeTabModelSelector = (TabModelSelectorImpl) activity.getTabModelSelector();
+            ChromeTabbedActivity chromeActivity = (ChromeTabbedActivity) activity;
+            if (chromeActivity.getTabModelSelector() != null) {
+                mTabbedModeTabModelSelector =
+                        (TabModelSelectorImpl) chromeActivity.getTabModelSelector();
                 mTabbedModeTabModelSelector.addTabPersistentStoreObserver(
                         getTabPersistentStoreObserver());
                 Tab tab = mTabbedModeTabModelSelector.openNewTab(
@@ -230,7 +230,9 @@ public class BrowserActionsService extends Service {
 
     private void sendBrowserActionsNotification(boolean isUpdate, int tabId) {
         Notification notification = createNotificationBuilder(isUpdate, tabId).build();
-        startForeground(NotificationConstants.NOTIFICATION_ID_BROWSER_ACTIONS, notification);
+
+        AppHooks.get().startForeground(this, NotificationConstants.NOTIFICATION_ID_BROWSER_ACTIONS,
+                notification, 0 /* foregroundServiceType */);
 
         if (!isUpdate) {
             NotificationUmaTracker.getInstance().onNotificationShown(
@@ -276,7 +278,7 @@ public class BrowserActionsService extends Service {
         boolean multipleUrls = hasBrowserActionsNotification();
         Intent intent;
         if (!multipleUrls && tabId != Tab.INVALID_TAB_ID) {
-            intent = Tab.createBringTabToFrontIntent(tabId);
+            intent = IntentUtils.createBringTabToFrontIntent(tabId);
         } else {
             intent = new Intent(this, ChromeLauncherActivity.class);
             IntentHandler.addTrustedIntentExtras(intent);

@@ -9,9 +9,9 @@ import android.content.Context;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.chrome.browser.DeviceConditions;
 import org.chromium.chrome.browser.background_task_scheduler.NativeBackgroundTask;
 import org.chromium.chrome.browser.background_task_scheduler.NativeBackgroundTask.StartBeforeNativeResult;
-import org.chromium.chrome.browser.offlinepages.DeviceConditions;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.background_task_scheduler.BackgroundTask.TaskFinishedCallback;
 import org.chromium.components.background_task_scheduler.TaskIds;
@@ -28,17 +28,17 @@ public class PrefetchBackgroundTask extends NativeBackgroundTask {
 
     private static final int MINIMUM_BATTERY_PERCENTAGE_FOR_PREFETCHING = 50;
 
-    private static boolean sSkipConditionCheckingForTesting = false;
+    private static boolean sSkipConditionCheckingForTesting;
 
-    private long mNativeTask = 0;
-    private TaskFinishedCallback mTaskFinishedCallback = null;
-    private Profile mProfile = null;
+    private long mNativeTask;
+    private TaskFinishedCallback mTaskFinishedCallback;
+    private Profile mProfile;
     // We update this when we call TaskFinishedCallback, so that subsequent calls to
     // onStopTask* can respond the same way.  This is possible due to races with the JobScheduler.
     // Defaults to true so that we are rescheduled automatically if somehow we were unable to start
     // up native.
     private boolean mCachedRescheduleResult = true;
-    private boolean mLimitlessPrefetchingEnabled = false;
+    private boolean mLimitlessPrefetchingEnabled;
 
     public PrefetchBackgroundTask() {}
 

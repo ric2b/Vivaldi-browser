@@ -142,7 +142,7 @@ class AutofillTest : public InProcessBrowserTest {
   // The function returns after the PersonalDataManager is updated.
   void FillFormAndSubmit(const std::string& filename, const FormMap& data) {
     FillFormAndSubmitWithHandler(filename, data, kDocumentClickHandlerSubmitJS,
-                                 true, true);
+                                 true);
   }
 
   // Helper where the actual submit JS code can be specified, as well as whether
@@ -150,16 +150,13 @@ class AutofillTest : public InProcessBrowserTest {
   void FillFormAndSubmitWithHandler(const std::string& filename,
                                     const FormMap& data,
                                     const std::string& submit_js,
-                                    bool simulate_click,
-                                    bool expect_personal_data_change) {
+                                    bool simulate_click) {
     GURL url = embedded_test_server()->GetURL("/autofill/" + filename);
     NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
     params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
     ui_test_utils::NavigateToURL(&params);
 
-    std::unique_ptr<WindowedPersonalDataManagerObserver> observer;
-    if (expect_personal_data_change)
-      observer.reset(new WindowedPersonalDataManagerObserver(browser()));
+    WindowedPersonalDataManagerObserver observer(browser());
 
     std::string js = GetJSToFillForm(data) + submit_js;
     ASSERT_TRUE(content::ExecuteScript(web_contents(), js));
@@ -170,11 +167,7 @@ class AutofillTest : public InProcessBrowserTest {
           browser()->tab_strip_model()->GetActiveWebContents(), 0,
           blink::WebMouseEvent::Button::kLeft);
     }
-    // We may not always be expecting changes in Personal data.
-    if (observer.get())
-      observer->Wait();
-    else
-      base::RunLoop().RunUntilIdle();
+    observer.Wait();
   }
 
   // Aggregate profiles from forms into Autofill preferences. Returns the number
@@ -227,45 +220,6 @@ class AutofillTest : public InProcessBrowserTest {
   net::TestURLFetcherFactory url_fetcher_factory_;
 };
 
-class AutofillParamTest : public AutofillTest,
-                          public testing::WithParamInterface<bool> {
- protected:
-  AutofillParamTest() : enable_company_feature_state_(GetParam()) {
-    feature_list_.InitWithFeatureState(features::kAutofillEnableCompanyName,
-                                       enable_company_feature_state_);
-  }
-
-  const bool enable_company_feature_state_;
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-// Test that Autofill respects CompanyName Feature state
-IN_PROC_BROWSER_TEST_P(AutofillParamTest, CompanyNameTest) {
-  SCOPED_TRACE(enable_company_feature_state_ ? "Enabled" : "Disabled");
-
-  const char kCompanyName[] = "Google";
-  FormMap data;
-  data["NAME_FIRST"] = "Bob";
-  data["NAME_LAST"] = "Smith";
-  data["ADDRESS_HOME_LINE1"] = "1234 H St.";
-  data["ADDRESS_HOME_CITY"] = "Mountain View";
-  data["ADDRESS_HOME_STATE"] = "CA";
-  data["ADDRESS_HOME_ZIP"] = "94043";
-  data["COMPANY_NAME"] = kCompanyName;
-
-  std::string submit("document.forms[0].submit();");
-  FillFormAndSubmitWithHandler("duplicate_profiles_test.html", data, submit,
-                               false, true);
-
-  EXPECT_EQ(
-      ASCIIToUTF16(enable_company_feature_state_ ? kCompanyName : ""),
-      personal_data_manager()->GetProfiles()[0]->GetRawInfo(COMPANY_NAME));
-}
-
-INSTANTIATE_TEST_CASE_P(, AutofillParamTest, testing::Bool());
-
 // Test that Autofill aggregates a minimum valid profile.
 // The minimum required address fields must be specified: First Name, Last Name,
 // Address Line 1, City, Zip Code, and State.
@@ -294,7 +248,7 @@ IN_PROC_BROWSER_TEST_F(AutofillTest, AggregatesMinValidProfileDifferentJS) {
 
   std::string submit("document.forms[0].submit();");
   FillFormAndSubmitWithHandler("duplicate_profiles_test.html", data, submit,
-                               false, true);
+                               false);
 
   ASSERT_EQ(1u, personal_data_manager()->GetProfiles().size());
 }
@@ -315,7 +269,7 @@ IN_PROC_BROWSER_TEST_F(AutofillTest, ProfilesAggregatedWithSubmitHandler) {
       "document.forms[0].addEventListener('submit', preventFunction);"
       "document.querySelector('input[type=submit]').click();");
   FillFormAndSubmitWithHandler("duplicate_profiles_test.html", data, submit,
-                               false, false);
+                               false);
 
   // The AutofillManager will update the user's profile.
   EXPECT_EQ(1u, personal_data_manager()->GetProfiles().size());
@@ -473,7 +427,8 @@ IN_PROC_BROWSER_TEST_F(AutofillTest, AppendCountryCodeForAggregatedPhones) {
 // This does not apply to US numbers. For US numbers, '+' is removed.
 
 // Flaky on Windows. http://crbug.com/500491
-#if defined(OS_WIN)
+// Also flaky on Linux. http://crbug.com/935629
+#if defined(OS_WIN) || defined(OS_LINUX)
 #define MAYBE_UsePlusSignForInternationalNumber \
     DISABLED_UsePlusSignForInternationalNumber
 #else

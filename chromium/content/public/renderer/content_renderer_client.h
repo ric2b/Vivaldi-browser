@@ -15,15 +15,15 @@
 #include "base/callback_forward.h"
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/task/task_scheduler/task_scheduler.h"
 #include "build/build_config.h"
 #include "content/public/common/content_client.h"
 #include "content/public/renderer/url_loader_throttle_provider.h"
 #include "content/public/renderer/websocket_handshake_throttle_provider.h"
-#include "media/base/decode_capabilities.h"
+#include "media/base/supported_types.h"
 #include "services/service_manager/public/mojom/service.mojom.h"
-#include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/public/web/web_navigation_policy.h"
 #include "third_party/blink/public/web/web_navigation_type.h"
@@ -42,12 +42,11 @@ namespace blink {
 class WebElement;
 class WebFrame;
 class WebLocalFrame;
-class WebMIDIAccessor;
-class WebMIDIAccessorClient;
 class WebPlugin;
 class WebPrescientNetworking;
 class WebSpeechSynthesizer;
 class WebSpeechSynthesizerClient;
+class WebMediaStreamRendererFactory;
 class WebThemeEngine;
 class WebURL;
 class WebURLRequest;
@@ -62,7 +61,6 @@ class KeySystemProperties;
 
 namespace content {
 class BrowserPluginDelegate;
-class MediaStreamRendererFactory;
 class RenderFrame;
 class RenderView;
 struct WebPluginInfo;
@@ -90,20 +88,25 @@ class CONTENT_EXPORT ContentRendererClient {
 
   // Returns true if the embedder renders the contents of the |plugin_element|
   // in a cross-process frame using MimeHandlerView.
-  virtual bool IsPluginHandledByMimeHandlerView(
+  virtual bool MaybeCreateMimeHandlerView(
       RenderFrame* embedder_frame,
       const blink::WebElement& plugin_element,
       const GURL& original_url,
-      const std::string& original_mime_type,
-      int32_t instance_id_to_use);
+      const std::string& original_mime_type);
 
-  // Allows the embedder to override creating a plugin. If it returns true, then
-  // |plugin| will contain the created plugin, although it could be NULL. If it
-  // returns false, the content layer will create the plugin.
-  virtual bool OverrideCreatePlugin(
-      RenderFrame* render_frame,
-      const blink::WebPluginParams& params,
-      blink::WebPlugin** plugin);
+  // Returns a scriptable object which implements custom javascript API for the
+  // given element. This is used for MimeHandlerView in providing API such as
+  // |postMessage| for <embed> and <object>.
+  virtual v8::Local<v8::Object> GetScriptableObject(
+      const blink::WebElement& plugin_element,
+      v8::Isolate* isolate);
+
+  // Allows the embedder to override creating a plugin. If it returns true,
+  // then |plugin| will contain the created plugin, although it could be
+  // NULL. If it returns false, the content layer will create the plugin.
+  virtual bool OverrideCreatePlugin(RenderFrame* render_frame,
+                                    const blink::WebPluginParams& params,
+                                    blink::WebPlugin** plugin);
 
   // Creates a replacement plugin that is shown when the plugin at |file_path|
   // couldn't be loaded. This allows the embedder to show a custom placeholder.
@@ -136,29 +139,29 @@ class CONTENT_EXPORT ContentRendererClient {
   // Returns the information to display when a navigation error occurs.
   // If |error_html| is not null then it may be set to a HTML page
   // containing the details of the error and maybe links to more info.
-  // If |error_description| is not null it may be set to contain a brief
-  // message describing the error that has occurred.
-  // Either of the out parameters may be not written to in certain cases
+  // Note that |error_html| may be not written to in certain cases
   // (lack of information on the error code) so the caller should take care to
-  // initialize the string values with safe defaults before the call.
+  // initialize it with a safe default before the call.
+  // TODO(dgozman): |ignoring_cache| is always false in these two methods.
   virtual void PrepareErrorPage(content::RenderFrame* render_frame,
-                                const blink::WebURLRequest& failed_request,
                                 const blink::WebURLError& error,
-                                std::string* error_html,
-                                base::string16* error_description) {}
+                                const std::string& http_method,
+                                bool ignoring_cache,
+                                std::string* error_html) {}
+
   virtual void PrepareErrorPageForHttpStatusError(
       content::RenderFrame* render_frame,
-      const blink::WebURLRequest& failed_request,
       const GURL& unreachable_url,
+      const std::string& http_method,
+      bool ignoring_cache,
       int http_status,
-      std::string* error_html,
-      base::string16* error_description) {}
+      std::string* error_html) {}
 
   // Returns as |error_description| a brief description of the error that
   // ocurred. The out parameter may be not written to in certain cases (lack of
   // information on the error code)
-  virtual void GetErrorDescription(const blink::WebURLRequest& failed_request,
-                                   const blink::WebURLError& error,
+  virtual void GetErrorDescription(const blink::WebURLError& error,
+                                   const std::string& http_method,
                                    base::string16* error_description) {}
 
   // Allows the embedder to control when media resources are loaded. Embedders
@@ -169,11 +172,6 @@ class CONTENT_EXPORT ContentRendererClient {
   virtual bool DeferMediaLoad(RenderFrame* render_frame,
                               bool has_played_media_before,
                               base::OnceClosure closure);
-
-  // Allows the embedder to override creating a WebMIDIAccessor.  If it
-  // returns NULL the content layer will create the MIDI accessor.
-  virtual std::unique_ptr<blink::WebMIDIAccessor> OverrideCreateMIDIAccessor(
-      blink::WebMIDIAccessorClient* client);
 
   // Allows the embedder to override the WebThemeEngine used. If it returns NULL
   // the content layer will provide an engine.
@@ -221,10 +219,6 @@ class CONTENT_EXPORT ContentRendererClient {
                                 blink::WebNavigationType type,
                                 blink::WebNavigationPolicy default_policy,
                                 bool is_redirect);
-
-  // Indicates if the Android MediaPlayer should be used instead of Chrome's
-  // built in media player for the given |url|. Defaults to false.
-  virtual bool ShouldUseMediaPlayerForURL(const GURL& url);
 #endif
 
   // Returns true if we should fork a new process for the given navigation.
@@ -258,9 +252,7 @@ class CONTENT_EXPORT ContentRendererClient {
                                              size_t length);
   virtual bool IsLinkVisited(unsigned long long link_hash);
   virtual blink::WebPrescientNetworking* GetPrescientNetworking();
-  virtual bool ShouldOverridePageVisibilityState(
-      const RenderFrame* render_frame,
-      blink::mojom::PageVisibilityState* override_state);
+  virtual bool IsPrerenderingFrame(const RenderFrame* render_frame);
 
   // Returns true if the given Pepper plugin is external (requiring special
   // startup steps).
@@ -272,11 +264,8 @@ class CONTENT_EXPORT ContentRendererClient {
   // language.
   virtual bool IsOriginIsolatedPepperPlugin(const base::FilePath& plugin_path);
 
-  // Returns true if the page at |url| can use Pepper MediaStream APIs.
-  virtual bool AllowPepperMediaStreamAPI(const GURL& url);
-
-  // Allows an embedder to provide a MediaStreamRendererFactory.
-  virtual std::unique_ptr<MediaStreamRendererFactory>
+  // Allows an embedder to provide a blink::WebMediaStreamRendererFactory.
+  virtual std::unique_ptr<blink::WebMediaStreamRendererFactory>
   CreateMediaStreamRendererFactory();
 
   // Allows embedder to register the key system(s) it supports by populating
@@ -290,10 +279,10 @@ class CONTENT_EXPORT ContentRendererClient {
   virtual bool IsKeySystemsUpdateNeeded();
 
   // Allows embedder to describe customized audio capabilities.
-  virtual bool IsSupportedAudioConfig(const media::AudioConfig& config);
+  virtual bool IsSupportedAudioType(const media::AudioType& type);
 
   // Allows embedder to describe customized video capabilities.
-  virtual bool IsSupportedVideoConfig(const media::VideoConfig& config);
+  virtual bool IsSupportedVideoType(const media::VideoType& type);
 
   // Return true if the bitstream format |codec| is supported by the audio sink.
   virtual bool IsSupportedBitstreamAudioCodec(media::AudioCodec codec);
@@ -303,7 +292,7 @@ class CONTENT_EXPORT ContentRendererClient {
   // reported source for the error; this can point to a page or a script,
   // and can be external or internal.
   virtual bool ShouldReportDetailedMessageForSource(
-      const base::string16& source) const;
+      const base::string16& source);
 
   // Creates a permission client for in-renderer worker.
   virtual std::unique_ptr<blink::WebContentSettingsClient>
@@ -311,9 +300,6 @@ class CONTENT_EXPORT ContentRendererClient {
 
   // Returns true if the page at |url| can use Pepper CameraDevice APIs.
   virtual bool IsPluginAllowedToUseCameraDeviceAPI(const GURL& url);
-
-  // Returns true if the page at |url| can use Pepper Compositor APIs.
-  virtual bool IsPluginAllowedToUseCompositorAPI(const GURL& url);
 
   // Returns true if dev channel APIs are available for plugins.
   virtual bool IsPluginAllowedToUseDevChannelAPIs();
@@ -359,6 +345,13 @@ class CONTENT_EXPORT ContentRendererClient {
       const GURL& service_worker_scope,
       const GURL& script_url) {}
 
+  // Notifies that a service worker context has finished executing its top-level
+  // JavaScript. This function is called from the worker thread.
+  virtual void DidStartServiceWorkerContextOnWorkerThread(
+      int64_t service_worker_version_id,
+      const GURL& service_worker_scope,
+      const GURL& script_url) {}
+
   // Notifies that a service worker context will be destroyed. This function
   // is called from the worker thread.
   virtual void WillDestroyServiceWorkerContextOnWorkerThread(
@@ -378,6 +371,14 @@ class CONTENT_EXPORT ContentRendererClient {
   // routing logic, i.e. allowing multiple routes and non-proxied UDP.
   virtual bool ShouldEnforceWebRTCRoutingPreferences();
 
+  // Provides a default configuration of WebRTC audio processing, in JSON format
+  // with fields corresponding to webrtc::AudioProcessing::Config. Allows for a
+  // more functional tuning on platforms with known implementation and hardware
+  // limitations.
+  // This is currently not supported when running the Chrome audio service.
+  virtual base::Optional<std::string>
+  WebRTCPlatformSpecificAudioProcessingConfiguration();
+
   // Notifies that a worker context has been created. This function is called
   // from the worker thread.
   virtual void DidInitializeWorkerContextOnWorkerThread(
@@ -396,19 +397,11 @@ class CONTENT_EXPORT ContentRendererClient {
   // suspended after a period of inactivity.
   virtual bool IsIdleMediaSuspendEnabled();
 
-  // Whether the renderer should automatically suspend media playback on
-  // background tabs for given |render_frame|.
-  virtual bool IsBackgroundMediaSuspendEnabled(RenderFrame* render_frame);
-
-  // Called when a resource at |url| is loaded using an otherwise-valid legacy
-  // Symantec certificate that will be distrusted in future. Allows the embedder
-  // to override the message that is added to the console to inform developers
-  // that their certificate will be distrusted in future. If the method returns
-  // true, then |*console_message| will be printed to the console; otherwise a
-  // generic mesage will be used.
-  virtual bool OverrideLegacySymantecCertConsoleMessage(
-      const GURL& url,
-      std::string* console_messsage);
+  // Returns true to suppress the warning for deprecated TLS versions.
+  //
+  // This is a workaround for an outdated test server used by Blink tests on
+  // macOS. See https://crbug.com/905831.
+  virtual bool SuppressLegacyTLSVersionConsoleMessage();
 
   // Asks the embedder to bind |service_request| to its renderer-side service
   // implementation.
@@ -426,6 +419,10 @@ class CONTENT_EXPORT ContentRendererClient {
 
   // Returns true if it is safe to redirect to |url|, otherwise returns false.
   virtual bool IsSafeRedirectTarget(const GURL& url);
+
+  // The user agent string is given from the browser process. This is called at
+  // most once.
+  virtual void DidSetUserAgent(const std::string& user_agent);
 };
 
 }  // namespace content

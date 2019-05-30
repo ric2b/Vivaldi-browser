@@ -7,12 +7,15 @@
 #include <limits>
 #include <string>
 
+#include "base/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
+#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
@@ -382,8 +385,8 @@ void ServiceWorkerMetrics::CountControlledPageLoad(Site site,
   if (ShouldExcludeSiteFromHistogram(site))
     return;
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&RecordURLMetricOnUI, "ServiceWorker.ControlledPageUrl",
                      url));
 }
@@ -524,14 +527,6 @@ void ServiceWorkerMetrics::RecordActivateEventStatus(
 void ServiceWorkerMetrics::RecordInstallEventStatus(
     blink::ServiceWorkerStatusCode status) {
   UMA_HISTOGRAM_ENUMERATION("ServiceWorker.InstallEventStatus", status);
-}
-
-void ServiceWorkerMetrics::RecordEventDispatchingDelay(EventType event_type,
-                                                       base::TimeDelta time) {
-  static constexpr char kName[] = "ServiceWorker.EventDispatchingDelay";
-  UMA_HISTOGRAM_TIMES(kName, time);
-  base::UmaHistogramTimes(base::StrCat({kName, EventTypeToSuffix(event_type)}),
-                          time);
 }
 
 void ServiceWorkerMetrics::RecordEventTimeout(EventType event) {
@@ -892,15 +887,6 @@ void ServiceWorkerMetrics::RecordRuntime(base::TimeDelta time) {
                              kBucketCount);
 }
 
-void ServiceWorkerMetrics::RecordUninstalledScriptImport(const GURL& url) {
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::BindOnce(&RecordURLMetricOnUI,
-                     "ServiceWorker.ContextRequestHandlerStatus."
-                     "UninstalledScriptImport",
-                     url));
-}
-
 void ServiceWorkerMetrics::RecordStartServiceWorkerForNavigationHintResult(
     StartServiceWorkerForNavigationHintResult result) {
   UMA_HISTOGRAM_ENUMERATION("ServiceWorker.StartForNavigationHint.Result",
@@ -909,12 +895,6 @@ void ServiceWorkerMetrics::RecordStartServiceWorkerForNavigationHintResult(
 
 void ServiceWorkerMetrics::RecordRegisteredOriginCount(size_t origin_count) {
   UMA_HISTOGRAM_COUNTS_1M("ServiceWorker.RegisteredOriginCount", origin_count);
-}
-
-void ServiceWorkerMetrics::RecordMainResourceRequestDestination(
-    MainResourceRequestDestination destination) {
-  UMA_HISTOGRAM_ENUMERATION("ServiceWorker.MainResourceRequestDestination",
-                            destination);
 }
 
 }  // namespace content

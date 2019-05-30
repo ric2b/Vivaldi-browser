@@ -10,9 +10,11 @@
 #include "app/vivaldi_resources.h"
 
 #include "base/lazy_instance.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -125,7 +127,7 @@ static struct ImportItemToStringMapping {
 };
 
 const size_t kImportItemToStringMappingLength =
-    arraysize(import_item_string_mapping);
+    base::size(import_item_string_mapping);
 
 const std::string ImportItemToString(importer::ImportItem item) {
   for (size_t i = 0; i < kImportItemToStringMappingLength; i++) {
@@ -279,7 +281,7 @@ bool ImporterApiFunction::RunAsync() {
 }
 
 void ImporterApiFunction::SendAsyncResponse() {
-  base::MessageLoop::current()->task_runner()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&ImporterApiFunction::SendResponseToCallback,
                             base::Unretained(this)));
 }
@@ -488,7 +490,7 @@ void ImportDataStartImportFunction::HandleChooseBookmarksFileOrFolder(
 
   gfx::NativeWindow window =
       web_contents ? platform_util::GetTopLevel(web_contents->GetNativeView())
-                   : NULL;
+                   : nullptr;
 
   DialogParams* params = new DialogParams();
   params->imported_items = imported_items;

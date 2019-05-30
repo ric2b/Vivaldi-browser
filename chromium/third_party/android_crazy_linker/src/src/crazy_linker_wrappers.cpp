@@ -12,7 +12,7 @@
 #include "crazy_linker_library_view.h"
 #include "crazy_linker_shared_library.h"
 #include "crazy_linker_system_linker.h"
-#include "crazy_linker_thread.h"
+#include "crazy_linker_thread_data.h"
 #include "crazy_linker_util.h"
 
 #ifdef __arm__
@@ -149,8 +149,8 @@ void* WrapDlsym(void* lib_handle, const char* symbol_name) {
         SystemLinker::Resolve(lib_handle, symbol_name);
     if (!sym.IsValid()) {
       SaveSystemError();
-      LOG("dlsym: could not find symbol '%s' from foreign library\n",
-          symbol_name, GetThreadData()->GetError());
+      LOG("Could not find symbol '%s' from foreign library [%s]", symbol_name,
+          GetThreadData()->GetError());
     }
     return sym.address;
   }
@@ -160,10 +160,8 @@ void* WrapDlsym(void* lib_handle, const char* symbol_name) {
     LibraryView::SearchResult sym = wrap_lib->LookupSymbol(symbol_name);
     if (!sym.IsValid()) {
       SaveSystemError();
-      LOG("dlsym:%s: could not find symbol '%s' from system library\n%s",
-          wrap_lib->GetName(),
-          symbol_name,
-          GetThreadData()->GetError());
+      LOG("Could not find symbol '%s' from system library %s [%s]", symbol_name,
+          wrap_lib->GetName(), GetThreadData()->GetError());
     }
     return sym.address;
   }
@@ -223,7 +221,7 @@ int WrapDlclose(void* lib_handle) {
     // Fall-back to the system in this case.
     if (SystemLinker::Close(lib_handle) != 0) {
       SaveSystemError();
-      LOG("dlclose: could not close foreign library handle %p\n%s", lib_handle,
+      LOG("Could not close foreign library handle %p\n%s", lib_handle,
           GetThreadData()->GetError());
       return -1;
     }

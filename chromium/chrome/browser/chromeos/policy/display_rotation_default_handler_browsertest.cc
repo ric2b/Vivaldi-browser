@@ -4,8 +4,6 @@
 
 #include "chrome/browser/chromeos/policy/display_rotation_default_handler.h"
 
-#include <stdint.h>
-
 #include <memory>
 
 #include "ash/display/display_configuration_controller.h"
@@ -23,7 +21,7 @@
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_cryptohome_client.h"
@@ -247,12 +245,12 @@ IN_PROC_BROWSER_TEST_P(DisplayRotationDefaultTest,
       << ", and policy was removed.";
 }
 
-INSTANTIATE_TEST_CASE_P(PolicyDisplayRotationDefault,
-                        DisplayRotationDefaultTest,
-                        testing::Values(display::Display::ROTATE_0,
-                                        display::Display::ROTATE_90,
-                                        display::Display::ROTATE_180,
-                                        display::Display::ROTATE_270));
+INSTANTIATE_TEST_SUITE_P(PolicyDisplayRotationDefault,
+                         DisplayRotationDefaultTest,
+                         testing::Values(display::Display::ROTATE_0,
+                                         display::Display::ROTATE_90,
+                                         display::Display::ROTATE_180,
+                                         display::Display::ROTATE_270));
 
 // This class tests that the policy is reapplied after a reboot. To persist from
 // PRE_Reboot to Reboot, the policy is inserted into a FakeSessionManagerClient.
@@ -330,11 +328,11 @@ IN_PROC_BROWSER_TEST_P(DisplayRotationBootTest, Reboot) {
   EXPECT_EQ(policy_rotation, GetRotationOfFirstDisplay());
 }
 
-INSTANTIATE_TEST_CASE_P(PolicyDisplayRotationDefault,
-                        DisplayRotationBootTest,
-                        testing::Values(display::Display::ROTATE_0,
-                                        display::Display::ROTATE_90,
-                                        display::Display::ROTATE_180,
-                                        display::Display::ROTATE_270));
+INSTANTIATE_TEST_SUITE_P(PolicyDisplayRotationDefault,
+                         DisplayRotationBootTest,
+                         testing::Values(display::Display::ROTATE_0,
+                                         display::Display::ROTATE_90,
+                                         display::Display::ROTATE_180,
+                                         display::Display::ROTATE_270));
 
 }  // namespace policy

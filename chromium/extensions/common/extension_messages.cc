@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <utility>
 
 #include "content/public/common/common_param_traits.h"
 #include "extensions/common/extension.h"
@@ -31,22 +32,25 @@ ExtensionMsg_PermissionSetStruct::ExtensionMsg_PermissionSetStruct() {
 
 ExtensionMsg_PermissionSetStruct::ExtensionMsg_PermissionSetStruct(
     const PermissionSet& permissions)
-    : apis(permissions.apis()),
-      manifest_permissions(permissions.manifest_permissions()),
-      explicit_hosts(permissions.explicit_hosts()),
-      scriptable_hosts(permissions.scriptable_hosts()) {
-}
+    : apis(permissions.apis().Clone()),
+      manifest_permissions(permissions.manifest_permissions().Clone()),
+      explicit_hosts(permissions.explicit_hosts().Clone()),
+      scriptable_hosts(permissions.scriptable_hosts().Clone()) {}
+
+ExtensionMsg_PermissionSetStruct::~ExtensionMsg_PermissionSetStruct() {}
 
 ExtensionMsg_PermissionSetStruct::ExtensionMsg_PermissionSetStruct(
-    const ExtensionMsg_PermissionSetStruct& other) = default;
+    ExtensionMsg_PermissionSetStruct&& other) = default;
 
-ExtensionMsg_PermissionSetStruct::~ExtensionMsg_PermissionSetStruct() {
-}
+ExtensionMsg_PermissionSetStruct& ExtensionMsg_PermissionSetStruct::operator=(
+    ExtensionMsg_PermissionSetStruct&& other) = default;
 
 std::unique_ptr<const PermissionSet>
 ExtensionMsg_PermissionSetStruct::ToPermissionSet() const {
-  return std::make_unique<PermissionSet>(apis, manifest_permissions,
-                                         explicit_hosts, scriptable_hosts);
+  // TODO(devlin): Make this destructive so we can std::move() the members.
+  return std::make_unique<PermissionSet>(
+      apis.Clone(), manifest_permissions.Clone(), explicit_hosts.Clone(),
+      scriptable_hosts.Clone());
 }
 
 ExtensionMsg_Loaded_Params::ExtensionMsg_Loaded_Params()
@@ -66,9 +70,9 @@ ExtensionMsg_Loaded_Params::ExtensionMsg_Loaded_Params(
       withheld_permissions(
           extension->permissions_data()->withheld_permissions()),
       policy_blocked_hosts(
-          extension->permissions_data()->policy_blocked_hosts()),
+          extension->permissions_data()->policy_blocked_hosts().Clone()),
       policy_allowed_hosts(
-          extension->permissions_data()->policy_allowed_hosts()),
+          extension->permissions_data()->policy_allowed_hosts().Clone()),
       uses_default_policy_blocked_allowed_hosts(
           extension->permissions_data()->UsesDefaultPolicyHostRestrictions()),
       id(extension->id()),
@@ -140,7 +144,7 @@ bool ParamTraits<URLPattern>::Read(const base::Pickle* m,
   URLPattern::ParseResult result =
       p->Parse(spec, URLPattern::ALLOW_WILDCARD_FOR_EFFECTIVE_TLD);
   p->SetValidSchemes(valid_schemes);
-  return URLPattern::PARSE_SUCCESS == result;
+  return URLPattern::ParseResult::kSuccess == result;
 }
 
 void ParamTraits<URLPattern>::Log(const param_type& p, std::string* l) {
@@ -158,8 +162,7 @@ bool ParamTraits<URLPatternSet>::Read(const base::Pickle* m,
   if (!ReadParam(m, iter, &patterns))
     return false;
 
-  for (std::set<URLPattern>::iterator i = patterns.begin();
-       i != patterns.end(); ++i)
+  for (auto i = patterns.begin(); i != patterns.end(); ++i)
     p->AddPattern(*i);
   return true;
 }
@@ -217,7 +220,7 @@ bool ParamTraits<APIPermissionSet>::Read(const base::Pickle* m,
     std::unique_ptr<APIPermission> p(permission_info->CreateAPIPermission());
     if (!p->Read(m, iter))
       return false;
-    r->insert(p.release());
+    r->insert(std::move(p));
   }
   return true;
 }
@@ -254,7 +257,7 @@ bool ParamTraits<ManifestPermissionSet>::Read(const base::Pickle* m,
       return false;
     if (!p->Read(m, iter))
       return false;
-    r->insert(p.release());
+    r->insert(std::move(p));
   }
   return true;
 }

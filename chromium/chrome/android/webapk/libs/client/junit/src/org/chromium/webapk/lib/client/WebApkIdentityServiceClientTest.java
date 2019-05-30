@@ -19,7 +19,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowApplication;
 import org.robolectric.shadows.ShadowLooper;
 
-import org.chromium.base.test.asynctask.CustomShadowAsyncTask;
+import org.chromium.base.task.test.CustomShadowAsyncTask;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
 import org.chromium.webapk.lib.common.WebApkMetaDataKeys;
 import org.chromium.webapk.lib.common.identity_service.IIdentityService;
@@ -155,7 +155,8 @@ public class WebApkIdentityServiceClientTest {
         Bundle bundle = new Bundle();
         bundle.putString(WebApkMetaDataKeys.RUNTIME_HOST, runtimeHost);
         bundle.putInt(WebApkMetaDataKeys.SHELL_APK_VERSION, shellApkVersion);
-        WebApkTestHelper.registerWebApkWithMetaData(WEBAPK_PACKAGE_NAME, bundle);
+        WebApkTestHelper.registerWebApkWithMetaData(
+                WEBAPK_PACKAGE_NAME, bundle, null /* shareTargetMetaData */);
     }
 
     /** Checks whether the browser backs the WebAPK. */

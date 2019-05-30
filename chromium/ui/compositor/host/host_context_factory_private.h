@@ -38,12 +38,30 @@ class HostContextFactoryPrivate : public ContextFactoryPrivate {
       scoped_refptr<base::SingleThreadTaskRunner> resize_task_runner);
   ~HostContextFactoryPrivate() override;
 
+  // Call this when a compositor is created to ensure a data map entry exists
+  // for it, so that the data can be accessed before the compositor is
+  // configured. Could be called twice, e.g. if the GPU process crashes.
+  void AddCompositor(Compositor* compositor);
+
   void ConfigureCompositor(
-      base::WeakPtr<Compositor> compositor_weak_ptr,
+      Compositor* compositor,
       scoped_refptr<viz::ContextProvider> context_provider,
       scoped_refptr<viz::RasterContextProvider> worker_context_provider);
 
   void UnconfigureCompositor(Compositor* compositor);
+
+  void set_is_gpu_compositing_disabled(bool value) {
+    is_gpu_compositing_disabled_ = value;
+  }
+  bool is_gpu_compositing_disabled() const {
+    return is_gpu_compositing_disabled_;
+  }
+
+  scoped_refptr<base::SingleThreadTaskRunner> resize_task_runner() {
+    return resize_task_runner_;
+  }
+
+  base::flat_set<Compositor*> GetAllCompositors();
 
   // ContextFactoryPrivate implementation.
   std::unique_ptr<Reflector> CreateReflector(Compositor* source,
@@ -59,8 +77,6 @@ class HostContextFactoryPrivate : public ContextFactoryPrivate {
   void SetDisplayColorSpace(Compositor* compositor,
                             const gfx::ColorSpace& blending_color_space,
                             const gfx::ColorSpace& output_color_space) override;
-  void SetAuthoritativeVSyncInterval(Compositor* compositor,
-                                     base::TimeDelta interval) override;
   void SetDisplayVSyncParameters(Compositor* compositor,
                                  base::TimeTicks timebase,
                                  base::TimeDelta interval) override;
@@ -68,20 +84,6 @@ class HostContextFactoryPrivate : public ContextFactoryPrivate {
                                const viz::BeginFrameArgs& args) override;
   void SetOutputIsSecure(Compositor* compositor, bool secure) override;
   viz::FrameSinkManagerImpl* GetFrameSinkManager() override;
-
- protected:
-  void set_is_gpu_compositing_disabled(bool value) {
-    is_gpu_compositing_disabled_ = value;
-  }
-  bool is_gpu_compositing_disabled() const {
-    return is_gpu_compositing_disabled_;
-  }
-
-  scoped_refptr<base::SingleThreadTaskRunner> resize_task_runner() {
-    return resize_task_runner_;
-  }
-
-  base::flat_set<Compositor*> GetAllCompositors();
 
  private:
   struct CompositorData {
@@ -99,6 +101,10 @@ class HostContextFactoryPrivate : public ContextFactoryPrivate {
     // BeginFrames are enabled for the compositor.
     std::unique_ptr<ExternalBeginFrameControllerClientImpl>
         external_begin_frame_controller_client;
+
+    // SetOutputIsSecure is called before the compositor is ready, so remember
+    // the status and apply it during configuration.
+    bool output_is_secure = false;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(CompositorData);

@@ -4,19 +4,23 @@
 
 #include "chrome/browser/chromeos/net/delay_network_call.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/task/post_task.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 const unsigned chromeos::kDefaultNetworkRetryDelayMS = 3000;
 
 void chromeos::DelayNetworkCall(base::TimeDelta retry,
-                                const base::Closure& callback) {
+                                base::OnceClosure callback) {
   bool delay_network_call = false;
   const NetworkState* default_network =
       NetworkHandler::Get()->network_state_handler()->DefaultNetwork();
@@ -45,10 +49,11 @@ void chromeos::DelayNetworkCall(base::TimeDelta retry,
     }
   }
   if (delay_network_call) {
-    content::BrowserThread::PostDelayedTask(
-        content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&chromeos::DelayNetworkCall, retry, callback), retry);
+    base::PostDelayedTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::UI},
+        base::BindOnce(&chromeos::DelayNetworkCall, retry, std::move(callback)),
+        retry);
   } else {
-    callback.Run();
+    std::move(callback).Run();
   }
 }

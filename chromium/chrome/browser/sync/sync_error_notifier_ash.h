@@ -7,30 +7,28 @@
 
 #include <string>
 
-#include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/strings/string16.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/sync/driver/sync_error_controller.h"
+#include "components/sync/driver/sync_service_observer.h"
 
 class Profile;
 
 // Shows sync-related errors as notifications in Ash.
-class SyncErrorNotifier : public syncer::SyncErrorController::Observer,
+class SyncErrorNotifier : public syncer::SyncServiceObserver,
                           public KeyedService {
  public:
-  SyncErrorNotifier(syncer::SyncErrorController* controller, Profile* profile);
+  SyncErrorNotifier(syncer::SyncService* sync_service, Profile* profile);
   ~SyncErrorNotifier() override;
 
   // KeyedService:
   void Shutdown() override;
 
-  // syncer::SyncErrorController::Observer:
-  void OnErrorChanged() override;
+  // syncer::SyncServiceObserver:
+  void OnStateChanged(syncer::SyncService* service) override;
 
  private:
-  // The error controller to query for error details.
-  syncer::SyncErrorController* error_controller_;
+  // The sync service to query for error details.
+  syncer::SyncService* sync_service_;
 
   // The Profile this service belongs to.
   Profile* profile_;

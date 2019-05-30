@@ -32,19 +32,12 @@ class MODULES_EXPORT NavigatorServiceWorker final
   static ServiceWorkerContainer* serviceWorker(ScriptState*,
                                                Navigator&,
                                                ExceptionState&);
-  static ServiceWorkerContainer* serviceWorker(ScriptState*,
-                                               Navigator&,
-                                               String& error_message);
-  void ClearServiceWorker();
 
+  explicit NavigatorServiceWorker(Navigator&);
   void Trace(blink::Visitor*) override;
 
  private:
-  explicit NavigatorServiceWorker(Navigator&);
-  ServiceWorkerContainer* serviceWorker(LocalFrame*, ExceptionState&);
-  ServiceWorkerContainer* serviceWorker(LocalFrame*, String& error_message);
-
-  Member<ServiceWorkerContainer> service_worker_;
+  ServiceWorkerContainer* GetOrCreateContainer(LocalFrame*, ExceptionState&);
 };
 
 }  // namespace blink

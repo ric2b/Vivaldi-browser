@@ -68,6 +68,10 @@ void SessionStorageBuilder::ExtractSessionState(
   for (size_t index = 0; index < item_storages.count; ++index) {
     std::unique_ptr<NavigationItemImpl> item_impl =
         item_storage_builder.BuildNavigationItemImpl(item_storages[index]);
+
+    web::NavigationManagerImpl* navigation_manager =
+        web_state->navigation_manager_.get();
+    navigation_manager->RewriteItemURLIfNecessary(item_impl.get());
     items[index] = std::move(item_impl);
   }
   web_state->navigation_manager_->Restore(storage.lastCommittedItemIndex,

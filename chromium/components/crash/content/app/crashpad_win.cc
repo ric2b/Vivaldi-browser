@@ -10,6 +10,7 @@
 #include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -32,7 +33,7 @@ void GetPlatformCrashpadAnnotations(
     std::map<std::string, std::string>* annotations) {
   CrashReporterClient* crash_reporter_client = GetCrashReporterClient();
   wchar_t exe_file[MAX_PATH] = {};
-  CHECK(::GetModuleFileName(nullptr, exe_file, arraysize(exe_file)));
+  CHECK(::GetModuleFileName(nullptr, exe_file, base::size(exe_file)));
   base::string16 product_name, version, special_build, channel_name;
   crash_reporter_client->GetProductNameAndVersion(
       exe_file, &product_name, &version, &special_build, &channel_name);
@@ -55,11 +56,13 @@ void GetPlatformCrashpadAnnotations(
 #endif
 }
 
-base::FilePath PlatformCrashpadInitialization(bool initial_client,
-                                              bool browser_process,
-                                              bool embedded_handler,
-                                              const std::string& user_data_dir,
-                                              const base::FilePath& exe_path) {
+base::FilePath PlatformCrashpadInitialization(
+    bool initial_client,
+    bool browser_process,
+    bool embedded_handler,
+    const std::string& user_data_dir,
+    const base::FilePath& exe_path,
+    const std::vector<std::string>& initial_arguments) {
   base::FilePath database_path;  // Only valid in the browser process.
   base::FilePath metrics_path;  // Only valid in the browser process.
 
@@ -96,7 +99,7 @@ base::FilePath PlatformCrashpadInitialization(bool initial_client,
     if (exe_file.empty()) {
       wchar_t exe_file_path[MAX_PATH] = {};
       CHECK(::GetModuleFileName(nullptr, exe_file_path,
-                                arraysize(exe_file_path)));
+                                base::size(exe_file_path)));
 
       exe_file = base::FilePath(exe_file_path);
     }
@@ -111,7 +114,7 @@ base::FilePath PlatformCrashpadInitialization(bool initial_client,
     // If the handler is embedded in the binary (e.g. chrome, setup), we
     // reinvoke it with --type=crashpad-handler. Otherwise, we use the
     // standalone crashpad_handler.exe (for tests, etc.).
-    std::vector<std::string> start_arguments;
+    std::vector<std::string> start_arguments(initial_arguments);
     if (embedded_handler) {
       start_arguments.push_back(std::string("--type=") +
                                 switches::kCrashpadHandler);
@@ -165,19 +168,11 @@ base::FilePath PlatformCrashpadInitialization(bool initial_client,
 
 // We need to prevent ICF from folding DumpProcessForHungInputThread(),
 // together, since that makes them indistinguishable in crash dumps.
-// We do this by making the function body unique, and prevent optimization
-// from shuffling things around.
-MSVC_DISABLE_OPTIMIZE()
-MSVC_PUSH_DISABLE_WARNING(4748)
-
-DWORD WINAPI DumpProcessForHungInputThread(void* param) {
+// We do this by making the function body unique, and turning off inlining.
+NOINLINE DWORD WINAPI DumpProcessForHungInputThread(void* param) {
   DumpWithoutCrashing();
   return 0;
 }
-
-MSVC_POP_WARNING()
-MSVC_ENABLE_OPTIMIZE()
-
 
 #if defined(ARCH_CPU_X86_64)
 

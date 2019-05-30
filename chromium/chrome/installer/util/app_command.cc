@@ -7,7 +7,7 @@
 #include <stddef.h>
 
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/win/registry.h"
 #include "chrome/installer/util/google_update_constants.h"
 #include "chrome/installer/util/work_item_list.h"
@@ -60,7 +60,7 @@ bool AppCommand::Initialize(const base::win::RegKey& key) {
 
   command_line_.swap(cmd_line);
 
-  for (size_t i = 0; i < arraysize(kNameBoolVars); ++i) {
+  for (size_t i = 0; i < base::size(kNameBoolVars); ++i) {
     DWORD value = 0;  // Set default to false.
     // Note: ReadValueDW only modifies out param on success.
     key.ReadValueDW(kNameBoolVars[i].name, &value);
@@ -74,7 +74,7 @@ void AppCommand::AddWorkItems(HKEY predefined_root,
                               const base::string16& command_path,
                               WorkItemList* item_list) const {
   // Command_path is derived from GetRegCommandKey which always returns
-  // value from GetVersionKey() which should be 32-bit hive.
+  // value from GetClientsKeyPath() which should be 32-bit hive.
   item_list->AddCreateRegKeyWorkItem(
                  predefined_root, command_path, KEY_WOW64_32KEY)
       ->set_log_message("creating AppCommand registry key");
@@ -86,7 +86,7 @@ void AppCommand::AddWorkItems(HKEY predefined_root,
                                     true)
       ->set_log_message("setting AppCommand CommandLine registry value");
 
-  for (size_t i = 0; i < arraysize(kNameBoolVars); ++i) {
+  for (size_t i = 0; i < base::size(kNameBoolVars); ++i) {
     const wchar_t* var_name = kNameBoolVars[i].name;
     bool var_data = this->*(kNameBoolVars[i].data);
 

@@ -7,14 +7,17 @@
 
 #include "base/macros.h"
 #include "ui/base/ime/linux/linux_input_method_context_factory.h"
+#include "ui/base/ime/linux/ui_base_ime_linux_export.h"
 
 namespace ui {
 
 // An implementation of LinuxInputMethodContextFactory, which creates and
 // returns FakeInputMethodContext's.
-class FakeInputMethodContextFactory : public LinuxInputMethodContextFactory {
+class UI_BASE_IME_LINUX_EXPORT FakeInputMethodContextFactory
+    : public LinuxInputMethodContextFactory {
  public:
   FakeInputMethodContextFactory();
+  ~FakeInputMethodContextFactory() override;
 
   // LinuxInputMethodContextFactory:
   std::unique_ptr<LinuxInputMethodContext> CreateInputMethodContext(

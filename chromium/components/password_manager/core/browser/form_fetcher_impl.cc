@@ -35,7 +35,7 @@ std::vector<std::unique_ptr<PasswordForm>> SplitFederatedMatches(
   const auto first_federated = std::partition(
       store_results->begin(), store_results->end(),
       [](const std::unique_ptr<PasswordForm>& form) {
-        return form->federation_origin.unique();  // False means federated.
+        return form->federation_origin.opaque();  // False means federated.
       });
 
   // Move out federated matches.
@@ -139,6 +139,11 @@ FormFetcherImpl::State FormFetcherImpl::GetState() const {
 const std::vector<InteractionsStats>& FormFetcherImpl::GetInteractionsStats()
     const {
   return interactions_stats_;
+}
+
+const std::vector<const PasswordForm*>&
+FormFetcherImpl::GetNonFederatedMatches() const {
+  return weak_non_federated_;
 }
 
 const std::vector<const PasswordForm*>& FormFetcherImpl::GetFederatedMatches()
@@ -314,9 +319,6 @@ void FormFetcherImpl::ProcessPasswordStoreResults(
   non_federated_ = std::move(results);
 
   const size_t original_count = non_federated_.size();
-
-  non_federated_ =
-      client_->GetStoreResultFilter()->FilterResults(std::move(non_federated_));
 
   filtered_count_ = original_count - non_federated_.size();
 

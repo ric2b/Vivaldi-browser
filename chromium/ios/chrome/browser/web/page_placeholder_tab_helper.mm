@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/web/page_placeholder_tab_helper.h"
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/threading/thread_task_runner_handle.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
@@ -20,8 +21,6 @@ const double kPlaceholderMaxDisplayTimeInSeconds = 1.5;
 // Placeholder removal will include a fade-out animation of this length.
 const NSTimeInterval kPlaceholderFadeOutAnimationLengthInSeconds = 0.5;
 }  // namespace
-
-DEFINE_WEB_STATE_USER_DATA_KEY(PagePlaceholderTabHelper);
 
 PagePlaceholderTabHelper::PagePlaceholderTabHelper(web::WebState* web_state)
     : web_state_(web_state), weak_factory_(this) {
@@ -41,6 +40,16 @@ void PagePlaceholderTabHelper::CancelPlaceholderForNextNavigation() {
   if (displaying_placeholder_) {
     RemovePlaceholder();
   }
+}
+
+void PagePlaceholderTabHelper::WasShown(web::WebState* web_state) {
+  if (add_placeholder_for_next_navigation_) {
+    AddPlaceholder();
+  }
+}
+
+void PagePlaceholderTabHelper::WasHidden(web::WebState* web_state) {
+  RemovePlaceholder();
 }
 
 void PagePlaceholderTabHelper::DidStartNavigation(
@@ -75,6 +84,7 @@ void PagePlaceholderTabHelper::AddPlaceholder() {
   // Lazily create the placeholder view.
   if (!placeholder_view_) {
     placeholder_view_ = [[UIImageView alloc] init];
+    placeholder_view_.backgroundColor = [UIColor whiteColor];
     placeholder_view_.contentMode = UIViewContentModeScaleAspectFit;
     placeholder_view_.autoresizingMask =
         UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -84,24 +94,28 @@ void PagePlaceholderTabHelper::AddPlaceholder() {
   __weak UIImageView* weak_placeholder_view = placeholder_view_;
   __weak UIView* weak_web_state_view = web_state_->GetView();
   __weak id<CRWWebViewProxy> web_view_proxy = web_state_->GetWebViewProxy();
-  SnapshotTabHelper::FromWebState(web_state_)
-      ->RetrieveGreySnapshot(^(UIImage* snapshot) {
-        CGRect frame = weak_web_state_view.frame;
-        UIEdgeInsets inset = web_view_proxy.contentInset;
-        frame.origin.x += inset.left;
-        frame.origin.y += inset.top;
-        frame.size.width -= (inset.right + inset.left);
-        frame.size.height -= (inset.bottom + inset.top);
-        weak_placeholder_view.frame = frame;
-        weak_placeholder_view.image = snapshot;
-        [weak_web_state_view addSubview:weak_placeholder_view];
-      });
+
+  SnapshotTabHelper* snapshotTabHelper =
+      SnapshotTabHelper::FromWebState(web_state_);
+  if (snapshotTabHelper) {
+    snapshotTabHelper->RetrieveGreySnapshot(^(UIImage* snapshot) {
+      CGRect frame = weak_web_state_view.frame;
+      UIEdgeInsets inset = web_view_proxy.contentInset;
+      frame.origin.x += inset.left;
+      frame.origin.y += inset.top;
+      frame.size.width -= (inset.right + inset.left);
+      frame.size.height -= (inset.bottom + inset.top);
+      weak_placeholder_view.frame = frame;
+      weak_placeholder_view.image = snapshot;
+      [weak_web_state_view addSubview:weak_placeholder_view];
+    });
+  }
 
   // Remove placeholder if it takes too long to load the page.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&PagePlaceholderTabHelper::RemovePlaceholder,
-                 weak_factory_.GetWeakPtr()),
+      base::BindOnce(&PagePlaceholderTabHelper::RemovePlaceholder,
+                     weak_factory_.GetWeakPtr()),
       base::TimeDelta::FromSecondsD(kPlaceholderMaxDisplayTimeInSeconds));
 }
 
@@ -119,5 +133,8 @@ void PagePlaceholderTabHelper::RemovePlaceholder() {
       }
       completion:^(BOOL finished) {
         [weak_placeholder_view removeFromSuperview];
+        weak_placeholder_view.alpha = 1.0f;
       }];
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(PagePlaceholderTabHelper)

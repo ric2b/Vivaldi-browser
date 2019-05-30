@@ -140,18 +140,12 @@ const struct DOMExceptionEntry {
     // https://github.com/WICG/BackgroundSync/issues/124
     {DOMExceptionCode::kPermissionDeniedError, "PermissionDeniedError",
      "User or security policy denied the request."},
-
-    // Pointer Events
-    // https://w3c.github.io/pointerevents/
-    // Pointer Events introduced a new DOMException outside Web IDL.
-    {DOMExceptionCode::kInvalidPointerId, "InvalidPointerId",
-     "PointerId was invalid."},
 };
 
-unsigned short ToLegacyErrorCode(DOMExceptionCode exception_code) {
+uint16_t ToLegacyErrorCode(DOMExceptionCode exception_code) {
   if (DOMExceptionCode::kLegacyErrorCodeMin <= exception_code &&
       exception_code <= DOMExceptionCode::kLegacyErrorCodeMax) {
-    return static_cast<unsigned short>(exception_code);
+    return static_cast<uint16_t>(exception_code);
   }
   return 0;
 }
@@ -165,7 +159,7 @@ const DOMExceptionEntry* FindErrorEntry(DOMExceptionCode exception_code) {
   return nullptr;
 }
 
-unsigned short FindLegacyErrorCode(const String& name) {
+uint16_t FindLegacyErrorCode(const String& name) {
   for (const auto& entry : kDOMExceptionEntryTable) {
     if (name == entry.name)
       return ToLegacyErrorCode(entry.code);
@@ -180,7 +174,7 @@ DOMException* DOMException::Create(DOMExceptionCode exception_code,
                                    const String& sanitized_message,
                                    const String& unsanitized_message) {
   const DOMExceptionEntry* entry = FindErrorEntry(exception_code);
-  return new DOMException(
+  return MakeGarbageCollected<DOMException>(
       ToLegacyErrorCode(entry->code), entry->name ? entry->name : "Error",
       sanitized_message.IsNull() ? String(entry->message) : sanitized_message,
       unsanitized_message);
@@ -188,7 +182,8 @@ DOMException* DOMException::Create(DOMExceptionCode exception_code,
 
 // static
 DOMException* DOMException::Create(const String& message, const String& name) {
-  return new DOMException(FindLegacyErrorCode(name), name, message, String());
+  return MakeGarbageCollected<DOMException>(FindLegacyErrorCode(name), name,
+                                            message, String());
 }
 
 // static
@@ -213,7 +208,7 @@ String DOMException::GetErrorMessage(DOMExceptionCode exception_code) {
   return entry->message;
 }
 
-DOMException::DOMException(unsigned short legacy_code,
+DOMException::DOMException(uint16_t legacy_code,
                            const String& name,
                            const String& sanitized_message,
                            const String& unsanitized_message)

@@ -158,13 +158,7 @@ TEST(TabCaptureCaptureOffscreenTabTest, DetermineInitialSize) {
 // Tests API behaviors, including info queries, and constraints violations.
 IN_PROC_BROWSER_TEST_F(TabCaptureApiTest, MAYBE_ApiTests) {
   AddExtensionToCommandLineWhitelist();
-  ASSERT_TRUE(RunExtensionSubtest(
-      "tab_capture", base::StringPrintf("api_tests.html%s",
-                                        base::FeatureList::IsEnabled(
-                                            features::kAudioServiceAudioStreams)
-                                            ? ""
-                                            : "?includeLegacyUnmuteTest=true")))
-      << message_;
+  ASSERT_TRUE(RunExtensionSubtest("tab_capture", "api_tests.html")) << message_;
 }
 
 #if defined(OS_MACOSX) && defined(ADDRESS_SANITIZER)
@@ -188,8 +182,11 @@ IN_PROC_BROWSER_TEST_F(TabCaptureApiPixelTest, EndToEndWithoutRemoting) {
     return;
   }
   AddExtensionToCommandLineWhitelist();
-  // TODO(crbug/758057): Determine why color accuracy went down in this test
-  // with the new VIZ-based tab capturer.
+  // Note: The range of acceptable colors is quite large because there's no way
+  // to know whether software compositing is being used for screen capture; and,
+  // if software compositing is being used, there is no color space management
+  // and color values can be off by a lot. That said, color accuracy is being
+  // tested by a suite of content_browsertests.
   ASSERT_TRUE(RunExtensionSubtest(
       "tab_capture", "end_to_end.html?method=local&colorDeviation=50"))
       << message_;
@@ -205,6 +202,8 @@ IN_PROC_BROWSER_TEST_F(TabCaptureApiPixelTest, EndToEndThroughWebRTC) {
     return;
   }
   AddExtensionToCommandLineWhitelist();
+  // See note in EndToEndWithoutRemoting test about why |colorDeviation| is
+  // being set so high.
   ASSERT_TRUE(RunExtensionSubtest(
       "tab_capture", "end_to_end.html?method=webrtc&colorDeviation=50"))
       << message_;
@@ -226,6 +225,9 @@ IN_PROC_BROWSER_TEST_F(TabCaptureApiPixelTest, OffscreenTabEndToEnd) {
 
 #if defined(OS_MACOSX)
 // Timeout on Mac. crbug.com/864250
+#define MAYBE_OffscreenTabEvilTests DISABLED_OffscreenTabEvilTests
+#elif defined(OS_LINUX) || defined(OS_CHROMEOS)
+// Flaky on Linux and ChromeOS. crbug.com/895120
 #define MAYBE_OffscreenTabEvilTests DISABLED_OffscreenTabEvilTests
 #else
 #define MAYBE_OffscreenTabEvilTests OffscreenTabEvilTests

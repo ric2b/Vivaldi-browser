@@ -228,12 +228,12 @@ void AddContainerAndCodecMasksForTest() {
   if (is_test_masks_added)
     return;
 
-  AddCodecMask(EmeMediaType::AUDIO, "fooaudio", TEST_CODEC_FOO_AUDIO);
-  AddCodecMask(EmeMediaType::VIDEO, "foovideo", TEST_CODEC_FOO_VIDEO);
-  AddCodecMask(EmeMediaType::VIDEO, "securefoovideo",
-               TEST_CODEC_FOO_SECURE_VIDEO);
-  AddMimeTypeCodecMask("audio/foo", TEST_CODEC_FOO_AUDIO_ALL);
-  AddMimeTypeCodecMask("video/foo", TEST_CODEC_FOO_VIDEO_ALL);
+  AddCodecMaskForTesting(EmeMediaType::AUDIO, "fooaudio", TEST_CODEC_FOO_AUDIO);
+  AddCodecMaskForTesting(EmeMediaType::VIDEO, "foovideo", TEST_CODEC_FOO_VIDEO);
+  AddCodecMaskForTesting(EmeMediaType::VIDEO, "securefoovideo",
+                         TEST_CODEC_FOO_SECURE_VIDEO);
+  AddMimeTypeCodecMaskForTesting("audio/foo", TEST_CODEC_FOO_AUDIO_ALL);
+  AddMimeTypeCodecMaskForTesting("video/foo", TEST_CODEC_FOO_VIDEO_ALL);
 
   is_test_masks_added = true;
 }
@@ -259,8 +259,8 @@ class TestMediaClient : public MediaClient {
   bool IsKeySystemsUpdateNeeded() final;
   void AddSupportedKeySystems(std::vector<std::unique_ptr<KeySystemProperties>>*
                                   key_systems_properties) override;
-  bool IsSupportedAudioConfig(const media::AudioConfig& config) final;
-  bool IsSupportedVideoConfig(const media::VideoConfig& config) final;
+  bool IsSupportedAudioType(const media::AudioType& type) final;
+  bool IsSupportedVideoType(const media::VideoType& type) final;
   bool IsSupportedBitstreamAudioCodec(AudioCodec codec) final;
 
   // Helper function to test the case where IsKeySystemsUpdateNeeded() is true
@@ -297,11 +297,11 @@ void TestMediaClient::AddSupportedKeySystems(
   is_update_needed_ = false;
 }
 
-bool TestMediaClient::IsSupportedAudioConfig(const media::AudioConfig& config) {
+bool TestMediaClient::IsSupportedAudioType(const media::AudioType& type) {
   return true;
 }
 
-bool TestMediaClient::IsSupportedVideoConfig(const media::VideoConfig& config) {
+bool TestMediaClient::IsSupportedVideoType(const media::VideoType& type) {
   return true;
 }
 

@@ -38,7 +38,8 @@ constexpr char kBackgroundFetchImageLoaderIcon3000x2000[] = "3000x2000.png";
 
 class BackgroundFetchIconLoaderTest : public PageTestBase {
  public:
-  BackgroundFetchIconLoaderTest() : loader_(new BackgroundFetchIconLoader()) {}
+  BackgroundFetchIconLoaderTest()
+      : loader_(MakeGarbageCollected<BackgroundFetchIconLoader>()) {}
   ~BackgroundFetchIconLoaderTest() override {
     loader_->Stop();
     platform_->GetURLLoaderMockFactory()
@@ -55,7 +56,7 @@ class BackgroundFetchIconLoaderTest : public PageTestBase {
 
   // Registers a mocked URL.
   WebURL RegisterMockedURL(const String& file_name) {
-    WebURL registered_url = URLTestHelpers::RegisterMockedURLLoadFromBase(
+    WebURL registered_url = url_test_helpers::RegisterMockedURLLoadFromBase(
         kBackgroundFetchImageLoaderBaseUrl,
         test::CoreTestDataPath(kBackgroundFetchImageLoaderBaseDir), file_name,
         "image/png");
@@ -64,7 +65,9 @@ class BackgroundFetchIconLoaderTest : public PageTestBase {
 
   // Callback for BackgroundFetchIconLoader. This will set up the state of the
   // load as either success or failed based on whether the bitmap is empty.
-  void IconLoaded(base::OnceClosure quit_closure, const SkBitmap& bitmap) {
+  void IconLoaded(base::OnceClosure quit_closure,
+                  const SkBitmap& bitmap,
+                  int64_t ideal_to_chosen_icon_size) {
     bitmap_ = bitmap;
 
     if (!bitmap_.isNull())
@@ -75,17 +78,17 @@ class BackgroundFetchIconLoaderTest : public PageTestBase {
     std::move(quit_closure).Run();
   }
 
-  ManifestImageResource CreateTestIcon(const String& url_str,
-                                       const String& size) {
-    ManifestImageResource icon;
-    icon.setSrc(url_str);
-    icon.setType("image/png");
-    icon.setSizes(size);
-    icon.setPurpose("any");
+  ManifestImageResource* CreateTestIcon(const String& url_str,
+                                        const String& size) {
+    ManifestImageResource* icon = ManifestImageResource::Create();
+    icon->setSrc(url_str);
+    icon->setType("image/png");
+    icon->setSizes(size);
+    icon->setPurpose("any");
     return icon;
   }
 
-  KURL PickRightIcon(HeapVector<ManifestImageResource> icons,
+  KURL PickRightIcon(HeapVector<Member<ManifestImageResource>> icons,
                      const WebSize& ideal_display_size) {
     loader_->icons_ = std::move(icons);
     loader_->icon_display_size_pixels_ = ideal_display_size;
@@ -95,13 +98,15 @@ class BackgroundFetchIconLoaderTest : public PageTestBase {
 
   void LoadIcon(const KURL& url,
                 const WebSize& maximum_size,
-                base::OnceClosure quit_closure) {
-    ManifestImageResource icon;
-    icon.setSrc(url.GetString());
-    icon.setType("image/png");
-    icon.setSizes("500x500");
-    icon.setPurpose("ANY");
-    HeapVector<ManifestImageResource> icons(1, icon);
+                base::OnceClosure quit_closure,
+                const String& sizes = "500x500",
+                const String& purpose = "ANY") {
+    ManifestImageResource* icon = ManifestImageResource::Create();
+    icon->setSrc(url.GetString());
+    icon->setType("image/png");
+    icon->setSizes(sizes);
+    icon->setPurpose(purpose);
+    HeapVector<Member<ManifestImageResource>> icons(1, icon);
     loader_->icons_ = std::move(icons);
     loader_->DidGetIconDisplaySizeIfSoLoadIcon(
         GetContext(),
@@ -142,7 +147,7 @@ TEST_F(BackgroundFetchIconLoaderTest, SuccessTest) {
 }
 
 TEST_F(BackgroundFetchIconLoaderTest, PickIconRelativePath) {
-  HeapVector<ManifestImageResource> icons;
+  HeapVector<Member<ManifestImageResource>> icons;
   icons.push_back(
       CreateTestIcon(kBackgroundFetchImageLoaderIcon500x500, "500x500"));
 
@@ -152,7 +157,7 @@ TEST_F(BackgroundFetchIconLoaderTest, PickIconRelativePath) {
 }
 
 TEST_F(BackgroundFetchIconLoaderTest, PickIconFullPath) {
-  HeapVector<ManifestImageResource> icons;
+  HeapVector<Member<ManifestImageResource>> icons;
   icons.push_back(CreateTestIcon(kBackgroundFetchImageLoaderIcon500x500FullPath,
                                  "500x500"));
 
@@ -162,14 +167,14 @@ TEST_F(BackgroundFetchIconLoaderTest, PickIconFullPath) {
 }
 
 TEST_F(BackgroundFetchIconLoaderTest, PickRightIcon) {
-  ManifestImageResource icon0 =
+  ManifestImageResource* icon0 =
       CreateTestIcon(kBackgroundFetchImageLoaderIcon500x500, "500x500");
-  ManifestImageResource icon1 =
+  ManifestImageResource* icon1 =
       CreateTestIcon(kBackgroundFetchImageLoaderIcon48x48, "48x48");
-  ManifestImageResource icon2 =
+  ManifestImageResource* icon2 =
       CreateTestIcon(kBackgroundFetchImageLoaderIcon3000x2000, "3000x2000");
 
-  HeapVector<ManifestImageResource> icons;
+  HeapVector<Member<ManifestImageResource>> icons;
   icons.push_back(icon0);
   icons.push_back(icon1);
   icons.push_back(icon2);
@@ -179,6 +184,36 @@ TEST_F(BackgroundFetchIconLoaderTest, PickRightIcon) {
   // We expect the smallest Icon larger than the ideal display size.
   EXPECT_EQ(best_icon, KURL(KURL(kBackgroundFetchImageLoaderBaseUrl),
                             kBackgroundFetchImageLoaderIcon48x48));
+}
+
+TEST_F(BackgroundFetchIconLoaderTest, EmptySizes) {
+  base::RunLoop run_loop;
+
+  WebSize maximum_size{192, 168};
+  LoadIcon(KURL(kBackgroundFetchImageLoaderIcon500x500FullPath), maximum_size,
+           run_loop.QuitClosure(), "", "ANY");
+
+  platform_->GetURLLoaderMockFactory()->ServeAsynchronousRequests();
+
+  run_loop.Run();
+
+  ASSERT_EQ(BackgroundFetchLoadState::kLoadSuccessful, loaded_);
+  ASSERT_FALSE(bitmap_.drawsNothing());
+}
+
+TEST_F(BackgroundFetchIconLoaderTest, EmptyPurpose) {
+  base::RunLoop run_loop;
+
+  WebSize maximum_size{192, 168};
+  LoadIcon(KURL(kBackgroundFetchImageLoaderIcon500x500FullPath), maximum_size,
+           run_loop.QuitClosure(), "500X500", "");
+
+  platform_->GetURLLoaderMockFactory()->ServeAsynchronousRequests();
+
+  run_loop.Run();
+
+  ASSERT_EQ(BackgroundFetchLoadState::kLoadSuccessful, loaded_);
+  ASSERT_FALSE(bitmap_.drawsNothing());
 }
 
 }  // namespace blink

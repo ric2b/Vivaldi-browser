@@ -4,6 +4,7 @@
 
 #include "components/arc/video_accelerator/gpu_arc_video_decode_accelerator.h"
 
+#include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
@@ -537,8 +538,27 @@ void GpuArcVideoDecodeAccelerator::ImportBufferForPicture(
           mojom::VideoDecodeAccelerator::Result::INVALID_ARGUMENT);
       return;
     }
-    gmb_handle.native_pixmap_handle.fds.push_back(
-        base::FileDescriptor(handle_fd.release(), true));
+
+    const size_t num_planes = media::VideoFrame::NumPlanes(pixel_format);
+
+    // TODO(crbug.com/911370): Remove this workaround once Android passes one fd
+    // per plane.
+    std::array<base::ScopedFD, media::VideoFrame::kMaxPlanes> scoped_fds;
+    scoped_fds[0].reset(handle_fd.release());
+    for (size_t i = 1; i < num_planes; ++i) {
+      scoped_fds[i].reset(HANDLE_EINTR(dup(scoped_fds[0].get())));
+      if (!scoped_fds[i].is_valid()) {
+        VLOGF(1) << "Failed to duplicate fd.";
+        client_->NotifyError(
+            mojom::VideoDecodeAccelerator::Result::PLATFORM_FAILURE);
+        return;
+      }
+    }
+    for (size_t i = 0; i < num_planes; ++i) {
+      gmb_handle.native_pixmap_handle.fds.push_back(
+          base::FileDescriptor(scoped_fds[i].release(), true));
+    }
+
     for (const auto& plane : planes) {
       gmb_handle.native_pixmap_handle.planes.emplace_back(plane.stride,
                                                           plane.offset, 0);

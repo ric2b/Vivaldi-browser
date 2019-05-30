@@ -34,12 +34,14 @@ class CertificateErrorReport {
   // Describes the type of interstitial that the user was shown for the
   // error that this report represents. Gets mapped to
   // |CertLoggerInterstitialInfo::InterstitialReason|.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
   enum InterstitialReason {
-    INTERSTITIAL_SSL,
-    INTERSTITIAL_CAPTIVE_PORTAL,
-    INTERSTITIAL_CLOCK,
-    INTERSTITIAL_SUPERFISH,
-    INTERSTITIAL_MITM_SOFTWARE,
+    INTERSTITIAL_SSL = 1,
+    INTERSTITIAL_CAPTIVE_PORTAL = 2,
+    INTERSTITIAL_CLOCK = 3,
+    INTERSTITIAL_SUPERFISH = 4,
+    INTERSTITIAL_MITM_SOFTWARE = 5,
   };
 
   // Whether the user clicked through the interstitial or not.
@@ -63,7 +65,10 @@ class CertificateErrorReport {
   // TODO(mattm): remove this when the trial is done. (https://crbug.com/649026)
   CertificateErrorReport(const std::string& hostname,
                          const net::X509Certificate& unverified_cert,
-                         const net::CertVerifier::Config& config,
+                         bool enable_rev_checking,
+                         bool require_rev_checking_local_anchors,
+                         bool enable_sha1_local_anchors,
+                         bool disable_symantec_enforcement,
                          const net::CertVerifyResult& primary_result,
                          const net::CertVerifyResult& trial_result);
 

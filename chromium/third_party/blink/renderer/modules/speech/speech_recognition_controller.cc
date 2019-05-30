@@ -46,7 +46,7 @@ SpeechRecognitionController::~SpeechRecognitionController() {
 
 SpeechRecognitionController* SpeechRecognitionController::Create(
     LocalFrame& frame) {
-  return new SpeechRecognitionController(frame);
+  return MakeGarbageCollected<SpeechRecognitionController>(frame);
 }
 
 void SpeechRecognitionController::Start(
@@ -56,7 +56,7 @@ void SpeechRecognitionController::Start(
     const String& lang,
     bool continuous,
     bool interim_results,
-    unsigned long max_alternatives) {
+    uint32_t max_alternatives) {
   mojom::blink::StartSpeechRecognitionRequestParamsPtr msg_params =
       mojom::blink::StartSpeechRecognitionRequestParams::New();
   for (unsigned i = 0; i < grammars.length(); i++) {

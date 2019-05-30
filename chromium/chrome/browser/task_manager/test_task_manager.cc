@@ -50,10 +50,6 @@ int64_t TestTaskManager::GetGpuMemoryUsage(TaskId task_id,
   return -1;
 }
 
-base::MemoryState TestTaskManager::GetMemoryState(TaskId task_id) const {
-  return base::MemoryState::UNKNOWN;
-}
-
 int TestTaskManager::GetIdleWakeupsPerSecond(TaskId task_id) const {
   return -1;
 }
@@ -179,6 +175,10 @@ TaskIdList TestTaskManager::GetIdsOfTasksSharingSameProcess(
 
 size_t TestTaskManager::GetNumberOfTasksOnSameProcess(TaskId task_id) const {
   return 1;
+}
+
+bool TestTaskManager::IsRunningInVM(TaskId task_id) const {
+  return false;
 }
 
 TaskId TestTaskManager::GetTaskIdForWebContents(

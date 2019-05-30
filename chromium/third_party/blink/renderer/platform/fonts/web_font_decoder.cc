@@ -34,10 +34,10 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
 #include "third_party/blink/renderer/platform/fonts/web_font_typeface_factory.h"
-#include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/shared_buffer.h"
+#include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/time.h"
 #include "third_party/ots/include/ots-memory-stream.h"
 #include "third_party/skia/include/core/SkStream.h"
@@ -210,7 +210,7 @@ sk_sp<SkTypeface> WebFontDecoder::Decode(SharedBuffer* buffer) {
     return nullptr;
   }
 
-  const size_t decoded_length = output.Tell();
+  const size_t decoded_length = SafeCast<size_t>(output.Tell());
   RecordDecodeSpeedHistogram(data, buffer->size(), CurrentTime() - start,
                              decoded_length);
 

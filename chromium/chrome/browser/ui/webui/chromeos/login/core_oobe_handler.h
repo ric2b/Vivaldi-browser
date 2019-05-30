@@ -35,7 +35,6 @@ class EventSink;
 namespace chromeos {
 
 class HelpAppLauncher;
-class OobeUI;
 
 // The core handler for Javascript messages related to the "oobe" view.
 class CoreOobeHandler : public BaseWebUIHandler,
@@ -45,8 +44,7 @@ class CoreOobeHandler : public BaseWebUIHandler,
                         public TabletModeClientObserver,
                         public OobeConfiguration::Observer {
  public:
-  explicit CoreOobeHandler(OobeUI* oobe_ui,
-                           JSCallsContainer* js_calls_container);
+  explicit CoreOobeHandler(JSCallsContainer* js_calls_container);
   ~CoreOobeHandler() override;
 
   // BaseScreenHandler implementation:
@@ -149,6 +147,9 @@ class CoreOobeHandler : public BaseWebUIHandler,
       const base::Value& callback_id,
       std::vector<ash::mojom::DisplayUnitInfoPtr> info_list);
   void HandleSetupDemoMode();
+  // Handles demo mode setup for tests. Accepts 'online' and 'offline' as
+  // |demo_config|.
+  void HandleStartDemoModeSetupForTesting(const std::string& demo_config);
 
   // When keyboard_utils.js arrow key down event is reached, raise it
   // to tab/shift-tab event.
@@ -169,15 +170,9 @@ class CoreOobeHandler : public BaseWebUIHandler,
   // Updates client area size based on the primary screen size.
   void UpdateClientAreaSize();
 
-  // Updates OOBE configuration.
-  void UpdateOobeConfiguration();
-
   // Notification of a change in the accessibility settings.
   void OnAccessibilityStatusChanged(
       const AccessibilityStatusEventDetails& details);
-
-  // Owner of this handler.
-  OobeUI* oobe_ui_ = nullptr;
 
   // True if we should show OOBE instead of login.
   bool show_oobe_ui_ = false;

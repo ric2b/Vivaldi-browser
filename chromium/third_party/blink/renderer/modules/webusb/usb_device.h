@@ -8,7 +8,7 @@
 #include "device/usb/public/mojom/device.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/array_buffer_or_array_buffer_view.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/bit_vector.h"
@@ -29,7 +29,8 @@ class USBDevice : public ScriptWrappable, public ContextLifecycleObserver {
   static USBDevice* Create(device::mojom::blink::UsbDeviceInfoPtr device_info,
                            device::mojom::blink::UsbDevicePtr device,
                            ExecutionContext* context) {
-    return new USBDevice(std::move(device_info), std::move(device), context);
+    return MakeGarbageCollected<USBDevice>(std::move(device_info),
+                                           std::move(device), context);
   }
 
   explicit USBDevice(device::mojom::blink::UsbDeviceInfoPtr,
@@ -40,9 +41,9 @@ class USBDevice : public ScriptWrappable, public ContextLifecycleObserver {
   const device::mojom::blink::UsbDeviceInfo& Info() const {
     return *device_info_;
   }
-  bool IsInterfaceClaimed(size_t configuration_index,
-                          size_t interface_index) const;
-  size_t SelectedAlternateInterface(size_t interface_index) const;
+  bool IsInterfaceClaimed(wtf_size_t configuration_index,
+                          wtf_size_t interface_index) const;
+  wtf_size_t SelectedAlternateInterface(wtf_size_t interface_index) const;
 
   // USBDevice.idl
   uint8_t usbVersionMajor() const { return Info().usb_version_major; }
@@ -74,12 +75,12 @@ class USBDevice : public ScriptWrappable, public ContextLifecycleObserver {
                                          uint8_t interface_number,
                                          uint8_t alternate_setting);
   ScriptPromise controlTransferIn(ScriptState*,
-                                  const USBControlTransferParameters& setup,
+                                  const USBControlTransferParameters* setup,
                                   unsigned length);
   ScriptPromise controlTransferOut(ScriptState*,
-                                   const USBControlTransferParameters& setup);
+                                   const USBControlTransferParameters* setup);
   ScriptPromise controlTransferOut(ScriptState*,
-                                   const USBControlTransferParameters& setup,
+                                   const USBControlTransferParameters* setup,
                                    const ArrayBufferOrArrayBufferView& data);
   ScriptPromise clearHalt(ScriptState*,
                           String direction,
@@ -105,11 +106,11 @@ class USBDevice : public ScriptWrappable, public ContextLifecycleObserver {
   void Trace(blink::Visitor*) override;
 
  private:
-  int FindConfigurationIndex(uint8_t configuration_value) const;
-  int FindInterfaceIndex(uint8_t interface_number) const;
-  int FindAlternateIndex(size_t interface_index,
-                         uint8_t alternate_setting) const;
-  bool IsProtectedInterfaceClass(int interface_index) const;
+  wtf_size_t FindConfigurationIndex(uint8_t configuration_value) const;
+  wtf_size_t FindInterfaceIndex(uint8_t interface_number) const;
+  wtf_size_t FindAlternateIndex(wtf_size_t interface_index,
+                                uint8_t alternate_setting) const;
+  bool IsProtectedInterfaceClass(wtf_size_t interface_index) const;
   bool EnsureNoDeviceOrInterfaceChangeInProgress(ScriptPromiseResolver*) const;
   bool EnsureDeviceConfigured(ScriptPromiseResolver*) const;
   bool EnsureInterfaceClaimed(uint8_t interface_number,
@@ -119,27 +120,27 @@ class USBDevice : public ScriptWrappable, public ContextLifecycleObserver {
                                ScriptPromiseResolver*) const;
   bool AnyInterfaceChangeInProgress() const;
   device::mojom::blink::UsbControlTransferParamsPtr
-  ConvertControlTransferParameters(const USBControlTransferParameters&,
+  ConvertControlTransferParameters(const USBControlTransferParameters*,
                                    ScriptPromiseResolver*) const;
-  void SetEndpointsForInterface(size_t interface_index, bool set);
+  void SetEndpointsForInterface(wtf_size_t interface_index, bool set);
 
   void AsyncOpen(ScriptPromiseResolver*,
                  device::mojom::blink::UsbOpenDeviceError);
   void AsyncClose(ScriptPromiseResolver*);
   void OnDeviceOpenedOrClosed(bool);
-  void AsyncSelectConfiguration(size_t configuration_index,
+  void AsyncSelectConfiguration(wtf_size_t configuration_index,
                                 ScriptPromiseResolver*,
                                 bool success);
-  void OnConfigurationSelected(bool success, size_t configuration_index);
-  void AsyncClaimInterface(size_t interface_index,
+  void OnConfigurationSelected(bool success, wtf_size_t configuration_index);
+  void AsyncClaimInterface(wtf_size_t interface_index,
                            ScriptPromiseResolver*,
                            bool success);
-  void AsyncReleaseInterface(size_t interface_index,
+  void AsyncReleaseInterface(wtf_size_t interface_index,
                              ScriptPromiseResolver*,
                              bool success);
-  void OnInterfaceClaimedOrUnclaimed(bool claimed, size_t interface_index);
-  void AsyncSelectAlternateInterface(size_t interface_index,
-                                     size_t alternate_index,
+  void OnInterfaceClaimedOrUnclaimed(bool claimed, wtf_size_t interface_index);
+  void AsyncSelectAlternateInterface(wtf_size_t interface_index,
+                                     wtf_size_t alternate_index,
                                      ScriptPromiseResolver*,
                                      bool success);
   void AsyncControlTransferIn(ScriptPromiseResolver*,
@@ -172,10 +173,10 @@ class USBDevice : public ScriptWrappable, public ContextLifecycleObserver {
   HeapHashSet<Member<ScriptPromiseResolver>> device_requests_;
   bool opened_;
   bool device_state_change_in_progress_;
-  int configuration_index_;
+  wtf_size_t configuration_index_;
   WTF::BitVector claimed_interfaces_;
   WTF::BitVector interface_state_change_in_progress_;
-  WTF::Vector<size_t> selected_alternates_;
+  WTF::Vector<wtf_size_t> selected_alternates_;
   WTF::BitVector in_endpoints_;
   WTF::BitVector out_endpoints_;
 };

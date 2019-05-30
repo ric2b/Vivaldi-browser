@@ -40,8 +40,8 @@ MutationObserverRegistration* MutationObserverRegistration::Create(
     Node* registration_node,
     MutationObserverOptions options,
     const HashSet<AtomicString>& attribute_filter) {
-  return new MutationObserverRegistration(observer, registration_node, options,
-                                          attribute_filter);
+  return MakeGarbageCollected<MutationObserverRegistration>(
+      observer, registration_node, options, attribute_filter);
 }
 
 MutationObserverRegistration::MutationObserverRegistration(
@@ -80,7 +80,7 @@ void MutationObserverRegistration::ObservedSubtreeNodeWillDetach(Node& node) {
   observer_->SetHasTransientRegistration();
 
   if (!transient_registration_nodes_) {
-    transient_registration_nodes_ = new NodeHashSet;
+    transient_registration_nodes_ = MakeGarbageCollected<NodeHashSet>();
 
     DCHECK(registration_node_);
     DCHECK(!registration_node_keep_alive_);
@@ -107,7 +107,7 @@ void MutationObserverRegistration::ClearTransientRegistrations() {
 }
 
 void MutationObserverRegistration::Unregister() {
-  // |this| can outlives m_registrationNode.
+  // |this| can outlives registration_node_.
   if (registration_node_)
     registration_node_->UnregisterMutationObserver(this);
   else
@@ -148,7 +148,7 @@ void MutationObserverRegistration::AddRegistrationNodesToSet(
     nodes.insert(iter->Get());
 }
 
-void MutationObserverRegistration::Trace(blink::Visitor* visitor) {
+void MutationObserverRegistration::Trace(Visitor* visitor) {
   visitor->Trace(observer_);
   visitor->Trace(registration_node_);
   visitor->Trace(registration_node_keep_alive_);

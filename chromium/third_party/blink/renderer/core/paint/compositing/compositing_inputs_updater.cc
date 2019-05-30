@@ -24,12 +24,8 @@ static const LayoutBoxModelObject* ClippingContainerFromClipChainParent(
              : clip_chain_parent->ClippingContainer();
 }
 
-CompositingInputsUpdater::CompositingInputsUpdater(
-    PaintLayer* root_layer,
-    CompositingReasonFinder& compositing_reason_finder)
-    : geometry_map_(kUseTransforms),
-      root_layer_(root_layer),
-      compositing_reason_finder_(compositing_reason_finder) {}
+CompositingInputsUpdater::CompositingInputsUpdater(PaintLayer* root_layer)
+    : geometry_map_(kUseTransforms), root_layer_(root_layer) {}
 
 CompositingInputsUpdater::~CompositingInputsUpdater() = default;
 
@@ -80,14 +76,16 @@ void CompositingInputsUpdater::UpdateRecursive(PaintLayer* layer,
 
   geometry_map_.PushMappingsToAncestor(layer, layer->Parent());
 
-  PaintLayer* enclosing_composited_layer = info.enclosing_composited_layer;
+  PaintLayer* enclosing_stacking_composited_layer =
+      info.enclosing_stacking_composited_layer;
   PaintLayer* enclosing_squashing_composited_layer =
       info.enclosing_squashing_composited_layer;
   switch (layer->GetCompositingState()) {
     case kNotComposited:
       break;
     case kPaintsIntoOwnBacking:
-      enclosing_composited_layer = layer;
+      if (layer->GetLayoutObject().StyleRef().IsStackingContext())
+        enclosing_stacking_composited_layer = layer;
       break;
     case kPaintsIntoGroupedBacking:
       enclosing_squashing_composited_layer =
@@ -96,8 +94,8 @@ void CompositingInputsUpdater::UpdateRecursive(PaintLayer* layer,
   }
 
   if (layer->NeedsCompositingInputsUpdate()) {
-    if (enclosing_composited_layer) {
-      enclosing_composited_layer->GetCompositedLayerMapping()
+    if (enclosing_stacking_composited_layer) {
+      enclosing_stacking_composited_layer->GetCompositedLayerMapping()
           ->SetNeedsGraphicsLayerUpdate(kGraphicsLayerUpdateSubtree);
     }
     if (enclosing_squashing_composited_layer) {
@@ -121,7 +119,8 @@ void CompositingInputsUpdater::UpdateRecursive(PaintLayer* layer,
   if (update_type == kForceUpdate)
     UpdateAncestorDependentCompositingInputs(layer, info);
 
-  info.enclosing_composited_layer = enclosing_composited_layer;
+  info.enclosing_stacking_composited_layer =
+      enclosing_stacking_composited_layer;
   info.enclosing_squashing_composited_layer =
       enclosing_squashing_composited_layer;
 
@@ -223,20 +222,20 @@ void CompositingInputsUpdater::UpdateRecursive(PaintLayer* layer,
   //    child.
   // 6. If |layer| is the root, composite if
   //    DescendantHasDirectCompositingReason is true for |layer|.
-  bool ignore_lcd_text =
-      (layer->AncestorScrollingLayer() &&
-       !layer->AncestorScrollingLayer()->IsRootLayer() &&
-       layer->AncestorScrollingLayer()->NeedsCompositedScrolling());
-
   layer->SetPotentialCompositingReasonsFromNonStyle(
-      compositing_reason_finder_.NonStyleDeterminedDirectReasons(
-          layer, ignore_lcd_text));
+      CompositingReasonFinder::NonStyleDeterminedDirectReasons(*layer));
 
   if (layer->GetScrollableArea()) {
     layer->GetScrollableArea()->UpdateNeedsCompositedScrolling(
         compositor->CanBeComposited(layer) &&
         layer->DirectCompositingReasons());
   }
+
+  if (layer->GetLayoutObject().IsVideo())
+    info.is_under_video = true;
+
+  if (layer->GetLayoutObject().IsStickyPositioned())
+    info.is_under_position_sticky = true;
 
   bool should_recurse =
       layer->ChildNeedsCompositingInputsUpdate() || update_type == kForceUpdate;
@@ -289,45 +288,51 @@ void CompositingInputsUpdater::UpdateAncestorDependentCompositingInputs(
   PaintLayer::AncestorDependentCompositingInputs properties;
   LayoutBoxModelObject& layout_object = layer->GetLayoutObject();
 
-  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
-    // The final value for |unclipped_absolute_bounding_box| needs to be
-    // in absolute, unscrolled space, without any scroll applied.
-    properties.unclipped_absolute_bounding_box =
-        EnclosingIntRect(geometry_map_.AbsoluteRect(
-            FloatRect(layer->BoundingBoxForCompositingOverlapTest())));
+  // The final value for |unclipped_absolute_bounding_box| needs to be
+  // in absolute, unscrolled space, without any scroll applied.
+  properties.unclipped_absolute_bounding_box =
+      EnclosingIntRect(geometry_map_.AbsoluteRect(
+          FloatRect(layer->BoundingBoxForCompositingOverlapTest())));
 
-    bool affected_by_scroll = root_layer_->GetScrollableArea() &&
-                              layer->IsAffectedByScrollOf(root_layer_);
+  bool affected_by_scroll = root_layer_->GetScrollableArea() &&
+                            layer->IsAffectedByScrollOf(root_layer_);
 
-    // At ths point, |unclipped_absolute_bounding_box| is in viewport space.
-    // To convert to absolute space, add scroll offset for non-fixed layers.
-    if (affected_by_scroll) {
-      properties.unclipped_absolute_bounding_box.Move(
-          RoundedIntSize(root_layer_->GetScrollableArea()->GetScrollOffset()));
-    }
-
-    ClipRect clip_rect;
-    layer->Clipper(PaintLayer::kDoNotUseGeometryMapper)
-        .CalculateBackgroundClipRect(
-            ClipRectsContext(root_layer_,
-                             &root_layer_->GetLayoutObject().FirstFragment(),
-                             kAbsoluteClipRectsIgnoringViewportClip,
-                             kIgnorePlatformOverlayScrollbarSize,
-                             kIgnoreOverflowClipAndScroll),
-            clip_rect);
-    IntRect snapped_clip_rect = PixelSnappedIntRect(clip_rect.Rect());
-    // |snapped_clip_rect| is in absolute space space, but with scroll applied.
-    // To convert to absolute, unscrolled space, subtract scroll offsets for
-    // fixed layers.
-    if (root_layer_->GetScrollableArea() && !affected_by_scroll) {
-      snapped_clip_rect.Move(
-          RoundedIntSize(-root_layer_->GetScrollableArea()->GetScrollOffset()));
-    }
-
-    properties.clipped_absolute_bounding_box =
-        properties.unclipped_absolute_bounding_box;
-    properties.clipped_absolute_bounding_box.Intersect(snapped_clip_rect);
+  // At ths point, |unclipped_absolute_bounding_box| is in viewport space.
+  // To convert to absolute space, add scroll offset for non-fixed layers.
+  if (affected_by_scroll) {
+    properties.unclipped_absolute_bounding_box.Move(
+        RoundedIntSize(root_layer_->GetScrollableArea()->GetScrollOffset()));
   }
+
+  // For sticky-positioned elements, the scroll offset is sometimes included and
+  // sometimes not, depending on whether the sticky element is affixed or still
+  // scrolling. This makes caching difficult, as compared to Fixed position
+  // elements which have consistent behavior. So we disable caching for
+  // sticky-positioned subtrees.
+  ClipRectsCacheSlot cache_slot = info.is_under_position_sticky
+                                      ? kUncachedClipRects
+                                      : kAbsoluteClipRectsIgnoringViewportClip;
+
+  ClipRect clip_rect;
+  layer->Clipper(PaintLayer::GeometryMapperOption::kDoNotUseGeometryMapper)
+      .CalculateBackgroundClipRect(
+          ClipRectsContext(root_layer_,
+                           &root_layer_->GetLayoutObject().FirstFragment(),
+                           cache_slot, kIgnorePlatformOverlayScrollbarSize,
+                           kIgnoreOverflowClipAndScroll),
+          clip_rect);
+  IntRect snapped_clip_rect = PixelSnappedIntRect(clip_rect.Rect());
+  // |snapped_clip_rect| is in absolute space space, but with scroll applied.
+  // To convert to absolute, unscrolled space, subtract scroll offsets for
+  // fixed layers.
+  if (root_layer_->GetScrollableArea() && !affected_by_scroll) {
+    snapped_clip_rect.Move(
+        RoundedIntSize(-root_layer_->GetScrollableArea()->GetScrollOffset()));
+  }
+
+  properties.clipped_absolute_bounding_box =
+      properties.unclipped_absolute_bounding_box;
+  properties.clipped_absolute_bounding_box.Intersect(snapped_clip_rect);
 
   const PaintLayer* parent = layer->Parent();
   properties.opacity_ancestor =
@@ -359,6 +364,9 @@ void CompositingInputsUpdater::UpdateAncestorDependentCompositingInputs(
   properties.ancestor_scrolling_layer = info.scrolling_ancestor;
   if (info.needs_reparent_scroll && layout_object.StyleRef().IsStacked())
     properties.scroll_parent = info.scrolling_ancestor;
+
+  properties.is_under_video = info.is_under_video;
+  properties.is_under_position_sticky = info.is_under_position_sticky;
 
   layer->UpdateAncestorDependentCompositingInputs(properties);
 }

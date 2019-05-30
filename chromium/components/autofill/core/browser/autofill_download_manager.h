@@ -19,14 +19,24 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/autofill_type.h"
+#include "components/variations/variations_http_header_provider.h"
 #include "net/base/backoff_entry.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "url/gurl.h"
+
+class PrefService;
 
 namespace autofill {
 
 class AutofillDriver;
 class FormStructure;
+
+// A helper to make sure that tests which modify the set of active autofill
+// experiments do not interfere with one another.
+struct ScopedActiveAutofillExperiments {
+  ScopedActiveAutofillExperiments();
+  ~ScopedActiveAutofillExperiments();
+};
 
 // Handles getting and updating Autofill heuristics.
 class AutofillDownloadManager {
@@ -61,8 +71,15 @@ class AutofillDownloadManager {
 
   // |driver| must outlive this instance.
   // |observer| - observer to notify on successful completion or error.
+  // Uses an API callback function that gives an empty string.
+  AutofillDownloadManager(AutofillDriver* driver, Observer* observer);
+  // |driver| must outlive this instance.
+  // |observer| - observer to notify on successful completion or error.
+  // |api_key| - API key to add to API request query parameters. Will only take
+  //   effect if using API.
   AutofillDownloadManager(AutofillDriver* driver,
-                          Observer* observer);
+                          Observer* observer,
+                          const std::string& api_key);
   virtual ~AutofillDownloadManager();
 
   // Starts a query request to Autofill servers. The observer is called with the
@@ -86,16 +103,25 @@ class AutofillDownloadManager {
       bool form_was_autofilled,
       const ServerFieldTypeSet& available_field_types,
       const std::string& login_form_signature,
-      bool observed_submission);
+      bool observed_submission,
+      PrefService* pref_service);
 
   // Returns true if the autofill server communication is enabled.
   bool IsEnabled() const { return autofill_server_url_.is_valid(); }
 
+  // Reset the upload history. This reduced space history prevents the autofill
+  // download manager from uploading a multiple votes for a given form/event
+  // pair.
+  static void ClearUploadHistory(PrefService* pref_service);
+
  private:
   friend class AutofillDownloadManagerTest;
+  friend struct ScopedActiveAutofillExperiments;
   FRIEND_TEST_ALL_PREFIXES(AutofillDownloadManagerTest, QueryAndUploadTest);
   FRIEND_TEST_ALL_PREFIXES(AutofillDownloadManagerTest, BackoffLogic_Upload);
   FRIEND_TEST_ALL_PREFIXES(AutofillDownloadManagerTest, BackoffLogic_Query);
+  FRIEND_TEST_ALL_PREFIXES(AutofillDownloadManagerTest, RetryLimit_Upload);
+  FRIEND_TEST_ALL_PREFIXES(AutofillDownloadManagerTest, RetryLimit_Query);
 
   struct FormRequestData;
   typedef std::list<std::pair<std::string, std::string> > QueryRequestCache;
@@ -105,6 +131,10 @@ class AutofillDownloadManager {
   // fully encompasses the request, do not include request_data.payload when
   // transmitting the request.
   std::tuple<GURL, std::string> GetRequestURLAndMethod(
+      const FormRequestData& request_data) const;
+
+  // Same as GetRequestURLAndMethod, but for the API.
+  std::tuple<GURL, std::string> GetRequestURLAndMethodForApi(
       const FormRequestData& request_data) const;
 
   // Initiates request to Autofill servers to download/upload type predictions.
@@ -132,11 +162,17 @@ class AutofillDownloadManager {
   std::string GetCombinedSignature(
       const std::vector<std::string>& forms_in_query) const;
 
+  // Returns the maximum number of attempts for a given autofill server request.
+  static int GetMaxServerAttempts();
+
   void OnSimpleLoaderComplete(
       std::list<std::unique_ptr<network::SimpleURLLoader>>::iterator it,
       FormRequestData request_data,
       base::TimeTicks request_start,
       std::unique_ptr<std::string> response_body);
+
+  static void InitActiveExperiments();
+  static void ResetActiveExperiments();
 
   // The AutofillDriver that this instance will use. Must not be null, and must
   // outlive this instance.
@@ -146,9 +182,18 @@ class AutofillDownloadManager {
   // Must not be null.
   AutofillDownloadManager::Observer* const observer_;  // WEAK
 
+  // Callback function to retrieve API key.
+  const std::string api_key_;
+
   // The autofill server URL root: scheme://host[:port]/path excluding the
   // final path component for the request and the query params.
   const GURL autofill_server_url_;
+
+  // The period after which the tracked set of uploads to throttle is reset.
+  const base::TimeDelta throttle_reset_period_;
+
+  // The set of active autofill server experiments.
+  static std::vector<variations::VariationID>* active_experiments_;
 
   // Loaders used for the processing the requests. Invalidated after completion.
   std::list<std::unique_ptr<network::SimpleURLLoader>> url_loaders_;

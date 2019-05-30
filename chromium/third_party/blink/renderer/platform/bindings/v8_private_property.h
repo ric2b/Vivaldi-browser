@@ -33,7 +33,6 @@ class ScriptWrappable;
   X(CustomElementLifecycle, CreatedCallback)          \
   X(CustomElementLifecycle, DetachedCallback)         \
   X(DOMException, Error)                              \
-  X(ErrorEvent, Error)                                \
   X(Global, Event)                                    \
   X(IDBCursor, Request)                               \
   X(IntersectionObserver, Callback)                   \
@@ -50,9 +49,6 @@ class ScriptWrappable;
   X(SameObject, NotificationVibrate)                  \
   X(SameObject, PerformanceLongTaskTimingAttribution) \
   X(SameObject, PushManagerSupportedContentEncodings) \
-  X(V8ErrorHandler, ErrorHandler)                     \
-  X(V8EventListenerOrEventHandler, AttributeListener) \
-  X(V8EventListenerOrEventHandler, Listener)          \
   SCRIPT_PROMISE_PROPERTIES(X, Promise)               \
   SCRIPT_PROMISE_PROPERTIES(X, Resolver)
 
@@ -84,7 +80,6 @@ class ScriptWrappable;
 //   ...
 class PLATFORM_EXPORT V8PrivateProperty {
   USING_FAST_MALLOC(V8PrivateProperty);
-  WTF_MAKE_NONCOPYABLE(V8PrivateProperty);
 
  public:
   enum CachedAccessorSymbol : unsigned {
@@ -192,7 +187,7 @@ class PLATFORM_EXPORT V8PrivateProperty {
         return GetWindowDocumentCachedAccessor(isolate);
       case kNoCachedAccessor:
         break;
-    };
+    }
     NOTREACHED();
     return GetSymbol(isolate, "unexpected cached accessor");
   }
@@ -221,6 +216,8 @@ class PLATFORM_EXPORT V8PrivateProperty {
   // a snapshot, and it cannot be a v8::Eternal<> due to V8 serializer's
   // requirement.
   ScopedPersistent<v8::Private> symbol_window_document_cached_accessor_;
+
+  DISALLOW_COPY_AND_ASSIGN(V8PrivateProperty);
 };
 
 }  // namespace blink

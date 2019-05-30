@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/core/testing/null_execution_context.h"
 #include "third_party/blink/renderer/platform/blob/testing/fake_blob.h"
 #include "third_party/blink/renderer/platform/blob/testing/fake_blob_url_store.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 
@@ -71,7 +72,7 @@ class PublicURLManagerTest : public testing::Test {
   void SetUp() override {
     scoped_feature_list_.InitAndEnableFeature(features::kMojoBlobURLs);
 
-    execution_context_ = new NullExecutionContext;
+    execution_context_ = MakeGarbageCollected<NullExecutionContext>();
     // By default this creates a unique origin, which is exactly what this test
     // wants.
     execution_context_->SetUpSecurityContext();

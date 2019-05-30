@@ -11,7 +11,6 @@
 <translation id="1375198122581997741">Wersja Vivaldi – informacje</translation>
 <translation id="139305205187523129">Serwer <ph name="HOST_NAME" /> nie wysłał żadnych danych.</translation>
 <translation id="14171126816530869">Tożsamość organizacji <ph name="ORGANIZATION" /> (<ph name="LOCALITY" />) została zweryfikowana przed wystawcę <ph name="ISSUER" />.</translation>
-<translation id="1506687042165942984">Pokaż zapisaną (nieaktualną) kopię tej strony.</translation>
 <translation id="1559528461873125649">Podany plik lub folder nie istnieje</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1640244768702815859">Otwórz <ph name="BEGIN_LINK" />stronę główną witryny<ph name="END_LINK" />.</translation>
@@ -38,6 +37,7 @@
 <translation id="2337852623177822836">Ustawienie kontrolowane przez administratora</translation>
 <translation id="2355395290879513365">Osoby dokonujące ataków mogą widzieć te same obrazy w witrynie co ty i zmodyfikować je by cię oszukać.</translation>
 <translation id="2356070529366658676">Pytaj</translation>
+<translation id="2359808026110333948">Dalej</translation>
 <translation id="2467694685043708798">Spróbuj przeprowadzić <ph name="BEGIN_LINK" />diagnostykę sieci<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Powiadomienia</translation>
 <translation id="2539524384386349900">Wykrywaj</translation>
@@ -75,7 +75,6 @@
 <translation id="3630155396527302611">Jeśli ten program jest już na liście programów mogących korzystać z sieci,
     spróbuj go z niej usunąć i dodać ponownie.</translation>
 <translation id="3658742229777143148">Rewizja</translation>
-<translation id="366094926047009040">Możesz utracić dostęp do swojego konta Vivaldi lub paść ofiarą kradzieży tożsamości. Vivaldi zaleca natychmiastową zmianę hasła.</translation>
 <translation id="3681007416295224113">Informacje o certyfikacie</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Sprawdź serwer proxy, zaporę sieciową i konfigurację DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Jeśli używasz serwera proxy...</translation>
@@ -109,7 +108,6 @@
 <translation id="4744603770635761495">Ścieżka pliku wykonywalnego</translation>
 <translation id="4750917950439032686">Informacje, które wysyłasz tej witrynie (na przykład hasła lub numery kart kredytowych) pozostają prywatne.</translation>
 <translation id="4764776831041365478">Strona internetowa pod adresem <ph name="URL" /> może być tymczasowo niedostępna lub została na stałe przeniesiona pod nowy adres.</translation>
-<translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
 <translation id="4974590756084640048">Ponownie włącz ostrzeżenia</translation>
 <translation id="5023310440958281426">Sprawdź zasady administratora</translation>
 <translation id="5039804452771397117">Zezwalaj</translation>
@@ -138,7 +136,7 @@
 <translation id="5810442152076338065">Połączenie z <ph name="DOMAIN" /> jest szyfrowane przy użyciu przestarzałego zestawu szyfrów.</translation>
 <translation id="5838278095973806738">Nie podawaj żadnych informacji poufnych (takich jak hasła czy karty kredytowe) w tej witrynie, bo osoby atakujące będą mogły je wykraść.</translation>
 <translation id="5869405914158311789">Ta strona jest nieosiągalna</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{W użyciu: 1}few{W użyciu: #}many{W użyciu: #}other{W użyciu: #}}</translation>
+<translation id="5932224571077948991">Na tej stronie wyświetlają się uciążliwe lub wprowadzające w błąd reklamy</translation>
 <translation id="5990559369517809815">Żądania do serwera zostały zablokowane przez rozszerzenie.</translation>
 <translation id="6051221802930200923">Nie możesz teraz otworzyć strony <ph name="SITE" />, ponieważ stosuje ona przypinanie certyfikatów. Błędy sieciowe i ataki są zazwyczaj tymczasowe, więc prawdopodobnie strona będzie dostępna później.</translation>
 <translation id="6146055958333702838">Sprawdź wszystkie kable i uruchom ponownie wszelkie używane routery, modemy
@@ -157,6 +155,7 @@
 <translation id="6417515091412812850">Nie można sprawdzić, czy certyfikat został unieważniony.</translation>
 <translation id="6433595998831338502">Serwer <ph name="HOST_NAME" /> odrzucił połączenie.</translation>
 <translation id="6447842834002726250">Ciasteczka</translation>
+<translation id="6451458296329894277">Potwierdź ponowne przesłanie formularza</translation>
 <translation id="6569060085658103619">Przeglądasz stronę rozszerzenia</translation>
 <translation id="6657585470893396449">Hasło</translation>
 <translation id="6685834062052613830">Wyloguj się i dokończ konfigurację</translation>
@@ -194,13 +193,14 @@
 <translation id="8025119109950072390">Osoby atakujące tę stronę mogą podstępem nakłonić cię do zrobienia czegoś niebezpiecznego, np. zainstalowania oprogramowania lub ujawnienia danych osobowych (takich jak hasła, numery telefonów czy dane kart kredytowych).</translation>
 <translation id="8037357227543935929">Pytaj (domyślnie)</translation>
 <translation id="8041940743680923270">Użyj globalnej wartości domyślnej (Pytaj)</translation>
+<translation id="808894953321890993">Zmień hasło</translation>
 <translation id="8142868475871995937">Wejdź na stronę &lt;strong&gt;vivaldi://policy&lt;/strong&gt;, aby wyświetlić listę zablokowanych adresów URL oraz inne zasady egzekwowane przez administratora twojego systemu.</translation>
 <translation id="8149426793427495338">Twój komputer przeszedł w tryb uśpienia.</translation>
 <translation id="8150722005171944719">Nie można odczytać pliku <ph name="URL" />. Być może został usunięty, przeniesiony lub uprawnienia dostępu uniemożliwiają jego odczyt.</translation>
 <translation id="8184538546369750125">Użyj globalnej wartości domyślnej (Zezwalaj)</translation>
-<translation id="8205463626947051446">Na stronie wyświetlane są uciążliwe reklamy</translation>
 <translation id="8211406090763984747">Połączenie jest bezpieczne</translation>
 <translation id="8225771182978767009">Administrator tego komputera zablokował tę witrynę.</translation>
+<translation id="8241707690549784388">Strona, na której wyszukiwane są wprowadzone przez Ciebie informacje. Powrót do tej strony może spowodować konieczność powtórzenia wykonanych czynności. Czy chcesz kontynuować?</translation>
 <translation id="8241712895048303527">Blokuj na tej stronie</translation>
 <translation id="8288807391153049143">Pokaż certyfikat</translation>
 <translation id="8289355894181816810">Jeśli nie masz pewności co to oznacza, skontaktuj się z administratorem sieci.</translation>
@@ -216,10 +216,10 @@
 <translation id="9025348182339809926">(Nieważny)</translation>
 <translation id="9039213469156557790">Ta strona zawiera niezabezpieczone zasoby. Podczas przesyłania danych mogą je wyświetlić inni użytkownicy, a osoby atakujące mogą je zmodyfikować, by zmienić sposób działania strony.</translation>
 <translation id="9069693763241529744">Zablokowane przez rozszerzenie</translation>
-<translation id="910908805481542201">Pomóż mi to naprawić</translation>
 <translation id="9169664750068251925">Zawsze blokuj na tej stronie</translation>
 <translation id="9183425211371246419">Serwer <ph name="HOST_NAME" /> używa nieobsługiwanego protokołu.</translation>
 <translation id="9219103736887031265">Obrazy</translation>
+<translation id="936602727769022409">Możesz stracić dostęp do swojego konta Google. Chromium zaleca natychmiastową zmianę hasła. Zobaczysz prośbę, by się zalogować.</translation>
 <translation id="969892804517981540">Oficjalna wersja</translation>
 <translation id="988159990683914416">Wersja rozwojowa</translation>
 </translationbundle>

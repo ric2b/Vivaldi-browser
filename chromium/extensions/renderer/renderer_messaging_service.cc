@@ -16,6 +16,7 @@
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/v8_value_converter.h"
 #include "extensions/common/api/messaging/message.h"
+#include "extensions/common/api/messaging/messaging_endpoint.h"
 #include "extensions/common/api/messaging/port_id.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/renderer/extension_bindings_system.h"
@@ -23,7 +24,7 @@
 #include "extensions/renderer/ipc_message_sender.h"
 #include "extensions/renderer/messaging_util.h"
 #include "extensions/renderer/script_context.h"
-#include "extensions/renderer/script_context_set.h"
+#include "extensions/renderer/script_context_set_iterable.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_scoped_user_gesture.h"
@@ -39,7 +40,7 @@ RendererMessagingService::RendererMessagingService(
 RendererMessagingService::~RendererMessagingService() {}
 
 void RendererMessagingService::ValidateMessagePort(
-    const ScriptContextSet& context_set,
+    ScriptContextSetIterable* context_set,
     const PortId& port_id,
     content::RenderFrame* render_frame) {
   // TODO(devlin): In practice, |render_frame| should never be null here (unlike
@@ -52,7 +53,7 @@ void RendererMessagingService::ValidateMessagePort(
   bool has_port = false;
   // The base::Unretained() below is safe since ScriptContextSet::ForEach is
   // synchronous.
-  context_set.ForEach(
+  context_set->ForEach(
       render_frame,
       base::Bind(&RendererMessagingService::ValidateMessagePortInContext,
                  base::Unretained(this), port_id, &has_port));
@@ -66,23 +67,22 @@ void RendererMessagingService::ValidateMessagePort(
 }
 
 void RendererMessagingService::DispatchOnConnect(
-    const ScriptContextSet& context_set,
+    ScriptContextSetIterable* context_set,
     const PortId& target_port_id,
     const std::string& channel_name,
     const ExtensionMsg_TabConnectionInfo& source,
     const ExtensionMsg_ExternalConnectionInfo& info,
-    const std::string& tls_channel_id,
     content::RenderFrame* restrict_to_render_frame) {
   DCHECK(!target_port_id.is_opener);
   int routing_id = restrict_to_render_frame
                        ? restrict_to_render_frame->GetRoutingID()
                        : MSG_ROUTING_NONE;
   bool port_created = false;
-  context_set.ForEach(
+  context_set->ForEach(
       info.target_id, restrict_to_render_frame,
       base::Bind(&RendererMessagingService::DispatchOnConnectToScriptContext,
                  base::Unretained(this), target_port_id, channel_name, &source,
-                 info, tls_channel_id, &port_created));
+                 info, &port_created));
   // Note: |restrict_to_render_frame| may have been deleted at this point!
 
   IPCMessageSender* ipc_sender = bindings_system_->GetIPCMessageSender();
@@ -94,22 +94,22 @@ void RendererMessagingService::DispatchOnConnect(
 }
 
 void RendererMessagingService::DeliverMessage(
-    const ScriptContextSet& context_set,
+    ScriptContextSetIterable* context_set,
     const PortId& target_port_id,
     const Message& message,
     content::RenderFrame* restrict_to_render_frame) {
-  context_set.ForEach(
+  context_set->ForEach(
       restrict_to_render_frame,
       base::Bind(&RendererMessagingService::DeliverMessageToScriptContext,
                  base::Unretained(this), message, target_port_id));
 }
 
 void RendererMessagingService::DispatchOnDisconnect(
-    const ScriptContextSet& context_set,
+    ScriptContextSetIterable* context_set,
     const PortId& port_id,
     const std::string& error_message,
     content::RenderFrame* restrict_to_render_frame) {
-  context_set.ForEach(
+  context_set->ForEach(
       restrict_to_render_frame,
       base::Bind(&RendererMessagingService::DispatchOnDisconnectToScriptContext,
                  base::Unretained(this), port_id, error_message));
@@ -131,7 +131,6 @@ void RendererMessagingService::DispatchOnConnectToScriptContext(
     const std::string& channel_name,
     const ExtensionMsg_TabConnectionInfo* source,
     const ExtensionMsg_ExternalConnectionInfo& info,
-    const std::string& tls_channel_id,
     bool* port_created,
     ScriptContext* script_context) {
   // If the channel was opened by this same context, ignore it. This should only
@@ -142,9 +141,14 @@ void RendererMessagingService::DispatchOnConnectToScriptContext(
 
   // First, determine the event we'll use to connect.
   std::string target_extension_id = script_context->GetExtensionID();
-  bool is_external = info.source_id != target_extension_id;
+  bool is_external =
+      (info.source_endpoint.type == MessagingEndpoint::Type::kExtension ||
+       info.source_endpoint.type == MessagingEndpoint::Type::kTab) &&
+      info.source_endpoint.extension_id != target_extension_id;
   std::string event_name;
-  if (channel_name == messaging_util::kSendRequestChannel) {
+  if (info.source_endpoint.type == MessagingEndpoint::Type::kNativeApp) {
+    event_name = messaging_util::kOnConnectNativeEvent;
+  } else if (channel_name == messaging_util::kSendRequestChannel) {
     event_name = is_external ? messaging_util::kOnRequestExternalEvent
                              : messaging_util::kOnRequestEvent;
   } else if (channel_name == messaging_util::kSendMessageChannel) {
@@ -165,7 +169,7 @@ void RendererMessagingService::DispatchOnConnectToScriptContext(
 
   DispatchOnConnectToListeners(script_context, target_port_id,
                                target_extension_id, channel_name, source, info,
-                               tls_channel_id, event_name);
+                               event_name);
 }
 
 void RendererMessagingService::DeliverMessageToScriptContext(

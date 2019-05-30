@@ -33,6 +33,12 @@ void WindowProxyManager::ClearForSwap() {
     entry.value->ClearForSwap();
 }
 
+void WindowProxyManager::ClearForV8MemoryPurge() {
+  window_proxy_->ClearForV8MemoryPurge();
+  for (auto& entry : isolated_worlds_)
+    entry.value->ClearForV8MemoryPurge();
+}
+
 void WindowProxyManager::ReleaseGlobalProxies(
     GlobalProxyVector& global_proxies) {
   DCHECK(global_proxies.IsEmpty());

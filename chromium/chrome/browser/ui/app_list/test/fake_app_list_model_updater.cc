@@ -10,7 +10,8 @@
 #include "chrome/browser/ui/app_list/chrome_app_list_item.h"
 #include "extensions/common/constants.h"
 
-FakeAppListModelUpdater::FakeAppListModelUpdater() = default;
+FakeAppListModelUpdater::FakeAppListModelUpdater(Profile* profile)
+    : profile_(profile) {}
 
 FakeAppListModelUpdater::~FakeAppListModelUpdater() = default;
 
@@ -58,8 +59,8 @@ void FakeAppListModelUpdater::MoveItemToFolder(const std::string& id,
     ChromeAppListItem* item = items_[index].get();
     ChromeAppListItem::TestApi test_api(item);
     test_api.SetFolderId(folder_id);
-    if (delegate_)
-      delegate_->OnAppListItemUpdated(item);
+    for (AppListModelUpdaterObserver& observer : observers_)
+      observer.OnAppListItemUpdated(item);
   }
 }
 
@@ -107,6 +108,20 @@ void FakeAppListModelUpdater::GetIdToAppListIndexMap(
   std::move(callback).Run(id_to_app_list_index);
 }
 
+syncer::StringOrdinal FakeAppListModelUpdater::GetFirstAvailablePosition()
+    const {
+  std::vector<ChromeAppListItem*> top_level_items;
+  for (auto& item : items_) {
+    DCHECK(item->position().IsValid())
+        << "Item with invalid position: id=" << item->id()
+        << ", name=" << item->name() << ", is_folder=" << item->is_folder()
+        << ", is_page_break=" << item->is_page_break();
+    if (item->folder_id().empty() && item->position().IsValid())
+      top_level_items.emplace_back(item.get());
+  }
+  return GetFirstAvailablePositionInternal(top_level_items);
+}
+
 void FakeAppListModelUpdater::GetContextMenuModel(
     const std::string& id,
     GetMenuModelCallback callback) {
@@ -144,7 +159,6 @@ FakeAppListModelUpdater::FindOrCreateOemFolder(
         std::make_unique<ChromeAppListItem>(nullptr, ash::kOemFolderId,
                                             nullptr);
     oem_folder = new_folder.get();
-    AddItem(std::move(new_folder));
     ash::mojom::AppListItemMetadataPtr folder_data =
         oem_folder->CloneMetadata();
     folder_data->position = preferred_oem_position.IsValid()
@@ -152,6 +166,7 @@ FakeAppListModelUpdater::FindOrCreateOemFolder(
                                 : GetOemFolderPos();
     folder_data->name = oem_folder_name;
     oem_folder->SetMetadata(std::move(folder_data));
+    AddItem(std::move(new_folder));
   }
   return oem_folder->CloneMetadata();
 }
@@ -161,8 +176,11 @@ syncer::StringOrdinal FakeAppListModelUpdater::GetOemFolderPos() {
   // We don't have the information in Chrome, so the returned position
   // here is not guaranteed correct.
   size_t web_store_app_index;
-  if (!FindItemIndexForTest(extensions::kWebStoreAppId, &web_store_app_index))
+  if (!FindItemIndexForTest(extensions::kWebStoreAppId, &web_store_app_index)) {
+    if (items_.empty())
+      return syncer::StringOrdinal::CreateInitialOrdinal();
     return items_.back()->position().CreateAfter();
+  }
   const ChromeAppListItem* web_store_app_item =
       ItemAtForTest(web_store_app_index);
   return web_store_app_item->position().CreateAfter();
@@ -197,7 +215,23 @@ void FakeAppListModelUpdater::UpdateAppItemFromSyncItem(
   }
 }
 
-void FakeAppListModelUpdater::SetDelegate(
-    AppListModelUpdaterDelegate* delegate) {
-  delegate_ = delegate;
+void FakeAppListModelUpdater::OnFolderCreated(
+    ash::mojom::AppListItemMetadataPtr folder) {
+  std::unique_ptr<ChromeAppListItem> stub_folder =
+      std::make_unique<ChromeAppListItem>(profile_, folder->id, this);
+
+  for (AppListModelUpdaterObserver& observer : observers_)
+    observer.OnAppListItemAdded(stub_folder.get());
+
+  AddItem(std::move(stub_folder));
+}
+
+void FakeAppListModelUpdater::AddObserver(
+    AppListModelUpdaterObserver* observer) {
+  observers_.AddObserver(observer);
+}
+
+void FakeAppListModelUpdater::RemoveObserver(
+    AppListModelUpdaterObserver* observer) {
+  observers_.RemoveObserver(observer);
 }

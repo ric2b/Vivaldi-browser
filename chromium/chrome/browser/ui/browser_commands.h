@@ -8,9 +8,11 @@
 #include <string>
 #include <vector>
 
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/devtools/devtools_toggle_action.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "content/public/common/page_zoom.h"
 #include "printing/buildflags/buildflags.h"
@@ -31,7 +33,9 @@ namespace chrome {
 
 bool IsCommandEnabled(Browser* browser, int command);
 bool SupportsCommand(Browser* browser, int command);
-bool ExecuteCommand(Browser* browser, int command);
+bool ExecuteCommand(Browser* browser,
+                    int command,
+                    base::TimeTicks time_stamp = base::TimeTicks::Now());
 bool ExecuteCommandWithDisposition(Browser* browser,
                                    int command,
                                    WindowOpenDisposition disposition);
@@ -70,7 +74,7 @@ void Home(Browser* browser, WindowOpenDisposition disposition);
 void OpenCurrentURL(Browser* browser);
 void Stop(Browser* browser);
 void NewWindow(Browser* browser);
-void NewIncognitoWindow(Browser* browser);
+void NewIncognitoWindow(Profile* profile);
 void CloseWindow(Browser* browser);
 void NewTab(Browser* browser);
 void CloseTab(Browser* browser);
@@ -80,12 +84,25 @@ bool CanResetZoom(content::WebContents* contents);
 void RestoreTab(Browser* browser);
 TabStripModelDelegate::RestoreTabType GetRestoreTabType(
     const Browser* browser);
-void SelectNextTab(Browser* browser);
-void SelectPreviousTab(Browser* browser);
+void SelectNextTab(
+    Browser* browser,
+    TabStripModel::UserGestureDetails gesture_detail =
+        TabStripModel::UserGestureDetails(TabStripModel::GestureType::kOther));
+void SelectPreviousTab(
+    Browser* browser,
+    TabStripModel::UserGestureDetails gesture_detail =
+        TabStripModel::UserGestureDetails(TabStripModel::GestureType::kOther));
 void MoveTabNext(Browser* browser);
 void MoveTabPrevious(Browser* browser);
-void SelectNumberedTab(Browser* browser, int index);
-void SelectLastTab(Browser* browser);
+void SelectNumberedTab(
+    Browser* browser,
+    int index,
+    TabStripModel::UserGestureDetails gesture_detail =
+        TabStripModel::UserGestureDetails(TabStripModel::GestureType::kOther));
+void SelectLastTab(
+    Browser* browser,
+    TabStripModel::UserGestureDetails gesture_detail =
+        TabStripModel::UserGestureDetails(TabStripModel::GestureType::kOther));
 void DuplicateTab(Browser* browser);
 bool CanDuplicateTab(const Browser* browser);
 content::WebContents* DuplicateTabAt(Browser* browser, int index);
@@ -105,6 +122,7 @@ void Translate(Browser* browser);
 void ManagePasswordsForPage(Browser* browser);
 void SavePage(Browser* browser);
 bool CanSavePage(const Browser* browser);
+void SendToMyDevices(Browser* browser);
 void ShowFindBar(Browser* browser);
 void Print(Browser* browser);
 bool CanPrint(Browser* browser);
@@ -150,9 +168,6 @@ void CopyURL(Browser* browser);
 // the tabbed Browser.
 Browser* OpenInChrome(Browser* hosted_app_browser);
 bool CanViewSource(const Browser* browser);
-#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
-void ToggleConfirmToQuitOption(Browser* browser);
-#endif
 
 // Initiates user flow for creating a bookmark app for the current page.
 // Will install a PWA hosted app if the site meets installability requirements

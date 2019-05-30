@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/unload_controller.h"
 
+#include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -91,7 +92,7 @@ bool UnloadController::RunUnloadEventsHelper(content::WebContents* contents) {
     // them. Once they have fired, we'll get a message back saying whether
     // to proceed closing the page or not, which sends us back to this method
     // with the NeedToFireBeforeUnload bit cleared.
-    contents->DispatchBeforeUnload();
+    contents->DispatchBeforeUnload(false /* auto_cancel */);
     return true;
   }
   return false;
@@ -205,11 +206,13 @@ bool UnloadController::TabsNeedBeforeUnloadFired() {
 }
 
 void UnloadController::CancelWindowClose() {
-  // Closing of window can be canceled from a beforeunload handler.
-  DCHECK(is_attempting_to_close_browser_);
+  // Note that this method may be called if closing was canceled in a number of
+  // different ways, so is_attempting_to_close_browser_ may be false. In that
+  // case some of this code might not have an effect, but it's still useful to,
+  // for example, call the notification(s).
   tabs_needing_before_unload_fired_.clear();
-  for (UnloadListenerSet::iterator it = tabs_needing_unload_fired_.begin();
-      it != tabs_needing_unload_fired_.end(); ++it) {
+  for (auto it = tabs_needing_unload_fired_.begin();
+       it != tabs_needing_unload_fired_.end(); ++it) {
     DevToolsWindow::OnPageCloseCanceled(*it);
   }
   tabs_needing_unload_fired_.clear();
@@ -243,25 +246,32 @@ void UnloadController::Observe(int type,
 ////////////////////////////////////////////////////////////////////////////////
 // UnloadController, TabStripModelObserver implementation:
 
-void UnloadController::TabInsertedAt(TabStripModel* tab_strip_model,
-                                     content::WebContents* contents,
-                                     int index,
-                                     bool foreground) {
-  TabAttachedImpl(contents);
-}
+void UnloadController::OnTabStripModelChanged(
+    TabStripModel* tab_strip_model,
+    const TabStripModelChange& change,
+    const TabStripSelectionChange& selection) {
+  if (change.type() != TabStripModelChange::kInserted &&
+      change.type() != TabStripModelChange::kRemoved &&
+      change.type() != TabStripModelChange::kReplaced)
+    return;
 
-void UnloadController::TabDetachedAt(content::WebContents* contents,
-                                     int index,
-                                     bool was_active) {
-  TabDetachedImpl(contents);
-}
+  for (const auto& delta : change.deltas()) {
+    content::WebContents* new_contents = nullptr;
+    content::WebContents* old_contents = nullptr;
+    if (change.type() == TabStripModelChange::kInserted) {
+      new_contents = delta.insert.contents;
+    } else if (change.type() == TabStripModelChange::kReplaced) {
+      new_contents = delta.replace.new_contents;
+      old_contents = delta.replace.old_contents;
+    } else {
+      old_contents = delta.remove.contents;
+    }
 
-void UnloadController::TabReplacedAt(TabStripModel* tab_strip_model,
-                                     content::WebContents* old_contents,
-                                     content::WebContents* new_contents,
-                                     int index) {
-  TabDetachedImpl(old_contents);
-  TabAttachedImpl(new_contents);
+    if (old_contents)
+      TabDetachedImpl(old_contents);
+    if (new_contents)
+      TabAttachedImpl(new_contents);
+  }
 }
 
 void UnloadController::TabStripEmpty() {
@@ -327,7 +337,7 @@ void UnloadController::ProcessPendingTabs(bool skip_beforeunload) {
       // and then call beforeunload handlers for |web_contents|.
       // See DevToolsWindow::InterceptPageBeforeUnload for details.
       if (!DevToolsWindow::InterceptPageBeforeUnload(web_contents))
-        web_contents->DispatchBeforeUnload();
+        web_contents->DispatchBeforeUnload(false /* auto_cancel */);
     } else {
       ClearUnloadState(web_contents, true);
     }
@@ -372,8 +382,7 @@ bool UnloadController::RemoveFromSet(UnloadListenerSet* set,
                                      content::WebContents* web_contents) {
   DCHECK(is_attempting_to_close_browser_);
 
-  UnloadListenerSet::iterator iter =
-      std::find(set->begin(), set->end(), web_contents);
+  auto iter = std::find(set->begin(), set->end(), web_contents);
   if (iter != set->end()) {
     set->erase(iter);
     return true;

@@ -15,6 +15,7 @@
 #include "ui/gfx/mojo/presentation_feedback_struct_traits.h"
 #include "ui/gfx/mojo/traits_test_service.mojom.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/rrect_f.h"
 #include "ui/gfx/selection_bound.h"
 #include "ui/gfx/transform.h"
 
@@ -57,6 +58,10 @@ class StructTraitsTest : public testing::Test, public mojom::TraitsTestService {
       GpuMemoryBufferHandle handle,
       EchoGpuMemoryBufferHandleCallback callback) override {
     std::move(callback).Run(std::move(handle));
+  }
+
+  void EchoRRectF(const RRectF& r, EchoRRectFCallback callback) override {
+    std::move(callback).Run(r);
   }
 
   base::MessageLoop loop_;
@@ -129,15 +134,7 @@ TEST_F(StructTraitsTest, Transform) {
   EXPECT_EQ(col4row4, output.matrix().get(3, 3));
 }
 
-// AcceleratedWidgets can only be sent between processes on some platforms.
-#if defined(OS_WIN) || defined(USE_OZONE) || defined(USE_X11) || \
-    defined(OS_MACOSX)
-#define MAYBE_AcceleratedWidget AcceleratedWidget
-#else
-#define MAYBE_AcceleratedWidget DISABLED_AcceleratedWidget
-#endif
-
-TEST_F(StructTraitsTest, MAYBE_AcceleratedWidget) {
+TEST_F(StructTraitsTest, AcceleratedWidget) {
   gfx::AcceleratedWidget input(CastToAcceleratedWidget(1001));
   gfx::AcceleratedWidget output;
   mojo::test::SerializeAndDeserialize<gfx::mojom::AcceleratedWidget>(&input,
@@ -149,14 +146,15 @@ TEST_F(StructTraitsTest, GpuMemoryBufferHandle) {
   const gfx::GpuMemoryBufferId kId(99);
   const uint32_t kOffset = 126;
   const int32_t kStride = 256;
-  base::SharedMemory shared_memory;
-  ASSERT_TRUE(shared_memory.CreateAnonymous(1024));
-  ASSERT_TRUE(shared_memory.Map(1024));
+  base::UnsafeSharedMemoryRegion shared_memory_region =
+      base::UnsafeSharedMemoryRegion::Create(1024);
+  ASSERT_TRUE(shared_memory_region.IsValid());
+  ASSERT_TRUE(shared_memory_region.Map().IsValid());
 
   gfx::GpuMemoryBufferHandle handle;
   handle.type = gfx::SHARED_MEMORY_BUFFER;
   handle.id = kId;
-  handle.handle = base::SharedMemory::DuplicateHandle(shared_memory.handle());
+  handle.region = shared_memory_region.Duplicate();
   handle.offset = kOffset;
   handle.stride = kStride;
 
@@ -168,8 +166,8 @@ TEST_F(StructTraitsTest, GpuMemoryBufferHandle) {
   EXPECT_EQ(kOffset, output.offset);
   EXPECT_EQ(kStride, output.stride);
 
-  base::SharedMemory output_memory(output.handle, true);
-  EXPECT_TRUE(output_memory.Map(1024));
+  base::UnsafeSharedMemoryRegion output_memory = std::move(output.region);
+  EXPECT_TRUE(output_memory.Map().IsValid());
 
 #if defined(OS_LINUX)
   gfx::GpuMemoryBufferHandle handle2;
@@ -234,6 +232,38 @@ TEST_F(StructTraitsTest, PresentationFeedback) {
   EXPECT_EQ(timestamp, output.timestamp);
   EXPECT_EQ(interval, output.interval);
   EXPECT_EQ(flags, output.flags);
+}
+
+TEST_F(StructTraitsTest, RRectF) {
+  gfx::RRectF input(40, 50, 60, 70, 1, 2);
+  input.SetCornerRadii(RRectF::Corner::kUpperRight, 3, 4);
+  input.SetCornerRadii(RRectF::Corner::kLowerRight, 5, 6);
+  input.SetCornerRadii(RRectF::Corner::kLowerLeft, 7, 8);
+  EXPECT_EQ(input.GetType(), RRectF::Type::kComplex);
+  mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
+  gfx::RRectF output;
+  proxy->EchoRRectF(input, &output);
+  EXPECT_EQ(input, output);
+  input = gfx::RRectF(40, 50, 0, 70, 0);
+  EXPECT_EQ(input.GetType(), RRectF::Type::kEmpty);
+  proxy->EchoRRectF(input, &output);
+  EXPECT_EQ(input, output);
+  input = RRectF(40, 50, 60, 70, 0);
+  EXPECT_EQ(input.GetType(), RRectF::Type::kRect);
+  proxy->EchoRRectF(input, &output);
+  EXPECT_EQ(input, output);
+  input = RRectF(40, 50, 60, 70, 5);
+  EXPECT_EQ(input.GetType(), RRectF::Type::kSingle);
+  proxy->EchoRRectF(input, &output);
+  EXPECT_EQ(input, output);
+  input = RRectF(40, 50, 60, 70, 6, 3);
+  EXPECT_EQ(input.GetType(), RRectF::Type::kSimple);
+  proxy->EchoRRectF(input, &output);
+  EXPECT_EQ(input, output);
+  input = RRectF(40, 50, 60, 70, 30, 35);
+  EXPECT_EQ(input.GetType(), RRectF::Type::kOval);
+  proxy->EchoRRectF(input, &output);
+  EXPECT_EQ(input, output);
 }
 
 }  // namespace gfx

@@ -38,7 +38,7 @@
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_image.h"
-#include "third_party/blink/renderer/platform/length_functions.h"
+#include "third_party/blink/renderer/platform/geometry/length_functions.h"
 
 namespace blink {
 
@@ -63,7 +63,8 @@ void ShapeOutsideInfo::SetReferenceBoxLogicalSize(
                                       layout_box_.MarginWidth());
   }
 
-  switch (ReferenceBox(*layout_box_.StyleRef().ShapeOutside())) {
+  const ShapeValue& shape_value = *layout_box_.StyleRef().ShapeOutside();
+  switch (ReferenceBox(shape_value)) {
     case CSSBoxType::kMargin:
       UseCounter::Count(document, WebFeature::kShapeOutsideMarginBox);
       if (is_horizontal_writing_mode)
@@ -91,8 +92,12 @@ void ShapeOutsideInfo::SetReferenceBoxLogicalSize(
             WebFeature::kShapeOutsidePaddingBoxDifferentFromMarginBox);
       }
       break;
-    case CSSBoxType::kContent:
-      UseCounter::Count(document, WebFeature::kShapeOutsideContentBox);
+    case CSSBoxType::kContent: {
+      bool is_shape_image = shape_value.GetType() == ShapeValue::kImage;
+
+      if (!is_shape_image)
+        UseCounter::Count(document, WebFeature::kShapeOutsideContentBox);
+
       if (is_horizontal_writing_mode)
         new_reference_box_logical_size.Shrink(
             layout_box_.BorderAndPaddingWidth(),
@@ -102,12 +107,14 @@ void ShapeOutsideInfo::SetReferenceBoxLogicalSize(
             layout_box_.BorderAndPaddingHeight(),
             layout_box_.BorderAndPaddingWidth());
 
-      if (new_reference_box_logical_size != margin_box_for_use_counter) {
+      if (!is_shape_image &&
+          new_reference_box_logical_size != margin_box_for_use_counter) {
         UseCounter::Count(
             document,
             WebFeature::kShapeOutsideContentBoxDifferentFromMarginBox);
       }
       break;
+    }
     case CSSBoxType::kMissing:
       NOTREACHED();
       break;
@@ -139,14 +146,14 @@ static bool CheckShapeImageOrigin(Document& document,
 
   DCHECK(style_image.CachedImage());
   ImageResourceContent& image_resource = *(style_image.CachedImage());
-  if (image_resource.IsAccessAllowed(document.GetSecurityOrigin()))
+  if (image_resource.IsAccessAllowed())
     return true;
 
   const KURL& url = image_resource.Url();
   String url_string = url.IsNull() ? "''" : url.ElidedString();
-  document.AddConsoleMessage(
-      ConsoleMessage::Create(kSecurityMessageSource, kErrorMessageLevel,
-                             "Unsafe attempt to load URL " + url_string + "."));
+  document.AddConsoleMessage(ConsoleMessage::Create(
+      kSecurityMessageSource, mojom::ConsoleMessageLevel::kError,
+      "Unsafe attempt to load URL " + url_string + "."));
 
   return false;
 }
@@ -231,7 +238,8 @@ const Shape& ShapeOutsideInfo::ComputedShape() const {
                              writing_mode, margin);
       break;
     case ShapeValue::kImage:
-      DCHECK(shape_value.IsImageValid());
+      DCHECK(shape_value.GetImage());
+      DCHECK(shape_value.GetImage()->CanRender());
       shape_ = CreateShapeForImage(shape_value.GetImage(),
                                    shape_image_threshold, writing_mode, margin);
       break;
@@ -364,10 +372,12 @@ bool ShapeOutsideInfo::IsEnabledFor(const LayoutBox& box) {
   switch (shape_value->GetType()) {
     case ShapeValue::kShape:
       return shape_value->Shape();
-    case ShapeValue::kImage:
-      return shape_value->IsImageValid() &&
-             CheckShapeImageOrigin(box.GetDocument(),
-                                   *(shape_value->GetImage()));
+    case ShapeValue::kImage: {
+      StyleImage* image = shape_value->GetImage();
+      DCHECK(image);
+      return image->CanRender() &&
+             CheckShapeImageOrigin(box.GetDocument(), *image);
+    }
     case ShapeValue::kBox:
       return true;
   }

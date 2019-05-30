@@ -87,7 +87,7 @@ TEST_F(WriteFileTest, WithData) {
                             &last_access_filetime, &last_modified_filetime));
 #elif defined(OS_AIX)
   struct timeval times[2] = {};
-  ASSERT_EQ(utimes(foo_name.AsUTF8Unsafe().c_str(), times), 0);
+  ASSERT_EQ(utimes(foo_name.value().c_str(), times), 0);
 #else
   struct timeval times[2] = {};
   ASSERT_EQ(futimes(foo_file.GetPlatformFile(), times), 0);

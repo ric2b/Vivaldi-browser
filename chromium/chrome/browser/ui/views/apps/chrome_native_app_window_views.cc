@@ -8,7 +8,8 @@
 #include <utility>
 
 #include "apps/ui/views/app_window_frame_view.h"
-#include "base/macros.h"
+#include "base/no_destructor.h"
+#include "base/stl_util.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
@@ -53,40 +54,38 @@ const AcceleratorMapping kAppWindowKioskAppModeAcceleratorMap[] = {
   { ui::VKEY_NUMPAD0, ui::EF_CONTROL_DOWN, IDC_ZOOM_NORMAL },
 };
 
-void AddAcceleratorsFromMapping(const AcceleratorMapping mapping[],
-                                size_t mapping_length,
-                                std::map<ui::Accelerator, int>* accelerators) {
+std::map<ui::Accelerator, int> AcceleratorsFromMapping(
+    const AcceleratorMapping mapping_array[],
+    size_t mapping_length) {
+  std::map<ui::Accelerator, int> mapping;
   for (size_t i = 0; i < mapping_length; ++i) {
-    ui::Accelerator accelerator(mapping[i].keycode, mapping[i].modifiers);
-    (*accelerators)[accelerator] = mapping[i].command_id;
+    ui::Accelerator accelerator(mapping_array[i].keycode,
+                                mapping_array[i].modifiers);
+    mapping.insert(std::make_pair(accelerator, mapping_array[i].command_id));
   }
+
+  return mapping;
 }
 
 const std::map<ui::Accelerator, int>& GetAcceleratorTable() {
-  typedef std::map<ui::Accelerator, int> AcceleratorMap;
-  CR_DEFINE_STATIC_LOCAL(AcceleratorMap, accelerators, ());
   if (!chrome::IsRunningInForcedAppMode()) {
-    if (accelerators.empty()) {
-      AddAcceleratorsFromMapping(
-          kAppWindowAcceleratorMap,
-          arraysize(kAppWindowAcceleratorMap),
-          &accelerators);
-    }
-    return accelerators;
+    static base::NoDestructor<std::map<ui::Accelerator, int>> accelerators(
+        AcceleratorsFromMapping(kAppWindowAcceleratorMap,
+                                base::size(kAppWindowAcceleratorMap)));
+    return *accelerators;
   }
 
-  CR_DEFINE_STATIC_LOCAL(AcceleratorMap, app_mode_accelerators, ());
-  if (app_mode_accelerators.empty()) {
-    AddAcceleratorsFromMapping(
-        kAppWindowAcceleratorMap,
-        arraysize(kAppWindowAcceleratorMap),
-        &app_mode_accelerators);
-    AddAcceleratorsFromMapping(
-        kAppWindowKioskAppModeAcceleratorMap,
-        arraysize(kAppWindowKioskAppModeAcceleratorMap),
-        &app_mode_accelerators);
-  }
-  return app_mode_accelerators;
+  static base::NoDestructor<std::map<ui::Accelerator, int>>
+      app_mode_accelerators([]() {
+        std::map<ui::Accelerator, int> mapping = AcceleratorsFromMapping(
+            kAppWindowAcceleratorMap, base::size(kAppWindowAcceleratorMap));
+        std::map<ui::Accelerator, int> kiosk_mapping = AcceleratorsFromMapping(
+            kAppWindowKioskAppModeAcceleratorMap,
+            base::size(kAppWindowKioskAppModeAcceleratorMap));
+        mapping.insert(std::begin(kiosk_mapping), std::end(kiosk_mapping));
+        return mapping;
+      }());
+  return *app_mode_accelerators;
 }
 
 }  // namespace
@@ -165,8 +164,8 @@ void ChromeNativeAppWindowViews::InitializeDefaultWindow(
   // registered. This CHECK catches the case.
   CHECK(!is_kiosk_app_mode ||
         accelerator_table.size() ==
-            arraysize(kAppWindowAcceleratorMap) +
-                arraysize(kAppWindowKioskAppModeAcceleratorMap));
+            base::size(kAppWindowAcceleratorMap) +
+                base::size(kAppWindowKioskAppModeAcceleratorMap));
 
   // Ensure there is a ZoomController in kiosk mode, otherwise the processing
   // of the accelerators will cause a crash. Note CHECK here because DCHECK
@@ -174,9 +173,8 @@ void ChromeNativeAppWindowViews::InitializeDefaultWindow(
   CHECK(!is_kiosk_app_mode ||
         zoom::ZoomController::FromWebContents(web_view()->GetWebContents()));
 
-  for (std::map<ui::Accelerator, int>::const_iterator iter =
-           accelerator_table.begin();
-       iter != accelerator_table.end(); ++iter) {
+  for (auto iter = accelerator_table.begin(); iter != accelerator_table.end();
+       ++iter) {
     if (is_kiosk_app_mode && !chrome::IsCommandAllowedInAppMode(iter->second))
       continue;
 
@@ -269,7 +267,7 @@ bool ChromeNativeAppWindowViews::WidgetHasHitTestMask() const {
   return shape_ != NULL;
 }
 
-void ChromeNativeAppWindowViews::GetWidgetHitTestMask(gfx::Path* mask) const {
+void ChromeNativeAppWindowViews::GetWidgetHitTestMask(SkPath* mask) const {
   shape_->getBoundaryPath(mask);
 }
 
@@ -279,8 +277,7 @@ bool ChromeNativeAppWindowViews::AcceleratorPressed(
     const ui::Accelerator& accelerator) {
   const std::map<ui::Accelerator, int>& accelerator_table =
       GetAcceleratorTable();
-  std::map<ui::Accelerator, int>::const_iterator iter =
-      accelerator_table.find(accelerator);
+  auto iter = accelerator_table.find(accelerator);
   DCHECK(iter != accelerator_table.end());
   int command_id = iter->second;
   switch (command_id) {

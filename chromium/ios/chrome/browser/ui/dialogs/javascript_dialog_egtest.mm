@@ -6,14 +6,15 @@
 #import <UIKit/UIKit.h>
 #import <XCTest/XCTest.h>
 
+#include "base/bind.h"
 #include "base/ios/ios_util.h"
 #import "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/url_formatter/elide_url.h"
 #import "ios/chrome/browser/ui/dialogs/dialog_presenter.h"
-#include "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
-#include "ios/chrome/browser/ui/ui_util.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
@@ -26,7 +27,7 @@
 #import "ios/web/public/test/earl_grey/web_view_matchers.h"
 #include "ios/web/public/test/element_selector.h"
 #include "ios/web/public/test/url_test_util.h"
-#include "ios/web/public/web_state/web_state.h"
+#import "ios/web/public/web_state/web_state.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
@@ -233,10 +234,10 @@ void WaitForAlertToBeShown(NSString* alert_label) {
 
 // Waits for a JavaScript dialog to be shown from the page at |url|.
 void WaitForJavaScriptDialogToBeShown(const GURL& url) {
-  NSString* hostname = base::SysUTF8ToNSString(url.host());
-  NSString* expectedTitle = l10n_util::GetNSStringF(
-      IDS_JAVASCRIPT_MESSAGEBOX_TITLE, base::SysNSStringToUTF16(hostname));
-
+  base::string16 URLString = url_formatter::FormatUrlForSecurityDisplay(
+      url, url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS);
+  NSString* expectedTitle =
+      l10n_util::GetNSStringF(IDS_JAVASCRIPT_MESSAGEBOX_TITLE, URLString);
   WaitForAlertToBeShown(expectedTitle);
 }
 
@@ -259,9 +260,10 @@ void ShowJavaScriptDialog(JavaScriptAlertType type, const GURL& url) {
 void AssertJavaScriptAlertNotPresent(const GURL& url) {
   ConditionBlock condition = ^{
     NSError* error = nil;
-    NSString* hostname = base::SysUTF8ToNSString(url.host());
-    NSString* expectedTitle = l10n_util::GetNSStringF(
-        IDS_JAVASCRIPT_MESSAGEBOX_TITLE, base::SysNSStringToUTF16(hostname));
+    base::string16 URLString = url_formatter::FormatUrlForSecurityDisplay(
+        url, url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS);
+    NSString* expectedTitle =
+        l10n_util::GetNSStringF(IDS_JAVASCRIPT_MESSAGEBOX_TITLE, URLString);
 
     id<GREYMatcher> titleLabel =
         chrome_test_util::StaticTextWithAccessibilityLabel(expectedTitle);
@@ -441,10 +443,10 @@ void TapSuppressDialogsButton() {
 // Tests that a prompt dialog is shown, and that the completion block is called
 // with the correct value when the OK buton is tapped.
 - (void)testShowJavaScriptPromptOK {
-  // TODO(crbug.com/753098): Re-enable this test on iOS 11 iPad once
-  // grey_typeText works on iOS 11.
-  if (base::ios::IsRunningOnIOS11OrLater() && IsIPadIdiom()) {
-    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 11.");
+  // TODO(crbug.com/753098): Re-enable this test on iPad once grey_typeText
+  // works.
+  if (IsIPadIdiom()) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iPad.");
   }
 
   // Load the blank test page and show a prompt dialog.
@@ -463,10 +465,10 @@ void TapSuppressDialogsButton() {
 // Tests that a prompt dialog is shown, and that the completion block is called
 // with the correct value when the Cancel buton is tapped.
 - (void)testShowJavaScriptPromptCancelled {
-  // TODO(crbug.com/753098): Re-enable this test on iOS 11 iPad once
-  // grey_typeText works on iOS 11.
-  if (base::ios::IsRunningOnIOS11OrLater() && IsIPadIdiom()) {
-    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 11.");
+  // TODO(crbug.com/753098): Re-enable this test on iPad once grey_typeText
+  // works.
+  if (IsIPadIdiom()) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iPad.");
   }
 
   // Load the blank test page and show a prompt dialog.
@@ -519,9 +521,13 @@ void TapSuppressDialogsButton() {
 
   // Show settings.
   [ChromeEarlGreyUI openSettingsMenu];
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::
-                                          StaticTextWithAccessibilityLabelId(
-                                              IDS_IOS_SETTINGS_TITLE)]
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(grey_accessibilityLabel(
+                                              l10n_util::GetNSString(
+                                                  IDS_IOS_SETTINGS_TITLE)),
+                                          grey_accessibilityTrait(
+                                              UIAccessibilityTraitHeader),
+                                          nil)]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   // Show an alert.
@@ -545,11 +551,9 @@ void TapSuppressDialogsButton() {
 
 // Tests that an alert is presented after displaying the share menu.
 - (void)testShowJavaScriptAfterShareMenu {
-  // TODO(crbug.com/747622): re-enable this test on iOS 11 once earl grey can
-  // interact with the share menu.
-  if (base::ios::IsRunningOnIOS11OrLater()) {
-    EARL_GREY_TEST_DISABLED(@"Disabled on iOS 11.");
-  }
+  // TODO(crbug.com/747622): re-enable this test once earl grey can interact
+  // with the share menu.
+  EARL_GREY_TEST_DISABLED(@"Disabled until EG can use share menu.");
 
   // Load the blank test page.
   [self loadBlankTestPage];
@@ -606,11 +610,7 @@ void TapSuppressDialogsButton() {
   }
 
   // Wait for the alert to be shown.
-  NSString* hostname = base::SysUTF8ToNSString(self.onLoadPageURL.host());
-  NSString* expectedTitle = l10n_util::GetNSStringF(
-      IDS_JAVASCRIPT_MESSAGEBOX_TITLE, base::SysNSStringToUTF16(hostname));
-
-  WaitForAlertToBeShown(expectedTitle);
+  WaitForJavaScriptDialogToBeShown(self.onLoadPageURL);
 
   // Verify that the omnibox shows the correct URL when the dialog is visible.
   std::string title =

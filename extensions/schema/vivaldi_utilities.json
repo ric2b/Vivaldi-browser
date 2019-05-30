@@ -9,13 +9,41 @@
     },
     "types": [
       {
+        "id":  "Color",
+        "type":  "object",
+        "description":  "Object defining an RGB color.",
+        "properties":  {
+          "red": {
+            "type": "integer",
+            "name": "red",
+            "description": "Red color."
+          },
+          "green": {
+            "type": "integer",
+            "name": "green",
+            "description": "Green color."
+          },
+          "blue": {
+            "type": "integer",
+            "name": "blue",
+            "description": "Blue color."
+          }
+        }
+      },
+      {
         "id": "DialogName",
         "type": "string",
         "description": "Name of the dialog to set position for.",
-        "enum": [{
-          "name": "password",
-          "description": "The password dialog opening to save a password."
-        }]
+        "enum": [
+          {
+            "name": "chromecast",
+            "description": "The Chromecast dialog with source and destination. Centered over the active webview."
+          },
+          {
+            "name": "password",
+            "description": "The password dialog opening to save a password."
+          }
+        ]
       },
       {
         "id": "FlowDirection",
@@ -44,6 +72,18 @@
           "schemeValid": {
             "type": "boolean",
             "description": "The protocol scheme is known and one we can show directly."
+          },
+          "schemeParsed": {
+            "type": "string",
+            "description": "The parsed and authorative protocol scheme as parsed by Chromium."
+          },
+          "normalizedUrl": {
+            "type": "string",
+            "description": "Returns the raw spec, i.e., the full text of the URL, in canonical UTF-8, if the URL is valid."
+          },
+          "externalHandler": {
+            "type": "boolean",
+            "description": "The protocol scheme will be passed to a confirmation and run in an external protocol handler."
           }
         }
       },
@@ -102,10 +142,16 @@
     ],
     "functions": [
       {
-        "name": "basicPrint",
+        "name": "print",
         "type": "function",
-        "description": "Open basic print dialog",
+        "description": "Open print preview dialog for the given tab.",
         "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "description": "The tab id for the tab we want to print.",
+            "minimum": 0
+          }
         ]
       },
       {
@@ -402,10 +448,6 @@
             "name": "callback",
             "description": "Return value true for success, false for failure.",
             "parameters": [
-              {
-                "name": "result",
-                "type": "boolean"
-              }
             ]
           }
         ]
@@ -439,7 +481,7 @@
             "parameters": [
               {
                 "name": "result",
-                "type": "string"
+                "type": "boolean"
               }
             ]
           }
@@ -456,7 +498,7 @@
             "parameters": [
               {
                 "name": "result",
-                "type": "string"
+                "type": "boolean"
               }
             ]
           }
@@ -488,10 +530,6 @@
             "type": "function",
             "name": "callback",
             "parameters": [
-              {
-                "name": "result",
-                "type": "string"
-              }
             ]
           }
         ]
@@ -505,10 +543,6 @@
             "type": "function",
             "name": "callback",
             "parameters": [
-              {
-                "name": "result",
-                "type": "string"
-              }
             ]
           }
         ]
@@ -530,10 +564,6 @@
             "type": "function",
             "name": "callback",
             "parameters": [
-              {
-                "name": "result",
-                "type": "string"
-              }
             ]
           }
         ]
@@ -606,10 +636,6 @@
             "type": "function",
             "name": "callback",
             "parameters": [
-              {
-                "name": "result",
-                "type": "string"
-              }
             ]
           }
         ]
@@ -643,7 +669,7 @@
           {
             "name": "urls",
             "type": "array",
-            "items": {"type": "string"}
+            "items": { "type": "string" }
           },
           {
             "type": "function",
@@ -670,6 +696,24 @@
                 "name": "results",
                 "type": "boolean",
                 "description": "true if the welcome page can be shown, otherwise false."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "canShowWhatsNewPage",
+        "type": "function",
+        "description": "Checks whether showing the what new page is allowed.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "boolean",
+                "description": "true if the whats new page can be shown, otherwise false."
               }
             ]
           }
@@ -735,6 +779,86 @@
             ]
           }
         ]
+      },
+      {
+        "name": "isRazerChromaAvailable",
+        "type": "function",
+        "description": "Is the Razer Chroma API available.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "boolean",
+                "description": "true if the Razer Chroma API is available, otherwise false."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "isRazerChromaReady",
+        "type": "function",
+        "description": "Is the Razer Chroma API initialized and ready to accept commands.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "boolean",
+                "description": "true if the Razer Chroma API is ready, otherwise false."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setRazerChromaColor",
+        "type": "function",
+        "description": "Set the color(s) for the configured Razer Chroma lights.",
+        "parameters": [
+          {
+            "name": "colors",
+            "type": "array",
+            "items": {
+              "$ref": "Color",
+              "description": "Array of colors to be set for the configured lights. If multiple colors are set, it will cycle quickly between them from the first to the last."
+            }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "boolean",
+                "description": "true if the Razer Chroma API is available, otherwise false."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "isDownloadManagerReady",
+        "type": "function",
+        "description": "Checks whether the download manager has initialized. If not, register for the onDownloadManagerReady event to be notified when it's ready.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "ready",
+                "type": "boolean",
+                "description": "true if the download manager is ready, otherwise false."
+              }
+            ]
+          }
+        ]
       }
     ],
     "events": [
@@ -747,7 +871,7 @@
             "type": "integer",
             "name": "scrollType",
             "minimum": 0,
-            "description":"Device that triggers scrolling. 1: Mouse, 2: Trackpad 3: Inertial"
+            "description": "Device that triggers scrolling. 1: Mouse, 2: Trackpad 3: Inertial"
           }
         ]
       },
@@ -784,11 +908,28 @@
         "description": "Fires for password icon status change.",
         "parameters": [
           {
+            "name": "windowId",
+            "type": "integer",
+            "description": "Window id to show/hide icon for"
+          },
+          {
             "name": "show",
             "type": "boolean",
             "description": "Whether to show or hide icon"
           }
         ]
+      },
+      {
+        "name": "onDownloadManagerReady",
+        "type": "function",
+        "description": "Fired when the download manager has loaded all its data.",
+        "parameters": []
+      },
+      {
+        "name": "onRazerChromaReady",
+        "type": "function",
+        "description": "Fired when the Razer Chroma API has been initialized.",
+        "parameters": []
       }
     ]
   }

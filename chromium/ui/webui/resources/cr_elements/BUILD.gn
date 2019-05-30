@@ -14,14 +14,17 @@ group("closure_compile") {
     "cr_dialog:closure_compile",
     "cr_drawer:closure_compile",
     "cr_expand_button:closure_compile",
+    "cr_icon_button:closure_compile",
     "cr_input:closure_compile",
     "cr_link_row:closure_compile",
     "cr_profile_avatar_selector:closure_compile",
     "cr_radio_button:closure_compile",
+    "cr_radio_group:closure_compile",
     "cr_searchable_drop_down:closure_compile",
     "cr_slider:closure_compile",
     "cr_toast:closure_compile",
     "cr_toggle:closure_compile",
+    "cr_view_manager:closure_compile",
     "policy:closure_compile",
   ]
 }

@@ -29,15 +29,16 @@
 #include <memory>
 
 #include "third_party/blink/public/common/indexeddb/web_idb_types.h"
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database.h"
+#include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/dom/dom_string_list.h"
 #include "third_party/blink/renderer/core/dom/events/event_listener.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/event_modules.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_metadata.h"
 #include "third_party/blink/renderer/modules/indexeddb/indexed_db.h"
+#include "third_party/blink/renderer/modules/indexeddb/web_idb_database.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/deque.h"
@@ -74,7 +75,7 @@ class MODULES_EXPORT IDBTransaction final
   static IDBTransaction* CreateNonVersionChange(ScriptState*,
                                                 int64_t,
                                                 const HashSet<String>& scope,
-                                                WebIDBTransactionMode,
+                                                mojom::IDBTransactionMode,
                                                 IDBDatabase*);
   static IDBTransaction* CreateVersionChange(
       ExecutionContext*,
@@ -82,10 +83,29 @@ class MODULES_EXPORT IDBTransaction final
       IDBDatabase*,
       IDBOpenDBRequest*,
       const IDBDatabaseMetadata& old_metadata);
+
+  // For observer transactions.
+  IDBTransaction(ExecutionContext*,
+                 int64_t,
+                 const HashSet<String>& scope,
+                 IDBDatabase*);
+  // For non-upgrade transactions.
+  IDBTransaction(ScriptState*,
+                 int64_t,
+                 const HashSet<String>& scope,
+                 mojom::IDBTransactionMode,
+                 IDBDatabase*);
+  // For upgrade transactions.
+  IDBTransaction(ExecutionContext*,
+                 int64_t,
+                 IDBDatabase*,
+                 IDBOpenDBRequest*,
+                 const IDBDatabaseMetadata&);
   ~IDBTransaction() override;
+
   void Trace(blink::Visitor*) override;
 
-  static WebIDBTransactionMode StringToMode(const String&);
+  static mojom::IDBTransactionMode StringToMode(const String&);
 
   // When the connection is closed backend will be 0.
   WebIDBDatabase* BackendDB() const;
@@ -94,10 +114,14 @@ class MODULES_EXPORT IDBTransaction final
   bool IsActive() const { return state_ == kActive; }
   bool IsFinished() const { return state_ == kFinished; }
   bool IsFinishing() const { return state_ == kFinishing; }
-  bool IsReadOnly() const { return mode_ == kWebIDBTransactionModeReadOnly; }
-  bool IsVersionChange() const {
-    return mode_ == kWebIDBTransactionModeVersionChange;
+  bool IsReadOnly() const {
+    return mode_ == mojom::IDBTransactionMode::ReadOnly;
   }
+  bool IsVersionChange() const {
+    return mode_ == mojom::IDBTransactionMode::VersionChange;
+  }
+  int64_t NumErrorsHandled() const { return num_errors_handled_; }
+  void IncrementNumErrorsHandled() { ++num_errors_handled_; }
 
   // Implement the IDBTransaction IDL
   const String& mode() const;
@@ -106,6 +130,7 @@ class MODULES_EXPORT IDBTransaction final
   DOMException* error() const { return error_; }
   IDBObjectStore* objectStore(const String& name, ExceptionState&);
   void abort(ExceptionState&);
+  void commit(ExceptionState&);
 
   void RegisterRequest(IDBRequest*);
   void UnregisterRequest(IDBRequest*);
@@ -133,9 +158,9 @@ class MODULES_EXPORT IDBTransaction final
   void SetActive(bool);
   void SetError(DOMException*);
 
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(abort);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(complete);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(error);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(abort, kAbort)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(complete, kComplete)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(error, kError)
 
   void OnAbort(DOMException*);
   void OnComplete();
@@ -166,26 +191,6 @@ class MODULES_EXPORT IDBTransaction final
  private:
   using IDBObjectStoreMap = HeapHashMap<String, Member<IDBObjectStore>>;
 
-  // For observer transactions.
-  IDBTransaction(ExecutionContext*,
-                 int64_t,
-                 const HashSet<String>& scope,
-                 IDBDatabase*);
-
-  // For non-upgrade transactions.
-  IDBTransaction(ScriptState*,
-                 int64_t,
-                 const HashSet<String>& scope,
-                 WebIDBTransactionMode,
-                 IDBDatabase*);
-
-  // For upgrade transactions.
-  IDBTransaction(ExecutionContext*,
-                 int64_t,
-                 IDBDatabase*,
-                 IDBOpenDBRequest*,
-                 const IDBDatabaseMetadata&);
-
   void EnqueueEvent(Event*);
 
   // Called when a transaction is aborted.
@@ -205,7 +210,7 @@ class MODULES_EXPORT IDBTransaction final
   const int64_t id_;
   Member<IDBDatabase> database_;
   Member<IDBOpenDBRequest> open_db_request_;
-  const WebIDBTransactionMode mode_;
+  const mojom::IDBTransactionMode mode_;
 
   // The names of the object stores that make up this transaction's scope.
   //
@@ -222,6 +227,7 @@ class MODULES_EXPORT IDBTransaction final
 
   State state_ = kActive;
   bool has_pending_activity_ = true;
+  int64_t num_errors_handled_ = 0;
   Member<DOMException> error_;
 
   HeapListHashSet<Member<IDBRequest>> request_list_;

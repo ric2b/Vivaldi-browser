@@ -23,7 +23,6 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_frontend_host.h"
-#include "net/url_request/url_fetcher_delegate.h"
 #include "ui/gfx/geometry/size.h"
 
 class DevToolsAndroidBridge;
@@ -40,7 +39,6 @@ class WebContents;
 class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
                            public DevToolsAndroidBridge::DeviceCountListener,
                            public content::DevToolsAgentHostClient,
-                           public net::URLFetcherDelegate,
                            public DevToolsFileHelper::Delegate {
  public:
   class Delegate {
@@ -87,7 +85,6 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
                           const base::Value* arg2,
                           const base::Value* arg3);
   void AttachTo(const scoped_refptr<content::DevToolsAgentHost>& agent_host);
-  void Reload();
   void Detach();
   bool IsAttachedTo(content::DevToolsAgentHost* agent_host);
 
@@ -168,9 +165,6 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
   void RegisterExtensionsAPI(const std::string& origin,
                              const std::string& script) override;
 
-  // net::URLFetcherDelegate overrides.
-  void OnURLFetchComplete(const net::URLFetcher* source) override;
-
   void EnableRemoteDeviceCounter(bool enable);
 
   void SendMessageAck(int request_id,
@@ -185,7 +179,6 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
                               const base::ListValue& targets);
 
   void ReadyToCommitNavigation(content::NavigationHandle* navigation_handle);
-  void DocumentAvailableInMainFrame();
   void DocumentOnLoadCompletedInMainFrame();
   void DidNavigateMainFrame();
   void FrontendLoaded();
@@ -244,16 +237,12 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
 
   bool devices_updates_enabled_;
   bool frontend_loaded_;
-  bool reloading_;
   std::unique_ptr<DevToolsTargetsUIHandler> remote_targets_handler_;
   std::unique_ptr<PortForwardingStatusSerializer> port_status_serializer_;
   PrefChangeRegistrar pref_change_registrar_;
   std::unique_ptr<DevToolsEmbedderMessageDispatcher>
       embedder_message_dispatcher_;
   GURL url_;
-
-  using PendingRequestsMap = std::map<const net::URLFetcher*, DispatchCallback>;
-  PendingRequestsMap pending_requests_;
 
   class NetworkResourceLoader;
   std::set<std::unique_ptr<NetworkResourceLoader>, base::UniquePtrComparator>

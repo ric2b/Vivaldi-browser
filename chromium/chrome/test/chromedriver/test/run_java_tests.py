@@ -3,13 +3,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""Runs the WebDriver Java acceptance tests.
-
-This script is called from chrome/test/chromedriver/run_all_tests.py and reports
-results using the buildbot annotation scheme.
-
-For ChromeDriver documentation, refer to http://code.google.com/p/chromedriver.
-"""
+"""Runs the WebDriver Java acceptance tests."""
 
 import optparse
 import os
@@ -64,7 +58,7 @@ class TestResult(object):
     return self._failure
 
 
-def _Run(java_tests_src_dir, test_filter,
+def _Run(java_tests_src_dir, test_filter, ready_to_run_tests,
          chromedriver_path, chrome_path, log_path, android_package_key,
          verbose, debug):
   """Run the WebDriver Java tests and return the test results.
@@ -73,6 +67,8 @@ def _Run(java_tests_src_dir, test_filter,
     java_tests_src_dir: the java test source code directory.
     test_filter: the filter to use when choosing tests to run. Format is same
         as Google C++ Test format.
+    readyToRunTests: tests that need to run regardless of
+        @NotYetImplemented annotation
     chromedriver_path: path to ChromeDriver exe.
     chrome_path: path to Chrome exe.
     log_path: path to server log.
@@ -90,7 +86,8 @@ def _Run(java_tests_src_dir, test_filter,
     if util.IsLinux() and android_package_key is None:
       # Workaround for crbug.com/611886 and
       # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1695
-      chrome_wrapper_path = os.path.join(java_tests_src_dir, 'chrome-wrapper-no-sandbox')
+      chrome_wrapper_path = os.path.join(java_tests_src_dir,
+                                         'chrome-wrapper-no-sandbox')
       with open(chrome_wrapper_path, 'w') as f:
         f.write('#!/bin/sh\n')
         f.write('exec "%s" --no-sandbox --disable-gpu "$@"\n' %
@@ -124,6 +121,8 @@ def _Run(java_tests_src_dir, test_filter,
     # Test jar actually takes a regex. Convert from glob.
     test_filter = test_filter.replace('*', '.*')
     sys_props += ['filter=' + test_filter]
+  if ready_to_run_tests:
+    sys_props += ['readyToRun=' + ready_to_run_tests]
 
   jvm_args = []
   if debug:
@@ -221,7 +220,8 @@ def _RunAntTest(java_tests_src_dir, jvm_args, verbose, sys_props):
 def PrintTestResults(results):
   """Prints the given results in a format recognized by the buildbot."""
 
-  # If no results that means something went wrong and we should return non zero value
+  # If no results that means something went wrong and
+  # we should return non zero value
   if len(results) == 0:
     print 'No tests were run'
     return 1
@@ -264,9 +264,6 @@ def main():
       '', '--log-path',
       help='Output verbose server logs to this file')
   parser.add_option(
-      '', '--chrome-version', default='HEAD',
-      help='Version of chrome. Default is \'HEAD\'')
-  parser.add_option(
       '', '--android-package', help='Android package key')
   parser.add_option(
       '', '--filter', type='string', default=None,
@@ -288,13 +285,10 @@ def main():
   if options.android_package:
     if options.android_package not in constants.PACKAGE_INFO:
       parser.error('Invalid --android-package')
-    if options.chrome_version != 'HEAD':
-      parser.error('Android does not support the --chrome-version argument.')
     environment = test_environment.AndroidTestEnvironment(
         options.android_package)
   else:
-    environment = test_environment.DesktopTestEnvironment(
-        options.chrome_version)
+    environment = test_environment.DesktopTestEnvironment()
 
   try:
     environment.GlobalSetUp()
@@ -313,6 +307,7 @@ def main():
           test_filter += '-'
         test_filter += ':'.join(environment.GetDisabledJavaTestMatchers())
       test_filters = [test_filter]
+    ready_to_run_tests = ':'.join(environment.GetReadyToRunJavaTestMatchers())
 
     java_tests_src_dir = os.path.join(chrome_paths.GetSrc(), 'chrome', 'test',
                                       'chromedriver', 'third_party',
@@ -334,6 +329,7 @@ def main():
       results += _Run(
           java_tests_src_dir=java_tests_src_dir,
           test_filter=filter,
+          ready_to_run_tests=ready_to_run_tests,
           chromedriver_path=options.chromedriver,
           chrome_path=util.GetAbsolutePathOfUserPath(options.chrome),
           log_path=options.log_path,
@@ -347,7 +343,8 @@ def main():
       os.remove(os.path.join(java_tests_src_dir, "build.xml"))
     if(os.path.exists(os.path.join(java_tests_src_dir, "results.xml"))):
       os.remove(os.path.join(java_tests_src_dir, "results.xml"))
-    if(os.path.exists(os.path.join(java_tests_src_dir, "chrome-wrapper-no-sandbox"))):
+    if(os.path.exists(os.path.join(java_tests_src_dir,
+                                   "chrome-wrapper-no-sandbox"))):
       os.remove(os.path.join(java_tests_src_dir, "chrome-wrapper-no-sandbox"))
     if(os.path.exists(os.path.join(java_tests_src_dir, "chrome-wrapper"))):
       os.remove(os.path.join(java_tests_src_dir, "chrome-wrapper"))

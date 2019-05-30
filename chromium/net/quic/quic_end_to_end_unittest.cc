@@ -75,7 +75,7 @@ class TestTransactionFactory : public HttpTransactionFactory {
 
   HttpCache* GetCache() override { return nullptr; }
 
-  HttpNetworkSession* GetSession() override { return session_.get(); };
+  HttpNetworkSession* GetSession() override { return session_.get(); }
 
  private:
   std::unique_ptr<HttpNetworkSession> session_;
@@ -107,8 +107,7 @@ class QuicEndToEndTest : public ::testing::TestWithParam<TestParams>,
         cert_transparency_verifier_(new MultiLogCTVerifier()),
         ssl_config_service_(new SSLConfigServiceDefaults),
         proxy_resolution_service_(ProxyResolutionService::CreateDirect()),
-        auth_handler_factory_(
-            HttpAuthHandlerFactory::CreateDefault(&host_resolver_)),
+        auth_handler_factory_(HttpAuthHandlerFactory::CreateDefault()),
         strike_register_no_startup_period_(false) {
     request_.method = "GET";
     request_.url = GURL("https://test.example.com/");
@@ -157,8 +156,9 @@ class QuicEndToEndTest : public ::testing::TestWithParam<TestParams>,
 
     // Use a mapped host resolver so that request for test.example.com (port 80)
     // reach the server running on localhost.
-    std::string map_rule = "MAP test.example.com test.example.com:" +
-                           base::IntToString(server_->server_address().port());
+    std::string map_rule =
+        "MAP test.example.com test.example.com:" +
+        base::NumberToString(server_->server_address().port());
     EXPECT_TRUE(host_resolver_.AddRuleFromString(map_rule));
 
     // To simplify the test, and avoid the race with the HTTP request, we force
@@ -179,8 +179,6 @@ class QuicEndToEndTest : public ::testing::TestWithParam<TestParams>,
         quic::test::kInitialStreamFlowControlWindowForTest);
     server_config_.SetInitialSessionFlowControlWindowToSend(
         quic::test::kInitialSessionFlowControlWindowForTest);
-    server_config_options_.token_binding_params =
-        quic::QuicTagVector{quic::kTB10, quic::kP256};
     server_.reset(new QuicSimpleServer(
         quic::test::crypto_test_utils::ProofSourceForTesting(), server_config_,
         server_config_options_, quic::AllSupportedVersions(),
@@ -263,9 +261,9 @@ class QuicEndToEndTest : public ::testing::TestWithParam<TestParams>,
   bool strike_register_no_startup_period_;
 };
 
-INSTANTIATE_TEST_CASE_P(Tests,
-                        QuicEndToEndTest,
-                        ::testing::ValuesIn(GetTestParams()));
+INSTANTIATE_TEST_SUITE_P(Tests,
+                         QuicEndToEndTest,
+                         ::testing::ValuesIn(GetTestParams()));
 
 TEST_P(QuicEndToEndTest, LargeGetWithNoPacketLoss) {
   std::string response(10 * 1024, 'x');
@@ -280,27 +278,6 @@ TEST_P(QuicEndToEndTest, LargeGetWithNoPacketLoss) {
   base::RunLoop().Run();
 
   CheckResponse(consumer, "HTTP/1.1 200", response);
-}
-
-TEST_P(QuicEndToEndTest, TokenBinding) {
-  // Enable token binding and re-initialize the TestTransactionFactory.
-  session_params_.enable_token_binding = true;
-  transaction_factory_.reset(
-      new TestTransactionFactory(session_params_, session_context_));
-
-  AddToCache(request_.url.PathForRequest(), 200, "OK", kResponseBody);
-
-  TestTransactionConsumer consumer(DEFAULT_PRIORITY,
-                                   transaction_factory_.get());
-  consumer.Start(&request_, NetLogWithSource());
-
-  // Will terminate when the last consumer completes.
-  base::RunLoop().Run();
-
-  CheckResponse(consumer, "HTTP/1.1 200", kResponseBody);
-  HttpRequestHeaders headers;
-  ASSERT_TRUE(consumer.transaction()->GetFullRequestHeaders(&headers));
-  EXPECT_TRUE(headers.HasHeader(HttpRequestHeaders::kTokenBinding));
 }
 
 // crbug.com/559173

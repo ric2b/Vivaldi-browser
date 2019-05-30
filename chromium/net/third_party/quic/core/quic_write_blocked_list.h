@@ -1,7 +1,7 @@
 // Copyright 2014 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-//
+
 #ifndef NET_THIRD_PARTY_QUIC_CORE_QUIC_WRITE_BLOCKED_LIST_H_
 #define NET_THIRD_PARTY_QUIC_CORE_QUIC_WRITE_BLOCKED_LIST_H_
 
@@ -10,9 +10,10 @@
 
 #include "base/macros.h"
 #include "net/third_party/quic/core/quic_packets.h"
+#include "net/third_party/quic/platform/api/quic_containers.h"
 #include "net/third_party/quic/platform/api/quic_export.h"
 #include "net/third_party/quic/platform/api/quic_map_util.h"
-#include "net/third_party/spdy/core/priority_write_scheduler.h"
+#include "net/third_party/quiche/src/spdy/core/priority_write_scheduler.h"
 
 namespace quic {
 
@@ -177,13 +178,12 @@ class QUIC_EXPORT_PRIVATE QuicWriteBlockedList {
       bool is_blocked;
     };
 
-    std::vector<StreamIdBlockedPair>::const_iterator begin() const {
-      return streams_.cbegin();
-    }
+    // Optimized for the typical case of 2 static streams per session.
+    typedef QuicInlinedVector<StreamIdBlockedPair, 2> StreamsVector;
 
-    std::vector<StreamIdBlockedPair>::const_iterator end() const {
-      return streams_.cend();
-    }
+    StreamsVector::const_iterator begin() const { return streams_.cbegin(); }
+
+    StreamsVector::const_iterator end() const { return streams_.cend(); }
 
     size_t num_blocked() const { return num_blocked_; }
 
@@ -254,7 +254,7 @@ class QUIC_EXPORT_PRIVATE QuicWriteBlockedList {
 
    private:
     size_t num_blocked_ = 0;
-    std::vector<StreamIdBlockedPair> streams_;
+    StreamsVector streams_;
   };
 
   StaticStreamCollection static_stream_collection_;

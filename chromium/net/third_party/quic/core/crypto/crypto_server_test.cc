@@ -11,11 +11,11 @@
 #include "net/third_party/quic/core/crypto/cert_compressor.h"
 #include "net/third_party/quic/core/crypto/common_cert_set.h"
 #include "net/third_party/quic/core/crypto/crypto_handshake.h"
-#include "net/third_party/quic/core/crypto/crypto_server_config_protobuf.h"
 #include "net/third_party/quic/core/crypto/crypto_utils.h"
 #include "net/third_party/quic/core/crypto/proof_source.h"
 #include "net/third_party/quic/core/crypto/quic_crypto_server_config.h"
 #include "net/third_party/quic/core/crypto/quic_random.h"
+#include "net/third_party/quic/core/proto/crypto_server_config.pb.h"
 #include "net/third_party/quic/core/quic_socket_address_coder.h"
 #include "net/third_party/quic/core/quic_utils.h"
 #include "net/third_party/quic/core/tls_server_handshaker.h"
@@ -107,7 +107,7 @@ class CryptoServerTest : public QuicTestWithParam<TestParams> {
   CryptoServerTest()
       : rand_(QuicRandom::GetInstance()),
         client_address_(QuicIpAddress::Loopback4(), 1234),
-        client_version_(PROTOCOL_UNSUPPORTED, QUIC_VERSION_UNSUPPORTED),
+        client_version_(UnsupportedQuicVersion()),
         config_(QuicCryptoServerConfig::TESTING,
                 rand_,
                 crypto_test_utils::ProofSourceForTesting(),
@@ -177,7 +177,7 @@ class CryptoServerTest : public QuicTestWithParam<TestParams> {
 
     QuicStringPiece scfg;
     ASSERT_TRUE(out_.GetStringPiece(kSCFG, &scfg));
-    server_config_ = CryptoFramer::ParseMessage(scfg, Perspective::IS_CLIENT);
+    server_config_ = CryptoFramer::ParseMessage(scfg);
 
     QuicStringPiece scid;
     ASSERT_TRUE(server_config_->GetStringPiece(kSCID, &scid));
@@ -236,7 +236,7 @@ class CryptoServerTest : public QuicTestWithParam<TestParams> {
 
   void ShouldSucceed(const CryptoHandshakeMessage& message) {
     bool called = false;
-    QuicSocketAddress server_address;
+    QuicSocketAddress server_address(QuicIpAddress::Any4(), 5);
     config_.ValidateClientHello(
         message, client_address_.host(), server_address,
         supported_versions_.front().transport_version, &clock_, signed_config_,
@@ -254,7 +254,7 @@ class CryptoServerTest : public QuicTestWithParam<TestParams> {
   void ShouldFailMentioning(const char* error_substr,
                             const CryptoHandshakeMessage& message,
                             bool* called) {
-    QuicSocketAddress server_address;
+    QuicSocketAddress server_address(QuicIpAddress::Any4(), 5);
     config_.ValidateClientHello(
         message, client_address_.host(), server_address,
         supported_versions_.front().transport_version, &clock_, signed_config_,
@@ -286,11 +286,10 @@ class CryptoServerTest : public QuicTestWithParam<TestParams> {
       if (should_succeed_) {
         ASSERT_EQ(error, QUIC_NO_ERROR)
             << "Message failed with error " << error_details << ": "
-            << result_->client_hello.DebugString(Perspective::IS_SERVER);
+            << result_->client_hello.DebugString();
       } else {
         ASSERT_NE(error, QUIC_NO_ERROR)
-            << "Message didn't fail: "
-            << result_->client_hello.DebugString(Perspective::IS_SERVER);
+            << "Message didn't fail: " << result_->client_hello.DebugString();
 
         EXPECT_TRUE(error_details.find(error_substr_) != QuicString::npos)
             << error_substr_ << " not in " << error_details;
@@ -313,13 +312,14 @@ class CryptoServerTest : public QuicTestWithParam<TestParams> {
       QuicReferenceCountedPointer<ValidateCallback::Result> result,
       bool should_succeed,
       const char* error_substr) {
-    QuicSocketAddress server_address;
+    QuicSocketAddress server_address(QuicIpAddress::Any4(), 5);
     QuicConnectionId server_designated_connection_id =
-        rand_for_id_generation_.RandUint64();
+        TestConnectionId(rand_for_id_generation_.RandUint64());
     bool called;
     config_.ProcessClientHello(
-        result, /*reject_only=*/false, /*connection_id=*/1, server_address,
-        client_address_, supported_versions_.front(), supported_versions_,
+        result, /*reject_only=*/false,
+        /*connection_id=*/TestConnectionId(1), server_address, client_address_,
+        supported_versions_.front(), supported_versions_,
         use_stateless_rejects_, server_designated_connection_id, &clock_, rand_,
         &compressed_certs_cache_, params_, signed_config_,
         /*total_framing_overhead=*/50, chlo_packet_size_,
@@ -356,7 +356,7 @@ class CryptoServerTest : public QuicTestWithParam<TestParams> {
   // server-designated connection id.  Once the check is complete,
   // allow the random id-generator to move to the next value.
   void CheckForServerDesignatedConnectionId() {
-    QuicConnectionId server_designated_connection_id;
+    uint64_t server_designated_connection_id;
     if (!RejectsAreStateless()) {
       EXPECT_EQ(QUIC_CRYPTO_MESSAGE_PARAMETER_NOT_FOUND,
                 out_.GetUint64(kRCID, &server_designated_connection_id));
@@ -415,9 +415,9 @@ class CryptoServerTest : public QuicTestWithParam<TestParams> {
   std::unique_ptr<CryptoHandshakeMessage> server_config_;
 };
 
-INSTANTIATE_TEST_CASE_P(CryptoServerTests,
-                        CryptoServerTest,
-                        ::testing::ValuesIn(GetTestParams()));
+INSTANTIATE_TEST_SUITE_P(CryptoServerTests,
+                         CryptoServerTest,
+                         ::testing::ValuesIn(GetTestParams()));
 
 TEST_P(CryptoServerTest, BadSNI) {
   // clang-format off
@@ -723,6 +723,26 @@ TEST_P(CryptoServerTest, CorruptSourceAddressToken) {
   CheckRejectReasons(kRejectReasons, QUIC_ARRAYSIZE(kRejectReasons));
 }
 
+TEST_P(CryptoServerTest, CorruptSourceAddressTokenIsStillAccepted) {
+  // This tests corrupted source address token.
+  CryptoHandshakeMessage msg = crypto_test_utils::CreateCHLO(
+      {{"PDMD", "X509"},
+       {"AEAD", "AESG"},
+       {"KEXS", "C255"},
+       {"SCID", scid_hex_},
+       {"#004b5453", (QuicString(1, 'X') + srct_hex_)},
+       {"PUBS", pub_hex_},
+       {"NONC", nonce_hex_},
+       {"XLCT", XlctHexString()},
+       {"VER\0", client_version_string_}},
+      kClientHelloMinimumSize);
+
+  config_.set_validate_source_address_token(false);
+
+  ShouldSucceed(msg);
+  EXPECT_EQ(kSHLO, out_.tag());
+}
+
 TEST_P(CryptoServerTest, CorruptClientNonceAndSourceAddressToken) {
   // This test corrupts client nonce and source address token.
   CryptoHandshakeMessage msg = crypto_test_utils::CreateCHLO(
@@ -821,7 +841,7 @@ TEST_P(CryptoServerTest, ProofForSuppliedServerConfig) {
   EXPECT_TRUE(out_.GetStringPiece(kPROF, &proof));
   EXPECT_TRUE(out_.GetStringPiece(kSCFG, &scfg_str));
   std::unique_ptr<CryptoHandshakeMessage> scfg(
-      CryptoFramer::ParseMessage(scfg_str, Perspective::IS_CLIENT));
+      CryptoFramer::ParseMessage(scfg_str));
   QuicStringPiece scid;
   EXPECT_TRUE(scfg->GetStringPiece(kSCID, &scid));
   EXPECT_NE(scid, kOldConfigId);
@@ -1018,8 +1038,7 @@ TEST_F(CryptoServerConfigGenerationTest, Determinism) {
   std::unique_ptr<CryptoHandshakeMessage> scfg_b(
       b.AddDefaultConfig(&rand_b, &clock, options));
 
-  ASSERT_EQ(scfg_a->DebugString(Perspective::IS_SERVER),
-            scfg_b->DebugString(Perspective::IS_SERVER));
+  ASSERT_EQ(scfg_a->DebugString(), scfg_b->DebugString());
 }
 
 TEST_F(CryptoServerConfigGenerationTest, SCIDVaries) {
@@ -1070,7 +1089,7 @@ TEST_F(CryptoServerConfigGenerationTest, SCIDIsHashOfServerConfig) {
 
   scfg->Erase(kSCID);
   scfg->MarkDirty();
-  const QuicData& serialized(scfg->GetSerialized(Perspective::IS_SERVER));
+  const QuicData& serialized(scfg->GetSerialized());
 
   uint8_t digest[SHA256_DIGEST_LENGTH];
   SHA256(reinterpret_cast<const uint8_t*>(serialized.data()),

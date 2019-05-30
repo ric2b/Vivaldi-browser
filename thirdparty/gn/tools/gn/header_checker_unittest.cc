@@ -195,32 +195,34 @@ TEST_F(HeaderCheckerTest, CheckInclude) {
 
   // A file in target A can't include a header from D because A has no
   // dependency on D.
-  EXPECT_FALSE(checker->CheckInclude(&a_, input_file, d_header, range, &err));
-  EXPECT_TRUE(err.has_error());
+  std::vector<Err> errors;
+  checker->CheckInclude(&a_, input_file, d_header, range, &errors);
+  EXPECT_GT(errors.size(), 0);
 
   // A can include the public header in B.
-  err = Err();
-  EXPECT_TRUE(checker->CheckInclude(&a_, input_file, b_public, range, &err));
-  EXPECT_FALSE(err.has_error());
+  errors.clear();
+  checker->CheckInclude(&a_, input_file, b_public, range, &errors);
+  EXPECT_EQ(errors.size(), 0);
 
   // Check A depending on the public and private headers in C.
-  err = Err();
-  EXPECT_TRUE(checker->CheckInclude(&a_, input_file, c_public, range, &err));
-  EXPECT_FALSE(err.has_error());
-  EXPECT_FALSE(checker->CheckInclude(&a_, input_file, c_private, range, &err));
-  EXPECT_TRUE(err.has_error());
+  errors.clear();
+  checker->CheckInclude(&a_, input_file, c_public, range, &errors);
+  EXPECT_EQ(errors.size(), 0);
+  errors.clear();
+  checker->CheckInclude(&a_, input_file, c_private, range, &errors);
+  EXPECT_GT(errors.size(), 0);
 
   // A can depend on a random file unknown to the build.
-  err = Err();
-  EXPECT_TRUE(checker->CheckInclude(&a_, input_file, SourceFile("//random.h"),
-                                    range, &err));
-  EXPECT_FALSE(err.has_error());
+  errors.clear();
+  checker->CheckInclude(&a_, input_file, SourceFile("//random.h"),
+                                    range, &errors);
+  EXPECT_EQ(errors.size(), 0);
 
   // A can depend on a file present only in another toolchain even with no
   // dependency path.
-  err = Err();
-  EXPECT_TRUE(checker->CheckInclude(&a_, input_file, otc_header, range, &err));
-  EXPECT_FALSE(err.has_error());
+  errors.clear();
+  checker->CheckInclude(&a_, input_file, otc_header, range, &errors);
+  EXPECT_EQ(errors.size(), 0);
 }
 
 // A public chain of dependencies should always be identified first, even if
@@ -282,17 +284,17 @@ TEST_F(HeaderCheckerTest, CheckIncludeAllowCircular) {
       new HeaderChecker(setup_.build_settings(), targets_));
 
   // A depends on B. So B normally can't include headers from A.
-  Err err;
-  EXPECT_FALSE(checker->CheckInclude(&b_, input_file, a_public, range, &err));
-  EXPECT_TRUE(err.has_error());
+  std::vector<Err> errors;
+  checker->CheckInclude(&b_, input_file, a_public, range, &errors);
+  EXPECT_GT(errors.size(), 0);
 
   // Add an allow_circular_includes_from on A that lists B.
   a_.allow_circular_includes_from().insert(b_.label());
 
   // Now the include from B to A should be allowed.
-  err = Err();
-  EXPECT_TRUE(checker->CheckInclude(&b_, input_file, a_public, range, &err));
-  EXPECT_FALSE(err.has_error());
+  errors.clear();
+  checker->CheckInclude(&b_, input_file, a_public, range, &errors);
+  EXPECT_EQ(errors.size(), 0);
 }
 
 TEST_F(HeaderCheckerTest, SourceFileForInclude) {
@@ -371,12 +373,12 @@ TEST_F(HeaderCheckerTest, Friend) {
       new HeaderChecker(setup_.build_settings(), targets_));
 
   // B should not be allowed to include C's private header.
-  err = Err();
-  EXPECT_FALSE(checker->CheckInclude(&b_, input_file, c_private, range, &err));
-  EXPECT_TRUE(err.has_error());
+  std::vector<Err> errors;
+  checker->CheckInclude(&b_, input_file, c_private, range, &errors);
+  EXPECT_GT(errors.size(), 0);
 
   // A should be able to because of the friend declaration.
-  err = Err();
-  EXPECT_TRUE(checker->CheckInclude(&a_, input_file, c_private, range, &err));
-  EXPECT_FALSE(err.has_error()) << err.message();
+  errors.clear();
+  checker->CheckInclude(&a_, input_file, c_private, range, &errors);
+  EXPECT_EQ(errors.size(), 0);
 }

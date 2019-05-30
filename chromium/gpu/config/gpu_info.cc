@@ -50,13 +50,67 @@ void EnumerateVideoEncodeAcceleratorSupportedProfile(
   enumerator->EndVideoEncodeAcceleratorSupportedProfile();
 }
 
+const char* ImageDecodeAcceleratorTypeToString(
+    gpu::ImageDecodeAcceleratorType type) {
+  switch (type) {
+    case gpu::ImageDecodeAcceleratorType::kJpeg:
+      return "JPEG";
+    case gpu::ImageDecodeAcceleratorType::kUnknown:
+      return "Unknown";
+  }
+}
+
+const char* ImageDecodeAcceleratorSubsamplingToString(
+    gpu::ImageDecodeAcceleratorSubsampling subsampling) {
+  switch (subsampling) {
+    case gpu::ImageDecodeAcceleratorSubsampling::k420:
+      return "4:2:0";
+    case gpu::ImageDecodeAcceleratorSubsampling::k422:
+      return "4:2:2";
+  }
+}
+
+void EnumerateImageDecodeAcceleratorSupportedProfile(
+    const gpu::ImageDecodeAcceleratorSupportedProfile& profile,
+    gpu::GPUInfo::Enumerator* enumerator) {
+  enumerator->BeginImageDecodeAcceleratorSupportedProfile();
+  enumerator->AddString("imageType",
+                        ImageDecodeAcceleratorTypeToString(profile.image_type));
+  enumerator->AddString("minEncodedDimensions",
+                        profile.min_encoded_dimensions.ToString());
+  enumerator->AddString("maxEncodedDimensions",
+                        profile.max_encoded_dimensions.ToString());
+  std::string subsamplings;
+  for (size_t i = 0; i < profile.subsamplings.size(); i++) {
+    if (i > 0)
+      subsamplings += ", ";
+    subsamplings +=
+        ImageDecodeAcceleratorSubsamplingToString(profile.subsamplings[i]);
+  }
+  enumerator->AddString("subsamplings", subsamplings);
+  enumerator->EndImageDecodeAcceleratorSupportedProfile();
+}
+
 #if defined(OS_WIN)
 void EnumerateOverlayCapability(const gpu::OverlayCapability& cap,
                                 gpu::GPUInfo::Enumerator* enumerator) {
+  std::string key_string = "overlayCap";
+  key_string += OverlayFormatToString(cap.format);
   enumerator->BeginOverlayCapability();
-  enumerator->AddInt("format", static_cast<int>(cap.format));
-  enumerator->AddInt("isScalingSupported", cap.is_scaling_supported);
+  enumerator->AddString(key_string.c_str(),
+                        cap.is_scaling_supported ? "SCALING" : "DIRECT");
   enumerator->EndOverlayCapability();
+}
+
+void EnumerateDx12VulkanVersionInfo(const gpu::Dx12VulkanVersionInfo& info,
+                                    gpu::GPUInfo::Enumerator* enumerator) {
+  enumerator->BeginDx12VulkanVersionInfo();
+  enumerator->AddBool("supportsDx12", info.supports_dx12);
+  enumerator->AddBool("supportsVulkan", info.supports_vulkan);
+  enumerator->AddInt("dx12FeatureLevel",
+                     static_cast<int>(info.d3d12_feature_level));
+  enumerator->AddInt("vulkanVersion", static_cast<int>(info.vulkan_version));
+  enumerator->EndDx12VulkanVersionInfo();
 }
 #endif
 
@@ -64,6 +118,7 @@ void EnumerateOverlayCapability(const gpu::OverlayCapability& cap,
 
 namespace gpu {
 
+#if defined(OS_WIN)
 const char* OverlayFormatToString(OverlayFormat format) {
   switch (format) {
     case OverlayFormat::kBGRA:
@@ -79,6 +134,7 @@ bool OverlayCapability::operator==(const OverlayCapability& other) const {
   return format == other.format &&
          is_scaling_supported == other.is_scaling_supported;
 }
+#endif
 
 VideoDecodeAcceleratorCapabilities::VideoDecodeAcceleratorCapabilities()
     : flags(0) {}
@@ -88,6 +144,24 @@ VideoDecodeAcceleratorCapabilities::VideoDecodeAcceleratorCapabilities(
 
 VideoDecodeAcceleratorCapabilities::~VideoDecodeAcceleratorCapabilities() =
     default;
+
+ImageDecodeAcceleratorSupportedProfile::ImageDecodeAcceleratorSupportedProfile()
+    : image_type(ImageDecodeAcceleratorType::kUnknown) {}
+
+ImageDecodeAcceleratorSupportedProfile::ImageDecodeAcceleratorSupportedProfile(
+    const ImageDecodeAcceleratorSupportedProfile& other) = default;
+
+ImageDecodeAcceleratorSupportedProfile::ImageDecodeAcceleratorSupportedProfile(
+    ImageDecodeAcceleratorSupportedProfile&& other) = default;
+
+ImageDecodeAcceleratorSupportedProfile::
+    ~ImageDecodeAcceleratorSupportedProfile() = default;
+
+ImageDecodeAcceleratorSupportedProfile& ImageDecodeAcceleratorSupportedProfile::
+operator=(const ImageDecodeAcceleratorSupportedProfile& other) = default;
+
+ImageDecodeAcceleratorSupportedProfile& ImageDecodeAcceleratorSupportedProfile::
+operator=(ImageDecodeAcceleratorSupportedProfile&& other) = default;
 
 GPUInfo::GPUDevice::GPUDevice()
     : vendor_id(0),
@@ -179,20 +253,22 @@ void GPUInfo::EnumerateFields(Enumerator* enumerator) const {
     bool supports_overlays;
     OverlayCapabilities overlay_capabilities;
     DxDiagNode dx_diagnostics;
-    bool supports_dx12;
-    bool supports_vulkan;
-    uint32_t d3d12_feature_level;
-    uint32_t vulkan_version;
+    Dx12VulkanVersionInfo dx12_vulkan_version_info;
 #endif
 
     VideoDecodeAcceleratorCapabilities video_decode_accelerator_capabilities;
     VideoEncodeAcceleratorSupportedProfiles
         video_encode_accelerator_supported_profiles;
     bool jpeg_decode_accelerator_supported;
+
+    ImageDecodeAcceleratorSupportedProfiles
+        image_decode_accelerator_supported_profiles;
+
 #if defined(USE_X11)
     VisualID system_visual;
     VisualID rgba_visual;
 #endif
+
     bool oop_rasterization_supported;
   };
 
@@ -242,10 +318,7 @@ void GPUInfo::EnumerateFields(Enumerator* enumerator) const {
   enumerator->AddBool("supportsOverlays", supports_overlays);
   for (const auto& cap : overlay_capabilities)
     EnumerateOverlayCapability(cap, enumerator);
-  enumerator->AddBool("supportsDX12", supports_dx12);
-  enumerator->AddBool("supportsVulkan", supports_vulkan);
-  enumerator->AddInt("d3dFeatureLevel", d3d12_feature_level);
-  enumerator->AddInt("vulkanVersion", vulkan_version);
+  EnumerateDx12VulkanVersionInfo(dx12_vulkan_version_info, enumerator);
 #endif
   enumerator->AddInt("videoDecodeAcceleratorFlags",
                      video_decode_accelerator_capabilities.flags);
@@ -256,6 +329,8 @@ void GPUInfo::EnumerateFields(Enumerator* enumerator) const {
     EnumerateVideoEncodeAcceleratorSupportedProfile(profile, enumerator);
   enumerator->AddBool("jpegDecodeAcceleratorSupported",
       jpeg_decode_accelerator_supported);
+  for (const auto& profile : image_decode_accelerator_supported_profiles)
+    EnumerateImageDecodeAcceleratorSupportedProfile(profile, enumerator);
 #if defined(USE_X11)
   enumerator->AddInt64("systemVisual", system_visual);
   enumerator->AddInt64("rgbaVisual", rgba_visual);

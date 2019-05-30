@@ -30,8 +30,9 @@
 
 #include "third_party/blink/renderer/core/dom/context_features_client_impl.h"
 
+#include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/renderer/core/dom/document.h"
-#include "third_party/blink/renderer/core/frame/content_settings_client.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 
 namespace blink {
@@ -72,6 +73,9 @@ class ContextFeaturesCache final
 
   static ContextFeaturesCache& From(Document&);
 
+  explicit ContextFeaturesCache(Document& document)
+      : Supplement<Document>(document) {}
+
   Entry& EntryFor(ContextFeatures::FeatureType type) {
     size_t index = static_cast<size_t>(type);
     SECURITY_DCHECK(index < ContextFeatures::kFeatureTypeSize);
@@ -80,14 +84,11 @@ class ContextFeaturesCache final
 
   void ValidateAgainst(Document*);
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     Supplement<Document>::Trace(visitor);
   }
 
  private:
-  explicit ContextFeaturesCache(Document& document)
-      : Supplement<Document>(document) {}
-
   String domain_;
   Entry entries_[ContextFeatures::kFeatureTypeSize];
 };
@@ -98,7 +99,7 @@ ContextFeaturesCache& ContextFeaturesCache::From(Document& document) {
   ContextFeaturesCache* cache =
       Supplement<Document>::From<ContextFeaturesCache>(document);
   if (!cache) {
-    cache = new ContextFeaturesCache(document);
+    cache = MakeGarbageCollected<ContextFeaturesCache>(document);
     ProvideTo(document, cache);
   }
 

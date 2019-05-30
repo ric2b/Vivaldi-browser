@@ -51,6 +51,7 @@ class CORE_EXPORT SpellCheckRequest
   static SpellCheckRequest* Create(const EphemeralRange& checking_range,
                                    int request_number);
 
+  SpellCheckRequest(Range* checking_range, const String&, int request_number);
   ~SpellCheckRequest();
   void Dispose();
 
@@ -67,11 +68,9 @@ class CORE_EXPORT SpellCheckRequest
 
   int RequestNumber() const { return request_number_; }
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
  private:
-  SpellCheckRequest(Range* checking_range, const String&, int request_number);
-
   Member<SpellCheckRequester> requester_;
   Member<Range> checking_range_;
   Member<Element> root_editable_element_;
@@ -84,11 +83,12 @@ class CORE_EXPORT SpellCheckRequester final
     : public GarbageCollectedFinalized<SpellCheckRequester> {
  public:
   static SpellCheckRequester* Create(LocalFrame& frame) {
-    return new SpellCheckRequester(frame);
+    return MakeGarbageCollected<SpellCheckRequester>(frame);
   }
 
+  explicit SpellCheckRequester(LocalFrame&);
   ~SpellCheckRequester();
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
   // Returns true if a request is initiated. Returns false otherwise.
   bool RequestCheckingFor(const EphemeralRange&);
@@ -99,14 +99,12 @@ class CORE_EXPORT SpellCheckRequester final
 
   int LastProcessedSequence() const { return last_processed_sequence_; }
 
-  // Exposed for leak detector only, see comment for corresponding
-  // SpellChecker method.
-  void PrepareForLeakDetection();
+  // Called to clean up pending requests when no more checking is needed. For
+  // example, when document is closed.
+  void Deactivate();
 
  private:
   friend class SpellCheckRequest;
-
-  explicit SpellCheckRequester(LocalFrame&);
 
   WebTextCheckClient* GetTextCheckerClient() const;
   void TimerFiredToProcessQueuedRequest(TimerBase*);

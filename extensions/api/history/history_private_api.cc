@@ -347,7 +347,7 @@ ExtensionFunction::ResponseAction HistoryPrivateDeleteVisitsFunction::Run() {
   history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
       GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
   hs->ExpireHistoryBetween(
-      restrict_urls, start_time, end_time,
+      restrict_urls, start_time, end_time, true,
       base::Bind(&HistoryPrivateDeleteVisitsFunction::DeleteVisitComplete,
                  base::Unretained(this)),
       &task_tracker_);

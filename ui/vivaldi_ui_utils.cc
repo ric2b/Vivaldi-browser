@@ -75,18 +75,20 @@ VivaldiBrowserWindow* GetActiveAppWindow() {
   return nullptr;
 }
 
-content::WebContents* GetWebContentsFromTabStrip(int tab_id, Profile* profile) {
+content::WebContents* GetWebContentsFromTabStrip(
+    int tab_id,
+    content::BrowserContext* browser_context) {
   content::WebContents* contents = nullptr;
   bool include_incognito = true;
   Browser* browser;
   int tab_index;
-  extensions::ExtensionTabUtil::GetTabById(tab_id, profile, include_incognito,
-                                           &browser, NULL, &contents,
-                                           &tab_index);
+  extensions::ExtensionTabUtil::GetTabById(tab_id, browser_context,
+                                           include_incognito, &browser, NULL,
+                                           &contents, &tab_index);
   return contents;
 }
 
-bool IsOutsideAppWindow(int screen_x, int screen_y, Profile* profile) {
+bool IsOutsideAppWindow(int screen_x, int screen_y) {
   gfx::Point screen_point(screen_x, screen_y);
 
   bool outside = true;
@@ -200,7 +202,7 @@ SkBitmap SmartCropAndSize(const SkBitmap& capture,
 
 bool IsMainVivaldiBrowserWindow(Browser* browser) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  std::unique_ptr<base::Value> json =
+  base::Optional<base::Value> json =
       base::JSONReader::Read(browser->ext_data(), options);
   base::DictionaryValue* dict = NULL;
   std::string window_type;
@@ -239,6 +241,10 @@ Browser* FindBrowserForPinnedTabs(Browser* current_browser) {
       continue;
     }
     if (browser->is_devtools()) {
+      continue;
+    }
+    // Only move within the same profile.
+    if (current_browser->profile() != browser->profile()) {
       continue;
     }
     if (!IsMainVivaldiBrowserWindow(browser)) {

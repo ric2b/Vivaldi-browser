@@ -44,15 +44,15 @@ namespace content {
 namespace {
 
 // A test service which can be driven by browser tests for various reasons.
-class TestServiceImpl : public mojom::TestService {
+class TestRendererServiceImpl : public mojom::TestService {
  public:
-  explicit TestServiceImpl(mojom::TestServiceRequest request)
+  explicit TestRendererServiceImpl(mojom::TestServiceRequest request)
       : binding_(this, std::move(request)) {
     binding_.set_connection_error_handler(base::BindOnce(
-        &TestServiceImpl::OnConnectionError, base::Unretained(this)));
+        &TestRendererServiceImpl::OnConnectionError, base::Unretained(this)));
   }
 
-  ~TestServiceImpl() override {}
+  ~TestRendererServiceImpl() override {}
 
  private:
   void OnConnectionError() { delete this; }
@@ -93,12 +93,12 @@ class TestServiceImpl : public mojom::TestService {
 
   mojo::Binding<mojom::TestService> binding_;
 
-  DISALLOW_COPY_AND_ASSIGN(TestServiceImpl);
+  DISALLOW_COPY_AND_ASSIGN(TestRendererServiceImpl);
 };
 
-void CreateTestService(mojom::TestServiceRequest request) {
+void CreateRendererTestService(mojom::TestServiceRequest request) {
   // Owns itself.
-  new TestServiceImpl(std::move(request));
+  new TestRendererServiceImpl(std::move(request));
 }
 
 }  // namespace
@@ -113,7 +113,8 @@ void ShellContentRendererClient::RenderThreadStarted() {
 
   auto registry = std::make_unique<service_manager::BinderRegistry>();
   registry->AddInterface<mojom::TestService>(
-      base::Bind(&CreateTestService), base::ThreadTaskRunnerHandle::Get());
+      base::Bind(&CreateRendererTestService),
+      base::ThreadTaskRunnerHandle::Get());
   registry->AddInterface<mojom::PowerMonitorTest>(
       base::Bind(&PowerMonitorTestImpl::MakeStrongBinding,
                  base::Passed(std::make_unique<PowerMonitorTestImpl>())),
@@ -134,15 +135,15 @@ bool ShellContentRendererClient::HasErrorPage(int http_status_code) {
 
 void ShellContentRendererClient::PrepareErrorPage(
     RenderFrame* render_frame,
-    const blink::WebURLRequest& failed_request,
     const blink::WebURLError& error,
-    std::string* error_html,
-    base::string16* error_description) {
+    const std::string& http_method,
+    bool ignoring_cache,
+    std::string* error_html) {
   if (error_html && error_html->empty()) {
     *error_html =
         "<head><title>Error</title></head><body>Could not load the requested "
         "resource.<br/>Error code: " +
-        base::IntToString(error.reason()) +
+        base::NumberToString(error.reason()) +
         (error.reason() < 0 ? " (" + net::ErrorToString(error.reason()) + ")"
                             : "") +
         "</body>";
@@ -151,26 +152,16 @@ void ShellContentRendererClient::PrepareErrorPage(
 
 void ShellContentRendererClient::PrepareErrorPageForHttpStatusError(
     content::RenderFrame* render_frame,
-    const blink::WebURLRequest& failed_request,
     const GURL& unreachable_url,
+    const std::string& http_method,
+    bool ignoring_cache,
     int http_status,
-    std::string* error_html,
-    base::string16* error_description) {
+    std::string* error_html) {
   if (error_html) {
     *error_html =
         "<head><title>Error</title></head><body>Server returned HTTP status " +
-        base::IntToString(http_status) + "</body>";
+        base::NumberToString(http_status) + "</body>";
   }
-}
-
-bool ShellContentRendererClient::IsPluginAllowedToUseCompositorAPI(
-    const GURL& url) {
-#if BUILDFLAG(ENABLE_PLUGINS)
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnablePepperTesting);
-#else
-  return false;
-#endif
 }
 
 bool ShellContentRendererClient::IsPluginAllowedToUseDevChannelAPIs() {
@@ -188,18 +179,6 @@ void ShellContentRendererClient::DidInitializeWorkerContextOnWorkerThread(
           switches::kExposeInternalsForTesting)) {
     blink::WebTestingSupport::InjectInternalsObject(context);
   }
-}
-
-bool ShellContentRendererClient::ShouldFork(blink::WebLocalFrame* frame,
-                                            const GURL& url,
-                                            const std::string& http_method,
-                                            bool is_initial_navigation,
-                                            bool is_server_redirect) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kContentShellAlwaysFork)) {
-    return true;
-  }
-  return false;
 }
 
 #if BUILDFLAG(ENABLE_MOJO_CDM)

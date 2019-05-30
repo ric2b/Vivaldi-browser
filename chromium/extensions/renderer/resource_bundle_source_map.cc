@@ -5,6 +5,7 @@
 #include "extensions/renderer/resource_bundle_source_map.h"
 
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "extensions/renderer/static_v8_external_one_byte_string_resource.h"
 #include "third_party/zlib/google/compression_utils.h"
@@ -17,9 +18,10 @@ namespace {
 v8::Local<v8::String> ConvertString(v8::Isolate* isolate,
                                     const base::StringPiece& string) {
   // v8 takes ownership of the StaticV8ExternalOneByteStringResource (see
-  // v8::String::NewExternal()).
-  return v8::String::NewExternal(
-      isolate, new StaticV8ExternalOneByteStringResource(string));
+  // v8::String::NewExternalOneByte()).
+  return v8::String::NewExternalOneByte(
+             isolate, new StaticV8ExternalOneByteStringResource(string))
+      .FromMaybe(v8::Local<v8::String>());
 }
 
 }  // namespace
@@ -88,7 +90,7 @@ v8::Local<v8::String> ResourceBundleSourceMap::GetSource(
 }
 
 bool ResourceBundleSourceMap::Contains(const std::string& name) const {
-  return !!resource_map_.count(name);
+  return base::ContainsKey(resource_map_, name);
 }
 
 }  // namespace extensions

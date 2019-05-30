@@ -30,6 +30,7 @@
 
 #include "third_party/blink/renderer/core/html/track/vtt/buffered_line_reader.h"
 
+#include "base/stl_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_names.h"
 #include "third_party/blink/renderer/platform/wtf/text/cstring.h"
@@ -166,23 +167,23 @@ String MakeTestData(const char** lines, const NewlineType* breaks, int count) {
   return builder.ToString();
 }
 
-const size_t kBlockSizes[] = {64, 32, 16, 8,  4,  2,  1,  3,
-                              5,  7,  9,  11, 13, 17, 19, 23};
+const wtf_size_t kBlockSizes[] = {64, 32, 16, 8,  4,  2,  1,  3,
+                                  5,  7,  9,  11, 13, 17, 19, 23};
 
 TEST(BufferedLineReaderTest, BufferSizes) {
   const char* lines[] = {"aaaaaaaaaaaaaaaa", "bbbbbbbbbb", "ccccccccccccc", "",
                          "dddddd",           "",           "eeeeeeeeee"};
   const NewlineType kBreaks[] = {kLf, kLf, kLf, kLf, kLf, kLf, kLf};
-  const size_t num_test_lines = arraysize(lines);
-  static_assert(num_test_lines == arraysize(kBreaks),
+  const size_t num_test_lines = base::size(lines);
+  static_assert(num_test_lines == base::size(kBreaks),
                 "number of test lines and breaks should be the same");
   String data = MakeTestData(lines, kBreaks, num_test_lines);
 
-  for (size_t k = 0; k < arraysize(kBlockSizes); ++k) {
+  for (size_t k = 0; k < base::size(kBlockSizes); ++k) {
     size_t line_count = 0;
     BufferedLineReader reader;
-    size_t block_size = kBlockSizes[k];
-    for (size_t i = 0; i < data.length(); i += block_size) {
+    wtf_size_t block_size = kBlockSizes[k];
+    for (wtf_size_t i = 0; i < data.length(); i += block_size) {
       reader.Append(data.Substring(i, block_size));
 
       String line;
@@ -200,16 +201,16 @@ TEST(BufferedLineReaderTest, BufferSizesMixedEndings) {
       "aaaaaaaaaaaaaaaa", "bbbbbbbbbb", "ccccccccccccc",      "",
       "dddddd",           "eeeeeeeeee", "fffffffffffffffffff"};
   const NewlineType kBreaks[] = {kCr, kLf, kCrLf, kCr, kLf, kCrLf, kLf};
-  const size_t num_test_lines = arraysize(lines);
-  static_assert(num_test_lines == arraysize(kBreaks),
+  const size_t num_test_lines = base::size(lines);
+  static_assert(num_test_lines == base::size(kBreaks),
                 "number of test lines and breaks should be the same");
   String data = MakeTestData(lines, kBreaks, num_test_lines);
 
-  for (size_t k = 0; k < arraysize(kBlockSizes); ++k) {
+  for (size_t k = 0; k < base::size(kBlockSizes); ++k) {
     size_t line_count = 0;
     BufferedLineReader reader;
-    size_t block_size = kBlockSizes[k];
-    for (size_t i = 0; i < data.length(); i += block_size) {
+    wtf_size_t block_size = kBlockSizes[k];
+    for (wtf_size_t i = 0; i < data.length(); i += block_size) {
       reader.Append(data.Substring(i, block_size));
 
       String line;

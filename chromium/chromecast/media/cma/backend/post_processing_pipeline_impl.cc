@@ -9,6 +9,7 @@
 
 #include "base/files/file_path.h"
 #include "base/json/json_writer.h"
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/scoped_native_library.h"
 #include "base/values.h"
@@ -41,7 +42,7 @@ PostProcessingPipelineFactoryImpl::~PostProcessingPipelineFactoryImpl() =
 std::unique_ptr<PostProcessingPipeline>
 PostProcessingPipelineFactoryImpl::CreatePipeline(
     const std::string& name,
-    const base::ListValue* filter_description_list,
+    const base::Value* filter_description_list,
     int num_channels) {
   return std::make_unique<PostProcessingPipelineImpl>(
       name, filter_description_list, num_channels);
@@ -49,7 +50,7 @@ PostProcessingPipelineFactoryImpl::CreatePipeline(
 
 PostProcessingPipelineImpl::PostProcessingPipelineImpl(
     const std::string& name,
-    const base::ListValue* filter_description_list,
+    const base::Value* filter_description_list,
     int channels)
     : name_(name), sample_rate_(kNoSampleRate), num_output_channels_(channels) {
   if (!filter_description_list) {
@@ -167,13 +168,18 @@ bool PostProcessingPipelineImpl::SetSampleRate(int sample_rate) {
 }
 
 bool PostProcessingPipelineImpl::IsRinging() {
-  return silence_frames_processed_ < ringing_time_in_frames_;
+  return ringing_time_in_frames_ < 0 ||
+         silence_frames_processed_ < ringing_time_in_frames_;
 }
 
 int PostProcessingPipelineImpl::GetRingingTimeInFrames() {
   int memory_frames = 0;
   for (auto& processor : processors_) {
-    memory_frames += processor.ptr->GetRingingTimeInFrames();
+    int ringing_time = processor.ptr->GetRingingTimeInFrames();
+    if (ringing_time < 0) {
+      return -1;
+    }
+    memory_frames += ringing_time;
   }
   return memory_frames;
 }
@@ -200,8 +206,8 @@ void PostProcessingPipelineImpl::SetPostProcessorConfig(
               [&name](PostProcessorInfo& p) { return p.name == name; });
   if (it != processors_.end()) {
     it->ptr->UpdateParameters(config);
-    VLOG(1) << "Config string: " << config << " was delivered to postprocessor "
-            << name;
+    LOG(INFO) << "Config string: " << config
+              << " was delivered to postprocessor " << name;
   }
 }
 

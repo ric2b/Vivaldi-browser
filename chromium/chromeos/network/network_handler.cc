@@ -5,12 +5,12 @@
 #include "chromeos/network/network_handler.h"
 
 #include "base/threading/thread_task_runner_handle.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/network/auto_connect_handler.h"
 #include "chromeos/network/client_cert_resolver.h"
 #include "chromeos/network/geolocation_handler.h"
 #include "chromeos/network/managed_network_configuration_handler_impl.h"
 #include "chromeos/network/network_activation_handler.h"
+#include "chromeos/network/network_cert_loader.h"
 #include "chromeos/network/network_cert_migrator.h"
 #include "chromeos/network/network_certificate_handler.h"
 #include "chromeos/network/network_configuration_handler.h"
@@ -30,8 +30,6 @@ static NetworkHandler* g_network_handler = NULL;
 
 NetworkHandler::NetworkHandler()
     : task_runner_(base::ThreadTaskRunnerHandle::Get()) {
-  CHECK(DBusThreadManager::IsInitialized());
-
   network_state_handler_.reset(new NetworkStateHandler());
   network_device_handler_.reset(new NetworkDeviceHandlerImpl());
   network_profile_handler_.reset(new NetworkProfileHandler());
@@ -39,7 +37,7 @@ NetworkHandler::NetworkHandler()
   managed_network_configuration_handler_.reset(
       new ManagedNetworkConfigurationHandlerImpl());
   prohibited_technologies_handler_.reset(new ProhibitedTechnologiesHandler());
-  if (CertLoader::IsInitialized()) {
+  if (NetworkCertLoader::IsInitialized()) {
     auto_connect_handler_.reset(new AutoConnectHandler());
     network_cert_migrator_.reset(new NetworkCertMigrator());
     network_certificate_handler_.reset(new NetworkCertificateHandler());

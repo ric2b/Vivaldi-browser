@@ -5,7 +5,7 @@
 #include "content/renderer/media/webrtc/transceiver_state_surfacer.h"
 
 #include "content/renderer/media/webrtc/webrtc_util.h"
-#include "third_party/webrtc/api/rtptransceiverinterface.h"
+#include "third_party/webrtc/api/rtp_transceiver_interface.h"
 
 namespace content {
 
@@ -164,11 +164,6 @@ void SurfaceSenderStateOnly::Stop() {
   NOTIMPLEMENTED();
 }
 
-void SurfaceSenderStateOnly::SetCodecPreferences(
-    rtc::ArrayView<webrtc::RtpCodecCapability> codecs) {
-  NOTIMPLEMENTED();
-}
-
 SurfaceReceiverStateOnly::SurfaceReceiverStateOnly(
     rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver)
     : receiver_(std::move(receiver)) {
@@ -214,11 +209,6 @@ SurfaceReceiverStateOnly::current_direction() const {
 }
 
 void SurfaceReceiverStateOnly::Stop() {
-  NOTIMPLEMENTED();
-}
-
-void SurfaceReceiverStateOnly::SetCodecPreferences(
-    rtc::ArrayView<webrtc::RtpCodecCapability> codecs) {
   NOTIMPLEMENTED();
 }
 

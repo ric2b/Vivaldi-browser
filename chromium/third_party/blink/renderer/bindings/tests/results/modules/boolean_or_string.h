@@ -8,8 +8,8 @@
 // DO NOT MODIFY!
 
 // clang-format off
-#ifndef BooleanOrString_h
-#define BooleanOrString_h
+#ifndef THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_MODULES_BOOLEAN_OR_STRING_H_
+#define THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_MODULES_BOOLEAN_OR_STRING_H_
 
 #include "base/optional.h"
 #include "third_party/blink/renderer/bindings/core/v8/dictionary.h"
@@ -22,7 +22,7 @@
 namespace blink {
 
 class MODULES_EXPORT BooleanOrString final {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
  public:
   BooleanOrString();
   bool IsNull() const { return type_ == SpecificType::kNone; }
@@ -90,6 +90,6 @@ struct V8TypeOf<BooleanOrString> {
 // items that can initialize with memset or have a vtable. It is safe to
 // set canInitializeWithMemset=true for a union type object in practice.
 // See https://codereview.chromium.org/1118993002/#msg5 for more details.
-WTF_ALLOW_MOVE_AND_INIT_WITH_MEM_FUNCTIONS(blink::BooleanOrString);
+WTF_ALLOW_MOVE_AND_INIT_WITH_MEM_FUNCTIONS(blink::BooleanOrString)
 
-#endif  // BooleanOrString_h
+#endif  // THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_MODULES_BOOLEAN_OR_STRING_H_

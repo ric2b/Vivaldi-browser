@@ -25,8 +25,8 @@
 #include "ios/chrome/browser/ui/first_run/first_run_util.h"
 #include "ios/chrome/browser/ui/first_run/static_file_view_controller.h"
 #import "ios/chrome/browser/ui/first_run/welcome_to_chrome_view.h"
-#include "ios/chrome/browser/ui/ui_util.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #include "ios/chrome/common/string_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
@@ -88,6 +88,14 @@ const BOOL kDefaultStatsCheckboxValue = YES;
   // Record metrics reporting as opt-in/opt-out only once.
   static dispatch_once_t once;
   dispatch_once(&once, ^{
+    // Don't call RecordMetricsReportingDefaultState twice.  This can happen
+    // if the app is quit before accepting the TOS, or via experiment settings.
+    if (metrics::GetMetricsReportingDefaultState(
+            GetApplicationContext()->GetLocalState()) !=
+        metrics::EnableMetricsDefault::DEFAULT_UNKNOWN) {
+      return;
+    }
+
     metrics::RecordMetricsReportingDefaultState(
         GetApplicationContext()->GetLocalState(),
         kDefaultStatsCheckboxValue ? metrics::EnableMetricsDefault::OPT_OUT

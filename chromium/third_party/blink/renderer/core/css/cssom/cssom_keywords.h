@@ -5,7 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_CSS_CSSOM_CSSOM_KEYWORDS_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_CSSOM_CSSOM_KEYWORDS_H_
 
-#include "third_party/blink/renderer/core/css_property_names.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 
 namespace blink {
@@ -16,7 +16,7 @@ class CSSKeywordValue;
 // CSSKeywordValue is valid for a given CSS Property.
 //
 // The implementation for this class is generated using input from
-// CSSProperties.json5 and build/scripts/make_cssom_types.py.
+// css_properties.json5 and build/scripts/make_cssom_types.py.
 class CSSOMKeywords {
   STATIC_ONLY(CSSOMKeywords);
 

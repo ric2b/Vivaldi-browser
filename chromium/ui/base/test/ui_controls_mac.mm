@@ -12,6 +12,7 @@
 #import "base/mac/foundation_util.h"
 #import "base/mac/scoped_objc_class_swizzler.h"
 #include "base/message_loop/message_loop.h"
+#include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/events/keycodes/keyboard_code_conversion_mac.h"
@@ -194,7 +195,7 @@ NSWindow* WindowAtCurrentMouseLocation() {
   NSUInteger result = 0;
   const int buttons[3] = {
       ui_controls::LEFT, ui_controls::RIGHT, ui_controls::MIDDLE};
-  for (size_t i = 0; i < arraysize(buttons); ++i) {
+  for (size_t i = 0; i < base::size(buttons); ++i) {
     if (g_mouse_button_down[buttons[i]])
       result |= (1 << i);
   }
@@ -265,11 +266,11 @@ bool SendKeyPressNotifyWhenDone(gfx::NativeWindow window,
                                 bool command,
                                 base::OnceClosure task) {
   CHECK(g_ui_controls_enabled);
-  DCHECK(base::MessageLoopForUI::IsCurrent());
+  DCHECK(base::MessageLoopCurrentForUI::IsSet());
 
   std::vector<NSEvent*> events;
-  SynthesizeKeyEventsSequence(
-      window, key, control, shift, alt, command, &events);
+  SynthesizeKeyEventsSequence(window.GetNativeNSWindow(), key, control, shift,
+                              alt, command, &events);
 
   // TODO(suzhe): Using [NSApplication postEvent:atStart:] here causes
   // BrowserKeyEventsTest.CommandKeyEvents to fail. See http://crbug.com/49270

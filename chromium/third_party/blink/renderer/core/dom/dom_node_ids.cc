@@ -4,20 +4,23 @@
 
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 
-#include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 
 namespace blink {
 
-DEFINE_WEAK_IDENTIFIER_MAP(Node, DOMNodeId);
+DEFINE_WEAK_IDENTIFIER_MAP(Node, DOMNodeId)
 
 // static
 DOMNodeId DOMNodeIds::IdForNode(Node* node) {
-  return WeakIdentifierMap<Node, DOMNodeId>::Identifier(node);
+  return node ? WeakIdentifierMap<Node, DOMNodeId>::Identifier(node)
+              : kInvalidDOMNodeId;
 }
 
 // static
 Node* DOMNodeIds::NodeForId(DOMNodeId id) {
-  return WeakIdentifierMap<Node, DOMNodeId>::Lookup(id);
+  return id == kInvalidDOMNodeId
+             ? nullptr
+             : WeakIdentifierMap<Node, DOMNodeId>::Lookup(id);
 }
 
 }  // namespace blink

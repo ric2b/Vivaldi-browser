@@ -56,38 +56,6 @@ Host.InspectorFrontendHostStub = class {
    * @override
    * @return {string}
    */
-  getSelectionBackgroundColor() {
-    return '#6e86ff';
-  }
-
-  /**
-   * @override
-   * @return {string}
-   */
-  getSelectionForegroundColor() {
-    return '#ffffff';
-  }
-
-  /**
-   * @override
-   * @return {string}
-   */
-  getInactiveSelectionBackgroundColor() {
-    return '#c9c8c8';
-  }
-
-  /**
-   * @override
-   * @return {string}
-   */
-  getInactiveSelectionForegroundColor() {
-    return '#323232';
-  }
-
-  /**
-   * @override
-   * @return {string}
-   */
   platform() {
     let match = navigator.userAgent.match(/Windows NT/);
     if (match)
@@ -556,8 +524,7 @@ Host.InspectorFrontendAPIImpl = class {
 /**
  * @type {!InspectorFrontendHostAPI}
  */
-let InspectorFrontendHost = window.InspectorFrontendHost || null;
-window.InspectorFrontendHost = InspectorFrontendHost;
+let InspectorFrontendHost = window.InspectorFrontendHost;
 (function() {
 
   function initializeInspectorFrontendHost() {
@@ -568,23 +535,15 @@ window.InspectorFrontendHost = InspectorFrontendHost;
     } else {
       // Otherwise add stubs for missing methods that are declared in the interface.
       proto = Host.InspectorFrontendHostStub.prototype;
-      for (const name in proto) {
-        const value = proto[name];
-        if (typeof value !== 'function' || InspectorFrontendHost[name])
+      for (const name of Object.getOwnPropertyNames(proto)) {
+        const stub = proto[name];
+        if (typeof stub !== 'function' || InspectorFrontendHost[name])
           continue;
 
-        InspectorFrontendHost[name] = stub.bind(null, name);
+        console.error(
+            'Incompatible embedder: method InspectorFrontendHost.' + name + ' is missing. Using stub instead.');
+        InspectorFrontendHost[name] = stub;
       }
-    }
-
-    /**
-     * @param {string} name
-     * @return {?}
-     */
-    function stub(name) {
-      console.error('Incompatible embedder: method InspectorFrontendHost.' + name + ' is missing. Using stub instead.');
-      const args = Array.prototype.slice.call(arguments, 1);
-      return proto[name].apply(InspectorFrontendHost, args);
     }
 
     // Attach the events object.

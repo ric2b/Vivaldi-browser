@@ -80,8 +80,8 @@ class BrowserAccessibilityMacTest : public ui::CocoaTest {
     // times in a test.
     root_ = ui::AXNodeData();
     root_.id = 1000;
-    root_.location.set_width(500);
-    root_.location.set_height(100);
+    root_.relative_bounds.bounds.set_width(500);
+    root_.relative_bounds.bounds.set_height(100);
     root_.role = ax::mojom::Role::kRootWebArea;
     root_.AddStringAttribute(ax::mojom::StringAttribute::kDescription,
                              "HelpText");
@@ -91,21 +91,21 @@ class BrowserAccessibilityMacTest : public ui::CocoaTest {
     ui::AXNodeData child1;
     child1.id = 1001;
     child1.SetName("Child1");
-    child1.location.set_width(250);
-    child1.location.set_height(100);
+    child1.relative_bounds.bounds.set_width(250);
+    child1.relative_bounds.bounds.set_height(100);
     child1.role = ax::mojom::Role::kButton;
 
     ui::AXNodeData child2;
     child2.id = 1002;
-    child2.location.set_x(250);
-    child2.location.set_width(250);
-    child2.location.set_height(100);
+    child2.relative_bounds.bounds.set_x(250);
+    child2.relative_bounds.bounds.set_width(250);
+    child2.relative_bounds.bounds.set_height(100);
     child2.role = ax::mojom::Role::kHeading;
 
     manager_.reset(new BrowserAccessibilityManagerMac(
         MakeAXTreeUpdate(root_, child1, child2), nullptr));
-    accessibility_.reset([ToBrowserAccessibilityCocoa(manager_->GetRoot())
-        retain]);
+    accessibility_.reset(
+        [ToBrowserAccessibilityCocoa(manager_->GetRoot()) retain]);
   }
 
   void SetRootValue(std::string value) {
@@ -123,22 +123,29 @@ class BrowserAccessibilityMacTest : public ui::CocoaTest {
   std::unique_ptr<BrowserAccessibilityManager> manager_;
 };
 
+// The next few tests all use the deprecated NSObject accessibility APIs:
+// https://crbug.com/921109.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
 // Standard hit test.
 TEST_F(BrowserAccessibilityMacTest, HitTestTest) {
   BrowserAccessibilityCocoa* firstChild =
       [accessibility_ accessibilityHitTest:NSMakePoint(50, 50)];
-  EXPECT_NSEQ(@"Child1",
+  EXPECT_NSEQ(
+      @"Child1",
       [firstChild
-       accessibilityAttributeValue:NSAccessibilityDescriptionAttribute]);
+          accessibilityAttributeValue:NSAccessibilityDescriptionAttribute]);
 }
 
 // Test doing a hit test on the edge of a child.
 TEST_F(BrowserAccessibilityMacTest, EdgeHitTest) {
   BrowserAccessibilityCocoa* firstChild =
       [accessibility_ accessibilityHitTest:NSZeroPoint];
-  EXPECT_NSEQ(@"Child1",
+  EXPECT_NSEQ(
+      @"Child1",
       [firstChild
-       accessibilityAttributeValue:NSAccessibilityDescriptionAttribute]);
+          accessibilityAttributeValue:NSAccessibilityDescriptionAttribute]);
 }
 
 // This will test a hit test with invalid coordinates.  It is assumed that
@@ -152,15 +159,15 @@ TEST_F(BrowserAccessibilityMacTest, InvalidHitTestCoordsTest) {
 
 // Test to ensure querying standard attributes works.
 TEST_F(BrowserAccessibilityMacTest, BasicAttributeTest) {
-  NSString* helpText = [accessibility_
-      accessibilityAttributeValue:NSAccessibilityHelpAttribute];
+  NSString* helpText =
+      [accessibility_ accessibilityAttributeValue:NSAccessibilityHelpAttribute];
   EXPECT_NSEQ(@"HelpText", helpText);
 }
 
 // Test querying for an invalid attribute to ensure it doesn't crash.
 TEST_F(BrowserAccessibilityMacTest, InvalidAttributeTest) {
-  NSString* shouldBeNil = [accessibility_
-      accessibilityAttributeValue:@"NSAnInvalidAttribute"];
+  NSString* shouldBeNil =
+      [accessibility_ accessibilityAttributeValue:@"NSAnInvalidAttribute"];
   EXPECT_TRUE(shouldBeNil == nil);
 }
 
@@ -168,8 +175,10 @@ TEST_F(BrowserAccessibilityMacTest, RetainedDetachedObjectsReturnNil) {
   // Get the first child.
   BrowserAccessibilityCocoa* retainedFirstChild =
       [accessibility_ accessibilityHitTest:NSMakePoint(50, 50)];
-  EXPECT_NSEQ(@"Child1", [retainedFirstChild
-      accessibilityAttributeValue:NSAccessibilityDescriptionAttribute]);
+  EXPECT_NSEQ(
+      @"Child1",
+      [retainedFirstChild
+          accessibilityAttributeValue:NSAccessibilityDescriptionAttribute]);
 
   // Retain it. This simulates what the system might do with an
   // accessibility object.
@@ -179,12 +188,16 @@ TEST_F(BrowserAccessibilityMacTest, RetainedDetachedObjectsReturnNil) {
   RebuildAccessibilityTree();
 
   // Now any attributes we query should return nil.
-  EXPECT_EQ(nil, [retainedFirstChild
-      accessibilityAttributeValue:NSAccessibilityDescriptionAttribute]);
+  EXPECT_EQ(
+      nil,
+      [retainedFirstChild
+          accessibilityAttributeValue:NSAccessibilityDescriptionAttribute]);
 
   // Don't leak memory in the test.
   [retainedFirstChild release];
 }
+
+#pragma clang diagnostic pop
 
 TEST_F(BrowserAccessibilityMacTest, TestComputeTextEdit) {
   BrowserAccessibility* owner = [accessibility_ owner];

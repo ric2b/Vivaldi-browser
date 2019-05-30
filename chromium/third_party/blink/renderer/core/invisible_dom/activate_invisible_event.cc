@@ -6,20 +6,16 @@
 
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/events/event_dispatcher.h"
-#include "third_party/blink/renderer/core/event_names.h"
+#include "third_party/blink/renderer/core/event_interface_names.h"
 
 namespace blink {
 
 const AtomicString& ActivateInvisibleEvent::InterfaceName() const {
-  return EventNames::ActivateInvisibleEvent;
-}
-
-bool ActivateInvisibleEvent::IsActivateInvisibleEvent() const {
-  return true;
+  return event_interface_names::kActivateInvisibleEvent;
 }
 
 ActivateInvisibleEvent::ActivateInvisibleEvent(Element* activated_element)
-    : Event(EventTypeNames::activateinvisible,
+    : Event(event_type_names::kActivateinvisible,
             Bubbles::kYes,
             Cancelable::kYes,
             ComposedMode::kScoped),

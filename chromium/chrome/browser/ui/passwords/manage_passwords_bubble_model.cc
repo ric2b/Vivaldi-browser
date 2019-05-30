@@ -21,7 +21,6 @@
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/profile_sync_service.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_form_metrics_recorder.h"
 #include "components/password_manager/core/browser/password_manager_constants.h"
@@ -29,12 +28,9 @@
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/password_manager/core/common/password_manager_ui.h"
 #include "components/prefs/pref_service.h"
+#include "components/sync/driver/sync_service.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
-
-#if defined(OS_WIN)
-#include "chrome/browser/ui/desktop_ios_promotion/desktop_ios_promotion_util.h"
-#endif
 
 namespace metrics_util = password_manager::metrics_util;
 
@@ -61,7 +57,7 @@ std::vector<autofill::PasswordForm> DeepCopyForms(
 }
 
 bool IsSyncUser(Profile* profile) {
-  const browser_sync::ProfileSyncService* sync_service =
+  const syncer::SyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile);
   return password_bubble_experiment::IsSmartLockUser(sync_service);
 }
@@ -291,7 +287,6 @@ ManagePasswordsBubbleModel::ManagePasswordsBubbleModel(
       case password_manager::ui::CREDENTIAL_REQUEST_STATE:
       case password_manager::ui::AUTO_SIGNIN_STATE:
       case password_manager::ui::CHROME_SIGN_IN_PROMO_STATE:
-      case password_manager::ui::CHROME_DESKTOP_IOS_PROMO_STATE:
       case password_manager::ui::INACTIVE_STATE:
         NOTREACHED();
         break;
@@ -315,7 +310,6 @@ ManagePasswordsBubbleModel::ManagePasswordsBubbleModel(
       case password_manager::ui::MANAGE_STATE:
       case password_manager::ui::CREDENTIAL_REQUEST_STATE:
       case password_manager::ui::CHROME_SIGN_IN_PROMO_STATE:
-      case password_manager::ui::CHROME_DESKTOP_IOS_PROMO_STATE:
       case password_manager::ui::INACTIVE_STATE:
         NOTREACHED();
         break;
@@ -382,24 +376,20 @@ void ManagePasswordsBubbleModel::OnSaveClicked() {
   }
 }
 
-void ManagePasswordsBubbleModel::OnManageClicked() {
+void ManagePasswordsBubbleModel::OnManageClicked(
+    password_manager::ManagePasswordsReferrer referrer) {
   interaction_keeper_->set_dismissal_reason(metrics_util::CLICKED_MANAGE);
   if (delegate_)
-    delegate_->NavigateToPasswordManagerSettingsPage();
+    delegate_->NavigateToPasswordManagerSettingsPage(referrer);
 }
 
 void ManagePasswordsBubbleModel::
-    OnNavigateToPasswordManagerAccountDashboardLinkClicked() {
+    OnNavigateToPasswordManagerAccountDashboardLinkClicked(
+        password_manager::ManagePasswordsReferrer referrer) {
   interaction_keeper_->set_dismissal_reason(
       metrics_util::CLICKED_PASSWORDS_DASHBOARD);
   if (delegate_)
-    delegate_->NavigateToPasswordManagerAccountDashboard();
-}
-
-void ManagePasswordsBubbleModel::OnBrandLinkClicked() {
-  interaction_keeper_->set_dismissal_reason(metrics_util::CLICKED_BRAND_NAME);
-  if (delegate_)
-    delegate_->NavigateToSmartLockHelpPage();
+    delegate_->NavigateToPasswordManagerAccountDashboard(referrer);
 }
 
 void ManagePasswordsBubbleModel::OnAutoSignInToastTimeout() {
@@ -467,9 +457,7 @@ bool ManagePasswordsBubbleModel::IsCurrentStateUpdate() const {
 bool ManagePasswordsBubbleModel::ShouldShowFooter() const {
   return (state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE ||
           state_ == password_manager::ui::PENDING_PASSWORD_STATE) &&
-         IsSyncUser(GetProfile()) &&
-         // TODO(crbug.com/862269): Remove when "Smart Lock" is gone.
-         pending_password_.federation_origin.unique();
+         IsSyncUser(GetProfile());
 }
 
 const base::string16& ManagePasswordsBubbleModel::GetCurrentUsername() const {
@@ -481,13 +469,12 @@ bool ManagePasswordsBubbleModel::ReplaceToShowPromotionIfNeeded() {
   if (!profile)
     return false;
   PrefService* prefs = profile->GetPrefs();
-  const browser_sync::ProfileSyncService* sync_service =
+  const syncer::SyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile);
   // Signin promotion.
   if (password_bubble_experiment::ShouldShowChromeSignInPasswordPromo(
           prefs, sync_service)) {
     interaction_keeper_->ReportInteractions(this);
-    title_brand_link_range_ = gfx::Range();
     title_ =
         l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_CONFIRM_SAVED_TITLE);
     state_ = password_manager::ui::CHROME_SIGN_IN_PROMO_STATE;
@@ -499,19 +486,6 @@ bool ManagePasswordsBubbleModel::ReplaceToShowPromotionIfNeeded() {
     interaction_keeper_->set_sign_in_promo_shown_count(show_count);
     return true;
   }
-#if defined(OS_WIN)
-  // Desktop to mobile promotion only enabled on windows.
-  if (desktop_ios_promotion::IsEligibleForIOSPromotion(
-          profile,
-          desktop_ios_promotion::PromotionEntryPoint::SAVE_PASSWORD_BUBBLE)) {
-    interaction_keeper_->ReportInteractions(this);
-    title_brand_link_range_ = gfx::Range();
-    title_ = desktop_ios_promotion::GetPromoTitle(
-        desktop_ios_promotion::PromotionEntryPoint::SAVE_PASSWORD_BUBBLE);
-    state_ = password_manager::ui::CHROME_DESKTOP_IOS_PROMO_STATE;
-    return true;
-  }
-#endif
   return false;
 }
 
@@ -528,16 +502,14 @@ bool ManagePasswordsBubbleModel::RevealPasswords() {
 }
 
 void ManagePasswordsBubbleModel::UpdatePendingStateTitle() {
-  title_brand_link_range_ = gfx::Range();
   PasswordTitleType type =
       state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE
           ? PasswordTitleType::UPDATE_PASSWORD
-          : (pending_password_.federation_origin.unique()
+          : (pending_password_.federation_origin.opaque()
                  ? PasswordTitleType::SAVE_PASSWORD
                  : PasswordTitleType::SAVE_ACCOUNT);
-  GetSavePasswordDialogTitleTextAndLinkRange(
-      GetWebContents()->GetVisibleURL(), origin_, IsSyncUser(GetProfile()),
-      type, &title_, &title_brand_link_range_);
+  GetSavePasswordDialogTitleTextAndLinkRange(GetWebContents()->GetVisibleURL(),
+                                             origin_, type, &title_);
 }
 
 void ManagePasswordsBubbleModel::UpdateManageStateTitle() {

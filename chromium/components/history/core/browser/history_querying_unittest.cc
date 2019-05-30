@@ -9,11 +9,11 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/history/core/browser/history_database_params.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/test/test_history_database.h"
@@ -173,7 +173,7 @@ class HistoryQueryTest : public testing::Test {
 
     // Fill the test data.
     base::Time now = base::Time::Now().LocalMidnight();
-    for (size_t i = 0; i < arraysize(test_entries); i++) {
+    for (size_t i = 0; i < base::size(test_entries); i++) {
       test_entries[i].time =
           now - (test_entries[i].days_ago * base::TimeDelta::FromDays(1));
       AddEntryToHistory(test_entries[i]);
@@ -198,7 +198,7 @@ class HistoryQueryTest : public testing::Test {
 
   base::ScopedTempDir temp_dir_;
 
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
 
   base::FilePath history_dir_;
 
@@ -410,7 +410,7 @@ TEST_F(HistoryQueryTest, TextSearchIDN) {
                        L"\u0438\u0434\u0435\u043d\u0442.\u0440\u0444"), 1, },
   };
 
-  for (size_t i = 0; i < arraysize(queries); ++i) {
+  for (size_t i = 0; i < base::size(queries); ++i) {
     QueryHistory(queries[i].query, options, &results);
     EXPECT_EQ(queries[i].results_size, results.size());
   }
@@ -421,7 +421,7 @@ TEST_F(HistoryQueryTest, Paging) {
   // Since results are fetched 1 and 2 at a time, entry #0 and #6 will not
   // be de-duplicated.
   int expected_results[] = { 4, 2, 3, 1, 7, 6, 5, 0 };
-  TestPaging(std::string(), expected_results, arraysize(expected_results));
+  TestPaging(std::string(), expected_results, base::size(expected_results));
 }
 
 TEST_F(HistoryQueryTest, TextSearchPaging) {
@@ -429,7 +429,7 @@ TEST_F(HistoryQueryTest, TextSearchPaging) {
   // be de-duplicated. Entry #4 does not contain the text "title", so it
   // shouldn't appear.
   int expected_results[] = { 2, 3, 1, 7, 6, 5 };
-  TestPaging("title", expected_results, arraysize(expected_results));
+  TestPaging("title", expected_results, base::size(expected_results));
 }
 
 }  // namespace history

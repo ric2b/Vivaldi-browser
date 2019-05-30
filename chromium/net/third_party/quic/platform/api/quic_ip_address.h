@@ -41,9 +41,9 @@ class QUIC_EXPORT_PRIVATE QuicIpAddress {
   IpAddressFamily address_family() const;
   int AddressFamilyToInt() const;
   // Returns the address as a sequence of bytes in network-byte-order. IPv4 will
-  // be 6 bytes. IPv6 will be 18 bytes.
+  // be 4 bytes. IPv6 will be 16 bytes.
   QuicString ToPackedString() const;
-  // Returns std::string representation of the address.
+  // Returns string representation of the address.
   QuicString ToString() const;
   // Normalizes the address representation with respect to IPv4 addresses, i.e,
   // mapped IPv4 addresses ("::ffff:X.Y.Z.Q") are converted to pure IPv4

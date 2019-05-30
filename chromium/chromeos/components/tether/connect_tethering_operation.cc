@@ -7,7 +7,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/default_clock.h"
-#include "chromeos/components/proximity_auth/logging/logging.h"
+#include "chromeos/components/multidevice/logging/logging.h"
 #include "chromeos/components/tether/message_wrapper.h"
 #include "chromeos/components/tether/proto/tether.pb.h"
 #include "chromeos/components/tether/tether_host_response_recorder.h"
@@ -37,10 +37,9 @@ ConnectTetheringOperation::Factory*
 // static
 std::unique_ptr<ConnectTetheringOperation>
 ConnectTetheringOperation::Factory::NewInstance(
-    cryptauth::RemoteDeviceRef device_to_connect,
+    multidevice::RemoteDeviceRef device_to_connect,
     device_sync::DeviceSyncClient* device_sync_client,
     secure_channel::SecureChannelClient* secure_channel_client,
-    BleConnectionManager* connection_manager,
     TetherHostResponseRecorder* tether_host_response_recorder,
     bool setup_required) {
   if (!factory_instance_) {
@@ -48,7 +47,7 @@ ConnectTetheringOperation::Factory::NewInstance(
   }
   return factory_instance_->BuildInstance(
       device_to_connect, device_sync_client, secure_channel_client,
-      connection_manager, tether_host_response_recorder, setup_required);
+      tether_host_response_recorder, setup_required);
 }
 
 // static
@@ -59,30 +58,27 @@ void ConnectTetheringOperation::Factory::SetInstanceForTesting(
 
 std::unique_ptr<ConnectTetheringOperation>
 ConnectTetheringOperation::Factory::BuildInstance(
-    cryptauth::RemoteDeviceRef device_to_connect,
+    multidevice::RemoteDeviceRef device_to_connect,
     device_sync::DeviceSyncClient* device_sync_client,
     secure_channel::SecureChannelClient* secure_channel_client,
-    BleConnectionManager* connection_manager,
     TetherHostResponseRecorder* tether_host_response_recorder,
     bool setup_required) {
   return base::WrapUnique(new ConnectTetheringOperation(
       device_to_connect, device_sync_client, secure_channel_client,
-      connection_manager, tether_host_response_recorder, setup_required));
+      tether_host_response_recorder, setup_required));
 }
 
 ConnectTetheringOperation::ConnectTetheringOperation(
-    cryptauth::RemoteDeviceRef device_to_connect,
+    multidevice::RemoteDeviceRef device_to_connect,
     device_sync::DeviceSyncClient* device_sync_client,
     secure_channel::SecureChannelClient* secure_channel_client,
-    BleConnectionManager* connection_manager,
     TetherHostResponseRecorder* tether_host_response_recorder,
     bool setup_required)
     : MessageTransferOperation(
-          cryptauth::RemoteDeviceRefList{device_to_connect},
+          multidevice::RemoteDeviceRefList{device_to_connect},
           secure_channel::ConnectionPriority::kHigh,
           device_sync_client,
-          secure_channel_client,
-          connection_manager),
+          secure_channel_client),
       remote_device_(device_to_connect),
       tether_host_response_recorder_(tether_host_response_recorder),
       clock_(base::DefaultClock::GetInstance()),
@@ -100,7 +96,7 @@ void ConnectTetheringOperation::RemoveObserver(Observer* observer) {
 }
 
 void ConnectTetheringOperation::OnDeviceAuthenticated(
-    cryptauth::RemoteDeviceRef remote_device) {
+    multidevice::RemoteDeviceRef remote_device) {
   DCHECK(remote_devices().size() == 1u && remote_devices()[0] == remote_device);
   connect_tethering_request_start_time_ = clock_->Now();
   connect_message_sequence_number_ = SendMessageToDevice(
@@ -110,7 +106,7 @@ void ConnectTetheringOperation::OnDeviceAuthenticated(
 
 void ConnectTetheringOperation::OnMessageReceived(
     std::unique_ptr<MessageWrapper> message_wrapper,
-    cryptauth::RemoteDeviceRef remote_device) {
+    multidevice::RemoteDeviceRef remote_device) {
   if (message_wrapper->GetMessageType() !=
       MessageType::CONNECT_TETHERING_RESPONSE) {
     // If another type of message has been received, ignore it.
@@ -128,11 +124,11 @@ void ConnectTetheringOperation::OnMessageReceived(
       ConnectTetheringResponse_ResponseCode::
           ConnectTetheringResponse_ResponseCode_SUCCESS) {
     if (response->has_ssid() && response->has_password()) {
-      PA_LOG(INFO) << "Received ConnectTetheringResponse from device with ID "
-                   << remote_device.GetTruncatedDeviceIdForLogs() << " and "
-                   << "response_code == SUCCESS. Config: {ssid: \""
-                   << response->ssid() << "\", password: \""
-                   << response->password() << "\"}";
+      PA_LOG(VERBOSE)
+          << "Received ConnectTetheringResponse from device with ID "
+          << remote_device.GetTruncatedDeviceIdForLogs() << " and "
+          << "response_code == SUCCESS. Config: {ssid: \"" << response->ssid()
+          << "\", password: \"" << response->password() << "\"}";
 
       tether_host_response_recorder_->RecordSuccessfulConnectTetheringResponse(
           remote_device);
@@ -151,9 +147,10 @@ void ConnectTetheringOperation::OnMessageReceived(
           HostResponseErrorCode::INVALID_HOTSPOT_CREDENTIALS;
     }
   } else {
-    PA_LOG(INFO) << "Received ConnectTetheringResponse from device with ID "
-                 << remote_device.GetTruncatedDeviceIdForLogs() << " and "
-                 << "response_code == " << response->response_code() << ".";
+    PA_LOG(WARNING)
+        << "Received failing ConnectTetheringResponse from device with ID "
+        << remote_device.GetTruncatedDeviceIdForLogs() << " and "
+        << "response_code == " << response->response_code() << ".";
     error_code_to_return_ = ConnectTetheringResponseCodeToHostResponseErrorCode(
         response->response_code());
   }
@@ -249,7 +246,7 @@ ConnectTetheringOperation::ConnectTetheringResponseCodeToHostResponseErrorCode(
       break;
   }
 
-  return HostResponseErrorCode::NO_RESPONSE;
+  return HostResponseErrorCode::UNRECOGNIZED_RESPONSE_ERROR;
 }
 
 void ConnectTetheringOperation::SetClockForTest(base::Clock* clock_for_test) {

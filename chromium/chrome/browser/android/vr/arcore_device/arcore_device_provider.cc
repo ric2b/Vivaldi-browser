@@ -5,28 +5,33 @@
 #include "chrome/browser/android/vr/arcore_device/arcore_device_provider.h"
 
 #include "chrome/browser/android/vr/arcore_device/arcore_device.h"
+#include "chrome/browser/android/vr/arcore_device/arcore_shim.h"
 
 namespace device {
 
-ARCoreDeviceProvider::ARCoreDeviceProvider() = default;
+ArCoreDeviceProvider::ArCoreDeviceProvider() = default;
 
-ARCoreDeviceProvider::~ARCoreDeviceProvider() = default;
+ArCoreDeviceProvider::~ArCoreDeviceProvider() = default;
 
-void ARCoreDeviceProvider::Initialize(
+void ArCoreDeviceProvider::Initialize(
     base::RepeatingCallback<void(mojom::XRDeviceId,
                                  mojom::VRDisplayInfoPtr,
                                  mojom::XRRuntimePtr)> add_device_callback,
     base::RepeatingCallback<void(mojom::XRDeviceId)> remove_device_callback,
     base::OnceClosure initialization_complete) {
-  arcore_device_ = base::WrapUnique(new ARCoreDevice());
-  add_device_callback.Run(arcore_device_->GetId(),
-                          arcore_device_->GetVRDisplayInfo(),
-                          arcore_device_->BindXRRuntimePtr());
+  if (vr::IsArCoreSupported()) {
+    DVLOG(2) << __func__ << ": ARCore is supported, creating device";
+    arcore_device_ = std::make_unique<ArCoreDevice>();
+
+    add_device_callback.Run(arcore_device_->GetId(),
+                            arcore_device_->GetVRDisplayInfo(),
+                            arcore_device_->BindXRRuntimePtr());
+  }
   initialized_ = true;
   std::move(initialization_complete).Run();
 }
 
-bool ARCoreDeviceProvider::Initialized() {
+bool ArCoreDeviceProvider::Initialized() {
   return initialized_;
 }
 

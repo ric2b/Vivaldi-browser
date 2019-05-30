@@ -27,11 +27,16 @@ class DEVICE_VR_EXPORT VRDeviceBase : public mojom::XRRuntime {
 
   // VRDevice Implementation
   void ListenToDeviceChanges(
-      mojom::XRRuntimeEventListenerPtr listener,
+      mojom::XRRuntimeEventListenerAssociatedPtrInfo listener,
       mojom::XRRuntime::ListenToDeviceChangesCallback callback) final;
   void SetListeningForActivate(bool is_listening) override;
+  void EnsureInitialized(int render_process_id,
+                         int render_frame_id,
+                         EnsureInitializedCallback callback) override;
+  void SetInlinePosesEnabled(bool enable) override;
 
-  void GetFrameData(mojom::XRFrameDataProvider::GetFrameDataCallback callback);
+  void GetInlineFrameData(
+      mojom::XRFrameDataProvider::GetFrameDataCallback callback);
 
   virtual void RequestHitTest(
       mojom::XRRayPtr ray,
@@ -51,7 +56,6 @@ class DEVICE_VR_EXPORT VRDeviceBase : public mojom::XRRuntime {
   // GVR delegate.
   virtual void PauseTracking();
   virtual void ResumeTracking();
-  void SetMagicWindowEnabled(bool enabled);
 
   mojom::VRDisplayInfoPtr GetVRDisplayInfo();
 
@@ -83,15 +87,15 @@ class DEVICE_VR_EXPORT VRDeviceBase : public mojom::XRRuntime {
  private:
   // TODO(https://crbug.com/842227): Rename methods to HandleOnXXX
   virtual void OnListeningForActivate(bool listening);
-  virtual void OnMagicWindowFrameDataRequest(
+  virtual void OnGetInlineFrameData(
       mojom::XRFrameDataProvider::GetFrameDataCallback callback);
 
-  mojom::XRRuntimeEventListenerPtr listener_;
+  mojom::XRRuntimeEventListenerAssociatedPtr listener_;
 
   bool presenting_ = false;
 
   device::mojom::XRDeviceId id_;
-  bool magic_window_enabled_ = true;
+  bool inline_poses_enabled_ = true;
 
   mojo::Binding<mojom::XRRuntime> runtime_binding_;
 

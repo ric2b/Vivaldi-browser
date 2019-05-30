@@ -16,6 +16,7 @@
 #include "base/values.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_token_status.h"
+#include "components/sync/driver/sync_user_settings.h"
 #include "components/sync/engine/cycle/sync_cycle_snapshot.h"
 #include "components/sync/engine/sync_status.h"
 #include "components/sync/engine/sync_string_conversions.h"
@@ -54,7 +55,8 @@ const char kRequestIncludeSpecificsInitialState[] =
     "requestIncludeSpecificsInitialState";
 const char kRequestListOfTypes[] = "requestListOfTypes";
 const char kRequestStart[] = "requestStart";
-const char kRequestStop[] = "requestStop";
+const char kRequestStopKeepData[] = "requestStopKeepData";
+const char kRequestStopClearData[] = "requestStopClearData";
 const char kRequestUpdatedAboutInfo[] = "requestUpdatedAboutInfo";
 const char kRequestUserEventsVisibility[] = "requestUserEventsVisibility";
 const char kSetIncludeSpecifics[] = "setIncludeSpecifics";
@@ -195,6 +197,8 @@ std::string GetDisableReasonsString(int disable_reasons) {
     reason_strings.push_back("User choice");
   if (disable_reasons & syncer::SyncService::DISABLE_REASON_UNRECOVERABLE_ERROR)
     reason_strings.push_back("Unrecoverable error");
+  if (disable_reasons & syncer::SyncService::DISABLE_REASON_PAUSED)
+    reason_strings.push_back("Paused");
   return base::JoinString(reason_strings, ", ");
 }
 
@@ -202,8 +206,6 @@ std::string GetTransportStateString(syncer::SyncService::TransportState state) {
   switch (state) {
     case syncer::SyncService::TransportState::DISABLED:
       return "Disabled";
-    case syncer::SyncService::TransportState::WAITING_FOR_START_REQUEST:
-      return "Waiting for start request";
     case syncer::SyncService::TransportState::START_DEFERRED:
       return "Start deferred";
     case syncer::SyncService::TransportState::INITIALIZING:
@@ -312,6 +314,8 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
       section_summary->AddStringStat("Disable Reasons");
   Stat<bool>* feature_enabled =
       section_summary->AddBoolStat("Sync Feature Enabled");
+  Stat<bool>* setup_in_progress =
+      section_summary->AddBoolStat("Setup In Progress");
 
   Section* section_version = section_list.AddSection("Version Info");
   Stat<std::string>* client_version =
@@ -320,19 +324,23 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
 
   Section* section_identity = section_list.AddSection(kIdentityTitle);
   section_identity->MarkSensitive();
-  Stat<std::string>* sync_id =
+  Stat<std::string>* sync_client_id =
       section_identity->AddStringStat("Sync Client ID");
   Stat<std::string>* invalidator_id =
       section_identity->AddStringStat("Invalidator Client ID");
   Stat<std::string>* username = section_identity->AddStringStat("Username");
+  Stat<bool>* user_is_primary = section_identity->AddBoolStat("Is Primary");
+  Stat<std::string>* auth_error = section_identity->AddStringStat("Auth Error");
+  // TODO(treib): Add the *time* of the auth error?
 
   Section* section_credentials = section_list.AddSection("Credentials");
   Stat<std::string>* request_token_time =
       section_credentials->AddStringStat("Requested Token");
   Stat<std::string>* receive_token_time =
       section_credentials->AddStringStat("Received Token");
-  Stat<std::string>* token_request_status =
-      section_credentials->AddStringStat("Token Request Status");
+  Stat<std::string>* last_token_request_result =
+      section_credentials->AddStringStat("Last Token Request Result");
+  Stat<bool>* has_token = section_credentials->AddBoolStat("Has Token");
   Stat<std::string>* next_token_request =
       section_credentials->AddStringStat("Next Token Request");
 
@@ -443,6 +451,7 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
   transport_state->Set(GetTransportStateString(service->GetTransportState()));
   disable_reasons->Set(GetDisableReasonsString(service->GetDisableReasons()));
   feature_enabled->Set(service->IsSyncFeatureEnabled());
+  setup_in_progress->Set(service->IsSetupInProgress());
 
   SyncStatus full_status;
   bool is_status_valid = service->QueryDetailedSyncStatus(&full_status);
@@ -455,23 +464,27 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
 
   // Identity.
   if (is_status_valid && !full_status.sync_id.empty())
-    sync_id->Set(full_status.sync_id);
+    sync_client_id->Set(full_status.sync_id);
   if (is_status_valid && !full_status.invalidator_client_id.empty())
     invalidator_id->Set(full_status.invalidator_client_id);
   username->Set(service->GetAuthenticatedAccountInfo().email);
+  user_is_primary->Set(service->IsAuthenticatedAccountPrimary());
+  std::string auth_error_str = service->GetAuthError().ToString();
+  auth_error->Set(auth_error_str.empty() ? "None" : auth_error_str);
 
   // Credentials.
   request_token_time->Set(GetTimeStr(token_status.token_request_time, "n/a"));
   receive_token_time->Set(GetTimeStr(token_status.token_receive_time, "n/a"));
   std::string err = token_status.last_get_token_error.error_message();
-  token_request_status->Set(err.empty() ? "OK" : err);
+  last_token_request_result->Set(err.empty() ? "OK" : err);
+  has_token->Set(token_status.has_token);
   next_token_request->Set(
       GetTimeStr(token_status.next_token_request_time, "not scheduled"));
 
   // Local State.
   server_connection->Set(GetConnectionStatus(token_status));
   last_synced->Set(GetLastSyncedTimeString(service->GetLastSyncedTime()));
-  is_setup_complete->Set(service->IsFirstSetupComplete());
+  is_setup_complete->Set(service->GetUserSettings()->IsFirstSetupComplete());
   if (is_status_valid)
     is_syncing->Set(full_status.syncing);
   is_local_sync_enabled->Set(service->IsLocalSyncEnabled());
@@ -489,11 +502,14 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
     are_notifications_enabled->Set(full_status.notifications_enabled);
 
   // Encryption.
-  if (service->IsSyncActive()) {
-    is_using_explicit_passphrase->Set(service->IsUsingSecondaryPassphrase());
-    is_passphrase_required->Set(service->IsPassphraseRequired());
+  if (service->IsSyncFeatureActive()) {
+    is_using_explicit_passphrase->Set(
+        service->GetUserSettings()->IsUsingSecondaryPassphrase());
+    is_passphrase_required->Set(
+        service->GetUserSettings()->IsPassphraseRequired());
     passphrase_time->Set(
-        GetTimeStr(service->GetExplicitPassphraseTime(), "No Passphrase Time"));
+        GetTimeStr(service->GetUserSettings()->GetExplicitPassphraseTime(),
+                   "No Passphrase Time"));
   }
   if (is_status_valid) {
     is_cryptographer_ready->Set(full_status.cryptographer_ready);
@@ -510,12 +526,11 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
     if (snapshot.get_updates_origin() != sync_pb::SyncEnums::UNKNOWN_ORIGIN) {
       session_source->Set(ProtoEnumToString(snapshot.get_updates_origin()));
     }
-    get_key_result->Set(GetSyncerErrorString(
-        snapshot.model_neutral_state().last_get_key_result));
-    download_result->Set(GetSyncerErrorString(
-        snapshot.model_neutral_state().last_download_updates_result));
-    commit_result->Set(
-        GetSyncerErrorString(snapshot.model_neutral_state().commit_result));
+    get_key_result->Set(
+        snapshot.model_neutral_state().last_get_key_result.ToString());
+    download_result->Set(
+        snapshot.model_neutral_state().last_download_updates_result.ToString());
+    commit_result->Set(snapshot.model_neutral_state().commit_result.ToString());
   }
 
   // Running Totals.

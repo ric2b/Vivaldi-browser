@@ -22,8 +22,8 @@
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
-#include "gpu/vulkan/buildflags.h"
 #include "services/ws/public/cpp/gpu/command_buffer_metrics.h"
+#include "services/ws/public/cpp/gpu/shared_worker_context_provider_factory.h"
 #include "ui/compositor/compositor.h"
 
 namespace base {
@@ -37,16 +37,14 @@ class SurfaceManager;
 
 namespace gpu {
 class GpuChannelEstablishFactory;
-class VulkanImplementation;
 }
 
 namespace viz {
 class CompositingModeReporterImpl;
 class OutputDeviceBacking;
+class RasterContextProvider;
 class ServerSharedBitmapManager;
 class SoftwareOutputDevice;
-class VulkanInProcessContextProvider;
-class RasterContextProvider;
 }
 
 namespace ws {
@@ -73,7 +71,6 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
       base::WeakPtr<ui::Compositor> compositor) override;
   scoped_refptr<viz::ContextProvider> SharedMainThreadContextProvider()
       override;
-  double GetRefreshRate() const override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
   void AddObserver(ui::ContextFactoryObserver* observer) override;
@@ -96,8 +93,6 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
   void SetDisplayColorSpace(ui::Compositor* compositor,
                             const gfx::ColorSpace& blending_color_space,
                             const gfx::ColorSpace& output_color_space) override;
-  void SetAuthoritativeVSyncInterval(ui::Compositor* compositor,
-                                     base::TimeDelta interval) override;
   void SetDisplayVSyncParameters(ui::Compositor* compositor,
                                  base::TimeTicks timebase,
                                  base::TimeDelta interval) override;
@@ -115,6 +110,8 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
  private:
   struct PerCompositorData;
 
+  scoped_refptr<viz::RasterContextProvider> shared_worker_context_provider();
+
   PerCompositorData* CreatePerCompositorData(ui::Compositor* compositor);
   std::unique_ptr<viz::SoftwareOutputDevice> CreateSoftwareOutputDevice(
       gfx::AcceleratedWidget widget,
@@ -127,11 +124,6 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
   void DisableGpuCompositing(ui::Compositor* guilty_compositor);
 
   void OnLostMainThreadSharedContext();
-
-#if BUILDFLAG(ENABLE_VULKAN)
-  scoped_refptr<viz::VulkanInProcessContextProvider>
-  SharedVulkanContextProvider();
-#endif
 
   // viz::ContextLostObserver implementation.
   void OnContextLost() override;
@@ -154,10 +146,6 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
   std::unique_ptr<viz::OutputDeviceBacking> software_backing_;
 #endif
 
-#if BUILDFLAG(ENABLE_VULKAN)
-  std::unique_ptr<gpu::VulkanImplementation> vulkan_implementation_;
-#endif
-
   // Depends on SurfaceManager.
   typedef std::map<ui::Compositor*, std::unique_ptr<PerCompositorData>>
       PerCompositorDataMap;
@@ -168,16 +156,12 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
   base::ObserverList<ui::ContextFactoryObserver>::Unchecked observer_list_;
   scoped_refptr<base::SingleThreadTaskRunner> resize_task_runner_;
   std::unique_ptr<cc::SingleThreadTaskGraphRunner> task_graph_runner_;
-  scoped_refptr<viz::RasterContextProvider> shared_worker_context_provider_;
+  ws::SharedWorkerContextProviderFactory
+      shared_worker_context_provider_factory_;
 
   bool is_gpu_compositing_disabled_ = false;
   bool disable_frame_rate_limit_ = false;
   bool wait_for_all_pipeline_stages_before_draw_ = false;
-#if BUILDFLAG(ENABLE_VULKAN)
-  bool shared_vulkan_context_provider_initialized_ = false;
-  scoped_refptr<viz::VulkanInProcessContextProvider>
-      shared_vulkan_context_provider_;
-#endif
 
   gpu::GpuChannelEstablishFactory* const gpu_channel_factory_;
   // Service-side impl that controls the compositing mode based on what mode the

@@ -25,6 +25,8 @@ component("metrics_cpp") {
     "ukm_source_id.h",
   ]
 
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
   defines = [ "METRICS_IMPLEMENTATION" ]
 
   public_deps = [
@@ -93,5 +95,18 @@ static_library("ukm_builders") {
     ":gen_ukm_builders",
     ":metrics_cpp",
     "//base",
+  ]
+}
+
+source_set("manifest") {
+  sources = [
+    "manifest.cc",
+    "manifest.h",
+  ]
+
+  deps = [
+    "//base",
+    "//services/metrics/public/mojom",
+    "//services/service_manager/public/cpp",
   ]
 }

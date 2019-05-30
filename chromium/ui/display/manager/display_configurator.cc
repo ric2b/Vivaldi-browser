@@ -8,16 +8,19 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "chromeos/system/devicemode.h"
 #include "ui/display/display.h"
+#include "ui/display/display_features.h"
 #include "ui/display/display_switches.h"
 #include "ui/display/manager/apply_content_protection_task.h"
 #include "ui/display/manager/display_layout_manager.h"
 #include "ui/display/manager/display_util.h"
+#include "ui/display/manager/managed_display_info.h"
 #include "ui/display/manager/update_display_configuration_task.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
@@ -66,6 +69,35 @@ bool RunColorCorrectionClosureSync(
   }
 
   return false;
+}
+
+// Returns true if a platform native |mode| is equal to a |managed_mode|.
+bool AreModesEqual(const DisplayMode& mode,
+                   const ManagedDisplayMode& managed_mode) {
+  return mode.size() == managed_mode.size() &&
+         mode.refresh_rate() == managed_mode.refresh_rate() &&
+         mode.is_interlaced() == managed_mode.is_interlaced();
+}
+
+// Finds and returns a pointer to a platform native mode in the given |display|
+// snapshot's modes which exactly matches the given |managed_mode|. Returns
+// nullptr if nothing was found.
+const DisplayMode* FindExactMatchingMode(
+    const DisplaySnapshot& display,
+    const ManagedDisplayMode& managed_mode) {
+  if (managed_mode.native()) {
+    return display.native_mode() &&
+                   AreModesEqual(*display.native_mode(), managed_mode)
+               ? display.native_mode()
+               : nullptr;
+  }
+
+  for (const std::unique_ptr<const DisplayMode>& mode : display.modes()) {
+    if (AreModesEqual(*mode, managed_mode))
+      return mode.get();
+  }
+
+  return nullptr;
 }
 
 }  // namespace
@@ -290,19 +322,15 @@ bool DisplayConfigurator::DisplayLayoutManagerImpl::GetDisplayLayout(
       }
       break;
     }
-    case MULTIPLE_DISPLAY_STATE_DUAL_MIRROR: {
+    case MULTIPLE_DISPLAY_STATE_MULTI_MIRROR: {
       if (configurator_->mirroring_controller_->IsSoftwareMirroringEnforced()) {
         LOG(WARNING) << "Ignoring request to enter hardware mirror mode "
                         "because software mirroring is enforced";
         return false;
       }
 
-      bool can_set_mirror_mode =
-          configurator_->is_multi_mirroring_enabled_
-              ? (states.size() > 1 &&
-                 (num_on_displays == 0 || num_on_displays > 1))
-              : (states.size() == 2 &&
-                 (num_on_displays == 0 || num_on_displays == 2));
+      const bool can_set_mirror_mode =
+          states.size() > 1 && num_on_displays != 1;
       if (!can_set_mirror_mode) {
         LOG(WARNING) << "Ignoring request to enter mirrored mode with "
                      << states.size() << " connected display(s) and "
@@ -366,7 +394,7 @@ DisplayConfigurator::DisplayLayoutManagerImpl::GetDisplayStates() const {
 }
 
 bool DisplayConfigurator::DisplayLayoutManagerImpl::IsMirroring() const {
-  if (GetDisplayState() == MULTIPLE_DISPLAY_STATE_DUAL_MIRROR)
+  if (GetDisplayState() == MULTIPLE_DISPLAY_STATE_MULTI_MIRROR)
     return true;
 
   return GetSoftwareMirroringController() &&
@@ -376,12 +404,23 @@ bool DisplayConfigurator::DisplayLayoutManagerImpl::IsMirroring() const {
 const DisplayMode*
 DisplayConfigurator::DisplayLayoutManagerImpl::GetUserSelectedMode(
     const DisplaySnapshot& display) const {
-  gfx::Size size;
   const DisplayMode* selected_mode = nullptr;
-  if (GetStateController() &&
-      GetStateController()->GetResolutionForDisplayId(display.display_id(),
-                                                      &size)) {
-    selected_mode = FindDisplayModeMatchingSize(display, size);
+  auto* state_controller = GetStateController();
+  if (state_controller) {
+    ManagedDisplayMode mode;
+    const bool mode_found = state_controller->GetSelectedModeForDisplayId(
+        display.display_id(), &mode);
+    if (display::features::IsListAllDisplayModesEnabled()) {
+      // When selecting any arbitrary display mode is enabled, we don't try to
+      // be smart about finding the best mode matching the user-selected display
+      // size, rather we find an exact match to the selected display mode.
+      selected_mode =
+          mode_found ? FindExactMatchingMode(display, mode) : nullptr;
+    } else {
+      selected_mode = mode_found
+                          ? FindDisplayModeMatchingSize(display, mode.size())
+                          : nullptr;
+    }
   }
 
   // Fall back to native mode.
@@ -539,9 +578,7 @@ DisplayConfigurator::DisplayConfigurator()
       display_control_changing_(false),
       displays_suspended_(false),
       layout_manager_(new DisplayLayoutManagerImpl(this)),
-      is_multi_mirroring_enabled_(
-          !base::CommandLine::ForCurrentProcess()->HasSwitch(
-              ::switches::kDisableMultiMirroring)),
+      has_unassociated_display_(false),
       weak_ptr_factory_(this) {}
 
 DisplayConfigurator::~DisplayConfigurator() {
@@ -1052,7 +1089,7 @@ void DisplayConfigurator::ResumeDisplays() {
 
   displays_suspended_ = false;
 
-  if (current_display_state_ == MULTIPLE_DISPLAY_STATE_DUAL_MIRROR ||
+  if (current_display_state_ == MULTIPLE_DISPLAY_STATE_MULTI_MIRROR ||
       current_display_state_ == MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED) {
     // When waking up from suspend while being in a multi display mode, we
     // schedule a delayed forced configuration, which will make
@@ -1060,9 +1097,10 @@ void DisplayConfigurator::ResumeDisplays() {
     // This gives a chance to wait for all displays to be added and detected
     // before configuration is performed, so we won't immediately resize the
     // desktops and the windows on it to fit on a single display.
-    configure_timer_.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(
-                                          kResumeConfigureMultiDisplayDelayMs),
-                           this, &DisplayConfigurator::ConfigureDisplays);
+    configure_timer_.Start(
+        FROM_HERE,
+        base::TimeDelta::FromMilliseconds(kResumeConfigureMultiDisplayDelayMs),
+        this, &DisplayConfigurator::ConfigureDisplays);
   }
 
   // TODO(crbug.com/794831): Solve the issue of mirror mode on display resume.
@@ -1119,6 +1157,7 @@ void DisplayConfigurator::RunPendingConfiguration() {
 void DisplayConfigurator::OnConfigured(
     bool success,
     const std::vector<DisplaySnapshot*>& displays,
+    const std::vector<DisplaySnapshot*>& unassociated_displays,
     MultipleDisplayState new_display_state,
     chromeos::DisplayPowerState new_power_state) {
   VLOG(1) << "OnConfigured: success=" << success << " new_display_state="
@@ -1126,6 +1165,8 @@ void DisplayConfigurator::OnConfigured(
           << " new_power_state=" << DisplayPowerStateToString(new_power_state);
 
   cached_displays_ = displays;
+  has_unassociated_display_ = unassociated_displays.size();
+
   if (success) {
     current_display_state_ = new_display_state;
     UpdatePowerState(new_power_state);

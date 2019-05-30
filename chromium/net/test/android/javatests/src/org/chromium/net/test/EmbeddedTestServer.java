@@ -8,7 +8,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.os.Environment;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
@@ -22,15 +21,20 @@ import org.chromium.net.test.util.CertTestUtil;
 
 import java.io.File;
 
-/** A simple file server for java tests.
+import javax.annotation.concurrent.GuardedBy;
+
+/**
+ * A simple file server for java tests.
  *
  * An example use:
- *   EmbeddedTestServer s = EmbeddedTestServer.createAndStartServer(context);
+ * <pre>
+ * EmbeddedTestServer s = EmbeddedTestServer.createAndStartServer(context);
  *
- *   // serve requests...
- *   s.getURL("/foo/bar.txt");
+ * // serve requests...
+ * s.getURL("/foo/bar.txt");
  *
- *   s.stopAndDestroyServer();
+ * s.stopAndDestroyServer();
+ * </pre>
  *
  * Note that this runs net::test_server::EmbeddedTestServer in a service in a separate APK.
  */
@@ -41,6 +45,7 @@ public class EmbeddedTestServer {
             "org.chromium.net.test.EMBEDDED_TEST_SERVER_SERVICE";
     private static final long SERVICE_CONNECTION_WAIT_INTERVAL_MS = 5000;
 
+    @GuardedBy("mImplMonitor")
     private IEmbeddedTestServerImpl mImpl;
     private ServiceConnection mConn = new ServiceConnection() {
         @Override
@@ -218,7 +223,7 @@ public class EmbeddedTestServer {
      *
      * @param serverCertificate The type of certificate the server should use.
      */
-    public void setSSLConfig(int serverCertificate) {
+    public void setSSLConfig(@ServerCertificate int serverCertificate) {
         try {
             synchronized (mImplMonitor) {
                 checkServiceLocked();
@@ -271,13 +276,14 @@ public class EmbeddedTestServer {
         }
     }
 
+    @GuardedBy("mImplMonitor")
     private void checkServiceLocked() {
         if (mImpl == null) {
             throw new EmbeddedTestServerFailure("Service disconnected.");
         }
     }
 
-    /** Starts the server.
+    /** Starts the server with an automatically selected port.
      *
      *  Note that this should be called after handlers are set up, including any relevant calls
      *  serveFilesFromDirectory.
@@ -285,47 +291,27 @@ public class EmbeddedTestServer {
      *  @return Whether the server was successfully initialized.
      */
     public boolean start() {
+        return start(0);
+    }
+
+    /** Starts the server with the specified port.
+     *
+     *  Note that this should be called after handlers are set up, including any relevant calls
+     *  serveFilesFromDirectory.
+     *
+     *  @param port The port to use for the server, 0 to auto-select an unused port.
+     *
+     *  @return Whether the server was successfully initialized.
+     */
+    public boolean start(int port) {
         try {
             synchronized (mImplMonitor) {
                 checkServiceLocked();
-                return mImpl.start();
+                return mImpl.start(port);
             }
         } catch (RemoteException e) {
             throw new EmbeddedTestServerFailure("Failed to start server.", e);
         }
-    }
-
-    /** Create and initialize a server that serves files from the provided directory.
-     *
-     *  This handles native object initialization, server configuration, and server initialization.
-     *  On returning, the server is ready for use.
-     *
-     *  @param context The context in which the server will run.
-     *  @param directory The directory from which files should be served. This must be
-     *      Environment.getExternalStorageDirectory().
-     *  @return The created server.
-     */
-    public static EmbeddedTestServer createAndStartFileServer(Context context, File directory)
-            throws InterruptedException {
-        // TODO(jbudorick): Update all callers to use createAndStartServer() directly.
-        if (!directory.equals(Environment.getExternalStorageDirectory())) {
-            throw new IllegalArgumentException("Expected directory to be ExternalStorageDirectory");
-        }
-        return createAndStartServer(context);
-    }
-
-    /** Create and initialize a server with the default handlers.
-     *
-     *  This handles native object initialization, server configuration, and server initialization.
-     *  On returning, the server is ready for use.
-     *
-     *  @param context The context in which the server will run.
-     *  @return The created server.
-     */
-    public static EmbeddedTestServer createAndStartDefaultServer(Context context)
-            throws InterruptedException {
-        // TODO(pkotwicz): Update all callers to use createAndStartServer() directly.
-        return createAndStartServer(context);
     }
 
     /** Create and initialize a server with the default handlers.
@@ -338,11 +324,25 @@ public class EmbeddedTestServer {
      */
     public static EmbeddedTestServer createAndStartServer(Context context)
             throws InterruptedException {
+        return createAndStartServerWithPort(context, 0);
+    }
+
+    /** Create and initialize a server with the default handlers and specified port.
+     *
+     *  This handles native object initialization, server configuration, and server initialization.
+     *  On returning, the server is ready for use.
+     *
+     *  @param context The context in which the server will run.
+     *  @param port The port to use for the server, 0 to auto-select an unused port.
+     *  @return The created server.
+     */
+    public static EmbeddedTestServer createAndStartServerWithPort(Context context, int port)
+            throws InterruptedException {
         Assert.assertNotEquals("EmbeddedTestServer should not be created on UiThread, "
                 + "the instantiation will hang forever waiting for tasks to post to UI thread",
                 Looper.getMainLooper(), Looper.myLooper());
         EmbeddedTestServer server = new EmbeddedTestServer();
-        return initializeAndStartServer(server, context);
+        return initializeAndStartServer(server, context, port);
     }
 
     /** Create and initialize an HTTPS server with the default handlers.
@@ -355,13 +355,28 @@ public class EmbeddedTestServer {
      *  @return The created server.
      */
     public static EmbeddedTestServer createAndStartHTTPSServer(
-            Context context, int serverCertificate) throws InterruptedException {
+            Context context, @ServerCertificate int serverCertificate) throws InterruptedException {
+        return createAndStartHTTPSServerWithPort(context, serverCertificate, 0 /* port */);
+    }
+
+    /** Create and initialize an HTTPS server with the default handlers and specified port.
+     *
+     *  This handles native object initialization, server configuration, and server initialization.
+     *  On returning, the server is ready for use.
+     *
+     *  @param context The context in which the server will run.
+     *  @param serverCertificate The certificate option that the server will use.
+     *  @param port The port to use for the server, 0 to auto-select an unused port.
+     *  @return The created server.
+     */
+    public static EmbeddedTestServer createAndStartHTTPSServerWithPort(Context context,
+            @ServerCertificate int serverCertificate, int port) throws InterruptedException {
         Assert.assertNotEquals("EmbeddedTestServer should not be created on UiThread, "
                         + "the instantiation will hang forever waiting for tasks"
                         + " to post to UI thread",
                 Looper.getMainLooper(), Looper.myLooper());
         EmbeddedTestServer server = new EmbeddedTestServer();
-        return initializeAndStartHTTPSServer(server, context, serverCertificate);
+        return initializeAndStartHTTPSServer(server, context, serverCertificate, port);
     }
 
     /** Initialize a server with the default handlers.
@@ -371,13 +386,14 @@ public class EmbeddedTestServer {
      *
      *  @param server The server instance that will be initialized.
      *  @param context The context in which the server will run.
+     *  @param port The port to use for the server, 0 to auto-select an unused port.
      *  @return The created server.
      */
     public static <T extends EmbeddedTestServer> T initializeAndStartServer(
-            T server, Context context) throws InterruptedException {
+            T server, Context context, int port) throws InterruptedException {
         server.initializeNative(context, ServerHTTPSSetting.USE_HTTP);
         server.addDefaultHandlers("");
-        if (!server.start()) {
+        if (!server.start(port)) {
             throw new EmbeddedTestServerFailure("Failed to start serving using default handlers.");
         }
         return server;
@@ -392,14 +408,16 @@ public class EmbeddedTestServer {
      *  @param server The server instance that will be initialized.
      *  @param context The context in which the server will run.
      *  @param serverCertificate The certificate option that the server will use.
+     *  @param port The port to use for the server.
      *  @return The created server.
      */
     public static <T extends EmbeddedTestServer> T initializeAndStartHTTPSServer(
-            T server, Context context, int serverCertificate) throws InterruptedException {
+            T server, Context context, @ServerCertificate int serverCertificate, int port)
+            throws InterruptedException {
         server.initializeNative(context, ServerHTTPSSetting.USE_HTTPS);
         server.addDefaultHandlers("");
         server.setSSLConfig(serverCertificate);
-        if (!server.start()) {
+        if (!server.start(port)) {
             throw new EmbeddedTestServerFailure("Failed to start serving using default handlers.");
         }
         return server;

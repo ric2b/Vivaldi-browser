@@ -5,10 +5,12 @@
 #include "chrome/browser/apps/platform_apps/shortcut_manager.h"
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -20,6 +22,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/browser/extension_registry.h"
@@ -35,7 +38,7 @@ namespace {
 // need to be recreated. This might happen when we change various aspects of app
 // shortcuts like command-line flags or associated icons, binaries, etc.
 #if defined(OS_MACOSX)
-const int kCurrentAppShortcutsVersion = 4;
+const int kCurrentAppShortcutsVersion = 5;
 #else
 const int kCurrentAppShortcutsVersion = 0;
 #endif
@@ -52,11 +55,7 @@ void CreateShortcutsForApp(Profile* profile, const Extension* app) {
       web_app::APP_MENU_LOCATION_SUBDIR_CHROMEAPPS;
 
   web_app::CreateShortcuts(web_app::SHORTCUT_CREATION_AUTOMATED,
-                           creation_locations, profile, app);
-}
-
-void SetCurrentAppShortcutsVersion(PrefService* prefs) {
-  prefs->SetInteger(prefs::kAppShortcutsVersion, kCurrentAppShortcutsVersion);
+                           creation_locations, profile, app, base::DoNothing());
 }
 
 }  // namespace
@@ -71,7 +70,6 @@ void AppShortcutManager::RegisterProfilePrefs(
 AppShortcutManager::AppShortcutManager(Profile* profile)
     : profile_(profile),
       is_profile_attributes_storage_observer_(false),
-      prefs_(profile->GetPrefs()),
       extension_registry_observer_(this),
       weak_ptr_factory_(this) {
   // Use of g_browser_process requires that we are either on the UI thread, or
@@ -143,17 +141,32 @@ void AppShortcutManager::OnProfileWillBeRemoved(
                      profile_path));
 }
 
+void AppShortcutManager::UpdateShortcutsForAllAppsNow() {
+  web_app::UpdateShortcutsForAllApps(
+      profile_,
+      base::BindOnce(&AppShortcutManager::SetCurrentAppShortcutsVersion,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void AppShortcutManager::SetCurrentAppShortcutsVersion() {
+  profile_->GetPrefs()->SetInteger(prefs::kAppShortcutsVersion,
+                                   kCurrentAppShortcutsVersion);
+}
+
 void AppShortcutManager::UpdateShortcutsForAllAppsIfNeeded() {
+  // Updating shortcuts writes to user home folders, which can not be done in
+  // tests without exploding disk space usage on the bots.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kTestType))
     return;
 
-  int last_version = prefs_->GetInteger(prefs::kAppShortcutsVersion);
+  int last_version =
+      profile_->GetPrefs()->GetInteger(prefs::kAppShortcutsVersion);
   if (last_version >= kCurrentAppShortcutsVersion)
     return;
 
-  content::BrowserThread::PostDelayedTask(
-      content::BrowserThread::UI, FROM_HERE,
-      base::BindOnce(&web_app::UpdateShortcutsForAllApps, profile_,
-                     base::Bind(&SetCurrentAppShortcutsVersion, prefs_)),
+  base::PostDelayedTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
+      base::BindOnce(&AppShortcutManager::UpdateShortcutsForAllAppsNow,
+                     weak_ptr_factory_.GetWeakPtr()),
       base::TimeDelta::FromSeconds(kUpdateShortcutsForAllAppsDelay));
 }

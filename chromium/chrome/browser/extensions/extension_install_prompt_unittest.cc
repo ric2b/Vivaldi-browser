@@ -97,7 +97,7 @@ TEST_F(ExtensionInstallPromptUnitTest, PromptShowsPermissionWarnings) {
   APIPermissionSet api_permissions;
   api_permissions.insert(APIPermission::kTab);
   std::unique_ptr<const PermissionSet> permission_set(
-      new PermissionSet(api_permissions, ManifestPermissionSet(),
+      new PermissionSet(std::move(api_permissions), ManifestPermissionSet(),
                         URLPatternSet(), URLPatternSet()));
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
@@ -175,7 +175,7 @@ TEST_F(ExtensionInstallPromptTestWithService, ExtensionInstallPromptIconsTest) {
   ImageLoader::Get(browser_context())
       ->LoadImagesAsync(
           extension, image_rep,
-          base::Bind(&SetImage, &image, image_loop.QuitClosure()));
+          base::BindOnce(&SetImage, &image, image_loop.QuitClosure()));
   image_loop.Run();
   ASSERT_FALSE(image.IsEmpty());
   std::unique_ptr<content::WebContents> web_contents(

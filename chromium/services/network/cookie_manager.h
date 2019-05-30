@@ -62,7 +62,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CookieManager
                      const net::CookieOptions& cookie_options,
                      GetCookieListCallback callback) override;
   void SetCanonicalCookie(const net::CanonicalCookie& cookie,
-                          bool secure_source,
+                          const std::string& source_scheme,
                           bool modify_http_only,
                           SetCanonicalCookieCallback callback) override;
   void DeleteCanonicalCookie(const net::CanonicalCookie& cookie,
@@ -114,6 +114,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CookieManager
   scoped_refptr<SessionCleanupChannelIDStore> session_cleanup_channel_id_store_;
   mojo::BindingSet<mojom::CookieManager> bindings_;
   std::vector<std::unique_ptr<ListenerRegistration>> listener_registrations_;
+  // Note: RestrictedCookieManager stores pointers to |cookie_settings_|.
   CookieSettings cookie_settings_;
 
   DISALLOW_COPY_AND_ASSIGN(CookieManager);

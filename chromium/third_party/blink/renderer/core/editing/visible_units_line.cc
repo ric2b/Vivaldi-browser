@@ -153,11 +153,12 @@ Node* PreviousLeafWithSameEditability(const Node& node,
   return nullptr;
 }
 
-Node* NextLeafWithSameEditability(Node* node, EditableType editable_type) {
+Node* NextLeafWithGivenEditability(Node* node,
+                                   EditableType editable_type,
+                                   bool editable) {
   if (!node)
     return nullptr;
 
-  const bool editable = HasEditableStyle(*node, editable_type);
   for (Node* runner = NextAtomicLeafNode(*node); runner;
        runner = NextAtomicLeafNode(*runner)) {
     if (editable == HasEditableStyle(*runner, editable_type))
@@ -338,12 +339,20 @@ Position NextRootInlineBoxCandidatePosition(
   DCHECK(visible_position.IsValid()) << visible_position;
   ContainerNode* highest_root =
       HighestEditableRoot(visible_position.DeepEquivalent(), editable_type);
-  Node* next_node = NextLeafWithSameEditability(node, editable_type);
-  while (next_node && InSameLine(*next_node, visible_position))
-    next_node = NextLeafWithSameEditability(next_node, kContentIsEditable);
+  // TODO(xiaochengh): We probably also need to pass in the starting editability
+  // to |PreviousLeafWithSameEditability|.
+  const bool is_editable = HasEditableStyle(
+      *visible_position.DeepEquivalent().ComputeContainerNode(), editable_type);
+  Node* next_node =
+      NextLeafWithGivenEditability(node, editable_type, is_editable);
+  while (next_node && InSameLine(*next_node, visible_position)) {
+    next_node = NextLeafWithGivenEditability(next_node, kContentIsEditable,
+                                             is_editable);
+  }
 
   for (Node* runner = next_node; runner && !runner->IsShadowRoot();
-       runner = NextLeafWithSameEditability(runner, editable_type)) {
+       runner =
+           NextLeafWithGivenEditability(runner, editable_type, is_editable)) {
     if (HighestEditableRootOfNode(*runner, editable_type) != highest_root)
       break;
 
@@ -689,6 +698,8 @@ VisiblePosition PreviousLinePosition(const VisiblePosition& visible_position,
                                      EditableType editable_type) {
   DCHECK(visible_position.IsValid()) << visible_position;
 
+  // TODO(xiaochengh): Make all variables |const|.
+
   Position p = visible_position.DeepEquivalent();
   Node* node = p.AnchorNode();
 
@@ -756,6 +767,8 @@ VisiblePosition NextLinePosition(const VisiblePosition& visible_position,
                                  EditableType editable_type) {
   DCHECK(visible_position.IsValid()) << visible_position;
 
+  // TODO(xiaochengh): Make all variables |const|.
+
   Position p = visible_position.DeepEquivalent();
   Node* node = p.AnchorNode();
 
@@ -779,9 +792,10 @@ VisiblePosition NextLinePosition(const VisiblePosition& visible_position,
   if (!root) {
     // FIXME: We need do the same in previousLinePosition.
     Node* child = NodeTraversal::ChildAt(*node, p.ComputeEditingOffset());
-    node = child ? child : &NodeTraversal::LastWithinOrSelf(*node);
+    Node* search_start_node =
+        child ? child : &NodeTraversal::LastWithinOrSelf(*node);
     Position position = NextRootInlineBoxCandidatePosition(
-        node, visible_position, editable_type);
+        search_start_node, visible_position, editable_type);
     if (position.IsNotNull()) {
       const VisiblePosition candidate = CreateVisiblePosition(position);
       const InlineBox* inline_box =

@@ -62,6 +62,13 @@ public class CastWebContentsActivityTest {
     }
 
     @Test
+    public void testSetsVolumeControlStream() {
+        mActivityLifecycle.create();
+
+        assertEquals(AudioManager.STREAM_MUSIC, mActivity.getVolumeControlStream());
+    }
+
+    @Test
     public void testNewIntentAfterFinishLaunchesNewActivity() {
         mActivityLifecycle.create();
         mActivity.finishForTesting();
@@ -153,7 +160,7 @@ public class CastWebContentsActivityTest {
         mShadowActivity = Shadows.shadowOf(mActivity);
         mActivityLifecycle.create();
 
-        Assert.assertTrue(Shadows.shadowOf(mShadowActivity.getWindow())
+        Assert.assertTrue(Shadows.shadowOf(mActivity.getWindow())
                                   .getFlag(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON));
     }
 
@@ -167,14 +174,14 @@ public class CastWebContentsActivityTest {
         mShadowActivity = Shadows.shadowOf(mActivity);
         mActivityLifecycle.create();
 
-        Assert.assertFalse(Shadows.shadowOf(mShadowActivity.getWindow())
+        Assert.assertFalse(Shadows.shadowOf(mActivity.getWindow())
                                    .getFlag(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON));
     }
 
     @Test
     public void testSetsKeepScreenOnFlag() {
         mActivityLifecycle.create();
-        Assert.assertTrue(Shadows.shadowOf(mShadowActivity.getWindow())
+        Assert.assertTrue(Shadows.shadowOf(mActivity.getWindow())
                                   .getFlag(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
     }
 
@@ -193,9 +200,29 @@ public class CastWebContentsActivityTest {
     }
 
     @Test
-    public void testBackButtonFinishes() {
+    public void testUserLeaveAndStopDestroysSurfaceHelper() {
+        CastWebContentsSurfaceHelper surfaceHelper = mock(CastWebContentsSurfaceHelper.class);
+        mActivity.setSurfaceHelperForTesting(surfaceHelper);
+        mActivityLifecycle.create().start().resume();
+        mActivityLifecycle.pause().userLeaving().stop();
+        verify(surfaceHelper).onDestroy();
+    }
+
+    @Test
+    public void testOnDestroyDestroysSurfaceHelper() {
+        CastWebContentsSurfaceHelper surfaceHelper = mock(CastWebContentsSurfaceHelper.class);
+        mActivity.setSurfaceHelperForTesting(surfaceHelper);
+        mActivityLifecycle.create().start().resume();
+        mActivityLifecycle.pause().stop();
+        verify(surfaceHelper, never()).onDestroy();
+        mActivityLifecycle.destroy();
+        verify(surfaceHelper).onDestroy();
+    }
+
+    @Test
+    public void testBackButtonDoesNotCauseFinish() {
         mActivityLifecycle.create().start().resume();
         mActivity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK));
-        Assert.assertTrue(mShadowActivity.isFinishing());
+        Assert.assertFalse(mShadowActivity.isFinishing());
     }
 }

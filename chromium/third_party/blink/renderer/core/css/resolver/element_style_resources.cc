@@ -25,12 +25,13 @@
 
 #include "third_party/blink/renderer/core/css/css_gradient_value.h"
 #include "third_party/blink/renderer/core/css/css_image_value.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_uri_value.h"
-#include "third_party/blink/renderer/core/css_property_names.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/tree_scope.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/lazy_load_image_observer.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/content_data.h"
@@ -44,7 +45,7 @@
 #include "third_party/blink/renderer/core/style/style_pending_image.h"
 #include "third_party/blink/renderer/core/svg/svg_resource.h"
 #include "third_party/blink/renderer/core/svg/svg_tree_scope_resources.h"
-#include "third_party/blink/renderer/platform/length.h"
+#include "third_party/blink/renderer/platform/geometry/length.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 
@@ -107,8 +108,8 @@ SVGResource* ElementStyleResources::GetSVGResourceFromValue(
   if (value.IsLocal(element_->GetDocument())) {
     SVGTreeScopeResources& tree_scope_resources =
         tree_scope.EnsureSVGTreeScopedResources();
-    AtomicString decoded_fragment(
-        DecodeURLEscapeSequences(value.FragmentIdentifier()));
+    AtomicString decoded_fragment(DecodeURLEscapeSequences(
+        value.FragmentIdentifier(), DecodeURLMode::kUTF8OrIsomorphic));
     return tree_scope_resources.ResourceForId(decoded_fragment);
   }
   if (allow_external == kAllowExternalResource)
@@ -203,10 +204,11 @@ void ElementStyleResources::LoadPendingImages(ComputedStyle* style) {
             FetchParameters::ImageRequestOptimization
                 image_request_optimization = FetchParameters::kNone;
             if (!BackgroundLayerMayBeSprite(*background_layer)) {
-              if (element_->GetDocument()
+              if (element_->GetDocument().GetSettings() &&
+                  element_->GetDocument().GetSettings()->GetLazyLoadEnabled() &&
+                  element_->GetDocument()
                       .GetFrame()
                       ->IsLazyLoadingImageAllowed()) {
-                background_image->SetIsLazyloadPossiblyDeferred(true);
                 image_request_optimization = FetchParameters::kDeferImageLoad;
               } else {
                 image_request_optimization = FetchParameters::kAllowPlaceholder;
@@ -215,10 +217,8 @@ void ElementStyleResources::LoadPendingImages(ComputedStyle* style) {
             StyleImage* new_image =
                 LoadPendingImage(style, ToStylePendingImage(background_image),
                                  image_request_optimization);
-            if (new_image && new_image->IsImageResource() &&
-                ToStyleFetchedImage(new_image)->IsLazyloadPossiblyDeferred()) {
+            if (new_image && new_image->IsLazyloadPossiblyDeferred())
               LazyLoadImageObserver::StartMonitoring(element_);
-            }
             background_layer->SetImage(new_image);
           }
         }
@@ -242,7 +242,7 @@ void ElementStyleResources::LoadPendingImages(ComputedStyle* style) {
       }
       case CSSPropertyCursor: {
         if (CursorList* cursor_list = style->Cursors()) {
-          for (size_t i = 0; i < cursor_list->size(); ++i) {
+          for (wtf_size_t i = 0; i < cursor_list->size(); ++i) {
             CursorData& current_cursor = cursor_list->at(i);
             if (StyleImage* image = current_cursor.GetImage()) {
               if (image->IsPendingImage()) {

@@ -6,34 +6,38 @@
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/window_properties.h"
+#include "ash/shell.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/app_list/internal_app/internal_app_metadata.h"
 #include "chrome/browser/ui/ash/launcher/app_window_base.h"
 #include "chrome/browser/ui/ash/launcher/app_window_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
+#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_client.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/base/base_window.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/views/widget/widget.h"
 
 InternalAppWindowShelfController::InternalAppWindowShelfController(
     ChromeLauncherController* owner)
     : AppWindowLauncherController(owner) {
-  if (aura::Env::HasInstance())
-    aura::Env::GetInstance()->AddObserver(this);
+  // TODO(mash): Find another way to observe for internal app window creation.
+  // https://crbug.com/887156
+  if (!features::IsMultiProcessMash())
+    ash::Shell::Get()->aura_env()->AddObserver(this);
 }
 
 InternalAppWindowShelfController::~InternalAppWindowShelfController() {
   for (auto* window : observed_windows_)
     window->RemoveObserver(this);
 
-  if (aura::Env::HasInstance())
-    aura::Env::GetInstance()->RemoveObserver(this);
+  if (!features::IsMultiProcessMash())
+    ash::Shell::Get()->aura_env()->RemoveObserver(this);
 }
 
 void InternalAppWindowShelfController::ActiveUserChanged(
@@ -45,7 +49,7 @@ void InternalAppWindowShelfController::ActiveUserChanged(
       continue;
     }
 
-    if (MultiUserWindowManager::GetInstance()
+    if (MultiUserWindowManagerClient::GetInstance()
             ->GetWindowOwner(w.first)
             .GetUserEmail() == user_email) {
       AddToShelf(app_window);
@@ -130,7 +134,7 @@ void InternalAppWindowShelfController::RegisterAppWindow(
   // Keyboard Shortcut Viewer has a global instance so it can be shared with
   // different users.
   if (shelf_id.app_id != app_list::kInternalAppIdKeyboardShortcutViewer) {
-    MultiUserWindowManager::GetInstance()->SetWindowOwner(
+    MultiUserWindowManagerClient::GetInstance()->SetWindowOwner(
         window,
         user_manager::UserManager::Get()->GetActiveUser()->GetAccountId());
   }
@@ -143,7 +147,12 @@ void InternalAppWindowShelfController::RegisterAppWindow(
 }
 
 void InternalAppWindowShelfController::AddToShelf(AppWindowBase* app_window) {
-  ash::ShelfID shelf_id = app_window->shelf_id();
+  const ash::ShelfID shelf_id = app_window->shelf_id();
+  // Internal Camera app does not have own window. Either ARC or extension
+  // window controller would add window to controller.
+  if (shelf_id.app_id == app_list::kInternalAppIdCamera)
+    return;
+
   AppWindowLauncherItemController* item_controller =
       owner()->shelf_model()->GetAppWindowLauncherItemController(shelf_id);
   if (item_controller == nullptr) {
@@ -166,6 +175,12 @@ void InternalAppWindowShelfController::AddToShelf(AppWindowBase* app_window) {
 
 void InternalAppWindowShelfController::RemoveFromShelf(
     AppWindowBase* app_window) {
+  const ash::ShelfID shelf_id = app_window->shelf_id();
+  // Internal Camera app does not have own window. Either ARC or extension
+  // window controller would remove window from controller.
+  if (shelf_id.app_id == app_list::kInternalAppIdCamera)
+    return;
+
   UnregisterAppWindow(app_window);
 
   // Check if we may close controller now, at this point we can safely remove

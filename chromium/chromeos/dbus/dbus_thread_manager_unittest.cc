@@ -35,7 +35,7 @@ TEST(DBusThreadManagerTest, Initialize) {
   EXPECT_TRUE(manager->GetLorgnetteManagerClient());
   EXPECT_TRUE(manager->GetModemMessagingClient());
   EXPECT_TRUE(manager->GetPermissionBrokerClient());
-  EXPECT_TRUE(manager->GetPowerManagerClient());
+  EXPECT_TRUE(manager->GetSeneschalClient());
   EXPECT_TRUE(manager->GetSessionManagerClient());
   EXPECT_TRUE(manager->GetShillDeviceClient());
   EXPECT_TRUE(manager->GetShillIPConfigClient());
@@ -44,7 +44,6 @@ TEST(DBusThreadManagerTest, Initialize) {
   EXPECT_TRUE(manager->GetShillProfileClient());
   EXPECT_TRUE(manager->GetShillThirdPartyVpnDriverClient());
   EXPECT_TRUE(manager->GetSMSClient());
-  EXPECT_TRUE(manager->GetSystemClockClient());
   EXPECT_TRUE(manager->GetUpdateEngineClient());
 
   DBusThreadManager::Shutdown();
@@ -63,7 +62,6 @@ TEST(DBusThreadManagerTest, InitializeForBrowser) {
   EXPECT_TRUE(manager->GetGsmSMSClient());
   EXPECT_TRUE(manager->GetModemMessagingClient());
   EXPECT_TRUE(manager->GetPermissionBrokerClient());
-  EXPECT_TRUE(manager->GetPowerManagerClient());
   EXPECT_TRUE(manager->GetSessionManagerClient());
   EXPECT_TRUE(manager->GetShillDeviceClient());
   EXPECT_TRUE(manager->GetShillIPConfigClient());
@@ -72,7 +70,6 @@ TEST(DBusThreadManagerTest, InitializeForBrowser) {
   EXPECT_TRUE(manager->GetShillServiceClient());
   EXPECT_TRUE(manager->GetShillThirdPartyVpnDriverClient());
   EXPECT_TRUE(manager->GetSMSClient());
-  EXPECT_TRUE(manager->GetSystemClockClient());
   EXPECT_TRUE(manager->GetUpdateEngineClient());
 
   // Clients for the browser were created.
@@ -86,6 +83,7 @@ TEST(DBusThreadManagerTest, InitializeForBrowser) {
   EXPECT_TRUE(manager->GetEasyUnlockClient());
   EXPECT_TRUE(manager->GetImageBurnerClient());
   EXPECT_TRUE(manager->GetLorgnetteManagerClient());
+  EXPECT_TRUE(manager->GetSeneschalClient());
 
   DBusThreadManager::Shutdown();
 }
@@ -102,7 +100,6 @@ TEST(DBusThreadManagerTest, InitializeForAsh) {
   EXPECT_TRUE(manager->GetGsmSMSClient());
   EXPECT_TRUE(manager->GetModemMessagingClient());
   EXPECT_TRUE(manager->GetPermissionBrokerClient());
-  EXPECT_TRUE(manager->GetPowerManagerClient());
   EXPECT_TRUE(manager->GetSessionManagerClient());
   EXPECT_TRUE(manager->GetShillDeviceClient());
   EXPECT_TRUE(manager->GetShillIPConfigClient());
@@ -111,7 +108,6 @@ TEST(DBusThreadManagerTest, InitializeForAsh) {
   EXPECT_TRUE(manager->GetShillServiceClient());
   EXPECT_TRUE(manager->GetShillThirdPartyVpnDriverClient());
   EXPECT_TRUE(manager->GetSMSClient());
-  EXPECT_TRUE(manager->GetSystemClockClient());
   EXPECT_TRUE(manager->GetUpdateEngineClient());
 
   // Clients for other processes were not created.
@@ -125,6 +121,7 @@ TEST(DBusThreadManagerTest, InitializeForAsh) {
   EXPECT_FALSE(manager->GetEasyUnlockClient());
   EXPECT_FALSE(manager->GetImageBurnerClient());
   EXPECT_FALSE(manager->GetLorgnetteManagerClient());
+  EXPECT_FALSE(manager->GetSeneschalClient());
 
   DBusThreadManager::Shutdown();
 }

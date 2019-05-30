@@ -10,8 +10,8 @@
 #include <memory>
 
 #include "base/base_paths.h"
-#include "base/macros.h"
 #include "base/path_service.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_path_override.h"
 #include "base/test/test_reg_util_win.h"
@@ -21,8 +21,6 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/install_static/install_util.h"
 #include "chrome/install_static/test/scoped_install_details.h"
-#include "chrome/installer/util/app_registration_data.h"
-#include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/channel_info.h"
 #include "chrome/installer/util/fake_installation_state.h"
 #include "chrome/installer/util/google_update_constants.h"
@@ -70,41 +68,38 @@ class GoogleUpdateSettingsTest : public testing::Test {
     base::string16 value;
     // Before anything is set, ReadExperimentLabels should succeed but return
     // an empty string.
-    EXPECT_TRUE(GoogleUpdateSettings::ReadExperimentLabels(
-        install == SYSTEM_INSTALL, &value));
+    EXPECT_TRUE(GoogleUpdateSettings::ReadExperimentLabels(&value));
     EXPECT_EQ(base::string16(), value);
 
-    EXPECT_TRUE(GoogleUpdateSettings::SetExperimentLabels(
-        install == SYSTEM_INSTALL, kTestExperimentLabel));
+    EXPECT_TRUE(
+        GoogleUpdateSettings::SetExperimentLabels(kTestExperimentLabel));
 
     // Validate that something is written. Only worry about the label itself.
     RegKey key;
     HKEY root = install == SYSTEM_INSTALL ?
         HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
-    BrowserDistribution* chrome = BrowserDistribution::GetDistribution();
-    base::string16 state_key = install == SYSTEM_INSTALL ?
-        chrome->GetStateMediumKey() : chrome->GetStateKey();
+    base::string16 state_key =
+        install == SYSTEM_INSTALL
+            ? install_static::GetClientStateMediumKeyPath()
+            : install_static::GetClientStateKeyPath();
 
     EXPECT_EQ(ERROR_SUCCESS,
               key.Open(root, state_key.c_str(), KEY_QUERY_VALUE));
     EXPECT_EQ(ERROR_SUCCESS,
         key.ReadValue(google_update::kExperimentLabels, &value));
     EXPECT_EQ(kTestExperimentLabel, value);
-    EXPECT_TRUE(GoogleUpdateSettings::ReadExperimentLabels(
-        install == SYSTEM_INSTALL, &value));
+    EXPECT_TRUE(GoogleUpdateSettings::ReadExperimentLabels(&value));
     EXPECT_EQ(kTestExperimentLabel, value);
     key.Close();
 
     // Now that the label is set, test the delete functionality. An empty label
     // should result in deleting the value.
-    EXPECT_TRUE(GoogleUpdateSettings::SetExperimentLabels(
-        install == SYSTEM_INSTALL, base::string16()));
+    EXPECT_TRUE(GoogleUpdateSettings::SetExperimentLabels(base::string16()));
     EXPECT_EQ(ERROR_SUCCESS,
               key.Open(root, state_key.c_str(), KEY_QUERY_VALUE));
     EXPECT_EQ(ERROR_FILE_NOT_FOUND,
         key.ReadValue(google_update::kExperimentLabels, &value));
-    EXPECT_TRUE(GoogleUpdateSettings::ReadExperimentLabels(
-        install == SYSTEM_INSTALL, &value));
+    EXPECT_TRUE(GoogleUpdateSettings::ReadExperimentLabels(&value));
     EXPECT_EQ(base::string16(), value);
     key.Close();
   }
@@ -249,20 +244,20 @@ TEST_F(GoogleUpdateSettingsTest, UpdateGoogleUpdateApKey) {
     L"1.1-full",
     L"1.1-dev-full"
   };
-  static_assert(arraysize(full) == arraysize(plain), "bad full array size");
+  static_assert(base::size(full) == base::size(plain), "bad full array size");
   const wchar_t* const multifail[] = {
     L"-multifail",
     L"1.1-multifail",
     L"1.1-dev-multifail"
   };
-  static_assert(arraysize(multifail) == arraysize(plain),
+  static_assert(base::size(multifail) == base::size(plain),
                 "bad multifail array size");
   const wchar_t* const multifail_full[] = {
     L"-multifail-full",
     L"1.1-multifail-full",
     L"1.1-dev-multifail-full"
   };
-  static_assert(arraysize(multifail_full) == arraysize(plain),
+  static_assert(base::size(multifail_full) == base::size(plain),
                 "bad multifail_full array size");
   const wchar_t* const* input_arrays[] = {
     plain,
@@ -295,7 +290,7 @@ TEST_F(GoogleUpdateSettingsTest, UpdateGoogleUpdateApKey) {
           else
             outputs = plain;
         }
-        for (size_t input_idx = 0; input_idx < arraysize(plain); ++input_idx) {
+        for (size_t input_idx = 0; input_idx < base::size(plain); ++input_idx) {
           const wchar_t* input = inputs[input_idx];
           const wchar_t* output = outputs[input_idx];
 
@@ -406,7 +401,7 @@ TEST_F(GoogleUpdateSettingsTest, UpdateInstallStatusTest) {
   }
 }
 
-TEST_F(GoogleUpdateSettingsTest, SetEULAConsent) {
+TEST_F(GoogleUpdateSettingsTest, SetEulaConsent) {
   using installer::FakeInstallationState;
 
   const bool system_level = true;
@@ -418,16 +413,15 @@ TEST_F(GoogleUpdateSettingsTest, SetEULAConsent) {
 
   RegKey key;
   DWORD value;
-  BrowserDistribution* chrome = BrowserDistribution::GetDistribution();
 
   // eulaconsent is set on the product.
-  EXPECT_TRUE(GoogleUpdateSettings::SetEULAConsent(machine_state, chrome,
-                                                   true));
+  EXPECT_TRUE(GoogleUpdateSettings::SetEulaConsent(machine_state, true));
   EXPECT_EQ(ERROR_SUCCESS,
-      key.Open(HKEY_LOCAL_MACHINE, chrome->GetStateMediumKey().c_str(),
-               KEY_QUERY_VALUE));
+            key.Open(HKEY_LOCAL_MACHINE,
+                     install_static::GetClientStateMediumKeyPath().c_str(),
+                     KEY_QUERY_VALUE));
   EXPECT_EQ(ERROR_SUCCESS,
-      key.ReadValueDW(google_update::kRegEULAAceptedField, &value));
+            key.ReadValueDW(google_update::kRegEulaAceptedField, &value));
   EXPECT_EQ(1U, value);
 }
 
@@ -466,8 +460,7 @@ TEST_F(GoogleUpdateSettingsTest, UpdateProfileCountsSystemInstall) {
   install_static::ScopedInstallDetails details(true /* system_level */);
 
   // No profile count keys present yet.
-  const base::string16& state_key = BrowserDistribution::GetDistribution()->
-      GetAppRegistrationData().GetStateMediumKey();
+  base::string16 state_key = install_static::GetClientStateMediumKeyPath();
   base::string16 num_profiles_path(state_key);
   num_profiles_path.append(L"\\");
   num_profiles_path.append(google_update::kRegProfilesActive);
@@ -531,8 +524,7 @@ TEST_F(GoogleUpdateSettingsTest, UpdateProfileCountsUserInstall) {
   // be a system install.
 
   // No profile count values present yet.
-  const base::string16& state_key = BrowserDistribution::GetDistribution()->
-      GetAppRegistrationData().GetStateKey();
+  base::string16 state_key = install_static::GetClientStateKeyPath();
 
   EXPECT_EQ(ERROR_FILE_NOT_FOUND,
             RegKey().Open(HKEY_CURRENT_USER,
@@ -863,12 +855,12 @@ TEST_P(SetProgressTest, SetProgress) {
   }
 }
 
-INSTANTIATE_TEST_CASE_P(SetProgressUserLevel,
-                        SetProgressTest,
-                        testing::Values(false));
-INSTANTIATE_TEST_CASE_P(SetProgressSystemLevel,
-                        SetProgressTest,
-                        testing::Values(true));
+INSTANTIATE_TEST_SUITE_P(SetProgressUserLevel,
+                         SetProgressTest,
+                         testing::Values(false));
+INSTANTIATE_TEST_SUITE_P(SetProgressSystemLevel,
+                         SetProgressTest,
+                         testing::Values(true));
 
 // Test GoogleUpdateSettings::GetUninstallCommandLine at system- or user-level,
 // according to the param.
@@ -926,8 +918,9 @@ TEST_P(GetUninstallCommandLine, TestRealValue) {
             GoogleUpdateSettings::GetUninstallCommandLine(!system_install_));
 }
 
-INSTANTIATE_TEST_CASE_P(GetUninstallCommandLineAtLevel, GetUninstallCommandLine,
-                        testing::Bool());
+INSTANTIATE_TEST_SUITE_P(GetUninstallCommandLineAtLevel,
+                         GetUninstallCommandLine,
+                         testing::Bool());
 
 // Test GoogleUpdateSettings::GetGoogleUpdateVersion at system- or user-level,
 // according to the param.
@@ -986,8 +979,9 @@ TEST_P(GetGoogleUpdateVersion, TestRealValue) {
           .IsValid());
 }
 
-INSTANTIATE_TEST_CASE_P(GetGoogleUpdateVersionAtLevel, GetGoogleUpdateVersion,
-                        testing::Bool());
+INSTANTIATE_TEST_SUITE_P(GetGoogleUpdateVersionAtLevel,
+                         GetGoogleUpdateVersion,
+                         testing::Bool());
 
 // Test values for use by the CollectStatsConsent test fixture.
 class StatsState {
@@ -1047,13 +1041,11 @@ class CollectStatsConsent : public ::testing::TestWithParam<StatsState> {
                     HKEY root_key,
                     const base::string16& reg_key);
 
-  BrowserDistribution* const dist_;
   registry_util::RegistryOverrideManager override_manager_;
   std::unique_ptr<install_static::ScopedInstallDetails> scoped_install_details_;
 };
 
-CollectStatsConsent::CollectStatsConsent()
-    : dist_(BrowserDistribution::GetDistribution()) {}
+CollectStatsConsent::CollectStatsConsent() = default;
 
 // Install the registry override and apply the settings to the registry.
 void CollectStatsConsent::SetUp() {
@@ -1069,9 +1061,11 @@ void CollectStatsConsent::SetUp() {
           stats_state.system_level(), 0 /* install_mode_index */);
   const HKEY root_key = stats_state.root_key();
   ASSERT_NO_FATAL_FAILURE(
-      ApplySetting(stats_state.state_value(), root_key, dist_->GetStateKey()));
-  ASSERT_NO_FATAL_FAILURE(ApplySetting(stats_state.state_medium_value(),
-                                       root_key, dist_->GetStateMediumKey()));
+      ApplySetting(stats_state.state_value(), root_key,
+                   install_static::GetClientStateKeyPath()));
+  ASSERT_NO_FATAL_FAILURE(
+      ApplySetting(stats_state.state_medium_value(), root_key,
+                   install_static::GetClientStateMediumKeyPath()));
 }
 
 // Write the correct value to represent |setting| in the registry.
@@ -1089,19 +1083,16 @@ void CollectStatsConsent::ApplySetting(StatsState::StateSetting setting,
 }
 
 // Test that stats consent can be read.
-TEST_P(CollectStatsConsent, GetCollectStatsConsentAtLevel) {
-  if (GetParam().is_consent_granted()) {
-    EXPECT_TRUE(GoogleUpdateSettings::GetCollectStatsConsentAtLevel(
-                    GetParam().system_level()));
-  } else {
-    EXPECT_FALSE(GoogleUpdateSettings::GetCollectStatsConsentAtLevel(
-                     GetParam().system_level()));
-  }
+TEST_P(CollectStatsConsent, GetCollectStatsConsent) {
+  if (GetParam().is_consent_granted())
+    EXPECT_TRUE(GoogleUpdateSettings::GetCollectStatsConsent());
+  else
+    EXPECT_FALSE(GoogleUpdateSettings::GetCollectStatsConsent());
 }
 
 // Test that stats consent can be flipped to the opposite setting, that the new
 // setting takes affect, and that the correct registry location is modified.
-TEST_P(CollectStatsConsent, SetCollectStatsConsentAtLevel) {
+TEST_P(CollectStatsConsent, SetCollectStatsConsent) {
   // When testing revoking consent, verify that backup client info is cleared.
   // To do so, first add some backup client info.
   if (GetParam().is_consent_granted()) {
@@ -1112,13 +1103,12 @@ TEST_P(CollectStatsConsent, SetCollectStatsConsentAtLevel) {
     GoogleUpdateSettings::StoreMetricsClientInfo(client_info);
   }
 
-  EXPECT_TRUE(GoogleUpdateSettings::SetCollectStatsConsentAtLevel(
-                  GetParam().system_level(),
-                  !GetParam().is_consent_granted()));
+  EXPECT_TRUE(GoogleUpdateSettings::SetCollectStatsConsent(
+      !GetParam().is_consent_granted()));
 
-  const base::string16 reg_key = GetParam().system_level()
-                                     ? dist_->GetStateMediumKey()
-                                     : dist_->GetStateKey();
+  const base::string16 reg_key =
+      GetParam().system_level() ? install_static::GetClientStateMediumKeyPath()
+                                : install_static::GetClientStateKeyPath();
   DWORD value = 0;
   EXPECT_EQ(
       ERROR_SUCCESS,
@@ -1126,26 +1116,24 @@ TEST_P(CollectStatsConsent, SetCollectStatsConsentAtLevel) {
              KEY_QUERY_VALUE).ReadValueDW(google_update::kRegUsageStatsField,
                                           &value));
   if (GetParam().is_consent_granted()) {
-    EXPECT_FALSE(GoogleUpdateSettings::GetCollectStatsConsentAtLevel(
-                     GetParam().system_level()));
+    EXPECT_FALSE(GoogleUpdateSettings::GetCollectStatsConsent());
     EXPECT_EQ(0UL, value);
   } else {
-    EXPECT_TRUE(GoogleUpdateSettings::GetCollectStatsConsentAtLevel(
-                    GetParam().system_level()));
+    EXPECT_TRUE(GoogleUpdateSettings::GetCollectStatsConsent());
     EXPECT_EQ(1UL, value);
     // Verify that backup client info has been cleared.
     EXPECT_FALSE(GoogleUpdateSettings::LoadMetricsClientInfo());
   }
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     UserLevel,
     CollectStatsConsent,
     ::testing::Values(
         StatsState(StatsState::kUserLevel, StatsState::NO_SETTING),
         StatsState(StatsState::kUserLevel, StatsState::FALSE_SETTING),
         StatsState(StatsState::kUserLevel, StatsState::TRUE_SETTING)));
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     SystemLevel,
     CollectStatsConsent,
     ::testing::Values(StatsState(StatsState::kSystemLevel,

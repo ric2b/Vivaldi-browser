@@ -35,7 +35,7 @@
 #include "base/macros.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/modules/webdatabase/database_error.h"
-#include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
@@ -64,9 +64,6 @@ class MODULES_EXPORT DatabaseTracker {
   // notificationMutex() is currently independent of the other locks.
 
   bool CanEstablishDatabase(DatabaseContext*,
-                            const String& name,
-                            const String& display_name,
-                            unsigned estimated_size,
                             DatabaseError&);
   String FullPathForDatabase(const SecurityOrigin*,
                              const String& name,
@@ -75,7 +72,7 @@ class MODULES_EXPORT DatabaseTracker {
   void AddOpenDatabase(Database*);
   void RemoveOpenDatabase(Database*);
 
-  unsigned long long GetMaxSizeForDatabase(const Database*);
+  uint64_t GetMaxSizeForDatabase(const Database*);
 
   void CloseDatabasesImmediately(const SecurityOrigin*, const String& name);
 

@@ -21,6 +21,10 @@
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
 
+namespace base {
+class HistogramBase;
+}  // namespace base
+
 namespace viz {
 class HitTestDataProvider;
 class LocalSurfaceIdProvider;
@@ -37,6 +41,32 @@ class CC_MOJO_EMBEDDER_EXPORT AsyncLayerTreeFrameSink
       public viz::mojom::CompositorFrameSinkClient,
       public viz::ExternalBeginFrameSourceClient {
  public:
+  // This class is used to handle the graphics pipeline related metrics
+  // reporting.
+  class PipelineReporting {
+   public:
+    PipelineReporting(viz::BeginFrameArgs args,
+                      base::TimeTicks now,
+                      base::HistogramBase* submit_begin_frame_histogram);
+    ~PipelineReporting();
+
+    void Report();
+
+    int64_t trace_id() const { return trace_id_; }
+
+   private:
+    // The trace id of a BeginFrame which is used to track its progress on the
+    // client side.
+    int64_t trace_id_;
+
+    // The time stamp for the begin frame to arrive on client side.
+    base::TimeTicks frame_time_;
+
+    // Histogram metrics used to record
+    // GraphicsPipeline.ClientName.SubmitCompositorFrameAfterBeginFrame
+    base::HistogramBase* submit_begin_frame_histogram_;
+  };
+
   struct CC_MOJO_EMBEDDER_EXPORT UnboundMessagePipes {
     UnboundMessagePipes();
     ~UnboundMessagePipes();
@@ -65,6 +95,7 @@ class CC_MOJO_EMBEDDER_EXPORT AsyncLayerTreeFrameSink
     UnboundMessagePipes pipes;
     bool enable_surface_synchronization = false;
     bool wants_animate_only_begin_frames = false;
+    const char* client_name = nullptr;
   };
 
   AsyncLayerTreeFrameSink(
@@ -86,20 +117,26 @@ class CC_MOJO_EMBEDDER_EXPORT AsyncLayerTreeFrameSink
   bool BindToClient(LayerTreeFrameSinkClient* client) override;
   void DetachFromClient() override;
   void SetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id) override;
-  void SubmitCompositorFrame(viz::CompositorFrame frame) override;
+  void SubmitCompositorFrame(viz::CompositorFrame frame,
+                             bool hit_test_data_changed,
+                             bool show_hit_test_borders) override;
   void DidNotProduceFrame(const viz::BeginFrameAck& ack) override;
   void DidAllocateSharedBitmap(mojo::ScopedSharedBufferHandle buffer,
                                const viz::SharedBitmapId& id) override;
   void DidDeleteSharedBitmap(const viz::SharedBitmapId& id) override;
+  void ForceAllocateNewId() override;
+
+  const viz::HitTestRegionList& get_last_hit_test_data_for_testing() const {
+    return last_hit_test_data_;
+  }
 
  private:
   // mojom::CompositorFrameSinkClient implementation:
   void DidReceiveCompositorFrameAck(
       const std::vector<viz::ReturnedResource>& resources) override;
-  void DidPresentCompositorFrame(
-      uint32_t presentation_token,
-      const gfx::PresentationFeedback& feedback) override;
-  void OnBeginFrame(const viz::BeginFrameArgs& begin_frame_args) override;
+  void OnBeginFrame(const viz::BeginFrameArgs& begin_frame_args,
+                    const base::flat_map<uint32_t, gfx::PresentationFeedback>&
+                        feedbacks) override;
   void OnBeginFramePausedChanged(bool paused) override;
   void ReclaimResources(
       const std::vector<viz::ReturnedResource>& resources) override;
@@ -134,10 +171,21 @@ class CC_MOJO_EMBEDDER_EXPORT AsyncLayerTreeFrameSink
   const bool enable_surface_synchronization_;
   const bool wants_animate_only_begin_frames_;
 
+  viz::HitTestRegionList last_hit_test_data_;
+
   viz::LocalSurfaceId last_submitted_local_surface_id_;
   float last_submitted_device_scale_factor_ = 1.f;
   gfx::Size last_submitted_size_in_pixels_;
+  // Use this map to record the time when client received the BeginFrameArgs.
+  base::flat_map<int64_t, PipelineReporting> pipeline_reporting_frame_times_;
 
+  // Histogram metrics used to record
+  // GraphicsPipeline.ClientName.ReceivedBeginFrame
+  base::HistogramBase* const receive_begin_frame_histogram_;
+
+  // Histogram metrics used to record
+  // GraphicsPipeline.ClientName.SubmitCompositorFrameAfterBeginFrame
+  base::HistogramBase* const submit_begin_frame_histogram_;
   base::WeakPtrFactory<AsyncLayerTreeFrameSink> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AsyncLayerTreeFrameSink);

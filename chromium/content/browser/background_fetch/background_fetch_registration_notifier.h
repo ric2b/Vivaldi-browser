@@ -13,12 +13,13 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
-#include "third_party/blink/public/platform/modules/background_fetch/background_fetch.mojom.h"
+#include "third_party/blink/public/mojom/background_fetch/background_fetch.mojom.h"
 
 namespace content {
 
-// Tracks the live BackgroundFetchRegistration objects across the renderer
-// processes and provides the functionality to notify them of progress updates.
+// Tracks the live BackgroundFetchRegistration objects across the
+// renderer processes and provides the functionality to notify them of progress
+// updates.
 class CONTENT_EXPORT BackgroundFetchRegistrationNotifier {
  public:
   BackgroundFetchRegistrationNotifier();
@@ -30,18 +31,27 @@ class CONTENT_EXPORT BackgroundFetchRegistrationNotifier {
       const std::string& unique_id,
       blink::mojom::BackgroundFetchRegistrationObserverPtr observer);
 
-  // Notifies any registered observers for the registration identified by the
-  // |unique_id| of the progress. This will cause JavaScript events to fire.
-  // Successful fetches must also call Notify with the final state.
-  void Notify(const std::string& unique_id,
-              uint64_t download_total,
-              uint64_t downloaded);
+  // Notifies any registered observers for the |registration| of the progress.
+  // This will cause JavaScript events to fire.
+  // Completed fetches must also call Notify with the final state.
+  void Notify(const blink::mojom::BackgroundFetchRegistration& registration);
 
-  // Runs |callback| when the last observer for |unique_id| is removed, or
-  // immediately if there are already no observers. Callback will never be run
-  // if the browser is shutdown before the last observer is removed.
-  void AddGarbageCollectionCallback(const std::string& unique_id,
-                                    base::OnceClosure callback);
+  // Notifies any registered observers for the registration identified by
+  // |unique_id| that the records for the fetch are no longer available.
+  void NotifyRecordsUnavailable(const std::string& unique_id);
+
+  // Notifies any registered observers for the registration identified by
+  // |unique_id| that the |request| has completed. |response| points to the
+  // completed response, if any.
+  void NotifyRequestCompleted(const std::string& unique_id,
+                              blink::mojom::FetchAPIRequestPtr request,
+                              blink::mojom::FetchAPIResponsePtr response);
+
+  // Add |url| to the list of |observed_urls_|. Once this is done, the
+  // |observers_| start getting updates about any requests with this URL.
+  void AddObservedUrl(const std::string& unique_id, const GURL& url);
+
+  void NoteTotalRequests(const std::string& unique_id, int num_total_requests);
 
   base::WeakPtr<BackgroundFetchRegistrationNotifier> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
@@ -59,9 +69,13 @@ class CONTENT_EXPORT BackgroundFetchRegistrationNotifier {
                 blink::mojom::BackgroundFetchRegistrationObserverPtr>
       observers_;
 
-  // Map from registration |unique_id| to callback to run when last observer is
-  // removed.
-  std::map<std::string, base::OnceClosure> garbage_collection_callbacks_;
+  // URLs the observers care about, indexed by the unique_id of the observer.
+  std::map<std::string, std::set<GURL>> observed_urls_;
+
+  // For the observer identified by |unique_id|, this stores the number of its
+  // requests, and the number for which updates are sent across the mojo pipe.
+  // This is used for UMA recording.
+  std::map<std::string, std::pair<int, int>> num_requests_and_updates_;
 
   base::WeakPtrFactory<BackgroundFetchRegistrationNotifier> weak_factory_;
 

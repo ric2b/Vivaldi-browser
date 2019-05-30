@@ -45,6 +45,9 @@ class AuditorResult {
                                    // list expresssion.
     ERROR_ANNOTATIONS_XML_UPDATE,  // Annotations XML requires update.
     ERROR_TEST_ANNOTATION,         // Annotation for tests is used.
+    ERROR_INVALID_OS,              // Invalid 'os_list' in annotations.xml
+    ERROR_DEPRECATED_WITH_OS,      // Marked deprecated, but 'os_list' is not
+                                   // empty in annotations.xml.
   };
 
   static const int kNoCodeLineSpecified;
@@ -64,7 +67,7 @@ class AuditorResult {
 
   void AddDetail(const std::string& message);
 
-  Type type() const { return type_; };
+  Type type() const { return type_; }
 
   std::string file_path() const { return file_path_; }
   void set_file_path(const std::string& file_path) { file_path_ = file_path; }

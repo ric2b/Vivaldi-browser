@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/empty_offset_mapping_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_line_height_metrics.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_offset_mapping_builder.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
@@ -17,7 +18,6 @@
 namespace blink {
 
 class ComputedStyle;
-class LayoutNGText;
 class LayoutObject;
 class LayoutText;
 
@@ -54,11 +54,18 @@ class NGInlineItemsBuilderTemplate {
   // <span></span> or <span><float></float></span>.
   bool IsEmptyInline() const { return is_empty_inline_; }
 
+  // True if changes to an item may affect different layout of earlier lines.
+  // May not be able to use line caches even when the line or earlier lines are
+  // not dirty.
+  bool ChangesMayAffectEarlierLines() const {
+    return changes_may_affect_earlier_lines_;
+  }
+
   // Append existing items from an unchanged LayoutObject.
   // Returns whether the existing items could be reused.
   // NOTE: The state of the builder remains unchanged if the append operation
   // fails (i.e. if it returns false).
-  bool Append(const String&, LayoutNGText*, const Vector<NGInlineItem*>&);
+  bool Append(const String&, LayoutText*);
 
   // Append a string.
   // When appending, spaces are collapsed according to CSS Text, The white space
@@ -78,6 +85,12 @@ class NGInlineItemsBuilderTemplate {
   // signaling the presence of a non-text object to the unicode bidi algorithm.
   void AppendAtomicInline(const ComputedStyle* = nullptr,
                           LayoutObject* = nullptr);
+
+  // Append floats and positioned objects in the same way as atomic inlines.
+  // Because these objects need positions, they will be handled in
+  // NGInlineLayoutAlgorithm.
+  void AppendFloating(LayoutObject* layout_object);
+  void AppendOutOfFlowPositioned(LayoutObject* layout_object);
 
   // Append a character.
   // The character is opaque to space collapsing; i.e., spaces before this
@@ -110,7 +123,11 @@ class NGInlineItemsBuilderTemplate {
 
   void SetIsSymbolMarker(bool b);
 
+  bool ShouldAbort() const { return false; }
+
  private:
+  static bool NeedsBoxInfo();
+
   Vector<NGInlineItem>* items_;
   StringBuilder text_;
 
@@ -118,6 +135,19 @@ class NGInlineItemsBuilderTemplate {
   // during inline collection. It is updated whenever |text_| is modified or a
   // white space is collapsed.
   OffsetMappingBuilder mapping_builder_;
+
+  // Keep track of inline boxes to compute ShouldCreateBoxFragment.
+  struct BoxInfo {
+    unsigned item_index;
+    bool should_create_box_fragment;
+    const ComputedStyle& style;
+    NGLineHeightMetrics text_metrics;
+
+    BoxInfo(unsigned item_index, const NGInlineItem& item);
+    bool ShouldCreateBoxFragmentForChild(const BoxInfo& child) const;
+    void SetShouldCreateBoxFragment(Vector<NGInlineItem>* items);
+  };
+  Vector<BoxInfo> boxes_;
 
   struct BidiContext {
     LayoutObject* node;
@@ -128,6 +158,7 @@ class NGInlineItemsBuilderTemplate {
 
   bool has_bidi_controls_ = false;
   bool is_empty_inline_ = true;
+  bool changes_may_affect_earlier_lines_ = false;
 
   // Append a character.
   // Currently this function is for adding control characters such as
@@ -157,14 +188,23 @@ class NGInlineItemsBuilderTemplate {
   void RestoreTrailingCollapsibleSpaceIfRemoved();
   void RestoreTrailingCollapsibleSpace(NGInlineItem*);
 
+  void AppendTextItem(const StringView,
+                      const ComputedStyle* style,
+                      LayoutText* layout_object);
+  void AppendTextItem(NGInlineItem::NGInlineItemType type,
+                      const StringView,
+                      const ComputedStyle* style,
+                      LayoutText* layout_object);
+
+  void AppendGeneratedBreakOpportunity(const ComputedStyle*, LayoutObject*);
+
   void Exit(LayoutObject*);
 };
 
 template <>
 CORE_EXPORT bool NGInlineItemsBuilderTemplate<NGOffsetMappingBuilder>::Append(
     const String&,
-    LayoutNGText*,
-    const Vector<NGInlineItem*>&);
+    LayoutText*);
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT
     NGInlineItemsBuilderTemplate<EmptyOffsetMappingBuilder>;

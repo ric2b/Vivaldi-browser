@@ -22,53 +22,19 @@
 #include "ui/base/models/tree_node_iterator.h"
 
 using vivaldi::NotesModelFactory;
+using vivaldi::Notes_Model;
+using vivaldi::Notes_Node;
+using extensions::vivaldi::notes::NoteTreeNode;
+using extensions::vivaldi::notes::NoteAttachment;
 
 namespace extensions {
 
-const char noteNotFoundStr[] = "Note not found.";
+static base::LazyInstance<BrowserContextKeyedAPIFactory<NotesAPI> >::
+    DestructorAtExit g_factory_notes = LAZY_INSTANCE_INITIALIZER;
 
-NotesEventRouter::NotesEventRouter(Profile* profile)
-    : browser_context_(profile),
-      model_(NotesModelFactory::GetForBrowserContext(profile)) {
-  model_->AddObserver(this);
-}
-
-NotesEventRouter::~NotesEventRouter() {
-  model_->RemoveObserver(this);
-}
-
-void NotesEventRouter::ExtensiveNotesChangesBeginning(Notes_Model* model) {
-  DispatchEvent(vivaldi::notes::OnImportBegan::kEventName,
-                vivaldi::notes::OnImportBegan::Create());
-}
-
-void NotesEventRouter::ExtensiveNotesChangesEnded(Notes_Model* model) {
-  DispatchEvent(vivaldi::notes::OnImportEnded::kEventName,
-                vivaldi::notes::OnImportEnded::Create());
-}
-
-// Helper to actually dispatch an event to extension listeners.
-void NotesEventRouter::DispatchEvent(
-    const std::string& event_name,
-    std::unique_ptr<base::ListValue> event_args) {
-  EventRouter* event_router = EventRouter::Get(browser_context_);
-  if (event_router) {
-    event_router->BroadcastEvent(base::WrapUnique(
-        new extensions::Event(extensions::events::VIVALDI_EXTENSION_EVENT,
-                              event_name, std::move(event_args))));
-  }
-}
-
-void BroadcastEvent(const std::string& eventname,
-                    std::unique_ptr<base::ListValue> args,
-                    content::BrowserContext* context) {
-  std::unique_ptr<extensions::Event> event(
-      new extensions::Event(extensions::events::VIVALDI_EXTENSION_EVENT,
-                            eventname, std::move(args), context));
-  EventRouter* event_router = EventRouter::Get(context);
-  if (event_router) {
-    event_router->BroadcastEvent(std::move(event));
-  }
+// static
+BrowserContextKeyedAPIFactory<NotesAPI>* NotesAPI::GetFactoryInstance() {
+  return g_factory_notes.Pointer();
 }
 
 NotesAPI::NotesAPI(content::BrowserContext* context)
@@ -80,32 +46,97 @@ NotesAPI::NotesAPI(content::BrowserContext* context)
                                  vivaldi::notes::OnImportEnded::kEventName);
 }
 
-NotesAPI::~NotesAPI() {}
+NotesAPI::~NotesAPI() {
+  DCHECK(!model_);
+}
 
 void NotesAPI::Shutdown() {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
-}
-
-static base::LazyInstance<BrowserContextKeyedAPIFactory<NotesAPI> >::
-    DestructorAtExit g_factory_notes = LAZY_INSTANCE_INITIALIZER;
-
-// static
-BrowserContextKeyedAPIFactory<NotesAPI>* NotesAPI::GetFactoryInstance() {
-  return g_factory_notes.Pointer();
+  if (model_) {
+    model_->RemoveObserver(this);
+    model_ = nullptr;
+  }
 }
 
 void NotesAPI::OnListenerAdded(const EventListenerInfo& details) {
-  notes_event_router_.reset(
-      new NotesEventRouter(Profile::FromBrowserContext(browser_context_)));
+  DCHECK(!model_);
+  model_ = NotesModelFactory::GetForBrowserContext(browser_context_);
+  model_->AddObserver(this);
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
-std::unique_ptr<NoteAttachment> CreateNoteAttachment(
-    const ::vivaldi::NoteAttachment& attachment) {
-  auto note_attachment = std::make_unique<NoteAttachment>();
+void NotesAPI::ExtensiveNotesChangesBeginning(Notes_Model* model) {
+  DCHECK(model_ == model);
+  ::vivaldi::BroadcastEvent(vivaldi::notes::OnImportBegan::kEventName,
+                            vivaldi::notes::OnImportBegan::Create(),
+                            browser_context_);
+}
 
-  note_attachment->content = attachment.content();
-  note_attachment->checksum =
+void NotesAPI::ExtensiveNotesChangesEnded(Notes_Model* model) {
+  DCHECK(model_ == model);
+  ::vivaldi::BroadcastEvent(vivaldi::notes::OnImportEnded::kEventName,
+                            vivaldi::notes::OnImportEnded::Create(),
+                            browser_context_);
+}
+
+namespace {
+
+void SendCreated(BrowserContext* browser_context,
+                 int64_t id,
+                 const NoteTreeNode& treenode) {
+  ::vivaldi::BroadcastEvent(
+      vivaldi::notes::OnCreated::kEventName,
+      vivaldi::notes::OnCreated::Create(base::Int64ToString(id), treenode),
+      browser_context);
+}
+
+void SendChanged(BrowserContext* browser_context,
+                 int64_t id,
+                 const vivaldi::notes::OnChanged::ChangeInfo& change_info) {
+  ::vivaldi::BroadcastEvent(
+      vivaldi::notes::OnChanged::kEventName,
+      vivaldi::notes::OnChanged::Create(base::Int64ToString(id), change_info),
+      browser_context);
+}
+
+void SendMoved(BrowserContext* browser_context,
+               int64_t id,
+               int64_t parent_id,
+               int index,
+               int64_t old_parent_id,
+               int old_index) {
+  vivaldi::notes::OnMoved::MoveInfo move_info;
+
+  move_info.index = index;
+  move_info.old_index = old_index;
+  move_info.parent_id = base::Int64ToString(parent_id);
+  move_info.old_parent_id = base::Int64ToString(old_parent_id);
+
+  ::vivaldi::BroadcastEvent(
+      vivaldi::notes::OnMoved::kEventName,
+      vivaldi::notes::OnMoved::Create(base::Int64ToString(id), move_info),
+      browser_context);
+}
+
+void SendRemoved(BrowserContext* browser_context,
+                 int64_t id,
+                 int64_t parent_id,
+                 int indexofdeleted) {
+  vivaldi::notes::OnRemoved::RemoveInfo info;
+
+  info.parent_id = base::Int64ToString(parent_id);
+  info.index = indexofdeleted;
+
+  ::vivaldi::BroadcastEvent(
+      vivaldi::notes::OnRemoved::kEventName,
+      vivaldi::notes::OnRemoved::Create(base::Int64ToString(id), info),
+      browser_context);
+}
+
+NoteAttachment MakeNoteAttachment(const ::vivaldi::NoteAttachment& attachment) {
+  NoteAttachment note_attachment;
+  note_attachment.content = attachment.content();
+  note_attachment.checksum =
       std::make_unique<std::string>(attachment.checksum());
   return note_attachment;
 }
@@ -114,62 +145,59 @@ std::unique_ptr<std::vector<NoteAttachment>> CreateNoteAttachments(
     const ::vivaldi::NoteAttachments& attachments) {
   auto new_attachments = std::make_unique<std::vector<NoteAttachment>>();
   for (const auto& attachment : attachments) {
-    new_attachments->push_back(
-        std::move(*CreateNoteAttachment(attachment.second)));
+    new_attachments->push_back(MakeNoteAttachment(attachment.second));
   }
 
   return new_attachments;
 }
 
-std::unique_ptr<NoteTreeNode> CreateTreeNode(Notes_Node* node) {
-  std::unique_ptr<NoteTreeNode> notes_tree_node =
-      std::make_unique<NoteTreeNode>();
+NoteTreeNode MakeTreeNode(Notes_Node* node) {
+  NoteTreeNode notes_tree_node;
 
-  notes_tree_node->id = base::Int64ToString(node->id());
+  notes_tree_node.id = base::Int64ToString(node->id());
 
   const Notes_Node* parent = node->parent();
   if (parent) {
-    notes_tree_node->parent_id.reset(
+    notes_tree_node.parent_id.reset(
         new std::string(base::Int64ToString(parent->id())));
-    notes_tree_node->index.reset(new int(parent->GetIndexOf(node)));
+    notes_tree_node.index.reset(new int(parent->GetIndexOf(node)));
   }
-  notes_tree_node->trash.reset(new bool(node->is_trash()));
+  notes_tree_node.trash.reset(new bool(node->is_trash()));
 
-  notes_tree_node->separator.reset(new bool(node->is_separator()));
+  notes_tree_node.separator.reset(new bool(node->is_separator()));
 
-  notes_tree_node->title.reset(
+  notes_tree_node.title.reset(
       new std::string(base::UTF16ToUTF8(node->GetTitle())));
-  notes_tree_node->content.reset(
+  notes_tree_node.content.reset(
       new std::string(base::UTF16ToUTF8(node->GetContent())));
 
   if (node->GetURL().is_valid()) {
-    notes_tree_node->url.reset(new std::string(node->GetURL().spec()));
+    notes_tree_node.url.reset(new std::string(node->GetURL().spec()));
   }
 
-  notes_tree_node->attachments = CreateNoteAttachments(node->GetAttachments());
+  notes_tree_node.attachments = CreateNoteAttachments(node->GetAttachments());
 
   // Javascript Date wants milliseconds since the epoch, ToDoubleT is seconds.
   double timedouble = node->GetCreationTime().ToDoubleT();
-  notes_tree_node->date_added.reset(new double(floor(timedouble * 1000)));
+  notes_tree_node.date_added.reset(new double(floor(timedouble * 1000)));
 
   if (node->is_folder()) {
     std::vector<NoteTreeNode> children;
     for (int i = 0; i < node->child_count(); ++i) {
       Notes_Node* child = node->GetChild(i);
-      std::unique_ptr<NoteTreeNode> child_node(CreateTreeNode(child));
-      children.push_back(std::move(*child_node));
+      children.push_back(MakeTreeNode(child));
     }
-    notes_tree_node->children.reset(
+    notes_tree_node.children.reset(
         new std::vector<NoteTreeNode>(std::move(children)));
   }
   return notes_tree_node;
 }
 
-///// TODO MOVE TO SEPARATE FILE  ^^^
+Notes_Model* GetNotesModel(UIThreadExtensionFunction* fun) {
+  return NotesModelFactory::GetForBrowserContext(fun->browser_context());
+}
 
-NotesGetFunction::NotesGetFunction() {}
-
-Notes_Node* NotesAsyncFunction::GetNodeFromId(Notes_Node* node, int64_t id) {
+Notes_Node* GetNodeFromId(Notes_Node* node, int64_t id) {
   if (node->id() == id) {
     return node;
   }
@@ -180,122 +208,105 @@ Notes_Node* NotesAsyncFunction::GetNodeFromId(Notes_Node* node, int64_t id) {
       return childnode;
     }
   }
-  return NULL;
+  return nullptr;
 }
 
-Notes_Model* NotesAsyncFunction::GetNotesModel() {
-  return NotesModelFactory::GetForBrowserContext(GetProfile());
+Notes_Node* ParseNoteId(Notes_Model* model,
+                        const std::string& id_str,
+                        std::string* error) {
+  int64_t id;
+  if (!base::StringToInt64(id_str, &id)) {
+    *error = "Note id is not a number - " + id_str;
+    return nullptr;
+  }
+  Notes_Node* node = GetNodeFromId(model->root_node(), id);
+  if (!node) {
+    *error = "No note with id " + id_str;
+    return nullptr;
+  }
+  return node;
 }
 
-bool NotesGetFunction::RunAsync() {
+}  // namespace
+
+///// TODO MOVE TO SEPARATE FILE  ^^^
+
+
+ExtensionFunction::ResponseAction NotesGetFunction::Run() {
   std::unique_ptr<vivaldi::notes::Get::Params> params(
       vivaldi::notes::Get::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::vector<NoteTreeNode> notes;
-  Notes_Model* model = NotesModelFactory::GetForBrowserContext(GetProfile());
-  Notes_Node* root = model->root_node();
+  Notes_Model* model = GetNotesModel(this);
+  std::string error;
   if (params->id_or_id_list.as_strings) {
     std::vector<std::string>& ids = *params->id_or_id_list.as_strings;
     size_t count = ids.size();
     EXTENSION_FUNCTION_VALIDATE(count > 0);
     for (size_t i = 0; i < count; ++i) {
-      int64_t idval;
-      base::StringToInt64(ids[i], &idval);
-      Notes_Node* node = GetNodeFromId(root, idval);
+      Notes_Node* node = ParseNoteId(model, ids[i], &error);
       if (!node) {
-        error_ = noteNotFoundStr;
-        SendResponse(false);
-        return false;
+        return RespondNow(Error(error));
       }
-      std::unique_ptr<NoteTreeNode> note(CreateTreeNode(node));
-      notes.push_back(std::move(*note));
+      notes.push_back(MakeTreeNode(node));
     }
   } else {
-    int64_t idval;
-    base::StringToInt64(*params->id_or_id_list.as_string, &idval);
-    Notes_Node* node = GetNodeFromId(root, idval);
+    Notes_Node* node =
+        ParseNoteId(model, *params->id_or_id_list.as_string, &error);
     if (!node) {
-      error_ = noteNotFoundStr;
-      SendResponse(false);
-      return false;
+      return RespondNow(Error(error));
     }
-    std::unique_ptr<NoteTreeNode> note(CreateTreeNode(node));
-    notes.push_back(std::move(*note));
+    notes.push_back(MakeTreeNode(node));
   }
-
-  results_ = vivaldi::notes::Get::Results::Create(notes);
-
-  SendResponse(true);
-  return true;
+  return RespondNow(ArgumentList(vivaldi::notes::Get::Results::Create(notes)));
 }
 
-NotesGetFunction::~NotesGetFunction() {}
-
-NotesGetTreeFunction::NotesGetTreeFunction() {}
-
-bool NotesGetTreeFunction::RunAsync() {
-  Notes_Model* model = NotesModelFactory::GetForBrowserContext(GetProfile());
+ExtensionFunction::ResponseAction NotesGetTreeFunction::Run() {
+  Notes_Model* model = GetNotesModel(this);
 
   // If the model has not loaded yet wait until it does and do the work then.
   if (!model->loaded()) {
-    model->AddObserver(this);
-    notes_model_ = model;
     AddRef();  // Balanced in NotesModelLoaded and NotesModelBeingDeleted.
+    model->AddObserver(this);
+    return RespondLater();
   } else {
     SendGetTreeResponse(model);
+    return AlreadyResponded();
   }
-
-  return true;
 }
 
-bool NotesGetTreeFunction::SendGetTreeResponse(Notes_Model* model) {
+void NotesGetTreeFunction::SendGetTreeResponse(Notes_Model* model) {
   std::vector<NoteTreeNode> notes;
   Notes_Node* root = model->main_node();
-  std::unique_ptr<NoteTreeNode> new_note(CreateTreeNode(root));
-  std::unique_ptr<NoteTreeNode> trash_note(CreateTreeNode(model->trash_node()));
-  new_note->children->push_back(std::move(*trash_note));
-  if (new_note->children.get()->size()) {  // Do not return root.
-    notes.push_back(std::move(*new_note));
-  }
-  results_ = vivaldi::notes::GetTree::Results::Create(notes);
-  SendResponse(true);
-  return true;
-}
-
-NotesGetTreeFunction::~NotesGetTreeFunction() {
-  if (notes_model_) {
-    notes_model_->RemoveObserver(this);
-  }
-  if (!did_respond()) {
-    SendResponse(false);
-  }
+  NoteTreeNode new_note = MakeTreeNode(root);
+  new_note.children->push_back(MakeTreeNode(model->trash_node()));
+  // After the above push the condition is always true
+  //if (new_note.children->size()) {  // Do not return root.
+    notes.push_back(std::move(new_note));
+  //}
+  Respond(ArgumentList(vivaldi::notes::GetTree::Results::Create(notes)));
 }
 
 void NotesGetTreeFunction::NotesModelLoaded(Notes_Model* model,
                                             bool ids_reassigned) {
   SendGetTreeResponse(model);
   model->RemoveObserver(this);
-  notes_model_ = nullptr;
   Release();
 }
 
 void NotesGetTreeFunction::NotesModelBeingDeleted(Notes_Model* model) {
+  Respond(Error("NotesModelBeingDeleted"));
   model->RemoveObserver(this);
-  notes_model_ = nullptr;
   Release();
 }
 
-NotesCreateFunction::NotesCreateFunction() {}
-
-bool NotesCreateFunction::RunAsync() {
+ExtensionFunction::ResponseAction NotesCreateFunction::Run() {
   std::unique_ptr<vivaldi::notes::Create::Params> params(
       vivaldi::notes::Create::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  Notes_Model* model = GetNotesModel();
-
-  Notes_Node* parent = NULL;
+  Notes_Model* model = GetNotesModel(this);
 
   int64_t id = model->GetNewIndex();
   std::unique_ptr<Notes_Node> newnode = std::make_unique<Notes_Node>(id);
@@ -331,10 +342,13 @@ bool NotesCreateFunction::RunAsync() {
     newnode->SetURL(url);
   }
 
+  Notes_Node* parent = nullptr;
   if (params->note.parent_id.get()) {
-    int64_t idval;
-    base::StringToInt64(*params->note.parent_id.get(), &idval);
-    parent = GetNodeFromId(model->root_node(), idval);
+    std::string error;
+    parent = ParseNoteId(model, *params->note.parent_id, &error);
+    if (!parent) {
+      return RespondNow(Error(error));
+    }
   }
 
   // insert the attachments
@@ -365,38 +379,24 @@ bool NotesCreateFunction::RunAsync() {
     model->AddNode(parent, newIndex, std::move(newnode));
   }
 
-  std::unique_ptr<vivaldi::notes::NoteTreeNode> treenode(
-      CreateTreeNode(newnode_ptr));
+  vivaldi::notes::NoteTreeNode treenode = MakeTreeNode(newnode_ptr);
 
-  results_ = vivaldi::notes::Create::Results::Create(*treenode.get());
+  SendCreated(browser_context(), newnode_ptr->id(), treenode);
 
-  std::unique_ptr<base::ListValue> args = vivaldi::notes::OnCreated::Create(
-      base::Int64ToString(newnode_ptr->id()), *std::move(treenode));
-
-  BroadcastEvent(vivaldi::notes::OnCreated::kEventName, std::move(args),
-                 context_);
-
-  SendResponse(true);
-  return true;
+  return RespondNow(
+      ArgumentList(vivaldi::notes::Create::Results::Create(treenode)));
 }
 
-NotesCreateFunction::~NotesCreateFunction() {}
-
-NotesUpdateFunction::NotesUpdateFunction() {}
-
-bool NotesUpdateFunction::RunAsync() {
+ExtensionFunction::ResponseAction NotesUpdateFunction::Run() {
   std::unique_ptr<vivaldi::notes::Update::Params> params(
       vivaldi::notes::Update::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  Notes_Model* model = GetNotesModel();
-  int64_t idval;
-  base::StringToInt64(params->id, &idval);
-  Notes_Node* node = GetNodeFromId(model->root_node(), idval);
+  Notes_Model* model = GetNotesModel(this);
+  std::string error;
+  Notes_Node* node = ParseNoteId(model, params->id, &error);
   if (!node) {
-    error_ = noteNotFoundStr;
-    SendResponse(false);
-    return false;
+    return RespondNow(Error(error));
   }
 
   vivaldi::notes::OnChanged::ChangeInfo changeinfo;
@@ -439,51 +439,37 @@ bool NotesUpdateFunction::RunAsync() {
     changeinfo.attachments = CreateNoteAttachments(node->GetAttachments());
   }
 
-  std::unique_ptr<vivaldi::notes::NoteTreeNode> ret(CreateTreeNode(node));
+  if (!model->SaveNotes()) {
+    return RespondNow(Error("SaveNotes failed"));
+  }
 
-  results_ = vivaldi::notes::Create::Results::Create(*ret);
-
-  SendResponse(true);
-
-  std::unique_ptr<base::ListValue> args = vivaldi::notes::OnChanged::Create(
-      base::Int64ToString(node->id()), changeinfo);
-
-  BroadcastEvent(vivaldi::notes::OnChanged::kEventName, std::move(args),
-                 context_);
-
-  return model->SaveNotes();
+  // Respond before we send the event.
+  Respond(ArgumentList(
+      vivaldi::notes::Create::Results::Create(MakeTreeNode(node))));
+  SendChanged(browser_context(), node->id(), changeinfo);
+  return AlreadyResponded();
 }
 
-NotesUpdateFunction::~NotesUpdateFunction() {}
-
-NotesRemoveFunction::NotesRemoveFunction() {}
-
-bool NotesRemoveFunction::RunAsync() {
+ExtensionFunction::ResponseAction NotesRemoveFunction::Run() {
   std::unique_ptr<vivaldi::notes::Remove::Params> params(
       vivaldi::notes::Remove::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  int64_t id;
-  base::StringToInt64(params->id, &id);
-
-  Notes_Model* model = GetNotesModel();
-
-  Notes_Node* root = model->root_node();
-  Notes_Node* node = GetNodeFromId(root, id);
+  Notes_Model* model = GetNotesModel(this);
+  std::string error;
+  Notes_Node* node = ParseNoteId(model, params->id, &error);
   if (!node) {
-    error_ = noteNotFoundStr;
-    SendResponse(false);
-    return false;
+    return RespondNow(Error(error));
   }
   Notes_Node* parent = node->parent();
   if (!parent) {
-    parent = root;
+    parent = model->root_node();
   }
   Notes_Node* trash_node = model->trash_node();
   if (trash_node == node) {
     // Trying to delete trash, should not happen.
     NOTREACHED();
-    return true;
+    return RespondNow(Error("Attempt to delete trash"));
   }
 
   bool move_to_trash = true;
@@ -508,62 +494,29 @@ bool NotesRemoveFunction::RunAsync() {
     int oldIndex = old_parent->GetIndexOf(node);
 
     // Move to trash
-    model->Move(node, trash_node, 0);
-
-    SendResponse(true);
-
-    std::unique_ptr<vivaldi::notes::NoteTreeNode> ret(CreateTreeNode(node));
-    results_ = vivaldi::notes::Move::Results::Create(*ret);
-
-    vivaldi::notes::OnMoved::MoveInfo moveInfo;
-
-    moveInfo.index = 0;
-    moveInfo.old_index = oldIndex;
-
-    moveInfo.parent_id = base::Int64ToString(trash_node->id());
-    moveInfo.old_parent_id = base::Int64ToString(old_parent->id());
-
-    std::unique_ptr<base::ListValue> args = vivaldi::notes::OnMoved::Create(
-        base::Int64ToString(node->id()), moveInfo);
-
-    BroadcastEvent(vivaldi::notes::OnMoved::kEventName, std::move(args),
-                   context_);
-
-  } else {
-    if (!model->Remove(parent, indexofdeleted)) {
-      error_ = noteNotFoundStr;
-      SendResponse(false);
-      return false;
+    if (!model->Move(node, trash_node, 0)) {
+      return RespondNow(Error("Failed to move note to trash - " + params->id));
     }
-    SendResponse(true);
 
-    vivaldi::notes::OnRemoved::RemoveInfo info;
+    // Respond before sending the event.
+    Respond(ArgumentList(vivaldi::notes::Remove::Results::Create()));
+    SendMoved(browser_context(), node->id(), trash_node->id(), 0,
+              old_parent->id(), oldIndex);
+    return AlreadyResponded();
+  } else {
+    int64_t idofdeleted = node->id();
+    if (!model->Remove(parent, indexofdeleted)) {
+      return RespondNow(Error("Failed to remove note " + params->id));
+    }
 
-    info.parent_id = parent->id();
-    info.index = indexofdeleted;
-
-    std::unique_ptr<base::ListValue> args =
-        vivaldi::notes::OnRemoved::Create(base::Int64ToString(id), info);
-
-    BroadcastEvent(vivaldi::notes::OnRemoved::kEventName, std::move(args),
-                   context_);
+    // Respond before sending the event.
+    Respond(ArgumentList(vivaldi::notes::Remove::Results::Create()));
+    SendRemoved(browser_context(), idofdeleted, parent->id(), indexofdeleted);
+    return AlreadyResponded();
   }
-  return true;
 }
 
-NotesRemoveFunction::~NotesRemoveFunction() {}
-
-NotesRemoveTreeFunction::NotesRemoveTreeFunction() {}
-
-bool NotesRemoveTreeFunction::RunAsync() {
-  return true;
-}
-
-NotesRemoveTreeFunction::~NotesRemoveTreeFunction() {}
-
-NotesSearchFunction::NotesSearchFunction() {}
-
-bool NotesSearchFunction::RunAsync() {
+ExtensionFunction::ResponseAction NotesSearchFunction::Run() {
   std::unique_ptr<vivaldi::notes::Search::Params> params(
       vivaldi::notes::Search::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -586,8 +539,7 @@ bool NotesSearchFunction::RunAsync() {
 
   base::string16 needle = base::UTF8ToUTF16(params->query.substr(offset));
   if (needle.length() > 0) {
-    ui::TreeNodeIterator<Notes_Node> iterator(
-        NotesModelFactory::GetForBrowserContext(GetProfile())->root_node());
+    ui::TreeNodeIterator<Notes_Node> iterator(GetNotesModel(this)->root_node());
 
     while (iterator.has_next()) {
       Notes_Node* node = iterator.Next();
@@ -602,63 +554,52 @@ bool NotesSearchFunction::RunAsync() {
             needle, base::UTF8ToUTF16(value), NULL, NULL);
       }
       if (match) {
-        std::unique_ptr<vivaldi::notes::NoteTreeNode> note(
-            CreateTreeNode(node));
-        search_result.push_back(std::move(*note));
+        search_result.push_back(MakeTreeNode(node));
       }
     }
   }
 
-  results_ = vivaldi::notes::Search::Results::Create(search_result);
-  SendResponse(true);
-  return true;
+  return RespondNow(
+      ArgumentList(vivaldi::notes::Search::Results::Create(search_result)));
 }
 
-NotesSearchFunction::~NotesSearchFunction() {}
-
-NotesMoveFunction::NotesMoveFunction() {}
-
-bool NotesMoveFunction::RunAsync() {
+ExtensionFunction::ResponseAction NotesMoveFunction::Run() {
   std::unique_ptr<vivaldi::notes::Move::Params> params(
       vivaldi::notes::Move::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  Notes_Model* model = NotesModelFactory::GetForBrowserContext(GetProfile());
-  Notes_Node* root = model->root_node();
+  Notes_Model* model = GetNotesModel(this);
 
-  int64_t id;
-  base::StringToInt64(params->id, &id);
-  if (!id)
-    return false;
-  Notes_Node* node = GetNodeFromId(root, id);
-  if (!node)
-    return false;
-  Notes_Node* old_parent = node->parent();
-  int oldIndex = old_parent->GetIndexOf(node);
-  std::string aid = base::Int64ToString(node->parent()->id());
-
-  const Notes_Node* parent = NULL;
+  std::string error;
+  Notes_Node* node = ParseNoteId(model, params->id, &error);
+  if (!node) {
+    return RespondNow(Error(error));
+  }
+  const Notes_Node* parent;
   if (!params->destination.parent_id.get()) {
     // Optional, defaults to current parent.
     parent = node->parent();
   } else {
-    int64_t parentId;
-    if (!base::StringToInt64(*params->destination.parent_id, &parentId))
-      return false;
-    parent = GetNodeFromId(root, parentId);
+    parent = ParseNoteId(model, *params->destination.parent_id, &error);
+    if (!parent) {
+      return RespondNow(Error(error));
+    }
   }
 
   int index;
-
   if (params->destination.index.get()) {  // Optional (defaults to end).
     index = *params->destination.index;
     if (index > parent->child_count() || index < 0) {
-      error_ = "Index out of bounds.";  // Todo move to constant
-      return false;
+       // Todo move to constant
+      return RespondNow(Error("Index out of bounds."));
     }
   } else {
     index = parent->child_count();
   }
+
+  Notes_Node* old_parent = node->parent();
+  int64_t old_parent_id = old_parent->id();
+  int old_index = old_parent->GetIndexOf(node);
 
   bool moved = model->Move(node, parent, index);
   DCHECK(moved);
@@ -666,61 +607,32 @@ bool NotesMoveFunction::RunAsync() {
     // This will happen if we attempt to move a folder into a subfolder of its
     // own. Should never happen (missing test in JS), but better be on the safe
     // side as a reply will mess up the displayed data.
-    return false;
+    return RespondNow(Error("Cannot move node"));
   }
 
-  std::unique_ptr<vivaldi::notes::NoteTreeNode> ret(CreateTreeNode(node));
-  results_ = vivaldi::notes::Move::Results::Create(*ret);
+  SendMoved(browser_context(), node->id(), parent->id(), index, old_parent_id,
+            old_index);
 
-  vivaldi::notes::OnMoved::MoveInfo moveInfo;
-
-  moveInfo.index = index;
-  moveInfo.old_index = oldIndex;
-
-  moveInfo.parent_id = base::Int64ToString(parent->id());
-  moveInfo.old_parent_id = aid;
-
-  std::unique_ptr<base::ListValue> args = vivaldi::notes::OnMoved::Create(
-      base::Int64ToString(node->id()), moveInfo);
-
-  BroadcastEvent(vivaldi::notes::OnMoved::kEventName, std::move(args),
-                 context_);
-
-  SendResponse(true);
-  return true;
+  return RespondNow(ArgumentList(
+      vivaldi::notes::Move::Results::Create(MakeTreeNode(node))));
 }
 
-NotesMoveFunction::~NotesMoveFunction() {}
-
-NotesEmptyTrashFunction::NotesEmptyTrashFunction() {}
-
-bool NotesEmptyTrashFunction::RunAsync() {
+ExtensionFunction::ResponseAction NotesEmptyTrashFunction::Run() {
   bool success = false;
 
-  Notes_Model* model = GetNotesModel();
+  Notes_Model* model = GetNotesModel(this);
   Notes_Node* trash_node = model->trash_node();
   if (trash_node) {
     while (trash_node->child_count()) {
       Notes_Node* node = trash_node->GetChild(0);
       int64_t removed_node_id = node->id();
       model->Remove(trash_node, 0);
-
-      vivaldi::notes::OnRemoved::RemoveInfo info;
-      info.parent_id = base::Int64ToString(trash_node->id());
-      info.index = 0;
-      std::unique_ptr<base::ListValue> args = vivaldi::notes::OnRemoved::Create(
-          base::Int64ToString(removed_node_id), info);
-
-      BroadcastEvent(vivaldi::notes::OnRemoved::kEventName, std::move(args),
-                     context_);
+      SendRemoved(browser_context(), removed_node_id, trash_node->id(), 0);
     }
     success = true;
   }
-  results_ = vivaldi::notes::EmptyTrash::Results::Create(success);
-  SendResponse(true);
-  return true;
+  return RespondNow(
+      ArgumentList(vivaldi::notes::EmptyTrash::Results::Create(success)));
 }
-
-NotesEmptyTrashFunction::~NotesEmptyTrashFunction() {}
 
 }  // namespace extensions

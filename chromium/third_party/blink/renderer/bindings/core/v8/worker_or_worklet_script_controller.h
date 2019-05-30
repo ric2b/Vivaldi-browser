@@ -31,7 +31,9 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_WORKER_OR_WORKLET_SCRIPT_CONTROLLER_H_
 #define THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_WORKER_OR_WORKLET_SCRIPT_CONTROLLER_H_
 
+#include "base/macros.h"
 #include "third_party/blink/renderer/bindings/core/v8/rejected_promises.h"
+#include "third_party/blink/renderer/bindings/core/v8/sanitize_script_errors.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_cache_options.h"
@@ -49,11 +51,11 @@ class WorkerOrWorkletGlobalScope;
 
 class CORE_EXPORT WorkerOrWorkletScriptController final
     : public GarbageCollectedFinalized<WorkerOrWorkletScriptController> {
-  WTF_MAKE_NONCOPYABLE(WorkerOrWorkletScriptController);
-
  public:
   static WorkerOrWorkletScriptController* Create(WorkerOrWorkletGlobalScope*,
                                                  v8::Isolate*);
+
+  WorkerOrWorkletScriptController(WorkerOrWorkletGlobalScope*, v8::Isolate*);
   virtual ~WorkerOrWorkletScriptController();
   void Dispose();
 
@@ -61,20 +63,20 @@ class CORE_EXPORT WorkerOrWorkletScriptController final
 
   // Returns true if the evaluation completed with no uncaught exception.
   bool Evaluate(const ScriptSourceCode&,
+                SanitizeScriptErrors sanitize_script_errors,
                 ErrorEvent** = nullptr,
                 V8CacheOptions = kV8CacheOptionsDefault);
 
   // Prevents future JavaScript execution.
   void ForbidExecution();
 
-  // Used by WorkerThread. Returns true if the context is successfully
-  // initialized or already initialized.
-  // For WorkerGlobalScope and ThreadedWorkletGlobalScope, |url_for_debugger| is
-  // and should be used only for setting name/origin that appears in DevTools.
-  // For other global scopes, |human_readable_name| is used for setting
-  // DOMWrapperWorld's human readable name.
-  bool InitializeContextIfNeeded(const String& human_readable_name,
-                                 const KURL& url_for_debugger);
+  // For WorkerGlobalScope and threaded WorkletGlobalScope, |url_for_debugger|
+  // is and should be used only for setting name/origin that appears in
+  // DevTools. For other global scopes, |human_readable_name| is used for
+  // setting DOMWrapperWorld's human readable name.
+  // This should be called only once.
+  bool InitializeContext(const String& human_readable_name,
+                         const KURL& url_for_debugger);
 
   // Used by WorkerGlobalScope:
   void RethrowExceptionFromImportedScript(ErrorEvent*, ExceptionState&);
@@ -102,11 +104,11 @@ class CORE_EXPORT WorkerOrWorkletScriptController final
   ScriptValue EvaluateAndReturnValueForTest(const ScriptSourceCode&);
 
  private:
-  WorkerOrWorkletScriptController(WorkerOrWorkletGlobalScope*, v8::Isolate*);
   class ExecutionState;
 
   // Evaluate a script file in the current execution environment.
   ScriptValue EvaluateInternal(const ScriptSourceCode&,
+                               SanitizeScriptErrors,
                                V8CacheOptions);
   void DisposeContextIfNeeded();
 
@@ -124,13 +126,15 @@ class CORE_EXPORT WorkerOrWorkletScriptController final
 
   scoped_refptr<RejectedPromises> rejected_promises_;
 
-  // |m_executionState| refers to a stack object that evaluate() allocates;
+  // |execution_state_| refers to a stack object that evaluate() allocates;
   // evaluate() ensuring that the pointer reference to it is removed upon
   // returning. Hence kept as a bare pointer here, and not a Persistent with
   // Oilpan enabled; stack scanning will visit the object and
   // trace its on-heap fields.
   GC_PLUGIN_IGNORE("394615")
   ExecutionState* execution_state_;
+
+  DISALLOW_COPY_AND_ASSIGN(WorkerOrWorkletScriptController);
 };
 
 }  // namespace blink

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/cfi_buildflags.h"
 #include "base/command_line.h"
@@ -112,7 +113,7 @@ class DomDistillerJsTest : public content::ContentBrowserTest {
 
 // Disabled on MSan and Android CFI bots.
 // https://crbug.com/845180
-#if defined(MEMORY_SANITIZER) ||                                 \
+#if defined(MEMORY_SANITIZER) || defined(OS_WIN) ||              \
     (defined(OS_ANDROID) &&                                      \
      (BUILDFLAG(CFI_CAST_CHECK) || BUILDFLAG(CFI_ICALL_CHECK) || \
       BUILDFLAG(CFI_ENFORCEMENT_DIAGNOSTIC) ||                   \

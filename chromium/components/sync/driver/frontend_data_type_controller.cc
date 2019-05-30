@@ -6,14 +6,13 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/configure_context.h"
 #include "components/sync/driver/model_associator.h"
-#include "components/sync/driver/sync_client.h"
-#include "components/sync/driver/sync_service.h"
 #include "components/sync/model/change_processor.h"
 #include "components/sync/model/data_type_error_handler_impl.h"
 #include "components/sync/model/sync_error.h"
@@ -24,26 +23,22 @@ namespace syncer {
 FrontendDataTypeController::FrontendDataTypeController(
     ModelType type,
     const base::Closure& dump_stack,
-    SyncClient* sync_client)
-    : DirectoryDataTypeController(type, dump_stack, sync_client, GROUP_UI),
-      state_(NOT_RUNNING) {
-  DCHECK(CalledOnValidThread());
-  DCHECK(sync_client);
-}
+    SyncService* sync_service)
+    : DirectoryDataTypeController(type, dump_stack, sync_service, GROUP_UI),
+      state_(NOT_RUNNING) {}
 
 void FrontendDataTypeController::LoadModels(
     const ConfigureContext& configure_context,
     const ModelLoadCallback& model_load_callback) {
   DCHECK(CalledOnValidThread());
-  DCHECK_EQ(configure_context.storage_option,
-            ConfigureContext::STORAGE_ON_DISK);
+  DCHECK_EQ(configure_context.storage_option, STORAGE_ON_DISK);
 
   model_load_callback_ = model_load_callback;
 
   if (state_ != NOT_RUNNING) {
-    model_load_callback.Run(type(),
-                            SyncError(FROM_HERE, SyncError::DATATYPE_ERROR,
-                                      "Model already running", type()));
+    model_load_callback_.Run(type(),
+                             SyncError(FROM_HERE, SyncError::DATATYPE_ERROR,
+                                       "Model already running", type()));
     return;
   }
 
@@ -68,12 +63,12 @@ void FrontendDataTypeController::OnModelLoaded() {
 }
 
 void FrontendDataTypeController::StartAssociating(
-    const StartCallback& start_callback) {
+    StartCallback start_callback) {
   DCHECK(CalledOnValidThread());
-  DCHECK(!start_callback.is_null());
+  DCHECK(start_callback);
   DCHECK_EQ(state_, MODEL_LOADED);
 
-  start_callback_ = start_callback;
+  start_callback_ = std::move(start_callback);
   state_ = ASSOCIATING;
 
   base::SequencedTaskRunnerHandle::Get()->PostTask(
@@ -81,8 +76,7 @@ void FrontendDataTypeController::StartAssociating(
                                 base::AsWeakPtr(this)));
 }
 
-// For directory datatypes metadata clears by SyncManager::PurgeDisabledTypes().
-void FrontendDataTypeController::Stop(SyncStopMetadataFate metadata_fate) {
+void FrontendDataTypeController::Stop(ShutdownReason shutdown_reason) {
   DCHECK(CalledOnValidThread());
 
   if (state_ == NOT_RUNNING)
@@ -211,7 +205,8 @@ void FrontendDataTypeController::StartDone(
     RecordStartFailure(start_result);
   }
 
-  start_callback_.Run(start_result, local_merge_result, syncer_merge_result);
+  std::move(start_callback_)
+      .Run(start_result, local_merge_result, syncer_merge_result);
 }
 
 std::unique_ptr<DataTypeErrorHandler>
@@ -225,7 +220,7 @@ FrontendDataTypeController::CreateErrorHandler() {
 void FrontendDataTypeController::OnUnrecoverableError(const SyncError& error) {
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(type(), error.model_type());
-  if (!model_load_callback_.is_null()) {
+  if (model_load_callback_) {
     model_load_callback_.Run(type(), error);
   }
 }
@@ -241,7 +236,7 @@ void FrontendDataTypeController::RecordAssociationTime(base::TimeDelta time) {
 void FrontendDataTypeController::RecordStartFailure(ConfigureResult result) {
   DCHECK(CalledOnValidThread());
   // TODO(wychen): enum uma should be strongly typed. crbug.com/661401
-  UMA_HISTOGRAM_ENUMERATION("Sync.DataTypeStartFailures",
+  UMA_HISTOGRAM_ENUMERATION("Sync.DataTypeStartFailures2",
                             ModelTypeToHistogramInt(type()),
                             static_cast<int>(MODEL_TYPE_COUNT));
 #define PER_DATA_TYPE_MACRO(type_str)                                    \

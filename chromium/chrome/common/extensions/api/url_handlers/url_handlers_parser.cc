@@ -57,6 +57,8 @@ namespace merrors = manifest_errors;
 UrlHandlerInfo::UrlHandlerInfo() {
 }
 
+UrlHandlerInfo::UrlHandlerInfo(UrlHandlerInfo&& other) = default;
+
 UrlHandlerInfo::~UrlHandlerInfo() {
 }
 
@@ -109,7 +111,8 @@ UrlHandlersParser::~UrlHandlersParser() {
 bool ParseUrlHandler(const std::string& handler_id,
                      const base::DictionaryValue& handler_info,
                      std::vector<UrlHandlerInfo>* url_handlers,
-                     base::string16* error) {
+                     base::string16* error,
+                     Extension* extension) {
   DCHECK(error);
 
   UrlHandlerInfo handler;
@@ -128,16 +131,21 @@ bool ParseUrlHandler(const std::string& handler_id,
     return false;
   }
 
-  for (base::ListValue::const_iterator it = manif_patterns->begin();
-       it != manif_patterns->end(); ++it) {
+  for (auto it = manif_patterns->begin(); it != manif_patterns->end(); ++it) {
     std::string str_pattern;
     it->GetAsString(&str_pattern);
     // TODO(sergeygs): Limit this to non-top-level domains.
     // TODO(sergeygs): Also add a verification to the CWS installer that the
     // URL patterns claimed here belong to the app's author verified sites.
-    URLPattern pattern(URLPattern::SCHEME_HTTP |
-                       URLPattern::SCHEME_HTTPS);
-    if (pattern.Parse(str_pattern) != URLPattern::PARSE_SUCCESS) {
+    URLPattern pattern(URLPattern::SCHEME_HTTP | URLPattern::SCHEME_HTTPS);
+    // System Web Apps are bookmark apps that point to chrome:// URLs.
+    // TODO(calamity): Remove once Bookmark Apps are no longer on Extensions.
+    if (extension->location() == Manifest::EXTERNAL_COMPONENT &&
+        extension->from_bookmark()) {
+      pattern = URLPattern(URLPattern::SCHEME_CHROMEUI);
+    }
+
+    if (pattern.Parse(str_pattern) != URLPattern::ParseResult::kSuccess) {
       *error = ErrorUtils::FormatErrorMessageUTF16(
           merrors::kInvalidURLHandlerPatternElement, handler_id);
       return false;
@@ -145,7 +153,7 @@ bool ParseUrlHandler(const std::string& handler_id,
     handler.patterns.AddPattern(pattern);
   }
 
-  url_handlers->push_back(handler);
+  url_handlers->push_back(std::move(handler));
 
   return true;
 }
@@ -175,7 +183,8 @@ bool UrlHandlersParser::Parse(Extension* extension, base::string16* error) {
       return false;
     }
 
-    if (!ParseUrlHandler(iter.key(), *handler, &info->handlers, error)) {
+    if (!ParseUrlHandler(iter.key(), *handler, &info->handlers, error,
+                         extension)) {
       // Text in |error| is set by ParseUrlHandler.
       return false;
     }

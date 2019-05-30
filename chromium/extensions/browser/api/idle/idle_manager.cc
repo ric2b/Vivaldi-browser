@@ -14,6 +14,10 @@
 #include "extensions/common/api/idle.h"
 #include "extensions/common/extension.h"
 
+#if defined(OS_CHROMEOS)
+#include "chromeos/dbus/power_policy_controller.h"
+#endif
+
 namespace keys = extensions::idle_api_constants;
 namespace idle = extensions::api::idle;
 
@@ -70,8 +74,8 @@ class DefaultIdleProvider : public IdleManager::IdleTimeProvider {
   DefaultIdleProvider();
   ~DefaultIdleProvider() override;
 
-  void CalculateIdleState(int idle_threshold, ui::IdleCallback notify) override;
-  void CalculateIdleTime(ui::IdleTimeCallback notify) override;
+  ui::IdleState CalculateIdleState(int idle_threshold) override;
+  int CalculateIdleTime() override;
   bool CheckIdleStateIsLocked() override;
 };
 
@@ -81,13 +85,12 @@ DefaultIdleProvider::DefaultIdleProvider() {
 DefaultIdleProvider::~DefaultIdleProvider() {
 }
 
-void DefaultIdleProvider::CalculateIdleState(int idle_threshold,
-                                             ui::IdleCallback notify) {
-  ui::CalculateIdleState(idle_threshold, notify);
+ui::IdleState DefaultIdleProvider::CalculateIdleState(int idle_threshold) {
+  return ui::CalculateIdleState(idle_threshold);
 }
 
-void DefaultIdleProvider::CalculateIdleTime(ui::IdleTimeCallback notify) {
-  ui::CalculateIdleTime(notify);
+int DefaultIdleProvider::CalculateIdleTime() {
+  return ui::CalculateIdleTime();
 }
 
 bool DefaultIdleProvider::CheckIdleStateIsLocked() {
@@ -122,9 +125,7 @@ IdleManager::IdleManager(content::BrowserContext* context)
       last_state_(ui::IDLE_STATE_ACTIVE),
       idle_time_provider_(new DefaultIdleProvider()),
       event_delegate_(new DefaultEventDelegate(context)),
-      extension_registry_observer_(this),
-      weak_factory_(this) {
-}
+      extension_registry_observer_(this) {}
 
 IdleManager::~IdleManager() {
 }
@@ -158,7 +159,7 @@ void IdleManager::OnListenerRemoved(const EventListenerInfo& details) {
 
   // During unload the monitor could already have been deleted. No need to do
   // anything in that case.
-  MonitorMap::iterator it = monitors_.find(details.extension_id);
+  auto it = monitors_.find(details.extension_id);
   if (it != monitors_.end()) {
     DCHECK_GT(it->second.listeners, 0);
     // Note: Deliberately leave the listener count as 0 rather than erase()ing
@@ -168,14 +169,23 @@ void IdleManager::OnListenerRemoved(const EventListenerInfo& details) {
   }
 }
 
-void IdleManager::QueryState(int threshold, const QueryStateCallback& notify) {
+ui::IdleState IdleManager::QueryState(int threshold) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  idle_time_provider_->CalculateIdleState(threshold, notify);
+  return idle_time_provider_->CalculateIdleState(threshold);
 }
 
 void IdleManager::SetThreshold(const std::string& extension_id, int threshold) {
   DCHECK(thread_checker_.CalledOnValidThread());
   GetMonitor(extension_id)->threshold = threshold;
+}
+
+base::TimeDelta IdleManager::GetAutoLockDelay() const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+#if defined(OS_CHROMEOS)
+  return chromeos::PowerPolicyController::Get()
+      ->GetMaxPolicyAutoScreenLockDelay();
+#endif
+  return base::TimeDelta();
 }
 
 // static
@@ -208,7 +218,7 @@ void IdleManager::SetIdleTimeProviderForTest(
 
 IdleMonitor* IdleManager::GetMonitor(const std::string& extension_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  MonitorMap::iterator it = monitors_.find(extension_id);
+  auto it = monitors_.find(extension_id);
 
   if (it == monitors_.end()) {
     it = monitors_.insert(std::make_pair(extension_id,
@@ -232,20 +242,14 @@ void IdleManager::StopPolling() {
 
 void IdleManager::UpdateIdleState() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  idle_time_provider_->CalculateIdleTime(base::Bind(
-      &IdleManager::UpdateIdleStateCallback, weak_factory_.GetWeakPtr()));
-}
-
-void IdleManager::UpdateIdleStateCallback(int idle_time) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  int idle_time = idle_time_provider_->CalculateIdleTime();
   bool locked = idle_time_provider_->CheckIdleStateIsLocked();
   int listener_count = 0;
 
   // Remember this state for initializing new event listeners.
   last_state_ = IdleTimeToIdleState(locked, idle_time, kDefaultIdleThreshold);
 
-  for (MonitorMap::iterator it = monitors_.begin(); it != monitors_.end();
-       ++it) {
+  for (auto it = monitors_.begin(); it != monitors_.end(); ++it) {
     IdleMonitor& monitor = it->second;
     ui::IdleState new_state =
         IdleTimeToIdleState(locked, idle_time, monitor.threshold);

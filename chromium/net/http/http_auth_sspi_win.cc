@@ -17,6 +17,8 @@
 
 namespace net {
 
+using DelegationType = HttpAuth::DelegationType;
+
 namespace {
 
 int MapAcquireCredentialsStatusToError(SECURITY_STATUS status,
@@ -55,14 +57,14 @@ int AcquireExplicitCredentials(SSPILibrary* library,
                                CredHandle* cred) {
   SEC_WINNT_AUTH_IDENTITY identity;
   identity.Flags = SEC_WINNT_AUTH_IDENTITY_UNICODE;
-  identity.User =
-      reinterpret_cast<unsigned short*>(const_cast<wchar_t*>(user.c_str()));
+  identity.User = reinterpret_cast<unsigned short*>(
+      const_cast<wchar_t*>(base::as_wcstr(user)));
   identity.UserLength = user.size();
-  identity.Domain =
-      reinterpret_cast<unsigned short*>(const_cast<wchar_t*>(domain.c_str()));
+  identity.Domain = reinterpret_cast<unsigned short*>(
+      const_cast<wchar_t*>(base::as_wcstr(domain)));
   identity.DomainLength = domain.size();
-  identity.Password =
-      reinterpret_cast<unsigned short*>(const_cast<wchar_t*>(password.c_str()));
+  identity.Password = reinterpret_cast<unsigned short*>(
+      const_cast<wchar_t*>(base::as_wcstr(password)));
   identity.PasswordLength = password.size();
 
   TimeStamp expiry;
@@ -247,7 +249,7 @@ HttpAuthSSPI::HttpAuthSSPI(SSPILibrary* library,
       scheme_(scheme),
       security_package_(security_package),
       max_token_length_(max_token_length),
-      can_delegate_(false) {
+      delegation_type_(DelegationType::kNone) {
   DCHECK(library_);
   SecInvalidateHandle(&cred_);
   SecInvalidateHandle(&ctxt_);
@@ -261,6 +263,10 @@ HttpAuthSSPI::~HttpAuthSSPI() {
   }
 }
 
+bool HttpAuthSSPI::Init() {
+  return true;
+}
+
 bool HttpAuthSSPI::NeedsIdentity() const {
   return decoded_server_auth_token_.empty();
 }
@@ -269,8 +275,8 @@ bool HttpAuthSSPI::AllowsExplicitCredentials() const {
   return true;
 }
 
-void HttpAuthSSPI::Delegate() {
-  can_delegate_ = true;
+void HttpAuthSSPI::SetDelegation(DelegationType delegation_type) {
+  delegation_type_ = delegation_type;
 }
 
 void HttpAuthSSPI::ResetSecurityContext() {
@@ -410,26 +416,27 @@ int HttpAuthSSPI::GetNextSecurityToken(const std::string& spn,
 
   DWORD context_flags = 0;
   // Firefox only sets ISC_REQ_DELEGATE, but MSDN documentation indicates that
-  // ISC_REQ_MUTUAL_AUTH must also be set.
-  if (can_delegate_)
+  // ISC_REQ_MUTUAL_AUTH must also be set. On Windows delegation by KDC policy
+  // is always respected.
+  if (delegation_type_ != DelegationType::kNone)
     context_flags |= (ISC_REQ_DELEGATE | ISC_REQ_MUTUAL_AUTH);
 
   // This returns a token that is passed to the remote server.
   DWORD context_attribute;
   base::string16 spn16 = base::ASCIIToUTF16(spn);
   SECURITY_STATUS status = library_->InitializeSecurityContext(
-      &cred_,                                    // phCredential
-      ctxt_ptr,                                  // phContext
-      const_cast<base::char16*>(spn16.c_str()),  // pszTargetName
-      context_flags,                             // fContextReq
-      0,                                         // Reserved1 (must be 0)
-      SECURITY_NATIVE_DREP,                      // TargetDataRep
-      in_buffer_desc_ptr,                        // pInput
-      0,                                         // Reserved2 (must be 0)
-      &ctxt_,                                    // phNewContext
-      &out_buffer_desc,                          // pOutput
-      &context_attribute,                        // pfContextAttr
-      nullptr);                                  // ptsExpiry
+      &cred_,                          // phCredential
+      ctxt_ptr,                        // phContext
+      base::as_writable_wcstr(spn16),  // pszTargetName
+      context_flags,                   // fContextReq
+      0,                               // Reserved1 (must be 0)
+      SECURITY_NATIVE_DREP,            // TargetDataRep
+      in_buffer_desc_ptr,              // pInput
+      0,                               // Reserved2 (must be 0)
+      &ctxt_,                          // phNewContext
+      &out_buffer_desc,                // pOutput
+      &context_attribute,              // pfContextAttr
+      nullptr);                        // ptsExpiry
   int rv = MapInitializeSecurityContextStatusToError(status);
   if (rv != OK) {
     ResetSecurityContext();

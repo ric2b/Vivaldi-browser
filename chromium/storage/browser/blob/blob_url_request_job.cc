@@ -142,7 +142,7 @@ scoped_refptr<net::HttpResponseHeaders> BlobURLRequestJob::GenerateHeaders(
     uint64_t total_size,
     uint64_t content_size) {
   std::string status("HTTP/1.1 ");
-  status.append(base::IntToString(status_code));
+  status.append(base::NumberToString(status_code));
   status.append(" ");
   status.append(net::GetHttpReasonPhrase(status_code));
   status.append("\0\0", 2);
@@ -251,7 +251,7 @@ void BlobURLRequestJob::DidCalculateSize(int result) {
     // TODO(horo): When the requester doesn't need the side data (ex:FileReader)
     // we should skip reading the side data.
     if (blob_reader_->has_side_data() &&
-        blob_reader_->ReadSideData(base::Bind(
+        blob_reader_->ReadSideData(base::BindOnce(
             &BlobURLRequestJob::DidReadMetadata, weak_factory_.GetWeakPtr())) ==
             BlobReader::Status::IO_PENDING) {
       return;

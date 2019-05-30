@@ -7,7 +7,7 @@
 #include "base/format_macros.h"
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
-#include "base/trace_event/trace_event_argument.h"
+#include "base/trace_event/traced_value.h"
 #include "base/values.h"
 
 namespace cc {
@@ -139,8 +139,10 @@ const char* SchedulerStateMachine::ActionToString(Action action) {
       return "Action::INVALIDATE_LAYER_TREE_FRAME_SINK";
     case Action::PERFORM_IMPL_SIDE_INVALIDATION:
       return "Action::PERFORM_IMPL_SIDE_INVALIDATION";
-    case Action::NOTIFY_BEGIN_MAIN_FRAME_NOT_SENT:
-      return "Action::NOTIFY_BEGIN_MAIN_FRAME_NOT_SENT";
+    case Action::NOTIFY_BEGIN_MAIN_FRAME_NOT_EXPECTED_UNTIL:
+      return "Action::NOTIFY_BEGIN_MAIN_FRAME_NOT_EXPECTED_UNTIL";
+    case Action::NOTIFY_BEGIN_MAIN_FRAME_NOT_EXPECTED_SOON:
+      return "Action::NOTIFY_BEGIN_MAIN_FRAME_NOT_EXPECTED_SOON";
   }
   NOTREACHED();
   return "???";
@@ -181,8 +183,10 @@ void SchedulerStateMachine::AsValueInto(
   state->SetBoolean("did_draw", did_draw_);
   state->SetBoolean("did_send_begin_main_frame_for_current_frame",
                     did_send_begin_main_frame_for_current_frame_);
-  state->SetBoolean("did_notify_begin_main_frame_not_sent",
-                    did_notify_begin_main_frame_not_sent_);
+  state->SetBoolean("did_notify_begin_main_frame_not_expected_until",
+                    did_notify_begin_main_frame_not_expected_until_);
+  state->SetBoolean("did_notify_begin_main_frame_not_expected_soon",
+                    did_notify_begin_main_frame_not_expected_soon_);
   state->SetBoolean("wants_begin_main_frame_not_expected",
                     wants_begin_main_frame_not_expected_);
   state->SetBoolean("did_commit_during_frame", did_commit_during_frame_);
@@ -223,7 +227,7 @@ void SchedulerStateMachine::AsValueInto(
   state->SetBoolean("skip_next_begin_main_frame_to_reduce_latency",
                     skip_next_begin_main_frame_to_reduce_latency_);
   state->SetBoolean("video_needs_begin_frames", video_needs_begin_frames_);
-  state->SetBoolean("defer_commits", defer_commits_);
+  state->SetBoolean("defer_begin_main_frame", defer_begin_main_frame_);
   state->SetBoolean("last_commit_had_no_updates", last_commit_had_no_updates_);
   state->SetBoolean("did_draw_in_last_frame", did_draw_in_last_frame_);
   state->SetBoolean("did_submit_in_last_frame", did_submit_in_last_frame_);
@@ -233,6 +237,10 @@ void SchedulerStateMachine::AsValueInto(
                     current_pending_tree_is_impl_side_);
   state->SetBoolean("previous_pending_tree_was_impl_side",
                     previous_pending_tree_was_impl_side_);
+  state->SetBoolean("processing_animation_worklets_for_active_tree",
+                    processing_animation_worklets_for_active_tree_);
+  state->SetBoolean("processing_animation_worklets_for_pending_tree",
+                    processing_animation_worklets_for_pending_tree_);
   state->EndDictionary();
 }
 
@@ -374,11 +382,16 @@ bool SchedulerStateMachine::ShouldActivateSyncTree() const {
   if (ShouldAbortCurrentFrame())
     return true;
 
+  // Delay pending tree activation until animation worklets have completed
+  // their asynchronous updates to pick up initial values.
+  if (processing_animation_worklets_for_pending_tree_)
+    return false;
+
   // At this point, only activate if we are ready to activate.
   return pending_tree_is_ready_for_activation_;
 }
 
-bool SchedulerStateMachine::ShouldNotifyBeginMainFrameNotSent() const {
+bool SchedulerStateMachine::ShouldNotifyBeginMainFrameNotExpectedUntil() const {
   // This method returns true if most of the conditions for sending a
   // BeginMainFrame are met, but one is not actually requested. This gives the
   // main thread the chance to do something else.
@@ -402,9 +415,16 @@ bool SchedulerStateMachine::ShouldNotifyBeginMainFrameNotSent() const {
   if (begin_frame_source_paused_)
     return false;
 
+  // If we've gone idle and have stopped getting BeginFrames, we should send
+  // SendBeginMainFrameNotExpectedSoon instead.
+  if (!BeginFrameNeeded() &&
+      begin_impl_frame_state_ == BeginImplFrameState::IDLE) {
+    return false;
+  }
+
   // Do not notify that no BeginMainFrame was sent too many times in a single
   // frame.
-  if (did_notify_begin_main_frame_not_sent_)
+  if (did_notify_begin_main_frame_not_expected_until_)
     return false;
 
   // Do not notify if a commit happened during this frame as the main thread
@@ -412,6 +432,30 @@ bool SchedulerStateMachine::ShouldNotifyBeginMainFrameNotSent() const {
   // actions. (This occurs if the main frame was scheduled but didn't complete
   // before the vsync deadline).
   if (did_commit_during_frame_)
+    return false;
+
+  return true;
+}
+
+bool SchedulerStateMachine::ShouldNotifyBeginMainFrameNotExpectedSoon() const {
+  if (!wants_begin_main_frame_not_expected_)
+    return false;
+
+  // Don't notify if a BeginMainFrame has already been requested or is in
+  // progress.
+  if (needs_begin_main_frame_ ||
+      begin_main_frame_state_ != BeginMainFrameState::IDLE) {
+    return false;
+  }
+
+  // Only send this when we've stopped getting BeginFrames and have gone idle.
+  if (BeginFrameNeeded() ||
+      begin_impl_frame_state_ != BeginImplFrameState::IDLE) {
+    return false;
+  }
+
+  // Do not notify that we're not expecting frames more than once per frame.
+  if (did_notify_begin_main_frame_not_expected_soon_)
     return false;
 
   return true;
@@ -430,8 +474,8 @@ bool SchedulerStateMachine::CouldSendBeginMainFrame() const {
   if (begin_frame_source_paused_)
     return false;
 
-  // Do not make a new commits when it is deferred.
-  if (defer_commits_)
+  // Do not send begin main frame when it is deferred.
+  if (defer_begin_main_frame_)
     return false;
 
   return true;
@@ -565,14 +609,12 @@ bool SchedulerStateMachine::ShouldInvalidateLayerTreeFrameSink() const {
   if (begin_impl_frame_state_ != BeginImplFrameState::INSIDE_BEGIN_FRAME)
     return false;
 
-  // Don't invalidate if we cannnot draw.
-  if (PendingDrawsShouldBeAborted())
-    return false;
-
+  // Don't invalidate for draw if we cannnot draw.
   // TODO(sunnyps): needs_prepare_tiles_ is needed here because PrepareTiles is
   // called only inside the deadline / draw phase. We could remove this if we
   // allowed PrepareTiles to happen in OnBeginImplFrame.
-  return needs_redraw_ || needs_prepare_tiles_;
+  return (needs_redraw_ && !PendingDrawsShouldBeAborted()) ||
+         needs_prepare_tiles_;
 }
 
 SchedulerStateMachine::Action SchedulerStateMachine::NextAction() const {
@@ -599,8 +641,10 @@ SchedulerStateMachine::Action SchedulerStateMachine::NextAction() const {
     return Action::INVALIDATE_LAYER_TREE_FRAME_SINK;
   if (ShouldBeginLayerTreeFrameSinkCreation())
     return Action::BEGIN_LAYER_TREE_FRAME_SINK_CREATION;
-  if (ShouldNotifyBeginMainFrameNotSent())
-    return Action::NOTIFY_BEGIN_MAIN_FRAME_NOT_SENT;
+  if (ShouldNotifyBeginMainFrameNotExpectedUntil())
+    return Action::NOTIFY_BEGIN_MAIN_FRAME_NOT_EXPECTED_UNTIL;
+  if (ShouldNotifyBeginMainFrameNotExpectedSoon())
+    return Action::NOTIFY_BEGIN_MAIN_FRAME_NOT_EXPECTED_SOON;
   return Action::NONE;
 }
 
@@ -716,8 +760,12 @@ bool SchedulerStateMachine::CouldCreatePendingTree() const {
   if (begin_frame_source_paused_)
     return false;
 
-  // Don't create a pending tree till a frame sink is initialized.
-  if (!HasInitializedLayerTreeFrameSink())
+  // Don't create a pending tree till a frame sink is fully initialized.  Check
+  // for the ACTIVE state explicitly instead of calling
+  // HasInitializedLayerTreeFrameSink() because that only checks if frame sink
+  // has been recreated, but doesn't check if we're waiting for first commit or
+  // activation.
+  if (layer_tree_frame_sink_state_ != LayerTreeFrameSinkState::ACTIVE)
     return false;
 
   return true;
@@ -735,11 +783,20 @@ void SchedulerStateMachine::WillSendBeginMainFrame() {
   last_frame_number_begin_main_frame_sent_ = current_frame_number_;
 }
 
-void SchedulerStateMachine::WillNotifyBeginMainFrameNotSent() {
+void SchedulerStateMachine::WillNotifyBeginMainFrameNotExpectedUntil() {
   DCHECK(visible_);
   DCHECK(!begin_frame_source_paused_);
-  DCHECK(!did_notify_begin_main_frame_not_sent_);
-  did_notify_begin_main_frame_not_sent_ = true;
+  DCHECK(BeginFrameNeeded() ||
+         begin_impl_frame_state_ != BeginImplFrameState::IDLE);
+  DCHECK(!did_notify_begin_main_frame_not_expected_until_);
+  did_notify_begin_main_frame_not_expected_until_ = true;
+}
+
+void SchedulerStateMachine::WillNotifyBeginMainFrameNotExpectedSoon() {
+  DCHECK(!BeginFrameNeeded());
+  DCHECK(begin_impl_frame_state_ == BeginImplFrameState::IDLE);
+  DCHECK(!did_notify_begin_main_frame_not_expected_soon_);
+  did_notify_begin_main_frame_not_expected_soon_ = true;
 }
 
 void SchedulerStateMachine::WillCommit(bool commit_has_no_updates) {
@@ -961,8 +1018,9 @@ void SchedulerStateMachine::SetVideoNeedsBeginFrames(
   video_needs_begin_frames_ = video_needs_begin_frames;
 }
 
-void SchedulerStateMachine::SetDeferCommits(bool defer_commits) {
-  defer_commits_ = defer_commits;
+void SchedulerStateMachine::SetDeferBeginMainFrame(
+    bool defer_begin_main_frame) {
+  defer_begin_main_frame_ = defer_begin_main_frame;
 }
 
 // These are the cases where we require a BeginFrame message to make progress
@@ -974,7 +1032,7 @@ bool SchedulerStateMachine::BeginFrameRequiredForAction() const {
     return true;
 
   return needs_redraw_ || needs_one_begin_impl_frame_ ||
-         (needs_begin_main_frame_ && !defer_commits_) ||
+         (needs_begin_main_frame_ && !defer_begin_main_frame_) ||
          needs_impl_side_invalidation_;
 }
 
@@ -994,7 +1052,13 @@ bool SchedulerStateMachine::ProactiveBeginFrameWanted() const {
   // request frames when commits are disabled, because the frame requests will
   // not provide the needed commit (and will wake up the process when it could
   // stay idle).
-  if ((begin_main_frame_state_ != BeginMainFrameState::IDLE) && !defer_commits_)
+  // TODO(schenney) crbug.com/805798 This will need to change. We do want to
+  // issue BeginMainFrames even if commits are deferred if this is during page
+  // load and we want to run lifecycle updates in preparation for the first
+  // commit. We probably need another flag to indicate that we are
+  // pre-rendering the page or in a page navigation state.
+  if ((begin_main_frame_state_ != BeginMainFrameState::IDLE) &&
+      !defer_begin_main_frame_)
     return true;
 
   // If the pending tree activates quickly, we'll want a BeginImplFrame soon
@@ -1039,7 +1103,8 @@ void SchedulerStateMachine::OnBeginImplFrame(uint64_t source_id,
   did_submit_in_last_frame_ = false;
   needs_one_begin_impl_frame_ = false;
 
-  did_notify_begin_main_frame_not_sent_ = false;
+  did_notify_begin_main_frame_not_expected_until_ = false;
+  did_notify_begin_main_frame_not_expected_soon_ = false;
   did_send_begin_main_frame_for_current_frame_ = false;
   did_commit_during_frame_ = false;
   did_invalidate_layer_tree_frame_sink_ = false;
@@ -1115,6 +1180,11 @@ bool SchedulerStateMachine::ShouldTriggerBeginImplFrameDeadlineImmediately()
   if (IsDrawThrottled())
     return false;
 
+  // Delay immediate draws when we have pending animation worklet updates to
+  // give them time to produce output before we draw.
+  if (processing_animation_worklets_for_active_tree_)
+    return false;
+
   // In full-pipe mode, we just gave all pipeline stages a chance to contribute.
   // We shouldn't wait any longer in any case - even if there are no updates.
   if (settings_.wait_for_all_pipeline_stages_before_draw)
@@ -1157,15 +1227,18 @@ bool SchedulerStateMachine::ShouldBlockDeadlineIndefinitely() const {
 
   // Wait for main frame to be ready for commits if in full-pipe mode, so that
   // we ensure we block during renderer initialization. In commit_to_active_tree
-  // mode, we cannot block for defer_commits_, as this may negatively affect
-  // animation smoothness during resize or orientation changes.
-  if (defer_commits_ && settings_.wait_for_all_pipeline_stages_before_draw)
+  // mode, we cannot block for defer_begin_main_frame_, as this may negatively
+  // affect animation smoothness during resize or orientation changes.
+  if (defer_begin_main_frame_ &&
+      settings_.wait_for_all_pipeline_stages_before_draw)
     return true;
 
   // Wait for main frame if one is in progress or about to be started.
   if (ShouldSendBeginMainFrame())
     return true;
 
+  // TODO(schenney): Is the right way to handle main frame without commit
+  // to add a new begin_main_frame_state_?
   if (begin_main_frame_state_ != BeginMainFrameState::IDLE)
     return true;
 
@@ -1310,7 +1383,14 @@ void SchedulerStateMachine::BeginMainFrameAborted(CommitEarlyOutReason reason) {
   switch (reason) {
     case CommitEarlyOutReason::ABORTED_LAYER_TREE_FRAME_SINK_LOST:
     case CommitEarlyOutReason::ABORTED_NOT_VISIBLE:
+    case CommitEarlyOutReason::ABORTED_DEFERRED_MAIN_FRAME_UPDATE:
     case CommitEarlyOutReason::ABORTED_DEFERRED_COMMIT:
+      // TODO(schenney) For ABORTED_DEFERRED_COMMIT we will need to do
+      // something different because we have updated the main frame, but
+      // we have not committed it. So we do not need a begin main frame
+      // but we might need a commit.
+      // We might have top split the compositor commit code from frame updates,
+      // or track a pending commit separately from a pending main frame update.
       begin_main_frame_state_ = BeginMainFrameState::IDLE;
       SetNeedsBeginMainFrame();
       return;
@@ -1344,6 +1424,18 @@ bool SchedulerStateMachine::NotifyReadyToActivate() {
 
 void SchedulerStateMachine::NotifyReadyToDraw() {
   active_tree_is_ready_to_draw_ = true;
+}
+
+void SchedulerStateMachine::NotifyAnimationWorkletStateChange(
+    AnimationWorkletState state,
+    TreeType tree) {
+  if (tree == TreeType::ACTIVE) {
+    processing_animation_worklets_for_active_tree_ =
+        (state == AnimationWorkletState::PROCESSING);
+  } else {
+    processing_animation_worklets_for_pending_tree_ =
+        (state == AnimationWorkletState::PROCESSING);
+  }
 }
 
 void SchedulerStateMachine::DidCreateAndInitializeLayerTreeFrameSink() {

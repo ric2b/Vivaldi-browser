@@ -27,10 +27,6 @@ struct PasswordForm;
 class AutofillEntry;
 }
 
-#if defined(OS_WIN)
-struct IE7PasswordInfo;
-#endif
-
 // ProfileWriter encapsulates profile for writing entries into it.
 // This object must be invoked on UI thread.
 class ProfileWriter : public base::RefCountedThreadSafe<ProfileWriter> {
@@ -45,10 +41,6 @@ class ProfileWriter : public base::RefCountedThreadSafe<ProfileWriter> {
 
   // Helper methods for adding data to local stores.
   virtual void AddPasswordForm(const autofill::PasswordForm& form);
-
-#if defined(OS_WIN)
-  virtual void AddIE7PasswordInfo(const IE7PasswordInfo& info);
-#endif
 
   virtual void AddHistoryPage(const history::URLRows& page,
                               history::VisitSource visit_source);

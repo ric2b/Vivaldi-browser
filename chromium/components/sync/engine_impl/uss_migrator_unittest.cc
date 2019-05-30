@@ -8,7 +8,7 @@
 #include <string>
 #include <utility>
 
-#include "base/message_loop/message_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/time/time.h"
 #include "components/sync/base/cancelation_signal.h"
 #include "components/sync/base/hash_util.h"
@@ -62,7 +62,8 @@ class UssMigratorTest : public ::testing::Test {
     auto processor = std::make_unique<MockModelTypeProcessor>();
     processor_ = processor.get();
     worker_ = std::make_unique<ModelTypeWorker>(
-        kModelType, sync_pb::ModelTypeState(), false, nullptr, &nudge_handler_,
+        kModelType, sync_pb::ModelTypeState(), false, /*cryptographer=*/nullptr,
+        PassphraseType::IMPLICIT_PASSPHRASE, &nudge_handler_,
         std::move(processor), &debug_emitter_, &cancelation_signal_);
   }
 
@@ -101,7 +102,7 @@ class UssMigratorTest : public ::testing::Test {
  private:
   syncable::Directory* directory() { return user_share()->directory.get(); }
 
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
   TestUserShare test_user_share_;
   CancelationSignal cancelation_signal_;
   std::unique_ptr<TestEntryFactory> entry_factory_;
@@ -117,14 +118,17 @@ TEST_F(UssMigratorTest, Migrate) {
   SetProgressMarkerToken(kToken1);
   int64_t metahandle = InsertEntity(kTag1, kValue1);
   base::Time ctime = GetCtimeForEntity(metahandle);
+  int migrated_entity_count;
 
-  ASSERT_TRUE(MigrateDirectoryData(kModelType, user_share(), worker()));
+  ASSERT_TRUE(MigrateDirectoryData(kModelType, user_share(), worker(),
+                                   &migrated_entity_count));
 
   // No nudge should happen in the happy case.
   EXPECT_EQ(0, nudge_handler()->GetNumInitialDownloadNudges());
   // One update with one entity in it.
   EXPECT_EQ(1U, processor()->GetNumUpdateResponses());
   EXPECT_EQ(1U, processor()->GetNthUpdateResponse(0).size());
+  EXPECT_EQ(1, migrated_entity_count);
 
   const sync_pb::ModelTypeState& state = processor()->GetNthUpdateState(0);
   EXPECT_EQ(kToken1, state.progress_marker().token());
@@ -144,70 +148,106 @@ TEST_F(UssMigratorTest, Migrate) {
 }
 
 TEST_F(UssMigratorTest, MigrateMultiple) {
+  int migrated_entity_count;
+
   CreateTypeRoot();
   SetProgressMarkerToken(kToken1);
   InsertEntity(kTag1, kValue1);
   InsertEntity(kTag2, kValue2);
   InsertEntity(kTag3, kValue3);
 
-  ASSERT_TRUE(MigrateDirectoryData(kModelType, user_share(), worker()));
+  ASSERT_TRUE(MigrateDirectoryData(kModelType, user_share(), worker(),
+                                   &migrated_entity_count));
 
   EXPECT_EQ(1U, processor()->GetNumUpdateResponses());
   EXPECT_EQ(3U, processor()->GetNthUpdateResponse(0).size());
+  EXPECT_EQ(3, migrated_entity_count);
 
   UpdateResponseDataList updates = processor()->GetNthUpdateResponse(0);
   EXPECT_EQ(kTag1, updates.at(0).entity.value().specifics.preference().name());
   EXPECT_EQ(kTag2, updates.at(1).entity.value().specifics.preference().name());
   EXPECT_EQ(kTag3, updates.at(2).entity.value().specifics.preference().name());
+
+  const sync_pb::ModelTypeState& state = processor()->GetNthUpdateState(0);
+  EXPECT_EQ(kToken1, state.progress_marker().token());
 }
 
 TEST_F(UssMigratorTest, MigrateMultipleBatches) {
+  // Some arbitrary number of entities that represents entities migrated in
+  // previous calls to MigrateDirectoryDataWithBatchSizeForTesting().
+  const int kPreviouslyMigratedEntityCount = 13;
+
   CreateTypeRoot();
   SetProgressMarkerToken(kToken1);
   InsertEntity(kTag1, kValue1);
   InsertEntity(kTag2, kValue2);
   InsertEntity(kTag3, kValue3);
 
-  ASSERT_TRUE(
-      MigrateDirectoryDataWithBatchSize(kModelType, user_share(), worker(), 2));
+  int cumulative_migrated_entity_count = kPreviouslyMigratedEntityCount;
+  ASSERT_TRUE(MigrateDirectoryDataWithBatchSizeForTesting(
+      kModelType, 2, user_share(), worker(),
+      &cumulative_migrated_entity_count));
 
   EXPECT_EQ(1U, processor()->GetNumUpdateResponses());
   EXPECT_EQ(3U, processor()->GetNthUpdateResponse(0).size());
+  EXPECT_EQ(kPreviouslyMigratedEntityCount + 3,
+            cumulative_migrated_entity_count);
 
   UpdateResponseDataList updates = processor()->GetNthUpdateResponse(0);
   EXPECT_EQ(kTag1, updates.at(0).entity.value().specifics.preference().name());
   EXPECT_EQ(kTag2, updates.at(1).entity.value().specifics.preference().name());
   EXPECT_EQ(kTag3, updates.at(2).entity.value().specifics.preference().name());
+
+  const sync_pb::ModelTypeState& state = processor()->GetNthUpdateState(0);
+  EXPECT_EQ(kToken1, state.progress_marker().token());
 }
 
 TEST_F(UssMigratorTest, MigrateIgnoresTombstone) {
+  int migrated_entity_count;
+
   CreateTypeRoot();
   SetProgressMarkerToken(kToken1);
   DeleteEntity(kTag1);
 
-  ASSERT_TRUE(MigrateDirectoryData(kModelType, user_share(), worker()));
+  ASSERT_TRUE(MigrateDirectoryData(kModelType, user_share(), worker(),
+                                   &migrated_entity_count));
 
   EXPECT_EQ(0, nudge_handler()->GetNumInitialDownloadNudges());
   EXPECT_EQ(1U, processor()->GetNumUpdateResponses());
   EXPECT_EQ(0U, processor()->GetNthUpdateResponse(0).size());
+  EXPECT_EQ(0, migrated_entity_count);
+
+  const sync_pb::ModelTypeState& state = processor()->GetNthUpdateState(0);
+  EXPECT_EQ(kToken1, state.progress_marker().token());
 }
 
 TEST_F(UssMigratorTest, MigrateZero) {
+  int migrated_entity_count;
+
   CreateTypeRoot();
   SetProgressMarkerToken(kToken1);
 
-  ASSERT_TRUE(MigrateDirectoryData(kModelType, user_share(), worker()));
+  ASSERT_TRUE(MigrateDirectoryData(kModelType, user_share(), worker(),
+                                   &migrated_entity_count));
 
   EXPECT_EQ(0, nudge_handler()->GetNumInitialDownloadNudges());
   EXPECT_EQ(1U, processor()->GetNumUpdateResponses());
   EXPECT_EQ(0U, processor()->GetNthUpdateResponse(0).size());
+  EXPECT_EQ(0, migrated_entity_count);
+
+  const sync_pb::ModelTypeState& state = processor()->GetNthUpdateState(0);
+  EXPECT_EQ(kToken1, state.progress_marker().token());
 }
 
 TEST_F(UssMigratorTest, MissingTypeRoot) {
+  int migrated_entity_count;
+
   EXPECT_EQ(0, nudge_handler()->GetNumInitialDownloadNudges());
-  ASSERT_FALSE(MigrateDirectoryData(kModelType, user_share(), worker()));
+  ASSERT_FALSE(MigrateDirectoryData(kModelType, user_share(), worker(),
+                                    &migrated_entity_count));
   EXPECT_EQ(1, nudge_handler()->GetNumInitialDownloadNudges());
   EXPECT_EQ(0U, processor()->GetNumUpdateResponses());
+  EXPECT_EQ(0, migrated_entity_count);
 }
 
 }  // namespace syncer

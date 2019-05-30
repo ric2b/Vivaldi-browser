@@ -32,8 +32,16 @@ namespace {
 
 const char kDmTokenBaseDir[] = FILE_PATH_LITERAL("Policy/Enrollment/");
 const char kEnrollmentTokenFilename[] =
+    FILE_PATH_LITERAL("enrollment/CloudManagementEnrollmentToken");
+// TODO(crbug.com/907589) : Remove once no longer in use.
+const char kEnrollmentTokenOldFilename[] =
     FILE_PATH_LITERAL("enrollment/enrollment_token");
 const char kMachineIdFilename[] = FILE_PATH_LITERAL("/etc/machine-id");
+
+// Enrollment Mandatory Option.
+const char kEnrollmentOptionsFilePath[] =
+    FILE_PATH_LITERAL("enrollment/CloudManagementEnrollmentOptions");
+const char kEnrollmentMandatoryOption[] = "Mandatory";
 
 bool GetDmTokenFilePath(base::FilePath* token_file_path,
                         const std::string& client_id,
@@ -46,7 +54,7 @@ bool GetDmTokenFilePath(base::FilePath* token_file_path,
   if (create_dir && !base::CreateDirectory(*token_file_path))
     return false;
 
-  *token_file_path = token_file_path->Append(FILE_PATH_LITERAL(client_id));
+  *token_file_path = token_file_path->Append(client_id);
 
   return true;
 }
@@ -90,8 +98,9 @@ std::string BrowserDMTokenStorageLinux::InitClientId() {
   base::StringPiece machine_id_trimmed =
       base::TrimWhitespaceASCII(machine_id, base::TRIM_TRAILING);
   if (machine_id_trimmed.size() != machine_id_size) {
-    SYSLOG(ERROR) << "Error: /etc/machine-id contains " << machine_id_size
-                  << " characters (" << machine_id_size << " were expected).";
+    SYSLOG(ERROR) << "Error: /etc/machine-id contains "
+                  << machine_id_trimmed.size() << " characters ("
+                  << machine_id_size << " were expected).";
     return std::string();
   }
 
@@ -114,8 +123,15 @@ std::string BrowserDMTokenStorageLinux::InitEnrollmentToken() {
   base::FilePath token_file_path =
       dir_policy_files_path.Append(kEnrollmentTokenFilename);
 
-  if (!base::ReadFileToString(token_file_path, &enrollment_token))
-    return std::string();
+  // Read the enrollment token from the new location. If that fails, try the old
+  // location (which will be deprecated soon). If that also fails, bail as there
+  // is no token set.
+  if (!base::ReadFileToString(token_file_path, &enrollment_token)) {
+    // TODO(crbug.com/907589) : Remove once no longer in use.
+    token_file_path = dir_policy_files_path.Append(kEnrollmentTokenOldFilename);
+    if (!base::ReadFileToString(token_file_path, &enrollment_token))
+      return std::string();
+  }
 
   return base::TrimWhitespaceASCII(enrollment_token, base::TRIM_ALL)
       .as_string();
@@ -133,6 +149,25 @@ std::string BrowserDMTokenStorageLinux::InitDMToken() {
   return token;
 }
 
+bool BrowserDMTokenStorageLinux::InitEnrollmentErrorOption() {
+  std::string options;
+  base::FilePath dir_policy_files_path;
+
+  if (!base::PathService::Get(chrome::DIR_POLICY_FILES,
+                              &dir_policy_files_path)) {
+    return false;
+  }
+
+  base::FilePath options_file_path =
+      dir_policy_files_path.Append(kEnrollmentOptionsFilePath);
+
+  if (!base::ReadFileToString(options_file_path, &options))
+    return false;
+
+  return base::TrimWhitespaceASCII(options, base::TRIM_ALL).as_string() ==
+         kEnrollmentMandatoryOption;
+}
+
 void BrowserDMTokenStorageLinux::SaveDMToken(const std::string& token) {
   std::string client_id = RetrieveClientId();
   base::PostTaskWithTraitsAndReplyWithResult(
@@ -140,6 +175,25 @@ void BrowserDMTokenStorageLinux::SaveDMToken(const std::string& token) {
       base::BindOnce(&StoreDMTokenInUserDataDir, token, client_id),
       base::BindOnce(&BrowserDMTokenStorage::OnDMTokenStored,
                      weak_factory_.GetWeakPtr()));
+}
+
+void BrowserDMTokenStorageLinux::DeletePolicyDirectory() {
+  base::FilePath token_file_path;
+  std::string dummy_id = "id";
+  if (!GetDmTokenFilePath(&token_file_path, dummy_id, /* create_dir = */ false))
+    return;
+
+  base::FilePath token_dir_path = token_file_path.DirName();
+  if (base::DirectoryExists(token_dir_path) &&
+      base::IsDirectoryEmpty(token_dir_path)) {
+    base::DeleteFile(token_dir_path, /* recursive = */ false);
+  }
+
+  base::FilePath policy_dir_path = token_dir_path.DirName();
+  if (base::DirectoryExists(policy_dir_path) &&
+      base::IsDirectoryEmpty(policy_dir_path)) {
+    base::DeleteFile(policy_dir_path, /* recursive = */ false);
+  }
 }
 
 std::string BrowserDMTokenStorageLinux::ReadMachineIdFile() {

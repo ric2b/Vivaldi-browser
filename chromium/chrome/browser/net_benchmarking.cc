@@ -12,7 +12,6 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/time/time.h"
-#include "chrome/browser/net/predictor.h"
 #include "chrome/browser/predictors/loading_predictor.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/net_benchmarking.mojom.h"
@@ -20,13 +19,6 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "net/base/net_errors.h"
-#include "net/disk_cache/disk_cache.h"
-#include "net/dns/host_cache.h"
-#include "net/dns/host_resolver.h"
-#include "net/http/http_cache.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 
 using content::BrowserThread;
@@ -45,10 +37,8 @@ network::mojom::NetworkContext* GetNetworkContext(int render_process_id) {
 
 NetBenchmarking::NetBenchmarking(
     base::WeakPtr<predictors::LoadingPredictor> loading_predictor,
-    base::WeakPtr<chrome_browser_net::Predictor> predictor,
     int render_process_id)
     : loading_predictor_(loading_predictor),
-      predictor_(predictor),
       render_process_id_(render_process_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
@@ -60,13 +50,11 @@ NetBenchmarking::~NetBenchmarking() {
 // static
 void NetBenchmarking::Create(
     base::WeakPtr<predictors::LoadingPredictor> loading_predictor,
-    base::WeakPtr<chrome_browser_net::Predictor> predictor,
     int render_process_id,
     chrome::mojom::NetBenchmarkingRequest request) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   mojo::MakeStrongBinding(std::make_unique<NetBenchmarking>(
-                              std::move(loading_predictor),
-                              std::move(predictor), render_process_id),
+                              std::move(loading_predictor), render_process_id),
                           std::move(request));
 }
 
@@ -106,7 +94,5 @@ void NetBenchmarking::ClearPredictorCache(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (loading_predictor_)
     loading_predictor_->resource_prefetch_predictor()->DeleteAllUrls();
-  if (predictor_)
-    predictor_->DiscardAllResultsAndClearPrefsOnUIThread();
   std::move(callback).Run();
 }

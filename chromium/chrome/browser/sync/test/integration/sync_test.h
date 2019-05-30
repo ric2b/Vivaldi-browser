@@ -12,7 +12,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/process/process.h"
 #include "build/buildflag.h"
 #include "chrome/browser/extensions/install_verifier.h"
 #include "chrome/browser/profiles/profile.h"
@@ -20,7 +19,6 @@
 #include "chrome/common/buildflags.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/protocol/sync_protocol_error.h"
 #include "components/sync/test/fake_server/fake_server.h"
 #include "components/sync/test/local_sync_test_server.h"
 #include "net/http/http_status_code.h"
@@ -43,7 +41,7 @@
 // To disable a test from running on Chromium waterfalls, you would still use
 // the default DISABLED_test_name macro. To disable it from running as an E2E
 // test outside Chromium waterfalls you would need to remove the E2E* macro.
-#define MACRO_CONCAT(prefix, test_name) prefix ## _ ## test_name
+#define MACRO_CONCAT(prefix, test_name) prefix##_##test_name
 #define E2E_ONLY(test_name) MACRO_CONCAT(DISABLED_E2ETest, test_name)
 #define E2E_ENABLED(test_name) MACRO_CONCAT(test_name, E2ETest)
 
@@ -68,15 +66,6 @@ namespace fake_server {
 class FakeServer;
 class FakeServerInvalidationService;
 }  // namespace fake_server
-
-namespace net {
-class FakeURLFetcherFactory;
-class URLFetcherImplFactory;
-}  // namespace net
-
-namespace network {
-class WeakWrapperSharedURLLoaderFactory;
-}  // namespace network
 
 // This is the base class for integration tests for all sync data types. Derived
 // classes must be defined for each sync data type. Individual tests are defined
@@ -191,8 +180,8 @@ class SyncTest : public InProcessBrowserTest {
   // Initializes sync clients and profiles if required and syncs each of them.
   virtual bool SetupSync() WARN_UNUSED_RESULT;
 
-  // Initialize, and clear data for given client.
-  bool SetupAndClearClient(size_t index);
+  // Like SetupSync() but does not wait for the clients to be ready to sync.
+  void SetupSyncNoWaitingForCompletion();
 
   // Sets whether or not the sync clients in this test should respond to
   // notifications of their own commits.  Real sync clients do not do this, but
@@ -265,15 +254,13 @@ class SyncTest : public InProcessBrowserTest {
 
  protected:
   // Add custom switches needed for running the test.
-  virtual void AddTestSwitches(base::CommandLine* cl);
-
-  // Append the command line switches to enable experimental types that aren't
-  // on by default yet.
-  virtual void AddOptionalTypesToCommandLine(base::CommandLine* cl);
+  void AddTestSwitches(base::CommandLine* cl);
 
   // BrowserTestBase implementation:
   void SetUpOnMainThread() override;
   void TearDownOnMainThread() override;
+
+  virtual void BeforeSetupClient(int index);
 
   // Implementations of the EnableNotifications() and DisableNotifications()
   // functions defined above.
@@ -292,6 +279,23 @@ class SyncTest : public InProcessBrowserTest {
   // Stops notificatinos being sent to a client.
   void DisableNotificationsForClient(int index);
 
+  // Sets a decryption passphrase to be used for a client. The passphrase will
+  // be provided to the client during initialization, before Sync starts. It is
+  // an error to provide both a decryption and encryption passphrases for one
+  // client.
+  void SetDecryptionPassphraseForClient(int index,
+                                        const std::string& passphrase);
+
+  // Sets an explicit encryption passphrase to be used for a client. The
+  // passphrase will be set for the client during initialization, before Sync
+  // starts. An encryption passphrase can be also enabled after initialization,
+  // but using this method ensures that Sync is never enabled when there is no
+  // passphrase, which allows tests to check for unencrypted data leaks. It is
+  // an error to provide both a decryption and encryption passphrases for one
+  // client.
+  void SetEncryptionPassphraseForClient(int index,
+                                        const std::string& passphrase);
+
   // Sets up fake responses for kClientLoginUrl, kIssueAuthTokenUrl,
   // kGetUserInfoUrl and kSearchDomainCheckUrl in order to mock out calls to
   // GAIA servers.
@@ -299,17 +303,11 @@ class SyncTest : public InProcessBrowserTest {
 
   base::test::ScopedFeatureList feature_list_;
 
-  // GAIA account used by the test case.
-  std::string username_;
-
-  // GAIA password used by the test case.
-  std::string password_;
-
-  // Locally available plain text file in which GAIA credentials are stored.
-  base::FilePath password_file_;
-
   // The FakeServer used in tests with server type IN_PROCESS_FAKE_SERVER.
   std::unique_ptr<fake_server::FakeServer> fake_server_;
+
+  // The factory used to mock out GAIA signin.
+  network::TestURLLoaderFactory test_url_loader_factory_;
 
  private:
   // Handles Profile creation for given index. Profile's path and type is
@@ -357,19 +355,6 @@ class SyncTest : public InProcessBrowserTest {
   // created. Returns true if successful.
   bool TearDownLocalPythonTestServer();
 
-  // Helper method used to destroy the local sync test server if one was
-  // created. Returns true if successful.
-  bool TearDownLocalTestServer();
-
-  // Helper method that waits for up to |wait| for the test server
-  // to start. Splits the time into |intervals| intervals, and polls the
-  // server after each interval to see if it has started. Returns true if
-  // successful.
-  bool WaitForTestServerToStart(base::TimeDelta wait, int intervals);
-
-  // Helper method used to check if the test server is up and running.
-  bool IsTestServerRunning();
-
   // Helper method used to set up fake responses for kClientLoginUrl,
   // kIssueAuthTokenUrl, kGetUserInfoUrl and kSearchDomainCheckUrl in order to
   // mock out calls to GAIA servers.
@@ -394,8 +379,17 @@ class SyncTest : public InProcessBrowserTest {
   // Initializes the invalidations that were set up in SetUpInvalidations.
   void InitializeInvalidations(int index);
 
-  // Clear server data, and restart sync.
-  bool ClearServerData(ProfileSyncServiceHarness* harness);
+  // Internal routine for setting up sync.
+  void SetupSyncInternal(bool wait_for_completion);
+
+  // GAIA account used by the test case.
+  std::string username_;
+
+  // GAIA password used by the test case.
+  std::string password_;
+
+  // Locally available plain text file in which GAIA credentials are stored.
+  base::FilePath password_file_;
 
   // Python sync test server, started on demand.
   syncer::LocalSyncTestServer sync_server_;
@@ -424,15 +418,14 @@ class SyncTest : public InProcessBrowserTest {
   // directory. Profiles are owned by the ProfileManager.
   std::vector<Profile*> profiles_;
 
-  // Collection of profile delegates. Only used for test profiles, which require
-  // a custom profile delegate to ensure initialization happens at the right
-  // time.
+  // Collection of profile delegates. Only used for test profiles, which
+  // require a custom profile delegate to ensure initialization happens at the
+  // right time.
   std::vector<std::unique_ptr<Profile::Delegate>> profile_delegates_;
 
-  // Collection of profile paths used by a test. Each profile has a unique path
-  // which should be cleaned up at test shutdown. Profile paths inside the
-  // default user data dir gets deleted at InProcessBrowserTest teardown.
-  std::vector<base::ScopedTempDir*> tmp_profile_paths_;
+  // List of temporary directories that need to be deleted when the test is
+  // completed, used for two-client tests with external server.
+  std::vector<std::unique_ptr<base::ScopedTempDir>> scoped_temp_dirs_;
 
   // Collection of pointers to the browser objects used by a test. One browser
   // instance is created for each sync profile. Browser object lifetime is
@@ -440,13 +433,19 @@ class SyncTest : public InProcessBrowserTest {
   // here.
   std::vector<Browser*> browsers_;
 
-  // Collection of sync clients used by a test. A sync client is associated with
-  // a sync profile, and implements methods that sync the contents of the
+  // Collection of sync clients used by a test. A sync client is associated
+  // with a sync profile, and implements methods that sync the contents of the
   // profile with the server.
   std::vector<std::unique_ptr<ProfileSyncServiceHarness>> clients_;
 
-  // A set of objects to listen for commit activity and broadcast notifications
-  // of this activity to its peer sync clients.
+  // Mapping from client indexes to encryption passphrases to use for them.
+  std::map<int, std::string> client_encryption_passphrases_;
+
+  // Mapping from client indexes to decryption passphrases to use for them.
+  std::map<int, std::string> client_decryption_passphrases_;
+
+  // A set of objects to listen for commit activity and broadcast
+  // notifications of this activity to its peer sync clients.
   std::vector<std::unique_ptr<P2PInvalidationForwarder>>
       invalidation_forwarders_;
 
@@ -454,42 +453,28 @@ class SyncTest : public InProcessBrowserTest {
   // notifications of this activity to its peer sync clients.
   std::vector<std::unique_ptr<P2PSyncRefresher>> sync_refreshers_;
 
-  // Collection of pointers to FakeServerInvalidation objects for each profile.
+  // Collection of pointers to FakeServerInvalidation objects for each
+  // profile.
   std::vector<fake_server::FakeServerInvalidationService*>
       fake_server_invalidation_services_;
 
   // Triggers a GetUpdates via refresh after a configuration.
   std::unique_ptr<ConfigurationRefresher> configuration_refresher_;
 
-  // Sync profile against which changes to individual profiles are verified. We
-  // don't need a corresponding verifier sync client because the contents of the
-  // verifier profile are strictly local, and are not meant to be synced.
+  // Sync profile against which changes to individual profiles are verified.
+  // We don't need a corresponding verifier sync client because the contents
+  // of the verifier profile are strictly local, and are not meant to be
+  // synced.
   Profile* verifier_;
 
   // Indicates whether changes to a profile should also change the verifier
   // profile or not.
   bool use_verifier_;
 
-  // Indicates the need to create Gaia user account at runtime. This can only be
-  // set if tests are run against external servers with support for user
+  // Indicates the need to create Gaia user account at runtime. This can only
+  // be set if tests are run against external servers with support for user
   // creation via http requests.
   bool create_gaia_account_at_runtime_;
-
-  // Used to start and stop the local test server.
-  base::Process test_server_;
-
-  // The factory used to mock out GAIA signin.
-  network::TestURLLoaderFactory test_url_loader_factory_;
-
-  // The shared URLLoaderFactory backed by |test_url_loader_factory_|.
-  scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
-      test_shared_url_loader_factory_;
-
-  // Fake URLFetcher factory used to mock out GAIA signin.
-  std::unique_ptr<net::FakeURLFetcherFactory> fake_factory_;
-
-  // The URLFetcherImplFactory instance used to instantiate |fake_factory_|.
-  std::unique_ptr<net::URLFetcherImplFactory> factory_;
 
   // The contents to be written to a profile's Preferences file before the
   // Profile object is created. If empty, no preexisting file will be written.

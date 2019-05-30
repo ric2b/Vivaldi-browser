@@ -35,10 +35,10 @@
 #include "third_party/blink/renderer/core/dom/synchronous_mutation_observer.h"
 #include "third_party/blink/renderer/core/editing/forward.h"
 #include "third_party/blink/renderer/core/editing/set_selection_options.h"
+#include "third_party/blink/renderer/core/scroll/scroll_alignment.h"
 #include "third_party/blink/renderer/platform/geometry/int_rect.h"
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_alignment.h"
 
 namespace blink {
 
@@ -125,8 +125,10 @@ class CORE_EXPORT FrameSelection final
 
  public:
   static FrameSelection* Create(LocalFrame& frame) {
-    return new FrameSelection(frame);
+    return MakeGarbageCollected<FrameSelection>(frame);
   }
+
+  explicit FrameSelection(LocalFrame&);
   ~FrameSelection();
 
   bool IsAvailable() const { return LifecycleContext(); }
@@ -204,10 +206,9 @@ class CORE_EXPORT FrameSelection final
   SelectionInDOMTree GetSelectionInDOMTree() const;
   bool IsDirectional() const;
 
-  void DocumentAttached(Document*);
+  void DidAttachDocument(Document*);
 
   void DidLayout();
-  bool NeedsLayoutSelectionUpdate() const;
   void CommitAppearanceIfNeeded();
   void SetCaretVisible(bool caret_is_visible);
   void ScheduleVisualUpdate() const;
@@ -276,15 +277,13 @@ class CORE_EXPORT FrameSelection final
   LayoutSelectionStatus ComputeLayoutSelectionStatus(
       const NGPaintFragment&) const;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   friend class CaretDisplayItemClientTest;
   friend class FrameSelectionTest;
   friend class PaintControllerPaintTestBase;
   friend class SelectionControllerTest;
-
-  explicit FrameSelection(LocalFrame&);
 
   const DisplayItemClient& CaretDisplayItemClientForTesting() const;
 

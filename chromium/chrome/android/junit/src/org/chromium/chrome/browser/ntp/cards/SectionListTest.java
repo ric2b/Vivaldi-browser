@@ -43,7 +43,6 @@ import org.robolectric.annotation.Config;
 import org.chromium.base.Callback;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ntp.snippets.CategoryInt;
 import org.chromium.chrome.browser.ntp.snippets.CategoryStatus;
 import org.chromium.chrome.browser.ntp.snippets.KnownCategories;
@@ -58,8 +57,6 @@ import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
 import org.chromium.chrome.test.support.DisableHistogramsRule;
 import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.suggestions.ContentSuggestionsTestUtils.CategoryInfoBuilder;
 import org.chromium.chrome.test.util.browser.suggestions.FakeSuggestionsSource;
 import org.chromium.net.NetworkChangeNotifier;
@@ -72,7 +69,6 @@ import java.util.List;
  */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
-@DisableFeatures(ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER)
 public class SectionListTest {
     @Rule
     public DisableHistogramsRule mDisableHistogramsRule = new DisableHistogramsRule();
@@ -117,12 +113,15 @@ public class SectionListTest {
 
         doNothing().when(mPrefServiceBridge).setBoolean(anyInt(), anyBoolean());
         PrefServiceBridge.setInstanceForTesting(mPrefServiceBridge);
+
+        SignInPromo.setDisablePromoForTests(true);
     }
 
     @After
     public void tearDown() {
         CardsVariationParameters.setTestVariationParams(null);
         PrefServiceBridge.setInstanceForTesting(null);
+        SignInPromo.setDisablePromoForTests(false);
     }
 
     @Test
@@ -327,17 +326,6 @@ public class SectionListTest {
 
     @Test
     @Feature({"Ntp"})
-    public void testArticlesHeaderHiddenWhenAlone() {
-        registerCategory(mSuggestionSource, KnownCategories.ARTICLES, 1);
-
-        SectionList sectionList = new SectionList(mUiDelegate, mOfflinePageBridge);
-        sectionList.refreshSuggestions();
-        SuggestionsSection articles = sectionList.getSection(KnownCategories.ARTICLES);
-        assertFalse(articles.getHeaderItemForTesting().isVisible());
-    }
-
-    @Test
-    @Feature({"Ntp"})
     public void testRandomSectionHeaderShownWhenAlone() {
         registerCategory(mSuggestionSource, CATEGORY1, 1);
 
@@ -361,7 +349,6 @@ public class SectionListTest {
 
     @Test
     @Feature({"Ntp"})
-    @EnableFeatures(ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER)
     public void testArticlesHeaderShownWhenExplicitlyDisabled() {
         when(mPrefServiceBridge.getBoolean(ARTICLES_SECTION_ENABLED_PREF)).thenReturn(true);
         registerCategory(mSuggestionSource, KnownCategories.ARTICLES, 0);
@@ -378,7 +365,6 @@ public class SectionListTest {
 
     @Test
     @Feature({"Ntp"})
-    @EnableFeatures(ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER)
     public void testArticlesHeaderHiddenWhenDisabledByPolicy() {
         when(mPrefServiceBridge.getBoolean(ARTICLES_SECTION_ENABLED_PREF)).thenReturn(false);
         registerCategory(mSuggestionSource, KnownCategories.ARTICLES, 0);
@@ -393,7 +379,6 @@ public class SectionListTest {
 
     @Test
     @Feature({"Ntp"})
-    @EnableFeatures(ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER)
     public void testArticlesHeaderExpandableWithOtherSections() {
         registerCategory(mSuggestionSource, KnownCategories.ARTICLES, 1);
         registerCategory(mSuggestionSource, CATEGORY1, 1);
@@ -414,7 +399,6 @@ public class SectionListTest {
 
     @Test
     @Feature({"Ntp"})
-    @EnableFeatures(ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER)
     public void testSuggestionsVisibilityOnPreferenceChanged() {
         when(mPrefServiceBridge.getBoolean(ARTICLES_SECTION_ENABLED_PREF)).thenReturn(true);
         when(mPrefServiceBridge.getBoolean(EXPANDABLE_HEADER_PREF)).thenReturn(true);

@@ -100,9 +100,11 @@ void DownloadShelfUIControllerDelegate::OnNewDownloadReady(
 
   if (browser && browser->window() &&
       DownloadItemModel(item).ShouldShowInShelf()) {
+    DownloadUIModel::DownloadUIModelPtr model = DownloadItemModel::Wrap(item);
+
     // GetDownloadShelf creates the download shelf if it was not yet created.
     if (browser->window()->GetDownloadShelf())
-      browser->window()->GetDownloadShelf()->AddDownload(item);
+    browser->window()->GetDownloadShelf()->AddDownload(std::move(model));
   }
 }
 
@@ -113,9 +115,13 @@ void DownloadShelfUIControllerDelegate::OnNewDownloadReady(
 DownloadUIController::Delegate::~Delegate() {
 }
 
-DownloadUIController::DownloadUIController(content::DownloadManager* manager,
-                                           std::unique_ptr<Delegate> delegate)
-    : download_notifier_(manager, this), delegate_(std::move(delegate)) {
+DownloadUIController::DownloadUIController(
+    content::DownloadManager* manager,
+    std::unique_ptr<Delegate> delegate,
+    DownloadOfflineContentProvider* provider)
+    : download_notifier_(manager, this),
+      delegate_(std::move(delegate)),
+      download_provider_(provider) {
 #if defined(OS_ANDROID)
   if (!delegate_)
     delegate_.reset(new AndroidUIControllerDelegate());
@@ -200,7 +206,8 @@ void DownloadUIController::OnDownloadUpdated(content::DownloadManager* manager,
       // GetDownloadShelf creates the download shelf if it was not yet created.
       DownloadShelf* shelf = browser && browser->window() ?  browser->window()->GetDownloadShelf() : NULL;
       if (shelf) {
-        shelf->AddDownload(item);
+        DownloadUIModel::DownloadUIModelPtr model = DownloadItemModel::Wrap(item);
+        shelf->AddDownload(std::move(model));
       }
     }
   }
@@ -211,4 +218,6 @@ void DownloadUIController::OnDownloadUpdated(content::DownloadManager* manager,
 
   DownloadItemModel(item).SetWasUINotified(true);
   delegate_->OnNewDownloadReady(item);
+  if (download_provider_)
+    download_provider_->OnDownloadStarted(item);
 }

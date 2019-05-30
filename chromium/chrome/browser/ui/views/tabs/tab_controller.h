@@ -5,16 +5,15 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_TABS_TAB_CONTROLLER_H_
 #define CHROME_BROWSER_UI_VIEWS_TABS_TAB_CONTROLLER_H_
 
-#include "base/callback_forward.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_types.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/ui_base_types.h"
 
+class SkPath;
 class Tab;
 
 namespace gfx {
-class Path;
 class Point;
 class Rect;
 }
@@ -30,30 +29,24 @@ class View;
 // Controller for tabs.
 class TabController {
  public:
-
   virtual const ui::ListSelectionModel& GetSelectionModel() const = 0;
 
   // Returns true if multiple selection is supported.
   virtual bool SupportsMultipleSelection() = 0;
 
-  // Under Refresh, returns where the new tab button should be placed. This is
-  // needed to determine which tab separators need to be faded in/out while
-  // animating into position.
+  // Returns where the new tab button should be placed. This is needed to
+  // determine which tab separators need to be faded in/out while animating into
+  // position.
   virtual NewTabButtonPosition GetNewTabButtonPosition() const = 0;
 
   // Returns true if the close button for the given tab is forced to be hidden.
   virtual bool ShouldHideCloseButtonForTab(Tab* tab) const = 0;
 
-  // Returns true if the close button on an inactive tab should be shown on
-  // mouse hover. This is predicated on ShouldHideCloseButtonForInactiveTabs()
-  // returning true.
-  virtual bool ShouldShowCloseButtonOnHover() = 0;
-
   // Returns true if ShouldPaintTab() could return a non-empty clip path.
   virtual bool MaySetClip() = 0;
 
-  // Selects the tab.
-  virtual void SelectTab(Tab* tab) = 0;
+  // Selects the tab. |event| is the event that causes |tab| to be selected.
+  virtual void SelectTab(Tab* tab, const ui::Event& event) = 0;
 
   // Extends the selection from the anchor to |tab|.
   virtual void ExtendSelectionTo(Tab* tab) = 0;
@@ -66,9 +59,6 @@ class TabController {
 
   // Closes the tab.
   virtual void CloseTab(Tab* tab, CloseTabSource source) = 0;
-
-  // Toggles whether tab-wide audio muting is active.
-  virtual void ToggleTabAudioMute(Tab* tab) = 0;
 
   // Shows a context menu for the tab at the specified point in screen coords.
   virtual void ShowContextMenuForTab(Tab* tab,
@@ -88,13 +78,6 @@ class TabController {
   // Returns whether |tab| is the first or last one visible.
   virtual bool IsFirstVisibleTab(const Tab* tab) const = 0;
   virtual bool IsLastVisibleTab(const Tab* tab) const = 0;
-
-  // Returns whether the strip is painting in single-tab mode.  This is true in
-  // a subset of the cases where ther is exactly one tab.
-  virtual bool SingleTabMode() const = 0;
-
-  // Returns true if the tab is a part of an incognito profile.
-  virtual bool IsIncognito() const = 0;
 
   // Potentially starts a drag for the specified Tab.
   virtual void MaybeStartDrag(
@@ -121,20 +104,18 @@ class TabController {
   virtual void OnMouseEventInTab(views::View* source,
                                  const ui::MouseEvent& event) = 0;
 
+  // Updates hover-card content, anchoring and visibility based on what tab is
+  // hovered and whether the card should be shown.
+  virtual void UpdateHoverCard(Tab* tab, bool should_show) = 0;
+
   // Returns whether |tab| needs to be painted. When this returns true, |clip|
   // is set to the path which should be clipped out of the current tab's region
   // (for hit testing or painting), if any.  |clip| is only non-empty when
-  // stacking tabs; if it is empty, no clipping is needed.  |border_callback| is
-  // a callback which returns a tab's border given its size, and is used in
-  // computing |clip|.
-  virtual bool ShouldPaintTab(
-      const Tab* tab,
-      const base::RepeatingCallback<gfx::Path(const gfx::Rect&)>&
-          border_callback,
-      gfx::Path* clip) = 0;
+  // stacking tabs; if it is empty, no clipping is needed.
+  virtual bool ShouldPaintTab(const Tab* tab, float scale, SkPath* clip) = 0;
 
-  // Returns the thickness of the stroke around all tabs (for pre-refresh) or
-  // the active tab (for refresh) in DIP.  Returns 0 if there is no stroke.
+  // Returns the thickness of the stroke around the active tab in DIP.  Returns
+  // 0 if there is no stroke.
   virtual int GetStrokeThickness() const = 0;
 
   // Returns true if tab loading throbbers can be painted to a composited layer.
@@ -146,21 +127,28 @@ class TabController {
   // frame.
   virtual bool HasVisibleBackgroundTabShapes() const = 0;
 
+  // Returns whether the tab strip should be painted as if the window frame is
+  // active.
+  virtual bool ShouldPaintAsActiveFrame() const = 0;
+
   // Returns COLOR_TOOLBAR_TOP_SEPARATOR[,_INACTIVE] depending on the activation
   // state of the window.
   virtual SkColor GetToolbarTopSeparatorColor() const = 0;
 
-  // Under Refresh, returns the color of the separator between the tabs.
+  // Returns the color of the separator between the tabs.
   virtual SkColor GetTabSeparatorColor() const = 0;
 
-  // Returns the tab background color based on both the |state| of the tab and
-  // the activation state of the window.  If |opaque| is true, the resulting
-  // color after drawing the tab background on the frame will be returned.
-  virtual SkColor GetTabBackgroundColor(TabState state, bool opaque) const = 0;
+  // Returns the tab background color based on both the |tab_state| and the
+  // |active_state| of the window.
+  virtual SkColor GetTabBackgroundColor(
+      TabState tab_state,
+      BrowserNonClientFrameView::ActiveState active_state =
+          BrowserNonClientFrameView::kUseCurrent) const = 0;
 
-  // Returns the tab foreground color of the the text based on both the |state|
-  // of the tab and the activation state of the window.
-  virtual SkColor GetTabForegroundColor(TabState state) const = 0;
+  // Returns the tab foreground color of the the text based on the |tab_state|,
+  // the activation state of the window, and the current |background_color|.
+  virtual SkColor GetTabForegroundColor(TabState tab_state,
+                                        SkColor background_color) const = 0;
 
   // Returns the resource ID for the image to use as the tab background.
   // |custom_image| is an outparam set to true if either the tab or the frame

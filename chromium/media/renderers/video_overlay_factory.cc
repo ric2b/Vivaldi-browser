@@ -71,7 +71,8 @@ class VideoOverlayFactory::Texture {
 
 VideoOverlayFactory::VideoOverlayFactory(
     GpuVideoAcceleratorFactories* gpu_factories)
-    : gpu_factories_(gpu_factories) {}
+    : overlay_plane_id_(base::UnguessableToken::Create()),
+      gpu_factories_(gpu_factories) {}
 
 VideoOverlayFactory::~VideoOverlayFactory() = default;
 
@@ -99,6 +100,17 @@ scoped_refptr<VideoFrame> VideoOverlayFactory::CreateFrame(
       base::TimeDelta());  // timestamp
   CHECK(frame);
   frame->metadata()->SetBoolean(VideoFrameMetadata::ALLOW_OVERLAY, true);
+  // On platforms that use the video hole, the video never makes it in the media
+  // pipeline as it is side loaded straight into the hardware video plane. This
+  // is intended for protected video such that userspace cannot copy potentially
+  // protected content. While the video may not be protected, since it goes
+  // through the protected video path, the video always looks like a protected
+  // video from the perspective of VideoOverlayFactory which produces a dummy
+  // video frame in its place.
+  frame->metadata()->SetBoolean(VideoFrameMetadata::PROTECTED_VIDEO, true);
+  frame->metadata()->SetBoolean(VideoFrameMetadata::HW_PROTECTED, true);
+  frame->metadata()->SetUnguessableToken(VideoFrameMetadata::OVERLAY_PLANE_ID,
+                                         overlay_plane_id_);
   return frame;
 }
 

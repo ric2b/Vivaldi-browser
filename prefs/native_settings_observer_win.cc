@@ -1,7 +1,10 @@
-// Copyright (c) 2016 Vivaldi Technologies. All Rights Reserved.
+// Copyright (c) 2016-2019 Vivaldi Technologies. All Rights Reserved.
 
 #include "base/logging.h"
 #include "prefs/native_settings_observer_win.h"
+#include "prefs/vivaldi_pref_names.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
+#include "vivaldi/prefs/vivaldi_gen_pref_enums.h"
 
 namespace vivaldi {
 
@@ -10,7 +13,39 @@ NativeSettingsObserver* NativeSettingsObserver::Create(Profile* profile) {
   return new NativeSettingsObserverWin(profile);
 }
 
+NativeSettingsObserverWin::~NativeSettingsObserverWin() {
+}
+
 NativeSettingsObserverWin::NativeSettingsObserverWin(Profile* profile)
-    : NativeSettingsObserver(profile) {}
+    : NativeSettingsObserver(profile) {
+  theme_key_.reset(new base::win::RegKey(
+    HKEY_CURRENT_USER,
+    L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+    KEY_READ));
+  if (theme_key_->Valid()) {
+    OnThemeColorUpdated();
+  }
+}
+
+void NativeSettingsObserverWin::OnThemeColorUpdated() {
+  DWORD ubr = 0;
+  vivaldiprefs::SystemDesktopThemeColorValues theme_color =
+      vivaldiprefs::SystemDesktopThemeColorValues::LIGHT;
+  if (theme_key_->ReadValueDW(L"AppsUseLightTheme", &ubr) == ERROR_SUCCESS) {
+    if (ubr == 0) {
+      // 0 is dark.
+      theme_color = vivaldiprefs::SystemDesktopThemeColorValues::DARK;
+    }
+  }
+  SetPref(vivaldiprefs::kSystemDesktopThemeColor,
+          static_cast<int>(theme_color));
+
+  // Watch for future changes. base::Unretained(this) because theme_key_
+  // is valid as long as |this| is.
+  if (!theme_key_->StartWatching(base::Bind(
+    &NativeSettingsObserverWin::OnThemeColorUpdated, base::Unretained(this)))) {
+    theme_key_.reset();
+  }
+}
 
 }  // namespace vivaldi

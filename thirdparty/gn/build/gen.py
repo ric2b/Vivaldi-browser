@@ -11,11 +11,9 @@ import optparse
 import os
 import platform
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
-import urllib2
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
@@ -41,6 +39,8 @@ class Platform(object):
       self._platform = 'aix'
     elif self._platform.startswith('fuchsia'):
       self._platform = 'fuchsia'
+    elif self._platform.startswith('freebsd'):
+      self._platform = 'freebsd'
 
   @staticmethod
   def known_platforms():
@@ -68,7 +68,7 @@ class Platform(object):
     return self._platform == 'aix'
 
   def is_posix(self):
-    return self._platform in ['linux', 'darwin', 'aix']
+    return self._platform in ['linux', 'freebsd', 'darwin', 'aix']
 
 
 def main(argv):
@@ -87,12 +87,12 @@ def main(argv):
                     help='Enable the use of LTO')
   parser.add_option('--use-icf', action='store_true',
                     help='Enable the use of Identical Code Folding')
-  parser.add_option('--no-sysroot', action='store_true',
-                    help='(Linux only) Do not build with the Debian sysroot.')
   parser.add_option('--no-last-commit-position', action='store_true',
                     help='Do not generate last_commit_position.h.')
   parser.add_option('--out-path',
                     help='The path to generate the build files in.')
+  parser.add_option('--no-strip', action='store_true',
+                    help='Don\'t strip release build. Useful for profiling.')
   options, args = parser.parse_args(argv)
 
   if args:
@@ -104,18 +104,13 @@ def main(argv):
   else:
     host = platform
 
-  linux_sysroot = None
-  if platform.is_linux() and not options.no_sysroot:
-    linux_sysroot = UpdateLinuxSysroot()
-
   out_dir = options.out_path or os.path.join(REPO_ROOT, 'out')
   if not os.path.isdir(out_dir):
     os.makedirs(out_dir)
   if not options.no_last_commit_position:
     GenerateLastCommitPosition(host,
                                os.path.join(out_dir, 'last_commit_position.h'))
-  WriteGNNinja(os.path.join(out_dir, 'build.ninja'), platform, host, options,
-               linux_sysroot)
+  WriteGNNinja(os.path.join(out_dir, 'build.ninja'), platform, host, options)
   return 0
 
 
@@ -150,50 +145,6 @@ def GenerateLastCommitPosition(host, header):
       f.write(contents)
 
 
-def UpdateLinuxSysroot():
-  # Sysroot revision from:
-  # https://cs.chromium.org/chromium/src/build/linux/sysroot_scripts/sysroots.json
-  server = 'https://commondatastorage.googleapis.com'
-  path = 'chrome-linux-sysroot/toolchain'
-  revision = '1015a998c2adf188813cca60b558b0ea1a0b6ced'
-  filename = 'debian_sid_amd64_sysroot.tar.xz'
-
-  url = '%s/%s/%s/%s' % (server, path, revision, filename)
-
-  sysroot = os.path.join(SCRIPT_DIR, os.pardir, '.linux-sysroot')
-
-  stamp = os.path.join(sysroot, '.stamp')
-  if os.path.exists(stamp):
-    with open(stamp) as s:
-      if s.read() == url:
-        return sysroot
-
-  print 'Installing Debian root image from %s' % url
-
-  if os.path.isdir(sysroot):
-    shutil.rmtree(sysroot)
-  os.mkdir(sysroot)
-  tarball = os.path.join(sysroot, filename)
-  print 'Downloading %s' % url
-
-  for _ in range(3):
-    response = urllib2.urlopen(url)
-    with open(tarball, 'wb') as f:
-      f.write(response.read())
-    break
-  else:
-    raise Exception('Failed to download %s' % url)
-
-  subprocess.check_call(['tar', 'xf', tarball, '-C', sysroot])
-
-  os.remove(tarball)
-
-  with open(stamp, 'w') as s:
-    s.write(url)
-
-  return sysroot
-
-
 def WriteGenericNinja(path, static_libraries, executables,
                       cc, cxx, ar, ld, platform, host, options,
                       cflags=[], cflags_cc=[], ldflags=[], libflags=[],
@@ -223,6 +174,7 @@ def WriteGenericNinja(path, static_libraries, executables,
       'msvc': 'build_win.ninja.template',
       'darwin': 'build_mac.ninja.template',
       'linux': 'build_linux.ninja.template',
+      'freebsd': 'build_linux.ninja.template',
       'aix': 'build_aix.ninja.template',
   }[platform.platform()])
 
@@ -301,7 +253,7 @@ def WriteGenericNinja(path, static_libraries, executables,
             os.path.relpath(template_filename, os.path.dirname(path)) + '\n')
 
 
-def WriteGNNinja(path, platform, host, options, linux_sysroot):
+def WriteGNNinja(path, platform, host, options):
   if platform.is_msvc():
     cc = os.environ.get('CC', 'cl.exe')
     cxx = os.environ.get('CXX', 'cl.exe')
@@ -331,6 +283,8 @@ def WriteGNNinja(path, platform, host, options, linux_sysroot):
     else:
       cflags.append('-DNDEBUG')
       cflags.append('-O3')
+      if options.no_strip:
+        cflags.append('-g')
       ldflags.append('-O3')
       # Use -fdata-sections and -ffunction-sections to place each function
       # or data item into its own section so --gc-sections can eliminate any
@@ -344,15 +298,16 @@ def WriteGNNinja(path, platform, host, options, linux_sysroot):
         ldflags.append('-Wl,--gc-sections')
 
       # Omit all symbol information from the output file.
-      if platform.is_darwin():
-        ldflags.append('-Wl,-S')
-      elif platform.is_aix():
-        ldflags.append('-Wl,-s')
-      else:
-        ldflags.append('-Wl,-strip-all')
+      if options.no_strip is None:
+        if platform.is_darwin():
+          ldflags.append('-Wl,-S')
+        elif platform.is_aix():
+          ldflags.append('-Wl,-s')
+        else:
+          ldflags.append('-Wl,-strip-all')
 
       # Enable identical code-folding.
-      if options.use_icf:
+      if options.use_icf and not platform.is_darwin():
         ldflags.append('-Wl,--icf=all')
 
     cflags.extend([
@@ -367,26 +322,22 @@ def WriteGNNinja(path, platform, host, options, linux_sysroot):
     cflags_cc.extend(['-std=c++14', '-Wno-c++11-narrowing'])
 
     if platform.is_linux():
-      if linux_sysroot:
-        # Use the sid sysroot that UpdateLinuxSysroot() downloads.
-        cflags.append('--sysroot=' + linux_sysroot)
-        ldflags.append('--sysroot=' + linux_sysroot)
       ldflags.extend([
           '-static-libstdc++',
           '-Wl,--as-needed',
       ])
-      libs.extend([
-          # These are needed by libc++.
-          '-ldl',
-          '-lpthread',
-      ])
+      # This is needed by libc++.
+      libs.append('-ldl')
     elif platform.is_darwin():
       min_mac_version_flag = '-mmacosx-version-min=10.9'
       cflags.append(min_mac_version_flag)
       ldflags.append(min_mac_version_flag)
     elif platform.is_aix():
       cflags_cc.append('-maix64')
-      ldflags.extend(['-maix64', '-pthread'])
+      ldflags.append('-maix64')
+
+    if platform.is_posix():
+      ldflags.append('-pthread')
 
     if options.use_lto:
       cflags.extend(['-flto', '-fwhole-program-vtables'])
@@ -394,7 +345,7 @@ def WriteGNNinja(path, platform, host, options, linux_sysroot):
 
   elif platform.is_msvc():
     if not options.debug:
-      cflags.extend(['/Ox', '/DNDEBUG', '/GL'])
+      cflags.extend(['/O2', '/DNDEBUG', '/GL'])
       libflags.extend(['/LTCG'])
       ldflags.extend(['/LTCG', '/OPT:REF', '/OPT:ICF'])
 
@@ -408,7 +359,6 @@ def WriteGNNinja(path, platform, host, options, linux_sysroot):
         '/D_UNICODE',
         '/D_WIN32_WINNT=0x0A00',
         '/FS',
-        '/Gy',
         '/W4',
         '/WX',
         '/Zi',
@@ -417,6 +367,7 @@ def WriteGNNinja(path, platform, host, options, linux_sysroot):
         '/wd4127',
         '/wd4244',
         '/wd4267',
+        '/wd4505',
         '/wd4838',
         '/wd4996',
     ])
@@ -482,6 +433,7 @@ def WriteGNNinja(path, platform, host, options, linux_sysroot):
         'tools/gn/command_format.cc',
         'tools/gn/command_gen.cc',
         'tools/gn/command_help.cc',
+        'tools/gn/command_meta.cc',
         'tools/gn/command_ls.cc',
         'tools/gn/command_path.cc',
         'tools/gn/command_refs.cc',
@@ -516,6 +468,7 @@ def WriteGNNinja(path, platform, host, options, linux_sysroot):
         'tools/gn/function_template.cc',
         'tools/gn/function_toolchain.cc',
         'tools/gn/function_write_file.cc',
+        'tools/gn/generated_file_target_generator.cc',
         'tools/gn/group_target_generator.cc',
         'tools/gn/header_checker.cc',
         'tools/gn/import_manager.cc',
@@ -530,12 +483,15 @@ def WriteGNNinja(path, platform, host, options, linux_sysroot):
         'tools/gn/lib_file.cc',
         'tools/gn/loader.cc',
         'tools/gn/location.cc',
+        'tools/gn/metadata.cc',
+        'tools/gn/metadata_walk.cc',
         'tools/gn/ninja_action_target_writer.cc',
         'tools/gn/ninja_binary_target_writer.cc',
         'tools/gn/ninja_build_writer.cc',
         'tools/gn/ninja_bundle_data_target_writer.cc',
         'tools/gn/ninja_copy_target_writer.cc',
         'tools/gn/ninja_create_bundle_target_writer.cc',
+        'tools/gn/ninja_generated_file_target_writer.cc',
         'tools/gn/ninja_group_target_writer.cc',
         'tools/gn/ninja_target_command_util.cc',
         'tools/gn/ninja_target_writer.cc',
@@ -629,12 +585,15 @@ def WriteGNNinja(path, platform, host, options, linux_sysroot):
         'tools/gn/label_pattern_unittest.cc',
         'tools/gn/label_unittest.cc',
         'tools/gn/loader_unittest.cc',
+        'tools/gn/metadata_unittest.cc',
+        'tools/gn/metadata_walk_unittest.cc',
         'tools/gn/ninja_action_target_writer_unittest.cc',
         'tools/gn/ninja_binary_target_writer_unittest.cc',
         'tools/gn/ninja_build_writer_unittest.cc',
         'tools/gn/ninja_bundle_data_target_writer_unittest.cc',
         'tools/gn/ninja_copy_target_writer_unittest.cc',
         'tools/gn/ninja_create_bundle_target_writer_unittest.cc',
+        'tools/gn/ninja_generated_file_target_writer_unittest.cc',
         'tools/gn/ninja_group_target_writer_unittest.cc',
         'tools/gn/ninja_target_writer_unittest.cc',
         'tools/gn/ninja_toolchain_writer_unittest.cc',
@@ -647,6 +606,7 @@ def WriteGNNinja(path, platform, host, options, linux_sysroot):
         'tools/gn/runtime_deps_unittest.cc',
         'tools/gn/scope_per_file_provider_unittest.cc',
         'tools/gn/scope_unittest.cc',
+        'tools/gn/setup_unittest.cc',
         'tools/gn/source_dir_unittest.cc',
         'tools/gn/source_file_unittest.cc',
         'tools/gn/string_utils_unittest.cc',
@@ -678,32 +638,11 @@ def WriteGNNinja(path, platform, host, options, linux_sysroot):
         'base/strings/string16.cc',
     ])
 
-  if platform.is_linux() or platform.is_aix():
-    static_libraries['base']['sources'].extend([
-        'base/strings/sys_string_conversions_posix.cc',
-    ])
-
-  if platform.is_darwin():
-    static_libraries['base']['sources'].extend([
-        'base/files/file_util_mac.mm',
-        'base/mac/bundle_locations.mm',
-        'base/mac/foundation_util.mm',
-        'base/strings/sys_string_conversions_mac.mm',
-    ])
-
-    libs.extend([
-        '-framework', 'AppKit',
-        '-framework', 'CoreFoundation',
-        '-framework', 'Foundation',
-        '-framework', 'Security',
-    ])
-
   if platform.is_windows():
     static_libraries['base']['sources'].extend([
         'base/files/file_enumerator_win.cc',
         'base/files/file_util_win.cc',
         'base/files/file_win.cc',
-        'base/strings/sys_string_conversions_win.cc',
         'base/win/registry.cc',
         'base/win/scoped_handle.cc',
         'base/win/scoped_process_information.cc',

@@ -10,10 +10,15 @@
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ui/app_list/chrome_app_list_model_updater.h"
+#include "chrome/browser/ui/ash/tablet_mode_client.h"
 #include "extensions/browser/app_sorting.h"
 #include "extensions/browser/extension_system.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/image/image_skia_operations.h"
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
+#endif
 
 namespace {
 
@@ -24,8 +29,8 @@ ash::mojom::AppListItemMetadataPtr CreateDefaultMetadata(
   return ash::mojom::AppListItemMetadata::New(
       app_id, std::string() /* name */, std::string() /* short_name */,
       std::string() /* folder_id */, syncer::StringOrdinal(),
-      false /* is_folder */, gfx::ImageSkia() /* icon */,
-      false /* is_page_break */);
+      false /* is_folder */, false /* is_persistent */,
+      gfx::ImageSkia() /* icon */, false /* is_page_break */);
 }
 
 }  // namespace
@@ -67,8 +72,7 @@ ChromeAppListItem::ChromeAppListItem(Profile* profile,
       profile_(profile),
       model_updater_(model_updater) {}
 
-ChromeAppListItem::~ChromeAppListItem() {
-}
+ChromeAppListItem::~ChromeAppListItem() = default;
 
 void ChromeAppListItem::SetIsInstalling(bool is_installing) {
   AppListModelUpdater* updater = model_updater();
@@ -92,6 +96,11 @@ ash::mojom::AppListItemMetadataPtr ChromeAppListItem::CloneMetadata() const {
 }
 
 void ChromeAppListItem::PerformActivate(int event_flags) {
+#if defined(OS_CHROMEOS)
+  // Handle recording app launch source from the AppList in Demo Mode.
+  chromeos::DemoSession::RecordAppLaunchSourceIfInDemoMode(
+      chromeos::DemoSession::AppLaunchSource::kAppList);
+#endif
   Activate(event_flags);
   MaybeDismissAppList();
 }
@@ -117,14 +126,17 @@ app_list::AppContextMenu* ChromeAppListItem::GetAppContextMenu() {
 void ChromeAppListItem::MaybeDismissAppList() {
   // Launching apps can take some time. It looks nicer to dismiss the app list.
   // Do not close app list for home launcher.
-  if (!GetController()->IsHomeLauncherEnabledInTabletMode())
+  if (!TabletModeClient::Get() ||
+      !TabletModeClient::Get()->tablet_mode_enabled()) {
     GetController()->DismissView();
+  }
 }
 
 void ChromeAppListItem::ContextMenuItemSelected(int command_id,
                                                 int event_flags) {
-  if (GetAppContextMenu())
-    GetAppContextMenu()->ExecuteCommand(command_id, event_flags);
+  app_list::AppContextMenu* menu = GetAppContextMenu();
+  if (menu)
+    menu->ExecuteCommand(command_id, event_flags);
 }
 
 extensions::AppSorting* ChromeAppListItem::GetAppSorting() {
@@ -146,19 +158,29 @@ void ChromeAppListItem::UpdateFromSync(
     SetName(sync_item->item_name);
 }
 
-void ChromeAppListItem::SetDefaultPositionIfApplicable() {
+void ChromeAppListItem::SetDefaultPositionIfApplicable(
+    AppListModelUpdater* model_updater) {
   syncer::StringOrdinal page_ordinal;
   syncer::StringOrdinal launch_ordinal;
   extensions::AppSorting* app_sorting = GetAppSorting();
-  if (!app_sorting->GetDefaultOrdinals(id(), &page_ordinal,
-                                       &launch_ordinal) ||
-      !page_ordinal.IsValid() || !launch_ordinal.IsValid()) {
-    app_sorting->EnsureValidOrdinals(id(), syncer::StringOrdinal());
-    page_ordinal = app_sorting->GetPageOrdinal(id());
-    launch_ordinal = app_sorting->GetAppLaunchOrdinal(id());
+  if (app_sorting->GetDefaultOrdinals(id(), &page_ordinal, &launch_ordinal) &&
+      page_ordinal.IsValid() && launch_ordinal.IsValid()) {
+    // Set the default position if it exists.
+    SetPosition(syncer::StringOrdinal(page_ordinal.ToInternalValue() +
+                                      launch_ordinal.ToInternalValue()));
+    return;
   }
-  DCHECK(page_ordinal.IsValid());
-  DCHECK(launch_ordinal.IsValid());
+
+  if (model_updater) {
+    // Set the first available position in the app list.
+    SetPosition(model_updater->GetFirstAvailablePosition());
+    return;
+  }
+
+  // Set the natural position.
+  app_sorting->EnsureValidOrdinals(id(), syncer::StringOrdinal());
+  page_ordinal = app_sorting->GetPageOrdinal(id());
+  launch_ordinal = app_sorting->GetAppLaunchOrdinal(id());
   SetPosition(syncer::StringOrdinal(page_ordinal.ToInternalValue() +
                                     launch_ordinal.ToInternalValue()));
 }
@@ -198,6 +220,13 @@ void ChromeAppListItem::SetPosition(const syncer::StringOrdinal& position) {
   AppListModelUpdater* updater = model_updater();
   if (updater)
     updater->SetItemPosition(id(), position);
+}
+
+void ChromeAppListItem::SetIsPersistent(bool is_persistent) {
+  metadata_->is_persistent = is_persistent;
+  AppListModelUpdater* updater = model_updater();
+  if (updater)
+    updater->SetItemIsPersistent(id(), is_persistent);
 }
 
 void ChromeAppListItem::SetIsPageBreak(bool is_page_break) {

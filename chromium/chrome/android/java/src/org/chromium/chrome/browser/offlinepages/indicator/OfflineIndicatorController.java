@@ -26,6 +26,7 @@ import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.Tab.TabHidingType;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.ContentUrlConstants;
@@ -55,12 +56,15 @@ public class OfflineIndicatorController implements ConnectivityDetector.Observer
 
     @SuppressLint("StaticFieldLeak")
     private static OfflineIndicatorController sInstance;
+    private static int sTimeToWaitForStableOfflineForTesting;
 
     private boolean mIsShowingOfflineIndicator;
     // Set to true if the offline indicator has been shown once since the activity has resumed.
     private boolean mHasOfflineIndicatorShownSinceActivityResumed;
+    // Set to true if the user has been continuously online for the required duration.
+    private boolean mWasOnlineForRequiredDuration;
     private ConnectivityDetector mConnectivityDetector;
-    private ChromeActivity mObservedActivity = null;
+    private ChromeActivity mObservedActivity;
 
     private boolean mIsOnline;
     // Last time when the online state is detected. It is recorded as milliseconds since boot.
@@ -118,9 +122,14 @@ public class OfflineIndicatorController implements ConnectivityDetector.Observer
 
     @Override
     public void onApplicationStateChange(int newState) {
+        // Note that the paused state can happen when the activity is temporarily covered by another
+        // activity's Fragment, in which case we should still treat the app as in foreground.
+        if (newState != ApplicationState.HAS_RUNNING_ACTIVITIES
+                && newState != ApplicationState.HAS_PAUSED_ACTIVITIES) {
+            mHasOfflineIndicatorShownSinceActivityResumed = false;
+        }
         // If the application is resumed, update the connection state and show indicator if needed.
         if (newState == ApplicationState.HAS_RUNNING_ACTIVITIES) {
-            mHasOfflineIndicatorShownSinceActivityResumed = false;
             mConnectivityDetector.detect();
             updateOfflineIndicator(mConnectivityDetector.getConnectionState()
                     == ConnectivityDetector.ConnectionState.VALIDATED);
@@ -130,7 +139,11 @@ public class OfflineIndicatorController implements ConnectivityDetector.Observer
     private void updateOfflineIndicator(boolean isOnline) {
         if (isOnline != mIsOnline) {
             if (isOnline) {
+                mWasOnlineForRequiredDuration = false;
                 mLastOnlineTime = SystemClock.elapsedRealtime();
+            } else {
+                mWasOnlineForRequiredDuration = SystemClock.elapsedRealtime() - mLastOnlineTime
+                        >= getTimeToWaitForStableOffline();
             }
             mIsOnline = isOnline;
         }
@@ -191,7 +204,7 @@ public class OfflineIndicatorController implements ConnectivityDetector.Observer
             }
 
             @Override
-            public void onHidden(Tab tab) {
+            public void onHidden(Tab tab, @TabHidingType int type) {
                 mObservedActivity = null;
                 tab.removeObserver(this);
                 doUpdate();
@@ -222,9 +235,7 @@ public class OfflineIndicatorController implements ConnectivityDetector.Observer
         // be shown if the user has been continuously online for the required duration, then goes
         // back to being offline.
         // TODO(jianli): keep these values in shared prefernces. (http://crbug.com/879725)
-        if (mHasOfflineIndicatorShownSinceActivityResumed
-                && SystemClock.elapsedRealtime() - mLastOnlineTime
-                        < getTimeToWaitForStableOffline()) {
+        if (mHasOfflineIndicatorShownSinceActivityResumed && !mWasOnlineForRequiredDuration) {
             return;
         }
 
@@ -236,7 +247,7 @@ public class OfflineIndicatorController implements ConnectivityDetector.Observer
                         .setSingleLine(true)
                         .setProfileImage(icon)
                         .setBackgroundColor(Color.BLACK)
-                        .setTextAppearance(R.style.WhiteBody)
+                        .setTextAppearance(R.style.TextAppearance_WhiteBody)
                         .setDuration(SNACKBAR_DURATION_MS)
                         .setAction(chromeActivity.getString(
                                            R.string.offline_indicator_view_offline_content),
@@ -255,7 +266,8 @@ public class OfflineIndicatorController implements ConnectivityDetector.Observer
         mHasOfflineIndicatorShownSinceActivityResumed = true;
     }
 
-    private void hideOfflineIndicator(ChromeActivity chromeActivity) {
+    @VisibleForTesting
+    void hideOfflineIndicator(ChromeActivity chromeActivity) {
         if (!mIsShowingOfflineIndicator) return;
 
         if (isUsingTopSnackbar()) {
@@ -266,9 +278,14 @@ public class OfflineIndicatorController implements ConnectivityDetector.Observer
     }
 
     int getTimeToWaitForStableOffline() {
-        int seconds = ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
-                ChromeFeatureList.OFFLINE_INDICATOR, PARAM_STABLE_OFFLINE_WAIT_SECONDS,
-                STABLE_OFFLINE_DEFAULT_WAIT_SECONDS);
+        int seconds;
+        if (sTimeToWaitForStableOfflineForTesting != 0) {
+            seconds = sTimeToWaitForStableOfflineForTesting;
+        } else {
+            seconds = ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
+                    ChromeFeatureList.OFFLINE_INDICATOR, PARAM_STABLE_OFFLINE_WAIT_SECONDS,
+                    STABLE_OFFLINE_DEFAULT_WAIT_SECONDS);
+        }
         return seconds * 1000;
     }
 
@@ -277,6 +294,11 @@ public class OfflineIndicatorController implements ConnectivityDetector.Observer
         boolean useBottomSnackbar = ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
                 ChromeFeatureList.OFFLINE_INDICATOR, PARAM_BOTTOM_OFFLINE_INDICATOR_ENABLED, false);
         return !useBottomSnackbar;
+    }
+
+    @VisibleForTesting
+    static void setTimeToWaitForStableOfflineForTesting(int waitSeconds) {
+        sTimeToWaitForStableOfflineForTesting = waitSeconds;
     }
 
     @VisibleForTesting

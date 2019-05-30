@@ -20,18 +20,22 @@ class ExceptionState;
 class ExecutionContext;
 class ScriptState;
 
-class MODULES_EXPORT PaymentRequestUpdateEvent final : public Event,
-                                                       public PaymentUpdater {
+class MODULES_EXPORT PaymentRequestUpdateEvent : public Event,
+                                                 public PaymentUpdater {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(PaymentRequestUpdateEvent)
+  USING_GARBAGE_COLLECTED_MIXIN(PaymentRequestUpdateEvent);
 
  public:
+  PaymentRequestUpdateEvent(ExecutionContext*,
+                            const AtomicString& type,
+                            const PaymentRequestUpdateEventInit*);
   ~PaymentRequestUpdateEvent() override;
 
   static PaymentRequestUpdateEvent* Create(
       ExecutionContext*,
       const AtomicString& type,
-      const PaymentRequestUpdateEventInit& = PaymentRequestUpdateEventInit());
+      const PaymentRequestUpdateEventInit* =
+          PaymentRequestUpdateEventInit::Create());
 
   void SetPaymentDetailsUpdater(PaymentUpdater*);
 
@@ -48,10 +52,6 @@ class MODULES_EXPORT PaymentRequestUpdateEvent final : public Event,
   void OnUpdateEventTimeoutForTesting();
 
  private:
-  PaymentRequestUpdateEvent(ExecutionContext*,
-                            const AtomicString& type,
-                            const PaymentRequestUpdateEventInit&);
-
   void OnUpdateEventTimeout(TimerBase*);
 
   // True after event.updateWith() was called.

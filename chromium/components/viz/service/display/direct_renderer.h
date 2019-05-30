@@ -29,7 +29,8 @@ class FilterOperations;
 
 namespace gfx {
 class ColorSpace;
-}
+class RRectF;
+}  // namespace gfx
 
 namespace viz {
 class BspWalkActionDrawPolygon;
@@ -37,6 +38,10 @@ class DrawPolygon;
 class OutputSurface;
 class RendererSettings;
 class RenderPass;
+
+namespace copy_output {
+struct RenderPassGeometry;
+}  // namespace copy_output
 
 // This is the base class for code shared between the GL and software
 // renderer implementations. "Direct" refers to the fact that it does not
@@ -61,8 +66,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
                  const gfx::Size& device_viewport_size);
 
   // Public interface implemented by subclasses.
-  virtual void SwapBuffers(std::vector<ui::LatencyInfo> latency_info,
-                           bool need_presentation_feedback) = 0;
+  virtual void SwapBuffers(std::vector<ui::LatencyInfo> latency_info) = 0;
   virtual void SwapBuffersComplete() {}
   virtual void DidReceiveTextureInUseResponses(
       const gpu::TextureInUseResponses& responses) {}
@@ -108,7 +112,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
 
   struct RenderPassRequirements {
     gfx::Size size;
-    bool mipmap = false;
+    bool generate_mipmap = false;
   };
 
   static gfx::RectF QuadVertexRect();
@@ -155,6 +159,8 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   const cc::FilterOperations* FiltersForPass(RenderPassId render_pass_id) const;
   const cc::FilterOperations* BackgroundFiltersForPass(
       RenderPassId render_pass_id) const;
+  const gfx::RRectF* BackgroundFilterBoundsForPass(
+      RenderPassId render_pass_id) const;
 
   // Private interface implemented by subclasses for use by DirectRenderer.
   virtual bool CanPartialSwap() = 0;
@@ -185,6 +191,9 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   // If a pass contains a single tile draw quad and can be drawn without
   // a render pass (e.g. applying a filter directly to the tile quad)
   // return that quad, otherwise return null.
+  static const TileDrawQuad* CanPassBeDrawnDirectly(
+      const RenderPass* pass,
+      DisplayResourceProvider* const resource_provider);
   virtual const TileDrawQuad* CanPassBeDrawnDirectly(const RenderPass* pass);
   virtual void FinishDrawingQuadList() {}
   virtual bool FlippedFramebuffer() const = 0;
@@ -192,6 +201,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   virtual void EnsureScissorTestDisabled() = 0;
   virtual void DidChangeVisibility() = 0;
   virtual void CopyDrawnRenderPass(
+      const copy_output::RenderPassGeometry& geometry,
       std::unique_ptr<CopyOutputRequest> request) = 0;
   virtual void SetEnableDCLayers(bool enable) = 0;
   virtual void GenerateMipmap() = 0;
@@ -229,7 +239,9 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   // A map from RenderPass id to the filters used when drawing the RenderPass.
   base::flat_map<RenderPassId, cc::FilterOperations*> render_pass_filters_;
   base::flat_map<RenderPassId, cc::FilterOperations*>
-      render_pass_background_filters_;
+      render_pass_backdrop_filters_;
+  base::flat_map<RenderPassId, gfx::RRectF*>
+      render_pass_backdrop_filter_bounds_;
 
   bool visible_ = false;
   bool disable_color_checks_for_testing_ = false;

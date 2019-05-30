@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "third_party/blink/renderer/modules/service_worker/fetch_event.h"
 
 #include "base/memory/scoped_refptr.h"
@@ -10,7 +12,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_for_core.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
-#include "third_party/blink/renderer/core/fetch/bytes_consumer_for_data_consumer_handle.h"
 #include "third_party/blink/renderer/core/fetch/request.h"
 #include "third_party/blink/renderer/core/fetch/response.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
@@ -26,19 +27,20 @@ namespace blink {
 
 FetchEvent* FetchEvent::Create(ScriptState* script_state,
                                const AtomicString& type,
-                               const FetchEventInit& initializer) {
-  return new FetchEvent(script_state, type, initializer, nullptr, nullptr,
-                        false);
+                               const FetchEventInit* initializer) {
+  return MakeGarbageCollected<FetchEvent>(script_state, type, initializer,
+                                          nullptr, nullptr, false);
 }
 
 FetchEvent* FetchEvent::Create(ScriptState* script_state,
                                const AtomicString& type,
-                               const FetchEventInit& initializer,
+                               const FetchEventInit* initializer,
                                FetchRespondWithObserver* respond_with_observer,
                                WaitUntilObserver* wait_until_observer,
                                bool navigation_preload_sent) {
-  return new FetchEvent(script_state, type, initializer, respond_with_observer,
-                        wait_until_observer, navigation_preload_sent);
+  return MakeGarbageCollected<FetchEvent>(
+      script_state, type, initializer, respond_with_observer,
+      wait_until_observer, navigation_preload_sent);
 }
 
 Request* FetchEvent::request() const {
@@ -47,6 +49,10 @@ Request* FetchEvent::request() const {
 
 String FetchEvent::clientId() const {
   return client_id_;
+}
+
+String FetchEvent::resultingClientId() const {
+  return resulting_client_id_;
 }
 
 bool FetchEvent::isReload() const {
@@ -67,7 +73,7 @@ ScriptPromise FetchEvent::preloadResponse(ScriptState* script_state) {
 }
 
 const AtomicString& FetchEvent::InterfaceName() const {
-  return EventNames::FetchEvent;
+  return event_interface_names::kFetchEvent;
 }
 
 bool FetchEvent::HasPendingActivity() const {
@@ -83,23 +89,24 @@ bool FetchEvent::HasPendingActivity() const {
 
 FetchEvent::FetchEvent(ScriptState* script_state,
                        const AtomicString& type,
-                       const FetchEventInit& initializer,
+                       const FetchEventInit* initializer,
                        FetchRespondWithObserver* respond_with_observer,
                        WaitUntilObserver* wait_until_observer,
                        bool navigation_preload_sent)
     : ExtendableEvent(type, initializer, wait_until_observer),
       ContextClient(ExecutionContext::From(script_state)),
       observer_(respond_with_observer),
-      preload_response_property_(new PreloadResponseProperty(
+      preload_response_property_(MakeGarbageCollected<PreloadResponseProperty>(
           ExecutionContext::From(script_state),
           this,
           PreloadResponseProperty::kPreloadResponse)) {
   if (!navigation_preload_sent)
     preload_response_property_->ResolveWithUndefined();
 
-  client_id_ = initializer.clientId();
-  is_reload_ = initializer.isReload();
-  request_ = initializer.request();
+  client_id_ = initializer->clientId();
+  resulting_client_id_ = initializer->resultingClientId();
+  is_reload_ = initializer->isReload();
+  request_ = initializer->request();
 }
 
 FetchEvent::~FetchEvent() = default;
@@ -107,25 +114,32 @@ FetchEvent::~FetchEvent() = default;
 void FetchEvent::OnNavigationPreloadResponse(
     ScriptState* script_state,
     std::unique_ptr<WebURLResponse> response,
-    std::unique_ptr<WebDataConsumerHandle> data_consume_handle) {
+    mojo::ScopedDataPipeConsumerHandle data_pipe) {
   if (!script_state->ContextIsValid())
     return;
   DCHECK(preload_response_property_);
   DCHECK(!preload_response_);
   ScriptState::Scope scope(script_state);
   preload_response_ = std::move(response);
+  DataPipeBytesConsumer* bytes_consumer = nullptr;
+  if (data_pipe.is_valid()) {
+    DataPipeBytesConsumer::CompletionNotifier* completion_notifier = nullptr;
+    bytes_consumer = MakeGarbageCollected<DataPipeBytesConsumer>(
+        ExecutionContext::From(script_state)
+            ->GetTaskRunner(TaskType::kNetworking),
+        std::move(data_pipe), &completion_notifier);
+    body_completion_notifier_ = completion_notifier;
+  }
   // TODO(ricea): Verify that this response can't be aborted from JS.
   FetchResponseData* response_data =
-      data_consume_handle
-          ? FetchResponseData::CreateWithBuffer(new BodyStreamBuffer(
-                script_state,
-                new BytesConsumerForDataConsumerHandle(
-                    ExecutionContext::From(script_state),
-                    std::move(data_consume_handle)),
-                new AbortSignal(ExecutionContext::From(script_state))))
-          : FetchResponseData::Create();
+      bytes_consumer ? FetchResponseData::CreateWithBuffer(
+                           MakeGarbageCollected<BodyStreamBuffer>(
+                               script_state, bytes_consumer,
+                               MakeGarbageCollected<AbortSignal>(
+                                   ExecutionContext::From(script_state))))
+                     : FetchResponseData::Create();
   Vector<KURL> url_list(1);
-  url_list[0] = preload_response_->Url();
+  url_list[0] = preload_response_->CurrentRequestUrl();
   response_data->SetURLList(url_list);
   response_data->SetStatus(preload_response_->HttpStatusCode());
   response_data->SetStatusMessage(preload_response_->HttpStatusText());
@@ -137,7 +151,7 @@ void FetchEvent::OnNavigationPreloadResponse(
     response_data->HeaderList()->Append(header.key, header.value);
   }
   FetchResponseData* tainted_response =
-      NetworkUtils::IsRedirectResponseCode(preload_response_->HttpStatusCode())
+      network_utils::IsRedirectResponseCode(preload_response_->HttpStatusCode())
           ? response_data->CreateOpaqueRedirectFilteredResponse()
           : response_data->CreateBasicFilteredResponse();
   preload_response_property_->Resolve(
@@ -149,6 +163,10 @@ void FetchEvent::OnNavigationPreloadError(
     std::unique_ptr<WebServiceWorkerError> error) {
   if (!script_state->ContextIsValid())
     return;
+  if (body_completion_notifier_) {
+    body_completion_notifier_->SignalError(BytesConsumer::Error());
+    body_completion_notifier_ = nullptr;
+  }
   DCHECK(preload_response_property_);
   if (preload_response_property_->GetState() !=
       PreloadResponseProperty::kPending) {
@@ -165,21 +183,30 @@ void FetchEvent::OnNavigationPreloadComplete(
     int64_t encoded_body_length,
     int64_t decoded_body_length) {
   DCHECK(preload_response_);
+  if (body_completion_notifier_) {
+    body_completion_notifier_->SignalComplete();
+    body_completion_notifier_ = nullptr;
+  }
   std::unique_ptr<WebURLResponse> response = std::move(preload_response_);
   ResourceResponse resource_response = response->ToResourceResponse();
   resource_response.SetEncodedDataLength(encoded_data_length);
   resource_response.SetEncodedBodyLength(encoded_body_length);
   resource_response.SetDecodedBodyLength(decoded_body_length);
+
+  ResourceLoadTiming* timing = resource_response.GetResourceLoadTiming();
+  // |timing| can be null, see https://crbug.com/817691.
+  base::TimeTicks request_time =
+      timing ? timing->RequestTime() : base::TimeTicks();
   // According to the Resource Timing spec, the initiator type of
   // navigation preload request is "navigation".
-  scoped_refptr<ResourceTimingInfo> info = ResourceTimingInfo::Create(
-      "navigation", resource_response.GetResourceLoadTiming()->RequestTime(),
-      false /* is_main_resource */);
+  scoped_refptr<ResourceTimingInfo> info =
+      ResourceTimingInfo::Create("navigation", request_time);
   info->SetNegativeAllowed(true);
-  info->SetLoadFinishTime(completion_time);
+  info->SetLoadResponseEnd(completion_time);
   info->SetInitialURL(request_->url());
   info->SetFinalResponse(resource_response);
-  info->AddFinalTransferSize(encoded_data_length);
+  info->AddFinalTransferSize(encoded_data_length == -1 ? 0
+                                                       : encoded_data_length);
   WorkerGlobalScopePerformance::performance(*worker_global_scope)
       ->GenerateAndAddResourceTiming(*info);
 }
@@ -188,6 +215,7 @@ void FetchEvent::Trace(blink::Visitor* visitor) {
   visitor->Trace(observer_);
   visitor->Trace(request_);
   visitor->Trace(preload_response_property_);
+  visitor->Trace(body_completion_notifier_);
   ExtendableEvent::Trace(visitor);
   ContextClient::Trace(visitor);
 }

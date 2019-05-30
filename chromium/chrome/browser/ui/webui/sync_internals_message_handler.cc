@@ -4,11 +4,11 @@
 
 #include "chrome/browser/ui/webui/sync_internals_message_handler.h"
 
-#include <stdint.h>
-
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
+#include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
@@ -16,13 +16,11 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/user_event_service_factory.h"
 #include "chrome/common/channel_info.h"
-#include "components/browser_sync/profile_sync_service.h"
-#include "components/sync/base/enum_set.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/base/weak_handle.h"
 #include "components/sync/driver/about_sync_util.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/driver/sync_service.h"
+#include "components/sync/driver/sync_user_settings.h"
 #include "components/sync/engine/cycle/commit_counters.h"
 #include "components/sync/engine/cycle/status_counters.h"
 #include "components/sync/engine/cycle/update_counters.h"
@@ -36,11 +34,7 @@
 using base::DictionaryValue;
 using base::ListValue;
 using base::Value;
-using browser_sync::ProfileSyncService;
-using syncer::JsEventDetails;
-using syncer::ModelTypeSet;
 using syncer::SyncService;
-using syncer::WeakHandle;
 
 namespace {
 
@@ -151,9 +145,16 @@ void SyncInternalsMessageHandler::RegisterMessages() {
                           base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
-      syncer::sync_ui_util::kRequestStop,
-      base::BindRepeating(&SyncInternalsMessageHandler::HandleRequestStop,
-                          base::Unretained(this)));
+      syncer::sync_ui_util::kRequestStopKeepData,
+      base::BindRepeating(
+          &SyncInternalsMessageHandler::HandleRequestStopKeepData,
+          base::Unretained(this)));
+
+  web_ui()->RegisterMessageCallback(
+      syncer::sync_ui_util::kRequestStopClearData,
+      base::BindRepeating(
+          &SyncInternalsMessageHandler::HandleRequestStopClearData,
+          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       syncer::sync_ui_util::kTriggerRefresh,
@@ -217,7 +218,7 @@ void SyncInternalsMessageHandler::HandleRequestListOfTypes(
 
   DictionaryValue event_details;
   auto type_list = std::make_unique<ListValue>();
-  ModelTypeSet protocol_types = syncer::ProtocolTypes();
+  syncer::ModelTypeSet protocol_types = syncer::ProtocolTypes();
   for (syncer::ModelType type : protocol_types) {
     type_list->AppendString(ModelTypeToString(type));
   }
@@ -307,10 +308,14 @@ void SyncInternalsMessageHandler::HandleRequestStart(
   if (!service)
     return;
 
-  service->RequestStart();
+  service->GetUserSettings()->SetSyncRequested(true);
+  // If the service was previously stopped via StopAndClear(), then the
+  // "first-setup-complete" bit was also cleared, and now the service wouldn't
+  // fully start up. So set that too.
+  service->GetUserSettings()->SetFirstSetupComplete();
 }
 
-void SyncInternalsMessageHandler::HandleRequestStop(
+void SyncInternalsMessageHandler::HandleRequestStopKeepData(
     const base::ListValue* args) {
   DCHECK_EQ(0U, args->GetSize());
 
@@ -318,7 +323,18 @@ void SyncInternalsMessageHandler::HandleRequestStop(
   if (!service)
     return;
 
-  service->RequestStop(SyncService::CLEAR_DATA);
+  service->GetUserSettings()->SetSyncRequested(false);
+}
+
+void SyncInternalsMessageHandler::HandleRequestStopClearData(
+    const base::ListValue* args) {
+  DCHECK_EQ(0U, args->GetSize());
+
+  SyncService* service = GetSyncService();
+  if (!service)
+    return;
+
+  service->StopAndClear();
 }
 
 void SyncInternalsMessageHandler::HandleTriggerRefresh(
@@ -346,8 +362,7 @@ void SyncInternalsMessageHandler::OnStateChanged(SyncService* sync) {
 
 void SyncInternalsMessageHandler::OnProtocolEvent(
     const syncer::ProtocolEvent& event) {
-  std::unique_ptr<DictionaryValue> value(
-      syncer::ProtocolEvent::ToValue(event, include_specifics_));
+  std::unique_ptr<DictionaryValue> value(event.ToValue(include_specifics_));
   DispatchEvent(syncer::sync_ui_util::kOnProtocolEvent, *value);
 }
 
@@ -382,7 +397,7 @@ void SyncInternalsMessageHandler::EmitCounterUpdate(
 
 void SyncInternalsMessageHandler::HandleJsEvent(
     const std::string& name,
-    const JsEventDetails& details) {
+    const syncer::JsEventDetails& details) {
   DVLOG(1) << "Handling event: " << name
            << " with details " << details.ToString();
   DispatchEvent(name, details.Get());
@@ -395,7 +410,7 @@ void SyncInternalsMessageHandler::SendAboutInfo() {
 }
 
 SyncService* SyncInternalsMessageHandler::GetSyncService() {
-  return ProfileSyncServiceFactory::GetSyncServiceForBrowserContext(
+  return ProfileSyncServiceFactory::GetForProfile(
       Profile::FromWebUI(web_ui())->GetOriginalProfile());
 }
 

@@ -163,6 +163,12 @@ class NET_EXPORT IPAddress {
   // Returns true if |ip_address_| is an IPv4-mapped IPv6 address.
   bool IsIPv4MappedIPv6() const;
 
+  // Returns true if |ip_address_| is 127.0.0.1/8 or ::1/128
+  bool IsLoopback() const;
+
+  // Returns true if |ip_address_| is 169.254.0.0/16 or fe80::/10
+  bool IsLinkLocal() const;
+
   // The size in bytes of |ip_address_|.
   size_t size() const { return ip_address_.size(); }
 
@@ -183,7 +189,7 @@ class NET_EXPORT IPAddress {
       WARN_UNUSED_RESULT;
 
   // Returns the underlying bytes.
-  const IPAddressBytes& bytes() const { return ip_address_; };
+  const IPAddressBytes& bytes() const { return ip_address_; }
 
   // Copies the bytes to a new vector. Generally callers should be using
   // |bytes()| and the IPAddressBytes abstraction. This method is provided as a
@@ -273,11 +279,10 @@ NET_EXPORT bool ParseURLHostnameToAddress(const base::StringPiece& hostname,
     WARN_UNUSED_RESULT;
 
 // Returns number of matching initial bits between the addresses |a1| and |a2|.
-NET_EXPORT unsigned CommonPrefixLength(const IPAddress& a1,
-                                       const IPAddress& a2);
+NET_EXPORT size_t CommonPrefixLength(const IPAddress& a1, const IPAddress& a2);
 
 // Computes the number of leading 1-bits in |mask|.
-NET_EXPORT unsigned MaskPrefixLength(const IPAddress& mask);
+NET_EXPORT size_t MaskPrefixLength(const IPAddress& mask);
 
 // Checks whether |address| starts with |prefix|. This provides similar
 // functionality as IPAddressMatchesPrefix() but doesn't perform automatic IPv4

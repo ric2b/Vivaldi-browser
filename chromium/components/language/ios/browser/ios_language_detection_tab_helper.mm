@@ -7,8 +7,6 @@
 #include "components/language/core/browser/url_language_histogram.h"
 #include "components/translate/core/common/language_detection_details.h"
 
-DEFINE_WEB_STATE_USER_DATA_KEY(language::IOSLanguageDetectionTabHelper);
-
 namespace language {
 
 IOSLanguageDetectionTabHelper::IOSLanguageDetectionTabHelper(
@@ -52,5 +50,7 @@ void IOSLanguageDetectionTabHelper::SetExtraCallbackForTesting(
     const Callback& callback) {
   extra_callback_for_testing_ = callback;
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(IOSLanguageDetectionTabHelper)
 
 }  // namespace language

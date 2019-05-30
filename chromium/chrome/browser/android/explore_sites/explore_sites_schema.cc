@@ -15,31 +15,35 @@ constexpr int ExploreSitesSchema::kCompatibleVersion;
 
 // Schema versions changelog:
 // * 1: Initial version.
+// * 2: Version with ntp shown count.
 
 namespace {
 static const char kCategoriesTableCreationSql[] =
-    "CREATE TABLE IF NOT EXISTS categories ( "
+    "CREATE TABLE IF NOT EXISTS categories ("
     "category_id INTEGER PRIMARY KEY AUTOINCREMENT, "  // for local use only,
                                                        // not known by server.
                                                        // ID is *not* retained
                                                        // across catalog
                                                        // updates.
-    "version INTEGER NOT NULL, "  // matches an entry in the meta table:
-                                  // ‘current_catalog’ or ‘downloading_catalog’.
+    "version_token TEXT NOT NULL, "  // matches an entry in the meta table:
+                                     // ‘current_catalog’ or
+                                     // ‘downloading_catalog’.
     "type INTEGER NOT NULL, "
-    "usable_on_ntp BOOLEAN NOT NULL, "
     "label TEXT NOT NULL, "
     "image BLOB, "  // can be NULL if no image is available, but must be
                     // populated for use on the NTP.
     "ntp_click_count INTEGER NOT NULL DEFAULT 0, "
-    "esp_site_click_count INTEGER NOT NULL DEFAULT 0);";
+    "esp_site_click_count INTEGER NOT NULL DEFAULT 0,"
+    "ntp_shown_count INTEGER NOT NULL DEFAULT 0);";  // number of times the
+                                                     // category was shown on
+                                                     // the ntp.
 
 bool CreateCategoriesTable(sql::Database* db) {
   return db->Execute(kCategoriesTableCreationSql);
 }
 
 static const char kSitesTableCreationSql[] =
-    "CREATE TABLE IF NOT EXISTS sites ( "
+    "CREATE TABLE IF NOT EXISTS sites ("
     "site_id INTEGER PRIMARY KEY AUTOINCREMENT, "  // locally generated. Same
                                                    // caveats as |category_id|.
     "url TEXT NOT NULL, "
@@ -54,8 +58,18 @@ bool CreateSitesTable(sql::Database* db) {
   return db->Execute(kSitesTableCreationSql);
 }
 
+static const char kActivityTableCreationSql[] =
+    "CREATE TABLE IF NOT EXISTS activity ("
+    "time INTEGER NOT NULL,"           // stored as unix timestamp
+    "category_type INTEGER NOT NULL,"  // matches the type of a category
+    "url TEXT NOT NULL);";             // matches the url of a site
+
+bool CreateActivityTable(sql::Database* db) {
+  return db->Execute(kActivityTableCreationSql);
+}
+
 static const char kSiteBlacklistTableCreationSql[] =
-    "CREATE TABLE IF NOT EXISTS site_blacklist ( "
+    "CREATE TABLE IF NOT EXISTS site_blacklist ("
     "url TEXT NOT NULL UNIQUE, "
     "date_removed INTEGER NOT NULL);";  // stored as unix timestamp
 
@@ -69,14 +83,35 @@ bool CreateLatestSchema(sql::Database* db) {
     return false;
 
   if (!CreateCategoriesTable(db) || !CreateSitesTable(db) ||
-      !CreateSiteBlacklistTable(db)) {
+      !CreateSiteBlacklistTable(db) || !CreateActivityTable(db)) {
     return false;
   }
 
   return transaction.Commit();
 }
 
+int MigrateFrom1To2(sql::Database* db, sql::MetaTable* meta_table) {
+  // Version 2 adds a new column.
+  const int target_version = 2;
+  static const char k1To2Sql[] =
+      "ALTER TABLE categories ADD COLUMN ntp_shown_count INTEGER NOT NULL "
+      "DEFAULT 0;";
+  sql::Transaction transaction(db);
+  if (transaction.Begin() && db->Execute(k1To2Sql) && transaction.Commit()) {
+    meta_table->SetVersionNumber(target_version);
+    return target_version;
+  }
+  return 1;
+}
+
 }  // namespace
+
+// static
+bool ExploreSitesSchema::InitMetaTable(sql::Database* db,
+                                       sql::MetaTable* meta_table) {
+  DCHECK(meta_table);
+  return meta_table->Init(db, kCurrentVersion, kCompatibleVersion);
+}
 
 // static
 bool ExploreSitesSchema::CreateOrUpgradeIfNeeded(sql::Database* db) {
@@ -85,7 +120,7 @@ bool ExploreSitesSchema::CreateOrUpgradeIfNeeded(sql::Database* db) {
     return false;
 
   sql::MetaTable meta_table;
-  if (!meta_table.Init(db, kCurrentVersion, kCompatibleVersion))
+  if (!InitMetaTable(db, &meta_table))
     return false;
 
   const int compatible_version = meta_table.GetCompatibleVersionNumber();
@@ -115,6 +150,8 @@ bool ExploreSitesSchema::CreateOrUpgradeIfNeeded(sql::Database* db) {
     return false;
 
   // NOTE: Insert schema upgrade scripts here when required.
+  if (current_version == 1)
+    current_version = MigrateFrom1To2(db, &meta_table);
 
   return current_version == kCurrentVersion;
 }

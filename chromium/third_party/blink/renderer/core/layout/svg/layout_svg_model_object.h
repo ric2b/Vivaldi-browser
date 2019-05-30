@@ -47,7 +47,7 @@ class LayoutSVGModelObject : public LayoutObject {
 
   bool IsChildAllowed(LayoutObject*, const ComputedStyle&) const override;
 
-  LayoutRect AbsoluteVisualRect() const override;
+  LayoutRect VisualRectInDocument() const override;
   FloatRect VisualRectInLocalSVGCoordinates() const override {
     return local_visual_rect_;
   }
@@ -71,8 +71,6 @@ class LayoutSVGModelObject : public LayoutObject {
       LayoutGeometryMap&) const final;
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
 
-  void ComputeLayerHitTestRects(LayerHitTestRects&, TouchAction) const final;
-
   SVGElement* GetElement() const {
     return ToSVGElement(LayoutObject::GetNode());
   }
@@ -82,27 +80,15 @@ class LayoutSVGModelObject : public LayoutObject {
   }
 
  protected:
-  void AddLayerHitTestRects(
-      LayerHitTestRects&,
-      const PaintLayer* current_composited_layer,
-      const LayoutPoint& layer_offset,
-      TouchAction supported_fast_actions,
-      const LayoutRect& container_rect,
-      TouchAction container_whitelisted_touch_action) const final;
   void WillBeDestroyed() override;
 
  private:
   // LayoutSVGModelObject subclasses should use GetElement() instead.
   void GetNode() const = delete;
 
-  // This method should never be called, SVG uses a different nodeAtPoint method
-  bool NodeAtPoint(HitTestResult&,
-                   const HitTestLocation& location_in_container,
-                   const LayoutPoint& accumulated_offset,
-                   HitTestAction) final;
   void AddOutlineRects(Vector<LayoutRect>&,
                        const LayoutPoint& additional_offset,
-                       IncludeBlockVisualOverflowOrNot) const final;
+                       NGOutlineType) const final;
 
  protected:
   FloatRect local_visual_rect_;

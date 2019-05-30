@@ -26,7 +26,11 @@
 #ifndef CONTENT_COMMON_DRAG_MESSAGES_H_
 #error "Failed to include content/common/drag_messages.h"
 #endif
+#undef CONTENT_COMMON_DRAG_TRAITS_H_
 #include "content/common/drag_traits.h"
+#ifndef CONTENT_COMMON_DRAG_TRAITS_H_
+#error "Failed to include content/common/drag_traits.h"
+#endif
 #undef CONTENT_COMMON_FILEAPI_WEBBLOB_MESSAGES_H_
 #include "content/common/fileapi/webblob_messages.h"
 #ifndef CONTENT_COMMON_FILEAPI_WEBBLOB_MESSAGES_H_
@@ -51,11 +55,6 @@
 #include "content/common/media/media_player_delegate_messages.h"
 #ifndef CONTENT_COMMON_MEDIA_MEDIA_PLAYER_DELEGATE_MESSAGES_H_
 #error "Failed to include content/common/media/media_player_delegate_messages.h"
-#endif
-#undef CONTENT_COMMON_MEDIA_MIDI_MESSAGES_H_
-#include "content/common/media/midi_messages.h"
-#ifndef CONTENT_COMMON_MEDIA_MIDI_MESSAGES_H_
-#error "Failed to include content/common/media/midi_messages.h"
 #endif
 #undef CONTENT_COMMON_MEDIA_PEER_CONNECTION_TRACKER_MESSAGES_H_
 #include "content/common/media/peer_connection_tracker_messages.h"
@@ -83,6 +82,11 @@
 #ifndef CONTENT_COMMON_VIEW_MESSAGES_H_
 #error "Failed to include content/common/view_messages.h"
 #endif
+#undef CONTENT_COMMON_WIDGET_MESSAGES_H_
+#include "content/common/widget_messages.h"
+#ifndef CONTENT_COMMON_WIDGET_MESSAGES_H_
+#error "Failed to include content/common/widget_messages.h"
+#endif
 #include "media/media_buildflags.h"
 
 #undef CONTENT_COMMON_SYNC_COMPOSITOR_MESSAGES_H_
@@ -96,11 +100,6 @@
 #include "content/common/gin_java_bridge_messages.h"
 #ifndef CONTENT_COMMON_GIN_JAVA_BRIDGE_MESSAGES_H_
 #error "Failed to include content/common/gin_java_bridge_messages.h"
-#endif
-#undef CONTENT_COMMON_MEDIA_MEDIA_PLAYER_MESSAGES_ANDROID_H_
-#include "content/common/media/media_player_messages_android.h"
-#ifndef CONTENT_COMMON_MEDIA_MEDIA_PLAYER_MESSAGES_ANDROID_H_
-#error "Failed to include content/common/media/media_player_messages_android.h"
 #endif
 #endif  // defined(OS_ANDROID)
 

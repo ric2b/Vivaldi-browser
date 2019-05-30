@@ -92,8 +92,20 @@ public class BitmapCache {
         mBitmapCache = referencePool.put(new RecentlyUsedCache(mCacheSize));
     }
 
+    /**
+     * Manually destroy the BitmapCache.
+     */
+    public void destroy() {
+        assert mReferencePool != null;
+        assert mBitmapCache != null;
+        mReferencePool.remove(mBitmapCache);
+        mBitmapCache = null;
+    }
+
     public Bitmap getBitmap(String key) {
         ThreadUtils.assertOnUiThread();
+        if (mBitmapCache == null) return null;
+
         Bitmap cachedBitmap = getBitmapCache().get(key);
         assert cachedBitmap == null || !cachedBitmap.isRecycled();
         maybeScheduleDeduplicationCache();
@@ -102,10 +114,16 @@ public class BitmapCache {
 
     public void putBitmap(@NonNull String key, @Nullable Bitmap bitmap) {
         ThreadUtils.assertOnUiThread();
-        if (bitmap == null) return;
+        if (bitmap == null || mBitmapCache == null) return;
+
         if (!SysUtils.isLowEndDevice()) getBitmapCache().put(key, bitmap);
         maybeScheduleDeduplicationCache();
         sDeduplicationCache.put(key, new WeakReference<>(bitmap));
+    }
+
+    /** @return The total number of bytes taken by the bitmaps in this cache. */
+    public int size() {
+        return getBitmapCache().size();
     }
 
     private RecentlyUsedCache getBitmapCache() {

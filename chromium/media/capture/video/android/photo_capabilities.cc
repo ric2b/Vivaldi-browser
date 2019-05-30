@@ -27,7 +27,7 @@ std::vector<PhotoCapabilities::AndroidMeteringMode> ToAndroidMeteringModes(
   std::vector<PhotoCapabilities::AndroidMeteringMode> modes;
   if (jni_modes.obj()) {
     base::android::JavaIntArrayToIntVector(
-        env, jni_modes.obj(), reinterpret_cast<std::vector<int>*>(&modes));
+        env, jni_modes, reinterpret_cast<std::vector<int>*>(&modes));
   }
   return modes;
 }
@@ -121,6 +121,27 @@ double PhotoCapabilities::getStepZoom() const {
   return Java_PhotoCapabilities_getStepZoom(AttachCurrentThread(), object_);
 }
 
+double PhotoCapabilities::getCurrentFocusDistance() const {
+  DCHECK(!object_.is_null());
+  return Java_PhotoCapabilities_getCurrentFocusDistance(AttachCurrentThread(),
+                                                        object_);
+}
+double PhotoCapabilities::getMaxFocusDistance() const {
+  DCHECK(!object_.is_null());
+  return Java_PhotoCapabilities_getMaxFocusDistance(AttachCurrentThread(),
+                                                    object_);
+}
+double PhotoCapabilities::getMinFocusDistance() const {
+  DCHECK(!object_.is_null());
+  return Java_PhotoCapabilities_getMinFocusDistance(AttachCurrentThread(),
+                                                    object_);
+}
+double PhotoCapabilities::getStepFocusDistance() const {
+  DCHECK(!object_.is_null());
+  return Java_PhotoCapabilities_getStepFocusDistance(AttachCurrentThread(),
+                                                     object_);
+}
+
 PhotoCapabilities::AndroidMeteringMode PhotoCapabilities::getFocusMode() const {
   DCHECK(!object_.is_null());
   return static_cast<AndroidMeteringMode>(
@@ -178,6 +199,30 @@ double PhotoCapabilities::getStepExposureCompensation() const {
       AttachCurrentThread(), object_);
 }
 
+double PhotoCapabilities::getMinExposureTime() const {
+  DCHECK(!object_.is_null());
+  return Java_PhotoCapabilities_getMinExposureTime(AttachCurrentThread(),
+                                                   object_);
+}
+
+double PhotoCapabilities::getMaxExposureTime() const {
+  DCHECK(!object_.is_null());
+  return Java_PhotoCapabilities_getMaxExposureTime(AttachCurrentThread(),
+                                                   object_);
+}
+
+double PhotoCapabilities::getCurrentExposureTime() const {
+  DCHECK(!object_.is_null());
+  return Java_PhotoCapabilities_getCurrentExposureTime(AttachCurrentThread(),
+                                                       object_);
+}
+
+double PhotoCapabilities::getStepExposureTime() const {
+  DCHECK(!object_.is_null());
+  return Java_PhotoCapabilities_getStepExposureTime(AttachCurrentThread(),
+                                                    object_);
+}
+
 PhotoCapabilities::AndroidMeteringMode PhotoCapabilities::getWhiteBalanceMode()
     const {
   DCHECK(!object_.is_null());
@@ -211,7 +256,7 @@ PhotoCapabilities::getFillLightModes() const {
       Java_PhotoCapabilities_getFillLightModes(env, object_);
   if (jni_modes.obj()) {
     base::android::JavaIntArrayToIntVector(
-        env, jni_modes.obj(), reinterpret_cast<std::vector<int>*>(&modes));
+        env, jni_modes, reinterpret_cast<std::vector<int>*>(&modes));
   }
   return modes;
 }

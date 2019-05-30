@@ -17,10 +17,10 @@
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/mac/display_icc_profiles.h"
 #include "ui/gfx/mac/io_surface.h"
+#include "ui/gl/buildflags.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_enums.h"
-#include "ui/gl/gl_features.h"
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/scoped_binders.h"
 #include "ui/gl/yuv_to_rgb_converter.h"
@@ -78,11 +78,6 @@ GLenum TextureFormat(gfx::BufferFormat format) {
       // OpenGL ES 3.0, for the case) support only GL_RGBA (the hardware ignores
       // the alpha channel anyway), see https://crbug.com/797347.
       return GL_RGBA;
-    case gfx::BufferFormat::ATC:
-    case gfx::BufferFormat::ATCIA:
-    case gfx::BufferFormat::DXT1:
-    case gfx::BufferFormat::DXT5:
-    case gfx::BufferFormat::ETC1:
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
@@ -113,11 +108,6 @@ GLenum DataFormat(gfx::BufferFormat format) {
       return GL_RGBA;
     case gfx::BufferFormat::UYVY_422:
       return GL_YCBCR_422_APPLE;
-    case gfx::BufferFormat::ATC:
-    case gfx::BufferFormat::ATCIA:
-    case gfx::BufferFormat::DXT1:
-    case gfx::BufferFormat::DXT5:
-    case gfx::BufferFormat::ETC1:
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
@@ -149,11 +139,6 @@ GLenum DataType(gfx::BufferFormat format) {
       return GL_HALF_APPLE;
     case gfx::BufferFormat::UYVY_422:
       return GL_UNSIGNED_SHORT_8_8_APPLE;
-    case gfx::BufferFormat::ATC:
-    case gfx::BufferFormat::ATCIA:
-    case gfx::BufferFormat::DXT1:
-    case gfx::BufferFormat::DXT5:
-    case gfx::BufferFormat::ETC1:
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
@@ -259,6 +244,13 @@ unsigned GLImageIOSurface::GetInternalFormat() {
   return internalformat_;
 }
 
+GLImageIOSurface::BindOrCopy GLImageIOSurface::ShouldBindOrCopy() {
+  // YUV_420_BIPLANAR is not supported by BindTexImage.
+  // CopyTexImage is supported by this format as that performs conversion to RGB
+  // as part of the copy operation.
+  return format_ == gfx::BufferFormat::YUV_420_BIPLANAR ? COPY : BIND;
+}
+
 bool GLImageIOSurface::BindTexImage(unsigned target) {
   return BindTexImageWithInternalformat(target, 0);
 }
@@ -266,14 +258,9 @@ bool GLImageIOSurface::BindTexImage(unsigned target) {
 bool GLImageIOSurface::BindTexImageWithInternalformat(unsigned target,
                                                       unsigned internalformat) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_EQ(BIND, ShouldBindOrCopy());
   TRACE_EVENT0("gpu", "GLImageIOSurface::BindTexImage");
   base::TimeTicks start_time = base::TimeTicks::Now();
-
-  // YUV_420_BIPLANAR is not supported by BindTexImage.
-  // CopyTexImage is supported by this format as that performs conversion to RGB
-  // as part of the copy operation.
-  if (format_ == gfx::BufferFormat::YUV_420_BIPLANAR)
-    return false;
 
   if (target != GL_TEXTURE_RECTANGLE_ARB) {
     // This might be supported in the future. For now, perform strict
@@ -314,9 +301,7 @@ bool GLImageIOSurface::BindTexImageImpl(unsigned internalformat) {
 
 bool GLImageIOSurface::CopyTexImage(unsigned target) {
   DCHECK(thread_checker_.CalledOnValidThread());
-
-  if (format_ != gfx::BufferFormat::YUV_420_BIPLANAR)
-    return false;
+  DCHECK_EQ(COPY, ShouldBindOrCopy());
 
   GLContext* gl_context = GLContext::GetCurrent();
   DCHECK(gl_context);
@@ -468,7 +453,7 @@ GLImage::Type GLImageIOSurface::GetType() const {
 void GLImageIOSurface::SetColorSpace(const gfx::ColorSpace& color_space) {
   if (color_space_ == color_space)
     return;
-  color_space_ = color_space;
+  GLImage::SetColorSpace(color_space);
 
   // Prefer to use data from DisplayICCProfiles, which will give a byte-for-byte
   // match for color spaces of the system displays. Note that DisplayICCProfiles
@@ -514,11 +499,6 @@ bool GLImageIOSurface::ValidFormat(gfx::BufferFormat format) {
       return true;
     case gfx::BufferFormat::R_16:
     case gfx::BufferFormat::RG_88:
-    case gfx::BufferFormat::ATC:
-    case gfx::BufferFormat::ATCIA:
-    case gfx::BufferFormat::DXT1:
-    case gfx::BufferFormat::DXT5:
-    case gfx::BufferFormat::ETC1:
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:

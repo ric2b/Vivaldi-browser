@@ -39,15 +39,14 @@ class AXObjectCacheImpl;
 class HTMLSelectElement;
 
 class AXListBoxOption final : public AXLayoutObject {
- private:
-  AXListBoxOption(LayoutObject*, AXObjectCacheImpl&);
-
  public:
   static AXListBoxOption* Create(LayoutObject*, AXObjectCacheImpl&);
+
+  AXListBoxOption(LayoutObject*, AXObjectCacheImpl&);
   ~AXListBoxOption() override;
 
   bool IsAXListBoxOption() const override { return true; }
-  AccessibilityRole DetermineAccessibilityRole() final;
+  ax::mojom::Role DetermineAccessibilityRole() final;
   AccessibilitySelectedState IsSelected() const override;
   bool IsSelectedOptionActive() const override;
   bool OnNativeSetSelectedAction(bool) override;
@@ -55,7 +54,7 @@ class AXListBoxOption final : public AXLayoutObject {
   String TextAlternative(bool recursive,
                          bool in_aria_labelled_by_traversal,
                          AXObjectSet& visited,
-                         AXNameFrom&,
+                         ax::mojom::NameFrom&,
                          AXRelatedObjectVector*,
                          NameSources*) const override;
 

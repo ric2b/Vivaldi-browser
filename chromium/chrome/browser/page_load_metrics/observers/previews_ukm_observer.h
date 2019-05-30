@@ -6,11 +6,15 @@
 #define CHROME_BROWSER_PAGE_LOAD_METRICS_OBSERVERS_PREVIEWS_UKM_OBSERVER_H_
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/sequence_checker.h"
+#include "base/time/time.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_observer.h"
+#include "components/previews/core/previews_experiments.h"
 
 namespace content {
 class NavigationHandle;
+class WebContents;
 }
 
 namespace previews {
@@ -39,6 +43,8 @@ class PreviewsUKMObserver : public page_load_metrics::PageLoadMetricsObserver {
   void OnLoadedResource(const page_load_metrics::ExtraRequestCompleteInfo&
                             extra_request_complete_info) override;
   void OnEventOccurred(const void* const event_key) override;
+  ObservePolicy ShouldObserveMimeType(
+      const std::string& mime_type) const override;
 
  protected:
   // Returns true if data saver feature is enabled in Chrome. Virtualized for
@@ -46,17 +52,27 @@ class PreviewsUKMObserver : public page_load_metrics::PageLoadMetricsObserver {
   virtual bool IsDataSaverEnabled(
       content::NavigationHandle* navigation_handle) const;
 
+  // Whether the current page load is an Offline Preview. Must be called from
+  // OnCommit. Virtual for testing.
+  virtual bool IsOfflinePreview(content::WebContents* web_contents) const;
+
  private:
   void RecordPreviewsTypes(const page_load_metrics::PageLoadExtraInfo& info);
+
+  // The preview type that was most recently committed.
+  PreviewsType committed_preview_;
 
   bool server_lofi_seen_ = false;
   bool client_lofi_seen_ = false;
   bool lite_page_seen_ = false;
+  bool lite_page_redirect_seen_ = false;
   bool noscript_seen_ = false;
   bool resource_loading_hints_seen_ = false;
+  bool offline_preview_seen_ = false;
   bool opt_out_occurred_ = false;
   bool origin_opt_out_occurred_ = false;
   bool save_data_enabled_ = false;
+  base::Optional<base::TimeDelta> navigation_restart_penalty_ = base::nullopt;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

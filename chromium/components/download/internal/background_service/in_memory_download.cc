@@ -20,13 +20,15 @@ InMemoryDownload::InMemoryDownload(const std::string& guid)
     : guid_(guid),
       state_(State::INITIAL),
       paused_(false),
-      bytes_downloaded_(0u) {}
+      bytes_downloaded_(0u),
+      bytes_uploaded_(0u) {}
 
 InMemoryDownload::~InMemoryDownload() = default;
 
 InMemoryDownloadImpl::InMemoryDownloadImpl(
     const std::string& guid,
     const RequestParams& request_params,
+    scoped_refptr<network::ResourceRequestBody> request_body,
     const net::NetworkTrafficAnnotationTag& traffic_annotation,
     Delegate* delegate,
     network::mojom::URLLoaderFactory* url_loader_factory,
@@ -34,6 +36,7 @@ InMemoryDownloadImpl::InMemoryDownloadImpl(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner)
     : InMemoryDownload(guid),
       request_params_(request_params),
+      request_body_(std::move(request_body)),
       traffic_annotation_(traffic_annotation),
       url_loader_factory_(url_loader_factory),
       blob_task_proxy_(
@@ -41,6 +44,7 @@ InMemoryDownloadImpl::InMemoryDownloadImpl(
       io_task_runner_(io_task_runner),
       delegate_(delegate),
       completion_notified_(false),
+      started_(false),
       weak_ptr_factory_(this) {
   DCHECK(!guid_.empty());
 }
@@ -125,11 +129,22 @@ void InMemoryDownloadImpl::OnComplete(bool success) {
 
   // Release download data.
   data_.clear();
+
+  // OnComplete() called without OnResponseStarted(). This will happen when the
+  // request was aborted.
+  if (!started_)
+    OnResponseStarted(GURL(), network::ResourceResponseHead());
+
   NotifyDelegateDownloadComplete();
 }
 
 void InMemoryDownloadImpl::OnRetry(base::OnceClosure start_retry) {
   Reset();
+
+  // The original URL is recorded in this class instead of |loader_|, so when
+  // running retry closure from SimpleUrlLoader, add back the original URL.
+  url_chain_.push_back(request_params_.url);
+
   std::move(start_retry).Run();
 }
 
@@ -178,6 +193,10 @@ void InMemoryDownloadImpl::SendRequest() {
   request->method = request_params_.method;
   request->headers = request_params_.request_headers;
   request->load_flags = net::LOAD_DISABLE_CACHE;
+  if (request_body_) {
+    request->request_body = std::move(request_body_);
+    request->enable_upload_progress = true;
+  }
 
   url_chain_.push_back(request_params_.url);
 
@@ -188,6 +207,8 @@ void InMemoryDownloadImpl::SendRequest() {
   loader_->SetOnResponseStartedCallback(
       base::BindRepeating(&InMemoryDownloadImpl::OnResponseStarted,
                           weak_ptr_factory_.GetWeakPtr()));
+  loader_->SetOnUploadProgressCallback(base::BindRepeating(
+      &InMemoryDownloadImpl::OnUploadProgress, weak_ptr_factory_.GetWeakPtr()));
 
   // TODO(xingliu): Use SimpleURLLoader's retry when it won't hit CHECK in
   // SharedURLLoaderFactory.
@@ -204,7 +225,17 @@ void InMemoryDownloadImpl::OnRedirect(
 void InMemoryDownloadImpl::OnResponseStarted(
     const GURL& final_url,
     const network::ResourceResponseHead& response_head) {
+  started_ = true;
   response_headers_ = response_head.headers;
+
+  if (delegate_)
+    delegate_->OnDownloadStarted(this);
+}
+
+void InMemoryDownloadImpl::OnUploadProgress(uint64_t position, uint64_t total) {
+  bytes_uploaded_ = position;
+  if (delegate_)
+    delegate_->OnUploadProgress(this);
 }
 
 void InMemoryDownloadImpl::Reset() {
@@ -213,6 +244,7 @@ void InMemoryDownloadImpl::Reset() {
   response_headers_.reset();
   bytes_downloaded_ = 0u;
   completion_notified_ = false;
+  started_ = false;
   resume_callback_.Reset();
 }
 

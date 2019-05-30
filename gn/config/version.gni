@@ -7,7 +7,6 @@ vivaldi_version_py_path = "//build/util/version.py"
 vivaldi_version_path = "//vivaldi/VIVALDI_VERSION"
 chrome_version_path = "//chrome/VERSION"
 lastchange_path = "//build/util/LASTCHANGE"
-lastchange_vivaldi_path = "//build/util/LASTCHANGE.vivaldi"
 
 vivaldi_global_build_number = "$GLOBAL_BUILDNUM"
 

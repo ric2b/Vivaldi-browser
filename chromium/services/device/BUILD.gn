@@ -3,9 +3,6 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
-import("//services/catalog/public/tools/catalog.gni")
-import("//services/service_manager/public/cpp/service.gni")
-import("//services/service_manager/public/service_manifest.gni")
 
 if (is_android) {
   import("//build/config/android/rules.gni")
@@ -25,8 +22,13 @@ source_set("lib") {
     "device_service.h",
   ]
 
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
   deps = [
     "//base",
+    "//device/usb/mojo",
+    "//device/usb/public/mojom",
+    "//device/usb/public/mojom:test",
     "//services/device/fingerprint",
     "//services/device/generic_sensor",
     "//services/device/geolocation",
@@ -51,7 +53,10 @@ source_set("lib") {
   }
 
   if (is_chromeos && use_dbus) {
-    deps += [ "//services/device/media_transfer_protocol" ]
+    deps += [
+      "//services/device/bluetooth:bluetooth_system",
+      "//services/device/media_transfer_protocol",
+    ]
   }
 
   if (is_serial_enabled_platform) {
@@ -60,6 +65,24 @@ source_set("lib") {
 }
 
 is_linux_without_udev = is_linux && !use_udev
+
+source_set("perftests") {
+  testonly = true
+
+  sources = [
+    "geolocation/position_cache_impl_perftest.cc",
+  ]
+
+  deps = [
+    ":test_support",
+    "//base",
+    "//base/test:test_support",
+    "//services/device/geolocation",
+    "//services/device/geolocation:test_support",
+    "//testing/gtest",
+    "//testing/perf",
+  ]
+}
 
 source_set("tests") {
   testonly = true
@@ -87,6 +110,7 @@ source_set("tests") {
     "geolocation/geolocation_service_unittest.cc",
     "geolocation/location_arbitrator_unittest.cc",
     "geolocation/network_location_provider_unittest.cc",
+    "geolocation/position_cache_impl_unittest.cc",
     "geolocation/public_ip_address_geolocator_unittest.cc",
     "geolocation/public_ip_address_location_notifier_unittest.cc",
     "geolocation/wifi_data_provider_chromeos_unittest.cc",
@@ -114,6 +138,7 @@ source_set("tests") {
     "//services/device/geolocation:test_support",
     "//services/device/power_monitor",
     "//services/device/public/cpp:device_features",
+    "//services/device/public/cpp/bluetooth:bluetooth_tests",
     "//services/device/public/cpp/power_monitor",
     "//services/device/public/mojom",
     "//services/device/wake_lock",
@@ -138,8 +163,9 @@ source_set("tests") {
   if (is_chromeos) {
     sources += [ "fingerprint/fingerprint_chromeos_unittest.cc" ]
     deps += [
-      "//chromeos",
-      "//dbus",
+      "//chromeos/dbus:test_support",
+      "//chromeos/network:test_support",
+      "//services/device/bluetooth:bluetooth_system_tests",
       "//services/device/fingerprint",
       "//third_party/protobuf:protobuf_lite",
     ]
@@ -190,10 +216,19 @@ source_set("tests") {
 
   if (is_serial_enabled_platform) {
     sources += [
-      "serial/serial_device_enumerator_impl_unittest.cc",
-      "serial/serial_io_handler_impl_unittest.cc",
+      "serial/serial_device_enumerator_unittest.cc",
+      "serial/serial_port_impl_unittest.cc",
+      "serial/serial_port_manager_impl_unittest.cc",
     ]
-    deps += [ "//services/device/serial" ]
+
+    if (is_posix) {
+      sources += [ "serial/serial_io_handler_posix_unittest.cc" ]
+    }
+
+    deps += [
+      "//services/device/serial",
+      "//services/device/serial:test_support",
+    ]
   }
 
   if (is_win) {
@@ -203,22 +238,6 @@ source_set("tests") {
       "sensorsapi.lib",
     ]
   }
-}
-
-service_manifest("manifest") {
-  name = "device"
-  source = "manifest.json"
-}
-
-service_manifest("unittest_manifest") {
-  name = "device_unittests"
-  source = "unittest_manifest.json"
-  packaged_services = [ ":manifest" ]
-}
-
-catalog("tests_catalog") {
-  testonly = true
-  embedded_services = [ ":unittest_manifest" ]
 }
 
 source_set("test_support") {
@@ -240,7 +259,8 @@ source_set("test_support") {
     "//services/device/public/mojom:constants",
     "//services/network:test_support",
     "//services/service_manager/public/cpp",
-    "//services/service_manager/public/cpp:service_test_support",
+    "//services/service_manager/public/cpp/test:test_support",
+    "//testing/gtest",
   ]
 }
 

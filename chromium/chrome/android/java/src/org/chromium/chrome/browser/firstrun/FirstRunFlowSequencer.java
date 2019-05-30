@@ -33,13 +33,12 @@ import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
-import org.chromium.chrome.browser.webapps.WebApkActivity;
+import org.chromium.chrome.browser.webapps.WebappLauncherActivity;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.ChildAccountStatus;
 import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.ui.base.DeviceFormFactor;
 
-import java.lang.ref.WeakReference;
 import java.util.List;
 
 /**
@@ -60,7 +59,7 @@ public abstract class FirstRunFlowSequencer  {
     // The following are initialized via initializeSharedState().
     private boolean mIsAndroidEduDevice;
     private @ChildAccountStatus.Status int mChildAccountStatus;
-    private Account[] mGoogleAccounts;
+    private List<Account> mGoogleAccounts;
     private boolean mForceEduSignIn;
 
     /**
@@ -113,7 +112,7 @@ public abstract class FirstRunFlowSequencer  {
     }
 
     @VisibleForTesting
-    protected Account[] getGoogleAccounts() {
+    protected List<Account> getGoogleAccounts() {
         return AccountManagerFacade.get().tryGetGoogleAccounts();
     }
 
@@ -163,7 +162,7 @@ public abstract class FirstRunFlowSequencer  {
         mGoogleAccounts = getGoogleAccounts();
         // EDU devices should always have exactly 1 google account, which will be automatically
         // signed-in. All FRE screens are skipped in this case.
-        mForceEduSignIn = mIsAndroidEduDevice && mGoogleAccounts.length == 1 && !isSignedIn();
+        mForceEduSignIn = mIsAndroidEduDevice && mGoogleAccounts.size() == 1 && !isSignedIn();
     }
 
     void processFreEnvironmentPreNative() {
@@ -195,7 +194,7 @@ public abstract class FirstRunFlowSequencer  {
 
     /**
      * Called onNativeInitialized() a given flow as completed.
-     * @param data Resulting FRE properties bundle.
+     * @param freProperties Resulting FRE properties bundle.
      */
     public void onNativeInitialized(Bundle freProperties) {
         // We show the sign-in page if sync is allowed, and not signed in, and this is not
@@ -203,13 +202,13 @@ public abstract class FirstRunFlowSequencer  {
         // - no "skip the first use hints" is set, or
         // - "skip the first use hints" is set, but there is at least one account.
         boolean offerSignInOk = isSyncAllowed() && !isSignedIn() && !mForceEduSignIn
-                && (!shouldSkipFirstUseHints() || mGoogleAccounts.length > 0);
+                && (!shouldSkipFirstUseHints() || !mGoogleAccounts.isEmpty());
         freProperties.putBoolean(FirstRunActivity.SHOW_SIGNIN_PAGE, offerSignInOk);
         if (mForceEduSignIn || ChildAccountStatus.isChild(mChildAccountStatus)) {
             // If the device is an Android EDU device or has a child account, there should be
             // exactly account on the device. Force sign-in in to that account.
             freProperties.putString(
-                    AccountFirstRunFragment.FORCE_SIGNIN_ACCOUNT_TO, mGoogleAccounts[0].name);
+                    AccountFirstRunFragment.FORCE_SIGNIN_ACCOUNT_TO, mGoogleAccounts.get(0).name);
         }
 
         freProperties.putBoolean(
@@ -267,52 +266,76 @@ public abstract class FirstRunFlowSequencer  {
 
     /**
      * @return A generic intent to show the First Run Activity.
-     * @param context        The context.
-     * @param fromChromeIcon Whether Chrome is opened via the Chrome icon.
+     * @param context                        The context.
+     * @param fromIntent                     The intent that was used to launch Chrome.
+     * @param intentToLaunchAfterFreComplete The intent to launch when the user completes the FRE.
+     * @param requiresBroadcast              Whether the relaunch intent must be broadcasted.
      */
-    public static Intent createGenericFirstRunIntent(Context context, boolean fromChromeIcon) {
+    private static Intent createGenericFirstRunIntent(Context context, Intent fromIntent,
+            Intent intentToLaunchAfterFreComplete, boolean requiresBroadcast) {
         Intent intent = new Intent();
         intent.setClassName(context, FirstRunActivity.class.getName());
-        intent.putExtra(FirstRunActivity.EXTRA_COMING_FROM_CHROME_ICON, fromChromeIcon);
+        intent.putExtra(FirstRunActivity.EXTRA_COMING_FROM_CHROME_ICON,
+                TextUtils.equals(fromIntent.getAction(), Intent.ACTION_MAIN));
+        intent.putExtra(FirstRunActivity.EXTRA_CHROME_LAUNCH_INTENT_IS_CCT,
+                LaunchIntentDispatcher.isCustomTabIntent(fromIntent));
+        addPendingIntent(context, intent, intentToLaunchAfterFreComplete, requiresBroadcast);
+
+        // Copy extras bundle from intent which was used to launch Chrome. Copying the extras
+        // enables the FirstRunActivity to locate the associated CustomTabsSession (if there
+        // is one) and to notify the connection of whether the FirstRunActivity was completed.
+        Bundle fromIntentExtras = fromIntent.getExtras();
+        if (fromIntentExtras != null) {
+            Bundle copiedFromExtras = new Bundle(fromIntentExtras);
+            intent.putExtra(FirstRunActivity.EXTRA_CHROME_LAUNCH_INTENT_EXTRAS, copiedFromExtras);
+        }
+
         return intent;
     }
 
     /**
      * Returns an intent to show the lightweight first run activity.
-     * @param context        The context.
-     * @param fromIntent     The intent that was used to launch Chrome.
+     * @param context                        The context.
+     * @param fromIntent                     The intent that was used to launch Chrome.
+     * @param associatedAppName              The id of the application associated with the activity
+     *                                       being launched.
+     * @param intentToLaunchAfterFreComplete The intent to launch when the user completes the FRE.
+     * @param requiresBroadcast              Whether the relaunch intent must be broadcasted.
      */
-    private static Intent createLightweightFirstRunIntent(Context context, Intent fromIntent) {
+    private static Intent createLightweightFirstRunIntent(Context context, Intent fromIntent,
+            String associatedAppName, Intent intentToLaunchAfterFreComplete,
+            boolean requiresBroadcast) {
         Intent intent = new Intent();
         intent.setClassName(context, LightweightFirstRunActivity.class.getName());
-        String appName = WebApkActivity.slowExtractNameFromIntentIfTargetIsWebApk(fromIntent);
-        intent.putExtra(LightweightFirstRunActivity.EXTRA_ASSOCIATED_APP_NAME, appName);
+        if (associatedAppName != null) {
+            intent.putExtra(
+                    LightweightFirstRunActivity.EXTRA_ASSOCIATED_APP_NAME, associatedAppName);
+        }
+        addPendingIntent(context, intent, intentToLaunchAfterFreComplete, requiresBroadcast);
         return intent;
     }
 
     /**
      * Adds fromIntent as a PendingIntent to the firstRunIntent. This should be used to add a
-     * PendingIntent that will be sent when first run is either completed or canceled.
+     * PendingIntent that will be sent when first run is completed.
      *
-     * @param caller            The context that corresponds to the Intent.
-     * @param firstRunIntent    The intent that will be used to start first run.
-     * @param fromIntent        The intent that was used to launch Chrome.
-     * @param requiresBroadcast Whether or not the fromIntent must be broadcasted.
+     * @param context                        The context that corresponds to the Intent.
+     * @param firstRunIntent                 The intent that will be used to start first run.
+     * @param intentToLaunchAfterFreComplete The intent to launch when the user completes the FRE.
+     * @param requiresBroadcast              Whether or not the fromIntent must be broadcasted.
      */
-    private static void addPendingIntent(
-            Context caller, Intent firstRunIntent, Intent fromIntent, boolean requiresBroadcast) {
+    private static void addPendingIntent(Context context, Intent firstRunIntent,
+            Intent intentToLaunchAfterFreComplete, boolean requiresBroadcast) {
         PendingIntent pendingIntent = null;
         int pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_ONE_SHOT;
         if (requiresBroadcast) {
-            pendingIntent = PendingIntent.getBroadcast(
-                    caller, FIRST_RUN_EXPERIENCE_REQUEST_CODE, fromIntent, pendingIntentFlags);
+            pendingIntent = PendingIntent.getBroadcast(context, FIRST_RUN_EXPERIENCE_REQUEST_CODE,
+                    intentToLaunchAfterFreComplete, pendingIntentFlags);
         } else {
-            pendingIntent = PendingIntent.getActivity(
-                    caller, FIRST_RUN_EXPERIENCE_REQUEST_CODE, fromIntent, pendingIntentFlags);
+            pendingIntent = PendingIntent.getActivity(context, FIRST_RUN_EXPERIENCE_REQUEST_CODE,
+                    intentToLaunchAfterFreComplete, pendingIntentFlags);
         }
-        firstRunIntent.putExtra(FirstRunActivity.EXTRA_CHROME_LAUNCH_INTENT, pendingIntent);
-        firstRunIntent.putExtra(FirstRunActivity.EXTRA_CHROME_LAUNCH_INTENT_IS_CCT,
-                LaunchIntentDispatcher.isCustomTabIntent(fromIntent));
+        firstRunIntent.putExtra(FirstRunActivity.EXTRA_FRE_COMPLETE_LAUNCH_INTENT, pendingIntent);
     }
 
     /**
@@ -320,27 +343,17 @@ public abstract class FirstRunFlowSequencer  {
      * flags, we first relaunch it to make sure it runs in its own task, then trigger First Run.
      *
      * @param caller               Activity instance that is checking if first run is necessary.
-     * @param intent               Intent used to launch the caller.
+     * @param fromIntent           Intent used to launch the caller.
      * @param requiresBroadcast    Whether or not the Intent triggers a BroadcastReceiver.
      * @param preferLightweightFre Whether to prefer the Lightweight First Run Experience.
      * @return Whether startup must be blocked (e.g. via Activity#finish or dropping the Intent).
      */
-    public static boolean launch(Context caller, Intent intent, boolean requiresBroadcast,
+    public static boolean launch(Context caller, Intent fromIntent, boolean requiresBroadcast,
             boolean preferLightweightFre) {
-        // Check if the user just came back from the FRE.
-        boolean firstRunActivityResult = IntentUtils.safeGetBooleanExtra(
-                intent, FirstRunActivity.EXTRA_FIRST_RUN_ACTIVITY_RESULT, false);
-        boolean firstRunComplete = IntentUtils.safeGetBooleanExtra(
-                intent, FirstRunActivity.EXTRA_FIRST_RUN_COMPLETE, false);
-        if (firstRunActivityResult && !firstRunComplete) {
-            Log.d(TAG, "User failed to complete the FRE.  Aborting");
-            return true;
-        }
-
         // Check if the user needs to go through First Run at all.
-        if (!checkIfFirstRunIsNecessary(caller, intent, preferLightweightFre)) return false;
+        if (!checkIfFirstRunIsNecessary(caller, fromIntent, preferLightweightFre)) return false;
 
-        String intentUrl = IntentHandler.getUrlFromIntent(intent);
+        String intentUrl = IntentHandler.getUrlFromIntent(fromIntent);
         Uri uri = intentUrl != null ? Uri.parse(intentUrl) : null;
         if (uri != null && UrlConstants.CONTENT_SCHEME.equals(uri.getScheme())) {
             caller.grantUriPermission(
@@ -348,66 +361,84 @@ public abstract class FirstRunFlowSequencer  {
         }
 
         Log.d(TAG, "Redirecting user through FRE.");
-        if ((intent.getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {
-            boolean isVrIntent = VrModuleProvider.getIntentDelegate().isVrIntent(intent);
-            boolean isGenericFreActive = false;
-            List<WeakReference<Activity>> activities = ApplicationStatus.getRunningActivities();
-            for (WeakReference<Activity> weakActivity : activities) {
-                Activity activity = weakActivity.get();
-                if (activity instanceof FirstRunActivity) {
-                    isGenericFreActive = true;
-                    break;
-                }
+        if ((fromIntent.getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {
+            boolean isVrIntent = VrModuleProvider.getIntentDelegate().isVrIntent(fromIntent);
+            boolean isGenericFreActive = checkIsGenericFreActive();
+
+            Intent intentToLaunchAfterFreComplete = fromIntent;
+            String associatedAppNameForLightweightFre = null;
+            WebappLauncherActivity.FreParams webApkFreParams =
+                    WebappLauncherActivity.slowGenerateFreParamsIfIntentIsForWebApk(fromIntent);
+            if (webApkFreParams != null) {
+                intentToLaunchAfterFreComplete =
+                        webApkFreParams.getIntentToLaunchAfterFreComplete();
+                associatedAppNameForLightweightFre = webApkFreParams.webApkShortName();
             }
 
             // Launch the Generic First Run Experience if it was previously active.
             Intent freIntent = null;
             if (preferLightweightFre && !isGenericFreActive) {
-                freIntent = createLightweightFirstRunIntent(caller, intent);
+                freIntent = createLightweightFirstRunIntent(caller, fromIntent,
+                        associatedAppNameForLightweightFre, intentToLaunchAfterFreComplete,
+                        requiresBroadcast);
             } else {
                 freIntent = createGenericFirstRunIntent(
-                        caller, TextUtils.equals(intent.getAction(), Intent.ACTION_MAIN));
+                        caller, fromIntent, intentToLaunchAfterFreComplete, requiresBroadcast);
 
-                if (maybeSwitchToTabbedMode(caller, freIntent)) {
+                if (shouldSwitchToTabbedMode(caller)) {
+                    freIntent.setClass(caller, TabbedModeFirstRunActivity.class);
+
                     // We switched to TabbedModeFRE. We need to disable animation on the original
                     // intent, to make transition seamless.
-                    intent = new Intent(intent);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+                    intentToLaunchAfterFreComplete = new Intent(intentToLaunchAfterFreComplete);
+                    intentToLaunchAfterFreComplete.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+                    addPendingIntent(
+                            caller, freIntent, intentToLaunchAfterFreComplete, requiresBroadcast);
                 }
             }
-
-            // Add a PendingIntent so that the intent used to launch Chrome will be resent when
-            // First Run is completed or canceled.
-            addPendingIntent(caller, freIntent, intent, requiresBroadcast);
 
             if (!(caller instanceof Activity)) freIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             if (isVrIntent) {
                 freIntent =
                         VrModuleProvider.getIntentDelegate().setupVrFreIntent(caller, freIntent);
+                // We cannot access Chrome right now, e.g. because the VR module is not installed.
+                if (freIntent == null) return true;
             }
             IntentUtils.safeStartActivity(caller, freIntent);
         } else {
             // First Run requires that the Intent contains NEW_TASK so that it doesn't sit on top
             // of something else.
-            Intent newIntent = new Intent(intent);
+            Intent newIntent = new Intent(fromIntent);
             newIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             IntentUtils.safeStartActivity(caller, newIntent);
         }
         return true;
     }
 
+    /** Returns whether the generic FRE is active. */
+    private static boolean checkIsGenericFreActive() {
+        for (Activity activity : ApplicationStatus.getRunningActivities()) {
+            // TabbedModeFirstRunActivity extends FirstRunActivity. LightweightFirstRunActivity
+            // does not.
+            if (activity instanceof FirstRunActivity) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * On tablets, where FRE activity is a dialog, transitions from fillscreen activities
-     * (the ones that use TabbedModeTheme, e.g. ChromeTabbedActivity) look ugly, because
+     * (the ones that use Theme.Chromium.TabbedMode, e.g. ChromeTabbedActivity) look ugly, because
      * when FRE is started from CTA.onCreate(), currently running animation for CTA window
      * is aborted. This is perceived as a flash of white and doesn't look good.
      *
      * To solve this, we added TabbedMode FRE activity, which has the same window background
-     * as TabbedModeTheme activities, but shows content in a FRE-like dialog.
+     * as Theme.Chromium.TabbedMode activities, but shows content in a FRE-like dialog.
      *
-     * This function attempts to switch FRE to TabbedModeFRE if certain conditions are met.
+     * This function returns whether to use the TabbedModeFRE.
      */
-    private static boolean maybeSwitchToTabbedMode(Context caller, Intent freIntent) {
+    private static boolean shouldSwitchToTabbedMode(Context caller) {
         // Caller must be an activity.
         if (!(caller instanceof Activity)) return false;
 
@@ -419,10 +450,6 @@ public abstract class FirstRunFlowSequencer  {
         TypedArray a = caller.obtainStyledAttributes(new int[] {android.R.attr.windowBackground});
         int backgroundResourceId = a.getResourceId(0 /* index */, 0);
         a.recycle();
-        if (backgroundResourceId != R.drawable.window_background) return false;
-
-        // Switch FRE -> TabbedModeFRE.
-        freIntent.setClass(caller, TabbedModeFirstRunActivity.class);
-        return true;
+        return (backgroundResourceId == R.drawable.window_background);
     }
 }

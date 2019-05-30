@@ -37,14 +37,14 @@ ContentSecurityPolicyResponseHeaders::ContentSecurityPolicyResponseHeaders(
     : ContentSecurityPolicyResponseHeaders(
           response.HttpHeaderFields(),
           SchemeRegistry::SchemeSupportsWasmEvalCSP(
-              response.Url().Protocol())) {}
+              response.CurrentRequestUrl().Protocol())) {}
 
 ContentSecurityPolicyResponseHeaders::ContentSecurityPolicyResponseHeaders(
     const HTTPHeaderMap& headers,
     bool should_parse_wasm_eval)
-    : content_security_policy_(headers.Get(HTTPNames::Content_Security_Policy)),
+    : content_security_policy_(headers.Get(http_names::kContentSecurityPolicy)),
       content_security_policy_report_only_(
-          headers.Get(HTTPNames::Content_Security_Policy_Report_Only)),
+          headers.Get(http_names::kContentSecurityPolicyReportOnly)),
       should_parse_wasm_eval_(should_parse_wasm_eval) {}
 
 ContentSecurityPolicyResponseHeaders

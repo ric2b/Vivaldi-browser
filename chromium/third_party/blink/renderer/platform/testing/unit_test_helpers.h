@@ -52,23 +52,29 @@ void YieldCurrentThread();
 // /src/third_party/blink.
 String BlinkRootDir();
 
-// Returns Blink LayoutTests directory as an absolute path, e.g.
-// /src/third_party/WebKit/LayoutTests.
-String BlinkLayoutTestsDir();
+// Returns Blink web_tests directory as an absolute path, e.g.
+// /src/third_party/blink/web_tests.
+String BlinkWebTestsDir();
 
 // Returns directory containing the current executable as absolute path.
 String ExecutableDir();
 
-// Returns test data absolute path for webkit_unit_tests in core, i.e.
-// <blinkRootDir>/Source/core/testing/data/<relativePath>.
-// It returns the top web test directory if |relativePath| was not specified.
+// Returns test data absolute path for blink_unittests in core, i.e.
+// <blinkRootDir>/renderer/core/testing/data/<relative_path>.
+// It returns the top web test directory if |relative_path| was not specified.
 String CoreTestDataPath(const String& relative_path = String());
 
 // Returns test data absolute path for blink_platform_unittests, i.e.
-// <blinkRootDir>/Source/platform/testing/data/<relativePath>.
-// It returns the top platform test directory if |relativePath| was not
+// <blinkRootDir>/renderer/platform/testing/data/<relative_path>.
+// It returns the top platform test directory if |relative_path| was not
 // specified.
 String PlatformTestDataPath(const String& relative_path = String());
+
+// Returns test data absolute path for accessibility unittests, i.e.
+// <blinkRootDir>/renderer/modules/accessibility/testing/data/<relative_path>.
+// It returns the top accessibility test directory if |relative_path| was not
+// specified.
+String AccessibilityTestDataPath(const String& relative_path = String());
 
 scoped_refptr<SharedBuffer> ReadFromFile(const String& path);
 

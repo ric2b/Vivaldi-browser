@@ -13,6 +13,7 @@
 #include "media/base/decode_status.h"
 #include "media/base/media_export.h"
 #include "media/base/pipeline_status.h"
+#include "media/base/waiting.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace media {
@@ -35,10 +36,6 @@ class MEDIA_EXPORT VideoDecoder {
   // corresponding DecoderBuffer, indicating that it's ready to accept another
   // buffer to decode.
   using DecodeCB = base::Callback<void(DecodeStatus)>;
-
-  // Callback for whenever the key needed to decrypt the stream is not
-  // available. May be called at any time after Initialize().
-  using WaitingForDecryptionKeyCB = base::RepeatingClosure;
 
   VideoDecoder();
 
@@ -70,8 +67,9 @@ class MEDIA_EXPORT VideoDecoder {
   // |cdm_context| can be used to handle encrypted buffers. May be null if the
   // stream is not encrypted.
   //
-  // |waiting_for_decryption_key_cb| is called whenever the key needed to
-  // decrypt the stream is not available.
+  // |waiting_cb| is called whenever the decoder is stalled waiting for
+  // something, e.g. decryption key. May be called at any time after
+  // Initialize().
   //
   // Note:
   // 1) The VideoDecoder will be reinitialized if it was initialized before.
@@ -82,13 +80,13 @@ class MEDIA_EXPORT VideoDecoder {
   // is ready (i.e. w/o thread trampolining) since it can strongly affect frame
   // delivery times with high-frame-rate material.  See Decode() for additional
   // notes.
-  virtual void Initialize(
-      const VideoDecoderConfig& config,
-      bool low_delay,
-      CdmContext* cdm_context,
-      const InitCB& init_cb,
-      const OutputCB& output_cb,
-      const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) = 0;
+  // 5) |init_cb| may be called before this returns.
+  virtual void Initialize(const VideoDecoderConfig& config,
+                          bool low_delay,
+                          CdmContext* cdm_context,
+                          const InitCB& init_cb,
+                          const OutputCB& output_cb,
+                          const WaitingCB& waiting_cb) = 0;
 
   // Requests a |buffer| to be decoded. The status of the decoder and decoded
   // frame are returned via the provided callback. Some decoders may allow
@@ -128,6 +126,13 @@ class MEDIA_EXPORT VideoDecoder {
   // Returns maximum number of parallel decode requests.
   virtual int GetMaxDecodeRequests() const;
 
+  // Returns the recommended number of threads for software video decoding. If
+  // the --video-threads command line option is specified and is valid, that
+  // value is returned. Otherwise |desired_threads| is clamped to the number of
+  // logical processors and then further clamped to
+  // [|limits::kMinVideoDecodeThreads|, |limits::kMaxVideoDecodeThreads|].
+  static int GetRecommendedThreadCount(int desired_threads);
+
  protected:
   // Deletion is only allowed via Destroy().
   virtual ~VideoDecoder();
@@ -135,7 +140,10 @@ class MEDIA_EXPORT VideoDecoder {
  private:
   friend struct std::default_delete<VideoDecoder>;
 
-  // Fires any pending callbacks, stops and destroys the decoder.
+  // Fires any pending callbacks, stops and destroys the decoder. After this
+  // call, external resources (e.g. raw pointers) |this| holds might be
+  // invalidated immediately. So if the decoder is destroyed asynchronously
+  // (e.g. DeleteSoon), external resources must be released in this call.
   virtual void Destroy();
 
   DISALLOW_COPY_AND_ASSIGN(VideoDecoder);

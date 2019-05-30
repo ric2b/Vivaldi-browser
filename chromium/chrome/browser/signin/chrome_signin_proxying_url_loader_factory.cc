@@ -5,16 +5,82 @@
 #include "chrome/browser/signin/chrome_signin_proxying_url_loader_factory.h"
 
 #include "base/barrier_closure.h"
+#include "base/bind.h"
+#include "base/task/post_task.h"
+#include "build/buildflag.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/chrome_signin_helper.h"
 #include "chrome/browser/signin/header_modification_delegate.h"
+#include "chrome/browser/signin/header_modification_delegate_impl.h"
 #include "components/signin/core/browser/signin_header_helper.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
+#include "content/public/browser/resource_context.h"
+#include "content/public/browser/web_contents.h"
+#include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
+#include "extensions/buildflags/buildflags.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "net/base/net_errors.h"
 
-using content::BrowserThread;
-
 namespace signin {
+
+namespace {
+
+// User data key for ResourceContextData.
+const void* const kResourceContextUserDataKey = &kResourceContextUserDataKey;
+
+// Owns all of the ProxyingURLLoaderFactorys for a given Profile. Since these
+// live on the IO thread this is done indirectly through the
+// content::ResourceContext.
+class ResourceContextData : public base::SupportsUserData::Data {
+ public:
+  ~ResourceContextData() override {}
+
+  static void StartProxying(
+      content::ResourceContext* resource_context,
+      content::ResourceRequestInfo::WebContentsGetter web_contents_getter,
+      network::mojom::URLLoaderFactoryRequest request,
+      network::mojom::URLLoaderFactoryPtrInfo target_factory) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+
+    auto* self = static_cast<ResourceContextData*>(
+        resource_context->GetUserData(kResourceContextUserDataKey));
+    if (!self) {
+      self = new ResourceContextData();
+      resource_context->SetUserData(kResourceContextUserDataKey,
+                                    base::WrapUnique(self));
+    }
+
+    auto delegate =
+        std::make_unique<HeaderModificationDelegateImpl>(resource_context);
+    auto proxy = std::make_unique<ProxyingURLLoaderFactory>(
+        std::move(delegate), std::move(web_contents_getter), std::move(request),
+        std::move(target_factory),
+        base::BindOnce(&ResourceContextData::RemoveProxy,
+                       self->weak_factory_.GetWeakPtr()));
+    self->proxies_.emplace(std::move(proxy));
+  }
+
+  void RemoveProxy(ProxyingURLLoaderFactory* proxy) {
+    auto it = proxies_.find(proxy);
+    DCHECK(it != proxies_.end());
+    proxies_.erase(it);
+  }
+
+ private:
+  ResourceContextData() : weak_factory_(this) {}
+
+  std::set<std::unique_ptr<ProxyingURLLoaderFactory>, base::UniquePtrComparator>
+      proxies_;
+
+  base::WeakPtrFactory<ResourceContextData> weak_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(ResourceContextData);
+};
+
+}  // namespace
 
 class ProxyingURLLoaderFactory::InProgressRequest
     : public network::mojom::URLLoader,
@@ -36,10 +102,9 @@ class ProxyingURLLoaderFactory::InProgressRequest
   }
 
   // network::mojom::URLLoader:
-  void FollowRedirect(
-      const base::Optional<std::vector<std::string>>& to_be_removed_headers,
-      const base::Optional<net::HttpRequestHeaders>& modified_request_headers)
-      override;
+  void FollowRedirect(const std::vector<std::string>& removed_headers,
+                      const net::HttpRequestHeaders& modified_headers,
+                      const base::Optional<GURL>& new_url) override;
 
   void ProceedWithResponse() override { target_loader_->ProceedWithResponse(); }
 
@@ -125,15 +190,15 @@ class ProxyingURLLoaderFactory::InProgressRequest::ProxyRequestAdapter
   ProxyRequestAdapter(InProgressRequest* in_progress_request,
                       const net::HttpRequestHeaders& original_headers,
                       net::HttpRequestHeaders* modified_headers,
-                      std::vector<std::string>* headers_to_remove)
+                      std::vector<std::string>* removed_headers)
       : ChromeRequestAdapter(nullptr),
         in_progress_request_(in_progress_request),
         original_headers_(original_headers),
         modified_headers_(modified_headers),
-        headers_to_remove_(headers_to_remove) {
+        removed_headers_(removed_headers) {
     DCHECK(in_progress_request_);
     DCHECK(modified_headers_);
-    DCHECK(headers_to_remove_);
+    DCHECK(removed_headers_);
   }
 
   ~ProxyRequestAdapter() override = default;
@@ -168,12 +233,12 @@ class ProxyingURLLoaderFactory::InProgressRequest::ProxyRequestAdapter
   bool HasHeader(const std::string& name) override {
     return (original_headers_.HasHeader(name) ||
             modified_headers_->HasHeader(name)) &&
-           !base::ContainsValue(*headers_to_remove_, name);
+           !base::ContainsValue(*removed_headers_, name);
   }
 
   void RemoveRequestHeaderByName(const std::string& name) override {
-    if (!base::ContainsValue(*headers_to_remove_, name))
-      headers_to_remove_->push_back(name);
+    if (!base::ContainsValue(*removed_headers_, name))
+      removed_headers_->push_back(name);
   }
 
   void SetExtraHeaderByName(const std::string& name,
@@ -181,16 +246,16 @@ class ProxyingURLLoaderFactory::InProgressRequest::ProxyRequestAdapter
     modified_headers_->SetHeader(name, value);
 
     auto it =
-        std::find(headers_to_remove_->begin(), headers_to_remove_->end(), name);
-    if (it != headers_to_remove_->end())
-      headers_to_remove_->erase(it);
+        std::find(removed_headers_->begin(), removed_headers_->end(), name);
+    if (it != removed_headers_->end())
+      removed_headers_->erase(it);
   }
 
  private:
   InProgressRequest* const in_progress_request_;
   const net::HttpRequestHeaders& original_headers_;
-  net::HttpRequestHeaders* const modified_headers_;
-  std::vector<std::string>* const headers_to_remove_;
+  net::HttpRequestHeaders* modified_headers_;
+  std::vector<std::string>* removed_headers_;
 
   DISALLOW_COPY_AND_ASSIGN(ProxyRequestAdapter);
 };
@@ -260,12 +325,12 @@ ProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
   client_binding_.Bind(mojo::MakeRequest(&proxy_client));
 
   net::HttpRequestHeaders modified_headers;
-  std::vector<std::string> headers_to_remove;
+  std::vector<std::string> removed_headers;
   ProxyRequestAdapter adapter(this, request.headers, &modified_headers,
-                              &headers_to_remove);
+                              &removed_headers);
   factory_->delegate_->ProcessRequest(&adapter, GURL() /* redirect_url */);
 
-  if (modified_headers.IsEmpty() && headers_to_remove.empty()) {
+  if (modified_headers.IsEmpty() && removed_headers.empty()) {
     factory_->target_factory_->CreateLoaderAndStart(
         mojo::MakeRequest(&target_loader_), routing_id, request_id, options,
         request, std::move(proxy_client), traffic_annotation);
@@ -276,7 +341,7 @@ ProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
   } else {
     network::ResourceRequest request_copy = request;
     request_copy.headers.MergeFrom(modified_headers);
-    for (const std::string& name : headers_to_remove)
+    for (const std::string& name : removed_headers)
       request_copy.headers.RemoveHeader(name);
 
     factory_->target_factory_->CreateLoaderAndStart(
@@ -294,29 +359,21 @@ ProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
 }
 
 void ProxyingURLLoaderFactory::InProgressRequest::FollowRedirect(
-    const base::Optional<std::vector<std::string>>& opt_headers_to_remove,
-    const base::Optional<net::HttpRequestHeaders>& opt_modified_headers) {
-  std::vector<std::string> headers_to_remove;
-  if (opt_headers_to_remove)
-    headers_to_remove = *opt_headers_to_remove;
-
-  net::HttpRequestHeaders modified_headers;
-  if (opt_modified_headers)
-    modified_headers.CopyFrom(*opt_modified_headers);
-
+    const std::vector<std::string>& removed_headers_ext,
+    const net::HttpRequestHeaders& modified_headers_ext,
+    const base::Optional<GURL>& opt_new_url) {
+  std::vector<std::string> removed_headers = removed_headers_ext;
+  net::HttpRequestHeaders modified_headers = modified_headers_ext;
   ProxyRequestAdapter adapter(this, headers_, &modified_headers,
-                              &headers_to_remove);
+                              &removed_headers);
   factory_->delegate_->ProcessRequest(&adapter, redirect_info_.new_url);
 
   headers_.MergeFrom(modified_headers);
-  for (const std::string& name : headers_to_remove)
+  for (const std::string& name : removed_headers)
     headers_.RemoveHeader(name);
 
-  target_loader_->FollowRedirect(
-      headers_to_remove.empty() ? base::nullopt
-                                : base::make_optional(headers_to_remove),
-      modified_headers.IsEmpty() ? base::nullopt
-                                 : base::make_optional(modified_headers));
+  target_loader_->FollowRedirect(removed_headers, modified_headers,
+                                 opt_new_url);
 
   request_url_ = redirect_info_.new_url;
   referrer_origin_ = GURL(redirect_info_.new_referrer).GetOrigin();
@@ -346,18 +403,12 @@ void ProxyingURLLoaderFactory::InProgressRequest::OnReceiveRedirect(
   response_url_ = redirect_info.new_url;
 }
 
-ProxyingURLLoaderFactory::ProxyingURLLoaderFactory() = default;
-
-ProxyingURLLoaderFactory::~ProxyingURLLoaderFactory() = default;
-
-// static
-void ProxyingURLLoaderFactory::StartProxying(
+ProxyingURLLoaderFactory::ProxyingURLLoaderFactory(
     std::unique_ptr<HeaderModificationDelegate> delegate,
     content::ResourceRequestInfo::WebContentsGetter web_contents_getter,
     network::mojom::URLLoaderFactoryRequest loader_request,
     network::mojom::URLLoaderFactoryPtrInfo target_factory,
-    base::OnceClosure on_disconnect) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+    DisconnectCallback on_disconnect) {
   DCHECK(proxy_bindings_.empty());
   DCHECK(!target_factory_.is_bound());
   DCHECK(!delegate_);
@@ -377,6 +428,60 @@ void ProxyingURLLoaderFactory::StartProxying(
       &ProxyingURLLoaderFactory::OnProxyBindingError, base::Unretained(this)));
 }
 
+ProxyingURLLoaderFactory::~ProxyingURLLoaderFactory() = default;
+
+// static
+bool ProxyingURLLoaderFactory::MaybeProxyRequest(
+    content::RenderFrameHost* render_frame_host,
+    bool is_navigation,
+    const url::Origin& request_initiator,
+    network::mojom::URLLoaderFactoryRequest* factory_request) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  // Navigation requests are handled using signin::URLLoaderThrottle.
+  if (is_navigation)
+    return false;
+
+  // This proxy should only be installed for subresource requests from a frame
+  // that is rendering the GAIA signon realm.
+  if (!gaia::IsGaiaSignonRealm(request_initiator.GetURL()))
+    return false;
+
+  auto* web_contents =
+      content::WebContents::FromRenderFrameHost(render_frame_host);
+  auto* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  if (profile->IsOffTheRecord())
+    return false;
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  // Account consistency requires the AccountReconcilor, which is only
+  // attached to the main request context.
+  // Note: InlineLoginUI uses an isolated request context and thus bypasses
+  // the account consistency flow here. See http://crbug.com/428396
+  if (extensions::WebViewRendererState::GetInstance()->IsGuest(
+          render_frame_host->GetProcess()->GetID())) {
+    return false;
+  }
+#endif
+
+  auto proxied_request = std::move(*factory_request);
+  network::mojom::URLLoaderFactoryPtrInfo target_factory_info;
+  *factory_request = mojo::MakeRequest(&target_factory_info);
+
+  auto web_contents_getter =
+      base::BindRepeating(&content::WebContents::FromFrameTreeNodeId,
+                          render_frame_host->GetFrameTreeNodeId());
+
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
+      base::BindOnce(&ResourceContextData::StartProxying,
+                     profile->GetResourceContext(),
+                     std::move(web_contents_getter), std::move(proxied_request),
+                     std::move(target_factory_info)));
+  return true;
+}
+
 void ProxyingURLLoaderFactory::CreateLoaderAndStart(
     network::mojom::URLLoaderRequest loader_request,
     int32_t routing_id,
@@ -392,13 +497,10 @@ void ProxyingURLLoaderFactory::CreateLoaderAndStart(
 
 void ProxyingURLLoaderFactory::Clone(
     network::mojom::URLLoaderFactoryRequest loader_request) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   proxy_bindings_.AddBinding(this, std::move(loader_request));
 }
 
 void ProxyingURLLoaderFactory::OnTargetFactoryError() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
   // Stop calls to CreateLoaderAndStart() when |target_factory_| is invalid.
   target_factory_.reset();
   proxy_bindings_.CloseAllBindings();
@@ -407,8 +509,6 @@ void ProxyingURLLoaderFactory::OnTargetFactoryError() {
 }
 
 void ProxyingURLLoaderFactory::OnProxyBindingError() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
   if (proxy_bindings_.empty())
     target_factory_.reset();
 
@@ -424,16 +524,13 @@ void ProxyingURLLoaderFactory::RemoveRequest(InProgressRequest* request) {
 }
 
 void ProxyingURLLoaderFactory::MaybeDestroySelf() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
   // Even if all URLLoaderFactory pipes connected to this object have been
   // closed it has to stay alive until all active requests have completed.
   if (target_factory_.is_bound() || !requests_.empty())
     return;
 
-  // Deletes |this| after a roundtrip to the UI thread.
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          std::move(on_disconnect_));
+  // Deletes |this|.
+  std::move(on_disconnect_).Run(this);
 }
 
 }  // namespace signin

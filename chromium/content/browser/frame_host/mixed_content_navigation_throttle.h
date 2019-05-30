@@ -12,13 +12,12 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle.h"
-#include "content/public/common/request_context_type.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
 #include "third_party/blink/public/platform/web_mixed_content_context_type.h"
 
 namespace content {
 
 class FrameTreeNode;
-struct WebPreferences;
 
 // Responsible for browser-process-side mixed content security checks. It is
 // only enabled if PlzNavigate is and checks only for frame-level resource loads
@@ -71,9 +70,8 @@ class MixedContentNavigationThrottle : public NavigationThrottle {
   // Records basic mixed content "feature" usage when any kind of mixed content
   // is found.
   void ReportBasicMixedContentFeatures(
-      RequestContextType request_context_type,
-      blink::WebMixedContentContextType mixed_content_context_type,
-      const WebPreferences& prefs);
+      blink::mojom::RequestContextType request_context_type,
+      blink::WebMixedContentContextType mixed_content_context_type);
 
   static bool CONTENT_EXPORT IsMixedContentForTesting(const GURL& origin_url,
                                                       const GURL& url);

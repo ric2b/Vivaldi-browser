@@ -18,24 +18,36 @@ namespace media_router {
 // hovered.
 class CastDialogSinkButton : public HoverButton {
  public:
-  // Icon sizes in DIP. These values are also used by the "no devices" view for
-  // consistency.
-  static int kPrimaryIconSize;
-  static int kSecondaryIconSize;
-
   CastDialogSinkButton(views::ButtonListener* button_listener,
-                       const UIMediaSink& sink);
+                       const UIMediaSink& sink,
+                       int button_tag);
   ~CastDialogSinkButton() override;
+
+  void OverrideStatusText(const base::string16& status_text);
+  void RestoreStatusText();
 
   // views::View:
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
   void OnEnabledChanged() override;
+  void RequestFocus() override;
+  void OnFocus() override;
+  void OnBlur() override;
 
   const UIMediaSink& sink() const { return sink_; }
 
  private:
-  UIMediaSink sink_;
+  friend class MediaRouterUiForTest;
+  FRIEND_TEST_ALL_PREFIXES(CastDialogSinkButtonTest, OverrideStatusText);
+  FRIEND_TEST_ALL_PREFIXES(CastDialogSinkButtonTest,
+                           SetStatusLabelForActiveSink);
+  FRIEND_TEST_ALL_PREFIXES(CastDialogSinkButtonTest,
+                           SetStatusLabelForAvailableSink);
+  FRIEND_TEST_ALL_PREFIXES(CastDialogSinkButtonTest,
+                           SetStatusLabelForSinkWithIssue);
+
+  const UIMediaSink sink_;
+  base::Optional<base::string16> saved_status_text_;
 
   DISALLOW_COPY_AND_ASSIGN(CastDialogSinkButton);
 };

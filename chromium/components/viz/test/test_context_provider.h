@@ -11,6 +11,7 @@
 #include <memory>
 
 #include "base/callback.h"
+#include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -20,7 +21,9 @@
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "components/viz/test/test_context_support.h"
 #include "gpu/command_buffer/client/gles2_interface_stub.h"
+#include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/config/gpu_feature_info.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
 namespace skia_bindings {
@@ -29,6 +32,46 @@ class GrContextForGLES2Interface;
 
 namespace viz {
 class TestGLES2Interface;
+
+class TestSharedImageInterface : public gpu::SharedImageInterface {
+ public:
+  TestSharedImageInterface();
+  ~TestSharedImageInterface() override;
+
+  gpu::Mailbox CreateSharedImage(ResourceFormat format,
+                                 const gfx::Size& size,
+                                 const gfx::ColorSpace& color_space,
+                                 uint32_t usage) override;
+
+  gpu::Mailbox CreateSharedImage(ResourceFormat format,
+                                 const gfx::Size& size,
+                                 const gfx::ColorSpace& color_space,
+                                 uint32_t usage,
+                                 base::span<const uint8_t> pixel_data) override;
+
+  gpu::Mailbox CreateSharedImage(
+      gfx::GpuMemoryBuffer* gpu_memory_buffer,
+      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
+      const gfx::ColorSpace& color_space,
+      uint32_t usage) override;
+
+  void UpdateSharedImage(const gpu::SyncToken& sync_token,
+                         const gpu::Mailbox& mailbox) override;
+
+  void DestroySharedImage(const gpu::SyncToken& sync_token,
+                          const gpu::Mailbox& mailbox) override;
+
+  gpu::SyncToken GenUnverifiedSyncToken() override;
+
+  size_t shared_image_count() const { return shared_images_.size(); }
+  const gfx::Size& MostRecentSize() const { return most_recent_size_; }
+  bool CheckSharedImageExists(const gpu::Mailbox& mailbox) const;
+
+ private:
+  uint64_t release_id_ = 0;
+  gfx::Size most_recent_size_;
+  base::flat_set<gpu::Mailbox> shared_images_;
+};
 
 class TestContextProvider
     : public base::RefCountedThreadSafe<TestContextProvider>,
@@ -62,6 +105,7 @@ class TestContextProvider
   gpu::raster::RasterInterface* RasterInterface() override;
   gpu::ContextSupport* ContextSupport() override;
   class GrContext* GrContext() override;
+  TestSharedImageInterface* SharedImageInterface() override;
   ContextCacheController* CacheController() override;
   base::Lock* GetLock() override;
   void AddObserver(ContextLostObserver* obs) override;
@@ -96,6 +140,7 @@ class TestContextProvider
   std::unique_ptr<gpu::raster::RasterInterface> raster_context_;
   std::unique_ptr<skia_bindings::GrContextForGLES2Interface> gr_context_;
   std::unique_ptr<ContextCacheController> cache_controller_;
+  std::unique_ptr<TestSharedImageInterface> shared_image_interface_;
   const bool support_locking_ ALLOW_UNUSED_TYPE;
   bool bound_ = false;
 

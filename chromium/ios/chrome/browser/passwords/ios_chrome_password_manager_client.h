@@ -9,8 +9,9 @@
 #import "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_client_helper.h"
 #include "components/password_manager/core/browser/password_manager_metrics_recorder.h"
-#include "components/password_manager/sync/browser/sync_credentials_filter.h"
+#include "components/password_manager/core/browser/sync_credentials_filter.h"
 #include "components/prefs/pref_member.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 
 namespace ios {
 class ChromeBrowserState;
@@ -19,6 +20,10 @@ class LogManager;
 
 namespace password_manager {
 class PasswordFormManagerForUI;
+}
+
+namespace web {
+class WebState;
 }
 
 @protocol PasswordManagerClientDelegate
@@ -35,11 +40,15 @@ class PasswordFormManagerForUI;
 - (void)showAutosigninNotification:
     (std::unique_ptr<autofill::PasswordForm>)formSignedIn;
 
+@property(readonly, nonatomic) web::WebState* webState;
+
 @property(readonly, nonatomic) ios::ChromeBrowserState* browserState;
 
 @property(readonly) password_manager::PasswordManager* passwordManager;
 
 @property(readonly, nonatomic) const GURL& lastCommittedURL;
+
+@property(readonly, nonatomic) ukm::SourceId ukmSourceId;
 
 @end
 
@@ -55,7 +64,6 @@ class IOSChromePasswordManagerClient
 
   // password_manager::PasswordManagerClient implementation.
   password_manager::SyncState GetPasswordSyncState() const override;
-  password_manager::SyncState GetHistorySyncState() const override;
   bool PromptUserToSaveOrUpdatePassword(
       std::unique_ptr<password_manager::PasswordFormManagerForUI> form_to_save,
       bool update_password) override;
@@ -73,6 +81,7 @@ class IOSChromePasswordManagerClient
           saved_form_manager) override;
   bool IsIncognito() const override;
   const password_manager::PasswordManager* GetPasswordManager() const override;
+  bool IsMainFrameSecure() const override;
   PrefService* GetPrefs() const override;
   password_manager::PasswordStore* GetPasswordStore() const override;
   void NotifyUserAutoSignin(
@@ -83,8 +92,9 @@ class IOSChromePasswordManagerClient
   void NotifySuccessfulLoginWithExistingPassword(
       const autofill::PasswordForm& form) override;
   void NotifyStorePasswordCalled() override;
-  bool IsSavingAndFillingEnabledForCurrentPage() const override;
+  bool IsSavingAndFillingEnabled(const GURL& url) const override;
   const GURL& GetLastCommittedEntryURL() const override;
+  std::string GetPageLanguage() const override;
   const password_manager::CredentialsFilter* GetStoreResultFilter()
       const override;
   const password_manager::LogManager* GetLogManager() const override;
@@ -106,14 +116,6 @@ class IOSChromePasswordManagerClient
   const password_manager::SyncCredentialsFilter credentials_filter_;
 
   std::unique_ptr<password_manager::LogManager> log_manager_;
-
-  // The URL to which the ukm_source_id_ was bound.
-  GURL ukm_source_url_;
-
-  // If ukm_source_url_ == delegate_.lastCommittedURL, this stores a
-  // ukm::SourceId that is bound to the last committed navigation of the tab
-  // owning this ChromePasswordManagerClient.
-  ukm::SourceId ukm_source_id_;
 
   // Recorder of metrics that is associated with the last committed navigation
   // of the tab owning this ChromePasswordManagerClient. May be unset at

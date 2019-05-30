@@ -19,7 +19,8 @@ var expectedVolume1 = {
   source: 'device',
   profile: {profileId: '', displayName: '', isCurrentProfile: true},
   diskFileSystemType: 'exfat',
-  iconSet: {}
+  iconSet: {},
+  driveLabel: 'drive_label1'
 };
 
 var expectedVolume2 = {
@@ -40,7 +41,8 @@ var expectedVolume2 = {
   source: 'device',
   profile: {profileId: '', displayName: '', isCurrentProfile: true},
   diskFileSystemType: 'exfat',
-  iconSet: {}
+  iconSet: {},
+  driveLabel: 'drive_label2'
 };
 
 var expectedVolume3 = {
@@ -59,7 +61,8 @@ var expectedVolume3 = {
   source: 'device',
   profile: {profileId: '', displayName: '', isCurrentProfile: true},
   diskFileSystemType: 'exfat',
-  iconSet: {}
+  iconSet: {},
+  driveLabel: 'drive_label3'
 };
 
 var expectedDownloadsVolume = {
@@ -74,23 +77,8 @@ var expectedDownloadsVolume = {
   source: 'system',
   profile: {profileId: '', displayName: '', isCurrentProfile: true},
   diskFileSystemType: '',
-  iconSet: {}
-};
-
-var expectedDriveVolume = {
-  volumeId: /^drive:drive[^\/]*$/,
-  volumeLabel: '',
-  sourcePath: /^\/special\/drive[^\/]*$/,
-  volumeType: 'drive',
-  isReadOnly: false,
-  isReadOnlyRemovableDevice: false,
-  hasMedia: false,
-  configurable: false,
-  watchable: true,
-  source: 'network',
-  profile: {profileId: '', displayName: '', isCurrentProfile: true},
-  diskFileSystemType: '',
-  iconSet: {}
+  iconSet: {},
+  driveLabel: ''
 };
 
 var expectedArchiveVolume = {
@@ -106,7 +94,8 @@ var expectedArchiveVolume = {
   source: 'file',
   profile: {profileId: '', displayName: '', isCurrentProfile: true},
   diskFileSystemType: '',
-  iconSet: {}
+  iconSet: {},
+  driveLabel: ''
 };
 
 var expectedProvidedVolume = {
@@ -127,7 +116,8 @@ var expectedProvidedVolume = {
   iconSet: {
     icon16x16Url: 'chrome://resources/testing-provider-id-16.jpg',
     icon32x32Url: 'chrome://resources/testing-provider-id-32.jpg'
-  }
+  },
+  driveLabel: ''
 };
 
 // List of expected mount points.
@@ -136,7 +126,6 @@ var expectedProvidedVolume = {
 var expectedVolumeList = [
   expectedArchiveVolume,
   expectedDownloadsVolume,
-  expectedDriveVolume,
   expectedProvidedVolume,
   expectedVolume1,
   expectedVolume2,

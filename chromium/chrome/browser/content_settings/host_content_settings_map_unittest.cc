@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -30,7 +31,6 @@
 #include "components/content_settings/core/browser/user_modifiable_provider.h"
 #include "components/content_settings/core/browser/website_settings_info.h"
 #include "components/content_settings/core/browser/website_settings_registry.h"
-#include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/content_settings/core/test/content_settings_test_utils.h"
 #include "components/prefs/pref_service.h"
@@ -1147,13 +1147,13 @@ TEST_F(HostContentSettingsMapTest, CanonicalizeExceptionsUnicodeOnly) {
 TEST_F(HostContentSettingsMapTest, CanonicalizeExceptionsUnicodeAndPunycode) {
   TestingProfile profile;
 
-  std::unique_ptr<base::Value> value =
-      base::JSONReader::Read("{\"[*.]\\xC4\\x87ira.com,*\":{\"setting\":1}}");
+  std::unique_ptr<base::Value> value = base::JSONReader::ReadDeprecated(
+      "{\"[*.]\\xC4\\x87ira.com,*\":{\"setting\":1}}");
   profile.GetPrefs()->Set(GetPrefName(CONTENT_SETTINGS_TYPE_COOKIES), *value);
 
   // Set punycode equivalent, with different setting.
-  std::unique_ptr<base::Value> puny_value =
-      base::JSONReader::Read("{\"[*.]xn--ira-ppa.com,*\":{\"setting\":2}}");
+  std::unique_ptr<base::Value> puny_value = base::JSONReader::ReadDeprecated(
+      "{\"[*.]xn--ira-ppa.com,*\":{\"setting\":2}}");
   profile.GetPrefs()->Set(GetPrefName(CONTENT_SETTINGS_TYPE_COOKIES),
                           *puny_value);
 
@@ -1460,8 +1460,8 @@ TEST_F(HostContentSettingsMapTest, GuestProfileMigration) {
   profile.SetGuestSession(true);
 
   // Set a pref manually in the guest profile.
-  std::unique_ptr<base::Value> value =
-      base::JSONReader::Read("{\"[*.]\\xC4\\x87ira.com,*\":{\"setting\":1}}");
+  std::unique_ptr<base::Value> value = base::JSONReader::ReadDeprecated(
+      "{\"[*.]\\xC4\\x87ira.com,*\":{\"setting\":1}}");
   profile.GetPrefs()->Set(GetPrefName(CONTENT_SETTINGS_TYPE_COOKIES), *value);
 
   // Test that during construction all the prefs get cleared.
@@ -1752,6 +1752,16 @@ TEST_F(HostContentSettingsMapTest, LastModifiedMultipleModifiableProviders) {
   weak_other_provider->RemoveObserver(map);
 }
 
+TEST_F(HostContentSettingsMapTest, IsRestrictedToSecureOrigins) {
+  TestingProfile profile;
+  const auto* map = HostContentSettingsMapFactory::GetForProfile(&profile);
+  EXPECT_TRUE(
+      map->IsRestrictedToSecureOrigins(CONTENT_SETTINGS_TYPE_GEOLOCATION));
+
+  EXPECT_FALSE(
+      map->IsRestrictedToSecureOrigins(CONTENT_SETTINGS_TYPE_JAVASCRIPT));
+}
+
 TEST_F(HostContentSettingsMapTest, CanSetNarrowestSetting) {
   TestingProfile profile;
   const auto* map = HostContentSettingsMapFactory::GetForProfile(&profile);
@@ -1874,7 +1884,7 @@ TEST_F(HostContentSettingsMapTest, PluginDataMigration) {
   }
   TestingProfile profile;
   // Set a website-specific Flash preference and a pattern exception.
-  std::unique_ptr<base::Value> value = base::JSONReader::Read(
+  std::unique_ptr<base::Value> value = base::JSONReader::ReadDeprecated(
       "{\"https://urlwithflashchanged.com:443,*\":{\"setting\":1}, "
       "\"[*.]patternurl.com:443,*\":{\"setting\":1}}");
   profile.GetPrefs()->Set(GetPrefName(CONTENT_SETTINGS_TYPE_PLUGINS), *value);
@@ -1905,10 +1915,10 @@ TEST_F(HostContentSettingsMapTest, PluginDataMigrated) {
   TestingProfile profile;
   // Set a website-specific Flash preference and another preference indicating
   // that the Flash setting has changed for a different website.
-  std::unique_ptr<base::Value> value = base::JSONReader::Read(
+  std::unique_ptr<base::Value> value = base::JSONReader::ReadDeprecated(
       "{\"https://unmigratedurl.com:443,*\":{\"setting\":1}}");
   profile.GetPrefs()->Set(GetPrefName(CONTENT_SETTINGS_TYPE_PLUGINS), *value);
-  value = base::JSONReader::Read(
+  value = base::JSONReader::ReadDeprecated(
       "{\"https://"
       "example.com:443,*\":{\"setting\":{\"flashPreviouslyChanged\":true}}}");
   profile.GetPrefs()->Set(GetPrefName(CONTENT_SETTINGS_TYPE_PLUGINS_DATA),
@@ -1948,11 +1958,10 @@ void ReloadProviders(PrefService* pref_service,
       HostContentSettingsMap::EPHEMERAL_PROVIDER);
 }
 
-// Tests if availability of EnableEphemeralFlashPermission switch results in
-// Flash permissions being reset after restarting.
-// The flag is not available on Android.
+// Tests that Flash permissions are reset after restarting.
+// Flash, and consequently, Flash permissions are not available on Android.
 #if !defined(OS_ANDROID)
-TEST_F(HostContentSettingsMapTest, FlashEphemeralPermissionSwitch) {
+TEST_F(HostContentSettingsMapTest, FlashPermissionsAreEphemeral) {
   TestingProfile profile;
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(&profile);
@@ -1961,47 +1970,31 @@ TEST_F(HostContentSettingsMapTest, FlashEphemeralPermissionSwitch) {
   map->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_PLUGINS,
                                 CONTENT_SETTING_ASK);
 
-  for (int ephemeral = 0; ephemeral < 2; ephemeral++) {
-    base::test::ScopedFeatureList feature_list;
-    if (ephemeral) {
-      feature_list.InitAndEnableFeature(
-          content_settings::features::kEnableEphemeralFlashPermission);
-    } else {
-      feature_list.InitAndDisableFeature(
-          content_settings::features::kEnableEphemeralFlashPermission);
-    }
-    content_settings::ContentSettingsRegistry::GetInstance()->ResetForTest();
+  base::test::ScopedFeatureList feature_list;
+  content_settings::ContentSettingsRegistry::GetInstance()->ResetForTest();
 
-    ReloadProviders(profile.GetPrefs(), map);
-    map->SetContentSettingDefaultScope(url, url, CONTENT_SETTINGS_TYPE_PLUGINS,
-                                       std::string(), CONTENT_SETTING_ALLOW);
-    EXPECT_EQ(CONTENT_SETTING_ALLOW,
-              map->GetContentSetting(url, url, CONTENT_SETTINGS_TYPE_PLUGINS,
-                                     std::string()));
+  ReloadProviders(profile.GetPrefs(), map);
+  map->SetContentSettingDefaultScope(url, url, CONTENT_SETTINGS_TYPE_PLUGINS,
+                                     std::string(), CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            map->GetContentSetting(url, url, CONTENT_SETTINGS_TYPE_PLUGINS,
+                                   std::string()));
 
-    ReloadProviders(profile.GetPrefs(), map);
-    ContentSetting expectation =
-        ephemeral ? CONTENT_SETTING_ASK : CONTENT_SETTING_ALLOW;
-
-    EXPECT_EQ(expectation,
-              map->GetContentSetting(url, url, CONTENT_SETTINGS_TYPE_PLUGINS,
-                                     std::string()))
-        << ephemeral;
-  }
+  ReloadProviders(profile.GetPrefs(), map);
+  EXPECT_EQ(CONTENT_SETTING_ASK,
+            map->GetContentSetting(url, url, CONTENT_SETTINGS_TYPE_PLUGINS,
+                                   std::string()));
 }
 #endif  // !defined(OS_ANDROID)
 
-// Tests if restarting only removes ephemeral permissions.
-// kEnableEphemeralFlashPermission is not available on Android.
+// Tests that restarting only removes ephemeral permissions. Flash, and
+// consequently, Flash permissions are not available on Android.
 #if !defined(OS_ANDROID)
 TEST_F(HostContentSettingsMapTest, MixedEphemeralAndPersistentPermissions) {
   TestingProfile profile;
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(&profile);
 
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      content_settings::features::kEnableEphemeralFlashPermission);
   content_settings::ContentSettingsRegistry::GetInstance()->ResetForTest();
   ReloadProviders(profile.GetPrefs(), map);
 
@@ -2052,18 +2045,15 @@ TEST_F(HostContentSettingsMapTest, MixedEphemeralAndPersistentPermissions) {
 }
 #endif  // !defined(OS_ANDROID)
 
-// Tests if directly writing a value to PrefProvider doesn't affect ephmeral
-// types.
-// kEnableEphemeralFlashPermission is not available on Android.
+// Test that directly writing a value to PrefProvider doesn't affect ephmeral
+// types. Flash, and consequently, Flash permissions are not available on
+// Android.
 #if !defined(OS_ANDROID)
 TEST_F(HostContentSettingsMapTest, EphemeralTypeDoesntReadFromPrefProvider) {
   TestingProfile profile;
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(&profile);
 
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      content_settings::features::kEnableEphemeralFlashPermission);
   content_settings::ContentSettingsRegistry::GetInstance()->ResetForTest();
   ReloadProviders(profile.GetPrefs(), map);
 
@@ -2160,4 +2150,80 @@ TEST_F(HostContentSettingsMapTest, GetPatternsFromScopingType) {
             ContentSettingsPattern::FromURLNoWildcard(primary_url));
   EXPECT_EQ(settings[0].secondary_pattern,
             ContentSettingsPattern::FromURLNoWildcard(secondary_url));
+}
+
+// Tests if changing a settings in incognito mode does not affects the regular
+// mode.
+TEST_F(HostContentSettingsMapTest, IncognitoChangesDoNotPersist) {
+  TestingProfile profile;
+  auto* regular_map = HostContentSettingsMapFactory::GetForProfile(&profile);
+  auto* incognito_map = HostContentSettingsMapFactory::GetForProfile(
+      profile.GetOffTheRecordProfile());
+  auto* registry = content_settings::WebsiteSettingsRegistry::GetInstance();
+  auto* content_setting_registry =
+      content_settings::ContentSettingsRegistry::GetInstance();
+
+  GURL url("https://example.com");
+  ContentSettingsPattern pattern = ContentSettingsPattern::FromURL(url);
+  content_settings::SettingInfo setting_info;
+
+  for (const content_settings::WebsiteSettingsInfo* info : *registry) {
+    SCOPED_TRACE(info->name());
+
+    // Get regular profile default value.
+    std::unique_ptr<base::Value> original_value =
+        regular_map->GetWebsiteSetting(url, url, info->type(), std::string(),
+                                       &setting_info);
+    // Get a different valid value for incognito mode.
+    std::unique_ptr<base::Value> new_value;
+    if (content_setting_registry->Get(info->type())) {
+      // If no original value is available, the settings does not have any valid
+      // values and no more steps are required.
+      if (!original_value)
+        continue;
+      int current_value;
+      original_value->GetAsInteger(&current_value);
+
+      for (int another_value = 0;
+           another_value < ContentSetting::CONTENT_SETTING_NUM_SETTINGS;
+           another_value++) {
+        if (another_value != current_value &&
+            content_setting_registry->Get(info->type())
+                ->IsSettingValid(static_cast<ContentSetting>(another_value))) {
+          new_value = std::make_unique<base::Value>(another_value);
+          break;
+        }
+      }
+      ASSERT_TRUE(new_value)
+          << "Every content setting should have at least two values.";
+    } else {
+      new_value = std::make_unique<base::Value>(base::Value::Type::DICTIONARY);
+      static_cast<base::DictionaryValue*>(new_value.get())
+          ->SetPath({"foo", "bar"}, base::Value(0));
+    }
+    // Ensure a different value is received (|original_value| can be null for
+    // website settings).
+    DCHECK(!original_value || *original_value != *new_value);
+
+    // Set the different value in incognito mode.
+    base::Value incognito_value = new_value->Clone();
+    incognito_map->SetWebsiteSettingCustomScope(
+        pattern, pattern, info->type(), std::string(), std::move(new_value));
+
+    // Ensure incognito mode value is changed.
+    EXPECT_EQ(incognito_value,
+              *incognito_map->GetWebsiteSetting(url, url, info->type(),
+                                                std::string(), &setting_info));
+
+    // Ensure regular mode value is not changed.
+    std::unique_ptr<base::Value> regular_mode_value =
+        regular_map->GetWebsiteSetting(url, url, info->type(), std::string(),
+                                       &setting_info);
+    if (regular_mode_value) {
+      ASSERT_TRUE(original_value);
+      EXPECT_EQ(*original_value, *regular_mode_value);
+    } else {
+      EXPECT_FALSE(original_value);
+    }
+  }
 }

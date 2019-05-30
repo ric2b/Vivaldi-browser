@@ -36,22 +36,20 @@
 
 namespace blink {
 
-using namespace HTMLNames;
-
 AXSlider::AXSlider(LayoutObject* layout_object,
                    AXObjectCacheImpl& ax_object_cache)
     : AXLayoutObject(layout_object, ax_object_cache) {}
 
 AXSlider* AXSlider::Create(LayoutObject* layout_object,
                            AXObjectCacheImpl& ax_object_cache) {
-  return new AXSlider(layout_object, ax_object_cache);
+  return MakeGarbageCollected<AXSlider>(layout_object, ax_object_cache);
 }
 
-AccessibilityRole AXSlider::DetermineAccessibilityRole() {
-  if ((aria_role_ = DetermineAriaRoleAttribute()) != kUnknownRole)
+ax::mojom::Role AXSlider::DetermineAccessibilityRole() {
+  if ((aria_role_ = DetermineAriaRoleAttribute()) != ax::mojom::Role::kUnknown)
     return aria_role_;
 
-  return kSliderRole;
+  return ax::mojom::Role::kSlider;
 }
 
 AccessibilityOrientation AXSlider::Orientation() const {
@@ -88,8 +86,8 @@ void AXSlider::AddChildren() {
 
   AXObjectCacheImpl& cache = AXObjectCache();
 
-  AXSliderThumb* thumb =
-      static_cast<AXSliderThumb*>(cache.GetOrCreate(kSliderThumbRole));
+  AXSliderThumb* thumb = static_cast<AXSliderThumb*>(
+      cache.GetOrCreate(ax::mojom::Role::kSliderThumb));
   thumb->SetParent(this);
 
   // Before actually adding the value indicator to the hierarchy,
@@ -116,7 +114,7 @@ bool AXSlider::OnNativeSetValueAction(const String& value) {
   if (input->value() == value)
     return false;
 
-  input->setValue(value, kDispatchInputAndChangeEvent);
+  input->setValue(value, TextFieldEventBehavior::kDispatchInputAndChangeEvent);
 
   // Fire change event manually, as LayoutSlider::setValueForPosition does.
   input->DispatchFormControlChangeEvent();
@@ -131,7 +129,7 @@ AXSliderThumb::AXSliderThumb(AXObjectCacheImpl& ax_object_cache)
     : AXMockObject(ax_object_cache) {}
 
 AXSliderThumb* AXSliderThumb::Create(AXObjectCacheImpl& ax_object_cache) {
-  return new AXSliderThumb(ax_object_cache);
+  return MakeGarbageCollected<AXSliderThumb>(ax_object_cache);
 }
 
 LayoutObject* AXSliderThumb::LayoutObjectForRelativeBounds() const {
@@ -144,7 +142,7 @@ LayoutObject* AXSliderThumb::LayoutObjectForRelativeBounds() const {
   Element* thumb_element =
       ToElement(slider_layout_object->GetNode())
           ->UserAgentShadowRoot()
-          ->getElementById(ShadowElementNames::SliderThumb());
+          ->getElementById(shadow_element_names::SliderThumb());
   DCHECK(thumb_element);
   return thumb_element->GetLayoutObject();
 }

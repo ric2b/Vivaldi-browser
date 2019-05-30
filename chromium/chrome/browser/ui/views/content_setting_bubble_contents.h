@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_VIEWS_CONTENT_SETTING_BUBBLE_CONTENTS_H_
 
 #include <map>
+#include <memory>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -19,10 +20,6 @@
 #include "ui/views/controls/button/radio_button.h"
 #include "ui/views/controls/combobox/combobox_listener.h"
 #include "ui/views/controls/link_listener.h"
-
-namespace chrome {
-class ContentSettingBubbleViewsBridge;
-}
 
 namespace views {
 class ImageButton;
@@ -47,7 +44,7 @@ class ContentSettingBubbleContents : public content::WebContentsObserver,
                                      public ContentSettingBubbleModel::Owner {
  public:
   ContentSettingBubbleContents(
-      ContentSettingBubbleModel* content_setting_bubble_model,
+      std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model,
       content::WebContents* web_contents,
       views::View* anchor_view,
       views::BubbleBorder::Arrow arrow);
@@ -80,9 +77,6 @@ class ContentSettingBubbleContents : public content::WebContentsObserver,
  private:
   class Favicon;
   class ListItemContainer;
-
-  // This allows ContentSettingBubbleViewsBridge to call SetAnchorRect().
-  friend class chrome::ContentSettingBubbleViewsBridge;
 
   // Applies the colors appropriate for |theme| to the learn more button.
   void StyleLearnMoreButton(const ui::NativeTheme* theme);

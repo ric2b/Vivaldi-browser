@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <string>
 
-#include "base/macros.h"
 #include "base/no_destructor.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
@@ -93,6 +92,15 @@ bool GetReactivationBrand(std::string* brand) {
 
 #endif
 
+bool GetRlzBrand(std::string* brand) {
+#if defined(OS_CHROMEOS)
+  brand->assign(google_brand::chromeos::GetRlzBrand());
+  return true;
+#else
+  return GetBrand(brand);
+#endif
+}
+
 bool IsOrganic(const std::string& brand) {
 #if defined(OS_MACOSX)
   if (brand.empty()) {
@@ -110,7 +118,7 @@ bool IsOrganic(const std::string& brand) {
       "CHOU", "CHOX", "CHOY", "CHOZ", "CHPD", "CHPE", "CHPF", "CHPG", "ECBA",
       "ECBB", "ECDA", "ECDB", "ECSA", "ECSB", "ECVA", "ECVB", "ECWA", "ECWB",
       "ECWC", "ECWD", "ECWE", "ECWF", "EUBB", "EUBC", "GGLA", "GGLS"};
-  const char* const* end = &kOrganicBrands[arraysize(kOrganicBrands)];
+  const char* const* end = &kOrganicBrands[base::size(kOrganicBrands)];
   if (std::binary_search(&kOrganicBrands[0], end, brand))
     return true;
 

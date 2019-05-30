@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "base/barrier_closure.h"
+#include "base/bind.h"
 #include "base/files/file_path_watcher.h"
 #include "base/files/file_util.h"
 #include "base/i18n/number_formatting.h"
@@ -25,16 +26,18 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/version.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/dbus/dbus_thread_linux.h"
 #include "chrome/browser/notifications/notification_display_service_impl.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/shell_integration_linux.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/dbus/dbus_thread_linux.h"
 #include "components/url_formatter/elide_url.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "dbus/bus.h"
@@ -169,13 +172,17 @@ gfx::Image ResizeImageToFdoMaxSize(const gfx::Image& image) {
           height)));
 }
 
-bool ShouldAddCloseButton(const std::string& server_name) {
+bool ShouldAddCloseButton(const std::string& server_name,
+                          const base::Version& server_version) {
   // Cinnamon doesn't add a close button on notifications.  With eg. calendar
   // notifications, which are stay-on-screen, this can lead to a situation where
   // the only way to dismiss a notification is to click on it, which would
   // create an unwanted web navigation.  For this reason, manually add a close
-  // button. (https://crbug.com/804637)
-  return server_name == "cinnamon";
+  // button (https://crbug.com/804637).  Cinnamon 3.8.0 adds a close button
+  // (https://github.com/linuxmint/Cinnamon/blob/8717fa/debian/changelog#L1075),
+  // so exclude versions that provide one already.
+  return server_name == "cinnamon" && server_version.IsValid() &&
+         server_version.CompareToWildcardString("3.8.0") < 0;
 }
 
 void ForwardNotificationOperationOnUiThread(
@@ -188,6 +195,14 @@ void ForwardNotificationOperationOnUiThread(
     const std::string& profile_id,
     bool is_incognito) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  // Profile ID can be empty for system notifications, which are not bound to a
+  // profile, but system notifications are transient and thus not handled by
+  // this NotificationPlatformBridge.
+  // When transient notifications are supported, this should route the
+  // notification response to the system NotificationDisplayService.
+  DCHECK(!profile_id.empty());
+
   g_browser_process->profile_manager()->LoadProfile(
       profile_id, is_incognito,
       base::Bind(&NotificationDisplayServiceImpl::ProfileLoadedCallback,
@@ -234,8 +249,9 @@ std::unique_ptr<ResourceFile> WriteDataToTmpFile(
 }  // namespace
 
 // static
-NotificationPlatformBridge* NotificationPlatformBridge::Create() {
-  return new NotificationPlatformBridgeLinux();
+std::unique_ptr<NotificationPlatformBridge>
+NotificationPlatformBridge::Create() {
+  return std::make_unique<NotificationPlatformBridgeLinux>();
 }
 
 // static
@@ -252,7 +268,7 @@ class NotificationPlatformBridgeLinuxImpl
   explicit NotificationPlatformBridgeLinuxImpl(scoped_refptr<dbus::Bus> bus)
       : bus_(bus) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-    task_runner_ = chrome::GetDBusTaskRunner();
+    task_runner_ = dbus_thread_linux::GetTaskRunner();
     registrar_.Add(this, chrome::NOTIFICATION_APP_TERMINATING,
                    content::NotificationService::AllSources());
   }
@@ -321,6 +337,8 @@ class NotificationPlatformBridgeLinuxImpl
       on_connected_callbacks_.push_back(std::move(callback));
     }
   }
+
+  void DisplayServiceShutDown(Profile* profile) override {}
 
   void CleanUp() {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -432,8 +450,8 @@ class NotificationPlatformBridgeLinuxImpl
           ConnectionInitializationStatusCode::MISSING_REQUIRED_CAPABILITIES);
       return;
     }
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::UI},
         base::BindOnce(
             &NotificationPlatformBridgeLinuxImpl::SetBodyImagesSupported, this,
             base::ContainsKey(capabilities_, kCapabilityBodyImages)));
@@ -447,6 +465,10 @@ class NotificationPlatformBridgeLinuxImpl
     if (server_information_response) {
       dbus::MessageReader reader(server_information_response.get());
       reader.PopString(&server_name_);
+      std::string server_version;
+      reader.PopString(&server_version);  // Vendor
+      reader.PopString(&server_version);  // Server version
+      server_version_ = base::Version(server_version);
     }
 
     connected_signals_barrier_ = base::BarrierClosure(
@@ -609,12 +631,13 @@ class NotificationPlatformBridgeLinuxImpl
       actions.push_back(kDefaultButtonId);
       actions.push_back("Activate");
       // Always add a settings button for web notifications.
-      if (notification_type != NotificationHandler::Type::EXTENSION) {
+      if (notification_type != NotificationHandler::Type::EXTENSION &&
+          notification_type != NotificationHandler::Type::SEND_TAB_TO_SELF) {
         actions.push_back(kSettingsButtonId);
         actions.push_back(
             l10n_util::GetStringUTF8(IDS_NOTIFICATION_BUTTON_SETTINGS));
       }
-      if (ShouldAddCloseButton(server_name_)) {
+      if (ShouldAddCloseButton(server_name_, server_version_)) {
         actions.push_back(kCloseButtonId);
         actions.push_back(
             l10n_util::GetStringUTF8(IDS_NOTIFICATION_BUTTON_CLOSE));
@@ -719,14 +742,14 @@ class NotificationPlatformBridgeLinuxImpl
       bool incognito,
       GetDisplayedNotificationsCallback callback) const {
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
-    auto displayed = std::make_unique<std::set<std::string>>();
+    std::set<std::string> displayed;
     for (const auto& pair : notifications_) {
       NotificationData* data = pair.first;
       if (data->profile_id == profile_id && data->is_incognito == incognito)
-        displayed->insert(data->notification_id);
+        displayed.insert(data->notification_id);
     }
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::UI},
         base::BindOnce(std::move(callback), std::move(displayed), true));
   }
 
@@ -764,8 +787,8 @@ class NotificationPlatformBridgeLinuxImpl
                                     const base::Optional<int>& action_index,
                                     const base::Optional<bool>& by_user) {
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, location,
+    base::PostTaskWithTraits(
+        location, {content::BrowserThread::UI},
         base::BindOnce(ForwardNotificationOperationOnUiThread, operation,
                        data->notification_type, data->origin_url,
                        data->notification_id, action_index, by_user,
@@ -795,6 +818,9 @@ class NotificationPlatformBridgeLinuxImpl
           FROM_HERE, data, NotificationCommon::OPERATION_SETTINGS,
           base::nullopt /* action_index */, base::nullopt /* by_user */);
     } else if (action == kCloseButtonId) {
+      ForwardNotificationOperation(
+          FROM_HERE, data, NotificationCommon::OPERATION_CLOSE,
+          base::nullopt /* action_index */, true /* by_user */);
       CloseOnTaskRunner(data->profile_id, data->notification_id);
     } else {
       size_t id;
@@ -847,8 +873,8 @@ class NotificationPlatformBridgeLinuxImpl
         "Notifications.Linux.BridgeInitializationStatus",
         static_cast<int>(status),
         static_cast<int>(ConnectionInitializationStatusCode::NUM_ITEMS));
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::UI},
         base::BindOnce(&NotificationPlatformBridgeLinuxImpl::
                            OnConnectionInitializationFinishedOnUiThread,
                        this,
@@ -953,6 +979,7 @@ class NotificationPlatformBridgeLinuxImpl
   std::unordered_set<std::string> capabilities_;
 
   std::string server_name_;
+  base::Version server_version_;
 
   base::Closure connected_signals_barrier_;
 
@@ -1007,6 +1034,9 @@ void NotificationPlatformBridgeLinux::GetDisplayed(
 void NotificationPlatformBridgeLinux::SetReadyCallback(
     NotificationBridgeReadyCallback callback) {
   impl_->SetReadyCallback(std::move(callback));
+}
+
+void NotificationPlatformBridgeLinux::DisplayServiceShutDown(Profile* profile) {
 }
 
 void NotificationPlatformBridgeLinux::CleanUp() {

@@ -13,7 +13,6 @@
 #include <set>
 #include <vector>
 
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "content/common/content_export.h"
 #include "gpu/command_buffer/common/mailbox.h"
@@ -124,6 +123,9 @@ class CONTENT_EXPORT PepperVideoDecoderHost
 
   bool software_fallback_allowed_ = false;
   bool software_fallback_used_ = false;
+
+  // Used for UMA stats; not frame-accurate.
+  gfx::Size coded_size_;
 
   int pending_texture_requests_ = 0;
 

@@ -17,18 +17,21 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.infobar.AdsBlockedInfoBar;
 import org.chromium.chrome.browser.infobar.InfoBar;
+import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.subresource_filter.TestSubresourceFilterPublisher;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
+import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.components.safe_browsing.SafeBrowsingApiBridge;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.net.test.EmbeddedTestServer;
 
 import java.util.List;
@@ -88,6 +91,7 @@ public final class SubresourceFilterTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "crbug.com/899903")
     public void resourceNotFiltered() throws Exception {
         String url = mTestServer.getURL(PAGE_WITH_JPG);
         mActivityTestRule.loadUrl(url);
@@ -102,6 +106,7 @@ public final class SubresourceFilterTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "crbug.com/899903")
     public void resourceFilteredClose() throws Exception {
         String url = mTestServer.getURL(PAGE_WITH_JPG);
         MockSafeBrowsingApiHandler.addMockResponse(url, METADATA_FOR_ENFORCEMENT);
@@ -124,12 +129,12 @@ public final class SubresourceFilterTest {
         // Think better of it and just close the infobar.
         ThreadUtils.runOnUiThreadBlocking(infobar::onCloseButtonClicked);
         Tab tab = mActivityTestRule.getActivity().getActivityTab();
-        CriteriaHelper.pollUiThread(
-                () -> tab.getInfoBarContainer().getInfoBarsForTesting().isEmpty());
+        CriteriaHelper.pollUiThread(() -> !InfoBarContainer.get(tab).hasInfoBars());
     }
 
     @Test
     @MediumTest
+    @DisabledTest(message = "crbug.com/899903")
     public void resourceFilteredClickLearnMore() throws Exception {
         String url = mTestServer.getURL(PAGE_WITH_JPG);
         MockSafeBrowsingApiHandler.addMockResponse(url, METADATA_FOR_ENFORCEMENT);
@@ -143,7 +148,7 @@ public final class SubresourceFilterTest {
         TabModel tabModel = mActivityTestRule.getActivity().getTabModelSelector().getCurrentModel();
         ThreadUtils.runOnUiThreadBlocking(() -> tabModel.addObserver(new EmptyTabModelObserver() {
             @Override
-            public void didAddTab(Tab tab, @TabModel.TabLaunchType int type) {
+            public void didAddTab(Tab tab, @TabLaunchType int type) {
                 if (tab.getUrl().equals(LEARN_MORE_PAGE)) tabCreatedCallback.notifyCalled();
             }
         }));
@@ -165,12 +170,12 @@ public final class SubresourceFilterTest {
         tabCreatedCallback.waitForCallback("Never received tab created event", 0);
 
         // The infobar should not be removed on the original tab.
-        CriteriaHelper.pollUiThread(
-                () -> !originalTab.getInfoBarContainer().getInfoBarsForTesting().isEmpty());
+        CriteriaHelper.pollUiThread(() -> InfoBarContainer.get(originalTab).hasInfoBars());
     }
 
     @Test
     @MediumTest
+    @DisabledTest(message = "crbug.com/899903")
     public void resourceFilteredReload() throws Exception {
         String url = mTestServer.getURL(PAGE_WITH_JPG);
         MockSafeBrowsingApiHandler.addMockResponse(url, METADATA_FOR_ENFORCEMENT);
@@ -194,8 +199,7 @@ public final class SubresourceFilterTest {
         Tab tab = mActivityTestRule.getActivity().getActivityTab();
         ChromeTabUtils.waitForTabPageLoaded(tab, url);
 
-        CriteriaHelper.pollUiThread(
-                () -> tab.getInfoBarContainer().getInfoBarsForTesting().isEmpty());
+        CriteriaHelper.pollUiThread(() -> !InfoBarContainer.get(tab).hasInfoBars());
 
         // Reloading should whitelist the site, so resources should no longer be filtered.
         loaded = mActivityTestRule.runJavaScriptCodeInCurrentTab("imgLoaded");
@@ -203,6 +207,7 @@ public final class SubresourceFilterTest {
     }
 
     @Test
+    @DisabledTest(message = "crbug.com/899903")
     @MediumTest
     public void resourceNotFilteredWithWarning() throws Exception {
         String url = mTestServer.getURL(PAGE_WITH_JPG);

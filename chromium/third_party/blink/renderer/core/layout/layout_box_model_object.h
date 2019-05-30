@@ -46,12 +46,6 @@ enum PaintLayerType {
   kForcedPaintLayer
 };
 
-enum : uint32_t {
-  kBackgroundPaintInGraphicsLayer = 1 << 0,
-  kBackgroundPaintInScrollingContents = 1 << 1
-};
-using BackgroundPaintLocation = uint32_t;
-
 // Modes for some of the line-related functions.
 enum LinePositionMode {
   kPositionOnContainingLine,
@@ -188,7 +182,12 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
 
   // Returns which layers backgrounds should be painted into for overflow
   // scrolling boxes.
-  BackgroundPaintLocation GetBackgroundPaintLocation(uint32_t* reasons) const;
+  // TODO(yigu): PaintLayerScrollableArea::ComputeNeedsCompositedScrolling
+  // calls this method to obtain main thread scrolling reasons due to
+  // background paint location. Once the cases get handled on compositor the
+  // parameter "reasons" could be removed.
+  BackgroundPaintLocation GetBackgroundPaintLocation(
+      uint32_t* main_thread_scrolling_reasons = nullptr) const;
 
   // These return the CSS computed padding values.
   LayoutUnit ComputedCSSPaddingTop() const {
@@ -417,23 +416,47 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   void ContentChanged(ContentChangeType);
   bool HasAcceleratedCompositing() const;
 
-  void ComputeLayerHitTestRects(LayerHitTestRects&, TouchAction) const override;
-
   // Returns true if the background is painted opaque in the given rect.
   // The query rect is given in local coordinate system.
   virtual bool BackgroundIsKnownToBeOpaqueInRect(const LayoutRect&) const {
     return false;
   }
 
-  // http://www.w3.org/TR/css3-background/#body-background
-  // <html> root element with no background steals background from its first
-  // <body> child. The used background for such body element should be the
-  // initial value. (i.e. transparent)
-  bool BackgroundStolenForBeingBody(
-      const ComputedStyle* root_element_style = nullptr) const;
+  // This object's background is transferred to its LayoutView if:
+  // 1. it's the document element, or
+  // 2. it's the first <body> if the document element is <html> and doesn't have
+  //    a background. http://www.w3.org/TR/css3-background/#body-background
+  // If it's the case, the used background should be the initial value (i.e.
+  // transparent). The first condition is actually an implementation detail
+  // because we paint the view background in ViewPainter instead of the painter
+  // of the layout object of the document element.
+  bool BackgroundTransfersToView(
+      const ComputedStyle* document_element_style = nullptr) const;
 
   void AbsoluteQuads(Vector<FloatQuad>& quads,
                      MapCoordinatesFlags mode = 0) const override;
+
+  virtual LayoutUnit OverrideContainingBlockContentWidth() const {
+    NOTREACHED();
+    return LayoutUnit(-1);
+  }
+  virtual LayoutUnit OverrideContainingBlockContentHeight() const {
+    NOTREACHED();
+    return LayoutUnit(-1);
+  }
+  virtual bool HasOverrideContainingBlockContentWidth() const { return false; }
+  virtual bool HasOverrideContainingBlockContentHeight() const { return false; }
+
+  // Returns the continuation associated with |this|.
+  // Returns nullptr if no continuation is associated with |this|.
+  //
+  // See the section about CONTINUATIONS AND ANONYMOUS LAYOUTBLOCKFLOWS in
+  // LayoutInline for more details about them.
+  //
+  // Our implementation uses a HashMap to store them to avoid paying the cost
+  // for each LayoutBoxModelObject (|continuationMap| in the cpp file).
+  // public only for NGOutOfFlowLayoutPart, otherwise protected.
+  LayoutBoxModelObject* Continuation() const;
 
  protected:
   // Compute absolute quads for |this|, but not any continuations. May only be
@@ -447,16 +470,6 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   LayoutPoint AdjustedPositionRelativeTo(const LayoutPoint&,
                                          const Element*) const;
 
-  // Returns the continuation associated with |this|.
-  // Returns nullptr if no continuation is associated with |this|.
-  //
-  // See the section about CONTINUATIONS AND ANONYMOUS LAYOUTBLOCKFLOWS in
-  // LayoutInline for more details about them.
-  //
-  // Our implementation uses a HashMap to store them to avoid paying the cost
-  // for each LayoutBoxModelObject (|continuationMap| in the cpp file).
-  LayoutBoxModelObject* Continuation() const;
-
   // Set the next link in the continuation chain.
   //
   // See continuation above for more details.
@@ -469,24 +482,22 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   LayoutRect LocalCaretRectForEmptyElement(LayoutUnit width,
                                            LayoutUnit text_indent_offset) const;
 
-  bool HasAutoHeightOrContainingBlockWithAutoHeight() const;
+  enum RegisterPercentageDescendant {
+    kDontRegisterPercentageDescendant,
+    kRegisterPercentageDescendant,
+  };
+  bool HasAutoHeightOrContainingBlockWithAutoHeight(
+      RegisterPercentageDescendant = kRegisterPercentageDescendant) const;
   LayoutBlock* ContainingBlockForAutoHeightDetection(
-      Length logical_height) const;
+      const Length& logical_height) const;
 
   void AddOutlineRectsForNormalChildren(Vector<LayoutRect>&,
                                         const LayoutPoint& additional_offset,
-                                        IncludeBlockVisualOverflowOrNot) const;
+                                        NGOutlineType) const;
   void AddOutlineRectsForDescendant(const LayoutObject& descendant,
                                     Vector<LayoutRect>&,
                                     const LayoutPoint& additional_offset,
-                                    IncludeBlockVisualOverflowOrNot) const;
-
-  void AddLayerHitTestRects(LayerHitTestRects&,
-                            const PaintLayer*,
-                            const LayoutPoint&,
-                            TouchAction,
-                            const LayoutRect&,
-                            TouchAction) const override;
+                                    NGOutlineType) const;
 
   void StyleWillChange(StyleDifference,
                        const ComputedStyle& new_style) override;

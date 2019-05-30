@@ -50,6 +50,7 @@ class ContentAutofillDriver : public AutofillDriver,
 
   // AutofillDriver:
   bool IsIncognito() const override;
+  bool IsInMainFrame() const override;
   net::URLRequestContextGetter* GetURLRequestContext() override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   bool RendererIsAvailable() override;
@@ -70,15 +71,13 @@ class ContentAutofillDriver : public AutofillDriver,
   void PopupHidden() override;
   gfx::RectF TransformBoundingBoxToViewportCoordinates(
       const gfx::RectF& bounding_box) override;
-  void DidInteractWithCreditCardForm() override;
 
   // mojom::AutofillDriver:
   void FormsSeen(const std::vector<FormData>& forms,
                  base::TimeTicks timestamp) override;
   void FormSubmitted(const FormData& form,
                      bool known_success,
-                     SubmissionSource source,
-                     base::TimeTicks timestamp) override;
+                     SubmissionSource source) override;
   void TextFieldDidChange(const FormData& form,
                           const FormFieldData& field,
                           const gfx::RectF& bounding_box,

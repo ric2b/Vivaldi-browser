@@ -17,7 +17,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "net/base/auth.h"
-#include "net/base/host_port_pair.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
 #include "net/base/load_states.h"
@@ -29,6 +28,7 @@
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_with_source.h"
 #include "net/nqe/network_quality_estimator.h"
+#include "net/url_request/redirect_util.h"
 #include "net/url_request/url_request_context.h"
 
 namespace net {
@@ -175,7 +175,7 @@ void URLRequestJob::GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const {
   // Only certain request types return more than just request start times.
 }
 
-bool URLRequestJob::GetRemoteEndpoint(IPEndPoint* endpoint) const {
+bool URLRequestJob::GetTransactionRemoteEndpoint(IPEndPoint* endpoint) const {
   return false;
 }
 
@@ -256,7 +256,8 @@ void URLRequestJob::ContinueDespiteLastError() {
 }
 
 void URLRequestJob::FollowDeferredRedirect(
-    const base::Optional<net::HttpRequestHeaders>& modified_request_headers) {
+    const base::Optional<std::vector<std::string>>& removed_headers,
+    const base::Optional<net::HttpRequestHeaders>& modified_headers) {
   // OnReceivedRedirect must have been called.
   DCHECK(deferred_redirect_info_);
 
@@ -264,7 +265,7 @@ void URLRequestJob::FollowDeferredRedirect(
   // pass along a reference to |deferred_redirect_info_|.
   base::Optional<RedirectInfo> redirect_info =
       std::move(deferred_redirect_info_);
-  FollowRedirect(*redirect_info, modified_request_headers);
+  FollowRedirect(*redirect_info, removed_headers, modified_headers);
 }
 
 int64_t URLRequestJob::prefilter_bytes_read() const {
@@ -282,8 +283,8 @@ int URLRequestJob::GetResponseCode() const {
   return headers->response_code();
 }
 
-HostPortPair URLRequestJob::GetSocketAddress() const {
-  return HostPortPair();
+IPEndPoint URLRequestJob::GetResponseRemoteEndpoint() const {
+  return IPEndPoint();
 }
 
 void URLRequestJob::OnSuspend() {
@@ -349,9 +350,6 @@ GURL URLRequestJob::ComputeReferrerForPolicy(URLRequest::ReferrerPolicy policy,
       return referrer_origin.GetURL();
     case URLRequest::NO_REFERRER:
       return GURL();
-    case URLRequest::MAX_REFERRER_POLICY:
-      NOTREACHED();
-      return GURL();
   }
 
   NOTREACHED();
@@ -377,8 +375,8 @@ bool URLRequestJob::CanSetCookie(const net::CanonicalCookie& cookie,
   return request_->CanSetCookie(cookie, options);
 }
 
-bool URLRequestJob::CanEnablePrivacyMode() const {
-  return request_->CanEnablePrivacyMode();
+PrivacyMode URLRequestJob::privacy_mode() const {
+  return request_->privacy_mode();
 }
 
 void URLRequestJob::NotifyHeadersComplete() {
@@ -427,11 +425,12 @@ void URLRequestJob::NotifyHeadersComplete() {
 
     RedirectInfo redirect_info = RedirectInfo::ComputeRedirectInfo(
         request_->method(), request_->url(), request_->site_for_cookies(),
-        request_->first_party_url_policy(), request_->referrer_policy(),
-        request_->referrer(), request_->response_headers(), http_status_code,
-        new_location, insecure_scheme_was_upgraded,
-        request_->ssl_info().token_binding_negotiated,
-        CopyFragmentOnRedirect(new_location));
+        request_->top_frame_origin(), request_->first_party_url_policy(),
+        request_->referrer_policy(), request_->referrer(), http_status_code,
+        new_location,
+        net::RedirectUtil::GetReferrerPolicyHeader(
+            request_->response_headers()),
+        insecure_scheme_was_upgraded, CopyFragmentOnRedirect(new_location));
     bool defer_redirect = false;
     request_->NotifyReceivedRedirect(redirect_info, &defer_redirect);
 
@@ -443,8 +442,8 @@ void URLRequestJob::NotifyHeadersComplete() {
     if (defer_redirect) {
       deferred_redirect_info_ = std::move(redirect_info);
     } else {
-      FollowRedirect(redirect_info,
-                     base::nullopt /* modified_request_headers */);
+      FollowRedirect(redirect_info, base::nullopt, /*  removed_headers */
+                     base::nullopt /* modified_headers */);
     }
     return;
   }
@@ -568,7 +567,7 @@ void URLRequestJob::OnDone(const URLRequestStatus& status, bool notify_done) {
     // delegate if we're done because of a synchronous call.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&URLRequestJob::NotifyDone, weak_factory_.GetWeakPtr()));
+        base::BindOnce(&URLRequestJob::NotifyDone, weak_factory_.GetWeakPtr()));
   }
 }
 
@@ -703,8 +702,9 @@ int URLRequestJob::CanFollowRedirect(const GURL& new_url) {
 
 void URLRequestJob::FollowRedirect(
     const RedirectInfo& redirect_info,
-    const base::Optional<net::HttpRequestHeaders>& modified_request_headers) {
-  request_->Redirect(redirect_info, modified_request_headers);
+    const base::Optional<std::vector<std::string>>& removed_headers,
+    const base::Optional<net::HttpRequestHeaders>& modified_headers) {
+  request_->Redirect(redirect_info, removed_headers, modified_headers);
 }
 
 void URLRequestJob::GatherRawReadStats(int bytes_read) {

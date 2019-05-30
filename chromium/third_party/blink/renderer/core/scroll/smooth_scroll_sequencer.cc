@@ -16,13 +16,16 @@ void SequencedScroll::Trace(blink::Visitor* visitor) {
 void SmoothScrollSequencer::QueueAnimation(ScrollableArea* scrollable,
                                            ScrollOffset offset,
                                            ScrollBehavior behavior) {
-  if (scrollable->ClampScrollOffset(offset) != scrollable->GetScrollOffset())
-    queue_.push_back(new SequencedScroll(scrollable, offset, behavior));
+  if (scrollable->ClampScrollOffset(offset) != scrollable->GetScrollOffset()) {
+    queue_.push_back(
+        MakeGarbageCollected<SequencedScroll>(scrollable, offset, behavior));
+  }
 }
 
 void SmoothScrollSequencer::RunQueuedAnimations() {
   if (queue_.IsEmpty()) {
     current_scrollable_ = nullptr;
+    scroll_type_ = kProgrammaticScroll;
     return;
   }
   SequencedScroll* sequenced_scroll = queue_.back();
@@ -39,6 +42,25 @@ void SmoothScrollSequencer::AbortAnimations() {
     current_scrollable_ = nullptr;
   }
   queue_.clear();
+  scroll_type_ = kProgrammaticScroll;
+}
+
+bool SmoothScrollSequencer::FilterNewScrollOrAbortCurrent(
+    ScrollType incoming_type) {
+  // Allow the incoming scroll to co-exist if its scroll type is
+  // kSequencedScroll, kClampingScroll, or kAnchoringScroll
+  if (incoming_type == kSequencedScroll || incoming_type == kClampingScroll ||
+      incoming_type == kAnchoringScroll)
+    return false;
+
+  // If the current sequenced scroll is UserScroll, but the incoming scroll is
+  // not, filter the incoming scroll. See crbug.com/913009 for more details.
+  if (scroll_type_ == kUserScroll && incoming_type != kUserScroll)
+    return true;
+
+  // Otherwise, abort the current sequenced scroll.
+  AbortAnimations();
+  return false;
 }
 
 void SmoothScrollSequencer::DidDisposeScrollableArea(

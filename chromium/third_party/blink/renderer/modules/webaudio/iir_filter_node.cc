@@ -109,11 +109,6 @@ IIRFilterNode* IIRFilterNode::Create(BaseAudioContext& context,
                                      ExceptionState& exception_state) {
   DCHECK(IsMainThread());
 
-  if (context.IsContextClosed()) {
-    context.ThrowExceptionForClosedState(exception_state);
-    return nullptr;
-  }
-
   if (feedback_coef.size() == 0 ||
       (feedback_coef.size() > IIRFilter::kMaxOrder + 1)) {
     exception_state.ThrowDOMException(
@@ -145,7 +140,7 @@ IIRFilterNode* IIRFilterNode::Create(BaseAudioContext& context,
 
   bool has_non_zero_coef = false;
 
-  for (size_t k = 0; k < feedforward_coef.size(); ++k) {
+  for (wtf_size_t k = 0; k < feedforward_coef.size(); ++k) {
     if (feedforward_coef[k] != 0) {
       has_non_zero_coef = true;
       break;
@@ -164,25 +159,26 @@ IIRFilterNode* IIRFilterNode::Create(BaseAudioContext& context,
     StringBuilder message;
     message.Append("Unstable IIRFilter with feedback coefficients: [");
     message.AppendNumber(feedback_coef[0]);
-    for (size_t k = 1; k < feedback_coef.size(); ++k) {
+    for (wtf_size_t k = 1; k < feedback_coef.size(); ++k) {
       message.Append(", ");
       message.AppendNumber(feedback_coef[k]);
     }
     message.Append(']');
 
     context.GetExecutionContext()->AddConsoleMessage(ConsoleMessage::Create(
-        kJSMessageSource, kWarningMessageLevel, message.ToString()));
+        kJSMessageSource, mojom::ConsoleMessageLevel::kWarning,
+        message.ToString()));
   }
 
-  return new IIRFilterNode(context, feedforward_coef, feedback_coef,
-                           is_filter_stable);
+  return MakeGarbageCollected<IIRFilterNode>(context, feedforward_coef,
+                                             feedback_coef, is_filter_stable);
 }
 
 IIRFilterNode* IIRFilterNode::Create(BaseAudioContext* context,
-                                     const IIRFilterOptions& options,
+                                     const IIRFilterOptions* options,
                                      ExceptionState& exception_state) {
-  IIRFilterNode* node = Create(*context, options.feedforward(),
-                               options.feedback(), exception_state);
+  IIRFilterNode* node = Create(*context, options->feedforward(),
+                               options->feedback(), exception_state);
 
   if (!node)
     return nullptr;

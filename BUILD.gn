@@ -13,11 +13,14 @@ import("//vivaldi/gn/source_updates.gni")
 import("//vivaldi/gn/product_updates.gni")
 import("//vivaldi/gn/deps_updates.gni")
 
+import("//vivaldi/app/resources/untranslated.gni")
+
 group("All") {
   testonly = true
 
   deps = [
     ":vivaldi",
+    ":generate_files_cfg",
     "//base:base_unittests",
     "//cc:cc_unittests",
     "//chrome/test:browser_tests",
@@ -115,6 +118,11 @@ group("All") {
   if (is_win) {
     deps += ["//vivaldi/testing:testing"]
   }
+  if (generate_untranslated){
+    deps += [
+      "//vivaldi/app:generate_untranslated"
+    ]
+  }
 }
 
 group("vivaldi") {
@@ -155,4 +163,57 @@ if (is_linux && !is_component_build) {
     #  "//breakpad:symupload($host_toolchain)",
     ]
   }
+}
+
+if (is_win) {
+  import("//build/toolchain/cc_wrapper.gni")
+
+  if (cc_wrapper != "") {
+    import("//vivaldi/gn/command_action.gni")
+
+    system_command("compile_cache_cleanup") {
+      testonly=true
+      deps = [":All"]
+
+      inputs = []
+      outputs = ["$root_gen_dir/vivaldi/compile_cache_cleanup.stamp"]
+
+      command = cc_wrapper
+      args = ["-c"]
+    }
+  }
+}
+
+action("generate_files_cfg") {
+  if (is_win) {
+    plat = "win"
+  } else if (is_mac) {
+    plat = "mac"
+  } else if (is_android) {
+    plat = "android"
+  } else if (is_linux) {
+    plat = "linux"
+  } else {
+    assert(false, "Unknown target platform")
+  }
+
+  script = "//vivaldi/scripts/cat_files.py"
+  chromium_files_cfg = "//chrome/tools/build/$plat/FILES.cfg"
+  vivaldi_files_cfg = "//vivaldi/tools/build/$plat/FILES.cfg"
+
+  files_cfg_target = "$root_build_dir/FILES.cfg"
+
+  inputs = [
+    script,
+    chromium_files_cfg,
+    vivaldi_files_cfg,
+  ]
+
+  outputs = [files_cfg_target]
+
+  args = rebase_path([
+    files_cfg_target,
+    chromium_files_cfg,
+    vivaldi_files_cfg,
+  ], root_build_dir)
 }

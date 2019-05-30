@@ -13,7 +13,6 @@
 #include "base/pending_task.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task/task_traits.h"
 #include "base/time/time.h"
 
 namespace base {
@@ -22,14 +21,12 @@ namespace internal {
 // A task is a unit of work inside the task scheduler. Support for tracing and
 // profiling inherited from PendingTask.
 struct BASE_EXPORT Task : public PendingTask {
+  Task();
+
   // |posted_from| is the site the task was posted from. |task| is the closure
-  // to run. |traits_in| is metadata about the task. |delay| is a delay that
-  // must expire before the Task runs. If |delay| is non-zero and the shutdown
-  // behavior in |traits| is BLOCK_SHUTDOWN, the shutdown behavior is
-  // automatically adjusted to SKIP_ON_SHUTDOWN.
+  // to run. |delay| is a delay that must expire before the Task runs.
   Task(const Location& posted_from,
        OnceClosure task,
-       const TaskTraits& traits,
        TimeDelta delay);
 
   // Task is move-only to avoid mistakes that cause reference counts to be
@@ -39,18 +36,6 @@ struct BASE_EXPORT Task : public PendingTask {
   ~Task();
 
   Task& operator=(Task&& other);
-
-  // The TaskTraits of this task.
-  TaskTraits traits;
-
-  // The delay that must expire before the task runs.
-  TimeDelta delay;
-
-  // The time at which the task was inserted in its sequence. For an undelayed
-  // task, this happens at post time. For a delayed task, this happens some
-  // time after the task's delay has expired. If the task hasn't been inserted
-  // in a sequence yet, this defaults to a null TimeTicks.
-  TimeTicks sequenced_time;
 
   // A reference to the SequencedTaskRunner or SingleThreadTaskRunner that
   // posted this task, if any. Used to set ThreadTaskRunnerHandle and/or

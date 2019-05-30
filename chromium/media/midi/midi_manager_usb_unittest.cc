@@ -10,9 +10,9 @@
 #include <string>
 #include <utility>
 
-#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "media/midi/midi_service.h"
@@ -103,11 +103,11 @@ class FakeMidiManagerClient : public MidiManagerClient {
         logger_(logger) {}
   ~FakeMidiManagerClient() override = default;
 
-  void AddInputPort(const MidiPortInfo& info) override {
+  void AddInputPort(const mojom::PortInfo& info) override {
     input_ports_.push_back(info);
   }
 
-  void AddOutputPort(const MidiPortInfo& info) override {
+  void AddOutputPort(const mojom::PortInfo& info) override {
     output_ports_.push_back(info);
   }
 
@@ -143,8 +143,8 @@ class FakeMidiManagerClient : public MidiManagerClient {
 
   bool complete_start_session_;
   Result result_;
-  MidiPortInfoList input_ports_;
-  MidiPortInfoList output_ports_;
+  std::vector<mojom::PortInfo> input_ports_;
+  std::vector<mojom::PortInfo> output_ports_;
 
  private:
   Logger* logger_;
@@ -260,8 +260,12 @@ class MidiManagerUsbTest : public ::testing::Test {
     }
   }
 
-  const MidiPortInfoList& input_ports() { return client_->input_ports_; }
-  const MidiPortInfoList& output_ports() { return client_->output_ports_; }
+  const std::vector<mojom::PortInfo>& input_ports() {
+    return client_->input_ports_;
+  }
+  const std::vector<mojom::PortInfo>& output_ports() {
+    return client_->output_ports_;
+  }
 
   MidiManagerUsb* manager() { return factory_->manager(); }
 
@@ -549,7 +553,7 @@ TEST_F(MidiManagerUsbTest, Receive) {
   RunCallbackUntilCallbackInvoked(true, &devices);
   EXPECT_EQ(Result::OK, GetInitializationResult());
 
-  manager()->ReceiveUsbMidiData(device_raw, 2, data, arraysize(data),
+  manager()->ReceiveUsbMidiData(device_raw, 2, data, base::size(data),
                                 base::TimeTicks());
   Finalize();
 

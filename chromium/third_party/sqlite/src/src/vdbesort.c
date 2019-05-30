@@ -537,7 +537,7 @@ static int vdbePmaReadBlob(
     /* Extend the p->aAlloc[] allocation if required. */
     if( p->nAlloc<nByte ){
       u8 *aNew;
-      int nNew = MAX(128, p->nAlloc*2);
+      sqlite3_int64 nNew = MAX(128, 2*(sqlite3_int64)p->nAlloc);
       while( nByte>nNew ) nNew = nNew*2;
       aNew = sqlite3Realloc(p->aAlloc, nNew);
       if( !aNew ) return SQLITE_NOMEM_BKPT;
@@ -1829,7 +1829,7 @@ int sqlite3VdbeSorterWrite(
     if( nMin>pSorter->nMemory ){
       u8 *aNew;
       int iListOff = (u8*)pSorter->list.pList - pSorter->list.aMemory;
-      int nNew = pSorter->nMemory * 2;
+      sqlite3_int64 nNew = 2 * (sqlite3_int64)pSorter->nMemory;
       while( nNew < nMin ) nNew = nNew*2;
       if( nNew > pSorter->mxPmaSize ) nNew = pSorter->mxPmaSize;
       if( nNew < nMin ) nNew = nMin;
@@ -2107,7 +2107,11 @@ static int vdbeMergeEngineInit(
 ){
   int rc = SQLITE_OK;             /* Return code */
   int i;                          /* For looping over PmaReader objects */
-  int nTree = pMerger->nTree;
+  int nTree;                      /* Number of subtrees to merge */
+
+  /* Failure to allocate the merge would have been detected prior to
+  ** invoking this routine */
+  assert( pMerger!=0 );
 
   /* eMode is always INCRINIT_NORMAL in single-threaded mode */
   assert( SQLITE_MAX_WORKER_THREADS>0 || eMode==INCRINIT_NORMAL );
@@ -2116,6 +2120,7 @@ static int vdbeMergeEngineInit(
   assert( pMerger->pTask==0 );
   pMerger->pTask = pTask;
 
+  nTree = pMerger->nTree;
   for(i=0; i<nTree; i++){
     if( SQLITE_MAX_WORKER_THREADS>0 && eMode==INCRINIT_ROOT ){
       /* PmaReaders should be normally initialized in order, as if they are

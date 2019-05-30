@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/gcm_driver/fake_gcm_driver.h"
 #include "components/gcm_driver/gcm_driver.h"
 #include "components/invalidation/impl/fake_invalidation_state_tracker.h"
@@ -23,6 +24,7 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "services/identity/public/cpp/identity_test_environment.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/test/test_network_connection_tracker.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace invalidation {
@@ -73,7 +75,11 @@ class TiclInvalidationServiceTestDelegate {
     invalidation_service_ = std::make_unique<TiclInvalidationService>(
         "TestUserAgent", identity_provider_.get(),
         std::unique_ptr<TiclSettingsProvider>(new FakeTiclSettingsProvider),
-        gcm_driver_.get(), nullptr, nullptr);
+        gcm_driver_.get(),
+        base::RepeatingCallback<void(
+            base::WeakPtr<TiclInvalidationService>,
+            network::mojom::ProxyResolvingSocketFactoryRequest)>(),
+        nullptr, nullptr, network::TestNetworkConnectionTracker::GetInstance());
   }
 
   void InitializeInvalidationService() {
@@ -100,6 +106,7 @@ class TiclInvalidationServiceTestDelegate {
     fake_invalidator_->EmitOnIncomingInvalidation(invalidation_map);
   }
 
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   identity::IdentityTestEnvironment identity_test_env_;
   std::unique_ptr<gcm::GCMDriver> gcm_driver_;
   std::unique_ptr<invalidation::IdentityProvider> identity_provider_;
@@ -110,9 +117,9 @@ class TiclInvalidationServiceTestDelegate {
   std::unique_ptr<TiclInvalidationService> invalidation_service_;
 };
 
-INSTANTIATE_TYPED_TEST_CASE_P(
-    TiclInvalidationServiceTest, InvalidationServiceTest,
-    TiclInvalidationServiceTestDelegate);
+INSTANTIATE_TYPED_TEST_SUITE_P(TiclInvalidationServiceTest,
+                               InvalidationServiceTest,
+                               TiclInvalidationServiceTestDelegate);
 
 namespace internal {
 

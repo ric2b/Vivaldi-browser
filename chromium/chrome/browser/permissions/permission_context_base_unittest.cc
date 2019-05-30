@@ -14,6 +14,7 @@
 #include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_entropy_provider.h"
@@ -36,6 +37,7 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/mock_render_process_host.h"
@@ -46,8 +48,6 @@ const char* const kPermissionsKillSwitchFieldStudy =
 const char* const kPermissionsKillSwitchBlockedValue =
     PermissionContextBase::kPermissionsKillSwitchBlockedValue;
 const char kPermissionsKillSwitchTestGroup[] = "TestGroup";
-const char* const kPromptGroupName = kPermissionsKillSwitchTestGroup;
-const char kPromptTrialName[] = "PermissionPromptsUX";
 
 class TestPermissionContext : public PermissionContextBase {
  public:
@@ -216,7 +216,7 @@ class PermissionContextBaseTests : public ChromeRenderViewHostTestHarness {
     else if (decision == CONTENT_SETTING_ASK)
       decision_string = "Dismissed";
 
-    if (decision_string.size()) {
+    if (!decision_string.empty()) {
       histograms.ExpectUniqueSample(
           "Permissions.Prompt." + decision_string + ".PriorDismissCount." +
               PermissionUtil::GetPermissionString(content_settings_type),
@@ -390,27 +390,16 @@ class PermissionContextBaseTests : public ChromeRenderViewHostTestHarness {
     SetUpUrl(url);
     base::HistogramTester histograms;
 
-    // Set up the custom parameter and custom value.
-    base::FieldTrialList field_trials(nullptr);
-    base::FieldTrial* trial = base::FieldTrialList::CreateFieldTrial(
-        kPromptTrialName, kPromptGroupName);
     std::map<std::string, std::string> params;
     params[PermissionDecisionAutoBlocker::kPromptDismissCountKey] = "5";
-    ASSERT_TRUE(variations::AssociateVariationParams(kPromptTrialName,
-                                                     kPromptGroupName, params));
-
-    std::unique_ptr<base::FeatureList> feature_list =
-        std::make_unique<base::FeatureList>();
-    feature_list->RegisterFieldTrialOverride(
-        features::kBlockPromptsIfDismissedOften.name,
-        base::FeatureList::OVERRIDE_ENABLE_FEATURE, trial);
-
     base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitWithFeatureList(std::move(feature_list));
+    scoped_feature_list.InitAndEnableFeatureWithParameters(
+        features::kBlockPromptsIfDismissedOften, params);
 
-    EXPECT_EQ(base::FeatureList::GetFieldTrial(
-                  features::kBlockPromptsIfDismissedOften),
-              trial);
+    std::map<std::string, std::string> actual_params;
+    EXPECT_TRUE(base::GetFieldTrialParamsByFeature(
+        features::kBlockPromptsIfDismissedOften, &actual_params));
+    EXPECT_EQ(params, actual_params);
 
     {
       std::map<std::string, std::string> actual_params;
@@ -594,6 +583,23 @@ class PermissionContextBaseTests : public ChromeRenderViewHostTestHarness {
     EXPECT_EQ(response, permission_context.GetContentSettingFromMap(url, url));
   }
 
+  void TestVirtualURL(const GURL& loaded_url,
+                      const GURL& virtual_url,
+                      const ContentSetting want_response,
+                      const PermissionStatusSource& want_source) {
+    TestPermissionContext permission_context(
+        profile(), CONTENT_SETTINGS_TYPE_NOTIFICATIONS);
+
+    NavigateAndCommit(loaded_url);
+    web_contents()->GetController().GetVisibleEntry()->SetVirtualURL(
+        virtual_url);
+
+    PermissionResult result = permission_context.GetPermissionStatus(
+        web_contents()->GetMainFrame(), virtual_url, virtual_url);
+    EXPECT_EQ(result.content_setting, want_response);
+    EXPECT_EQ(result.source, want_source);
+  }
+
   void SetUpUrl(const GURL& url) {
     NavigateAndCommit(url);
     prompt_factory_->DocumentOnLoadCompletedInMainFrame();
@@ -706,4 +712,21 @@ TEST_F(PermissionContextBaseTests, TestParallelRequestsBlocked) {
 
 TEST_F(PermissionContextBaseTests, TestParallelRequestsDismissed) {
   TestParallelRequests(CONTENT_SETTING_ASK);
+}
+
+TEST_F(PermissionContextBaseTests, TestVirtualURLDifferentOrigin) {
+  TestVirtualURL(GURL("http://www.google.com"), GURL("http://foo.com"),
+                 CONTENT_SETTING_BLOCK,
+                 PermissionStatusSource::VIRTUAL_URL_DIFFERENT_ORIGIN);
+}
+
+TEST_F(PermissionContextBaseTests, TestVirtualURLNotHTTP) {
+  TestVirtualURL(GURL("chrome://foo"), GURL("chrome://newtab"),
+                 CONTENT_SETTING_ASK, PermissionStatusSource::UNSPECIFIED);
+}
+
+TEST_F(PermissionContextBaseTests, TestVirtualURLSameOrigin) {
+  TestVirtualURL(GURL("http://www.google.com"),
+                 GURL("http://www.google.com/foo"), CONTENT_SETTING_ASK,
+                 PermissionStatusSource::UNSPECIFIED);
 }

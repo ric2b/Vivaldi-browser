@@ -8,7 +8,7 @@
 #include "mojo/public/cpp/system/handle.h"
 #include "mojo/public/cpp/system/trap.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_member.h"
 
@@ -26,9 +26,11 @@ class MojoWatcher final : public ScriptWrappable,
 
  public:
   static MojoWatcher* Create(mojo::Handle,
-                             const MojoHandleSignals&,
+                             const MojoHandleSignals*,
                              V8MojoWatchCallback*,
                              ExecutionContext*);
+
+  MojoWatcher(ExecutionContext*, V8MojoWatchCallback*);
   ~MojoWatcher() override;
 
   MojoResult cancel();
@@ -44,8 +46,7 @@ class MojoWatcher final : public ScriptWrappable,
  private:
   friend class V8MojoWatcher;
 
-  MojoWatcher(ExecutionContext*, V8MojoWatchCallback*);
-  MojoResult Watch(mojo::Handle, const MojoHandleSignals&);
+  MojoResult Watch(mojo::Handle, const MojoHandleSignals*);
   MojoResult Arm(MojoResult* ready_result);
 
   static void OnHandleReady(const MojoTrapEvent*);

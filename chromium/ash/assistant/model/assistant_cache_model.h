@@ -8,6 +8,7 @@
 #include <map>
 #include <vector>
 
+#include "base/component_export.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
@@ -16,7 +17,7 @@ namespace ash {
 
 class AssistantCacheModelObserver;
 
-class AssistantCacheModel {
+class COMPONENT_EXPORT(ASSISTANT_MODEL) AssistantCacheModel {
  public:
   using AssistantSuggestion = chromeos::assistant::mojom::AssistantSuggestion;
   using AssistantSuggestionPtr =
@@ -44,7 +45,7 @@ class AssistantCacheModel {
 
   std::vector<AssistantSuggestionPtr> conversation_starters_;
 
-  base::ObserverList<AssistantCacheModelObserver>::Unchecked observers_;
+  base::ObserverList<AssistantCacheModelObserver> observers_;
 
   DISALLOW_COPY_AND_ASSIGN(AssistantCacheModel);
 };

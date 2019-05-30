@@ -20,10 +20,11 @@
 #include "base/metrics/histogram.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -221,12 +222,12 @@ BackendImpl::~BackendImpl() {
         FROM_HERE,
         base::BindOnce(&FinalCleanupCallback, base::Unretained(this)));
     // http://crbug.com/74623
-    base::ThreadRestrictions::ScopedAllowWait allow_wait;
+    base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope allow_wait;
     done_.Wait();
   }
 }
 
-int BackendImpl::Init(CompletionOnceCallback callback) {
+net::Error BackendImpl::Init(CompletionOnceCallback callback) {
   background_queue_.Init(std::move(callback));
   return net::ERR_IO_PENDING;
 }
@@ -709,10 +710,8 @@ scoped_refptr<EntryImpl> BackendImpl::OpenNextEntryImpl(
   return next_entry;
 }
 
-bool BackendImpl::SetMaxSize(int max_bytes) {
-  static_assert(sizeof(max_bytes) == sizeof(max_size_),
-                "unsupported int model");
-  if (max_bytes < 0)
+bool BackendImpl::SetMaxSize(int64_t max_bytes) {
+  if (max_bytes < 0 || max_bytes > std::numeric_limits<int>::max())
     return false;
 
   // Zero size means use the default.
@@ -909,7 +908,7 @@ void BackendImpl::RemoveEntry(EntryImpl* entry) {
 }
 
 void BackendImpl::OnEntryDestroyBegin(Addr address) {
-  EntriesMap::iterator it = open_entries_.find(address.value());
+  auto it = open_entries_.find(address.value());
   if (it != open_entries_.end())
     open_entries_.erase(it);
 }
@@ -930,8 +929,7 @@ void BackendImpl::OnSyncBackendOpComplete() {
 
 EntryImpl* BackendImpl::GetOpenEntry(CacheRankingsBlock* rankings) const {
   DCHECK(rankings->HasData());
-  EntriesMap::const_iterator it =
-      open_entries_.find(rankings->Data()->contents);
+  auto it = open_entries_.find(rankings->Data()->contents);
   if (it != open_entries_.end()) {
     // We have this entry in memory.
     return it->second;
@@ -944,7 +942,7 @@ int32_t BackendImpl::GetCurrentEntryId() const {
   return data_->header.this_id;
 }
 
-int BackendImpl::MaxFileSize() const {
+int64_t BackendImpl::MaxFileSize() const {
   return cache_type() == net::PNACL_CACHE ? max_size_ : max_size_ / 8;
 }
 
@@ -1255,57 +1253,71 @@ int32_t BackendImpl::GetEntryCount() const {
   return not_deleted;
 }
 
-int BackendImpl::OpenEntry(const std::string& key,
-                           net::RequestPriority request_priority,
-                           Entry** entry,
-                           CompletionOnceCallback callback) {
+net::Error BackendImpl::OpenOrCreateEntry(const std::string& key,
+                                          net::RequestPriority request_priority,
+                                          EntryWithOpened* entry_struct,
+                                          CompletionOnceCallback callback) {
+  DCHECK(!callback.is_null());
+  background_queue_.OpenOrCreateEntry(key, entry_struct, std::move(callback));
+  return net::ERR_IO_PENDING;
+}
+
+net::Error BackendImpl::OpenEntry(const std::string& key,
+                                  net::RequestPriority request_priority,
+                                  Entry** entry,
+                                  CompletionOnceCallback callback) {
   DCHECK(!callback.is_null());
   background_queue_.OpenEntry(key, entry, std::move(callback));
   return net::ERR_IO_PENDING;
 }
 
-int BackendImpl::CreateEntry(const std::string& key,
-                             net::RequestPriority request_priority,
-                             Entry** entry,
-                             CompletionOnceCallback callback) {
+net::Error BackendImpl::CreateEntry(const std::string& key,
+                                    net::RequestPriority request_priority,
+                                    Entry** entry,
+                                    CompletionOnceCallback callback) {
   DCHECK(!callback.is_null());
   background_queue_.CreateEntry(key, entry, std::move(callback));
   return net::ERR_IO_PENDING;
 }
 
-int BackendImpl::DoomEntry(const std::string& key,
-                           net::RequestPriority priority,
-                           CompletionOnceCallback callback) {
+net::Error BackendImpl::DoomEntry(const std::string& key,
+                                  net::RequestPriority priority,
+                                  CompletionOnceCallback callback) {
   DCHECK(!callback.is_null());
   background_queue_.DoomEntry(key, std::move(callback));
   return net::ERR_IO_PENDING;
 }
 
-int BackendImpl::DoomAllEntries(CompletionOnceCallback callback) {
+net::Error BackendImpl::DoomAllEntries(CompletionOnceCallback callback) {
   DCHECK(!callback.is_null());
   background_queue_.DoomAllEntries(std::move(callback));
   return net::ERR_IO_PENDING;
 }
 
-int BackendImpl::DoomEntriesBetween(const base::Time initial_time,
-                                    const base::Time end_time,
-                                    CompletionOnceCallback callback) {
+net::Error BackendImpl::DoomEntriesBetween(const base::Time initial_time,
+                                           const base::Time end_time,
+                                           CompletionOnceCallback callback) {
   DCHECK(!callback.is_null());
   background_queue_.DoomEntriesBetween(initial_time, end_time,
                                        std::move(callback));
   return net::ERR_IO_PENDING;
 }
 
-int BackendImpl::DoomEntriesSince(const base::Time initial_time,
-                                  CompletionOnceCallback callback) {
+net::Error BackendImpl::DoomEntriesSince(const base::Time initial_time,
+                                         CompletionOnceCallback callback) {
   DCHECK(!callback.is_null());
   background_queue_.DoomEntriesSince(initial_time, std::move(callback));
   return net::ERR_IO_PENDING;
 }
 
-int BackendImpl::CalculateSizeOfAllEntries(CompletionOnceCallback callback) {
+int64_t BackendImpl::CalculateSizeOfAllEntries(
+    Int64CompletionOnceCallback callback) {
   DCHECK(!callback.is_null());
-  background_queue_.CalculateSizeOfAllEntries(std::move(callback));
+  background_queue_.CalculateSizeOfAllEntries(BindOnce(
+      [](Int64CompletionOnceCallback callback, int result) {
+        std::move(callback).Run(static_cast<int64_t>(result));
+      },
+      std::move(callback)));
   return net::ERR_IO_PENDING;
 }
 
@@ -1321,8 +1333,8 @@ class BackendImpl::IteratorImpl : public Backend::Iterator {
       background_queue_->EndEnumeration(std::move(iterator_));
   }
 
-  int OpenNextEntry(Entry** next_entry,
-                    net::CompletionOnceCallback callback) override {
+  net::Error OpenNextEntry(Entry** next_entry,
+                           net::CompletionOnceCallback callback) override {
     if (!background_queue_)
       return net::ERR_FAILED;
     background_queue_->OpenNextEntry(iterator_.get(), next_entry,
@@ -1347,19 +1359,19 @@ void BackendImpl::GetStats(StatsItems* stats) {
   std::pair<std::string, std::string> item;
 
   item.first = "Entries";
-  item.second = base::IntToString(data_->header.num_entries);
+  item.second = base::NumberToString(data_->header.num_entries);
   stats->push_back(item);
 
   item.first = "Pending IO";
-  item.second = base::IntToString(num_pending_io_);
+  item.second = base::NumberToString(num_pending_io_);
   stats->push_back(item);
 
   item.first = "Max size";
-  item.second = base::IntToString(max_size_);
+  item.second = base::NumberToString(max_size_);
   stats->push_back(item);
 
   item.first = "Current size";
-  item.second = base::IntToString(data_->header.num_bytes);
+  item.second = base::NumberToString(data_->header.num_bytes);
   stats->push_back(item);
 
   item.first = "Cache type";
@@ -1576,7 +1588,7 @@ void BackendImpl::PrepareForRestart() {
 }
 
 int BackendImpl::NewEntry(Addr address, scoped_refptr<EntryImpl>* entry) {
-  EntriesMap::iterator it = open_entries_.find(address.value());
+  auto it = open_entries_.find(address.value());
   if (it != open_entries_.end()) {
     // Easy job. This entry is already in memory.
     *entry = base::WrapRefCounted(it->second);
@@ -2124,7 +2136,7 @@ bool BackendImpl::CheckEntry(EntryImpl* cache_entry) {
   bool ok = block_files_.IsValid(cache_entry->entry()->address());
   ok = ok && block_files_.IsValid(cache_entry->rankings()->address());
   EntryStore* data = cache_entry->entry()->Data();
-  for (size_t i = 0; i < arraysize(data->data_addr); i++) {
+  for (size_t i = 0; i < base::size(data->data_addr); i++) {
     if (data->data_addr[i]) {
       Addr address(data->data_addr[i]);
       if (address.is_block_file())

@@ -113,8 +113,9 @@ void ConflictResolver::ProcessSimpleConflict(syncable::WriteTransaction* trans,
     bool server_encrypted_with_default_key = false;
     if (specifics.has_encrypted()) {
       DCHECK(cryptographer->CanDecryptUsingDefaultKey(specifics.encrypted()));
-      decrypted_specifics =
-          cryptographer->DecryptToString(specifics.encrypted());
+      // TODO(crbug.com/908391): what if the decryption below fails?
+      cryptographer->DecryptToString(specifics.encrypted(),
+                                     &decrypted_specifics);
     } else {
       decrypted_specifics = specifics.SerializeAsString();
     }
@@ -122,8 +123,9 @@ void ConflictResolver::ProcessSimpleConflict(syncable::WriteTransaction* trans,
       server_encrypted_with_default_key =
           cryptographer->CanDecryptUsingDefaultKey(
               server_specifics.encrypted());
-      decrypted_server_specifics =
-          cryptographer->DecryptToString(server_specifics.encrypted());
+      // TODO(crbug.com/908391): what if the decryption below fails?
+      cryptographer->DecryptToString(server_specifics.encrypted(),
+                                     &decrypted_server_specifics);
     } else {
       decrypted_server_specifics = server_specifics.SerializeAsString();
     }
@@ -139,8 +141,9 @@ void ConflictResolver::ProcessSimpleConflict(syncable::WriteTransaction* trans,
         decrypted_base_server_specifics =
             base_server_specifics.SerializeAsString();
       } else {
-        decrypted_base_server_specifics =
-            cryptographer->DecryptToString(base_server_specifics.encrypted());
+        // TODO(crbug.com/908391): what if the decryption below fails?
+        cryptographer->DecryptToString(base_server_specifics.encrypted(),
+                                       &decrypted_base_server_specifics);
       }
       if (decrypted_server_specifics == decrypted_base_server_specifics)
         base_server_specifics_match = true;
@@ -173,6 +176,9 @@ void ConflictResolver::ProcessSimpleConflict(syncable::WriteTransaction* trans,
                << "for: " << entry;
       UMA_HISTOGRAM_ENUMERATION("Sync.ResolveSimpleConflict", OVERWRITE_SERVER,
                                 CONFLICT_RESOLUTION_SIZE);
+      // TODO(crbug.com/890746): It seems like local deletion can override a
+      // remote update, which goes against the usual spirit of undeletion-wins,
+      // and differs from the USS logic.
     } else {
       DVLOG(1) << "Resolving simple conflict, ignoring local changes for: "
                << entry;

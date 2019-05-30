@@ -13,48 +13,12 @@
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service_manager.h"
 #include "ui/base/ime/composition_text.h"
+#include "ui/base/ime/text_input_flags.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace arc {
 namespace {
-
-ui::TextInputType ConvertTextInputType(mojom::TextInputType ipc_type) {
-  // The two enum types are similar, but intentionally made not identical.
-  // We cannot force them to be in sync. If we do, updates in ui::TextInputType
-  // must always be propagated to the mojom::TextInputType mojo definition in
-  // ARC container side, which is in a different repository than Chromium.
-  // We don't want such dependency.
-  //
-  // That's why we need a lengthy switch statement instead of static_cast
-  // guarded by a static assert on the two enums to be in sync.
-  switch (ipc_type) {
-    case mojom::TextInputType::NONE:
-      return ui::TEXT_INPUT_TYPE_NONE;
-    case mojom::TextInputType::TEXT:
-      return ui::TEXT_INPUT_TYPE_TEXT;
-    case mojom::TextInputType::PASSWORD:
-      return ui::TEXT_INPUT_TYPE_PASSWORD;
-    case mojom::TextInputType::SEARCH:
-      return ui::TEXT_INPUT_TYPE_SEARCH;
-    case mojom::TextInputType::EMAIL:
-      return ui::TEXT_INPUT_TYPE_EMAIL;
-    case mojom::TextInputType::NUMBER:
-      return ui::TEXT_INPUT_TYPE_NUMBER;
-    case mojom::TextInputType::TELEPHONE:
-      return ui::TEXT_INPUT_TYPE_TELEPHONE;
-    case mojom::TextInputType::URL:
-      return ui::TEXT_INPUT_TYPE_URL;
-    case mojom::TextInputType::DATE:
-      return ui::TEXT_INPUT_TYPE_DATE;
-    case mojom::TextInputType::TIME:
-      return ui::TEXT_INPUT_TYPE_TIME;
-    case mojom::TextInputType::DATETIME:
-      return ui::TEXT_INPUT_TYPE_DATE_TIME_LOCAL;
-    default:
-      return ui::TEXT_INPUT_TYPE_TEXT;
-  }
-}
 
 std::vector<mojom::CompositionSegmentPtr> ConvertSegments(
     const ui::CompositionText& composition) {
@@ -70,6 +34,17 @@ std::vector<mojom::CompositionSegmentPtr> ConvertSegments(
     segments.push_back(std::move(segment));
   }
   return segments;
+}
+
+// Converts mojom::TEXT_INPUT_FLAG_* to ui::TextInputFlags.
+int ConvertTextInputFlags(int32_t flags) {
+  if (flags & mojom::TEXT_INPUT_FLAG_AUTOCAPITALIZE_NONE)
+    return ui::TextInputFlags::TEXT_INPUT_FLAG_AUTOCAPITALIZE_NONE;
+  if (flags & mojom::TEXT_INPUT_FLAG_AUTOCAPITALIZE_CHARACTERS)
+    return ui::TextInputFlags::TEXT_INPUT_FLAG_AUTOCAPITALIZE_CHARACTERS;
+  if (flags & mojom::TEXT_INPUT_FLAG_AUTOCAPITALIZE_WORDS)
+    return ui::TextInputFlags::TEXT_INPUT_FLAG_AUTOCAPITALIZE_WORDS;
+  return ui::TextInputFlags::TEXT_INPUT_FLAG_NONE;
 }
 
 }  // namespace
@@ -135,10 +110,11 @@ void ArcImeBridgeImpl::SendOnKeyboardAppearanceChanging(
 }
 
 void ArcImeBridgeImpl::OnTextInputTypeChanged(
-    mojom::TextInputType type,
-    bool is_personalized_learning_allowed) {
-  delegate_->OnTextInputTypeChanged(ConvertTextInputType(type),
-                                    is_personalized_learning_allowed);
+    ui::TextInputType type,
+    bool is_personalized_learning_allowed,
+    int32_t flags) {
+  delegate_->OnTextInputTypeChanged(type, is_personalized_learning_allowed,
+                                    ConvertTextInputFlags(flags));
 }
 
 void ArcImeBridgeImpl::OnCursorRectChanged(const gfx::Rect& rect,

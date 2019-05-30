@@ -22,7 +22,7 @@ TEST_F(HTMLFrameElementTest, DefaultContainerPolicy) {
 
   HTMLFrameElement* frame_element = HTMLFrameElement::Create(*document);
 
-  frame_element->setAttribute(HTMLNames::srcAttr, "http://example.net/");
+  frame_element->setAttribute(html_names::kSrcAttr, "http://example.net/");
   frame_element->UpdateContainerPolicyForTests();
 
   const ParsedFeaturePolicy& container_policy =
@@ -31,8 +31,8 @@ TEST_F(HTMLFrameElementTest, DefaultContainerPolicy) {
   // Fullscreen should be disabled in this frame
   EXPECT_EQ(mojom::FeaturePolicyFeature::kFullscreen,
             container_policy[0].feature);
-  EXPECT_FALSE(container_policy[0].matches_all_origins);
-  EXPECT_EQ(0UL, container_policy[0].origins.size());
+  EXPECT_EQ(0UL, container_policy[0].values.size());
+  EXPECT_GE(PolicyValue(false), container_policy[0].fallback_value);
 }
 
 }  // namespace blink

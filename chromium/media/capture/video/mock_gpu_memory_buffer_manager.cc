@@ -9,7 +9,7 @@
 #include "build/build_config.h"
 
 #if defined(OS_CHROMEOS)
-#include "media/capture/video/chromeos/stream_buffer_manager.h"
+#include "media/capture/video/chromeos/request_manager.h"
 #endif
 
 using ::testing::Return;
@@ -37,12 +37,15 @@ class FakeGpuMemoryBuffer : public gfx::GpuMemoryBuffer {
 
 #if defined(OS_CHROMEOS)
     // Set a dummy fd since this is for testing only.
-    handle_.native_pixmap_handle.fds.push_back(base::FileDescriptor(0, false));
+    handle_.native_pixmap_handle.fds.push_back(base::FileDescriptor(0, true));
     handle_.native_pixmap_handle.planes.push_back(
         gfx::NativePixmapPlane(size_.width(), 0, y_plane_size));
-    handle_.native_pixmap_handle.planes.push_back(gfx::NativePixmapPlane(
-        size_.width(), handle_.native_pixmap_handle.planes[0].size,
-        uv_plane_size));
+    if (format == gfx::BufferFormat::YUV_420_BIPLANAR) {
+      handle_.native_pixmap_handle.fds.push_back(base::FileDescriptor(0, true));
+      handle_.native_pixmap_handle.planes.push_back(gfx::NativePixmapPlane(
+          size_.width(), handle_.native_pixmap_handle.planes[0].size,
+          uv_plane_size));
+    }
 
     // For faking a valid JPEG blob buffer.
     if (base::checked_cast<size_t>(size_.width()) >= sizeof(Camera3JpegBlob)) {

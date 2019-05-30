@@ -5,7 +5,7 @@
 #include "third_party/blink/renderer/core/css/properties/longhands/text_align.h"
 
 namespace blink {
-namespace CSSLonghand {
+namespace css_longhand {
 
 const CSSValue* TextAlign::CSSValueFromComputedStyleInternal(
     const ComputedStyle& style,
@@ -22,7 +22,7 @@ void TextAlign::ApplyValue(StyleResolverState& state,
       ToCSSIdentifierValue(value).GetValueID() != CSSValueWebkitMatchParent) {
     // Special case for th elements - UA stylesheet text-align does not apply if
     // parent's computed value for text-align is not its initial value
-    // https://html.spec.whatwg.org/multipage/rendering.html#tables-2
+    // https://html.spec.whatwg.org/C/#tables-2
     const CSSIdentifierValue& ident_value = ToCSSIdentifierValue(value);
     if (ident_value.GetValueID() == CSSValueInternalCenter &&
         state.ParentStyle()->GetTextAlign() !=
@@ -43,5 +43,5 @@ void TextAlign::ApplyValue(StyleResolverState& state,
   }
 }
 
-}  // namespace CSSLonghand
+}  // namespace css_longhand
 }  // namespace blink

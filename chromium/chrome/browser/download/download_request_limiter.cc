@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/stl_util.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -13,10 +14,10 @@
 #include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/tab_contents/tab_util.h"
-#include "chrome/browser/vr/vr_tab_helper.h"
 #include "components/content_settings/core/browser/content_settings_details.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -228,15 +229,6 @@ void DownloadRequestLimiter::TabDownloadState::PromptUserForDownload(
   if (is_showing_prompt())
     return;
 
-  if (vr::VrTabHelper::IsUiSuppressedInVr(
-          web_contents_, vr::UiSuppressedElement::kDownloadPermission)) {
-    // Permission request UI cannot currently be rendered binocularly in VR
-    // mode, so we suppress the UI and return cancelled to inform the caller
-    // that the request will not progress. crbug.com/736568
-    Cancel();
-    return;
-  }
-
   PermissionRequestManager* permission_request_manager =
       PermissionRequestManager::FromWebContents(web_contents_);
   if (permission_request_manager) {
@@ -320,7 +312,7 @@ void DownloadRequestLimiter::TabDownloadState::OnContentSettingChanged(
   // Analogous to TabSpecificContentSettings::OnContentSettingChanged:
   const ContentSettingsDetails details(primary_pattern, secondary_pattern,
                                        content_type, resource_identifier);
-  const NavigationController& controller = web_contents()->GetController();
+  NavigationController& controller = web_contents()->GetController();
 
   // The visible NavigationEntry is the URL in the URL field of a tab.
   // Currently this should be matched by the |primary_pattern|.
@@ -378,8 +370,8 @@ bool DownloadRequestLimiter::TabDownloadState::NotifyCallbacks(bool allow) {
 
   for (const auto& callback : callbacks) {
     // When callback runs, it can cause the WebContents to be destroyed.
-    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            base::BindOnce(callback, allow));
+    base::PostTaskWithTraits(FROM_HERE, {BrowserThread::UI},
+                             base::BindOnce(callback, allow));
   }
 
   return throttled;
@@ -457,7 +449,7 @@ DownloadRequestLimiter::GetDownloadState(
     content::WebContents* originating_web_contents,
     bool create) {
   DCHECK(web_contents);
-  StateMap::iterator i = state_map_.find(web_contents);
+  auto i = state_map_.find(web_contents);
   if (i != state_map_.end())
     return i->second;
 
@@ -474,8 +466,7 @@ void DownloadRequestLimiter::CanDownload(
     const content::ResourceRequestInfo::WebContentsGetter& web_contents_getter,
     const GURL& url,
     const std::string& request_method,
-    const Callback& callback,
-    const content::DownloadInformation& info) {
+    const Callback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   content::WebContents* originating_contents = web_contents_getter.Run();
@@ -497,7 +488,6 @@ void DownloadRequestLimiter::CanDownload(
       &DownloadRequestLimiter::OnCanDownloadDecided, factory_.GetWeakPtr(),
       web_contents_getter, request_method, callback);
 
-  originating_contents->GetDelegate()->SetDownloadInformation(info);
   originating_contents->GetDelegate()->CanDownload(url, request_method,
                                                    can_download_callback);
 }

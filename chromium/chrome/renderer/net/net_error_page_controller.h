@@ -11,7 +11,6 @@
 #include "gin/arguments.h"
 #include "gin/wrappable.h"
 
-
 namespace content {
 class RenderFrame;
 }
@@ -39,6 +38,29 @@ class NetErrorPageController : public gin::Wrappable<NetErrorPageController> {
     // Called to show all available offline content.
     virtual void LaunchDownloadsPage() = 0;
 
+    // Schedules a request to save the page later. This is different from the
+    // download button in that the page is only saved temporarily. This is used
+    // only for the auto-fetch-on-net-error-page feature.
+    virtual void SavePageForLater() = 0;
+
+    // Cancels the request to save the page later. This cancels a previous call
+    // to |SavePageForLater|, or the automatic request made when loading the
+    // error page. This is used only for the auto-fetch-on-net-error-page
+    // feature.
+    virtual void CancelSavePage() = 0;
+
+    // Called to signal the user tapped the button to change the visibility of
+    // the offline content list.
+    virtual void ListVisibilityChanged(bool is_visible) = 0;
+
+    // Save a new high score for the easer egg game in the user's synced
+    // preferences.
+    virtual void UpdateEasterEggHighScore(int high_score) = 0;
+
+    // Clear any high score for the easer egg game saved in the user's synced
+    // preferences.
+    virtual void ResetEasterEggHighScore() = 0;
+
    protected:
     Delegate();
     virtual ~Delegate();
@@ -57,9 +79,6 @@ class NetErrorPageController : public gin::Wrappable<NetErrorPageController> {
   explicit NetErrorPageController(base::WeakPtr<Delegate> delegate);
   ~NetErrorPageController() override;
 
-  // Execute a "Show saved copy" button click.
-  bool ShowSavedCopyButtonClick();
-
   // Execute a button click to download page later.
   bool DownloadButtonClick();
 
@@ -69,8 +88,10 @@ class NetErrorPageController : public gin::Wrappable<NetErrorPageController> {
   // Execute a "Details" button click.
   bool DetailsButtonClick();
 
-  // Track easter egg plays.
+  // Track easter egg plays and high scores.
   bool TrackEasterEgg();
+  bool UpdateEasterEggHighScore(int high_score);
+  bool ResetEasterEggHighScore();
 
   // Execute a "Diagnose Errors" button click.
   bool DiagnoseErrorsButtonClick();
@@ -87,6 +108,9 @@ class NetErrorPageController : public gin::Wrappable<NetErrorPageController> {
 
   void LaunchOfflineItem(gin::Arguments* args);
   void LaunchDownloadsPage();
+  void SavePageForLater();
+  void CancelSavePage();
+  void ListVisibilityChanged(bool is_visible);
 
   // gin::WrappableBase
   gin::ObjectTemplateBuilder GetObjectTemplateBuilder(

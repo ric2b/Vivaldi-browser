@@ -69,9 +69,9 @@ void TestService::WaitUntilServiceIsStarted() {
 }
 
 void TestService::ShutdownAndBlock() {
-  message_loop()->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&TestService::ShutdownAndBlockInternal,
-                            base::Unretained(this)));
+  task_runner()->PostTask(FROM_HERE,
+                          base::BindOnce(&TestService::ShutdownAndBlockInternal,
+                                         base::Unretained(this)));
 }
 
 bool TestService::HasDBusThread() {
@@ -86,15 +86,15 @@ void TestService::ShutdownAndBlockInternal() {
 }
 
 void TestService::SendTestSignal(const std::string& message) {
-  message_loop()->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&TestService::SendTestSignalInternal,
-                            base::Unretained(this), message));
+  task_runner()->PostTask(FROM_HERE,
+                          base::BindOnce(&TestService::SendTestSignalInternal,
+                                         base::Unretained(this), message));
 }
 
 void TestService::SendTestSignalFromRoot(const std::string& message) {
-  message_loop()->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&TestService::SendTestSignalFromRootInternal,
-                            base::Unretained(this), message));
+  task_runner()->PostTask(
+      FROM_HERE, base::BindOnce(&TestService::SendTestSignalFromRootInternal,
+                                base::Unretained(this), message));
 }
 
 void TestService::SendTestSignalInternal(const std::string& message) {
@@ -119,9 +119,9 @@ void TestService::SendTestSignalFromRootInternal(const std::string& message) {
 }
 
 void TestService::RequestOwnership(base::Callback<void(bool)> callback) {
-  message_loop()->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&TestService::RequestOwnershipInternal,
-                            base::Unretained(this), callback));
+  task_runner()->PostTask(FROM_HERE,
+                          base::BindOnce(&TestService::RequestOwnershipInternal,
+                                         base::Unretained(this), callback));
 }
 
 void TestService::RequestOwnershipInternal(
@@ -145,10 +145,8 @@ void TestService::OnOwnership(base::Callback<void(bool)> callback,
 
 void TestService::ReleaseOwnership(base::Closure callback) {
   bus_->GetDBusTaskRunner()->PostTask(
-      FROM_HERE,
-      base::Bind(&TestService::ReleaseOwnershipInternal,
-                 base::Unretained(this),
-                 callback));
+      FROM_HERE, base::BindOnce(&TestService::ReleaseOwnershipInternal,
+                                base::Unretained(this), callback));
 }
 
 void TestService::ReleaseOwnershipInternal(
@@ -314,9 +312,10 @@ void TestService::SlowEcho(MethodCall* method_call,
 void TestService::AsyncEcho(MethodCall* method_call,
                             ExportedObject::ResponseSender response_sender) {
   // Schedule a call to Echo() to send an asynchronous response after we return.
-  message_loop()->task_runner()->PostDelayedTask(
-      FROM_HERE, base::Bind(&TestService::Echo, base::Unretained(this),
-                            method_call, response_sender),
+  task_runner()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&TestService::Echo, base::Unretained(this), method_call,
+                     response_sender),
       TestTimeouts::tiny_timeout());
 }
 
@@ -630,9 +629,9 @@ void TestService::AddPropertiesToWriter(MessageWriter* writer) {
 }
 
 void TestService::AddObject(const ObjectPath& object_path) {
-  message_loop()->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&TestService::AddObjectInternal,
-                            base::Unretained(this), object_path));
+  task_runner()->PostTask(FROM_HERE,
+                          base::BindOnce(&TestService::AddObjectInternal,
+                                         base::Unretained(this), object_path));
 }
 
 void TestService::AddObjectInternal(const ObjectPath& object_path) {
@@ -654,9 +653,9 @@ void TestService::AddObjectInternal(const ObjectPath& object_path) {
 }
 
 void TestService::RemoveObject(const ObjectPath& object_path) {
-  message_loop()->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&TestService::RemoveObjectInternal,
-                            base::Unretained(this), object_path));
+  task_runner()->PostTask(FROM_HERE,
+                          base::BindOnce(&TestService::RemoveObjectInternal,
+                                         base::Unretained(this), object_path));
 }
 
 void TestService::RemoveObjectInternal(const ObjectPath& object_path) {
@@ -673,9 +672,9 @@ void TestService::RemoveObjectInternal(const ObjectPath& object_path) {
 }
 
 void TestService::SendPropertyChangedSignal(const std::string& name) {
-  message_loop()->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&TestService::SendPropertyChangedSignalInternal,
-                            base::Unretained(this), name));
+  task_runner()->PostTask(
+      FROM_HERE, base::BindOnce(&TestService::SendPropertyChangedSignalInternal,
+                                base::Unretained(this), name));
 }
 
 void TestService::SendPropertyChangedSignalInternal(const std::string& name) {
@@ -702,9 +701,10 @@ void TestService::SendPropertyChangedSignalInternal(const std::string& name) {
 }
 
 void TestService::SendPropertyInvalidatedSignal() {
-  message_loop()->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&TestService::SendPropertyInvalidatedSignalInternal,
-                            base::Unretained(this)));
+  task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&TestService::SendPropertyInvalidatedSignalInternal,
+                     base::Unretained(this)));
 }
 
 void TestService::SendPropertyInvalidatedSignalInternal() {

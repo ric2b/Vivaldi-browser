@@ -40,7 +40,8 @@ Scrollbar* LayoutScrollbar::CreateCustomScrollbar(
     ScrollableArea* scrollable_area,
     ScrollbarOrientation orientation,
     Element* style_source) {
-  return new LayoutScrollbar(scrollable_area, orientation, style_source);
+  return MakeGarbageCollected<LayoutScrollbar>(scrollable_area, orientation,
+                                               style_source);
 }
 
 LayoutScrollbar::LayoutScrollbar(ScrollableArea* scrollable_area,
@@ -90,9 +91,10 @@ int LayoutScrollbar::HypotheticalScrollbarThickness(
     ScrollbarOrientation orientation,
     const LayoutBox& enclosing_box,
     const LayoutObject& style_source) {
-  scoped_refptr<ComputedStyle> part_style = style_source.GetUncachedPseudoStyle(
-      PseudoStyleRequest(kPseudoIdScrollbar, nullptr, kScrollbarBGPart),
-      style_source.Style());
+  scoped_refptr<const ComputedStyle> part_style =
+      style_source.GetUncachedPseudoStyle(
+          PseudoStyleRequest(kPseudoIdScrollbar, nullptr, kScrollbarBGPart),
+          style_source.Style());
   if (orientation == kHorizontalScrollbar) {
     return LayoutScrollbarPart::ComputeScrollbarHeight(
         enclosing_box.ClientHeight().ToInt(), part_style.get());
@@ -191,6 +193,12 @@ void LayoutScrollbar::UpdateScrollbarParts(bool destroy) {
       if (box->IsLayoutBlock())
         ToLayoutBlock(box)->NotifyScrollbarThicknessChanged();
       box->SetChildNeedsLayout();
+      // LayoutNG may attempt to reuse line-box fragments. It will do this even
+      // if the |LayoutObject::ChildNeedsLayout| is true (set above).
+      // The box itself needs to be marked as needs layout here, as conceptually
+      // this is similar to border or padding changing, (which marks the box as
+      // self needs layout).
+      box->SetNeedsLayout(layout_invalidation_reason::kScrollbarChanged);
       if (scrollable_area_)
         scrollable_area_->SetScrollCornerNeedsPaintInvalidation();
     }

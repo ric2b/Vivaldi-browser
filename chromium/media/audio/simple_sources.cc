@@ -11,6 +11,7 @@
 #include "base/files/file.h"
 #include "base/logging.h"
 #include "base/numerics/math_constants.h"
+#include "base/thread_annotations.h"
 #include "base/time/time.h"
 #include "media/audio/sounds/wav_audio_handler.h"
 #include "media/base/audio_bus.h"
@@ -87,8 +88,8 @@ class BeepContext {
 
  private:
   mutable base::Lock lock_;
-  bool beep_once_;
-  bool automatic_beep_;
+  bool beep_once_ GUARDED_BY(lock_);
+  bool automatic_beep_ GUARDED_BY(lock_);
 };
 
 BeepContext* GetBeepContext() {
@@ -262,7 +263,7 @@ int BeepingSource::OnMoreData(base::TimeDelta /* delay */,
   // Accumulate the time from the last beep.
   interval_from_last_beep_ += base::TimeTicks::Now() - last_callback_time_;
 
-  memset(buffer_.get(), 0, buffer_size_);
+  memset(buffer_.get(), 128, buffer_size_);
   bool should_beep = false;
   BeepContext* beep_context = GetBeepContext();
   if (beep_context->automatic_beep()) {
@@ -290,7 +291,7 @@ int BeepingSource::OnMoreData(base::TimeDelta /* delay */,
     int position = 0;
     while (position + high_bytes <= buffer_size_) {
       // Write high values first.
-      memset(buffer_.get() + position, 128, high_bytes);
+      memset(buffer_.get() + position, 255, high_bytes);
       // Then leave low values in the buffer with |high_bytes|.
       position += high_bytes * 2;
     }

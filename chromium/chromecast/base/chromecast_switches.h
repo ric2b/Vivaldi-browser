@@ -19,6 +19,9 @@ extern const char kSwitchValueFalse[];
 // Url to upload crash data to.
 extern const char kCrashServerUrl[];
 
+// Disable Crash Reporting
+extern const char kDisableCrashReporter[];
+
 // Content-implementation switches
 extern const char kEnableLocalFileAccesses[];
 
@@ -27,6 +30,7 @@ extern const char kOverrideMetricsUploadUrl[];
 
 // Network switches
 extern const char kNoWifi[];
+extern const char kRequireWlan[];
 
 // Switches to communicate app state information
 extern const char kLastLaunchedApp[];
@@ -39,22 +43,24 @@ extern const char kAcceptResourceProvider[];
 // TODO(sergeyu): kAlsaEnableUpsampling and kAlsaCheckCloseTimeout are
 // implemented in StreamMixer, which is not ALSA-specific - it's also used on
 // Fuchsia. Rename these flags.
-extern const char kAlsaOutputBufferSize[];
-extern const char kAlsaOutputPeriodSize[];
-extern const char kAlsaOutputStartThreshold[];
-extern const char kAlsaOutputAvailMin[];
+extern const char kAlsaAmpDeviceName[];
+extern const char kAlsaAmpElementName[];
 extern const char kAlsaCheckCloseTimeout[];
 extern const char kAlsaEnableUpsampling[];
 extern const char kAlsaFixedOutputSampleRate[];
-extern const char kAlsaVolumeDeviceName[];
-extern const char kAlsaVolumeElementName[];
 extern const char kAlsaMuteDeviceName[];
 extern const char kAlsaMuteElementName[];
-extern const char kAlsaAmpDeviceName[];
-extern const char kAlsaAmpElementName[];
-extern const char kMaxOutputVolumeDba1m[];
+extern const char kAlsaOutputAvailMin[];
+extern const char kAlsaOutputBufferSize[];
+extern const char kAlsaOutputPeriodSize[];
+extern const char kAlsaOutputStartThreshold[];
+extern const char kAlsaVolumeDeviceName[];
+extern const char kAlsaVolumeElementName[];
 extern const char kAudioOutputChannels[];
 extern const char kAudioOutputSampleRate[];
+extern const char kMaxOutputVolumeDba1m[];
+extern const char kMixerSourceAudioReadyThresholdMs[];
+extern const char kMixerSourceInputQueueMs[];
 
 // Memory pressure switches
 extern const char kMemPressureSystemReservedKb[];
@@ -81,8 +87,11 @@ extern const char kEnableTopDragGesture[];
 // Background color used when Chromium hasn't rendered anything yet.
 extern const char kCastAppBackgroundColor[];
 
+extern const char kMixerServiceEndpoint[];
 extern const char kCastMemoryPressureCriticalFraction[];
 extern const char kCastMemoryPressureModerateFraction[];
+
+extern const char kDisableMojoRenderer[];
 
 }  // namespace switches
 

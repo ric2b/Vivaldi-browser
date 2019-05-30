@@ -9,6 +9,7 @@
 goog.provide('EventStreamLogger');
 
 goog.require('LogStore');
+goog.require('TextLog');
 
 goog.scope(function() {
 var AutomationEvent = chrome.automation.AutomationEvent;
@@ -51,41 +52,15 @@ EventStreamLogger.prototype = {
   },
 
   /**
-   * @param {!AutomationNode} target
-   */
-  isDescendantOfConsole: function(target) {
-    /** Event log should not be written when event is dispatched from console or
-     * chromevox log page.
-     */
-    if (target.docUrl &&
-        (target.docUrl.indexOf('chrome-devtools://') == 0 ||
-         target.docUrl == chrome.runtime.getURL('cvox2/background/log.html')))
-      return true;
-
-    if (!target.parent)
-      return false;
-
-    return this.isDescendantOfConsole(target.parent);
-  },
-
-  /**
    * @param {!AutomationEvent} evt
    */
   eventStreamLogging: function(evt) {
-    /**
-     * If evt is dispatched to console, don't show.
-     * Console event log are unnecessary for developers.
-     */
-    if (this.isDescendantOfConsole(evt.target))
-      return;
-
     var logStr = 'EventType = ' + evt.type;
     logStr += ', TargetName = ' + evt.target.name;
     logStr += ', RootName = ' + evt.target.root.name;
     logStr += ', DocumentURL = ' + evt.target.docUrl;
 
-    LogStore.getInstance().writeLog(logStr, LogStore.LogType.EVENT);
-    console.log(logStr);
+    LogStore.getInstance().writeTextLog(logStr, TextLog.LogType.EVENT);
   },
 
   /**
@@ -104,63 +79,9 @@ EventStreamLogger.prototype = {
    * @param {boolean} checked
    */
   notifyEventStreamFilterChangedAll: function(checked) {
-    var EventTypeList = [
-      EventType.ACTIVEDESCENDANTCHANGED,
-      EventType.ALERT,
-      EventType.ARIA_ATTRIBUTE_CHANGED,
-      EventType.AUTOCORRECTION_OCCURED,
-      EventType.BLUR,
-      EventType.CHECKED_STATE_CHANGED,
-      EventType.CHILDREN_CHANGED,
-      EventType.CLICKED,
-      EventType.DOCUMENT_SELECTION_CHANGED,
-      EventType.DOCUMENT_TITLE_CHANGED,
-      EventType.EXPANDED_CHANGED,
-      EventType.FOCUS,
-      EventType.FOCUS_CONTEXT,
-      EventType.IMAGE_FRAME_UPDATED,
-      EventType.HIDE,
-      EventType.HIT_TEST_RESULT,
-      EventType.HOVER,
-      EventType.INVALID_STATUS_CHANGED,
-      EventType.LAYOUT_COMPLETE,
-      EventType.LIVE_REGION_CREATED,
-      EventType.LIVE_REGION_CHANGED,
-      EventType.LOAD_COMPLETE,
-      EventType.LOCATION_CHANGED,
-      EventType.MEDIA_STARTED_PLAYING,
-      EventType.MEDIA_STOPPED_PLAYING,
-      EventType.MENU_END,
-      EventType.MENU_LIST_ITEM_SELECTED,
-      EventType.MENU_LIST_VALUE_CHANGED,
-      EventType.MENU_POPUP_END,
-      EventType.MENU_POPUP_START,
-      EventType.MENU_START,
-      EventType.MOUSE_CANCELED,
-      EventType.MOUSE_DRAGGED,
-      EventType.MOUSE_MOVED,
-      EventType.MOUSE_PRESSED,
-      EventType.MOUSE_RELEASED,
-      EventType.ROW_COLLAPSED,
-      EventType.ROW_COUNT_CHANGED,
-      EventType.ROW_EXPANDED,
-      EventType.SCROLL_POSITION_CHANGED,
-      EventType.SCROLLED_TO_ANCHOR,
-      EventType.SELECTED_CHILDREN_CHANGED,
-      EventType.SELECTION,
-      EventType.SELECTION_ADD,
-      EventType.SELECTION_REMOVE,
-      EventType.SHOW,
-      EventType.STATE_CHANGED,
-      EventType.TEXT_CHANGED,
-      EventType.TEXT_SELECTION_CHANGED,
-      EventType.TREE_CHANGED,
-      EventType.VALUE_CHANGED
-    ];
-
-    for (var evtType of EventTypeList) {
-      if (localStorage[evtType] == 'true')
-        this.notifyEventStreamFilterChanged(evtType, checked);
+    for (var type in EventType) {
+      if (localStorage[EventType[type]] == 'true')
+        this.notifyEventStreamFilterChanged(EventType[type], checked);
     }
   },
 };

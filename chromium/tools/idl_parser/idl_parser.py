@@ -336,11 +336,9 @@ class IDLParser(object):
     """InterfaceMembers : error"""
     p[0] = self.BuildError(p, 'InterfaceMembers')
 
-  # Removed unsupported: Serializer
   def p_InterfaceMember(self, p):
     """InterfaceMember : Const
                        | Operation
-                       | Serializer
                        | Stringifier
                        | StaticMember
                        | Iterable
@@ -544,70 +542,6 @@ class IDLParser(object):
       val = p[1]
     p[0] = ListFromConcat(self.BuildAttribute('TYPE', 'float'),
                           self.BuildAttribute('VALUE', val))
-
-  def p_Serializer(self, p):
-    """Serializer : SERIALIZER SerializerRest"""
-    p[0] = self.BuildProduction('Serializer', p, 1, p[2])
-
-  # TODO(jl): This adds ReturnType and ';', missing from the spec's grammar.
-  # https://www.w3.org/Bugs/Public/show_bug.cgi?id=20361
-  def p_SerializerRest(self, p):
-    """SerializerRest : ReturnType OperationRest
-                      | '=' SerializationPattern ';'
-                      | ';'"""
-    if len(p) == 3:
-      p[2].AddChildren(p[1])
-      p[0] = p[2]
-    elif len(p) == 4:
-      p[0] = p[2]
-
-  def p_SerializationPattern(self, p):
-    """SerializationPattern : '{' SerializationPatternMap '}'
-                            | '[' SerializationPatternList ']'
-                            | identifier"""
-    if len(p) > 2:
-      p[0] = p[2]
-    else:
-      p[0] = self.BuildAttribute('ATTRIBUTE', p[1])
-
-  # TODO(jl): This adds the "ATTRIBUTE" and "INHERIT ',' ATTRIBUTE" variants,
-  # missing from the spec's grammar.
-  # https://www.w3.org/Bugs/Public/show_bug.cgi?id=20361
-  def p_SerializationPatternMap(self, p):
-    """SerializationPatternMap : GETTER
-                               | ATTRIBUTE
-                               | INHERIT ',' ATTRIBUTE
-                               | INHERIT Identifiers
-                               | identifier Identifiers
-                               |"""
-    p[0] = self.BuildProduction('Map', p, 0)
-    if len(p) == 4:
-      p[0].AddChildren(self.BuildTrue('INHERIT'))
-      p[0].AddChildren(self.BuildTrue('ATTRIBUTE'))
-    elif len(p) > 1:
-      if p[1] == 'getter':
-        p[0].AddChildren(self.BuildTrue('GETTER'))
-      elif p[1] == 'attribute':
-        p[0].AddChildren(self.BuildTrue('ATTRIBUTE'))
-      else:
-        if p[1] == 'inherit':
-          p[0].AddChildren(self.BuildTrue('INHERIT'))
-          attributes = p[2]
-        else:
-          attributes = ListFromConcat(p[1], p[2])
-        p[0].AddChildren(self.BuildAttribute('ATTRIBUTES', attributes))
-
-  def p_SerializationPatternList(self, p):
-    """SerializationPatternList : GETTER
-                                | identifier Identifiers
-                                |"""
-    p[0] = self.BuildProduction('List', p, 0)
-    if len(p) > 1:
-      if p[1] == 'getter':
-        p[0].AddChildren(self.BuildTrue('GETTER'))
-      else:
-        attributes = ListFromConcat(p[1], p[2])
-        p[0].AddChildren(self.BuildAttribute('ATTRIBUTES', attributes))
 
   def p_Stringifier(self, p):
     """Stringifier : STRINGIFIER StringifierRest"""
@@ -893,7 +827,6 @@ class IDLParser(object):
                            | LEGACYCALLER
                            | NAMESPACE
                            | PARTIAL
-                           | SERIALIZER
                            | SETTER
                            | STATIC
                            | STRINGIFIER
@@ -932,10 +865,12 @@ class IDLParser(object):
     p[0] = self.BuildProduction('UnionType', p, 1, members)
 
   def p_UnionMemberType(self, p):
-    """UnionMemberType : NonAnyType
+    """UnionMemberType : ExtendedAttributeList NonAnyType
                        | UnionType Null"""
-    if len(p) == 2:
-      p[0] = self.BuildProduction('Type', p, 1, p[1])
+    if p[1] is None:
+      p[0] = self.BuildProduction('Type', p, 1, p[2])
+    elif p[1].GetClass() == 'ExtAttributes':
+      p[0] = self.BuildProduction('Type', p, 1, ListFromConcat(p[2], p[1]))
     else:
       p[0] = self.BuildProduction('Type', p, 1, ListFromConcat(p[1], p[2]))
 
@@ -1032,19 +967,9 @@ class IDLParser(object):
     else:
       p[0] = ''
 
-  # Add unqualified Promise
   def p_PromiseType(self, p):
-    """PromiseType : PROMISE '<' ReturnType '>'
-                   | PROMISE"""
-    if len(p) == 2:
-      # Promise without resolution type is not specified in the Web IDL spec.
-      # As it is used in some specs and in the blink implementation,
-      # we allow that here.
-      resolution_type = self.BuildProduction('Type', p, 1,
-                                             self.BuildProduction('Any', p, 1))
-      p[0] = self.BuildNamed('Promise', p, 1, resolution_type)
-    else:
-      p[0] = self.BuildNamed('Promise', p, 1, p[3])
+    """PromiseType : PROMISE '<' ReturnType '>'"""
+    p[0] = self.BuildNamed('Promise', p, 1, p[3])
 
   def p_Null(self, p):
     """Null : '?'

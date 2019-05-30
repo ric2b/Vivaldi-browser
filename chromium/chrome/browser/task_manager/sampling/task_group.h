@@ -12,12 +12,12 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/memory_coordinator_client.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/process_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/task_manager/providers/task.h"
+#include "chrome/browser/task_manager/sampling/arc_shared_sampler.h"
 #include "chrome/browser/task_manager/sampling/shared_sampler.h"
 #include "chrome/browser/task_manager/sampling/task_group_sampler.h"
 #include "chrome/browser/task_manager/task_manager_observer.h"
@@ -29,6 +29,18 @@ struct VideoMemoryUsageStats;
 
 namespace task_manager {
 
+// A mask for refresh flags that are not supported by VM tasks.
+constexpr int kUnsupportedVMRefreshFlags =
+    REFRESH_TYPE_CPU | REFRESH_TYPE_SWAPPED_MEM | REFRESH_TYPE_GPU_MEMORY |
+    REFRESH_TYPE_V8_MEMORY | REFRESH_TYPE_SQLITE_MEMORY |
+    REFRESH_TYPE_WEBCACHE_STATS | REFRESH_TYPE_NETWORK_USAGE |
+    REFRESH_TYPE_NACL | REFRESH_TYPE_IDLE_WAKEUPS | REFRESH_TYPE_HANDLES |
+    REFRESH_TYPE_START_TIME | REFRESH_TYPE_CPU_TIME | REFRESH_TYPE_PRIORITY |
+#if defined(OS_LINUX) || defined(OS_MACOSX)
+    REFRESH_TYPE_FD_COUNT |
+#endif
+    REFRESH_TYPE_HARD_FAULTS;
+
 class SharedSampler;
 
 // Defines a group of tasks tracked by the task manager which belong to the same
@@ -38,6 +50,7 @@ class TaskGroup {
   TaskGroup(
       base::ProcessHandle proc_handle,
       base::ProcessId proc_id,
+      bool is_running_in_vm,
       const base::Closure& on_background_calculations_done,
       const scoped_refptr<SharedSampler>& shared_sampler,
       const scoped_refptr<base::SequencedTaskRunner>& blocking_pool_runner);
@@ -63,6 +76,10 @@ class TaskGroup {
   // process represented by this TaskGroup have completed.
   bool AreBackgroundCalculationsDone() const;
 
+#if defined(OS_CHROMEOS)
+  void SetArcSampler(ArcSharedSampler* sampler);
+#endif  // defined(OS_CHROMEOS)
+
   const base::ProcessHandle& process_handle() const { return process_handle_; }
   const base::ProcessId& process_id() const { return process_id_; }
 
@@ -82,7 +99,6 @@ class TaskGroup {
 #endif
   int64_t gpu_memory() const { return gpu_memory_; }
   bool gpu_memory_has_duplicates() const { return gpu_memory_has_duplicates_; }
-  base::MemoryState memory_state() const { return memory_state_; }
   int64_t per_process_network_usage_rate() const {
     return per_process_network_usage_rate_;
   }
@@ -103,12 +119,11 @@ class TaskGroup {
   int nacl_debug_stub_port() const { return nacl_debug_stub_port_; }
 #endif  // BUILDFLAG(ENABLE_NACL)
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_MACOSX)
   int open_fd_count() const { return open_fd_count_; }
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_MACOSX)
 
   int idle_wakeups_per_second() const { return idle_wakeups_per_second_; }
-
  private:
   void RefreshGpuMemory(const gpu::VideoMemoryUsageStats& gpu_memory_stats);
 
@@ -119,9 +134,9 @@ class TaskGroup {
   void RefreshNaClDebugStubPort(int child_process_unique_id);
   void OnRefreshNaClDebugStubPortDone(int port);
 #endif
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_MACOSX)
   void OnOpenFdCountRefreshDone(int open_fd_count);
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_MACOSX)
 
   void OnCpuRefreshDone(double cpu_usage);
   void OnSwappedMemRefreshDone(int64_t swapped_mem_bytes);
@@ -131,11 +146,17 @@ class TaskGroup {
   void OnSamplerRefreshDone(
       base::Optional<SharedSampler::SamplingResult> results);
 
+#if defined(OS_CHROMEOS)
+  void OnArcSamplerRefreshDone(
+      base::Optional<ArcSharedSampler::MemoryFootprintBytes> results);
+#endif  // defined(OS_CHROMEOS)
+
   void OnBackgroundRefreshTypeFinished(int64_t finished_refresh_type);
 
   // The process' handle and ID.
   base::ProcessHandle process_handle_;
   base::ProcessId process_id_;
+  bool is_running_in_vm_;
 
   // This is a callback into the TaskManagerImpl to inform it that the
   // background calculations for this TaskGroup has finished.
@@ -144,6 +165,10 @@ class TaskGroup {
   scoped_refptr<TaskGroupSampler> worker_thread_sampler_;
 
   scoped_refptr<SharedSampler> shared_sampler_;
+#if defined(OS_CHROMEOS)
+  // Shared sampler that retrieves memory footprint for all ARC processes.
+  ArcSharedSampler* arc_shared_sampler_;  // Not owned
+#endif                                    // defined(OS_CHROMEOS)
 
   // Lists the Tasks in this TaskGroup.
   // Tasks are not owned by the TaskGroup. They're owned by the TaskProviders.
@@ -161,7 +186,6 @@ class TaskGroup {
   int64_t swapped_mem_bytes_;
   int64_t memory_footprint_;
   int64_t gpu_memory_;
-  base::MemoryState memory_state_;
   // The network usage in bytes per second as the sum of all network usages of
   // the individual tasks sharing the same process.
   int64_t per_process_network_usage_rate_;
@@ -181,10 +205,10 @@ class TaskGroup {
 #if BUILDFLAG(ENABLE_NACL)
   int nacl_debug_stub_port_;
 #endif  // BUILDFLAG(ENABLE_NACL)
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_MACOSX)
   // The number of file descriptors currently open by the process.
   int open_fd_count_;
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_MACOSX)
   int idle_wakeups_per_second_;
   bool gpu_memory_has_duplicates_;
   bool is_backgrounded_;

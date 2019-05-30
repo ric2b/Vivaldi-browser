@@ -24,7 +24,7 @@
 #include "url/gurl.h"
 
 #if defined(OS_WIN)
-#include "base/win/win_util.h"
+#include "base/enterprise_util.h"
 #endif
 
 namespace extensions {
@@ -52,7 +52,9 @@ bool ExtensionListPolicyHandler::CheckListEntry(const base::Value& value) {
 void ExtensionListPolicyHandler::ApplyList(
     std::unique_ptr<base::ListValue> filtered_list,
     PrefValueMap* prefs) {
-  prefs->SetValue(pref_path_, std::move(filtered_list));
+  DCHECK(filtered_list);
+  prefs->SetValue(pref_path_,
+                  base::Value::FromUniquePtrValue(std::move(filtered_list)));
 }
 
 // ExtensionInstallListPolicyHandler implementation ----------------------------
@@ -75,9 +77,9 @@ void ExtensionInstallListPolicyHandler::ApplyPolicySettings(
     const policy::PolicyMap& policies,
     PrefValueMap* prefs) {
   const base::Value* value = nullptr;
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  base::DictionaryValue dict;
   if (CheckAndGetValue(policies, nullptr, &value) && value &&
-      ParseList(value, dict.get(), nullptr)) {
+      ParseList(value, &dict, nullptr)) {
     prefs->SetValue(pref_name_, std::move(dict));
   }
 }
@@ -96,7 +98,7 @@ bool ExtensionInstallListPolicyHandler::ParseList(
     return false;
   }
 
-  for (base::ListValue::const_iterator entry(policy_list_value->begin());
+  for (auto entry(policy_list_value->begin());
        entry != policy_list_value->end(); ++entry) {
     std::string entry_string;
     if (!entry->GetAsString(&entry_string)) {
@@ -183,8 +185,7 @@ bool ExtensionURLPatternListPolicyHandler::CheckPolicySettings(
   }
 
   // Check that the list contains valid URLPattern strings only.
-  for (base::ListValue::const_iterator entry(list_value->begin());
-       entry != list_value->end(); ++entry) {
+  for (auto entry(list_value->begin()); entry != list_value->end(); ++entry) {
     std::string url_pattern_string;
     if (!entry->GetAsString(&url_pattern_string)) {
       errors->AddError(policy_name(), entry - list_value->begin(),
@@ -194,7 +195,8 @@ bool ExtensionURLPatternListPolicyHandler::CheckPolicySettings(
     }
 
     URLPattern pattern(URLPattern::SCHEME_ALL);
-    if (pattern.Parse(url_pattern_string) != URLPattern::PARSE_SUCCESS) {
+    if (pattern.Parse(url_pattern_string) !=
+        URLPattern::ParseResult::kSuccess) {
       errors->AddError(policy_name(),
                        entry - list_value->begin(),
                        IDS_POLICY_VALUE_FORMAT_ERROR);
@@ -212,7 +214,7 @@ void ExtensionURLPatternListPolicyHandler::ApplyPolicySettings(
     return;
   const base::Value* value = policies.GetValue(policy_name());
   if (value)
-    prefs->SetValue(pref_path_, value->CreateDeepCopy());
+    prefs->SetValue(pref_path_, value->Clone());
 }
 
 // ExtensionSettingsPolicyHandler implementation  ------------------------------
@@ -275,7 +277,7 @@ bool ExtensionSettingsPolicyHandler::CheckPolicySettings(
 #if defined(OS_WIN)
           // We can't use IsWebstoreUpdateUrl() here since the ExtensionClient
           // isn't set this early during startup.
-          if (!base::win::IsEnterpriseManaged() &&
+          if (!base::IsMachineExternallyManaged() &&
               !base::LowerCaseEqualsASCII(
                   update_url, extension_urls::kChromeWebstoreUpdateURL)) {
             errors->AddError(policy_name(), it.key(),
@@ -305,16 +307,16 @@ bool ExtensionSettingsPolicyHandler::CheckPolicySettings(
           unparsed_urls->GetString(i, &unparsed_url);
           URLPattern pattern(extension_scheme_mask);
           URLPattern::ParseResult parse_result = pattern.Parse(
-              unparsed_url, URLPattern::ALLOW_WILDCARD_FOR_EFFECTIVE_TLD);
+              unparsed_url, URLPattern::DENY_WILDCARD_FOR_EFFECTIVE_TLD);
           // These keys don't support paths due to how we track the initiator
           // of a webRequest and cookie security policy. We expect a valid
           // pattern to return a PARSE_ERROR_EMPTY_PATH.
-          if (parse_result == URLPattern::PARSE_ERROR_EMPTY_PATH) {
+          if (parse_result == URLPattern::ParseResult::kEmptyPath) {
             // Add a wildcard path to the URL as it should match any path.
             parse_result =
                 pattern.Parse(unparsed_url + "/*",
-                              URLPattern::ALLOW_WILDCARD_FOR_EFFECTIVE_TLD);
-          } else if (parse_result == URLPattern::PARSE_SUCCESS) {
+                              URLPattern::DENY_WILDCARD_FOR_EFFECTIVE_TLD);
+          } else if (parse_result == URLPattern::ParseResult::kSuccess) {
             // The user supplied a path, notify them that this is not supported.
             if (!pattern.match_all_urls()) {
               errors->AddError(
@@ -326,7 +328,7 @@ bool ExtensionSettingsPolicyHandler::CheckPolicySettings(
               return false;
             }
           }
-          if (parse_result != URLPattern::PARSE_SUCCESS) {
+          if (parse_result != URLPattern::ParseResult::kSuccess) {
             errors->AddError(policy_name(), it.key(),
                              "Invalid URL pattern '" + unparsed_url +
                                  "' for attribute " + key);
@@ -346,7 +348,8 @@ void ExtensionSettingsPolicyHandler::ApplyPolicySettings(
   std::unique_ptr<base::Value> policy_value;
   if (!CheckAndGetValue(policies, NULL, &policy_value) || !policy_value)
     return;
-  prefs->SetValue(pref_names::kExtensionManagement, std::move(policy_value));
+  prefs->SetValue(pref_names::kExtensionManagement,
+                  base::Value::FromUniquePtrValue(std::move(policy_value)));
 }
 
 }  // namespace extensions

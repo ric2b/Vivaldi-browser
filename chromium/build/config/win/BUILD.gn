@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import("//build/config/chrome_build.gni")
-import("//build/config/c++/c++.gni")
 import("//build/config/clang/clang.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/sanitizers/sanitizers.gni")
@@ -38,9 +37,8 @@ declare_args() {
   #   "desktop" - Windows Desktop Applications
   target_winuwp_family = "app"
 
-  # Set this to use clang style diagnostics format. Available only on clang.
-  # Tune this on for the editor integrations like Emacs compilation mode that
-  # match clang style error messages.
+  # Set this to use clang-style diagnostics format instead of MSVC-style, which
+  # is useful in e.g. Emacs compilation mode.
   # E.g.:
   #  Without this, clang emits a diagnostic message like this:
   #    foo/bar.cc(12,34): error: something went wrong
@@ -88,6 +86,14 @@ config("compiler") {
   if (is_clang) {
     cflags += [ "-fmsc-version=1911" ]
 
+    if (is_component_build) {
+      cflags += [
+        # Do not export inline member functions. This makes component builds
+        # faster. This is similar to -fvisibility-inlines-hidden.
+        "/Zc:dllexportInlines-",
+      ]
+    }
+
     if (current_cpu == "x86") {
       cflags += [ "-m32" ]
     } else {
@@ -103,7 +109,7 @@ config("compiler") {
       ]
     }
 
-    if (is_clang && use_clang_diagnostics_format) {
+    if (use_clang_diagnostics_format) {
       cflags += [
         "-Xclang",
         "-fdiagnostics-format",
@@ -140,7 +146,7 @@ config("compiler") {
   if (!is_debug && !is_component_build) {
     # Enable standard linker optimizations like GC (/OPT:REF) and ICF in static
     # release builds. These are implied by /PROFILE below, but /PROFILE is
-    # incompatible with /debug:fastlink and LLD ignores it as of this writing.
+    # incompatible with /debug:fastlink.
     # Release builds always want these optimizations, so enable them explicitly.
     ldflags += [
       "/OPT:REF",
@@ -239,7 +245,7 @@ config("runtime_library") {
     "_ATL_NO_OPENGL",
     "_WINDOWS",
     "CERT_CHAIN_PARA_HAS_EXTRA_FIELDS",
-    "PSAPI_VERSION=1",
+    "PSAPI_VERSION=2",
     "WIN32",
     "_SECURE_ATL",
   ]
@@ -248,20 +254,6 @@ config("runtime_library") {
     # This is required for ATL to use XP-safe versions of its functions.
     # However it is prohibited when using /analyze
     defines += [ "_USING_V110_SDK71_" ]
-  }
-
-  if (use_custom_libcxx) {
-    cflags_cc +=
-        [ "-I" + rebase_path("$libcxx_prefix/include", root_build_dir) ]
-    if (!is_component_build) {
-      defines += [ "_LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS" ]
-    }
-
-    # Prevent libc++ from embedding linker flags to try to automatically link
-    # against its runtime library. This is unnecessary with our build system,
-    # and can also result in build failures if libc++'s name for a library does
-    # not match ours.
-    defines += [ "_LIBCPP_NO_AUTO_LINK" ]
   }
 
   if (current_os == "winuwp") {
@@ -313,7 +305,7 @@ config("runtime_library") {
 # targets need to manually override it for their compiles.
 config("winver") {
   defines = [
-    "NTDDI_VERSION=0x0A000002",
+    "NTDDI_VERSION=0x0A000003",  # NTDDI_WIN10_RS2
     "_WIN32_WINNT=0x0A00",
     "WINVER=0x0A00",
   ]
@@ -427,10 +419,10 @@ config("default_crt") {
   }
 }
 
-# Use this to force the debug CRT for when building perf-critical build tools
-# that need to be fully optimized even in debug builds, for those times when the
-# debug CRT is part of the bottleneck. This also avoids *implicitly* defining
-# _DEBUG.
+# Use this to force use of the release CRT when building perf-critical build
+# tools that need to be fully optimized even in debug builds, for those times
+# when the debug CRT is part of the bottleneck. This also avoids *implicitly*
+# defining _DEBUG.
 config("release_crt") {
   if (is_component_build) {
     cflags = [ "/MD" ]
@@ -464,6 +456,9 @@ if (current_cpu == "x64") {
   # The number after the comma is the minimum required OS version.
   # 5.02 = Windows Server 2003.
   subsystem_version_suffix = ",5.02"
+} else if (current_cpu == "arm64") {
+  # Windows ARM64 requires Windows 10.
+  subsystem_version_suffix = ",10.0"
 } else {
   # 5.01 = Windows XP.
   subsystem_version_suffix = ",5.01"

@@ -4,33 +4,142 @@
 
 #include "ui/aura/mus/window_tree_host_mus.h"
 
+#include <limits>
+#include <utility>
+
+#include "base/bind.h"
 #include "ui/aura/env.h"
 #include "ui/aura/mus/input_method_mus.h"
+#include "ui/aura/mus/mus_types.h"
 #include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/mus/window_tree_host_mus_delegate.h"
 #include "ui/aura/mus/window_tree_host_mus_init_params.h"
 #include "ui/aura/window.h"
+#include "ui/aura/window_delegate.h"
 #include "ui/aura/window_event_dispatcher.h"
+#include "ui/aura/window_tracker.h"
 #include "ui/aura/window_tree_host_observer.h"
 #include "ui/base/class_property.h"
+#include "ui/base/hit_test.h"
+#include "ui/base/layout.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches_util.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
+#include "ui/events/gestures/gesture_recognizer.h"
+#include "ui/events/gestures/gesture_recognizer_observer.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/platform_window/stub/stub_window.h"
 
-DEFINE_UI_CLASS_PROPERTY_TYPE(aura::WindowTreeHostMus*);
+DEFINE_UI_CLASS_PROPERTY_TYPE(aura::WindowTreeHostMus*)
 
 namespace aura {
 
 namespace {
 
-DEFINE_UI_CLASS_PROPERTY_KEY(
-    WindowTreeHostMus*, kWindowTreeHostMusKey, nullptr);
+DEFINE_UI_CLASS_PROPERTY_KEY(WindowTreeHostMus*, kWindowTreeHostMusKey, nullptr)
 
-static uint32_t accelerated_widget_count = 1;
+// Start at the max and decrease as in SingleProcessMash these values must not
+// overlap with values assigned by Ozone's PlatformWindow (which starts at 1
+// and increases).
+uint32_t next_accelerated_widget_id = std::numeric_limits<uint32_t>::max();
+
+// This class handles the gesture events occurring on the root window and sends
+// them to the content window during the window move. Typically gesture events
+// will stop arriving once PerformWindowMove is invoked, but sometimes events
+// are already queued and arrive to the root window. They should be handled
+// by the content window. See https://crbug.com/943316.
+class RemainingGestureEventHandler : public ui::EventHandler, WindowObserver {
+ public:
+  RemainingGestureEventHandler(Window* content_window, Window* root)
+      : content_window_({content_window}), root_(root) {
+    root_->AddPostTargetHandler(this);
+    root_->AddObserver(this);
+  }
+  ~RemainingGestureEventHandler() override {
+    if (root_)
+      StopObserving();
+  }
+
+ private:
+  void StopObserving() {
+    root_->RemoveObserver(this);
+    root_->RemovePostTargetHandler(this);
+    root_ = nullptr;
+  }
+
+  // ui::EventHandler:
+  void OnGestureEvent(ui::GestureEvent* event) override {
+    if (!content_window_.windows().empty())
+      (*content_window_.windows().begin())->delegate()->OnGestureEvent(event);
+  }
+  // WindowObserver:
+  void OnWindowDestroying(Window* window) override { StopObserving(); }
+
+  WindowTracker content_window_;
+  Window* root_;
+
+  DISALLOW_COPY_AND_ASSIGN(RemainingGestureEventHandler);
+};
+
+// ScopedTouchTransferController controls the transfer of touch events for
+// window move loop. It transfers touches before the window move starts, and
+// then transfers them back to the original window when the window move ends.
+// However this transferring back to the original shouldn't happen if the client
+// wants to continue the dragging on another window (like attaching the dragged
+// tab to another window).
+class ScopedTouchTransferController : public ui::GestureRecognizerObserver {
+ public:
+  ScopedTouchTransferController(Window* source, Window* dest)
+      : tracker_({source, dest}),
+        remaining_gesture_event_handler_(source, dest),
+        gesture_recognizer_(source->env()->gesture_recognizer()) {
+    gesture_recognizer_->TransferEventsTo(
+        source, dest, ui::TransferTouchesBehavior::kDontCancel);
+    gesture_recognizer_->AddObserver(this);
+  }
+  ~ScopedTouchTransferController() override {
+    gesture_recognizer_->RemoveObserver(this);
+    if (tracker_.windows().size() == 2) {
+      Window* source = tracker_.Pop();
+      Window* dest = tracker_.Pop();
+      gesture_recognizer_->TransferEventsTo(
+          dest, source, ui::TransferTouchesBehavior::kDontCancel);
+    }
+  }
+
+ private:
+  // ui::GestureRecognizerObserver:
+  void OnActiveTouchesCanceledExcept(
+      ui::GestureConsumer* not_cancelled) override {}
+  void OnEventsTransferred(
+      ui::GestureConsumer* current_consumer,
+      ui::GestureConsumer* new_consumer,
+      ui::TransferTouchesBehavior transfer_touches_behavior) override {
+    if (tracker_.windows().size() <= 1)
+      return;
+    Window* dest = tracker_.windows()[1];
+    if (current_consumer == dest)
+      tracker_.Remove(dest);
+  }
+  void OnActiveTouchesCanceled(ui::GestureConsumer* consumer) override {}
+
+  WindowTracker tracker_;
+  RemainingGestureEventHandler remaining_gesture_event_handler_;
+  ui::GestureRecognizer* gesture_recognizer_;
+
+  DISALLOW_COPY_AND_ASSIGN(ScopedTouchTransferController);
+};
+
+void OnPerformWindowMoveDone(
+    std::unique_ptr<ScopedTouchTransferController> controller,
+    base::OnceCallback<void(bool)> callback,
+    bool success) {
+  controller.reset();
+  std::move(callback).Run(success);
+}
 
 }  // namespace
 
@@ -57,20 +166,22 @@ WindowTreeHostMus::WindowTreeHostMus(WindowTreeHostMusInitParams init_params)
   // In other cases, let a valid FrameSinkId be selected by
   // context_factory_private().
   const bool force_software_compositor = false;
-  const bool external_begin_frames_enabled = false;
+  ui::ExternalBeginFrameClient* external_begin_frame_client = nullptr;
   const bool are_events_in_pixels = false;
   CreateCompositor(window_mus->GenerateFrameSinkIdFromServerId(),
-                   force_software_compositor, external_begin_frames_enabled,
-                   are_events_in_pixels);
+                   force_software_compositor, external_begin_frame_client,
+                   are_events_in_pixels,
+                   /* trace_environment_name */ nullptr,
+                   /* automatically_allocate_surface_ids */ false);
   gfx::AcceleratedWidget accelerated_widget;
 // We need accelerated widget numbers to be different for each window and
 // fit in the smallest sizeof(AcceleratedWidget) uint32_t has this property.
 #if defined(OS_WIN) || defined(OS_ANDROID)
   accelerated_widget =
-      reinterpret_cast<gfx::AcceleratedWidget>(accelerated_widget_count++);
+      reinterpret_cast<gfx::AcceleratedWidget>(next_accelerated_widget_id--);
 #else
   accelerated_widget =
-      static_cast<gfx::AcceleratedWidget>(accelerated_widget_count++);
+      static_cast<gfx::AcceleratedWidget>(next_accelerated_widget_id--);
 #endif
   OnAcceleratedWidgetAvailable(accelerated_widget);
 
@@ -116,11 +227,44 @@ WindowTreeHostMus* WindowTreeHostMus::ForWindow(aura::Window* window) {
   return root->GetProperty(kWindowTreeHostMusKey);
 }
 
-void WindowTreeHostMus::SetBoundsFromServerInPixels(
-    const gfx::Rect& bounds_in_pixels,
-    const viz::LocalSurfaceId& local_surface_id) {
-  base::AutoReset<bool> resetter(&in_set_bounds_from_server_, true);
-  SetBoundsInPixels(bounds_in_pixels, local_surface_id);
+void WindowTreeHostMus::SetBounds(
+    const gfx::Rect& bounds_in_dip,
+    const viz::LocalSurfaceIdAllocation& local_surface_id_allocation) {
+  viz::LocalSurfaceIdAllocation actual_local_surface_id_allocation =
+      local_surface_id_allocation;
+  // This uses GetScaleFactorForNativeView() as it's called at a time when the
+  // scale factor may not have been applied to the Compositor yet (the
+  // call to WindowTreeHostPlatform::SetBoundsInPixels() updates the
+  // Compositor).
+  // Do not use ConvertRectToPixel, enclosing rects cause problems. In
+  // particular, ConvertRectToPixel's result varies based on the location.
+  const float dsf = ui::GetScaleFactorForNativeView(window());
+  const gfx::Rect pixel_bounds(
+      gfx::ScaleToFlooredPoint(bounds_in_dip.origin(), dsf),
+      gfx::ScaleToCeiledSize(bounds_in_dip.size(), dsf));
+  if (!is_server_setting_bounds_) {
+    // Update the LocalSurfaceIdAllocation here, rather than in WindowTreeHost
+    // as WindowTreeClient (the delegate) needs that information before
+    // OnWindowTreeHostBoundsWillChange().
+    if (!local_surface_id_allocation.IsValid() &&
+        ShouldAllocateLocalSurfaceIdOnResize()) {
+      if (pixel_bounds.size() != compositor()->size())
+        window()->AllocateLocalSurfaceId();
+      actual_local_surface_id_allocation =
+          window()->GetLocalSurfaceIdAllocation();
+    }
+    delegate_->OnWindowTreeHostBoundsWillChange(this, bounds_in_dip);
+  }
+  bounds_in_dip_ = bounds_in_dip;
+  WindowTreeHostPlatform::SetBoundsInPixels(pixel_bounds,
+                                            actual_local_surface_id_allocation);
+}
+
+void WindowTreeHostMus::SetBoundsFromServer(
+    const gfx::Rect& bounds,
+    const viz::LocalSurfaceIdAllocation& local_surface_id_allocation) {
+  base::AutoReset<bool> resetter(&is_server_setting_bounds_, true);
+  SetBounds(bounds, local_surface_id_allocation);
 }
 
 void WindowTreeHostMus::SetClientArea(
@@ -146,16 +290,23 @@ void WindowTreeHostMus::StackAtTop() {
   delegate_->OnWindowTreeHostStackAtTop(this);
 }
 
-void WindowTreeHostMus::PerformWmAction(const std::string& action) {
-  delegate_->OnWindowTreeHostPerformWmAction(this, action);
-}
-
 void WindowTreeHostMus::PerformWindowMove(
+    Window* content_window,
     ws::mojom::MoveLoopSource mus_source,
     const gfx::Point& cursor_location,
-    const base::Callback<void(bool)>& callback) {
+    int hit_test,
+    base::OnceCallback<void(bool)> callback) {
+  DCHECK(window()->Contains(content_window));
+  std::unique_ptr<ScopedTouchTransferController> scoped_controller;
+  if (content_window != window()) {
+    scoped_controller = std::make_unique<ScopedTouchTransferController>(
+        content_window, window());
+  }
+  content_window->ReleaseCapture();
   delegate_->OnWindowTreeHostPerformWindowMove(
-      this, mus_source, cursor_location, callback);
+      this, mus_source, cursor_location, hit_test,
+      base::BindOnce(&OnPerformWindowMoveDone, std::move(scoped_controller),
+                     std::move(callback)));
 }
 
 void WindowTreeHostMus::CancelWindowMove() {
@@ -168,17 +319,22 @@ display::Display WindowTreeHostMus::GetDisplay() const {
   return display;
 }
 
+void WindowTreeHostMus::SetPendingLocalSurfaceIdFromServer(
+    const viz::LocalSurfaceIdAllocation& id) {
+  DCHECK(id.IsValid());
+  pending_local_surface_id_from_server_ = id;
+}
+
+base::Optional<viz::LocalSurfaceIdAllocation>
+WindowTreeHostMus::TakePendingLocalSurfaceIdFromServer() {
+  base::Optional<viz::LocalSurfaceIdAllocation> id;
+  std::swap(id, pending_local_surface_id_from_server_);
+  return id;
+}
+
 void WindowTreeHostMus::HideImpl() {
   WindowTreeHostPlatform::HideImpl();
   window()->Hide();
-}
-
-void WindowTreeHostMus::SetBoundsInPixels(
-    const gfx::Rect& bounds,
-    const viz::LocalSurfaceId& local_surface_id) {
-  if (!in_set_bounds_from_server_)
-    delegate_->OnWindowTreeHostBoundsWillChange(this, bounds);
-  WindowTreeHostPlatform::SetBoundsInPixels(bounds, local_surface_id);
 }
 
 void WindowTreeHostMus::DispatchEvent(ui::Event* event) {
@@ -205,6 +361,26 @@ int64_t WindowTreeHostMus::GetDisplayId() {
   return display_id_;
 }
 
+bool WindowTreeHostMus::ShouldAllocateLocalSurfaceIdOnResize() {
+  return WindowPortMus::Get(window())->window_mus_type() ==
+             WindowMusType::TOP_LEVEL &&
+         (window()->GetLocalSurfaceIdAllocation().IsValid() ||
+          pending_local_surface_id_from_server_);
+}
+
+gfx::Rect WindowTreeHostMus::GetTransformedRootWindowBoundsInPixels(
+    const gfx::Size& size_in_pixels) const {
+  // Special case asking for the current size to ensure the aura::Window is
+  // given the same size as |bounds_in_dip_|. To do otherwise could result in
+  // rounding errors and the aura::Window given a different size.
+  if (size_in_pixels == GetBoundsInPixels().size() &&
+      window()->layer()->transform().IsIdentity()) {
+    return gfx::Rect(bounds_in_dip_.size());
+  }
+  return WindowTreeHostPlatform::GetTransformedRootWindowBoundsInPixels(
+      size_in_pixels);
+}
+
 void WindowTreeHostMus::SetTextInputState(ui::mojom::TextInputStatePtr state) {
   WindowPortMus::Get(window())->SetTextInputState(std::move(state));
 }
@@ -212,6 +388,16 @@ void WindowTreeHostMus::SetTextInputState(ui::mojom::TextInputStatePtr state) {
 void WindowTreeHostMus::SetImeVisibility(bool visible,
                                          ui::mojom::TextInputStatePtr state) {
   WindowPortMus::Get(window())->SetImeVisibility(visible, std::move(state));
+}
+
+void WindowTreeHostMus::SetBoundsInPixels(
+    const gfx::Rect& bounds,
+    const viz::LocalSurfaceIdAllocation& local_surface_id_allocation) {
+  // As UI code operates in DIPs (as does the window-service APIs), this
+  // function is very seldomly uses, and so converts to DIPs.
+  SetBounds(
+      gfx::ConvertRectToDIP(ui::GetScaleFactorForNativeView(window()), bounds),
+      local_surface_id_allocation);
 }
 
 }  // namespace aura

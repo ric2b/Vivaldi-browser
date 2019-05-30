@@ -41,7 +41,7 @@ class PasswordStoreDefault : public PasswordStore {
   ~PasswordStoreDefault() override;
 
   // Opens |login_db_| on the background sequence.
-  void InitOnBackgroundSequence(
+  bool InitOnBackgroundSequence(
       const syncer::SyncableService::StartSyncFlare& flare) override;
 
   // Implements PasswordStore interface.
@@ -83,6 +83,14 @@ class PasswordStoreDefault : public PasswordStore {
   std::vector<InteractionsStats> GetAllSiteStatsImpl() override;
   std::vector<InteractionsStats> GetSiteStatsImpl(
       const GURL& origin_domain) override;
+
+  // Implements PasswordStoreSync interface.
+  bool BeginTransaction() override;
+  bool CommitTransaction() override;
+  FormRetrievalResult ReadAllLogins(
+      PrimaryKeyToFormMap* key_to_form_map) override;
+  PasswordStoreChangeList RemoveLoginByPrimaryKeySync(int primary_key) override;
+  PasswordStoreSync::MetadataStore* GetMetadataStore() override;
 
   inline bool DeleteAndRecreateDatabaseFile() {
     return login_db_->DeleteAndRecreateDatabaseFile();

@@ -6,6 +6,9 @@
 
 #include <utility>
 
+#include "base/bind.h"
+#include "media/capture/mojom/video_capture_types.mojom.h"
+
 namespace viz {
 
 namespace {
@@ -29,7 +32,7 @@ ClientFrameSinkVideoCapturer::~ClientFrameSinkVideoCapturer() {
 }
 
 void ClientFrameSinkVideoCapturer::SetFormat(media::VideoPixelFormat format,
-                                             media::ColorSpace color_space) {
+                                             gfx::ColorSpace color_space) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   format_.emplace(format, color_space);
@@ -133,7 +136,7 @@ ClientFrameSinkVideoCapturer::CreateOverlay(int32_t stacking_index) {
 
 ClientFrameSinkVideoCapturer::Format::Format(
     media::VideoPixelFormat pixel_format,
-    media::ColorSpace color_space)
+    gfx::ColorSpace color_space)
     : pixel_format(pixel_format), color_space(color_space) {}
 
 ClientFrameSinkVideoCapturer::ResolutionConstraints::ResolutionConstraints(
@@ -147,13 +150,12 @@ ClientFrameSinkVideoCapturer::ResolutionConstraints::ResolutionConstraints(
 void ClientFrameSinkVideoCapturer::OnFrameCaptured(
     base::ReadOnlySharedMemoryRegion data,
     media::mojom::VideoFrameInfoPtr info,
-    const gfx::Rect& update_rect,
     const gfx::Rect& content_rect,
     mojom::FrameSinkVideoConsumerFrameCallbacksPtr callbacks) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  consumer_->OnFrameCaptured(std::move(data), std::move(info), update_rect,
-                             content_rect, std::move(callbacks));
+  consumer_->OnFrameCaptured(std::move(data), std::move(info), content_rect,
+                             std::move(callbacks));
 }
 
 void ClientFrameSinkVideoCapturer::OnStopped() {

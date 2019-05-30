@@ -11,29 +11,34 @@
 #include <vector>
 
 #include "base/android/jni_android.h"
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/optional.h"
-#include "components/content_settings/core/common/content_settings.h"
 #include "device/vr/vr_device.h"
 #include "device/vr/vr_device_base.h"
 
 namespace vr {
 class MailboxToSurfaceBridge;
-class ArCoreJavaUtils;
+class ArCoreInstallUtils;
 }  // namespace vr
-
-namespace content {
-class WebContents;
-}  // namespace content
 
 namespace device {
 
-class ARCoreGlThread;
+class ArImageTransportFactory;
+class ArCoreFactory;
+class ArCoreGlThread;
+class ArCorePermissionHelper;
 
-class ARCoreDevice : public VRDeviceBase {
+class ArCoreDevice : public VRDeviceBase {
  public:
-  ARCoreDevice();
-  ~ARCoreDevice() override;
+  ArCoreDevice(
+      std::unique_ptr<ArCoreFactory> arcore_factory,
+      std::unique_ptr<ArImageTransportFactory> ar_image_transport_factory,
+      std::unique_ptr<vr::MailboxToSurfaceBridge> mailbox_to_surface_bridge,
+      std::unique_ptr<vr::ArCoreInstallUtils> arcore_install_utils,
+      std::unique_ptr<ArCorePermissionHelper> arcore_permission_helper);
+  ArCoreDevice();
+  ~ArCoreDevice() override;
 
   // VRDeviceBase implementation.
   void PauseTracking() override;
@@ -42,16 +47,19 @@ class ARCoreDevice : public VRDeviceBase {
       mojom::XRRuntimeSessionOptionsPtr options,
       mojom::XRRuntime::RequestSessionCallback callback) override;
 
-  base::WeakPtr<ARCoreDevice> GetWeakPtr() {
+  base::WeakPtr<ArCoreDevice> GetWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();
   }
 
-  void OnRequestInstallSupportedARCoreCanceled();
+  // TODO(crbug.com/893348): these should not be public.
+  // Use callbacks instead.
+  void OnRequestInstallArModuleResult(bool success);
+  void OnRequestInstallSupportedArCoreResult(bool success);
 
  private:
   // VRDeviceBase implementation
   bool ShouldPauseTrackingWhenFrameDataRestricted() override;
-  void OnMagicWindowFrameDataRequest(
+  void OnGetInlineFrameData(
       mojom::XRFrameDataProvider::GetFrameDataCallback callback) override;
   void RequestHitTest(
       mojom::XRRayPtr ray,
@@ -59,10 +67,8 @@ class ARCoreDevice : public VRDeviceBase {
       override;
 
   void OnMailboxBridgeReady();
-  void OnARCoreGlThreadInitialized();
-  void OnRequestCameraPermissionComplete(
-      base::OnceCallback<void(bool)> callback,
-      bool success);
+  void OnArCoreGlThreadInitialized();
+  void OnRequestCameraPermissionComplete(bool success);
 
   template <typename... Args>
   static void RunCallbackOnTaskRunner(
@@ -76,7 +82,7 @@ class ARCoreDevice : public VRDeviceBase {
   template <typename... Args>
   base::OnceCallback<void(Args...)> CreateMainThreadCallback(
       base::OnceCallback<void(Args...)> callback) {
-    return base::BindOnce(&ARCoreDevice::RunCallbackOnTaskRunner<Args...>,
+    return base::BindOnce(&ArCoreDevice::RunCallbackOnTaskRunner<Args...>,
                           main_thread_task_runner_, std::move(callback));
   }
 
@@ -84,45 +90,42 @@ class ARCoreDevice : public VRDeviceBase {
 
   bool IsOnMainThread();
 
-  void SatisfyRequestSessionPreconditions(
-      int render_process_id,
-      int render_frame_id,
-      bool has_user_activation,
-      base::OnceCallback<void(bool)> callback);
-  void OnRequestARCoreInstallOrUpdateComplete(
-      int render_process_id,
-      int render_frame_id,
-      bool has_user_activation,
-      base::OnceCallback<void(bool)> callback);
-  void CallDeferredRequestInstallSupportedARCore();
-  void RequestCameraPermission(int render_process_id,
+  void RequestArModule(int render_process_id,
+                       int render_frame_id,
+                       bool has_user_activation);
+  void OnRequestArModuleResult(int render_process_id,
                                int render_frame_id,
                                bool has_user_activation,
-                               base::OnceCallback<void(bool)> callback);
-  void OnRequestCameraPermissionResult(content::WebContents* web_contents,
-                                       base::OnceCallback<void(bool)> callback,
-                                       ContentSetting content_setting);
+                               bool success);
+  void RequestArCoreInstallOrUpdate(int render_process_id,
+                                    int render_frame_id,
+                                    bool has_user_activation);
+  void OnRequestArCoreInstallOrUpdateResult(int render_process_id,
+                                            int render_frame_id,
+                                            bool has_user_activation,
+                                            bool success);
+  void CallDeferredRequestSessionCallbacks(bool success);
   void OnRequestAndroidCameraPermissionResult(
       base::OnceCallback<void(bool)> callback,
       bool was_android_camera_permission_granted);
-  void OnRequestSessionPreconditionsComplete(
-      mojom::XRRuntime::RequestSessionCallback callback,
-      bool success);
-  void OnARCoreGlInitializationComplete(
-      mojom::XRRuntime::RequestSessionCallback callback,
-      bool success);
+  void RequestArCoreGlInitialization();
+  void OnArCoreGlInitializationComplete(bool success);
 
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
+  std::unique_ptr<ArCoreFactory> arcore_factory_;
+  std::unique_ptr<ArImageTransportFactory> ar_image_transport_factory_;
   std::unique_ptr<vr::MailboxToSurfaceBridge> mailbox_bridge_;
-  std::unique_ptr<ARCoreGlThread> arcore_gl_thread_;
-  std::unique_ptr<vr::ArCoreJavaUtils> arcore_java_utils_;
+  std::unique_ptr<ArCoreGlThread> arcore_gl_thread_;
+  std::unique_ptr<vr::ArCoreInstallUtils> arcore_install_utils_;
+  std::unique_ptr<ArCorePermissionHelper> arcore_permission_helper_;
 
   bool is_arcore_gl_thread_initialized_ = false;
   bool is_arcore_gl_initialized_ = false;
 
-  // If we get a requestSession before we are completely initialized, store it
-  // until we are intialized.
-  base::OnceClosure pending_request_session_callback_;
+  // If we get a requestSession before we are completely initialized, store a
+  // callback to requesting the AR module since that is the next step that needs
+  // to be taken.
+  base::OnceClosure pending_request_ar_module_callback_;
 
   // This object is not paused when it is created. Although it is not
   // necessarily running during initialization, it is not paused. If it is
@@ -130,13 +133,16 @@ class ARCoreDevice : public VRDeviceBase {
   // not be resumed.
   bool is_paused_ = false;
 
-  // TODO(https://)
-  std::vector<base::OnceCallback<void()>>
-      deferred_request_install_supported_arcore_callbacks_;
+  std::vector<mojom::XRRuntime::RequestSessionCallback>
+      deferred_request_session_callbacks_;
+
+  base::OnceCallback<void(bool)>
+      on_request_arcore_install_or_update_result_callback_;
+  base::OnceCallback<void(bool)> on_request_ar_module_result_callback_;
 
   // Must be last.
-  base::WeakPtrFactory<ARCoreDevice> weak_ptr_factory_;
-  DISALLOW_COPY_AND_ASSIGN(ARCoreDevice);
+  base::WeakPtrFactory<ArCoreDevice> weak_ptr_factory_;
+  DISALLOW_COPY_AND_ASSIGN(ArCoreDevice);
 };
 
 }  // namespace device

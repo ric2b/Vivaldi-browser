@@ -58,7 +58,7 @@ void RunTests(ContainerNode& scope, const QueryTest (&test_cases)[length]) {
 #endif
   }
 }
-};  // namespace
+}  // namespace
 
 TEST(SelectorQueryTest, NotMatchingPseudoElement) {
   Document* document = Document::CreateForTest();
@@ -68,11 +68,10 @@ TEST(SelectorQueryTest, NotMatchingPseudoElement) {
       "<body><style>span::before { content: 'X' }</style><span></span></body>");
 
   CSSSelectorList selector_list = CSSParser::ParseSelector(
-      CSSParserContext::Create(
-          *document, NullURL(),
-          false /* is_opaque_response_from_service_worker */,
-          kReferrerPolicyDefault, WTF::TextEncoding(),
-          CSSParserContext::kSnapshotProfile),
+      CSSParserContext::Create(*document, NullURL(), true /* origin_clean */,
+                               network::mojom::ReferrerPolicy::kDefault,
+                               WTF::TextEncoding(),
+                               CSSParserContext::kSnapshotProfile),
       nullptr, "span::before");
   std::unique_ptr<SelectorQuery> query =
       SelectorQuery::Adopt(std::move(selector_list));
@@ -80,11 +79,10 @@ TEST(SelectorQueryTest, NotMatchingPseudoElement) {
   EXPECT_EQ(nullptr, elm);
 
   selector_list = CSSParser::ParseSelector(
-      CSSParserContext::Create(
-          *document, NullURL(),
-          false /* is_opaque_response_from_service_worker */,
-          kReferrerPolicyDefault, WTF::TextEncoding(),
-          CSSParserContext::kSnapshotProfile),
+      CSSParserContext::Create(*document, NullURL(), true /* origin_clean */,
+                               network::mojom::ReferrerPolicy::kDefault,
+                               WTF::TextEncoding(),
+                               CSSParserContext::kSnapshotProfile),
       nullptr, "span");
   query = SelectorQuery::Adopt(std::move(selector_list));
   elm = query->QueryFirst(*document);
@@ -101,11 +99,10 @@ TEST(SelectorQueryTest, LastOfTypeNotFinishedParsing) {
   document->body()->BeginParsingChildren();
 
   CSSSelectorList selector_list = CSSParser::ParseSelector(
-      CSSParserContext::Create(
-          *document, NullURL(),
-          false /* is_opaque_response_from_service_worker */,
-          kReferrerPolicyDefault, WTF::TextEncoding(),
-          CSSParserContext::kSnapshotProfile),
+      CSSParserContext::Create(*document, NullURL(), true /* origin_clean */,
+                               network::mojom::ReferrerPolicy::kDefault,
+                               WTF::TextEncoding(),
+                               CSSParserContext::kSnapshotProfile),
       nullptr, "p:last-of-type");
   std::unique_ptr<SelectorQuery> query =
       SelectorQuery::Adopt(std::move(selector_list));
@@ -251,7 +248,7 @@ TEST(SelectorQueryTest, FastPathScoped) {
   ShadowRoot& shadowRoot =
       scope->AttachShadowRootInternal(ShadowRootType::kOpen);
   // Make the inside the shadow root be identical to that of the outer document.
-  shadowRoot.appendChild(document->documentElement()->CloneWithChildren());
+  shadowRoot.appendChild(&document->documentElement()->CloneWithChildren());
   static const struct QueryTest kTestCases[] = {
       // Id in the right most selector.
       {"#first", false, 0, {0, 0, 0, 0, 0, 0, 0}},
@@ -330,7 +327,7 @@ TEST(SelectorQueryTest, QuirksModeSlowPath) {
 
 TEST(SelectorQueryTest, DisconnectedSubtree) {
   Document* document = HTMLDocument::CreateForTest();
-  Element* scope = document->CreateRawElement(HTMLNames::divTag);
+  Element* scope = document->CreateRawElement(html_names::kDivTag);
   scope->SetInnerHTMLFromString(R"HTML(
     <section>
       <span id=first>
@@ -357,7 +354,7 @@ TEST(SelectorQueryTest, DisconnectedSubtree) {
 
 TEST(SelectorQueryTest, DisconnectedTreeScope) {
   Document* document = HTMLDocument::CreateForTest();
-  Element* host = document->CreateRawElement(HTMLNames::divTag);
+  Element* host = document->CreateRawElement(html_names::kDivTag);
   ShadowRoot& shadowRoot =
       host->AttachShadowRootInternal(ShadowRootType::kOpen);
   shadowRoot.SetInnerHTMLFromString(R"HTML(

@@ -8,6 +8,8 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
+
 namespace app_list {
 
 SearchModel::SearchModel()
@@ -27,11 +29,29 @@ void SearchModel::SetSearchEngineIsGoogle(bool is_google) {
 std::vector<SearchResult*> SearchModel::FilterSearchResultsByDisplayType(
     SearchResults* results,
     SearchResult::DisplayType display_type,
+    const std::set<std::string>& excludes,
+    size_t max_results) {
+  base::RepeatingCallback<bool(const SearchResult&)> filter_function =
+      base::BindRepeating(
+          [](const SearchResult::DisplayType& display_type,
+             const std::set<std::string>& excludes,
+             const SearchResult& r) -> bool {
+            return excludes.count(r.id()) == 0 &&
+                   display_type == r.display_type();
+          },
+          display_type, excludes);
+  return SearchModel::FilterSearchResultsByFunction(results, filter_function,
+                                                    max_results);
+}
+
+std::vector<SearchResult*> SearchModel::FilterSearchResultsByFunction(
+    SearchResults* results,
+    const base::RepeatingCallback<bool(const SearchResult&)>& result_filter,
     size_t max_results) {
   std::vector<SearchResult*> matches;
   for (size_t i = 0; i < results->item_count(); ++i) {
     SearchResult* item = results->GetItemAt(i);
-    if (item->display_type() == display_type) {
+    if (result_filter.Run(*item)) {
       matches.push_back(item);
       if (matches.size() == max_results)
         break;
@@ -60,12 +80,10 @@ void SearchModel::PublishResults(
   // Add items back to |results_| in the order of |new_results|.
   for (auto&& new_result : new_results) {
     auto ui_result_it = results_map.find(new_result->id());
-    if (ui_result_it != results_map.end() &&
-        new_result->answer_card_contents_token() ==
-            ui_result_it->second->answer_card_contents_token()) {
+    if (ui_result_it != results_map.end()) {
       // Update and use the old result if it exists.
       std::unique_ptr<SearchResult> ui_result = std::move(ui_result_it->second);
-      ui_result->SetMetadata(new_result->CloneMetadata());
+      ui_result->SetMetadata(new_result->TakeMetadata());
       results_->Add(std::move(ui_result));
 
       // Remove the item from the map so that it ends up only with unused
@@ -88,8 +106,27 @@ SearchResult* SearchModel::FindSearchResult(const std::string& id) {
   return nullptr;
 }
 
+SearchResult* SearchModel::GetFirstVisibleResult() {
+  for (const auto& result : *results_) {
+    if (result->is_visible())
+      return result.get();
+  }
+
+  return nullptr;
+}
+
 void SearchModel::DeleteAllResults() {
   PublishResults(std::vector<std::unique_ptr<SearchResult>>());
+}
+
+void SearchModel::DeleteResultById(const std::string& id) {
+  for (size_t i = 0; i < results_->item_count(); ++i) {
+    SearchResult* result = results_->GetItemAt(i);
+    if (result->id() == id) {
+      results_->DeleteAt(i);
+      break;
+    }
+  }
 }
 
 }  // namespace app_list

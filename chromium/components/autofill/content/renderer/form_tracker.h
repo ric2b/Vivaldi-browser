@@ -89,10 +89,11 @@ class FormTracker : public content::RenderFrameObserver {
   class FormElementObserverCallback;
 
   // content::RenderFrameObserver:
-  void DidCommitProvisionalLoad(bool is_new_navigation,
-                                bool is_same_document_navigation) override;
-  void DidStartProvisionalLoad(
-      blink::WebDocumentLoader* document_loader) override;
+  void DidCommitProvisionalLoad(bool is_same_document_navigation,
+                                ui::PageTransition transition) override;
+  void DidStartNavigation(
+      const GURL& url,
+      base::Optional<blink::WebNavigationType> navigation_type) override;
   void FrameDetached() override;
   void WillSendSubmitEvent(const blink::WebFormElement& form) override;
   void WillSubmitForm(const blink::WebFormElement& form) override;

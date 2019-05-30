@@ -7,11 +7,12 @@ module ws.mojom;
 import "mojo/public/mojom/base/unguessable_token.mojom";
 import "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom";
 import "services/viz/public/interfaces/compositing/frame_sink_id.mojom";
-import "services/viz/public/interfaces/compositing/local_surface_id.mojom";
+import "services/viz/public/interfaces/compositing/local_surface_id_allocation.mojom";
 import "services/viz/public/interfaces/compositing/surface_info.mojom";
-import "services/ws/public/mojom/cursor/cursor.mojom";
+import "services/ws/public/mojom/window_manager.mojom";
 import "services/ws/public/mojom/screen_provider_observer.mojom";
 import "services/ws/public/mojom/window_tree_constants.mojom";
+import "ui/base/mojo/cursor.mojom";
 import "ui/base/mojo/ui_base_types.mojom";
 import "ui/events/mojo/event.mojom";
 import "ui/events/mojo/event_constants.mojom";
@@ -39,12 +40,12 @@ import "ui/platform_window/mojo/text_input_state.mojom";
 //
 // Event processing happens in the following order:
 // . The event is sent to the accelerator registered for the PRE_TARGET. If
-//   the client consumes the event, matching pointer watchers are notified and
+//   the client consumes the event, matching event observers are notified and
 //   processing stops. If the client does not consume the event processing
 //   continues.
 // . Target window (lookup of the target window depends upon the event type) and
-//   matching pointer watchers are notified at the same time. The target is only
-//   notified once, even if it has a matching pointer watcher registered. If the
+//   matching event observers are notified at the same time. The target is only
+//   notified once, even if it has a matching event observer registered. If the
 //   target consumes the event, processing stops.
 // . Accelerator registered for POST_TARGET. No response is expected from the
 //   client for the POST_TARGET and processing of the next continues
@@ -65,7 +66,6 @@ interface WindowTree {
   // Requests the WindowManager to create a new top level window. On success
   // OnTopLevelCreated() is called with the WindowData for the new window. On
   // failure OnChangeCompleted() is called.
-  // TODO(sky): this likely needs context, maybe in |properties|.
   NewTopLevelWindow(uint32 change_id,
                     uint64 window_id,
                     map<string, array<uint8>> properties);
@@ -91,28 +91,45 @@ interface WindowTree {
   // if |window_id| does not currently have capture.
   ReleaseCapture(uint32 change_id, uint64 window_id);
 
-  // Starts the pointer watcher that monitors pointer events (up/down events if
-  // |wants_moves| is false, up/down and move if |wants_moves| is true), even if
-  // they are not targeted at a window in this tree. For pointer events that
-  // would normally be sent to the requesting client (if the event target is
-  // this window tree) OnWindowInputEvent() is called, all other matching
-  // pointer events (if the target is another tree) result in
-  // OnPointerEventObserved(). There is only ever one pointer watcher active at
-  // a given time. The client should prefer |want_moves| to be false, as there's
-  // a system-wide performance/battery penalty for listening to moves.
+  // Start observing global events matching the supplied |types|, even if they
+  // are not targeted at the requesting client. Events that would normally be
+  // sent to the requesting client (ie. the event target is this window tree)
+  // are sent to OnWindowInputEvent() with |matches_event_observer| set to true.
+  //
+  // Clients should limit the requested types and the duration of observation,
+  // as there is a system-wide perf/battery penalty, especially for mouse moves.
   //
   // See class description for details on event delivery.
-  StartPointerWatcher(bool want_moves);
-
-  // Stops the pointer watcher for all events.
-  StopPointerWatcher();
+  ObserveEventTypes(array<ui.mojom.EventType> types);
 
   // Sets the specified bounds of the specified window. The window will paint
   // the frame in the provided |local_frame_id|, if any.
-  SetWindowBounds(uint32 change_id,
-                  uint64 window_id,
-                  gfx.mojom.Rect bounds,
-                  viz.mojom.LocalSurfaceId? local_surface_id);
+  // |local_surface_id_allocation| need only be supplied for roots.
+  // For top-levels, clients may supply a null LocalSurfaceIdAllocation, before
+  // OnTopLevelCreated() is called (clients receive the initial
+  // LocalSurfaceIdAllocation in OnTopLevelCreated()). While clients may supply
+  // a LocalSurfaceIdAllocation for top-levels, they are only allowed to
+  // change the child-sequence number portion of the id. Supplying a different
+  // embed token results in failure, and changes to the parent sequence number
+  // are ignored.
+  // |bounds| are in DIPs.
+  SetWindowBounds(
+      uint32 change_id,
+      uint64 window_id,
+      gfx.mojom.Rect bounds,
+      viz.mojom.LocalSurfaceIdAllocation? local_surface_id_allocation);
+
+  // Updates the LocalSurfaceIdAllocation for a window from the child. Does
+  // nothing if |window_id| does not identify a top-level. See comment in
+  // SetWindowBounds() for allowable values of |local_surface_id_allocation|.
+  UpdateLocalSurfaceIdFromChild(
+      uint64 window_id,
+      viz.mojom.LocalSurfaceIdAllocation local_surface_id_allocation);
+
+  // Asks the server to generate a new LocalSurfaceId for a window. The server
+  // responds with the new LocalSurfaceId by way of OnWindowBoundsChanged().
+  // This is only useful for top-levels.
+  AllocateLocalSurfaceId(uint64 window_id);
 
   SetWindowTransform(uint32 change_id,
                      uint64 window_id,
@@ -126,10 +143,19 @@ interface WindowTree {
                 gfx.mojom.Insets insets,
                 array<gfx.mojom.Rect>? additional_client_areas);
 
-  // Mouse events outside a hit test mask do not hit the window. The |mask| is
-  // in window local coordinates. Pass null to clear the mask.
-  // TODO(jamescook): Convert |mask| to a path. http://crbug.com/613210
-  SetHitTestMask(uint64 window_id, gfx.mojom.Rect? mask);
+  // Insets the hit test of a window by the specified values. The insets must be
+  // positive (or zero). |mouse| applies to events originating from the mouse,
+  // and |touch| from a non-mouse pointer device (such as tap).
+  SetHitTestInsets(uint64 window_id,
+                   gfx.mojom.Insets mouse,
+                   gfx.mojom.Insets touch);
+
+  // Specifies the shape of the window. The region outside of the shape becomes
+  // transparent and should be considered to be outside of the widget, so
+  // underlying window will be targeted. Each element of |shape| is relative to
+  // the window's coordinate. Empty means to reset the settings, so the normal
+  // rectangular region will be used.
+  SetShape(uint64 window_id, array<gfx.mojom.Rect> shape);
 
   // Called by clients that want to accept drag and drops. Windows default to
   // this being disabled; a window must actively opt-in to receiving OnDrag*()
@@ -196,12 +222,6 @@ interface WindowTree {
   // . |window_id| does not identify a valid window.
   // . Client does not have a valid user id (i.e., it is an embedded app).
   SetModalType(uint32 change_id, uint64 window_id, ui.mojom.ModalType type);
-
-  // Sets the modal parent of a CHILD_MODAL window. This is the modal parent of
-  // the window, which is not necessarily the same as the parent of the window.
-  SetChildModalParent(uint32 change_id,
-                      uint64 window_id,
-                      uint64 parent_window_id);
 
   // Reorders a window in its parent, relative to |relative_window_id| according
   // to |direction|. Only the connection that created the window's parent can
@@ -285,6 +305,12 @@ interface WindowTree {
                   uint32 embed_flags)
       => (bool success);
 
+  // Attaches/unattaches a FrameSinkId to this window. A window can only have
+  // a single frame-sink-id attached to it.
+  AttachFrameSinkId(uint64 window_id,
+                    viz.mojom.FrameSinkId frame_sink_id);
+  UnattachFrameSinkId(uint64 window_id);
+
   // Sets focus to the specified window, use 0 to clear focus. For a window to
   // get focus the following has to happen: the window is drawn, the window has
   // been marked as focusable (see SetCanFocus()) and the window is in a
@@ -296,7 +322,7 @@ interface WindowTree {
   SetCanFocus(uint64 window_id, bool can_focus);
 
   // Sets the cursor when the pointer is inside |window_id|.
-  SetCursor(uint32 change_id, uint64 window_id, CursorData cursor);
+  SetCursor(uint32 change_id, uint64 window_id, ui.mojom.Cursor cursor);
 
   // Set text input state for the given window.
   SetWindowTextInputState(uint64 window_id, ui.mojom.TextInputState state);
@@ -327,20 +353,28 @@ interface WindowTree {
   // Stacks the window above all sibling windows.
   StackAtTop(uint32 change_id, uint64 window_id);
 
-  // Tells the window manager to perform |string_action| for |window_id|.
-  PerformWmAction(uint64 window_id, string action);
+  // Requests a window manager specific interface. |name| is the name of the
+  // interface. This function is typed to WindowManager, but that's purely
+  // by necessity. This function is used to request *any* interface known to
+  // the environment hosting the window service. If |name| is not the name of
+  // an interface known to the environment hosting the window service,
+  // |window_manager| is closed.
+  BindWindowManagerInterface(string name,
+                             associated WindowManager& window_manager);
 
   // Returns a shared memory segment that contains two 16-bit ints packed into a
   // single Atomic32, which represent the current location of the mouse cursor
   // where the location is (x << 16) | y.
   GetCursorLocationMemory() => (handle<shared_buffer> cursor_buffer);
 
-  // Tells the window manager to start moving the window. OnChangeCompleted is
-  // called on whether the move was canceled. Because there's a delay between
-  // when a client sends this message and when the window manager starts acting
-  // on it, pass the cursor location at the start of the move.
+  // Tells the window manager to start moving or resizing the window.
+  // OnChangeCompleted is called on whether the move was canceled. Because
+  // there's a delay between when a client sends this message and when the
+  // window manager starts acting on it, pass the cursor location at the start
+  // of the move. |hit_test| specifies the type of the session; kCaption for
+  // moving.
   PerformWindowMove(uint32 change_id, uint64 window_id, MoveLoopSource source,
-                    gfx.mojom.Point cursor);
+                    gfx.mojom.Point cursor, ui.mojom.HitTest hit_test);
 
   // Tells the window manager to cancel any in progress window move started with
   // StartWindowMove() and to revert the window bounds to how they were.
@@ -376,6 +410,41 @@ interface WindowTree {
   // Called by the client to request stopping the ongoing session of observing
   // the topmost window under the cursor.
   StopObservingTopmostWindow();
+
+  // Sets the resize shadow for |hit_test| to the specified window. It hides
+  // the shadow when kNowhere is set.
+  SetWindowResizeShadow(uint64 window_id, ui.mojom.HitTest hit_test);
+
+  // Called by the client to cancel active touch events. not_cancelled_window_id
+  // is a window ID, and that window is excluded from cancelling. When
+  // not_cancelled_window_id is invalid, active touch events should be cancelled
+  // on all windows.
+  CancelActiveTouchesExcept(uint64 not_cancelled_window_id);
+
+  // Called by the client to cancel active touches on |window_id|.
+  CancelActiveTouches(uint64 window_id);
+
+  // Called by the client to transfer the gesture stream from the window of
+  // |current_id| to the window of |new_id|. If |should_cancel| is set, then
+  // cancel events are also dispatched to |current_id|. Both |current_id| and
+  // |new_id| need to be valid window ID created by the client. This operation
+  // is not allowed for embedded clients.
+  TransferGestureEventsTo(uint64 current_id, uint64 new_id, bool should_cancel);
+
+  // Called by the client to start occlusion tracking for a window.
+  TrackOcclusionState(uint64 window_id);
+
+  // Called by the client to pause occlusion states computation when there are
+  // massive window changes (such as a hierarchy change, or multiple window
+  // visibility change) to avoid unnecessary occlusion state updates. Server
+  // will re-compute the occlusion state after a balancing
+  // UnpauseWindowOcclusionTracking call.
+  PauseWindowOcclusionTracking();
+
+  // Called by the client the resume occlusion states computation. When
+  // all outstanding pause requests are cleared, server will re-compute
+  // occlusion states for the tracked windows and send back updates.
+  UnpauseWindowOcclusionTracking();
 };
 
 // Changes to windows are not sent to the connection that originated the
@@ -383,6 +452,11 @@ interface WindowTree {
 // calling SetWindowBounds(), connection 1 does not receive
 // OnWindowBoundsChanged().
 interface WindowTreeClient {
+  // Sent when clients establishes a connection to the WindowService.
+  // |client_id| gives the unique id for the client. This value is generally
+  // only useful for debugging.
+  OnClientId(uint32 client_id);
+
   // Invoked when the client application has been embedded at |root|.
   // See Embed() on WindowTree for more details. |tree| will be a handle back to
   // the window manager service, unless the connection is to the root connection
@@ -395,14 +469,15 @@ interface WindowTreeClient {
           int64 display_id,
           uint64 focused_window,
           bool parent_drawn,
-          viz.mojom.LocalSurfaceId? local_surface_id);
+          viz.mojom.LocalSurfaceIdAllocation? local_surface_id_allocation);
 
   // See description in ScheduleEmbedForExistingClient() for details on this.
   // Supplied arguments match that of OnEmbed().
-  OnEmbedFromToken(mojo_base.mojom.UnguessableToken token,
-                   WindowData root,
-                   int64 display_id,
-                   viz.mojom.LocalSurfaceId? local_surface_id);
+  OnEmbedFromToken(
+      mojo_base.mojom.UnguessableToken token,
+      WindowData root,
+      int64 display_id,
+      viz.mojom.LocalSurfaceIdAllocation? local_surface_id_allocation);
 
   // Invoked when the application embedded at |window| is disconnected. In other
   // words the embedded app closes the connection to the server. This is called
@@ -426,23 +501,22 @@ interface WindowTreeClient {
   // Called in response to NewTopLevelWindow() successfully completing.
   // |parent_drawn| is true if the parent of the window is drawn, see
   // OnDrawnStateChanged() for details. |display_id| identifies the display this
-  // window is on. If the top level window has a size, |local_surface_id|
-  // identifies the ID to use to submit CompositorFrames.
-  OnTopLevelCreated(uint32 change_id,
-                    WindowData data,
-                    int64 display_id,
-                    bool parent_drawn,
-                    viz.mojom.LocalSurfaceId? local_surface_id);
+  // window is on.
+  OnTopLevelCreated(
+      uint32 change_id,
+      WindowData data,
+      int64 display_id,
+      bool parent_drawn,
+      viz.mojom.LocalSurfaceIdAllocation local_surface_id_allocation);
 
-  // Invoked when a window's bounds have changed. Only the client embedded in
-  // |window| gets a non_empty |local_surface_id|.
-  OnWindowBoundsChanged(uint64 window,
-                        gfx.mojom.Rect old_bounds,
-                        gfx.mojom.Rect new_bounds,
-                        viz.mojom.LocalSurfaceId? local_surface_id);
+  // Invoked when a window's bounds have changed. |local_surface_id_allocation|
+  // is only supplied for roots.
+  OnWindowBoundsChanged(
+      uint64 window,
+      gfx.mojom.Rect new_bounds,
+      viz.mojom.LocalSurfaceIdAllocation? local_surface_id_allocation);
 
   OnWindowTransformChanged(uint64 window,
-                           gfx.mojom.Transform old_transform,
                            gfx.mojom.Transform new_transform);
 
   OnTransientWindowAdded(uint64 window_id,
@@ -478,7 +552,11 @@ interface WindowTreeClient {
   OnWindowVisibilityChanged(uint64 window, bool visible);
 
   // Invoked when the opacity of the specified window has changed.
-  OnWindowOpacityChanged(uint64 window, float old_opacity, float new_opacity);
+  OnWindowOpacityChanged(uint64 window, float new_opacity);
+
+  // Invoked when the window moves to a new display. This is only called on
+  // a top-level window or an embedded root.
+  OnWindowDisplayChanged(uint64 window, int64 display_id);
 
   // Invoked when the drawn state of |window|'s parent changes. The drawn state
   // is determined by the visibility of a Window and the Windows ancestors. A
@@ -499,27 +577,22 @@ interface WindowTreeClient {
                                 array<uint8>? new_data);
 
   // Invoked when an event is targeted at the specified window. The client must
-  // call WindowTree::OnWindowInputEventAck() with the same |event_id| to notify
+  // call WindowTree::OnWindowInputEventAck() with the same |event_id| to ack
   // that the event has been processed, and with an EventResult value to notify
-  // if the event was consumed. |matches_pointer_watcher| is true if the client
-  // has called StartPointerWatcher() and the event matches the type of events
-  // specified by StartPointerWatcher(). The client will not receive farther
-  // events until the event is ack'ed, regardless of the value of
-  // |matches_pointer_watcher|.
+  // if the event was consumed. |matches_event_observer| is true if the event
+  // also matches the requested types passed via ObserveEventTypes(). The client
+  // must respond to ack these events, regardless of |matches_event_observer|.
   OnWindowInputEvent(uint32 event_id,
                      uint64 window,
                      int64 display_id,
                      ui.mojom.Event event,
-                     bool matches_pointer_watcher);
+                     bool matches_event_observer);
 
-  // Called when a pointer event that would not normally be targeted at this
-  // client is encountered and the client called StartPointerWatcher(). See
-  // StartPointerWatcher() for details. |window_id| is the window id of the
-  // event target, or 0 if the window is not known to this client. The
-  // client should not acknowledge these events.
-  OnPointerEventObserved(ui.mojom.Event event,
-                         uint64 window_id,
-                         int64 display_id);
+  // Called when an event not targeted at this client is observed, matching the
+  // event types passed to ObserveEventTypes(); see that function for details.
+  // Located events are always passed with the locations in screen coordinates.
+  // The client should not respond to ack these events.
+  OnObservedInputEvent(ui.mojom.Event event);
 
   // Called in two distinct cases: when a window known to the connection gains
   // focus, or when focus moves from a window known to the connection to a
@@ -528,16 +601,7 @@ interface WindowTreeClient {
   // initiate the change.
   OnWindowFocused(uint64 focused_window_id);
 
-  OnWindowCursorChanged(uint64 window_id, CursorData cursor);
-
-  // Invoked when a client window submits a new surface ID. The surface ID and
-  // associated information is propagated to the parent connection. The parent
-  // compositor can take ownership of this surface ID and embed it along with
-  // frame_size and device_scale_factor in a layer.
-  // TODO(fsamuel): Surface IDs should be passed to parents directly instead of
-  // going through the window server. http://crbug.com/655231
-  OnWindowSurfaceChanged(uint64 window_id,
-                         viz.mojom.SurfaceInfo surface_info);
+  OnWindowCursorChanged(uint64 window_id, ui.mojom.Cursor cursor);
 
   // Called when the mouse cursor enters a window on this connection for the
   // first time, providing a list of available mime types. We want to send this
@@ -545,32 +609,36 @@ interface WindowTreeClient {
   // occurs every time the mouse enters a window.
   OnDragDropStart(map<string, array<uint8>> drag_data);
 
-  // Called when the mouse cursor enters a window that has opted into
-  // accepting drags through SetAcceptsDrags(), providing a list
-  // of available mime types.  Returns a bitmask of the supported
-  // operations. |screen_position| is in screen coordinates.
+  // Called when the mouse cursor enters a window that has opted into accepting
+  // drags through SetAcceptsDrags(), providing a list of available mime types.
+  // |location_in_root| is the location relative to the embed root of |window|.
+  // |location| is the location relative to |window|.
+  // If |window| is a top-level or embed root, then |location_in_root| is the
+  // same as |location|. Callback is supplied the supported operations.
   OnDragEnter(uint64 window,
               uint32 key_state,
-              gfx.mojom.Point screen_position,
+              gfx.mojom.PointF location_in_root,
+              gfx.mojom.PointF location,
               uint32 effect_bitmask) => (uint32 supported_op_bitmask);
 
-  // Called when the pointer moves over the window after the initial
-  // DragEnter. Returns a bitmask of the supported operations at this
-  // location. |screen_position| is in screen coordinates.
+  // Called when the pointer moves over the window after the initial DragEnter.
+  // Returns a bitmask of the supported operations at this location. See
+  // OnDragEnter() for details on coordinates.
   OnDragOver(uint64 window,
              uint32 key_state,
-             gfx.mojom.Point screen_position,
+             gfx.mojom.PointF location_in_root,
+             gfx.mojom.PointF location,
              uint32 effect_bitmask) => (uint32 supported_op_bitmask);
 
-  // Called when the pointer leaves a window or if the drop is
-  // canceled.
+  // Called when the pointer leaves a window or if the drop is canceled.
   OnDragLeave(uint64 window);
 
-  // Called when the drop occurs on a window. Returns the action
-  // taken. |screen_position| is in screen coordinates.
+  // Called when the drop occurs on a window. Returns the action taken. See
+  // OnDragEnter() for details on coordinates.
   OnCompleteDrop(uint64 window,
                  uint32 key_state,
-                 gfx.mojom.Point screen_position,
+                 gfx.mojom.PointF location_in_root,
+                 gfx.mojom.PointF location,
                  uint32 effect_bitmask) => (uint32 action_taken);
 
   // Called on the client that requested PerformDragDrop() to return which drag
@@ -603,6 +671,24 @@ interface WindowTreeClient {
   // Requests the ScreenProviderObserver from the client. See
   // ScreenProviderObserver for details.
   GetScreenProviderObserver(associated ScreenProviderObserver& observer);
+
+  // Called to send occlusion changes to client. |occlusion_changes| contains
+  // the changed info, with window id as its key and new occlusion state as its
+  // data. See also TrackOcclusionState on WindowTree.
+  OnOcclusionStatesChanged(map<uint64, OcclusionState> occlusion_changes);
+
+  // Cancels the ongoing touch gesture recognitions and clears related gesture
+  // recognition state of the window of |window_id| in the client.
+  CleanupGestureState(uint64 window_id);
+
+  // Called when the window manager may start resizing a window by a user
+  // gesture. For example, if the user clicks on a window-resize handle this may
+  // be called. This is followed by OnWindowResizeLoopEnded() when the loop is
+  // done. This function is only called for top-levels.
+  // OnWindowResizeLoopEnded() may not be called if the window is destroyed
+  // during the loop.
+  OnWindowResizeLoopStarted(uint64 window_id);
+  OnWindowResizeLoopEnded(uint64 window_id);
 };
 
 // Mus provides this interface as a way for clients to connect and obtain a

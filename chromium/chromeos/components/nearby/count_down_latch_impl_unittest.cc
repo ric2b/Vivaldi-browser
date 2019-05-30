@@ -4,6 +4,7 @@
 
 #include "chromeos/components/nearby/count_down_latch_impl.h"
 
+#include "base/bind.h"
 #include "base/containers/flat_map.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
@@ -85,7 +86,7 @@ class CountDownLatchImplTest : public testing::Test {
     base::PlatformThread::Sleep(TestTimeouts::tiny_timeout());
   }
 
-  const base::test::ScopedTaskEnvironment scoped_task_environment_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   base::Lock map_lock_;
   base::flat_map<base::UnguessableToken,
                  base::Optional<location::nearby::ExceptionOr<bool>>>

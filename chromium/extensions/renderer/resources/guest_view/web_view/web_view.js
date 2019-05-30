@@ -6,35 +6,29 @@
 // BrowserPlugin object element. The object element is hidden within
 // the shadow DOM of the WebView element.
 
-var DocumentNatives = requireNative('document_natives');
+var $Element = require('safeMethods').SafeMethods.$Element;
 var GuestView = require('guestView').GuestView;
 var GuestViewContainer = require('guestViewContainer').GuestViewContainer;
 var GuestViewInternalNatives = requireNative('guest_view_internal');
 var WebViewConstants = require('webViewConstants').WebViewConstants;
-var WEB_VIEW_API_METHODS = require('webViewApiMethods').WEB_VIEW_API_METHODS;
 var WebViewAttributes = require('webViewAttributes').WebViewAttributes;
 var WebViewEvents = require('webViewEvents').WebViewEvents;
 var WebViewInternal = getInternalApi ?
     getInternalApi('webViewInternal') :
     require('webViewInternal').WebViewInternal;
 
+var RegisterVivaldiWebViewExtensions = require("webViewPrivateImpl").RegisterVivaldiWebViewExtensions;
+
 // Represents the internal state of <webview>.
 function WebViewImpl(webviewElement) {
   $Function.call(GuestViewContainer, this, webviewElement, 'webview');
-  this.cachedZoom = 1;
+  this.pendingZoomFactor_ = null;
+  this.userAgentOverride = null;
   this.setupElementProperties();
   new WebViewEvents(this, this.viewInstanceId);
 }
 
 WebViewImpl.prototype.__proto__ = GuestViewContainer.prototype;
-
-WebViewImpl.VIEW_TYPE = 'WebView';
-
-// Add extra functionality to |this.element|.
-WebViewImpl.setupElement = function(proto) {
-  // Forward proto.foo* method calls to WebViewImpl.foo*.
-  GuestViewContainer.forwardApiMethods(proto, WEB_VIEW_API_METHODS);
-};
 
 // Sets up all of the webview attributes.
 WebViewImpl.prototype.setupAttributes = function() {
@@ -56,6 +50,8 @@ WebViewImpl.prototype.setupAttributes = function() {
     new WebViewAttributes.TabIdAttribute(this);
   this.attributes[WebViewConstants.ATTRIBUTE_WASTYPED] =
     new WebViewAttributes.WasTypedAttribute(this);
+  this.attributes[WebViewConstants.ATTRIBUTE_VIEW_TYPE] =
+    new WebViewAttributes.ViewtypeAttribute(this);
 
   var autosizeAttributes = [
     WebViewConstants.ATTRIBUTE_MAXHEIGHT, WebViewConstants.ATTRIBUTE_MAXWIDTH,
@@ -190,8 +186,9 @@ WebViewImpl.prototype.onAttach = function(storagePartitionId) {
 };
 
 WebViewImpl.prototype.buildContainerParams = function() {
-  var params = { 'initialZoomFactor': this.cachedZoomFactor,
-                 'userAgentOverride': this.userAgentOverride };
+  var params = $Object.create(null);
+  params.initialZoomFactor = this.pendingZoomFactor_;
+  params.userAgentOverride = this.userAgentOverride;
   for (var i in this.attributes) {
     var value = this.attributes[i].getValueIfDirty();
     if (value)
@@ -209,18 +206,10 @@ WebViewImpl.prototype.attachWindow$ = function(opt_guestInstanceId) {
     }
     this.guest.destroy();
     this.guest = new GuestView('webview', opt_guestInstanceId);
-    this.prepareForReattach_();
+    this.prepareForReattach$();
   }
 
   return $Function.call(GuestViewContainer.prototype.attachWindow$, this);
-};
-
-WebViewImpl.prototype.addContentScripts = function(rules) {
-  return WebViewInternal.addContentScripts(this.viewInstanceId, rules);
-};
-
-WebViewImpl.prototype.removeContentScripts = function(names) {
-  return WebViewInternal.removeContentScripts(this.viewInstanceId, names);
 };
 
 // Shared implementation of executeScript() and insertCSS().
@@ -239,45 +228,6 @@ WebViewImpl.prototype.executeCode = function(func, args) {
                        $Array.slice(args));
   $Function.apply(func, null, args);
   return true;
-};
-
-WebViewImpl.prototype.executeScript = function(var_args) {
-  return this.executeCode(
-      WebViewInternal.executeScript, $Array.slice(arguments));
-};
-
-WebViewImpl.prototype.insertCSS = function(var_args) {
-  return this.executeCode(WebViewInternal.insertCSS, $Array.slice(arguments));
-};
-
-WebViewImpl.prototype.back = function(callback) {
-  return this.go(-1, callback);
-};
-
-WebViewImpl.prototype.canGoBack = function() {
-  return this.entryCount > 1 && this.currentEntryIndex > 0;
-};
-
-WebViewImpl.prototype.canGoForward = function() {
-  return this.currentEntryIndex >= 0 &&
-      this.currentEntryIndex < (this.entryCount - 1);
-};
-
-WebViewImpl.prototype.forward = function(callback) {
-  return this.go(1, callback);
-};
-
-WebViewImpl.prototype.getProcessId = function() {
-  return this.processId;
-};
-
-WebViewImpl.prototype.getUserAgent = function() {
-  return this.userAgentOverride || navigator.userAgent;
-};
-
-WebViewImpl.prototype.isUserAgentOverridden = function() {
-  return !!this.userAgentOverride &&
-      this.userAgentOverride != navigator.userAgent;
 };
 
 WebViewImpl.prototype.setUserAgentOverride = function(userAgentOverride) {
@@ -307,16 +257,12 @@ WebViewImpl.prototype.loadDataWithBaseUrl = function(
       });
 };
 
-WebViewImpl.prototype.print = function() {
-  return this.executeScript({code: 'window.print();'});
-};
-
 WebViewImpl.prototype.setZoom = function(zoomFactor, callback) {
   if (!this.guest.getId()) {
-    this.cachedZoomFactor = zoomFactor;
+    this.pendingZoomFactor_ = zoomFactor;
     return false;
   }
-  this.cachedZoomFactor = 1;
+  this.pendingZoomFactor_ = null;
   WebViewInternal.setZoom(this.guest.getId(), zoomFactor, callback);
   return true;
 };
@@ -324,35 +270,12 @@ WebViewImpl.prototype.setZoom = function(zoomFactor, callback) {
 // Requests the <webview> element wihtin the embedder to enter fullscreen.
 WebViewImpl.prototype.makeElementFullscreen = function() {
   GuestViewInternalNatives.RunWithGesture($Function.bind(function() {
-    this.element.webkitRequestFullScreen();
+    $Element.webkitRequestFullScreen(this.element);
   }, this));
 };
 
-// Implemented when the ChromeWebView API is available.
-WebViewImpl.prototype.maybeSetupContextMenus = function() {};
-
-(() => {
-  // For <webview> API methods which aren't explicitly defined on |WebViewImpl|,
-  // create default implementations which forward the call to |WebViewInternal|.
-  var createDefaultApiMethod = function(m) {
-    return function(var_args) {
-      if (!this.guest.getId()) {
-        return false;
-      }
-      var args = $Array.concat([this.guest.getId()], $Array.slice(arguments));
-      $Function.apply(WebViewInternal[m], null, args);
-      return true;
-    };
-  };
-
-  for (var methodName of WEB_VIEW_API_METHODS) {
-    if (WebViewImpl.prototype[methodName] == undefined) {
-      WebViewImpl.prototype[methodName] = createDefaultApiMethod(methodName);
-    }
-  }
-})();
-
-GuestViewContainer.registerElement(WebViewImpl);
+// vivaldi extensions
+RegisterVivaldiWebViewExtensions(WebViewImpl)
 
 // Exports.
 exports.$set('WebViewImpl', WebViewImpl);

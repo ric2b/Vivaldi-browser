@@ -21,10 +21,13 @@ namespace blink {
 class FloatPoint;
 class FloatRect;
 class FloatSize;
+class Font;
 class GraphicsContext;
 class ImageObserver;
 
-// A generated placeholder image that shows a translucent gray rectangle.
+// A generated placeholder image that shows a translucent gray rectangle with
+// the full resource size (for example, 100KB) shown in the center. For
+// LazyImages the placeholder image will be a plain translucent rectangle.
 class PLATFORM_EXPORT PlaceholderImage final : public Image {
  public:
   static scoped_refptr<PlaceholderImage> Create(
@@ -32,7 +35,13 @@ class PLATFORM_EXPORT PlaceholderImage final : public Image {
       const IntSize& size,
       int64_t original_resource_size) {
     return base::AdoptRef(
-        new PlaceholderImage(observer, size, original_resource_size));
+        new PlaceholderImage(observer, size, original_resource_size, false));
+  }
+
+  static scoped_refptr<PlaceholderImage> CreateForLazyImages(
+      ImageObserver* observer,
+      const IntSize& size) {
+    return base::AdoptRef(new PlaceholderImage(observer, size, 0, true));
   }
 
   ~PlaceholderImage() override;
@@ -54,11 +63,15 @@ class PLATFORM_EXPORT PlaceholderImage final : public Image {
   bool IsPlaceholderImage() const override;
 
   const String& GetTextForTesting() const { return text_; }
+  const Font* GetFontForTesting() const;
+
+  void SetIconAndTextScaleFactor(float icon_and_text_scale_factor);
 
  private:
   PlaceholderImage(ImageObserver*,
                    const IntSize&,
-                   int64_t original_resource_size);
+                   int64_t original_resource_size,
+                   bool is_lazy_image);
 
   bool CurrentFrameHasSingleSecurityOrigin() const override;
 
@@ -77,6 +90,11 @@ class PLATFORM_EXPORT PlaceholderImage final : public Image {
 
   const IntSize size_;
   const String text_;
+
+  // This placeholder image is used for lazyloading of images.
+  bool is_lazy_image_;
+
+  float icon_and_text_scale_factor_ = 1.0f;
 
   class SharedFont;
   // Lazily initialized. All instances of PlaceholderImage will share the same

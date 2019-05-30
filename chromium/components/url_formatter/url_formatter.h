@@ -73,10 +73,6 @@ extern const FormatUrlType kFormatUrlOmitTrailingSlashOnBareHostname;
 // If the scheme is 'https://', it's removed. Not in kFormatUrlOmitDefaults.
 extern const FormatUrlType kFormatUrlOmitHTTPS;
 
-// Replaces the path, query, and ref with an ellipsis. Experimental and not in
-// kFormatUrlOmitDefaults.
-extern const FormatUrlType kFormatUrlExperimentalElideAfterHost;
-
 // Omits some trivially informative subdomains such as "www" or "m". Not in
 // kFormatUrlOmitDefaults.
 extern const FormatUrlType kFormatUrlOmitTrivialSubdomains;
@@ -84,6 +80,12 @@ extern const FormatUrlType kFormatUrlOmitTrivialSubdomains;
 // Omits everything after the host: the path, query, ref, username and password
 // are all omitted.
 extern const FormatUrlType kFormatUrlTrimAfterHost;
+
+// If the scheme is 'file://', it's removed. Not in kFormatUrlOmitDefaults.
+extern const FormatUrlType kFormatUrlOmitFileScheme;
+
+// If the scheme is 'mailto:', it's removed. Not in kFormatUrlOmitDefaults.
+extern const FormatUrlType kFormatUrlOmitMailToScheme;
 
 // Convenience for omitting all unecessary types. Does not include HTTPS scheme
 // removal, or experimental flags.
@@ -184,6 +186,10 @@ base::string16 StripWWWFromHost(const GURL& url);
 
 // Returns skeleton strings computed from |host| for spoof checking.
 Skeletons GetSkeletons(const base::string16& host);
+
+// Returns a domain from the top 10K list matching the given skeleton. Used for
+// spoof checking.
+std::string LookupSkeletonInTopDomains(const std::string& skeleton);
 
 }  // namespace url_formatter
 

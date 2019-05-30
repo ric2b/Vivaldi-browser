@@ -42,11 +42,11 @@ namespace switches {
 
 GL_EXPORT extern const char kDisableD3D11[];
 GL_EXPORT extern const char kDisableES3GLContext[];
+GL_EXPORT extern const char kDisableES3GLContextForTesting[];
 GL_EXPORT extern const char kDisableGpuVsync[];
 GL_EXPORT extern const char kEnableGPUServiceLogging[];
 GL_EXPORT extern const char kEnableGPUServiceTracing[];
 GL_EXPORT extern const char kGpuNoContextLost[];
-GL_EXPORT extern const char kDisableDirectComposition[];
 
 GL_EXPORT extern const char kUseANGLE[];
 GL_EXPORT extern const char kUseGL[];
@@ -55,6 +55,7 @@ GL_EXPORT extern const char kUseGpuInTests[];
 GL_EXPORT extern const char kEnableSgiVideoSync[];
 GL_EXPORT extern const char kDisableGLExtensions[];
 GL_EXPORT extern const char kEnableSwapBuffersWithBounds[];
+GL_EXPORT extern const char kDisableDirectComposition[];
 GL_EXPORT extern const char kEnableDirectCompositionLayers[];
 GL_EXPORT extern const char kDisableDirectCompositionLayers[];
 
@@ -69,7 +70,6 @@ GL_EXPORT extern const int kGLSwitchesCopiedFromGpuProcessHostNumSwitches;
 
 namespace features {
 
-GL_EXPORT extern const base::Feature kDirectCompositionUnderlays;
 GL_EXPORT extern const base::Feature kDirectCompositionComplexOverlays;
 GL_EXPORT extern const base::Feature kDirectCompositionNonrootOverlays;
 GL_EXPORT extern const base::Feature kDefaultANGLEOpenGL;

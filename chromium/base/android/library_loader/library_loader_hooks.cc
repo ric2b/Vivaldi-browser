@@ -11,10 +11,11 @@
 #include "base/android/orderfile/orderfile_buildflags.h"
 #include "base/at_exit.h"
 #include "base/base_switches.h"
-#include "base/command_line.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/no_destructor.h"
+#include "base/rand_util.h"
 #include "jni/LibraryLoader_jni.h"
 
 #if BUILDFLAG(ORDERFILE_INSTRUMENTATION)
@@ -30,6 +31,9 @@ base::AtExitManager* g_at_exit_manager = NULL;
 const char* g_library_version_number = "";
 LibraryLoadedHook* g_registration_callback = NULL;
 NativeInitializationHook* g_native_initialization_hook = NULL;
+
+constexpr char kSwitchOffValue[] = "off";
+constexpr char kSwitchOnValue[] = "on";
 
 enum RendererHistogramCode {
   // Renderer load at fixed address success, fail, or not attempted.
@@ -91,14 +95,46 @@ void RecordLibraryPreloaderRendereHistogram() {
   }
 }
 
-#if BUILDFLAG(SUPPORTS_CODE_ORDERING)
-bool ShouldDoOrderfileMemoryOptimization() {
-  return CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kOrderfileMemoryOptimization);
-}
-#endif
-
 }  // namespace
+
+namespace internal {
+
+bool GetRandomizedTrial(const std::string& flag_name,
+                        CommandLine* command_line) {
+  std::string switch_value = command_line->GetSwitchValueASCII(flag_name);
+  if (switch_value.empty()) {
+    // Set enabled randomly.
+    bool is_enabled = RandUint64() & 1;
+    command_line->AppendSwitchASCII(
+        flag_name, is_enabled ? kSwitchOnValue : kSwitchOffValue);
+    return is_enabled;
+  } else if (switch_value == kSwitchOffValue) {
+    return false;
+  } else if (switch_value != kSwitchOnValue) {
+    // Default to on if invalid switch value.
+    LOG(ERROR) << "Invalid value for --" << flag_name
+               << "; was expecting 'on' or 'off' instead of " << switch_value
+               << ". Trial is ENABLED.";
+    return true;
+  } else {
+    DCHECK_EQ(switch_value, kSwitchOnValue);
+    return true;
+  }
+}
+
+}  // namespace internal.
+
+bool IsUsingOrderfileOptimization() {
+#if BUILDFLAG(SUPPORTS_CODE_ORDERING)
+  // A local static variable is guaranteed to be initialized once in a
+  // thread-safe way.
+  static bool trial_enabled =
+      internal::GetRandomizedTrial(switches::kOrderfileMemoryOptimization);
+  return trial_enabled;
+#else  //  !SUPPORTS_CODE_ORDERING
+  return false;
+#endif
+}
 
 static void JNI_LibraryLoader_RegisterChromiumAndroidLinkerRendererHistogram(
     JNIEnv* env,
@@ -186,7 +222,10 @@ static jboolean JNI_LibraryLoader_LibraryLoaded(
 #endif
 
 #if BUILDFLAG(SUPPORTS_CODE_ORDERING)
-  if (ShouldDoOrderfileMemoryOptimization()) {
+  if (CommandLine::ForCurrentProcess()->HasSwitch(
+          "log-native-library-residency")) {
+    NativeLibraryPrefetcher::MadviseForResidencyCollection();
+  } else if (IsUsingOrderfileOptimization()) {
     NativeLibraryPrefetcher::MadviseForOrderfile();
   }
 #endif
@@ -195,8 +234,12 @@ static jboolean JNI_LibraryLoader_LibraryLoaded(
       !g_native_initialization_hook(
           static_cast<LibraryProcessType>(library_process_type)))
     return false;
-  if (g_registration_callback && !g_registration_callback(env, nullptr))
+  if (g_registration_callback &&
+      !g_registration_callback(
+          env, nullptr,
+          static_cast<LibraryProcessType>(library_process_type))) {
     return false;
+  }
   return true;
 }
 
@@ -207,18 +250,15 @@ void LibraryLoaderExitHook() {
   }
 }
 
-static void JNI_LibraryLoader_ForkAndPrefetchNativeLibrary(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz) {
+static void JNI_LibraryLoader_ForkAndPrefetchNativeLibrary(JNIEnv* env) {
 #if BUILDFLAG(SUPPORTS_CODE_ORDERING)
   return NativeLibraryPrefetcher::ForkAndPrefetchNativeLibrary(
-      ShouldDoOrderfileMemoryOptimization());
+      IsUsingOrderfileOptimization());
 #endif
 }
 
 static jint JNI_LibraryLoader_PercentageOfResidentNativeLibraryCode(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz) {
+    JNIEnv* env) {
 #if BUILDFLAG(SUPPORTS_CODE_ORDERING)
   return NativeLibraryPrefetcher::PercentageOfResidentNativeLibraryCode();
 #else
@@ -226,9 +266,7 @@ static jint JNI_LibraryLoader_PercentageOfResidentNativeLibraryCode(
 #endif
 }
 
-static void JNI_LibraryLoader_PeriodicallyCollectResidency(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz) {
+static void JNI_LibraryLoader_PeriodicallyCollectResidency(JNIEnv* env) {
 #if BUILDFLAG(SUPPORTS_CODE_ORDERING)
   NativeLibraryPrefetcher::PeriodicallyCollectResidency();
 #else

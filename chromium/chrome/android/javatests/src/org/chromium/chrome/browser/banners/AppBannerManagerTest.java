@@ -11,7 +11,6 @@ import android.app.Instrumentation.ActivityResult;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.support.test.InstrumentationRegistry;
@@ -29,9 +28,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.mockito.quality.Strictness;
@@ -65,9 +62,9 @@ import org.chromium.chrome.test.util.InfoBarUtil;
 import org.chromium.chrome.test.util.browser.TabLoadObserver;
 import org.chromium.chrome.test.util.browser.TabTitleObserver;
 import org.chromium.chrome.test.util.browser.WebappTestPage;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.TouchCommon;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.net.test.EmbeddedTestServer;
 
@@ -189,10 +186,10 @@ public class AppBannerManagerTest {
     @Before
     public void setUp() throws Exception {
         AppBannerManager.setIsSupported(true);
-        InstallerDelegate.setPackageManagerForTesting(mPackageManager);
         ShortcutHelper.setDelegateForTests(new ShortcutHelper.Delegate() {
             @Override
-            public void addShortcutToHomescreen(String title, Bitmap icon, Intent shortcutIntent) {
+            public void addShortcutToHomescreen(
+                    String title, Bitmap icon, boolean iconAdaptive, Intent shortcutIntent) {
                 // Ignore to prevent adding homescreen shortcuts.
             }
         });
@@ -219,11 +216,15 @@ public class AppBannerManagerTest {
         });
     }
 
+    private AppBannerManager getAppBannerManager(Tab tab) {
+        return AppBannerManager.forTab(tab);
+    }
+
     private void waitForBannerManager(Tab tab) {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return !tab.getAppBannerManager().isRunningForTesting();
+                return !getAppBannerManager(tab).isRunningForTesting();
             }
         });
     }
@@ -240,8 +241,7 @@ public class AppBannerManagerTest {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                AppBannerManager manager =
-                        rule.getActivity().getActivityTab().getAppBannerManager();
+                AppBannerManager manager = getAppBannerManager(rule.getActivity().getActivityTab());
                 return mDetailsDelegate.mNumRetrieved == numExpected
                         && !manager.isRunningForTesting();
             }
@@ -279,11 +279,6 @@ public class AppBannerManagerTest {
 
     private void runFullNativeInstallPathway(
             String url, String expectedReferrer, String expectedTitle) throws Exception {
-        // Say that the package isn't installed.
-        Mockito.when(mPackageManager.getPackageInfo(
-                             ArgumentMatchers.anyString(), ArgumentMatchers.anyInt()))
-                .thenThrow(new PackageManager.NameNotFoundException());
-
         // Visit a site that requests a banner.
         Tab tab = mTabbedActivityTestRule.getActivity().getActivityTab();
         resetEngagementForUrl(url, 0);
@@ -292,19 +287,14 @@ public class AppBannerManagerTest {
 
         // Update engagement, then revisit the page to get the banner to appear.
         resetEngagementForUrl(url, 10);
-        InfoBarContainer container = tab.getInfoBarContainer();
+        InfoBarContainer container = mTabbedActivityTestRule.getInfoBarContainer();
         final InfobarListener listener = new InfobarListener();
         container.addAnimationListener(listener);
         new TabLoadObserver(tab).fullyLoadUrl(url);
         waitUntilAppDetailsRetrieved(mTabbedActivityTestRule, 1);
         Assert.assertEquals(mDetailsDelegate.mReferrer, expectedReferrer);
         waitUntilAppBannerInfoBarAppears(mTabbedActivityTestRule, NATIVE_APP_TITLE);
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return listener.mDoneAnimating;
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> listener.mDoneAnimating);
 
         // Check that the button asks if the user wants to install the app.
         InfoBar infobar = container.getInfoBarsForTesting().get(0);
@@ -318,39 +308,10 @@ public class AppBannerManagerTest {
         InstrumentationRegistry.getInstrumentation().addMonitor(activityMonitor);
         TouchCommon.singleClickView(button);
 
-        // Wait for the infobar to register that the app is installing.
-        final String installingText = InstrumentationRegistry.getTargetContext().getString(
-                R.string.app_banner_installing);
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return InstrumentationRegistry.getInstrumentation().checkMonitorHit(
-                               activityMonitor, 1)
-                        && TextUtils.equals(button.getText(), installingText);
-            }
-        });
-
         // If we expect an update of the page title via JavaScript, wait until the change happens.
         if (expectedTitle != null) {
             new TabTitleObserver(tab, expectedTitle).waitForTitleUpdate(3);
         }
-
-        // Say that the package is installed.  Infobar should say that the app is ready to open.
-        Mockito.reset(mPackageManager);
-        PackageInfo info = new PackageInfo();
-        info.packageName = NATIVE_APP_PACKAGE;
-        Mockito.when(mPackageManager.getPackageInfo(
-                             ArgumentMatchers.anyString(), ArgumentMatchers.anyInt()))
-                .thenReturn(info);
-
-        final String openText =
-                InstrumentationRegistry.getTargetContext().getString(R.string.app_banner_open);
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return TextUtils.equals(button.getText(), openText);
-            }
-        });
     }
 
     private void triggerWebAppBanner(ChromeActivityTestRule<? extends ChromeActivity> rule,
@@ -362,7 +323,7 @@ public class AppBannerManagerTest {
         InfoBarUtil.waitUntilNoInfoBarsExist(rule.getInfoBars());
 
         // Add the animation listener in.
-        InfoBarContainer container = rule.getActivity().getActivityTab().getInfoBarContainer();
+        InfoBarContainer container = rule.getInfoBarContainer();
         final InfobarListener listener = new InfobarListener();
         container.addAnimationListener(listener);
 
@@ -373,12 +334,7 @@ public class AppBannerManagerTest {
 
         if (!installApp) return;
 
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return listener.mDoneAnimating;
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> listener.mDoneAnimating);
 
         // Click the button to trigger the adding of the shortcut.
         InfoBar infobar = container.getInfoBarsForTesting().get(0);
@@ -392,7 +348,7 @@ public class AppBannerManagerTest {
         // Update engagement, then visit a page which triggers a banner.
         Tab tab = rule.getActivity().getActivityTab();
         resetEngagementForUrl(url, 10);
-        InfoBarContainer container = tab.getInfoBarContainer();
+        InfoBarContainer container = rule.getInfoBarContainer();
         final InfobarListener listener = new InfobarListener();
         container.addAnimationListener(listener);
         new TabLoadObserver(tab).fullyLoadUrl(url);
@@ -402,12 +358,7 @@ public class AppBannerManagerTest {
         waitUntilAppBannerInfoBarAppears(rule, expectedTitle);
 
         // Explicitly dismiss the banner.
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return listener.mDoneAnimating;
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> listener.mDoneAnimating);
         ArrayList<InfoBar> infobars = container.getInfoBarsForTesting();
         View close = infobars.get(0).getView().findViewById(R.id.infobar_close_button);
         TouchCommon.singleClickView(close);
@@ -423,7 +374,7 @@ public class AppBannerManagerTest {
             @Override
             public boolean isSatisfied() {
                 AddToHomescreenDialog dialog =
-                        tab.getAppBannerManager().getAddToHomescreenDialogForTesting();
+                        getAppBannerManager(tab).getAddToHomescreenDialogForTesting();
                 return dialog == null || dialog.getAlertDialogForTesting() == null;
             }
         });
@@ -436,7 +387,7 @@ public class AppBannerManagerTest {
             @Override
             public boolean isSatisfied() {
                 AddToHomescreenDialog dialog =
-                        tab.getAppBannerManager().getAddToHomescreenDialogForTesting();
+                        getAppBannerManager(tab).getAddToHomescreenDialogForTesting();
                 if (dialog != null) {
                     AlertDialog alertDialog = dialog.getAlertDialogForTesting();
                     return alertDialog != null && alertDialog.isShowing();
@@ -483,7 +434,7 @@ public class AppBannerManagerTest {
         instrumentation.addMonitor(activityMonitor);
 
         ThreadUtils.runOnUiThreadBlocking(() -> {
-            Button button = tab.getAppBannerManager()
+            Button button = getAppBannerManager(tab)
                                     .getAddToHomescreenDialogForTesting()
                                     .getAlertDialogForTesting()
                                     .getButton(DialogInterface.BUTTON_POSITIVE);
@@ -523,7 +474,7 @@ public class AppBannerManagerTest {
 
     private void clickButton(final Tab tab, final int button) {
         ThreadUtils.runOnUiThreadBlocking(() -> {
-            tab.getAppBannerManager()
+            getAppBannerManager(tab)
                     .getAddToHomescreenDialogForTesting()
                     .getAlertDialogForTesting()
                     .getButton(button)
@@ -575,9 +526,10 @@ public class AppBannerManagerTest {
                         "call_stashed_prompt_on_click_verify_appinstalled"),
                 NATIVE_APP_BLANK_REFERRER, true);
 
-        // The appinstalled event should fire (and cause the title to change).
-        new TabTitleObserver(mTabbedActivityTestRule.getActivity().getActivityTab(),
-                "Got appinstalled: listener, attr")
+        // The userChoice promise should resolve (and cause the title to change). appinstalled is
+        // not fired for native apps
+        new TabTitleObserver(
+                mTabbedActivityTestRule.getActivity().getActivityTab(), "Got userChoice: accepted")
                 .waitForTitleUpdate(3);
     }
 
@@ -598,7 +550,7 @@ public class AppBannerManagerTest {
 
         // The appinstalled event should fire (and cause the title to change).
         new TabTitleObserver(mCustomTabActivityTestRule.getActivity().getActivityTab(),
-                "Got appinstalled: listener, attr")
+                "Got userChoice: accepted")
                 .waitForTitleUpdate(3);
     }
 
@@ -697,17 +649,12 @@ public class AppBannerManagerTest {
         new TabLoadObserver(tab).fullyLoadUrl(webBannerUrl);
         waitUntilAmbientBadgeInfoBarAppears(mTabbedActivityTestRule);
 
-        InfoBarContainer container = tab.getInfoBarContainer();
+        InfoBarContainer container = mTabbedActivityTestRule.getInfoBarContainer();
         final InfobarListener listener = new InfobarListener();
         container.addAnimationListener(listener);
 
         // Explicitly dismiss the ambient badge.
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return listener.mDoneAnimating;
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> listener.mDoneAnimating);
 
         ArrayList<InfoBar> infobars = container.getInfoBarsForTesting();
         View close = infobars.get(0).getView().findViewById(R.id.infobar_close_button);
@@ -748,8 +695,8 @@ public class AppBannerManagerTest {
     public void testFullNativeInstallPathwayFromUrl() throws Exception {
         runFullNativeInstallPathway(
                 WebappTestPage.getNonServiceWorkerUrlWithManifestAndAction(
-                        mTestServer, NATIVE_APP_MANIFEST_WITH_URL, "verify_appinstalled"),
-                NATIVE_APP_REFERRER, "Got appinstalled: listener, attr");
+                        mTestServer, NATIVE_APP_MANIFEST_WITH_URL, "call_prompt_delayed"),
+                NATIVE_APP_REFERRER, "Got userChoice: accepted");
     }
 
     @Test
@@ -832,7 +779,7 @@ public class AppBannerManagerTest {
 
         // Update engagement, then revisit the page.
         resetEngagementForUrl(nativeBannerUrl, 10);
-        InfoBarContainer container = tab.getInfoBarContainer();
+        InfoBarContainer container = mTabbedActivityTestRule.getInfoBarContainer();
         final InfobarListener listener = new InfobarListener();
         container.addAnimationListener(listener);
         new TabLoadObserver(tab).fullyLoadUrl(nativeBannerUrl);
@@ -840,12 +787,7 @@ public class AppBannerManagerTest {
         waitUntilAppBannerInfoBarAppears(mTabbedActivityTestRule, NATIVE_APP_TITLE);
 
         // Explicitly dismiss the banner.
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return listener.mDoneAnimating;
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> listener.mDoneAnimating);
         ArrayList<InfoBar> infobars = container.getInfoBarsForTesting();
         View close = infobars.get(0).getView().findViewById(R.id.infobar_close_button);
         TouchCommon.singleClickView(close);
@@ -880,19 +822,14 @@ public class AppBannerManagerTest {
 
         // Update engagement, then visit a page which triggers a banner.
         resetEngagementForUrl(webBannerUrl, 10);
-        InfoBarContainer container = tab.getInfoBarContainer();
+        InfoBarContainer container = mTabbedActivityTestRule.getInfoBarContainer();
         final InfobarListener listener = new InfobarListener();
         container.addAnimationListener(listener);
         new TabLoadObserver(tab).fullyLoadUrl(webBannerUrl);
         waitUntilAppBannerInfoBarAppears(mTabbedActivityTestRule, WEB_APP_TITLE);
 
         // Explicitly dismiss the banner.
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return listener.mDoneAnimating;
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> listener.mDoneAnimating);
         ArrayList<InfoBar> infobars = container.getInfoBarsForTesting();
         View close = infobars.get(0).getView().findViewById(R.id.infobar_close_button);
         TouchCommon.singleClickView(close);
@@ -988,7 +925,7 @@ public class AppBannerManagerTest {
         // Verify metrics calling in the successful case.
         ThreadUtils.runOnUiThread(() -> {
             AppBannerManager manager =
-                    mTabbedActivityTestRule.getActivity().getActivityTab().getAppBannerManager();
+                    getAppBannerManager(mTabbedActivityTestRule.getActivity().getActivityTab());
             manager.recordMenuItemAddToHomescreen();
             Assert.assertEquals(1,
                     RecordHistogram.getHistogramValueCountForTesting(

@@ -7,10 +7,11 @@
 
 #include "base/time/time.h"
 #include "cc/trees/layer_tree_host.h"
-#include "content/renderer/gpu/layer_tree_view.h"
+#include "content/renderer/compositor/layer_tree_view.h"
 #include "content/test/stub_layer_tree_view_delegate.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_canvas.h"
+#include "third_party/blink/renderer/platform/graphics/apply_viewport_changes.h"
 
 namespace blink {
 
@@ -27,17 +28,27 @@ class WebViewImpl;
 // Note: This also does not support compositor driven animations.
 class SimCompositor final : public content::StubLayerTreeViewDelegate {
  public:
-  explicit SimCompositor();
+  SimCompositor();
   ~SimCompositor() override;
 
   // This compositor should be given to the WebViewImpl passed to SetWebView.
   content::LayerTreeView& layer_tree_view() { return *layer_tree_view_; }
 
   // When the compositor asks for a main frame, this WebViewImpl will have its
-  // lifecycle updated and be painted. The compositor() should have also been
-  // given to the WebViewImpl so that its using the same compositor() for its
-  // layer tree.
-  void SetWebView(WebViewImpl&);
+  // lifecycle updated and be painted. The WebLayerTreeView that is being used
+  // to composite the WebViewImpl is passed separately as the underlying
+  // content::LayerTreeView type, in order to bypass the Web* API surface
+  // provided to blink.
+  // The WebWidget client is overridden (via the WebViewClient) to control
+  // BeginMainFrame scheduling since this test suite does not use the
+  // compositor's scheduler. The SimCompositor wants to monitor and verify
+  // expectations around this scheduling, so receives the WebViewClient. We
+  // pass it here explicitly to provide type safety, though it is the client
+  // available on the WebViewImpl as well.
+  void SetWebView(WebViewImpl&,
+                  content::LayerTreeView&,
+                  frame_test_helpers::TestWebViewClient&,
+                  frame_test_helpers::TestWebWidgetClient&);
 
   // Executes the BeginMainFrame processing steps, an approximation of what
   // cc::ThreadProxy::BeginMainFrame would do.
@@ -55,15 +66,19 @@ class SimCompositor final : public content::StubLayerTreeViewDelegate {
   // Helpers to query the state of the compositor from tests.
   //
   // Returns true if a main frame has been requested from blink, until the
-  // BeginFrame() step occurs.
+  // BeginFrame() step occurs. The AnimationScheduled() checks if an explicit
+  // requet for BeginFrame() was made, vs an implicit one by making changes
+  // to the compositor's state.
   bool NeedsBeginFrame() const {
-    return layer_tree_view_->layer_tree_host()->RequestedMainFramePending();
+    cc::LayerTreeHost* layer_tree_host = layer_tree_view_->layer_tree_host();
+    return test_web_widget_client_->AnimationScheduled() ||
+           layer_tree_host->RequestedMainFramePendingForTesting();
   }
   // Returns true if commits are deferred in the compositor. Since these tests
   // use synchronous compositing through BeginFrame(), the deferred state has no
   // real effect.
-  bool DeferCommits() const {
-    return layer_tree_view_->layer_tree_host()->defer_commits();
+  bool DeferMainFrameUpdate() const {
+    return layer_tree_view_->layer_tree_host()->defer_main_frame_update();
   }
   // Returns true if a selection is set on the compositor.
   bool HasSelection() const {
@@ -75,21 +90,27 @@ class SimCompositor final : public content::StubLayerTreeViewDelegate {
     return layer_tree_view_->layer_tree_host()->background_color();
   }
 
+  base::TimeTicks LastFrameTime() const { return last_frame_time_; }
+
  private:
   // content::LayerTreeViewDelegate implementation.
+  void ApplyViewportChanges(const ApplyViewportChangesArgs& args) override;
   void RequestNewLayerTreeFrameSink(
       LayerTreeFrameSinkCallback callback) override;
   void BeginMainFrame(base::TimeTicks frame_time) override;
+  void DidBeginMainFrame() override { web_view_->DidBeginFrame(); }
 
   WebViewImpl* web_view_ = nullptr;
+  content::LayerTreeView* layer_tree_view_ = nullptr;
+  frame_test_helpers::TestWebViewClient* test_web_view_client_ = nullptr;
+  frame_test_helpers::TestWebWidgetClient* test_web_widget_client_ = nullptr;
+
   base::TimeTicks last_frame_time_;
 
-  // During BeginFrame(), painting is done, and the result is stored here to
-  // be returned from BeginFrame().
   SimCanvas::Commands* paint_commands_;
 
-  content::LayerTreeView* layer_tree_view_ = nullptr;
-  FrameTestHelpers::LayerTreeViewFactory layer_tree_view_factory_;
+  std::unique_ptr<cc::ScopedDeferMainFrameUpdate>
+      scoped_defer_main_frame_update_;
 };
 
 }  // namespace blink

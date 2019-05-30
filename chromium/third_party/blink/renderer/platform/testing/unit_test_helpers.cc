@@ -33,8 +33,8 @@
 #include "third_party/blink/public/platform/file_path_conversion.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_string.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/shared_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_utf8_adaptor.h"
@@ -51,18 +51,18 @@ base::FilePath BlinkRootFilePath() {
       path.Append(FILE_PATH_LITERAL("third_party/blink")));
 }
 
-base::FilePath LayoutTestsFilePath() {
+base::FilePath WebTestsFilePath() {
   base::FilePath path;
   base::PathService::Get(base::DIR_SOURCE_ROOT, &path);
   return base::MakeAbsoluteFilePath(
-      path.Append(FILE_PATH_LITERAL("third_party/WebKit/LayoutTests")));
+      path.Append(FILE_PATH_LITERAL("third_party/blink/web_tests")));
 }
 
 }  // namespace
 
 void RunPendingTasks() {
-  Platform::Current()->CurrentThread()->GetTaskRunner()->PostTask(
-      FROM_HERE, WTF::Bind(&ExitRunLoop));
+  Thread::Current()->GetTaskRunner()->PostTask(FROM_HERE,
+                                               WTF::Bind(&ExitRunLoop));
 
   // We forbid GC in the tasks. Otherwise the registered GCTaskObserver tries
   // to run GC with NoHeapPointerOnStack.
@@ -72,7 +72,7 @@ void RunPendingTasks() {
 }
 
 void RunDelayedTasks(TimeDelta delay) {
-  Platform::Current()->CurrentThread()->GetTaskRunner()->PostDelayedTask(
+  Thread::Current()->GetTaskRunner()->PostDelayedTask(
       FROM_HERE, WTF::Bind(&ExitRunLoop), delay);
   EnterRunLoop();
 }
@@ -93,8 +93,8 @@ String BlinkRootDir() {
   return FilePathToWebString(BlinkRootFilePath());
 }
 
-String BlinkLayoutTestsDir() {
-  return FilePathToWebString(LayoutTestsFilePath());
+String BlinkWebTestsDir() {
+  return FilePathToWebString(WebTestsFilePath());
 }
 
 String ExecutableDir() {
@@ -114,6 +114,14 @@ String PlatformTestDataPath(const String& relative_path) {
   return FilePathToWebString(
       BlinkRootFilePath()
           .Append(FILE_PATH_LITERAL("renderer/platform/testing/data"))
+          .Append(WebStringToFilePath(relative_path)));
+}
+
+String AccessibilityTestDataPath(const String& relative_path) {
+  return FilePathToWebString(
+      BlinkRootFilePath()
+          .Append(
+              FILE_PATH_LITERAL("renderer/modules/accessibility/testing/data"))
           .Append(WebStringToFilePath(relative_path)));
 }
 

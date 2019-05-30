@@ -1,9 +1,11 @@
+#!/usr/bin/env python
 # Copyright 2017 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
 import datetime
 import unittest
+import xml.dom.minidom
 
 import generate_expired_histograms_array
 
@@ -146,6 +148,30 @@ class ExpiredHistogramsTest(unittest.TestCase):
 
     self.assertEqual(_EXPECTED_HEADER_FILE_CONTENT.format(
         array_definition=_EXPECTED_NON_EMPTY_ARRAY_DEFINITION), content)
+
+  def testGenerateFileHistogramExpiryWithGrace(self):
+    histograms = xml.dom.minidom.parseString("""
+<histogram-configuration>
+<histograms><!-- Must be alphabetical. -->
+  <histogram name="FirstHistogram" expires_after="2010-11-01"/>
+  <histogram name="FourthHistogram" expires_after="M61"/>
+  <histogram name="SecondHistogram" expires_after="2010-09-01"/>
+  <histogram name="ThirdHistogram" expires_after="M60"/>
+</histograms>
+</histogram-configuration>
+""")
+
+    branch_data = "MAJOR_BRANCH_DATE=2011-01-01\n"
+    mstone_data = "MAJOR=63\n"
+
+    content = generate_expired_histograms_array._GenerateFileContent(
+        histograms, branch_data, mstone_data, "header.h", "uma")
+    # These have expired but are within the 14-week/2-milestone grace period.
+    self.assertNotIn("FirstHistogram", content);
+    self.assertNotIn("FourthHistogram", content);
+    # These have expired and are outside of the grace period.
+    self.assertIn("SecondHistogram", content);
+    self.assertIn("ThirdHistogram", content);
 
   def testGenerateHeaderFileContentEmptyArray(self):
     header_filename = "test/test.h"

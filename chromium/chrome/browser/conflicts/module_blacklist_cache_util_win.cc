@@ -6,11 +6,12 @@
 
 #include <algorithm>
 #include <functional>
+#include <iterator>
 #include <string>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
-#include "base/containers/span.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -232,25 +233,21 @@ int64_t CalculateExpectedFileSize(
   return static_cast<int64_t>(sizeof(third_party_dlls::PackedListMetadata) +
                               packed_list_metadata.module_count *
                                   sizeof(third_party_dlls::PackedListModule) +
-                              arraysize(base::MD5Digest::a));
+                              std::extent<decltype(base::MD5Digest::a)>());
 }
 
 bool ModuleLess::operator()(
     const third_party_dlls::PackedListModule& lhs,
     const third_party_dlls::PackedListModule& rhs) const {
-  return std::make_tuple(base::make_span(lhs.basename_hash),
-                         base::make_span(lhs.code_id_hash)) <
-         std::make_tuple(base::make_span(rhs.basename_hash),
-                         base::make_span(rhs.code_id_hash));
+  return std::tie(lhs.basename_hash, lhs.code_id_hash) <
+         std::tie(rhs.basename_hash, rhs.code_id_hash);
 }
 
 bool ModuleEqual::operator()(
     const third_party_dlls::PackedListModule& lhs,
     const third_party_dlls::PackedListModule& rhs) const {
-  return std::make_tuple(base::make_span(lhs.basename_hash),
-                         base::make_span(lhs.code_id_hash)) ==
-         std::make_tuple(base::make_span(rhs.basename_hash),
-                         base::make_span(rhs.code_id_hash));
+  return lhs.basename_hash == rhs.basename_hash &&
+         lhs.code_id_hash == rhs.code_id_hash;
 }
 
 bool ModuleTimeDateStampGreater::operator()(

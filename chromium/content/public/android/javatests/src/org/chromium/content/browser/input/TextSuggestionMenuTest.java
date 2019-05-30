@@ -21,13 +21,13 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.content.R;
-import org.chromium.content.browser.test.ContentJUnit4ClassRunner;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.DOMUtils;
-import org.chromium.content.browser.test.util.JavaScriptUtils;
-import org.chromium.content.browser.test.util.TouchCommon;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.test.ContentJUnit4ClassRunner;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.DOMUtils;
+import org.chromium.content_public.browser.test.util.JavaScriptUtils;
+import org.chromium.content_public.browser.test.util.TouchCommon;
 
 import java.util.concurrent.TimeoutException;
 
@@ -282,12 +282,138 @@ public class TextSuggestionMenuTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                TextSuggestionHost.fromWebContents(webContents)
+                getTextSuggestionHost(webContents)
                         .getTextSuggestionsPopupWindowForTesting()
                         .dismiss();
             }
         });
         waitForMenuToHide(webContents);
+    }
+
+    @Test
+    @LargeTest
+    public void testAutoCorrectionSuggestionSpan() throws InterruptedException, Throwable {
+        WebContents webContents = mRule.getWebContents();
+
+        DOMUtils.focusNode(webContents, "div");
+        mRule.waitAndVerifyUpdateSelection(0, 0, 0, -1, -1);
+
+        SpannableString textToCommit = new SpannableString("hello");
+        SuggestionSpan suggestionSpan = new SuggestionSpan(
+                mRule.getActivity(), new String[0], SuggestionSpan.FLAG_AUTO_CORRECTION);
+        textToCommit.setSpan(suggestionSpan, 0, 5, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        mRule.commitText(textToCommit, 1);
+        mRule.waitAndVerifyUpdateSelection(1, 5, 5, -1, -1);
+
+        Assert.assertEquals("1",
+                JavaScriptUtils.executeJavaScriptAndWaitForResult(webContents,
+                        "internals.markerCountForNode("
+                                + "document.getElementById('div').firstChild, 'suggestion')"));
+    }
+
+    // The following 3 tests (test*RemovesAutoCorrectionSuggestionSpan()) are testing if we
+    // correctly removed SuggestionSpan with SPAN_COMPOSING flag. If IME sets the SPAN_COMPOSING
+    // flag for the span, the SuggestionSpan is in transition state, and we should remove it once we
+    // done with composing.
+    @Test
+    @LargeTest
+    public void testSetComposingTextRemovesAutoCorrectionSuggestionSpan()
+            throws InterruptedException, Throwable {
+        WebContents webContents = mRule.getWebContents();
+
+        DOMUtils.focusNode(webContents, "div");
+        mRule.waitAndVerifyUpdateSelection(0, 0, 0, -1, -1);
+
+        SpannableString composingText = new SpannableString("hello");
+        SuggestionSpan suggestionSpan = new SuggestionSpan(
+                mRule.getActivity(), new String[0], SuggestionSpan.FLAG_AUTO_CORRECTION);
+        composingText.setSpan(
+                suggestionSpan, 0, 5, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE | Spanned.SPAN_COMPOSING);
+        mRule.setComposingText(composingText, 1);
+        mRule.waitAndVerifyUpdateSelection(1, 5, 5, 0, 5);
+
+        Assert.assertEquals("1",
+                JavaScriptUtils.executeJavaScriptAndWaitForResult(webContents,
+                        "internals.markerCountForNode("
+                                + "document.getElementById('div').firstChild, 'suggestion')"));
+
+        // setComposingText() will replace the text in current composing range and set a new
+        // composing range, so the spans associated with composing range should be removed. If there
+        // is no new span attached to the SpannableString, we should get 0 marker.
+        mRule.setComposingText(new SpannableString("helloworld"), 1);
+        mRule.waitAndVerifyUpdateSelection(2, 10, 10, 0, 10);
+
+        Assert.assertEquals("0",
+                JavaScriptUtils.executeJavaScriptAndWaitForResult(webContents,
+                        "internals.markerCountForNode("
+                                + "document.getElementById('div').firstChild, 'suggestion')"));
+    }
+
+    @Test
+    @LargeTest
+    public void testCommitTextRemovesAutoCorrectionSuggestionSpan()
+            throws InterruptedException, Throwable {
+        WebContents webContents = mRule.getWebContents();
+
+        DOMUtils.focusNode(webContents, "div");
+        mRule.waitAndVerifyUpdateSelection(0, 0, 0, -1, -1);
+
+        SpannableString composingText = new SpannableString("hello");
+        SuggestionSpan suggestionSpan = new SuggestionSpan(
+                mRule.getActivity(), new String[0], SuggestionSpan.FLAG_AUTO_CORRECTION);
+        composingText.setSpan(
+                suggestionSpan, 0, 5, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE | Spanned.SPAN_COMPOSING);
+        mRule.setComposingText(composingText, 1);
+        mRule.waitAndVerifyUpdateSelection(1, 5, 5, 0, 5);
+
+        Assert.assertEquals("1",
+                JavaScriptUtils.executeJavaScriptAndWaitForResult(webContents,
+                        "internals.markerCountForNode("
+                                + "document.getElementById('div').firstChild, 'suggestion')"));
+
+        // commitText() will replace the text in current composing range and there won't be a new
+        // composing range. So we done with composing and the SuggestionSpan with SPAN_COMPOSING
+        // should be removed.
+        mRule.commitText(new SpannableString("helloworld"), 1);
+        mRule.waitAndVerifyUpdateSelection(2, 10, 10, -1, -1);
+
+        Assert.assertEquals("0",
+                JavaScriptUtils.executeJavaScriptAndWaitForResult(webContents,
+                        "internals.markerCountForNode("
+                                + "document.getElementById('div').firstChild, 'suggestion')"));
+    }
+
+    @Test
+    @LargeTest
+    public void testFinishComposingRemovesAutoCorrectionSuggestionSpan()
+            throws InterruptedException, Throwable {
+        WebContents webContents = mRule.getWebContents();
+
+        DOMUtils.focusNode(webContents, "div");
+        mRule.waitAndVerifyUpdateSelection(0, 0, 0, -1, -1);
+
+        SpannableString composingText = new SpannableString("hello");
+        SuggestionSpan suggestionSpan = new SuggestionSpan(
+                mRule.getActivity(), new String[0], SuggestionSpan.FLAG_AUTO_CORRECTION);
+        composingText.setSpan(
+                suggestionSpan, 0, 5, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE | Spanned.SPAN_COMPOSING);
+        mRule.setComposingText(composingText, 1);
+        mRule.waitAndVerifyUpdateSelection(1, 5, 5, 0, 5);
+
+        Assert.assertEquals("1",
+                JavaScriptUtils.executeJavaScriptAndWaitForResult(webContents,
+                        "internals.markerCountForNode("
+                                + "document.getElementById('div').firstChild, 'suggestion')"));
+
+        // finishComposingText() will remove the composing range, any span has SPAN_COMPOSING flag
+        // should be removed since there is no composing range available.
+        mRule.finishComposingText();
+        mRule.waitAndVerifyUpdateSelection(2, 5, 5, -1, -1);
+
+        Assert.assertEquals("0",
+                JavaScriptUtils.executeJavaScriptAndWaitForResult(webContents,
+                        "internals.markerCountForNode("
+                                + "document.getElementById('div').firstChild, 'suggestion')"));
     }
 
     private void waitForMenuToShow(WebContents webContents) {
@@ -313,12 +439,11 @@ public class TextSuggestionMenuTest {
             @Override
             public boolean isSatisfied() {
                 SuggestionsPopupWindow suggestionsPopupWindow =
-                        TextSuggestionHost.fromWebContents(webContents)
+                        getTextSuggestionHost(webContents)
                                 .getTextSuggestionsPopupWindowForTesting();
 
                 SuggestionsPopupWindow spellCheckPopupWindow =
-                        TextSuggestionHost.fromWebContents(webContents)
-                                .getSpellCheckPopupWindowForTesting();
+                        getTextSuggestionHost(webContents).getSpellCheckPopupWindowForTesting();
 
                 return suggestionsPopupWindow == null && spellCheckPopupWindow == null;
             }
@@ -327,22 +452,25 @@ public class TextSuggestionMenuTest {
 
     private View getContentView(WebContents webContents) {
         SuggestionsPopupWindow suggestionsPopupWindow =
-                TextSuggestionHost.fromWebContents(webContents)
-                        .getTextSuggestionsPopupWindowForTesting();
+                getTextSuggestionHost(webContents).getTextSuggestionsPopupWindowForTesting();
 
         if (suggestionsPopupWindow != null) {
             return suggestionsPopupWindow.getContentViewForTesting();
         }
 
         SuggestionsPopupWindow spellCheckPopupWindow =
-                TextSuggestionHost.fromWebContents(webContents)
-                        .getSpellCheckPopupWindowForTesting();
+                getTextSuggestionHost(webContents).getSpellCheckPopupWindowForTesting();
 
         if (spellCheckPopupWindow != null) {
             return spellCheckPopupWindow.getContentViewForTesting();
         }
 
         return null;
+    }
+
+    private TextSuggestionHost getTextSuggestionHost(WebContents webContents) {
+        return ThreadUtils.runOnUiThreadBlockingNoException(
+                () -> TextSuggestionHost.fromWebContents(webContents));
     }
 
     private ListView getSuggestionList(WebContents webContents) {

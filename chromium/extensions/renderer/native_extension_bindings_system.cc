@@ -4,6 +4,7 @@
 
 #include "extensions/renderer/native_extension_bindings_system.h"
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
@@ -42,6 +43,7 @@
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_user_gesture_indicator.h"
 
 namespace extensions {
 
@@ -93,7 +95,8 @@ struct BindingsSystemPerContextData : public base::SupportsUserData::Data {
 // If a 'chrome' property exists but isn't an object, returns an empty Local.
 // If no 'chrome' property exists (or is undefined), creates a new
 // object, assigns it to Global().chrome, and returns it.
-v8::Local<v8::Object> GetOrCreateChrome(v8::Local<v8::Context> context) {
+v8::Local<v8::Object> GetOrCreateChrome(v8::Local<v8::Context> context,
+                                        bool prop_is_vivaldi = false) {
   // Ensure that the creation context for any new chrome object is |context|.
   v8::Context::Scope context_scope(context);
 
@@ -103,8 +106,8 @@ v8::Local<v8::Object> GetOrCreateChrome(v8::Local<v8::Context> context) {
   // throw exceptions or have unintended side effects.
   // On the one hand, anyone writing that code is probably asking for trouble.
   // On the other, it'd be nice to avoid. I wonder if we can?
-  v8::Local<v8::String> chrome_string =
-      gin::StringToSymbol(context->GetIsolate(), "chrome");
+  v8::Local<v8::String> chrome_string = gin::StringToSymbol(
+      context->GetIsolate(), prop_is_vivaldi ? "vivaldi" : "chrome");
   v8::Local<v8::Value> chrome_value;
   if (!context->Global()->Get(context, chrome_string).ToLocal(&chrome_value))
     return v8::Local<v8::Object>();
@@ -342,15 +345,19 @@ NativeExtensionBindingsSystem::NativeExtensionBindingsSystem(
     std::unique_ptr<IPCMessageSender> ipc_message_sender)
     : ipc_message_sender_(std::move(ipc_message_sender)),
       api_system_(
-          base::Bind(&GetAPISchema),
-          base::Bind(&IsAPIFeatureAvailable),
-          base::Bind(&NativeExtensionBindingsSystem::SendRequest,
-                     base::Unretained(this)),
-          base::Bind(&NativeExtensionBindingsSystem::OnEventListenerChanged,
-                     base::Unretained(this)),
-          base::Bind(&GetContextOwner),
-          base::Bind(&APIActivityLogger::LogAPICall),
-          base::Bind(&AddConsoleError),
+          base::BindRepeating(&GetAPISchema),
+          base::BindRepeating(&IsAPIFeatureAvailable),
+          base::BindRepeating(&NativeExtensionBindingsSystem::SendRequest,
+                              base::Unretained(this)),
+          base::BindRepeating(
+              &NativeExtensionBindingsSystem::GetUserActivationState,
+              base::Unretained(this)),
+          base::BindRepeating(
+              &NativeExtensionBindingsSystem::OnEventListenerChanged,
+              base::Unretained(this)),
+          base::BindRepeating(&GetContextOwner),
+          base::BindRepeating(&APIActivityLogger::LogAPICall),
+          base::BindRepeating(&AddConsoleError),
           APILastError(base::Bind(&GetLastErrorParents),
                        base::Bind(&AddConsoleError))),
       messaging_service_(this),
@@ -427,6 +434,7 @@ void NativeExtensionBindingsSystem::UpdateBindingsForContext(
   v8::Isolate* isolate = context->isolate();
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> v8_context = context->v8_context();
+
   v8::Local<v8::Object> chrome = GetOrCreateChrome(v8_context);
   if (chrome.IsEmpty())
     return;
@@ -437,9 +445,25 @@ void NativeExtensionBindingsSystem::UpdateBindingsForContext(
                        v8_context](base::StringPiece accessor_name) {
     v8::Local<v8::String> api_name =
         gin::StringToSymbol(isolate, accessor_name);
+
+    std::string api_name_string;
+    CHECK(
+      gin::Converter<std::string>::FromV8(isolate, api_name, &api_name_string));
+
+    const Feature* feature =
+      FeatureProvider::GetByName("api")->GetFeature(api_name_string);
+    if (feature && feature->IsVivaldiFeature()) {
+      v8::Local<v8::Object> vivaldi = GetOrCreateChrome(v8_context, true);
+      v8::Maybe<bool> success = vivaldi->SetLazyDataProperty(
+        v8_context, api_name, &BindingAccessor, api_name);
+      return success.IsJust() && success.FromJust();
+
+    }
+    else {
     v8::Maybe<bool> success = chrome->SetLazyDataProperty(
         v8_context, api_name, &BindingAccessor, api_name);
     return success.IsJust() && success.FromJust();
+    }
   };
 
   bool is_webpage = false;
@@ -756,6 +780,13 @@ void NativeExtensionBindingsSystem::SendRequest(
 
   ipc_message_sender_->SendRequestIPC(script_context, std::move(params),
                                       request->thread);
+}
+
+bool NativeExtensionBindingsSystem::GetUserActivationState(
+    v8::Local<v8::Context> context) {
+  ScriptContext* script_context = GetScriptContextFromV8ContextChecked(context);
+  return blink::WebUserGestureIndicator::IsProcessingUserGestureThreadSafe(
+      script_context->web_frame());
 }
 
 void NativeExtensionBindingsSystem::OnEventListenerChanged(

@@ -37,8 +37,6 @@ std::ostream& operator<<(std::ostream& out, const KeepAliveOrigin& origin) {
       return out << "CHROME_APP_DELEGATE";
     case KeepAliveOrigin::CHROME_VIEWS_DELEGATE:
       return out << "CHROME_VIEWS_DELEGATE";
-    case KeepAliveOrigin::LEAKED_UNINSTALL_VIEW:
-      return out << "LEAKED_UNINSTALL_VIEW";
     case KeepAliveOrigin::PANEL:
       return out << "PANEL";
     case KeepAliveOrigin::PANEL_VIEW:
@@ -49,6 +47,8 @@ std::ostream& operator<<(std::ostream& out, const KeepAliveOrigin& origin) {
       return out << "PROFILE_LOADER";
     case KeepAliveOrigin::USER_MANAGER_VIEW:
       return out << "USER_MANAGER_VIEW";
+    case KeepAliveOrigin::CREDENTIAL_PROVIDER_SIGNIN_DIALOG:
+      return out << "CREDENTIAL_PROVIDER_SIGNIN_DIALOG";
   }
 
   NOTREACHED();

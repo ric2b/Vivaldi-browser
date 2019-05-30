@@ -24,6 +24,7 @@
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/ios/browser/autofill_driver_ios.h"
+#include "components/omnibox/browser/location_bar_model.h"
 #include "components/payments/core/can_make_payment_query.h"
 #include "components/payments/core/features.h"
 #include "components/payments/core/journey_logger.h"
@@ -39,7 +40,6 @@
 #include "components/payments/core/web_payment_request.h"
 #include "components/payments/mojom/payment_request_data.mojom.h"
 #include "components/prefs/pref_service.h"
-#include "components/toolbar/toolbar_model.h"
 #include "components/url_formatter/elide_url.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #include "ios/chrome/browser/autofill/validation_rules_storage_factory.h"
@@ -66,7 +66,10 @@
 #import "ios/web/public/web_state/navigation_context.h"
 #import "ios/web/public/web_state/ui/crw_web_view_proxy.h"
 #include "ios/web/public/web_state/url_verification_constants.h"
-#include "ios/web/public/web_state/web_state.h"
+#include "ios/web/public/web_state/web_frame.h"
+#include "ios/web/public/web_state/web_frame_util.h"
+#import "ios/web/public/web_state/web_frames_manager.h"
+#import "ios/web/public/web_state/web_state.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
 #include "third_party/libaddressinput/chromium/chrome_metadata_source.h"
 #include "third_party/libaddressinput/chromium/chrome_storage_impl.h"
@@ -265,7 +268,7 @@ struct PendingPaymentResponse {
 
 @implementation PaymentRequestManager
 
-@synthesize toolbarModel = _toolbarModel;
+@synthesize locationBarModel = _locationBarModel;
 @synthesize browserState = _browserState;
 @synthesize enabled = _enabled;
 @synthesize activeWebState = _activeWebState;
@@ -327,7 +330,7 @@ struct PendingPaymentResponse {
     __weak PaymentRequestManager* weakSelf = self;
     auto callback = base::BindRepeating(
         ^bool(const base::DictionaryValue& JSON, const GURL& originURL,
-              bool interacting, bool isMainFrame) {
+              bool interacting, bool isMainFrame, web::WebFrame* senderFrame) {
           if (!isMainFrame) {
             // Payment request is only supported on main frame.
             return false;
@@ -665,8 +668,11 @@ paymentRequestFromMessage:(const base::DictionaryValue&)message
           _activeWebState->GetLastCommittedURL()));
   BOOL connectionSecure =
       _activeWebState->GetLastCommittedURL().SchemeIs(url::kHttpsScheme);
+  // Payment Request is only enabled in main frame.
+  web::WebFrame* main_frame = web::GetMainWebFrame(_activeWebState);
   autofill::AutofillManager* autofillManager =
-      autofill::AutofillDriverIOS::FromWebState(_activeWebState)
+      autofill::AutofillDriverIOS::FromWebStateAndWebFrame(_activeWebState,
+                                                           main_frame)
           ->autofill_manager();
   _paymentRequestCoordinator = [[PaymentRequestCoordinator alloc]
       initWithBaseViewController:_baseViewController];
@@ -755,13 +761,14 @@ paymentRequestFromMessage:(const base::DictionaryValue&)message
       IOSCanMakePaymentQueryFactory::GetForBrowserState(
           _browserState->GetOriginalChromeBrowserState());
   DCHECK(canMakePaymentQuery);
-  // iOS PaymentRequest does not support iframes.
+  // iOS PaymentRequest does not support iframes or origin trials.
   if (canMakePaymentQuery->CanQuery(
           GURL(url_formatter::FormatUrlForSecurityDisplay(
               _activeWebState->GetLastCommittedURL())),
           GURL(url_formatter::FormatUrlForSecurityDisplay(
               _activeWebState->GetLastCommittedURL())),
-          paymentRequest->stringified_method_data())) {
+          paymentRequest->stringified_method_data(),
+          /*per_method_quota=*/false)) {
     // canMakePayment should return false if user has not allowed canMakePayment
     // to return a truthful value.
     canMakePayment &=
@@ -950,7 +957,7 @@ paymentRequestFromMessage:(const base::DictionaryValue&)message
     return NO;
   }
 
-  if (!self.toolbarModel) {
+  if (!self.locationBarModel) {
     return NO;
   }
 
@@ -976,7 +983,7 @@ paymentRequestFromMessage:(const base::DictionaryValue&)message
   // If the scheme is cryptographic, the SSL certificate must also be valid.
   return !security_state::IsSchemeCryptographic(lastCommittedURL) ||
          security_state::IsSslCertificateValid(
-             self.toolbarModel->GetSecurityLevel(true));
+             self.locationBarModel->GetSecurityLevel(true));
 }
 
 #pragma mark - PaymentRequestUIDelegate

@@ -30,28 +30,24 @@
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
-#include "third_party/blink/renderer/core/events/text_event.h"
-#include "third_party/blink/renderer/core/events/text_event_input_type.h"
-#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/html_names.h"
-#include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/layout/layout_text_control_single_line.h"
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 TextControlInnerContainer::TextControlInnerContainer(Document& document)
     : HTMLDivElement(document) {}
 
 TextControlInnerContainer* TextControlInnerContainer::Create(
     Document& document) {
-  TextControlInnerContainer* element = new TextControlInnerContainer(document);
-  element->setAttribute(idAttr, ShadowElementNames::TextFieldContainer());
+  TextControlInnerContainer* element =
+      MakeGarbageCollected<TextControlInnerContainer>(document);
+  element->setAttribute(kIdAttr, shadow_element_names::TextFieldContainer());
   return element;
 }
 
@@ -68,8 +64,9 @@ EditingViewPortElement::EditingViewPortElement(Document& document)
 }
 
 EditingViewPortElement* EditingViewPortElement::Create(Document& document) {
-  EditingViewPortElement* element = new EditingViewPortElement(document);
-  element->setAttribute(idAttr, ShadowElementNames::EditingViewPort());
+  EditingViewPortElement* element =
+      MakeGarbageCollected<EditingViewPortElement>(document);
+  element->setAttribute(kIdAttr, shadow_element_names::EditingViewPort());
   return element;
 }
 
@@ -81,14 +78,13 @@ EditingViewPortElement::CustomStyleForLayoutObject() {
   style->InheritFrom(OwnerShadowHost()->ComputedStyleRef());
 
   style->SetFlexGrow(1);
-  style->SetMinWidth(Length(0, kFixed));
+  style->SetMinWidth(Length::Fixed(0));
   style->SetDisplay(EDisplay::kBlock);
   style->SetDirection(TextDirection::kLtr);
 
   // We don't want the shadow dom to be editable, so we set this block to
   // read-only in case the input itself is editable.
   style->SetUserModify(EUserModify::kReadOnly);
-  style->SetUnique();
 
   return style;
 }
@@ -103,7 +99,7 @@ inline TextControlInnerEditorElement::TextControlInnerEditorElement(
 
 TextControlInnerEditorElement* TextControlInnerEditorElement::Create(
     Document& document) {
-  return new TextControlInnerEditorElement(document);
+  return MakeGarbageCollected<TextControlInnerEditorElement>(document);
 }
 
 void TextControlInnerEditorElement::DefaultEventHandler(Event& event) {
@@ -112,7 +108,7 @@ void TextControlInnerEditorElement::DefaultEventHandler(Event& event) {
   // this subclass.
   // Or possibly we could just use a normal event listener.
   if (event.IsBeforeTextInsertedEvent() ||
-      event.type() == EventTypeNames::webkitEditableContentChanged) {
+      event.type() == event_type_names::kWebkitEditableContentChanged) {
     Element* shadow_ancestor = OwnerShadowHost();
     // A TextControlInnerTextElement can have no host if its been detached,
     // but kept alive by an EditCommand. In this case, an undo/redo can
@@ -129,9 +125,9 @@ void TextControlInnerEditorElement::DefaultEventHandler(Event& event) {
 void TextControlInnerEditorElement::SetVisibility(bool is_visible) {
   if (is_visible_ != is_visible) {
     is_visible_ = is_visible;
-    SetNeedsStyleRecalc(
-        kLocalStyleChange,
-        StyleChangeReasonForTracing::Create(StyleChangeReason::kControlValue));
+    SetNeedsStyleRecalc(kLocalStyleChange,
+                        StyleChangeReasonForTracing::Create(
+                            style_change_reason::kControlValue));
   }
 }
 
@@ -169,7 +165,6 @@ TextControlInnerEditorElement::CreateInnerEditorStyle() const {
           ? EUserModify::kReadOnly
           : EUserModify::kReadWritePlaintextOnly);
   text_block_style->SetDisplay(EDisplay::kBlock);
-  text_block_style->SetUnique();
 
   if (!IsHTMLTextAreaElement(host)) {
     text_block_style->SetWhiteSpace(EWhiteSpace::kPre);
@@ -185,7 +180,7 @@ TextControlInnerEditorElement::CreateInnerEditorStyle() const {
 
     // We'd like to remove line-height if it's unnecessary because
     // overflow:scroll clips editing text by line-height.
-    Length logical_height = start_style.LogicalHeight();
+    const Length& logical_height = start_style.LogicalHeight();
     // Here, we remove line-height if the INPUT fixed height is taller than the
     // line-height.  It's not the precise condition because logicalHeight
     // includes border and padding if box-sizing:border-box, and there are cases
@@ -219,24 +214,15 @@ TextControlInnerEditorElement::CreateInnerEditorStyle() const {
 
 inline SearchFieldCancelButtonElement::SearchFieldCancelButtonElement(
     Document& document)
-    : HTMLDivElement(document), capturing_(false) {}
+    : HTMLDivElement(document) {}
 
 SearchFieldCancelButtonElement* SearchFieldCancelButtonElement::Create(
     Document& document) {
   SearchFieldCancelButtonElement* element =
-      new SearchFieldCancelButtonElement(document);
+      MakeGarbageCollected<SearchFieldCancelButtonElement>(document);
   element->SetShadowPseudoId(AtomicString("-webkit-search-cancel-button"));
-  element->setAttribute(idAttr, ShadowElementNames::SearchClearButton());
+  element->setAttribute(kIdAttr, shadow_element_names::SearchClearButton());
   return element;
-}
-
-void SearchFieldCancelButtonElement::DetachLayoutTree(
-    const AttachContext& context) {
-  if (capturing_) {
-    if (LocalFrame* frame = GetDocument().GetFrame())
-      frame->GetEventHandler().SetCapturingMouseEventsNode(nullptr);
-  }
-  HTMLDivElement::DetachLayoutTree(context);
 }
 
 void SearchFieldCancelButtonElement::DefaultEventHandler(Event& event) {
@@ -248,9 +234,9 @@ void SearchFieldCancelButtonElement::DefaultEventHandler(Event& event) {
     return;
   }
 
-  if (event.type() == EventTypeNames::click && event.IsMouseEvent() &&
+  if (event.type() == event_type_names::kClick && event.IsMouseEvent() &&
       ToMouseEvent(event).button() ==
-          static_cast<short>(WebPointerProperties::Button::kLeft)) {
+          static_cast<int16_t>(WebPointerProperties::Button::kLeft)) {
     input->SetValueForUser("");
     input->SetAutofillState(WebAutofillState::kNotFilled);
     input->OnSearch();

@@ -29,18 +29,10 @@ def _ParseJarInfoFile(file_name):
   return source_map
 
 
-def _LoadSourceMap(apk_name, output_directory):
-  apk_jar_info_name = apk_name + '.jar.info'
-  jar_info_path = os.path.join(
-      output_directory, 'size-info', apk_jar_info_name)
-  return _ParseJarInfoFile(jar_info_path)
-
-
-def _RunApkAnalyzer(apk_path, output_directory):
+def _RunApkAnalyzer(apk_path, mapping_path, output_directory):
   args = [path_util.GetApkAnalyzerPath(output_directory), 'dex', 'packages',
           apk_path]
-  mapping_path = apk_path + '.mapping'
-  if os.path.exists(mapping_path):
+  if mapping_path and os.path.exists(mapping_path):
     args.extend(['--proguard-mappings', mapping_path])
   output = subprocess.check_output(args)
   data = []
@@ -50,7 +42,7 @@ def _RunApkAnalyzer(apk_path, output_directory):
     # pylint: disable=unused-variable
     node_type, state, defined_methods, referenced_methods, size, name = (
         vals[0], vals[1], vals[2], vals[3], vals[4], vals[5:])
-    data.append((' '.join(name), int(size)))
+    data.append((node_type, ' '.join(name), int(size)))
   return data
 
 
@@ -73,19 +65,17 @@ def UndoHierarchicalSizing(data):
 
   Example nodes:
     [
-      ('<TOTAL>', 37),
-      ('org', 30),
-      ('org.chromium', 25),
-      ('org.chromium.ClassA', 14),
-      ('org.chromium.ClassA void methodA()', 10),
-      ('org.chromium.ClassA$Proxy', 8),
+      ('P', '<TOTAL>', 37),
+      ('P', 'org', 32),
+      ('P', 'org.chromium', 32),
+      ('C', 'org.chromium.ClassA', 14),
+      ('M', 'org.chromium.ClassA void methodA()', 10),
+      ('C', 'org.chromium.ClassA$Proxy', 8),
     ]
 
   Processed nodes:
     [
-      ('<TOTAL>', 7),
-      ('org', 5),
-      ('org.chromium', 3),
+      ('<TOTAL>', 15),
       ('org.chromium.ClassA', 4),
       ('org.chromium.ClassA void methodA()', 10),
       ('org.chromium.ClassA$Proxy', 8),
@@ -96,14 +86,15 @@ def UndoHierarchicalSizing(data):
 
   def process_node(start_idx):
     assert start_idx < num_nodes, 'Attempting to parse beyond data array.'
-    name, size = data[start_idx]
+    node_type, name, size = data[start_idx]
     total_child_size = 0
     next_idx = start_idx + 1
     name_len = len(name)
     while next_idx < num_nodes:
-      next_name = data[next_idx][0]
+      next_name = data[next_idx][1]
       if name == _TOTAL_NODE_NAME or (
-          next_name.startswith(name) and next_name[name_len] in '. '):
+          len(next_name) > name_len and next_name.startswith(name)
+          and next_name[name_len] in '. '):
         # Child node
         child_next_idx, child_node_size = process_node(next_idx)
         next_idx = child_next_idx
@@ -123,7 +114,14 @@ def UndoHierarchicalSizing(data):
     #    'Child node total size exceeded parent node total size')
 
     node_size = size - total_child_size
-    nodes.append((name, node_size))
+    # It is valid to have a package and a class with the same name.
+    # To avoid having two symbols with the same name in these cases, do not
+    # create symbols for packages (which have no size anyways).
+    if node_type == 'P' and node_size != 0 and name != _TOTAL_NODE_NAME:
+      logging.warning('Unexpected java package that takes up size: %d, %s',
+                      node_size, name)
+    if node_type != 'P' or node_size != 0:
+      nodes.append((node_type, name, node_size))
     return next_idx, size
 
   idx = 0
@@ -132,12 +130,15 @@ def UndoHierarchicalSizing(data):
   return nodes
 
 
-def CreateDexSymbols(apk_path, output_directory):
-  apk_name = os.path.basename(apk_path)
-  source_map = _LoadSourceMap(apk_name, output_directory)
-  nodes = UndoHierarchicalSizing(_RunApkAnalyzer(apk_path, output_directory))
+def CreateDexSymbols(apk_path, mapping_path, size_info_prefix,
+                     output_directory):
+  source_map = _ParseJarInfoFile(size_info_prefix + '.jar.info')
+
+  nodes = _RunApkAnalyzer(apk_path, mapping_path, output_directory)
+  nodes = UndoHierarchicalSizing(nodes)
+
   dex_expected_size = _ExpectedDexTotalSize(apk_path)
-  total_node_size = sum(map(lambda x: x[1], nodes))
+  total_node_size = sum(map(lambda x: x[2], nodes))
   # TODO(agrieve): Figure out why this log is triggering for
   #     ChromeModernPublic.apk (https://crbug.com/851535).
   # Reporting: dex_expected_size=6546088 total_node_size=6559549
@@ -149,7 +150,7 @@ def CreateDexSymbols(apk_path, output_directory):
   # We have more than 100KB of ids for methods, strings
   id_metadata_overhead_size = dex_expected_size - total_node_size
   symbols = []
-  for name, node_size in nodes:
+  for _, name, node_size in nodes:
     package = name.split(' ', 1)[0]
     class_path = package.split('$')[0]
     source_path = source_map.get(class_path, '')

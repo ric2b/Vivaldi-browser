@@ -11,6 +11,14 @@
     {
       "name": "testJavascriptInterfaceCustomPropertiesClearedOnReload",
       "_bug_id": "crbug.com/767847"
+    },
+    {
+      "name": "testRequestImageRef",
+      "_bug_id": "crbug.com/900915"
+    },
+    {
+      "name": "testLoadDataWithBaseUrl",
+      "_bug_id": "crbug.com/900915"
     }
   ],
   "android.webkit.cts.WebSettingsTest": [
@@ -21,12 +29,6 @@
     {
       "name": "testAllowMixedMode",
       "_bug_id": "crbug.com/777393"
-    }
-  ],
-  "android.webkit.cts.WebChromeClientTest": [
-    {
-      "name": "testOnJsBeforeUnloadIsCalled",
-      "_bug_id": "crbug.com/719974"
     }
   ],
   "android.webkit.cts.ServiceWorkerClientTest": [

@@ -45,6 +45,13 @@ def _OptionsForBrowser(browser_type, finder_options):
   finder_options.browser_type = browser_type
   finder_options.browser_executable = None
   finder_options.browser_options.browser_type = browser_type
+
+  # TODO(crbug.com/881469): remove this once Webview support surface
+  # synchronization and viz.
+  if browser_type and 'android-webview' in browser_type:
+    finder_options.browser_options.AppendExtraBrowserArgs(
+        '--disable-features=SurfaceSynchronization,VizDisplayCompositor')
+
   return finder_options
 
 
@@ -139,9 +146,11 @@ class MultiBrowserSharedState(story_module.SharedState):
     """
     if self._browsers_created:
       return
+    self.platform.FlushDnsCache()
     for browser_type in self._browsers:
       possible_browser, browser_options = self._possible_browsers[browser_type]
       possible_browser.SetUpEnvironment(browser_options)
+      possible_browser.FlushOsPageCaches()
       self._browsers[browser_type] = possible_browser.Create()
     self._browsers_created = True
 

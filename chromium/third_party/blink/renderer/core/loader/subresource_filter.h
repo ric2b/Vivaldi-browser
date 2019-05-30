@@ -29,22 +29,24 @@ class CORE_EXPORT SubresourceFilter final
   static SubresourceFilter* Create(
       ExecutionContext&,
       std::unique_ptr<WebDocumentSubresourceFilter>);
+
+  SubresourceFilter(ExecutionContext*,
+                    std::unique_ptr<WebDocumentSubresourceFilter>);
   ~SubresourceFilter();
 
   bool AllowLoad(const KURL& resource_url,
-                 WebURLRequest::RequestContext,
+                 mojom::RequestContextType,
                  SecurityViolationReportingPolicy);
   bool AllowWebSocketConnection(const KURL&);
 
   // Returns if |resource_url| is an ad resource.
-  bool IsAdResource(const KURL& resource_url, WebURLRequest::RequestContext);
+  bool IsAdResource(const KURL& resource_url, mojom::RequestContextType);
+  // Reports the resource request id as an ad to the |subresource_filter_|.
+  void ReportAdRequestId(int request_id);
 
   virtual void Trace(blink::Visitor*);
 
  private:
-  SubresourceFilter(ExecutionContext*,
-                    std::unique_ptr<WebDocumentSubresourceFilter>);
-
   void ReportLoad(const KURL& resource_url,
                   WebDocumentSubresourceFilter::LoadPolicy);
 
@@ -52,7 +54,7 @@ class CORE_EXPORT SubresourceFilter final
   std::unique_ptr<WebDocumentSubresourceFilter> subresource_filter_;
 
   // Save the last resource check's result in the single element cache.
-  std::pair<std::pair<KURL, WebURLRequest::RequestContext>,
+  std::pair<std::pair<KURL, mojom::RequestContextType>,
             WebDocumentSubresourceFilter::LoadPolicy>
       last_resource_check_result_;
 };

@@ -5,7 +5,6 @@
 #include "ash/shelf/shelf_context_menu_model.h"
 
 #include "ash/public/cpp/app_menu_constants.h"
-#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/session/test_session_controller_client.h"
 #include "ash/shelf/shelf.h"
@@ -15,7 +14,6 @@
 #include "ash/wallpaper/wallpaper_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chromeos/login/scoped_test_public_session_login_state.h"
 #include "ui/display/display.h"
 #include "ui/views/widget/widget.h"
 

@@ -32,9 +32,9 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/platform/geometry/length.h"
+#include "third_party/blink/renderer/platform/geometry/length_size.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_types.h"
-#include "third_party/blink/renderer/platform/length.h"
-#include "third_party/blink/renderer/platform/length_size.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/ref_counted.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -46,6 +46,8 @@ class FloatSize;
 class Path;
 
 class CORE_EXPORT BasicShape : public RefCounted<BasicShape> {
+  USING_FAST_MALLOC(BasicShape);
+
  public:
   virtual ~BasicShape() = default;
 
@@ -84,7 +86,7 @@ class BasicShapeCenterCoordinate {
   enum Direction { kTopLeft, kBottomRight };
 
   BasicShapeCenterCoordinate(Direction direction = kTopLeft,
-                             const Length& length = Length(0, kFixed))
+                             const Length& length = Length::Fixed(0))
       : direction_(direction),
         length_(length),
         computed_length_(direction == kTopLeft

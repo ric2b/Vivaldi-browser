@@ -14,107 +14,158 @@
 #include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "content/browser/background_fetch/background_fetch_data_manager_observer.h"
+#include "content/browser/background_fetch/background_fetch_event_dispatcher.h"
 #include "content/browser/background_fetch/background_fetch_registration_id.h"
+#include "content/browser/service_worker/service_worker_context_core_observer.h"
 #include "content/common/content_export.h"
+#include "third_party/blink/public/mojom/background_fetch/background_fetch.mojom.h"
 
 namespace content {
 
+class BackgroundFetchDataManager;
+class BackgroundFetchDelegateProxy;
+class BackgroundFetchJobController;
 class BackgroundFetchRegistrationId;
+class BackgroundFetchRegistrationNotifier;
 class BackgroundFetchRequestInfo;
-enum class BackgroundFetchReasonToAbort;
 
 // Maintains a list of Controllers and chooses which ones should launch new
 // downloads.
-class CONTENT_EXPORT BackgroundFetchScheduler {
+class CONTENT_EXPORT BackgroundFetchScheduler
+    : public BackgroundFetchDataManagerObserver,
+      public ServiceWorkerContextCoreObserver {
  public:
-  using FinishedCallback =
-      base::OnceCallback<void(const BackgroundFetchRegistrationId&,
-                              BackgroundFetchReasonToAbort)>;
+  BackgroundFetchScheduler(
+      BackgroundFetchDataManager* data_manager,
+      BackgroundFetchRegistrationNotifier* registration_notifier,
+      BackgroundFetchDelegateProxy* delegate_proxy,
+      scoped_refptr<ServiceWorkerContextWrapper> service_worker_context);
+  ~BackgroundFetchScheduler() override;
 
-  // Interface for download job controllers.
-  class CONTENT_EXPORT Controller {
-   public:
-    using RequestFinishedCallback =
-        base::OnceCallback<void(scoped_refptr<BackgroundFetchRequestInfo>)>;
+  // Aborts the background fetch identified by |registration_id|.
+  // Must only be used for background fetches aborted by the developer,
+  // other cases are handled elsewhere.
+  void Abort(const BackgroundFetchRegistrationId& registration_id,
+             blink::mojom::BackgroundFetchFailureReason failure_reason,
+             blink::mojom::BackgroundFetchService::AbortCallback callback);
 
-    virtual ~Controller();
+  // BackgroundFetchDataManagerObserver implementation.
+  void OnRegistrationCreated(
+      const BackgroundFetchRegistrationId& registration_id,
+      const blink::mojom::BackgroundFetchRegistration& registration,
+      blink::mojom::BackgroundFetchOptionsPtr options,
+      const SkBitmap& icon,
+      int num_requests,
+      bool start_paused) override;
+  void OnRegistrationLoadedAtStartup(
+      const BackgroundFetchRegistrationId& registration_id,
+      const blink::mojom::BackgroundFetchRegistration& registration,
+      blink::mojom::BackgroundFetchOptionsPtr options,
+      const SkBitmap& icon,
+      int num_completed_requests,
+      int num_requests,
+      std::vector<scoped_refptr<BackgroundFetchRequestInfo>>
+          active_fetch_requests) override;
+  void OnServiceWorkerDatabaseCorrupted(
+      int64_t service_worker_registration_id) override;
+  void OnRegistrationQueried(
+      blink::mojom::BackgroundFetchRegistration* registration) override;
+  void OnRequestCompleted(const std::string& unique_id,
+                          blink::mojom::FetchAPIRequestPtr request,
+                          blink::mojom::FetchAPIResponsePtr response) override;
 
-    // Returns whether the Controller has any pending download requests.
-    virtual bool HasMoreRequests() = 0;
-
-    // Requests the download manager to start fetching |request|.
-    virtual void StartRequest(scoped_refptr<BackgroundFetchRequestInfo> request,
-                              RequestFinishedCallback callback) = 0;
-
-    void Finish(BackgroundFetchReasonToAbort reason_to_abort);
-
-    const BackgroundFetchRegistrationId& registration_id() const {
-      return registration_id_;
-    }
-
-   protected:
-    Controller(BackgroundFetchScheduler* scheduler,
-               const BackgroundFetchRegistrationId& registration_id,
-               FinishedCallback finished_callback);
-
-   private:
-    // The |scheduler_| is guaranteed to outlive the controllers due to their
-    // declaration order in the BackgroundFetchContext.
-    BackgroundFetchScheduler* scheduler_;
-
-    BackgroundFetchRegistrationId registration_id_;
-    FinishedCallback finished_callback_;
-  };
-
-  using NextRequestCallback =
-      base::OnceCallback<void(scoped_refptr<BackgroundFetchRequestInfo>)>;
-
-  class CONTENT_EXPORT RequestProvider {
-   public:
-    virtual ~RequestProvider() {}
-
-    // Retrieves the next pending request for |registration_id| and invoke
-    // |callback| with it.
-    virtual void PopNextRequest(
-        const BackgroundFetchRegistrationId& registration_id,
-        NextRequestCallback callback) = 0;
-
-    // Marks |request_info| as complete and calls |callback| when done.
-    virtual void MarkRequestAsComplete(
-        const BackgroundFetchRegistrationId& registration_id,
-        scoped_refptr<BackgroundFetchRequestInfo> request_info,
-        base::OnceClosure closure) = 0;
-  };
-
-  explicit BackgroundFetchScheduler(RequestProvider* request_provider);
-  ~BackgroundFetchScheduler();
-
-  // Adds a new job controller to the scheduler. May immediately start to
-  // schedule jobs for |controller|.
-  void AddJobController(Controller* controller);
-
-  // Removes the |controller| from the scheduler. Pending updates will be
-  // ignored and it won't be considered for further requests.
-  void RemoveJobController(Controller* controller);
+  // ServiceWorkerContextCoreObserver implementation.
+  void OnRegistrationDeleted(int64_t registration_id,
+                             const GURL& pattern) override;
+  void OnStorageWiped() override;
 
  private:
-  void ScheduleDownload();
+  friend class BackgroundFetchJobControllerTest;
+  friend class BackgroundFetchSchedulerTest;
 
-  void DidPopNextRequest(
+  // Schedules a download, if possible, and returns whether successful.
+  bool ScheduleDownload();
+
+  // Helper method to abandon ongoing fetches for a given service worker.
+  // Abandons all of them if |service_worker_registration_id| is set to
+  // blink::mojom::kInvalidServiceWorkerRegistrationId.
+  void AbortFetches(int64_t service_worker_registration_id);
+
+  // Returns the active job controller, if any, for |registration_id| or
+  // |unique_id|. Returns nullptr if the job isn't currently active.
+  BackgroundFetchJobController* GetActiveController(
+      const BackgroundFetchRegistrationId& registration_id);
+  BackgroundFetchJobController* GetActiveController(
+      const std::string& unique_id);
+
+  std::unique_ptr<BackgroundFetchJobController> CreateInitializedController(
+      const BackgroundFetchRegistrationId& registration_id,
+      const blink::mojom::BackgroundFetchRegistration& registration,
+      blink::mojom::BackgroundFetchOptionsPtr options,
+      const SkBitmap& icon,
+      int num_completed_requests,
+      int num_requests,
+      std::vector<scoped_refptr<BackgroundFetchRequestInfo>>
+          active_fetch_requests,
+      bool start_paused);
+
+  void DidCompleteRequest(
+      const BackgroundFetchRegistrationId& registration_id,
       scoped_refptr<BackgroundFetchRequestInfo> request_info);
 
-  void MarkRequestAsComplete(
-      scoped_refptr<BackgroundFetchRequestInfo> request_info);
-  void DidMarkRequestAsComplete();
+  void FinishJob(
+      const BackgroundFetchRegistrationId& registration_id,
+      blink::mojom::BackgroundFetchFailureReason failure_reason,
+      base::OnceCallback<void(blink::mojom::BackgroundFetchError)> callback);
 
-  RequestProvider* request_provider_;
+  void DidMarkForDeletion(
+      const BackgroundFetchRegistrationId& registration_id,
+      bool job_started,
+      base::OnceCallback<void(blink::mojom::BackgroundFetchError)> callback,
+      blink::mojom::BackgroundFetchError error,
+      blink::mojom::BackgroundFetchFailureReason failure_reason);
 
-  // The scheduler owns all the job controllers, holding them either in the
-  // controller queue or the guid to controller map.
-  base::circular_deque<Controller*> controller_queue_;
-  Controller* active_controller_ = nullptr;
+  void CleanupRegistration(
+      const BackgroundFetchRegistrationId& registration_id);
 
-  base::WeakPtrFactory<BackgroundFetchScheduler> weak_ptr_factory_{this};
+  void DispatchClickEvent(const std::string& unique_id);
+
+  // Owned by BackgroundFetchContext.
+  BackgroundFetchDataManager* data_manager_;
+  BackgroundFetchRegistrationNotifier* registration_notifier_;
+  BackgroundFetchDelegateProxy* delegate_proxy_;
+
+  BackgroundFetchEventDispatcher event_dispatcher_;
+
+  // The order in which to process the job controllers.
+  base::circular_deque<BackgroundFetchRegistrationId> controller_ids_;
+
+  // Map from background fetch registration |unique_id|s to active job
+  // controllers. Must be destroyed before |data_manager_|, |scheduler_| and
+  // |registration_notifier_|.
+  std::map<std::string, std::unique_ptr<BackgroundFetchJobController>>
+      job_controllers_;
+
+  // The current fetch job controllers that are being processed.
+  base::circular_deque<BackgroundFetchJobController*> active_controllers_;
+
+  // Map from |unique_id|s to {|registration_id|, |registration|}.
+  // An entry in here means the fetch has completed. This information is needed
+  // after the fetch has completed to dispatch the backgroundfetchclick event.
+  // TODO(crbug.com/857122): Clean this up when the UI is no longer showing.
+  std::map<std::string,
+           std::pair<BackgroundFetchRegistrationId,
+                     blink::mojom::BackgroundFetchRegistrationPtr>>
+      completed_fetches_;
+
+  // Scheduling params - Finch configurable.
+  int max_running_downloads_;
+  int max_active_registrations_;
+  int num_active_registrations_ = 0;
+  int num_running_downloads_ = 0;
+
+  base::WeakPtrFactory<BackgroundFetchScheduler> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(BackgroundFetchScheduler);
 };

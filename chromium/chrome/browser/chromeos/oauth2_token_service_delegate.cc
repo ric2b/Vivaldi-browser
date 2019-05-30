@@ -10,22 +10,77 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "chrome/browser/chromeos/account_mapper_util.h"
+#include "base/stl_util.h"
 #include "chromeos/account_manager/account_manager.h"
+#include "components/signin/core/browser/account_tracker_service.h"
+#include "content/public/browser/network_service_instance.h"
+#include "google_apis/gaia/oauth2_access_token_fetcher_immediate_error.h"
+#include "net/base/backoff_entry.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace chromeos {
 
+namespace {
+
+// Values used from |MutableProfileOAuth2TokenServiceDelegate|.
+const net::BackoffEntry::Policy kBackoffPolicy = {
+    0 /* int num_errors_to_ignore */,
+
+    1000 /* int initial_delay_ms */,
+
+    2.0 /* double multiply_factor */,
+
+    0.2 /* double jitter_factor */,
+
+    15 * 60 * 1000 /* int64_t maximum_backoff_ms */,
+
+    -1 /* int64_t entry_lifetime_ms */,
+
+    false /* bool always_use_initial_delay */,
+};
+
+// Maps crOS Account Manager |account_keys| to the account id representation
+// used by the OAuth token service chain. |account_keys| can safely contain Gaia
+// and non-Gaia accounts. Non-Gaia accounts will be filtered out.
+// |account_keys| is the set of accounts that need to be translated.
+// |account_tracker_service| is an unowned pointer.
+std::vector<std::string> GetOAuthAccountIdsFromAccountKeys(
+    const std::set<AccountManager::AccountKey>& account_keys,
+    const AccountTrackerService* const account_tracker_service) {
+  std::vector<std::string> accounts;
+  for (auto& account_key : account_keys) {
+    if (account_key.account_type !=
+        account_manager::AccountType::ACCOUNT_TYPE_GAIA) {
+      continue;
+    }
+
+    std::string account_id =
+        account_tracker_service
+            ->FindAccountInfoByGaiaId(account_key.id /* gaia_id */)
+            .account_id;
+    DCHECK(!account_id.empty());
+    accounts.emplace_back(account_id);
+  }
+
+  return accounts;
+}
+
+}  // namespace
+
 ChromeOSOAuth2TokenServiceDelegate::ChromeOSOAuth2TokenServiceDelegate(
     AccountTrackerService* account_tracker_service,
     chromeos::AccountManager* account_manager)
-    : account_mapper_util_(
-          std::make_unique<AccountMapperUtil>(account_tracker_service)),
+    : account_tracker_service_(account_tracker_service),
       account_manager_(account_manager),
-      weak_factory_(this) {}
+      backoff_entry_(&kBackoffPolicy),
+      backoff_error_(GoogleServiceAuthError::NONE),
+      weak_factory_(this) {
+  content::GetNetworkConnectionTracker()->AddNetworkConnectionObserver(this);
+}
 
 ChromeOSOAuth2TokenServiceDelegate::~ChromeOSOAuth2TokenServiceDelegate() {
   account_manager_->RemoveObserver(this);
+  content::GetNetworkConnectionTracker()->RemoveNetworkConnectionObserver(this);
 }
 
 OAuth2AccessTokenFetcher*
@@ -34,27 +89,55 @@ ChromeOSOAuth2TokenServiceDelegate::CreateAccessTokenFetcher(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     OAuth2AccessTokenConsumer* consumer) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK_EQ(LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS, load_credentials_state_);
+  DCHECK_EQ(LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS, load_credentials_state());
 
   ValidateAccountId(account_id);
 
-  const AccountManager::AccountKey& account_key =
-      account_mapper_util_->OAuthAccountIdToAccountKey(account_id);
+  // Check if we need to reject the request.
+  // We will reject the request if we are facing a persistent error for this
+  // account.
+  auto it = errors_.find(account_id);
+  if (it != errors_.end() && it->second.last_auth_error.IsPersistentError()) {
+    VLOG(1) << "Request for token has been rejected due to persistent error #"
+            << it->second.last_auth_error.state();
+    // |OAuth2TokenService| will manage the lifetime of this pointer.
+    return new OAuth2AccessTokenFetcherImmediateError(
+        consumer, it->second.last_auth_error);
+  }
+  // Or when we need to backoff.
+  if (backoff_entry_.ShouldRejectRequest()) {
+    VLOG(1) << "Request for token has been rejected due to backoff rules from"
+            << " previous error #" << backoff_error_.state();
+    // |OAuth2TokenService| will manage the lifetime of this pointer.
+    return new OAuth2AccessTokenFetcherImmediateError(consumer, backoff_error_);
+  }
 
   // |OAuth2TokenService| will manage the lifetime of the released pointer.
   return account_manager_
-      ->CreateAccessTokenFetcher(account_key, url_loader_factory, consumer)
+      ->CreateAccessTokenFetcher(
+          AccountManager::AccountKey{
+              account_tracker_service_->GetAccountInfo(account_id).gaia,
+              account_manager::AccountType::
+                  ACCOUNT_TYPE_GAIA} /* account_key */,
+          url_loader_factory, consumer)
       .release();
 }
 
+// Note: This method should use the same logic for filtering accounts as
+// |GetAccounts|. See crbug.com/919793 for details. At the time of writing,
+// both |GetAccounts| and |RefreshTokenIsAvailable| use
+// |GetOAuthAccountIdsFromAccountKeys|.
 bool ChromeOSOAuth2TokenServiceDelegate::RefreshTokenIsAvailable(
     const std::string& account_id) const {
-  if (load_credentials_state_ != LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS) {
+  if (load_credentials_state() != LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS) {
     return false;
   }
 
-  return account_manager_->IsTokenAvailable(
-      account_mapper_util_->OAuthAccountIdToAccountKey(account_id));
+  // We intentionally do NOT check if the refresh token associated with
+  // |account_id| is valid or not. See crbug.com/919793 for details.
+  return base::ContainsValue(GetOAuthAccountIdsFromAccountKeys(
+                                 account_keys_, account_tracker_service_),
+                             account_id);
 }
 
 void ChromeOSOAuth2TokenServiceDelegate::UpdateAuthError(
@@ -62,19 +145,24 @@ void ChromeOSOAuth2TokenServiceDelegate::UpdateAuthError(
     const GoogleServiceAuthError& error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  // TODO(sinhak): Implement a backoff policy.
+  backoff_entry_.InformOfRequest(!error.IsTransientError());
+  ValidateAccountId(account_id);
   if (error.IsTransientError()) {
+    backoff_error_ = error;
     return;
   }
 
   auto it = errors_.find(account_id);
-  if (error.state() == GoogleServiceAuthError::NONE) {
-    if (it != errors_.end()) {
+  if (it != errors_.end()) {
+    // Update the existing error.
+    if (error.state() == GoogleServiceAuthError::NONE)
       errors_.erase(it);
-      FireAuthErrorChanged(account_id, error);
-    }
-  } else if ((it == errors_.end()) || (it->second != error)) {
-    errors_[account_id] = error;
+    else
+      it->second.last_auth_error = error;
+    FireAuthErrorChanged(account_id, error);
+  } else if (error.state() != GoogleServiceAuthError::NONE) {
+    // Add a new error.
+    errors_.emplace(account_id, AccountErrorStatus{error});
     FireAuthErrorChanged(account_id, error);
   }
 }
@@ -83,61 +171,92 @@ GoogleServiceAuthError ChromeOSOAuth2TokenServiceDelegate::GetAuthError(
     const std::string& account_id) const {
   auto it = errors_.find(account_id);
   if (it != errors_.end()) {
-    return it->second;
+    return it->second.last_auth_error;
   }
 
   return GoogleServiceAuthError::AuthErrorNone();
 }
 
+// Note: This method should use the same logic for filtering accounts as
+// |RefreshTokenIsAvailable|. See crbug.com/919793 for details. At the time of
+// writing, both |GetAccounts| and |RefreshTokenIsAvailable| use
+// |GetOAuthAccountIdsFromAccountKeys|.
 std::vector<std::string> ChromeOSOAuth2TokenServiceDelegate::GetAccounts() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK_EQ(LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS, load_credentials_state_);
 
-  std::vector<std::string> accounts;
-  for (auto& account_key : account_keys_) {
-    std::string account_id =
-        account_mapper_util_->AccountKeyToOAuthAccountId(account_key);
-    if (!account_id.empty()) {
-      accounts.emplace_back(account_id);
-    }
-  }
+  // |GetAccounts| intentionally does not care about the state of
+  // |load_credentials_state|. See crbug.com/919793 and crbug.com/900590 for
+  // details.
 
-  return accounts;
+  return GetOAuthAccountIdsFromAccountKeys(account_keys_,
+                                           account_tracker_service_);
 }
 
 void ChromeOSOAuth2TokenServiceDelegate::LoadCredentials(
     const std::string& primary_account_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (load_credentials_state_ != LOAD_CREDENTIALS_NOT_STARTED) {
+  if (load_credentials_state() != LOAD_CREDENTIALS_NOT_STARTED) {
     return;
   }
 
-  load_credentials_state_ = LOAD_CREDENTIALS_IN_PROGRESS;
+  set_load_credentials_state(LOAD_CREDENTIALS_IN_PROGRESS);
 
   DCHECK(account_manager_);
   account_manager_->AddObserver(this);
   account_manager_->GetAccounts(
-      base::BindOnce(&ChromeOSOAuth2TokenServiceDelegate::GetAccountsCallback,
+      base::BindOnce(&ChromeOSOAuth2TokenServiceDelegate::OnGetAccounts,
                      weak_factory_.GetWeakPtr()));
 }
 
 void ChromeOSOAuth2TokenServiceDelegate::UpdateCredentials(
     const std::string& account_id,
     const std::string& refresh_token) {
+  // This API could have been called for upserting the Device/Primary
+  // |account_id| or a Secondary |account_id|.
+
+  // Account insertion:
+  // Device Account insertion on Chrome OS happens as a 2 step process:
+  // 1. The account is inserted into SigninManager / AccountTrackerService, via
+  // IdentityManager, with a valid Gaia id and email but an invalid refresh
+  // token.
+  // 2. This API is called to update the aforementioned account with a valid
+  // refresh token.
+  // Secondary Account insertion on Chrome OS happens atomically in
+  // |InlineLoginHandlerChromeOS::<anon>::SigninHelper::OnClientOAuthSuccess|.
+  // In both of the aforementioned cases, we can be sure that when this API is
+  // called, |account_id| is guaranteed to be present in
+  // |AccountTrackerService|. This guarantee is important because
+  // |ChromeOSOAuth2TokenServiceDelegate| relies on |AccountTrackerService| to
+  // convert |account_id| to an email id.
+
+  // Account update:
+  // If an account is being updated, it must be present in
+  // |AccountTrackerService|.
+
+  // Hence for all cases (insertion and updates for Device and Secondary
+  // Accounts) we can be sure that |account_id| is present in
+  // |AccountTrackerService|.
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK_EQ(LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS, load_credentials_state_);
+  DCHECK_EQ(LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS, load_credentials_state());
   DCHECK(!account_id.empty());
   DCHECK(!refresh_token.empty());
 
   ValidateAccountId(account_id);
 
-  const AccountManager::AccountKey& account_key =
-      account_mapper_util_->OAuthAccountIdToAccountKey(account_id);
+  const AccountInfo& account_info =
+      account_tracker_service_->GetAccountInfo(account_id);
+  LOG_IF(FATAL, account_info.gaia.empty())
+      << "account_id must be present in AccountTrackerService before "
+         "UpdateCredentials is called";
 
   // Will result in AccountManager calling
   // |ChromeOSOAuth2TokenServiceDelegate::OnTokenUpserted|.
-  account_manager_->UpsertToken(account_key, refresh_token);
+  account_manager_->UpsertAccount(
+      AccountManager::AccountKey{
+          account_info.gaia,
+          account_manager::AccountType::ACCOUNT_TYPE_GAIA} /* account_key */,
+      account_info.email /* email */, refresh_token);
 }
 
 scoped_refptr<network::SharedURLLoaderFactory>
@@ -145,77 +264,107 @@ ChromeOSOAuth2TokenServiceDelegate::GetURLLoaderFactory() const {
   return account_manager_->GetUrlLoaderFactory();
 }
 
-OAuth2TokenServiceDelegate::LoadCredentialsState
-ChromeOSOAuth2TokenServiceDelegate::GetLoadCredentialsState() const {
-  return load_credentials_state_;
-}
-
-void ChromeOSOAuth2TokenServiceDelegate::GetAccountsCallback(
-    std::vector<AccountManager::AccountKey> account_keys) {
+void ChromeOSOAuth2TokenServiceDelegate::OnGetAccounts(
+    const std::vector<AccountManager::Account>& accounts) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // This callback should only be triggered during |LoadCredentials|, which
-  // implies that |load_credentials_state_| should in
+  // implies that |load_credentials_state())| should in
   // |LOAD_CREDENTIALS_IN_PROGRESS| state.
-  DCHECK_EQ(LOAD_CREDENTIALS_IN_PROGRESS, load_credentials_state_);
+  DCHECK_EQ(LOAD_CREDENTIALS_IN_PROGRESS, load_credentials_state());
 
-  load_credentials_state_ = LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS;
-
+  set_load_credentials_state(LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS);
   // The typical order of |OAuth2TokenService::Observer| callbacks is:
-  // 1. OnStartBatchChanges
-  // 2. OnRefreshTokenAvailable
-  // 3. OnEndBatchChanges
-  // 4. OnRefreshTokensLoaded
+  // 1. OnRefreshTokenAvailable
+  // 2. OnEndBatchChanges
+  // 3. OnRefreshTokensLoaded
   {
     ScopedBatchChange batch(this);
-    for (const auto& account_key : account_keys) {
-      OnTokenUpserted(account_key);
+    for (const auto& account : accounts) {
+      OnTokenUpserted(account);
     }
   }
   FireRefreshTokensLoaded();
 }
 
 void ChromeOSOAuth2TokenServiceDelegate::OnTokenUpserted(
-    const AccountManager::AccountKey& account_key) {
+    const AccountManager::Account& account) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  account_keys_.insert(account_key);
+  account_keys_.insert(account.key);
 
-  std::string account_id =
-      account_mapper_util_->AccountKeyToOAuthAccountId(account_key);
-  if (account_id.empty()) {
+  if (account.key.account_type !=
+      account_manager::AccountType::ACCOUNT_TYPE_GAIA) {
     return;
+  }
+
+  std::string email = account.raw_email;
+  if (email.empty()) {
+    // This is an old, un-migrated account for which we do not have an email id
+    // stored on disk. Check https://crbug.com/933307 and
+    // https://crbug.com/925827 for context.
+
+    // This is an existing account and thus, must be present in
+    // AccountTrackerService.
+    email = account_tracker_service_
+                ->FindAccountInfoByGaiaId(account.key.id /* gaia_id */)
+                .email;
+
+    // Additionally, backfill this email into Account Manager so that we can
+    // remove this block of code with a DCHECK in future (M75) releases.
+    account_manager_->UpdateEmail(account.key, email);
+  }
+
+  std::string account_id = account_tracker_service_->SeedAccountInfo(
+      account.key.id /* gaia_id */, email);
+  DCHECK(!account_id.empty());
+
+  // Clear any previously cached errors for |account_id|.
+  // We cannot directly use |UpdateAuthError| because it does not invoke
+  // |FireAuthErrorChanged| if |account_id|'s error state was already
+  // |GoogleServiceAuthError::State::NONE|, but |FireAuthErrorChanged| must be
+  // invoked here, regardless. See the comment above |FireAuthErrorChanged| few
+  // lines down.
+  errors_.erase(account_id);
+  GoogleServiceAuthError error(GoogleServiceAuthError::AuthErrorNone());
+
+  // However, if we know that |account_key| has a dummy token, store a
+  // persistent error against it, so that we can pre-emptively reject access
+  // token requests for it.
+  if (account_manager_->HasDummyGaiaToken(account.key)) {
+    error = GoogleServiceAuthError::FromInvalidGaiaCredentialsReason(
+        GoogleServiceAuthError::InvalidGaiaCredentialsReason::
+            CREDENTIALS_REJECTED_BY_CLIENT);
+    errors_.emplace(account_id, AccountErrorStatus{error});
   }
 
   ScopedBatchChange batch(this);
   FireRefreshTokenAvailable(account_id);
-
-  // We cannot directly use |UpdateAuthError| because it does not invoke
-  // |FireAuthErrorChanged| if |account_id|'s error state was already
-  // |GoogleServiceAuthError::State::NONE|, but |FireAuthErrorChanged| must be
-  // invoked here, regardless. See the comment below.
-  errors_.erase(account_id);
   // See |OAuth2TokenService::Observer::OnAuthErrorChanged|.
   // |OnAuthErrorChanged| must be always called after
   // |OnRefreshTokenAvailable|, when refresh token is updated.
-  FireAuthErrorChanged(account_id, GoogleServiceAuthError::AuthErrorNone());
+  FireAuthErrorChanged(account_id, error);
 }
 
 void ChromeOSOAuth2TokenServiceDelegate::OnAccountRemoved(
-    const AccountManager::AccountKey& account_key) {
+    const AccountManager::Account& account) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK_EQ(LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS, load_credentials_state_);
+  DCHECK_EQ(LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS, load_credentials_state());
 
-  auto it = account_keys_.find(account_key);
+  auto it = account_keys_.find(account.key);
   if (it == account_keys_.end()) {
     return;
   }
-
   account_keys_.erase(it);
-  std::string account_id =
-      account_mapper_util_->AccountKeyToOAuthAccountId(account_key);
-  if (account_id.empty()) {
+
+  if (account.key.account_type !=
+      account_manager::AccountType::ACCOUNT_TYPE_GAIA) {
     return;
   }
+  std::string account_id =
+      account_tracker_service_
+          ->FindAccountInfoByGaiaId(account.key.id /* gaia_id */)
+          .account_id;
+  DCHECK(!account_id.empty());
 
   ScopedBatchChange batch(this);
 
@@ -233,6 +382,16 @@ void ChromeOSOAuth2TokenServiceDelegate::RevokeCredentials(
 void ChromeOSOAuth2TokenServiceDelegate::RevokeAllCredentials() {
   // Signing out of Chrome is not possible on Chrome OS.
   NOTREACHED();
+}
+
+const net::BackoffEntry* ChromeOSOAuth2TokenServiceDelegate::BackoffEntry()
+    const {
+  return &backoff_entry_;
+}
+
+void ChromeOSOAuth2TokenServiceDelegate::OnConnectionChanged(
+    network::mojom::ConnectionType type) {
+  backoff_entry_.Reset();
 }
 
 }  // namespace chromeos

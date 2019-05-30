@@ -8,8 +8,8 @@
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/frame/sandbox_flags.h"
+#include "third_party/blink/renderer/core/scroll/scroll_types.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_types.h"
 
 namespace blink {
 
@@ -27,7 +27,7 @@ class CORE_EXPORT FrameOwner : public GarbageCollectedMixin {
 
   virtual bool IsLocal() const = 0;
   virtual bool IsRemote() const = 0;
-  virtual bool IsPlugin() { return false; }
+  virtual bool IsPlugin() const { return false; }
 
   virtual Frame* ContentFrame() const = 0;
   virtual void SetContentFrame(Frame&) = 0;
@@ -43,15 +43,26 @@ class CORE_EXPORT FrameOwner : public GarbageCollectedMixin {
   // On load failure, a frame can ask its owner to render fallback content
   // which replaces the frame contents.
   virtual bool CanRenderFallbackContent() const = 0;
-  virtual void RenderFallbackContent() = 0;
+
+  // The argument refers to the frame with the failed navigation. Note that this
+  // is not always the ContentFrame() for this owner; this argument is needed to
+  // support showing fallback using DOM of parent frame in a separate process.
+  // The use case is limited to RemoteFrameOwner when the corresponding local
+  // FrameOwner in parent process is an <object>. In such cases the frame with
+  // failed navigation could be provisional (cross-site navigations).
+  virtual void RenderFallbackContent(Frame*) = 0;
 
   // The intrinsic dimensions of the embedded object changed. This is only
   // relevant for SVG documents that are embedded via <object> or <embed>.
   virtual void IntrinsicSizingInfoChanged() = 0;
 
+  // Indicates that a child frame requires its parent frame to track whether the
+  // child frame is occluded or has visual effects applied.
+  virtual void SetNeedsOcclusionTracking(bool) = 0;
+
   // Returns the 'name' content attribute value of the browsing context
   // container.
-  // https://html.spec.whatwg.org/multipage/browsers.html#browsing-context-container
+  // https://html.spec.whatwg.org/C/#browsing-context-container
   virtual AtomicString BrowsingContextContainerName() const = 0;
   virtual ScrollbarMode ScrollingMode() const = 0;
   virtual int MarginWidth() const = 0;
@@ -75,7 +86,9 @@ class CORE_EXPORT DummyFrameOwner final
   USING_GARBAGE_COLLECTED_MIXIN(DummyFrameOwner);
 
  public:
-  static DummyFrameOwner* Create() { return new DummyFrameOwner; }
+  static DummyFrameOwner* Create() {
+    return MakeGarbageCollected<DummyFrameOwner>();
+  }
 
   void Trace(blink::Visitor* visitor) override { FrameOwner::Trace(visitor); }
 
@@ -87,8 +100,9 @@ class CORE_EXPORT DummyFrameOwner final
   void AddResourceTiming(const ResourceTimingInfo&) override {}
   void DispatchLoad() override {}
   bool CanRenderFallbackContent() const override { return false; }
-  void RenderFallbackContent() override {}
+  void RenderFallbackContent(Frame*) override {}
   void IntrinsicSizingInfoChanged() override {}
+  void SetNeedsOcclusionTracking(bool) override {}
   AtomicString BrowsingContextContainerName() const override {
     return AtomicString();
   }

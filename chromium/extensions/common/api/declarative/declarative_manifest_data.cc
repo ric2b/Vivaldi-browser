@@ -10,6 +10,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "extensions/common/api/declarative/declarative_constants.h"
 #include "extensions/common/manifest_constants.h"
 
 namespace extensions {
@@ -42,7 +43,7 @@ class ErrorBuilder {
 // type of rule/condition, while the internal format uses a "instanceType" key
 // for this. This function walks through all the conditions and rules to swap
 // the manifest key for the internal key.
-bool ConvertManifestRule(const linked_ptr<DeclarativeManifestData::Rule>& rule,
+bool ConvertManifestRule(const DeclarativeManifestData::Rule& rule,
                          ErrorBuilder* error_builder) {
   auto convert_list =
       [error_builder](const std::vector<std::unique_ptr<base::Value>>& list) {
@@ -58,12 +59,14 @@ bool ConvertManifestRule(const linked_ptr<DeclarativeManifestData::Rule>& rule,
             error_builder->Append("'type' is required and must be a string");
             return false;
           }
+          if (type == declarative_content_constants::kLegacyShowAction)
+            type = declarative_content_constants::kShowAction;
           dictionary->Remove("type", nullptr);
           dictionary->SetString("instanceType", type);
         }
         return true;
       };
-  return convert_list(rule->actions) && convert_list(rule->conditions);
+  return convert_list(rule.actions) && convert_list(rule.conditions);
 }
 
 }  // namespace
@@ -140,8 +143,8 @@ std::unique_ptr<DeclarativeManifestData> DeclarativeManifestData::FromValue(
       return std::unique_ptr<DeclarativeManifestData>();
     }
 
-    linked_ptr<Rule> rule(new Rule());
-    if (!Rule::Populate(*dict, rule.get())) {
+    Rule rule;
+    if (!Rule::Populate(*dict, &rule)) {
       error_builder.Append("rule failed to populate");
       return std::unique_ptr<DeclarativeManifestData>();
     }
@@ -149,14 +152,26 @@ std::unique_ptr<DeclarativeManifestData> DeclarativeManifestData::FromValue(
     if (!ConvertManifestRule(rule, &error_builder))
       return std::unique_ptr<DeclarativeManifestData>();
 
-    result->event_rules_map_[event].push_back(rule);
+    result->event_rules_map_[event].push_back(std::move(rule));
   }
   return result;
 }
 
-std::vector<linked_ptr<DeclarativeManifestData::Rule>>&
+std::vector<DeclarativeManifestData::Rule>
 DeclarativeManifestData::RulesForEvent(const std::string& event) {
-  return event_rules_map_[event];
+  const auto& rules = event_rules_map_[event];
+  std::vector<DeclarativeManifestData::Rule> result;
+  result.reserve(rules.size());
+  for (const auto& rule : rules) {
+    // TODO(rdevlin.cronin): It would be nice if we could have the RulesRegistry
+    // reference the rules owned here, but the ownership issues are a bit
+    // tricky. Revisit this.
+    std::unique_ptr<base::DictionaryValue> rule_value = rule.ToValue();
+    std::unique_ptr<DeclarativeManifestData::Rule> rule_copy =
+        DeclarativeManifestData::Rule::FromValue(*rule_value);
+    result.push_back(std::move(*rule_copy));
+  }
+  return result;
 }
 
 }  // namespace extensions

@@ -25,11 +25,11 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
-import org.chromium.chrome.browser.modaldialog.ModalDialogView;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.ui.modaldialog.ModalDialogProperties;
 
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
@@ -38,7 +38,8 @@ import java.util.concurrent.TimeoutException;
  * A payment integration test for the correct log of the CanMakePayment metrics.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
+        "enable-features=PaymentRequestHasEnrolledInstrument"})
 public class PaymentRequestCanMakePaymentMetricsTest implements MainActivityStartCallback {
     @Rule
     public PaymentRequestTestRule mPaymentRequestTestRule =
@@ -76,8 +77,9 @@ public class PaymentRequestCanMakePaymentMetricsTest implements MainActivityStar
         mPaymentRequestTestRule.expectResultContains(new String[] {"Request cancelled"});
 
         // Make sure the canMakePayment events were logged correctly.
-        int expectedSample = Event.SHOWN | Event.USER_ABORTED | Event.CAN_MAKE_PAYMENT_FALSE
-                | Event.REQUEST_METHOD_BASIC_CARD | Event.REQUEST_METHOD_OTHER;
+        int expectedSample = Event.SHOWN | Event.USER_ABORTED | Event.CAN_MAKE_PAYMENT_TRUE
+                | Event.HAS_ENROLLED_INSTRUMENT_FALSE | Event.REQUEST_METHOD_BASIC_CARD
+                | Event.REQUEST_METHOD_OTHER;
         Assert.assertEquals(1,
                 RecordHistogram.getHistogramValueCountForTesting(
                         "PaymentRequest.Events", expectedSample));
@@ -114,11 +116,12 @@ public class PaymentRequestCanMakePaymentMetricsTest implements MainActivityStar
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogProperties.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
 
         // Make sure the canMakePayment events were logged correctly.
         int expectedSample = Event.SHOWN | Event.PAY_CLICKED | Event.RECEIVED_INSTRUMENT_DETAILS
-                | Event.COMPLETED | Event.CAN_MAKE_PAYMENT_FALSE | Event.REQUEST_METHOD_BASIC_CARD
+                | Event.COMPLETED | Event.CAN_MAKE_PAYMENT_TRUE
+                | Event.HAS_ENROLLED_INSTRUMENT_FALSE | Event.REQUEST_METHOD_BASIC_CARD
                 | Event.REQUEST_METHOD_OTHER | Event.SELECTED_CREDIT_CARD;
         Assert.assertEquals(1,
                 RecordHistogram.getHistogramValueCountForTesting(
@@ -149,7 +152,8 @@ public class PaymentRequestCanMakePaymentMetricsTest implements MainActivityStar
         // Make sure the canMakePayment events were logged correctly.
         int expectedSample = Event.SHOWN | Event.OTHER_ABORTED | Event.HAD_INITIAL_FORM_OF_PAYMENT
                 | Event.HAD_NECESSARY_COMPLETE_SUGGESTIONS | Event.CAN_MAKE_PAYMENT_TRUE
-                | Event.REQUEST_METHOD_BASIC_CARD | Event.REQUEST_METHOD_OTHER;
+                | Event.HAS_ENROLLED_INSTRUMENT_TRUE | Event.REQUEST_METHOD_BASIC_CARD
+                | Event.REQUEST_METHOD_OTHER;
         Assert.assertEquals(1,
                 RecordHistogram.getHistogramValueCountForTesting(
                         "PaymentRequest.Events", expectedSample));
@@ -178,8 +182,8 @@ public class PaymentRequestCanMakePaymentMetricsTest implements MainActivityStar
         int expectedSample = Event.SHOWN | Event.PAY_CLICKED | Event.RECEIVED_INSTRUMENT_DETAILS
                 | Event.COMPLETED | Event.HAD_INITIAL_FORM_OF_PAYMENT
                 | Event.HAD_NECESSARY_COMPLETE_SUGGESTIONS | Event.CAN_MAKE_PAYMENT_TRUE
-                | Event.REQUEST_METHOD_BASIC_CARD | Event.REQUEST_METHOD_OTHER
-                | Event.SELECTED_OTHER;
+                | Event.HAS_ENROLLED_INSTRUMENT_TRUE | Event.REQUEST_METHOD_BASIC_CARD
+                | Event.REQUEST_METHOD_OTHER | Event.SELECTED_OTHER;
         Assert.assertEquals(1,
                 RecordHistogram.getHistogramValueCountForTesting(
                         "PaymentRequest.Events", expectedSample));
@@ -212,8 +216,8 @@ public class PaymentRequestCanMakePaymentMetricsTest implements MainActivityStar
         int expectedSample = Event.SHOWN | Event.PAY_CLICKED | Event.RECEIVED_INSTRUMENT_DETAILS
                 | Event.COMPLETED | Event.HAD_INITIAL_FORM_OF_PAYMENT
                 | Event.HAD_NECESSARY_COMPLETE_SUGGESTIONS | Event.CAN_MAKE_PAYMENT_FALSE
-                | Event.REQUEST_METHOD_BASIC_CARD | Event.REQUEST_METHOD_OTHER
-                | Event.SELECTED_OTHER;
+                | Event.HAS_ENROLLED_INSTRUMENT_FALSE | Event.REQUEST_METHOD_BASIC_CARD
+                | Event.REQUEST_METHOD_OTHER | Event.SELECTED_OTHER;
         Assert.assertEquals(1,
                 RecordHistogram.getHistogramValueCountForTesting(
                         "PaymentRequest.Events", expectedSample));

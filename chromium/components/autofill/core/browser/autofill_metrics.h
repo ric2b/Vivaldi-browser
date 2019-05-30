@@ -18,6 +18,8 @@
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_types.h"
+#include "components/autofill/core/browser/metrics/form_events.h"
+#include "components/autofill/core/browser/sync_utils.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/signatures_util.h"
 #include "components/security_state/core/security_state.h"
@@ -27,6 +29,10 @@ namespace autofill {
 
 class AutofillField;
 class CreditCard;
+enum class SubmissionSource;
+
+// A given maximum is enforced to minimize the number of buckets generated.
+extern const int kMaxBucketsCount;
 
 class AutofillMetrics {
  public:
@@ -44,6 +50,13 @@ class AutofillMetrics {
     FILLABLE_FORM_AUTOFILLED_NONE_DID_SHOW_SUGGESTIONS,
     FILLABLE_FORM_AUTOFILLED_NONE_DID_NOT_SHOW_SUGGESTIONS,
     AUTOFILL_FORM_SUBMITTED_STATE_ENUM_SIZE,
+  };
+
+  enum class BillingIdStatus {
+    MISSING = 0,
+    PARSE_ERROR = 1,
+    VALID = 2,
+    kMaxValue = VALID,
   };
 
   enum CardUploadDecisionMetric {
@@ -92,6 +105,17 @@ class AutofillMetrics {
     // A textfield for the user to enter/confirm cardholder name was surfaced
     // in the offer-to-save dialog.
     USER_REQUESTED_TO_PROVIDE_CARDHOLDER_NAME = 1 << 12,
+    // The Autofill StrikeDatabase decided not to allow offering to save for
+    // this card. On mobile, that means no save prompt is shown at all.
+    UPLOAD_NOT_OFFERED_MAX_STRIKES_ON_MOBILE = 1 << 13,
+    // A pair of dropdowns for the user to select expiration date was surfaced
+    // in the offer-to-save dialog.
+    USER_REQUESTED_TO_PROVIDE_EXPIRATION_DATE = 1 << 14,
+    // All the required conditions were satisfied even though the form is
+    // unfocused after the user entered information into it.
+    UPLOAD_OFFERED_FROM_NON_FOCUSABLE_FIELD = 1 << 15,
+    // The card does not satisfy any of the ranges of supported BIN ranges.
+    UPLOAD_NOT_OFFERED_UNSUPPORTED_BIN_RANGE = 1 << 16,
     // Update |kNumCardUploadDecisionMetrics| when adding new enum here.
   };
 
@@ -122,6 +146,19 @@ class AutofillMetrics {
     NUM_INFO_BAR_METRICS,
   };
 
+  // Autocomplete Events.
+  // These events are not based on forms nor submissions, but depend on the
+  // the usage of the Autocomplete feature.
+  enum AutocompleteEvent {
+    // A dropdown with Autocomplete suggestions was shown.
+    AUTOCOMPLETE_SUGGESTIONS_SHOWN = 0,
+
+    // An Autocomplete suggestion was selected.
+    AUTOCOMPLETE_SUGGESTION_SELECTED,
+
+    NUM_AUTOCOMPLETE_EVENTS
+  };
+
   // Represents card submitted state.
   enum SubmittedCardStateMetric {
     // Submitted card has valid card number and expiration date.
@@ -138,7 +175,7 @@ class AutofillMetrics {
   // Metric to measure if a submitted card's expiration date matches the same
   // server card's expiration date (unmasked or not).  Cards are considered to
   // be the same if they have the same card number (if unmasked) or if they have
-  // the same network and last four digits (if masked).
+  // the same last four digits (if masked).
   enum SubmittedServerCardExpirationStatusMetric {
     // The submitted card and the unmasked server card had the same expiration
     // date.
@@ -153,6 +190,14 @@ class AutofillMetrics {
     // dates.
     MASKED_SERVER_CARD_EXPIRATION_DATE_DID_NOT_MATCH,
     NUM_SUBMITTED_SERVER_CARD_EXPIRATION_STATUS_METRICS,
+  };
+
+  // Metric to distinguish between local credit card saves and upload credit
+  // card saves.
+  enum class SaveTypeMetric {
+    LOCAL = 0,
+    SERVER = 1,
+    kMaxValue = SERVER,
   };
 
   // Metric to measure volume of cards that are disallowed for upload by their
@@ -181,6 +226,19 @@ class AutofillMetrics {
     // The user accepted upload of a newly-seen credit card.
     USER_ACCEPTED_UPLOAD_OF_NEW_CARD,
     NUM_UPLOAD_ACCEPTED_CARD_ORIGIN_METRICS,
+  };
+
+  // Represents requesting expiration date reason.
+  enum class SaveCardRequestExpirationDateReasonMetric {
+    // Submitted card has empty month.
+    kMonthMissingOnly,
+    // Submitted card has empty year.
+    kYearMissingOnly,
+    // Submitted card has both empty month and year.
+    kMonthAndYearMissing,
+    // Submitted card has expired expiration date.
+    kExpirationDatePresentButExpired,
+    kMaxValue = kExpirationDatePresentButExpired,
   };
 
   // Metrics to measure user interaction with the save credit card prompt.
@@ -238,6 +296,10 @@ class AutofillMetrics {
     SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_NAVIGATION_HIDDEN,
     // The prompt was dismissed because the user clicked a legal message link.
     SAVE_CARD_PROMPT_CVC_FIX_FLOW_DISMISS_CLICK_LEGAL_MESSAGE,
+
+    // The save card bubble was not shown due to the card having too many
+    // offer-to-save strikes, but the omnibox icon was still displayed.
+    SAVE_CARD_ICON_SHOWN_WITHOUT_PROMPT,
 
     NUM_SAVE_CARD_PROMPT_METRICS,
   };
@@ -436,6 +498,36 @@ class AutofillMetrics {
     NUM_LOCAL_CARD_MIGRATION_BUBBLE_USER_INTERACTION_METRICS,
   };
 
+  // Metrics to track events when local card migration dialog is offered.
+  enum LocalCardMigrationDialogOfferMetric {
+    // The dialog is shown to the user.
+    LOCAL_CARD_MIGRATION_DIALOG_SHOWN = 0,
+    // The dialog is not shown due to legal message being invalid.
+    LOCAL_CARD_MIGRATION_DIALOG_NOT_SHOWN_INVALID_LEGAL_MESSAGE = 1,
+    // The dialog is shown when migration feedback is available.
+    LOCAL_CARD_MIGRATION_DIALOG_FEEDBACK_SHOWN = 2,
+    // The dialog is shown when migration fails due to server error.
+    LOCAL_CARD_MIGRATION_DIALOG_FEEDBACK_SERVER_ERROR_SHOWN = 3,
+    NUM_LOCAL_CARD_MIGRATION_DIALOG_OFFER_METRICS,
+  };
+
+  // Metrics to track user interactions with the dialog.
+  enum LocalCardMigrationDialogUserInteractionMetric {
+    // The user explicitly accepts the offer by clicking the save button.
+    LOCAL_CARD_MIGRATION_DIALOG_CLOSED_SAVE_BUTTON_CLICKED = 0,
+    // The user explicitly denies the offer by clicking the cancel button.
+    LOCAL_CARD_MIGRATION_DIALOG_CLOSED_CANCEL_BUTTON_CLICKED = 1,
+    // The user clicks the legal message.
+    LOCAL_CARD_MIGRATION_DIALOG_LEGAL_MESSAGE_CLICKED = 2,
+    // The user clicks the view card button after successfully migrated cards.
+    LOCAL_CARD_MIGRATION_DIALOG_CLOSED_VIEW_CARDS_BUTTON_CLICKED = 3,
+    // The user clicks the done button to close dialog after migration.
+    LOCAL_CARD_MIGRATION_DIALOG_CLOSED_DONE_BUTTON_CLICKED = 4,
+    // The user clicks the trash icon to delete invalid card.
+    LOCAL_CARD_MIGRATION_DIALOG_DELETE_CARD_ICON_CLICKED = 5,
+    NUM_LOCAL_CARD_MIGRATION_DIALOG_USER_INTERACTION_METRICS,
+  };
+
   // These metrics are logged for each local card migration origin. These are
   // used to derive the conversion rate for each triggering source.
   enum LocalCardMigrationPromptMetric {
@@ -506,102 +598,28 @@ class AutofillMetrics {
     NUM_USER_HAPPINESS_METRICS,
   };
 
-  // Form Events for autofill.
-  // These events are triggered separetly for address and credit card forms.
-  enum FormEvent {
-    // User interacted with a field of this kind of form. Logged only once per
-    // page load.
-    FORM_EVENT_INTERACTED_ONCE = 0,
-    // A dropdown with suggestions was shown.
-    FORM_EVENT_SUGGESTIONS_SHOWN,
-    // Same as above, but recoreded only once per page load.
-    FORM_EVENT_SUGGESTIONS_SHOWN_ONCE,
-    // A local suggestion was used to fill the form.
-    FORM_EVENT_LOCAL_SUGGESTION_FILLED,
-    // A server suggestion was used to fill the form.
-    // When dealing with credit cards, this means a full server card was used
-    // to fill.
-    FORM_EVENT_SERVER_SUGGESTION_FILLED,
-    // A masked server card suggestion was used to fill the form.
-    FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_FILLED,
-    // A suggestion was used to fill the form. The origin type (local or server
-    // or masked server card) of the first selected within a page load will
-    // determine which of the following two will be fired.
-    FORM_EVENT_LOCAL_SUGGESTION_FILLED_ONCE,
-    FORM_EVENT_SERVER_SUGGESTION_FILLED_ONCE,
-    FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_FILLED_ONCE,
-    // A form was submitted. Depending on the user filling a local, server,
-    // masked server card or no suggestion one of the following will be
-    // triggered. Only one of the following four will be triggered per page
-    // load.
-    FORM_EVENT_NO_SUGGESTION_SUBMITTED_ONCE,
-    FORM_EVENT_LOCAL_SUGGESTION_SUBMITTED_ONCE,
-    FORM_EVENT_SERVER_SUGGESTION_SUBMITTED_ONCE,
-    FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_SUBMITTED_ONCE,
-    // A masked server card suggestion was selected to fill the form.
-    FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_SELECTED,
-    // Same as above but only triggered once per page load.
-    FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_SELECTED_ONCE,
-    // An autofillable form is about to be submitted. If the submission is not
-    // interrupted by JavaScript, the "form submitted" events above will also be
-    // logged. Depending on the user filling a local, server, masked server card
-    // or no suggestion one of the following will be triggered, at most once per
-    // page load.
-    FORM_EVENT_NO_SUGGESTION_WILL_SUBMIT_ONCE,
-    FORM_EVENT_LOCAL_SUGGESTION_WILL_SUBMIT_ONCE,
-    FORM_EVENT_SERVER_SUGGESTION_WILL_SUBMIT_ONCE,
-    FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_WILL_SUBMIT_ONCE,
-    // A dropdown with suggestions was shown and a form was submitted after
-    // that.
-    FORM_EVENT_SUGGESTION_SHOWN_SUBMITTED_ONCE,
-    // A dropdown with suggestions was shown and a form is about to be
-    // submitted. If the submission is not interrupted by JavaScript, the "form
-    // submitted" event above will also be logged.
-    FORM_EVENT_SUGGESTION_SHOWN_WILL_SUBMIT_ONCE,
-    // A dropdown with credit card suggestions was shown, but they were not used
-    // to fill the form. Depending on the user submitting a card known by the
-    // browser, submitting a card that the browser does not know about,
-    // submitting with an empty card number, submitting with a card number of
-    // wrong size or submitting with a card number that does not pass luhn
-    // check, one of the following will be triggered. At most one of the
-    // following five metrics will be triggered per submit.
-    FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_KNOWN_CARD,
-    FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_UNKNOWN_CARD,
-    FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_NO_CARD,
-    FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_WRONG_SIZE_CARD,
-    FORM_EVENT_SUBMIT_WITHOUT_SELECTING_SUGGESTIONS_FAIL_LUHN_CHECK_CARD,
-
-    // The form was changed dynamically.
-    FORM_EVENT_DID_SEE_DYNAMIC_FORM,
-    // The form was changed dynamically and was fillable.
-    FORM_EVENT_DID_SEE_FILLABLE_DYNAMIC_FORM,
-    // There was a dynamic change of the form and it got re-filled
-    // automatically.
-    FORM_EVENT_DID_DYNAMIC_REFILL,
-    // The form dynamically changed another time after the refill.
-    FORM_EVENT_DYNAMIC_CHANGE_AFTER_REFILL,
-
-    NUM_FORM_EVENTS,
+  // Cardholder name fix flow prompt metrics.
+  enum CardholderNameFixFlowPromptEvent {
+    // The prompt was shown.
+    CARDHOLDER_NAME_FIX_FLOW_PROMPT_SHOWN = 0,
+    // The prompt was accepted by user.
+    CARDHOLDER_NAME_FIX_FLOW_PROMPT_ACCEPTED,
+    // The prompt was dismissed by user.
+    CARDHOLDER_NAME_FIX_FLOW_PROMPT_DISMISSED,
+    // The prompt was closed without user interaction.
+    CARDHOLDER_NAME_FIX_FLOW_PROMPT_CLOSED_WITHOUT_INTERACTION,
+    NUM_CARDHOLDER_NAME_FIXFLOW_PROMPT_EVENTS,
   };
 
-  // Indicates submitted card information.
-  enum CardNumberStatus {
-    EMPTY_CARD,
-    WRONG_SIZE_CARD,
-    FAIL_LUHN_CHECK_CARD,
-    KNOWN_CARD,
-    UNKNOWN_CARD
-  };
-
-  // Form Events for autofill with bank name available for display.
-  enum BankNameDisplayedFormEvent {
-    // A dropdown with suggestions was shown and at least one suggestion has a
-    // bank name. Logged at most once per page load.
-    FORM_EVENT_SUGGESTIONS_SHOWN_WITH_BANK_NAME_AVAILABLE_ONCE = 0,
-    // A server suggestion was used to fill the form and at least one suggestion
-    // has a bank name. Logged at most once per page load.
-    FORM_EVENT_SERVER_SUGGESTION_FILLED_WITH_BANK_NAME_AVAILABLE_ONCE,
-    BANK_NAME_NUM_FORM_EVENTS,
+  // Expiration date fix flow prompt metrics.
+  enum class ExpirationDateFixFlowPromptEvent {
+    // The prompt was accepted by user.
+    EXPIRATION_DATE_FIX_FLOW_PROMPT_ACCEPTED = 0,
+    // The prompt was dismissed by user.
+    EXPIRATION_DATE_FIX_FLOW_PROMPT_DISMISSED,
+    // The prompt was closed without user interaction.
+    EXPIRATION_DATE_FIX_FLOW_PROMPT_CLOSED_WITHOUT_INTERACTION,
+    kMaxValue = EXPIRATION_DATE_FIX_FLOW_PROMPT_CLOSED_WITHOUT_INTERACTION,
   };
 
   // Events related to the Unmask Credit Card Prompt.
@@ -737,19 +755,28 @@ class AutofillMetrics {
     NUM_CONVERTED_ADDRESS_CONVERSION_TYPES
   };
 
+  // To record whether or not the upload event was sent,
+  enum class UploadEventStatus { kNotSent, kSent, kMaxValue = kSent };
+
   // Utility to log URL keyed form interaction events.
   class FormInteractionsUkmLogger {
    public:
-    explicit FormInteractionsUkmLogger(ukm::UkmRecorder* ukm_recorder);
+    FormInteractionsUkmLogger(ukm::UkmRecorder* ukm_recorder,
+                              const ukm::SourceId source_id);
 
     bool has_pinned_timestamp() const { return !pinned_timestamp_.is_null(); }
     void set_pinned_timestamp(base::TimeTicks t) { pinned_timestamp_ = t; }
 
-    const GURL& url() const { return url_; }
-
-    // Initializes this logger with a valid url and source_id.
-    // Unless forms is parsed no autofill UKM can be recorded.
-    void OnFormsParsed(const GURL& url, const ukm::SourceId source_id);
+    // Initializes this logger with a source_id. Unless forms is parsed no
+    // autofill UKM is recorded. However due to autofill_manager resets,
+    // it is possible to have the UKM being recorded after the forms were
+    // parsed. So, rely on autofill_client to pass correct source_id
+    // However during some cases there is a race for setting AutofillClient
+    // and generation of new source_id (by UKM) as they are both observing tab
+    // navigation. Ideally we need to refactor ownership of this logger
+    // so as not to rely on OnFormsParsed to record the metrics correctly.
+    // TODO(nikunjb): Refactor the logger to be owned by AutofillClient.
+    void OnFormsParsed(const ukm::SourceId source_id);
     void LogInteractedWithForm(bool is_for_credit_card,
                                size_t local_record_type_count,
                                size_t server_record_type_count,
@@ -757,8 +784,6 @@ class AutofillMetrics {
     void LogSuggestionsShown(const FormStructure& form,
                              const AutofillField& field,
                              const base::TimeTicks& form_parsed_timestamp);
-    void LogSelectedMaskedServerCard(
-        const base::TimeTicks& form_parsed_timestamp);
     void LogDidFillSuggestion(int record_type,
                               bool is_for_credit_card,
                               const FormStructure& form,
@@ -776,10 +801,14 @@ class AutofillMetrics {
                       ServerFieldType predicted_type,
                       ServerFieldType actual_type);
     void LogFormSubmitted(bool is_for_credit_card,
+                          bool has_upi_vpa_field,
                           const std::set<FormType>& form_types,
                           AutofillFormSubmittedState state,
                           const base::TimeTicks& form_parsed_timestamp,
                           FormSignature form_signature);
+    void LogFormEvent(FormEvent form_event,
+                      const std::set<FormType>& form_types,
+                      const base::TimeTicks& form_parsed_timestamp);
 
     // Log whether the autofill decided to skip or to fill each
     // hidden/representational field.
@@ -800,8 +829,7 @@ class AutofillMetrics {
         const base::TimeTicks& form_parsed_timestamp) const;
 
     ukm::UkmRecorder* ukm_recorder_;  // Weak reference.
-    ukm::SourceId source_id_ = -1;
-    GURL url_;
+    ukm::SourceId source_id_;
     base::TimeTicks pinned_timestamp_;
   };
 
@@ -826,6 +854,20 @@ class AutofillMetrics {
   static void LogSubmittedServerCardExpirationStatusMetric(
       SubmittedServerCardExpirationStatusMetric metric);
 
+  // When a masked card is compared with another card, logs whether the cards'
+  // networks match.
+  static void LogMaskedCardComparisonNetworksMatch(bool matches);
+
+  // When credit card save is not offered (either at all on mobile or by simply
+  // not showing the bubble on desktop), logs the occurrence.
+  static void LogCreditCardSaveNotOfferedDueToMaxStrikesMetric(
+      SaveTypeMetric metric);
+
+  // When local card migration is not offered due to max strike limit reached,
+  // logs the occurrence.
+  static void LogLocalCardMigrationNotOfferedDueToMaxStrikesMetric(
+      SaveTypeMetric metric);
+
   // When credit card upload is disallowed for a particular network, logs which
   // network was blocked.
   static void LogUploadDisallowedForNetworkMetric(const std::string& network);
@@ -849,24 +891,27 @@ class AutofillMetrics {
   // from its prefilled value or not.
   static void LogSaveCardCardholderNameWasEdited(bool edited);
 
-  // Logs whether the PaymentsCustomerData's billing ID was valid at the time of
-  // use.
-  static void LogPaymentsCustomerDataBillingIdIsValid(bool valid);
+  // Logs the PaymentsCustomerData billing ID status at the time of use.
+  static void LogPaymentsCustomerDataBillingIdStatus(BillingIdStatus status);
 
   // |upload_decision_metrics| is a bitmask of |CardUploadDecisionMetric|.
   static void LogCardUploadDecisionMetrics(int upload_decision_metrics);
   static void LogCreditCardInfoBarMetric(
       InfoBarMetric metric,
       bool is_uploading,
+      AutofillClient::SaveCreditCardOptions options,
       int previous_save_credit_card_prompt_user_decision);
   static void LogCreditCardFillingInfoBarMetric(InfoBarMetric metric);
+  static void LogSaveCardRequestExpirationDateReasonMetric(
+      SaveCardRequestExpirationDateReasonMetric metric);
   static void LogSaveCardPromptMetric(
       SaveCardPromptMetric metric,
       bool is_uploading,
       bool is_reshow,
-      bool is_requesting_cardholder_name,
+      AutofillClient::SaveCreditCardOptions options,
       int previous_save_credit_card_prompt_user_decision,
-      security_state::SecurityLevel security_level);
+      security_state::SecurityLevel security_level,
+      AutofillSyncSigninState sync_state);
   static void LogSaveCardPromptMetricBySecurityLevel(
       SaveCardPromptMetric metric,
       bool is_uploading,
@@ -880,6 +925,14 @@ class AutofillMetrics {
   static void LogLocalCardMigrationBubbleUserInteractionMetric(
       LocalCardMigrationBubbleUserInteractionMetric metric,
       bool is_reshow);
+  static void LogLocalCardMigrationDialogOfferMetric(
+      LocalCardMigrationDialogOfferMetric metric);
+  static void LogLocalCardMigrationDialogUserInteractionMetric(
+      const base::TimeDelta& duration,
+      LocalCardMigrationDialogUserInteractionMetric metric);
+  static void LogLocalCardMigrationDialogUserSelectionPercentageMetric(
+      int selected,
+      int total);
   static void LogLocalCardMigrationPromptMetric(
       LocalCardMigrationOrigin local_card_migration_origin,
       LocalCardMigrationPromptMetric metric);
@@ -893,6 +946,7 @@ class AutofillMetrics {
 
   static void LogSaveCardWithFirstAndLastNameOffered(bool is_local);
   static void LogSaveCardWithFirstAndLastNameComplete(bool is_local);
+  static void LogSaveCardReachedPersonalDataManager(bool is_local);
 
   static void LogDeveloperEngagementMetric(DeveloperEngagementMetric metric);
 
@@ -931,6 +985,17 @@ class AutofillMetrics {
 
   // Logs |event| to the unmask prompt events histogram.
   static void LogUnmaskPromptEvent(UnmaskPromptEvent event);
+
+  // Logs |event| to cardholder name fix flow prompt events histogram.
+  static void LogCardholderNameFixFlowPromptEvent(
+      CardholderNameFixFlowPromptEvent event);
+
+  // Logs |event| to expiration date fix flow prompt events histogram.
+  static void LogExpirationDateFixFlowPromptEvent(
+      ExpirationDateFixFlowPromptEvent event);
+
+  // Logs the count of expiration date fix flow prompts shown histogram.
+  static void LogExpirationDateFixFlowPromptShown();
 
   // Logs the time elapsed between the unmask prompt being shown and it
   // being closed.
@@ -976,7 +1041,9 @@ class AutofillMetrics {
                                   const base::TimeDelta& duration);
 
   // This should be called each time a page containing forms is loaded.
-  static void LogIsAutofillEnabledAtPageLoad(bool enabled);
+  static void LogIsAutofillEnabledAtPageLoad(
+      bool enabled,
+      AutofillSyncSigninState sync_state);
 
   // This should be called each time a new chrome profile is launched.
   static void LogIsAutofillEnabledAtStartup(bool enabled);
@@ -1042,8 +1109,18 @@ class AutofillMetrics {
   // Log the index of the selected Autofill suggestion in the popup.
   static void LogAutofillSuggestionAcceptedIndex(int index);
 
+  // Log the number of days since an Autocomplete suggestion was last used.
+  static void LogAutocompleteDaysSinceLastUse(size_t days);
+
   // Log the index of the selected Autocomplete suggestion in the popup.
   static void LogAutocompleteSuggestionAcceptedIndex(int index);
+
+  // Log the fact that an autocomplete popup was shown.
+  static void OnAutocompleteSuggestionsShown();
+
+  // Log the number of autocomplete entries that were cleaned-up as a result
+  // of the Autocomplete Retention Policy.
+  static void LogNumberOfAutocompleteEntriesCleanedUp(int nb_entries);
 
   // Log how many autofilled fields in a given form were edited before the
   // submission or when the user unfocused the form (depending on
@@ -1064,6 +1141,7 @@ class AutofillMetrics {
   static void LogAutofillFormSubmittedState(
       AutofillFormSubmittedState state,
       bool is_for_credit_card,
+      bool has_upi_vpa_field,
       const std::set<FormType>& form_types,
       const base::TimeTicks& form_parsed_timestamp,
       FormSignature form_signature,
@@ -1093,6 +1171,21 @@ class AutofillMetrics {
   // This should be called when the user selects the Form-Not-Secure warning
   // suggestion to show an explanation of the warning.
   static void LogShowedHttpNotSecureExplanation();
+
+  // Logs if an autocomplete query was created for a field.
+  static void LogAutocompleteQuery(bool created);
+
+  // Logs if there is any suggestions for an autocomplete query.
+  static void LogAutocompleteSuggestions(bool has_suggestions);
+
+  // Returns the UMA metric used to track whether or not an upload was sent
+  // after being triggered by |submission_source|. This is exposed for testing.
+  static const char* SubmissionSourceToUploadEventMetric(
+      SubmissionSource submission_source);
+
+  // Logs whether or not an upload |was_sent| after being triggered by a
+  // |submission_source| event.
+  static void LogUploadEvent(SubmissionSource submission_source, bool was_sent);
 
   // Logs the card upload decisions ukm for the specified |url|.
   // |upload_decision_metrics| is a bitmask of |CardUploadDecisionMetric|.
@@ -1129,88 +1222,22 @@ class AutofillMetrics {
   // Converts form type to bit vector to store in UKM.
   static int64_t FormTypesToBitVector(const std::set<FormType>& form_types);
 
-  // Utility to log autofill form events in the relevant histograms depending on
-  // the presence of server and/or local data.
-  class FormEventLogger {
-   public:
-    FormEventLogger(bool is_for_credit_card,
-                    FormInteractionsUkmLogger* form_interactions_ukm_logger);
+  // Records the fact that the server card link was clicked with information
+  // about the current sync state.
+  static void LogServerCardLinkClicked(AutofillSyncSigninState sync_state);
 
-    inline void set_server_record_type_count(size_t server_record_type_count) {
-      server_record_type_count_ = server_record_type_count;
-    }
+  // Records whether the user had opted-in to seeing their server card when in
+  // sync transport mode for Wallet. This should only be logged if the user had
+  // server cards to be shown.
+  static void LogWalletSyncTransportCardsOptIn(bool is_opted_in);
 
-    inline void set_local_record_type_count(size_t local_record_type_count) {
-      local_record_type_count_ = local_record_type_count;
-    }
-
-    inline void set_is_context_secure(bool is_context_secure) {
-      is_context_secure_ = is_context_secure;
-    }
-
-    void OnDidInteractWithAutofillableForm(FormSignature form_signature);
-
-    void OnDidPollSuggestions(const FormFieldData& field);
-
-    void OnDidShowSuggestions(const FormStructure& form,
-                              const AutofillField& field,
-                              const base::TimeTicks& form_parsed_timestamp);
-
-    void OnDidSelectMaskedServerCardSuggestion(
-        const base::TimeTicks& form_parsed_timestamp);
-
-    // In case of masked cards, caller must make sure this gets called before
-    // the card is upgraded to a full card.
-    void OnDidFillSuggestion(const CreditCard& credit_card,
-                             const FormStructure& form,
-                             const AutofillField& field);
-
-    void OnDidFillSuggestion(const AutofillProfile& profile,
-                             const FormStructure& form,
-                             const AutofillField& field);
-
-    void OnWillSubmitForm();
-
-    void OnFormSubmitted(bool force_logging,
-                         const CardNumberStatus card_number_status);
-
-    void SetBankNameAvailable();
-
-    void OnDidSeeDynamicForm();
-
-    void OnDidSeeFillableDynamicForm();
-
-    void OnDidRefill();
-
-    void OnSubsequentRefillAttempt();
-
-   private:
-    void Log(FormEvent event) const;
-    void Log(BankNameDisplayedFormEvent event) const;
-
-    bool is_for_credit_card_;
-    size_t server_record_type_count_;
-    size_t local_record_type_count_;
-    bool is_context_secure_;
-    bool has_logged_interacted_;
-    bool has_logged_suggestions_shown_;
-    bool has_logged_masked_server_card_suggestion_selected_;
-    bool has_logged_suggestion_filled_;
-    bool has_logged_will_submit_;
-    bool has_logged_submitted_;
-    bool has_logged_bank_name_available_;
-    bool logged_suggestion_filled_was_server_data_;
-    bool logged_suggestion_filled_was_masked_server_card_;
-
-    // The last field that was polled for suggestions.
-    FormFieldData last_polled_field_;
-
-    FormInteractionsUkmLogger*
-        form_interactions_ukm_logger_;  // Weak reference.
-  };
+  static const char* GetMetricsSyncStateSuffix(
+      AutofillSyncSigninState sync_state);
 
  private:
-  static const int kNumCardUploadDecisionMetrics = 13;
+  static void Log(AutocompleteEvent event);
+
+  static const int kNumCardUploadDecisionMetrics = 17;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(AutofillMetrics);
 };

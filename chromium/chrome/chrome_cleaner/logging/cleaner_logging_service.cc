@@ -19,7 +19,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/win/i18n.h"
 #include "base/win/windows_version.h"
 #include "chrome/chrome_cleaner/chrome_utils/chrome_util.h"
@@ -29,6 +29,7 @@
 #include "chrome/chrome_cleaner/logging/api_keys.h"
 #include "chrome/chrome_cleaner/logging/pending_logs_service.h"
 #include "chrome/chrome_cleaner/logging/proto/removal_status.pb.h"
+#include "chrome/chrome_cleaner/logging/proto/shared_data.pb.h"
 #include "chrome/chrome_cleaner/logging/registry_logger.h"
 #include "chrome/chrome_cleaner/logging/utils.h"
 #include "chrome/chrome_cleaner/os/disk_util.h"
@@ -67,8 +68,8 @@ constexpr net::NetworkTrafficAnnotationTag kCleanerReportTrafficAnnotation =
             trigger:
               "The user either accepted a prompt to remove unwanted software, "
               "or went to \"Clean up computer\" in the settings page and chose "
-              "to \"Find and remove harmful software\", and enabled \"Report "
-              "details to Google\"."
+              "to \"Find harmful software\", and enabled \"Report details to "
+              "Google\"."
             data:
               "The user's Chrome version, Windows version, and locale, file "
               "metadata related to the unwanted software that was detected, "
@@ -163,6 +164,7 @@ void AppendFolderInformation(const FolderInformation& folder,
 void AppendMatchedFile(const MatchedFile& file, MessageBuilder* builder) {
   AppendFileInformation(file.file_information(), builder);
   builder->Add(L", removal_status = ", file.removal_status());
+  builder->Add(L", quarantine_status = ", file.quarantine_status());
 }
 
 void AppendMatchedRegistryEntry(const MatchedRegistryEntry& registry,
@@ -299,7 +301,7 @@ void CleanerLoggingService::Initialize(RegistryLogger* registry_logger) {
     ChromeCleanerReport_EnvironmentData* env_data =
         chrome_cleaner_report_.mutable_environment();
     env_data->set_windows_version(base::win::GetVersion());
-    env_data->set_cleaner_version(CHROME_VERSION_UTF8_STRING);
+    env_data->set_cleaner_version(CHROME_CLEANER_VERSION_UTF8_STRING);
     if (languages.size() > 0)
       env_data->set_default_locale(base::WideToUTF8(languages[0]));
     env_data->set_detailed_system_report(false);
@@ -584,13 +586,19 @@ void CleanerLoggingService::SetWinHttpProxySettings(
 
 void CleanerLoggingService::AddInstalledExtension(
     const base::string16& extension_id,
-    ExtensionInstallMethod install_method) {
+    ExtensionInstallMethod install_method,
+    const std::vector<internal::FileInformation>& extension_files) {
   base::AutoLock lock(lock_);
   ChromeCleanerReport_SystemReport_InstalledExtension* installed_extension =
       chrome_cleaner_report_.mutable_system_report()
           ->add_installed_extensions();
   installed_extension->set_extension_id(base::UTF16ToUTF8(extension_id));
   installed_extension->set_install_method(install_method);
+  for (const auto& file : extension_files) {
+    FileInformation proto_file_information;
+    FileInformationToProtoObject(file, &proto_file_information);
+    *installed_extension->add_extension_files() = proto_file_information;
+  }
 }
 
 void CleanerLoggingService::AddScheduledTask(
@@ -611,6 +619,28 @@ void CleanerLoggingService::AddScheduledTask(
   *chrome_cleaner_report_.mutable_system_report()->add_scheduled_tasks() =
       scheduled_task;
 }
+
+void CleanerLoggingService::AddShortcutData(
+    const base::string16& lnk_path,
+    const base::string16& executable_path,
+    const std::string& executable_hash,
+    const std::vector<base::string16>& command_line_arguments) {
+  base::AutoLock lock(lock_);
+  ChromeCleanerReport_SystemReport_ShortcutData* shortcut_data =
+      chrome_cleaner_report_.mutable_system_report()->add_shortcut_data();
+  shortcut_data->set_lnk_path(base::UTF16ToUTF8(lnk_path));
+  shortcut_data->set_executable_path(base::UTF16ToUTF8(executable_path));
+  shortcut_data->set_executable_hash(executable_hash);
+  for (const auto& argument : command_line_arguments) {
+    shortcut_data->add_command_line_arguments(base::UTF16ToUTF8(argument));
+  }
+}
+
+void CleanerLoggingService::SetFoundModifiedChromeShortcuts(
+    bool /*found_modified_shortcuts*/) {}
+
+void CleanerLoggingService::SetScannedLocations(
+    const std::vector<UwS::TraceLocation>& /*scanned_locations*/) {}
 
 void CleanerLoggingService::LogProcessInformation(
     SandboxType process_type,
@@ -834,11 +864,17 @@ void CleanerLoggingService::UpdateFileRemovalStatuses() {
       auto folder_it = matched_folders_.find(sanitized_path);
 
       if (file_it != matched_files_.end()) {
-        for (MatchedFile* matched_file : file_it->second)
+        for (MatchedFile* matched_file : file_it->second) {
           matched_file->set_removal_status(status.removal_status);
+          matched_file->set_quarantine_status(status.quarantine_status);
+        }
       } else if (folder_it != matched_folders_.end()) {
-        for (MatchedFolder* matched_folder : folder_it->second)
+        for (MatchedFolder* matched_folder : folder_it->second) {
           matched_folder->set_removal_status(status.removal_status);
+          // We don't quarantine folders. So the quarantine status should be
+          // |QUARANTINE_STATUS_UNSPECIFIED| and we don't need to record it.
+          DCHECK(status.quarantine_status == QUARANTINE_STATUS_UNSPECIFIED);
+        }
       } else {
         known_matched_file = false;
       }
@@ -879,6 +915,7 @@ void CleanerLoggingService::UpdateFileRemovalStatuses() {
         file->mutable_file_information()->set_path(sanitized_path);
       }
       file->set_removal_status(status.removal_status);
+      file->set_quarantine_status(status.quarantine_status);
     }
   }
 }

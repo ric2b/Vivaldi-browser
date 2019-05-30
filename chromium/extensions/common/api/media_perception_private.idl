@@ -63,6 +63,19 @@ namespace mediaPerceptionPrivate {
     MOJO_CONNECTION_FAILURE
   };
 
+  enum Feature {
+    AUTOZOOM,
+    HOTWORD_DETECTION,
+    OCCUPANCY_DETECTION,
+    EDGE_EMBEDDINGS,
+    SOFTWARE_CROPPING
+  };
+
+  dictionary NamedTemplateArgument {
+    DOMString? name;
+    (DOMString or double)? value;
+  };
+
   enum ComponentType {
     // The smaller component with limited functionality (smaller size and
     // limited models).
@@ -198,6 +211,13 @@ namespace mediaPerceptionPrivate {
     // only be set when setting state to <code>RUNNING</code> and configuration
     // to whiteboard.
     Whiteboard? whiteboard;
+
+    // A list of enabled media perception features.
+    Feature[]? features;
+
+    // A list of named parameters to be substituted at start-up. Will
+    // only have effect when setting state to <code>RUNNING</code>.
+    NamedTemplateArgument[]? namedTemplateArguments;
   };
 
   dictionary BoundingBox {
@@ -430,6 +450,11 @@ namespace mediaPerceptionPrivate {
     AudioVisualHumanPresenceDetection? audioVisualHumanPresenceDetection;
   };
 
+  // Stores metadata such as version of media perception features.
+  dictionary Metadata {
+    DOMString? visualExperienceControllerVersion;
+  };
+
   dictionary MediaPerception {
     // The time the media perception data was emitted by the media processing
     // pipeline. This value will be greater than the timestamp stored within
@@ -445,6 +470,9 @@ namespace mediaPerceptionPrivate {
 
     // An array of audio-visual perceptions.
     AudioVisualPerception[]? audioVisualPerceptions;
+
+    // Stores metadata such as version of media perception features.
+    Metadata? metadata;
   };
 
   enum ImageFormat {
@@ -479,6 +507,9 @@ namespace mediaPerceptionPrivate {
 
     // Perception results based on both audio and video inputs.
     AudioVisualPerception? audioVisualPerception;
+
+    // Stores metadata such as version of media perception features.
+    Metadata? metadata;
   };
 
   dictionary Diagnostics {

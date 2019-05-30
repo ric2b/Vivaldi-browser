@@ -13,13 +13,14 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/component_export.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "storage/browser/storage_browser_export.h"
-#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
-#include "url/gurl.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom-forward.h"
+#include "url/origin.h"
 
 namespace content {
 class QuotaDatabaseTest;
@@ -30,23 +31,22 @@ class Database;
 class MetaTable;
 }
 
-class GURL;
-
 namespace storage {
 
 class SpecialStoragePolicy;
 
-// All the methods of this class must run on the DB thread.
-class STORAGE_EXPORT QuotaDatabase {
+// All the methods of this class, except the constructor, must run on the DB
+// thread.
+class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaDatabase {
  public:
-  struct STORAGE_EXPORT OriginInfoTableEntry {
+  struct COMPONENT_EXPORT(STORAGE_BROWSER) OriginInfoTableEntry {
     OriginInfoTableEntry();
-    OriginInfoTableEntry(const GURL& origin,
+    OriginInfoTableEntry(const url::Origin& origin,
                          blink::mojom::StorageType type,
                          int used_count,
                          const base::Time& last_access_time,
                          const base::Time& last_modified_time);
-    GURL origin;
+    url::Origin origin;
     blink::mojom::StorageType type;
     int used_count;
     base::Time last_access_time;
@@ -74,41 +74,42 @@ class STORAGE_EXPORT QuotaDatabase {
                     int64_t quota);
   bool DeleteHostQuota(const std::string& host, blink::mojom::StorageType type);
 
-  bool SetOriginLastAccessTime(const GURL& origin,
+  bool SetOriginLastAccessTime(const url::Origin& origin,
                                blink::mojom::StorageType type,
                                base::Time last_access_time);
 
-  bool SetOriginLastModifiedTime(const GURL& origin,
+  bool SetOriginLastModifiedTime(const url::Origin& origin,
                                  blink::mojom::StorageType type,
                                  base::Time last_modified_time);
 
   // Gets the time |origin| was last evicted. Returns whether the record could
   // be found.
-  bool GetOriginLastEvictionTime(const GURL& origin,
+  bool GetOriginLastEvictionTime(const url::Origin& origin,
                                  blink::mojom::StorageType type,
                                  base::Time* last_eviction_time);
 
   // Sets the time the origin was last evicted. Returns whether the operation
   // succeeded.
-  bool SetOriginLastEvictionTime(const GURL& origin,
+  bool SetOriginLastEvictionTime(const url::Origin& origin,
                                  blink::mojom::StorageType type,
                                  base::Time last_eviction_time);
-  bool DeleteOriginLastEvictionTime(const GURL& origin,
+  bool DeleteOriginLastEvictionTime(const url::Origin& origin,
                                     blink::mojom::StorageType type);
 
   // Register initial |origins| info |type| to the database.
   // This method is assumed to be called only after the installation or
   // the database schema reset.
-  bool RegisterInitialOriginInfo(const std::set<GURL>& origins,
+  bool RegisterInitialOriginInfo(const std::set<url::Origin>& origins,
                                  blink::mojom::StorageType type);
 
   // Gets the OriginInfoTableEntry for |origin|. Returns whether the record
   // could be found.
-  bool GetOriginInfo(const GURL& origin,
+  bool GetOriginInfo(const url::Origin& origin,
                      blink::mojom::StorageType type,
                      OriginInfoTableEntry* entry);
 
-  bool DeleteOriginInfo(const GURL& origin, blink::mojom::StorageType type);
+  bool DeleteOriginInfo(const url::Origin& origin,
+                        blink::mojom::StorageType type);
 
   bool GetQuotaConfigValue(const char* key, int64_t* value);
   bool SetQuotaConfigValue(const char* key, int64_t value);
@@ -116,16 +117,16 @@ class STORAGE_EXPORT QuotaDatabase {
   // Sets |origin| to the least recently used origin of origins not included
   // in |exceptions| and not granted the special unlimited storage right.
   // It returns false when it failed in accessing the database.
-  // |origin| is set to empty when there is no matching origin.
+  // |origin| is set to nullopt when there is no matching origin.
   bool GetLRUOrigin(blink::mojom::StorageType type,
-                    const std::set<GURL>& exceptions,
+                    const std::set<url::Origin>& exceptions,
                     SpecialStoragePolicy* special_storage_policy,
-                    GURL* origin);
+                    base::Optional<url::Origin>* origin);
 
   // Populates |origins| with the ones that have been modified since
   // the |modified_since|. Returns whether the operation succeeded.
   bool GetOriginsModifiedSince(blink::mojom::StorageType type,
-                               std::set<GURL>* origins,
+                               std::set<url::Origin>* origins,
                                base::Time modified_since);
 
   // Returns false if SetOriginDatabaseBootstrapped has never
@@ -135,7 +136,7 @@ class STORAGE_EXPORT QuotaDatabase {
   bool SetOriginDatabaseBootstrapped(bool bootstrap_flag);
 
  private:
-  struct STORAGE_EXPORT QuotaTableEntry {
+  struct COMPONENT_EXPORT(STORAGE_BROWSER) QuotaTableEntry {
     QuotaTableEntry();
     QuotaTableEntry(const std::string& host,
                     blink::mojom::StorageType type,
@@ -144,10 +145,12 @@ class STORAGE_EXPORT QuotaDatabase {
     blink::mojom::StorageType type;
     int64_t quota;
   };
-  friend STORAGE_EXPORT bool operator <(
-      const QuotaTableEntry& lhs, const QuotaTableEntry& rhs);
-  friend STORAGE_EXPORT bool operator <(
-      const OriginInfoTableEntry& lhs, const OriginInfoTableEntry& rhs);
+  friend COMPONENT_EXPORT(STORAGE_BROWSER) bool operator<(
+      const QuotaTableEntry& lhs,
+      const QuotaTableEntry& rhs);
+  friend COMPONENT_EXPORT(STORAGE_BROWSER) bool operator<(
+      const OriginInfoTableEntry& lhs,
+      const OriginInfoTableEntry& rhs);
 
   // Structures used for CreateSchema.
   struct TableSchema {
@@ -196,6 +199,12 @@ class STORAGE_EXPORT QuotaDatabase {
   bool DumpQuotaTable(const QuotaTableCallback& callback);
   bool DumpOriginInfoTable(const OriginInfoTableCallback& callback);
 
+  // Serialize/deserialize base::Time objects to a stable representation for
+  // persistence in the database.
+  // TODO(pwnall): Add support for base::Time values to //sql directly.
+  static base::Time TimeFromSqlValue(int64_t time);
+  static int64_t TimeToSqlValue(const base::Time& time);
+
   base::FilePath db_file_path_;
 
   std::unique_ptr<sql::Database> db_;
@@ -211,6 +220,7 @@ class STORAGE_EXPORT QuotaDatabase {
   static const TableSchema kTables[];
   static const IndexSchema kIndexes[];
 
+  SEQUENCE_CHECKER(sequence_checker_);
   DISALLOW_COPY_AND_ASSIGN(QuotaDatabase);
 };
 

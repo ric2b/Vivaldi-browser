@@ -6,7 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_LOCKS_LOCK_H_
 
 #include "third_party/blink/public/platform/modules/locks/lock_manager.mojom-blink.h"
-#include "third_party/blink/renderer/core/dom/pausable_object.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -19,7 +19,7 @@ class ScriptPromise;
 class ScriptPromiseResolver;
 class ScriptState;
 
-class Lock final : public ScriptWrappable, public PausableObject {
+class Lock final : public ScriptWrappable, public ContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(Lock);
 
@@ -27,9 +27,14 @@ class Lock final : public ScriptWrappable, public PausableObject {
   static Lock* Create(ScriptState*,
                       const String& name,
                       mojom::blink::LockMode,
-                      mojom::blink::LockHandlePtr,
+                      mojom::blink::LockHandleAssociatedPtr,
                       LockManager*);
 
+  Lock(ScriptState*,
+       const String& name,
+       mojom::blink::LockMode,
+       mojom::blink::LockHandleAssociatedPtr,
+       LockManager*);
   ~Lock() override;
 
   void Trace(blink::Visitor*) override;
@@ -39,7 +44,7 @@ class Lock final : public ScriptWrappable, public PausableObject {
   String name() const { return name_; }
   String mode() const;
 
-  // PausableObject
+  // ContextLifecycleObserver
   void ContextDestroyed(ExecutionContext*) override;
 
   // The lock is held until the passed promise resolves. When it is released,
@@ -52,12 +57,6 @@ class Lock final : public ScriptWrappable, public PausableObject {
  private:
   class ThenFunction;
 
-  Lock(ScriptState*,
-       const String& name,
-       mojom::blink::LockMode,
-       mojom::blink::LockHandlePtr,
-       LockManager*);
-
   void ReleaseIfHeld();
 
   void OnConnectionError();
@@ -69,7 +68,7 @@ class Lock final : public ScriptWrappable, public PausableObject {
 
   // An opaque handle; this one end of a mojo pipe. When this is closed,
   // the lock is released by the back end.
-  mojom::blink::LockHandlePtr handle_;
+  mojom::blink::LockHandleAssociatedPtr handle_;
 
   // LockManager::OnLockReleased() is called when this lock is released, to
   // stop artificially keeping this instance alive. It is necessary in the

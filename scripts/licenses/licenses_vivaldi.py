@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
+
 from subprocess import check_output
 import re
 import json
@@ -158,7 +160,7 @@ SPECIAL_CASES = {
 
 def GetEntries(entry_template, EvaluateTemplate):
   entries = []
-  for module, license in modules.iteritems():
+  for module, license in modules.items():
     entries.append({
         'name': license['name'],
         'content': EvaluateTemplate(entry_template, license),

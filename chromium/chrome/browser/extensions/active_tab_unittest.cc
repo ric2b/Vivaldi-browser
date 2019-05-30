@@ -6,6 +6,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/values.h"
@@ -16,9 +17,11 @@
 #include "chrome/browser/extensions/extension_service_test_base.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
+#include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "chrome/test/base/testing_profile.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_details.h"
@@ -31,6 +34,7 @@
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_browser_thread.h"
 #include "content/public/test/web_contents_tester.h"
+#include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/constants.h"
@@ -45,15 +49,17 @@
 
 #if defined(OS_CHROMEOS)
 #include "base/run_loop.h"
+#include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/extensions/active_tab_permission_granter_delegate_chromeos.h"
+#include "chrome/browser/chromeos/login/users/chrome_user_manager_impl.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/ui/ash/test_wallpaper_controller.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "chromeos/chromeos_switches.h"
-#include "chromeos/login/scoped_test_public_session_login_state.h"
+#include "chromeos/constants/chromeos_switches.h"
+#include "chromeos/login/login_state/scoped_test_public_session_login_state.h"
 #include "components/account_id/account_id.h"
 #include "components/browser_sync/browser_sync_switches.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
@@ -68,23 +74,16 @@ namespace extensions {
 namespace {
 
 scoped_refptr<const Extension> CreateTestExtension(
-    const std::string& id,
+    const std::string& name,
     bool has_active_tab_permission,
     bool has_tab_capture_permission) {
-  ListBuilder permissions;
+  ExtensionBuilder builder(name);
   if (has_active_tab_permission)
-    permissions.Append("activeTab");
+    builder.AddPermission("activeTab");
   if (has_tab_capture_permission)
-    permissions.Append("tabCapture");
-  return ExtensionBuilder()
-      .SetManifest(DictionaryBuilder()
-                       .Set("name", "Extension with ID " + id)
-                       .Set("version", "1.0")
-                       .Set("manifest_version", 2)
-                       .Set("permissions", permissions.Build())
-                       .Build())
-      .SetID(id)
-      .Build();
+    builder.AddPermission("tabCapture");
+
+  return builder.Build();
 }
 
 enum PermittedFeature {
@@ -136,6 +135,24 @@ class ActiveTabTest : public ChromeRenderViewHostTestHarness {
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
     TabHelper::CreateForWebContents(web_contents());
+
+    // We need to add extensions to the ExtensionService; else trying to commit
+    // any of their URLs fails and redirects to about:blank.
+    ExtensionService* service =
+        static_cast<TestExtensionSystem*>(ExtensionSystem::Get(profile()))
+            ->CreateExtensionService(base::CommandLine::ForCurrentProcess(),
+                                     base::FilePath(), false);
+    service->AddExtension(extension.get());
+    service->AddExtension(another_extension.get());
+    service->AddExtension(extension_without_active_tab.get());
+    service->AddExtension(extension_with_tab_capture.get());
+  }
+
+  void TearDown() override {
+#if defined(OS_CHROMEOS)
+    chromeos::KioskAppManager::Shutdown();
+#endif
+    ChromeRenderViewHostTestHarness::TearDown();
   }
 
   int tab_id() { return SessionTabHelper::IdForTab(web_contents()).id(); }
@@ -164,7 +181,8 @@ class ActiveTabTest : public ChromeRenderViewHostTestHarness {
     bool script =
         permissions_data->CanAccessPage(url, tab_id, nullptr) &&
         permissions_data->CanRunContentScriptOnPage(url, tab_id, nullptr);
-    bool capture = permissions_data->CanCaptureVisiblePage(url, tab_id, NULL);
+    bool capture = permissions_data->CanCaptureVisiblePage(
+        url, tab_id, NULL, extensions::CaptureRequirement::kActiveTabOrAllUrls);
     switch (feature) {
       case PERMITTED_SCRIPT_ONLY:
         return script && !capture;
@@ -251,23 +269,17 @@ TEST_F(ActiveTabTest, GrantToSinglePage) {
   EXPECT_TRUE(IsBlocked(another_extension, mail_google));
   EXPECT_TRUE(IsBlocked(extension_without_active_tab, mail_google));
 
-  // Reloading the page should clear the active permissions.
+  // Reloading the page should not clear the active permissions, since the
+  // user remains on the same site.
   content::NavigationSimulator::Reload(web_contents());
-
-  EXPECT_TRUE(IsBlocked(extension, google));
-  EXPECT_TRUE(IsBlocked(another_extension, google));
-  EXPECT_TRUE(IsBlocked(extension_without_active_tab, google));
-
-  EXPECT_FALSE(HasTabsPermission(extension));
-  EXPECT_FALSE(HasTabsPermission(another_extension));
-  EXPECT_FALSE(HasTabsPermission(extension_without_active_tab));
-
-  // But they should still be able to be granted again.
-  active_tab_permission_granter()->GrantIfRequested(extension.get());
 
   EXPECT_TRUE(IsAllowed(extension, google));
   EXPECT_TRUE(IsBlocked(another_extension, google));
   EXPECT_TRUE(IsBlocked(extension_without_active_tab, google));
+
+  EXPECT_TRUE(HasTabsPermission(extension));
+  EXPECT_FALSE(HasTabsPermission(another_extension));
+  EXPECT_FALSE(HasTabsPermission(extension_without_active_tab));
 
   // And grant a few more times redundantly for good measure.
   active_tab_permission_granter()->GrantIfRequested(extension.get());
@@ -348,21 +360,25 @@ TEST_F(ActiveTabTest, CapturingPagesWithActiveTab) {
   for (const GURL& url : test_urls) {
     SCOPED_TRACE(url);
     NavigateAndCommit(url);
+    EXPECT_EQ(url, web_contents()->GetLastCommittedURL());
     // By default, there should be no access.
     EXPECT_FALSE(extension->permissions_data()->CanCaptureVisiblePage(
-        url, tab_id(), nullptr /*error*/));
+        url, tab_id(), nullptr /*error*/,
+        extensions::CaptureRequirement::kActiveTabOrAllUrls));
     // Granting permission should allow page capture.
     active_tab_permission_granter()->GrantIfRequested(extension.get());
     EXPECT_TRUE(extension->permissions_data()->CanCaptureVisiblePage(
-        url, tab_id(), nullptr /*error*/));
+        url, tab_id(), nullptr /*error*/,
+        extensions::CaptureRequirement::kActiveTabOrAllUrls));
     // Navigating away should revoke access.
     NavigateAndCommit(kAboutBlank);
     EXPECT_FALSE(extension->permissions_data()->CanCaptureVisiblePage(
-        url, tab_id(), nullptr /*error*/));
+        url, tab_id(), nullptr /*error*/,
+        extensions::CaptureRequirement::kActiveTabOrAllUrls));
   }
 }
 
-TEST_F(ActiveTabTest, Uninstalling) {
+TEST_F(ActiveTabTest, Unloading) {
   // Some semi-arbitrary setup.
   GURL google("http://www.google.com");
   NavigateAndCommit(google);
@@ -372,11 +388,10 @@ TEST_F(ActiveTabTest, Uninstalling) {
   EXPECT_TRUE(IsGrantedForTab(extension.get(), web_contents()));
   EXPECT_TRUE(IsAllowed(extension, google));
 
-  // Uninstalling the extension should clear its tab permissions.
-  ExtensionRegistry* registry =
-      ExtensionRegistry::Get(web_contents()->GetBrowserContext());
-  registry->TriggerOnUnloaded(extension.get(),
-                              UnloadedExtensionReason::DISABLE);
+  // Unloading the extension should clear its tab permissions.
+  ExtensionSystem::Get(web_contents()->GetBrowserContext())
+      ->extension_service()
+      ->DisableExtension(extension->id(), disable_reason::DISABLE_USER_ACTION);
 
   // Note: can't EXPECT_FALSE(IsAllowed) here because uninstalled extensions
   // are just that... considered to be uninstalled, and the manager might
@@ -439,8 +454,8 @@ TEST_F(ActiveTabTest, SameDocumentNavigations) {
 
   EXPECT_FALSE(IsAllowed(extension, google));
   EXPECT_FALSE(IsAllowed(extension, google_h1));
-  EXPECT_FALSE(IsAllowed(extension, chromium));
-  EXPECT_FALSE(IsAllowed(extension, chromium_h1));
+  EXPECT_TRUE(IsAllowed(extension, chromium));
+  EXPECT_TRUE(IsAllowed(extension, chromium_h1));
 }
 
 TEST_F(ActiveTabTest, ChromeUrlGrants) {
@@ -463,17 +478,17 @@ TEST_F(ActiveTabTest, ChromeUrlGrants) {
 
 class ActiveTabDelegateTest : public ActiveTabTest {
  protected:
-  ActiveTabDelegateTest()
-      : test_delegate_(
-            std::make_unique<ActiveTabPermissionGranterTestDelegate>()) {
-    ActiveTabPermissionGranter::SetPlatformDelegate(test_delegate_.get());
+  ActiveTabDelegateTest() {
+    auto delegate = std::make_unique<ActiveTabPermissionGranterTestDelegate>();
+    test_delegate_ = delegate.get();
+    ActiveTabPermissionGranter::SetPlatformDelegate(std::move(delegate));
   }
 
   ~ActiveTabDelegateTest() override {
     ActiveTabPermissionGranter::SetPlatformDelegate(nullptr);
   }
 
-  std::unique_ptr<ActiveTabPermissionGranterTestDelegate> test_delegate_;
+  ActiveTabPermissionGranterTestDelegate* test_delegate_;
 };
 
 // Test that the custom platform delegate works as expected.
@@ -500,7 +515,79 @@ TEST_F(ActiveTabDelegateTest, DelegateUsedOnlyWhenNeeded) {
 }
 
 #if defined(OS_CHROMEOS)
-// Keep the unique_ptr around until callback has been run.
+class ActiveTabManagedSessionTest : public ActiveTabTest {
+ protected:
+  ActiveTabManagedSessionTest() {}
+
+  void SetUp() override {
+    ActiveTabTest::SetUp();
+
+    // Necessary to prevent instantiation of ProfileSyncService, which messes
+    // with our signin state below.
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kDisableSync);
+    // Necessary because no ProfileManager instance exists in this test.
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        chromeos::switches::kIgnoreUserProfileMappingForTests);
+
+    // Setup, login a public account user.
+    const std::string user_id = "public@account.user";
+    const std::string user_email = user_id;
+    const AccountId account_id =
+        AccountId::FromUserEmailGaiaId(user_email, user_id);
+    const std::string user_id_hash =
+        chromeos::ProfileHelper::Get()->GetUserIdHashByUserIdForTesting(
+            user_id);
+
+    local_state_ = std::make_unique<ScopedTestingLocalState>(
+        TestingBrowserProcess::GetGlobal());
+    wallpaper_controller_client_ =
+        std::make_unique<WallpaperControllerClient>();
+    wallpaper_controller_client_->InitForTesting(
+        test_wallpaper_controller_.CreateInterfacePtr());
+    g_browser_process->local_state()->SetString(
+        "PublicAccountPendingDataRemoval", user_email);
+    user_manager::UserManager::Get()->UserLoggedIn(account_id, user_id_hash,
+                                                   true /* browser_restart */,
+                                                   false /* is_child */);
+    // Finish initialization - some things are run as separate tasks.
+    base::RunLoop().RunUntilIdle();
+
+    google_ = GURL("http://www.google.com");
+    NavigateAndCommit(google_);
+  }
+
+  void TearDown() override {
+    // This one needs to be destructed here so it deregisters itself from
+    // CrosSettings before that is destructed down the line inside
+    // ChromeRenderViewHostTestHarness::TearDown.
+    wallpaper_controller_client_.reset();
+
+    chromeos::ChromeUserManagerImpl::ResetPublicAccountDelegatesForTesting();
+    chromeos::ChromeUserManager::Get()->Shutdown();
+
+    ActiveTabTest::TearDown();
+  }
+
+  std::unique_ptr<ScopedTestingLocalState> local_state_;
+  TestWallpaperController test_wallpaper_controller_;
+  std::unique_ptr<WallpaperControllerClient> wallpaper_controller_client_;
+  GURL google_;
+};
+
+// Test that there's no permission prompt in Managed Sessions (Public Sessions
+// v2) for activeTab.
+TEST_F(ActiveTabManagedSessionTest, NoPromptInManagedSession) {
+  chromeos::ScopedTestPublicSessionLoginState login_state(
+      chromeos::LoginState::LOGGED_IN_USER_PUBLIC_ACCOUNT_MANAGED);
+
+  active_tab_permission_granter()->GrantIfRequested(
+      extension_with_tab_capture.get());
+  EXPECT_TRUE(IsAllowed(extension_with_tab_capture, google_));
+}
+
+// Keep the unique_ptr around until callback has been run and don't forget to
+// unset the ActiveTabPermissionGranterDelegateChromeOS.
 std::unique_ptr<permission_helper::RequestResolvedCallback>
 QuitRunLoopOnRequestResolved(base::RunLoop* run_loop) {
   auto callback = std::make_unique<permission_helper::RequestResolvedCallback>(
@@ -512,57 +599,30 @@ QuitRunLoopOnRequestResolved(base::RunLoop* run_loop) {
   return callback;
 }
 
-// Test that the platform delegate is being set and the permission is prompted
-// for.
-TEST_F(ActiveTabTest, DelegateIsSet) {
-  // Necessary to prevent instantiation of ProfileSyncService, which messes with
-  // our signin state below.
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(switches::kDisableSync);
-  // Necessary because no ProfileManager instance exists in this test.
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      chromeos::switches::kIgnoreUserProfileMappingForTests);
-
-  // Setup, login a public account user.
-  chromeos::ScopedTestPublicSessionLoginState login_state;
-  std::string user_id = "public@account.user";
-  std::string user_email = user_id;
-  AccountId account_id = AccountId::FromUserEmailGaiaId(user_email, user_id);
-  std::string user_id_hash = chromeos::ProfileHelper::Get()->
-      GetUserIdHashByUserIdForTesting(user_id);
-  ScopedTestingLocalState local_state(TestingBrowserProcess::GetGlobal());
-  std::unique_ptr<WallpaperControllerClient> wallpaper_controller_client_ =
-      std::make_unique<WallpaperControllerClient>();
-  TestWallpaperController test_wallpaper_controller_;
-  wallpaper_controller_client_->InitForTesting(
-      test_wallpaper_controller_.CreateInterfacePtr());
-  g_browser_process->local_state()->SetString(
-      "PublicAccountPendingDataRemoval", user_email);
-  user_manager::UserManager::Get()->UserLoggedIn(account_id, user_id_hash,
-                                                 true /* browser_restart */,
-                                                 false /* is_child */);
-
-  GURL google("http://www.google.com");
-  NavigateAndCommit(google);
-
+// Test that the platform delegate is being set and the activeTab permission is
+// prompted for in Public Sessions.
+TEST_F(ActiveTabManagedSessionTest,
+       DelegateIsSetAndPromptIsShownInPublicSession) {
+  chromeos::ScopedTestPublicSessionLoginState login_state(
+      chromeos::LoginState::LOGGED_IN_USER_PUBLIC_ACCOUNT);
   // Grant and verify.
   {
     ScopedTestDialogAutoConfirm auto_confirm(
         ScopedTestDialogAutoConfirm::ACCEPT);
 
+    // RunLoop needed to resolve the permission dialog.
     base::RunLoop run_loop;
     auto cb = QuitRunLoopOnRequestResolved(&run_loop);
     active_tab_permission_granter()->GrantIfRequested(extension.get());
     run_loop.Run();
-    EXPECT_TRUE(IsBlocked(extension, google));
+    EXPECT_TRUE(IsBlocked(extension, google_));
 
-    base::RunLoop run_loop2;
-    cb = QuitRunLoopOnRequestResolved(&run_loop2);
     active_tab_permission_granter()->GrantIfRequested(extension.get());
-    run_loop2.Run();
-    EXPECT_TRUE(IsAllowed(extension, google));
+    EXPECT_TRUE(IsAllowed(extension, google_));
   }
 
-  // Deny and verify. Use a different extension so it doesn't trigger the cache.
+  // Deny and verify. Use a different extension so it doesn't trigger the
+  // cache.
   {
     ScopedTestDialogAutoConfirm auto_confirm(
         ScopedTestDialogAutoConfirm::CANCEL);
@@ -571,20 +631,15 @@ TEST_F(ActiveTabTest, DelegateIsSet) {
     auto cb = QuitRunLoopOnRequestResolved(&run_loop);
     active_tab_permission_granter()->GrantIfRequested(another_extension.get());
     run_loop.Run();
-    EXPECT_TRUE(IsBlocked(another_extension, google));
+    EXPECT_TRUE(IsBlocked(another_extension, google_));
 
-    base::RunLoop run_loop2;
-    cb = QuitRunLoopOnRequestResolved(&run_loop2);
     active_tab_permission_granter()->GrantIfRequested(another_extension.get());
-    run_loop2.Run();
-    EXPECT_TRUE(IsBlocked(another_extension, google));
+    EXPECT_TRUE(IsBlocked(another_extension, google_));
   }
 
   // Cleanup.
   ActiveTabPermissionGranterDelegateChromeOS::
       SetRequestResolvedCallbackForTesting(nullptr);
-  delete ActiveTabPermissionGranter::SetPlatformDelegate(nullptr);
-  chromeos::ChromeUserManager::Get()->Shutdown();
 }
 #endif  // defined(OS_CHROMEOS)
 
@@ -655,11 +710,13 @@ TEST_F(ActiveTabWithServiceTest, FileURLs) {
   EXPECT_NE(extension_misc::kUnknownTabId, tab_id);
 
   EXPECT_FALSE(extension->permissions_data()->CanCaptureVisiblePage(
-      web_contents->GetLastCommittedURL(), tab_id, nullptr));
+      web_contents->GetLastCommittedURL(), tab_id, nullptr,
+      extensions::CaptureRequirement::kActiveTabOrAllUrls));
 
   permission_granter->GrantIfRequested(extension.get());
   EXPECT_FALSE(extension->permissions_data()->CanCaptureVisiblePage(
-      web_contents->GetLastCommittedURL(), tab_id, nullptr));
+      web_contents->GetLastCommittedURL(), tab_id, nullptr,
+      extensions::CaptureRequirement::kActiveTabOrAllUrls));
 
   permission_granter->RevokeForTesting();
   TestExtensionRegistryObserver observer(registry(), id);
@@ -669,10 +726,12 @@ TEST_F(ActiveTabWithServiceTest, FileURLs) {
   ASSERT_TRUE(extension);
 
   EXPECT_FALSE(extension->permissions_data()->CanCaptureVisiblePage(
-      web_contents->GetLastCommittedURL(), tab_id, nullptr));
+      web_contents->GetLastCommittedURL(), tab_id, nullptr,
+      extensions::CaptureRequirement::kActiveTabOrAllUrls));
   permission_granter->GrantIfRequested(extension.get());
   EXPECT_TRUE(extension->permissions_data()->CanCaptureVisiblePage(
-      web_contents->GetLastCommittedURL(), tab_id, nullptr));
+      web_contents->GetLastCommittedURL(), tab_id, nullptr,
+      extensions::CaptureRequirement::kActiveTabOrAllUrls));
 }
 
 }  // namespace

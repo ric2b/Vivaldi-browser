@@ -55,9 +55,9 @@ class CONTENT_EXPORT URLLoaderClientImpl final
   // If set to true, this causes the raw datapipe containing the response body
   // to be passed on to the ResourceDispatcher. Otherwise a
   // URLResponseBodyConsumer is created that passes individual chunks of data
-  // from teh body to the dispatcher.
+  // from the body to the dispatcher.
   void SetPassResponsePipeToDispatcher(bool pass_pipe) {
-    pass_response_pipe_to_dispatcher_ = true;
+    pass_response_pipe_to_dispatcher_ = pass_pipe;
   }
 
   // Binds this instance to the given URLLoaderClient endpoints so that it can
@@ -89,16 +89,23 @@ class CONTENT_EXPORT URLLoaderClientImpl final
   class DeferredOnReceiveRedirect;
   class DeferredOnUploadProgress;
   class DeferredOnReceiveCachedMetadata;
+  class DeferredOnStartLoadingResponseBody;
   class DeferredOnComplete;
 
   bool NeedsStoringMessage() const;
   void StoreAndDispatch(std::unique_ptr<DeferredMessage> message);
   void OnConnectionClosed();
 
+  // Non-ResourceLoadViaDataPipe:
+  // Used for reading the response body from the data pipe passed on
+  // OnStartLoadingResponseBody() and passing the data to corresponding
+  // RequestPeer.
   scoped_refptr<URLResponseBodyConsumer> body_consumer_;
+
   std::vector<std::unique_ptr<DeferredMessage>> deferred_messages_;
   const int request_id_;
-  bool has_received_response_ = false;
+  bool has_received_response_head_ = false;
+  bool has_received_response_body_ = false;
   bool has_received_complete_ = false;
   bool is_deferred_ = false;
   bool pass_response_pipe_to_dispatcher_ = false;

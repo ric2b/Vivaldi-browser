@@ -35,6 +35,8 @@ class PaintChunkSubset;
 // Unless its dangerous accessors are used, it promises to be in a reasonable
 // state (e.g. chunk bounding boxes computed).
 class PLATFORM_EXPORT PaintArtifact final : public RefCounted<PaintArtifact> {
+  USING_FAST_MALLOC(PaintArtifact);
+
  public:
   static scoped_refptr<PaintArtifact> Create(DisplayItemList,
                                              Vector<PaintChunk>);
@@ -54,7 +56,7 @@ class PLATFORM_EXPORT PaintArtifact final : public RefCounted<PaintArtifact> {
   const Vector<PaintChunk>& PaintChunks() const { return chunks_; }
 
   PaintChunkSubset GetPaintChunkSubset(
-      const Vector<size_t>& subset_indices) const {
+      const Vector<wtf_size_t>& subset_indices) const {
     return PaintChunkSubset(PaintChunks(), subset_indices);
   }
 
@@ -66,6 +68,8 @@ class PLATFORM_EXPORT PaintArtifact final : public RefCounted<PaintArtifact> {
   // Returns the approximate memory usage, excluding memory likely to be
   // shared with the embedder after copying to cc::DisplayItemList.
   size_t ApproximateUnsharedMemoryUsage() const;
+
+  void AppendDebugDrawing(sk_sp<const PaintRecord>, const PropertyTreeState&);
 
   // Draws the paint artifact to a GraphicsContext, into the ancestor state
   // given by |replay_state|.
@@ -79,9 +83,8 @@ class PLATFORM_EXPORT PaintArtifact final : public RefCounted<PaintArtifact> {
               const PropertyTreeState& replay_state,
               const IntPoint& offset = IntPoint()) const;
 
-  // Writes the paint artifact into a cc::DisplayItemList.
-  void AppendToDisplayItemList(const FloatSize& visual_rect_offset,
-                               cc::DisplayItemList& display_list) const;
+  sk_sp<PaintRecord> GetPaintRecord(const PropertyTreeState& replay_state,
+                                    const IntPoint& offset = IntPoint()) const;
 
   // Called when the caller finishes updating a full document life cycle.
   // Will cleanup data (e.g. raster invalidations) that will no longer be used

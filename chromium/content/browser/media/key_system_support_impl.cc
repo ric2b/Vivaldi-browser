@@ -20,6 +20,7 @@
 #include "media/base/key_system_names.h"
 #include "media/base/key_systems.h"
 #include "media/base/media_switches.h"
+#include "media/mojo/buildflags.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 
 namespace content {
@@ -114,11 +115,17 @@ void GetHardwareSecureDecryptionCaps(
     return;
   }
 
+#if BUILDFLAG(ENABLE_MOJO_VIDEO_DECODER)
   if (!base::FeatureList::IsEnabled(media::kMojoVideoDecoder)) {
     DVLOG(1) << "Hardware secure codecs not supported because mojo video "
-                "decode disabled";
+                "decode was disabled at runtime";
     return;
   }
+#else
+  DVLOG(1) << "Hardware secure codecs not supported because mojo video "
+              "decode was disabled at buildtime";
+  return;
+#endif
 
   base::flat_set<media::VideoCodec> video_codec_set;
   base::flat_set<media::EncryptionMode> encryption_scheme_set;
@@ -178,6 +185,8 @@ void KeySystemSupportImpl::IsKeySystemSupported(
   // Supported codecs and encryption schemes.
   auto capability = media::mojom::KeySystemCapability::New();
   capability->video_codecs = cdm_info->capability.video_codecs;
+  capability->supports_vp9_profile2 =
+      cdm_info->capability.supports_vp9_profile2;
   capability->encryption_schemes =
       SetToVector(cdm_info->capability.encryption_schemes);
 

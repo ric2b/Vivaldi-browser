@@ -10,7 +10,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/no_destructor.h"
 #include "base/stl_util.h"
-#include "chromeos/components/proximity_auth/logging/logging.h"
+#include "chromeos/components/multidevice/logging/logging.h"
 #include "chromeos/services/secure_channel/active_connection_manager_impl.h"
 #include "chromeos/services/secure_channel/authenticated_channel.h"
 #include "chromeos/services/secure_channel/ble_connection_manager_impl.h"
@@ -71,21 +71,23 @@ SecureChannelImpl::ConnectionRequestWaitingForDisconnection::
 
 SecureChannelImpl::SecureChannelImpl(
     scoped_refptr<device::BluetoothAdapter> bluetooth_adapter)
-    : timer_factory_(TimerFactoryImpl::Factory::Get()->BuildInstance()),
+    : bluetooth_adapter_(std::move(bluetooth_adapter)),
+      timer_factory_(TimerFactoryImpl::Factory::Get()->BuildInstance()),
       remote_device_cache_(
-          cryptauth::RemoteDeviceCache::Factory::Get()->BuildInstance()),
+          multidevice::RemoteDeviceCache::Factory::Get()->BuildInstance()),
       ble_service_data_helper_(
           BleServiceDataHelperImpl::Factory::Get()->BuildInstance(
               remote_device_cache_.get())),
       ble_connection_manager_(
           BleConnectionManagerImpl::Factory::Get()->BuildInstance(
-              bluetooth_adapter,
+              bluetooth_adapter_,
               ble_service_data_helper_.get(),
               timer_factory_.get())),
       pending_connection_manager_(
           PendingConnectionManagerImpl::Factory::Get()->BuildInstance(
               this /* delegate */,
-              ble_connection_manager_.get())),
+              ble_connection_manager_.get(),
+              bluetooth_adapter_)),
       active_connection_manager_(
           ActiveConnectionManagerImpl::Factory::Get()->BuildInstance(
               this /* delegate */)) {}
@@ -93,8 +95,8 @@ SecureChannelImpl::SecureChannelImpl(
 SecureChannelImpl::~SecureChannelImpl() = default;
 
 void SecureChannelImpl::ListenForConnectionFromDevice(
-    const cryptauth::RemoteDevice& device_to_connect,
-    const cryptauth::RemoteDevice& local_device,
+    const multidevice::RemoteDevice& device_to_connect,
+    const multidevice::RemoteDevice& local_device,
     const std::string& feature,
     ConnectionPriority connection_priority,
     mojom::ConnectionDelegatePtr delegate) {
@@ -107,8 +109,8 @@ void SecureChannelImpl::ListenForConnectionFromDevice(
 }
 
 void SecureChannelImpl::InitiateConnectionToDevice(
-    const cryptauth::RemoteDevice& device_to_connect,
-    const cryptauth::RemoteDevice& local_device,
+    const multidevice::RemoteDevice& device_to_connect,
+    const multidevice::RemoteDevice& local_device,
     const std::string& feature,
     ConnectionPriority connection_priority,
     mojom::ConnectionDelegatePtr delegate) {
@@ -137,10 +139,11 @@ void SecureChannelImpl::OnDisconnected(
   // connection to disconnect), pass the request off to
   // PendingConnectionManager.
   for (auto& details : pending_requests_it->second) {
-    PA_LOG(INFO) << "SecureChannelImpl::OnDisconnected(): Disconnection "
-                 << "completed; starting pending connection attempt. Request: "
-                 << *details.client_connection_parameters
-                 << ", Attempt details: " << details.connection_attempt_details;
+    PA_LOG(VERBOSE)
+        << "SecureChannelImpl::OnDisconnected(): Disconnection "
+        << "completed; starting pending connection attempt. Request: "
+        << *details.client_connection_parameters
+        << ", Attempt details: " << details.connection_attempt_details;
     pending_connection_manager_->HandleConnectionRequest(
         details.connection_attempt_details,
         std::move(details.client_connection_parameters),
@@ -181,8 +184,8 @@ void SecureChannelImpl::OnConnection(
 
 void SecureChannelImpl::ProcessConnectionRequest(
     ApiFunctionName api_fn_name,
-    const cryptauth::RemoteDevice& device_to_connect,
-    const cryptauth::RemoteDevice& local_device,
+    const multidevice::RemoteDevice& device_to_connect,
+    const multidevice::RemoteDevice& local_device,
     std::unique_ptr<ClientConnectionParameters> client_connection_parameters,
     ConnectionRole connection_role,
     ConnectionPriority connection_priority,
@@ -207,6 +210,17 @@ void SecureChannelImpl::ProcessConnectionRequest(
     return;
   }
 
+  // Check 4: Medium-specific verification.
+  switch (connection_medium) {
+    case ConnectionMedium::kBluetoothLowEnergy:
+      // Is the local Bluetooth adapter disabled or not present? If either,
+      // notify client and return early.
+      if (CheckIfBluetoothAdapterDisabledOrNotPresent(
+              api_fn_name, client_connection_parameters.get()))
+        return;
+      break;
+  }
+
   // At this point, the request has been deemed valid.
   ConnectionAttemptDetails connection_attempt_details(
       device_to_connect.GetDeviceId(), local_device.GetDeviceId(),
@@ -215,29 +229,31 @@ void SecureChannelImpl::ProcessConnectionRequest(
       connection_attempt_details.GetAssociatedConnectionDetails();
   switch (active_connection_manager_->GetConnectionState(connection_details)) {
     case ActiveConnectionManager::ConnectionState::kActiveConnectionExists:
-      PA_LOG(INFO) << "SecureChannelImpl::" << api_fn_name << "(): Adding "
-                   << "request to active channel. Request: "
-                   << *client_connection_parameters << ", Local device ID: \""
-                   << cryptauth::RemoteDeviceRef::TruncateDeviceIdForLogs(
-                          local_device.GetDeviceId())
-                   << "\""
-                   << ", Role: " << connection_role
-                   << ", Priority: " << connection_priority
-                   << ", Details: " << connection_details;
+      PA_LOG(VERBOSE) << "SecureChannelImpl::" << api_fn_name << "(): Adding "
+                      << "request to active channel. Request: "
+                      << *client_connection_parameters
+                      << ", Local device ID: \""
+                      << multidevice::RemoteDeviceRef::TruncateDeviceIdForLogs(
+                             local_device.GetDeviceId())
+                      << "\""
+                      << ", Role: " << connection_role
+                      << ", Priority: " << connection_priority
+                      << ", Details: " << connection_details;
       active_connection_manager_->AddClientToChannel(
           std::move(client_connection_parameters), connection_details);
       break;
 
     case ActiveConnectionManager::ConnectionState::kNoConnectionExists:
-      PA_LOG(INFO) << "SecureChannelImpl::" << api_fn_name << "(): Starting "
-                   << "pending connection attempt. Request: "
-                   << *client_connection_parameters << ", Local device ID: \""
-                   << cryptauth::RemoteDeviceRef::TruncateDeviceIdForLogs(
-                          local_device.GetDeviceId())
-                   << "\""
-                   << ", Role: " << connection_role
-                   << ", Priority: " << connection_priority
-                   << ", Details: " << connection_details;
+      PA_LOG(VERBOSE) << "SecureChannelImpl::" << api_fn_name << "(): Starting "
+                      << "pending connection attempt. Request: "
+                      << *client_connection_parameters
+                      << ", Local device ID: \""
+                      << multidevice::RemoteDeviceRef::TruncateDeviceIdForLogs(
+                             local_device.GetDeviceId())
+                      << "\""
+                      << ", Role: " << connection_role
+                      << ", Priority: " << connection_priority
+                      << ", Details: " << connection_details;
       pending_connection_manager_->HandleConnectionRequest(
           connection_attempt_details, std::move(client_connection_parameters),
           connection_priority);
@@ -245,17 +261,18 @@ void SecureChannelImpl::ProcessConnectionRequest(
 
     case ActiveConnectionManager::ConnectionState::
         kDisconnectingConnectionExists:
-      PA_LOG(INFO) << "SecureChannelImpl::" << api_fn_name << "(): Received "
-                   << "request for which a disconnecting connection exists. "
-                   << "Waiting for connection to disconnect completely before "
-                   << "continuing. Request: " << *client_connection_parameters
-                   << ", Local device ID: \""
-                   << cryptauth::RemoteDeviceRef::TruncateDeviceIdForLogs(
-                          local_device.GetDeviceId())
-                   << "\""
-                   << ", Role: " << connection_role
-                   << ", Priority: " << connection_priority
-                   << ", Details: " << connection_details;
+      PA_LOG(VERBOSE)
+          << "SecureChannelImpl::" << api_fn_name << "(): Received "
+          << "request for which a disconnecting connection exists. "
+          << "Waiting for connection to disconnect completely before "
+          << "continuing. Request: " << *client_connection_parameters
+          << ", Local device ID: \""
+          << multidevice::RemoteDeviceRef::TruncateDeviceIdForLogs(
+                 local_device.GetDeviceId())
+          << "\""
+          << ", Role: " << connection_role
+          << ", Priority: " << connection_priority
+          << ", Details: " << connection_details;
       disconnecting_details_to_requests_map_[connection_details].emplace_back(
           std::move(client_connection_parameters), connection_attempt_details,
           connection_priority);
@@ -288,7 +305,7 @@ bool SecureChannelImpl::CheckForInvalidRequest(
 
 bool SecureChannelImpl::CheckForInvalidInputDevice(
     ApiFunctionName api_fn_name,
-    const cryptauth::RemoteDevice& device,
+    const multidevice::RemoteDevice& device,
     ClientConnectionParameters* client_connection_parameters,
     bool is_local_device) {
   base::Optional<InvalidRemoteDeviceReason> potential_invalid_reason =
@@ -320,10 +337,30 @@ bool SecureChannelImpl::CheckForInvalidInputDevice(
   return true;
 }
 
+bool SecureChannelImpl::CheckIfBluetoothAdapterDisabledOrNotPresent(
+    ApiFunctionName api_fn_name,
+    ClientConnectionParameters* client_connection_parameters) {
+  if (!bluetooth_adapter_->IsPresent()) {
+    RejectRequestForReason(
+        api_fn_name, mojom::ConnectionAttemptFailureReason::ADAPTER_NOT_PRESENT,
+        client_connection_parameters);
+    return true;
+  }
+
+  if (!bluetooth_adapter_->IsPowered()) {
+    RejectRequestForReason(
+        api_fn_name, mojom::ConnectionAttemptFailureReason::ADAPTER_DISABLED,
+        client_connection_parameters);
+    return true;
+  }
+
+  return false;
+}
+
 base::Optional<SecureChannelImpl::InvalidRemoteDeviceReason>
 SecureChannelImpl::AddDeviceToCacheIfPossible(
     ApiFunctionName api_fn_name,
-    const cryptauth::RemoteDevice& device) {
+    const multidevice::RemoteDevice& device) {
   if (device.public_key.empty()) {
     PA_LOG(WARNING) << "SecureChannelImpl::" << api_fn_name << "(): "
                     << "Provided device has an invalid public key. Cannot "

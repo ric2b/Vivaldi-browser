@@ -11,16 +11,21 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/fake_disk_mount_manager.h"
 #include "chrome/browser/chromeos/file_manager/volume_manager_observer.h"
 #include "chrome/browser/chromeos/file_system_provider/fake_extension_provider.h"
 #include "chrome/browser/chromeos/file_system_provider/service.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/scoped_set_running_on_chromeos_for_testing.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/fake_power_manager_client.h"
 #include "chromeos/dbus/power_manager/suspend.pb.h"
 #include "chromeos/disks/disk.h"
@@ -29,9 +34,11 @@
 #include "components/drive/service/dummy_drive_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/storage_monitor/storage_info.h"
+#include "components/user_manager/user.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_service_manager_context.h"
 #include "extensions/browser/extension_registry.h"
+#include "services/device/public/mojom/mtp_storage_info.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using chromeos::disks::Disk;
@@ -39,6 +46,9 @@ using chromeos::disks::DiskMountManager;
 
 namespace file_manager {
 namespace {
+const char kLsbRelease[] =
+    "CHROMEOS_RELEASE_NAME=Chrome OS\n"
+    "CHROMEOS_RELEASE_VERSION=1.2.3.4\n";
 
 class LoggingObserver : public VolumeManagerObserver {
  public:
@@ -163,6 +173,15 @@ class LoggingObserver : public VolumeManagerObserver {
   DISALLOW_COPY_AND_ASSIGN(LoggingObserver);
 };
 
+class FakeUser : public user_manager::User {
+ public:
+  explicit FakeUser(const AccountId& account_id) : User(account_id) {}
+
+  user_manager::UserType GetType() const override {
+    return user_manager::USER_TYPE_REGULAR;
+  }
+};
+
 }  // namespace
 
 class VolumeManagerTest : public testing::Test {
@@ -194,7 +213,15 @@ class VolumeManagerTest : public testing::Test {
               disk_manager,
               file_system_provider_service_.get(),
               base::Bind(&ProfileEnvironment::GetFakeMtpStorageInfo,
-                         base::Unretained(this)))) {}
+                         base::Unretained(this)))),
+          account_id_(
+              AccountId::FromUserEmailGaiaId(profile_->GetProfileUserName(),
+                                             "id")),
+          user_(account_id_) {
+      chromeos::ProfileHelper::Get()->SetProfileToUserMappingForTesting(&user_);
+      chromeos::ProfileHelper::Get()->SetUserToProfileMappingForTesting(
+          &user_, profile_.get());
+    }
 
     Profile* profile() const { return profile_.get(); }
     VolumeManager* volume_manager() const { return volume_manager_.get(); }
@@ -212,14 +239,21 @@ class VolumeManagerTest : public testing::Test {
         file_system_provider_service_;
     std::unique_ptr<drive::DriveIntegrationService> drive_integration_service_;
     std::unique_ptr<VolumeManager> volume_manager_;
+    AccountId account_id_;
+    FakeUser user_;
   };
 
   void SetUp() override {
-    power_manager_client_ =
-        std::make_unique<chromeos::FakePowerManagerClient>();
+    chromeos::PowerManagerClient::Initialize();
     disk_mount_manager_ = std::make_unique<FakeDiskMountManager>();
     main_profile_ = std::make_unique<ProfileEnvironment>(
-        power_manager_client_.get(), disk_mount_manager_.get());
+        chromeos::PowerManagerClient::Get(), disk_mount_manager_.get());
+  }
+
+  void TearDown() override {
+    main_profile_.reset();
+    disk_mount_manager_.reset();
+    chromeos::PowerManagerClient::Shutdown();
   }
 
   Profile* profile() const { return main_profile_->profile(); }
@@ -229,7 +263,6 @@ class VolumeManagerTest : public testing::Test {
 
   content::TestBrowserThreadBundle thread_bundle_;
   content::TestServiceManagerContext context_;
-  std::unique_ptr<chromeos::FakePowerManagerClient> power_manager_client_;
   std::unique_ptr<FakeDiskMountManager> disk_mount_manager_;
   std::unique_ptr<ProfileEnvironment> main_profile_;
 };
@@ -243,7 +276,9 @@ TEST_F(VolumeManagerTest, OnDriveFileSystemMountAndUnmount) {
   ASSERT_EQ(1U, observer.events().size());
   LoggingObserver::Event event = observer.events()[0];
   EXPECT_EQ(LoggingObserver::Event::VOLUME_MOUNTED, event.type);
-  EXPECT_EQ(drive::util::GetDriveMountPointPath(profile()).AsUTF8Unsafe(),
+  EXPECT_EQ(drive::DriveIntegrationServiceFactory::GetForProfile(profile())
+                ->GetMountPointPath()
+                .AsUTF8Unsafe(),
             event.device_path);
   EXPECT_EQ(chromeos::MOUNT_ERROR_NONE, event.mount_error);
 
@@ -252,7 +287,9 @@ TEST_F(VolumeManagerTest, OnDriveFileSystemMountAndUnmount) {
   ASSERT_EQ(2U, observer.events().size());
   event = observer.events()[1];
   EXPECT_EQ(LoggingObserver::Event::VOLUME_UNMOUNTED, event.type);
-  EXPECT_EQ(drive::util::GetDriveMountPointPath(profile()).AsUTF8Unsafe(),
+  EXPECT_EQ(drive::DriveIntegrationServiceFactory::GetForProfile(profile())
+                ->GetMountPointPath()
+                .AsUTF8Unsafe(),
             event.device_path);
   EXPECT_EQ(chromeos::MOUNT_ERROR_NONE, event.mount_error);
 
@@ -591,9 +628,9 @@ TEST_F(VolumeManagerTest, OnMountEvent_Remounting) {
 
   // Emulate system suspend and then resume.
   {
-    power_manager_client_->SendSuspendImminent(
+    chromeos::FakePowerManagerClient::Get()->SendSuspendImminent(
         power_manager::SuspendImminent_Reason_OTHER);
-    power_manager_client_->SendSuspendDone();
+    chromeos::FakePowerManagerClient::Get()->SendSuspendDone();
 
     // After resume, the device is unmounted and then mounted.
     volume_manager()->OnMountEvent(DiskMountManager::UNMOUNTING,
@@ -750,7 +787,7 @@ TEST_F(VolumeManagerTest, OnExternalStorageDisabledChanged) {
 }
 
 TEST_F(VolumeManagerTest, ExternalStorageDisabledPolicyMultiProfile) {
-  ProfileEnvironment secondary(power_manager_client_.get(),
+  ProfileEnvironment secondary(chromeos::PowerManagerClient::Get(),
                                disk_mount_manager_.get());
   volume_manager()->Initialize();
   secondary.volume_manager()->Initialize();
@@ -815,23 +852,42 @@ TEST_F(VolumeManagerTest, OnExternalStorageReadOnlyChanged) {
 }
 
 TEST_F(VolumeManagerTest, GetVolumeList) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(chromeos::features::kMyFilesVolume);
   volume_manager()->Initialize();  // Adds "Downloads"
   std::vector<base::WeakPtr<Volume>> volume_list =
       volume_manager()->GetVolumeList();
   ASSERT_EQ(1u, volume_list.size());
-  EXPECT_EQ("downloads:Downloads", volume_list[0]->volume_id());
+  EXPECT_EQ("downloads:MyFiles", volume_list[0]->volume_id());
   EXPECT_EQ(VOLUME_TYPE_DOWNLOADS_DIRECTORY, volume_list[0]->type());
 }
 
+TEST_F(VolumeManagerTest, VolumeManagerInitializeMyFilesVolume) {
+  // Emulate running inside ChromeOS.
+  chromeos::ScopedSetRunningOnChromeOSForTesting fake_release(kLsbRelease,
+                                                              base::Time());
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(chromeos::features::kMyFilesVolume);
+  volume_manager()->Initialize();  // Adds "Downloads"
+  std::vector<base::WeakPtr<Volume>> volume_list =
+      volume_manager()->GetVolumeList();
+  ASSERT_EQ(1u, volume_list.size());
+  auto volume = volume_list[0];
+  EXPECT_EQ("downloads:MyFiles", volume->volume_id());
+  EXPECT_EQ(VOLUME_TYPE_DOWNLOADS_DIRECTORY, volume->type());
+}
+
 TEST_F(VolumeManagerTest, FindVolumeById) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(chromeos::features::kMyFilesVolume);
   volume_manager()->Initialize();  // Adds "Downloads"
   base::WeakPtr<Volume> bad_volume =
       volume_manager()->FindVolumeById("nonexistent");
   ASSERT_FALSE(bad_volume.get());
   base::WeakPtr<Volume> good_volume =
-      volume_manager()->FindVolumeById("downloads:Downloads");
+      volume_manager()->FindVolumeById("downloads:MyFiles");
   ASSERT_TRUE(good_volume.get());
-  EXPECT_EQ("downloads:Downloads", good_volume->volume_id());
+  EXPECT_EQ("downloads:MyFiles", good_volume->volume_id());
   EXPECT_EQ(VOLUME_TYPE_DOWNLOADS_DIRECTORY, good_volume->type());
 }
 
@@ -957,7 +1013,7 @@ TEST_F(VolumeManagerTest, OnRenameEvent_StartFailed) {
   volume_manager()->RemoveObserver(&observer);
 }
 
-TEST_F(VolumeManagerTest, OnRenameEvent_Completed) {
+TEST_F(VolumeManagerTest, DISABLED_OnRenameEvent_Completed) {
   LoggingObserver observer;
   volume_manager()->AddObserver(&observer);
 

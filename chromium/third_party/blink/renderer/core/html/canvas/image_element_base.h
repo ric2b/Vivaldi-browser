@@ -30,14 +30,13 @@ class CORE_EXPORT ImageElementBase : public CanvasImageSource,
   ScriptPromise CreateImageBitmap(ScriptState*,
                                   EventTarget&,
                                   base::Optional<IntRect>,
-                                  const ImageBitmapOptions&) override;
+                                  const ImageBitmapOptions*) override;
 
   scoped_refptr<Image> GetSourceImageForCanvas(SourceImageStatus*,
                                                AccelerationHint,
                                                const FloatSize&) override;
 
-  bool WouldTaintOrigin(
-      const SecurityOrigin* destination_security_origin) const override;
+  bool WouldTaintOrigin() const override;
 
   FloatSize ElementSize(const FloatSize& default_object_size) const override;
   FloatSize DefaultDestinationSize(
@@ -46,6 +45,8 @@ class CORE_EXPORT ImageElementBase : public CanvasImageSource,
   bool IsAccelerated() const override;
 
   bool IsSVGSource() const override;
+
+  bool IsImageElement() const override;
 
   bool IsOpaque() const override;
 

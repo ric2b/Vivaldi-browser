@@ -11,7 +11,7 @@
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
 #include "ui/aura/mus/window_tree_host_mus_init_params.h"
-#include "ui/aura/test/mus/window_tree_client_private.h"
+#include "ui/aura/test/mus/window_tree_client_test_api.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tree_host.h"
@@ -46,7 +46,7 @@ TestScreen::~TestScreen() {
   delete host_;
 }
 
-WindowTreeHost* TestScreen::CreateHostForPrimaryDisplay() {
+WindowTreeHost* TestScreen::CreateHostForPrimaryDisplay(Env* env) {
   DCHECK(!host_);
   if (window_tree_client_) {
     host_ =
@@ -54,7 +54,8 @@ WindowTreeHost* TestScreen::CreateHostForPrimaryDisplay() {
     host_->SetBoundsInPixels(gfx::Rect(GetPrimaryDisplay().GetSizeInPixel()));
   } else {
     host_ = WindowTreeHost::Create(ui::PlatformWindowInitProperties{gfx::Rect(
-                                       GetPrimaryDisplay().GetSizeInPixel())})
+                                       GetPrimaryDisplay().GetSizeInPixel())},
+                                   env)
                 .release();
   }
   // Some tests don't correctly manage window focus/activation states.

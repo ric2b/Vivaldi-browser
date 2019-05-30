@@ -107,6 +107,11 @@ void AutofillWebDataService::AddAutofillProfile(
            autofill_backend_, profile));
 }
 
+void AutofillWebDataService::SetAutofillProfileChangedCallback(
+    base::RepeatingCallback<void(const AutofillProfileDeepChange&)> change_cb) {
+  autofill_backend_->SetAutofillProfileChangedCallback(std::move(change_cb));
+}
+
 void AutofillWebDataService::UpdateAutofillProfile(
     const AutofillProfile& profile) {
   wdbs_->ScheduleDBTask(FROM_HERE,
@@ -313,6 +318,16 @@ void AutofillWebDataService::GetAutofillBackend(
 
 base::SingleThreadTaskRunner* AutofillWebDataService::GetDBTaskRunner() {
   return db_task_runner_.get();
+}
+
+WebDataServiceBase::Handle
+AutofillWebDataService::RemoveExpiredAutocompleteEntries(
+    WebDataServiceConsumer* consumer) {
+  return wdbs_->ScheduleDBTaskWithResult(
+      FROM_HERE,
+      Bind(&AutofillWebDataBackendImpl::RemoveExpiredAutocompleteEntries,
+           autofill_backend_),
+      consumer);
 }
 
 AutofillWebDataService::~AutofillWebDataService() {

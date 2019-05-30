@@ -9,17 +9,20 @@
 #include <vector>
 
 #include "base/big_endian.h"
+#include "base/bind.h"
 #include "base/containers/span.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/sys_byteorder.h"
 #include "base/test/test_timeouts.h"
 #include "net/dns/dns_client.h"
-#include "net/dns/dns_protocol.h"
+#include "net/dns/dns_config.h"
 #include "net/dns/dns_query.h"
 #include "net/dns/dns_util.h"
+#include "net/dns/public/dns_protocol.h"
 #include "net/dns/record_rdata.h"
 #include "net/socket/socket_test_util.h"
+#include "net/url_request/url_request_error_job.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace certificate_transparency {
@@ -134,6 +137,13 @@ bool CreateDnsErrorResponse(const net::DnsQuery& query,
 }
 
 }  // namespace
+
+net::URLRequestJob* MockLogDnsTraffic::DohJobInterceptor::MaybeInterceptRequest(
+    net::URLRequest* request,
+    net::NetworkDelegate* network_delegate) const {
+  return new net::URLRequestErrorJob(request, network_delegate,
+                                     net::ERR_NOT_IMPLEMENTED);
+}
 
 // A container for all of the data needed for simulating a socket.
 // This is useful because Mock{Read,Write}, SequencedSocketData and
@@ -299,6 +309,9 @@ void MockLogDnsTraffic::InitializeDnsConfig() {
   // sending real DNS queries. The mock sockets don't care that the address
   // is invalid.
   dns_config.nameservers.push_back(net::IPEndPoint());
+  // Add a DoH server.
+  dns_config.dns_over_https_servers.push_back(
+      {"https://mock.http/dns-query{?dns}", true /* use_post */});
   // Don't attempt retransmissions - just fail.
   dns_config.attempts = 1;
   // This ensures timeouts are long enough for memory tests.

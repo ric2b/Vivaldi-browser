@@ -6,16 +6,20 @@
 #define BASE_TASK_TASK_SCHEDULER_DELAYED_TASK_MANAGER_H_
 
 #include <memory>
+#include <string>
 #include <utility>
-#include <vector>
 
 #include "base/base_export.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/strings/string_piece.h"
 #include "base/synchronization/atomic_flag.h"
+#include "base/task/common/intrusive_heap.h"
+#include "base/task/common/intrusive_heap_lazy_staleness_policy.h"
 #include "base/task/task_scheduler/scheduler_lock.h"
+#include "base/task/task_scheduler/task.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/tick_clock.h"
 
@@ -24,8 +28,6 @@ namespace base {
 class TaskRunner;
 
 namespace internal {
-
-struct Task;
 
 // The DelayedTaskManager forwards tasks to post task callbacks when they become
 // ripe for execution. Tasks are not forwarded before Start() is called. This
@@ -36,7 +38,8 @@ class BASE_EXPORT DelayedTaskManager {
   using PostTaskNowCallback = OnceCallback<void(Task task)>;
 
   // |tick_clock| can be specified for testing.
-  DelayedTaskManager(std::unique_ptr<const TickClock> tick_clock =
+  DelayedTaskManager(StringPiece histogram_label = "",
+                     std::unique_ptr<const TickClock> tick_clock =
                          std::make_unique<DefaultTickClock>());
   ~DelayedTaskManager();
 
@@ -47,29 +50,80 @@ class BASE_EXPORT DelayedTaskManager {
   void Start(scoped_refptr<TaskRunner> service_thread_task_runner);
 
   // Schedules a call to |post_task_now_callback| with |task| as argument when
-  // |task| is ripe for execution and Start() has been called.
+  // |task| is ripe for execution.
   void AddDelayedTask(Task task, PostTaskNowCallback post_task_now_callback);
 
+  void ReportHeartbeatMetrics() const;
+
  private:
-  // Schedules a call to |post_task_now_callback| with |task| as argument when
-  // |delay| expires. Start() must have been called before this.
-  void AddDelayedTaskNow(Task task,
-                         TimeDelta delay,
-                         PostTaskNowCallback post_task_now_callback);
+  struct DelayedTask {
+    DelayedTask();
+    DelayedTask(Task task, PostTaskNowCallback callback);
+    DelayedTask(DelayedTask&& other);
+    ~DelayedTask();
+
+    // Required by IntrusiveHeap::insert().
+    DelayedTask& operator=(DelayedTask&& other);
+
+    // Required by IntrusiveHeap.
+    bool operator<=(const DelayedTask& other) const;
+
+    Task task;
+    PostTaskNowCallback callback;
+
+    // True iff the delayed task has been marked as scheduled.
+    bool IsScheduled() const;
+
+    // Mark the delayed task as scheduled. Since the sort key is
+    // |task.delayed_run_time|, it does not alter sort order when it is called.
+    void SetScheduled();
+
+    // Required by IntrusiveHeap.
+    void SetHeapHandle(const HeapHandle& handle) {}
+
+    // Required by IntrusiveHeap.
+    void ClearHeapHandle() {}
+
+    // Required by LazyStalenessPolicy.
+    bool IsStale() const;
+
+   private:
+    bool scheduled_ = false;
+    DISALLOW_COPY_AND_ASSIGN(DelayedTask);
+  };
+
+  // Pop and post all the ripe tasks in the delayed task queue.
+  void ProcessRipeTasks();
+
+  // Get the time at which to schedule the next |ProcessRipeTasks()| execution,
+  // or TimeTicks::Max() if none needs to be scheduled (i.e. no task, or next
+  // task already scheduled).
+  TimeTicks GetTimeToScheduleProcessRipeTasksLockRequired();
+
+  // Schedule |ProcessRipeTasks()| on the service thread to be executed at the
+  // given |process_ripe_tasks_time|, provided the given time is not
+  // TimeTicks::Max().
+  void ScheduleProcessRipeTasksOnServiceThread(
+      TimeTicks process_ripe_tasks_time);
+
+  const RepeatingClosure process_ripe_tasks_closure_;
+
+  // Used to label histograms for this class.
+  const std::string histogram_label_;
 
   const std::unique_ptr<const TickClock> tick_clock_;
 
-  AtomicFlag started_;
-
-  // Synchronizes access to all members below before |started_| is set. Once
-  // |started_| is set:
-  // - |service_thread_task_runner| doest not change, so it can be read without
-  //   holding the lock.
-  // - |tasks_added_before_start_| isn't accessed anymore.
-  SchedulerLock lock_;
-
   scoped_refptr<TaskRunner> service_thread_task_runner_;
-  std::vector<std::pair<Task, PostTaskNowCallback>> tasks_added_before_start_;
+
+  IntrusiveHeap<DelayedTask, LazyStalenessPolicy<DelayedTask>>
+      delayed_task_queue_;
+
+  // Synchronizes access to |delayed_task_queue_| and the setting of
+  // |service_thread_task_runner|. Once |service_thread_task_runner_| is set,
+  // it is never modified. It is therefore safe to access
+  // |service_thread_task_runner_| without synchronization once it is observed
+  // that it is non-null.
+  SchedulerLock queue_lock_;
 
   DISALLOW_COPY_AND_ASSIGN(DelayedTaskManager);
 };

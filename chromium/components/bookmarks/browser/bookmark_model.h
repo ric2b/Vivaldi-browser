@@ -198,7 +198,9 @@ class BookmarkModel : public BookmarkUndoProvider,
                                 const base::string16& title,
                                 const base::string16& nickname = {},
                                 const base::string16& description = {},
-                                bool speeddial = false);
+                                const base::string16& partner = {},
+                                bool speeddial = false,
+                                bool bookmarkbar = false);
 
   // Adds a new folder with meta info.
   // --- VIVALDI --- changed by Daniel Sig. @ 10-02-2015
@@ -209,7 +211,9 @@ class BookmarkModel : public BookmarkUndoProvider,
       const BookmarkNode::MetaInfoMap* meta_info,
       const base::string16& nickname = {},
       const base::string16& description = {},
-      const bool speeddial = false);
+      const base::string16& partner = {},
+      const bool speeddial = false,
+      const bool bookmarkbar = false);
 
     // Adds a url at the specified position.
   const BookmarkNode* AddURL(const BookmarkNode* parent,
@@ -219,6 +223,7 @@ class BookmarkModel : public BookmarkUndoProvider,
                              const base::string16& nickname = {},
                              const base::string16& description = {},
                              const base::string16& thumbnail = {},
+                             const base::string16& partner = {},
                              const bool speeddial = false);
 
   // Adds a url with a specific creation date and meta info.
@@ -232,6 +237,7 @@ class BookmarkModel : public BookmarkUndoProvider,
       const base::string16& nickname = {},
       const base::string16& description = {},
       const base::string16 &thumbnail = {},
+      const base::string16& partner = {},
       const bool speeddial = false,
       const base::Time *visited_time = nullptr);
 

@@ -6,7 +6,7 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "base/values.h"
-#include "chromeos/components/proximity_auth/logging/logging.h"
+#include "chromeos/components/multidevice/logging/logging.h"
 #include "chromeos/components/tether/active_host.h"
 #include "chromeos/components/tether/device_id_tether_network_guid_map.h"
 #include "chromeos/components/tether/disconnect_tethering_request_sender.h"
@@ -68,9 +68,10 @@ void TetherDisconnectorImpl::DisconnectFromNetwork(
   if (status == ActiveHost::ActiveHostStatus::CONNECTING) {
     // Note: CancelConnectionAttempt() disconnects the active host.
     if (tether_connector_->CancelConnectionAttempt(tether_network_guid)) {
-      PA_LOG(INFO) << "Disconnect requested for Tether network with GUID "
-                   << tether_network_guid << ", which had not yet connected. "
-                   << "Canceled in-progress connection attempt.";
+      PA_LOG(VERBOSE) << "Disconnect requested for Tether network with GUID "
+                      << tether_network_guid
+                      << ", which had not yet connected. "
+                      << "Canceled in-progress connection attempt.";
       success_callback.Run();
       return;
     }

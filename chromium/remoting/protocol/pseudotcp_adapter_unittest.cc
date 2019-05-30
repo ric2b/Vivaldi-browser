@@ -39,7 +39,7 @@ const int kTestDataSize = kMessages * kMessageSize;
 class RateLimiter {
  public:
   virtual ~RateLimiter() = default;
-  ;
+
   // Returns true if the new packet needs to be dropped, false otherwise.
   virtual bool DropNextPacket() = 0;
 };
@@ -107,9 +107,9 @@ class FakeSocket : public P2PDatagramSocket {
 
   void set_rate_limiter(RateLimiter* rate_limiter) {
     rate_limiter_ = rate_limiter;
-  };
+  }
 
-  void set_latency(int latency_ms) { latency_ms_ = latency_ms; };
+  void set_latency(int latency_ms) { latency_ms_ = latency_ms; }
 
   // P2PDatagramSocket interface.
   int Recv(const scoped_refptr<net::IOBuffer>& buf, int buf_len,
@@ -138,9 +138,9 @@ class FakeSocket : public P2PDatagramSocket {
     if (peer_socket_) {
       base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
           FROM_HERE,
-          base::Bind(&FakeSocket::AppendInputPacket,
-                     base::Unretained(peer_socket_),
-                     std::vector<char>(buf->data(), buf->data() + buf_len)),
+          base::BindOnce(&FakeSocket::AppendInputPacket,
+                         base::Unretained(peer_socket_),
+                         std::vector<char>(buf->data(), buf->data() + buf_len)),
           base::TimeDelta::FromMilliseconds(latency_ms_));
     }
 
@@ -173,7 +173,7 @@ class TCPChannelTester : public base::RefCountedThreadSafe<TCPChannelTester> {
 
   void Start() {
     task_runner_->PostTask(FROM_HERE,
-                           base::Bind(&TCPChannelTester::DoStart, this));
+                           base::BindOnce(&TCPChannelTester::DoStart, this));
   }
 
   void CheckResults() {
@@ -209,7 +209,7 @@ class TCPChannelTester : public base::RefCountedThreadSafe<TCPChannelTester> {
         base::MakeRefCounted<net::IOBuffer>(kTestDataSize), kTestDataSize);
     memset(output_buffer_->data(), 123, kTestDataSize);
 
-    input_buffer_ = new net::GrowableIOBuffer();
+    input_buffer_ = base::MakeRefCounted<net::GrowableIOBuffer>();
     // Always keep kMessageSize bytes available at the end of the input buffer.
     input_buffer_->SetCapacity(kMessageSize);
   }

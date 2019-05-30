@@ -54,6 +54,7 @@
 @interface BlinkScrollbarObserver : NSObject {
   blink::Scrollbar* _scrollbar;
   RetainPtr<ScrollbarPainter> _scrollbarPainter;
+  BOOL _suppressSetScrollbarsHidden;
 }
 - (id)initWithScrollbar:(blink::Scrollbar*)scrollbar
                 painter:(const RetainPtr<ScrollbarPainter>&)painter;
@@ -78,6 +79,10 @@
   return _scrollbarPainter.Get();
 }
 
+- (void)setSuppressSetScrollbarsHidden:(BOOL)value {
+  _suppressSetScrollbarsHidden = value;
+}
+
 - (void)dealloc {
   [_scrollbarPainter.Get() removeObserver:self forKeyPath:@"knobAlpha"];
   [super dealloc];
@@ -88,8 +93,10 @@
                         change:(NSDictionary*)change
                        context:(void*)context {
   if ([keyPath isEqualToString:@"knobAlpha"]) {
-    BOOL visible = [_scrollbarPainter.Get() knobAlpha] > 0;
-    _scrollbar->SetScrollbarsHiddenIfOverlay(!visible);
+    if (!_suppressSetScrollbarsHidden) {
+      BOOL visible = [_scrollbarPainter.Get() knobAlpha] > 0;
+      _scrollbar->SetScrollbarsHiddenIfOverlay(!visible);
+    }
   }
 }
 
@@ -97,20 +104,26 @@
 
 namespace blink {
 
-typedef PersistentHeapHashSet<WeakMember<Scrollbar>> ScrollbarSet;
+static float s_initial_button_delay = 0.5f;
+static float s_autoscroll_button_delay = 0.05f;
+static NSScrollerStyle s_preferred_scroller_style = NSScrollerStyleLegacy;
+static bool s_jump_on_track_click = false;
+
+typedef HeapHashSet<WeakMember<Scrollbar>> ScrollbarSet;
 
 static ScrollbarSet& GetScrollbarSet() {
-  DEFINE_STATIC_LOCAL(ScrollbarSet, set, ());
-  return set;
+  DEFINE_STATIC_LOCAL(Persistent<ScrollbarSet>, set,
+                      (MakeGarbageCollected<ScrollbarSet>()));
+  return *set;
 }
 
-typedef PersistentHeapHashMap<WeakMember<Scrollbar>,
-                              RetainPtr<BlinkScrollbarObserver>>
+typedef HeapHashMap<WeakMember<Scrollbar>, RetainPtr<BlinkScrollbarObserver>>
     ScrollbarPainterMap;
 
 static ScrollbarPainterMap& GetScrollbarPainterMap() {
-  DEFINE_STATIC_LOCAL(ScrollbarPainterMap, map, ());
-  return map;
+  DEFINE_STATIC_LOCAL(Persistent<ScrollbarPainterMap>, map,
+                      (MakeGarbageCollected<ScrollbarPainterMap>()));
+  return *map;
 }
 
 static bool SupportsExpandedScrollbars() {
@@ -123,7 +136,6 @@ static bool SupportsExpandedScrollbars() {
 }
 
 ScrollbarThemeMac::ScrollbarThemeMac() {
-  WebScrollbarTheme::RegisterClient(*this);
 }
 
 ScrollbarTheme& ScrollbarTheme::NativeTheme() {
@@ -144,19 +156,18 @@ bool ScrollbarThemeMac::ShouldCenterOnThumb(const Scrollbar& scrollbar,
                                             const WebMouseEvent& event) {
   bool alt_key_pressed = event.GetModifiers() & WebInputEvent::kAltKey;
   return (event.button == WebPointerProperties::Button::kLeft) &&
-         (WebScrollbarTheme::JumpOnTrackClick() != alt_key_pressed);
+         (s_jump_on_track_click != alt_key_pressed);
 }
 
 ScrollbarThemeMac::~ScrollbarThemeMac() {
-  WebScrollbarTheme::UnregisterClient(*this);
 }
 
 TimeDelta ScrollbarThemeMac::InitialAutoscrollTimerDelay() {
-  return TimeDelta::FromSecondsD(WebScrollbarTheme::InitialButtonDelay());
+  return TimeDelta::FromSecondsD(s_initial_button_delay);
 }
 
 TimeDelta ScrollbarThemeMac::AutoscrollTimerDelay() {
-  return TimeDelta::FromSecondsD(WebScrollbarTheme::AutoscrollButtonDelay());
+  return TimeDelta::FromSecondsD(s_autoscroll_button_delay);
 }
 
 bool ScrollbarThemeMac::ShouldDragDocumentInsteadOfThumb(
@@ -283,7 +294,9 @@ void ScrollbarThemeMac::PaintThumbInternal(GraphicsContext& context,
 
   {
     LocalCurrentGraphicsContext local_context(context, local_rect);
-    ScrollbarPainter scrollbar_painter = PainterForScrollbar(scrollbar);
+    RetainPtr<BlinkScrollbarObserver> observer =
+        GetScrollbarPainterMap().at(const_cast<Scrollbar*>(&scrollbar));
+    ScrollbarPainter scrollbar_painter = [observer.Get() painter];
     [scrollbar_painter setEnabled:scrollbar.Enabled()];
     // drawKnob aligns the thumb to right side of the draw rect.
     // If the vertical overlay scrollbar is on the left, use trackWidth instead
@@ -299,6 +312,7 @@ void ScrollbarThemeMac::PaintThumbInternal(GraphicsContext& context,
     [scrollbar_painter setDoubleValue:0];
     [scrollbar_painter setKnobProportion:1];
 
+    [observer.Get() setSuppressSetScrollbarsHidden:YES];
     CGFloat old_knob_alpha = [scrollbar_painter knobAlpha];
     [scrollbar_painter setKnobAlpha:1];
 
@@ -311,6 +325,7 @@ void ScrollbarThemeMac::PaintThumbInternal(GraphicsContext& context,
     [scrollbar_painter
         setBoundsSize:NSSizeFromCGSize(CGSize(scrollbar.FrameRect().Size()))];
     [scrollbar_painter setKnobAlpha:old_knob_alpha];
+    [observer.Get() setSuppressSetScrollbarsHidden:NO];
   }
 
   if (opacity != 1.0f)
@@ -401,10 +416,22 @@ float ScrollbarThemeMac::ThumbOpacity(const Scrollbar& scrollbar) const {
   return [scrollbar_painter knobAlpha];
 }
 
-void ScrollbarThemeMac::PreferencesChanged() {
-  for (const auto& scrollbar : GetScrollbarSet()) {
-    scrollbar->StyleChanged();
-    scrollbar->SetNeedsPaintInvalidation(kAllParts);
+// static
+void ScrollbarThemeMac::UpdateScrollbarsWithNSDefaults(
+    float initial_button_delay,
+    float autoscroll_button_delay,
+    NSScrollerStyle preferred_scroller_style,
+    bool redraw,
+    bool jump_on_track_click) {
+  s_initial_button_delay = initial_button_delay;
+  s_autoscroll_button_delay = autoscroll_button_delay;
+  s_preferred_scroller_style = preferred_scroller_style;
+  s_jump_on_track_click = jump_on_track_click;
+  if (redraw) {
+    for (const auto& scrollbar : GetScrollbarSet()) {
+      scrollbar->StyleChanged();
+      scrollbar->SetNeedsPaintInvalidation(kAllParts);
+    }
   }
 }
 
@@ -412,8 +439,7 @@ void ScrollbarThemeMac::PreferencesChanged() {
 NSScrollerStyle ScrollbarThemeMac::RecommendedScrollerStyle() {
   if (RuntimeEnabledFeatures::OverlayScrollbarsEnabled())
     return NSScrollerStyleOverlay;
-  return static_cast<NSScrollerStyle>(
-      WebScrollbarTheme::PreferredScrollerStyle());
+  return s_preferred_scroller_style;
 }
 
 }  // namespace blink

@@ -22,9 +22,8 @@ class VideoActivityNotifierTest : public AshTestBase {
   void SetUp() override {
     AshTestBase::SetUp();
     power_client_ = static_cast<chromeos::FakePowerManagerClient*>(
-        chromeos::DBusThreadManager::Get()->GetPowerManagerClient());
-    detector_ = std::make_unique<VideoDetector>(
-        viz::mojom::VideoDetectorObserverRequest());
+        chromeos::PowerManagerClient::Get());
+    detector_ = std::make_unique<VideoDetector>();
     notifier_.reset(new VideoActivityNotifier(detector_.get()));
   }
 

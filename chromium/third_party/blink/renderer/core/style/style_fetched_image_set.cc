@@ -29,6 +29,7 @@
 #include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_for_container.h"
+#include "third_party/blink/renderer/platform/graphics/placeholder_image.h"
 
 namespace blink {
 
@@ -49,6 +50,15 @@ StyleFetchedImageSet::~StyleFetchedImageSet() = default;
 void StyleFetchedImageSet::Dispose() {
   best_fit_image_->RemoveObserver(this);
   best_fit_image_ = nullptr;
+}
+
+bool StyleFetchedImageSet::IsEqual(const StyleImage& other) const {
+  if (!other.IsImageResourceSet())
+    return false;
+  const auto& other_image = ToStyleFetchedImageSet(other);
+  if (best_fit_image_ != other_image.best_fit_image_)
+    return false;
+  return url_ == other_image.url_;
 }
 
 WrappedImagePtr StyleFetchedImageSet::Data() const {
@@ -100,12 +110,8 @@ FloatSize StyleFetchedImageSet::ImageSize(
   return scaled_image_size;
 }
 
-bool StyleFetchedImageSet::ImageHasRelativeSize() const {
-  return best_fit_image_->GetImage()->HasRelativeSize();
-}
-
-bool StyleFetchedImageSet::UsesImageContainerSize() const {
-  return best_fit_image_->GetImage()->UsesContainerSize();
+bool StyleFetchedImageSet::HasIntrinsicSize() const {
+  return best_fit_image_->GetImage()->HasIntrinsicSize();
 }
 
 void StyleFetchedImageSet::AddClient(ImageResourceObserver* observer) {
@@ -122,6 +128,11 @@ scoped_refptr<Image> StyleFetchedImageSet::GetImage(
     const ComputedStyle& style,
     const FloatSize& target_size) const {
   Image* image = best_fit_image_->GetImage();
+  if (image->IsPlaceholderImage()) {
+    static_cast<PlaceholderImage*>(image)->SetIconAndTextScaleFactor(
+        style.EffectiveZoom());
+  }
+
   if (!image->IsSVGImage())
     return image;
   return SVGImageForContainer::Create(ToSVGImage(image), target_size,

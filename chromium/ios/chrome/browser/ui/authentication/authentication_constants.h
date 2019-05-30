@@ -9,7 +9,6 @@
 
 // Header image sizes.
 extern const CGFloat kAuthenticationHeaderImageHeight;
-extern const CGFloat kAuthenticationHeaderImageWidth;
 
 // Font sizes
 extern const UIFontTextStyle kAuthenticationTitleFontStyle;
@@ -32,14 +31,10 @@ extern const CGFloat kAuthenticationSeparatorColorAlpha;
 // Height of the separator.
 extern const CGFloat kAuthenticationSeparatorHeight;
 
-// Height and width of the checkmark.
-extern const CGFloat kAuthenticationCheckmarkSize;
 // Color of the checkmark.
 extern const int kAuthenticationCheckmarkColor;
 
 // Header image name.
 extern NSString* const kAuthenticationHeaderImageName;
-// Checkmark image name.
-extern NSString* const kAuthenticationCheckmarkImageName;
 
 #endif  // IOS_CHROME_BROWSER_UI_AUTHENTICATION_AUTHENTICATION_CONSTANTS_H_

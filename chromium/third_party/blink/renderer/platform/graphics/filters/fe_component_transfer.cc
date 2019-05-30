@@ -25,7 +25,10 @@
 #include "third_party/blink/renderer/platform/graphics/filters/fe_component_transfer.h"
 
 #include <algorithm>
+
 #include "SkTableColorFilter.h"
+
+#include "base/stl_util.h"
 #include "third_party/blink/renderer/platform/graphics/filters/paint_filter_builder.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_stream.h"
@@ -52,8 +55,8 @@ FEComponentTransfer* FEComponentTransfer::Create(
     const ComponentTransferFunction& green_func,
     const ComponentTransferFunction& blue_func,
     const ComponentTransferFunction& alpha_func) {
-  return new FEComponentTransfer(filter, red_func, green_func, blue_func,
-                                 alpha_func);
+  return MakeGarbageCollected<FEComponentTransfer>(filter, red_func, green_func,
+                                                   blue_func, alpha_func);
 }
 
 static void Identity(unsigned char*, const ComponentTransferFunction&) {}
@@ -134,8 +137,8 @@ bool FEComponentTransfer::AffectsTransparentPixels() const {
 }
 
 sk_sp<PaintFilter> FEComponentTransfer::CreateImageFilter() {
-  sk_sp<PaintFilter> input(
-      PaintFilterBuilder::Build(InputEffect(0), OperatingInterpolationSpace()));
+  sk_sp<PaintFilter> input(paint_filter_builder::Build(
+      InputEffect(0), OperatingInterpolationSpace()));
 
   unsigned char r_values[256], g_values[256], b_values[256], a_values[256];
   GetValues(r_values, g_values, b_values, a_values);
@@ -161,7 +164,7 @@ void FEComponentTransfer::GetValues(unsigned char r_values[256],
 
   for (unsigned channel = 0; channel < 4; channel++) {
     SECURITY_DCHECK(static_cast<size_t>(transfer_function[channel].type) <
-                    arraysize(call_effect));
+                    base::size(call_effect));
     (*call_effect[transfer_function[channel].type])(tables[channel],
                                                     transfer_function[channel]);
   }

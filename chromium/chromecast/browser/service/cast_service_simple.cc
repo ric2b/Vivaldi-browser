@@ -90,16 +90,17 @@ void CastServiceSimple::StopInternal() {
   cast_web_view_.reset();
 }
 
-void CastServiceSimple::OnPageStopped(int error_code) {}
+void CastServiceSimple::OnPageStopped(CastWebContents* cast_web_contents,
+                                      int error_code) {}
 
-void CastServiceSimple::OnLoadingStateChanged(bool loading) {}
+void CastServiceSimple::OnPageStateChanged(CastWebContents* cast_web_contents) {
+}
 
 void CastServiceSimple::OnWindowDestroyed() {}
 
 void CastServiceSimple::OnKeyEvent(const ui::KeyEvent& key_event) {}
 
 bool CastServiceSimple::OnAddMessageToConsoleReceived(
-    content::WebContents* source,
     int32_t level,
     const base::string16& message,
     int32_t line_no,

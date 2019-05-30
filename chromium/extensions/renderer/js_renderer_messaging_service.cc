@@ -8,9 +8,11 @@
 
 #include <string>
 
+#include "base/stl_util.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/renderer/v8_value_converter.h"
 #include "extensions/common/api/messaging/message.h"
+#include "extensions/common/api/messaging/messaging_endpoint.h"
 #include "extensions/common/api/messaging/port_id.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/manifest_handlers/externally_connectable.h"
@@ -19,6 +21,8 @@
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/v8_helpers.h"
 #include "v8/include/v8.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace extensions {
 
@@ -44,7 +48,6 @@ void JSRendererMessagingService::DispatchOnConnectToListeners(
     const std::string& channel_name,
     const ExtensionMsg_TabConnectionInfo* source,
     const ExtensionMsg_ExternalConnectionInfo& info,
-    const std::string& tls_channel_id,
     const std::string& event_name) {
   MessagingBindings* bindings = MessagingBindings::ForContext(script_context);
   ExtensionPort* port = bindings->CreateNewPortWithId(target_port_id);
@@ -61,18 +64,20 @@ void JSRendererMessagingService::DispatchOnConnectToListeners(
   v8::Local<v8::Value> guest_render_frame_routing_id = v8::Undefined(isolate);
 
   if (extension) {
-    if (!source->tab.empty() && !extension->is_platform_app()) {
+    // NOTE(andre@vivaldi.com) : Vivaldi addition for use in isolated
+    // contentscripts.
+    if (!source->tab.empty() && (!extension->is_platform_app() ||
+                                 vivaldi::IsVivaldiApp(extension->id()))) {
       tab = content::V8ValueConverter::Create()->ToV8Value(
           &source->tab, script_context->v8_context());
     }
 
     ExternallyConnectableInfo* externally_connectable =
         ExternallyConnectableInfo::Get(extension);
+
     if (externally_connectable &&
         externally_connectable->accepts_tls_channel_id) {
-      v8::Local<v8::String> v8_tls_channel_id;
-      if (ToV8String(isolate, tls_channel_id.c_str(), &v8_tls_channel_id))
-        tls_channel_id_value = v8_tls_channel_id;
+      tls_channel_id_value = v8::String::Empty(isolate);
     }
 
     if (info.guest_process_id != content::ChildProcessHost::kInvalidUniqueID) {
@@ -83,11 +88,21 @@ void JSRendererMessagingService::DispatchOnConnectToListeners(
   }
 
   v8::Local<v8::String> v8_channel_name;
-  v8::Local<v8::String> v8_source_id;
+  v8::Local<v8::String> v8_source_extension_id;
+  v8::Local<v8::String> v8_source_native_app_name;
   v8::Local<v8::String> v8_target_extension_id;
   v8::Local<v8::String> v8_source_url_spec;
   if (!ToV8String(isolate, channel_name.c_str(), &v8_channel_name) ||
-      !ToV8String(isolate, info.source_id.c_str(), &v8_source_id) ||
+      !ToV8String(isolate,
+                  info.source_endpoint.extension_id
+                      ? *info.source_endpoint.extension_id
+                      : ExtensionId(),
+                  &v8_source_extension_id) ||
+      !ToV8String(isolate,
+                  info.source_endpoint.native_app_name
+                      ? *info.source_endpoint.native_app_name
+                      : std::string(),
+                  &v8_source_native_app_name) ||
       !ToV8String(isolate, target_extension_id.c_str(),
                   &v8_target_extension_id) ||
       !ToV8String(isolate, source_url_spec.c_str(), &v8_source_url_spec)) {
@@ -109,7 +124,9 @@ void JSRendererMessagingService::DispatchOnConnectToListeners(
       // guestRenderFrameRoutingId
       guest_render_frame_routing_id,
       // sourceExtensionId
-      v8_source_id,
+      v8_source_extension_id,
+      // sourceNativeAppName
+      v8_source_native_app_name,
       // targetExtensionId
       v8_target_extension_id,
       // sourceUrl
@@ -120,7 +137,7 @@ void JSRendererMessagingService::DispatchOnConnectToListeners(
 
   // Note: this can execute asynchronously if JS is suspended.
   script_context->module_system()->CallModuleMethodSafe(
-      "messaging", "dispatchOnConnect", arraysize(arguments), arguments);
+      "messaging", "dispatchOnConnect", base::size(arguments), arguments);
 }
 
 void JSRendererMessagingService::DispatchOnMessageToListeners(

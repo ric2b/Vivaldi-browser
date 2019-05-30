@@ -42,7 +42,7 @@ namespace blink {
 class AXObject;
 
 struct DateTimeSuggestion {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
   double value;
   String localized_value;
   String label;
@@ -76,7 +76,7 @@ class CORE_EXPORT DateTimeChooser
   // Returns a root AXObject in the DateTimeChooser if it's available.
   virtual AXObject* RootAXObject() = 0;
 
-  virtual void Trace(blink::Visitor* visitor) {}
+  virtual void Trace(Visitor* visitor) {}
 };
 
 }  // namespace blink

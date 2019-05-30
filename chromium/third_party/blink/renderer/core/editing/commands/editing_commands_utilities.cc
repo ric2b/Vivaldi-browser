@@ -138,7 +138,7 @@ bool AreIdenticalElements(const Node& first, const Node& second) {
   if (!first_element.HasTagName(second_element.TagQName()))
     return false;
 
-  if (!first_element.HasEquivalentAttributes(&second_element))
+  if (!first_element.HasEquivalentAttributes(second_element))
     return false;
 
   return HasEditableStyle(first_element) && HasEditableStyle(second_element);
@@ -351,7 +351,7 @@ bool LineBreakExistsAtVisiblePosition(const VisiblePosition& visible_position) {
 }
 
 HTMLElement* CreateHTMLElement(Document& document, const QualifiedName& name) {
-  DCHECK_EQ(name.NamespaceURI(), HTMLNames::xhtmlNamespaceURI)
+  DCHECK_EQ(name.NamespaceURI(), html_names::xhtmlNamespaceURI)
       << "Unexpected namespace: " << name;
   return ToHTMLElement(document.CreateElement(
       name, CreateElementFlags::ByCloneNode(), g_null_atom));
@@ -532,7 +532,7 @@ void TidyUpHTMLStructure(Document& document) {
   // non-<html> root elements under <body>, and the <body> works as
   // rootEditableElement.
   document.AddConsoleMessage(ConsoleMessage::Create(
-      kJSMessageSource, kWarningMessageLevel,
+      kJSMessageSource, mojom::ConsoleMessageLevel::kWarning,
       "document.execCommand() doesn't work with an invalid HTML structure. It "
       "is corrected automatically."));
   UseCounter::Count(document, WebFeature::kExecCommandAltersHTMLStructure);
@@ -581,11 +581,11 @@ void DispatchEditableContentChangedEvents(Element* start_root,
                                           Element* end_root) {
   if (start_root) {
     start_root->DispatchEvent(
-        *Event::Create(EventTypeNames::webkitEditableContentChanged));
+        *Event::Create(event_type_names::kWebkitEditableContentChanged));
   }
   if (end_root && end_root != start_root) {
     end_root->DispatchEvent(
-        *Event::Create(EventTypeNames::webkitEditableContentChanged));
+        *Event::Create(event_type_names::kWebkitEditableContentChanged));
   }
 }
 
@@ -595,7 +595,7 @@ static void DispatchInputEvent(Element* target,
                                InputEvent::EventIsComposing is_composing) {
   if (!target)
     return;
-  // TODO(chongz): Pass appreciate |ranges| after it's defined on spec.
+  // TODO(editing-dev): Pass appreciate |ranges| after it's defined on spec.
   // http://w3c.github.io/editing/input-events.html#dom-inputevent-inputtype
   InputEvent* const input_event =
       InputEvent::CreateInput(input_type, data, is_composing, nullptr);

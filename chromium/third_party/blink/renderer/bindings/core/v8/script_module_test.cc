@@ -35,9 +35,9 @@ class TestScriptModuleResolver final : public ScriptModuleResolver {
  private:
   // Implements ScriptModuleResolver:
 
-  void RegisterModuleScript(ModuleScript*) override { NOTREACHED(); }
-  void UnregisterModuleScript(ModuleScript*) override { NOTREACHED(); }
-  ModuleScript* GetHostDefined(const ScriptModule&) const override {
+  void RegisterModuleScript(const ModuleScript*) override { NOTREACHED(); }
+  void UnregisterModuleScript(const ModuleScript*) override { NOTREACHED(); }
+  const ModuleScript* GetHostDefined(const ScriptModule&) const override {
     NOTREACHED();
     return nullptr;
   }
@@ -75,7 +75,7 @@ class ScriptModuleTestModulator final : public DummyModulator {
 };
 
 ScriptModuleTestModulator::ScriptModuleTestModulator()
-    : resolver_(new TestScriptModuleResolver) {}
+    : resolver_(MakeGarbageCollected<TestScriptModuleResolver>()) {}
 
 void ScriptModuleTestModulator::Trace(blink::Visitor* visitor) {
   visitor->Trace(resolver_);
@@ -87,8 +87,8 @@ TEST(ScriptModuleTest, compileSuccess) {
   const KURL js_url("https://example.com/foo.js");
   ScriptModule module = ScriptModule::Compile(
       scope.GetIsolate(), "export const a = 42;", js_url, js_url,
-      ScriptFetchOptions(), kSharableCrossOrigin,
-      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
+      ScriptFetchOptions(), TextPosition::MinimumPosition(),
+      ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module.IsNull());
 }
 
@@ -97,8 +97,7 @@ TEST(ScriptModuleTest, compileFail) {
   const KURL js_url("https://example.com/foo.js");
   ScriptModule module = ScriptModule::Compile(
       scope.GetIsolate(), "123 = 456", js_url, js_url, ScriptFetchOptions(),
-      kSharableCrossOrigin, TextPosition::MinimumPosition(),
-      scope.GetExceptionState());
+      TextPosition::MinimumPosition(), scope.GetExceptionState());
   ASSERT_TRUE(module.IsNull());
   EXPECT_TRUE(scope.GetExceptionState().HadException());
 }
@@ -111,13 +110,13 @@ TEST(ScriptModuleTest, equalAndHash) {
   ScriptModule module_null;
   ScriptModule module_a = ScriptModule::Compile(
       scope.GetIsolate(), "export const a = 'a';", js_url_a, js_url_a,
-      ScriptFetchOptions(), kSharableCrossOrigin,
-      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
+      ScriptFetchOptions(), TextPosition::MinimumPosition(),
+      ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module_a.IsNull());
   ScriptModule module_b = ScriptModule::Compile(
       scope.GetIsolate(), "export const b = 'b';", js_url_b, js_url_b,
-      ScriptFetchOptions(), kSharableCrossOrigin,
-      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
+      ScriptFetchOptions(), TextPosition::MinimumPosition(),
+      ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module_b.IsNull());
   Vector<char> module_deleted_buffer(sizeof(ScriptModule));
   ScriptModule& module_deleted =
@@ -158,8 +157,8 @@ TEST(ScriptModuleTest, moduleRequests) {
   const KURL js_url("https://example.com/foo.js");
   ScriptModule module = ScriptModule::Compile(
       scope.GetIsolate(), "import 'a'; import 'b'; export const c = 'c';",
-      js_url, js_url, ScriptFetchOptions(), kSharableCrossOrigin,
-      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
+      js_url, js_url, ScriptFetchOptions(), TextPosition::MinimumPosition(),
+      ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module.IsNull());
 
   auto requests = module.ModuleRequests(scope.GetScriptState());
@@ -169,7 +168,7 @@ TEST(ScriptModuleTest, moduleRequests) {
 TEST(ScriptModuleTest, instantiateNoDeps) {
   V8TestingScope scope;
 
-  auto* modulator = new ScriptModuleTestModulator();
+  auto* modulator = MakeGarbageCollected<ScriptModuleTestModulator>();
   auto* resolver = modulator->GetTestScriptModuleResolver();
 
   Modulator::SetModulator(scope.GetScriptState(), modulator);
@@ -177,8 +176,8 @@ TEST(ScriptModuleTest, instantiateNoDeps) {
   const KURL js_url("https://example.com/foo.js");
   ScriptModule module = ScriptModule::Compile(
       scope.GetIsolate(), "export const a = 42;", js_url, js_url,
-      ScriptFetchOptions(), kSharableCrossOrigin,
-      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
+      ScriptFetchOptions(), TextPosition::MinimumPosition(),
+      ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module.IsNull());
   ScriptValue exception = module.Instantiate(scope.GetScriptState());
   ASSERT_TRUE(exception.IsEmpty());
@@ -189,7 +188,7 @@ TEST(ScriptModuleTest, instantiateNoDeps) {
 TEST(ScriptModuleTest, instantiateWithDeps) {
   V8TestingScope scope;
 
-  auto* modulator = new ScriptModuleTestModulator();
+  auto* modulator = MakeGarbageCollected<ScriptModuleTestModulator>();
   auto* resolver = modulator->GetTestScriptModuleResolver();
 
   Modulator::SetModulator(scope.GetScriptState(), modulator);
@@ -197,24 +196,24 @@ TEST(ScriptModuleTest, instantiateWithDeps) {
   const KURL js_url_a("https://example.com/a.js");
   ScriptModule module_a = ScriptModule::Compile(
       scope.GetIsolate(), "export const a = 'a';", js_url_a, js_url_a,
-      ScriptFetchOptions(), kSharableCrossOrigin,
-      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
+      ScriptFetchOptions(), TextPosition::MinimumPosition(),
+      ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module_a.IsNull());
   resolver->PushScriptModule(module_a);
 
   const KURL js_url_b("https://example.com/b.js");
   ScriptModule module_b = ScriptModule::Compile(
       scope.GetIsolate(), "export const b = 'b';", js_url_b, js_url_b,
-      ScriptFetchOptions(), kSharableCrossOrigin,
-      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
+      ScriptFetchOptions(), TextPosition::MinimumPosition(),
+      ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module_b.IsNull());
   resolver->PushScriptModule(module_b);
 
   const KURL js_url_c("https://example.com/c.js");
   ScriptModule module = ScriptModule::Compile(
       scope.GetIsolate(), "import 'a'; import 'b'; export const c = 123;",
-      js_url_c, js_url_c, ScriptFetchOptions(), kSharableCrossOrigin,
-      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
+      js_url_c, js_url_c, ScriptFetchOptions(), TextPosition::MinimumPosition(),
+      ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module.IsNull());
   ScriptValue exception = module.Instantiate(scope.GetScriptState());
   ASSERT_TRUE(exception.IsEmpty());
@@ -227,7 +226,7 @@ TEST(ScriptModuleTest, instantiateWithDeps) {
 TEST(ScriptModuleTest, EvaluationErrrorIsRemembered) {
   V8TestingScope scope;
 
-  auto* modulator = new ScriptModuleTestModulator();
+  auto* modulator = MakeGarbageCollected<ScriptModuleTestModulator>();
   auto* resolver = modulator->GetTestScriptModuleResolver();
 
   Modulator::SetModulator(scope.GetScriptState(), modulator);
@@ -235,8 +234,8 @@ TEST(ScriptModuleTest, EvaluationErrrorIsRemembered) {
   const KURL js_url_f("https://example.com/failure.js");
   ScriptModule module_failure = ScriptModule::Compile(
       scope.GetIsolate(), "nonexistent_function()", js_url_f, js_url_f,
-      ScriptFetchOptions(), kSharableCrossOrigin,
-      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
+      ScriptFetchOptions(), TextPosition::MinimumPosition(),
+      ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module_failure.IsNull());
   ASSERT_TRUE(module_failure.Instantiate(scope.GetScriptState()).IsEmpty());
   ScriptValue evaluation_error =
@@ -248,8 +247,8 @@ TEST(ScriptModuleTest, EvaluationErrrorIsRemembered) {
   const KURL js_url_c("https://example.com/c.js");
   ScriptModule module = ScriptModule::Compile(
       scope.GetIsolate(), "import 'failure'; export const c = 123;", js_url_c,
-      js_url_c, ScriptFetchOptions(), kSharableCrossOrigin,
-      TextPosition::MinimumPosition(), scope.GetExceptionState());
+      js_url_c, ScriptFetchOptions(), TextPosition::MinimumPosition(),
+      scope.GetExceptionState());
   ASSERT_FALSE(module.IsNull());
   ASSERT_TRUE(module.Instantiate(scope.GetScriptState()).IsEmpty());
   ScriptValue evaluation_error2 = module.Evaluate(scope.GetScriptState());
@@ -264,14 +263,14 @@ TEST(ScriptModuleTest, EvaluationErrrorIsRemembered) {
 TEST(ScriptModuleTest, Evaluate) {
   V8TestingScope scope;
 
-  auto* modulator = new ScriptModuleTestModulator();
+  auto* modulator = MakeGarbageCollected<ScriptModuleTestModulator>();
   Modulator::SetModulator(scope.GetScriptState(), modulator);
 
   const KURL js_url("https://example.com/foo.js");
   ScriptModule module = ScriptModule::Compile(
       scope.GetIsolate(), "export const a = 42; window.foo = 'bar';", js_url,
-      js_url, ScriptFetchOptions(), kSharableCrossOrigin,
-      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
+      js_url, ScriptFetchOptions(), TextPosition::MinimumPosition(),
+      ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module.IsNull());
   ScriptValue exception = module.Instantiate(scope.GetScriptState());
   ASSERT_TRUE(exception.IsEmpty());
@@ -280,7 +279,8 @@ TEST(ScriptModuleTest, Evaluate) {
   v8::Local<v8::Value> value = scope.GetFrame()
                                    .GetScriptController()
                                    .ExecuteScriptInMainWorldAndReturnValue(
-                                       ScriptSourceCode("window.foo"));
+                                       ScriptSourceCode("window.foo"), KURL(),
+                                       SanitizeScriptErrors::kSanitize);
   ASSERT_TRUE(value->IsString());
   EXPECT_EQ("bar", ToCoreString(v8::Local<v8::String>::Cast(value)));
 
@@ -297,14 +297,13 @@ TEST(ScriptModuleTest, Evaluate) {
 TEST(ScriptModuleTest, EvaluateCaptureError) {
   V8TestingScope scope;
 
-  auto* modulator = new ScriptModuleTestModulator();
+  auto* modulator = MakeGarbageCollected<ScriptModuleTestModulator>();
   Modulator::SetModulator(scope.GetScriptState(), modulator);
 
   const KURL js_url("https://example.com/foo.js");
   ScriptModule module = ScriptModule::Compile(
       scope.GetIsolate(), "throw 'bar';", js_url, js_url, ScriptFetchOptions(),
-      kSharableCrossOrigin, TextPosition::MinimumPosition(),
-      ASSERT_NO_EXCEPTION);
+      TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
   ASSERT_FALSE(module.IsNull());
   ScriptValue exception = module.Instantiate(scope.GetScriptState());
   ASSERT_TRUE(exception.IsEmpty());

@@ -75,8 +75,10 @@ class BiquadFilterNode final : public AudioNode {
 
   static BiquadFilterNode* Create(BaseAudioContext&, ExceptionState&);
   static BiquadFilterNode* Create(BaseAudioContext*,
-                                  const BiquadFilterOptions&,
+                                  const BiquadFilterOptions*,
                                   ExceptionState&);
+
+  BiquadFilterNode(BaseAudioContext&);
 
   void Trace(blink::Visitor*) override;
 
@@ -96,8 +98,6 @@ class BiquadFilterNode final : public AudioNode {
                             ExceptionState&);
 
  private:
-  BiquadFilterNode(BaseAudioContext&);
-
   BiquadProcessor* GetBiquadProcessor() const;
   bool setType(unsigned);  // Returns true on success.
 

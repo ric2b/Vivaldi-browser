@@ -5,7 +5,7 @@
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_button_item.h"
 
 #include "base/mac/foundation_util.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -46,7 +46,7 @@ const CGFloat buttonTitleFontSize = 17.0;
   return self;
 }
 
-- (void)configureCell:(UITableViewCell*)tableCell
+- (void)configureCell:(TableViewCell*)tableCell
            withStyler:(ChromeTableViewStyler*)styler {
   [super configureCell:tableCell withStyler:styler];
   TableViewTextButtonCell* cell =

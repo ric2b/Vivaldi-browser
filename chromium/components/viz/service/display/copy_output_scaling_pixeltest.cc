@@ -64,9 +64,27 @@ class CopyOutputScalingPixelTest
   // The scene is drawn, which also causes the copy request to execute. Then,
   // the resulting bitmap is compared against an expected bitmap.
   void RunTest() {
-    constexpr gfx::Size viewport_size = gfx::Size(24, 10);
-    constexpr int x_block = 4;
-    constexpr int y_block = 2;
+    const char* result_format_as_str = "<unknown>";
+    if (result_format_ == CopyOutputResult::Format::RGBA_BITMAP)
+      result_format_as_str = "RGBA_BITMAP";
+    else if (result_format_ == CopyOutputResult::Format::I420_PLANES)
+      result_format_as_str = "I420_PLANES";
+    else
+      NOTIMPLEMENTED();
+    SCOPED_TRACE(testing::Message()
+                 << "scale_from=" << scale_from_.ToString()
+                 << ", scale_to=" << scale_to_.ToString()
+                 << ", result_format=" << result_format_as_str);
+
+    // These need to be large enough to prevent odd-valued coordinates when
+    // testing I420_PLANES requests. The requests would still work with
+    // odd-valued coordinates, but the pixel comparisons at the end of the test
+    // will fail due to off-by-one chroma reconstruction. That behavior is WAI,
+    // though, since clients making CopyOutputRequests should always align to
+    // even-valued coordinates!
+    constexpr gfx::Size viewport_size = gfx::Size(48, 20);
+    constexpr int x_block = 8;
+    constexpr int y_block = 4;
     constexpr SkColor smaller_pass_colors[4] = {SK_ColorRED, SK_ColorGREEN,
                                                 SK_ColorBLUE, SK_ColorYELLOW};
     constexpr SkColor root_pass_color = SK_ColorWHITE;
@@ -137,7 +155,7 @@ class CopyOutputScalingPixelTest
           base::BindOnce(
               [](bool* dummy_ran,
                  std::unique_ptr<CopyOutputResult>* test_result,
-                 const base::Closure& quit_closure,
+                 const base::RepeatingClosure& quit_closure,
                  std::unique_ptr<CopyOutputResult> result_from_renderer) {
                 EXPECT_TRUE(*dummy_ran);
                 *test_result = std::move(result_from_renderer);
@@ -279,14 +297,14 @@ using GLCopyOutputScalingPixelTest = CopyOutputScalingPixelTest<GLRenderer>;
 TEST_P(GLCopyOutputScalingPixelTest, ScaledCopyOfDrawnFrame) {
   RunTest();
 }
-INSTANTIATE_TEST_CASE_P(, GLCopyOutputScalingPixelTest, kParameters);
+INSTANTIATE_TEST_SUITE_P(, GLCopyOutputScalingPixelTest, kParameters);
 
 using SoftwareCopyOutputScalingPixelTest =
     CopyOutputScalingPixelTest<SoftwareRenderer>;
 TEST_P(SoftwareCopyOutputScalingPixelTest, ScaledCopyOfDrawnFrame) {
   RunTest();
 }
-INSTANTIATE_TEST_CASE_P(, SoftwareCopyOutputScalingPixelTest, kParameters);
+INSTANTIATE_TEST_SUITE_P(, SoftwareCopyOutputScalingPixelTest, kParameters);
 
 }  // namespace
 }  // namespace viz

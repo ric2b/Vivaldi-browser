@@ -14,7 +14,7 @@ Polymer({
     engine: Object,
   },
 
-  behaviors: [FocusRowBehavior],
+  behaviors: [cr.ui.FocusRowBehavior],
 
   /** @private {?settings.ExtensionControlBrowserProxy} */
   browserProxy_: null,
@@ -42,18 +42,11 @@ Polymer({
     this.$$('cr-action-menu').close();
   },
 
-  /**
-   * @param {string} url
-   * @return {string} A set of icon URLs.
-   * @private
-   */
-  getIconSet_: function(url) {
-    return cr.icon.getFavicon(url);
-  },
-
   /** @private */
   onDotsTap_: function() {
     /** @type {!CrActionMenuElement} */ (this.$$('cr-action-menu'))
-        .showAt(assert(this.$$('paper-icon-button-light button')));
+        .showAt(assert(this.$$('paper-icon-button-light button')), {
+          anchorAlignmentY: AnchorAlignment.AFTER_END,
+        });
   },
 });

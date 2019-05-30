@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -17,9 +18,9 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "chrome/chrome_cleaner/ipc/ipc_test_util.h"
 #include "chrome/chrome_cleaner/logging/scoped_logging.h"
-#include "chrome/chrome_cleaner/test/test_name_helper.h"
 #include "chrome/chrome_cleaner/test/test_util.h"
 #include "components/chrome_cleaner/public/interfaces/chrome_prompt.mojom.h"
+#include "components/chrome_cleaner/test/test_name_helper.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -31,6 +32,7 @@ namespace {
 using testing::Bool;
 using testing::Values;
 
+constexpr char kIncludeUwESwitch[] = "include-uwe";
 constexpr char kIncludeUwSSwitch[] = "include-uws";
 constexpr char kIncludeRegistryKeysSwitch[] = "include-registry-keys";
 constexpr char kExpectedPromptResultSwitch[] = "expected-prompt-result";
@@ -39,6 +41,7 @@ constexpr char kExpectedParentDisconnectedSwitch[] =
 
 const base::FilePath kBadFilePath(L"/path/to/bad.dll");
 const base::string16 kBadRegistryKey(L"HKCU:32\\Software\\ugly-uws\\nasty");
+const base::string16 kExtensionId(L"expected-extension-id");
 
 // Possible moments when the parent process can disconnect from the IPC to
 // check connection error handling in the child process.
@@ -78,6 +81,7 @@ std::ostream& operator<<(std::ostream& stream,
 
 struct TestConfig {
   bool uws_expected;
+  bool uwe_expected;
   bool with_registry_keys;
   mojom::PromptAcceptance expected_prompt_acceptance;
   ParentDisconnected expected_parent_disconnected;
@@ -107,6 +111,20 @@ class MockChromePrompt : public mojom::ChromePrompt {
     }
     CloseConnectionIf(ParentDisconnected::kWhileProcessingChildRequest);
     std::move(callback).Run(test_config_.expected_prompt_acceptance);
+    if (!test_config_.uwe_expected) {
+      CloseConnectionIf(ParentDisconnected::kOnDone);
+    }
+  }
+
+  void DisableExtensions(const std::vector<base::string16>& extension_ids,
+                         DisableExtensionsCallback callback) override {
+    EXPECT_NE(test_config_.uwe_expected, extension_ids.empty());
+    if (test_config_.uwe_expected) {
+      EXPECT_EQ(kExtensionId, extension_ids.front());
+    } else {
+      EXPECT_EQ(0UL, extension_ids.size());
+    }
+    std::move(callback).Run(true);
     CloseConnectionIf(ParentDisconnected::kOnDone);
   }
 
@@ -128,13 +146,16 @@ class ChromePromptIPCParentProcess : public ParentProcess {
       : ParentProcess(std::move(mojo_task_runner)), test_config_(test_config) {
     if (test_config.uws_expected)
       AppendSwitch(kIncludeUwSSwitch);
+    if (test_config.uwe_expected) {
+      AppendSwitch(kIncludeUwESwitch);
+    }
     if (test_config.with_registry_keys)
       AppendSwitch(kIncludeRegistryKeysSwitch);
     AppendSwitch(kExpectedPromptResultSwitch,
-                 base::IntToString(
+                 base::NumberToString(
                      static_cast<int>(test_config.expected_prompt_acceptance)));
     AppendSwitch(kExpectedParentDisconnectedSwitch,
-                 base::IntToString(static_cast<int>(
+                 base::NumberToString(static_cast<int>(
                      test_config.expected_parent_disconnected)));
   }
 
@@ -183,12 +204,30 @@ class ChromePromptIPCChildProcess : public ChildProcess {
       scoped_refptr<MojoTaskRunner> mojo_task_runner)
       : ChildProcess(std::move(mojo_task_runner)) {}
 
+  void SendUwEDataToParentProcess(ChromePromptIPC* chrome_prompt_ipc,
+                                  base::OnceClosure done) {
+    CHECK(chrome_prompt_ipc);
+    std::vector<base::string16> extensions;
+    if (uwe_expected()) {
+      extensions.push_back(kExtensionId);
+    } else {
+      std::move(done).Run();
+      return;
+    }
+    chrome_prompt_ipc->PostDisableExtensionsTask(
+        std::move(extensions),
+        base::BindOnce(
+            &ChromePromptIPCChildProcess::ReceiveDisableExtensionsResult,
+            base::Unretained(this), base::Passed(&done)));
+  }
+
   void SendUwSDataToParentProcess(ChromePromptIPC* chrome_prompt_ipc,
                                   base::OnceClosure done) {
     CHECK(chrome_prompt_ipc);
 
     std::vector<base::FilePath> files_to_delete;
     std::vector<base::string16> registry_keys;
+    std::vector<base::string16> extension_ids;
     if (uws_expected()) {
       files_to_delete.push_back(kBadFilePath);
       if (with_registry_keys())
@@ -197,6 +236,7 @@ class ChromePromptIPCChildProcess : public ChildProcess {
 
     chrome_prompt_ipc->PostPromptUserTask(
         std::move(files_to_delete), std::move(registry_keys),
+        std::move(extension_ids),
         base::BindOnce(&ChromePromptIPCChildProcess::ReceivePromptResult,
                        base::Unretained(this), base::Passed(&done)));
   }
@@ -219,8 +259,17 @@ class ChromePromptIPCChildProcess : public ChildProcess {
     std::move(done).Run();
   }
 
+  void ReceiveDisableExtensionsResult(base::OnceClosure done, bool completed) {
+    CHECK(completed);
+    std::move(done).Run();
+  }
+
   bool uws_expected() const {
     return command_line().HasSwitch(kIncludeUwSSwitch);
+  }
+
+  bool uwe_expected() const {
+    return command_line().HasSwitch(kIncludeUwESwitch);
   }
 
   bool with_registry_keys() const {
@@ -274,10 +323,14 @@ MULTIPROCESS_TEST_MAIN(ChromePromptIPCClientMain) {
   // After the response from the parent process is received, this will post a
   // task to unblock the child process's main thread. Not blocking the main
   // thread can lead to race condition on exit.
-  base::RunLoop run_loop;
+  base::RunLoop prompt_user_run_loop;
+  base::RunLoop extension_run_loop;
   child_process->SendUwSDataToParentProcess(chrome_prompt_ipc,
-                                            run_loop.QuitClosure());
-  run_loop.Run();
+                                            prompt_user_run_loop.QuitClosure());
+  prompt_user_run_loop.Run();
+  child_process->SendUwEDataToParentProcess(chrome_prompt_ipc,
+                                            extension_run_loop.QuitClosure());
+  extension_run_loop.Run();
 
   if (child_process->expected_parent_disconnected() ==
       ParentDisconnected::kOnDone) {
@@ -291,8 +344,11 @@ MULTIPROCESS_TEST_MAIN(ChromePromptIPCClientMain) {
 }
 
 class ChromePromptIPCTest
-    : public ::testing::TestWithParam<
-          std::tuple<bool, bool, mojom::PromptAcceptance, ParentDisconnected>> {
+    : public ::testing::TestWithParam<std::tuple<bool,
+                                                 bool,
+                                                 bool,
+                                                 mojom::PromptAcceptance,
+                                                 ParentDisconnected>> {
  public:
   void SetUp() override { mojo_task_runner_ = MojoTaskRunner::Create(); }
 
@@ -302,7 +358,8 @@ class ChromePromptIPCTest
 
 TEST_P(ChromePromptIPCTest, Communication) {
   TestConfig test_config;
-  std::tie(test_config.uws_expected, test_config.with_registry_keys,
+  std::tie(test_config.uws_expected, test_config.uwe_expected,
+           test_config.with_registry_keys,
            test_config.expected_prompt_acceptance,
            test_config.expected_parent_disconnected) = GetParam();
   if (test_config.with_registry_keys)
@@ -324,21 +381,23 @@ TEST_P(ChromePromptIPCTest, Communication) {
   EXPECT_EQ(expected_exit_code, exit_code);
 }
 
-INSTANTIATE_TEST_CASE_P(NoUwSPresent,
-                        ChromePromptIPCTest,
-                        testing::Combine(
-                            /*uws_expected=*/Values(false),
-                            /*with_registry_keys=*/Values(false),
-                            Values(mojom::PromptAcceptance::DENIED),
-                            Values(ParentDisconnected::kNone,
-                                   ParentDisconnected::kOnStartup)),
-                        GetParamNameForTest());
+INSTANTIATE_TEST_SUITE_P(NoUwSPresent,
+                         ChromePromptIPCTest,
+                         testing::Combine(
+                             /*uws_expected=*/Values(false),
+                             /*uwe_expected=*/Values(false),
+                             /*with_registry_keys=*/Values(false),
+                             Values(mojom::PromptAcceptance::DENIED),
+                             Values(ParentDisconnected::kNone,
+                                    ParentDisconnected::kOnStartup)),
+                         GetParamNameForTest());
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     UwSPresent,
     ChromePromptIPCTest,
     testing::Combine(
         /*uws_expected=*/Values(true),
+        /*uwe_expected=*/Bool(),
         /*with_registry_keys=*/Bool(),
         Values(mojom::PromptAcceptance::ACCEPTED_WITH_LOGS,
                mojom::PromptAcceptance::ACCEPTED_WITHOUT_LOGS,

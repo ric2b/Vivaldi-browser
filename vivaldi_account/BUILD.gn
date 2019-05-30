@@ -1,0 +1,15 @@
+source_set("vivaldi_account") {
+  sources = [
+    "vivaldi_account_manager_factory.cc",
+    "vivaldi_account_manager_factory.h",
+    "vivaldi_account_manager.cc",
+    "vivaldi_account_manager.h",
+    "vivaldi_account_manager_request_handler.cc",
+    "vivaldi_account_manager_request_handler.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chrome/browser",
+  ]
+}

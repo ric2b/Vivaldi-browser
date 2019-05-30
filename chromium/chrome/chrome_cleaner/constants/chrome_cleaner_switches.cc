@@ -10,6 +10,8 @@ namespace chrome_cleaner {
 
 // Set the timeout for the cleaning phase, in minutes. 0 disables the timeout
 // entirely.
+// WARNING: this switch is used by internal test systems. Be careful when making
+// changes.
 const char kCleaningTimeoutMinutesSwitch[] = "cleaning-timeout";
 
 // Identifier used to group all reports generated during the same run of the
@@ -36,6 +38,9 @@ const char kDumpRawLogsSwitch[] = "dump-raw-logs";
 // Identify that the process is already supposed to be elevated, so that we
 // don't try again.
 const char kElevatedSwitch[] = "elevated";
+
+// Limit the size of files the scanning engine is allowed to open.
+const char kFileSizeLimitSwitch[] = "max-file-size";
 
 // Force a logs upload failure to help test the logs upload retry.
 const char kForceLogsUploadFailureSwitch[] = "force-logs-upload-failure";
@@ -84,7 +89,7 @@ const char kNoCrashUploadSwitch[] = "no-crash-upload";
 const char kNoRecoveryComponentSwitch[] = "no-recovery-component";
 
 // Prevent the logging service from uploading logs and reports.
-// WARNING: this switch is used by internal test systems, be careful when making
+// WARNING: this switch is used by internal test systems. Be careful when making
 // changes.
 const char kNoReportUploadSwitch[] = "no-report-upload";
 
@@ -105,12 +110,12 @@ const char kPostRebootTriggerSwitch[] = "post-reboot-trigger";
 const char kPostRebootSwitchesInOtherRegistryKeySwitch[] =
     "post-reboot-override-cmd";
 
+// Specifies the quarantine folder instead of the default one.
+const char kQuarantineDirSwitch[] = "quarantine-dir";
+
 // Allow the engine to remove UwS that isn't marked cleanable. For testing
 // only.
 const char kRemoveScanOnlyUwS[] = "remove-scan-only-uws";
-
-// Enable reporting of force-installed Chrome extensions.
-const char kReportExtensionsSwitch[] = "report-extensions";
 
 // Mojo pipe token generated in the broker process and passed to the sandbox
 // process to bind with the EngineCommands IPC interface.
@@ -127,14 +132,19 @@ const char kScanLocationsSwitch[] = "scan-locations";
 
 // Set the timeout for the scanning phase, in minutes. 0 disables the timeout
 // entirely.
+// WARNING: this switch is used by internal test systems. Be careful when making
+// changes.
 const char kScanningTimeoutMinutesSwitch[] = "scanning-timeout";
+
+// Set a path to save logs in while testing.
+const char kTestLoggingPathSwitch[] = "test-logging-path";
 
 // Set a test logging URL, where logs will be uploaded.
 const char kTestLoggingURLSwitch[] = "test-logging-url";
 
 // Flag set during testing and stored as a crash key, to differentiate from
 // crashes received from actual users.
-// WARNING: this switch is used by internal test systems, be careful when making
+// WARNING: this switch is used by internal test systems. Be careful when making
 // changes.
 const char kTestingSwitch[] = "testing";
 

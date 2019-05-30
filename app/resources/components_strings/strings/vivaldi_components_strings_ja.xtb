@@ -11,7 +11,6 @@
 <translation id="1375198122581997741">バージョン情報</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" />からデータが送信されませんでした。</translation>
 <translation id="14171126816530869"><ph name="LOCALITY" /> の <ph name="ORGANIZATION" /> は、<ph name="ISSUER" /> によって確認済みです。</translation>
-<translation id="1506687042165942984">このページの保存されているコピー(古いバージョン)を表示します。</translation>
 <translation id="1559528461873125649">該当するファイルまたはフォルダーがありません</translation>
 <translation id="1620510694547887537">カメラ</translation>
 <translation id="1640244768702815859"><ph name="BEGIN_LINK" />サイトのトップページにアクセス<ph name="END_LINK" />してみてください。</translation>
@@ -38,6 +37,7 @@
 <translation id="2337852623177822836">管理者が指定する設定</translation>
 <translation id="2355395290879513365">悪意あるユーザーが、あなたがこのサイトで見ている画像を推測し、修正することで、あなたを騙そうとしているかも知れません。</translation>
 <translation id="2356070529366658676">確認</translation>
+<translation id="2359808026110333948">続行</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />ネットワーク診断を実行<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">通知</translation>
 <translation id="2539524384386349900">検出</translation>
@@ -75,7 +75,6 @@
 <translation id="3630155396527302611">ネットワークアクセスが許可されたプログラムのリストに既に登録されている場合は、
       いったんリストから削除し、もう一度追加してみてください。</translation>
 <translation id="3658742229777143148">変更履歴</translation>
-<translation id="366094926047009040">Vivaldi アカウントにアクセスできなくなったり、個人情報を盗まれたりする可能性があります。Vivaldi は今すぐパスワードを変更することをお勧めします。</translation>
 <translation id="3681007416295224113">証明書情報</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />プロキシ、ファイアウォール、DNSの設定を確認する<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">プロキシサーバーを使用している場合...</translation>
@@ -109,7 +108,6 @@
 <translation id="4744603770635761495">実行ファイルのパス</translation>
 <translation id="4750917950439032686">このサイトに送信した情報（パスワード、クレジット カード番号など）が第三者に見られることはありません。</translation>
 <translation id="4764776831041365478"><ph name="URL" />のウェブページは一時的に停止しているか、新しいウェブアドレスに移動した可能性があります。</translation>
-<translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
 <translation id="4974590756084640048">警告を再度有効にする</translation>
 <translation id="5023310440958281426">管理者のポリシーを確認してください</translation>
 <translation id="5039804452771397117">許可</translation>
@@ -138,7 +136,7 @@
 <translation id="5810442152076338065"><ph name="DOMAIN" /> への接続は古い暗号スイートにより暗号化されています。</translation>
 <translation id="5838278095973806738">このサイトでは機密情報（パスワード、クレジット カードなど）を入力しないでください。悪意のあるユーザーに情報が盗まれる恐れがあります。</translation>
 <translation id="5869405914158311789">このサイトにアクセスできません</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 個が使用中}other{# 個が使用中}}</translation>
+<translation id="5932224571077948991">このサイトでは煩わしい広告や誤解を招く広告が表示されています</translation>
 <translation id="5990559369517809815">サーバーへのリクエストは拡張機能によってブロックされています。</translation>
 <translation id="6051221802930200923"><ph name="SITE" />では証明書ピンニングが使用されているため、現在アクセスできません。通常、ネットワークエラーやネットワークへの攻撃は一時的なものです。しばらくするとページにアクセスできるようになります。</translation>
 <translation id="6146055958333702838">ケーブルを確認し、使用している可能性があるネットワークデバイス(ルーター、モデムなど)を
@@ -157,6 +155,7 @@
 <translation id="6417515091412812850">証明書が失効しているかを確認できません。</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" />で接続が拒否されました。</translation>
 <translation id="6447842834002726250">Cookie</translation>
+<translation id="6451458296329894277">フォーム再送信の確認</translation>
 <translation id="6569060085658103619">拡張機能のページを表示しています</translation>
 <translation id="6657585470893396449">パスワード</translation>
 <translation id="6685834062052613830">ログアウトして設定を完了してください</translation>
@@ -194,13 +193,14 @@
 <translation id="8025119109950072390">このサイトを利用すると、悪意のあるユーザーによってソフトウェアのインストールや個人情報（例: パスワード、電話番号、クレジット カード番号）の入力などの危険な操作を行うよう誘導される可能性があります。</translation>
 <translation id="8037357227543935929">確認（デフォルト）</translation>
 <translation id="8041940743680923270">グローバルのデフォルト値（[確認]）を使用</translation>
+<translation id="808894953321890993">パスワードの変更</translation>
 <translation id="8142868475871995937">&lt;strong&gt;vivaldi://policy&lt;/strong&gt;にアクセスし、システム管理者が登録したブラックリストのURLとその他のポリシーを確認してください。</translation>
 <translation id="8149426793427495338">パソコンがスリープ状態でした。</translation>
 <translation id="8150722005171944719"><ph name="URL" />のファイルを読むことができません。削除されたか移動された可能性があります。ファイルに対するアクセス権がない場合もあります。</translation>
 <translation id="8184538546369750125">グローバルのデフォルト値（[許可]）を使用</translation>
-<translation id="8205463626947051446">わずらわしい広告がよく表示されるサイト</translation>
 <translation id="8211406090763984747">この接続は保護されています</translation>
 <translation id="8225771182978767009">このサイトは、このパソコンを設定したユーザーによってブロックされています。</translation>
+<translation id="8241707690549784388">あなたが戻ろうとしているページは、入力した情報を使用しています。このページに戻った場合、操作のやり直しが発生する可能性があります。続行しますか？</translation>
 <translation id="8241712895048303527">このサイトでブロック</translation>
 <translation id="8288807391153049143">証明書を表示</translation>
 <translation id="8289355894181816810">確認方法がわからない場合は、ネットワーク管理者までお問い合わせください。</translation>
@@ -216,10 +216,10 @@
 <translation id="9025348182339809926">（無効）</translation>
 <translation id="9039213469156557790">加えて、このページには安全でない他のリソースが含まれています。このリソースは受信中に他のユーザーから見られる可能性があります。また、悪意のあるユーザーによって改変されページの動作が変わる可能性もあります。</translation>
 <translation id="9069693763241529744">拡張機能によってブロック</translation>
-<translation id="910908805481542201">問題を修正するには</translation>
 <translation id="9169664750068251925">このサイトでは常にブロック</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" />ではサポートされていないプロトコルが使用されています。</translation>
 <translation id="9219103736887031265">画像</translation>
+<translation id="936602727769022409">Googleアカウントにアクセスできなくなる可能性があります。今すぐパスワードを変更することをChromiumは勧めます。システムからログインを求められます。</translation>
 <translation id="969892804517981540">公式ビルド</translation>
 <translation id="988159990683914416">デベロッパービルド</translation>
 </translationbundle>

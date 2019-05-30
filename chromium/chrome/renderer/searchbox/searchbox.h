@@ -28,12 +28,6 @@ class SearchBox : public content::RenderFrameObserver,
                   public content::RenderFrameObserverTracker<SearchBox>,
                   public chrome::mojom::EmbeddedSearchClient {
  public:
-  enum ImageSourceType {
-    NONE = -1,
-    FAVICON,
-    THUMB
-  };
-
   // Helper class for GenerateImageURLFromTransientURL() to adapt SearchBox's
   // instance, thereby allow mocking for unit tests.
   class IconURLHelper {
@@ -68,17 +62,14 @@ class SearchBox : public content::RenderFrameObserver,
   // Sends DeleteMostVisitedItem to the browser.
   void DeleteMostVisitedItem(InstantRestrictedID most_visited_item_id);
 
-  // Generates the image URL of |type| for the most visited item specified in
-  // |transient_url|. If |transient_url| is valid, |url| with a translated URL
-  // and returns true.  Otherwise it depends on |type|:
-  // - FAVICON: Returns true and renders an URL to display the default favicon.
+  // Generates the image URL of the most visited item favicon specified by
+  // |transient_url|. If |transient_url| is valid, |url| is set with a
+  // translated URL. Otherwise, |url| is set the the default favicon
+  // ("chrome-search://favicon/").
   //
-  // For |type| == FAVICON, valid forms of |transient_url|:
+  // Valid forms of |transient_url|:
   //    chrome-search://favicon/<view_id>/<restricted_id>
   //    chrome-search://favicon/<favicon_parameters>/<view_id>/<restricted_id>
-  //
-  // For |type| == THUMB, valid form of |transient_url|:
-  //    chrome-search://thumb/<render_view_id>/<most_visited_item_id>
   //
   // We do this to prevent search providers from abusing image URLs and deduce
   // whether the user has visited a particular page. For example, if
@@ -87,8 +78,7 @@ class SearchBox : public content::RenderFrameObserver,
   // has visited "http://www.secretsite.com". Therefore we require search
   // providers to specify URL by "<view_id>/<restricted_id>". We then translate
   // this to the original |url|, and pass the request to the proper endpoint.
-  bool GenerateImageURLFromTransientURL(const GURL& transient_url,
-                                        ImageSourceType type,
+  void GenerateImageURLFromTransientURL(const GURL& transient_url,
                                         GURL* url) const;
 
   // Returns the latest most visited items sent by the browser.
@@ -130,6 +120,9 @@ class SearchBox : public content::RenderFrameObserver,
                         const GURL& new_url,
                         const std::string& new_title);
 
+  // Sends ReorderCustomLink to the browser.
+  void ReorderCustomLink(InstantRestrictedID link_id, int new_pos);
+
   // Sends DeleteCustomLink to the browser.
   void DeleteCustomLink(InstantRestrictedID most_visited_item_id);
 
@@ -156,14 +149,31 @@ class SearchBox : public content::RenderFrameObserver,
   // Let the user select a local file for the NTP background.
   void SelectLocalBackgroundImage();
 
+  // Add a search suggestion task id to the blocklist.
+  void BlocklistSearchSuggestion(int task_version, long task_id);
+
+  // Add a search suggestion task id and hash to the blocklist.
+  void BlocklistSearchSuggestionWithHash(int task_version,
+                                         long task_id,
+                                         const std::vector<uint8_t>& hash);
+
+  // A suggestion collected, issue a new request with the suggestion
+  // temporarily added to the blocklist.
+  void SearchSuggestionSelected(int task_version,
+                                long task_id,
+                                const std::vector<uint8_t>& hash);
+
+  // Opts the user out of receiving search suggestions.
+  void OptOutOfSearchSuggestions();
+
   bool is_focused() const { return is_focused_; }
   bool is_input_in_progress() const { return is_input_in_progress_; }
   bool is_key_capture_enabled() const { return is_key_capture_enabled_; }
 
  private:
   // Overridden from content::RenderFrameObserver:
-  void DidCommitProvisionalLoad(bool is_new_navigation,
-                                bool is_same_document_navigation) override;
+  void DidCommitProvisionalLoad(bool is_same_document_navigation,
+                                ui::PageTransition transition) override;
   void OnDestruct() override;
 
   // Overridden from chrome::mojom::EmbeddedSearchClient:
@@ -181,7 +191,6 @@ class SearchBox : public content::RenderFrameObserver,
   void AddCustomLinkResult(bool success);
   void UpdateCustomLinkResult(bool success);
   void DeleteCustomLinkResult(bool success);
-  void UndoCustomLinkActionResult(bool success);
 
   // Returns the URL of the Most Visited item specified by the |item_id|.
   GURL GetURLForMostVisitedItem(InstantRestrictedID item_id) const;

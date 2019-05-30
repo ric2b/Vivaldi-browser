@@ -23,13 +23,13 @@ cr.define('gpu', function() {
       cr.ui.TabPanel.prototype.decorate.apply(this);
 
       browserBridge.addEventListener('gpuInfoUpdate', this.refresh.bind(this));
-      browserBridge.addEventListener('logMessagesChange',
-                                     this.refresh.bind(this));
-      browserBridge.addEventListener('clientInfoChange',
-                                     this.refresh.bind(this));
+      browserBridge.addEventListener(
+          'logMessagesChange', this.refresh.bind(this));
+      browserBridge.addEventListener(
+          'clientInfoChange', this.refresh.bind(this));
 
       // Add handler to 'copy to clipboard' button
-      document.getElementById('copy-to-clipboard').onclick = function() {
+      $('copy-to-clipboard').onclick = function() {
         // Make sure nothing is selected
         window.getSelection().removeAllRanges();
 
@@ -38,14 +38,14 @@ cr.define('gpu', function() {
 
         // And deselect everything at the end.
         window.getSelection().removeAllRanges();
-      }
+      };
 
       this.refresh();
     },
 
     /**
-    * Updates the view based on its currently known data
-    */
+     * Updates the view based on its currently known data
+     */
     refresh: function(data) {
       function createSourcePermalink(revisionIdentifier, filepath) {
         if (revisionIdentifier.length !== 40) {
@@ -53,7 +53,8 @@ cr.define('gpu', function() {
           // from the Chrome version string "Chrome/0.0.0.0".
           revisionIdentifier = clientInfo.version.split('/')[1];
         }
-        return `https://chromium.googlesource.com/chromium/src/+/${revisionIdentifier}/${filepath}`;
+        return `https://chromium.googlesource.com/chromium/src/+/${
+            revisionIdentifier}/${filepath}`;
       }
 
       // Client info
@@ -61,40 +62,27 @@ cr.define('gpu', function() {
         var clientInfo = browserBridge.clientInfo;
 
         this.setTable_('client-info', [
-          {
-            description: 'Data exported',
-            value: (new Date()).toISOString()
-          },
-          {
-            description: 'Chrome version',
-            value: clientInfo.version
-          },
-          {
-            description: 'Operating system',
-            value: clientInfo.operating_system
-          },
+          {description: 'Data exported', value: (new Date()).toISOString()},
+          {description: 'Chrome version', value: clientInfo.version},
+          {description: 'Operating system', value: clientInfo.operating_system},
           {
             description: 'Software rendering list URL',
-            value: createSourcePermalink(clientInfo.revision_identifier,
-              'gpu/config/software_rendering_list.json')
+            value: createSourcePermalink(
+                clientInfo.revision_identifier,
+                'gpu/config/software_rendering_list.json')
           },
           {
             description: 'Driver bug list URL',
-            value: createSourcePermalink(clientInfo.revision_identifier,
-              'gpu/config/gpu_driver_bug_list.json')
+            value: createSourcePermalink(
+                clientInfo.revision_identifier,
+                'gpu/config/gpu_driver_bug_list.json')
           },
-          {
-            description: 'ANGLE commit id',
-            value: clientInfo.angle_commit_id
-          },
-          {
+          {description: 'ANGLE commit id', value: clientInfo.angle_commit_id}, {
             description: '2D graphics backend',
             value: clientInfo.graphics_backend
           },
-          {
-            description: 'Command Line',
-            value: clientInfo.command_line
-          }]);
+          {description: 'Command Line', value: clientInfo.command_line}
+        ]);
       } else {
         this.setText_('client-info', '... loading...');
       }
@@ -130,9 +118,9 @@ cr.define('gpu', function() {
         // Not using jstemplate here for blacklist status because we construct
         // href from data, which jstemplate can't seem to do.
         if (gpuInfo.featureStatus) {
-          this.appendFeatureInfo_(gpuInfo.featureStatus, featureStatusList,
-                                  problemsDiv, problemsList,
-                                  workaroundsDiv, workaroundsList);
+          this.appendFeatureInfo_(
+              gpuInfo.featureStatus, featureStatusList, problemsDiv,
+              problemsList, workaroundsDiv, workaroundsList);
         } else {
           featureStatusList.textContent = '';
           problemsList.hidden = true;
@@ -144,15 +132,14 @@ cr.define('gpu', function() {
           featureStatusForHardwareGpuDiv.hidden = false;
           problemsForHardwareGpuDiv.hidden = false;
           workaroundsForHardwareGpuDiv.hidden = false;
-          this.appendFeatureInfo_(gpuInfo.featureStatusForHardwareGpu,
-                                  featureStatusForHardwareGpuList,
-                                  problemsForHardwareGpuDiv,
-                                  problemsForHardwareGpuList,
-                                  workaroundsForHardwareGpuDiv,
-                                  workaroundsForHardwareGpuList);
+          this.appendFeatureInfo_(
+              gpuInfo.featureStatusForHardwareGpu,
+              featureStatusForHardwareGpuList, problemsForHardwareGpuDiv,
+              problemsForHardwareGpuList, workaroundsForHardwareGpuDiv,
+              workaroundsForHardwareGpuList);
           if (gpuInfo.basicInfoForHardwareGpu) {
-            this.setTable_('basic-info-for-hardware-gpu',
-                           gpuInfo.basicInfoForHardwareGpu);
+            this.setTable_(
+                'basic-info-for-hardware-gpu', gpuInfo.basicInfoForHardwareGpu);
           } else {
             this.setTable_('basic-info-for-hardware-gpu', []);
           }
@@ -163,25 +150,29 @@ cr.define('gpu', function() {
           workaroundsForHardwareGpuDiv.hidden = true;
         }
 
-        if (gpuInfo.basicInfo)
+        if (gpuInfo.basicInfo) {
           this.setTable_('basic-info', gpuInfo.basicInfo);
-        else
+        } else {
           this.setTable_('basic-info', []);
+        }
 
-        if (gpuInfo.compositorInfo)
+        if (gpuInfo.compositorInfo) {
           this.setTable_('compositor-info', gpuInfo.compositorInfo);
-        else
+        } else {
           this.setTable_('compositor-info', []);
+        }
 
-        if (gpuInfo.gpuMemoryBufferInfo)
+        if (gpuInfo.gpuMemoryBufferInfo) {
           this.setTable_('gpu-memory-buffer-info', gpuInfo.gpuMemoryBufferInfo);
-        else
+        } else {
           this.setTable_('gpu-memory-buffer-info', []);
+        }
 
-        if (gpuInfo.displayInfo)
+        if (gpuInfo.displayInfo) {
           this.setTable_('display-info', gpuInfo.displayInfo);
-        else
+        } else {
           this.setTable_('display-info', []);
+        }
 
         if (gpuInfo.videoAcceleratorsInfo) {
           this.setTable_(
@@ -211,13 +202,14 @@ cr.define('gpu', function() {
       }
 
       // Log messages
-      jstProcess(new JsEvalContext({values: browserBridge.logMessages}),
-                 $('log-messages'));
+      jstProcess(
+          new JsEvalContext({values: browserBridge.logMessages}),
+          $('log-messages'));
     },
 
-    appendFeatureInfo_: function(featureInfo, featureStatusList,
-                                 problemsDiv, problemsList,
-                                 workaroundsDiv, workaroundsList) {
+    appendFeatureInfo_: function(
+        featureInfo, featureStatusList, problemsDiv, problemsList,
+        workaroundsDiv, workaroundsList) {
       // Feature map
       var featureLabelMap = {
         '2d_canvas': 'Canvas',
@@ -235,38 +227,27 @@ cr.define('gpu', function() {
         'native_gpu_memory_buffers': 'Native GpuMemoryBuffers',
         'protected_video_decode': 'Hardware Protected Video Decode',
         'surface_synchronization': 'Surface Synchronization',
+        'surface_control': 'Surface Control',
         'vpx_decode': 'VPx Video Decode',
         'webgl2': 'WebGL2',
         'viz_display_compositor': 'Viz Service Display Compositor',
         'skia_renderer': 'Skia Renderer',
-        'skia_deferred_display_list': 'Skia Deferred Display List',
       };
 
-      var statusMap =  {
+      var statusMap = {
         'disabled_software': {
           'label': 'Software only. Hardware acceleration disabled',
           'class': 'feature-yellow'
         },
-        'disabled_off': {
-          'label': 'Disabled',
-          'class': 'feature-red'
-        },
-        'disabled_off_ok': {
-          'label': 'Disabled',
-          'class': 'feature-yellow'
-        },
+        'disabled_off': {'label': 'Disabled', 'class': 'feature-red'},
+        'disabled_off_ok': {'label': 'Disabled', 'class': 'feature-yellow'},
         'unavailable_software': {
           'label': 'Software only, hardware acceleration unavailable',
           'class': 'feature-yellow'
         },
-        'unavailable_off': {
-          'label': 'Unavailable',
-          'class': 'feature-red'
-        },
-        'unavailable_off_ok': {
-          'label': 'Unavailable',
-          'class': 'feature-yellow'
-        },
+        'unavailable_off': {'label': 'Unavailable', 'class': 'feature-red'},
+        'unavailable_off_ok':
+            {'label': 'Unavailable', 'class': 'feature-yellow'},
         'enabled_readback': {
           'label': 'Hardware accelerated but at reduced performance',
           'class': 'feature-yellow'
@@ -275,18 +256,10 @@ cr.define('gpu', function() {
           'label': 'Hardware accelerated on all pages',
           'class': 'feature-green'
         },
-        'enabled': {
-          'label': 'Hardware accelerated',
-          'class': 'feature-green'
-        },
-        'enabled_on': {
-          'label': 'Enabled',
-          'class': 'feature-green'
-        },
-        'enabled_force_on': {
-          'label': 'Force enabled',
-          'class': 'feature-green'
-        },
+        'enabled': {'label': 'Hardware accelerated', 'class': 'feature-green'},
+        'enabled_on': {'label': 'Enabled', 'class': 'feature-green'},
+        'enabled_force_on':
+            {'label': 'Force enabled', 'class': 'feature-green'},
       };
 
       // feature status list
@@ -296,8 +269,9 @@ cr.define('gpu', function() {
         var featureEl = document.createElement('li');
 
         var nameEl = document.createElement('span');
-        if (!featureLabelMap[featureName])
+        if (!featureLabelMap[featureName]) {
           console.log('Missing featureLabel for', featureName);
+        }
         nameEl.textContent = featureLabelMap[featureName] + ': ';
         featureEl.appendChild(nameEl);
 
@@ -386,10 +360,11 @@ cr.define('gpu', function() {
         problemEl.appendChild(iNode);
 
         var headNode = document.createElement('span');
-        if (problem.tag == 'disabledFeatures')
+        if (problem.tag == 'disabledFeatures') {
           headNode.textContent = 'Disabled Features: ';
-        else  // problem.tag == 'workarounds'
+        } else {  // problem.tag == 'workarounds'
           headNode.textContent = 'Applied Workarounds: ';
+        }
         iNode.appendChild(headNode);
         for (j = 0; j < problem.affectedGpuSettings.length; ++j) {
           if (j > 0) {
@@ -398,10 +373,11 @@ cr.define('gpu', function() {
             iNode.appendChild(separateNode);
           }
           var nameNode = document.createElement('span');
-          if (problem.tag == 'disabledFeatures')
+          if (problem.tag == 'disabledFeatures') {
             nameNode.classList.add('feature-red');
-          else  // problem.tag == 'workarounds'
+          } else {  // problem.tag == 'workarounds'
             nameNode.classList.add('feature-yellow');
+          }
           nameNode.textContent = problem.affectedGpuSettings[j];
           iNode.appendChild(nameNode);
         }
@@ -411,25 +387,23 @@ cr.define('gpu', function() {
     },
 
     setText_: function(outputElementId, text) {
-      var peg = document.getElementById(outputElementId);
+      var peg = $(outputElementId);
       peg.textContent = text;
     },
 
     setTable_: function(outputElementId, inputData) {
       var template = jstGetTemplate('info-view-table-template');
-      jstProcess(new JsEvalContext({value: inputData}),
-                 template);
+      jstProcess(new JsEvalContext({value: inputData}), template);
 
-      var peg = document.getElementById(outputElementId);
-      if (!peg)
+      var peg = $(outputElementId);
+      if (!peg) {
         throw new Error('Node ' + outputElementId + ' not found');
+      }
 
       peg.innerHTML = '';
       peg.appendChild(template);
     }
   };
 
-  return {
-    InfoView: InfoView
-  };
+  return {InfoView: InfoView};
 });

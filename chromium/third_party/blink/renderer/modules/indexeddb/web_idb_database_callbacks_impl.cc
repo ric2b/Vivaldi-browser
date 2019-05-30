@@ -29,12 +29,8 @@
 
 #include "base/memory/ptr_util.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
-
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database_error.h"
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_observation.h"
-#include "third_party/blink/public/platform/web_vector.h"
-#include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_database_callbacks.h"
+#include "third_party/blink/renderer/modules/indexeddb/idb_database_error.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_key_range.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_observation.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_value.h"
@@ -68,7 +64,7 @@ void WebIDBDatabaseCallbacksImpl::OnVersionChange(long long old_version,
 }
 
 void WebIDBDatabaseCallbacksImpl::OnAbort(long long transaction_id,
-                                          const WebIDBDatabaseError& error) {
+                                          const IDBDatabaseError& error) {
   if (callbacks_) {
     callbacks_->OnAbort(
         transaction_id,
@@ -84,7 +80,7 @@ void WebIDBDatabaseCallbacksImpl::OnComplete(long long transaction_id) {
 
 void WebIDBDatabaseCallbacksImpl::OnChanges(
     const ObservationIndexMap& observation_index_map,
-    WebVector<WebIDBObservation> observations,
+    Vector<Persistent<IDBObservation>> observations,
     const TransactionMap& transactions) {
   if (callbacks_) {
     callbacks_->OnChanges(observation_index_map, std::move(observations),

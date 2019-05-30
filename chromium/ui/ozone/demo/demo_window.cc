@@ -15,8 +15,7 @@
 #include "ui/platform_window/platform_window_init_properties.h"
 
 #if defined(OS_FUCHSIA)
-#include <fuchsia/ui/policy/cpp/fidl.h>
-#include "base/fuchsia/component_context.h"
+#include "ui/platform_window/fuchsia/initialize_presenter_api_view.h"
 #endif
 
 namespace ui {
@@ -31,19 +30,12 @@ DemoWindow::DemoWindow(WindowManager* window_manager,
   properties.bounds = bounds;
 
 #if defined(OS_FUCHSIA)
-  // When using Scenic Ozone platform we need to supply a ViewOwner request to
-  // the window. This is not necessary when using the headless ozone platform.
+  // When using Scenic Ozone platform we need to supply a view_token to the
+  // window. This is not necessary when using the headless ozone platform.
   if (ui::OzonePlatform::GetInstance()
           ->GetPlatformProperties()
-          .needs_view_owner_request) {
-    // Initialize view_owner_request for the new instance.
-    fidl::InterfaceHandle<fuchsia::ui::viewsv1token::ViewOwner> view_owner;
-    properties.view_owner_request = view_owner.NewRequest();
-
-    // Request Presenter to show the view full-screen.
-    auto presenter = base::fuchsia::ComponentContext::GetDefault()
-                         ->ConnectToService<fuchsia::ui::policy::Presenter>();
-    presenter->Present(std::move(view_owner), nullptr);
+          .needs_view_token) {
+    ui::fuchsia::InitializeViewTokenAndPresentView(&properties);
   }
 #endif
 
@@ -66,16 +58,16 @@ gfx::Size DemoWindow::GetSize() {
 }
 
 void DemoWindow::Start() {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&DemoWindow::StartOnGpu, weak_ptr_factory_.GetWeakPtr()));
+  StartRendererIfNecessary();
 }
 
 void DemoWindow::Quit() {
   window_manager_->Quit();
 }
 
-void DemoWindow::OnBoundsChanged(const gfx::Rect& new_bounds) {}
+void DemoWindow::OnBoundsChanged(const gfx::Rect& new_bounds) {
+  StartRendererIfNecessary();
+}
 
 void DemoWindow::OnDamageRect(const gfx::Rect& damaged_region) {}
 
@@ -105,7 +97,9 @@ void DemoWindow::OnAcceleratedWidgetDestroyed() {
 
 void DemoWindow::OnActivationChanged(bool active) {}
 
-void DemoWindow::StartOnGpu() {
+void DemoWindow::StartRendererIfNecessary() {
+  if (renderer_ || GetSize().IsEmpty())
+    return;
   renderer_ =
       renderer_factory_->CreateRenderer(GetAcceleratedWidget(), GetSize());
   if (!renderer_->Initialize())

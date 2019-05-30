@@ -8,11 +8,9 @@ import android.graphics.Bitmap;
 import android.os.SystemClock;
 import android.util.LruCache;
 
-import org.chromium.base.AsyncTask;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
-
-import java.util.concurrent.TimeUnit;
+import org.chromium.base.task.AsyncTask;
 
 /**
  * A worker task to scale bitmaps in the background.
@@ -48,8 +46,7 @@ class BitmapScalerTask extends AsyncTask<Bitmap> {
         long begin = SystemClock.elapsedRealtime();
         Bitmap bitmap = BitmapUtils.scale(mBitmap, mSize, false);
         long scaleTime = SystemClock.elapsedRealtime() - begin;
-        RecordHistogram.recordTimesHistogram(
-                "Android.PhotoPicker.BitmapScalerTask", scaleTime, TimeUnit.MILLISECONDS);
+        RecordHistogram.recordTimesHistogram("Android.PhotoPicker.BitmapScalerTask", scaleTime);
         return bitmap;
     }
 

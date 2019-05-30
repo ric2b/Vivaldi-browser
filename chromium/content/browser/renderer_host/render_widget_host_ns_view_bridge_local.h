@@ -11,22 +11,28 @@
 #import "content/browser/renderer_host/popup_window_mac.h"
 #import "content/browser/renderer_host/render_widget_host_view_cocoa.h"
 #include "content/common/render_widget_host_ns_view.mojom.h"
+#include "content/public/common/widget_type.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
 #include "ui/accelerated_widget_mac/display_ca_layer_tree.h"
 #include "ui/display/display_observer.h"
 
 namespace content {
 
-// Bridge to a locally-hosted NSView -- this is always instantiated in the same
-// process as the NSView. The caller of this interface may exist in another
-// process.
+// Mojo bridge for a RenderWidgetHostViewMac's NSView. This class may be
+// instantiated in the same process as its RenderWidgetHostViewMac, or it may
+// be in a different process.
 class RenderWidgetHostNSViewBridgeLocal
     : public mojom::RenderWidgetHostNSViewBridge,
       public display::DisplayObserver {
  public:
   RenderWidgetHostNSViewBridgeLocal(
       mojom::RenderWidgetHostNSViewClient* client,
-      RenderWidgetHostNSViewLocalClient* local_client);
+      RenderWidgetHostNSViewClientHelper* client_helper);
   ~RenderWidgetHostNSViewBridgeLocal() override;
+
+  // Bind to a remote request for a bridge interface.
+  void BindRequest(
+      mojom::RenderWidgetHostNSViewBridgeAssociatedRequest bridge_request);
 
   // TODO(ccameron): RenderWidgetHostViewMac and other functions currently use
   // this method to communicate directly with RenderWidgetHostViewCocoa. The
@@ -35,8 +41,8 @@ class RenderWidgetHostNSViewBridgeLocal
   RenderWidgetHostViewCocoa* GetRenderWidgetHostViewCocoa();
 
   // mojom::RenderWidgetHostNSViewBridge implementation.
-  void InitAsPopup(const gfx::Rect& content_rect,
-                   blink::WebPopupType popup_type) override;
+  void InitAsPopup(const gfx::Rect& content_rect) override;
+  void SetParentWebContentsNSView(uint64_t parent_ns_view_id) override;
   void DisableDisplay() override;
   void MakeFirstResponder() override;
   void SetBounds(const gfx::Rect& rect) override;
@@ -62,11 +68,7 @@ class RenderWidgetHostNSViewBridgeLocal
   void UnlockKeyboard() override;
 
  private:
-  bool IsPopup() const {
-    // TODO(ccameron): If this is not equivalent to |popup_window_| then
-    // there are bugs.
-    return popup_type_ != blink::kWebPopupTypeNone;
-  }
+  bool IsPopup() const { return !!popup_window_; }
 
   // display::DisplayObserver implementation.
   void OnDisplayMetricsChanged(const display::Display& display,
@@ -81,7 +83,6 @@ class RenderWidgetHostNSViewBridgeLocal
 
   // The window used for popup widgets, and its helper.
   std::unique_ptr<PopupWindowMac> popup_window_;
-  blink::WebPopupType popup_type_ = blink::kWebPopupTypeNone;
 
   // The background CALayer which is hosted by |cocoa_view_|, and is used as
   // the root of |display_ca_layer_tree_|.
@@ -90,6 +91,9 @@ class RenderWidgetHostNSViewBridgeLocal
 
   // Cached copy of the tooltip text, to avoid redundant calls.
   base::string16 tooltip_text_;
+
+  // The binding for this object (only used when remotely instantiated).
+  mojo::AssociatedBinding<mojom::RenderWidgetHostNSViewBridge> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostNSViewBridgeLocal);
 };

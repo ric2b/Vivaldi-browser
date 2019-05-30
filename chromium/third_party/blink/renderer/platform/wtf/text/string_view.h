@@ -29,7 +29,7 @@ class String;
 //
 // See base/strings/string_piece.h for more details.
 class WTF_EXPORT StringView {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
 
  public:
   // Null string.
@@ -57,7 +57,7 @@ class WTF_EXPORT StringView {
   StringView(StringImpl&, unsigned offset);
   StringView(StringImpl&, unsigned offset, unsigned length);
 
-  // From an String, implemented in String.h
+  // From a String, implemented in String.h
   inline StringView(const String&, unsigned offset, unsigned length);
   inline StringView(const String&, unsigned offset);
   inline StringView(const String&);

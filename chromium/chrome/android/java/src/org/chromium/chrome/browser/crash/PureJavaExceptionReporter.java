@@ -15,10 +15,12 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.BuildConfig;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.PiiElider;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.MainDex;
 import org.chromium.chrome.browser.ChromeVersionInfo;
+import org.chromium.components.crash.CrashKeys;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -40,6 +42,7 @@ public class PureJavaExceptionReporter {
     public static final String PRODUCT = "prod";
     public static final String ANDROID_BUILD_ID = "android_build_id";
     public static final String ANDROID_BUILD_FP = "android_build_fp";
+    public static final String SDK = "sdk";
     public static final String DEVICE = "device";
     public static final String GMS_CORE_VERSION = "gms_core_version";
     public static final String INSTALLER_PACKAGE_NAME = "installer_package_name";
@@ -60,8 +63,8 @@ public class PureJavaExceptionReporter {
     private static final String RN = "\r\n";
     private static final String FORM_DATA_MESSAGE = "Content-Disposition: form-data; name=\"";
 
-    protected File mMinidumpFile = null;
-    private FileOutputStream mMinidumpFileStream = null;
+    protected File mMinidumpFile;
+    private FileOutputStream mMinidumpFileStream;
     private final String mLocalId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
     private final String mBoundary = "------------" + UUID.randomUUID() + RN;
 
@@ -134,10 +137,12 @@ public class PureJavaExceptionReporter {
         addPairedString(BRAND, Build.BRAND);
         addPairedString(BOARD, Build.BOARD);
         addPairedString(ANDROID_BUILD_FP, buildInfo.androidBuildFingerprint);
+        addPairedString(SDK, String.valueOf(Build.VERSION.SDK_INT));
         addPairedString(GMS_CORE_VERSION, buildInfo.gmsVersionCode);
         addPairedString(INSTALLER_PACKAGE_NAME, buildInfo.installerPackageName);
         addPairedString(ABI_NAME, buildInfo.abiString);
-        addPairedString(EXCEPTION_INFO, Log.getStackTraceString(javaException));
+        addPairedString(EXCEPTION_INFO,
+                PiiElider.sanitizeStacktrace(Log.getStackTraceString(javaException)));
         addPairedString(EARLY_JAVA_EXCEPTION, "true");
         addPairedString(PACKAGE,
                 String.format("%s v%s (%s)", BuildConfig.FIREBASE_APP_ID, buildInfo.versionCode,

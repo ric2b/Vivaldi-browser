@@ -279,12 +279,16 @@ void DriverGL::InitializeStaticBindings() {
 
 void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
                                          const gfx::ExtensionSet& extensions) {
+  ext.b_GL_AMD_framebuffer_multisample_advanced =
+      gfx::HasExtension(extensions, "GL_AMD_framebuffer_multisample_advanced");
   ext.b_GL_ANGLE_framebuffer_blit =
       gfx::HasExtension(extensions, "GL_ANGLE_framebuffer_blit");
   ext.b_GL_ANGLE_framebuffer_multisample =
       gfx::HasExtension(extensions, "GL_ANGLE_framebuffer_multisample");
   ext.b_GL_ANGLE_instanced_arrays =
       gfx::HasExtension(extensions, "GL_ANGLE_instanced_arrays");
+  ext.b_GL_ANGLE_multi_draw =
+      gfx::HasExtension(extensions, "GL_ANGLE_multi_draw");
   ext.b_GL_ANGLE_multiview =
       gfx::HasExtension(extensions, "GL_ANGLE_multiview");
   ext.b_GL_ANGLE_request_extension =
@@ -296,6 +300,8 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
   ext.b_GL_APPLE_fence = gfx::HasExtension(extensions, "GL_APPLE_fence");
   ext.b_GL_APPLE_vertex_array_object =
       gfx::HasExtension(extensions, "GL_APPLE_vertex_array_object");
+  ext.b_GL_ARB_ES2_compatibility =
+      gfx::HasExtension(extensions, "GL_ARB_ES2_compatibility");
   ext.b_GL_ARB_blend_func_extended =
       gfx::HasExtension(extensions, "GL_ARB_blend_func_extended");
   ext.b_GL_ARB_draw_buffers =
@@ -334,10 +340,6 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
       gfx::HasExtension(extensions, "GL_ARB_vertex_array_object");
   ext.b_GL_CHROMIUM_bind_uniform_location =
       gfx::HasExtension(extensions, "GL_CHROMIUM_bind_uniform_location");
-  ext.b_GL_CHROMIUM_compressed_copy_texture =
-      gfx::HasExtension(extensions, "GL_CHROMIUM_compressed_copy_texture");
-  ext.b_GL_CHROMIUM_copy_compressed_texture =
-      gfx::HasExtension(extensions, "GL_CHROMIUM_copy_compressed_texture");
   ext.b_GL_CHROMIUM_copy_texture =
       gfx::HasExtension(extensions, "GL_CHROMIUM_copy_texture");
   ext.b_GL_CHROMIUM_framebuffer_mixed_samples =
@@ -372,11 +374,18 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
       gfx::HasExtension(extensions, "GL_EXT_instanced_arrays");
   ext.b_GL_EXT_map_buffer_range =
       gfx::HasExtension(extensions, "GL_EXT_map_buffer_range");
+  ext.b_GL_EXT_memory_object =
+      gfx::HasExtension(extensions, "GL_EXT_memory_object");
+  ext.b_GL_EXT_memory_object_fd =
+      gfx::HasExtension(extensions, "GL_EXT_memory_object_fd");
   ext.b_GL_EXT_multisampled_render_to_texture =
       gfx::HasExtension(extensions, "GL_EXT_multisampled_render_to_texture");
   ext.b_GL_EXT_occlusion_query_boolean =
       gfx::HasExtension(extensions, "GL_EXT_occlusion_query_boolean");
   ext.b_GL_EXT_robustness = gfx::HasExtension(extensions, "GL_EXT_robustness");
+  ext.b_GL_EXT_semaphore = gfx::HasExtension(extensions, "GL_EXT_semaphore");
+  ext.b_GL_EXT_semaphore_fd =
+      gfx::HasExtension(extensions, "GL_EXT_semaphore_fd");
   ext.b_GL_EXT_shader_image_load_store =
       gfx::HasExtension(extensions, "GL_EXT_shader_image_load_store");
   ext.b_GL_EXT_texture_buffer =
@@ -400,12 +409,16 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
   ext.b_GL_KHR_blend_equation_advanced =
       gfx::HasExtension(extensions, "GL_KHR_blend_equation_advanced");
   ext.b_GL_KHR_debug = gfx::HasExtension(extensions, "GL_KHR_debug");
+  ext.b_GL_KHR_parallel_shader_compile =
+      gfx::HasExtension(extensions, "GL_KHR_parallel_shader_compile");
   ext.b_GL_KHR_robustness = gfx::HasExtension(extensions, "GL_KHR_robustness");
   ext.b_GL_NV_blend_equation_advanced =
       gfx::HasExtension(extensions, "GL_NV_blend_equation_advanced");
   ext.b_GL_NV_fence = gfx::HasExtension(extensions, "GL_NV_fence");
   ext.b_GL_NV_framebuffer_mixed_samples =
       gfx::HasExtension(extensions, "GL_NV_framebuffer_mixed_samples");
+  ext.b_GL_NV_internalformat_sample_query =
+      gfx::HasExtension(extensions, "GL_NV_internalformat_sample_query");
   ext.b_GL_NV_path_rendering =
       gfx::HasExtension(extensions, "GL_NV_path_rendering");
   ext.b_GL_OES_EGL_image = gfx::HasExtension(extensions, "GL_OES_EGL_image");
@@ -617,13 +630,6 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
         GetGLProcAddress("glClientWaitSync"));
   }
 
-  if (ext.b_GL_CHROMIUM_copy_compressed_texture ||
-      ext.b_GL_CHROMIUM_compressed_copy_texture) {
-    fn.glCompressedCopyTextureCHROMIUMFn =
-        reinterpret_cast<glCompressedCopyTextureCHROMIUMProc>(
-            GetGLProcAddress("glCompressedCopyTextureCHROMIUM"));
-  }
-
   if (ext.b_GL_ANGLE_robust_client_memory) {
     fn.glCompressedTexImage2DRobustANGLEFn =
         reinterpret_cast<glCompressedTexImage2DRobustANGLEProc>(
@@ -724,6 +730,12 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
         GetGLProcAddress("glCoverStrokePathCHROMIUM"));
   }
 
+  if (ext.b_GL_EXT_memory_object) {
+    fn.glCreateMemoryObjectsEXTFn =
+        reinterpret_cast<glCreateMemoryObjectsEXTProc>(
+            GetGLProcAddress("glCreateMemoryObjectsEXT"));
+  }
+
   if (ver->IsAtLeastGL(4u, 1u) || ver->IsAtLeastGLES(3u, 1u)) {
     fn.glCreateShaderProgramvFn = reinterpret_cast<glCreateShaderProgramvProc>(
         GetGLProcAddress("glCreateShaderProgramv"));
@@ -813,6 +825,11 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
       ext.b_GL_ARB_sampler_objects) {
     fn.glDeleteSamplersFn = reinterpret_cast<glDeleteSamplersProc>(
         GetGLProcAddress("glDeleteSamplers"));
+  }
+
+  if (ext.b_GL_EXT_semaphore) {
+    fn.glDeleteSemaphoresEXTFn = reinterpret_cast<glDeleteSemaphoresEXTProc>(
+        GetGLProcAddress("glDeleteSemaphoresEXT"));
   }
 
   if (ver->IsAtLeastGL(3u, 2u) || ver->IsAtLeastGLES(3u, 0u) ||
@@ -1096,6 +1113,11 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
         reinterpret_cast<glGenSamplersProc>(GetGLProcAddress("glGenSamplers"));
   }
 
+  if (ext.b_GL_EXT_semaphore) {
+    fn.glGenSemaphoresEXTFn = reinterpret_cast<glGenSemaphoresEXTProc>(
+        GetGLProcAddress("glGenSemaphoresEXT"));
+  }
+
   if (ver->IsAtLeastGLES(3u, 0u) || ver->IsAtLeastGL(4u, 0u) ||
       ext.b_GL_ARB_transform_feedback2) {
     fn.glGenTransformFeedbacksFn =
@@ -1302,6 +1324,12 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
             GetGLProcAddress("glGetInternalformativRobustANGLE"));
   }
 
+  if (ext.b_GL_NV_internalformat_sample_query) {
+    fn.glGetInternalformatSampleivNVFn =
+        reinterpret_cast<glGetInternalformatSampleivNVProc>(
+            GetGLProcAddress("glGetInternalformatSampleivNV"));
+  }
+
   if (ver->IsAtLeastGL(3u, 2u) || ver->IsAtLeastGLES(3u, 1u) ||
       ext.b_GL_ARB_texture_multisample) {
     fn.glGetMultisamplefvFn = reinterpret_cast<glGetMultisamplefvProc>(
@@ -1413,7 +1441,8 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
         GetGLProcAddress("glGetProgramResourceiv"));
   }
 
-  if (ver->IsAtLeastGL(4u, 3u) || ver->IsAtLeastGLES(3u, 1u)) {
+  if (ver->IsAtLeastGL(4u, 3u) || ver->IsAtLeastGLES(3u, 1u) ||
+      ext.b_GL_ARB_program_interface_query) {
     fn.glGetProgramResourceLocationFn =
         reinterpret_cast<glGetProgramResourceLocationProc>(
             GetGLProcAddress("glGetProgramResourceLocation"));
@@ -1567,7 +1596,8 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
             GetGLProcAddress("glGetShaderivRobustANGLE"));
   }
 
-  if (ver->IsAtLeastGL(4u, 1u) || ver->is_es) {
+  if (ver->IsAtLeastGL(4u, 1u) || ver->is_es ||
+      ext.b_GL_ARB_ES2_compatibility) {
     fn.glGetShaderPrecisionFormatFn =
         reinterpret_cast<glGetShaderPrecisionFormatProc>(
             GetGLProcAddress("glGetShaderPrecisionFormat"));
@@ -1706,6 +1736,16 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
             GetGLProcAddress("glGetVertexAttribPointervRobustANGLE"));
   }
 
+  if (ext.b_GL_EXT_memory_object_fd) {
+    fn.glImportMemoryFdEXTFn = reinterpret_cast<glImportMemoryFdEXTProc>(
+        GetGLProcAddress("glImportMemoryFdEXT"));
+  }
+
+  if (ext.b_GL_EXT_semaphore_fd) {
+    fn.glImportSemaphoreFdEXTFn = reinterpret_cast<glImportSemaphoreFdEXTProc>(
+        GetGLProcAddress("glImportSemaphoreFdEXT"));
+  }
+
   if (ext.b_GL_EXT_debug_marker) {
     fn.glInsertEventMarkerEXTFn = reinterpret_cast<glInsertEventMarkerEXTProc>(
         GetGLProcAddress("glInsertEventMarkerEXT"));
@@ -1839,6 +1879,12 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
             GetGLProcAddress("glMatrixLoadIdentityCHROMIUM"));
   }
 
+  if (ext.b_GL_KHR_parallel_shader_compile) {
+    fn.glMaxShaderCompilerThreadsKHRFn =
+        reinterpret_cast<glMaxShaderCompilerThreadsKHRProc>(
+            GetGLProcAddress("glMaxShaderCompilerThreadsKHR"));
+  }
+
   if (ver->IsAtLeastGLES(3u, 1u) || ver->IsAtLeastGL(4u, 5u)) {
     fn.glMemoryBarrierByRegionFn =
         reinterpret_cast<glMemoryBarrierByRegionProc>(
@@ -1857,6 +1903,29 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
   if (ver->IsAtLeastGLES(3u, 2u) || ver->IsAtLeastGL(4u, 0u)) {
     fn.glMinSampleShadingFn = reinterpret_cast<glMinSampleShadingProc>(
         GetGLProcAddress("glMinSampleShading"));
+  }
+
+  if (ext.b_GL_ANGLE_multi_draw) {
+    fn.glMultiDrawArraysANGLEFn = reinterpret_cast<glMultiDrawArraysANGLEProc>(
+        GetGLProcAddress("glMultiDrawArraysANGLE"));
+  }
+
+  if (ext.b_GL_ANGLE_multi_draw) {
+    fn.glMultiDrawArraysInstancedANGLEFn =
+        reinterpret_cast<glMultiDrawArraysInstancedANGLEProc>(
+            GetGLProcAddress("glMultiDrawArraysInstancedANGLE"));
+  }
+
+  if (ext.b_GL_ANGLE_multi_draw) {
+    fn.glMultiDrawElementsANGLEFn =
+        reinterpret_cast<glMultiDrawElementsANGLEProc>(
+            GetGLProcAddress("glMultiDrawElementsANGLE"));
+  }
+
+  if (ext.b_GL_ANGLE_multi_draw) {
+    fn.glMultiDrawElementsInstancedANGLEFn =
+        reinterpret_cast<glMultiDrawElementsInstancedANGLEProc>(
+            GetGLProcAddress("glMultiDrawElementsInstancedANGLE"));
   }
 
   if (ver->IsAtLeastGL(4u, 3u) || ver->IsAtLeastGLES(3u, 2u)) {
@@ -2211,6 +2280,12 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
             GetGLProcAddress("glRenderbufferStorageMultisampleEXT"));
   }
 
+  if (ext.b_GL_AMD_framebuffer_multisample_advanced) {
+    fn.glRenderbufferStorageMultisampleAdvancedAMDFn =
+        reinterpret_cast<glRenderbufferStorageMultisampleAdvancedAMDProc>(
+            GetGLProcAddress("glRenderbufferStorageMultisampleAdvancedAMD"));
+  }
+
   if (ext.b_GL_EXT_multisampled_render_to_texture) {
     fn.glRenderbufferStorageMultisampleEXTFn =
         reinterpret_cast<glRenderbufferStorageMultisampleEXTProc>(
@@ -2300,6 +2375,11 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
   if (ver->IsAtLeastGL(4u, 1u) || ver->is_es) {
     fn.glShaderBinaryFn = reinterpret_cast<glShaderBinaryProc>(
         GetGLProcAddress("glShaderBinary"));
+  }
+
+  if (ext.b_GL_EXT_semaphore) {
+    fn.glSignalSemaphoreEXTFn = reinterpret_cast<glSignalSemaphoreEXTProc>(
+        GetGLProcAddress("glSignalSemaphoreEXT"));
   }
 
   if (ext.b_GL_NV_path_rendering) {
@@ -2471,6 +2551,11 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
       ext.b_GL_ARB_texture_storage) {
     fn.glTexStorage3DFn = reinterpret_cast<glTexStorage3DProc>(
         GetGLProcAddress("glTexStorage3D"));
+  }
+
+  if (ext.b_GL_EXT_memory_object) {
+    fn.glTexStorageMem2DEXTFn = reinterpret_cast<glTexStorageMem2DEXTProc>(
+        GetGLProcAddress("glTexStorageMem2DEXT"));
   }
 
   if (ext.b_GL_ANGLE_robust_client_memory) {
@@ -2655,6 +2740,11 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
   if (ver->IsAtLeastGL(4u, 3u) || ver->IsAtLeastGLES(3u, 1u)) {
     fn.glVertexBindingDivisorFn = reinterpret_cast<glVertexBindingDivisorProc>(
         GetGLProcAddress("glVertexBindingDivisor"));
+  }
+
+  if (ext.b_GL_EXT_semaphore) {
+    fn.glWaitSemaphoreEXTFn = reinterpret_cast<glWaitSemaphoreEXTProc>(
+        GetGLProcAddress("glWaitSemaphoreEXT"));
   }
 
   if (ver->IsAtLeastGL(3u, 2u) || ver->IsAtLeastGLES(3u, 0u) ||
@@ -2918,11 +3008,6 @@ void GLApiBase::glCompileShaderFn(GLuint shader) {
   driver_->fn.glCompileShaderFn(shader);
 }
 
-void GLApiBase::glCompressedCopyTextureCHROMIUMFn(GLuint sourceId,
-                                                  GLuint destId) {
-  driver_->fn.glCompressedCopyTextureCHROMIUMFn(sourceId, destId);
-}
-
 void GLApiBase::glCompressedTexImage2DFn(GLenum target,
                                          GLint level,
                                          GLenum internalformat,
@@ -3155,6 +3240,10 @@ void GLApiBase::glCoverStrokePathNVFn(GLuint name, GLenum coverMode) {
   driver_->fn.glCoverStrokePathNVFn(name, coverMode);
 }
 
+void GLApiBase::glCreateMemoryObjectsEXTFn(GLsizei n, GLuint* memoryObjects) {
+  driver_->fn.glCreateMemoryObjectsEXTFn(n, memoryObjects);
+}
+
 GLuint GLApiBase::glCreateProgramFn(void) {
   return driver_->fn.glCreateProgramFn();
 }
@@ -3237,6 +3326,10 @@ void GLApiBase::glDeleteRenderbuffersEXTFn(GLsizei n,
 
 void GLApiBase::glDeleteSamplersFn(GLsizei n, const GLuint* samplers) {
   driver_->fn.glDeleteSamplersFn(n, samplers);
+}
+
+void GLApiBase::glDeleteSemaphoresEXTFn(GLsizei n, const GLuint* semaphores) {
+  driver_->fn.glDeleteSemaphoresEXTFn(n, semaphores);
 }
 
 void GLApiBase::glDeleteShaderFn(GLuint shader) {
@@ -3503,6 +3596,10 @@ void GLApiBase::glGenRenderbuffersEXTFn(GLsizei n, GLuint* renderbuffers) {
 
 void GLApiBase::glGenSamplersFn(GLsizei n, GLuint* samplers) {
   driver_->fn.glGenSamplersFn(n, samplers);
+}
+
+void GLApiBase::glGenSemaphoresEXTFn(GLsizei n, GLuint* semaphores) {
+  driver_->fn.glGenSemaphoresEXTFn(n, semaphores);
 }
 
 void GLApiBase::glGenTexturesFn(GLsizei n, GLuint* textures) {
@@ -3791,6 +3888,16 @@ void GLApiBase::glGetInternalformativRobustANGLEFn(GLenum target,
                                                  bufSize, length, params);
 }
 
+void GLApiBase::glGetInternalformatSampleivNVFn(GLenum target,
+                                                GLenum internalformat,
+                                                GLsizei samples,
+                                                GLenum pname,
+                                                GLsizei bufSize,
+                                                GLint* params) {
+  driver_->fn.glGetInternalformatSampleivNVFn(target, internalformat, samples,
+                                              pname, bufSize, params);
+}
+
 void GLApiBase::glGetMultisamplefvFn(GLenum pname, GLuint index, GLfloat* val) {
   driver_->fn.glGetMultisamplefvFn(pname, index, val);
 }
@@ -3918,10 +4025,11 @@ void GLApiBase::glGetProgramPipelineivFn(GLuint pipeline,
   driver_->fn.glGetProgramPipelineivFn(pipeline, pname, params);
 }
 
-void GLApiBase::glGetProgramResourceIndexFn(GLuint program,
-                                            GLenum programInterface,
-                                            const GLchar* name) {
-  driver_->fn.glGetProgramResourceIndexFn(program, programInterface, name);
+GLuint GLApiBase::glGetProgramResourceIndexFn(GLuint program,
+                                              GLenum programInterface,
+                                              const GLchar* name) {
+  return driver_->fn.glGetProgramResourceIndexFn(program, programInterface,
+                                                 name);
 }
 
 void GLApiBase::glGetProgramResourceivFn(GLuint program,
@@ -4366,6 +4474,19 @@ void GLApiBase::glHintFn(GLenum target, GLenum mode) {
   driver_->fn.glHintFn(target, mode);
 }
 
+void GLApiBase::glImportMemoryFdEXTFn(GLuint memory,
+                                      GLuint64 size,
+                                      GLenum handleType,
+                                      GLint fd) {
+  driver_->fn.glImportMemoryFdEXTFn(memory, size, handleType, fd);
+}
+
+void GLApiBase::glImportSemaphoreFdEXTFn(GLuint semaphore,
+                                         GLenum handleType,
+                                         GLint fd) {
+  driver_->fn.glImportSemaphoreFdEXTFn(semaphore, handleType, fd);
+}
+
 void GLApiBase::glInsertEventMarkerEXTFn(GLsizei length, const char* marker) {
   driver_->fn.glInsertEventMarkerEXTFn(length, marker);
 }
@@ -4478,6 +4599,10 @@ void GLApiBase::glMatrixLoadIdentityEXTFn(GLenum matrixMode) {
   driver_->fn.glMatrixLoadIdentityEXTFn(matrixMode);
 }
 
+void GLApiBase::glMaxShaderCompilerThreadsKHRFn(GLuint count) {
+  driver_->fn.glMaxShaderCompilerThreadsKHRFn(count);
+}
+
 void GLApiBase::glMemoryBarrierByRegionFn(GLbitfield barriers) {
   driver_->fn.glMemoryBarrierByRegionFn(barriers);
 }
@@ -4488,6 +4613,42 @@ void GLApiBase::glMemoryBarrierEXTFn(GLbitfield barriers) {
 
 void GLApiBase::glMinSampleShadingFn(GLfloat value) {
   driver_->fn.glMinSampleShadingFn(value);
+}
+
+void GLApiBase::glMultiDrawArraysANGLEFn(GLenum mode,
+                                         const GLint* firsts,
+                                         const GLsizei* counts,
+                                         GLsizei drawcount) {
+  driver_->fn.glMultiDrawArraysANGLEFn(mode, firsts, counts, drawcount);
+}
+
+void GLApiBase::glMultiDrawArraysInstancedANGLEFn(GLenum mode,
+                                                  const GLint* firsts,
+                                                  const GLsizei* counts,
+                                                  const GLsizei* instanceCounts,
+                                                  GLsizei drawcount) {
+  driver_->fn.glMultiDrawArraysInstancedANGLEFn(mode, firsts, counts,
+                                                instanceCounts, drawcount);
+}
+
+void GLApiBase::glMultiDrawElementsANGLEFn(GLenum mode,
+                                           const GLsizei* counts,
+                                           GLenum type,
+                                           const GLvoid* const* indices,
+                                           GLsizei drawcount) {
+  driver_->fn.glMultiDrawElementsANGLEFn(mode, counts, type, indices,
+                                         drawcount);
+}
+
+void GLApiBase::glMultiDrawElementsInstancedANGLEFn(
+    GLenum mode,
+    const GLsizei* counts,
+    GLenum type,
+    const GLvoid* const* indices,
+    const GLsizei* instanceCounts,
+    GLsizei drawcount) {
+  driver_->fn.glMultiDrawElementsInstancedANGLEFn(mode, counts, type, indices,
+                                                  instanceCounts, drawcount);
 }
 
 void GLApiBase::glObjectLabelFn(GLenum identifier,
@@ -4911,6 +5072,17 @@ void GLApiBase::glRenderbufferStorageMultisampleFn(GLenum target,
                                                  internalformat, width, height);
 }
 
+void GLApiBase::glRenderbufferStorageMultisampleAdvancedAMDFn(
+    GLenum target,
+    GLsizei samples,
+    GLsizei storageSamples,
+    GLenum internalformat,
+    GLsizei width,
+    GLsizei height) {
+  driver_->fn.glRenderbufferStorageMultisampleAdvancedAMDFn(
+      target, samples, storageSamples, internalformat, width, height);
+}
+
 void GLApiBase::glRenderbufferStorageMultisampleEXTFn(GLenum target,
                                                       GLsizei samples,
                                                       GLenum internalformat,
@@ -5015,6 +5187,16 @@ void GLApiBase::glShaderSourceFn(GLuint shader,
                                  const char* const* str,
                                  const GLint* length) {
   driver_->fn.glShaderSourceFn(shader, count, str, length);
+}
+
+void GLApiBase::glSignalSemaphoreEXTFn(GLuint semaphore,
+                                       GLuint numBufferBarriers,
+                                       const GLuint* buffers,
+                                       GLuint numTextureBarriers,
+                                       const GLuint* textures,
+                                       const GLenum* dstLayouts) {
+  driver_->fn.glSignalSemaphoreEXTFn(semaphore, numBufferBarriers, buffers,
+                                     numTextureBarriers, textures, dstLayouts);
 }
 
 void GLApiBase::glStencilFillPathInstancedNVFn(GLsizei numPaths,
@@ -5286,6 +5468,17 @@ void GLApiBase::glTexStorage3DFn(GLenum target,
                                  GLsizei depth) {
   driver_->fn.glTexStorage3DFn(target, levels, internalformat, width, height,
                                depth);
+}
+
+void GLApiBase::glTexStorageMem2DEXTFn(GLenum target,
+                                       GLsizei levels,
+                                       GLenum internalFormat,
+                                       GLsizei width,
+                                       GLsizei height,
+                                       GLuint memory,
+                                       GLuint64 offset) {
+  driver_->fn.glTexStorageMem2DEXTFn(target, levels, internalFormat, width,
+                                     height, memory, offset);
 }
 
 void GLApiBase::glTexSubImage2DFn(GLenum target,
@@ -5689,6 +5882,16 @@ void GLApiBase::glViewportFn(GLint x, GLint y, GLsizei width, GLsizei height) {
   driver_->fn.glViewportFn(x, y, width, height);
 }
 
+void GLApiBase::glWaitSemaphoreEXTFn(GLuint semaphore,
+                                     GLuint numBufferBarriers,
+                                     const GLuint* buffers,
+                                     GLuint numTextureBarriers,
+                                     const GLuint* textures,
+                                     const GLenum* srcLayouts) {
+  driver_->fn.glWaitSemaphoreEXTFn(semaphore, numBufferBarriers, buffers,
+                                   numTextureBarriers, textures, srcLayouts);
+}
+
 void GLApiBase::glWaitSyncFn(GLsync sync, GLbitfield flags, GLuint64 timeout) {
   driver_->fn.glWaitSyncFn(sync, flags, timeout);
 }
@@ -5995,13 +6198,6 @@ void TraceGLApi::glCompileShaderFn(GLuint shader) {
   gl_api_->glCompileShaderFn(shader);
 }
 
-void TraceGLApi::glCompressedCopyTextureCHROMIUMFn(GLuint sourceId,
-                                                   GLuint destId) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu",
-                                "TraceGLAPI::glCompressedCopyTextureCHROMIUM")
-  gl_api_->glCompressedCopyTextureCHROMIUMFn(sourceId, destId);
-}
-
 void TraceGLApi::glCompressedTexImage2DFn(GLenum target,
                                           GLint level,
                                           GLenum internalformat,
@@ -6259,6 +6455,11 @@ void TraceGLApi::glCoverStrokePathNVFn(GLuint name, GLenum coverMode) {
   gl_api_->glCoverStrokePathNVFn(name, coverMode);
 }
 
+void TraceGLApi::glCreateMemoryObjectsEXTFn(GLsizei n, GLuint* memoryObjects) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glCreateMemoryObjectsEXT")
+  gl_api_->glCreateMemoryObjectsEXTFn(n, memoryObjects);
+}
+
 GLuint TraceGLApi::glCreateProgramFn(void) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glCreateProgram")
   return gl_api_->glCreateProgramFn();
@@ -6358,6 +6559,11 @@ void TraceGLApi::glDeleteRenderbuffersEXTFn(GLsizei n,
 void TraceGLApi::glDeleteSamplersFn(GLsizei n, const GLuint* samplers) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glDeleteSamplers")
   gl_api_->glDeleteSamplersFn(n, samplers);
+}
+
+void TraceGLApi::glDeleteSemaphoresEXTFn(GLsizei n, const GLuint* semaphores) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glDeleteSemaphoresEXT")
+  gl_api_->glDeleteSemaphoresEXTFn(n, semaphores);
 }
 
 void TraceGLApi::glDeleteShaderFn(GLuint shader) {
@@ -6684,6 +6890,11 @@ void TraceGLApi::glGenRenderbuffersEXTFn(GLsizei n, GLuint* renderbuffers) {
 void TraceGLApi::glGenSamplersFn(GLsizei n, GLuint* samplers) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glGenSamplers")
   gl_api_->glGenSamplersFn(n, samplers);
+}
+
+void TraceGLApi::glGenSemaphoresEXTFn(GLsizei n, GLuint* semaphores) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glGenSemaphoresEXT")
+  gl_api_->glGenSemaphoresEXTFn(n, semaphores);
 }
 
 void TraceGLApi::glGenTexturesFn(GLsizei n, GLuint* textures) {
@@ -7023,6 +7234,18 @@ void TraceGLApi::glGetInternalformativRobustANGLEFn(GLenum target,
                                               bufSize, length, params);
 }
 
+void TraceGLApi::glGetInternalformatSampleivNVFn(GLenum target,
+                                                 GLenum internalformat,
+                                                 GLsizei samples,
+                                                 GLenum pname,
+                                                 GLsizei bufSize,
+                                                 GLint* params) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu",
+                                "TraceGLAPI::glGetInternalformatSampleivNV")
+  gl_api_->glGetInternalformatSampleivNVFn(target, internalformat, samples,
+                                           pname, bufSize, params);
+}
+
 void TraceGLApi::glGetMultisamplefvFn(GLenum pname,
                                       GLuint index,
                                       GLfloat* val) {
@@ -7170,11 +7393,11 @@ void TraceGLApi::glGetProgramPipelineivFn(GLuint pipeline,
   gl_api_->glGetProgramPipelineivFn(pipeline, pname, params);
 }
 
-void TraceGLApi::glGetProgramResourceIndexFn(GLuint program,
-                                             GLenum programInterface,
-                                             const GLchar* name) {
+GLuint TraceGLApi::glGetProgramResourceIndexFn(GLuint program,
+                                               GLenum programInterface,
+                                               const GLchar* name) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glGetProgramResourceIndex")
-  gl_api_->glGetProgramResourceIndexFn(program, programInterface, name);
+  return gl_api_->glGetProgramResourceIndexFn(program, programInterface, name);
 }
 
 void TraceGLApi::glGetProgramResourceivFn(GLuint program,
@@ -7699,6 +7922,21 @@ void TraceGLApi::glHintFn(GLenum target, GLenum mode) {
   gl_api_->glHintFn(target, mode);
 }
 
+void TraceGLApi::glImportMemoryFdEXTFn(GLuint memory,
+                                       GLuint64 size,
+                                       GLenum handleType,
+                                       GLint fd) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glImportMemoryFdEXT")
+  gl_api_->glImportMemoryFdEXTFn(memory, size, handleType, fd);
+}
+
+void TraceGLApi::glImportSemaphoreFdEXTFn(GLuint semaphore,
+                                          GLenum handleType,
+                                          GLint fd) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glImportSemaphoreFdEXT")
+  gl_api_->glImportSemaphoreFdEXTFn(semaphore, handleType, fd);
+}
+
 void TraceGLApi::glInsertEventMarkerEXTFn(GLsizei length, const char* marker) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glInsertEventMarkerEXT")
   gl_api_->glInsertEventMarkerEXTFn(length, marker);
@@ -7836,6 +8074,12 @@ void TraceGLApi::glMatrixLoadIdentityEXTFn(GLenum matrixMode) {
   gl_api_->glMatrixLoadIdentityEXTFn(matrixMode);
 }
 
+void TraceGLApi::glMaxShaderCompilerThreadsKHRFn(GLuint count) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu",
+                                "TraceGLAPI::glMaxShaderCompilerThreadsKHR")
+  gl_api_->glMaxShaderCompilerThreadsKHRFn(count);
+}
+
 void TraceGLApi::glMemoryBarrierByRegionFn(GLbitfield barriers) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glMemoryBarrierByRegion")
   gl_api_->glMemoryBarrierByRegionFn(barriers);
@@ -7849,6 +8093,48 @@ void TraceGLApi::glMemoryBarrierEXTFn(GLbitfield barriers) {
 void TraceGLApi::glMinSampleShadingFn(GLfloat value) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glMinSampleShading")
   gl_api_->glMinSampleShadingFn(value);
+}
+
+void TraceGLApi::glMultiDrawArraysANGLEFn(GLenum mode,
+                                          const GLint* firsts,
+                                          const GLsizei* counts,
+                                          GLsizei drawcount) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glMultiDrawArraysANGLE")
+  gl_api_->glMultiDrawArraysANGLEFn(mode, firsts, counts, drawcount);
+}
+
+void TraceGLApi::glMultiDrawArraysInstancedANGLEFn(
+    GLenum mode,
+    const GLint* firsts,
+    const GLsizei* counts,
+    const GLsizei* instanceCounts,
+    GLsizei drawcount) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu",
+                                "TraceGLAPI::glMultiDrawArraysInstancedANGLE")
+  gl_api_->glMultiDrawArraysInstancedANGLEFn(mode, firsts, counts,
+                                             instanceCounts, drawcount);
+}
+
+void TraceGLApi::glMultiDrawElementsANGLEFn(GLenum mode,
+                                            const GLsizei* counts,
+                                            GLenum type,
+                                            const GLvoid* const* indices,
+                                            GLsizei drawcount) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glMultiDrawElementsANGLE")
+  gl_api_->glMultiDrawElementsANGLEFn(mode, counts, type, indices, drawcount);
+}
+
+void TraceGLApi::glMultiDrawElementsInstancedANGLEFn(
+    GLenum mode,
+    const GLsizei* counts,
+    GLenum type,
+    const GLvoid* const* indices,
+    const GLsizei* instanceCounts,
+    GLsizei drawcount) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu",
+                                "TraceGLAPI::glMultiDrawElementsInstancedANGLE")
+  gl_api_->glMultiDrawElementsInstancedANGLEFn(mode, counts, type, indices,
+                                               instanceCounts, drawcount);
 }
 
 void TraceGLApi::glObjectLabelFn(GLenum identifier,
@@ -8344,6 +8630,19 @@ void TraceGLApi::glRenderbufferStorageMultisampleFn(GLenum target,
                                               width, height);
 }
 
+void TraceGLApi::glRenderbufferStorageMultisampleAdvancedAMDFn(
+    GLenum target,
+    GLsizei samples,
+    GLsizei storageSamples,
+    GLenum internalformat,
+    GLsizei width,
+    GLsizei height) {
+  TRACE_EVENT_BINARY_EFFICIENT0(
+      "gpu", "TraceGLAPI::glRenderbufferStorageMultisampleAdvancedAMD")
+  gl_api_->glRenderbufferStorageMultisampleAdvancedAMDFn(
+      target, samples, storageSamples, internalformat, width, height);
+}
+
 void TraceGLApi::glRenderbufferStorageMultisampleEXTFn(GLenum target,
                                                        GLsizei samples,
                                                        GLenum internalformat,
@@ -8469,6 +8768,17 @@ void TraceGLApi::glShaderSourceFn(GLuint shader,
                                   const GLint* length) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glShaderSource")
   gl_api_->glShaderSourceFn(shader, count, str, length);
+}
+
+void TraceGLApi::glSignalSemaphoreEXTFn(GLuint semaphore,
+                                        GLuint numBufferBarriers,
+                                        const GLuint* buffers,
+                                        GLuint numTextureBarriers,
+                                        const GLuint* textures,
+                                        const GLenum* dstLayouts) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glSignalSemaphoreEXT")
+  gl_api_->glSignalSemaphoreEXTFn(semaphore, numBufferBarriers, buffers,
+                                  numTextureBarriers, textures, dstLayouts);
 }
 
 void TraceGLApi::glStencilFillPathInstancedNVFn(
@@ -8782,6 +9092,18 @@ void TraceGLApi::glTexStorage3DFn(GLenum target,
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glTexStorage3D")
   gl_api_->glTexStorage3DFn(target, levels, internalformat, width, height,
                             depth);
+}
+
+void TraceGLApi::glTexStorageMem2DEXTFn(GLenum target,
+                                        GLsizei levels,
+                                        GLenum internalFormat,
+                                        GLsizei width,
+                                        GLsizei height,
+                                        GLuint memory,
+                                        GLuint64 offset) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glTexStorageMem2DEXT")
+  gl_api_->glTexStorageMem2DEXTFn(target, levels, internalFormat, width, height,
+                                  memory, offset);
 }
 
 void TraceGLApi::glTexSubImage2DFn(GLenum target,
@@ -9250,6 +9572,17 @@ void TraceGLApi::glViewportFn(GLint x, GLint y, GLsizei width, GLsizei height) {
   gl_api_->glViewportFn(x, y, width, height);
 }
 
+void TraceGLApi::glWaitSemaphoreEXTFn(GLuint semaphore,
+                                      GLuint numBufferBarriers,
+                                      const GLuint* buffers,
+                                      GLuint numTextureBarriers,
+                                      const GLuint* textures,
+                                      const GLenum* srcLayouts) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glWaitSemaphoreEXT")
+  gl_api_->glWaitSemaphoreEXTFn(semaphore, numBufferBarriers, buffers,
+                                numTextureBarriers, textures, srcLayouts);
+}
+
 void TraceGLApi::glWaitSyncFn(GLsync sync, GLbitfield flags, GLuint64 timeout) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glWaitSync")
   gl_api_->glWaitSyncFn(sync, flags, timeout);
@@ -9638,13 +9971,6 @@ void DebugGLApi::glCompileShaderFn(GLuint shader) {
   gl_api_->glCompileShaderFn(shader);
 }
 
-void DebugGLApi::glCompressedCopyTextureCHROMIUMFn(GLuint sourceId,
-                                                   GLuint destId) {
-  GL_SERVICE_LOG("glCompressedCopyTextureCHROMIUM"
-                 << "(" << sourceId << ", " << destId << ")");
-  gl_api_->glCompressedCopyTextureCHROMIUMFn(sourceId, destId);
-}
-
 void DebugGLApi::glCompressedTexImage2DFn(GLenum target,
                                           GLint level,
                                           GLenum internalformat,
@@ -9980,6 +10306,13 @@ void DebugGLApi::glCoverStrokePathNVFn(GLuint name, GLenum coverMode) {
   gl_api_->glCoverStrokePathNVFn(name, coverMode);
 }
 
+void DebugGLApi::glCreateMemoryObjectsEXTFn(GLsizei n, GLuint* memoryObjects) {
+  GL_SERVICE_LOG("glCreateMemoryObjectsEXT"
+                 << "(" << n << ", " << static_cast<const void*>(memoryObjects)
+                 << ")");
+  gl_api_->glCreateMemoryObjectsEXTFn(n, memoryObjects);
+}
+
 GLuint DebugGLApi::glCreateProgramFn(void) {
   GL_SERVICE_LOG("glCreateProgram"
                  << "("
@@ -10119,6 +10452,13 @@ void DebugGLApi::glDeleteSamplersFn(GLsizei n, const GLuint* samplers) {
                  << "(" << n << ", " << static_cast<const void*>(samplers)
                  << ")");
   gl_api_->glDeleteSamplersFn(n, samplers);
+}
+
+void DebugGLApi::glDeleteSemaphoresEXTFn(GLsizei n, const GLuint* semaphores) {
+  GL_SERVICE_LOG("glDeleteSemaphoresEXT"
+                 << "(" << n << ", " << static_cast<const void*>(semaphores)
+                 << ")");
+  gl_api_->glDeleteSemaphoresEXTFn(n, semaphores);
 }
 
 void DebugGLApi::glDeleteShaderFn(GLuint shader) {
@@ -10544,6 +10884,13 @@ void DebugGLApi::glGenSamplersFn(GLsizei n, GLuint* samplers) {
                  << "(" << n << ", " << static_cast<const void*>(samplers)
                  << ")");
   gl_api_->glGenSamplersFn(n, samplers);
+}
+
+void DebugGLApi::glGenSemaphoresEXTFn(GLsizei n, GLuint* semaphores) {
+  GL_SERVICE_LOG("glGenSemaphoresEXT"
+                 << "(" << n << ", " << static_cast<const void*>(semaphores)
+                 << ")");
+  gl_api_->glGenSemaphoresEXTFn(n, semaphores);
 }
 
 void DebugGLApi::glGenTexturesFn(GLsizei n, GLuint* textures) {
@@ -11007,6 +11354,21 @@ void DebugGLApi::glGetInternalformativRobustANGLEFn(GLenum target,
                                               bufSize, length, params);
 }
 
+void DebugGLApi::glGetInternalformatSampleivNVFn(GLenum target,
+                                                 GLenum internalformat,
+                                                 GLsizei samples,
+                                                 GLenum pname,
+                                                 GLsizei bufSize,
+                                                 GLint* params) {
+  GL_SERVICE_LOG("glGetInternalformatSampleivNV"
+                 << "(" << GLEnums::GetStringEnum(target) << ", "
+                 << GLEnums::GetStringEnum(internalformat) << ", " << samples
+                 << ", " << GLEnums::GetStringEnum(pname) << ", " << bufSize
+                 << ", " << static_cast<const void*>(params) << ")");
+  gl_api_->glGetInternalformatSampleivNVFn(target, internalformat, samples,
+                                           pname, bufSize, params);
+}
+
 void DebugGLApi::glGetMultisamplefvFn(GLenum pname,
                                       GLuint index,
                                       GLfloat* val) {
@@ -11200,14 +11562,17 @@ void DebugGLApi::glGetProgramPipelineivFn(GLuint pipeline,
   gl_api_->glGetProgramPipelineivFn(pipeline, pname, params);
 }
 
-void DebugGLApi::glGetProgramResourceIndexFn(GLuint program,
-                                             GLenum programInterface,
-                                             const GLchar* name) {
+GLuint DebugGLApi::glGetProgramResourceIndexFn(GLuint program,
+                                               GLenum programInterface,
+                                               const GLchar* name) {
   GL_SERVICE_LOG("glGetProgramResourceIndex"
                  << "(" << program << ", "
                  << GLEnums::GetStringEnum(programInterface) << ", "
                  << static_cast<const void*>(name) << ")");
-  gl_api_->glGetProgramResourceIndexFn(program, programInterface, name);
+  GLuint result =
+      gl_api_->glGetProgramResourceIndexFn(program, programInterface, name);
+  GL_SERVICE_LOG("GL_RESULT: " << result);
+  return result;
 }
 
 void DebugGLApi::glGetProgramResourceivFn(GLuint program,
@@ -11888,6 +12253,25 @@ void DebugGLApi::glHintFn(GLenum target, GLenum mode) {
   gl_api_->glHintFn(target, mode);
 }
 
+void DebugGLApi::glImportMemoryFdEXTFn(GLuint memory,
+                                       GLuint64 size,
+                                       GLenum handleType,
+                                       GLint fd) {
+  GL_SERVICE_LOG("glImportMemoryFdEXT"
+                 << "(" << memory << ", " << size << ", "
+                 << GLEnums::GetStringEnum(handleType) << ", " << fd << ")");
+  gl_api_->glImportMemoryFdEXTFn(memory, size, handleType, fd);
+}
+
+void DebugGLApi::glImportSemaphoreFdEXTFn(GLuint semaphore,
+                                          GLenum handleType,
+                                          GLint fd) {
+  GL_SERVICE_LOG("glImportSemaphoreFdEXT"
+                 << "(" << semaphore << ", "
+                 << GLEnums::GetStringEnum(handleType) << ", " << fd << ")");
+  gl_api_->glImportSemaphoreFdEXTFn(semaphore, handleType, fd);
+}
+
 void DebugGLApi::glInsertEventMarkerEXTFn(GLsizei length, const char* marker) {
   GL_SERVICE_LOG("glInsertEventMarkerEXT"
                  << "(" << length << ", " << marker << ")");
@@ -12094,6 +12478,12 @@ void DebugGLApi::glMatrixLoadIdentityEXTFn(GLenum matrixMode) {
   gl_api_->glMatrixLoadIdentityEXTFn(matrixMode);
 }
 
+void DebugGLApi::glMaxShaderCompilerThreadsKHRFn(GLuint count) {
+  GL_SERVICE_LOG("glMaxShaderCompilerThreadsKHR"
+                 << "(" << count << ")");
+  gl_api_->glMaxShaderCompilerThreadsKHRFn(count);
+}
+
 void DebugGLApi::glMemoryBarrierByRegionFn(GLbitfield barriers) {
   GL_SERVICE_LOG("glMemoryBarrierByRegion"
                  << "(" << barriers << ")");
@@ -12110,6 +12500,64 @@ void DebugGLApi::glMinSampleShadingFn(GLfloat value) {
   GL_SERVICE_LOG("glMinSampleShading"
                  << "(" << value << ")");
   gl_api_->glMinSampleShadingFn(value);
+}
+
+void DebugGLApi::glMultiDrawArraysANGLEFn(GLenum mode,
+                                          const GLint* firsts,
+                                          const GLsizei* counts,
+                                          GLsizei drawcount) {
+  GL_SERVICE_LOG("glMultiDrawArraysANGLE"
+                 << "(" << GLEnums::GetStringEnum(mode) << ", "
+                 << static_cast<const void*>(firsts) << ", "
+                 << static_cast<const void*>(counts) << ", " << drawcount
+                 << ")");
+  gl_api_->glMultiDrawArraysANGLEFn(mode, firsts, counts, drawcount);
+}
+
+void DebugGLApi::glMultiDrawArraysInstancedANGLEFn(
+    GLenum mode,
+    const GLint* firsts,
+    const GLsizei* counts,
+    const GLsizei* instanceCounts,
+    GLsizei drawcount) {
+  GL_SERVICE_LOG("glMultiDrawArraysInstancedANGLE"
+                 << "(" << GLEnums::GetStringEnum(mode) << ", "
+                 << static_cast<const void*>(firsts) << ", "
+                 << static_cast<const void*>(counts) << ", "
+                 << static_cast<const void*>(instanceCounts) << ", "
+                 << drawcount << ")");
+  gl_api_->glMultiDrawArraysInstancedANGLEFn(mode, firsts, counts,
+                                             instanceCounts, drawcount);
+}
+
+void DebugGLApi::glMultiDrawElementsANGLEFn(GLenum mode,
+                                            const GLsizei* counts,
+                                            GLenum type,
+                                            const GLvoid* const* indices,
+                                            GLsizei drawcount) {
+  GL_SERVICE_LOG("glMultiDrawElementsANGLE"
+                 << "(" << GLEnums::GetStringEnum(mode) << ", "
+                 << static_cast<const void*>(counts) << ", "
+                 << GLEnums::GetStringEnum(type) << ", " << indices << ", "
+                 << drawcount << ")");
+  gl_api_->glMultiDrawElementsANGLEFn(mode, counts, type, indices, drawcount);
+}
+
+void DebugGLApi::glMultiDrawElementsInstancedANGLEFn(
+    GLenum mode,
+    const GLsizei* counts,
+    GLenum type,
+    const GLvoid* const* indices,
+    const GLsizei* instanceCounts,
+    GLsizei drawcount) {
+  GL_SERVICE_LOG("glMultiDrawElementsInstancedANGLE"
+                 << "(" << GLEnums::GetStringEnum(mode) << ", "
+                 << static_cast<const void*>(counts) << ", "
+                 << GLEnums::GetStringEnum(type) << ", " << indices << ", "
+                 << static_cast<const void*>(instanceCounts) << ", "
+                 << drawcount << ")");
+  gl_api_->glMultiDrawElementsInstancedANGLEFn(mode, counts, type, indices,
+                                               instanceCounts, drawcount);
 }
 
 void DebugGLApi::glObjectLabelFn(GLenum identifier,
@@ -12736,6 +13184,22 @@ void DebugGLApi::glRenderbufferStorageMultisampleFn(GLenum target,
                                               width, height);
 }
 
+void DebugGLApi::glRenderbufferStorageMultisampleAdvancedAMDFn(
+    GLenum target,
+    GLsizei samples,
+    GLsizei storageSamples,
+    GLenum internalformat,
+    GLsizei width,
+    GLsizei height) {
+  GL_SERVICE_LOG("glRenderbufferStorageMultisampleAdvancedAMD"
+                 << "(" << GLEnums::GetStringEnum(target) << ", " << samples
+                 << ", " << storageSamples << ", "
+                 << GLEnums::GetStringEnum(internalformat) << ", " << width
+                 << ", " << height << ")");
+  gl_api_->glRenderbufferStorageMultisampleAdvancedAMDFn(
+      target, samples, storageSamples, internalformat, width, height);
+}
+
 void DebugGLApi::glRenderbufferStorageMultisampleEXTFn(GLenum target,
                                                        GLsizei samples,
                                                        GLenum internalformat,
@@ -12911,6 +13375,22 @@ void DebugGLApi::glShaderSourceFn(GLuint shader,
       }
     }
   });
+}
+
+void DebugGLApi::glSignalSemaphoreEXTFn(GLuint semaphore,
+                                        GLuint numBufferBarriers,
+                                        const GLuint* buffers,
+                                        GLuint numTextureBarriers,
+                                        const GLuint* textures,
+                                        const GLenum* dstLayouts) {
+  GL_SERVICE_LOG("glSignalSemaphoreEXT"
+                 << "(" << semaphore << ", " << numBufferBarriers << ", "
+                 << static_cast<const void*>(buffers) << ", "
+                 << numTextureBarriers << ", "
+                 << static_cast<const void*>(textures) << ", "
+                 << static_cast<const void*>(dstLayouts) << ")");
+  gl_api_->glSignalSemaphoreEXTFn(semaphore, numBufferBarriers, buffers,
+                                  numTextureBarriers, textures, dstLayouts);
 }
 
 void DebugGLApi::glStencilFillPathInstancedNVFn(
@@ -13326,6 +13806,22 @@ void DebugGLApi::glTexStorage3DFn(GLenum target,
                  << width << ", " << height << ", " << depth << ")");
   gl_api_->glTexStorage3DFn(target, levels, internalformat, width, height,
                             depth);
+}
+
+void DebugGLApi::glTexStorageMem2DEXTFn(GLenum target,
+                                        GLsizei levels,
+                                        GLenum internalFormat,
+                                        GLsizei width,
+                                        GLsizei height,
+                                        GLuint memory,
+                                        GLuint64 offset) {
+  GL_SERVICE_LOG("glTexStorageMem2DEXT"
+                 << "(" << GLEnums::GetStringEnum(target) << ", " << levels
+                 << ", " << GLEnums::GetStringEnum(internalFormat) << ", "
+                 << width << ", " << height << ", " << memory << ", " << offset
+                 << ")");
+  gl_api_->glTexStorageMem2DEXTFn(target, levels, internalFormat, width, height,
+                                  memory, offset);
 }
 
 void DebugGLApi::glTexSubImage2DFn(GLenum target,
@@ -13937,6 +14433,22 @@ void DebugGLApi::glViewportFn(GLint x, GLint y, GLsizei width, GLsizei height) {
   gl_api_->glViewportFn(x, y, width, height);
 }
 
+void DebugGLApi::glWaitSemaphoreEXTFn(GLuint semaphore,
+                                      GLuint numBufferBarriers,
+                                      const GLuint* buffers,
+                                      GLuint numTextureBarriers,
+                                      const GLuint* textures,
+                                      const GLenum* srcLayouts) {
+  GL_SERVICE_LOG("glWaitSemaphoreEXT"
+                 << "(" << semaphore << ", " << numBufferBarriers << ", "
+                 << static_cast<const void*>(buffers) << ", "
+                 << numTextureBarriers << ", "
+                 << static_cast<const void*>(textures) << ", "
+                 << static_cast<const void*>(srcLayouts) << ")");
+  gl_api_->glWaitSemaphoreEXTFn(semaphore, numBufferBarriers, buffers,
+                                numTextureBarriers, textures, srcLayouts);
+}
+
 void DebugGLApi::glWaitSyncFn(GLsync sync, GLbitfield flags, GLuint64 timeout) {
   GL_SERVICE_LOG("glWaitSync"
                  << "(" << sync << ", " << flags << ", " << timeout << ")");
@@ -14209,11 +14721,6 @@ void NoContextGLApi::glCompileShaderFn(GLuint shader) {
   NoContextHelper("glCompileShader");
 }
 
-void NoContextGLApi::glCompressedCopyTextureCHROMIUMFn(GLuint sourceId,
-                                                       GLuint destId) {
-  NoContextHelper("glCompressedCopyTextureCHROMIUM");
-}
-
 void NoContextGLApi::glCompressedTexImage2DFn(GLenum target,
                                               GLint level,
                                               GLenum internalformat,
@@ -14423,6 +14930,11 @@ void NoContextGLApi::glCoverStrokePathNVFn(GLuint name, GLenum coverMode) {
   NoContextHelper("glCoverStrokePathNV");
 }
 
+void NoContextGLApi::glCreateMemoryObjectsEXTFn(GLsizei n,
+                                                GLuint* memoryObjects) {
+  NoContextHelper("glCreateMemoryObjectsEXT");
+}
+
 GLuint NoContextGLApi::glCreateProgramFn(void) {
   NoContextHelper("glCreateProgram");
   return 0U;
@@ -14508,6 +15020,11 @@ void NoContextGLApi::glDeleteRenderbuffersEXTFn(GLsizei n,
 
 void NoContextGLApi::glDeleteSamplersFn(GLsizei n, const GLuint* samplers) {
   NoContextHelper("glDeleteSamplers");
+}
+
+void NoContextGLApi::glDeleteSemaphoresEXTFn(GLsizei n,
+                                             const GLuint* semaphores) {
+  NoContextHelper("glDeleteSemaphoresEXT");
 }
 
 void NoContextGLApi::glDeleteShaderFn(GLuint shader) {
@@ -14775,6 +15292,10 @@ void NoContextGLApi::glGenRenderbuffersEXTFn(GLsizei n, GLuint* renderbuffers) {
 
 void NoContextGLApi::glGenSamplersFn(GLsizei n, GLuint* samplers) {
   NoContextHelper("glGenSamplers");
+}
+
+void NoContextGLApi::glGenSemaphoresEXTFn(GLsizei n, GLuint* semaphores) {
+  NoContextHelper("glGenSemaphoresEXT");
 }
 
 void NoContextGLApi::glGenTexturesFn(GLsizei n, GLuint* textures) {
@@ -15058,6 +15579,15 @@ void NoContextGLApi::glGetInternalformativRobustANGLEFn(GLenum target,
   NoContextHelper("glGetInternalformativRobustANGLE");
 }
 
+void NoContextGLApi::glGetInternalformatSampleivNVFn(GLenum target,
+                                                     GLenum internalformat,
+                                                     GLsizei samples,
+                                                     GLenum pname,
+                                                     GLsizei bufSize,
+                                                     GLint* params) {
+  NoContextHelper("glGetInternalformatSampleivNV");
+}
+
 void NoContextGLApi::glGetMultisamplefvFn(GLenum pname,
                                           GLuint index,
                                           GLfloat* val) {
@@ -15181,10 +15711,11 @@ void NoContextGLApi::glGetProgramPipelineivFn(GLuint pipeline,
   NoContextHelper("glGetProgramPipelineiv");
 }
 
-void NoContextGLApi::glGetProgramResourceIndexFn(GLuint program,
-                                                 GLenum programInterface,
-                                                 const GLchar* name) {
+GLuint NoContextGLApi::glGetProgramResourceIndexFn(GLuint program,
+                                                   GLenum programInterface,
+                                                   const GLchar* name) {
   NoContextHelper("glGetProgramResourceIndex");
+  return 0U;
 }
 
 void NoContextGLApi::glGetProgramResourceivFn(GLuint program,
@@ -15610,6 +16141,19 @@ void NoContextGLApi::glHintFn(GLenum target, GLenum mode) {
   NoContextHelper("glHint");
 }
 
+void NoContextGLApi::glImportMemoryFdEXTFn(GLuint memory,
+                                           GLuint64 size,
+                                           GLenum handleType,
+                                           GLint fd) {
+  NoContextHelper("glImportMemoryFdEXT");
+}
+
+void NoContextGLApi::glImportSemaphoreFdEXTFn(GLuint semaphore,
+                                              GLenum handleType,
+                                              GLint fd) {
+  NoContextHelper("glImportSemaphoreFdEXT");
+}
+
 void NoContextGLApi::glInsertEventMarkerEXTFn(GLsizei length,
                                               const char* marker) {
   NoContextHelper("glInsertEventMarkerEXT");
@@ -15740,6 +16284,10 @@ void NoContextGLApi::glMatrixLoadIdentityEXTFn(GLenum matrixMode) {
   NoContextHelper("glMatrixLoadIdentityEXT");
 }
 
+void NoContextGLApi::glMaxShaderCompilerThreadsKHRFn(GLuint count) {
+  NoContextHelper("glMaxShaderCompilerThreadsKHR");
+}
+
 void NoContextGLApi::glMemoryBarrierByRegionFn(GLbitfield barriers) {
   NoContextHelper("glMemoryBarrierByRegion");
 }
@@ -15750,6 +16298,40 @@ void NoContextGLApi::glMemoryBarrierEXTFn(GLbitfield barriers) {
 
 void NoContextGLApi::glMinSampleShadingFn(GLfloat value) {
   NoContextHelper("glMinSampleShading");
+}
+
+void NoContextGLApi::glMultiDrawArraysANGLEFn(GLenum mode,
+                                              const GLint* firsts,
+                                              const GLsizei* counts,
+                                              GLsizei drawcount) {
+  NoContextHelper("glMultiDrawArraysANGLE");
+}
+
+void NoContextGLApi::glMultiDrawArraysInstancedANGLEFn(
+    GLenum mode,
+    const GLint* firsts,
+    const GLsizei* counts,
+    const GLsizei* instanceCounts,
+    GLsizei drawcount) {
+  NoContextHelper("glMultiDrawArraysInstancedANGLE");
+}
+
+void NoContextGLApi::glMultiDrawElementsANGLEFn(GLenum mode,
+                                                const GLsizei* counts,
+                                                GLenum type,
+                                                const GLvoid* const* indices,
+                                                GLsizei drawcount) {
+  NoContextHelper("glMultiDrawElementsANGLE");
+}
+
+void NoContextGLApi::glMultiDrawElementsInstancedANGLEFn(
+    GLenum mode,
+    const GLsizei* counts,
+    GLenum type,
+    const GLvoid* const* indices,
+    const GLsizei* instanceCounts,
+    GLsizei drawcount) {
+  NoContextHelper("glMultiDrawElementsInstancedANGLE");
 }
 
 void NoContextGLApi::glObjectLabelFn(GLenum identifier,
@@ -16168,6 +16750,16 @@ void NoContextGLApi::glRenderbufferStorageMultisampleFn(GLenum target,
   NoContextHelper("glRenderbufferStorageMultisample");
 }
 
+void NoContextGLApi::glRenderbufferStorageMultisampleAdvancedAMDFn(
+    GLenum target,
+    GLsizei samples,
+    GLsizei storageSamples,
+    GLenum internalformat,
+    GLsizei width,
+    GLsizei height) {
+  NoContextHelper("glRenderbufferStorageMultisampleAdvancedAMD");
+}
+
 void NoContextGLApi::glRenderbufferStorageMultisampleEXTFn(
     GLenum target,
     GLsizei samples,
@@ -16273,6 +16865,15 @@ void NoContextGLApi::glShaderSourceFn(GLuint shader,
                                       const char* const* str,
                                       const GLint* length) {
   NoContextHelper("glShaderSource");
+}
+
+void NoContextGLApi::glSignalSemaphoreEXTFn(GLuint semaphore,
+                                            GLuint numBufferBarriers,
+                                            const GLuint* buffers,
+                                            GLuint numTextureBarriers,
+                                            const GLuint* textures,
+                                            const GLenum* dstLayouts) {
+  NoContextHelper("glSignalSemaphoreEXT");
 }
 
 void NoContextGLApi::glStencilFillPathInstancedNVFn(
@@ -16534,6 +17135,16 @@ void NoContextGLApi::glTexStorage3DFn(GLenum target,
                                       GLsizei height,
                                       GLsizei depth) {
   NoContextHelper("glTexStorage3D");
+}
+
+void NoContextGLApi::glTexStorageMem2DEXTFn(GLenum target,
+                                            GLsizei levels,
+                                            GLenum internalFormat,
+                                            GLsizei width,
+                                            GLsizei height,
+                                            GLuint memory,
+                                            GLuint64 offset) {
+  NoContextHelper("glTexStorageMem2DEXT");
 }
 
 void NoContextGLApi::glTexSubImage2DFn(GLenum target,
@@ -16942,6 +17553,15 @@ void NoContextGLApi::glViewportFn(GLint x,
                                   GLsizei width,
                                   GLsizei height) {
   NoContextHelper("glViewport");
+}
+
+void NoContextGLApi::glWaitSemaphoreEXTFn(GLuint semaphore,
+                                          GLuint numBufferBarriers,
+                                          const GLuint* buffers,
+                                          GLuint numTextureBarriers,
+                                          const GLuint* textures,
+                                          const GLenum* srcLayouts) {
+  NoContextHelper("glWaitSemaphoreEXT");
 }
 
 void NoContextGLApi::glWaitSyncFn(GLsync sync,

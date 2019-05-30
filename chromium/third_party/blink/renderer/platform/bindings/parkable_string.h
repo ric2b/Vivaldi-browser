@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_BINDINGS_PARKABLE_STRING_H_
 
 #include <map>
+#include <memory>
 #include <set>
 #include <utility>
 
@@ -13,8 +14,11 @@
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/ref_counted.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#include "third_party/blink/renderer/platform/wtf/threading.h"
+#include "third_party/blink/renderer/platform/wtf/threading_primitives.h"
 
 // ParkableString represents a string that may be parked in memory, that it its
 // underlying memory address may change. Its content can be retrieved with the
@@ -24,12 +28,17 @@
 //
 // As with WTF::AtomicString, this class is *not* thread-safe, and strings
 // created on a thread must always be used on the same thread.
-//
-// Implementation note: the string content is not parked yet, it is merely
-// used to gather statistics.
 
 namespace blink {
 
+class WebProcessMemoryDump;
+struct CompressionTaskParams;
+
+// A parked string is parked by calling |Park()|, and unparked by calling
+// |ToString()| on a parked string.
+// |Lock()| does *not* unpark a string, and |ToString()| must be called on
+// a single thread, the one on which the string was created. Only |Lock()|
+// and |Unlock()| can be called from any thread.
 class PLATFORM_EXPORT ParkableStringImpl final
     : public RefCounted<ParkableStringImpl> {
  public:
@@ -41,52 +50,165 @@ class PLATFORM_EXPORT ParkableStringImpl final
     kMaxValue = kUnparkedInForeground
   };
 
-  ParkableStringImpl();
-  explicit ParkableStringImpl(scoped_refptr<StringImpl>&& impl);
+  enum class ParkableState { kParkable, kNotParkable };
+  enum class ParkingMode { kIfCompressedDataExists, kAlways };
+  enum class AgeOrParkResult {
+    kSuccessOrTransientFailure,
+    kNonTransientFailure
+  };
+
+  // Not all parkable strings can actually be parked. If |parkable| is
+  // kNotParkable, then one cannot call |Park()|, and the underlying StringImpl
+  // will not move.
+  ParkableStringImpl(scoped_refptr<StringImpl>&& impl, ParkableState parkable);
   ~ParkableStringImpl();
+
+  void Lock();
+  void Unlock();
+
+  void PurgeMemory();
 
   // The returned string may be used as a normal one, as long as the
   // returned value (or a copy of it) is alive.
   const String& ToString();
 
   // See the matching String methods.
-  bool Is8Bit() const;
-  bool IsNull() const;
-  unsigned length() const { return string_.length(); }
+  bool is_8bit() const { return is_8bit_; }
+  unsigned length() const { return length_; }
   unsigned CharactersSizeInBytes() const;
 
+  // Tries to either age or park a string:
+  //
+  // - If the string is already old, tries to park it.
+  // - Otherwise, tries to age it.
+  //
+  // The action doesn't necessarily succeed. either due to a temporary
+  // or potentially lasting condition.
+  //
+  // As parking may be synchronous, this can call back into
+  // ParkableStringManager.
+  AgeOrParkResult MaybeAgeOrParkString();
+
   // A parked string cannot be accessed until it has been |Unpark()|-ed.
-  // Returns true iff the string has been parked.
-  bool Park();
+  //
+  // Parking may be synchronous, and will be if compressed data is already
+  // available. If |mode| is |kIfCompressedDataExists|, then parking will always
+  // be synchronous.
+  //
+  // Must not be called if |may_be_parked()| returns false.
+  //
+  // Returns true if the string is being parked or has been parked.
+  bool Park(ParkingMode mode);
+  // Returns true iff the string can be parked. This does not mean that the
+  // string can be parked now, merely that it is eligible to be parked at some
+  // point.
+  bool may_be_parked() const { return may_be_parked_; }
   // Returns true if the string is parked.
-  bool is_parked() const { return is_parked_; }
+  bool is_parked() const;
+  // Returns whether synchronous parking is possible, that is the string was
+  // parked in the past.
+  bool has_compressed_data() const { return !!compressed_; }
+  // Returns the compressed size, must not be called unless the string has a
+  // compressed representation.
+  size_t compressed_size() const {
+    DCHECK(has_compressed_data());
+    return compressed_->size();
+  }
+
+  // A string can either be "young" or "old". It starts young, and transitions
+  // are:
+  // Young -> Old: By calling |MaybeAgeOrParkString()|.
+  // Old -> Young: When the string is accessed, either by |Lock()|-ing it or
+  //               calling |ToString()|.
+  bool is_young() const { return is_young_; }
 
  private:
+  enum class State;
+  enum class Status;
+
+#if defined(ADDRESS_SANITIZER)
+  // See |CompressInBackground()|. Doesn't make the string young.
+  // May be called from any thread.
+  void LockWithoutMakingYoung();
+#endif  // defined(ADDRESS_SANITIZER)
+  // May be called from any thread. Must acquire |mutex_| first.
+  void MakeYoung();
+  // Whether the string is referenced or locked. Must be called with |mutex_|
+  // held, and the return value is valid as long as |mutex_| is held.
+  Status CurrentStatus() const;
+  bool CanParkNow() const;
+  void ParkInternal(ParkingMode mode);
   void Unpark();
+  // Called on the main thread after compression is done.
+  // |params| is the same as the one passed to |CompressInBackground()|,
+  // |compressed| is the compressed data, nullptr if compression failed.
+  void OnParkingCompleteOnMainThread(
+      std::unique_ptr<CompressionTaskParams> params,
+      std::unique_ptr<Vector<uint8_t>> compressed);
 
+  // Background thread.
+  static void CompressInBackground(std::unique_ptr<CompressionTaskParams>);
+
+  Mutex mutex_;  // protects lock_depth_.
+  int lock_depth_;
+
+  // Main thread only.
+  State state_;
   String string_;
-  bool is_parked_;
+  std::unique_ptr<Vector<uint8_t>> compressed_;
+  bool is_young_ : 1;
 
+  const bool may_be_parked_ : 1;
+  const bool is_8bit_ : 1;
+  const unsigned length_;
+
+#if DCHECK_IS_ON()
+  const base::PlatformThreadId owning_thread_;
+#endif
+
+  void AssertOnValidThread() const {
+#if DCHECK_IS_ON()
+    DCHECK_EQ(owning_thread_, CurrentThread());
+#endif
+  }
+
+  FRIEND_TEST_ALL_PREFIXES(ParkableStringTest, LockUnlock);
+  FRIEND_TEST_ALL_PREFIXES(ParkableStringTest, LockParkedString);
   DISALLOW_COPY_AND_ASSIGN(ParkableStringImpl);
 };
 
 class PLATFORM_EXPORT ParkableString final {
+  DISALLOW_NEW();
+
  public:
-  ParkableString() : impl_(base::MakeRefCounted<ParkableStringImpl>(nullptr)) {}
+  ParkableString() : impl_(nullptr) {}
   explicit ParkableString(scoped_refptr<StringImpl>&& impl);
   ParkableString(const ParkableString& rhs) : impl_(rhs.impl_) {}
   ~ParkableString();
 
+  // Locks a string. A string is unlocked when the number of Lock()/Unlock()
+  // calls match. A locked string cannot be parked.
+  // Can be called from any thread.
+  void Lock() const;
+
+  // Unlocks a string.
+  // Can be called from any thread.
+  void Unlock() const;
+
+  void OnMemoryDump(WebProcessMemoryDump* pmd, const String& name) const;
+
   // See the matching String methods.
   bool Is8Bit() const;
-  bool IsNull() const;
-  unsigned length() const { return impl_->length(); }
-  ParkableStringImpl* Impl() const { return impl_.get(); }
+  bool IsNull() const { return !impl_; }
+  unsigned length() const { return impl_ ? impl_->length() : 0; }
+  bool may_be_parked() const { return impl_ && impl_->may_be_parked(); }
+
+  ParkableStringImpl* Impl() const { return impl_ ? impl_.get() : nullptr; }
   // Returns an unparked version of the string.
   // The string is guaranteed to be valid for
   // max(lifetime of a copy of the returned reference, current thread task).
   const String& ToString() const;
-  unsigned CharactersSizeInBytes() const;
+  wtf_size_t CharactersSizeInBytes() const;
 
   // Causes the string to be unparked. Note that the pointer must not be
   // cached.
@@ -95,39 +217,6 @@ class PLATFORM_EXPORT ParkableString final {
 
  private:
   scoped_refptr<ParkableStringImpl> impl_;
-};
-
-// Per-thread registry of all ParkableString instances. NOT thread-safe.
-class PLATFORM_EXPORT ParkableStringTable final {
- public:
-  ParkableStringTable();
-  ~ParkableStringTable();
-
-  static ParkableStringTable& Instance();
-
-  scoped_refptr<ParkableStringImpl> Add(scoped_refptr<StringImpl>&&);
-
-  // This is for ~ParkableStringImpl to unregister a string before
-  // destruction since the table is holding raw pointers. It should not be used
-  // directly.
-  void Remove(StringImpl*);
-
-  void SetRendererBackgrounded(bool backgrounded);
-  bool IsRendererBackgrounded() const;
-
-  // Parks all the strings in the table if currently in background.
-  void MaybeParkAll();
-
- private:
-  bool backgrounded_;
-  // Could bet a set where the hashing function is
-  // ParkableStringImpl::string_.Impl(), but clearer this way.
-  std::map<StringImpl*, ParkableStringImpl*> table_;
-
-  FRIEND_TEST_ALL_PREFIXES(ParkableStringTest, TableSimple);
-  FRIEND_TEST_ALL_PREFIXES(ParkableStringTest, TableMultiple);
-
-  DISALLOW_COPY_AND_ASSIGN(ParkableStringTable);
 };
 
 }  // namespace blink

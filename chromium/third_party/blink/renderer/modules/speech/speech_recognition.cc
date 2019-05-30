@@ -37,11 +37,8 @@
 namespace blink {
 
 SpeechRecognition* SpeechRecognition::Create(ExecutionContext* context) {
-  DCHECK(context);
-  DCHECK(context->IsDocument());
-  Document* document = ToDocument(context);
-  DCHECK(document);
-  return new SpeechRecognition(document->GetFrame(), context);
+  Document& document = To<Document>(*context);
+  return MakeGarbageCollected<SpeechRecognition>(document.GetFrame(), context);
 }
 
 void SpeechRecognition::start(ExceptionState& exception_state) {
@@ -56,9 +53,12 @@ void SpeechRecognition::start(ExceptionState& exception_state) {
 
   final_results_.clear();
 
+  // See https://bit.ly/2S0zRAS for task types.
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+      GetExecutionContext()->GetTaskRunner(blink::TaskType::kMiscPlatformAPI);
   mojom::blink::SpeechRecognitionSessionClientPtrInfo session_client;
   binding_.Bind(mojo::MakeRequest(&session_client),
-                GetExecutionContext()->GetInterfaceInvalidator());
+                GetExecutionContext()->GetInterfaceInvalidator(), task_runner);
   binding_.set_connection_error_handler(WTF::Bind(
       &SpeechRecognition::OnConnectionError, WrapWeakPersistent(this)));
 
@@ -96,7 +96,7 @@ void SpeechRecognition::ResultRetrieved(
   auto* it = std::stable_partition(
       results.begin(), results.end(),
       [](const auto& result) { return !result->is_provisional; });
-  size_t provisional_count = results.end() - it;
+  wtf_size_t provisional_count = static_cast<wtf_size_t>(results.end() - it);
 
   // Add the new results to the previous final results.
   HeapVector<Member<SpeechRecognitionResult>> aggregated_results =
@@ -146,25 +146,25 @@ void SpeechRecognition::ErrorOccurred(
 }
 
 void SpeechRecognition::Started() {
-  DispatchEvent(*Event::Create(EventTypeNames::start));
+  DispatchEvent(*Event::Create(event_type_names::kStart));
 }
 
 void SpeechRecognition::AudioStarted() {
-  DispatchEvent(*Event::Create(EventTypeNames::audiostart));
+  DispatchEvent(*Event::Create(event_type_names::kAudiostart));
 }
 
 void SpeechRecognition::SoundStarted() {
-  DispatchEvent(*Event::Create(EventTypeNames::soundstart));
-  DispatchEvent(*Event::Create(EventTypeNames::speechstart));
+  DispatchEvent(*Event::Create(event_type_names::kSoundstart));
+  DispatchEvent(*Event::Create(event_type_names::kSpeechstart));
 }
 
 void SpeechRecognition::SoundEnded() {
-  DispatchEvent(*Event::Create(EventTypeNames::speechend));
-  DispatchEvent(*Event::Create(EventTypeNames::soundend));
+  DispatchEvent(*Event::Create(event_type_names::kSpeechend));
+  DispatchEvent(*Event::Create(event_type_names::kSoundend));
 }
 
 void SpeechRecognition::AudioEnded() {
-  DispatchEvent(*Event::Create(EventTypeNames::audioend));
+  DispatchEvent(*Event::Create(event_type_names::kAudioend));
 }
 
 void SpeechRecognition::Ended() {
@@ -172,11 +172,11 @@ void SpeechRecognition::Ended() {
   stopping_ = false;
   session_.reset();
   binding_.Close();
-  DispatchEvent(*Event::Create(EventTypeNames::end));
+  DispatchEvent(*Event::Create(event_type_names::kEnd));
 }
 
 const AtomicString& SpeechRecognition::InterfaceName() const {
-  return EventTargetNames::SpeechRecognition;
+  return event_target_names::kSpeechRecognition;
 }
 
 ExecutionContext* SpeechRecognition::GetExecutionContext() const {

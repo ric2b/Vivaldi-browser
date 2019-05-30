@@ -11,7 +11,6 @@
 <translation id="1375198122581997741">Informazioni sulla versione</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> non ha inviato dati.</translation>
 <translation id="14171126816530869">L'identità di <ph name="ORGANIZATION" /> a <ph name="LOCALITY" /> è stata verifica da <ph name="ISSUER" />.</translation>
-<translation id="1506687042165942984">Mostra una copia salvata (cioè che è noto sia obsoleta) di questa pagina.</translation>
 <translation id="1559528461873125649">Nessun file o directory corrispondente</translation>
 <translation id="1620510694547887537">Videocamera</translation>
 <translation id="1640244768702815859">Prova a <ph name="BEGIN_LINK" />visitare la home page del sito<ph name="END_LINK" />.</translation>
@@ -28,7 +27,6 @@
 <translation id="2030481566774242610">Forse cercavi <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Controllare il proxy e il firewall<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Audio</translation>
-<translation id="2147827593068025794">Sincronizzazione in background</translation>
 <translation id="2166378884831602661">Il sito non può fornire una connessione protetta</translation>
 <translation id="2187317261103489799">Rileva (predefinita)</translation>
 <translation id="2224337661447660594">Nessuna connessione ad Internet</translation>
@@ -38,6 +36,7 @@
 <translation id="2337852623177822836">Impostazione controllata dall'amministratore</translation>
 <translation id="2355395290879513365">Gli utenti malintenzionati potrebbero riuscire a vedere le immagini che stai guardando in questo sito e ingannarti modificandole.</translation>
 <translation id="2356070529366658676">Chiedi</translation>
+<translation id="2359808026110333948">Continua</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Eseguire la diagnostica di rete<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Notifiche</translation>
 <translation id="2539524384386349900">Rileva</translation>
@@ -72,7 +71,6 @@
 <translation id="3630155396527302611">Se è già elencato come programma autorizzato ad accedere alla rete, prova a
       rimuoverlo dall'elenco e ad aggiungerlo di nuovo.</translation>
 <translation id="3658742229777143148">Revisione</translation>
-<translation id="366094926047009040">Potresti perdere l'accesso al tuo Account Vivaldi o subire un furto d'identità. Vivaldi ti consiglia di cambiare subito la password.</translation>
 <translation id="3681007416295224113">Informazioni certificato</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Controllare la configurazione del proxy, firewall e DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Se utilizzi un server proxy...</translation>
@@ -106,7 +104,6 @@
 <translation id="4744603770635761495">Percorso eseguibile</translation>
 <translation id="4750917950439032686">Le tue informazioni (ad esempio password o numeri di carte di credito) restano private quando sono inviate a questo sito.</translation>
 <translation id="4764776831041365478">La pagina web all'indirizzo <ph name="URL" /> potrebbe essere temporaneamente non disponibile oppure è stata permanentemente spostata a un nuovo indirizzo web.</translation>
-<translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
 <translation id="4974590756084640048">Riattiva gli avvisi</translation>
 <translation id="5023310440958281426">Consulta le norme dell'amministratore</translation>
 <translation id="5039804452771397117">Consenti</translation>
@@ -135,7 +132,7 @@
 <translation id="5810442152076338065">La connessione a <ph name="DOMAIN" /> è crittografato tramite un pacchetto di crittografia obsoleto.</translation>
 <translation id="5838278095973806738">Non dovresti inserire dati sensibili in questo sito (ad esempio password o carte di credito) perché potrebbero essere rubati da utenti malintenzionati.</translation>
 <translation id="5869405914158311789">Impossibile raggiungere il sito</translation>
-<translation id="5920262536204764679">{NUM_COOKIES, plural, =1 {1 in uso} other {# in uso}}</translation>
+<translation id="5932224571077948991">Il sito mostra annunci invasivi o fuorvianti</translation>
 <translation id="5990559369517809815">Le richieste al server sono state bloccate da un'estensione.</translation>
 <translation id="6051221802930200923">Al momento non puoi visitare <ph name="SITE" /> perché il sito web utilizza il blocco dei certificati. Errori di rete e attacchi sono in genere temporanei, quindi questa pagina probabilmente funzionerà più tardi.</translation>
 <translation id="6146055958333702838">Controlla eventuali cavi e riavvia eventuali router, modem o altri dispositivi di rete in uso.</translation>
@@ -153,6 +150,7 @@
 <translation id="6417515091412812850">Impossibile controllare se il certificato è stato revocato.</translation>
 <translation id="6433595998831338502">Connessione negata da <ph name="HOST_NAME" />.</translation>
 <translation id="6447842834002726250">Cookie</translation>
+<translation id="6451458296329894277">Conferma reinvio modulo</translation>
 <translation id="6569060085658103619">Stai visualizzando la pagina di un'estensione</translation>
 <translation id="6657585470893396449">Password</translation>
 <translation id="6685834062052613830">Esci e completa la configurazione</translation>
@@ -190,13 +188,14 @@
 <translation id="8025119109950072390">I malintenzionati su questo sito potrebbero indurti con l'inganno a effettuare operazioni pericolose, come installare software o fornire i tuoi dati personali (ad esempio password, numeri di telefono o carte di credito).</translation>
 <translation id="8037357227543935929">Chiedi (predefinita)</translation>
 <translation id="8041940743680923270">Usa predefinita globale (Chiedi)</translation>
+<translation id="808894953321890993">Cambia password</translation>
 <translation id="8142868475871995937">Visita &lt;strong&gt;vivaldi://policy&lt;/strong&gt; per visualizzare l'elenco di URL inseriti nella blacklist e altre norme applicate dall'amministratore di sistema.</translation>
 <translation id="8149426793427495338">Il computer è entrato in modalità sospensione.</translation>
 <translation id="8150722005171944719">Il file all'indirizzo <ph name="URL" /> non è leggibile. Potrebbe essere stato rimosso, spostato oppure delle autorizzazioni del file potrebbero impedire l'accesso.</translation>
 <translation id="8184538546369750125">Usa predefinita globale (Consenti)</translation>
-<translation id="8205463626947051446">Il sito tende a mostrare annunci invasivi</translation>
 <translation id="8211406090763984747">La connessione è sicura</translation>
 <translation id="8225771182978767009">La persona che ha configurato il computer ha deciso di bloccare questo sito.</translation>
+<translation id="8241707690549784388">La pagina che stai cercando utilizza informazioni già inserite. Tornare a quella pagina potrebbe far sì che ogni azione già effettuata venga ripetuta. Vuoi continuare?</translation>
 <translation id="8241712895048303527">Blocca su questo sito</translation>
 <translation id="8288807391153049143">Mostra certificato</translation>
 <translation id="8289355894181816810">Contatta l'amministratore di rete se non sei sicuro del significato.</translation>
@@ -212,10 +211,10 @@
 <translation id="9025348182339809926">(Non valido)</translation>
 <translation id="9039213469156557790">Inoltre, questa pagina include altre risorse che non sono sicure. Tali risorse possono essere visualizzate da altri durante il transito dei dati e possono essere modificate da un utente malintenzionato al fine di modificare il comportamento della pagina.</translation>
 <translation id="9069693763241529744">Bloccata da un'estensione</translation>
-<translation id="910908805481542201">Aiutami a risolvere il problema</translation>
 <translation id="9169664750068251925">Blocca sempre su questo sito</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> utilizza un protocollo non supportato.</translation>
 <translation id="9219103736887031265">Immagini</translation>
+<translation id="936602727769022409">Potresti perdere l'accesso al tuo account Google. Chromium consiglia di cambiare subito la tua password. Ti sarà chiesto di effettuare l'accesso.</translation>
 <translation id="969892804517981540">Build ufficiale</translation>
 <translation id="988159990683914416">Build sviluppatore</translation>
 </translationbundle>

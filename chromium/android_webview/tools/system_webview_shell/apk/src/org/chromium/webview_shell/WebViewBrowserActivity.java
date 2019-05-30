@@ -21,6 +21,9 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.StrictMode;
+import android.print.PrintAttributes;
+import android.print.PrintDocumentAdapter;
+import android.print.PrintManager;
 import android.provider.Browser;
 import android.util.SparseArray;
 import android.view.Gravity;
@@ -110,7 +113,7 @@ public class WebViewBrowserActivity extends Activity implements PopupMenu.OnMenu
     // Each time we make a request, store it here with an int key. onRequestPermissionsResult will
     // look up the request in order to grant the approprate permissions.
     private SparseArray<PermissionRequest> mPendingRequests = new SparseArray<PermissionRequest>();
-    private int mNextRequestKey = 0;
+    private int mNextRequestKey;
 
     // Work around our wonky API by wrapping a geo permission prompt inside a regular
     // PermissionRequest.
@@ -332,6 +335,7 @@ public class WebViewBrowserActivity extends Activity implements PopupMenu.OnMenu
         webview.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                setUrlFail(false);
                 setUrlBarText(url);
             }
 
@@ -547,6 +551,15 @@ public class WebViewBrowserActivity extends Activity implements PopupMenu.OnMenu
                     }
                 }
                 return true;
+            case R.id.start_animation_activity:
+                startActivity(new Intent(this, WebViewAnimationTestActivity.class));
+                return true;
+            case R.id.menu_print:
+                PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                String jobName = "WebViewShell document";
+                PrintDocumentAdapter printAdapter = mWebView.createPrintDocumentAdapter(jobName);
+                printManager.print(jobName, printAdapter, new PrintAttributes.Builder().build());
+                return true;
             case R.id.menu_about:
                 about();
                 hideKeyboard(mUrlBar);
@@ -694,6 +707,12 @@ public class WebViewBrowserActivity extends Activity implements PopupMenu.OnMenu
             return true;
         } catch (ActivityNotFoundException ex) {
             Log.w(TAG, "No application can handle %s", url);
+        } catch (SecurityException ex) {
+            // This can happen if the Activity is exported="true", guarded by a permission, and sets
+            // up an intent filter matching this intent. This is a valid configuration for an
+            // Activity, so instead of crashing, we catch the exception and do nothing. See
+            // https://crbug.com/808494 and https://crbug.com/889300.
+            Log.w(TAG, "SecurityException when starting intent for %s", url);
         }
         return false;
     }

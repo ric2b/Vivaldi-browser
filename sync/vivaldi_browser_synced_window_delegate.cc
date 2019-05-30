@@ -21,27 +21,40 @@ VivaldiBrowserSyncedWindowDelegate::~VivaldiBrowserSyncedWindowDelegate() {}
 
 sync_sessions::SyncedTabDelegate* VivaldiBrowserSyncedWindowDelegate::GetTabAt(
     int index) const {
-  sync_sessions::SyncedTabDelegate* delegate =
-      BrowserSyncedWindowDelegate::GetTabAt(index);
-  if (!delegate) {
-    VivaldiBrowserWindow* window =
-        static_cast<VivaldiBrowserWindow*>(browser_copy_->window());
-    LOG(ERROR) << "BrowserSyncedWindowDelegate found no SyncedTabDelegate for "
-                  "tab position "
-               << index << ", meaning this will crash now.";
-    LOG(ERROR) << "Window had title: " << window->GetTitle();
-    LOG(ERROR) << "Window top level url: " << window->web_contents()->GetURL().spec();
-
-    content::WebContents* contents =
-        browser_copy_->tab_strip_model()->GetWebContentsAt(index);
-    if (!contents) {
-      LOG(ERROR) << "WebContents for given index was a nullptr. tab strip has "
-                 << browser_copy_->tab_strip_model()->count() << " entries.";
-    }
+  // Inline BrowserSyncedWindowDelegate::GetTabAt(index) to avoid crash on
+  // null WebContents.
+  content::WebContents* contents =
+      browser_copy_->tab_strip_model()->GetWebContentsAt(index);
+  if (contents) {
+    sync_sessions::SyncedTabDelegate* delegate =
+        BrowserSyncedTabDelegate::FromWebContents(contents);
+    if (delegate)
+      return delegate;
   }
-  return delegate;
+
+  VivaldiBrowserWindow* window =
+      static_cast<VivaldiBrowserWindow*>(browser_copy_->window());
+  LOG(ERROR) << "BrowserSyncedWindowDelegate found no SyncedTabDelegate for "
+                "tab position "
+             << index << " with " << browser_copy_->tab_strip_model()->count()
+             << " entries in tab strip. This may lead to a crash.";
+  if (!contents) {
+    LOG(ERROR) << "WebContents for given index was a nullptr.";
+  }
+  LOG(ERROR) << "Window had title: " << window->GetTitle();
+  LOG(ERROR) << "Window top level url: "
+              << window->web_contents()->GetURL().spec();
+
+  return nullptr;
 }
 
 SessionID VivaldiBrowserSyncedWindowDelegate::GetTabIdAt(int index) const {
-  return GetTabAt(index)->GetSessionId();
+  // On null delegate return an invalid session id avoiding a crash when the
+  // code is called from LocalSessionEventHandlerImpl::AssociateWindows under
+  // WebContentsImpl destructor, see VB-43254.
+  // TODO(igor@vivaldi.com): find out the condition leading to this.
+  sync_sessions::SyncedTabDelegate* delegate = GetTabAt(index);
+  if (!delegate)
+    return SessionID::InvalidValue();
+  return delegate->GetSessionId();
 }

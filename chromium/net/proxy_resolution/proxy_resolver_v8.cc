@@ -13,7 +13,7 @@
 #include "base/debug/leak_annotations.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -69,7 +69,7 @@
 // --------------------+-------------+-------------------+--------------
 //                     | Firefox3    | InternetExplorer8 |  --> Us <---
 // --------------------+-------------+-------------------+--------------
-// myIpAddress()       | IPv4/IPv6   |  IPv4             |  IPv4
+// myIpAddress()       | IPv4/IPv6   |  IPv4             |  IPv4/IPv6
 // dnsResolve()        | IPv4/IPv6   |  IPv4             |  IPv4
 // isResolvable()      | IPv4/IPv6   |  IPv4             |  IPv4
 // myIpAddressEx()     | N/A         |  IPv4/IPv6        |  IPv4/IPv6
@@ -385,9 +385,13 @@ class SharedIsolateFactory {
         static const char kNoOpt[] = "--noopt";
         v8::V8::SetFlagsFromString(kNoOpt, strlen(kNoOpt));
 
+        // WebAssembly isn't encountered during resolution, so reduce the
+        // potential attack surface.
+        static const char kNoExposeWasm[] = "--no-expose-wasm";
+        v8::V8::SetFlagsFromString(kNoExposeWasm, strlen(kNoExposeWasm));
+
         gin::IsolateHolder::Initialize(
             gin::IsolateHolder::kNonStrictMode,
-            gin::IsolateHolder::kStableV8Extras,
             gin::ArrayBufferAllocator::SharedInstance());
 
         has_initialized_v8_ = true;
@@ -465,7 +469,7 @@ class ProxyResolverV8::Context {
     v8::TryCatch try_catch(isolate_);
     v8::Local<v8::Value> ret;
     if (!v8::Function::Cast(*function)
-             ->Call(context, context->Global(), arraysize(argv), argv)
+             ->Call(context, context->Global(), base::size(argv), argv)
              .ToLocal(&ret)) {
       DCHECK(try_catch.HasCaught());
       HandleError(try_catch.Message());
@@ -697,41 +701,42 @@ class ProxyResolverV8::Context {
   // V8 callback for when "myIpAddress()" is invoked by the PAC script.
   static void MyIpAddressCallback(
       const v8::FunctionCallbackInfo<v8::Value>& args) {
-    DnsResolveCallbackHelper(args, JSBindings::MY_IP_ADDRESS);
+    DnsResolveCallbackHelper(args, ProxyResolveDnsOperation::MY_IP_ADDRESS);
   }
 
   // V8 callback for when "myIpAddressEx()" is invoked by the PAC script.
   static void MyIpAddressExCallback(
       const v8::FunctionCallbackInfo<v8::Value>& args) {
-    DnsResolveCallbackHelper(args, JSBindings::MY_IP_ADDRESS_EX);
+    DnsResolveCallbackHelper(args, ProxyResolveDnsOperation::MY_IP_ADDRESS_EX);
   }
 
   // V8 callback for when "dnsResolve()" is invoked by the PAC script.
   static void DnsResolveCallback(
       const v8::FunctionCallbackInfo<v8::Value>& args) {
-    DnsResolveCallbackHelper(args, JSBindings::DNS_RESOLVE);
+    DnsResolveCallbackHelper(args, ProxyResolveDnsOperation::DNS_RESOLVE);
   }
 
   // V8 callback for when "dnsResolveEx()" is invoked by the PAC script.
   static void DnsResolveExCallback(
       const v8::FunctionCallbackInfo<v8::Value>& args) {
-    DnsResolveCallbackHelper(args, JSBindings::DNS_RESOLVE_EX);
+    DnsResolveCallbackHelper(args, ProxyResolveDnsOperation::DNS_RESOLVE_EX);
   }
 
   // Shared code for implementing:
   //   - myIpAddress(), myIpAddressEx(), dnsResolve(), dnsResolveEx().
   static void DnsResolveCallbackHelper(
       const v8::FunctionCallbackInfo<v8::Value>& args,
-      JSBindings::ResolveDnsOperation op) {
+      ProxyResolveDnsOperation op) {
     Context* context =
         static_cast<Context*>(v8::External::Cast(*args.Data())->Value());
 
     std::string hostname;
 
     // dnsResolve() and dnsResolveEx() need at least 1 argument.
-    if (op == JSBindings::DNS_RESOLVE || op == JSBindings::DNS_RESOLVE_EX) {
+    if (op == ProxyResolveDnsOperation::DNS_RESOLVE ||
+        op == ProxyResolveDnsOperation::DNS_RESOLVE_EX) {
       if (!GetHostnameArgument(args, &hostname)) {
-        if (op == JSBindings::DNS_RESOLVE)
+        if (op == ProxyResolveDnsOperation::DNS_RESOLVE)
           args.GetReturnValue().SetNull();
         return;
       }
@@ -758,17 +763,17 @@ class ProxyResolverV8::Context {
 
     // Each function handles resolution errors differently.
     switch (op) {
-      case JSBindings::DNS_RESOLVE:
+      case ProxyResolveDnsOperation::DNS_RESOLVE:
         args.GetReturnValue().SetNull();
         return;
-      case JSBindings::DNS_RESOLVE_EX:
+      case ProxyResolveDnsOperation::DNS_RESOLVE_EX:
         args.GetReturnValue().SetEmptyString();
         return;
-      case JSBindings::MY_IP_ADDRESS:
+      case ProxyResolveDnsOperation::MY_IP_ADDRESS:
         args.GetReturnValue().Set(
             ASCIILiteralToV8String(args.GetIsolate(), "127.0.0.1"));
         return;
-      case JSBindings::MY_IP_ADDRESS_EX:
+      case ProxyResolveDnsOperation::MY_IP_ADDRESS_EX:
         args.GetReturnValue().SetEmptyString();
         return;
     }

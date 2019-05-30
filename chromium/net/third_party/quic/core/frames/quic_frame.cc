@@ -3,32 +3,32 @@
 // found in the LICENSE file.
 
 #include "net/third_party/quic/core/frames/quic_frame.h"
+
 #include "net/third_party/quic/core/quic_constants.h"
 #include "net/third_party/quic/platform/api/quic_bug_tracker.h"
 #include "net/third_party/quic/platform/api/quic_logging.h"
-
-using std::string;
 
 namespace quic {
 
 QuicFrame::QuicFrame() {}
 
 QuicFrame::QuicFrame(QuicPaddingFrame padding_frame)
-    : type(PADDING_FRAME), padding_frame(padding_frame) {}
+    : padding_frame(padding_frame) {}
 
 QuicFrame::QuicFrame(QuicStreamFrame stream_frame)
-    : type(STREAM_FRAME), stream_frame(stream_frame) {}
+    : stream_frame(stream_frame) {}
+
+QuicFrame::QuicFrame(QuicCryptoFrame* crypto_frame)
+    : type(CRYPTO_FRAME), crypto_frame(crypto_frame) {}
 
 QuicFrame::QuicFrame(QuicAckFrame* frame) : type(ACK_FRAME), ack_frame(frame) {}
 
 QuicFrame::QuicFrame(QuicMtuDiscoveryFrame frame)
-    : type(MTU_DISCOVERY_FRAME), mtu_discovery_frame(frame) {}
+    : mtu_discovery_frame(frame) {}
 
-QuicFrame::QuicFrame(QuicStopWaitingFrame* frame)
-    : type(STOP_WAITING_FRAME), stop_waiting_frame(frame) {}
+QuicFrame::QuicFrame(QuicStopWaitingFrame frame) : stop_waiting_frame(frame) {}
 
-QuicFrame::QuicFrame(QuicPingFrame frame)
-    : type(PING_FRAME), ping_frame(frame) {}
+QuicFrame::QuicFrame(QuicPingFrame frame) : ping_frame(frame) {}
 
 QuicFrame::QuicFrame(QuicRstStreamFrame* frame)
     : type(RST_STREAM_FRAME), rst_stream_frame(frame) {}
@@ -51,11 +51,13 @@ QuicFrame::QuicFrame(QuicApplicationCloseFrame* frame)
 QuicFrame::QuicFrame(QuicNewConnectionIdFrame* frame)
     : type(NEW_CONNECTION_ID_FRAME), new_connection_id_frame(frame) {}
 
-QuicFrame::QuicFrame(QuicMaxStreamIdFrame frame)
-    : type(MAX_STREAM_ID_FRAME), max_stream_id_frame(frame) {}
+QuicFrame::QuicFrame(QuicRetireConnectionIdFrame* frame)
+    : type(RETIRE_CONNECTION_ID_FRAME), retire_connection_id_frame(frame) {}
+
+QuicFrame::QuicFrame(QuicMaxStreamIdFrame frame) : max_stream_id_frame(frame) {}
 
 QuicFrame::QuicFrame(QuicStreamIdBlockedFrame frame)
-    : type(STREAM_ID_BLOCKED_FRAME), stream_id_blocked_frame(frame) {}
+    : stream_id_blocked_frame(frame) {}
 
 QuicFrame::QuicFrame(QuicPathResponseFrame* frame)
     : type(PATH_RESPONSE_FRAME), path_response_frame(frame) {}
@@ -65,6 +67,12 @@ QuicFrame::QuicFrame(QuicPathChallengeFrame* frame)
 
 QuicFrame::QuicFrame(QuicStopSendingFrame* frame)
     : type(STOP_SENDING_FRAME), stop_sending_frame(frame) {}
+
+QuicFrame::QuicFrame(QuicMessageFrame* frame)
+    : type(MESSAGE_FRAME), message_frame(frame) {}
+
+QuicFrame::QuicFrame(QuicNewTokenFrame* frame)
+    : type(NEW_TOKEN_FRAME), new_token_frame(frame) {}
 
 void DeleteFrames(QuicFrames* frames) {
   for (QuicFrame& frame : *frames) {
@@ -80,14 +88,12 @@ void DeleteFrame(QuicFrame* frame) {
     case MTU_DISCOVERY_FRAME:
     case PING_FRAME:
     case MAX_STREAM_ID_FRAME:
+    case STOP_WAITING_FRAME:
     case STREAM_ID_BLOCKED_FRAME:
     case STREAM_FRAME:
       break;
     case ACK_FRAME:
       delete frame->ack_frame;
-      break;
-    case STOP_WAITING_FRAME:
-      delete frame->stop_waiting_frame;
       break;
     case RST_STREAM_FRAME:
       delete frame->rst_stream_frame;
@@ -116,8 +122,20 @@ void DeleteFrame(QuicFrame* frame) {
     case NEW_CONNECTION_ID_FRAME:
       delete frame->new_connection_id_frame;
       break;
+    case RETIRE_CONNECTION_ID_FRAME:
+      delete frame->retire_connection_id_frame;
+      break;
     case PATH_RESPONSE_FRAME:
       delete frame->path_response_frame;
+      break;
+    case MESSAGE_FRAME:
+      delete frame->message_frame;
+      break;
+    case CRYPTO_FRAME:
+      delete frame->crypto_frame;
+      break;
+    case NEW_TOKEN_FRAME:
+      delete frame->new_token_frame;
       break;
 
     case NUM_FRAME_TYPES:
@@ -126,7 +144,7 @@ void DeleteFrame(QuicFrame* frame) {
 }
 
 void RemoveFramesForStream(QuicFrames* frames, QuicStreamId stream_id) {
-  QuicFrames::iterator it = frames->begin();
+  auto it = frames->begin();
   while (it != frames->end()) {
     if (it->type != STREAM_FRAME || it->stream_frame.stream_id != stream_id) {
       ++it;
@@ -145,6 +163,7 @@ bool IsControlFrame(QuicFrameType type) {
     case STREAM_ID_BLOCKED_FRAME:
     case MAX_STREAM_ID_FRAME:
     case PING_FRAME:
+    case STOP_SENDING_FRAME:
       return true;
     default:
       return false;
@@ -167,6 +186,8 @@ QuicControlFrameId GetControlFrameId(const QuicFrame& frame) {
       return frame.max_stream_id_frame.control_frame_id;
     case PING_FRAME:
       return frame.ping_frame.control_frame_id;
+    case STOP_SENDING_FRAME:
+      return frame.stop_sending_frame->control_frame_id;
     default:
       return kInvalidControlFrameId;
   }
@@ -195,6 +216,9 @@ void SetControlFrameId(QuicControlFrameId control_frame_id, QuicFrame* frame) {
     case MAX_STREAM_ID_FRAME:
       frame->max_stream_id_frame.control_frame_id = control_frame_id;
       return;
+    case STOP_SENDING_FRAME:
+      frame->stop_sending_frame->control_frame_id = control_frame_id;
+      return;
     default:
       QUIC_BUG
           << "Try to set control frame id of a frame without control frame id";
@@ -218,6 +242,15 @@ QuicFrame CopyRetransmittableControlFrame(const QuicFrame& frame) {
       break;
     case PING_FRAME:
       copy = QuicFrame(QuicPingFrame(frame.ping_frame.control_frame_id));
+      break;
+    case STOP_SENDING_FRAME:
+      copy = QuicFrame(new QuicStopSendingFrame(*frame.stop_sending_frame));
+      break;
+    case STREAM_ID_BLOCKED_FRAME:
+      copy = QuicFrame(QuicStreamIdBlockedFrame(frame.stream_id_blocked_frame));
+      break;
+    case MAX_STREAM_ID_FRAME:
+      copy = QuicFrame(QuicMaxStreamIdFrame(frame.max_stream_id_frame));
       break;
     default:
       QUIC_BUG << "Try to copy a non-retransmittable control frame: " << frame;
@@ -263,7 +296,7 @@ std::ostream& operator<<(std::ostream& os, const QuicFrame& frame) {
       break;
     }
     case STOP_WAITING_FRAME: {
-      os << "type { STOP_WAITING_FRAME } " << *(frame.stop_waiting_frame);
+      os << "type { STOP_WAITING_FRAME } " << frame.stop_waiting_frame;
       break;
     }
     case PING_FRAME: {
@@ -275,10 +308,14 @@ std::ostream& operator<<(std::ostream& os, const QuicFrame& frame) {
       break;
     }
     case APPLICATION_CLOSE_FRAME:
-      os << "type { APPLICATION_CLOSE } " << *(frame.connection_close_frame);
+      os << "type { APPLICATION_CLOSE } " << *(frame.application_close_frame);
       break;
     case NEW_CONNECTION_ID_FRAME:
       os << "type { NEW_CONNECTION_ID } " << *(frame.new_connection_id_frame);
+      break;
+    case RETIRE_CONNECTION_ID_FRAME:
+      os << "type { RETIRE_CONNECTION_ID } "
+         << *(frame.retire_connection_id_frame);
       break;
     case MAX_STREAM_ID_FRAME:
       os << "type { MAX_STREAM_ID } " << frame.max_stream_id_frame;
@@ -294,6 +331,12 @@ std::ostream& operator<<(std::ostream& os, const QuicFrame& frame) {
       break;
     case STOP_SENDING_FRAME:
       os << "type { STOP_SENDING } " << *(frame.stop_sending_frame);
+      break;
+    case MESSAGE_FRAME:
+      os << "type { MESSAGE_FRAME }" << *(frame.message_frame);
+      break;
+    case NEW_TOKEN_FRAME:
+      os << "type { NEW_TOKEN_FRAME }" << *(frame.new_token_frame);
       break;
     default: {
       QUIC_LOG(ERROR) << "Unknown frame type: " << frame.type;

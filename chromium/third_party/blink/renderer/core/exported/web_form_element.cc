@@ -47,7 +47,7 @@ bool WebFormElement::AutoComplete() const {
 
 WebString WebFormElement::Action() const {
   return ConstUnwrap<HTMLFormElement>()->FastGetAttribute(
-      HTMLNames::actionAttr);
+      html_names::kActionAttr);
 }
 
 WebString WebFormElement::GetName() const {
@@ -79,7 +79,7 @@ void WebFormElement::GetFormControlElements(
 WebFormElement::WebFormElement(HTMLFormElement* e) : WebElement(e) {}
 
 DEFINE_WEB_NODE_TYPE_CASTS(WebFormElement,
-                           IsHTMLFormElement(ConstUnwrap<Node>()));
+                           IsHTMLFormElement(ConstUnwrap<Node>()))
 
 WebFormElement& WebFormElement::operator=(HTMLFormElement* e) {
   private_ = e;

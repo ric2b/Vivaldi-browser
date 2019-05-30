@@ -4,10 +4,10 @@
 
 #import "components/storage_monitor/image_capture_device.h"
 
+#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
-#include "base/threading/thread_restrictions.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace storage_monitor {
@@ -16,7 +16,6 @@ namespace {
 
 base::File::Error RenameFile(const base::FilePath& downloaded_filename,
                              const base::FilePath& desired_filename) {
-  base::AssertBlockingAllowed();
   bool success = base::ReplaceFile(downloaded_filename, desired_filename, NULL);
   return success ? base::File::FILE_OK : base::File::FILE_ERROR_NOT_FOUND;
 }
@@ -59,7 +58,7 @@ base::FilePath PathForCameraItem(ICCameraItem* item) {
 
 @implementation ImageCaptureDevice
 
-- (id)initWithCameraDevice:(ICCameraDevice*)cameraDevice {
+- (instancetype)initWithCameraDevice:(ICCameraDevice*)cameraDevice {
   if ((self = [super init])) {
     camera_.reset([cameraDevice retain]);
     [camera_ setDelegate:self];
@@ -119,10 +118,10 @@ base::FilePath PathForCameraItem(ICCameraItem* item) {
 
       NSMutableDictionary* options =
           [NSMutableDictionary dictionaryWithCapacity:3];
-      [options setObject:[NSURL fileURLWithPath:saveDirectory isDirectory:YES]
-                  forKey:ICDownloadsDirectoryURL];
-      [options setObject:saveFilename forKey:ICSaveAsFilename];
-      [options setObject:[NSNumber numberWithBool:YES] forKey:ICOverwrite];
+      options[ICDownloadsDirectoryURL] =
+          [NSURL fileURLWithPath:saveDirectory isDirectory:YES];
+      options[ICSaveAsFilename] = saveFilename;
+      options[ICOverwrite] = @YES;
 
       [camera_ requestDownloadFile:base::mac::ObjCCastStrict<ICCameraFile>(item)
                            options:options
@@ -202,10 +201,9 @@ base::FilePath PathForCameraItem(ICCameraItem* item) {
     return;
   }
 
-  std::string savedFilename =
-      base::SysNSStringToUTF8([options objectForKey:ICSavedFilename]);
+  std::string savedFilename = base::SysNSStringToUTF8(options[ICSavedFilename]);
   std::string saveAsFilename =
-      base::SysNSStringToUTF8([options objectForKey:ICSaveAsFilename]);
+      base::SysNSStringToUTF8(options[ICSaveAsFilename]);
   if (savedFilename == saveAsFilename) {
     if (listener_)
       listener_->DownloadedFile(name, base::File::FILE_OK);
@@ -215,8 +213,8 @@ base::FilePath PathForCameraItem(ICCameraItem* item) {
   // ImageCapture did not save the file into the name we gave it in the
   // options. It picks a new name according to its best lights, so we need
   // to rename the file.
-  base::FilePath saveDir(base::SysNSStringToUTF8(
-      [[options objectForKey:ICDownloadsDirectoryURL] path]));
+  base::FilePath saveDir(
+      base::SysNSStringToUTF8([options[ICDownloadsDirectoryURL] path]));
   base::FilePath saveAsPath = saveDir.Append(saveAsFilename);
   base::FilePath savedPath = saveDir.Append(savedFilename);
   // Shared result value from file-copy closure to tell-listener closure.

@@ -38,8 +38,10 @@ class CORE_EXPORT PluginDocument final : public HTMLDocument {
  public:
   static PluginDocument* Create(const DocumentInit& initializer,
                                 Color background_color) {
-    return new PluginDocument(initializer, background_color);
+    return MakeGarbageCollected<PluginDocument>(initializer, background_color);
   }
+
+  PluginDocument(const DocumentInit&, Color background_color);
 
   void SetPluginNode(HTMLPlugInElement* plugin_node) {
     plugin_node_ = plugin_node;
@@ -52,12 +54,10 @@ class CORE_EXPORT PluginDocument final : public HTMLDocument {
 
   void Shutdown() override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   class BeforeUnloadEventListener;
-
-  PluginDocument(const DocumentInit&, Color background_color);
 
   DocumentParser* CreateParser() override;
 

@@ -99,8 +99,6 @@ class OfflinePageUtils {
   // custom tab.
   static bool CurrentlyShownInCustomTab(content::WebContents* web_contents);
 
-  static bool EqualsIgnoringFragment(const GURL& lhs, const GURL& rhs);
-
   // Returns original URL of the given web contents. Empty URL is returned if
   // no redirect occurred.
   static GURL GetOriginalURLFromWebContents(content::WebContents* web_contents);
@@ -161,7 +159,7 @@ class OfflinePageUtils {
   // Note that the offline header is assumed to be the onlt extra header if it
   // exists.
   static std::string ExtractOfflineHeaderValueFromNavigationEntry(
-      const content::NavigationEntry& entry);
+      content::NavigationEntry* entry);
 
   // Returns true if |web_contents| is showing a trusted offline page.
   static bool IsShowingTrustedOfflinePage(content::WebContents* web_contents);

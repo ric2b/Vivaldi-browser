@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/jumbo.gni")
+
 if (is_nacl) {
   import("//build/config/nacl/config.gni")
 }
@@ -9,7 +11,7 @@ if (is_nacl) {
 if (is_nacl && is_nacl_glibc) {
   cpp_target_type = "shared_library"
 } else {
-  cpp_target_type = "static_library"
+  cpp_target_type = "jumbo_static_library"
 }
 
 # Link to this target to get the PPAPI C++ wrapper objects and plugin startup
@@ -50,7 +52,7 @@ target(cpp_target_type, "cpp") {
 # Link to this target to get only the PPAPI C++ wrapper objects but not the
 # plugin startup code. Some plugins need special startup code that they supply
 # themselves.
-source_set("objects") {
+jumbo_source_set("objects") {
   sources = [
     "array_output.cc",
     "array_output.h",
@@ -63,10 +65,6 @@ source_set("objects") {
     "audio_encoder.cc",
     "audio_encoder.h",
     "completion_callback.h",
-    "compositor.cc",
-    "compositor.h",
-    "compositor_layer.cc",
-    "compositor_layer.h",
     "core.cc",
     "core.h",
     "directory_entry.cc",
@@ -91,6 +89,7 @@ source_set("objects") {
     "image_data.h",
     "input_event.cc",
     "input_event.h",
+    "input_event_interface_name.h",
     "instance.cc",
     "instance.h",
     "instance_handle.cc",
@@ -250,12 +249,8 @@ source_set("objects") {
     "private/uma_private.h",
     "private/var_private.cc",
     "private/var_private.h",
-    "private/video_destination_private.cc",
-    "private/video_destination_private.h",
     "private/video_frame_private.cc",
     "private/video_frame_private.h",
-    "private/video_source_private.cc",
-    "private/video_source_private.h",
     "private/x509_certificate_private.cc",
     "private/x509_certificate_private.h",
 

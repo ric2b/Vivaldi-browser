@@ -8,11 +8,11 @@ source_set("commands") {
     "activity_service_commands.h",
     "application_commands.h",
     "browser_commands.h",
+    "browser_coordinator_commands.h",
     "browsing_data_commands.h",
     "command_dispatcher.h",
     "command_dispatcher.mm",
-    "external_search_commands.h",
-    "history_popup_commands.h",
+    "infobar_commands.h",
     "load_query_commands.h",
     "omnibox_suggestion_commands.h",
     "open_new_tab_command.h",
@@ -27,7 +27,6 @@ source_set("commands") {
     "show_signin_command.mm",
     "snackbar_commands.h",
     "toolbar_commands.h",
-    "tools_menu_commands.h",
   ]
   deps = [
     "//base",

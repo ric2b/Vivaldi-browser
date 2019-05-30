@@ -13,6 +13,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "media/base/bind_to_current_loop.h"
@@ -31,7 +32,7 @@ namespace {
 
 const char* const kDecodedDataReadTraceEventNames[] = {"ReadAudioData",
                                                        "ReadVideoData"};
-static_assert(arraysize(kDecodedDataReadTraceEventNames) ==
+static_assert(base::size(kDecodedDataReadTraceEventNames) ==
                   PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT,
               "Incorrect number of defined tracing event names.");
 

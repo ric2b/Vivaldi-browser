@@ -10,6 +10,7 @@
 #include "net/http/http_response_headers.h"
 
 #include <algorithm>
+#include <limits>
 #include <memory>
 #include <unordered_map>
 #include <utility>
@@ -18,6 +19,8 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/pickle.h"
+#include "base/stl_util.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -29,6 +32,7 @@
 #include "net/http/http_byte_range.h"
 #include "net/http/http_log_util.h"
 #include "net/http/http_util.h"
+#include "net/log/net_log.h"
 #include "net/log/net_log_capture_mode.h"
 
 using base::StringPiece;
@@ -71,6 +75,8 @@ const char* const kCookieResponseHeaders[] = {
 // This avoids erroneously re-processing them on page loads from cache ---
 // they are defined to be valid only on live and error-free HTTPS
 // connections.
+// TODO(https://crbug.com/893055): remove Public-Key-Pins from non-cachable
+// headers?
 const char* const kSecurityStateHeaders[] = {
   "strict-transport-security",
   "public-key-pins"
@@ -79,34 +85,41 @@ const char* const kSecurityStateHeaders[] = {
 // These response headers are not copied from a 304/206 response to the cached
 // response headers.  This list is based on Mozilla's nsHttpResponseHead.cpp.
 const char* const kNonUpdatedHeaders[] = {
-  "connection",
-  "proxy-connection",
-  "keep-alive",
-  "www-authenticate",
-  "proxy-authenticate",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-  "etag",
-  "x-frame-options",
-  "x-xss-protection",
+    "connection",
+    "proxy-connection",
+    "keep-alive",
+    "www-authenticate",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    "content-location",
+    "content-md5",
+    "etag",
+    "content-encoding",
+    "content-range",
+    "content-type",
+    "content-length",
+    "x-frame-options",
+    "x-xss-protection",
 };
 
 // Some header prefixes mean "Don't copy this header from a 304 response.".
 // Rather than listing all the relevant headers, we can consolidate them into
 // this list:
 const char* const kNonUpdatedHeaderPrefixes[] = {
-  "content-",
   "x-content-",
   "x-webkit-"
 };
 
 bool ShouldUpdateHeader(base::StringPiece name) {
-  for (size_t i = 0; i < arraysize(kNonUpdatedHeaders); ++i) {
+  for (size_t i = 0; i < base::size(kNonUpdatedHeaders); ++i) {
     if (base::LowerCaseEqualsASCII(name, kNonUpdatedHeaders[i]))
       return false;
   }
-  for (size_t i = 0; i < arraysize(kNonUpdatedHeaderPrefixes); ++i) {
+  for (size_t i = 0; i < base::size(kNonUpdatedHeaderPrefixes); ++i) {
     if (base::StartsWith(name, kNonUpdatedHeaderPrefixes[i],
                          base::CompareCase::INSENSITIVE_ASCII))
       return false;
@@ -114,11 +127,19 @@ bool ShouldUpdateHeader(base::StringPiece name) {
   return true;
 }
 
-void CheckDoesNotHaveEmbededNulls(const std::string& str) {
+bool HasEmbeddedNulls(base::StringPiece str) {
+  for (char c : str) {
+    if (c == '\0')
+      return true;
+  }
+  return false;
+}
+
+void CheckDoesNotHaveEmbeddedNulls(base::StringPiece str) {
   // Care needs to be taken when adding values to the raw headers string to
   // make sure it does not contain embeded NULLs. Any embeded '\0' may be
   // understood as line terminators and change how header lines get tokenized.
-  CHECK(str.find('\0') == std::string::npos);
+  CHECK(!HasEmbeddedNulls(str));
 }
 
 }  // namespace
@@ -166,6 +187,18 @@ HttpResponseHeaders::HttpResponseHeaders(base::PickleIterator* iter)
   std::string raw_input;
   if (iter->ReadString(&raw_input))
     Parse(raw_input);
+}
+
+scoped_refptr<HttpResponseHeaders> HttpResponseHeaders::TryToCreate(
+    base::StringPiece headers) {
+  // Reject strings with nulls.
+  if (HasEmbeddedNulls(headers) ||
+      headers.size() > std::numeric_limits<int>::max()) {
+    return nullptr;
+  }
+
+  return base::MakeRefCounted<HttpResponseHeaders>(
+      HttpUtil::AssembleRawHeaders(headers.data(), headers.size()));
 }
 
 void HttpResponseHeaders::Persist(base::Pickle* pickle,
@@ -355,7 +388,7 @@ void HttpResponseHeaders::RemoveHeaderLine(const std::string& name,
 }
 
 void HttpResponseHeaders::AddHeader(const std::string& header) {
-  CheckDoesNotHaveEmbededNulls(header);
+  CheckDoesNotHaveEmbeddedNulls(header);
   DCHECK_EQ('\0', raw_headers_[raw_headers_.size() - 2]);
   DCHECK_EQ('\0', raw_headers_[raw_headers_.size() - 1]);
   // Don't copy the last null.
@@ -375,7 +408,7 @@ void HttpResponseHeaders::AddCookie(const std::string& cookie_string) {
 }
 
 void HttpResponseHeaders::ReplaceStatusLine(const std::string& new_status) {
-  CheckDoesNotHaveEmbededNulls(new_status);
+  CheckDoesNotHaveEmbeddedNulls(new_status);
   // Copy up to the null byte.  This just copies the status line.
   std::string new_raw_headers(new_status);
   new_raw_headers.push_back('\0');
@@ -748,7 +781,8 @@ void HttpResponseHeaders::AddHeader(std::string::const_iterator name_begin,
       HttpUtil::IsNonCoalescingHeader(name_begin, name_end)) {
     AddToParsed(name_begin, name_end, values_begin, values_end);
   } else {
-    HttpUtil::ValuesIterator it(values_begin, values_end, ',');
+    HttpUtil::ValuesIterator it(values_begin, values_end, ',',
+                                false /* ignore_empty_values */);
     while (it.GetNext()) {
       AddToParsed(name_begin, name_end, it.value_begin(), it.value_end());
       // clobber these so that subsequent values are treated as continuations
@@ -820,17 +854,17 @@ void HttpResponseHeaders::AddNonCacheableHeaders(HeaderSet* result) const {
 }
 
 void HttpResponseHeaders::AddHopByHopHeaders(HeaderSet* result) {
-  for (size_t i = 0; i < arraysize(kHopByHopResponseHeaders); ++i)
+  for (size_t i = 0; i < base::size(kHopByHopResponseHeaders); ++i)
     result->insert(std::string(kHopByHopResponseHeaders[i]));
 }
 
 void HttpResponseHeaders::AddCookieHeaders(HeaderSet* result) {
-  for (size_t i = 0; i < arraysize(kCookieResponseHeaders); ++i)
+  for (size_t i = 0; i < base::size(kCookieResponseHeaders); ++i)
     result->insert(std::string(kCookieResponseHeaders[i]));
 }
 
 void HttpResponseHeaders::AddChallengeHeaders(HeaderSet* result) {
-  for (size_t i = 0; i < arraysize(kChallengeResponseHeaders); ++i)
+  for (size_t i = 0; i < base::size(kChallengeResponseHeaders); ++i)
     result->insert(std::string(kChallengeResponseHeaders[i]));
 }
 
@@ -839,7 +873,7 @@ void HttpResponseHeaders::AddHopContentRangeHeaders(HeaderSet* result) {
 }
 
 void HttpResponseHeaders::AddSecurityStateHeaders(HeaderSet* result) {
-  for (size_t i = 0; i < arraysize(kSecurityStateHeaders); ++i)
+  for (size_t i = 0; i < base::size(kSecurityStateHeaders); ++i)
     result->insert(std::string(kSecurityStateHeaders[i]));
 }
 
@@ -886,10 +920,16 @@ bool HttpResponseHeaders::IsRedirect(std::string* location) const {
   } while (parsed_[i].value_begin == parsed_[i].value_end);
 
   if (location) {
+    base::StringPiece location_strpiece(parsed_[i].value_begin,
+                                        parsed_[i].value_end);
     // Escape any non-ASCII characters to preserve them.  The server should
     // only be returning ASCII here, but for compat we need to do this.
-    *location = EscapeNonASCII(
-        std::string(parsed_[i].value_begin, parsed_[i].value_end));
+    //
+    // The URL parser escapes things internally, but it expect the bytes to be
+    // valid UTF-8, so encoding errors turn into replacement characters before
+    // escaping. Escaping here preserves the bytes as-is. See
+    // https://crbug.com/942073#c14.
+    *location = EscapeNonASCII(location_strpiece);
   }
 
   return true;
@@ -1296,17 +1336,15 @@ std::unique_ptr<base::Value> HttpResponseHeaders::NetLogCallback(
     NetLogCaptureMode capture_mode) const {
   auto dict = std::make_unique<base::DictionaryValue>();
   auto headers = std::make_unique<base::ListValue>();
-  headers->AppendString(EscapeNonASCII(GetStatusLine()));
+  headers->GetList().push_back(NetLogStringValue(GetStatusLine()));
   size_t iterator = 0;
   std::string name;
   std::string value;
   while (EnumerateHeaderLines(&iterator, &name, &value)) {
     std::string log_value =
         ElideHeaderValueForNetLog(capture_mode, name, value);
-    std::string escaped_name = EscapeNonASCII(name);
-    std::string escaped_value = EscapeNonASCII(log_value);
-    headers->AppendString(base::StringPrintf("%s: %s", escaped_name.c_str(),
-                                             escaped_value.c_str()));
+    headers->GetList().push_back(
+        NetLogStringValue(base::StrCat({name, ": ", log_value})));
   }
   dict->Set("headers", std::move(headers));
   return std::move(dict);

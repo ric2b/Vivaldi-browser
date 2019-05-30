@@ -38,6 +38,29 @@
             "type": "boolean"
           }
         }
+      },
+      {
+        "id": "UserProfile",
+        "type": "object",
+        "description": "Object returned from the getUserProfiles function.",
+        "properties": {
+          "name": {
+            "description": "Name of this user profile. For a guest profile, this should be ignored and translated string used instead.",
+            "type": "string"
+          },
+          "active": {
+            "description": "true if this is the active profile, otherwise false. ",
+            "type": "boolean"
+          },
+          "image": {
+            "description": "base64 encoded data url with the image to use for this profile. Empty for Guest profile.",
+            "type": "string"
+          },
+          "guest": {
+            "description": "true if this is the guest profile, otherwise false. ",
+            "type": "boolean"
+          }
+        }
       }
     ],
     "functions": [
@@ -92,6 +115,173 @@
               ]
             }
         ]
+      },
+      {
+        "name": "isGuestSession",
+        "type": "function",
+        "description": "Checks whether the profile in the current window is running as a guest session or not.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "type": "boolean",
+                "name": "isGuestSession",
+                "description": "true if we're using a guest session, otherwise false."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "hasGuestSession",
+        "type": "function",
+        "description": "Checks whether any guest session is open.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "type": "boolean",
+                "name": "isGuestSession",
+                "description": "true if we're using a guest session, otherwise false."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "switchToGuestSession",
+        "type": "function",
+        "description": "Switch to a guest session.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "type": "boolean",
+                "name": "success",
+                "description": "true if success, otherwise false."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "closeGuestSession",
+        "type": "function",
+        "description": "Close all guest session windows.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "type": "boolean",
+                "name": "success",
+                "description": "true if success, otherwise false."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "openProfileSelectionWindow",
+        "type": "function",
+        "description": "Open window for profile management.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "type": "boolean",
+                "name": "success",
+                "description": "true if success, otherwise false."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getUserProfiles",
+        "type": "function",
+        "description": "Get all registered user profiles.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "avatarWidth",
+            "description": "Width to scale the avatar image to. 0 for no scaling."
+          },
+          {
+            "type": "integer",
+            "name": "avatarHeight",
+            "description": "Height to scale the avatar image to. 0 for no scaling"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "profiles",
+                "type": "array",
+                "items": { "$ref": "UserProfile" }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "openNamedProfile",
+        "type": "function",
+        "description": "Open a new window using the given named profile.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "profileName",
+            "description": "Name of the profile to open."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "type": "boolean",
+                "name": "success",
+                "description": "true if success, otherwise false."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "closeActiveProfile",
+        "type": "function",
+        "description": "Close all windows for the active profile in this window.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "type": "boolean",
+                "name": "success",
+                "description": "true if success, otherwise false."
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onProfilesUpdated",
+        "type": "function",
+        "description": "Fired when profiles have changed and the UI must be updated to reflect it.",
+        "parameters": []
       }
     ]
   }

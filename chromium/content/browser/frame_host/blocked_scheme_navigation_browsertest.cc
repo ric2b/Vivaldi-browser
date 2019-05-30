@@ -19,7 +19,6 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
@@ -580,10 +579,10 @@ class BlockedSchemeNavigationBrowserTest
   DISALLOW_COPY_AND_ASSIGN(BlockedSchemeNavigationBrowserTest);
 };
 
-INSTANTIATE_TEST_CASE_P(,
-                        BlockedSchemeNavigationBrowserTest,
-                        ::testing::Values(url::kDataScheme,
-                                          url::kFileSystemScheme));
+INSTANTIATE_TEST_SUITE_P(,
+                         BlockedSchemeNavigationBrowserTest,
+                         ::testing::Values(url::kDataScheme,
+                                           url::kFileSystemScheme));
 
 ////////////////////////////////////////////////////////////////////////////////
 // Blocked schemes with HTML mimetype

@@ -11,7 +11,6 @@
 <translation id="1375198122581997741">About Version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> didn’t send any data.</translation>
 <translation id="14171126816530869">The identity of <ph name="ORGANIZATION" /> at <ph name="LOCALITY" /> has been verified by <ph name="ISSUER" />.</translation>
-<translation id="1506687042165942984">Show a saved (i.e. known to be out of date) copy of this page.</translation>
 <translation id="1559528461873125649">No such file or directory</translation>
 <translation id="1620510694547887537">Camera</translation>
 <translation id="1640244768702815859">Try <ph name="BEGIN_LINK" />visiting the site's homepage<ph name="END_LINK" />.</translation>
@@ -74,7 +73,6 @@
 <translation id="3630155396527302611">If it is already listed as a program allowed to access the network, try
       removing it from the list and adding it again.</translation>
 <translation id="3658742229777143148">Revision</translation>
-<translation id="366094926047009040">You could lose access to your Vivaldi Account or experience identity theft. Vivaldi recommends that you change your password now.</translation>
 <translation id="3681007416295224113">Certificate information</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Checking the proxy, firewall, and DNS configuration<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">If you use a proxy server...</translation>
@@ -107,7 +105,6 @@
 <translation id="4744603770635761495">Executable Path</translation>
 <translation id="4750917950439032686">Your information (for example, passwords or credit card numbers) is private when it is sent to this site.</translation>
 <translation id="4764776831041365478">The web page at <ph name="URL" /> might be temporarily down or it may have moved permanently to a new web address.</translation>
-<translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
 <translation id="4974590756084640048">Re-enable warnings</translation>
 <translation id="5023310440958281426">Check your administrator's policies</translation>
 <translation id="5039804452771397117">Allow</translation>
@@ -136,7 +133,6 @@
 <translation id="5810442152076338065">Your connection to <ph name="DOMAIN" /> is encrypted using an obsolete cipher suite.</translation>
 <translation id="5838278095973806738">You should not enter any sensitive information on this site (for example, passwords or credit cards), because it could be stolen by attackers.</translation>
 <translation id="5869405914158311789">This site can’t be reached</translation>
-<translation id="5920262536204764679">{NUM_COOKIES, plural, =1 {1 in use} other {# in use}}</translation>
 <translation id="5990559369517809815">Requests to the server have been blocked by an extension.</translation>
 <translation id="6051221802930200923">You cannot visit <ph name="SITE" /> right now because the website uses certificate pinning. Network errors and attacks are usually temporary, so this page will probably work later.</translation>
 <translation id="6146055958333702838">Check any cables and reboot any routers, modems or other network
@@ -195,7 +191,6 @@
 <translation id="8149426793427495338">Your computer went to sleep.</translation>
 <translation id="8150722005171944719">The file at <ph name="URL" /> is not readable.  It may have been removed, moved or file permissions may be preventing access.</translation>
 <translation id="8184538546369750125">Use global default (Allow)</translation>
-<translation id="8205463626947051446">Site tends to show intrusive ads</translation>
 <translation id="8225771182978767009">The person who set up this computer has chosen to block this site.</translation>
 <translation id="8241712895048303527">Block on this site</translation>
 <translation id="8288807391153049143">Show certificate</translation>
@@ -212,7 +207,6 @@
 <translation id="9025348182339809926">(Invalid)</translation>
 <translation id="9039213469156557790">Furthermore, this page includes other resources which are not secure. These resources can be viewed by others while in transit, and can be modified by an attacker to change the behaviour of the page.</translation>
 <translation id="9069693763241529744">Blocked by an extension</translation>
-<translation id="910908805481542201">Help me fix this</translation>
 <translation id="9169664750068251925">Always block on this site</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> uses an unsupported protocol.</translation>
 <translation id="9219103736887031265">Images</translation>

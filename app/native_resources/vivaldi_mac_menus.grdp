@@ -7,5 +7,7 @@
   <message name="IDS_VIV_TOOLS_MENU" desc="The menu title of the Mac tools menu.">
     Tools
   </message>
-
+  <message name="IDS_VIV_NEW_PRIVATE_WINDOW" desc="The title of the new private window menu item.">
+    New Private Window
+  </message>
 </grit-part>

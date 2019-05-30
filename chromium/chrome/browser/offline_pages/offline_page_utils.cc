@@ -29,8 +29,10 @@
 #include "components/offline_pages/core/background/save_page_request.h"
 #include "components/offline_pages/core/client_namespace_constants.h"
 #include "components/offline_pages/core/client_policy_controller.h"
+#include "components/offline_pages/core/offline_clock.h"
 #include "components/offline_pages/core/offline_page_feature.h"
 #include "components/offline_pages/core/offline_page_item.h"
+#include "components/offline_pages/core/offline_page_item_utils.h"
 #include "components/offline_pages/core/offline_page_model.h"
 #include "components/offline_pages/core/request_header/offline_page_header.h"
 #include "content/public/browser/browser_context.h"
@@ -59,15 +61,17 @@ class OfflinePageComparer {
 void OnGetPagesByURLDone(
     const GURL& url,
     int tab_id,
-    const std::vector<std::string>& namespaces_to_show_in_original_tab,
+    const std::vector<std::string>& namespaces_restricted_to_tab_from_client_id,
     base::OnceCallback<void(const std::vector<OfflinePageItem>&)> callback,
     const MultipleOfflinePageItemResult& pages) {
   std::vector<OfflinePageItem> selected_pages;
-  std::string tab_id_str = base::IntToString(tab_id);
+  std::string tab_id_str = base::NumberToString(tab_id);
 
   // Exclude pages whose tab id does not match.
+  // Note: For this restriction to work offline pages saved to tab-bound
+  // namespaces must have the assigned tab id set to their ClientId::id field.
   for (const auto& page : pages) {
-    if (base::ContainsValue(namespaces_to_show_in_original_tab,
+    if (base::ContainsValue(namespaces_restricted_to_tab_from_client_id,
                             page.client_id.name_space) &&
         page.client_id.id != tab_id_str) {
       continue;
@@ -123,7 +127,7 @@ void CheckDuplicateOngoingDownloads(
           // samples in seconds rather than milliseconds.
           UMA_HISTOGRAM_CUSTOM_COUNTS(
               "OfflinePages.DownloadRequestTimeSinceDuplicateRequested",
-              (base::Time::Now() - latest_request_time).InSeconds(),
+              (OfflineTimeNow() - latest_request_time).InSeconds(),
               base::TimeDelta::FromSeconds(1).InSeconds(),
               base::TimeDelta::FromDays(7).InSeconds(), 50);
 
@@ -215,7 +219,7 @@ void OfflinePageUtils::SelectPagesForURL(
   offline_page_model->GetPagesByURL(
       url, base::BindOnce(&OnGetPagesByURLDone, url, tab_id,
                           offline_page_model->GetPolicyController()
-                              ->GetNamespacesRestrictedToOriginalTab(),
+                              ->GetNamespacesRestrictedToTabFromClientId(),
                           std::move(callback)));
 }
 
@@ -266,18 +270,6 @@ bool OfflinePageUtils::IsShowingDownloadButtonInErrorPage(
 }
 
 // static
-bool OfflinePageUtils::EqualsIgnoringFragment(const GURL& lhs,
-                                              const GURL& rhs) {
-  GURL::Replacements remove_params;
-  remove_params.ClearRef();
-
-  GURL lhs_stripped = lhs.ReplaceComponents(remove_params);
-  GURL rhs_stripped = rhs.ReplaceComponents(remove_params);
-
-  return lhs_stripped == rhs_stripped;
-}
-
-// static
 GURL OfflinePageUtils::GetOriginalURLFromWebContents(
     content::WebContents* web_contents) {
   content::NavigationEntry* entry =
@@ -318,7 +310,7 @@ void OfflinePageUtils::CheckDuplicateDownloads(
       // samples in seconds rather than milliseconds.
       UMA_HISTOGRAM_CUSTOM_COUNTS(
           "OfflinePages.DownloadRequestTimeSinceDuplicateSaved",
-          (base::Time::Now() - latest_saved_time).InSeconds(),
+          (OfflineTimeNow() - latest_saved_time).InSeconds(),
           base::TimeDelta::FromSeconds(1).InSeconds(),
           base::TimeDelta::FromDays(7).InSeconds(), 50);
 
@@ -336,7 +328,8 @@ void OfflinePageUtils::ScheduleDownload(content::WebContents* web_contents,
                                         const GURL& url,
                                         DownloadUIActionFlags ui_action,
                                         const std::string& request_origin) {
-  DCHECK(web_contents);
+  if (!web_contents)
+    return;
 
   // Ensure that the storage permission is granted since the archive file is
   // going to be placed in the public directory.
@@ -382,8 +375,8 @@ bool OfflinePageUtils::GetCachedOfflinePageSizeBetween(
 
 // static
 std::string OfflinePageUtils::ExtractOfflineHeaderValueFromNavigationEntry(
-    const content::NavigationEntry& entry) {
-  std::string extra_headers = entry.GetExtraHeaders();
+    content::NavigationEntry* entry) {
+  std::string extra_headers = entry->GetExtraHeaders();
   if (extra_headers.empty())
     return std::string();
 

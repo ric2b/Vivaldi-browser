@@ -4,6 +4,9 @@
 
 #include "services/network/p2p/socket.h"
 
+#include <utility>
+
+#include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sys_byteorder.h"
 #include "net/base/net_errors.h"
@@ -67,12 +70,7 @@ P2PSocket::P2PSocket(Delegate* delegate,
     : delegate_(delegate),
       client_(std::move(client)),
       binding_(this, std::move(socket)),
-      state_(STATE_UNINITIALIZED),
       protocol_type_(protocol_type),
-      send_packets_delayed_total_(0),
-      send_packets_total_(0),
-      send_bytes_delayed_max_(0),
-      send_bytes_delayed_cur_(0),
       weak_ptr_factory_(this) {
   binding_.set_connection_error_handler(
       base::BindOnce(&P2PSocket::OnError, base::Unretained(this)));
@@ -160,7 +158,7 @@ void P2PSocket::ReportSocketError(int result, const char* histogram_name) {
 }
 
 // static
-P2PSocket* P2PSocket::Create(
+std::unique_ptr<P2PSocket> P2PSocket::Create(
     Delegate* delegate,
     mojom::P2PSocketClientPtr client,
     mojom::P2PSocketRequest socket,
@@ -170,29 +168,31 @@ P2PSocket* P2PSocket::Create(
     P2PMessageThrottler* throttler) {
   switch (type) {
     case P2P_SOCKET_UDP:
-      return new P2PSocketUdp(delegate, std::move(client), std::move(socket),
-                              throttler, net_log);
+      return std::make_unique<P2PSocketUdp>(
+          delegate, std::move(client), std::move(socket), throttler, net_log);
     case P2P_SOCKET_TCP_SERVER:
-      return new P2PSocketTcpServer(delegate, std::move(client),
-                                    std::move(socket), P2P_SOCKET_TCP_CLIENT);
+      return std::make_unique<P2PSocketTcpServer>(delegate, std::move(client),
+                                                  std::move(socket),
+                                                  P2P_SOCKET_TCP_CLIENT);
 
     case P2P_SOCKET_STUN_TCP_SERVER:
-      return new P2PSocketTcpServer(delegate, std::move(client),
-                                    std::move(socket),
-                                    P2P_SOCKET_STUN_TCP_CLIENT);
+      return std::make_unique<P2PSocketTcpServer>(delegate, std::move(client),
+                                                  std::move(socket),
+                                                  P2P_SOCKET_STUN_TCP_CLIENT);
 
     case P2P_SOCKET_TCP_CLIENT:
     case P2P_SOCKET_SSLTCP_CLIENT:
     case P2P_SOCKET_TLS_CLIENT:
-      return new P2PSocketTcp(delegate, std::move(client), std::move(socket),
-                              type, proxy_resolving_socket_factory);
+      return std::make_unique<P2PSocketTcp>(delegate, std::move(client),
+                                            std::move(socket), type,
+                                            proxy_resolving_socket_factory);
 
     case P2P_SOCKET_STUN_TCP_CLIENT:
     case P2P_SOCKET_STUN_SSLTCP_CLIENT:
     case P2P_SOCKET_STUN_TLS_CLIENT:
-      return new P2PSocketStunTcp(delegate, std::move(client),
-                                  std::move(socket), type,
-                                  proxy_resolving_socket_factory);
+      return std::make_unique<P2PSocketStunTcp>(delegate, std::move(client),
+                                                std::move(socket), type,
+                                                proxy_resolving_socket_factory);
   }
 
   NOTREACHED();

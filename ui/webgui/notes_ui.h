@@ -12,6 +12,7 @@ namespace vivaldi {
 class NotesUIHTMLSource : public content::URLDataSource {
  public:
   NotesUIHTMLSource();
+  ~NotesUIHTMLSource() override;
 
   std::string GetSource() const override;
   void StartDataRequest(
@@ -21,7 +22,6 @@ class NotesUIHTMLSource : public content::URLDataSource {
   std::string GetMimeType(const std::string& path) const override;
 
  private:
-  ~NotesUIHTMLSource() override;
   DISALLOW_COPY_AND_ASSIGN(NotesUIHTMLSource);
 };
 

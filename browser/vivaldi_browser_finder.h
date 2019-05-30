@@ -7,12 +7,17 @@
 
 namespace content {
 class WebContents;
+class RenderWidgetHostView;
 }
 
 namespace vivaldi {
 
-Browser* FindBrowserForEmbedderWebContents(const content::WebContents* contents);
+Browser* FindBrowserForEmbedderWebContents(
+    const content::WebContents* contents);
+
 Browser* FindBrowserWithWebContents(content::WebContents* web_contents);
+
+int GetBrowserCountOfType(Browser::Type type);
 
 }  // namespace vivaldi
 

@@ -4,78 +4,63 @@
 
 package org.chromium.chrome.browser.autofill.keyboard_accessory;
 
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.ACTIVE_TAB_INDEX;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.HEIGHT;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.NO_ACTIVE_TAB;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.PAGE_CHANGE_LISTENER;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.TABS;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.TOP_SHADOW_VISIBLE;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.VISIBLE;
+
 import android.os.Build;
-import android.support.v4.view.ViewPager;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 
-import org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetModel.PropertyKey;
-import org.chromium.chrome.browser.modelutil.LazyViewBinderAdapter;
+import org.chromium.ui.modelutil.PropertyKey;
+import org.chromium.ui.modelutil.PropertyModel;
 
 /**
- * Observes {@link AccessorySheetModel} changes (like a newly available tab) and triggers the
+ * Observes {@link AccessorySheetProperties} changes (like a newly available tab) and triggers the
  * {@link AccessorySheetViewBinder} which will modify the view accordingly.
  */
-class AccessorySheetViewBinder
-        implements LazyViewBinderAdapter
-                           .SimpleViewBinder<AccessorySheetModel, ViewPager, PropertyKey> {
-    @Override
-    public PropertyKey getVisibilityProperty() {
-        return PropertyKey.VISIBLE;
-    }
-
-    @Override
-    public boolean isVisible(AccessorySheetModel model) {
-        return model.isVisible();
-    }
-
-    @Override
-    public void onInitialInflation(AccessorySheetModel model, ViewPager inflatedView) {
-        inflatedView.setAdapter(
-                AccessorySheetCoordinator.createTabViewAdapter(model, inflatedView));
-        bind(model, inflatedView, PropertyKey.HEIGHT);
-        bind(model, inflatedView, PropertyKey.ACTIVE_TAB_INDEX);
-    }
-
-    @Override
-    public void bind(AccessorySheetModel model, ViewPager inflatedView, PropertyKey propertyKey) {
-        if (propertyKey == PropertyKey.VISIBLE) {
-            inflatedView.bringToFront(); // Ensure toolbars and other containers are overlaid.
-            inflatedView.setVisibility(model.isVisible() ? View.VISIBLE : View.GONE);
-            if (model.isVisible()
-                    && model.getActiveTabIndex() != AccessorySheetModel.NO_ACTIVE_TAB) {
-                announceOpenedTab(inflatedView, model.getTabList().get(model.getActiveTabIndex()));
+class AccessorySheetViewBinder {
+    public static void bind(PropertyModel model, AccessorySheetView view, PropertyKey propertyKey) {
+        if (propertyKey == TABS) {
+            view.setAdapter(AccessorySheetCoordinator.createTabViewAdapter(
+                    model.get(TABS), view.getViewPager()));
+        } else if (propertyKey == VISIBLE) {
+            view.bringToFront(); // Ensure toolbars and other containers are overlaid.
+            view.setVisibility(model.get(VISIBLE) ? View.VISIBLE : View.GONE);
+            if (model.get(VISIBLE) && model.get(ACTIVE_TAB_INDEX) != NO_ACTIVE_TAB) {
+                announceOpenedTab(view, model.get(TABS).get(model.get(ACTIVE_TAB_INDEX)));
             }
-            requestLayout(inflatedView);
-            return;
-        }
-        if (propertyKey == PropertyKey.HEIGHT) {
-            ViewGroup.LayoutParams p = inflatedView.getLayoutParams();
-            p.height = model.getHeight();
-            inflatedView.setLayoutParams(p);
-            requestLayout(inflatedView);
-            return;
-        }
-        if (propertyKey == PropertyKey.ACTIVE_TAB_INDEX) {
-            if (model.getActiveTabIndex() != AccessorySheetModel.NO_ACTIVE_TAB) {
-                inflatedView.setCurrentItem(model.getActiveTabIndex());
+        } else if (propertyKey == HEIGHT) {
+            ViewGroup.LayoutParams p = view.getLayoutParams();
+            p.height = model.get(HEIGHT);
+            view.setLayoutParams(p);
+        } else if (propertyKey == TOP_SHADOW_VISIBLE) {
+            view.setTopShadowVisible(model.get(TOP_SHADOW_VISIBLE));
+        } else if (propertyKey == ACTIVE_TAB_INDEX) {
+            if (model.get(ACTIVE_TAB_INDEX) != NO_ACTIVE_TAB) {
+                view.setCurrentItem(model.get(ACTIVE_TAB_INDEX));
             }
-            requestLayout(inflatedView);
-            return;
-        }
-        assert false : "Every possible property update needs to be handled!";
-    }
-
-    private static void requestLayout(ViewPager viewPager) {
-         // Layout requests happen automatically since Kitkat and redundant requests cause warnings.
-        if (viewPager == null || Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) return;
-        viewPager.post(() -> {
-            ViewParent parent = viewPager.getParent();
-            if (parent != null) {
-                parent.requestLayout();
+        } else if (propertyKey == PAGE_CHANGE_LISTENER) {
+            if (model.get(PAGE_CHANGE_LISTENER) != null) {
+                view.addOnPageChangeListener(model.get(PAGE_CHANGE_LISTENER));
             }
-        });
+        } else {
+            assert false : "Every possible property update needs to be handled!";
+        }
+        // Layout requests happen automatically since Kitkat and redundant requests cause warnings.
+        if (view != null && Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
+            view.post(() -> {
+                ViewParent parent = view.getParent();
+                if (parent != null) {
+                    parent.requestLayout();
+                }
+            });
+        }
     }
 
     static void announceOpenedTab(View announcer, KeyboardAccessoryData.Tab tab) {

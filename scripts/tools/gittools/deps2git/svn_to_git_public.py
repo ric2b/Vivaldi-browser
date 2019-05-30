@@ -4,6 +4,7 @@
 # found in the LICENSE file.
 
 """SVN to GIT mapping for the public Chromium repositories."""
+from __future__ import print_function
 
 import re
 
@@ -204,4 +205,4 @@ def SvnUrlToGitUrl(path, svn_url):
     return (path, GIT_HOST + 'chromium/reference_builds/%s' % repo, GIT_HOST)
 
   # Nothing yet? Oops.
-  print 'No match for %s' % svn_url
+  print('No match for %s' % svn_url)

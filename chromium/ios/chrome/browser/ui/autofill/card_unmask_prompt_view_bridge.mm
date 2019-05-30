@@ -20,7 +20,7 @@
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
-#import "ios/chrome/browser/ui/rtl_geometry.h"
+#import "ios/chrome/browser/ui/util/rtl_geometry.h"
 #import "ios/third_party/material_components_ios/src/components/AppBar/src/MaterialAppBar.h"
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
@@ -91,8 +91,9 @@ void CardUnmaskPromptViewBridge::GotVerificationResult(
   if (error_message.empty()) {
     [view_controller_ showSuccess];
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, base::Bind(&CardUnmaskPromptViewBridge::PerformClose,
-                              weak_ptr_factory_.GetWeakPtr()),
+        FROM_HERE,
+        base::BindOnce(&CardUnmaskPromptViewBridge::PerformClose,
+                       weak_ptr_factory_.GetWeakPtr()),
         controller_->GetSuccessMessageDuration());
   } else {
     if (allow_retry) {

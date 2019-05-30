@@ -46,6 +46,7 @@ class TestRequestPeer : public RequestPeer {
   void OnReceivedCachedMetadata(const char* data, int len) override;
   void OnCompletedRequest(
       const network::URLLoaderCompletionStatus& status) override;
+  scoped_refptr<base::TaskRunner> GetTaskRunner() override;
 
   struct Context final {
     Context();
@@ -66,6 +67,9 @@ class TestRequestPeer : public RequestPeer {
     std::vector<char> cached_metadata;
     // Data received. If downloading to file, remains empty.
     std::string data;
+
+    // Mojo's data pipe passed on OnStartLoadingResponseBody.
+    mojo::ScopedDataPipeConsumerHandle body_handle;
 
     // Total encoded data length, regardless of whether downloading to a file or
     // not.

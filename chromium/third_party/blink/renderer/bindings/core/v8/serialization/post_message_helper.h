@@ -6,7 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_SERIALIZATION_POST_MESSAGE_HELPER_H_
 
 #include "base/memory/scoped_refptr.h"
-#include "third_party/blink/public/mojom/message_port/message_port.mojom-blink.h"
+#include "third_party/blink/public/mojom/messaging/user_activation_snapshot.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "v8/include/v8.h"
@@ -27,14 +27,14 @@ class CORE_EXPORT PostMessageHelper {
   static scoped_refptr<SerializedScriptValue> SerializeMessageByMove(
       v8::Isolate*,
       const ScriptValue& message,
-      const PostMessageOptions& options,
+      const PostMessageOptions* options,
       Transferables& transferables,
       ExceptionState&);
 
   static scoped_refptr<SerializedScriptValue> SerializeMessageByCopy(
       v8::Isolate*,
       const ScriptValue& message,
-      const PostMessageOptions& options,
+      const PostMessageOptions* options,
       Transferables& transferables,
       ExceptionState&);
 
@@ -42,7 +42,7 @@ class CORE_EXPORT PostMessageHelper {
   // execution context is not a window.
   static mojom::blink::UserActivationSnapshotPtr CreateUserActivationSnapshot(
       ExecutionContext*,
-      const PostMessageOptions&);
+      const PostMessageOptions*);
 };
 
 }  // namespace blink

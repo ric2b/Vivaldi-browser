@@ -20,7 +20,7 @@ class _BaseCastBenchmark(perf_benchmark.PerfBenchmark):
   page_set = media_router_perf_pages.MediaRouterDialogPageSet
 
   def SetExtraBrowserOptions(self, options):
-    options.clear_sytem_cache_for_browser_and_profile_on_start = True
+    options.flush_os_page_caches_on_start = True
     # This flag is required to enable the communication between the page and
     # the test extension.
     options.disable_background_networking = False
@@ -32,6 +32,7 @@ class _BaseCastBenchmark(perf_benchmark.PerfBenchmark):
             'Release', 'mr_extension', 'release'),
              os.path.join(path_util.GetChromiumSrcDir(), 'out',
              'Release', 'media_router', 'telemetry_extension')]),
+        '--disable-features=ViewsCastDialog',
         '--whitelisted-extension-id=enhhojjnijigcajfphajepfemndkmdlo',
         '--media-router=1',
         '--enable-stats-collection-bindings'
@@ -100,7 +101,7 @@ class CPUMemoryBenckmark(perf_benchmark.PerfBenchmark):
   page_set = media_router_perf_pages.CPUMemoryPageSet
 
   def SetExtraBrowserOptions(self, options):
-    options.clear_sytem_cache_for_browser_and_profile_on_start = True
+    options.flush_os_page_caches_on_start = True
     # This flag is required to enable the communication between the page and
     # the test extension.
     options.disable_background_networking = False
@@ -108,6 +109,7 @@ class CPUMemoryBenckmark(perf_benchmark.PerfBenchmark):
         '--load-extension=' +
              os.path.join(path_util.GetChromiumSrcDir(), 'out',
              'Release', 'media_router', 'telemetry_extension'),
+        '--disable-features=ViewsCastDialog',
         '--media-router=0',
         '--enable-stats-collection-bindings'
     ])

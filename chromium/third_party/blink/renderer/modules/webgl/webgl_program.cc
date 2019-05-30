@@ -32,7 +32,7 @@
 namespace blink {
 
 WebGLProgram* WebGLProgram::Create(WebGLRenderingContextBase* ctx) {
-  return new WebGLProgram(ctx);
+  return MakeGarbageCollected<WebGLProgram>(ctx);
 }
 
 WebGLProgram::WebGLProgram(WebGLRenderingContextBase* ctx)
@@ -72,6 +72,14 @@ void WebGLProgram::DeleteObjectImpl(gpu::gles2::GLES2Interface* gl) {
 bool WebGLProgram::LinkStatus(WebGLRenderingContextBase* context) {
   CacheInfoIfNeeded(context);
   return link_status_;
+}
+
+bool WebGLProgram::CompletionStatus(WebGLRenderingContextBase* context) {
+  GLint completed = 0;
+  gpu::gles2::GLES2Interface* gl = context->ContextGL();
+  gl->GetProgramiv(object_, GL_COMPLETION_STATUS_KHR, &completed);
+
+  return completed;
 }
 
 void WebGLProgram::IncreaseLinkCount() {

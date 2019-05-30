@@ -25,16 +25,18 @@ std::string PrefetchEnumToString(PrefetchBackgroundTaskRescheduleType value) {
 
 std::string PrefetchEnumToString(PrefetchRequestStatus value) {
   switch (value) {
-    case PrefetchRequestStatus::SUCCESS:
+    case PrefetchRequestStatus::kSuccess:
       return "SUCCESS";
-    case PrefetchRequestStatus::SHOULD_RETRY_WITHOUT_BACKOFF:
+    case PrefetchRequestStatus::kShouldRetryWithoutBackoff:
       return "SHOULD_RETRY_WITHOUT_BACKOFF";
-    case PrefetchRequestStatus::SHOULD_RETRY_WITH_BACKOFF:
+    case PrefetchRequestStatus::kShouldRetryWithBackoff:
       return "SHOULD_RETRY_WITH_BACKOFF";
-    case PrefetchRequestStatus::SHOULD_SUSPEND:
-      return "SHOULD_SUSPEND";
-    case PrefetchRequestStatus::COUNT:
-      return "COUNT";
+    case PrefetchRequestStatus::kShouldSuspendNotImplemented:
+      return "SHOULD_SUSPEND_NOT_IMPLEMENTED";
+    case PrefetchRequestStatus::kShouldSuspendForbidden:
+      return "SHOULD_SUSPEND_FORBIDDEN";
+    case PrefetchRequestStatus::kShouldSuspendBlockedByAdministrator:
+      return "SHOULD_SUSPEND_BLOCKED_BY_ADMINISTRATOR";
   }
   DCHECK(false) << static_cast<int>(value) << " not valid enum value";
 }
@@ -132,6 +134,15 @@ std::string PrefetchEnumToString(PrefetchItemErrorCode value) {
 RenderPageInfo::RenderPageInfo() = default;
 
 RenderPageInfo::RenderPageInfo(const RenderPageInfo& other) = default;
+
+PrefetchURL::PrefetchURL(const std::string& id,
+                         const GURL& url,
+                         const base::string16& title)
+    : id(id), url(url), title(title) {}
+
+PrefetchURL::~PrefetchURL() = default;
+
+PrefetchURL::PrefetchURL(const PrefetchURL& other) = default;
 
 PrefetchDownloadResult::PrefetchDownloadResult() = default;
 

@@ -13,6 +13,7 @@
 
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/animation/animation_host.h"
 #include "cc/base/math_util.h"
@@ -320,25 +321,20 @@ TEST_F(PictureLayerImplTest, ExternalViewportRectForPrioritizingTiles) {
       viewport_rect_for_tile_priority, transform_for_tile_priority);
   host_impl()->active_tree()->UpdateDrawProperties();
 
-  gfx::Rect viewport_rect_for_tile_priority_in_view_space =
-      viewport_rect_for_tile_priority;
-
   // Verify the viewport rect for tile priority is used in picture layer tiling.
-  EXPECT_EQ(viewport_rect_for_tile_priority_in_view_space,
+  EXPECT_EQ(viewport_rect_for_tile_priority,
             active_layer()->viewport_rect_for_tile_priority_in_content_space());
   PictureLayerTilingSet* tilings = active_layer()->tilings();
   for (size_t i = 0; i < tilings->num_tilings(); i++) {
     PictureLayerTiling* tiling = tilings->tiling_at(i);
-    EXPECT_EQ(
-        tiling->GetCurrentVisibleRectForTesting(),
-        gfx::ScaleToEnclosingRect(viewport_rect_for_tile_priority_in_view_space,
-                                  tiling->contents_scale_key()));
+    EXPECT_EQ(tiling->GetCurrentVisibleRectForTesting(),
+              gfx::ScaleToEnclosingRect(viewport_rect_for_tile_priority,
+                                        tiling->contents_scale_key()));
   }
 
   // Update tiles with viewport for tile priority as (200, 200, 100, 100) in
-  // screen space and the transform for tile priority is translated and
-  // rotated. The actual viewport for tile priority used by PictureLayerImpl
-  // should be (200, 200, 100, 100) applied with the said transform.
+  // root layer space and the transform for tile priority is translated and
+  // rotated.
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(200));
 
   viewport_rect_for_tile_priority = gfx::Rect(200, 200, 100, 100);
@@ -348,27 +344,14 @@ TEST_F(PictureLayerImplTest, ExternalViewportRectForPrioritizingTiles) {
       viewport_rect_for_tile_priority, transform_for_tile_priority);
   host_impl()->active_tree()->UpdateDrawProperties();
 
-  gfx::Transform screen_to_view(gfx::Transform::kSkipInitialization);
-  bool success = transform_for_tile_priority.GetInverse(&screen_to_view);
-  EXPECT_TRUE(success);
-
-  // Note that we don't clip this to the layer bounds, since it is expected that
-  // the rect will sometimes be outside of the layer bounds. If we clip to
-  // bounds, then tile priorities will end up being incorrect in cases of fully
-  // offscreen layer.
-  viewport_rect_for_tile_priority_in_view_space =
-      MathUtil::ProjectEnclosingClippedRect(screen_to_view,
-                                            viewport_rect_for_tile_priority);
-
-  EXPECT_EQ(viewport_rect_for_tile_priority_in_view_space,
+  EXPECT_EQ(viewport_rect_for_tile_priority,
             active_layer()->viewport_rect_for_tile_priority_in_content_space());
   tilings = active_layer()->tilings();
   for (size_t i = 0; i < tilings->num_tilings(); i++) {
     PictureLayerTiling* tiling = tilings->tiling_at(i);
-    EXPECT_EQ(
-        tiling->GetCurrentVisibleRectForTesting(),
-        gfx::ScaleToEnclosingRect(viewport_rect_for_tile_priority_in_view_space,
-                                  tiling->contents_scale_key()));
+    EXPECT_EQ(tiling->GetCurrentVisibleRectForTesting(),
+              gfx::ScaleToEnclosingRect(viewport_rect_for_tile_priority,
+                                        tiling->contents_scale_key()));
   }
 }
 
@@ -3095,8 +3078,7 @@ TEST_F(PictureLayerImplTest, TilingSetRasterQueue) {
 
   std::vector<Tile*> high_res_tiles =
       pending_layer()->HighResTiling()->AllTilesForTesting();
-  for (std::vector<Tile*>::iterator tile_it = high_res_tiles.begin();
-       tile_it != high_res_tiles.end();
+  for (auto tile_it = high_res_tiles.begin(); tile_it != high_res_tiles.end();
        ++tile_it) {
     Tile* tile = *tile_it;
     TileDrawInfo& draw_info = tile->draw_info();
@@ -3243,7 +3225,7 @@ TEST_F(PictureLayerImplTest, TilingSetEvictionQueue) {
     while (std::abs(tile->contents_scale_key() - expected_scales[scale_index]) >
            std::numeric_limits<float>::epsilon()) {
       ++scale_index;
-      ASSERT_LT(scale_index, arraysize(expected_scales));
+      ASSERT_LT(scale_index, base::size(expected_scales));
     }
 
     EXPECT_FLOAT_EQ(tile->contents_scale_key(), expected_scales[scale_index]);
@@ -3291,7 +3273,7 @@ TEST_F(PictureLayerImplTest, TilingSetEvictionQueue) {
     while (std::abs(tile->contents_scale_key() - expected_scales[scale_index]) >
            std::numeric_limits<float>::epsilon()) {
       ++scale_index;
-      ASSERT_LT(scale_index, arraysize(expected_scales));
+      ASSERT_LT(scale_index, base::size(expected_scales));
     }
 
     EXPECT_FLOAT_EQ(tile->contents_scale_key(), expected_scales[scale_index]);
@@ -3370,7 +3352,7 @@ TEST_F(PictureLayerImplTest, OcclusionOnSolidColorPictureLayer) {
 
   {
     SCOPED_TRACE("Scaled occlusion");
-    gfx::Rect occluded(300, 0, 400, 2000);
+    gfx::Rect occluded(300, 0, 2000, 2000);
     impl.AppendQuadsWithOcclusion(active_layer(), occluded);
 
     size_t partial_occluded_count = 0;
@@ -3378,11 +3360,9 @@ TEST_F(PictureLayerImplTest, OcclusionOnSolidColorPictureLayer) {
                                             &partial_occluded_count);
     // Because of the implementation of test helper AppendQuadsWithOcclusion,
     // the occlusion will have a scale transform resulted from the device scale
-    // factor. However, the AppendQuads function will try to tile a solid color
-    // layer ignoring the scale factor, and its visible layer bounds is 500x500.
-    // So we end up having 4 partially occluded quads.
-    EXPECT_EQ(4u, impl.quad_list().size());
-    EXPECT_EQ(4u, partial_occluded_count);
+    // factor. A single partially overlapped DrawQuad of 500x500 will be added.
+    EXPECT_EQ(1u, impl.quad_list().size());
+    EXPECT_EQ(1u, partial_occluded_count);
   }
 }
 
@@ -3410,7 +3390,7 @@ TEST_F(PictureLayerImplTest, IgnoreOcclusionOnSolidColorMask) {
                                             &partial_occluded_count);
     // None of the quads shall be occluded because mask layers ignores
     // occlusion.
-    EXPECT_EQ(16u, impl.quad_list().size());
+    EXPECT_EQ(1u, impl.quad_list().size());
     EXPECT_EQ(0u, partial_occluded_count);
   }
 }
@@ -4054,7 +4034,7 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
   layer1->SetBounds(layer_bounds);
   layer1->SetDrawsContent(true);
   layer1->SetContentsOpaque(true);
-  layer1->SetPosition(occluding_layer_position);
+  layer1->test_properties()->position = occluding_layer_position;
 
   RebuildPropertyTreesOnPendingTree();
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(200));
@@ -4078,7 +4058,7 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
   EXPECT_EQ(20, unoccluded_tile_count);
 
   // Full occlusion.
-  layer1->SetPosition(gfx::PointF());
+  layer1->test_properties()->position = gfx::PointF();
   layer1->NoteLayerPropertyChanged();
 
   RebuildPropertyTreesOnPendingTree();
@@ -4149,7 +4129,7 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
   layer1->SetBounds(layer_bounds);
   layer1->SetDrawsContent(true);
   layer1->SetContentsOpaque(true);
-  layer1->SetPosition(occluding_layer_position);
+  layer1->test_properties()->position = occluding_layer_position;
 
   RebuildPropertyTreesOnPendingTree();
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(200));
@@ -4186,7 +4166,7 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
   }
 
   // Full occlusion.
-  layer1->SetPosition(gfx::PointF());
+  layer1->test_properties()->position = gfx::PointF();
   layer1->NoteLayerPropertyChanged();
 
   RebuildPropertyTreesOnPendingTree();
@@ -4246,7 +4226,7 @@ TEST_F(OcclusionTrackingPictureLayerImplTest, OcclusionForDifferentScales) {
   layer1->SetBounds(layer_bounds);
   layer1->SetDrawsContent(true);
   layer1->SetContentsOpaque(true);
-  layer1->SetPosition(occluding_layer_position);
+  layer1->test_properties()->position = occluding_layer_position;
 
   pending_layer()->tilings()->RemoveAllTilings();
   float low_res_factor = host_impl()->settings().low_res_contents_scale_factor;
@@ -4331,7 +4311,7 @@ TEST_F(OcclusionTrackingPictureLayerImplTest, DifferentOcclusionOnTrees) {
   layer1->SetBounds(layer_bounds);
   layer1->SetDrawsContent(true);
   layer1->SetContentsOpaque(true);
-  layer1->SetPosition(occluding_layer_position);
+  layer1->test_properties()->position = occluding_layer_position;
 
   ActivateTree();
 
@@ -4427,8 +4407,8 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
   active_occluding_layer->SetBounds(layer_bounds);
   active_occluding_layer->SetDrawsContent(true);
   active_occluding_layer->SetContentsOpaque(true);
-  active_occluding_layer->SetPosition(active_occluding_layer_position);
-
+  active_occluding_layer->test_properties()->position =
+      active_occluding_layer_position;
   ActivateTree();
 
   // Partially invalidate the pending layer. Tiles inside the invalidation rect
@@ -4444,7 +4424,8 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
   pending_occluding_layer->SetBounds(layer_bounds);
   pending_occluding_layer->SetDrawsContent(true);
   pending_occluding_layer->SetContentsOpaque(true);
-  pending_occluding_layer->SetPosition(pending_occluding_layer_position);
+  pending_occluding_layer->test_properties()->position =
+      pending_occluding_layer_position;
 
   EXPECT_EQ(1u, pending_layer()->num_tilings());
   EXPECT_EQ(2u, active_layer()->num_tilings());

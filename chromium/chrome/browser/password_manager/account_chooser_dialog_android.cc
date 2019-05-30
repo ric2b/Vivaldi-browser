@@ -10,14 +10,13 @@
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
+#include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/password_manager/credential_android.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/passwords/account_avatar_fetcher.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/profile_sync_service.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_manager_constants.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
@@ -101,7 +100,7 @@ void FetchAvatar(const base::android::ScopedJavaGlobalRef<jobject>& java_dialog,
   fetcher->Start(loader_factory);
 }
 
-};  // namespace
+}  // namespace
 
 AccountChooserDialogAndroid::AccountChooserDialogAndroid(
     content::WebContents* web_contents,
@@ -119,17 +118,15 @@ AccountChooserDialogAndroid::AccountChooserDialogAndroid(
 
 AccountChooserDialogAndroid::~AccountChooserDialogAndroid() {}
 
-void AccountChooserDialogAndroid::ShowDialog() {
+bool AccountChooserDialogAndroid::ShowDialog() {
+  TabAndroid* tab = TabAndroid::FromWebContents(web_contents_);
+  if (!(tab && tab->IsUserInteractable())) {
+    delete this;
+    return false;
+  }
   JNIEnv* env = AttachCurrentThread();
-  bool is_smartlock_branding_enabled =
-      password_bubble_experiment::IsSmartLockUser(
-          ProfileSyncServiceFactory::GetForProfile(
-              Profile::FromBrowserContext(web_contents_->GetBrowserContext())));
-  base::string16 title;
-  gfx::Range title_link_range = gfx::Range();
-  GetAccountChooserDialogTitleTextAndLinkRange(
-      is_smartlock_branding_enabled, local_credentials_forms().size() > 1,
-      &title, &title_link_range);
+  base::string16 title =
+      l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_ACCOUNT_CHOOSER_TITLE);
   gfx::NativeWindow native_window = web_contents_->GetTopLevelNativeWindow();
   ScopedJavaLocalRef<jobjectArray> java_credentials_array =
       CreateNativeCredentialArray(env, local_credentials_forms().size());
@@ -145,8 +142,7 @@ void AccountChooserDialogAndroid::ShowDialog() {
   dialog_jobject_.Reset(Java_AccountChooserDialog_createAndShowAccountChooser(
       env, native_window->GetJavaObject(), reinterpret_cast<intptr_t>(this),
       java_credentials_array,
-      base::android::ConvertUTF16ToJavaString(env, title),
-      title_link_range.start(), title_link_range.end(),
+      base::android::ConvertUTF16ToJavaString(env, title), 0, 0,
       base::android::ConvertUTF8ToJavaString(env, origin),
       base::android::ConvertUTF16ToJavaString(env, signin_button)));
   network::mojom::URLLoaderFactory* loader_factory =
@@ -157,6 +153,7 @@ void AccountChooserDialogAndroid::ShowDialog() {
   int avatar_index = 0;
   for (const auto& form : local_credentials_forms())
     FetchAvatar(dialog_jobject_, form.get(), avatar_index++, loader_factory);
+  return true;
 }
 
 void AccountChooserDialogAndroid::OnCredentialClicked(

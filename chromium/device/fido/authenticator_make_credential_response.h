@@ -16,6 +16,7 @@
 #include "base/optional.h"
 #include "device/fido/attestation_object.h"
 #include "device/fido/fido_constants.h"
+#include "device/fido/fido_transport_protocol.h"
 #include "device/fido/response_data.h"
 
 namespace device {
@@ -29,10 +30,13 @@ class COMPONENT_EXPORT(DEVICE_FIDO) AuthenticatorMakeCredentialResponse
  public:
   static base::Optional<AuthenticatorMakeCredentialResponse>
   CreateFromU2fRegisterResponse(
+      base::Optional<FidoTransportProtocol> transport_used,
       base::span<const uint8_t, kRpIdHashLength> relying_party_id_hash,
       base::span<const uint8_t> u2f_data);
 
-  AuthenticatorMakeCredentialResponse(AttestationObject attestation_object);
+  AuthenticatorMakeCredentialResponse(
+      base::Optional<FidoTransportProtocol> transport_used,
+      AttestationObject attestation_object);
   AuthenticatorMakeCredentialResponse(
       AuthenticatorMakeCredentialResponse&& that);
   AuthenticatorMakeCredentialResponse& operator=(
@@ -41,10 +45,10 @@ class COMPONENT_EXPORT(DEVICE_FIDO) AuthenticatorMakeCredentialResponse
 
   std::vector<uint8_t> GetCBOREncodedAttestationObject() const;
 
-  // Replaces the attestation statement with a “none” attestation and removes
-  // AAGUID from authenticator data section.
+  // Replaces the attestation statement with a “none” attestation, and removes
+  // AAGUID from authenticator data section unless |preserve_aaguid| is true.
   // https://w3c.github.io/webauthn/#createCredential
-  void EraseAttestationStatement();
+  void EraseAttestationStatement(AttestationObject::AAGUID erase_aaguid);
 
   // Returns true if the attestation is a "self" attestation, i.e. is just the
   // private key signing itself to show that it is fresh and the AAGUID is zero.
@@ -63,8 +67,16 @@ class COMPONENT_EXPORT(DEVICE_FIDO) AuthenticatorMakeCredentialResponse
     return attestation_object_;
   }
 
+  base::Optional<FidoTransportProtocol> transport_used() const {
+    return transport_used_;
+  }
+
  private:
   AttestationObject attestation_object_;
+
+  // Contains the transport used to register the credential in this case. It is
+  // nullopt for cases where we cannot determine the transport (Windows).
+  base::Optional<FidoTransportProtocol> transport_used_;
 
   DISALLOW_COPY_AND_ASSIGN(AuthenticatorMakeCredentialResponse);
 };

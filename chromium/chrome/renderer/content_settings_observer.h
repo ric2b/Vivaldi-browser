@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "base/callback.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/gtest_prod_util.h"
@@ -30,10 +31,12 @@ class WebSecurityOrigin;
 class WebURL;
 }
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 namespace extensions {
 class Dispatcher;
 class Extension;
 }
+#endif
 
 // Handles blocking content per content settings for each RenderFrame.
 class ContentSettingsObserver
@@ -45,10 +48,15 @@ class ContentSettingsObserver
   // Set |should_whitelist| to true if |render_frame()| contains content that
   // should be whitelisted for content settings.
   ContentSettingsObserver(content::RenderFrame* render_frame,
-                          extensions::Dispatcher* extension_dispatcher,
                           bool should_whitelist,
                           service_manager::BinderRegistry* registry);
   ~ContentSettingsObserver() override;
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  // Sets the extension dispatcher. Call this right after constructing this
+  // class. This should only be called once.
+  void SetExtensionDispatcher(extensions::Dispatcher* extension_dispatcher);
+#endif
 
   // Sets the content setting rules which back |allowImage()|, |allowScript()|,
   // |allowScriptFromSource()| and |allowAutoplay()|. |content_setting_rules|
@@ -68,15 +76,12 @@ class ContentSettingsObserver
                            const base::string16& details);
 
   // blink::WebContentSettingsClient:
-  bool AllowDatabase(const blink::WebString& name,
-                     const blink::WebString& display_name,
-                     unsigned estimated_size) override;
+  bool AllowDatabase() override;
   void RequestFileSystemAccessAsync(
-      const blink::WebContentSettingCallbacks& callbacks) override;
+      base::OnceCallback<void(bool)> callback) override;
   bool AllowImage(bool enabled_per_settings,
                   const blink::WebURL& image_url) override;
-  bool AllowIndexedDB(const blink::WebString& name,
-                      const blink::WebSecurityOrigin& origin) override;
+  bool AllowIndexedDB(const blink::WebSecurityOrigin& origin) override;
   bool AllowScript(bool enabled_per_settings) override;
   bool AllowScriptFromSource(bool enabled_per_settings,
                              const blink::WebURL& script_url) override;
@@ -113,8 +118,8 @@ class ContentSettingsObserver
 
   // RenderFrameObserver implementation.
   bool OnMessageReceived(const IPC::Message& message) override;
-  void DidCommitProvisionalLoad(bool is_new_navigation,
-                                bool is_same_document_navigation) override;
+  void DidCommitProvisionalLoad(bool is_same_document_navigation,
+                                ui::PageTransition transition) override;
   void OnDestruct() override;
 
   // chrome::mojom::ContentSettingsRenderer:
@@ -153,17 +158,17 @@ class ContentSettingsObserver
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // Owned by ChromeContentRendererClient and outlive us.
-  extensions::Dispatcher* const extension_dispatcher_;
+  extensions::Dispatcher* extension_dispatcher_ = nullptr;
 #endif
 
   // Insecure content may be permitted for the duration of this render view.
-  bool allow_running_insecure_content_;
+  bool allow_running_insecure_content_ = false;
 
   // A pointer to content setting rules stored by the renderer. Normally, the
   // |RendererContentSettingRules| object is owned by
   // |ChromeRenderThreadObserver|. In the tests it is owned by the caller of
   // |SetContentSettingRules|.
-  const RendererContentSettingRules* content_setting_rules_;
+  const RendererContentSettingRules* content_setting_rules_ = nullptr;
 
   // Stores if images, scripts, and plugins have actually been blocked.
   base::flat_set<ContentSettingsType> content_blocked_;
@@ -176,10 +181,10 @@ class ContentSettingsObserver
   base::flat_map<blink::WebFrame*, bool> cached_script_permissions_;
 
   base::flat_set<std::string> temporarily_allowed_plugins_;
-  bool is_interstitial_page_;
+  bool is_interstitial_page_ = false;
 
-  int current_request_id_;
-  base::flat_map<int, blink::WebContentSettingCallbacks> permission_requests_;
+  int current_request_id_ = 0;
+  base::flat_map<int, base::OnceCallback<void(bool)>> permission_requests_;
 
   // If true, IsWhitelistedForContentSettings will always return true.
   const bool should_whitelist_;

@@ -9,10 +9,10 @@ jumbo_static_library("ui") {
     "webgui/vivaldi_web_ui_controller_factory.cpp",
     "webgui/vivaldi_web_ui_controller_factory.h",
   ]
-  if (is_mac) {
+  if (is_win) {
     sources += [
-      "dragging/drag_tab_handler_helper_mac.h",
-      "dragging/drag_tab_handler_helper_mac.mm",
+      "lights/razer_chroma_platform_driver_win.cc",
+      "lights/razer_chroma_platform_driver_win.h",
     ]
   }
   public_configs = [ "//third_party/protobuf:using_proto" ]
@@ -31,12 +31,18 @@ jumbo_static_library("ui") {
       "lazy_load_service.h",
       "devtools/devtools_connector.cc",
       "devtools/devtools_connector.h",
-      "dragging/drag_tab_handler.cc",
-      "dragging/drag_tab_handler.h",
+      "lights/razer_chroma_handler.cc",
+      "lights/razer_chroma_handler.h",
     ]
     deps += [
       "//chrome/browser/extensions:extensions",
       "//vivaldi/extensions/schema"
+    ]
+  }
+  if (is_mac) {
+    sources += [
+      "vivaldi_bookmark_menu_mac.h",
+      "vivaldi_bookmark_menu_mac.mm",
     ]
   }
 }

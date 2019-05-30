@@ -5,15 +5,14 @@
 /**
  * UMA exporter for Quick View.
  *
- * @param {!VolumeManagerWrapper} volumeManager
+ * @param {!VolumeManager} volumeManager
  * @param {!DialogType} dialogType
  *
  * @constructor
  */
 function QuickViewUma(volumeManager, dialogType) {
-
   /**
-   * @type {!VolumeManagerWrapper}
+   * @type {!VolumeManager}
    * @private
    */
   this.volumeManager_ = volumeManager;
@@ -64,6 +63,7 @@ QuickViewUma.VolumeType = [
   VolumeManagerCommon.VolumeType.MEDIA_VIEW,
   VolumeManagerCommon.VolumeType.CROSTINI,
   VolumeManagerCommon.VolumeType.ANDROID_FILES,
+  VolumeManagerCommon.VolumeType.DOCUMENTS_PROVIDER,
 ];
 
 /**
@@ -74,8 +74,8 @@ QuickViewUma.VolumeType = [
  *
  * @private
  */
-QuickViewUma.prototype.exportFileType_ = function(entry, name) {
-  var extension = FileType.getExtension(entry).toLowerCase();
+QuickViewUma.prototype.exportFileType_ = (entry, name) => {
+  let extension = FileType.getExtension(entry).toLowerCase();
   if (entry.isDirectory) {
     extension = 'directory';
   } else if (extension === '') {
@@ -106,7 +106,7 @@ QuickViewUma.prototype.onOpened = function(entry, wayToOpen) {
   metrics.recordEnum(
       'QuickView.WayToOpen', wayToOpen, QuickViewUma.WayToOpenValues_);
 
-  var volumeType = this.volumeManager_.getVolumeInfo(entry).volumeType;
+  const volumeType = this.volumeManager_.getVolumeInfo(entry).volumeType;
   if (QuickViewUma.VolumeType.includes(volumeType)) {
     metrics.recordEnum(
         'QuickView.VolumeType', volumeType, QuickViewUma.VolumeType);

@@ -4,13 +4,11 @@
 
 #include "ash/system/tray/system_tray_notifier.h"
 
-#include "ash/system/bluetooth/bluetooth_observer.h"
+#include "ash/public/cpp/system_tray_focus_observer.h"
 #include "ash/system/ime/ime_observer.h"
 #include "ash/system/network/network_observer.h"
 #include "ash/system/screen_security/screen_capture_observer.h"
 #include "ash/system/screen_security/screen_share_observer.h"
-#include "ash/system/system_tray_focus_observer.h"
-#include "ash/system/tray_tracing.h"
 #include "ash/system/virtual_keyboard/virtual_keyboard_observer.h"
 
 namespace ash {
@@ -18,24 +16,6 @@ namespace ash {
 SystemTrayNotifier::SystemTrayNotifier() = default;
 
 SystemTrayNotifier::~SystemTrayNotifier() = default;
-
-void SystemTrayNotifier::AddBluetoothObserver(BluetoothObserver* observer) {
-  bluetooth_observers_.AddObserver(observer);
-}
-
-void SystemTrayNotifier::RemoveBluetoothObserver(BluetoothObserver* observer) {
-  bluetooth_observers_.RemoveObserver(observer);
-}
-
-void SystemTrayNotifier::NotifyRefreshBluetooth() {
-  for (auto& observer : bluetooth_observers_)
-    observer.OnBluetoothRefresh();
-}
-
-void SystemTrayNotifier::NotifyBluetoothDiscoveringChanged() {
-  for (auto& observer : bluetooth_observers_)
-    observer.OnBluetoothDiscoveringChanged();
-}
 
 void SystemTrayNotifier::AddIMEObserver(IMEObserver* observer) {
   ime_observers_.AddObserver(observer);
@@ -79,10 +59,12 @@ void SystemTrayNotifier::RemoveScreenCaptureObserver(
 }
 
 void SystemTrayNotifier::NotifyScreenCaptureStart(
-    const base::Closure& stop_callback,
+    base::RepeatingClosure stop_callback,
+    base::RepeatingClosure source_callback,
     const base::string16& sharing_app_name) {
   for (auto& observer : screen_capture_observers_)
-    observer.OnScreenCaptureStart(stop_callback, sharing_app_name);
+    observer.OnScreenCaptureStart(stop_callback, source_callback,
+                                  sharing_app_name);
 }
 
 void SystemTrayNotifier::NotifyScreenCaptureStop() {

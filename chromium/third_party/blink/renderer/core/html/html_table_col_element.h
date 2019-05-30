@@ -30,7 +30,7 @@
 
 namespace blink {
 
-class HTMLTableColElement final : public HTMLTablePartElement {
+class CORE_EXPORT HTMLTableColElement final : public HTMLTablePartElement {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -58,8 +58,8 @@ class HTMLTableColElement final : public HTMLTablePartElement {
 };
 
 inline bool IsHTMLTableColElement(const HTMLElement& element) {
-  return element.HasTagName(HTMLNames::colTag) ||
-         element.HasTagName(HTMLNames::colgroupTag);
+  return element.HasTagName(html_names::kColTag) ||
+         element.HasTagName(html_names::kColgroupTag);
 }
 
 DEFINE_HTMLELEMENT_TYPE_CASTS_WITH_FUNCTION(HTMLTableColElement);

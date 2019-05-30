@@ -6,8 +6,8 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_SERVICE_WORKER_RESPOND_WITH_OBSERVER_H_
 
 #include "third_party/blink/public/mojom/service_worker/service_worker_error_type.mojom-shared.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -59,7 +59,7 @@ class MODULES_EXPORT RespondWithObserver
  protected:
   RespondWithObserver(ExecutionContext*, int event_id, WaitUntilObserver*);
   const int event_id_;
-  double event_dispatch_time_ = 0;
+  TimeTicks event_dispatch_time_;
 
  private:
   class ThenFunction;

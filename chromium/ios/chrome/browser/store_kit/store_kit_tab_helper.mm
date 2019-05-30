@@ -10,8 +10,6 @@
 #error "This file requires ARC support."
 #endif
 
-DEFINE_WEB_STATE_USER_DATA_KEY(StoreKitTabHelper);
-
 StoreKitTabHelper::StoreKitTabHelper(web::WebState* web_state) {}
 
 StoreKitTabHelper::~StoreKitTabHelper() {}
@@ -31,3 +29,5 @@ void StoreKitTabHelper::OpenAppStore(NSString* app_id) {
 void StoreKitTabHelper::OpenAppStore(NSDictionary* product_params) {
   [store_kit_launcher_ openAppStoreWithParameters:product_params];
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(StoreKitTabHelper)

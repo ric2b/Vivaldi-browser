@@ -38,15 +38,6 @@ void WebStateObserverBridge::NavigationItemsPruned(web::WebState* web_state,
   }
 }
 
-void WebStateObserverBridge::NavigationItemCommitted(
-    web::WebState* web_state,
-    const web::LoadCommittedDetails& load_detatils) {
-  SEL selector = @selector(webState:didCommitNavigationWithDetails:);
-  if ([observer_ respondsToSelector:selector]) {
-    [observer_ webState:web_state didCommitNavigationWithDetails:load_detatils];
-  }
-}
-
 void WebStateObserverBridge::DidStartNavigation(
     web::WebState* web_state,
     web::NavigationContext* navigation_context) {
@@ -125,18 +116,30 @@ void WebStateObserverBridge::DidChangeVisibleSecurityState(
   }
 }
 
-void WebStateObserverBridge::DidSuppressDialog(web::WebState* web_state) {
-  if ([observer_ respondsToSelector:@selector(webStateDidSuppressDialog:)]) {
-    [observer_ webStateDidSuppressDialog:web_state];
-  }
-}
-
 void WebStateObserverBridge::FaviconUrlUpdated(
     web::WebState* web_state,
     const std::vector<FaviconURL>& candidates) {
   SEL selector = @selector(webState:didUpdateFaviconURLCandidates:);
   if ([observer_ respondsToSelector:selector]) {
     [observer_ webState:web_state didUpdateFaviconURLCandidates:candidates];
+  }
+}
+
+void WebStateObserverBridge::WebFrameDidBecomeAvailable(
+    web::WebState* web_state,
+    web::WebFrame* web_frame) {
+  SEL selector = @selector(webState:frameDidBecomeAvailable:);
+  if ([observer_ respondsToSelector:selector]) {
+    [observer_ webState:web_state frameDidBecomeAvailable:web_frame];
+  }
+}
+
+void WebStateObserverBridge::WebFrameWillBecomeUnavailable(
+    web::WebState* web_state,
+    web::WebFrame* web_frame) {
+  SEL selector = @selector(webState:frameWillBecomeUnavailable:);
+  if ([observer_ respondsToSelector:selector]) {
+    [observer_ webState:web_state frameWillBecomeUnavailable:web_frame];
   }
 }
 

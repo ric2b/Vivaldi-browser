@@ -10,14 +10,14 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 
 namespace blink {
-namespace CSSLonghand {
+namespace css_longhand {
 
 const CSSValue* TransitionTimingFunction::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext&,
     const CSSParserLocalContext&) const {
-  return CSSPropertyParserHelpers::ConsumeCommaSeparatedList(
-      CSSParsingUtils::ConsumeAnimationTimingFunction, range);
+  return css_property_parser_helpers::ConsumeCommaSeparatedList(
+      css_parsing_utils::ConsumeAnimationTimingFunction, range);
 }
 
 const CSSValue* TransitionTimingFunction::CSSValueFromComputedStyleInternal(
@@ -31,10 +31,10 @@ const CSSValue* TransitionTimingFunction::CSSValueFromComputedStyleInternal(
 }
 
 const CSSValue* TransitionTimingFunction::InitialValue() const {
-  DEFINE_STATIC_LOCAL(CSSValue, value,
+  DEFINE_STATIC_LOCAL(Persistent<CSSValue>, value,
                       (CSSIdentifierValue::Create(CSSValueEase)));
-  return &value;
+  return value;
 }
 
-}  // namespace CSSLonghand
+}  // namespace css_longhand
 }  // namespace blink

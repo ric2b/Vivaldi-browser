@@ -9,7 +9,7 @@
 
 #include "base/callback.h"
 #include "base/command_line.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager_util.h"
@@ -19,8 +19,8 @@
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/test/base/testing_profile.h"
-#include "chromeos/chromeos_switches.h"
-#include "chromeos/login/login_state.h"
+#include "chromeos/constants/chromeos_switches.h"
+#include "chromeos/login/login_state/login_state.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user_image/user_image.h"
 #include "components/user_manager/user_names.h"
@@ -241,13 +241,10 @@ void FakeChromeUserManager::SwitchActiveUser(const AccountId& account_id) {
       }
     }
   }
+  NotifyActiveUserChanged(active_user_);
 }
 
 void FakeChromeUserManager::OnSessionStarted() {}
-
-void FakeChromeUserManager::OnProfileInitialized(user_manager::User* user) {
-  user->set_profile_ever_initialized(true);
-}
 
 void FakeChromeUserManager::RemoveUser(
     const AccountId& account_id,
@@ -315,24 +312,8 @@ UserFlow* FakeChromeUserManager::GetDefaultUserFlow() const {
   return default_flow_.get();
 }
 
-void FakeChromeUserManager::UpdateLoginState(
-    const user_manager::User* active_user,
-    const user_manager::User* primary_user,
-    bool is_current_user_owner) const {
-  chrome_user_manager_util::UpdateLoginState(active_user, primary_user,
-                                             is_current_user_owner);
-}
-
 void FakeChromeUserManager::SetOwnerId(const AccountId& account_id) {
   UserManagerBase::SetOwnerId(account_id);
-}
-
-bool FakeChromeUserManager::GetPlatformKnownUserId(
-    const std::string& user_email,
-    const std::string& gaia_id,
-    AccountId* out_account_id) const {
-  return chrome_user_manager_util::GetPlatformKnownUserId(user_email, gaia_id,
-                                                          out_account_id);
 }
 
 const AccountId& FakeChromeUserManager::GetGuestAccountId() const {
@@ -490,7 +471,10 @@ void FakeChromeUserManager::SaveUserOAuthStatus(
 
 void FakeChromeUserManager::SaveForceOnlineSignin(const AccountId& account_id,
                                                   bool force_online_signin) {
-  NOTREACHED();
+  if (!active_user_ || active_user_->GetAccountId() != account_id)
+    NOTREACHED() << account_id;
+
+  active_user_->set_force_online_signin(force_online_signin);
 }
 
 void FakeChromeUserManager::SaveUserDisplayName(
@@ -559,8 +543,7 @@ bool FakeChromeUserManager::IsLoggedInAsUserWithGaiaAccount() const {
 }
 
 bool FakeChromeUserManager::IsLoggedInAsChildUser() const {
-  NOTREACHED();
-  return false;
+  return current_user_child_;
 }
 
 bool FakeChromeUserManager::IsLoggedInAsPublicAccount() const {
@@ -719,6 +702,16 @@ void FakeChromeUserManager::SetUserAffiliation(
 
 bool FakeChromeUserManager::ShouldReportUser(const std::string& user_id) const {
   return false;
+}
+
+bool FakeChromeUserManager::IsManagedSessionEnabledForUser(
+    const user_manager::User& active_user) const {
+  return true;
+}
+
+bool FakeChromeUserManager::IsFullManagementDisclosureNeeded(
+    policy::DeviceLocalAccountPolicyBroker* broker) const {
+  return true;
 }
 
 user_manager::User* FakeChromeUserManager::GetActiveUserInternal() const {

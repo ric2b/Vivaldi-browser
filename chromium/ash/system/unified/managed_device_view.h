@@ -13,26 +13,23 @@
 namespace ash {
 
 // A view to show an icon in the status tray when the device is managed by
-// an organization admin. Observes change of the enterprise domain in order to
-// show/hide the icon reflecting the latest status.
+// an organization admin. Observes login status in order to show/hide the
+// icon reflecting the latest status.
 class ManagedDeviceView : public TrayItemView,
-                          public EnterpriseDomainObserver,
-                          public SessionObserver {
+                          public SessionObserver,
+                          public EnterpriseDomainObserver {
  public:
-  ManagedDeviceView();
+  explicit ManagedDeviceView(Shelf* shelf);
   ~ManagedDeviceView() override;
-
-  // EnterpriseDomainObserver:
-  void OnEnterpriseDomainChanged() override;
 
   // SessionObserver:
   void OnLoginStatusChanged(LoginStatus status) override;
 
+  // EnterpriseDomainObserver:
+  void OnEnterpriseDomainChanged() override;
+
  private:
   void Update();
-
-  bool is_child_ = false;
-  bool is_enterprise_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(ManagedDeviceView);
 };

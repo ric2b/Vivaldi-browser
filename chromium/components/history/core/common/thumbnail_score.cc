@@ -37,8 +37,7 @@ static int GetThumbnailType(const ThumbnailScore& score) {
 }
 
 ThumbnailScore::ThumbnailScore()
-    : force_update(false),
-      boring_score(1.0),
+    : boring_score(1.0),
       good_clipping(false),
       at_top(false),
       load_completed(false),
@@ -47,8 +46,7 @@ ThumbnailScore::ThumbnailScore()
 }
 
 ThumbnailScore::ThumbnailScore(double score, bool clipping, bool top)
-    : force_update(false),
-      boring_score(score),
+    : boring_score(score),
       good_clipping(clipping),
       at_top(top),
       load_completed(false),
@@ -60,8 +58,7 @@ ThumbnailScore::ThumbnailScore(double score,
                                bool clipping,
                                bool top,
                                const Time& time)
-    : force_update(false),
-      boring_score(score),
+    : boring_score(score),
       good_clipping(clipping),
       at_top(top),
       load_completed(false),
@@ -94,9 +91,6 @@ std::string ThumbnailScore::ToString() const {
 
 bool ShouldReplaceThumbnailWith(const ThumbnailScore& current,
                                 const ThumbnailScore& replacement) {
-  if (replacement.force_update)
-    return true;
-
   int current_type = GetThumbnailType(current);
   int replacement_type = GetThumbnailType(replacement);
   if (replacement_type < current_type) {
@@ -141,9 +135,6 @@ bool ShouldReplaceThumbnailWith(const ThumbnailScore& current,
 }
 
 bool ThumbnailScore::ShouldConsiderUpdating() {
-  if (force_update)
-    return true;
-
   const TimeDelta time_elapsed = Time::Now() - time_at_snapshot;
   if (time_elapsed < kUpdateThumbnailTime && good_clipping && at_top &&
       load_completed) {

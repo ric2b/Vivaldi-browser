@@ -10,6 +10,7 @@
 
 #include "base/macros.h"
 #include "base/sequenced_task_runner.h"
+#include "base/time/tick_clock.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/privacy_mode.h"
 #include "net/third_party/quic/core/quic_packets.h"
@@ -56,8 +57,15 @@ class QuicStreamFactoryPeer {
       QuicStreamFactory* factory,
       const quic::QuicServerId& server_id);
 
+  static bool HasLiveSession(QuicStreamFactory* factory,
+                             const HostPortPair& destination,
+                             const quic::QuicServerId& server_id);
+
   static bool IsLiveSession(QuicStreamFactory* factory,
                             QuicChromiumClientSession* session);
+
+  static void SetTickClock(QuicStreamFactory* factory,
+                           const base::TickClock* tick_clock);
 
   static void SetTaskRunner(QuicStreamFactory* factory,
                             base::SequencedTaskRunner* task_runner);

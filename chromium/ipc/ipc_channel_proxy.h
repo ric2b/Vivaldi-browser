@@ -12,12 +12,14 @@
 #include <string>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/component_export.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
 #include "base/synchronization/lock.h"
 #include "build/build_config.h"
+#include "ipc/ipc.mojom.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_listener.h"

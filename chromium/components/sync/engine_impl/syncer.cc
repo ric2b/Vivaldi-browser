@@ -9,10 +9,8 @@
 #include "base/auto_reset.h"
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
-#include "build/build_config.h"
 #include "components/sync/base/cancelation_signal.h"
 #include "components/sync/engine_impl/apply_control_data_updates.h"
-#include "components/sync/engine_impl/clear_server_data.h"
 #include "components/sync/engine_impl/commit.h"
 #include "components/sync/engine_impl/commit_processor.h"
 #include "components/sync/engine_impl/cycle/nudge_tracker.h"
@@ -25,13 +23,6 @@
 namespace syncer {
 
 namespace {
-
-// TODO(akalin): We may want to propagate this switch up eventually.
-#if defined(OS_ANDROID) || defined(OS_IOS)
-static const bool kCreateMobileBookmarksFolder = true;
-#else
-static const bool kCreateMobileBookmarksFolder = false;
-#endif
 
 void HandleCycleBegin(SyncCycle* cycle) {
   cycle->mutable_status_controller()->UpdateStartTime();
@@ -54,12 +45,11 @@ bool Syncer::NormalSyncShare(ModelTypeSet request_types,
                              SyncCycle* cycle) {
   base::AutoReset<bool> is_syncing(&is_syncing_, true);
   HandleCycleBegin(cycle);
-  if (nudge_tracker->IsGetUpdatesRequired() ||
+  if (nudge_tracker->IsGetUpdatesRequired(request_types) ||
       cycle->context()->ShouldFetchUpdatesBeforeCommit()) {
     VLOG(1) << "Downloading types " << ModelTypeSetToString(request_types);
     if (!DownloadAndApplyUpdates(&request_types, cycle,
-                                 NormalGetUpdatesDelegate(*nudge_tracker),
-                                 kCreateMobileBookmarksFolder)) {
+                                 NormalGetUpdatesDelegate(*nudge_tracker))) {
       return HandleCycleEnd(cycle, nudge_tracker->GetOrigin());
     }
   }
@@ -89,8 +79,7 @@ bool Syncer::ConfigureSyncShare(const ModelTypeSet& request_types,
   VLOG(1) << "Configuring types " << ModelTypeSetToString(still_enabled_types);
   HandleCycleBegin(cycle);
   DownloadAndApplyUpdates(&still_enabled_types, cycle,
-                          ConfigureGetUpdatesDelegate(origin),
-                          kCreateMobileBookmarksFolder);
+                          ConfigureGetUpdatesDelegate(origin));
   return HandleCycleEnd(cycle, origin);
 }
 
@@ -98,21 +87,13 @@ bool Syncer::PollSyncShare(ModelTypeSet request_types, SyncCycle* cycle) {
   base::AutoReset<bool> is_syncing(&is_syncing_, true);
   VLOG(1) << "Polling types " << ModelTypeSetToString(request_types);
   HandleCycleBegin(cycle);
-  DownloadAndApplyUpdates(&request_types, cycle, PollGetUpdatesDelegate(),
-                          kCreateMobileBookmarksFolder);
+  DownloadAndApplyUpdates(&request_types, cycle, PollGetUpdatesDelegate());
   return HandleCycleEnd(cycle, sync_pb::SyncEnums::PERIODIC);
-}
-
-bool Syncer::PostClearServerData(SyncCycle* cycle) {
-  DCHECK(cycle);
-  ClearServerData clear_server_data(cycle->context()->account_name());
-  return clear_server_data.SendRequest(cycle) == SYNCER_OK;
 }
 
 bool Syncer::DownloadAndApplyUpdates(ModelTypeSet* request_types,
                                      SyncCycle* cycle,
-                                     const GetUpdatesDelegate& delegate,
-                                     bool create_mobile_bookmarks_folder) {
+                                     const GetUpdatesDelegate& delegate) {
   // CommitOnlyTypes() should not be included in the GetUpdates, but should be
   // included in the Commit. We are given a set of types for our SyncShare,
   // and we must do this filtering. Note that |request_types| is also an out
@@ -123,18 +104,18 @@ bool Syncer::DownloadAndApplyUpdates(ModelTypeSet* request_types,
       Difference(*request_types, requested_commit_only_types);
   GetUpdatesProcessor get_updates_processor(
       cycle->context()->model_type_registry()->update_handler_map(), delegate);
-  SyncerError download_result = UNSET;
+  SyncerError download_result;
   do {
-    download_result = get_updates_processor.DownloadUpdates(
-        &download_types, cycle, create_mobile_bookmarks_folder);
-  } while (download_result == SERVER_MORE_TO_DOWNLOAD);
+    download_result =
+        get_updates_processor.DownloadUpdates(&download_types, cycle);
+  } while (download_result.value() == SyncerError::SERVER_MORE_TO_DOWNLOAD);
 
   // It is our responsibility to propagate the removal of types that occurred in
   // GetUpdatesProcessor::DownloadUpdates().
   *request_types = Union(download_types, requested_commit_only_types);
 
   // Exit without applying if we're shutting down or an error was detected.
-  if (download_result != SYNCER_OK || ExitRequested())
+  if (download_result.value() != SyncerError::SYNCER_OK || ExitRequested())
     return false;
 
   {
@@ -183,12 +164,12 @@ SyncerError Syncer::BuildAndPostCommits(const ModelTypeSet& request_types,
         nudge_tracker, cycle, cycle->mutable_status_controller(),
         cycle->context()->extensions_activity());
     commit->CleanUp();
-    if (error != SYNCER_OK) {
+    if (error.value() != SyncerError::SYNCER_OK) {
       return error;
     }
   }
 
-  return SYNCER_OK;
+  return SyncerError(SyncerError::SYNCER_OK);
 }
 
 bool Syncer::ExitRequested() {

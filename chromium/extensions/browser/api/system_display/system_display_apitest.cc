@@ -7,6 +7,7 @@
 #include <set>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/debug/leak_annotations.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
@@ -17,6 +18,7 @@
 #include "extensions/browser/api/system_display/system_display_api.h"
 #include "extensions/browser/api_test_utils.h"
 #include "extensions/common/api/system_display.h"
+#include "extensions/common/extension_builder.h"
 #include "extensions/shell/test/shell_apitest.h"
 #include "extensions/test/result_catcher.h"
 #include "ui/display/display.h"
@@ -177,7 +179,7 @@ class MockDisplayInfoProvider : public DisplayInfoProvider {
       const display::Display& display,
       extensions::api::system_display::DisplayUnitInfo* unit) override {
     int64_t id = display.id();
-    unit->name = "DISPLAY NAME FOR " + base::Int64ToString(id);
+    unit->name = "DISPLAY NAME FOR " + base::NumberToString(id);
     if (id == 1)
       unit->mirroring_source_id = "0";
     unit->is_primary = id == 0 ? true : false;
@@ -262,37 +264,12 @@ IN_PROC_BROWSER_TEST_F(SystemDisplayApiTest, SetDisplay) {
 
 #else  // !defined(OS_CHROMEOS)
 
-constexpr char kTestManifest[] =
-    "{\n"
-    "  \"name\": \"Test\",\n"
-    "  \"version\": \"1.0\",\n"
-    "  \"app\": {\n"
-    "    \"background\": {\n"
-    "      \"scripts\": [\"background.js\"]\n"
-    "    }\n"
-    "  }\n"
-    "}";
-
-constexpr char kTestManifestKiosk[] =
-    "{\n"
-    "  \"name\": \"Test\",\n"
-    "  \"version\": \"1.0\",\n"
-    "  \"app\": {\n"
-    "    \"background\": {\n"
-    "      \"scripts\": [\"background.js\"]\n"
-    "    }\n"
-    "  },\n"
-    "  \"kiosk_enabled\": true\n"
-    "}";
-
 // TODO(stevenjb): Add API tests for {GS}etDisplayLayout. That code currently
 // lives in src/chrome but should be getting moved soon.
 
 IN_PROC_BROWSER_TEST_F(SystemDisplayApiTest, SetDisplayNotKioskEnabled) {
-  std::unique_ptr<base::DictionaryValue> test_extension_value(
-      api_test_utils::ParseDictionary(kTestManifest));
-  scoped_refptr<Extension> test_extension(
-      api_test_utils::CreateExtension(test_extension_value.get()));
+  scoped_refptr<const Extension> test_extension =
+      ExtensionBuilder("Test", ExtensionBuilder::Type::PLATFORM_APP).Build();
 
   scoped_refptr<SystemDisplaySetDisplayPropertiesFunction> set_info_function(
       new SystemDisplaySetDisplayPropertiesFunction());
@@ -311,10 +288,10 @@ IN_PROC_BROWSER_TEST_F(SystemDisplayApiTest, SetDisplayNotKioskEnabled) {
 }
 
 IN_PROC_BROWSER_TEST_F(SystemDisplayApiTest, SetDisplayKioskEnabled) {
-  std::unique_ptr<base::DictionaryValue> test_extension_value(
-      api_test_utils::ParseDictionary(kTestManifestKiosk));
-  scoped_refptr<Extension> test_extension(
-      api_test_utils::CreateExtension(test_extension_value.get()));
+  scoped_refptr<const Extension> test_extension =
+      ExtensionBuilder("Test", ExtensionBuilder::Type::PLATFORM_APP)
+          .SetManifestKey("kiosk_enabled", true)
+          .Build();
 
   scoped_refptr<SystemDisplaySetDisplayPropertiesFunction> set_info_function(
       new SystemDisplaySetDisplayPropertiesFunction());
@@ -354,10 +331,10 @@ IN_PROC_BROWSER_TEST_F(SystemDisplayApiTest, SetDisplayKioskEnabled) {
 }
 
 IN_PROC_BROWSER_TEST_F(SystemDisplayApiTest, EnableUnifiedDesktop) {
-  std::unique_ptr<base::DictionaryValue> test_extension_value(
-      api_test_utils::ParseDictionary(kTestManifestKiosk));
-  scoped_refptr<Extension> test_extension(
-      api_test_utils::CreateExtension(test_extension_value.get()));
+  scoped_refptr<const Extension> test_extension =
+      ExtensionBuilder("Test", ExtensionBuilder::Type::PLATFORM_APP)
+          .SetManifestKey("kiosk_enabled", true)
+          .Build();
   {
     scoped_refptr<SystemDisplayEnableUnifiedDesktopFunction>
         enable_unified_function(
@@ -387,10 +364,10 @@ IN_PROC_BROWSER_TEST_F(SystemDisplayApiTest, EnableUnifiedDesktop) {
 
 IN_PROC_BROWSER_TEST_F(SystemDisplayApiTest, OverscanCalibrationStart) {
   const std::string id = "display0";
-  std::unique_ptr<base::DictionaryValue> test_extension_value(
-      api_test_utils::ParseDictionary(kTestManifestKiosk));
-  scoped_refptr<Extension> test_extension(
-      api_test_utils::CreateExtension(test_extension_value.get()));
+  scoped_refptr<const Extension> test_extension =
+      ExtensionBuilder("Test", ExtensionBuilder::Type::PLATFORM_APP)
+          .SetManifestKey("kiosk_enabled", true)
+          .Build();
 
   // Setup MockDisplayInfoProvider.
   api::system_display::DisplayProperties params;
@@ -451,10 +428,10 @@ IN_PROC_BROWSER_TEST_F(SystemDisplayApiTest, OverscanCalibrationAppNoComplete) {
 
 IN_PROC_BROWSER_TEST_F(SystemDisplayApiTest, ShowNativeTouchCalibrationFail) {
   const std::string id = "display0";
-  std::unique_ptr<base::DictionaryValue> test_extension_value(
-      api_test_utils::ParseDictionary(kTestManifestKiosk));
-  scoped_refptr<Extension> test_extension(
-      api_test_utils::CreateExtension(test_extension_value.get()));
+  scoped_refptr<const Extension> test_extension =
+      ExtensionBuilder("Test", ExtensionBuilder::Type::PLATFORM_APP)
+          .SetManifestKey("kiosk_enabled", true)
+          .Build();
 
   scoped_refptr<SystemDisplayShowNativeTouchCalibrationFunction>
       show_native_calibration(
@@ -473,10 +450,10 @@ IN_PROC_BROWSER_TEST_F(SystemDisplayApiTest, ShowNativeTouchCalibrationFail) {
 
 IN_PROC_BROWSER_TEST_F(SystemDisplayApiTest, ShowNativeTouchCalibration) {
   const std::string id = "display0";
-  std::unique_ptr<base::DictionaryValue> test_extension_value(
-      api_test_utils::ParseDictionary(kTestManifestKiosk));
-  scoped_refptr<Extension> test_extension(
-      api_test_utils::CreateExtension(test_extension_value.get()));
+  scoped_refptr<const Extension> test_extension =
+      ExtensionBuilder("Test", ExtensionBuilder::Type::PLATFORM_APP)
+          .SetManifestKey("kiosk_enabled", true)
+          .Build();
 
   scoped_refptr<SystemDisplayShowNativeTouchCalibrationFunction>
       show_native_calibration(
@@ -498,10 +475,10 @@ IN_PROC_BROWSER_TEST_F(SystemDisplayApiTest, ShowNativeTouchCalibration) {
 }
 
 IN_PROC_BROWSER_TEST_F(SystemDisplayApiTest, SetMirrorMode) {
-  std::unique_ptr<base::DictionaryValue> test_extension_value(
-      api_test_utils::ParseDictionary(kTestManifestKiosk));
-  scoped_refptr<Extension> test_extension(
-      api_test_utils::CreateExtension(test_extension_value.get()));
+  scoped_refptr<const Extension> test_extension =
+      ExtensionBuilder("Test", ExtensionBuilder::Type::PLATFORM_APP)
+          .SetManifestKey("kiosk_enabled", true)
+          .Build();
   {
     auto set_mirror_mode_function =
         base::MakeRefCounted<SystemDisplaySetMirrorModeFunction>();

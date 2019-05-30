@@ -9,23 +9,24 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/guid.h"
-#include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
+#include "base/no_destructor.h"
 #include "base/process/process_handle.h"
+#include "base/task/post_task.h"
+#include "base/token.h"
 #include "ios/web/public/certificate_policy_cache.h"
 #include "ios/web/public/network_context_owner.h"
 #include "ios/web/public/service_manager_connection.h"
 #include "ios/web/public/service_names.mojom.h"
 #include "ios/web/public/web_client.h"
+#include "ios/web/public/web_task_traits.h"
 #include "ios/web/public/web_thread.h"
 #include "ios/web/webui/url_data_manager_ios_backend.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_context_getter_observer.h"
-#include "services/network/network_change_manager.h"
 #include "services/network/network_context.h"
-#include "services/network/public/cpp/network_connection_tracker.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/mojom/service.mojom.h"
@@ -37,9 +38,12 @@
 namespace web {
 namespace {
 
-// Maps service userIds to associated BrowserState instances.
-base::LazyInstance<std::map<std::string, BrowserState*>>::DestructorAtExit
-    g_user_id_to_browser_state = LAZY_INSTANCE_INITIALIZER;
+// Maps service instance group IDs to associated BrowserState instances.
+std::map<base::Token, BrowserState*>& GetInstanceGroupToBrowserState() {
+  static base::NoDestructor<std::map<base::Token, BrowserState*>>
+      instance_group_to_browser_state;
+  return *instance_group_to_browser_state;
+}
 
 // Private key used for safe conversion of base::SupportsUserData to
 // web::BrowserState in web::BrowserState::FromSupportsUserData.
@@ -47,9 +51,8 @@ const char kBrowserStateIdentifierKey[] = "BrowserStateIdentifierKey";
 
 // Data key names.
 const char kCertificatePolicyCacheKeyName[] = "cert_policy_cache";
-const char kMojoWasInitialized[] = "mojo-was-initialized";
 const char kServiceManagerConnection[] = "service-manager-connection";
-const char kServiceUserId[] = "service-user-id";
+const char kServiceInstanceGroup[] = "service-instance-group";
 
 // Wraps a CertificatePolicyCache as a SupportsUserData::Data; this is necessary
 // since reference counted objects can't be user data.
@@ -60,29 +63,29 @@ struct CertificatePolicyCacheHandle : public base::SupportsUserData::Data {
   scoped_refptr<CertificatePolicyCache> policy_cache;
 };
 
-// Container for a service userId to support association between BrowserStates
-// and service UserIds.
-class ServiceUserIdHolder : public base::SupportsUserData::Data {
+// Container for a service instance group ID to support association between
+// BrowserStates and service instance groups.
+class ServiceInstanceGroupHolder : public base::SupportsUserData::Data {
  public:
-  explicit ServiceUserIdHolder(const std::string& user_id)
-      : user_id_(user_id) {}
-  ~ServiceUserIdHolder() override {}
+  explicit ServiceInstanceGroupHolder(const base::Token& instance_group)
+      : instance_group_(instance_group) {}
+  ~ServiceInstanceGroupHolder() override = default;
 
-  const std::string& user_id() const { return user_id_; }
+  const base::Token& instance_group() const { return instance_group_; }
 
  private:
-  std::string user_id_;
+  base::Token instance_group_;
 
-  DISALLOW_COPY_AND_ASSIGN(ServiceUserIdHolder);
+  DISALLOW_COPY_AND_ASSIGN(ServiceInstanceGroupHolder);
 };
 
-// Eliminates the mapping from |browser_state|'s associated userId (if any) to
-// |browser_state|.
-void RemoveBrowserStateFromUserIdMap(BrowserState* browser_state) {
-  ServiceUserIdHolder* holder = static_cast<ServiceUserIdHolder*>(
-      browser_state->GetUserData(kServiceUserId));
+// Eliminates the mapping from |browser_state|'s associated instance group ID
+// (if any) to |browser_state|.
+void RemoveBrowserStateFromInstanceGroupMap(BrowserState* browser_state) {
+  ServiceInstanceGroupHolder* holder = static_cast<ServiceInstanceGroupHolder*>(
+      browser_state->GetUserData(kServiceInstanceGroup));
   if (holder) {
-    g_user_id_to_browser_state.Get().erase(holder->user_id());
+    GetInstanceGroupToBrowserState().erase(holder->instance_group());
   }
 }
 
@@ -92,11 +95,18 @@ void RemoveBrowserStateFromUserIdMap(BrowserState* browser_state) {
 class BrowserStateServiceManagerConnectionHolder
     : public base::SupportsUserData::Data {
  public:
-  explicit BrowserStateServiceManagerConnectionHolder(
+  BrowserStateServiceManagerConnectionHolder(
+      BrowserState* browser_state,
       service_manager::mojom::ServiceRequest request)
-      : service_manager_connection_(ServiceManagerConnection::Create(
+      : browser_state_(browser_state),
+        service_manager_connection_(ServiceManagerConnection::Create(
             std::move(request),
-            WebThread::GetTaskRunnerForThread(WebThread::IO))) {}
+            base::CreateSingleThreadTaskRunnerWithTraits({WebThread::IO}))) {
+    service_manager_connection_->SetDefaultServiceRequestHandler(
+        base::BindRepeating(
+            &BrowserStateServiceManagerConnectionHolder::OnServiceRequest,
+            weak_ptr_factory_.GetWeakPtr()));
+  }
   ~BrowserStateServiceManagerConnectionHolder() override {}
 
   ServiceManagerConnection* service_manager_connection() {
@@ -104,17 +114,37 @@ class BrowserStateServiceManagerConnectionHolder
   }
 
  private:
+  void OnServiceRequest(const std::string& service_name,
+                        service_manager::mojom::ServiceRequest request) {
+    std::unique_ptr<service_manager::Service> service =
+        browser_state_->HandleServiceRequest(service_name, std::move(request));
+    if (!service) {
+      LOG(ERROR) << "Ignoring request for unknown per-browser-state service:"
+                 << service_name;
+      return;
+    }
+
+    auto* raw_service = service.get();
+    service->set_termination_closure(base::BindOnce(
+        &BrowserStateServiceManagerConnectionHolder::OnServiceQuit,
+        base::Unretained(this), raw_service));
+    running_services_.emplace(raw_service, std::move(service));
+  }
+
+  void OnServiceQuit(service_manager::Service* service) {
+    running_services_.erase(service);
+  }
+
+  BrowserState* const browser_state_;
   std::unique_ptr<ServiceManagerConnection> service_manager_connection_;
+  std::map<service_manager::Service*, std::unique_ptr<service_manager::Service>>
+      running_services_;
+
+  base::WeakPtrFactory<BrowserStateServiceManagerConnectionHolder>
+      weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(BrowserStateServiceManagerConnectionHolder);
 };
-
-// Passed to NetworkConnectionTracker to bind a NetworkChangeManagerRequest.
-void BindNetworkChangeManagerRequest(
-    network::NetworkChangeManager* network_change_manager,
-    network::mojom::NetworkChangeManagerRequest request) {
-  network_change_manager->AddRequest(std::move(request));
-}
 
 }  // namespace
 
@@ -150,7 +180,7 @@ BrowserState::BrowserState() : url_data_manager_ios_backend_(nullptr) {
 }
 
 BrowserState::~BrowserState() {
-  CHECK(GetUserData(kMojoWasInitialized))
+  CHECK(GetUserData(kServiceInstanceGroup))
       << "Attempting to destroy a BrowserState that never called "
       << "Initialize()";
   shared_url_loader_factory_->Detach();
@@ -160,7 +190,7 @@ BrowserState::~BrowserState() {
                                network_context_owner_.release());
   }
 
-  RemoveBrowserStateFromUserIdMap(this);
+  RemoveBrowserStateFromInstanceGroupMap(this);
 
   // Delete the URLDataManagerIOSBackend instance on the IO thread if it has
   // been created. Note that while this check can theoretically race with a
@@ -196,19 +226,6 @@ network::mojom::CookieManager* BrowserState::GetCookieManager() {
     network_context_->GetCookieManager(mojo::MakeRequest(&cookie_manager_));
   }
   return cookie_manager_.get();
-}
-
-network::NetworkConnectionTracker* BrowserState::GetNetworkConnectionTracker() {
-  if (!network_connection_tracker_) {
-    DCHECK(!network_change_manager_);
-    network_change_manager_ =
-        std::make_unique<network::NetworkChangeManager>(nullptr);
-    network_connection_tracker_ =
-        std::make_unique<network::NetworkConnectionTracker>(base::BindRepeating(
-            &BindNetworkChangeManagerRequest,
-            base::Unretained(network_change_manager_.get())));
-  }
-  return network_connection_tracker_.get();
 }
 
 void BrowserState::GetProxyResolvingSocketFactory(
@@ -256,20 +273,18 @@ BrowserState* BrowserState::FromSupportsUserData(
 // static
 void BrowserState::Initialize(BrowserState* browser_state,
                               const base::FilePath& path) {
-  std::string new_id = base::GenerateGUID();
+  base::Token new_group = base::Token::CreateRandom();
 
   // Note: If the file service is ever used on iOS, code needs to be added here
-  // to have the file service associate |path| as the user dir of the user Id
-  // of |browser_state| (see corresponding code in
+  // to have the file service associate |path| as the user dir of the instance
+  // group of |browser_state| (see corresponding code in
   // content::BrowserContext::Initialize). crbug.com/739450
 
-  RemoveBrowserStateFromUserIdMap(browser_state);
-  g_user_id_to_browser_state.Get()[new_id] = browser_state;
-  browser_state->SetUserData(kServiceUserId,
-                             std::make_unique<ServiceUserIdHolder>(new_id));
-
-  browser_state->SetUserData(kMojoWasInitialized,
-                             std::make_unique<base::SupportsUserData::Data>());
+  RemoveBrowserStateFromInstanceGroupMap(browser_state);
+  GetInstanceGroupToBrowserState()[new_group] = browser_state;
+  browser_state->SetUserData(
+      kServiceInstanceGroup,
+      std::make_unique<ServiceInstanceGroupHolder>(new_group));
 
   ServiceManagerConnection* service_manager_connection =
       ServiceManagerConnection::Get();
@@ -279,20 +294,21 @@ void BrowserState::Initialize(BrowserState* browser_state,
 
     // Have the global service manager connection start an instance of the
     // web_browser service that is associated with this BrowserState (via
-    // |new_id|).
+    // |new_group|).
     service_manager::mojom::ServicePtr service;
     auto service_request = mojo::MakeRequest(&service);
 
     service_manager::mojom::PIDReceiverPtr pid_receiver;
-    service_manager::Identity identity(mojom::kBrowserServiceName, new_id);
-    service_manager_connection->GetConnector()->StartService(
+    service_manager::Identity identity(mojom::kBrowserServiceName, new_group,
+                                       base::Token{},
+                                       base::Token::CreateRandom());
+    service_manager_connection->GetConnector()->RegisterServiceInstance(
         identity, std::move(service), mojo::MakeRequest(&pid_receiver));
     pid_receiver->SetPID(base::GetCurrentProcId());
 
-    service_manager_connection->GetConnector()->StartService(identity);
     auto connection_holder =
         std::make_unique<BrowserStateServiceManagerConnectionHolder>(
-            std::move(service_request));
+            browser_state, std::move(service_request));
 
     ServiceManagerConnection* connection =
         connection_holder->service_manager_connection();
@@ -300,27 +316,19 @@ void BrowserState::Initialize(BrowserState* browser_state,
     browser_state->SetUserData(kServiceManagerConnection,
                                std::move(connection_holder));
 
-    // New embedded service factories should be added to |connection| here.
-    WebClient::StaticServiceMap services;
-    browser_state->RegisterServices(&services);
-    for (const auto& entry : services) {
-      connection->AddEmbeddedService(entry.first, entry.second);
-    }
-
     connection->Start();
   }
 }
 
 // static
-const std::string& BrowserState::GetServiceUserIdFor(
+const base::Token& BrowserState::GetServiceInstanceGroupFor(
     BrowserState* browser_state) {
-  CHECK(browser_state->GetUserData(kMojoWasInitialized))
-      << "Attempting to get the mojo user id for a BrowserState that was "
+  ServiceInstanceGroupHolder* holder = static_cast<ServiceInstanceGroupHolder*>(
+      browser_state->GetUserData(kServiceInstanceGroup));
+  CHECK(holder)
+      << "Attempting to get the instance group for a BrowserState that was "
       << "never Initialize()ed.";
-
-  ServiceUserIdHolder* holder = static_cast<ServiceUserIdHolder*>(
-      browser_state->GetUserData(kServiceUserId));
-  return holder->user_id();
+  return holder->instance_group();
 }
 
 // static
@@ -339,6 +347,12 @@ ServiceManagerConnection* BrowserState::GetServiceManagerConnectionFor(
           browser_state->GetUserData(kServiceManagerConnection));
   return connection_holder ? connection_holder->service_manager_connection()
                            : nullptr;
+}
+
+std::unique_ptr<service_manager::Service> BrowserState::HandleServiceRequest(
+    const std::string& service_name,
+    service_manager::mojom::ServiceRequest request) {
+  return nullptr;
 }
 
 }  // namespace web

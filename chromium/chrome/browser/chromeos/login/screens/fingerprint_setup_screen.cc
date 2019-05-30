@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/login/screens/fingerprint_setup_screen.h"
 
+#include "chrome/browser/chromeos/login/users/chrome_user_manager_util.h"
+
 namespace chromeos {
 namespace {
 
@@ -13,9 +15,11 @@ constexpr char kUserActionClose[] = "fingerprint-setup-done";
 
 FingerprintSetupScreen::FingerprintSetupScreen(
     BaseScreenDelegate* base_screen_delegate,
-    FingerprintSetupScreenView* view)
+    FingerprintSetupScreenView* view,
+    const base::RepeatingClosure& exit_callback)
     : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_FINGERPRINT_SETUP),
-      view_(view) {
+      view_(view),
+      exit_callback_(exit_callback) {
   DCHECK(view_);
   view_->Bind(this);
 }
@@ -25,7 +29,10 @@ FingerprintSetupScreen::~FingerprintSetupScreen() {
 }
 
 void FingerprintSetupScreen::Show() {
-  // Show the screen.
+  if (chrome_user_manager_util::IsPublicSessionOrEphemeralLogin()) {
+    exit_callback_.Run();
+    return;
+  }
   view_->Show();
 }
 
@@ -35,7 +42,7 @@ void FingerprintSetupScreen::Hide() {
 
 void FingerprintSetupScreen::OnUserAction(const std::string& action_id) {
   if (action_id == kUserActionClose) {
-    Finish(ScreenExitCode::FINGERPRINT_SETUP_FINISHED);
+    exit_callback_.Run();
     return;
   }
   BaseScreen::OnUserAction(action_id);

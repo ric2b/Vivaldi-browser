@@ -5,7 +5,7 @@
 #include "ash/system/power/power_button_display_controller.h"
 
 #include "ash/accessibility/accessibility_controller.h"
-#include "ash/media_controller.h"
+#include "ash/media/media_controller.h"
 #include "ash/shell.h"
 #include "ash/system/power/scoped_backlights_forced_off.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
@@ -36,8 +36,7 @@ PowerButtonDisplayController::PowerButtonDisplayController(
       backlights_forced_off_observer_(this),
       tick_clock_(tick_clock),
       weak_ptr_factory_(this) {
-  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->AddObserver(
-      this);
+  chromeos::PowerManagerClient::Get()->AddObserver(this);
   ui::InputDeviceManager::GetInstance()->AddObserver(this);
   Shell::Get()->AddPreTargetHandler(this, ui::EventTarget::Priority::kSystem);
 
@@ -47,8 +46,7 @@ PowerButtonDisplayController::PowerButtonDisplayController(
 PowerButtonDisplayController::~PowerButtonDisplayController() {
   Shell::Get()->RemovePreTargetHandler(this);
   ui::InputDeviceManager::GetInstance()->RemoveObserver(this);
-  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->RemoveObserver(
-      this);
+  chromeos::PowerManagerClient::Get()->RemoveObserver(this);
 }
 
 bool PowerButtonDisplayController::IsScreenOn() const {

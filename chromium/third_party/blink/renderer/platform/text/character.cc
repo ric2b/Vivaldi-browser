@@ -33,13 +33,15 @@
 #include <unicode/uobject.h>
 #include <unicode/uscript.h>
 #include <algorithm>
+
+#include "base/stl_util.h"
+#include "third_party/blink/renderer/platform/text/character_property_data.h"
 #include "third_party/blink/renderer/platform/text/icu_error.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
 #if defined(USING_SYSTEM_ICU)
 #include <unicode/uniset.h>
-#include "third_party/blink/renderer/platform/text/character_property_data_generator.h"
 #else
 #define MUTEX_H  // Prevent compile failure of utrie2.h on Windows
 #include <utrie2.h>
@@ -61,9 +63,9 @@ static icu::UnicodeSet* createUnicodeSet(const UChar32* characters,
   return unicodeSet;
 }
 
-#define CREATE_UNICODE_SET(name)                                      \
-  createUnicodeSet(name##Array, arraysize(name##Array), name##Ranges, \
-                   arraysize(name##Ranges))
+#define CREATE_UNICODE_SET(name)                                       \
+  createUnicodeSet(name##Array, base::size(name##Array), name##Ranges, \
+                   base::size(name##Ranges))
 
 #define RETURN_HAS_PROPERTY(c, name)            \
   static icu::UnicodeSet* unicodeSet = nullptr; \
@@ -71,10 +73,6 @@ static icu::UnicodeSet* createUnicodeSet(const UChar32* characters,
     unicodeSet = CREATE_UNICODE_SET(name);      \
   return unicodeSet->contains(c);
 #else
-// Freezed trie tree, see CharacterDataGenerator.cpp.
-extern const int32_t kSerializedCharacterDataSize;
-extern const uint8_t kSerializedCharacterData[];
-
 static UTrie2* CreateTrie() {
   // Create a Trie from the value array.
   ICUError error;
@@ -127,7 +125,7 @@ bool Character::IsHangulSlow(UChar32 character) {
 }
 
 unsigned Character::ExpansionOpportunityCount(const LChar* characters,
-                                              size_t length,
+                                              unsigned length,
                                               TextDirection direction,
                                               bool& is_after_expansion,
                                               const TextJustify text_justify) {
@@ -138,7 +136,7 @@ unsigned Character::ExpansionOpportunityCount(const LChar* characters,
   }
 
   if (direction == TextDirection::kLtr) {
-    for (size_t i = 0; i < length; ++i) {
+    for (unsigned i = 0; i < length; ++i) {
       if (TreatAsSpace(characters[i])) {
         count++;
         is_after_expansion = true;
@@ -147,7 +145,7 @@ unsigned Character::ExpansionOpportunityCount(const LChar* characters,
       }
     }
   } else {
-    for (size_t i = length; i > 0; --i) {
+    for (unsigned i = length; i > 0; --i) {
       if (TreatAsSpace(characters[i - 1])) {
         count++;
         is_after_expansion = true;
@@ -161,13 +159,13 @@ unsigned Character::ExpansionOpportunityCount(const LChar* characters,
 }
 
 unsigned Character::ExpansionOpportunityCount(const UChar* characters,
-                                              size_t length,
+                                              unsigned length,
                                               TextDirection direction,
                                               bool& is_after_expansion,
                                               const TextJustify text_justify) {
   unsigned count = 0;
   if (direction == TextDirection::kLtr) {
-    for (size_t i = 0; i < length; ++i) {
+    for (unsigned i = 0; i < length; ++i) {
       UChar32 character = characters[i];
       if (TreatAsSpace(character)) {
         count++;
@@ -190,7 +188,7 @@ unsigned Character::ExpansionOpportunityCount(const UChar* characters,
       is_after_expansion = false;
     }
   } else {
-    for (size_t i = length; i > 0; --i) {
+    for (unsigned i = length; i > 0; --i) {
       UChar32 character = characters[i - 1];
       if (TreatAsSpace(character)) {
         count++;
@@ -240,11 +238,11 @@ bool Character::CanTextDecorationSkipInk(UChar32 codepoint) {
 }
 
 bool Character::CanReceiveTextEmphasis(UChar32 c) {
-  WTF::Unicode::CharCategory category = WTF::Unicode::Category(c);
+  WTF::unicode::CharCategory category = WTF::unicode::Category(c);
   if (category &
-      (WTF::Unicode::kSeparator_Space | WTF::Unicode::kSeparator_Line |
-       WTF::Unicode::kSeparator_Paragraph | WTF::Unicode::kOther_NotAssigned |
-       WTF::Unicode::kOther_Control | WTF::Unicode::kOther_Format))
+      (WTF::unicode::kSeparator_Space | WTF::unicode::kSeparator_Line |
+       WTF::unicode::kSeparator_Paragraph | WTF::unicode::kOther_NotAssigned |
+       WTF::unicode::kOther_Control | WTF::unicode::kOther_Format))
     return false;
 
   // Additional word-separator characters listed in CSS Text Level 3 Editor's
@@ -260,12 +258,10 @@ bool Character::CanReceiveTextEmphasis(UChar32 c) {
   return true;
 }
 
-bool Character::IsEmojiFlagSequenceTag(UChar32 c) {
-  // Only allow valid sequences from
+bool Character::IsEmojiTagSequence(UChar32 c) {
   // http://www.unicode.org/reports/tr51/proposed.html#valid-emoji-tag-sequences
   return (c >= kTagDigitZero && c <= kTagDigitNine) ||
-         (c >= kTagLatinSmallLetterA && c <= kTagLatinSmallLetterZ) ||
-         c == kCancelTag;
+         (c >= kTagLatinSmallLetterA && c <= kTagLatinSmallLetterZ);
 }
 
 template <typename CharacterType>
@@ -296,7 +292,7 @@ bool Character::IsCommonOrInheritedScript(UChar32 character) {
 }
 
 bool Character::IsPrivateUse(UChar32 character) {
-  return WTF::Unicode::Category(character) & WTF::Unicode::kOther_PrivateUse;
+  return WTF::unicode::Category(character) & WTF::unicode::kOther_PrivateUse;
 }
 
 bool Character::IsNonCharacter(UChar32 character) {

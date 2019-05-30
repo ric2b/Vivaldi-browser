@@ -13,8 +13,6 @@
 #error "This file requires ARC support."
 #endif
 
-DEFINE_WEB_STATE_USER_DATA_KEY(JavaScriptDialogBlockingState);
-
 JavaScriptDialogBlockingState::JavaScriptDialogBlockingState(
     web::WebState* web_state)
     : web_state_(web_state) {
@@ -56,3 +54,5 @@ void JavaScriptDialogBlockingState::WebStateDestroyed(
   web_state_->RemoveObserver(this);
   web_state_ = nullptr;
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(JavaScriptDialogBlockingState)

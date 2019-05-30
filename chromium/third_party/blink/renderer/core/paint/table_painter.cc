@@ -55,14 +55,16 @@ void TablePainter::PaintObject(const PaintInfo& paint_info,
 void TablePainter::PaintBoxDecorationBackground(
     const PaintInfo& paint_info,
     const LayoutPoint& paint_offset) {
-  if (!layout_table_.HasBoxDecorationBackground() ||
-      layout_table_.StyleRef().Visibility() != EVisibility::kVisible)
-    return;
-
   LayoutRect rect(paint_offset, layout_table_.Size());
   layout_table_.SubtractCaptionRect(rect);
-  BoxPainter(layout_table_)
-      .PaintBoxDecorationBackgroundWithRect(paint_info, rect);
+
+  if (layout_table_.HasBoxDecorationBackground() &&
+      layout_table_.StyleRef().Visibility() == EVisibility::kVisible) {
+    BoxPainter(layout_table_)
+        .PaintBoxDecorationBackgroundWithRect(paint_info, rect, layout_table_);
+  }
+
+  BoxPainter(layout_table_).RecordHitTestData(paint_info, rect, layout_table_);
 }
 
 void TablePainter::PaintMask(const PaintInfo& paint_info,

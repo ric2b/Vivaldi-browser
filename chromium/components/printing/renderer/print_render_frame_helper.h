@@ -177,10 +177,16 @@ class PrintRenderFrameHelper
     PRINT_PREVIEW_SCRIPTED  // triggered by window.print().
   };
 
+  enum class PrintRequestType {
+    kRegular,
+    kScripted,
+  };
+
   // RenderFrameObserver implementation.
   void OnDestruct() override;
-  void DidStartProvisionalLoad(
-      blink::WebDocumentLoader* document_loader) override;
+  void DidStartNavigation(
+      const GURL& url,
+      base::Optional<blink::WebNavigationType> navigation_type) override;
   void DidFailProvisionalLoad(const blink::WebURLError& error) override;
   void DidFinishLoad() override;
   void ScriptedPrint(bool user_initiated) override;
@@ -235,11 +241,10 @@ class PrintRenderFrameHelper
   // Main printing code -------------------------------------------------------
 
   // Print with the system dialog.
-  // |is_scripted| should be true when the call is coming from window.print().
   // WARNING: |this| may be gone after this method returns.
   void Print(blink::WebLocalFrame* frame,
              const blink::WebNode& node,
-             bool is_scripted);
+             PrintRequestType print_request_type);
 
   // Notification when printing is done - signal tear-down/free resources.
   void DidFinishPrinting(PrintingResult result);
@@ -273,7 +278,7 @@ class PrintRenderFrameHelper
   void GetPrintSettingsFromUser(blink::WebLocalFrame* frame,
                                 const blink::WebNode& node,
                                 int expected_pages_count,
-                                bool is_scripted,
+                                PrintRequestType print_request_type,
                                 PrintMsg_PrintPages_Params* print_settings);
 
   // Page Printing / Rendering ------------------------------------------------
@@ -453,6 +458,7 @@ class PrintRenderFrameHelper
     const blink::WebNode& prepared_node() const;
 
     int total_page_count() const;
+    const std::vector<int>& pages_to_render() const;
     MetafileSkia* metafile();
     int last_error() const;
 

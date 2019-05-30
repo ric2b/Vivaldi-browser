@@ -9,7 +9,9 @@
 #include <string>
 #include <vector>
 
+#include "base/component_export.h"
 #include "base/macros.h"
+#include "base/observer_list_types.h"
 
 namespace ash {
 
@@ -19,9 +21,10 @@ enum class InputModality;
 enum class InteractionState;
 enum class MicState;
 
-// An observer which receives notification of changes to an Assistant
+// A checked observer which receives notification of changes to an Assistant
 // interaction.
-class AssistantInteractionModelObserver {
+class COMPONENT_EXPORT(ASSISTANT_MODEL) AssistantInteractionModelObserver
+    : public base::CheckedObserver {
  public:
   // Invoked when the interaction state is changed.
   virtual void OnInteractionStateChanged(InteractionState interaction_state) {}
@@ -47,7 +50,8 @@ class AssistantInteractionModelObserver {
   virtual void OnPendingQueryCleared() {}
 
   // Invoked when the response associated with the interaction is changed.
-  virtual void OnResponseChanged(const AssistantResponse& response) {}
+  virtual void OnResponseChanged(
+      const std::shared_ptr<AssistantResponse>& response) {}
 
   // Invoked when the response associated with the interaction is cleared.
   virtual void OnResponseCleared() {}
@@ -57,7 +61,7 @@ class AssistantInteractionModelObserver {
 
  protected:
   AssistantInteractionModelObserver() = default;
-  virtual ~AssistantInteractionModelObserver() = default;
+  ~AssistantInteractionModelObserver() override = default;
 
   DISALLOW_COPY_AND_ASSIGN(AssistantInteractionModelObserver);
 };

@@ -12,10 +12,13 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "device/gamepad/gamepad_id_list.h"
+#include "device/gamepad/gamepad_uma.h"
 #include "device/udev_linux/scoped_udev.h"
 #include "device/udev_linux/udev_linux.h"
 
@@ -58,38 +61,6 @@ void GamepadPlatformDataFetcherLinux::GetGamepadData(bool) {
   // Update our internal state.
   for (size_t i = 0; i < Gamepads::kItemsLengthCap; ++i)
     ReadDeviceData(i);
-}
-
-// static
-void GamepadPlatformDataFetcherLinux::UpdateGamepadStrings(
-    const std::string& name,
-    const std::string& vendor_id,
-    const std::string& product_id,
-    bool has_standard_mapping,
-    Gamepad* pad) {
-  // Set the ID string. The ID contains the device name, vendor and product IDs,
-  // and an indication of whether the standard mapping is in use.
-  std::string id =
-      base::StringPrintf("%s (%sVendor: %s Product: %s)", name.c_str(),
-                         has_standard_mapping ? "STANDARD GAMEPAD " : "",
-                         vendor_id.c_str(), product_id.c_str());
-  base::TruncateUTF8ToByteSize(id, Gamepad::kIdLengthCap - 1, &id);
-  base::string16 tmp16 = base::UTF8ToUTF16(id);
-  memset(pad->id, 0, sizeof(pad->id));
-  tmp16.copy(pad->id, arraysize(pad->id) - 1);
-
-  // Set the mapper string to "standard" if the gamepad has a standard mapping,
-  // or the empty string otherwise.
-  if (has_standard_mapping) {
-    std::string mapping = "standard";
-    base::TruncateUTF8ToByteSize(mapping, Gamepad::kMappingLengthCap - 1,
-                                 &mapping);
-    tmp16 = base::UTF8ToUTF16(mapping);
-    memset(pad->mapping, 0, sizeof(pad->mapping));
-    tmp16.copy(pad->mapping, arraysize(pad->mapping) - 1);
-  } else {
-    pad->mapping[0] = 0;
-  }
 }
 
 // Used during enumeration, and monitor notifications.
@@ -180,11 +151,23 @@ void GamepadPlatformDataFetcherLinux::RefreshJoydevDevice(
     return;
   }
 
+  // Joydev uses its own internal list of device IDs to identify known gamepads.
+  // If the device is on our list, record it by ID. If the device is unknown,
+  // record that an unknown gamepad was enumerated.
+  uint16_t vendor_id = device->GetVendorId();
+  uint16_t product_id = device->GetProductId();
+  GamepadId gamepad_id =
+      GamepadIdList::Get().GetGamepadId(vendor_id, product_id);
+  if (gamepad_id == GamepadId::kUnknownGamepad)
+    RecordUnknownGamepad(source());
+  else
+    RecordConnectedGamepad(vendor_id, product_id);
+
   state->mapper = device->GetMappingFunction();
 
   Gamepad& pad = state->data;
   UpdateGamepadStrings(device->GetName(), device->GetVendorId(),
-                       device->GetProductId(), state->mapper != nullptr, &pad);
+                       device->GetProductId(), state->mapper != nullptr, pad);
 
   pad.vibration_actuator.type = GamepadHapticActuatorType::kDualRumble;
   pad.vibration_actuator.not_null = device->SupportsVibration();
@@ -226,7 +209,7 @@ void GamepadPlatformDataFetcherLinux::RefreshEvdevDevice(
       if (mapper != state->mapper) {
         state->mapper = mapper;
         UpdateGamepadStrings(device->GetName(), device->GetVendorId(),
-                             device->GetProductId(), mapper != nullptr, &pad);
+                             device->GetProductId(), mapper != nullptr, pad);
       }
 
       pad.vibration_actuator.not_null = device->SupportsVibration();
@@ -305,40 +288,47 @@ void GamepadPlatformDataFetcherLinux::PlayEffect(
     int pad_id,
     mojom::GamepadHapticEffectType type,
     mojom::GamepadEffectParametersPtr params,
-    mojom::GamepadHapticsManager::PlayVibrationEffectOnceCallback callback) {
+    mojom::GamepadHapticsManager::PlayVibrationEffectOnceCallback callback,
+    scoped_refptr<base::SequencedTaskRunner> callback_runner) {
   if (pad_id < 0 || pad_id >= static_cast<int>(Gamepads::kItemsLengthCap)) {
-    std::move(callback).Run(
+    RunVibrationCallback(
+        std::move(callback), std::move(callback_runner),
         mojom::GamepadHapticsResult::GamepadHapticsResultError);
     return;
   }
 
   GamepadDeviceLinux* device = GetDeviceWithJoydevIndex(pad_id);
   if (!device) {
-    std::move(callback).Run(
+    RunVibrationCallback(
+        std::move(callback), std::move(callback_runner),
         mojom::GamepadHapticsResult::GamepadHapticsResultError);
     return;
   }
 
-  device->PlayEffect(type, std::move(params), std::move(callback));
+  device->PlayEffect(type, std::move(params), std::move(callback),
+                     std::move(callback_runner));
 }
 
 void GamepadPlatformDataFetcherLinux::ResetVibration(
     int pad_id,
-    mojom::GamepadHapticsManager::ResetVibrationActuatorCallback callback) {
+    mojom::GamepadHapticsManager::ResetVibrationActuatorCallback callback,
+    scoped_refptr<base::SequencedTaskRunner> callback_runner) {
   if (pad_id < 0 || pad_id >= static_cast<int>(Gamepads::kItemsLengthCap)) {
-    std::move(callback).Run(
+    RunVibrationCallback(
+        std::move(callback), std::move(callback_runner),
         mojom::GamepadHapticsResult::GamepadHapticsResultError);
     return;
   }
 
   GamepadDeviceLinux* device = GetDeviceWithJoydevIndex(pad_id);
   if (!device) {
-    std::move(callback).Run(
+    RunVibrationCallback(
+        std::move(callback), std::move(callback_runner),
         mojom::GamepadHapticsResult::GamepadHapticsResultError);
     return;
   }
 
-  device->ResetVibration(std::move(callback));
+  device->ResetVibration(std::move(callback), std::move(callback_runner));
 }
 
 }  // namespace device

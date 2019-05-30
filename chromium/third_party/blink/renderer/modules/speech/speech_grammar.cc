@@ -31,15 +31,15 @@
 namespace blink {
 
 SpeechGrammar* SpeechGrammar::Create() {
-  return new SpeechGrammar;
+  return MakeGarbageCollected<SpeechGrammar>();
 }
 
 SpeechGrammar* SpeechGrammar::Create(const KURL& src, double weight) {
-  return new SpeechGrammar(src, weight);
+  return MakeGarbageCollected<SpeechGrammar>(src, weight);
 }
 
 void SpeechGrammar::setSrc(ScriptState* script_state, const String& src) {
-  Document* document = ToDocument(ExecutionContext::From(script_state));
+  Document* document = To<Document>(ExecutionContext::From(script_state));
   src_ = document->CompleteURL(src);
 }
 

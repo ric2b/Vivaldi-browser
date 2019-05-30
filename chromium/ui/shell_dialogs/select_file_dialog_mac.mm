@@ -19,6 +19,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #import "ui/base/cocoa/nib_loading.h"
+#include "ui/base/cocoa/remote_views_window.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/shell_dialogs/select_file_policy.h"
 #include "ui/strings/grit/ui_strings.h"
@@ -97,7 +98,7 @@ SelectFileDialogImpl::SelectFileDialogImpl(
           [[SelectFileDialogBridge alloc] initWithSelectFileDialogImpl:this]) {}
 
 bool SelectFileDialogImpl::IsRunning(gfx::NativeWindow parent_window) const {
-  return parents_.find(parent_window) != parents_.end();
+  return parents_.find(parent_window.GetNativeNSWindow()) != parents_.end();
 }
 
 void SelectFileDialogImpl::ListenerDestroyed() {
@@ -141,11 +142,20 @@ void SelectFileDialogImpl::SelectFileImpl(
     const FileTypeInfo* file_types,
     int file_type_index,
     const base::FilePath::StringType& default_extension,
-    gfx::NativeWindow owning_window,
+    gfx::NativeWindow owning_native_window,
     void* params) {
   DCHECK(type == SELECT_FOLDER || type == SELECT_UPLOAD_FOLDER ||
          type == SELECT_EXISTING_FOLDER || type == SELECT_OPEN_FILE ||
          type == SELECT_OPEN_MULTI_FILE || type == SELECT_SAVEAS_FILE);
+  NSWindow* owning_window = owning_native_window.GetNativeNSWindow();
+  // TODO(https://crbug.com/913303): The select file dialog's interface to
+  // Cocoa should be wrapped in a mojo interface in order to allow instantiating
+  // across processes. As a temporary solution, raise the remote windows'
+  // transparent in-process window to the front.
+  if (ui::IsWindowUsingRemoteViews(owning_window)) {
+    [owning_window makeKeyAndOrderFront:nil];
+    [owning_window setLevel:NSModalPanelWindowLevel];
+  }
   parents_.insert(owning_window);
 
   // Note: we need to retain the dialog as owning_window can be null.

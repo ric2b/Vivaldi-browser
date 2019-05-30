@@ -7,7 +7,7 @@
 
 #include "base/macros.h"
 #include "third_party/blink/renderer/core/css/css_property_id_templates.h"
-#include "third_party/blink/renderer/core/css/cssom/style_property_map_read_only.h"
+#include "third_party/blink/renderer/core/css/cssom/style_property_map_read_only_main_thread.h"
 
 namespace blink {
 
@@ -24,7 +24,7 @@ class ComputedStyle;
 // result when the ComputedStyle changes UpdateStyle needs to be called to
 // re-populate the internal maps.
 class CORE_EXPORT PrepopulatedComputedStylePropertyMap
-    : public StylePropertyMapReadOnly {
+    : public StylePropertyMapReadOnlyMainThread {
  public:
   // NOTE: styled_node may be null, in the case where this map is for an
   // anonymous box.
@@ -38,15 +38,15 @@ class CORE_EXPORT PrepopulatedComputedStylePropertyMap
   // Updates the values of the properties based on the new computed style.
   void UpdateStyle(const Document&, const ComputedStyle&);
 
-  unsigned size() override;
+  unsigned size() const override;
   void Trace(blink::Visitor*) override;
 
  protected:
-  const CSSValue* GetProperty(CSSPropertyID) override;
-  const CSSValue* GetCustomProperty(AtomicString) override;
+  const CSSValue* GetProperty(CSSPropertyID) const override;
+  const CSSValue* GetCustomProperty(AtomicString) const override;
   void ForEachProperty(const IterationCallback&) override;
 
-  String SerializationForShorthand(const CSSProperty&) override;
+  String SerializationForShorthand(const CSSProperty&) const override;
 
  private:
   void UpdateNativeProperty(const ComputedStyle&, CSSPropertyID);

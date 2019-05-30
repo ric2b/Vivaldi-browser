@@ -7,11 +7,12 @@
 #include <IOKit/IOKitLib.h>
 #include <libkern/OSByteOrder.h>
 
+#include "base/bind.h"
 #include "base/mac/scoped_ioobject.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/process/process_info.h"
+#include "base/process/process.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
 #include "base/time/time.h"
@@ -194,7 +195,7 @@ class PowerMetricsProvider::Impl : public base::RefCountedThreadSafe<Impl> {
   bool IsInStartup() {
     if (could_be_in_startup_) {
       const base::TimeDelta process_uptime =
-          base::Time::Now() - base::CurrentProcessInfo::CreationTime();
+          base::Time::Now() - base::Process::Current().CreationTime();
       if (process_uptime >= kStartupPowerMetricsCollectionDuration)
         could_be_in_startup_ = false;
     }

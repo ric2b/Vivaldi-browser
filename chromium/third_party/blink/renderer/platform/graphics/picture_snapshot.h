@@ -48,11 +48,10 @@ namespace blink {
 class FloatRect;
 
 class PLATFORM_EXPORT PictureSnapshot : public RefCounted<PictureSnapshot> {
-
  public:
   struct TilePictureStream : RefCounted<TilePictureStream> {
     FloatPoint layer_offset;
-    Vector<char> data;
+    sk_sp<SkPicture> picture;
   };
 
   static scoped_refptr<PictureSnapshot> Load(

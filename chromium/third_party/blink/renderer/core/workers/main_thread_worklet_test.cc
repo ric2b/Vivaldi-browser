@@ -11,8 +11,8 @@
 #include "third_party/blink/renderer/core/script/script.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/core/workers/global_scope_creation_params.h"
-#include "third_party/blink/renderer/core/workers/main_thread_worklet_global_scope.h"
 #include "third_party/blink/renderer/core/workers/main_thread_worklet_reporting_proxy.h"
+#include "third_party/blink/renderer/core/workers/worklet_global_scope.h"
 #include "third_party/blink/renderer/core/workers/worklet_module_responses_map.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 
@@ -64,23 +64,28 @@ class MainThreadWorkletTest : public PageTestBase {
     reporting_proxy_ =
         std::make_unique<MainThreadWorkletReportingProxyForTest>(document);
     auto creation_params = std::make_unique<GlobalScopeCreationParams>(
-        document->Url(), ScriptType::kModule, document->UserAgent(),
+        document->Url(), mojom::ScriptType::kModule,
+        OffMainThreadWorkerScriptFetchOption::kEnabled, "MainThreadWorklet",
+        document->UserAgent(), nullptr /* web_worker_fetch_context */,
         document->GetContentSecurityPolicy()->Headers(),
         document->GetReferrerPolicy(), document->GetSecurityOrigin(),
         document->IsSecureContext(), document->GetHttpsState(),
         nullptr /* worker_clients */, document->AddressSpace(),
         OriginTrialContext::GetTokens(document).get(),
         base::UnguessableToken::Create(), nullptr /* worker_settings */,
-        kV8CacheOptionsDefault, new WorkletModuleResponsesMap);
-    global_scope_ = new MainThreadWorkletGlobalScope(
-        &GetFrame(), std::move(creation_params), *reporting_proxy_);
+        kV8CacheOptionsDefault,
+        MakeGarbageCollected<WorkletModuleResponsesMap>());
+    global_scope_ = MakeGarbageCollected<WorkletGlobalScope>(
+        std::move(creation_params), *reporting_proxy_, &GetFrame());
+    EXPECT_TRUE(global_scope_->IsMainThreadWorkletGlobalScope());
+    EXPECT_FALSE(global_scope_->IsThreadedWorkletGlobalScope());
   }
 
-  void TearDown() override { global_scope_->Terminate(); }
+  void TearDown() override { global_scope_->Dispose(); }
 
  protected:
   std::unique_ptr<MainThreadWorkletReportingProxyForTest> reporting_proxy_;
-  Persistent<MainThreadWorkletGlobalScope> global_scope_;
+  Persistent<WorkletGlobalScope> global_scope_;
 };
 
 class MainThreadWorkletInvalidCSPTest : public MainThreadWorkletTest {
@@ -117,7 +122,7 @@ TEST_F(MainThreadWorkletTest, UseCounter) {
   // This feature is randomly selected.
   const WebFeature kFeature1 = WebFeature::kRequestFileSystem;
 
-  // API use on the MainThreadWorkletGlobalScope should be recorded in
+  // API use on WorkletGlobalScope for the main thread should be recorded in
   // UseCounter on the Document.
   EXPECT_FALSE(UseCounter::IsCounted(GetDocument(), kFeature1));
   UseCounter::Count(global_scope_, kFeature1);
@@ -130,8 +135,8 @@ TEST_F(MainThreadWorkletTest, UseCounter) {
   // This feature is randomly selected from Deprecation::deprecationMessage().
   const WebFeature kFeature2 = WebFeature::kPrefixedStorageInfo;
 
-  // Deprecated API use on the MainThreadWorkletGlobalScope should be recorded
-  // in UseCounter on the Document.
+  // Deprecated API use on WorkletGlobalScope for the main thread should be
+  // recorded in UseCounter on the Document.
   EXPECT_FALSE(UseCounter::IsCounted(GetDocument(), kFeature2));
   Deprecation::CountDeprecation(global_scope_, kFeature2);
   EXPECT_TRUE(UseCounter::IsCounted(GetDocument(), kFeature2));

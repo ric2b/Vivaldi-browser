@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/no_destructor.h"
 #include "base/strings/nullable_string16.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/renderer/fetchers/manifest_fetcher.h"
@@ -95,9 +96,8 @@ void ManifestManager::DidChangeManifest() {
   manifest_debug_info_ = nullptr;
 }
 
-void ManifestManager::DidCommitProvisionalLoad(
-    bool is_new_navigation,
-    bool is_same_document_navigation) {
+void ManifestManager::DidCommitProvisionalLoad(bool is_same_document_navigation,
+                                               ui::PageTransition transition) {
   if (is_same_document_navigation)
     return;
 
@@ -131,8 +131,8 @@ void ManifestManager::FetchManifest() {
 }
 
 static const std::string& GetMessagePrefix() {
-  CR_DEFINE_STATIC_LOCAL(std::string, message_prefix, ("Manifest: "));
-  return message_prefix;
+  static base::NoDestructor<std::string> message_prefix("Manifest: ");
+  return *message_prefix;
 }
 
 void ManifestManager::OnManifestFetchComplete(
@@ -148,7 +148,7 @@ void ManifestManager::OnManifestFetchComplete(
   }
 
   ManifestUmaUtil::FetchSucceeded();
-  GURL response_url = response.Url();
+  GURL response_url = response.CurrentRequestUrl();
   base::StringPiece data_piece(data);
   ManifestParser parser(data_piece, response_url, document_url);
   parser.Parse();
@@ -159,8 +159,9 @@ void ManifestManager::OnManifestFetchComplete(
 
   for (const auto& error : manifest_debug_info_->errors) {
     blink::WebConsoleMessage message;
-    message.level = error->critical ? blink::WebConsoleMessage::kLevelError
-                                    : blink::WebConsoleMessage::kLevelWarning;
+    message.level = error->critical
+                        ? blink::mojom::ConsoleMessageLevel::kError
+                        : blink::mojom::ConsoleMessageLevel::kWarning;
     message.text =
         blink::WebString::FromUTF8(GetMessagePrefix() + error->message);
     message.url =
@@ -177,7 +178,7 @@ void ManifestManager::OnManifestFetchComplete(
     return;
   }
 
-  manifest_url_ = response.Url();
+  manifest_url_ = response.CurrentRequestUrl();
   manifest_ = parser.manifest();
   ResolveCallbacks(ResolveStateSuccess);
 }

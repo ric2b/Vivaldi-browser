@@ -16,15 +16,15 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #include "base/test/scoped_feature_list.h"
-#import "ios/web/interstitials/html_web_interstitial_impl.h"
+#import "ios/web/interstitials/web_interstitial_impl.h"
 #import "ios/web/navigation/navigation_item_impl.h"
 #import "ios/web/navigation/wk_navigation_util.h"
 #import "ios/web/public/crw_navigation_item_storage.h"
 #import "ios/web/public/crw_session_storage.h"
 #include "ios/web/public/features.h"
 #import "ios/web/public/java_script_dialog_presenter.h"
-#include "ios/web/public/load_committed_details.h"
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
+#import "ios/web/public/test/fakes/fake_web_frame.h"
 #include "ios/web/public/test/fakes/test_browser_state.h"
 #import "ios/web/public/test/fakes/test_web_state_delegate.h"
 #import "ios/web/public/test/fakes/test_web_state_observer.h"
@@ -71,33 +71,17 @@ class TestGlobalWebStateObserver : public GlobalWebStateObserver {
  public:
   TestGlobalWebStateObserver()
       : GlobalWebStateObserver(),
-        navigation_items_pruned_called_(false),
-        navigation_item_changed_called_(false),
-        navigation_item_committed_called_(false),
         did_start_loading_called_(false),
         did_stop_loading_called_(false),
         did_start_navigation_called_(false),
-        page_loaded_called_with_success_(false),
         web_state_destroyed_called_(false) {}
 
   // Methods returning true if the corresponding GlobalWebStateObserver method
   // has been called.
-  bool navigation_items_pruned_called() const {
-    return navigation_items_pruned_called_;
-  }
-  bool navigation_item_changed_called() const {
-    return navigation_item_changed_called_;
-  }
-  bool navigation_item_committed_called() const {
-    return navigation_item_committed_called_;
-  }
   bool did_start_loading_called() const { return did_start_loading_called_; }
   bool did_stop_loading_called() const { return did_stop_loading_called_; }
   bool did_start_navigation_called() const {
     return did_start_navigation_called_;
-  }
-  bool page_loaded_called_with_success() const {
-    return page_loaded_called_with_success_;
   }
   bool web_state_destroyed_called() const {
     return web_state_destroyed_called_;
@@ -105,18 +89,6 @@ class TestGlobalWebStateObserver : public GlobalWebStateObserver {
 
  private:
   // GlobalWebStateObserver implementation:
-  void NavigationItemsPruned(WebState* web_state,
-                             size_t pruned_item_count) override {
-    navigation_items_pruned_called_ = true;
-  }
-  void NavigationItemChanged(WebState* web_state) override {
-    navigation_item_changed_called_ = true;
-  }
-  void NavigationItemCommitted(
-      WebState* web_state,
-      const LoadCommittedDetails& load_details) override {
-    navigation_item_committed_called_ = true;
-  }
   void WebStateDidStartLoading(WebState* web_state) override {
     did_start_loading_called_ = true;
   }
@@ -128,22 +100,13 @@ class TestGlobalWebStateObserver : public GlobalWebStateObserver {
       NavigationContext* navigation_context) override {
     did_start_navigation_called_ = true;
   }
-  void PageLoaded(WebState* web_state,
-                  PageLoadCompletionStatus load_completion_status) override {
-    page_loaded_called_with_success_ =
-        load_completion_status == PageLoadCompletionStatus::SUCCESS;
-  }
   void WebStateDestroyed(WebState* web_state) override {
     web_state_destroyed_called_ = true;
   }
 
-  bool navigation_items_pruned_called_;
-  bool navigation_item_changed_called_;
-  bool navigation_item_committed_called_;
   bool did_start_loading_called_;
   bool did_stop_loading_called_;
   bool did_start_navigation_called_;
-  bool page_loaded_called_with_success_;
   bool web_state_destroyed_called_;
 };
 
@@ -176,21 +139,24 @@ scoped_refptr<net::HttpResponseHeaders> HeadersFromString(const char* string) {
 // Test callback for script commands.
 // Sets |is_called| to true if it is called, and checks that the parameters
 // match their expected values.
-// |user_is_interacting| is not checked because Bind() has a maximum of 7
-// parameters.
 bool HandleScriptCommand(bool* is_called,
                          bool should_handle,
                          base::DictionaryValue* expected_value,
                          const GURL& expected_url,
+                         bool expected_user_is_interacting,
                          bool expected_is_main_frame,
+                         web::WebFrame* expected_sender_frame,
                          const base::DictionaryValue& value,
                          const GURL& url,
                          bool user_is_interacting,
-                         bool is_main_frame) {
+                         bool is_main_frame,
+                         web::WebFrame* sender_frame) {
   *is_called = true;
   EXPECT_TRUE(expected_value->Equals(&value));
   EXPECT_EQ(expected_url, url);
+  EXPECT_EQ(expected_user_is_interacting, user_is_interacting);
   EXPECT_EQ(expected_is_main_frame, is_main_frame);
+  EXPECT_EQ(expected_sender_frame, sender_frame);
   return should_handle;
 }
 
@@ -229,8 +195,8 @@ class WebStateImplTest
   WebInterstitialImpl* ShowInterstitial() {
     auto delegate = std::make_unique<MockInterstitialDelegate>();
     WebInterstitialImpl* result =
-        new HtmlWebInterstitialImpl(web_state_.get(), /*new_navigation=*/true,
-                                    GURL::EmptyGURL(), std::move(delegate));
+        new WebInterstitialImpl(web_state_.get(), /*new_navigation=*/true,
+                                GURL::EmptyGURL(), std::move(delegate));
     result->Show();
     return result;
   }
@@ -251,19 +217,6 @@ TEST_P(WebStateImplTest, WebUsageEnabled) {
   web_state_->SetWebUsageEnabled(true);
   EXPECT_TRUE(web_state_->IsWebUsageEnabled());
   EXPECT_TRUE(web_state_->GetWebController().webUsageEnabled);
-}
-
-TEST_P(WebStateImplTest, ShouldSuppressDialogs) {
-  // Default is false.
-  ASSERT_FALSE(web_state_->ShouldSuppressDialogs());
-
-  web_state_->SetShouldSuppressDialogs(true);
-  EXPECT_TRUE(web_state_->ShouldSuppressDialogs());
-  EXPECT_TRUE(web_state_->GetWebController().shouldSuppressDialogs);
-
-  web_state_->SetShouldSuppressDialogs(false);
-  EXPECT_FALSE(web_state_->ShouldSuppressDialogs());
-  EXPECT_FALSE(web_state_->GetWebController().shouldSuppressDialogs);
 }
 
 TEST_P(WebStateImplTest, ResponseHeaders) {
@@ -376,13 +329,6 @@ TEST_P(WebStateImplTest, ObserverTest) {
   EXPECT_EQ(web_state_.get(),
             observer->did_change_visible_security_state_info()->web_state);
 
-  // Test that DidSuppressDialog() is called.
-  ASSERT_FALSE(observer->did_suppress_dialog_info());
-  web_state_->SetShouldSuppressDialogs(true);
-  web_state_->OnDialogSuppressed();
-  ASSERT_TRUE(observer->did_suppress_dialog_info());
-  EXPECT_EQ(web_state_.get(), observer->did_suppress_dialog_info()->web_state);
-
   // Test that FaviconUrlUpdated() is called.
   ASSERT_FALSE(observer->update_favicon_url_candidates_info());
   web::FaviconURL favicon_url(GURL("https://chromium.test/"),
@@ -405,6 +351,22 @@ TEST_P(WebStateImplTest, ObserverTest) {
   EXPECT_EQ(favicon_url.icon_sizes[0].height(),
             actual_favicon_url.icon_sizes[0].height());
 
+  // Test that WebFrameDidBecomeAvailable() is called.
+  ASSERT_FALSE(observer->web_frame_available_info());
+  web::FakeWebFrame main_frame("main", true, GURL());
+  web_state_->OnWebFrameAvailable(&main_frame);
+  ASSERT_TRUE(observer->web_frame_available_info());
+  EXPECT_EQ(web_state_.get(), observer->web_frame_available_info()->web_state);
+  EXPECT_EQ(&main_frame, observer->web_frame_available_info()->web_frame);
+
+  // Test that WebFrameWillBecomeUnavailable() is called.
+  ASSERT_FALSE(observer->web_frame_unavailable_info());
+  web_state_->OnWebFrameUnavailable(&main_frame);
+  ASSERT_TRUE(observer->web_frame_unavailable_info());
+  EXPECT_EQ(web_state_.get(),
+            observer->web_frame_unavailable_info()->web_state);
+  EXPECT_EQ(&main_frame, observer->web_frame_unavailable_info()->web_frame);
+
   // Test that RenderProcessGone() is called.
   SetIgnoreRenderProcessCrashesDuringTesting(true);
   ASSERT_FALSE(observer->render_process_gone_info());
@@ -415,7 +377,7 @@ TEST_P(WebStateImplTest, ObserverTest) {
   // Test that DidFinishNavigation() is called.
   ASSERT_FALSE(observer->did_finish_navigation_info());
   const GURL url("http://test");
-  std::unique_ptr<web::NavigationContext> context =
+  std::unique_ptr<NavigationContextImpl> context =
       NavigationContextImpl::CreateNavigationContext(
           web_state_.get(), url, /*has_user_gesture=*/true,
           ui::PageTransition::PAGE_TRANSITION_AUTO_BOOKMARK,
@@ -455,27 +417,6 @@ TEST_P(WebStateImplTest, ObserverTest) {
   EXPECT_EQ(web_state_.get(),
             observer->navigation_items_pruned_info()->web_state);
 
-  // Test that NavigationItemChanged() is called.
-  ASSERT_FALSE(observer->navigation_item_changed_info());
-  web_state_->OnNavigationItemChanged();
-  ASSERT_TRUE(observer->navigation_item_changed_info());
-  EXPECT_EQ(web_state_.get(),
-            observer->navigation_item_changed_info()->web_state);
-
-  // Test that NavigationItemCommitted() is called.
-  ASSERT_FALSE(observer->commit_navigation_info());
-  LoadCommittedDetails details;
-  auto item = std::make_unique<NavigationItemImpl>();
-  details.item = item.get();
-  web_state_->OnNavigationItemCommitted(details);
-  ASSERT_TRUE(observer->commit_navigation_info());
-  EXPECT_EQ(web_state_.get(), observer->commit_navigation_info()->web_state);
-  LoadCommittedDetails actual_details =
-      observer->commit_navigation_info()->load_details;
-  EXPECT_EQ(details.item, actual_details.item);
-  EXPECT_EQ(details.previous_item_index, actual_details.previous_item_index);
-  EXPECT_EQ(details.is_in_page, actual_details.is_in_page);
-
   // Test that OnPageLoaded() is called with success when there is no error.
   ASSERT_FALSE(observer->load_page_info());
   web_state_->OnPageLoaded(url, false);
@@ -505,22 +446,27 @@ TEST_P(WebStateImplTest, ObserverTest) {
 // Tests that placeholder navigations are not visible to WebStateObservers.
 TEST_P(WebStateImplTest, PlaceholderNavigationNotExposedToObservers) {
   TestWebStateObserver observer(web_state_.get());
-  FakeNavigationContext context;
-  context.SetUrl(
-      wk_navigation_util::CreatePlaceholderUrlForUrl(GURL("chrome://newtab")));
-
+  GURL placeholder_url =
+      wk_navigation_util::CreatePlaceholderUrlForUrl(GURL("chrome://newtab"));
+  std::unique_ptr<NavigationContextImpl> context =
+      NavigationContextImpl::CreateNavigationContext(
+          web_state_.get(), placeholder_url,
+          /*has_user_gesture=*/true,
+          ui::PageTransition::PAGE_TRANSITION_AUTO_BOOKMARK,
+          /*is_renderer_initiated=*/true);
+  context->SetPlaceholderNavigation(true);
   // Test that OnPageLoaded() is not called.
-  web_state_->OnPageLoaded(context.GetUrl(), true /* load_success */);
+  web_state_->OnPageLoaded(placeholder_url, /*load_success=*/true);
   EXPECT_FALSE(observer.load_page_info());
-  web_state_->OnPageLoaded(context.GetUrl(), false /* load_success */);
+  web_state_->OnPageLoaded(placeholder_url, /*load_success=*/false);
   EXPECT_FALSE(observer.load_page_info());
 
   // Test that OnNavigationStarted() is not called.
-  web_state_->OnNavigationStarted(&context);
+  web_state_->OnNavigationStarted(context.get());
   EXPECT_FALSE(observer.did_start_navigation_info());
 
   // Test that OnNavigationFinished() is not called.
-  web_state_->OnNavigationFinished(&context);
+  web_state_->OnNavigationFinished(context.get());
   EXPECT_FALSE(observer.did_finish_navigation_info());
 }
 
@@ -646,28 +592,14 @@ TEST_P(WebStateImplTest, GlobalObserverTest) {
   std::unique_ptr<TestGlobalWebStateObserver> observer(
       new TestGlobalWebStateObserver());
 
-  // Test that NavigationItemsPruned() is called.
-  EXPECT_FALSE(observer->navigation_items_pruned_called());
-  web_state_->OnNavigationItemsPruned(1);
-  EXPECT_TRUE(observer->navigation_items_pruned_called());
-
-  // Test that NavigationItemChanged() is called.
-  EXPECT_FALSE(observer->navigation_item_changed_called());
-  web_state_->OnNavigationItemChanged();
-  EXPECT_TRUE(observer->navigation_item_changed_called());
-
-  // Test that NavigationItemCommitted() is called.
-  EXPECT_FALSE(observer->navigation_item_committed_called());
-  LoadCommittedDetails details;
-  auto item = std::make_unique<NavigationItemImpl>();
-  details.item = item.get();
-  web_state_->OnNavigationItemCommitted(details);
-  EXPECT_TRUE(observer->navigation_item_committed_called());
-
   // Test that DidStartNavigation() is called.
   EXPECT_FALSE(observer->did_start_navigation_called());
-  FakeNavigationContext context;
-  web_state_->OnNavigationStarted(&context);
+  std::unique_ptr<NavigationContextImpl> context =
+      NavigationContextImpl::CreateNavigationContext(
+          web_state_.get(), GURL::EmptyGURL(), /*has_user_gesture=*/true,
+          ui::PageTransition::PAGE_TRANSITION_AUTO_BOOKMARK,
+          /*is_renderer_initiated=*/true);
+  web_state_->OnNavigationStarted(context.get());
   EXPECT_TRUE(observer->did_start_navigation_called());
 
   // Test that WebStateDidStartLoading() is called.
@@ -679,13 +611,6 @@ TEST_P(WebStateImplTest, GlobalObserverTest) {
   EXPECT_FALSE(observer->did_stop_loading_called());
   web_state_->SetIsLoading(false);
   EXPECT_TRUE(observer->did_stop_loading_called());
-
-  // Test that OnPageLoaded() is called with success when there is no error.
-  EXPECT_FALSE(observer->page_loaded_called_with_success());
-  web_state_->OnPageLoaded(GURL("http://test"), false);
-  EXPECT_FALSE(observer->page_loaded_called_with_success());
-  web_state_->OnPageLoaded(GURL("http://test"), true);
-  EXPECT_TRUE(observer->page_loaded_called_with_success());
 
   // Test that WebStateDestroyed() is called.
   EXPECT_FALSE(observer->web_state_destroyed_called());
@@ -699,7 +624,6 @@ TEST_P(WebStateImplTest, GlobalObserverTest) {
 MATCHER_P(RequestInfoMatch, expected_request_info, /* argument_name = */ "") {
   return ui::PageTransitionTypeIncludingQualifiersIs(
              arg.transition_type, expected_request_info.transition_type) &&
-         arg.source_url == expected_request_info.source_url &&
          arg.target_frame_is_main ==
              expected_request_info.target_frame_is_main &&
          arg.has_user_gesture == expected_request_info.has_user_gesture;
@@ -721,7 +645,7 @@ TEST_P(WebStateImplTest, PolicyDeciderTest) {
   // Test that ShouldAllowRequest() is called for the same parameters.
   WebStatePolicyDecider::RequestInfo request_info_main_frame(
       ui::PageTransition::PAGE_TRANSITION_LINK,
-      /*source_url=*/GURL::EmptyGURL(), /*target_main_frame=*/true,
+      /*target_main_frame=*/true,
       /*has_user_gesture=*/false);
   EXPECT_CALL(decider, ShouldAllowRequest(
                            request, RequestInfoMatch(request_info_main_frame)))
@@ -736,7 +660,7 @@ TEST_P(WebStateImplTest, PolicyDeciderTest) {
 
   WebStatePolicyDecider::RequestInfo request_info_iframe(
       ui::PageTransition::PAGE_TRANSITION_LINK,
-      /*source_url=*/GURL::EmptyGURL(), /*target_main_frame=*/false,
+      /*target_main_frame=*/false,
       /*has_user_gesture=*/false);
 
   EXPECT_CALL(decider, ShouldAllowRequest(
@@ -812,10 +736,12 @@ TEST_P(WebStateImplTest, ScriptCommand) {
   value_1.SetString("a", "b");
   const GURL kUrl1("http://foo");
   bool is_called_1 = false;
+  web::FakeWebFrame main_frame("main", true, GURL());
   web_state_->AddScriptCommandCallback(
       base::BindRepeating(&HandleScriptCommand, &is_called_1,
                           /*should_handle*/ true, &value_1, kUrl1,
-                          /*expected_is_main_frame*/ true),
+                          /*expected_user_is_interacting*/ false,
+                          /*expected_is_main_frame*/ true, &main_frame),
       kPrefix1);
 
   const std::string kPrefix2("prefix2");
@@ -827,7 +753,8 @@ TEST_P(WebStateImplTest, ScriptCommand) {
   web_state_->AddScriptCommandCallback(
       base::BindRepeating(&HandleScriptCommand, &is_called_2,
                           /*should_handle*/ false, &value_2, kUrl2,
-                          /*expected_is_main_frame*/ true),
+                          /*expected_user_is_interacting*/ false,
+                          /*expected_is_main_frame*/ true, &main_frame),
       kPrefix2);
 
   const std::string kPrefix3("prefix3");
@@ -836,41 +763,46 @@ TEST_P(WebStateImplTest, ScriptCommand) {
   value_3.SetString("e", "f");
   const GURL kUrl3("http://iframe");
   bool is_called_3 = false;
+  web::FakeWebFrame subframe("subframe", false, GURL());
   web_state_->AddScriptCommandCallback(
       base::BindRepeating(&HandleScriptCommand, &is_called_3,
                           /*should_handle*/ true, &value_3, kUrl3,
-                          /*expected_is_main_frame*/ false),
+                          /*expected_user_is_interacting*/ false,
+                          /*expected_is_main_frame*/ false, &subframe),
       kPrefix3);
 
   // Check that a irrelevant or invalid command does not trigger the callbacks.
   EXPECT_FALSE(web_state_->OnScriptCommandReceived(
       "wohoo.blah", value_1, kUrl1,
-      /*user_is_interacting*/ false, /*is_main_frame*/ true));
+      /*user_is_interacting*/ false, /*is_main_frame*/ true,
+      /*sender_frame*/ &main_frame));
   EXPECT_FALSE(is_called_1);
   EXPECT_FALSE(is_called_2);
   EXPECT_FALSE(is_called_3);
 
   EXPECT_FALSE(web_state_->OnScriptCommandReceived(
       "prefix1ButMissingDot", value_1, kUrl1, /*user_is_interacting*/ false,
-      /*is_main_frame*/ true));
+      /*is_main_frame*/ true, /*sender_frame*/ &main_frame));
   EXPECT_FALSE(is_called_1);
   EXPECT_FALSE(is_called_2);
   EXPECT_FALSE(is_called_3);
 
   // Check that only the callback matching the prefix is called, with the
   // expected parameters and return value;
-  EXPECT_TRUE(web_state_->OnScriptCommandReceived(kCommand1, value_1, kUrl1,
-                                                  /*user_is_interacting*/ false,
-                                                  /*is_main_frame*/ true));
+  EXPECT_TRUE(
+      web_state_->OnScriptCommandReceived(kCommand1, value_1, kUrl1,
+                                          /*user_is_interacting*/ false,
+                                          /*is_main_frame*/ true,
+                                          /*sender_frame*/ &main_frame));
   EXPECT_TRUE(is_called_1);
   EXPECT_FALSE(is_called_2);
   EXPECT_FALSE(is_called_3);
   is_called_1 = false;
-
   // Check that sending message from iframe sets |is_main_frame| to false.
   EXPECT_TRUE(web_state_->OnScriptCommandReceived(kCommand3, value_3, kUrl3,
                                                   /*user_is_interacting*/ false,
-                                                  /*is_main_frame*/ false));
+                                                  /*is_main_frame*/ false,
+                                                  /*sender_frame*/ &subframe));
   EXPECT_FALSE(is_called_1);
   EXPECT_FALSE(is_called_2);
   EXPECT_TRUE(is_called_3);
@@ -880,7 +812,8 @@ TEST_P(WebStateImplTest, ScriptCommand) {
   web_state_->RemoveScriptCommandCallback(kPrefix1);
   EXPECT_FALSE(web_state_->OnScriptCommandReceived(
       kCommand1, value_1, kUrl1,
-      /*user_is_interacting*/ false, /*is_main_frame*/ true));
+      /*user_is_interacting*/ false, /*is_main_frame*/ true,
+      /*sender_frame*/ &main_frame));
   EXPECT_FALSE(is_called_1);
   EXPECT_FALSE(is_called_2);
   EXPECT_FALSE(is_called_3);
@@ -888,7 +821,8 @@ TEST_P(WebStateImplTest, ScriptCommand) {
   // Check that a false return value is forwarded correctly.
   EXPECT_FALSE(web_state_->OnScriptCommandReceived(
       kCommand2, value_2, kUrl2,
-      /*user_is_interacting*/ false, /*is_main_frame*/ true));
+      /*user_is_interacting*/ false, /*is_main_frame*/ true,
+      /*sender_frame*/ &main_frame));
   EXPECT_FALSE(is_called_1);
   EXPECT_TRUE(is_called_2);
   EXPECT_FALSE(is_called_3);
@@ -918,9 +852,13 @@ TEST_P(WebStateImplTest, FaviconUpdateForSameDocumentNavigations) {
   auto observer = std::make_unique<TestWebStateObserver>(web_state_.get());
 
   // No callback if icons has not been fetched yet.
-  FakeNavigationContext context;
-  context.SetIsSameDocument(true);
-  web_state_->OnNavigationFinished(&context);
+  std::unique_ptr<NavigationContextImpl> context =
+      NavigationContextImpl::CreateNavigationContext(
+          web_state_.get(), GURL::EmptyGURL(),
+          /*has_user_gesture=*/false, ui::PageTransition::PAGE_TRANSITION_LINK,
+          /*is_renderer_initiated=*/false);
+  context->SetIsSameDocument(true);
+  web_state_->OnNavigationFinished(context.get());
   EXPECT_FALSE(observer->update_favicon_url_candidates_info());
 
   // Callback is called when icons were fetched.
@@ -933,7 +871,7 @@ TEST_P(WebStateImplTest, FaviconUpdateForSameDocumentNavigations) {
 
   // Callback is now called after same-document navigation.
   observer = std::make_unique<TestWebStateObserver>(web_state_.get());
-  web_state_->OnNavigationFinished(&context);
+  web_state_->OnNavigationFinished(context.get());
   ASSERT_TRUE(observer->update_favicon_url_candidates_info());
   ASSERT_EQ(1U,
             observer->update_favicon_url_candidates_info()->candidates.size());
@@ -950,14 +888,14 @@ TEST_P(WebStateImplTest, FaviconUpdateForSameDocumentNavigations) {
 
   // Document change navigation does not call callback.
   observer = std::make_unique<TestWebStateObserver>(web_state_.get());
-  context.SetIsSameDocument(false);
-  web_state_->OnNavigationFinished(&context);
+  context->SetIsSameDocument(false);
+  web_state_->OnNavigationFinished(context.get());
   EXPECT_FALSE(observer->update_favicon_url_candidates_info());
 
   // Previous candidates were invalidated by the document change. No callback
   // if icons has not been fetched yet.
-  context.SetIsSameDocument(true);
-  web_state_->OnNavigationFinished(&context);
+  context->SetIsSameDocument(true);
+  web_state_->OnNavigationFinished(context.get());
   EXPECT_FALSE(observer->update_favicon_url_candidates_info());
 }
 
@@ -1103,9 +1041,9 @@ TEST_P(WebStateImplTest, ShowAndClearInterstitialWithoutChangingSslStatus) {
   EXPECT_FALSE(observer.did_change_visible_security_state_info());
 }
 
-INSTANTIATE_TEST_CASE_P(ProgrammaticWebStateImplTest,
-                        WebStateImplTest,
-                        ::testing::Values(NavigationManagerChoice::LEGACY,
-                                          NavigationManagerChoice::WK_BASED));
+INSTANTIATE_TEST_SUITE_P(ProgrammaticWebStateImplTest,
+                         WebStateImplTest,
+                         ::testing::Values(NavigationManagerChoice::LEGACY,
+                                           NavigationManagerChoice::WK_BASED));
 
 }  // namespace web

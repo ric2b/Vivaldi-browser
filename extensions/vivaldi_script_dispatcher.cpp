@@ -3,6 +3,7 @@
 #include "extensions/vivaldi_script_dispatcher.h"
 
 #include "app/vivaldi_apptools.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/renderer/module_system.h"
 #include "extensions/renderer/script_context.h"
 
@@ -17,12 +18,19 @@ void VivaldiAddScriptResources(
                         IDR_WEB_VIEW_PRIVATE_API_IMPL_JS});
   resources->push_back({"webViewPrivateMethods",
                         IDR_WEB_VIEW_PRIVATE_API_METHODS_JS});
-  resources->push_back({"webViewPrivate", IDR_WEB_VIEW_PRIVATE_JS});
+
+  if (!base::FeatureList::IsEnabled(extensions_features::kNativeCrxBindings)) {
+    // This is now "internal" and will be removed.
+    resources->push_back({ "webViewPrivate", IDR_WEB_VIEW_PRIVATE_JS });
+  }
+
   resources->push_back({"webViewEventsPrivate", IDR_WEB_VIEW_PRIVATE_EVENTS_JS});
+
   resources->push_back({"webViewAttributesPrivate",
                         IDR_WEB_VIEW_PRIVATE_ATTRIBUTES_JS});
   resources->push_back({"webViewConstantsPrivate",
                         IDR_WEB_VIEW_PRIVATE_CONSTANTS_JS});
+
 }
 
 // Called by Dispatcher::RequireGuestViewModules()

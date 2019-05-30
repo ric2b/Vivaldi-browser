@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -28,19 +27,16 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
+#include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_io_data.h"
+#include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings.h"
+#include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings_factory.h"
 #include "chrome/browser/data_use_measurement/chrome_data_use_ascriber.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
-#include "chrome/browser/net/predictor.h"
 #include "chrome/browser/net/profile_network_context_service.h"
 #include "chrome/browser/net/profile_network_context_service_factory.h"
 #include "chrome/browser/net/quota_policy_channel_id_store.h"
 #include "chrome/browser/net/reporting_permissions_checker.h"
-#include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_io_data.h"
-#include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
-#include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings_factory.h"
-#include "chrome/browser/previews/previews_service.h"
-#include "chrome/browser/previews/previews_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
@@ -52,7 +48,6 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/data_reduction_proxy/core/browser/data_store_impl.h"
-#include "components/domain_reliability/monitor.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/network_session_configurator/browser/network_session_configurator.h"
 #include "components/offline_pages/buildflags/buildflags.h"
@@ -60,9 +55,9 @@
 #include "components/prefs/pref_filter.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
-#include "components/previews/content/previews_decider_impl.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "content/public/browser/notification_service.h"
@@ -91,21 +86,14 @@
 #include "chrome/browser/offline_pages/offline_page_request_interceptor.h"
 #endif
 
-#if BUILDFLAG(ENABLE_REPORTING)
-#include "net/network_error_logging/network_error_logging_delegate.h"
-#include "net/network_error_logging/network_error_logging_service.h"
-#include "net/reporting/reporting_policy.h"
-#include "net/reporting/reporting_service.h"
-#endif  // BUILDFLAG(ENABLE_REPORTING)
-
 namespace {
 
 // Returns the BackendType that the disk cache should use.
 // TODO(mmenke): Once all URLRequestContexts are set up using
 // URLRequestContextBuilders, and the media URLRequestContext is take care of
 // (In one way or another), this should be removed.
-net::BackendType ChooseCacheBackendType(const base::CommandLine& command_line) {
-  switch (network_session_configurator::ChooseCacheType(command_line)) {
+net::BackendType ChooseCacheBackendType() {
+  switch (network_session_configurator::ChooseCacheType()) {
     case net::URLRequestContextBuilder::HttpCacheParams::DISK_BLOCKFILE:
       return net::CACHE_BACKEND_BLOCKFILE;
     case net::URLRequestContextBuilder::HttpCacheParams::DISK_SIMPLE:
@@ -133,12 +121,6 @@ ProfileImplIOData::Handle::Handle(Profile* profile)
 
 ProfileImplIOData::Handle::~Handle() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (io_data_->predictor_ != NULL) {
-    // io_data_->predictor_ might be NULL if Init() was never called
-    // (i.e. we shut down before ProfileImpl::DoFinalInit() got called).
-    io_data_->predictor_->ShutdownOnUIThread();
-  }
-
   // io_data_->data_reduction_proxy_io_data() might be NULL if Init() was
   // never called.
   if (io_data_->data_reduction_proxy_io_data())
@@ -152,14 +134,11 @@ void ProfileImplIOData::Handle::Init(
     int media_cache_max_size,
     const base::FilePath& extensions_cookie_path,
     const base::FilePath& profile_path,
-    chrome_browser_net::Predictor* predictor,
     storage::SpecialStoragePolicy* special_storage_policy,
-    std::unique_ptr<ReportingPermissionsChecker> reporting_permissions_checker,
-    std::unique_ptr<domain_reliability::DomainReliabilityMonitor>
-        domain_reliability_monitor) {
+    std::unique_ptr<ReportingPermissionsChecker>
+        reporting_permissions_checker) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!io_data_->lazy_params_);
-  DCHECK(predictor);
 
   LazyParams* lazy_params = new LazyParams();
 
@@ -173,8 +152,6 @@ void ProfileImplIOData::Handle::Init(
   lazy_params->special_storage_policy = special_storage_policy;
   lazy_params->reporting_permissions_checker =
       std::move(reporting_permissions_checker);
-  lazy_params->domain_reliability_monitor =
-      std::move(domain_reliability_monitor);
 
   io_data_->lazy_params_.reset(lazy_params);
 
@@ -183,27 +160,11 @@ void ProfileImplIOData::Handle::Init(
   io_data_->profile_path_ = profile_path;
   io_data_->app_media_cache_max_size_ = media_cache_max_size;
 
-  io_data_->predictor_.reset(predictor);
-
-  io_data_->InitializeMetricsEnabledStateOnUIThread();
-  if (io_data_->lazy_params_->domain_reliability_monitor)
-    io_data_->lazy_params_->domain_reliability_monitor->MoveToNetworkThread();
-
-  io_data_->set_previews_decider_impl(
-      std::make_unique<previews::PreviewsDeciderImpl>(
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
-          base::DefaultClock::GetInstance()));
-  PreviewsServiceFactory::GetForProfile(profile_)->Initialize(
-      io_data_->previews_decider_impl(),
-      g_browser_process->optimization_guide_service(),
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO), profile_path);
-
   io_data_->set_data_reduction_proxy_io_data(
       CreateDataReductionProxyChromeIOData(
-          g_browser_process->io_thread()->net_log(), profile_->GetPrefs(),
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)));
+          profile_->GetPrefs(),
+          base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}),
+          base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::UI})));
 
 #if defined(OS_CHROMEOS)
   io_data_->data_reduction_proxy_io_data()
@@ -235,33 +196,15 @@ ProfileImplIOData::Handle::CreateMainRequestContextGetter(
     IOThread* io_thread) const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   LazyInitialize();
+
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    NOTREACHED();
+    return nullptr;
+  }
+
   DCHECK(!main_request_context_getter_.get());
   main_request_context_getter_ = ChromeURLRequestContextGetter::Create(
       profile_, io_data_, protocol_handlers, std::move(request_interceptors));
-
-  scoped_refptr<base::SequencedTaskRunner> db_task_runner =
-      base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
-           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
-  std::unique_ptr<data_reduction_proxy::DataStore> store(
-      new data_reduction_proxy::DataStoreImpl(io_data_->profile_path_));
-  DataReductionProxyChromeSettingsFactory::GetForBrowserContext(profile_)
-      ->InitDataReductionProxySettings(
-          io_data_->data_reduction_proxy_io_data(), profile_->GetPrefs(),
-          // TODO(crbug.com/721403) Switch DRP to mojo. For now it is disabled
-          // with network service.
-          base::FeatureList::IsEnabled(network::features::kNetworkService)
-              ? nullptr
-              : main_request_context_getter_.get(),
-          content::BrowserContext::GetDefaultStoragePartition(profile_)
-              ->GetURLLoaderFactoryForBrowserProcess(),
-          std::move(store),
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
-          db_task_runner);
-
-  io_data_->predictor_->InitNetworkPredictor(profile_->GetPrefs(), io_thread,
-                                             main_request_context_getter_.get(),
-                                             io_data_, profile_);
 
   content::NotificationService::current()->Notify(
       chrome::NOTIFICATION_PROFILE_URL_REQUEST_CONTEXT_GETTER_INITIALIZED,
@@ -274,22 +217,17 @@ scoped_refptr<ChromeURLRequestContextGetter>
 ProfileImplIOData::Handle::GetMediaRequestContextGetter() const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   LazyInitialize();
+
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    NOTREACHED();
+    return nullptr;
+  }
+
   if (!media_request_context_getter_.get()) {
     media_request_context_getter_ =
         ChromeURLRequestContextGetter::CreateForMedia(profile_, io_data_);
   }
   return media_request_context_getter_;
-}
-
-scoped_refptr<ChromeURLRequestContextGetter>
-ProfileImplIOData::Handle::GetExtensionsRequestContextGetter() const {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  LazyInitialize();
-  if (!extensions_request_context_getter_.get()) {
-    extensions_request_context_getter_ =
-        ChromeURLRequestContextGetter::CreateForExtensions(profile_, io_data_);
-  }
-  return extensions_request_context_getter_;
 }
 
 scoped_refptr<ChromeURLRequestContextGetter>
@@ -304,10 +242,14 @@ ProfileImplIOData::Handle::CreateIsolatedAppRequestContextGetter(
   CHECK(partition_path != profile_->GetPath());
   LazyInitialize();
 
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    NOTREACHED();
+    return nullptr;
+  }
+
   // Keep a map of request context getters, one per requested storage partition.
   StoragePartitionDescriptor descriptor(partition_path, in_memory);
-  ChromeURLRequestContextGetterMap::iterator iter =
-      app_request_context_getter_map_.find(descriptor);
+  auto iter = app_request_context_getter_map_.find(descriptor);
   if (iter != app_request_context_getter_map_.end())
     return iter->second;
 
@@ -348,10 +290,14 @@ ProfileImplIOData::Handle::GetIsolatedMediaRequestContextGetter(
   CHECK(partition_path != profile_->GetPath());
   LazyInitialize();
 
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    NOTREACHED();
+    return nullptr;
+  }
+
   // Keep a map of request context getters, one per requested storage partition.
   StoragePartitionDescriptor descriptor(partition_path, in_memory);
-  ChromeURLRequestContextGetterMap::iterator iter =
-      isolated_media_request_context_getter_map_.find(descriptor);
+  auto iter = isolated_media_request_context_getter_map_.find(descriptor);
   if (iter != isolated_media_request_context_getter_map_.end())
     return iter->second;
 
@@ -369,6 +315,29 @@ ProfileImplIOData::Handle::GetIsolatedMediaRequestContextGetter(
   return context;
 }
 
+void ProfileImplIOData::Handle::InitializeDataReductionProxy() const {
+  scoped_refptr<base::SequencedTaskRunner> db_task_runner =
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
+  std::unique_ptr<data_reduction_proxy::DataStore> store(
+      new data_reduction_proxy::DataStoreImpl(io_data_->profile_path_));
+  DataReductionProxyChromeSettingsFactory::GetForBrowserContext(profile_)
+      ->InitDataReductionProxySettings(
+          io_data_->data_reduction_proxy_io_data(), profile_->GetPrefs(),
+          // TODO(crbug.com/721403) Switch DRP to mojo. For now it is disabled
+          // with network service.
+          base::FeatureList::IsEnabled(network::features::kNetworkService)
+              ? nullptr
+              : main_request_context_getter_.get(),
+          profile_,
+          content::BrowserContext::GetDefaultStoragePartition(profile_)
+              ->GetURLLoaderFactoryForBrowserProcess(),
+          std::move(store),
+          base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::UI}),
+          db_task_runner);
+}
+
 void ProfileImplIOData::Handle::LazyInitialize() const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (initialized_)
@@ -381,16 +350,16 @@ void ProfileImplIOData::Handle::LazyInitialize() const {
   io_data_->safe_browsing_enabled()->Init(prefs::kSafeBrowsingEnabled,
       pref_service);
   io_data_->safe_browsing_enabled()->MoveToThread(
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+      base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}));
   io_data_->safe_browsing_whitelist_domains()->Init(
       prefs::kSafeBrowsingWhitelistDomains, pref_service);
   io_data_->safe_browsing_whitelist_domains()->MoveToThread(
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+      base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}));
 #if BUILDFLAG(ENABLE_PLUGINS)
   io_data_->always_open_pdf_externally()->Init(
       prefs::kPluginsAlwaysOpenPdfExternally, pref_service);
   io_data_->always_open_pdf_externally()->MoveToThread(
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+      base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}));
 #endif
   io_data_->InitializeOnUIThread(profile_);
 }
@@ -408,9 +377,6 @@ ProfileImplIOData::Handle::GetAllContextGetters() {
   iter = app_request_context_getter_map_.begin();
   for (; iter != app_request_context_getter_map_.end(); ++iter)
     context_getters->push_back(iter->second);
-
-  if (extensions_request_context_getter_.get())
-    context_getters->push_back(extensions_request_context_getter_);
 
   if (media_request_context_getter_.get())
     context_getters->push_back(media_request_context_getter_);
@@ -444,10 +410,6 @@ std::unique_ptr<net::NetworkDelegate>
 ProfileImplIOData::ConfigureNetworkDelegate(
     IOThread* io_thread,
     std::unique_ptr<ChromeNetworkDelegate> chrome_network_delegate) const {
-  if (lazy_params_->domain_reliability_monitor) {
-    chrome_network_delegate->set_domain_reliability_monitor(
-        std::move(lazy_params_->domain_reliability_monitor));
-  }
 
   if (lazy_params_->reporting_permissions_checker) {
     chrome_network_delegate->set_reporting_permissions_checker(
@@ -456,8 +418,7 @@ ProfileImplIOData::ConfigureNetworkDelegate(
 
   return data_reduction_proxy_io_data()->CreateNetworkDelegate(
       io_thread->globals()->data_use_ascriber->CreateNetworkDelegate(
-          std::move(chrome_network_delegate),
-          io_thread->GetMetricsDataUseForwarder()),
+          std::move(chrome_network_delegate)),
       true);
 }
 
@@ -484,7 +445,6 @@ void ProfileImplIOData::InitializeInternal(
       data_reduction_proxy_io_data()->CreateInterceptor());
   data_reduction_proxy_io_data()->SetDataUseAscriber(
       io_thread_globals->data_use_ascriber.get());
-  data_reduction_proxy_io_data()->SetPreviewsDecider(previews_decider_impl());
   SetUpJobFactoryDefaultsForBuilder(
       builder, std::move(request_interceptors),
       std::move(profile_params->protocol_handler_interceptor));
@@ -495,25 +455,22 @@ void ProfileImplIOData::OnMainRequestContextCreated(
   DCHECK(lazy_params_);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  InitializeExtensionsRequestContext(profile_params);
+  InitializeExtensionsCookieStore(profile_params);
 #endif
 
-  MaybeDeleteMediaCache(lazy_params_->media_cache_path);
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    // Create a media request context based on the main context, but using a
+    // media cache.  It shares the same job factory as the main context.
+    StoragePartitionDescriptor details(profile_path_, false);
+    media_request_context_.reset(InitializeMediaRequestContext(
+        main_request_context(), details, "main_media"));
+  }
 
-  // Create a media request context based on the main context, but using a
-  // media cache.  It shares the same job factory as the main context.
-  StoragePartitionDescriptor details(profile_path_, false);
-  media_request_context_.reset(InitializeMediaRequestContext(
-      main_request_context(), details, "main_media"));
   lazy_params_.reset();
 }
 
-void ProfileImplIOData::
-    InitializeExtensionsRequestContext(ProfileParams* profile_params) const {
-  // The extensions context only serves to hold onto the extensions cookie
-  // store.
-  net::URLRequestContext* extensions_context = extensions_request_context();
-
+void ProfileImplIOData::InitializeExtensionsCookieStore(
+    ProfileParams* profile_params) const {
   content::CookieStoreConfig cookie_config(
       lazy_params_->extensions_cookie_path,
       lazy_params_->restore_old_session_cookies,
@@ -521,10 +478,8 @@ void ProfileImplIOData::
   cookie_config.crypto_delegate = cookie_config::GetCookieCryptoDelegate();
   // Enable cookies for chrome-extension URLs.
   cookie_config.cookieable_schemes.push_back(extensions::kExtensionScheme);
-  cookie_config.channel_id_service = extensions_context->channel_id_service();
   extensions_cookie_store_ = content::CreateCookieStore(
       cookie_config, profile_params->io_thread->net_log());
-  extensions_context->set_cookie_store(extensions_cookie_store_.get());
 }
 
 net::URLRequestContext* ProfileImplIOData::InitializeMediaRequestContext(
@@ -557,10 +512,9 @@ net::URLRequestContext* ProfileImplIOData::InitializeMediaRequestContext(
 
   // Use a separate HTTP disk cache for isolated apps.
   std::unique_ptr<net::HttpCache::BackendFactory> media_backend(
-      new net::HttpCache::DefaultBackend(
-          net::MEDIA_CACHE,
-          ChooseCacheBackendType(*base::CommandLine::ForCurrentProcess()),
-          cache_path, cache_max_size));
+      new net::HttpCache::DefaultBackend(net::MEDIA_CACHE,
+                                         ChooseCacheBackendType(), cache_path,
+                                         cache_max_size));
   std::unique_ptr<net::HttpCache> media_http_cache = CreateHttpFactory(
       main_request_context()->http_transaction_factory(),
       std::move(media_backend));
@@ -594,6 +548,6 @@ ProfileImplIOData::AcquireIsolatedMediaRequestContext(
   return media_request_context;
 }
 
-chrome_browser_net::Predictor* ProfileImplIOData::GetPredictor() {
-  return predictor_.get();
+net::CookieStore* ProfileImplIOData::GetExtensionsCookieStore() const {
+  return extensions_cookie_store_.get();
 }

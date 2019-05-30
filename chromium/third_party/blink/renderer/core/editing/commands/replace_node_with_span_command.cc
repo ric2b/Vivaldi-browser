@@ -39,8 +39,6 @@
 
 namespace blink {
 
-using namespace HTMLNames;
-
 ReplaceNodeWithSpanCommand::ReplaceNodeWithSpanCommand(HTMLElement* element)
     : SimpleEditCommand(element->GetDocument()), element_to_replace_(element) {
   DCHECK(element_to_replace_);
@@ -81,7 +79,7 @@ void ReplaceNodeWithSpanCommand::DoUnapply() {
                                             *span_element_);
 }
 
-void ReplaceNodeWithSpanCommand::Trace(blink::Visitor* visitor) {
+void ReplaceNodeWithSpanCommand::Trace(Visitor* visitor) {
   visitor->Trace(element_to_replace_);
   visitor->Trace(span_element_);
   SimpleEditCommand::Trace(visitor);

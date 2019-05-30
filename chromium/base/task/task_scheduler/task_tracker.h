@@ -5,6 +5,7 @@
 #ifndef BASE_TASK_TASK_SCHEDULER_TASK_TRACKER_H_
 #define BASE_TASK_TASK_SCHEDULER_TASK_TRACKER_H_
 
+#include <atomic>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -13,13 +14,13 @@
 #include "base/atomicops.h"
 #include "base/base_export.h"
 #include "base/callback_forward.h"
-#include "base/debug/task_annotator.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_base.h"
 #include "base/sequence_checker.h"
 #include "base/strings/string_piece.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/common/task_annotator.h"
 #include "base/task/task_scheduler/can_schedule_sequence_observer.h"
 #include "base/task/task_scheduler/scheduler_lock.h"
 #include "base/task/task_scheduler/sequence.h"
@@ -84,24 +85,24 @@ namespace internal {
 //                   Go back to (*)                      |_________________|
 //
 //
-// Note: A background task is a task posted with TaskPriority::BEST_EFFORT. A
+// Note: A best-effort task is a task posted with TaskPriority::BEST_EFFORT. A
 // foreground task is a task posted with TaskPriority::USER_VISIBLE or
 // TaskPriority::USER_BLOCKING.
 //
 // TODO(fdoray): We want to allow disabling TaskPriority::BEST_EFFORT tasks in a
 // scope (e.g. during startup or page load), but we don't need a dynamic maximum
-// number of background tasks. The code could probably be simplified if it
+// number of best-effort tasks. The code could probably be simplified if it
 // didn't support that. https://crbug.com/831835
 class BASE_EXPORT TaskTracker {
  public:
   // |histogram_label| is used as a suffix for histograms, it must not be empty.
   // The first constructor sets the maximum number of TaskPriority::BEST_EFFORT
   // sequences that can be scheduled concurrently to 0 if the
-  // --disable-background-tasks flag is specified, max() otherwise. The second
-  // constructor sets it to |max_num_scheduled_background_sequences|.
+  // --disable-best-effort-tasks flag is specified, max() otherwise. The second
+  // constructor sets it to |max_num_scheduled_best_effort_sequences|.
   TaskTracker(StringPiece histogram_label);
   TaskTracker(StringPiece histogram_label,
-              int max_num_scheduled_background_sequences);
+              int max_num_scheduled_best_effort_sequences);
 
   virtual ~TaskTracker();
 
@@ -128,23 +129,24 @@ class BASE_EXPORT TaskTracker {
   // FlushAsyncForTesting() may be pending at any given time.
   void FlushAsyncForTesting(OnceClosure flush_callback);
 
-  // Informs this TaskTracker that |task| is about to be posted. Returns true if
-  // this operation is allowed (|task| should be posted if-and-only-if it is).
-  // This method may also modify metadata on |task| if desired.
-  bool WillPostTask(Task* task);
+  // Informs this TaskTracker that |task| from a |shutdown_behavior| sequence
+  // is about to be posted. Returns true if this operation is allowed (|task|
+  // should be posted if-and-only-if it is). This method may also modify
+  // metadata on |task| if desired.
+  bool WillPostTask(Task* task, TaskShutdownBehavior shutdown_behavior);
 
-  // Informs this TaskTracker that |sequence| is about to be scheduled. If this
-  // returns |sequence|, it is expected that RunAndPopNextTask() will soon be
-  // called with |sequence| as argument. Otherwise, RunAndPopNextTask() must not
-  // be called with |sequence| as argument until |observer| is notified that
-  // |sequence| can be scheduled (the caller doesn't need to keep a pointer to
-  // |sequence|; it will be included in the notification to |observer|).
-  // WillPostTask() must have allowed the task in front of |sequence| to be
-  // posted before this is called. |observer| is only required if the priority
-  // of |sequence| is TaskPriority::BEST_EFFORT
-  scoped_refptr<Sequence> WillScheduleSequence(
-      scoped_refptr<Sequence> sequence,
-      CanScheduleSequenceObserver* observer);
+  // Informs this TaskTracker that the Sequence locked by |sequence_transaction|
+  // is about to be scheduled. If this returns true, it is expected that
+  // RunAndPopNextTask() will soon be called with the Sequence as argument.
+  // Otherwise, RunAndPopNextTask() must not be called with the Sequence as
+  // argument until |observer| is notified that the Sequence can be scheduled
+  // (the caller doesn't need to keep a pointer to the Sequence; it will be
+  // included in the notification to |observer|). WillPostTask() must have
+  // allowed the task in front of the Sequence to be posted before this is
+  // called. |observer| is only required if the priority of the Sequence is
+  // TaskPriority::BEST_EFFORT.
+  bool WillScheduleSequence(const Sequence::Transaction& sequence_transaction,
+                            CanScheduleSequenceObserver* observer);
 
   // Runs the next task in |sequence| unless the current shutdown state prevents
   // that. Then, pops the task from |sequence| (even if it didn't run). Returns
@@ -183,11 +185,21 @@ class BASE_EXPORT TaskTracker {
   // cannot be called after this.
   void SetHasShutdownStartedForTesting();
 
-  // Records |Now() - posted_time| to the appropriate |latency_histogram_type|
-  // based on |task_traits|.
-  void RecordLatencyHistogram(LatencyHistogramType latency_histogram_type,
-                              TaskTraits task_traits,
-                              TimeTicks posted_time) const;
+  // Records two histograms
+  // 1. TaskScheduler.[label].HeartbeatLatencyMicroseconds.[suffix]:
+  //    Now() - posted_time
+  // 2. TaskScheduler.[label].NumTasksRunWhileQueuing.[suffix]:
+  //    GetNumTasksRun() - num_tasks_run_when_posted.
+  // [label] is the histogram label provided to the constructor.
+  // [suffix] is derived from |task_priority| and |may_block|.
+  void RecordHeartbeatLatencyAndTasksRunWhileQueuingHistograms(
+      TaskPriority task_priority,
+      bool may_block,
+      TimeTicks posted_time,
+      int num_tasks_run_when_posted) const;
+
+  // Returns the number of tasks run so far
+  int GetNumTasksRun() const;
 
   TrackedRef<TaskTracker> GetTrackedRef() {
     return tracked_ref_factory_.GetTrackedRef();
@@ -198,22 +210,19 @@ class BASE_EXPORT TaskTracker {
   void SetExecutionFenceEnabled(bool execution_fence_enabled);
 
   // Returns the number of preempted sequences of a given priority.
-  int GetPreemptedSequenceCountForTesting(TaskPriority priority);
+  size_t GetPreemptedSequenceCountForTesting(TaskPriority priority);
 
  protected:
   // Runs and deletes |task| if |can_run_task| is true. Otherwise, just deletes
   // |task|. |task| is always deleted in the environment where it runs or would
-  // have run. |sequence| is the sequence from which |task| was extracted. An
-  // override is expected to call its parent's implementation but is free to
-  // perform extra work before and after doing so.
-  virtual void RunOrSkipTask(Task task, Sequence* sequence, bool can_run_task);
-
-#if DCHECK_IS_ON()
-  // Returns true if this context should be exempt from blocking shutdown
-  // DCHECKs.
-  // TODO(robliao): Remove when http://crbug.com/698140 is fixed.
-  virtual bool IsPostingBlockShutdownTaskAfterShutdownAllowed();
-#endif
+  // have run. |sequence| is the sequence from which |task| was extracted.
+  // |traits| are the traits of |sequence|. An override is expected to call its
+  // parent's implementation but is free to perform extra work before and after
+  // doing so.
+  virtual void RunOrSkipTask(Task task,
+                             Sequence* sequence,
+                             const TaskTraits& traits,
+                             bool can_run_task);
 
   // Returns true if there are undelayed tasks that haven't completed their
   // execution (still queued or in progress). If it returns false: the side-
@@ -263,12 +272,11 @@ class BASE_EXPORT TaskTracker {
   void SetMaxNumScheduledSequences(int max_scheduled_sequences,
                                    TaskPriority priority);
 
-  // Pops the next sequence in
-  // |preemption_state_[priority].preempted_sequences| and increments
-  // |preemption_state_[priority].current_scheduled_sequences|. Must only be
-  // called in the scope of |preemption_state_[priority].lock|, with
-  // |preemption_state_[priority].preempted_sequences| non-empty. The caller
-  // must forward the returned sequence to the associated
+  // Pops the next sequence in |preemption_state_[priority].preempted_sequences|
+  // and increments |preemption_state_[priority].current_scheduled_sequences|.
+  // Must only be called in the scope of |preemption_state_[priority].lock|,
+  // with |preemption_state_[priority].preempted_sequences| non-empty. The
+  // caller must forward the returned sequence to the associated
   // CanScheduleSequenceObserver as soon as |preemption_state_[priority].lock|
   // is released.
   PreemptedSequence GetPreemptedSequenceToScheduleLockRequired(
@@ -282,17 +290,17 @@ class BASE_EXPORT TaskTracker {
   // Called before WillPostTask() informs the tracing system that a task has
   // been posted. Updates |num_tasks_blocking_shutdown_| if necessary and
   // returns true if the current shutdown state allows the task to be posted.
-  bool BeforePostTask(TaskShutdownBehavior shutdown_behavior);
+  bool BeforePostTask(TaskShutdownBehavior effective_shutdown_behavior);
 
-  // Called before a task with |shutdown_behavior| is run by RunTask(). Updates
-  // |num_tasks_blocking_shutdown_| if necessary and returns true if the current
-  // shutdown state allows the task to be run.
-  bool BeforeRunTask(TaskShutdownBehavior shutdown_behavior);
+  // Called before a task with |effective_shutdown_behavior| is run by
+  // RunTask(). Updates |num_tasks_blocking_shutdown_| if necessary and returns
+  // true if the current shutdown state allows the task to be run.
+  bool BeforeRunTask(TaskShutdownBehavior effective_shutdown_behavior);
 
-  // Called after a task with |shutdown_behavior| has been run by RunTask().
-  // Updates |num_tasks_blocking_shutdown_| and signals |shutdown_cv_| if
-  // necessary.
-  void AfterRunTask(TaskShutdownBehavior shutdown_behavior);
+  // Called after a task with |effective_shutdown_behavior| has been run by
+  // RunTask(). Updates |num_tasks_blocking_shutdown_| and signals
+  // |shutdown_cv_| if necessary.
+  void AfterRunTask(TaskShutdownBehavior effective_shutdown_behavior);
 
   // Called when the number of tasks blocking shutdown becomes zero after
   // shutdown has started.
@@ -302,8 +310,8 @@ class BASE_EXPORT TaskTracker {
   // if it reaches zero.
   void DecrementNumIncompleteUndelayedTasks();
 
-  // To be called after running a background task from |just_ran_sequence|.
-  // Performs the following actions:
+  // To be called after running a task from |just_ran_sequence|. Performs the
+  // following actions:
   //  - If |just_ran_sequence| is non-null:
   //    - returns it if it should be rescheduled by the caller of
   //      RunAndPopNextTask(), i.e. its next task is set to run earlier than the
@@ -314,8 +322,7 @@ class BASE_EXPORT TaskTracker {
   //  - If |just_ran_sequence| is null (RunAndPopNextTask() just popped the last
   //    task from it):
   //    - the next preempeted sequence (if any) is scheduled.
-  //  - In all cases: adjusts the number of scheduled background sequences
-  //    accordingly.
+  //  - In all cases: adjusts the number of scheduled sequences accordingly.
   scoped_refptr<Sequence> ManageSequencesAfterRunningTask(
       scoped_refptr<Sequence> just_ran_sequence,
       CanScheduleSequenceObserver* observer,
@@ -325,7 +332,22 @@ class BASE_EXPORT TaskTracker {
   // manner.
   void CallFlushCallbackForTesting();
 
-  debug::TaskAnnotator task_annotator_;
+  // Records |Now() - posted_time| to the appropriate |latency_histogram_type|
+  // based on |task_traits|.
+  void RecordLatencyHistogram(LatencyHistogramType latency_histogram_type,
+                              TaskTraits task_traits,
+                              TimeTicks posted_time) const;
+
+  void IncrementNumTasksRun();
+
+  // Dummy frames to allow identification of shutdown behavior in a stack trace.
+  void RunContinueOnShutdown(Task* task);
+  void RunSkipOnShutdown(Task* task);
+  void RunBlockShutdown(Task* task);
+  void RunTaskWithShutdownBehavior(TaskShutdownBehavior shutdown_behavior,
+                                   Task* task);
+
+  TaskAnnotator task_annotator_;
 
   // Number of tasks blocking shutdown and boolean indicating whether shutdown
   // has started.
@@ -360,8 +382,13 @@ class BASE_EXPORT TaskTracker {
   // completes.
   std::unique_ptr<WaitableEvent> shutdown_event_;
 
-  // TaskScheduler.TaskLatencyMicroseconds.* and
-  // TaskScheduler.HeartbeatLatencyMicroseconds.* histograms. The first index is
+  // Counter for number of tasks run so far, used to record tasks run while
+  // a task queued to histogram.
+  std::atomic_int num_tasks_run_{0};
+
+  // TaskScheduler.TaskLatencyMicroseconds.*,
+  // TaskScheduler.HeartbeatLatencyMicroseconds.*, and
+  // TaskScheduler.NumTasksRunWhileQueuing.* histograms. The first index is
   // a TaskPriority. The second index is 0 for non-blocking tasks, 1 for
   // blocking tasks. Intentionally leaked.
   // TODO(scheduler-dev): Consider using STATIC_HISTOGRAM_POINTER_GROUP for
@@ -370,6 +397,8 @@ class BASE_EXPORT TaskTracker {
       static_cast<int>(TaskPriority::HIGHEST) + 1;
   HistogramBase* const task_latency_histograms_[kNumTaskPriorities][2];
   HistogramBase* const heartbeat_latency_histograms_[kNumTaskPriorities][2];
+  HistogramBase* const
+      num_tasks_run_while_queuing_histograms_[kNumTaskPriorities][2];
 
   PreemptionState preemption_state_[kNumTaskPriorities];
 
@@ -377,9 +406,6 @@ class BASE_EXPORT TaskTracker {
   // Indicates whether to prevent tasks running.
   bool execution_fence_enabled_ = false;
 #endif
-
-  // Number of BLOCK_SHUTDOWN tasks posted during shutdown.
-  HistogramBase::Sample num_block_shutdown_tasks_posted_during_shutdown_ = 0;
 
   // Enforces that |max_scheduled_sequences| and
   // |max_scheduled_sequences_before_fence| in PreemptedState are only written

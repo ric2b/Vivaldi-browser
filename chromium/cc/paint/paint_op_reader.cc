@@ -7,14 +7,16 @@
 #include <stddef.h>
 #include <algorithm>
 
+#include "base/bits.h"
+#include "base/debug/dump_without_crashing.h"
+#include "base/rand_util.h"
 #include "base/stl_util.h"
 #include "cc/paint/image_transfer_cache_entry.h"
+#include "cc/paint/paint_cache.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_image_builder.h"
 #include "cc/paint/paint_op_buffer.h"
 #include "cc/paint/paint_shader.h"
-#include "cc/paint/paint_typeface_transfer_cache_entry.h"
-#include "cc/paint/path_transfer_cache_entry.h"
 #include "cc/paint/shader_transfer_cache_entry.h"
 #include "cc/paint/transfer_cache_deserialize_helper.h"
 #include "third_party/skia/include/core/SkPath.h"
@@ -26,20 +28,22 @@
 namespace cc {
 namespace {
 
-// If we have more than this many colors, abort deserialization.
-const size_t kMaxShaderColorsSupported = 10000;
-const size_t kMaxMergeFilterCount = 10000;
-const size_t kMaxKernelSize = 1000;
-const size_t kMaxRegionByteSize = 10 * 1024;
-
 bool IsValidPaintShaderType(PaintShader::Type type) {
   return static_cast<uint8_t>(type) <
          static_cast<uint8_t>(PaintShader::Type::kShaderCount);
 }
 
-bool IsValidSkShaderTileMode(SkShader::TileMode mode) {
-  // When Skia adds Decal, update this (skbug.com/7638)
-  return mode <= SkShader::kMirror_TileMode;
+// SkShader::TileMode has no defined backing type, so read/write int32_t's.
+// If read_mode is a valid tile mode, this returns true and updates mode to the
+// equivalent enum value. Otherwise false is returned and mode is not modified.
+bool ValidateAndGetSkShaderTileMode(int32_t read_mode,
+                                    SkShader::TileMode* mode) {
+  if (read_mode < 0 || read_mode >= SkShader::kTileModeCount) {
+    return false;
+  }
+
+  *mode = static_cast<SkShader::TileMode>(read_mode);
+  return true;
 }
 
 bool IsValidPaintShaderScalingBehavior(PaintShader::ScalingBehavior behavior) {
@@ -82,6 +86,8 @@ bool PaintOpReader::ReadAndValidateOpHeader(const volatile void* input,
                                             size_t input_size,
                                             uint8_t* type,
                                             uint32_t* skip) {
+  if (input_size < 4)
+    return false;
   uint32_t first_word = reinterpret_cast<const volatile uint32_t*>(input)[0];
   *type = static_cast<uint8_t>(first_word & 0xFF);
   *skip = first_word >> 8;
@@ -99,7 +105,12 @@ template <typename T>
 void PaintOpReader::ReadSimple(T* val) {
   static_assert(base::is_trivially_copyable<T>::value,
                 "Not trivially copyable");
-  if (remaining_bytes_ < sizeof(T))
+
+  // Align everything to 4 bytes, as the writer does.
+  static constexpr size_t kAlign = 4;
+  size_t size = base::bits::Align(sizeof(T), kAlign);
+
+  if (remaining_bytes_ < size)
     SetInvalid();
   if (!valid_)
     return;
@@ -110,8 +121,18 @@ void PaintOpReader::ReadSimple(T* val) {
   // use assignment.
   *val = *reinterpret_cast<const T*>(const_cast<const char*>(memory_));
 
-  memory_ += sizeof(T);
-  remaining_bytes_ -= sizeof(T);
+  memory_ += size;
+  remaining_bytes_ -= size;
+}
+
+uint8_t* PaintOpReader::CopyScratchSpace(size_t bytes) {
+  DCHECK(SkIsAlign4(reinterpret_cast<uintptr_t>(memory_)));
+
+  if (options_.scratch_buffer->size() < bytes)
+    options_.scratch_buffer->resize(bytes);
+  memcpy(options_.scratch_buffer->data(), const_cast<const char*>(memory_),
+         bytes);
+  return options_.scratch_buffer->data();
 }
 
 template <typename T>
@@ -125,13 +146,9 @@ void PaintOpReader::ReadFlattenable(sk_sp<T>* val) {
   if (bytes == 0)
     return;
 
-  // This is assumed safe from TOCTOU violations as the flattenable
-  // deserializing function uses an SkReadBuffer which reads each piece of
-  // memory once much like PaintOpReader does.
-  DCHECK(SkIsAlign4(reinterpret_cast<uintptr_t>(memory_)));
+  auto* scratch = CopyScratchSpace(bytes);
   val->reset(static_cast<T*>(
-      SkFlattenable::Deserialize(T::GetFlattenableType(),
-                                 const_cast<const char*>(memory_), bytes)
+      SkFlattenable::Deserialize(T::GetFlattenableType(), scratch, bytes)
           .release()));
   if (!val)
     SetInvalid();
@@ -193,22 +210,53 @@ void PaintOpReader::Read(SkRRect* rect) {
 }
 
 void PaintOpReader::Read(SkPath* path) {
-  uint32_t transfer_cache_entry_id;
-  ReadSimple(&transfer_cache_entry_id);
+  uint32_t path_id;
+  ReadSimple(&path_id);
   if (!valid_)
     return;
-  auto* entry =
-      options_.transfer_cache->GetEntryAs<ServicePathTransferCacheEntry>(
-          transfer_cache_entry_id);
-  if (entry) {
-    *path = entry->path();
-  } else {
+
+  uint32_t entry_state_int = 0u;
+  ReadSimple(&entry_state_int);
+  if (entry_state_int > static_cast<uint32_t>(PaintCacheEntryState::kLast)) {
     valid_ = false;
+    return;
+  }
+
+  auto entry_state = static_cast<PaintCacheEntryState>(entry_state_int);
+  switch (entry_state) {
+    case PaintCacheEntryState::kEmpty:
+      return;
+    case PaintCacheEntryState::kCached: {
+      auto* cached_path = options_.paint_cache->GetPath(path_id);
+      if (!cached_path)
+        SetInvalid();
+      else
+        *path = *cached_path;
+      return;
+    }
+    case PaintCacheEntryState::kInlined: {
+      size_t path_bytes = 0u;
+      ReadSize(&path_bytes);
+      if (path_bytes > remaining_bytes_ || path_bytes == 0u)
+        SetInvalid();
+      if (!valid_)
+        return;
+
+      auto* scratch = CopyScratchSpace(path_bytes);
+      size_t bytes_read = path->readFromMemory(scratch, path_bytes);
+      if (bytes_read == 0u) {
+        SetInvalid();
+        return;
+      }
+      options_.paint_cache->PutPath(path_id, *path);
+      memory_ += path_bytes;
+      remaining_bytes_ -= path_bytes;
+      return;
+    }
   }
 }
 
 void PaintOpReader::Read(PaintFlags* flags) {
-  Read(&flags->text_size_);
   ReadSimple(&flags->color_);
   Read(&flags->width_);
   Read(&flags->miter_limit_);
@@ -358,13 +406,8 @@ void PaintOpReader::Read(sk_sp<SkColorSpace>* color_space) {
   if (!valid_ || size == 0)
     return;
 
-  // To avoid TOCTOU issues, make a copy of this prior to turning it
-  // into an SkColorSpace.  SkColorSpace::Deserialize reads header
-  // fields multiple times, so is not safe to pass memory_ to directly.
-  std::unique_ptr<char[]> data(new char[size]);
-  memcpy(data.get(), const_cast<const char*>(memory_), size);
-
-  *color_space = SkColorSpace::Deserialize(data.get(), size);
+  auto* scratch = CopyScratchSpace(size);
+  *color_space = SkColorSpace::Deserialize(scratch, size);
   // If this had non-zero bytes, it should be a valid color space.
   if (!color_space)
     SetInvalid();
@@ -373,28 +416,46 @@ void PaintOpReader::Read(sk_sp<SkColorSpace>* color_space) {
   remaining_bytes_ -= size;
 }
 
-void PaintOpReader::Read(scoped_refptr<PaintTextBlob>* paint_blob) {
+void PaintOpReader::Read(sk_sp<SkTextBlob>* blob) {
+  AlignMemory(4);
+  uint32_t blob_id = 0u;
+  Read(&blob_id);
+  if (!valid_)
+    return;
+
   size_t data_bytes = 0u;
   ReadSize(&data_bytes);
-  if (remaining_bytes_ < data_bytes || data_bytes == 0u)
+  if (remaining_bytes_ < data_bytes)
     SetInvalid();
   if (!valid_)
     return;
+
+  if (data_bytes == 0u) {
+    auto cached_blob = options_.paint_cache->GetTextBlob(blob_id);
+    if (!cached_blob) {
+      SetInvalid();
+      return;
+    }
+
+    *blob = std::move(cached_blob);
+    return;
+  }
 
   DCHECK(options_.strike_client);
   SkDeserialProcs procs;
   TypefaceCtx typeface_ctx(options_.strike_client);
   procs.fTypefaceProc = &DeserializeTypeface;
   procs.fTypefaceCtx = &typeface_ctx;
-  sk_sp<SkTextBlob> blob = SkTextBlob::Deserialize(
-      const_cast<const char*>(memory_), data_bytes, procs);
-  if (!blob || typeface_ctx.invalid_typeface) {
+  auto* scratch = CopyScratchSpace(data_bytes);
+  sk_sp<SkTextBlob> deserialized_blob =
+      SkTextBlob::Deserialize(scratch, data_bytes, procs);
+  if (!deserialized_blob || typeface_ctx.invalid_typeface) {
     SetInvalid();
     return;
   }
+  options_.paint_cache->PutTextBlob(blob_id, deserialized_blob);
 
-  *paint_blob = base::MakeRefCounted<PaintTextBlob>(
-      std::move(blob), std::vector<PaintTypeface>());
+  *blob = std::move(deserialized_blob);
   memory_ += data_bytes;
   remaining_bytes_ -= data_bytes;
 }
@@ -419,10 +480,16 @@ void PaintOpReader::Read(sk_sp<PaintShader>* shader) {
   ReadSimple(&ref.flags_);
   ReadSimple(&ref.end_radius_);
   ReadSimple(&ref.start_radius_);
-  ReadSimple(&ref.tx_);
-  ReadSimple(&ref.ty_);
-  if (!IsValidSkShaderTileMode(ref.tx_) || !IsValidSkShaderTileMode(ref.ty_))
+
+  // See ValidateAndGetSkShaderTileMode
+  int32_t tx = 0;
+  int32_t ty = 0;
+  Read(&tx);
+  Read(&ty);
+  if (!ValidateAndGetSkShaderTileMode(tx, &ref.tx_) ||
+      !ValidateAndGetSkShaderTileMode(ty, &ref.ty_)) {
     SetInvalid();
+  }
   ReadSimple(&ref.fallback_color_);
   ReadSimple(&ref.scaling_behavior_);
   if (!IsValidPaintShaderScalingBehavior(ref.scaling_behavior_))
@@ -461,12 +528,14 @@ void PaintOpReader::Read(sk_sp<PaintShader>* shader) {
     size_t record_size = Read(&ref.record_);
     size_t post_size = options_.transfer_cache->GetTotalEntrySizes();
     shader_size = post_size - pre_size + record_size;
+
+    ref.id_ = shader_id;
   }
   decltype(ref.colors_)::size_type colors_size = 0;
   ReadSize(&colors_size);
 
   // If there are too many colors, abort.
-  if (colors_size > kMaxShaderColorsSupported) {
+  if (colors_size > remaining_bytes_) {
     SetInvalid();
     return;
   }
@@ -515,18 +584,16 @@ void PaintOpReader::Read(sk_sp<PaintShader>* shader) {
   auto* entry =
       options_.transfer_cache->GetEntryAs<ServiceShaderTransferCacheEntry>(
           shader_id);
-  // Only consider entries that use the same scale and color space.
-  // This limits the service side transfer cache to only having one entry
-  // per shader but this will hit the common case of enabling Skia reuse.
-  if (entry && entry->shader()->tile_ == ref.tile_ &&
-      entry->raster_color_space_id() == options_.raster_color_space_id) {
+  // Only consider entries that use the same scale.  This limits the service
+  // side transfer cache to only having one entry per shader but this will hit
+  // the common case of enabling Skia reuse.
+  if (entry && entry->shader()->tile_ == ref.tile_) {
     DCHECK(!ref.cached_shader_);
     ref.cached_shader_ = entry->shader()->GetSkShader();
   } else {
     ref.CreateSkShader();
     std::unique_ptr<ServiceShaderTransferCacheEntry> entry(
-        new ServiceShaderTransferCacheEntry(
-            *shader, options_.raster_color_space_id, shader_size));
+        new ServiceShaderTransferCacheEntry(*shader, shader_size));
     options_.transfer_cache->CreateLocalEntry(shader_id, std::move(entry));
   }
 }
@@ -567,6 +634,9 @@ void PaintOpReader::AlignMemory(size_t alignment) {
 }
 
 inline void PaintOpReader::SetInvalid() {
+  if (valid_ && options_.crash_dump_on_failure && base::RandInt(1, 10) == 1) {
+    base::debug::DumpWithoutCrashing();
+  }
   valid_ = false;
 }
 
@@ -858,7 +928,7 @@ void PaintOpReader::ReadMatrixConvolutionPaintFilter(
     return;
   auto size =
       static_cast<size_t>(sk_64_mul(kernel_size.width(), kernel_size.height()));
-  if (size > kMaxKernelSize) {
+  if (size > remaining_bytes_) {
     SetInvalid();
     return;
   }
@@ -956,8 +1026,13 @@ void PaintOpReader::ReadMergePaintFilter(
     sk_sp<PaintFilter>* filter,
     const base::Optional<PaintFilter::CropRect>& crop_rect) {
   size_t input_count = 0;
-  ReadSimple(&input_count);
-  if (input_count > kMaxMergeFilterCount)
+  ReadSize(&input_count);
+
+  // The minimum size for a serialized filter is 4 bytes (a zero uint32_t to
+  // indicate a null filter). Make sure the |input_count| doesn't exceed the
+  // maximum number of filters possible for the remaining data.
+  const size_t max_filters = remaining_bytes_ / 4u;
+  if (input_count > max_filters)
     SetInvalid();
   if (!valid_)
     return;
@@ -1220,7 +1295,7 @@ size_t PaintOpReader::Read(sk_sp<PaintRecord>* record) {
 void PaintOpReader::Read(SkRegion* region) {
   size_t region_bytes = 0;
   ReadSize(&region_bytes);
-  if (region_bytes == 0 || region_bytes > kMaxRegionByteSize)
+  if (region_bytes == 0 || region_bytes > remaining_bytes_)
     SetInvalid();
   if (!valid_)
     return;

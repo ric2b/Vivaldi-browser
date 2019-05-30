@@ -4,14 +4,20 @@
 
 #include "content/test/mock_platform_notification_service.h"
 
+#include <set>
+#include <utility>
+
+#include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/guid.h"
 #include "base/strings/nullable_string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_event_dispatcher.h"
 #include "content/public/common/persistent_notification_status.h"
-#include "content/public/common/platform_notification_data.h"
+#include "third_party/blink/public/common/notifications/platform_notification_data.h"
 
 namespace content {
 
@@ -23,8 +29,8 @@ void MockPlatformNotificationService::DisplayNotification(
     BrowserContext* browser_context,
     const std::string& notification_id,
     const GURL& origin,
-    const PlatformNotificationData& notification_data,
-    const NotificationResources& notification_resources) {
+    const blink::PlatformNotificationData& notification_data,
+    const blink::NotificationResources& notification_resources) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   ReplaceNotificationIfNeeded(notification_id);
@@ -41,8 +47,8 @@ void MockPlatformNotificationService::DisplayPersistentNotification(
     const std::string& notification_id,
     const GURL& service_worker_scope,
     const GURL& origin,
-    const PlatformNotificationData& notification_data,
-    const NotificationResources& notification_resources) {
+    const blink::PlatformNotificationData& notification_data,
+    const blink::NotificationResources& notification_resources) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   ReplaceNotificationIfNeeded(notification_id);
@@ -80,18 +86,18 @@ void MockPlatformNotificationService::ClosePersistentNotification(
 
 void MockPlatformNotificationService::GetDisplayedNotifications(
     BrowserContext* browser_context,
-    const DisplayedNotificationsCallback& callback) {
+    DisplayedNotificationsCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  auto displayed_notifications = std::make_unique<std::set<std::string>>();
+  std::set<std::string> displayed_notifications;
 
   for (const auto& kv : persistent_notifications_)
-    displayed_notifications->insert(kv.first);
+    displayed_notifications.insert(kv.first);
   for (const auto& notification_id : non_persistent_notifications_)
-    displayed_notifications->insert(notification_id);
+    displayed_notifications.insert(notification_id);
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::BindOnce(callback, std::move(displayed_notifications),
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
+      base::BindOnce(std::move(callback), std::move(displayed_notifications),
                      true /* supports_synchronization */));
 }
 

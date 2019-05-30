@@ -9,14 +9,14 @@
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/strings/string_util.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/task_runner.h"
 #include "base/task_runner_util.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "build/build_config.h"
 
 #if defined(OS_CHROMEOS)
-#include "chromeos/system/devicetype.h"
+#include "chromeos/constants/devicetype.h"
 #elif defined(OS_LINUX)
 #include "components/sync/base/get_session_name_linux.h"
 #elif defined(OS_IOS)
@@ -31,10 +31,9 @@
 
 namespace syncer {
 
-namespace {
-
-std::string GetSessionNameSynchronously() {
-  base::AssertBlockingAllowed();
+std::string GetSessionNameBlocking() {
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   std::string session_name;
 #if defined(OS_CHROMEOS)
   switch (chromeos::GetDeviceType()) {
@@ -73,20 +72,6 @@ std::string GetSessionNameSynchronously() {
 
   DCHECK(base::IsStringUTF8(session_name));
   return session_name;
-}
-
-}  // namespace
-
-void GetSessionName(
-    const scoped_refptr<base::TaskRunner>& task_runner,
-    const base::Callback<void(const std::string&)>& done_callback) {
-  base::PostTaskAndReplyWithResult(task_runner.get(), FROM_HERE,
-                                   base::Bind(&GetSessionNameSynchronously),
-                                   done_callback);
-}
-
-std::string GetSessionNameSynchronouslyForTesting() {
-  return GetSessionNameSynchronously();
 }
 
 }  // namespace syncer

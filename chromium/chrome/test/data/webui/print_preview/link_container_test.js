@@ -7,6 +7,7 @@ cr.define('link_container_test', function() {
   const TestNames = {
     HideInAppKioskMode: 'hide in app kiosk mode',
     SystemDialogLinkClick: 'system dialog link click',
+    InvalidState: 'invalid state',
     OpenInPreviewLinkClick: 'open in preview link click',
   };
 
@@ -25,7 +26,6 @@ cr.define('link_container_test', function() {
       const fooDestination = new print_preview.Destination(
           'FooPrinter', print_preview.DestinationType.LOCAL,
           print_preview.DestinationOrigin.LOCAL, 'Foo Printer',
-          false /* isRecent */,
           print_preview.DestinationConnectionStatus.ONLINE);
       fooDestination.capabilities =
           print_preview_test_utils.getCddTemplate(fooDestination.id)
@@ -57,6 +57,36 @@ cr.define('link_container_test', function() {
       return promise.then(function() {
         assertEquals(cr.isWindows, throbber.hidden);
       });
+    });
+
+    /**
+     * Test that if settings are invalid, the open in preview link is disabled
+     * (if it exists), and that the system dialog link is disabled on Windows
+     * and enabled on other platforms.
+     */
+    test(assert(TestNames.InvalidState), function() {
+      const systemDialogLink = linkContainer.$.systemDialogLink;
+      const openInPreviewLink =
+          cr.isMac ? linkContainer.$.openPdfInPreviewLink : null;
+
+      const validateLinkState = (link, disabled) => {
+        assertFalse(link.hidden);
+        assertEquals(!disabled, link.hasAttribute('actionable'));
+        assertEquals(disabled, link.querySelector('button').disabled);
+      };
+
+      validateLinkState(systemDialogLink, false);
+      if (cr.isMac) {
+        validateLinkState(openInPreviewLink, false);
+      }
+
+      // Set disabled to true, indicating that there is a validation error or
+      // printer error.
+      linkContainer.disabled = true;
+      validateLinkState(systemDialogLink, cr.isWindows);
+      if (cr.isMac) {
+        validateLinkState(openInPreviewLink, true);
+      }
     });
 
     /**

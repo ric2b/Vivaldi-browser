@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
@@ -14,7 +15,7 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/user_manager/user_manager.h"
@@ -64,17 +65,6 @@ void LoginScreenPolicyTest::RefreshDevicePolicyAndWaitForSettingChange(
 
   RefreshDevicePolicy();
   runner->Run();
-}
-
-IN_PROC_BROWSER_TEST_F(LoginScreenPolicyTest, DisableSupervisedUsers) {
-  EXPECT_FALSE(user_manager::UserManager::Get()->AreSupervisedUsersAllowed());
-
-  em::ChromeDeviceSettingsProto& proto(device_policy()->payload());
-  proto.mutable_supervised_users_settings()->set_supervised_users_enabled(true);
-  RefreshDevicePolicyAndWaitForSettingChange(
-      chromeos::kAccountsPrefSupervisedUsersEnabled);
-
-  EXPECT_TRUE(user_manager::UserManager::Get()->AreSupervisedUsersAllowed());
 }
 
 IN_PROC_BROWSER_TEST_F(LoginScreenPolicyTest, RestrictInputMethods) {

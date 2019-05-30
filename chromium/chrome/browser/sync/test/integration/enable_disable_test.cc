@@ -6,16 +6,22 @@
 
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/strings/string_util.h"
 #include "base/test/bind_test_util.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/values.h"
+#include "chrome/browser/sync/test/integration/bookmarks_helper.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
+#include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
+#include "components/bookmarks/browser/bookmark_model.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/sync_prefs.h"
 #include "components/sync/driver/sync_driver_switches.h"
+#include "components/sync/test/fake_server/bookmark_entity_builder.h"
+#include "components/sync/test/fake_server/entity_builder_factory.h"
 
-using base::FeatureList;
 using syncer::ModelType;
 using syncer::ModelTypeSet;
 using syncer::ModelTypeFromString;
@@ -26,23 +32,24 @@ using syncer::UserSelectableTypes;
 
 namespace {
 
-const bool kUserEventsSeparatePrefGroup = false;
+const char kSyncedBookmarkURL[] = "http://www.mybookmark.com";
+// Non-utf8 string to make sure it gets handled well.
+const char kTestServerChips[] = "\xed\xa0\x80\xed\xbf\xbf";
 
 // Some types show up in multiple groups. This means that there are at least two
 // user selectable groups that will cause these types to become enabled. This
 // affects our tests because we cannot assume that before enabling a multi type
 // it will be disabled, because the other selectable type(s) could already be
 // enabling it. And vice versa for disabling.
-ModelTypeSet MultiGroupTypes(const SyncPrefs& sync_prefs,
-                             const ModelTypeSet& registered_types) {
+ModelTypeSet MultiGroupTypes(const ModelTypeSet& registered_types) {
   const ModelTypeSet selectable_types = UserSelectableTypes();
   ModelTypeSet seen;
   ModelTypeSet multi;
   // TODO(vitaliii): Do not use such short variable names here (and possibly
   // elsewhere in the file).
   for (ModelType st : selectable_types) {
-    const ModelTypeSet grouped_types = sync_prefs.ResolvePrefGroups(
-        registered_types, ModelTypeSet(st), kUserEventsSeparatePrefGroup);
+    const ModelTypeSet grouped_types =
+        SyncPrefs::ResolvePrefGroups(ModelTypeSet(st));
     for (ModelType gt : grouped_types) {
       if (seen.Has(gt)) {
         multi.Put(gt);
@@ -51,6 +58,7 @@ ModelTypeSet MultiGroupTypes(const SyncPrefs& sync_prefs,
       }
     }
   }
+  multi.RetainAll(registered_types);
   return multi;
 }
 
@@ -93,44 +101,63 @@ class EnableDisableSingleClientTest : public SyncTest {
     return false;
   }
 
+  void InjectSyncedBookmark() {
+    fake_server::BookmarkEntityBuilder bookmark_builder =
+        entity_builder_factory_.NewBookmarkEntityBuilder("My Bookmark");
+    GetFakeServer()->InjectEntity(
+        bookmark_builder.BuildBookmark(GURL(kSyncedBookmarkURL)));
+  }
+
+  int GetNumUpdatesDownloadedInLastCycle() {
+    return GetSyncService(0)
+        ->GetLastCycleSnapshot()
+        .model_neutral_state()
+        .num_updates_downloaded_total;
+  }
+
+  sync_pb::ClientToServerMessage TriggerGetUpdatesCycleAndWait() {
+    TriggerSyncForModelTypes(0, {syncer::BOOKMARKS});
+    EXPECT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
+
+    sync_pb::ClientToServerMessage message;
+    EXPECT_TRUE(GetFakeServer()->GetLastGetUpdatesMessage(&message));
+    return message;
+  }
+
  protected:
   void SetupTest(bool all_types_enabled) {
     ASSERT_TRUE(SetupClients());
-    sync_prefs_ = std::make_unique<SyncPrefs>(GetProfile(0)->GetPrefs());
     if (all_types_enabled) {
       ASSERT_TRUE(GetClient(0)->SetupSync());
     } else {
-      ASSERT_TRUE(GetClient(0)->SetupSync(ModelTypeSet()));
+      ASSERT_TRUE(GetClient(0)->SetupSyncNoWaitForCompletion(ModelTypeSet()));
+      ASSERT_TRUE(GetClient(0)->AwaitSyncSetupCompletion());
     }
 
     registered_types_ = GetSyncService(0)->GetRegisteredDataTypes();
     selectable_types_ = UserSelectableTypes();
-    multi_grouped_types_ = MultiGroupTypes(*sync_prefs_, registered_types_);
+    multi_grouped_types_ = MultiGroupTypes(registered_types_);
   }
 
   ModelTypeSet ResolveGroup(ModelType type) {
-    return Difference(
-        sync_prefs_->ResolvePrefGroups(registered_types_, ModelTypeSet(type),
-                                       kUserEventsSeparatePrefGroup),
-        ProxyTypes());
+    ModelTypeSet grouped_types =
+        SyncPrefs::ResolvePrefGroups(ModelTypeSet(type));
+    grouped_types.RetainAll(registered_types_);
+    grouped_types.RemoveAll(ProxyTypes());
+    return grouped_types;
   }
 
   ModelTypeSet WithoutMultiTypes(const ModelTypeSet& input) {
     return Difference(input, multi_grouped_types_);
   }
 
-  void TearDownOnMainThread() override {
-    // Has to be done before user prefs are destroyed.
-    sync_prefs_.reset();
-    SyncTest::TearDownOnMainThread();
-  }
-
-  std::unique_ptr<SyncPrefs> sync_prefs_;
   ModelTypeSet registered_types_;
   ModelTypeSet selectable_types_;
   ModelTypeSet multi_grouped_types_;
 
  private:
+  fake_server::EntityBuilderFactory entity_builder_factory_;
+
   DISALLOW_COPY_AND_ASSIGN(EnableDisableSingleClientTest);
 };
 
@@ -145,10 +172,23 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, EnableOneAtATime) {
       ASSERT_FALSE(ModelTypeExists(sgt)) << " for " << ModelTypeToString(st);
     }
 
+    base::HistogramTester histogram_tester;
     EXPECT_TRUE(GetClient(0)->EnableSyncForDatatype(st));
 
     for (ModelType gt : grouped_types) {
       EXPECT_TRUE(ModelTypeExists(gt)) << " for " << ModelTypeToString(st);
+
+      if (syncer::CommitOnlyTypes().Has(gt)) {
+        EXPECT_EQ(0, histogram_tester.GetBucketCount(
+                         "Sync.PostedDataTypeGetUpdatesRequest",
+                         ModelTypeToHistogramInt(gt)))
+            << " for " << ModelTypeToString(gt);
+      } else {
+        EXPECT_NE(0, histogram_tester.GetBucketCount(
+                         "Sync.PostedDataTypeGetUpdatesRequest",
+                         ModelTypeToHistogramInt(gt)))
+            << " for " << ModelTypeToString(gt);
+      }
     }
   }
 }
@@ -267,6 +307,24 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, EnableDisable) {
   }
 }
 
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, PRE_EnableAndRestart) {
+  SetupTest(/*all_types_enabled=*/true);
+}
+
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, EnableAndRestart) {
+  ASSERT_TRUE(SetupClients());
+
+  EXPECT_TRUE(GetClient(0)->AwaitEngineInitialization());
+
+  // Proxy types don't really run.
+  const ModelTypeSet non_proxy_types =
+      Difference(selectable_types_, ProxyTypes());
+
+  for (ModelType type : non_proxy_types) {
+    EXPECT_TRUE(ModelTypeExists(type)) << " for " << ModelTypeToString(type);
+  }
+}
+
 IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, FastEnableDisableEnable) {
   SetupTest(/*all_types_enabled=*/false);
 
@@ -284,6 +342,131 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, FastEnableDisableEnable) {
   for (ModelType type : non_proxy_types) {
     EXPECT_TRUE(ModelTypeExists(type)) << " for " << ModelTypeToString(type);
   }
+}
+
+// This test makes sure that after a RequestStop(CLEAR_DATA), Sync data gets
+// redownloaded when Sync is started again. This does not actually verify that
+// the data is gone from disk (which seems infeasible); it's mostly here as a
+// baseline for the following tests.
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
+                       RedownloadsAfterClearData) {
+  ASSERT_TRUE(SetupClients());
+  ASSERT_FALSE(bookmarks_helper::GetBookmarkModel(0)->IsBookmarked(
+      GURL(kSyncedBookmarkURL)));
+
+  // Create a bookmark on the server, then turn on Sync on the client.
+  InjectSyncedBookmark();
+  ASSERT_TRUE(GetClient(0)->SetupSync());
+  ASSERT_TRUE(GetSyncService(0)->IsSyncFeatureActive());
+
+  // Make sure the bookmark got synced down.
+  ASSERT_TRUE(bookmarks_helper::GetBookmarkModel(0)->IsBookmarked(
+      GURL(kSyncedBookmarkURL)));
+  // Note: The response may also contain permanent nodes, so we can't check the
+  // exact count.
+  const int initial_updates_downloaded = GetNumUpdatesDownloadedInLastCycle();
+  ASSERT_GT(initial_updates_downloaded, 0);
+
+  // Stop and restart Sync.
+  GetClient(0)->StopSyncServiceAndClearData();
+  GetClient(0)->StartSyncService();
+  ASSERT_TRUE(GetSyncService(0)->IsSyncFeatureActive());
+
+  // Everything should have been redownloaded.
+  ASSERT_TRUE(bookmarks_helper::GetBookmarkModel(0)->IsBookmarked(
+      GURL(kSyncedBookmarkURL)));
+  EXPECT_EQ(GetNumUpdatesDownloadedInLastCycle(), initial_updates_downloaded);
+}
+
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
+                       DoesNotRedownloadAfterKeepData) {
+  ASSERT_TRUE(SetupClients());
+  ASSERT_FALSE(bookmarks_helper::GetBookmarkModel(0)->IsBookmarked(
+      GURL(kSyncedBookmarkURL)));
+
+  // Create a bookmark on the server, then turn on Sync on the client.
+  InjectSyncedBookmark();
+  ASSERT_TRUE(GetClient(0)->SetupSync());
+  ASSERT_TRUE(GetSyncService(0)->IsSyncFeatureActive());
+
+  // Make sure the bookmark got synced down.
+  ASSERT_TRUE(bookmarks_helper::GetBookmarkModel(0)->IsBookmarked(
+      GURL(kSyncedBookmarkURL)));
+  // Note: The response may also contain permanent nodes, so we can't check the
+  // exact count.
+  ASSERT_GT(GetNumUpdatesDownloadedInLastCycle(), 0);
+
+  // Stop Sync and let it start up again in standalone transport mode.
+  GetClient(0)->StopSyncServiceWithoutClearingData();
+  ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
+  ASSERT_EQ(syncer::SyncService::TransportState::ACTIVE,
+            GetSyncService(0)->GetTransportState());
+  ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureActive());
+
+  // Now start full Sync again.
+  base::HistogramTester histogram_tester;
+  GetClient(0)->StartSyncService();
+  ASSERT_TRUE(GetSyncService(0)->IsSyncFeatureActive());
+
+  // The bookmark should still be there, *without* having been redownloaded.
+  ASSERT_TRUE(SetupSync());
+  ASSERT_TRUE(bookmarks_helper::GetBookmarkModel(0)->IsBookmarked(
+      GURL(kSyncedBookmarkURL)));
+  EXPECT_EQ(
+      0, histogram_tester.GetBucketCount("Sync.ModelTypeEntityChange3.BOOKMARK",
+                                         /*REMOTE_NON_INITIAL_UPDATE=*/4));
+  EXPECT_EQ(
+      0, histogram_tester.GetBucketCount("Sync.ModelTypeEntityChange3.BOOKMARK",
+                                         /*REMOTE_INITIAL_UPDATE=*/5));
+}
+
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, ClearsPrefsIfClearData) {
+  SetupTest(/*all_types_enabled=*/true);
+
+  SyncPrefs prefs(GetProfile(0)->GetPrefs());
+  ASSERT_NE("", prefs.GetCacheGuid());
+
+  GetClient(0)->StopSyncServiceAndClearData();
+  EXPECT_EQ("", prefs.GetCacheGuid());
+}
+
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
+                       DoesNotClearPrefsWithKeepData) {
+  SetupTest(/*all_types_enabled=*/true);
+
+  SyncPrefs prefs(GetProfile(0)->GetPrefs());
+  const std::string cache_guid = prefs.GetCacheGuid();
+  ASSERT_NE("", cache_guid);
+
+  GetClient(0)->StopSyncServiceWithoutClearingData();
+  EXPECT_EQ(cache_guid, prefs.GetCacheGuid());
+}
+
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, PRE_ResendsBagOfChips) {
+  sync_pb::ChipBag bag_of_chips;
+  bag_of_chips.set_server_chips(kTestServerChips);
+  ASSERT_FALSE(base::IsStringUTF8(bag_of_chips.SerializeAsString()));
+  GetFakeServer()->SetBagOfChips(bag_of_chips);
+
+  SetupTest(/*all_types_enabled=*/true);
+
+  SyncPrefs prefs(GetProfile(0)->GetPrefs());
+  EXPECT_EQ(bag_of_chips.SerializeAsString(), prefs.GetBagOfChips());
+
+  sync_pb::ClientToServerMessage message = TriggerGetUpdatesCycleAndWait();
+  EXPECT_TRUE(message.has_bag_of_chips());
+  EXPECT_EQ(kTestServerChips, message.bag_of_chips().server_chips());
+}
+
+IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, ResendsBagOfChips) {
+  ASSERT_TRUE(SetupClients());
+  SyncPrefs prefs(GetProfile(0)->GetPrefs());
+  ASSERT_NE("", prefs.GetBagOfChips());
+  ASSERT_TRUE(GetClient(0)->AwaitEngineInitialization());
+
+  sync_pb::ClientToServerMessage message = TriggerGetUpdatesCycleAndWait();
+  EXPECT_TRUE(message.has_bag_of_chips());
+  EXPECT_EQ(kTestServerChips, message.bag_of_chips().server_chips());
 }
 
 }  // namespace

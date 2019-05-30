@@ -33,14 +33,15 @@
 #include <memory>
 #include "base/location.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/renderer/platform/font_family_names.h"
 #include "third_party/blink/renderer/platform/fonts/font_description.h"
 #include "third_party/blink/renderer/platform/fonts/font_face_creation_params.h"
 #include "third_party/blink/renderer/platform/fonts/font_platform_data.h"
-#include "third_party/blink/renderer/platform/fonts/mac/font_family_matcher_mac.h"
+#include "third_party/blink/renderer/platform/fonts/mac/font_matcher_mac.h"
 #include "third_party/blink/renderer/platform/fonts/simple_font_data.h"
-#include "third_party/blink/renderer/platform/layout_test_support.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
+#include "third_party/blink/renderer/platform/web_test_support.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 
@@ -62,12 +63,12 @@ const char kColorEmojiFontMac[] = "Apple Color Emoji";
 
 // static
 const AtomicString& FontCache::LegacySystemFontFamily() {
-  return FontFamilyNames::BlinkMacSystemFont;
+  return font_family_names::kBlinkMacSystemFont;
 }
 
 static void InvalidateFontCache() {
   if (!IsMainThread()) {
-    Platform::Current()->MainThread()->GetTaskRunner()->PostTask(
+    Thread::MainThread()->GetTaskRunner()->PostTask(
         FROM_HERE, WTF::Bind(&InvalidateFontCache));
     return;
   }
@@ -86,9 +87,9 @@ static void FontCacheRegisteredFontsChangedNotificationCallback(
 }
 
 static bool UseHinting() {
-  // Enable hinting only when antialiasing is disabled in layout tests.
-  return (LayoutTestSupport::IsRunningLayoutTest() &&
-          !LayoutTestSupport::IsFontAntialiasingEnabledForTest());
+  // Enable hinting only when antialiasing is disabled in web tests.
+  return (WebTestSupport::IsRunningWebTest() &&
+          !WebTestSupport::IsFontAntialiasingEnabledForTest());
 }
 
 void FontCache::PlatformInit() {
@@ -231,7 +232,7 @@ scoped_refptr<SimpleFontData> FontCache::GetLastResortFallbackFont(
   // For now we'll pick the default that the user would get without changing
   // any prefs.
   scoped_refptr<SimpleFontData> simple_font_data =
-      GetFontData(font_description, FontFamilyNames::Times,
+      GetFontData(font_description, font_family_names::kTimes,
                   AlternateFontName::kAllowAlternate, should_retain);
   if (simple_font_data)
     return simple_font_data;
@@ -240,7 +241,7 @@ scoped_refptr<SimpleFontData> FontCache::GetLastResortFallbackFont(
   // where the user doesn't have it, we fall back on Lucida Grande because
   // that's guaranteed to be there, according to Nathan Taylor. This is good
   // enough to avoid a crash at least.
-  return GetFontData(font_description, FontFamilyNames::Lucida_Grande,
+  return GetFontData(font_description, font_family_names::kLucidaGrande,
                      AlternateFontName::kAllowAlternate, should_retain);
 }
 
@@ -248,23 +249,29 @@ std::unique_ptr<FontPlatformData> FontCache::CreateFontPlatformData(
     const FontDescription& font_description,
     const FontFaceCreationParams& creation_params,
     float font_size,
-    AlternateFontName) {
+    AlternateFontName alternate_name) {
   NSFontTraitMask traits = font_description.Style() ? NSFontItalicTrait : 0;
   float size = font_size;
 
-  NSFont* ns_font = MatchNSFontFamily(creation_params.Family(), traits,
-                                      font_description.Weight(), size);
-  if (!ns_font)
+  NSFont* matched_font = nullptr;
+  if (alternate_name == AlternateFontName::kLocalUniqueFace &&
+      RuntimeEnabledFeatures::FontSrcLocalMatchingEnabled()) {
+    matched_font = MatchUniqueFont(creation_params.Family(), size);
+  } else {
+    matched_font = MatchNSFontFamily(creation_params.Family(), traits,
+                                     font_description.Weight(), size);
+  }
+  if (!matched_font)
     return nullptr;
 
   NSFontManager* font_manager = [NSFontManager sharedFontManager];
   NSFontTraitMask actual_traits = 0;
   if (font_description.Style())
-    actual_traits = [font_manager traitsOfFont:ns_font];
-  NSInteger actual_weight = [font_manager weightOfFont:ns_font];
+    actual_traits = [font_manager traitsOfFont:matched_font];
+  NSInteger actual_weight = [font_manager weightOfFont:matched_font];
 
   NSFont* platform_font =
-      UseHinting() ? [ns_font screenFont] : [ns_font printerFont];
+      UseHinting() ? [matched_font screenFont] : [matched_font printerFont];
   NSInteger app_kit_weight = ToAppKitFontWeight(font_description.Weight());
 
   // TODO(eae): Remove once skia supports bold emoji. See

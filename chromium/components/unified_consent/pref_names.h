@@ -8,10 +8,12 @@
 namespace unified_consent {
 namespace prefs {
 
-extern const char kHadEverythingSyncedBeforeMigration[];
-extern const char kShouldShowUnifiedConsentBump[];
-extern const char kUnifiedConsentGiven[];
+// Integer indicating the migration state of unified consent, defined in
+// unified_consent::MigrationState.
 extern const char kUnifiedConsentMigrationState[];
+
+// Boolean indicating whether anonymized URL-keyed data data collection is
+// enabled.
 extern const char kUrlKeyedAnonymizedDataCollectionEnabled[];
 
 }  // namespace prefs

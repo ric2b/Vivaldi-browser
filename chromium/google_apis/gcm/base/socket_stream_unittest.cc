@@ -12,9 +12,9 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_task_environment.h"
@@ -35,11 +35,11 @@ typedef std::vector<net::MockRead> ReadList;
 typedef std::vector<net::MockWrite> WriteList;
 
 const char kReadData[] = "read_data";
-const int kReadDataSize = arraysize(kReadData) - 1;
+const int kReadDataSize = base::size(kReadData) - 1;
 const char kReadData2[] = "read_alternate_data";
-const int kReadData2Size = arraysize(kReadData2) - 1;
+const int kReadData2Size = base::size(kReadData2) - 1;
 const char kWriteData[] = "write_data";
-const int kWriteDataSize = arraysize(kWriteData) - 1;
+const int kWriteDataSize = base::size(kWriteData) - 1;
 
 class GCMSocketStreamTest : public testing::Test {
  public:
@@ -91,6 +91,7 @@ class GCMSocketStreamTest : public testing::Test {
 
   // net:: components.
   net::AddressList address_list_;
+  std::unique_ptr<net::NetworkChangeNotifier> network_change_notifier_;
   std::unique_ptr<network::NetworkService> network_service_;
   network::mojom::NetworkContextPtr network_context_ptr_;
   net::MockClientSocketFactory socket_factory_;
@@ -104,6 +105,7 @@ class GCMSocketStreamTest : public testing::Test {
 GCMSocketStreamTest::GCMSocketStreamTest()
     : scoped_task_environment_(
           base::test::ScopedTaskEnvironment::MainThreadType::IO),
+      network_change_notifier_(net::NetworkChangeNotifier::CreateMock()),
       network_service_(network::NetworkService::CreateForTesting()),
       url_request_context_(true /* delay_initialization */) {
   address_list_ = net::AddressList::CreateFromIPAddress(
@@ -222,10 +224,13 @@ void GCMSocketStreamTest::OpenConnection() {
   base::RunLoop run_loop;
   int net_error = net::ERR_FAILED;
   const GURL kDestination("https://example.com");
+  network::mojom::ProxyResolvingSocketOptionsPtr options =
+      network::mojom::ProxyResolvingSocketOptions::New();
+  options->use_tls = true;
   mojo_socket_factory_ptr_->CreateProxyResolvingSocket(
-      kDestination, true /* use_tls */,
+      kDestination, std::move(options),
       net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
-      mojo::MakeRequest(&mojo_socket_ptr_),
+      mojo::MakeRequest(&mojo_socket_ptr_), nullptr /* observer */,
       base::BindLambdaForTesting(
           [&](int result, const base::Optional<net::IPEndPoint>& local_addr,
               const base::Optional<net::IPEndPoint>& peer_addr,

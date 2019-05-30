@@ -89,19 +89,37 @@ void VivaldiDataSource::StartDataRequest(
   }
 }
 
-const char kPathDelimiter = '/';
-
 // In a url such as chrome://vivaldi-data/desktop-image/0 type is
 // "desktop-image" and data is "0".
 void VivaldiDataSource::ExtractRequestTypeAndData(const std::string& path,
                                                   std::string& type,
                                                   std::string& data) {
-  std::string page_url_str(path);
+  size_t pos = path.find("bookmark_thumbnail");
+  if (pos != std::string::npos) {
+    // This is a shortcut path to handle old-style
+    // bookmark thumbnail links.
+    pos = path.find('/', pos);
+    data = path.substr(pos + 1);
+    type = "local-image";
 
-  size_t pos = path.find(kPathDelimiter);
+    // Strip all after ? for links such as
+    // chrome://thumb/http://bookmark_thumbnail/610?1535393294240
+    pos = data.find('?');
+    if (pos != std::string::npos) {
+      data = data.substr(0, pos);
+    }
+    return;
+  }
+  // Default path for new links.
+  pos = path.find('/');
   if (pos != std::string::npos) {
     type = path.substr(0, pos);
     data = path.substr(pos+1);
+  }
+  // Strip all after ?
+  pos = data.find('?');
+  if (pos != std::string::npos) {
+    data = data.substr(0, pos);
   }
 }
 
@@ -121,4 +139,18 @@ bool VivaldiDataSource::ShouldServiceRequest(
     int render_process_id) const {
   return URLDataSource::ShouldServiceRequest(url, resource_context,
                                              render_process_id);
+}
+/*
+ * Code to handle the chrome://thumb/ protocol.
+ */
+
+VivaldiThumbDataSource::VivaldiThumbDataSource(Profile* profile)
+  : VivaldiDataSource(profile), weak_ptr_factory_(this) {
+}
+
+VivaldiThumbDataSource::~VivaldiThumbDataSource() {
+}
+
+std::string VivaldiThumbDataSource::GetSource() const {
+  return vivaldi::kVivaldiThumbDataHost;
 }

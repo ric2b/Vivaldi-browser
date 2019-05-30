@@ -35,12 +35,17 @@ class PersistedLogs : public LogStore {
   //
   // If the optional |max_log_size| parameter is non-zero, all logs larger than
   // that limit will be skipped when writing to disk.
+  //
+  // |signing_key| is used to produce an HMAC-SHA256 signature of the logged
+  // data, which will be uploaded with the log and used to validate data
+  // integrity.
   PersistedLogs(std::unique_ptr<PersistedLogsMetrics> metrics,
                 PrefService* local_state,
                 const char* pref_name,
                 size_t min_log_count,
                 size_t min_log_bytes,
-                size_t max_log_size);
+                size_t max_log_size,
+                const std::string& signing_key);
   ~PersistedLogs();
 
   // LogStore:
@@ -48,6 +53,7 @@ class PersistedLogs : public LogStore {
   bool has_staged_log() const override;
   const std::string& staged_log() const override;
   const std::string& staged_log_hash() const override;
+  const std::string& staged_log_signature() const override;
   void StageNextLog() override;
   void DiscardStagedLog() override;
   void PersistUnsentLogs() const override;
@@ -92,19 +98,38 @@ class PersistedLogs : public LogStore {
   // Logs greater than this size will not be written to disk.
   const size_t max_log_size_;
 
+  // Used to create a signature of log data, in order to verify reported data is
+  // authentic.
+  const std::string signing_key_;
+
   struct LogInfo {
-    // Initializes the members based on uncompressed |log_data| and
-    // |log_timestamp|.
+    LogInfo();
+    LogInfo(const LogInfo& other);
+    ~LogInfo();
+
+    // Initializes the members based on uncompressed |log_data|,
+    // |log_timestamp|, and |signing_key|. |log_data| is the uncompressed
+    // serialized log protobuf. A hash and a signature are computed from
+    // |log_data|. The signature is produced using |signing_key|. |log_data|
+    // will be compressed and storred in |compressed_log_data|. |log_timestamp|
+    // is stored as is.
     // |metrics| is the parent's metrics_ object, and should not be held.
     void Init(PersistedLogsMetrics* metrics,
               const std::string& log_data,
-              const std::string& log_timestamp);
+              const std::string& log_timestamp,
+              const std::string& signing_key);
 
     // Compressed log data - a serialized protobuf that's been gzipped.
     std::string compressed_log_data;
 
-    // The SHA1 hash of log, stored to catch errors from memory corruption.
+    // The SHA1 hash of the log. Computed in Init and stored to catch errors
+    // from memory corruption.
     std::string hash;
+
+    // The HMAC-SHA256 signature of the log, used to validate the log came from
+    // Chrome. It's computed in Init and stored, instead of computed on demand,
+    // to catch errors from memory corruption.
+    std::string signature;
 
     // The timestamp of when the log was created as a time_t value.
     std::string timestamp;

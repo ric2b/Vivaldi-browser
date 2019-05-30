@@ -12,7 +12,7 @@
 #include "chrome/browser/chromeos/extensions/input_method_event_router.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -78,10 +78,7 @@ class TestListener : public content::NotificationObserver {
 
 class ExtensionInputMethodApiTest : public extensions::ExtensionApiTest {
  public:
-  ExtensionInputMethodApiTest() {
-    scoped_feature_list_.InitAndEnableFeature(features::kOptInImeMenu);
-  }
-
+  ExtensionInputMethodApiTest() {}
   ~ExtensionInputMethodApiTest() override {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -161,4 +158,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionInputMethodApiTest, ImeMenuAPITest) {
       kTestIMEID2, false /* show_message */);
   engine_handler->Enable("test2");
   ASSERT_TRUE(list_listenter.WaitUntilSatisfied()) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionInputMethodApiTest, Settings) {
+  ASSERT_TRUE(RunExtensionTest("input_method/settings")) << message_;
 }

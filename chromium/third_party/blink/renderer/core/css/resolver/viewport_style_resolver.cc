@@ -66,7 +66,7 @@ bool HasViewportFitProperty(const CSSPropertyValueSet* property_set) {
 ViewportStyleResolver::ViewportStyleResolver(Document& document)
     : document_(document) {
   DCHECK(document.GetFrame());
-  initial_viewport_medium_ = new MediaQueryEvaluator(
+  initial_viewport_medium_ = MakeGarbageCollected<MediaQueryEvaluator>(
       MediaValuesInitialViewport::Create(*document.GetFrame()));
 }
 
@@ -115,18 +115,16 @@ void ViewportStyleResolver::CollectViewportChildRules(
     const HeapVector<Member<StyleRuleBase>>& rules,
     Origin origin) {
   for (auto& rule : rules) {
-    if (rule->IsViewportRule()) {
-      AddViewportRule(*ToStyleRuleViewport(rule), origin);
-    } else if (rule->IsMediaRule()) {
-      StyleRuleMedia* media_rule = ToStyleRuleMedia(rule);
+    if (auto* viewport_rule = DynamicTo<StyleRuleViewport>(rule.Get())) {
+      AddViewportRule(*viewport_rule, origin);
+    } else if (auto* media_rule = DynamicTo<StyleRuleMedia>(rule.Get())) {
       if (!media_rule->MediaQueries() ||
           initial_viewport_medium_->Eval(
               *media_rule->MediaQueries(),
               &viewport_dependent_media_query_results_,
               &device_dependent_media_query_results_))
         CollectViewportChildRules(media_rule->ChildRules(), origin);
-    } else if (rule->IsSupportsRule()) {
-      StyleRuleSupports* supports_rule = ToStyleRuleSupports(rule);
+    } else if (auto* supports_rule = DynamicTo<StyleRuleSupports>(rule.Get())) {
       if (supports_rule->ConditionIsSupported())
         CollectViewportChildRules(supports_rule->ChildRules(), origin);
     }
@@ -296,9 +294,9 @@ Length ViewportStyleResolver::ViewportLengthValue(CSSPropertyID id) {
   if (value->IsIdentifierValue()) {
     CSSValueID value_id = ToCSSIdentifierValue(value)->GetValueID();
     if (value_id == CSSValueInternalExtendToZoom)
-      return Length(kExtendToZoom);
+      return Length::ExtendToZoom();
     if (value_id == CSSValueAuto)
-      return Length(kAuto);
+      return Length::Auto();
   }
 
   const CSSPrimitiveValue* primitive_value = ToCSSPrimitiveValue(value);
@@ -318,7 +316,7 @@ Length ViewportStyleResolver::ViewportLengthValue(CSSPropertyID id) {
     float scaled_value =
         document_->GetPage()->GetChromeClient().WindowToViewportScalar(
             result.GetFloatValue());
-    result.SetValue(scaled_value);
+    result = Length::Fixed(scaled_value);
   }
   return result;
 }

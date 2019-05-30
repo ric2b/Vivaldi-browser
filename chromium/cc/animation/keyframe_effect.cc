@@ -174,7 +174,7 @@ void KeyframeEffect::RemoveFromTicking() {
   // Resetting last_tick_time_ here ensures that calling ::UpdateState
   // before ::Animate doesn't start a keyframe model.
   last_tick_time_ = base::TimeTicks();
-  animation_->KeyframeModelRemovedFromTicking();
+  animation_->RemoveFromTicking();
 }
 
 void KeyframeEffect::UpdateState(bool start_ready_keyframe_models,
@@ -203,18 +203,15 @@ void KeyframeEffect::UpdateState(bool start_ready_keyframe_models,
   }
 }
 
-void KeyframeEffect::UpdateTickingState(UpdateTickingType type) {
-  bool force = type == UpdateTickingType::FORCE;
+void KeyframeEffect::UpdateTickingState() {
   if (animation_->has_animation_host()) {
     bool was_ticking = is_ticking_;
-    is_ticking_ = HasNonDeletedKeyframeModel();
+    is_ticking_ = HasNonDeletedKeyframeModel() &&
+                  element_animations_->has_element_in_any_list();
 
-    bool has_element_in_any_list =
-        element_animations_->has_element_in_any_list();
-
-    if (is_ticking_ && ((!was_ticking && has_element_in_any_list) || force)) {
+    if (is_ticking_ && !was_ticking) {
       animation_->AddToTicking();
-    } else if (!is_ticking_ && (was_ticking || force)) {
+    } else if (!is_ticking_ && was_ticking) {
       RemoveFromTicking();
     }
   }
@@ -296,7 +293,7 @@ void KeyframeEffect::RemoveKeyframeModel(int keyframe_model_id) {
   keyframe_models_.erase(keyframe_models_to_remove, keyframe_models_.end());
 
   if (has_bound_element_animations()) {
-    UpdateTickingState(UpdateTickingType::NORMAL);
+    UpdateTickingState();
     if (keyframe_model_removed)
       element_animations_->UpdateClientAnimationState();
     animation_->SetNeedsCommit();
@@ -374,7 +371,7 @@ void KeyframeEffect::KeyframeModelAdded() {
   animation_->SetNeedsCommit();
   needs_to_start_keyframe_models_ = true;
 
-  UpdateTickingState(UpdateTickingType::NORMAL);
+  UpdateTickingState();
   element_animations_->UpdateClientAnimationState();
 }
 
@@ -810,7 +807,7 @@ void KeyframeEffect::PushPropertiesTo(KeyframeEffect* keyframe_effect_impl) {
       scroll_offset_animation_was_interrupted_;
   scroll_offset_animation_was_interrupted_ = false;
 
-  keyframe_effect_impl->UpdateTickingState(UpdateTickingType::NORMAL);
+  keyframe_effect_impl->UpdateTickingState();
 }
 
 void KeyframeEffect::SetAnimation(Animation* animation) {

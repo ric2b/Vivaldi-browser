@@ -5,7 +5,7 @@
 #include <stddef.h>
 
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -49,13 +49,13 @@ TEST(UTFStringConversionsTest, ConvertUTF8AndWide) {
   // we round-trip all the wide strings through UTF-8 to make sure everything
   // agrees on the conversion. This uses the stream operators to test them
   // simultaneously.
-  for (size_t i = 0; i < arraysize(kConvertRoundtripCases); ++i) {
+  for (auto* i : kConvertRoundtripCases) {
     std::ostringstream utf8;
-    utf8 << WideToUTF8(kConvertRoundtripCases[i]);
+    utf8 << WideToUTF8(i);
     std::wostringstream wide;
     wide << UTF8ToWide(utf8.str());
 
-    EXPECT_EQ(kConvertRoundtripCases[i], wide.str());
+    EXPECT_EQ(i, wide.str());
   }
 }
 
@@ -97,13 +97,10 @@ TEST(UTFStringConversionsTest, ConvertUTF8ToWide) {
 #endif
   };
 
-  for (size_t i = 0; i < arraysize(convert_cases); i++) {
+  for (const auto& i : convert_cases) {
     std::wstring converted;
-    EXPECT_EQ(convert_cases[i].success,
-              UTF8ToWide(convert_cases[i].utf8,
-                         strlen(convert_cases[i].utf8),
-                         &converted));
-    std::wstring expected(convert_cases[i].wide);
+    EXPECT_EQ(i.success, UTF8ToWide(i.utf8, strlen(i.utf8), &converted));
+    std::wstring expected(i.wide);
     EXPECT_EQ(expected, converted);
   }
 
@@ -197,14 +194,14 @@ TEST(UTFStringConversionsTest, ConvertMultiString) {
     '\0'
   };
   string16 multistring16;
-  memcpy(WriteInto(&multistring16, arraysize(multi16)), multi16,
-                   sizeof(multi16));
-  EXPECT_EQ(arraysize(multi16) - 1, multistring16.length());
+  memcpy(WriteInto(&multistring16, base::size(multi16)), multi16,
+         sizeof(multi16));
+  EXPECT_EQ(base::size(multi16) - 1, multistring16.length());
   std::string expected;
-  memcpy(WriteInto(&expected, arraysize(multi)), multi, sizeof(multi));
-  EXPECT_EQ(arraysize(multi) - 1, expected.length());
+  memcpy(WriteInto(&expected, base::size(multi)), multi, sizeof(multi));
+  EXPECT_EQ(base::size(multi) - 1, expected.length());
   const std::string& converted = UTF16ToUTF8(multistring16);
-  EXPECT_EQ(arraysize(multi) - 1, converted.length());
+  EXPECT_EQ(base::size(multi) - 1, converted.length());
   EXPECT_EQ(expected, converted);
 }
 

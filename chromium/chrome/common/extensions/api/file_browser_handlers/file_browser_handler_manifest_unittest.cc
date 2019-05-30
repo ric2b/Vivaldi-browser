@@ -5,7 +5,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/common/extensions/api/file_browser_handlers/file_browser_handler.h"
 #include "chrome/common/extensions/manifest_tests/chrome_manifest_test.h"
@@ -60,12 +60,12 @@ TEST_F(FileBrowserHandlerManifestTest, GetHandlersRequiresPermission) {
 
   extensions::ExtensionBuilder bad_app_builder;
   bad_app_builder.SetManifest(std::move(bad_manifest_value));
-  scoped_refptr<extensions::Extension> bad_app(bad_app_builder.Build());
+  scoped_refptr<const extensions::Extension> bad_app(bad_app_builder.Build());
   EXPECT_FALSE(FileBrowserHandler::GetHandlers(bad_app.get()));
 
   extensions::ExtensionBuilder good_app_builder;
   good_app_builder.SetManifest(good_manifest_builder.Build());
-  scoped_refptr<extensions::Extension> good_app(good_app_builder.Build());
+  scoped_refptr<const extensions::Extension> good_app(good_app_builder.Build());
   EXPECT_TRUE(FileBrowserHandler::GetHandlers(good_app.get()));
 }
 
@@ -73,7 +73,7 @@ TEST_F(FileBrowserHandlerManifestTest, InvalidFileBrowserHandlers) {
   Testcase testcases[] = {
       Testcase("filebrowser_invalid_access_permission.json",
                extensions::ErrorUtils::FormatErrorMessage(
-                   errors::kInvalidFileAccessValue, base::IntToString(1))),
+                   errors::kInvalidFileAccessValue, base::NumberToString(1))),
       Testcase("filebrowser_invalid_access_permission_list.json",
                errors::kInvalidFileAccessList),
       Testcase("filebrowser_invalid_empty_access_permission_list.json",
@@ -92,11 +92,11 @@ TEST_F(FileBrowserHandlerManifestTest, InvalidFileBrowserHandlers) {
                errors::kInvalidFileFiltersList),
       Testcase("filebrowser_invalid_file_filters_2.json",
                extensions::ErrorUtils::FormatErrorMessage(
-                   errors::kInvalidFileFilterValue, base::IntToString(0))),
+                   errors::kInvalidFileFilterValue, base::NumberToString(0))),
       Testcase("filebrowser_invalid_file_filters_url.json",
                extensions::ErrorUtils::FormatErrorMessage(
                    errors::kInvalidURLPatternError, "http:*.html"))};
-  RunTestcases(testcases, arraysize(testcases), EXPECT_TYPE_ERROR);
+  RunTestcases(testcases, base::size(testcases), EXPECT_TYPE_ERROR);
   RunTestcase(Testcase("filebrowser_missing_permission.json",
                        errors::kInvalidFileBrowserHandlerMissingPermission),
               EXPECT_TYPE_WARNING);

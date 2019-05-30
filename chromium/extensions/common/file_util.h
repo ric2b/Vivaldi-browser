@@ -13,13 +13,10 @@
 #include "base/memory/ref_counted.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/message_bundle.h"
+#include "third_party/skia/include/core/SkColor.h"
 
 class ExtensionIconSet;
 class GURL;
-
-namespace base {
-class FilePath;
-}
 
 namespace extensions {
 class Extension;
@@ -114,11 +111,20 @@ void DeleteFile(const base::FilePath& path, bool recursive);
 // Get a relative file path from a chrome-extension:// URL.
 base::FilePath ExtensionURLToRelativeFilePath(const GURL& url);
 
-// Returns true if the icons in the icon set exist. Oherwise, populates
-// |error| with the |error_message_id| for an invalid file.
+// If |value| is true, when ValidateExtensionIconSet is called for unpacked
+// extensions, an icon which is not sufficiently visible will be reported as
+// an error.
+void SetReportErrorForInvisibleIconForTesting(bool value);
+
+// Returns true if the icons in |icon_set| exist. Otherwise, populates
+// |error| with the |error_message_id| for an invalid file. If an icon
+// is not sufficiently visible, and error checking is enabled, |error|
+// is populated with a different message, rather than one specified
+// by |error_message_id|.
 bool ValidateExtensionIconSet(const ExtensionIconSet& icon_set,
                               const Extension* extension,
                               int error_message_id,
+                              SkColor background_color,
                               std::string* error);
 
 // Loads extension message catalogs and returns message bundle.

@@ -134,12 +134,12 @@ void RdpClient::Core::Connect(const ScreenResolution& resolution,
                               DWORD port_number) {
   if (!ui_task_runner_->BelongsToCurrentThread()) {
     ui_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&Core::Connect, this, resolution, terminal_id, port_number));
+        FROM_HERE, base::BindOnce(&Core::Connect, this, resolution, terminal_id,
+                                  port_number));
     return;
   }
 
-  DCHECK(base::MessageLoopForUI::IsCurrent());
+  DCHECK(base::MessageLoopCurrentForUI::IsSet());
   DCHECK(!rdp_client_window_);
   DCHECK(!self_.get());
 
@@ -159,7 +159,8 @@ void RdpClient::Core::Connect(const ScreenResolution& resolution,
 
 void RdpClient::Core::Disconnect() {
   if (!ui_task_runner_->BelongsToCurrentThread()) {
-    ui_task_runner_->PostTask(FROM_HERE, base::Bind(&Core::Disconnect, this));
+    ui_task_runner_->PostTask(FROM_HERE,
+                              base::BindOnce(&Core::Disconnect, this));
     return;
   }
 
@@ -176,7 +177,8 @@ void RdpClient::Core::Disconnect() {
 
 void RdpClient::Core::InjectSas() {
   if (!ui_task_runner_->BelongsToCurrentThread()) {
-    ui_task_runner_->PostTask(FROM_HERE, base::Bind(&Core::InjectSas, this));
+    ui_task_runner_->PostTask(FROM_HERE,
+                              base::BindOnce(&Core::InjectSas, this));
     return;
   }
 
@@ -188,7 +190,7 @@ void RdpClient::Core::InjectSas() {
 void RdpClient::Core::ChangeResolution(const ScreenResolution& resolution) {
   if (!ui_task_runner_->BelongsToCurrentThread()) {
     ui_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&Core::ChangeResolution, this, resolution));
+        FROM_HERE, base::BindOnce(&Core::ChangeResolution, this, resolution));
     return;
   }
 
@@ -222,8 +224,8 @@ RdpClient::Core::~Core() {
 
 void RdpClient::Core::NotifyConnected() {
   if (!caller_task_runner_->BelongsToCurrentThread()) {
-    caller_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&Core::NotifyConnected, this));
+    caller_task_runner_->PostTask(FROM_HERE,
+                                  base::BindOnce(&Core::NotifyConnected, this));
     return;
   }
 
@@ -233,8 +235,8 @@ void RdpClient::Core::NotifyConnected() {
 
 void RdpClient::Core::NotifyClosed() {
   if (!caller_task_runner_->BelongsToCurrentThread()) {
-    caller_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&Core::NotifyClosed, this));
+    caller_task_runner_->PostTask(FROM_HERE,
+                                  base::BindOnce(&Core::NotifyClosed, this));
     return;
   }
 

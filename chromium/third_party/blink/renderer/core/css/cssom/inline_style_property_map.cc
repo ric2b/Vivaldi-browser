@@ -7,29 +7,27 @@
 #include "third_party/blink/renderer/core/css/css_custom_property_declaration.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
 #include "third_party/blink/renderer/core/css/css_variable_reference_value.h"
-#include "third_party/blink/renderer/core/css/property_registry.h"
 #include "third_party/blink/renderer/core/css/style_property_serializer.h"
 
 namespace blink {
 
-unsigned int InlineStylePropertyMap::size() {
+unsigned int InlineStylePropertyMap::size() const {
   const CSSPropertyValueSet* inline_style = owner_element_->InlineStyle();
   return inline_style ? inline_style->PropertyCount() : 0;
 }
 
-const CSSValue* InlineStylePropertyMap::GetProperty(CSSPropertyID property_id) {
+const CSSValue* InlineStylePropertyMap::GetProperty(
+    CSSPropertyID property_id) const {
   const CSSPropertyValueSet* inline_style = owner_element_->InlineStyle();
   return inline_style ? inline_style->GetPropertyCSSValue(property_id)
                       : nullptr;
 }
 
 const CSSValue* InlineStylePropertyMap::GetCustomProperty(
-    AtomicString property_name) {
+    AtomicString property_name) const {
   const CSSPropertyValueSet* inline_style = owner_element_->InlineStyle();
-  const CSSValue* value =
-      inline_style ? inline_style->GetPropertyCSSValue(property_name) : nullptr;
-  return PropertyRegistry::ParseIfRegistered(owner_element_->GetDocument(),
-                                             property_name, value);
+  return inline_style ? inline_style->GetPropertyCSSValue(property_name)
+                      : nullptr;
 }
 
 void InlineStylePropertyMap::SetProperty(CSSPropertyID property_id,
@@ -77,19 +75,12 @@ void InlineStylePropertyMap::ForEachProperty(
       owner_element_->EnsureMutableInlineStyle();
   for (unsigned i = 0; i < inline_style_set.PropertyCount(); i++) {
     const auto& property_reference = inline_style_set.PropertyAt(i);
-    if (property_reference.Id() == CSSPropertyVariable) {
-      const auto& decl =
-          ToCSSCustomPropertyDeclaration(property_reference.Value());
-      callback(decl.GetName(), property_reference.Value());
-    } else {
-      callback(property_reference.Property().GetPropertyNameAtomicString(),
-               property_reference.Value());
-    }
+    callback(property_reference.Name(), property_reference.Value());
   }
 }
 
 String InlineStylePropertyMap::SerializationForShorthand(
-    const CSSProperty& property) {
+    const CSSProperty& property) const {
   DCHECK(property.IsShorthand());
   if (const CSSPropertyValueSet* inline_style = owner_element_->InlineStyle()) {
     return StylePropertySerializer(*inline_style)

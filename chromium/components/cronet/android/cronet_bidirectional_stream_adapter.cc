@@ -14,8 +14,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "components/cronet/android/cronet_url_request_context_adapter.h"
 #include "components/cronet/android/io_buffer_with_byte_buffer.h"
-#include "components/cronet/android/metrics_util.h"
 #include "components/cronet/android/url_request_error.h"
+#include "components/cronet/metrics_util.h"
 #include "jni/CronetBidirectionalStream_jni.h"
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
@@ -27,7 +27,7 @@
 #include "net/http/http_util.h"
 #include "net/ssl/ssl_info.h"
 #include "net/third_party/quic/core/quic_packets.h"
-#include "net/third_party/spdy/core/spdy_header_block.h"
+#include "net/third_party/quiche/src/spdy/core/spdy_header_block.h"
 #include "net/url_request/http_user_agent_settings.h"
 #include "net/url_request/url_request_context.h"
 #include "url/gurl.h"
@@ -234,8 +234,9 @@ jboolean CronetBidirectionalStreamAdapter::WritevData(
     env->GetIntArrayRegion(pending_write_data->jwrite_buffer_limit_list.obj(),
                            i, 1, &limit);
     DCHECK_LE(pos, limit);
-    scoped_refptr<net::WrappedIOBuffer> write_buffer(
-        new net::WrappedIOBuffer(static_cast<char*>(data) + pos));
+    scoped_refptr<net::WrappedIOBuffer> write_buffer =
+        base::MakeRefCounted<net::WrappedIOBuffer>(static_cast<char*>(data) +
+                                                   pos);
     pending_write_data->write_buffer_list.push_back(write_buffer);
     pending_write_data->write_buffer_len_list.push_back(limit - pos);
   }

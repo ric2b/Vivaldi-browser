@@ -20,8 +20,7 @@ void DeleteJournal::GetBookmarkDeleteJournals(
   trans->GetDirectory()->delete_journal()->GetDeleteJournals(
       trans->GetWrappedTrans(), BOOKMARKS, &deleted_entries);
   std::set<int64_t> undecryptable_journal;
-  for (syncable::EntryKernelSet::const_iterator i = deleted_entries.begin();
-       i != deleted_entries.end(); ++i) {
+  for (auto i = deleted_entries.begin(); i != deleted_entries.end(); ++i) {
     delete_journal_list->push_back(BookmarkDeleteJournal());
     delete_journal_list->back().id = (*i)->ref(syncable::META_HANDLE);
     delete_journal_list->back().external_id =
@@ -32,10 +31,10 @@ void DeleteJournal::GetBookmarkDeleteJournals(
     if (!specifics.has_encrypted()) {
       delete_journal_list->back().specifics = specifics;
     } else {
-      std::string plaintext_data =
-          trans->GetCryptographer()->DecryptToString(specifics.encrypted());
+      std::string plaintext_data;
       sync_pb::EntitySpecifics unencrypted_data;
-      if (plaintext_data.length() == 0 ||
+      if (!trans->GetCryptographer()->DecryptToString(specifics.encrypted(),
+                                                      &plaintext_data) ||
           !unencrypted_data.ParseFromString(plaintext_data)) {
         // Fail to decrypt, Add this delete journal to purge.
         undecryptable_journal.insert(delete_journal_list->back().id);

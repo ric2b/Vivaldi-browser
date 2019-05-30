@@ -35,6 +35,7 @@ class CORE_EXPORT PaintTiming final
  public:
   static const char kSupplementName[];
 
+  explicit PaintTiming(Document&);
   virtual ~PaintTiming() = default;
 
   static PaintTiming& From(Document&);
@@ -45,18 +46,16 @@ class CORE_EXPORT PaintTiming final
   // event.
   void MarkFirstPaint();
 
-  // MarkFirstTextPaint, MarkFirstImagePaint, and MarkFirstContentfulPaint
+  // MarkFirstImagePaint, and MarkFirstContentfulPaint
   // will also record first paint if first paint hasn't been recorded yet.
   void MarkFirstContentfulPaint();
 
-  // MarkFirstTextPaint and MarkFirstImagePaint will also record first
-  // contentful paint if first contentful paint hasn't been recorded yet.
-  void MarkFirstTextPaint();
+  // MarkFirstImagePaint will also record first contentful paint if first
+  // contentful paint hasn't been recorded yet.
   void MarkFirstImagePaint();
 
   void SetFirstMeaningfulPaintCandidate(TimeTicks timestamp);
   void SetFirstMeaningfulPaint(
-      TimeTicks stamp,
       TimeTicks swap_stamp,
       FirstMeaningfulPaintDetector::HadUserInput had_input);
   void NotifyPaint(bool is_first_paint, bool text_painted, bool image_painted);
@@ -75,9 +74,6 @@ class CORE_EXPORT PaintTiming final
   TimeTicks FirstContentfulPaint() const {
     return first_contentful_paint_swap_;
   }
-
-  // FirstTextPaint returns the first time that text content was painted.
-  TimeTicks FirstTextPaint() const { return first_text_paint_swap_; }
 
   // FirstImagePaint returns the first time that image content was painted.
   TimeTicks FirstImagePaint() const { return first_image_paint_swap_; }
@@ -110,7 +106,6 @@ class CORE_EXPORT PaintTiming final
   void Trace(blink::Visitor*) override;
 
  private:
-  explicit PaintTiming(Document&);
   LocalFrame* GetFrame() const;
   void NotifyPaintTimingChanged();
 
@@ -134,7 +129,6 @@ class CORE_EXPORT PaintTiming final
   void SetFirstPaintSwap(TimeTicks stamp);
   void SetFirstContentfulPaintSwap(TimeTicks stamp);
   void SetFirstImagePaintSwap(TimeTicks stamp);
-  void SetFirstTextPaintSwap(TimeTicks stamp);
 
   void RegisterNotifySwapTime(PaintEvent);
   void ReportUserInputHistogram(
@@ -146,22 +140,15 @@ class CORE_EXPORT PaintTiming final
     return first_contentful_paint_;
   }
 
-  TimeTicks FirstMeaningfulPaintRendered() const {
-    return first_meaningful_paint_;
-  }
-
   // TODO(crbug/738235): Non first_*_swap_ variables are only being tracked to
   // compute deltas for reporting histograms and should be removed once we
   // confirm the deltas and discrepancies look reasonable.
   TimeTicks first_paint_;
   TimeTicks first_paint_swap_;
-  TimeTicks first_text_paint_;
-  TimeTicks first_text_paint_swap_;
   TimeTicks first_image_paint_;
   TimeTicks first_image_paint_swap_;
   TimeTicks first_contentful_paint_;
   TimeTicks first_contentful_paint_swap_;
-  TimeTicks first_meaningful_paint_;
   TimeTicks first_meaningful_paint_swap_;
   TimeTicks first_meaningful_paint_candidate_;
 

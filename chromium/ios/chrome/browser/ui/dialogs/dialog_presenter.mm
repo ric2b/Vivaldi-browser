@@ -9,22 +9,32 @@
 #include "base/containers/circular_deque.h"
 #import "base/ios/block_types.h"
 #include "base/logging.h"
-#include "base/strings/sys_string_conversions.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/url_formatter/elide_url.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/alert_coordinator/input_alert_coordinator.h"
+#import "ios/chrome/browser/ui/dialogs/completion_block_util.h"
 #import "ios/chrome/browser/ui/dialogs/java_script_dialog_blocking_state.h"
 #import "ios/chrome/browser/ui/dialogs/nsurl_protection_space_util.h"
-#include "ios/chrome/browser/ui/ui_util.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
-#include "ios/web/public/web_state/web_state.h"
+#import "ios/web/public/web_state/web_state.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+using completion_block_util::AlertCallback;
+using completion_block_util::ConfirmCallback;
+using completion_block_util::PromptCallback;
+using completion_block_util::HTTPAuthCallack;
+using completion_block_util::GetSafeJavaScriptAlertCompletion;
+using completion_block_util::GetSafeJavaScriptConfirmationCompletion;
+using completion_block_util::GetSafeJavaScriptPromptCompletion;
+using completion_block_util::GetSafeHTTPAuthCompletion;
 
 // Externed accessibility identifier.
 NSString* const kJavaScriptDialogTextFieldAccessibiltyIdentifier =
@@ -138,6 +148,8 @@ NSString* const kJavaScriptDialogTextFieldAccessibiltyIdentifier =
                                 requestURL:(const GURL&)requestURL
                                   webState:(web::WebState*)webState
                          completionHandler:(void (^)(void))completionHandler {
+  AlertCallback safeCallback =
+      GetSafeJavaScriptAlertCompletion(completionHandler);
   NSString* title = [DialogPresenter
       localizedTitleForJavaScriptAlertFromPage:requestURL
                                   mainFrameURL:webState->GetLastCommittedURL()];
@@ -150,8 +162,8 @@ NSString* const kJavaScriptDialogTextFieldAccessibiltyIdentifier =
   __weak DialogPresenter* weakSelf = self;
   __weak AlertCoordinator* weakCoordinator = alertCoordinator;
   ProceduralBlock OKHandler = ^{
-    if (completionHandler)
-      completionHandler();
+    if (safeCallback)
+      safeCallback();
     [weakSelf dialogCoordinatorWasStopped:weakCoordinator];
   };
 
@@ -161,8 +173,8 @@ NSString* const kJavaScriptDialogTextFieldAccessibiltyIdentifier =
                                style:UIAlertActionStyleDefault];
 
   // Add cancel handler.
-  alertCoordinator.cancelAction = completionHandler;
-  alertCoordinator.noInteractionAction = completionHandler;
+  alertCoordinator.cancelAction = safeCallback;
+  alertCoordinator.noInteractionAction = safeCallback;
 
   // Blocking option setup.
   [self setUpBlockingOptionForCoordinator:alertCoordinator webState:webState];
@@ -175,6 +187,8 @@ NSString* const kJavaScriptDialogTextFieldAccessibiltyIdentifier =
                                     webState:(web::WebState*)webState
                            completionHandler:
                                (void (^)(BOOL isConfirmed))completionHandler {
+  ConfirmCallback safeCallback =
+      GetSafeJavaScriptConfirmationCompletion(completionHandler);
   NSString* title = [DialogPresenter
       localizedTitleForJavaScriptAlertFromPage:requestURL
                                   mainFrameURL:webState->GetLastCommittedURL()];
@@ -185,13 +199,13 @@ NSString* const kJavaScriptDialogTextFieldAccessibiltyIdentifier =
 
   // Actions.
   ProceduralBlock confirmAction = ^{
-    if (completionHandler)
-      completionHandler(YES);
+    if (safeCallback)
+      safeCallback(YES);
   };
 
   ProceduralBlock cancelAction = ^{
-    if (completionHandler)
-      completionHandler(NO);
+    if (safeCallback)
+      safeCallback(NO);
   };
 
   // Coordinator Setup.
@@ -213,6 +227,8 @@ NSString* const kJavaScriptDialogTextFieldAccessibiltyIdentifier =
                                      webState:(web::WebState*)webState
                             completionHandler:
                                 (void (^)(NSString* input))completionHandler {
+  PromptCallback safeCallback =
+      GetSafeJavaScriptPromptCompletion(completionHandler);
   NSString* title = [DialogPresenter
       localizedTitleForJavaScriptAlertFromPage:requestURL
                                   mainFrameURL:webState->GetLastCommittedURL()];
@@ -224,15 +240,15 @@ NSString* const kJavaScriptDialogTextFieldAccessibiltyIdentifier =
   // Actions.
   __weak InputAlertCoordinator* weakCoordinator = alertCoordinator;
   ProceduralBlock confirmAction = ^{
-    if (completionHandler) {
+    if (safeCallback) {
       NSString* textInput = [weakCoordinator textFields].firstObject.text;
-      completionHandler(textInput ? textInput : @"");
+      safeCallback(textInput ? textInput : @"");
     }
   };
 
   ProceduralBlock cancelAction = ^{
-    if (completionHandler)
-      completionHandler(nil);
+    if (safeCallback)
+      safeCallback(nil);
   };
 
   // Coordinator Setup.
@@ -261,6 +277,7 @@ NSString* const kJavaScriptDialogTextFieldAccessibiltyIdentifier =
                                webState:(web::WebState*)webState
                       completionHandler:(void (^)(NSString* user,
                                                   NSString* password))handler {
+  HTTPAuthCallack safeCallback = GetSafeHTTPAuthCompletion(handler);
   NSString* title = l10n_util::GetNSStringWithFixup(IDS_LOGIN_DIALOG_TITLE);
   NSString* message =
       nsurlprotectionspace_util::MessageForHTTPAuth(protectionSpace);
@@ -273,16 +290,16 @@ NSString* const kJavaScriptDialogTextFieldAccessibiltyIdentifier =
   // Actions.
   __weak InputAlertCoordinator* weakCoordinator = alertCoordinator;
   ProceduralBlock confirmAction = ^{
-    if (handler) {
+    if (safeCallback) {
       NSString* username = [[weakCoordinator textFields] objectAtIndex:0].text;
       NSString* password = [[weakCoordinator textFields] objectAtIndex:1].text;
-      handler(username, password);
+      safeCallback(username, password);
     }
   };
 
   ProceduralBlock cancelAction = ^{
-    if (handler)
-      handler(nil, nil);
+    if (safeCallback)
+      safeCallback(nil, nil);
   };
 
   // Coordinator Setup.
@@ -349,29 +366,23 @@ NSString* const kJavaScriptDialogTextFieldAccessibiltyIdentifier =
   // displayed.
   if (self.blockingConfirmationCoordinator)
     return;
-  // The active TabModel can't be changed while a JavaScript dialog is shown.
-  DCHECK(!self.showingDialog);
-  if (_active && !_queuedWebStates.empty() &&
-      !self.delegate.dialogPresenterDelegateIsPresenting)
+  if (!self.showingDialog && _active && !_queuedWebStates.empty() &&
+      [self.delegate shouldDialogPresenterPresentDialog:self]) {
     [self showNextDialog];
+  }
 }
 
 + (NSString*)localizedTitleForJavaScriptAlertFromPage:(const GURL&)pageURL
                                          mainFrameURL:
                                              (const GURL&)mainFrameURL {
-  NSString* localizedTitle = nil;
-  NSString* hostname = base::SysUTF8ToNSString(pageURL.host());
-
   bool sameOriginAsMainFrame = pageURL.GetOrigin() == mainFrameURL.GetOrigin();
-
   if (!sameOriginAsMainFrame) {
-    localizedTitle = l10n_util::GetNSString(
+    return l10n_util::GetNSString(
         IDS_JAVASCRIPT_MESSAGEBOX_TITLE_NONSTANDARD_URL_IFRAME);
-  } else {
-    localizedTitle = l10n_util::GetNSStringF(
-        IDS_JAVASCRIPT_MESSAGEBOX_TITLE, base::SysNSStringToUTF16(hostname));
   }
-  return localizedTitle;
+  base::string16 title = url_formatter::FormatUrlForSecurityDisplay(
+      pageURL, url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS);
+  return l10n_util::GetNSStringF(IDS_JAVASCRIPT_MESSAGEBOX_TITLE, title);
 }
 
 #pragma mark - Private methods.
@@ -386,8 +397,9 @@ NSString* const kJavaScriptDialogTextFieldAccessibiltyIdentifier =
   _dialogCoordinatorsForWebStates[webState] = coordinator;
 
   if (self.active && !self.showingDialog &&
-      !self.delegate.dialogPresenterDelegateIsPresenting)
+      [self.delegate shouldDialogPresenterPresentDialog:self]) {
     [self showNextDialog];
+  }
 }
 
 - (void)showNextDialog {
@@ -413,8 +425,9 @@ NSString* const kJavaScriptDialogTextFieldAccessibiltyIdentifier =
   self.presentedDialogCoordinator = nil;
   self.blockingConfirmationCoordinator = nil;
   if (!_queuedWebStates.empty() &&
-      !self.delegate.dialogPresenterDelegateIsPresenting)
+      [self.delegate shouldDialogPresenterPresentDialog:self]) {
     [self showNextDialog];
+  }
 }
 
 - (void)setUpAlertCoordinator:(AlertCoordinator*)alertCoordinator

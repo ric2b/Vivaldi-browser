@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
@@ -19,7 +20,7 @@
 #include "content/public/browser/web_contents.h"
 #include "media/base/media_switches.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/blink/public/platform/autoplay.mojom.h"
+#include "third_party/blink/public/mojom/autoplay/autoplay.mojom.h"
 
 #if !defined(OS_ANDROID)
 #include "chrome/browser/ui/browser.h"
@@ -428,7 +429,7 @@ void MediaEngagementContentsObserver::MaybeInsertRemoveSignificantPlayer(
   if (state.muted == false && state.playing == true &&
       state.has_audio == true &&
       audible_players_.find(id) == audible_players_.end()) {
-    audible_players_[id] = std::make_pair(false, nullptr);
+    audible_players_.emplace(id, std::make_pair(false, nullptr));
   }
 
   bool is_currently_significant =

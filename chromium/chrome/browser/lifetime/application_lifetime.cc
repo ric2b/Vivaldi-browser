@@ -15,6 +15,7 @@
 #include "base/logging.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
@@ -32,8 +33,8 @@
 #include "components/keep_alive_registry/keep_alive_registry.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/language/core/common/locale_util.h"
-#include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/notification_service.h"
@@ -147,7 +148,7 @@ void AttemptExitInternal(bool try_to_quit_application) {
       content::NotificationService::AllSources(),
       content::NotificationService::NoDetails());
 
-  g_browser_process->platform_part()->AttemptExit();
+  g_browser_process->platform_part()->AttemptExit(try_to_quit_application);
 }
 
 #if !defined(OS_ANDROID)
@@ -261,8 +262,8 @@ void AttemptRestart() {
   // Make sure we don't send stop request to the session manager.
   g_send_stop_request_to_session_manager = false;
   // Run exit process in clean stack.
-  content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                   base::Bind(&ExitCleanly));
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                           base::BindOnce(&ExitIgnoreUnloadHandlers));
 #else
   // Set the flag to restore state after the restart.
   pref_service->SetBoolean(prefs::kRestartLastSessionOnShutdown, true);
@@ -273,7 +274,7 @@ void AttemptRestart() {
 
 void AttemptRelaunch() {
 #if defined(OS_CHROMEOS)
-  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->RequestRestart(
+  chromeos::PowerManagerClient::Get()->RequestRestart(
       power_manager::REQUEST_RESTART_OTHER, "Chrome relaunch");
   // If running the Chrome OS build, but we're not on the device, fall through.
 #endif
@@ -298,23 +299,25 @@ void AttemptExit() {
 #endif
 }
 
-#if defined(OS_CHROMEOS)
-// A function called when SIGTERM is received.
-void ExitCleanly() {
-  VLOG(1) << "ExitCleanly";
+void ExitIgnoreUnloadHandlers() {
+  VLOG(1) << "ExitIgnoreUnloadHandlers";
+#if !defined(OS_ANDROID)
   // We always mark exit cleanly.
   MarkAsCleanShutdown();
 
-  // Don't block when SIGTERM is received. AreaAllBrowsersCloseable()
+  // On ChromeOS ExitIgnoreUnloadHandlers() is used to handle SIGTERM.
+  // In this case, AreAllBrowsersCloseable()
   // can be false in following cases. a) power-off b) signout from
   // screen locker.
   if (!AreAllBrowsersCloseable())
     browser_shutdown::OnShutdownStarting(browser_shutdown::END_SESSION);
   else
     browser_shutdown::OnShutdownStarting(browser_shutdown::BROWSER_EXIT);
+#endif
   AttemptExitInternal(true);
 }
 
+#if defined(OS_CHROMEOS)
 bool IsAttemptingShutdown() {
   return g_send_stop_request_to_session_manager;
 }
@@ -344,9 +347,6 @@ void SessionEnding() {
   // exit this function.
   ShutdownWatcherHelper shutdown_watcher;
   shutdown_watcher.Arm(base::TimeDelta::FromSeconds(90));
-  metrics::MetricsService::SetExecutionPhase(
-      metrics::ExecutionPhase::SHUTDOWN_TIMEBOMB_ARM,
-      g_browser_process->local_state());
 
   browser_shutdown::OnShutdownStarting(browser_shutdown::END_SESSION);
 

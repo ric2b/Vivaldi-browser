@@ -161,10 +161,10 @@ static int GetHeightForLineCount(const LayoutBlockFlow* block_flow,
     for (RootInlineBox* box = block_flow->FirstRootBox(); box;
          box = box->NextRootBox()) {
       if (++count == line_count)
-        return (box->LineBottom() + (include_bottom
-                                         ? (block_flow->BorderBottom() +
-                                            block_flow->PaddingBottom())
-                                         : LayoutUnit()))
+        return (box->LineBottomWithLeading() +
+                (include_bottom ? (block_flow->BorderBottom() +
+                                   block_flow->PaddingBottom())
+                                : LayoutUnit()))
             .ToInt();
     }
     return -1;
@@ -303,8 +303,8 @@ static LayoutUnit MarginWidthForChild(LayoutBox* child) {
   // A margin basically has three types: fixed, percentage, and auto (variable).
   // Auto and percentage margins simply become 0 when computing min/max width.
   // Fixed margins can be added in as is.
-  Length margin_left = child->StyleRef().MarginLeft();
-  Length margin_right = child->StyleRef().MarginRight();
+  const Length& margin_left = child->StyleRef().MarginLeft();
+  const Length& margin_right = child->StyleRef().MarginRight();
   LayoutUnit margin;
   if (margin_left.IsFixed())
     margin += margin_left.Value();
@@ -457,7 +457,7 @@ void LayoutDeprecatedFlexibleBox::UpdateBlockLayout(bool relayout_children) {
 
     LayoutPositionedObjects(relayout_children || IsDocumentElement());
 
-    ComputeOverflow(old_client_after_edge);
+    ComputeLayoutOverflow(old_client_after_edge);
   }
 
   UpdateAfterLayout();

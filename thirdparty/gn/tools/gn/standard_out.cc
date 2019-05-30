@@ -78,8 +78,8 @@ void WriteToStdOut(const std::string& output) {
 #endif  // !defined(OS_WIN)
 
 void OutputMarkdownDec(TextDecoration dec) {
-  // The markdown rendering turns "dim" text to italics and any
-  // other colored text to bold.
+// The markdown rendering turns "dim" text to italics and any
+// other colored text to bold.
 
 #if defined(OS_WIN)
   DWORD written = 0;
@@ -226,25 +226,23 @@ void PrintSectionHelp(const std::string& line,
   }
 }
 
-void PrintShortHelp(const std::string& line) {
+void PrintShortHelp(const std::string& line, const std::string& link_tag) {
   EnsureInitialized();
+
+  if (is_markdown) {
+    if (link_tag.empty())
+      OutputString("    *   " + line + "\n");
+    else
+      OutputString("    *   [" + line + "](#" + link_tag + ")\n");
+    return;
+  }
 
   size_t colon_offset = line.find(':');
   size_t first_normal = 0;
   if (colon_offset != std::string::npos) {
-    if (is_markdown) {
-      OutputString("    *   [" + line + "](#" + line.substr(0, colon_offset) +
-                   ")\n");
-    } else {
-      OutputString("  " + line.substr(0, colon_offset), DECORATION_YELLOW);
-      first_normal = colon_offset;
-    }
-  } else if (is_markdown) {
-    OutputString("    *   [" + line + "](" + line + ")\n");
+    OutputString("  " + line.substr(0, colon_offset), DECORATION_YELLOW);
+    first_normal = colon_offset;
   }
-
-  if (is_markdown)
-    return;
 
   // See if the colon is followed by a " [" and if so, dim the contents of [ ].
   if (first_normal > 0 && line.size() > first_normal + 2 &&
@@ -289,16 +287,8 @@ void PrintLongHelp(const std::string& text, const std::string& tag) {
           in_body = false;
         }
 
-        if (first_header) {
-          std::string the_tag = tag;
-          if (the_tag.size() == 0) {
-            if (line.substr(0, 2) == "gn") {
-              the_tag = line.substr(3, line.substr(3).find(' '));
-            } else {
-              the_tag = line.substr(0, line.find(':'));
-            }
-          }
-          OutputString("### <a name=\"" + the_tag + "\"></a>", DECORATION_NONE,
+        if (first_header && !tag.empty()) {
+          OutputString("### <a name=\"" + tag + "\"></a>", DECORATION_NONE,
                        NO_ESCAPING);
           first_header = false;
         } else {

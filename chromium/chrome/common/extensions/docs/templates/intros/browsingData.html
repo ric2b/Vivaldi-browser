@@ -43,6 +43,7 @@ chrome.browsingData.remove({
 }, {
   "appcache": true,
   "cache": true,
+  "cacheStorage": true,
   "cookies": true,
   "downloads": true,
   "fileSystems": true,
@@ -52,6 +53,7 @@ chrome.browsingData.remove({
   "localStorage": true,
   "pluginData": true,
   "passwords": true,
+  "serviceWorkers": true,
   "webSQL": true
 }, callback);</pre>
 
@@ -87,6 +89,37 @@ chrome.browsingData.removeCookies({
   heavy lifting in the background, and can take <em>tens of seconds</em> to
   complete, depending on a user's profile. You should use the callback mechanism
   to keep your users up to date on the removal's status.
+</p>
+
+
+<h2 id="specific_origins">Specific Origins</h2>
+
+<p>To remove data for a specific origin or to exclude a set of origins from
+deletion, you can use the <code>RemovalOptions.origins</code> and
+<code>RemovalOptions.excludeOrigins</code> parameters. They can only be applied
+to cookies, cache, and storage (CacheStorage, FileSystems, IndexedDB,
+LocalStorage, PluginData, ServiceWorkers, and WebSQL).
+</p>
+
+<pre>chrome.browsingData.remove({
+  "origins": ["https://www.example.com"]
+}, {
+  "cacheStorage": true,
+  "cookies": true,
+  "fileSystems": true,
+  "indexedDB": true,
+  "localStorage": true,
+  "pluginData": true,
+  "serviceWorkers": true,
+  "webSQL": true
+}, callback);</pre>
+
+<p class="caution">
+    <strong>Important</strong>: As cookies are scoped more broadly than other
+    types of storage, deleting cookies for an origin will delete all cookies of
+    the registrable domain. For example, deleting data for
+    <code>https://www.example.com</code> will delete cookies with a domain of
+    <code>.example.com</code> as well.
 </p>
 
 <h2 id="origin_types">Origin Types</h2>
@@ -137,6 +170,7 @@ chrome.browsingData.remove({
 }, {
   "appcache": true,
   "cache": true,
+  "cacheStorage": true,
   "cookies": true,
   "downloads": true,
   "fileSystems": true,
@@ -147,6 +181,7 @@ chrome.browsingData.remove({
   "serverBoundCertificates": true,
   "pluginData": true,
   "passwords": true,
+  "serviceWorkers": true,
   "webSQL": true
 }, callback);</pre>
 

@@ -23,14 +23,18 @@
 namespace aura {
 class PropertyConverter;
 class Window;
-class WindowTreeHost;
 }  // namespace aura
 
 namespace gfx {
 class Point;
 }
 
+namespace mojo {
+class ScopedInterfaceEndpointHandle;
+}
+
 namespace ui {
+class EventTarget;
 class KeyEvent;
 class OSExchangeData;
 class SystemInputInjector;
@@ -38,17 +42,25 @@ class SystemInputInjector;
 
 namespace ws {
 
+class TopLevelProxyWindow;
+class WindowManagerInterface;
+class WindowTree;
+
 // A delegate used by the WindowService for context-specific operations.
 class COMPONENT_EXPORT(WINDOW_SERVICE) WindowServiceDelegate {
  public:
   // A client requested a new top-level window. Implementations should create a
   // new window, parenting it in the appropriate container. Return null to
   // reject the request.
+  // |top_level_proxy_window| is owned by the WindowService and may be used by
+  // the delegate to perform operations specific to the window. See
+  // TopLevelProxyWindow for details.
   // NOTE: it is recommended that when clients create a new window they use
   // WindowDelegateImpl as the WindowDelegate of the Window (this must be done
   // by the WindowServiceDelegate, as the Window's delegate can not be changed
   // after creation).
   virtual std::unique_ptr<aura::Window> NewTopLevel(
+      TopLevelProxyWindow* top_level_proxy_window,
       aura::PropertyConverter* property_converter,
       const base::flat_map<std::string, std::vector<uint8_t>>& properties) = 0;
 
@@ -68,6 +80,7 @@ class COMPONENT_EXPORT(WINDOW_SERVICE) WindowServiceDelegate {
   virtual void RunWindowMoveLoop(aura::Window* window,
                                  mojom::MoveLoopSource source,
                                  const gfx::Point& cursor,
+                                 int window_component,
                                  DoneCallback callback);
 
   // Called to cancel an in-progress window move loop that was started by
@@ -91,6 +104,10 @@ class COMPONENT_EXPORT(WINDOW_SERVICE) WindowServiceDelegate {
   // Called to cancel an in-progress drag loop that was started by RunDragLoop.
   virtual void CancelDragLoop(aura::Window* window) {}
 
+  // Called to update resize shadow for the window.
+  virtual void SetWindowResizeShadow(aura::Window* window,
+                                     int window_component) {}
+
   // Called to update the text input state of the PlatformWindow associated with
   // |window|. It is a no-op if |window| is not focused.
   virtual void UpdateTextInputState(aura::Window* window,
@@ -111,10 +128,10 @@ class COMPONENT_EXPORT(WINDOW_SERVICE) WindowServiceDelegate {
   // injection.
   virtual ui::SystemInputInjector* GetSystemInputInjector();
 
-  // Returns the WindowTreeHost for the specified display id, null if not a
-  // valid display.
-  virtual aura::WindowTreeHost* GetWindowTreeHostForDisplayId(
-      int64_t display_id);
+  // Returns the EventTarget which can process all of the events on the system.
+  virtual ui::EventTarget* GetGlobalEventTarget() = 0;
+
+  virtual aura::Window* GetRootWindowForDisplayId(int64_t display_id) = 0;
 
   // Returns the topmost visible window at the location in screen coordinate,
   // excluding |ignore|. |real_topmost| is updated to the topmost visible window
@@ -123,6 +140,21 @@ class COMPONENT_EXPORT(WINDOW_SERVICE) WindowServiceDelegate {
       const gfx::Point& location_in_screen,
       const std::set<aura::Window*>& ignore,
       aura::Window** real_topmost);
+
+  // Creates and binds a request for an interface provided by the local
+  // environment. The interface request originated from the client associated
+  // with |tree|. |name| is the name of the requested interface. The return
+  // value is owned by |tree|. Return null if |name| is not the name of a known
+  // interface.
+  // The following shows how to bind |handle|:
+  // TestWmInterface* wm_interface_impl = ...;
+  // mojo::AssociatedBindingTestWmInterface> binding(
+  //   wm_interface_impl,
+  //   mojo::AssociatedInterfaceRequest<TestWmInterface>(std::move(handle)));
+  virtual std::unique_ptr<WindowManagerInterface> CreateWindowManagerInterface(
+      WindowTree* tree,
+      const std::string& name,
+      mojo::ScopedInterfaceEndpointHandle handle);
 
  protected:
   virtual ~WindowServiceDelegate() = default;

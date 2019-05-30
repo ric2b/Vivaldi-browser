@@ -6,10 +6,12 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "ui/aura/client/cursor_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -42,19 +44,24 @@ namespace aura {
 
 // static
 std::unique_ptr<WindowTreeHost> WindowTreeHost::Create(
-    ui::PlatformWindowInitProperties properties) {
+    ui::PlatformWindowInitProperties properties,
+    Env* env) {
   return std::make_unique<WindowTreeHostPlatform>(
       std::move(properties),
       std::make_unique<aura::Window>(nullptr, client::WINDOW_TYPE_UNKNOWN,
-                                     Env::GetInstance()));
+                                     env ? env : Env::GetInstance()));
 }
 
 WindowTreeHostPlatform::WindowTreeHostPlatform(
     ui::PlatformWindowInitProperties properties,
-    std::unique_ptr<Window> window)
+    std::unique_ptr<Window> window,
+    const char* trace_environment_name)
     : WindowTreeHost(std::move(window)) {
-  bounds_ = properties.bounds;
-  CreateCompositor();
+  bounds_in_pixels_ = properties.bounds;
+  CreateCompositor(viz::FrameSinkId(),
+                   /* force_software_compositor */ false,
+                   /* external_begin_frames_enabled */ nullptr,
+                   /* are_events_in_pixels */ true, trace_environment_name);
   CreateAndSetPlatformWindow(std::move(properties));
 }
 
@@ -115,9 +122,9 @@ gfx::Rect WindowTreeHostPlatform::GetBoundsInPixels() const {
 
 void WindowTreeHostPlatform::SetBoundsInPixels(
     const gfx::Rect& bounds,
-    const viz::LocalSurfaceId& local_surface_id) {
+    const viz::LocalSurfaceIdAllocation& local_surface_id_allocation) {
   pending_size_ = bounds.size();
-  pending_local_surface_id_ = local_surface_id;
+  pending_local_surface_id_allocation_ = local_surface_id_allocation;
   platform_window_->SetBounds(bounds);
 }
 
@@ -139,7 +146,7 @@ bool WindowTreeHostPlatform::CaptureSystemKeyEventsImpl(
   // problems with event routing (i.e. which Hook takes precedence) and
   // destruction ordering.
   DCHECK(!keyboard_hook_);
-  keyboard_hook_ = ui::KeyboardHook::Create(
+  keyboard_hook_ = ui::KeyboardHook::CreateModifierKeyboardHook(
       std::move(dom_codes), GetAcceleratedWidget(),
       base::BindRepeating(
           [](ui::PlatformWindowDelegate* delegate, ui::KeyEvent* event) {
@@ -193,18 +200,20 @@ void WindowTreeHostPlatform::OnCursorVisibilityChangedNative(bool show) {
 void WindowTreeHostPlatform::OnBoundsChanged(const gfx::Rect& new_bounds) {
   float current_scale = compositor()->device_scale_factor();
   float new_scale = ui::GetScaleFactorForNativeView(window());
-  gfx::Rect old_bounds = bounds_;
-  bounds_ = new_bounds;
-  if (bounds_.origin() != old_bounds.origin())
-    OnHostMovedInPixels(bounds_.origin());
-  if (pending_local_surface_id_.is_valid() ||
-      bounds_.size() != old_bounds.size() || current_scale != new_scale) {
-    auto local_surface_id = bounds_.size() == pending_size_
-                                ? pending_local_surface_id_
-                                : viz::LocalSurfaceId();
-    pending_local_surface_id_ = viz::LocalSurfaceId();
+  gfx::Rect old_bounds = bounds_in_pixels_;
+  bounds_in_pixels_ = new_bounds;
+  if (bounds_in_pixels_.origin() != old_bounds.origin())
+    OnHostMovedInPixels(bounds_in_pixels_.origin());
+  if (pending_local_surface_id_allocation_.IsValid() ||
+      bounds_in_pixels_.size() != old_bounds.size() ||
+      current_scale != new_scale) {
+    viz::LocalSurfaceIdAllocation local_surface_id_allocation;
+    if (bounds_in_pixels_.size() == pending_size_)
+      local_surface_id_allocation = pending_local_surface_id_allocation_;
+    pending_local_surface_id_allocation_ = viz::LocalSurfaceIdAllocation();
     pending_size_ = gfx::Size();
-    OnHostResizedInPixels(bounds_.size(), local_surface_id);
+    OnHostResizedInPixels(bounds_in_pixels_.size(),
+                          local_surface_id_allocation);
   }
 }
 
@@ -215,8 +224,24 @@ void WindowTreeHostPlatform::OnDamageRect(const gfx::Rect& damage_rect) {
 void WindowTreeHostPlatform::DispatchEvent(ui::Event* event) {
   TRACE_EVENT0("input", "WindowTreeHostPlatform::DispatchEvent");
   ui::EventDispatchDetails details = SendEventToSink(event);
-  if (details.dispatcher_destroyed)
+  if (details.dispatcher_destroyed) {
     event->SetHandled();
+    return;
+  }
+
+  // Reset the cursor on ET_MOUSE_EXITED, so that when the mouse re-enters the
+  // window, the cursor is updated correctly.
+  if (event->type() == ui::ET_MOUSE_EXITED) {
+    client::CursorClient* cursor_client = client::GetCursorClient(window());
+    if (cursor_client) {
+      // The cursor-change needs to happen through the CursorClient so that
+      // other external states are updated correctly, instead of just changing
+      // |current_cursor_| here.
+      cursor_client->SetCursor(ui::CursorType::kNone);
+      DCHECK(cursor_client->IsCursorLocked() ||
+             ui::CursorType::kNone == current_cursor_.native_type());
+    }
+  }
 }
 
 void WindowTreeHostPlatform::OnCloseRequest() {
@@ -252,8 +277,6 @@ void WindowTreeHostPlatform::OnAcceleratedWidgetDestroyed() {
 }
 
 void WindowTreeHostPlatform::OnActivationChanged(bool active) {
-  if (active)
-    OnHostActivated();
 }
 
 }  // namespace aura

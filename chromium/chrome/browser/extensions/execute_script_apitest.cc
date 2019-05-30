@@ -74,11 +74,6 @@ IN_PROC_BROWSER_TEST_F(ExecuteScriptApiTest,
                                   "execute_script.html")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(ExecuteScriptApiTest, NavigationRaceJavaScriptURL) {
-  ASSERT_TRUE(RunExtensionSubtest("executescript/navigation_race",
-                                  "javascript_url.html")) << message_;
-}
-
 // If failing, mark disabled and update http://crbug.com/92105.
 IN_PROC_BROWSER_TEST_F(ExecuteScriptApiTest, ExecuteScriptFrameAfterLoad) {
   ASSERT_TRUE(RunExtensionTest("executescript/frame_after_load")) << message_;
@@ -151,9 +146,9 @@ class DestructiveScriptTest : public ExecuteScriptApiTest,
   bool RunSubtest(const std::string& test_host) {
     return RunExtensionSubtest(
         "executescript/destructive",
-        "test.html?" + test_host +
-        "#bucketcount=" + base::IntToString(kDestructiveScriptTestBucketCount) +
-        "&bucketindex=" + base::IntToString(GetParam()));
+        "test.html?" + test_host + "#bucketcount=" +
+            base::NumberToString(kDestructiveScriptTestBucketCount) +
+            "&bucketindex=" + base::NumberToString(GetParam()));
   }
 };
 
@@ -202,6 +197,7 @@ IN_PROC_BROWSER_TEST_P(DestructiveScriptTest, DOMSubtreeModified3) {
   ASSERT_TRUE(RunSubtest("domsubtreemodified3")) << message_;
 }
 
-INSTANTIATE_TEST_CASE_P(ExecuteScriptApiTest,
-                        DestructiveScriptTest,
-                        ::testing::Range(0, kDestructiveScriptTestBucketCount));
+INSTANTIATE_TEST_SUITE_P(ExecuteScriptApiTest,
+                         DestructiveScriptTest,
+                         ::testing::Range(0,
+                                          kDestructiveScriptTestBucketCount));

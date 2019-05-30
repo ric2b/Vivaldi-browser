@@ -5,6 +5,7 @@
 #include "chrome/browser/plugins/flash_download_interception.h"
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/no_destructor.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
@@ -108,12 +109,11 @@ void FlashDownloadInterception::InterceptFlashDownloadNavigation(
             WEB_VIEW_PERMISSION_TYPE_LOAD_PLUGIN, request_info,
             base::Bind(&PluginLoadResponse, web_contents), false);
       }
-    } else {
+    }
     PermissionManager* manager = PermissionManager::Get(profile);
     manager->RequestPermission(
         CONTENT_SETTINGS_TYPE_PLUGINS, web_contents->GetMainFrame(),
         web_contents->GetLastCommittedURL(), true, base::DoNothing());
-    }
   } else if (flash_setting == CONTENT_SETTING_BLOCK) {
     auto* settings = TabSpecificContentSettings::FromWebContents(web_contents);
     if (settings)
@@ -229,5 +229,6 @@ FlashDownloadInterception::MaybeCreateThrottleFor(NavigationHandle* handle) {
   }
 
   return std::make_unique<navigation_interception::InterceptNavigationThrottle>(
-      handle, base::Bind(&InterceptNavigation, source_url));
+      handle, base::Bind(&InterceptNavigation, source_url),
+      navigation_interception::SynchronyMode::kSync);
 }

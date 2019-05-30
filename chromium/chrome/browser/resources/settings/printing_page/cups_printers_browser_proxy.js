@@ -12,7 +12,6 @@
  *   ppdManufacturer: string,
  *   ppdModel: string,
  *   printerAddress: string,
- *   printerAutoconf: boolean,
  *   printerDescription: string,
  *   printerId: string,
  *   printerManufacturer: string,
@@ -20,10 +19,20 @@
  *   printerMakeAndModel: string,
  *   printerName: string,
  *   printerPPDPath: string,
+ *   printerPpdReference: {
+ *     userSuppliedPpdUrl: string,
+ *     effectiveMakeAndModel: string,
+ *     autoconf: boolean,
+ *   },
+ *   printerPpdReferenceResolved: boolean,
  *   printerProtocol: string,
  *   printerQueue: string,
  *   printerStatus: string,
  * }}
+ *
+ * Note: |printerPPDPath| refers to a PPD retrieved from the user at the
+ * add-printer-manufacturer-model-dialog. |printerPpdReference| refers to either
+ * information retrieved from the printer or resolved via ppd_provider.
  */
 let CupsPrinterInfo;
 
@@ -55,7 +64,10 @@ let ModelsInfo;
  *   manufacturer: string,
  *   model: string,
  *   makeAndModel: string,
- *   autoconf: boolean
+ *   autoconf: boolean,
+ *   ppdRefUserSuppliedPpdUrl: string,
+ *   ppdRefEffectiveMakeAndModel: string,
+ *   ppdReferenceResolved: boolean
  * }}
  */
 let PrinterMakeModel;
@@ -84,6 +96,8 @@ const PrinterSetupResult = {
   INVALID_PPD: 11,
   PPD_NOT_FOUND: 12,
   PPD_UNRETRIEVABLE: 13,
+  DBUS_NO_REPLY: 64,
+  DBUS_TIMEOUT: 65,
 };
 
 /**

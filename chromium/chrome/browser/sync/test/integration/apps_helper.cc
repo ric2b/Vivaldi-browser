@@ -23,7 +23,7 @@ using sync_datatype_helper::test;
 namespace {
 
 std::string CreateFakeAppName(int index) {
-  return "fakeapp" + base::IntToString(index);
+  return "fakeapp" + base::NumberToString(index);
 }
 
 }  // namespace
@@ -191,7 +191,7 @@ std::string AppsMatchChecker::GetDebugMessage() const {
 }
 
 bool AppsMatchChecker::IsExitConditionSatisfied() {
-  std::vector<Profile*>::iterator it = profiles_.begin();
+  auto it = profiles_.begin();
   Profile* profile0 = *it;
   ++it;
   for (; it != profiles_.end(); ++it) {

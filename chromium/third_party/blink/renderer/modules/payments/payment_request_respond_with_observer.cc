@@ -23,7 +23,8 @@ PaymentRequestRespondWithObserver* PaymentRequestRespondWithObserver::Create(
     ExecutionContext* context,
     int event_id,
     WaitUntilObserver* observer) {
-  return new PaymentRequestRespondWithObserver(context, event_id, observer);
+  return MakeGarbageCollected<PaymentRequestRespondWithObserver>(
+      context, event_id, observer);
 }
 
 void PaymentRequestRespondWithObserver::OnResponseRejected(
@@ -33,7 +34,7 @@ void PaymentRequestRespondWithObserver::OnResponseRejected(
 
   WebPaymentHandlerResponse web_data;
   ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
-      ->RespondToPaymentRequestEvent(event_id_, web_data, event_dispatch_time_);
+      ->RespondToPaymentRequestEvent(event_id_, web_data);
 }
 
 void PaymentRequestRespondWithObserver::OnResponseFulfilled(
@@ -44,8 +45,9 @@ void PaymentRequestRespondWithObserver::OnResponseFulfilled(
   DCHECK(GetExecutionContext());
   ExceptionState exception_state(value.GetIsolate(), context_type,
                                  interface_name, property_name);
-  PaymentHandlerResponse response = ScriptValue::To<PaymentHandlerResponse>(
-      ToIsolate(GetExecutionContext()), value, exception_state);
+  PaymentHandlerResponse* response =
+      NativeValueTraits<PaymentHandlerResponse>::NativeValue(
+          value.GetIsolate(), value.V8Value(), exception_state);
   if (exception_state.HadException()) {
     exception_state.ClearException();
     OnResponseRejected(mojom::ServiceWorkerResponseError::kNoV8Instance);
@@ -53,25 +55,25 @@ void PaymentRequestRespondWithObserver::OnResponseFulfilled(
   }
 
   // Check payment response validity.
-  if (!response.hasMethodName() || !response.hasDetails()) {
-    GetExecutionContext()->AddConsoleMessage(
-        ConsoleMessage::Create(kJSMessageSource, kErrorMessageLevel,
-                               "'PaymentHandlerResponse.methodName' and "
-                               "'PaymentHandlerResponse.details' must not "
-                               "be empty in payment response."));
+  if (!response->hasMethodName() || !response->hasDetails()) {
+    GetExecutionContext()->AddConsoleMessage(ConsoleMessage::Create(
+        kJSMessageSource, mojom::ConsoleMessageLevel::kError,
+        "'PaymentHandlerResponse.methodName' and "
+        "'PaymentHandlerResponse.details' must not "
+        "be empty in payment response."));
     OnResponseRejected(mojom::ServiceWorkerResponseError::kUnknown);
     return;
   }
 
   WebPaymentHandlerResponse web_data;
-  web_data.method_name = response.methodName();
+  web_data.method_name = response->methodName();
 
   v8::Local<v8::String> details_value;
-  if (!v8::JSON::Stringify(response.details().GetContext(),
-                           response.details().V8Value().As<v8::Object>())
+  if (!v8::JSON::Stringify(response->details().GetContext(),
+                           response->details().V8Value().As<v8::Object>())
            .ToLocal(&details_value)) {
     GetExecutionContext()->AddConsoleMessage(ConsoleMessage::Create(
-        kJSMessageSource, kErrorMessageLevel,
+        kJSMessageSource, mojom::ConsoleMessageLevel::kError,
         "Failed to stringify PaymentHandlerResponse.details in payment "
         "response."));
     OnResponseRejected(mojom::ServiceWorkerResponseError::kUnknown);
@@ -79,14 +81,13 @@ void PaymentRequestRespondWithObserver::OnResponseFulfilled(
   }
   web_data.stringified_details = ToCoreString(details_value);
   ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
-      ->RespondToPaymentRequestEvent(event_id_, web_data, event_dispatch_time_);
+      ->RespondToPaymentRequestEvent(event_id_, web_data);
 }
 
 void PaymentRequestRespondWithObserver::OnNoResponse() {
   DCHECK(GetExecutionContext());
   ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
-      ->RespondToPaymentRequestEvent(event_id_, WebPaymentHandlerResponse(),
-                                     event_dispatch_time_);
+      ->RespondToPaymentRequestEvent(event_id_, WebPaymentHandlerResponse());
 }
 
 PaymentRequestRespondWithObserver::PaymentRequestRespondWithObserver(

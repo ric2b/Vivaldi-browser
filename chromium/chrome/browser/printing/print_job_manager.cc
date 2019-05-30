@@ -4,6 +4,7 @@
 
 #include "chrome/browser/printing/print_job_manager.h"
 
+#include "base/bind.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/printing/print_job.h"
@@ -105,8 +106,7 @@ void PrintJobManager::StopJobs(bool wait_for_finish) {
   PrintJobs to_stop;
   to_stop.swap(current_jobs_);
 
-  for (PrintJobs::const_iterator job = to_stop.begin(); job != to_stop.end();
-       ++job) {
+  for (auto job = to_stop.begin(); job != to_stop.end(); ++job) {
     // Wait for two minutes for the print job to be spooled.
     if (wait_for_finish)
       (*job)->FlushJob(base::TimeDelta::FromMinutes(2));

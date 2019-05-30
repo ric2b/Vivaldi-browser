@@ -174,6 +174,12 @@
   <message name="IDS_SETTINGS_MORE_FEATURES_LINK_DESCRIPTION" desc="Description for the link about additional accessibility features.">
     Enable accessibility features
   </message>
+  <message name="IDS_SETTINGS_ACCESSIBLE_IMAGE_LABELS_TITLE" desc="Description for screen reader image labels feature.">
+    Get image descriptions from Google
+  </message>
+  <message name="IDS_SETTINGS_ACCESSIBLE_IMAGE_LABELS_SUBTITLE" desc="Subtitle for screen reader image labels feature.">
+    If an image doesn’t have a useful description, Chrome will provide one for you. Images are scanned by Google.
+  </message>
   <if expr="chromeos">
     <message name="IDS_SETTINGS_OPTIONS_IN_MENU_LABEL" desc="Label for checkbox which enables showing accessibility options in the system menu.">
       Always show accessibility options in the system menu
@@ -253,26 +259,65 @@
     <message name="IDS_SETTINGS_TAP_DRAGGING_LABEL" desc="Label for checkbox which enables tap dragging.">
       Enable tap dragging
     </message>
-    <message name="IDS_SETTINGS_CLICK_ON_STOP_LABEL" desc="Label for checkbox which enables automatically clicking when the mouse cursor stops.">
+    <message name="IDS_SETTINGS_CLICK_ON_STOP_LABEL" desc="Label for checkbox which enables automatically do a mouse action when the mouse cursor stops.">
       Automatically click when the mouse cursor stops
     </message>
-    <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_LABEL" desc="Label for dropdown menu which contains various time delays for clicks.">
+    <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_LABEL" desc="Label for dropdown menu which contains various time delays for mouse action.">
       Delay before click:
     </message>
-    <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_EXTREMELY_SHORT" desc="Description of an extremely short delay before clicks.">
+    <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_EXTREMELY_SHORT" desc="Description of an extremely short delay before mouse action.">
       extremely short (0.6s)
     </message>
-    <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_VERY_SHORT" desc="Description of a very short delay before clicks.">
+    <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_VERY_SHORT" desc="Description of a very short delay before mouse action.">
       very short (0.8s)
     </message>
-    <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_SHORT" desc="Description of a short delay before clicks.">
+    <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_SHORT" desc="Description of a short delay before mouse action.">
       short (1s)
     </message>
-    <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_LONG" desc="Description of a long delay before clicks.">
+    <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_LONG" desc="Description of a long delay before mouse action.">
       long (2s)
     </message>
-    <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_VERY_LONG" desc="Description of a very long delay before clicks.">
+    <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_VERY_LONG" desc="Description of a very long delay before mouse action.">
       very long (4s)
+    </message>
+    <message name="IDS_SETTINGS_AUTOCLICK_EVENT_TYPE_LABEL" desc="Label for dropdown menu which contains various mouse actions for autoclick to take when the mouse cursor stops">
+      Dwell action
+    </message>
+    <message name="IDS_SETTINGS_AUTOCLICK_EVENT_TYPE_LEFT_CLICK" desc="Description of a left click mouse action.">
+      Left click
+    </message>
+    <message name="IDS_SETTINGS_AUTOCLICK_EVENT_TYPE_RIGHT_CLICK" desc="Description of a right click mouse action.">
+      Right click
+    </message>
+    <message name="IDS_SETTINGS_AUTOCLICK_EVENT_TYPE_DRAG_AND_DROP" desc="Description of a drag and drop mouse action.">
+      Drag and drop
+    </message>
+    <message name="IDS_SETTINGS_AUTOCLICK_EVENT_TYPE_DOUBLE_CLICK" desc="Description of a double click mouse action.">
+      Double click
+    </message>
+    <message name="IDS_SETTINGS_AUTOCLICK_EVENT_TYPE_NO_ACTION" desc="Description of an option to take no action (pause mouse actions).">
+      No action (pause)
+    </message>
+    <message name="IDS_SETTINGS_AUTOCLICK_REVERT_TO_LEFT_CLICK" desc="Description of a checkbox that gives the option to return to the default left click action after taking another action.">
+      Revert to left click after action
+    </message>
+    <message name="IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_LABEL" desc="Label for a dropdown menu which that has options for how much mouse movement can occur before a new autoclick is initiated.">
+      Movement threshold
+    </message>
+    <message name="IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_EXTRA_SMALL" desc="Description of an extra small mouse movement threshold for autoclick mouse movements.">
+      Extra small
+    </message>
+    <message name="IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_SMALL" desc="Description of a small mouse movement threshold for autoclick mouse movements">
+      Small
+    </message>
+    <message name="IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_DEFAULT" desc="Description of the default mouse movement threshold for autoclick mouse movements">
+      Default
+    </message>
+    <message name="IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_LARGE" desc="Description of a large mouse movement threshold for autoclick mouse movements">
+      Large
+    </message>
+    <message name="IDS_SETTINGS_AUTOCLICK_MOVEMENT_THRESHOLD_EXTRA_LARGE" desc="Description of an extra large mouse movement threshold for autoclick mouse movements">
+      Extra large
     </message>
     <message name="IDS_SETTINGS_ON_SCREEN_KEYBOARD_LABEL" desc="Label for checkbox which enables an on-screen keyboard.">
       Enable on-screen keyboard
@@ -287,7 +332,7 @@
       Play the same audio through all speakers (mono audio)
     </message>
     <message name="IDS_SETTINGS_STARTUP_SOUND_LABEL" desc="Label for checkbox which enables startup sound.">
-      Play an audio indicator on startup
+      Play sound on startup
     </message>
     <message name="IDS_SETTINGS_ACCESSIBILITY_EXPLANATION" desc="Informational message at the top of the accessibility section of the settings page about enabling additional accessibility-related features.">
       Enable accessibility features to make your device easier to use.
@@ -407,10 +452,10 @@
       Loudest
     </message>
     <message name="IDS_SETTINGS_PERCENTAGE" desc="A number displayed as a percentage">
-      <ph name="PERCENTAGE">$1<ex>120</ex>%</ph>
+      <ph name="PERCENTAGE">$1<ex>120</ex></ph>%
     </message>
     <message name="IDS_SETTINGS_DEFAULT_PERCENTAGE" desc="A number displayed as a percentage, which is the normal or default.">
-      <ph name="PERCENTAGE">$1<ex>120</ex>%</ph> (default)
+      <ph name="PERCENTAGE">$1<ex>120</ex></ph>% (default)
     </message>
     <message name="IDS_SETTINGS_TEXT_TO_SPEECH_PREVIEW_HEADING" desc="The heading for a section of the text-to-speech settings page where a user can preview text to speech">
       Preview
@@ -433,6 +478,36 @@
   </if>
 
   <if expr="chromeos">
+    <!-- Kiosk Next Shell page. Note that this experience is currently a prototype and is not shown
+         to end users at this point.
+         TODO(922687): Change these strings to the final ones when our internal repo is ready.-->
+    <message name="IDS_SETTINGS_KIOSK_NEXT_SHELL_TITLE" desc="The title of Kiosk Next Shell section." translateable="false">
+      Kiosk Next Shell (Dev)
+    </message>
+    <message name="IDS_SETTINGS_KIOSK_NEXT_SHELL_LABEL" desc="The text associated with the contained shell section setting." translateable="false">
+      Kiosk Next Shell
+    </message>
+    <message name="IDS_SETTINGS_KIOSK_NEXT_SHELL_SUBTEXT_ENABLE" desc="Text shown when displaying the enable Kiosk Next Shell button." translateable="false">
+      Enables the Kiosk Next Shell for the next sign in.
+    </message>
+    <message name="IDS_SETTINGS_KIOSK_NEXT_SHELL_SUBTEXT_DISABLE" desc="Text shown when displaying the disable Kiosk Next Shell button." translateable="false">
+      Disable the Kiosk Next Shell and return to the normal Chrome OS experience.
+    </message>
+    <message name="IDS_SETTINGS_KIOSK_NEXT_SHELL_TURN_OFF" desc="Label for the button that disables the Kiosk Next Shell." translateable="false">
+      Turn off
+    </message>
+    <message name="IDS_SETTINGS_KIOSK_NEXT_SHELL_ENABLED_DIALOG_TITLE" desc="Title for the confirmation dialog when disabling the Kiosk Next Shell." translateable="false">
+      Turn off the Kiosk Next Shell
+    </message>
+    <message name="IDS_SETTINGS_KIOSK_NEXT_SHELL_DISABLED_DIALOG_TITLE" desc="Title for the confirmation dialog when enabling the Kiosk Next Shell." translateable="false">
+      Turn on the Kiosk Next Shell
+    </message>
+    <message name="IDS_SETTINGS_KIOSK_NEXT_SHELL_ENABLED_DIALOG_BODY" desc="Body text for the confirmation dialog when disabling the Kiosk Next Shell." translateable="false">
+      This will turn off the Kiosk Next Shell, sign you out and return you to the normal Chrome OS experience.
+    </message>
+    <message name="IDS_SETTINGS_KIOSK_NEXT_SHELL_DISABLED_DIALOG_BODY" desc="Body text for the confirmation dialog when enabling the Kiosk Next Shell." translateable="false">
+      This will sign you out and turn on the Kiosk Next Shell.
+    </message>
     <!-- Crostini Page -->
     <message name="IDS_SETTINGS_CROSTINI_TITLE" desc="The title of Crostini section.">
       Linux (Beta)
@@ -441,10 +516,52 @@
       Linux
     </message>
     <message name="IDS_SETTINGS_CROSTINI_SUBTEXT" desc="Description for the section for enabling and managing Crostini.">
-      Run Linux tools, editors, and IDEs on your Chromebook. &lt;a target="_blank" href="<ph name="URL">$1<ex>https://google.com/</ex></ph>"&gt;Learn more&lt;/a&gt;
+      Run Linux tools, editors, and IDEs on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>. &lt;a target="_blank" href="<ph name="URL">$2<ex>https://google.com/</ex></ph>"&gt;Learn more&lt;/a&gt;
     </message>
     <message name="IDS_SETTINGS_CROSTINI_REMOVE" desc="Label for the row to open a dialog confirming removal of Crostini.">
-      Remove Linux Apps for Chromebook
+      Remove Linux Apps for <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
+    </message>
+    <message name="IDS_SETTINGS_CROSTINI_SHARED_PATHS" desc="Label for managing shared folders in Crostini.">
+      Manage shared files &amp; folders
+    </message>
+    <message name="IDS_SETTINGS_CROSTINI_SHARED_PATHS_LIST_HEADING" desc="Label for list of shared folders.">
+      Shared folders
+    </message>
+    <message name="IDS_SETTINGS_CROSTINI_SHARED_PATHS_INSTRUCTIONS_ADD" desc="Instructions for how to add shared folders in Crostini.">
+      To share, right-click on a folder in Files app, then select "Share with Linux".
+    </message>
+    <message name="IDS_SETTINGS_CROSTINI_SHARED_PATHS_INSTRUCTIONS_LOCATE" desc="Instructions for how to locate shared folders in Crostini.">
+      Shared folders are available in Linux at <ph name="BASE_DIR">$1<ex>/mnt/chromeos</ex></ph>.
+    </message>
+    <message name="IDS_SETTINGS_CROSTINI_SHARED_PATHS_INSTRUCTIONS_REMOVE" desc="Instructions for removing shared folders in Crostini.">
+      Removing folders from here will stop sharing but will not delete files.
+    </message>
+    <message name="IDS_SETTINGS_CROSTINI_SHARED_PATHS_REMOVE_SHARING" desc="Tooltip to show when hovering on the remove icon for a crostini shared folder.">
+      Remove sharing
+    </message>
+    <message name="IDS_SETTINGS_CROSTINI_EXPORT_IMPORT_TITLE" desc="Title for crostini container export and imoprt (backup and restore) section">
+      Backup &amp; restore
+    </message>
+    <message name="IDS_SETTINGS_CROSTINI_EXPORT" desc="Tile for exporting (backing up) the crostini container.">
+      Backup
+    </message>
+    <message name="IDS_SETTINGS_CROSTINI_EXPORT_LABEL" desc="Description shown next to the button to export (backup) Crostini.">
+      Backup Linux apps and files
+    </message>
+    <message name="IDS_SETTINGS_CROSTINI_IMPORT" desc="Title for importing (restoring) the crostini container.">
+      Restore
+    </message>
+    <message name="IDS_SETTINGS_CROSTINI_IMPORT_LABEL" desc="Description shown next to the button to import (restore) Crostini.">
+      Replace your Linux apps and files with a previous backup
+    </message>
+    <message name="IDS_SETTINGS_CROSTINI_SHARED_USB_DEVICES_LABEL" desc="Label for managing shared USB devices.">
+      USB Device preferences
+    </message>
+    <message name="IDS_SETTINGS_CROSTINI_SHARED_USB_DEVICES_LIST_HEADING" desc="Label for list of options to share USB devices.">
+      USB Devices
+    </message>
+    <message name="IDS_SETTINGS_CROSTINI_SHARED_USB_DEVICES_DESCRIPTION" desc="Description for managing shared USB devices.">
+      Share a USB device with Linux by turning the toggle on. Sharing will only last until the device is detached.
     </message>
 
     <!-- Android Apps Page -->
@@ -552,6 +669,9 @@
     <message name="IDS_SETTINGS_TABS_TO_LINKS_PREF" desc="The documentation string of the 'Tabs to Links' preference">
       Pressing Tab on a webpage highlights links, as well as form fields
     </message>
+    <message name="IDS_SETTINGS_WARN_BEFORE_QUITTING_PREF" desc="The documentation string of the 'Warn Before Quitting' preference which is also available in the Chrome app menu.">
+      Show warning before quitting with ⌘Q
+    </message>
   </if>
 
   <!-- Common -->
@@ -575,6 +695,9 @@
   </message>
   <message name="IDS_SETTINGS_SETTINGS" desc="The settings page title.">
     Settings
+  </message>
+  <message name="IDS_SETTINGS_ALT_PAGE_TITLE" desc="The settings page title for the about page.">
+    Settings - <ph name="SECTION_TITLE">$1<ex>About Chromium</ex></ph>
   </message>
   <if expr="not chromeos">
     <message name="IDS_SETTINGS_RESTART" desc="Text for a button that will restart Chrome.">
@@ -613,16 +736,16 @@
   <message name="IDS_SETTINGS_NOT_VALID_WEB_ADDRESS" desc="Text indicating that the Web address entered by the user is invalid." >
     Not a valid web address
   </message>
+  <message name="IDS_SETTINGS_NOT_VALID_WEB_ADDRESS_FOR_CONTENT_TYPE" desc="Text indicating that the content setting can't take effect because the setting is limited to secure origins." >
+    Origin must be secure
+  </message>
   <message name="IDS_SETTINGS_RETRY" desc="The label text of the retry button because there is an error.">
    Retry
   </message>
 
-  <!-- Passwords and Autofill Page -->
-  <message name="IDS_SETTINGS_PASSWORDS_AND_AUTOFILL_PAGE_TITLE" desc="Name of the settings page which allows managing passwords and autofill settings.">
-    Passwords and forms
-  </message>
-  <message name="IDS_SETTINGS_AUTOFILL" desc="Name for the autofill section and toggle.">
-    Autofill settings
+  <!-- Autofill Page -->
+  <message name="IDS_SETTINGS_AUTOFILL" desc="Name of the settings page which allows managing passwords, payment methods and addresses settings.">
+    Autofill
   </message>
   <message name="IDS_SETTINGS_GOOGLE_PAYMENTS" desc="Label used to differentiate when an address or credit card entry comes from Google Pay. This should follow the casing of the 'Google Pay' brand. 'Google Pay' should not be translated as it is the product name.">
     Google Pay
@@ -642,14 +765,6 @@
   <message name="IDS_SETTINGS_AUTOFILL_ADDRESSES_EMAIL" desc="This is the label for the field that lets a user modify the email address that will be used when auto-filling forms on the web.">
     Email
   </message>
-  <!-- TODO(https://crbug.com/854562): Remove this string once Autofill Home is fully launched. -->
-  <message name="IDS_SETTINGS_AUTOFILL_CREDIT_CARD_HEADING" desc="Title for the list of saved passwords that can be used to fill in forms.">
-    Credit card settings
-  </message>
-  <!-- TODO(https://crbug.com/854562): Remove this string once Autofill Home is fully launched. -->
-  <message name="IDS_SETTINGS_AUTOFILL_CREDIT_CARD_DETAIL" desc="Description of what toggling the 'Credit card' setting does. Immediately underneath IDS_SETTINGS_AUTOFILL_CREDIT_CARD_HEADING.">
-    Enable credit card Autofill to fill out forms in a single click
-  </message>
   <message name="IDS_SETTINGS_AUTOFILL_CREDIT_CARD_TYPE_COLUMN_LABEL" desc="Label for the column containing the type of credit card that is saved. The type is in the format: `Visa ****1234`.">
     Type
   </message>
@@ -663,25 +778,28 @@
     Remove
   </message>
   <message name="IDS_SETTINGS_CREDIT_CARD_CLEAR" desc="Label for a context menu item clears the locally cached credit card that is also saved on Google Payments. Clicking this will NOT remove the credit card from Google Payments.">
-   Clear copy
+    Clear copy
   </message>
   <message name="IDS_SETTINGS_EDIT_CREDIT_CARD_TITLE" desc="The title for the dialog that's shown when editing a card. This can be either credit, debit, or prepaid card..">
     Edit card
   </message>
+  <message name="IDS_SETTINGS_PAYMENTS_MANAGE_CREDIT_CARDS" desc="Shown in the payments section of settings. Descriptive text to inform the user that credit cards can be accessed online. Has a link.">
+   To add or manage Google Pay payment methods, visit your <ph name="BEGIN_LINK">&lt;a href="$1" target="_blank"&gt;</ph>Google Account<ph name="END_LINK">&lt;/a&gt;</ph>
+  </message>
+    <message name="IDS_SETTINGS_PAYMENTS_SAVED_TO_THIS_DEVICE_ONLY" desc="Shown in the payments section of settings. Descriptive text to inform the user that this credit card will be saved to local device only.">
+   This card will be saved to this device only
+  </message>
   <message name="IDS_SETTINGS_ADD_CREDIT_CARD_TITLE" desc="The title for the dialog that's shown when entering the information for a new card. This can be either credit, debit, or prepaid card.">
     Add card
   </message>
-  <message name="IDS_SETTINGS_SINGLE_MIGRATABLE_CARD_LABEL" desc="Label for the field to migrate the locally cached credit card to Google Payments for single migratable card. Clicking this will upload migratable credit cards to Google Payments.">
-    Save card to use Google Pay
-  </message>
-  <message name="IDS_SETTINGS_MULTIPLE_MIGRATABLE_CARDS_LABEL" desc="Label for the field to migrate the locally cached credit cards to Google Payments for multiple migratable cards. Clicking this will upload migratable credit cards to Google Payments.">
-    Save cards to use Google Pay
+  <message name="IDS_SETTINGS_MIGRATABLE_CARDS_LABEL" desc="Label for the field to migrate the locally cached credit card to Google Payments. Clicking this will upload migratable credit cards to Google Payments.">
+    Save cards in your Google Account
   </message>
   <message name="IDS_SETTINGS_SINGLE_MIGRATABLE_CARD_INFO" desc="Display text under the save cards to Google Pay label. This text indicates one of local cards can only be used on this device.">
-    1 of your cards can only be used on this device
+    Right now, you have one card that can only be used on this device
   </message>
   <message name="IDS_SETTINGS_MULTIPLE_MIGRATABLE_CARDS_INFO" desc="Display text under the save cards to Google Pay label. This text indicates user has multiple migratable cards on this device.">
-    Some of your cards can only be used on this device
+    Right now, you have some cards that can only be used on this device
   </message>
   <message name="IDS_SETTINGS_NAME_ON_CREDIT_CARD" desc="The title for the input that lets users modify the name on the credit card.">
     Name on card
@@ -701,11 +819,7 @@
   <message name="IDS_SETTINGS_CREDIT_CARD_EXPIRED" desc="The error message that is shown when user attempts to enter or save an expired card.">
     Your card is expired
   </message>
-  <message name="IDS_SETTINGS_PASSWORDS" desc="Name for the password section and toggle">
-    Manage passwords
-  </message>
-  <!-- TODO(https://crbug.com/854562): Rename this to "IDS_SETTINGS_PASSWORDS" once Autofill Home is fully launched. -->
-  <message name="IDS_SETTINGS_PASSWORDS_AUTOFILL_HOME" desc="Name for the password section and settings entry used for Autofill Home.">
+  <message name="IDS_SETTINGS_PASSWORDS" desc="Name for the password section and settings entry used for managing passwords.">
     Passwords
   </message>
   <message name="IDS_SETTINGS_PASSWORDS_SAVE_PASSWORDS_TOGGLE_LABEL" desc="Label for a toggle that allows users to be prompted if they want to save their passwords when logging into webpages.">
@@ -716,9 +830,6 @@
   </message>
   <message name="IDS_SETTINGS_PASSWORDS_AUTOSIGNIN_CHECKBOX_DESC" desc="Text that describes the 'Auto Sign-in' functionality to users.">
     Automatically sign in to websites using stored credentials. If disabled, you will be asked for confirmation every time before signing in to a website.
-  </message>
-  <message name="IDS_SETTINGS_PASSWORDS_DETAIL" desc="Description of what toggling the 'Manage passwords' setting does. Immediately underneath IDS_SETTINGS_PASSWORDS">
-    Offer to save your web passwords
   </message>
   <message name="IDS_SETTINGS_PASSWORDS_SAVED_HEADING" desc="The title for a list of username/site/password items. These items are already saved by the browser and can be deleted/edited.">
     Saved Passwords
@@ -758,10 +869,6 @@
   </message>
   <message name="IDS_SETTINGS_ADDRESS_NONE" desc="Placeholder that is shown when there are no addresses in the list of saved addresses.">
     Saved addresses will appear here
-  </message>
-  <!-- TODO(https://crbug.com/854562): Remove this string (and use "IDS_SETTINGS_PAYMENT_METHODS_NONE" instead) once Autofill Home is fully launched. -->
-  <message name="IDS_SETTINGS_CREDIT_CARD_NONE" desc="Placeholder that is shown when there are no credit cards in the list of saved credit cards.">
-    Saved cards will appear here
   </message>
   <message name="IDS_SETTINGS_PAYMENT_METHODS_NONE" desc="Placeholder that is shown when there are no payment methods in the list of saved payment methods.">
     Saved payment methods will appear here
@@ -1138,16 +1245,16 @@
     Time range
   </message>
   <message name="IDS_SETTINGS_CLEAR_BROWSING_DATA_WITH_SYNC" desc="Description in the footer of the Clear Browsing Data dialog when the user is syncing.">
-    To clear browsing data from this device only, while keeping it in your Google Account, <ph name="BEGIN_LINK">&lt;a href="$1" target=&quot;_blank&quot;&gt;</ph>sign out<ph name="END_LINK">&lt;/a&gt;</ph>.
+    To clear browsing data from this device only, while keeping it in your Google Account, <ph name="BEGIN_LINK">&lt;a href="#" target=&quot;_blank&quot;&gt;</ph>sign out<ph name="END_LINK">&lt;/a&gt;</ph>.
   </message>
   <message name="IDS_SETTINGS_CLEAR_BROWSING_DATA_WITH_SYNC_ERROR" desc="Description in the footer of the Clear Browsing Data dialog when there is a sync error.">
-    To clear browsing data from all of your synced devices and your Google Account, <ph name="BEGIN_LINK">&lt;a href="$1" target=&quot;_blank&quot;&gt;</ph>visit sync settings<ph name="END_LINK">&lt;/a&gt;</ph>.
+    To clear browsing data from all of your synced devices and your Google Account, <ph name="BEGIN_LINK">&lt;a href="#" target=&quot;_blank&quot;&gt;</ph>visit sync settings<ph name="END_LINK">&lt;/a&gt;</ph>.
   </message>
   <message name="IDS_SETTINGS_CLEAR_BROWSING_DATA_WITH_SYNC_PASSPHRASE_ERROR" desc="Description in the footer of the Clear Browsing Data dialog when there is a sync passphrase error.">
-    To clear browsing data from all of your synced devices and your Google Account, <ph name="BEGIN_LINK">&lt;a href="$1" target=&quot;_blank&quot;&gt;</ph>enter your passphrase<ph name="END_LINK">&lt;/a&gt;</ph>.
+    To clear browsing data from all of your synced devices and your Google Account, <ph name="BEGIN_LINK">&lt;a href="#" target=&quot;_blank&quot;&gt;</ph>enter your passphrase<ph name="END_LINK">&lt;/a&gt;</ph>.
   </message>
   <message name="IDS_SETTINGS_CLEAR_BROWSING_DATA_WITH_SYNC_PAUSED" desc="Description in the footer of the Clear Browsing Data dialog when sync is paused.">
-    To clear browsing data from all of your synced devices and your Google Account, <ph name="BEGIN_LINK">&lt;a href="$1" target=&quot;_blank&quot;&gt;</ph>sign in<ph name="END_LINK">&lt;/a&gt;</ph>.
+    To clear browsing data from all of your synced devices and your Google Account, <ph name="BEGIN_LINK">&lt;a href="#" target=&quot;_blank&quot;&gt;</ph>sign in<ph name="END_LINK">&lt;/a&gt;</ph>.
   </message>
   <message name="IDS_SETTINGS_CLEAR_BROWSING_HISTORY" desc="Checkbox for deleting Browsing History">
     Browsing history
@@ -1166,9 +1273,6 @@
   </message>
   <message name="IDS_SETTINGS_CLEAR_BROWSING_HISTORY_SUMMARY_SYNCED" desc="A description for the basic tab explaining browsing history for users with history sync.">
     Clears history from all signed-in devices. Your Google Account may have other forms of browsing history at <ph name="BEGIN_LINK">&lt;a target='_blank' href='$1'&gt;</ph>myactivity.google.com<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>.
-  </message>
-  <message name="IDS_SETTINGS_CLEAR_BROWSING_HISTORY_SUMMARY_SYNC_ERROR" desc="A description for the basic tab explaining browsing history for users with history sync, that have a sync error.">
-    Clears history from this device.
   </message>
   <message name="IDS_SETTINGS_CLEAR_DOWNLOAD_HISTORY" desc="Checkbox for deleting Download History">
     Download history
@@ -1190,9 +1294,6 @@
   </message>
   <message name="IDS_SETTINGS_CLEAR_HOSTED_APP_DATA" desc="Checkbox for deleting data of hosted apps">
     Hosted app data
-  </message>
-  <message name="IDS_SETTINGS_CLEAR_MEDIA_LICENSES" desc="Checkbox for deleting media licenses (premium content, etc.)">
-    Media licenses
   </message>
   <message name="IDS_SETTINGS_CLEAR_PERIOD_HOUR" desc="The option to delete browsing data from the last hour.">
     Last hour
@@ -1424,10 +1525,10 @@
       Display name (optional)
     </message>
     <message name="IDS_SETTINGS_DOWNLOADS_ADD_SHARE_USERNAME" desc="Title for the input that lets users specify their username for an SMB share.">
-      Username
+      Username (optional)
     </message>
     <message name="IDS_SETTINGS_DOWNLOADS_ADD_SHARE_PASSWORD" desc="Title for the input that lets users specify their password for an SMB Share.">
-      Password
+      Password (optional)
     </message>
     <message name="IDS_SETTINGS_DOWNLOADS_SHARE_ADDED_SUCCESS_MESSAGE" desc="The message shown when a new SMB share is successfully mounted.">
       Share mounted successfully.
@@ -1442,13 +1543,22 @@
       Error mounting share. The specified share was not found on the network.
     </message>
     <message name="IDS_SETTINGS_DOWNLOADS_SHARE_ADDED_UNSUPPORTED_DEVICE_MESSAGE" desc="The message shown when mounting a new SMB share fails because the specified device is not supported.">
-      Error mounting share. The specified share is not supported.
+      Error mounting share. Please check that the file server you are connecting to supports SMBv2 or later.
     </message>
     <message name="IDS_SETTINGS_DOWNLOADS_SHARE_ADDED_MOUNT_EXISTS_MESSAGE" desc="The message shown when mounting a new SMB share fails because the share is already mounted.">
       Error mounting share. The specified share is already mounted.
     </message>
     <message name="IDS_SETTINGS_DOWNLOADS_SHARE_ADDED_MOUNT_INVALID_URL_MESSAGE" desc="The message shown when mounting a new SMB share fails because the URL is an invalid format.">
       Invalid URL format. Supported formats are \\server\share and smb://server/share.
+    </message>
+    <message name="IDS_SETTINGS_DOWNLOADS_ADD_SHARE_AUTHENTICATION_METHOD" desc="Title for the input that lets users specify their authentication method for an SMB Share.">
+      Authentication Method
+    </message>
+    <message name="IDS_SETTINGS_DOWNLOADS_ADD_SHARE_STANDARD_AUTHENTICATION" desc="Authentication method option indicating that fields for username and password should be shown to the user.">
+      Standard
+    </message>
+    <message name="IDS_SETTINGS_DOWNLOADS_ADD_SHARE_KERBEROS_AUTHENTICATION" desc="Authentication method option to use a users Kerberos ticket to authenticate. Only availible for Active Directory users.">
+      SSO
     </message>
 
     <!-- Date/Time Page -->
@@ -1819,6 +1929,9 @@
     <message name="IDS_SETTINGS_INTERNET_NETWORK_AUTO_CONNECT" desc="Settings > Internet > Network details: Label for the checkbox determining whether to automatically connect to the network.">
       Automatically connect to this network
     </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_ALWAYS_ON_VPN" desc="Settings > Internet > Network details: Label for the checkbox determining that all internet traffic has to go through this VPN (virtual private network), and all other network connections are blocked.">
+      Always connect through this VPN
+    </message>
     <message name="IDS_SETTINGS_INTERNET_NETWORK_IP_CONFIG_AUTO" desc="Settings > Internet > Network details: Label for the checkbox determining whether to automatically configure the network IP config.">
       Configure IP address automatically
     </message>
@@ -1900,8 +2013,8 @@
     <message name="IDS_SETTINGS_INTERNET_GMSCORE_NOTIFICATIONS_FOURTH_STEP" desc="Fourth instruction for how to enable Google Play Services notifications on an Android phone. This step teaches the user how to enable the Instant Tethering notification channel for Google Play Services.">
       Scroll to the bottom of the screen and turn on Instant Tethering, if it appears. If it doesn't, you're all set.
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NO_NETWORKS_MOBILE_DATA" desc="Text shown when viewing the Mobile data page when there are no cellular or tether networks available.">
-      No mobile connection found. Turn on Instant Tethering on your other devices and try again. &lt;a target="_blank" href="<ph name="URL">$1<ex>https://google.com/</ex></ph>"&gt;Learn more&lt;/a&gt;
+    <message name="IDS_SETTINGS_INTERNET_LOOKING_FOR_MOBILE_NETWORK" desc="Text shown when viewing the Mobile data page when there are no cellular or tether networks available.">
+      Looking for a mobile network. <ph name="BEGIN_LINK">&lt;a target="_blank" href="$1"&gt;</ph>Learn more<ph name="END_LINK">&lt;/a&gt;</ph>
     </message>
     <message name="IDS_SETTINGS_INTERNET_TETHER_CONNECTION_DIALOG_TITLE" desc="Settings > Internet > Tether Connection Dialog > Title asking the user to create a new hotspot.">
       Connect to new hotspot?
@@ -2316,6 +2429,9 @@
   <message name="IDS_SETTINGS_LANGUAGES_OFFER_TO_ENABLE_TRANSLATE" desc="The label of the check-box that enables the prompt to translate a page.">
     Offer to translate pages that aren't in a language you read
   </message>
+  <message name="IDS_SETTINGS_LANGUAGES_TRANSLATE_TARGET" desc="The label under a language's name in a list of enabled languages indicating that pages will be translated to this language.">
+    This language is used when translating pages
+  </message>
   <if expr="chromeos">
     <message name="IDS_SETTINGS_LANGUAGES_INPUT_METHODS_LIST_TITLE" desc="Title for the current input method in the header for the collapsible list of enabled input methods (keyboard layouts and input method editors).">
       Input method
@@ -2335,7 +2451,7 @@
     <message name="IDS_SETTINGS_LANGUAGES_MANAGE_INPUT_METHODS_TITLE" desc="Name of the settings sub-page which allows enabling and disabling input methods.">
       Manage input methods
     </message>
-    <message name="IDS_SETTINGS_LANGUAGES_SHOW_IME_MENU" desc="The label for he toggle button controlling showing the IME menu in the shelf.">
+    <message name="IDS_SETTINGS_LANGUAGES_SHOW_IME_MENU" desc="The label for the toggle button controlling showing the IME menu in the shelf.">
       Show input options in the shelf
     </message>
     <message name="IDS_SETTINGS_LANGUAGES_KEYBOARD_APPS" desc="Title for the list of keyboard apps installed via Play Store by the user.">
@@ -2461,12 +2577,6 @@
   <message name="IDS_SETTINGS_SPELLING_PREF_UNIFIED_CONSENT" desc="The documentation string of the 'Use Spelling' preference">
     Enhanced spell check
   </message>
-  <message name="IDS_SETTINGS_SPELLING_TURN_ON_HINT_UNIFIED_CONSENT" desc="Informs user how to change their settings to be able to turn on spell check.">
-    To turn this on, first turn on spell check in <ph name="BEGIN_LINK">&lt;a href="$1" target=&quot;_blank&quot;&gt;<ex>&lt;a href="$1" target=&quot;_blank&quot;&gt;</ex></ph>Languages and input<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
-  </message>
-  <message name="IDS_SETTINGS_SPELLING_TURN_ON_HINT_UNIFIED_CONSENT_MAC" desc="Informs user how to change their settings on Mac to be able to turn on spell check.">
-    To turn this on, first select Check Spelling While Typing in the Edit menu
-  </message>
   <message name="IDS_SETTINGS_ENABLE_LOGGING" desc="The label of the checkbox to enable/disable crash and user metrics logging">
     Automatically send usage statistics and crash reports to Google
   </message>
@@ -2477,7 +2587,7 @@
     Help improve Chrome's features and performance
   </message>
   <message name="IDS_SETTINGS_ENABLE_LOGGING_DESC_UNIFIED_CONSENT" desc="The description of the checkbox to enable/disable crash and user metrics logging">
-    Automatically send usage statistics and crash reports to Google
+    Automatically sends usage statistics and crash reports to Google
   </message>
   <message name="IDS_SETTINGS_ENABLE_URL_KEYED_ANONYMIZED_DATA_COLLECTION" desc="The label of the checkbox to enable/disable url keyed anonymized data collection.">
     Make searches and browsing better
@@ -2527,11 +2637,8 @@
   <message name="IDS_SETTINGS_TITLE_AND_COUNT" desc="The title of a section in the settings page with a count of the total number of items in the section">
     <ph name="TITLE">$1<ex>Block</ex></ph> - <ph name="COUNT">$2<ex>42</ex></ph>
   </message>
-  <message name="IDS_SETTINGS_PRIVACY_MORE_SETTINGS" desc="The text with a link to point users to more sync and personalization settings">
-    For more settings that relate to privacy, security, and data collection, see <ph name="BEGIN_LINK">&lt;a href=&quot;chrome://settings/syncSetup&quot;&gt;<ex>&lt;a href=&quot;chrome://settings/syncSetup&quot;&gt;</ex></ph>Sync and personalization<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
-  </message>
-  <message name="IDS_SETTINGS_PRIVACY_MORE_SETTINGS_UNIFIED_CONSENT" desc="The text with a link to point users to Sync and Google services settings">
-    For more settings that relate to privacy, security, and data collection, see <ph name="BEGIN_LINK">&lt;a href=&quot;chrome://settings/syncSetup&quot;&gt;<ex>&lt;a href=&quot;chrome://settings/syncSetup&quot;&gt;</ex></ph>Sync and Google services<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+  <message name="IDS_SETTINGS_SYNC_AND_GOOGLE_SERVICES_PRIVACY_DESC_UNIFIED_CONSENT" desc="The description of the 'Sync and Google services' row in the privacy section">
+    More settings that relate to privacy, security, and data collection
   </message>
 
   <!-- Reset Settings Page -->
@@ -2642,7 +2749,7 @@
     Query URL
   </message>
   <message name="IDS_SETTINGS_SEARCH_ENGINES_QUERY_URL_EXPLANATION" desc="Label for explaining the format of the URL that should be entered by the user in the add/edit search engine dialog.">
-    URL with %s in place of query
+    URL with <ph name="SPECIAL_SYMBOL">%s</ph> in place of query
   </message>
   <message name="IDS_SETTINGS_SEARCH_ENGINES_MAKE_DEFAULT" desc="Text of the button that makes the selected engine the default search engine">
     Make default
@@ -2660,22 +2767,49 @@
     Google Assistant
   </message>
   <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_ENABLE_CONTEXT" desc="Title for a toggle that lets the assistant use whats on the screen.">
-    Let Assistant use what's on your screen
+    Related info
   </message>
   <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_ENABLE_CONTEXT_DESCRIPTION" desc="Sub label for context-enable toggle.">
-    Enables the Assistant to show you related info, apps, and actions.
+    Let the Assistant show you info related to what's on your screen
   </message>
   <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_ENABLE_HOTWORD" desc="Title for a toggle that lets the assistant detect hotword.">
-    "Ok Google" detection
+    "Ok Google"
   </message>
   <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_ENABLE_HOTWORD_DESCRIPTION" desc="Sub label for hotword-enable toggle.">
-    Access your Assistant any time you say "Ok Google" when your screen is on.
+    Access your Assistant any time you say "Ok Google"
+  </message>
+  <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_ENABLE_HOTWORD_WITHOUT_DSP_DESCRIPTION" desc="Sub label for hotword-enable dropdown without DSP support.">
+    Activate the Assistant when anyone says “Ok Google”. To save battery, “Ok Google” is on only when your device is connected to a power source.
+  </message>
+  <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_ENABLE_HOTWORD_WITHOUT_DSP_RECOMMENDED" desc="Default label for hotword-enable dropdown without DSP support.">
+    On (Recommended)
+  </message>
+  <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_ENABLE_HOTWORD_WITHOUT_DSP_ALWAYS_ON" desc="Always-on label for hotword-enable dropdown without DSP support.">
+    Always on
+  </message>
+  <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_ENABLE_HOTWORD_WITHOUT_DSP_OFF" desc="Off label for hotword-enable dropdown without DSP support.">
+    Off
+  </message>
+  <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_VOICE_SETTINGS" desc="Title for the Assistant voice settings.">
+    Voice match
+  </message>
+  <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_VOICE_SETTINGS_DESCRIPTION" desc="Sub label for the Assistant voice settings.">
+    Teach your Assistant to recognize your voice
+  </message>
+  <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_VOICE_SETTINGS_RETRAIN" desc="Button label for retrain voice model.">
+    Retrain
   </message>
   <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_ENABLE_NOTIFICATION" desc="Title for a toggle that lets the assistant show you notifications.">
-    Let Assistant show you notifications
+    Notifications
   </message>
   <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_ENABLE_NOTIFICATION_DESCRIPTION" desc="Sub label for notification-enable toggle.">
-    Enables the Assistant to show you notifications.
+    Allow the Assistant to show you notifications
+  </message>
+  <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_LAUNCH_WITH_MIC_OPEN" desc="Title for a toggle that determines whether to open the microphone when launching the Assistant.">
+    Preferred input
+  </message>
+  <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_LAUNCH_WITH_MIC_OPEN_DESCRIPTION" desc="Sub label for launch-with-microphone-open toggle.">
+    Default to using voice instead of keyboard
   </message>
   <message name="IDS_SETTINGS_GOOGLE_ASSISTANT_SETTINGS" desc="Title for a button that opens the Google Assistant app settings.">
     Google Assistant settings
@@ -2913,11 +3047,11 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_HANDLERS_BLOCKED" desc="The block label for protocol handlers in site settings.">
     Do not allow any site to handle protocols
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCK" desc="The block label for ads in site settings.">
-    Blocked on sites that tend to show intrusive ads
+  <message name="IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCK" desc="A subtitle for the ‘Ads’ setting. ‘Blocked’ refers to ads being blocked.">
+    Blocked on sites that show intrusive or misleading ads
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCK_RECOMMENDED" desc="The block label for ads in site settings (with the 'recommended' suffix).">
-    Blocked on sites that tend to show intrusive ads (recommended)
+  <message name="IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCK_RECOMMENDED" desc="A label for the ‘Ads’ setting toggle. ‘Blocked’ refers to ads being blocked.">
+    Blocked on sites that show intrusive or misleading ads (recommended)
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_SOUND_ALLOW" desc="The allow label for sound in site settings.">
     Allow sites to play sound
@@ -3025,8 +3159,11 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_SOURCE_DRM_DISABLED" desc="A label shown when the protected content / protected media identifier permission on the Site Details page is disabled because the user has turned off using unique identifiers to access protected content.">
     To change this setting, first <ph name="BEGIN_LINK">&lt;a target="_blank" href="$1"&gt;</ph>turn on identifiers<ph name="END_LINK">&lt;/a&gt;</ph>
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCK_SINGULAR" desc="A label shown when the Ads permission on the Site Details page is blocked by the user, but the site is not blacklisted for having bad ads.">
-    Block if site tends to show intrusive ads
+  <message name="IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCK_BLACKLISTED_SINGULAR" desc="A subtitle for the ‘Ads’ setting, shown if a website is known to show ads that have a poor user experience (intrusive, misleading) and is blocked from showing ads by Chrome.">
+    Site shows intrusive or misleading ads
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_ADS_BLOCK_NOT_BLACKLISTED_SINGULAR" desc="A subtitle for the ‘Ads’ setting, shown if user chooses to Block ads. ‘Block’ refers to the blocking of ads.">
+    Block if site shows intrusive or misleading ads
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_SOURCE_KILL_SWITCH" desc="A label shown when a permission on the Site Details page is temporarily blocked for the user's safety.">
     Temporarily blocked to protect your security
@@ -3038,6 +3175,12 @@
     Reset permissions
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_DELETE" desc="The clear storage button label, used to delete non-cookie storage on the Site Details page.">
+    Clear data
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_GROUP_RESET" desc="The Reset button, used to clear all permissions for a group of sites.">
+    Reset permissions
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_GROUP_DELETE" desc="The clear storage button label, used to delete storage data for a group of sites.">
     Clear data
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_HEADER" desc="A header for the list of showing all cookies and site data.">
@@ -3064,17 +3207,23 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_RESET_CONFIRMATION" desc="Text for the dialog that warns about resetting all permissions for a site.">
     Reset site permissions for <ph name="SITE">$1<ex>www.example.com</ex></ph>?
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_CLEAR_STORAGE_DIALOG_TITLE" desc="Title of the dialog that warns about clearing storage used by a site (excluding cookies).">
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_CLEAR_STORAGE_DIALOG_TITLE" desc="Title of the dialog that warns about clearing storage used by a site.">
     Clear site data?
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_CLEAR_STORAGE_CONFIRMATION" desc="Text for the dialog that warns about clearing storage used by a site (excluding cookies).">
-    All data stored by <ph name="SITE">$1<ex>www.example.com</ex></ph> will be deleted, except for cookies.
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_CLEAR_STORAGE_CONFIRMATION" desc="Text for the dialog that warns about clearing storage used by a site.">
+    All data stored by <ph name="SITE">$1<ex>www.example.com</ex></ph> will be deleted.
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_GROUP_RESET_DIALOG_TITLE" desc="Title of the dialog that warns about resetting all permissions for a group of sites.">
     Reset site permissions?
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_GROUP_RESET_CONFIRMATION" desc="Text for the dialog that warns about resetting all permissions for a group of sites.">
     Sites under <ph name="SITE_GROUP_NAME">$1<ex>google.co.uk</ex></ph> will also be reset.
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_GROUP_DELETE_DIALOG_TITLE" desc="Title of the dialog that warns about clearing all storage data for a group of sites.">
+    Clear site data?
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_GROUP_DELETE_CONFIRMATION" desc="Text for the dialog that warns about clearing all storage data for a group of sites.">
+    All data stored by <ph name="SITE_GROUP_NAME">$1<ex>google.co.uk</ex></ph> and any sites under it will be deleted. This includes cookies. You'll be signed out of these sites, including in open tabs.
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_REMOVE_MULTIPLE" desc="Text for the dialog that warns about deleting all site data.">
     This will delete any data stored on your device for all the sites shown. Do you want to continue?
@@ -3133,6 +3282,12 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_BLOCK_AUTOPLAY" desc="A label for a toggle in site settings to block autoplay. If the toggle is on then Chrome will block autoplay by default and use an algorithm to determine which sites should still be able to autoplay. If the toggle is off then autoplay will be enabled for all sites.">
     Let Chrome choose when sites can play sound (recommended)
   </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_EMPTY_ALL_SITES_PAGE" desc="Explanation shown when there are no sites that have appeared yet on the All Sites page.">
+    Sites you visit will appear here
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_NO_SITES_FOUND" desc="Explanation shown when there are no matching search results on All Sites page.">
+    No sites found
+  </message>
 
   <message name="IDS_SETTINGS_NO_USB_DEVICES_FOUND" desc="Explanation for not showing USB devices in site settings.">
     No USB devices found
@@ -3149,6 +3304,11 @@
   <message name="IDS_SETTINGS_ADD_SITE" desc="The label for the input box for adding a site">
     Site
   </message>
+  <if expr="chromeos">
+    <message name="IDS_SETTINGS_ANDROID_SMS_NOTE" desc="Special note shown below Messages for Android entry in notification permissions to indicate use in ChromeOS Multidevice features.">
+      Allows Android Messages to relay texts from your phone to your Chromebook
+    </message>
+  </if>
 
   <!-- Cookies Window -->
   <message name="IDS_SETTINGS_COOKIES_COOKIE_NAME_LABEL" desc="The Cookie Name label">
@@ -3189,9 +3349,6 @@
     {NUM_COOKIES, plural,
         =1 {1 cookie}
         other {# cookies}}
-  </message>
-  <message name="IDS_SETTINGS_COOKIES_WEB_DATABASE_DESCRIPTION_LABEL" desc="The Database Description label">
-    Description
   </message>
   <message name="IDS_SETTINGS_COOKIES_LOCAL_STORAGE_ORIGIN_LABEL" desc="The Local Storage Origin label">
     Origin
@@ -3241,9 +3398,6 @@
   <message name="IDS_SETTINGS_COOKIES_SERVICE_WORKER" desc="The text shown when there is data for Service Workers within an origin (name of a Web standard) in the Cookies table">
     Service Workers
   </message>
-  <message name="IDS_SETTINGS_COOKIES_SERVICE_WORKER_SCOPES_LABEL" desc="Label for list of Service Worker (name of an HTML standard) patterns">
-    Scopes
-  </message>
   <message name="IDS_SETTINGS_COOKIES_SHARED_WORKER" desc="The text shown when there is data for Shared Workers within an origin (name of a Web standard) in the Cookies table">
     Shared Workers
   </message>
@@ -3263,9 +3417,6 @@
   </message>
   <message name="IDS_SETTINGS_CHANGE_PICTURE_PROFILE_PHOTO" desc="The text on the Google profile photo of the user.">
     Google Profile photo
-  </message>
-  <message name="IDS_SETTINGS_PEOPLE_SYNC_UNIFIED_CONSENT_TOGGLE_TITLE" desc="The title of the toggle to opt into unified consent and enable all its services.">
-    Use sync and all services
   </message>
   <message name="IDS_SETTINGS_PEOPLE_SIGN_OUT" desc="The label of the button that lets user sign-out of Chrome.">
     Sign out
@@ -3306,7 +3457,7 @@
       Screen lock options
     </message>
     <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_OPTIONS_LOGIN_LOCK" desc="Text on the lock screen which is the subheader for the screen locking options.">
-      Screen lock and sign-in options
+      Lock screen from sleep mode
     </message>
     <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PASSWORD_ONLY" desc="Only the account password can be used to unlock the device.">
       Password only
@@ -3314,8 +3465,8 @@
     <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PIN_OR_PASSWORD" desc="The account password or a custom PIN can be used to unlock the device.">
       PIN or password
     </message>
-    <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_NONE" desc="Text on the people page which opens up the quick unlock subpage and the title of the quick unlock subpage.">
-      None
+    <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_NONE" desc="Text on the people page which notifies the user that the device will not show lock screen or prompt for auth after waking from sleep.">
+      Sign in automatically
     </message>
     <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_CHANGE_PIN_BUTTON" desc="Button that the user can click to change an existing already-active PIN.">
       Change PIN
@@ -3347,6 +3498,9 @@
     <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_FINGERPRINT_LESS_SECURE" desc="Text telling users that fingerprints might be less secure than strong PINs or passwords.">
       Note: Your fingerprint may be less secure than a strong password or PIN.
     </message>
+    <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_DELETE_FINGERPRINT_ARIA_LABEL" desc="Aria label for the button in the fingerprint subpage that deletes a registered fingerprint. Only visible by screen reader software.">
+      delete [<ph name="FINGERPRINT_NAME">$1<ex>Fingerprint 1</ex></ph>], button
+    </message>
     <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_NEW_FINGERPRINT_DEFAULT_NAME" desc="The default name (plus a number for a newly added fingerprint).">
       Finger <ph name="NEW_FINGER_NUMBER">$1<ex>1</ex></ph>
     </message>
@@ -3354,7 +3508,7 @@
       Add account
     </message>
     <message name="IDS_SETTINGS_ACCOUNT_MANAGER_DESCRIPTION" desc="Description of the Account Manager Settings page. Shown just below the title of the page.">
-      All of your signed in Google accounts from apps and websites can be managed here.
+      All of your signed in Google Accounts from apps and websites can be managed here. Apps and websites that have your permission can access the account information they need to work properly.
     </message>
     <message name="IDS_SETTINGS_ACCOUNT_MANAGER_LIST_HEADER" desc="List header for Account List in Account Manager Settings page.">
       Accounts
@@ -3365,16 +3519,25 @@
     <message name="IDS_SETTINGS_ACCOUNT_MANAGER_SUBMENU_LABEL" desc="Label of Account Manager submenu in Settings page.">
       Google Accounts
     </message>
+    <message name="IDS_SETTINGS_ACCOUNT_MANAGER_SIGNED_OUT_ACCOUNT_PLACEHOLDER" desc="Placeholder text for the full name of a signed out account in Account Manager.">
+      Sign in again
+    </message>
+    <message name="IDS_SETTINGS_ACCOUNT_MANAGER_REAUTHENTICATION_LABEL" desc="Label of the re-authentication button on Account Manager Settings page.">
+      Sign in
+    </message>
     <message name="IDS_SETTINGS_ACCOUNT_MANAGER_REMOVE_ACCOUNT_LABEL" desc="Label of the Remove account button in Account Manager.">
       Remove account from this device
     </message>
     <message name="IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_TITLE" desc="Title of the add fingerprint dialog popup.">
-      Registering fingerprint
+      Set up your fingerprint
     </message>
-    <message name="IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER" desc="Text in the add fingerprint dialog telling users what to do for step 1.">
-      Let's get started. Place your finger on the sensor.
+    <message name="IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER" desc="Text in the add fingerprint dialog telling users to place finger on the sensor.">
+      Touch the power button with your finger
     </message>
-    <message name="IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_READY" desc="Text in the add fingerprint dialog telling users what to do for step 3.">
+     <message name="IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_ARIA_LABEL" desc="Aria label in the add fingerprint dialog telling users where the fingerprint sensor is. Only visible by screen reader software.">
+      The fingerprint sensor is in the power button. Touch it lightly with any finger.
+    </message>
+    <message name="IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_READY" desc="Text in the add fingerprint dialog that confirms user's fingerprint scan was successful.">
       Fingerprint added.
     </message>
     <message name="IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_LIFT_FINGER" desc="Warning text in the add fingerprint dialog to tell users to lift their finger and touch the sensor again.">
@@ -3527,29 +3690,17 @@
   <message name="IDS_SETTINGS_SYNC" desc="Name of the sync service.">
     Sync
   </message>
-  <message name="IDS_SETTINGS_SYNC_UNIFIED_CONSENT" desc="Name of the sync service when unified consent is enabled.">
-    Sync and personalization
-  </message>
-  <message name="IDS_SETTINGS_SYNC_DESCRIPTION" desc="Text explaining what the sync system does.">
-    Passwords, bookmarks, history, and more are synced to your account
-  </message>
-  <message name="IDS_SETTINGS_SYNC_DESCRIPTION_UNIFIED_CONSENT" desc="Text explaining what the sync system does, when unified consent is enabled.">
-    Your browsing data and activity, synced to your Google Account
-  </message>
-  <message name="IDS_SETTINGS_SYNC_SECTION_ACCESSIBILITY_LABEL" desc="Label for the button that toggles showing the sync settings. Only visible by screen reader software.">
-    Show sync settings
-  </message>
   <message name="IDS_SETTINGS_NON_PERSONALIZED_SERVICES_SECTION_LABEL" desc="Title for a section that shows options for various Google services">
     Other Google services
-  </message>
-  <message name="IDS_SETTINGS_NON_PERSONALIZED_SERVICES_SECTION_ACCESSIBILITY_LABEL" desc="Label for the button that toggles showing the google services settings. Only visible by screen reader software.">
-    Show Google services settings
   </message>
   <message name="IDS_SETTINGS_SYNC_SYNC_AND_NON_PERSONALIZED_SERVICES" desc="The name of the settings page and the label of the button that takes the user to manage their sync and non-personalized services settings.">
     Sync and Google services
   </message>
   <message name="IDS_SETTINGS_SYNC_PAGE_TITLE" desc="Name of the settings page which manages syncing data between multiple browser instances with the same Google profile.">
     Advanced sync settings
+  </message>
+  <message name="IDS_SETTINGS_SYNC_ADVANCED_PAGE_TITLE" desc="Name of the settings page which manages data used by sync.">
+    Manage sync
   </message>
   <message name="IDS_SETTINGS_SYNC_LOADING" desc="The message shown when waiting for the sync backend to start up.">
     Please wait...
@@ -3558,8 +3709,17 @@
     <message name="IDS_SETTINGS_SYNC_WILL_START" desc="The message to tell users that sync will start once they leave the sync setup page.">
       Sync will start once you leave this page
     </message>
+    <message name="IDS_SETTINGS_SYNC_WILL_START_UNITY" desc="The message to tell users that sync will start once they leave the sync setup page when unified consent is enabled.">
+      Sync will start once you leave sync settings
+    </message>
     <message name="IDS_SETTINGS_SYNC_SETTINGS_CANCEL_SYNC" desc="The label of button that allows user to cancel sync.">
       Cancel sync
+    </message>
+    <message name="IDS_SETTINGS_SYNC_SETUP_CANCEL_DIALOG_TITLE" desc="The title of the dialog to confirm the sync cancellation.">
+      Cancel sync?
+    </message>
+    <message name="IDS_SETTINGS_SYNC_SETUP_CANCEL_DIALOG_BODY" desc="The body text of the dialog to confirm the sync cancellation.">
+      You can turn on sync anytime in settings
     </message>
   </if>
   <message name="IDS_SETTINGS_SYNC_TIMEOUT" desc="Text explaining what to do if sync times out.">
@@ -3567,6 +3727,9 @@
   </message>
   <message name="IDS_SETTINGS_SYNC_EVERYTHING_CHECKBOX_LABEL" desc="Label for the checkbox which causes all properties to be synced.">
     Sync everything
+  </message>
+  <message name="IDS_SETTINGS_MANAGE_GOOGLE_ACCOUNT" desc="Label for the button that takes the user to the Google Account website.">
+    Manage your Google Account
   </message>
   <message name="IDS_SETTINGS_APPS_CHECKBOX_LABEL" desc="Label for the checkbox which enables or disables syncing apps between multiple browser instances.">
     Apps
@@ -3578,23 +3741,26 @@
     Settings
   </message>
   <message name="IDS_SETTINGS_AUTOFILL_CHECKBOX_LABEL" desc="Label for the checkbox which enables or disables syncing autofill settings between multiple browser instances.">
-    Autofill
+    Addresses, phone numbers, and more
   </message>
   <message name="IDS_SETTINGS_HISTORY_CHECKBOX_LABEL" desc="Label for the checkbox which enables or disables syncing history between multiple browser instances.">
     History
   </message>
+<if expr="chromeos">
   <message name="IDS_SETTINGS_THEMES_AND_WALLPAPERS_CHECKBOX_LABEL" desc="Label for the checkbox which enables or disables syncing themes and wallpapers between multiple browser instances.">
     Themes &amp; Wallpapers
   </message>
+</if>
+<if expr="not chromeos">
+  <message name="IDS_SETTINGS_THEMES_AND_WALLPAPERS_CHECKBOX_LABEL" desc="Label for the checkbox which enables or disables syncing themes and wallpapers between multiple browser instances.">
+    Themes
+  </message>
+</if>
   <message name="IDS_SETTINGS_BOOKMARKS_CHECKBOX_LABEL" desc="Label for the checkbox which enables or disables syncing bookmarks between multiple browser instances.">
     Bookmarks
   </message>
   <message name="IDS_SETTINGS_PASSWORDS_CHECKBOX_LABEL" desc="Label for the checkbox which enables or disables syncing passwords between multiple browser instances.">
     Passwords
-  </message>
-  <!-- TODO(https://crbug.com/854562): Remove this string once Autofill Home is fully launched. -->
-  <message name="IDS_SETTINGS_ENABLE_PAYMENTS_INTEGRATION_CHECKBOX_LABEL" desc="Label for the checkbox that controls the Autofill/Payments integration feature.">
-    Credit cards and addresses using Google Pay.
   </message>
   <message name="IDS_SETTINGS_OPEN_TABS_CHECKBOX_LABEL" desc="Label for the checkbox which enables or disables syncing open tabs between multiple browser instances.">
     Open Tabs
@@ -3611,6 +3777,9 @@
   <message name="IDS_SETTINGS_MANAGE_SYNCED_DATA_TITLE" desc="Title for the link to manage Chrome Sync data via Google Dashboard.">
     Manage synced data on Google Dashboard
   </message>
+   <message name="IDS_SETTINGS_MANAGE_SYNCED_DATA_TITLE_UNIFIED_CONSENT" desc="Title for the link to manage Chrome Sync data via Google Dashboard when unified consent is enabled.">
+    Data from Chrome sync
+  </message>
   <message name="IDS_SETTINGS_EXISTING_PASSPHRASE_TITLE" desc="Title for the section where the user enters the passphrase.">
     Encryption options
   </message>
@@ -3621,7 +3790,7 @@
     Encrypt synced passwords with your Google username and password
   </message>
   <message name="IDS_SETTINGS_ENCRYPT_WITH_SYNC_PASSPHRASE_LABEL" desc="Label for the radio button which, when selected, causes synced settings to be encrypted with a user-provided password.">
-    Encrypt synced data with your own <ph name="BEGIN_LINK">&lt;a href="$1" target=&quot;_blank&quot;&gt;<ex>&lt;a href="$1" target=&quot;_blank&quot;&gt;</ex></ph>sync passphrase<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+    Encrypt synced data with your own <ph name="BEGIN_LINK">&lt;a href="$1" target=&quot;_blank&quot;&gt;<ex>&lt;a href="$1" target=&quot;_blank&quot;&gt;</ex></ph>sync passphrase<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>. This doesn't include payment methods and addresses from Google Pay.
   </message>
   <message name="IDS_SETTINGS_PASSPHRASE_EXPLANATION_TEXT" desc="Message shown when explicit passphrase is selected.">
     Only someone with your passphrase can read your encrypted data. The passphrase is not sent to or stored by Google. If you forget your passphrase or want to change this setting, you'll need to <ph name="BEGIN_LINK">&lt;a href="$1" target=&quot;_blank&quot;&gt;<ex>&lt;a href="$1" target=&quot;_blank&quot;&gt;</ex></ph>reset sync<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>.
@@ -3881,14 +4050,23 @@
     <message name="IDS_SETTINGS_KEYBOARD_KEY_BACKSPACE" desc="In Device Settings, the dropdown list item for the Backspace key.">
       Backspace
     </message>
+    <message name="IDS_SETTINGS_KEYBOARD_KEY_ASSISTANT" desc="In Device Settings, the label and dropdown list item for the Assistant key.">
+      Assistant
+    </message>
     <message name="IDS_SETTINGS_KEYBOARD_KEY_DISABLED" desc="In Device Settings, the dropdown list item for a disabled key.">
       Disabled
     </message>
     <message name="IDS_SETTINGS_KEYBOARD_KEY_EXTERNAL_COMMAND" desc="In Device Settings, the dropdown list item for the external Command key on Apple keyboards.">
       External Command
     </message>
+    <message name="IDS_SETTINGS_KEYBOARD_KEY_COMMAND" desc="In Device Settings, the dropdown list item for the external Command key on Apple keyboards when there's no internal keyboard on the device.">
+      Command
+    </message>
     <message name="IDS_SETTINGS_KEYBOARD_KEY_EXTERNAL_META" desc="In Device Settings, the dropdown list item for the external Meta key (Search key on ChromeOS keyboards, and Windows key on Windows keyboards).">
       External Meta
+    </message>
+    <message name="IDS_SETTINGS_KEYBOARD_KEY_META" desc="In Device Settings, the dropdown list item for the external Meta key (Search key on ChromeOS keyboards, and Windows key on Windows keyboards) when there's no internal keyboard on the device.">
+      Meta
     </message>
     <message name="IDS_SETTINGS_KEYBOARD_SEND_FUNCTION_KEYS" desc="In Device Settings, the checkbox label for interpreting the top-row keys as function keys instead.">
       Treat top-row keys as function keys
@@ -3920,7 +4098,7 @@
     <message name="IDS_SETTINGS_KEYBOARD_AUTO_REPEAT_FAST" desc="The label for the end of the auto-repeat rate slider, representing a fast repeat rate.">
       Fast
     </message>
-    <message name="IDS_SETTINGS_KEYBOARD_SHOW_KEYBOARD_SHORTCUTS_OVERLAY" desc="The link to open the keyboard shortuts overlay.">
+    <message name="IDS_SETTINGS_KEYBOARD_SHOW_SHORTCUT_VIEWER" desc="The link to open the keyboard shortut viewer.">
       View keyboard shortcuts
     </message>
     <message name="IDS_SETTINGS_KEYBOARD_SHOW_LANGUAGE_AND_INPUT" desc="The link to navigate to the language and input method settings.">
@@ -4047,6 +4225,9 @@
     <message name="IDS_SETTINGS_DISPLAY_RESOLUTION_MENU_ITEM" desc="In Device Settings > Displays, the text entry for a single item in the external display resolution drop down menu.">
       <ph name="WIDTH">$1<ex>1600</ex></ph> x <ph name="HEIGHT">$2<ex>1200</ex></ph> (<ph name="REFRESH_RATE">$3<ex>60</ex></ph> Hertz)
     </message>
+    <message name="IDS_SETTINGS_DISPLAY_RESOLUTION_INTERLACED_MENU_ITEM" desc="In Device Settings > Displays, the text entry for a single item in the external display resolution drop down menu, when the display mode is interlaced (which means the display's odd and even lines are scanned alternately in two interwoven rasterized lines).">
+      <ph name="WIDTH">$1<ex>1600</ex></ph> x <ph name="HEIGHT">$2<ex>1200</ex></ph> (<ph name="REFRESH_RATE">$3<ex>60</ex></ph> Hertz) - interlaced
+    </message>
     <message name="IDS_SETTINGS_DISPLAY_ZOOM_TITLE" desc="In Device Settings > Displays, the title for the section for changing the display's zoom.">
       Display Size
     </message>
@@ -4054,7 +4235,7 @@
       Make items on your screen smaller or larger
     </message>
     <message name="IDS_SETTINGS_DISPLAY_ZOOM_VALUE" desc="The currently selected display zoom percentage.">
-      <ph name="DISPLAY_ZOOM">$1<ex>120</ex>%</ph>
+      <ph name="DISPLAY_ZOOM">$1<ex>120</ex></ph>%
     </message>
     <message name="IDS_SETTINGS_DISPLAY_ZOOM_SLIDER_MINIMUM" desc="In Device Settings > Displays, the label of the minimum value for the display size slider">
       Tiny
@@ -4240,19 +4421,16 @@
       Connected devices
     </message>
     <message name="IDS_SETTINGS_MULTIDEVICE_SETUP_ITEM_HEADING" desc="Heading for settings item that allows the user to connect their phone to their Chromebook.">
-      Better Together
+      Android phone
     </message>
-    <message name="IDS_SETTINGS_MULTIDEVICE_SETUP_SUMMARY" desc="Description of the idea that the user can get a better experience on their Chromebook by connecting it to their phone.">
-      Your Chromebook works even better with your phone. <ph name="LINK_BEGIN">&lt;a target="_blank" href="$1<ex>https://google.com/</ex>"&gt;</ph>Learn more.<ph name="LINK_END">&lt;/a&gt;</ph>
+    <message name="IDS_SETTINGS_MULTIDEVICE_SETUP_SUMMARY" desc="Tells the user to connect their Chromebook to their phone.">
+      Connect your Chromebook with your phone. <ph name="LINK_BEGIN">&lt;a target="_blank" href="$1<ex>https://google.com/</ex>"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
     </message>
     <message name="IDS_SETTINGS_MULTIDEVICE_NO_ELIGIBLE_HOSTS" desc="Tells the user that there is no phone with their account on it that can connect to their Chromebook.">
-      No eligible devices. <ph name="LINK_BEGIN">&lt;a target="_blank" href="$1<ex>https://google.com/</ex>"&gt;</ph>Learn more.<ph name="LINK_END">&lt;/a&gt;</ph>
+      No eligible devices. <ph name="LINK_BEGIN">&lt;a target="_blank" href="$1<ex>https://google.com/</ex>"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
     </message>
     <message name="IDS_SETTINGS_MULTIDEVICE_VERIFICATION_TEXT" desc="Text to tell user that their Chromebook needs to verify that it can connect with their phone.">
-      Waiting for verification. <ph name="LINK_BEGIN">&lt;a target="_blank" href="$1<ex>https://google.com/</ex>"&gt;</ph>Learn more.<ph name="LINK_END">&lt;/a&gt;</ph>
-    </message>
-    <message name="IDS_SETTINGS_MULTIDEVICE_COULD_NOT_CONNECT" desc="Text to tell user that their Chromebook could not connect to their phone while it was trying to set up multidevice features.">
-      Couldn't connect to phone. <ph name="LINK_BEGIN">&lt;a target="_blank" href="$1<ex>https://google.com/</ex>"&gt;</ph>Learn more.<ph name="LINK_END">&lt;/a&gt;</ph>
+      Waiting for verification. <ph name="LINK_BEGIN">&lt;a target="_blank" href="$1<ex>https://google.com/</ex>"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
     </message>
     <message name="IDS_SETTINGS_MULTIDEVICE_SETUP_BUTTON" desc="Label of the button that opens a menu to the user that allows them to set up a connection between the user's phone and their Chromebook to give them access to special features.">
       Set up
@@ -4261,10 +4439,10 @@
       Verify
     </message>
     <message name="IDS_SETTINGS_MULTIDEVICE_ENABLED" desc="Text to tell user multidevice features are turned on">
-      Better Together is on
+      Enabled
     </message>
     <message name="IDS_SETTINGS_MULTIDEVICE_DISABLED" desc="Text to tell user multidevice features are turned off">
-      Better Together is off
+      Disabled
     </message>
     <message name="IDS_SETTINGS_MULTIDEVICE_SMART_LOCK_SUMMARY" desc="Description of for the 'Smart Lock' setting. This feature automatically unlocks the user's Chromebook if their phone is nearby and unlocked.">
       Unlock your Chromebook with your phone. <ph name="LINK_BEGIN">&lt;a target="_blank" href="$1<ex>https://google.com/</ex>"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
@@ -4272,32 +4450,29 @@
     <message name="IDS_SETTINGS_MULTIDEVICE_INSTANT_TETHERING" desc="Name of a feature. This feature automatically offers the user to tether to their phone if their Chromebook is offline and their phone supports tethering.">
       Instant Tethering
     </message>
+    <message name="IDS_SETTINGS_MULTIDEVICE_INSTANT_TETHERING_SUMMARY" desc="Description of for the 'Instant Tethering' setting. This feature automatically offers the user to tether to their phone if their Chromebook is offline and their phone supports tethering.">
+      Connect to the internet through your phone
+    </message>
     <message name="IDS_SETTINGS_MULTIDEVICE_ANDROID_MESSAGES" desc="Name of a feature. This feature lets the user read and reply to text messages from their Chromebook. New text messages will appear as notifications.">
       Messages
     </message>
     <message name="IDS_SETTINGS_MULTIDEVICE_ANDROID_MESSAGES_SUMMARY" desc="Description of for the 'Android Messages' setting. This feature lets the user read and reply to text messages from their Chromebook. New text messages will appear as notifications.">
       Send and receive text messages from your Chromebook. <ph name="LINK_BEGIN">&lt;a target="_blank" href="$1<ex>https://google.com/</ex>"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
     </message>
-    <message name="IDS_SETTINGS_MULTIDEVICE_FORGET_THIS_DEVICE" desc="Header for a clickable menu item that makes the Chromebook forget the user's phone. This means they will no longer have access to multidevice features.">
-      Forget this device
+    <message name="IDS_SETTINGS_MULTIDEVICE_FORGET_THIS_DEVICE" desc="Header to tell the user an action will make their Chromebook forget their phone. This means they will no longer have access to multidevice features.">
+      Forget phone
     </message>
     <message name="IDS_SETTINGS_MULTIDEVICE_FORGET_THIS_DEVICE_EXPLANATION" desc="Explanation on a clickable menu item that makes the Chromebook forget the user's phone. It tells the user that the menu item will cause their phone to stop acting as a partner for their Chromebook for multidevice features.">
-      Remove from Better Together
-    </message>
-    <message name="IDS_SETTINGS_MULTIDEVICE_FORGET_DEVICE_DIALOG_HEADING" desc="Heading for a dialog that lets the user choose if their Chromebook should forget their phone. This means they will no longer have access to multidevice features.">
-      Forget device
+      Disconnect your phone from your Chromebook
     </message>
     <message name="IDS_SETTINGS_MULTIDEVICE_FORGET_DEVICE_DIALOG_MESSAGE" desc="Text of a dialog that lets the user choose if their Chromebook should forget their phone. This means they will no longer have access to multidevice features.">
-      Remove your phone and disable Better Together
+      Disconnect your phone from your Chromebook. They will no longer connect automatically.
     </message>
   </if>
 
   <!-- Password protection -->
   <message name="IDS_SETTINGS_CHANGE_PASSWORD_TITLE" desc="Title of the reset password warning.">
     Your password may be compromised
-  </message>
-  <message name="IDS_SETTINGS_CHANGE_PASSWORD_DETAIL" desc="Detailed description of the reset password warning.">
-    To protect your personal information, change your password now. Before you can change your password, you’ll be asked to sign in.
   </message>
   <message name="IDS_SETTINGS_CHANGE_PASSWORD_BUTTON" desc="Label on button that takes user to change password page.">
     Change Password
@@ -4312,18 +4487,18 @@
       Items not listed here will also be removed, if needed. Learn more about &lt;a href=&quot;<ph name="URL">$1<ex>https://www.google.com/chrome/browser/privacy/whitepaper.html#unwantedsoftware</ex></ph>&quot;&gt;unwanted software protection&lt;/a&gt; in the Chrome privacy white paper.
     </message>
     <message name="IDS_SETTINGS_RESET_CLEANUP_DETAILS_EXTENSIONS" desc="Introduces a bullet list containing the names of extensions to be removed by Chrome.">
-      Extensions:
+      Extensions to be removed:
     </message>
     <message name="IDS_SETTINGS_RESET_CLEANUP_DETAILS_EXTENSION_UNKNOWN" desc="Text for a list item among a list of extensions, where we could not determine the name of the extension being cleaned up.">
       Unknown extension with ID <ph name="EXTENSION_ID">$1<ex>exampleextensionababababcdcdcdcd</ex></ph>
     </message>
-    <message name="IDS_SETTINGS_RESET_CLEANUP_DETAILS_FILES_AND_PROGRAMS" desc="Introduces a bullet list containing the names of files and programs to be removed by Chrome.">
-      Files and programs:
+    <message name="IDS_SETTINGS_RESET_CLEANUP_DETAILS_FILES_AND_PROGRAMS" desc="Introduces a bullet list containing the names of files and programs to be quarantined by Chrome (i.e. removed from the original location, moved and archived in the Quarantine folder).">
+      Files and programs to be quarantined:
     </message>
-    <message name="IDS_SETTINGS_RESET_CLEANUP_DETAILS_ITEMS_TO_BE_REMOVED" desc="Label for an expansion arrow. On expansion, the screen displays a list of files and programs that Chrome will remove. Placeholder can be 2 or more items.">
+    <message name="IDS_SETTINGS_RESET_CLEANUP_DETAILS_ITEMS_TO_BE_REMOVED" desc="Label for an expansion arrow. On expansion, the screen displays a list of files and programs that Chrome will remove or quarantine. Placeholder can be 2 or more items.">
       {NUM_ITEMS, plural,
-        =1 {1 item to be removed}
-        other {# items to be removed}}
+        =1 {1 item}
+        other {# items}}
     </message>
     <message name="IDS_SETTINGS_RESET_CLEANUP_DETAILS_REGISTRY_ENTRIES" desc="Introduces a bullet list containing the names of registry entries to be removed/changed by Chrome.">
       Registry entries to be removed or changed:
@@ -4346,12 +4521,12 @@
       Click Try Again, and accept the prompt on your computer
     </message>
     <message name="IDS_SETTINGS_RESET_CLEANUP_EXPLANATION_CURRENTLY_REMOVING" desc="Description in the Chrome Cleanup web page that Chrome browser shows when unwanted software, like ad injectors or software that changes the user's settings without their knowledge, is being removed by Chrome from the user's computer. Appears under the title 'Removing harmful software...' Actor is Chrome; we are indicating that harmful software is currently being removed. 'it' is harmful software. Preferrably, the translation for this string should parallel IDS_CHROME_CLEANUP_PROMPT_EXPLANATION.">
-      There's harmful software on your computer. Chrome is removing it and will restore your settings to make your browser work normally again.
+      There's harmful software on your computer. Chrome is removing it, restoring your settings, and disabling extensions. This will make your browser work normally again.
     </message>
     <message name="IDS_SETTINGS_RESET_CLEANUP_EXPLANATION_SCAN_ERROR" desc="Body of error message that could appear during the cleanup of harmful software.">
       An error occurred while Chrome was searching for harmful software
     </message>
-    <message name="IDS_SETTINGS_RESET_CLEANUP_FIND_BUTTON_LABEL" desc="Button for the 'Find and remove harmful software' item in Chrome Settings. Imperative. On click, Chrome looks for harmful software on the user's computer. Imperative.">
+    <message name="IDS_SETTINGS_RESET_CLEANUP_FIND_BUTTON_LABEL" desc="Button for the 'Find harmful software' item in Chrome Settings. Imperative. On click, Chrome looks for harmful software on the user's computer. Imperative.">
       Find
     </message>
     <message name="IDS_SETTINGS_RESET_CLEANUP_FOOTER_POWERED_BY" desc="Branding footer on the web page for Chrome Cleanup. COMPANY_NAME is the name of a technology service that Chrome uses to remove harmful software from the user's computer. It is not necessary to translate 'powered by' literally; use an appropriate word for your language to convey the meaning of 'uses'. A similar use in other Google products is 'Powered by Google Translate.'">
@@ -4367,7 +4542,7 @@
       Restart computer
     </message>
     <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_DONE" desc="Message confirming that Chrome has removed harmful software. Exclamation point is nice in EN-US but is optional in your language; please use or omit as appropriate. The UI will also display a checkmark icon to indicate the operation is done. ">
-      Done! Harmful software removed. To turn extensions back on, visit &lt;a href=&quot;chrome://extensions&quot;&gt;Extensions.&lt;/a&gt;
+      Done! Harmful software removed. To turn extensions back on, visit &lt;a href=&quot;chrome://extensions&quot;&gt;Extensions&lt;/a&gt;.
     </message>
     <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_ERROR_CANT_REMOVE" desc="An error message, appearing on the Chrome Cleanup web page, that Chrome tried to clean up unwanted software, as requested by the user, but was unsuccessful. Omits subject, i.e. Chrome can't remove harmful software.">
       Cleanup failed
@@ -4375,8 +4550,8 @@
     <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_ERROR_PERMISSIONS_NEEDED" desc="Title of error message that could appear during the cleanup of harmful software. 'permission' refers to the user granting permission, e.g. from an operating system prompt, before the cleanup operation can continue.">
       Chrome needs permission to continue
     </message>
-    <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_FIND_AND_REMOVE" desc="Title of an item in Chrome Settings. Imperative.">
-      Find and remove harmful software
+    <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_FIND_HARMFUL_SOFTWARE" desc="Title of an item in Chrome Settings. Imperative.">
+      Find harmful software
     </message>
     <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_NO_INTERNET_CONNECTION" desc="Title of error message that could appear during the cleanup of harmful software.">
       No internet connection
@@ -4405,8 +4580,8 @@
     <message name="IDS_SETTINGS_RESET_CLEANUP_TRY_AGAIN_BUTTON_LABEL" desc="Generic button that appears next to a message indicating that an operation failed during the cleanup of harmful software." meaning="Button referred to in the string 'Click Try Again, and accept the prompt on your computer', IDS_SETTINGS_RESET_CLEANUP_EXPLANATION_PERMISSIONS_NEEDED">
       Try again
     </message>
-    <message name="IDS_SETTINGS_RESET_CLEANUP_LOGS_PERMISSION_EXPLANATION" desc="Description for the 'Report details to Google' option. Subject, 'Details', is omitted. Although the plural subject would indicate usage of the plural verb, here, we use the plural form of the verb, 'includes', to avoid the impression that 'include' is an infinitive verb. 'Includes' is a present tense main verb. ">
-      Includes information about harmful software, system settings, and processes on your computer
+    <message name="IDS_SETTINGS_RESET_CLEANUP_LOGS_PERMISSION_PREF" desc="A checkbox label for the 'Report harmful software removal details' preference.">
+      Report details to Google about harmful software, system settings, and processes that were found on your computer during this cleanup
     </message>
     <message name="IDS_SETTINGS_RESET_CLEANUP_TITLE_CLEANUP_UNAVAILABLE" desc="Title of error message that could appear before the cleanup of harmful software because Chrome failed to contact the server. This message will only appear on Windows desktop/laptop computers.">
       Cleanup is currently unavailable
@@ -4453,4 +4628,19 @@
   <message name="IDS_PAGE_NOT_AVAILABLE_FOR_GUEST_HEADING" desc="This is the heading for the page not available for guest.">
     <ph name="PAGE_NAME">$1<ex>Bookmarks</ex></ph> is not available to Guest users.
   </message>
+
+  <if expr="chromeos">
+    <message name="IDS_ASH_SETTINGS_LOCK_SCREEN_NOTIFICATION_TITLE" desc="The title of options to change the behavior of notifications on the lock screen.">
+      On the lock screen
+    </message>
+    <message name="IDS_ASH_SETTINGS_LOCK_SCREEN_NOTIFICATION_SHOW" desc="One of options of the lock screen notification mode to show all the notifications and its contents on the lock screen.">
+      Show all notification content
+    </message>
+    <message name="IDS_ASH_SETTINGS_LOCK_SCREEN_NOTIFICATION_HIDE" desc="One of options of the lock screen notification mode to hide all the notifications on the lock screen.">
+      Don't show notifications at all
+    </message>
+    <message name="IDS_ASH_SETTINGS_LOCK_SCREEN_NOTIFICATION_HIDE_SENSITIVE" desc="One of options of the lock screen notification mode to hide sensitive contents and show the others on the lock screen.">
+      Hide sensitive content
+    </message>
+  </if>
 </grit-part>

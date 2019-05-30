@@ -13,9 +13,8 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/checked_math.h"
-#include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/activity_flags.h"
 #include "gpu/command_buffer/common/constants.h"
@@ -424,8 +423,13 @@ void MemoryProgramCache::SaveLinkedProgram(
       return;
     }
   }
-  UMA_HISTOGRAM_COUNTS("GPU.ProgramCache.ProgramBinarySizeBytes",
-                       binary.size());
+
+  // If the binary is so big it will never fit in the cache, throw it away.
+  if (binary.size() > max_size_bytes())
+    return;
+
+  UMA_HISTOGRAM_COUNTS_1M("GPU.ProgramCache.ProgramBinarySizeBytes",
+                          binary.size());
 
   char a_sha[kHashLength];
   char b_sha[kHashLength];
@@ -445,8 +449,8 @@ void MemoryProgramCache::SaveLinkedProgram(
                      sha);
   const std::string sha_string(sha, sizeof(sha));
 
-  UMA_HISTOGRAM_COUNTS("GPU.ProgramCache.MemorySizeBeforeKb",
-                       curr_size_bytes_ / 1024);
+  UMA_HISTOGRAM_COUNTS_1M("GPU.ProgramCache.MemorySizeBeforeKb",
+                          curr_size_bytes_ / 1024);
 
   // Evict any cached program with the same key in favor of the least recently
   // accessed.
@@ -454,10 +458,9 @@ void MemoryProgramCache::SaveLinkedProgram(
   if(existing != store_.end())
     store_.Erase(existing);
 
-  while (curr_size_bytes_ + binary.size() > max_size_bytes()) {
-    DCHECK(!store_.empty());
-    store_.Erase(store_.rbegin());
-  }
+  // If the cache is overflowing, remove some old entries.
+  DCHECK(max_size_bytes() >= binary.size());
+  Trim(max_size_bytes() - binary.size());
 
   if (!disable_gpu_shader_disk_cache_) {
     std::unique_ptr<GpuProgramProto> proto(
@@ -484,8 +487,8 @@ void MemoryProgramCache::SaveLinkedProgram(
           shader_b->output_variable_list(), shader_b->interface_block_map(),
           this));
 
-  UMA_HISTOGRAM_COUNTS("GPU.ProgramCache.MemorySizeAfterKb",
-                       curr_size_bytes_ / 1024);
+  UMA_HISTOGRAM_COUNTS_1M("GPU.ProgramCache.MemorySizeAfterKb",
+                          curr_size_bytes_ / 1024);
 }
 
 void MemoryProgramCache::LoadProgram(const std::string& key,
@@ -563,20 +566,20 @@ void MemoryProgramCache::LoadProgram(const std::string& key,
             fragment_attribs, fragment_uniforms, fragment_varyings,
             fragment_output_variables, fragment_interface_blocks, this));
 
-    UMA_HISTOGRAM_COUNTS("GPU.ProgramCache.MemorySizeAfterKb",
-                         curr_size_bytes_ / 1024);
+    UMA_HISTOGRAM_COUNTS_1M("GPU.ProgramCache.MemorySizeAfterKb",
+                            curr_size_bytes_ / 1024);
   } else {
     LOG(ERROR) << "Failed to parse proto file.";
   }
 }
 
 size_t MemoryProgramCache::Trim(size_t limit) {
-  if (curr_size_bytes_ <= limit)
-    return 0;
   size_t initial_size = curr_size_bytes_;
-  while (curr_size_bytes_ > limit && !store_.empty())
+  while (curr_size_bytes_ > limit) {
+    DCHECK(!store_.empty());
     store_.Erase(store_.rbegin());
-  return (initial_size - curr_size_bytes_);
+  }
+  return initial_size - curr_size_bytes_;
 }
 
 MemoryProgramCache::ProgramCacheValue::ProgramCacheValue(

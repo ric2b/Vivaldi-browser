@@ -17,7 +17,6 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -242,7 +241,7 @@ IN_PROC_BROWSER_TEST_F(ScreenOrientationBrowserTest, DISABLED_LockSmoke) {
 
 // Check that using screen orientation after a frame is detached doesn't crash
 // the renderer process.
-// This could be a LayoutTest if they were not using a mock screen orientation
+// This could be a web test if they were not using a mock screen orientation
 // controller.
 IN_PROC_BROWSER_TEST_F(ScreenOrientationBrowserTest, CrashTest_UseAfterDetach) {
   GURL test_url = GetTestUrl("screen_orientation",
@@ -346,7 +345,7 @@ IN_PROC_BROWSER_TEST_F(ScreenOrientationOOPIFBrowserTest, ScreenOrientation) {
 // Regression test for triggering a screen orientation change for a pending
 // main frame RenderFrameHost.  See https://crbug.com/764202.  In the bug, this
 // was triggered via the DevTools audit panel and
-// ViewMsg_EnableDeviceEmulation, which calls RenderWidget::Resize on the
+// WidgetMsg_EnableDeviceEmulation, which calls RenderWidget::Resize on the
 // renderer side.  The test fakes this by directly sending the resize message
 // to the widget.
 IN_PROC_BROWSER_TEST_F(ScreenOrientationOOPIFBrowserTest,

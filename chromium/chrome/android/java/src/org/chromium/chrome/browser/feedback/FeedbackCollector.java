@@ -15,8 +15,10 @@ import org.chromium.base.Callback;
 import org.chromium.base.CollectionUtil;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -84,9 +86,9 @@ public class FeedbackCollector implements Runnable {
         sources.add(new LowEndDeviceFeedbackSource());
         sources.add(new IMEFeedbackSource());
         sources.add(new PermissionFeedbackSource());
-        sources.add(new SimplifiedNtpFeedbackSource());
         sources.add(new FeedbackContextFeedbackSource(feedbackContext));
         sources.add(new DuetFeedbackSource());
+        sources.add(new InterestFeedFeedbackSource());
 
         // Sanity check in case a source is added to the wrong list.
         for (FeedbackSource source : sources) {
@@ -216,7 +218,7 @@ public class FeedbackCollector implements Runnable {
         final Callback<FeedbackCollector> callback = mCallback;
         mCallback = null;
 
-        ThreadUtils.postOnUiThread(new Runnable() {
+        PostTask.postTask(UiThreadTaskTraits.DEFAULT, new Runnable() {
             @Override
             public void run() {
                 callback.onResult(FeedbackCollector.this);

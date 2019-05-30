@@ -13,7 +13,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
-#include "base/trace_event/trace_event_argument.h"
+#include "base/trace_event/traced_value.h"
 #include "cc/raster/raster_source.h"
 #include "cc/trees/layer_tree_frame_sink.h"
 #include "components/viz/common/resources/bitmap_allocation.h"
@@ -156,12 +156,16 @@ bool BitmapRasterBufferProvider::IsResourceReadyToDraw(
 
 uint64_t BitmapRasterBufferProvider::SetReadyToDrawCallback(
     const std::vector<const ResourcePool::InUsePoolResource*>& resources,
-    const base::Closure& callback,
+    base::OnceClosure callback,
     uint64_t pending_callback_id) const {
   // Bitmap resources are immediately ready to draw.
   return 0;
 }
 
 void BitmapRasterBufferProvider::Shutdown() {}
+
+bool BitmapRasterBufferProvider::CheckRasterFinishedQueries() {
+  return false;
+}
 
 }  // namespace cc

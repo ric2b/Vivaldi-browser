@@ -2,12 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-var spinner;
-var controller;
+/**
+ * @type {Element}
+ */
+let spinner;
+
+/**
+ * @type {SpinnerController}
+ */
+let controller;
 
 function waitForMutation(target) {
-  return new Promise(function(fulfill, reject) {
-    var observer = new MutationObserver(function(mutations) {
+  return new Promise((fulfill, reject) => {
+    const observer = new MutationObserver(mutations => {
       observer.disconnect();
       fulfill();
     });
@@ -16,8 +23,11 @@ function waitForMutation(target) {
 }
 
 function setUp() {
-  spinner = document.querySelector('#spinner');
-  controller = new SpinnerController(spinner);
+  spinner = document.createElement('div');
+  spinner.id = 'spinner';
+  spinner.textContent = 'LOADING...';
+  spinner.hidden = true;
+  controller = new SpinnerController(assert(spinner));
   // Set the duration to 100ms, which is short enough, but also long enough
   // to happen later than 0ms timers used in test cases.
   controller.setBlinkDurationForTesting(100);
@@ -28,30 +38,30 @@ function testBlink(callback) {
   controller.blink();
 
   return reportPromise(
-    waitForMutation(spinner).then(function() {
+    waitForMutation(spinner).then(() => {
       assertFalse(spinner.hidden);
       return waitForMutation(spinner);
-    }).then(function() {
+    }).then(() => {
       assertTrue(spinner.hidden);
     }), callback);
 }
 
 function testShow(callback) {
   assertTrue(spinner.hidden);
-  var hideCallback = controller.show();
+  const hideCallback = controller.show();
 
   return reportPromise(
-    waitForMutation(spinner).then(function() {
+    waitForMutation(spinner).then(() => {
       assertFalse(spinner.hidden);
-      return new Promise(function(fulfill, reject) {
+      return new Promise((fulfill, reject) => {
         setTimeout(fulfill, 0);
       });
-    }).then(function() {
+    }).then(() => {
       assertFalse(spinner.hidden);  // It should still be hidden.
       // Call asynchronously, so the mutation observer catches the change.
       setTimeout(hideCallback, 0);
       return waitForMutation(spinner);
-    }).then(function() {
+    }).then(() => {
       assertTrue(spinner.hidden);
     }), callback);
 }
@@ -59,24 +69,24 @@ function testShow(callback) {
 function testShowDuringBlink(callback) {
   assertTrue(spinner.hidden);
   controller.blink();
-  var hideCallback = controller.show();
+  const hideCallback = controller.show();
 
   return reportPromise(
-    waitForMutation(spinner).then(function() {
+    waitForMutation(spinner).then(() => {
       assertFalse(spinner.hidden);
-      return new Promise(function(fulfill, reject) {
+      return new Promise((fulfill, reject) => {
         setTimeout(fulfill, 0);
       });
-    }).then(function() {
+    }).then(() => {
       assertFalse(spinner.hidden);
       hideCallback();
-      return new Promise(function(fulfill, reject) {
+      return new Promise((fulfill, reject) => {
         setTimeout(fulfill, 0);
       });
-    }).then(function() {
+    }).then(() => {
       assertFalse(spinner.hidden);
       return waitForMutation(spinner);
-    }).then(function() {
+    }).then(() => {
       assertTrue(spinner.hidden);
     }), callback);
 }
@@ -84,28 +94,28 @@ function testShowDuringBlink(callback) {
 function testStackedShows(callback) {
   assertTrue(spinner.hidden);
 
-  var hideCallbacks = [];
+  const hideCallbacks = [];
   hideCallbacks.push(controller.show());
   hideCallbacks.push(controller.show());
 
   return reportPromise(
-    waitForMutation(spinner).then(function() {
+    waitForMutation(spinner).then(() => {
       assertFalse(spinner.hidden);
-      return new Promise(function(fulfill, reject) {
+      return new Promise((fulfill, reject) => {
         setTimeout(fulfill, 0);
       });
-    }).then(function() {
+    }).then(() => {
       assertFalse(spinner.hidden);
       hideCallbacks[1]();
-      return new Promise(function(fulfill, reject) {
+      return new Promise((fulfill, reject) => {
         setTimeout(fulfill, 0);
       });
-    }).then(function() {
+    }).then(() => {
       assertFalse(spinner.hidden);
       // Call asynchronously, so the mutation observer catches the change.
       setTimeout(hideCallbacks[0], 0);
       return waitForMutation(spinner);
-    }).then(function() {
+    }).then(() => {
       assertTrue(spinner.hidden);
     }), callback);
 }

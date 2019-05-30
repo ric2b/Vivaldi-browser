@@ -27,15 +27,11 @@
 #endif
 
 struct FrameHostMsg_CreateChildFrame_Params;
+struct FrameHostMsg_CreateChildFrame_Params_Reply;
 struct FrameHostMsg_DownloadUrl_Params;
 class GURL;
 
-namespace mojo {
-class MessagePipeHandle;
-}
-
 namespace net {
-class URLRequestContext;
 class URLRequestContextGetter;
 }
 
@@ -75,6 +71,9 @@ class CONTENT_EXPORT RenderFrameMessageFilter
 
   network::mojom::CookieManagerPtr* GetCookieManager();
 
+  // Clears |resource_context_| to prevent accessing it after deletion.
+  void ClearResourceContext();
+
  protected:
   friend class TestSaveImageFromDataURL;
 
@@ -102,12 +101,11 @@ class CONTENT_EXPORT RenderFrameMessageFilter
   void InitializeCookieManager(
       network::mojom::CookieManagerRequest cookie_manager_request);
 
-  // |new_render_frame_id| and |devtools_frame_token| are out parameters.
-  // Browser process defines them for the renderer process.
-  void OnCreateChildFrame(const FrameHostMsg_CreateChildFrame_Params& params,
-                          int* new_render_frame_id,
-                          mojo::MessagePipeHandle* new_interface_provider,
-                          base::UnguessableToken* devtools_frame_token);
+  // |params_reply| is an out parameter. Browser process defines it for the
+  // renderer process.
+  void OnCreateChildFrame(
+      const FrameHostMsg_CreateChildFrame_Params& params,
+      FrameHostMsg_CreateChildFrame_Params_Reply* params_reply);
   void OnCookiesEnabled(int render_frame_id,
                         const GURL& url,
                         const GURL& site_for_cookies,
@@ -118,7 +116,8 @@ class CONTENT_EXPORT RenderFrameMessageFilter
                              const GURL& url,
                              const GURL& site_for_cookies,
                              GetCookiesCallback callback,
-                             const net::CookieList& cookie_list);
+                             const net::CookieList& cookie_list,
+                             const net::CookieStatusList& excluded_cookies);
 
   void OnDownloadUrl(const FrameHostMsg_DownloadUrl_Params& params);
 
@@ -170,11 +169,6 @@ class CONTENT_EXPORT RenderFrameMessageFilter
                                            int32_t pp_instance,
                                            bool is_throttled);
 #endif  // ENABLE_PLUGINS
-
-  // Returns the correct net::URLRequestContext depending on what type of url is
-  // given.
-  // Only call on the IO thread.
-  net::URLRequestContext* GetRequestContextForURL(const GURL& url);
 
 #if BUILDFLAG(ENABLE_PLUGINS)
   PluginServiceImpl* plugin_service_;

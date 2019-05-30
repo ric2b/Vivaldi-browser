@@ -4,13 +4,18 @@
 
 #include <string>
 
+#include "ash/public/cpp/ash_features.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/scoped_observer.h"
+#include "base/test/scoped_feature_list.h"
+#include "base/test/test_timeouts.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/screens/gaia_view.h"
+#include "chrome/browser/chromeos/login/test/fake_gaia_mixin.h"
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
@@ -18,7 +23,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -34,6 +39,18 @@
 #if BUILDFLAG(ENABLE_RLZ)
 #include "base/task/post_task.h"
 #include "components/rlz/rlz_tracker.h"
+#endif
+
+#if defined(GOOGLE_CHROME_BUILD)
+#include "apps/test/app_window_waiter.h"
+#include "ash/public/cpp/ash_pref_names.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/extensions/component_loader.h"
+#include "chrome/common/extensions/extension_constants.h"
+#include "ui/aura/client/aura_constants.h"
+#include "ui/aura/env.h"
+#include "ui/aura/env_observer.h"
+#include "ui/aura/window.h"
 #endif
 
 namespace chromeos {
@@ -52,7 +69,8 @@ void GetAccessPointRlzInBackgroundThread(rlz_lib::AccessPoint point,
 
 class LoginUtilsTest : public OobeBaseTest {
  public:
-  LoginUtilsTest() {}
+  LoginUtilsTest() = default;
+  ~LoginUtilsTest() override = default;
 
   void RunUntilIdle() { base::RunLoop().RunUntilIdle(); }
 
@@ -74,8 +92,127 @@ class LoginUtilsTest : public OobeBaseTest {
   }
 
  private:
+  FakeGaiaMixin fake_gaia_{&mixin_host_, embedded_test_server()};
+
   DISALLOW_COPY_AND_ASSIGN(LoginUtilsTest);
 };
+
+#if defined(GOOGLE_CHROME_BUILD)
+class LoginUtilsKioskNextShellTest : public LoginUtilsTest {
+ public:
+  void SetUp() override {
+    feature_list_.InitAndEnableFeature(ash::features::kKioskNextShell);
+    LoginUtilsTest::SetUp();
+  }
+
+  void LoginAndSetKioskNextShellPref(bool kiosk_next_shell_pref_value) {
+    extensions::ComponentLoader::EnableBackgroundExtensionsForTesting();
+
+    WaitForSigninScreen();
+
+    Login("username");
+
+    // Take some time to finish login and register user prefs.
+    base::RunLoop().RunUntilIdle();
+
+    // Update the now registered Kiosk Next Shell pref.
+    ProfileHelper::Get()
+        ->GetProfileByUser(user_manager::UserManager::Get()->GetActiveUser())
+        ->GetPrefs()
+        ->SetBoolean(ash::prefs::kKioskNextShellEnabled,
+                     kiosk_next_shell_pref_value);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// This observer is used by LoginUtilsKioskNextShellTest to keep track of
+// whether a Fullscreen window was launched by ash during the test run.
+class FullscreenWindowEnvObserver : public aura::EnvObserver,
+                                    public aura::WindowObserver {
+ public:
+  FullscreenWindowEnvObserver() { env_observer_.Add(aura::Env::GetInstance()); }
+
+  bool did_fullscreen_window_launch() const {
+    return did_fullscreen_window_launch_;
+  }
+
+  // aura::EnvObserver:
+  void OnWindowInitialized(aura::Window* window) override {
+    window_observer_.Add(window);
+  }
+
+  // aura::WindowObserver:
+  void OnWindowPropertyChanged(aura::Window* window,
+                               const void* key,
+                               intptr_t old) override {
+    did_fullscreen_window_launch_ =
+        did_fullscreen_window_launch_ ||
+        window->GetProperty(aura::client::kShowStateKey) ==
+            ui::SHOW_STATE_FULLSCREEN;
+  }
+
+ private:
+  bool did_fullscreen_window_launch_ = false;
+
+  ScopedObserver<aura::Env, aura::EnvObserver> env_observer_{this};
+  ScopedObserver<aura::Window, aura::WindowObserver> window_observer_{this};
+
+  DISALLOW_COPY_AND_ASSIGN(FullscreenWindowEnvObserver);
+};
+
+IN_PROC_BROWSER_TEST_F(LoginUtilsKioskNextShellTest, PRE_KioskNextShellLaunch) {
+  LoginAndSetKioskNextShellPref(true);
+}
+
+// Checks that the Kiosk Next Home window is launched on sign-in when the
+// feature is enabled and its pref allows it.
+IN_PROC_BROWSER_TEST_F(LoginUtilsKioskNextShellTest, KioskNextShellLaunch) {
+  // Enable all component extensions.
+  extensions::ComponentLoader::EnableBackgroundExtensionsForTesting();
+
+  WaitForSigninScreen();
+
+  FullscreenWindowEnvObserver fullscreen_observer;
+
+  Login("username");
+
+  // Wait for the app to launch before verifying it is fullscreen.
+  apps::AppWindowWaiter waiter(
+      extensions::AppWindowRegistry::Get(ProfileHelper::Get()->GetProfileByUser(
+          user_manager::UserManager::Get()->GetActiveUser())),
+      extension_misc::kKioskNextHomeAppId);
+  EXPECT_NE(nullptr,
+            waiter.WaitForShownWithTimeout(TestTimeouts::action_timeout()));
+  EXPECT_TRUE(fullscreen_observer.did_fullscreen_window_launch());
+}
+
+IN_PROC_BROWSER_TEST_F(LoginUtilsKioskNextShellTest,
+                       PRE_KioskNextShellDoesntLaunchWhenPrefIsDisabled) {
+  LoginAndSetKioskNextShellPref(false);
+}
+
+// Checks that the Kiosk Next Home window does not launch in sign-in when
+// its pref is disabled
+IN_PROC_BROWSER_TEST_F(LoginUtilsKioskNextShellTest,
+                       KioskNextShellDoesntLaunchWhenPrefIsDisabled) {
+  // Enable all component extensions.
+  extensions::ComponentLoader::EnableBackgroundExtensionsForTesting();
+
+  WaitForSigninScreen();
+
+  Login("username");
+
+  // Wait for the app to launch before verifying that it didn't.
+  apps::AppWindowWaiter waiter(
+      extensions::AppWindowRegistry::Get(ProfileHelper::Get()->GetProfileByUser(
+          user_manager::UserManager::Get()->GetActiveUser())),
+      extension_misc::kKioskNextHomeAppId);
+  EXPECT_EQ(nullptr,
+            waiter.WaitForShownWithTimeout(TestTimeouts::action_timeout()));
+}
+#endif  // defined(GOOGLE_CHROME_BUILD)
 
 // Exercises login, like the desktopui_MashLogin Chrome OS autotest.
 IN_PROC_BROWSER_TEST_F(LoginUtilsTest, MashLogin) {

@@ -28,7 +28,6 @@ class SignedExchangeDevToolsProxy;
 class CONTENT_EXPORT SignedExchangeCertificateChain {
  public:
   static std::unique_ptr<SignedExchangeCertificateChain> Parse(
-      SignedExchangeVersion version,
       base::span<const uint8_t> cert_response_body,
       SignedExchangeDevToolsProxy* devtools_proxy);
 
@@ -46,7 +45,6 @@ class CONTENT_EXPORT SignedExchangeCertificateChain {
  private:
   scoped_refptr<net::X509Certificate> cert_;
 
-  // Version b1 specific fields:
   std::string ocsp_;
   std::string sct_;
 };

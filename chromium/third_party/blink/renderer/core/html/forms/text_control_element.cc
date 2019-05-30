@@ -25,6 +25,7 @@
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
 
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
+#include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
@@ -62,7 +63,7 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 TextControlElement::TextControlElement(const QualifiedName& tag_name,
                                        Document& doc)
@@ -104,7 +105,7 @@ void TextControlElement::DispatchBlurEvent(
 }
 
 void TextControlElement::DefaultEventHandler(Event& event) {
-  if (event.type() == EventTypeNames::webkitEditableContentChanged &&
+  if (event.type() == event_type_names::kWebkitEditableContentChanged &&
       GetLayoutObject() && GetLayoutObject()->IsTextControl()) {
     last_change_was_user_edit_ = !GetDocument().IsRunningExecCommand();
     user_has_edited_the_field_ |= last_change_was_user_edit_;
@@ -128,8 +129,8 @@ void TextControlElement::DefaultEventHandler(Event& event) {
 }
 
 void TextControlElement::ForwardEvent(Event& event) {
-  if (event.type() == EventTypeNames::blur ||
-      event.type() == EventTypeNames::focus)
+  if (event.type() == event_type_names::kBlur ||
+      event.type() == event_type_names::kFocus)
     return;
   InnerEditorElement()->DefaultEventHandler(event);
 }
@@ -137,7 +138,7 @@ void TextControlElement::ForwardEvent(Event& event) {
 String TextControlElement::StrippedPlaceholder() const {
   // According to the HTML5 specification, we need to remove CR and LF from
   // the attribute value.
-  const AtomicString& attribute_value = FastGetAttribute(placeholderAttr);
+  const AtomicString& attribute_value = FastGetAttribute(kPlaceholderAttr);
   if (!attribute_value.Contains(kNewlineCharacter) &&
       !attribute_value.Contains(kCarriageReturnCharacter))
     return attribute_value;
@@ -159,7 +160,7 @@ static bool IsNotLineBreak(UChar ch) {
 }
 
 bool TextControlElement::IsPlaceholderEmpty() const {
-  const AtomicString& attribute_value = FastGetAttribute(placeholderAttr);
+  const AtomicString& attribute_value = FastGetAttribute(kPlaceholderAttr);
   return attribute_value.GetString().Find(IsNotLineBreak) == kNotFound;
 }
 
@@ -172,14 +173,15 @@ HTMLElement* TextControlElement::PlaceholderElement() const {
   if (!SupportsPlaceholder())
     return nullptr;
   DCHECK(UserAgentShadowRoot());
-  return ToHTMLElementOrDie(
-      UserAgentShadowRoot()->getElementById(ShadowElementNames::Placeholder()));
+  return ToHTMLElementOrDie(UserAgentShadowRoot()->getElementById(
+      shadow_element_names::Placeholder()));
 }
 
 void TextControlElement::UpdatePlaceholderVisibility() {
   HTMLElement* placeholder = PlaceholderElement();
   if (!placeholder) {
     UpdatePlaceholderText();
+    SetPlaceholderVisibility(PlaceholderShouldBeVisible());
     return;
   }
 
@@ -262,7 +264,7 @@ void TextControlElement::DispatchFormControlChangeEvent() {
 void TextControlElement::EnqueueChangeEvent() {
   if (!value_before_first_user_edit_.IsNull() &&
       !EqualIgnoringNullity(value_before_first_user_edit_, value())) {
-    Event* event = Event::CreateBubble(EventTypeNames::change);
+    Event* event = Event::CreateBubble(event_type_names::kChange);
     event->SetTarget(this);
     GetDocument().EnqueueAnimationFrameEvent(event);
   }
@@ -356,7 +358,7 @@ static Position PositionForIndex(HTMLElement* inner_editor, unsigned index) {
   unsigned remaining_characters_to_move_forward = index;
   Node* last_br_or_text = inner_editor;
   for (Node& node : NodeTraversal::DescendantsOf(*inner_editor)) {
-    if (node.HasTagName(brTag)) {
+    if (node.HasTagName(kBrTag)) {
       if (remaining_characters_to_move_forward == 0)
         return Position::BeforeNode(node);
       --remaining_characters_to_move_forward;
@@ -405,7 +407,7 @@ unsigned TextControlElement::IndexForPosition(HTMLElement* inner_editor,
         index += std::min(length, passed_position.OffsetInContainerNode());
       else
         index += length;
-    } else if (node->HasTagName(brTag)) {
+    } else if (node->HasTagName(kBrTag)) {
       ++index;
     }
   }
@@ -428,7 +430,9 @@ bool TextControlElement::SetSelectionRange(
     direction = kSelectionHasForwardDirection;
   bool did_change = CacheSelection(start, end, direction);
 
-  if (GetDocument().FocusedElement() != this)
+  // TODO(crbug.com/927646): The focused element should always be connected, but
+  // we fail to ensure so in some cases. Fix it.
+  if (GetDocument().FocusedElement() != this || !isConnected())
     return did_change;
 
   HTMLElement* inner_editor = InnerEditorElement();
@@ -492,8 +496,8 @@ VisiblePosition TextControlElement::VisiblePositionForIndex(int index) const {
   return CreateVisiblePosition(it.EndPosition(), TextAffinity::kUpstream);
 }
 
-// TODO(yosin): We should move |TextControlElement::indexForVisiblePosition()|
-// to "AXLayoutObject.cpp" since this funciton is used only there.
+// TODO(yosin): We should move |TextControlElement::IndexForVisiblePosition()|
+// to "ax_layout_object.cc" since this function is used only there.
 int TextControlElement::IndexForVisiblePosition(
     const VisiblePosition& pos) const {
   Position index_position = pos.DeepEquivalent().ParentAnchoredEquivalent();
@@ -662,14 +666,14 @@ SelectionInDOMTree TextControlElement::Selection() const {
 
 int TextControlElement::maxLength() const {
   int value;
-  if (!ParseHTMLInteger(FastGetAttribute(maxlengthAttr), value))
+  if (!ParseHTMLInteger(FastGetAttribute(kMaxlengthAttr), value))
     return -1;
   return value >= 0 ? value : -1;
 }
 
 int TextControlElement::minLength() const {
   int value;
-  if (!ParseHTMLInteger(FastGetAttribute(minlengthAttr), value))
+  if (!ParseHTMLInteger(FastGetAttribute(kMinlengthAttr), value))
     return -1;
   return value >= 0 ? value : -1;
 }
@@ -688,7 +692,7 @@ void TextControlElement::setMaxLength(int new_value,
         ExceptionMessages::IndexExceedsMinimumBound("maxLength", new_value,
                                                     min));
   } else {
-    SetIntegralAttribute(maxlengthAttr, new_value);
+    SetIntegralAttribute(kMaxlengthAttr, new_value);
   }
 }
 
@@ -706,7 +710,7 @@ void TextControlElement::setMinLength(int new_value,
         ExceptionMessages::IndexExceedsMaximumBound("minLength", new_value,
                                                     max));
   } else {
-    SetIntegralAttribute(minlengthAttr, new_value);
+    SetIntegralAttribute(kMinlengthAttr, new_value);
   }
 }
 
@@ -732,23 +736,34 @@ void TextControlElement::SelectionChanged(bool user_triggered) {
       frame->Selection().GetSelectionInDOMTree();
   if (selection.Type() != kRangeSelection)
     return;
-  DispatchEvent(*Event::CreateBubble(EventTypeNames::select));
+  DispatchEvent(*Event::CreateBubble(event_type_names::kSelect));
 }
 
 void TextControlElement::ScheduleSelectEvent() {
-  Event* event = Event::CreateBubble(EventTypeNames::select);
+  Event* event = Event::CreateBubble(event_type_names::kSelect);
   event->SetTarget(this);
   GetDocument().EnqueueAnimationFrameEvent(event);
 }
 
 void TextControlElement::ParseAttribute(
     const AttributeModificationParams& params) {
-  if (params.name == placeholderAttr) {
+  if (params.name == kPlaceholderAttr) {
     UpdatePlaceholderText();
     UpdatePlaceholderVisibility();
     UseCounter::Count(GetDocument(), WebFeature::kPlaceholderAttribute);
+  } else if (params.name == kReadonlyAttr || params.name == kDisabledAttr) {
+    DisabledOrReadonlyAttributeChanged(params.name);
+    HTMLFormControlElementWithState::ParseAttribute(params);
   } else {
     HTMLFormControlElementWithState::ParseAttribute(params);
+  }
+}
+
+void TextControlElement::DisabledOrReadonlyAttributeChanged(
+    const QualifiedName& attr) {
+  if (Element* inner_editor = InnerEditorElement()) {
+    inner_editor->SetNeedsStyleRecalc(
+        kLocalStyleChange, StyleChangeReasonForTracing::FromAttribute(attr));
   }
 }
 
@@ -872,7 +887,6 @@ String TextControlElement::ValueWithHardLineBreaks() const {
   if (!layout_object)
     return value();
 
-  DCHECK(CanUseInlineBox(*layout_object));
   Node* break_node;
   unsigned break_offset;
   RootInlineBox* line = layout_object->FirstRootBox();
@@ -916,6 +930,15 @@ TextControlElement* EnclosingTextControl(const Position& position) {
   return EnclosingTextControl(position.ComputeContainerNode());
 }
 
+TextControlElement* EnclosingTextControl(const PositionInFlatTree& position) {
+  Node* container = position.ComputeContainerNode();
+  if (IsTextControl(container)) {
+    // For example, #inner-editor@beforeAnchor reaches here.
+    return ToTextControl(container);
+  }
+  return EnclosingTextControl(container);
+}
+
 TextControlElement* EnclosingTextControl(const Node* container) {
   if (!container)
     return nullptr;
@@ -930,7 +953,7 @@ String TextControlElement::DirectionForFormData() const {
   for (const HTMLElement* element = this; element;
        element = Traversal<HTMLElement>::FirstAncestor(*element)) {
     const AtomicString& dir_attribute_value =
-        element->FastGetAttribute(dirAttr);
+        element->FastGetAttribute(kDirAttr);
     if (dir_attribute_value.IsNull())
       continue;
 
@@ -952,7 +975,8 @@ String TextControlElement::DirectionForFormData() const {
 void TextControlElement::SetAutofillValue(const String& value) {
   // Set the value trimmed to the max length of the field and dispatch the input
   // and change events.
-  setValue(value.Substring(0, maxLength()), kDispatchInputAndChangeEvent);
+  setValue(value.Substring(0, maxLength()),
+           TextFieldEventBehavior::kDispatchInputAndChangeEvent);
 }
 
 // TODO(crbug.com/772433): Create and use a new suggested-value element instead.

@@ -8,7 +8,9 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/observer_list.h"
 #include "base/timer/elapsed_timer.h"
+#include "chrome/browser/ui/autofill/local_card_migration_controller_observer.h"
 #include "components/autofill/core/browser/ui/local_card_migration_bubble_controller.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -35,14 +37,12 @@ class LocalCardMigrationBubbleControllerImpl
   // Invoked when local card migration icon is clicked.
   void ReshowBubble();
 
-  // Returns true if Omnibox save credit card icon should be visible.
-  bool IsIconVisible() const;
+  void AddObserver(LocalCardMigrationControllerObserver* observer);
 
   // Returns nullptr if no bubble is currently shown.
   LocalCardMigrationBubble* local_card_migration_bubble_view() const;
 
-  // LocalCardBubbleController:
-  base::string16 GetBubbleMessage() const override;
+  // LocalCardMigrationBubbleController:
   void OnConfirmButtonClicked() override;
   void OnCancelButtonClicked() override;
   void OnBubbleClosed() override;
@@ -65,10 +65,16 @@ class LocalCardMigrationBubbleControllerImpl
   friend class content::WebContentsUserData<
       LocalCardMigrationBubbleControllerImpl>;
 
+  friend class LocalCardMigrationBrowserTest;
+
   void ShowBubbleImplementation();
 
   // Update the visibility and toggled state of the Omnibox save card icon.
   void UpdateIcon();
+
+  // Add strikes for local card migration, to be called on user closing the
+  // promo bubble.
+  void AddStrikesForBubbleClose();
 
   // Weak reference. Will be nullptr if no bubble is currently shown.
   LocalCardMigrationBubble* local_card_migration_bubble_ = nullptr;
@@ -81,6 +87,16 @@ class LocalCardMigrationBubbleControllerImpl
 
   // Boolean to determine if bubble is called from ReshowBubble().
   bool is_reshow_ = false;
+
+  // Boolean to determine if strikes should be added when bubble is closed. They
+  // should be added only once and only if the bubble isn't closed due to
+  // clicking the Continue button.
+  bool should_add_strikes_on_bubble_close_ = true;
+
+  base::ObserverList<LocalCardMigrationControllerObserver>::Unchecked
+      observer_list_;
+
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
 
   DISALLOW_COPY_AND_ASSIGN(LocalCardMigrationBubbleControllerImpl);
 };

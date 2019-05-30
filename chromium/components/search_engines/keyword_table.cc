@@ -238,8 +238,7 @@ bool KeywordTable::PerformOperations(const Operations& operations) {
   if (!transaction.Begin())
     return false;
 
-  for (Operations::const_iterator i(operations.begin()); i != operations.end();
-       ++i) {
+  for (auto i(operations.begin()); i != operations.end(); ++i) {
     switch (i->first) {
       case ADD:
         if (!AddKeyword(i->second))
@@ -275,8 +274,7 @@ bool KeywordTable::GetKeywords(Keywords* keywords) {
     }
   }
   bool succeeded = s.Succeeded();
-  for (std::set<TemplateURLID>::const_iterator i(bad_entries.begin());
-       i != bad_entries.end(); ++i)
+  for (auto i(bad_entries.begin()); i != bad_entries.end(); ++i)
     succeeded &= RemoveKeyword(*i);
   return succeeded;
 }
@@ -476,7 +474,7 @@ bool KeywordTable::GetKeywordDataFromStatement(const sql::Statement& s,
   data->alternate_urls.clear();
   base::JSONReader json_reader;
   std::unique_ptr<base::Value> value(
-      json_reader.ReadToValue(s.ColumnString(15)));
+      json_reader.ReadToValueDeprecated(s.ColumnString(15)));
   base::ListValue* alternate_urls_value;
   if (value.get() && value->GetAsList(&alternate_urls_value)) {
     std::string alternate_url;

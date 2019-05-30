@@ -35,7 +35,7 @@ update_target("//components/url_formatter:url_formatter") {
 
 update_target("//third_party/blink/public:all_blink") {
   public_deps -= [
-    "//third_party/blink/renderer/controller:webkit_unit_tests",
+    "//third_party/blink/renderer/controller:blink_unittests",
     "//third_party/blink/renderer/platform/heap:blink_heap_unittests",
     "//third_party/blink/renderer/platform:blink_platform_unittests",
     "//third_party/blink/renderer/platform/wtf:wtf_unittests",
@@ -56,6 +56,14 @@ update_template_instance("//components/sync:sync") {
   deps += [
     "//components/sync/protocol",
   ]
+}
+
+if (!is_android) {
+  update_template_instance("//chrome/test:interactive_ui_tests") {
+    deps -= [
+      ":captured_sites_interactive_tests",
+    ]
+  }
 }
 
 _targets = [
@@ -109,7 +117,14 @@ update_template_instance("//components:components_unittests") {
     "//vivaldi/importer",
     "//vivaldi/importer:browser",
     "//vivaldi/notes",
+    "//vivaldi/prefs:prefs_files_generated",
     "//vivaldi/sync:sync",
+  ]
+}
+
+update_template_instance("//components/autofill/core/browser:browser") {
+  deps += [
+    "//vivaldi/prefs:prefs_files_generated",
   ]
 }
 
@@ -124,6 +139,29 @@ if (!is_android) {
   update_target("//chrome/common/importer:importer") {
     deps += [
       "//third_party/libxml",
+    ]
+  }
+}
+
+if (is_mac) {
+  if (is_official_build) {
+    update_target("//chrome:chrome") {
+      deps += [
+        ":chrome_dsym_archive",
+        ":chrome_dump_syms",
+      ]
+    }
+  }
+  update_template_instance("//chrome:chrome_app_plist") {
+    args += [
+      "--sparkle=1",
+    ]
+  }
+  update_template_instance("//chrome:chrome_framework_plist") {
+    args += [
+      "--sparkle=1",
+      "--vivaldi-build",
+      vivaldi_global_build_number,
     ]
   }
 }

@@ -76,9 +76,9 @@ class ChromeSubresourceFilterClient
 
   // SubresourceFilterClient:
   void ShowNotification() override;
-  subresource_filter::ActivationLevel OnPageActivationComputed(
+  subresource_filter::mojom::ActivationLevel OnPageActivationComputed(
       content::NavigationHandle* navigation_handle,
-      subresource_filter::ActivationLevel initial_activation_level,
+      subresource_filter::mojom::ActivationLevel initial_activation_level,
       subresource_filter::ActivationDecision* decision) override;
 
   // Should be called by devtools in response to a protocol command to enable ad
@@ -93,6 +93,7 @@ class ChromeSubresourceFilterClient
   static void LogAction(SubresourceFilterAction action);
 
  private:
+  friend class content::WebContentsUserData<ChromeSubresourceFilterClient>;
   void WhitelistByContentSettings(const GURL& url);
   void ShowUI(const GURL& url);
 
@@ -108,6 +109,8 @@ class ChromeSubresourceFilterClient
   // loads. We must be careful to ensure this boolean does not persist after the
   // devtools window is closed, which should be handled by the devtools system.
   bool activated_via_devtools_ = false;
+
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
 
   DISALLOW_COPY_AND_ASSIGN(ChromeSubresourceFilterClient);
 };

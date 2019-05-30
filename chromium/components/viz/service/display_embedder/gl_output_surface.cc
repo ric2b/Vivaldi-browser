@@ -4,7 +4,8 @@
 
 #include "components/viz/service/display_embedder/gl_output_surface.h"
 
-#include <stdint.h>
+#include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -66,6 +67,9 @@ void GLOutputSurface::BindFramebuffer() {
 }
 
 void GLOutputSurface::SetDrawRectangle(const gfx::Rect& rect) {
+  if (!context_provider_->ContextCapabilities().dc_layers)
+    return;
+
   if (set_draw_rectangle_for_frame_)
     return;
   DCHECK(gfx::Rect(size_).Contains(rect));
@@ -100,16 +104,17 @@ void GLOutputSurface::SwapBuffers(OutputSurfaceFrame frame) {
       &GLOutputSurface::OnGpuSwapBuffersCompleted,
       weak_ptr_factory_.GetWeakPtr(), std::move(frame.latency_info), size_);
   gpu::ContextSupport::PresentationCallback presentation_callback;
-  if (frame.need_presentation_feedback) {
-    flags |= gpu::SwapBuffersFlags::kPresentationFeedback;
-    presentation_callback = base::BindOnce(&GLOutputSurface::OnPresentation,
-                                           weak_ptr_factory_.GetWeakPtr());
-  }
+  presentation_callback = base::BindOnce(&GLOutputSurface::OnPresentation,
+                                         weak_ptr_factory_.GetWeakPtr());
 
   set_draw_rectangle_for_frame_ = false;
   if (frame.sub_buffer_rect) {
     HandlePartialSwap(*frame.sub_buffer_rect, flags, std::move(swap_callback),
                       std::move(presentation_callback));
+  } else if (!frame.content_bounds.empty()) {
+    context_provider_->ContextSupport()->SwapWithBounds(
+        frame.content_bounds, flags, std::move(swap_callback),
+        std::move(presentation_callback));
   } else {
     context_provider_->ContextSupport()->Swap(flags, std::move(swap_callback),
                                               std::move(presentation_callback));
@@ -117,10 +122,8 @@ void GLOutputSurface::SwapBuffers(OutputSurfaceFrame frame) {
 }
 
 uint32_t GLOutputSurface::GetFramebufferCopyTextureFormat() {
-  // TODO(danakj): What attributes are used for the default framebuffer here?
-  // Can it have alpha? VizProcessContextProvider doesn't take any
-  // attributes.
-  return GL_RGB;
+  auto* gl = static_cast<VizProcessContextProvider*>(context_provider());
+  return gl->GetCopyTextureInternalFormat();
 }
 
 OverlayCandidateValidator* GLOutputSurface::GetOverlayCandidateValidator()
@@ -192,13 +195,6 @@ void GLOutputSurface::OnPresentation(
     const gfx::PresentationFeedback& feedback) {
   client_->DidReceivePresentationFeedback(feedback);
 }
-
-#if BUILDFLAG(ENABLE_VULKAN)
-gpu::VulkanSurface* GLOutputSurface::GetVulkanSurface() {
-  NOTIMPLEMENTED();
-  return nullptr;
-}
-#endif
 
 unsigned GLOutputSurface::UpdateGpuFence() {
   if (!use_gpu_fence_)

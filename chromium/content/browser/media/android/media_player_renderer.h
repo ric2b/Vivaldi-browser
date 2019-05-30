@@ -12,7 +12,6 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/render_frame_host.h"
 #include "media/base/android/media_player_bridge.h"
-#include "media/base/android/media_player_manager.h"
 #include "media/base/media_log.h"
 #include "media/base/media_resource.h"
 #include "media/base/renderer.h"
@@ -35,11 +34,9 @@ class MediaPlayerRendererWebContentsObserver;
 // MediaPlayerBridge is tightly coupled with the manager abstraction.
 // |player_id| is ignored in all MediaPlayerManager calls, as there is only one
 // MediaPlayer per MediaPlayerRenderer.
-//
-// TODO(tguilbert): Remove the MediaPlayerManager implementation and update
-// MediaPlayerBridge, once WMPA has been deleted. See http://crbug.com/580626
-class CONTENT_EXPORT MediaPlayerRenderer : public media::Renderer,
-                                           public media::MediaPlayerManager {
+class CONTENT_EXPORT MediaPlayerRenderer
+    : public media::Renderer,
+      public media::MediaPlayerBridge::Client {
  public:
   // Permits embedders to handle custom urls.
   static void RegisterMediaUrlInterceptor(
@@ -68,28 +65,13 @@ class CONTENT_EXPORT MediaPlayerRenderer : public media::Renderer,
   void SetVolume(float volume) override;
   base::TimeDelta GetMediaTime() override;
 
-  // media::MediaPlayerManager implementation
+  // media::MediaPlayerBridge::Client implementation
   media::MediaResourceGetter* GetMediaResourceGetter() override;
   media::MediaUrlInterceptor* GetMediaUrlInterceptor() override;
-  void OnTimeUpdate(int player_id,
-                    base::TimeDelta current_timestamp,
-                    base::TimeTicks current_time_ticks) override;
-  void OnMediaMetadataChanged(int player_id,
-                              base::TimeDelta duration,
-                              int width,
-                              int height,
-                              bool success) override;
-  void OnPlaybackComplete(int player_id) override;
-  void OnMediaInterrupted(int player_id) override;
-  void OnBufferingUpdate(int player_id, int percentage) override;
-  void OnSeekComplete(int player_id,
-                      const base::TimeDelta& current_time) override;
-  void OnError(int player_id, int error) override;
-  void OnVideoSizeChanged(int player_id, int width, int height) override;
-  media::MediaPlayerAndroid* GetPlayer(int player_id) override;
-  bool RequestPlay(int player_id,
-                   base::TimeDelta duration,
-                   bool has_audio) override;
+  void OnMediaDurationChanged(base::TimeDelta duration) override;
+  void OnPlaybackComplete() override;
+  void OnError(int error) override;
+  void OnVideoSizeChanged(int width, int height) override;
 
   void OnUpdateAudioMutingState(bool muted);
   void OnWebContentsDestroyed();
@@ -107,9 +89,6 @@ class CONTENT_EXPORT MediaPlayerRenderer : public media::Renderer,
  private:
   void CreateMediaPlayer(const media::MediaUrlParams& params,
                          const media::PipelineStatusCB& init_cb);
-
-  // Used when creating |media_player_|.
-  void OnDecoderResourcesReleased(int player_id);
 
   // Cancels the pending request started by InitiateScopedSurfaceRequest(), if
   // it exists. No-ops otherwise.

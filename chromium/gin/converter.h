@@ -121,6 +121,8 @@ struct GIN_EXPORT Converter<std::string> {
 
 template<>
 struct GIN_EXPORT Converter<v8::Local<v8::Function> > {
+  static v8::Local<v8::Value> ToV8(v8::Isolate* isolate,
+                                   v8::Local<v8::Function> val);
   static bool FromV8(v8::Isolate* isolate,
                      v8::Local<v8::Value> val,
                      v8::Local<v8::Function>* out);
@@ -133,6 +135,15 @@ struct GIN_EXPORT Converter<v8::Local<v8::Object> > {
   static bool FromV8(v8::Isolate* isolate,
                      v8::Local<v8::Value> val,
                      v8::Local<v8::Object>* out);
+};
+
+template <>
+struct GIN_EXPORT Converter<v8::Local<v8::Promise>> {
+  static v8::Local<v8::Value> ToV8(v8::Isolate* isolate,
+                                   v8::Local<v8::Promise> val);
+  static bool FromV8(v8::Isolate* isolate,
+                     v8::Local<v8::Value> val,
+                     v8::Local<v8::Promise>* out);
 };
 
 template<>

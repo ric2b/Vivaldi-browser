@@ -14,7 +14,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
-#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/load_error_reporter.h"
@@ -22,7 +21,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/crx_file/id_util.h"
 #include "components/sync/model/string_ordinal.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "extensions/browser/api/declarative_net_request/ruleset_source.h"
 #include "extensions/browser/api/declarative_net_request/utils.h"
 #include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/browser/extension_prefs.h"
@@ -246,8 +247,6 @@ int UnpackedInstaller::GetFlags() {
 bool UnpackedInstaller::LoadExtension(Manifest::Location location,
                                       int flags,
                                       std::string* error) {
-  base::AssertBlockingAllowed();
-
   // Clean up the kMetadataFolder if necessary. This prevents spurious
   // warnings/errors and ensures we don't treat a user provided file as one by
   // the Extension system.
@@ -272,18 +271,17 @@ bool UnpackedInstaller::LoadExtension(Manifest::Location location,
 
 bool UnpackedInstaller::IndexAndPersistRulesIfNeeded(std::string* error) {
   DCHECK(extension());
-  base::AssertBlockingAllowed();
 
-  const ExtensionResource* resource =
-      declarative_net_request::DNRManifestData::GetRulesetResource(extension());
-  // The extension did not provide a ruleset.
-  if (!resource)
+  if (!declarative_net_request::DNRManifestData::HasRuleset(*extension())) {
+    // The extension did not provide a ruleset.
     return true;
+  }
 
   // TODO(crbug.com/761107): Change this so that we don't need to parse JSON
   // in the browser process.
   declarative_net_request::IndexAndPersistRulesResult result =
-      declarative_net_request::IndexAndPersistRulesUnsafe(*extension());
+      declarative_net_request::IndexAndPersistRulesUnsafe(
+          declarative_net_request::RulesetSource::Create(*extension()));
   if (!result.success) {
     *error = std::move(result.error);
     return false;
@@ -291,7 +289,7 @@ bool UnpackedInstaller::IndexAndPersistRulesIfNeeded(std::string* error) {
 
   dnr_ruleset_checksum_ = result.ruleset_checksum;
   if (!result.warnings.empty())
-    extension_->AddInstallWarnings(result.warnings);
+    extension_->AddInstallWarnings(std::move(result.warnings));
 
   return true;
 }
@@ -306,12 +304,10 @@ bool UnpackedInstaller::IsLoadingUnpackedAllowed() const {
 }
 
 void UnpackedInstaller::GetAbsolutePath() {
-  base::AssertBlockingAllowed();
-
   extension_path_ = base::MakeAbsoluteFilePath(extension_path_);
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&UnpackedInstaller::CheckExtensionFileAccess, this));
 }
 
@@ -331,19 +327,17 @@ void UnpackedInstaller::CheckExtensionFileAccess() {
 }
 
 void UnpackedInstaller::LoadWithFileAccess(int flags) {
-  base::AssertBlockingAllowed();
-
   std::string error;
   if (!LoadExtension(Manifest::UNPACKED, flags, &error)) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&UnpackedInstaller::ReportExtensionLoadError, this,
                        error));
     return;
   }
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&UnpackedInstaller::StartInstallChecks, this));
 }
 
@@ -355,10 +349,8 @@ void UnpackedInstaller::ReportExtensionLoadError(const std::string &error) {
         extension_path_, error, service_weak_->profile(), be_noisy_on_failure_);
   }
 
-  if (!callback_.is_null()) {
-    callback_.Run(nullptr, extension_path_, error);
-    callback_.Reset();
-  }
+  if (!callback_.is_null())
+    std::move(callback_).Run(nullptr, extension_path_, error);
 }
 
 void UnpackedInstaller::InstallExtension() {
@@ -377,10 +369,8 @@ void UnpackedInstaller::InstallExtension() {
                                       kInstallFlagInstallImmediately,
                                       dnr_ruleset_checksum_);
 
-  if (!callback_.is_null()) {
-    callback_.Run(extension(), extension_path_, std::string());
-    callback_.Reset();
-  }
+  if (!callback_.is_null())
+    std::move(callback_).Run(extension(), extension_path_, std::string());
 }
 
 }  // namespace extensions

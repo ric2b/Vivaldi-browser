@@ -5,7 +5,8 @@
 #include "ui/accessibility/ax_tree_id_registry.h"
 
 #include "base/memory/singleton.h"
-#include "ui/accessibility/ax_host_delegate.h"
+#include "base/strings/string_number_conversions.h"
+#include "ui/accessibility/ax_action_handler.h"
 
 namespace ui {
 
@@ -14,23 +15,20 @@ AXTreeIDRegistry* AXTreeIDRegistry::GetInstance() {
   return base::Singleton<AXTreeIDRegistry>::get();
 }
 
-AXTreeIDRegistry::AXTreeID AXTreeIDRegistry::GetOrCreateAXTreeID(
-    int process_id,
-    int routing_id) {
-  FrameID frame_id(process_id, routing_id);
+void AXTreeIDRegistry::SetFrameIDForAXTreeID(const FrameID& frame_id,
+                                             const AXTreeID& ax_tree_id) {
   auto it = frame_to_ax_tree_id_map_.find(frame_id);
-  if (it != frame_to_ax_tree_id_map_.end())
-    return it->second;
+  if (it != frame_to_ax_tree_id_map_.end()) {
+    NOTREACHED();
+    return;
+  }
 
-  AXTreeID new_id = ++ax_tree_id_counter_;
-  frame_to_ax_tree_id_map_[frame_id] = new_id;
-  ax_tree_to_frame_id_map_[new_id] = frame_id;
-
-  return new_id;
+  frame_to_ax_tree_id_map_[frame_id] = ax_tree_id;
+  ax_tree_to_frame_id_map_[ax_tree_id] = frame_id;
 }
 
 AXTreeIDRegistry::FrameID AXTreeIDRegistry::GetFrameID(
-    AXTreeIDRegistry::AXTreeID ax_tree_id) {
+    const AXTreeID& ax_tree_id) {
   auto it = ax_tree_to_frame_id_map_.find(ax_tree_id);
   if (it != ax_tree_to_frame_id_map_.end())
     return it->second;
@@ -38,45 +36,44 @@ AXTreeIDRegistry::FrameID AXTreeIDRegistry::GetFrameID(
   return FrameID(-1, -1);
 }
 
-AXTreeIDRegistry::AXTreeID AXTreeIDRegistry::GetOrCreateAXTreeID(
-    AXHostDelegate* delegate) {
-  for (auto it : id_to_host_delegate_) {
-    if (it.second == delegate)
-      return it.first;
-  }
-  id_to_host_delegate_[++ax_tree_id_counter_] = delegate;
-  return ax_tree_id_counter_;
+AXTreeID AXTreeIDRegistry::GetAXTreeID(AXTreeIDRegistry::FrameID frame_id) {
+  auto it = frame_to_ax_tree_id_map_.find(frame_id);
+  if (it != frame_to_ax_tree_id_map_.end())
+    return it->second;
+
+  return ui::AXTreeIDUnknown();
 }
 
-AXHostDelegate* AXTreeIDRegistry::GetHostDelegate(
-    AXTreeIDRegistry::AXTreeID ax_tree_id) {
-  auto it = id_to_host_delegate_.find(ax_tree_id);
-  if (it == id_to_host_delegate_.end())
+AXTreeID AXTreeIDRegistry::GetOrCreateAXTreeID(AXActionHandler* handler) {
+  for (auto it : id_to_action_handler_) {
+    if (it.second == handler)
+      return it.first;
+  }
+  AXTreeID new_id = AXTreeID::CreateNewAXTreeID();
+  id_to_action_handler_[new_id] = handler;
+  return new_id;
+}
+
+AXActionHandler* AXTreeIDRegistry::GetActionHandler(AXTreeID ax_tree_id) {
+  auto it = id_to_action_handler_.find(ax_tree_id);
+  if (it == id_to_action_handler_.end())
     return nullptr;
   return it->second;
 }
 
-void AXTreeIDRegistry::SetDelegateForID(AXHostDelegate* delegate,
-                                        AXTreeIDRegistry::AXTreeID id) {
-  id_to_host_delegate_[id] = delegate;
-}
-
-void AXTreeIDRegistry::RemoveAXTreeID(AXTreeIDRegistry::AXTreeID ax_tree_id) {
+void AXTreeIDRegistry::RemoveAXTreeID(AXTreeID ax_tree_id) {
   auto frame_it = ax_tree_to_frame_id_map_.find(ax_tree_id);
   if (frame_it != ax_tree_to_frame_id_map_.end()) {
     frame_to_ax_tree_id_map_.erase(frame_it->second);
     ax_tree_to_frame_id_map_.erase(frame_it);
-    return;
   }
 
-  auto action_it = id_to_host_delegate_.find(ax_tree_id);
-  if (action_it != id_to_host_delegate_.end())
-    id_to_host_delegate_.erase(action_it);
+  auto action_it = id_to_action_handler_.find(ax_tree_id);
+  if (action_it != id_to_action_handler_.end())
+    id_to_action_handler_.erase(action_it);
 }
 
-AXTreeIDRegistry::AXTreeIDRegistry() : ax_tree_id_counter_(-1) {
-  // Always populate default desktop tree value (0 -> 0, 0).
-  GetOrCreateAXTreeID(0, 0);
+AXTreeIDRegistry::AXTreeIDRegistry() {
 }
 
 AXTreeIDRegistry::~AXTreeIDRegistry() {}

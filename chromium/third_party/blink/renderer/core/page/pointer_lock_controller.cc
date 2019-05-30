@@ -29,6 +29,7 @@
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
@@ -39,13 +40,13 @@ PointerLockController::PointerLockController(Page* page)
     : page_(page), lock_pending_(false) {}
 
 PointerLockController* PointerLockController::Create(Page* page) {
-  return new PointerLockController(page);
+  return MakeGarbageCollected<PointerLockController>(page);
 }
 
 void PointerLockController::RequestPointerLock(Element* target) {
   if (!target || !target->isConnected() ||
       document_of_removed_element_while_waiting_for_unlock_) {
-    EnqueueEvent(EventTypeNames::pointerlockerror, target);
+    EnqueueEvent(event_type_names::kPointerlockerror, target);
     return;
   }
 
@@ -60,26 +61,26 @@ void PointerLockController::RequestPointerLock(Element* target) {
     // FIXME: This message should be moved off the console once a solution to
     // https://bugs.webkit.org/show_bug.cgi?id=103274 exists.
     target->GetDocument().AddConsoleMessage(ConsoleMessage::Create(
-        kSecurityMessageSource, kErrorMessageLevel,
+        kSecurityMessageSource, mojom::ConsoleMessageLevel::kError,
         "Blocked pointer lock on an element because the element's frame is "
         "sandboxed and the 'allow-pointer-lock' permission is not set."));
-    EnqueueEvent(EventTypeNames::pointerlockerror, target);
+    EnqueueEvent(event_type_names::kPointerlockerror, target);
     return;
   }
 
   if (element_) {
     if (element_->GetDocument() != target->GetDocument()) {
-      EnqueueEvent(EventTypeNames::pointerlockerror, target);
+      EnqueueEvent(event_type_names::kPointerlockerror, target);
       return;
     }
-    EnqueueEvent(EventTypeNames::pointerlockchange, target);
+    EnqueueEvent(event_type_names::kPointerlockchange, target);
     element_ = target;
   } else if (page_->GetChromeClient().RequestPointerLock(
                  target->GetDocument().GetFrame())) {
     lock_pending_ = true;
     element_ = target;
   } else {
-    EnqueueEvent(EventTypeNames::pointerlockerror, target);
+    EnqueueEvent(event_type_names::kPointerlockerror, target);
   }
 }
 
@@ -115,18 +116,18 @@ Element* PointerLockController::GetElement() const {
 }
 
 void PointerLockController::DidAcquirePointerLock() {
-  EnqueueEvent(EventTypeNames::pointerlockchange, element_.Get());
+  EnqueueEvent(event_type_names::kPointerlockchange, element_.Get());
   lock_pending_ = false;
 }
 
 void PointerLockController::DidNotAcquirePointerLock() {
-  EnqueueEvent(EventTypeNames::pointerlockerror, element_.Get());
+  EnqueueEvent(event_type_names::kPointerlockerror, element_.Get());
   ClearElement();
 }
 
 void PointerLockController::DidLosePointerLock() {
   EnqueueEvent(
-      EventTypeNames::pointerlockchange,
+      event_type_names::kPointerlockchange,
       element_ ? &element_->GetDocument()
                : document_of_removed_element_while_waiting_for_unlock_.Get());
   ClearElement();
@@ -135,20 +136,26 @@ void PointerLockController::DidLosePointerLock() {
 
 void PointerLockController::DispatchLockedMouseEvent(
     const WebMouseEvent& event,
+    const Vector<WebMouseEvent>& coalesced_events,
+    const Vector<WebMouseEvent>& predicted_events,
     const AtomicString& event_type) {
   if (!element_ || !element_->GetDocument().GetFrame())
     return;
 
-  element_->DispatchMouseEvent(event, event_type, event.click_count);
+  if (LocalFrame* frame = element_->GetDocument().GetFrame()) {
+    frame->GetEventHandler().HandleTargetedMouseEvent(
+        element_, event, event_type, coalesced_events, predicted_events);
 
-  // Event handlers may remove element.
-  if (!element_)
-    return;
+    // Event handlers may remove element.
+    if (!element_)
+      return;
 
-  // Create click events
-  if (event_type == EventTypeNames::mouseup) {
-    element_->DispatchMouseEvent(event, EventTypeNames::click,
-                                 event.click_count);
+    // Create click events
+    if (event_type == event_type_names::kMouseup) {
+      frame->GetEventHandler().HandleTargetedMouseEvent(
+          element_, event, event_type_names::kClick, Vector<WebMouseEvent>(),
+          Vector<WebMouseEvent>());
+    }
   }
 }
 

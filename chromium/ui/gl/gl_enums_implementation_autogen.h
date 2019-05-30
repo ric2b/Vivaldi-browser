@@ -13,10 +13,6 @@
 
 static const GLEnums::EnumToString enum_to_string_table[] = {
     {
-        0,
-        "GL_FALSE",
-    },
-    {
         0x00,
         "GL_CLOSE_PATH_NV",
     },
@@ -1793,6 +1789,10 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
         "GL_PERFQUERY_WAIT_INTEL",
     },
     {
+        0x83FC,
+        "GL_BLACKHOLE_RENDER_INTEL",
+    },
+    {
         0x83FE,
         "GL_CONSERVATIVE_RASTERIZATION_INTEL",
     },
@@ -2105,6 +2105,14 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
         "GL_PROGRAM_BINARY_LENGTH_OES",
     },
     {
+        0x8743,
+        "GL_MIRROR_CLAMP_TO_EDGE_EXT",
+    },
+    {
+        0x875F,
+        "GL_PROGRAM_BINARY_FORMAT_MESA",
+    },
+    {
         0x8764,
         "GL_BUFFER_SIZE",
     },
@@ -2297,6 +2305,10 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
         "GL_QUERY_RESULT_AVAILABLE_EXT",
     },
     {
+        0x8868,
+        "GL_QUERY_RESULT_AVAILABLE_NO_FLUSH_CHROMIUM_EXT",
+    },
+    {
         0x8869,
         "GL_MAX_VERTEX_ATTRIBS",
     },
@@ -2406,15 +2418,15 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
     },
     {
         0x88EB,
-        "GL_PIXEL_PACK_BUFFER",
+        "GL_PIXEL_PACK_BUFFER_NV",
     },
     {
         0x88EC,
-        "GL_PIXEL_UNPACK_BUFFER",
+        "GL_PIXEL_UNPACK_BUFFER_NV",
     },
     {
         0x88ED,
-        "GL_PIXEL_PACK_BUFFER_BINDING",
+        "GL_PIXEL_PACK_BUFFER_BINDING_NV",
     },
     {
         0x88EE,
@@ -2422,7 +2434,7 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
     },
     {
         0x88EF,
-        "GL_PIXEL_UNPACK_BUFFER_BINDING",
+        "GL_PIXEL_UNPACK_BUFFER_BINDING_NV",
     },
     {
         0x88F0,
@@ -2679,6 +2691,14 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
     {
         0x8AF4,
         "GL_COLOR_SPACE_DISPLAY_P3_CHROMIUM",
+    },
+    {
+        0x8AF5,
+        "GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM",
+    },
+    {
+        0x8AF6,
+        "GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM",
     },
     {
         0x8B30,
@@ -3005,6 +3025,26 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
         "GL_TEXTURE_PROTECTED_EXT",
     },
     {
+        0x8BFB,
+        "GL_TEXTURE_FOVEATED_FEATURE_BITS_QCOM",
+    },
+    {
+        0x8BFC,
+        "GL_TEXTURE_FOVEATED_MIN_PIXEL_DENSITY_QCOM",
+    },
+    {
+        0x8BFD,
+        "GL_TEXTURE_FOVEATED_FEATURE_QUERY_QCOM",
+    },
+    {
+        0x8BFE,
+        "GL_TEXTURE_FOVEATED_NUM_FOCAL_POINTS_QUERY_QCOM",
+    },
+    {
+        0x8BFF,
+        "GL_FRAMEBUFFER_INCOMPLETE_FOVEATION_QCOM",
+    },
+    {
         0x8C00,
         "GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG",
     },
@@ -3142,19 +3182,19 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
     },
     {
         0x8C4C,
-        "GL_COMPRESSED_SRGB_S3TC_DXT1_NV",
+        "GL_COMPRESSED_SRGB_S3TC_DXT1_EXT",
     },
     {
         0x8C4D,
-        "GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_NV",
+        "GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT",
     },
     {
         0x8C4E,
-        "GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_NV",
+        "GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT",
     },
     {
         0x8C4F,
-        "GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_NV",
+        "GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT",
     },
     {
         0x8C76,
@@ -3223,6 +3263,14 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
     {
         0x8C93,
         "GL_ATC_RGBA_EXPLICIT_ALPHA_AMD",
+    },
+    {
+        0x8CA1,
+        "GL_LOWER_LEFT_EXT",
+    },
+    {
+        0x8CA2,
+        "GL_UPPER_LEFT_EXT",
     },
     {
         0x8CA3,
@@ -3637,6 +3685,22 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
         "GL_FRAMEBUFFER_SRGB_EXT",
     },
     {
+        0x8DBB,
+        "GL_COMPRESSED_RED_RGTC1_EXT",
+    },
+    {
+        0x8DBC,
+        "GL_COMPRESSED_SIGNED_RED_RGTC1_EXT",
+    },
+    {
+        0x8DBD,
+        "GL_COMPRESSED_RED_GREEN_RGTC2_EXT",
+    },
+    {
+        0x8DBE,
+        "GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT",
+    },
+    {
         0x8DC1,
         "GL_SAMPLER_2D_ARRAY",
     },
@@ -3989,6 +4053,22 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
         "GL_MAX_TESS_EVALUATION_UNIFORM_BLOCKS_OES",
     },
     {
+        0x8E8C,
+        "GL_COMPRESSED_RGBA_BPTC_UNORM_EXT",
+    },
+    {
+        0x8E8D,
+        "GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT",
+    },
+    {
+        0x8E8E,
+        "GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT",
+    },
+    {
+        0x8E8F,
+        "GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT",
+    },
+    {
         0x8ED0,
         "GL_COVERAGE_COMPONENT_NV",
     },
@@ -4193,6 +4273,10 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
         "GL_SRG8_EXT",
     },
     {
+        0x8FBF,
+        "GL_TEXTURE_FORMAT_SRGB_OVERRIDE_EXT",
+    },
+    {
         0x8FC4,
         "GL_SHADER_BINARY_VIV",
     },
@@ -4323,6 +4407,14 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
     {
         0x900F,
         "GL_UNSIGNED_INT_SAMPLER_CUBE_MAP_ARRAY_OES",
+    },
+    {
+        0x901C,
+        "GL_FACTOR_MIN_AMD",
+    },
+    {
+        0x901D,
+        "GL_FACTOR_MAX_AMD",
     },
     {
         0x904D,
@@ -5105,6 +5197,38 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
         "GL_NUM_SPARSE_LEVELS_EXT",
     },
     {
+        0x91B0,
+        "GL_MAX_SHADER_COMPILER_THREADS_KHR",
+    },
+    {
+        0x91B1,
+        "GL_COMPLETION_STATUS_KHR",
+    },
+    {
+        0x91B2,
+        "GL_RENDERBUFFER_STORAGE_SAMPLES_AMD",
+    },
+    {
+        0x91B3,
+        "GL_MAX_COLOR_FRAMEBUFFER_SAMPLES_AMD",
+    },
+    {
+        0x91B4,
+        "GL_MAX_COLOR_FRAMEBUFFER_STORAGE_SAMPLES_AMD",
+    },
+    {
+        0x91B5,
+        "GL_MAX_DEPTH_STENCIL_FRAMEBUFFER_SAMPLES_AMD",
+    },
+    {
+        0x91B6,
+        "GL_NUM_SUPPORTED_MULTISAMPLE_MODES_AMD",
+    },
+    {
+        0x91B7,
+        "GL_SUPPORTED_MULTISAMPLE_MODES_AMD",
+    },
+    {
         0x91B9,
         "GL_COMPUTE_SHADER",
     },
@@ -5821,6 +5945,30 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
         "GL_VIEWPORT_SWIZZLE_W_NV",
     },
     {
+        0x935C,
+        "GL_CLIP_ORIGIN_EXT",
+    },
+    {
+        0x935D,
+        "GL_CLIP_DEPTH_MODE_EXT",
+    },
+    {
+        0x935E,
+        "GL_NEGATIVE_ONE_TO_ONE_EXT",
+    },
+    {
+        0x935F,
+        "GL_ZERO_TO_ONE_EXT",
+    },
+    {
+        0x9366,
+        "GL_TEXTURE_REDUCTION_MODE_EXT",
+    },
+    {
+        0x9367,
+        "GL_WEIGHTED_AVERAGE_EXT",
+    },
+    {
         0x9368,
         "GL_FONT_GLYPHS_AVAILABLE_NV",
     },
@@ -5859,6 +6007,18 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
     {
         0x9374,
         "GL_CONFORMANT_NV",
+    },
+    {
+        0x937C,
+        "GL_VIEWPORT_POSITION_W_SCALE_NV",
+    },
+    {
+        0x937D,
+        "GL_VIEWPORT_POSITION_W_SCALE_X_COEFF_NV",
+    },
+    {
+        0x937E,
+        "GL_VIEWPORT_POSITION_W_SCALE_Y_COEFF_NV",
     },
     {
         0x9380,
@@ -6149,6 +6309,14 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
         "GL_PERFQUERY_GPA_EXTENDED_COUNTERS_INTEL",
     },
     {
+        0x9530,
+        "GL_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_EXT",
+    },
+    {
+        0x9531,
+        "GL_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_EXT",
+    },
+    {
         0x954D,
         "GL_CONSERVATIVE_RASTER_MODE_NV",
     },
@@ -6159,6 +6327,122 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
     {
         0x954F,
         "GL_CONSERVATIVE_RASTER_MODE_PRE_SNAP_TRIANGLES_NV",
+    },
+    {
+        0x9550,
+        "GL_CONSERVATIVE_RASTER_MODE_PRE_SNAP_NV",
+    },
+    {
+        0x9580,
+        "GL_TEXTURE_TILING_EXT",
+    },
+    {
+        0x9581,
+        "GL_DEDICATED_MEMORY_OBJECT_EXT",
+    },
+    {
+        0x9582,
+        "GL_NUM_TILING_TYPES_EXT",
+    },
+    {
+        0x9583,
+        "GL_TILING_TYPES_EXT",
+    },
+    {
+        0x9584,
+        "GL_OPTIMAL_TILING_EXT",
+    },
+    {
+        0x9585,
+        "GL_LINEAR_TILING_EXT",
+    },
+    {
+        0x9586,
+        "GL_HANDLE_TYPE_OPAQUE_FD_EXT",
+    },
+    {
+        0x9587,
+        "GL_HANDLE_TYPE_OPAQUE_WIN32_EXT",
+    },
+    {
+        0x9588,
+        "GL_HANDLE_TYPE_OPAQUE_WIN32_KMT_EXT",
+    },
+    {
+        0x9589,
+        "GL_HANDLE_TYPE_D3D12_TILEPOOL_EXT",
+    },
+    {
+        0x958A,
+        "GL_HANDLE_TYPE_D3D12_RESOURCE_EXT",
+    },
+    {
+        0x958B,
+        "GL_HANDLE_TYPE_D3D11_IMAGE_EXT",
+    },
+    {
+        0x958C,
+        "GL_HANDLE_TYPE_D3D11_IMAGE_KMT_EXT",
+    },
+    {
+        0x958D,
+        "GL_LAYOUT_GENERAL_EXT",
+    },
+    {
+        0x958E,
+        "GL_LAYOUT_COLOR_ATTACHMENT_EXT",
+    },
+    {
+        0x958F,
+        "GL_LAYOUT_DEPTH_STENCIL_ATTACHMENT_EXT",
+    },
+    {
+        0x9590,
+        "GL_LAYOUT_DEPTH_STENCIL_READ_ONLY_EXT",
+    },
+    {
+        0x9591,
+        "GL_LAYOUT_SHADER_READ_ONLY_EXT",
+    },
+    {
+        0x9592,
+        "GL_LAYOUT_TRANSFER_SRC_EXT",
+    },
+    {
+        0x9593,
+        "GL_LAYOUT_TRANSFER_DST_EXT",
+    },
+    {
+        0x9594,
+        "GL_HANDLE_TYPE_D3D12_FENCE_EXT",
+    },
+    {
+        0x9595,
+        "GL_D3D12_FENCE_VALUE_EXT",
+    },
+    {
+        0x9596,
+        "GL_NUM_DEVICE_UUIDS_EXT",
+    },
+    {
+        0x9597,
+        "GL_DEVICE_UUID_EXT",
+    },
+    {
+        0x9598,
+        "GL_DRIVER_UUID_EXT",
+    },
+    {
+        0x9599,
+        "GL_DEVICE_LUID_EXT",
+    },
+    {
+        0x959A,
+        "GL_DEVICE_NODE_MASK_EXT",
+    },
+    {
+        0x959B,
+        "GL_PROTECTED_MEMORY_OBJECT_EXT",
     },
     {
         0x9630,
@@ -6188,6 +6472,10 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
         0x9652,
         "GL_FRAMEBUFFER_INCOMPLETE_INSUFFICIENT_SHADER_COMBINED_LOCAL_STORAGE_"
         "EXT",
+    },
+    {
+        0x96A2,
+        "GL_FRAMEBUFFER_FETCH_NONCOHERENT_QCOM",
     },
     {
         0xC0,
@@ -6268,18 +6556,6 @@ static const GLEnums::EnumToString enum_to_string_table[] = {
     {
         0xFFFFFFFF,
         "GL_ALL_SHADER_BITS_EXT",
-    },
-    {
-        1,
-        "GL_GLES_PROTOTYPES",
-    },
-    {
-        16,
-        "GL_MAILBOX_SIZE_CHROMIUM",
-    },
-    {
-        24,
-        "GL_SYNC_TOKEN_SIZE_CHROMIUM",
     },
 };
 

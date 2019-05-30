@@ -13,6 +13,7 @@
 #include "ash/public/cpp/shelf_item.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/interfaces/accessibility_controller.mojom-shared.h"
 #include "ash/public/interfaces/window_state_type.mojom.h"
 #include "ash/session/session_controller.h"
 #include "ash/shelf/shelf.h"
@@ -38,6 +39,7 @@ enum ActiveWindowStateType {
   ACTIVE_WINDOW_STATE_TYPE_SNAPPED,
   ACTIVE_WINDOW_STATE_TYPE_PINNED,
   ACTIVE_WINDOW_STATE_TYPE_TRUSTED_PINNED,
+  ACTIVE_WINDOW_STATE_TYPE_PIP,
   ACTIVE_WINDOW_STATE_TYPE_COUNT,
 };
 
@@ -63,13 +65,14 @@ ActiveWindowStateType GetActiveWindowState() {
       case mojom::WindowStateType::TRUSTED_PINNED:
         active_window_state_type = ACTIVE_WINDOW_STATE_TYPE_TRUSTED_PINNED;
         break;
+      case mojom::WindowStateType::PIP:
+        active_window_state_type = ACTIVE_WINDOW_STATE_TYPE_PIP;
+        break;
       case mojom::WindowStateType::DEFAULT:
       case mojom::WindowStateType::NORMAL:
       case mojom::WindowStateType::MINIMIZED:
       case mojom::WindowStateType::INACTIVE:
       case mojom::WindowStateType::AUTO_POSITIONED:
-      case mojom::WindowStateType::PIP:
-        // TODO: We probably want to record PIP state.
         active_window_state_type = ACTIVE_WINDOW_STATE_TYPE_OTHER;
         break;
     }
@@ -100,7 +103,8 @@ bool IsUserActive() {
 // UMA statistics. Note the containers are ordered from top most visible
 // container to the lowest to allow the |GetNumVisibleWindows| method to short
 // circuit when processing a maximized or fullscreen window.
-int kVisibleWindowContainerIds[] = {kShellWindowId_AlwaysOnTopContainer,
+int kVisibleWindowContainerIds[] = {kShellWindowId_PipContainer,
+                                    kShellWindowId_AlwaysOnTopContainer,
                                     kShellWindowId_DefaultContainer};
 
 // Returns an approximate count of how many windows are currently visible in the
@@ -200,9 +204,9 @@ void UserMetricsRecorder::RecordUserClickOnShelfButton(
 
 // static
 void UserMetricsRecorder::RecordUserToggleDictation(
-    DictationToggleMethod method) {
+    mojom::DictationToggleSource source) {
   UMA_HISTOGRAM_ENUMERATION("Accessibility.CrosDictation.ToggleDictationMethod",
-                            method);
+                            source);
 }
 
 void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
@@ -370,6 +374,9 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
     case UMA_STATUS_AREA_OS_UPDATE_DEFAULT_SELECTED:
       RecordAction(UserMetricsAction("StatusArea_OS_Update_Default_Selected"));
       break;
+    case UMA_STATUS_AREA_SCREEN_CAPTURE_CHANGE_SOURCE:
+      RecordAction(UserMetricsAction("StatusArea_ScreenCapture_Change_Source"));
+      break;
     case UMA_STATUS_AREA_SCREEN_CAPTURE_DEFAULT_STOP:
       RecordAction(UserMetricsAction("StatusArea_ScreenCapture_Default_Stop"));
       break;
@@ -424,18 +431,6 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
       break;
     case UMA_TRAY_SHUT_DOWN:
       RecordAction(UserMetricsAction("Tray_ShutDown"));
-      break;
-    case UMA_TRAY_SWIPE_TO_CLOSE_SUCCESSFUL:
-      RecordAction(UserMetricsAction("Tray_SwipeToClose_Successful"));
-      break;
-    case UMA_TRAY_SWIPE_TO_CLOSE_UNSUCCESSFUL:
-      RecordAction(UserMetricsAction("Tray_SwipeToClose_Unsuccessful"));
-      break;
-    case UMA_TRAY_SWIPE_TO_OPEN_SUCCESSFUL:
-      RecordAction(UserMetricsAction("Tray_SwipeToOpen_Successful"));
-      break;
-    case UMA_TRAY_SWIPE_TO_OPEN_UNSUCCESSFUL:
-      RecordAction(UserMetricsAction("Tray_SwipeToOpen_Unsuccessful"));
       break;
   }
 }

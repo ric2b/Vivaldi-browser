@@ -11,7 +11,6 @@
 #include <memory>
 
 #include "base/callback.h"
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "gpu/command_buffer/client/gpu_control.h"
 #include "gpu/command_buffer/common/command_buffer.h"
@@ -50,7 +49,7 @@ class PPAPI_PROXY_EXPORT PpapiCommandBufferProxy : public gpu::CommandBuffer,
                                 int32_t start,
                                 int32_t end) override;
   void SetGetBuffer(int32_t transfer_buffer_id) override;
-  scoped_refptr<gpu::Buffer> CreateTransferBuffer(size_t size,
+  scoped_refptr<gpu::Buffer> CreateTransferBuffer(uint32_t size,
                                                   int32_t* id) override;
   void DestroyTransferBuffer(int32_t id) override;
 
@@ -59,8 +58,7 @@ class PPAPI_PROXY_EXPORT PpapiCommandBufferProxy : public gpu::CommandBuffer,
   const gpu::Capabilities& GetCapabilities() const override;
   int32_t CreateImage(ClientBuffer buffer,
                       size_t width,
-                      size_t height,
-                      unsigned internalformat) override;
+                      size_t height) override;
   void DestroyImage(int32_t id) override;
   void SignalQuery(uint32_t query, base::OnceClosure callback) override;
   void CreateGpuFence(uint32_t gpu_fence_id, ClientGpuFence source) override;
@@ -76,7 +74,7 @@ class PPAPI_PROXY_EXPORT PpapiCommandBufferProxy : public gpu::CommandBuffer,
   bool IsFenceSyncReleased(uint64_t release) override;
   void SignalSyncToken(const gpu::SyncToken& sync_token,
                        base::OnceClosure callback) override;
-  void WaitSyncTokenHint(const gpu::SyncToken& sync_token) override;
+  void WaitSyncToken(const gpu::SyncToken& sync_token) override;
   bool CanWaitUnverifiedSyncToken(const gpu::SyncToken& sync_token) override;
 
  private:

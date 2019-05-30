@@ -10,9 +10,6 @@
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "components/policy/core/common/policy_switches.h"
-#include "components/policy/proto/device_management_backend.pb.h"
-
-namespace em = enterprise_management;
 
 namespace policy {
 
@@ -30,6 +27,12 @@ const char kParamOAuthToken[] = "oauth_token";
 const char kParamPlatform[] = "platform";
 const char kParamRequest[] = "request";
 const char kParamRetry[] = "retry";
+
+// Policy constants used in authorization header.
+const char kAuthHeader[] = "Authorization";
+const char kServiceTokenAuthHeaderPrefix[] = "GoogleLogin auth=";
+const char kDMTokenAuthHeaderPrefix[] = "GoogleDMToken token=";
+const char kEnrollmentTokenAuthHeaderPrefix[] = "GoogleEnrollmentToken token=";
 
 // String constants for the device and app type we report to the server.
 const char kValueAppType[] = "Chrome";

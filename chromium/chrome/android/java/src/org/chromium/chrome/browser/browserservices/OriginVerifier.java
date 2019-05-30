@@ -9,9 +9,9 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.customtabs.CustomTabsService;
 import android.support.customtabs.CustomTabsService.Relation;
-import android.support.v4.util.Pair;
 import android.text.TextUtils;
 
 import org.chromium.base.CommandLine;
@@ -26,7 +26,6 @@ import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.UrlConstants;
-import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.content_public.browser.BrowserStartupController;
 
@@ -39,11 +38,14 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
+
+import javax.inject.Inject;
+
+import dagger.Reusable;
 
 /**
  * Used to verify postMessage origin for a designated package name.
@@ -62,13 +64,29 @@ public class OriginVerifier {
     private static final String USE_AS_ORIGIN = "delegate_permission/common.use_as_origin";
     private static final String HANDLE_ALL_URLS = "delegate_permission/common.handle_all_urls";
 
-    private static Map<Pair<String, Integer>, Set<Origin>> sPackageToCachedOrigins;
-    private final OriginVerificationListener mListener;
     private final String mPackageName;
     private final String mSignatureFingerprint;
     private final @Relation int mRelation;
-    private long mNativeOriginVerifier = 0;
+    private long mNativeOriginVerifier;
+    @Nullable private OriginVerificationListener mListener;
     private Origin mOrigin;
+
+    /**
+     * A collection of Relationships (stored as Strings, with the signature set to an empty String)
+     * that we override verifications to succeed for. It is threadsafe.
+     */
+    private static final AtomicReference<Set<String>> sVerificationOverrides =
+            new AtomicReference<>();
+
+    @Reusable
+    public static class Factory {
+        @Inject
+        public Factory() {}
+
+        public OriginVerifier create(String packageName, @Relation int relation) {
+            return new OriginVerifier(packageName, relation);
+        }
+    }
 
     /** Small helper class to post a result of origin verification. */
     private class VerifiedCallback implements Runnable {
@@ -95,49 +113,68 @@ public class OriginVerifier {
     /** Clears all known relations. */
     @VisibleForTesting
     public static void clearCachedVerificationsForTesting() {
-        ThreadUtils.assertOnUiThread();
-        if (sPackageToCachedOrigins != null) sPackageToCachedOrigins.clear();
+        VerificationResultStore.clearStoredRelationships();
+        if (sVerificationOverrides.get() != null) {
+            sVerificationOverrides.get().clear();
+        }
     }
 
     /**
-     * Mark an origin as verified for a package.
-     * @param packageName The package name to prepopulate for.
-     * @param origin The origin to add as verified.
-     * @param relation The Digital Asset Links relation verified.
+     * Ensures that subsequent calls to {@link OriginVerifier#start} result in a success without
+     * performing the full check.
      */
-    public static void addVerifiedOriginForPackage(
-            String packageName, Origin origin, @Relation int relation) {
-        Log.d(TAG, "Adding: %s for %s", packageName, origin);
-        ThreadUtils.assertOnUiThread();
-        if (sPackageToCachedOrigins == null) sPackageToCachedOrigins = new HashMap<>();
-        Set<Origin> cachedOrigins =
-                sPackageToCachedOrigins.get(new Pair<>(packageName, relation));
-        if (cachedOrigins == null) {
-            cachedOrigins = new HashSet<>();
-            sPackageToCachedOrigins.put(new Pair<>(packageName, relation), cachedOrigins);
+    public static void addVerificationOverride(String packageName, Origin origin,
+            int relationship) {
+        if (sVerificationOverrides.get() == null) {
+            sVerificationOverrides.compareAndSet(null,
+                    Collections.synchronizedSet(new HashSet<>()));
         }
-        cachedOrigins.add(origin);
+        sVerificationOverrides.get().add(
+                new Relationship(packageName, "", origin, relationship).toString());
+    }
 
-        TrustedWebActivityClient.registerClient(ContextUtils.getApplicationContext(),
-                origin, packageName);
+    /**
+     * Checks whether the origin was verified for that origin with a call to {@link #start}.
+     */
+    public boolean wasPreviouslyVerified(Origin origin) {
+        return wasPreviouslyVerified(mPackageName, mSignatureFingerprint, origin, mRelation);
     }
 
     /**
      * Returns whether an origin is first-party relative to a given package name.
      *
-     * This only returns data from previously cached relations, and does not
-     * trigger an asynchronous validation.
+     * This only returns data from previously cached relations, and does not trigger an asynchronous
+     * validation. This cache is persisted across Chrome restarts. If you have an instance of
+     * OriginVerifier, use {@link #wasPreviouslyVerified(Origin)} instead as that avoids recomputing
+     * the signatureFingerprint of the package.
      *
-     * @param packageName The package name
-     * @param origin The origin to verify
+     * @param packageName The package name.
+     * @param origin The origin to verify.
      * @param relation The Digital Asset Links relation to verify for.
      */
-    public static boolean isValidOrigin(String packageName, Origin origin, @Relation int relation) {
-        ThreadUtils.assertOnUiThread();
-        if (sPackageToCachedOrigins == null) return false;
-        Set<Origin> cachedOrigins = sPackageToCachedOrigins.get(new Pair<>(packageName, relation));
-        if (cachedOrigins == null) return false;
-        return cachedOrigins.contains(origin);
+    public static boolean wasPreviouslyVerified(String packageName, Origin origin,
+            @Relation int relation) {
+        return shouldOverrideVerification(packageName, origin, relation)
+                || VerificationResultStore.isRelationshipSaved(new Relationship(packageName,
+                getCertificateSHA256FingerprintForPackage(packageName), origin, relation));
+    }
+
+
+    /**
+     * Returns whether an origin is first-party relative to a given package name.
+     *
+     * This only returns data from previously cached relations, and does not trigger an asynchronous
+     * validation. This cache is persisted across Chrome restarts.
+     *
+     * @param packageName The package name.
+     * @param signatureFingerprint The signature of the package.
+     * @param origin The origin to verify.
+     * @param relation The Digital Asset Links relation to verify for.
+     */
+    private static boolean wasPreviouslyVerified(String packageName, String signatureFingerprint,
+            Origin origin, @Relation int relation) {
+        return VerificationResultStore.isRelationshipSaved(
+                new Relationship(packageName, signatureFingerprint, origin, relation));
     }
 
     /**
@@ -159,14 +196,11 @@ public class OriginVerifier {
 
     /**
      * Main constructor.
-     * Use {@link OriginVerifier#start(Origin)}
-     * @param listener The listener who will get the verification result.
+     * Use {@link OriginVerifier#start}
      * @param packageName The package for the Android application for verification.
      * @param relation Digital Asset Links {@link Relation} to use during verification.
      */
-    public OriginVerifier(
-            OriginVerificationListener listener, String packageName, @Relation int relation) {
-        mListener = listener;
+    public OriginVerifier(String packageName, @Relation int relation) {
         mPackageName = packageName;
         mSignatureFingerprint = getCertificateSHA256FingerprintForPackage(mPackageName);
         mRelation = relation;
@@ -177,10 +211,12 @@ public class OriginVerifier {
      * making a network request for non-cached origins with a URLFetcher using the last used
      * profile as context.
      * @param origin The postMessage origin the application is claiming to have. Can't be null.
+     * @param listener The listener who will get the verification result.
      */
-    public void start(@NonNull Origin origin) {
+    public void start(@NonNull OriginVerificationListener listener, @NonNull Origin origin) {
         ThreadUtils.assertOnUiThread();
         mOrigin = origin;
+        mListener = listener;
 
         // Website to app Digital Asset Link verification can be skipped for a specific URL by
         // passing a command line flag to ease development.
@@ -203,14 +239,12 @@ public class OriginVerifier {
             return;
         }
 
-        // If this origin is cached as verified already, use that.
-        if (isValidOrigin(mPackageName, origin, mRelation)) {
-            Log.i(TAG, "Verification succeeded for %s, it was cached.", origin);
-            BrowserServicesMetrics.recordVerificationResult(
-                    BrowserServicesMetrics.VerificationResult.CACHED_SUCCESS);
+        if (shouldOverrideVerification(mPackageName, mOrigin, mRelation)) {
+            Log.i(TAG, "Verification succeeded for %s, it was overridden.", origin);
             ThreadUtils.runOnUiThread(new VerifiedCallback(true, null));
             return;
         }
+
         if (mNativeOriginVerifier != 0) cleanUp();
         if (!BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
                         .isStartupSuccessfullyCompleted()) {
@@ -239,6 +273,21 @@ public class OriginVerifier {
                     BrowserServicesMetrics.VerificationResult.REQUEST_FAILURE);
             ThreadUtils.runOnUiThread(new VerifiedCallback(false, false));
         }
+    }
+
+    /**
+     * Removes the verification listener, but finishes the ongoing verification process, if any.
+     */
+    public void removeListener() {
+        mListener = null;
+    }
+
+    private static boolean shouldOverrideVerification(String packageName, Origin origin,
+            int relation) {
+        if (sVerificationOverrides.get() == null) return false;
+
+        return sVerificationOverrides.get().contains(
+                new Relationship(packageName, "", origin, relation).toString());
     }
 
     /**
@@ -276,12 +325,10 @@ public class OriginVerifier {
         if (packageInfo == null) return null;
 
         InputStream input = new ByteArrayInputStream(packageInfo.signatures[0].toByteArray());
-        X509Certificate certificate = null;
         String hexString = null;
         try {
-            certificate =
-                    (X509Certificate) CertificateFactory.getInstance("X509").generateCertificate(
-                            input);
+            X509Certificate certificate = (X509Certificate)
+                    CertificateFactory.getInstance("X509").generateCertificate(input);
             hexString = byteArrayToHexString(
                     MessageDigest.getInstance("SHA256").digest(certificate.getEncoded()));
         } catch (CertificateEncodingException e) {
@@ -334,7 +381,12 @@ public class OriginVerifier {
     private void originVerified(boolean originVerified, Boolean online) {
         Log.i(TAG, "Verification %s.", (originVerified ? "succeeded" : "failed"));
         if (originVerified) {
-            addVerifiedOriginForPackage(mPackageName, mOrigin, mRelation);
+            Log.d(TAG, "Adding: %s for %s", mPackageName, mOrigin);
+            VerificationResultStore.addRelationship(new Relationship(mPackageName,
+                    mSignatureFingerprint, mOrigin, mRelation));
+
+            TrustedWebActivityClient.registerClient(ContextUtils.getApplicationContext(),
+                    mOrigin, mPackageName);
         }
 
         // We save the result even if there is a failure as a way of overwriting a previously
@@ -351,28 +403,22 @@ public class OriginVerifier {
      * Saves the result of a verification to Preferences so we can reuse it when offline.
      */
     private void saveVerificationResult(boolean originVerified) {
-        String link = relationshipToString(mPackageName, mOrigin, mRelation);
-        Set<String> savedLinks;
-        try (StrictModeContext unused = StrictModeContext.allowDiskReads()) {
-            savedLinks = ChromePreferenceManager.getInstance().getVerifiedDigitalAssetLinks();
-        }
+        Relationship relationship =
+                new Relationship(mPackageName, mSignatureFingerprint, mOrigin, mRelation);
         if (originVerified) {
-            savedLinks.add(link);
+            VerificationResultStore.addRelationship(relationship);
         } else {
-            savedLinks.remove(link);
+            VerificationResultStore.removeRelationship(relationship);
         }
-        ChromePreferenceManager.getInstance().setVerifiedDigitalAssetLinks(savedLinks);
     }
 
     /**
      * Checks for a previously saved verification result.
      */
     private void checkForSavedResult() {
-        String link = relationshipToString(mPackageName, mOrigin, mRelation);
         try (StrictModeContext unused = StrictModeContext.allowDiskReads()) {
-            Set<String> savedLinks =
-                    ChromePreferenceManager.getInstance().getVerifiedDigitalAssetLinks();
-            boolean verified = savedLinks.contains(link);
+            boolean verified = VerificationResultStore.isRelationshipSaved(
+                    new Relationship(mPackageName, mSignatureFingerprint, mOrigin, mRelation));
 
             BrowserServicesMetrics.recordVerificationResult(verified
                             ? BrowserServicesMetrics.VerificationResult.OFFLINE_SUCCESS
@@ -382,19 +428,13 @@ public class OriginVerifier {
         }
     }
 
-    private static String relationshipToString(String packageName, Origin origin, int relation) {
-        // Neither package names nor origins contain commas.
-        return packageName + "," + origin + "," + relation;
-    }
-
     /**
      * Removes any data about sites visited from static variables and Android Preferences.
      */
     @CalledByNative
     public static void clearBrowsingData() {
-        ThreadUtils.assertOnUiThread();
-        if (sPackageToCachedOrigins != null) sPackageToCachedOrigins.clear();
-        ChromePreferenceManager.getInstance().setVerifiedDigitalAssetLinks(Collections.emptySet());
+        // TODO(peconn): Move this over to VerificationResultStore.
+        VerificationResultStore.clearStoredRelationships();
     }
 
     private native long nativeInit(Profile profile);

@@ -24,7 +24,6 @@
 #include "content/public/browser/devtools_external_agent_proxy.h"
 #include "content/public/browser/devtools_external_agent_proxy_delegate.h"
 #include "content/public/browser/web_contents_delegate.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_utils.h"
 #include "content/test/test_content_browser_client.h"
@@ -204,11 +203,11 @@ class TestExternalAgentDelegate: public DevToolsExternalAgentProxyDelegate {
 
   void Attach(DevToolsExternalAgentProxy* proxy) override {
     recordEvent("Attach");
-  };
+  }
 
   void Detach(DevToolsExternalAgentProxy* proxy) override {
     recordEvent("Detach");
-  };
+  }
 
   std::string GetType() override { return std::string(); }
   std::string GetTitle() override { return std::string(); }
@@ -216,15 +215,15 @@ class TestExternalAgentDelegate: public DevToolsExternalAgentProxyDelegate {
   GURL GetURL() override { return GURL(); }
   GURL GetFaviconURL() override { return GURL(); }
   std::string GetFrontendURL() override { return std::string(); }
-  bool Activate() override { return false; };
-  void Reload() override { };
-  bool Close() override { return false; };
+  bool Activate() override { return false; }
+  void Reload() override {}
+  bool Close() override { return false; }
   base::TimeTicks GetLastActivityTime() override { return base::TimeTicks(); }
 
   void SendMessageToBackend(DevToolsExternalAgentProxy* proxy,
                             const std::string& message) override {
     recordEvent(std::string("SendMessageToBackend.") + message);
-  };
+  }
 };
 
 TEST_F(DevToolsManagerTest, TestExternalProxy) {

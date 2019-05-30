@@ -5,6 +5,9 @@
 #ifndef ASH_ASSISTANT_UI_MAIN_STAGE_ASSISTANT_OPT_IN_VIEW_H_
 #define ASH_ASSISTANT_UI_MAIN_STAGE_ASSISTANT_OPT_IN_VIEW_H_
 
+#include "ash/public/cpp/assistant/default_voice_interaction_observer.h"
+#include "ash/public/interfaces/voice_interaction_controller.mojom.h"
+#include "base/component_export.h"
 #include "base/macros.h"
 #include "ui/views/controls/button/button.h"
 
@@ -14,39 +17,39 @@ class StyledLabel;
 
 namespace ash {
 
-// AssistantOptInDelegate ------------------------------------------------------
-
-class AssistantOptInDelegate {
- public:
-  // Invoked when the Assistant opt in button is pressed.
-  virtual void OnOptInButtonPressed() = 0;
-
- protected:
-  virtual ~AssistantOptInDelegate() = default;
-};
+class AssistantViewDelegate;
 
 // AssistantOptInView ----------------------------------------------------------
 
-class AssistantOptInView : public views::View, public views::ButtonListener {
+class COMPONENT_EXPORT(ASSISTANT_UI) AssistantOptInView
+    : public views::View,
+      public views::ButtonListener,
+      public DefaultVoiceInteractionObserver {
  public:
-  AssistantOptInView();
+  explicit AssistantOptInView(AssistantViewDelegate* delegate_);
   ~AssistantOptInView() override;
 
-  // views::Button:
+  // views::View:
+  const char* GetClassName() const override;
   void ChildPreferredSizeChanged(views::View* child) override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
-  void set_delegate(AssistantOptInDelegate* delegate) { delegate_ = delegate; }
+  // DefaultVoiceInteractionObserver:
+  void OnVoiceInteractionConsentStatusUpdated(
+      mojom::ConsentStatus consent_status) override;
 
  private:
   void InitLayout();
+  void UpdateLabel(mojom::ConsentStatus consent_status);
 
   views::StyledLabel* label_;  // Owned by view hierarchy.
 
-  AssistantOptInDelegate* delegate_ = nullptr;
+  views::Button* container_;
+
+  AssistantViewDelegate* delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(AssistantOptInView);
 };

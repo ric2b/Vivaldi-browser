@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "ash/public/cpp/ash_constants.h"
-#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_view_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller.h"
@@ -21,14 +20,11 @@
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/native_theme/native_theme.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/ink_drop_mask.h"
 #include "ui/views/animation/square_ink_drop_ripple.h"
-#include "ui/views/background.h"
-#include "ui/views/border.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/button/toggle_button.h"
@@ -160,15 +156,7 @@ TriView* TrayPopupUtils::CreateMultiTargetRowView() {
 views::Label* TrayPopupUtils::CreateDefaultLabel() {
   views::Label* label = new views::Label();
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  if (features::IsSystemTrayUnifiedEnabled()) {
-    label->SetSubpixelRenderingEnabled(false);
-  } else {
-    // Frequently the label will paint to a layer that's non-opaque, so subpixel
-    // rendering won't work unless we explicitly set a background. See
-    // https://crbug.com/686363
-    label->SetBackground(views::CreateThemedSolidBackground(
-        label, ui::NativeTheme::kColorId_BubbleBackground));
-  }
+  label->SetSubpixelRenderingEnabled(false);
   return label;
 }
 
@@ -222,15 +210,11 @@ void TrayPopupUtils::ConfigureTrayPopupButton(views::Button* button) {
   button->set_has_ink_drop_action_on_click(true);
   button->set_ink_drop_base_color(kTrayPopupInkDropBaseColor);
   button->set_ink_drop_visible_opacity(kTrayPopupInkDropRippleOpacity);
+  button->set_ink_drop_highlight_opacity(kTrayPopupInkDropHighlightOpacity);
 }
 
 void TrayPopupUtils::ConfigureAsStickyHeader(views::View* view) {
   view->set_id(VIEW_ID_STICKY_HEADER);
-
-  if (!features::IsSystemTrayUnifiedEnabled()) {
-    view->SetBackground(views::CreateThemedSolidBackground(
-        view, ui::NativeTheme::kColorId_BubbleBackground));
-  }
   view->SetBorder(
       views::CreateEmptyBorder(gfx::Insets(kMenuSeparatorVerticalPadding, 0)));
   view->SetPaintToLayer();
@@ -240,12 +224,11 @@ void TrayPopupUtils::ConfigureAsStickyHeader(views::View* view) {
 void TrayPopupUtils::ShowStickyHeaderSeparator(views::View* view,
                                                bool show_separator) {
   if (show_separator) {
-    const int separator_width = ash::TrayConstants::separator_width();
     view->SetBorder(views::CreatePaddedBorder(
-        views::CreateSolidSidedBorder(0, 0, separator_width, 0,
+        views::CreateSolidSidedBorder(0, 0, kTraySeparatorWidth, 0,
                                       kMenuSeparatorColor),
         gfx::Insets(kMenuSeparatorVerticalPadding, 0,
-                    kMenuSeparatorVerticalPadding - separator_width, 0)));
+                    kMenuSeparatorVerticalPadding - kTraySeparatorWidth, 0)));
   } else {
     view->SetBorder(views::CreateEmptyBorder(
         gfx::Insets(kMenuSeparatorVerticalPadding, 0)));
@@ -307,35 +290,31 @@ std::unique_ptr<views::InkDropHighlight> TrayPopupUtils::CreateInkDropHighlight(
   return highlight;
 }
 
-std::unique_ptr<views::InkDropMask> TrayPopupUtils::CreateInkDropMask(
+std::unique_ptr<SkPath> TrayPopupUtils::CreateHighlightPath(
     TrayPopupInkDropStyle ink_drop_style,
     const views::View* host) {
-  if (ink_drop_style == TrayPopupInkDropStyle::FILL_BOUNDS)
-    return nullptr;
+  auto path = std::make_unique<SkPath>();
 
-  const gfx::Size layer_size = host->size();
+  const gfx::Rect mask_bounds =
+      GetInkDropBounds(TrayPopupInkDropStyle::HOST_CENTERED, host);
   switch (ink_drop_style) {
     case TrayPopupInkDropStyle::HOST_CENTERED: {
-      const gfx::Rect mask_bounds =
-          GetInkDropBounds(TrayPopupInkDropStyle::HOST_CENTERED, host);
+      gfx::Point center_point = mask_bounds.CenterPoint();
       const int radius =
           std::min(mask_bounds.width(), mask_bounds.height()) / 2;
-      return std::make_unique<views::CircleInkDropMask>(
-          layer_size, mask_bounds.CenterPoint(), radius);
+      path->addCircle(center_point.x(), center_point.y(), radius);
+      break;
     }
-    case TrayPopupInkDropStyle::INSET_BOUNDS: {
-      const gfx::Insets mask_insets =
-          GetInkDropInsets(TrayPopupInkDropStyle::INSET_BOUNDS);
-      return std::make_unique<views::RoundRectInkDropMask>(
-          layer_size, mask_insets, kTrayPopupInkDropCornerRadius);
-    }
+    case TrayPopupInkDropStyle::INSET_BOUNDS:
+      path->addRoundRect(RectToSkRect(mask_bounds),
+                         kTrayPopupInkDropCornerRadius,
+                         kTrayPopupInkDropCornerRadius);
+      break;
     case TrayPopupInkDropStyle::FILL_BOUNDS:
-      // Handled by quick return above.
+      path->addRect(RectToSkRect(mask_bounds));
       break;
   }
-  // Required by some compilers.
-  NOTREACHED();
-  return nullptr;
+  return path;
 }
 
 gfx::Insets TrayPopupUtils::GetInkDropInsets(
@@ -384,7 +363,7 @@ bool TrayPopupUtils::CanOpenWebUISettings() {
 void TrayPopupUtils::InitializeAsCheckableRow(HoverHighlightView* container,
                                               bool checked) {
   gfx::ImageSkia check_mark =
-      CreateVectorIcon(kCheckCircleIcon, gfx::kGoogleGreen700);
+      CreateVectorIcon(kCheckCircleIcon, gfx::kGoogleGreenDark600);
   container->AddRightIcon(check_mark, check_mark.width());
   UpdateCheckMarkVisibility(container, checked);
 }

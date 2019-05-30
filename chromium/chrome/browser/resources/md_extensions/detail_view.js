@@ -16,7 +16,7 @@ cr.define('extensions', function() {
     properties: {
       /**
        * The underlying ExtensionInfo for the details being displayed.
-       * @type {chrome.developerPrivate.ExtensionInfo}
+       * @type {!chrome.developerPrivate.ExtensionInfo}
        */
       data: Object,
 
@@ -31,6 +31,12 @@ cr.define('extensions', function() {
 
       /** Whether "allow in incognito" option should be shown. */
       incognitoAvailable: Boolean,
+
+      /** Whether "View Activity Log" link should be shown. */
+      showActivityLog: Boolean,
+
+      /** Whether the user navigated to this page from the activity log page. */
+      fromActivityLog: Boolean,
     },
 
     observers: [
@@ -42,12 +48,24 @@ cr.define('extensions', function() {
     },
 
     /**
+     * Focuses the extensions options button. This should be used after the
+     * dialog closes.
+     */
+    focusOptionsButton: function() {
+      this.$$('#extensions-options').focus();
+    },
+
+    /**
      * Focuses the back button when page is loaded.
      * @private
      */
     onViewEnterStart_: function() {
+      const elementToFocus = this.fromActivityLog ?
+          this.$.extensionsActivityLogLink :
+          this.$.closeButton;
+
       Polymer.RenderStatus.afterNextRender(
-          this, () => cr.ui.focusWithoutInk(this.$.closeButton));
+          this, () => cr.ui.focusWithoutInk(elementToFocus));
     },
 
     /** @private */
@@ -58,6 +76,12 @@ cr.define('extensions', function() {
       this.delegate.getExtensionSize(this.data.id).then(size => {
         this.size_ = size;
       });
+    },
+
+    /** @private */
+    onActivityLogTap_: function() {
+      extensions.navigation.navigateTo(
+          {page: Page.ACTIVITY_LOG, extensionId: this.data.id});
     },
 
     /**
@@ -97,6 +121,16 @@ cr.define('extensions', function() {
      */
     isEnableToggleEnabled_: function() {
       return extensions.userCanChangeEnablement(this.data);
+    },
+
+    /**
+     * Returns true if the extension is in the terminated state.
+     * @return {boolean}
+     * @private
+     */
+    isTerminated_: function() {
+      return this.data.state ==
+          chrome.developerPrivate.ExtensionState.TERMINATED;
     },
 
     /**
@@ -283,15 +317,42 @@ cr.define('extensions', function() {
      */
     hasPermissions_: function() {
       return this.data.permissions.simplePermissions.length > 0 ||
-          !!this.data.permissions.hostAccess;
+          this.hasRuntimeHostPermissions_();
     },
 
     /**
      * @return {boolean}
      * @private
      */
-    showRuntimeHostPermissions_: function() {
-      return !!this.data.permissions.hostAccess;
+    hasRuntimeHostPermissions_: function() {
+      return !!this.data.permissions.runtimeHostPermissions;
+    },
+
+    /**
+     * @return {boolean}
+     * @private
+     */
+    showSiteAccessContent_: function() {
+      return this.showFreeformRuntimeHostPermissions_() ||
+          this.showHostPermissionsToggleList_();
+    },
+
+    /**
+     * @return {boolean}
+     * @private
+     */
+    showFreeformRuntimeHostPermissions_: function() {
+      return this.hasRuntimeHostPermissions_() &&
+          this.data.permissions.runtimeHostPermissions.hasAllHosts;
+    },
+
+    /**
+     * @return {boolean}
+     * @private
+     */
+    showHostPermissionsToggleList_: function() {
+      return this.hasRuntimeHostPermissions_() &&
+          !this.data.permissions.runtimeHostPermissions.hasAllHosts;
     },
   });
 

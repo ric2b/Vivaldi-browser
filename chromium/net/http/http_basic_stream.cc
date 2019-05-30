@@ -11,6 +11,8 @@
 #include "net/http/http_response_body_drainer.h"
 #include "net/http/http_stream_parser.h"
 #include "net/socket/client_socket_handle.h"
+#include "net/ssl/ssl_cert_request_info.h"
+#include "net/ssl/ssl_info.h"
 
 namespace net {
 
@@ -62,9 +64,18 @@ int HttpBasicStream::ReadResponseBody(IOBuffer* buf,
 
 void HttpBasicStream::Close(bool not_reusable) {
   // parser() is null if |this| is created by an orphaned HttpStreamFactory::Job
-  // in which case InitializeStream() will not have been called.
-  if (parser())
-    parser()->Close(not_reusable);
+  // in which case InitializeStream() will not have been called. This also
+  // protects against null dereference in the case where
+  // state_.ReleaseConnection() has been called.
+  //
+  // TODO(mmenke):  Can these cases be handled a bit more cleanly?
+  // WebSocketHandshakeStream will need to be updated as well.
+  if (!parser())
+    return;
+  StreamSocket* socket = state_.connection()->socket();
+  if (not_reusable && socket)
+    socket->Disconnect();
+  state_.connection()->Reset();
 }
 
 HttpStream* HttpBasicStream::RenewStreamForAuth() {
@@ -83,13 +94,15 @@ bool HttpBasicStream::IsResponseBodyComplete() const {
 }
 
 bool HttpBasicStream::IsConnectionReused() const {
-  return parser()->IsConnectionReused();
+  return state_.IsConnectionReused();
 }
 
-void HttpBasicStream::SetConnectionReused() { parser()->SetConnectionReused(); }
+void HttpBasicStream::SetConnectionReused() {
+  state_.connection()->set_reuse_type(ClientSocketHandle::REUSED_IDLE);
+}
 
 bool HttpBasicStream::CanReuseConnection() const {
-  return parser()->CanReuseConnection();
+  return state_.connection()->socket() && parser()->CanReuseConnection();
 }
 
 int64_t HttpBasicStream::GetTotalReceivedBytes() const {
@@ -106,8 +119,14 @@ int64_t HttpBasicStream::GetTotalSentBytes() const {
 
 bool HttpBasicStream::GetLoadTimingInfo(
     LoadTimingInfo* load_timing_info) const {
-  return state_.connection()->GetLoadTimingInfo(IsConnectionReused(),
-                                                load_timing_info);
+  if (!state_.connection()->GetLoadTimingInfo(IsConnectionReused(),
+                                              load_timing_info) ||
+      !parser()) {
+    return false;
+  }
+
+  load_timing_info->receive_headers_start = parser()->response_start_time();
+  return true;
 }
 
 bool HttpBasicStream::GetAlternativeService(
@@ -116,11 +135,19 @@ bool HttpBasicStream::GetAlternativeService(
 }
 
 void HttpBasicStream::GetSSLInfo(SSLInfo* ssl_info) {
+  if (!state_.connection()->socket()) {
+    ssl_info->Reset();
+    return;
+  }
   parser()->GetSSLInfo(ssl_info);
 }
 
 void HttpBasicStream::GetSSLCertRequestInfo(
     SSLCertRequestInfo* cert_request_info) {
+  if (!state_.connection()->socket()) {
+    cert_request_info->Reset();
+    return;
+  }
   parser()->GetSSLCertRequestInfo(cert_request_info);
 }
 
@@ -129,12 +156,6 @@ bool HttpBasicStream::GetRemoteEndpoint(IPEndPoint* endpoint) {
     return false;
 
   return state_.connection()->socket()->GetPeerAddress(endpoint) == OK;
-}
-
-Error HttpBasicStream::GetTokenBindingSignature(crypto::ECPrivateKey* key,
-                                                TokenBindingType tb_type,
-                                                std::vector<uint8_t>* out) {
-  return parser()->GetTokenBindingSignature(key, tb_type, out);
 }
 
 void HttpBasicStream::Drain(HttpNetworkSession* session) {

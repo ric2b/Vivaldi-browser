@@ -30,7 +30,7 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
-#include "third_party/blink/renderer/platform/wtf/address_sanitizer.h"
+#include "third_party/blink/renderer/platform/wtf/sanitizers.h"
 #include "third_party/blink/renderer/platform/wtf/time.h"
 
 namespace blink {
@@ -163,10 +163,8 @@ bool TimerBase::Comparator::operator()(const TimerBase* a,
 
 // static
 TimeTicks TimerBase::TimerCurrentTimeTicks() const {
-  return WTF::TimeTicks(Platform::Current()
-                            ->CurrentThread()
-                            ->Scheduler()
-                            ->MonotonicallyIncreasingVirtualTime());
+  return WTF::TimeTicks(
+      ThreadScheduler::Current()->MonotonicallyIncreasingVirtualTime());
 }
 
 }  // namespace blink

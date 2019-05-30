@@ -27,8 +27,8 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/user_agent.h"
-#include "content/shell/browser/layout_test/secondary_test_window_observer.h"
 #include "content/shell/browser/shell.h"
+#include "content/shell/browser/web_test/secondary_test_window_observer.h"
 #include "content/shell/common/shell_content_client.h"
 #include "content/shell/common/shell_switches.h"
 #include "content/shell/grit/shell_resources.h"
@@ -182,6 +182,20 @@ ShellDevToolsManagerDelegate::~ShellDevToolsManagerDelegate() {
 
 BrowserContext* ShellDevToolsManagerDelegate::GetDefaultBrowserContext() {
   return browser_context_;
+}
+
+void ShellDevToolsManagerDelegate::ClientAttached(
+    content::DevToolsAgentHost* agent_host,
+    content::DevToolsAgentHostClient* client) {
+  // Make sure we don't receive notifications twice for the same client.
+  CHECK(clients_.find(client) == clients_.end());
+  clients_.insert(client);
+}
+
+void ShellDevToolsManagerDelegate::ClientDetached(
+    content::DevToolsAgentHost* agent_host,
+    content::DevToolsAgentHostClient* client) {
+  clients_.erase(client);
 }
 
 scoped_refptr<DevToolsAgentHost>

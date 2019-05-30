@@ -49,10 +49,9 @@ class TestListener : public internal::ShillPropertyHandler::Listener {
     UpdateEntries(GetTypeString(type), entries);
   }
 
-  void UpdateManagedStateProperties(
-      ManagedState::ManagedType type,
-      const std::string& path,
-      const base::DictionaryValue& properties) override {
+  void UpdateManagedStateProperties(ManagedState::ManagedType type,
+                                    const std::string& path,
+                                    const base::Value& properties) override {
     VLOG(2) << "UpdateManagedStateProperties: " << GetTypeString(type);
     initial_property_updates(GetTypeString(type))[path] += 1;
   }
@@ -71,11 +70,10 @@ class TestListener : public internal::ShillPropertyHandler::Listener {
     AddPropertyUpdate(shill::kDevicesProperty, device_path);
   }
 
-  void UpdateIPConfigProperties(
-      ManagedState::ManagedType type,
-      const std::string& path,
-      const std::string& ip_config_path,
-      const base::DictionaryValue& properties) override {
+  void UpdateIPConfigProperties(ManagedState::ManagedType type,
+                                const std::string& path,
+                                const std::string& ip_config_path,
+                                const base::Value& properties) override {
     AddPropertyUpdate(shill::kIPConfigsProperty, ip_config_path);
   }
 
@@ -390,12 +388,12 @@ TEST_F(ShillPropertyHandlerTest, ShillPropertyHandlerServicePropertyChanged) {
   EXPECT_EQ(1, listener_->property_updates(
       shill::kServiceCompleteListProperty)[kTestServicePath]);
 
-  // Change the visibility of a service. This will trigger a service list
-  // updates.
+  // Set the state of the service to Connected. This will trigger a service list
+  // update.
   listener_->reset_list_updates();
   DBusThreadManager::Get()->GetShillServiceClient()->SetProperty(
-      dbus::ObjectPath(kTestServicePath), shill::kVisibleProperty,
-      base::Value(false), base::DoNothing(),
+      dbus::ObjectPath(kTestServicePath), shill::kStateProperty,
+      base::Value(shill::kStateReady), base::DoNothing(),
       base::Bind(&ErrorCallbackFunction));
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, listener_->list_updates(shill::kServiceCompleteListProperty));

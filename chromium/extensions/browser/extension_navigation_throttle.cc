@@ -23,6 +23,8 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "ui/base/page_transition_types.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace extensions {
 
 ExtensionNavigationThrottle::ExtensionNavigationThrottle(
@@ -168,7 +170,10 @@ ExtensionNavigationThrottle::WillStartOrRedirectRequest() {
     // non-extension origins of |url| this is enforced by means of a Content
     // Security Policy. But CSP is incapable of blocking the chrome-extension
     // scheme. Thus, this case must be handled specially here.
-    if (target_extension->is_platform_app())
+    // NOTE(andre@vivaldi.com) : We do inject iframes that parse RSS-feeds that
+    // rely on this to work.
+    if (target_extension->is_platform_app() &&
+        !vivaldi::IsVivaldiApp(target_extension->id()))
       return content::NavigationThrottle::CANCEL;
 
     // A platform app may not load another extension in an <iframe>.

@@ -66,12 +66,15 @@ class InstallableManager
   void RecordAddToHomescreenManifestAndIconTimeout();
   void RecordAddToHomescreenInstallabilityTimeout();
 
+  bool IsContentSecureForTesting();
+
  protected:
   // For mocking in tests.
   virtual void OnWaitingForServiceWorker() {}
   virtual void OnResetData() {}
 
  private:
+  friend class content::WebContentsUserData<InstallableManager>;
   friend class AddToHomescreenDataFetcherTest;
   friend class InstallableManagerBrowserTest;
   friend class InstallableManagerUnitTest;
@@ -133,9 +136,13 @@ class InstallableManager
   // Returns true if |purpose| matches any fetched icon, or false if no icon has
   // been requested yet or there is no match.
   bool IsIconFetched(const IconPurpose purpose) const;
+  bool IsPrimaryIconFetched(const InstallableParams& params) const;
 
   // Sets the icon matching |purpose| as fetched.
   void SetIconFetched(const IconPurpose purpose);
+
+  // Gets the purpose of the icon to use as a primary icon.
+  IconPurpose GetPrimaryIconPurpose(const InstallableParams& params) const;
 
   // Returns the error code associated with the resources requested in |params|,
   // or NO_ERROR_DETECTED if there is no error.
@@ -179,8 +186,9 @@ class InstallableManager
   void OnDidGetManifest(const GURL& manifest_url,
                         const blink::Manifest& manifest);
 
-  void CheckManifestValid();
-  bool IsManifestValidForWebApp(const blink::Manifest& manifest);
+  void CheckManifestValid(bool check_webapp_manifest_display);
+  bool IsManifestValidForWebApp(const blink::Manifest& manifest,
+                                bool check_webapp_manifest_display);
   void CheckServiceWorker();
   void OnDidCheckHasServiceWorker(content::ServiceWorkerCapability capability);
 
@@ -224,6 +232,8 @@ class InstallableManager
   bool has_pwa_check_;
 
   base::WeakPtrFactory<InstallableManager> weak_factory_;
+
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
 
   DISALLOW_COPY_AND_ASSIGN(InstallableManager);
 };

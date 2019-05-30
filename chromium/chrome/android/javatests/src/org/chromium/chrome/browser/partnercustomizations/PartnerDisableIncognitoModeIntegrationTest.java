@@ -27,8 +27,8 @@ import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.partnercustomizations.TestPartnerBrowserCustomizationsProvider;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.net.test.EmbeddedTestServer;
 
 import java.util.concurrent.Callable;
@@ -155,7 +155,7 @@ public class PartnerDisableIncognitoModeIntegrationTest {
             waitForParentalControlsEnabledState(true);
 
             CriteriaHelper.pollInstrumentationThread(
-                    Criteria.equals(0, () -> mActivityTestRule.incognitoTabsCount()));
+                    Criteria.equals(0, () -> mActivityTestRule.tabsCount(true /* incognito */)));
         } finally {
             testServer.stopAndDestroyServer();
         }

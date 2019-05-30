@@ -4,53 +4,45 @@
 
 package org.chromium.chrome.browser.omaha;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.animation.AnimatorSet;
-import android.animation.ObjectAnimator;
-import android.annotation.TargetApi;
+import android.app.Activity;
 import android.content.ActivityNotFoundException;
-import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.net.Uri;
-import android.os.Build;
-import android.os.Environment;
-import android.os.StatFs;
+import android.os.Handler;
+import android.os.Looper;
+import android.support.annotation.ColorInt;
+import android.support.annotation.DrawableRes;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.annotation.StringRes;
 import android.text.TextUtils;
-import android.view.View;
-import android.view.animation.LinearInterpolator;
 
-import com.google.android.gms.common.GooglePlayServicesUtil;
-
-import org.chromium.base.AsyncTask;
-import org.chromium.base.CommandLine;
+import org.chromium.base.BuildInfo;
+import org.chromium.base.Callback;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
-import org.chromium.base.ThreadUtils;
+import org.chromium.base.ObserverList;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.appmenu.AppMenu;
+import org.chromium.chrome.browser.omaha.UpdateStatusProvider.UpdateInteractionSource;
+import org.chromium.chrome.browser.omaha.UpdateStatusProvider.UpdateState;
+import org.chromium.chrome.browser.omaha.UpdateStatusProvider.UpdateStatus;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.chrome.browser.util.ConversionUtils;
-import org.chromium.components.variations.VariationsAssociatedData;
-import org.chromium.ui.interpolators.BakedBezierInterpolator;
-
-import java.io.File;
 
 /**
- * Contains logic for whether the update menu item should be shown, whether the update toolbar badge
- * should be shown, and UMA logging for the update menu item.
+ * Contains logic related to displaying app menu badge and a special menu item for information
+ * related to updates.
+ *
+ * It supports displaying a badge and item for whether an update is available, and a different
+ * badge and menu item if the Android OS version Chrome is currently running on is unsupported.
+ *
+ * It also has logic for logging usage of the update menu item to UMA.
+ *
+ * For manually testing this functionality, see {@link UpdateConfigs}.
  */
 public class UpdateMenuItemHelper {
     private static final String TAG = "UpdateMenuItemHelper";
-
-    // VariationsAssociatedData configs
-    private static final String FIELD_TRIAL_NAME = "UpdateMenuItem";
-    private static final String ENABLED_VALUE = "true";
-    private static final String CUSTOM_SUMMARY = "custom_summary";
-    private static final String MIN_REQUIRED_STORAGE_MB = "min_required_storage_for_update_mb";
 
     // UMA constants for logging whether the menu item was clicked.
     private static final int ITEM_NOT_CLICKED = 0;
@@ -63,77 +55,127 @@ public class UpdateMenuItemHelper {
     private static final int NOT_UPDATED = 1;
     private static final int UPDATED_BOUNDARY = 2;
 
+    /** The UI state required to properly display an update-related main menu item. */
+    public static class MenuItemState {
+        /** The title resource of the menu.  Always set if this object is not {@code null}. */
+        public @StringRes int title;
+
+        /** The color resource of the title.  Always set if this object is not {@code null}. */
+        public @ColorInt int titleColor;
+
+        /** The summary string for the menu.  Maybe {@code null} if no summary should be shown. */
+        public @Nullable String summary;
+
+        /** An icon resource for the menu item.  May be {@code 0} if no icon is specified. */
+        public @DrawableRes int icon;
+
+        /** Whether or not the menu item should be enabled (and clickable). */
+        public boolean enabled;
+    }
+
+    /** The UI state required to properly display a 'update decorated' main menu button. */
+    public static class MenuButtonState {
+        /**
+         * The new content description of the menu button.  Always set if this object is not
+         * {@code null}.
+         */
+        public @StringRes int menuContentDescription;
+
+        /**
+         * An icon resource for the dark badge for the menu button.  Always set (not {@code 0}) if
+         * this object is not {@code null}.
+         */
+        public @DrawableRes int darkBadgeIcon;
+
+        /**
+         * An icon resource for the light badge for the menu button.  Always set (not {@code 0}) if
+         * this object is not {@code null}.
+         */
+        public @DrawableRes int lightBadgeIcon;
+    }
+
+    /**
+     * The UI state required to properly decorate the main menu.  This may include the button
+     * decorations as well as the actual update item to show in the menu.
+     */
+    public static class MenuUiState {
+        /**
+         * The optional UI state for building the menu item.  If {@code null} no item should be
+         * shown.
+         */
+        public @Nullable MenuItemState itemState;
+
+        /**
+         * The optional UI state for decorating the menu button itself.  If {@code null} no
+         * decoration should be applied to the menu button.
+         */
+        public @Nullable MenuButtonState buttonState;
+    }
+
     private static UpdateMenuItemHelper sInstance;
+
     private static Object sGetInstanceLock = new Object();
 
-    // Whether OmahaClient has already been checked for an update.
-    private boolean mAlreadyCheckedForUpdates;
+    private final ObserverList<Runnable> mObservers = new ObserverList<>();
 
-    // Whether an update is available.
-    private boolean mUpdateAvailable;
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
 
-    // URL to direct the user to when Omaha detects a newer version available.
-    private String mUpdateUrl;
+    private final Callback<UpdateStatusProvider.UpdateStatus> mUpdateCallback = status -> {
+        mStatus = status;
+        handleStateChanged();
+        pingObservers();
+        recordUpdateHistogram();
+    };
+
+    /**
+     * The current state of updates for Chrome.  This can change during runtime and may be {@code
+     * null} if the status hasn't been determined yet.
+     *
+     * TODO(924011): Handle state bug where the state here and the visible state of the UI can be
+     * out of sync.
+     */
+    private @Nullable UpdateStatus mStatus;
+
+    private @NonNull MenuUiState mMenuUiState = new MenuUiState();
 
     // Whether the menu item was clicked. This is used to log the click-through rate.
     private boolean mMenuItemClicked;
 
-    // The latest Chrome version available if OmahaClient.isNewerVersionAvailable() returns true.
-    private String mLatestVersion;
-
-    /**
-     * @return The {@link UpdateMenuItemHelper} instance.
-     */
+    /** @return The {@link UpdateMenuItemHelper} instance. */
     public static UpdateMenuItemHelper getInstance() {
         synchronized (UpdateMenuItemHelper.sGetInstanceLock) {
             if (sInstance == null) {
                 sInstance = new UpdateMenuItemHelper();
-                String testMarketUrl = getStringParamValue(ChromeSwitches.MARKET_URL_FOR_TESTING);
-                if (!TextUtils.isEmpty(testMarketUrl)) {
-                    sInstance.mUpdateUrl = testMarketUrl;
-                }
             }
             return sInstance;
         }
     }
 
     /**
-     * Checks if the {@link OmahaClient} knows about an update.
-     * @param activity The current {@link ChromeActivity}.
+     * Registers {@code observer} to be triggered whenever the menu state changes.  This will always
+     * be triggered at least once after registration.
      */
-    public void checkForUpdateOnBackgroundThread(final ChromeActivity activity) {
-        ThreadUtils.assertOnUiThread();
+    public void registerObserver(Runnable observer) {
+        if (!mObservers.addObserver(observer)) return;
 
-        if (mAlreadyCheckedForUpdates) {
-            if (activity.isActivityDestroyed()) return;
-            activity.onCheckForUpdate(mUpdateAvailable);
+        if (mStatus != null) {
+            mHandler.post(() -> {
+                if (mObservers.hasObserver(observer)) observer.run();
+            });
             return;
         }
 
-        mAlreadyCheckedForUpdates = true;
+        UpdateStatusProvider.getInstance().addObserver(mUpdateCallback);
+    }
 
-        new AsyncTask<Void>() {
-            @Override
-            protected Void doInBackground() {
-                if (VersionNumberGetter.isNewerVersionAvailable(activity)) {
-                    mUpdateUrl = MarketURLGetter.getMarketUrl(activity);
-                    mLatestVersion =
-                            VersionNumberGetter.getInstance().getLatestKnownVersion(activity);
-                    mUpdateAvailable = checkForSufficientStorage();
-                } else {
-                    mUpdateAvailable = false;
-                }
-                return null;
-            }
+    /** Unregisters {@code observer} from menu state changes. */
+    public void unregisterObserver(Runnable observer) {
+        mObservers.removeObserver(observer);
+    }
 
-            @Override
-            protected void onPostExecute(Void result) {
-                if (activity.isActivityDestroyed()) return;
-                activity.onCheckForUpdate(mUpdateAvailable);
-                recordUpdateHistogram();
-            }
-        }
-                .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+    /** @return {@link MenuUiState} representing the current update state for the menu. */
+    public @NonNull MenuUiState getUiState() {
+        return mMenuUiState;
     }
 
     /**
@@ -141,103 +183,62 @@ public class UpdateMenuItemHelper {
      * Should be called from ChromeActivity#onStart().
      */
     public void onStart() {
-        if (mAlreadyCheckedForUpdates) {
-            recordUpdateHistogram();
-        }
-    }
-
-    /**
-     * @param activity The current {@link ChromeActivity}.
-     * @return Whether the update menu item should be shown.
-     */
-    public boolean shouldShowMenuItem(ChromeActivity activity) {
-        if (getBooleanParam(ChromeSwitches.FORCE_SHOW_UPDATE_MENU_ITEM)) {
-            return true;
-        }
-
-        if (!isGooglePlayStoreAvailable(activity)) {
-            return false;
-        }
-
-        return updateAvailable(activity);
-    }
-
-    private static boolean isGooglePlayStoreAvailable(Context context) {
-        try {
-            context.getPackageManager().getPackageInfo(
-                    GooglePlayServicesUtil.GOOGLE_PLAY_STORE_PACKAGE, 0);
-        } catch (PackageManager.NameNotFoundException e) {
-            return false;
-        }
-        return true;
-    }
-
-    /**
-     * @param context The current {@link Context}.
-     * @return The string to use for summary text or the empty string if no summary should be shown.
-     */
-    public String getMenuItemSummaryText(Context context) {
-        String customSummary = getStringParamValue(CUSTOM_SUMMARY);
-        if (!TextUtils.isEmpty(customSummary)) {
-            return customSummary;
-        }
-
-        return context.getResources().getString(R.string.menu_update_summary_default);
-    }
-
-    /**
-     * @param activity The current {@link ChromeActivity}.
-     * @return Whether the update badge should be shown in the toolbar.
-     */
-    public boolean shouldShowToolbarBadge(ChromeActivity activity) {
-        if (getBooleanParam(ChromeSwitches.FORCE_SHOW_UPDATE_MENU_BADGE)) {
-            return true;
-        }
-
-        if (!isGooglePlayStoreAvailable(activity)) {
-            return false;
-        }
-
-        // The badge is hidden if the update menu item has been clicked until there is an
-        // even newer version of Chrome available.
-        String latestVersionWhenClicked =
-                PrefServiceBridge.getInstance().getLatestVersionWhenClickedUpdateMenuItem();
-        if (TextUtils.equals(latestVersionWhenClicked, mLatestVersion)) {
-            return false;
-        }
-
-        return updateAvailable(activity);
+        if (mStatus != null) recordUpdateHistogram();
     }
 
     /**
      * Handles a click on the update menu item.
-     * @param activity The current {@link ChromeActivity}.
+     * @param activity The current {@code Activity}.
      */
-    public void onMenuItemClicked(ChromeActivity activity) {
-        if (mUpdateUrl == null) return;
+    public void onMenuItemClicked(Activity activity) {
+        if (mStatus == null) return;
+
+        switch (mStatus.updateState) {
+            case UpdateState.UPDATE_AVAILABLE:
+                if (TextUtils.isEmpty(mStatus.updateUrl)) return;
+
+                try {
+                    Intent launchIntent =
+                            new Intent(Intent.ACTION_VIEW, Uri.parse(mStatus.updateUrl));
+                    activity.startActivity(launchIntent);
+                    recordItemClickedHistogram(ITEM_CLICKED_INTENT_LAUNCHED);
+                    PrefServiceBridge.getInstance().setClickedUpdateMenuItem(true);
+                } catch (ActivityNotFoundException e) {
+                    Log.e(TAG, "Failed to launch Activity for: %s", mStatus.updateUrl);
+                    recordItemClickedHistogram(ITEM_CLICKED_INTENT_FAILED);
+                }
+                break;
+            case UpdateState.INLINE_UPDATE_AVAILABLE:
+                UpdateStatusProvider.getInstance().startInlineUpdate(
+                        UpdateInteractionSource.FROM_MENU, activity);
+                break;
+            case UpdateState.INLINE_UPDATE_READY:
+                UpdateStatusProvider.getInstance().finishInlineUpdate(
+                        UpdateInteractionSource.FROM_MENU);
+                break;
+            case UpdateState.INLINE_UPDATE_FAILED:
+                UpdateStatusProvider.getInstance().retryInlineUpdate(
+                        UpdateInteractionSource.FROM_MENU, activity);
+                break;
+            case UpdateState.UNSUPPORTED_OS_VERSION:
+            // Intentional fall through.
+            case UpdateState.INLINE_UPDATE_DOWNLOADING:
+            // Intentional fall through.
+            default:
+                return;
+        }
 
         // If the update menu item is showing because it was forced on through about://flags
         // then mLatestVersion may be null.
-        if (mLatestVersion != null) {
+        if (mStatus.latestVersion != null) {
             PrefServiceBridge.getInstance().setLatestVersionWhenClickedUpdateMenuItem(
-                    mLatestVersion);
+                    mStatus.latestVersion);
         }
 
-        // Fire an intent to open the URL.
-        try {
-            Intent launchIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(mUpdateUrl));
-            activity.startActivity(launchIntent);
-            recordItemClickedHistogram(ITEM_CLICKED_INTENT_LAUNCHED);
-            PrefServiceBridge.getInstance().setClickedUpdateMenuItem(true);
-        } catch (ActivityNotFoundException e) {
-            Log.e(TAG, "Failed to launch Activity for: %s", mUpdateUrl);
-            recordItemClickedHistogram(ITEM_CLICKED_INTENT_FAILED);
-        }
+        handleStateChanged();
     }
 
-    /**
-     * Should be called before the AppMenu is dismissed if the update menu item was clicked.
-     */
+    /** Should be called before the AppMenu is dismissed if the update menu item was clicked. */
     public void setMenuItemClicked() {
         mMenuItemClicked = true;
     }
@@ -247,105 +248,139 @@ public class UpdateMenuItemHelper {
      * item was not clicked. If it was clicked, logging is delayed until #onMenuItemClicked().
      */
     public void onMenuDismissed() {
-        if (!mMenuItemClicked) {
-            recordItemClickedHistogram(ITEM_NOT_CLICKED);
-        }
+        if (!mMenuItemClicked) recordItemClickedHistogram(ITEM_NOT_CLICKED);
         mMenuItemClicked = false;
     }
 
     /**
-     * Creates an {@link AnimatorSet} for showing the update badge that is displayed on top
-     * of the app menu button.
-     *
-     * @param menuButton The {@link View} containing the app menu button.
-     * @param menuBadge The {@link View} containing the update badge.
-     * @return An {@link AnimatorSet} to run when showing the update badge.
+     * Called when the user clicks the app menu button while the unsupported OS badge is showing.
      */
-    public static AnimatorSet createShowUpdateBadgeAnimation(final View menuButton,
-            final View menuBadge) {
-        // Create badge ObjectAnimators.
-        ObjectAnimator badgeFadeAnimator = ObjectAnimator.ofFloat(menuBadge, View.ALPHA, 1.f);
-        badgeFadeAnimator.setInterpolator(BakedBezierInterpolator.FADE_IN_CURVE);
+    public void onMenuButtonClicked() {
+        if (mStatus == null) return;
+        if (mStatus.updateState != UpdateState.UNSUPPORTED_OS_VERSION) return;
 
-        int pixelTranslation = menuBadge.getResources().getDimensionPixelSize(
-                R.dimen.menu_badge_translation_y_distance);
-        ObjectAnimator badgeTranslateYAnimator = ObjectAnimator.ofFloat(menuBadge,
-                View.TRANSLATION_Y, pixelTranslation, 0.f);
-        badgeTranslateYAnimator.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
-
-        // Create menu button ObjectAnimator.
-        ObjectAnimator menuButtonFadeAnimator = ObjectAnimator.ofFloat(menuButton, View.ALPHA, 0.f);
-        menuButtonFadeAnimator.setInterpolator(new LinearInterpolator());
-
-        // Create AnimatorSet and listeners.
-        AnimatorSet set = new AnimatorSet();
-        set.playTogether(badgeFadeAnimator, badgeTranslateYAnimator, menuButtonFadeAnimator);
-        set.setDuration(350);
-        set.addListener(new AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationEnd(Animator animation) {
-                // Make sure the menu button is visible again.
-                menuButton.setAlpha(1.f);
-            }
-
-            @Override
-            public void onAnimationCancel(Animator animation) {
-                // Jump to the end state if the animation is canceled.
-                menuBadge.setAlpha(1.f);
-                menuBadge.setTranslationY(0.f);
-                menuButton.setAlpha(1.f);
-            }
-        });
-
-        return set;
+        UpdateStatusProvider.getInstance().updateLatestUnsupportedVersion();
     }
 
-    /**
-     * Creates an {@link AnimatorSet} for hiding the update badge that is displayed on top
-     * of the app menu button.
-     *
-     * @param menuButton The {@link View} containing the app menu button.
-     * @param menuBadge The {@link View} containing the update badge.
-     * @return An {@link AnimatorSet} to run when hiding the update badge.
-     */
-    public static AnimatorSet createHideUpdateBadgeAnimation(final View menuButton,
-            final View menuBadge) {
-        // Create badge ObjectAnimator.
-        ObjectAnimator badgeFadeAnimator = ObjectAnimator.ofFloat(menuBadge, View.ALPHA, 0.f);
-        badgeFadeAnimator.setInterpolator(BakedBezierInterpolator.FADE_OUT_CURVE);
+    private void handleStateChanged() {
+        assert mStatus != null;
 
-        // Create menu button ObjectAnimator.
-        ObjectAnimator menuButtonFadeAnimator = ObjectAnimator.ofFloat(menuButton, View.ALPHA, 1.f);
-        menuButtonFadeAnimator.setInterpolator(BakedBezierInterpolator.FADE_IN_CURVE);
+        boolean showBadge = UpdateConfigs.getAlwaysShowMenuBadge();
 
-        // Create AnimatorSet and listeners.
-        AnimatorSet set = new AnimatorSet();
-        set.playTogether(badgeFadeAnimator, menuButtonFadeAnimator);
-        set.setDuration(200);
-        set.addListener(new AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationEnd(Animator animation) {
-                menuBadge.setVisibility(View.GONE);
-            }
+        // Note that is not safe for theming, but for string access it should be ok.
+        Resources resources = ContextUtils.getApplicationContext().getResources();
 
-            @Override
-            public void onAnimationCancel(Animator animation) {
-                // Jump to the end state if the animation is canceled.
-                menuButton.setAlpha(1.f);
-                menuBadge.setVisibility(View.GONE);
-            }
-        });
+        mMenuUiState = new MenuUiState();
+        switch (mStatus.updateState) {
+            case UpdateState.UPDATE_AVAILABLE:
+                // The badge is hidden if the update menu item has been clicked until there is an
+                // even newer version of Chrome available.
+                showBadge |= !TextUtils.equals(
+                        PrefServiceBridge.getInstance().getLatestVersionWhenClickedUpdateMenuItem(),
+                        mStatus.latestUnsupportedVersion);
 
-        return set;
-    }
+                if (showBadge) {
+                    mMenuUiState.buttonState = new MenuButtonState();
+                    mMenuUiState.buttonState.menuContentDescription =
+                            R.string.accessibility_toolbar_btn_menu_update;
+                    mMenuUiState.buttonState.darkBadgeIcon = R.drawable.badge_update_dark;
+                    mMenuUiState.buttonState.lightBadgeIcon = R.drawable.badge_update_light;
+                }
 
-    private boolean updateAvailable(ChromeActivity activity) {
-        if (!mAlreadyCheckedForUpdates) {
-            checkForUpdateOnBackgroundThread(activity);
-            return false;
+                mMenuUiState.itemState = new MenuItemState();
+                mMenuUiState.itemState.title = R.string.menu_update;
+                mMenuUiState.itemState.titleColor = R.color.error_text_color;
+                mMenuUiState.itemState.icon = R.drawable.badge_update_dark;
+                mMenuUiState.itemState.enabled = true;
+                mMenuUiState.itemState.summary = UpdateConfigs.getCustomSummary();
+                if (TextUtils.isEmpty(mMenuUiState.itemState.summary)) {
+                    mMenuUiState.itemState.summary =
+                            resources.getString(R.string.menu_update_summary_default);
+                }
+                break;
+            case UpdateState.UNSUPPORTED_OS_VERSION:
+                // We should show the badge if the user has not opened the menu.
+                showBadge |= mStatus.latestUnsupportedVersion == null;
+
+                // In case the user has been upgraded since last time they tapped the toolbar badge
+                // we should show the badge again.
+                showBadge |= !TextUtils.equals(
+                        BuildInfo.getInstance().versionName, mStatus.latestUnsupportedVersion);
+
+                if (showBadge) {
+                    mMenuUiState.buttonState = new MenuButtonState();
+                    mMenuUiState.buttonState.menuContentDescription =
+                            R.string.accessibility_toolbar_btn_menu_os_version_unsupported;
+                    mMenuUiState.buttonState.darkBadgeIcon =
+                            R.drawable.ic_error_grey800_24dp_filled;
+                    mMenuUiState.buttonState.lightBadgeIcon = R.drawable.ic_error_white_24dp_filled;
+                }
+
+                mMenuUiState.itemState = new MenuItemState();
+                mMenuUiState.itemState.title = R.string.menu_update_unsupported;
+                mMenuUiState.itemState.titleColor = R.color.default_text_color;
+                mMenuUiState.itemState.summary =
+                        resources.getString(R.string.menu_update_unsupported_summary_default);
+                mMenuUiState.itemState.icon = R.drawable.ic_error_grey800_24dp_filled;
+                mMenuUiState.itemState.enabled = false;
+                break;
+            case UpdateState.INLINE_UPDATE_AVAILABLE:
+                // The badge is hidden if the update menu item has been clicked until there is an
+                // even newer version of Chrome available.
+                showBadge |= !TextUtils.equals(
+                        PrefServiceBridge.getInstance().getLatestVersionWhenClickedUpdateMenuItem(),
+                        mStatus.latestUnsupportedVersion);
+
+                if (showBadge) {
+                    mMenuUiState.buttonState = new MenuButtonState();
+                    mMenuUiState.buttonState.menuContentDescription =
+                            R.string.accessibility_toolbar_btn_menu_update;
+                    mMenuUiState.buttonState.darkBadgeIcon = R.drawable.badge_update_dark;
+                    mMenuUiState.buttonState.lightBadgeIcon = R.drawable.badge_update_light;
+                }
+
+                mMenuUiState.itemState = new MenuItemState();
+                mMenuUiState.itemState.title = R.string.menu_update;
+                mMenuUiState.itemState.titleColor = R.color.default_text_color_blue;
+                mMenuUiState.itemState.summary = UpdateConfigs.getCustomSummary();
+                if (TextUtils.isEmpty(mMenuUiState.itemState.summary)) {
+                    mMenuUiState.itemState.summary =
+                            resources.getString(R.string.menu_update_summary_default);
+                }
+                mMenuUiState.itemState.icon = R.drawable.ic_history_googblue_24dp;
+                mMenuUiState.itemState.enabled = true;
+                break;
+            case UpdateState.INLINE_UPDATE_DOWNLOADING:
+                mMenuUiState.itemState = new MenuItemState();
+                mMenuUiState.itemState.title = R.string.menu_inline_update_downloading;
+                mMenuUiState.itemState.titleColor = R.color.default_text_color_secondary;
+                break;
+            case UpdateState.INLINE_UPDATE_READY:
+                mMenuUiState.itemState = new MenuItemState();
+                mMenuUiState.itemState.title = R.string.menu_inline_update_ready;
+                mMenuUiState.itemState.titleColor = R.color.default_text_color_blue;
+                mMenuUiState.itemState.summary =
+                        resources.getString(R.string.menu_inline_update_ready_summary);
+                mMenuUiState.itemState.icon = R.drawable.infobar_chrome;
+                mMenuUiState.itemState.enabled = true;
+                break;
+            case UpdateState.INLINE_UPDATE_FAILED:
+                mMenuUiState.itemState = new MenuItemState();
+                mMenuUiState.itemState.title = R.string.menu_inline_update_failed;
+                mMenuUiState.itemState.titleColor = R.color.default_text_color_blue;
+                mMenuUiState.itemState.summary = resources.getString(R.string.try_again);
+                mMenuUiState.itemState.icon = R.drawable.ic_history_googblue_24dp;
+                mMenuUiState.itemState.enabled = true;
+                break;
+            case UpdateState.NONE:
+            // Intentional fall through.
+            default:
+                break;
         }
+    }
 
-        return mUpdateAvailable;
+    private void pingObservers() {
+        for (Runnable observer : mObservers) observer.run();
     }
 
     private void recordItemClickedHistogram(int action) {
@@ -354,95 +389,16 @@ public class UpdateMenuItemHelper {
     }
 
     private void recordUpdateHistogram() {
+        assert mStatus != null;
+
         if (PrefServiceBridge.getInstance().getClickedUpdateMenuItem()) {
             RecordHistogram.recordEnumeratedHistogram(
                     "GoogleUpdate.MenuItem.ActionTakenAfterItemClicked",
-                    mUpdateAvailable ? NOT_UPDATED : UPDATED, UPDATED_BOUNDARY);
+                    mStatus.updateState == UpdateState.UPDATE_AVAILABLE ? NOT_UPDATED : UPDATED,
+                    UPDATED_BOUNDARY);
             PrefServiceBridge.getInstance().setClickedUpdateMenuItem(false);
         }
     }
 
-    /**
-     * Gets a boolean VariationsAssociatedData parameter, assuming the <paramName>="true" format.
-     * Also checks for a command-line switch with the same name, for easy local testing.
-     * @param paramName The name of the parameter (or command-line switch) to get a value for.
-     * @return Whether the param is defined with a value "true", if there's a command-line
-     *         flag present with any value.
-     */
-    private static boolean getBooleanParam(String paramName) {
-        if (CommandLine.getInstance().hasSwitch(paramName)) {
-            return true;
-        }
-        return TextUtils.equals(ENABLED_VALUE,
-                VariationsAssociatedData.getVariationParamValue(FIELD_TRIAL_NAME, paramName));
-    }
 
-    /**
-     * Gets a String VariationsAssociatedData parameter. Also checks for a command-line switch with
-     * the same name, for easy local testing.
-     * @param paramName The name of the parameter (or command-line switch) to get a value for.
-     * @return The command-line flag value if present, or the param is value if present.
-     */
-    private static String getStringParamValue(String paramName) {
-        String value = CommandLine.getInstance().getSwitchValue(paramName);
-        if (TextUtils.isEmpty(value)) {
-            value = VariationsAssociatedData.getVariationParamValue(FIELD_TRIAL_NAME, paramName);
-        }
-        return value;
-    }
-
-    /**
-     * Returns an integer value for a Finch parameter, or the default value if no parameter exists
-     * in the current configuration.  Also checks for a command-line switch with the same name.
-     * @param paramName The name of the Finch parameter (or command-line switch) to get a value for.
-     * @param defaultValue The default value to return when there's no param or switch.
-     * @return An integer value -- either the param or the default.
-     */
-    private static int getIntParamValueOrDefault(String paramName, int defaultValue) {
-        String value = CommandLine.getInstance().getSwitchValue(paramName);
-        if (TextUtils.isEmpty(value)) {
-            value = VariationsAssociatedData.getVariationParamValue(FIELD_TRIAL_NAME, paramName);
-        }
-        if (TextUtils.isEmpty(value)) return defaultValue;
-
-        try {
-            return Integer.parseInt(value);
-        } catch (NumberFormatException e) {
-            return defaultValue;
-        }
-    }
-
-    private boolean checkForSufficientStorage() {
-        assert !ThreadUtils.runningOnUiThread();
-
-        File path = Environment.getDataDirectory();
-        StatFs statFs = new StatFs(path.getAbsolutePath());
-        long size;
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            size = getSize(statFs);
-        } else {
-            size = getSizeUpdatedApi(statFs);
-        }
-        RecordHistogram.recordLinearCountHistogram(
-                "GoogleUpdate.InfoBar.InternalStorageSizeAvailable", (int) size, 1, 200, 100);
-        RecordHistogram.recordLinearCountHistogram(
-                "GoogleUpdate.InfoBar.DeviceFreeSpace", (int) size, 1, 1000, 50);
-
-        int minRequiredStorage = getIntParamValueOrDefault(MIN_REQUIRED_STORAGE_MB, -1);
-        if (minRequiredStorage == -1) return true;
-
-        return size >= minRequiredStorage;
-    }
-
-    @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR2)
-    private static long getSizeUpdatedApi(StatFs statFs) {
-        return ConversionUtils.bytesToMegabytes(statFs.getAvailableBytes());
-    }
-
-    @SuppressWarnings("deprecation")
-    private static long getSize(StatFs statFs) {
-        int blockSize = statFs.getBlockSize();
-        int availableBlocks = statFs.getAvailableBlocks();
-        return ConversionUtils.bytesToMegabytes(blockSize * availableBlocks);
-    }
 }

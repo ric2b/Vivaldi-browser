@@ -15,7 +15,6 @@
 #include "chrome/browser/extensions/api/content_settings/content_settings_service.h"
 #include "chrome/browser/extensions/api/cookies/cookies_api.h"
 #include "chrome/browser/extensions/api/developer_private/developer_private_api.h"
-#include "chrome/browser/extensions/api/easy_unlock_private/easy_unlock_private_api.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/api/font_settings/font_settings_api.h"
 #include "chrome/browser/extensions/api/history/history_api.h"
@@ -29,7 +28,6 @@
 #include "chrome/browser/extensions/api/settings_overrides/settings_overrides_api.h"
 #include "chrome/browser/extensions/api/settings_private/settings_private_event_router_factory.h"
 #include "chrome/browser/extensions/api/signed_in_devices/signed_in_devices_manager.h"
-#include "chrome/browser/extensions/api/streams_private/streams_private_api.h"
 #include "chrome/browser/extensions/api/tab_capture/tab_capture_registry.h"
 #include "chrome/browser/extensions/api/tabs/tabs_windows_api.h"
 #include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
@@ -52,12 +50,10 @@
 #include "ppapi/buildflags/buildflags.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/extensions/arc_apps_private_api.h"
 #include "chrome/browser/chromeos/extensions/file_manager/event_router_factory.h"
 #include "chrome/browser/chromeos/extensions/input_method_api.h"
 #include "chrome/browser/chromeos/extensions/media_player_api.h"
 #include "chrome/browser/extensions/api/input_ime/input_ime_api.h"
-#include "chrome/browser/extensions/api/screenlock_private/screenlock_private_api.h"
 #elif defined(OS_LINUX) || defined(OS_WIN)
 #include "chrome/browser/extensions/api/input_ime/input_ime_api.h"
 #endif
@@ -75,9 +71,6 @@ namespace chrome_extensions {
 void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   extensions::ActivityLog::GetFactoryInstance();
   extensions::ActivityLogAPI::GetFactoryInstance();
-#if defined(OS_CHROMEOS)
-  extensions::ArcAppsPrivateAPI::GetFactoryInstance();
-#endif
   extensions::AutofillPrivateEventRouterFactory::GetInstance();
   extensions::BluetoothLowEnergyAPI::GetFactoryInstance();
   extensions::BookmarksAPI::GetFactoryInstance();
@@ -87,9 +80,6 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   extensions::ContentSettingsService::GetFactoryInstance();
   extensions::CookiesAPI::GetFactoryInstance();
   extensions::DeveloperPrivateAPI::GetFactoryInstance();
-#if defined(OS_CHROMEOS)
-  extensions::EasyUnlockPrivateAPI::GetFactoryInstance();
-#endif
   extensions::ExtensionActionAPI::GetFactoryInstance();
   extensions::ExtensionGarbageCollectorFactory::GetInstance();
   extensions::ExtensionStorageMonitorFactory::GetInstance();
@@ -121,9 +111,6 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
 #endif
   extensions::PreferenceAPI::GetFactoryInstance();
   extensions::ProcessesAPI::GetFactoryInstance();
-#if defined(OS_CHROMEOS)
-  extensions::ScreenlockPrivateEventRouter::GetFactoryInstance();
-#endif
   extensions::SessionsAPI::GetFactoryInstance();
   extensions::SettingsPrivateEventRouterFactory::GetInstance();
   extensions::SettingsOverridesAPI::GetFactoryInstance();
@@ -131,7 +118,6 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
 #if BUILDFLAG(ENABLE_SPELLCHECK)
   extensions::SpellcheckAPI::GetFactoryInstance();
 #endif
-  extensions::StreamsPrivateAPI::GetFactoryInstance();
   extensions::TabCaptureRegistry::GetFactoryInstance();
   extensions::TabsWindowsAPI::GetFactoryInstance();
   extensions::TtsAPI::GetFactoryInstance();

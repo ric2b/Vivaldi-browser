@@ -11,12 +11,13 @@
 #include <string>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/invalidation/impl/fake_invalidation_state_tracker.h"
 #include "components/invalidation/impl/push_client_channel.h"
@@ -112,8 +113,7 @@ class FakeInvalidationClient : public invalidation::InvalidationClient {
       ADD_FAILURE();
       return;
     }
-    for (invalidation::vector<ObjectId>::const_iterator
-             it = object_ids.begin(); it != object_ids.end(); ++it) {
+    for (auto it = object_ids.begin(); it != object_ids.end(); ++it) {
       registered_ids_.erase(*it);
     }
   }
@@ -141,7 +141,7 @@ class FakeDelegate : public SyncInvalidationListener::Delegate {
   ~FakeDelegate() override {}
 
   size_t GetInvalidationCount(const ObjectId& id) const {
-    Map::const_iterator it = invalidations_.find(id);
+    auto it = invalidations_.find(id);
     if (it == invalidations_.end()) {
       return 0;
     } else {
@@ -150,7 +150,7 @@ class FakeDelegate : public SyncInvalidationListener::Delegate {
   }
 
   int64_t GetVersion(const ObjectId& id) const {
-    Map::const_iterator it = invalidations_.find(id);
+    auto it = invalidations_.find(id);
     if (it == invalidations_.end()) {
       ADD_FAILURE() << "No invalidations for ID " << ObjectIdToString(id);
       return 0;
@@ -160,7 +160,7 @@ class FakeDelegate : public SyncInvalidationListener::Delegate {
   }
 
   std::string GetPayload(const ObjectId& id) const {
-    Map::const_iterator it = invalidations_.find(id);
+    auto it = invalidations_.find(id);
     if (it == invalidations_.end()) {
       ADD_FAILURE() << "No invalidations for ID " << ObjectIdToString(id);
       return nullptr;
@@ -170,7 +170,7 @@ class FakeDelegate : public SyncInvalidationListener::Delegate {
   }
 
   bool IsUnknownVersion(const ObjectId& id) const {
-    Map::const_iterator it = invalidations_.find(id);
+    auto it = invalidations_.find(id);
     if (it == invalidations_.end()) {
       ADD_FAILURE() << "No invalidations for ID " << ObjectIdToString(id);
       return false;
@@ -180,7 +180,7 @@ class FakeDelegate : public SyncInvalidationListener::Delegate {
   }
 
   bool StartsWithUnknownVersion(const ObjectId& id) const {
-    Map::const_iterator it = invalidations_.find(id);
+    auto it = invalidations_.find(id);
     if (it == invalidations_.end()) {
       ADD_FAILURE() << "No invalidations for ID " << ObjectIdToString(id);
       return false;
@@ -195,27 +195,27 @@ class FakeDelegate : public SyncInvalidationListener::Delegate {
 
   void AcknowledgeNthInvalidation(const ObjectId& id, size_t n) {
     List& list = invalidations_[id];
-    List::iterator it = list.begin() + n;
+    auto it = list.begin() + n;
     it->Acknowledge();
   }
 
   void AcknowledgeAll(const ObjectId& id) {
     List& list = invalidations_[id];
-    for (List::iterator it = list.begin(); it != list.end(); ++it) {
+    for (auto it = list.begin(); it != list.end(); ++it) {
       it->Acknowledge();
     }
   }
 
   void DropNthInvalidation(const ObjectId& id, size_t n) {
     List& list = invalidations_[id];
-    List::iterator it = list.begin() + n;
+    auto it = list.begin() + n;
     it->Drop();
     dropped_invalidations_map_.erase(id);
     dropped_invalidations_map_.insert(std::make_pair(id, *it));
   }
 
   void RecoverFromDropEvent(const ObjectId& id) {
-    DropMap::iterator it = dropped_invalidations_map_.find(id);
+    auto it = dropped_invalidations_map_.find(id);
     if (it != dropped_invalidations_map_.end()) {
       it->second.Acknowledge();
       dropped_invalidations_map_.erase(it);
@@ -225,7 +225,7 @@ class FakeDelegate : public SyncInvalidationListener::Delegate {
   // SyncInvalidationListener::Delegate implementation.
   void OnInvalidate(const ObjectIdInvalidationMap& invalidation_map) override {
     ObjectIdSet ids = invalidation_map.GetObjectIds();
-    for (ObjectIdSet::iterator it = ids.begin(); it != ids.end(); ++it) {
+    for (auto it = ids.begin(); it != ids.end(); ++it) {
       const SingleObjectInvalidationSet& incoming =
           invalidation_map.ForObject(*it);
       List& list = invalidations_[*it];
@@ -365,8 +365,7 @@ class SyncInvalidationListenerTest : public testing::Test {
 
   SingleObjectInvalidationSet GetSavedInvalidationsForType(const ObjectId& id) {
     const UnackedInvalidationsMap& saved_state = GetSavedInvalidations();
-    UnackedInvalidationsMap::const_iterator it =
-        saved_state.find(kBookmarksId_);
+    auto it = saved_state.find(kBookmarksId_);
     if (it == saved_state.end()) {
       ADD_FAILURE() << "No state saved for ID " << ObjectIdToString(id);
       return SingleObjectInvalidationSet();
@@ -446,7 +445,7 @@ class SyncInvalidationListenerTest : public testing::Test {
   ObjectIdSet registered_ids_;
 
  private:
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
   notifier::FakePushClient* const fake_push_client_;
 
  protected:
@@ -613,8 +612,7 @@ TEST_F(SyncInvalidationListenerTest, InvalidateUnknownVersion) {
 TEST_F(SyncInvalidationListenerTest, InvalidateAll) {
   FireInvalidateAll();
 
-  for (ObjectIdSet::const_iterator it = registered_ids_.begin();
-       it != registered_ids_.end(); ++it) {
+  for (auto it = registered_ids_.begin(); it != registered_ids_.end(); ++it) {
     ASSERT_EQ(1U, GetInvalidationCount(*it));
     EXPECT_TRUE(IsUnknownVersion(*it));
   }
@@ -806,7 +804,7 @@ TEST_F(SyncInvalidationListenerTest, DuplicateInvaldiations_Simple) {
   // Expect that the duplicate was discarded.
   SingleObjectInvalidationSet list = GetSavedInvalidationsForType(id);
   EXPECT_EQ(3U, list.GetSize());
-  SingleObjectInvalidationSet::const_iterator it = list.begin();
+  auto it = list.begin();
   EXPECT_EQ(1, it->version());
   it++;
   EXPECT_EQ(2, it->version());

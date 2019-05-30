@@ -11,6 +11,11 @@ namespace prerender {
 
 // FinalStatus indicates whether |this| was used, or why it was cancelled.
 // NOTE: New values need to be appended, since they are used in histograms.
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused. The values should remain
+// synchronized with the enum PrerenderFinalStatus in
+// //tools/metrics/histograms/enums.xml.
 enum FinalStatus {
   FINAL_STATUS_USED = 0,
   FINAL_STATUS_TIMED_OUT = 1,
@@ -70,6 +75,7 @@ enum FinalStatus {
   FINAL_STATUS_CREDENTIAL_MANAGER_API = 55,
   FINAL_STATUS_NOSTATE_PREFETCH_FINISHED = 56,
   FINAL_STATUS_LOW_END_DEVICE = 57,
+  FINAL_STATUS_BROWSER_SWITCH = 58,
   FINAL_STATUS_MAX,
 };
 

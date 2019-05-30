@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/core/editing/visible_selection.h"
 #include "third_party/blink/renderer/core/editing/visible_units.h"
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
+#include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
@@ -48,27 +49,14 @@
 
 namespace blink {
 
-// Note: If the layout object has a scrolling contents layer, the selection
-// will be relative to that.
-static GraphicsLayer* GetGraphicsLayerBacking(
-    const LayoutObject& layout_object) {
-  const LayoutBoxModelObject& paint_invalidation_container =
-      layout_object.ContainerForPaintInvalidation();
-  DCHECK(paint_invalidation_container.Layer());
-  if (paint_invalidation_container.Layer()->GetCompositingState() ==
-      kNotComposited)
-    return nullptr;
-  return paint_invalidation_container.Layer()->GraphicsLayerBacking(
-      &layout_object);
-}
-
 // Convert a local point into the coordinate system of backing coordinates.
 static gfx::Point LocalToInvalidationBackingPoint(
     const LayoutPoint& local_point,
-    const LayoutObject& layout_object) {
+    const LayoutObject& layout_object,
+    const GraphicsLayer& graphics_layer) {
   const LayoutBoxModelObject& paint_invalidation_container =
       layout_object.ContainerForPaintInvalidation();
-  DCHECK(paint_invalidation_container.Layer());
+  const PaintLayer& paint_layer = *paint_invalidation_container.Layer();
 
   FloatPoint container_point = layout_object.LocalToAncestorPoint(
       FloatPoint(local_point), &paint_invalidation_container,
@@ -76,15 +64,12 @@ static gfx::Point LocalToInvalidationBackingPoint(
 
   // A layoutObject can have no invalidation backing if it is from a detached
   // frame, or when forced compositing is disabled.
-  if (paint_invalidation_container.Layer()->GetCompositingState() ==
-      kNotComposited)
+  if (paint_layer.GetCompositingState() == kNotComposited)
     return RoundedIntPoint(container_point);
 
   PaintLayer::MapPointInPaintInvalidationContainerToBacking(
       paint_invalidation_container, container_point);
-
-  if (GraphicsLayer* graphics_layer = GetGraphicsLayerBacking(layout_object))
-    container_point.Move(-graphics_layer->OffsetFromLayoutObject());
+  container_point.Move(-graphics_layer.OffsetFromLayoutObject());
 
   // Ensure the coordinates are in the scrolling contents space, if the object
   // is a scroller.
@@ -120,11 +105,12 @@ std::pair<LayoutPoint, LayoutPoint> static GetLocalSelectionEndpoints(
 
 static LayoutPoint GetSamplePointForVisibility(
     const LayoutPoint& edge_top_in_layer,
-    const LayoutPoint& edge_bottom_in_layer) {
+    const LayoutPoint& edge_bottom_in_layer,
+    float zoom_factor) {
   FloatSize diff(edge_top_in_layer - edge_bottom_in_layer);
   // Adjust by ~1px to avoid integer snapping error. This logic is the same
   // as that in ComputeViewportSelectionBound in cc.
-  diff.Scale(1 / diff.DiagonalLength());
+  diff.Scale(zoom_factor / diff.DiagonalLength());
   LayoutPoint sample_point = edge_bottom_in_layer;
   sample_point.Move(LayoutSize(diff));
   return sample_point;
@@ -149,7 +135,8 @@ static bool IsVisible(const LayoutObject& rect_layout_object,
     return true;
 
   const LayoutPoint sample_point =
-      GetSamplePointForVisibility(edge_top_in_layer, edge_bottom_in_layer);
+      GetSamplePointForVisibility(edge_top_in_layer, edge_bottom_in_layer,
+                                  rect_layout_object.View()->ZoomFactor());
 
   LayoutBox* const text_control_object = ToLayoutBox(layout_object);
   const LayoutPoint position_in_input(rect_layout_object.LocalToAncestorPoint(
@@ -158,20 +145,18 @@ static bool IsVisible(const LayoutObject& rect_layout_object,
   return text_control_object->BorderBoxRect().Contains(position_in_input);
 }
 
-static base::Optional<cc::LayerSelectionBound> ComputeSelectionBound(
+static cc::LayerSelectionBound ComputeSelectionBound(
     const LayoutObject& layout_object,
+    const GraphicsLayer& graphics_layer,
     const LayoutPoint& edge_top_in_layer,
     const LayoutPoint& edge_bottom_in_layer) {
   cc::LayerSelectionBound bound;
 
-  bound.edge_top =
-      LocalToInvalidationBackingPoint(edge_top_in_layer, layout_object);
-  bound.edge_bottom =
-      LocalToInvalidationBackingPoint(edge_bottom_in_layer, layout_object);
-  GraphicsLayer* const layer = GetGraphicsLayerBacking(layout_object);
-  if (!layer)
-    return base::nullopt;
-  bound.layer_id = layer->CcLayer()->id();
+  bound.edge_top = LocalToInvalidationBackingPoint(
+      edge_top_in_layer, layout_object, graphics_layer);
+  bound.edge_bottom = LocalToInvalidationBackingPoint(
+      edge_bottom_in_layer, layout_object, graphics_layer);
+  bound.layer_id = graphics_layer.CcLayer()->id();
   bound.hidden =
       !IsVisible(layout_object, edge_top_in_layer, edge_bottom_in_layer);
   return bound;
@@ -187,6 +172,18 @@ static inline bool IsTextDirectionRTL(const Node& node,
          PrimaryDirectionOf(node) == TextDirection::kRtl;
 }
 
+static GraphicsLayer* GetGraphicsLayerFor(const LayoutObject& layout_object) {
+  const LayoutBoxModelObject& paint_invalidation_container =
+      layout_object.ContainerForPaintInvalidation();
+  DCHECK(paint_invalidation_container.Layer()) << layout_object;
+  if (!paint_invalidation_container.Layer())
+    return nullptr;
+  const PaintLayer& paint_layer = *paint_invalidation_container.Layer();
+  if (paint_layer.GetCompositingState() == kNotComposited)
+    return nullptr;
+  return paint_layer.GraphicsLayerBacking(&layout_object);
+}
+
 static base::Optional<cc::LayerSelectionBound>
 StartPositionInGraphicsLayerBacking(const SelectionInDOMTree& selection) {
   const PositionWithAffinity position(selection.ComputeStartPosition(),
@@ -195,15 +192,15 @@ StartPositionInGraphicsLayerBacking(const SelectionInDOMTree& selection) {
   const LayoutObject* const layout_object = local_caret_rect.layout_object;
   if (!layout_object)
     return base::nullopt;
+  GraphicsLayer* graphics_layer = GetGraphicsLayerFor(*layout_object);
+  if (!graphics_layer)
+    return base::nullopt;
 
   LayoutPoint edge_top_in_layer, edge_bottom_in_layer;
   std::tie(edge_top_in_layer, edge_bottom_in_layer) =
       GetLocalSelectionStartpoints(local_caret_rect);
-  const auto& maybe = ComputeSelectionBound(*layout_object, edge_top_in_layer,
-                                            edge_bottom_in_layer);
-  if (!maybe.has_value())
-    return base::nullopt;
-  cc::LayerSelectionBound bound = maybe.value();
+  cc::LayerSelectionBound bound = ComputeSelectionBound(
+      *layout_object, *graphics_layer, edge_top_in_layer, edge_bottom_in_layer);
   if (selection.IsRange()) {
     bound.type = IsTextDirectionRTL(*position.AnchorNode(), *layout_object)
                      ? gfx::SelectionBound::Type::RIGHT
@@ -222,15 +219,15 @@ EndPositionInGraphicsLayerBacking(const SelectionInDOMTree& selection) {
   const LayoutObject* const layout_object = local_caret_rect.layout_object;
   if (!layout_object)
     return base::nullopt;
+  GraphicsLayer* graphics_layer = GetGraphicsLayerFor(*layout_object);
+  if (!graphics_layer)
+    return base::nullopt;
 
   LayoutPoint edge_top_in_layer, edge_bottom_in_layer;
   std::tie(edge_top_in_layer, edge_bottom_in_layer) =
       GetLocalSelectionEndpoints(local_caret_rect);
-  const auto& maybe = ComputeSelectionBound(*layout_object, edge_top_in_layer,
-                                            edge_bottom_in_layer);
-  if (!maybe.has_value())
-    return base::nullopt;
-  cc::LayerSelectionBound bound = maybe.value();
+  cc::LayerSelectionBound bound = ComputeSelectionBound(
+      *layout_object, *graphics_layer, edge_top_in_layer, edge_bottom_in_layer);
   if (selection.IsRange()) {
     bound.type = IsTextDirectionRTL(*position.AnchorNode(), *layout_object)
                      ? gfx::SelectionBound::Type::LEFT

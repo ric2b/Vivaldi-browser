@@ -23,12 +23,10 @@ bool IPCFactory::g_enabled = true;
 
 namespace {
 
-static IPCMediaPipelineHost::Creator
-    g_ipc_media_pipeline_host_creator;
-static scoped_refptr<base::SequencedTaskRunner>
-    g_main_task_runner;
-static scoped_refptr<base::SequencedTaskRunner>
-    g_media_task_runner;
+static IPCMediaPipelineHost::Creator* g_ipc_media_pipeline_host_creator =
+    nullptr;
+static scoped_refptr<base::SequencedTaskRunner>* g_main_task_runner = nullptr;
+static scoped_refptr<base::SequencedTaskRunner>* g_media_task_runner = nullptr;
 
 void RunAndSignal(const base::Closure& task, base::WaitableEvent* done) {
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
@@ -80,36 +78,41 @@ void IPCFactory::Preinitialize(
     const scoped_refptr<base::SequencedTaskRunner>& main_task_runner,
     const scoped_refptr<base::SequencedTaskRunner>& media_task_runner) {
   DCHECK(IsAvailable());
+  DCHECK(!g_ipc_media_pipeline_host_creator);
+  DCHECK(!g_main_task_runner);
+  DCHECK(!g_media_task_runner);
   DCHECK(!ipc_media_pipeline_host_creator.is_null());
   DCHECK(main_task_runner);
   DCHECK(media_task_runner);
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
 
-  g_ipc_media_pipeline_host_creator = ipc_media_pipeline_host_creator;
-  g_main_task_runner = main_task_runner;
-  g_media_task_runner = media_task_runner;
+  g_ipc_media_pipeline_host_creator =
+      new IPCMediaPipelineHost::Creator(ipc_media_pipeline_host_creator);
+  g_main_task_runner = new scoped_refptr<base::SequencedTaskRunner>(main_task_runner);
+  g_media_task_runner = new scoped_refptr<base::SequencedTaskRunner>(media_task_runner);
 }
 
 void IPCFactory::RunCreatorOnMainThread(
     DataSource* data_source,
     std::unique_ptr<IPCMediaPipelineHost>* ipc_media_pipeline_host) {
-  DCHECK(g_media_task_runner);
+  DCHECK(g_ipc_media_pipeline_host_creator && *g_ipc_media_pipeline_host_creator);
+  DCHECK(g_media_task_runner && *g_media_task_runner);
   DCHECK(ipc_media_pipeline_host);
   DCHECK(!ipc_media_pipeline_host->get());
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
   *ipc_media_pipeline_host =
-            g_ipc_media_pipeline_host_creator.Run(g_media_task_runner,
+            g_ipc_media_pipeline_host_creator->Run(*g_media_task_runner,
                                                   data_source);
 }
 
 void IPCFactory::CreatePipeline(
     std::unique_ptr<IPCMediaPipelineHost>* ipc_media_pipeline_host) {
-  DCHECK(g_main_task_runner);
+  DCHECK(g_main_task_runner && *g_main_task_runner);
   DCHECK(ipc_media_pipeline_host);
   DCHECK(!ipc_media_pipeline_host->get());
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
 
-  PostTaskAndWait(g_main_task_runner, FROM_HERE,
+  PostTaskAndWait(*g_main_task_runner, FROM_HERE,
                   base::Bind(&IPCFactory::RunCreatorOnMainThread,
                              base::Unretained(this),
                              nullptr,
@@ -118,18 +121,18 @@ void IPCFactory::CreatePipeline(
 
 void IPCFactory::ReleasePipeline(
     std::unique_ptr<IPCMediaPipelineHost>* ipc_media_pipeline_host) {
-  DCHECK(g_media_task_runner);
+  DCHECK(g_media_task_runner && *g_media_task_runner);
   DCHECK(ipc_media_pipeline_host);
   DCHECK(ipc_media_pipeline_host->get());
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
 
-  base::ThreadRestrictions::ScopedAllowWait scoped_wait;
+  base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope scoped_wait;
 
-  PostTaskAndWait(g_media_task_runner, FROM_HERE,
+  PostTaskAndWait(*g_media_task_runner, FROM_HERE,
                   base::Bind(&IPCMediaPipelineHost::Stop,
                              base::Unretained(ipc_media_pipeline_host->get())));
 
-  g_media_task_runner->DeleteSoon(FROM_HERE,
+  (*g_media_task_runner)->DeleteSoon(FROM_HERE,
                                   ipc_media_pipeline_host->release());
 }
 
@@ -146,13 +149,13 @@ void IPCFactory::PostTaskAndWait(
 
 const scoped_refptr<base::SequencedTaskRunner>& IPCFactory::MediaTaskRunner() {
   DCHECK(IPCFactory::IsAvailable());
-  DCHECK(g_media_task_runner);
-  return g_media_task_runner;
+  DCHECK(g_media_task_runner && *g_media_task_runner);
+  return *g_media_task_runner;
 }
 
 const scoped_refptr<base::SequencedTaskRunner>& IPCFactory::MainTaskRunner() {
-  DCHECK(g_main_task_runner);
-  return g_main_task_runner;
+  DCHECK(g_main_task_runner && *g_main_task_runner);
+  return *g_main_task_runner;
 }
 
 }  // namespace media

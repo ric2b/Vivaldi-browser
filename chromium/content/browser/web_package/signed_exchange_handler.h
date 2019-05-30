@@ -12,6 +12,7 @@
 #include "base/time/time.h"
 #include "content/browser/web_package/signed_exchange_consts.h"
 #include "content/browser/web_package/signed_exchange_envelope.h"
+#include "content/browser/web_package/signed_exchange_error.h"
 #include "content/browser/web_package/signed_exchange_prologue.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/system/data_pipe.h"
@@ -43,22 +44,35 @@ class SignedExchangeCertFetcher;
 class SignedExchangeCertFetcherFactory;
 class SignedExchangeCertificateChain;
 class SignedExchangeDevToolsProxy;
+class SignedExchangeReporter;
+class SignedExchangeRequestMatcher;
 
 // SignedExchangeHandler reads "application/signed-exchange" format from a
-// net::SourceStream, parse and verify the signed exchange, and report
+// net::SourceStream, parses and verifies the signed exchange, and reports
 // the result asynchronously via SignedExchangeHandler::ExchangeHeadersCallback.
 //
 // Note that verifying a signed exchange requires an associated certificate
 // chain. SignedExchangeHandler creates a SignedExchangeCertFetcher to
-// fetch the certificate chain over network, and verify it with the
+// fetch the certificate chain over the network, and verifies it with the
 // net::CertVerifier.
 class CONTENT_EXPORT SignedExchangeHandler {
  public:
+  // Callback that will be called when SXG header is parsed and its signature is
+  // validated against a verified certificate, or on failure.
+  // On success:
+  // - |result| is kSuccess.
+  // - |request_url| is the exchange's request's URL.
+  // - |resource_response| contains inner response's headers.
+  // - The payload stream can be read from |payload_stream|.
+  // On failure:
+  // - |result| indicates the failure reason.
+  // - |error| indicates the net::Error if |result| is kSXGHeaderNetError.
+  // - |request_url| may refer to the fallback URL.
   using ExchangeHeadersCallback = base::OnceCallback<void(
+      SignedExchangeLoadResult result,
       net::Error error,
       const GURL& request_url,
-      const std::string& request_method,
-      const network::ResourceResponseHead&,
+      const network::ResourceResponseHead& resource_response,
       std::unique_ptr<net::SourceStream> payload_stream)>;
 
   static void SetNetworkContextForTesting(
@@ -72,14 +86,20 @@ class CONTENT_EXPORT SignedExchangeHandler {
   // from |payload_stream| passed to |headers_callback|. |cert_fetcher_factory|
   // is used to create a SignedExchangeCertFetcher that fetches the certificate.
   SignedExchangeHandler(
+      bool is_secure_transport,
+      bool has_nosniff,
       std::string content_type,
       std::unique_ptr<net::SourceStream> body,
       ExchangeHeadersCallback headers_callback,
       std::unique_ptr<SignedExchangeCertFetcherFactory> cert_fetcher_factory,
       int load_flags,
+      std::unique_ptr<SignedExchangeRequestMatcher> request_matcher,
       std::unique_ptr<SignedExchangeDevToolsProxy> devtools_proxy,
+      SignedExchangeReporter* reporter,
       base::RepeatingCallback<int(void)> frame_tree_node_id_getter);
   ~SignedExchangeHandler();
+
+  int64_t GetExchangeHeaderLength() const { return exchange_header_length_; }
 
  protected:
   SignedExchangeHandler();
@@ -98,12 +118,13 @@ class CONTENT_EXPORT SignedExchangeHandler {
   void SetupBuffers(size_t size);
   void DoHeaderLoop();
   void DidReadHeader(bool completed_syncly, int result);
-  bool ParsePrologueBeforeFallbackUrl();
-  bool ParsePrologueFallbackUrlAndAfter();
-  bool ParseHeadersAndFetchCertificate();
-  void RunErrorCallback(net::Error);
+  SignedExchangeLoadResult ParsePrologueBeforeFallbackUrl();
+  SignedExchangeLoadResult ParsePrologueFallbackUrlAndAfter();
+  SignedExchangeLoadResult ParseHeadersAndFetchCertificate();
+  void RunErrorCallback(SignedExchangeLoadResult result, net::Error);
 
   void OnCertReceived(
+      SignedExchangeLoadResult result,
       std::unique_ptr<SignedExchangeCertificateChain> cert_chain);
   bool CheckCertExtension(const net::X509Certificate* verified_cert);
   bool CheckOCSPStatus(const net::OCSPVerifyResult& ocsp_result);
@@ -111,7 +132,10 @@ class CONTENT_EXPORT SignedExchangeHandler {
   void OnVerifyCert(int32_t error_code,
                     const net::CertVerifyResult& cv_result,
                     const net::ct::CTVerifyResult& ct_result);
+  std::unique_ptr<net::SourceStream> CreateResponseBodyStream();
 
+  const bool is_secure_transport_;
+  const bool has_nosniff_;
   ExchangeHeadersCallback headers_callback_;
   base::Optional<SignedExchangeVersion> version_;
   std::unique_ptr<net::SourceStream> source_;
@@ -121,6 +145,7 @@ class CONTENT_EXPORT SignedExchangeHandler {
   scoped_refptr<net::IOBuffer> header_buf_;
   // Wrapper around |header_buf_| to progressively read fixed-size data.
   scoped_refptr<net::DrainableIOBuffer> header_read_buf_;
+  int64_t exchange_header_length_ = 0;
 
   signed_exchange_prologue::BeforeFallbackUrl prologue_before_fallback_url_;
   signed_exchange_prologue::FallbackUrlAndAfter
@@ -133,9 +158,16 @@ class CONTENT_EXPORT SignedExchangeHandler {
 
   std::unique_ptr<SignedExchangeCertificateChain> unverified_cert_chain_;
 
+  std::unique_ptr<SignedExchangeRequestMatcher> request_matcher_;
+
   std::unique_ptr<SignedExchangeDevToolsProxy> devtools_proxy_;
 
+  // This is owned by SignedExchangeLoader which is the owner of |this|.
+  SignedExchangeReporter* reporter_;
+
   base::RepeatingCallback<int(void)> frame_tree_node_id_getter_;
+
+  base::TimeTicks cert_fetch_start_time_;
 
   base::WeakPtrFactory<SignedExchangeHandler> weak_factory_;
 

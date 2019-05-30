@@ -6,7 +6,7 @@
  * Namespace for common constnats used in Files app.
  * @namespace
  */
-var constants = {};
+const constants = {};
 
 /**
  * @const {!Array<string>}
@@ -36,6 +36,7 @@ constants.EXECUTABLE_EXTENSIONS = Object.freeze([
 constants.FILE_SELECTION_METADATA_PREFETCH_PROPERTY_NAMES = [
   'availableOffline',
   'contentMimeType',
+  'hosted',
 ];
 
 /**
@@ -47,9 +48,22 @@ constants.FILE_SELECTION_METADATA_PREFETCH_PROPERTY_NAMES = [
  * @const {!Array<string>}
  */
 constants.LIST_CONTAINER_METADATA_PREFETCH_PROPERTY_NAMES = [
-  'availableOffline', 'contentMimeType', 'customIconUrl', 'hosted',
-  'modificationTime', 'modificationByMeTime', 'shared', 'size', 'canCopy',
-  'canDelete', 'canRename', 'canAddChildren', 'canShare'
+  'availableOffline',
+  'contentMimeType',
+  'customIconUrl',
+  'hosted',
+  'modificationTime',
+  'modificationByMeTime',
+  'shared',
+  'size',
+  'canCopy',
+  'canDelete',
+  'canRename',
+  'canAddChildren',
+  'canShare',
+  'isMachineRoot',
+  'isExternalMedia',
+  'isArbitrarySyncFolder',
 ];
 
 /**
@@ -57,3 +71,9 @@ constants.LIST_CONTAINER_METADATA_PREFETCH_PROPERTY_NAMES = [
  * @type {string}
  */
 constants.FILES_QUICK_VIEW_HTML = 'foreground/elements/files_quick_view.html';
+
+/**
+ * Path for drive_welcome.css file.  Allow override for testing.
+ * @type {string}
+ */
+constants.DRIVE_WELCOME_CSS = 'foreground/css/drive_welcome.css';

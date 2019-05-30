@@ -5,8 +5,11 @@
 #ifndef ASH_ASSISTANT_UI_MAIN_STAGE_ASSISTANT_HEADER_VIEW_H_
 #define ASH_ASSISTANT_UI_MAIN_STAGE_ASSISTANT_HEADER_VIEW_H_
 
+#include <memory>
+
 #include "ash/assistant/model/assistant_interaction_model_observer.h"
 #include "ash/assistant/model/assistant_ui_model_observer.h"
+#include "base/component_export.h"
 #include "base/macros.h"
 #include "ui/views/view.h"
 
@@ -16,34 +19,38 @@ class BoxLayout;
 
 namespace ash {
 
-class AssistantController;
+class AssistantViewDelegate;
 class BaseLogoView;
 
 // AssistantHeaderView is the child of UiElementContainerView which provides
 // the Assistant icon.
-class AssistantHeaderView : public views::View,
-                            public AssistantInteractionModelObserver,
-                            public AssistantUiModelObserver {
+class COMPONENT_EXPORT(ASSISTANT_UI) AssistantHeaderView
+    : public views::View,
+      public AssistantInteractionModelObserver,
+      public AssistantUiModelObserver {
  public:
-  explicit AssistantHeaderView(AssistantController* assistant_controller);
+  explicit AssistantHeaderView(AssistantViewDelegate* delegate);
   ~AssistantHeaderView() override;
 
   // views::View:
+  const char* GetClassName() const override;
   gfx::Size CalculatePreferredSize() const override;
-  void ChildVisibilityChanged(views::View* child) override;
 
   // AssistantInteractionModelObserver:
-  void OnResponseChanged(const AssistantResponse& response) override;
+  void OnResponseChanged(
+      const std::shared_ptr<AssistantResponse>& response) override;
 
   // AssistantUiModelObserver:
-  void OnUiVisibilityChanged(AssistantVisibility new_visibility,
-                             AssistantVisibility old_visibility,
-                             AssistantSource source) override;
+  void OnUiVisibilityChanged(
+      AssistantVisibility new_visibility,
+      AssistantVisibility old_visibility,
+      base::Optional<AssistantEntryPoint> entry_point,
+      base::Optional<AssistantExitPoint> exit_point) override;
 
  private:
   void InitLayout();
 
-  AssistantController* const assistant_controller_;  // Owned by Shell.
+  AssistantViewDelegate* const delegate_;  // Owned by Shell.
 
   views::BoxLayout* layout_manager_;  // Owned by view hierarchy.
   BaseLogoView* molecule_icon_;       // Owned by view hierarchy.

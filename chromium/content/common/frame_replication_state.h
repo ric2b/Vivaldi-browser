@@ -11,6 +11,7 @@
 #include "content/common/content_export.h"
 #include "content/common/content_security_policy_header.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
+#include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
 #include "third_party/blink/public/platform/web_insecure_request_policy.h"
 #include "url/origin.h"
@@ -33,7 +34,8 @@ struct CONTENT_EXPORT FrameReplicationState {
                         const std::vector<uint32_t>& insecure_navigations_set,
                         bool has_potentially_trustworthy_unique_origin,
                         bool has_received_user_gesture,
-                        bool has_received_user_gesture_before_nav);
+                        bool has_received_user_gesture_before_nav,
+                        blink::FrameOwnerElementType owner_type);
   FrameReplicationState(const FrameReplicationState& other);
   ~FrameReplicationState();
 
@@ -66,7 +68,7 @@ struct CONTENT_EXPORT FrameReplicationState {
   // |unique_name| is used in heuristics that try to identify the same frame
   // across different, unrelated navigations (i.e. to refer to the frame
   // when going back/forward in session history OR when refering to the frame
-  // in layout tests results).
+  // in web tests results).
   //
   // |unique_name| needs to be replicated to ensure that unique name for a given
   // frame is the same across all renderers - without replication a renderer
@@ -99,6 +101,10 @@ struct CONTENT_EXPORT FrameReplicationState {
   // can be inherited properly if a proxy ever becomes a parent of a local
   // frame.
   blink::FramePolicy frame_policy;
+
+  // The state of feature policies in the opener browsing context. This field is
+  // only relevant for a root FrameTreeNode.
+  blink::FeaturePolicy::FeatureState opener_feature_state;
 
   // Accumulated CSP headers - gathered from http headers, <meta> elements,
   // parent frames (in case of about:blank frames).
@@ -133,6 +139,14 @@ struct CONTENT_EXPORT FrameReplicationState {
   // Whether the frame has received a user gesture in a previous navigation so
   // long as a the frame has staying on the same eTLD+1.
   bool has_received_user_gesture_before_nav;
+
+  // The type of the (local) frame owner for this frame in the parent process.
+  // Note: This should really be const, as it can never change once a frame is
+  // created. However, making it const makes it a pain to embed into IPC message
+  // params: having a const member implicitly deletes the copy assignment
+  // operator.
+  blink::FrameOwnerElementType frame_owner_element_type =
+      blink::FrameOwnerElementType::kNone;
 
   // IMPORTANT NOTE: When adding a new member to this struct, don't forget to
   // also add a corresponding entry to the struct traits in frame_messages.h!

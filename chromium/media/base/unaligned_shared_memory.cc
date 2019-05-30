@@ -7,7 +7,7 @@
 #include <limits>
 
 #include "base/logging.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 
 namespace media {
@@ -113,10 +113,7 @@ WritableUnalignedMapping::WritableUnalignedMapping(
     size_t size,
     off_t offset)
     : WritableUnalignedMapping(
-          mojo::UnwrapUnsafeSharedMemoryRegion(mojo::WrapSharedMemoryHandle(
-              handle,
-              handle.GetSize(),
-              mojo::UnwrappedSharedMemoryHandleProtection::kReadWrite)),
+          base::UnsafeSharedMemoryRegion::CreateFromHandle(handle),
           size,
           offset) {}
 

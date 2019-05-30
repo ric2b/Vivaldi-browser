@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ash/app_list/model/app_list_model.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/app_list/app_list_switches.h"
 #include "ash/public/cpp/menu_utils.h"
 #include "base/callback.h"
@@ -34,12 +35,20 @@ SearchModel* AppListTestViewDelegate::GetSearchModel() {
   return search_model_.get();
 }
 
-void AppListTestViewDelegate::OpenSearchResult(const std::string& result_id,
-                                               int event_flags) {
+void AppListTestViewDelegate::OpenSearchResult(
+    const std::string& result_id,
+    int event_flags,
+    ash::mojom::AppListLaunchedFrom launched_from,
+    ash::mojom::AppListLaunchType launch_type,
+    int suggestion_index) {
   const SearchModel::SearchResults* results = search_model_->results();
   for (size_t i = 0; i < results->item_count(); ++i) {
     if (results->GetItemAt(i)->id() == result_id) {
       open_search_result_counts_[i]++;
+      if (app_list_features::IsEmbeddedAssistantUIEnabled() &&
+          results->GetItemAt(i)->is_omnibox_search()) {
+        ++open_assistant_ui_count_;
+      }
       break;
     }
   }
@@ -88,8 +97,19 @@ void AppListTestViewDelegate::ShowWallpaperContextMenu(
   ++show_wallpaper_context_menu_count_;
 }
 
-ws::WindowService* AppListTestViewDelegate::GetWindowService() {
-  return nullptr;
+bool AppListTestViewDelegate::ProcessHomeLauncherGesture(
+    ui::GestureEvent* event,
+    const gfx::Point& screen_location) {
+  return false;
+}
+
+bool AppListTestViewDelegate::CanProcessEventsOnApplistViews() {
+  return true;
+}
+
+void AppListTestViewDelegate::GetNavigableContentsFactory(
+    content::mojom::NavigableContentsFactoryRequest request) {
+  fake_navigable_contents_factory_.BindRequest(std::move(request));
 }
 
 void AppListTestViewDelegate::GetSearchResultContextMenuModel(
@@ -102,6 +122,19 @@ void AppListTestViewDelegate::GetSearchResultContextMenuModel(
   menu->AddItem(command_id++, base::ASCIIToUTF16("Item0"));
   menu->AddItem(command_id++, base::ASCIIToUTF16("Item1"));
   std::move(callback).Run(ash::menu_utils::GetMojoMenuItemsFromModel(menu));
+}
+
+ash::AssistantViewDelegate*
+AppListTestViewDelegate::GetAssistantViewDelegate() {
+  return nullptr;
+}
+
+void AppListTestViewDelegate::OnSearchResultVisibilityChanged(
+    const std::string& id,
+    bool visibility) {}
+
+bool AppListTestViewDelegate::IsAssistantAllowedAndEnabled() const {
+  return false;
 }
 
 bool AppListTestViewDelegate::IsCommandIdChecked(int command_id) const {

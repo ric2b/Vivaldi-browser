@@ -6,10 +6,56 @@
  * @fileoverview Login UI based on a stripped down OOBE controller.
  */
 
-var isMd = true;
+// <include src="test_util.js">
+// <include src="../../../../../ui/login/screen.js">
+// <include src="screen_context.js">
+// <include src="apps_menu.js">
+// <include src="../../../../../ui/login/bubble.js">
+// <include src="../../../../../ui/login/display_manager.js">
+// <include src="md_header_bar.js">
+// <include src="demo_mode_test_helper.js">
 
-// <include src="md_login_shared.js">
-// <include src="login_non_lock_shared.js">
+// <include
+// src="../../../../../ui/login/account_picker/chromeos_screen_account_picker.js">
+
+// <include src="../../../../../ui/login/login_ui_tools.js">
+// <include
+// src="../../../../../ui/login/account_picker/chromeos_user_pod_row.js">
+// <include src="../../../../../ui/login/resource_loader.js">
+// <include src="cr_ui.js">
+// <include src="oobe_screen_reset.js">
+// <include src="oobe_screen_autolaunch.js">
+// <include src="oobe_screen_enable_kiosk.js">
+// <include src="oobe_screen_terms_of_service.js">
+// <include src="oobe_screen_user_image.js">
+// <include src="oobe_screen_supervision_transition.js">
+// <include src="oobe_screen_assistant_optin_flow.js">
+// <include src="oobe_select.js">
+
+// <include src="screen_app_launch_splash.js">
+// <include src="screen_arc_kiosk_splash.js">
+// <include src="screen_arc_terms_of_service.js">
+// <include src="screen_error_message.js">
+// <include src="screen_gaia_signin.js">
+// <include src="screen_password_changed.js">
+// <include src="screen_tpm_error.js">
+// <include src="screen_wrong_hwid.js">
+// <include src="screen_confirm_password.js">
+// <include src="screen_fatal_error.js">
+// <include src="screen_device_disabled.js">
+// <include src="screen_unrecoverable_cryptohome_error.js">
+// <include src="screen_active_directory_password_change.js">
+// <include src="screen_encryption_migration.js">
+// <include src="screen_update_required.js">
+// <include src="screen_sync_consent.js">
+// <include src="screen_fingerprint_setup.js">
+// <include src="screen_recommend_apps.js">
+// <include src="screen_app_downloading.js">
+// <include src="screen_discover.js">
+// <include src="screen_marketing_opt_in.js">
+// <include src="screen_multidevice_setup.js">
+
+// <include src="../../gaia_auth_host/authenticator.js">
 // <include src="notification_card.js">
 
 /**
@@ -41,7 +87,6 @@ cr.define('cr.ui.Oobe', function() {
       login.ErrorMessageScreen.register();
       login.TPMErrorMessageScreen.register();
       login.PasswordChangedScreen.register();
-      login.SupervisedUserCreationScreen.register();
       login.TermsOfServiceScreen.register();
       login.SyncConsentScreen.register();
       login.FingerprintSetupScreen.register();
@@ -56,12 +101,12 @@ cr.define('cr.ui.Oobe', function() {
       login.UnrecoverableCryptohomeErrorScreen.register();
       login.ActiveDirectoryPasswordChangeScreen.register(/* lazyInit= */ true);
       login.EncryptionMigrationScreen.register();
-      login.VoiceInteractionValuePropScreen.register();
-      login.WaitForContainerReadyScreen.register();
+      login.SupervisionTransitionScreen.register();
       login.UpdateRequiredScreen.register();
       login.DiscoverScreen.register();
       login.MarketingOptInScreen.register();
       login.AssistantOptInFlowScreen.register();
+      login.MultiDeviceSetupScreen.register();
 
       cr.ui.Bubble.decorate($('bubble-persistent'));
       $('bubble-persistent').persistent = true;
@@ -69,20 +114,11 @@ cr.define('cr.ui.Oobe', function() {
 
       cr.ui.Bubble.decorate($('bubble'));
       login.HeaderBar.decorate($('login-header-bar'));
-      login.TopHeaderBar.decorate($('top-header-bar'));
 
       chrome.send('screenStateInitialize');
-
-      if (Oobe.getInstance().showingViewsLogin)
-        chrome.send('showAddUser');
     },
 
     // Dummy Oobe functions not present with stripped login UI.
-    initializeA11yMenu: function(e) {},
-    handleAccessibilityLinkClick: function(e) {},
-    handleSpokenFeedbackClick: function(e) {},
-    handleHighContrastClick: function(e) {},
-    handleScreenMagnifierClick: function(e) {},
     setUsageStats: function(checked) {},
     setTpmPassword: function(password) {},
     refreshA11yInfo: function(data) {},
@@ -108,7 +144,7 @@ cr.define('cr.ui.Oobe', function() {
 
     /**
      * Updates OOBE configuration when it is loaded.
-     * @param {dictionary} configuration OOBE configuration.
+     * @param {!OobeTypes.OobeConfiguration} configuration OOBE configuration.
      */
     updateOobeConfiguration: function(configuration) {
       Oobe.getInstance().updateOobeConfiguration_(configuration);

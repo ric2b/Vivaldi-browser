@@ -5,13 +5,16 @@
 #ifndef CONTENT_BROWSER_INDEXED_DB_DATABASE_IMPL_H_
 #define CONTENT_BROWSER_INDEXED_DB_DATABASE_IMPL_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/sequence_checker.h"
+#include "content/public/browser/browser_thread.h"
 #include "third_party/blink/public/common/indexeddb/indexeddb_key.h"
 #include "third_party/blink/public/common/indexeddb/indexeddb_key_path.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom.h"
-
-using blink::IndexedDBKeyRange;
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -26,7 +29,6 @@ namespace content {
 class IndexedDBConnection;
 class IndexedDBDispatcherHost;
 
-// Expected to be constructed, called, and destructed on the IO thread.
 class DatabaseImpl : public blink::mojom::IDBDatabase {
  public:
   explicit DatabaseImpl(std::unique_ptr<IndexedDBConnection> connection,
@@ -48,7 +50,7 @@ class DatabaseImpl : public blink::mojom::IDBDatabase {
                          const base::string16& new_name) override;
   void CreateTransaction(int64_t transaction_id,
                          const std::vector<int64_t>& object_store_ids,
-                         blink::WebIDBTransactionMode mode) override;
+                         blink::mojom::IDBTransactionMode mode) override;
   void Close() override;
   void VersionChangeIgnored() override;
   void AddObserver(int64_t transaction_id,
@@ -56,18 +58,18 @@ class DatabaseImpl : public blink::mojom::IDBDatabase {
                    bool include_transaction,
                    bool no_records,
                    bool values,
-                   uint16_t operation_types) override;
+                   uint32_t operation_types) override;
   void RemoveObservers(const std::vector<int32_t>& observers) override;
   void Get(int64_t transaction_id,
            int64_t object_store_id,
            int64_t index_id,
-           const IndexedDBKeyRange& key_range,
+           const blink::IndexedDBKeyRange& key_range,
            bool key_only,
            blink::mojom::IDBCallbacksAssociatedPtrInfo callbacks) override;
   void GetAll(int64_t transaction_id,
               int64_t object_store_id,
               int64_t index_id,
-              const IndexedDBKeyRange& key_range,
+              const blink::IndexedDBKeyRange& key_range,
               bool key_only,
               int64_t max_count,
               blink::mojom::IDBCallbacksAssociatedPtrInfo callbacks) override;
@@ -75,7 +77,7 @@ class DatabaseImpl : public blink::mojom::IDBDatabase {
            int64_t object_store_id,
            blink::mojom::IDBValuePtr value,
            const blink::IndexedDBKey& key,
-           blink::WebIDBPutMode mode,
+           blink::mojom::IDBPutMode mode,
            const std::vector<blink::IndexedDBIndexKeys>& index_keys,
            blink::mojom::IDBCallbacksAssociatedPtrInfo callbacks) override;
   void SetIndexKeys(
@@ -90,20 +92,24 @@ class DatabaseImpl : public blink::mojom::IDBDatabase {
       int64_t transaction_id,
       int64_t object_store_id,
       int64_t index_id,
-      const IndexedDBKeyRange& key_range,
-      blink::WebIDBCursorDirection direction,
+      const blink::IndexedDBKeyRange& key_range,
+      blink::mojom::IDBCursorDirection direction,
       bool key_only,
-      blink::WebIDBTaskType task_type,
+      blink::mojom::IDBTaskType task_type,
       blink::mojom::IDBCallbacksAssociatedPtrInfo callbacks_info) override;
   void Count(int64_t transaction_id,
              int64_t object_store_id,
              int64_t index_id,
-             const IndexedDBKeyRange& key_range,
+             const blink::IndexedDBKeyRange& key_range,
              blink::mojom::IDBCallbacksAssociatedPtrInfo callbacks) override;
   void DeleteRange(
       int64_t transaction_id,
       int64_t object_store_id,
-      const IndexedDBKeyRange& key_range,
+      const blink::IndexedDBKeyRange& key_range,
+      blink::mojom::IDBCallbacksAssociatedPtrInfo callbacks) override;
+  void GetKeyGeneratorCurrentNumber(
+      int64_t transaction_id,
+      int64_t object_store_id,
       blink::mojom::IDBCallbacksAssociatedPtrInfo callbacks) override;
   void Clear(int64_t transaction_id,
              int64_t object_store_id,
@@ -123,17 +129,22 @@ class DatabaseImpl : public blink::mojom::IDBDatabase {
                    int64_t index_id,
                    const base::string16& new_name) override;
   void Abort(int64_t transaction_id) override;
-  void Commit(int64_t transaction_id) override;
+  void Commit(int64_t transaction_id, int64_t num_errors_handled) override;
 
  private:
   class IDBSequenceHelper;
+  class IOHelper;
 
-  IDBSequenceHelper* helper_;
+  std::unique_ptr<IDBSequenceHelper> helper_;
+  std::unique_ptr<IOHelper, BrowserThread::DeleteOnIOThread> io_helper_;
+
   // This raw pointer is safe because all DatabaseImpl instances are owned by
   // an IndexedDBDispatcherHost.
   IndexedDBDispatcherHost* dispatcher_host_;
   const url::Origin origin_;
   scoped_refptr<base::SequencedTaskRunner> idb_runner_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(DatabaseImpl);
 };

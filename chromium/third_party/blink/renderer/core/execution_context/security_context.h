@@ -29,6 +29,7 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
+#include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/platform/web_insecure_request_policy.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/frame/sandbox_flags.h"
@@ -47,7 +48,14 @@ struct ParsedFeaturePolicyDeclaration;
 
 using ParsedFeaturePolicy = std::vector<ParsedFeaturePolicyDeclaration>;
 
+// Whether to report policy violations when checking whether a feature is
+// enabled.
+enum class ReportOptions { kReportOnFailure, kDoNotReport };
+enum class FeatureEnabledState { kDisabled, kReportOnly, kEnabled };
+
 namespace mojom {
+enum class FeaturePolicyDisposition : int32_t;
+enum class FeaturePolicyFeature : int32_t;
 enum class IPAddressSpace : int32_t;
 }
 
@@ -83,21 +91,18 @@ class CORE_EXPORT SecurityContext : public GarbageCollectedMixin {
   virtual void DidUpdateSecurityOrigin() = 0;
 
   SandboxFlags GetSandboxFlags() const { return sandbox_flags_; }
-  bool IsSandboxed(SandboxFlags mask) const {
-    return IsSandboxed(mask, sandbox_flags_);
-  }
-  static bool IsSandboxed(SandboxFlags mask, SandboxFlags sandbox_flags) {
-    return sandbox_flags & mask;
-  }
+  bool IsSandboxed(SandboxFlag mask) const;
   virtual void EnforceSandboxFlags(SandboxFlags mask);
 
   void SetAddressSpace(mojom::IPAddressSpace space) { address_space_ = space; }
   mojom::IPAddressSpace AddressSpace() const { return address_space_; }
   String addressSpaceForBindings() const;
 
-  void SetRequireTrustedTypes() { require_safe_types_ = true; }
-  bool RequireTrustedTypes() const { return require_safe_types_; }
+  void SetRequireTrustedTypes();
+  bool RequireTrustedTypes() const;
+  void SetRequireTrustedTypesForTesting();  // Skips sanity checks.
 
+  // https://w3c.github.io/webappsec-upgrade-insecure-requests/#upgrade-insecure-navigations-set
   void SetInsecureNavigationsSet(const std::vector<unsigned>& set) {
     insecure_navigations_to_upgrade_.clear();
     for (unsigned hash : set)
@@ -110,6 +115,7 @@ class CORE_EXPORT SecurityContext : public GarbageCollectedMixin {
     return &insecure_navigations_to_upgrade_;
   }
 
+  // https://w3c.github.io/webappsec-upgrade-insecure-requests/#insecure-requests-policy
   virtual void SetInsecureRequestPolicy(WebInsecureRequestPolicy policy) {
     insecure_request_policy_ = policy;
   }
@@ -117,11 +123,53 @@ class CORE_EXPORT SecurityContext : public GarbageCollectedMixin {
     return insecure_request_policy_;
   }
 
+  void SetMixedAutoupgradeOptOut(bool opt_out) {
+    mixed_autoupgrade_opt_out_ = opt_out;
+  }
+  bool GetMixedAutoUpgradeOptOut() { return mixed_autoupgrade_opt_out_; }
+
   FeaturePolicy* GetFeaturePolicy() const { return feature_policy_.get(); }
+  FeaturePolicy* GetReportOnlyFeaturePolicy() const {
+    return report_only_feature_policy_.get();
+  }
   void SetFeaturePolicy(std::unique_ptr<FeaturePolicy> feature_policy);
-  void InitializeFeaturePolicy(const ParsedFeaturePolicy& parsed_header,
-                               const ParsedFeaturePolicy& container_policy,
-                               const FeaturePolicy* parent_feature_policy);
+  // Constructs the enforcement FeaturePolicy struct for this security context.
+  // The resulted FeaturePolicy is a combination of:
+  //   * |parsed_header|: from the FeaturePolicy part of the response headers.
+  //   * |container_policy|: from <iframe>'s allow attribute.
+  //   * |parent_feature_policy|: which is the current state of feature policies
+  //     in a parent browsing context (frame).
+  //   * |opener_feature_state|: the current state of the policies in an opener
+  //     if any.
+  // Note that at most one of the |parent_feature_policy| or
+  // |opener_feature_state| should be provided. The |container_policy| is empty
+  // for a top-level security context.
+  void InitializeFeaturePolicy(
+      const ParsedFeaturePolicy& parsed_header,
+      const ParsedFeaturePolicy& container_policy,
+      const FeaturePolicy* parent_feature_policy,
+      const FeaturePolicy::FeatureState* opener_feature_state);
+  void AddReportOnlyFeaturePolicy(
+      const ParsedFeaturePolicy& parsed_report_only_header,
+      const ParsedFeaturePolicy& container_policy,
+      const FeaturePolicy* parent_feature_policy);
+
+  // Tests whether the policy-controlled feature is enabled in this frame.
+  // Optionally sends a report to any registered reporting observers or
+  // Report-To endpoints, via ReportFeaturePolicyViolation(), if the feature is
+  // disabled. The optional ConsoleMessage will be sent to the console if
+  // present, or else a default message will be used instead.
+  bool IsFeatureEnabled(
+      mojom::FeaturePolicyFeature,
+      ReportOptions report_on_failure = ReportOptions::kDoNotReport,
+      const String& message = g_empty_string) const;
+  FeatureEnabledState GetFeatureEnabledState(mojom::FeaturePolicyFeature) const;
+  virtual void CountPotentialFeaturePolicyViolation(
+      mojom::FeaturePolicyFeature) const {}
+  virtual void ReportFeaturePolicyViolation(
+      mojom::FeaturePolicyFeature,
+      mojom::FeaturePolicyDisposition,
+      const String& message = g_empty_string) const {}
 
   // Apply the sandbox flag. In addition, if the origin is not already opaque,
   // the origin is updated to a newly created unique opaque origin, setting the
@@ -135,15 +183,22 @@ class CORE_EXPORT SecurityContext : public GarbageCollectedMixin {
 
   void SetContentSecurityPolicy(ContentSecurityPolicy*);
 
+  // Determines whether or not the SecurityContext has a customized feature
+  // policy. If this method returns false, |feature_policy_| is reset to a
+  // default value ignoring container, header, and inherited policies.
+  virtual bool HasCustomizedFeaturePolicy() const { return true; }
+
   SandboxFlags sandbox_flags_;
 
  private:
   scoped_refptr<SecurityOrigin> security_origin_;
   Member<ContentSecurityPolicy> content_security_policy_;
   std::unique_ptr<FeaturePolicy> feature_policy_;
+  std::unique_ptr<FeaturePolicy> report_only_feature_policy_;
 
   mojom::IPAddressSpace address_space_;
   WebInsecureRequestPolicy insecure_request_policy_;
+  bool mixed_autoupgrade_opt_out_;
   InsecureNavigationsSet insecure_navigations_to_upgrade_;
   bool require_safe_types_;
   DISALLOW_COPY_AND_ASSIGN(SecurityContext);

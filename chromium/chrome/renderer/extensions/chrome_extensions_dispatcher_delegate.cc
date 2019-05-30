@@ -8,12 +8,10 @@
 
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
-#include "chrome/common/url_constants.h"
 #include "chrome/grit/renderer_resources.h"
 #include "chrome/renderer/extensions/app_bindings.h"
 #include "chrome/renderer/extensions/app_hooks_delegate.h"
@@ -25,7 +23,6 @@
 #include "chrome/renderer/extensions/page_capture_custom_bindings.h"
 #include "chrome/renderer/extensions/sync_file_system_custom_bindings.h"
 #include "chrome/renderer/extensions/tabs_hooks_delegate.h"
-#include "chrome/renderer/extensions/webstore_bindings.h"
 #include "components/version_info/version_info.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/renderer/render_thread.h"
@@ -36,7 +33,6 @@
 #include "extensions/common/features/feature_channel.h"
 #include "extensions/common/permissions/manifest_permission_set.h"
 #include "extensions/common/permissions/permission_set.h"
-#include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/switches.h"
 #include "extensions/renderer/bindings/api_bindings_system.h"
 #include "extensions/renderer/css_native_handler.h"
@@ -64,34 +60,6 @@ ChromeExtensionsDispatcherDelegate::ChromeExtensionsDispatcherDelegate() {
 }
 
 ChromeExtensionsDispatcherDelegate::~ChromeExtensionsDispatcherDelegate() {
-}
-
-void ChromeExtensionsDispatcherDelegate::AddOriginAccessPermissions(
-    const extensions::Extension& extension,
-    bool is_extension_active) {
-  // Allow component extensions to access chrome://theme/.
-  //
-  // We don't want to grant these permissions to inactive component extensions,
-  // to avoid granting them in "unblessed" (non-extension) processes.  If a
-  // component extension somehow starts as inactive and becomes active later,
-  // we'll re-init the origin permissions, so there's no danger in being
-  // conservative.
-  if (extensions::Manifest::IsComponentLocation(extension.location()) &&
-      is_extension_active) {
-    blink::WebSecurityPolicy::AddOriginAccessAllowListEntry(
-        extension.url(), blink::WebString::FromUTF8(content::kChromeUIScheme),
-        blink::WebString::FromUTF8(chrome::kChromeUIThemeHost), false);
-  }
-
-  // TODO(jstritar): We should try to remove this special case. Also, these
-  // whitelist entries need to be updated when the kManagement permission
-  // changes.
-  if (is_extension_active && extension.permissions_data()->HasAPIPermission(
-                                 extensions::APIPermission::kManagement)) {
-    blink::WebSecurityPolicy::AddOriginAccessAllowListEntry(
-        extension.url(), blink::WebString::FromUTF8(content::kChromeUIScheme),
-        blink::WebString::FromUTF8(chrome::kChromeUIExtensionIconHost), false);
-  }
 }
 
 void ChromeExtensionsDispatcherDelegate::RegisterNativeHandlers(
@@ -131,9 +99,6 @@ void ChromeExtensionsDispatcherDelegate::RegisterNativeHandlers(
   module_system->RegisterNativeHandler(
       "page_capture", std::unique_ptr<NativeHandler>(
                           new extensions::PageCaptureCustomBindings(context)));
-  module_system->RegisterNativeHandler(
-      "webstore", std::unique_ptr<NativeHandler>(
-                      new extensions::WebstoreBindings(context)));
   module_system->RegisterNativeHandler(
       "cast_streaming_natives",
       std::make_unique<extensions::CastStreamingNativeHandler>(
@@ -250,8 +215,6 @@ void ChromeExtensionsDispatcherDelegate::PopulateSourceMap(
       IDR_WEBRTC_DESKTOP_CAPTURE_PRIVATE_CUSTOM_BINDINGS_JS);
   source_map->RegisterSource("webrtcLoggingPrivate",
                              IDR_WEBRTC_LOGGING_PRIVATE_CUSTOM_BINDINGS_JS);
-  source_map->RegisterSource("webstore", IDR_WEBSTORE_CUSTOM_BINDINGS_JS);
-
 
   // Platform app sources that are not API-specific..
   source_map->RegisterSource("chromeWebViewInternal",
@@ -272,6 +235,8 @@ void ChromeExtensionsDispatcherDelegate::PopulateSourceMap(
                              IDR_MEDIA_ROUTER_BINDINGS_JS);
   source_map->RegisterSource("mojo/public/mojom/base/time.mojom",
                              IDR_MOJO_TIME_MOJOM_JS);
+  source_map->RegisterSource("mojo/public/mojom/base/unguessable_token.mojom",
+                             IDR_MOJO_UNGUESSABLE_TOKEN_MOJOM_JS);
   source_map->RegisterSource("net/interfaces/ip_address.mojom",
                              IDR_MOJO_IP_ADDRESS_MOJOM_JS);
   source_map->RegisterSource("net/interfaces/ip_endpoint.mojom",
@@ -297,7 +262,7 @@ void ChromeExtensionsDispatcherDelegate::PopulateSourceMap(
       IDR_MIRRORING_SESSION_PARAMETERS_JS);
 
   // These bindings are unnecessary with native bindings enabled.
-  if (!base::FeatureList::IsEnabled(extensions::features::kNativeCrxBindings)) {
+  if (!base::FeatureList::IsEnabled(extensions_features::kNativeCrxBindings)) {
     source_map->RegisterSource("app", IDR_APP_CUSTOM_BINDINGS_JS);
     source_map->RegisterSource("tabs", IDR_TABS_CUSTOM_BINDINGS_JS);
 
@@ -309,16 +274,10 @@ void ChromeExtensionsDispatcherDelegate::PopulateSourceMap(
   }
 }
 
-void ChromeExtensionsDispatcherDelegate::RequireAdditionalModules(
+void ChromeExtensionsDispatcherDelegate::RequireWebViewModules(
     extensions::ScriptContext* context) {
-  // Note: setting up the WebView class here, not the chrome.webview API.
-  // The API will be automatically set up when first used.
-  if (context->GetAvailability("webViewInternal").is_available()) {
-    // TODO(fsamuel): Eagerly calling Require on context startup is expensive.
-    // It would be better if there were a light way of detecting when a webview
-    // or appview is created and only then set up the infrastructure.
-    context->module_system()->Require("chromeWebView");
-  }
+  DCHECK(context->GetAvailability("webViewInternal").is_available());
+  context->module_system()->Require("chromeWebView");
 }
 
 void ChromeExtensionsDispatcherDelegate::OnActiveExtensionsUpdated(
@@ -333,8 +292,7 @@ void ChromeExtensionsDispatcherDelegate::OnActiveExtensionsUpdated(
 void ChromeExtensionsDispatcherDelegate::InitializeBindingsSystem(
     extensions::Dispatcher* dispatcher,
     extensions::NativeExtensionBindingsSystem* bindings_system) {
-  DCHECK(
-      base::FeatureList::IsEnabled(extensions::features::kNativeCrxBindings));
+  DCHECK(base::FeatureList::IsEnabled(extensions_features::kNativeCrxBindings));
   extensions::APIBindingsSystem* bindings = bindings_system->api_system();
   bindings->GetHooksForAPI("app")->SetDelegate(
       std::make_unique<extensions::AppHooksDelegate>(

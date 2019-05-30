@@ -4,11 +4,13 @@
 
 #include <vector>
 
-#include "components/cbor/cbor_writer.h"
+#include "components/cbor/reader.h"
+#include "components/cbor/writer.h"
 #include "device/fido/attestation_statement_formats.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_parsing_utils.h"
 #include "device/fido/fido_test_data.h"
+#include "device/fido/opaque_attestation_statement.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -81,23 +83,34 @@ constexpr uint8_t kCertificates[] = {
 
 TEST(PackedAttestationStatementTest, CBOR) {
   EXPECT_THAT(
-      *cbor::CBORWriter::Write(
-          cbor::CBORValue(PackedAttestationStatement(
-                              CoseAlgorithmIdentifier::kCoseEs256,
-                              fido_parsing_utils::Materialize(kSignature),
-                              {fido_parsing_utils::Materialize(kCertificates)})
-                              .GetAsCBORMap())),
+      *cbor::Writer::Write(
+          cbor::Value(PackedAttestationStatement(
+                          CoseAlgorithmIdentifier::kCoseEs256,
+                          fido_parsing_utils::Materialize(kSignature),
+                          {fido_parsing_utils::Materialize(kCertificates)})
+                          .GetAsCBORMap())),
       testing::ElementsAreArray(test_data::kPackedAttestationStatementCBOR));
 }
 
 TEST(PackedAttestationStatementTest, CBOR_NoCerts) {
-  EXPECT_THAT(*cbor::CBORWriter::Write(cbor::CBORValue(
+  EXPECT_THAT(*cbor::Writer::Write(cbor::Value(
                   PackedAttestationStatement(
                       CoseAlgorithmIdentifier::kCoseEs256,
                       fido_parsing_utils::Materialize(kSignature), {})
                       .GetAsCBORMap())),
               testing::ElementsAreArray(
                   test_data::kPackedAttestationStatementCBORNoCerts));
+}
+
+TEST(OpaqueAttestationStatementTest, GetLeafCertificate) {
+  auto attestation_map =
+      cbor::Reader::Read(test_data::kPackedAttestationStatementCBOR);
+  ASSERT_TRUE(attestation_map);
+  OpaqueAttestationStatement statement("packed", std::move(*attestation_map));
+  EXPECT_FALSE(statement.IsSelfAttestation());
+  auto leaf_cert = statement.GetLeafCertificate();
+  ASSERT_TRUE(leaf_cert);
+  EXPECT_EQ(590u, leaf_cert->size());
 }
 
 }  // namespace

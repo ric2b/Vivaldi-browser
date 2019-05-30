@@ -75,14 +75,14 @@ StyleElement::ProcessingResult StyleElement::ProcessStyleSheet(
 }
 
 void StyleElement::RemovedFrom(Element& element,
-                               ContainerNode* insertion_point) {
-  if (!insertion_point->isConnected())
+                               ContainerNode& insertion_point) {
+  if (!insertion_point.isConnected())
     return;
 
   Document& document = element.GetDocument();
   if (registered_as_candidate_) {
     document.GetStyleEngine().RemoveStyleSheetCandidateNode(element,
-                                                            *insertion_point);
+                                                            insertion_point);
     registered_as_candidate_ = false;
   }
 
@@ -93,7 +93,7 @@ void StyleElement::RemovedFrom(Element& element,
 StyleElement::ProcessingResult StyleElement::ChildrenChanged(Element& element) {
   if (created_by_parser_)
     return kProcessingSuccessful;
-  probe::willChangeStyleElement(&element);
+  probe::WillChangeStyleElement(&element);
   return Process(element);
 }
 
@@ -123,8 +123,7 @@ void StyleElement::ClearSheet(Element& owner_element) {
 
 static bool ShouldBypassMainWorldCSP(const Element& element) {
   // Main world CSP is bypassed within an isolated world.
-  LocalFrame* frame = element.GetDocument().GetFrame();
-  if (frame && frame->GetScriptController().ShouldBypassMainWorldCSP())
+  if (ContentSecurityPolicy::ShouldBypassMainWorld(&element.GetDocument()))
     return true;
 
   // Main world CSP is bypassed for style elements in user agent shadow DOM.
@@ -143,9 +142,9 @@ StyleElement::ProcessingResult StyleElement::CreateSheet(Element& element,
   const ContentSecurityPolicy* csp = document.GetContentSecurityPolicy();
   bool passes_content_security_policy_checks =
       ShouldBypassMainWorldCSP(element) ||
-      csp->AllowInlineStyle(&element, document.Url(), element.nonce(),
-                            start_position_.line_, text,
-                            ContentSecurityPolicy::InlineType::kBlock);
+      csp->AllowInline(ContentSecurityPolicy::InlineType::kInlineStyleElement,
+                       &element, text, element.nonce(), document.Url(),
+                       start_position_.line_);
 
   // Clearing the current sheet may remove the cache entry so create the new
   // sheet first

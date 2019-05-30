@@ -66,6 +66,12 @@
 
 namespace blink {
 
+namespace {
+
+constexpr char kGlobalProxyLabel[] = "WindowProxy::global_proxy_";
+
+}  // namespace
+
 void LocalWindowProxy::Trace(blink::Visitor* visitor) {
   visitor->Trace(script_state_);
   WindowProxy::Trace(visitor);
@@ -73,8 +79,23 @@ void LocalWindowProxy::Trace(blink::Visitor* visitor) {
 
 void LocalWindowProxy::DisposeContext(Lifecycle next_status,
                                       FrameReuseStatus frame_reuse_status) {
-  DCHECK(next_status == Lifecycle::kGlobalObjectIsDetached ||
-         next_status == Lifecycle::kFrameIsDetached);
+  DCHECK(next_status == Lifecycle::kV8MemoryIsForciblyPurged ||
+         next_status == Lifecycle::kGlobalObjectIsDetached ||
+         next_status == Lifecycle::kFrameIsDetached ||
+         next_status == Lifecycle::kFrameIsDetachedAndV8MemoryIsPurged);
+
+  // If the current lifecycle is kV8MemoryIsForciblyPurged, next status should
+  // be either kFrameIsDetachedAndV8MemoryIsPurged, or kGlobalObjectIsDetached.
+  // If the former, |global_proxy_| should become weak, and if the latter, the
+  // necessary operations are already done so can return here.
+  if (lifecycle_ == Lifecycle::kV8MemoryIsForciblyPurged) {
+    DCHECK(next_status == Lifecycle::kGlobalObjectIsDetached ||
+           next_status == Lifecycle::kFrameIsDetachedAndV8MemoryIsPurged);
+    if (next_status == Lifecycle::kFrameIsDetachedAndV8MemoryIsPurged)
+      global_proxy_.SetPhantom();
+    lifecycle_ = next_status;
+    return;
+  }
 
   if (lifecycle_ != Lifecycle::kContextIsInitialized)
     return;
@@ -86,8 +107,8 @@ void LocalWindowProxy::DisposeContext(Lifecycle next_status,
   // it returns.
   GetFrame()->Client()->WillReleaseScriptContext(context, world_->GetWorldId());
   MainThreadDebugger::Instance()->ContextWillBeDestroyed(script_state_);
-
-  if (next_status == Lifecycle::kGlobalObjectIsDetached) {
+  if (next_status == Lifecycle::kV8MemoryIsForciblyPurged ||
+      next_status == Lifecycle::kGlobalObjectIsDetached) {
     // Clean up state on the global proxy, which will be reused.
     if (!global_proxy_.IsEmpty()) {
       CHECK(global_proxy_ == context->Global());
@@ -132,6 +153,7 @@ void LocalWindowProxy::Initialize() {
       ("Blink.Binding.InitializeNonMainLocalWindowProxy", 0, 10000000, 50));
   ScopedUsHistogramTimer timer(GetFrame()->IsMainFrame() ? main_frame_hist
                                                          : non_main_frame_hist);
+  CHECK(!GetFrame()->IsProvisional());
 
   ScriptForbiddenScope::AllowUserAgentScript allow_script;
   // Inspector may request V8 interruption to process DevTools protocol
@@ -148,6 +170,7 @@ void LocalWindowProxy::Initialize() {
   v8::Local<v8::Context> context = script_state_->GetContext();
   if (global_proxy_.IsEmpty()) {
     global_proxy_.Set(GetIsolate(), context->Global());
+    global_proxy_.Get().AnnotateStrongRetainer(kGlobalProxyLabel);
     CHECK(!global_proxy_.IsEmpty());
   }
 
@@ -182,6 +205,9 @@ void LocalWindowProxy::Initialize() {
 
   InstallConditionalFeatures();
 
+  // This needs to go after everything else since it accesses the window object.
+  InitializeV8ExtrasBinding(script_state_);
+
   if (World().IsMainWorld()) {
     GetFrame()->Loader().DispatchDidClearWindowObjectInMainWorld();
   }
@@ -194,16 +220,8 @@ void LocalWindowProxy::CreateContext() {
   // TODO(yukishiino): Remove this CHECK once crbug.com/713699 gets fixed.
   CHECK(IsMainThread());
 
-  Vector<const char*> extension_names;
-  // Dynamically tell v8 about our extensions now.
-  if (GetFrame()->Client()->AllowScriptExtensions()) {
-    const V8Extensions& extensions = ScriptController::RegisteredExtensions();
-    extension_names.ReserveInitialCapacity(extensions.size());
-    for (const auto* extension : extensions)
-      extension_names.push_back(extension->name());
-  }
-  v8::ExtensionConfiguration extension_configuration(extension_names.size(),
-                                                     extension_names.data());
+  v8::ExtensionConfiguration extension_configuration =
+      ScriptController::ExtensionsFor(GetFrame()->GetDocument());
 
   v8::Local<v8::Context> context;
   {
@@ -229,7 +247,7 @@ void LocalWindowProxy::CreateContext() {
     // in some cases, e.g. loading XML files.
     if (context.IsEmpty()) {
       v8::Local<v8::ObjectTemplate> global_template =
-          V8Window::domTemplate(isolate, World())->InstanceTemplate();
+          V8Window::DomTemplate(isolate, World())->InstanceTemplate();
       CHECK(!global_template.IsEmpty());
       context = v8::Context::New(isolate, &extension_configuration,
                                  global_template, global_proxy);
@@ -243,8 +261,6 @@ void LocalWindowProxy::CreateContext() {
 #endif
 
   script_state_ = ScriptState::Create(context, world_);
-
-  InitializeV8ExtrasBinding(script_state_);
 
   DCHECK(lifecycle_ == Lifecycle::kContextIsUninitialized ||
          lifecycle_ == Lifecycle::kGlobalObjectIsDetached);
@@ -275,7 +291,7 @@ void LocalWindowProxy::InstallConditionalFeatures() {
   wrapper_type_info->InstallConditionalFeatures(
       context, World(), global_proxy, unused_prototype_object,
       unused_interface_object,
-      wrapper_type_info->domTemplate(GetIsolate(), World()));
+      wrapper_type_info->DomTemplate(GetIsolate(), World()));
 
   if (World().IsMainWorld()) {
     // For the main world, install any remaining conditional bindings (i.e.
@@ -466,11 +482,11 @@ static v8::Local<v8::Value> GetNamedProperty(
     v8::Local<v8::Object> creation_context,
     v8::Isolate* isolate) {
   if (!html_document->HasNamedItem(key))
-    return V8Undefined();
+    return v8::Local<v8::Value>();
 
   DocumentNameCollection* items = html_document->DocumentNamedItems(key);
   if (items->IsEmpty())
-    return V8Undefined();
+    return v8::Local<v8::Value>();
 
   if (items->HasExactlyOneItem()) {
     HTMLElement* element = items->Item(0);

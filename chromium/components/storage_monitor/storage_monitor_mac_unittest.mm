@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -13,10 +14,12 @@
 #include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "components/storage_monitor/mock_removable_storage_observer.h"
 #include "components/storage_monitor/removable_device_constants.h"
 #include "components/storage_monitor/storage_info.h"
 #include "components/storage_monitor/test_storage_monitor.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -57,11 +60,11 @@ class StorageMonitorMacTest : public testing::Test {
   }
 
   void UpdateDisk(StorageInfo info, StorageMonitorMac::UpdateType update_type) {
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&StorageMonitorMac::UpdateDisk,
-                   base::Unretained(monitor_.get()), update_type,
-                   base::Owned(new std::string("dummy_bsd_name")), info));
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::UI},
+        base::BindOnce(&StorageMonitorMac::UpdateDisk,
+                       base::Unretained(monitor_.get()), update_type,
+                       base::Owned(new std::string("dummy_bsd_name")), info));
     base::RunLoop().RunUntilIdle();
   }
 

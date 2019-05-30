@@ -7,10 +7,11 @@
 #include <set>
 #include <vector>
 
+#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/checked_math.h"
-#include "base/trace_event/trace_event_argument.h"
+#include "base/trace_event/traced_value.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/trees/clip_node.h"
 #include "cc/trees/effect_node.h"
@@ -634,8 +635,7 @@ void TransformTree::UpdateNodeAndAncestorsAreAnimatedOrInvertible(
 void TransformTree::SetRootTransformsAndScales(
     float device_scale_factor,
     float page_scale_factor_for_root,
-    const gfx::Transform& device_transform,
-    gfx::PointF root_position) {
+    const gfx::Transform& device_transform) {
   gfx::Vector2dF device_transform_scale_components =
       MathUtil::ComputeTransform2dScaleComponents(device_transform, 1.f);
 
@@ -644,17 +644,14 @@ void TransformTree::SetRootTransformsAndScales(
       std::max(device_transform_scale_components.x(),
                device_transform_scale_components.y());
 
-  // If DT is the device transform, DSF is the matrix scaled by (device scale
-  // factor * page scale factor for root), RP is the matrix translated by root's
-  // position,
-  // Let Screen Space Scale(SSS) = scale component of DT*DSF*RP,
-  // then the screen space transform of the root transform node is set to SSS
-  // and the post local transform of the contents root node is set to
-  // SSS^-1*DT*DSF*RP.
+  // Let DT be the device transform and DSF be the matrix scaled by (device
+  // scale factor * page scale factor for root). Let Screen Space Scale(SSS) =
+  // scale component of DT*DSF. The screen space transform of the root
+  // transform node is set to SSS and the post local transform of the contents
+  // root node is set to SSS^-1*DT*DSF.
   gfx::Transform transform = device_transform;
   transform.Scale(device_scale_factor * page_scale_factor_for_root,
                   device_scale_factor * page_scale_factor_for_root);
-  transform.Translate(root_position.x(), root_position.y());
   float fallback_value = device_scale_factor * page_scale_factor_for_root;
   gfx::Vector2dF screen_space_scale =
       MathUtil::ComputeTransform2dScaleComponents(transform, fallback_value);
@@ -779,12 +776,18 @@ void EffectTree::UpdateOpacities(EffectNode* node, EffectNode* parent_node) {
     node->screen_space_opacity *= parent_node->screen_space_opacity;
 }
 
+void EffectTree::UpdateSubtreeHidden(EffectNode* node,
+                                     EffectNode* parent_node) {
+  if (parent_node)
+    node->subtree_hidden |= parent_node->subtree_hidden;
+}
+
 void EffectTree::UpdateIsDrawn(EffectNode* node, EffectNode* parent_node) {
   // Nodes that have screen space opacity 0 are hidden. So they are not drawn.
   // Exceptions:
   // 1) Nodes that contribute to copy requests, whether hidden or not, must be
   //    drawn.
-  // 2) Nodes that have a background filter.
+  // 2) Nodes that have a backdrop filter.
   // 3) Nodes with animating screen space opacity on main thread or pending tree
   //    are drawn if their parent is drawn irrespective of their opacity.
   if (node->has_copy_request || node->cache_render_surface)
@@ -792,7 +795,7 @@ void EffectTree::UpdateIsDrawn(EffectNode* node, EffectNode* parent_node) {
   else if (EffectiveOpacity(node) == 0.f &&
            (!node->has_potential_opacity_animation ||
             property_trees()->is_active) &&
-           node->background_filters.IsEmpty())
+           node->backdrop_filters.IsEmpty())
     node->is_drawn = false;
   else if (parent_node)
     node->is_drawn = parent_node->is_drawn;
@@ -830,6 +833,11 @@ void EffectTree::UpdateHasMaskingChild(EffectNode* node,
   node->has_masking_child = false;
   if (node->blend_mode == SkBlendMode::kDstIn)
     parent_node->has_masking_child = true;
+}
+
+void EffectTree::UpdateIsMasked(EffectNode* node, EffectNode* parent_node) {
+  node->is_masked = (parent_node && parent_node->is_masked) ||
+                    node->mask_layer_id != Layer::INVALID_ID;
 }
 
 void EffectTree::UpdateSurfaceContentsScale(EffectNode* effect_node) {
@@ -903,10 +911,12 @@ void EffectTree::UpdateEffects(int id) {
   EffectNode* parent_node = parent(node);
 
   UpdateOpacities(node, parent_node);
+  UpdateSubtreeHidden(node, parent_node);
   UpdateIsDrawn(node, parent_node);
   UpdateEffectChanged(node, parent_node);
   UpdateBackfaceVisibility(node, parent_node);
   UpdateHasMaskingChild(node, parent_node);
+  UpdateIsMasked(node, parent_node);
   UpdateSurfaceContentsScale(node);
 }
 
@@ -1181,8 +1191,6 @@ bool EffectTree::ClippedHitTestRegionIsRectangle(int effect_id) const {
                                        effect_node->target_id, &to_target) ||
         !to_target.Preserves2dAxisAlignment())
       return false;
-    if (effect_node->mask_layer_id != Layer::INVALID_ID)
-      return false;
   }
   return true;
 }
@@ -1305,14 +1313,7 @@ void ScrollTree::clear() {
 
 gfx::ScrollOffset ScrollTree::MaxScrollOffset(int scroll_node_id) const {
   const ScrollNode* scroll_node = Node(scroll_node_id);
-  gfx::SizeF scroll_bounds =
-      gfx::SizeF(scroll_node->bounds.width(), scroll_node->bounds.height());
-
-  if (scroll_node->scrolls_inner_viewport) {
-    scroll_bounds.Enlarge(
-        property_trees()->inner_viewport_scroll_bounds_delta().x(),
-        property_trees()->inner_viewport_scroll_bounds_delta().y());
-  }
+  gfx::SizeF scroll_bounds = this->scroll_bounds(scroll_node_id);
 
   if (!scroll_node->scrollable || scroll_bounds.IsEmpty())
     return gfx::ScrollOffset();
@@ -1335,6 +1336,16 @@ gfx::ScrollOffset ScrollTree::MaxScrollOffset(int scroll_node_id) const {
   max_offset.Scale(1 / scale_factor);
   max_offset.SetToMax(gfx::ScrollOffset());
   return max_offset;
+}
+
+gfx::SizeF ScrollTree::scroll_bounds(int scroll_node_id) const {
+  const ScrollNode* scroll_node = Node(scroll_node_id);
+  gfx::SizeF bounds(scroll_node->bounds);
+  if (scroll_node->scrolls_inner_viewport) {
+    const auto& delta = property_trees()->inner_viewport_scroll_bounds_delta();
+    bounds.Enlarge(delta.x(), delta.y());
+  }
+  return bounds;
 }
 
 void ScrollTree::OnScrollOffsetAnimated(ElementId id,
@@ -1436,7 +1447,7 @@ gfx::Vector2dF ScrollTree::ClampScrollToMaxScrollOffset(
 
 const gfx::ScrollOffset ScrollTree::current_scroll_offset(ElementId id) const {
   if (property_trees()->is_main_thread) {
-    ScrollOffsetMap::const_iterator it = scroll_offset_map_.find(id);
+    auto it = scroll_offset_map_.find(id);
     return it != scroll_offset_map_.end() ? it->second : gfx::ScrollOffset();
   }
   return GetSyncedScrollOffset(id)
@@ -1472,10 +1483,17 @@ const gfx::ScrollOffset ScrollTree::GetPixelSnappedScrollOffset(
 }
 
 gfx::ScrollOffset ScrollTree::PullDeltaForMainThread(
-    SyncedScrollOffset* scroll_offset) {
+    SyncedScrollOffset* scroll_offset,
+    bool use_fractional_deltas) {
   DCHECK(property_trees()->is_active);
+
+  // Once this setting is enabled, all the complicated rounding logic below can
+  // go away.
+  if (use_fractional_deltas)
+    return scroll_offset->PullDeltaForMainThread();
+
   // TODO(flackr): We should pass the fractional scroll deltas when Blink fully
-  // supports fractional scrolls.
+  // supports fractional scrolls. crbug.com/414283.
   // TODO(flackr): We should ideally round the fractional scrolls in the same
   // direction as the scroll will be snapped but for common cases this is
   // equivalent to rounding to the nearest integer offset.
@@ -1495,26 +1513,25 @@ gfx::ScrollOffset ScrollTree::PullDeltaForMainThread(
   return delta;
 }
 
-void ScrollTree::CollectScrollDeltas(
-    ScrollAndScaleSet* scroll_info,
-    ElementId inner_viewport_scroll_element_id) {
+void ScrollTree::CollectScrollDeltas(ScrollAndScaleSet* scroll_info,
+                                     ElementId inner_viewport_scroll_element_id,
+                                     bool use_fractional_deltas) {
   DCHECK(!property_trees()->is_main_thread);
   for (auto map_entry : synced_scroll_offset_map_) {
     gfx::ScrollOffset scroll_delta =
-        PullDeltaForMainThread(map_entry.second.get());
+        PullDeltaForMainThread(map_entry.second.get(), use_fractional_deltas);
 
-    gfx::Vector2d scroll_delta_vector(scroll_delta.x(), scroll_delta.y());
     ElementId id = map_entry.first;
 
     if (!scroll_delta.IsZero()) {
       if (id == inner_viewport_scroll_element_id) {
         // Inner (visual) viewport is stored separately.
         scroll_info->inner_viewport_scroll.element_id = id;
-        scroll_info->inner_viewport_scroll.scroll_delta = scroll_delta_vector;
+        scroll_info->inner_viewport_scroll.scroll_delta = scroll_delta;
       } else {
         LayerTreeHostCommon::ScrollUpdateInfo scroll;
         scroll.element_id = id;
-        scroll.scroll_delta = scroll_delta_vector;
+        scroll.scroll_delta = scroll_delta;
         scroll_info->scrolls.push_back(scroll);
       }
     }
@@ -1522,8 +1539,11 @@ void ScrollTree::CollectScrollDeltas(
 }
 
 void ScrollTree::CollectScrollDeltasForTesting() {
+  LayerTreeSettings settings;
+  bool use_fractional_deltas = settings.commit_fractional_scroll_deltas;
+
   for (auto map_entry : synced_scroll_offset_map_) {
-    PullDeltaForMainThread(map_entry.second.get());
+    PullDeltaForMainThread(map_entry.second.get(), use_fractional_deltas);
   }
 }
 
@@ -1828,7 +1848,7 @@ void PropertyTrees::SetOuterViewportContainerBoundsDelta(
 
 bool PropertyTrees::ElementIsAnimatingChanged(
     const MutatorHost* mutator_host,
-    ElementId element_id,
+    const PropertyToElementIdMap& element_id_map,
     ElementListType list_type,
     const PropertyAnimationState& mask,
     const PropertyAnimationState& state,
@@ -1840,6 +1860,19 @@ bool PropertyTrees::ElementIsAnimatingChanged(
         !mask.potentially_animating[property])
       continue;
 
+    // The mask represents which properties have had their state changed. This
+    // can include properties for which there are no longer any animations, in
+    // which case there will not be an entry in the map.
+    //
+    // It is unclear whether this is desirable; it may be that we are missing
+    // updates to property nodes here because we no longer have the required
+    // ElementId to look them up. See http://crbug.com/912574 for context around
+    // why this code was rewritten.
+    auto it = element_id_map.find(static_cast<TargetProperty::Type>(property));
+    if (it == element_id_map.end())
+      continue;
+
+    const ElementId element_id = it->second;
     switch (property) {
       case TargetProperty::TRANSFORM:
         if (TransformNode* transform_node =
@@ -1982,6 +2015,16 @@ std::unique_ptr<base::trace_event::TracedValue> PropertyTrees::AsTracedValue()
   value->EndDictionary();
 
   return value;
+}
+
+std::string PropertyTrees::ToString() const {
+  std::string str;
+  base::JSONWriter::WriteWithOptions(
+      *AsTracedValue()->ToBaseValue(),
+      base::JSONWriter::OPTIONS_OMIT_DOUBLE_TYPE_PRESERVATION |
+          base::JSONWriter::OPTIONS_PRETTY_PRINT,
+      &str);
+  return str;
 }
 
 CombinedAnimationScale PropertyTrees::GetAnimationScales(

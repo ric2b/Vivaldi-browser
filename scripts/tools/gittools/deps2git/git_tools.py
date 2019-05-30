@@ -3,7 +3,14 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import cStringIO
+from __future__ import print_function
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+from builtins import range
+from builtins import object
+
+import io
 import os
 import re
 import subprocess
@@ -33,7 +40,7 @@ class AbnormalExit(Exception):
 class StdioBuffer(object):
   def __init__(self, name, out_queue):
     self.closed = False
-    self.line_buffer = cStringIO.StringIO()
+    self.line_buffer = io.StringIO()
     self.name = name
     self.out_q = out_queue
 
@@ -49,7 +56,7 @@ class StdioBuffer(object):
       for line in lines[:-1]:
         self.out_q.put('%s> %s' % (self.name, line))
       self.line_buffer.close()
-      self.line_buffer = cStringIO.StringIO()
+      self.line_buffer = io.StringIO()
       self.line_buffer.write(lines[-1])
 
   def close(self):
@@ -62,8 +69,8 @@ class StdioBuffer(object):
 def GetStatusOutput(cmd, cwd=None, out_buffer=None):
   """Return (status, output) of executing cmd in a shell."""
   if VERBOSE:
-    print >> sys.stderr, ''
-    print >> sys.stderr, '[DEBUG] Running "%s"' % cmd
+    print('', file=sys.stderr)
+    print('[DEBUG] Running "%s"' % cmd, file=sys.stderr)
 
   def _thread_main():
     thr = threading.current_thread()
@@ -90,7 +97,7 @@ def GetStatusOutput(cmd, cwd=None, out_buffer=None):
                                 cwd=cwd, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT)
         (stdout, _) = proc.communicate()
-    except Exception, e:
+    except Exception as e:
       thr.status = -1
       thr.stdout = ''
       thr.stderr = repr(e)
@@ -108,8 +115,8 @@ def GetStatusOutput(cmd, cwd=None, out_buffer=None):
   if VERBOSE:
     short_output = ' '.join(thr.stdout.splitlines())
     short_output = short_output.strip(' \t\n\r')
-    print >> sys.stderr, (
-        '[DEBUG] Output: %d, %-60s' % (thr.status, short_output))
+    print('[DEBUG] Output: %d, %-60s' % (thr.status, short_output),
+          file=sys.stderr)
 
   return (thr.status, thr.stdout)
 
@@ -171,7 +178,7 @@ def Ping(git_repo, verbose=False):
   """Confirm that a remote repository URL is valid."""
   status, stdout = GetStatusOutput('git ls-remote ' + git_repo)
   if status != 0 and verbose:
-    print >> sys.stderr, stdout
+    print(stdout, file=sys.stderr)
   return status == 0
 
 
@@ -267,8 +274,8 @@ def _SearchImpl(git_repo, svn_rev, is_mirror, refspec, fetch_url, regex):
     found_rev = None
   if (not found_rev or found_rev < int(svn_rev)) and fetch_url:
     if VERBOSE:
-      print >> sys.stderr, (
-          'Fetching %s %s [%s < %s]' % (git_repo, refspec, found_rev, svn_rev))
+      print('Fetching %s %s [%s < %s]' % (git_repo, refspec, found_rev, svn_rev),
+            file=sys.stderr)
     Fetch(git_repo, fetch_url, is_mirror)
     found_rev = _FindRevForCommitish(git_repo, refspec, is_mirror)
 
@@ -288,7 +295,7 @@ def _SearchImpl(git_repo, svn_rev, is_mirror, refspec, fetch_url, regex):
   found_msg = svn_rev
   if found_rev != int(svn_rev):
     found_msg = '%s [actual: %s]' % (svn_rev, found_rev)
-  print >> sys.stderr, '%s: %s <-> %s' % (git_repo, output, found_msg)
+  print('%s: %s <-> %s' % (git_repo, output, found_msg), file=sys.stderr)
   return output
 
 

@@ -594,7 +594,7 @@ void BluetoothSocketMac::OnChannelOpened(
   DCHECK(thread_checker_.CalledOnValidThread());
   DVLOG(1) << uuid_.canonical_value() << ": Incoming channel pending.";
 
-  accept_queue_.push(linked_ptr<BluetoothChannelMac>(channel.release()));
+  accept_queue_.push(std::move(channel));
   if (accept_request_)
     AcceptConnectionRequest();
 
@@ -687,8 +687,7 @@ void BluetoothSocketMac::OnChannelDataReceived(void* data, size_t length) {
   DCHECK(!is_connecting());
 
   int data_size = base::checked_cast<int>(length);
-  scoped_refptr<net::IOBufferWithSize> buffer(
-      new net::IOBufferWithSize(data_size));
+  auto buffer = base::MakeRefCounted<net::IOBufferWithSize>(data_size);
   memcpy(buffer->data(), data, buffer->size());
 
   // If there is a pending read callback, call it now.
@@ -719,43 +718,44 @@ void BluetoothSocketMac::Send(scoped_refptr<net::IOBuffer> buffer,
   }
 
   // Create and enqueue request in preparation of async writes.
-  linked_ptr<SendRequest> request(new SendRequest());
+  auto request = std::make_unique<SendRequest>();
+  SendRequest* request_ptr = request.get();
   request->buffer_size = buffer_size;
   request->success_callback = success_callback;
   request->error_callback = error_callback;
-  send_queue_.push(request);
+  send_queue_.push(std::move(request));
 
   // |writeAsync| accepts buffers of max. mtu bytes per call, so we need to emit
   // multiple write operations if buffer_size > mtu.
   uint16_t mtu = channel_->GetOutgoingMTU();
-  scoped_refptr<net::DrainableIOBuffer> send_buffer(
-      new net::DrainableIOBuffer(buffer.get(), buffer_size));
+  auto send_buffer =
+      base::MakeRefCounted<net::DrainableIOBuffer>(buffer.get(), buffer_size);
   while (send_buffer->BytesRemaining() > 0) {
     int byte_count = send_buffer->BytesRemaining();
     if (byte_count > mtu)
       byte_count = mtu;
     IOReturn status =
-        channel_->WriteAsync(send_buffer->data(), byte_count, request.get());
+        channel_->WriteAsync(send_buffer->data(), byte_count, request_ptr);
 
     if (status != kIOReturnSuccess) {
       std::stringstream error;
       error << "Failed to connect bluetooth socket ("
             << channel_->GetDeviceAddress() << "): (" << status << ")";
       // Remember the first error only
-      if (request->status == kIOReturnSuccess)
-        request->status = status;
-      request->error_signaled = true;
-      request->error_callback.Run(error.str());
+      if (request_ptr->status == kIOReturnSuccess)
+        request_ptr->status = status;
+      request_ptr->error_signaled = true;
+      request_ptr->error_callback.Run(error.str());
       // We may have failed to issue any write operation. In that case, there
       // will be no corresponding completion callback for this particular
       // request, so we must forget about it now.
-      if (request->active_async_writes == 0) {
+      if (request_ptr->active_async_writes == 0) {
         send_queue_.pop();
       }
       return;
     }
 
-    request->active_async_writes++;
+    request_ptr->active_async_writes++;
     send_buffer->DidConsume(byte_count);
   }
 }
@@ -763,28 +763,26 @@ void BluetoothSocketMac::Send(scoped_refptr<net::IOBuffer> buffer,
 void BluetoothSocketMac::OnChannelWriteComplete(void* refcon, IOReturn status) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
+  SendRequest* request_ptr = send_queue_.front().get();
   // Note: We use "CHECK" below to ensure we never run into unforeseen
   // occurrences of asynchronous callbacks, which could lead to data
   // corruption.
-  CHECK_EQ(static_cast<SendRequest*>(refcon), send_queue_.front().get());
+  CHECK_EQ(static_cast<SendRequest*>(refcon), request_ptr);
 
-  // Keep a local linked_ptr to avoid releasing the request too early if we end
-  // up removing it from the queue.
-  linked_ptr<SendRequest> request = send_queue_.front();
-
-  // Remember the first error only
+  // Remember the first error only.
   if (status != kIOReturnSuccess) {
-    if (request->status == kIOReturnSuccess)
-      request->status = status;
+    if (request_ptr->status == kIOReturnSuccess)
+      request_ptr->status = status;
   }
 
-  // Figure out if we are done with this async request
-  request->active_async_writes--;
-  if (request->active_async_writes > 0)
+  // Figure out if we are done with this async request.
+  request_ptr->active_async_writes--;
+  if (request_ptr->active_async_writes > 0)
     return;
 
   // If this was the last active async write for this request, remove it from
   // the queue and call the appropriate callback associated to the request.
+  std::unique_ptr<SendRequest> request = std::move(send_queue_.front());
   send_queue_.pop();
   if (request->status != kIOReturnSuccess) {
     if (!request->error_signaled) {
@@ -834,7 +832,8 @@ void BluetoothSocketMac::AcceptConnectionRequest() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DVLOG(1) << uuid_.canonical_value() << ": Accepting pending connection.";
 
-  linked_ptr<BluetoothChannelMac> channel = accept_queue_.front();
+  std::unique_ptr<BluetoothChannelMac> channel =
+      std::move(accept_queue_.front());
   accept_queue_.pop();
 
   adapter_->DeviceConnected(channel->GetDevice());
@@ -845,7 +844,7 @@ void BluetoothSocketMac::AcceptConnectionRequest() {
       BluetoothSocketMac::CreateSocket();
 
   client_socket->uuid_ = uuid_;
-  client_socket->channel_.reset(channel.release());
+  client_socket->channel_ = std::move(channel);
 
   // Associating the socket can synchronously call into OnChannelOpenComplete().
   // Make sure to first set the new socket to be connecting and hook it up to

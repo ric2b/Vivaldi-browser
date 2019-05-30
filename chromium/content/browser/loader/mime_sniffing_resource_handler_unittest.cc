@@ -9,6 +9,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -181,9 +182,10 @@ class MimeSniffingResourceHandlerTest : public testing::Test {
 
   void set_plugin_stale(bool plugin_stale) { plugin_stale_ = plugin_stale; }
 
-  bool TestStreamIsIntercepted(bool allow_download,
-                               bool must_download,
-                               ResourceType request_resource_type);
+  bool TestStreamIsIntercepted(
+      ResourceInterceptPolicy resource_intercept_policy,
+      bool must_download,
+      ResourceType request_resource_type);
 
   // Tests the operation of the MimeSniffingHandler when it needs to buffer
   // data (example case: the response is text/plain).
@@ -233,10 +235,10 @@ MimeSniffingResourceHandlerTest::TestAcceptHeaderSettingWithURLRequest(
                                           0,              // render_view_id
                                           0,              // render_frame_id
                                           is_main_frame,  // is_main_frame
-                                          false,          // allow_download
-                                          true,           // is_async
-                                          PREVIEWS_OFF,   // previews_state
-                                          nullptr);       // navigation_ui_data
+                                          ResourceInterceptPolicy::kAllowNone,
+                                          true,          // is_async
+                                          PREVIEWS_OFF,  // previews_state
+                                          nullptr);      // navigation_ui_data
 
   std::unique_ptr<TestResourceHandler> scoped_test_handler(
       new TestResourceHandler());
@@ -244,7 +246,7 @@ MimeSniffingResourceHandlerTest::TestAcceptHeaderSettingWithURLRequest(
 
   MimeSniffingResourceHandler mime_sniffing_handler(
       std::move(scoped_test_handler), nullptr, nullptr, nullptr, request,
-      REQUEST_CONTEXT_TYPE_UNSPECIFIED);
+      blink::mojom::RequestContextType::UNSPECIFIED);
   MockResourceLoader mock_loader(&mime_sniffing_handler);
 
   EXPECT_EQ(MockResourceLoader::Status::IDLE,
@@ -256,7 +258,7 @@ MimeSniffingResourceHandlerTest::TestAcceptHeaderSettingWithURLRequest(
 }
 
 bool MimeSniffingResourceHandlerTest::TestStreamIsIntercepted(
-    bool allow_download,
+    ResourceInterceptPolicy resource_intercept_policy,
     bool must_download,
     ResourceType request_resource_type) {
   net::URLRequestContext context;
@@ -265,15 +267,15 @@ bool MimeSniffingResourceHandlerTest::TestStreamIsIntercepted(
       TRAFFIC_ANNOTATION_FOR_TESTS));
   bool is_main_frame = request_resource_type == RESOURCE_TYPE_MAIN_FRAME;
   ResourceRequestInfo::AllocateForTesting(request.get(), request_resource_type,
-                                          nullptr,         // context
-                                          0,               // render_process_id
-                                          0,               // render_view_id
-                                          0,               // render_frame_id
-                                          is_main_frame,   // is_main_frame
-                                          allow_download,  // allow_download
-                                          true,            // is_async
-                                          PREVIEWS_OFF,    // previews_state
-                                          nullptr);        // navigation_ui_data
+                                          nullptr,        // context
+                                          0,              // render_process_id
+                                          0,              // render_view_id
+                                          0,              // render_frame_id
+                                          is_main_frame,  // is_main_frame
+                                          resource_intercept_policy,
+                                          true,          // is_async
+                                          PREVIEWS_OFF,  // previews_state
+                                          nullptr);      // navigation_ui_data
 
   TestResourceDispatcherHost host(stream_has_handler_);
   TestContentBrowserClient new_client(must_download);
@@ -290,7 +292,7 @@ bool MimeSniffingResourceHandlerTest::TestStreamIsIntercepted(
   MimeSniffingResourceHandler mime_sniffing_handler(
       std::unique_ptr<ResourceHandler>(std::move(scoped_test_handler)), &host,
       &plugin_service, intercepting_handler.get(), request.get(),
-      REQUEST_CONTEXT_TYPE_UNSPECIFIED);
+      blink::mojom::RequestContextType::UNSPECIFIED);
 
   MockResourceLoader mock_loader(&mime_sniffing_handler);
 
@@ -309,7 +311,7 @@ bool MimeSniffingResourceHandlerTest::TestStreamIsIntercepted(
 
   content::RunAllPendingInMessageLoop();
   EXPECT_LT(host.intercepted_as_stream_count(), 2);
-  if (allow_download)
+  if (resource_intercept_policy != ResourceInterceptPolicy::kAllowNone)
     EXPECT_TRUE(intercepting_handler->new_handler_for_testing());
   SetBrowserClientForTesting(old_client);
   return host.intercepted_as_stream();
@@ -328,12 +330,12 @@ void MimeSniffingResourceHandlerTest::TestHandlerSniffing(
       TRAFFIC_ANNOTATION_FOR_TESTS));
   ResourceRequestInfo::AllocateForTesting(request.get(),
                                           RESOURCE_TYPE_MAIN_FRAME,
-                                          nullptr,       // context
-                                          0,             // render_process_id
-                                          0,             // render_view_id
-                                          0,             // render_frame_id
-                                          true,          // is_main_frame
-                                          false,         // allow_download
+                                          nullptr,  // context
+                                          0,        // render_process_id
+                                          0,        // render_view_id
+                                          0,        // render_frame_id
+                                          true,     // is_main_frame
+                                          ResourceInterceptPolicy::kAllowNone,
                                           true,          // is_async
                                           PREVIEWS_OFF,  // previews_state
                                           nullptr);      // navigation_ui_data
@@ -357,7 +359,7 @@ void MimeSniffingResourceHandlerTest::TestHandlerSniffing(
   MimeSniffingResourceHandler mime_sniffing_handler(
       std::move(scoped_test_handler), &host, &plugin_service,
       intercepting_handler.get(), request.get(),
-      REQUEST_CONTEXT_TYPE_UNSPECIFIED);
+      blink::mojom::RequestContextType::UNSPECIFIED);
 
   MockResourceLoader mock_loader(&mime_sniffing_handler);
 
@@ -492,12 +494,12 @@ void MimeSniffingResourceHandlerTest::TestHandlerNoSniffing(
       TRAFFIC_ANNOTATION_FOR_TESTS));
   ResourceRequestInfo::AllocateForTesting(request.get(),
                                           RESOURCE_TYPE_MAIN_FRAME,
-                                          nullptr,       // context
-                                          0,             // render_process_id
-                                          0,             // render_view_id
-                                          0,             // render_frame_id
-                                          true,          // is_main_frame
-                                          false,         // allow_download
+                                          nullptr,  // context
+                                          0,        // render_process_id
+                                          0,        // render_view_id
+                                          0,        // render_frame_id
+                                          true,     // is_main_frame
+                                          ResourceInterceptPolicy::kAllowNone,
                                           true,          // is_async
                                           PREVIEWS_OFF,  // previews_state
                                           nullptr);      // navigation_ui_data
@@ -521,7 +523,7 @@ void MimeSniffingResourceHandlerTest::TestHandlerNoSniffing(
   MimeSniffingResourceHandler mime_sniffing_handler(
       std::move(scoped_test_handler), &host, &plugin_service,
       intercepting_handler.get(), request.get(),
-      REQUEST_CONTEXT_TYPE_UNSPECIFIED);
+      blink::mojom::RequestContextType::UNSPECIFIED);
 
   MockResourceLoader mock_loader(&mime_sniffing_handler);
 
@@ -630,7 +632,7 @@ void MimeSniffingResourceHandlerTest::TestHandlerNoSniffing(
 // circumstances. Test is not relevent when plugins are disabled.
 #if BUILDFLAG(ENABLE_PLUGINS)
 TEST_F(MimeSniffingResourceHandlerTest, StreamHandling) {
-  bool allow_download;
+  ResourceInterceptPolicy resource_intercept_policy;
   bool must_download;
   ResourceType resource_type;
 
@@ -641,78 +643,86 @@ TEST_F(MimeSniffingResourceHandlerTest, StreamHandling) {
 
   // Main frame request with no download allowed. Stream shouldn't be
   // intercepted.
-  allow_download = false;
+  resource_intercept_policy = ResourceInterceptPolicy::kAllowNone;
   must_download = false;
   resource_type = RESOURCE_TYPE_MAIN_FRAME;
-  EXPECT_FALSE(
-      TestStreamIsIntercepted(allow_download, must_download, resource_type));
+  EXPECT_FALSE(TestStreamIsIntercepted(resource_intercept_policy, must_download,
+                                       resource_type));
+
+  // Main frame request with no download allowed only after plugin handler is
+  // checked. Stream should be intercepted.
+  resource_intercept_policy = ResourceInterceptPolicy::kAllowPluginOnly;
+  must_download = false;
+  resource_type = RESOURCE_TYPE_MAIN_FRAME;
+  EXPECT_TRUE(TestStreamIsIntercepted(resource_intercept_policy, must_download,
+                                      resource_type));
 
   // Main frame request with download allowed. Stream should be intercepted.
-  allow_download = true;
+  resource_intercept_policy = ResourceInterceptPolicy::kAllowAll;
   must_download = false;
   resource_type = RESOURCE_TYPE_MAIN_FRAME;
-  EXPECT_TRUE(
-      TestStreamIsIntercepted(allow_download, must_download, resource_type));
+  EXPECT_TRUE(TestStreamIsIntercepted(resource_intercept_policy, must_download,
+                                      resource_type));
 
   // Main frame request with download forced. Stream shouldn't be intercepted.
-  allow_download = true;
+  resource_intercept_policy = ResourceInterceptPolicy::kAllowAll;
   must_download = true;
   resource_type = RESOURCE_TYPE_MAIN_FRAME;
-  EXPECT_FALSE(
-      TestStreamIsIntercepted(allow_download, must_download, resource_type));
+  EXPECT_FALSE(TestStreamIsIntercepted(resource_intercept_policy, must_download,
+                                       resource_type));
 
   // Sub-resource request with download not allowed. Stream shouldn't be
   // intercepted.
-  allow_download = false;
+  resource_intercept_policy = ResourceInterceptPolicy::kAllowNone;
   must_download = false;
   resource_type = RESOURCE_TYPE_SUB_RESOURCE;
-  EXPECT_FALSE(
-      TestStreamIsIntercepted(allow_download, must_download, resource_type));
+  EXPECT_FALSE(TestStreamIsIntercepted(resource_intercept_policy, must_download,
+                                       resource_type));
 
   // Plugin resource request with download not allowed. Stream shouldn't be
   // intercepted.
-  allow_download = false;
+  resource_intercept_policy = ResourceInterceptPolicy::kAllowNone;
   must_download = false;
   resource_type = RESOURCE_TYPE_PLUGIN_RESOURCE;
-  EXPECT_FALSE(
-      TestStreamIsIntercepted(allow_download, must_download, resource_type));
+  EXPECT_FALSE(TestStreamIsIntercepted(resource_intercept_policy, must_download,
+                                       resource_type));
 
   // Object request with download not allowed. Stream should be intercepted.
-  allow_download = false;
+  resource_intercept_policy = ResourceInterceptPolicy::kAllowNone;
   must_download = false;
   resource_type = RESOURCE_TYPE_OBJECT;
-  EXPECT_TRUE(
-      TestStreamIsIntercepted(allow_download, must_download, resource_type));
+  EXPECT_TRUE(TestStreamIsIntercepted(resource_intercept_policy, must_download,
+                                      resource_type));
 
   // Test the cases where the stream isn't handled by MaybeInterceptAsStream
   // in the ResourceDispatcherHost.
   set_stream_has_handler(false);
-  allow_download = false;
+  resource_intercept_policy = ResourceInterceptPolicy::kAllowNone;
   must_download = false;
   resource_type = RESOURCE_TYPE_OBJECT;
-  EXPECT_FALSE(
-      TestStreamIsIntercepted(allow_download, must_download, resource_type));
+  EXPECT_FALSE(TestStreamIsIntercepted(resource_intercept_policy, must_download,
+                                       resource_type));
 
   // Test the cases where the stream handled by MaybeInterceptAsStream
   // with plugin not available. This is the case when intercepting streams for
   // the streamsPrivate extensions API.
   set_stream_has_handler(true);
   set_plugin_available(false);
-  allow_download = false;
+  resource_intercept_policy = ResourceInterceptPolicy::kAllowNone;
   must_download = false;
   resource_type = RESOURCE_TYPE_OBJECT;
-  EXPECT_TRUE(
-      TestStreamIsIntercepted(allow_download, must_download, resource_type));
+  EXPECT_TRUE(TestStreamIsIntercepted(resource_intercept_policy, must_download,
+                                      resource_type));
 
   // Test the cases where the stream handled by MaybeInterceptAsStream
   // with plugin not available. This is the case when intercepting streams for
   // the streamsPrivate extensions API with stale plugin.
   set_plugin_stale(true);
-  allow_download = false;
+  resource_intercept_policy = ResourceInterceptPolicy::kAllowNone;
   must_download = false;
   resource_type = RESOURCE_TYPE_OBJECT;
-  EXPECT_TRUE(
-      TestStreamIsIntercepted(allow_download, must_download, resource_type));
+  EXPECT_TRUE(TestStreamIsIntercepted(resource_intercept_policy, must_download,
+                                      resource_type));
 }
 #endif
 
@@ -834,12 +844,12 @@ TEST_F(MimeSniffingResourceHandlerTest, 304Handling) {
       TRAFFIC_ANNOTATION_FOR_TESTS));
   ResourceRequestInfo::AllocateForTesting(request.get(),
                                           RESOURCE_TYPE_MAIN_FRAME,
-                                          nullptr,       // context
-                                          0,             // render_process_id
-                                          0,             // render_view_id
-                                          0,             // render_frame_id
-                                          true,          // is_main_frame
-                                          true,          // allow_download
+                                          nullptr,  // context
+                                          0,        // render_process_id
+                                          0,        // render_view_id
+                                          0,        // render_frame_id
+                                          true,     // is_main_frame
+                                          ResourceInterceptPolicy::kAllowAll,
                                           true,          // is_async
                                           PREVIEWS_OFF,  // previews_state
                                           nullptr);      // navigation_ui_data
@@ -854,7 +864,7 @@ TEST_F(MimeSniffingResourceHandlerTest, 304Handling) {
       std::unique_ptr<ResourceHandler>(new TestResourceHandler()), &host,
       &plugin_service,
       static_cast<InterceptingResourceHandler*>(intercepting_handler.get()),
-      request.get(), REQUEST_CONTEXT_TYPE_UNSPECIFIED);
+      request.get(), blink::mojom::RequestContextType::UNSPECIFIED);
 
   MockResourceLoader mock_loader(&mime_sniffing_handler);
 
@@ -885,12 +895,12 @@ TEST_F(MimeSniffingResourceHandlerTest, FetchShouldDisableMimeSniffing) {
       TRAFFIC_ANNOTATION_FOR_TESTS));
   ResourceRequestInfo::AllocateForTesting(request.get(),
                                           RESOURCE_TYPE_MAIN_FRAME,
-                                          nullptr,       // context
-                                          0,             // render_process_id
-                                          0,             // render_view_id
-                                          0,             // render_frame_id
-                                          true,          // is_main_frame
-                                          false,         // allow_download
+                                          nullptr,  // context
+                                          0,        // render_process_id
+                                          0,        // render_view_id
+                                          0,        // render_frame_id
+                                          true,     // is_main_frame
+                                          ResourceInterceptPolicy::kAllowNone,
                                           true,          // is_async
                                           PREVIEWS_OFF,  // previews_state
                                           nullptr);      // navigation_ui_data
@@ -907,7 +917,8 @@ TEST_F(MimeSniffingResourceHandlerTest, FetchShouldDisableMimeSniffing) {
   scoped_test_handler->set_on_response_started_result(false);
   MimeSniffingResourceHandler mime_sniffing_handler(
       std::move(scoped_test_handler), &host, &plugin_service,
-      intercepting_handler.get(), request.get(), REQUEST_CONTEXT_TYPE_FETCH);
+      intercepting_handler.get(), request.get(),
+      blink::mojom::RequestContextType::FETCH);
 
   MockResourceLoader mock_loader(&mime_sniffing_handler);
 
@@ -944,12 +955,12 @@ TEST_F(MimeSniffingResourceHandlerTest, NonEmptyPayloadEndsBeforeDecision) {
       GURL("http://www.google.com"), net::DEFAULT_PRIORITY, nullptr,
       TRAFFIC_ANNOTATION_FOR_TESTS));
   ResourceRequestInfo::AllocateForTesting(request.get(), RESOURCE_TYPE_SCRIPT,
-                                          nullptr,       // context
-                                          0,             // render_process_id
-                                          0,             // render_view_id
-                                          0,             // render_frame_id
-                                          false,         // is_main_frame
-                                          false,         // allow_download
+                                          nullptr,  // context
+                                          0,        // render_process_id
+                                          0,        // render_view_id
+                                          0,        // render_frame_id
+                                          false,    // is_main_frame
+                                          ResourceInterceptPolicy::kAllowNone,
                                           true,          // is_async
                                           PREVIEWS_OFF,  // previews_state
                                           nullptr);      // navigation_ui_data
@@ -967,7 +978,7 @@ TEST_F(MimeSniffingResourceHandlerTest, NonEmptyPayloadEndsBeforeDecision) {
   MimeSniffingResourceHandler mime_sniffing_handler(
       std::move(scoped_test_handler), &host, &plugin_service,
       intercepting_handler.get(), request.get(),
-      REQUEST_CONTEXT_TYPE_UNSPECIFIED);
+      blink::mojom::RequestContextType::UNSPECIFIED);
 
   MockResourceLoader mock_loader(&mime_sniffing_handler);
 
@@ -1022,12 +1033,12 @@ TEST_F(MimeSniffingResourceHandlerTest, EmptyPayload) {
       GURL("http://www.google.com"), net::DEFAULT_PRIORITY, nullptr,
       TRAFFIC_ANNOTATION_FOR_TESTS));
   ResourceRequestInfo::AllocateForTesting(request.get(), RESOURCE_TYPE_SCRIPT,
-                                          nullptr,       // context
-                                          0,             // render_process_id
-                                          0,             // render_view_id
-                                          0,             // render_frame_id
-                                          false,         // is_main_frame
-                                          false,         // allow_download
+                                          nullptr,  // context
+                                          0,        // render_process_id
+                                          0,        // render_view_id
+                                          0,        // render_frame_id
+                                          false,    // is_main_frame
+                                          ResourceInterceptPolicy::kAllowNone,
                                           true,          // is_async
                                           PREVIEWS_OFF,  // previews_state
                                           nullptr);      // navigation_ui_data
@@ -1045,7 +1056,7 @@ TEST_F(MimeSniffingResourceHandlerTest, EmptyPayload) {
   MimeSniffingResourceHandler mime_sniffing_handler(
       std::move(scoped_test_handler), &host, &plugin_service,
       intercepting_handler.get(), request.get(),
-      REQUEST_CONTEXT_TYPE_UNSPECIFIED);
+      blink::mojom::RequestContextType::UNSPECIFIED);
 
   MockResourceLoader mock_loader(&mime_sniffing_handler);
 

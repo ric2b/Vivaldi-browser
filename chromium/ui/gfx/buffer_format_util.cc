@@ -5,54 +5,30 @@
 #include "ui/gfx/buffer_format_util.h"
 
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/numerics/safe_math.h"
+#include "base/stl_util.h"
 
 namespace gfx {
 namespace {
 
-const BufferFormat kBufferFormats[] = {BufferFormat::ATC,
-                                       BufferFormat::ATCIA,
-                                       BufferFormat::DXT1,
-                                       BufferFormat::DXT5,
-                                       BufferFormat::ETC1,
-                                       BufferFormat::R_8,
-                                       BufferFormat::R_16,
-                                       BufferFormat::RG_88,
-                                       BufferFormat::BGR_565,
-                                       BufferFormat::RGBA_4444,
-                                       BufferFormat::RGBX_8888,
-                                       BufferFormat::RGBA_8888,
-                                       BufferFormat::BGRX_8888,
-                                       BufferFormat::BGRX_1010102,
-                                       BufferFormat::RGBX_1010102,
-                                       BufferFormat::BGRA_8888,
-                                       BufferFormat::RGBA_F16,
-                                       BufferFormat::UYVY_422,
-                                       BufferFormat::YUV_420_BIPLANAR,
-                                       BufferFormat::YVU_420};
+const BufferFormat kBufferFormats[] = {
+    BufferFormat::R_8,          BufferFormat::R_16,
+    BufferFormat::RG_88,        BufferFormat::BGR_565,
+    BufferFormat::RGBA_4444,    BufferFormat::RGBX_8888,
+    BufferFormat::RGBA_8888,    BufferFormat::BGRX_8888,
+    BufferFormat::BGRX_1010102, BufferFormat::RGBX_1010102,
+    BufferFormat::BGRA_8888,    BufferFormat::RGBA_F16,
+    BufferFormat::UYVY_422,     BufferFormat::YUV_420_BIPLANAR,
+    BufferFormat::YVU_420};
 
-static_assert(arraysize(kBufferFormats) ==
+static_assert(base::size(kBufferFormats) ==
                   (static_cast<int>(BufferFormat::LAST) + 1),
               "BufferFormat::LAST must be last value of kBufferFormats");
-
 
 bool RowSizeForBufferFormatChecked(
     size_t width, BufferFormat format, size_t plane, size_t* size_in_bytes) {
   base::CheckedNumeric<size_t> checked_size = width;
   switch (format) {
-    case BufferFormat::ATCIA:
-    case BufferFormat::DXT5:
-      DCHECK_EQ(0u, plane);
-      *size_in_bytes = width;
-      return true;
-    case BufferFormat::ATC:
-    case BufferFormat::DXT1:
-    case BufferFormat::ETC1:
-      DCHECK_EQ(0u, plane);
-      DCHECK_EQ(0u, width % 2);
-      *size_in_bytes = width / 2;
-      return true;
     case BufferFormat::R_8:
       checked_size += 3;
       if (!checked_size.IsValid())
@@ -104,16 +80,11 @@ bool RowSizeForBufferFormatChecked(
 
 std::vector<BufferFormat> GetBufferFormatsForTesting() {
   return std::vector<BufferFormat>(kBufferFormats,
-                                   kBufferFormats + arraysize(kBufferFormats));
+                                   kBufferFormats + base::size(kBufferFormats));
 }
 
 size_t NumberOfPlanesForBufferFormat(BufferFormat format) {
   switch (format) {
-    case BufferFormat::ATC:
-    case BufferFormat::ATCIA:
-    case BufferFormat::DXT1:
-    case BufferFormat::DXT5:
-    case BufferFormat::ETC1:
     case BufferFormat::R_8:
     case BufferFormat::R_16:
     case BufferFormat::RG_88:
@@ -139,11 +110,6 @@ size_t NumberOfPlanesForBufferFormat(BufferFormat format) {
 
 size_t SubsamplingFactorForBufferFormat(BufferFormat format, size_t plane) {
   switch (format) {
-    case BufferFormat::ATC:
-    case BufferFormat::ATCIA:
-    case BufferFormat::DXT1:
-    case BufferFormat::DXT5:
-    case BufferFormat::ETC1:
     case BufferFormat::R_8:
     case BufferFormat::R_16:
     case BufferFormat::RG_88:
@@ -160,12 +126,12 @@ size_t SubsamplingFactorForBufferFormat(BufferFormat format, size_t plane) {
       return 1;
     case BufferFormat::YVU_420: {
       static size_t factor[] = {1, 2, 2};
-      DCHECK_LT(static_cast<size_t>(plane), arraysize(factor));
+      DCHECK_LT(static_cast<size_t>(plane), base::size(factor));
       return factor[plane];
     }
     case BufferFormat::YUV_420_BIPLANAR: {
       static size_t factor[] = {1, 2};
-      DCHECK_LT(static_cast<size_t>(plane), arraysize(factor));
+      DCHECK_LT(static_cast<size_t>(plane), base::size(factor));
       return factor[plane];
     }
   }
@@ -214,11 +180,6 @@ size_t BufferOffsetForBufferFormat(const Size& size,
                                    size_t plane) {
   DCHECK_LT(plane, gfx::NumberOfPlanesForBufferFormat(format));
   switch (format) {
-    case BufferFormat::ATC:
-    case BufferFormat::ATCIA:
-    case BufferFormat::DXT1:
-    case BufferFormat::DXT5:
-    case BufferFormat::ETC1:
     case BufferFormat::R_8:
     case BufferFormat::R_16:
     case BufferFormat::RG_88:
@@ -235,13 +196,13 @@ size_t BufferOffsetForBufferFormat(const Size& size,
       return 0;
     case BufferFormat::YVU_420: {
       static size_t offset_in_2x2_sub_sampling_sizes[] = {0, 4, 5};
-      DCHECK_LT(plane, arraysize(offset_in_2x2_sub_sampling_sizes));
+      DCHECK_LT(plane, base::size(offset_in_2x2_sub_sampling_sizes));
       return offset_in_2x2_sub_sampling_sizes[plane] *
              (size.width() / 2 + size.height() / 2);
     }
     case gfx::BufferFormat::YUV_420_BIPLANAR: {
       static size_t offset_in_2x2_sub_sampling_sizes[] = {0, 4};
-      DCHECK_LT(plane, arraysize(offset_in_2x2_sub_sampling_sizes));
+      DCHECK_LT(plane, base::size(offset_in_2x2_sub_sampling_sizes));
       return offset_in_2x2_sub_sampling_sizes[plane] *
              (size.width() / 2 + size.height() / 2);
     }
@@ -252,16 +213,6 @@ size_t BufferOffsetForBufferFormat(const Size& size,
 
 const char* BufferFormatToString(BufferFormat format) {
   switch (format) {
-    case BufferFormat::ATC:
-      return "ATC";
-    case BufferFormat::ATCIA:
-      return "ATCIA";
-    case BufferFormat::DXT1:
-      return "DXT1";
-    case BufferFormat::DXT5:
-      return "DXT5";
-    case BufferFormat::ETC1:
-      return "ETC1";
     case BufferFormat::R_8:
       return "R_8";
     case BufferFormat::R_16:

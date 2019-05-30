@@ -4,7 +4,10 @@
 
 #include "ash/assistant/ui/main_stage/assistant_progress_indicator.h"
 
+#include <algorithm>
+
 #include "ash/assistant/util/animation_util.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
 #include "base/bind.h"
 #include "base/time/time.h"
 #include "ui/compositor/layer_animation_element.h"
@@ -22,6 +25,7 @@ namespace {
 constexpr int kDotCount = 3;
 constexpr float kDotLargeSizeDip = 9.f;
 constexpr float kDotSmallSizeDip = 6.f;
+constexpr int kEmbeddedUiPreferredHeightDip = 9;
 constexpr int kSpacingDip = 4;
 
 // Animation.
@@ -71,22 +75,19 @@ AssistantProgressIndicator::AssistantProgressIndicator() {
 
 AssistantProgressIndicator::~AssistantProgressIndicator() = default;
 
-void AssistantProgressIndicator::InitLayout() {
-  SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), kSpacingDip));
+const char* AssistantProgressIndicator::GetClassName() const {
+  return "AssistantProgressIndicator";
+}
 
-  // Initialize dots.
-  for (int i = 0; i < kDotCount; ++i) {
-    views::View* dot_view = new views::View();
-    dot_view->SetBackground(std::make_unique<DotBackground>());
-    dot_view->SetPreferredSize(gfx::Size(kDotSmallSizeDip, kDotSmallSizeDip));
+gfx::Size AssistantProgressIndicator::CalculatePreferredSize() const {
+  const int preferred_width = views::View::CalculatePreferredSize().width();
+  return gfx::Size(preferred_width, GetHeightForWidth(preferred_width));
+}
 
-    // Dots will animate on their own layers.
-    dot_view->SetPaintToLayer();
-    dot_view->layer()->SetFillsBoundsOpaquely(false);
-
-    AddChildView(dot_view);
-  }
+int AssistantProgressIndicator::GetHeightForWidth(int width) const {
+  return app_list_features::IsEmbeddedAssistantUIEnabled()
+             ? kEmbeddedUiPreferredHeightDip
+             : views::View::GetHeightForWidth(width);
 }
 
 void AssistantProgressIndicator::AddedToWidget() {
@@ -100,17 +101,21 @@ void AssistantProgressIndicator::RemovedFromWidget() {
 void AssistantProgressIndicator::OnLayerOpacityChanged(
     ui::PropertyChangeReason reason) {
   VisibilityChanged(/*starting_from=*/this,
-                    /*is_visible=*/layer()->opacity() > 0.f);
+                    /*is_visible=*/visible());
 }
 
 void AssistantProgressIndicator::VisibilityChanged(views::View* starting_from,
                                                    bool is_visible) {
-  if (is_visible == is_visible_)
+  // Stop the animation when the view is either not visible or is "visible" but
+  // not actually visible to the user (because it is faded out).
+  const bool is_drawn =
+      IsDrawn() && !cc::MathUtil::IsWithinEpsilon(layer()->opacity(), 0.f);
+  if (is_drawn_ == is_drawn)
     return;
 
-  is_visible_ = is_visible;
+  is_drawn_ = is_drawn;
 
-  if (!is_visible_) {
+  if (!is_drawn_) {
     // Stop all animations.
     for (int i = 0; i < child_count(); ++i) {
       child_at(i)->layer()->GetAnimator()->StopAnimating();
@@ -118,7 +123,8 @@ void AssistantProgressIndicator::VisibilityChanged(views::View* starting_from,
     return;
   }
 
-  using namespace assistant::util;
+  using assistant::util::CreateLayerAnimationSequence;
+  using assistant::util::CreateTransformElement;
 
   // The animation performs scaling on the child views. In order to give the
   // illusion that scaling is being performed about the center of the view as
@@ -151,6 +157,29 @@ void AssistantProgressIndicator::VisibilityChanged(views::View* starting_from,
                 kAnimationPauseDuration),
             // Animation parameters.
             {.is_cyclic = true}));
+  }
+}
+
+void AssistantProgressIndicator::InitLayout() {
+  views::BoxLayout* layout_manager =
+      SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
+          kSpacingDip));
+
+  layout_manager->set_cross_axis_alignment(
+      views::BoxLayout::CrossAxisAlignment::CROSS_AXIS_ALIGNMENT_CENTER);
+
+  // Initialize dots.
+  for (int i = 0; i < kDotCount; ++i) {
+    views::View* dot_view = new views::View();
+    dot_view->SetBackground(std::make_unique<DotBackground>());
+    dot_view->SetPreferredSize(gfx::Size(kDotSmallSizeDip, kDotSmallSizeDip));
+
+    // Dots will animate on their own layers.
+    dot_view->SetPaintToLayer();
+    dot_view->layer()->SetFillsBoundsOpaquely(false);
+
+    AddChildView(dot_view);
   }
 }
 

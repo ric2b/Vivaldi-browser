@@ -17,6 +17,7 @@
 #include "base/task/task_scheduler/scheduler_worker_params.h"
 #include "base/task/task_scheduler/sequence.h"
 #include "base/task/task_scheduler/tracked_ref.h"
+#include "base/thread_annotations.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -77,15 +78,10 @@ class BASE_EXPORT SchedulerWorker
     // Called by |worker|'s thread to get a Sequence from which to run a Task.
     virtual scoped_refptr<Sequence> GetWork(SchedulerWorker* worker) = 0;
 
-    // Called by the SchedulerWorker after it ran a task.
-    virtual void DidRunTask() = 0;
-
-    // Called when |sequence| isn't empty after the SchedulerWorker pops a Task
-    // from it. |sequence| is the last Sequence returned by GetWork().
-    //
-    // TODO(fdoray): Rename to RescheduleSequence() to match TaskTracker
-    // terminology.
-    virtual void ReEnqueueSequence(scoped_refptr<Sequence> sequence) = 0;
+    // Called by the SchedulerWorker after it ran a Task. If the Task's Sequence
+    // should be reenqueued, it is passed to |sequence|. Otherwise, |sequence|
+    // is nullptr.
+    virtual void DidRunTask(scoped_refptr<Sequence> sequence) = 0;
 
     // Called to determine how long to sleep before the next call to GetWork().
     // GetWork() may be called before this timeout expires if the worker's
@@ -214,15 +210,14 @@ class BASE_EXPORT SchedulerWorker
   // thread is created and the second access occurs on the thread.
   scoped_refptr<SchedulerWorker> self_;
 
-  // Synchronizes access to |thread_handle_| and |last_used_time_|.
   mutable SchedulerLock thread_lock_;
 
   // Handle for the thread managed by |this|.
-  PlatformThreadHandle thread_handle_;
+  PlatformThreadHandle thread_handle_ GUARDED_BY(thread_lock_);
 
   // The last time this worker was used by its owner (e.g. to process work or
   // stand as a required idle thread).
-  TimeTicks last_used_time_;
+  TimeTicks last_used_time_ GUARDED_BY(thread_lock_);
 
   // Event to wake up the thread managed by |this|.
   WaitableEvent wake_up_event_{WaitableEvent::ResetPolicy::AUTOMATIC,

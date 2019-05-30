@@ -22,6 +22,8 @@
 #include "third_party/blink/renderer/core/css/style_rule.h"
 
 #include "third_party/blink/renderer/core/css/css_font_face_rule.h"
+#include "third_party/blink/renderer/core/css/css_font_feature_values_rule.h"
+#include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_import_rule.h"
 #include "third_party/blink/renderer/core/css/css_keyframes_rule.h"
 #include "third_party/blink/renderer/core/css/css_media_rule.h"
@@ -29,6 +31,7 @@
 #include "third_party/blink/renderer/core/css/css_page_rule.h"
 #include "third_party/blink/renderer/core/css/css_style_rule.h"
 #include "third_party/blink/renderer/core/css/css_supports_rule.h"
+#include "third_party/blink/renderer/core/css/css_value_list.h"
 #include "third_party/blink/renderer/core/css/css_viewport_rule.h"
 #include "third_party/blink/renderer/core/css/style_rule_import.h"
 #include "third_party/blink/renderer/core/css/style_rule_keyframe.h"
@@ -55,37 +58,40 @@ CSSRule* StyleRuleBase::CreateCSSOMWrapper(CSSRule* parent_rule) const {
 void StyleRuleBase::Trace(blink::Visitor* visitor) {
   switch (GetType()) {
     case kCharset:
-      ToStyleRuleCharset(this)->TraceAfterDispatch(visitor);
+      To<StyleRuleCharset>(this)->TraceAfterDispatch(visitor);
       return;
     case kStyle:
-      ToStyleRule(this)->TraceAfterDispatch(visitor);
+      To<StyleRule>(this)->TraceAfterDispatch(visitor);
       return;
     case kPage:
-      ToStyleRulePage(this)->TraceAfterDispatch(visitor);
+      To<StyleRulePage>(this)->TraceAfterDispatch(visitor);
       return;
     case kFontFace:
-      ToStyleRuleFontFace(this)->TraceAfterDispatch(visitor);
+      To<StyleRuleFontFace>(this)->TraceAfterDispatch(visitor);
       return;
     case kMedia:
-      ToStyleRuleMedia(this)->TraceAfterDispatch(visitor);
+      To<StyleRuleMedia>(this)->TraceAfterDispatch(visitor);
       return;
     case kSupports:
-      ToStyleRuleSupports(this)->TraceAfterDispatch(visitor);
+      To<StyleRuleSupports>(this)->TraceAfterDispatch(visitor);
       return;
     case kImport:
-      ToStyleRuleImport(this)->TraceAfterDispatch(visitor);
+      To<StyleRuleImport>(this)->TraceAfterDispatch(visitor);
       return;
     case kKeyframes:
-      ToStyleRuleKeyframes(this)->TraceAfterDispatch(visitor);
+      To<StyleRuleKeyframes>(this)->TraceAfterDispatch(visitor);
       return;
     case kKeyframe:
-      ToStyleRuleKeyframe(this)->TraceAfterDispatch(visitor);
+      To<StyleRuleKeyframe>(this)->TraceAfterDispatch(visitor);
       return;
     case kNamespace:
-      ToStyleRuleNamespace(this)->TraceAfterDispatch(visitor);
+      To<StyleRuleNamespace>(this)->TraceAfterDispatch(visitor);
       return;
     case kViewport:
-      ToStyleRuleViewport(this)->TraceAfterDispatch(visitor);
+      To<StyleRuleViewport>(this)->TraceAfterDispatch(visitor);
+      return;
+    case kFontFeatureValues:
+      To<StyleRuleFontFeatureValues>(this)->TraceAfterDispatch(visitor);
       return;
   }
   NOTREACHED();
@@ -94,37 +100,40 @@ void StyleRuleBase::Trace(blink::Visitor* visitor) {
 void StyleRuleBase::FinalizeGarbageCollectedObject() {
   switch (GetType()) {
     case kCharset:
-      ToStyleRuleCharset(this)->~StyleRuleCharset();
+      To<StyleRuleCharset>(this)->~StyleRuleCharset();
       return;
     case kStyle:
-      ToStyleRule(this)->~StyleRule();
+      To<StyleRule>(this)->~StyleRule();
       return;
     case kPage:
-      ToStyleRulePage(this)->~StyleRulePage();
+      To<StyleRulePage>(this)->~StyleRulePage();
       return;
     case kFontFace:
-      ToStyleRuleFontFace(this)->~StyleRuleFontFace();
+      To<StyleRuleFontFace>(this)->~StyleRuleFontFace();
       return;
     case kMedia:
-      ToStyleRuleMedia(this)->~StyleRuleMedia();
+      To<StyleRuleMedia>(this)->~StyleRuleMedia();
       return;
     case kSupports:
-      ToStyleRuleSupports(this)->~StyleRuleSupports();
+      To<StyleRuleSupports>(this)->~StyleRuleSupports();
       return;
     case kImport:
-      ToStyleRuleImport(this)->~StyleRuleImport();
+      To<StyleRuleImport>(this)->~StyleRuleImport();
       return;
     case kKeyframes:
-      ToStyleRuleKeyframes(this)->~StyleRuleKeyframes();
+      To<StyleRuleKeyframes>(this)->~StyleRuleKeyframes();
       return;
     case kKeyframe:
-      ToStyleRuleKeyframe(this)->~StyleRuleKeyframe();
+      To<StyleRuleKeyframe>(this)->~StyleRuleKeyframe();
       return;
     case kNamespace:
-      ToStyleRuleNamespace(this)->~StyleRuleNamespace();
+      To<StyleRuleNamespace>(this)->~StyleRuleNamespace();
       return;
     case kViewport:
-      ToStyleRuleViewport(this)->~StyleRuleViewport();
+      To<StyleRuleViewport>(this)->~StyleRuleViewport();
+      return;
+    case kFontFeatureValues:
+      To<StyleRuleFontFeatureValues>(this)->~StyleRuleFontFeatureValues();
       return;
   }
   NOTREACHED();
@@ -133,25 +142,27 @@ void StyleRuleBase::FinalizeGarbageCollectedObject() {
 StyleRuleBase* StyleRuleBase::Copy() const {
   switch (GetType()) {
     case kStyle:
-      return ToStyleRule(this)->Copy();
+      return To<StyleRule>(this)->Copy();
     case kPage:
-      return ToStyleRulePage(this)->Copy();
+      return To<StyleRulePage>(this)->Copy();
     case kFontFace:
-      return ToStyleRuleFontFace(this)->Copy();
+      return To<StyleRuleFontFace>(this)->Copy();
     case kMedia:
-      return ToStyleRuleMedia(this)->Copy();
+      return To<StyleRuleMedia>(this)->Copy();
     case kSupports:
-      return ToStyleRuleSupports(this)->Copy();
+      return To<StyleRuleSupports>(this)->Copy();
     case kImport:
       // FIXME: Copy import rules.
       NOTREACHED();
       return nullptr;
     case kKeyframes:
-      return ToStyleRuleKeyframes(this)->Copy();
+      return To<StyleRuleKeyframes>(this)->Copy();
     case kViewport:
-      return ToStyleRuleViewport(this)->Copy();
+      return To<StyleRuleViewport>(this)->Copy();
     case kNamespace:
-      return ToStyleRuleNamespace(this)->Copy();
+      return To<StyleRuleNamespace>(this)->Copy();
+    case kFontFeatureValues:
+      return To<StyleRuleFontFeatureValues>(this)->Copy();
     case kCharset:
     case kKeyframe:
       NOTREACHED();
@@ -167,31 +178,37 @@ CSSRule* StyleRuleBase::CreateCSSOMWrapper(CSSStyleSheet* parent_sheet,
   StyleRuleBase* self = const_cast<StyleRuleBase*>(this);
   switch (GetType()) {
     case kStyle:
-      rule = CSSStyleRule::Create(ToStyleRule(self), parent_sheet);
+      rule = CSSStyleRule::Create(To<StyleRule>(self), parent_sheet);
       break;
     case kPage:
-      rule = CSSPageRule::Create(ToStyleRulePage(self), parent_sheet);
+      rule = CSSPageRule::Create(To<StyleRulePage>(self), parent_sheet);
       break;
     case kFontFace:
-      rule = CSSFontFaceRule::Create(ToStyleRuleFontFace(self), parent_sheet);
+      rule = CSSFontFaceRule::Create(To<StyleRuleFontFace>(self), parent_sheet);
       break;
     case kMedia:
-      rule = CSSMediaRule::Create(ToStyleRuleMedia(self), parent_sheet);
+      rule = CSSMediaRule::Create(To<StyleRuleMedia>(self), parent_sheet);
       break;
     case kSupports:
-      rule = CSSSupportsRule::Create(ToStyleRuleSupports(self), parent_sheet);
+      rule = CSSSupportsRule::Create(To<StyleRuleSupports>(self), parent_sheet);
       break;
     case kImport:
-      rule = CSSImportRule::Create(ToStyleRuleImport(self), parent_sheet);
+      rule = CSSImportRule::Create(To<StyleRuleImport>(self), parent_sheet);
       break;
     case kKeyframes:
-      rule = CSSKeyframesRule::Create(ToStyleRuleKeyframes(self), parent_sheet);
+      rule =
+          CSSKeyframesRule::Create(To<StyleRuleKeyframes>(self), parent_sheet);
       break;
     case kNamespace:
-      rule = CSSNamespaceRule::Create(ToStyleRuleNamespace(self), parent_sheet);
+      rule =
+          CSSNamespaceRule::Create(To<StyleRuleNamespace>(self), parent_sheet);
       break;
     case kViewport:
-      rule = CSSViewportRule::Create(ToStyleRuleViewport(self), parent_sheet);
+      rule = CSSViewportRule::Create(To<StyleRuleViewport>(self), parent_sheet);
+      break;
+    case kFontFeatureValues:
+      rule = CSSFontFeatureValuesRule::Create(
+          To<StyleRuleFontFeatureValues>(self), parent_sheet);
       break;
     case kKeyframe:
     case kCharset:
@@ -242,7 +259,7 @@ MutableCSSPropertyValueSet& StyleRule::MutableProperties() {
   // Ensure properties_ is initialized.
   if (!Properties().IsMutable())
     properties_ = properties_->MutableCopy();
-  return *ToMutableCSSPropertyValueSet(properties_.Get());
+  return *To<MutableCSSPropertyValueSet>(properties_.Get());
 }
 
 bool StyleRule::PropertiesHaveFailedOrCanceledSubresources() const {
@@ -285,7 +302,7 @@ StyleRulePage::~StyleRulePage() = default;
 MutableCSSPropertyValueSet& StyleRulePage::MutableProperties() {
   if (!properties_->IsMutable())
     properties_ = properties_->MutableCopy();
-  return *ToMutableCSSPropertyValueSet(properties_.Get());
+  return *To<MutableCSSPropertyValueSet>(properties_.Get());
 }
 
 void StyleRulePage::TraceAfterDispatch(blink::Visitor* visitor) {
@@ -305,7 +322,7 @@ StyleRuleFontFace::~StyleRuleFontFace() = default;
 MutableCSSPropertyValueSet& StyleRuleFontFace::MutableProperties() {
   if (!properties_->IsMutable())
     properties_ = properties_->MutableCopy();
-  return *ToMutableCSSPropertyValueSet(properties_);
+  return *To<MutableCSSPropertyValueSet>(properties_.Get());
 }
 
 void StyleRuleFontFace::TraceAfterDispatch(blink::Visitor* visitor) {
@@ -389,11 +406,24 @@ StyleRuleViewport::~StyleRuleViewport() = default;
 MutableCSSPropertyValueSet& StyleRuleViewport::MutableProperties() {
   if (!properties_->IsMutable())
     properties_ = properties_->MutableCopy();
-  return *ToMutableCSSPropertyValueSet(properties_);
+  return *To<MutableCSSPropertyValueSet>(properties_.Get());
 }
 
 void StyleRuleViewport::TraceAfterDispatch(blink::Visitor* visitor) {
   visitor->Trace(properties_);
+  StyleRuleBase::TraceAfterDispatch(visitor);
+}
+
+StyleRuleFontFeatureValues::StyleRuleFontFeatureValues(
+    const CSSValueList* font_family,
+    const CSSIdentifierValue* font_display)
+    : StyleRuleBase(kFontFeatureValues),
+      font_family_(font_family),
+      font_display_(font_display) {}
+
+void StyleRuleFontFeatureValues::TraceAfterDispatch(blink::Visitor* visitor) {
+  visitor->Trace(font_family_);
+  visitor->Trace(font_display_);
   StyleRuleBase::TraceAfterDispatch(visitor);
 }
 

@@ -8,7 +8,9 @@
 #include <memory>
 #include <string>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "extensions/browser/extension_event_histogram_value.h"
 
 namespace content {
@@ -36,6 +38,13 @@ class PermissionsUpdater {
         std::unique_ptr<const PermissionSet>* granted_permissions) = 0;
   };
 
+  // If INIT_FLAG_TRANSIENT is specified, this updater is being used for an
+  // extension that is not actually installed (and instead is just being
+  // initialized e.g. to display the permission warnings in an install prompt).
+  // In these cases, this updater should follow all rules below.
+  //   a) don't check prefs for stored permissions.
+  //   b) don't send notifications of permission changes, because there is no
+  //      installed extension that would be affected.
   enum InitFlag {
     INIT_FLAG_NONE = 0,
     INIT_FLAG_TRANSIENT = 1 << 0,
@@ -64,8 +73,7 @@ class PermissionsUpdater {
   // Sets a delegate to provide platform-specific logic. This should be set
   // during startup (to ensure all extensions are initialized through the
   // delegate).
-  // |delegate| is a singleton instance and is leaked.
-  static void SetPlatformDelegate(Delegate* delegate);
+  static void SetPlatformDelegate(std::unique_ptr<Delegate> delegate);
 
   // Grants |permissions| that were defined as optional in the manifest to
   // |extension|, updating the active permission set and notifying any
@@ -74,7 +82,8 @@ class PermissionsUpdater {
   // NOTE: This should only be used for granting permissions defined in the
   // extension's optional permissions set through the permissions API.
   void GrantOptionalPermissions(const Extension& extension,
-                                const PermissionSet& permissions);
+                                const PermissionSet& permissions,
+                                base::OnceClosure completion_callback);
 
   // Grants |permissions| that were withheld at installation and granted at
   // runtime to |extension|, updating the active permission set and notifying
@@ -85,7 +94,8 @@ class PermissionsUpdater {
   // NOTE: This should only be used for granting permissions through the runtime
   // host permissions feature.
   void GrantRuntimePermissions(const Extension& extension,
-                               const PermissionSet& permissions);
+                               const PermissionSet& permissions,
+                               base::OnceClosure completion_callback);
 
   // Removes |permissions| that were defined as optional in the manifest from
   // the |extension|, updating the active permission set and notifying any
@@ -96,7 +106,8 @@ class PermissionsUpdater {
   // extension's optional permissions set through the permissions API.
   void RevokeOptionalPermissions(const Extension& extension,
                                  const PermissionSet& permissions,
-                                 RemoveType remove_type);
+                                 RemoveType remove_type,
+                                 base::OnceClosure completion_callback);
 
   // Removes |permissions| that were withheld at installation and granted at
   // runtime from |extension|, updating the active permission set and notifying
@@ -104,7 +115,8 @@ class PermissionsUpdater {
   // NOTE: This should only be used for removing permissions through the runtime
   // host permissions feature.
   void RevokeRuntimePermissions(const Extension& extension,
-                                const PermissionSet& permissions);
+                                const PermissionSet& permissions,
+                                base::OnceClosure completion_callback);
 
   // Removes the |permissions| from |extension| and makes no effort to determine
   // if doing so is safe in the slightlest. This method shouldn't be used,
@@ -148,6 +160,8 @@ class PermissionsUpdater {
                                 const PermissionSet& permissions);
 
  private:
+  class NetworkPermissionsUpdateHelper;
+
   enum EventType {
     ADDED,
     REMOVED,
@@ -162,35 +176,33 @@ class PermissionsUpdater {
     kActivePermissions = 1 << 2,
   };
 
+  // Issues the relevant events, messages and notifications when the
+  // |extension|'s permissions have |changed| (|changed| is the delta).
+  // Specifically, this sends the EXTENSION_PERMISSIONS_UPDATED notification,
+  // the ExtensionMsg_UpdatePermissions IPC message, and fires the
+  // onAdded/onRemoved events in the extension.
+  static void NotifyPermissionsUpdated(
+      content::BrowserContext* browser_context,
+      EventType event_type,
+      scoped_refptr<const Extension> extension,
+      std::unique_ptr<const PermissionSet> changed,
+      base::OnceClosure completion_callback);
+
+  // Issues the relevant events, messages and notifications when the default
+  // scope management policy have changed.
+  // Specifically, this sends the ExtensionMsg_UpdateDefaultHostRestrictions
+  // IPC message.
+  static void NotifyDefaultPolicyHostRestrictionsUpdated(
+      content::BrowserContext* browser_context,
+      const URLPatternSet default_runtime_blocked_hosts,
+      const URLPatternSet default_runtime_allowed_hosts);
+
   // Sets the |extension|'s active permissions to |active|, and calculates and
   // sets the |extension|'s new withheld permissions. If |update_prefs| is true,
   // also updates the set of active permissions in the extension preferences.
   void SetPermissions(const Extension* extension,
                       std::unique_ptr<const PermissionSet> active,
                       bool update_prefs);
-
-  // Dispatches specified event to the extension.
-  void DispatchEvent(const std::string& extension_id,
-                     events::HistogramValue histogram_value,
-                     const char* event_name,
-                     const PermissionSet& changed_permissions);
-
-  // Issues the relevant events, messages and notifications when the
-  // |extension|'s permissions have |changed| (|changed| is the delta).
-  // Specifically, this sends the EXTENSION_PERMISSIONS_UPDATED notification,
-  // the ExtensionMsg_UpdatePermissions IPC message, and fires the
-  // onAdded/onRemoved events in the extension.
-  void NotifyPermissionsUpdated(EventType event_type,
-                                const Extension* extension,
-                                const PermissionSet& changed);
-
-  // Issues the relevant events, messages and notifications when the
-  // default scope management policy have changed.
-  // Specifically, this sends the ExtensionMsg_UpdateDefaultHostRestrictions
-  // IPC message.
-  void NotifyDefaultPolicyHostRestrictionsUpdated(
-      const URLPatternSet& default_runtime_blocked_hosts,
-      const URLPatternSet& default_runtime_allowed_hosts);
 
   // Adds the given |active_permissions_to_add| to |extension|'s current
   // active permissions (i.e., the permissions associated with the |extension|
@@ -202,7 +214,8 @@ class PermissionsUpdater {
   void AddPermissionsImpl(const Extension& extension,
                           const PermissionSet& active_permissions_to_add,
                           int permission_store_mask,
-                          const PermissionSet& prefs_permissions_to_add);
+                          const PermissionSet& prefs_permissions_to_add,
+                          base::OnceClosure completion_callback);
 
   // Removes the given |active_permissions_to_remove| from |extension|'s current
   // active permissions. Updates the preferences according to
@@ -211,7 +224,8 @@ class PermissionsUpdater {
   void RemovePermissionsImpl(const Extension& extension,
                              const PermissionSet& active_permissions_to_remove,
                              int permission_store_mask,
-                             const PermissionSet& prefs_permissions_to_remove);
+                             const PermissionSet& prefs_permissions_to_remove,
+                             base::OnceClosure completion_callback);
 
   // The associated BrowserContext.
   content::BrowserContext* browser_context_;

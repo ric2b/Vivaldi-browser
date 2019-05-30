@@ -13,11 +13,13 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread_restrictions.h"
 #include "components/download/public/common/download_task_runner.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/common/frame_messages.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/mhtml_extra_parts.h"
 #include "content/public/browser/render_frame_host.h"
@@ -34,8 +36,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/web/web_find_options.h"
-#include "third_party/blink/public/web/web_frame_serializer_cache_control_policy.h"
+#include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
 
 using testing::ContainsRegex;
 using testing::HasSubstr;
@@ -56,12 +57,12 @@ class FindTrackingDelegate : public WebContentsDelegate {
     WebContentsDelegate* old_delegate = web_contents->GetDelegate();
     web_contents->SetDelegate(this);
 
-    blink::WebFindOptions options;
-    options.run_synchronously_for_testing = true;
-    options.match_case = false;
+    auto options = blink::mojom::FindOptions::New();
+    options->run_synchronously_for_testing = true;
+    options->match_case = false;
 
     web_contents->Find(global_request_id++, base::UTF8ToUTF16(search_),
-                       options);
+                       std::move(options));
     run_loop_.Run();
 
     web_contents->SetDelegate(old_delegate);
@@ -329,14 +330,14 @@ class GenerateMHTMLAndExitRendererMessageFilter : public BrowserMessageFilter {
       //   execution at (Y?) and (Z?) instead is possible.  In practice,
       //   bouncing off of UI and download sequence does mean (Z) happens
       //   after (1).
-      BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE,
+      base::PostTaskWithTraits(
+          FROM_HERE, {BrowserThread::UI},
           base::BindOnce(&GenerateMHTMLAndExitRendererMessageFilter::TaskX,
                          base::Unretained(this)));
     }
 
     return false;
-  };
+  }
 
   void TaskX() {
     download::GetDownloadTaskRunner()->PostTask(
@@ -346,8 +347,8 @@ class GenerateMHTMLAndExitRendererMessageFilter : public BrowserMessageFilter {
   }
 
   void TaskY() {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&GenerateMHTMLAndExitRendererMessageFilter::TaskZ,
                        base::Unretained(this)));
   }
@@ -472,114 +473,23 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLIgnoreNoStore) {
   EXPECT_THAT(mhtml, ContainsRegex("Content-Location:.*/nostore.html"));
 }
 
-IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLObeyNoStoreMainFrame) {
-  base::FilePath path(temp_dir_.GetPath());
-  path = path.Append(FILE_PATH_LITERAL("test.mht"));
-
-  GURL url(embedded_test_server()->GetURL("/nostore.html"));
-
-  // Generate MHTML, specifying the FailForNoStoreMainFrame policy.
-  MHTMLGenerationParams params(path);
-  params.cache_control_policy =
-      blink::WebFrameSerializerCacheControlPolicy::kFailForNoStoreMainFrame;
-
-  GenerateMHTML(params, url);
-  // We expect that there was an error (file size -1 indicates an error.)
-  EXPECT_EQ(-1, file_size());
-
-  std::string mhtml;
-  {
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
-  }
-
-  // Make sure the contents are missing.
-  EXPECT_THAT(mhtml, Not(HasSubstr("test body")));
-
-  // Checks that the final status reported to UMA is correct.
-  histogram_tester()->ExpectUniqueSample(
-      "PageSerialization.MhtmlGeneration.FinalSaveStatus",
-      static_cast<int>(MhtmlSaveStatus::FRAME_SERIALIZATION_FORBIDDEN), 1);
-}
-
-IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest,
-                       GenerateMHTMLIgnoreNoStoreSubFrame) {
-  base::FilePath path(temp_dir_.GetPath());
-  path = path.Append(FILE_PATH_LITERAL("test.mht"));
-
-  GURL url(embedded_test_server()->GetURL("/page_with_nostore_iframe.html"));
-
-  // Generate MHTML, specifying the FailForNoStoreMainFrame policy.
-  MHTMLGenerationParams params(path);
-  params.cache_control_policy =
-      blink::WebFrameSerializerCacheControlPolicy::kFailForNoStoreMainFrame;
-
-  GenerateMHTML(params, url);
-  // We expect that there was no error (file size -1 indicates an error.)
-  EXPECT_LT(0, file_size());
-
-  std::string mhtml;
-  {
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
-  }
-
-  EXPECT_THAT(mhtml, HasSubstr("Main Frame"));
-  // Make sure that no-store subresources exist in this mode.
-  EXPECT_THAT(mhtml, HasSubstr("no-store test body"));
-  EXPECT_THAT(mhtml, ContainsRegex("Content-Location:.*nostore.jpg"));
-}
-
-IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLObeyNoStoreSubFrame) {
-  base::FilePath path(temp_dir_.GetPath());
-  path = path.Append(FILE_PATH_LITERAL("test.mht"));
-
-  GURL url(embedded_test_server()->GetURL("/page_with_nostore_iframe.html"));
-
-  // Generate MHTML, specifying the FailForNoStoreMainFrame policy.
-  MHTMLGenerationParams params(path);
-  params.cache_control_policy = blink::WebFrameSerializerCacheControlPolicy::
-      kSkipAnyFrameOrResourceMarkedNoStore;
-
-  GenerateMHTML(params, url);
-  // We expect that there was no error (file size -1 indicates an error.)
-  EXPECT_LT(0, file_size());
-
-  std::string mhtml;
-  {
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
-  }
-
-  EXPECT_THAT(mhtml, HasSubstr("Main Frame"));
-  // Make sure the contents are missing.
-  EXPECT_THAT(mhtml, Not(HasSubstr("no-store test body")));
-  // This image comes from a resource marked no-store.
-  EXPECT_THAT(mhtml, Not(ContainsRegex("Content-Location:.*nostore.jpg")));
-}
-
 // TODO(crbug.com/615291): These fail on Android under some circumstances.
 #if defined(OS_ANDROID)
-#define MAYBE_ViewedMHTMLContainsNoStoreContentIfNoCacheControlPolicy \
-    DISABLED_ViewedMHTMLContainsNoStoreContentIfNoCacheControlPolicy
-#define MAYBE_ViewedMHTMLDoesNotContainNoStoreContent \
-    DISABLED_ViewedMHTMLDoesNotContainNoStoreContent
+#define MAYBE_ViewedMHTMLContainsNoStoreContent \
+  DISABLED_ViewedMHTMLContainsNoStoreContent
 #else
-#define MAYBE_ViewedMHTMLContainsNoStoreContentIfNoCacheControlPolicy \
-    ViewedMHTMLContainsNoStoreContentIfNoCacheControlPolicy
-#define MAYBE_ViewedMHTMLDoesNotContainNoStoreContent \
-    ViewedMHTMLDoesNotContainNoStoreContent
+#define MAYBE_ViewedMHTMLContainsNoStoreContent \
+  ViewedMHTMLContainsNoStoreContent
 #endif
 
-IN_PROC_BROWSER_TEST_F(
-    MHTMLGenerationTest,
-    MAYBE_ViewedMHTMLContainsNoStoreContentIfNoCacheControlPolicy) {
-  // Generate MHTML, specifying the FailForNoStoreMainFrame policy.
+IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest,
+                       MAYBE_ViewedMHTMLContainsNoStoreContent) {
+  // Generate MHTML.
   base::FilePath path(temp_dir_.GetPath());
   path = path.Append(FILE_PATH_LITERAL("test.mht"));
   MHTMLGenerationParams params(path);
 
-  // No special cache control options so we should see both frames.
+  // We should see both frames.
   std::vector<std::string> expectations = {
       "Main Frame, normal headers.", "Cache-Control: no-store test body",
   };
@@ -587,39 +497,6 @@ IN_PROC_BROWSER_TEST_F(
   TestOriginalVsSavedPage(
       embedded_test_server()->GetURL("/page_with_nostore_iframe.html"), params,
       2 /* expected number of frames */, expectations, forbidden);
-
-  std::string mhtml;
-  {
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    ASSERT_TRUE(base::ReadFileToString(params.file_path, &mhtml));
-  }
-}
-
-IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest,
-                       MAYBE_ViewedMHTMLDoesNotContainNoStoreContent) {
-  // Generate MHTML, specifying the FailForNoStoreMainFrame policy.
-  base::FilePath path(temp_dir_.GetPath());
-  path = path.Append(FILE_PATH_LITERAL("test.mht"));
-  MHTMLGenerationParams params(path);
-  params.cache_control_policy = blink::WebFrameSerializerCacheControlPolicy::
-      kSkipAnyFrameOrResourceMarkedNoStore;
-
-  // No special cache control options so we should see both frames.
-  std::vector<std::string> expectations = {
-      "Main Frame, normal headers.",
-  };
-  std::vector<std::string> forbidden = {
-      "Cache-Control: no-store test body",
-  };
-  TestOriginalVsSavedPage(
-      embedded_test_server()->GetURL("/page_with_nostore_iframe.html"), params,
-      2 /* expected number of frames */, expectations, forbidden);
-
-  std::string mhtml;
-  {
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    ASSERT_TRUE(base::ReadFileToString(params.file_path, &mhtml));
-  }
 }
 
 // Test suite that allows testing --site-per-process against cross-site frames.

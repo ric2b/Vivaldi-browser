@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/sync/base/model_type.h"
+#include "components/sync/base/storage_option.h"
 #include "components/sync/driver/configure_context.h"
 #include "components/sync/driver/data_type_controller.h"
 #include "components/sync/model/model_error.h"
@@ -42,15 +43,15 @@ class ModelTypeController : public DataTypeController {
   void BeforeLoadModels(ModelTypeConfigurer* configurer) override;
   void LoadModels(const ConfigureContext& configure_context,
                   const ModelLoadCallback& model_load_callback) override;
-  void RegisterWithBackend(base::Callback<void(bool)> set_downloaded,
+  void RegisterWithBackend(base::OnceCallback<void(bool)> set_downloaded,
                            ModelTypeConfigurer* configurer) override;
-  void StartAssociating(const StartCallback& start_callback) override;
+  void StartAssociating(StartCallback start_callback) override;
   void ActivateDataType(ModelTypeConfigurer* configurer) override;
   void DeactivateDataType(ModelTypeConfigurer* configurer) override;
-  void Stop(SyncStopMetadataFate metadata_fate, StopCallback callback) override;
+  void Stop(ShutdownReason shutdown_reason, StopCallback callback) override;
   State state() const override;
-  void GetAllNodes(const AllNodesCallback& callback) override;
-  void GetStatusCounters(const StatusCountersCallback& callback) override;
+  void GetAllNodes(AllNodesCallback callback) override;
+  void GetStatusCounters(StatusCountersCallback callback) override;
   void RecordMemoryUsageAndCountsHistograms() override;
 
  protected:
@@ -58,28 +59,20 @@ class ModelTypeController : public DataTypeController {
                         const ModelError& error);
 
  private:
-  void RecordStartFailure(ConfigureResult result) const;
-
-  // If the DataType controller is waiting for models to load, once the models
-  // are loaded this function should be called to let the base class
-  // implementation know that it is safe to continue with the activation.
-  // The error indicates whether the loading completed successfully.
-  void LoadModelsDone(ConfigureResult result, const SyncError& error);
-
-  // The function will do the real work when OnProcessorStarted got called. This
-  // is called on the UI thread.
-  void OnProcessorStarted(
+  void RecordStartFailure() const;
+  void RecordRunFailure() const;
+  void OnDelegateStarted(
       std::unique_ptr<DataTypeActivationResponse> activation_response);
+  void TriggerCompletionCallbacks(const SyncError& error);
 
-  base::flat_map<ConfigureContext::StorageOption,
-                 std::unique_ptr<ModelTypeControllerDelegate>>
+  base::flat_map<StorageOption, std::unique_ptr<ModelTypeControllerDelegate>>
       delegate_map_;
 
   // State of this datatype controller.
-  State state_;
+  State state_ = NOT_RUNNING;
 
   // Owned by |delegate_map_|. Null while NOT_RUNNING.
-  ModelTypeControllerDelegate* delegate_;
+  ModelTypeControllerDelegate* delegate_ = nullptr;
 
   // Callback for use when starting the datatype (usually MODEL_STARTING, but
   // STOPPING if abort requested while starting).

@@ -19,13 +19,13 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
 #include "build/build_config.h"
-#include "chrome/browser/download/download_path_reservation_tracker.h"
 #include "chrome/browser/download/download_target_determiner_delegate.h"
 #include "chrome/browser/download/download_target_info.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "components/download/public/common/download_danger_type.h"
 #include "components/download/public/common/download_item.h"
+#include "components/download/public/common/download_path_reservation_tracker.h"
 #include "content/public/browser/download_manager_delegate.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -93,8 +93,11 @@ class ChromeDownloadManagerDelegate
       const content::DownloadOpenDelayedCallback& callback) override;
   bool InterceptDownloadIfApplicable(
       const GURL& url,
+      const std::string& user_agent,
+      const std::string& content_disposition,
       const std::string& mime_type,
       const std::string& request_origin,
+      int64_t content_length,
       content::WebContents* web_contents) override;
   bool GenerateFileHash() override;
   void GetSaveDir(content::BrowserContext* browser_context,
@@ -134,9 +137,9 @@ class ChromeDownloadManagerDelegate
   virtual safe_browsing::DownloadProtectionService*
       GetDownloadProtectionService();
 
-  // Called to show a file picker
-  virtual void ShowFilePicker(
-      const std::string& guid,
+  // Show file picker for |download|.
+  virtual void ShowFilePickerForDownload(
+      download::DownloadItem* download,
       const base::FilePath& suggested_path,
       const DownloadTargetDeterminerDelegate::ConfirmationCallback& callback);
 
@@ -148,7 +151,8 @@ class ChromeDownloadManagerDelegate
       download::DownloadItem* download,
       const base::FilePath& virtual_path,
       bool create_directory,
-      DownloadPathReservationTracker::FilenameConflictAction conflict_action,
+      download::DownloadPathReservationTracker::FilenameConflictAction
+          conflict_action,
       const ReservedPathCallback& callback) override;
   void RequestConfirmation(download::DownloadItem* download,
                            const base::FilePath& suggested_virtual_path,
@@ -185,6 +189,12 @@ class ChromeDownloadManagerDelegate
                            RequestConfirmation_Android);
 
   typedef std::vector<content::DownloadIdCallback> IdCallbackVector;
+
+  // Called to show a file picker for download with |guid|
+  void ShowFilePicker(
+      const std::string& guid,
+      const base::FilePath& suggested_path,
+      const DownloadTargetDeterminerDelegate::ConfirmationCallback& callback);
 
   // content::NotificationObserver implementation.
   void Observe(int type,
@@ -237,7 +247,7 @@ class ChromeDownloadManagerDelegate
   void GenerateUniqueFileNameDone(
       gfx::NativeWindow native_window,
       const DownloadTargetDeterminerDelegate::ConfirmationCallback& callback,
-      PathValidationResult result,
+      download::PathValidationResult result,
       const base::FilePath& target_path);
 #endif
 
@@ -247,10 +257,13 @@ class ChromeDownloadManagerDelegate
   std::unique_ptr<DownloadLocationDialogBridge> location_dialog_bridge_;
 #endif
 
-  // Incremented by one for each download, the first available download id is
-  // assigned from history database or 1 when history database fails to
-  // intialize.
+  // If history database fails to initialize, this will always be kInvalidId.
+  // Otherwise, the first available download id is assigned from history
+  // database, and incremented by one for each download.
   uint32_t next_download_id_;
+
+  // Whether |next_download_id_| is retrieved from history db.
+  bool next_id_retrieved_;
 
   // The |GetNextId| callbacks that may be cached before loading the download
   // database.

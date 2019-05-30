@@ -7,6 +7,7 @@
 
 #include "build/build_config.h"
 #include "cc/test/stub_decode_cache.h"
+#include "components/viz/test/test_context_provider.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -43,6 +44,10 @@ class WebGraphicsContext3DProviderForTests
   GrContext* GetGrContext() override { return nullptr; }
   gpu::webgpu::WebGPUInterface* WebGPUInterface() override { return nullptr; }
   bool BindToCurrentThread() override { return false; }
+  gpu::SharedImageInterface* GetSharedImageInterface() const override {
+    NOTREACHED();
+    return nullptr;
+  }
   const gpu::Capabilities& GetCapabilities() const override {
     return capabilities_;
   }
@@ -53,8 +58,13 @@ class WebGraphicsContext3DProviderForTests
   void SetLostContextCallback(base::Closure) override {}
   void SetErrorMessageCallback(
       base::RepeatingCallback<void(const char*, int32_t id)>) override {}
-  cc::ImageDecodeCache* ImageDecodeCache() override {
+  cc::ImageDecodeCache* ImageDecodeCache(
+      SkColorType color_type,
+      sk_sp<SkColorSpace> color_space) override {
     return &image_decode_cache_;
+  }
+  viz::TestSharedImageInterface* SharedImageInterface() override {
+    return &test_shared_image_interface_;
   }
 
  private:
@@ -62,6 +72,7 @@ class WebGraphicsContext3DProviderForTests
   std::unique_ptr<gpu::gles2::GLES2Interface> gl_;
   gpu::Capabilities capabilities_;
   gpu::GpuFeatureInfo gpu_feature_info_;
+  viz::TestSharedImageInterface test_shared_image_interface_;
 };
 
 // The target to use when binding a texture to a Chromium image.
@@ -171,10 +182,11 @@ class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub,
         break;
     }
   }
-
+  MOCK_METHOD1(WaitSyncTokenCHROMIUMMock, void(const GLbyte* sync_token));
   void WaitSyncTokenCHROMIUM(const GLbyte* sync_token) override {
     memcpy(&most_recently_waited_sync_token_, sync_token,
            sizeof(most_recently_waited_sync_token_));
+    WaitSyncTokenCHROMIUMMock(sync_token);
   }
 
   GLenum CheckFramebufferStatus(GLenum target) override {
@@ -271,6 +283,19 @@ class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub,
       textures[i] = id++;
   }
 
+  MOCK_METHOD1(CreateAndTexStorage2DSharedImageCHROMIUMMock,
+               void(const GLbyte*));
+  GLuint CreateAndTexStorage2DSharedImageCHROMIUM(
+      const GLbyte* mailbox) override {
+    CreateAndTexStorage2DSharedImageCHROMIUMMock(mailbox);
+    GLuint texture_id;
+    GenTextures(1, &texture_id);
+    last_imported_shared_image_.SetZero();
+    last_imported_shared_image_.SetName(
+        reinterpret_cast<const gpu::Mailbox*>(mailbox)->name);
+    return texture_id;
+  }
+
   // DrawingBuffer::Client implementation.
   bool DrawingBufferClientIsBoundForDraw() override {
     return !state_.draw_framebuffer_binding;
@@ -349,6 +374,10 @@ class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub,
               saved_state_.pixel_pack_buffer_binding);
   }
 
+  gpu::Mailbox* last_imported_shared_image() {
+    return &last_imported_shared_image_;
+  }
+
  private:
   std::map<GLenum, GLuint> bound_textures_;
 
@@ -385,6 +414,7 @@ class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub,
   HashMap<GLuint, IntSize> texture_sizes_;
   HashMap<GLuint, IntSize> image_sizes_;
   HashMap<GLuint, GLuint> image_to_texture_map_;
+  gpu::Mailbox last_imported_shared_image_;
 };
 
 class DrawingBufferForTests : public DrawingBuffer {
@@ -439,6 +469,11 @@ class DrawingBufferForTests : public DrawingBuffer {
 
   GLES2InterfaceForTests* ContextGLForTests() {
     return static_cast<GLES2InterfaceForTests*>(ContextGL());
+  }
+
+  viz::TestSharedImageInterface* SharedImageInterfaceForTests() {
+    return static_cast<viz::TestSharedImageInterface*>(
+        ContextProvider()->SharedImageInterface());
   }
 
   bool* live_;

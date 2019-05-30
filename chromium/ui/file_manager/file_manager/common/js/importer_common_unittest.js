@@ -3,37 +3,32 @@
 // found in the LICENSE file.
 
 /** @type {!MockVolumeManager} */
-var volumeManager;
+let volumeManager;
 
 /** @type {!VolumeInfo} */
-var cameraVolume;
+let cameraVolume;
 
 /** @type {!VolumeInfo} */
-var sdVolume;
+let sdVolume;
 
-/** @type {!VolumeInfo} */
-var driveVolume;
-
-/** @type {!MockFileEntry} */
-var cameraFileEntry;
+/** @type {VolumeInfo} */
+let driveVolume;
 
 /** @type {!MockFileEntry} */
-var rawFileEntry;
+let cameraFileEntry;
 
 /** @type {!MockFileEntry} */
-var sdFileEntry;
+let rawFileEntry;
 
 /** @type {!MockFileEntry} */
-var driveFileEntry;
+let sdFileEntry;
 
-// Sadly, boilerplate setup necessary to include test support classes.
-loadTimeData.data = {
-  DRIVE_DIRECTORY_LABEL: 'My Drive',
-  DOWNLOADS_DIRECTORY_LABEL: 'Downloads'
-};
+/** @type {!MockFileEntry} */
+let driveFileEntry;
 
 // Set up the test components.
 function setUp() {
+  window.loadTimeData.getString = id => id;
   new MockCommandLinePrivate();
   new MockChromeStorageAPI();
   importer.setupTestLogger();
@@ -86,11 +81,11 @@ function testIsMediaDirectory() {
 }
 
 function testResolver_Resolve(callback) {
-  var resolver = new importer.Resolver();
+  const resolver = new importer.Resolver();
   assertFalse(resolver.settled);
   resolver.resolve(1);
   resolver.promise.then(
-      function(value) {
+      value => {
         assertTrue(resolver.settled);
         assertEquals(1, value);
       });
@@ -99,13 +94,13 @@ function testResolver_Resolve(callback) {
 }
 
 function testResolver_Reject(callback) {
-  var resolver = new importer.Resolver();
+  const resolver = new importer.Resolver();
   assertFalse(resolver.settled);
   resolver.reject('ouch');
   resolver.promise
       .then(callback.bind(null, true))
       .catch(
-          function(error) {
+          error => {
             assertTrue(resolver.settled);
             assertEquals('ouch', error);
             callback(false);
@@ -113,11 +108,11 @@ function testResolver_Reject(callback) {
 }
 
 function testGetMachineId_Persisted(callback) {
-  var promise = importer.getMachineId().then(
-      function(firstMachineId) {
+  const promise = importer.getMachineId().then(
+      firstMachineId => {
         assertTrue(100000 <= firstMachineId <= 9999999);
         importer.getMachineId().then(
-            function(secondMachineId) {
+            secondMachineId => {
               assertEquals(firstMachineId, secondMachineId);
             });
       });
@@ -125,14 +120,14 @@ function testGetMachineId_Persisted(callback) {
 }
 
 function testPhotosApp_DefaultDisabled(callback) {
-  var promise = importer.isPhotosAppImportEnabled().then(assertFalse);
+  const promise = importer.isPhotosAppImportEnabled().then(assertFalse);
 
   reportPromise(promise, callback);
 }
 
 function testPhotosApp_ImportEnabled(callback) {
-  var promise = importer.handlePhotosAppMessage(true).then(
-      function() {
+  const promise = importer.handlePhotosAppMessage(true).then(
+      () => {
         return importer.isPhotosAppImportEnabled().then(assertTrue);
       });
 
@@ -140,8 +135,8 @@ function testPhotosApp_ImportEnabled(callback) {
 }
 
 function testPhotosApp_ImportDisabled(callback) {
-  var promise = importer.handlePhotosAppMessage(false).then(
-      function() {
+  const promise = importer.handlePhotosAppMessage(false).then(
+      () => {
         return importer.isPhotosAppImportEnabled().then(assertFalse);
       });
 
@@ -149,11 +144,11 @@ function testPhotosApp_ImportDisabled(callback) {
 }
 
 function testHistoryFilename(callback) {
-  var promise = importer.getHistoryFilename().then(
-      function(firstName) {
+  const promise = importer.getHistoryFilename().then(
+      firstName => {
         assertTrue(!!firstName && firstName.length > 10);
         importer.getHistoryFilename().then(
-            function(secondName) {
+            secondName => {
               assertEquals(firstName, secondName);
             });
       });
@@ -162,13 +157,13 @@ function testHistoryFilename(callback) {
 }
 
 function testLocalStorageWrapper(callback) {
-  var storage = new importer.ChromeLocalStorage();
-  var promise = Promise.all([
+  const storage = new importer.ChromeLocalStorage();
+  const promise = Promise.all([
     storage.set('lamb', 'chop'),
     storage.set('isPoodle', true),
     storage.set('age of grandma', 103)
   ]).then(
-      function() {
+      () => {
         return Promise.all([
           storage.get('lamb').then(assertEquals.bind(null, 'chop')),
           storage.get('isPoodle').then(assertEquals.bind(null, true)),
@@ -180,31 +175,31 @@ function testLocalStorageWrapper(callback) {
 }
 
 function testRotateLogs(callback) {
-  var fileName;
-  var fileFactory = function(namePromise) {
+  let fileName;
+  const fileFactory = namePromise => {
     return namePromise.then(
-        function(name) {
+        name => {
           fileName = name;
           return Promise.resolve(driveFileEntry);
         });
   };
 
-  var nextLogId = 0;
-  var lastLogId = 1;
-  var promise = importer.ChromeLocalStorage.getInstance()
+  const nextLogId = 0;
+  const lastLogId = 1;
+  const promise = importer.ChromeLocalStorage.getInstance()
       .set(importer.Setting.LAST_KNOWN_LOG_ID, lastLogId)
       .then(
-          function() {
+          () => {
             // Should delete the log with the nextLogId.
             return importer.rotateLogs(nextLogId, fileFactory);
           })
       .then(
-          function() {
+          () => {
             assertTrue(fileName !== undefined);
             // Verify the *active* log is deleted.
             assertEquals(0, fileName.search(/[0-9]{6}-import-debug-0.log/),
                 'Filename (' + fileName + ') does not match next pattern.');
-            driveFileEntry.assertRemoved();
+            driveFileEntry.asMock().assertRemoved();
 
             return importer.ChromeLocalStorage.getInstance()
                   .get(importer.Setting.LAST_KNOWN_LOG_ID)
@@ -215,11 +210,17 @@ function testRotateLogs(callback) {
 }
 
 function testRotateLogs_RemembersInitialActiveLog(callback) {
-  var nextLogId = 1;
-  var fileFactory = assertFalse;  // Should not be called.
-  var promise = importer.rotateLogs(nextLogId, assertFalse)
-      .then(
-          function() {
+  const nextLogId = 1;
+
+  // Should not be called.
+  const fileFactory = (namePromise) => {
+    assertFalse(true);
+    return Promise.resolve();
+  };
+
+  const promise =
+      importer.rotateLogs(nextLogId, fileFactory)
+          .then(() => {
             return importer.ChromeLocalStorage.getInstance()
                   .get(importer.Setting.LAST_KNOWN_LOG_ID)
                   .then(assertEquals.bind(null, nextLogId));
@@ -229,9 +230,9 @@ function testRotateLogs_RemembersInitialActiveLog(callback) {
 }
 
 function testDeflateAppUrl() {
-  var url = 'filesystem:chrome-extension://hhaomjibdihmijegdhdafkllkbggdgoj' +
+  const url = 'filesystem:chrome-extension://hhaomjibdihmijegdhdafkllkbggdgoj' +
       '/external/removable/USB%20Drive/DCIM/derekkind2.jpg';
-  var deflated = importer.deflateAppUrl(url);
+  const deflated = importer.deflateAppUrl(url);
 
   // Just verify that the string starts with our secret sauce marker...
   assertEquals('$', deflated.substring(0, 1),
@@ -244,11 +245,11 @@ function testDeflateAppUrl() {
   // And finally that we can reconstitute the original.
   assertEquals(url, importer.inflateAppUrl(deflated),
       'Deflated then inflated URLs must match original URL.');
-};
+}
 
 function testHasMediaDirectory(callback) {
-  var dir = createDirectoryEntry(sdVolume, '/DCIM');
-  var promise = importer.hasMediaDirectory(sdVolume.fileSystem.root)
+  const dir = createDirectoryEntry(sdVolume, '/DCIM');
+  const promise = importer.hasMediaDirectory(sdVolume.fileSystem.root)
       .then(assertTrue.bind(null));
 
   reportPromise(promise, callback);
@@ -256,23 +257,22 @@ function testHasMediaDirectory(callback) {
 
 /** @param {string} path */
 function assertIsMediaDir(path) {
-  var dir = createDirectoryEntry(sdVolume, path);
+  const dir = createDirectoryEntry(sdVolume, path);
   assertTrue(importer.isMediaDirectory(dir, volumeManager));
 }
 
 /** @param {string} path */
 function assertIsNotMediaDir(path) {
-  var dir = createDirectoryEntry(sdVolume, path);
+  const dir = createDirectoryEntry(sdVolume, path);
   assertFalse(importer.isMediaDirectory(dir, volumeManager));
 }
 
 function createFileEntry(volume, path) {
-  var entry = new MockFileEntry(
-      volume.fileSystem,
-      path, {
-        size: 1234,
-        modificationTime: new Date().toString()
-      });
+  const entry =
+      new MockFileEntry(volume.fileSystem, path, /** @type{Metadata} */ ({
+                          size: 1234,
+                          modificationTime: new Date().toString()
+                        }));
   // Ensure the file entry has a volumeID...necessary for lookups
   // via the VolumeManager.
   entry.volumeId = volume.volumeId;
@@ -280,7 +280,7 @@ function createFileEntry(volume, path) {
 }
 
 function createDirectoryEntry(volume, path) {
-  var entry = new MockDirectoryEntry(volume.fileSystem, path);
+  const entry = new MockDirectoryEntry(volume.fileSystem, path);
   // Ensure the file entry has a volumeID...necessary for lookups
   // via the VolumeManager.
   entry.volumeId = volume.volumeId;

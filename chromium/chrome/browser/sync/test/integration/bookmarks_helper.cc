@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <functional>
 #include <memory>
 #include <set>
 #include <vector>
@@ -29,7 +30,6 @@
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sync_datatype_helper.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
@@ -45,6 +45,7 @@
 #include "components/history/core/browser/history_db_task.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
+#include "components/sync/test/fake_server/entity_builder_factory.h"
 #include "components/sync_bookmarks/bookmark_change_processor.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -248,10 +249,8 @@ void SetFaviconImpl(Profile* profile,
     favicon_service->SetFavicons({node->url()}, icon_url,
                                  favicon_base::IconType::kFavicon, image);
     } else {
-      browser_sync::ProfileSyncService* pss =
-          ProfileSyncServiceFactory::GetForProfile(profile);
       sync_bookmarks::BookmarkChangeProcessor::ApplyBookmarkFavicon(
-          node, pss->GetSyncClient(), icon_url, image.As1xPNGBytes());
+          node, favicon_service, icon_url, image.As1xPNGBytes());
     }
 
     // Wait for the favicon for |node| to be invalidated.
@@ -294,10 +293,8 @@ void DeleteFaviconMappingsImpl(Profile* profile,
     favicon_service->DeleteFaviconMappings({node->url()},
                                            favicon_base::IconType::kFavicon);
   } else {
-    browser_sync::ProfileSyncService* pss =
-        ProfileSyncServiceFactory::GetForProfile(profile);
     sync_bookmarks::BookmarkChangeProcessor::ApplyBookmarkFavicon(
-        node, pss->GetSyncClient(), /*icon_url=*/GURL(),
+        node, favicon_service, /*icon_url=*/GURL(),
         scoped_refptr<base::RefCountedString>(new base::RefCountedString()));
   }
 
@@ -367,10 +364,8 @@ bool FaviconsMatch(BookmarkModel* model_a,
     return false;
 
   // Compare only the 1x bitmaps as only those are synced.
-  SkBitmap bitmap_a = image_a.AsImageSkia().GetRepresentation(
-      1.0f).sk_bitmap();
-  SkBitmap bitmap_b = image_b.AsImageSkia().GetRepresentation(
-      1.0f).sk_bitmap();
+  SkBitmap bitmap_a = image_a.AsImageSkia().GetRepresentation(1.0f).GetBitmap();
+  SkBitmap bitmap_b = image_b.AsImageSkia().GetRepresentation(1.0f).GetBitmap();
   return FaviconRawBitmapsMatch(bitmap_a, bitmap_b);
 }
 
@@ -959,6 +954,15 @@ std::string IndexedSubsubfolderName(int i) {
   return base::StringPrintf("Subsubfolder Name %d", i);
 }
 
+std::unique_ptr<syncer::LoopbackServerEntity> CreateBookmarkServerEntity(
+    const std::string& title,
+    const GURL& url) {
+  fake_server::EntityBuilderFactory entity_builder_factory;
+  fake_server::BookmarkEntityBuilder bookmark_builder =
+      entity_builder_factory.NewBookmarkEntityBuilder(title);
+  return bookmark_builder.BuildBookmark(url);
+}
+
 }  // namespace bookmarks_helper
 
 BookmarksMatchChecker::BookmarksMatchChecker()
@@ -1006,6 +1010,64 @@ std::string BookmarksTitleChecker::GetDebugMessage() const {
   return "Waiting for bookmark count to match";
 }
 
+ServerBookmarksEqualityChecker::ServerBookmarksEqualityChecker(
+    browser_sync::ProfileSyncService* service,
+    fake_server::FakeServer* fake_server,
+    const std::vector<ExpectedBookmark>& expected_bookmarks,
+    syncer::Cryptographer* cryptographer)
+    : SingleClientStatusChangeChecker(service),
+      fake_server_(fake_server),
+      cryptographer_(cryptographer),
+      expected_bookmarks_(expected_bookmarks) {}
+
+bool ServerBookmarksEqualityChecker::IsExitConditionSatisfied() {
+  std::vector<sync_pb::SyncEntity> entities =
+      fake_server_->GetSyncEntitiesByModelType(syncer::BOOKMARKS);
+  if (expected_bookmarks_.size() != entities.size()) {
+    return false;
+  }
+
+  // Make a copy so we can remove bookmarks that were found.
+  std::vector<ExpectedBookmark> expected = expected_bookmarks_;
+  for (const sync_pb::SyncEntity& entity : entities) {
+    // If the cryptographer was provided, we expect the specifics to have
+    // encrypted data.
+    EXPECT_EQ(entity.specifics().has_encrypted(), cryptographer_ != nullptr);
+
+    sync_pb::BookmarkSpecifics actual_specifics;
+    if (entity.specifics().has_encrypted()) {
+      sync_pb::EntitySpecifics entity_specifics;
+      EXPECT_TRUE(cryptographer_->Decrypt(entity.specifics().encrypted(),
+                                          &entity_specifics));
+      actual_specifics = entity_specifics.bookmark();
+    } else {
+      actual_specifics = entity.specifics().bookmark();
+    }
+
+    auto it =
+        std::find_if(expected.begin(), expected.end(),
+                     [actual_specifics](const ExpectedBookmark& bookmark) {
+                       return actual_specifics.title() == bookmark.title &&
+                              actual_specifics.url() == bookmark.url;
+                     });
+    if (it != expected.end()) {
+      expected.erase(it);
+    } else {
+      ADD_FAILURE() << "Could not find expected bookmark with title '"
+                    << actual_specifics.title() << "' and URL '"
+                    << actual_specifics.url() << "'";
+    }
+  }
+
+  return true;
+}
+
+std::string ServerBookmarksEqualityChecker::GetDebugMessage() const {
+  return "Waiting for server-side bookmarks to match expected.";
+}
+
+ServerBookmarksEqualityChecker::~ServerBookmarksEqualityChecker() {}
+
 namespace {
 
 bool BookmarkCountsByUrlMatch(int profile,
@@ -1028,6 +1090,6 @@ BookmarksUrlChecker::BookmarksUrlChecker(int profile,
                                          int expected_count)
     : AwaitMatchStatusChangeChecker(base::Bind(BookmarkCountsByUrlMatch,
                                                profile,
-                                               base::ConstRef(url),
+                                               std::cref(url),
                                                expected_count),
                                     "Bookmark URL counts match.") {}

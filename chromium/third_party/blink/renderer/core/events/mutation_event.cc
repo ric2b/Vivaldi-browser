@@ -22,6 +22,8 @@
 
 #include "third_party/blink/renderer/core/events/mutation_event.h"
 
+#include "third_party/blink/renderer/core/event_interface_names.h"
+
 namespace blink {
 
 MutationEvent::MutationEvent() : attr_change_(0) {}
@@ -33,7 +35,7 @@ MutationEvent::MutationEvent(const AtomicString& type,
                              const String& prev_value,
                              const String& new_value,
                              const String& attr_name,
-                             unsigned short attr_change)
+                             uint16_t attr_change)
     : Event(type, bubbles, cancelable),
       related_node_(related_node),
       prev_value_(prev_value),
@@ -50,7 +52,7 @@ void MutationEvent::initMutationEvent(const AtomicString& type,
                                       const String& prev_value,
                                       const String& new_value,
                                       const String& attr_name,
-                                      unsigned short attr_change) {
+                                      uint16_t attr_change) {
   if (IsBeingDispatched())
     return;
 
@@ -64,7 +66,7 @@ void MutationEvent::initMutationEvent(const AtomicString& type,
 }
 
 const AtomicString& MutationEvent::InterfaceName() const {
-  return EventNames::MutationEvent;
+  return event_interface_names::kMutationEvent;
 }
 
 void MutationEvent::Trace(blink::Visitor* visitor) {

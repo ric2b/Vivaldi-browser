@@ -136,8 +136,8 @@ ChromePluginPlaceholder* ChromePluginPlaceholder::CreateBlockedPlugin(
           roundf(power_saver_info.custom_poster_size.width() / zoom_factor);
       int height =
           roundf(power_saver_info.custom_poster_size.height() / zoom_factor);
-      values.SetString("visibleWidth", base::IntToString(width) + "px");
-      values.SetString("visibleHeight", base::IntToString(height) + "px");
+      values.SetString("visibleWidth", base::NumberToString(width) + "px");
+      values.SetString("visibleHeight", base::NumberToString(height) + "px");
     }
   }
 
@@ -383,8 +383,8 @@ gin::ObjectTemplateBuilder ChromePluginPlaceholder::GetObjectTemplateBuilder(
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnablePluginPlaceholderTesting)) {
     builder.SetMethod<void (ChromePluginPlaceholder::*)()>(
-        "didFinishIconRepositionForTesting",
-        &ChromePluginPlaceholder::DidFinishIconRepositionForTestingCallback);
+        "notifyPlaceholderReadyForTesting",
+        &ChromePluginPlaceholder::NotifyPlaceholderReadyForTestingCallback);
   }
 
   return builder;

@@ -12,7 +12,7 @@ cr.exportPath('settings');
 /** @polymerBehavior */
 const MultiDeviceFeatureBehaviorImpl = {
   properties: {
-    /** @type {MultiDevicePageContentData} */
+    /** @type {!MultiDevicePageContentData} */
     pageContentData: Object,
 
     /**
@@ -31,7 +31,8 @@ const MultiDeviceFeatureBehaviorImpl = {
    * @return {boolean}
    */
   isSuiteOn: function() {
-    return this.pageContentData.betterTogetherState ===
+    return !!this.pageContentData &&
+        this.pageContentData.betterTogetherState ===
         settings.MultiDeviceFeatureState.ENABLED_BY_USER;
   },
 
@@ -41,7 +42,8 @@ const MultiDeviceFeatureBehaviorImpl = {
    * @return {boolean}
    */
   isSuiteAllowedByPolicy: function() {
-    return this.pageContentData.betterTogetherState !==
+    return !!this.pageContentData &&
+        this.pageContentData.betterTogetherState !==
         settings.MultiDeviceFeatureState.PROHIBITED_BY_POLICY;
   },
 
@@ -92,6 +94,8 @@ const MultiDeviceFeatureBehaviorImpl = {
    */
   getFeatureName: function(feature) {
     switch (feature) {
+      case settings.MultiDeviceFeature.BETTER_TOGETHER_SUITE:
+        return this.i18n('multideviceSetupItemHeading');
       case settings.MultiDeviceFeature.INSTANT_TETHERING:
         return this.i18n('multideviceInstantTetheringItemTitle');
       case settings.MultiDeviceFeature.MESSAGES:
@@ -132,6 +136,8 @@ const MultiDeviceFeatureBehaviorImpl = {
     switch (feature) {
       case settings.MultiDeviceFeature.SMART_LOCK:
         return this.i18nAdvanced('multideviceSmartLockItemSummary');
+      case settings.MultiDeviceFeature.INSTANT_TETHERING:
+        return this.i18nAdvanced('multideviceInstantTetheringItemSummary');
       case settings.MultiDeviceFeature.MESSAGES:
         return this.i18nAdvanced('multideviceAndroidMessagesItemSummary');
       default:
@@ -147,6 +153,10 @@ const MultiDeviceFeatureBehaviorImpl = {
    * @return {?settings.MultiDeviceFeatureState}
    */
   getFeatureState: function(feature) {
+    if (!this.pageContentData) {
+      return null;
+    }
+
     switch (feature) {
       case settings.MultiDeviceFeature.BETTER_TOGETHER_SUITE:
         return this.pageContentData.betterTogetherState;

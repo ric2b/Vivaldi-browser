@@ -29,7 +29,7 @@
 namespace blink {
 
 inline SVGFEMergeElement::SVGFEMergeElement(Document& document)
-    : SVGFilterPrimitiveStandardAttributes(SVGNames::feMergeTag, document) {}
+    : SVGFilterPrimitiveStandardAttributes(svg_names::kFEMergeTag, document) {}
 
 DEFINE_NODE_FACTORY(SVGFEMergeElement)
 
@@ -45,10 +45,6 @@ FilterEffect* SVGFEMergeElement::Build(SVGFilterBuilder* filter_builder,
     merge_inputs.push_back(merge_effect);
   }
   return effect;
-}
-
-bool SVGFEMergeElement::TaintsOrigin(bool inputs_taint_origin) const {
-  return inputs_taint_origin;
 }
 
 }  // namespace blink

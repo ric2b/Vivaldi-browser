@@ -5,6 +5,7 @@
 #include "services/resource_coordinator/memory_instrumentation/process_map.h"
 
 #include "base/process/process_handle.h"
+#include "base/stl_util.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/resource_coordinator/public/mojom/memory_instrumentation/memory_instrumentation.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -27,14 +28,16 @@ ProcessMap::ProcessMap(service_manager::Connector* connector) : binding_(this) {
   binding_.Bind(std::move(request));
 }
 
-ProcessMap::~ProcessMap() {}
+ProcessMap::~ProcessMap() = default;
 
 void ProcessMap::OnInit(std::vector<RunningServiceInfoPtr> instances) {
   for (const RunningServiceInfoPtr& instance : instances) {
     if (instance->pid == base::kNullProcessId)
       continue;
-    const service_manager::Identity& identity = instance->identity;
-    auto it_and_inserted = instances_.emplace(identity, instance->pid);
+
+    // This must succeed. Every instance has a globally unique Identity.
+    auto it_and_inserted =
+        instances_.emplace(instance->identity, instance->pid);
     DCHECK(it_and_inserted.second);
   }
 }
@@ -54,10 +57,13 @@ void ProcessMap::OnServiceStopped(const service_manager::Identity& identity) {
 
 void ProcessMap::OnServicePIDReceived(const service_manager::Identity& identity,
                                       uint32_t pid) {
-  if (pid == base::kNullProcessId)
-    return;
   auto it_and_inserted = instances_.emplace(identity, pid);
-  DCHECK(it_and_inserted.second);
+
+  // Either we didn't have the PID before and emplacement succeeded above, or
+  // we already had a valid PID for this Identity from |OnInit()|. In the latter
+  // case, the PID received here must match that one.
+  DCHECK(it_and_inserted.second ||
+         it_and_inserted.first->second == base::ProcessId(pid));
 }
 
 base::ProcessId ProcessMap::GetProcessId(

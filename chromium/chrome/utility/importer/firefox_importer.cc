@@ -10,8 +10,8 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -28,6 +28,8 @@
 #include "sql/database.h"
 #include "sql/statement.h"
 #include "url/gurl.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace {
 
@@ -70,7 +72,7 @@ bool CanImportURL(const GURL& url) {
 
   // Filter out the URLs with unsupported schemes.
   const char* const kInvalidSchemes[] = {"wyciwyg", "place", "about", "chrome"};
-  for (size_t i = 0; i < arraysize(kInvalidSchemes); ++i) {
+  for (size_t i = 0; i < base::size(kInvalidSchemes); ++i) {
     if (url.SchemeIs(kInvalidSchemes[i]))
       return false;
   }
@@ -102,6 +104,7 @@ struct FirefoxImporter::BookmarkItem {
   int id;
   GURL url;
   base::string16 title;
+  base::string16 description; // Added by vivaldi
   BookmarkItemType type;
   std::string keyword;
   base::Time date_added;
@@ -326,6 +329,9 @@ void FirefoxImporter::ImportBookmarks() {
       entry.path = path;
       entry.in_toolbar = is_in_toolbar;
       entry.is_folder = item->type == TYPE_FOLDER;
+      if (vivaldi::IsVivaldiRunning()) {
+        entry.description = item->description;
+      }
 
       bookmarks.push_back(entry);
     }
@@ -746,6 +752,9 @@ void FirefoxImporter::GetWholeBookmarkFolder(sql::Database* db,
       "b.type, k.keyword, b.dateAdded ";
   if (favicons_location == FaviconsLocation::kPlacesDatabase)
     query += ", h.favicon_id ";
+  if (vivaldi::IsVivaldiRunning()) {
+    query += ", h.description ";
+  }
   query +=
       "FROM moz_bookmarks b "
       "LEFT JOIN moz_places h ON b.fk = h.id "
@@ -769,6 +778,11 @@ void FirefoxImporter::GetWholeBookmarkFolder(sql::Database* db,
                         ? s.ColumnInt64(6)
                         : 0;
     item->empty_folder = true;
+    if (vivaldi::IsVivaldiRunning()) {
+      int column = favicons_location == FaviconsLocation::kPlacesDatabase ?
+        7 : 6;
+      item->description = s.ColumnString16(column);
+    }
 
     temp_list.push_back(std::move(item));
     if (empty_folder != NULL)
@@ -796,8 +810,7 @@ void FirefoxImporter::LoadFavicons(
   if (!s.is_valid())
     return;
 
-  for (FaviconMap::const_iterator i = favicon_map.begin();
-       i != favicon_map.end(); ++i) {
+  for (auto i = favicon_map.begin(); i != favicon_map.end(); ++i) {
     s.BindInt64(0, i->first);
     if (s.Step()) {
       std::vector<unsigned char> data;

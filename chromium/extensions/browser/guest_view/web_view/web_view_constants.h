@@ -72,7 +72,7 @@ extern const char kContextMenuItems[];
 extern const char kDefaultPromptText[];
 extern const char kFindSearchText[];
 extern const char kFindFinalUpdate[];
-extern const char kInitialTop[];
+extern const char kInitialHeight[];
 extern const char kInitialWidth[];
 extern const char kLastUnlockedBySelf[];
 extern const char kLevel[];

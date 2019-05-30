@@ -16,6 +16,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/task/post_task.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -28,7 +29,7 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/signin/core/browser/profile_management_switches.h"
+#include "components/signin/core/browser/account_consistency_method.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
@@ -60,7 +61,8 @@ const char kStatsBookmarksKeyDeprecated[] = "stats_bookmarks";
 const char kStatsSettingsKeyDeprecated[] = "stats_settings";
 
 void DeleteBitmap(const base::FilePath& image_path) {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   base::DeleteFile(image_path, false);
 }
 
@@ -534,21 +536,28 @@ void ProfileInfoCache::SetGAIAPictureOfProfileAtIndex(size_t index,
   base::FilePath path = GetPathOfProfileAtIndex(index);
   std::string key = CacheKeyFromProfilePath(path);
 
-  // Delete the old bitmap from cache.
-  cached_avatar_images_.erase(key);
-
   std::string old_file_name;
   GetInfoForProfileAtIndex(index)->GetString(
       kGAIAPictureFileNameKey, &old_file_name);
   std::string new_file_name;
 
+  if (!image && old_file_name.empty()) {
+    // On Windows, Taskbar and Desktop icons are refreshed every time
+    // |OnProfileAvatarChanged| notification is fired.
+    // Updating from an empty image to a null image is a no-op and it is
+    // important to avoid firing |OnProfileAvatarChanged| in this case.
+    // See http://crbug.com/900374
+    DCHECK_EQ(0U, cached_avatar_images_.count(key));
+    return;
+  }
+
+  // Delete the old bitmap from cache.
+  cached_avatar_images_.erase(key);
   if (!image) {
     // Delete the old bitmap from disk.
-    if (!old_file_name.empty()) {
-      base::FilePath image_path = path.AppendASCII(old_file_name);
-      file_task_runner_->PostTask(FROM_HERE,
-                                  base::BindOnce(&DeleteBitmap, image_path));
-    }
+    base::FilePath image_path = path.AppendASCII(old_file_name);
+    file_task_runner_->PostTask(FROM_HERE,
+                                base::BindOnce(&DeleteBitmap, image_path));
   } else {
     // Save the new bitmap to disk.
     new_file_name =
@@ -686,8 +695,7 @@ void ProfileInfoCache::UpdateSortForProfileIndex(size_t index) {
 
   // Remove and reinsert key in |sorted_keys_| to alphasort.
   std::string key = CacheKeyFromProfilePath(GetPathOfProfileAtIndex(index));
-  std::vector<std::string>::iterator key_it =
-      std::find(sorted_keys_.begin(), sorted_keys_.end(), key);
+  auto key_it = std::find(sorted_keys_.begin(), sorted_keys_.end(), key);
   DCHECK(key_it != sorted_keys_.end());
   sorted_keys_.erase(key_it);
   sorted_keys_.insert(FindPositionForProfile(key, name), key);

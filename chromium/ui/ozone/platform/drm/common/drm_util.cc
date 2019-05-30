@@ -666,7 +666,7 @@ gfx::ColorSpace GetColorSpaceFromEdid(const display::EdidParser& edid_parser) {
     return gfx::ColorSpace();
   }
 
-  SkMatrix44 color_space_as_matrix;
+  skcms_Matrix3x3 color_space_as_matrix;
   if (!primaries.toXYZD50(&color_space_as_matrix)) {
     EmitEdidColorSpaceChecksOutcomeUma(
         EdidColorSpaceChecksOutcome::kErrorCannotExtractToXYZD50);
@@ -680,7 +680,7 @@ gfx::ColorSpace GetColorSpaceFromEdid(const display::EdidParser& edid_parser) {
     return gfx::ColorSpace();
   }
 
-  SkColorSpaceTransferFn transfer = {gamma, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+  skcms_TransferFunction transfer = {gamma, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
   EmitEdidColorSpaceChecksOutcomeUma(EdidColorSpaceChecksOutcome::kSuccess);
   return gfx::ColorSpace::CreateCustom(color_space_as_matrix, transfer);
 }

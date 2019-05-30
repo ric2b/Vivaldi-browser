@@ -37,11 +37,12 @@ class Task {
     UNKNOWN = 0,
 
     /* Singleton processes first that don't belong to a particular tab. */
-    BROWSER, /* The main browser process. */
-    GPU,     /* A graphics process. */
-    ARC,     /* An ARC process. */
-    ZYGOTE,  /* A Linux zygote process. */
-    UTILITY, /* A browser utility process. */
+    BROWSER,  /* The main browser process. */
+    GPU,      /* A graphics process. */
+    ARC,      /* An ARC process. */
+    CROSTINI, /* A Crostini VM process. */
+    ZYGOTE,   /* A Linux zygote process. */
+    UTILITY,  /* A browser utility process. */
 
     /* Per-Tab processes next. */
     RENDERER,  /* A normal WebContents renderer process. */
@@ -152,6 +153,9 @@ class Task {
 
   // Returns the keep-alive counter if the Task is an event page, -1 otherwise.
   virtual int GetKeepaliveCount() const;
+
+  // Returns true if the task is running inside a VM.
+  virtual bool IsRunningInVM() const;
 
   int64_t task_id() const { return task_id_; }
 

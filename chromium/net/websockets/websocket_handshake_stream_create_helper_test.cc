@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "net/base/completion_once_callback.h"
+#include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/base/proxy_server.h"
 #include "net/http/http_network_session.h"
@@ -67,9 +68,10 @@ class MockClientSocketHandleFactory {
       const std::string& return_to_read) {
     socket_factory_maker_.SetExpectations(expect_written, return_to_read);
     auto socket_handle = std::make_unique<ClientSocketHandle>();
-    socket_handle->Init("a", scoped_refptr<MockTransportSocketParams>(), MEDIUM,
-                        SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
-                        CompletionOnceCallback(), &pool_, NetLogWithSource());
+    socket_handle->Init(
+        "a", scoped_refptr<MockTransportSocketParams>(), MEDIUM, SocketTag(),
+        ClientSocketPool::RespectLimits::ENABLED, CompletionOnceCallback(),
+        ClientSocketPool::ProxyAuthCallback(), &pool_, NetLogWithSource());
     return socket_handle;
   }
 
@@ -99,7 +101,7 @@ class TestConnectDelegate : public WebSocketStream::ConnectDelegate {
   int OnAuthRequired(scoped_refptr<AuthChallengeInfo> auth_info,
 
                      scoped_refptr<HttpResponseHeaders> response_headers,
-                     const HostPortPair& host_port_pair,
+                     const IPEndPoint& host_port_pair,
                      base::OnceCallback<void(const AuthCredentials*)> callback,
                      base::Optional<AuthCredentials>* credentials) override {
     *credentials = base::nullopt;
@@ -131,9 +133,8 @@ class WebSocketHandshakeStreamCreateHelperTest
     const GURL url("wss://www.example.org/");
     NetLogWithSource net_log;
 
-    WebSocketHandshakeStreamCreateHelper create_helper(&connect_delegate_,
-                                                       sub_protocols);
-    create_helper.set_stream_request(&stream_request_);
+    WebSocketHandshakeStreamCreateHelper create_helper(
+        &connect_delegate_, sub_protocols, &stream_request_);
 
     switch (GetParam()) {
       case BASIC_HANDSHAKE_STREAM:
@@ -230,6 +231,7 @@ class WebSocketHandshakeStreamCreateHelperTest
             SpdySessionDependencies::SpdyCreateSession(&session_deps);
         const SpdySessionKey key(HostPortPair::FromURL(url),
                                  ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
+                                 SpdySessionKey::IsProxySession::kFalse,
                                  SocketTag());
         base::WeakPtr<SpdySession> spdy_session =
             CreateSpdySession(http_network_session.get(), key, net_log);
@@ -271,9 +273,10 @@ class WebSocketHandshakeStreamCreateHelperTest
   WebSocketEndpointLockManager websocket_endpoint_lock_manager_;
 };
 
-INSTANTIATE_TEST_CASE_P(,
-                        WebSocketHandshakeStreamCreateHelperTest,
-                        Values(BASIC_HANDSHAKE_STREAM, HTTP2_HANDSHAKE_STREAM));
+INSTANTIATE_TEST_SUITE_P(,
+                         WebSocketHandshakeStreamCreateHelperTest,
+                         Values(BASIC_HANDSHAKE_STREAM,
+                                HTTP2_HANDSHAKE_STREAM));
 
 // Confirm that the basic case works as expected.
 TEST_P(WebSocketHandshakeStreamCreateHelperTest, BasicStream) {

@@ -20,7 +20,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
-#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/crx_installer.h"
@@ -162,14 +161,8 @@ void AppLauncherHandler::CreateAppInfo(const Extension* extension,
   value->SetBoolean("mayChangeLaunchType",
                     !extension->is_platform_app() && is_locally_installed);
 
-#if defined(OS_MACOSX)
-  // On Mac, only packaged apps can have shortcuts created.
-  value->SetBoolean("mayCreateShortcuts", extension->is_platform_app());
-#else
-  // On other platforms, any locally installed app can have shortcuts created.
+  // Any locally installed app can have shortcuts created.
   value->SetBoolean("mayCreateShortcuts", is_locally_installed);
-#endif
-
   value->SetBoolean("isLocallyInstalled", is_locally_installed);
 
   auto icon_size = extension_misc::EXTENSION_ICON_LARGE;
@@ -379,8 +372,7 @@ void AppLauncherHandler::FillAppDictionary(base::DictionaryValue* dictionary) {
   Profile* profile = Profile::FromWebUI(web_ui());
   PrefService* prefs = profile->GetPrefs();
 
-  for (std::set<std::string>::iterator it = visible_apps_.begin();
-       it != visible_apps_.end(); ++it) {
+  for (auto it = visible_apps_.begin(); it != visible_apps_.end(); ++it) {
     const Extension* extension = extension_service_->GetInstalledExtension(*it);
     if (extension && extensions::ui_util::ShouldDisplayInNewTabPage(
             extension, profile)) {
@@ -861,10 +853,9 @@ AppLauncherHandler::CreateExtensionUninstallDialog() {
     browser = vivaldi::FindBrowserWithWebContents(web_ui()->GetWebContents());
     DCHECK(browser);
   }
-  extension_uninstall_dialog_.reset(
-      extensions::ExtensionUninstallDialog::Create(
-          extension_service_->profile(), browser->window()->GetNativeWindow(),
-          this));
+  extension_uninstall_dialog_ = extensions::ExtensionUninstallDialog::Create(
+      extension_service_->profile(), browser->window()->GetNativeWindow(),
+      this);
   return extension_uninstall_dialog_.get();
 }
 

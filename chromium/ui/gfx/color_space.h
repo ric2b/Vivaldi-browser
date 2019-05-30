@@ -105,7 +105,8 @@ class COLOR_SPACE_EXPORT ColorSpace {
     BT2020_NCL,
     BT2020_CL,
     YDZDX,
-    LAST = YDZDX,
+    GBR,
+    LAST = GBR,
   };
 
   enum class RangeID : uint8_t {
@@ -119,45 +120,71 @@ class COLOR_SPACE_EXPORT ColorSpace {
     LAST = DERIVED,
   };
 
-  ColorSpace();
+  constexpr ColorSpace() {}
   ColorSpace(PrimaryID primaries, TransferID transfer);
+  constexpr ColorSpace(PrimaryID primaries,
+                       TransferID transfer,
+                       MatrixID matrix,
+                       RangeID full_range)
+      : primaries_(primaries),
+        transfer_(transfer),
+        matrix_(matrix),
+        range_(full_range) {}
+
   ColorSpace(PrimaryID primaries,
-             TransferID transfer,
-             MatrixID matrix,
-             RangeID full_range);
-  ColorSpace(PrimaryID primaries,
-             const SkColorSpaceTransferFn& fn,
+             const skcms_TransferFunction& fn,
              MatrixID matrix,
              RangeID full_range);
   explicit ColorSpace(const SkColorSpace& sk_color_space);
-  ColorSpace(const ColorSpace& other);
-  ColorSpace(ColorSpace&& other);
-  ColorSpace& operator=(const ColorSpace& other);
-  ~ColorSpace();
 
   // Returns true if this is not the default-constructor object.
   bool IsValid() const;
 
-  static ColorSpace CreateSRGB();
-  static ColorSpace CreateDisplayP3D65();
-  static ColorSpace CreateCustom(const SkMatrix44& to_XYZD50,
-                                 TransferID transfer_id);
-  static ColorSpace CreateCustom(const SkMatrix44& to_XYZD50,
-                                 const SkColorSpaceTransferFn& fn);
-  static ColorSpace CreateXYZD50();
+  static constexpr ColorSpace CreateSRGB() {
+    return ColorSpace(PrimaryID::BT709, TransferID::IEC61966_2_1, MatrixID::RGB,
+                      RangeID::FULL);
+  }
+
+  static constexpr ColorSpace CreateDisplayP3D65() {
+    return ColorSpace(PrimaryID::SMPTEST432_1, TransferID::IEC61966_2_1,
+                      MatrixID::RGB, RangeID::FULL);
+  }
+  static ColorSpace CreateCustom(const skcms_Matrix3x3& to_XYZD50,
+                                 const skcms_TransferFunction& fn);
+  static constexpr ColorSpace CreateXYZD50() {
+    return ColorSpace(PrimaryID::XYZ_D50, TransferID::LINEAR, MatrixID::RGB,
+                      RangeID::FULL);
+  }
 
   // Extended sRGB matches sRGB for values in [0, 1], and extends the transfer
   // function to all real values.
-  static ColorSpace CreateExtendedSRGB();
+  static constexpr ColorSpace CreateExtendedSRGB() {
+    return ColorSpace(PrimaryID::BT709, TransferID::IEC61966_2_1_HDR,
+                      MatrixID::RGB, RangeID::FULL);
+  }
 
   // scRGB uses the same primaries as sRGB but has a linear transfer function
   // for all real values.
-  static ColorSpace CreateSCRGBLinear();
+  static constexpr ColorSpace CreateSCRGBLinear() {
+    return ColorSpace(PrimaryID::BT709, TransferID::LINEAR_HDR, MatrixID::RGB,
+                      RangeID::FULL);
+  }
 
   // TODO(ccameron): Remove these, and replace with more generic constructors.
-  static ColorSpace CreateJpeg();
-  static ColorSpace CreateREC601();
-  static ColorSpace CreateREC709();
+  static constexpr ColorSpace CreateJpeg() {
+    // TODO(ccameron): Determine which primaries and transfer function were
+    // intended here.
+    return ColorSpace(PrimaryID::BT709, TransferID::IEC61966_2_1,
+                      MatrixID::SMPTE170M, RangeID::FULL);
+  }
+  static constexpr ColorSpace CreateREC601() {
+    return ColorSpace(PrimaryID::SMPTE170M, TransferID::SMPTE170M,
+                      MatrixID::SMPTE170M, RangeID::LIMITED);
+  }
+  static constexpr ColorSpace CreateREC709() {
+    return ColorSpace(PrimaryID::BT709, TransferID::BT709, MatrixID::BT709,
+                      RangeID::LIMITED);
+  }
 
   // Generates a process global unique ID that can be used to key a color space.
   static int GetNextId();
@@ -211,20 +238,24 @@ class COLOR_SPACE_EXPORT ColorSpace {
   // Returns true if a close match is found.
   bool ToSkYUVColorSpace(SkYUVColorSpace* out) const;
 
+  void GetPrimaryMatrix(skcms_Matrix3x3* to_XYZD50) const;
   void GetPrimaryMatrix(SkMatrix44* to_XYZD50) const;
-  bool GetTransferFunction(SkColorSpaceTransferFn* fn) const;
-  bool GetInverseTransferFunction(SkColorSpaceTransferFn* fn) const;
+  bool GetTransferFunction(skcms_TransferFunction* fn) const;
+  bool GetInverseTransferFunction(skcms_TransferFunction* fn) const;
 
   // For most formats, this is the RGB to YUV matrix.
   void GetTransferMatrix(SkMatrix44* matrix) const;
   void GetRangeAdjustMatrix(SkMatrix44* matrix) const;
 
  private:
-  void SetCustomTransferFunction(const SkColorSpaceTransferFn& fn);
-  void SetCustomPrimaries(const SkMatrix44& to_XYZD50);
+  static void GetPrimaryMatrix(PrimaryID, skcms_Matrix3x3* to_XYZD50);
+  static bool GetTransferFunction(TransferID, skcms_TransferFunction* fn);
+
+  void SetCustomTransferFunction(const skcms_TransferFunction& fn);
+  void SetCustomPrimaries(const skcms_Matrix3x3& to_XYZD50);
 
   // Returns true if the transfer function is defined by an
-  // SkColorSpaceTransferFn which is extended to all real values.
+  // skcms_TransferFunction which is extended to all real values.
   bool HasExtendedSkTransferFn() const;
 
   PrimaryID primaries_ = PrimaryID::INVALID;
@@ -236,7 +267,7 @@ class COLOR_SPACE_EXPORT ColorSpace {
   float custom_primary_matrix_[9] = {0, 0, 0, 0, 0, 0, 0, 0};
 
   // Only used if transfer_ is TransferID::CUSTOM. This array consists of the A
-  // through G entries of the SkColorSpaceTransferFn structure in alphabetical
+  // through G entries of the skcms_TransferFunction structure in alphabetical
   // order.
   float custom_transfer_params_[7] = {0, 0, 0, 0, 0, 0, 0};
 

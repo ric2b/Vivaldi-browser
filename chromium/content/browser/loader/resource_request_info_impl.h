@@ -20,6 +20,7 @@
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/common/referrer.h"
+#include "content/public/common/resource_intercept_policy.h"
 #include "content/public/common/resource_type.h"
 #include "net/base/load_states.h"
 #include "services/network/public/cpp/resource_request_body.h"
@@ -38,10 +39,6 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
  public:
   // Returns the ResourceRequestInfoImpl associated with the given URLRequest.
   CONTENT_EXPORT static ResourceRequestInfoImpl* ForRequest(
-      net::URLRequest* request);
-
-  // And, a const version for cases where you only need read access.
-  CONTENT_EXPORT static const ResourceRequestInfoImpl* ForRequest(
       const net::URLRequest* request);
 
   CONTENT_EXPORT ResourceRequestInfoImpl(
@@ -52,17 +49,18 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
       int request_id,
       int render_frame_id,
       bool is_main_frame,
+      const base::UnguessableToken& fetch_window_id,
       ResourceType resource_type,
       ui::PageTransition transition_type,
       bool is_download,
       bool is_stream,
-      bool allow_download,
+      ResourceInterceptPolicy resource_intercept_policy,
       bool has_user_gesture,
       bool enable_load_timing,
       bool enable_upload_progress,
       bool do_not_prompt_for_login,
       bool keepalive,
-      blink::WebReferrerPolicy referrer_policy,
+      network::mojom::ReferrerPolicy referrer_policy,
       bool is_prerendering,
       ResourceContext* context,
       bool report_raw_headers,
@@ -74,41 +72,38 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   ~ResourceRequestInfoImpl() override;
 
   // ResourceRequestInfo implementation:
-  WebContentsGetter GetWebContentsGetterForRequest() const override;
-  FrameTreeNodeIdGetter GetFrameTreeNodeIdGetterForRequest() const override;
-  ResourceContext* GetContext() const override;
-  int GetChildID() const override;
-  int GetRouteID() const override;
-  GlobalRequestID GetGlobalRequestID() const override;
-  int GetPluginChildID() const override;
-  int GetRenderFrameID() const override;
-  int GetFrameTreeNodeId() const override;
-  bool IsMainFrame() const override;
-  ResourceType GetResourceType() const override;
-  int GetProcessType() const override;
-  blink::WebReferrerPolicy GetReferrerPolicy() const override;
-  bool IsPrerendering() const override;
-  ui::PageTransition GetPageTransition() const override;
-  bool HasUserGesture() const override;
+  WebContentsGetter GetWebContentsGetterForRequest() override;
+  FrameTreeNodeIdGetter GetFrameTreeNodeIdGetterForRequest() override;
+  ResourceContext* GetContext() override;
+  int GetChildID() override;
+  int GetRouteID() override;
+  GlobalRequestID GetGlobalRequestID() override;
+  int GetPluginChildID() override;
+  int GetRenderFrameID() override;
+  int GetFrameTreeNodeId() override;
+  bool IsMainFrame() override;
+  ResourceType GetResourceType() override;
+  network::mojom::ReferrerPolicy GetReferrerPolicy() override;
+  bool IsPrerendering() override;
+  ui::PageTransition GetPageTransition() override;
+  bool HasUserGesture() override;
   bool GetAssociatedRenderFrame(int* render_process_id,
-                                int* render_frame_id) const override;
-  bool IsAsync() const override;
-  bool IsDownload() const override;
+                                int* render_frame_id) override;
+  bool IsAsync() override;
+  bool IsDownload() override;
   // Returns a bitmask of potentially several Previews optimizations.
-  PreviewsState GetPreviewsState() const override;
-  void SetPreviewsState(PreviewsState previews_state) override;
-  NavigationUIData* GetNavigationUIData() const override;
-  DevToolsStatus GetDevToolsStatus() const override;
+  PreviewsState GetPreviewsState() override;
+  NavigationUIData* GetNavigationUIData() override;
   void SetResourceRequestBlockedReason(
       blink::ResourceRequestBlockedReason reason) override;
   base::Optional<blink::ResourceRequestBlockedReason>
-  GetResourceRequestBlockedReason() const override;
-  base::StringPiece GetCustomCancelReason() const override;
+  GetResourceRequestBlockedReason() override;
+  base::StringPiece GetCustomCancelReason() override;
 
   CONTENT_EXPORT void AssociateWithRequest(net::URLRequest* request);
 
   CONTENT_EXPORT int GetRequestID() const;
-  GlobalRoutingID GetGlobalRoutingID() const;
+  GlobalRoutingID GetGlobalRoutingID();
 
   // Returns true if raw response headers (including sensitive data such as
   // cookies) should be included with the response.
@@ -136,8 +131,9 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   }
   bool keepalive() const { return keepalive_; }
 
-  // Downloads are allowed only as a top level request.
-  bool allow_download() const { return allow_download_; }
+  ResourceInterceptPolicy resource_intercept_policy() const {
+    return resource_intercept_policy_;
+  }
 
   // Whether this is a download.
   void set_is_download(bool download) { is_download_ = download; }
@@ -187,10 +183,6 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
     navigation_ui_data_ = std::move(navigation_ui_data);
   }
 
-  void set_devtools_status(DevToolsStatus devtools_status) {
-    devtools_status_ = devtools_status;
-  }
-
   void SetBlobHandles(BlobHandles blob_handles);
 
   bool blocked_response_from_reaching_renderer() const {
@@ -214,6 +206,10 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
 
   void set_first_auth_attempt(bool first_auth_attempt) {
     first_auth_attempt_ = first_auth_attempt;
+  }
+
+  const base::UnguessableToken& fetch_window_id() const {
+    return fetch_window_id_;
   }
 
   // Vivaldi specific
@@ -246,9 +242,10 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   int request_id_;
   int render_frame_id_;
   bool is_main_frame_;
+  base::UnguessableToken fetch_window_id_;
   bool is_download_;
   bool is_stream_;
-  bool allow_download_;
+  ResourceInterceptPolicy resource_intercept_policy_;
   bool has_user_gesture_;
   bool enable_load_timing_;
   bool enable_upload_progress_;
@@ -258,13 +255,12 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   ResourceType resource_type_;
   ui::PageTransition transition_type_;
   int memory_cost_;
-  blink::WebReferrerPolicy referrer_policy_;
+  network::mojom::ReferrerPolicy referrer_policy_;
   bool is_prerendering_;
   ResourceContext* context_;
   bool report_raw_headers_;
   bool report_security_info_;
   bool is_async_;
-  DevToolsStatus devtools_status_;
   base::Optional<blink::ResourceRequestBlockedReason>
       resource_request_blocked_reason_;
   PreviewsState previews_state_;

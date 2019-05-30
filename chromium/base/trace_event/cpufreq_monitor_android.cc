@@ -26,7 +26,7 @@ namespace trace_event {
 namespace {
 
 const size_t kNumBytesToReadForSampling = 32;
-const char kTraceCategory[] = TRACE_DISABLED_BY_DEFAULT("power");
+constexpr const char kTraceCategory[] = TRACE_DISABLED_BY_DEFAULT("power");
 const char kEventTitle[] = "CPU Frequency";
 
 }  // namespace
@@ -119,9 +119,7 @@ CPUFreqMonitor::CPUFreqMonitor()
     : CPUFreqMonitor(std::make_unique<CPUFreqMonitorDelegate>()) {}
 
 CPUFreqMonitor::CPUFreqMonitor(std::unique_ptr<CPUFreqMonitorDelegate> delegate)
-    : delegate_(std::move(delegate)), weak_ptr_factory_(this) {
-  TRACE_EVENT_WARMUP_CATEGORY(kTraceCategory);
-}
+    : delegate_(std::move(delegate)), weak_ptr_factory_(this) {}
 
 CPUFreqMonitor::~CPUFreqMonitor() {
   Stop();

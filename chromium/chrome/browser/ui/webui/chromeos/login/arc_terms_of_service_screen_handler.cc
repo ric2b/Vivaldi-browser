@@ -18,9 +18,9 @@
 #include "chrome/browser/consent_auditor/consent_auditor_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
@@ -28,9 +28,10 @@
 #include "components/consent_auditor/consent_auditor.h"
 #include "components/login/localized_values_builder.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/signin_manager_base.h"
+#include "components/user_manager/user_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
+#include "services/identity/public/cpp/identity_manager.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using ArcBackupAndRestoreConsent =
@@ -50,8 +51,11 @@ const char kJsScreenPath[] = "login.ArcTermsOfServiceScreen";
 
 namespace chromeos {
 
-ArcTermsOfServiceScreenHandler::ArcTermsOfServiceScreenHandler()
-    : BaseScreenHandler(kScreenId) {
+ArcTermsOfServiceScreenHandler::ArcTermsOfServiceScreenHandler(
+    JSCallsContainer* js_calls_container)
+    : BaseScreenHandler(kScreenId, js_calls_container),
+      is_child_account_(
+          user_manager::UserManager::Get()->IsLoggedInAsChildUser()) {
   set_call_js_prefix(kJsScreenPath);
 }
 
@@ -84,7 +88,7 @@ void ArcTermsOfServiceScreenHandler::MaybeLoadPlayStoreToS(
   if (!ignore_network_state && !default_network)
     return;
   const std::string country_code = base::CountryCodeForCurrentTimezone();
-  CallJS("loadPlayStoreToS", country_code);
+  CallJS("login.ArcTermsOfServiceScreen.loadPlayStoreToS", country_code);
 }
 
 void ArcTermsOfServiceScreenHandler::OnCurrentScreenChanged(
@@ -123,20 +127,31 @@ void ArcTermsOfServiceScreenHandler::DeclareLocalizedValues(
   builder->Add("arcTermsOfServiceNextButton",
                IDS_ARC_OPT_IN_DIALOG_BUTTON_NEXT);
   builder->Add("arcPolicyLink", IDS_ARC_OPT_IN_PRIVACY_POLICY_LINK);
-  builder->Add("arcTextBackupRestore", IDS_ARC_OPT_IN_DIALOG_BACKUP_RESTORE);
-  builder->Add("arcTextLocationService", IDS_ARC_OPT_IN_LOCATION_SETTING);
+  builder->Add("arcTextBackupRestore",
+               is_child_account_ ? IDS_ARC_OPT_IN_DIALOG_BACKUP_RESTORE_CHILD
+                                 : IDS_ARC_OPT_IN_DIALOG_BACKUP_RESTORE);
+  builder->Add("arcTextLocationService",
+               is_child_account_ ? IDS_ARC_OPT_IN_LOCATION_SETTING_CHILD
+                                 : IDS_ARC_OPT_IN_LOCATION_SETTING);
   builder->Add("arcTextPaiService", IDS_ARC_OPT_IN_PAI);
   builder->Add("arcTextGoogleServiceConfirmation",
                IDS_ARC_OPT_IN_GOOGLE_SERVICE_CONFIRMATION);
+  builder->Add("arcTextReviewSettings", IDS_ARC_REVIEW_SETTINGS);
   builder->Add("arcTextMetricsManagedEnabled",
                IDS_ARC_OOBE_TERMS_DIALOG_METRICS_MANAGED_ENABLED);
   builder->Add("arcAcceptAndContinueGoogleServiceConfirmation",
                IDS_ARC_OPT_IN_ACCEPT_AND_CONTINUE_GOOGLE_SERVICE_CONFIRMATION);
-  builder->Add("arcLearnMoreStatistics", IDS_ARC_OPT_IN_LEARN_MORE_STATISTICS);
+  builder->Add("arcLearnMoreStatistics",
+               is_child_account_ ? IDS_ARC_OPT_IN_LEARN_MORE_STATISTICS_CHILD
+                                 : IDS_ARC_OPT_IN_LEARN_MORE_STATISTICS);
   builder->Add("arcLearnMoreLocationService",
-      IDS_ARC_OPT_IN_LEARN_MORE_LOCATION_SERVICES);
+               is_child_account_
+                   ? IDS_ARC_OPT_IN_LEARN_MORE_LOCATION_SERVICES_CHILD
+                   : IDS_ARC_OPT_IN_LEARN_MORE_LOCATION_SERVICES);
   builder->Add("arcLearnMoreBackupAndRestore",
-      IDS_ARC_OPT_IN_LEARN_MORE_BACKUP_AND_RESTORE);
+               is_child_account_
+                   ? IDS_ARC_OPT_IN_LEARN_MORE_BACKUP_AND_RESTORE_CHILD
+                   : IDS_ARC_OPT_IN_LEARN_MORE_BACKUP_AND_RESTORE);
   builder->Add("arcLearnMorePaiService", IDS_ARC_OPT_IN_LEARN_MORE_PAI_SERVICE);
   builder->Add("arcOverlayClose", IDS_ARC_OOBE_TERMS_POPUP_HELP_CLOSE_BUTTON);
   builder->Add("arcOverlayLoading", IDS_ARC_POPUP_HELP_LOADING);
@@ -159,30 +174,41 @@ void ArcTermsOfServiceScreenHandler::OnMetricsModeChanged(bool enabled,
   // managed flag.
   const bool owner_profile = !owner.is_valid() || user->GetAccountId() == owner;
 
-  if (owner_profile && !managed && !enabled) {
-    CallJS("setMetricsMode", base::string16(), false);
+  int message_id;
+  if (owner_profile && !managed) {
+    if (is_child_account_) {
+      message_id = enabled ? IDS_ARC_OOBE_TERMS_DIALOG_METRICS_ENABLED_CHILD
+                           : IDS_ARC_OOBE_TERMS_DIALOG_METRICS_DISABLED_CHILD;
+    } else {
+      message_id = enabled ? IDS_ARC_OOBE_TERMS_DIALOG_METRICS_ENABLED
+                           : IDS_ARC_OOBE_TERMS_DIALOG_METRICS_DISABLED;
+    }
   } else {
-    int message_id;
-    if (owner_profile && !managed) {
-      message_id = IDS_ARC_OOBE_TERMS_DIALOG_METRICS_ENABLED;
+    if (is_child_account_) {
+      message_id =
+          enabled ? IDS_ARC_OOBE_TERMS_DIALOG_METRICS_MANAGED_ENABLED_CHILD
+                  : IDS_ARC_OOBE_TERMS_DIALOG_METRICS_MANAGED_DISABLED_CHILD;
     } else {
       message_id = enabled ? IDS_ARC_OOBE_TERMS_DIALOG_METRICS_MANAGED_ENABLED
                            : IDS_ARC_OOBE_TERMS_DIALOG_METRICS_MANAGED_DISABLED;
     }
-    CallJS("setMetricsMode", l10n_util::GetStringUTF16(message_id), true);
   }
+  CallJS("login.ArcTermsOfServiceScreen.setMetricsMode",
+         l10n_util::GetStringUTF16(message_id), true);
 }
 
 void ArcTermsOfServiceScreenHandler::OnBackupAndRestoreModeChanged(
     bool enabled, bool managed) {
   backup_restore_managed_ = managed;
-  CallJS("setBackupAndRestoreMode", enabled, managed);
+  CallJS("login.ArcTermsOfServiceScreen.setBackupAndRestoreMode", enabled,
+         managed);
 }
 
 void ArcTermsOfServiceScreenHandler::OnLocationServicesModeChanged(
     bool enabled, bool managed) {
   location_services_managed_ = managed;
-  CallJS("setLocationServicesMode", enabled, managed);
+  CallJS("login.ArcTermsOfServiceScreen.setLocationServicesMode", enabled,
+         managed);
 }
 
 void ArcTermsOfServiceScreenHandler::AddObserver(
@@ -246,6 +272,8 @@ void ArcTermsOfServiceScreenHandler::DoShow() {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   CHECK(profile);
 
+  CallJS("login.ArcTermsOfServiceScreen.clearDemoMode");
+
   // Enable ARC to match ArcSessionManager logic. ArcSessionManager expects that
   // ARC is enabled (prefs::kArcEnabled = true) on showing Terms of Service. If
   // user accepts ToS then prefs::kArcEnabled is left activated. If user skips
@@ -255,7 +283,7 @@ void ArcTermsOfServiceScreenHandler::DoShow() {
   // Hide the Skip button if the ToS screen can not be skipped during OOBE.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kEnableArcOobeOptinNoSkip)) {
-    CallJS("hideSkipButton");
+    CallJS("login.ArcTermsOfServiceScreen.hideSkipButton");
   }
 
   action_taken_ = false;
@@ -263,7 +291,7 @@ void ArcTermsOfServiceScreenHandler::DoShow() {
   ShowScreen(kScreenId);
 
   arc_managed_ = arc::IsArcPlayStoreEnabledPreferenceManagedForProfile(profile);
-  CallJS("setArcManaged", arc_managed_);
+  CallJS("login.ArcTermsOfServiceScreen.setArcManaged", arc_managed_);
 
   MaybeLoadPlayStoreToS(true);
   StartNetworkAndTimeZoneObserving();
@@ -276,7 +304,7 @@ void ArcTermsOfServiceScreenHandler::DoShow() {
 void ArcTermsOfServiceScreenHandler::DoShowForDemoModeSetup() {
   DCHECK(arc::IsArcDemoModeSetupFlow());
 
-  CallJS("setupForDemoMode");
+  CallJS("login.ArcTermsOfServiceScreen.setupForDemoMode");
   action_taken_ = false;
   ShowScreen(kScreenId);
   MaybeLoadPlayStoreToS(true);
@@ -301,10 +329,9 @@ void ArcTermsOfServiceScreenHandler::RecordConsents(
   Profile* profile = ProfileManager::GetActiveUserProfile();
   consent_auditor::ConsentAuditor* consent_auditor =
       ConsentAuditorFactory::GetForProfile(profile);
-  SigninManagerBase* signin_manager =
-      SigninManagerFactory::GetForProfile(profile);
-  DCHECK(signin_manager->IsAuthenticated());
-  const std::string account_id = signin_manager->GetAuthenticatedAccountId();
+  auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
+  DCHECK(identity_manager->HasPrimaryAccount());
+  const std::string account_id = identity_manager->GetPrimaryAccountId();
 
   ArcPlayTermsOfServiceConsent play_consent;
   play_consent.set_status(tos_accepted ? UserConsentTypes::GIVEN
@@ -323,7 +350,8 @@ void ArcTermsOfServiceScreenHandler::RecordConsents(
     backup_and_restore_consent.set_confirmation_grd_id(
         IDS_ARC_OOBE_TERMS_BUTTON_ACCEPT);
     backup_and_restore_consent.add_description_grd_ids(
-        IDS_ARC_OPT_IN_DIALOG_BACKUP_RESTORE);
+        is_child_account_ ? IDS_ARC_OPT_IN_DIALOG_BACKUP_RESTORE_CHILD
+                          : IDS_ARC_OPT_IN_DIALOG_BACKUP_RESTORE);
     backup_and_restore_consent.set_status(backup_accepted
                                               ? UserConsentTypes::GIVEN
                                               : UserConsentTypes::NOT_GIVEN);
@@ -337,7 +365,8 @@ void ArcTermsOfServiceScreenHandler::RecordConsents(
     location_service_consent.set_confirmation_grd_id(
         IDS_ARC_OOBE_TERMS_BUTTON_ACCEPT);
     location_service_consent.add_description_grd_ids(
-        IDS_ARC_OPT_IN_LOCATION_SETTING);
+        is_child_account_ ? IDS_ARC_OPT_IN_LOCATION_SETTING
+                          : IDS_ARC_OPT_IN_LOCATION_SETTING);
     location_service_consent.set_status(location_accepted
                                             ? UserConsentTypes::GIVEN
                                             : UserConsentTypes::NOT_GIVEN);
@@ -367,10 +396,11 @@ void ArcTermsOfServiceScreenHandler::HandleSkip(
 void ArcTermsOfServiceScreenHandler::HandleAccept(
     bool enable_backup_restore,
     bool enable_location_services,
+    bool review_arc_settings,
     const std::string& tos_content) {
   if (arc::IsArcDemoModeSetupFlow()) {
     for (auto& observer : observer_list_)
-      observer.OnAccept();
+      observer.OnAccept(false);
     // TODO(agawronska): Record consent.
     return;
   }
@@ -388,7 +418,7 @@ void ArcTermsOfServiceScreenHandler::HandleAccept(
                  !location_services_managed_, enable_location_services);
 
   for (auto& observer : observer_list_)
-    observer.OnAccept();
+    observer.OnAccept(review_arc_settings);
 }
 
 }  // namespace chromeos

@@ -114,7 +114,7 @@ void XmlUnitTestResultPrinter::OnTestEnd(const testing::TestInfo& test_info) {
 
   if (test_info.result()->total_part_count() > limit) {
     WriteTestPartResult(
-        "<unknown>", 0, testing::TestPartResult::kNonFatalFailure,
+        "unknown", 0, testing::TestPartResult::kNonFatalFailure,
         kTestPartLesultsLimitExceeded, kTestPartLesultsLimitExceeded);
   }
 
@@ -144,6 +144,9 @@ void XmlUnitTestResultPrinter::WriteTestPartResult(
       break;
     case testing::TestPartResult::kFatalFailure:
       type = "fatal_failure";
+      break;
+    case testing::TestPartResult::kSkip:
+      type = "skip";
       break;
   }
   std::string summary_encoded;

@@ -9,14 +9,14 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/power_monitor/power_observer.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "gpu/command_buffer/service/progress_reporter.h"
 #include "gpu/ipc/service/gpu_ipc_service_export.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/gl/progress_reporter.h"
 
 #if defined(USE_X11)
 #include <sys/poll.h>
@@ -28,10 +28,9 @@ namespace gpu {
 
 // A thread that intermitently sends tasks to a group of watched message loops
 // and deliberately crashes if one of them does not respond after a timeout.
-class GPU_IPC_SERVICE_EXPORT GpuWatchdogThread
-    : public base::Thread,
-      public base::PowerObserver,
-      public gles2::ProgressReporter {
+class GPU_IPC_SERVICE_EXPORT GpuWatchdogThread : public base::Thread,
+                                                 public base::PowerObserver,
+                                                 public gl::ProgressReporter {
  public:
   ~GpuWatchdogThread() override;
 
@@ -43,7 +42,7 @@ class GPU_IPC_SERVICE_EXPORT GpuWatchdogThread
   // any thread.
   void AddPowerObserver();
 
-  // gles2::ProgressReporter implementation:
+  // gl::ProgressReporter implementation:
   void ReportProgress() override;
 
   // Notifies the watchdog when Chrome is backgrounded / foregrounded. Should
@@ -64,12 +63,13 @@ class GPU_IPC_SERVICE_EXPORT GpuWatchdogThread
  private:
   // An object of this type intercepts the reception and completion of all tasks
   // on the watched thread and checks whether the watchdog is armed.
-  class GpuWatchdogTaskObserver : public base::MessageLoop::TaskObserver {
+  class GpuWatchdogTaskObserver
+      : public base::MessageLoopCurrent::TaskObserver {
    public:
     explicit GpuWatchdogTaskObserver(GpuWatchdogThread* watchdog);
     ~GpuWatchdogTaskObserver() override;
 
-    // Implements MessageLoop::TaskObserver.
+    // Implements MessageLoopCurrent::TaskObserver.
     void WillProcessTask(const base::PendingTask& pending_task) override;
     void DidProcessTask(const base::PendingTask& pending_task) override;
 
@@ -143,7 +143,7 @@ class GPU_IPC_SERVICE_EXPORT GpuWatchdogThread
   int GetActiveTTY() const;
 #endif
 
-  base::MessageLoop* watched_message_loop_;
+  scoped_refptr<base::SingleThreadTaskRunner> watched_task_runner_;
   base::TimeDelta timeout_;
   bool armed_;
   GpuWatchdogTaskObserver task_observer_;

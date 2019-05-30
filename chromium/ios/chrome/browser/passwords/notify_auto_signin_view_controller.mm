@@ -9,8 +9,8 @@
 #include "components/image_fetcher/core/image_fetcher_impl.h"
 #include "components/image_fetcher/ios/ios_image_decoder_impl.h"
 #include "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/ui/rtl_geometry.h"
-#include "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/rtl_geometry.h"
+#include "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -24,6 +24,8 @@
 namespace {
 
 constexpr int kBackgroundColor = 0x4285F4;
+
+const char kImageFetcherUmaClient[] = "NotifyAutoSignin";
 
 // NetworkTrafficAnnotationTag for fetching avatar.
 const net::NetworkTrafficAnnotationTag kTrafficAnnotation =
@@ -145,15 +147,17 @@ const net::NetworkTrafficAnnotationTag kTrafficAnnotation =
   // Fetch user's avatar and update displayed image.
   if (self.iconURL.is_valid()) {
     __weak NotifyUserAutoSigninViewController* weakSelf = self;
+    image_fetcher::ImageFetcherParams params(kTrafficAnnotation,
+                                             kImageFetcherUmaClient);
     _imageFetcher->FetchImage(
-        _iconURL.spec(), _iconURL,
-        base::BindOnce(^(const std::string& id, const gfx::Image& image,
+        _iconURL,
+        base::BindOnce(^(const gfx::Image& image,
                          const image_fetcher::RequestMetadata& metadata) {
           if (!image.IsEmpty()) {
             weakSelf.avatarView.image = [image.ToUIImage() copy];
           }
         }),
-        kTrafficAnnotation);
+        params);
   }
 }
 

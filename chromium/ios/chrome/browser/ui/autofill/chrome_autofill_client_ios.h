@@ -11,9 +11,12 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "components/autofill/core/browser/autocomplete_history_manager.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/card_unmask_delegate.h"
+#include "components/autofill/core/browser/legacy_strike_database.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/autofill/core/browser/strike_database.h"
 #include "components/autofill/core/browser/ui/card_unmask_prompt_controller_impl.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #import "components/autofill/ios/browser/autofill_client_ios_bridge.h"
@@ -42,15 +45,23 @@ class ChromeAutofillClientIOS : public AutofillClient {
   // Sets a weak reference to the view controller used to present UI.
   void SetBaseViewController(UIViewController* base_view_controller);
 
-  // AutofillClientIOS implementation.
+  // AutofillClient:
+  version_info::Channel GetChannel() const override;
   PersonalDataManager* GetPersonalDataManager() override;
+  AutocompleteHistoryManager* GetAutocompleteHistoryManager() override;
   PrefService* GetPrefs() override;
   syncer::SyncService* GetSyncService() override;
   identity::IdentityManager* GetIdentityManager() override;
+  FormDataImporter* GetFormDataImporter() override;
+  payments::PaymentsClient* GetPaymentsClient() override;
+  LegacyStrikeDatabase* GetLegacyStrikeDatabase() override;
+  StrikeDatabase* GetStrikeDatabase() override;
   ukm::UkmRecorder* GetUkmRecorder() override;
   ukm::SourceId GetUkmSourceId() override;
   AddressNormalizer* GetAddressNormalizer() override;
   security_state::SecurityLevel GetSecurityLevelForUmaHistograms() override;
+  std::string GetPageLanguage() const override;
+
   void ShowAutofillSettings(bool show_credit_card_settings) override;
   void ShowUnmaskPrompt(const CreditCard& card,
                         UnmaskCardReason reason,
@@ -60,21 +71,27 @@ class ChromeAutofillClientIOS : public AutofillClient {
       base::OnceClosure show_migration_dialog_closure) override;
   void ConfirmMigrateLocalCardToCloud(
       std::unique_ptr<base::DictionaryValue> legal_message,
-      std::vector<MigratableCreditCard>& migratable_credit_cards,
-      base::OnceClosure start_migrating_cards_closure) override;
+      const std::string& user_email,
+      const std::vector<MigratableCreditCard>& migratable_credit_cards,
+      LocalCardMigrationCallback start_migrating_cards_callback) override;
+  void ShowLocalCardMigrationResults(
+      const bool has_server_error,
+      const base::string16& tip_message,
+      const std::vector<MigratableCreditCard>& migratable_credit_cards,
+      MigrationDeleteCardCallback delete_local_card_callback) override;
   void ConfirmSaveAutofillProfile(const AutofillProfile& profile,
                                   base::OnceClosure callback) override;
-  void ConfirmSaveCreditCardLocally(const CreditCard& card,
-                                    const base::Closure& callback) override;
+  void ConfirmSaveCreditCardLocally(
+      const CreditCard& card,
+      SaveCreditCardOptions options,
+      LocalSaveCardPromptCallback callback) override;
   void ConfirmSaveCreditCardToCloud(
       const CreditCard& card,
       std::unique_ptr<base::DictionaryValue> legal_message,
-      bool should_request_name_from_user,
-      base::OnceCallback<void(const base::string16&)> callback) override;
+      SaveCreditCardOptions options,
+      UploadSaveCardPromptCallback callback) override;
   void ConfirmCreditCardFillAssist(const CreditCard& card,
-                                   const base::Closure& callback) override;
-  void LoadRiskData(
-      const base::Callback<void(const std::string&)>& callback) override;
+                                   base::OnceClosure callback) override;
   bool HasCreditCardScanFeature() override;
   void ScanCreditCard(const CreditCardScanCallback& callback) override;
   void ShowAutofillPopup(
@@ -83,31 +100,36 @@ class ChromeAutofillClientIOS : public AutofillClient {
       const std::vector<Suggestion>& suggestions,
       bool /*unused_autoselect_first_suggestion*/,
       base::WeakPtr<AutofillPopupDelegate> delegate) override;
-  void HideAutofillPopup() override;
-  bool IsAutocompleteEnabled() override;
   void UpdateAutofillPopupDataListValues(
       const std::vector<base::string16>& values,
       const std::vector<base::string16>& labels) override;
+  void HideAutofillPopup() override;
+  bool IsAutocompleteEnabled() override;
   void PropagateAutofillPredictions(
       content::RenderFrameHost* rfh,
       const std::vector<FormStructure*>& forms) override;
   void DidFillOrPreviewField(const base::string16& autofilled_value,
                              const base::string16& profile_full_name) override;
-  scoped_refptr<AutofillWebDataService> GetDatabase() override;
-  void DidInteractWithNonsecureCreditCardInput() override;
   bool IsContextSecure() override;
   bool ShouldShowSigninPromo() override;
-  bool IsAutofillSupported() override;
   bool AreServerCardsSupported() override;
   void ExecuteCommand(int id) override;
+
+  // RiskDataLoader:
+  void LoadRiskData(
+      base::OnceCallback<void(const std::string&)> callback) override;
 
  private:
   PrefService* pref_service_;
   syncer::SyncService* sync_service_;
   PersonalDataManager* personal_data_manager_;
+  AutocompleteHistoryManager* autocomplete_history_manager_;
+  ios::ChromeBrowserState* browser_state_;
   web::WebState* web_state_;
   __weak id<AutofillClientIOSBridge> bridge_;
   identity::IdentityManager* identity_manager_;
+  std::unique_ptr<payments::PaymentsClient> payments_client_;
+  std::unique_ptr<FormDataImporter> form_data_importer_;
   scoped_refptr<AutofillWebDataService> autofill_web_data_service_;
   infobars::InfoBarManager* infobar_manager_;
   password_manager::PasswordGenerationManager* password_generation_manager_;

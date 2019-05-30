@@ -6,10 +6,13 @@
 #include <memory>
 #include <string>
 
+#include "third_party/blink/public/platform/web_float_point.h"
+
 class Browser;
 
 namespace content {
 class BrowserContext;
+class WebContents;
 }
 
 namespace base {
@@ -31,6 +34,12 @@ double MilliSecondsFromTime(const base::Time& time);
 
 // Return time from milliseconds
 base::Time GetTime(double ms_from_epoch);
+
+blink::WebFloatPoint FromUICoordinates(content::WebContents* web_contents,
+                                       blink::WebFloatPoint p);
+
+blink::WebFloatPoint ToUICoordinates(content::WebContents* web_contents,
+                                     blink::WebFloatPoint p);
 
 }  // namespace vivaldi
 

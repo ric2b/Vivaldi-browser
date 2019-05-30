@@ -10,10 +10,11 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/guid.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -27,6 +28,7 @@
 #include "content/browser/indexed_db/indexed_db_tracing.h"
 #include "content/browser/indexed_db/indexed_db_transaction.h"
 #include "content/browser/indexed_db/indexed_db_value.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/strong_associated_binding.h"
 #include "storage/browser/blob/blob_data_builder.h"
@@ -91,59 +93,51 @@ class SafeIOThreadCursorWrapper {
   DISALLOW_COPY_AND_ASSIGN(SafeIOThreadCursorWrapper);
 };
 
-void ConvertBlobInfo(
-    const std::vector<IndexedDBBlobInfo>& blob_info,
-    std::vector<blink::mojom::IDBBlobInfoPtr>* blob_or_file_info) {
-  blob_or_file_info->reserve(blob_info.size());
-  for (const auto& iter : blob_info) {
-    if (!iter.mark_used_callback().is_null())
-      iter.mark_used_callback().Run();
-
-    auto info = blink::mojom::IDBBlobInfo::New();
-    info->mime_type = iter.type();
-    info->size = iter.size();
-    if (iter.is_file()) {
-      info->file = blink::mojom::IDBFileInfo::New();
-      info->file->name = iter.file_name();
-      info->file->path = iter.file_path();
-      info->file->last_modified = iter.last_modified();
-    }
-    blob_or_file_info->push_back(std::move(info));
+std::unique_ptr<storage::BlobDataHandle> CreateBlobData(
+    std::string uuid,
+    storage::BlobStorageContext* blob_context,
+    base::SequencedTaskRunner* idb_runner,
+    const IndexedDBBlobInfo& blob_info) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (blob_info.blob_handle()) {
+    // We're sending back a live blob, not a reference into our backing store.
+    return std::make_unique<storage::BlobDataHandle>(*blob_info.blob_handle());
   }
-}
-
-// Destructively converts an IndexedDBReturnValue to a Mojo ReturnValue.
-blink::mojom::IDBReturnValuePtr ConvertReturnValue(
-    IndexedDBReturnValue* value) {
-  auto mojo_value = blink::mojom::IDBReturnValue::New();
-  mojo_value->value = blink::mojom::IDBValue::New();
-  if (value->primary_key.IsValid()) {
-    mojo_value->primary_key = value->primary_key;
-    mojo_value->key_path = value->key_path;
+  scoped_refptr<ShareableFileReference> shareable_file =
+      ShareableFileReference::Get(blob_info.file_path());
+  if (!shareable_file) {
+    shareable_file = ShareableFileReference::GetOrCreate(
+        blob_info.file_path(),
+        ShareableFileReference::DONT_DELETE_ON_FINAL_RELEASE, idb_runner);
+    if (!blob_info.release_callback().is_null())
+      shareable_file->AddFinalReleaseCallback(blob_info.release_callback());
   }
-  if (!value->empty())
-    swap(mojo_value->value->bits, value->bits);
-  ConvertBlobInfo(value->blob_info, &mojo_value->value->blob_or_file_info);
-  return mojo_value;
+  auto blob_data_builder = std::make_unique<storage::BlobDataBuilder>(uuid);
+  blob_data_builder->set_content_type(base::UTF16ToUTF8(blob_info.type()));
+  blob_data_builder->AppendFile(blob_info.file_path(), 0, blob_info.size(),
+                                blob_info.last_modified());
+  return blob_context->AddFinishedBlob(std::move(blob_data_builder));
 }
 
 }  // namespace
 
-// Expected to be created and called from IO thread.
-class IndexedDBCallbacks::IOThreadHelper {
+// TODO(cmp): Flatten calls / remove this class once IDB task runner CL settles.
+class IndexedDBCallbacks::Helper {
  public:
-  IOThreadHelper(IDBCallbacksAssociatedPtrInfo callbacks_info,
-                 base::WeakPtr<IndexedDBDispatcherHost> dispatcher_host,
-                 url::Origin origin,
-                 scoped_refptr<base::SequencedTaskRunner> idb_runner);
-  ~IOThreadHelper();
+  Helper(IDBCallbacksAssociatedPtrInfo callbacks_info,
+         base::WeakPtr<IndexedDBDispatcherHost> dispatcher_host,
+         url::Origin origin,
+         scoped_refptr<base::SequencedTaskRunner> idb_runner);
+  ~Helper();
 
   void SendError(const IndexedDBDatabaseError& error);
+  void SendSuccessNamesAndVersionsList(
+      std::vector<blink::mojom::IDBNameAndVersionPtr> names_and_versions);
   void SendSuccessStringList(const std::vector<base::string16>& value);
   void SendBlocked(int64_t existing_version);
   void SendUpgradeNeeded(SafeIOThreadConnectionWrapper connection,
                          int64_t old_version,
-                         blink::WebIDBDataLoss data_loss,
+                         blink::mojom::IDBDataLoss data_loss,
                          const std::string& data_loss_message,
                          const IndexedDBDatabaseMetadata& metadata);
   void SendSuccessDatabase(SafeIOThreadConnectionWrapper connection,
@@ -172,11 +166,6 @@ class IndexedDBCallbacks::IOThreadHelper {
   void SendSuccessInteger(int64_t value);
   void SendSuccess();
 
-  std::unique_ptr<storage::BlobDataHandle> CreateBlobData(
-      const IndexedDBBlobInfo& blob_info);
-  bool CreateAllBlobs(
-      const std::vector<IndexedDBBlobInfo>& blob_info,
-      std::vector<blink::mojom::IDBBlobInfoPtr>* blob_or_file_info);
   void OnConnectionError();
 
  private:
@@ -184,18 +173,100 @@ class IndexedDBCallbacks::IOThreadHelper {
   blink::mojom::IDBCallbacksAssociatedPtr callbacks_;
   url::Origin origin_;
   scoped_refptr<base::SequencedTaskRunner> idb_runner_;
-
-  DISALLOW_COPY_AND_ASSIGN(IOThreadHelper);
+  SEQUENCE_CHECKER(sequence_checker_);
+  DISALLOW_COPY_AND_ASSIGN(Helper);
 };
 
+IndexedDBCallbacks::IndexedDBValueBlob::IndexedDBValueBlob(
+    const IndexedDBBlobInfo& blob_info,
+    blink::mojom::IDBBlobInfoPtr* blob_or_file_info)
+    : blob_info_(blob_info) {
+  if (blob_info_.blob_handle()) {
+    uuid_ = blob_info_.blob_handle()->uuid();
+  } else {
+    uuid_ = base::GenerateGUID();
+  }
+  (*blob_or_file_info)->uuid = uuid_;
+  request_ = mojo::MakeRequest(&(*blob_or_file_info)->blob);
+}
+IndexedDBCallbacks::IndexedDBValueBlob::IndexedDBValueBlob(
+    IndexedDBValueBlob&& other) = default;
+IndexedDBCallbacks::IndexedDBValueBlob::~IndexedDBValueBlob() = default;
+
 // static
-blink::mojom::IDBValuePtr IndexedDBCallbacks::ConvertAndEraseValue(
-    IndexedDBValue* value) {
-  auto mojo_value = blink::mojom::IDBValue::New();
-  if (!value->empty())
-    swap(mojo_value->bits, value->bits);
-  ConvertBlobInfo(value->blob_info, &mojo_value->blob_or_file_info);
-  return mojo_value;
+void IndexedDBCallbacks::IndexedDBValueBlob::GetIndexedDBValueBlobs(
+    std::vector<IndexedDBValueBlob>* value_blobs,
+    const std::vector<IndexedDBBlobInfo>& blob_info,
+    std::vector<blink::mojom::IDBBlobInfoPtr>* blob_or_file_info) {
+  DCHECK(value_blobs);
+  DCHECK(blob_or_file_info);
+  DCHECK_EQ(blob_info.size(), blob_or_file_info->size());
+  value_blobs->reserve(value_blobs->size() + blob_info.size());
+  for (size_t i = 0; i < blob_info.size(); i++) {
+    value_blobs->push_back(
+        IndexedDBValueBlob(blob_info[i], &(*blob_or_file_info)[i]));
+  }
+}
+
+// static
+std::vector<IndexedDBCallbacks::IndexedDBValueBlob>
+IndexedDBCallbacks::IndexedDBValueBlob::GetIndexedDBValueBlobs(
+    const std::vector<IndexedDBBlobInfo>& blob_info,
+    std::vector<blink::mojom::IDBBlobInfoPtr>* blob_or_file_info) {
+  std::vector<IndexedDBValueBlob> value_blobs;
+  IndexedDBValueBlob::GetIndexedDBValueBlobs(&value_blobs, blob_info,
+                                             blob_or_file_info);
+  return value_blobs;
+}
+
+// static
+bool IndexedDBCallbacks::CreateAllBlobs(
+    scoped_refptr<ChromeBlobStorageContext> blob_context,
+    scoped_refptr<base::SequencedTaskRunner> idb_runner,
+    std::vector<IndexedDBValueBlob> value_blobs) {
+  DCHECK(idb_runner->RunsTasksInCurrentSequence());
+  IDB_TRACE("IndexedDBCallbacks::CreateAllBlobs");
+
+  if (value_blobs.empty())
+    return true;
+
+  // TODO(crbug.com/932869): Remove IO thread hop entirely.
+  base::WaitableEvent signal_when_finished(
+      base::WaitableEvent::ResetPolicy::AUTOMATIC,
+      base::WaitableEvent::InitialState::NOT_SIGNALED);
+  bool result;
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
+      base::BindOnce(
+          [](scoped_refptr<ChromeBlobStorageContext> inner_blob_context,
+             scoped_refptr<base::SequencedTaskRunner> inner_idb_runner,
+             std::vector<IndexedDBValueBlob> inner_value_blobs,
+             base::WaitableEvent* inner_signal_when_finished,
+             bool* inner_result) {
+            base::ScopedClosureRunner signal_runner(base::BindOnce(
+                [](base::WaitableEvent* signal) { signal->Signal(); },
+                inner_signal_when_finished));
+
+            if (!inner_blob_context) {
+              *inner_result = false;
+              return;
+            }
+
+            for (size_t i = 0; i < inner_value_blobs.size(); ++i) {
+              std::unique_ptr<storage::BlobDataHandle> blob_data =
+                  CreateBlobData(
+                      inner_value_blobs[i].uuid_, inner_blob_context->context(),
+                      inner_idb_runner.get(), inner_value_blobs[i].blob_info_);
+              storage::BlobImpl::Create(
+                  std::move(blob_data),
+                  std::move(inner_value_blobs[i].request_));
+            }
+            *inner_result = true;
+          },
+          std::move(blob_context), std::move(idb_runner),
+          std::move(value_blobs), &signal_when_finished, &result));
+  signal_when_finished.Wait();
+  return result;
 }
 
 IndexedDBCallbacks::IndexedDBCallbacks(
@@ -203,13 +274,13 @@ IndexedDBCallbacks::IndexedDBCallbacks(
     const url::Origin& origin,
     blink::mojom::IDBCallbacksAssociatedPtrInfo callbacks_info,
     scoped_refptr<base::SequencedTaskRunner> idb_runner)
-    : data_loss_(blink::kWebIDBDataLossNone),
-      io_helper_(new IOThreadHelper(std::move(callbacks_info),
-                                    std::move(dispatcher_host),
-                                    origin,
-                                    std::move(idb_runner))) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  DETACH_FROM_SEQUENCE(sequence_checker_);
+    : data_loss_(blink::mojom::IDBDataLoss::None),
+      helper_(new Helper(std::move(callbacks_info),
+                         std::move(dispatcher_host),
+                         origin,
+                         idb_runner)) {
+  DCHECK(idb_runner->RunsTasksInCurrentSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
 IndexedDBCallbacks::~IndexedDBCallbacks() {
@@ -220,53 +291,40 @@ void IndexedDBCallbacks::OnError(const IndexedDBDatabaseError& error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!complete_);
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&IOThreadHelper::SendError,
-                     base::Unretained(io_helper_.get()), error));
+  helper_->SendError(error);
   complete_ = true;
+}
 
-  if (!connection_open_start_time_.is_null()) {
-    UMA_HISTOGRAM_MEDIUM_TIMES(
-        "WebCore.IndexedDB.OpenTime.Error",
-        base::TimeTicks::Now() - connection_open_start_time_);
-    connection_open_start_time_ = base::TimeTicks();
-  }
+void IndexedDBCallbacks::OnSuccess(
+    std::vector<blink::mojom::IDBNameAndVersionPtr> names_and_versions) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!complete_);
+  DCHECK(helper_);
+
+  helper_->SendSuccessNamesAndVersionsList(std::move(names_and_versions));
+  complete_ = true;
 }
 
 void IndexedDBCallbacks::OnSuccess(const std::vector<base::string16>& value) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!complete_);
-  DCHECK(io_helper_);
+  DCHECK(helper_);
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&IOThreadHelper::SendSuccessStringList,
-                     base::Unretained(io_helper_.get()), value));
+  helper_->SendSuccessStringList(value);
   complete_ = true;
 }
 
 void IndexedDBCallbacks::OnBlocked(int64_t existing_version) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!complete_);
-  DCHECK(io_helper_);
+  DCHECK(helper_);
 
   if (sent_blocked_)
     return;
 
   sent_blocked_ = true;
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&IOThreadHelper::SendBlocked,
-                     base::Unretained(io_helper_.get()), existing_version));
-
-  if (!connection_open_start_time_.is_null()) {
-    UMA_HISTOGRAM_MEDIUM_TIMES(
-        "WebCore.IndexedDB.OpenTime.Blocked",
-        base::TimeTicks::Now() - connection_open_start_time_);
-    connection_open_start_time_ = base::TimeTicks();
-  }
+  helper_->SendBlocked(existing_version);
 }
 
 void IndexedDBCallbacks::OnUpgradeNeeded(
@@ -276,7 +334,7 @@ void IndexedDBCallbacks::OnUpgradeNeeded(
     const IndexedDBDataLossInfo& data_loss_info) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!complete_);
-  DCHECK(io_helper_);
+  DCHECK(helper_);
 
   DCHECK(!connection_created_);
 
@@ -284,19 +342,9 @@ void IndexedDBCallbacks::OnUpgradeNeeded(
   connection_created_ = true;
 
   SafeIOThreadConnectionWrapper wrapper(std::move(connection));
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&IOThreadHelper::SendUpgradeNeeded,
-                     base::Unretained(io_helper_.get()), std::move(wrapper),
-                     old_version, data_loss_info.status, data_loss_info.message,
-                     metadata));
-
-  if (!connection_open_start_time_.is_null()) {
-    UMA_HISTOGRAM_MEDIUM_TIMES(
-        "WebCore.IndexedDB.OpenTime.UpgradeNeeded",
-        base::TimeTicks::Now() - connection_open_start_time_);
-    connection_open_start_time_ = base::TimeTicks();
-  }
+  helper_->SendUpgradeNeeded(std::move(wrapper), old_version,
+                             data_loss_info.status, data_loss_info.message,
+                             metadata);
 }
 
 void IndexedDBCallbacks::OnSuccess(
@@ -304,7 +352,7 @@ void IndexedDBCallbacks::OnSuccess(
     const IndexedDBDatabaseMetadata& metadata) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!complete_);
-  DCHECK(io_helper_);
+  DCHECK(helper_);
 
   DCHECK_EQ(connection_created_, !connection);
 
@@ -317,18 +365,8 @@ void IndexedDBCallbacks::OnSuccess(
     database_connection = std::move(connection);
 
   SafeIOThreadConnectionWrapper wrapper(std::move(database_connection));
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::BindOnce(&IOThreadHelper::SendSuccessDatabase,
-                                         base::Unretained(io_helper_.get()),
-                                         std::move(wrapper), metadata));
+  helper_->SendSuccessDatabase(std::move(wrapper), metadata);
   complete_ = true;
-
-  if (!connection_open_start_time_.is_null()) {
-    UMA_HISTOGRAM_MEDIUM_TIMES(
-        "WebCore.IndexedDB.OpenTime.Success",
-        base::TimeTicks::Now() - connection_open_start_time_);
-    connection_open_start_time_ = base::TimeTicks();
-  }
 }
 
 void IndexedDBCallbacks::OnSuccess(std::unique_ptr<IndexedDBCursor> cursor,
@@ -337,25 +375,20 @@ void IndexedDBCallbacks::OnSuccess(std::unique_ptr<IndexedDBCursor> cursor,
                                    IndexedDBValue* value) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!complete_);
-  DCHECK(io_helper_);
+  DCHECK(helper_);
 
-  DCHECK_EQ(blink::kWebIDBDataLossNone, data_loss_);
+  DCHECK_EQ(blink::mojom::IDBDataLoss::None, data_loss_);
 
   blink::mojom::IDBValuePtr mojo_value;
   std::vector<IndexedDBBlobInfo> blob_info;
   if (value) {
-    mojo_value = ConvertAndEraseValue(value);
+    mojo_value = IndexedDBValue::ConvertAndEraseValue(value);
     blob_info.swap(value->blob_info);
   }
 
   SafeIOThreadCursorWrapper cursor_wrapper(std::move(cursor));
-
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&IOThreadHelper::SendSuccessCursor,
-                     base::Unretained(io_helper_.get()),
-                     std::move(cursor_wrapper), key, primary_key,
-                     std::move(mojo_value), std::move(blob_info)));
+  helper_->SendSuccessCursor(std::move(cursor_wrapper), key, primary_key,
+                             std::move(mojo_value), std::move(blob_info));
   complete_ = true;
 }
 
@@ -364,22 +397,19 @@ void IndexedDBCallbacks::OnSuccess(const IndexedDBKey& key,
                                    IndexedDBValue* value) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!complete_);
-  DCHECK(io_helper_);
+  DCHECK(helper_);
 
-  DCHECK_EQ(blink::kWebIDBDataLossNone, data_loss_);
+  DCHECK_EQ(blink::mojom::IDBDataLoss::None, data_loss_);
 
   blink::mojom::IDBValuePtr mojo_value;
   std::vector<IndexedDBBlobInfo> blob_info;
   if (value) {
-    mojo_value = ConvertAndEraseValue(value);
+    mojo_value = IndexedDBValue::ConvertAndEraseValue(value);
     blob_info.swap(value->blob_info);
   }
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&IOThreadHelper::SendSuccessCursorContinue,
-                     base::Unretained(io_helper_.get()), key, primary_key,
-                     std::move(mojo_value), std::move(blob_info)));
+  helper_->SendSuccessCursorContinue(key, primary_key, std::move(mojo_value),
+                                     std::move(blob_info));
   complete_ = true;
 }
 
@@ -389,22 +419,19 @@ void IndexedDBCallbacks::OnSuccessWithPrefetch(
     std::vector<IndexedDBValue>* values) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!complete_);
-  DCHECK(io_helper_);
+  DCHECK(helper_);
   DCHECK_EQ(keys.size(), primary_keys.size());
   DCHECK_EQ(keys.size(), values->size());
 
-  DCHECK_EQ(blink::kWebIDBDataLossNone, data_loss_);
+  DCHECK_EQ(blink::mojom::IDBDataLoss::None, data_loss_);
 
   std::vector<blink::mojom::IDBValuePtr> mojo_values;
   mojo_values.reserve(values->size());
   for (size_t i = 0; i < values->size(); ++i)
-    mojo_values.push_back(ConvertAndEraseValue(&(*values)[i]));
+    mojo_values.push_back(IndexedDBValue::ConvertAndEraseValue(&(*values)[i]));
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&IOThreadHelper::SendSuccessCursorPrefetch,
-                     base::Unretained(io_helper_.get()), keys, primary_keys,
-                     std::move(mojo_values), *values));
+  helper_->SendSuccessCursorPrefetch(keys, primary_keys, std::move(mojo_values),
+                                     *values);
   complete_ = true;
 }
 
@@ -412,20 +439,16 @@ void IndexedDBCallbacks::OnSuccess(IndexedDBReturnValue* value) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!complete_);
 
-  DCHECK_EQ(blink::kWebIDBDataLossNone, data_loss_);
+  DCHECK_EQ(blink::mojom::IDBDataLoss::None, data_loss_);
 
   blink::mojom::IDBReturnValuePtr mojo_value;
   std::vector<IndexedDBBlobInfo> blob_info;
   if (value) {
-    mojo_value = ConvertReturnValue(value);
+    mojo_value = IndexedDBReturnValue::ConvertReturnValue(value);
     blob_info = value->blob_info;
   }
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&IOThreadHelper::SendSuccessValue,
-                     base::Unretained(io_helper_.get()), std::move(mojo_value),
-                     std::move(blob_info)));
+  helper_->SendSuccessValue(std::move(mojo_value), std::move(blob_info));
   complete_ = true;
 }
 
@@ -433,33 +456,29 @@ void IndexedDBCallbacks::OnSuccessArray(
     std::vector<IndexedDBReturnValue>* values) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!complete_);
-  DCHECK(io_helper_);
+  DCHECK(helper_);
 
-  DCHECK_EQ(blink::kWebIDBDataLossNone, data_loss_);
+  DCHECK_EQ(blink::mojom::IDBDataLoss::None, data_loss_);
 
   std::vector<blink::mojom::IDBReturnValuePtr> mojo_values;
   mojo_values.reserve(values->size());
-  for (size_t i = 0; i < values->size(); ++i)
-    mojo_values.push_back(ConvertReturnValue(&(*values)[i]));
+  for (size_t i = 0; i < values->size(); ++i) {
+    mojo_values.push_back(
+        IndexedDBReturnValue::ConvertReturnValue(&(*values)[i]));
+  }
 
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::BindOnce(&IOThreadHelper::SendSuccessArray,
-                                         base::Unretained(io_helper_.get()),
-                                         std::move(mojo_values), *values));
+  helper_->SendSuccessArray(std::move(mojo_values), *values);
   complete_ = true;
 }
 
 void IndexedDBCallbacks::OnSuccess(const IndexedDBKey& value) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!complete_);
-  DCHECK(io_helper_);
+  DCHECK(helper_);
 
-  DCHECK_EQ(blink::kWebIDBDataLossNone, data_loss_);
+  DCHECK_EQ(blink::mojom::IDBDataLoss::None, data_loss_);
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&IOThreadHelper::SendSuccessKey,
-                     base::Unretained(io_helper_.get()), value));
+  helper_->SendSuccessKey(value);
   complete_ = true;
 }
 
@@ -467,32 +486,22 @@ void IndexedDBCallbacks::OnSuccess(int64_t value) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!complete_);
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&IOThreadHelper::SendSuccessInteger,
-                     base::Unretained(io_helper_.get()), value));
+  helper_->SendSuccessInteger(value);
   complete_ = true;
 }
 
 void IndexedDBCallbacks::OnSuccess() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!complete_);
-  DCHECK(io_helper_);
+  DCHECK(helper_);
 
-  DCHECK_EQ(blink::kWebIDBDataLossNone, data_loss_);
+  DCHECK_EQ(blink::mojom::IDBDataLoss::None, data_loss_);
 
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::BindOnce(&IOThreadHelper::SendSuccess,
-                                         base::Unretained(io_helper_.get())));
+  helper_->SendSuccess();
   complete_ = true;
 }
 
-void IndexedDBCallbacks::SetConnectionOpenStartTime(
-    const base::TimeTicks& start_time) {
-  connection_open_start_time_ = start_time;
-}
-
-IndexedDBCallbacks::IOThreadHelper::IOThreadHelper(
+IndexedDBCallbacks::Helper::Helper(
     IDBCallbacksAssociatedPtrInfo callbacks_info,
     base::WeakPtr<IndexedDBDispatcherHost> dispatcher_host,
     url::Origin origin,
@@ -500,21 +509,25 @@ IndexedDBCallbacks::IOThreadHelper::IOThreadHelper(
     : dispatcher_host_(std::move(dispatcher_host)),
       origin_(origin),
       idb_runner_(idb_runner) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK(idb_runner_->RunsTasksInCurrentSequence());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (callbacks_info.is_valid()) {
     callbacks_.Bind(std::move(callbacks_info));
-    callbacks_.set_connection_error_handler(base::BindOnce(
-        &IOThreadHelper::OnConnectionError, base::Unretained(this)));
+    // |callbacks_| is owned by |this|, so if |this| is destroyed, then
+    // |callbacks_| will also be destroyed.  While |callbacks_| is otherwise
+    // alive, |this| will always be valid.
+    callbacks_.set_connection_error_handler(
+        base::BindOnce(&Helper::OnConnectionError, base::Unretained(this)));
   }
 }
 
-IndexedDBCallbacks::IOThreadHelper::~IOThreadHelper() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+IndexedDBCallbacks::Helper::~Helper() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
-void IndexedDBCallbacks::IOThreadHelper::SendError(
+void IndexedDBCallbacks::Helper::SendError(
     const IndexedDBDatabaseError& error) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!callbacks_)
     return;
   if (!dispatcher_host_) {
@@ -524,9 +537,21 @@ void IndexedDBCallbacks::IOThreadHelper::SendError(
   callbacks_->Error(error.code(), error.message());
 }
 
-void IndexedDBCallbacks::IOThreadHelper::SendSuccessStringList(
+void IndexedDBCallbacks::Helper::SendSuccessNamesAndVersionsList(
+    std::vector<blink::mojom::IDBNameAndVersionPtr> names_and_versions) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!callbacks_)
+    return;
+  if (!dispatcher_host_) {
+    OnConnectionError();
+    return;
+  }
+  callbacks_->SuccessNamesAndVersionsList(std::move(names_and_versions));
+}
+
+void IndexedDBCallbacks::Helper::SendSuccessStringList(
     const std::vector<base::string16>& value) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!callbacks_)
     return;
   if (!dispatcher_host_) {
@@ -536,8 +561,8 @@ void IndexedDBCallbacks::IOThreadHelper::SendSuccessStringList(
   callbacks_->SuccessStringList(value);
 }
 
-void IndexedDBCallbacks::IOThreadHelper::SendBlocked(int64_t existing_version) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+void IndexedDBCallbacks::Helper::SendBlocked(int64_t existing_version) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!dispatcher_host_) {
     OnConnectionError();
     return;
@@ -546,13 +571,13 @@ void IndexedDBCallbacks::IOThreadHelper::SendBlocked(int64_t existing_version) {
     callbacks_->Blocked(existing_version);
 }
 
-void IndexedDBCallbacks::IOThreadHelper::SendUpgradeNeeded(
+void IndexedDBCallbacks::Helper::SendUpgradeNeeded(
     SafeIOThreadConnectionWrapper connection_wrapper,
     int64_t old_version,
-    blink::WebIDBDataLoss data_loss,
+    blink::mojom::IDBDataLoss data_loss,
     const std::string& data_loss_message,
     const IndexedDBDatabaseMetadata& metadata) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!callbacks_)
     return;
   if (!dispatcher_host_) {
@@ -572,10 +597,10 @@ void IndexedDBCallbacks::IOThreadHelper::SendUpgradeNeeded(
                             data_loss_message, metadata);
 }
 
-void IndexedDBCallbacks::IOThreadHelper::SendSuccessDatabase(
+void IndexedDBCallbacks::Helper::SendSuccessDatabase(
     SafeIOThreadConnectionWrapper connection_wrapper,
     const IndexedDBDatabaseMetadata& metadata) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!callbacks_)
     return;
   if (!dispatcher_host_) {
@@ -595,13 +620,13 @@ void IndexedDBCallbacks::IOThreadHelper::SendSuccessDatabase(
   callbacks_->SuccessDatabase(std::move(ptr_info), metadata);
 }
 
-void IndexedDBCallbacks::IOThreadHelper::SendSuccessCursor(
+void IndexedDBCallbacks::Helper::SendSuccessCursor(
     SafeIOThreadCursorWrapper cursor,
     const IndexedDBKey& key,
     const IndexedDBKey& primary_key,
     blink::mojom::IDBValuePtr value,
     const std::vector<IndexedDBBlobInfo>& blob_info) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!callbacks_)
     return;
   if (!dispatcher_host_) {
@@ -610,9 +635,12 @@ void IndexedDBCallbacks::IOThreadHelper::SendSuccessCursor(
   }
   auto cursor_impl = std::make_unique<CursorImpl>(
       std::move(cursor.cursor_), origin_, dispatcher_host_.get(), idb_runner_);
-
-  if (value && !CreateAllBlobs(blob_info, &value->blob_or_file_info))
+  if (value && !IndexedDBCallbacks::CreateAllBlobs(
+                   dispatcher_host_->blob_storage_context(), idb_runner_,
+                   IndexedDBValueBlob::GetIndexedDBValueBlobs(
+                       blob_info, &value->blob_or_file_info))) {
     return;
+  }
 
   blink::mojom::IDBCursorAssociatedPtrInfo ptr_info;
   auto request = mojo::MakeRequest(&ptr_info);
@@ -622,10 +650,10 @@ void IndexedDBCallbacks::IOThreadHelper::SendSuccessCursor(
                             std::move(value));
 }
 
-void IndexedDBCallbacks::IOThreadHelper::SendSuccessValue(
+void IndexedDBCallbacks::Helper::SendSuccessValue(
     blink::mojom::IDBReturnValuePtr value,
     const std::vector<IndexedDBBlobInfo>& blob_info) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!callbacks_)
     return;
   if (!dispatcher_host_) {
@@ -633,14 +661,20 @@ void IndexedDBCallbacks::IOThreadHelper::SendSuccessValue(
     return;
   }
 
-  if (!value || CreateAllBlobs(blob_info, &value->value->blob_or_file_info))
-    callbacks_->SuccessValue(std::move(value));
+  if (value && !IndexedDBCallbacks::CreateAllBlobs(
+                   dispatcher_host_->blob_storage_context(), idb_runner_,
+                   IndexedDBValueBlob::GetIndexedDBValueBlobs(
+                       blob_info, &value->value->blob_or_file_info))) {
+    return;
+  }
+
+  callbacks_->SuccessValue(std::move(value));
 }
 
-void IndexedDBCallbacks::IOThreadHelper::SendSuccessArray(
+void IndexedDBCallbacks::Helper::SendSuccessArray(
     std::vector<blink::mojom::IDBReturnValuePtr> mojo_values,
     const std::vector<IndexedDBReturnValue>& values) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(mojo_values.size(), values.size());
 
   if (!callbacks_)
@@ -650,20 +684,28 @@ void IndexedDBCallbacks::IOThreadHelper::SendSuccessArray(
     return;
   }
 
+  std::vector<IndexedDBValueBlob> value_blobs;
   for (size_t i = 0; i < mojo_values.size(); ++i) {
-    if (!CreateAllBlobs(values[i].blob_info,
-                        &mojo_values[i]->value->blob_or_file_info))
-      return;
+    IndexedDBValueBlob::GetIndexedDBValueBlobs(
+        &value_blobs, values[i].blob_info,
+        &mojo_values[i]->value->blob_or_file_info);
   }
+
+  if (!IndexedDBCallbacks::CreateAllBlobs(
+          dispatcher_host_->blob_storage_context(), idb_runner_,
+          std::move(value_blobs))) {
+    return;
+  }
+
   callbacks_->SuccessArray(std::move(mojo_values));
 }
 
-void IndexedDBCallbacks::IOThreadHelper::SendSuccessCursorContinue(
+void IndexedDBCallbacks::Helper::SendSuccessCursorContinue(
     const IndexedDBKey& key,
     const IndexedDBKey& primary_key,
     blink::mojom::IDBValuePtr value,
     const std::vector<IndexedDBBlobInfo>& blob_info) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!callbacks_)
     return;
   if (!dispatcher_host_) {
@@ -671,16 +713,22 @@ void IndexedDBCallbacks::IOThreadHelper::SendSuccessCursorContinue(
     return;
   }
 
-  if (!value || CreateAllBlobs(blob_info, &value->blob_or_file_info))
-    callbacks_->SuccessCursorContinue(key, primary_key, std::move(value));
+  if (value && !IndexedDBCallbacks::CreateAllBlobs(
+                   dispatcher_host_->blob_storage_context(), idb_runner_,
+                   IndexedDBValueBlob::GetIndexedDBValueBlobs(
+                       blob_info, &value->blob_or_file_info))) {
+    return;
+  }
+
+  callbacks_->SuccessCursorContinue(key, primary_key, std::move(value));
 }
 
-void IndexedDBCallbacks::IOThreadHelper::SendSuccessCursorPrefetch(
+void IndexedDBCallbacks::Helper::SendSuccessCursorPrefetch(
     const std::vector<IndexedDBKey>& keys,
     const std::vector<IndexedDBKey>& primary_keys,
     std::vector<blink::mojom::IDBValuePtr> mojo_values,
     const std::vector<IndexedDBValue>& values) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(mojo_values.size(), values.size());
 
   if (!callbacks_)
@@ -690,19 +738,23 @@ void IndexedDBCallbacks::IOThreadHelper::SendSuccessCursorPrefetch(
     return;
   }
 
+  std::vector<IndexedDBValueBlob> value_blobs;
   for (size_t i = 0; i < mojo_values.size(); ++i) {
-    if (!CreateAllBlobs(values[i].blob_info,
-                        &mojo_values[i]->blob_or_file_info)) {
-      return;
-    }
+    IndexedDBValueBlob::GetIndexedDBValueBlobs(
+        &value_blobs, values[i].blob_info, &mojo_values[i]->blob_or_file_info);
+  }
+
+  if (!IndexedDBCallbacks::CreateAllBlobs(
+          dispatcher_host_->blob_storage_context(), idb_runner_,
+          std::move(value_blobs))) {
+    return;
   }
 
   callbacks_->SuccessCursorPrefetch(keys, primary_keys, std::move(mojo_values));
 }
 
-void IndexedDBCallbacks::IOThreadHelper::SendSuccessKey(
-    const IndexedDBKey& value) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+void IndexedDBCallbacks::Helper::SendSuccessKey(const IndexedDBKey& value) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!callbacks_)
     return;
   if (!dispatcher_host_) {
@@ -712,8 +764,8 @@ void IndexedDBCallbacks::IOThreadHelper::SendSuccessKey(
   callbacks_->SuccessKey(value);
 }
 
-void IndexedDBCallbacks::IOThreadHelper::SendSuccessInteger(int64_t value) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+void IndexedDBCallbacks::Helper::SendSuccessInteger(int64_t value) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!callbacks_)
     return;
   if (!dispatcher_host_) {
@@ -723,8 +775,8 @@ void IndexedDBCallbacks::IOThreadHelper::SendSuccessInteger(int64_t value) {
   callbacks_->SuccessInteger(value);
 }
 
-void IndexedDBCallbacks::IOThreadHelper::SendSuccess() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+void IndexedDBCallbacks::Helper::SendSuccess() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!callbacks_)
     return;
   if (!dispatcher_host_) {
@@ -734,61 +786,8 @@ void IndexedDBCallbacks::IOThreadHelper::SendSuccess() {
   callbacks_->Success();
 }
 
-std::unique_ptr<storage::BlobDataHandle>
-IndexedDBCallbacks::IOThreadHelper::CreateBlobData(
-    const IndexedDBBlobInfo& blob_info) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (blob_info.blob_handle()) {
-    // We're sending back a live blob, not a reference into our backing store.
-    return std::make_unique<storage::BlobDataHandle>(*blob_info.blob_handle());
-  }
-  scoped_refptr<ShareableFileReference> shareable_file =
-      ShareableFileReference::Get(blob_info.file_path());
-  if (!shareable_file) {
-    shareable_file = ShareableFileReference::GetOrCreate(
-        blob_info.file_path(),
-        ShareableFileReference::DONT_DELETE_ON_FINAL_RELEASE,
-        dispatcher_host_->context()->TaskRunner());
-    if (!blob_info.release_callback().is_null())
-      shareable_file->AddFinalReleaseCallback(blob_info.release_callback());
-  }
-  std::string uuid = base::GenerateGUID();
-  auto blob_data_builder = std::make_unique<storage::BlobDataBuilder>(uuid);
-  blob_data_builder->set_content_type(base::UTF16ToUTF8(blob_info.type()));
-  blob_data_builder->AppendFile(blob_info.file_path(), 0, blob_info.size(),
-                                blob_info.last_modified());
-  return dispatcher_host_->blob_storage_context()->AddFinishedBlob(
-      std::move(blob_data_builder));
-}
-
-bool IndexedDBCallbacks::IOThreadHelper::CreateAllBlobs(
-    const std::vector<IndexedDBBlobInfo>& blob_info,
-    std::vector<blink::mojom::IDBBlobInfoPtr>* blob_or_file_info) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (!dispatcher_host_) {
-    OnConnectionError();
-    return false;
-  }
-  IDB_TRACE("IndexedDBCallbacks::CreateAllBlobs");
-  DCHECK_EQ(blob_info.size(), blob_or_file_info->size());
-  storage::BlobStorageContext* blob_context =
-      dispatcher_host_->blob_storage_context();
-  if (!blob_context)
-    return false;
-  for (size_t i = 0; i < blob_info.size(); ++i) {
-    std::unique_ptr<storage::BlobDataHandle> blob_data =
-        CreateBlobData(blob_info[i]);
-    (*blob_or_file_info)[i]->uuid = blob_data->uuid();
-    blink::mojom::BlobPtrInfo blob_ptr_info;
-    storage::BlobImpl::Create(std::move(blob_data),
-                              MakeRequest(&blob_ptr_info));
-    (*blob_or_file_info)[i]->blob = std::move(blob_ptr_info);
-  }
-  return true;
-}
-
-void IndexedDBCallbacks::IOThreadHelper::OnConnectionError() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+void IndexedDBCallbacks::Helper::OnConnectionError() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   callbacks_.reset();
   dispatcher_host_ = nullptr;
 }

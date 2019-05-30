@@ -6,11 +6,15 @@
 
 #include <string>
 
+#include "ash/login/login_screen_controller.h"
+#include "ash/login/ui/lock_screen.h"
 #include "ash/login/ui/login_test_utils.h"
-#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/interfaces/tray_action.mojom.h"
+#include "ash/session/test_session_controller_client.h"
 #include "ash/shell.h"
+#include "ash/wallpaper/wallpaper_controller.h"
+#include "base/bind.h"
 #include "base/strings/strcat.h"
 #include "services/ws/public/cpp/property_type_converters.h"
 #include "services/ws/public/mojom/window_manager.mojom.h"
@@ -42,6 +46,36 @@ class LoginTestBase::WidgetDelegate : public views::WidgetDelegate {
 LoginTestBase::LoginTestBase() = default;
 
 LoginTestBase::~LoginTestBase() = default;
+
+void LoginTestBase::ShowLockScreen() {
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOCKED);
+  // The lock screen can't be shown without a wallpaper.
+  Shell::Get()->wallpaper_controller()->ShowDefaultWallpaperForTesting();
+
+  base::Optional<bool> result;
+  Shell::Get()->login_screen_controller()->ShowLockScreen(base::BindOnce(
+      [](base::Optional<bool>* result, bool did_show) { *result = did_show; },
+      &result));
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(result.has_value());
+  ASSERT_EQ(*result, true);
+}
+
+void LoginTestBase::ShowLoginScreen() {
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOGIN_PRIMARY);
+  // The login screen can't be shown without a wallpaper.
+  Shell::Get()->wallpaper_controller()->ShowDefaultWallpaperForTesting();
+
+  base::Optional<bool> result;
+  Shell::Get()->login_screen_controller()->ShowLoginScreen(base::BindOnce(
+      [](base::Optional<bool>* result, bool did_show) { *result = did_show; },
+      &result));
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(result.has_value());
+  ASSERT_EQ(*result, true);
+}
 
 void LoginTestBase::SetWidget(std::unique_ptr<views::Widget> widget) {
   EXPECT_FALSE(widget_) << "SetWidget can only be called once.";
@@ -77,7 +111,7 @@ void LoginTestBase::SetUserCount(size_t count) {
 
   users_.erase(users_.begin() + count, users_.end());
   // Notify any listeners that the user count has changed.
-  data_dispatcher_.NotifyUsers(users_);
+  DataDispatcher()->NotifyUsers(users_);
 }
 
 void LoginTestBase::AddUsers(size_t num_users) {
@@ -88,7 +122,12 @@ void LoginTestBase::AddUsers(size_t num_users) {
   }
 
   // Notify any listeners that the user count has changed.
-  data_dispatcher_.NotifyUsers(users_);
+  DataDispatcher()->NotifyUsers(users_);
+}
+
+void LoginTestBase::AddUserByEmail(const std::string& email) {
+  users_.push_back(CreateUser(email));
+  DataDispatcher()->NotifyUsers(users_);
 }
 
 void LoginTestBase::AddPublicAccountUsers(size_t num_public_accounts) {
@@ -99,11 +138,30 @@ void LoginTestBase::AddPublicAccountUsers(size_t num_public_accounts) {
   }
 
   // Notify any listeners that the user count has changed.
-  data_dispatcher_.NotifyUsers(users_);
+  DataDispatcher()->NotifyUsers(users_);
+}
+
+void LoginTestBase::AddChildUsers(size_t num_users) {
+  for (size_t i = 0; i < num_users; i++) {
+    std::string email =
+        base::StrCat({"user", std::to_string(users_.size()), "@domain.com"});
+    users_.push_back(CreateChildUser(email));
+  }
+
+  // Notify any listeners that the user count has changed.
+  DataDispatcher()->NotifyUsers(users_);
+}
+
+LoginDataDispatcher* LoginTestBase::DataDispatcher() {
+  return LockScreen::HasInstance() ? LockScreen::Get()->data_dispatcher()
+                                   : &data_dispatcher_;
 }
 
 void LoginTestBase::TearDown() {
   widget_.reset();
+
+  if (LockScreen::HasInstance())
+    LockScreen::Get()->Destroy();
 
   AshTestBase::TearDown();
 }

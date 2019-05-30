@@ -8,8 +8,8 @@
 #include <stdint.h>
 
 #include <vector>
-
 #include "base/optional.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/quads/frame_deadline.h"
@@ -35,6 +35,20 @@ inline bool FrameTokenGT(uint32_t token1, uint32_t token2) {
   // after token2.
   return (token2 - token1) > 0x80000000u;
 }
+
+class VIZ_COMMON_EXPORT FrameTokenGenerator {
+ public:
+  inline uint32_t operator++() {
+    if (++frame_token_ == 0)
+      ++frame_token_;
+    return frame_token_;
+  }
+
+  inline uint32_t operator*() const { return frame_token_; }
+
+ private:
+  uint32_t frame_token_ = 0;
+};
 
 class VIZ_COMMON_EXPORT CompositorFrameMetadata {
  public:
@@ -123,24 +137,23 @@ class VIZ_COMMON_EXPORT CompositorFrameMetadata {
   // wants to do something after a particular frame is processed.
   bool send_frame_token_to_embedder = false;
 
-  // Once the display compositor presents a frame with
-  // |request_presentation_feedback| flag turned on, a presentation feedback
-  // will be provided to CompositorFrameSinkClient.
-  bool request_presentation_feedback = false;
-
   // These limits can be used together with the scroll/scale fields above to
   // determine if scrolling/scaling in a particular direction is possible.
   float min_page_scale_factor = 0.f;
+
+  // Used to position the location top bar and page content, whose precise
+  // position is computed by the renderer compositor.
+  float top_controls_height = 0.f;
+  float top_controls_shown_ratio = 0.f;
+
+  // The time at which the LocalSurfaceId used to submit this CompositorFrame
+  // was allocated.
+  base::TimeTicks local_surface_id_allocation_time;
 
 #if defined(OS_ANDROID)
   float max_page_scale_factor = 0.f;
   gfx::SizeF root_layer_size;
   bool root_overflow_y_hidden = false;
-
-  // Used to position the Android location top bar and page content, whose
-  // precise position is computed by the renderer compositor.
-  float top_controls_height = 0.f;
-  float top_controls_shown_ratio = 0.f;
 
   // Used to position Android bottom bar, whose position is computed by the
   // renderer compositor.

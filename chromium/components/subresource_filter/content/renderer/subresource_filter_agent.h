@@ -9,9 +9,12 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "components/subresource_filter/core/common/activation_state.h"
+#include "components/subresource_filter/content/mojom/subresource_filter_agent.mojom.h"
+#include "components/subresource_filter/content/renderer/ad_resource_tracker.h"
+#include "components/subresource_filter/core/mojom/subresource_filter.mojom.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_frame_observer_tracker.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
 #include "url/gurl.h"
 
 namespace blink {
@@ -20,7 +23,6 @@ class WebDocumentSubresourceFilter;
 
 namespace subresource_filter {
 
-struct DocumentLoadStatistics;
 class UnverifiedRulesetDealer;
 class WebDocumentSubresourceFilterImpl;
 
@@ -31,12 +33,16 @@ class WebDocumentSubresourceFilterImpl;
 class SubresourceFilterAgent
     : public content::RenderFrameObserver,
       public content::RenderFrameObserverTracker<SubresourceFilterAgent>,
+      public mojom::SubresourceFilterAgent,
       public base::SupportsWeakPtr<SubresourceFilterAgent> {
  public:
   // The |ruleset_dealer| must not be null and must outlive this instance. The
-  // |render_frame| may be null in unittests.
-  explicit SubresourceFilterAgent(content::RenderFrame* render_frame,
-                                  UnverifiedRulesetDealer* ruleset_dealer);
+  // |render_frame| may be null in unittests. The |ad_resource_tracker| may be
+  // null.
+  explicit SubresourceFilterAgent(
+      content::RenderFrame* render_frame,
+      UnverifiedRulesetDealer* ruleset_dealer,
+      std::unique_ptr<AdResourceTracker> ad_resource_tracker);
   ~SubresourceFilterAgent() override;
 
  protected:
@@ -58,41 +64,56 @@ class SubresourceFilterAgent
 
   // Sends statistics about the DocumentSubresourceFilter's work to the browser.
   virtual void SendDocumentLoadStatistics(
-      const DocumentLoadStatistics& statistics);
+      const mojom::DocumentLoadStatistics& statistics);
 
   // Tells the browser that the frame is an ad subframe.
   virtual void SendFrameIsAdSubframe();
 
   // True if the frame has been heuristically determined to be an ad subframe.
   virtual bool IsAdSubframe();
-  virtual void SetIsAdSubframe();
+  virtual void SetIsAdSubframe(blink::mojom::AdFrameType ad_frame_type);
+
+  // mojom::SubresourceFilterAgent:
+  void ActivateForNextCommittedLoad(
+      mojom::ActivationStatePtr activation_state,
+      blink::mojom::AdFrameType ad_frame_type) override;
 
  private:
   // Assumes that the parent will be in a local frame relative to this one, upon
   // construction.
-  static ActivationState GetParentActivationState(
+  static mojom::ActivationState GetParentActivationState(
       content::RenderFrame* render_frame);
 
-  void OnActivateForNextCommittedLoad(const ActivationState& activation_state,
-                                      bool is_ad_subframe);
-  void RecordHistogramsOnLoadCommitted(const ActivationState& activation_state);
+  void RecordHistogramsOnLoadCommitted(
+      const mojom::ActivationState& activation_state);
   void RecordHistogramsOnLoadFinished();
   void ResetInfoForNextCommit();
+
+  const mojom::SubresourceFilterHostAssociatedPtr& GetSubresourceFilterHost();
+
+  void OnSubresourceFilterAgentRequest(
+      mojom::SubresourceFilterAgentAssociatedRequest request);
 
   // content::RenderFrameObserver:
   void OnDestruct() override;
   void DidCreateNewDocument() override;
-  void DidCommitProvisionalLoad(bool is_new_navigation,
-                                bool is_same_document_navigation) override;
   void DidFailProvisionalLoad(const blink::WebURLError& error) override;
   void DidFinishLoad() override;
-  bool OnMessageReceived(const IPC::Message& message) override;
   void WillCreateWorkerFetchContext(blink::WebWorkerFetchContext*) override;
 
   // Owned by the ChromeContentRendererClient and outlives us.
   UnverifiedRulesetDealer* ruleset_dealer_;
 
-  ActivationState activation_state_for_next_commit_;
+  mojom::ActivationState activation_state_for_next_commit_;
+
+  // Tracks all ad resource observers.
+  std::unique_ptr<AdResourceTracker> ad_resource_tracker_;
+
+  // Use associated interface to make sure mojo messages are ordered with regard
+  // to legacy IPC messages.
+  mojom::SubresourceFilterHostAssociatedPtr subresource_filter_host_;
+
+  mojo::AssociatedBinding<mojom::SubresourceFilterAgent> binding_;
 
   // If a document has been created for this frame before. The first document
   // for a new local subframe should be about:blank.

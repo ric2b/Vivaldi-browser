@@ -4,8 +4,10 @@
 
 #include "extensions/browser/api/system_display/display_info_provider.h"
 
+#include "base/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "extensions/browser/extensions_browser_client.h"
 #include "extensions/common/api/system_display.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -61,7 +63,7 @@ api::system_display::DisplayUnitInfo DisplayInfoProvider::CreateDisplayUnitInfo(
   api::system_display::DisplayUnitInfo unit;
   const gfx::Rect& bounds = display.bounds();
   const gfx::Rect& work_area = display.work_area();
-  unit.id = base::Int64ToString(display.id());
+  unit.id = base::NumberToString(display.id());
   unit.is_primary = (display.id() == primary_display_id);
   unit.is_internal = display.IsInternal();
   unit.is_enabled = true;
@@ -121,6 +123,18 @@ void DisplayInfoProvider::GetDisplayLayout(
       FROM_HERE, base::BindOnce(std::move(callback), DisplayLayoutList()));
 }
 
+void DisplayInfoProvider::StartObserving() {
+  display::Screen* screen = display::Screen::GetScreen();
+  if (screen)
+    screen->AddObserver(this);
+}
+
+void DisplayInfoProvider::StopObserving() {
+  display::Screen* screen = display::Screen::GetScreen();
+  if (screen)
+    screen->RemoveObserver(this);
+}
+
 bool DisplayInfoProvider::OverscanCalibrationStart(const std::string& id) {
   return false;
 }
@@ -169,10 +183,32 @@ void DisplayInfoProvider::SetMirrorMode(
       FROM_HERE, base::BindOnce(std::move(callback), "Not supported"));
 }
 
+void DisplayInfoProvider::DispatchOnDisplayChangedEvent() {
+  ExtensionsBrowserClient::Get()->BroadcastEventToRenderers(
+      events::SYSTEM_DISPLAY_ON_DISPLAY_CHANGED,
+      extensions::api::system_display::OnDisplayChanged::kEventName,
+      std::make_unique<base::ListValue>());
+}
+
 void DisplayInfoProvider::UpdateDisplayUnitInfoForPlatform(
     const display::Display& display,
     extensions::api::system_display::DisplayUnitInfo* unit) {
   NOTIMPLEMENTED_LOG_ONCE();
+}
+
+void DisplayInfoProvider::OnDisplayAdded(const display::Display& new_display) {
+  DispatchOnDisplayChangedEvent();
+}
+
+void DisplayInfoProvider::OnDisplayRemoved(
+    const display::Display& old_display) {
+  DispatchOnDisplayChangedEvent();
+}
+
+void DisplayInfoProvider::OnDisplayMetricsChanged(
+    const display::Display& display,
+    uint32_t metrics) {
+  DispatchOnDisplayChangedEvent();
 }
 
 }  // namespace extensions

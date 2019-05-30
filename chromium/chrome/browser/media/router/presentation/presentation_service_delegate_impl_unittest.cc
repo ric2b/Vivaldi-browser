@@ -4,6 +4,7 @@
 
 #include "chrome/browser/media/router/presentation/presentation_service_delegate_impl.h"
 
+#include "base/bind.h"
 #include "base/test/mock_callback.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/router/media_router_factory.h"
@@ -138,7 +139,8 @@ class PresentationServiceDelegateImplTest
     content::WebContents* wc = GetWebContents();
     router_ = static_cast<MockMediaRouter*>(
         MediaRouterFactory::GetInstance()->SetTestingFactoryAndUse(
-            web_contents()->GetBrowserContext(), &MockMediaRouter::Create));
+            web_contents()->GetBrowserContext(),
+            base::BindRepeating(&MockMediaRouter::Create)));
     ASSERT_TRUE(wc);
     PresentationServiceDelegateImpl::CreateForWebContents(wc);
     delegate_impl_ = PresentationServiceDelegateImpl::FromWebContents(wc);
@@ -209,7 +211,7 @@ class PresentationServiceDelegateImplTest
 
   void SetMockLocalPresentationManager() {
     LocalPresentationManagerFactory::GetInstanceForTest()->SetTestingFactory(
-        profile(), &BuildMockLocalPresentationManager);
+        profile(), base::BindRepeating(&BuildMockLocalPresentationManager));
     mock_local_manager_ = static_cast<MockLocalPresentationManager*>(
         LocalPresentationManagerFactory::GetOrCreateForBrowserContext(
             profile()));
@@ -276,7 +278,7 @@ TEST_F(PresentationServiceDelegateImplTest, AddScreenAvailabilityListener) {
       main_frame_process_id_, main_frame_routing_id_, &listener1_));
   EXPECT_TRUE(delegate_impl_->HasScreenAvailabilityListenerForTest(
       main_frame_process_id_, main_frame_routing_id_, source1_.id()))
-      << "Mapping not found for " << source1_.ToString();
+      << "Mapping not found for " << source1_;
 
   EXPECT_CALL(*router_, UnregisterMediaSinksObserver(_));
   delegate_impl_->RemoveScreenAvailabilityListener(
@@ -295,10 +297,10 @@ TEST_F(PresentationServiceDelegateImplTest, AddMultipleListenersToFrame) {
       main_frame_process_id_, main_frame_routing_id_, &listener2_));
   EXPECT_TRUE(delegate_impl_->HasScreenAvailabilityListenerForTest(
       main_frame_process_id_, main_frame_routing_id_, source1_.id()))
-      << "Mapping not found for " << source1_.ToString();
+      << "Mapping not found for " << source1_;
   EXPECT_TRUE(delegate_impl_->HasScreenAvailabilityListenerForTest(
       main_frame_process_id_, main_frame_routing_id_, source2_.id()))
-      << "Mapping not found for " << source2_.ToString();
+      << "Mapping not found for " << source2_;
 
   EXPECT_CALL(*router_, UnregisterMediaSinksObserver(_)).Times(2);
   delegate_impl_->RemoveScreenAvailabilityListener(
@@ -580,9 +582,9 @@ TEST_F(PresentationServiceDelegateImplTest, ConnectToLocalPresentation) {
   MockPresentationConnectionProxy receiver_proxy;
   mojo::Binding<PresentationConnection> receiver_binding(&receiver_proxy);
   auto& mock_local_manager = GetMockLocalPresentationManager();
-  EXPECT_CALL(mock_local_manager, RegisterLocalPresentationControllerInternal(
-                                      InfoEquals(presentation_info), rfh_id, _,
-                                      _, Equals(media_route)))
+  EXPECT_CALL(mock_local_manager,
+              RegisterLocalPresentationControllerInternal(
+                  InfoEquals(presentation_info), rfh_id, _, _, media_route))
       .WillOnce([&receiver_binding, &controller_ptr](
                     const PresentationInfo&,
                     const content::GlobalFrameRoutingId&,
@@ -600,24 +602,18 @@ TEST_F(PresentationServiceDelegateImplTest, ConnectToLocalPresentation) {
                      base::Unretained(&success_cb)),
       presentation_info, /** connection */ nullptr, media_route);
 
-  EXPECT_CALL(controller_proxy, OnMessage(_, _))
-      .WillOnce([](auto message, auto cb) {
-        EXPECT_TRUE(message->Equals(
-            *PresentationConnectionMessage::NewMessage("alpha")));
-        std::move(cb).Run(true);
-      });
-  controller_ptr->OnMessage(PresentationConnectionMessage::NewMessage("alpha"),
-                            base::DoNothing());
+  EXPECT_CALL(controller_proxy, OnMessage(_)).WillOnce([](auto message) {
+    EXPECT_TRUE(
+        message->Equals(*PresentationConnectionMessage::NewMessage("alpha")));
+  });
+  controller_ptr->OnMessage(PresentationConnectionMessage::NewMessage("alpha"));
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_CALL(receiver_proxy, OnMessage(_, _))
-      .WillOnce([](auto message, auto cb) {
-        EXPECT_TRUE(message->Equals(
-            *PresentationConnectionMessage::NewMessage("beta")));
-        std::move(cb).Run(true);
-      });
-  receiver_ptr->OnMessage(PresentationConnectionMessage::NewMessage("beta"),
-                          base::DoNothing());
+  EXPECT_CALL(receiver_proxy, OnMessage(_)).WillOnce([](auto message) {
+    EXPECT_TRUE(
+        message->Equals(*PresentationConnectionMessage::NewMessage("beta")));
+  });
+  receiver_ptr->OnMessage(PresentationConnectionMessage::NewMessage("beta"));
   base::RunLoop().RunUntilIdle();
 
   EXPECT_CALL(mock_local_manager,
@@ -658,19 +654,14 @@ TEST_F(PresentationServiceDelegateImplTest, ConnectToPresentation) {
                      base::Unretained(&success_cb)),
       presentation_info, /** connection */ nullptr, media_route);
 
-  EXPECT_CALL(*router_, SendRouteMessageInternal(media_route.media_route_id(),
-                                                 "alpha", _))
-      .WillOnce(
-          [](const std::string&, const std::string&,
-             base::OnceCallback<void(bool)>& cb) { std::move(cb).Run(true); });
-  connection_ptr->OnMessage(PresentationConnectionMessage::NewMessage("alpha"),
-                            base::DoNothing());
+  EXPECT_CALL(*router_,
+              SendRouteMessage(media_route.media_route_id(), "alpha"));
+  connection_ptr->OnMessage(PresentationConnectionMessage::NewMessage("alpha"));
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_CALL(mock_proxy, OnMessage(_, _)).WillOnce([](auto message, auto cb) {
+  EXPECT_CALL(mock_proxy, OnMessage(_)).WillOnce([](auto message) {
     EXPECT_TRUE(
         message->Equals(*PresentationConnectionMessage::NewMessage("beta")));
-    std::move(cb).Run(true);
   });
   std::vector<mojom::RouteMessagePtr> messages;
   messages.emplace_back(mojom::RouteMessage::New(

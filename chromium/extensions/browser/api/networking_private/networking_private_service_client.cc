@@ -16,6 +16,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/onc/onc_constants.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/network_service_instance.h"
 #include "extensions/browser/api/networking_private/networking_private_api.h"
 #include "extensions/browser/api/networking_private/networking_private_delegate_observer.h"
 
@@ -54,11 +55,11 @@ NetworkingPrivateServiceClient::NetworkingPrivateServiceClient(
       weak_factory_(this) {
   task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&WiFiService::Initialize,
-                 base::Unretained(wifi_service_.get()), task_runner_));
+      base::BindOnce(&WiFiService::Initialize,
+                     base::Unretained(wifi_service_.get()), task_runner_));
   task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(
+      base::BindOnce(
           &WiFiService::SetEventObservers,
           base::Unretained(wifi_service_.get()),
           base::ThreadTaskRunnerHandle::Get(),
@@ -68,7 +69,7 @@ NetworkingPrivateServiceClient::NetworkingPrivateServiceClient(
           base::Bind(&NetworkingPrivateServiceClient::
                          OnNetworkListChangedEventOnUIThread,
                      weak_factory_.GetWeakPtr())));
-  net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
+  content::GetNetworkConnectionTracker()->AddNetworkConnectionObserver(this);
 }
 
 NetworkingPrivateServiceClient::~NetworkingPrivateServiceClient() {
@@ -79,14 +80,14 @@ NetworkingPrivateServiceClient::~NetworkingPrivateServiceClient() {
 
 void NetworkingPrivateServiceClient::Shutdown() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
+  content::GetNetworkConnectionTracker()->RemoveNetworkConnectionObserver(this);
   // Clear callbacks map to release callbacks from UI thread.
   callbacks_map_.Clear();
   // Post ShutdownWifiServiceOnWorkerThread task to delete services when all
   // posted tasks are done.
   task_runner_->PostTask(FROM_HERE,
-                         base::Bind(&ShutdownWifiServiceOnWorkerThread,
-                                    base::Passed(&wifi_service_)));
+                         base::BindOnce(&ShutdownWifiServiceOnWorkerThread,
+                                        std::move(wifi_service_)));
 }
 
 void NetworkingPrivateServiceClient::AddObserver(
@@ -99,11 +100,11 @@ void NetworkingPrivateServiceClient::RemoveObserver(
   network_events_observers_.RemoveObserver(observer);
 }
 
-void NetworkingPrivateServiceClient::OnNetworkChanged(
-    net::NetworkChangeNotifier::ConnectionType type) {
-  task_runner_->PostTask(FROM_HERE,
-                         base::Bind(&WiFiService::RequestConnectedNetworkUpdate,
-                                    base::Unretained(wifi_service_.get())));
+void NetworkingPrivateServiceClient::OnConnectionChanged(
+    network::mojom::ConnectionType type) {
+  task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&WiFiService::RequestConnectedNetworkUpdate,
+                                base::Unretained(wifi_service_.get())));
 }
 
 NetworkingPrivateServiceClient::ServiceCallbacks*
@@ -388,8 +389,8 @@ bool NetworkingPrivateServiceClient::DisableNetworkType(
 bool NetworkingPrivateServiceClient::RequestScan(
     const std::string& /* type */) {
   task_runner_->PostTask(FROM_HERE,
-                         base::Bind(&WiFiService::RequestNetworkScan,
-                                    base::Unretained(wifi_service_.get())));
+                         base::BindOnce(&WiFiService::RequestNetworkScan,
+                                        base::Unretained(wifi_service_.get())));
   return true;
 }
 

@@ -4,14 +4,23 @@
 
 #include "chrome/browser/ui/ash/assistant/assistant_setup.h"
 
+#include <string>
+#include <utility>
+
+#include "ash/public/cpp/notification_utils.h"
 #include "ash/public/cpp/vector_icons/vector_icons.h"
 #include "ash/public/interfaces/assistant_controller.mojom.h"
 #include "ash/public/interfaces/constants.mojom.h"
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/sequenced_task_runner_handle.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ash/assistant/assistant_pref_util.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/webui/chromeos/assistant_optin/assistant_optin_ui.h"
 #include "chrome/grit/generated_resources.h"
@@ -19,6 +28,7 @@
 #include "chromeos/services/assistant/public/proto/settings_ui.pb.h"
 #include "components/arc/arc_prefs.h"
 #include "components/prefs/pref_service.h"
+#include "components/user_manager/user_manager.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -75,13 +85,13 @@ class AssistantHotwordNotificationDelegate
 }  // namespace
 
 AssistantSetup::AssistantSetup(service_manager::Connector* connector)
-    : connector_(connector), binding_(this) {
-  // Bind to the Assistant controller in ash.
-  ash::mojom::AssistantControllerPtr assistant_controller;
-  connector_->BindInterface(ash::mojom::kServiceName, &assistant_controller);
+    : connector_(connector), binding_(this), weak_factory_(this) {
+  // Bind to the AssistantSetupController in ash.
+  ash::mojom::AssistantSetupControllerPtr setup_controller;
+  connector_->BindInterface(ash::mojom::kServiceName, &setup_controller);
   ash::mojom::AssistantSetupPtr ptr;
   binding_.Bind(mojo::MakeRequest(&ptr));
-  assistant_controller->SetAssistantSetup(std::move(ptr));
+  setup_controller->SetAssistantSetup(std::move(ptr));
 
   arc::VoiceInteractionControllerClient::Get()->AddObserver(this);
 }
@@ -91,11 +101,14 @@ AssistantSetup::~AssistantSetup() {
 }
 
 void AssistantSetup::StartAssistantOptInFlow(
+    ash::mojom::FlowType type,
     StartAssistantOptInFlowCallback callback) {
-  if (chromeos::AssistantOptInDialog::IsActive())
+  if (chromeos::AssistantOptInDialog::IsActive()) {
+    std::move(callback).Run(false);
     return;
+  }
 
-  chromeos::AssistantOptInDialog::Show(std::move(callback));
+  chromeos::AssistantOptInDialog::Show(type, std::move(callback));
 }
 
 void AssistantSetup::OnStateChanged(ash::mojom::VoiceInteractionState state) {
@@ -106,10 +119,12 @@ void AssistantSetup::OnStateChanged(ash::mojom::VoiceInteractionState state) {
   if (!settings_manager_)
     SyncActivityControlState();
 
-  // If the optin flow is active, no need to show the notification since it is
+  // If the OOBE flow is active, no need to show the notification since it is
   // included in the flow.
-  if (chromeos::AssistantOptInDialog::IsActive())
+  if (user_manager::UserManager::Get()->IsCurrentUserNew() &&
+      chromeos::LoginDisplayHost::default_host()) {
     return;
+  }
 
   Profile* profile = ProfileManager::GetActiveUserProfile();
   PrefService* prefs = profile->GetPrefs();
@@ -126,10 +141,10 @@ void AssistantSetup::OnStateChanged(ash::mojom::VoiceInteractionState state) {
   const base::string16 display_source =
       base::UTF8ToUTF16(kAssistantDisplaySource);
 
-  auto notification = message_center::Notification::CreateSystemNotification(
+  auto notification = ash::CreateSystemNotification(
       message_center::NOTIFICATION_TYPE_SIMPLE, kHotwordNotificationId, title,
       base::string16(), display_source, GURL(),
-      message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
+      message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
                                  kNotifierAssistant),
       {}, base::MakeRefCounted<AssistantHotwordNotificationDelegate>(profile),
       ash::kNotificationAssistantIcon,
@@ -158,7 +173,9 @@ void AssistantSetup::SyncActivityControlState() {
 
 void AssistantSetup::OnGetSettingsResponse(const std::string& settings) {
   chromeos::assistant::SettingsUi settings_ui;
-  settings_ui.ParseFromString(settings);
+  if (!settings_ui.ParseFromString(settings))
+    return;
+
   if (!settings_ui.has_consent_flow_ui()) {
     LOG(ERROR) << "Failed to get activity control status.";
     return;
@@ -172,18 +189,38 @@ void AssistantSetup::OnGetSettingsResponse(const std::string& settings) {
     case ConsentFlowUi::ASK_FOR_CONSENT:
       if (consent_ui.has_activity_control_ui() &&
           consent_ui.activity_control_ui().setting_zippy().size()) {
-        prefs->SetBoolean(arc::prefs::kVoiceInteractionActivityControlAccepted,
-                          false);
+        assistant::prefs::SetConsentStatus(
+            prefs, ash::mojom::ConsentStatus::kNotFound);
       } else {
-        prefs->SetBoolean(arc::prefs::kVoiceInteractionActivityControlAccepted,
-                          true);
+        assistant::prefs::SetConsentStatus(
+            prefs, ash::mojom::ConsentStatus::kActivityControlAccepted);
       }
       break;
-    case ConsentFlowUi::ALREADY_CONSENTED:
-      prefs->SetBoolean(arc::prefs::kVoiceInteractionActivityControlAccepted,
-                        true);
+    case ConsentFlowUi::ERROR_ACCOUNT:
+      assistant::prefs::SetConsentStatus(
+          prefs, ash::mojom::ConsentStatus::kUnauthorized);
       break;
-    default:
+    case ConsentFlowUi::ALREADY_CONSENTED:
+      assistant::prefs::SetConsentStatus(
+          prefs, ash::mojom::ConsentStatus::kActivityControlAccepted);
+      break;
+    case ConsentFlowUi::UNSPECIFIED:
+    case ConsentFlowUi::ERROR:
+      assistant::prefs::SetConsentStatus(prefs,
+                                         ash::mojom::ConsentStatus::kUnknown);
       LOG(ERROR) << "Invalid activity control consent status.";
+  }
+}
+
+void AssistantSetup::MaybeStartAssistantOptInFlow() {
+  auto* pref_service = ProfileManager::GetActiveUserProfile()->GetPrefs();
+  DCHECK(pref_service);
+  if (!pref_service->GetUserPrefValue(
+          assistant::prefs::kAssistantConsentStatus)) {
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(&AssistantSetup::StartAssistantOptInFlow,
+                                  weak_factory_.GetWeakPtr(),
+                                  ash::mojom::FlowType::CONSENT_FLOW,
+                                  base::DoNothing::Once<bool>()));
   }
 }

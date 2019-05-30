@@ -16,7 +16,6 @@
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
@@ -39,6 +38,26 @@ namespace chromeos {
 
 class CHROMEOS_EXPORT AccountManager {
  public:
+  // A dummy token stored against Active Directory accounts in Account Manager.
+  // Accounts stored in Account Manager must have a token associated with them.
+  // Active Directory accounts use Kerberos tickets for authentication, which is
+  // handled by a different infrastructure. Hence, we need a dummy token to
+  // store Active Directory accounts in Account Manager.
+  // See |AccountManager::UpsertToken|.
+  static const char kActiveDirectoryDummyToken[];
+
+  // A special token that is guaranteed to cheaply fail all network requests
+  // performed using it.
+  // Note that it neither marks an account in Account Manager as invalid, nor
+  // removes the account. This is useful in scenarios where account names are
+  // imported from elsewhere (Chrome content area or ARC++) and their tokens are
+  // not yet known, but at the same time, these accounts need to be surfaced on
+  // the UI.
+  // Do not use this token for Active Directory accounts,
+  // |kActiveDirectoryDummyToken| is meant for that.
+  // See |AccountManager::UpsertToken|.
+  static const char* const kInvalidToken;
+
   struct AccountKey {
     // |id| is obfuscated GAIA id for |AccountType::ACCOUNT_TYPE_GAIA|.
     // |id| is object GUID (|AccountId::GetObjGuid|) for
@@ -50,23 +69,31 @@ class CHROMEOS_EXPORT AccountManager {
 
     bool operator<(const AccountKey& other) const;
     bool operator==(const AccountKey& other) const;
+    bool operator!=(const AccountKey& other) const;
   };
 
-  // A map from |AccountKey| to a raw token.
-  using TokenMap = std::map<AccountKey, std::string>;
+  // Publicly viewable information about an account.
+  struct Account {
+    // A unique identifier for this account.
+    AccountKey key;
 
-  // A callback for list of |AccountKey|s.
-  using AccountListCallback = base::OnceCallback<void(std::vector<AccountKey>)>;
+    // The raw, un-canonicalized email id for this account.
+    std::string raw_email;
+  };
+
+  // Callback used for the (asynchronous) GetAccounts() call.
+  using AccountListCallback =
+      base::OnceCallback<void(const std::vector<Account>&)>;
 
   using DelayNetworkCallRunner =
-      base::RepeatingCallback<void(const base::RepeatingClosure&)>;
+      base::RepeatingCallback<void(base::OnceClosure)>;
 
   class Observer {
    public:
     Observer();
     virtual ~Observer();
 
-    // Called when the token for |account_key| is updated/inserted.
+    // Called when the token for |account| is updated/inserted.
     // Use |AccountManager::AddObserver| to add an |Observer|.
     // Note: |Observer|s which register with |AccountManager| before its
     // initialization is complete will get notified when |AccountManager| is
@@ -74,13 +101,13 @@ class CHROMEOS_EXPORT AccountManager {
     // Note: |Observer|s which register with |AccountManager| after its
     // initialization is complete will not get an immediate
     // notification-on-registration.
-    virtual void OnTokenUpserted(const AccountKey& account_key) = 0;
+    virtual void OnTokenUpserted(const Account& account) = 0;
 
     // Called when an account has been removed from AccountManager.
     // Observers that may have cached access tokens (fetched via
     // |AccountManager::CreateAccessTokenFetcher|), must clear their cache entry
-    // for this |account_key| on receiving this callback.
-    virtual void OnAccountRemoved(const AccountKey& account_key) = 0;
+    // for this |account| on receiving this callback.
+    virtual void OnAccountRemoved(const Account& account) = 0;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(Observer);
@@ -110,6 +137,12 @@ class CHROMEOS_EXPORT AccountManager {
   // constructed object.
   void GetAccounts(AccountListCallback callback);
 
+  // Gets (async) the raw, un-canonicalized email id corresponding to
+  // |account_key|. |callback| is called with an empty string if |account_key|
+  // is not known to Account Manager.
+  void GetAccountEmail(const AccountKey& account_key,
+                       base::OnceCallback<void(const std::string&)> callback);
+
   // Removes an account. Does not do anything if |account_key| is not known by
   // |AccountManager|.
   // Observers are notified about an account removal through
@@ -119,9 +152,25 @@ class CHROMEOS_EXPORT AccountManager {
   // with GAIA fails, AccountManager will forget the account.
   void RemoveAccount(const AccountKey& account_key);
 
-  // Updates or inserts a token, for the account corresponding to the given
-  // |account_key|. |account_key| must be valid (|AccountKey::IsValid|).
-  void UpsertToken(const AccountKey& account_key, const std::string& token);
+  // Updates or inserts an account. |raw_email| is the raw, un-canonicalized
+  // email id for |account_key|. |raw_email| must not be empty. Use
+  // |AccountManager::kActiveDirectoryDummyToken| as the |token| for Active
+  // Directory accounts, and |AccountManager::kInvalidToken| for Gaia accounts
+  // with unknown tokens.
+  void UpsertAccount(const AccountKey& account_key,
+                     const std::string& raw_email,
+                     const std::string& token);
+
+  // Updates the token for the account corresponding to the given |account_key|.
+  // The account must be known to Account Manager. See |UpsertAccount| for
+  // information about adding an account.
+  // Note: This API is idempotent.
+  void UpdateToken(const AccountKey& account_key, const std::string& token);
+
+  // Updates the email associated with |account_key|. The account must be known
+  // to Account Manager. See |UpsertAccount| for information about adding an
+  // account.
+  void UpdateEmail(const AccountKey& account_key, const std::string& raw_email);
 
   // Add a non owning pointer to an |AccountManager::Observer|.
   void AddObserver(Observer* observer);
@@ -133,6 +182,10 @@ class CHROMEOS_EXPORT AccountManager {
   // Gets AccountManager's URL Loader Factory.
   scoped_refptr<network::SharedURLLoaderFactory> GetUrlLoaderFactory();
 
+  // Sets the provided URL Loader Factory. Used only by tests.
+  void SetUrlLoaderFactoryForTests(
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
+
   // Creates and returns an |OAuth2AccessTokenFetcher| using the refresh token
   // stored for |account_key|. |IsTokenAvailable| should be |true| for
   // |account_key|, otherwise a |nullptr| is returned.
@@ -141,12 +194,19 @@ class CHROMEOS_EXPORT AccountManager {
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       OAuth2AccessTokenConsumer* consumer) const;
 
-  // Returns |true| if an LST is available for |account_key|.
-  // Note: An LST will not be available for |account_key| if it is an Active
-  // Directory account.
+  // Returns |true| if an LST is available for |account_key|. Note that
+  // "availability" does not guarantee "validity", i.e. this method will return
+  // true for LSTs that have expired / been invalidated.
+  // Note: Always returns false for Active Directory accounts.
   // Note: This method will return |false| if |AccountManager| has not been
   // initialized yet.
   bool IsTokenAvailable(const AccountKey& account_key) const;
+
+  // Returns true if the token stored against |account_key| is a dummy Gaia
+  // token. This is meant to be used only by
+  // |ChromeOSOAuth2TokenServiceDelegate| to pre-emptively reject access token
+  // requests for |account_key|.
+  bool HasDummyGaiaToken(const AccountKey& account_key) const;
 
  private:
   enum InitializationState {
@@ -155,12 +215,25 @@ class CHROMEOS_EXPORT AccountManager {
     kInitialized,  // Initialization was successfully completed
   };
 
+  // Account Manager's internal information about an account.
+  struct AccountInfo {
+    std::string raw_email;
+    std::string token;
+  };
+
   // A util class to revoke Gaia tokens on server. This class is meant to be
   // used for a single request.
   class GaiaTokenRevocationRequest;
 
   friend class AccountManagerTest;
   FRIEND_TEST_ALL_PREFIXES(AccountManagerTest, TestInitialization);
+  FRIEND_TEST_ALL_PREFIXES(AccountManagerTest, TestTokenPersistence);
+  FRIEND_TEST_ALL_PREFIXES(AccountManagerTest,
+                           UpdatingAccountEmailShouldNotOverwriteTokens);
+  FRIEND_TEST_ALL_PREFIXES(AccountManagerTest,
+                           UpdatingTokensShouldNotOverwriteAccountEmail);
+
+  using AccountMap = std::map<AccountKey, AccountInfo>;
 
   // Same as the public |Initialize| except for a |task_runner|.
   void Initialize(
@@ -169,9 +242,13 @@ class CHROMEOS_EXPORT AccountManager {
       DelayNetworkCallRunner delay_network_call_runner,
       scoped_refptr<base::SequencedTaskRunner> task_runner);
 
-  // Reads tokens from |tokens| and inserts them in |tokens_| and runs all
+  // Loads accounts from disk and returns the result.
+  static AccountMap LoadAccountsFromDisk(
+      const base::FilePath& tokens_file_path);
+
+  // Reads accounts from |accounts| and inserts them in |accounts_| and runs all
   // callbacks waiting on |AccountManager| initialization.
-  void InsertTokensAndRunInitializationCallbacks(const TokenMap& tokens);
+  void InsertAccountsAndRunInitializationCallbacks(const AccountMap& accounts);
 
   // Accepts a closure and runs it immediately if |AccountManager| has already
   // been initialized, otherwise saves the |closure| for running later, when the
@@ -182,31 +259,53 @@ class CHROMEOS_EXPORT AccountManager {
   // |AccountManager| initialization (|init_state_|) is complete.
   void GetAccountsInternal(AccountListCallback callback);
 
+  // Does the actual work of fetching the email for |account_key|. Assumes that
+  // |AccountManager| initialization (|init_state_|) is complete.
+  void GetAccountEmailInternal(
+      const AccountKey& account_key,
+      base::OnceCallback<void(const std::string&)> callback);
+
   // Does the actual work of removing an account. Assumes that
   // |AccountManager| initialization (|init_state_|) is complete.
   void RemoveAccountInternal(const AccountKey& account_key);
 
-  // Does the actual work of updating or inserting tokens. Assumes that
-  // |AccountManager| initialization (|init_state_|) is complete.
-  void UpsertTokenInternal(const AccountKey& account_key,
+  // Assumes that |AccountManager| initialization (|init_state_|) is complete.
+  void UpdateTokenInternal(const AccountKey& account_key,
                            const std::string& token);
 
+  // Assumes that |AccountManager| initialization (|init_state_|) is complete.
+  void UpdateEmailInternal(const AccountKey& account_key,
+                           const std::string& raw_email);
+
+  // Does the actual work of upserting an account and performing related tasks
+  // like revoking old tokens and informing observers. All account updates
+  // funnel through to this method. Assumes that |AccountManager| initialization
+  // (|init_state_|) is complete.
+  void UpsertAccountInternal(const AccountKey& account_key,
+                             const AccountInfo& account);
+
   // Posts a task on |task_runner_|, which is usually a background thread, to
-  // persist the current state of |tokens_|.
-  void PersistTokensAsync();
+  // persist the current state of |accounts_|.
+  void PersistAccountsAsync();
 
-  // Notify |Observer|s about a token update.
-  void NotifyTokenObservers(const AccountKey& account_key);
+  // Gets a serialized representation of accounts.
+  std::string GetSerializedAccounts();
 
-  // Notify |Observer|s about an account removal.
-  void NotifyAccountRemovalObservers(const AccountKey& account_key);
+  // Gets the publicly viewable information stored in |accounts_|.
+  std::vector<Account> GetAccounts();
+
+  // Notifies |Observer|s about a token update for |account|.
+  void NotifyTokenObservers(const Account& account);
+
+  // Notifies |Observer|s about an |account| removal.
+  void NotifyAccountRemovalObservers(const Account& account);
 
   // Revokes |account_key|'s token on the relevant backend.
   // Note: Does not do anything if the |account_manager::AccountType|
   // of |account_key| does not support server token revocation.
-  // Note: Does not do anything if |account_key| is not present in |tokens_|.
+  // Note: Does not do anything if |account_key| is not present in |accounts_|.
   // Hence, call this method before actually modifying or deleting old tokens
-  // from |tokens_|.
+  // from |accounts_|.
   void MaybeRevokeTokenOnServer(const AccountKey& account_key);
 
   // Revokes |refresh_token| with GAIA. Virtual for testing.
@@ -231,8 +330,8 @@ class CHROMEOS_EXPORT AccountManager {
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   std::unique_ptr<base::ImportantFileWriter> writer_;
 
-  // A map of account keys to tokens.
-  TokenMap tokens_;
+  // A map from |AccountKey|s to |AccountInfo|.
+  AccountMap accounts_;
 
   // Callbacks waiting on class initialization (|init_state_|).
   std::vector<base::OnceClosure> initialization_callbacks_;

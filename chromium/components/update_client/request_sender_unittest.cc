@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
@@ -14,8 +15,8 @@
 #include "base/strings/string_util.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/update_client/net/url_loader_post_interceptor.h"
 #include "components/update_client/test_configurator.h"
-#include "components/update_client/url_loader_post_interceptor.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace update_client {
@@ -72,7 +73,7 @@ class RequestSenderTest : public testing::Test,
   DISALLOW_COPY_AND_ASSIGN(RequestSenderTest);
 };
 
-INSTANTIATE_TEST_CASE_P(IsForeground, RequestSenderTest, ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(IsForeground, RequestSenderTest, ::testing::Bool());
 
 RequestSenderTest::RequestSenderTest()
     : scoped_task_environment_(
@@ -229,7 +230,7 @@ TEST_F(RequestSenderTest, RequestSendFailedNoUrls) {
   std::vector<GURL> urls;
   request_sender_ = std::make_unique<RequestSender>(config_);
   request_sender_->Send(
-      urls, std::map<std::string, std::string>(), "test", false,
+      urls, {}, "test", false,
       base::BindOnce(&RequestSenderTest::RequestSenderComplete,
                      base::Unretained(this)));
   RunThreads();

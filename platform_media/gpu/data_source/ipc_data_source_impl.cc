@@ -82,9 +82,11 @@ IPCDataSourceImpl::IPCDataSourceImpl(IPC::Sender* channel,
     if (!GetSize(&content_log_size_))
       content_log_size_ = 1024 * 1024 * 16;
     content_log_ = std::make_unique<base::MemoryMappedFile>();
-    content_log_->Initialize(std::move(content_log_file),
-                             {0, content_log_size_},
-                             base::MemoryMappedFile::READ_WRITE_EXTEND);
+    if (!content_log_->Initialize(std::move(content_log_file),
+                                  {0, content_log_size_},
+                                  base::MemoryMappedFile::READ_WRITE_EXTEND)) {
+      content_log_.reset();
+    }
   }
 #endif //NDEBUG
 }
@@ -179,6 +181,9 @@ void IPCDataSourceImpl::SetBitrate(int bitrate) {
 void IPCDataSourceImpl::OnBufferForRawDataReady(
     size_t buffer_size,
     base::SharedMemoryHandle handle) {
+  VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " OnBufferForRawDataReady, size: " << buffer_size;
+
   if (read_operation_.get() == NULL) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << " Received buffer while no read operation is in progress.";
@@ -197,68 +202,76 @@ void IPCDataSourceImpl::OnBufferForRawDataReady(
     return;
   }
 
+  VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " Mapping shared data, size: " << buffer_size;
+
   shared_data_.reset(new base::SharedMemory(handle, true));
   if (!shared_data_->Map(buffer_size)) {
     ReadOperation::Finish(std::move(read_operation_), NULL, kReadError);
     return;
   }
+  VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " MediaPipelineMsg_ReadRawData";
 
   channel_->Send(new MediaPipelineMsg_ReadRawData(
       routing_id_, read_operation_->position(), read_operation_->size()));
 }
 
 void IPCDataSourceImpl::OnRawDataReady(int size) {
-  {
-    base::AutoLock auto_lock(lock_);
+  base::AutoLock auto_lock(lock_);
 
-    if (stopped_)
-      return;
+  if (stopped_)
+    return;
 
-    if (should_discard_next_buffer_) {
-      DCHECK(read_operation_);
-      should_discard_next_buffer_ = false;
-      ReadOperation::Finish(std::move(read_operation_), NULL, kReadInterrupted);
-      return;
-    }
-
-    if (read_operation_.get() == NULL) {
-      LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " Unexpected call to " << __FUNCTION__;
-      return;
-    }
-
-    if (size > 0) {
-      if (shared_data_.get() != NULL &&
-          base::saturated_cast<int>(shared_data_->mapped_size()) >= size) {
-        auto* shared_memory = static_cast<uint8_t*>(shared_data_->memory());
-#ifndef NDEBUG
-        if (content_log_size_ > 0) {
-          if (read_operation_->position() + read_operation_->size() >
-              content_log_size_) {
-            content_log_size_ = read_operation_->position() + read_operation_->size() + 1024 * 1024 * 16;
-            content_log_ = std::make_unique<base::MemoryMappedFile>();
-            base::File content_log_file(content_log_path_,
-                                        base::File::FLAG_OPEN |
-                                            base::File::FLAG_READ |
-                                            base::File::FLAG_WRITE);
-            content_log_->Initialize(std::move(content_log_file),
-                                     {0, content_log_size_},
-                                     base::MemoryMappedFile::READ_WRITE_EXTEND);
-          }
-          std::copy(shared_memory, shared_memory + size, content_log_->data() + read_operation_->position());
-        }
-#endif //NDEBUG
-        ReadOperation::Finish(std::move(read_operation_),
-                              shared_memory,
-                              size);
-        return;
-      }
-
-      size = kReadError;
-    }
-
-    ReadOperation::Finish(std::move(read_operation_), NULL, size);
+  if (should_discard_next_buffer_) {
+    DCHECK(read_operation_);
+    should_discard_next_buffer_ = false;
+    ReadOperation::Finish(std::move(read_operation_), NULL, kReadInterrupted);
+    return;
   }
+
+  if (read_operation_.get() == NULL) {
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                << " Unexpected call to " << __FUNCTION__;
+    return;
+  }
+
+  if (size > 0) {
+    if (shared_data_.get() != NULL &&
+        base::saturated_cast<int>(shared_data_->mapped_size()) >= size) {
+      auto* shared_memory = static_cast<uint8_t*>(shared_data_->memory());
+#ifndef NDEBUG
+      if (content_log_size_ > 0) {
+        if (read_operation_->position() + read_operation_->size() >
+            content_log_size_) {
+          content_log_size_ = read_operation_->position() +
+                              read_operation_->size() + 1024 * 1024 * 16;
+          content_log_ = std::make_unique<base::MemoryMappedFile>();
+          base::File content_log_file(content_log_path_,
+                                      base::File::FLAG_OPEN |
+                                          base::File::FLAG_READ |
+                                          base::File::FLAG_WRITE);
+          if (!content_log_->Initialize(
+                  std::move(content_log_file), {0, content_log_size_},
+                  base::MemoryMappedFile::READ_WRITE_EXTEND)) {
+            content_log_.reset();
+          };
+        }
+        if (content_log_)
+          std::copy(shared_memory, shared_memory + size,
+                    content_log_->data() + read_operation_->position());
+      }
+#endif  // NDEBUG
+      ReadOperation::Finish(std::move(read_operation_),
+                            shared_memory,
+                            size);
+      return;
+    }
+
+    size = kReadError;
+  }
+
+  ReadOperation::Finish(std::move(read_operation_), NULL, size);
 }
 
 }  // namespace media

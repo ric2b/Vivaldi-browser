@@ -65,6 +65,8 @@ DownloadSource DownloadDBConversions::DownloadSourceFromProto(
       return DownloadSource::OFFLINE_PAGE;
     case download_pb::DownloadSource::CONTEXT_MENU:
       return DownloadSource::CONTEXT_MENU;
+    case download_pb::DownloadSource::RETRY:
+      return DownloadSource::RETRY;
   }
   NOTREACHED();
   return DownloadSource::UNKNOWN;
@@ -94,6 +96,8 @@ download_pb::DownloadSource DownloadDBConversions::DownloadSourceToProto(
       return download_pb::DownloadSource::OFFLINE_PAGE;
     case DownloadSource::CONTEXT_MENU:
       return download_pb::DownloadSource::CONTEXT_MENU;
+    case DownloadSource::RETRY:
+      return download_pb::DownloadSource::RETRY;
   }
   NOTREACHED();
   return download_pb::DownloadSource::UNKNOWN;
@@ -190,6 +194,7 @@ download_pb::InProgressInfo DownloadDBConversions::InProgressInfoToProto(
   proto.set_paused(in_progress_info.paused);
   proto.set_metered(in_progress_info.metered);
   proto.set_bytes_wasted(in_progress_info.bytes_wasted);
+  proto.set_auto_resume_count(in_progress_info.auto_resume_count);
   return proto;
 }
 
@@ -243,6 +248,7 @@ InProgressInfo DownloadDBConversions::InProgressInfoFromProto(
   info.paused = proto.paused();
   info.metered = proto.metered();
   info.bytes_wasted = proto.bytes_wasted();
+  info.auto_resume_count = proto.auto_resume_count();
   return info;
 }
 

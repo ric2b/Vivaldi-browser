@@ -8,6 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/common/gles2_cmd_format.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/command_buffer/service/context_group.h"
@@ -71,9 +72,9 @@ class GLES2DecoderGeometryInstancingTest : public GLES2DecoderWithShaderTest {
   }
 };
 
-INSTANTIATE_TEST_CASE_P(Service,
-                        GLES2DecoderGeometryInstancingTest,
-                        ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(Service,
+                         GLES2DecoderGeometryInstancingTest,
+                         ::testing::Bool());
 
 void GLES2DecoderManualInitTest::DirtyStateMaskTest(GLuint color_bits,
                                                     bool depth_mask,
@@ -2303,7 +2304,7 @@ TEST_P(GLES2DecoderManualInitTest, DrawClearsDepthTexture) {
       .WillOnce(Return(GL_FRAMEBUFFER_COMPLETE))
       .RetiresOnSaturation();
 
-  EXPECT_CALL(*gl_, ColorMask(1, 1, 1, 1)).Times(1).RetiresOnSaturation();
+  SetupExpectationsForColorMask(true, true, true, true);
   EXPECT_CALL(*gl_, ClearColor(0.0f, 0.0f, 0.0f, 0.0f))
       .Times(1)
       .RetiresOnSaturation();
@@ -2335,6 +2336,7 @@ TEST_P(GLES2DecoderManualInitTest, DrawClearsDepthTexture) {
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
 
+#if defined(OS_MACOSX)
 TEST_P(GLES2DecoderManualInitTest, DrawClearsLargeTexture) {
   InitState init;
   init.gl_version = "OpenGL ES 3.0";
@@ -2376,7 +2378,7 @@ TEST_P(GLES2DecoderManualInitTest, DrawClearsLargeTexture) {
       .WillOnce(Return(GL_FRAMEBUFFER_COMPLETE))
       .RetiresOnSaturation();
 
-  EXPECT_CALL(*gl_, ColorMask(1, 1, 1, 1)).Times(1).RetiresOnSaturation();
+  SetupExpectationsForColorMask(true, true, true, true);
   EXPECT_CALL(*gl_, ClearColor(0.0f, 0.0f, 0.0f, 0.0f))
       .Times(1)
       .RetiresOnSaturation();
@@ -2409,6 +2411,7 @@ TEST_P(GLES2DecoderManualInitTest, DrawClearsLargeTexture) {
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
+#endif
 
 TEST_P(GLES3DecoderTest, DrawNoProgram) {
   SetupAllNeededVertexBuffers();

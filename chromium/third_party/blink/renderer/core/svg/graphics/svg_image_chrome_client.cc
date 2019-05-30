@@ -44,16 +44,13 @@ static constexpr TimeDelta kAnimationFrameDelay =
 SVGImageChromeClient::SVGImageChromeClient(SVGImage* image)
     : image_(image),
       animation_timer_(std::make_unique<TaskRunnerTimer<SVGImageChromeClient>>(
-          blink::Platform::Current()
-              ->CurrentThread()
-              ->Scheduler()
-              ->CompositorTaskRunner(),
+          ThreadScheduler::Current()->CompositorTaskRunner(),
           this,
           &SVGImageChromeClient::AnimationTimerFired)),
       timeline_state_(kRunning) {}
 
 SVGImageChromeClient* SVGImageChromeClient::Create(SVGImage* image) {
-  return new SVGImageChromeClient(image);
+  return MakeGarbageCollected<SVGImageChromeClient>(image);
 }
 
 bool SVGImageChromeClient::IsSVGImageChromeClient() const {
@@ -64,11 +61,11 @@ void SVGImageChromeClient::ChromeDestroyed() {
   image_ = nullptr;
 }
 
-void SVGImageChromeClient::InvalidateRect(const IntRect& r) {
-  // If m_image->m_page is null, we're being destructed, don't fire
-  // changedInRect() in that case.
+void SVGImageChromeClient::InvalidateRect(const IntRect&) {
+  // If image_->page_ is null, we're being destructed, so don't fire
+  // |Changed()| in that case.
   if (image_ && image_->GetImageObserver() && image_->page_)
-    image_->GetImageObserver()->ChangedInRect(image_, r);
+    image_->GetImageObserver()->Changed(image_);
 }
 
 void SVGImageChromeClient::SuspendAnimation() {

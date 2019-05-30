@@ -172,8 +172,8 @@ class SyncChannel::ReceivedSyncMsgQueue :
     dispatch_event_.Signal();
     if (!was_task_pending) {
       listener_task_runner_->PostTask(
-          FROM_HERE, base::Bind(&ReceivedSyncMsgQueue::DispatchMessagesTask,
-                                this, base::RetainedRef(context)));
+          FROM_HERE, base::BindOnce(&ReceivedSyncMsgQueue::DispatchMessagesTask,
+                                    this, base::RetainedRef(context)));
     }
   }
 
@@ -416,8 +416,8 @@ bool SyncChannel::SyncContext::Pop() {
   // Send() call.  So check if we have any queued replies available that
   // can now unblock the listener thread.
   ipc_task_runner()->PostTask(
-      FROM_HERE, base::Bind(&ReceivedSyncMsgQueue::DispatchReplies,
-                            received_sync_msgs_));
+      FROM_HERE, base::BindOnce(&ReceivedSyncMsgQueue::DispatchReplies,
+                                received_sync_msgs_));
 
   return result;
 }
@@ -495,11 +495,13 @@ void SyncChannel::SyncContext::OnChannelError() {
 }
 
 void SyncChannel::SyncContext::OnChannelOpened() {
-  shutdown_watcher_.StartWatching(
-      shutdown_event_,
-      base::Bind(&SyncChannel::SyncContext::OnShutdownEventSignaled,
-                 base::Unretained(this)),
-      base::SequencedTaskRunnerHandle::Get());
+  if (shutdown_event_) {
+    shutdown_watcher_.StartWatching(
+        shutdown_event_,
+        base::BindOnce(&SyncChannel::SyncContext::OnShutdownEventSignaled,
+                       base::Unretained(this)),
+        base::SequencedTaskRunnerHandle::Get());
+  }
   Context::OnChannelOpened();
 }
 
@@ -539,6 +541,11 @@ std::unique_ptr<SyncChannel> SyncChannel::Create(
     const scoped_refptr<base::SingleThreadTaskRunner>& listener_task_runner,
     bool create_pipe_now,
     base::WaitableEvent* shutdown_event) {
+  // TODO(tobiasjs): The shutdown_event object is passed to a refcounted
+  // Context object, and as a result it is not easy to ensure that it
+  // outlives the Context.  There should be some way to either reset
+  // the shutdown_event when it is destroyed, or allow the Context to
+  // control the lifetime of shutdown_event.
   std::unique_ptr<SyncChannel> channel =
       Create(listener, ipc_task_runner, listener_task_runner, shutdown_event);
   channel->Init(channel_handle, mode, create_pipe_now);

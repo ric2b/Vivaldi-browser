@@ -14,7 +14,6 @@
 #include "components/download/internal/background_service/download_service_impl.h"
 #include "components/download/internal/background_service/download_store.h"
 #include "components/download/internal/background_service/empty_file_monitor.h"
-#include "components/download/internal/background_service/empty_task_scheduler.h"
 #include "components/download/internal/background_service/file_monitor_impl.h"
 #include "components/download/internal/background_service/in_memory_download_driver.h"
 #include "components/download/internal/background_service/logger_impl.h"
@@ -22,18 +21,19 @@
 #include "components/download/internal/background_service/noop_store.h"
 #include "components/download/internal/background_service/proto/entry.pb.h"
 #include "components/download/internal/background_service/scheduler/scheduler_impl.h"
-#include "components/leveldb_proto/proto_database_impl.h"
+#include "components/download/public/task/empty_task_scheduler.h"
+#include "components/leveldb_proto/public/proto_database_provider.h"
 #include "content/public/browser/storage_partition.h"
 
 #if defined(OS_ANDROID)
 #include "components/download/internal/background_service/android/battery_status_listener_android.h"
-#include "components/download/internal/background_service/android/network_status_listener_android.h"
+#include "components/download/network/android/network_status_listener_android.h"
 #elif defined(OS_MACOSX)
 #include "components/download/internal/background_service/scheduler/battery_status_listener_mac.h"
-#include "components/download/internal/background_service/scheduler/network_status_listener_mac.h"
+#include "components/download/network/network_status_listener_mac.h"
 #else
 #include "components/download/internal/background_service/scheduler/battery_status_listener_impl.h"
-#include "components/download/internal/background_service/scheduler/network_status_listener_impl.h"
+#include "components/download/network/network_status_listener_impl.h"
 #endif
 
 namespace download {
@@ -107,7 +107,7 @@ DownloadService* BuildDownloadService(
 
   auto entry_db_storage_dir = storage_dir.Append(kEntryDBStorageDir);
   auto entry_db =
-      std::make_unique<leveldb_proto::ProtoDatabaseImpl<protodb::Entry>>(
+      leveldb_proto::ProtoDatabaseProvider::CreateUniqueDB<protodb::Entry>(
           background_task_runner);
   auto store = std::make_unique<DownloadStore>(entry_db_storage_dir,
                                                std::move(entry_db));

@@ -4,6 +4,7 @@
 
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 
+#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/registry.h"
@@ -43,7 +44,7 @@ bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
   //   dd373896(v=vs.85).aspx
   wchar_t result_buffer[80];
   int len = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_STIMEFORMAT,
-                            result_buffer, arraysize(result_buffer));
+                            result_buffer, base::size(result_buffer));
 
   if (len == 0) {
     return false;
@@ -51,7 +52,7 @@ bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
 
   std::string timeformat = base::UTF16ToUTF8(result_buffer);
   len = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SSHORTDATE,
-                        result_buffer, arraysize(result_buffer));
+                        result_buffer, base::size(result_buffer));
 
   if (len == 0) {
     return false;
@@ -59,7 +60,7 @@ bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
 
   std::string shortformat = base::UTF16ToUTF8(result_buffer);
   len = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SLONGDATE,
-                        result_buffer, arraysize(result_buffer));
+                        result_buffer, base::size(result_buffer));
 
   if (len == 0) {
     return false;
@@ -67,7 +68,7 @@ bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
 
   std::string longdateformat = base::UTF16ToUTF8(result_buffer);
   len = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_IFIRSTDAYOFWEEK,
-                        result_buffer, arraysize(result_buffer));
+                        result_buffer, base::size(result_buffer));
 
   if (len == 0) {
     return false;

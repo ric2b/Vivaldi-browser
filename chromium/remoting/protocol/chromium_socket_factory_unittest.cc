@@ -14,8 +14,8 @@
 #include "base/single_thread_task_runner.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/webrtc/rtc_base/asyncpacketsocket.h"
-#include "third_party/webrtc/rtc_base/socketaddress.h"
+#include "third_party/webrtc/rtc_base/async_packet_socket.h"
+#include "third_party/webrtc/rtc_base/socket_address.h"
 
 namespace remoting {
 namespace protocol {
@@ -35,9 +35,10 @@ class ChromiumSocketFactoryTest : public testing::Test,
   }
 
   void OnPacket(rtc::AsyncPacketSocket* socket,
-                const char* data, size_t size,
+                const char* data,
+                size_t size,
                 const rtc::SocketAddress& address,
-                const rtc::PacketTime& packet_time) {
+                const int64_t& packet_time) {
     EXPECT_EQ(socket, socket_.get());
     last_packet_.assign(data, data + size);
     last_address_ = address;

@@ -5,7 +5,7 @@
 #ifndef IOS_CLEAN_CHROME_BROWSER_UI_FULLSCREEN_FULLSCREEN_CONTROLLER_OBSERVER_H_
 #define IOS_CLEAN_CHROME_BROWSER_UI_FULLSCREEN_FULLSCREEN_CONTROLLER_OBSERVER_H_
 
-#include <CoreGraphics/CoreGraphics.h>
+#import <UIKit/UIKit.h>
 
 #include "base/macros.h"
 
@@ -18,6 +18,13 @@ class FullscreenControllerObserver {
   FullscreenControllerObserver() = default;
   virtual ~FullscreenControllerObserver() = default;
 
+  // Invoked when the maximum or minimum viewport insets for |controller| have
+  // been updated.
+  virtual void FullscreenViewportInsetRangeChanged(
+      FullscreenController* controller,
+      UIEdgeInsets min_viewport_insets,
+      UIEdgeInsets max_viewport_insets) {}
+
   // Invoked after a scrolling event has caused |controller| to calculate
   // |progress|.  A |progress| value of 1.0 denotes that the toolbar should be
   // completely visible, while a |progress| value of 0.0 denotes that the
@@ -29,28 +36,11 @@ class FullscreenControllerObserver {
   virtual void FullscreenEnabledStateChanged(FullscreenController* controller,
                                              bool enabled) {}
 
-  // Invoked when a scroll event being observed by |controller| has ended.
-  // Observers can add animations to |animator|.
-  virtual void FullscreenScrollEventEnded(FullscreenController* controller,
-                                          FullscreenAnimator* animator) {}
-
-  // Invoked to scroll the main content view to the top.  FullscreenUIElements
-  // are expected add animations that scroll the content to the top and fully
-  // show the toolbar.
-  virtual void FullscreenWillScrollToTop(FullscreenController* controller,
-                                         FullscreenAnimator* animator) {}
-
-  // Invoked when the application is about to enter the foreground.
-  // FullscreenUIElements are expected to add animations to |animator| to show
-  // the toolbar.
-  virtual void FullscreenWillEnterForeground(FullscreenController* controller,
-                                             FullscreenAnimator* animator) {}
-
-  // Invoked when FullscreenController::ResetModel() is called.
-  // FullscreenUIElements are expected to add animations to |animator| to show
-  // the toolbar.
-  virtual void FullscreenModelWasReset(FullscreenController* controller,
-                                       FullscreenAnimator* animator) {}
+  // Invoked when |controller| is about to start an animation with |animator|.
+  // Observers are expected to add animations to update UI for |animator|'s
+  // final progress.
+  virtual void FullscreenWillAnimate(FullscreenController* controller,
+                                     FullscreenAnimator* animator) {}
 
   // Invoked before the FullscreenController service is shut down.
   virtual void FullscreenControllerWillShutDown(

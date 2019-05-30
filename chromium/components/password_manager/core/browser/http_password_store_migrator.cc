@@ -4,10 +4,16 @@
 
 #include "components/password_manager/core/browser/http_password_store_migrator.h"
 
+#include <string>
+#include <utility>
+
+#include "base/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/stl_util.h"
+#include "base/strings/strcat.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
+#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
@@ -51,6 +57,33 @@ HttpPasswordStoreMigrator::HttpPasswordStoreMigrator(
 
 HttpPasswordStoreMigrator::~HttpPasswordStoreMigrator() = default;
 
+autofill::PasswordForm HttpPasswordStoreMigrator::MigrateHttpFormToHttps(
+    const autofill::PasswordForm& http_form) {
+  DCHECK(http_form.origin.SchemeIs(url::kHttpScheme));
+
+  autofill::PasswordForm https_form = http_form;
+  GURL::Replacements rep;
+  rep.SetSchemeStr(url::kHttpsScheme);
+  https_form.origin = http_form.origin.ReplaceComponents(rep);
+
+  // Only replace the scheme of the signon_realm in case it is HTTP. Do not
+  // change the signon_realm for federated credentials.
+  if (GURL(http_form.signon_realm).SchemeIs(url::kHttpScheme)) {
+    https_form.signon_realm =
+        base::StrCat({url::kHttpsScheme, url::kStandardSchemeSeparator,
+                      password_manager_util::GetSignonRealmWithProtocolExcluded(
+                          https_form)});
+  }
+  // If |action| is not HTTPS then it's most likely obsolete. Otherwise, it
+  // may still be valid.
+  if (!http_form.action.SchemeIs(url::kHttpsScheme))
+    https_form.action = https_form.origin;
+  https_form.form_data = autofill::FormData();
+  https_form.generation_upload_status = autofill::PasswordForm::NO_SIGNAL_SENT;
+  https_form.skip_zero_click = false;
+  return https_form;
+}
+
 void HttpPasswordStoreMigrator::OnGetPasswordStoreResults(
     std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -84,19 +117,8 @@ void HttpPasswordStoreMigrator::ProcessPasswordStoreResults() {
   // Add the new credentials to the password store. The HTTP forms are
   // removed iff |mode_| == MigrationMode::MOVE.
   for (const auto& form : results_) {
-    autofill::PasswordForm new_form = *form;
-
-    GURL::Replacements rep;
-    rep.SetSchemeStr(url::kHttpsScheme);
-    new_form.origin = form->origin.ReplaceComponents(rep);
-    new_form.signon_realm = new_form.origin.GetOrigin().spec();
-    // If |action| is not HTTPS then it's most likely obsolete. Otherwise, it
-    // may still be valid.
-    if (!form->action.SchemeIs(url::kHttpsScheme))
-      new_form.action = new_form.origin;
-    new_form.form_data = autofill::FormData();
-    new_form.generation_upload_status = autofill::PasswordForm::NO_SIGNAL_SENT;
-    new_form.skip_zero_click = false;
+    autofill::PasswordForm new_form =
+        HttpPasswordStoreMigrator::MigrateHttpFormToHttps(*form);
     client_->GetPasswordStore()->AddLogin(new_form);
 
     if (mode_ == MigrationMode::MOVE)

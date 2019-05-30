@@ -4,6 +4,8 @@
 
 #include "chromeos/dbus/smb_provider_client.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_util.h"
@@ -56,6 +58,14 @@ bool ParseDeleteList(const base::ScopedFD& fd,
          delete_list->ParseFromArray(buffer.data(), buffer.size());
 }
 
+std::unique_ptr<smbprovider::MountConfigProto> CreateMountConfigProto(
+    bool enable_ntlm) {
+  auto mount_config = std::make_unique<smbprovider::MountConfigProto>();
+  mount_config->set_enable_ntlm(enable_ntlm);
+
+  return mount_config;
+}
+
 class SmbProviderClientImpl : public SmbProviderClient {
  public:
   SmbProviderClientImpl() = default;
@@ -63,6 +73,7 @@ class SmbProviderClientImpl : public SmbProviderClient {
   ~SmbProviderClientImpl() override {}
 
   void Mount(const base::FilePath& share_path,
+             bool ntlm_enabled,
              const std::string& workgroup,
              const std::string& username,
              base::ScopedFD password_fd,
@@ -71,6 +82,10 @@ class SmbProviderClientImpl : public SmbProviderClient {
     options.set_path(share_path.value());
     options.set_workgroup(workgroup);
     options.set_username(username);
+
+    std::unique_ptr<smbprovider::MountConfigProto> config =
+        CreateMountConfigProto(ntlm_enabled);
+    options.set_allocated_mount_config(config.release());
 
     dbus::MethodCall method_call(smbprovider::kSmbProviderInterface,
                                  smbprovider::kMountMethod);
@@ -83,6 +98,7 @@ class SmbProviderClientImpl : public SmbProviderClient {
 
   void Remount(const base::FilePath& share_path,
                int32_t mount_id,
+               bool ntlm_enabled,
                const std::string& workgroup,
                const std::string& username,
                base::ScopedFD password_fd,
@@ -93,6 +109,10 @@ class SmbProviderClientImpl : public SmbProviderClient {
     options.set_workgroup(workgroup);
     options.set_username(username);
 
+    std::unique_ptr<smbprovider::MountConfigProto> config =
+        CreateMountConfigProto(ntlm_enabled);
+    options.set_allocated_mount_config(config.release());
+
     dbus::MethodCall method_call(smbprovider::kSmbProviderInterface,
                                  smbprovider::kRemountMethod);
     dbus::MessageWriter writer(&method_call);
@@ -100,6 +120,25 @@ class SmbProviderClientImpl : public SmbProviderClient {
     writer.AppendFileDescriptor(password_fd.get());
 
     CallDefaultMethod(&method_call, &callback);
+  }
+
+  void Premount(const base::FilePath& share_path,
+                bool ntlm_enabled,
+                MountCallback callback) override {
+    smbprovider::PremountOptionsProto options;
+    options.set_path(share_path.value());
+
+    std::unique_ptr<smbprovider::MountConfigProto> config =
+        CreateMountConfigProto(ntlm_enabled);
+    options.set_allocated_mount_config(config.release());
+
+    dbus::MethodCall method_call(smbprovider::kSmbProviderInterface,
+                                 smbprovider::kPremountMethod);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendProtoAsArrayOfBytes(options);
+
+    CallMethod(&method_call, &SmbProviderClientImpl::HandleMountCallback,
+               &callback);
   }
 
   void Unmount(int32_t mount_id, StatusCallback callback) override {
@@ -315,6 +354,64 @@ class SmbProviderClientImpl : public SmbProviderClient {
     dbus::MessageWriter writer(&method_call);
     writer.AppendInt32(mount_id);
     writer.AppendInt32(copy_token);
+    CallDefaultMethod(&method_call, &callback);
+  }
+
+  void StartReadDirectory(int32_t mount_id,
+                          const base::FilePath& directory_path,
+                          StartReadDirectoryCallback callback) override {
+    smbprovider::ReadDirectoryOptionsProto options;
+    options.set_mount_id(mount_id);
+    options.set_directory_path(directory_path.value());
+    CallMethod(smbprovider::kStartReadDirectoryMethod, options,
+               &SmbProviderClientImpl::HandleStartReadDirectoryCallback,
+               &callback);
+  }
+
+  void ContinueReadDirectory(int32_t mount_id,
+                             int32_t read_dir_token,
+                             ReadDirectoryCallback callback) override {
+    dbus::MethodCall method_call(smbprovider::kSmbProviderInterface,
+                                 smbprovider::kContinueReadDirectoryMethod);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendInt32(mount_id);
+    writer.AppendInt32(read_dir_token);
+    CallMethod(&method_call,
+               &SmbProviderClientImpl::HandleContinueReadDirectoryCallback,
+               &callback);
+  }
+
+  void UpdateMountCredentials(int32_t mount_id,
+                              std::string workgroup,
+                              std::string username,
+                              base::ScopedFD password_fd,
+                              StatusCallback callback) override {
+    smbprovider::UpdateMountCredentialsOptionsProto options;
+    options.set_mount_id(mount_id);
+    options.set_workgroup(workgroup);
+    options.set_username(username);
+
+    dbus::MethodCall method_call(smbprovider::kSmbProviderInterface,
+                                 smbprovider::kUpdateMountCredentialsMethod);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendProtoAsArrayOfBytes(options);
+    writer.AppendFileDescriptor(password_fd.get());
+
+    CallDefaultMethod(&method_call, &callback);
+  }
+
+  void UpdateSharePath(int32_t mount_id,
+                       const std::string& share_path,
+                       StatusCallback callback) override {
+    smbprovider::UpdateSharePathOptionsProto options;
+    options.set_mount_id(mount_id);
+    options.set_path(share_path);
+
+    dbus::MethodCall method_call(smbprovider::kSmbProviderInterface,
+                                 smbprovider::kUpdateSharePathMethod);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendProtoAsArrayOfBytes(options);
+
     CallDefaultMethod(&method_call, &callback);
   }
 
@@ -561,6 +658,58 @@ class SmbProviderClientImpl : public SmbProviderClient {
     }
 
     std::move(callback).Run(smbprovider::ERROR_COPY_PENDING, copy_token);
+  }
+
+  void HandleStartReadDirectoryCallback(StartReadDirectoryCallback callback,
+                                        dbus::Response* response) {
+    if (!response) {
+      LOG(ERROR) << "StartReadDirectory: failed to call smbprovider";
+      std::move(callback).Run(smbprovider::ERROR_DBUS_PARSE_FAILED,
+                              -1 /* read_dir_token */,
+                              smbprovider::DirectoryEntryListProto());
+      return;
+    }
+
+    dbus::MessageReader reader(response);
+
+    smbprovider::ErrorType error = GetErrorFromReader(&reader);
+
+    smbprovider::DirectoryEntryListProto entries;
+    int32_t read_dir_token;
+    if (!reader.PopArrayOfBytesAsProto(&entries) ||
+        !reader.PopInt32(&read_dir_token)) {
+      LOG(ERROR) << "StartReadDirectory: Failed to parse protobuf.";
+      std::move(callback).Run(smbprovider::ERROR_DBUS_PARSE_FAILED,
+                              -1 /* read_dir_token */,
+                              smbprovider::DirectoryEntryListProto());
+      return;
+    }
+
+    std::move(callback).Run(error, read_dir_token, entries);
+  }
+
+  void HandleContinueReadDirectoryCallback(ReadDirectoryCallback callback,
+                                           dbus::Response* response) {
+    if (!response) {
+      LOG(ERROR) << "ContinueReadDirectory: failed to call smbprovider";
+      std::move(callback).Run(smbprovider::ERROR_DBUS_PARSE_FAILED,
+                              smbprovider::DirectoryEntryListProto());
+      return;
+    }
+
+    dbus::MessageReader reader(response);
+
+    smbprovider::ErrorType error = GetErrorFromReader(&reader);
+
+    smbprovider::DirectoryEntryListProto entries;
+    if (!reader.PopArrayOfBytesAsProto(&entries)) {
+      LOG(ERROR) << "ContinueReadDirectory: Failed to parse protobuf.";
+      std::move(callback).Run(smbprovider::ERROR_DBUS_PARSE_FAILED,
+                              smbprovider::DirectoryEntryListProto());
+      return;
+    }
+
+    std::move(callback).Run(error, entries);
   }
 
   // Default callback handler for D-Bus calls.

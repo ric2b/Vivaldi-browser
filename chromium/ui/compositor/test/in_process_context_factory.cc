@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -110,8 +111,7 @@ class DirectOutputSurface : public viz::OutputSurface {
 
     context_provider_->ContextSupport()->SignalSyncToken(
         sync_token, base::BindOnce(&DirectOutputSurface::OnSwapBuffersComplete,
-                                   weak_ptr_factory_.GetWeakPtr(),
-                                   frame.need_presentation_feedback));
+                                   weak_ptr_factory_.GetWeakPtr()));
   }
   uint32_t GetFramebufferCopyTextureFormat() override {
     auto* gl = static_cast<InProcessContextProvider*>(context_provider());
@@ -128,16 +128,12 @@ class DirectOutputSurface : public viz::OutputSurface {
   }
   bool HasExternalStencilTest() const override { return false; }
   void ApplyExternalStencil() override {}
-#if BUILDFLAG(ENABLE_VULKAN)
-  gpu::VulkanSurface* GetVulkanSurface() override { return nullptr; }
-#endif
   unsigned UpdateGpuFence() override { return 0; }
 
  private:
-  void OnSwapBuffersComplete(bool need_presentation_feedback) {
+  void OnSwapBuffersComplete() {
     client_->DidReceiveSwapBuffersAck();
-    if (need_presentation_feedback)
-      client_->DidReceivePresentationFeedback(gfx::PresentationFeedback());
+    client_->DidReceivePresentationFeedback(gfx::PresentationFeedback());
   }
 
   viz::OutputSurfaceClient* client_ = nullptr;
@@ -316,7 +312,7 @@ InProcessContextFactory::SharedMainThreadContextProvider() {
 }
 
 void InProcessContextFactory::RemoveCompositor(Compositor* compositor) {
-  PerCompositorDataMap::iterator it = per_compositor_data_.find(compositor);
+  auto it = per_compositor_data_.find(compositor);
   if (it == per_compositor_data_.end())
     return;
   PerCompositorData* data = it->second.get();
@@ -328,10 +324,6 @@ void InProcessContextFactory::RemoveCompositor(Compositor* compositor) {
     gpu::GpuSurfaceTracker::Get()->RemoveSurface(data->surface_handle);
 #endif
   per_compositor_data_.erase(it);
-}
-
-double InProcessContextFactory::GetRefreshRate() const {
-  return refresh_rate_;
 }
 
 gpu::GpuMemoryBufferManager*

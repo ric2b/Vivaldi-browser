@@ -56,6 +56,9 @@ Polymer({
      * @type {!CrOnc.ConnectionState|undefined}
      */
     connectionState_: String,
+
+    /** Whether to show technology badge on mobile network icon. */
+    showTechnologyBadge: {type: Boolean, value: true},
   },
 
   behaviors: [CrPolicyNetworkBehavior],
@@ -72,11 +75,13 @@ Polymer({
 
   /** @private */
   networkStateChanged_: function() {
-    if (!this.networkState)
+    if (!this.networkState) {
       return;
-    var connectionState = this.networkState.ConnectionState;
-    if (connectionState == this.connectionState_)
+    }
+    const connectionState = this.networkState.ConnectionState;
+    if (connectionState == this.connectionState_) {
       return;
+    }
     this.connectionState_ = connectionState;
     this.fire('network-connect-changed', this.networkState);
   },
@@ -88,13 +93,14 @@ Polymer({
    */
   getItemName_: function() {
     if (this.item.hasOwnProperty('customItemName')) {
-      var item = /** @type {!CrNetworkList.CustomItemState} */ (this.item);
-      var name = item.customItemName || '';
-      if (CrOncStrings.hasOwnProperty(item.customItemName))
+      const item = /** @type {!CrNetworkList.CustomItemState} */ (this.item);
+      let name = item.customItemName || '';
+      if (CrOncStrings.hasOwnProperty(item.customItemName)) {
         name = CrOncStrings[item.customItemName];
+      }
       return name;
     }
-    var network = /** @type {!CrOnc.NetworkStateProperties} */ (this.item);
+    const network = /** @type {!CrOnc.NetworkStateProperties} */ (this.item);
     return CrOnc.getNetworkName(network);
   },
 
@@ -112,21 +118,26 @@ Polymer({
    * @private
    */
   getNetworkStateText_: function() {
-    if (!this.networkState)
+    if (!this.networkState) {
       return '';
-    var connectionState = this.networkState.ConnectionState;
+    }
+    const connectionState = this.networkState.ConnectionState;
     if (this.networkState.Type == CrOnc.Type.CELLULAR) {
       // For Cellular, an empty ConnectionState indicates that the device is
       // still initializing.
-      if (!connectionState)
+      if (!connectionState) {
         return CrOncStrings.networkListItemInitializing;
-      if (this.networkState.Cellular && this.networkState.Cellular.Scanning)
+      }
+      if (this.networkState.Cellular && this.networkState.Cellular.Scanning) {
         return CrOncStrings.networkListItemScanning;
+      }
     }
-    if (connectionState == CrOnc.ConnectionState.CONNECTED)
+    if (connectionState == CrOnc.ConnectionState.CONNECTED) {
       return CrOncStrings.networkListItemConnected;
-    if (connectionState == CrOnc.ConnectionState.CONNECTING)
+    }
+    if (connectionState == CrOnc.ConnectionState.CONNECTING) {
       return CrOncStrings.networkListItemConnecting;
+    }
     return '';
   },
 

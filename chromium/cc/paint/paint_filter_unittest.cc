@@ -17,10 +17,10 @@ class MockImageProvider : public ImageProvider {
   MockImageProvider() = default;
   ~MockImageProvider() override = default;
 
-  ScopedDecodedDrawImage GetDecodedDrawImage(
-      const DrawImage& draw_image) override {
+  ScopedResult GetRasterContent(const DrawImage& draw_image) override {
+    DCHECK(!draw_image.paint_image().IsPaintWorklet());
     image_count_++;
-    return ScopedDecodedDrawImage(DecodedDrawImage(
+    return ScopedResult(DecodedDrawImage(
         CreateBitmapImage(gfx::Size(10, 10)).GetSkImage(), SkSize::MakeEmpty(),
         SkSize::Make(1.0f, 1.0f), draw_image.filter_quality(), true));
   }
@@ -33,7 +33,7 @@ sk_sp<PaintFilter> CreateTestFilter(PaintFilter::Type filter_type,
   if (has_discardable_images)
     image = CreateDiscardablePaintImage(gfx::Size(100, 100));
   else
-    image = CreateBitmapImage(gfx::Size(100, 100));
+    image = CreateNonDiscardablePaintImage(gfx::Size(100, 100));
 
   auto image_filter = sk_make_sp<ImagePaintFilter>(
       image, SkRect::MakeWH(100.f, 100.f), SkRect::MakeWH(100.f, 100.f),
@@ -149,7 +149,7 @@ class PaintFilterTest : public ::testing::TestWithParam<uint8_t> {
   }
 };
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     P,
     PaintFilterTest,
     ::testing::Range(static_cast<uint8_t>(PaintFilter::Type::kColorFilter),

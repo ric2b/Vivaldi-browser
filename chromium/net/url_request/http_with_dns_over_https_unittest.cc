@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
+#include "net/base/proxy_server.h"
+#include "net/dns/context_host_resolver.h"
 #include "net/dns/dns_client.h"
+#include "net/dns/dns_config.h"
 #include "net/dns/dns_transaction.h"
-#include "net/dns/host_resolver_impl.h"
+#include "net/dns/host_resolver_proc.h"
 #include "net/http/http_stream_factory_test_util.h"
 #include "net/log/net_log.h"
 #include "net/socket/transport_client_socket_pool.h"
@@ -44,7 +48,7 @@ class TestHostResolverProc : public HostResolverProc {
 class HttpWithDnsOverHttpsTest : public TestWithScopedTaskEnvironment {
  public:
   HttpWithDnsOverHttpsTest()
-      : resolver_(HostResolver::Options(), nullptr),
+      : resolver_(HostResolver::CreateDefaultResolverImpl(nullptr)),
         request_context_(true),
         doh_server_(EmbeddedTestServer::Type::TYPE_HTTPS),
         test_server_(EmbeddedTestServer::Type::TYPE_HTTPS),
@@ -64,11 +68,11 @@ class HttpWithDnsOverHttpsTest : public TestWithScopedTaskEnvironment {
     config.nameservers.push_back(IPEndPoint());
     config.dns_over_https_servers.emplace_back(url.spec(), true /* use_post */);
     dns_client->SetConfig(config);
-    resolver_.SetRequestContext(&request_context_);
-    resolver_.set_proc_params_for_test(
-        HostResolverImpl::ProcTaskParams(new TestHostResolverProc(), 1));
-    resolver_.SetDnsClient(std::move(dns_client));
-    request_context_.set_host_resolver(&resolver_);
+    resolver_->SetRequestContext(&request_context_);
+    resolver_->SetProcParamsForTesting(
+        ProcTaskParams(new TestHostResolverProc(), 1));
+    resolver_->SetDnsClientForTesting(std::move(dns_client));
+    request_context_.set_host_resolver(resolver_.get());
     request_context_.Init();
   }
 
@@ -116,7 +120,7 @@ class HttpWithDnsOverHttpsTest : public TestWithScopedTaskEnvironment {
   }
 
  protected:
-  HostResolverImpl resolver_;
+  std::unique_ptr<ContextHostResolver> resolver_;
   TestURLRequestContext request_context_;
   EmbeddedTestServer doh_server_;
   EmbeddedTestServer test_server_;
@@ -161,11 +165,11 @@ class TestHttpDelegate : public HttpStreamRequest::Delegate {
   void OnNeedsClientAuth(const SSLConfig& used_ssl_config,
                          SSLCertRequestInfo* cert_info) override {}
 
-  void OnHttpsProxyTunnelResponse(const HttpResponseInfo& response_info,
-                                  const SSLConfig& used_ssl_config,
-                                  const ProxyInfo& used_proxy_info,
-                                  std::unique_ptr<HttpStream> stream) override {
-  }
+  void OnHttpsProxyTunnelResponseRedirect(
+      const HttpResponseInfo& response_info,
+      const SSLConfig& used_ssl_config,
+      const ProxyInfo& used_proxy_info,
+      std::unique_ptr<HttpStream> stream) override {}
 
   void OnQuicBroken() override {}
 
@@ -204,9 +208,10 @@ TEST_F(HttpWithDnsOverHttpsTest, EndToEnd) {
   std::string group_name(request_info.url.host() + ":" +
                          request_info.url.port());
   EXPECT_EQ(network_session
-                ->GetTransportSocketPool(HttpNetworkSession::NORMAL_SOCKET_POOL)
+                ->GetSocketPool(HttpNetworkSession::NORMAL_SOCKET_POOL,
+                                ProxyServer::Direct())
                 ->IdleSocketCountInGroup(group_name),
-            1);
+            1u);
 
   // Make a request that will trigger a DoH query as well.
   TestDelegate d;

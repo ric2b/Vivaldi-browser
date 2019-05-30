@@ -11,14 +11,15 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/containers/circular_deque.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/loader/resource_loader_delegate.h"
 #include "content/browser/loader/test_resource_handler.h"
@@ -27,7 +28,6 @@
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/resource_type.h"
-#include "content/public/test/mock_resource_context.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_renderer_host.h"
@@ -203,7 +203,6 @@ class MockClientCertJobProtocolHandler
 // Set up dummy values to use in test HTTPS requests.
 
 const net::CertStatus kTestCertError = net::CERT_STATUS_DATE_INVALID;
-const int kTestSecurityBits = 256;
 // SSL3 TLS_DHE_RSA_WITH_AES_256_CBC_SHA
 const int kTestConnectionStatus = 0x300039;
 
@@ -228,7 +227,6 @@ class MockHTTPSURLRequestJob : public net::URLRequestTestJob {
     info->ssl_info.cert =
         net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
     info->ssl_info.cert_status = kTestCertError;
-    info->ssl_info.security_bits = kTestSecurityBits;
     info->ssl_info.connection_status = kTestConnectionStatus;
   }
 
@@ -254,7 +252,7 @@ class MockHTTPSJobURLRequestInterceptor : public net::URLRequestInterceptor {
       net::URLRequest* request,
       net::NetworkDelegate* network_delegate) const override {
     std::string headers =
-        redirect_ ? std::string(kRedirectHeaders, arraysize(kRedirectHeaders))
+        redirect_ ? std::string(kRedirectHeaders, base::size(kRedirectHeaders))
                   : net::URLRequestTestJob::test_headers();
     return new MockHTTPSURLRequestJob(request, network_delegate, headers,
                                       "dummy response", true);
@@ -387,7 +385,6 @@ class ResourceLoaderTest : public testing::Test,
   ResourceLoaderTest()
       : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP),
         test_url_request_context_(true),
-        resource_context_(&test_url_request_context_),
         raw_ptr_resource_handler_(nullptr),
         raw_ptr_to_request_(nullptr) {
     test_url_request_context_.set_job_factory(&job_factory_);
@@ -443,23 +440,23 @@ class ResourceLoaderTest : public testing::Test,
 
     RenderFrameHost* rfh = web_contents_->GetMainFrame();
     ResourceRequestInfo::AllocateForTesting(
-        request.get(), resource_type, &resource_context_,
+        request.get(), resource_type, nullptr /* resource_context */,
         rfh->GetProcess()->GetID(), rfh->GetRenderViewHost()->GetRoutingID(),
-        rfh->GetRoutingID(), belongs_to_main_frame, true /* allow_download */,
-        false /* is_async */, PREVIEWS_OFF /* previews_state */,
-        nullptr /* navigation_ui_data */);
+        rfh->GetRoutingID(), belongs_to_main_frame,
+        ResourceInterceptPolicy::kAllowAll, false /* is_async */,
+        PREVIEWS_OFF /* previews_state */, nullptr /* navigation_ui_data */);
     std::unique_ptr<TestResourceHandler> resource_handler(
         new TestResourceHandler(nullptr, nullptr));
     raw_ptr_resource_handler_ = resource_handler.get();
     loader_.reset(new ResourceLoader(
         std::move(request),
         WrapResourceHandler(std::move(resource_handler), raw_ptr_to_request_),
-        this, &resource_context_, nullptr /* throttling_token */));
+        this, nullptr /* resource_context */, nullptr /* throttling_token */));
   }
 
   void SetUpResourceLoaderForUrl(const GURL& test_url) {
     std::unique_ptr<net::URLRequest> request(
-        resource_context_.GetRequestContext()->CreateRequest(
+        test_url_request_context_.CreateRequest(
             test_url, net::DEFAULT_PRIORITY, nullptr /* delegate */,
             TRAFFIC_ANNOTATION_FOR_TESTS));
     SetUpResourceLoader(std::move(request), RESOURCE_TYPE_MAIN_FRAME, true);
@@ -490,7 +487,7 @@ class ResourceLoaderTest : public testing::Test,
   }
 
   // ResourceLoaderDelegate:
-  scoped_refptr<LoginDelegate> CreateLoginDelegate(
+  std::unique_ptr<LoginDelegate> CreateLoginDelegate(
       ResourceLoader* loader,
       net::AuthChallengeInfo* auth_info) override {
     return nullptr;
@@ -563,7 +560,6 @@ class ResourceLoaderTest : public testing::Test,
   net::URLRequestJobFactoryImpl job_factory_;
   net::TestNetworkQualityEstimator network_quality_estimator_;
   net::TestURLRequestContext test_url_request_context_;
-  MockResourceContext resource_context_;
   std::unique_ptr<TestBrowserContext> browser_context_;
   std::unique_ptr<TestWebContents> web_contents_;
 
@@ -774,7 +770,7 @@ TEST_F(ClientCertResourceLoaderTest, StoreAsyncCancel) {
 // Tests that a RESOURCE_TYPE_PREFETCH request sets the LOAD_PREFETCH flag.
 TEST_F(ResourceLoaderTest, PrefetchFlag) {
   std::unique_ptr<net::URLRequest> request(
-      resource_context_.GetRequestContext()->CreateRequest(
+      test_url_request_context_.CreateRequest(
           test_async_url(), net::DEFAULT_PRIORITY, nullptr /* delegate */,
           TRAFFIC_ANNOTATION_FOR_TESTS));
   SetUpResourceLoader(std::move(request), RESOURCE_TYPE_PREFETCH, true);
@@ -1578,7 +1574,7 @@ class EffectiveConnectionTypeResourceLoaderTest : public ResourceLoaderTest {
 
     // Start the request and wait for it to finish.
     std::unique_ptr<net::URLRequest> request(
-        resource_context_.GetRequestContext()->CreateRequest(
+        test_url_request_context_.CreateRequest(
             test_redirect_url(), net::DEFAULT_PRIORITY, nullptr /* delegate */,
             TRAFFIC_ANNOTATION_FOR_TESTS));
     SetUpResourceLoader(std::move(request), resource_type,

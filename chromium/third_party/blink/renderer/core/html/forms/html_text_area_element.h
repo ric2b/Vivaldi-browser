@@ -38,16 +38,19 @@ class CORE_EXPORT HTMLTextAreaElement final : public TextControlElement {
  public:
   static HTMLTextAreaElement* Create(Document&);
 
+  explicit HTMLTextAreaElement(Document&);
+
   unsigned cols() const { return cols_; }
   unsigned rows() const { return rows_; }
 
   bool ShouldWrapText() const { return wrap_ != kNoWrap; }
 
   String value() const override;
-  void setValue(const String&,
-                TextFieldEventBehavior = kDispatchNoEvent,
-                TextControlSetValueSelection =
-                    TextControlSetValueSelection::kSetSelectionToEnd) override;
+  void setValue(
+      const String&,
+      TextFieldEventBehavior = TextFieldEventBehavior::kDispatchNoEvent,
+      TextControlSetValueSelection =
+          TextControlSetValueSelection::kSetSelectionToEnd) override;
   String defaultValue() const;
   void setDefaultValue(const String&);
   int textLength() const { return value().length(); }
@@ -66,7 +69,6 @@ class CORE_EXPORT HTMLTextAreaElement final : public TextControlElement {
 
  private:
   FRIEND_TEST_ALL_PREFIXES(HTMLTextAreaElementTest, SanitizeUserInputValue);
-  explicit HTMLTextAreaElement(Document&);
 
   enum WrapMethod { kNoWrap, kSoftWrap, kHardWrap };
 
@@ -102,7 +104,7 @@ class CORE_EXPORT HTMLTextAreaElement final : public TextControlElement {
   bool IsEnumeratable() const override { return true; }
   bool IsInteractiveContent() const override;
   bool SupportsAutofocus() const override;
-  bool SupportLabels() const override { return true; }
+  bool IsLabelable() const override { return true; }
 
   const AtomicString& FormControlType() const override;
 
@@ -125,7 +127,7 @@ class CORE_EXPORT HTMLTextAreaElement final : public TextControlElement {
   bool MayTriggerVirtualKeyboard() const override;
   bool IsKeyboardFocusable() const override;
   void UpdateFocusAppearanceWithOptions(SelectionBehaviorOnFocus,
-                                        const FocusOptions&) override;
+                                        const FocusOptions*) override;
 
   void AccessKeyAction(bool send_mouse_events) override;
 

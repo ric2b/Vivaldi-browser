@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/containers/span.h"
 #include "base/logging.h"
@@ -30,7 +31,6 @@
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
 #include "net/http/http_auth_controller.h"
-#include "net/http/http_proxy_client_socket_pool.h"
 #include "net/http/proxy_client_socket.h"
 #include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_factory.h"
@@ -39,9 +39,7 @@
 #include "net/socket/datagram_client_socket.h"
 #include "net/socket/socket_performance_watcher.h"
 #include "net/socket/socket_tag.h"
-#include "net/socket/socks_client_socket_pool.h"
 #include "net/socket/ssl_client_socket.h"
-#include "net/socket/ssl_client_socket_pool.h"
 #include "net/socket/transport_client_socket.h"
 #include "net/socket/transport_client_socket_pool.h"
 #include "net/ssl/ssl_config_service.h"
@@ -55,6 +53,7 @@ class RunLoop;
 namespace net {
 
 class NetLog;
+class X509Certificate;
 
 const NetworkChangeNotifier::NetworkHandle kDefaultNetworkForTests = 1;
 const NetworkChangeNotifier::NetworkHandle kNewNetworkForTests = 2;
@@ -223,7 +222,58 @@ class SocketDataProvider {
   virtual bool AllWriteDataConsumed() const = 0;
   virtual void CancelPendingRead() {}
 
-  virtual void OnEnableTCPFastOpenIfSupported();
+  // Returns the last set receive buffer size, or -1 if never set.
+  int receive_buffer_size() const { return receive_buffer_size_; }
+  void set_receive_buffer_size(int receive_buffer_size) {
+    receive_buffer_size_ = receive_buffer_size;
+  }
+
+  // Returns the last set send buffer size, or -1 if never set.
+  int send_buffer_size() const { return send_buffer_size_; }
+  void set_send_buffer_size(int send_buffer_size) {
+    send_buffer_size_ = send_buffer_size;
+  }
+
+  // Returns the last set value of TCP no delay, or false if never set.
+  bool no_delay() const { return no_delay_; }
+  void set_no_delay(bool no_delay) { no_delay_ = no_delay; }
+
+  // Returns whether TCP keepalives were enabled or not. Returns 0 by default,
+  // which may not match the default behavior on all platforms.
+  bool keep_alive_enabled() const { return keep_alive_enabled_; }
+  // Last set TCP keepalive delay.
+  int keep_alive_delay() const { return keep_alive_delay_; }
+  void set_keep_alive(bool enable, int delay) {
+    keep_alive_enabled_ = enable;
+    keep_alive_delay_ = delay;
+  }
+
+  // Setters / getters for the return values of the corresponding Set*()
+  // methods. By default, they all succeed, if the socket is connected.
+
+  void set_set_receive_buffer_size_result(int receive_buffer_size_result) {
+    set_receive_buffer_size_result_ = receive_buffer_size_result;
+  }
+  int set_receive_buffer_size_result() const {
+    return set_receive_buffer_size_result_;
+  }
+
+  void set_set_send_buffer_size_result(int set_send_buffer_size_result) {
+    set_send_buffer_size_result_ = set_send_buffer_size_result;
+  }
+  int set_send_buffer_size_result() const {
+    return set_send_buffer_size_result_;
+  }
+
+  void set_set_no_delay_result(bool set_no_delay_result) {
+    set_no_delay_result_ = set_no_delay_result;
+  }
+  bool set_no_delay_result() const { return set_no_delay_result_; }
+
+  void set_set_keep_alive_result(bool set_keep_alive_result) {
+    set_keep_alive_result_ = set_keep_alive_result;
+  }
+  bool set_keep_alive_result() const { return set_keep_alive_result_; }
 
   // Returns true if the request should be considered idle, for the purposes of
   // IsConnectedAndIdle.
@@ -249,7 +299,20 @@ class SocketDataProvider {
   virtual void Reset() = 0;
 
   MockConnect connect_;
-  AsyncSocket* socket_;
+  AsyncSocket* socket_ = nullptr;
+
+  int receive_buffer_size_ = -1;
+  int send_buffer_size_ = -1;
+  // This reflects the default state of TCPClientSockets.
+  bool no_delay_ = true;
+  // Default varies by platform. Just pretend it's disabled.
+  bool keep_alive_enabled_ = false;
+  int keep_alive_delay_ = 0;
+
+  int set_receive_buffer_size_result_ = net::OK;
+  int set_send_buffer_size_result_ = net::OK;
+  bool set_no_delay_result_ = true;
+  bool set_keep_alive_result_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(SocketDataProvider);
 };
@@ -395,6 +458,8 @@ struct SSLSocketDataProvider {
 
   uint16_t expected_ssl_version_min;
   uint16_t expected_ssl_version_max;
+  base::Optional<bool> expected_send_client_cert;
+  scoped_refptr<X509Certificate> expected_client_cert;
 
   bool is_connect_data_consumed = false;
 };
@@ -424,7 +489,6 @@ class SequencedSocketData : public SocketDataProvider {
   MockWriteResult OnWrite(const std::string& data) override;
   bool AllReadDataConsumed() const override;
   bool AllWriteDataConsumed() const override;
-  void OnEnableTCPFastOpenIfSupported() override;
   bool IsIdle() const override;
   void CancelPendingRead() override;
 
@@ -442,8 +506,6 @@ class SequencedSocketData : public SocketDataProvider {
   // occur synchronously with the call if it can.
   void Resume();
   void RunUntilPaused();
-
-  bool IsUsingTCPFastOpen() const;
 
   // When true, IsConnectedAndIdle() will return false if the next event in the
   // sequence is a synchronous.  Otherwise, the socket claims to be idle as
@@ -480,7 +542,6 @@ class SequencedSocketData : public SocketDataProvider {
   IoState write_state_;
 
   bool busy_before_sync_reads_;
-  bool is_using_tcp_fast_open_;
 
   // Used by RunUntilPaused.  NULL at all other times.
   std::unique_ptr<base::RunLoop> run_until_paused_run_loop_;
@@ -563,22 +624,22 @@ class MockClientSocketFactory : public ClientSocketFactory {
       NetLog* net_log,
       const NetLogSource& source) override;
   std::unique_ptr<SSLClientSocket> CreateSSLClientSocket(
-      std::unique_ptr<ClientSocketHandle> transport_socket,
+      std::unique_ptr<StreamSocket> stream_socket,
       const HostPortPair& host_and_port,
       const SSLConfig& ssl_config,
       const SSLClientSocketContext& context) override;
   std::unique_ptr<ProxyClientSocket> CreateProxyClientSocket(
-      std::unique_ptr<ClientSocketHandle> transport_socket,
+      std::unique_ptr<StreamSocket> stream_socket,
       const std::string& user_agent,
       const HostPortPair& endpoint,
+      const ProxyServer& proxy_server,
       HttpAuthController* http_auth_controller,
       bool tunnel,
       bool using_spdy,
       NextProto negotiated_protocol,
+      ProxyDelegate* proxy_delegate,
       bool is_https_proxy,
       const NetworkTrafficAnnotationTag& traffic_annotation) override;
-  void ClearSSLSessionCache() override;
-
   const std::vector<uint16_t>& udp_client_socket_ports() const {
     return udp_client_socket_ports_;
   }
@@ -676,15 +737,22 @@ class MockTCPClientSocket : public MockClientSocket, public AsyncSocket {
             int buf_len,
             CompletionOnceCallback callback,
             const NetworkTrafficAnnotationTag& traffic_annotation) override;
+  int SetReceiveBufferSize(int32_t size) override;
+  int SetSendBufferSize(int32_t size) override;
+
+  // TransportClientSocket implementation.
+  bool SetNoDelay(bool no_delay) override;
+  bool SetKeepAlive(bool enable, int delay) override;
 
   // StreamSocket implementation.
+  void SetBeforeConnectCallback(
+      const BeforeConnectCallback& before_connect_callback) override;
   int Connect(CompletionOnceCallback callback) override;
   void Disconnect() override;
   bool IsConnected() const override;
   bool IsConnectedAndIdle() const override;
   int GetPeerAddress(IPEndPoint* address) const override;
   bool WasEverUsed() const override;
-  void EnableTCPFastOpenIfSupported() override;
   bool GetSSLInfo(SSLInfo* ssl_info) override;
   void GetConnectionAttempts(ConnectionAttempts* out) const override;
   void ClearConnectionAttempts() override;
@@ -737,6 +805,8 @@ class MockTCPClientSocket : public MockClientSocket, public AsyncSocket {
   // ERR_READ_IF_READY_NOT_IMPLEMENTED.
   bool enable_read_if_ready_;
 
+  BeforeConnectCallback before_connect_callback_;
+
   ConnectionAttempts connection_attempts_;
 
   DISALLOW_COPY_AND_ASSIGN(MockTCPClientSocket);
@@ -744,13 +814,12 @@ class MockTCPClientSocket : public MockClientSocket, public AsyncSocket {
 
 class MockProxyClientSocket : public AsyncSocket, public ProxyClientSocket {
  public:
-  MockProxyClientSocket(std::unique_ptr<ClientSocketHandle> transport_socket,
+  MockProxyClientSocket(std::unique_ptr<StreamSocket> socket,
                         HttpAuthController* auth_controller,
                         ProxyClientSocketDataProvider* data);
   ~MockProxyClientSocket() override;
   // ProxyClientSocket implementation.
   const HttpResponseInfo* GetConnectResponseInfo() const override;
-  std::unique_ptr<HttpStream> CreateConnectResponseStream() override;
   const scoped_refptr<HttpAuthController>& GetAuthController() const override;
   int RestartWithAuth(CompletionOnceCallback callback) override;
   bool IsUsingSpdy() const override;
@@ -799,7 +868,7 @@ class MockProxyClientSocket : public AsyncSocket, public ProxyClientSocket {
   void RunCallbackAsync(CompletionOnceCallback callback, int result);
 
   NetLogWithSource net_log_;
-  std::unique_ptr<ClientSocketHandle> transport_;
+  std::unique_ptr<StreamSocket> socket_;
   ProxyClientSocketDataProvider* data_;
   scoped_refptr<HttpAuthController> auth_controller_;
 
@@ -810,7 +879,7 @@ class MockProxyClientSocket : public AsyncSocket, public ProxyClientSocket {
 
 class MockSSLClientSocket : public AsyncSocket, public SSLClientSocket {
  public:
-  MockSSLClientSocket(std::unique_ptr<ClientSocketHandle> transport_socket,
+  MockSSLClientSocket(std::unique_ptr<StreamSocket> stream_socket,
                       const HostPortPair& host_and_port,
                       const SSLConfig& ssl_config,
                       SSLSocketDataProvider* socket);
@@ -842,9 +911,6 @@ class MockSSLClientSocket : public AsyncSocket, public SSLClientSocket {
   bool GetSSLInfo(SSLInfo* ssl_info) override;
   void GetSSLCertRequestInfo(
       SSLCertRequestInfo* cert_request_info) const override;
-  Error GetTokenBindingSignature(crypto::ECPrivateKey* key,
-                                 TokenBindingType tb_type,
-                                 std::vector<uint8_t>* out) override;
   ChannelIDService* GetChannelIDService() const override;
   crypto::ECPrivateKey* GetChannelIDKey() const override;
   void ApplySocketTag(const SocketTag& tag) override;
@@ -882,7 +948,7 @@ class MockSSLClientSocket : public AsyncSocket, public SSLClientSocket {
 
   bool connected_ = false;
   NetLogWithSource net_log_;
-  std::unique_ptr<ClientSocketHandle> transport_;
+  std::unique_ptr<StreamSocket> stream_socket_;
   SSLSocketDataProvider* data_;
   // Address of the "remote" peer we're connected to.
   IPEndPoint peer_addr_;
@@ -931,6 +997,7 @@ class MockUDPClientSocket : public DatagramClientSocket, public AsyncSocket {
   void SetWriteMultiCoreEnabled(bool enabled) override;
   void SetSendmmsgEnabled(bool enabled) override;
   void SetWriteBatchingActive(bool active) override;
+  int SetMulticastInterface(uint32_t interface_index) override;
   const NetLogWithSource& NetLog() const override;
 
   // DatagramClientSocket implementation.
@@ -1049,7 +1116,8 @@ class ClientSocketPoolTest {
     requests_.push_back(base::WrapUnique(request));
     int rv = request->handle()->Init(
         group_name, socket_params, priority, SocketTag(), respect_limits,
-        request->callback(), socket_pool, NetLogWithSource());
+        request->callback(), ClientSocketPool::ProxyAuthCallback(), socket_pool,
+        NetLogWithSource());
     if (rv != ERR_IO_PENDING)
       request_order_.push_back(request);
     return rv;
@@ -1104,11 +1172,17 @@ class MockTransportClientSocketPool : public TransportClientSocketPool {
     MockConnectJob(std::unique_ptr<StreamSocket> socket,
                    ClientSocketHandle* handle,
                    const SocketTag& socket_tag,
-                   CompletionOnceCallback callback);
+                   CompletionOnceCallback callback,
+                   RequestPriority priority);
     ~MockConnectJob();
 
     int Connect();
     bool CancelHandle(const ClientSocketHandle* handle);
+
+    ClientSocketHandle* handle() const { return handle_; }
+
+    RequestPriority priority() const { return priority_; }
+    void set_priority(RequestPriority priority) { priority_ = priority; }
 
    private:
     void OnConnect(int rv);
@@ -1117,6 +1191,7 @@ class MockTransportClientSocketPool : public TransportClientSocketPool {
     ClientSocketHandle* handle_;
     const SocketTag socket_tag_;
     CompletionOnceCallback user_callback_;
+    RequestPriority priority_;
 
     DISALLOW_COPY_AND_ASSIGN(MockConnectJob);
   };
@@ -1130,6 +1205,11 @@ class MockTransportClientSocketPool : public TransportClientSocketPool {
   RequestPriority last_request_priority() const {
     return last_request_priority_;
   }
+
+  const std::vector<std::unique_ptr<MockConnectJob>>& requests() const {
+    return job_list_;
+  }
+
   int release_count() const { return release_count_; }
   int cancel_count() const { return cancel_count_; }
 
@@ -1141,6 +1221,7 @@ class MockTransportClientSocketPool : public TransportClientSocketPool {
                     RespectLimits respect_limits,
                     ClientSocketHandle* handle,
                     CompletionOnceCallback callback,
+                    const ProxyAuthCallback& on_auth_callback,
                     const NetLogWithSource& net_log) override;
   void SetPriority(const std::string& group_name,
                    ClientSocketHandle* handle,
@@ -1159,38 +1240,6 @@ class MockTransportClientSocketPool : public TransportClientSocketPool {
   int cancel_count_;
 
   DISALLOW_COPY_AND_ASSIGN(MockTransportClientSocketPool);
-};
-
-class MockSOCKSClientSocketPool : public SOCKSClientSocketPool {
- public:
-  MockSOCKSClientSocketPool(int max_sockets,
-                            int max_sockets_per_group,
-                            TransportClientSocketPool* transport_pool);
-
-  ~MockSOCKSClientSocketPool() override;
-
-  // SOCKSClientSocketPool implementation.
-  int RequestSocket(const std::string& group_name,
-                    const void* socket_params,
-                    RequestPriority priority,
-                    const SocketTag& socket_tag,
-                    RespectLimits respect_limits,
-                    ClientSocketHandle* handle,
-                    CompletionOnceCallback callback,
-                    const NetLogWithSource& net_log) override;
-  void SetPriority(const std::string& group_name,
-                   ClientSocketHandle* handle,
-                   RequestPriority priority) override;
-  void CancelRequest(const std::string& group_name,
-                     ClientSocketHandle* handle) override;
-  void ReleaseSocket(const std::string& group_name,
-                     std::unique_ptr<StreamSocket> socket,
-                     int id) override;
-
- private:
-  TransportClientSocketPool* const transport_pool_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockSOCKSClientSocketPool);
 };
 
 // WrappedStreamSocket is a base class that wraps an existing StreamSocket,
@@ -1299,15 +1348,24 @@ class MockTaggingClientSocketFactory : public MockClientSocketFactory {
   DISALLOW_COPY_AND_ASSIGN(MockTaggingClientSocketFactory);
 };
 
-// Constants for a successful SOCKS v4 handshake (connecting to localhost on
-// port 80, for the request).
+// Host / port used for SOCKS4 test strings.
+extern const char kSOCKS4TestHost[];
+extern const int kSOCKS4TestPort;
+
+// Constants for a successful SOCKS v4 handshake (connecting to kSOCKS4TestHost
+// on port kSOCKS4TestPort, for the request).
 extern const char kSOCKS4OkRequestLocalHostPort80[];
 extern const int kSOCKS4OkRequestLocalHostPort80Length;
 
 extern const char kSOCKS4OkReply[];
 extern const int kSOCKS4OkReplyLength;
 
-// Constants for a successful SOCKS v5 handshake.
+// Host / port used for SOCKS5 test strings.
+extern const char kSOCKS5TestHost[];
+extern const int kSOCKS5TestPort;
+
+// Constants for a successful SOCKS v5 handshake (connecting to kSOCKS5TestHost
+// on port kSOCKS5TestPort, for the request)..
 extern const char kSOCKS5GreetRequest[];
 extern const int kSOCKS5GreetRequestLength;
 
@@ -1327,6 +1385,9 @@ int64_t CountReadBytes(base::span<const MockRead> reads);
 int64_t CountWriteBytes(base::span<const MockWrite> writes);
 
 #if defined(OS_ANDROID)
+// Returns whether the device supports calling GetTaggedBytes().
+bool CanGetTaggedBytes();
+
 // Query the system to find out how many bytes were received with tag
 // |expected_tag| for our UID.  Return the count of recieved bytes.
 uint64_t GetTaggedBytes(int32_t expected_tag);

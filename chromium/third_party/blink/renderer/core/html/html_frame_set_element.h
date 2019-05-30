@@ -37,11 +37,17 @@ class HTMLFrameSetElement final : public HTMLElement {
  public:
   DECLARE_NODE_FACTORY(HTMLFrameSetElement);
 
+  explicit HTMLFrameSetElement(Document&);
+
   bool HasFrameBorder() const { return frameborder_; }
   bool NoResize() const { return noresize_; }
 
-  size_t TotalRows() const { return std::max<size_t>(1, row_lengths_.size()); }
-  size_t TotalCols() const { return std::max<size_t>(1, col_lengths_.size()); }
+  wtf_size_t TotalRows() const {
+    return std::max<wtf_size_t>(1, row_lengths_.size());
+  }
+  wtf_size_t TotalCols() const {
+    return std::max<wtf_size_t>(1, col_lengths_.size());
+  }
   int Border() const { return HasFrameBorder() ? border_ : 0; }
 
   bool HasBorderColor() const { return border_color_set_; }
@@ -51,17 +57,15 @@ class HTMLFrameSetElement final : public HTMLElement {
 
   bool HasNonInBodyInsertionMode() const override { return true; }
 
-  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(blur);
-  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(error);
-  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(focus);
-  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(load);
-  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(resize);
-  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(scroll);
-  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(orientationchange);
+  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(blur, kBlur)
+  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(error, kError)
+  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(focus, kFocus)
+  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(load, kLoad)
+  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(resize, kResize)
+  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(scroll, kScroll)
+  DEFINE_WINDOW_ATTRIBUTE_EVENT_LISTENER(orientationchange, kOrientationchange)
 
  private:
-  explicit HTMLFrameSetElement(Document&);
-
   void ParseAttribute(const AttributeModificationParams&) override;
   bool IsPresentationAttribute(const QualifiedName&) const override;
   void CollectStyleForPresentationAttribute(
@@ -76,7 +80,7 @@ class HTMLFrameSetElement final : public HTMLElement {
   void DefaultEventHandler(Event&) override;
 
   InsertionNotificationRequest InsertedInto(ContainerNode&) override;
-  void WillRecalcStyle(StyleRecalcChange) override;
+  void WillRecalcStyle(const StyleRecalcChange) override;
 
   Vector<HTMLDimension> row_lengths_;
   Vector<HTMLDimension> col_lengths_;

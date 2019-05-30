@@ -14,7 +14,7 @@ namespace {
 
 void BuildAncestorChain(EventTarget* target,
                         HeapVector<Member<Node>, 20>* ancestors) {
-  if (!EventHandlingUtil::IsInDocument(target))
+  if (!event_handling_util::IsInDocument(target))
     return;
   Node* target_node = target->ToNode();
   DCHECK(target_node);
@@ -30,8 +30,8 @@ void BuildAncestorChainsAndFindCommonAncestors(
     EventTarget* entered_target,
     HeapVector<Member<Node>, 20>* exited_ancestors_out,
     HeapVector<Member<Node>, 20>* entered_ancestors_out,
-    size_t* exited_ancestors_common_parent_index_out,
-    size_t* entered_ancestors_common_parent_index_out) {
+    wtf_size_t* exited_ancestors_common_parent_index_out,
+    wtf_size_t* entered_ancestors_common_parent_index_out) {
   DCHECK(exited_ancestors_out);
   DCHECK(entered_ancestors_out);
   DCHECK(exited_ancestors_common_parent_index_out);
@@ -62,7 +62,7 @@ void BoundaryEventDispatcher::SendBoundaryEvents(EventTarget* exited_target,
     return;
 
   // Dispatch out event
-  if (EventHandlingUtil::IsInDocument(exited_target))
+  if (event_handling_util::IsInDocument(exited_target))
     DispatchOut(exited_target, entered_target);
 
   // Create lists of all exited/entered ancestors, locate the common ancestor
@@ -70,8 +70,8 @@ void BoundaryEventDispatcher::SendBoundaryEvents(EventTarget* exited_target,
   // than 20.
   HeapVector<Member<Node>, 20> exited_ancestors;
   HeapVector<Member<Node>, 20> entered_ancestors;
-  size_t exited_ancestors_common_parent_index = 0;
-  size_t entered_ancestors_common_parent_index = 0;
+  wtf_size_t exited_ancestors_common_parent_index = 0;
+  wtf_size_t entered_ancestors_common_parent_index = 0;
 
   // A note on mouseenter and mouseleave: These are non-bubbling events, and
   // they are dispatched if there is a capturing event handler on an ancestor or
@@ -99,7 +99,7 @@ void BoundaryEventDispatcher::SendBoundaryEvents(EventTarget* exited_target,
 
   bool exited_node_has_capturing_ancestor = false;
   const AtomicString& leave_event = GetLeaveEvent();
-  for (size_t j = 0; j < exited_ancestors.size(); j++) {
+  for (wtf_size_t j = 0; j < exited_ancestors.size(); j++) {
     if (exited_ancestors[j]->HasCapturingEventListeners(leave_event)) {
       exited_node_has_capturing_ancestor = true;
       break;
@@ -107,19 +107,19 @@ void BoundaryEventDispatcher::SendBoundaryEvents(EventTarget* exited_target,
   }
 
   // Dispatch leave events, in child-to-parent order.
-  for (size_t j = 0; j < exited_ancestors_common_parent_index; j++)
+  for (wtf_size_t j = 0; j < exited_ancestors_common_parent_index; j++)
     DispatchLeave(exited_ancestors[j], entered_target,
                   !exited_node_has_capturing_ancestor);
 
   // Dispatch over event
-  if (EventHandlingUtil::IsInDocument(entered_target))
+  if (event_handling_util::IsInDocument(entered_target))
     DispatchOver(entered_target, exited_target);
 
   // Defer locating capturing enter listener until /after/ dispatching the leave
   // events because the leave handlers might set a capturing enter handler.
   bool entered_node_has_capturing_ancestor = false;
   const AtomicString& enter_event = GetEnterEvent();
-  for (size_t i = 0; i < entered_ancestors.size(); i++) {
+  for (wtf_size_t i = 0; i < entered_ancestors.size(); i++) {
     if (entered_ancestors[i]->HasCapturingEventListeners(enter_event)) {
       entered_node_has_capturing_ancestor = true;
       break;
@@ -127,7 +127,7 @@ void BoundaryEventDispatcher::SendBoundaryEvents(EventTarget* exited_target,
   }
 
   // Dispatch enter events, in parent-to-child order.
-  for (size_t i = entered_ancestors_common_parent_index; i > 0; i--)
+  for (wtf_size_t i = entered_ancestors_common_parent_index; i > 0; i--)
     DispatchEnter(entered_ancestors[i - 1], exited_target,
                   !entered_node_has_capturing_ancestor);
 }

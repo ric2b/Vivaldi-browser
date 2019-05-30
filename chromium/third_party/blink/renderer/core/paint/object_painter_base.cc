@@ -96,7 +96,7 @@ void PaintComplexOutline(GraphicsContext& graphics_context,
 
   // Construct a clockwise path along the outer edge of the outline.
   SkRegion region;
-  int width = style.OutlineWidth();
+  uint16_t width = style.OutlineWidth();
   int outset = style.OutlineOffset() + style.OutlineWidth();
   for (auto& r : rects) {
     IntRect rect = r;
@@ -111,7 +111,7 @@ void PaintComplexOutline(GraphicsContext& graphics_context,
 
   SkPath::Iter iter(path, false);
   SkPoint points[4];
-  size_t count = 0;
+  wtf_size_t count = 0;
   for (SkPath::Verb verb = iter.next(points, false); verb != SkPath::kDone_Verb;
        verb = iter.next(points, false)) {
     if (verb != SkPath::kLine_Verb)
@@ -163,7 +163,7 @@ void PaintComplexOutline(GraphicsContext& graphics_context,
   // edge.
   int adjacent_width_start = first_adjacent_width;
   int adjacent_width_end;
-  for (size_t i = 0; i < count; ++i) {
+  for (wtf_size_t i = 0; i < count; ++i) {
     OutlineEdgeInfo& edge = edges[i];
     adjacent_width_end = i == count - 1
                              ? first_adjacent_width
@@ -499,9 +499,10 @@ void ObjectPainterBase::PaintOutlineRects(
 
   Color color = style.VisitedDependentColor(GetCSSPropertyOutlineColor());
   if (style.OutlineStyleIsAuto()) {
-    paint_info.context.DrawFocusRing(pixel_snapped_outline_rects,
-                                     style.GetOutlineStrokeWidthForFocusRing(),
-                                     style.OutlineOffset(), color);
+    paint_info.context.DrawFocusRing(
+        pixel_snapped_outline_rects, style.GetOutlineStrokeWidthForFocusRing(),
+        style.OutlineOffset(), color,
+        LayoutTheme::GetTheme().IsFocusRingOutset());
     return;
   }
 

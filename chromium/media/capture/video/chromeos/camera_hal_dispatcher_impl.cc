@@ -11,13 +11,17 @@
 
 #include <vector>
 
+#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/trace_event/trace_event.h"
+#include "media/capture/video/chromeos/mojo/camera_common.mojom.h"
 #include "mojo/public/cpp/platform/named_platform_channel.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "mojo/public/cpp/platform/socket_utils_posix.h"
@@ -61,7 +65,7 @@ bool WaitForSocketReadable(int raw_socket_fd, int raw_cancel_fd) {
       {raw_socket_fd, POLLIN, 0}, {raw_cancel_fd, POLLIN, 0},
   };
 
-  if (HANDLE_EINTR(poll(fds, arraysize(fds), -1)) <= 0) {
+  if (HANDLE_EINTR(poll(fds, base::size(fds), -1)) <= 0) {
     PLOG(ERROR) << "poll()";
     return false;
   }
@@ -155,7 +159,11 @@ bool CameraHalDispatcherImpl::IsStarted() {
 
 CameraHalDispatcherImpl::CameraHalDispatcherImpl()
     : proxy_thread_("CameraProxyThread"),
-      blocking_io_thread_("CameraBlockingIOThread") {}
+      blocking_io_thread_("CameraBlockingIOThread") {
+  // This event is for adding camera category to categories list.
+  TRACE_EVENT0("camera", "CameraHalDispatcherImpl");
+  base::trace_event::TraceLog::GetInstance()->AddEnabledStateObserver(this);
+}
 
 CameraHalDispatcherImpl::~CameraHalDispatcherImpl() {
   VLOG(1) << "Stopping CameraHalDispatcherImpl...";
@@ -166,6 +174,7 @@ CameraHalDispatcherImpl::~CameraHalDispatcherImpl() {
     proxy_thread_.Stop();
   }
   blocking_io_thread_.Stop();
+  base::trace_event::TraceLog::GetInstance()->RemoveEnabledStateObserver(this);
   VLOG(1) << "CameraHalDispatcherImpl stopped";
 }
 
@@ -210,6 +219,20 @@ void CameraHalDispatcherImpl::GetJpegDecodeAccelerator(
 void CameraHalDispatcherImpl::GetJpegEncodeAccelerator(
     media::mojom::JpegEncodeAcceleratorRequest jea_request) {
   jea_factory_.Run(std::move(jea_request));
+}
+
+void CameraHalDispatcherImpl::OnTraceLogEnabled() {
+  proxy_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&CameraHalDispatcherImpl::OnTraceLogEnabledOnProxyThread,
+                     base::Unretained(this)));
+}
+
+void CameraHalDispatcherImpl::OnTraceLogDisabled() {
+  proxy_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&CameraHalDispatcherImpl::OnTraceLogDisabledOnProxyThread,
+                     base::Unretained(this)));
 }
 
 void CameraHalDispatcherImpl::CreateSocket(base::WaitableEvent* started) {
@@ -379,6 +402,26 @@ void CameraHalDispatcherImpl::StopOnProxyThread() {
   client_observers_.clear();
   camera_hal_server_.reset();
   binding_set_.CloseAllBindings();
+}
+
+void CameraHalDispatcherImpl::OnTraceLogEnabledOnProxyThread() {
+  DCHECK(proxy_task_runner_->BelongsToCurrentThread());
+  if (!camera_hal_server_) {
+    return;
+  }
+  bool camera_event_enabled = false;
+  TRACE_EVENT_CATEGORY_GROUP_ENABLED("camera", &camera_event_enabled);
+  if (camera_event_enabled) {
+    camera_hal_server_->SetTracingEnabled(true);
+  }
+}
+
+void CameraHalDispatcherImpl::OnTraceLogDisabledOnProxyThread() {
+  DCHECK(proxy_task_runner_->BelongsToCurrentThread());
+  if (!camera_hal_server_) {
+    return;
+  }
+  camera_hal_server_->SetTracingEnabled(false);
 }
 
 }  // namespace media

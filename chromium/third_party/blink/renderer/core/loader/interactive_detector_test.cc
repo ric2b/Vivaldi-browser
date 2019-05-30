@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/testing/testing_platform_support_with_mock_scheduler.h"
 
 namespace blink {
@@ -23,7 +24,7 @@ class NetworkActivityCheckerForTest
 
   virtual void SetActiveConnections(int active_connections) {
     active_connections_ = active_connections;
-  };
+  }
   int GetActiveConnections() override;
 
  private:
@@ -42,7 +43,7 @@ class InteractiveDetectorTest : public testing::Test {
 
     Document* document = &dummy_page_holder_->GetDocument();
 
-    detector_ = new InteractiveDetector(
+    detector_ = MakeGarbageCollected<InteractiveDetector>(
         *document, new NetworkActivityCheckerForTest(document));
 
     // By this time, the DummyPageHolder has created an InteractiveDetector, and
@@ -504,8 +505,9 @@ TEST_F(InteractiveDetectorTest, InvalidatedFMP) {
                    TimeDelta::FromSecondsD(5.0 + 0.1));
   // Since FMP was invalidated, we do not have TTI or TTI Detection Time.
   EXPECT_EQ(GetInteractiveTime(), TimeTicks());
-  EXPECT_EQ(TimeTicksInSeconds(GetDetector()->GetInteractiveDetectionTime()),
-            0.0);
+  EXPECT_EQ(
+      GetDetector()->GetInteractiveDetectionTime().since_origin().InSecondsF(),
+      0.0);
   // Invalidating input timestamp is available.
   EXPECT_EQ(GetDetector()->GetFirstInvalidatingInputTime(),
             t0 + TimeDelta::FromSeconds(1));
@@ -521,7 +523,7 @@ TEST_F(InteractiveDetectorTest, TaskLongerThan5sBlocksTTI) {
 
   // Post a task with 6 seconds duration.
   PostCrossThreadTask(
-      *platform_->CurrentThread()->GetTaskRunner(), FROM_HERE,
+      *Thread::Current()->GetTaskRunner(), FROM_HERE,
       CrossThreadBind(&InteractiveDetectorTest::DummyTaskWithDuration,
                       CrossThreadUnretained(this), 6.0));
 
@@ -542,7 +544,7 @@ TEST_F(InteractiveDetectorTest, LongTaskAfterTTIDoesNothing) {
 
   // Long task 1.
   PostCrossThreadTask(
-      *platform_->CurrentThread()->GetTaskRunner(), FROM_HERE,
+      *Thread::Current()->GetTaskRunner(), FROM_HERE,
       CrossThreadBind(&InteractiveDetectorTest::DummyTaskWithDuration,
                       CrossThreadUnretained(this), 0.1));
 
@@ -555,7 +557,7 @@ TEST_F(InteractiveDetectorTest, LongTaskAfterTTIDoesNothing) {
 
   // Long task 2.
   PostCrossThreadTask(
-      *platform_->CurrentThread()->GetTaskRunner(), FROM_HERE,
+      *Thread::Current()->GetTaskRunner(), FROM_HERE,
       CrossThreadBind(&InteractiveDetectorTest::DummyTaskWithDuration,
                       CrossThreadUnretained(this), 0.1));
 

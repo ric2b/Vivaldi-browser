@@ -8,15 +8,17 @@
 
 #include <algorithm>
 
+#include "base/bind.h"
 #include "base/containers/circular_deque.h"
 #include "base/files/file_util.h"
 #include "base/guid.h"
 #include "base/json/json_reader.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
@@ -43,6 +45,7 @@
 #include "components/download/public/common/download_item.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/notification_service.h"
@@ -56,6 +59,7 @@
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/notification_types.h"
+#include "extensions/common/manifest_handlers/incognito_info.h"
 #include "net/base/data_url.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
@@ -105,8 +109,8 @@ void OnOpenPromptCreated(download::DownloadItem* item,
                          DownloadOpenPrompt* prompt) {
   EXPECT_FALSE(item->GetOpened());
   // Posts a task to accept the DownloadOpenPrompt.
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&DownloadOpenPrompt::AcceptConfirmationDialogForTesting,
                      base::Unretained(prompt)));
 }
@@ -137,7 +141,7 @@ class DownloadsEventsListener : public content::NotificationObserver {
         : profile_(profile),
           event_name_(event_name),
           json_args_(json_args),
-          args_(base::JSONReader::Read(json_args).release()),
+          args_(base::JSONReader::ReadDeprecated(json_args).release()),
           caught_(caught) {}
 
     const base::Time& caught() { return caught_; }
@@ -377,8 +381,8 @@ class DownloadExtensionTest : public ExtensionApiTest {
   // InProcessBrowserTest
   void SetUpOnMainThread() override {
     ExtensionApiTest::SetUpOnMainThread();
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::IO},
         base::BindOnce(&chrome_browser_net::SetUrlRequestMocksEnabled, true));
     GoOnTheRecord();
     current_browser()->profile()->GetPrefs()->SetBoolean(
@@ -659,11 +663,13 @@ class DownloadExtensionTest : public ExtensionApiTest {
  private:
   void SetUpExtensionFunction(UIThreadExtensionFunction* function) {
     if (extension_) {
+      const GURL url = current_browser_ == incognito_browser_ &&
+                               !IncognitoInfo::IsSplitMode(extension_)
+                           ? GURL(url::kAboutBlankURL)
+                           : extension_->GetResourceURL("empty.html");
       // Recreate the tab each time for insulation.
       content::WebContents* tab = chrome::AddSelectedTabWithURL(
-          current_browser(),
-          extension_->GetResourceURL("empty.html"),
-          ui::PAGE_TRANSITION_LINK);
+          current_browser(), url, ui::PAGE_TRANSITION_LINK);
       function->set_extension(extension_);
       function->SetRenderFrameHost(tab->GetMainFrame());
     }
@@ -700,8 +706,8 @@ class MockIconExtractorImpl : public DownloadFileIconExtractor {
     if (expected_path_ == path &&
         expected_icon_size_ == icon_size) {
       callback_ = callback;
-      BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE,
+      base::PostTaskWithTraits(
+          FROM_HERE, {BrowserThread::UI},
           base::BindOnce(&MockIconExtractorImpl::RunCallback,
                          base::Unretained(this)));
       return true;
@@ -785,8 +791,8 @@ class HTML5FileWriter {
     // Invoke the fileapi to copy it into the sandboxed filesystem.
     bool result = false;
     base::RunLoop run_loop;
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::IO},
         base::BindOnce(&CreateFileForTestingOnIOThread,
                        base::Unretained(context), path, temp_file,
                        base::Unretained(&result), run_loop.QuitClosure()));
@@ -802,7 +808,7 @@ class HTML5FileWriter {
                                base::File::Error error) {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     *result = error == base::File::FILE_OK;
-    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, quit_closure);
+    base::PostTaskWithTraits(FROM_HERE, {BrowserThread::UI}, quit_closure);
   }
 
   static void CreateFileForTestingOnIOThread(
@@ -926,9 +932,9 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 
   scoped_refptr<DownloadsOpenFunction> scoped_open(new DownloadsOpenFunction());
   scoped_open->set_user_gesture(true);
-  base::ListValue list_value;
-  list_value.GetList().emplace_back(static_cast<int>(download_item->GetId()));
-  scoped_open->SetArgs(&list_value);
+  base::Value args_list(base::Value::Type::LIST);
+  args_list.GetList().emplace_back(static_cast<int>(download_item->GetId()));
+  scoped_open->SetArgs(std::move(args_list));
   scoped_open->set_browser_context(current_browser()->profile());
   scoped_open->set_extension(extension());
   DownloadsOpenFunction::OnPromptCreatedCallback callback =
@@ -1145,7 +1151,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       {FILE_PATH_LITERAL("fake.txt"), DownloadItem::COMPLETE,
        download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS}};
   DownloadManager::DownloadVector all_downloads;
-  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, arraysize(kHistoryInfo),
+  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, base::size(kHistoryInfo),
                                      &all_downloads));
 
   base::FilePath real_path = all_downloads[0]->GetTargetFilePath();
@@ -1158,9 +1164,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
     ASSERT_FALSE(base::PathExists(fake_path));
   }
 
-  for (DownloadManager::DownloadVector::iterator iter = all_downloads.begin();
-       iter != all_downloads.end();
-       ++iter) {
+  for (auto iter = all_downloads.begin(); iter != all_downloads.end(); ++iter) {
     std::string result_string;
     // Use a MockIconExtractorImpl to test if the correct path is being passed
     // into the DownloadFileIconExtractor.
@@ -1249,7 +1253,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       {FILE_PATH_LITERAL("baz"), DownloadItem::COMPLETE,
        download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS}};
   DownloadManager::DownloadVector all_downloads;
-  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, arraysize(kHistoryInfo),
+  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, base::size(kHistoryInfo),
                                      &all_downloads));
 
   std::unique_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -1325,8 +1329,8 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       {FILE_PATH_LITERAL("baz"), DownloadItem::COMPLETE,
        download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS}};
   DownloadManager::DownloadVector items;
-  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, arraysize(kHistoryInfo),
-                                     &items));
+  ASSERT_TRUE(
+      CreateHistoryDownloads(kHistoryInfo, base::size(kHistoryInfo), &items));
 
   std::unique_ptr<base::Value> result(RunFunctionAndReturnResult(
       new DownloadsSearchFunction(), "[{\"orderBy\": [\"filename\"]}]"));
@@ -1355,8 +1359,8 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       {FILE_PATH_LITERAL("baz"), DownloadItem::COMPLETE,
        download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS}};
   DownloadManager::DownloadVector items;
-  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, arraysize(kHistoryInfo),
-                                     &items));
+  ASSERT_TRUE(
+      CreateHistoryDownloads(kHistoryInfo, base::size(kHistoryInfo), &items));
 
   std::unique_ptr<base::Value> result(RunFunctionAndReturnResult(
       new DownloadsSearchFunction(), "[{\"orderBy\": []}]"));
@@ -1389,8 +1393,8 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       {FILE_PATH_LITERAL("baz"), DownloadItem::COMPLETE,
        download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS}};
   DownloadManager::DownloadVector items;
-  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, arraysize(kHistoryInfo),
-                                     &items));
+  ASSERT_TRUE(
+      CreateHistoryDownloads(kHistoryInfo, base::size(kHistoryInfo), &items));
 
   std::unique_ptr<base::Value> result(RunFunctionAndReturnResult(
       new DownloadsSearchFunction(), "[{\"danger\": \"content\"}]"));
@@ -1475,8 +1479,8 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
        download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT},
   };
   DownloadManager::DownloadVector items;
-  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, arraysize(kHistoryInfo),
-                                     &items));
+  ASSERT_TRUE(
+      CreateHistoryDownloads(kHistoryInfo, base::size(kHistoryInfo), &items));
 
   std::unique_ptr<base::Value> result(
       RunFunctionAndReturnResult(new DownloadsSearchFunction(),
@@ -1932,7 +1936,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
     "Access-Control-Request-Method",
   };
 
-  for (size_t index = 0; index < arraysize(kUnsafeHeaders); ++index) {
+  for (size_t index = 0; index < base::size(kUnsafeHeaders); ++index) {
     std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
     EXPECT_STREQ(errors::kInvalidHeaderUnsafe,
                   RunFunctionAndReturnError(new DownloadsDownloadFunction(),
@@ -2069,7 +2073,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
     "google.com/",
   };
 
-  for (size_t index = 0; index < arraysize(kInvalidURLs); ++index) {
+  for (size_t index = 0; index < base::size(kInvalidURLs); ++index) {
     EXPECT_STREQ(errors::kInvalidURL,
                   RunFunctionAndReturnError(new DownloadsDownloadFunction(),
                                             base::StringPrintf(
@@ -4191,8 +4195,7 @@ IN_PROC_BROWSER_TEST_F(
     EXPECT_EQ(1u, observer->NumDownloadsSeenInState(DownloadItem::IN_PROGRESS));
     DownloadManager::DownloadVector items;
     manager->GetAllDownloads(&items);
-    for (DownloadManager::DownloadVector::iterator iter = items.begin();
-          iter != items.end(); ++iter) {
+    for (auto iter = items.begin(); iter != items.end(); ++iter) {
       if ((*iter)->GetState() == DownloadItem::IN_PROGRESS) {
         // There should be only one IN_PROGRESS item.
         EXPECT_EQ(NULL, item);
@@ -4266,7 +4269,7 @@ IN_PROC_BROWSER_TEST_F(
   // Downloads that are restarted on resumption trigger another download target
   // determination.
   RemoveFilenameDeterminer(host);
-  item->Resume();
+  item->Resume(true);
 
   // Errors caught before filename determination is complete are delayed until
   // after filename determination so that, on resumption, filename determination

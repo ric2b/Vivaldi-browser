@@ -9,7 +9,6 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/containers/hash_tables.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -53,8 +52,6 @@ class OffTheRecordProfileIOData : public ProfileIOData {
         content::ProtocolHandlerMap* protocol_handlers,
         content::URLRequestInterceptorScopedVector request_interceptors) const;
     scoped_refptr<ChromeURLRequestContextGetter>
-        GetExtensionsRequestContextGetter() const;
-    scoped_refptr<ChromeURLRequestContextGetter>
         GetIsolatedAppRequestContextGetter(
             const base::FilePath& partition_path,
             bool in_memory) const;
@@ -88,8 +85,6 @@ class OffTheRecordProfileIOData : public ProfileIOData {
     // ProfileIOData instance is deleted.
     mutable scoped_refptr<ChromeURLRequestContextGetter>
         main_request_context_getter_;
-    mutable scoped_refptr<ChromeURLRequestContextGetter>
-        extensions_request_context_getter_;
     mutable ChromeURLRequestContextGetterMap
         app_request_context_getter_map_;
     OffTheRecordProfileIOData* const io_data_;
@@ -112,7 +107,7 @@ class OffTheRecordProfileIOData : public ProfileIOData {
                               request_interceptors) const override;
   void OnMainRequestContextCreated(
       ProfileParams* profile_params) const override;
-  void InitializeExtensionsRequestContext(
+  void InitializeExtensionsCookieStore(
       ProfileParams* profile_params) const override;
   net::URLRequestContext* InitializeMediaRequestContext(
       net::URLRequestContext* original_context,
@@ -122,6 +117,7 @@ class OffTheRecordProfileIOData : public ProfileIOData {
   net::URLRequestContext* AcquireIsolatedMediaRequestContext(
       net::URLRequestContext* app_context,
       const StoragePartitionDescriptor& partition_descriptor) const override;
+  net::CookieStore* GetExtensionsCookieStore() const override;
 
   mutable std::unique_ptr<net::CookieStore> extensions_cookie_store_;
 

@@ -6,6 +6,7 @@
 
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
+#import "base/test/ios/wait_util.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_service.h"
 #import "ios/chrome/app/application_delegate/metrics_mediator.h"
@@ -23,14 +24,15 @@
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
 #import "ios/chrome/browser/ui/main/bvc_container_view_controller.h"
+#import "ios/chrome/browser/ui/main/tab_switcher.h"
 #import "ios/chrome/browser/ui/main/view_controller_swapping.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_switcher.h"
-#include "ios/chrome/browser/ui/ui_util.h"
-#include "ios/chrome/test/app/navigation_test_util.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/test/app/tab_test_util.h"
 #import "ios/web/public/navigation_manager.h"
+#include "ios/web/public/test/fakes/test_web_state_observer.h"
 #import "ios/web/public/test/native_controller_test_util.h"
+#import "ios/web/public/web_state/navigation_context.h"
 #import "third_party/breakpad/breakpad/src/client/ios/BreakpadController.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -105,14 +107,14 @@ ios::ChromeBrowserState* GetCurrentIncognitoBrowserState() {
 }
 
 NSUInteger GetRegisteredKeyCommandsCount() {
-  BrowserViewController* mainBVC =
-      GetMainController().browserViewInformation.mainBVC;
-  return mainBVC.keyCommands.count;
+  UIViewController* mainViewController =
+      GetMainController().interfaceProvider.mainInterface.viewController;
+  return mainViewController.keyCommands.count;
 }
 
 id<BrowserCommands> BrowserCommandDispatcherForMainBVC() {
   BrowserViewController* mainBVC =
-      GetMainController().browserViewInformation.mainBVC;
+      GetMainController().interfaceProvider.mainInterface.bvc;
   return mainBVC.dispatcher;
 }
 
@@ -143,25 +145,6 @@ UIViewController* GetActiveViewController() {
             .currentBVC;
   }
   return active_view_controller;
-}
-
-id<ApplicationCommands, BrowserCommands> DispatcherForActiveViewController() {
-  DCHECK(!IsUIRefreshPhase1Enabled());
-  UIViewController* vc = GetActiveViewController();
-  BrowserViewController* bvc = base::mac::ObjCCast<BrowserViewController>(vc);
-  if (bvc)
-    return bvc.dispatcher;
-  if ([vc conformsToProtocol:@protocol(TabSwitcher)]) {
-    // In stack_view and the iPad tab switcher, the view controller has a
-    // dispatcher.
-    id<TabSwitcher> tabSwitcher = static_cast<id<TabSwitcher>>(vc);
-    return static_cast<id<ApplicationCommands, BrowserCommands>>(
-        tabSwitcher.dispatcher);
-  }
-  // In tab grid, the TabSwitcher object is not in the view hierarchy so it must
-  // be gotten through the MainController.
-  return static_cast<id<ApplicationCommands, BrowserCommands>>(
-      GetMainController().tabSwitcher.dispatcher);
 }
 
 id<ApplicationCommands, BrowserCommands>
@@ -258,10 +241,27 @@ void OpenChromeFromExternalApp(const GURL& url) {
 
 bool PurgeCachedWebViewPages() {
   web::WebState* web_state = chrome_test_util::GetCurrentWebState();
+  const GURL last_committed_url = web_state->GetLastCommittedURL();
+
   web_state->SetWebUsageEnabled(false);
   web_state->SetWebUsageEnabled(true);
+
+  auto observer = std::make_unique<web::TestWebStateObserver>(web_state);
+  web::TestWebStateObserver* observer_ptr = observer.get();
+
   web_state->GetNavigationManager()->LoadIfNecessary();
-  return chrome_test_util::WaitForPageToFinishLoading();
+
+  // The navigation triggered by LoadIfNecessary() may only start loading in the
+  // next run loop, if it is for a web URL. The most reliable way to detect that
+  // this navigation has finished is via the WebStateObserver.
+  return base::test::ios::WaitUntilConditionOrTimeout(
+      base::test::ios::kWaitForPageLoadTimeout, ^{
+        return observer_ptr->did_finish_navigation_info() &&
+               observer_ptr->did_finish_navigation_info()->context &&
+               observer_ptr->did_finish_navigation_info()
+                       ->context->GetWebState()
+                       ->GetVisibleURL() == last_committed_url;
+      });
 }
 
 }  // namespace chrome_test_util

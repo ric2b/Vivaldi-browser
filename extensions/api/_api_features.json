@@ -16,9 +16,19 @@
 //
 
 {
+  "accessKeys": {
+    "vivaldi": true,
+    "dependencies": [ "permission:accessKeys" ],
+    "contexts": [ "blessed_extension" ]
+  },
   "autoUpdate": {
     "vivaldi": true,
     "dependencies": [ "permission:autoUpdate" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "bookmarkContextMenu": {
+    "vivaldi": true,
+    "dependencies": [ "permission:bookmarkContextMenu" ],
     "contexts": [ "blessed_extension" ]
   },
   "bookmarksPrivate": {
@@ -125,16 +135,24 @@
     "dependencies": [ "permission:utilities" ],
     "contexts": [ "blessed_extension" ]
   },
+  "vivaldiAccount": {
+    "vivaldi": true,
+    "dependencies": [ "permission:vivaldiAccount" ],
+    "contexts": [ "blessed_extension" ]
+  },
   "webViewPrivate": [{
+    "internal": true,
     "dependencies": ["permission:webview"],
     "contexts": ["blessed_extension"]
   }, {
+    "internal": true,
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
       "chrome://chrome-signin/*",
       "chrome://media-router/*",
-      "chrome://oobe/*"
+      "chrome://oobe/*",
+      "chrome://discards/*"
     ]
   }],
   "windowPrivate": {

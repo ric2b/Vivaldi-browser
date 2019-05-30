@@ -4,7 +4,9 @@
 
 #include "chrome/browser/sync/sync_error_notifier_ash.h"
 
+#include "ash/public/cpp/notification_utils.h"
 #include "ash/public/cpp/vector_icons/vector_icons.h"
+#include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -13,6 +15,7 @@
 #include "chrome/browser/notifications/notification_common.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
@@ -22,6 +25,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/account_id/account_id.h"
+#include "components/sync/driver/sync_service.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -46,35 +50,38 @@ void ShowSyncSetup(Profile* profile) {
 
 }  // namespace
 
-SyncErrorNotifier::SyncErrorNotifier(syncer::SyncErrorController* controller,
+SyncErrorNotifier::SyncErrorNotifier(syncer::SyncService* sync_service,
                                      Profile* profile)
-    : error_controller_(controller),
+    : sync_service_(sync_service),
       profile_(profile),
       notification_displayed_(false) {
   // Create a unique notification ID for this profile.
   notification_id_ =
       kProfileSyncNotificationId + profile_->GetProfileUserName();
 
-  error_controller_->AddObserver(this);
-  OnErrorChanged();
+  sync_service_->AddObserver(this);
+  OnStateChanged(sync_service_);
 }
 
 SyncErrorNotifier::~SyncErrorNotifier() {
-  DCHECK(!error_controller_)
-      << "SyncErrorNotifier::Shutdown() was not called";
+  DCHECK(!sync_service_) << "SyncErrorNotifier::Shutdown() was not called";
 }
 
 void SyncErrorNotifier::Shutdown() {
-  error_controller_->RemoveObserver(this);
-  error_controller_ = nullptr;
+  sync_service_->RemoveObserver(this);
+  sync_service_ = nullptr;
 }
 
-void SyncErrorNotifier::OnErrorChanged() {
-  if (error_controller_->HasError() == notification_displayed_)
+void SyncErrorNotifier::OnStateChanged(syncer::SyncService* service) {
+  DCHECK_EQ(service, sync_service_);
+
+  if (sync_ui_util::ShouldShowPassphraseError(sync_service_) ==
+      notification_displayed_) {
     return;
+  }
 
   auto* display_service = NotificationDisplayService::GetForProfile(profile_);
-  if (!error_controller_->HasError()) {
+  if (!sync_ui_util::ShouldShowPassphraseError(sync_service_)) {
     notification_displayed_ = false;
     display_service->Close(NotificationHandler::Type::TRANSIENT,
                            notification_id_);
@@ -94,10 +101,12 @@ void SyncErrorNotifier::OnErrorChanged() {
 
   // Error state just got triggered. There shouldn't be previous notification.
   // Let's display one.
-  DCHECK(!notification_displayed_ && error_controller_->HasError());
+  DCHECK(!notification_displayed_ &&
+         sync_ui_util::ShouldShowPassphraseError(sync_service_));
 
   message_center::NotifierId notifier_id(
-      message_center::NotifierId::SYSTEM_COMPONENT, kProfileSyncNotificationId);
+      message_center::NotifierType::SYSTEM_COMPONENT,
+      kProfileSyncNotificationId);
 
   // Set |profile_id| for multi-user notification blocker.
   notifier_id.profile_id =
@@ -105,7 +114,7 @@ void SyncErrorNotifier::OnErrorChanged() {
 
   // Add a new notification.
   std::unique_ptr<message_center::Notification> notification =
-      message_center::Notification::CreateSystemNotification(
+      ash::CreateSystemNotification(
           message_center::NOTIFICATION_TYPE_SIMPLE, notification_id_,
           l10n_util::GetStringUTF16(IDS_SYNC_ERROR_BUBBLE_VIEW_TITLE),
           l10n_util::GetStringUTF16(

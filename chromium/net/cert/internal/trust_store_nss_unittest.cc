@@ -55,7 +55,8 @@ class TrustStoreNSSTest : public testing::Test {
   }
 
   std::string GetUniqueNickname() {
-    return "trust_store_nss_unittest" + base::UintToString(nickname_counter_++);
+    return "trust_store_nss_unittest" +
+           base::NumberToString(nickname_counter_++);
   }
 
   void AddCertToNSS(const ParsedCertificate* cert) {
@@ -323,7 +324,7 @@ class TrustStoreNSSTestDelegate {
  protected:
   std::string GetUniqueNickname() {
     return "cert_issuer_source_nss_unittest" +
-           base::UintToString(nickname_counter_++);
+           base::NumberToString(nickname_counter_++);
   }
 
   crypto::ScopedTestNSSDB test_nssdb_;
@@ -331,15 +332,15 @@ class TrustStoreNSSTestDelegate {
   unsigned int nickname_counter_ = 0;
 };
 
-INSTANTIATE_TYPED_TEST_CASE_P(TrustStoreNSSTest2,
-                              CertIssuerSourceSyncTest,
-                              TrustStoreNSSTestDelegate);
+INSTANTIATE_TYPED_TEST_SUITE_P(TrustStoreNSSTest2,
+                               CertIssuerSourceSyncTest,
+                               TrustStoreNSSTestDelegate);
 
 // NSS doesn't normalize UTF8String values, so use the not-normalized version of
 // those tests.
-INSTANTIATE_TYPED_TEST_CASE_P(TrustStoreNSSNotNormalizedTest,
-                              CertIssuerSourceSyncNotNormalizedTest,
-                              TrustStoreNSSTestDelegate);
+INSTANTIATE_TYPED_TEST_SUITE_P(TrustStoreNSSNotNormalizedTest,
+                               CertIssuerSourceSyncNotNormalizedTest,
+                               TrustStoreNSSTestDelegate);
 
 }  // namespace
 

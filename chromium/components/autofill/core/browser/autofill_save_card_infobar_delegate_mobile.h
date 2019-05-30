@@ -10,6 +10,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
+#include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/legal_message_line.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
@@ -30,11 +31,15 @@ class AutofillSaveCardInfoBarDelegateMobile : public ConfirmInfoBarDelegate {
  public:
   AutofillSaveCardInfoBarDelegateMobile(
       bool upload,
+      AutofillClient::SaveCreditCardOptions options,
       const CreditCard& card,
       std::unique_ptr<base::DictionaryValue> legal_message,
-      base::OnceCallback<void(const base::string16&)> upload_save_card_callback,
-      base::Closure local_save_card_callback,
-      PrefService* pref_service);
+      AutofillClient::UploadSaveCardPromptCallback
+          upload_save_card_prompt_callback,
+      AutofillClient::LocalSaveCardPromptCallback
+          local_save_card_prompt_callback,
+      PrefService* pref_service,
+      bool is_off_the_record);
 
   ~AutofillSaveCardInfoBarDelegateMobile() override;
 
@@ -69,18 +74,29 @@ class AutofillSaveCardInfoBarDelegateMobile : public ConfirmInfoBarDelegate {
   bool Accept() override;
 
  private:
+  // Runs the appropriate local or upload save callback with the given
+  // |user_decision|.
+  void RunSaveCardPromptCallbackWithUserDecision(
+      AutofillClient::SaveCardOfferUserDecision user_decision);
+
   void LogUserAction(AutofillMetrics::InfoBarMetric user_action);
 
   // Whether the action is an upload or a local save.
   bool upload_;
 
-  // The callback to save the credit card to Google Payments if |upload_| is
-  // true and the user accepts the infobar.
-  base::OnceCallback<void(const base::string16&)> upload_save_card_callback_;
+  // If the cardholder name is missing, request the name from the user before
+  // saving the card. If the expiration date is missing, request the missing
+  // data from the user before saving the card.
+  AutofillClient::SaveCreditCardOptions options_;
 
-  // The callback to save the credit card locally to the device if |upload_| is
-  // false and the user accepts the infobar.
-  base::Closure local_save_card_callback_;
+  // The callback to run once the user makes a decision with respect to the
+  // credit card upload offer-to-save prompt (if |upload_| is true).
+  AutofillClient::UploadSaveCardPromptCallback
+      upload_save_card_prompt_callback_;
+
+  // The callback to run once the user makes a decision with respect to the
+  // local credit card offer-to-save prompt (if |upload_| is false).
+  AutofillClient::LocalSaveCardPromptCallback local_save_card_prompt_callback_;
 
   // Weak reference to read & write |kAutofillAcceptSaveCreditCardPromptState|,
   PrefService* pref_service_;
@@ -97,8 +113,14 @@ class AutofillSaveCardInfoBarDelegateMobile : public ConfirmInfoBarDelegate {
   // The sub-label for the card to show in the content of the infobar.
   base::string16 card_sub_label_;
 
+  // The last four digits of the card for which save is being offered.
+  base::string16 card_last_four_digits_;
+
   // The legal messages to show in the content of the infobar.
   LegalMessageLines legal_messages_;
+
+  // Whether the save is offered while off the record
+  bool is_off_the_record_;
 
   DISALLOW_COPY_AND_ASSIGN(AutofillSaveCardInfoBarDelegateMobile);
 };

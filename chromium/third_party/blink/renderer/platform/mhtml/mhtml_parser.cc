@@ -30,26 +30,72 @@
 
 #include "third_party/blink/renderer/platform/mhtml/mhtml_parser.h"
 
+#include <stddef.h>
 #include "third_party/blink/renderer/platform/mhtml/archive_resource.h"
 #include "third_party/blink/renderer/platform/network/http_parsers.h"
 #include "third_party/blink/renderer/platform/network/parsed_content_type.h"
-#include "third_party/blink/renderer/platform/text/quoted_printable.h"
+#include "third_party/blink/renderer/platform/wtf/ascii_ctype.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/text/base64.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_concatenate.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
+
+namespace {
+
+void QuotedPrintableDecode(const char* data,
+                           size_t data_length,
+                           Vector<char>& out) {
+  out.clear();
+  if (!data_length)
+    return;
+
+  for (size_t i = 0; i < data_length; ++i) {
+    char current_character = data[i];
+    if (current_character != '=') {
+      out.push_back(current_character);
+      continue;
+    }
+    // We are dealing with a '=xx' sequence.
+    if (data_length - i < 3) {
+      // Unfinished = sequence, append as is.
+      out.push_back(current_character);
+      continue;
+    }
+    char upper_character = data[++i];
+    char lower_character = data[++i];
+    if (upper_character == '\r' && lower_character == '\n')
+      continue;
+
+    if (!IsASCIIHexDigit(upper_character) ||
+        !IsASCIIHexDigit(lower_character)) {
+      // Invalid sequence, = followed by non hex digits, just insert the
+      // characters as is.
+      out.push_back('=');
+      out.push_back(upper_character);
+      out.push_back(lower_character);
+      continue;
+    }
+    out.push_back(
+        static_cast<char>(ToASCIIHexValue(upper_character, lower_character)));
+  }
+}
+
+}  // namespace
 
 // This class is a limited MIME parser used to parse the MIME headers of MHTML
 // files.
 class MIMEHeader : public GarbageCollectedFinalized<MIMEHeader> {
  public:
-  static MIMEHeader* Create() { return new MIMEHeader; }
+  static MIMEHeader* Create() { return MakeGarbageCollected<MIMEHeader>(); }
 
-  enum Encoding {
+  MIMEHeader();
+
+  enum class Encoding {
     kQuotedPrintable,
     kBase64,
     kEightBit,
@@ -81,8 +127,6 @@ class MIMEHeader : public GarbageCollectedFinalized<MIMEHeader> {
   void Trace(blink::Visitor* visitor) {}
 
  private:
-  MIMEHeader();
-
   static Encoding ParseContentTransferEncoding(const String&);
 
   String content_type_;
@@ -119,7 +163,7 @@ static KeyValueMap RetrieveKeyValuePairs(SharedBufferChunkReader* buffer) {
       key = String();
       value.Clear();
     }
-    size_t semi_colon_index = line.find(':');
+    wtf_size_t semi_colon_index = line.find(':');
     if (semi_colon_index == kNotFound) {
       // This is not a key value pair, ignore.
       continue;
@@ -192,20 +236,20 @@ MIMEHeader::Encoding MIMEHeader::ParseContentTransferEncoding(
     const String& text) {
   String encoding = text.StripWhiteSpace().DeprecatedLower();
   if (encoding == "base64")
-    return kBase64;
+    return Encoding::kBase64;
   if (encoding == "quoted-printable")
-    return kQuotedPrintable;
+    return Encoding::kQuotedPrintable;
   if (encoding == "8bit")
-    return kEightBit;
+    return Encoding::kEightBit;
   if (encoding == "7bit")
-    return kSevenBit;
+    return Encoding::kSevenBit;
   if (encoding == "binary")
-    return kBinary;
+    return Encoding::kBinary;
   DVLOG(1) << "Unknown encoding '" << text << "' found in MIME header.";
-  return kUnknown;
+  return Encoding::kUnknown;
 }
 
-MIMEHeader::MIMEHeader() : content_transfer_encoding_(kUnknown) {}
+MIMEHeader::MIMEHeader() : content_transfer_encoding_(Encoding::kUnknown) {}
 
 static bool SkipLinesUntilBoundaryFound(SharedBufferChunkReader& line_reader,
                                         const String& boundary) {
@@ -302,13 +346,13 @@ ArchiveResource* MHTMLParser::ParseNextPart(
   // If no content transfer encoding is specified, default to binary encoding.
   MIMEHeader::Encoding content_transfer_encoding =
       mime_header.ContentTransferEncoding();
-  if (content_transfer_encoding == MIMEHeader::kUnknown)
-    content_transfer_encoding = MIMEHeader::kBinary;
+  if (content_transfer_encoding == MIMEHeader::Encoding::kUnknown)
+    content_transfer_encoding = MIMEHeader::Encoding::kBinary;
 
   Vector<char> content;
   const bool check_boundary = !end_of_part_boundary.IsEmpty();
   bool end_of_part_reached = false;
-  if (content_transfer_encoding == MIMEHeader::kBinary) {
+  if (content_transfer_encoding == MIMEHeader::Encoding::kBinary) {
     if (!check_boundary) {
       DVLOG(1) << "Binary contents requires end of part";
       return nullptr;
@@ -369,7 +413,7 @@ ArchiveResource* MHTMLParser::ParseNextPart(
       // Note that we use line.utf8() and not line.ascii() as ascii turns
       // special characters (such as tab, line-feed...) into '?'.
       content.Append(line.Utf8().data(), line.length());
-      if (content_transfer_encoding == MIMEHeader::kQuotedPrintable) {
+      if (content_transfer_encoding == MIMEHeader::Encoding::kQuotedPrintable) {
         // The line reader removes the \r\n, but we need them for the content in
         // this case as the QuotedPrintable decoder expects CR-LF terminated
         // lines.
@@ -384,18 +428,18 @@ ArchiveResource* MHTMLParser::ParseNextPart(
 
   Vector<char> data;
   switch (content_transfer_encoding) {
-    case MIMEHeader::kBase64:
+    case MIMEHeader::Encoding::kBase64:
       if (!Base64Decode(content.data(), content.size(), data)) {
         DVLOG(1) << "Invalid base64 content for MHTML part.";
         return nullptr;
       }
       break;
-    case MIMEHeader::kQuotedPrintable:
+    case MIMEHeader::Encoding::kQuotedPrintable:
       QuotedPrintableDecode(content.data(), content.size(), data);
       break;
-    case MIMEHeader::kEightBit:
-    case MIMEHeader::kSevenBit:
-    case MIMEHeader::kBinary:
+    case MIMEHeader::Encoding::kEightBit:
+    case MIMEHeader::Encoding::kSevenBit:
+    case MIMEHeader::Encoding::kBinary:
       data.Append(content.data(), content.size());
       break;
     default:

@@ -57,10 +57,6 @@ void UpdateNotesPositioning(const sync_pb::SyncEntity& update,
 
 // SyncClient
 
-Profile* SyncClient::GetProfile() {
-  return nullptr;
-}
-
 vivaldi::Notes_Model* SyncClient::GetNotesModel() {
   return nullptr;
 }

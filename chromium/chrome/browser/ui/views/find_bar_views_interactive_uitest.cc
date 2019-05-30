@@ -19,7 +19,6 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_contents.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -96,8 +95,6 @@ class FindInPageTest : public InProcessBrowserTest {
   }
 
  private:
-  test::ScopedMacViewsBrowserMode views_mode_{true};
-
   DISALLOW_COPY_AND_ASSIGN(FindInPageTest);
 };
 
@@ -118,7 +115,8 @@ IN_PROC_BROWSER_TEST_F(FindInPageTest, CrashEscHandlers) {
   EXPECT_TRUE(IsViewFocused(browser(), VIEW_ID_FIND_IN_PAGE_TEXT_FIELD));
 
   // Select tab A.
-  browser()->tab_strip_model()->ActivateTabAt(0, true);
+  browser()->tab_strip_model()->ActivateTabAt(
+      0, {TabStripModel::GestureType::kOther});
 
   // Close tab B.
   browser()->tab_strip_model()->CloseWebContentsAt(1,
@@ -360,12 +358,14 @@ IN_PROC_BROWSER_TEST_F(FindInPageTest, MAYBE_SelectionRestoreOnTabSwitch) {
   EXPECT_EQ(ASCIIToUTF16("de"), GetFindBarSelectedText());
 
   // Select tab A. Find bar should select "bc".
-  browser()->tab_strip_model()->ActivateTabAt(0, true);
+  browser()->tab_strip_model()->ActivateTabAt(
+      0, {TabStripModel::GestureType::kOther});
   EXPECT_TRUE(IsViewFocused(browser(), VIEW_ID_FIND_IN_PAGE_TEXT_FIELD));
   EXPECT_EQ(ASCIIToUTF16("bc"), GetFindBarSelectedText());
 
   // Select tab B. Find bar should select "de".
-  browser()->tab_strip_model()->ActivateTabAt(1, true);
+  browser()->tab_strip_model()->ActivateTabAt(
+      1, {TabStripModel::GestureType::kOther});
   EXPECT_TRUE(IsViewFocused(browser(), VIEW_ID_FIND_IN_PAGE_TEXT_FIELD));
   EXPECT_EQ(ASCIIToUTF16("de"), GetFindBarSelectedText());
 }
@@ -411,13 +411,15 @@ IN_PROC_BROWSER_TEST_F(FindInPageTest, FocusRestoreOnTabSwitch) {
   EXPECT_TRUE(IsViewFocused(browser(), VIEW_ID_OMNIBOX));
 
   // Select tab A. Find bar should get focus.
-  browser()->tab_strip_model()->ActivateTabAt(0, true);
+  browser()->tab_strip_model()->ActivateTabAt(
+      0, {TabStripModel::GestureType::kOther});
   EXPECT_TRUE(IsViewFocused(browser(), VIEW_ID_FIND_IN_PAGE_TEXT_FIELD));
   if (!views::PlatformStyle::kTextfieldScrollsToStartOnFocusChange)
     EXPECT_EQ(ASCIIToUTF16("a"), GetFindBarSelectedText());
 
   // Select tab B. Location bar should get focus.
-  browser()->tab_strip_model()->ActivateTabAt(1, true);
+  browser()->tab_strip_model()->ActivateTabAt(
+      1, {TabStripModel::GestureType::kOther});
   EXPECT_TRUE(IsViewFocused(browser(), VIEW_ID_OMNIBOX));
 }
 

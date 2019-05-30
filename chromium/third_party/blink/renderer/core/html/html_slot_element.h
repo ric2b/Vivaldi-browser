@@ -46,21 +46,14 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
   static HTMLSlotElement* CreateUserAgentDefaultSlot(Document&);
   static HTMLSlotElement* CreateUserAgentCustomAssignSlot(Document&);
 
+  HTMLSlotElement(Document&);
+
   const HeapVector<Member<Node>>& AssignedNodes() const;
   const HeapVector<Member<Node>> AssignedNodesForBinding(
-      const AssignedNodesOptions&);
+      const AssignedNodesOptions*);
   const HeapVector<Member<Element>> AssignedElements();
   const HeapVector<Member<Element>> AssignedElementsForBinding(
-      const AssignedNodesOptions&);
-
-  bool IsAssignedNodeSameWithBefore(
-      HeapVector<Member<Node>>& new_assigned_nodes,
-      HeapHashSet<Member<Node>>& old_assigned_nodes);
-  void assign(HeapVector<Member<Node>> nodes);
-  bool ContainsInAssignedNodesCandidates(Node&) const;
-  void SignalSlotChange();
-
-  const HeapVector<Member<Node>> FlattenedAssignedNodes();
+      const AssignedNodesOptions*);
 
   Node* FirstAssignedNode() const {
     auto& nodes = AssignedNodes();
@@ -75,6 +68,16 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
   Node* AssignedNodePreviousTo(const Node&) const;
 
   void AppendAssignedNode(Node&);
+  void ClearAssignedNodes();
+
+  const HeapVector<Member<Node>> FlattenedAssignedNodes();
+
+  void WillRecalcAssignedNodes() { ClearAssignedNodes(); }
+  void DidRecalcAssignedNodes() {
+    if (RuntimeEnabledFeatures::FastFlatTreeTraversalEnabled())
+      UpdateFlatTreeNodeDataForAssignedNodes();
+    RecalcFlatTreeChildren();
+  }
 
   void AttachLayoutTree(AttachContext&) final;
   void DetachLayoutTree(const AttachContext& = AttachContext()) final;
@@ -108,75 +111,48 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
   static const AtomicString& UserAgentCustomAssignSlotName();
   static const AtomicString& UserAgentDefaultSlotName();
 
-  void Trace(blink::Visitor*) override;
-
-  // For Incremental Shadow DOM
-  void ClearAssignedNodes();
-  void RecalcFlatTreeChildren();
-
-  // For Non-Incremental Shadow DOM
-  void RecalcDistributedNodes();
-  void AppendDistributedNode(Node&);
-  void AppendDistributedNodesFrom(const HTMLSlotElement& other);
-  void UpdateDistributedNodesWithFallback();
-  void LazyReattachDistributedNodesIfNeeded();
-  void ClearDistribution();
-  void SaveAndClearDistribution();
-  Node* DistributedNodeNextTo(const Node&) const;
-  Node* DistributedNodePreviousTo(const Node&) const;
-
-  Node* FirstDistributedNode() const {
-    DCHECK(!RuntimeEnabledFeatures::IncrementalShadowDOMEnabled());
-    DCHECK(SupportsAssignment());
-    return distributed_nodes_.IsEmpty() ? nullptr
-                                        : distributed_nodes_.front().Get();
+  // For imperative Shadow DOM distribution APIs
+  void assign(HeapVector<Member<Node>> nodes);
+  const HeapHashSet<Member<Node>>& AssignedNodesCandidate() const {
+    return assigned_nodes_candidates_;
   }
-  Node* LastDistributedNode() const {
-    DCHECK(!RuntimeEnabledFeatures::IncrementalShadowDOMEnabled());
-    DCHECK(SupportsAssignment());
-    return distributed_nodes_.IsEmpty() ? nullptr
-                                        : distributed_nodes_.back().Get();
-  }
+
+  void Trace(Visitor*) override;
 
  private:
-  HTMLSlotElement(Document&);
-
   InsertionNotificationRequest InsertedInto(ContainerNode&) final;
   void RemovedFrom(ContainerNode&) final;
-  void DidRecalcStyle(StyleRecalcChange) final;
+  void DidRecalcStyle(const StyleRecalcChange) final;
 
   void EnqueueSlotChangeEvent();
 
   bool HasSlotableChild() const;
 
-  const HeapVector<Member<Node>>& ChildrenInFlatTreeIfAssignmentIsSupported();
-
-  void LazyReattachNodesIfNeeded(const HeapVector<Member<Node>>& nodes1,
-                                 const HeapVector<Member<Node>>& nodes2);
-  static void LazyReattachNodesNaive(const HeapVector<Member<Node>>& nodes1,
-                                     const HeapVector<Member<Node>>& nodes2);
-  static void LazyReattachNodesByDynamicProgramming(
-      const HeapVector<Member<Node>>& nodes1,
-      const HeapVector<Member<Node>>& nodes2);
+  void NotifySlottedNodesOfFlatTreeChange(
+      const HeapVector<Member<Node>>& old_slotted,
+      const HeapVector<Member<Node>>& new_slotted);
+  static void NotifySlottedNodesOfFlatTreeChangeNaive(
+      const HeapVector<Member<Node>>& new_slotted);
+  static void NotifySlottedNodesOfFlatTreeChangeByDynamicProgramming(
+      const HeapVector<Member<Node>>& old_slotted,
+      const HeapVector<Member<Node>>& new_slotted);
 
   void SetNeedsDistributionRecalcWillBeSetNeedsAssignmentRecalc();
 
   const HeapVector<Member<Node>>& GetDistributedNodes();
 
+  void RecalcFlatTreeChildren();
+  void UpdateFlatTreeNodeDataForAssignedNodes();
   void ClearAssignedNodesAndFlatTreeChildren();
 
   HeapVector<Member<Node>> assigned_nodes_;
-  bool slotchange_event_enqueued_ = false;
-
-  HeapHashSet<Member<Node>> assigned_nodes_candidates_;
-
-  // For IncrementalShadowDOM
+  HeapHashMap<Member<const Node>, unsigned> assigned_nodes_index_;
   HeapVector<Member<Node>> flat_tree_children_;
 
-  // For Non-IncrmentalShadowDOM. IncremntalShadowDOM never use these members.
-  HeapVector<Member<Node>> distributed_nodes_;
-  HeapVector<Member<Node>> old_distributed_nodes_;
-  HeapHashMap<Member<const Node>, size_t> distributed_indices_;
+  bool slotchange_event_enqueued_ = false;
+
+  // For imperative Shadow DOM distribution APIs
+  HeapHashSet<Member<Node>> assigned_nodes_candidates_;
 
   // TODO(hayato): Move this to more appropriate directory (e.g. platform/wtf)
   // if there are more than one usages.
@@ -186,21 +162,21 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
       const Container& seq2,
       LCSTable& lcs_table,
       BacktrackTable& backtrack_table) {
-    const size_t rows = seq1.size();
-    const size_t columns = seq2.size();
+    const wtf_size_t rows = SafeCast<wtf_size_t>(seq1.size());
+    const wtf_size_t columns = SafeCast<wtf_size_t>(seq2.size());
 
     DCHECK_GT(lcs_table.size(), rows);
     DCHECK_GT(lcs_table[0].size(), columns);
     DCHECK_GT(backtrack_table.size(), rows);
     DCHECK_GT(backtrack_table[0].size(), columns);
 
-    for (size_t r = 0; r <= rows; ++r)
+    for (wtf_size_t r = 0; r <= rows; ++r)
       lcs_table[r][0] = 0;
-    for (size_t c = 0; c <= columns; ++c)
+    for (wtf_size_t c = 0; c <= columns; ++c)
       lcs_table[0][c] = 0;
 
-    for (size_t r = 1; r <= rows; ++r) {
-      for (size_t c = 1; c <= columns; ++c) {
+    for (wtf_size_t r = 1; r <= rows; ++r) {
+      for (wtf_size_t c = 1; c <= columns; ++c) {
         if (seq1[r - 1] == seq2[c - 1]) {
           lcs_table[r][c] = lcs_table[r - 1][c - 1] + 1;
           backtrack_table[r][c] = std::make_pair(r - 1, c - 1);

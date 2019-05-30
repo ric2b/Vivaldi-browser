@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.widget.prefeditor;
 
+import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.util.Pair;
@@ -17,8 +18,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-
-import javax.annotation.Nullable;
 
 /**
  * Representation of a single input text field in an editor. Can be used, for example, for a phone
@@ -140,6 +139,8 @@ public class EditorFieldModel {
     @Nullable
     private CharSequence mInvalidErrorMessage;
     @Nullable
+    private CharSequence mCustomErrorMessage;
+    @Nullable
     private CharSequence mErrorMessage;
     @Nullable
     private CharSequence mLabel;
@@ -159,7 +160,7 @@ public class EditorFieldModel {
     private int mActionIconResourceId;
     private int mActionIconDescriptionForAccessibility;
     private boolean mIsFullLine = true;
-    private boolean mPlusIconIsDisplayed = false;
+    private boolean mPlusIconIsDisplayed;
 
     /**
      * Constructs a label to show in the editor. This can be, for example, description of a server
@@ -537,6 +538,11 @@ public class EditorFieldModel {
         return mErrorMessage;
     }
 
+    /** Updates the custom error message */
+    public void setCustomErrorMessage(@Nullable CharSequence errorMessage) {
+        mCustomErrorMessage = errorMessage;
+    }
+
     /** @return The value that the user has typed into the field or the key of the value that the
      *          user has selected in the dropdown. Can be null. */
     @Nullable
@@ -594,6 +600,11 @@ public class EditorFieldModel {
      * @return Whether the field value is valid.
      */
     public boolean isValid() {
+        if (!TextUtils.isEmpty(mCustomErrorMessage)) {
+            mErrorMessage = mCustomErrorMessage;
+            return false;
+        }
+
         if (isRequired()
                 && (TextUtils.isEmpty(mValue) || TextUtils.getTrimmedLength(mValue) == 0)) {
             mErrorMessage = mRequiredErrorMessage;

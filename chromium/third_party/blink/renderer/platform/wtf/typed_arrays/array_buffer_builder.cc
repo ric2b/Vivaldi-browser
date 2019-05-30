@@ -31,19 +31,20 @@
 #include "third_party/blink/renderer/platform/wtf/typed_arrays/array_buffer_builder.h"
 
 #include <limits>
+#include <utility>
+
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 
 namespace WTF {
 
 static const int kDefaultBufferCapacity = 32768;
 
-ArrayBufferBuilder::ArrayBufferBuilder()
-    : bytes_used_(0), variable_capacity_(true) {
+ArrayBufferBuilder::ArrayBufferBuilder() : bytes_used_(0) {
   buffer_ = ArrayBuffer::Create(kDefaultBufferCapacity, 1);
 }
 
 bool ArrayBufferBuilder::ExpandCapacity(unsigned size_to_increase) {
-  unsigned current_buffer_size = buffer_->ByteLength();
+  size_t current_buffer_size = buffer_->ByteLength();
 
   // If the size of the buffer exceeds max of unsigned, it can't be grown any
   // more.
@@ -55,8 +56,10 @@ bool ArrayBufferBuilder::ExpandCapacity(unsigned size_to_increase) {
   // Grow exponentially if possible.
   unsigned exponential_growth_new_buffer_size =
       std::numeric_limits<unsigned>::max();
-  if (current_buffer_size <= std::numeric_limits<unsigned>::max() / 2)
-    exponential_growth_new_buffer_size = current_buffer_size * 2;
+  if (current_buffer_size <= std::numeric_limits<unsigned>::max() / 2) {
+    exponential_growth_new_buffer_size =
+        static_cast<unsigned>(current_buffer_size * 2);
+  }
   if (exponential_growth_new_buffer_size > new_buffer_size)
     new_buffer_size = exponential_growth_new_buffer_size;
 
@@ -74,40 +77,24 @@ bool ArrayBufferBuilder::ExpandCapacity(unsigned size_to_increase) {
 unsigned ArrayBufferBuilder::Append(const char* data, unsigned length) {
   DCHECK_GT(length, 0u);
 
-  unsigned current_buffer_size = buffer_->ByteLength();
+  size_t current_buffer_size = buffer_->ByteLength();
 
   DCHECK_LE(bytes_used_, current_buffer_size);
 
-  unsigned remaining_buffer_space = current_buffer_size - bytes_used_;
+  size_t remaining_buffer_space = current_buffer_size - bytes_used_;
 
-  unsigned bytes_to_save = length;
+  if (length > remaining_buffer_space && !ExpandCapacity(length))
+    return 0;
 
-  if (length > remaining_buffer_space) {
-    if (variable_capacity_) {
-      if (!ExpandCapacity(length))
-        return 0;
-    } else {
-      bytes_to_save = remaining_buffer_space;
-    }
-  }
+  memcpy(static_cast<char*>(buffer_->Data()) + bytes_used_, data, length);
+  bytes_used_ += length;
 
-  memcpy(static_cast<char*>(buffer_->Data()) + bytes_used_, data,
-         bytes_to_save);
-  bytes_used_ += bytes_to_save;
-
-  return bytes_to_save;
+  return length;
 }
 
-scoped_refptr<ArrayBuffer> ArrayBufferBuilder::ToArrayBuffer() {
-  // Fully used. Return m_buffer as-is.
-  if (buffer_->ByteLength() == bytes_used_)
-    return buffer_;
-
-  return buffer_->Slice(0, bytes_used_);
-}
-
-String ArrayBufferBuilder::ToString() {
-  return String(static_cast<const char*>(buffer_->Data()), bytes_used_);
+scoped_refptr<ArrayBuffer> ArrayBufferBuilder::PassArrayBuffer() {
+  ShrinkToFit();
+  return std::move(buffer_);
 }
 
 void ArrayBufferBuilder::ShrinkToFit() {

@@ -13,6 +13,7 @@ import android.graphics.Rect;
 import android.os.Build;
 import android.os.SystemClock;
 import android.support.annotation.Nullable;
+import android.text.format.DateUtils;
 import android.util.Rational;
 
 import org.chromium.base.Callback;
@@ -21,6 +22,7 @@ import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.rappor.RapporServiceBridge;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -34,7 +36,6 @@ import org.chromium.content_public.browser.WebContentsObserver;
 import java.lang.reflect.InvocationTargetException;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
  * A controller for entering Android O Picture in Picture mode with fullscreen videos.
@@ -191,13 +192,13 @@ public class PictureInPictureController {
         webContents.setHasPersistentVideo(true);
 
         // We don't want InfoBars displaying while in PiP, they cover too much content.
-        activity.getActivityTab().getInfoBarContainer().setHidden(true);
+        InfoBarContainer.get(activity.getActivityTab()).setHidden(true);
 
         mOnLeavePipCallbacks.add(new Callback<ChromeActivity>() {
             @Override
             public void onResult(ChromeActivity activity2) {
                 webContents.setHasPersistentVideo(false);
-                activity.getActivityTab().getInfoBarContainer().setHidden(false);
+                InfoBarContainer.get(activity.getActivityTab()).setHidden(false);
             }
         });
 
@@ -231,8 +232,7 @@ public class PictureInPictureController {
             public void onResult(ChromeActivity activity2) {
                 long pipTimeMs = SystemClock.elapsedRealtime() - startTimeMs;
                 RecordHistogram.recordCustomTimesHistogram(METRICS_DURATION, pipTimeMs,
-                        TimeUnit.SECONDS.toMillis(7), TimeUnit.HOURS.toMillis(10),
-                        TimeUnit.MILLISECONDS, 50);
+                        DateUtils.SECOND_IN_MILLIS * 7, DateUtils.HOUR_IN_MILLIS * 10, 50);
             }
         });
     }
@@ -330,7 +330,7 @@ public class PictureInPictureController {
         }
 
         @Override
-        public void onCrash(Tab tab, boolean sadTabShown) {
+        public void onCrash(Tab tab) {
             dismissActivity(mActivity, METRICS_END_REASON_CRASH);
         }
 

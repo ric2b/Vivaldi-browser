@@ -154,7 +154,7 @@ std::unique_ptr<VerifiedContents> VerifiedContents::Create(
   if (!verified_contents->GetPayload(path, &payload))
     return nullptr;
 
-  std::unique_ptr<base::Value> value(base::JSONReader::Read(payload));
+  std::unique_ptr<base::Value> value(base::JSONReader::ReadDeprecated(payload));
   if (!value.get() || !value->is_dict())
     return nullptr;
   DictionaryValue* dictionary = static_cast<DictionaryValue*>(value.get());
@@ -221,7 +221,7 @@ std::unique_ptr<VerifiedContents> VerifiedContents::Create(
           base::FilePath::FromUTF8Unsafe(file_path_string);
       base::FilePath::StringType lowercase_file_path =
           base::ToLowerASCII(file_path.value());
-      RootHashes::iterator i = verified_contents->root_hashes_.insert(
+      auto i = verified_contents->root_hashes_.insert(
           std::make_pair(lowercase_file_path, std::string()));
       i->second.swap(root_hash);
 
@@ -318,7 +318,8 @@ bool VerifiedContents::GetPayload(const base::FilePath& path,
   std::string contents;
   if (!base::ReadFileToString(path, &contents))
     return false;
-  std::unique_ptr<base::Value> value(base::JSONReader::Read(contents));
+  std::unique_ptr<base::Value> value(
+      base::JSONReader::ReadDeprecated(contents));
   if (!value.get() || !value->is_list())
     return false;
   ListValue* top_list = static_cast<ListValue*>(value.get());
@@ -409,8 +410,7 @@ bool VerifiedContents::TreeHashRootEqualsImpl(
     const std::string& expected) const {
   std::pair<RootHashes::const_iterator, RootHashes::const_iterator> hashes =
       root_hashes_.equal_range(normalized_relative_path);
-  for (RootHashes::const_iterator iter = hashes.first; iter != hashes.second;
-       ++iter) {
+  for (auto iter = hashes.first; iter != hashes.second; ++iter) {
     if (expected == iter->second)
       return true;
   }

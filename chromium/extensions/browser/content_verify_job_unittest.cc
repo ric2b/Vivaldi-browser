@@ -2,13 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/path_service.h"
+#include "base/task/post_task.h"
 #include "base/version.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/test/mock_resource_context.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/content_verifier.h"
@@ -45,9 +48,7 @@ enum ContentVerifyJobAsyncRunMode {
 
 class ContentVerifyJobUnittest : public ExtensionsTest {
  public:
-  ContentVerifyJobUnittest()
-      // The TestBrowserThreadBundle is needed for ContentVerifyJob::Start().
-      : resource_context_(&test_url_request_context_) {}
+  ContentVerifyJobUnittest() {}
   ~ContentVerifyJobUnittest() override {}
 
   // Helper to get files from our subdirectory in the general extensions test
@@ -63,18 +64,14 @@ class ContentVerifyJobUnittest : public ExtensionsTest {
     ExtensionsTest::SetUp();
 
     extension_info_map_ = new InfoMap();
-    net::URLRequestContext* request_context =
-        resource_context_.GetRequestContext();
-    old_factory_ = request_context->job_factory();
+    old_factory_ = test_url_request_context_.job_factory();
     content_verifier_ = new ContentVerifier(
         &testing_context_, std::make_unique<MockContentVerifierDelegate>());
     extension_info_map_->SetContentVerifier(content_verifier_.get());
   }
 
   void TearDown() override {
-    net::URLRequestContext* request_context =
-        resource_context_.GetRequestContext();
-    request_context->set_job_factory(old_factory_);
+    test_url_request_context_.set_job_factory(old_factory_);
     content_verifier_->Shutdown();
 
     ExtensionsTest::TearDown();
@@ -155,8 +152,8 @@ class ContentVerifyJobUnittest : public ExtensionsTest {
 
  private:
   void StartJob(scoped_refptr<ContentVerifyJob> job) {
-    content::BrowserThread::PostTask(
-        content::BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::IO},
         base::BindOnce(&ContentVerifyJob::Start, job,
                        base::Unretained(content_verifier_.get())));
   }
@@ -165,7 +162,6 @@ class ContentVerifyJobUnittest : public ExtensionsTest {
   net::URLRequestJobFactoryImpl job_factory_;
   const net::URLRequestJobFactory* old_factory_;
   net::TestURLRequestContext test_url_request_context_;
-  content::MockResourceContext resource_context_;
   scoped_refptr<ContentVerifier> content_verifier_;
   content::TestBrowserContext testing_context_;
 
@@ -369,11 +365,11 @@ class ContentMismatchUnittest
   DISALLOW_COPY_AND_ASSIGN(ContentMismatchUnittest);
 };
 
-INSTANTIATE_TEST_CASE_P(ContentVerifyJobUnittest,
-                        ContentMismatchUnittest,
-                        testing::Values(kNone,
-                                        kContentReadBeforeHashesReady,
-                                        kHashesReadyBeforeContentRead));
+INSTANTIATE_TEST_SUITE_P(ContentVerifyJobUnittest,
+                         ContentMismatchUnittest,
+                         testing::Values(kNone,
+                                         kContentReadBeforeHashesReady,
+                                         kHashesReadyBeforeContentRead));
 
 // Tests that content modification causes content verification failure.
 TEST_P(ContentMismatchUnittest, ContentMismatch) {

@@ -4,8 +4,10 @@
 
 #include "net/base/mime_sniffer.h"
 
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
+#include "url/url_constants.h"
 
 namespace net {
 namespace {
@@ -29,6 +31,38 @@ static std::string SniffMimeType(const std::string& content,
   SniffMimeType(content.data(), content.size(), GURL(url), mime_type_hint,
                 ForceSniffFileUrlsForHtml::kDisabled, &mime_type);
   return mime_type;
+}
+
+TEST(MimeSnifferTest, SniffableSchemes) {
+  struct {
+    const char* scheme;
+    bool sniffable;
+  } kTestCases[] = {
+    {url::kAboutScheme, false},
+    {url::kBlobScheme, false},
+#if defined(OS_ANDROID)
+    {url::kContentScheme, true},
+#else
+    {url::kContentScheme, false},
+#endif
+    {url::kContentIDScheme, false},
+    {url::kDataScheme, false},
+    {url::kFileScheme, true},
+    {url::kFileSystemScheme, true},
+    {url::kFtpScheme, false},
+    {url::kGopherScheme, false},
+    {url::kHttpScheme, true},
+    {url::kHttpsScheme, true},
+    {url::kJavaScriptScheme, false},
+    {url::kMailToScheme, false},
+    {url::kWsScheme, false},
+    {url::kWssScheme, false}
+  };
+
+  for (const auto test_case : kTestCases) {
+    GURL url(std::string(test_case.scheme) + "://host/path/whatever");
+    EXPECT_EQ(test_case.sniffable, ShouldSniffMimeType(url, ""));
+  }
 }
 
 TEST(MimeSnifferTest, BoundaryConditionsTest) {
@@ -456,6 +490,34 @@ TEST(MimeSnifferTest, AudioVideoTest) {
                                          &mime_type));
   EXPECT_EQ("audio/mpeg", mime_type);
   mime_type.clear();
+
+  const char kAMRTestData[] =
+      "\x23\x21\x41\x4d\x52\x0a\x3c\x53\x0a\x7c\xe8\xb8\x41\xa5\x80\xca";
+  EXPECT_TRUE(SniffMimeTypeFromLocalData(kAMRTestData, sizeof(kAMRTestData) - 1,
+                                         &mime_type));
+  EXPECT_EQ("audio/amr", mime_type);
+  mime_type.clear();
+}
+
+TEST(MimeSnifferTest, ImageTest) {
+  std::string mime_type;
+  const char kWebPSimpleFormat[] = "RIFF\xee\x81\x00\x00WEBPVP8 ";
+  EXPECT_TRUE(SniffMimeTypeFromLocalData(
+      kWebPSimpleFormat, sizeof(kWebPSimpleFormat) - 1, &mime_type));
+  EXPECT_EQ("image/webp", mime_type);
+  mime_type.clear();
+
+  const char kWebPLosslessFormat[] = "RIFF\xee\x81\x00\x00WEBPVP8L";
+  EXPECT_TRUE(SniffMimeTypeFromLocalData(
+      kWebPLosslessFormat, sizeof(kWebPLosslessFormat) - 1, &mime_type));
+  EXPECT_EQ("image/webp", mime_type);
+  mime_type.clear();
+
+  const char kWebPExtendedFormat[] = "RIFF\xee\x81\x00\x00WEBPVP8X";
+  EXPECT_TRUE(SniffMimeTypeFromLocalData(
+      kWebPExtendedFormat, sizeof(kWebPExtendedFormat) - 1, &mime_type));
+  EXPECT_EQ("image/webp", mime_type);
+  mime_type.clear();
 }
 
 // The tests need char parameters, but the ranges to test include 0xFF, and some
@@ -473,21 +535,21 @@ TEST_P(MimeSnifferBinaryTest, IsBinaryControlCode) {
 }
 
 // ::testing::Range(a, b) tests an open-ended range, ie. "b" is not included.
-INSTANTIATE_TEST_CASE_P(MimeSnifferBinaryTestRange1,
-                        MimeSnifferBinaryTest,
-                        Range(0x00, 0x09));
+INSTANTIATE_TEST_SUITE_P(MimeSnifferBinaryTestRange1,
+                         MimeSnifferBinaryTest,
+                         Range(0x00, 0x09));
 
-INSTANTIATE_TEST_CASE_P(MimeSnifferBinaryTestByte0x0B,
-                        MimeSnifferBinaryTest,
-                        Values(0x0B));
+INSTANTIATE_TEST_SUITE_P(MimeSnifferBinaryTestByte0x0B,
+                         MimeSnifferBinaryTest,
+                         Values(0x0B));
 
-INSTANTIATE_TEST_CASE_P(MimeSnifferBinaryTestRange2,
-                        MimeSnifferBinaryTest,
-                        Range(0x0E, 0x1B));
+INSTANTIATE_TEST_SUITE_P(MimeSnifferBinaryTestRange2,
+                         MimeSnifferBinaryTest,
+                         Range(0x0E, 0x1B));
 
-INSTANTIATE_TEST_CASE_P(MimeSnifferBinaryTestRange3,
-                        MimeSnifferBinaryTest,
-                        Range(0x1C, 0x20));
+INSTANTIATE_TEST_SUITE_P(MimeSnifferBinaryTestRange3,
+                         MimeSnifferBinaryTest,
+                         Range(0x1C, 0x20));
 
 class MimeSnifferPlainTextTest : public ::testing::TestWithParam<int> {};
 
@@ -496,13 +558,13 @@ TEST_P(MimeSnifferPlainTextTest, NotBinaryControlCode) {
   EXPECT_FALSE(LooksLikeBinary(&param, 1));
 }
 
-INSTANTIATE_TEST_CASE_P(MimeSnifferPlainTextTestPlainTextControlCodes,
-                        MimeSnifferPlainTextTest,
-                        Values(0x09, 0x0A, 0x0C, 0x0D, 0x1B));
+INSTANTIATE_TEST_SUITE_P(MimeSnifferPlainTextTestPlainTextControlCodes,
+                         MimeSnifferPlainTextTest,
+                         Values(0x09, 0x0A, 0x0C, 0x0D, 0x1B));
 
-INSTANTIATE_TEST_CASE_P(MimeSnifferPlainTextTestNotControlCodeRange,
-                        MimeSnifferPlainTextTest,
-                        Range(0x20, 0x100));
+INSTANTIATE_TEST_SUITE_P(MimeSnifferPlainTextTestNotControlCodeRange,
+                         MimeSnifferPlainTextTest,
+                         Range(0x20, 0x100));
 
 class MimeSnifferControlCodesEdgeCaseTest
     : public ::testing::TestWithParam<const char*> {};
@@ -512,12 +574,12 @@ TEST_P(MimeSnifferControlCodesEdgeCaseTest, EdgeCase) {
   EXPECT_TRUE(LooksLikeBinary(param, strlen(param)));
 }
 
-INSTANTIATE_TEST_CASE_P(MimeSnifferControlCodesEdgeCaseTest,
-                        MimeSnifferControlCodesEdgeCaseTest,
-                        Values("\x01__",  // first byte is binary
-                               "__\x03",  // last byte is binary
-                               "_\x02_"   // a byte in the middle is binary
-                               ));
+INSTANTIATE_TEST_SUITE_P(MimeSnifferControlCodesEdgeCaseTest,
+                         MimeSnifferControlCodesEdgeCaseTest,
+                         Values("\x01__",  // first byte is binary
+                                "__\x03",  // last byte is binary
+                                "_\x02_"   // a byte in the middle is binary
+                                ));
 
 }  // namespace
 }  // namespace net

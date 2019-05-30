@@ -42,8 +42,8 @@ Vector<IntRect> Region::Rects() const {
     int height = (span + 1)->y - y;
 
     for (Shape::SegmentIterator segment = shape_.SegmentsBegin(span),
-                                end = shape_.SegmentsEnd(span);
-         segment != end && segment + 1 != end; segment += 2) {
+                                segment_end = shape_.SegmentsEnd(span);
+         segment != segment_end && segment + 1 != segment_end; segment += 2) {
       int x = *segment;
       int width = *(segment + 1) - x;
 
@@ -77,8 +77,8 @@ bool Region::Contains(const IntPoint& point) const {
       continue;
 
     for (Shape::SegmentIterator segment = shape_.SegmentsBegin(span),
-                                end = shape_.SegmentsEnd(span);
-         segment != end && segment + 1 != end; segment += 2) {
+                                segment_end = shape_.SegmentsEnd(span);
+         segment != segment_end && segment + 1 != segment_end; segment += 2) {
       int x = *segment;
       int max_x = *(segment + 1);
 
@@ -100,17 +100,17 @@ bool Region::Intersects(const Region& region) const {
                                                                  region.shape_);
 }
 
-double Region::Area() const {
-  double area = 0.0;
+uint64_t Region::Area() const {
+  uint64_t area = 0;
   for (Shape::SpanIterator span = shape_.SpansBegin(), end = shape_.SpansEnd();
        span != end && span + 1 != end; ++span) {
     int height = (span + 1)->y - span->y;
 
     for (Shape::SegmentIterator segment = shape_.SegmentsBegin(span),
-                                end = shape_.SegmentsEnd(span);
-         segment != end && segment + 1 != end; segment += 2) {
+                                segment_end = shape_.SegmentsEnd(span);
+         segment != segment_end && segment + 1 != segment_end; segment += 2) {
       int width = *(segment + 1) - *segment;
-      area += height * width;
+      area += (uint64_t)height * (uint64_t)width;
     }
   }
   return area;
@@ -241,7 +241,7 @@ Region::Shape::Shape(const IntRect& rect) {
   AppendSpan(rect.MaxY());
 }
 
-Region::Shape::Shape(size_t segments_capacity, size_t spans_capacity) {
+Region::Shape::Shape(wtf_size_t segments_capacity, wtf_size_t spans_capacity) {
   segments_.ReserveCapacity(segments_capacity);
   spans_.ReserveCapacity(spans_capacity);
 }
@@ -321,7 +321,7 @@ Region::Shape::SegmentIterator Region::Shape::SegmentsEnd(
     return nullptr;
 
   DCHECK_LT(it + 1, spans_.data() + spans_.size());
-  size_t segment_index = (it + 1)->segment_index;
+  wtf_size_t segment_index = (it + 1)->segment_index;
 
   SECURITY_DCHECK(segment_index <= segments_.size());
   return segments_.data() + segment_index;
@@ -334,8 +334,8 @@ void Region::Shape::Dump() const {
     printf("%6d: (", span->y);
 
     for (Shape::SegmentIterator segment = SegmentsBegin(span),
-                                end = SegmentsEnd(span);
-         segment != end; ++segment)
+                                segment_end = SegmentsEnd(span);
+         segment != segment_end; ++segment)
       printf("%d ", *segment);
     printf(")\n");
   }
@@ -381,9 +381,9 @@ IntRect Region::Shape::Bounds() const {
 }
 
 void Region::Shape::Translate(const IntSize& offset) {
-  for (size_t i = 0; i < segments_.size(); ++i)
+  for (wtf_size_t i = 0; i < segments_.size(); ++i)
     segments_[i] += offset.Width();
-  for (size_t i = 0; i < spans_.size(); ++i)
+  for (wtf_size_t i = 0; i < spans_.size(); ++i)
     spans_[i].y += offset.Height();
 }
 
@@ -407,8 +407,8 @@ Region::Shape Region::Shape::ShapeOperation(const Shape& shape1,
                   Operation::kShouldAddRemainingSpansFromShape2),
                 "invalid span combination");
 
-  size_t segments_capacity = shape1.SegmentsSize() + shape2.SegmentsSize();
-  size_t spans_capacity = shape1.SpansSize() + shape2.SpansSize();
+  wtf_size_t segments_capacity = shape1.SegmentsSize() + shape2.SegmentsSize();
+  wtf_size_t spans_capacity = shape1.SpansSize() + shape2.SpansSize();
   Shape result(segments_capacity, spans_capacity);
   if (Operation::TrySimpleOperation(shape1, shape2, result))
     return result;
@@ -432,16 +432,16 @@ Region::Shape Region::Shape::ShapeOperation(const Shape& shape1,
   // Iterate over all spans.
   while (spans1 != spans1_end && spans2 != spans2_end) {
     int y = 0;
-    int test = spans1->y - spans2->y;
+    int y_diff = spans1->y - spans2->y;
 
-    if (test <= 0) {
+    if (y_diff <= 0) {
       y = spans1->y;
 
       segments1 = shape1.SegmentsBegin(spans1);
       segments1_end = shape1.SegmentsEnd(spans1);
       ++spans1;
     }
-    if (test >= 0) {
+    if (y_diff >= 0) {
       y = spans2->y;
 
       segments2 = shape2.SegmentsBegin(spans2);
@@ -462,15 +462,15 @@ Region::Shape Region::Shape::ShapeOperation(const Shape& shape1,
     // Now iterate over the segments in each span and construct a new vector of
     // segments.
     while (s1 != segments1_end && s2 != segments2_end) {
-      int test = *s1 - *s2;
+      int s_diff = *s1 - *s2;
       int x;
 
-      if (test <= 0) {
+      if (s_diff <= 0) {
         x = *s1;
         flag = flag ^ 1;
         ++s1;
       }
-      if (test >= 0) {
+      if (s_diff >= 0) {
         x = *s2;
         flag = flag ^ 2;
         ++s2;

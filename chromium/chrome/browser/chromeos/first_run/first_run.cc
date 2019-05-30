@@ -2,13 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/chromeos/first_run/first_run.h"
+
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
-#include "chrome/browser/chromeos/arc/voice_interaction/arc_voice_interaction_framework_service.h"
 #include "chrome/browser/chromeos/first_run/first_run_controller.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
@@ -18,20 +19,19 @@
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/ui/ash/tablet_mode_client.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_info.h"
-#include "components/signin/core/browser/account_tracker_service.h"
-#include "components/signin/core/browser/signin_manager_base.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_observer.h"
@@ -40,6 +40,7 @@
 #include "content/public/common/content_switches.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
+#include "services/identity/public/cpp/identity_manager.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace chromeos {
@@ -67,13 +68,17 @@ void LaunchDialogForProfile(Profile* profile) {
 void TryLaunchFirstRunDialog(Profile* profile) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 
-  if (command_line->HasSwitch(switches::kOobeSkipPostLogin))
+  if (chromeos::switches::ShouldSkipOobePostLogin())
     return;
 
   if (command_line->HasSwitch(switches::kForceFirstRunUI)) {
     LaunchDialogForProfile(profile);
     return;
   }
+
+  // TabletModeClient does not exist in some tests.
+  if (TabletModeClient::Get() && TabletModeClient::Get()->tablet_mode_enabled())
+    return;
 
   if (policy::ProfilePolicyConnectorFactory::GetForBrowserContext(profile)
           ->IsManaged())
@@ -120,37 +125,7 @@ class DialogLauncher : public content::NotificationObserver {
     DCHECK(content::Details<const user_manager::User>(details).ptr() ==
            ProfileHelper::Get()->GetUserByProfile(profile_));
 
-    // Whether the account is supported for voice interaction.
-    bool account_supported = false;
-    SigninManagerBase* signin_manager =
-        SigninManagerFactory::GetForProfileIfExists(profile_);
-    if (signin_manager) {
-      std::string hosted_domain =
-          signin_manager->GetAuthenticatedAccountInfo().hosted_domain;
-      if (hosted_domain == AccountTrackerService::kNoHostedDomainFound ||
-          hosted_domain == "google.com") {
-        account_supported = true;
-      }
-    }
-
-    // If voice interaction value prop needs to be shown, the tutorial will be
-    // shown after the voice interaction OOBE flow.
-    if (account_supported && arc::IsArcPlayStoreEnabledForProfile(profile_) &&
-        !profile_->GetPrefs()->GetBoolean(
-            arc::prefs::kArcVoiceInteractionValuePropAccepted)) {
-      auto* service =
-          arc::ArcVoiceInteractionFrameworkService::GetForBrowserContext(
-              profile_);
-      if (service) {
-        service->StartVoiceInteractionOobe();
-      } else {
-        // Try launching the tutorial in case the voice interaction framework
-        // service is unavailable. See https://crbug.com/809756.
-        TryLaunchFirstRunDialog(profile_);
-      }
-    } else {
-      TryLaunchFirstRunDialog(profile_);
-    }
+    TryLaunchFirstRunDialog(profile_);
 
     delete this;
   }

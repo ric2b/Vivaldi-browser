@@ -4,6 +4,7 @@
 
 import("//build/util/branding.gni")
 import("//components/vector_icons/vector_icons.gni")
+import("//device/vr/buildflags/buildflags.gni")
 
 aggregate_vector_icons("chrome_vector_icons") {
   icon_directory = "."
@@ -12,7 +13,6 @@ aggregate_vector_icons("chrome_vector_icons") {
     "account_box.icon",
     "account_child.icon",
     "account_child_circle.icon",
-    "account_circle.icon",
     "add.icon",
     "ads.icon",
     "apps.icon",
@@ -52,10 +52,13 @@ aggregate_vector_icons("chrome_vector_icons") {
     "folder.icon",
     "folder_supervised.icon",
     "forward_arrow_touch.icon",
+    "generic_stop.icon",
     "globe.icon",
+    "google_g_logo.icon",
     "google_pay_logo.icon",
     "horizontal_menu.icon",
     "incognito.icon",
+    "incognito_profile.icon",
     "input.icon",
     "key.icon",
     "laptop.icon",
@@ -66,21 +69,18 @@ aggregate_vector_icons("chrome_vector_icons") {
     "navigate_home_touch.icon",
     "navigate_stop.icon",
     "navigate_stop_touch.icon",
-    "new_tab_button_incognito.icon",
     "nfc.icon",
     "overflow_chevron.icon",
     "page_info_content_paste.icon",
     "paintbrush.icon",
-    "pause.icon",
     "photo.icon",
     "photo_camera.icon",
     "picture_in_picture_control_background.icon",
-    "play_arrow.icon",
     "picture_in_picture_alt.icon",
-    "profile_switcher_outline.icon",
     "reload_touch.icon",
     "remove.icon",
     "remove_box.icon",
+    "resize_handle.icon",
     "sad_tab.icon",
     "security.icon",
     "sensors.icon",
@@ -95,7 +95,6 @@ aggregate_vector_icons("chrome_vector_icons") {
     "sync.icon",
     "sync_circle.icon",
     "sync_error_circle.icon",
-    "sync_paused.icon",
     "sync_paused_circle.icon",
     "sync_problem.icon",
     "sync_switch_account.icon",
@@ -119,6 +118,7 @@ aggregate_vector_icons("chrome_vector_icons") {
     "user_menu_guest.icon",
     "user_menu_right_arrow.icon",
     "volume_up.icon",
+    "vr_headset.icon",
     "warning_badge.icon",
     "web.icon",
     "zoom_minus.icon",
@@ -129,7 +129,6 @@ aggregate_vector_icons("chrome_vector_icons") {
   if (is_mac) {
     icons += [
       "default_favicon.icon",
-      "google_g_logo.icon",
       "new_tab_mac_touchbar.icon",
     ]
   }
@@ -145,6 +144,11 @@ aggregate_vector_icons("chrome_vector_icons") {
 
   if (is_chromeos) {
     icons += [ "warning_badge_circle.icon" ]
+  }
+
+  if (enable_vr && !is_android) {
+    # Used on desktop VR headsets and Linux unit tests.
+    icons += [ "open_in_browser.icon" ]
   }
 }
 

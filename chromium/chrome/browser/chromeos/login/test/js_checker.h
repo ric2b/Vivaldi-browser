@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_TEST_JS_CHECKER_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_TEST_JS_CHECKER_H_
 
+#include <memory>
 #include <string>
 
 namespace content {
@@ -13,6 +14,8 @@ class WebContents;
 
 namespace chromeos {
 namespace test {
+
+class TestConditionWaiter;
 
 // Utility class for tests that allows us to evalute and check JavaScript
 // expressions inside given web contents. All calls are made synchronously.
@@ -43,6 +46,13 @@ class JSChecker {
   void ExpectNE(const std::string& expression, int result);
   void ExpectEQ(const std::string& expression, const std::string& result);
   void ExpectNE(const std::string& expression, const std::string& result);
+  void ExpectEQ(const std::string& expression, bool result);
+  void ExpectNE(const std::string& expression, bool result);
+
+  // Checks test waiter that would await until |js_condition| evaluates
+  // to true.
+  std::unique_ptr<TestConditionWaiter> CreateWaiter(
+      const std::string& js_condition);
 
   void set_web_contents(content::WebContents* web_contents) {
     web_contents_ = web_contents;
@@ -53,8 +63,21 @@ class JSChecker {
   void GetIntImpl(const std::string& expression, int* result);
   void GetStringImpl(const std::string& expression, std::string* result);
 
-  content::WebContents* web_contents_;
+  content::WebContents* web_contents_ = nullptr;
 };
+
+// Helper method to create the JSChecker instance from the login/oobe
+// web-contents.
+JSChecker OobeJS();
+
+// Helper method to execute the given script in the context of OOBE.
+void ExecuteOobeJS(const std::string& script);
+void ExecuteOobeJSAsync(const std::string& script);
+
+// Helper method to create waiter over js condition that would also be satisfied
+// if oobe UI is destroyed.
+std::unique_ptr<TestConditionWaiter> CreatePredicateOrOobeDestroyedWaiter(
+    const std::string& js_expression);
 
 }  // namespace test
 }  // namespace chromeos

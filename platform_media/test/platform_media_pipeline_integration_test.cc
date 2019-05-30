@@ -8,13 +8,17 @@
 #include "media/test/pipeline_integration_test_base.h"
 
 #include "base/command_line.h"
-#include "platform_media/test/test_pipeline_host.h"
+#include "base/path_service.h"
+#include "base/vivaldi_paths.h"
+#include "media/filters/file_data_source.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
 #include "media/base/test_data_util.h"
 #include "media/base/video_decoder_config.h"
+#include "media/test/test_media_source.h"
 #include "platform_media/renderer/decoders/ipc_demuxer.h"
+#include "platform_media/test/test_pipeline_host.h"
 
 #if defined(OS_MACOSX)
 #include "base/mac/mac_util.h"
@@ -26,24 +30,56 @@
 
 namespace media {
 
-#if defined(OS_WIN)
 namespace {
+
+#if defined(OS_WIN)
 DemuxerStream* GetStream(std::unique_ptr<Demuxer> & demuxer, DemuxerStream::Type type) {
-    std::vector<DemuxerStream*> streams = demuxer->GetAllStreams();
-    for (auto* stream : streams) {
-      if (stream->type() == type)
-        return stream;
-    }
-    return nullptr;
-}
+  std::vector<DemuxerStream*> streams = demuxer->GetAllStreams();
+  for (auto* stream : streams) {
+    if (stream->type() == type)
+      return stream;
+  }
+  return nullptr;
 }
 #endif  // defined(OS_WIN)
+
+const base::FilePath::CharType kPlatformMediaTestDataPath[] =
+    FILE_PATH_LITERAL("platform_media");
+
+base::FilePath GetPlatformMediaTestDataPath() {
+  return base::FilePath(kPlatformMediaTestDataPath);
+}
+
+}  // namespace
+
+base::FilePath GetVivaldiTestDataFilePath(const std::string& name) {
+  base::FilePath file_path;
+  CHECK(base::PathService::Get(vivaldi::DIR_VIVALDI_TEST_DATA, &file_path));
+  return file_path.Append(GetPlatformMediaTestDataPath()).AppendASCII(name);
+}
+
+
+class PlatformMediaMockMediaSource : public TestMediaSource {
+ public:
+  PlatformMediaMockMediaSource(const std::string& filename,
+                               const std::string& mimetype,
+                               size_t initial_append_size,
+                               bool initial_sequence_mode = false)
+      : TestMediaSource(filename,
+                        mimetype,
+                        initial_append_size,
+                        initial_sequence_mode,
+                        GetVivaldiTestDataFilePath(filename)){};
+};
 
 class PlatformMediaPipelineIntegrationTest
     : public testing::Test,
       public PipelineIntegrationTestBase {
  public:
-  static bool IsEnabled() {
+   void SetUp() override {
+     vivaldi::RegisterVivaldiPaths();
+   }
+   static bool IsEnabled() {
 #if defined(OS_MACOSX)
     return true;
 #elif defined(OS_WIN)
@@ -53,6 +89,42 @@ class PlatformMediaPipelineIntegrationTest
     LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
                  << " Unsupported OS, skipping test";
     return false;
+  }
+  PipelineStatus StartVivaldiWithFile(
+      const std::string& filename,
+      CdmContext* cdm_context,
+      uint8_t test_type,
+      CreateVideoDecodersCB prepend_video_decoders_cb = CreateVideoDecodersCB(),
+      CreateAudioDecodersCB prepend_audio_decoders_cb =
+          CreateAudioDecodersCB()) {
+    std::unique_ptr<FileDataSource> file_data_source(new FileDataSource());
+    base::FilePath file_path(GetVivaldiTestDataFilePath(filename));
+    CHECK(file_data_source->Initialize(file_path)) << "Is " << file_path.value()
+      << " missing?";
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+    filepath_ = file_path;
+#endif
+    return StartInternal(std::move(file_data_source), cdm_context, test_type,
+      prepend_video_decoders_cb, prepend_audio_decoders_cb);
+  }
+
+  PipelineStatus StartVivaldi(const std::string& filename) {
+    return StartVivaldiWithFile(filename, nullptr, kNormal);
+  }
+
+  PipelineStatus StartVivaldi(const std::string& filename,
+                              CdmContext* cdm_context) {
+    return StartVivaldiWithFile(filename, cdm_context, kNormal);
+  }
+  PipelineStatus StartVivaldi(
+      const std::string& filename,
+      uint8_t test_type,
+      CreateVideoDecodersCB prepend_video_decoders_cb = CreateVideoDecodersCB(),
+      CreateAudioDecodersCB prepend_audio_decoders_cb =
+          CreateAudioDecodersCB()) {
+    return StartVivaldiWithFile(filename, nullptr, test_type,
+                                prepend_video_decoders_cb,
+                                prepend_audio_decoders_cb);
   }
 };
 
@@ -87,7 +159,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_16x9_Aspect) {
   if (!IsEnabled())
     return;
 
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("vivaldi-bear-320x240-16x9-aspect.mp4", kHashed));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, StartVivaldi("vivaldi-bear-320x240-16x9-aspect.mp4", kHashed));
 
   Play();
 
@@ -235,7 +307,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, TruncatedMedia) {
   if (!IsEnabled())
     return;
 
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("vivaldi-bear_truncated.mp4"));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, StartVivaldi("vivaldi-bear_truncated.mp4"));
 
   Play();
   WaitUntilCurrentTimeIsAfter(base::TimeDelta::FromMicroseconds(1066666));
@@ -255,7 +327,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, DecodingError) {
   // TODO(wdzierzanowski): WMFMediaPipeline (Windows) doesn't detect the error?
   // (DNA-30324).
 #if !defined(OS_WIN)
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_corrupt.mp4"));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, StartVivaldi("bear_corrupt.mp4"));
   Play();
   EXPECT_EQ(PipelineStatus::PIPELINE_ERROR_DECODE, WaitUntilEndedOrError());
 #endif
@@ -323,7 +395,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, AudioConfigChange) {
   if (!IsEnabled())
     return;
 
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("vivaldi-config_change_audio.mp4"));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, StartVivaldi("vivaldi-config_change_audio.mp4"));
 
   Play();
 
@@ -343,7 +415,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, VideoConfigChange) {
   if (!IsEnabled())
     return;
 
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("vivaldi-config_change_video.mp4"));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, StartVivaldi("vivaldi-config_change_video.mp4"));
 
   Play();
 
@@ -361,7 +433,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, VideoConfigChange) {
 
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlaybackPositiveStartTime) {
 
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("vivaldi-nonzero-start-time.mp4"));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK, StartVivaldi("vivaldi-nonzero-start-time.mp4"));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
   ASSERT_EQ(base::TimeDelta::FromMicroseconds(390000),
@@ -369,5 +441,24 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlaybackPositiveStartTime) {
 }
 
 #endif  // defined(OS_MACOSX) || defined(OS_WIN)
+
+
+TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_MediaSource_MP4_AudioOnly) {
+  PlatformMediaMockMediaSource source("what-does-the-fox-say.mp4",
+    "audio/mp4; codecs=\"mp4a.40.5\"", kAppendWholeFile);
+  StartPipelineWithMediaSource(&source);
+  source.EndOfStream();
+
+  EXPECT_EQ(1u, pipeline_->GetBufferedTimeRanges().size());
+  EXPECT_EQ(0, pipeline_->GetBufferedTimeRanges().start(0).InMilliseconds());
+  EXPECT_EQ(1493, pipeline_->GetBufferedTimeRanges().end(0).InMilliseconds());
+
+  Play();
+
+  ASSERT_TRUE(WaitUntilOnEnded());
+  source.Shutdown();
+  Stop();
+}
+
 
 }  // namespace media

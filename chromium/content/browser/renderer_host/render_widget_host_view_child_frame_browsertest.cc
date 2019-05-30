@@ -4,6 +4,7 @@
 
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/test/test_timeouts.h"
@@ -146,7 +147,8 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameTest,
                                        base::UnguessableToken::Create());
   cc::RenderFrameMetadata metadata;
   metadata.viewport_size_in_pixels = gfx::Size(75, 75);
-  metadata.local_surface_id = local_surface_id;
+  metadata.local_surface_id_allocation =
+      viz::LocalSurfaceIdAllocation(local_surface_id, base::TimeTicks::Now());
   root->current_frame_host()->GetRenderWidgetHost()->DidUpdateVisualProperties(
       metadata);
 
@@ -160,7 +162,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameTest,
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameTest, ChildFrameSinkId) {
   // Only when mus hosts viz do we expect a RenderFrameProxy to provide the
   // FrameSinkId.
-  if (!features::IsUsingWindowService())
+  if (!features::IsMultiProcessMash())
     return;
 
   GURL main_url(embedded_test_server()->GetURL("/site_per_process_main.html"));

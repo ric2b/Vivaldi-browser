@@ -22,7 +22,9 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
 #include "base/task_runner.h"
 #include "base/threading/thread_restrictions.h"
@@ -178,6 +180,22 @@ void URLRequestFileJob::SetExtraRequestHeaders(
   }
 }
 
+void URLRequestFileJob::GetResponseInfo(HttpResponseInfo* info) {
+  if (!serve_mime_type_as_content_type_ || !meta_info_.mime_type_result)
+    return;
+  auto headers =
+      base::MakeRefCounted<net::HttpResponseHeaders>("HTTP/1.1 200 OK");
+  headers->AddHeader(base::StringPrintf("%s: %s",
+                                        net::HttpRequestHeaders::kContentType,
+                                        meta_info_.mime_type.c_str()));
+  info->headers = headers;
+}
+
+void URLRequestFileJob::OnSuspend() {
+  // Unlike URLRequestJob, don't suspend active requests here. Requests for
+  // file URLs need not be suspended when the system suspends.
+}
+
 void URLRequestFileJob::OnOpenComplete(int result) {}
 
 void URLRequestFileJob::OnSeekComplete(int64_t result) {}
@@ -192,6 +210,7 @@ std::unique_ptr<SourceStream> URLRequestFileJob::SetUpSourceStream() {
   if (!base::LowerCaseEqualsASCII(file_path_.Extension(), ".svgz"))
     return source;
 
+  UMA_HISTOGRAM_BOOLEAN("Net.FileSVGZLoadCount", true);
   return GzipSourceStream::Create(std::move(source), SourceStream::TYPE_GZIP);
 }
 

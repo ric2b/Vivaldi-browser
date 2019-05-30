@@ -24,45 +24,35 @@ importer.TestImportHistory = function() {
   /**
    * If null, history has been loaded and listeners notified.
    *
-   * @private {Array<!importer.ImportHistory>}
+   * @private {Array<!function(!importer.ImportHistory)>}
    */
   this.loadListeners_ = [];
 };
 
 /** @override */
-importer.TestImportHistory.prototype.getHistory =
-    function() {
-  Promise.resolve().then(
-      /** @this {importer.TestImportHistory} */
-      function() {
-        if (this.loadListeners_) {
-          this.loadListeners_.forEach(
-              /** @param {!Array<!importer.ImportHistory>} listener */
-              function(listener) {
-                listener(this);
-              }.bind(this));
-          // Null out listeners...this is our signal that history has
-          // been loaded ... resulting in all future listener added
-          // being notified immediately
-          this.loadListeners_ = null;
-        }
-      }.bind(this));
+importer.TestImportHistory.prototype.getHistory = function() {
+  Promise.resolve().then(() => {
+    if (this.loadListeners_) {
+      this.loadListeners_.forEach((listener) => listener(this));
+      // Null out listeners...this is our signal that history has
+      // been loaded ... resulting in all future listener added
+      // being notified immediately
+      this.loadListeners_ = null;
+    }
+  });
 
   return Promise.resolve(this);
 };
 
 /** @override */
-importer.TestImportHistory.prototype.addHistoryLoadedListener =
-    function(listener) {
-  // Notify immediately if history is already loaded.
+importer.TestImportHistory.prototype.addHistoryLoadedListener = function(
+    listener) {
+  assertTrue(typeof listener === 'function');
+  // Notify listener immediately if history is already loaded.
   if (this.loadListeners_ === null) {
-    Promise.resolve(this.history_).then(
-        /** @param {!importer.ImportHistory} history */
-        function(history) {
-          listener(history);
-        });
+    setTimeout(listener, 0, this);
   } else {
-    this.loadListeners_.push(listeners);
+    this.loadListeners_.push(listener);
   }
 };
 
@@ -83,7 +73,7 @@ importer.TestImportHistory.prototype.assertCopied =
  */
 importer.TestImportHistory.prototype.wasCopied_ =
     function(entry, destination) {
-  var path = entry.fullPath;
+  const path = entry.fullPath;
   return path in this.copiedPaths &&
       this.copiedPaths[path].indexOf(destination) > -1;
 };
@@ -91,14 +81,14 @@ importer.TestImportHistory.prototype.wasCopied_ =
 /** @override */
 importer.TestImportHistory.prototype.wasCopied =
     function(entry, destination) {
-  var path = entry.fullPath;
+  const path = entry.fullPath;
   return Promise.resolve(this.wasCopied_(entry, destination));
 };
 
 /** @override */
 importer.TestImportHistory.prototype.markCopied =
     function(entry, destination, destinationUrl) {
-  var path = entry.fullPath;
+  const path = entry.fullPath;
   if (path in this.copiedPaths) {
     this.copiedPaths[path].push(destination);
   } else {
@@ -109,7 +99,7 @@ importer.TestImportHistory.prototype.markCopied =
 
 /** @override */
 importer.TestImportHistory.prototype.listUnimportedUrls =
-    function(destination) {
+    destination => {
   return Promise.resolve([]);
 };
 
@@ -130,7 +120,7 @@ importer.TestImportHistory.prototype.assertImported =
  */
 importer.TestImportHistory.prototype.wasImported_ =
     function(entry, destination) {
-  var path = entry.fullPath;
+  const path = entry.fullPath;
   return path in this.importedPaths &&
       this.importedPaths[path].indexOf(destination) > -1;
 };
@@ -138,14 +128,14 @@ importer.TestImportHistory.prototype.wasImported_ =
 /** @override */
 importer.TestImportHistory.prototype.wasImported =
     function(entry, destination) {
-  var path = entry.fullPath;
+  const path = entry.fullPath;
   return Promise.resolve(this.wasImported_(entry, destination));
 };
 
 /** @override */
 importer.TestImportHistory.prototype.markImported =
     function(entry, destination) {
-  var path = entry.fullPath;
+  const path = entry.fullPath;
   if (path in this.importedPaths) {
     this.importedPaths[path].push(destination);
   } else {
@@ -155,7 +145,13 @@ importer.TestImportHistory.prototype.markImported =
 };
 
 /** @override */
-importer.TestImportHistory.prototype.addObserver = function() {};
+importer.TestImportHistory.prototype.whenReady = () => {};
 
 /** @override */
-importer.TestImportHistory.prototype.removeObserver = function() {};
+importer.TestImportHistory.prototype.markImportedByUrl = () => {};
+
+/** @override */
+importer.TestImportHistory.prototype.addObserver = () => {};
+
+/** @override */
+importer.TestImportHistory.prototype.removeObserver = () => {};

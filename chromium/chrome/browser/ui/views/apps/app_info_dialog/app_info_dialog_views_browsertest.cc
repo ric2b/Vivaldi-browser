@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 
+#include "base/bind_helpers.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/test_extension_environment.h"
 #include "chrome/browser/ui/browser.h"
@@ -48,7 +49,7 @@ class AppInfoDialogBrowserTest : public DialogBrowserTest {
 
  private:
   std::unique_ptr<extensions::TestExtensionEnvironment> extension_environment_;
-  scoped_refptr<extensions::Extension> extension_;
+  scoped_refptr<const extensions::Extension> extension_;
 
   DISALLOW_COPY_AND_ASSIGN(AppInfoDialogBrowserTest);
 };

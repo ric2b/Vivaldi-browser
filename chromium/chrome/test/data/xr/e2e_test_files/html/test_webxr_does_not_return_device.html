@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-Tests that WebXR returns no devices when OpenVR is disabled.
+Tests that WebXR does not report immersive-vr support when OpenVR is disabled.
 -->
 <html>
   <head>
@@ -8,16 +8,13 @@ Tests that WebXR returns no devices when OpenVR is disabled.
   </head>
   <body>
     <canvas id="webgl-canvas"></canvas>
-    <script src="../../../../../../third_party/WebKit/LayoutTests/resources/testharness.js"></script>
-    <script src="../resources/webvr_e2e.js"></script>
+    <script src="../../../../../../third_party/blink/web_tests/resources/testharness.js"></script>
+    <script src="../resources/webxr_e2e.js"></script>
     <script>
-      var t = async_test("WebXR returns no devices when OpenVR disabled");
-      navigator.xr.requestDevice().then( () => {
-        t.step( () => {
-          assert_unreached("WebXR returned a device");
-        });
+      navigator.xr.supportsSessionMode('immersive-vr').then( () => {
+        assert_unreached("WebXR indicated support for 'immersive-vr'");
       }, () => {
-        t.done();
+        done();
       });
     </script>
   </body>

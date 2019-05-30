@@ -18,10 +18,11 @@
 namespace content {
 
 class DevToolsAgentHostImpl;
+class DevToolsRendererChannel;
+class DevToolsSession;
 class NavigationHandle;
 class NavigationThrottle;
 class RenderFrameHostImpl;
-class TargetRegistry;
 
 namespace protocol {
 
@@ -29,9 +30,20 @@ class TargetHandler : public DevToolsDomainHandler,
                       public Target::Backend,
                       public DevToolsAgentHostObserver {
  public:
-  TargetHandler(bool browser_only,
+  enum class AccessMode {
+    // Only setAutoAttach is supported. Any non-related target are not
+    // accessible.
+    kAutoAttachOnly,
+    // Standard mode of operation: both auto-attach and discovery.
+    kRegular,
+    // This mode also allows advanced method like Target.exposeDevToolsProtocol,
+    // which should not be exposed on a non-browser-wide connection.
+    kBrowser
+  };
+  TargetHandler(AccessMode access_mode,
                 const std::string& owner_target_id,
-                TargetRegistry* target_registry);
+                DevToolsRendererChannel* renderer_channel,
+                DevToolsSession* root_session);
   ~TargetHandler() override;
 
   static std::vector<TargetHandler*> ForAgentHost(DevToolsAgentHostImpl* host);
@@ -41,16 +53,16 @@ class TargetHandler : public DevToolsDomainHandler,
                    RenderFrameHostImpl* frame_host) override;
   Response Disable() override;
 
-  void DidCommitNavigation();
-  void RenderFrameHostChanged();
+  void DidFinishNavigation();
   std::unique_ptr<NavigationThrottle> CreateThrottleForNavigation(
       NavigationHandle* navigation_handle);
 
   // Domain implementation.
   Response SetDiscoverTargets(bool discover) override;
-  Response SetAutoAttach(bool auto_attach,
-                         bool wait_for_debugger_on_start,
-                         Maybe<bool> flatten) override;
+  void SetAutoAttach(bool auto_attach,
+                     bool wait_for_debugger_on_start,
+                     Maybe<bool> flatten,
+                     std::unique_ptr<SetAutoAttachCallback> callback) override;
   Response SetRemoteLocations(
       std::unique_ptr<protocol::Array<Target::RemoteLocation>>) override;
   Response AttachToTarget(const std::string& target_id,
@@ -94,9 +106,12 @@ class TargetHandler : public DevToolsDomainHandler,
   void AutoDetach(DevToolsAgentHost* host);
   Response FindSession(Maybe<std::string> session_id,
                        Maybe<std::string> target_id,
-                       Session** session,
-                       bool fall_through);
+                       Session** session);
   void ClearThrottles();
+  void SetAutoAttachInternal(bool auto_attach,
+                             bool wait_for_debugger_on_start,
+                             bool flatten,
+                             base::OnceClosure callback);
 
   // DevToolsAgentHostObserver implementation.
   bool ShouldForceDevToolsAgentHostCreation() override;
@@ -115,9 +130,9 @@ class TargetHandler : public DevToolsDomainHandler,
   std::map<std::string, std::unique_ptr<Session>> attached_sessions_;
   std::map<DevToolsAgentHost*, Session*> auto_attached_sessions_;
   std::set<DevToolsAgentHost*> reported_hosts_;
-  bool browser_only_;
+  AccessMode access_mode_;
   std::string owner_target_id_;
-  TargetRegistry* target_registry_;
+  DevToolsSession* root_session_;
   base::flat_set<Throttle*> throttles_;
   base::WeakPtrFactory<TargetHandler> weak_factory_;
 

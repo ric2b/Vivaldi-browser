@@ -35,16 +35,18 @@ struct GenerateFilenameCase {
 };
 
 // The expected filenames are coded as wchar_t for convenience.
+// TODO(https://crbug.com/911896): Make these char16_t once base::string16 is
+// std::u16string.
 std::wstring FilePathAsWString(const base::FilePath& path) {
 #if defined(OS_WIN)
-  return path.value();
+  return base::UTF16ToWide(path.value());
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   return base::UTF8ToWide(path.value());
 #endif
 }
 base::FilePath WStringAsFilePath(const std::wstring& str) {
 #if defined(OS_WIN)
-  return base::FilePath(str);
+  return base::FilePath(base::WideToUTF16(str));
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   return base::FilePath(base::WideToUTF8(str));
 #endif
@@ -238,6 +240,7 @@ TEST(FilenameUtilTest, FileURLConversion) {
     {L"\\\\foo\\bar.txt", "file:////foo\\bar.txt"},
     {L"\\\\foo\\bar.txt", "file:/foo/bar.txt"},
     {L"\\\\foo\\bar.txt", "file://foo\\bar.txt"},
+    {L"\\\\foo\\bar.txt", "http://foo/bar.txt"},
     {L"C:\\foo\\bar.txt", "file:\\\\\\c:/foo/bar.txt"},
     // %2F ('/') should fail, because it might otherwise be interpreted as a
     // path separator on Windows.
@@ -304,8 +307,9 @@ TEST(FilenameUtilTest, FileURLConversion) {
 #if defined(OS_WIN)
     // On Windows, invalid UTF-8 bytes are interpreted using the default ANSI
     // code page. This defaults to Windows-1252 (which we assume here).
-    const wchar_t expected_output[] = L"D:\\Blah\\\u2026\u2122.doc";
-    EXPECT_EQ(std::wstring(expected_output), output.value());
+    const base::FilePath::CharType expected_output[] =
+        FILE_PATH_LITERAL("D:\\Blah\\\u2026\u2122.doc");
+    EXPECT_EQ(expected_output, output.value());
 #elif defined(OS_POSIX)
     // No conversion should happen, and the invalid UTF-8 should be preserved.
     const char expected_output[] = "/d:/Blah/\x85\x99.doc";
@@ -320,8 +324,9 @@ TEST(FilenameUtilTest, FileURLConversion) {
 #if defined(OS_WIN)
     // On Windows, invalid UTF-8 bytes are interpreted using the default ANSI
     // code page. This defaults to Windows-1252 (which we assume here).
-    const wchar_t expected_output[] = L"D:\\Blah\\\u2026\u2122.doc";
-    EXPECT_EQ(std::wstring(expected_output), output.value());
+    const base::FilePath::CharType expected_output[] =
+        FILE_PATH_LITERAL("D:\\Blah\\\u2026\u2122.doc");
+    EXPECT_EQ(expected_output, output.value());
 #elif defined(OS_POSIX)
     // No conversion should happen, and the invalid UTF-8 should be preserved.
     const char expected_output[] = "/d:/Blah/\x85\x99.doc";
@@ -379,7 +384,7 @@ TEST(FilenameUtilTest, GenerateSafeFileName) {
   };
 
 #if defined(OS_WIN)
-  base::FilePath base_path(L"C:\\foo");
+  base::FilePath base_path(FILE_PATH_LITERAL("C:\\foo"));
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   base::FilePath base_path("/foo");
 #endif
@@ -573,9 +578,14 @@ TEST(FilenameUtilTest, GenerateFileName) {
     {// A normal avi should get .avi and not .avi.avi
      __LINE__, "https://example.com/misc/2.avi", "", "", "", "video/x-msvideo",
      L"download", L"2.avi"},
-    {// Shouldn't unescape slashes.
+    {// Slashes are illegal, and should be replaced with underscores.
      __LINE__, "http://example.com/foo%2f..%2fbar.jpg", "", "", "",
-     "text/plain", L"download", L"foo%2f..%2fbar.jpg"},
+     "text/plain", L"download", L"foo_.._bar.jpg"},
+    {// "%00" decodes to the NUL byte, which is illegal and should be replaced
+     // with an underscore. (Note: This can't be tested with a URL, since "%00"
+     // is illegal in a URL. Only applies to Content-Disposition.)
+     __LINE__, "http://example.com/download.py", "filename=foo%00bar.jpg", "",
+     "", "text/plain", L"download", L"foo_bar.jpg"},
     {// Extension generation for C-D derived filenames.
      __LINE__, "", "filename=my-cat", "", "", "image/jpeg", L"download",
      L"my-cat"},
@@ -744,6 +754,15 @@ TEST(FilenameUtilTest, GenerateFileName) {
      __LINE__, "http://www.example.com/fooa%cc%88.txt", "", "", "",
      "image/jpeg", L"foo\xe4", L"foo\xe4.txt"},
 #endif
+
+    // U+3000 IDEOGRAPHIC SPACE (http://crbug.com/849794): In URL file name.
+    {__LINE__, "http://www.example.com/%E5%B2%A1%E3%80%80%E5%B2%A1.txt", "", "",
+     "", "text/plain", L"", L"\u5ca1\u3000\u5ca1.txt"},
+    // U+3000 IDEOGRAPHIC SPACE (http://crbug.com/849794): In
+    // Content-Disposition filename.
+    {__LINE__, "http://www.example.com/download.py",
+     "filename=%E5%B2%A1%E3%80%80%E5%B2%A1.txt", "utf-8", "", "text/plain", L"",
+     L"\u5ca1\u3000\u5ca1.txt"},
   };
 
   for (const auto& selection_test : selection_tests)

@@ -15,7 +15,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/rand_util.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "base/task/task_scheduler/task_scheduler.h"
 #include "base/task/task_traits.h"
@@ -28,6 +28,9 @@ namespace gin {
 namespace {
 
 base::LazyInstance<V8Platform>::Leaky g_v8_platform = LAZY_INSTANCE_INITIALIZER;
+
+constexpr base::TaskTraits kLowPriorityTaskTraits = {
+    base::TaskPriority::BEST_EFFORT};
 
 constexpr base::TaskTraits kDefaultTaskTraits = {
     base::TaskPriority::USER_VISIBLE};
@@ -44,7 +47,7 @@ class ConvertableToTraceFormatWrapper final
     : public base::trace_event::ConvertableToTraceFormat {
  public:
   explicit ConvertableToTraceFormatWrapper(
-      std::unique_ptr<v8::ConvertableToTraceFormat>& inner)
+      std::unique_ptr<v8::ConvertableToTraceFormat> inner)
       : inner_(std::move(inner)) {}
   ~ConvertableToTraceFormatWrapper() override = default;
   void AppendAsTraceFormat(std::string* out) const final {
@@ -60,7 +63,14 @@ class ConvertableToTraceFormatWrapper final
 class EnabledStateObserverImpl final
     : public base::trace_event::TraceLog::EnabledStateObserver {
  public:
-  EnabledStateObserverImpl() = default;
+  EnabledStateObserverImpl() {
+    base::trace_event::TraceLog::GetInstance()->AddEnabledStateObserver(this);
+  }
+
+  ~EnabledStateObserverImpl() override {
+    base::trace_event::TraceLog::GetInstance()->RemoveEnabledStateObserver(
+        this);
+  }
 
   void OnTraceLogEnabled() final {
     base::AutoLock lock(mutex_);
@@ -80,12 +90,9 @@ class EnabledStateObserverImpl final
     {
       base::AutoLock lock(mutex_);
       DCHECK(!observers_.count(observer));
-      if (observers_.empty()) {
-        base::trace_event::TraceLog::GetInstance()->AddEnabledStateObserver(
-            this);
-      }
       observers_.insert(observer);
     }
+
     // Fire the observer if recording is already in progress.
     if (base::trace_event::TraceLog::GetInstance()->IsEnabled())
       observer->OnTraceEnabled();
@@ -95,10 +102,6 @@ class EnabledStateObserverImpl final
     base::AutoLock lock(mutex_);
     DCHECK(observers_.count(observer) == 1);
     observers_.erase(observer);
-    if (observers_.empty()) {
-      base::trace_event::TraceLog::GetInstance()->RemoveEnabledStateObserver(
-          this);
-    }
   }
 
  private:
@@ -114,7 +117,13 @@ base::LazyInstance<EnabledStateObserverImpl>::Leaky g_trace_state_dispatcher =
 // TODO(skyostil): Deduplicate this with the clamper in Blink.
 class TimeClamper {
  public:
-  static constexpr double kResolutionSeconds = 0.001;
+// As site isolation is enabled on desktop platforms, we can safely provide
+// more timing resolution. Jittering is still enabled everywhere.
+#if defined(OS_ANDROID)
+  static constexpr double kResolutionSeconds = 100e-6;
+#else
+  static constexpr double kResolutionSeconds = 5e-6;
+#endif
 
   TimeClamper() : secret_(base::RandUint64()) {}
 
@@ -239,9 +248,14 @@ class PageAllocator : public v8::PageAllocator {
       base::DecommitSystemPages(address, length);
       return true;
     } else {
-      return base::SetSystemPagesAccess(address, length,
-                                        GetPageConfig(permissions));
+      return base::TrySetSystemPagesAccess(address, length,
+                                           GetPageConfig(permissions));
     }
+  }
+
+  bool DiscardSystemPages(void* address, size_t size) override {
+    base::DiscardSystemPages(address, size);
+    return true;
   }
 };
 
@@ -251,6 +265,26 @@ base::LazyInstance<PageAllocator>::Leaky g_page_allocator =
 #endif  // BUILDFLAG(USE_PARTITION_ALLOC)
 
 }  // namespace
+
+}  // namespace gin
+
+// Allow std::unique_ptr<v8::ConvertableToTraceFormat> to be a valid
+// initialization value for trace macros.
+template <>
+struct base::trace_event::TraceValue::Helper<
+    std::unique_ptr<v8::ConvertableToTraceFormat>> {
+  static constexpr unsigned char kType = TRACE_VALUE_TYPE_CONVERTABLE;
+  static inline void SetValue(
+      TraceValue* v,
+      std::unique_ptr<v8::ConvertableToTraceFormat> value) {
+    // NOTE: |as_convertable| is an owning pointer, so using new here
+    // is acceptable.
+    v->as_convertable =
+        new gin::ConvertableToTraceFormatWrapper(std::move(value));
+  }
+};
+
+namespace gin {
 
 class V8Platform::TracingControllerImpl : public v8::TracingController {
  public:
@@ -274,22 +308,15 @@ class V8Platform::TracingControllerImpl : public v8::TracingController {
       const uint64_t* arg_values,
       std::unique_ptr<v8::ConvertableToTraceFormat>* arg_convertables,
       unsigned int flags) override {
-    std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
-        convertables[2];
-    if (num_args > 0 && arg_types[0] == TRACE_VALUE_TYPE_CONVERTABLE) {
-      convertables[0].reset(
-          new ConvertableToTraceFormatWrapper(arg_convertables[0]));
-    }
-    if (num_args > 1 && arg_types[1] == TRACE_VALUE_TYPE_CONVERTABLE) {
-      convertables[1].reset(
-          new ConvertableToTraceFormatWrapper(arg_convertables[1]));
-    }
+    base::trace_event::TraceArguments args(
+        num_args, arg_names, arg_types,
+        reinterpret_cast<const unsigned long long*>(arg_values),
+        arg_convertables);
     DCHECK_LE(num_args, 2);
     base::trace_event::TraceEventHandle handle =
         TRACE_EVENT_API_ADD_TRACE_EVENT_WITH_BIND_ID(
-            phase, category_enabled_flag, name, scope, id, bind_id, num_args,
-            arg_names, arg_types, (const long long unsigned int*)arg_values,
-            convertables, flags);
+            phase, category_enabled_flag, name, scope, id, bind_id, &args,
+            flags);
     uint64_t result;
     memcpy(&result, &handle, sizeof(result));
     return result;
@@ -362,6 +389,12 @@ void V8Platform::CallOnWorkerThread(std::unique_ptr<v8::Task> task) {
 void V8Platform::CallBlockingTaskOnWorkerThread(
     std::unique_ptr<v8::Task> task) {
   base::PostTaskWithTraits(FROM_HERE, kBlockingTaskTraits,
+                           base::BindOnce(&v8::Task::Run, std::move(task)));
+}
+
+void V8Platform::CallLowPriorityTaskOnWorkerThread(
+    std::unique_ptr<v8::Task> task) {
+  base::PostTaskWithTraits(FROM_HERE, kLowPriorityTaskTraits,
                            base::BindOnce(&v8::Task::Run, std::move(task)));
 }
 

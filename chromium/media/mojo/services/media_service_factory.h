@@ -11,11 +11,13 @@
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
+#include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_preferences.h"
 #include "media/base/android_overlay_mojo_factory.h"
 #include "media/cdm/cdm_proxy.h"
 #include "media/mojo/services/media_mojo_export.h"
 #include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/mojom/service.mojom.h"
 
 namespace media {
 
@@ -25,7 +27,7 @@ class MediaGpuChannelManager;
 // platform. Uses the TestMojoMediaClient if |enable_test_mojo_media_client| is
 // true.
 std::unique_ptr<service_manager::Service> MEDIA_MOJO_EXPORT
-CreateMediaService();
+CreateMediaService(service_manager::mojom::ServiceRequest request);
 
 // Creates a MediaService instance using the GpuMojoMediaClient.
 // |media_gpu_channel_manager| must only be used on |task_runner|, which is
@@ -34,8 +36,10 @@ CreateMediaService();
 // CdmProxy is not supported on the platform.
 std::unique_ptr<service_manager::Service> MEDIA_MOJO_EXPORT
 CreateGpuMediaService(
+    service_manager::mojom::ServiceRequest requset,
     const gpu::GpuPreferences& gpu_preferences,
     const gpu::GpuDriverBugWorkarounds& gpu_workarounds,
+    const gpu::GpuFeatureInfo& gpu_feature_info,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     base::WeakPtr<MediaGpuChannelManager> media_gpu_channel_manager,
     AndroidOverlayMojoFactoryCB android_overlay_factory_cb,
@@ -43,7 +47,7 @@ CreateGpuMediaService(
 
 // Creates a MediaService instance using the TestMojoMediaClient.
 std::unique_ptr<service_manager::Service> MEDIA_MOJO_EXPORT
-CreateMediaServiceForTesting();
+CreateMediaServiceForTesting(service_manager::mojom::ServiceRequest request);
 
 }  // namespace media
 

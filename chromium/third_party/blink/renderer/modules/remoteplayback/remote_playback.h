@@ -5,18 +5,18 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_REMOTEPLAYBACK_REMOTE_PLAYBACK_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_REMOTEPLAYBACK_REMOTE_PLAYBACK_H_
 
+#include "base/macros.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "third_party/blink/public/mojom/presentation/presentation.mojom-blink.h"
-#include "third_party/blink/public/platform/modules/remoteplayback/web_remote_playback_availability.h"
 #include "third_party/blink/public/platform/modules/remoteplayback/web_remote_playback_client.h"
-#include "third_party/blink/public/platform/modules/remoteplayback/web_remote_playback_state.h"
 #include "third_party/blink/public/platform/web_callbacks.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/html/media/remote_playback_controller.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/modules/presentation/presentation_availability_observer.h"
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_member.h"
@@ -46,7 +46,8 @@ class MODULES_EXPORT RemotePlayback final
       public ActiveScriptWrappable<RemotePlayback>,
       public WebRemotePlaybackClient,
       public PresentationAvailabilityObserver,
-      public mojom::blink::PresentationConnection {
+      public mojom::blink::PresentationConnection,
+      public RemotePlaybackController {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(RemotePlayback);
 
@@ -55,7 +56,9 @@ class MODULES_EXPORT RemotePlayback final
   // supported.
   static const int kWatchAvailabilityNotSupported = -1;
 
-  static RemotePlayback* Create(HTMLMediaElement&);
+  static RemotePlayback& From(HTMLMediaElement&);
+
+  explicit RemotePlayback(HTMLMediaElement&);
 
   // Notifies this object that disableRemotePlayback attribute was set on the
   // corresponding media element.
@@ -93,7 +96,7 @@ class MODULES_EXPORT RemotePlayback final
   int WatchAvailabilityInternal(AvailabilityCallbackWrapper*);
   bool CancelWatchAvailabilityInternal(int id);
 
-  WebRemotePlaybackState GetState() const { return state_; }
+  mojom::blink::PresentationConnectionState GetState() const { return state_; }
 
   // PresentationAvailabilityObserver implementation.
   void AvailabilityChanged(mojom::blink::ScreenAvailability) override;
@@ -106,18 +109,20 @@ class MODULES_EXPORT RemotePlayback final
   void OnConnectionError(const mojom::blink::PresentationError&);
 
   // mojom::blink::PresentationConnection implementation.
-  void OnMessage(mojom::blink::PresentationConnectionMessagePtr,
-                 OnMessageCallback) override;
+  void OnMessage(mojom::blink::PresentationConnectionMessagePtr) override;
   void DidChangeState(mojom::blink::PresentationConnectionState) override;
-  void RequestClose() override;
+  void DidClose(mojom::blink::PresentationConnectionCloseReason) override;
 
   // WebRemotePlaybackClient implementation.
-  void StateChanged(WebRemotePlaybackState) override;
-  void AvailabilityChanged(WebRemotePlaybackAvailability) override;
-  void PromptCancelled() override;
   bool RemotePlaybackAvailable() const override;
   void SourceChanged(const WebURL&, bool is_source_supported) override;
   WebString GetPresentationId() override;
+
+  // RemotePlaybackController implementation.
+  void AddObserver(RemotePlaybackObserver*) override;
+  void RemoveObserver(RemotePlaybackObserver*) override;
+  void AvailabilityChangedForTesting(bool screen_is_available) override;
+  void StateChangedForTesting(bool is_connected) override;
 
   // ScriptWrappable implementation.
   bool HasPendingActivity() const final;
@@ -125,9 +130,12 @@ class MODULES_EXPORT RemotePlayback final
   // ContextLifecycleObserver implementation.
   void ContextDestroyed(ExecutionContext*) override;
 
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(connecting);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(connect);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(disconnect);
+  // Adjusts the internal state of |this| after a playback state change.
+  void StateChanged(mojom::blink::PresentationConnectionState);
+
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(connecting, kConnecting)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(connect, kConnect)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(disconnect, kDisconnect)
 
   void Trace(blink::Visitor*) override;
 
@@ -136,7 +144,7 @@ class MODULES_EXPORT RemotePlayback final
   friend class RemotePlaybackTest;
   friend class MediaControlsImplTest;
 
-  explicit RemotePlayback(HTMLMediaElement&);
+  void PromptCancelled();
 
   // Calls the specified availability callback with the current availability.
   // Need a void() method to post it as a task.
@@ -151,8 +159,11 @@ class MODULES_EXPORT RemotePlayback final
   // May be called more than once in a row.
   void StopListeningForAvailability();
 
-  WebRemotePlaybackState state_;
-  WebRemotePlaybackAvailability availability_;
+  // Clears bindings after remote playback stops.
+  void CleanupConnections();
+
+  mojom::blink::PresentationConnectionState state_;
+  mojom::blink::ScreenAvailability availability_;
   HeapHashMap<int, TraceWrapperMember<AvailabilityCallbackWrapper>>
       availability_callbacks_;
   Member<HTMLMediaElement> media_element_;
@@ -166,6 +177,10 @@ class MODULES_EXPORT RemotePlayback final
   mojo::Binding<mojom::blink::PresentationConnection>
       presentation_connection_binding_;
   mojom::blink::PresentationConnectionPtr target_presentation_connection_;
+
+  HeapHashSet<Member<RemotePlaybackObserver>> observers_;
+
+  DISALLOW_COPY_AND_ASSIGN(RemotePlayback);
 };
 
 }  // namespace blink

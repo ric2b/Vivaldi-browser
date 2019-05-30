@@ -34,10 +34,11 @@
 #include <memory>
 
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "third_party/blink/renderer/platform/date_components.h"
 #include "third_party/blink/renderer/platform/language.h"
-#include "third_party/blink/renderer/platform/layout_test_support.h"
 #include "third_party/blink/renderer/platform/text/date_time_format.h"
+#include "third_party/blink/renderer/platform/web_test_support.h"
 #include "third_party/blink/renderer/platform/wtf/date_math.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_buffer.h"
@@ -93,7 +94,7 @@ static LCID LCIDFromLocale(const String& locale, bool defaults_for_locale) {
 std::unique_ptr<Locale> Locale::Create(const String& locale) {
   // Whether the default settings for the locale should be used, ignoring user
   // overrides.
-  bool defaults_for_locale = LayoutTestSupport::IsRunningLayoutTest();
+  bool defaults_for_locale = WebTestSupport::IsRunningWebTest();
   return LocaleWin::Create(LCIDFromLocale(locale, defaults_for_locale),
                            defaults_for_locale);
 }
@@ -148,13 +149,13 @@ void LocaleWin::EnsureShortMonthLabels() {
       LOCALE_SABBREVMONTHNAME9,  LOCALE_SABBREVMONTHNAME10,
       LOCALE_SABBREVMONTHNAME11, LOCALE_SABBREVMONTHNAME12,
   };
-  short_month_labels_.ReserveCapacity(arraysize(kTypes));
-  for (unsigned i = 0; i < arraysize(kTypes); ++i) {
+  short_month_labels_.ReserveCapacity(base::size(kTypes));
+  for (unsigned i = 0; i < base::size(kTypes); ++i) {
     short_month_labels_.push_back(GetLocaleInfoString(kTypes[i]));
     if (short_month_labels_.back().IsEmpty()) {
       short_month_labels_.Shrink(0);
-      short_month_labels_.ReserveCapacity(arraysize(WTF::kMonthName));
-      for (unsigned m = 0; m < arraysize(WTF::kMonthName); ++m)
+      short_month_labels_.ReserveCapacity(base::size(WTF::kMonthName));
+      for (unsigned m = 0; m < base::size(WTF::kMonthName); ++m)
         short_month_labels_.push_back(WTF::kMonthName[m]);
       return;
     }
@@ -274,13 +275,13 @@ void LocaleWin::EnsureMonthLabels() {
       LOCALE_SMONTHNAME7,  LOCALE_SMONTHNAME8,  LOCALE_SMONTHNAME9,
       LOCALE_SMONTHNAME10, LOCALE_SMONTHNAME11, LOCALE_SMONTHNAME12,
   };
-  month_labels_.ReserveCapacity(arraysize(kTypes));
-  for (unsigned i = 0; i < arraysize(kTypes); ++i) {
+  month_labels_.ReserveCapacity(base::size(kTypes));
+  for (unsigned i = 0; i < base::size(kTypes); ++i) {
     month_labels_.push_back(GetLocaleInfoString(kTypes[i]));
     if (month_labels_.back().IsEmpty()) {
       month_labels_.Shrink(0);
-      month_labels_.ReserveCapacity(arraysize(WTF::kMonthFullName));
-      for (unsigned m = 0; m < arraysize(WTF::kMonthFullName); ++m)
+      month_labels_.ReserveCapacity(base::size(WTF::kMonthFullName));
+      for (unsigned m = 0; m < base::size(WTF::kMonthFullName); ++m)
         month_labels_.push_back(WTF::kMonthFullName[m]);
       return;
     }
@@ -295,13 +296,13 @@ void LocaleWin::EnsureWeekDayShortLabels() {
                             LOCALE_SABBREVDAYNAME2, LOCALE_SABBREVDAYNAME3,
                             LOCALE_SABBREVDAYNAME4, LOCALE_SABBREVDAYNAME5,
                             LOCALE_SABBREVDAYNAME6};
-  week_day_short_labels_.ReserveCapacity(arraysize(kTypes));
-  for (unsigned i = 0; i < arraysize(kTypes); ++i) {
+  week_day_short_labels_.ReserveCapacity(base::size(kTypes));
+  for (unsigned i = 0; i < base::size(kTypes); ++i) {
     week_day_short_labels_.push_back(GetLocaleInfoString(kTypes[i]));
     if (week_day_short_labels_.back().IsEmpty()) {
       week_day_short_labels_.Shrink(0);
-      week_day_short_labels_.ReserveCapacity(arraysize(WTF::kWeekdayName));
-      for (unsigned w = 0; w < arraysize(WTF::kWeekdayName); ++w) {
+      week_day_short_labels_.ReserveCapacity(base::size(WTF::kWeekdayName));
+      for (unsigned w = 0; w < base::size(WTF::kWeekdayName); ++w) {
         // weekdayName starts with Monday.
         week_day_short_labels_.push_back(WTF::kWeekdayName[(w + 6) % 7]);
       }
@@ -325,10 +326,10 @@ unsigned LocaleWin::FirstDayOfWeek() {
 }
 
 bool LocaleWin::IsRTL() {
-  WTF::Unicode::CharDirection dir =
-      WTF::Unicode::Direction(MonthLabels()[0][0]);
-  return dir == WTF::Unicode::kRightToLeft ||
-         dir == WTF::Unicode::kRightToLeftArabic;
+  WTF::unicode::CharDirection dir =
+      WTF::unicode::Direction(MonthLabels()[0][0]);
+  return dir == WTF::unicode::kRightToLeft ||
+         dir == WTF::unicode::kRightToLeftArabic;
 }
 
 String LocaleWin::DateFormat() {

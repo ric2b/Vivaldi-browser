@@ -6,6 +6,8 @@
 
 #include <utility>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/optional.h"
 #include "content/browser/cookie_store/cookie_change_subscriptions.pb.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
@@ -182,7 +184,7 @@ void CookieStoreManager::AppendSubscriptions(
           service_worker_registration_id);
   if (!service_worker_registration ||
       !origin.IsSameOriginWith(
-          url::Origin::Create(service_worker_registration->pattern()))) {
+          url::Origin::Create(service_worker_registration->scope()))) {
     // This error case is a good fit for mojo::ReportBadMessage(), because the
     // renderer has passed an invalid registration ID. However, the code here
     // might run without a mojo call context, if the original call was delayed

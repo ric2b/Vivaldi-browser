@@ -5,11 +5,11 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_FONTS_SCRIPT_RUN_ITERATOR_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_FONTS_SCRIPT_RUN_ITERATOR_H_
 
+#include "base/macros.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/deque.h"
 #include "third_party/blink/renderer/platform/wtf/dtoa/utils.h"
-#include "third_party/blink/renderer/platform/wtf/noncopyable.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 #include <unicode/uchar.h>
@@ -21,24 +21,23 @@ class ScriptData;
 
 class PLATFORM_EXPORT ScriptRunIterator {
   USING_FAST_MALLOC(ScriptRunIterator);
-  WTF_MAKE_NONCOPYABLE(ScriptRunIterator);
 
  public:
-  ScriptRunIterator(const UChar* text, size_t length);
+  ScriptRunIterator(const UChar* text, wtf_size_t length);
 
   // This maintains a reference to data. It must exist for the lifetime of
   // this object. Typically data is a singleton that exists for the life of
   // the process.
-  ScriptRunIterator(const UChar* text, size_t length, const ScriptData*);
+  ScriptRunIterator(const UChar* text, wtf_size_t length, const ScriptData*);
 
-  bool Consume(unsigned& limit, UScriptCode&);
+  bool Consume(unsigned* limit, UScriptCode*);
 
   static constexpr int kMaxScriptCount = 20;
   using UScriptCodeList = Vector<UScriptCode, kMaxScriptCount>;
 
  private:
   struct BracketRec {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+    DISALLOW_NEW();
     UChar32 ch;
     UScriptCode script;
   };
@@ -46,15 +45,15 @@ class PLATFORM_EXPORT ScriptRunIterator {
   void CloseBracket(UChar32);
   bool MergeSets();
   void FixupStack(UScriptCode resolved_script);
-  bool Fetch(size_t* pos, UChar32*);
+  bool Fetch(wtf_size_t* pos, UChar32*);
 
   UScriptCode ResolveCurrentScript() const;
 
   const UChar* text_;
-  const size_t length_;
+  const wtf_size_t length_;
 
   Deque<BracketRec> brackets_;
-  size_t brackets_fixup_depth_;
+  wtf_size_t brackets_fixup_depth_;
   // Limit max brackets so that the bracket tracking buffer does not grow
   // excessively large when processing long runs of text.
   static const int kMaxBrackets = 32;
@@ -67,11 +66,13 @@ class PLATFORM_EXPORT ScriptRunIterator {
   std::unique_ptr<UScriptCodeList> ahead_set_;
 
   UChar32 ahead_character_;
-  size_t ahead_pos_;
+  wtf_size_t ahead_pos_;
 
   UScriptCode common_preferred_;
 
   const ScriptData* script_data_;
+
+  DISALLOW_COPY_AND_ASSIGN(ScriptRunIterator);
 };
 
 // ScriptData is a wrapper which returns a set of scripts for a particular
@@ -81,7 +82,6 @@ class PLATFORM_EXPORT ScriptRunIterator {
 // method to work correctly.
 class PLATFORM_EXPORT ScriptData {
   USING_FAST_MALLOC(ScriptData);
-  WTF_MAKE_NONCOPYABLE(ScriptData);
 
  protected:
   ScriptData() = default;
@@ -104,6 +104,9 @@ class PLATFORM_EXPORT ScriptData {
   virtual UChar32 GetPairedBracket(UChar32) const = 0;
 
   virtual PairedBracketType GetPairedBracketType(UChar32) const = 0;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ScriptData);
 };
 
 class PLATFORM_EXPORT ICUScriptData : public ScriptData {

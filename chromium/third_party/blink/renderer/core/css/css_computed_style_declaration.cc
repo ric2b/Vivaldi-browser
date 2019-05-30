@@ -24,17 +24,19 @@
 
 #include "third_party/blink/renderer/core/css/css_computed_style_declaration.h"
 
+#include "base/stl_util.h"
 #include "third_party/blink/renderer/core/css/computed_style_css_value_mapping.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value_mappings.h"
 #include "third_party/blink/renderer/core/css/css_property_id_templates.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_selector.h"
 #include "third_party/blink/renderer/core/css/css_variable_data.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
+#include "third_party/blink/renderer/core/css/properties/css_property_ref.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/css/zoom_adjusted_pixel_value.h"
-#include "third_party/blink/renderer/core/css_property_names.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/pseudo_element.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
@@ -182,6 +184,8 @@ CSSValueID CssIdentifierForFontSizeKeyword(int keyword_size) {
 
 void LogUnimplementedPropertyID(const CSSProperty& property) {
   DEFINE_STATIC_LOCAL(HashSet<CSSPropertyID>, property_id_set, ());
+  if (property.PropertyID() == CSSPropertyVariable)
+    return;
   if (!property_id_set.insert(property.PropertyID()).is_new_entry)
     return;
 
@@ -196,7 +200,7 @@ CSSComputedStyleDeclaration::ComputableProperties() {
   DEFINE_STATIC_LOCAL(Vector<const CSSProperty*>, properties, ());
   if (properties.IsEmpty()) {
     CSSProperty::FilterEnabledCSSPropertiesIntoVector(
-        kComputedPropertyArray, arraysize(kComputedPropertyArray), properties);
+        kComputedPropertyArray, base::size(kComputedPropertyArray), properties);
   }
   return properties;
 }
@@ -304,16 +308,8 @@ const CSSValue* CSSComputedStyleDeclaration::GetPropertyCSSValue(
   if (!styled_node)
     return nullptr;
 
-  styled_node->GetDocument().UpdateStyleAndLayoutTreeForNode(styled_node);
-
-  const ComputedStyle* style = ComputeComputedStyle();
-  if (!style)
-    return nullptr;
-  // Don't use styled_node in case it was discarded or replaced in
-  // UpdateStyleAndLayoutTreeForNode.
-  return ComputedStyleCSSValueMapping::Get(
-      custom_property_name, *style,
-      StyledNode()->GetDocument().GetPropertyRegistry());
+  CSSPropertyRef ref(custom_property_name, styled_node->GetDocument());
+  return GetPropertyCSSValue(ref.GetProperty());
 }
 
 HeapHashMap<AtomicString, Member<const CSSValue>>
@@ -381,6 +377,12 @@ const CSSValue* CSSComputedStyleDeclaration::GetPropertyCSSValue(
 
 String CSSComputedStyleDeclaration::GetPropertyValue(
     CSSPropertyID property_id) const {
+  // allow_visited_style_ is true only for access from DevTools.
+  if (!allow_visited_style_ && property_id == CSSPropertyWebkitAppearance) {
+    UseCounter::Count(
+        node_->GetDocument(),
+        WebFeature::kGetComputedStyleForWebkitAppearanceExcludeDevTools);
+  }
   const CSSValue* value = GetPropertyCSSValue(CSSProperty::Get(property_id));
   if (value)
     return value->CssText();

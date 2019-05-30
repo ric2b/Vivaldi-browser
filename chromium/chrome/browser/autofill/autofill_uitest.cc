@@ -4,6 +4,7 @@
 
 #include <string>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -168,6 +169,12 @@ void AutofillUiTest::SendKeyToPopupAndWait(
   widget->ForwardKeyboardEvent(event);
   test_delegate()->Wait(std::move(expected_events));
   widget->RemoveKeyPressEventCallback(key_press_event_sink_);
+}
+
+void AutofillUiTest::DoNothingAndWait(unsigned seconds) {
+  test_delegate()->Reset();
+  ASSERT_FALSE(test_delegate()->Wait({ObservedUiEvents::kNoEvent},
+                                     base::TimeDelta::FromSeconds(seconds)));
 }
 
 void AutofillUiTest::SendKeyToDataListPopup(ui::DomKey key) {

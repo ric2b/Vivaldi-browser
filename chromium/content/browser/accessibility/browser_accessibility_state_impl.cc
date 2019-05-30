@@ -6,12 +6,14 @@
 
 #include <stddef.h>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
@@ -56,8 +58,7 @@ BrowserAccessibilityStateImpl* BrowserAccessibilityStateImpl::GetInstance() {
 }
 
 BrowserAccessibilityStateImpl::BrowserAccessibilityStateImpl()
-    : BrowserAccessibilityState(),
-      disable_hot_tracking_(false) {
+    : BrowserAccessibilityState(), disable_hot_tracking_(false) {
   ResetAccessibilityModeValue();
 
   // We need to AddRef() the leaky singleton so that Bind doesn't
@@ -67,19 +68,22 @@ BrowserAccessibilityStateImpl::BrowserAccessibilityStateImpl()
   // Hook ourselves up to observe ax mode changes.
   ui::AXPlatformNode::AddAXModeObserver(this);
 
-#if defined(OS_WIN)
+  // Let each platform do its own initialization.
+  PlatformInitialize();
+
+#if defined(OS_WIN) || defined(OS_ANDROID)
   // The delay is necessary because assistive technology sometimes isn't
   // detected until after the user interacts in some way, so a reasonable delay
   // gives us better numbers.
   base::PostDelayedTaskWithTraits(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-      base::Bind(&BrowserAccessibilityStateImpl::UpdateHistograms, this),
+      base::BindOnce(&BrowserAccessibilityStateImpl::UpdateHistograms, this),
       base::TimeDelta::FromSeconds(ACCESSIBILITY_HISTOGRAM_DELAY_SECS));
 #else
-  // On all other platforms, UpdateHistograms should be called on the UI
-  // thread because it needs to be able to access PrefService.
-  BrowserThread::PostDelayedTask(
-      BrowserThread::UI, FROM_HERE,
+  // On MacOS, UpdateHistograms should be called on the UI thread because it
+  // needs to be able to access PrefService.
+  base::PostDelayedTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&BrowserAccessibilityStateImpl::UpdateHistograms, this),
       base::TimeDelta::FromSeconds(ACCESSIBILITY_HISTOGRAM_DELAY_SECS));
 #endif
@@ -166,9 +170,10 @@ ui::AXMode BrowserAccessibilityStateImpl::GetAccessibilityMode() const {
   return accessibility_mode_;
 }
 
-#if !defined(OS_WIN) && !defined(OS_MACOSX)
-void BrowserAccessibilityStateImpl::UpdatePlatformSpecificHistograms() {
-}
+#if !defined(OS_ANDROID) && !defined(OS_WIN) && !defined(OS_MACOSX)
+void BrowserAccessibilityStateImpl::PlatformInitialize() {}
+
+void BrowserAccessibilityStateImpl::UpdatePlatformSpecificHistograms() {}
 #endif
 
 void BrowserAccessibilityStateImpl::AddAccessibilityModeFlags(ui::AXMode mode) {

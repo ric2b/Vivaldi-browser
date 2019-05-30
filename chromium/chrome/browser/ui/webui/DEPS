@@ -1,6 +1,5 @@
 include_rules = [
-  # TODO(mash): Remove. http://crbug.com/628715
-  "+ash/strings",
+  "+chrome/services/app_service/public",
   "+device/bluetooth",
   "+extensions/strings/grit/extensions_strings.h",
 

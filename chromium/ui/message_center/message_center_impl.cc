@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/auto_reset.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
@@ -64,8 +65,7 @@ void MessageCenterImpl::AddNotificationBlocker(NotificationBlocker* blocker) {
 void MessageCenterImpl::RemoveNotificationBlocker(
     NotificationBlocker* blocker) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  std::vector<NotificationBlocker*>::iterator iter =
-      std::find(blockers_.begin(), blockers_.end(), blocker);
+  auto iter = std::find(blockers_.begin(), blockers_.end(), blocker);
   if (iter == blockers_.end())
     return;
   blocker->RemoveObserver(this);
@@ -101,6 +101,9 @@ void MessageCenterImpl::SetVisibility(Visibility visibility) {
       for (auto& observer : observer_list_)
         observer.OnNotificationUpdated(id);
     }
+
+    for (Notification* notification : GetPopupNotifications())
+      MarkSinglePopupAsShown(notification->id(), false);
   }
 
   for (auto& observer : observer_list_)
@@ -141,7 +144,14 @@ bool MessageCenterImpl::IsQuietMode() const {
 Notification* MessageCenterImpl::FindVisibleNotificationById(
     const std::string& id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  return notification_list_->GetNotificationById(id);
+
+  const auto& notifications = GetVisibleNotifications();
+  for (auto* notification : notifications) {
+    if (notification->id() == id)
+      return notification;
+  }
+
+  return nullptr;
 }
 
 NotificationList::Notifications MessageCenterImpl::FindNotificationsByAppId(
@@ -214,7 +224,7 @@ void MessageCenterImpl::RemoveNotification(const std::string& id,
                                            bool by_user) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  Notification* notification = FindVisibleNotificationById(id);
+  Notification* notification = notification_list_->GetNotificationById(id);
   if (!notification)
     return;
 
@@ -301,17 +311,6 @@ void MessageCenterImpl::SetNotificationImage(const std::string& notification_id,
                                              const gfx::Image& image) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (notification_list_->SetNotificationImage(notification_id, image)) {
-    for (auto& observer : observer_list_)
-      observer.OnNotificationUpdated(notification_id);
-  }
-}
-
-void MessageCenterImpl::SetNotificationButtonIcon(
-    const std::string& notification_id, int button_index,
-    const gfx::Image& image) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  if (notification_list_->SetNotificationButtonIcon(notification_id,
-                                                    button_index, image)) {
     for (auto& observer : observer_list_)
       observer.OnNotificationUpdated(notification_id);
   }

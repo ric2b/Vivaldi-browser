@@ -6,13 +6,14 @@
 
 #include <map>
 
+#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/optional.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "components/feature_engagement/internal/proto/feature_event.pb.h"
 #include "components/feature_engagement/internal/stats.h"
 #include "components/feature_engagement/internal/test/event_util.h"
-#include "components/leveldb_proto/proto_database.h"
+#include "components/leveldb_proto/public/proto_database.h"
 #include "components/leveldb_proto/testing/fake_db.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -33,9 +34,7 @@ void VerifyEventsInListAndMap(const std::map<std::string, Event>& map,
 
 class PersistentEventStoreTest : public ::testing::Test {
  public:
-  PersistentEventStoreTest()
-      : db_(nullptr),
-        storage_dir_(FILE_PATH_LITERAL("/persistent/store/lalala")) {
+  PersistentEventStoreTest() : db_(nullptr) {
     load_callback_ = base::Bind(&PersistentEventStoreTest::LoadCallback,
                                 base::Unretained(this));
   }
@@ -53,7 +52,7 @@ class PersistentEventStoreTest : public ::testing::Test {
 
     auto db = std::make_unique<leveldb_proto::test::FakeDB<Event>>(&db_events_);
     db_ = db.get();
-    store_.reset(new PersistentEventStore(storage_dir_, std::move(db)));
+    store_.reset(new PersistentEventStore(std::move(db)));
   }
 
   void LoadCallback(bool success, std::unique_ptr<std::vector<Event>> events) {
@@ -69,18 +68,9 @@ class PersistentEventStoreTest : public ::testing::Test {
   std::map<std::string, Event> db_events_;
   leveldb_proto::test::FakeDB<Event>* db_;
   std::unique_ptr<EventStore> store_;
-
-  // Constant test data.
-  base::FilePath storage_dir_;
 };
 
 }  // namespace
-
-TEST_F(PersistentEventStoreTest, StorageDirectory) {
-  SetUpDB();
-  store_->Load(load_callback_);
-  EXPECT_EQ(storage_dir_, db_->GetDirectory());
-}
 
 TEST_F(PersistentEventStoreTest, SuccessfulInitAndLoadEmptyStore) {
   SetUpDB();
@@ -89,7 +79,7 @@ TEST_F(PersistentEventStoreTest, SuccessfulInitAndLoadEmptyStore) {
 
   store_->Load(load_callback_);
   // The initialize should not trigger a response to the callback.
-  db_->InitCallback(true);
+  db_->InitStatusCallback(leveldb_proto::Enums::InitStatus::kOK);
   EXPECT_FALSE(load_successful_.has_value());
 
   // The load should trigger a response to the callback.
@@ -128,7 +118,7 @@ TEST_F(PersistentEventStoreTest, SuccessfulInitAndLoadWithEvents) {
 
   // The initialize should not trigger a response to the callback.
   store_->Load(load_callback_);
-  db_->InitCallback(true);
+  db_->InitStatusCallback(leveldb_proto::Enums::InitStatus::kOK);
   EXPECT_FALSE(load_successful_.has_value());
 
   // The load should trigger a response to the callback.
@@ -154,7 +144,7 @@ TEST_F(PersistentEventStoreTest, SuccessfulInitBadLoad) {
   store_->Load(load_callback_);
 
   // The initialize should not trigger a response to the callback.
-  db_->InitCallback(true);
+  db_->InitStatusCallback(leveldb_proto::Enums::InitStatus::kOK);
   EXPECT_FALSE(load_successful_.has_value());
 
   // The load will fail and should trigger the callback.
@@ -177,7 +167,7 @@ TEST_F(PersistentEventStoreTest, BadInit) {
   store_->Load(load_callback_);
 
   // The initialize will fail and should trigger the callback.
-  db_->InitCallback(false);
+  db_->InitStatusCallback(leveldb_proto::Enums::InitStatus::kError);
   EXPECT_FALSE(load_successful_.value());
   EXPECT_FALSE(store_->IsReady());
 
@@ -196,7 +186,7 @@ TEST_F(PersistentEventStoreTest, IsReady) {
   store_->Load(load_callback_);
   EXPECT_FALSE(store_->IsReady());
 
-  db_->InitCallback(true);
+  db_->InitStatusCallback(leveldb_proto::Enums::InitStatus::kOK);
   EXPECT_FALSE(store_->IsReady());
 
   db_->LoadCallback(true);
@@ -207,7 +197,7 @@ TEST_F(PersistentEventStoreTest, WriteEvent) {
   SetUpDB();
 
   store_->Load(load_callback_);
-  db_->InitCallback(true);
+  db_->InitStatusCallback(leveldb_proto::Enums::InitStatus::kOK);
   db_->LoadCallback(true);
 
   Event event;
@@ -228,7 +218,7 @@ TEST_F(PersistentEventStoreTest, WriteAndDeleteEvent) {
   SetUpDB();
 
   store_->Load(load_callback_);
-  db_->InitCallback(true);
+  db_->InitStatusCallback(leveldb_proto::Enums::InitStatus::kOK);
   db_->LoadCallback(true);
 
   Event event;

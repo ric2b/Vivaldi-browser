@@ -9,8 +9,8 @@
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/chrome_cleaner/constants/chrome_cleaner_switches.h"
-#include "chrome/chrome_cleaner/test/test_name_helper.h"
 #include "components/chrome_cleaner/public/constants/constants.h"
+#include "components/chrome_cleaner/test/test_name_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace chrome_cleaner {
@@ -47,7 +47,7 @@ TEST_P(CleanerSettingsTest, CleanerLogsPermissions) {
   if (execution_mode_ != ExecutionMode::kNone) {
     command_line.AppendSwitchASCII(
         kExecutionModeSwitch,
-        base::IntToString(static_cast<int>(execution_mode_)));
+        base::NumberToString(static_cast<int>(execution_mode_)));
   }
   if (with_scanning_mode_logs_)
     command_line.AppendSwitch(kWithScanningModeLogsSwitch);
@@ -69,7 +69,7 @@ TEST_P(CleanerSettingsTest, CleanerLogsPermissions) {
   EXPECT_EQ(logs_upload_allowed, settings->logs_upload_allowed());
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     All,
     CleanerSettingsTest,
     ::testing::Combine(

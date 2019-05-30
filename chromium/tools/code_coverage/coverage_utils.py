@@ -636,8 +636,7 @@ def GetHtmlIndexPath(output_dir):
 
 def GetFullPath(path):
   """Return full absolute path."""
-  return (os.path.abspath(
-      os.path.realpath(os.path.expandvars(os.path.expanduser(path)))))
+  return os.path.abspath(os.path.expandvars(os.path.expanduser(path)))
 
 
 def GetHostPlatform():
@@ -750,12 +749,13 @@ def _CmdSharedLibraries(args):
     logging.error('No binaries are specified.')
     return 1
 
-  paths = GetSharedLibraries(args.object, args.build_dir)
-  if not paths:
+  library_paths = GetSharedLibraries(args.object, args.build_dir)
+  if not library_paths:
     return 0
 
   # Print output in the format that can be passed to llvm-cov tool.
-  output = ' '.join(['-object=%s' % path for path in paths])
+  output = ' '.join(
+      '-object=%s' % os.path.normpath(path) for path in library_paths)
   print(output)
   return 0
 

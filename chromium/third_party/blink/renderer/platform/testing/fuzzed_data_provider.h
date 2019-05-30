@@ -5,42 +5,53 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_TESTING_FUZZED_DATA_PROVIDER_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_TESTING_FUZZED_DATA_PROVIDER_H_
 
+#include "base/macros.h"
 #include "base/test/fuzzed_data_provider.h"
-#include "third_party/blink/renderer/platform/wtf/noncopyable.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/cstring.h"
+#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
 
 // This class simply wraps //base/test/fuzzed_data_provider and vends Blink
 // friendly types.
 class FuzzedDataProvider {
-  WTF_MAKE_NONCOPYABLE(FuzzedDataProvider);
+  DISALLOW_NEW();
 
  public:
   FuzzedDataProvider(const uint8_t* bytes, size_t num_bytes);
 
-  // Returns a string with length between minBytes and maxBytes. If the
-  // length is greater than the length of the remaining data this is
-  // equivalent to ConsumeRemainingBytes().
-  CString ConsumeBytesInRange(uint32_t min_bytes, uint32_t max_bytes);
+  // Returns a string with length between 0 and max_length.
+  String ConsumeRandomLengthString(size_t max_length);
 
   // Returns a String containing all remaining bytes of the input data.
   CString ConsumeRemainingBytes();
 
   // Returns a bool, or false when no data remains.
-  bool ConsumeBool();
+  bool ConsumeBool() { return provider_.ConsumeBool(); }
 
   // Returns a number in the range [min, max] by consuming bytes from the input
   // data. The value might not be uniformly distributed in the given range. If
   // there's no input data left, always returns |min|. |min| must be less than
   // or equal to |max|.
-  int ConsumeInt32InRange(int min, int max);
+  template <typename T>
+  T ConsumeIntegralInRange(T min, T max) {
+    return provider_.ConsumeIntegralInRange<T>(min, max);
+  }
+
+  // Returns a number in the range [Type's min, Type's max]. The value might
+  // not be uniformly distributed in the given range. If there's no input data
+  // left, always returns |min|.
+  template <typename T>
+  T ConsumeIntegral() {
+    return provider_.ConsumeIntegral<T>();
+  }
 
   // Returns a value from |array|, consuming as many bytes as needed to do so.
   // |array| must be a fixed-size array.
-  template <typename Type, size_t size>
-  Type PickValueInArray(Type (&array)[size]) {
-    return array[provider_.ConsumeUint32InRange(0, size - 1)];
+  template <typename T, size_t size>
+  T PickValueInArray(T (&array)[size]) {
+    return array[provider_.ConsumeIntegralInRange<size_t>(0, size - 1)];
   }
 
   // Reports the remaining bytes available for fuzzed input.
@@ -48,6 +59,8 @@ class FuzzedDataProvider {
 
  private:
   base::FuzzedDataProvider provider_;
+
+  DISALLOW_COPY_AND_ASSIGN(FuzzedDataProvider);
 };
 
 }  // namespace blink

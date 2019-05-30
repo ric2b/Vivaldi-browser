@@ -49,8 +49,9 @@ Polymer({
    * @private
    */
   computeCapabilityWithLabels_: function() {
-    if (this.capability === undefined)
+    if (this.capability === undefined) {
       return null;
+    }
 
     const result =
         /** @type {{option: Array<!print_preview_new.SelectOption>}} */ (
@@ -94,5 +95,10 @@ Polymer({
         return;
       }
     }
+
+    const defaultOption =
+        this.capabilityWithLabels_.option.find(o => !!o.is_default) ||
+        this.capabilityWithLabels_.option[0];
+    this.setSetting('dpi', defaultOption);
   },
 });

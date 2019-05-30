@@ -1,5 +1,7 @@
 # Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
 
+from __future__ import print_function
+
 import argparse
 
 argparser = argparse.ArgumentParser()
@@ -16,7 +18,10 @@ if not options.locales:
   raise Exception("Must specify at least one locale");
 
 with open(options.target, "w") as f:
-  print >>f, """# Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
+  print("""# Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
+
+from __future__ import print_function
+
 import argparse
 import os
 
@@ -28,8 +33,8 @@ argparser = argparse.ArgumentParser()
 argparser.add_argument("prefix_path")
 options = argparser.parse_args()
 
-print "-"*40
-print "<translations>"
+print("-"*40)
+print("<translations>")
 for locale in LOCALES:
   spec_locale = locale if locale != "nb" else "no"
   params = dict(
@@ -40,12 +45,12 @@ for locale in LOCALES:
   fname = "%%(path)s_%%(locale)s.xtb" %% params
   if not os.access(fname, os.R_OK):
     with open(fname, "w") as f:
-      print >>f, \"\"\"<?xml version="1.0" ?>
+      print (\"\"\"<?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="%%s">
-</translationbundle>\"\"\" %% spec_locale
-  print '  <file path="%%(path)s_%%(locale)s.xtb" lang="%%(spec_locale)s" />' %% params
+</translationbundle>\"\"\" %% spec_locale, file=f)
+  print('  <file path="%%(path)s_%%(locale)s.xtb" lang="%%(spec_locale)s" />' %% params)
 
-print "</translations>"
-print "-"*40
-""" % dict(locales = '",\n  "'.join(options.locales))
+print("</translations>")
+print("-"*40)
+""" % dict(locales = '",\n  "'.join(options.locales)), file=f)

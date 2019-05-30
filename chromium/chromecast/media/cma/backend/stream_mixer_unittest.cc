@@ -8,7 +8,6 @@
 #include <cmath>
 #include <limits>
 #include <memory>
-#include <unordered_map>
 #include <utility>
 
 #include "base/memory/ptr_util.h"
@@ -20,8 +19,8 @@
 #include "chromecast/media/cma/backend/audio_output_redirector.h"
 #include "chromecast/media/cma/backend/mixer_input.h"
 #include "chromecast/media/cma/backend/mock_mixer_source.h"
+#include "chromecast/media/cma/backend/mock_post_processor_factory.h"
 #include "chromecast/media/cma/backend/mock_redirected_audio_output.h"
-#include "chromecast/media/cma/backend/post_processing_pipeline.h"
 #include "chromecast/public/media/mixer_output_stream.h"
 #include "chromecast/public/volume_control.h"
 #include "media/audio/audio_device_description.h"
@@ -204,63 +203,6 @@ class MockMixerOutput : public MixerOutputStream {
   std::vector<float> data_;
 };
 
-class MockPostProcessorFactory;
-class MockPostProcessor : public PostProcessingPipeline {
- public:
-  MockPostProcessor(MockPostProcessorFactory* factory,
-                    const std::string& name,
-                    const base::ListValue* filter_description_list,
-                    int channels);
-  ~MockPostProcessor() override;
-  MOCK_METHOD4(
-      ProcessFrames,
-      int(float* data, int num_frames, float current_volume, bool is_silence));
-  MOCK_METHOD1(SetContentType, void(AudioContentType));
-  bool SetSampleRate(int sample_rate) override { return true; }
-  bool IsRinging() override { return ringing_; }
-  int delay() { return rendering_delay_; }
-  std::string name() const { return name_; }
-  float* GetOutputBuffer() override { return output_buffer_; }
-  int NumOutputChannels() override { return num_output_channels_; }
-
-  MOCK_METHOD2(SetPostProcessorConfig,
-               void(const std::string& name, const std::string& config));
-  MOCK_METHOD1(UpdatePlayoutChannel, void(int));
-
- private:
-  int DoProcessFrames(float* data,
-                      int num_frames,
-                      float current_volume,
-                      bool is_silence) {
-    output_buffer_ = data;
-    return rendering_delay_;
-  }
-
-  MockPostProcessorFactory* const factory_;
-  const std::string name_;
-  int rendering_delay_ = 0;
-  bool ringing_ = false;
-  float* output_buffer_ = nullptr;
-  int num_output_channels_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockPostProcessor);
-};
-
-class MockPostProcessorFactory : public PostProcessingPipelineFactory {
- public:
-  MockPostProcessorFactory() = default;
-  ~MockPostProcessorFactory() override = default;
-  std::unique_ptr<PostProcessingPipeline> CreatePipeline(
-      const std::string& name,
-      const base::ListValue* filter_description_list,
-      int channels) override {
-    return std::make_unique<testing::NiceMock<MockPostProcessor>>(
-        this, name, filter_description_list, channels);
-  }
-
-  std::unordered_map<std::string, MockPostProcessor*> instances;
-};
-
 #define EXPECT_CALL_ALL_POSTPROCESSORS(factory, call_sig) \
   do {                                                    \
     for (auto& itr : factory->instances) {                \
@@ -272,49 +214,6 @@ void VerifyAndClearPostProcessors(MockPostProcessorFactory* factory) {
   for (auto& itr : factory->instances) {
     testing::Mock::VerifyAndClearExpectations(itr.second);
   }
-}
-
-MockPostProcessor::MockPostProcessor(
-    MockPostProcessorFactory* factory,
-    const std::string& name,
-    const base::ListValue* filter_description_list,
-    int channels)
-    : factory_(factory), name_(name), num_output_channels_(channels) {
-  DCHECK(factory_);
-  CHECK(factory_->instances.insert({name_, this}).second);
-
-  ON_CALL(*this, ProcessFrames(_, _, _, _))
-      .WillByDefault(
-          testing::Invoke(this, &MockPostProcessor::DoProcessFrames));
-
-  if (!filter_description_list) {
-    // This happens for PostProcessingPipeline with no post-processors.
-    return;
-  }
-
-  // Parse |filter_description_list| for parameters.
-  for (size_t i = 0; i < filter_description_list->GetSize(); ++i) {
-    const base::DictionaryValue* description_dict;
-    CHECK(filter_description_list->GetDictionary(i, &description_dict));
-    std::string solib;
-    CHECK(description_dict->GetString("processor", &solib));
-    // This will initially be called with the actual pipeline on creation.
-    // Ignore and wait for the call to ResetPostProcessorsForTest.
-    if (solib == kDelayModuleSolib) {
-      const base::DictionaryValue* processor_config_dict;
-      CHECK(description_dict->GetDictionary("config", &processor_config_dict));
-      int module_delay;
-      CHECK(processor_config_dict->GetInteger("delay", &module_delay));
-      rendering_delay_ += module_delay;
-      processor_config_dict->GetBoolean("ringing", &ringing_);
-      processor_config_dict->GetInteger("output_channels",
-                                        &num_output_channels_);
-    }
-  }
-}
-
-MockPostProcessor::~MockPostProcessor() {
-  factory_->instances.erase(name_);
 }
 
 class MockLoopbackAudioObserver : public CastMediaShlib::LoopbackAudioObserver {
@@ -486,12 +385,16 @@ class StreamMixerTest : public testing::Test {
   }
 
   MockRedirectedAudioOutput* AddOutputRedirector(
-      const AudioOutputRedirectionConfig& config) {
+      const AudioOutputRedirectionConfig& config,
+      AudioOutputRedirector** redirector_ptr = nullptr) {
     auto redirected_output =
         std::make_unique<MockRedirectedAudioOutput>(kNumChannels);
     MockRedirectedAudioOutput* redirected_output_ptr = redirected_output.get();
     auto redirector = std::make_unique<AudioOutputRedirector>(
         config, std::move(redirected_output));
+    if (redirector_ptr) {
+      *redirector_ptr = redirector.get();
+    }
     mixer_->AddAudioOutputRedirector(std::move(redirector));
     return redirected_output_ptr;
   }
@@ -1056,7 +959,7 @@ TEST_F(StreamMixerTest, PicksPlayoutChannel) {
   VerifyAndClearPostProcessors(factory_ptr);
 
   // Requests: all = 0 ch0 = 0 ch1 = 2.
-  EXPECT_CALL_ALL_POSTPROCESSORS(factory_ptr, UpdatePlayoutChannel(1));
+  // Playout channel is still 1.
   mixer_->AddInput(&input4);
   WaitForMixer();
   VerifyAndClearPostProcessors(factory_ptr);
@@ -1070,8 +973,7 @@ TEST_F(StreamMixerTest, PicksPlayoutChannel) {
   VerifyAndClearPostProcessors(factory_ptr);
 
   // Requests: all = 1 ch0 = 0 ch1 = 1.
-  EXPECT_CALL_ALL_POSTPROCESSORS(factory_ptr,
-                                 UpdatePlayoutChannel(kChannelAll));
+  // Playout channel is still 'all'.
   mixer_->RemoveInput(&input3);
   WaitForMixer();
   VerifyAndClearPostProcessors(factory_ptr);
@@ -1434,6 +1336,64 @@ TEST_F(StreamMixerTest, OutputRedirectionNoMatch) {
   mixer_.reset();
 }
 
+TEST_F(StreamMixerTest, ModifyOutputRedirection) {
+  std::vector<std::unique_ptr<MockMixerSource>> inputs;
+  inputs.push_back(
+      std::make_unique<MockMixerSource>(kTestSamplesPerSecond, "matches"));
+  inputs.push_back(
+      std::make_unique<MockMixerSource>(kTestSamplesPerSecond, "asdf"));
+
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    mixer_->AddInput(inputs[i].get());
+  }
+  WaitForMixer();
+  mock_output_->ClearData();
+
+  AudioOutputRedirectionConfig config;
+  config.stream_match_patterns.push_back({AudioContentType::kMedia, "*match*"});
+  AudioOutputRedirector* redirector_ptr = nullptr;
+  MockRedirectedAudioOutput* redirected_output_ptr =
+      AddOutputRedirector(config, &redirector_ptr);
+  CHECK(redirector_ptr);
+  WaitForMixer();
+
+  const int kNumFrames = 32;
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    inputs[i]->SetData(GetTestData(i));
+  }
+  PlaybackOnce();
+  mock_output_->ClearData();
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    inputs[i]->SetData(GetTestData(i));
+  }
+  PlaybackOnce();
+
+  CheckRedirectorOutput(redirected_output_ptr, {inputs[1].get()},
+                        {inputs[0].get()}, kNumFrames);
+
+  std::vector<std::pair<AudioContentType, std::string>> new_match_patterns = {
+      {AudioContentType::kMedia, "*asdf*"}};
+  mixer_->ModifyAudioOutputRedirection(redirector_ptr,
+                                       std::move(new_match_patterns));
+  WaitForMixer();
+  mock_output_->ClearData();
+
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    inputs[i]->SetData(GetTestData(i));
+  }
+  PlaybackOnce();
+  mock_output_->ClearData();
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    inputs[i]->SetData(GetTestData(i));
+  }
+  PlaybackOnce();
+
+  CheckRedirectorOutput(redirected_output_ptr, {inputs[0].get()},
+                        {inputs[1].get()}, kNumFrames);
+
+  mixer_.reset();
+}
+
 #if GTEST_HAS_DEATH_TEST
 
 using StreamMixerDeathTest = StreamMixerTest;
@@ -1482,12 +1442,9 @@ TEST_F(StreamMixerDeathTest, CrashesIfChannelCountDoesNotMatchFlags) {
 
   ::testing::FLAGS_gtest_death_test_style = "threadsafe";
   mixer_->SetNumOutputChannelsForTest(kNumOutputChannels);
-  mixer_->ResetPostProcessorsForTest(
-      std::make_unique<MockPostProcessorFactory>(), config);
-
-  ASSERT_DEATH(mixer_->ValidatePostProcessorsForTest(),
-               DeathRegex("PostProcessor configuration channel count does not "
-                          "match command line flag"));
+  ASSERT_DEATH(mixer_->ResetPostProcessorsForTest(
+                   std::make_unique<MockPostProcessorFactory>(), config),
+               DeathRegex("PostProcessorsHaveCorrectNumOutputs"));
 }
 
 TEST_F(StreamMixerDeathTest, CrashesIfMoreThan2LoopbackChannels) {
@@ -1514,11 +1471,9 @@ TEST_F(StreamMixerDeathTest, CrashesIfMoreThan2LoopbackChannels) {
   ::testing::FLAGS_gtest_death_test_style = "threadsafe";
   mixer_->SetNumOutputChannelsForTest(kNumOutputChannels);
 
-  mixer_->ResetPostProcessorsForTest(
-      std::make_unique<MockPostProcessorFactory>(), config);
-
-  ASSERT_DEATH(mixer_->ValidatePostProcessorsForTest(),
-               DeathRegex("loopback_channel_count <= 2"));
+  ASSERT_DEATH(mixer_->ResetPostProcessorsForTest(
+                   std::make_unique<MockPostProcessorFactory>(), config),
+               DeathRegex("PostProcessorsHaveCorrectNumOutputs"));
 }
 
 #endif  // GTEST_HAS_DEATH_TEST

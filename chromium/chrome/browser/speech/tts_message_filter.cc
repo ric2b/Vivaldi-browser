@@ -8,10 +8,12 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/tts_messages.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_process_host.h"
 
@@ -22,7 +24,7 @@ TtsMessageFilter::TtsMessageFilter(content::BrowserContext* browser_context)
       browser_context_(browser_context),
       valid_(true) {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  TtsController::GetInstance()->AddVoicesChangedDelegate(this);
+  content::TtsController::GetInstance()->AddVoicesChangedDelegate(this);
 
   // TODO(dmazzoni): make it so that we can listen for a BrowserContext
   // being destroyed rather than a Profile.  http://crbug.com/444668
@@ -65,9 +67,9 @@ bool TtsMessageFilter::OnMessageReceived(const IPC::Message& message) {
 void TtsMessageFilter::OnChannelClosing() {
   base::AutoLock lock(mutex_);
   valid_ = false;
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&TtsMessageFilter::OnChannelClosingInUIThread, this));
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
+      base::BindOnce(&TtsMessageFilter::OnChannelClosingInUIThread, this));
 }
 
 bool TtsMessageFilter::Valid() {
@@ -93,8 +95,9 @@ void TtsMessageFilter::OnInitializeVoiceList() {
   if (!browser_context_)
     return;
 
-  TtsController* tts_controller = TtsController::GetInstance();
-  std::vector<VoiceData> voices;
+  content::TtsController* tts_controller =
+      content::TtsController::GetInstance();
+  std::vector<content::VoiceData> voices;
   tts_controller->GetVoices(browser_context_, &voices);
 
   std::vector<TtsVoice> out_voices;
@@ -115,75 +118,80 @@ void TtsMessageFilter::OnSpeak(const TtsUtteranceRequest& request) {
   if (!browser_context_)
     return;
 
-  std::unique_ptr<Utterance> utterance(new Utterance(browser_context_));
-  utterance->set_src_id(request.id);
-  utterance->set_text(request.text);
-  utterance->set_lang(request.lang);
-  utterance->set_voice_name(request.voice);
-  utterance->set_can_enqueue(true);
-  utterance->set_continuous_parameters(request.rate,
-                                       request.pitch,
-                                       request.volume);
+  std::unique_ptr<content::TtsUtterance> utterance(
+      content::TtsUtterance::Create((browser_context_)));
+  utterance->SetSrcId(request.id);
+  utterance->SetText(request.text);
+  utterance->SetLang(request.lang);
+  utterance->SetVoiceName(request.voice);
+  utterance->SetCanEnqueue(true);
+  utterance->SetContinuousParameters(request.rate, request.pitch,
+                                     request.volume);
 
-  utterance->set_event_delegate(this);
+  utterance->SetEventDelegate(this);
 
-  TtsController::GetInstance()->SpeakOrEnqueue(utterance.release());
+  content::TtsController::GetInstance()->SpeakOrEnqueue(utterance.release());
 }
 
 void TtsMessageFilter::OnPause() {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  TtsController::GetInstance()->Pause();
+  content::TtsController::GetInstance()->Pause();
 }
 
 void TtsMessageFilter::OnResume() {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  TtsController::GetInstance()->Resume();
+  content::TtsController::GetInstance()->Resume();
 }
 
 void TtsMessageFilter::OnCancel() {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  TtsController::GetInstance()->Stop();
+  content::TtsController::GetInstance()->Stop();
 }
 
-void TtsMessageFilter::OnTtsEvent(Utterance* utterance,
-                                  TtsEventType event_type,
+void TtsMessageFilter::OnTtsEvent(content::TtsUtterance* utterance,
+                                  content::TtsEventType event_type,
                                   int char_index,
+                                  int length,
                                   const std::string& error_message) {
   if (!Valid())
     return;
 
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   switch (event_type) {
-    case TTS_EVENT_START:
-      Send(new TtsMsg_DidStartSpeaking(utterance->src_id()));
+    case content::TTS_EVENT_START:
+      Send(new TtsMsg_DidStartSpeaking(utterance->GetSrcId()));
       break;
-    case TTS_EVENT_END:
-      Send(new TtsMsg_DidFinishSpeaking(utterance->src_id()));
+    case content::TTS_EVENT_END:
+      Send(new TtsMsg_DidFinishSpeaking(utterance->GetSrcId()));
       break;
-    case TTS_EVENT_WORD:
-      Send(new TtsMsg_WordBoundary(utterance->src_id(), char_index));
+    case content::TTS_EVENT_WORD:
+      // We do not send the length here because the IPC message
+      // does not expect it. A SpeechSynthesisEvent does not currently
+      // take a length parameter in the TTS event.
+      // TODO(crbug.com/923556) Support length in the SpeechSynthesis API.
+      Send(new TtsMsg_WordBoundary(utterance->GetSrcId(), char_index));
       break;
-    case TTS_EVENT_SENTENCE:
-      Send(new TtsMsg_SentenceBoundary(utterance->src_id(), char_index));
+    case content::TTS_EVENT_SENTENCE:
+      Send(new TtsMsg_SentenceBoundary(utterance->GetSrcId(), char_index));
       break;
-    case TTS_EVENT_MARKER:
-      Send(new TtsMsg_MarkerEvent(utterance->src_id(), char_index));
+    case content::TTS_EVENT_MARKER:
+      Send(new TtsMsg_MarkerEvent(utterance->GetSrcId(), char_index));
       break;
-    case TTS_EVENT_INTERRUPTED:
-      Send(new TtsMsg_WasInterrupted(utterance->src_id()));
+    case content::TTS_EVENT_INTERRUPTED:
+      Send(new TtsMsg_WasInterrupted(utterance->GetSrcId()));
       break;
-    case TTS_EVENT_CANCELLED:
-      Send(new TtsMsg_WasCancelled(utterance->src_id()));
+    case content::TTS_EVENT_CANCELLED:
+      Send(new TtsMsg_WasCancelled(utterance->GetSrcId()));
       break;
-    case TTS_EVENT_ERROR:
-      Send(new TtsMsg_SpeakingErrorOccurred(
-          utterance->src_id(), error_message));
+    case content::TTS_EVENT_ERROR:
+      Send(new TtsMsg_SpeakingErrorOccurred(utterance->GetSrcId(),
+                                            error_message));
       break;
-    case TTS_EVENT_PAUSE:
-      Send(new TtsMsg_DidPauseSpeaking(utterance->src_id()));
+    case content::TTS_EVENT_PAUSE:
+      Send(new TtsMsg_DidPauseSpeaking(utterance->GetSrcId()));
       break;
-    case TTS_EVENT_RESUME:
-      Send(new TtsMsg_DidResumeSpeaking(utterance->src_id()));
+    case content::TTS_EVENT_RESUME:
+      Send(new TtsMsg_DidResumeSpeaking(utterance->GetSrcId()));
       break;
   }
 }
@@ -203,8 +211,8 @@ void TtsMessageFilter::OnChannelClosingInUIThread() {
 }
 
 void TtsMessageFilter::Cleanup() {
-  TtsController::GetInstance()->RemoveVoicesChangedDelegate(this);
-  TtsController::GetInstance()->RemoveUtteranceEventDelegate(this);
+  content::TtsController::GetInstance()->RemoveVoicesChangedDelegate(this);
+  content::TtsController::GetInstance()->RemoveUtteranceEventDelegate(this);
 }
 
 void TtsMessageFilter::Observe(

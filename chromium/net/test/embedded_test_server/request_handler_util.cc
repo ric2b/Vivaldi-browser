@@ -32,6 +32,8 @@ const char kMockHttpHeadersExtension[] = "mock-http-headers";
 std::string GetContentType(const base::FilePath& path) {
   if (path.MatchesExtension(FILE_PATH_LITERAL(".crx")))
     return "application/x-chrome-extension";
+  if (path.MatchesExtension(FILE_PATH_LITERAL(".css")))
+    return "text/css";
   if (path.MatchesExtension(FILE_PATH_LITERAL(".exe")))
     return "application/octet-stream";
   if (path.MatchesExtension(FILE_PATH_LITERAL(".gif")))
@@ -94,9 +96,9 @@ RequestQuery ParseQuery(const GURL& url) {
   return queries;
 }
 
-void GetFilePathWithReplacements(const std::string& original_file_path,
-                                 const base::StringPairs& text_to_replace,
-                                 std::string* replacement_path) {
+std::string GetFilePathWithReplacements(
+    const std::string& original_file_path,
+    const base::StringPairs& text_to_replace) {
   std::string new_file_path = original_file_path;
   for (const auto& replacement : text_to_replace) {
     const std::string& old_text = replacement.first;
@@ -115,7 +117,26 @@ void GetFilePathWithReplacements(const std::string& original_file_path,
     new_file_path += base64_new;
   }
 
-  *replacement_path = new_file_path;
+  return new_file_path;
+}
+
+// Returns false if there were errors, otherwise true.
+bool UpdateReplacedText(const RequestQuery& query, std::string* data) {
+  auto replace_text = query.find("replace_text");
+  if (replace_text == query.end())
+    return true;
+
+  for (const auto& replacement : replace_text->second) {
+    if (replacement.find(":") == std::string::npos)
+      return false;
+    std::string find;
+    std::string with;
+    base::Base64Decode(replacement.substr(0, replacement.find(":")), &find);
+    base::Base64Decode(replacement.substr(replacement.find(":") + 1), &with);
+    base::ReplaceSubstringsAfterOffset(data, 0, find, with);
+  }
+
+  return true;
 }
 
 // Handles |request| by serving a file from under |server_root|.
@@ -178,17 +199,8 @@ std::unique_ptr<HttpResponse> HandleFileRequest(
   if (request.method == METHOD_HEAD)
     file_contents = "";
 
-  if (query.find("replace_text") != query.end()) {
-    for (const auto& replacement : query["replace_text"]) {
-      if (replacement.find(":") == std::string::npos)
-        return std::move(failed_response);
-      std::string find;
-      std::string with;
-      base::Base64Decode(replacement.substr(0, replacement.find(":")), &find);
-      base::Base64Decode(replacement.substr(replacement.find(":") + 1), &with);
-      base::ReplaceSubstringsAfterOffset(&file_contents, 0, find, with);
-    }
-  }
+  if (!UpdateReplacedText(query, &file_contents))
+    return std::move(failed_response);
 
   base::FilePath::StringPieceType mock_headers_extension;
 #if defined(OS_WIN)
@@ -203,8 +215,10 @@ std::unique_ptr<HttpResponse> HandleFileRequest(
   if (base::PathExists(headers_path)) {
     std::string headers_contents;
 
-    if (!base::ReadFileToString(headers_path, &headers_contents))
+    if (!base::ReadFileToString(headers_path, &headers_contents) ||
+        !UpdateReplacedText(query, &headers_contents)) {
       return nullptr;
+    }
 
     return std::make_unique<RawHttpResponse>(headers_contents, file_contents);
   }

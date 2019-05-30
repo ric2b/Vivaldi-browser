@@ -32,6 +32,12 @@ const char kCommands[] = "commands";
 const char kContentCapabilities[] = "content_capabilities";
 const char kContentScripts[] = "content_scripts";
 const char kContentSecurityPolicy[] = "content_security_policy";
+const char kContentSecurityPolicy_ExtensionPagesPath[] =
+    "content_security_policy.extension_pages";
+const char kContentSecurityPolicy_IsolatedWorldPath[] =
+    "content_security_policy.isolated_world";
+const char kContentSecurityPolicy_SandboxedPagesPath[] =
+    "content_security_policy.sandbox";
 const char kConvertedFromUserScript[] = "converted_from_user_script";
 const char kCss[] = "css";
 const char kCtrlKey[] = "ctrlKey";
@@ -157,8 +163,6 @@ const char kThemeDisplayProperties[] = "properties";
 const char kThemeImages[] = "images";
 const char kThemeTints[] = "tints";
 const char kTtsEngine[] = "tts_engine";
-const char kTtsGenderFemale[] = "female";
-const char kTtsGenderMale[] = "male";
 const char kTtsVoices[] = "voices";
 const char kTtsVoicesEventTypeEnd[] = "end";
 const char kTtsVoicesEventTypeError[] = "error";
@@ -239,7 +243,7 @@ const char kRunAtDocumentIdle[] = "document_idle";
 const char kPageActionCommandEvent[] = "_execute_page_action";
 const char kPageActionTypeTab[] = "tab";
 const char kPageActionTypePermanent[] = "permanent";
-const char kLaunchContainerPanel[] = "panel";
+const char kLaunchContainerPanelDeprecated[] = "panel";
 const char kLaunchContainerTab[] = "tab";
 const char kLaunchContainerWindow[] = "window";
 
@@ -355,13 +359,13 @@ const char kInvalidContentScript[] =
     "Invalid value for 'content_scripts[*]'.";
 const char kInvalidContentScriptsList[] =
     "Invalid value for 'content_scripts'.";
-const char kInvalidContentSecurityPolicy[] =
-    "Invalid value for 'content_security_policy'.";
-const char kInvalidCSPInsecureValue[] =
-    "Ignored insecure CSP value \"*\" in directive '*'.";
+const char kInvalidCSPInsecureValueIgnored[] =
+    "'*': Ignored insecure CSP value \"*\" in directive '*'.";
+const char kInvalidCSPInsecureValueError[] =
+    "'*': Insecure CSP value \"*\" in directive '*'.";
 const char kInvalidCSPMissingSecureSrc[] =
-    "CSP directive '*' must be specified (either explicitly, or implicitly via"
-    " 'default-src') and must whitelist only secure resources.";
+    "'*': CSP directive '*' must be specified (either explicitly, or "
+    "implicitly via 'default-src') and must whitelist only secure resources.";
 const char kInvalidCss[] =
     "Invalid value for 'content_scripts[*].css[*]'.";
 const char kInvalidCssList[] =
@@ -522,6 +526,7 @@ const char kInvalidLinkedAppIconURL[] =
 const char kInvalidLinkedAppIcons[] =
     "Invalid 'app.linked_icons'. Must be an array";
 const char kInvalidManifest[] = "Manifest file is invalid";
+const char kInvalidManifestKey[] = "Invalid value for '*'.";
 const char kInvalidManifestVersion[] =
     "Invalid value for 'manifest_version'. Must be an integer greater than "
     "zero.";
@@ -601,8 +606,6 @@ const char kInvalidSandboxedPagesList[] =
     "Invalid value for 'sandbox.pages'.";
 const char kInvalidSandboxedPage[] =
     "Invalid value for 'sandbox.pages[*]'.";
-const char kInvalidSandboxedPagesCSP[] =
-    "Invalid value for 'sandbox.content_security_policy'.";
 const char kInvalidSearchEngineMissingKeys[] =
     "Missing mandatory parameters for "
     "'chrome_settings_overrides.search_provider'.";
@@ -717,10 +720,14 @@ const char kMissingFile[] =
 const char kMultipleOverrides[] =
     "An extension cannot override more than one page.";
 const char kNoWildCardsInPaths[] =
-  "Wildcards are not allowed in extent URL pattern paths.";
+    "Wildcards are not allowed in extent URL pattern paths.";
 const char kNPAPIPluginsNotSupported[] = "NPAPI plugins are not supported.";
 const char kOneUISurfaceOnly[] =
     "Only one of 'browser_action', 'page_action', and 'app' can be specified.";
+const char kPageCaptureNeeded[] = "'pageCapture' permission is required.";
+const char kPermissionMarkedOptionalAndRequired[] =
+    "Optional permission '*' is redundant with the required permissions;"
+    "this permission will be omitted.";
 const char kPermissionMustBeOptional[] =
     "Permission '*' must be specified in the optional section of the manifest.";
 const char kPermissionNotAllowed[] =
@@ -733,6 +740,9 @@ const char kPluginsRequirementDeprecated[] =
     "The \"plugins\" requirement is deprecated.";
 const char kReservedMessageFound[] =
     "Reserved key * found in message catalog.";
+const char kSandboxPagesCSPKeyNotAllowed[] =
+    "The Content Security Policy for sandboxed pages should be specified in "
+    "'content_security_policy.sandbox'.";
 const char kRulesFileIsInvalid[] =
     "Invalid value for key '*.*': The provided path is invalid.";
 const char kTtsGenderIsDeprecated[] =

@@ -5,9 +5,9 @@
 #ifndef CHROME_BROWSER_UI_LIBGTKUI_X11_INPUT_METHOD_CONTEXT_IMPL_GTK_H_
 #define CHROME_BROWSER_UI_LIBGTKUI_X11_INPUT_METHOD_CONTEXT_IMPL_GTK_H_
 
+#include <unordered_set>
 #include <vector>
 
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "ui/base/glib/glib_integers.h"
@@ -35,6 +35,8 @@ class X11InputMethodContextImplGtk : public ui::LinuxInputMethodContext {
   void Reset() override;
   void Focus() override;
   void Blur() override;
+  void SetSurroundingText(const base::string16& text,
+                          const gfx::Range& selection_range) override;
 
  private:
   // Resets the cache of X modifier keycodes.
@@ -79,6 +81,14 @@ class X11InputMethodContextImplGtk : public ui::LinuxInputMethodContext {
   // A set of callback functions.  Must not be nullptr.
   ui::LinuxInputMethodContextDelegate* delegate_;
 
+  // Input method context type flag.
+  //   - true if it supports table-based input methods
+  //   - false if it supports multiple, loadable input methods
+  bool is_simple_;
+
+  // Keeps track of current focus state.
+  bool has_focus_;
+
   // IME's input GTK context.
   GtkIMContext* gtk_context_;
 
@@ -88,7 +98,7 @@ class X11InputMethodContextImplGtk : public ui::LinuxInputMethodContext {
   gfx::Rect last_caret_bounds_;
 
   // A set of hardware keycodes of modifier keys.
-  base::hash_set<unsigned int> modifier_keycodes_;
+  std::unordered_set<unsigned int> modifier_keycodes_;
 
   // A list of keycodes of each modifier key.
   std::vector<int> meta_keycodes_;

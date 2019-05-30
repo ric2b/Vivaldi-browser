@@ -14,7 +14,7 @@
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/paint/paint_controller_paint_test.h"
-#include "third_party/blink/renderer/core/paint/stub_chrome_client_for_spv2.h"
+#include "third_party/blink/renderer/core/paint/stub_chrome_client_for_cap.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_2d_layer_bridge.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/test/fake_gles2_interface.h"
@@ -24,14 +24,14 @@
 
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 
-// Integration tests of canvas painting code (in SPv2 mode).
+// Integration tests of canvas painting code (in CAP mode).
 
 namespace blink {
 
-class HTMLCanvasPainterTestForSPv2 : public PaintControllerPaintTest {
+class HTMLCanvasPainterTestForCAP : public PaintControllerPaintTest {
  public:
-  HTMLCanvasPainterTestForSPv2()
-      : chrome_client_(new StubChromeClientForSPv2) {}
+  HTMLCanvasPainterTestForCAP()
+      : chrome_client_(MakeGarbageCollected<StubChromeClientForCAP>()) {}
 
  protected:
   void SetUp() override {
@@ -72,13 +72,13 @@ class HTMLCanvasPainterTestForSPv2 : public PaintControllerPaintTest {
   }
 
  private:
-  Persistent<StubChromeClientForSPv2> chrome_client_;
+  Persistent<StubChromeClientForCAP> chrome_client_;
   FakeGLES2Interface gl_;
 };
 
-INSTANTIATE_SPV2_TEST_CASE_P(HTMLCanvasPainterTestForSPv2);
+INSTANTIATE_CAP_TEST_SUITE_P(HTMLCanvasPainterTestForCAP);
 
-TEST_P(HTMLCanvasPainterTestForSPv2, Canvas2DLayerAppearsInLayerTree) {
+TEST_P(HTMLCanvasPainterTestForCAP, Canvas2DLayerAppearsInLayerTree) {
   // Insert a <canvas> and force it into accelerated mode.
   // Not using SetBodyInnerHTML() because we need to test before document
   // lifecyle update.
@@ -91,14 +91,14 @@ TEST_P(HTMLCanvasPainterTestForSPv2, Canvas2DLayerAppearsInLayerTree) {
       element->GetCanvasRenderingContext("2d", attributes);
   IntSize size(300, 200);
   std::unique_ptr<Canvas2DLayerBridge> bridge = MakeCanvas2DLayerBridge(size);
-  element->SetCanvas2DLayerBridgeForTesting(std::move(bridge), size);
+  element->SetResourceProviderForTesting(nullptr, std::move(bridge), size);
   ASSERT_EQ(context, element->RenderingContext());
   ASSERT_TRUE(context->IsComposited());
   ASSERT_TRUE(element->IsAccelerated());
 
   // Force the page to paint.
   element->FinalizeFrame();
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   // Fetch the layer associated with the <canvas>, and check that it was
   // correctly configured in the layer tree.

@@ -2,6 +2,24 @@
 
 <grit base_dir="." latest_public_release="0" current_release="1"
       source_lang_id="en" enc_check="möl">
+  <outputs>
+    <output filename="generated_resources_be.pak" type="data_package" lang="be" />
+    <output filename="generated_resources_eo.pak" type="data_package" lang="eo" />
+    <output filename="generated_resources_es-PE.pak" type="data_package" lang="es-PE" />
+    <output filename="generated_resources_eu.pak" type="data_package" lang="eu" />
+    <output filename="generated_resources_fy.pak" type="data_package" lang="fy" />
+    <output filename="generated_resources_gl.pak" type="data_package" lang="gl" />
+    <output filename="generated_resources_hy.pak" type="data_package" lang="hy" />
+    <output filename="generated_resources_io.pak" type="data_package" lang="io" />
+    <output filename="generated_resources_is.pak" type="data_package" lang="is" />
+    <output filename="generated_resources_jbo.pak" type="data_package" lang="jbo" />
+    <output filename="generated_resources_ka.pak" type="data_package" lang="ka" />
+    <output filename="generated_resources_ku.pak" type="data_package" lang="ku" />
+    <output filename="generated_resources_mk.pak" type="data_package" lang="mk" />
+    <output filename="generated_resources_sc.pak" type="data_package" lang="sc" />
+    <output filename="generated_resources_sq.pak" type="data_package" lang="sq" />
+    <output filename="generated_resources_nn.pak" type="data_package" lang="nn" />
+  </outputs>
   <translations>
     <file path="strings/vivaldi_generated_resources_am.xtb" lang="am" />
     <file path="strings/vivaldi_generated_resources_ar.xtb" lang="ar" />
@@ -80,6 +98,16 @@
       <message name="IDS_EXTENSIONS_SHOW_BUTTON" desc="The text for the Show link.">
         Show button
       </message>
+      <if expr="use_titlecase">
+        <message name="IDS_NEW_INCOGNITO_WINDOW" desc="In Title Case: The text label of a menu item for opening a New Private window. Overridden from Chromium">
+          New &amp;Private Window
+        </message>
+      </if>
+      <if expr="not use_titlecase">
+        <message name="IDS_NEW_INCOGNITO_WINDOW" desc="The text label of a menu item for opening a New private window. Overridden from Chromium">
+          New &amp;private window
+        </message>
+      </if>
       <if expr="is_macosx">
         <message name="IDS_VIV_JAVASCRIPT_UNSUPPORTED_ERROR_APPLESCRIPT_MAC" desc="Error dialog title to be displayed when the user attempts to execute JavaScript via AppleScript. Mac-only.">
           Executing JavaScript through AppleScript is turned off. To turn it on, from the menu bar, go to Tools > Allow JavaScript from Apple Events.

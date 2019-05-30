@@ -33,11 +33,12 @@
 #include "chrome/common/extensions/api/language_settings_private.h"
 #include "chrome/common/pref_names.h"
 #include "components/language/core/browser/language_model_manager.h"
+#include "components/language/core/browser/pref_names.h"
+#include "components/language/core/common/language_util.h"
 #include "components/language/core/common/locale_util.h"
 #include "components/spellcheck/common/spellcheck_common.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_prefs.h"
-#include "components/translate/core/common/translate_util.h"
 #include "third_party/icu/source/i18n/unicode/coll.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_collator.h"
@@ -87,13 +88,14 @@ std::unordered_set<std::string> GetIMEsFromPref(PrefService* prefs,
 }
 
 // Returns the set of allowed UI locales.
-std::unordered_set<std::string> GetAllowedUILocales(PrefService* prefs) {
-  std::unordered_set<std::string> allowed_ui_locales;
+std::unordered_set<std::string> GetAllowedLanguages(PrefService* prefs) {
+  std::unordered_set<std::string> allowed_languages;
   const base::Value::ListStorage& pref_value =
-      prefs->GetList(prefs::kAllowedUILocales)->GetList();
+      prefs->GetList(prefs::kAllowedLanguages)->GetList();
   for (const base::Value& locale_value : pref_value)
-    allowed_ui_locales.insert(locale_value.GetString());
-  return allowed_ui_locales;
+    allowed_languages.insert(locale_value.GetString());
+
+  return allowed_languages;
 }
 
 // Sorts the input methods by the order of their associated languages. For
@@ -107,7 +109,7 @@ std::vector<std::string> GetSortedComponentIMEs(
     const std::unordered_set<std::string>& component_ime_set,
     PrefService* prefs) {
   std::vector<std::string> enabled_languages =
-      base::SplitString(prefs->GetString(prefs::kLanguagePreferredLanguages),
+      base::SplitString(prefs->GetString(language::prefs::kPreferredLanguages),
                         ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
 
   // Duplicate set for membership testing.
@@ -140,7 +142,7 @@ std::vector<std::string> GetSortedThirdPartyIMEs(
     PrefService* prefs) {
   std::vector<std::string> ime_list;
   std::string preferred_languages =
-      prefs->GetString(prefs::kLanguagePreferredLanguages);
+      prefs->GetString(language::prefs::kPreferredLanguages);
   std::vector<std::string> enabled_languages =
       base::SplitString(preferred_languages, ",", base::TRIM_WHITESPACE,
                         base::SPLIT_WANT_NONEMPTY);
@@ -215,7 +217,7 @@ LanguageSettingsPrivateGetLanguageListFunction::Run() {
   std::unique_ptr<base::ListValue> language_list(new base::ListValue);
 #if defined(OS_CHROMEOS)
   const std::unordered_set<std::string> allowed_ui_locales(
-      GetAllowedUILocales(chrome_details_.GetProfile()->GetPrefs()));
+      GetAllowedLanguages(chrome_details_.GetProfile()->GetPrefs()));
 #endif  // defined(OS_CHROMEOS)
   for (const auto& entry : languages) {
     language_settings_private::Language language;
@@ -242,7 +244,7 @@ LanguageSettingsPrivateGetLanguageListFunction::Run() {
 #if defined(OS_CHROMEOS)
     if (!allowed_ui_locales.empty() &&
         allowed_ui_locales.count(language.code) == 0) {
-      language.is_prohibited_ui_locale.reset(new bool(true));
+      language.is_prohibited_language.reset(new bool(true));
     }
 #endif  // defined(OS_CHROMEOS)
 
@@ -286,7 +288,7 @@ LanguageSettingsPrivateEnableLanguageFunction::Run() {
   std::vector<std::string> languages;
   translate_prefs->GetLanguageList(&languages);
   std::string chrome_language = language_code;
-  translate::ToChromeLanguageSynonym(&chrome_language);
+  language::ToChromeLanguageSynonym(&chrome_language);
 
   if (base::ContainsValue(languages, chrome_language)) {
     LOG(ERROR) << "Language " << chrome_language << " already enabled";
@@ -319,7 +321,7 @@ LanguageSettingsPrivateDisableLanguageFunction::Run() {
   std::vector<std::string> languages;
   translate_prefs->GetLanguageList(&languages);
   std::string chrome_language = language_code;
-  translate::ToChromeLanguageSynonym(&chrome_language);
+  language::ToChromeLanguageSynonym(&chrome_language);
 
   if (!base::ContainsValue(languages, chrome_language)) {
     LOG(ERROR) << "Language " << chrome_language << " not enabled";

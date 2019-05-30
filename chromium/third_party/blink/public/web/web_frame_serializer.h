@@ -35,7 +35,6 @@
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_thread_safe_data.h"
 #include "third_party/blink/public/platform/web_url.h"
-#include "third_party/blink/public/web/web_frame_serializer_cache_control_policy.h"
 
 namespace blink {
 
@@ -52,8 +51,6 @@ class WebFrameSerializer {
     // Tells whether to skip serialization of a subresource with a given URI.
     // Used to deduplicate resources across multiple frames.
     virtual bool ShouldSkipResource(const WebURL&) = 0;
-
-    virtual WebFrameSerializerCacheControlPolicy CacheControlPolicy() = 0;
 
     virtual bool UseBinaryEncoding() = 0;
 

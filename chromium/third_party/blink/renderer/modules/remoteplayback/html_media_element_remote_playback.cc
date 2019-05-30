@@ -16,7 +16,7 @@ namespace blink {
 bool HTMLMediaElementRemotePlayback::FastHasAttribute(
     const QualifiedName& name,
     const HTMLMediaElement& element) {
-  DCHECK(name == HTMLNames::disableremoteplaybackAttr);
+  DCHECK(name == html_names::kDisableremoteplaybackAttr);
   return element.FastHasAttribute(name);
 }
 
@@ -25,50 +25,23 @@ void HTMLMediaElementRemotePlayback::SetBooleanAttribute(
     const QualifiedName& name,
     HTMLMediaElement& element,
     bool value) {
-  DCHECK(name == HTMLNames::disableremoteplaybackAttr);
+  DCHECK(name == html_names::kDisableremoteplaybackAttr);
   element.SetBooleanAttribute(name, value);
 
-  HTMLMediaElementRemotePlayback& self =
-      HTMLMediaElementRemotePlayback::From(element);
-  if (self.remote_ && value)
-    self.remote_->RemotePlaybackDisabled();
-}
-
-// static
-HTMLMediaElementRemotePlayback& HTMLMediaElementRemotePlayback::From(
-    HTMLMediaElement& element) {
-  HTMLMediaElementRemotePlayback* supplement =
-      Supplement<HTMLMediaElement>::From<HTMLMediaElementRemotePlayback>(
-          element);
-  if (!supplement) {
-    supplement = new HTMLMediaElementRemotePlayback();
-    ProvideTo(element, supplement);
-  }
-  return *supplement;
+  RemotePlayback& remote_playback = RemotePlayback::From(element);
+  if (value)
+    remote_playback.RemotePlaybackDisabled();
 }
 
 // static
 RemotePlayback* HTMLMediaElementRemotePlayback::remote(
     HTMLMediaElement& element) {
-  HTMLMediaElementRemotePlayback& self =
-      HTMLMediaElementRemotePlayback::From(element);
+  RemotePlayback& remote_playback = RemotePlayback::From(element);
   Document& document = element.GetDocument();
   if (!document.GetFrame())
     return nullptr;
 
-  if (!self.remote_)
-    self.remote_ = RemotePlayback::Create(element);
-
-  return self.remote_;
-}
-
-// static
-const char HTMLMediaElementRemotePlayback::kSupplementName[] =
-    "HTMLMediaElementRemotePlayback";
-
-void HTMLMediaElementRemotePlayback::Trace(blink::Visitor* visitor) {
-  visitor->Trace(remote_);
-  Supplement<HTMLMediaElement>::Trace(visitor);
+  return &remote_playback;
 }
 
 }  // namespace blink

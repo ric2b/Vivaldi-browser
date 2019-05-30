@@ -21,12 +21,10 @@
 #include "net/base/net_errors.h"
 #include "net/base/net_export.h"
 #include "net/log/net_log_with_source.h"
-#include "net/ssl/token_binding.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace net {
 
-class ClientSocketHandle;
 class DrainableIOBuffer;
 class GrowableIOBuffer;
 class HttpChunkedDecoder;
@@ -36,16 +34,24 @@ class HttpResponseInfo;
 class IOBuffer;
 class SSLCertRequestInfo;
 class SSLInfo;
+class StreamSocket;
 class UploadDataStream;
 
 class NET_EXPORT_PRIVATE HttpStreamParser {
  public:
+  // |connection_is_reused| must be |true| if |stream_socket| has previously
+  // been used successfully for an HTTP/1.x request.
+  //
   // Any data in |read_buffer| will be used before reading from the socket
   // and any data left over after parsing the stream will be put into
   // |read_buffer|.  The left over data will start at offset 0 and the
   // buffer's offset will be set to the first free byte. |read_buffer| may
   // have its capacity changed.
-  HttpStreamParser(ClientSocketHandle* connection,
+  //
+  // It is not safe to call into the HttpStreamParser after destroying the
+  // |stream_socket|.
+  HttpStreamParser(StreamSocket* stream_socket,
+                   bool connection_is_reused,
                    const HttpRequestInfo* request,
                    GrowableIOBuffer* read_buffer,
                    const NetLogWithSource& net_log);
@@ -73,17 +79,11 @@ class NET_EXPORT_PRIVATE HttpStreamParser {
                        int buf_len,
                        CompletionOnceCallback callback);
 
-  void Close(bool not_reusable);
-
   bool IsResponseBodyComplete() const;
 
   bool CanFindEndOfResponse() const;
 
   bool IsMoreDataBuffered() const;
-
-  bool IsConnectionReused() const;
-
-  void SetConnectionReused();
 
   // Returns true if the underlying connection can be reused.
   // The connection can be reused if:
@@ -100,13 +100,11 @@ class NET_EXPORT_PRIVATE HttpStreamParser {
 
   int64_t sent_bytes() const { return sent_bytes_; }
 
+  base::TimeTicks response_start_time() { return response_start_time_; }
+
   void GetSSLInfo(SSLInfo* ssl_info);
 
   void GetSSLCertRequestInfo(SSLCertRequestInfo* cert_request_info);
-
-  Error GetTokenBindingSignature(crypto::ECPrivateKey* key,
-                                 TokenBindingType tb_type,
-                                 std::vector<uint8_t>* out);
 
   // Encodes the given |payload| in the chunked format to |output|.
   // Returns the number of bytes written to |output|. |output_size| should
@@ -230,8 +228,8 @@ class NET_EXPORT_PRIVATE HttpStreamParser {
   int read_buf_unused_offset_;
 
   // The amount beyond |read_buf_unused_offset_| where the status line starts;
-  // -1 if not found yet.
-  int response_header_start_offset_;
+  // std::string::npos if not found yet.
+  size_t response_header_start_offset_;
 
   // The amount of received data.  If connection is reused then intermediate
   // value may be bigger than final.
@@ -245,6 +243,10 @@ class NET_EXPORT_PRIVATE HttpStreamParser {
   // caller of SendRequest may have been destroyed - this happens in the case an
   // HttpResponseBodyDrainer is used.
   HttpResponseInfo* response_;
+
+  // Time at which the first bytes of the header response are about to be
+  // parsed.
+  base::TimeTicks response_start_time_;
 
   // Indicates the content length.  If this value is less than zero
   // (and chunked_decoder_ is null), then we must read until the server
@@ -268,8 +270,14 @@ class NET_EXPORT_PRIVATE HttpStreamParser {
   // complete or there was an error
   CompletionOnceCallback callback_;
 
-  // The underlying socket.
-  ClientSocketHandle* const connection_;
+  // The underlying socket, owned by the caller. The HttpStreamParser must be
+  // destroyed before the caller destroys the socket, or relinquishes ownership
+  // of it.
+  StreamSocket* const stream_socket_;
+
+  // Whether the socket has already been used. Only used in HTTP/0.9 detection
+  // logic.
+  const bool connection_is_reused_;
 
   NetLogWithSource net_log_;
 

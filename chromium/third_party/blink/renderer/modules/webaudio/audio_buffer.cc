@@ -28,6 +28,7 @@
 
 #include "third_party/blink/renderer/modules/webaudio/audio_buffer.h"
 
+#include <memory>
 #include "third_party/blink/renderer/modules/webaudio/audio_buffer_options.h"
 #include "third_party/blink/renderer/modules/webaudio/base_audio_context.h"
 #include "third_party/blink/renderer/platform/audio/audio_bus.h"
@@ -40,15 +41,15 @@
 namespace blink {
 
 AudioBuffer* AudioBuffer::Create(unsigned number_of_channels,
-                                 size_t number_of_frames,
+                                 uint32_t number_of_frames,
                                  float sample_rate) {
-  if (!AudioUtilities::IsValidAudioBufferSampleRate(sample_rate) ||
+  if (!audio_utilities::IsValidAudioBufferSampleRate(sample_rate) ||
       number_of_channels > BaseAudioContext::MaxNumberOfChannels() ||
       !number_of_channels || !number_of_frames)
     return nullptr;
 
-  AudioBuffer* buffer =
-      new AudioBuffer(number_of_channels, number_of_frames, sample_rate);
+  AudioBuffer* buffer = MakeGarbageCollected<AudioBuffer>(
+      number_of_channels, number_of_frames, sample_rate);
 
   if (!buffer->CreatedSuccessfully(number_of_channels))
     return nullptr;
@@ -56,7 +57,7 @@ AudioBuffer* AudioBuffer::Create(unsigned number_of_channels,
 }
 
 AudioBuffer* AudioBuffer::Create(unsigned number_of_channels,
-                                 size_t number_of_frames,
+                                 uint32_t number_of_frames,
                                  float sample_rate,
                                  ExceptionState& exception_state) {
   if (!number_of_channels ||
@@ -71,14 +72,14 @@ AudioBuffer* AudioBuffer::Create(unsigned number_of_channels,
     return nullptr;
   }
 
-  if (!AudioUtilities::IsValidAudioBufferSampleRate(sample_rate)) {
+  if (!audio_utilities::IsValidAudioBufferSampleRate(sample_rate)) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotSupportedError,
         ExceptionMessages::IndexOutsideRange(
             "sample rate", sample_rate,
-            AudioUtilities::MinAudioBufferSampleRate(),
+            audio_utilities::MinAudioBufferSampleRate(),
             ExceptionMessages::kInclusiveBound,
-            AudioUtilities::MaxAudioBufferSampleRate(),
+            audio_utilities::MaxAudioBufferSampleRate(),
             ExceptionMessages::kInclusiveBound));
     return nullptr;
   }
@@ -86,8 +87,8 @@ AudioBuffer* AudioBuffer::Create(unsigned number_of_channels,
   if (!number_of_frames) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotSupportedError,
-        ExceptionMessages::IndexExceedsMinimumBound(
-            "number of frames", number_of_frames, static_cast<size_t>(0)));
+        ExceptionMessages::IndexExceedsMinimumBound("number of frames",
+                                                    number_of_frames, 0u));
     return nullptr;
   }
 
@@ -105,22 +106,22 @@ AudioBuffer* AudioBuffer::Create(unsigned number_of_channels,
   return audio_buffer;
 }
 
-AudioBuffer* AudioBuffer::Create(const AudioBufferOptions& options,
+AudioBuffer* AudioBuffer::Create(const AudioBufferOptions* options,
                                  ExceptionState& exception_state) {
-  return Create(options.numberOfChannels(), options.length(),
-                options.sampleRate(), exception_state);
+  return Create(options->numberOfChannels(), options->length(),
+                options->sampleRate(), exception_state);
 }
 
 AudioBuffer* AudioBuffer::CreateUninitialized(unsigned number_of_channels,
-                                              size_t number_of_frames,
+                                              uint32_t number_of_frames,
                                               float sample_rate) {
-  if (!AudioUtilities::IsValidAudioBufferSampleRate(sample_rate) ||
+  if (!audio_utilities::IsValidAudioBufferSampleRate(sample_rate) ||
       number_of_channels > BaseAudioContext::MaxNumberOfChannels() ||
       !number_of_channels || !number_of_frames)
     return nullptr;
 
-  AudioBuffer* buffer = new AudioBuffer(number_of_channels, number_of_frames,
-                                        sample_rate, kDontInitialize);
+  AudioBuffer* buffer = MakeGarbageCollected<AudioBuffer>(
+      number_of_channels, number_of_frames, sample_rate, kDontInitialize);
 
   if (!buffer->CreatedSuccessfully(number_of_channels))
     return nullptr;
@@ -134,7 +135,7 @@ AudioBuffer* AudioBuffer::CreateFromAudioFileData(const void* data,
   scoped_refptr<AudioBus> bus =
       CreateBusFromInMemoryAudioFile(data, data_size, mix_to_mono, sample_rate);
   if (bus) {
-    AudioBuffer* buffer = new AudioBuffer(bus.get());
+    AudioBuffer* buffer = MakeGarbageCollected<AudioBuffer>(bus.get());
     if (buffer->CreatedSuccessfully(bus->NumberOfChannels()))
       return buffer;
   }
@@ -145,7 +146,7 @@ AudioBuffer* AudioBuffer::CreateFromAudioFileData(const void* data,
 AudioBuffer* AudioBuffer::CreateFromAudioBus(AudioBus* bus) {
   if (!bus)
     return nullptr;
-  AudioBuffer* buffer = new AudioBuffer(bus);
+  AudioBuffer* buffer = MakeGarbageCollected<AudioBuffer>(bus);
   if (buffer->CreatedSuccessfully(bus->NumberOfChannels()))
     return buffer;
   return nullptr;
@@ -157,7 +158,7 @@ bool AudioBuffer::CreatedSuccessfully(
 }
 
 DOMFloat32Array* AudioBuffer::CreateFloat32ArrayOrNull(
-    size_t length,
+    uint32_t length,
     InitializationPolicy policy) {
   scoped_refptr<WTF::Float32Array> buffer;
 
@@ -180,7 +181,7 @@ DOMFloat32Array* AudioBuffer::CreateFloat32ArrayOrNull(
 }
 
 AudioBuffer::AudioBuffer(unsigned number_of_channels,
-                         size_t number_of_frames,
+                         uint32_t number_of_frames,
                          float sample_rate,
                          InitializationPolicy policy)
     : sample_rate_(sample_rate), length_(number_of_frames) {
@@ -243,23 +244,23 @@ NotShared<DOMFloat32Array> AudioBuffer::getChannelData(unsigned channel_index) {
 }
 
 void AudioBuffer::copyFromChannel(NotShared<DOMFloat32Array> destination,
-                                  long channel_number,
+                                  int32_t channel_number,
                                   ExceptionState& exception_state) {
   return copyFromChannel(destination, channel_number, 0, exception_state);
 }
 
 void AudioBuffer::copyFromChannel(NotShared<DOMFloat32Array> destination,
-                                  long channel_number,
-                                  unsigned long start_in_channel,
+                                  int32_t channel_number,
+                                  uint32_t start_in_channel,
                                   ExceptionState& exception_state) {
   if (channel_number < 0 ||
-      channel_number >= static_cast<long>(channels_.size())) {
+      static_cast<uint32_t>(channel_number) >= channels_.size()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kIndexSizeError,
         ExceptionMessages::IndexOutsideRange(
-            "channelNumber", channel_number, 0L,
+            "channelNumber", channel_number, 0,
             ExceptionMessages::kInclusiveBound,
-            static_cast<long>(channels_.size() - 1),
+            static_cast<int32_t>(channels_.size() - 1),
             ExceptionMessages::kInclusiveBound));
 
     return;
@@ -271,9 +272,8 @@ void AudioBuffer::copyFromChannel(NotShared<DOMFloat32Array> destination,
     exception_state.ThrowDOMException(
         DOMExceptionCode::kIndexSizeError,
         ExceptionMessages::IndexOutsideRange(
-            "startInChannel", start_in_channel, 0UL,
-            ExceptionMessages::kInclusiveBound,
-            static_cast<unsigned long>(channel_data->length()),
+            "startInChannel", start_in_channel, 0U,
+            ExceptionMessages::kInclusiveBound, channel_data->length(),
             ExceptionMessages::kExclusiveBound));
 
     return;
@@ -292,23 +292,23 @@ void AudioBuffer::copyFromChannel(NotShared<DOMFloat32Array> destination,
 }
 
 void AudioBuffer::copyToChannel(NotShared<DOMFloat32Array> source,
-                                long channel_number,
+                                int32_t channel_number,
                                 ExceptionState& exception_state) {
   return copyToChannel(source, channel_number, 0, exception_state);
 }
 
 void AudioBuffer::copyToChannel(NotShared<DOMFloat32Array> source,
-                                long channel_number,
-                                unsigned long start_in_channel,
+                                int32_t channel_number,
+                                uint32_t start_in_channel,
                                 ExceptionState& exception_state) {
   if (channel_number < 0 ||
-      channel_number >= static_cast<long>(channels_.size())) {
+      static_cast<uint32_t>(channel_number) >= channels_.size()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kIndexSizeError,
         ExceptionMessages::IndexOutsideRange(
-            "channelNumber", channel_number, 0L,
+            "channelNumber", channel_number, 0,
             ExceptionMessages::kInclusiveBound,
-            static_cast<long>(channels_.size() - 1),
+            static_cast<int32_t>(channels_.size() - 1),
             ExceptionMessages::kInclusiveBound));
     return;
   }
@@ -319,9 +319,8 @@ void AudioBuffer::copyToChannel(NotShared<DOMFloat32Array> source,
     exception_state.ThrowDOMException(
         DOMExceptionCode::kIndexSizeError,
         ExceptionMessages::IndexOutsideRange(
-            "startInChannel", start_in_channel, 0UL,
-            ExceptionMessages::kInclusiveBound,
-            static_cast<unsigned long>(channel_data->length()),
+            "startInChannel", start_in_channel, 0U,
+            ExceptionMessages::kInclusiveBound, channel_data->length(),
             ExceptionMessages::kExclusiveBound));
 
     return;
@@ -345,6 +344,26 @@ void AudioBuffer::Zero() {
       float* data = array.View()->Data();
       memset(data, 0, length() * sizeof(*data));
     }
+  }
+}
+
+std::unique_ptr<SharedAudioBuffer> AudioBuffer::CreateSharedAudioBuffer() {
+  return std::make_unique<SharedAudioBuffer>(this);
+}
+
+SharedAudioBuffer::SharedAudioBuffer(AudioBuffer* buffer)
+    : sample_rate_(buffer->sampleRate()), length_(buffer->length()) {
+  channels_.resize(buffer->numberOfChannels());
+  for (unsigned int i = 0; i < buffer->numberOfChannels(); ++i) {
+    buffer->getChannelData(i).View()->buffer()->ShareNonSharedForInternalUse(
+        channels_[i]);
+  }
+}
+
+void SharedAudioBuffer::Zero() {
+  for (unsigned i = 0; i < channels_.size(); ++i) {
+    float* data = static_cast<float*>(channels_[i].Data());
+    memset(data, 0, length() * sizeof(*data));
   }
 }
 

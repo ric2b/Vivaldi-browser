@@ -235,15 +235,21 @@ bool PrefsSetFunction::RunAsync() {
 
   if (!properties->enum_properties) {
     const PrefService::Preference* pref = prefs->FindPreference(path);
-    if (pref->GetType() != value->type()) {
+    if (pref->GetType() == value->type()) {
+      prefs->Set(path, *value);
+    } else if (pref->GetType() == base::Value::Type::DOUBLE &&
+               value->type() == base::Value::Type::INTEGER) {
+      // JS doesn't have an explicit distinction between integer and double
+      // and will send us an integer even when explicitly using a decimal
+      // point if the number has an empty decimal part.
+      prefs->Set(path, base::Value(value->GetDouble()));
+    } else {
       error_ = std::string("Cannot assign a ") +
                base::Value::GetTypeName(value->type()) + " value to a " +
                base::Value::GetTypeName(pref->GetType()) +
                " preference: " + path;
       return false;
     }
-
-    prefs->Set(path, *value);
   } else {
     if (!value->is_string()) {
       error_ = std::string("Cannot assign a ") +
@@ -254,10 +260,10 @@ bool PrefsSetFunction::RunAsync() {
     const auto& result =
         properties->enum_properties->string_to_value.find(value->GetString());
     if (result == properties->enum_properties->string_to_value.end()) {
-      error_ =
-          std::string("The value") + value->GetString() +
-          "is not part of the accepted values for the enumerated preference:" +
-          path;
+      error_ = std::string("The value") + value->GetString() +
+               "is not part of the accepted values for the enumerated "
+               "preference:" +
+               path;
       return false;
     }
     prefs->Set(path, base::Value(result->second));
@@ -306,9 +312,9 @@ bool PrefsGetForCacheFunction::RunAsync() {
                              : GetProfile()->GetOriginalProfile()->GetPrefs();
 
     if (!prefs->FindPreference(path)) {
-        // Trying to get a pref that's not registered. This can happen
-        // when listing a chromium pref that's only registered for specific
-        // OS'es
+      // Trying to get a pref that's not registered. This can happen
+      // when listing a chromium pref that's only registered for specific
+      // OS'es
       continue;
     }
 

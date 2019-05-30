@@ -20,6 +20,7 @@ class Point;
 }
 
 namespace ui {
+class Event;
 class ListSelectionModel;
 }
 
@@ -52,7 +53,8 @@ class TabStripController {
   virtual bool IsTabPinned(int index) const = 0;
 
   // Select the tab at the specified index in the model.
-  virtual void SelectTab(int index) = 0;
+  // |event| is the input event that triggers the tab selection.
+  virtual void SelectTab(int index, const ui::Event& event) = 0;
 
   // Extends the selection from the anchor to the specified index in the model.
   virtual void ExtendSelectionTo(int index) = 0;
@@ -63,11 +65,14 @@ class TabStripController {
   // Adds the selection the anchor to |index|.
   virtual void AddSelectionFromAnchorTo(int index) = 0;
 
+  // Prepares to close a tab. If closing the tab might require (for example) a
+  // user prompt, triggers that prompt and returns false, indicating that the
+  // current close operation should not proceed. If this method returns true,
+  // closing can proceed.
+  virtual bool BeforeCloseTab(int index, CloseTabSource source) = 0;
+
   // Closes the tab at the specified index in the model.
   virtual void CloseTab(int index, CloseTabSource source) = 0;
-
-  // Toggles audio muting for the tab at the specified index in the model.
-  virtual void ToggleTabAudioMute(int index) = 0;
 
   // Shows a context menu for the tab at the specified point in screen coords.
   virtual void ShowContextMenuForTab(Tab* tab,
@@ -98,19 +103,8 @@ class TabStripController {
   // search-result page for |location|.
   virtual void CreateNewTabWithLocation(const base::string16& location) = 0;
 
-  // Returns true if the tab strip is in an incognito window.  This is used to
-  // determining which theme may have applied to it, so this determination
-  // should match the one in ThemeService::GetThemeProviderForProfile().
-  virtual bool IsIncognito() = 0;
-
   // Invoked if the stacked layout (on or off) might have changed.
   virtual void StackedLayoutMaybeChanged() = 0;
-
-  // Whether the special painting mode for one tab is allowed.
-  virtual bool IsSingleTabModeAvailable() = 0;
-
-  // Returns whether or not strokes should be drawn around and under the tabs.
-  virtual bool ShouldDrawStrokes() const = 0;
 
   // Notifies controller that the user started dragging this tabstrip's tabs.
   virtual void OnStartedDraggingTabs() = 0;
@@ -133,22 +127,23 @@ class TabStripController {
   // frame for either active or inactive windows.
   virtual bool EverHasVisibleBackgroundTabShapes() const = 0;
 
-  // Returns the color of the browser frame, which is also the color of the
-  // tabstrip background.
-  virtual SkColor GetFrameColor() const = 0;
+  // Returnes whether the window frame is being painted as active. This
+  // determines which colors are used in the tab strip.
+  virtual bool ShouldPaintAsActiveFrame() const = 0;
+
+  // Returns whether tab strokes can ever be drawn. If true, strokes will only
+  // be drawn if necessary.
+  virtual bool CanDrawStrokes() const = 0;
+
+  // Returns the color of the browser frame for the given window activation
+  // state.
+  virtual SkColor GetFrameColor(
+      BrowserNonClientFrameView::ActiveState active_state =
+          BrowserNonClientFrameView::kUseCurrent) const = 0;
 
   // Returns COLOR_TOOLBAR_TOP_SEPARATOR[,_INACTIVE] depending on the activation
   // state of the window.
   virtual SkColor GetToolbarTopSeparatorColor() const = 0;
-
-  // Returns the tab background color based on both the |state| of the tab and
-  // the activation state of the window.  If |opaque| is true, the resulting
-  // color after drawing the tab background on the frame will be returned.
-  virtual SkColor GetTabBackgroundColor(TabState state, bool opaque) const = 0;
-
-  // Returns the tab foreground color of the the text based on both the |state|
-  // of the tab and the activation state of the window.
-  virtual SkColor GetTabForegroundColor(TabState state) const = 0;
 
   // For non-transparent windows, returns the resource ID to use behind
   // background tabs.  |has_custom_image| will be set to true if this has been

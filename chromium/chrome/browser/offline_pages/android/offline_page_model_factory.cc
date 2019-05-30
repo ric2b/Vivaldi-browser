@@ -65,7 +65,7 @@ KeyedService* OfflinePageModelFactory::BuildServiceInstanceFor(
   std::unique_ptr<ArchiveManager> archive_manager(new DownloadArchiveManager(
       temporary_archives_dir, persistent_archives_dir,
       DownloadPrefs::GetDefaultDownloadDirectory(), background_task_runner,
-      profile));
+      profile->GetPrefs()));
   auto clock = std::make_unique<base::DefaultClock>();
 
   std::unique_ptr<SystemDownloadManager> download_manager(
@@ -73,8 +73,7 @@ KeyedService* OfflinePageModelFactory::BuildServiceInstanceFor(
 
   OfflinePageModelTaskified* model = new OfflinePageModelTaskified(
       std::move(metadata_store), std::move(archive_manager),
-      std::move(download_manager), background_task_runner,
-      base::DefaultClock::GetInstance());
+      std::move(download_manager), background_task_runner);
 
   CctOriginObserver::AttachToOfflinePageModel(model);
 

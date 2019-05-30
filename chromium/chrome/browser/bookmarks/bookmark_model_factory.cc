@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/deferred_sequenced_task_runner.h"
 #include "base/memory/singleton.h"
+#include "base/task/post_task.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/bookmarks/chrome_bookmark_client.h"
@@ -15,7 +16,7 @@
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/bookmark_sync_service_factory.h"
-#include "chrome/browser/ui/webui/md_bookmarks/md_bookmarks_ui.h"
+#include "chrome/browser/ui/webui/bookmarks/bookmarks_ui.h"
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -25,6 +26,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/sync_bookmarks/bookmark_sync_service.h"
 #include "components/undo/bookmark_undo_service.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
 using bookmarks::BookmarkModel;
@@ -71,8 +73,8 @@ KeyedService* BookmarkModelFactory::BuildServiceInstanceFor(
   bookmark_model->Load(profile->GetPrefs(), profile->GetPath(),
                        StartupTaskRunnerServiceFactory::GetForProfile(profile)
                            ->GetBookmarkTaskRunner(),
-                       content::BrowserThread::GetTaskRunnerForThread(
-                           content::BrowserThread::UI));
+                       base::CreateSingleThreadTaskRunnerWithTraits(
+                           {content::BrowserThread::UI}));
   BookmarkUndoServiceFactory::GetForProfile(profile)->Start(bookmark_model);
 
   return bookmark_model;

@@ -8,11 +8,13 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 
 namespace blink {
@@ -20,6 +22,8 @@ namespace blink {
 class BlobBytesProviderTest : public testing::Test {
  public:
   void SetUp() override {
+    Platform::SetMainThreadTaskRunnerForTesting();
+
     test_bytes1_.resize(128);
     for (size_t i = 0; i < test_bytes1_.size(); ++i)
       test_bytes1_[i] = i % 191;
@@ -39,6 +43,11 @@ class BlobBytesProviderTest : public testing::Test {
     combined_bytes_.AppendVector(test_bytes1_);
     combined_bytes_.AppendVector(test_bytes2_);
     combined_bytes_.AppendVector(test_bytes3_);
+  }
+
+  void TearDown() override {
+    scoped_task_environment_.RunUntilIdle();
+    Platform::UnsetMainThreadTaskRunnerForTesting();
   }
 
   std::unique_ptr<BlobBytesProvider> CreateProvider(
@@ -108,8 +117,8 @@ TEST_F(BlobBytesProviderTest, RequestAsReply) {
 namespace {
 
 struct FileTestData {
-  uint64_t offset;
-  uint64_t size;
+  uint32_t offset;
+  uint32_t size;
 };
 
 void PrintTo(const FileTestData& test, std::ostream* os) {
@@ -247,9 +256,9 @@ const FileTestData file_tests[] = {
     {10, 128 + 64},      // Parts of all three chunks.
 };
 
-INSTANTIATE_TEST_CASE_P(BlobBytesProviderTest,
-                        RequestAsFile,
-                        testing::ValuesIn(file_tests));
+INSTANTIATE_TEST_SUITE_P(BlobBytesProviderTest,
+                         RequestAsFile,
+                         testing::ValuesIn(file_tests));
 
 TEST_F(BlobBytesProviderTest, RequestAsFile_MultipleChunks) {
   auto provider = CreateProvider();
@@ -328,9 +337,11 @@ TEST_F(BlobBytesProviderTest, RequestAsStream) {
       blink::scheduler::GetSequencedTaskRunnerForTesting());
   watcher.Watch(
       pipe.consumer_handle.get(), MOJO_HANDLE_SIGNAL_READABLE,
+      MOJO_WATCH_CONDITION_SATISFIED,
       base::BindRepeating(
           [](mojo::DataPipeConsumerHandle pipe, base::Closure quit_closure,
-             Vector<uint8_t>* bytes_out, MojoResult result) {
+             Vector<uint8_t>* bytes_out, MojoResult result,
+             const mojo::HandleSignalsState& state) {
             if (result == MOJO_RESULT_CANCELLED ||
                 result == MOJO_RESULT_FAILED_PRECONDITION) {
               quit_closure.Run();

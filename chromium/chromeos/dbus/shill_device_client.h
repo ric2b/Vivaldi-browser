@@ -6,10 +6,11 @@
 #define CHROMEOS_DBUS_SHILL_DEVICE_CLIENT_H_
 
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
+#include "base/component_export.h"
 #include "base/macros.h"
-#include "chromeos/chromeos_export.h"
 #include "chromeos/dbus/dbus_client.h"
 #include "chromeos/dbus/shill_client_helper.h"
 
@@ -38,7 +39,7 @@ class ShillPropertyChangedObserver;
 // ShillDeviceClient is used to communicate with the Shill Device service.
 // All methods should be called from the origin thread which initializes the
 // DBusThreadManager instance.
-class CHROMEOS_EXPORT ShillDeviceClient : public DBusClient {
+class COMPONENT_EXPORT(CHROMEOS_DBUS) ShillDeviceClient : public DBusClient {
  public:
   typedef ShillClientHelper::PropertyChangedHandler PropertyChangedHandler;
   typedef ShillClientHelper::DictionaryValueCallback DictionaryValueCallback;
@@ -174,11 +175,30 @@ class CHROMEOS_EXPORT ShillDeviceClient : public DBusClient {
       const base::Closure& callback,
       const ErrorCallback& error_callback) = 0;
 
+  // Adds |types| to the list of packet types that the device should monitor to
+  // wake the system from suspend. |types| corresponds to "Wake on WiFi Packet
+  // Type Constants." in
+  // third_party/cros_system_api/dbus/shill/dbus-constants.h.
+  virtual void AddWakeOnPacketOfTypes(const dbus::ObjectPath& device_path,
+                                      const std::vector<std::string>& types,
+                                      const base::Closure& callback,
+                                      const ErrorCallback& error_callback) = 0;
+
   // Removes |ip_endpoint| from the list of tcp connections that the device
   // should monitor to wake the system from suspend.
   virtual void RemoveWakeOnPacketConnection(
       const dbus::ObjectPath& device_path,
       const net::IPEndPoint& ip_endpoint,
+      const base::Closure& callback,
+      const ErrorCallback& error_callback) = 0;
+
+  // Removes |types| from the list of packet types that the device should
+  // monitor to wake the system from suspend. |types| corresponds to "Wake on
+  // WiFi Packet Type Constants." in
+  // third_party/cros_system_api/dbus/shill/dbus-constants.h.
+  virtual void RemoveWakeOnPacketOfTypes(
+      const dbus::ObjectPath& device_path,
+      const std::vector<std::string>& types,
       const base::Closure& callback,
       const ErrorCallback& error_callback) = 0;
 

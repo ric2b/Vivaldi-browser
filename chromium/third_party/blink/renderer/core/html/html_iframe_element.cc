@@ -26,31 +26,32 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/string_or_trusted_html.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_html_iframe_element.h"
-#include "third_party/blink/renderer/core/css_property_names.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/feature_policy/iframe_policy.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
+#include "third_party/blink/renderer/core/frame/sandbox_flags.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
 #include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/layout/layout_iframe.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
-#include "third_party/blink/renderer/core/policy/iframe_policy.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 inline HTMLIFrameElement::HTMLIFrameElement(Document& document)
-    : HTMLFrameElementBase(iframeTag, document),
+    : HTMLFrameElementBase(kIFrameTag, document),
       collapsed_by_client_(false),
       sandbox_(HTMLIFrameElementSandbox::Create(this)),
-      referrer_policy_(kReferrerPolicyDefault) {}
+      referrer_policy_(network::mojom::ReferrerPolicy::kDefault) {}
 
 DEFINE_NODE_FACTORY(HTMLIFrameElement)
 
-void HTMLIFrameElement::Trace(blink::Visitor* visitor) {
+void HTMLIFrameElement::Trace(Visitor* visitor) {
   visitor->Trace(sandbox_);
   visitor->Trace(policy_);
   HTMLFrameElementBase::Trace(visitor);
@@ -58,6 +59,14 @@ void HTMLIFrameElement::Trace(blink::Visitor* visitor) {
 }
 
 HTMLIFrameElement::~HTMLIFrameElement() = default;
+
+const AttrNameToTrustedType& HTMLIFrameElement::GetCheckedAttributeTypes()
+    const {
+  DEFINE_STATIC_LOCAL(AttrNameToTrustedType, attribute_map,
+                      ({{"src", SpecificTrustedType::kTrustedURL},
+                        {"srcdoc", SpecificTrustedType::kTrustedHTML}}));
+  return attribute_map;
+}
 
 void HTMLIFrameElement::SetCollapsed(bool collapse) {
   if (collapsed_by_client_ == collapse)
@@ -75,18 +84,18 @@ DOMTokenList* HTMLIFrameElement::sandbox() const {
   return sandbox_.Get();
 }
 
-Policy* HTMLIFrameElement::policy() {
+DOMFeaturePolicy* HTMLIFrameElement::featurePolicy() {
   if (!policy_) {
-    policy_ = new IFramePolicy(&GetDocument(), ContainerPolicy(),
-                               GetOriginForFeaturePolicy());
+    policy_ = MakeGarbageCollected<IFramePolicy>(
+        &GetDocument(), ContainerPolicy(), GetOriginForFeaturePolicy());
   }
   return policy_.Get();
 }
 
 bool HTMLIFrameElement::IsPresentationAttribute(
     const QualifiedName& name) const {
-  if (name == widthAttr || name == heightAttr || name == alignAttr ||
-      name == frameborderAttr)
+  if (name == kWidthAttr || name == kHeightAttr || name == kAlignAttr ||
+      name == kFrameborderAttr)
     return true;
   return HTMLFrameElementBase::IsPresentationAttribute(name);
 }
@@ -95,13 +104,13 @@ void HTMLIFrameElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
     MutableCSSPropertyValueSet* style) {
-  if (name == widthAttr) {
+  if (name == kWidthAttr) {
     AddHTMLLengthToStyle(style, CSSPropertyWidth, value);
-  } else if (name == heightAttr) {
+  } else if (name == kHeightAttr) {
     AddHTMLLengthToStyle(style, CSSPropertyHeight, value);
-  } else if (name == alignAttr) {
+  } else if (name == kAlignAttr) {
     ApplyAlignmentAttributeToStyle(value, style);
-  } else if (name == frameborderAttr) {
+  } else if (name == kFrameborderAttr) {
     // LocalFrame border doesn't really match the HTML4 spec definition for
     // iframes. It simply adds a presentational hint that the border should be
     // off if set to zero.
@@ -121,7 +130,7 @@ void HTMLIFrameElement::ParseAttribute(
     const AttributeModificationParams& params) {
   const QualifiedName& name = params.name;
   const AtomicString& value = params.new_value;
-  if (name == nameAttr) {
+  if (name == kNameAttr) {
     if (IsInDocumentTree() && GetDocument().IsHTMLDocument()) {
       HTMLDocument& document = ToHTMLDocument(GetDocument());
       document.RemoveNamedItem(name_);
@@ -131,7 +140,7 @@ void HTMLIFrameElement::ParseAttribute(
     name_ = value;
     if (name_ != old_name)
       FrameOwnerPropertiesChanged();
-  } else if (name == sandboxAttr) {
+  } else if (name == kSandboxAttr) {
     sandbox_->DidUpdateAttributeValue(params.old_value, value);
     String invalid_tokens;
     SetSandboxFlags(value.IsNull() ? kSandboxNone
@@ -139,19 +148,30 @@ void HTMLIFrameElement::ParseAttribute(
                                                         invalid_tokens));
     if (!invalid_tokens.IsNull()) {
       GetDocument().AddConsoleMessage(ConsoleMessage::Create(
-          kOtherMessageSource, kErrorMessageLevel,
+          kOtherMessageSource, mojom::ConsoleMessageLevel::kError,
           "Error while parsing the 'sandbox' attribute: " + invalid_tokens));
     }
+    if (RuntimeEnabledFeatures::FeaturePolicyForSandboxEnabled()) {
+      Vector<String> messages;
+      UpdateContainerPolicy(&messages);
+      if (!messages.IsEmpty()) {
+        for (const String& message : messages) {
+          GetDocument().AddConsoleMessage(ConsoleMessage::Create(
+              kOtherMessageSource, mojom::ConsoleMessageLevel::kWarning,
+              message));
+        }
+      }
+    }
     UseCounter::Count(GetDocument(), WebFeature::kSandboxViaIFrame);
-  } else if (name == referrerpolicyAttr) {
-    referrer_policy_ = kReferrerPolicyDefault;
+  } else if (name == kReferrerpolicyAttr) {
+    referrer_policy_ = network::mojom::ReferrerPolicy::kDefault;
     if (!value.IsNull()) {
       SecurityPolicy::ReferrerPolicyFromString(
           value, kSupportReferrerPolicyLegacyKeywords, &referrer_policy_);
       UseCounter::Count(GetDocument(),
                         WebFeature::kHTMLIFrameElementReferrerPolicyAttribute);
     }
-  } else if (name == allowfullscreenAttr) {
+  } else if (name == kAllowfullscreenAttr) {
     bool old_allow_fullscreen = allow_fullscreen_;
     allow_fullscreen_ = !value.IsNull();
     if (allow_fullscreen_ != old_allow_fullscreen) {
@@ -166,19 +186,19 @@ void HTMLIFrameElement::ParseAttribute(
       FrameOwnerPropertiesChanged();
       UpdateContainerPolicy();
     }
-  } else if (name == allowpaymentrequestAttr) {
+  } else if (name == kAllowpaymentrequestAttr) {
     bool old_allow_payment_request = allow_payment_request_;
     allow_payment_request_ = !value.IsNull();
     if (allow_payment_request_ != old_allow_payment_request) {
       FrameOwnerPropertiesChanged();
       UpdateContainerPolicy();
     }
-  } else if (name == cspAttr) {
+  } else if (name == kCspAttr) {
     if (!ContentSecurityPolicy::IsValidCSPAttr(
             value.GetString(), GetDocument().RequiredCSP().GetString())) {
       required_csp_ = g_null_atom;
       GetDocument().AddConsoleMessage(ConsoleMessage::Create(
-          kOtherMessageSource, kErrorMessageLevel,
+          kOtherMessageSource, mojom::ConsoleMessageLevel::kError,
           "'csp' attribute is not a valid policy: " + value));
       return;
     }
@@ -186,7 +206,7 @@ void HTMLIFrameElement::ParseAttribute(
       required_csp_ = value;
       FrameOwnerPropertiesChanged();
     }
-  } else if (name == allowAttr) {
+  } else if (name == kAllowAttr) {
     if (allow_ != value) {
       allow_ = value;
       Vector<String> messages;
@@ -194,7 +214,8 @@ void HTMLIFrameElement::ParseAttribute(
       if (!messages.IsEmpty()) {
         for (const String& message : messages) {
           GetDocument().AddConsoleMessage(ConsoleMessage::Create(
-              kOtherMessageSource, kWarningMessageLevel, message));
+              kOtherMessageSource, mojom::ConsoleMessageLevel::kWarning,
+              message));
         }
       }
       if (!value.IsEmpty()) {
@@ -214,14 +235,14 @@ void HTMLIFrameElement::ParseAttribute(
             WebFeature::kHTMLIFrameElementGestureMedia)) {
       UseCounter::Count(GetDocument(),
                         WebFeature::kHTMLIFrameElementGestureMedia);
-      GetDocument().AddConsoleMessage(
-          ConsoleMessage::Create(kOtherMessageSource, kWarningMessageLevel,
-                                 "<iframe gesture=\"media\"> is not supported. "
-                                 "Use <iframe allow=\"autoplay\">, "
-                                 "https://goo.gl/ximf56"));
+      GetDocument().AddConsoleMessage(ConsoleMessage::Create(
+          kOtherMessageSource, mojom::ConsoleMessageLevel::kWarning,
+          "<iframe gesture=\"media\"> is not supported. "
+          "Use <iframe allow=\"autoplay\">, "
+          "https://goo.gl/ximf56"));
     }
 
-    if (name == srcAttr)
+    if (name == kSrcAttr)
       LogUpdateAttributeIfIsolatedWorldAndInDocument("iframe", params);
     HTMLFrameElementBase::ParseAttribute(params);
   }
@@ -232,8 +253,33 @@ ParsedFeaturePolicy HTMLIFrameElement::ConstructContainerPolicy(
   scoped_refptr<const SecurityOrigin> src_origin = GetOriginForFeaturePolicy();
   scoped_refptr<const SecurityOrigin> self_origin =
       GetDocument().GetSecurityOrigin();
-  ParsedFeaturePolicy container_policy =
-      ParseFeaturePolicyAttribute(allow_, self_origin, src_origin, messages);
+
+  // Start with the allow attribute
+  ParsedFeaturePolicy container_policy = ParseFeaturePolicyAttribute(
+      allow_, self_origin, src_origin, messages, &GetDocument());
+
+  // Next, process sandbox flags. These all only take effect if a corresponding
+  // policy does *not* exist in the allow attribute's value.
+  if (RuntimeEnabledFeatures::FeaturePolicyForSandboxEnabled()) {
+    SandboxFlags sandbox_flags = GetSandboxFlags();
+
+    // If the frame is sandboxed at all, then warn if feature policy attributes
+    // will override the sandbox attributes.
+    if (messages && (sandbox_flags & kSandboxNavigation)) {
+      if (!(sandbox_flags & kSandboxForms) &&
+          IsFeatureDeclared(mojom::FeaturePolicyFeature::kFormSubmission,
+                            container_policy)) {
+        messages->push_back(
+            "Allow and Sandbox attributes both mention forms. Allow will take "
+            "precedence.");
+      }
+    }
+    ApplySandboxFlagsToParsedFeaturePolicy(sandbox_flags, container_policy);
+  }
+
+  // Finally, process the allow* attribuets. Like sandbox attributes, they only
+  // take effect if the corresponding feature is not present in the allow
+  // attribute's value.
 
   // If allowfullscreen attribute is present and no fullscreen policy is set,
   // enable the feature for all origins.
@@ -256,7 +302,8 @@ ParsedFeaturePolicy HTMLIFrameElement::ConstructContainerPolicy(
     }
   }
 
-  // Update Policy associated with this iframe, if exists.
+  // Update the JavaScript policy object associated with this iframe, if it
+  // exists.
   if (policy_)
     policy_->UpdateContainerPolicy(container_policy, src_origin);
 
@@ -284,7 +331,7 @@ Node::InsertionNotificationRequest HTMLIFrameElement::InsertedInto(
             required_csp_, GetDocument().RequiredCSP().GetString())) {
       if (!required_csp_.IsEmpty()) {
         GetDocument().AddConsoleMessage(ConsoleMessage::Create(
-            kOtherMessageSource, kErrorMessageLevel,
+            kOtherMessageSource, mojom::ConsoleMessageLevel::kError,
             "'csp' attribute is not a valid policy: " + required_csp_));
       }
       if (required_csp_ != GetDocument().RequiredCSP()) {
@@ -293,7 +340,7 @@ Node::InsertionNotificationRequest HTMLIFrameElement::InsertedInto(
       }
     }
   }
-  LogAddElementIfIsolatedWorldAndInDocument("iframe", srcAttr);
+  LogAddElementIfIsolatedWorldAndInDocument("iframe", kSrcAttr);
   return result;
 }
 
@@ -307,7 +354,7 @@ bool HTMLIFrameElement::IsInteractiveContent() const {
   return true;
 }
 
-ReferrerPolicy HTMLIFrameElement::ReferrerPolicyAttribute() {
+network::mojom::ReferrerPolicy HTMLIFrameElement::ReferrerPolicyAttribute() {
   return referrer_policy_;
 }
 

@@ -12,6 +12,21 @@
 #include "ios/web/public/web_state/web_state_observer.h"
 #import "ios/web/public/web_state/web_state_user_data.h"
 
+// Key of the UMA ContextMenu.iOS.GetImageDataByJsResult histogram.
+extern const char kUmaGetImageDataByJsResult[];
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// Enum for the ContextMenu.iOS.GetImageDataByJsResult UMA histogram to report
+// the results of GetImageDataByJs.
+enum class ContextMenuGetImageDataByJsResult {
+  kCanvasSucceed = 0,
+  kXMLHttpRequestSucceed = 1,
+  kFail = 2,
+  kTimeout = 3,
+  kMaxValue = kTimeout,
+};
+
 // Gets the image data by JavaScript or
 // image_fetcher::IOSImageDataFetcherWrapper. Always use this class by
 // ImageFetchTabHelper::FromWebState on UI thread. All callbacks will also be
@@ -58,6 +73,9 @@ class ImageFetchTabHelper : public web::WebStateObserver,
                         base::TimeDelta timeout,
                         JsCallback&& callback);
 
+  // Records ContextMenu.iOS.GetImageDataByJsResult UMA histogram.
+  void RecordGetImageDataByJsResult(ContextMenuGetImageDataByJsResult result);
+
   // Handler for messages sent back from injected JavaScript.
   bool OnJsMessage(const base::DictionaryValue& message);
 
@@ -83,6 +101,8 @@ class ImageFetchTabHelper : public web::WebStateObserver,
   int call_id_ = 0;
 
   base::WeakPtrFactory<ImageFetchTabHelper> weak_ptr_factory_;
+
+  WEB_STATE_USER_DATA_KEY_DECL();
 
   DISALLOW_COPY_AND_ASSIGN(ImageFetchTabHelper);
 };

@@ -4,13 +4,14 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/local_discovery/service_discovery_client_impl.h"
-#include "net/dns/dns_protocol.h"
+#include "net/dns/public/dns_protocol.h"
 #include "net/dns/record_rdata.h"
 
 namespace local_discovery {
@@ -248,14 +249,14 @@ void ServiceWatcherImpl::AddService(const std::string& service) {
 void ServiceWatcherImpl::AddSRV(const std::string& service) {
   DCHECK(started_);
 
-  ServiceListenersMap::iterator it = services_.find(service);
+  auto it = services_.find(service);
   if (it != services_.end())
     it->second->set_has_srv(true);
 }
 
 void ServiceWatcherImpl::DeferUpdate(ServiceWatcher::UpdateType update_type,
                                      const std::string& service_name) {
-  ServiceListenersMap::iterator it = services_.find(service_name);
+  auto it = services_.find(service_name);
   if (it != services_.end() && !it->second->update_pending()) {
     it->second->set_update_pending(true);
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -266,7 +267,7 @@ void ServiceWatcherImpl::DeferUpdate(ServiceWatcher::UpdateType update_type,
 
 void ServiceWatcherImpl::DeliverDeferredUpdate(
     ServiceWatcher::UpdateType update_type, const std::string& service_name) {
-  ServiceListenersMap::iterator it = services_.find(service_name);
+  auto it = services_.find(service_name);
   if (it != services_.end()) {
     it->second->set_update_pending(false);
     if (!callback_.is_null())
@@ -277,7 +278,7 @@ void ServiceWatcherImpl::DeliverDeferredUpdate(
 void ServiceWatcherImpl::RemovePTR(const std::string& service) {
   DCHECK(started_);
 
-  ServiceListenersMap::iterator it = services_.find(service);
+  auto it = services_.find(service);
   if (it != services_.end()) {
     it->second->set_has_ptr(false);
     if (!it->second->has_ptr_or_srv()) {
@@ -291,7 +292,7 @@ void ServiceWatcherImpl::RemovePTR(const std::string& service) {
 void ServiceWatcherImpl::RemoveSRV(const std::string& service) {
   DCHECK(started_);
 
-  ServiceListenersMap::iterator it = services_.find(service);
+  auto it = services_.find(service);
   if (it != services_.end()) {
     it->second->set_has_srv(false);
     if (!it->second->has_ptr_or_srv()) {

@@ -37,19 +37,24 @@ class FirstLetterPseudoElement;
 // We cache offsets so that text transformations can be applied in such a way
 // that we can recover the original unaltered string from our corresponding DOM
 // node.
-class CORE_EXPORT LayoutTextFragment final : public LayoutText {
+class CORE_EXPORT LayoutTextFragment : public LayoutText {
  public:
-  LayoutTextFragment(Node*, StringImpl*, int start_offset, int length);
-  LayoutTextFragment(Node*, StringImpl*);
   ~LayoutTextFragment() override;
 
-  static LayoutTextFragment* CreateAnonymous(PseudoElement&, StringImpl*);
-  static LayoutTextFragment* CreateAnonymous(PseudoElement&,
+  // |style| is used for checking |ForceLegacyLayout()|.
+  static LayoutTextFragment* Create(const ComputedStyle& style,
+                                    Node*,
+                                    StringImpl*,
+                                    int start_offset,
+                                    int length);
+  static LayoutTextFragment* CreateAnonymous(const ComputedStyle& style,
+                                             PseudoElement&,
+                                             StringImpl*);
+  static LayoutTextFragment* CreateAnonymous(const ComputedStyle& style,
+                                             PseudoElement&,
                                              StringImpl*,
                                              unsigned start,
                                              unsigned length);
-
-  bool IsTextFragment() const override { return true; }
 
   Position PositionForCaretOffset(unsigned) const override;
   base::Optional<unsigned> CaretOffsetForPosition(
@@ -99,6 +104,7 @@ class CORE_EXPORT LayoutTextFragment final : public LayoutText {
   LayoutText* GetFirstLetterPart() const override;
 
  protected:
+  LayoutTextFragment(Node*, StringImpl*, int start_offset, int length);
   void WillBeDestroyed() override;
 
  private:

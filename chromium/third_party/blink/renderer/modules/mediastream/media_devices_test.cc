@@ -130,7 +130,7 @@ class MockMediaDevicesDispatcherHost
       bool subscribe_audio_output,
       mojom::blink::MediaDevicesListenerPtr listener) override {
     listener_ = std::move(listener);
-  };
+  }
 
   mojom::blink::MediaDevicesDispatcherHostPtr CreateInterfacePtrAndBind() {
     mojom::blink::MediaDevicesDispatcherHostPtr ptr;
@@ -170,12 +170,11 @@ class PromiseObserver {
     static v8::Local<v8::Function> CreateFunction(ScriptState* script_state,
                                                   bool* flag_to_set,
                                                   ScriptValue* arg_to_set) {
-      MyScriptFunction* self =
-          new MyScriptFunction(script_state, flag_to_set, arg_to_set);
+      MyScriptFunction* self = MakeGarbageCollected<MyScriptFunction>(
+          script_state, flag_to_set, arg_to_set);
       return self->BindToV8Function();
     }
 
-   private:
     MyScriptFunction(ScriptState* script_state,
                      bool* flag_to_set,
                      ScriptValue* arg_to_set)
@@ -187,6 +186,8 @@ class PromiseObserver {
       *arg_to_set_ = arg;
       return arg;
     }
+
+   private:
     bool* flag_to_set_;
     ScriptValue* arg_to_set_;
   };
@@ -198,9 +199,9 @@ class PromiseObserver {
 
 class MediaDevicesTest : public testing::Test {
  public:
-  using MediaDeviceInfos = PersistentHeapVector<Member<MediaDeviceInfo>>;
+  using MediaDeviceInfos = HeapVector<Member<MediaDeviceInfo>>;
 
-  MediaDevicesTest() {
+  MediaDevicesTest() : device_infos_(MakeGarbageCollected<MediaDeviceInfos>()) {
     dispatcher_host_ = std::make_unique<MockMediaDevicesDispatcherHost>();
   }
 
@@ -223,8 +224,8 @@ class MediaDevicesTest : public testing::Test {
 
   void DevicesEnumerated(const MediaDeviceInfoVector& device_infos) {
     devices_enumerated_ = true;
-    for (size_t i = 0; i < device_infos.size(); i++) {
-      device_infos_.push_back(MediaDeviceInfo::Create(
+    for (wtf_size_t i = 0; i < device_infos.size(); i++) {
+      device_infos_->push_back(MediaDeviceInfo::Create(
           device_infos[i]->deviceId(), device_infos[i]->label(),
           device_infos[i]->groupId(), device_infos[i]->DeviceType()));
     }
@@ -247,7 +248,7 @@ class MediaDevicesTest : public testing::Test {
 
   bool listener_connection_error() const { return listener_connection_error_; }
 
-  const MediaDeviceInfos& device_infos() const { return device_infos_; }
+  const MediaDeviceInfos& device_infos() const { return *device_infos_; }
 
   bool devices_enumerated() const { return devices_enumerated_; }
 
@@ -264,7 +265,7 @@ class MediaDevicesTest : public testing::Test {
  private:
   ScopedTestingPlatformSupport<TestingPlatformSupport> platform_;
   std::unique_ptr<MockMediaDevicesDispatcherHost> dispatcher_host_;
-  MediaDeviceInfos device_infos_;
+  Persistent<MediaDeviceInfos> device_infos_;
   bool devices_enumerated_ = false;
   bool dispatcher_host_connection_error_ = false;
   bool device_changed_ = false;
@@ -274,7 +275,7 @@ class MediaDevicesTest : public testing::Test {
 
 TEST_F(MediaDevicesTest, GetUserMediaCanBeCalled) {
   V8TestingScope scope;
-  MediaStreamConstraints constraints;
+  MediaStreamConstraints* constraints = MediaStreamConstraints::Create();
   ScriptPromise promise =
       GetMediaDevices(scope.GetExecutionContext())
           ->getUserMedia(scope.GetScriptState(), constraints,

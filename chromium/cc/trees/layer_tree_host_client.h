@@ -9,17 +9,46 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
+#include "cc/input/browser_controls_state.h"
+#include "ui/gfx/geometry/scroll_offset.h"
+#include "ui/gfx/geometry/vector2d_f.h"
 
 namespace gfx {
 struct PresentationFeedback;
-class Vector2dF;
 }
 
 namespace viz {
+class LocalSurfaceIdAllocation;
 struct BeginFrameArgs;
 }
 
 namespace cc {
+struct ElementId;
+
+struct ApplyViewportChangesArgs {
+  // Scroll offset delta of the inner (visual) viewport.
+  gfx::ScrollOffset inner_delta;
+
+  // Elastic overscroll effect offset delta. This is used only on Mac. a.k.a
+  // "rubber-banding" overscroll.
+  gfx::Vector2dF elastic_overscroll_delta;
+
+  // "Pinch-zoom" page scale delta. This is a multiplicative delta. i.e.
+  // main_thread_scale * delta == impl_thread_scale.
+  float page_scale_delta;
+
+  // How much the browser controls have been shown or hidden. The ratio runs
+  // between 0 (hidden) and 1 (full-shown). This is additive.
+  float browser_controls_delta;
+
+  // Whether the browser controls have been locked to fully hidden or shown or
+  // whether they can be freely moved.
+  BrowserControlsState browser_controls_constraint;
+
+  // Set to true when a scroll gesture being handled on the compositor has
+  // ended.
+  bool scroll_gesture_did_end;
+};
 
 // A LayerTreeHost is bound to a LayerTreeHostClient. The main rendering
 // loop (in ProxyMain or SingleThreadProxy) calls methods on the
@@ -52,6 +81,7 @@ class LayerTreeHostClient {
   virtual void BeginMainFrameNotExpectedSoon() = 0;
   virtual void BeginMainFrameNotExpectedUntil(base::TimeTicks time) = 0;
   virtual void DidBeginMainFrame() = 0;
+  virtual void DidUpdateLayers() = 0;
 
   // Visual frame-based updates to the state of the LayerTreeHost are expected
   // to happen only in calls to LayerTreeHostClient::UpdateLayerTreeHost, which
@@ -63,21 +93,25 @@ class LayerTreeHostClient {
   // state. (The "compositing state" will result in a mutated layer tree on the
   // LayerTreeHost via additional interface indirections which lead back to
   // mutations on the LayerTreeHost.)
-  //
-  // If |requested_update| is kPrePaint, the client should apply layout and
-  // animation updates and their side effects, but can skip painting stages.
-  enum class VisualStateUpdate { kPrePaint, kAll };
-  virtual void UpdateLayerTreeHost(VisualStateUpdate requested_update) = 0;
+  virtual void UpdateLayerTreeHost() = 0;
 
-  virtual void ApplyViewportDeltas(
-      const gfx::Vector2dF& inner_delta,
-      const gfx::Vector2dF& outer_delta,
-      const gfx::Vector2dF& elastic_overscroll_delta,
-      float page_scale,
-      float top_controls_delta) = 0;
+  // Notifies the client of viewport-related changes that occured in the
+  // LayerTreeHost since the last commit. This typically includes things
+  // related to pinch-zoom, browser controls (aka URL bar), overscroll, etc.
+  virtual void ApplyViewportChanges(const ApplyViewportChangesArgs& args) = 0;
+
   virtual void RecordWheelAndTouchScrollingCount(
       bool has_scrolled_by_wheel,
       bool has_scrolled_by_touch) = 0;
+
+  // Notifies the client when an overscroll has happened.
+  virtual void SendOverscrollEventFromImplSide(
+      const gfx::Vector2dF& overscroll_delta,
+      ElementId scroll_latched_element_id) = 0;
+  // Notifies the client when a gesture scroll has ended.
+  virtual void SendScrollEndEventFromImplSide(
+      ElementId scroll_latched_element_id) = 0;
+
   // Request a LayerTreeFrameSink from the client. When the client has one it
   // should call LayerTreeHost::SetLayerTreeFrameSink. This will result in
   // either DidFailToInitializeLayerTreeFrameSink or
@@ -93,6 +127,12 @@ class LayerTreeHostClient {
   virtual void DidPresentCompositorFrame(
       uint32_t frame_token,
       const gfx::PresentationFeedback& feedback) = 0;
+  // Mark the frame start and end time for UMA and UKM metrics that require
+  // the time from the start of BeginMainFrame to the Commit, or early out.
+  virtual void RecordStartOfFrameMetrics() = 0;
+  virtual void RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time) = 0;
+  virtual void DidGenerateLocalSurfaceIdAllocation(
+      const viz::LocalSurfaceIdAllocation& allocation) = 0;
 
  protected:
   virtual ~LayerTreeHostClient() {}

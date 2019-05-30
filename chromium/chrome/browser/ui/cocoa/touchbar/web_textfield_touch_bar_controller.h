@@ -14,8 +14,6 @@
 
 @class BrowserWindowTouchBarController;
 @class CreditCardAutofillTouchBarController;
-@class TextSuggestionsTouchBarController;
-@class TabContentsController;
 
 namespace autofill {
 class AutofillPopupController;
@@ -27,12 +25,11 @@ class WebContents;
 
 // Provides a touch bar for the textfields in the WebContents. This class
 // implements the NSTouchBarDelegate and handles the items in the touch bar.
+API_AVAILABLE(macos(10.12.2))
 @interface WebTextfieldTouchBarController : NSObject<NSTouchBarDelegate> {
   BrowserWindowTouchBarController* controller_;  // weak.
   base::scoped_nsobject<CreditCardAutofillTouchBarController>
       autofillTouchBarController_;
-  base::scoped_nsobject<TextSuggestionsTouchBarController>
-      textSuggestionsTouchBarController_;
 }
 
 + (WebTextfieldTouchBarController*)controllerForWindow:(NSWindow*)window;
@@ -45,12 +42,10 @@ class WebContents;
 
 - (void)hideCreditCardAutofillTouchBar;
 
-- (void)updateWebContents:(content::WebContents*)contents;
-
 - (void)invalidateTouchBar;
 
 // Creates and returns a touch bar.
-- (NSTouchBar*)makeTouchBar API_AVAILABLE(macos(10.12.2));
+- (NSTouchBar*)makeTouchBar;
 
 @end
 

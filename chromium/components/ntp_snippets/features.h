@@ -33,13 +33,9 @@ extern const base::Feature* const kAllFeatures[];
 // helpers in chrome/browser/ntp_snippets/dependent_features.h instead.
 
 extern const base::Feature kBookmarkSuggestionsFeature;
-extern const base::Feature kForeignSessionsSuggestionsFeature;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Independent features. Treat as normal
-
-// Feature to allow show/hide article suggestions by clicking the header.
-extern const base::Feature kArticleSuggestionsExpandableHeader;
 
 extern const base::Feature kArticleSuggestionsFeature;
 
@@ -51,9 +47,6 @@ extern const base::Feature kBreakingNewsPushFeature;
 
 // Feature to choose a category ranker.
 extern const base::Feature kCategoryRanker;
-
-// Feature to allow the new Google favicon server for fetching publisher icons.
-extern const base::Feature kPublisherFaviconsFromNewServerFeature;
 
 // Feature for simple experimental comparison and validation of changes since
 // M58: enabling this brings back the M58 Stable fetching schedule (which is

@@ -22,17 +22,37 @@
 #include "services/network/public/cpp/http_raw_request_response_info.h"
 #include "url/gurl.h"
 
-// Authenticate a user against the Google Accounts ClientLogin API
-// with various capabilities and return results to a GaiaAuthConsumer.
+// Authenticate a user against the Google Accounts APIs with various
+// capabilities and return results to a GaiaAuthConsumer.
 //
-// In the future, we will also issue auth tokens from this class.
 // This class should be used on a single thread, but it can be whichever thread
 // that you like.
 //
 // This class can handle one request at a time on any thread. To parallelize
-// requests, create multiple GaiaAuthFetcher's.
+// requests, create multiple GaiaAuthFetchers.
 
 class GaiaAuthFetcherTest;
+
+namespace gaia {
+
+// Mode determining whether Gaia can change the order of the accounts in
+// cookies.
+enum class MultiloginMode {
+  MULTILOGIN_UPDATE_COOKIE_ACCOUNTS_ORDER = 0,
+  MULTILOGIN_PRESERVE_COOKIE_ACCOUNTS_ORDER
+};
+
+// Specifies the "source" parameter for Gaia calls.
+enum class GaiaSource {
+  kChrome,
+  kChromeOS,
+  kAccountReconcilorDice,
+  kAccountReconcilorMirror,
+  kOAuth2LoginVerifier,
+  kSigninManager
+};
+
+}  // namespace gaia
 
 namespace network {
 class SimpleURLLoader;
@@ -63,7 +83,7 @@ class GaiaAuthFetcher {
   // This will later be hidden behind an auth service which caches tokens.
   GaiaAuthFetcher(
       GaiaAuthConsumer* consumer,
-      const std::string& source,
+      gaia::GaiaSource source,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
   virtual ~GaiaAuthFetcher();
 
@@ -72,47 +92,6 @@ class GaiaAuthFetcher {
   // OnOAuth2RevokeTokenCompleted will be called on the consumer on the original
   // thread.
   void StartRevokeOAuth2Token(const std::string& auth_token);
-
-  // Start a request to exchange the cookies of a signed-in user session
-  // for an OAuthLogin-scoped oauth2 token.  In the case of a session with
-  // multiple accounts signed in, |session_index| indicate the which of accounts
-  // within the session.
-  //
-  // Either OnClientOAuthSuccess or OnClientOAuthFailure will be
-  // called on the consumer on the original thread.
-  void DeprecatedStartCookieForOAuthLoginTokenExchange(
-      const std::string& session_index);
-
-  // Start a request to exchange the cookies of a signed-in user session
-  // for an OAuthLogin-scoped oauth2 token. In the case of a session with
-  // multiple accounts signed in, |session_index| indicate the which of accounts
-  // within the session.
-  // Resulting refresh token is annotated on the server with |device_id|. Format
-  // of device_id on the server is at most 64 unicode characters.
-  //
-  // Either OnClientOAuthSuccess or OnClientOAuthFailure will be
-  // called on the consumer on the original thread.
-  void DeprecatedStartCookieForOAuthLoginTokenExchangeWithDeviceId(
-      const std::string& session_index,
-      const std::string& device_id);
-
-  // Start a request to exchange the cookies of a signed-in user session
-  // and for specified client for an OAuthLogin-scoped oauth2 token. Client is
-  // determined by its |client_id|. In the case of a session with multiple
-  // accounts signed in, |session_index| indicate the which of accounts
-  // within the session. If |fetch_token_from_auth_code| is not set fetching
-  // process stops after receiving an auth code and ClientOAuthSuccess won't be
-  // called.
-  // Resulting refresh token is annotated on the server with |device_id|. Format
-  // of device_id on the server is at most 64 unicode characters.
-  //
-  // Either OnClientOAuthCode or ClientOAuthSuccess or OnClientOAuthFailure
-  // will be called on the consumer on the original thread.
-  void DeprecatedStartCookieForOAuthLoginTokenExchange(
-      bool fetch_token_from_auth_code,
-      const std::string& session_index,
-      const std::string& client_id,
-      const std::string& device_id);
 
   // Start a request to exchange the authorization code for an OAuthLogin-scoped
   // oauth2 token.
@@ -232,17 +211,21 @@ class GaiaAuthFetcher {
   // Dispatch the results of a request.
   void DispatchFetchedRequest(const GURL& url,
                               const std::string& data,
-                              const net::ResponseCookies& cookies,
                               net::Error net_error,
                               int response_code);
 
   void SetPendingFetch(bool pending_fetch);
 
+  // Needed to use XmlHTTPRequest for Multilogin requeston iOS even after
+  // iOS11 because WKWebView cannot read response body if content-disposition
+  // header is set.
+  // TODO(https://crbug.com/889471) Remove this once requests are done using
+  // NSUrlSession in iOS.
+  bool IsMultiloginUrl(const GURL& url);
+
  private:
   // The format of the POST body for IssueAuthToken.
   static const char kIssueAuthTokenFormat[];
-  // The format of the query string to get OAuth2 auth code from auth token.
-  static const char kClientLoginToOAuth2URLFormat[];
   // The format of the POST body to get OAuth2 token pair from auth code.
   static const char kOAuth2CodeToTokenPairBodyFormat[];
   // Additional param for the POST body to get OAuth2 token pair from auth code.
@@ -283,19 +266,9 @@ class GaiaAuthFetcher {
   static const char kAuthHeaderFormat[];
   static const char kOAuthHeaderFormat[];
   static const char kOAuth2BearerHeaderFormat[];
-  static const char kDeviceIdHeaderFormat[];
   static const char kOAuthMultiBearerHeaderFormat[];
-  static const char kClientLoginToOAuth2CookiePartSecure[];
-  static const char kClientLoginToOAuth2CookiePartHttpOnly[];
-  static const char kClientLoginToOAuth2CookiePartCodePrefix[];
-  static const int kClientLoginToOAuth2CookiePartCodePrefixLength;
 
   void OnURLLoadComplete(std::unique_ptr<std::string> response_body);
-
-  void OnClientLoginToOAuth2Fetched(const std::string& data,
-                                    const net::ResponseCookies& cookies,
-                                    net::Error net_error,
-                                    int response_code);
 
   void OnOAuth2TokenPairFetched(const std::string& data,
                                 net::Error net_error,
@@ -348,14 +321,6 @@ class GaiaAuthFetcher {
                                       std::string* error_url,
                                       std::string* captcha_url,
                                       std::string* captcha_token);
-
-  // Parse ClientLogin to OAuth2 response.
-  static bool ParseClientLoginToOAuth2Response(
-      const net::ResponseCookies& cookies,
-      std::string* auth_code);
-
-  static bool ParseClientLoginToOAuth2Cookie(const std::string& cookie,
-                                             std::string* auth_code);
 
   // Is this a special case Gaia error for TwoFactor auth?
   static bool IsSecondFactorSuccess(const std::string& alleged_error);
@@ -414,7 +379,6 @@ class GaiaAuthFetcher {
   // While a fetch is going on:
   std::unique_ptr<network::SimpleURLLoader> url_loader_;
   GURL original_url_;
-  GURL deprecated_client_login_to_oauth2_gurl_;
   std::string request_body_;
 
   std::string requested_service_;  // Currently tracked for IssueAuthToken only.
@@ -423,8 +387,8 @@ class GaiaAuthFetcher {
 
   // For investigation of https://crbug.com/876306.
   base::TimeDelta list_accounts_system_uptime_;
-#if !defined(OS_IOS)
-  // There is no easy way to get the process uptime on iOS.
+#if !defined(OS_IOS) && !defined(OS_ANDROID)
+  // Process creation time is not available on iOS and Android.
   base::TimeDelta list_accounts_process_uptime_;
 #endif
 
@@ -438,8 +402,6 @@ class GaiaAuthFetcher {
   FRIEND_TEST_ALL_PREFIXES(GaiaAuthFetcherTest, CheckNormalErrorCode);
   FRIEND_TEST_ALL_PREFIXES(GaiaAuthFetcherTest, CheckTwoFactorResponse);
   FRIEND_TEST_ALL_PREFIXES(GaiaAuthFetcherTest, LoginNetFailure);
-  FRIEND_TEST_ALL_PREFIXES(GaiaAuthFetcherTest,
-      ParseClientLoginToOAuth2Response);
   FRIEND_TEST_ALL_PREFIXES(GaiaAuthFetcherTest, ParseOAuth2TokenPairResponse);
   FRIEND_TEST_ALL_PREFIXES(GaiaAuthFetcherTest, ClientOAuthSuccess);
   FRIEND_TEST_ALL_PREFIXES(GaiaAuthFetcherTest, ClientOAuthWithQuote);

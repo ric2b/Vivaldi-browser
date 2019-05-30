@@ -9,20 +9,25 @@
 
 #include "ash/public/interfaces/constants.mojom.h"
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/timer/timer.h"
 #include "build/buildflag.h"
 #include "chromeos/assistant/buildflags.h"
+#include "chromeos/audio/cras_audio_handler.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
 #include "chromeos/services/assistant/assistant_manager_service.h"
 #include "chromeos/services/assistant/assistant_settings_manager.h"
+#include "chromeos/services/assistant/public/features.h"
 #include "google_apis/gaia/google_service_auth_error.h"
-#include "google_apis/gaia/oauth2_token_service.h"
+#include "services/identity/public/cpp/scope_set.h"
 #include "services/identity/public/mojom/constants.mojom.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/cpp/service_context.h"
 
 #if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
 #include "chromeos/assistant/internal/internal_constants.h"
@@ -44,6 +49,7 @@ namespace {
 constexpr char kScopeAuthGcm[] = "https://www.googleapis.com/auth/gcm";
 constexpr char kScopeAssistant[] =
     "https://www.googleapis.com/auth/assistant-sdk-prototype";
+constexpr char kScopeClearCutLog[] = "https://www.googleapis.com/auth/cclog";
 
 constexpr base::TimeDelta kMinTokenRefreshDelay =
     base::TimeDelta::FromMilliseconds(1000);
@@ -52,14 +58,18 @@ constexpr base::TimeDelta kMaxTokenRefreshDelay =
 
 }  // namespace
 
-Service::Service()
-    : platform_binding_(this),
+Service::Service(service_manager::mojom::ServiceRequest request,
+                 network::NetworkConnectionTracker* network_connection_tracker,
+                 std::unique_ptr<network::SharedURLLoaderFactoryInfo>
+                     url_loader_factory_info)
+    : service_binding_(this, std::move(request)),
+      platform_binding_(this),
       session_observer_binding_(this),
       token_refresh_timer_(std::make_unique<base::OneShotTimer>()),
-      main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      main_task_runner_(base::SequencedTaskRunnerHandle::Get()),
       power_manager_observer_(this),
-      voice_interaction_observer_binding_(this),
-      assistant_interaction_subscriber_binding_(this),
+      network_connection_tracker_(network_connection_tracker),
+      url_loader_factory_info_(std::move(url_loader_factory_info)),
       weak_ptr_factory_(this) {
   registry_.AddInterface<mojom::AssistantPlatform>(base::BindRepeating(
       &Service::BindAssistantPlatformConnection, base::Unretained(this)));
@@ -67,15 +77,26 @@ Service::Service()
   // TODO(xiaohuic): in MASH we will need to setup the dbus client if assistant
   // service runs in its own process.
   chromeos::PowerManagerClient* power_manager_client =
-      chromeos::DBusThreadManager::Get()->GetPowerManagerClient();
+      chromeos::PowerManagerClient::Get();
   power_manager_observer_.Add(power_manager_client);
+  power_manager_client->RequestStatusUpdate();
 }
 
 Service::~Service() = default;
 
-void Service::SetIdentityManagerForTesting(
-    identity::mojom::IdentityManagerPtr identity_manager) {
-  identity_manager_ = std::move(identity_manager);
+void Service::RequestAccessToken() {
+  // Bypass access token fetching under signed out mode.
+  if (is_signed_out_mode_)
+    return;
+
+  VLOG(1) << "Start requesting access token.";
+  GetIdentityAccessor()->GetPrimaryAccountInfo(base::BindOnce(
+      &Service::GetPrimaryAccountInfoCallback, base::Unretained(this)));
+}
+
+void Service::SetIdentityAccessorForTesting(
+    identity::mojom::IdentityAccessorPtr identity_accessor) {
+  identity_accessor_ = std::move(identity_accessor);
 }
 
 void Service::SetAssistantManagerForTesting(
@@ -104,6 +125,16 @@ void Service::BindAssistantConnection(mojom::AssistantRequest request) {
 void Service::BindAssistantPlatformConnection(
     mojom::AssistantPlatformRequest request) {
   platform_binding_.Bind(std::move(request));
+}
+
+void Service::PowerChanged(const power_manager::PowerSupplyProperties& prop) {
+  const bool power_source_connected =
+      prop.external_power() == power_manager::PowerSupplyProperties::AC;
+  if (power_source_connected == power_source_connected_)
+    return;
+
+  power_source_connected_ = power_source_connected;
+  UpdateAssistantManagerState();
 }
 
 void Service::SuspendDone(const base::TimeDelta& sleep_duration) {
@@ -140,61 +171,134 @@ void Service::OnLockStateChanged(bool locked) {
 }
 
 void Service::OnVoiceInteractionSettingsEnabled(bool enabled) {
-  settings_enabled_ = enabled;
-  if (enabled && assistant_manager_service_->GetState() ==
-                     AssistantManagerService::State::STOPPED) {
-    // This will eventually trigger the actual start of assistant services
-    // because they all depend on it.
-    RequestAccessToken();
-  } else if (!enabled && assistant_manager_service_->GetState() !=
-                             AssistantManagerService::State::STOPPED) {
-    assistant_manager_service_->Stop();
-    client_->OnAssistantStatusChanged(false /* running */);
-  }
+  UpdateAssistantManagerState();
 }
 
 void Service::OnVoiceInteractionHotwordEnabled(bool enabled) {
-  if (hotword_enabled_ == enabled)
-    return;
-  hotword_enabled_ = enabled;
+  UpdateAssistantManagerState();
+}
 
-  if (assistant_manager_service_->GetState() !=
-      AssistantManagerService::State::RUNNING) {
+void Service::OnLocaleChanged(const std::string& locale) {
+  UpdateAssistantManagerState();
+}
+
+void Service::OnVoiceInteractionHotwordAlwaysOn(bool always_on) {
+  // No need to update hotword status if power source is connected.
+  if (power_source_connected_)
+    return;
+
+  UpdateAssistantManagerState();
+}
+
+void Service::UpdateAssistantManagerState() {
+  if (!assistant_state_.hotword_enabled().has_value() ||
+      !assistant_state_.settings_enabled().has_value() ||
+      !assistant_state_.hotword_always_on().has_value() ||
+      !assistant_state_.locale().has_value() ||
+      (!access_token_.has_value() && !is_signed_out_mode_)) {
+    // Assistant state has not finished initialization, let's wait.
     return;
   }
 
-  assistant_manager_service_->Stop();
-  client_->OnAssistantStatusChanged(false /* running */);
-  RequestAccessToken();
-}
+  if (!assistant_manager_service_)
+    CreateAssistantManagerService();
 
-void Service::OnInteractionFinished(
-    mojom::AssistantInteractionResolution resolution) {
-  if (resolution == mojom::AssistantInteractionResolution::kError) {
-    // When communicateion error happens, it could be caused by auth errors.
-    // Retry with a new auth token to attempt recovery.
-    RequestAccessToken();
+  switch (assistant_manager_service_->GetState()) {
+    case AssistantManagerService::State::STOPPED:
+      if (assistant_state_.settings_enabled().value()) {
+        assistant_manager_service_->Start(
+            is_signed_out_mode_ ? base::nullopt : access_token_,
+            ShouldEnableHotword(),
+            base::BindOnce(
+                [](scoped_refptr<base::SequencedTaskRunner> task_runner,
+                   base::OnceCallback<void()> callback) {
+                  task_runner->PostTask(FROM_HERE, std::move(callback));
+                },
+                main_task_runner_,
+                base::BindOnce(&Service::FinalizeAssistantManagerService,
+                               weak_ptr_factory_.GetWeakPtr())));
+        DVLOG(1) << "Request Assistant start";
+      }
+      break;
+    case AssistantManagerService::State::RUNNING:
+    case AssistantManagerService::State::STARTED:
+      if (assistant_state_.settings_enabled().value()) {
+        if (!is_signed_out_mode_)
+          assistant_manager_service_->SetAccessToken(access_token_.value());
+        assistant_manager_service_->EnableHotword(ShouldEnableHotword());
+      } else {
+        StopAssistantManagerService();
+      }
+      break;
   }
 }
 
 void Service::BindAssistantSettingsManager(
     mojom::AssistantSettingsManagerRequest request) {
-  DCHECK(assistant_settings_manager_);
-  assistant_settings_manager_->BindRequest(std::move(request));
+  DCHECK(assistant_manager_service_);
+  assistant_manager_service_->GetAssistantSettingsManager()->BindRequest(
+      std::move(request));
 }
 
-void Service::RequestAccessToken() {
-  VLOG(1) << "Start requesting access token.";
-  GetIdentityManager()->GetPrimaryAccountInfo(base::BindOnce(
-      &Service::GetPrimaryAccountInfoCallback, base::Unretained(this)));
-}
+void Service::Init(mojom::ClientPtr client,
+                   mojom::DeviceActionsPtr device_actions) {
+  client_ = std::move(client);
+  device_actions_ = std::move(device_actions);
+  assistant_state_.Init(service_binding_.GetConnector());
+  assistant_state_.AddObserver(this);
 
-identity::mojom::IdentityManager* Service::GetIdentityManager() {
-  if (!identity_manager_) {
-    context()->connector()->BindInterface(
-        identity::mojom::kServiceName, mojo::MakeRequest(&identity_manager_));
+  // Don't fetch token for test.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          chromeos::switches::kDisableGaiaServices)) {
+    is_signed_out_mode_ = true;
+    return;
   }
-  return identity_manager_.get();
+
+  RequestAccessToken();
+}
+
+identity::mojom::IdentityAccessor* Service::GetIdentityAccessor() {
+  if (!identity_accessor_) {
+    service_binding_.GetConnector()->BindInterface(
+        identity::mojom::kServiceName, mojo::MakeRequest(&identity_accessor_));
+  }
+  return identity_accessor_.get();
+}
+
+void Service::GetPrimaryAccountInfoCallback(
+    const base::Optional<AccountInfo>& account_info,
+    const identity::AccountState& account_state) {
+  if (!account_info.has_value() || !account_state.has_refresh_token ||
+      account_info.value().gaia.empty()) {
+    LOG(ERROR) << "Failed to retrieve primary account info.";
+    RetryRefreshToken();
+    return;
+  }
+  account_id_ = AccountId::FromUserEmailGaiaId(account_info.value().email,
+                                               account_info.value().gaia);
+  identity::ScopeSet scopes;
+  scopes.insert(kScopeAssistant);
+  scopes.insert(kScopeAuthGcm);
+  if (features::IsClearCutLogEnabled())
+    scopes.insert(kScopeClearCutLog);
+  identity_accessor_->GetAccessToken(
+      account_info.value().account_id, scopes, "cros_assistant",
+      base::BindOnce(&Service::GetAccessTokenCallback, base::Unretained(this)));
+}
+
+void Service::GetAccessTokenCallback(const base::Optional<std::string>& token,
+                                     base::Time expiration_time,
+                                     const GoogleServiceAuthError& error) {
+  if (!token.has_value()) {
+    LOG(ERROR) << "Failed to retrieve token, error: " << error.ToString();
+    RetryRefreshToken();
+    return;
+  }
+
+  access_token_ = token;
+  UpdateAssistantManagerState();
+  token_refresh_timer_->Start(FROM_HERE, expiration_time - base::Time::Now(),
+                              this, &Service::RequestAccessToken);
 }
 
 void Service::RetryRefreshToken() {
@@ -209,114 +313,20 @@ void Service::RetryRefreshToken() {
                               &Service::RequestAccessToken);
 }
 
-void Service::Init(mojom::ClientPtr client,
-                   mojom::DeviceActionsPtr device_actions) {
-  client_ = std::move(client);
-  device_actions_ = std::move(device_actions);
+void Service::CreateAssistantManagerService() {
 #if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
-  context()->connector()->BindInterface(ash::mojom::kServiceName,
-                                        &voice_interaction_controller_);
-  ash::mojom::VoiceInteractionObserverPtr ptr;
-  voice_interaction_observer_binding_.Bind(mojo::MakeRequest(&ptr));
-  voice_interaction_controller_->IsHotwordEnabled(base::BindOnce(
-      &Service::CreateAssistantManagerService, weak_ptr_factory_.GetWeakPtr()));
-  voice_interaction_controller_->AddObserver(std::move(ptr));
-  voice_interaction_controller_->IsSettingEnabled(
-      base::BindOnce(&Service::OnVoiceInteractionSettingsEnabled,
-                     weak_ptr_factory_.GetWeakPtr()));
+  device::mojom::BatteryMonitorPtr battery_monitor;
+  service_binding_.GetConnector()->BindInterface(
+      device::mojom::kServiceName, mojo::MakeRequest(&battery_monitor));
+
+  // |assistant_manager_service_| is only created once.
+  DCHECK(url_loader_factory_info_);
+  assistant_manager_service_ = std::make_unique<AssistantManagerServiceImpl>(
+      service_binding_.GetConnector(), std::move(battery_monitor), this,
+      network_connection_tracker_, std::move(url_loader_factory_info_));
 #else
   assistant_manager_service_ =
       std::make_unique<FakeAssistantManagerServiceImpl>();
-  RequestAccessToken();
-#endif
-}
-
-void Service::GetPrimaryAccountInfoCallback(
-    const base::Optional<AccountInfo>& account_info,
-    const identity::AccountState& account_state) {
-  if (!account_info.has_value() || !account_state.has_refresh_token ||
-      account_info.value().gaia.empty()) {
-    LOG(ERROR) << "Failed to retrieve primary account info.";
-    RetryRefreshToken();
-    return;
-  }
-  account_id_ = AccountId::FromUserEmailGaiaId(account_info.value().email,
-                                               account_info.value().gaia);
-  OAuth2TokenService::ScopeSet scopes;
-  scopes.insert(kScopeAssistant);
-  scopes.insert(kScopeAuthGcm);
-  identity_manager_->GetAccessToken(
-      account_info.value().account_id, scopes, "cros_assistant",
-      base::BindOnce(&Service::GetAccessTokenCallback, base::Unretained(this)));
-}
-
-void Service::GetAccessTokenCallback(const base::Optional<std::string>& token,
-                                     base::Time expiration_time,
-                                     const GoogleServiceAuthError& error) {
-  if (!token.has_value()) {
-    LOG(ERROR) << "Failed to retrieve token, error: " << error.ToString();
-    RetryRefreshToken();
-    return;
-  }
-
-  DCHECK(assistant_manager_service_);
-  switch (assistant_manager_service_->GetState()) {
-    case AssistantManagerService::State::STOPPED:
-      assistant_manager_service_->Start(
-          token.value(),
-          base::BindOnce(
-              [](scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-                 base::OnceCallback<void()> callback) {
-                task_runner->PostTask(FROM_HERE, std::move(callback));
-              },
-              main_thread_task_runner_,
-              base::BindOnce(&Service::FinalizeAssistantManagerService,
-                             weak_ptr_factory_.GetWeakPtr())));
-      DVLOG(1) << "Request Assistant start";
-      break;
-    case AssistantManagerService::State::RUNNING:
-      assistant_manager_service_->SetAccessToken(token.value());
-      break;
-    case AssistantManagerService::State::STARTED:
-      // in the process of starting, no need to do anything.
-      break;
-  }
-
-  token_refresh_timer_->Start(FROM_HERE, expiration_time - base::Time::Now(),
-                              this, &Service::RequestAccessToken);
-}
-
-void Service::CreateAssistantManagerService(bool enable_hotword) {
-#if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
-  hotword_enabled_ = enable_hotword;
-  device::mojom::BatteryMonitorPtr battery_monitor;
-  context()->connector()->BindInterface(device::mojom::kServiceName,
-                                        mojo::MakeRequest(&battery_monitor));
-  assistant_manager_service_ = std::make_unique<AssistantManagerServiceImpl>(
-      context()->connector(), std::move(battery_monitor), this, enable_hotword);
-
-  // Bind to Assistant controller in ash.
-  context()->connector()->BindInterface(ash::mojom::kServiceName,
-                                        &assistant_controller_);
-  mojom::AssistantPtr ptr;
-  BindAssistantConnection(mojo::MakeRequest(&ptr));
-  assistant_controller_->SetAssistant(std::move(ptr));
-
-  registry_.AddInterface<mojom::Assistant>(base::BindRepeating(
-      &Service::BindAssistantConnection, base::Unretained(this)));
-
-  assistant_settings_manager_ =
-      assistant_manager_service_.get()->GetAssistantSettingsManager();
-  registry_.AddInterface<mojom::AssistantSettingsManager>(base::BindRepeating(
-      &Service::BindAssistantSettingsManager, base::Unretained(this)));
-
-  // Subscribe to Assistant interaction events.
-  chromeos::assistant::mojom::AssistantInteractionSubscriberPtr
-      interaction_subscriber_ptr;
-  assistant_interaction_subscriber_binding_.Bind(
-      mojo::MakeRequest(&interaction_subscriber_ptr));
-  assistant_manager_service_->AddAssistantInteractionSubscriber(
-      std::move(interaction_subscriber_ptr));
 #endif
 }
 
@@ -324,30 +334,54 @@ void Service::FinalizeAssistantManagerService() {
   DCHECK(assistant_manager_service_->GetState() ==
          AssistantManagerService::State::RUNNING);
 
-  if (!session_observer_binding_)
-    AddAshSessionObserver();
+  // Using session_observer_binding_ as a flag to control onetime initialization
+  if (!session_observer_binding_) {
+    // Bind to the AssistantController in ash.
+    service_binding_.GetConnector()->BindInterface(ash::mojom::kServiceName,
+                                                   &assistant_controller_);
 
-  // Double check settings enabled status to avoid racing issue.
-  if (!settings_enabled_) {
-    assistant_manager_service_->Stop();
-    client_->OnAssistantStatusChanged(false /* running */);
-    return;
+    mojom::AssistantPtr ptr;
+    BindAssistantConnection(mojo::MakeRequest(&ptr));
+    assistant_controller_->SetAssistant(std::move(ptr));
+
+    if (features::IsTimerNotificationEnabled()) {
+      // Bind to the AssistantAlarmTimerController in ash.
+      service_binding_.GetConnector()->BindInterface(
+          ash::mojom::kServiceName, &assistant_alarm_timer_controller_);
+    }
+
+    // Bind to the AssistantNotificationController in ash.
+    service_binding_.GetConnector()->BindInterface(
+        ash::mojom::kServiceName, &assistant_notification_controller_);
+
+    // Bind to the AssistantScreenContextController in ash.
+    service_binding_.GetConnector()->BindInterface(
+        ash::mojom::kServiceName, &assistant_screen_context_controller_);
+
+    registry_.AddInterface<mojom::Assistant>(base::BindRepeating(
+        &Service::BindAssistantConnection, base::Unretained(this)));
+
+    registry_.AddInterface<mojom::AssistantSettingsManager>(base::BindRepeating(
+        &Service::BindAssistantSettingsManager, base::Unretained(this)));
+
+    AddAshSessionObserver();
   }
 
   client_->OnAssistantStatusChanged(true /* running */);
   UpdateListeningState();
   DVLOG(1) << "Assistant is running";
+}
 
-  // Double check hotword status to avoid racing issue.
-  voice_interaction_controller_->IsHotwordEnabled(
-      base::BindOnce(&Service::OnVoiceInteractionHotwordEnabled,
-                     weak_ptr_factory_.GetWeakPtr()));
+void Service::StopAssistantManagerService() {
+  assistant_manager_service_->Stop();
+  weak_ptr_factory_.InvalidateWeakPtrs();
+  client_->OnAssistantStatusChanged(false /* running */);
 }
 
 void Service::AddAshSessionObserver() {
   ash::mojom::SessionControllerPtr session_controller;
-  context()->connector()->BindInterface(ash::mojom::kServiceName,
-                                        &session_controller);
+  service_binding_.GetConnector()->BindInterface(ash::mojom::kServiceName,
+                                                 &session_controller);
   ash::mojom::SessionActivationObserverPtr observer;
   session_observer_binding_.Bind(mojo::MakeRequest(&observer));
   session_controller->AddSessionActivationObserverForAccountId(
@@ -358,6 +392,26 @@ void Service::UpdateListeningState() {
   bool should_listen = !locked_ && session_active_;
   DVLOG(1) << "Update assistant listening state: " << should_listen;
   assistant_manager_service_->EnableListening(should_listen);
+}
+
+bool Service::ShouldEnableHotword() {
+  bool dsp_available = false;
+  chromeos::AudioDeviceList devices;
+  chromeos::CrasAudioHandler::Get()->GetAudioDevices(&devices);
+  for (const chromeos::AudioDevice& device : devices) {
+    if (device.type == chromeos::AUDIO_TYPE_HOTWORD) {
+      dsp_available = true;
+    }
+  }
+
+  // Disable hotword if hotword is not set to always on and power source is not
+  // connected.
+  if (!dsp_available && !assistant_state_.hotword_always_on().value() &&
+      !power_source_connected_) {
+    return false;
+  }
+
+  return assistant_state_.hotword_enabled().value();
 }
 
 }  // namespace assistant

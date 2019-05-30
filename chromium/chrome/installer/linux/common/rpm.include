@@ -1,91 +1,15 @@
 @@include@@variables.include
 
-# Remove expired repository/package signing key (7B8B44A1), if present.
+# Remove expired repository/package signing key (C3401E12), if present.
 remove_old_rpm_key() {
-  rpm -q gpg-pubkey-7b8b44a1 >/dev/null 2>&1
-  if [ "$?" -eq "0" ]; then
-    rpm -e gpg-pubkey-7b8b44a1 >/dev/null 2>&1
-  fi
-}
-
-# Install the repository/package signing key (C3401E12), if it isn't already.
-install_rpm_key() {
-  # Check to see if the key already exists.
   rpm -q gpg-pubkey-c3401e12 >/dev/null 2>&1
   if [ "$?" -eq "0" ]; then
-    # Keys already exist
-    return 0
+    rpm -e gpg-pubkey-c3401e12 >/dev/null 2>&1
   fi
-
-  # RPM on Mandriva 2009 is dumb and does not understand "rpm --import -"
-  TMPKEY=$(mktemp /tmp/vivaldi.sig.XXXXXX)
-  if [ -n "$TMPKEY" ]; then
-    cat > "$TMPKEY" <<KEYDATA
------BEGIN PGP PUBLIC KEY BLOCK-----
-Version: GnuPG v1
-
-mQINBFh9700BEACfjuPRKbTaFB1y2yPlCMYfA9sw+Mu19g2AEpO4kXsqZPA1mfU0
-nGpZEBanbKbWaZNknr+4Gp0KrkSKL4ZywFeCMhEUXDsMU9dBCInVrhP9jzVJV4oP
-TfNY1fgcwiWNaOJFRt4rot9NNiEOWRRguCPki2285biGfl6bS5a5UqFyA8XQn0dv
-EyyuFQ1mSDJqSw7yYpHFuLsp1hUO1WtmezE6Cqkh1m50eXJmuB5jG8wM1NkGk8lk
-t2DgC/bMDwNIijJBsvBTuh9mdqH/u4TF3mysomMDy+vU8m9Uq5eSEoMKh9Bttai2
-brxPFfxw2u6OTSYbKdw0KmXCe4pNcyrK6jPKUTLaplhhn8vRnzVilQVeTIJPHM1O
-8bsio1LDTQl3K7AQtpqnu2N2nKRLtnTyOyDtfVC+PBS7Jvj4yDoImzqaiOaMcFKO
-DpeO8NudVBUunmgPWwUw4lv4rZyY5+6Rq9fHQGoh+dVnTjSyXVjBppD438RpPCRx
-MUlUddmpZmPsCYqdjnAV1J3kYlSyYOBu7PtssK9TwkzLP3xaMQFJrSRQw48Bc/Q/
-CgaXAYER5pVfQg78thj4gDT3yi1u5ozTmw1hkvaTu9RAJmo4svgWoCClfKJusfo3
-AwCxrgPcFqRWoyahUkpNNS/yKlbDtB6LLmFoO9SJuQ7CmKOXtP8AkGemywARAQAB
-tDVWaXZhbGRpIFBhY2thZ2UgQ29tcG9zZXIgS0VZMDMgPHBhY2thZ2VyQHZpdmFs
-ZGkuY29tPokCPgQTAQIAKAUCWH3vTQIbAwUJA8JnAAYLCQgHAwIGFQgCCQoLBBYC
-AwECHgECF4AACgkQbTeJ7cNAHhK6vQ//YFN3EmodDZL4mPZ5I2gyadFHqKKf79yV
-XiAPC2LOLBKMHGzxMlHDN6MVgCnkPSiGGiS1aJzozucNmg06g0H0DQA4WEg2iBPZ
-SnaCt72ONsPyDrrA7FJimHXCS7wrU4XD1shnnVi+ToV6mYWGiCwiwA6EpJlEYqRs
-ZDJuXAfJYPI85nAvhnysdCGFSEXYICxXhlRZvS234FkV81AmMukelJyZ8O44Ayvm
-ypYIYESBDGrj7wnJJvOE6+IIg7Hl/7XIa60MsN2t7Uo4b4En0yW0NRwwZ4uNUN8L
-tTxcjx20/IdoAEQrNe+UCieaWpUKDQHBOxerBT/PLAnPlpESqMYoAZ07V6VdjD5I
-LoD/iB3jYV4wT9nfWQqMcoyi2gm8HO3w7Nubq9OO3ao9Kd4n1B3S/uKkOZGOE5u9
-VdzvX+c4aBwU5A4nxpMTpE24WWfkHdgj6C/E7eZAfr41pAi9zStecLscqGB5shmX
-5odBk1qAHzvjPk+/zmlh3hEXTaCk5Qi0me8BHiLJC5SMr0XgkQTBC4aSa2Jsbthq
-xcX4oAdb4wbXEiDSatiZjA/hge87OCNsHP6E/5mctran9JsX4kFY/bL/gdsgQ7Zg
-AOa0rSKXeI7vboaveZzst53mN1+8yItV2UQpB5f51/QGLcGy8LnkZgp8UJ4kjpmd
-m2DRBz/IWeC5Ag0EWH3vTQEQAOXfpNZh2Rq5frcawVacN1e4ahorOspOQ6xZZQdl
-iq8EM6YDwZMVSv3ssPMMvcas6ROmCyT+8eeVuiLtlUEAPfgH7Ro8S3tXltS5Zxtp
-4z+yBaKVQw1IrmKTANMsRO+7gu5IHpvUgGhDWi3J4OriIJw2o/Lznf3pBOmnO1pk
-Qgx1bDCDzcauqtQoWrmPikgq010gNU2wdDWTJkgn5BeYrn8gp3tyY5qSFL6Dth2U
-KoYEGwom5QDN9bA/oKRedY9hHdOkqlGedsIAXBIdwp89Cnot/fSUDCOqjZjUHbAb
-lNagPylWsJMne2m2hdWief5YXhsvc/CgSiy3XHkIJkNkpSABzDEV7ulsdVPjr1KL
-AA1ffynx+kSwKNEV10xAIwWhGc1f43z20dAQGEyo2+Wt2sX1RTLe6HCa/0nryVOc
-6YlMI8kPpq15mRPdN1mvwqz+mQtHbOF4mxKjt+lW1NRm7tWwZKU50nzqy1j+aujL
-Q/+Y99SGaXbZbjPffe6HFAG5bEvhJAtfLNW0QZJNavZdwqslmhdyEnC1NPjedubr
-8Ct8hzKxtHOnKYZqACBkkkUCZI32pHbG8JJiLzEPJOivpWlrLt9063gHsgtuVLEk
-FY+qsrCSCQL1g8KBhvhw0WwGuqOhNGCccgZTYZSngshfm1YlXsKAgqGVWC2vMBz6
-ockRABEBAAGJAiUEGAECAA8FAlh9700CGwwFCQPCZwAACgkQbTeJ7cNAHhI1xQ//
-QZwfWqpB9Fl6UlwbCsikxb/yeye3LMQjeJaVkDxa4op15+LBlnOby/rBA8WtGfBq
-KqjH76uAvgaefleOJjJFTwTAGUIt/Db5PvhKztAzdNJeUIGBEz1QlmC16/9hhlgJ
-e1UCXRgd+z59bRY8acV113BxdIV26KU6rbK24Z442LIx07FneNJuoXgfN9Fm+/8T
-FeRD6+kMxzF9i1dVU+/EIufyUbFMA08KnlaevT6umDwHArGPIYjoJ5xVQl04x8dd
-RPrX2FpEHffFla8veKIM8x/T2yQwJeyXbLOsdVVvvGEHStinmePlkX6JV9A243/P
-IAtYo6GK1s8vqVV5kIJhkdsFG6nFVv4Zymhk5LUD9aRVY+wdelsrbOxWSf+TQz7n
-37Or9Tu3LeAlx1wlym8NO+RFo2haCN53PAIqOOWMYZVM9JAq9FxkCF7uLIe9afd2
-ErzEbAPt2yax2at6QvS+CBXlPh7qZ0xzuqDAtHJuZ41Umjr1vo2fXUwn+9dr+EtF
-0KgR8nB31mEerr6wg+d1JoAKPnQ8Ja1xvlHakMa/WswzhtVwL63Z2G9VhAhN0jWv
-4X3uu8Y3gXeQFQoiHHX0zxMKNdv2ujyqG8UQWqENOpgjfcv5TtsaWJrpW267BE61
-R6o2nS+jYNBfJ1GD07srhQQtdgjDLgb8u197g8MhI1I=
-=iQPH
------END PGP PUBLIC KEY BLOCK-----
-KEYDATA
-    rpm --import "$TMPKEY"
-    rc=$?
-    rm -f "$TMPKEY"
-    if [ "$rc" -eq "0" ]; then
-      return 0
-    fi
-  fi
-  return 1
 }
 
-# Install another key (EFB20B23), if it isn't already, for future use.
-install_future_rpm_key() {
+# Install the repository/package signing key (EFB20B23), if it isn't already.
+install_rpm_key() {
   # Check to see if the key already exists.
   rpm -q gpg-pubkey-efb20b23 >/dev/null 2>&1
   if [ "$?" -eq "0" ]; then
@@ -160,13 +84,89 @@ KEYDATA
   return 1
 }
 
+# Install another key (4A3AA3D6), if it isn't already, for future use.
+install_future_rpm_key() {
+  # Check to see if the key already exists.
+  rpm -q gpg-pubkey-a43aa3d6 >/dev/null 2>&1
+  if [ "$?" -eq "0" ]; then
+    # Keys already exist
+    return 0
+  fi
+
+  # RPM on Mandriva 2009 is dumb and does not understand "rpm --import -"
+  TMPKEY=$(mktemp /tmp/vivaldi.sig.XXXXXX)
+  if [ -n "$TMPKEY" ]; then
+    cat > "$TMPKEY" <<KEYDATA
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+Version: GnuPG v1
+
+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
+=plXO
+-----END PGP PUBLIC KEY BLOCK-----
+KEYDATA
+    rpm --import "$TMPKEY"
+    rc=$?
+    rm -f "$TMPKEY"
+    if [ "$rc" -eq "0" ]; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
 determine_rpm_package_manager() {
   local RELEASE
   LSB_RELEASE="$(which lsb_release 2> /dev/null)"
   if [ -x "$LSB_RELEASE" ]; then
     RELEASE=$(lsb_release -i 2> /dev/null | sed 's/:\t/:/' | cut -d ':' -f 2-)
     case $RELEASE in
-    "Fedora")
+    "Fedora"|"Amazon")
       PACKAGEMANAGERS=(yum)
       ;;
     "Mageia")
@@ -204,6 +204,8 @@ determine_rpm_package_manager() {
   fi
 
   if [ -f "/etc/fedora-release" ] || [ -f "/etc/redhat-release" ]; then
+    PACKAGEMANAGERS=(yum)
+  elif [ -f "/etc/system-release" ] && grep -Fq "Amazon Linux" "/etc/system-release"; then
     PACKAGEMANAGERS=(yum)
   elif [ -f "/etc/SuSE-release" ]; then
     PACKAGEMANAGERS=(yast)

@@ -16,9 +16,9 @@ import android.text.style.StyleSpan;
 import android.view.View;
 import android.webkit.MimeTypeMap;
 
-import org.chromium.base.AsyncTask;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.download.DownloadManagerService;
 import org.chromium.chrome.browser.download.DownloadMetrics;
@@ -72,6 +72,7 @@ public class DuplicateDownloadInfoBar extends ConfirmInfoBar {
      * @param template Template of the text to be displayed.
      */
     private CharSequence getDownloadMessageText(final Context context, final String template) {
+        // TODO(qinmin): fix the case that mFilePath is a content Uri.
         final File file = new File(mFilePath);
         final Uri fileUri = Uri.fromFile(file);
         final String mimeType = getMimeTypeFromUri(fileUri);
@@ -88,8 +89,8 @@ public class DuplicateDownloadInfoBar extends ConfirmInfoBar {
                     @Override
                     protected void onPostExecute(Boolean fileExists) {
                         if (fileExists) {
-                            DownloadUtils.openFile(file, mimeType, null, mIsIncognito, null, null,
-                                    DownloadMetrics.DownloadOpenSource.INFO_BAR);
+                            DownloadUtils.openFile(mFilePath, mimeType, null, mIsIncognito, null,
+                                    null, DownloadMetrics.DownloadOpenSource.INFO_BAR);
                         } else {
                             DownloadManagerService.openDownloadsPage(
                                     ContextUtils.getApplicationContext());

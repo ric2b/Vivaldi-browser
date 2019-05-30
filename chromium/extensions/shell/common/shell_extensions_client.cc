@@ -16,7 +16,6 @@
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/features/simple_feature.h"
 #include "extensions/common/permissions/permission_message_provider.h"
-#include "extensions/common/permissions/permissions_provider.h"
 #include "extensions/common/url_pattern_set.h"
 #include "extensions/shell/common/shell_extensions_api_provider.h"
 
@@ -33,6 +32,11 @@ class ShellPermissionMessageProvider : public PermissionMessageProvider {
 
   // PermissionMessageProvider implementation.
   PermissionMessages GetPermissionMessages(
+      const PermissionIDSet& permissions) const override {
+    return PermissionMessages();
+  }
+
+  PermissionMessages GetPowerfulPermissionMessages(
       const PermissionIDSet& permissions) const override {
     return PermissionMessages();
   }
@@ -137,11 +141,6 @@ bool ShellExtensionsClient::IsBlacklistUpdateURL(const GURL& url) const {
   // TODO(rockot): Maybe we want to do something else here. For now we accept
   // any URL as a blacklist URL because we don't really care.
   return true;
-}
-
-std::string ShellExtensionsClient::GetUserAgent() const {
-  return content::BuildUserAgentFromProduct(
-      version_info::GetProductNameAndVersionForUserAgent());
 }
 
 }  // namespace extensions

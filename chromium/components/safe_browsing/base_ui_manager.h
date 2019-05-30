@@ -46,13 +46,19 @@ class BaseUIManager
   // protocol buffer.
   virtual void SendSerializedThreatDetails(const std::string& serialized);
 
+  // Updates the whitelist URL set for |web_contents|. Called on the UI thread.
+  void AddToWhitelistUrlSet(const GURL& whitelist_url,
+                            content::WebContents* web_contents,
+                            bool is_pending,
+                            SBThreatType threat_type);
+
   // This is a no-op in the base class, but should be overridden to report hits
   // to the unsafe contents (malware, phishing, unsafe download URL)
   // to the server. Can only be called on UI thread. Will only upload a hit
   // report if the user has enabled SBER and is not currently in incognito mode.
   virtual void MaybeReportSafeBrowsingHit(
       const safe_browsing::HitReport& hit_report,
-      const content::WebContents* web_contents);
+      content::WebContents* web_contents);
 
   // A convenience wrapper method for IsUrlWhitelistedOrPendingForWebContents.
   virtual bool IsWhitelisted(const UnsafeResource& resource);
@@ -101,12 +107,6 @@ class BaseUIManager
  protected:
   friend class ChromePasswordProtectionService;
   virtual ~BaseUIManager();
-
-  // Updates the whitelist URL set for |web_contents|. Called on the UI thread.
-  void AddToWhitelistUrlSet(const GURL& whitelist_url,
-                            content::WebContents* web_contents,
-                            bool is_pending,
-                            SBThreatType threat_type);
 
   // Removes |whitelist_url| from the whitelist for |web_contents|.
   // Called on the UI thread.

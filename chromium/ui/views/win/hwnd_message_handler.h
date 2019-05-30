@@ -39,17 +39,18 @@ class Insets;
 }  // namespace gfx
 
 namespace ui  {
+class AXFragmentRootWin;
 class AXSystemCaretWin;
 class InputMethod;
 class TextInputClient;
 class ViewProp;
+class SessionChangeObserver;
 }  // namespace ui
 
 namespace views {
 
 class FullscreenHandler;
 class HWNDMessageHandlerDelegate;
-class WindowsSessionChangeObserver;
 
 // These two messages aren't defined in winuser.h, but they are sent to windows
 // with captions. They appear to paint the window caption and frame.
@@ -355,6 +356,9 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
     CR_MESSAGE_HANDLER_EX(WM_POINTERUPDATE, OnPointerEvent)
     CR_MESSAGE_HANDLER_EX(WM_POINTERENTER, OnPointerEvent)
     CR_MESSAGE_HANDLER_EX(WM_POINTERLEAVE, OnPointerEvent)
+    CR_MESSAGE_HANDLER_EX(WM_NCPOINTERDOWN, OnPointerEvent)
+    CR_MESSAGE_HANDLER_EX(WM_NCPOINTERUP, OnPointerEvent)
+    CR_MESSAGE_HANDLER_EX(WM_NCPOINTERUPDATE, OnPointerEvent)
 
     // Key events.
     CR_MESSAGE_HANDLER_EX(WM_KEYDOWN, OnKeyEvent)
@@ -517,13 +521,6 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
                                     WPARAM w_param,
                                     LPARAM l_param);
 
-  LRESULT GenerateMouseEventFromPointerEvent(
-      UINT message,
-      UINT32 pointer_id,
-      const POINTER_INFO& pointer_info,
-      const gfx::Point& point,
-      const ui::PointerDetails& pointer_details);
-
   // Returns true if the mouse message passed in is an OS synthesized mouse
   // message.
   // |message| identifies the mouse message.
@@ -535,6 +532,9 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
 
   // Provides functionality to transition a frame to DWM.
   void PerformDwmTransition();
+
+  // Updates DWM frame to extend into client area if needed.
+  void UpdateDwmFrame();
 
   // Generates a touch event and adds it to the |touch_events| parameter.
   // |point| is the point where the touch was initiated.
@@ -643,6 +643,9 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // activation, etc.)
   bool ignore_window_pos_changes_;
 
+  // Keeps track of the last size type param received from a WM_SIZE message.
+  UINT last_size_param_ = SIZE_RESTORED;
+
   // The last-seen monitor containing us, and its rect and work area.  These are
   // used to catch updates to the rect and work area and react accordingly.
   HMONITOR last_monitor_;
@@ -661,9 +664,6 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   ui::SequentialIDGenerator id_generator_;
 
   PenEventProcessor pen_processor_;
-
-  // Set to true if we are in the context of a sizing operation.
-  bool in_size_loop_;
 
   // Stores a pointer to the WindowEventTarget interface implemented by this
   // class. Allows callers to retrieve the interface pointer.
@@ -694,6 +694,11 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // glass. Defaults to false.
   bool dwm_transition_desired_;
 
+  // Is DWM composition currently enabled?
+  // Note: According to MSDN docs for DwmIsCompositionEnabled(), this is always
+  // true starting in Windows 8.
+  bool dwm_composition_enabled_;
+
   // True if HandleWindowSizeChanging has been called in the delegate, but not
   // HandleClientSizeChanged.
   bool sent_window_size_changing_;
@@ -703,11 +708,13 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   uint32_t current_window_size_message_ = 0;
 
   // Manages observation of Windows Session Change messages.
-  std::unique_ptr<WindowsSessionChangeObserver>
-      windows_session_change_observer_;
+  std::unique_ptr<ui::SessionChangeObserver> session_change_observer_;
 
   // Some assistive software need to track the location of the caret.
   std::unique_ptr<ui::AXSystemCaretWin> ax_system_caret_;
+
+  // Implements IRawElementProviderFragmentRoot when UIA is enabled
+  std::unique_ptr<ui::AXFragmentRootWin> ax_fragment_root_;
 
   // The location where the user clicked on the caption. We cache this when we
   // receive the WM_NCLBUTTONDOWN message. We use this in the subsequent
@@ -735,6 +742,13 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // True if we enable feature kPrecisionTouchpadScrollPhase. Indicate we will
   // report the scroll phase information or not.
   bool precision_touchpad_scroll_phase_enabled_;
+
+  // True if DWM frame should be cleared on next WM_ERASEBKGND message.  This is
+  // necessary to avoid white flashing in the titlebar area around the
+  // minimize/maximize/close buttons.  Clearing the frame on every WM_ERASEBKGND
+  // message causes black flickering in the titlebar region so we do it on for
+  // the first message after frame type changes.
+  bool needs_dwm_frame_clear_ = true;
 
   // This is a map of the HMONITOR to full screeen window instance. It is safe
   // to keep a raw pointer to the HWNDMessageHandler instance as we track the

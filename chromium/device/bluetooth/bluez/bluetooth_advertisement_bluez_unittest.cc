@@ -33,8 +33,7 @@ namespace bluez {
 class BluetoothAdvertisementBlueZTest : public testing::Test {
  public:
   void SetUp() override {
-    bluez::BluezDBusManager::Initialize(nullptr /* bus */,
-                                        true /* use_dbus_stub */);
+    bluez::BluezDBusManager::GetSetterForTesting();
 
     callback_count_ = 0;
     error_callback_count_ = 0;
@@ -59,8 +58,8 @@ class BluetoothAdvertisementBlueZTest : public testing::Test {
   // Gets the existing Bluetooth adapter.
   void GetAdapter() {
     BluetoothAdapterFactory::GetAdapter(
-        base::Bind(&BluetoothAdvertisementBlueZTest::GetAdapterCallback,
-                   base::Unretained(this)));
+        base::BindOnce(&BluetoothAdvertisementBlueZTest::GetAdapterCallback,
+                       base::Unretained(this)));
     base::RunLoop().Run();
   }
 

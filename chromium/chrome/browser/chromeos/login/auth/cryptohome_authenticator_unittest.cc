@@ -9,12 +9,13 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/chromeos/login/auth/chrome_cryptohome_authenticator.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
@@ -26,7 +27,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/cryptohome/cryptohome_util.h"
 #include "chromeos/cryptohome/homedir_methods.h"
@@ -42,7 +43,7 @@
 #include "chromeos/login/auth/mock_url_fetchers.h"
 #include "chromeos/login/auth/test_attempt_state.h"
 #include "chromeos/login/auth/user_context.h"
-#include "chromeos/login/login_state.h"
+#include "chromeos/login/login_state/login_state.h"
 #include "components/ownership/mock_owner_key_util.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -118,12 +119,12 @@ const uint8_t kOwnerPublicKey[] = {
 
 std::vector<uint8_t> GetOwnerPublicKey() {
   return std::vector<uint8_t>(kOwnerPublicKey,
-                              kOwnerPublicKey + arraysize(kOwnerPublicKey));
+                              kOwnerPublicKey + base::size(kOwnerPublicKey));
 }
 
 bool CreateOwnerKeyInSlot(PK11SlotInfo* slot) {
   const std::vector<uint8_t> key(
-      kOwnerPrivateKey, kOwnerPrivateKey + arraysize(kOwnerPrivateKey));
+      kOwnerPrivateKey, kOwnerPrivateKey + base::size(kOwnerPrivateKey));
   return crypto::ImportNSSKeyFromPrivateKeyInfo(
              slot, key, true /* permanent */) != nullptr;
 }
@@ -156,6 +157,10 @@ class TestCryptohomeClient : public ::chromeos::FakeCryptohomeClient {
 
   void set_remove_ex_should_succeed(bool should_succeed) {
     remove_ex_should_succeed_ = should_succeed;
+  }
+
+  void set_unmount_ex_should_succeed(bool should_succeed) {
+    unmount_ex_should_succeed_ = should_succeed;
   }
 
   void MountEx(const cryptohome::AccountIdentifier& cryptohome_id,
@@ -229,6 +234,16 @@ class TestCryptohomeClient : public ::chromeos::FakeCryptohomeClient {
         FROM_HERE, base::BindOnce(std::move(callback), reply));
   }
 
+  void UnmountEx(const cryptohome::UnmountRequest& account,
+                 DBusMethodCallback<cryptohome::BaseReply> callback) override {
+    cryptohome::BaseReply reply;
+    if (!unmount_ex_should_succeed_)
+      reply.set_error(cryptohome::CRYPTOHOME_ERROR_REMOVE_FAILED);
+
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), reply));
+  }
+
  private:
   cryptohome::AccountIdentifier expected_id_;
   std::string expected_authorization_secret_;
@@ -236,6 +251,7 @@ class TestCryptohomeClient : public ::chromeos::FakeCryptohomeClient {
   bool migrate_key_should_succeed_ = false;
   bool mount_guest_should_succeed_ = false;
   bool remove_ex_should_succeed_ = false;
+  bool unmount_ex_should_succeed_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TestCryptohomeClient);
 };
@@ -556,7 +572,7 @@ TEST_F(CryptohomeAuthenticatorTest, ResolveOwnerNeededFailedMount) {
   state_->PresetCryptohomeStatus(cryptohome::MOUNT_ERROR_NONE);
   SetOwnerState(false, false);
   ScopedCrosSettingsTestHelper settings_helper(false);
-  settings_helper.ReplaceProvider(kPolicyMissingMitigationMode);
+  settings_helper.ReplaceDeviceSettingsProviderWithStub();
   settings_helper.SetBoolean(kPolicyMissingMitigationMode, true);
 
   // Initialize login state for this test to verify the login state is changed
@@ -581,7 +597,7 @@ TEST_F(CryptohomeAuthenticatorTest, ResolveOwnerNeededFailedMount) {
   EXPECT_TRUE(LoginState::Get()->IsInSafeMode());
 
   // Unset global objects used by this test.
-  fake_cryptohome_client_->set_unmount_result(true);
+  fake_cryptohome_client_->set_unmount_ex_should_succeed(true);
   LoginState::Shutdown();
 }
 
@@ -606,7 +622,7 @@ TEST_F(CryptohomeAuthenticatorTest, ResolveOwnerNeededSuccess) {
   state_->PresetCryptohomeStatus(cryptohome::MOUNT_ERROR_NONE);
   SetOwnerState(false, false);
   ScopedCrosSettingsTestHelper settings_helper(false);
-  settings_helper.ReplaceProvider(kPolicyMissingMitigationMode);
+  settings_helper.ReplaceDeviceSettingsProviderWithStub();
   settings_helper.SetBoolean(kPolicyMissingMitigationMode, true);
 
   // Initialize login state for this test to verify the login state is changed
@@ -630,7 +646,7 @@ TEST_F(CryptohomeAuthenticatorTest, ResolveOwnerNeededSuccess) {
   EXPECT_TRUE(LoginState::Get()->IsInSafeMode());
 
   // Unset global objects used by this test.
-  fake_cryptohome_client_->set_unmount_result(true);
+  fake_cryptohome_client_->set_unmount_ex_should_succeed(true);
   LoginState::Shutdown();
 }
 

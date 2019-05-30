@@ -23,7 +23,7 @@
 // designed to be used as a parameter type that efficiently manages conversion
 // to strings and avoids copies in the above operations.
 //
-// Any routine accepting either a std::string or a number may accept `AlphaNum`.
+// Any routine accepting either a string or a number may accept `AlphaNum`.
 // The basic idea is that by accepting a `const AlphaNum &` as an argument
 // to your function, your callers will automagically convert bools, integers,
 // and floating point values to strings for you.
@@ -65,7 +65,7 @@
 namespace absl {
 
 namespace strings_internal {
-// AlphaNumBuffer allows a way to pass a std::string to StrCat without having to do
+// AlphaNumBuffer allows a way to pass a string to StrCat without having to do
 // memory allocation.  It is simply a pair of a fixed-size character array, and
 // a size.  Please don't use outside of absl, yet.
 template <size_t max_size>
@@ -97,6 +97,10 @@ enum PadSpec : uint8_t {
   kZeroPad14,
   kZeroPad15,
   kZeroPad16,
+  kZeroPad17,
+  kZeroPad18,
+  kZeroPad19,
+  kZeroPad20,
 
   kSpacePad2 = kZeroPad2 + 64,
   kSpacePad3,
@@ -113,14 +117,18 @@ enum PadSpec : uint8_t {
   kSpacePad14,
   kSpacePad15,
   kSpacePad16,
+  kSpacePad17,
+  kSpacePad18,
+  kSpacePad19,
+  kSpacePad20,
 };
 
 // -----------------------------------------------------------------------------
 // Hex
 // -----------------------------------------------------------------------------
 //
-// `Hex` stores a set of hexadecimal std::string conversion parameters for use
-// within `AlphaNum` std::string conversions.
+// `Hex` stores a set of hexadecimal string conversion parameters for use
+// within `AlphaNum` string conversions.
 struct Hex {
   uint64_t value;
   uint8_t width;
@@ -168,8 +176,8 @@ struct Hex {
 // Dec
 // -----------------------------------------------------------------------------
 //
-// `Dec` stores a set of decimal std::string conversion parameters for use
-// within `AlphaNum` std::string conversions.  Dec is slower than the default
+// `Dec` stores a set of decimal string conversion parameters for use
+// within `AlphaNum` string conversions.  Dec is slower than the default
 // integer conversion, so use it only if you need padding.
 struct Dec {
   uint64_t value;
@@ -271,7 +279,7 @@ class AlphaNum {
 //
 // Merges given strings or numbers, using no delimiter(s).
 //
-// `StrCat()` is designed to be the fastest possible way to construct a std::string
+// `StrCat()` is designed to be the fastest possible way to construct a string
 // out of a mix of raw C strings, string_views, strings, bool values,
 // and numeric values.
 //
@@ -279,7 +287,7 @@ class AlphaNum {
 // works poorly on strings built up out of fragments.
 //
 // For clarity and performance, don't use `StrCat()` when appending to a
-// std::string. Use `StrAppend()` instead. In particular, avoid using any of these
+// string. Use `StrAppend()` instead. In particular, avoid using any of these
 // (anti-)patterns:
 //
 //   str.append(StrCat(...))
@@ -328,26 +336,26 @@ ABSL_MUST_USE_RESULT inline std::string StrCat(const AlphaNum& a, const AlphaNum
 // StrAppend()
 // -----------------------------------------------------------------------------
 //
-// Appends a std::string or set of strings to an existing std::string, in a similar
+// Appends a string or set of strings to an existing string, in a similar
 // fashion to `StrCat()`.
 //
 // WARNING: `StrAppend(&str, a, b, c, ...)` requires that none of the
 // a, b, c, parameters be a reference into str. For speed, `StrAppend()` does
 // not try to check each of its input arguments to be sure that they are not
-// a subset of the std::string being appended to. That is, while this will work:
+// a subset of the string being appended to. That is, while this will work:
 //
-//   std::string s = "foo";
+//   string s = "foo";
 //   s += s;
 //
 // This output is undefined:
 //
-//   std::string s = "foo";
+//   string s = "foo";
 //   StrAppend(&s, s);
 //
 // This output is undefined as well, since `absl::string_view` does not own its
 // data:
 //
-//   std::string s = "foobar";
+//   string s = "foobar";
 //   absl::string_view p = s;
 //   StrAppend(&s, p);
 

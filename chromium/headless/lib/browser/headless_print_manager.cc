@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -145,7 +146,8 @@ void HeadlessPrintManager::GetPDFContents(content::RenderFrameHost* rfh,
   DCHECK(callback);
 
   if (callback_) {
-    std::move(callback).Run(SIMULTANEOUS_PRINT_ACTIVE, std::string());
+    std::move(callback).Run(SIMULTANEOUS_PRINT_ACTIVE,
+                            base::MakeRefCounted<base::RefCountedString>());
     return;
   }
   printing_rfh_ = rfh;
@@ -282,18 +284,16 @@ void HeadlessPrintManager::OnPrintingFailed(int cookie) {
 void HeadlessPrintManager::OnDidPrintDocument(
     const PrintHostMsg_DidPrintDocument_Params& params) {
   auto& content = params.content;
-  if (!base::SharedMemory::IsHandleValid(content.metafile_data_handle)) {
+  if (!content.metafile_data_region.IsValid()) {
     ReleaseJob(INVALID_MEMORY_HANDLE);
     return;
   }
-  auto shared_buf =
-      std::make_unique<base::SharedMemory>(content.metafile_data_handle, true);
-  if (!shared_buf->Map(content.data_size)) {
+  base::ReadOnlySharedMemoryMapping map = content.metafile_data_region.Map();
+  if (!map.IsValid()) {
     ReleaseJob(METAFILE_MAP_ERROR);
     return;
   }
-  data_ = std::string(static_cast<const char*>(shared_buf->memory()),
-                      content.data_size);
+  data_ = std::string(static_cast<const char*>(map.memory()), map.size());
   ReleaseJob(PRINT_SUCCESS);
 }
 
@@ -313,13 +313,18 @@ void HeadlessPrintManager::ReleaseJob(PrintResult result) {
     return;
   }
 
-  if (result == PRINT_SUCCESS)
-    std::move(callback_).Run(result, std::move(data_));
-  else
-    std::move(callback_).Run(result, std::string());
+  if (result == PRINT_SUCCESS) {
+    std::move(callback_).Run(result,
+                             base::RefCountedString::TakeString(&data_));
+  } else {
+    std::move(callback_).Run(result,
+                             base::MakeRefCounted<base::RefCountedString>());
+  }
   printing_rfh_->Send(new PrintMsg_PrintingDone(printing_rfh_->GetRoutingID(),
                                                 result == PRINT_SUCCESS));
   Reset();
 }
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(HeadlessPrintManager)
 
 }  // namespace headless

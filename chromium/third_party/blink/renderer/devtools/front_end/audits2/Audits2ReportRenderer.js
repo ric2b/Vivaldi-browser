@@ -16,12 +16,45 @@ Audits2.ReportRenderer = class extends ReportRenderer {
 
     const defaultPassTrace = artifacts.traces.defaultPass;
     const timelineButton = UI.createTextButton(Common.UIString('View Trace'), onViewTraceClick, 'view-trace');
-    el.querySelector('.lh-metric-column').appendChild(timelineButton);
+    el.querySelector('.lh-column').appendChild(timelineButton);
     return el;
 
     async function onViewTraceClick() {
+      Host.userMetrics.actionTaken(Host.UserMetrics.Action.Audits2ViewTrace);
       await UI.inspectorView.showPanel('timeline');
       Timeline.TimelinePanel.instance().loadFromEvents(defaultPassTrace.traceEvents);
+    }
+  }
+
+  /**
+   * @param {!Element} el
+   */
+  static async linkifyNodeDetails(el) {
+    const mainTarget = SDK.targetManager.mainTarget();
+    const resourceTreeModel = mainTarget.model(SDK.ResourceTreeModel);
+    await resourceTreeModel.once(SDK.ResourceTreeModel.Events.Load);
+
+    const domModel = mainTarget.model(SDK.DOMModel);
+
+    for (const origElement of el.getElementsByClassName('lh-node')) {
+      /** @type {!DetailsRenderer.NodeDetailsJSON} */
+      const detailsItem = origElement.dataset;
+      if (!detailsItem.path)
+        continue;
+
+      const nodeId = await domModel.pushNodeByPathToFrontend(detailsItem.path);
+
+      if (!nodeId)
+        continue;
+      const node = domModel.nodeForId(nodeId);
+      if (!node)
+        continue;
+
+      const element =
+          await Common.Linkifier.linkify(node, /** @type {!Common.Linkifier.Options} */ ({title: detailsItem.snippet}));
+      origElement.title = '';
+      origElement.textContent = '';
+      origElement.appendChild(element);
     }
   }
 };
@@ -33,57 +66,3 @@ class ReportUIFeatures {
   initFeatures(report) {
   }
 }
-
-
-Audits2.DetailsRenderer = class extends DetailsRenderer {
-  /**
-   * @param {!DOM} dom
-   */
-  constructor(dom) {
-    super(dom);
-    this._onLoadPromise = null;
-  }
-
-  /**
-   * @override
-   * @param {!DetailsRenderer.NodeDetailsJSON} item
-   * @return {!Element}
-   */
-  renderNode(item) {
-    const element = super.renderNode(item);
-    this._replaceWithDeferredNodeBlock(element, item);
-    return element;
-  }
-
-  /**
-   * @param {!Element} origElement
-   * @param {!DetailsRenderer.NodeDetailsJSON} detailsItem
-   */
-  async _replaceWithDeferredNodeBlock(origElement, detailsItem) {
-    const mainTarget = SDK.targetManager.mainTarget();
-    if (!this._onLoadPromise) {
-      const resourceTreeModel = mainTarget.model(SDK.ResourceTreeModel);
-      this._onLoadPromise = resourceTreeModel.once(SDK.ResourceTreeModel.Events.Load);
-    }
-
-    await this._onLoadPromise;
-
-    const domModel = mainTarget.model(SDK.DOMModel);
-    if (!detailsItem.path)
-      return;
-
-    const nodeId = await domModel.pushNodeByPathToFrontend(detailsItem.path);
-
-    if (!nodeId)
-      return;
-    const node = domModel.nodeForId(nodeId);
-    if (!node)
-      return;
-
-    const element =
-        await Common.Linkifier.linkify(node, /** @type {!Common.Linkifier.Options} */ ({title: detailsItem.snippet}));
-    origElement.title = '';
-    origElement.textContent = '';
-    origElement.appendChild(element);
-  }
-};

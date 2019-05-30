@@ -4,10 +4,11 @@
 
 #include "ios/chrome/browser/translate/translate_ranker_factory.h"
 
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/translate/core/browser/translate_ranker_impl.h"
+#include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/browser_state_otr_helper.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 
@@ -15,7 +16,8 @@ namespace translate {
 
 // static
 TranslateRankerFactory* TranslateRankerFactory::GetInstance() {
-  return base::Singleton<TranslateRankerFactory>::get();
+  static base::NoDestructor<TranslateRankerFactory> instance;
+  return instance.get();
 }
 
 // static
@@ -38,7 +40,8 @@ std::unique_ptr<KeyedService> TranslateRankerFactory::BuildServiceInstanceFor(
       ios::ChromeBrowserState::FromBrowserState(context);
   return std::make_unique<TranslateRankerImpl>(
       TranslateRankerImpl::GetModelPath(browser_state->GetStatePath()),
-      TranslateRankerImpl::GetModelURL(), nullptr /* ukm::UkmRecorder */);
+      TranslateRankerImpl::GetModelURL(),
+      GetApplicationContext()->GetUkmRecorder());
 }
 
 web::BrowserState* TranslateRankerFactory::GetBrowserStateToUse(

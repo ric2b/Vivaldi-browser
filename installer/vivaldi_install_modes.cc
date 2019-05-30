@@ -50,6 +50,7 @@ const InstallConstants kInstallModes[] = {
         0x7091,
         0x4930,
         {0x92, 0xBD, 0x6A, 0x33, 0x9A, 0xE9, 0x07, 0x06}},  // Elevator CLSID.
+        {}, // IID elevator_iid;
         L"",      // Empty default channel name since no update integration.
         ChannelStrategy::UNSUPPORTED,
         true,  // Supports system-level installs.

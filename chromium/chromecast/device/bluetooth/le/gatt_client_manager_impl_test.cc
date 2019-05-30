@@ -62,6 +62,7 @@ std::vector<bluetooth_v2_shlib::Gatt::Service> GenerateServices() {
   service.handle = 0x1;
   service.primary = true;
 
+  // Generate a characteristic that supports notification only.
   characteristic.uuid = {{0x1, 0x1}};
   characteristic.handle = 0x2;
   characteristic.permissions =
@@ -85,6 +86,7 @@ std::vector<bluetooth_v2_shlib::Gatt::Service> GenerateServices() {
   characteristic.descriptors.push_back(descriptor);
   service.characteristics.push_back(characteristic);
 
+  // Generate a characteristic that does not support notification or indication.
   characteristic.uuid = {{0x1, 0x2}};
   characteristic.handle = 0x5;
   characteristic.permissions =
@@ -96,10 +98,61 @@ std::vector<bluetooth_v2_shlib::Gatt::Service> GenerateServices() {
   characteristic.descriptors.clear();
   service.characteristics.push_back(characteristic);
 
+  // Generate a characteristic that supports indication only.
+  characteristic.uuid = {{0x1, 0x3}};
+  characteristic.handle = 0x6;
+  characteristic.permissions =
+      static_cast<bluetooth_v2_shlib::Gatt::Permissions>(
+          bluetooth_v2_shlib::Gatt::PERMISSION_READ |
+          bluetooth_v2_shlib::Gatt::PERMISSION_WRITE);
+  characteristic.properties = bluetooth_v2_shlib::Gatt::PROPERTY_INDICATE;
+
+  descriptor.uuid = {{0x1, 0x3, 0x1}};
+  descriptor.handle = 0x7;
+  descriptor.permissions = static_cast<bluetooth_v2_shlib::Gatt::Permissions>(
+      bluetooth_v2_shlib::Gatt::PERMISSION_READ |
+      bluetooth_v2_shlib::Gatt::PERMISSION_WRITE);
+  characteristic.descriptors.push_back(descriptor);
+
+  descriptor.uuid = RemoteDescriptor::kCccdUuid;
+  descriptor.handle = 0x8;
+  descriptor.permissions = static_cast<bluetooth_v2_shlib::Gatt::Permissions>(
+      bluetooth_v2_shlib::Gatt::PERMISSION_READ |
+      bluetooth_v2_shlib::Gatt::PERMISSION_WRITE);
+  characteristic.descriptors.push_back(descriptor);
+  service.characteristics.push_back(characteristic);
+
+  // Generate a characteristic that supports both notification and indication.
+  characteristic.uuid = {{0x1, 0x4}};
+  characteristic.handle = 0x9;
+  characteristic.permissions =
+      static_cast<bluetooth_v2_shlib::Gatt::Permissions>(
+          bluetooth_v2_shlib::Gatt::PERMISSION_READ |
+          bluetooth_v2_shlib::Gatt::PERMISSION_WRITE);
+  characteristic.properties = static_cast<bluetooth_v2_shlib::Gatt::Properties>(
+      bluetooth_v2_shlib::Gatt::PROPERTY_NOTIFY |
+      bluetooth_v2_shlib::Gatt::PROPERTY_INDICATE);
+  characteristic.descriptors.clear();
+
+  descriptor.uuid = {{0x1, 0x4, 0x1}};
+  descriptor.handle = 0xA;
+  descriptor.permissions = static_cast<bluetooth_v2_shlib::Gatt::Permissions>(
+      bluetooth_v2_shlib::Gatt::PERMISSION_READ |
+      bluetooth_v2_shlib::Gatt::PERMISSION_WRITE);
+  characteristic.descriptors.push_back(descriptor);
+
+  descriptor.uuid = RemoteDescriptor::kCccdUuid;
+  descriptor.handle = 0xB;
+  descriptor.permissions = static_cast<bluetooth_v2_shlib::Gatt::Permissions>(
+      bluetooth_v2_shlib::Gatt::PERMISSION_READ |
+      bluetooth_v2_shlib::Gatt::PERMISSION_WRITE);
+  characteristic.descriptors.push_back(descriptor);
+  service.characteristics.push_back(characteristic);
+
   ret.push_back(service);
 
   service.uuid = {{0x2}};
-  service.handle = 0x6;
+  service.handle = 0xC;
   service.primary = true;
   service.characteristics.clear();
   ret.push_back(service);
@@ -197,11 +250,15 @@ TEST_F(GattClientManagerTest, RemoteDeviceConnect) {
 
   scoped_refptr<RemoteDevice> device = GetDevice(kTestAddr1);
   EXPECT_FALSE(device->IsConnected());
+  EXPECT_FALSE(gatt_client_manager_->IsConnectedLeDevice(kTestAddr1));
   EXPECT_EQ(kTestAddr1, device->addr());
 
   // These should fail if we're not connected.
   EXPECT_CALL(cb_, Run(false));
   device->Disconnect(cb_.Get());
+
+  EXPECT_CALL(cb_, Run(false));
+  device->CreateBond(cb_.Get());
 
   base::MockCallback<RemoteDevice::RssiCallback> rssi_cb;
   EXPECT_CALL(rssi_cb, Run(false, _));
@@ -224,6 +281,7 @@ TEST_F(GattClientManagerTest, RemoteDeviceConnect) {
   delegate->OnGetServices(kTestAddr1, {});
 
   EXPECT_TRUE(device->IsConnected());
+  EXPECT_TRUE(gatt_client_manager_->IsConnectedLeDevice(kTestAddr1));
 
   base::MockCallback<
       base::OnceCallback<void(std::vector<scoped_refptr<RemoteDevice>>)>>
@@ -242,6 +300,96 @@ TEST_F(GattClientManagerTest, RemoteDeviceConnect) {
   delegate->OnConnectChanged(kTestAddr1, true /* status */,
                              false /* connected */);
   EXPECT_FALSE(device->IsConnected());
+  EXPECT_FALSE(gatt_client_manager_->IsConnectedLeDevice(kTestAddr1));
+
+  fake_task_runner_->RunUntilIdle();
+}
+
+TEST_F(GattClientManagerTest, RemoteDeviceBond) {
+  bluetooth_v2_shlib::Gatt::Client::Delegate* delegate =
+      gatt_client_->delegate();
+
+  scoped_refptr<RemoteDevice> device = GetDevice(kTestAddr1);
+  Connect(kTestAddr1);
+  EXPECT_FALSE(device->IsBonded());
+
+  // CreateBond fails in the initial request.
+  EXPECT_CALL(*gatt_client_, CreateBond(kTestAddr1)).WillOnce(Return(false));
+  EXPECT_CALL(cb_, Run(false));
+  device->CreateBond(cb_.Get());
+  EXPECT_FALSE(device->IsBonded());
+
+  // CreateBond fails in the callback.
+  EXPECT_CALL(*gatt_client_, CreateBond(kTestAddr1)).WillOnce(Return(true));
+  EXPECT_CALL(cb_, Run(false));
+  device->CreateBond(cb_.Get());
+  delegate->OnBondChanged(kTestAddr1, false /* status */, false /* bonded */);
+  EXPECT_FALSE(device->IsBonded());
+
+  // CreateBond succeeds.
+  EXPECT_CALL(*gatt_client_, CreateBond(kTestAddr1)).WillOnce(Return(true));
+  device->CreateBond(cb_.Get());
+  EXPECT_CALL(cb_, Run(true));
+  delegate->OnBondChanged(kTestAddr1, true /* status */, true /* bonded */);
+  EXPECT_TRUE(device->IsBonded());
+
+  // Bond with an already bonded device should fail.
+  EXPECT_CALL(cb_, Run(false));
+  device->CreateBond(cb_.Get());
+  EXPECT_TRUE(device->IsBonded());
+
+  // RemoveBond succeeds.
+  EXPECT_CALL(*gatt_client_, RemoveBond(kTestAddr1)).WillOnce(Return(true));
+  device->RemoveBond(cb_.Get());
+  EXPECT_CALL(cb_, Run(true));
+  delegate->OnBondChanged(kTestAddr1, false /* status */, false /* bonded */);
+  EXPECT_FALSE(device->IsBonded());
+
+  // RemoveBond from an unbonded device succeeds.
+  EXPECT_CALL(*gatt_client_, RemoveBond(kTestAddr1)).WillOnce(Return(true));
+  device->RemoveBond(cb_.Get());
+  EXPECT_CALL(cb_, Run(true));
+  delegate->OnBondChanged(kTestAddr1, false /* status */, false /* bonded */);
+  EXPECT_FALSE(device->IsBonded());
+
+  // CreateBond again succeeds.
+  EXPECT_CALL(*gatt_client_, CreateBond(kTestAddr1)).WillOnce(Return(true));
+  device->CreateBond(cb_.Get());
+  EXPECT_CALL(cb_, Run(true));
+  delegate->OnBondChanged(kTestAddr1, true /* status */, true /* bonded */);
+  EXPECT_TRUE(device->IsBonded());
+
+  // Device should remain bonded when it disconnects.
+  EXPECT_CALL(*gatt_client_, Disconnect(kTestAddr1)).WillOnce(Return(true));
+  device->Disconnect({});
+  delegate->OnConnectChanged(kTestAddr1, true /* status */,
+                             false /* connected */);
+  EXPECT_FALSE(device->IsConnected());
+  EXPECT_TRUE(device->IsBonded());
+
+  // RemoveBond from a disconnected but bonded device.
+  EXPECT_CALL(*gatt_client_, RemoveBond(kTestAddr1)).WillOnce(Return(true));
+  device->RemoveBond(cb_.Get());
+  EXPECT_CALL(cb_, Run(true));
+  delegate->OnBondChanged(kTestAddr1, false /* status */, false /* bonded */);
+  EXPECT_FALSE(device->IsBonded());
+
+  fake_task_runner_->RunUntilIdle();
+}
+
+TEST_F(GattClientManagerTest, RemoteDeviceBondedOnInitialization) {
+  // NotifyBonded at initialization.
+  gatt_client_manager_->NotifyBonded(kTestAddr1);
+
+  // Device should have updated the bonding state.
+  scoped_refptr<RemoteDevice> device = GetDevice(kTestAddr1);
+  EXPECT_FALSE(device->IsConnected());
+  EXPECT_TRUE(device->IsBonded());
+
+  Connect(kTestAddr1);
+  EXPECT_TRUE(device->IsConnected());
+  EXPECT_TRUE(device->IsBonded());
+
   fake_task_runner_->RunUntilIdle();
 }
 
@@ -607,6 +755,80 @@ TEST_F(GattClientManagerTest,
       .WillOnce(Return(true));
 
   characteristic->SetRegisterNotification(true, cb_.Get());
+  EXPECT_CALL(cb_, Run(true));
+  delegate->OnDescriptorWriteResponse(kTestAddr1, true, cccd->handle());
+
+  EXPECT_CALL(*observer_,
+              OnCharacteristicNotification(device, characteristic, kTestData1));
+  delegate->OnNotification(kTestAddr1, characteristic->handle(), kTestData1);
+  fake_task_runner_->RunUntilIdle();
+}
+
+TEST_F(GattClientManagerTest, RemoteDeviceCharacteristicSetRegisterIndication) {
+  const std::vector<uint8_t> kTestData1 = {0x1, 0x2, 0x3};
+  const auto kServices = GenerateServices();
+  Connect(kTestAddr1);
+  scoped_refptr<RemoteDevice> device = GetDevice(kTestAddr1);
+  bluetooth_v2_shlib::Gatt::Client::Delegate* delegate =
+      gatt_client_->delegate();
+  delegate->OnServicesAdded(kTestAddr1, kServices);
+  std::vector<scoped_refptr<RemoteService>> services =
+      GetServices(device.get());
+  ASSERT_EQ(kServices.size(), services.size());
+
+  scoped_refptr<RemoteService> service = services[0];
+  std::vector<scoped_refptr<RemoteCharacteristic>> characteristics =
+      service->GetCharacteristics();
+  ASSERT_EQ(characteristics.size(), 4ul);
+
+  // |characteristics[2]| supports indication only.
+  scoped_refptr<RemoteCharacteristic> characteristic = characteristics[2];
+
+  scoped_refptr<RemoteDescriptor> cccd =
+      characteristic->GetDescriptorByUuid(RemoteDescriptor::kCccdUuid);
+  ASSERT_TRUE(cccd);
+
+  EXPECT_CALL(*gatt_client_,
+              SetCharacteristicNotification(
+                  kTestAddr1, characteristic->characteristic(), true))
+      .WillOnce(Return(true));
+  std::vector<uint8_t> cccd_enable_indication = {
+      std::begin(bluetooth::RemoteDescriptor::kEnableIndicationValue),
+      std::end(bluetooth::RemoteDescriptor::kEnableIndicationValue)};
+  EXPECT_CALL(*gatt_client_, WriteDescriptor(kTestAddr1, cccd->descriptor(), _,
+                                             cccd_enable_indication))
+      .WillOnce(Return(true));
+
+  characteristic->SetRegisterNotificationOrIndication(true, cb_.Get());
+  EXPECT_CALL(cb_, Run(true));
+  delegate->OnDescriptorWriteResponse(kTestAddr1, true, cccd->handle());
+
+  EXPECT_CALL(*observer_,
+              OnCharacteristicNotification(device, characteristic, kTestData1));
+  delegate->OnNotification(kTestAddr1, characteristic->handle(), kTestData1);
+  fake_task_runner_->RunUntilIdle();
+
+  // |characteristics[3]| supports both notification and indication.
+  characteristic = characteristics[3];
+
+  cccd = characteristic->GetDescriptorByUuid(RemoteDescriptor::kCccdUuid);
+  ASSERT_TRUE(cccd);
+
+  // Notification has higher priority than indication. So
+  // SetRegisterNotificationOrIndication will behave the same as
+  // SetRegisterNotification.
+  EXPECT_CALL(*gatt_client_,
+              SetCharacteristicNotification(
+                  kTestAddr1, characteristic->characteristic(), true))
+      .WillOnce(Return(true));
+  std::vector<uint8_t> cccd_enable_notification = {
+      std::begin(bluetooth::RemoteDescriptor::kEnableNotificationValue),
+      std::end(bluetooth::RemoteDescriptor::kEnableNotificationValue)};
+  EXPECT_CALL(*gatt_client_, WriteDescriptor(kTestAddr1, cccd->descriptor(), _,
+                                             cccd_enable_notification))
+      .WillOnce(Return(true));
+
+  characteristic->SetRegisterNotificationOrIndication(true, cb_.Get());
   EXPECT_CALL(cb_, Run(true));
   delegate->OnDescriptorWriteResponse(kTestAddr1, true, cccd->handle());
 

@@ -16,7 +16,6 @@
 #include "ash/login/ui/login_big_user_view.h"
 #include "ash/login/ui/login_test_base.h"
 #include "ash/login/ui/login_test_utils.h"
-#include "ash/public/cpp/config.h"
 #include "ash/session/test_session_controller_client.h"
 #include "ash/shell.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
@@ -46,8 +45,6 @@ class LoginMetricsRecorderTest : public LoginTestBase {
     LoginTestBase::SetUp();
     histogram_tester_.reset(new base::HistogramTester());
   }
-
-  void TearDown() override { LoginTestBase::TearDown(); }
 
  protected:
   void EnableTabletMode(bool enable) {
@@ -88,8 +85,8 @@ TEST_F(LoginMetricsRecorderTest, NoteActionButtonClick) {
 
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(1);
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
 

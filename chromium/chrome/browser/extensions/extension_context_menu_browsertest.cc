@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 
+#include "base/bind.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -566,25 +567,46 @@ static void ExpectLabelAndType(const char* expected_label,
 }
 
 // In the separators test we build a submenu with items and separators in two
-// different ways - this is used to verify the results in both cases.
+// different ways - this is used to verify the results in both cases. Separators
+// are not included on OS_CHROMEOS.
 static void VerifyMenuForSeparatorsTest(const MenuModel& menu) {
   // We expect to see the following items in the menu:
   //  radio1
   //  radio2
+  //  --separator-- (automatically added)
   //  normal1
+  //  --separator--
   //  normal2
+  //  --separator--
   //  radio3
   //  radio4
+  //  --separator--
   //  normal3
 
   int index = 0;
+#if defined(OS_CHROMEOS)
   ASSERT_EQ(7, menu.GetItemCount());
+#else
+  ASSERT_EQ(11, menu.GetItemCount());
+#endif  // OS_CHROMEOS
   ExpectLabelAndType("radio1", MenuModel::TYPE_RADIO, menu, index++);
   ExpectLabelAndType("radio2", MenuModel::TYPE_RADIO, menu, index++);
+#if !defined(OS_CHROMEOS)
+  EXPECT_EQ(MenuModel::TYPE_SEPARATOR, menu.GetTypeAt(index++));
+#endif  // !OS_CHROMEOS
   ExpectLabelAndType("normal1", MenuModel::TYPE_COMMAND, menu, index++);
+#if !defined(OS_CHROMEOS)
+  EXPECT_EQ(MenuModel::TYPE_SEPARATOR, menu.GetTypeAt(index++));
+#endif  // !OS_CHROMEOS
   ExpectLabelAndType("normal2", MenuModel::TYPE_COMMAND, menu, index++);
+#if !defined(OS_CHROMEOS)
+  EXPECT_EQ(MenuModel::TYPE_SEPARATOR, menu.GetTypeAt(index++));
+#endif  // !OS_CHROMEOS
   ExpectLabelAndType("radio3", MenuModel::TYPE_RADIO, menu, index++);
   ExpectLabelAndType("radio4", MenuModel::TYPE_RADIO, menu, index++);
+#if !defined(OS_CHROMEOS)
+  EXPECT_EQ(MenuModel::TYPE_SEPARATOR, menu.GetTypeAt(index++));
+#endif  // !OS_CHROMEOS
   ExpectLabelAndType("normal3", MenuModel::TYPE_COMMAND, menu, index++);
 }
 

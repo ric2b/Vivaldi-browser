@@ -43,35 +43,22 @@ SyncInternalsWebUITest.prototype = {
    */
   hasInDetails: function(isValid, key, value) {
     var details = chrome.sync.aboutInfo.details;
-    if (!details)
+    if (!details) {
       return false;
+    }
     for (var i = 0; i < details.length; ++i) {
-      if (!details[i].data)
+      if (!details[i].data) {
         continue;
+      }
       for (var j = 0; j < details[i].data.length; ++j) {
         var obj = details[i].data[j];
-        if (obj.stat_name == key)
+        if (obj.stat_name == key) {
           return obj.is_valid == isValid && obj.stat_value == value;
+        }
       }
     }
     return false;
   }
-};
-
-function SyncInternalsWebUITestWithStandaloneTransport() {}
-
-SyncInternalsWebUITestWithStandaloneTransport.prototype = {
-  __proto__: SyncInternalsWebUITest.prototype,
-
-  featureList: ['switches::kSyncStandaloneTransport', ''],
-};
-
-function SyncInternalsWebUITestWithoutStandaloneTransport() {}
-
-SyncInternalsWebUITestWithoutStandaloneTransport.prototype = {
-  __proto__: SyncInternalsWebUITest.prototype,
-
-  featureList: ['', 'switches::kSyncStandaloneTransport'],
 };
 
 /**
@@ -255,32 +242,15 @@ TEST_F('SyncInternalsWebUITest', 'Uninitialized', function() {
    assertNotEquals(null, chrome.sync.aboutInfo);
 });
 
-// Test that username is set correctly when the user is signed in or not.
-// On chromeos, browser tests are signed in by default.  On other platforms,
-// browser tests are signed out.
-GEN('#if defined(OS_CHROMEOS)');
-TEST_F('SyncInternalsWebUITestWithStandaloneTransport', 'SignedIn', function() {
-  assertNotEquals(null, chrome.sync.aboutInfo);
-  expectTrue(this.hasInDetails(true, 'Transport State', 'Initializing'));
-  expectTrue(this.hasInDetails(true, 'Disable Reasons', 'None'));
-  expectTrue(this.hasInDetails(true, 'Username', 'stub-user@example.com'));
-});
-TEST_F(
-    'SyncInternalsWebUITestWithoutStandaloneTransport', 'SignedIn', function() {
-      assertNotEquals(null, chrome.sync.aboutInfo);
-      expectTrue(this.hasInDetails(
-          true, 'Transport State', 'Waiting for start request'));
-      expectTrue(this.hasInDetails(true, 'Disable Reasons', 'None'));
-      expectTrue(this.hasInDetails(true, 'Username', 'stub-user@example.com'));
-    });
-GEN('#else');
+// TODO(crbug.com/814787): On ChromeOS, browser tests are signed in by default,
+// so the test expectations below should be different. However, the way the
+// account is set up for tests is broken (it happens much later than in real
+// life), so it doesn't make it to sync-internals.
 TEST_F('SyncInternalsWebUITest', 'SignedOut', function() {
-  assertNotEquals(null, chrome.sync.aboutInfo);
   expectTrue(this.hasInDetails(true, 'Transport State', 'Disabled'));
   expectTrue(this.hasInDetails(true, 'Disable Reasons', 'Not signed in'));
   expectTrue(this.hasInDetails(true, 'Username', ''));
 });
-GEN('#endif  // defined(OS_CHROMEOS)');
 
 TEST_F('SyncInternalsWebUITest', 'LoadPastedAboutInfo', function() {
   // Expose the text field.
@@ -334,11 +304,15 @@ TEST_F('SyncInternalsWebUITest', 'SearchTabDoesntChangeOnItemSelect',
   $('sync-results-list').dataModel = new cr.ui.ArrayDataModel([
     {
       value: 'value 0',
-      toString: function() { return 'node 0'; },
+      toString: function() {
+        return 'node 0';
+      },
     },
     {
       value: 'value 1',
-      toString: function() { return 'node 1'; },
+      toString: function() {
+        return 'node 1';
+      },
     }
   ]);
 

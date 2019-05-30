@@ -15,6 +15,7 @@
 #include "base/synchronization/lock.h"
 #include "base/task/sequence_manager/lazy_now.h"
 #include "base/task/sequence_manager/moveable_auto_lock.h"
+#include "base/task/sequence_manager/tasks.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 
@@ -27,15 +28,22 @@ class BlameContext;
 namespace sequence_manager {
 
 namespace internal {
-struct AssociatedThreadId;
-class GracefulQueueShutdownHelper;
+class AssociatedThreadId;
 class SequenceManagerImpl;
 class TaskQueueImpl;
 }  // namespace internal
 
 class TimeDomain;
 
-class BASE_EXPORT TaskQueue : public SingleThreadTaskRunner {
+// TODO(kraynov): Make TaskQueue to actually be an interface for TaskQueueImpl
+// and stop using ref-counting because we're no longer tied to task runner
+// lifecycle and there's no other need for ref-counting either.
+// NOTE: When TaskQueue gets automatically deleted on zero ref-count,
+// TaskQueueImpl gets gracefully shutdown. It means that it doesn't get
+// unregistered immediately and might accept some last minute tasks until
+// SequenceManager will unregister it at some point. It's done to ensure that
+// task queue always gets unregistered on the main thread.
+class BASE_EXPORT TaskQueue : public RefCountedThreadSafe<TaskQueue> {
  public:
   class Observer {
    public:
@@ -54,55 +62,36 @@ class BASE_EXPORT TaskQueue : public SingleThreadTaskRunner {
                                           TimeTicks next_wake_up) = 0;
   };
 
-  // A wrapper around OnceClosure with additional metadata to be passed
-  // to PostTask and plumbed until PendingTask is created.
-  struct BASE_EXPORT PostedTask {
-    PostedTask(OnceClosure callback,
-               Location posted_from,
-               TimeDelta delay = TimeDelta(),
-               Nestable nestable = Nestable::kNestable,
-               int task_type = 0);
-    PostedTask(PostedTask&& move_from);
-    PostedTask(const PostedTask& copy_from) = delete;
-    ~PostedTask();
-
-    OnceClosure callback;
-    Location posted_from;
-    TimeDelta delay;
-    Nestable nestable;
-    int task_type;
-  };
-
   // Prepare the task queue to get released.
   // All tasks posted after this call will be discarded.
   virtual void ShutdownTaskQueue();
 
   // TODO(scheduler-dev): Could we define a more clear list of priorities?
   // See https://crbug.com/847858.
-  enum QueuePriority {
+  enum QueuePriority : uint8_t {
     // Queues with control priority will run before any other queue, and will
     // explicitly starve other queues. Typically this should only be used for
     // private queues which perform control operations.
-    kControlPriority,
+    kControlPriority = 0,
 
     // The selector will prioritize highest over high, normal and low; and
     // high over normal and low; and normal over low. However it will ensure
     // neither of the lower priority queues can be completely starved by higher
     // priority tasks. All three of these queues will always take priority over
     // and can starve the best effort queue.
-    kHighestPriority,
+    kHighestPriority = 1,
 
-    kHighPriority,
+    kHighPriority = 2,
 
     // Queues with normal priority are the default.
-    kNormalPriority,
-    kLowPriority,
+    kNormalPriority = 3,
+    kLowPriority = 4,
 
     // Queues with best effort priority will only be run if all other queues are
     // empty. They can be starved by the other queues.
-    kBestEffortPriority,
+    kBestEffortPriority = 5,
     // Must be the last entry.
-    kQueuePriorityCount,
+    kQueuePriorityCount = 6,
     kFirstQueuePriority = kControlPriority,
   };
 
@@ -111,11 +100,7 @@ class BASE_EXPORT TaskQueue : public SingleThreadTaskRunner {
 
   // Options for constructing a TaskQueue.
   struct Spec {
-    explicit Spec(const char* name)
-        : name(name),
-          should_monitor_quiescence(false),
-          time_domain(nullptr),
-          should_notify_observers(true) {}
+    explicit Spec(const char* name) : name(name) {}
 
     Spec SetShouldMonitorQuiescence(bool should_monitor) {
       should_monitor_quiescence = should_monitor;
@@ -127,27 +112,28 @@ class BASE_EXPORT TaskQueue : public SingleThreadTaskRunner {
       return *this;
     }
 
+    // Delayed fences require Now() to be sampled when posting immediate tasks
+    // which is not free.
+    Spec SetDelayedFencesAllowed(bool allow_delayed_fences) {
+      delayed_fence_allowed = allow_delayed_fences;
+      return *this;
+    }
+
     Spec SetTimeDomain(TimeDomain* domain) {
       time_domain = domain;
       return *this;
     }
 
     const char* name;
-    bool should_monitor_quiescence;
-    TimeDomain* time_domain;
-    bool should_notify_observers;
+    bool should_monitor_quiescence = false;
+    TimeDomain* time_domain = nullptr;
+    bool should_notify_observers = true;
+    bool delayed_fence_allowed = false;
   };
 
-  // Interface to pass per-task metadata to RendererScheduler.
-  class BASE_EXPORT Task : public PendingTask {
-   public:
-    Task(PostedTask posted_task, TimeTicks desired_run_time);
-
-    int task_type() const { return task_type_; }
-
-   private:
-    int task_type_;
-  };
+  // TODO(altimin): Make this private after TaskQueue/TaskQueueImpl refactoring.
+  TaskQueue(std::unique_ptr<internal::TaskQueueImpl> impl,
+            const TaskQueue::Spec& spec);
 
   // Information about task execution.
   //
@@ -206,20 +192,26 @@ class BASE_EXPORT TaskQueue : public SingleThreadTaskRunner {
 
   // An interface that lets the owner vote on whether or not the associated
   // TaskQueue should be enabled.
-  class QueueEnabledVoter {
+  class BASE_EXPORT QueueEnabledVoter {
    public:
-    QueueEnabledVoter() = default;
-    virtual ~QueueEnabledVoter() = default;
+    ~QueueEnabledVoter();
+
+    QueueEnabledVoter(const QueueEnabledVoter&) = delete;
+    const QueueEnabledVoter& operator=(const QueueEnabledVoter&) = delete;
 
     // Votes to enable or disable the associated TaskQueue. The TaskQueue will
     // only be enabled if all the voters agree it should be enabled, or if there
     // are no voters.
     // NOTE this must be called on the thread the associated TaskQueue was
     // created on.
-    virtual void SetQueueEnabled(bool enabled) = 0;
+    void SetQueueEnabled(bool enabled);
 
    private:
-    DISALLOW_COPY_AND_ASSIGN(QueueEnabledVoter);
+    friend class TaskQueue;
+    explicit QueueEnabledVoter(scoped_refptr<TaskQueue> task_queue);
+
+    scoped_refptr<TaskQueue> const task_queue_;
+    bool enabled_;
   };
 
   // Returns an interface that allows the caller to vote on whether or not this
@@ -297,6 +289,10 @@ class BASE_EXPORT TaskQueue : public SingleThreadTaskRunner {
   // Only one fence can be scheduled at a time. Inserting a new fence
   // will automatically remove the previous one, regardless of fence type.
   void InsertFence(InsertFencePosition position);
+
+  // Delayed fences are only allowed for queues created with
+  // SetDelayedFencesAllowed(true) because this feature implies sampling Now()
+  // (which isn't free) for every PostTask, even those with zero delay.
   void InsertFenceAt(TimeTicks time);
 
   // Removes any previously added fence and unblocks execution of any tasks
@@ -315,31 +311,31 @@ class BASE_EXPORT TaskQueue : public SingleThreadTaskRunner {
 
   // Create a task runner for this TaskQueue which will annotate all
   // posted tasks with the given task type.
+  // May be called on any thread.
+  // NOTE: Task runners don't hold a reference to a TaskQueue, hence,
+  // it's required to retain that reference to prevent automatic graceful
+  // shutdown. Unique ownership of task queues will fix this issue soon.
   scoped_refptr<SingleThreadTaskRunner> CreateTaskRunner(int task_type);
 
-  // TODO(kraynov): Drop this implementation and introduce
-  // GetDefaultTaskRunner() method instead.
-  // SingleThreadTaskRunner implementation:
-  bool RunsTasksInCurrentSequence() const override;
-  bool PostDelayedTask(const Location& from_here,
-                       OnceClosure task,
-                       TimeDelta delay) override;
-  bool PostNonNestableDelayedTask(const Location& from_here,
-                                  OnceClosure task,
-                                  TimeDelta delay) override;
-
-  bool PostTaskWithMetadata(PostedTask task);
+  // Default task runner which doesn't annotate tasks with a task type.
+  scoped_refptr<SingleThreadTaskRunner> task_runner() const {
+    return default_task_runner_;
+  }
 
  protected:
-  TaskQueue(std::unique_ptr<internal::TaskQueueImpl> impl,
-            const TaskQueue::Spec& spec);
-  ~TaskQueue() override;
+  virtual ~TaskQueue();
 
   internal::TaskQueueImpl* GetTaskQueueImpl() const { return impl_.get(); }
 
  private:
+  friend class RefCountedThreadSafe<TaskQueue>;
   friend class internal::SequenceManagerImpl;
   friend class internal::TaskQueueImpl;
+
+  void AddQueueEnabledVoter(bool voter_is_enabled);
+  void RemoveQueueEnabledVoter(bool voter_is_enabled);
+  bool AreAllQueueEnabledVotersEnabled() const;
+  void OnQueueEnabledVoteChanged(bool enabled);
 
   bool IsOnMainThread() const;
 
@@ -361,10 +357,11 @@ class BASE_EXPORT TaskQueue : public SingleThreadTaskRunner {
 
   const WeakPtr<internal::SequenceManagerImpl> sequence_manager_;
 
-  const scoped_refptr<internal::GracefulQueueShutdownHelper>
-      graceful_queue_shutdown_helper_;
-
   scoped_refptr<internal::AssociatedThreadId> associated_thread_;
+  scoped_refptr<SingleThreadTaskRunner> default_task_runner_;
+
+  int enabled_voter_count_ = 0;
+  int voter_count_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(TaskQueue);
 };

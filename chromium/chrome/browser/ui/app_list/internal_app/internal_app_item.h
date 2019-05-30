@@ -11,14 +11,17 @@
 namespace app_list {
 class AppContextMenu;
 struct InternalApp;
-}
+}  // namespace app_list
 
 // A class that represents an internal app in launcher.
 class InternalAppItem : public ChromeAppListItem {
  public:
   static const char kItemType[];
 
+  static void RecordActiveHistogram(const std::string& app_id);
+
   InternalAppItem(Profile* profile,
+                  AppListModelUpdater* model_updater,
                   const app_list::AppListSyncableService::SyncItem* sync_item,
                   const app_list::InternalApp& internal_app);
   ~InternalAppItem() override;

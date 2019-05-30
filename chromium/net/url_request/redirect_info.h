@@ -28,22 +28,18 @@ struct NET_EXPORT RedirectInfo {
       const std::string& original_method,
       const GURL& original_url,
       const GURL& original_site_for_cookies,
+      const base::Optional<url::Origin>& original_top_frame_origin,
       URLRequest::FirstPartyURLPolicy original_first_party_url_policy,
       URLRequest::ReferrerPolicy original_referrer_policy,
       const std::string& original_referrer,
-      // |response_headers| can be null. This is for non-HTTP URLRequestJobs
-      // which implement IsRedirectResponse() without having HttpResponseHeaders
-      // (ex: URLRequestFileJob). |http_status_code| and |new_location|
-      // arguments are for such case.
-      const HttpResponseHeaders* response_headers,
       // The HTTP status code of the redirect response.
       int http_status_code,
       // The new location URL of the redirect response.
       const GURL& new_location,
+      // Referrer-Policy header of the redirect response.
+      const base::Optional<std::string>& referrer_policy_header,
       // Whether the URL was upgraded to HTTPS due to upgrade-insecure-requests.
       bool insecure_scheme_was_upgraded,
-      // Whether Token Binding of TLS was negotiated.
-      bool token_binding_negotiated,
       // This method copies the URL fragment of the original URL to the new URL
       // by default. Set false only when the network delegate has set the
       // desired redirect URL (with or without fragment), so it must not be
@@ -65,6 +61,8 @@ struct NET_EXPORT RedirectInfo {
   // The new first-party URL for cookies.
   GURL new_site_for_cookies;
 
+  base::Optional<url::Origin> new_top_frame_origin;
+
   // The new HTTP referrer header.
   std::string new_referrer;
 
@@ -75,11 +73,6 @@ struct NET_EXPORT RedirectInfo {
   // The new referrer policy that should be obeyed if there are
   // subsequent redirects.
   URLRequest::ReferrerPolicy new_referrer_policy;
-
-  // The hostname of the referrer if it asked the client to include a referred
-  // Token Binding when following the redirect; otherwise this is the empty
-  // string.
-  std::string referred_token_binding_host;
 };
 
 }  // namespace net

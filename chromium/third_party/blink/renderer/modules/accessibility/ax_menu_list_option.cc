@@ -34,8 +34,6 @@
 
 namespace blink {
 
-using namespace HTMLNames;
-
 AXMenuListOption::AXMenuListOption(HTMLOptionElement* element,
                                    AXObjectCacheImpl& ax_object_cache)
     : AXMockObject(ax_object_cache), element_(element) {}
@@ -55,16 +53,16 @@ LocalFrameView* AXMenuListOption::DocumentFrameView() const {
   return element_->GetDocument().View();
 }
 
-AccessibilityRole AXMenuListOption::RoleValue() const {
+ax::mojom::Role AXMenuListOption::RoleValue() const {
   const AtomicString& aria_role =
       GetAOMPropertyOrARIAAttribute(AOMStringProperty::kRole);
   if (aria_role.IsEmpty())
-    return kMenuListOptionRole;
+    return ax::mojom::Role::kMenuListOption;
 
-  AccessibilityRole role = AriaRoleToWebCoreRole(aria_role);
-  if (role)
+  ax::mojom::Role role = AriaRoleToWebCoreRole(aria_role);
+  if (role != ax::mojom::Role::kUnknown)
     return role;
-  return kMenuListOptionRole;
+  return ax::mojom::Role::kMenuListOption;
 }
 
 Element* AXMenuListOption::ActionElement() const {
@@ -79,6 +77,8 @@ AXObject* AXMenuListOption::ComputeParent() const {
   if (!select)
     return nullptr;
   AXObject* select_ax_object = AXObjectCache().GetOrCreate(select);
+  if (!select_ax_object)
+    return nullptr;
 
   // This happens if the <select> is not rendered. Return it and move on.
   if (!select_ax_object->IsMenuList())
@@ -178,7 +178,7 @@ void AXMenuListOption::GetRelativeBounds(AXObject** out_container,
 String AXMenuListOption::TextAlternative(bool recursive,
                                          bool in_aria_labelled_by_traversal,
                                          AXObjectSet& visited,
-                                         AXNameFrom& name_from,
+                                         ax::mojom::NameFrom& name_from,
                                          AXRelatedObjectVector* related_objects,
                                          NameSources* name_sources) const {
   // If nameSources is non-null, relatedObjects is used in filling it in, so it
@@ -196,7 +196,7 @@ String AXMenuListOption::TextAlternative(bool recursive,
   if (found_text_alternative && !name_sources)
     return text_alternative;
 
-  name_from = kAXNameFromContents;
+  name_from = ax::mojom::NameFrom::kContents;
   text_alternative = element_->DisplayLabel();
   if (name_sources) {
     name_sources->push_back(NameSource(found_text_alternative));

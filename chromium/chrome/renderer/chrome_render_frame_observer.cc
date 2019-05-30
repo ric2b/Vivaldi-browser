@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -40,6 +41,7 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/platform/web_image.h"
 #include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/web/web_console_message.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_document_loader.h"
 #include "third_party/blink/public/web/web_element.h"
@@ -214,7 +216,7 @@ void ChromeRenderFrameObserver::RequestReloadImageForContextNode() {
   // TODO(dglazkov): This code is clearly in the wrong place. Need
   // to investigate what it is doing and fix (http://crbug.com/606164).
   WebNode context_node = frame->ContextMenuNode();
-  if (!context_node.IsNull() && context_node.IsElementNode()) {
+  if (!context_node.IsNull()) {
     frame->ReloadImage(context_node);
   }
 }
@@ -284,7 +286,7 @@ void ChromeRenderFrameObserver::GetWebApplicationInfo(
   // if the Chromium build is running on a desktop. It will get more exposition.
   if (web_app_info.mobile_capable == WebApplicationInfo::MOBILE_CAPABLE_APPLE) {
     blink::WebConsoleMessage message(
-        blink::WebConsoleMessage::kLevelWarning,
+        blink::mojom::ConsoleMessageLevel::kWarning,
         "<meta name=\"apple-mobile-web-app-capable\" content=\"yes\"> is "
         "deprecated. Please include <meta name=\"mobile-web-app-capable\" "
         "content=\"yes\"> - "
@@ -296,9 +298,7 @@ void ChromeRenderFrameObserver::GetWebApplicationInfo(
   // any icon with a data URL to have originated from a favicon.  We don't want
   // to decode arbitrary data URLs in the browser process.  See
   // http://b/issue?id=1162972
-  for (std::vector<WebApplicationInfo::IconInfo>::iterator it =
-           web_app_info.icons.begin();
-       it != web_app_info.icons.end();) {
+  for (auto it = web_app_info.icons.begin(); it != web_app_info.icons.end();) {
     if (it->url.SchemeIs(url::kDataScheme))
       it = web_app_info.icons.erase(it);
     else
@@ -359,7 +359,8 @@ void ChromeRenderFrameObserver::DidCreateNewDocument() {
   blink::WebDocumentLoader* doc_loader =
       render_frame()->GetWebFrame()->GetDocumentLoader();
   DCHECK(doc_loader);
-  if (!doc_loader->IsArchive())
+
+  if (!doc_loader->HasBeenLoadedAsWebArchive())
     return;
 
   // Connect to Mojo service on browser to notify it of the page's archive
@@ -370,11 +371,12 @@ void ChromeRenderFrameObserver::DidCreateNewDocument() {
   DCHECK(mhtml_notifier);
   blink::WebArchiveInfo info = doc_loader->GetArchiveInfo();
 
-  mhtml_notifier->NotifyIsMhtmlPage(info.url, info.date);
+  mhtml_notifier->NotifyMhtmlPageLoadAttempted(info.load_result, info.url,
+                                               info.date);
 #endif
 }
 
-void ChromeRenderFrameObserver::DidStartProvisionalLoad(
+void ChromeRenderFrameObserver::ReadyToCommitNavigation(
     WebDocumentLoader* document_loader) {
   // Let translate_helper do any preparatory work for loading a URL.
   if (!translate_helper_)
@@ -385,8 +387,8 @@ void ChromeRenderFrameObserver::DidStartProvisionalLoad(
 }
 
 void ChromeRenderFrameObserver::DidCommitProvisionalLoad(
-    bool is_new_navigation,
-    bool is_same_document_navigation) {
+    bool is_same_document_navigation,
+    ui::PageTransition transition) {
   WebLocalFrame* frame = render_frame()->GetWebFrame();
 
   // Don't do anything for subframes.
@@ -501,12 +503,12 @@ void ChromeRenderFrameObserver::SetWindowFeatures(
       content::ConvertMojoWindowFeaturesToWebWindowFeatures(*window_features));
 }
 
-#if defined(OS_ANDROID)
 void ChromeRenderFrameObserver::UpdateBrowserControlsState(
     content::BrowserControlsState constraints,
     content::BrowserControlsState current,
     bool animate) {
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
   render_frame()->GetRenderView()->UpdateBrowserControlsState(constraints,
                                                               current, animate);
-}
 #endif
+}

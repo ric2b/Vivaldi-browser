@@ -27,6 +27,8 @@
 using content::WebContents;
 using web_modal::WebContentsModalDialogManager;
 
+namespace printing {
+
 namespace {
 
 scoped_refptr<base::RefCountedBytes> CreateTestData() {
@@ -46,24 +48,19 @@ bool IsShowingWebContentsModalDialog(WebContents* tab) {
 
 class PrintPreviewUIUnitTest : public PrintPreviewTest {
  public:
-  PrintPreviewUIUnitTest();
-  ~PrintPreviewUIUnitTest() override;
+  PrintPreviewUIUnitTest() {}
+  ~PrintPreviewUIUnitTest() override {}
 
  protected:
-  void SetUp() override;
+  void SetUp() override {
+    PrintPreviewTest::SetUp();
+
+    chrome::NewTab(browser());
+  }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PrintPreviewUIUnitTest);
 };
-
-PrintPreviewUIUnitTest::PrintPreviewUIUnitTest() {}
-PrintPreviewUIUnitTest::~PrintPreviewUIUnitTest() {}
-
-void PrintPreviewUIUnitTest::SetUp() {
-  PrintPreviewTest::SetUp();
-
-  chrome::NewTab(browser());
-}
 
 // Create/Get a preview tab for initiator.
 TEST_F(PrintPreviewUIUnitTest, PrintPreviewData) {
@@ -71,12 +68,12 @@ TEST_F(PrintPreviewUIUnitTest, PrintPreviewData) {
   ASSERT_TRUE(initiator);
   EXPECT_FALSE(IsShowingWebContentsModalDialog(initiator));
 
-  printing::PrintPreviewDialogController* controller =
-      printing::PrintPreviewDialogController::GetInstance();
+  PrintPreviewDialogController* controller =
+      PrintPreviewDialogController::GetInstance();
   ASSERT_TRUE(controller);
 
-  printing::PrintViewManager* print_view_manager =
-      printing::PrintViewManager::FromWebContents(initiator);
+  PrintViewManager* print_view_manager =
+      PrintViewManager::FromWebContents(initiator);
   print_view_manager->PrintPreviewNow(initiator->GetMainFrame(), false);
   WebContents* preview_dialog = controller->GetOrCreatePreviewDialog(initiator);
 
@@ -87,30 +84,27 @@ TEST_F(PrintPreviewUIUnitTest, PrintPreviewData) {
   PrintPreviewUI* preview_ui = static_cast<PrintPreviewUI*>(
       preview_dialog->GetWebUI()->GetController());
   ASSERT_TRUE(preview_ui);
+  preview_ui->SetPreviewUIId();
 
   scoped_refptr<base::RefCountedMemory> data;
-  preview_ui->GetPrintPreviewDataForIndex(
-      printing::COMPLETE_PREVIEW_DOCUMENT_INDEX,
-      &data);
+  preview_ui->GetPrintPreviewDataForIndex(COMPLETE_PREVIEW_DOCUMENT_INDEX,
+                                          &data);
   EXPECT_FALSE(data);
 
   scoped_refptr<base::RefCountedBytes> dummy_data = CreateTestData();
 
-  preview_ui->SetPrintPreviewDataForIndex(
-      printing::COMPLETE_PREVIEW_DOCUMENT_INDEX,
-      dummy_data.get());
-  preview_ui->GetPrintPreviewDataForIndex(
-      printing::COMPLETE_PREVIEW_DOCUMENT_INDEX,
-      &data);
+  preview_ui->SetPrintPreviewDataForIndexForTest(
+      COMPLETE_PREVIEW_DOCUMENT_INDEX, dummy_data.get());
+  preview_ui->GetPrintPreviewDataForIndex(COMPLETE_PREVIEW_DOCUMENT_INDEX,
+                                          &data);
   EXPECT_EQ(dummy_data->size(), data->size());
   EXPECT_EQ(dummy_data.get(), data.get());
 
   // Clear the preview data.
-  preview_ui->ClearAllPreviewData();
+  preview_ui->ClearAllPreviewDataForTest();
 
-  preview_ui->GetPrintPreviewDataForIndex(
-      printing::COMPLETE_PREVIEW_DOCUMENT_INDEX,
-      &data);
+  preview_ui->GetPrintPreviewDataForIndex(COMPLETE_PREVIEW_DOCUMENT_INDEX,
+                                          &data);
   EXPECT_FALSE(data);
 }
 
@@ -119,12 +113,12 @@ TEST_F(PrintPreviewUIUnitTest, PrintPreviewDraftPages) {
   WebContents* initiator = browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(initiator);
 
-  printing::PrintPreviewDialogController* controller =
-      printing::PrintPreviewDialogController::GetInstance();
+  PrintPreviewDialogController* controller =
+      PrintPreviewDialogController::GetInstance();
   ASSERT_TRUE(controller);
 
-  printing::PrintViewManager* print_view_manager =
-      printing::PrintViewManager::FromWebContents(initiator);
+  PrintViewManager* print_view_manager =
+      PrintViewManager::FromWebContents(initiator);
   print_view_manager->PrintPreviewNow(initiator->GetMainFrame(), false);
   WebContents* preview_dialog = controller->GetOrCreatePreviewDialog(initiator);
 
@@ -135,42 +129,40 @@ TEST_F(PrintPreviewUIUnitTest, PrintPreviewDraftPages) {
   PrintPreviewUI* preview_ui = static_cast<PrintPreviewUI*>(
       preview_dialog->GetWebUI()->GetController());
   ASSERT_TRUE(preview_ui);
+  preview_ui->SetPreviewUIId();
 
   scoped_refptr<base::RefCountedMemory> data;
-  preview_ui->GetPrintPreviewDataForIndex(printing::FIRST_PAGE_INDEX, &data);
+  preview_ui->GetPrintPreviewDataForIndex(FIRST_PAGE_INDEX, &data);
   EXPECT_FALSE(data);
 
   scoped_refptr<base::RefCountedBytes> dummy_data = CreateTestData();
 
-  preview_ui->SetPrintPreviewDataForIndex(printing::FIRST_PAGE_INDEX,
-                                          dummy_data.get());
-  preview_ui->GetPrintPreviewDataForIndex(printing::FIRST_PAGE_INDEX, &data);
+  preview_ui->SetPrintPreviewDataForIndexForTest(FIRST_PAGE_INDEX,
+                                                 dummy_data.get());
+  preview_ui->GetPrintPreviewDataForIndex(FIRST_PAGE_INDEX, &data);
   EXPECT_EQ(dummy_data->size(), data->size());
   EXPECT_EQ(dummy_data.get(), data.get());
 
   // Set and get the third page data.
-  preview_ui->SetPrintPreviewDataForIndex(printing::FIRST_PAGE_INDEX + 2,
-                                          dummy_data.get());
-  preview_ui->GetPrintPreviewDataForIndex(printing::FIRST_PAGE_INDEX + 2,
-                                          &data);
+  preview_ui->SetPrintPreviewDataForIndexForTest(FIRST_PAGE_INDEX + 2,
+                                                 dummy_data.get());
+  preview_ui->GetPrintPreviewDataForIndex(FIRST_PAGE_INDEX + 2, &data);
   EXPECT_EQ(dummy_data->size(), data->size());
   EXPECT_EQ(dummy_data.get(), data.get());
 
   // Get the second page data.
-  preview_ui->GetPrintPreviewDataForIndex(printing::FIRST_PAGE_INDEX + 1,
-                                          &data);
+  preview_ui->GetPrintPreviewDataForIndex(FIRST_PAGE_INDEX + 1, &data);
   EXPECT_FALSE(data);
 
-  preview_ui->SetPrintPreviewDataForIndex(printing::FIRST_PAGE_INDEX + 1,
-                                          dummy_data.get());
-  preview_ui->GetPrintPreviewDataForIndex(printing::FIRST_PAGE_INDEX + 1,
-                                          &data);
+  preview_ui->SetPrintPreviewDataForIndexForTest(FIRST_PAGE_INDEX + 1,
+                                                 dummy_data.get());
+  preview_ui->GetPrintPreviewDataForIndex(FIRST_PAGE_INDEX + 1, &data);
   EXPECT_EQ(dummy_data->size(), data->size());
   EXPECT_EQ(dummy_data.get(), data.get());
 
   // Clear the preview data.
-  preview_ui->ClearAllPreviewData();
-  preview_ui->GetPrintPreviewDataForIndex(printing::FIRST_PAGE_INDEX, &data);
+  preview_ui->ClearAllPreviewDataForTest();
+  preview_ui->GetPrintPreviewDataForIndex(FIRST_PAGE_INDEX, &data);
   EXPECT_FALSE(data);
 }
 
@@ -179,12 +171,12 @@ TEST_F(PrintPreviewUIUnitTest, ShouldCancelRequest) {
   WebContents* initiator = browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(initiator);
 
-  printing::PrintPreviewDialogController* controller =
-      printing::PrintPreviewDialogController::GetInstance();
+  PrintPreviewDialogController* controller =
+      PrintPreviewDialogController::GetInstance();
   ASSERT_TRUE(controller);
 
-  printing::PrintViewManager* print_view_manager =
-      printing::PrintViewManager::FromWebContents(initiator);
+  PrintViewManager* print_view_manager =
+      PrintViewManager::FromWebContents(initiator);
   print_view_manager->PrintPreviewNow(initiator->GetMainFrame(), false);
   WebContents* preview_dialog = controller->GetOrCreatePreviewDialog(initiator);
 
@@ -195,6 +187,7 @@ TEST_F(PrintPreviewUIUnitTest, ShouldCancelRequest) {
   PrintPreviewUI* preview_ui = static_cast<PrintPreviewUI*>(
       preview_dialog->GetWebUI()->GetController());
   ASSERT_TRUE(preview_ui);
+  preview_ui->SetPreviewUIId();
 
   // Test with invalid UI ID.
   const int32_t kInvalidId = -5;
@@ -202,7 +195,7 @@ TEST_F(PrintPreviewUIUnitTest, ShouldCancelRequest) {
 
   const int kFirstRequestId = 1000;
   const int kSecondRequestId = 1001;
-  const int32_t preview_id = preview_ui->GetIDForPrintPreviewUI();
+  const int32_t preview_id = preview_ui->GetIDForPrintPreviewUI().value();
 
   // Test with kFirstRequestId.
   preview_ui->OnPrintPreviewRequest(kFirstRequestId);
@@ -214,3 +207,18 @@ TEST_F(PrintPreviewUIUnitTest, ShouldCancelRequest) {
   EXPECT_TRUE(preview_ui->ShouldCancelRequest({kFirstRequestId, preview_id}));
   EXPECT_FALSE(preview_ui->ShouldCancelRequest({kSecondRequestId, preview_id}));
 }
+
+TEST_F(PrintPreviewUIUnitTest, ParseDataPath) {
+  EXPECT_FALSE(
+      PrintPreviewUI::ParseDataPath("pdf/browser_api.js", nullptr, nullptr));
+  EXPECT_TRUE(PrintPreviewUI::ParseDataPath("1/2/print.pdf", nullptr, nullptr));
+
+  int ui_id = -1;
+  int page_index = -2;
+  EXPECT_TRUE(
+      PrintPreviewUI::ParseDataPath("3/4/print.pdf", &ui_id, &page_index));
+  EXPECT_EQ(ui_id, 3);
+  EXPECT_EQ(page_index, 4);
+}
+
+}  // namespace printing

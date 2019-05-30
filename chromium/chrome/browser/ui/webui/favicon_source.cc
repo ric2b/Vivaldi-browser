@@ -13,16 +13,17 @@
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/instant_io_context.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/sync/session_sync_service_factory.h"
 #include "chrome/common/url_constants.h"
-#include "components/browser_sync/profile_sync_service.h"
 #include "components/favicon_base/favicon_url_parser.h"
 #include "components/history/core/browser/top_sites.h"
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
+#include "components/sync_sessions/session_sync_service.h"
 #include "net/url_request/url_request.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/webui/web_ui_util.h"
+#include "ui/native_theme/native_theme.h"
 #include "ui/resources/grit/ui_resources.h"
 
 FaviconSource::IconRequest::IconRequest()
@@ -124,6 +125,17 @@ void FaviconSource::StartDataRequest(
     // all be shown with the same icon.
     const bool fallback_to_host =
         url.spec().find("https://vivaldi.com/bk/") != 0;
+    if (!fallback_to_host) {
+      // NOTE(espen@vivaldi.com): We append a query section to favicon requests
+      // to prevent a caching problem when an icon becomes available. Remove
+      // that section here. Removal is required when we do not allow falling
+      // back to the host for matching.
+      int s = url.spec().rfind("/?");
+      if (s != -1) {
+        url = GURL(url.spec().substr(0, s));
+      }
+    }
+
     favicon_service->GetRawFaviconForPageURL(
         url, {favicon_base::IconType::kFavicon}, desired_size_in_pixel,
         fallback_to_host,
@@ -165,10 +177,10 @@ bool FaviconSource::ShouldServiceRequest(
 
 bool FaviconSource::HandleMissingResource(const IconRequest& request) {
   // If the favicon is not available, try to use the synced favicon.
-  browser_sync::ProfileSyncService* sync_service =
-      ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_);
+  sync_sessions::SessionSyncService* service =
+      SessionSyncServiceFactory::GetInstance()->GetForProfile(profile_);
   sync_sessions::OpenTabsUIDelegate* open_tabs =
-      sync_service ? sync_service->GetOpenTabsUIDelegate() : nullptr;
+      service ? service->GetOpenTabsUIDelegate() : nullptr;
 
   scoped_refptr<base::RefCountedMemory> response;
   if (open_tabs &&
@@ -178,6 +190,10 @@ bool FaviconSource::HandleMissingResource(const IconRequest& request) {
     return true;
   }
   return false;
+}
+
+ui::NativeTheme* FaviconSource::GetNativeTheme() {
+  return ui::NativeTheme::GetInstanceForNativeUi();
 }
 
 void FaviconSource::OnFaviconDataAvailable(
@@ -197,23 +213,24 @@ void FaviconSource::SendDefaultResponse(
 }
 
 void FaviconSource::SendDefaultResponse(const IconRequest& icon_request) {
+  const bool dark = GetNativeTheme()->SystemDarkModeEnabled();
   int resource_id;
   switch (icon_request.size_in_dip) {
     case 64:
-      resource_id = IDR_DEFAULT_FAVICON_64;
+      resource_id = dark ? IDR_DEFAULT_FAVICON_DARK_64 : IDR_DEFAULT_FAVICON_64;
       break;
     case 32:
-      resource_id = IDR_DEFAULT_FAVICON_32;
+      resource_id = dark ? IDR_DEFAULT_FAVICON_DARK_32 : IDR_DEFAULT_FAVICON_32;
       break;
     default:
-      resource_id = IDR_DEFAULT_FAVICON;
+      resource_id = dark ? IDR_DEFAULT_FAVICON_DARK : IDR_DEFAULT_FAVICON;
       break;
   }
+  icon_request.callback.Run(LoadIconBytes(icon_request, resource_id));
+}
 
-  base::RefCountedMemory* default_favicon =
-      ui::ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
-          resource_id,
-          ui::GetSupportedScaleFactor(icon_request.device_scale_factor));
-
-  icon_request.callback.Run(default_favicon);
+base::RefCountedMemory* FaviconSource::LoadIconBytes(const IconRequest& request,
+                                                     int resource_id) {
+  return ui::ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
+      resource_id, ui::GetSupportedScaleFactor(request.device_scale_factor));
 }

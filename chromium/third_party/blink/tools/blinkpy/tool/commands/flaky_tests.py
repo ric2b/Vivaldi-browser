@@ -59,7 +59,7 @@ class FlakyTests(Command):
         '/dashboards/flakiness_dashboard.html%23tests=XXXXXXX')
 
     HEADER = (
-        'Manually add bug numbers for these and then put the lines in LayoutTests/TestExpectations.\n'
+        'Manually add bug numbers for these and then put the lines in web_tests/TestExpectations.\n'
         'Look up the test in the flakiness dashboard first to see if the the platform\n'
         'specifiers should be made more general.\n\n'
         'Bug template:\n%s\n') % BUG_TEMPLATE
@@ -116,7 +116,7 @@ class FlakyTests(Command):
         port = tool.port_factory.get()
         # Skip any tests which are mentioned in the dashboard but not in our checkout:
         fs = tool.filesystem
-        lines = [line for line in lines if fs.exists(fs.join(port.layout_tests_dir(), line.path))]
+        lines = [line for line in lines if fs.exists(fs.join(port.web_tests_dir(), line.path))]
 
         test_names = [line.name for line in lines]
         flakiness_dashboard_url = self.FLAKINESS_DASHBOARD_URL % ','.join(test_names)

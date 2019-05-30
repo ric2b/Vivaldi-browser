@@ -47,13 +47,14 @@ OmniboxSuggestionIconType GetOmniboxSuggestionIconTypeForAutocompleteMatchType(
 
   switch (type) {
     case AutocompleteMatchType::BOOKMARK_TITLE:
-    case AutocompleteMatchType::CLIPBOARD:
+    case AutocompleteMatchType::CLIPBOARD_URL:
     case AutocompleteMatchType::NAVSUGGEST:
     case AutocompleteMatchType::NAVSUGGEST_PERSONALIZED:
     case AutocompleteMatchType::PHYSICAL_WEB_DEPRECATED:
     case AutocompleteMatchType::PHYSICAL_WEB_OVERFLOW_DEPRECATED:
     case AutocompleteMatchType::URL_WHAT_YOU_TYPED:
     case AutocompleteMatchType::DOCUMENT_SUGGESTION:
+    case AutocompleteMatchType::PEDAL:
       return DEFAULT_FAVICON;
     case AutocompleteMatchType::HISTORY_BODY:
     case AutocompleteMatchType::HISTORY_KEYWORD:
@@ -71,6 +72,8 @@ OmniboxSuggestionIconType GetOmniboxSuggestionIconTypeForAutocompleteMatchType(
     case AutocompleteMatchType::SEARCH_SUGGEST_TAIL:
     case AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED:
     case AutocompleteMatchType::VOICE_SUGGEST:
+    case AutocompleteMatchType::CLIPBOARD_TEXT:
+    case AutocompleteMatchType::CLIPBOARD_IMAGE:
       return SEARCH;
     case AutocompleteMatchType::CALCULATOR:
       return CALCULATOR;
@@ -151,7 +154,7 @@ int GetIconForAutocompleteMatchType(AutocompleteMatchType::Type type,
 
   switch (type) {
     case AutocompleteMatchType::BOOKMARK_TITLE:
-    case AutocompleteMatchType::CLIPBOARD:
+    case AutocompleteMatchType::CLIPBOARD_URL:
     case AutocompleteMatchType::NAVSUGGEST:
     case AutocompleteMatchType::NAVSUGGEST_PERSONALIZED:
     case AutocompleteMatchType::PHYSICAL_WEB_DEPRECATED:
@@ -176,6 +179,8 @@ int GetIconForAutocompleteMatchType(AutocompleteMatchType::Type type,
     case AutocompleteMatchType::SEARCH_SUGGEST_TAIL:
     case AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED:
     case AutocompleteMatchType::VOICE_SUGGEST:
+    case AutocompleteMatchType::CLIPBOARD_TEXT:
+    case AutocompleteMatchType::CLIPBOARD_IMAGE:
       return is_incognito ? IDR_IOS_OMNIBOX_SEARCH_INCOGNITO
                           : IDR_IOS_OMNIBOX_SEARCH;
     case AutocompleteMatchType::CALCULATOR:
@@ -184,7 +189,8 @@ int GetIconForAutocompleteMatchType(AutocompleteMatchType::Type type,
       DCHECK(!is_incognito);
       return IDR_IOS_OMNIBOX_CALCULATOR;
     case AutocompleteMatchType::DOCUMENT_SUGGESTION:
-      // Document suggeestions aren't yet supported on mobile.
+    case AutocompleteMatchType::PEDAL:
+      // Document and Pedal suggestions aren't yet supported on mobile.
       NOTREACHED();
       return IDR_IOS_OMNIBOX_HTTP;
     case AutocompleteMatchType::EXTENSION_APP_DEPRECATED:

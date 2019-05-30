@@ -48,25 +48,26 @@ class CORE_EXPORT DateTimeChooserImpl final : public DateTimeChooser,
   static DateTimeChooserImpl* Create(ChromeClient*,
                                      DateTimeChooserClient*,
                                      const DateTimeChooserParameters&);
+
+  DateTimeChooserImpl(ChromeClient*,
+                      DateTimeChooserClient*,
+                      const DateTimeChooserParameters&);
   ~DateTimeChooserImpl() override;
 
   // DateTimeChooser functions:
   void EndChooser() override;
   AXObject* RootAXObject() override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
-  DateTimeChooserImpl(ChromeClient*,
-                      DateTimeChooserClient*,
-                      const DateTimeChooserParameters&);
   // PagePopupClient functions:
   void WriteDocument(SharedBuffer*) override;
   void SelectFontsFromOwnerDocument(Document&) override {}
   Locale& GetLocale() override;
   void SetValueAndClosePopup(int, const String&) override;
   void SetValue(const String&) override;
-  void ClosePopup() override;
+  void CancelPopup() override;
   Element& OwnerElement() override;
   void DidClosePopup() override;
 

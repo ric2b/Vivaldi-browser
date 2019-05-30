@@ -6,11 +6,11 @@ package org.chromium.chrome.browser.compositor.bottombar;
 
 import android.animation.Animator;
 import android.content.Context;
+import android.support.annotation.Nullable;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.compositor.animation.CompositorAnimationHandler;
 import org.chromium.chrome.browser.compositor.animation.CompositorAnimator;
-import org.chromium.chrome.browser.compositor.animation.CompositorAnimator.AnimatorUpdateListener;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.PanelState;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
@@ -37,7 +37,7 @@ public abstract class OverlayPanelAnimation extends OverlayPanelBase {
     private static final float INITIAL_ANIMATION_VELOCITY_DP_PER_SECOND = 1750f;
 
     /** The PanelState to which the Panel is being animated. */
-    private PanelState mAnimatingState;
+    private @Nullable @PanelState Integer mAnimatingState;
 
     /** The StateChangeReason for which the Panel is being animated. */
     private @StateChangeReason int mAnimatingStateReason;
@@ -140,9 +140,9 @@ public abstract class OverlayPanelAnimation extends OverlayPanelBase {
         // before the panel is notified of the size change, resulting in the panel's
         // ContentView being laid out incorrectly.
         if (isPanelResizeSupported) {
-            if (mAnimatingState != PanelState.UNDEFINED) {
-                // If the size changes when an animation is happening, then we need to restart the
-                // animation, because the size of the Panel might have changed as well.
+            if (mAnimatingState == null || mAnimatingState != PanelState.UNDEFINED) {
+                // If the size changes when an animation is happening, then we need to restart
+                // the animation, because the size of the Panel might have changed as well.
                 animatePanelToState(mAnimatingState, mAnimatingStateReason);
             } else {
                 updatePanelForSizeChange();
@@ -177,7 +177,8 @@ public abstract class OverlayPanelAnimation extends OverlayPanelBase {
      * @param state The state to animate to.
      * @param reason The reason for the change of panel state.
      */
-    private void animatePanelToState(PanelState state, @StateChangeReason int reason) {
+    private void animatePanelToState(
+            @Nullable @PanelState Integer state, @StateChangeReason int reason) {
         animatePanelToState(state, reason, BASE_ANIMATION_DURATION_MS);
     }
 
@@ -189,7 +190,7 @@ public abstract class OverlayPanelAnimation extends OverlayPanelBase {
      * @param duration The animation duration in milliseconds.
      */
     protected void animatePanelToState(
-            PanelState state, @StateChangeReason int reason, long duration) {
+            @Nullable @PanelState Integer state, @StateChangeReason int reason, long duration) {
         mAnimatingState = state;
         mAnimatingStateReason = reason;
 
@@ -203,7 +204,7 @@ public abstract class OverlayPanelAnimation extends OverlayPanelBase {
      * @param state The state to resize to.
      * @param reason The reason for the change of panel state.
      */
-    protected void resizePanelToState(PanelState state, @StateChangeReason int reason) {
+    protected void resizePanelToState(@PanelState int state, @StateChangeReason int reason) {
         cancelHeightAnimation();
 
         final float height = getPanelHeightFromState(state);
@@ -223,7 +224,7 @@ public abstract class OverlayPanelAnimation extends OverlayPanelBase {
         // Calculate the nearest state from the current position, and then calculate the duration
         // of the animation that will start with a desired initial velocity and move the desired
         // amount of dps (displacement).
-        final PanelState nearestState = findNearestPanelStateFromHeight(getHeight(), 0.0f);
+        final @PanelState int nearestState = findNearestPanelStateFromHeight(getHeight(), 0.0f);
         final float displacement = getPanelHeightFromState(nearestState) - getHeight();
         final long duration = calculateAnimationDuration(
                 INITIAL_ANIMATION_VELOCITY_DP_PER_SECOND, displacement);
@@ -237,7 +238,8 @@ public abstract class OverlayPanelAnimation extends OverlayPanelBase {
      * @param velocity The velocity of the gesture in dps per second.
      */
     protected void animateToProjectedState(float velocity) {
-        PanelState projectedState = getProjectedState(velocity);
+        @PanelState
+        int projectedState = getProjectedState(velocity);
 
         final float displacement = getPanelHeightFromState(projectedState) - getHeight();
         final long duration = calculateAnimationDuration(velocity, displacement);
@@ -249,13 +251,14 @@ public abstract class OverlayPanelAnimation extends OverlayPanelBase {
      * @param velocity The given velocity.
      * @return The projected state the Panel will be if the given velocity is applied.
      */
-    protected PanelState getProjectedState(float velocity) {
+    protected @PanelState int getProjectedState(float velocity) {
         final float kickY = calculateAnimationDisplacement(velocity, BASE_ANIMATION_DURATION_MS);
         final float projectedHeight = getHeight() - kickY;
 
         // Calculate the projected state the Panel will be at the end of the fling movement and the
         // duration of the animation given the current velocity and the projected displacement.
-        PanelState projectedState = findNearestPanelStateFromHeight(projectedHeight, velocity);
+        @PanelState
+        int projectedState = findNearestPanelStateFromHeight(projectedHeight, velocity);
 
         return projectedState;
     }
@@ -348,12 +351,7 @@ public abstract class OverlayPanelAnimation extends OverlayPanelBase {
 
         mHeightAnimator = CompositorAnimator.ofFloat(
                 getAnimationHandler(), getHeight(), height, duration, null);
-        mHeightAnimator.addUpdateListener(new AnimatorUpdateListener() {
-            @Override
-            public void onAnimationUpdate(CompositorAnimator animator) {
-                setPanelHeight(animator.getAnimatedValue());
-            }
-        });
+        mHeightAnimator.addUpdateListener(animator -> setPanelHeight(animator.getAnimatedValue()));
         mHeightAnimator.addListener(new CancelAwareAnimatorListener() {
             @Override
             public void onEnd(Animator animation) {
@@ -375,7 +373,7 @@ public abstract class OverlayPanelAnimation extends OverlayPanelBase {
         // be checked.
         if (mAnimatingState != null && mAnimatingState != PanelState.UNDEFINED
                 && MathUtils.areFloatsEqual(
-                           getHeight(), getPanelHeightFromState(mAnimatingState))) {
+                        getHeight(), getPanelHeightFromState(mAnimatingState))) {
             setPanelState(mAnimatingState, mAnimatingStateReason);
         }
 

@@ -71,7 +71,7 @@ class VIZ_HOST_EXPORT ClientFrameSinkVideoCapturer
   ~ClientFrameSinkVideoCapturer() override;
 
   // See FrameSinkVideoCapturer for documentation.
-  void SetFormat(media::VideoPixelFormat format, media::ColorSpace color_space);
+  void SetFormat(media::VideoPixelFormat format, gfx::ColorSpace color_space);
   void SetMinCapturePeriod(base::TimeDelta min_capture_period);
   void SetMinSizeChangePeriod(base::TimeDelta min_period);
   void SetResolutionConstraints(const gfx::Size& min_size,
@@ -97,10 +97,10 @@ class VIZ_HOST_EXPORT ClientFrameSinkVideoCapturer
 
  private:
   struct Format {
-    Format(media::VideoPixelFormat pixel_format, media::ColorSpace color_space);
+    Format(media::VideoPixelFormat pixel_format, gfx::ColorSpace color_space);
 
     media::VideoPixelFormat pixel_format;
-    media::ColorSpace color_space;
+    gfx::ColorSpace color_space;
   };
 
   struct ResolutionConstraints {
@@ -117,7 +117,6 @@ class VIZ_HOST_EXPORT ClientFrameSinkVideoCapturer
   void OnFrameCaptured(
       base::ReadOnlySharedMemoryRegion data,
       media::mojom::VideoFrameInfoPtr info,
-      const gfx::Rect& update_rect,
       const gfx::Rect& content_rect,
       mojom::FrameSinkVideoConsumerFrameCallbacksPtr callbacks) final;
   void OnStopped() final;

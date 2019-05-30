@@ -96,7 +96,7 @@ class ListItemPendingError : public SimplePendingError {
 
   base::string16 GetMessage() const override {
     return l10n_util::GetStringFUTF16(IDS_POLICY_LIST_ENTRY_ERROR,
-                                      base::IntToString16(index_),
+                                      base::NumberToString16(index_),
                                       SimplePendingError::GetMessage());
   }
 
@@ -192,7 +192,7 @@ base::string16 PolicyErrorMap::GetErrors(const std::string& policy) {
   CheckReadyAndConvert();
   std::pair<const_iterator, const_iterator> range = map_.equal_range(policy);
   std::vector<base::StringPiece16> list;
-  for (const_iterator it = range.first; it != range.second; ++it)
+  for (auto it = range.first; it != range.second; ++it)
     list.push_back(it->second);
   return base::JoinString(list, base::ASCIIToUTF16("\n"));
 }
@@ -230,7 +230,7 @@ void PolicyErrorMap::SetDebugInfo(const std::string& policy,
 }
 
 const std::string PolicyErrorMap::GetDebugInfo(const std::string& policy) {
-  std::map<std::string, std::string>::iterator it = debug_infos_.find(policy);
+  auto it = debug_infos_.find(policy);
   if (it != debug_infos_.end())
     return it->second;
   return std::string();

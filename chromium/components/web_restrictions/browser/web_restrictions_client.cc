@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "base/task/post_task.h"
 #include "base/threading/scoped_blocking_call.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "jni/WebRestrictionsClient_jni.h"
 
@@ -32,7 +33,8 @@ bool RequestPermissionTask(
 
 bool CheckSupportsRequestTask(
     const base::android::JavaRef<jobject>& java_provider) {
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   JNIEnv* env = base::android::AttachCurrentThread();
   return Java_WebRestrictionsClient_supportsRequest(env, java_provider);
 }
@@ -58,10 +60,10 @@ void WebRestrictionsClient::SetAuthority(
     const std::string& content_provider_authority) {
   // This is called from the UI thread, but class members should only be
   // accessed from the IO thread.
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&WebRestrictionsClient::SetAuthorityTask,
-                 base::Unretained(this), content_provider_authority));
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
+      base::BindOnce(&WebRestrictionsClient::SetAuthorityTask,
+                     base::Unretained(this), content_provider_authority));
 }
 
 void WebRestrictionsClient::SetAuthorityTask(
@@ -135,9 +137,9 @@ void WebRestrictionsClient::RequestPermission(
 void WebRestrictionsClient::OnWebRestrictionsChanged(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) {
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&WebRestrictionsClient::ClearCache, base::Unretained(this)));
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::IO},
+                           base::BindOnce(&WebRestrictionsClient::ClearCache,
+                                          base::Unretained(this)));
 }
 
 void WebRestrictionsClient::RecordURLAccess(const std::string& url) {

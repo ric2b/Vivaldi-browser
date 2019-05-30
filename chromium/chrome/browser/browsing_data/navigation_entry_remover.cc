@@ -4,11 +4,13 @@
 
 #include "chrome/browser/browsing_data/navigation_entry_remover.h"
 
+#include <functional>
+
+#include "base/bind.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/common/buildflags.h"
-#include "components/browsing_data/core/features.h"
 #include "components/sessions/core/serialized_navigation_entry.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/sessions/core/tab_restore_service_observer.h"
@@ -47,9 +49,9 @@ bool ShouldDeleteNavigationEntry(
     base::Time begin,
     base::Time end,
     const base::Optional<std::set<GURL>>& restrict_urls,
-    const content::NavigationEntry& entry) {
-  return ShouldDeleteUrl(begin, end, restrict_urls, entry.GetURL(),
-                         entry.GetTimestamp());
+    content::NavigationEntry* entry) {
+  return ShouldDeleteUrl(begin, end, restrict_urls, entry->GetURL(),
+                         entry->GetTimestamp());
 }
 
 bool ShouldDeleteSerializedNavigationEntry(
@@ -62,8 +64,8 @@ bool ShouldDeleteSerializedNavigationEntry(
 }
 
 bool UrlMatcherForNavigationEntry(const base::flat_set<GURL>& urls,
-                                  const content::NavigationEntry& entry) {
-  return urls.find(entry.GetURL()) != urls.end();
+                                  content::NavigationEntry* entry) {
+  return urls.find(entry->GetURL()) != urls.end();
 }
 
 bool UrlMatcherForSerializedNavigationEntry(
@@ -98,18 +100,18 @@ void DeleteTabNavigationEntries(
   auto predicate = time_range.IsValid()
                        ? base::BindRepeating(
                              &ShouldDeleteNavigationEntry, time_range.begin(),
-                             time_range.end(), base::ConstRef(restrict_urls))
+                             time_range.end(), std::cref(restrict_urls))
                        : base::BindRepeating(&UrlMatcherForNavigationEntry,
-                                             base::ConstRef(url_set));
+                                             std::cref(url_set));
 
 #if defined(OS_ANDROID)
   auto session_predicate =
       time_range.IsValid()
           ? base::BindRepeating(&ShouldDeleteSerializedNavigationEntry,
                                 time_range.begin(), time_range.end(),
-                                base::ConstRef(restrict_urls))
+                                std::cref(restrict_urls))
           : base::BindRepeating(&UrlMatcherForSerializedNavigationEntry,
-                                base::ConstRef(url_set));
+                                std::cref(url_set));
 
   for (auto it = TabModelList::begin(); it != TabModelList::end(); ++it) {
     TabModel* tab_model = *it;
@@ -216,10 +218,6 @@ void RemoveNavigationEntries(Profile* profile,
                              const history::DeletionInfo& deletion_info) {
   DCHECK(profile->GetProfileType() == Profile::ProfileType::REGULAR_PROFILE);
   DCHECK(!deletion_info.is_from_expiration());
-  if (!base::FeatureList::IsEnabled(
-          browsing_data::features::kRemoveNavigationHistory)) {
-    return;
-  }
 
   base::flat_set<GURL> url_set;
   if (!deletion_info.time_range().IsValid())

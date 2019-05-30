@@ -74,13 +74,6 @@ DownloadShelfView::DownloadShelfView(Browser* browser, BrowserView* parent)
   // cases, like when installing a theme. See DownloadShelf::AddDownload().
   SetVisible(false);
 
-  mouse_watcher_.set_notify_on_exit_time(
-      base::TimeDelta::FromMilliseconds(kNotifyOnExitTimeMS));
-  set_id(VIEW_ID_DOWNLOAD_SHELF);
-  if (parent) {
-  parent->AddChildView(this);
-  }
-
   show_all_view_ = views::MdTextButton::Create(
       this, l10n_util::GetStringUTF16(IDS_SHOW_ALL_DOWNLOADS));
   AddChildView(show_all_view_);
@@ -92,12 +85,24 @@ DownloadShelfView::DownloadShelfView(Browser* browser, BrowserView* parent)
   accessible_alert_ = new views::View();
   AddChildView(accessible_alert_);
 
-  new_item_animation_.SetSlideDuration(kNewItemAnimationDurationMs);
-  shelf_animation_.SetSlideDuration(kShelfAnimationDurationMs);
+  if (gfx::Animation::ShouldRenderRichAnimation()) {
+    new_item_animation_.SetSlideDuration(kNewItemAnimationDurationMs);
+    shelf_animation_.SetSlideDuration(kShelfAnimationDurationMs);
+  } else {
+    new_item_animation_.SetSlideDuration(0);
+    shelf_animation_.SetSlideDuration(0);
+  }
 
   GetViewAccessibility().OverrideName(
       l10n_util::GetStringUTF16(IDS_ACCNAME_DOWNLOADS_BAR));
   GetViewAccessibility().OverrideRole(ax::mojom::Role::kGroup);
+
+  mouse_watcher_.set_notify_on_exit_time(
+      base::TimeDelta::FromMilliseconds(kNotifyOnExitTimeMS));
+  set_id(VIEW_ID_DOWNLOAD_SHELF);
+  if (parent) {
+  parent->AddChildView(this);
+  }
 }
 
 DownloadShelfView::~DownloadShelfView() {
@@ -110,6 +115,7 @@ void DownloadShelfView::AddDownloadView(DownloadItemView* view) {
   mouse_watcher_.Stop();
 
   DCHECK(view);
+  const bool was_empty = download_views_.empty();
   download_views_.push_back(view);
 
   // Insert the new view as the first child, so the logical child order matches
@@ -121,10 +127,16 @@ void DownloadShelfView::AddDownloadView(DownloadItemView* view) {
 
   new_item_animation_.Reset();
   new_item_animation_.Show();
+  if (was_empty && !shelf_animation_.is_animating() && visible()) {
+    // Force a re-layout of the parent to adjust height of shelf properly.
+    parent_->ToolbarSizeChanged(shelf_animation_.IsShowing());
+  }
 }
 
-void DownloadShelfView::DoAddDownload(DownloadItem* download) {
-  AddDownloadView(new DownloadItemView(download, this, accessible_alert_));
+void DownloadShelfView::DoAddDownload(
+    DownloadUIModel::DownloadUIModelPtr download) {
+  AddDownloadView(
+      new DownloadItemView(std::move(download), this, accessible_alert_));
 }
 
 void DownloadShelfView::MouseMovedOutOfHost() {
@@ -157,8 +169,9 @@ void DownloadShelfView::ConfigureButtonForTheme(views::MdTextButton* button) {
           ->UsingDefaultTheme()) {
     // For custom themes, we have to make up a background color for the
     // button. Use a slight tint of the shelf background.
-    bg_color = color_utils::BlendTowardOppositeLuma(
-        GetThemeProvider()->GetColor(ThemeProperties::COLOR_TOOLBAR), 0x10);
+    bg_color = color_utils::BlendTowardMaxContrast(
+        GetThemeProvider()->GetColor(ThemeProperties::COLOR_DOWNLOAD_SHELF),
+        0x10);
   }
   button->SetBgColorOverride(bg_color);
 }
@@ -284,13 +297,6 @@ void DownloadShelfView::Layout() {
   }
 }
 
-void DownloadShelfView::ViewHierarchyChanged(
-    const ViewHierarchyChangedDetails& details) {
-  View::ViewHierarchyChanged(details);
-  if (details.is_add)
-    UpdateColorsFromTheme();
-}
-
 bool DownloadShelfView::CanFitFirstDownloadItem() {
   if (download_views_.empty())
     return true;
@@ -315,15 +321,18 @@ void DownloadShelfView::UpdateColorsFromTheme() {
   if (!GetThemeProvider())
     return;
 
-  if (show_all_view_)
-    ConfigureButtonForTheme(show_all_view_);
+  ConfigureButtonForTheme(show_all_view_);
 
   SetBackground(views::CreateSolidBackground(
-      GetThemeProvider()->GetColor(ThemeProperties::COLOR_TOOLBAR)));
+      GetThemeProvider()->GetColor(ThemeProperties::COLOR_DOWNLOAD_SHELF)));
 
   views::SetImageFromVectorIcon(
       close_button_, vector_icons::kCloseRoundedIcon,
       DownloadItemView::GetTextColorForThemeProvider(GetThemeProvider()));
+}
+
+void DownloadShelfView::AddedToWidget() {
+  UpdateColorsFromTheme();
 }
 
 void DownloadShelfView::OnThemeChanged() {
@@ -388,7 +397,7 @@ void DownloadShelfView::Closed() {
   // When the close animation is complete, remove all completed downloads.
   size_t i = 0;
   while (i < download_views_.size()) {
-    DownloadItem* download = download_views_[i]->download();
+    DownloadUIModel* download = download_views_[i]->model();
     DownloadItem::DownloadState state = download->GetState();
     bool is_transfer_done = state == DownloadItem::COMPLETE ||
                             state == DownloadItem::CANCELLED ||
@@ -402,12 +411,22 @@ void DownloadShelfView::Closed() {
       ++i;
     }
   }
+
+  // If we had keyboard focus, calling SetVisible(false) causes keyboard focus
+  // to be completely lost. To prevent this, we focus another view: the web
+  // contents. TODO(collinbaker): https://crbug.com/846466 Fix
+  // AccessiblePaneView::SetVisible or FocusManager to make this unnecessary.
+  auto* focus_manager = GetFocusManager();
+  if (focus_manager && Contains(focus_manager->GetFocusedView())) {
+    get_parent()->contents_web_view()->RequestFocus();
+  }
+
   SetVisible(false);
 }
 
 bool DownloadShelfView::CanAutoClose() {
   for (size_t i = 0; i < download_views_.size(); ++i) {
-    if (!download_views_[i]->download()->GetOpened())
+    if (!download_views_[i]->model()->GetOpened())
       return false;
   }
   return true;

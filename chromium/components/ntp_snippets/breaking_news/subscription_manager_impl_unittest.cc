@@ -5,8 +5,9 @@
 #include "components/ntp_snippets/breaking_news/subscription_manager_impl.h"
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_task_environment.h"
 #include "build/build_config.h"
 #include "components/ntp_snippets/pref_names.h"
 #include "components/ntp_snippets/remote/test_utils.h"
@@ -30,7 +31,7 @@ const char kTestEmail[] = "test@email.com";
 const char kAPIKey[] = "fakeAPIkey";
 const char kSubscriptionUrl[] = "http://valid-url.test/subscribe";
 const char kSubscriptionUrlSignedIn[] = "http://valid-url.test/subscribe";
-;
+
 const char kSubscriptionUrlSignedOut[] =
     "http://valid-url.test/subscribe?key=fakeAPIkey";
 const char kUnsubscriptionUrl[] = "http://valid-url.test/unsubscribe";
@@ -122,7 +123,7 @@ class SubscriptionManagerImplTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
   }
 
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   test::RemoteSuggestionsTestUtils utils_;
   identity::IdentityTestEnvironment identity_test_env_;
   network::TestURLLoaderFactory test_url_loader_factory_;

@@ -49,8 +49,10 @@ class CORE_EXPORT SelectionController final
 
  public:
   static SelectionController* Create(LocalFrame&);
+
+  explicit SelectionController(LocalFrame&);
   virtual ~SelectionController();
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   bool HandleMousePressEvent(const MouseEventWithHitTestResults&);
   void HandleMouseDraggedEvent(const MouseEventWithHitTestResults&,
@@ -83,8 +85,6 @@ class CORE_EXPORT SelectionController final
 
  private:
   friend class SelectionControllerTest;
-
-  explicit SelectionController(LocalFrame&);
 
   enum class AppendTrailingWhitespace { kShouldAppend, kDontAppend };
   enum class SelectInputEventType { kTouch, kMouse };
@@ -119,7 +119,7 @@ class CORE_EXPORT SelectionController final
   FrameSelection& Selection() const;
 
   // Implements |DocumentShutdownObserver|.
-  // TODO(yosin): We should relocate |m_originalBaseInFlatTree| when DOM tree
+  // TODO(yosin): We should relocate |original_base_in_flat_tree_| when DOM tree
   // changed.
   void ContextDestroyed(Document*) final;
 
@@ -146,7 +146,7 @@ class CORE_EXPORT SelectionController final
   DISALLOW_COPY_AND_ASSIGN(SelectionController);
 };
 
-bool IsLinkSelection(const MouseEventWithHitTestResults&);
+bool IsSelectionOverLink(const MouseEventWithHitTestResults&);
 bool IsExtendingSelection(const MouseEventWithHitTestResults&);
 CORE_EXPORT SelectionInFlatTree
 AdjustSelectionWithTrailingWhitespace(const SelectionInFlatTree&);

@@ -14,20 +14,22 @@
 #include <sys/mman.h>
 #endif
 
+#include "base/debug/alias.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/logging.h"
 #include "base/memory/shared_memory.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/sys_info.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/optional.h"
+#include "base/system/sys_info.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "build/build_config.h"
 
 namespace {
 
 // Limit of memory segment size. It has to fit in an unsigned 32-bit number
-// and should be a power of 2 in order to accomodate almost any page size.
+// and should be a power of 2 in order to accommodate almost any page size.
 const uint32_t kSegmentMaxSize = 1 << 30;  // 1 GiB
 
 // A constant (random) value placed in the shared metadata to identify
@@ -817,17 +819,15 @@ void PersistentMemoryAllocator::MakeIterable(Reference ref) {
                                                      std::memory_order_release,
                                                      std::memory_order_relaxed);
       return;
-    } else {
-      // In the unlikely case that a thread crashed or was killed between the
-      // update of "next" and the update of "tailptr", it is necessary to
-      // perform the operation that would have been done. There's no explicit
-      // check for crash/kill which means that this operation may also happen
-      // even when the other thread is in perfect working order which is what
-      // necessitates the CompareAndSwap above.
-      shared_meta()->tailptr.compare_exchange_strong(tail, next,
-                                                     std::memory_order_acq_rel,
-                                                     std::memory_order_acquire);
     }
+    // In the unlikely case that a thread crashed or was killed between the
+    // update of "next" and the update of "tailptr", it is necessary to
+    // perform the operation that would have been done. There's no explicit
+    // check for crash/kill which means that this operation may also happen
+    // even when the other thread is in perfect working order which is what
+    // necessitates the CompareAndSwap above.
+    shared_meta()->tailptr.compare_exchange_strong(
+        tail, next, std::memory_order_acq_rel, std::memory_order_acquire);
   }
 }
 
@@ -1013,31 +1013,54 @@ void LocalPersistentMemoryAllocator::DeallocateLocalMemory(void* memory,
 #endif
 }
 
+//----- WritableSharedPersistentMemoryAllocator --------------------------------
 
-//----- SharedPersistentMemoryAllocator ----------------------------------------
+WritableSharedPersistentMemoryAllocator::
+    WritableSharedPersistentMemoryAllocator(
+        base::WritableSharedMemoryMapping memory,
+        uint64_t id,
+        base::StringPiece name)
+    : PersistentMemoryAllocator(Memory(memory.memory(), MEM_SHARED),
+                                memory.size(),
+                                0,
+                                id,
+                                name,
+                                false),
+      shared_memory_(std::move(memory)) {}
 
-SharedPersistentMemoryAllocator::SharedPersistentMemoryAllocator(
-    std::unique_ptr<SharedMemory> memory,
-    uint64_t id,
-    base::StringPiece name,
-    bool read_only)
+WritableSharedPersistentMemoryAllocator::
+    ~WritableSharedPersistentMemoryAllocator() = default;
+
+// static
+bool WritableSharedPersistentMemoryAllocator::IsSharedMemoryAcceptable(
+    const base::WritableSharedMemoryMapping& memory) {
+  return IsMemoryAcceptable(memory.memory(), memory.size(), 0, false);
+}
+
+//----- ReadOnlySharedPersistentMemoryAllocator --------------------------------
+
+ReadOnlySharedPersistentMemoryAllocator::
+    ReadOnlySharedPersistentMemoryAllocator(
+        base::ReadOnlySharedMemoryMapping memory,
+        uint64_t id,
+        base::StringPiece name)
     : PersistentMemoryAllocator(
-          Memory(static_cast<uint8_t*>(memory->memory()), MEM_SHARED),
-          memory->mapped_size(),
+          Memory(const_cast<void*>(memory.memory()), MEM_SHARED),
+          memory.size(),
           0,
           id,
           name,
-          read_only),
+          true),
       shared_memory_(std::move(memory)) {}
 
-SharedPersistentMemoryAllocator::~SharedPersistentMemoryAllocator() = default;
+ReadOnlySharedPersistentMemoryAllocator::
+    ~ReadOnlySharedPersistentMemoryAllocator() = default;
 
 // static
-bool SharedPersistentMemoryAllocator::IsSharedMemoryAcceptable(
-    const SharedMemory& memory) {
-  return IsMemoryAcceptable(memory.memory(), memory.mapped_size(), 0, false);
+bool ReadOnlySharedPersistentMemoryAllocator::IsSharedMemoryAcceptable(
+    const base::ReadOnlySharedMemoryMapping& memory) {
+  return IsMemoryAcceptable(memory.memory(), memory.size(), 0, true);
 }
-
 
 #if !defined(OS_NACL)
 //----- FilePersistentMemoryAllocator ------------------------------------------
@@ -1066,15 +1089,44 @@ bool FilePersistentMemoryAllocator::IsFileAcceptable(
   return IsMemoryAcceptable(file.data(), file.length(), 0, read_only);
 }
 
+void FilePersistentMemoryAllocator::Cache() {
+  // Since this method is expected to load data from permanent storage
+  // into memory, blocking I/O may occur.
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
+
+  // Calculate begin/end addresses so that the first byte of every page
+  // in that range can be read. Keep within the used space. The |volatile|
+  // keyword makes it so the compiler can't make assumptions about what is
+  // in a given memory location and thus possibly avoid the read.
+  const volatile char* mem_end = mem_base_ + used();
+  const volatile char* mem_begin = mem_base_;
+
+  // Iterate over the memory a page at a time, reading the first byte of
+  // every page. The values are added to a |total| so that the compiler
+  // can't omit the read.
+  int total = 0;
+  for (const volatile char* memory = mem_begin; memory < mem_end;
+       memory += vm_page_size_) {
+    total += *memory;
+  }
+
+  // Tell the compiler that |total| is used so that it can't optimize away
+  // the memory accesses above.
+  debug::Alias(&total);
+}
+
 void FilePersistentMemoryAllocator::FlushPartial(size_t length, bool sync) {
-  if (sync)
-    AssertBlockingAllowed();
   if (IsReadonly())
     return;
 
+  base::Optional<base::ScopedBlockingCall> scoped_blocking_call;
+  if (sync)
+    scoped_blocking_call.emplace(FROM_HERE, base::BlockingType::MAY_BLOCK);
+
 #if defined(OS_WIN)
   // Windows doesn't support asynchronous flush.
-  AssertBlockingAllowed();
+  scoped_blocking_call.emplace(FROM_HERE, base::BlockingType::MAY_BLOCK);
   BOOL success = ::FlushViewOfFile(data(), length);
   DPCHECK(success);
 #elif defined(OS_MACOSX)

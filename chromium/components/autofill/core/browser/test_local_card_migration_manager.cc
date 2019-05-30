@@ -8,7 +8,6 @@
 #include "components/autofill/core/browser/payments/test_payments_client.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_prefs.h"
-#include "services/identity/public/cpp/identity_manager.h"
 
 namespace autofill {
 
@@ -16,11 +15,12 @@ TestLocalCardMigrationManager::TestLocalCardMigrationManager(
     AutofillDriver* driver,
     AutofillClient* client,
     payments::TestPaymentsClient* payments_client,
-    PersonalDataManager* personal_data_manager)
+    TestPersonalDataManager* personal_data_manager)
     : LocalCardMigrationManager(client,
                                 payments_client,
                                 "en-US",
-                                personal_data_manager) {}
+                                personal_data_manager),
+      personal_data_manager_(personal_data_manager) {}
 
 TestLocalCardMigrationManager::~TestLocalCardMigrationManager() {}
 
@@ -28,10 +28,19 @@ bool TestLocalCardMigrationManager::IsCreditCardMigrationEnabled() {
   bool migration_experiment_enabled =
       features::GetLocalCardMigrationExperimentalFlag() !=
       features::LocalCardMigrationExperimentalFlag::kMigrationDisabled;
+
   bool has_google_payments_account =
       (static_cast<int64_t>(payments_client_->GetPrefService()->GetDouble(
            prefs::kAutofillBillingCustomerNumber)) != 0);
-  return migration_experiment_enabled && has_google_payments_account;
+
+  bool sync_feature_enabled =
+      (personal_data_manager_->GetSyncSigninState() ==
+       AutofillSyncSigninState::kSignedInAndSyncFeature);
+
+  return migration_experiment_enabled && has_google_payments_account &&
+         (sync_feature_enabled ||
+          base::FeatureList::IsEnabled(
+              features::kAutofillEnableLocalCardMigrationForNonSyncUser));
 }
 
 bool TestLocalCardMigrationManager::LocalCardMigrationWasTriggered() {
@@ -52,20 +61,28 @@ void TestLocalCardMigrationManager::
   LocalCardMigrationManager::OnUserAcceptedIntermediateMigrationDialog();
 }
 
-void TestLocalCardMigrationManager::OnUserAcceptedMainMigrationDialog() {
+void TestLocalCardMigrationManager::OnUserAcceptedMainMigrationDialog(
+    const std::vector<std::string>& selected_cards) {
   main_prompt_was_shown_ = true;
-  LocalCardMigrationManager::OnUserAcceptedMainMigrationDialog();
+  LocalCardMigrationManager::OnUserAcceptedMainMigrationDialog(selected_cards);
+}
+
+void TestLocalCardMigrationManager::ResetSyncState(
+    AutofillSyncSigninState sync_state) {
+  personal_data_manager_->SetSyncAndSignInState(sync_state);
 }
 
 void TestLocalCardMigrationManager::OnDidGetUploadDetails(
     bool is_from_settings_page,
     AutofillClient::PaymentsRpcResult result,
     const base::string16& context_token,
-    std::unique_ptr<base::DictionaryValue> legal_message) {
+    std::unique_ptr<base::Value> legal_message,
+    std::vector<std::pair<int, int>> supported_bin_ranges) {
   if (result == AutofillClient::SUCCESS) {
     local_card_migration_was_triggered_ = true;
     LocalCardMigrationManager::OnDidGetUploadDetails(
-        is_from_settings_page, result, context_token, std::move(legal_message));
+        is_from_settings_page, result, context_token, std::move(legal_message),
+        supported_bin_ranges);
   }
 }
 

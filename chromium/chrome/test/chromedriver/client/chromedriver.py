@@ -12,6 +12,7 @@ from webelement import WebElement
 
 ELEMENT_KEY_W3C = "element-6066-11e4-a52e-4f735466cecf"
 ELEMENT_KEY = "ELEMENT"
+MAX_RETRY_COUNT = 3
 
 class ChromeDriverException(Exception):
   pass
@@ -70,9 +71,6 @@ def _ExceptionForLegacyResponse(response):
     11: ElementNotVisible,
     12: InvalidElementState,
     13: UnknownError,
-    14: InvalidArgument,
-    15: ElementNotInteractable,
-    16: UnsupportedOperation,
     17: JavaScriptError,
     19: XPathLookupError,
     21: Timeout,
@@ -83,7 +81,10 @@ def _ExceptionForLegacyResponse(response):
     28: ScriptTimeout,
     32: InvalidSelector,
     33: SessionNotCreated,
-    105: NoSuchCookie
+    60: ElementNotInteractable,
+    61: InvalidArgument,
+    62: NoSuchCookie,
+    405: UnsupportedOperation
   }
   status = response['status']
   msg = response['value']['message']
@@ -122,17 +123,34 @@ def _ExceptionForStandardResponse(response):
 class ChromeDriver(object):
   """Starts and controls a single Chrome instance on this machine."""
 
-  def __init__(self, server_url, chrome_binary=None, android_package=None,
-               android_activity=None, android_process=None,
-               android_use_running_app=None, chrome_switches=None,
-               chrome_extensions=None, chrome_log_path=None,
-               debugger_address=None, logging_prefs=None,
-               mobile_emulation=None, experimental_options=None,
-               download_dir=None, network_connection=None,
-               send_w3c_capability=None, send_w3c_request=None,
-               page_load_strategy=None, unexpected_alert_behaviour=None,
-               devtools_events_to_log=None, accept_insecure_certs=None,
-               test_name=None):
+  retry_count = 0
+  retried_tests = []
+
+  def __init__(self, *args, **kwargs):
+    try:
+      self._InternalInit(*args, **kwargs)
+    except Exception as e:
+      if not e.message.startswith('timed out'):
+        raise
+      else:
+        if ChromeDriver.retry_count < MAX_RETRY_COUNT:
+          ChromeDriver.retry_count = ChromeDriver.retry_count + 1
+          ChromeDriver.retried_tests.append(kwargs.get('test_name'))
+          self._InternalInit(*args, **kwargs)
+        else:
+          raise
+
+  def _InternalInit(self, server_url, chrome_binary=None, android_package=None,
+      android_activity=None, android_process=None,
+      android_use_running_app=None, chrome_switches=None,
+      chrome_extensions=None, chrome_log_path=None,
+      debugger_address=None, logging_prefs=None,
+      mobile_emulation=None, experimental_options=None,
+      download_dir=None, network_connection=None,
+      send_w3c_capability=None, send_w3c_request=None,
+      page_load_strategy=None, unexpected_alert_behaviour=None,
+      devtools_events_to_log=None, accept_insecure_certs=None,
+      timeouts=None, test_name=None):
     self._executor = command_executor.CommandExecutor(server_url)
     self.w3c_compliant = False
 
@@ -160,6 +178,10 @@ class ChromeDriver(object):
       chrome_switches.append('no-sandbox')
       # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1695
       chrome_switches.append('disable-gpu')
+
+    if chrome_switches is None:
+      chrome_switches = []
+    chrome_switches.append('force-color-profile=srgb')
 
     if chrome_switches:
       assert type(chrome_switches) is list
@@ -208,7 +230,7 @@ class ChromeDriver(object):
       options['w3c'] = send_w3c_capability
 
     params = {
-        'chromeOptions': options,
+        'goog:chromeOptions': options,
         'loggingPrefs': logging_prefs
     }
 
@@ -218,13 +240,19 @@ class ChromeDriver(object):
 
     if unexpected_alert_behaviour:
       assert type(unexpected_alert_behaviour) is str
-      params['unexpectedAlertBehaviour'] = unexpected_alert_behaviour
+      if send_w3c_request:
+        params['unhandledPromptBehavior'] = unexpected_alert_behaviour
+      else:
+        params['unexpectedAlertBehaviour'] = unexpected_alert_behaviour
 
     if network_connection:
       params['networkConnectionEnabled'] = network_connection
 
     if accept_insecure_certs is not None:
       params['acceptInsecureCerts'] = accept_insecure_certs
+
+    if timeouts is not None:
+      params['timeouts'] = timeouts
 
     if test_name is not None:
       params['goog:testName'] = test_name
@@ -289,7 +317,8 @@ class ChromeDriver(object):
     if (not self.w3c_compliant and 'status' in response
         and response['status'] != 0):
       raise _ExceptionForLegacyResponse(response)
-    elif self.w3c_compliant and 'error' in response['value']:
+    elif (self.w3c_compliant and type(response['value']) is dict
+          and 'error' in response['value']):
       raise _ExceptionForStandardResponse(response)
     return response
 
@@ -356,6 +385,9 @@ class ChromeDriver(object):
     return self.ExecuteCommand(
         Command.FIND_ELEMENTS, {'using': strategy, 'value': target})
 
+  def GetTimeouts(self):
+    return self.ExecuteCommand(Command.GET_TIMEOUTS)
+
   def SetTimeouts(self, params):
     return self.ExecuteCommand(Command.SET_TIMEOUTS, params)
 
@@ -419,6 +451,15 @@ class ChromeDriver(object):
     params = {'x': x, 'y': y, 'scale': scale}
     self.ExecuteCommand(Command.TOUCH_PINCH, params)
 
+  def PerformActions(self, actions):
+    """
+    actions: a dictionary containing the specified actions users wish to perform
+    """
+    self.ExecuteCommand(Command.PERFORM_ACTIONS, actions)
+
+  def ReleaseActions(self):
+    self.ExecuteCommand(Command.RELEASE_ACTIONS)
+
   def GetCookies(self):
     return self.ExecuteCommand(Command.GET_COOKIES)
 
@@ -471,23 +512,28 @@ class ChromeDriver(object):
     return [rect['width'], rect['height'], rect['x'], rect['y']]
 
   def SetWindowSize(self, width, height):
-    self.ExecuteCommand(
+    return self.ExecuteCommand(
         Command.SET_WINDOW_SIZE,
         {'windowHandle': 'current', 'width': width, 'height': height})
 
   def SetWindowRect(self, width, height, x, y):
-    self.ExecuteCommand(
-        Command.SET_WINDOW_SIZE,
+    return self.ExecuteCommand(
+        Command.SET_WINDOW_RECT,
         {'width': width, 'height': height, 'x': x, 'y': y})
 
   def MaximizeWindow(self):
-    self.ExecuteCommand(Command.MAXIMIZE_WINDOW, {'windowHandle': 'current'})
+    return self.ExecuteCommand(Command.MAXIMIZE_WINDOW,
+                               {'windowHandle': 'current'})
 
   def MinimizeWindow(self):
-    return self.ExecuteCommand(Command.MINIMIZE_WINDOW, {'windowHandle': 'current'})
+    return self.ExecuteCommand(Command.MINIMIZE_WINDOW,
+                               {'windowHandle': 'current'})
 
   def FullScreenWindow(self):
-    self.ExecuteCommand(Command.FULLSCREEN_WINDOW)
+    return self.ExecuteCommand(Command.FULLSCREEN_WINDOW)
+
+  def TakeScreenshot(self):
+    return self.ExecuteCommand(Command.SCREENSHOT)
 
   def Quit(self):
     """Quits the browser and ends the session."""
@@ -571,3 +617,6 @@ class ChromeDriver(object):
       for i in range(len(value)):
         typing.append(value[i])
     self.ExecuteCommand(Command.SEND_KEYS_TO_ACTIVE_ELEMENT, {'value': typing})
+
+  def GenerateTestReport(self, message):
+    self.ExecuteCommand(Command.GENERATE_TEST_REPORT, {'message': message})

@@ -14,6 +14,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/url_data_source.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 
 namespace content {
 class BrowserContext;
@@ -24,6 +25,7 @@ namespace extensions {
 class VivaldiDataSourceItem {
  public:
   VivaldiDataSourceItem(const std::string& id, const base::FilePath& path);
+  VivaldiDataSourceItem(int bookmark_id, const base::FilePath& path);
   explicit VivaldiDataSourceItem(const std::string& id);
   ~VivaldiDataSourceItem();
 
@@ -45,6 +47,10 @@ class VivaldiDataSourceItem {
     return file_path_.AsUTF8Unsafe();
   }
 
+  int bookmark_id() {
+    return bookmark_id_;
+  }
+
   void SetCachedData(scoped_refptr<base::RefCountedMemory> data);
 
  private:
@@ -53,6 +59,9 @@ class VivaldiDataSourceItem {
 
   // The id used to request this file from the protocol side.
   std::string mapping_id_;
+
+  // If this is a bookmark, this is the bookmark id.
+  int bookmark_id_ = 0;
 
   // The cached image data.
   scoped_refptr<base::RefCountedMemory> cached_image_data_;
@@ -67,6 +76,9 @@ class VivaldiDataSourcesAPI : public BrowserContextKeyedAPI {
   explicit VivaldiDataSourcesAPI(content::BrowserContext* context);
   ~VivaldiDataSourcesAPI() override;
 
+  typedef base::Callback<void(int bookmark_id, std::string& image_url)>
+    AddBookmarkImageCallback;
+
   // KeyedService implementation.
   void Shutdown() override;
 
@@ -74,13 +86,32 @@ class VivaldiDataSourcesAPI : public BrowserContextKeyedAPI {
   static BrowserContextKeyedAPIFactory<VivaldiDataSourcesAPI>*
     GetFactoryInstance();
 
+  // The version with an existing id already and creates a straight mapping
+  // between an absolute path and an id.
   bool AddMapping(const std::string& id, const base::FilePath& file_path);
 
+  // This version connects the bookmark id with the given path.
+  bool AddMapping(int bookmark_id, const base::FilePath& file_path);
+
   bool RemoveMapping(const std::string& id);
+  bool RemoveMapping(int bookmark_id);
 
   // This method should be called from the UI thread.
   void GetDataForId(const std::string& id,
                     const content::URLDataSource::GotDataCallback& callback);
+
+  // Add image data to disk and set up a mapping so it can be requested
+  // using the usual image data protocol.
+  void AddImageDataForBookmark(int bookmark_id,
+                               std::unique_ptr<SkBitmap> bitmap,
+                               AddBookmarkImageCallback callback);
+
+  void AddImageDataForBookmark(int bookmark_id,
+                               scoped_refptr<base::RefCountedMemory> png_data,
+                               AddBookmarkImageCallback callback);
+
+  // If bookmark_id is provided, use that, otherwise lookup based on url.
+  bool HasBookmarkThumbnail(int bookmark_id);
 
  private:
   void GetDataForIdOnFileThread(
@@ -91,6 +122,21 @@ class VivaldiDataSourcesAPI : public BrowserContextKeyedAPI {
   void PostResultsOnThread(
       const content::URLDataSource::GotDataCallback& callback,
       scoped_refptr<base::RefCountedMemory> data);
+
+  void AddRawImageDataForBookmarkOnFileThread(
+      int bookmark_id,
+      scoped_refptr<base::RefCountedMemory> png_data,
+      AddBookmarkImageCallback callback,
+      content::BrowserThread::ID thread_id);
+  void AddImageDataForBookmarkOnFileThread(
+      int bookmark_id,
+      std::unique_ptr<SkBitmap> bitmap,
+      AddBookmarkImageCallback callback,
+      content::BrowserThread::ID thread_id);
+
+  void PostAddBookmarkImageResultsOnThread(AddBookmarkImageCallback callback,
+                                           base::FilePath image_path,
+                                           int bookmark_id);
 
   bool LoadMappings();
   bool GetMappings();

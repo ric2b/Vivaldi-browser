@@ -11,12 +11,12 @@
 #include <utility>
 #include <vector>
 
-#include "base/macros.h"
+#include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/gcm.h"
 #include "components/gcm_driver/common/gcm_messages.h"
@@ -73,12 +73,10 @@ const char* GcmResultToError(gcm::GCMClient::Result result) {
 bool IsMessageKeyValid(const std::string& key) {
   std::string lower = base::ToLowerASCII(key);
   return !key.empty() &&
-         key.compare(0, arraysize(kCollapseKey) - 1, kCollapseKey) != 0 &&
-         lower.compare(0,
-                       arraysize(kGoogleRestrictedPrefix) - 1,
+         key.compare(0, base::size(kCollapseKey) - 1, kCollapseKey) != 0 &&
+         lower.compare(0, base::size(kGoogleRestrictedPrefix) - 1,
                        kGoogleRestrictedPrefix) != 0 &&
-         lower.compare(0,
-                       arraysize(kGoogDotRestrictedPrefix),
+         lower.compare(0, base::size(kGoogDotRestrictedPrefix),
                        kGoogDotRestrictedPrefix) != 0;
 }
 
@@ -203,8 +201,7 @@ void GcmSendFunction::CompleteFunctionWithResult(
 
 bool GcmSendFunction::ValidateMessageData(const gcm::MessageData& data) const {
   size_t total_size = 0u;
-  for (std::map<std::string, std::string>::const_iterator iter = data.begin();
-       iter != data.end(); ++iter) {
+  for (auto iter = data.cbegin(); iter != data.cend(); ++iter) {
     total_size += iter->first.size() + iter->second.size();
 
     if (!IsMessageKeyValid(iter->first) ||

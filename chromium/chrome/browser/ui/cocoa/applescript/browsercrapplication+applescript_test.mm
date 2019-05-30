@@ -44,7 +44,8 @@ IN_PROC_BROWSER_TEST_F(BrowserCrApplicationAppleScriptTest, Creation) {
 }
 
 // Insert a new window.
-IN_PROC_BROWSER_TEST_F(BrowserCrApplicationAppleScriptTest, InsertWindow) {
+IN_PROC_BROWSER_TEST_F(BrowserCrApplicationAppleScriptTest,
+                       FLAKY_InsertWindow) {
   // Emulate what applescript would do when creating a new window.
   // Emulate a script like |set var to make new window with properties
   // {visible:false}|.
@@ -99,9 +100,7 @@ IN_PROC_BROWSER_TEST_F(BrowserCrApplicationAppleScriptTest, ObjectSpecifier) {
 }
 
 // Bookmark folders at the root level.
-// http://code.google.com/p/chromium/issues/detail?id=84299
-IN_PROC_BROWSER_TEST_F(BrowserCrApplicationAppleScriptTest,
-                       DISABLED_BookmarkFolders) {
+IN_PROC_BROWSER_TEST_F(BrowserCrApplicationAppleScriptTest, BookmarkFolders) {
   NSArray* bookmarkFolders = [NSApp bookmarkFolders];
   EXPECT_EQ(2U, [bookmarkFolders count]);
 

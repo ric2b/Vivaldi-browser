@@ -26,6 +26,9 @@ class BackgroundFetchDownloadClient : public download::Client {
   ~BackgroundFetchDownloadClient() override;
 
  private:
+  // Lazily initializes and returns |delegate_| as a raw pointer.
+  BackgroundFetchDelegateImpl* GetDelegate();
+
   // download::Client implementation
   void OnServiceInitialized(
       bool state_lost,
@@ -36,8 +39,10 @@ class BackgroundFetchDownloadClient : public download::Client {
       const std::vector<GURL>& url_chain,
       const scoped_refptr<const net::HttpResponseHeaders>& headers) override;
   void OnDownloadUpdated(const std::string& guid,
+                         uint64_t bytes_uploaded,
                          uint64_t bytes_downloaded) override;
   void OnDownloadFailed(const std::string& guid,
+                        const download::CompletionInfo& info,
                         download::Client::FailureReason reason) override;
   void OnDownloadSucceeded(const std::string& guid,
                            const download::CompletionInfo& info) override;

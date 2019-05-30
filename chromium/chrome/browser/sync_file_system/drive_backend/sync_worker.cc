@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/sync_file_system/drive_backend/callback_helper.h"
 #include "chrome/browser/sync_file_system/drive_backend/conflict_resolver.h"
@@ -424,8 +425,7 @@ void SyncWorker::QueryAppStatusOnUIThread(
     return;
   }
 
-  for (std::vector<std::string>::const_iterator itr = app_ids->begin();
-       itr != app_ids->end(); ++itr) {
+  for (auto itr = app_ids->begin(); itr != app_ids->end(); ++itr) {
     const std::string& app_id = *itr;
     if (!extension_service->GetInstalledExtension(app_id))
       (*status)[app_id] = APP_STATUS_UNINSTALLED;
@@ -445,8 +445,7 @@ void SyncWorker::DidQueryAppStatus(const AppStatusMap* app_status) {
   DCHECK(metadata_db);
 
   // Update the status of every origin using status from ExtensionService.
-  for (AppStatusMap::const_iterator itr = app_status->begin();
-       itr != app_status->end(); ++itr) {
+  for (auto itr = app_status->begin(); itr != app_status->end(); ++itr) {
     const std::string& app_id = itr->first;
     GURL origin = extensions::Extension::GetBaseURLFromExtensionId(app_id);
 
@@ -502,7 +501,7 @@ void SyncWorker::DidProcessRemoteChange(RemoteToLocalSyncer* syncer,
     if (syncer->sync_action() == SYNC_ACTION_DELETED &&
         syncer->url().is_valid() &&
         storage::VirtualPath::IsRootPath(syncer->url().path())) {
-      RegisterOrigin(syncer->url().origin(), base::DoNothing());
+      RegisterOrigin(syncer->url().origin().GetURL(), base::DoNothing());
     }
     should_check_conflict_ = true;
   }
@@ -519,7 +518,7 @@ void SyncWorker::DidApplyLocalChange(LocalToRemoteSyncer* syncer,
       syncer->sync_action() != SYNC_ACTION_NONE) {
     storage::FileSystemURL updated_url = syncer->url();
     if (!syncer->target_path().empty()) {
-      updated_url = CreateSyncableFileSystemURL(syncer->url().origin(),
+      updated_url = CreateSyncableFileSystemURL(syncer->url().origin().GetURL(),
                                                 syncer->target_path());
     }
     for (auto& observer : observers_) {
@@ -530,7 +529,7 @@ void SyncWorker::DidApplyLocalChange(LocalToRemoteSyncer* syncer,
   }
 
   if (status == SYNC_STATUS_UNKNOWN_ORIGIN && syncer->url().is_valid())
-    RegisterOrigin(syncer->url().origin(), base::DoNothing());
+    RegisterOrigin(syncer->url().origin().GetURL(), base::DoNothing());
 
   if (syncer->needs_remote_change_listing() &&
       !listing_remote_changes_) {

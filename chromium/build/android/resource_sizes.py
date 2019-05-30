@@ -3,10 +3,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""Reports binary size and static initializer metrics for an APK.
+"""Reports binary size metrics for an APK.
 
 More information at //docs/speed/binary_size/metrics.md.
 """
+
+from __future__ import print_function
 
 import argparse
 import collections
@@ -14,9 +16,11 @@ from contextlib import contextmanager
 import json
 import logging
 import os
+import posixpath
 import re
 import struct
 import sys
+import tempfile
 import zipfile
 import zlib
 
@@ -37,6 +41,9 @@ _APK_PATCH_SIZE_ESTIMATOR_PATH = os.path.join(
 
 with host_paths.SysPath(host_paths.BUILD_COMMON_PATH):
   import perf_tests_results_helper # pylint: disable=import-error
+
+with host_paths.SysPath(host_paths.TRACING_PATH):
+  from tracing.value import convert_chart_json # pylint: disable=import-error
 
 with host_paths.SysPath(_BUILD_UTILS_PATH, 0):
   from util import build_utils # pylint: disable=import-error
@@ -97,8 +104,6 @@ _BASE_CHART = {
     'trace_rerun_options': [],
     'charts': {}
 }
-_DUMP_STATIC_INITIALIZERS_PATH = os.path.join(
-    host_paths.DIR_SOURCE_ROOT, 'tools', 'linux', 'dump-static-initializers.py')
 # Macro definitions look like (something, 123) when
 # enable_resource_whitelist_generation=true.
 _RC_HEADER_RE = re.compile(r'^#define (?P<name>\w+).* (?P<id>\d+)\)?$')
@@ -107,19 +112,31 @@ _RE_COMPRESSED_LANGUAGE_PAK = re.compile(
     r'\.lpak$|^assets/(?!stored-locales/).*(?!resources|percent)\.pak$')
 _RE_STORED_LANGUAGE_PAK = re.compile(r'^assets/stored-locales/.*\.pak$')
 _READELF_SIZES_METRICS = {
-  'text': ['.text'],
-  'data': ['.data', '.rodata', '.data.rel.ro', '.data.rel.ro.local'],
-  'relocations': ['.rel.dyn', '.rel.plt', '.rela.dyn', '.rela.plt'],
-  'unwind': ['.ARM.extab', '.ARM.exidx', '.eh_frame', '.eh_frame_hdr',
-             '.ARM.exidxsentinel_section_after_text'],
-  'symbols': ['.dynsym', '.dynstr', '.dynamic', '.shstrtab', '.got', '.plt',
-              '.got.plt', '.hash', '.gnu.hash'],
-  'bss': ['.bss'],
-  'other': ['.init_array', '.fini_array', '.comment', '.note.gnu.gold-version',
-            '.note.crashpad.info', '.note.android.ident',
-            '.ARM.attributes', '.note.gnu.build-id', '.gnu.version',
-            '.gnu.version_d', '.gnu.version_r', '.interp', '.gcc_except_table']
+    'text': ['.text'],
+    'data': ['.data', '.rodata', '.data.rel.ro', '.data.rel.ro.local'],
+    'relocations': ['.rel.dyn', '.rel.plt', '.rela.dyn', '.rela.plt'],
+    'unwind': [
+        '.ARM.extab', '.ARM.exidx', '.eh_frame', '.eh_frame_hdr',
+        '.ARM.exidxsentinel_section_after_text'
+    ],
+    'symbols': [
+        '.dynsym', '.dynstr', '.dynamic', '.shstrtab', '.got', '.plt',
+        '.got.plt', '.hash', '.gnu.hash'
+    ],
+    'bss': ['.bss'],
+    'other': [
+        '.init_array', '.preinit_array', '.ctors', '.fini_array', '.comment',
+        '.note.gnu.gold-version', '.note.crashpad.info', '.note.android.ident',
+        '.ARM.attributes', '.note.gnu.build-id', '.gnu.version',
+        '.gnu.version_d', '.gnu.version_r', '.interp', '.gcc_except_table'
+    ]
 }
+
+
+def _PercentageDifference(a, b):
+  if a == 0:
+    return 0
+  return float(b - a) / a
 
 
 def _RunReadelf(so_path, options, tool_prefix=''):
@@ -127,8 +144,8 @@ def _RunReadelf(so_path, options, tool_prefix=''):
       [tool_prefix + 'readelf'] + options + [so_path])
 
 
-def _ExtractMainLibSectionSizesFromApk(apk_path, main_lib_path, tool_prefix):
-  with Unzip(apk_path, filename=main_lib_path) as extracted_lib_path:
+def _ExtractLibSectionSizesFromApk(apk_path, lib_path, tool_prefix):
+  with Unzip(apk_path, filename=lib_path) as extracted_lib_path:
     grouped_section_sizes = collections.defaultdict(int)
     section_sizes = _CreateSectionNameSizeMap(extracted_lib_path, tool_prefix)
     for group_name, section_names in _READELF_SIZES_METRICS.iteritems():
@@ -138,7 +155,7 @@ def _ExtractMainLibSectionSizesFromApk(apk_path, main_lib_path, tool_prefix):
 
     # Group any unknown section headers into the "other" group.
     for section_header, section_size in section_sizes.iteritems():
-      print "Unknown elf section header:", section_header
+      print('Unknown elf section header: %s' % section_header)
       grouped_section_sizes['other'] += section_size
 
     return grouped_section_sizes
@@ -155,13 +172,6 @@ def _CreateSectionNameSizeMap(so_path, tool_prefix):
   return section_sizes
 
 
-def _ParseLibBuildId(so_path, tool_prefix):
-  """Returns the Build ID of the given native library."""
-  stdout = _RunReadelf(so_path, ['-n'], tool_prefix)
-  match = re.search(r'Build ID: (\w+)', stdout)
-  return match.group(1) if match else None
-
-
 def _ParseManifestAttributes(apk_path):
   # Check if the manifest specifies whether or not to extract native libs.
   skip_extract_lib = False
@@ -172,75 +182,20 @@ def _ParseManifestAttributes(apk_path):
     skip_extract_lib = not bool(int(m.group(1)))
 
   # Dex decompression overhead varies by Android version.
-  m = re.search(r'android:minSdkVersion\(\w+\)=\(type \w+\)(\w+)\n', output)
+  m = re.search(r'android:minSdkVersion\(\w+\)=\(type \w+\)(\w+)', output)
   sdk_version = int(m.group(1), 16)
-  # Pre-L: Dalvik - .odex file is simply decompressed/optimized dex file (~1x).
-  # L, M: ART - .odex file is compiled version of the dex file (~4x).
-  # N: ART - Uses Dalvik-like JIT for normal apps (~1x), full compilation for
-  #    shared apps (~4x).
-  # Actual multipliers calculated using "apk_operations.py disk-usage".
-  # Will need to update multipliers once apk obfuscation is enabled.
-  # E.g. with obfuscation, the 4.04 changes to 4.46.
-  if sdk_version < 21:
-    dex_multiplier = 1.16
-  elif sdk_version < 24:
-    dex_multiplier = 4.04
-  elif 'Monochrome' in apk_path or 'WebView' in apk_path:
-    dex_multiplier = 4.04  # compilation_filter=speed
-  else:
-    dex_multiplier = 1.17  # compilation_filter=speed-profile
 
-  return dex_multiplier, skip_extract_lib
+  return sdk_version, skip_extract_lib
 
 
-def CountStaticInitializers(so_path, tool_prefix):
-  # Mostly copied from //infra/scripts/legacy/scripts/slave/chromium/sizes.py.
-  def get_elf_section_size(readelf_stdout, section_name):
-    # Matches: .ctors PROGBITS 000000000516add0 5169dd0 000010 00 WA 0 0 8
-    match = re.search(r'\.%s.*$' % re.escape(section_name),
-                      readelf_stdout, re.MULTILINE)
-    if not match:
-      return (False, -1)
-    size_str = re.split(r'\W+', match.group(0))[5]
-    return (True, int(size_str, 16))
-
-  # Find the number of files with at least one static initializer.
-  # First determine if we're 32 or 64 bit
-  stdout = _RunReadelf(so_path, ['-h'], tool_prefix)
-  elf_class_line = re.search('Class:.*$', stdout, re.MULTILINE).group(0)
-  elf_class = re.split(r'\W+', elf_class_line)[1]
-  if elf_class == 'ELF32':
-    word_size = 4
-  else:
-    word_size = 8
-
-  # Then find the number of files with global static initializers.
-  # NOTE: this is very implementation-specific and makes assumptions
-  # about how compiler and linker implement global static initializers.
-  si_count = 0
-  stdout = _RunReadelf(so_path, ['-SW'], tool_prefix)
-  has_init_array, init_array_size = get_elf_section_size(stdout, 'init_array')
-  if has_init_array:
-    si_count = init_array_size / word_size
-  si_count = max(si_count, 0)
-  return si_count
-
-
-def GetStaticInitializers(so_path, tool_prefix):
-  output = cmd_helper.GetCmdOutput([_DUMP_STATIC_INITIALIZERS_PATH, '-d',
-                                    so_path, '-t', tool_prefix])
-  summary = re.search(r'Found \d+ static initializers in (\d+) files.', output)
-  return output.splitlines()[:-1], int(summary.group(1))
-
-
-def _NormalizeLanguagePaks(translations, normalized_apk_size, factor):
+def _NormalizeLanguagePaks(translations, factor):
   english_pak = translations.FindByPattern(r'.*/en[-_][Uu][Ss]\.l?pak')
   num_translations = translations.GetNumEntries()
+  ret = 0
   if english_pak:
-    normalized_apk_size -= translations.ComputeZippedSize()
-    normalized_apk_size += int(
-        english_pak.compress_size * num_translations * factor)
-  return normalized_apk_size
+    ret -= translations.ComputeZippedSize()
+    ret += int(english_pak.compress_size * num_translations * factor)
+  return ret
 
 
 def _NormalizeResourcesArsc(apk_path, num_arsc_files, num_translations,
@@ -252,7 +207,7 @@ def _NormalizeResourcesArsc(apk_path, num_arsc_files, num_translations,
   # If there are multiple .arsc files, use the resource packaged APK instead.
   if num_arsc_files > 1:
     if not out_dir:
-      print 'Skipping resources.arsc normalization (output directory required)'
+      print('Skipping resources.arsc normalization (output directory required)')
       return 0
     ap_name = os.path.basename(apk_path).replace('.apk', '.intermediate.ap_')
     ap_path = os.path.join(out_dir, 'gen/arsc/apks', ap_name)
@@ -342,7 +297,7 @@ class _FileGroup(object):
     return self.ComputeExtractedSize() + self.ComputeZippedSize()
 
 
-def PrintApkAnalysis(apk_filename, tool_prefix, out_dir, chartjson=None):
+def _DoApkAnalysis(apk_filename, apks_path, tool_prefix, out_dir, report_func):
   """Analyse APK to determine size contributions of different file classes."""
   file_groups = []
 
@@ -366,21 +321,44 @@ def PrintApkAnalysis(apk_filename, tool_prefix, out_dir, chartjson=None):
   notices = make_group('licenses.notice file')
   unwind_cfi = make_group('unwind_cfi (dev and canary only)')
 
-  apk = zipfile.ZipFile(apk_filename, 'r')
-  try:
+  with zipfile.ZipFile(apk_filename, 'r') as apk:
     apk_contents = apk.infolist()
-  finally:
-    apk.close()
 
-  dex_multiplier, skip_extract_lib = _ParseManifestAttributes(apk_filename)
+  sdk_version, skip_extract_lib = _ParseManifestAttributes(apk_filename)
+
+  # Pre-L: Dalvik - .odex file is simply decompressed/optimized dex file (~1x).
+  # L, M: ART - .odex file is compiled version of the dex file (~4x).
+  # N: ART - Uses Dalvik-like JIT for normal apps (~1x), full compilation for
+  #    shared apps (~4x).
+  # Actual multipliers calculated using "apk_operations.py disk-usage".
+  # Will need to update multipliers once apk obfuscation is enabled.
+  # E.g. with obfuscation, the 4.04 changes to 4.46.
+  speed_profile_dex_multiplier = 1.17
+  orig_filename = apks_path or apk_filename
+  is_monochrome = 'Monochrome' in orig_filename
+  is_webview = 'WebView' in orig_filename
+  is_shared_apk = sdk_version >= 24 and (is_monochrome or is_webview)
+  if sdk_version < 21:
+    # JellyBean & KitKat
+    dex_multiplier = 1.16
+  elif sdk_version < 24:
+    # Lollipop & Marshmallow
+    dex_multiplier = 4.04
+  elif is_shared_apk:
+    # Oreo and above, compilation_filter=speed
+    dex_multiplier = 4.04
+  else:
+    # Oreo and above, compilation_filter=speed-profile
+    dex_multiplier = speed_profile_dex_multiplier
+
   total_apk_size = os.path.getsize(apk_filename)
-  apk_basename = os.path.basename(apk_filename)
   for member in apk_contents:
     filename = member.filename
     if filename.endswith('/'):
       continue
     if filename.endswith('.so'):
-      should_extract_lib = not (skip_extract_lib or 'crazy' in filename)
+      basename = posixpath.basename(filename)
+      should_extract_lib = not skip_extract_lib and basename.startswith('lib')
       native_code.AddZipInfo(
           member, extracted_multiplier=int(should_extract_lib))
     elif filename.endswith('.dex'):
@@ -412,131 +390,150 @@ def PrintApkAnalysis(apk_filename, tool_prefix, out_dir, chartjson=None):
     else:
       unknown.AddZipInfo(member)
 
+  if apks_path:
+    # We're mostly focused on size of Chrome for non-English locales, so assume
+    # Hindi (arbitrarily chosen) locale split is installed.
+    with zipfile.ZipFile(apks_path) as z:
+      hindi_apk_info = z.getinfo('splits/base-hi.apk')
+      total_apk_size += hindi_apk_info.file_size
+
   total_install_size = total_apk_size
+  total_install_size_android_go = total_apk_size
   zip_overhead = total_apk_size
 
   for group in file_groups:
     actual_size = group.ComputeZippedSize()
     install_size = group.ComputeInstallSize()
     uncompressed_size = group.ComputeUncompressedSize()
-
-    total_install_size += group.ComputeExtractedSize()
+    extracted_size = group.ComputeExtractedSize()
+    total_install_size += extracted_size
     zip_overhead -= actual_size
 
-    perf_tests_results_helper.ReportPerfResult(chartjson,
-                     apk_basename + '_Breakdown', group.name + ' size',
-                     actual_size, 'bytes')
-    perf_tests_results_helper.ReportPerfResult(chartjson,
-                     apk_basename + '_InstallBreakdown',
-                     group.name + ' size', install_size, 'bytes')
+    report_func('Breakdown', group.name + ' size', actual_size, 'bytes')
+    report_func('InstallBreakdown', group.name + ' size', int(install_size),
+                'bytes')
     # Only a few metrics are compressed in the first place.
     # To avoid over-reporting, track uncompressed size only for compressed
     # entries.
     if uncompressed_size != actual_size:
-      perf_tests_results_helper.ReportPerfResult(chartjson,
-                       apk_basename + '_Uncompressed',
-                       group.name + ' size', uncompressed_size,
-                       'bytes')
+      report_func('Uncompressed', group.name + ' size', uncompressed_size,
+                  'bytes')
+
+    if group is java_code and is_shared_apk:
+      # Updates are compiled using quicken, but system image uses speed-profile.
+      extracted_size = int(uncompressed_size * speed_profile_dex_multiplier)
+      total_install_size_android_go += extracted_size
+      report_func('InstallBreakdownGo', group.name + ' size',
+                  actual_size + extracted_size, 'bytes')
+    elif group is translations and apks_path:
+      # Assume Hindi rather than English (accounted for above in total_apk_size)
+      total_install_size_android_go += actual_size
+    else:
+      total_install_size_android_go += extracted_size
 
   # Per-file zip overhead is caused by:
   # * 30 byte entry header + len(file name)
   # * 46 byte central directory entry + len(file name)
   # * 0-3 bytes for zipalign.
-  perf_tests_results_helper.ReportPerfResult(chartjson,
-                   apk_basename + '_Breakdown', 'Zip Overhead',
-                   zip_overhead, 'bytes')
-  perf_tests_results_helper.ReportPerfResult(chartjson,
-                   apk_basename + '_InstallSize', 'APK size',
-                   total_apk_size, 'bytes')
-  perf_tests_results_helper.ReportPerfResult(chartjson,
-                   apk_basename + '_InstallSize',
-                   'Estimated installed size', total_install_size, 'bytes')
+  report_func('Breakdown', 'Zip Overhead', zip_overhead, 'bytes')
+  report_func('InstallSize', 'APK size', total_apk_size, 'bytes')
+  report_func('InstallSize', 'Estimated installed size',
+              int(total_install_size), 'bytes')
+  if is_shared_apk:
+    report_func('InstallSize', 'Estimated installed size (Android Go)',
+                int(total_install_size_android_go), 'bytes')
   transfer_size = _CalculateCompressedSize(apk_filename)
-  perf_tests_results_helper.ReportPerfResult(chartjson,
-                   apk_basename + '_TransferSize',
-                   'Transfer size (deflate)', transfer_size, 'bytes')
+  report_func('TransferSize', 'Transfer size (deflate)', transfer_size, 'bytes')
 
   # Size of main dex vs remaining.
   main_dex_info = java_code.FindByPattern('classes.dex')
   if main_dex_info:
     main_dex_size = main_dex_info.file_size
-    perf_tests_results_helper.ReportPerfResult(chartjson,
-                     apk_basename + '_Specifics',
-                     'main dex size', main_dex_size, 'bytes')
+    report_func('Specifics', 'main dex size', main_dex_size, 'bytes')
     secondary_size = java_code.ComputeUncompressedSize() - main_dex_size
-    perf_tests_results_helper.ReportPerfResult(chartjson,
-                     apk_basename + '_Specifics',
-                     'secondary dex size', secondary_size, 'bytes')
+    report_func('Specifics', 'secondary dex size', secondary_size, 'bytes')
 
-  # Size of main .so vs remaining.
   main_lib_info = native_code.FindLargest()
-  if main_lib_info:
-    main_lib_size = main_lib_info.file_size
-    perf_tests_results_helper.ReportPerfResult(chartjson,
-                     apk_basename + '_Specifics',
-                     'main lib size', main_lib_size, 'bytes')
-    secondary_size = native_code.ComputeUncompressedSize() - main_lib_size
-    perf_tests_results_helper.ReportPerfResult(chartjson,
-                     apk_basename + '_Specifics',
-                     'other lib size', secondary_size, 'bytes')
+  native_code_unaligned_size = 0
+  for lib_info in native_code.AllEntries():
+    section_sizes = _ExtractLibSectionSizesFromApk(
+        apk_filename, lib_info.filename, tool_prefix)
+    native_code_unaligned_size += sum(
+        v for k, v in section_sizes.iteritems() if k != 'bss')
+    # Size of main .so vs remaining.
+    if lib_info == main_lib_info:
+      main_lib_size = lib_info.file_size
+      report_func('Specifics', 'main lib size', main_lib_size, 'bytes')
+      secondary_size = native_code.ComputeUncompressedSize() - main_lib_size
+      report_func('Specifics', 'other lib size', secondary_size, 'bytes')
 
-    main_lib_section_sizes = _ExtractMainLibSectionSizesFromApk(
-        apk_filename, main_lib_info.filename, tool_prefix)
-    for metric_name, size in main_lib_section_sizes.iteritems():
-      perf_tests_results_helper.ReportPerfResult(chartjson,
-                       apk_basename + '_MainLibInfo',
-                       metric_name, size, 'bytes')
+      for metric_name, size in section_sizes.iteritems():
+        report_func('MainLibInfo', metric_name, size, 'bytes')
 
   # Main metric that we want to monitor for jumps.
   normalized_apk_size = total_apk_size
   # unwind_cfi exists only in dev, canary, and non-channel builds.
   normalized_apk_size -= unwind_cfi.ComputeZippedSize()
-  # Always look at uncompressed .so.
+  # Sections within .so files get 4kb aligned, so use section sizes rather than
+  # file size. Also gets rid of compression.
   normalized_apk_size -= native_code.ComputeZippedSize()
-  normalized_apk_size += native_code.ComputeUncompressedSize()
-  # TODO(agrieve): Once we have better tooling (which can tell you where dex
-  #     size came from), change this to "ComputeExtractedSize()".
+  normalized_apk_size += native_code_unaligned_size
+  # Unaligned size should be ~= uncompressed size or something is wrong.
+  # As of now, padding_fraction ~= .007
+  padding_fraction = -_PercentageDifference(
+      native_code.ComputeUncompressedSize(), native_code_unaligned_size)
+  assert 0 <= padding_fraction < .02, 'Padding was: {}'.format(padding_fraction)
+  # Normalized dex size: size within the zip + size on disk for Android Go
+  # devices (which ~= uncompressed dex size).
   normalized_apk_size += java_code.ComputeUncompressedSize()
-  # Avoid noise caused when strings change and translations haven't yet been
-  # updated.
-  num_translations = translations.GetNumEntries()
-  num_stored_translations = stored_translations.GetNumEntries()
+  if apks_path:
+    # Locale normalization not needed when measuring only one locale.
+    # E.g. a change that adds 300 chars of unstranslated strings would cause the
+    # metric to be off by only 390 bytes (assuming a multiplier of 2.3 for
+    # Hindi).
+    pass
+  else:
+    # Avoid noise caused when strings change and translations haven't yet been
+    # updated.
+    num_translations = translations.GetNumEntries()
+    num_stored_translations = stored_translations.GetNumEntries()
 
-  if num_translations > 1:
-    # Multipliers found by looking at MonochromePublic.apk and seeing how much
-    # smaller en-US.pak is relative to the average locale.pak.
-    normalized_apk_size = _NormalizeLanguagePaks(
-        translations, normalized_apk_size, 1.17)
-  if num_stored_translations > 1:
-    normalized_apk_size = _NormalizeLanguagePaks(
-        stored_translations, normalized_apk_size, 1.43)
-  if num_translations + num_stored_translations > 1:
-    if num_translations == 0:
-      # WebView stores all locale paks uncompressed.
-      num_arsc_translations = num_stored_translations
-    else:
-      # Monochrome has more configurations than Chrome since it includes
-      # WebView (which supports more locales), but these should mostly be empty
-      # so ignore them here.
-      num_arsc_translations = num_translations
-    normalized_apk_size += int(_NormalizeResourcesArsc(
-        apk_filename, arsc.GetNumEntries(), num_arsc_translations, out_dir))
+    if num_translations > 1:
+      # Multipliers found by looking at MonochromePublic.apk and seeing how much
+      # smaller en-US.pak is relative to the average locale.pak.
+      normalized_apk_size += _NormalizeLanguagePaks(translations, 1.17)
+    if num_stored_translations > 1:
+      normalized_apk_size += _NormalizeLanguagePaks(stored_translations, 1.43)
+    if num_translations + num_stored_translations > 1:
+      if num_translations == 0:
+        # WebView stores all locale paks uncompressed.
+        num_arsc_translations = num_stored_translations
+      else:
+        # Monochrome has more configurations than Chrome since it includes
+        # WebView (which supports more locales), but these should mostly be
+        # empty so ignore them here.
+        num_arsc_translations = num_translations
+      normalized_apk_size += int(
+          _NormalizeResourcesArsc(apk_filename, arsc.GetNumEntries(),
+                                  num_arsc_translations, out_dir))
 
-  perf_tests_results_helper.ReportPerfResult(chartjson,
-                   apk_basename + '_Specifics',
-                   'normalized apk size', normalized_apk_size, 'bytes')
-
-  perf_tests_results_helper.ReportPerfResult(chartjson,
-                   apk_basename + '_Specifics',
-                   'file count', len(apk_contents), 'zip entries')
+  report_func('Specifics', 'normalized apk size', normalized_apk_size, 'bytes')
+  # The "file count" metric cannot be grouped with any other metrics when the
+  # end result is going to be uploaded to the perf dashboard in the HistogramSet
+  # format due to mixed units (bytes vs. zip entries) causing malformed
+  # summaries to be generated.
+  # TODO(https://crbug.com/903970): Remove this workaround if unit mixing is
+  # ever supported.
+  report_func('FileCount', 'file count', len(apk_contents), 'zip entries')
 
   for info in unknown.AllEntries():
-    print 'Unknown entry:', info.filename, info.compress_size
+    sys.stderr.write(
+        'Unknown entry: %s %d\n' % (info.filename, info.compress_size))
 
 
 def _AnnotatePakResources(out_dir):
   """Returns a pair of maps: id_name_map, id_header_map."""
-  print 'Looking at resources in: %s' % out_dir
+  print('Looking at resources in: %s' % out_dir)
 
   grit_headers = []
   for root, _, files in os.walk(out_dir):
@@ -554,53 +551,11 @@ def _AnnotatePakResources(out_dir):
           i = int(m.group('id'))
           name = m.group('name')
           if i in id_name_map and name != id_name_map[i]:
-            print 'WARNING: Resource ID conflict %s (%s vs %s)' % (
-                i, id_name_map[i], name)
+            print('WARNING: Resource ID conflict %s (%s vs %s)' % (
+                      i, id_name_map[i], name))
           id_name_map[i] = name
           id_header_map[i] = os.path.relpath(header, out_dir)
   return id_name_map, id_header_map
-
-
-# This method also used by //build/android/gyp/assert_static_initializers.py
-def AnalyzeStaticInitializers(apk_filename, tool_prefix, dump_sis, out_dir,
-                              ignored_libs):
-  # Static initializer counting mostly copies logic in
-  # infra/scripts/legacy/scripts/slave/chromium/sizes.py.
-  with zipfile.ZipFile(apk_filename) as z:
-    so_files = [f for f in z.infolist()
-                if f.filename.endswith('.so') and f.file_size > 0
-                and os.path.basename(f.filename) not in ignored_libs]
-  # Skip checking static initializers for 32 bit .so files when 64 bit .so files
-  # are present since the 32 bit versions will be checked by bots that only
-  # build the 32 bit version. This avoids the complexity of finding 32 bit .so
-  # files in the output directory in 64 bit builds.
-  has_64 = any('64' in f.filename for f in so_files)
-  files_to_check = [f for f in so_files if not has_64 or '64' in f.filename]
-
-  si_count = 0
-  for f in files_to_check:
-    with Unzip(apk_filename, filename=f.filename) as unzipped_so:
-      si_count += CountStaticInitializers(unzipped_so, tool_prefix)
-      if dump_sis:
-        # Print count and list of SIs reported by dump-static-initializers.py.
-        # Doesn't work well on all archs (particularly arm), which is why
-        # the readelf method is used for tracking SI counts.
-        _PrintDumpSIsCount(f.filename, unzipped_so, out_dir, tool_prefix)
-  return si_count
-
-
-def _PrintDumpSIsCount(apk_so_name, unzipped_so, out_dir, tool_prefix):
-  lib_name = os.path.basename(apk_so_name).replace('crazy.', '')
-  so_with_symbols_path = os.path.join(out_dir, 'lib.unstripped', lib_name)
-  if os.path.exists(so_with_symbols_path):
-    _VerifyLibBuildIdsMatch(tool_prefix, unzipped_so, so_with_symbols_path)
-    sis, _ = GetStaticInitializers(
-        so_with_symbols_path, tool_prefix)
-    for si in sis:
-      print si
-  else:
-    raise Exception('Unstripped .so not found. Looked here: %s',
-                    so_with_symbols_path)
 
 
 def _CalculateCompressedSize(file_path):
@@ -614,27 +569,22 @@ def _CalculateCompressedSize(file_path):
   return total_size
 
 
-def _PrintDexAnalysis(apk_filename, chartjson=None):
+def _DoDexAnalysis(apk_filename, report_func):
   sizes, total_size = method_count.ExtractSizesFromZip(apk_filename)
 
-  graph_title = os.path.basename(apk_filename) + '_Dex'
   dex_metrics = method_count.CONTRIBUTORS_TO_DEX_CACHE
   cumulative_sizes = collections.defaultdict(int)
   for classes_dex_sizes in sizes.values():
     for key in dex_metrics:
       cumulative_sizes[key] += classes_dex_sizes[key]
   for key, label in dex_metrics.iteritems():
-    perf_tests_results_helper.ReportPerfResult(chartjson, graph_title, label,
-                                               cumulative_sizes[key], 'entries')
+    report_func('Dex', label, cumulative_sizes[key], 'entries')
 
-  graph_title = '%sCache' % graph_title
-  perf_tests_results_helper.ReportPerfResult(chartjson, graph_title, 'DexCache',
-                                             total_size, 'bytes')
+  report_func('DexCache', 'DexCache', total_size, 'bytes')
 
 
-def _PrintPatchSizeEstimate(new_apk, builder, bucket, chartjson=None):
+def _PrintPatchSizeEstimate(new_apk, builder, bucket, report_func):
   apk_name = os.path.basename(new_apk)
-  title = apk_name + '_PatchSizeEstimate'
   # Reference APK paths have spaces replaced by underscores.
   builder = builder.replace(' ', '_')
   old_apk = apk_downloader.MaybeDownloadApk(
@@ -646,12 +596,10 @@ def _PrintPatchSizeEstimate(new_apk, builder, bucket, chartjson=None):
       tmp_name = os.path.join(tmp, 'patch.tmp')
       bsdiff = apk_patch_size_estimator.calculate_bsdiff(
           old_apk, new_apk, None, tmp_name)
-      perf_tests_results_helper.ReportPerfResult(chartjson, title,
-                                'BSDiff (gzipped)', bsdiff, 'bytes')
+      report_func('PatchSizeEstimate', 'BSDiff (gzipped)', bsdiff, 'bytes')
       fbf = apk_patch_size_estimator.calculate_filebyfile(
           old_apk, new_apk, None, tmp_name)
-      perf_tests_results_helper.ReportPerfResult(chartjson, title,
-                                'FileByFile (gzipped)', fbf, 'bytes')
+      report_func('PatchSizeEstimate', 'FileByFile (gzipped)', fbf, 'bytes')
 
 
 @contextmanager
@@ -664,12 +612,6 @@ def Unzip(zip_file, filename=None):
       raise Exception(
           '%s not found in %s' % (filename, zip_file))
     yield unzipped_files[0]
-
-
-def _VerifyLibBuildIdsMatch(tool_prefix, *so_files):
-  if len(set(_ParseLibBuildId(f, tool_prefix) for f in so_files)) > 1:
-    raise Exception('Found differing build ids in output directory and apk. '
-                    'Your output directory is likely stale.')
 
 
 def _ConfigOutDirAndToolsPrefix(out_dir):
@@ -690,6 +632,22 @@ def _ConfigOutDirAndToolsPrefix(out_dir):
   return out_dir, tool_prefix
 
 
+def _Analyze(apk_path, chartjson, args):
+
+  def report_func(*args):
+    # Do not add any new metrics without also documenting them in:
+    # //docs/speed/binary_size/metrics.md.
+    perf_tests_results_helper.ReportPerfResult(chartjson, *args)
+
+  out_dir, tool_prefix = _ConfigOutDirAndToolsPrefix(args.out_dir)
+  apks_path = args.input if args.input.endswith('.apks') else None
+  _DoApkAnalysis(apk_path, apks_path, tool_prefix, out_dir, report_func)
+  _DoDexAnalysis(apk_path, report_func)
+  if args.estimate_patch_size:
+    _PrintPatchSizeEstimate(apk_path, args.reference_apk_builder,
+                            args.reference_apk_bucket, report_func)
+
+
 def main():
   argparser = argparse.ArgumentParser(description='Print APK size metrics.')
   argparser.add_argument('--min-pak-resource-size',
@@ -701,18 +659,16 @@ def main():
                          help='Location of the build artifacts.')
   argparser.add_argument('--chartjson',
                          action='store_true',
-                         help='Sets output mode to chartjson.')
+                         help='DEPRECATED. Use --output-format=chartjson '
+                              'instead.')
+  argparser.add_argument('--output-format',
+                         choices=['chartjson', 'histograms'],
+                         help='Output the results to a file in the given '
+                              'format instead of printing the results.')
   argparser.add_argument('--output-dir',
                          default='.',
                          help='Directory to save chartjson to.')
-  argparser.add_argument('--dump-static-initializers',
-                         action='store_true',
-                         dest='dump_sis',
-                         help='Run dump-static-initializers.py to get the list'
-                              'of static initializers (slow).')
-  argparser.add_argument('--loadable_module',
-                         action='append',
-                         help='Use for libraries added via loadable_modules')
+  argparser.add_argument('--loadable_module', help='Obsolete (ignored).')
   argparser.add_argument('--estimate-patch-size',
                          action='store_true',
                          help='Include patch size estimates. Useful for perf '
@@ -725,36 +681,56 @@ def main():
   argparser.add_argument('--reference-apk-bucket',
                          default=apk_downloader.DEFAULT_BUCKET,
                          help='Storage bucket holding reference APKs.')
-  argparser.add_argument('apk', help='APK file path.')
+  argparser.add_argument('input', help='Path to .apk or .apks file to measure.')
   args = argparser.parse_args()
 
-  chartjson = _BASE_CHART.copy() if args.chartjson else None
-  out_dir, tool_prefix = _ConfigOutDirAndToolsPrefix(args.out_dir)
-  if args.dump_sis and not out_dir:
-    argparser.error(
-        '--dump-static-initializers requires --chromium-output-directory')
+  # TODO(bsheedy): Remove this once uses of --chartjson have been removed.
+  if args.chartjson:
+    args.output_format = 'chartjson'
 
-  # Do not add any new metrics without also documenting them in:
-  # //docs/speed/binary_size/metrics.md.
+  chartjson = _BASE_CHART.copy() if args.output_format else None
 
-  PrintApkAnalysis(args.apk, tool_prefix, out_dir, chartjson=chartjson)
-  _PrintDexAnalysis(args.apk, chartjson=chartjson)
+  if args.input.endswith('.apk'):
+    _Analyze(args.input, chartjson, args)
+  elif args.input.endswith('.apks'):
+    with tempfile.NamedTemporaryFile(suffix='.apk') as f:
+      with zipfile.ZipFile(args.input) as z:
+        # Currently bundletool is creating two apks when .apks is created
+        # without specifying an sdkVersion. Always measure the one with an
+        # uncompressed shared library.
+        try:
+          info = z.getinfo('splits/base-master_2.apk')
+        except KeyError:
+          info = z.getinfo('splits/base-master.apk')
+        f.write(z.read(info))
+        f.flush()
+      _Analyze(f.name, chartjson, args)
+  else:
+    raise Exception('Unknown file type: ' + args.input)
 
-  ignored_libs = args.loadable_module if args.loadable_module else []
-
-  si_count = AnalyzeStaticInitializers(
-      args.apk, tool_prefix, args.dump_sis, out_dir, ignored_libs)
-  perf_tests_results_helper.ReportPerfResult(
-      chartjson, 'StaticInitializersCount', 'count', si_count, 'count')
-
-  if args.estimate_patch_size:
-    _PrintPatchSizeEstimate(args.apk, args.reference_apk_builder,
-                            args.reference_apk_bucket, chartjson=chartjson)
   if chartjson:
     results_path = os.path.join(args.output_dir, 'results-chart.json')
-    logging.critical('Dumping json to %s', results_path)
+    logging.critical('Dumping chartjson to %s', results_path)
     with open(results_path, 'w') as json_file:
       json.dump(chartjson, json_file)
+
+    # We would ideally generate a histogram set directly instead of generating
+    # chartjson then converting. However, perf_tests_results_helper is in
+    # //build, which doesn't seem to have any precedent for depending on
+    # anything in Catapult. This can probably be fixed, but since this doesn't
+    # need to be super fast or anything, converting is a good enough solution
+    # for the time being.
+    if args.output_format == 'histograms':
+      histogram_result = convert_chart_json.ConvertChartJson(results_path)
+      if histogram_result.returncode != 0:
+        logging.error('chartjson conversion failed with error: %s',
+            histogram_result.stdout)
+        return 1
+
+      histogram_path = os.path.join(args.output_dir, 'perf_results.json')
+      logging.critical('Dumping histograms to %s', histogram_path)
+      with open(histogram_path, 'w') as json_file:
+        json_file.write(histogram_result.stdout)
 
 
 if __name__ == '__main__':

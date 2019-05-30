@@ -160,8 +160,28 @@ void DriveFsEventRouter::OnFilesChanged(
                     CHANGE_TYPE_ADD_OR_UPDATE);
     }
     for (auto& event : events) {
-      DispatchOnDirectoryChangedEventToExtension(extension_id, event.second);
+      DispatchOnDirectoryChangedEventToExtension(extension_id, event.first,
+                                                 event.second);
     }
+  }
+}
+
+void DriveFsEventRouter::OnError(const drivefs::mojom::DriveError& error) {
+  file_manager_private::DriveSyncErrorEvent event;
+  switch (error.type) {
+    case drivefs::mojom::DriveError::Type::kCantUploadStorageFull:
+      event.type = file_manager_private::DRIVE_SYNC_ERROR_TYPE_NO_SERVER_SPACE;
+      break;
+  }
+  for (const auto& extension_id : GetEventListenerExtensionIds(
+           file_manager_private::OnDriveSyncError::kEventName)) {
+    event.file_url =
+        ConvertDrivePathToFileSystemUrl(error.path, extension_id).spec();
+    DispatchEventToExtension(
+        extension_id,
+        extensions::events::FILE_MANAGER_PRIVATE_ON_DRIVE_SYNC_ERROR,
+        file_manager_private::OnDriveSyncError::kEventName,
+        file_manager_private::OnDriveSyncError::Create(event));
   }
 }
 
@@ -185,7 +205,11 @@ void DriveFsEventRouter::DispatchOnFileTransfersUpdatedEventToExtension(
 
 void DriveFsEventRouter::DispatchOnDirectoryChangedEventToExtension(
     const std::string& extension_id,
+    const base::FilePath& directory,
     const extensions::api::file_manager_private::FileWatchEvent& event) {
+  if (!IsPathWatched(directory)) {
+    return;
+  }
   DispatchEventToExtension(
       extension_id,
       extensions::events::FILE_MANAGER_PRIVATE_ON_DIRECTORY_CHANGED,

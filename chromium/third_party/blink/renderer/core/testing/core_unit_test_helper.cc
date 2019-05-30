@@ -34,8 +34,9 @@ void LocalFrameClientWithParent::Detached(FrameDetachType) {
 }
 
 ChromeClient& RenderingTest::GetChromeClient() const {
-  DEFINE_STATIC_LOCAL(EmptyChromeClient, client, (EmptyChromeClient::Create()));
-  return client;
+  DEFINE_STATIC_LOCAL(Persistent<EmptyChromeClient>, client,
+                      (EmptyChromeClient::Create()));
+  return *client;
 }
 
 RenderingTest::RenderingTest(LocalFrameClient* local_frame_client)
@@ -51,6 +52,17 @@ const Node* RenderingTest::HitTest(int x, int y) {
   return result.InnerNode();
 }
 
+HitTestResult::NodeSet RenderingTest::RectBasedHitTest(LayoutRect rect) {
+  HitTestLocation location(rect);
+  HitTestResult result(
+      HitTestRequest(HitTestRequest::kReadOnly | HitTestRequest::kActive |
+                     HitTestRequest::kAllowChildFrameContent |
+                     HitTestRequest::kListBased),
+      location);
+  GetLayoutView().HitTest(location, result);
+  return result.ListBasedTestResult();
+}
+
 void RenderingTest::SetUp() {
   Page::PageClients page_clients;
   FillWithEmptyClients(page_clients);
@@ -61,7 +73,7 @@ void RenderingTest::SetUp() {
 
   // This ensures that the minimal DOM tree gets attached
   // correctly for tests that don't call setBodyInnerHTML.
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   // Allow ASSERT_DEATH and EXPECT_DEATH for multiple threads.
   testing::FLAGS_gtest_death_test_style = "threadsafe";

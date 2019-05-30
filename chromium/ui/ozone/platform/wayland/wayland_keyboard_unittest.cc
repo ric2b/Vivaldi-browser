@@ -10,7 +10,9 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event.h"
-#include "ui/ozone/platform/wayland/fake_server.h"
+#include "ui/ozone/platform/wayland/test/mock_surface.h"
+#include "ui/ozone/platform/wayland/test/test_keyboard.h"
+#include "ui/ozone/platform/wayland/test/test_wayland_server_thread.h"
 #include "ui/ozone/platform/wayland/wayland_test.h"
 
 #if BUILDFLAG(USE_XKBCOMMON)
@@ -61,7 +63,7 @@ class WaylandKeyboardTest : public WaylandTest {
   }
 
  protected:
-  wl::MockKeyboard* keyboard_;
+  wl::TestKeyboard* keyboard_;
 
  private:
 #if BUILDFLAG(USE_XKBCOMMON)
@@ -468,11 +470,11 @@ TEST_P(WaylandKeyboardTest, NoEventAutoRepeatBeforeTimeout) {
   EXPECT_EQ(ET_KEY_RELEASED, key_event2->type());
 }
 
-INSTANTIATE_TEST_CASE_P(XdgVersionV5Test,
-                        WaylandKeyboardTest,
-                        ::testing::Values(kXdgShellV5));
-INSTANTIATE_TEST_CASE_P(XdgVersionV6Test,
-                        WaylandKeyboardTest,
-                        ::testing::Values(kXdgShellV6));
+INSTANTIATE_TEST_SUITE_P(XdgVersionV5Test,
+                         WaylandKeyboardTest,
+                         ::testing::Values(kXdgShellV5));
+INSTANTIATE_TEST_SUITE_P(XdgVersionV6Test,
+                         WaylandKeyboardTest,
+                         ::testing::Values(kXdgShellV6));
 
 }  // namespace ui

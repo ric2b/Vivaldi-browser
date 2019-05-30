@@ -5,6 +5,7 @@
 #include "extensions/renderer/storage_area.h"
 
 #include "base/command_line.h"
+#include "base/stl_util.h"
 #include "components/crx_file/id_util.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/features/simple_feature.h"
@@ -37,10 +38,10 @@ class CustomTypesTest : public NativeExtensionBindingsSystemUnittest {
   void RunContextInvalidationTest(const char* permission,
                                   const char* api_script,
                                   const char* use_api_script) {
-    scoped_refptr<Extension> extension = ExtensionBuilder("foo")
-                                             .AddPermission(permission)
-                                             .SetID(extension_id_)
-                                             .Build();
+    scoped_refptr<const Extension> extension = ExtensionBuilder("foo")
+                                                   .AddPermission(permission)
+                                                   .SetID(extension_id_)
+                                                   .Build();
     RegisterExtension(extension);
 
     v8::HandleScope handle_scope(isolate());
@@ -59,12 +60,12 @@ class CustomTypesTest : public NativeExtensionBindingsSystemUnittest {
     v8::Local<v8::Function> use_api =
         FunctionFromString(context, use_api_script);
     v8::Local<v8::Value> args[] = {api_object};
-    RunFunction(use_api, context, arraysize(args), args);
+    RunFunction(use_api, context, base::size(args), args);
 
     DisposeContext(context);
 
     EXPECT_FALSE(binding::IsContextValid(context));
-    RunFunctionAndExpectError(use_api, context, arraysize(args), args,
+    RunFunctionAndExpectError(use_api, context, base::size(args), args,
                               "Uncaught Error: Extension context invalidated.");
   }
 
@@ -109,7 +110,7 @@ TEST_F(CustomTypesTest, EasyUnlockProximityRequiredUseAfterInvalidation) {
 }
 
 TEST_F(CustomTypesTest, ContentSettingsInvalidInvocationError) {
-  scoped_refptr<Extension> extension =
+  scoped_refptr<const Extension> extension =
       ExtensionBuilder("foo").AddPermission("contentSettings").Build();
   RegisterExtension(extension);
 
@@ -142,7 +143,7 @@ TEST_F(CustomTypesTest, ContentSettingsInvalidInvocationError) {
 }
 
 TEST_F(CustomTypesTest, ChromeSettingsInvalidInvocationError) {
-  scoped_refptr<Extension> extension =
+  scoped_refptr<const Extension> extension =
       ExtensionBuilder("foo").AddPermission("privacy").Build();
   RegisterExtension(extension);
 

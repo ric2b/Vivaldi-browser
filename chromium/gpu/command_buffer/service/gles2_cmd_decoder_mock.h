@@ -87,7 +87,7 @@ class MockGLES2Decoder : public GLES2Decoder {
   MOCK_CONST_METHOD0(RestoreGlobalState, void());
   MOCK_CONST_METHOD0(RestoreProgramBindings, void());
   MOCK_METHOD0(RestoreRenderbufferBindings, void());
-  MOCK_CONST_METHOD1(RestoreTextureState, void(unsigned service_id));
+  MOCK_METHOD1(RestoreTextureState, void(unsigned service_id));
   MOCK_CONST_METHOD1(RestoreTextureUnitBindings, void(unsigned unit));
   MOCK_METHOD1(RestoreVertexAttribArray, void(unsigned index));
   MOCK_CONST_METHOD0(RestoreDeviceWindowRectangles, void());
@@ -101,8 +101,6 @@ class MockGLES2Decoder : public GLES2Decoder {
       GetTransformFeedbackManager, gpu::gles2::TransformFeedbackManager*());
   MOCK_METHOD0(GetVertexArrayManager, gpu::gles2::VertexArrayManager*());
   MOCK_METHOD0(GetImageManagerForTest, gpu::gles2::ImageManager*());
-  MOCK_METHOD1(
-      SetResizeCallback, void(const base::Callback<void(gfx::Size, float)>&));
   MOCK_METHOD1(SetIgnoreCachedStateForTest, void(bool ignore));
   MOCK_METHOD1(SetForceShaderNameHashingForTest, void(bool force));
   MOCK_METHOD1(SetAllowExit, void(bool allow));
@@ -173,6 +171,9 @@ class MockGLES2Decoder : public GLES2Decoder {
   MOCK_METHOD1(
       SetCopyTextureResourceManagerForTest,
       void(CopyTextureCHROMIUMResourceManager* copy_texture_resource_manager));
+  MOCK_METHOD1(
+      SetCopyTexImageBlitterForTest,
+      void(CopyTexImageResourceManager* copy_texture_resource_manager));
 
  private:
   base::WeakPtrFactory<MockGLES2Decoder> weak_ptr_factory_;

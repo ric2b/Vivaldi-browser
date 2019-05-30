@@ -5,6 +5,8 @@
 #include "third_party/blink/renderer/core/paint/box_border_painter.h"
 
 #include <algorithm>
+
+#include "base/stl_util.h"
 #include "third_party/blink/renderer/core/paint/box_painter.h"
 #include "third_party/blink/renderer/core/paint/object_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
@@ -663,7 +665,7 @@ BoxBorderPainter::BoxBorderPainter(const ComputedStyle& style,
 }
 
 void BoxBorderPainter::ComputeBorderProperties() {
-  for (unsigned i = 0; i < arraysize(edges_); ++i) {
+  for (unsigned i = 0; i < base::size(edges_); ++i) {
     const BorderEdge& edge = edges_[i];
 
     if (!edge.ShouldRender()) {
@@ -771,7 +773,7 @@ BorderEdgeFlags BoxBorderPainter::PaintOpacityGroup(
     float effective_opacity) const {
   DCHECK(effective_opacity > 0 && effective_opacity <= 1);
 
-  const size_t opacity_group_count = border_info.opacity_groups.size();
+  const wtf_size_t opacity_group_count = border_info.opacity_groups.size();
 
   // For overdraw logic purposes, treat missing/transparent edges as completed.
   if (index >= opacity_group_count)

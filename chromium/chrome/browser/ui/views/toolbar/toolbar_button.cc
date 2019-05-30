@@ -4,11 +4,14 @@
 
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/layout_constants.h"
@@ -17,14 +20,18 @@
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
 #include "ui/accessibility/ax_node_data.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/models/menu_model.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/gfx/color_utils.h"
+#include "ui/views/animation/ink_drop.h"
+#include "ui/views/animation/ink_drop_highlight.h"
+#include "ui/views/background.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/menu_runner.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 
 ToolbarButton::ToolbarButton(views::ButtonListener* listener)
@@ -38,12 +45,10 @@ ToolbarButton::ToolbarButton(views::ButtonListener* listener,
       model_(std::move(model)),
       tab_strip_model_(tab_strip_model),
       trigger_menu_on_long_press_(trigger_menu_on_long_press),
-      layout_insets_(GetLayoutInsets(TOOLBAR_BUTTON)),
       show_menu_factory_(this) {
   set_has_ink_drop_action_on_click(true);
   set_context_menu_controller(this);
   SetInkDropMode(InkDropMode::ON);
-  SetFocusPainter(nullptr);
 
   // Make sure icons are flipped by default so that back, forward, etc. follows
   // UI direction.
@@ -51,14 +56,14 @@ ToolbarButton::ToolbarButton(views::ButtonListener* listener,
 
   set_ink_drop_visible_opacity(kToolbarInkDropVisibleOpacity);
 
-  const int size = GetLayoutConstant(LOCATION_BAR_HEIGHT);
-  const int radii = ChromeLayoutProvider::Get()->GetCornerRadiusMetric(
-      views::EMPHASIS_MAXIMUM, gfx::Size(size, size));
-  set_ink_drop_corner_radii(radii, radii);
-
   SetImageLabelSpacing(ChromeLayoutProvider::Get()->GetDistanceMetric(
       DISTANCE_RELATED_LABEL_HORIZONTAL_LIST));
   SetHorizontalAlignment(gfx::ALIGN_RIGHT);
+
+  // Because we're using the internal padding to keep track of the changes we
+  // make to the leading margin to handle Fitts' Law, it's easier to just
+  // allocate the property once and modify the value.
+  SetProperty(views::kInternalPaddingKey, new gfx::Insets());
 
   UpdateHighlightBackgroundAndInsets();
 }
@@ -77,36 +82,61 @@ void ToolbarButton::SetHighlightColor(base::Optional<SkColor> color) {
   UpdateHighlightBackgroundAndInsets();
 }
 
+void ToolbarButton::SetText(const base::string16& text) {
+  LabelButton::SetText(text);
+  UpdateHighlightBackgroundAndInsets();
+}
+
 void ToolbarButton::UpdateHighlightBackgroundAndInsets() {
+  const int highlight_radius =
+      ChromeLayoutProvider::Get()->GetCornerRadiusMetric(
+          views::EMPHASIS_MAXIMUM, size());
   if (!highlight_color_) {
     SetBackground(nullptr);
   } else {
     // ToolbarButtons are always the height the location bar.
     const gfx::Insets bg_insets(
         (height() - GetLayoutConstant(LOCATION_BAR_HEIGHT)) / 2);
-    const SkColor bg_color = SkColorSetA(*highlight_color_, 32);
+    const SkColor bg_color =
+        SkColorSetA(*highlight_color_, kToolbarButtonBackgroundAlpha);
     SetBackground(views::CreateBackgroundFromPainter(
-        views::Painter::CreateSolidRoundRectPainter(
-            bg_color, ink_drop_large_corner_radius(), bg_insets)));
+        views::Painter::CreateSolidRoundRectPainter(bg_color, highlight_radius,
+                                                    bg_insets)));
     SetEnabledTextColors(*highlight_color_);
   }
 
-  gfx::Insets insets = layout_insets_ + gfx::Insets(0, leading_margin_, 0, 0);
-  if (highlight_color_)
-    insets += gfx::Insets(0, ink_drop_large_corner_radius() / 2, 0, 0);
+  gfx::Insets new_insets = GetLayoutInsets(TOOLBAR_BUTTON) +
+                           layout_inset_delta_ +
+                           *GetProperty(views::kInternalPaddingKey);
 
-  SetBorder(views::CreateEmptyBorder(insets));
+  if (!GetText().empty()) {
+    const int text_side_inset = highlight_radius / 2;
+
+    // Some subclasses (AvatarToolbarButton) may be change alignment. This adds
+    // an inset to the text-label side.
+    if (horizontal_alignment() == gfx::ALIGN_RIGHT) {
+      new_insets += gfx::Insets(0, text_side_inset, 0, 0);
+    } else {
+      new_insets += gfx::Insets(0, 0, 0, text_side_inset);
+    }
+  }
+
+  if (!border() || new_insets != border()->GetInsets())
+    SetBorder(views::CreateEmptyBorder(new_insets));
 }
 
-void ToolbarButton::SetLayoutInsets(const gfx::Insets& insets) {
-  layout_insets_ = insets;
+void ToolbarButton::SetLayoutInsetDelta(const gfx::Insets& inset_delta) {
+  if (layout_inset_delta_ == inset_delta)
+    return;
+  layout_inset_delta_ = inset_delta;
   UpdateHighlightBackgroundAndInsets();
 }
 
 void ToolbarButton::SetLeadingMargin(int margin) {
-  if (leading_margin_ == margin)
+  gfx::Insets* const internal_padding = GetProperty(views::kInternalPaddingKey);
+  if (internal_padding->left() == margin)
     return;
-  leading_margin_ = margin;
+  internal_padding->set_left(margin);
   UpdateHighlightBackgroundAndInsets();
 }
 
@@ -119,10 +149,8 @@ bool ToolbarButton::IsMenuShowing() const {
 }
 
 void ToolbarButton::OnBoundsChanged(const gfx::Rect& previous_bounds) {
-  if (focus_ring()) {
-    focus_ring()->SetPath(CreateToolbarFocusRingPath(
-        this, gfx::Insets(0, leading_margin_, 0, 0)));
-  }
+  SetToolbarButtonHighlightPath(this, *GetProperty(views::kInternalPaddingKey));
+
   UpdateHighlightBackgroundAndInsets();
   LabelButton::OnBoundsChanged(previous_bounds);
 }
@@ -130,7 +158,7 @@ void ToolbarButton::OnBoundsChanged(const gfx::Rect& previous_bounds) {
 gfx::Rect ToolbarButton::GetAnchorBoundsInScreen() const {
   gfx::Rect bounds = GetBoundsInScreen();
   gfx::Insets insets =
-      GetInkDropInsets(this, gfx::Insets(0, leading_margin_, 0, 0));
+      GetToolbarInkDropInsets(this, *GetProperty(views::kInternalPaddingKey));
   // If the button is extended, don't inset the leading edge. The anchored menu
   // should extend to the screen edge as well so the menu is easier to hit
   // (Fitts's law).
@@ -190,8 +218,7 @@ void ToolbarButton::OnMouseReleased(const ui::MouseEvent& event) {
     show_menu_factory_.InvalidateWeakPtrs();
 }
 
-void ToolbarButton::OnMouseCaptureLost() {
-}
+void ToolbarButton::OnMouseCaptureLost() {}
 
 void ToolbarButton::OnMouseExited(const ui::MouseEvent& event) {
   // Starting a drag results in a MouseExited, we need to ignore it.
@@ -219,37 +246,9 @@ void ToolbarButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
     node_data->SetDefaultActionVerb(ax::mojom::DefaultActionVerb::kPress);
 }
 
-std::unique_ptr<views::InkDrop> ToolbarButton::CreateInkDrop() {
-  return CreateToolbarInkDrop<LabelButton>(this);
-}
-
-std::unique_ptr<views::InkDropRipple> ToolbarButton::CreateInkDropRipple()
-    const {
-  return CreateToolbarInkDropRipple<LabelButton>(
-      this, GetInkDropCenterBasedOnLastEvent(),
-      gfx::Insets(0, leading_margin_, 0, 0));
-}
-
 std::unique_ptr<views::InkDropHighlight> ToolbarButton::CreateInkDropHighlight()
     const {
-  if (highlight_color_) {
-    // TODO(pbos): Unify with CreateToolbarInkDropHighlight which currently
-    // assumes a square inkdrop and uses different bounds for the center point.
-    auto highlight = std::make_unique<views::InkDropHighlight>(
-        size(), ink_drop_large_corner_radius(),
-        gfx::PointF(GetMirroredRect(GetLocalBounds()).CenterPoint()),
-        GetInkDropBaseColor());
-    highlight->set_visible_opacity(kToolbarInkDropHighlightVisibleOpacity);
-    return highlight;
-  }
-
-  return CreateToolbarInkDropHighlight<LabelButton>(
-      this, GetMirroredRect(GetContentsBounds()).CenterPoint());
-}
-
-std::unique_ptr<views::InkDropMask> ToolbarButton::CreateInkDropMask() const {
-  return CreateToolbarInkDropMask<LabelButton>(
-      this, gfx::Insets(0, leading_margin_, 0, 0));
+  return CreateToolbarInkDropHighlight(this);
 }
 
 SkColor ToolbarButton::GetInkDropBaseColor() const {
@@ -258,14 +257,45 @@ SkColor ToolbarButton::GetInkDropBaseColor() const {
   return GetToolbarInkDropBaseColor(this);
 }
 
-void ToolbarButton::ShowContextMenuForView(View* source,
-                                           const gfx::Point& point,
-                                           ui::MenuSourceType source_type) {
+void ToolbarButton::ShowContextMenuForViewImpl(View* source,
+                                               const gfx::Point& point,
+                                               ui::MenuSourceType source_type) {
   if (!enabled())
     return;
 
   show_menu_factory_.InvalidateWeakPtrs();
   ShowDropDownMenu(source_type);
+}
+
+// static
+SkColor ToolbarButton::AdjustHighlightColorForContrast(
+    const ui::ThemeProvider* theme_provider,
+    SkColor desired_dark_color,
+    SkColor desired_light_color,
+    SkColor dark_extreme,
+    SkColor light_extreme) {
+  if (!theme_provider)
+    return desired_light_color;
+  const SkColor toolbar_color =
+      theme_provider->GetColor(ThemeProperties::COLOR_TOOLBAR);
+  const SkColor contrasting_color = color_utils::PickContrastingColor(
+      desired_dark_color, desired_light_color, toolbar_color);
+  const SkColor limit =
+      contrasting_color == desired_dark_color ? dark_extreme : light_extreme;
+  // Setting highlight color will set the text to the highlight color, and the
+  // background to the same color with a low alpha. This means that our target
+  // contrast is between the text (the highlight color) and a blend of the
+  // highlight color and the toolbar color.
+  const SkColor base_color = color_utils::AlphaBlend(
+      contrasting_color, toolbar_color, kToolbarButtonBackgroundAlpha);
+
+  // Add a fudge factor to the minimum contrast ratio since we'll actually be
+  // blending with the adjusted color.
+  const SkAlpha blend_alpha = color_utils::GetBlendValueWithMinimumContrast(
+      contrasting_color, limit, base_color,
+      color_utils::kMinimumReadableContrastRatio * 1.05);
+
+  return color_utils::AlphaBlend(limit, contrasting_color, blend_alpha);
 }
 
 bool ToolbarButton::ShouldShowMenu() {
@@ -329,8 +359,10 @@ void ToolbarButton::OnMenuClosed() {
   menu_showing_ = false;
 
   // Set the state back to normal after the drop down menu is closed.
-  if (state() != STATE_DISABLED)
+  if (state() != STATE_DISABLED) {
+    GetInkDrop()->SetHovered(IsMouseHovered());
     SetState(STATE_NORMAL);
+  }
 
   menu_runner_.reset();
   menu_model_adapter_.reset();

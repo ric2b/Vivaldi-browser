@@ -6,7 +6,11 @@
 #define EXTENSIONS_COMMON_CSP_VALIDATOR_H_
 
 #include <string>
+#include <vector>
 
+#include "base/macros.h"
+#include "base/strings/string16.h"
+#include "base/strings/string_piece_forward.h"
 #include "extensions/common/manifest.h"
 
 namespace extensions {
@@ -31,6 +35,60 @@ enum Options {
   OPTIONS_ALLOW_INSECURE_OBJECT_SRC = 1 << 1,
 };
 
+// Helper to parse a serialized content security policy string.
+// Exposed for testing.
+class CSPParser {
+ public:
+  // Represents a CSP directive.
+  // E.g. for the directive "script-src 'self' www.google.com"
+  // |directive_string| is "script-src 'self' www.google.com".
+  // |directive_name| is "script_src".
+  // |directive_values| is ["'self'", "www.google.com"].
+  struct Directive {
+    Directive(base::StringPiece directive_string,
+              std::string directive_name,
+              std::vector<base::StringPiece> directive_values);
+    ~Directive();
+    Directive(Directive&&);
+    Directive& operator=(Directive&&);
+
+    base::StringPiece directive_string;
+
+    // Must be lower case.
+    std::string directive_name;
+
+    std::vector<base::StringPiece> directive_values;
+
+    DISALLOW_COPY_AND_ASSIGN(Directive);
+  };
+
+  using DirectiveList = std::vector<Directive>;
+
+  CSPParser(std::string policy);
+  ~CSPParser();
+
+  // It's not safe to move CSPParser since |directives_| refers to memory owned
+  // by |policy_|. Once move constructed, |directives_| will end up being in an
+  // invalid state, as it will point to memory owned by a "moved" string
+  // instance.
+  CSPParser(CSPParser&&) = delete;
+  CSPParser& operator=(CSPParser&&) = delete;
+
+  // This can contain duplicate directives (directives having the same directive
+  // name).
+  const DirectiveList& directives() const { return directives_; }
+
+ private:
+  void Parse();
+
+  const std::string policy_;
+
+  // This refers to memory owned by |policy_|.
+  DirectiveList directives_;
+
+  DISALLOW_COPY_AND_ASSIGN(CSPParser);
+};
+
 // Checks whether the given |policy| meets the minimum security requirements
 // for use in the extension system.
 //
@@ -48,6 +106,7 @@ enum Options {
 // Returns the sanitized policy.
 std::string SanitizeContentSecurityPolicy(
     const std::string& policy,
+    std::string manifest_key,
     int options,
     std::vector<InstallWarning>* warnings);
 
@@ -61,6 +120,7 @@ std::string SanitizeContentSecurityPolicy(
 // If |warnings| is not nullptr, any validation errors are appended to
 // |warnings|.
 std::string GetEffectiveSandoxedPageCSP(const std::string& policy,
+                                        std::string manifest_key,
                                         std::vector<InstallWarning>* warnings);
 
 // Checks whether the given |policy| enforces a unique origin sandbox as
@@ -71,6 +131,11 @@ std::string GetEffectiveSandoxedPageCSP(const std::string& policy,
 // |type|.
 bool ContentSecurityPolicyIsSandboxed(
     const std::string& policy, Manifest::Type type);
+
+// Returns whether the given |isolated_world_csp| is secure. If not, populates
+// |error|.
+bool IsSecureIsolatedWorldCSP(const std::string& isolated_world_csp,
+                              base::string16* error);
 
 }  // namespace csp_validator
 

@@ -4,6 +4,7 @@
 
 #include "extensions/renderer/guest_view/mime_handler_view/mime_handler_view_container_base.h"
 
+#include "base/bind.h"
 #include "base/guid.h"
 #include "base/lazy_instance.h"
 #include "base/memory/weak_ptr.h"
@@ -14,6 +15,7 @@
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/v8_value_converter.h"
+#include "extensions/common/guest_view/extensions_guest_view_messages.h"
 #include "extensions/common/mojo/guest_view.mojom.h"
 #include "extensions/renderer/extension_frame_helper.h"
 #include "gin/arguments.h"
@@ -29,6 +31,7 @@
 #include "third_party/blink/public/web/web_associated_url_loader_options.h"
 #include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_remote_frame.h"
 
 namespace extensions {
 namespace {
@@ -173,9 +176,9 @@ MimeHandlerViewContainerBase::MimeHandlerViewContainerBase(
     const content::WebPluginInfo& info,
     const std::string& mime_type,
     const GURL& original_url)
-    : plugin_path_(info.path.MaybeAsASCII()),
+    : original_url_(original_url),
+      plugin_path_(info.path.MaybeAsASCII()),
       mime_type_(mime_type),
-      original_url_(original_url),
       embedder_render_frame_routing_id_(embedder_render_frame->GetRoutingID()),
       before_unload_control_binding_(this),
       weak_factory_(this) {
@@ -261,6 +264,19 @@ void MimeHandlerViewContainerBase::PostMessageFromValue(
                             &message, frame->MainWorldScriptContext()));
 }
 
+void MimeHandlerViewContainerBase::DidReceiveData(const char* data,
+                                                  int data_length) {
+  view_id_ += std::string(data, data_length);
+}
+
+void MimeHandlerViewContainerBase::DidFinishLoading() {
+  DCHECK(is_embedded_);
+  // Warning: It is possible that |this| gets destroyed after this line (when
+  // the MHVCB is of the frame type and the associated plugin element does not
+  // have a content frame).
+  CreateMimeHandlerViewGuestIfNecessary();
+}
+
 content::RenderFrame* MimeHandlerViewContainerBase::GetEmbedderRenderFrame()
     const {
   DCHECK_NE(embedder_render_frame_routing_id_, MSG_ROUTING_NONE);
@@ -270,7 +286,15 @@ content::RenderFrame* MimeHandlerViewContainerBase::GetEmbedderRenderFrame()
 void MimeHandlerViewContainerBase::CreateMimeHandlerViewGuestIfNecessary() {
   if (guest_created_)
     return;
+  auto* embedder_render_frame = GetEmbedderRenderFrame();
+  if (!embedder_render_frame) {
+    // TODO(ekaramad): How can this happen? We should destroy the container if
+    // this happens at all. The process is however different for a plugin-based
+    // container.
+    return;
+  }
 
+  auto* guest_view = GetGuestView();
   // When the network service is enabled, subresource requests like plugins are
   // made directly from the renderer to the network service. So we need to
   // intercept the URLLoader and send it to the browser so that it can forward
@@ -281,14 +305,14 @@ void MimeHandlerViewContainerBase::CreateMimeHandlerViewGuestIfNecessary() {
       return;
 
     auto* extension_frame_helper =
-        ExtensionFrameHelper::Get(GetEmbedderRenderFrame());
+        ExtensionFrameHelper::Get(embedder_render_frame);
     if (!extension_frame_helper)
       return;
 
-    GetGuestView()->CreateEmbeddedMimeHandlerViewGuest(
-        GetEmbedderRenderFrame()->GetRoutingID(),
-        extension_frame_helper->tab_id(), original_url_, GetInstanceId(),
-        GetElementSize(), std::move(transferrable_url_loader_));
+    guest_view->CreateEmbeddedMimeHandlerViewGuest(
+        embedder_render_frame->GetRoutingID(), extension_frame_helper->tab_id(),
+        original_url_, GetInstanceId(), GetElementSize(),
+        std::move(transferrable_url_loader_), plugin_frame_routing_id_);
     guest_created_ = true;
     return;
   }
@@ -304,22 +328,20 @@ void MimeHandlerViewContainerBase::CreateMimeHandlerViewGuestIfNecessary() {
 
   DCHECK_NE(GetInstanceId(), guest_view::kInstanceIDNone);
 
-  if (!GetEmbedderRenderFrame())
-    return;
-
   mime_handler::BeforeUnloadControlPtr before_unload_control;
   if (!is_embedded_) {
     before_unload_control_binding_.Bind(
         mojo::MakeRequest(&before_unload_control));
   }
-  GetGuestView()->CreateMimeHandlerViewGuest(
-      GetEmbedderRenderFrame()->GetRoutingID(), view_id_, GetInstanceId(),
-      GetElementSize(), std::move(before_unload_control));
+  guest_view->CreateMimeHandlerViewGuest(
+      embedder_render_frame->GetRoutingID(), view_id_, GetInstanceId(),
+      GetElementSize(), std::move(before_unload_control),
+      plugin_frame_routing_id_);
 
   guest_created_ = true;
 }
 
-void MimeHandlerViewContainerBase::DidCompleteLoad() {
+void MimeHandlerViewContainerBase::DidLoadInternal() {
   if (!GetEmbedderRenderFrame())
     return;
 
@@ -353,7 +375,7 @@ void MimeHandlerViewContainerBase::SendResourceRequest() {
   // send credentials/cookies with the request. So, use the default mode
   // "no-cors" and credentials mode "include".
   blink::WebURLRequest request(original_url_);
-  request.SetRequestContext(blink::WebURLRequest::kRequestContextObject);
+  request.SetRequestContext(blink::mojom::RequestContextType::OBJECT);
   // The plugin resource request should skip service workers since "plug-ins
   // may get their security origins from their own urls".
   // https://w3c.github.io/ServiceWorker/#implementer-concerns
@@ -371,6 +393,9 @@ void MimeHandlerViewContainerBase::SetEmbeddedLoader(
     content::mojom::TransferrableURLLoaderPtr transferrable_url_loader) {
   transferrable_url_loader_ = std::move(transferrable_url_loader);
   transferrable_url_loader_->url = GURL(plugin_path_ + base::GenerateGUID());
+  // Warning: It is possible that |this| gets destroyed after this line (when
+  // the MHVCB is of the frame type and the associated plugin element does not
+  // have a content frame).
   CreateMimeHandlerViewGuestIfNecessary();
 }
 

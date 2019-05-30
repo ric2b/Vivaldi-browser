@@ -18,6 +18,8 @@ class VivaldiAppHelper : public content::WebContentsUserData<VivaldiAppHelper> {
   explicit VivaldiAppHelper(content::WebContents* contents);
   friend class content::WebContentsUserData<VivaldiAppHelper>;
 
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
+
   DISALLOW_COPY_AND_ASSIGN(VivaldiAppHelper);
 };
 

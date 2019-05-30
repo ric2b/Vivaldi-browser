@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_PAYMENTS_PAYMENT_REQUEST_EVENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_PAYMENTS_PAYMENT_REQUEST_EVENT_H_
 
+#include "base/macros.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/modules/event_modules.h"
 #include "third_party/blink/renderer/modules/payments/payment_request_event_init.h"
@@ -22,15 +23,19 @@ class ScriptState;
 
 class MODULES_EXPORT PaymentRequestEvent final : public ExtendableEvent {
   DEFINE_WRAPPERTYPEINFO();
-  WTF_MAKE_NONCOPYABLE(PaymentRequestEvent);
 
  public:
   static PaymentRequestEvent* Create(const AtomicString& type,
-                                     const PaymentRequestEventInit&);
+                                     const PaymentRequestEventInit*);
   static PaymentRequestEvent* Create(const AtomicString& type,
-                                     const PaymentRequestEventInit&,
+                                     const PaymentRequestEventInit*,
                                      RespondWithObserver*,
                                      WaitUntilObserver*);
+
+  PaymentRequestEvent(const AtomicString& type,
+                      const PaymentRequestEventInit*,
+                      RespondWithObserver*,
+                      WaitUntilObserver*);
   ~PaymentRequestEvent() override;
 
   const AtomicString& InterfaceName() const override;
@@ -38,9 +43,9 @@ class MODULES_EXPORT PaymentRequestEvent final : public ExtendableEvent {
   const String& topOrigin() const;
   const String& paymentRequestOrigin() const;
   const String& paymentRequestId() const;
-  const HeapVector<PaymentMethodData>& methodData() const;
+  const HeapVector<Member<PaymentMethodData>>& methodData() const;
   const ScriptValue total(ScriptState*) const;
-  const HeapVector<PaymentDetailsModifier>& modifiers() const;
+  const HeapVector<Member<PaymentDetailsModifier>>& modifiers() const;
   const String& instrumentKey() const;
 
   ScriptPromise openWindow(ScriptState*, const String& url);
@@ -49,20 +54,17 @@ class MODULES_EXPORT PaymentRequestEvent final : public ExtendableEvent {
   void Trace(blink::Visitor*) override;
 
  private:
-  PaymentRequestEvent(const AtomicString& type,
-                      const PaymentRequestEventInit&,
-                      RespondWithObserver*,
-                      WaitUntilObserver*);
-
   String top_origin_;
   String payment_request_origin_;
   String payment_request_id_;
-  HeapVector<PaymentMethodData> method_data_;
-  PaymentCurrencyAmount total_;
-  HeapVector<PaymentDetailsModifier> modifiers_;
+  HeapVector<Member<PaymentMethodData>> method_data_;
+  Member<PaymentCurrencyAmount> total_;
+  HeapVector<Member<PaymentDetailsModifier>> modifiers_;
   String instrument_key_;
 
   Member<RespondWithObserver> observer_;
+
+  DISALLOW_COPY_AND_ASSIGN(PaymentRequestEvent);
 };
 
 }  // namespace blink

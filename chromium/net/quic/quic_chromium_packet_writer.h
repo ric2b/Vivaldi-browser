@@ -88,14 +88,15 @@ class NET_EXPORT_PRIVATE QuicChromiumPacketWriter
                                 const quic::QuicIpAddress& self_address,
                                 const quic::QuicSocketAddress& peer_address,
                                 quic::PerPacketOptions* options) override;
-  bool IsWriteBlockedDataBuffered() const override;
   bool IsWriteBlocked() const override;
   void SetWritable() override;
   quic::QuicByteCount GetMaxPacketSize(
       const quic::QuicSocketAddress& peer_address) const override;
   bool SupportsReleaseTime() const override;
   bool IsBatchMode() const override;
-  char* GetNextWriteLocation() const override;
+  char* GetNextWriteLocation(
+      const quic::QuicIpAddress& self_address,
+      const quic::QuicSocketAddress& peer_address) override;
   quic::WriteResult Flush() override;
 
   void OnWriteComplete(int rv);

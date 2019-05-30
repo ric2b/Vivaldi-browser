@@ -23,6 +23,7 @@
 #
 
 from contextlib import contextmanager
+import difflib
 import filecmp
 import fnmatch
 import os
@@ -38,7 +39,6 @@ from code_generator_v8 import CodeGeneratorDictionaryImpl
 from code_generator_v8 import CodeGeneratorV8
 from code_generator_v8 import CodeGeneratorUnionType
 from code_generator_v8 import CodeGeneratorCallbackFunction
-from code_generator_web_agent_api import CodeGeneratorWebAgentAPI
 from compute_interfaces_info_individual import InterfaceInfoCollector
 from compute_interfaces_info_overall import (compute_interfaces_info_overall,
                                              interfaces_info)
@@ -197,6 +197,9 @@ def bindings_tests(output_directory, verbose, suppress_diff):
     executive = Executive()
 
     def list_files(directory):
+        if not os.path.isdir(directory):
+            return []
+
         files = []
         for component in os.listdir(directory):
             if component not in COMPONENT_DIRECTORY:
@@ -207,16 +210,13 @@ def bindings_tests(output_directory, verbose, suppress_diff):
         return files
 
     def diff(filename1, filename2):
-        # Python's difflib module is too slow, especially on long output, so
-        # run external diff(1) command
-        cmd = ['diff',
-               '-u',  # unified format
-               '-N',  # treat absent files as empty
-               filename1,
-               filename2]
-        # Return output and don't raise exception, even though diff(1) has
-        # non-zero exit if files differ.
-        return executive.run_command(cmd, error_handler=lambda x: None)
+        with open(filename1) as file1:
+            file1_lines = file1.readlines()
+        with open(filename2) as file2:
+            file2_lines = file2.readlines()
+
+        # Use Python's difflib module so that diffing works across platforms
+        return ''.join(difflib.context_diff(file1_lines, file2_lines))
 
     def is_cache_file(filename):
         return filename.endswith('.cache')
@@ -332,11 +332,6 @@ def bindings_tests(output_directory, verbose, suppress_diff):
                                             info_provider, options)
             generate_bindings(
                 CodeGeneratorV8,
-                info_provider,
-                options,
-                idl_filenames)
-            generate_bindings(
-                CodeGeneratorWebAgentAPI,
                 info_provider,
                 options,
                 idl_filenames)

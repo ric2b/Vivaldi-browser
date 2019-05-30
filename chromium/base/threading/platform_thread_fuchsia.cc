@@ -31,14 +31,15 @@ void PlatformThread::SetName(const std::string& name) {
 }
 
 // static
-bool PlatformThread::CanIncreaseCurrentThreadPriority() {
+bool PlatformThread::CanIncreaseThreadPriority(ThreadPriority priority) {
   return false;
 }
 
 // static
-void PlatformThread::SetCurrentThreadPriority(ThreadPriority priority) {
+void PlatformThread::SetCurrentThreadPriorityImpl(ThreadPriority priority) {
   if (priority != ThreadPriority::NORMAL) {
-    NOTIMPLEMENTED() << "setting ThreadPriority " << static_cast<int>(priority);
+    // TODO(https://crbug.com/926583): Fuchsia does not currently support this.
+    NOTIMPLEMENTED_LOG_ONCE() << " to non-NORMAL priority.";
   }
 }
 

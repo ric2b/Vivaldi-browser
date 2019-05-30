@@ -44,10 +44,14 @@ class TestWindowServiceDelegate : public WindowServiceDelegate {
 
   bool cancel_drag_loop_called() const { return cancel_drag_loop_called_; }
 
+  void set_topmost(aura::Window* window) { topmost_ = window; }
+  void set_real_topmost(aura::Window* window) { real_topmost_ = window; }
+
   DragDropCompletedCallback TakeDragLoopCallback();
 
   // WindowServiceDelegate:
   std::unique_ptr<aura::Window> NewTopLevel(
+      TopLevelProxyWindow* top_level_proxy_window,
       aura::PropertyConverter* property_converter,
       const base::flat_map<std::string, std::vector<uint8_t>>& properties)
       override;
@@ -55,6 +59,7 @@ class TestWindowServiceDelegate : public WindowServiceDelegate {
   void RunWindowMoveLoop(aura::Window* window,
                          mojom::MoveLoopSource source,
                          const gfx::Point& cursor,
+                         int window_component,
                          DoneCallback callback) override;
   void CancelWindowMoveLoop() override;
   void RunDragLoop(aura::Window* window,
@@ -64,6 +69,11 @@ class TestWindowServiceDelegate : public WindowServiceDelegate {
                    ui::DragDropTypes::DragEventSource source,
                    DragDropCompletedCallback callback) override;
   void CancelDragLoop(aura::Window* window) override;
+  ui::EventTarget* GetGlobalEventTarget() override;
+  aura::Window* GetRootWindowForDisplayId(int64_t display_id) override;
+  aura::Window* GetTopmostWindowAtPoint(const gfx::Point& location_in_screen,
+                                        const std::set<aura::Window*>& ignore,
+                                        aura::Window** real_topmost) override;
 
  private:
   aura::Window* top_level_parent_;
@@ -80,6 +90,9 @@ class TestWindowServiceDelegate : public WindowServiceDelegate {
 
   bool cancel_window_move_loop_called_ = false;
   bool cancel_drag_loop_called_ = false;
+
+  aura::Window* topmost_ = nullptr;
+  aura::Window* real_topmost_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(TestWindowServiceDelegate);
 };

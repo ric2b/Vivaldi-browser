@@ -32,9 +32,14 @@ class LayoutFieldset final : public LayoutBlockFlow {
  public:
   explicit LayoutFieldset(Element*);
 
-  LayoutBox* FindInFlowLegend() const;
+  static LayoutBox* FindInFlowLegend(const LayoutBlock& fieldset);
+  LayoutBox* FindInFlowLegend() const { return FindInFlowLegend(*this); }
 
   const char* GetName() const override { return "LayoutFieldset"; }
+
+  bool CreatesNewFormattingContext() const final { return true; }
+
+  bool BackgroundIsKnownToBeOpaqueInRect(const LayoutRect&) const override;
 
  private:
   bool IsOfType(LayoutObjectType type) const override {

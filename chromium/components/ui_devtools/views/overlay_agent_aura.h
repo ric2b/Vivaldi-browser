@@ -5,12 +5,18 @@
 #ifndef COMPONENTS_UI_DEVTOOLS_VIEWS_OVERLAY_AGENT_AURA_H_
 #define COMPONENTS_UI_DEVTOOLS_VIEWS_OVERLAY_AGENT_AURA_H_
 
+#include <vector>
+
 #include "components/ui_devtools/Overlay.h"
 #include "components/ui_devtools/overlay_agent.h"
 #include "components/ui_devtools/views/dom_agent_aura.h"
 #include "ui/compositor/layer_delegate.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/native_widget_types.h"
+
+namespace aura {
+class Env;
+}
 
 namespace gfx {
 class RenderText;
@@ -35,14 +41,19 @@ class OverlayAgentAura : public OverlayAgent,
                          public ui::EventHandler,
                          public ui::LayerDelegate {
  public:
-  explicit OverlayAgentAura(DOMAgentAura* dom_agent);
+  OverlayAgentAura(DOMAgentAura* dom_agent, aura::Env* env);
   ~OverlayAgentAura() override;
-  int pinned_id() const { return pinned_id_; };
+
+  static OverlayAgentAura* GetInstance() { return overlay_agent_aura_; }
+
+  void RegisterEnv(aura::Env* env);
+
+  int pinned_id() const { return pinned_id_; }
   void SetPinnedNodeId(int pinned_id);
 
   // Overlay::Backend:
   protocol::Response setInspectMode(
-      const String& in_mode,
+      const protocol::String& in_mode,
       protocol::Maybe<protocol::Overlay::HighlightConfig> in_highlightConfig)
       override;
   protocol::Response highlightNode(
@@ -52,24 +63,32 @@ class OverlayAgentAura : public OverlayAgent,
 
   HighlightRectsConfiguration highlight_rect_config() const {
     return highlight_rect_config_;
-  };
+  }
 
-  // Return the id of the UI element targeted by an event located at |p|, where
-  // |p| is in the local coodinate space of |root_window|. The function
-  // first searches for the targeted window, then the targeted widget (if one
-  // exists), then the targeted view (if one exists). Return 0 if no valid
-  // target is found.
-  int FindElementIdTargetedByPoint(const gfx::Point& p,
-                                   gfx::NativeWindow root_window) const;
+  // Return the id of the UI element located at |event|'s root location.
+  // The function first searches for the targeted window, then the targeted
+  // widget (if one exists), then the targeted view (if one exists). Return 0 if
+  // no valid target is found.
+  int FindElementIdTargetedByPoint(ui::LocatedEvent* event) const;
+
+ private:
+  FRIEND_TEST_ALL_PREFIXES(OverlayAgentTest,
+                           MouseEventsGenerateFEEventsInInspectMode);
+  FRIEND_TEST_ALL_PREFIXES(OverlayAgentTest, HighlightRects);
+  FRIEND_TEST_ALL_PREFIXES(OverlayAgentTest, HighlightNonexistentNode);
+  FRIEND_TEST_ALL_PREFIXES(OverlayAgentTest, HighlightWidget);
+#if defined(USE_AURA)
+  FRIEND_TEST_ALL_PREFIXES(OverlayAgentTest, HighlightWindow);
+  FRIEND_TEST_ALL_PREFIXES(OverlayAgentTest, HighlightEmptyOrInvisibleWindow);
+#endif
+  protocol::Response HighlightNode(int node_id, bool show_size = false);
+  // Returns true when there is any visible element to highlight.
+  bool UpdateHighlight(
+      const std::pair<gfx::NativeWindow, gfx::Rect>& window_and_screen_bounds);
 
   // Shows the distances between the nodes identified by |pinned_id| and
   // |element_id| in the highlight overlay.
   void ShowDistancesInHighlightOverlay(int pinned_id, int element_id);
-
- private:
-  protocol::Response HighlightNode(int node_id, bool show_size = false);
-  void UpdateHighlight(
-      const std::pair<gfx::NativeWindow, gfx::Rect>& window_and_bounds);
 
   // ui:EventHandler:
   void OnMouseEvent(ui::MouseEvent* event) override;
@@ -80,14 +99,24 @@ class OverlayAgentAura : public OverlayAgent,
   void OnDeviceScaleFactorChanged(float old_device_scale_factor,
                                   float new_device_scale_factor) override {}
 
+  ui::Layer* layer_for_highlighting() { return layer_for_highlighting_.get(); }
+
+  static OverlayAgentAura* overlay_agent_aura_;
+
+  std::vector<aura::Env*> envs_;
   std::unique_ptr<gfx::RenderText> render_text_;
   bool show_size_on_canvas_ = false;
   HighlightRectsConfiguration highlight_rect_config_;
   bool is_swap_ = false;
 
+  // The layer used to paint highlights, and its offset from the screen origin.
   std::unique_ptr<ui::Layer> layer_for_highlighting_;
+  gfx::Vector2d layer_for_highlighting_screen_offset_;
+
+  // Hovered and pinned element bounds in screen coordinates; empty if none.
   gfx::Rect hovered_rect_;
   gfx::Rect pinned_rect_;
+
   int pinned_id_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(OverlayAgentAura);

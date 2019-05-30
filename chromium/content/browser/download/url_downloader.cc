@@ -4,10 +4,12 @@
 
 #include "content/browser/download/url_downloader.h"
 
+#include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/sequenced_task_runner.h"
+#include "base/task/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/download/public/common/download_create_info.h"
 #include "components/download/public/common/download_interrupt_reasons.h"
@@ -16,12 +18,17 @@
 #include "components/download/public/common/url_download_request_handle.h"
 #include "content/browser/byte_stream.h"
 #include "content/browser/download/byte_stream_input_stream.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/download_request_utils.h"
+#include "content/public/common/child_process_host.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
+#include "net/base/upload_progress.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
+#include "services/network/upload_progress_tracker.h"
 #include "ui/base/page_transition_types.h"
 
 namespace content {
@@ -39,14 +46,16 @@ std::unique_ptr<UrlDownloader> UrlDownloader::BeginDownload(
       Referrer::SanitizeForRequest(request->url(), referrer);
   Referrer::SetReferrerForRequest(request.get(), sanitized_referrer);
 
+  // TODO(xingliu): Figure out if we can support blob scheme.
   if (request->url().SchemeIs(url::kBlobScheme))
     return nullptr;
 
   // From this point forward, the |UrlDownloader| is responsible for
   // |started_callback|.
-  std::unique_ptr<UrlDownloader> downloader(
-      new UrlDownloader(std::move(request), delegate, is_parallel_request,
-                        params->request_origin(), params->download_source()));
+  auto downloader = std::make_unique<UrlDownloader>(
+      std::move(request), delegate, is_parallel_request,
+      params->request_origin(), params->follow_cross_origin_redirects(),
+      params->download_source(), params->upload_callback());
   downloader->Start();
 
   return downloader;
@@ -57,7 +66,10 @@ UrlDownloader::UrlDownloader(
     base::WeakPtr<download::UrlDownloadHandler::Delegate> delegate,
     bool is_parallel_request,
     const std::string& request_origin,
-    download::DownloadSource download_source)
+    bool follow_cross_origin_redirects,
+    download::DownloadSource download_source,
+    const download::DownloadUrlParameters::UploadProgressCallback&
+        upload_callback)
     : request_(std::move(request)),
       delegate_(delegate),
       core_(request_.get(),
@@ -65,28 +77,49 @@ UrlDownloader::UrlDownloader(
             is_parallel_request,
             request_origin,
             download_source),
+      follow_cross_origin_redirects_(follow_cross_origin_redirects),
+      upload_callback_(upload_callback),
       weak_ptr_factory_(this) {}
 
-UrlDownloader::~UrlDownloader() {
-}
+UrlDownloader::~UrlDownloader() = default;
 
 void UrlDownloader::Start() {
   DCHECK(!request_->is_pending());
 
+  if (request_->has_upload() && upload_callback_) {
+    upload_progress_tracker_ = std::make_unique<network::UploadProgressTracker>(
+        FROM_HERE,
+        base::BindRepeating(&UrlDownloader::OnUploadProgressReport,
+                            weak_ptr_factory_.GetWeakPtr()),
+        request_.get());
+  }
   request_->set_delegate(this);
   request_->Start();
+}
+
+void UrlDownloader::OnUploadProgressReport(
+    const net::UploadProgress& upload_progress) {
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
+      base::BindOnce(upload_callback_, upload_progress.position()));
 }
 
 void UrlDownloader::OnReceivedRedirect(net::URLRequest* request,
                                        const net::RedirectInfo& redirect_info,
                                        bool* defer_redirect) {
-  DVLOG(1) << "OnReceivedRedirect: " << request_->url().spec();
-  // We are going to block redirects even if DownloadRequestCore allows it.  No
-  // redirects are expected for download requests that are made without a
-  // renderer, which are currently exclusively resumption requests. Since there
-  // is no security policy being applied here, it's safer to block redirects and
-  // revisit if some previously unknown legitimate use case arises for redirects
-  // while resuming.
+  DVLOG(1) << __func__ << " , request url: " << request_->url().spec()
+           << " ,redirect url:" << redirect_info.new_url;
+  if (follow_cross_origin_redirects_) {
+    if (!DownloadRequestUtils::IsURLSafe(ChildProcessHost::kInvalidUniqueID,
+                                         redirect_info.new_url)) {
+      core_.OnWillAbort(
+          download::DOWNLOAD_INTERRUPT_REASON_NETWORK_INVALID_REQUEST);
+      request_->CancelWithError(net::ERR_UNSAFE_REDIRECT);
+    }
+    return;
+  }
+
+  // Block redirects since there is no security policy being applied here.
   core_.OnWillAbort(download::DOWNLOAD_INTERRUPT_REASON_SERVER_UNREACHABLE);
   request_->CancelWithError(net::ERR_UNSAFE_REDIRECT);
 }
@@ -96,8 +129,19 @@ void UrlDownloader::OnResponseStarted(net::URLRequest* request, int net_error) {
 
   DVLOG(1) << "OnResponseStarted: " << request_->url().spec();
 
+  if (upload_progress_tracker_)
+    upload_progress_tracker_->OnUploadCompleted();
+
   if (net_error != net::OK) {
     ResponseCompleted(net_error);
+    return;
+  }
+
+  if (!DownloadRequestUtils::IsURLSafe(ChildProcessHost::kInvalidUniqueID,
+                                       request_->url())) {
+    core_.OnWillAbort(
+        download::DOWNLOAD_INTERRUPT_REASON_NETWORK_INVALID_REQUEST);
+    request_->CancelWithError(net::ERR_DISALLOWED_URL_SCHEME);
     return;
   }
 
@@ -188,8 +232,8 @@ void UrlDownloader::OnStart(
   create_info->request_handle.reset(new download::UrlDownloadRequestHandle(
       weak_ptr_factory_.GetWeakPtr(), base::SequencedTaskRunnerHandle::Get()));
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(
           &download::UrlDownloadHandler::Delegate::OnUrlDownloadStarted,
           delegate_, std::move(create_info),
@@ -214,8 +258,8 @@ void UrlDownloader::CancelRequest() {
 }
 
 void UrlDownloader::Destroy() {
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(
           &download::UrlDownloadHandler::Delegate::OnUrlDownloadStopped,
           delegate_, this));

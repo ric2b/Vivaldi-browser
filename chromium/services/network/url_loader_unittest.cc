@@ -11,6 +11,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
@@ -30,6 +32,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "mojo/public/c/system/data_pipe.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/data_pipe_utils.h"
 #include "mojo/public/cpp/system/wait.h"
 #include "net/base/io_buffer.h"
@@ -37,6 +40,7 @@
 #include "net/base/mime_sniffer.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_info.h"
+#include "net/ssl/client_cert_identity_test_util.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -275,9 +279,11 @@ class URLRequestSimulatedCacheJob : public net::URLRequestJob {
   URLRequestSimulatedCacheJob(
       net::URLRequest* request,
       net::NetworkDelegate* network_delegate,
-      scoped_refptr<net::IOBuffer>* simulated_cache_dest)
+      scoped_refptr<net::IOBuffer>* simulated_cache_dest,
+      bool use_text_plain)
       : URLRequestJob(request, network_delegate),
         simulated_cache_dest_(simulated_cache_dest),
+        use_text_plain_(use_text_plain),
         weak_factory_(this) {}
 
   // net::URLRequestJob implementation:
@@ -285,6 +291,15 @@ class URLRequestSimulatedCacheJob : public net::URLRequestJob {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::BindOnce(&URLRequestSimulatedCacheJob::StartAsync,
                                   weak_factory_.GetWeakPtr()));
+  }
+
+  void GetResponseInfo(net::HttpResponseInfo* info) override {
+    if (!use_text_plain_)
+      return URLRequestJob::GetResponseInfo(info);
+    if (!info->headers) {
+      info->headers = net::HttpResponseHeaders::TryToCreate(
+          "HTTP/1.1 200 OK\r\nContent-Type: text/plain");
+    }
   }
 
   int ReadRawData(net::IOBuffer* buf, int buf_size) override {
@@ -305,6 +320,7 @@ class URLRequestSimulatedCacheJob : public net::URLRequestJob {
   void StartAsync() { NotifyHeadersComplete(); }
 
   scoped_refptr<net::IOBuffer>* simulated_cache_dest_;
+  bool use_text_plain_;
   base::WeakPtrFactory<URLRequestSimulatedCacheJob> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(URLRequestSimulatedCacheJob);
@@ -313,41 +329,22 @@ class URLRequestSimulatedCacheJob : public net::URLRequestJob {
 class SimulatedCacheInterceptor : public net::URLRequestInterceptor {
  public:
   explicit SimulatedCacheInterceptor(
-      scoped_refptr<net::IOBuffer>* simulated_cache_dest)
-      : simulated_cache_dest_(simulated_cache_dest) {}
+      scoped_refptr<net::IOBuffer>* simulated_cache_dest,
+      bool use_text_plain)
+      : simulated_cache_dest_(simulated_cache_dest),
+        use_text_plain_(use_text_plain) {}
 
   net::URLRequestJob* MaybeInterceptRequest(
       net::URLRequest* request,
       net::NetworkDelegate* network_delegate) const override {
-    return new URLRequestSimulatedCacheJob(request, network_delegate,
-                                           simulated_cache_dest_);
+    return new URLRequestSimulatedCacheJob(
+        request, network_delegate, simulated_cache_dest_, use_text_plain_);
   }
 
  private:
   scoped_refptr<net::IOBuffer>* simulated_cache_dest_;
+  bool use_text_plain_;
   DISALLOW_COPY_AND_ASSIGN(SimulatedCacheInterceptor);
-};
-
-class RequestInterceptor : public net::URLRequestInterceptor {
- public:
-  using InterceptCallback = base::Callback<void(net::URLRequest*)>;
-
-  explicit RequestInterceptor(const InterceptCallback& callback)
-      : callback_(callback) {}
-  ~RequestInterceptor() override {}
-
-  // URLRequestInterceptor implementation:
-  net::URLRequestJob* MaybeInterceptRequest(
-      net::URLRequest* request,
-      net::NetworkDelegate* network_delegate) const override {
-    callback_.Run(request);
-    return nullptr;
-  }
-
- private:
-  InterceptCallback callback_;
-
-  DISALLOW_COPY_AND_ASSIGN(RequestInterceptor);
 };
 
 // Returns whether monitoring was successfully set up. If yes,
@@ -439,16 +436,16 @@ class URLLoaderTest : public testing::Test {
     url_loader = std::make_unique<URLLoader>(
         context(), network_service_client.get(),
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
-        mojo::MakeRequest(&loader), options, request, false,
+        mojo::MakeRequest(&loader), options, request,
         client_.CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
         0 /* request_id */, resource_scheduler_client(), nullptr,
-        nullptr /* network_usage_accumulator */);
+        nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
     ran_ = true;
 
     if (expect_redirect_) {
       client_.RunUntilRedirectReceived();
-      loader->FollowRedirect(base::nullopt, base::nullopt);
+      loader->FollowRedirect({}, {}, base::nullopt);
     }
 
     if (body) {
@@ -537,15 +534,6 @@ class URLLoaderTest : public testing::Test {
     EXPECT_EQ(net::OK, Load(MultipleWritesInterceptor::GetURL(), &actual_body));
 
     EXPECT_EQ(actual_body, expected_body);
-  }
-
-  // Adds an interceptor that can examine the URLRequest object.
-  void AddRequestObserver(
-      const GURL& url,
-      const RequestInterceptor::InterceptCallback& callback) {
-    net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
-        url, std::unique_ptr<net::URLRequestInterceptor>(
-                 new RequestInterceptor(callback)));
   }
 
   net::EmbeddedTestServer* test_server() { return &test_server_; }
@@ -688,6 +676,8 @@ class URLLoaderTest : public testing::Test {
   const net::test_server::HttpRequest& sent_request() const {
     return sent_request_;
   }
+
+  void RunUntilIdle() { scoped_task_environment_.RunUntilIdle(); }
 
   static constexpr int kProcessId = 4;
   static constexpr int kRouteId = 8;
@@ -839,7 +829,7 @@ TEST_F(URLLoaderTest, RespectNoSniff) {
   set_sniff();
   EXPECT_EQ(net::OK, Load(test_server()->GetURL("/nosniff-test.html")));
   EXPECT_FALSE(did_mime_sniff());
-  ASSERT_TRUE(mime_type().empty());
+  ASSERT_EQ(std::string("text/plain"), mime_type());
 }
 
 TEST_F(URLLoaderTest, SniffTextPlainDoesNotResultInHTML) {
@@ -974,10 +964,10 @@ TEST_F(URLLoaderTest, DestroyOnURLLoaderPipeClosed) {
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), 0, request, false,
-      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
-      0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   // Run until the response body pipe arrives, to make sure that a live body
   // pipe does not result in keeping the loader alive when the URLLoader pipe is
@@ -1026,10 +1016,10 @@ TEST_F(URLLoaderTest, CloseResponseBodyConsumerBeforeProducer) {
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), 0, request, false,
-      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
-      0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   client()->RunUntilResponseBodyArrived();
   EXPECT_TRUE(client()->has_received_response());
@@ -1080,10 +1070,10 @@ TEST_F(URLLoaderTest, PauseReadingBodyFromNetBeforeResponseHeaders) {
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), 0, request, false,
-      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
-      0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   // Pausing reading response body from network stops future reads from the
   // underlying URLRequest. So no data should be sent using the response body
@@ -1156,10 +1146,10 @@ TEST_F(URLLoaderTest, PauseReadingBodyFromNetWhenReadIsPending) {
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), 0, request, false,
-      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
-      0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   response_controller.WaitForRequest();
   response_controller.Send(
@@ -1221,10 +1211,10 @@ TEST_F(URLLoaderTest, ResumeReadingBodyFromNetAfterClosingConsumer) {
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), 0, request, false,
-      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
-      0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   loader->PauseReadingBodyFromNet();
   loader.FlushForTesting();
@@ -1281,10 +1271,10 @@ TEST_F(URLLoaderTest, MultiplePauseResumeReadingBodyFromNet) {
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), 0, request, false,
-      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
-      0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   // It is okay to call ResumeReadingBodyFromNet() even if there is no prior
   // PauseReadingBodyFromNet().
@@ -1463,10 +1453,10 @@ TEST_F(URLLoaderTest, UploadFileCanceled) {
   std::unique_ptr<URLLoader> url_loader = std::make_unique<URLLoader>(
       context(), network_service_client.get(),
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), 0, request, false,
-      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
-      0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   mojom::NetworkServiceClient::OnFileUploadRequestedCallback callback;
   network_service_client->RunUntilUploadRequested(&callback);
@@ -1647,11 +1637,11 @@ TEST_F(URLLoaderTest, UploadChunkedDataPipe) {
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), 0, request, false /* report_raw_headers */,
-      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
-      0 /* request_id */, nullptr /* resource_scheduler_client */,
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      nullptr /* resource_scheduler_client */,
       nullptr /* keepalive_statistics_reporter */,
-      nullptr /* network_usage_accumulator */);
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   mojom::ChunkedDataPipeGetter::GetSizeCallback get_size_callback =
       data_pipe_getter.WaitForGetSize();
@@ -1715,10 +1705,10 @@ TEST_F(URLLoaderTest, RedirectModifiedHeaders) {
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), mojom::kURLLoadOptionNone, request, false,
+      mojo::MakeRequest(&loader), mojom::kURLLoadOptionNone, request,
       client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   client()->RunUntilRedirectReceived();
 
@@ -1732,7 +1722,7 @@ TEST_F(URLLoaderTest, RedirectModifiedHeaders) {
   net::HttpRequestHeaders redirect_headers;
   redirect_headers.SetHeader("Header2", "");
   redirect_headers.SetHeader("Header3", "Value3");
-  loader->FollowRedirect(base::nullopt, redirect_headers);
+  loader->FollowRedirect({}, redirect_headers, base::nullopt);
 
   client()->RunUntilComplete();
   delete_run_loop.Run();
@@ -1760,10 +1750,10 @@ TEST_F(URLLoaderTest, RedirectRemoveHeader) {
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), mojom::kURLLoadOptionNone, request, false,
+      mojo::MakeRequest(&loader), mojom::kURLLoadOptionNone, request,
       client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   client()->RunUntilRedirectReceived();
 
@@ -1773,8 +1763,8 @@ TEST_F(URLLoaderTest, RedirectRemoveHeader) {
   EXPECT_EQ("Value2", request_headers1.find("Header2")->second);
 
   // Remove Header1.
-  std::vector<std::string> to_be_removed_request_headers = {"Header1"};
-  loader->FollowRedirect(to_be_removed_request_headers, base::nullopt);
+  std::vector<std::string> removed_headers = {"Header1"};
+  loader->FollowRedirect(removed_headers, {}, base::nullopt);
 
   client()->RunUntilComplete();
   delete_run_loop.Run();
@@ -1801,10 +1791,10 @@ TEST_F(URLLoaderTest, RedirectRemoveHeaderAndAddItBack) {
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), mojom::kURLLoadOptionNone, request, false,
+      mojo::MakeRequest(&loader), mojom::kURLLoadOptionNone, request,
       client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   client()->RunUntilRedirectReceived();
 
@@ -1814,10 +1804,10 @@ TEST_F(URLLoaderTest, RedirectRemoveHeaderAndAddItBack) {
   EXPECT_EQ("Value2", request_headers1.find("Header2")->second);
 
   // Remove Header1 and add it back using a different value.
-  std::vector<std::string> to_be_removed_request_headers = {"Header1"};
-  net::HttpRequestHeaders redirect_headers;
-  redirect_headers.SetHeader("Header1", "NewValue1");
-  loader->FollowRedirect(to_be_removed_request_headers, redirect_headers);
+  std::vector<std::string> removed_headers = {"Header1"};
+  net::HttpRequestHeaders modified_headers;
+  modified_headers.SetHeader("Header1", "NewValue1");
+  loader->FollowRedirect(removed_headers, modified_headers, base::nullopt);
 
   client()->RunUntilComplete();
   delete_run_loop.Run();
@@ -1918,10 +1908,10 @@ TEST_F(URLLoaderTest, ResourceSchedulerIntegration) {
     std::unique_ptr<URLLoader> url_loader = std::make_unique<URLLoader>(
         context(), nullptr /* network_service_client */,
         NeverInvokedDeleteLoaderCallback(),
-        mojo::MakeRequest(&loaderInterfacePtr), 0, request, false,
+        mojo::MakeRequest(&loaderInterfacePtr), 0, request,
         client.CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
         0 /* request_id */, resource_scheduler_client(), nullptr,
-        nullptr /* network_usage_accumulator */);
+        nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
     loaders.emplace_back(
         std::make_pair(std::move(url_loader), std::move(loaderInterfacePtr)));
@@ -1939,10 +1929,10 @@ TEST_F(URLLoaderTest, ResourceSchedulerIntegration) {
   std::unique_ptr<URLLoader> loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       NeverInvokedDeleteLoaderCallback(),
-      mojo::MakeRequest(&loader_interface_ptr), 0, request, false,
+      mojo::MakeRequest(&loader_interface_ptr), 0, request,
       client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
   base::RunLoop().RunUntilIdle();
 
   // Make sure that the ResourceScheduler throttles this request.
@@ -1974,10 +1964,10 @@ TEST_F(URLLoaderTest, ReadPipeClosedWhileReadTaskPosted) {
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), mojom::kURLLoadOptionNone, request, false,
+      mojo::MakeRequest(&loader), mojom::kURLLoadOptionNone, request,
       client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   client()->RunUntilResponseBodyArrived();
   client()->response_body_release();
@@ -2028,10 +2018,10 @@ TEST_F(URLLoaderTest, EnterSuspendModeWhileNoPendingRead) {
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), mojom::kURLLoadOptionNone, request, false,
+      mojo::MakeRequest(&loader), mojom::kURLLoadOptionNone, request,
       client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   // This will spin the run loop until the Mojo read buffer is full. The
   // URLLoader will end up waiting for Mojo to give it more read buffer space.
@@ -2046,14 +2036,17 @@ TEST_F(URLLoaderTest, EnterSuspendModeWhileNoPendingRead) {
   unowned_power_monitor_source->Resume();
 }
 
-TEST_F(URLLoaderTest, EnterSuspendDiskCacheWriteQueued) {
-  // Test to make sure that fetch abort on suspend doesn't yank out the backing
-  // for IOBuffer for an issued disk_cache Write.
-
+// This tests the case where suspend mode is entered when a job is trying to do
+// mime detection, but is paused and therefore does not have a pending read to
+// provide partial data.
+TEST_F(URLLoaderTest, EnterSuspendModePaused) {
   GURL url("http://www.example.com");
   scoped_refptr<net::IOBuffer> simulated_cache_dest;
+  // Using SimulatedCacheInterceptor here since it marks the read pending,
+  // which avoids races between various events.
   net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
-      url, std::make_unique<SimulatedCacheInterceptor>(&simulated_cache_dest));
+      url, std::make_unique<SimulatedCacheInterceptor>(
+               &simulated_cache_dest, true /* use_text_plain */));
 
   std::unique_ptr<TestPowerMonitorSource> power_monitor_source =
       std::make_unique<TestPowerMonitorSource>();
@@ -2072,10 +2065,54 @@ TEST_F(URLLoaderTest, EnterSuspendDiskCacheWriteQueued) {
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), mojom::kURLLoadOptionNone, request, false,
+      mojo::MakeRequest(&loader), mojom::kURLLoadOptionSniffMimeType, request,
       client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
+
+  url_loader->PauseReadingBodyFromNet();
+  base::RunLoop().RunUntilIdle();
+
+  unowned_power_monitor_source->Suspend();
+
+  client()->RunUntilComplete();
+  EXPECT_EQ(net::ERR_ABORTED, client()->completion_status().error_code);
+  delete_run_loop.Run();
+
+  unowned_power_monitor_source->Resume();
+}
+
+TEST_F(URLLoaderTest, EnterSuspendDiskCacheWriteQueued) {
+  // Test to make sure that fetch abort on suspend doesn't yank out the backing
+  // for IOBuffer for an issued disk_cache Write.
+
+  GURL url("http://www.example.com");
+  scoped_refptr<net::IOBuffer> simulated_cache_dest;
+  net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
+      url, std::make_unique<SimulatedCacheInterceptor>(
+               &simulated_cache_dest, false /* use_text_plain */));
+
+  std::unique_ptr<TestPowerMonitorSource> power_monitor_source =
+      std::make_unique<TestPowerMonitorSource>();
+  TestPowerMonitorSource* unowned_power_monitor_source =
+      power_monitor_source.get();
+  base::PowerMonitor power_monitor(std::move(power_monitor_source));
+
+  ResourceRequest request = CreateResourceRequest("GET", url);
+
+  base::RunLoop delete_run_loop;
+  mojom::URLLoaderPtr loader;
+  std::unique_ptr<URLLoader> url_loader;
+  mojom::URLLoaderFactoryParams params;
+  params.process_id = mojom::kBrowserProcessId;
+  params.is_corb_enabled = false;
+  url_loader = std::make_unique<URLLoader>(
+      context(), nullptr /* network_service_client */,
+      DeleteLoaderCallback(&delete_run_loop, &url_loader),
+      mojo::MakeRequest(&loader), mojom::kURLLoadOptionNone, request,
+      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      0 /* request_id */, resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   // Spin until the job has produced a (simulated) cache write.
   base::RunLoop().RunUntilIdle();
@@ -2094,17 +2131,57 @@ TEST_F(URLLoaderTest, EnterSuspendDiskCacheWriteQueued) {
   EXPECT_EQ('a', simulated_cache_dest->data()[0]);
 }
 
-// A mock NetworkServiceClient that responds auth challenges with previously
-// set credentials.
-class TestAuthNetworkServiceClient : public mojom::NetworkServiceClient {
+class FakeSSLPrivateKeyImpl : public network::mojom::SSLPrivateKey {
  public:
-  TestAuthNetworkServiceClient() = default;
-  ~TestAuthNetworkServiceClient() override = default;
+  explicit FakeSSLPrivateKeyImpl(
+      scoped_refptr<net::SSLPrivateKey> ssl_private_key)
+      : ssl_private_key_(std::move(ssl_private_key)) {}
+  ~FakeSSLPrivateKeyImpl() override {}
+
+  // network::mojom::SSLPrivateKey:
+  void Sign(uint16_t algorithm,
+            const std::vector<uint8_t>& input,
+            network::mojom::SSLPrivateKey::SignCallback callback) override {
+    base::span<const uint8_t> input_span(input);
+    ssl_private_key_->Sign(
+        algorithm, input_span,
+        base::BindOnce(&FakeSSLPrivateKeyImpl::Callback, base::Unretained(this),
+                       std::move(callback)));
+  }
+
+ private:
+  void Callback(network::mojom::SSLPrivateKey::SignCallback callback,
+                net::Error net_error,
+                const std::vector<uint8_t>& signature) {
+    std::move(callback).Run(static_cast<int32_t>(net_error), signature);
+  }
+
+  scoped_refptr<net::SSLPrivateKey> ssl_private_key_;
+
+  DISALLOW_COPY_AND_ASSIGN(FakeSSLPrivateKeyImpl);
+};
+
+// A mock NetworkServiceClient that does the following:
+// 1. Responds auth challenges with previously set credentials.
+// 2. Responds certificate request with previously set responses.
+class MockNetworkServiceClient : public mojom::NetworkServiceClient {
+ public:
+  MockNetworkServiceClient() = default;
+  ~MockNetworkServiceClient() override = default;
 
   enum class CredentialsResponse {
     NO_CREDENTIALS,
     CORRECT_CREDENTIALS,
     INCORRECT_CREDENTIALS_THEN_CORRECT_ONES,
+  };
+
+  enum class CertificateResponse {
+    INVALID = -1,
+    URL_LOADER_REQUEST_CANCELLED,
+    CANCEL_CERTIFICATE_SELECTION,
+    NULL_CERTIFICATE,
+    VALID_CERTIFICATE_SIGNATURE,
+    INVALID_CERTIFICATE_SIGNATURE,
   };
 
   // mojom::NetworkServiceClient:
@@ -2139,13 +2216,40 @@ class TestAuthNetworkServiceClient : public mojom::NetworkServiceClient {
   }
 
   void OnCertificateRequested(
+      const base::Optional<base::UnguessableToken>& window_id,
       uint32_t process_id,
       uint32_t routing_id,
       uint32_t request_id,
       const scoped_refptr<net::SSLCertRequestInfo>& cert_info,
       mojom::NetworkServiceClient::OnCertificateRequestedCallback callback)
       override {
-    NOTREACHED();
+    switch (certificate_response_) {
+      case CertificateResponse::INVALID:
+        NOTREACHED();
+        break;
+      case CertificateResponse::URL_LOADER_REQUEST_CANCELLED:
+        ASSERT_TRUE(url_loader_ptr_);
+        url_loader_ptr_->reset();
+        break;
+      case CertificateResponse::CANCEL_CERTIFICATE_SELECTION:
+        std::move(callback).Run(nullptr, std::string(), std::vector<uint16_t>(),
+                                nullptr,
+                                true /* cancel_certificate_selection */);
+        break;
+      case CertificateResponse::NULL_CERTIFICATE:
+        std::move(callback).Run(nullptr, std::string(), std::vector<uint16_t>(),
+                                nullptr,
+                                false /* cancel_certificate_selection */);
+        break;
+      case CertificateResponse::VALID_CERTIFICATE_SIGNATURE:
+      case CertificateResponse::INVALID_CERTIFICATE_SIGNATURE:
+        std::move(callback).Run(std::move(certificate_), provider_name_,
+                                algorithm_preferences_,
+                                std::move(ssl_private_key_ptr_),
+                                false /* cancel_certificate_selection */);
+        break;
+    }
+    ++on_certificate_requested_counter_;
   }
 
   void OnSSLCertificateError(uint32_t process_id,
@@ -2175,6 +2279,12 @@ class TestAuthNetworkServiceClient : public mojom::NetworkServiceClient {
     NOTREACHED();
   }
 
+#if defined(OS_CHROMEOS)
+  void OnTrustAnchorUsed(const std::string& username_hash) override {
+    NOTREACHED();
+  }
+#endif
+
   void OnFileUploadRequested(uint32_t process_id,
                              bool async,
                              const std::vector<base::FilePath>& file_paths,
@@ -2196,6 +2306,21 @@ class TestAuthNetworkServiceClient : public mojom::NetworkServiceClient {
     NOTREACHED();
   }
 
+  void OnDataUseUpdate(int32_t network_traffic_annotation_id_hash,
+                       int64_t recv_bytes,
+                       int64_t sent_bytes) override {}
+
+#if defined(OS_ANDROID)
+  void OnGenerateHttpNegotiateAuthToken(
+      const std::string& server_auth_token,
+      bool can_delegate,
+      const std::string& auth_negotiate_android_account_type,
+      const std::string& spn,
+      OnGenerateHttpNegotiateAuthTokenCallback callback) override {
+    NOTREACHED();
+  }
+#endif
+
   void set_credentials_response(CredentialsResponse credentials_response) {
     credentials_response_ = credentials_response;
   }
@@ -2206,19 +2331,53 @@ class TestAuthNetworkServiceClient : public mojom::NetworkServiceClient {
     return last_seen_response_headers_.get();
   }
 
+  void set_certificate_response(CertificateResponse certificate_response) {
+    certificate_response_ = certificate_response;
+  }
+
+  void set_url_loader_ptr(mojom::URLLoaderPtr* url_loader_ptr) {
+    url_loader_ptr_ = url_loader_ptr;
+  }
+
+  void set_private_key(scoped_refptr<net::SSLPrivateKey> ssl_private_key) {
+    ssl_private_key_ = std::move(ssl_private_key);
+    provider_name_ = ssl_private_key_->GetProviderName();
+    algorithm_preferences_ = ssl_private_key_->GetAlgorithmPreferences();
+    auto ssl_private_key_request = mojo::MakeRequest(&ssl_private_key_ptr_);
+    mojo::MakeStrongBinding(
+        std::make_unique<FakeSSLPrivateKeyImpl>(std::move(ssl_private_key_)),
+        std::move(ssl_private_key_request));
+  }
+
+  void set_certificate(scoped_refptr<net::X509Certificate> certificate) {
+    certificate_ = std::move(certificate);
+  }
+
+  int on_certificate_requested_counter() {
+    return on_certificate_requested_counter_;
+  }
+
  private:
   CredentialsResponse credentials_response_;
   base::Optional<net::AuthCredentials> auth_credentials_;
   int on_auth_required_call_counter_ = 0;
   scoped_refptr<net::HttpResponseHeaders> last_seen_response_headers_;
+  CertificateResponse certificate_response_ = CertificateResponse::INVALID;
+  mojom::URLLoaderPtr* url_loader_ptr_ = nullptr;
+  scoped_refptr<net::SSLPrivateKey> ssl_private_key_;
+  scoped_refptr<net::X509Certificate> certificate_;
+  network::mojom::SSLPrivateKeyPtr ssl_private_key_ptr_;
+  std::string provider_name_;
+  std::vector<uint16_t> algorithm_preferences_;
+  int on_certificate_requested_counter_ = 0;
 
-  DISALLOW_COPY_AND_ASSIGN(TestAuthNetworkServiceClient);
+  DISALLOW_COPY_AND_ASSIGN(MockNetworkServiceClient);
 };
 
 TEST_F(URLLoaderTest, SetAuth) {
-  TestAuthNetworkServiceClient network_service_client;
+  MockNetworkServiceClient network_service_client;
   network_service_client.set_credentials_response(
-      TestAuthNetworkServiceClient::CredentialsResponse::CORRECT_CREDENTIALS);
+      MockNetworkServiceClient::CredentialsResponse::CORRECT_CREDENTIALS);
 
   ResourceRequest request =
       CreateResourceRequest("GET", test_server()->GetURL(kTestAuthURL));
@@ -2230,10 +2389,10 @@ TEST_F(URLLoaderTest, SetAuth) {
   std::unique_ptr<URLLoader> url_loader = std::make_unique<URLLoader>(
       context(), &network_service_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), 0, request, false,
-      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
-      0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
   base::RunLoop().RunUntilIdle();
 
   ASSERT_TRUE(url_loader);
@@ -2257,9 +2416,9 @@ TEST_F(URLLoaderTest, SetAuth) {
 }
 
 TEST_F(URLLoaderTest, CancelAuth) {
-  TestAuthNetworkServiceClient network_service_client;
+  MockNetworkServiceClient network_service_client;
   network_service_client.set_credentials_response(
-      TestAuthNetworkServiceClient::CredentialsResponse::NO_CREDENTIALS);
+      MockNetworkServiceClient::CredentialsResponse::NO_CREDENTIALS);
 
   ResourceRequest request =
       CreateResourceRequest("GET", test_server()->GetURL(kTestAuthURL));
@@ -2271,10 +2430,10 @@ TEST_F(URLLoaderTest, CancelAuth) {
   std::unique_ptr<URLLoader> url_loader = std::make_unique<URLLoader>(
       context(), &network_service_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), 0, request, false,
-      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
-      0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
   base::RunLoop().RunUntilIdle();
 
   ASSERT_TRUE(url_loader);
@@ -2298,9 +2457,9 @@ TEST_F(URLLoaderTest, CancelAuth) {
 }
 
 TEST_F(URLLoaderTest, TwoChallenges) {
-  TestAuthNetworkServiceClient network_service_client;
+  MockNetworkServiceClient network_service_client;
   network_service_client.set_credentials_response(
-      TestAuthNetworkServiceClient::CredentialsResponse::
+      MockNetworkServiceClient::CredentialsResponse::
           INCORRECT_CREDENTIALS_THEN_CORRECT_ONES);
 
   ResourceRequest request =
@@ -2313,10 +2472,10 @@ TEST_F(URLLoaderTest, TwoChallenges) {
   std::unique_ptr<URLLoader> url_loader = std::make_unique<URLLoader>(
       context(), &network_service_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), 0, request, false,
-      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
-      0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
   base::RunLoop().RunUntilIdle();
 
   ASSERT_TRUE(url_loader);
@@ -2342,9 +2501,9 @@ TEST_F(URLLoaderTest, TwoChallenges) {
 TEST_F(URLLoaderTest, NoAuthRequiredForFavicon) {
   constexpr char kFaviconTestPage[] = "/has_favicon.html";
 
-  TestAuthNetworkServiceClient network_service_client;
+  MockNetworkServiceClient network_service_client;
   network_service_client.set_credentials_response(
-      TestAuthNetworkServiceClient::CredentialsResponse::CORRECT_CREDENTIALS);
+      MockNetworkServiceClient::CredentialsResponse::CORRECT_CREDENTIALS);
 
   ResourceRequest request =
       CreateResourceRequest("GET", test_server()->GetURL(kFaviconTestPage));
@@ -2356,10 +2515,10 @@ TEST_F(URLLoaderTest, NoAuthRequiredForFavicon) {
   std::unique_ptr<URLLoader> url_loader = std::make_unique<URLLoader>(
       context(), &network_service_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), 0, request, false,
-      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
-      0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
   base::RunLoop().RunUntilIdle();
 
   ASSERT_TRUE(url_loader);
@@ -2384,9 +2543,9 @@ TEST_F(URLLoaderTest, NoAuthRequiredForFavicon) {
 }
 
 TEST_F(URLLoaderTest, HttpAuthResponseHeadersAvailable) {
-  TestAuthNetworkServiceClient network_service_client;
+  MockNetworkServiceClient network_service_client;
   network_service_client.set_credentials_response(
-      TestAuthNetworkServiceClient::CredentialsResponse::CORRECT_CREDENTIALS);
+      MockNetworkServiceClient::CredentialsResponse::CORRECT_CREDENTIALS);
 
   ResourceRequest request =
       CreateResourceRequest("GET", test_server()->GetURL(kTestAuthURL));
@@ -2398,10 +2557,10 @@ TEST_F(URLLoaderTest, HttpAuthResponseHeadersAvailable) {
   std::unique_ptr<URLLoader> url_loader = std::make_unique<URLLoader>(
       context(), &network_service_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), 0, request, false,
-      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
-      0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
   base::RunLoop().RunUntilIdle();
 
   ASSERT_TRUE(url_loader);
@@ -2427,7 +2586,7 @@ TEST_F(URLLoaderTest, CorbEffectiveWithCors) {
   ResourceRequest request =
       CreateResourceRequest("GET", test_server()->GetURL("/hello.html"));
   request.resource_type = kResourceType;
-  request.fetch_request_mode = mojom::FetchRequestMode::kCORS;
+  request.fetch_request_mode = mojom::FetchRequestMode::kCors;
   request.request_initiator = url::Origin::Create(GURL("http://foo.com/"));
 
   base::RunLoop delete_run_loop;
@@ -2438,10 +2597,10 @@ TEST_F(URLLoaderTest, CorbEffectiveWithCors) {
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), 0, request, false,
-      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
-      0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   client()->RunUntilResponseBodyArrived();
   std::string body = ReadBody();
@@ -2463,7 +2622,7 @@ TEST_F(URLLoaderTest, CorbExcludedWithNoCors) {
   ResourceRequest request =
       CreateResourceRequest("GET", test_server()->GetURL("/hello.html"));
   request.resource_type = kResourceType;
-  request.fetch_request_mode = mojom::FetchRequestMode::kNoCORS;
+  request.fetch_request_mode = mojom::FetchRequestMode::kNoCors;
   request.request_initiator = url::Origin::Create(GURL("http://foo.com/"));
 
   base::RunLoop delete_run_loop;
@@ -2476,10 +2635,10 @@ TEST_F(URLLoaderTest, CorbExcludedWithNoCors) {
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), 0, request, false,
-      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
-      0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   client()->RunUntilResponseBodyArrived();
   std::string body = ReadBody();
@@ -2503,7 +2662,7 @@ TEST_F(URLLoaderTest, CorbEffectiveWithNoCorsWhenNoActualPlugin) {
   ResourceRequest request =
       CreateResourceRequest("GET", test_server()->GetURL("/hello.html"));
   request.resource_type = kResourceType;
-  request.fetch_request_mode = mojom::FetchRequestMode::kNoCORS;
+  request.fetch_request_mode = mojom::FetchRequestMode::kNoCors;
   request.request_initiator = url::Origin::Create(GURL("http://foo.com/"));
 
   base::RunLoop delete_run_loop;
@@ -2517,10 +2676,10 @@ TEST_F(URLLoaderTest, CorbEffectiveWithNoCorsWhenNoActualPlugin) {
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), 0, request, false,
-      client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
-      0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   client()->RunUntilResponseBodyArrived();
   std::string body = ReadBody();
@@ -2550,18 +2709,298 @@ TEST_F(URLLoaderTest, FollowRedirectTwice) {
   url_loader = std::make_unique<URLLoader>(
       context(), nullptr /* network_service_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      mojo::MakeRequest(&loader), mojom::kURLLoadOptionNone, request, false,
+      mojo::MakeRequest(&loader), mojom::kURLLoadOptionNone, request,
       client()->CreateInterfacePtr(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       0 /* request_id */, resource_scheduler_client(), nullptr,
-      nullptr /* network_usage_accumulator */);
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
 
   client()->RunUntilRedirectReceived();
 
-  url_loader->FollowRedirect(base::nullopt, base::nullopt);
-  EXPECT_DCHECK_DEATH(url_loader->FollowRedirect(base::nullopt, base::nullopt));
+  url_loader->FollowRedirect({}, {}, base::nullopt);
+  EXPECT_DCHECK_DEATH(url_loader->FollowRedirect({}, {}, base::nullopt));
 
   client()->RunUntilComplete();
   delete_run_loop.Run();
 }
+
+class TestSSLPrivateKey : public net::SSLPrivateKey {
+ public:
+  explicit TestSSLPrivateKey(scoped_refptr<net::SSLPrivateKey> key)
+      : key_(std::move(key)) {}
+
+  void set_fail_signing(bool fail_signing) { fail_signing_ = fail_signing; }
+  int sign_count() const { return sign_count_; }
+
+  std::string GetProviderName() override { return key_->GetProviderName(); }
+  std::vector<uint16_t> GetAlgorithmPreferences() override {
+    return key_->GetAlgorithmPreferences();
+  }
+  void Sign(uint16_t algorithm,
+            base::span<const uint8_t> input,
+            SignCallback callback) override {
+    sign_count_++;
+    if (fail_signing_) {
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, base::BindOnce(std::move(callback),
+                                    net::ERR_SSL_CLIENT_AUTH_SIGNATURE_FAILED,
+                                    std::vector<uint8_t>()));
+    } else {
+      key_->Sign(algorithm, input, std::move(callback));
+    }
+  }
+
+ private:
+  ~TestSSLPrivateKey() override = default;
+
+  scoped_refptr<net::SSLPrivateKey> key_;
+  bool fail_signing_ = false;
+  int sign_count_ = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(TestSSLPrivateKey);
+};
+
+#if !defined(OS_IOS)
+TEST_F(URLLoaderTest, ClientAuthCancelConnection) {
+  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  net::SSLServerConfig ssl_config;
+  ssl_config.client_cert_type =
+      net::SSLServerConfig::ClientCertType::REQUIRE_CLIENT_CERT;
+  test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK, ssl_config);
+  test_server.AddDefaultHandlers(
+      base::FilePath(FILE_PATH_LITERAL("services/test/data")));
+  ASSERT_TRUE(test_server.Start());
+
+  MockNetworkServiceClient network_service_client;
+  network_service_client.set_certificate_response(
+      MockNetworkServiceClient::CertificateResponse::
+          URL_LOADER_REQUEST_CANCELLED);
+
+  ResourceRequest request =
+      CreateResourceRequest("GET", test_server.GetURL("/defaultresponse"));
+  base::RunLoop delete_run_loop;
+  mojom::URLLoaderPtr loader;
+  mojom::URLLoaderFactoryParams params;
+  params.process_id = kProcessId;
+  params.is_corb_enabled = false;
+  std::unique_ptr<URLLoader> url_loader = std::make_unique<URLLoader>(
+      context(), &network_service_client,
+      DeleteLoaderCallback(&delete_run_loop, &url_loader),
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
+  network_service_client.set_url_loader_ptr(&loader);
+
+  RunUntilIdle();
+  ASSERT_TRUE(url_loader);
+
+  client()->RunUntilComplete();
+
+  EXPECT_EQ(net::ERR_FAILED, client()->completion_status().error_code);
+}
+
+TEST_F(URLLoaderTest, ClientAuthCancelCertificateSelection) {
+  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  net::SSLServerConfig ssl_config;
+  ssl_config.client_cert_type =
+      net::SSLServerConfig::ClientCertType::REQUIRE_CLIENT_CERT;
+  test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK, ssl_config);
+  test_server.AddDefaultHandlers(
+      base::FilePath(FILE_PATH_LITERAL("services/test/data")));
+  ASSERT_TRUE(test_server.Start());
+
+  MockNetworkServiceClient network_service_client;
+  network_service_client.set_certificate_response(
+      MockNetworkServiceClient::CertificateResponse::
+          CANCEL_CERTIFICATE_SELECTION);
+
+  ResourceRequest request =
+      CreateResourceRequest("GET", test_server.GetURL("/defaultresponse"));
+  base::RunLoop delete_run_loop;
+  mojom::URLLoaderPtr loader;
+  mojom::URLLoaderFactoryParams params;
+  params.process_id = kProcessId;
+  params.is_corb_enabled = false;
+  std::unique_ptr<URLLoader> url_loader = std::make_unique<URLLoader>(
+      context(), &network_service_client,
+      DeleteLoaderCallback(&delete_run_loop, &url_loader),
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
+
+  RunUntilIdle();
+  ASSERT_TRUE(url_loader);
+
+  EXPECT_EQ(0, network_service_client.on_certificate_requested_counter());
+
+  client()->RunUntilComplete();
+
+  EXPECT_EQ(1, network_service_client.on_certificate_requested_counter());
+  EXPECT_EQ(net::ERR_SSL_CLIENT_AUTH_CERT_NEEDED,
+            client()->completion_status().error_code);
+}
+
+TEST_F(URLLoaderTest, ClientAuthNoCertificate) {
+  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  net::SSLServerConfig ssl_config;
+  ssl_config.client_cert_type =
+      net::SSLServerConfig::ClientCertType::REQUIRE_CLIENT_CERT;
+
+  // TLS 1.3 client auth errors show up post-handshake, resulting in a read
+  // error which on Windows causes the socket to shutdown immediately before the
+  // error is read.
+  // TODO(crbug.com/906668): Add support for testing this in TLS 1.3.
+  ssl_config.version_max = net::SSL_PROTOCOL_VERSION_TLS1_2;
+
+  test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK, ssl_config);
+  test_server.AddDefaultHandlers(
+      base::FilePath(FILE_PATH_LITERAL("services/test/data")));
+  ASSERT_TRUE(test_server.Start());
+
+  MockNetworkServiceClient network_service_client;
+  network_service_client.set_certificate_response(
+      MockNetworkServiceClient::CertificateResponse::NULL_CERTIFICATE);
+
+  ResourceRequest request =
+      CreateResourceRequest("GET", test_server.GetURL("/defaultresponse"));
+  base::RunLoop delete_run_loop;
+  mojom::URLLoaderPtr loader;
+  mojom::URLLoaderFactoryParams params;
+  params.process_id = kProcessId;
+  params.is_corb_enabled = false;
+  std::unique_ptr<URLLoader> url_loader = std::make_unique<URLLoader>(
+      context(), &network_service_client,
+      DeleteLoaderCallback(&delete_run_loop, &url_loader),
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
+
+  RunUntilIdle();
+  ASSERT_TRUE(url_loader);
+
+  EXPECT_EQ(0, network_service_client.on_certificate_requested_counter());
+
+  client()->RunUntilComplete();
+
+  EXPECT_EQ(1, network_service_client.on_certificate_requested_counter());
+  EXPECT_EQ(net::ERR_BAD_SSL_CLIENT_AUTH_CERT,
+            client()->completion_status().error_code);
+}
+
+TEST_F(URLLoaderTest, ClientAuthCertificateWithValidSignature) {
+  std::unique_ptr<net::FakeClientCertIdentity> identity =
+      net::FakeClientCertIdentity::CreateFromCertAndKeyFiles(
+          net::GetTestCertsDirectory(), "client_1.pem", "client_1.pk8");
+  ASSERT_TRUE(identity);
+  scoped_refptr<TestSSLPrivateKey> private_key =
+      base::MakeRefCounted<TestSSLPrivateKey>(identity->ssl_private_key());
+  TestSSLPrivateKey* private_key_ptr = private_key.get();
+
+  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  net::SSLServerConfig ssl_config;
+  ssl_config.client_cert_type =
+      net::SSLServerConfig::ClientCertType::REQUIRE_CLIENT_CERT;
+  test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK, ssl_config);
+  test_server.AddDefaultHandlers(
+      base::FilePath(FILE_PATH_LITERAL("services/test/data")));
+  ASSERT_TRUE(test_server.Start());
+
+  MockNetworkServiceClient network_service_client;
+  network_service_client.set_certificate_response(
+      MockNetworkServiceClient::CertificateResponse::
+          VALID_CERTIFICATE_SIGNATURE);
+  network_service_client.set_private_key(std::move(private_key));
+  scoped_refptr<net::X509Certificate> certificate =
+      test_server.GetCertificate();
+  network_service_client.set_certificate(std::move(certificate));
+
+  ResourceRequest request =
+      CreateResourceRequest("GET", test_server.GetURL("/defaultresponse"));
+  base::RunLoop delete_run_loop;
+  mojom::URLLoaderPtr loader;
+  mojom::URLLoaderFactoryParams params;
+  params.process_id = kProcessId;
+  params.is_corb_enabled = false;
+  std::unique_ptr<URLLoader> url_loader = std::make_unique<URLLoader>(
+      context(), &network_service_client,
+      DeleteLoaderCallback(&delete_run_loop, &url_loader),
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
+
+  RunUntilIdle();
+  ASSERT_TRUE(url_loader);
+
+  EXPECT_EQ(0, network_service_client.on_certificate_requested_counter());
+  EXPECT_EQ(0, private_key_ptr->sign_count());
+
+  client()->RunUntilComplete();
+
+  EXPECT_EQ(1, network_service_client.on_certificate_requested_counter());
+  // The private key should have been used.
+  EXPECT_EQ(1, private_key_ptr->sign_count());
+}
+
+TEST_F(URLLoaderTest, ClientAuthCertificateWithInvalidSignature) {
+  std::unique_ptr<net::FakeClientCertIdentity> identity =
+      net::FakeClientCertIdentity::CreateFromCertAndKeyFiles(
+          net::GetTestCertsDirectory(), "client_1.pem", "client_1.pk8");
+  ASSERT_TRUE(identity);
+  scoped_refptr<TestSSLPrivateKey> private_key =
+      base::MakeRefCounted<TestSSLPrivateKey>(identity->ssl_private_key());
+  private_key->set_fail_signing(true);
+  TestSSLPrivateKey* private_key_ptr = private_key.get();
+
+  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  net::SSLServerConfig ssl_config;
+  ssl_config.client_cert_type =
+      net::SSLServerConfig::ClientCertType::REQUIRE_CLIENT_CERT;
+  test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK, ssl_config);
+  test_server.AddDefaultHandlers(
+      base::FilePath(FILE_PATH_LITERAL("services/test/data")));
+  ASSERT_TRUE(test_server.Start());
+
+  MockNetworkServiceClient network_service_client;
+  network_service_client.set_certificate_response(
+      MockNetworkServiceClient::CertificateResponse::
+          VALID_CERTIFICATE_SIGNATURE);
+  network_service_client.set_private_key(std::move(private_key));
+  scoped_refptr<net::X509Certificate> certificate =
+      test_server.GetCertificate();
+  network_service_client.set_certificate(std::move(certificate));
+
+  ResourceRequest request =
+      CreateResourceRequest("GET", test_server.GetURL("/defaultresponse"));
+  base::RunLoop delete_run_loop;
+  mojom::URLLoaderPtr loader;
+  mojom::URLLoaderFactoryParams params;
+  params.process_id = kProcessId;
+  params.is_corb_enabled = false;
+  std::unique_ptr<URLLoader> url_loader = std::make_unique<URLLoader>(
+      context(), &network_service_client,
+      DeleteLoaderCallback(&delete_run_loop, &url_loader),
+      mojo::MakeRequest(&loader), 0, request, client()->CreateInterfacePtr(),
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params, 0 /* request_id */,
+      resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */);
+
+  RunUntilIdle();
+  ASSERT_TRUE(url_loader);
+
+  EXPECT_EQ(0, network_service_client.on_certificate_requested_counter());
+  EXPECT_EQ(0, private_key_ptr->sign_count());
+
+  client()->RunUntilComplete();
+
+  EXPECT_EQ(1, network_service_client.on_certificate_requested_counter());
+  // The private key should have been used.
+  EXPECT_EQ(1, private_key_ptr->sign_count());
+  EXPECT_EQ(net::ERR_SSL_CLIENT_AUTH_SIGNATURE_FAILED,
+            client()->completion_status().error_code);
+}
+#endif  // !defined(OS_IOS)
 
 }  // namespace network

@@ -9,6 +9,7 @@
 #include <set>
 #include <string>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "content/public/browser/web_contents.h"
@@ -131,7 +132,7 @@ void OverscanTracker::RemoveObserver(content::WebContents* web_contents) {
 OverscanTracker::OverscanWebObserver* OverscanTracker::GetObserver(
     content::WebContents* web_contents,
     bool create) {
-  ObserverMap::iterator iter = observers_.find(web_contents);
+  auto iter = observers_.find(web_contents);
   if (iter != observers_.end())
     return iter->second.get();
   if (!create)

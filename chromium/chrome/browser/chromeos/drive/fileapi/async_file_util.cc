@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
@@ -15,6 +16,7 @@
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/drive/fileapi/fileapi_worker.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "google_apis/drive/task_util.h"
 #include "storage/browser/blob/shareable_file_reference.h"
@@ -36,8 +38,8 @@ void PostFileSystemCallback(
     const base::Closure& on_error_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&fileapi_internal::RunFileSystemCallback,
                      file_system_getter, function,
                      on_error_callback.is_null()
@@ -58,10 +60,10 @@ void RunCreateOrOpenFileCallback(
   // It will be provided as a FileSystem::OpenFileCallback's argument later.
   // (crbug.com/259184).
   std::move(callback).Run(
-      std::move(file),
-      base::Bind(&google_apis::RunTaskWithTaskRunner,
-                 BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
-                 close_callback_on_ui_thread));
+      std::move(file), base::Bind(&google_apis::RunTaskWithTaskRunner,
+                                  base::CreateSingleThreadTaskRunnerWithTraits(
+                                      {BrowserThread::UI}),
+                                  close_callback_on_ui_thread));
 }
 
 // Runs CreateOrOpenFile when the error happens.

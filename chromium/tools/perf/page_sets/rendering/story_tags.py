@@ -13,8 +13,6 @@ Tag = collections.namedtuple('Tag', ['name', 'description'])
 
 GPU_RASTERIZATION = Tag(
     'gpu_rasterization', 'Story tests performance with GPU rasterization.')
-SYNC_SCROLL = Tag(
-    'sync_scroll', 'Story tests rendering with synchronous scrolling.')
 FASTPATH = Tag(
     'fastpath', 'Fast path stories.')
 REQUIRED_WEBGL = Tag(
@@ -24,6 +22,8 @@ USE_FAKE_CAMERA_DEVICE = Tag(
 
 # Below are tags for filtering by page sets
 
+BACKDROP_FILTER = Tag(
+    'backdrop_filter', 'Backdrop filter stories')
 IMAGE_DECODING = Tag(
     'image_decoding', 'Stories with accelerated jpeg decoding')
 KEY_DESKTOP_MOVE = Tag(
@@ -38,10 +38,19 @@ KEY_IDLE_POWER = Tag(
     'key_idle_power', 'Key idle power stories')
 MAPS = Tag(
     'maps', 'Maps stories')
+MOTIONMARK = Tag(
+    'motionmark', 'Motionmark benchmark stories')
 PATHOLOGICAL_MOBILE_SITES = Tag(
     'pathological_mobile_sites', 'Pathological mobile sites')
 POLYMER = Tag(
     'polymer', 'Polymer stories')
+REPAINT_DESKTOP = Tag(
+    'repaint_desktop', 'Repaint desktop stories')
+REPRESENTATIVE_MAC_DESKTOP = Tag(
+    'representative_mac_desktop', 'Rendering desktop representatives for mac')
+REPRESENTATIVE_WIN_DESKTOP = Tag(
+    'representative_win_desktop',
+    'Rendering desktop representatives for windows')
 SIMPLE_MOBILE_SITES = Tag(
     'simple_mobile_sites', 'Simple mobile sites')
 TOP_REAL_WORLD_DESKTOP = Tag(

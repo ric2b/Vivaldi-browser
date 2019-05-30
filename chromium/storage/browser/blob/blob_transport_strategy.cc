@@ -6,9 +6,11 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/containers/circular_deque.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "storage/browser/blob/blob_data_builder.h"
+#include "third_party/blink/public/mojom/blob/data_element.mojom.h"
 
 namespace storage {
 
@@ -163,16 +165,19 @@ class DataPipeTransportStrategy : public BlobTransportStrategy {
 
     current_source_offset_ = 0;
     provider->RequestAsStream(std::move(producer_handle));
-    watcher_.Watch(consumer_handle_.get(), MOJO_HANDLE_SIGNAL_READABLE,
-                   base::Bind(&DataPipeTransportStrategy::OnDataPipeReadable,
-                              base::Unretained(this), expected_source_size,
-                              std::move(future_data)));
+    watcher_.Watch(
+        consumer_handle_.get(), MOJO_HANDLE_SIGNAL_READABLE,
+        MOJO_WATCH_CONDITION_SATISFIED,
+        base::BindRepeating(&DataPipeTransportStrategy::OnDataPipeReadable,
+                            base::Unretained(this), expected_source_size,
+                            std::move(future_data)));
   }
 
   void OnDataPipeReadable(
       size_t expected_full_source_size,
       const std::vector<BlobDataBuilder::FutureData>& future_data,
-      MojoResult result) {
+      MojoResult result,
+      const mojo::HandleSignalsState& state) {
     // The index of the element data should currently be written to, relative to
     // the first element of this stream (the first item in future_data).
     size_t relative_element_index =
@@ -316,7 +321,7 @@ class FileTransportStrategy : public BlobTransportStrategy {
 
  private:
   void OnReply(BlobDataBuilder::FutureFile future_file,
-               const scoped_refptr<ShareableFileReference>& file_reference,
+               scoped_refptr<ShareableFileReference> file_reference,
                base::Optional<base::Time> time_file_modified) {
     if (!time_file_modified) {
       // Writing to the file failed in the renderer.
@@ -325,7 +330,7 @@ class FileTransportStrategy : public BlobTransportStrategy {
     }
 
     bool populate_result =
-        future_file.Populate(file_reference, *time_file_modified);
+        future_file.Populate(std::move(file_reference), *time_file_modified);
     DCHECK(populate_result);
 
     if (--num_unresolved_requests_ == 0)

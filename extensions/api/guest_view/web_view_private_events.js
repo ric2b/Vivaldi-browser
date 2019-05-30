@@ -43,6 +43,7 @@ var EVENTS_PRIVATE = {
 function addPrivateEvents(WebViewEvents) {
   for (var i in EVENTS_PRIVATE) {
     WebViewEvents.EVENTS[i] = EVENTS_PRIVATE[i];
+    WebViewEvents.EVENTS[i].__proto__ = null;
   }
 }
 

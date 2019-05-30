@@ -8,7 +8,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/logging_chrome.h"
@@ -36,7 +36,7 @@ void SymlinkSetUp(const base::CommandLine& command_line,
     DLOG(ERROR) << "Unable to initialize logging to " << log_path.value();
     base::PostTaskWithTraits(
         FROM_HERE, {base::MayBlock()},
-        base::Bind(&RemoveSymlinkAndLog, log_path, target_path));
+        base::BindOnce(&RemoveSymlinkAndLog, log_path, target_path));
   } else {
     chrome_logging_redirected_ = true;
   }
@@ -60,6 +60,9 @@ void RedirectChromeLogging(const base::CommandLine& command_line) {
 
   if (command_line.HasSwitch(switches::kDisableLoggingRedirect))
     return;
+
+  LOG(WARNING)
+      << "Redirecting post-login logging to /home/chronos/user/log/chrome/";
 
   // Redirect logs to the session log directory, if set.  Otherwise
   // defaults to the profile dir.

@@ -20,9 +20,10 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/heap_profiling/supervisor.h"
-#include "components/services/heap_profiling/public/cpp/allocator_shim.h"
 #include "components/services/heap_profiling/public/cpp/controller.h"
+#include "components/services/heap_profiling/public/cpp/sampling_profiler_wrapper.h"
 #include "components/services/heap_profiling/public/cpp/settings.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/tracing_controller.h"
@@ -32,7 +33,7 @@ namespace heap_profiling {
 
 namespace {
 
-const char kTestCategory[] = "kTestCategory";
+constexpr const char kTestCategory[] = "kTestCategory";
 const char kMallocEvent[] = "kMallocEvent";
 const char kMallocTypeTag[] = "kMallocTypeTag";
 const char kPAEvent[] = "kPAEvent";
@@ -558,7 +559,7 @@ TestDriver::TestDriver()
                           base::WaitableEvent::InitialState::NOT_SIGNALED) {
   partition_allocator_.init();
 }
-TestDriver::~TestDriver() {}
+TestDriver::~TestDriver() = default;
 
 bool TestDriver::RunTest(const Options& options) {
   options_ = options;
@@ -574,8 +575,8 @@ bool TestDriver::RunTest(const Options& options) {
     if (running_on_ui_thread_) {
       has_started_ = Supervisor::GetInstance()->HasStarted();
     } else {
-      content::BrowserThread::PostTask(
-          content::BrowserThread::UI, FROM_HERE,
+      base::PostTaskWithTraits(
+          FROM_HERE, {content::BrowserThread::UI},
           base::BindOnce(&TestDriver::GetHasStartedOnUIThread,
                          base::Unretained(this)));
       wait_for_ui_thread_.Wait();
@@ -597,21 +598,21 @@ bool TestDriver::RunTest(const Options& options) {
       MakeTestAllocations();
     CollectResults(true);
   } else {
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::UI},
         base::BindOnce(&TestDriver::CheckOrStartProfilingOnUIThreadAndSignal,
                        base::Unretained(this)));
     wait_for_ui_thread_.Wait();
     if (!initialization_success_)
       return false;
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::UI},
         base::BindOnce(&TestDriver::SetKeepSmallAllocationsOnUIThreadAndSignal,
                        base::Unretained(this)));
     wait_for_ui_thread_.Wait();
     if (ShouldProfileRenderer()) {
-      content::BrowserThread::PostTask(
-          content::BrowserThread::UI, FROM_HERE,
+      base::PostTaskWithTraits(
+          FROM_HERE, {content::BrowserThread::UI},
           base::BindOnce(
               &TestDriver::
                   WaitForProfilingToStartForAllRenderersUIThreadAndSignal,
@@ -619,20 +620,18 @@ bool TestDriver::RunTest(const Options& options) {
       wait_for_ui_thread_.Wait();
     }
     if (ShouldProfileBrowser()) {
-      content::BrowserThread::PostTask(
-          content::BrowserThread::UI, FROM_HERE,
-          base::BindOnce(&TestDriver::MakeTestAllocations,
-                         base::Unretained(this)));
+      base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                               base::BindOnce(&TestDriver::MakeTestAllocations,
+                                              base::Unretained(this)));
     }
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
-        base::BindOnce(&TestDriver::CollectResults, base::Unretained(this),
-                       false));
+    base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                             base::BindOnce(&TestDriver::CollectResults,
+                                            base::Unretained(this), false));
     wait_for_ui_thread_.Wait();
   }
 
   std::unique_ptr<base::Value> dump_json =
-      base::JSONReader::Read(serialized_trace_);
+      base::JSONReader::ReadDeprecated(serialized_trace_);
   if (!dump_json) {
     LOG(ERROR) << "Failed to deserialize trace.";
     return false;
@@ -724,8 +723,8 @@ bool TestDriver::CheckOrStartProfilingOnUIThreadWithAsyncSignalling() {
                                ? (options_.sample_everything ? 2 : kSampleRate)
                                : 1;
   Supervisor::GetInstance()->Start(connection, options_.mode,
-                                   options_.stack_mode, sampling_rate,
-                                   std::move(start_callback));
+                                   options_.stack_mode, options_.stream_samples,
+                                   sampling_rate, std::move(start_callback));
 
   return true;
 }
@@ -777,8 +776,8 @@ bool TestDriver::CheckOrStartProfilingOnUIThreadWithNestedRunLoops() {
                                ? (options_.sample_everything ? 2 : kSampleRate)
                                : 1;
   Supervisor::GetInstance()->Start(connection, options_.mode,
-                                   options_.stack_mode, sampling_rate,
-                                   std::move(start_callback));
+                                   options_.stack_mode, options_.stream_samples,
+                                   sampling_rate, std::move(start_callback));
 
   run_loop->Run();
 
@@ -902,8 +901,7 @@ bool TestDriver::ValidateBrowserAllocations(base::Value* dump_json) {
   if (IsRecordingAllAllocations()) {
     if (should_validate_dumps) {
       result = ValidateDump(heaps_v2, kMallocAllocSize * kMallocAllocCount,
-                            kMallocAllocCount, "malloc",
-                            HasPseudoFrames() ? kMallocTypeTag : nullptr,
+                            kMallocAllocCount, "malloc", kMallocTypeTag,
                             HasPseudoFrames() ? kMallocEvent : "", thread_name);
       if (!result) {
         LOG(ERROR) << "Failed to validate malloc fixed allocations";

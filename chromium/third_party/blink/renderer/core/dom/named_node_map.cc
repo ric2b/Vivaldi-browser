@@ -33,8 +33,6 @@
 
 namespace blink {
 
-using namespace HTMLNames;
-
 Attr* NamedNodeMap::getNamedItem(const AtomicString& name) const {
   return element_->getAttributeNode(name);
 }
@@ -46,7 +44,7 @@ Attr* NamedNodeMap::getNamedItemNS(const AtomicString& namespace_uri,
 
 Attr* NamedNodeMap::removeNamedItem(const AtomicString& name,
                                     ExceptionState& exception_state) {
-  size_t index =
+  wtf_size_t index =
       element_->Attributes().FindIndex(element_->LowercaseIfNecessary(name));
   if (index == kNotFound) {
     exception_state.ThrowDOMException(
@@ -60,7 +58,7 @@ Attr* NamedNodeMap::removeNamedItem(const AtomicString& name,
 Attr* NamedNodeMap::removeNamedItemNS(const AtomicString& namespace_uri,
                                       const AtomicString& local_name,
                                       ExceptionState& exception_state) {
-  size_t index = element_->Attributes().FindIndex(
+  wtf_size_t index = element_->Attributes().FindIndex(
       QualifiedName(g_null_atom, local_name, namespace_uri));
   if (index == kNotFound) {
     exception_state.ThrowDOMException(DOMExceptionCode::kNotFoundError,
@@ -128,7 +126,7 @@ bool NamedNodeMap::NamedPropertyQuery(const AtomicString& name,
   return properties.Contains(name);
 }
 
-void NamedNodeMap::Trace(blink::Visitor* visitor) {
+void NamedNodeMap::Trace(Visitor* visitor) {
   visitor->Trace(element_);
   ScriptWrappable::Trace(visitor);
 }

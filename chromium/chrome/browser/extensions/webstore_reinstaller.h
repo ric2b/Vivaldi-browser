@@ -19,7 +19,7 @@ class WebstoreReinstaller : public WebstoreStandaloneInstaller,
  public:
   WebstoreReinstaller(content::WebContents* web_contents,
                       const std::string& extension_id,
-                      const WebstoreStandaloneInstaller::Callback& callback);
+                      WebstoreStandaloneInstaller::Callback callback);
 
   // Begin the reinstall process. |callback| (from the constructor) will be
   // called upon completion.
@@ -30,16 +30,11 @@ class WebstoreReinstaller : public WebstoreStandaloneInstaller,
 
   // WebstoreStandaloneInstaller:
   bool CheckRequestorAlive() const override;
-  const GURL& GetRequestorURL() const override;
   bool ShouldShowPostInstallUI() const override;
   bool ShouldShowAppInstalledBubble() const override;
   content::WebContents* GetWebContents() const override;
   std::unique_ptr<ExtensionInstallPrompt::Prompt> CreateInstallPrompt()
       const override;
-  bool CheckInlineInstallPermitted(const base::DictionaryValue& webstore_data,
-                                   std::string* error) const override;
-  bool CheckRequestorPermitted(const base::DictionaryValue& webstore_data,
-                               std::string* error) const override;
   void OnInstallPromptDone(ExtensionInstallPrompt::Result result) override;
 
   // content::WebContentsObserver:

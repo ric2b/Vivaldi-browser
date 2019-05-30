@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_samples.h"
@@ -24,7 +25,6 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/interactive_test_utils.h"
-#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/common/content_features.h"
@@ -32,7 +32,6 @@
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "ui/base/ui_features.h"
 #include "ui/views/window/dialog_client_view.h"
 
 using net::test_server::BasicHttpResponse;
@@ -82,8 +81,6 @@ class PasswordBubbleInteractiveUiTest : public ManagePasswordsTest {
   }
 
  private:
-  test::ScopedMacViewsBrowserMode views_mode_{true};
-
   DISALLOW_COPY_AND_ASSIGN(PasswordBubbleInteractiveUiTest);
 };
 
@@ -270,13 +267,13 @@ IN_PROC_BROWSER_TEST_F(PasswordBubbleInteractiveUiTest,
   // Set up the second tab and bring the bubble again.
   AddTabAtIndex(1, GURL("http://example.com/"), ui::PAGE_TRANSITION_TYPED);
   TabStripModel* tab_model = browser()->tab_strip_model();
-  tab_model->ActivateTabAt(1, true);
+  tab_model->ActivateTabAt(1, {TabStripModel::GestureType::kOther});
   EXPECT_FALSE(IsBubbleShowing());
   EXPECT_EQ(1, tab_model->active_index());
   SetupPendingPassword();
   EXPECT_TRUE(IsBubbleShowing());
   // Back to the first tab.
-  tab_model->ActivateTabAt(0, true);
+  tab_model->ActivateTabAt(0, {TabStripModel::GestureType::kOther});
   EXPECT_FALSE(IsBubbleShowing());
 }
 
@@ -285,13 +282,13 @@ IN_PROC_BROWSER_TEST_F(PasswordBubbleInteractiveUiTest,
   // Set up the second tab and bring the bubble there.
   AddTabAtIndex(1, GURL("http://example.com/"), ui::PAGE_TRANSITION_TYPED);
   TabStripModel* tab_model = browser()->tab_strip_model();
-  tab_model->ActivateTabAt(1, true);
+  tab_model->ActivateTabAt(1, {TabStripModel::GestureType::kOther});
   EXPECT_FALSE(IsBubbleShowing());
   EXPECT_EQ(1, tab_model->active_index());
   SetupPendingPassword();
   EXPECT_TRUE(IsBubbleShowing());
   // Back to the first tab. Set up the bubble.
-  tab_model->ActivateTabAt(0, true);
+  tab_model->ActivateTabAt(0, {TabStripModel::GestureType::kOther});
   // Drain message pump to ensure the bubble view is cleared so that it can be
   // created again (it is checked on Mac to prevent re-opening the bubble when
   // clicking the location bar button repeatedly).
@@ -315,7 +312,7 @@ IN_PROC_BROWSER_TEST_F(PasswordBubbleInteractiveUiTest,
       PasswordBubbleViewBase::manage_password_bubble();
   bool ran_event_task = false;
   base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(press_button, bubble, &ran_event_task));
+      FROM_HERE, base::BindOnce(press_button, bubble, &ran_event_task));
   EXPECT_TRUE(IsBubbleShowing());
 
   // Close the tab.
@@ -383,12 +380,5 @@ IN_PROC_BROWSER_TEST_F(PasswordBubbleInteractiveUiTest, AutoSigninNoFocus) {
   ui_test_utils::BrowserActivationWaiter waiter(browser());
   waiter.WaitForActivation();
 
-// Sign-in dialogs opened for inactive browser windows do not auto-close on
-// MacOS. This matches existing Cocoa bubble behavior.
-// TODO(varkha): Remove the limitation as part of http://crbug/671916 .
-#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
   EXPECT_FALSE(IsBubbleShowing());
-#else
-  EXPECT_TRUE(IsBubbleShowing());
-#endif
 }

@@ -81,6 +81,24 @@ void EmbeddedFrameSinkProviderImpl::CreateSimpleCompositorFrameSink(
                             std::move(compositor_frame_sink_request));
 }
 
+void EmbeddedFrameSinkProviderImpl::ConnectToEmbedder(
+    const viz::FrameSinkId& child_frame_sink_id,
+    blink::mojom::SurfaceEmbedderRequest surface_embedder_request) {
+  // TODO(kylechar): Kill the renderer too.
+  if (child_frame_sink_id.client_id() != renderer_client_id_) {
+    DLOG(ERROR) << "Invalid client id " << child_frame_sink_id;
+    return;
+  }
+
+  auto iter = frame_sink_map_.find(child_frame_sink_id);
+  if (iter == frame_sink_map_.end()) {
+    DLOG(ERROR) << "No EmbeddedFrameSinkImpl for " << child_frame_sink_id;
+    return;
+  }
+
+  iter->second->ConnectToEmbedder(std::move(surface_embedder_request));
+}
+
 void EmbeddedFrameSinkProviderImpl::DestroyEmbeddedFrameSink(
     viz::FrameSinkId frame_sink_id) {
   frame_sink_map_.erase(frame_sink_id);

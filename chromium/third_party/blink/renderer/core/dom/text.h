@@ -25,6 +25,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_DOM_TEXT_H_
 
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/css/style_recalc.h"
 #include "third_party/blink/renderer/core/dom/character_data.h"
 
 namespace blink {
@@ -42,6 +43,9 @@ class CORE_EXPORT Text : public CharacterData {
   static Text* Create(Document&, const String&);
   static Text* CreateEditingText(Document&, const String&);
 
+  Text(TreeScope& tree_scope, const String& data, ConstructionType type)
+      : CharacterData(tree_scope, data, type) {}
+
   LayoutText* GetLayoutObject() const;
 
   // mergeNextSiblingNodesIfPossible() merges next sibling nodes if possible
@@ -54,7 +58,7 @@ class CORE_EXPORT Text : public CharacterData {
   String wholeText() const;
   Text* ReplaceWholeText(const String&);
 
-  void RecalcTextStyle(StyleRecalcChange);
+  void RecalcTextStyle(const StyleRecalcChange);
   void RebuildTextLayoutTree(WhitespaceAttacher&);
   bool TextLayoutObjectIsNeeded(const AttachContext&,
                                 const ComputedStyle&,
@@ -69,11 +73,7 @@ class CORE_EXPORT Text : public CharacterData {
   bool CanContainRangeEndPoint() const final { return true; }
   NodeType getNodeType() const override;
 
-  void Trace(blink::Visitor*) override;
-
- protected:
-  Text(TreeScope& tree_scope, const String& data, ConstructionType type)
-      : CharacterData(tree_scope, data, type) {}
+  void Trace(Visitor*) override;
 
  private:
   String nodeName() const override;
@@ -81,8 +81,6 @@ class CORE_EXPORT Text : public CharacterData {
 
   bool IsTextNode() const =
       delete;  // This will catch anyone doing an unnecessary check.
-
-  bool NeedsWhitespaceLayoutObject();
 
   virtual Text* CloneWithData(Document&, const String&) const;
 };

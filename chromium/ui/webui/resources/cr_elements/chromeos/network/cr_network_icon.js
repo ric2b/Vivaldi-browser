@@ -38,26 +38,44 @@ Polymer({
       type: Boolean,
       value: false,
     },
+
+    /**
+     * If true, cellular technology badge is displayed in the network icon.
+     */
+    showTechnologyBadge: {
+      type: Boolean,
+      value: true,
+    },
   },
+
+  /**
+   * Number of network icons for different cellular or wifi network signal
+   * strengths.
+   * @private @const
+   */
+  networkIconCount_: 5,
 
   /**
    * @return {string} The name of the svg icon image to show.
    * @private
    */
   getIconClass_: function() {
-    if (!this.networkState)
+    if (!this.networkState) {
       return '';
-    var type = this.networkState.Type;
-    if (type == CrOnc.Type.ETHERNET)
+    }
+    const type = this.networkState.Type;
+    if (type == CrOnc.Type.ETHERNET) {
       return 'ethernet';
-    if (type == CrOnc.Type.VPN)
+    }
+    if (type == CrOnc.Type.VPN) {
       return 'vpn';
+    }
 
-    var prefix = (type == CrOnc.Type.CELLULAR || type == CrOnc.Type.TETHER) ?
+    const prefix = (type == CrOnc.Type.CELLULAR || type == CrOnc.Type.TETHER) ?
         'cellular-' :
         'wifi-';
     if (!this.isListItem && !this.networkState.GUID) {
-      var deviceState = this.deviceState;
+      const deviceState = this.deviceState;
       if (!deviceState || deviceState.State == 'Enabled' ||
           deviceState.State == 'Enabling') {
         return prefix + 'no-network';
@@ -65,9 +83,10 @@ Polymer({
       return prefix + 'off';
     }
 
-    var connectionState = this.networkState.ConnectionState;
-    if (connectionState == CrOnc.ConnectionState.CONNECTING)
+    const connectionState = this.networkState.ConnectionState;
+    if (connectionState == CrOnc.ConnectionState.CONNECTING) {
       return prefix + 'connecting';
+    }
 
     if (!this.isListItem &&
         (!connectionState ||
@@ -75,19 +94,28 @@ Polymer({
       return prefix + 'not-connected';
     }
 
-    var strength = CrOnc.getSignalStrength(this.networkState);
+    const strength = CrOnc.getSignalStrength(this.networkState);
     return prefix + this.strengthToIndex_(strength).toString(10);
   },
 
   /**
    * @param {number} strength The signal strength from [0 - 100].
-   * @return {number} An index from 0-4 corresponding to |strength|.
+   * @return {number} An index from 0 to |this.networkIconCount_ - 1|
+   * corresponding to |strength|.
    * @private
    */
   strengthToIndex_: function(strength) {
-    if (strength == 0)
+    if (strength <= 0) {
       return 0;
-    return Math.min(Math.trunc((strength - 1) / 25) + 1, 4);
+    }
+
+    if (strength >= 100) {
+      return this.networkIconCount_ - 1;
+    }
+
+    const zeroBasedIndex =
+        Math.trunc((strength - 1) * (this.networkIconCount_ - 1) / 100);
+    return zeroBasedIndex + 1;
   },
 
   /**
@@ -95,7 +123,7 @@ Polymer({
    * @private
    */
   showTechnology_: function() {
-    return this.getTechnology_() != '';
+    return this.getTechnology_() != '' && this.showTechnologyBadge;
   },
 
   /**
@@ -103,17 +131,20 @@ Polymer({
    * @private
    */
   getTechnology_: function() {
-    var networkState = this.networkState;
-    if (!networkState)
+    const networkState = this.networkState;
+    if (!networkState) {
       return '';
-    var type = networkState.Type;
-    if (type == CrOnc.Type.WI_MAX)
+    }
+    const type = networkState.Type;
+    if (type == CrOnc.Type.WI_MAX) {
       return 'network:4g';
+    }
     if (type == CrOnc.Type.CELLULAR && networkState.Cellular) {
-      var technology =
+      const technology =
           this.getTechnologyId_(networkState.Cellular.NetworkTechnology);
-      if (technology != '')
+      if (technology != '') {
         return 'network:' + technology;
+      }
     }
     return '';
   },
@@ -153,16 +184,18 @@ Polymer({
    * @private
    */
   showSecure_: function() {
-    var networkState = this.networkState;
-    if (!this.networkState)
+    const networkState = this.networkState;
+    if (!this.networkState) {
       return false;
-    if (networkState.Type != CrOnc.Type.WI_FI || !networkState.WiFi)
+    }
+    if (networkState.Type != CrOnc.Type.WI_FI || !networkState.WiFi) {
       return false;
+    }
     if (!this.isListItem &&
         networkState.ConnectionState == CrOnc.ConnectionState.NOT_CONNECTED) {
       return false;
     }
-    var security = CrOnc.getStateOrActiveString(networkState.WiFi.Security);
+    const security = CrOnc.getStateOrActiveString(networkState.WiFi.Security);
     return !!security && security != 'None';
   },
 });

@@ -8,12 +8,19 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.junit.Assert.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.support.v4.view.ViewPager;
-import android.view.ViewStub;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.ACTIVE_TAB_INDEX;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.HEIGHT;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.TABS;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.TOP_SHADOW_VISIBLE;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.VISIBLE;
+
+import android.support.v7.widget.RecyclerView;
+import android.view.ViewGroup;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -24,12 +31,14 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.test.ShadowRecordHistogram;
+import org.chromium.base.task.test.CustomShadowAsyncTask;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.asynctask.CustomShadowAsyncTask;
-import org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetModel.PropertyKey;
 import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryData.Tab;
-import org.chromium.chrome.browser.modelutil.ListObservable;
-import org.chromium.chrome.browser.modelutil.PropertyObservable;
+import org.chromium.ui.modelutil.ListObservable;
+import org.chromium.ui.modelutil.PropertyKey;
+import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.modelutil.PropertyObservable;
+import org.chromium.ui.test.util.modelutil.FakeViewProvider;
 
 /**
  * Controller tests for the keyboard accessory bottom sheet component.
@@ -43,24 +52,26 @@ public class AccessorySheetControllerTest {
     @Mock
     private ListObservable.ListObserver<Void> mTabListObserver;
     @Mock
-    private ViewStub mMockViewStub;
+    private AccessorySheetView mMockView;
     @Mock
-    private ViewPager mMockView;
+    private RecyclerView mMockRecyclerView;
 
-    private final Tab[] mTabs =
-            new Tab[] {new Tab(null, null, 0, 0, null), new Tab(null, null, 0, 0, null),
-                    new Tab(null, null, 0, 0, null), new Tab(null, null, 0, 0, null)};
+    private final Tab[] mTabs = new Tab[] {new Tab("Passwords", null, null, 0, 0, null),
+            new Tab("Passwords", null, null, 0, 0, null),
+            new Tab("Passwords", null, null, 0, 0, null),
+            new Tab("Passwords", null, null, 0, 0, null)};
 
     private AccessorySheetCoordinator mCoordinator;
     private AccessorySheetMediator mMediator;
-    private AccessorySheetModel mModel;
+    private PropertyModel mModel;
 
     @Before
     public void setUp() {
         ShadowRecordHistogram.reset();
         MockitoAnnotations.initMocks(this);
-        when(mMockViewStub.inflate()).thenReturn(mMockView);
-        mCoordinator = new AccessorySheetCoordinator(mMockViewStub, /*unused*/ () -> null);
+        when(mMockView.getLayoutParams()).thenReturn(new ViewGroup.LayoutParams(0, 0));
+        mCoordinator =
+                new AccessorySheetCoordinator(new FakeViewProvider<>(mMockView));
         mMediator = mCoordinator.getMediatorForTesting();
         mModel = mMediator.getModelForTesting();
     }
@@ -78,18 +89,19 @@ public class AccessorySheetControllerTest {
 
         // Calling show on the mediator should make model propagate that it's visible.
         mMediator.show();
-        verify(mMockPropertyObserver).onPropertyChanged(mModel, PropertyKey.VISIBLE);
-        assertThat(mModel.isVisible(), is(true));
+        verify(mMockPropertyObserver).onPropertyChanged(mModel, VISIBLE);
+        assertThat(mModel.get(VISIBLE), is(true));
 
         // Calling show again does nothing.
         mMediator.show();
         verify(mMockPropertyObserver) // Still the same call and no new one added.
-                .onPropertyChanged(mModel, PropertyKey.VISIBLE);
+                .onPropertyChanged(mModel, VISIBLE);
 
         // Calling hide on the mediator should make model propagate that it's invisible.
         mMediator.hide();
-        verify(mMockPropertyObserver, times(2)).onPropertyChanged(mModel, PropertyKey.VISIBLE);
-        assertThat(mModel.isVisible(), is(false));
+        verify(mMockPropertyObserver, times(2)).onPropertyChanged(mModel, VISIBLE);
+
+        assertThat(mModel.get(VISIBLE), is(false));
     }
 
     @Test
@@ -98,28 +110,29 @@ public class AccessorySheetControllerTest {
 
         // Setting height triggers the observer and changes the model.
         mCoordinator.setHeight(123);
-        verify(mMockPropertyObserver).onPropertyChanged(mModel, PropertyKey.HEIGHT);
-        assertThat(mModel.getHeight(), is(123));
+        verify(mMockPropertyObserver).onPropertyChanged(mModel, HEIGHT);
+        assertThat(mModel.get(HEIGHT), is(123));
 
         // Setting the same height doesn't trigger anything.
         mCoordinator.setHeight(123);
-        verify(mMockPropertyObserver).onPropertyChanged(mModel, PropertyKey.HEIGHT); // No 2nd call.
+        verify(mMockPropertyObserver).onPropertyChanged(mModel, HEIGHT); // No 2nd call.
 
         // Setting a different height triggers again.
         mCoordinator.setHeight(234);
-        verify(mMockPropertyObserver, times(2)).onPropertyChanged(mModel, PropertyKey.HEIGHT);
-        assertThat(mModel.getHeight(), is(234));
+        verify(mMockPropertyObserver, times(2)).onPropertyChanged(mModel, HEIGHT);
+
+        assertThat(mModel.get(HEIGHT), is(234));
     }
 
     @Test
     public void testModelNotifiesChangesForNewSheet() {
         mModel.addObserver(mMockPropertyObserver);
-        mModel.getTabList().addObserver(mTabListObserver);
+        mModel.get(TABS).addObserver(mTabListObserver);
 
-        assertThat(mModel.getTabList().size(), is(0));
+        assertThat(mModel.get(TABS).size(), is(0));
         mCoordinator.addTab(mTabs[0]);
-        verify(mTabListObserver).onItemRangeInserted(mModel.getTabList(), 0, 1);
-        assertThat(mModel.getTabList().size(), is(1));
+        verify(mTabListObserver).onItemRangeInserted(mModel.get(TABS), 0, 1);
+        assertThat(mModel.get(TABS).size(), is(1));
     }
 
     @Test
@@ -127,21 +140,21 @@ public class AccessorySheetControllerTest {
         mModel.addObserver(mMockPropertyObserver);
 
         // Initially, there is no active Tab.
-        assertThat(mModel.getTabList().size(), is(0));
+        assertThat(mModel.get(TABS).size(), is(0));
         assertThat(mCoordinator.getTab(), is(nullValue()));
 
         // The first tab becomes the active Tab.
         mCoordinator.addTab(mTabs[0]);
-        verify(mMockPropertyObserver).onPropertyChanged(mModel, PropertyKey.ACTIVE_TAB_INDEX);
-        assertThat(mModel.getTabList().size(), is(1));
-        assertThat(mModel.getActiveTabIndex(), is(0));
+        verify(mMockPropertyObserver).onPropertyChanged(mModel, ACTIVE_TAB_INDEX);
+        assertThat(mModel.get(TABS).size(), is(1));
+        assertThat(mModel.get(ACTIVE_TAB_INDEX), is(0));
         assertThat(mCoordinator.getTab(), is(mTabs[0]));
 
         // A second tab is added but doesn't become automatically active.
         mCoordinator.addTab(mTabs[1]);
-        verify(mMockPropertyObserver).onPropertyChanged(mModel, PropertyKey.ACTIVE_TAB_INDEX);
-        assertThat(mModel.getTabList().size(), is(2));
-        assertThat(mModel.getActiveTabIndex(), is(0));
+        verify(mMockPropertyObserver).onPropertyChanged(mModel, ACTIVE_TAB_INDEX);
+        assertThat(mModel.get(TABS).size(), is(2));
+        assertThat(mModel.get(ACTIVE_TAB_INDEX), is(0));
     }
 
     @Test
@@ -150,13 +163,13 @@ public class AccessorySheetControllerTest {
         mCoordinator.addTab(mTabs[1]);
         mCoordinator.addTab(mTabs[2]);
         mCoordinator.addTab(mTabs[3]);
-        assertThat(mModel.getTabList().size(), is(4));
-        assertThat(mModel.getActiveTabIndex(), is(0));
+        assertThat(mModel.get(TABS).size(), is(4));
+        assertThat(mModel.get(ACTIVE_TAB_INDEX), is(0));
 
         mCoordinator.removeTab(mTabs[0]);
 
-        assertThat(mModel.getTabList().size(), is(3));
-        assertThat(mModel.getActiveTabIndex(), is(0));
+        assertThat(mModel.get(TABS).size(), is(3));
+        assertThat(mModel.get(ACTIVE_TAB_INDEX), is(0));
     }
 
     @Test
@@ -164,8 +177,8 @@ public class AccessorySheetControllerTest {
         mCoordinator.addTab(mTabs[0]);
         mCoordinator.removeTab(mTabs[0]);
 
-        assertThat(mModel.getTabList().size(), is(0));
-        assertThat(mModel.getActiveTabIndex(), is(AccessorySheetModel.NO_ACTIVE_TAB));
+        assertThat(mModel.get(TABS).size(), is(0));
+        assertThat(mModel.get(ACTIVE_TAB_INDEX), is(AccessorySheetProperties.NO_ACTIVE_TAB));
     }
 
     @Test
@@ -174,14 +187,14 @@ public class AccessorySheetControllerTest {
         mCoordinator.addTab(mTabs[1]);
         mCoordinator.addTab(mTabs[2]);
         mCoordinator.addTab(mTabs[3]);
-        mModel.setActiveTabIndex(2);
+        mModel.set(ACTIVE_TAB_INDEX, 2);
         mModel.addObserver(mMockPropertyObserver);
 
         mCoordinator.removeTab(mTabs[2]);
 
-        verify(mMockPropertyObserver).onPropertyChanged(mModel, PropertyKey.ACTIVE_TAB_INDEX);
-        assertThat(mModel.getTabList().size(), is(3));
-        assertThat(mModel.getActiveTabIndex(), is(1));
+        verify(mMockPropertyObserver).onPropertyChanged(mModel, ACTIVE_TAB_INDEX);
+        assertThat(mModel.get(TABS).size(), is(3));
+        assertThat(mModel.get(ACTIVE_TAB_INDEX), is(1));
     }
 
     @Test
@@ -190,14 +203,14 @@ public class AccessorySheetControllerTest {
         mCoordinator.addTab(mTabs[1]);
         mCoordinator.addTab(mTabs[2]);
         mCoordinator.addTab(mTabs[3]);
-        mModel.setActiveTabIndex(2);
+        mModel.set(ACTIVE_TAB_INDEX, 2);
         mModel.addObserver(mMockPropertyObserver);
 
         mCoordinator.removeTab(mTabs[1]);
 
-        verify(mMockPropertyObserver).onPropertyChanged(mModel, PropertyKey.ACTIVE_TAB_INDEX);
-        assertThat(mModel.getTabList().size(), is(3));
-        assertThat(mModel.getActiveTabIndex(), is(1));
+        verify(mMockPropertyObserver).onPropertyChanged(mModel, ACTIVE_TAB_INDEX);
+        assertThat(mModel.get(TABS).size(), is(3));
+        assertThat(mModel.get(ACTIVE_TAB_INDEX), is(1));
     }
 
     @Test
@@ -206,12 +219,27 @@ public class AccessorySheetControllerTest {
         mCoordinator.addTab(mTabs[1]);
         mCoordinator.addTab(mTabs[2]);
         mCoordinator.addTab(mTabs[3]);
-        mModel.setActiveTabIndex(2);
+        mModel.set(ACTIVE_TAB_INDEX, 2);
 
         mCoordinator.removeTab(mTabs[3]);
 
-        assertThat(mModel.getTabList().size(), is(3));
-        assertThat(mModel.getActiveTabIndex(), is(2));
+        assertThat(mModel.get(TABS).size(), is(3));
+        assertThat(mModel.get(ACTIVE_TAB_INDEX), is(2));
+    }
+
+    @Test
+    public void testScrollingChangesShadowVisibility() {
+        assertThat(mModel.get(TOP_SHADOW_VISIBLE), is(false));
+
+        // If the list was scrolled far enough that the top is hidden, show the top shadow.
+        when(mMockRecyclerView.canScrollVertically(eq(-1))).thenReturn(true);
+        mCoordinator.getScrollListener().onScrolled(mMockRecyclerView, 0, 10);
+        assertThat(mModel.get(TOP_SHADOW_VISIBLE), is(true));
+
+        // If the list was scrolled back to the top, hide the shadow again.
+        when(mMockRecyclerView.canScrollVertically(eq(-1))).thenReturn(false);
+        mCoordinator.getScrollListener().onScrolled(mMockRecyclerView, 0, -10);
+        assertThat(mModel.get(TOP_SHADOW_VISIBLE), is(false));
     }
 
     @Test

@@ -8,8 +8,10 @@
 #include "ash/drag_drop/drag_image_view.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/aura/client/capture_client.h"
@@ -90,7 +92,7 @@ class DragTestView : public views::View {
 
   bool GetDropFormats(
       int* formats,
-      std::set<ui::Clipboard::FormatType>* format_types) override {
+      std::set<ui::ClipboardFormatType>* format_types) override {
     *formats = ui::OSExchangeData::STRING;
     return true;
   }
@@ -290,13 +292,14 @@ void DispatchGesture(ui::EventType gesture_type, gfx::Point location) {
 
 class DragDropControllerTest : public AshTestBase {
  public:
-  DragDropControllerTest() : AshTestBase() {}
+  DragDropControllerTest() = default;
   ~DragDropControllerTest() override = default;
 
   void SetUp() override {
     AshTestBase::SetUp();
     drag_drop_controller_.reset(new TestDragDropController);
     drag_drop_controller_->set_should_block_during_drag_drop(false);
+    drag_drop_controller_->set_enabled(true);
     aura::client::SetDragDropClient(Shell::GetPrimaryRootWindow(),
                                     drag_drop_controller_.get());
   }
@@ -379,7 +382,7 @@ TEST_F(DragDropControllerTest, DragDropInSingleViewTest) {
     generator.MoveMouseBy(0, 1);
 
     // Execute any scheduled draws to process deferred mouse events.
-    RunAllPendingInMessageLoop();
+    base::RunLoop().RunUntilIdle();
   }
 
   generator.ReleaseLeftButton();
@@ -463,7 +466,7 @@ TEST_F(DragDropControllerTest, DragDropInMultipleViewsSingleWidgetTest) {
     generator.MoveMouseBy(1, 0);
 
     // Execute any scheduled draws to process deferred mouse events.
-    RunAllPendingInMessageLoop();
+    base::RunLoop().RunUntilIdle();
   }
 
   generator.ReleaseLeftButton();
@@ -523,7 +526,7 @@ TEST_F(DragDropControllerTest, DragDropInMultipleViewsMultipleWidgetsTest) {
     generator.MoveMouseBy(1, 0);
 
     // Execute any scheduled draws to process deferred mouse events.
-    RunAllPendingInMessageLoop();
+    base::RunLoop().RunUntilIdle();
   }
 
   generator.ReleaseLeftButton();
@@ -574,7 +577,7 @@ TEST_F(DragDropControllerTest, ViewRemovedWhileInDragDropTest) {
     generator.MoveMouseBy(0, 1);
 
     // Execute any scheduled draws to process deferred mouse events.
-    RunAllPendingInMessageLoop();
+    base::RunLoop().RunUntilIdle();
   }
 
   drag_view->parent()->RemoveChildView(drag_view.get());
@@ -585,7 +588,7 @@ TEST_F(DragDropControllerTest, ViewRemovedWhileInDragDropTest) {
     generator.MoveMouseBy(0, 1);
 
     // Execute any scheduled draws to process deferred mouse events.
-    RunAllPendingInMessageLoop();
+    base::RunLoop().RunUntilIdle();
   }
 
   generator.ReleaseLeftButton();
@@ -613,7 +616,7 @@ TEST_F(DragDropControllerTest, DragLeavesClipboardAloneTest) {
     ui::ScopedClipboardWriter scw(ui::CLIPBOARD_TYPE_COPY_PASTE);
     scw.WriteText(base::ASCIIToUTF16(clip_str));
   }
-  EXPECT_TRUE(cb->IsFormatAvailable(ui::Clipboard::GetPlainTextFormatType(),
+  EXPECT_TRUE(cb->IsFormatAvailable(ui::ClipboardFormatType::GetPlainTextType(),
                                     ui::CLIPBOARD_TYPE_COPY_PASTE));
 
   std::unique_ptr<views::Widget> widget = CreateTestWidget();
@@ -630,11 +633,11 @@ TEST_F(DragDropControllerTest, DragLeavesClipboardAloneTest) {
   generator.MoveMouseBy(0, drag_view->VerticalDragThreshold() + 1);
 
   // Execute any scheduled draws to process deferred mouse events.
-  RunAllPendingInMessageLoop();
+  base::RunLoop().RunUntilIdle();
 
   // Verify the clipboard contents haven't changed
   std::string result;
-  EXPECT_TRUE(cb->IsFormatAvailable(ui::Clipboard::GetPlainTextFormatType(),
+  EXPECT_TRUE(cb->IsFormatAvailable(ui::ClipboardFormatType::GetPlainTextType(),
                                     ui::CLIPBOARD_TYPE_COPY_PASTE));
   cb->ReadAsciiText(ui::CLIPBOARD_TYPE_COPY_PASTE, &result);
   EXPECT_EQ(clip_str, result);
@@ -666,7 +669,7 @@ TEST_F(DragDropControllerTest, WindowDestroyedDuringDragDrop) {
     generator.MoveMouseBy(0, 1);
 
     // Execute any scheduled draws to process deferred mouse events.
-    RunAllPendingInMessageLoop();
+    base::RunLoop().RunUntilIdle();
 
     if (i > drag_view->VerticalDragThreshold())
       EXPECT_EQ(window, GetDragWindow());
@@ -760,7 +763,7 @@ TEST_F(DragDropControllerTest, PressingEscapeCancelsDragDrop) {
     generator.MoveMouseBy(0, 1);
 
     // Execute any scheduled draws to process deferred mouse events.
-    RunAllPendingInMessageLoop();
+    base::RunLoop().RunUntilIdle();
   }
 
   generator.PressKey(ui::VKEY_ESCAPE, 0);
@@ -802,7 +805,7 @@ TEST_F(DragDropControllerTest, CaptureLostCancelsDragDrop) {
     generator.MoveMouseBy(0, 1);
 
     // Execute any scheduled draws to process deferred mouse events.
-    RunAllPendingInMessageLoop();
+    base::RunLoop().RunUntilIdle();
   }
   // Make sure the capture window won't handle mouse events.
   aura::Window* capture_window = drag_drop_tracker()->capture_window();
@@ -864,7 +867,7 @@ TEST_F(DragDropControllerTest, TouchDragDropInMultipleWindows) {
     DispatchGesture(ui::ET_GESTURE_SCROLL_UPDATE, gesture_location);
 
     // Execute any scheduled draws to process deferred mouse events.
-    RunAllPendingInMessageLoop();
+    base::RunLoop().RunUntilIdle();
   }
 
   DispatchGesture(ui::ET_GESTURE_SCROLL_END, gesture_location);
@@ -1156,6 +1159,26 @@ TEST_F(DragDropControllerTest, DragStartedAndEndedEvents) {
   drag_drop_controller_->RemoveObserver(&observer);
 }
 
+TEST_F(DragDropControllerTest, SetEnabled) {
+  TestObserver observer;
+  drag_drop_controller_->AddObserver(&observer);
+
+  // Data for the drag.
+  ui::OSExchangeData data;
+  data.SetString(base::UTF8ToUTF16("I am being dragged"));
+  std::unique_ptr<views::Widget> widget = CreateTestWidget();
+  aura::Window* window = widget->GetNativeWindow();
+
+  // Cannot start a drag when the controller is disabled.
+  drag_drop_controller_->set_enabled(false);
+  drag_drop_controller_->StartDragAndDrop(
+      data, window->GetRootWindow(), window, gfx::Point(5, 5),
+      ui::DragDropTypes::DRAG_MOVE, ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE);
+  EXPECT_EQ(TestObserver::State::kNotInvoked, observer.state());
+
+  drag_drop_controller_->RemoveObserver(&observer);
+}
+
 TEST_F(DragDropControllerTest, EventTarget) {
   std::unique_ptr<aura::Window> window(CreateTestWindowInShellWithDelegate(
       aura::test::TestWindowDelegate::CreateSelfDestroyingDelegate(), -1,
@@ -1188,7 +1211,7 @@ TEST_F(DragDropControllerTest, EventTarget) {
 
   EXPECT_EQ(EventTargetTestDelegate::State::kPerformDropInvoked,
             delegate.state());
-  RunAllPendingInMessageLoop();
+  base::RunLoop().RunUntilIdle();
 }
 
 }  // namespace ash

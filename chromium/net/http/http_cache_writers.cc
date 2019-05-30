@@ -8,8 +8,10 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/logging.h"
-
+#include "base/threading/thread_task_runner_handle.h"
 #include "net/base/net_errors.h"
 #include "net/disk_cache/disk_cache.h"
 #include "net/http/http_cache_transaction.h"
@@ -186,7 +188,7 @@ HttpCache::Writers::EraseTransaction(TransactionMap::iterator it, int result) {
   Transaction* transaction = it->first;
   transaction->WriterAboutToBeRemovedFromEntry(result);
 
-  TransactionMap::iterator return_it = all_writers_.erase(it);
+  auto return_it = all_writers_.erase(it);
 
   if (all_writers_.empty() && next_state_ == State::NONE) {
     // This needs to be called to handle the edge case where even before Read is

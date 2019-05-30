@@ -2,9 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/jumbo.gni")
 import("//testing/test.gni")
 
-static_library("metrics") {
+jumbo_static_library("metrics") {
   sources = [
     "call_stack_profile_metrics_provider.cc",
     "call_stack_profile_metrics_provider.h",
@@ -14,6 +15,8 @@ static_library("metrics") {
     "client_info.h",
     "cloned_install_detector.cc",
     "cloned_install_detector.h",
+    "cpu_metrics_provider.cc",
+    "cpu_metrics_provider.h",
     "daily_event.cc",
     "daily_event.h",
     "data_use_tracker.cc",
@@ -31,8 +34,6 @@ static_library("metrics") {
     "enabled_state_provider.h",
     "environment_recorder.cc",
     "environment_recorder.h",
-    "execution_phase.cc",
-    "execution_phase.h",
     "expired_histogram_util.cc",
     "expired_histogram_util.h",
     "expired_histograms_checker.cc",
@@ -114,8 +115,10 @@ static_library("metrics") {
     "//components/prefs",
     "//components/variations",
     "//components/version_info:version_info",
+    "//crypto",
     "//extensions/buildflags",
     "//third_party/zlib/google:compression_utils",
+    "//url",
   ]
 
   if (is_chromeos) {
@@ -181,7 +184,7 @@ if (!is_ios) {
   }
 }
 
-static_library("net") {
+jumbo_static_library("net") {
   sources = [
     "net/cellular_logic_helper.cc",
     "net/cellular_logic_helper.h",
@@ -216,7 +219,7 @@ static_library("net") {
       "net/wifi_access_point_info_provider_chromeos.cc",
       "net/wifi_access_point_info_provider_chromeos.h",
     ]
-    deps += [ "//chromeos" ]
+    deps += [ "//chromeos/network" ]
   }
 }
 
@@ -319,7 +322,7 @@ source_set("call_stack_profile_collector") {
   ]
 }
 
-static_library("test_support") {
+jumbo_static_library("test_support") {
   testonly = true
   sources = [
     "test_enabled_state_provider.cc",
@@ -399,7 +402,6 @@ source_set("unit_tests") {
     "//base/test:test_support",
     "//components/component_updater:test_support",
     "//components/encrypted_messages:encrypted_message_proto",
-    "//components/metrics/public/cpp:call_stack_unit_tests",
     "//components/prefs:test_support",
     "//components/variations",
     "//extensions/buildflags",
@@ -419,14 +421,24 @@ source_set("unit_tests") {
   }
 
   if (is_chromeos) {
-    deps += [ "//chromeos" ]
+    deps += [
+      "//chromeos/dbus:test_support",
+      "//chromeos/network:test_support",
+    ]
   }
 
   # iOS is not supported by the profiler and the ios-simulator bot chokes on
   # these tests.
   if (is_ios) {
     sources -= [ "child_call_stack_profile_collector_unittest.cc" ]
-    deps -= [ "//components/metrics/public/cpp:call_stack_unit_tests" ]
+  }
+
+  if (is_ios) {
+    deps += [ "//ios/web/public/test" ]
+  }
+
+  if (!is_ios) {
+    deps += [ "//content/test:test_support" ]
   }
 }
 

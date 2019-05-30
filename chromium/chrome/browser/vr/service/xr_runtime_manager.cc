@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/lazy_instance.h"
 #include "base/memory/singleton.h"
 #include "build/build_config.h"
 #include "chrome/browser/vr/service/browser_xr_runtime.h"
@@ -47,7 +48,15 @@ namespace vr {
 
 namespace {
 XRRuntimeManager* g_xr_runtime_manager = nullptr;
+
+base::LazyInstance<base::ObserverList<XRRuntimeManagerObserver>>::Leaky
+    g_xr_runtime_manager_observers;
 }  // namespace
+
+XRRuntimeManager::~XRRuntimeManager() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  g_xr_runtime_manager = nullptr;
+}
 
 XRRuntimeManager* XRRuntimeManager::GetInstance() {
   if (!g_xr_runtime_manager) {
@@ -57,7 +66,7 @@ XRRuntimeManager* XRRuntimeManager::GetInstance() {
 #if defined(OS_ANDROID)
 #if BUILDFLAG(ENABLE_ARCORE)
     if (base::FeatureList::IsEnabled(features::kWebXrHitTest)) {
-      providers.emplace_back(device::ARCoreDeviceProviderFactory::Create());
+      providers.emplace_back(device::ArCoreDeviceProviderFactory::Create());
     }
 #endif
 
@@ -83,14 +92,12 @@ XRRuntimeManager* XRRuntimeManager::GetInstance() {
 #endif
 #endif  // ENABLE_ISOLATED_XR_SERVICE
 
-    if (base::FeatureList::IsEnabled(features::kWebXrOrientationSensorDevice)) {
-      content::ServiceManagerConnection* connection =
-          content::ServiceManagerConnection::GetForProcess();
-      if (connection) {
-        providers.emplace_back(
-            std::make_unique<device::VROrientationDeviceProvider>(
-                connection->GetConnector()));
-      }
+    content::ServiceManagerConnection* connection =
+        content::ServiceManagerConnection::GetForProcess();
+    if (connection) {
+      providers.emplace_back(
+          std::make_unique<device::VROrientationDeviceProvider>(
+              connection->GetConnector()));
     }
 
     // The constructor sets g_xr_runtime_manager, which is cleaned up when
@@ -100,140 +107,30 @@ XRRuntimeManager* XRRuntimeManager::GetInstance() {
   return g_xr_runtime_manager;
 }
 
-BrowserXRRuntime* XRRuntimeManager::GetImmersiveRuntime() {
-#if defined(OS_ANDROID)
-  auto* gvr = GetRuntime(device::mojom::XRDeviceId::GVR_DEVICE_ID);
-  if (gvr)
-    return gvr;
-#endif
-
-#if BUILDFLAG(ENABLE_OPENVR)
-  auto* openvr = GetRuntime(device::mojom::XRDeviceId::OPENVR_DEVICE_ID);
-  if (openvr)
-    return openvr;
-#endif
-
-#if BUILDFLAG(ENABLE_OCULUS_VR)
-  auto* oculus = GetRuntime(device::mojom::XRDeviceId::OCULUS_DEVICE_ID);
-  if (oculus)
-    return oculus;
-#endif
-
-  return nullptr;
-}
-
-BrowserXRRuntime* XRRuntimeManager::GetRuntime(device::mojom::XRDeviceId id) {
-  auto it = runtimes_.find(id);
-  if (it == runtimes_.end())
-    return nullptr;
-
-  return it->second.get();
-}
-
-BrowserXRRuntime* XRRuntimeManager::GetRuntimeForOptions(
-    device::mojom::XRSessionOptions* options) {
-  // Examine options to determine which device provider we should use.
-  if (options->immersive && !options->provide_passthrough_camera) {
-    return GetImmersiveRuntime();
-  } else if (options->provide_passthrough_camera && !options->immersive) {
-    return GetRuntime(device::mojom::XRDeviceId::ARCORE_DEVICE_ID);
-  } else if (!options->provide_passthrough_camera && !options->immersive) {
-    // Non immersive session.
-    // Try the orientation provider if it exists.
-    auto* orientation_runtime =
-        GetRuntime(device::mojom::XRDeviceId::ORIENTATION_DEVICE_ID);
-    if (orientation_runtime) {
-      return orientation_runtime;
-    }
-
-    // Otherwise fall back to immersive providers.
-    return GetImmersiveRuntime();
-  }
-  return nullptr;
-}
-
-bool XRRuntimeManager::IsOtherDevicePresenting(XRDeviceImpl* device) {
-  auto* runtime = GetImmersiveRuntime();
-  return runtime && runtime->GetPresentingRendererDevice() &&
-         runtime->GetPresentingRendererDevice() != device;
-}
-
-device::mojom::VRDisplayInfoPtr XRRuntimeManager::GetCurrentVRDisplayInfo(
-    XRDeviceImpl* device) {
-  // Get an immersive_runtime device if there is one.
-  auto* immersive_runtime = GetImmersiveRuntime();
-  if (immersive_runtime) {
-    // Listen to changes for this device.
-    immersive_runtime->OnRendererDeviceAdded(device);
-  }
-
-  // Get an AR device if there is one.
-  device::mojom::XRSessionOptions options = {};
-  options.provide_passthrough_camera = true;
-  auto* ar_runtime = GetRuntimeForOptions(&options);
-  if (ar_runtime) {
-    // Listen to  changes for this device.
-    ar_runtime->OnRendererDeviceAdded(device);
-  }
-
-  // If there is neither, use the generic non-immersive device.
-  if (!ar_runtime && !immersive_runtime) {
-    device::mojom::XRSessionOptions options = {};
-    auto* non_immersive_runtime = GetRuntimeForOptions(&options);
-    if (non_immersive_runtime) {
-      // Listen to changes for this device.
-      non_immersive_runtime->OnRendererDeviceAdded(device);
-    }
-
-    // If we don't have an AR or immersive device, return the generic non-
-    // immersive device's DisplayInfo if we have it.
-    return non_immersive_runtime ? non_immersive_runtime->GetVRDisplayInfo()
-                                 : nullptr;
-  }
-
-  // Use the immersive or AR device. However, if we are using the immersive
-  // device's info, and AR is supported, reflect that in capabilities.
-  device::mojom::VRDisplayInfoPtr device_info =
-      immersive_runtime ? immersive_runtime->GetVRDisplayInfo()
-                        : ar_runtime->GetVRDisplayInfo();
-  device_info->capabilities->can_provide_pass_through_images = !!ar_runtime;
-
-  return device_info;
-}
-
-void XRRuntimeManager::SupportsSession(
-    device::mojom::XRSessionOptionsPtr options,
-    device::mojom::XRDevice::SupportsSessionCallback callback) {
-  auto* runtime = GetRuntimeForOptions(options.get());
-
-  if (!runtime) {
-    std::move(callback).Run(false);
-    return;
-  }
-
-  // TODO(http://crbug.com/842025): Pass supports session on to the device
-  // runtimes.
-  std::move(callback).Run(true);
-}
-
-bool XRRuntimeManager::HasAnyRuntime() {
-  return runtimes_.size() > 0;
-}
-
 bool XRRuntimeManager::HasInstance() {
   return g_xr_runtime_manager != nullptr;
 }
 
-XRRuntimeManager::XRRuntimeManager(ProviderList providers)
-    : providers_(std::move(providers)) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  CHECK(!g_xr_runtime_manager);
-  g_xr_runtime_manager = this;
+void XRRuntimeManager::RecordVrStartupHistograms() {
+#if BUILDFLAG(ENABLE_OPENVR) && !BUILDFLAG(ENABLE_ISOLATED_XR_SERVICE)
+  device::OpenVRDeviceProvider::RecordRuntimeAvailability();
+#endif
 }
 
-XRRuntimeManager::~XRRuntimeManager() {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  g_xr_runtime_manager = nullptr;
+void XRRuntimeManager::AddObserver(XRRuntimeManagerObserver* observer) {
+  g_xr_runtime_manager_observers.Get().AddObserver(observer);
+}
+
+void XRRuntimeManager::RemoveObserver(XRRuntimeManagerObserver* observer) {
+  g_xr_runtime_manager_observers.Get().RemoveObserver(observer);
+}
+
+/* static */
+void XRRuntimeManager::ExitImmersivePresentation() {
+  auto* browser_xr_runtime = GetInstance()->GetImmersiveRuntime();
+  if (browser_xr_runtime) {
+    browser_xr_runtime->ExitVrFromPresentingRendererDevice();
+  }
 }
 
 void XRRuntimeManager::AddService(VRServiceImpl* service) {
@@ -260,42 +157,187 @@ void XRRuntimeManager::RemoveService(VRServiceImpl* service) {
   }
 }
 
+BrowserXRRuntime* XRRuntimeManager::GetRuntime(device::mojom::XRDeviceId id) {
+  auto it = runtimes_.find(id);
+  if (it == runtimes_.end())
+    return nullptr;
+
+  return it->second.get();
+}
+
+BrowserXRRuntime* XRRuntimeManager::GetRuntimeForOptions(
+    device::mojom::XRSessionOptions* options) {
+  // Examine options to determine which device provider we should use.
+
+  // AR requested.
+  if (options->environment_integration) {
+    if (options->immersive) {
+      // No support for immersive AR.
+      return nullptr;
+    }
+    // Return the ARCore device.
+    return GetRuntime(device::mojom::XRDeviceId::ARCORE_DEVICE_ID);
+  }
+
+  if (options->immersive) {
+    return GetImmersiveRuntime();
+  } else {
+    // Non immersive session.
+    // Try the orientation provider if it exists.
+    auto* orientation_runtime =
+        GetRuntime(device::mojom::XRDeviceId::ORIENTATION_DEVICE_ID);
+    if (orientation_runtime) {
+      return orientation_runtime;
+    }
+
+    // If we don't have an orientation provider, then we don't have an explicit
+    // runtime to back a non-immersive session
+    return nullptr;
+  }
+}
+
+BrowserXRRuntime* XRRuntimeManager::GetImmersiveRuntime() {
+#if defined(OS_ANDROID)
+  auto* gvr = GetRuntime(device::mojom::XRDeviceId::GVR_DEVICE_ID);
+  if (gvr)
+    return gvr;
+#endif
+
+#if BUILDFLAG(ENABLE_OPENVR)
+  auto* openvr = GetRuntime(device::mojom::XRDeviceId::OPENVR_DEVICE_ID);
+  if (openvr)
+    return openvr;
+#endif
+
+#if BUILDFLAG(ENABLE_OCULUS_VR)
+  auto* oculus = GetRuntime(device::mojom::XRDeviceId::OCULUS_DEVICE_ID);
+  if (oculus)
+    return oculus;
+#endif
+
+#if BUILDFLAG(ENABLE_WINDOWS_MR)
+  auto* wmr = GetRuntime(device::mojom::XRDeviceId::WINDOWS_MIXED_REALITY_ID);
+  if (wmr)
+    return wmr;
+#endif
+
+  return nullptr;
+}
+
+device::mojom::VRDisplayInfoPtr XRRuntimeManager::GetCurrentVRDisplayInfo(
+    XRDeviceImpl* device) {
+  // Get an immersive_runtime device if there is one.
+  auto* immersive_runtime = GetImmersiveRuntime();
+  if (immersive_runtime) {
+    // Listen to changes for this device.
+    immersive_runtime->OnRendererDeviceAdded(device);
+
+    // If we don't have display info for the immersive device, get display info
+    // from a different device.
+    if (!immersive_runtime->GetVRDisplayInfo()) {
+      immersive_runtime = nullptr;
+    }
+  }
+
+  // Get an AR device if there is one.
+  device::mojom::XRSessionOptions options = {};
+  options.environment_integration = true;
+  auto* ar_runtime = GetRuntimeForOptions(&options);
+  if (ar_runtime) {
+    // Listen to  changes for this device.
+    ar_runtime->OnRendererDeviceAdded(device);
+  }
+
+  // If there is neither, use the generic non-immersive device.
+  if (!ar_runtime && !immersive_runtime) {
+    device::mojom::XRSessionOptions options = {};
+    auto* non_immersive_runtime = GetRuntimeForOptions(&options);
+    if (non_immersive_runtime) {
+      // Listen to changes for this device.
+      non_immersive_runtime->OnRendererDeviceAdded(device);
+    }
+
+    // If we don't have an AR or immersive device, return the generic non-
+    // immersive device's DisplayInfo if we have it.
+    return non_immersive_runtime ? non_immersive_runtime->GetVRDisplayInfo()
+                                 : nullptr;
+  }
+
+  // Use the immersive or AR device.
+  device::mojom::VRDisplayInfoPtr device_info =
+      immersive_runtime ? immersive_runtime->GetVRDisplayInfo()
+                        : ar_runtime->GetVRDisplayInfo();
+
+  return device_info;
+}
+
 void XRRuntimeManager::OnRendererDeviceRemoved(XRDeviceImpl* device) {
   for (const auto& runtime : runtimes_) {
     runtime.second->OnRendererDeviceRemoved(device);
   }
 }
 
-void XRRuntimeManager::AddRuntime(device::mojom::XRDeviceId id,
-                                  device::mojom::VRDisplayInfoPtr info,
-                                  device::mojom::XRRuntimePtr runtime) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK(runtimes_.find(id) == runtimes_.end());
+bool XRRuntimeManager::IsOtherDevicePresenting(XRDeviceImpl* device) {
+  DCHECK(device);
 
-  runtimes_[id] =
-      std::make_unique<BrowserXRRuntime>(std::move(runtime), std::move(info));
-  for (VRServiceImpl* service : services_)
-    service->RuntimesChanged();
+  auto* runtime = GetImmersiveRuntime();
+  if (!runtime)
+    return false;  // No immersive runtime to be presenting.
+
+  XRDeviceImpl* presenting_device = runtime->GetPresentingRendererDevice();
+  if (!presenting_device)
+    return false;  // No XRDeviceImpl is presenting.
+
+  // True if some other XRDeviceImpl is presenting.
+  return (presenting_device != device);
 }
 
-void XRRuntimeManager::RemoveRuntime(device::mojom::XRDeviceId id) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  auto it = runtimes_.find(id);
-  DCHECK(it != runtimes_.end());
-
-  // Remove the device from runtimes_ before notifying services that it was
-  // removed, since they will query for devices in RemoveRuntime.
-  std::unique_ptr<BrowserXRRuntime> removed_device = std::move(it->second);
-  runtimes_.erase(it);
-
-  for (VRServiceImpl* service : services_)
-    service->RuntimesChanged();
+bool XRRuntimeManager::HasAnyRuntime() {
+  return !runtimes_.empty();
 }
 
-void XRRuntimeManager::RecordVrStartupHistograms() {
-#if BUILDFLAG(ENABLE_OPENVR) && !BUILDFLAG(ENABLE_ISOLATED_XR_SERVICE)
-  device::OpenVRDeviceProvider::RecordRuntimeAvailability();
-#endif
+void XRRuntimeManager::SupportsSession(
+    device::mojom::XRSessionOptionsPtr options,
+    device::mojom::XRDevice::SupportsSessionCallback callback) {
+  auto* runtime = GetRuntimeForOptions(options.get());
+
+  if (!runtime) {
+    std::move(callback).Run(false);
+    return;
+  }
+
+  // TODO(http://crbug.com/842025): Pass supports session on to the device
+  // runtimes.
+  std::move(callback).Run(true);
+}
+
+void XRRuntimeManager::ForEachRuntime(
+    const base::RepeatingCallback<void(BrowserXRRuntime*)>& fn) {
+  for (auto& rt : runtimes_) {
+    fn.Run(rt.second.get());
+  }
+}
+
+XRRuntimeManager::XRRuntimeManager(ProviderList providers)
+    : providers_(std::move(providers)) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  CHECK(!g_xr_runtime_manager);
+  g_xr_runtime_manager = this;
+}
+
+device::mojom::XRRuntime* XRRuntimeManager::GetRuntimeForTest(
+    device::mojom::XRDeviceId id) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DeviceRuntimeMap::iterator iter =
+      runtimes_.find(static_cast<device::mojom::XRDeviceId>(id));
+  if (iter == runtimes_.end())
+    return nullptr;
+
+  return iter->second->GetRuntime();
+}
+
+size_t XRRuntimeManager::NumberOfConnectedServices() {
+  return services_.size();
 }
 
 void XRRuntimeManager::InitializeProviders() {
@@ -329,22 +371,35 @@ bool XRRuntimeManager::AreAllProvidersInitialized() {
   return num_initialized_providers_ == providers_.size();
 }
 
-size_t XRRuntimeManager::NumberOfConnectedServices() {
-  return services_.size();
+void XRRuntimeManager::AddRuntime(device::mojom::XRDeviceId id,
+                                  device::mojom::VRDisplayInfoPtr info,
+                                  device::mojom::XRRuntimePtr runtime) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(runtimes_.find(id) == runtimes_.end());
+
+  runtimes_[id] =
+      std::make_unique<BrowserXRRuntime>(std::move(runtime), std::move(info));
+
+  for (XRRuntimeManagerObserver& obs : g_xr_runtime_manager_observers.Get())
+    obs.OnRuntimeAdded(runtimes_[id].get());
+
+  for (VRServiceImpl* service : services_)
+    // TODO(sumankancherla): Consider combining with XRRuntimeManagerObserver.
+    service->RuntimesChanged();
 }
 
-device::mojom::XRRuntime* XRRuntimeManager::GetRuntimeForTest(unsigned int id) {
+void XRRuntimeManager::RemoveRuntime(device::mojom::XRDeviceId id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  auto it = runtimes_.find(id);
+  DCHECK(it != runtimes_.end());
 
-  if (id == 0)
-    return nullptr;
+  // Remove the device from runtimes_ before notifying services that it was
+  // removed, since they will query for devices in RuntimesChanged.
+  std::unique_ptr<BrowserXRRuntime> removed_device = std::move(it->second);
+  runtimes_.erase(it);
 
-  DeviceRuntimeMap::iterator iter =
-      runtimes_.find(static_cast<device::mojom::XRDeviceId>(id));
-  if (iter == runtimes_.end())
-    return nullptr;
-
-  return iter->second->GetRuntime();
+  for (VRServiceImpl* service : services_)
+    service->RuntimesChanged();
 }
 
 }  // namespace vr

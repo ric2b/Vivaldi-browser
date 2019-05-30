@@ -47,7 +47,7 @@ class CORE_EXPORT SelectorFilter {
 
  public:
   class ParentStackFrame {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+    DISALLOW_NEW();
 
    public:
     ParentStackFrame() : element(nullptr) {}
@@ -104,6 +104,6 @@ inline bool SelectorFilter::FastRejectSelector(
 
 }  // namespace blink
 
-WTF_ALLOW_INIT_WITH_MEM_FUNCTIONS(blink::SelectorFilter::ParentStackFrame);
+WTF_ALLOW_INIT_WITH_MEM_FUNCTIONS(blink::SelectorFilter::ParentStackFrame)
 
 #endif

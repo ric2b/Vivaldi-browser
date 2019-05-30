@@ -9,7 +9,7 @@
 
 #include "base/callback.h"
 #include "content/common/content_export.h"
-#include "third_party/blink/public/platform/modules/fetch/fetch_api_request.mojom.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 
 class GURL;
@@ -60,7 +60,7 @@ class CONTENT_EXPORT AssociatedResourceFetcher {
   // https://fetch.spec.whatwg.org/#concept-request-credentials-mode
   virtual void Start(
       blink::WebLocalFrame* frame,
-      blink::WebURLRequest::RequestContext request_context,
+      blink::mojom::RequestContextType request_context,
       network::mojom::FetchRequestMode fetch_request_mode,
       network::mojom::FetchCredentialsMode fetch_credentials_mode,
       network::mojom::RequestContextFrameType frame_type,

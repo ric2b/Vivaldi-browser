@@ -22,17 +22,17 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.TabState;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabState;
+import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore;
 import org.chromium.chrome.browser.tabmodel.TestTabModelDirectory;
 import org.chromium.chrome.browser.tabmodel.TestTabModelDirectory.TabStateInfo;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 
 import java.io.File;
 import java.util.concurrent.Callable;
@@ -57,8 +57,10 @@ public class IncognitoNotificationServiceTest {
     }
 
     private void sendClearIncognitoIntent() throws CanceledException {
-        PendingIntent clearIntent = IncognitoNotificationService.getRemoveAllIncognitoTabsIntent(
-                InstrumentationRegistry.getTargetContext());
+        PendingIntent clearIntent =
+                IncognitoNotificationService
+                        .getRemoveAllIncognitoTabsIntent(InstrumentationRegistry.getTargetContext())
+                        .getPendingIntent();
         clearIntent.send();
     }
 

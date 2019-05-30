@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "ash/keyboard/ash_keyboard_controller.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
@@ -26,8 +27,8 @@
 #include "ui/compositor/test/layer_animator_test_controller.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/keyboard/keyboard_controller.h"
-#include "ui/keyboard/keyboard_switches.h"
 #include "ui/keyboard/keyboard_ui.h"
+#include "ui/keyboard/public/keyboard_switches.h"
 #include "ui/keyboard/test/keyboard_test_util.h"
 #include "ui/views/test/capture_tracking_view.h"
 #include "ui/views/widget/widget.h"
@@ -152,16 +153,6 @@ class SystemModalContainerLayoutManagerTest : public AshTestBase {
     AshTestBase::SetUp();
   }
 
-  void ActivateKeyboard() {
-    Shell::GetPrimaryRootWindowController()->ActivateKeyboard(
-        keyboard::KeyboardController::Get());
-  }
-
-  void DeactivateKeyboard() {
-    Shell::GetPrimaryRootWindowController()->DeactivateKeyboard(
-        keyboard::KeyboardController::Get());
-  }
-
   aura::Window* OpenToplevelTestWindow(bool modal) {
     views::Widget* widget = views::Widget::CreateWindowWithContext(
         new TestWindow(modal), CurrentContext());
@@ -179,18 +170,13 @@ class SystemModalContainerLayoutManagerTest : public AshTestBase {
   // Show or hide the keyboard.
   void ShowKeyboard(bool show) {
     auto* keyboard = keyboard::KeyboardController::Get();
-    ASSERT_TRUE(keyboard->enabled());
+    ASSERT_TRUE(keyboard->IsEnabled());
     if (show == keyboard->IsKeyboardVisible())
       return;
 
     if (show) {
-      keyboard->ShowKeyboard(true);
-      if (keyboard->ui()->GetKeyboardWindow()->bounds().height() == 0) {
-        keyboard->ui()->GetKeyboardWindow()->SetBounds(
-            keyboard::KeyboardBoundsFromRootBounds(
-                Shell::GetPrimaryRootWindow()->bounds(), 100));
-        keyboard->NotifyKeyboardWindowLoaded();
-      }
+      keyboard->ShowKeyboard(true /* lock */);
+      ASSERT_TRUE(keyboard::WaitUntilShown());
     } else {
       keyboard->HideKeyboardByUser();
     }
@@ -656,7 +642,6 @@ TEST_F(SystemModalContainerLayoutManagerTest, MultiDisplays) {
 // positioned into the visible area.
 TEST_F(SystemModalContainerLayoutManagerTest,
        SystemModalDialogGetPushedFromKeyboard) {
-  ActivateKeyboard();
   const gfx::Rect& container_bounds = GetModalContainer()->bounds();
   // Place the window at the bottom of the screen.
   gfx::Size modal_size(100, 100);
@@ -687,14 +672,12 @@ TEST_F(SystemModalContainerLayoutManagerTest,
   EXPECT_NE(modal_bounds.ToString(), modal_window->bounds().ToString());
   EXPECT_EQ(modal_size.ToString(), modal_window->bounds().size().ToString());
   EXPECT_EQ(modal_origin.x(), modal_window->bounds().x());
-  DeactivateKeyboard();
 }
 
 // Test that windows will not get cropped through the visible virtual keyboard -
 // if centered.
 TEST_F(SystemModalContainerLayoutManagerTest,
        SystemModalDialogGetPushedButNotCroppedFromKeyboard) {
-  ActivateKeyboard();
   const gfx::Rect& container_bounds = GetModalContainer()->bounds();
   const gfx::Size screen_size = Shell::GetPrimaryRootWindow()->bounds().size();
   // Place the window at the bottom of the screen.
@@ -722,14 +705,12 @@ TEST_F(SystemModalContainerLayoutManagerTest,
   EXPECT_EQ(0, modal_window->bounds().y());
 
   ShowKeyboard(false);
-  DeactivateKeyboard();
 }
 
 // Test that windows will not get cropped through the visible virtual keyboard -
 // if not centered.
 TEST_F(SystemModalContainerLayoutManagerTest,
        SystemModalDialogGetPushedButNotCroppedFromKeyboardIfNotCentered) {
-  ActivateKeyboard();
   const gfx::Size screen_size = Shell::GetPrimaryRootWindow()->bounds().size();
   // Place the window at the bottom of the screen.
   gfx::Size modal_size(100, screen_size.height() - 70);
@@ -754,7 +735,6 @@ TEST_F(SystemModalContainerLayoutManagerTest,
   EXPECT_EQ(0, modal_window->bounds().y());
 
   ShowKeyboard(false);
-  DeactivateKeyboard();
 }
 
 TEST_F(SystemModalContainerLayoutManagerTest, UpdateModalType) {

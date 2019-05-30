@@ -6,8 +6,8 @@
 #define CHROMECAST_BROWSER_CAST_CONTENT_WINDOW_AURA_H_
 
 #include "base/macros.h"
+#include "chromecast/browser/cast_content_gesture_handler.h"
 #include "chromecast/browser/cast_content_window.h"
-#include "chromecast/browser/cast_gesture_dispatcher.h"
 #include "ui/aura/window_observer.h"
 
 namespace aura {
@@ -37,6 +37,8 @@ class CastContentWindowAura : public CastContentWindow,
   void GrantScreenAccess() override;
   void RevokeScreenAccess() override;
   void RequestVisibility(VisibilityPriority visibility_priority) override;
+  void SetActivityContext(base::Value activity_context) override;
+  void SetHostContext(base::Value host_context) override;
   void NotifyVisibilityChange(VisibilityType visibility_type) override;
   void RequestMoveOut() override;
   void EnableTouchInput(bool enabled) override;
@@ -54,8 +56,8 @@ class CastContentWindowAura : public CastContentWindow,
   CastContentWindow::Delegate* const delegate_;
 
   // Utility class for detecting and dispatching gestures to delegates.
-  std::unique_ptr<CastGestureDispatcher> gesture_dispatcher_;
-  CastGestureDispatcher::Priority const gesture_priority_;
+  std::unique_ptr<CastContentGestureHandler> gesture_dispatcher_;
+  CastContentGestureHandler::Priority const gesture_priority_;
 
   const bool is_touch_enabled_;
   std::unique_ptr<TouchBlocker> touch_blocker_;

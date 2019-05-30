@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_performance_observer_callback.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/timing/performance.h"
+#include "third_party/blink/renderer/core/timing/performance_layout_jank.h"
 #include "third_party/blink/renderer/core/timing/performance_mark.h"
 #include "third_party/blink/renderer/core/timing/performance_observer_init.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
@@ -33,10 +34,10 @@ class PerformanceObserverTest : public testing::Test {
   void Initialize(ScriptState* script_state) {
     v8::Local<v8::Function> callback =
         v8::Function::New(script_state->GetContext(), nullptr).ToLocalChecked();
-    base_ = new MockPerformance(script_state);
+    base_ = MakeGarbageCollected<MockPerformance>(script_state);
     cb_ = V8PerformanceObserverCallback::Create(callback);
-    observer_ = new PerformanceObserver(ExecutionContext::From(script_state),
-                                        base_, cb_);
+    observer_ = MakeGarbageCollected<PerformanceObserver>(
+        ExecutionContext::From(script_state), base_, cb_);
   }
 
   bool IsRegistered() { return observer_->is_registered_; }
@@ -53,13 +54,34 @@ TEST_F(PerformanceObserverTest, Observe) {
   Initialize(scope.GetScriptState());
 
   NonThrowableExceptionState exception_state;
-  PerformanceObserverInit options;
+  PerformanceObserverInit* options = PerformanceObserverInit::Create();
   Vector<String> entry_type_vec;
   entry_type_vec.push_back("mark");
-  options.setEntryTypes(entry_type_vec);
+  options->setEntryTypes(entry_type_vec);
 
   observer_->observe(options, exception_state);
   EXPECT_TRUE(IsRegistered());
+}
+
+TEST_F(PerformanceObserverTest, ObserveWithBufferedFlag) {
+  V8TestingScope scope;
+  Initialize(scope.GetScriptState());
+
+  NonThrowableExceptionState exception_state;
+  PerformanceObserverInit* options = PerformanceObserverInit::Create();
+  options->setType("layoutJank");
+  options->setBuffered(true);
+  EXPECT_EQ(0, NumPerformanceEntries());
+
+  // add a layoutjank to performance so getEntries() returns it
+  PerformanceLayoutJank* entry = PerformanceLayoutJank::Create(1234);
+  base_->AddLayoutJankBuffer(*entry);
+
+  // call observe with the buffered flag
+  observer_->observe(options, exception_state);
+  EXPECT_TRUE(IsRegistered());
+  // Verify that the entry was added to the performance entries
+  EXPECT_EQ(1, NumPerformanceEntries());
 }
 
 TEST_F(PerformanceObserverTest, Enqueue) {

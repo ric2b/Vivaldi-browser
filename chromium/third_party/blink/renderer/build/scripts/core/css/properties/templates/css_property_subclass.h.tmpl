@@ -14,14 +14,14 @@
 {% endfor %}
 
 namespace blink {
-namespace CSS{{property.namespace_group}} {
+namespace css_{{property.namespace_group.lower()}} {
 
 {% if property.is_property %}
 // Implements the '{{property.name}}' CSS property
 {% else %}
 // Implements the '{{property.name}}' CSS descriptor
 {% endif %}
-// See src/third_party/WebKit/Source/core/css/properties/README.md
+// See src/third_party/blink/renderer/core/css/properties/README.md
   {% if property.alias_for != None%}
 class {{property_classname}} final : public CSSUnresolvedProperty {
  public:
@@ -38,13 +38,13 @@ class {{property_classname}} final : public {{property.namespace_group}} {
     return RuntimeEnabledFeatures::{{property.runtime_flag}}Enabled();
   }
   {% endif %}
-  const char* GetPropertyName() const override { return "{{property.name}}\0"; }
+  const char* GetPropertyName() const override { return "{{property.name}}"; }
   const WTF::AtomicString& GetPropertyNameAtomicString() const override {
-    static const WTF::AtomicString& name = WTF::AtomicString("{{property.name}}\0");
+    DEFINE_STATIC_LOCAL(const AtomicString, name, ("{{property.name}}"));
     return name;
   }
-  const WTF::String GetJSPropertyName() const override {
-    return WTF::String("{{property_classname[0].lower() + property_classname[1:]}}\0");
+  const char* GetJSPropertyName() const override {
+    return "{{property_classname[0].lower() + property_classname[1:]}}";
   }
   {% if property.alias_for == None %}
   CSSPropertyID PropertyID() const override { return {{property.property_id}}; }
@@ -130,7 +130,7 @@ class {{property_classname}} final : public {{property.namespace_group}} {
   {% endif %}
 };
 
-}  // namespace CSS{{property.namespace_group}}
+}  // namespace css_{{property.namespace_group.lower()}}
 }  // namespace blink
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_CSS_PROPERTIES_{{property.namespace_group.upper()}}_{{property_filename|upper}}_H_

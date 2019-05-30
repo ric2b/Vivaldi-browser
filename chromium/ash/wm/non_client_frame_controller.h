@@ -14,7 +14,6 @@
 #include "ash/ash_export.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
-#include "ui/aura/client/transient_window_client_observer.h"
 #include "ui/aura/window_observer.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
@@ -30,19 +29,15 @@ class Insets;
 }
 
 namespace ws {
-namespace mojom {
-enum class WindowType;
-}
+class TopLevelProxyWindow;
 }  // namespace ws
 
 namespace ash {
 
 // Provides the non-client frame and contents view for windows created by remote
 // app processes.
-class ASH_EXPORT NonClientFrameController
-    : public views::WidgetDelegate,
-      public aura::WindowObserver,
-      public aura::client::TransientWindowClientObserver {
+class ASH_EXPORT NonClientFrameController : public views::WidgetDelegate,
+                                            public aura::WindowObserver {
  public:
   // Creates a new NonClientFrameController and window to render the non-client
   // frame decorations. This deletes itself when |window| is destroyed. |parent|
@@ -52,10 +47,10 @@ class ASH_EXPORT NonClientFrameController
   // null for now. |bounds| is screen coordinates when |parent| is null,
   // otherwise local coordinates, see views::Widget::InitParams::bounds.
   NonClientFrameController(
+      ws::TopLevelProxyWindow* top_level_proxy_window,
       aura::Window* parent,
       aura::Window* context,
       const gfx::Rect& bounds,
-      ws::mojom::WindowType window_type,
       aura::PropertyConverter* property_converter,
       std::map<std::string, std::vector<uint8_t>>* properties);
 
@@ -72,12 +67,14 @@ class ASH_EXPORT NonClientFrameController
 
   aura::Window* window() { return window_; }
 
-  void SetClientArea(const gfx::Insets& insets);
-
   // Stores |cursor| as this window's active cursor. It does not actually update
   // the active cursor by calling into CursorManager, but will update the return
   // value provided by the associated window's aura::WindowDelegate::GetCursor.
   void StoreCursor(const ui::Cursor& cursor);
+
+  ws::TopLevelProxyWindow* top_level_proxy_window() {
+    return top_level_proxy_window_;
+  }
 
   // views::WidgetDelegate:
   base::string16 GetWindowTitle() const override;
@@ -91,6 +88,8 @@ class ASH_EXPORT NonClientFrameController
   const views::Widget* GetWidget() const override;
   views::View* GetContentsView() override;
   views::ClientView* CreateClientView(views::Widget* widget) override;
+  void OnWindowBeginUserBoundsChange() override;
+  void OnWindowEndUserBoundsChange() override;
 
   // aura::WindowObserver:
   void OnWindowPropertyChanged(aura::Window* window,
@@ -98,21 +97,17 @@ class ASH_EXPORT NonClientFrameController
                                intptr_t old) override;
   void OnWindowDestroyed(aura::Window* window) override;
 
-  // aura::client::TransientWindowClientObserver:
-  void OnTransientChildWindowAdded(aura::Window* parent,
-                                   aura::Window* transient_child) override;
-  void OnTransientChildWindowRemoved(aura::Window* parent,
-                                     aura::Window* transient_child) override;
-
  private:
   ~NonClientFrameController() override;
 
   views::Widget* widget_;
   views::View* contents_view_ = nullptr;
+  // Owned by the window-service.
+  ws::TopLevelProxyWindow* top_level_proxy_window_;
 
   // WARNING: as widget delays destruction there is a portion of time when this
   // is null.
-  aura::Window* window_;
+  aura::Window* window_ = nullptr;
 
   bool did_init_native_widget_ = false;
 

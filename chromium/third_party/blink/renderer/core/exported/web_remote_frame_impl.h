@@ -36,6 +36,7 @@ class CORE_EXPORT WebRemoteFrameImpl final
                                              WebRemoteFrameClient*,
                                              WebFrame* opener = nullptr);
 
+  WebRemoteFrameImpl(WebTreeScopeType, WebRemoteFrameClient*);
   ~WebRemoteFrameImpl() override;
 
   // WebFrame methods:
@@ -50,27 +51,33 @@ class CORE_EXPORT WebRemoteFrameImpl final
                                   WebSandboxFlags,
                                   WebLocalFrameClient*,
                                   blink::InterfaceRegistry*,
+                                  mojo::ScopedMessagePipeHandle,
                                   WebFrame* previous_sibling,
                                   const ParsedFeaturePolicy&,
                                   const WebFrameOwnerProperties&,
+                                  FrameOwnerElementType,
                                   WebFrame* opener) override;
   WebRemoteFrame* CreateRemoteChild(WebTreeScopeType,
                                     const WebString& name,
                                     WebSandboxFlags,
                                     const ParsedFeaturePolicy&,
+                                    FrameOwnerElementType,
                                     WebRemoteFrameClient*,
                                     WebFrame* opener) override;
-  void SetCcLayer(cc::Layer*, bool prevent_contents_opaque_changes) override;
+  void SetCcLayer(cc::Layer*,
+                  bool prevent_contents_opaque_changes,
+                  bool is_surface_layer) override;
   void SetReplicatedOrigin(
       const WebSecurityOrigin&,
       bool is_potentially_trustworthy_opaque_origin) override;
   void SetReplicatedSandboxFlags(WebSandboxFlags) override;
   void SetReplicatedName(const WebString&) override;
-  void SetReplicatedFeaturePolicyHeader(
-      const ParsedFeaturePolicy& parsed_header) override;
+  void SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
+      const ParsedFeaturePolicy& parsed_header,
+      const FeaturePolicy::FeatureState&) override;
   void AddReplicatedContentSecurityPolicyHeader(
       const WebString& header_value,
-      WebContentSecurityPolicyType,
+      mojom::ContentSecurityPolicyType,
       WebContentSecurityPolicySource) override;
   void ResetReplicatedContentSecurityPolicy() override;
   void SetReplicatedInsecureRequestPolicy(WebInsecureRequestPolicy) override;
@@ -78,6 +85,7 @@ class CORE_EXPORT WebRemoteFrameImpl final
       const std::vector<unsigned>&) override;
   void ForwardResourceTimingToParent(const WebResourceTimingInfo&) override;
   void DispatchLoadEventForFrameOwner() override;
+  void SetNeedsOcclusionTracking(bool) override;
   void DidStartLoading() override;
   void DidStopLoading() override;
   bool IsIgnoredForHitTest() const override;
@@ -91,11 +99,16 @@ class CORE_EXPORT WebRemoteFrameImpl final
   void SetHasReceivedUserGestureBeforeNavigation(bool value) override;
   v8::Local<v8::Object> GlobalProxy() const override;
   WebRect GetCompositingRect() override;
+  void RenderFallbackContent() const override;
 
   void InitializeCoreFrame(Page&, FrameOwner*, const AtomicString& name);
   RemoteFrame* GetFrame() const { return frame_.Get(); }
 
   WebRemoteFrameClient* Client() const { return client_; }
+
+  const FeaturePolicy::FeatureState& OpenerFeatureState() const {
+    return opener_feature_state_;
+  }
 
   static WebRemoteFrameImpl* FromFrame(RemoteFrame&);
 
@@ -103,8 +116,6 @@ class CORE_EXPORT WebRemoteFrameImpl final
 
  private:
   friend class RemoteFrameClientImpl;
-
-  WebRemoteFrameImpl(WebTreeScopeType, WebRemoteFrameClient*);
 
   void SetCoreFrame(RemoteFrame*);
   void ApplyReplicatedFeaturePolicyHeader();
@@ -120,6 +131,10 @@ class CORE_EXPORT WebRemoteFrameImpl final
   // TODO(dcheng): Inline this field directly rather than going through Member.
   Member<RemoteFrameClientImpl> frame_client_;
   Member<RemoteFrame> frame_;
+
+  // Feature policy state inherited from an opener. It is always empty for child
+  // frames.
+  FeaturePolicy::FeatureState opener_feature_state_;
 
   ParsedFeaturePolicy feature_policy_header_;
 

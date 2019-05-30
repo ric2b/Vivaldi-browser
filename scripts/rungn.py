@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import sys, os, os.path
 import subprocess
 import argparse
@@ -5,11 +7,7 @@ import platform
 import shutil
 import datetime
 
-script_name = sys.argv[0]
-if not os.path.isabs(script_name):
-  script_name = os.path.abspath(os.path.join(os.getcwd(), script_name ))
-
-sourcedir = os.path.abspath(os.path.dirname(os.path.dirname(script_name)))
+sourcedir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 is_windows = platform.system() == "Windows"
 is_linux = platform.system() == "Linux"
@@ -17,8 +15,11 @@ is_android = os.access(os.path.join(sourcedir, ".enable_android"), os.F_OK)
 
 # Check python version on Windows
 if is_windows:
-  import check_win_python
-  check_win_python.CheckPythonInstall()
+  try:
+    import check_win_python
+    check_win_python.CheckPythonInstall()
+  except:
+    pass
 
   os.environ["DEPOT_TOOLS_WIN_TOOLCHAIN"]="0"
 elif is_linux:
@@ -44,13 +45,13 @@ parser.add_argument("--ide")
 parser.add_argument("--ide-all", action="store_true");
 parser.add_argument("--official", action="store_true");
 parser.add_argument("--static", action="store_true");
+parser.add_argument("--args-gn")
 parser.add_argument("args", nargs=argparse.REMAINDER);
 
 args = parser.parse_args()
 
 # Need this file to be present
 gclient_gni_content = """checkout_nacl=false
-checkout_libaom=true
 checkout_oculus_sdk=false
 build_with_chromium=true
 """
@@ -137,11 +138,14 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
 
   if full_bootstrap:
     def do_full_bootstrap():
+      extra_bootstrap_args = []
+      if os.access(os.path.join(sourcedir, "thirdparty", "gn", "last_commit_position.h"), os.F_OK):
+        extra_bootstrap_args.append("--no-last-commit-position")
       if subprocess.call(["python",
         os.path.join(sourcedir, "thirdparty", "gn", "build",
                      "gen.py"),
         "--out-path", gn_releasedir,
-        ],
+        ] + extra_bootstrap_args,
         cwd = sourcedir,
         env = bootstrap_env,
         shell = is_windows,
@@ -159,7 +163,7 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
       if do_full_bootstrap() != 0:
         sys.exit(1)
   stop_time = datetime.datetime.now()
-  print "Refreshed GN parser in", (stop_time-start_time).total_seconds(), "seconds"
+  print("Refreshed GN parser in", (stop_time-start_time).total_seconds(), "seconds")
   sys.stdout.flush()
 
 gn_defines = os.environ.get("GN_DEFINES", "")
@@ -176,11 +180,16 @@ if args.official:
 if args.static:
   gn_defines += " is_component_build=false"
 
-user_arg_file = os.path.expanduser("~/.gn/args.gn")
-if os.access(user_arg_file, os.F_OK):
+if args.args_gn:
+  user_arg_file = args.args_gn
+else:
+  user_arg_file = os.path.expanduser("~/.gn/args.gn")
+if user_arg_file and os.access(user_arg_file, os.F_OK):
   if is_windows:
      # convert to gn absolute file system label
-    user_arg_file = "/"+user_arg_file.replace("\\", "/")
+    user_arg_file = user_arg_file.replace("\\", "/")
+    if not args.args_gn:
+      user_arg_file = "/"+user_arg_file
 else:
   user_arg_file = None
 

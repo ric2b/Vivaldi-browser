@@ -10,6 +10,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/macros.h"
 #import "ios/web/navigation/navigation_item_impl.h"
 #import "ios/web/public/navigation_item_list.h"
@@ -25,6 +26,12 @@ class BrowserState;
 class NavigationItem;
 class NavigationManagerDelegate;
 class SessionStorageBuilder;
+
+// Name of UMA histogram to log the number of items Navigation Manager was
+// requested to restore. 100 is logged when the number of navigation items is
+// greater than 100. This is just a requested count and actual number of
+// restored items can be smaller.
+extern const char kRestoreNavigationItemCount[];
 
 // Defines the ways how a pending navigation can be initiated.
 enum class NavigationInitiationType {
@@ -85,8 +92,10 @@ class NavigationManagerImpl : public NavigationManager {
   // TODO(stuartmorgan): Make these private once the logic triggering them moves
   // into this layer.
   virtual void OnNavigationItemsPruned(size_t pruned_item_count) = 0;
-  virtual void OnNavigationItemChanged() = 0;
   virtual void OnNavigationItemCommitted() = 0;
+
+  // Called when renderer-initiated navigation has started.
+  virtual void OnRendererInitiatedNavigationStarted(const GURL& url) = 0;
 
   // Prepares for the deletion of WKWebView such as caching necessary data.
   virtual void DetachFromWebView();
@@ -113,7 +122,13 @@ class NavigationManagerImpl : public NavigationManager {
       UserAgentOverrideOption user_agent_override_option) = 0;
 
   // Commits the pending item, if any.
+  // TODO(crbug.com/936933): Remove this method.
   virtual void CommitPendingItem() = 0;
+
+  // Commits given pending |item| stored outside of navigation manager
+  // (normally in NavigationContext). It is possible to have additional pending
+  // items owned by navigation manager and/or outside of navigation manager.
+  virtual void CommitPendingItem(std::unique_ptr<NavigationItemImpl> item) = 0;
 
   // Returns the navigation index that differs from the current item (or pending
   // item if it exists) by the specified |offset|, skipping redirect navigation
@@ -135,6 +150,13 @@ class NavigationManagerImpl : public NavigationManager {
   virtual void AddPushStateItemIfNecessary(const GURL& url,
                                            NSString* state_object,
                                            ui::PageTransition transition) = 0;
+
+  // Sets the index of the pending navigation item. -1 means no navigation or a
+  // new navigation.
+  virtual void SetPendingItemIndex(int index) = 0;
+
+  // Applies the workaround for crbug.com/887497.
+  virtual void ApplyWKWebViewForwardHistoryClobberWorkaround();
 
   // Resets the transient url rewriter list.
   void RemoveTransientURLRewriters();
@@ -160,6 +182,10 @@ class NavigationManagerImpl : public NavigationManager {
   // out of CRWWebController.
   NavigationItemImpl* GetCurrentItemImpl() const;
 
+  // Returns the last committed NavigationItem, which may be null if there
+  // are no committed entries or session restoration is in-progress.
+  NavigationItemImpl* GetLastCommittedItemImpl() const;
+
   // Updates the pending or last committed navigation item after replaceState.
   // TODO(crbug.com/783382): This is a legacy method to maintain backward
   // compatibility for PageLoad stat. Remove this method once PageLoad no longer
@@ -175,19 +201,28 @@ class NavigationManagerImpl : public NavigationManager {
 
   // NavigationManager:
   NavigationItem* GetLastCommittedItem() const final;
+  int GetLastCommittedItemIndex() const final;
   NavigationItem* GetPendingItem() const final;
   NavigationItem* GetTransientItem() const final;
-  void LoadURLWithParams(const NavigationManager::WebLoadParams&) final;
+  void LoadURLWithParams(const NavigationManager::WebLoadParams&) override;
   void AddTransientURLRewriter(BrowserURLRewriter::URLRewriter rewriter) final;
   void GoToIndex(int index) final;
   void Reload(ReloadType reload_type, bool check_for_reposts) final;
   void ReloadWithUserAgentType(UserAgentType user_agent_type) final;
   void LoadIfNecessary() override;
+  void AddRestoreCompletionCallback(base::OnceClosure callback) override;
 
   // Implementation for corresponding NavigationManager getters.
-  virtual NavigationItemImpl* GetPendingItemImpl() const = 0;
+  virtual NavigationItemImpl* GetPendingItemInCurrentOrRestoredSession()
+      const = 0;
   virtual NavigationItemImpl* GetTransientItemImpl() const = 0;
-  virtual NavigationItemImpl* GetLastCommittedItemImpl() const = 0;
+  // Unlike GetLastCommittedItem(), this method does not return null during
+  // session restoration (and returns last known committed item instead).
+  virtual NavigationItemImpl* GetLastCommittedItemInCurrentOrRestoredSession()
+      const = 0;
+  // Unlike GetLastCommittedItemIndex(), this method does not return -1 during
+  // session restoration (and returns last known committed item index instead).
+  virtual int GetLastCommittedItemIndexInCurrentOrRestoredSession() const = 0;
 
   // Identical to GetItemAtIndex() but returns the underlying NavigationItemImpl
   // instead of the public NavigationItem interface.
@@ -202,16 +237,19 @@ class NavigationManagerImpl : public NavigationManager {
   // TODO(crbug.com/738020): Remove legacy code and merge
   // WKBasedNavigationManager into this class after the navigation experiment.
 
-  // Checks whether or not two URLs differ only in the fragment.
-  static bool IsFragmentChangeNavigationBetweenUrls(const GURL& existing_url,
-                                                    const GURL& new_url);
-
   // Applies the user agent override to |pending_item|, or inherits the user
   // agent of |inherit_from| if |user_agent_override_option| is INHERIT.
   static void UpdatePendingItemUserAgentType(
       UserAgentOverrideOption override_option,
       const NavigationItem* inherit_from,
       NavigationItem* pending_item);
+
+  // Must be called by subclasses before restoring |item_count| navigation
+  // items.
+  void WillRestore(size_t item_count);
+
+  // Some app-specific URLs need to be rewritten to about: scheme.
+  void RewriteItemURLIfNecessary(NavigationItem* item) const;
 
   // Creates a NavigationItem using the given properties, where |previous_url|
   // is the URL of the navigation just prior to the current one. If
@@ -227,16 +265,17 @@ class NavigationManagerImpl : public NavigationManager {
       const GURL& previous_url,
       const std::vector<BrowserURLRewriter::URLRewriter>* url_rewriters) const;
 
-  // Returns the most recent NavigationItem that does not have an app-specific
-  // URL.
-  NavigationItem* GetLastCommittedNonAppSpecificItem() const;
+  // Returns the most recent NavigationItem with an URL that generates an HTTP
+  // request.
+  NavigationItem* GetLastCommittedItemWithUserAgentType() const;
 
   // Subclass specific implementation to update session state.
   virtual void FinishGoToIndex(int index,
                                NavigationInitiationType type,
                                bool has_user_gesture) = 0;
   virtual void FinishReload();
-  virtual void FinishLoadURLWithParams();
+  virtual void FinishLoadURLWithParams(
+      NavigationInitiationType initiation_type);
 
   // Returns true if the subclass uses placeholder URLs and this is such a URL.
   virtual bool IsPlaceholderUrl(const GURL& url) const;

@@ -8,6 +8,7 @@
 #include "base/android/jni_string.h"
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/android/bookmarks/partner_bookmarks_shim.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
@@ -17,9 +18,10 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/favicon/core/favicon_server_fetcher_params.h"
 #include "components/favicon/core/favicon_service.h"
-#include "components/favicon/core/large_icon_service.h"
+#include "components/favicon/core/large_icon_service_impl.h"
 #include "components/favicon_base/favicon_types.h"
 #include "components/image_fetcher/core/image_fetcher.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "jni/PartnerBookmarksReader_jni.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -90,10 +92,10 @@ void PrepareAndSetFavicon(jbyte* icon_bytes,
 
   base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                             base::WaitableEvent::InitialState::NOT_SIGNALED);
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&SetFaviconCallback, profile, node->url(), fake_icon_url,
-                 image_data, icon_type, &event));
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
+      base::BindOnce(&SetFaviconCallback, profile, node->url(), fake_icon_url,
+                     image_data, icon_type, &event));
   // TODO(aruslan): http://b/6397072 If possible - avoid using favicon service
   event.Wait();
 }
@@ -219,8 +221,8 @@ void PartnerBookmarksReader::GetFavicon(const GURL& page_url,
                                         bool fallback_to_server,
                                         int desired_favicon_size_px,
                                         FaviconFetchedCallback callback) {
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&PartnerBookmarksReader::GetFaviconImpl,
                      base::Unretained(this), page_url, profile,
                      fallback_to_server, desired_favicon_size_px,
@@ -257,7 +259,7 @@ void PartnerBookmarksReader::GetFaviconFromCacheOrServer(
     bool from_server,
     int desired_favicon_size_px,
     FaviconFetchedCallback callback) {
-  GetLargeIconService()->GetLargeIconOrFallbackStyle(
+  GetLargeIconService()->GetLargeIconRawBitmapOrFallbackStyleForPageUrl(
       page_url, kPartnerBookmarksMinimumFaviconSizePx, desired_favicon_size_px,
       base::Bind(&PartnerBookmarksReader::OnGetFaviconFromCacheFinished,
                  base::Unretained(this), page_url,
@@ -361,8 +363,7 @@ void PartnerBookmarksReader::OnFaviconFetched(
 // ----------------------------------------------------------------
 
 static void JNI_PartnerBookmarksReader_DisablePartnerBookmarksEditing(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz) {
+    JNIEnv* env) {
   PartnerBookmarksShim::DisablePartnerBookmarksEditing();
 }
 
@@ -379,7 +380,6 @@ static jlong JNI_PartnerBookmarksReader_Init(JNIEnv* env,
 static base::android::ScopedJavaLocalRef<jstring>
 JNI_PartnerBookmarksReader_GetNativeUrlString(
     JNIEnv* env,
-    const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& j_url) {
   GURL url(ConvertJavaStringToUTF8(j_url));
   return ConvertUTF8ToJavaString(env, url.spec());

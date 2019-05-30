@@ -8,7 +8,7 @@
 Polymer({
   is: 'print-preview-destination-list',
 
-  behaviors: [I18nBehavior, ListPropertyUpdateBehavior],
+  behaviors: [ListPropertyUpdateBehavior],
 
   properties: {
     /** @type {Array<!print_preview.Destination>} */
@@ -16,12 +16,6 @@ Polymer({
 
     /** @type {?RegExp} */
     searchQuery: Object,
-
-    /** @type {boolean} */
-    hasActionLink: {
-      type: Boolean,
-      value: false,
-    },
 
     /** @type {boolean} */
     loadingDestinations: {
@@ -41,11 +35,10 @@ Polymer({
     hasDestinations_: {
       type: Boolean,
       value: true,
-      observer: 'hasDestinationsChanged_',
     },
 
     /** @private {boolean} */
-    showDestinationsTotal_: {
+    throbberHidden_: {
       type: Boolean,
       value: false,
     },
@@ -53,7 +46,9 @@ Polymer({
 
   observers: [
     'updateMatchingDestinations_(destinations.*, searchQuery)',
-    'matchingDestinationsChanged_(matchingDestinations_.*)',
+    'matchingDestinationsChanged_(' +
+        'matchingDestinations_.*, loadingDestinations)',
+    'updateThrobberHidden_(matchingDestinations_.*, loadingDestinations)',
   ],
 
   // This is a workaround to ensure that the iron-list correctly updates the
@@ -68,8 +63,9 @@ Polymer({
 
   /** @private */
   updateMatchingDestinations_: function() {
-    if (this.destinations === undefined)
+    if (this.destinations === undefined) {
       return;
+    }
 
     this.updateList(
         'matchingDestinations_',
@@ -84,13 +80,7 @@ Polymer({
   /** @private */
   matchingDestinationsChanged_: function() {
     const count = this.matchingDestinations_.length;
-    this.hasDestinations_ = count > 0;
-    this.showDestinationsTotal_ = count > 4;
-  },
-
-  /** @private */
-  onActionLinkClick_: function() {
-    print_preview.NativeLayer.getInstance().managePrinters();
+    this.hasDestinations_ = count > 0 || this.loadingDestinations;
   },
 
   /**
@@ -109,14 +99,27 @@ Polymer({
    * @private
    */
   onDestinationSelected_: function(e) {
+    if (e.composedPath()[0].tagName === 'A') {
+      return;
+    }
+
     this.fire('destination-selected', e.target);
   },
 
   /** @private */
-  hasDestinationsChanged_: function() {
-    // If there are no destinations, leave space for "no destinations" message.
-    this.$.list.style.height = this.hasDestinations_ ?
-        'calc(100% - 1rem - 9px)' : 'calc(100% - 2rem - 9px)';
-  },
+  updateThrobberHidden_: function() {
+    if (!this.loadingDestinations) {
+      this.throbberHidden_ = true;
+    } else if (!this.matchingDestinations_) {
+      this.throbberHidden_ = false;
+    } else {
+      const maxDisplayedItems = this.offsetHeight / 32;
+      this.throbberHidden_ =
+          maxDisplayedItems <= this.matchingDestinations_.length;
+    }
+    Polymer.RenderStatus.afterNextRender(this, () => {
+      this.forceIronResize();
+    });
+  }
 });
 })();

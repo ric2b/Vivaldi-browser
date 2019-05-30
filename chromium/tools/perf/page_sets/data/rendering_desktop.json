@@ -18,6 +18,12 @@
         "animometer_webgl": {
             "DEFAULT": "rendering_desktop_011.wprgo"
         },
+        "animometer_webgl_attrib_arrays": {
+            "DEFAULT": "rendering_desktop_3a59b064d2.wprgo"
+        },
+        "animometer_webgl_multi_draw": {
+            "DEFAULT": "rendering_desktop_a8987d91b9.wprgo"
+        },
         "aquarium": {
             "DEFAULT": "rendering_desktop_011.wprgo"
         },
@@ -157,16 +163,16 @@
             "DEFAULT": "rendering_desktop_009.wprgo"
         },
         "js_scroll_200_layer_grid": {
-            "DEFAULT": "rendering_desktop_009.wprgo"
+            "DEFAULT": "rendering_desktop_05c1f9e507.wprgo"
         },
         "js_scroll_text_only": {
-            "DEFAULT": "rendering_desktop_009.wprgo"
+            "DEFAULT": "rendering_desktop_a2106b0095.wprgo"
         },
         "kevs_3d": {
             "DEFAULT": "rendering_desktop_004.wprgo"
         },
         "linkedin_2018": {
-            "DEFAULT": "rendering_desktop_000.wprgo"
+            "DEFAULT": "rendering_desktop_6eb5e5be2a.wprgo"
         },
         "linkedin_pinch_2018": {
             "DEFAULT": "rendering_desktop_007.wprgo"
@@ -233,6 +239,36 @@
         },
         "pinterest_2018": {
             "DEFAULT": "rendering_desktop_000.wprgo"
+        },
+        "repaint_amazon_2018": {
+            "DEFAULT": "rendering_desktop_fdde4c2d8b.wprgo"
+        },
+        "repaint_cnn_2018": {
+            "DEFAULT": "rendering_desktop_fdde4c2d8b.wprgo"
+        },
+        "repaint_facebook_2018": {
+            "DEFAULT": "rendering_desktop_fdde4c2d8b.wprgo"
+        },
+        "repaint_google_search_2018": {
+            "DEFAULT": "rendering_desktop_fdde4c2d8b.wprgo"
+        },
+        "repaint_instagram_2018": {
+            "DEFAULT": "rendering_desktop_fdde4c2d8b.wprgo"
+        },
+        "repaint_reddit_2018": {
+            "DEFAULT": "rendering_desktop_fdde4c2d8b.wprgo"
+        },
+        "repaint_theverge_2018": {
+            "DEFAULT": "rendering_desktop_fdde4c2d8b.wprgo"
+        },
+        "repaint_twitter_2018": {
+            "DEFAULT": "rendering_desktop_fdde4c2d8b.wprgo"
+        },
+        "repaint_wikipedia_2018": {
+            "DEFAULT": "rendering_desktop_fdde4c2d8b.wprgo"
+        },
+        "repaint_yahoo_homepage_2018": {
+            "DEFAULT": "rendering_desktop_fdde4c2d8b.wprgo"
         },
         "runway": {
             "DEFAULT": "rendering_desktop_004.wprgo"

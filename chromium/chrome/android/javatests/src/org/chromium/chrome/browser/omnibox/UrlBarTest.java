@@ -31,6 +31,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
@@ -39,15 +40,16 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteController;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils.StubAutocompleteController;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.KeyUtils;
-import org.chromium.content.browser.test.util.TouchCommon;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.KeyUtils;
+import org.chromium.content_public.browser.test.util.TouchCommon;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -90,13 +92,12 @@ public class UrlBarTest {
     }
 
     private void toggleFocusAndIgnoreImeOperations(final UrlBar urlBar, final boolean gainFocus) {
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                OmniboxTestUtils.toggleUrlBarFocus(urlBar, gainFocus);
-                if (gainFocus) startIgnoringImeUntilRestart(urlBar);
-            }
-        });
+        OmniboxTestUtils.toggleUrlBarFocus(urlBar, gainFocus);
+        if (gainFocus) {
+            ThreadUtils.runOnUiThreadBlocking(() -> startIgnoringImeUntilRestart(urlBar));
+            CriteriaHelper.pollUiThread(() -> urlBar.getInputConnection() != null,
+                    "Input connection never initialized for URL bar.");
+        }
     }
 
     private void runInputConnectionMethodOnUiThreadBlocking(final Runnable runnable) {
@@ -129,8 +130,8 @@ public class UrlBarTest {
                 LocationBarLayout locationBar =
                         (LocationBarLayout) mActivityTestRule.getActivity().findViewById(
                                 R.id.location_bar);
-                locationBar.cancelPendingAutocompleteStart();
-                locationBar.setAutocompleteController(controller);
+                locationBar.getAutocompleteCoordinator().cancelPendingAutocompleteStart();
+                locationBar.getAutocompleteCoordinator().setAutocompleteController(controller);
             }
         });
     }
@@ -220,6 +221,7 @@ public class UrlBarTest {
     @SmallTest
     @Feature({"Omnibox"})
     @RetryOnFailure
+    @DisabledTest
     public void testRefocusing() throws InterruptedException {
         mActivityTestRule.startMainActivityOnBlankPage();
         UrlBar urlBar = getUrlBar();

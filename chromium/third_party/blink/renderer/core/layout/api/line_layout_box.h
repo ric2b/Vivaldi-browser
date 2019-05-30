@@ -8,7 +8,7 @@
 #include "third_party/blink/renderer/core/layout/api/line_layout_box_model.h"
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
-#include "third_party/blink/renderer/platform/layout_unit.h"
+#include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 
 namespace blink {
 
@@ -74,7 +74,8 @@ class LineLayoutBox : public LineLayoutBoxModel {
     ToBox()->Move(width, height);
   }
 
-  bool HasOverflowModel() const { return ToBox()->HasOverflowModel(); }
+  bool HasLayoutOverflow() const { return ToBox()->HasLayoutOverflow(); }
+  bool HasVisualOverflow() const { return ToBox()->HasVisualOverflow(); }
   LayoutRect LogicalVisualOverflowRectForPropagation() const {
     return ToBox()->LogicalVisualOverflowRectForPropagation();
   }

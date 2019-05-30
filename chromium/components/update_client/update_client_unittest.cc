@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
@@ -27,6 +28,7 @@
 #include "components/prefs/testing_pref_service.h"
 #include "components/update_client/component_unpacker.h"
 #include "components/update_client/crx_update_item.h"
+#include "components/update_client/network.h"
 #include "components/update_client/persisted_data.h"
 #include "components/update_client/ping_manager.h"
 #include "components/update_client/protocol_parser.h"
@@ -110,14 +112,14 @@ class MockPingManagerImpl : public PingManager {
 
   const std::vector<PingData>& ping_data() const;
 
-  const std::vector<std::string>& events() const;
+  const std::vector<base::Value>& events() const;
 
  protected:
   ~MockPingManagerImpl() override;
 
  private:
   std::vector<PingData> ping_data_;
-  std::vector<std::string> events_;
+  std::vector<base::Value> events_;
   DISALLOW_COPY_AND_ASSIGN(MockPingManagerImpl);
 };
 
@@ -140,8 +142,7 @@ void MockPingManagerImpl::SendPing(const Component& component,
   ping_data.diff_update_failed = component.diff_update_failed();
   ping_data_.push_back(ping_data);
 
-  const auto& events = component.events();
-  events_.insert(events_.end(), events.begin(), events.end());
+  events_ = component.GetEvents();
 
   std::move(callback).Run(0, "");
 }
@@ -151,7 +152,7 @@ MockPingManagerImpl::ping_data() const {
   return ping_data_;
 }
 
-const std::vector<std::string>& MockPingManagerImpl::events() const {
+const std::vector<base::Value>& MockPingManagerImpl::events() const {
   return events_;
 }
 
@@ -245,12 +246,13 @@ TEST_F(UpdateClientTest, OneCrxNoUpdate) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       EXPECT_FALSE(session_id.empty());
       EXPECT_TRUE(enabled_component_updates);
       EXPECT_EQ(1u, ids_to_check.size());
@@ -279,7 +281,7 @@ TEST_F(UpdateClientTest, OneCrxNoUpdate) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -363,12 +365,13 @@ TEST_F(UpdateClientTest, TwoCrxUpdateNoUpdate) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       /*
       Mock the following response:
 
@@ -443,7 +446,7 @@ TEST_F(UpdateClientTest, TwoCrxUpdateNoUpdate) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -579,12 +582,13 @@ TEST_F(UpdateClientTest, TwoCrxUpdateFirstServerIgnoresSecond) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       /*
       Mock the following response:
 
@@ -643,7 +647,7 @@ TEST_F(UpdateClientTest, TwoCrxUpdateFirstServerIgnoresSecond) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -786,12 +790,13 @@ TEST_F(UpdateClientTest, TwoCrxUpdateNoCrxComponentData) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       /*
       Mock the following response:
 
@@ -850,7 +855,7 @@ TEST_F(UpdateClientTest, TwoCrxUpdateNoCrxComponentData) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -974,12 +979,13 @@ TEST_F(UpdateClientTest, TwoCrxUpdateNoCrxComponentDataAtAll) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       NOTREACHED();
     }
   };
@@ -988,7 +994,7 @@ TEST_F(UpdateClientTest, TwoCrxUpdateNoCrxComponentDataAtAll) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -1080,12 +1086,13 @@ TEST_F(UpdateClientTest, TwoCrxUpdateDownloadTimeout) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       /*
       Mock the following response:
 
@@ -1177,7 +1184,7 @@ TEST_F(UpdateClientTest, TwoCrxUpdateDownloadTimeout) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -1354,12 +1361,13 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       EXPECT_FALSE(session_id.empty());
 
       static int num_call = 0;
@@ -1467,7 +1475,7 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -1682,12 +1690,13 @@ TEST_F(UpdateClientTest, OneCrxInstallError) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       /*
       Mock the following response:
 
@@ -1740,7 +1749,7 @@ TEST_F(UpdateClientTest, OneCrxInstallError) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -1873,12 +1882,13 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdateFailsFullUpdateSucceeds) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       EXPECT_FALSE(session_id.empty());
 
       static int num_call = 0;
@@ -1988,7 +1998,7 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdateFailsFullUpdateSucceeds) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -2173,12 +2183,13 @@ TEST_F(UpdateClientTest, OneCrxNoUpdateQueuedCall) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       EXPECT_FALSE(session_id.empty());
       EXPECT_TRUE(enabled_component_updates);
       EXPECT_EQ(1u, ids_to_check.size());
@@ -2206,7 +2217,7 @@ TEST_F(UpdateClientTest, OneCrxNoUpdateQueuedCall) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -2288,12 +2299,13 @@ TEST_F(UpdateClientTest, OneCrxInstall) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       /*
       Mock the following response:
 
@@ -2352,7 +2364,7 @@ TEST_F(UpdateClientTest, OneCrxInstall) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -2466,12 +2478,13 @@ TEST_F(UpdateClientTest, OneCrxInstallNoCrxComponentData) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       NOTREACHED();
     }
   };
@@ -2480,7 +2493,7 @@ TEST_F(UpdateClientTest, OneCrxInstallNoCrxComponentData) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -2580,12 +2593,13 @@ TEST_F(UpdateClientTest, ConcurrentInstallSameCRX) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       EXPECT_FALSE(session_id.empty());
       EXPECT_TRUE(enabled_component_updates);
       EXPECT_EQ(1u, ids_to_check.size());
@@ -2613,7 +2627,7 @@ TEST_F(UpdateClientTest, ConcurrentInstallSameCRX) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -2689,12 +2703,13 @@ TEST_F(UpdateClientTest, EmptyIdList) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       NOTREACHED();
     }
   };
@@ -2703,7 +2718,7 @@ TEST_F(UpdateClientTest, EmptyIdList) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -2750,12 +2765,13 @@ TEST_F(UpdateClientTest, SendUninstallPing) {
       return nullptr;
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       NOTREACHED();
     }
   };
@@ -2764,7 +2780,7 @@ TEST_F(UpdateClientTest, SendUninstallPing) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return nullptr;
     }
 
@@ -2854,12 +2870,13 @@ TEST_F(UpdateClientTest, RetryAfter) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       EXPECT_FALSE(session_id.empty());
 
       static int num_call = 0;
@@ -2895,7 +2912,7 @@ TEST_F(UpdateClientTest, RetryAfter) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -3036,12 +3053,13 @@ TEST_F(UpdateClientTest, TwoCrxUpdateOneUpdateDisabled) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       /*
       Mock the following response:
 
@@ -3137,7 +3155,7 @@ TEST_F(UpdateClientTest, TwoCrxUpdateOneUpdateDisabled) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -3282,12 +3300,13 @@ TEST_F(UpdateClientTest, OneCrxUpdateCheckFails) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       EXPECT_FALSE(session_id.empty());
       EXPECT_TRUE(enabled_component_updates);
       EXPECT_EQ(1u, ids_to_check.size());
@@ -3305,7 +3324,7 @@ TEST_F(UpdateClientTest, OneCrxUpdateCheckFails) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -3422,12 +3441,13 @@ TEST_F(UpdateClientTest, OneCrxErrorUnknownApp) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       EXPECT_FALSE(session_id.empty());
       EXPECT_TRUE(enabled_component_updates);
       EXPECT_EQ(4u, ids_to_check.size());
@@ -3445,12 +3465,12 @@ TEST_F(UpdateClientTest, OneCrxErrorUnknownApp) {
           R"( status="error-foobarApp"/>)"
           R"(</response>)";
 
-      ProtocolParser parser;
-      EXPECT_TRUE(parser.Parse(update_response));
+      const auto parser = ProtocolParser::Create();
+      EXPECT_TRUE(parser->Parse(update_response));
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE,
-          base::BindOnce(std::move(update_check_callback), parser.results(),
+          base::BindOnce(std::move(update_check_callback), parser->results(),
                          ErrorCategory::kNone, 0, 0));
     }
   };
@@ -3459,7 +3479,7 @@ TEST_F(UpdateClientTest, OneCrxErrorUnknownApp) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -3579,12 +3599,13 @@ TEST_F(UpdateClientTest, ActionRun_Install) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       /*
       Mock the following response:
 
@@ -3643,7 +3664,7 @@ TEST_F(UpdateClientTest, ActionRun_Install) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -3685,23 +3706,40 @@ TEST_F(UpdateClientTest, ActionRun_Install) {
 
    protected:
     ~MockPingManager() override {
-      const auto& events = MockPingManagerImpl::events();
-      EXPECT_EQ(3u, events.size());
-      EXPECT_STREQ(
-          "<event eventtype=\"14\" eventresult=\"1\" downloader=\"unknown\" "
-          "url=\"http://localhost/download/"
-          "runaction_test_win.crx3\" downloaded=\"1843\" "
-          "total=\"1843\" download_time_ms=\"1000\" previousversion=\"0.0\" "
-          "nextversion=\"1.0\"/>",
-          events[0].c_str());
-      EXPECT_STREQ(
-          "<event eventtype=\"42\" eventresult=\"1\" "
-          "errorcode=\"1877345072\"/>",
-          events[1].c_str());
-      EXPECT_STREQ(
-          "<event eventtype=\"3\" eventresult=\"1\" previousversion=\"0.0\" "
-          "nextversion=\"1.0\"/>",
-          events[2].c_str());
+      EXPECT_EQ(3u, events().size());
+
+      /*
+      "<event eventtype="14" eventresult="1" downloader="unknown" "
+      "url="http://localhost/download/runaction_test_win.crx3"
+      "downloaded=1843 "
+      "total=1843 download_time_ms="1000" previousversion="0.0" "
+      "nextversion="1.0"/>"
+      */
+      const auto& event0 = events()[0];
+      EXPECT_EQ(14, event0.FindKey("eventtype")->GetInt());
+      EXPECT_EQ(1, event0.FindKey("eventresult")->GetInt());
+      EXPECT_EQ("unknown", event0.FindKey("downloader")->GetString());
+      EXPECT_EQ("http://localhost/download/runaction_test_win.crx3",
+                event0.FindKey("url")->GetString());
+      EXPECT_EQ(1843, event0.FindKey("downloaded")->GetDouble());
+      EXPECT_EQ(1843, event0.FindKey("total")->GetDouble());
+      EXPECT_EQ(1000, event0.FindKey("download_time_ms")->GetDouble());
+      EXPECT_EQ("0.0", event0.FindKey("previousversion")->GetString());
+      EXPECT_EQ("1.0", event0.FindKey("nextversion")->GetString());
+
+      // "<event eventtype="42" eventresult="1" errorcode="1877345072"/>"
+      const auto& event1 = events()[1];
+      EXPECT_EQ(42, event1.FindKey("eventtype")->GetInt());
+      EXPECT_EQ(1, event1.FindKey("eventresult")->GetInt());
+      EXPECT_EQ(1877345072, event1.FindKey("errorcode")->GetInt());
+
+      // "<event eventtype=\"3\" eventresult=\"1\" previousversion=\"0.0\" "
+      // "nextversion=\"1.0\"/>",
+      const auto& event2 = events()[2];
+      EXPECT_EQ(3, event2.FindKey("eventtype")->GetInt());
+      EXPECT_EQ(1, event1.FindKey("eventresult")->GetInt());
+      EXPECT_EQ("0.0", event0.FindKey("previousversion")->GetString());
+      EXPECT_EQ("1.0", event0.FindKey("nextversion")->GetString());
     }
   };
 
@@ -3743,12 +3781,13 @@ TEST_F(UpdateClientTest, ActionRun_NoUpdate) {
       return std::make_unique<MockUpdateChecker>();
     }
 
-    void CheckForUpdates(const std::string& session_id,
-                         const std::vector<std::string>& ids_to_check,
-                         const IdToComponentPtrMap& components,
-                         const std::string& additional_attributes,
-                         bool enabled_component_updates,
-                         UpdateCheckCallback update_check_callback) override {
+    void CheckForUpdates(
+        const std::string& session_id,
+        const std::vector<std::string>& ids_to_check,
+        const IdToComponentPtrMap& components,
+        const base::flat_map<std::string, std::string>& additional_attributes,
+        bool enabled_component_updates,
+        UpdateCheckCallback update_check_callback) override {
       /*
       Mock the following response:
 
@@ -3787,7 +3826,7 @@ TEST_F(UpdateClientTest, ActionRun_NoUpdate) {
    public:
     static std::unique_ptr<CrxDownloader> Create(
         bool is_background_download,
-        scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+        scoped_refptr<NetworkFetcherFactory> network_fetcher_factory) {
       return std::make_unique<MockCrxDownloader>();
     }
 
@@ -3804,12 +3843,13 @@ TEST_F(UpdateClientTest, ActionRun_NoUpdate) {
 
    protected:
     ~MockPingManager() override {
-      const auto& events = MockPingManagerImpl::events();
-      EXPECT_EQ(1u, events.size());
-      EXPECT_STREQ(
-          "<event eventtype=\"42\" eventresult=\"1\" "
-          "errorcode=\"1877345072\"/>",
-          events[0].c_str());
+      EXPECT_EQ(1u, events().size());
+
+      // "<event eventtype="42" eventresult="1" errorcode="1877345072"/>"
+      const auto& event = events()[0];
+      EXPECT_EQ(42, event.FindKey("eventtype")->GetInt());
+      EXPECT_EQ(1, event.FindKey("eventresult")->GetInt());
+      EXPECT_EQ(1877345072, event.FindKey("errorcode")->GetInt());
     }
   };
 

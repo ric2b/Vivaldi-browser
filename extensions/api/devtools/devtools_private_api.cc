@@ -115,6 +115,13 @@ bool DevtoolsPrivateCloseDevtoolsFunction::RunAsync() {
 }
 
 bool DevtoolsPrivateToggleDevtoolsFunction::RunAsync() {
+  std::unique_ptr<vivaldi::devtools_private::ToggleDevtools::Params>
+    params(vivaldi::devtools_private::ToggleDevtools::Params::Create(
+      *args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  bool inspect = params->inspect;
+
   Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
       dispatcher()->GetAssociatedWebContents());
   content::WebContents* current_tab =
@@ -133,8 +140,9 @@ bool DevtoolsPrivateToggleDevtoolsFunction::RunAsync() {
           static_cast<VivaldiBrowserWindow*>(browser->window())
           ->web_contents()->GetMainFrame(), 0, 0);
     } else {
-      DevToolsWindow::OpenDevToolsWindow(current_tab,
-                                         DevToolsToggleAction::Show());
+      DevToolsWindow::OpenDevToolsWindow(
+          current_tab, inspect ? DevToolsToggleAction::Inspect()
+                               : DevToolsToggleAction::Show());
     }
   }
   SendResponse(true);

@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <utility>
+#include "base/bind.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
@@ -94,6 +95,8 @@ class BlobDataHandleTest : public testing::Test {
   }
 
   void SetUp() override {
+    Platform::SetMainThreadTaskRunnerForTesting();
+
     small_test_data_.resize(1024);
     medium_test_data_.resize(1024 * 32);
     large_test_data_.resize(1024 * 512);
@@ -127,9 +130,14 @@ class BlobDataHandleTest : public testing::Test {
     mock_blob_registry_.registrations.clear();
   }
 
+  void TearDown() override {
+    scoped_task_environment_.RunUntilIdle();
+    Platform::UnsetMainThreadTaskRunnerForTesting();
+  }
+
   void TestCreateBlob(std::unique_ptr<BlobData> data,
                       Vector<ExpectedElement> expected_elements) {
-    size_t blob_size = data->length();
+    uint64_t blob_size = data->length();
     String type = data->ContentType();
     bool is_single_unknown_size_file = data->IsSingleUnknownSizeFile();
 
@@ -158,9 +166,9 @@ class BlobDataHandleTest : public testing::Test {
 
         base::RunLoop loop;
         Vector<uint8_t> received_bytes;
-        mojom::blink::BytesProviderPtr data(
+        mojom::blink::BytesProviderPtr actual_data(
             std::move(actual->get_bytes()->data));
-        data->RequestAsReply(base::BindOnce(
+        actual_data->RequestAsReply(base::BindOnce(
             [](base::Closure quit_closure, Vector<uint8_t>* bytes_out,
                const Vector<uint8_t>& bytes) {
               *bytes_out = bytes;

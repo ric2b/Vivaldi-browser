@@ -4,7 +4,6 @@
 
 #include "third_party/blink/renderer/modules/indexeddb/idb_observation.h"
 
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_observation.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_for_core.h"
 #include "third_party/blink/renderer/bindings/modules/v8/to_v8_for_modules.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_binding_for_modules.h"
@@ -31,51 +30,62 @@ ScriptValue IDBObservation::value(ScriptState* script_state) {
   return ScriptValue::From(script_state, value_);
 }
 
-WebIDBOperationType IDBObservation::StringToOperationType(const String& type) {
-  if (type == IndexedDBNames::add)
-    return kWebIDBAdd;
-  if (type == IndexedDBNames::put)
-    return kWebIDBPut;
-  if (type == IndexedDBNames::kDelete)
-    return kWebIDBDelete;
-  if (type == IndexedDBNames::clear)
-    return kWebIDBClear;
+mojom::IDBOperationType IDBObservation::StringToOperationType(
+    const String& type) {
+  if (type == indexed_db_names::kAdd)
+    return mojom::IDBOperationType::Add;
+  if (type == indexed_db_names::kPut)
+    return mojom::IDBOperationType::Put;
+  if (type == indexed_db_names::kDelete)
+    return mojom::IDBOperationType::Delete;
+  if (type == indexed_db_names::kClear)
+    return mojom::IDBOperationType::Clear;
 
   NOTREACHED();
-  return kWebIDBAdd;
+  return mojom::IDBOperationType::Add;
 }
 
 const String& IDBObservation::type() const {
   switch (operation_type_) {
-    case kWebIDBAdd:
-      return IndexedDBNames::add;
+    case mojom::IDBOperationType::Add:
+      return indexed_db_names::kAdd;
 
-    case kWebIDBPut:
-      return IndexedDBNames::put;
+    case mojom::IDBOperationType::Put:
+      return indexed_db_names::kPut;
 
-    case kWebIDBDelete:
-      return IndexedDBNames::kDelete;
+    case mojom::IDBOperationType::Delete:
+      return indexed_db_names::kDelete;
 
-    case kWebIDBClear:
-      return IndexedDBNames::clear;
+    case mojom::IDBOperationType::Clear:
+      return indexed_db_names::kClear;
 
     default:
       NOTREACHED();
-      return IndexedDBNames::add;
+      return indexed_db_names::kAdd;
   }
 }
 
-IDBObservation* IDBObservation::Create(WebIDBObservation observation,
-                                       v8::Isolate* isolate) {
-  return new IDBObservation(std::move(observation), isolate);
+IDBObservation* IDBObservation::Create(int64_t object_store_id,
+                                       mojom::IDBOperationType type,
+                                       IDBKeyRange* key_range,
+                                       std::unique_ptr<IDBValue> value) {
+  return MakeGarbageCollected<IDBObservation>(object_store_id, type, key_range,
+                                              std::move(value));
 }
 
-IDBObservation::IDBObservation(WebIDBObservation observation,
-                               v8::Isolate* isolate)
-    : key_range_(observation.key_range), operation_type_(observation.type) {
-  std::unique_ptr<IDBValue> value = observation.value.ReleaseIdbValue();
-  value->SetIsolate(isolate);
+IDBObservation::IDBObservation(int64_t object_store_id,
+                               mojom::IDBOperationType type,
+                               IDBKeyRange* key_range,
+                               std::unique_ptr<IDBValue> value)
+    : object_store_id_(object_store_id),
+      operation_type_(type),
+      key_range_(key_range) {
   value_ = IDBAny::Create(std::move(value));
+}
+
+void IDBObservation::SetIsolate(v8::Isolate* isolate) {
+  DCHECK(value_ && value_->Value());
+  value_->Value()->SetIsolate(isolate);
 }
 
 void IDBObservation::Trace(blink::Visitor* visitor) {

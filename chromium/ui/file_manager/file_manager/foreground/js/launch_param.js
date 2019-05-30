@@ -8,7 +8,7 @@
  *   overrideCwsContainerOriginForTest: (string|undefined)
  * }}
  */
-var SuggestAppDialogState;
+let SuggestAppDialogState;
 
 /**
  * @param {!Object} unformatted Unformatted option.
@@ -65,7 +65,8 @@ function LaunchParam(unformatted) {
    * @const
    */
   this.allowedPaths = unformatted['allowedPaths'] ?
-      unformatted['allowedPaths'] : AllowedPaths.ANY_PATH;
+      unformatted['allowedPaths'] :
+      AllowedPaths.ANY_PATH_OR_URL;
 
   /**
    * @type {!SuggestAppDialogState}

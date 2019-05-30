@@ -77,8 +77,18 @@ settings.ChromeCleanupCardActionButton;
 settings.ChromeCleanupCardComponents;
 
 /**
+ * Represents the file path structure of a base::FilePath.
+ * dirname ends with a separator.
  * @typedef {{
- *   files: Array<string>,
+ *   dirname: string,
+ *   basename: string,
+ * }}
+ */
+settings.ChromeCleanupFilePath;
+
+/**
+ * @typedef {{
+ *   files: Array<settings.ChromeCleanupFilePath>,
  *   registryKeys: Array<string>,
  *   extensions: Array<string>,
  * }}
@@ -103,8 +113,13 @@ Polymer({
   behaviors: [I18nBehavior, WebUIListenerBehavior],
 
   properties: {
-    /** Preferences state. */
-    prefs: Object,
+    /**
+     * Preferences state.
+     */
+    prefs: {
+      type: Object,
+      notify: true,
+    },
 
     /** @private */
     title_: {
@@ -230,8 +245,10 @@ Polymer({
   /** @private {?function()} */
   doAction_: null,
 
-  /** @private {?Map<settings.ChromeCleanerCardState,
-   *                 !settings.ChromeCleanupCardComponents>} */
+  /**
+   * @private {?Map<settings.ChromeCleanerCardState,
+   *                 !settings.ChromeCleanupCardComponents>}
+   */
   cardStateToComponentsMap_: null,
 
   /** @private {settings.ChromeCleanupOngoingAction} */
@@ -266,9 +283,6 @@ Polymer({
     this.addWebUIListener(
         'chrome-cleanup-on-reboot-required', this.onRebootRequired_.bind(this));
     this.addWebUIListener(
-        'chrome-cleanup-upload-permission-change',
-        this.onUploadPermissionChange_.bind(this));
-    this.addWebUIListener(
         'chrome-cleanup-enabled-change',
         this.onCleanupEnabledChange_.bind(this));
     this.browserProxy_.registerChromeCleanerObserver();
@@ -283,34 +297,14 @@ Polymer({
     this.doAction_();
   },
 
-  getTopSettingsBoxClass_: function(showDetails) {
-    return showDetails ? 'top-aligned-settings-box' : 'two-line';
-  },
-
-  /**
-   * Toggles the expand button within the element being listened to.
-   * @param {!Event} e
-   * @private
-   */
-  toggleExpandButton_: function(e) {
-    // The expand button handles toggling itself.
-    const expandButtonTag = 'CR-EXPAND-BUTTON';
-    if (e.target.tagName == expandButtonTag)
-      return;
-
-    /** @type {!CrExpandButtonElement} */
-    const expandButton = e.currentTarget.querySelector(expandButtonTag);
-    assert(expandButton);
-    expandButton.expanded = !expandButton.expanded;
-  },
-
   /**
    * Notifies Chrome that the details section was opened or closed.
    * @private
    */
   itemsToRemoveSectionExpandedChanged_: function(newVal, oldVal) {
-    if (!oldVal && newVal)
+    if (!oldVal && newVal) {
       this.browserProxy_.notifyShowDetails(this.itemsToRemoveSectionExpanded_);
+    }
   },
 
   /**
@@ -539,26 +533,9 @@ Polymer({
 
     // Files to remove list should only be expandable if details are being
     // shown, otherwise it will add extra padding at the bottom of the card.
-    if (!this.showExplanation_ || !this.showItemsToRemove_)
+    if (!this.showExplanation_ || !this.showItemsToRemove_) {
       this.itemsToRemoveSectionExpanded_ = false;
-  },
-
-  /**
-   * @param {boolean} managed Whether uploads are controlled by policy or not.
-   * @param {boolean} enabled Whether logs upload is enabled.
-   * @private
-   */
-  onUploadPermissionChange_: function(managed, enabled) {
-    const pref = {
-      key: '',
-      type: chrome.settingsPrivate.PrefType.BOOLEAN,
-      value: enabled,
-    };
-    if (managed) {
-      pref.enforcement = chrome.settingsPrivate.Enforcement.ENFORCED;
-      pref.controlledBy = chrome.settingsPrivate.ControlledBy.USER_POLICY;
     }
-    this.logsUploadPref_ = pref;
   },
 
   /**
@@ -567,12 +544,6 @@ Polymer({
    */
   onCleanupEnabledChange_: function(enabled) {
     this.cleanupEnabled_ = enabled;
-  },
-
-  /** @private */
-  changeLogsPermission_: function() {
-    const enabled = this.$.chromeCleanupLogsUploadControl.checked;
-    this.browserProxy_.setLogsUploadPermission(enabled);
   },
 
   /**
@@ -740,5 +711,24 @@ Polymer({
         },
       ],
     ]);
+  },
+
+  /**
+   * @param {!Array<string>} list
+   * @return {!Array<settings.ChromeCleanupRemovalListItem>}
+   * @private
+   */
+  getListEntriesFromStrings_: function(list) {
+    return list.map(entry => ({text: entry, highlightSuffix: null}));
+  },
+
+  /**
+   * @param {!Array<settings.ChromeCleanupFilePath>} paths
+   * @return {!Array<settings.ChromeCleanupRemovalListItem>}
+   * @private
+   */
+  getListEntriesFromFilePaths_: function(paths) {
+    return paths.map(
+        path => ({text: path.dirname, highlightSuffix: path.basename}));
   },
 });

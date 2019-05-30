@@ -22,6 +22,10 @@
 
 #include "extensions/buildflags/buildflags.h"
 
+namespace extensions {
+class DevtoolsConnectorItem;
+}
+
 namespace guest_view {
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -170,7 +174,8 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
 
   // Returns whether this guest has an associated embedder.
   bool attached() const {
-    return (element_instance_id_ != kInstanceIDNone) && !attach_in_progress_;
+    return !(element_instance_id_ == kInstanceIDNone || attach_in_progress_ ||
+             is_being_destroyed_);
   }
 
   // Returns the instance ID of the <*view> element.
@@ -179,7 +184,10 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   // Returns the instance ID of this GuestViewBase.
   int guest_instance_id() const { return guest_instance_id_; }
 
-  // Returns the instance ID of the GuestViewBase's element.
+  // Returns the instance ID of the GuestViewBase's element (unique within an
+  // embedder process). Note: this value is set once after attach is complete.
+  // It will maintain its value during the lifetime of GuestViewBase, even after
+  // |attach()| is false due to |is_being_destroyed_|.
   int element_instance_id() const { return element_instance_id_; }
 
   bool can_owner_receive_events() const { return !!view_instance_id_; }
@@ -223,14 +231,16 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   content::RenderWidgetHost* GetOwnerRenderWidgetHost() override;
   content::SiteInstance* GetOwnerSiteInstance() override;
 
+  // Starts the attaching process for a (frame-based) GuestView.
+  // |embedder_frame| is a frame in the embedder WebContents (owned by a
+  // HTMLFrameOwnerElement associated with the GuestView's element in the
+  // embedder process) which will be used for attaching.
+  void AttachToOuterWebContentsFrame(content::RenderFrameHost* embedder_frame,
+                                     int32_t element_instance_id,
+                                     bool is_full_page_plugin);
   // NOTE(andre@vivaldi.com): This is used in Vivaldi to make sure the lifecycle
   // of webcontents is working for webcontents owned by multiple guests.
   bool web_contents_is_owned_by_this_ = true;
-
-  // NOTE(andre@vivaldi.com) : We need to manage the BrowserPluginGuest when we
-  // move WebContents ownership between guests. Used to reset guest_host_ in
-  // between hand-overs.
-  content::BrowserPluginGuest* delegate_to_browser_plugin_ = nullptr;
 
  protected:
   explicit GuestViewBase(content::WebContents* owner_web_contents);
@@ -244,7 +254,7 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   virtual void OnRenderFrameHostDeleted(int process_id, int routing_id);
 
   // WebContentsDelegate implementation.
-  void HandleKeyboardEvent(
+  bool HandleKeyboardEvent(
       content::WebContents* source,
       const content::NativeWebKeyboardEvent& event) override;
   bool PreHandleGestureEvent(content::WebContents* source,
@@ -350,11 +360,13 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
 
   void VivaldiStopTrackingEmbedderZoomLevel() {
     StopTrackingEmbedderZoomLevel();
-  };
+  }
+
+  // NOTE(david@vivaldi.com): |connector_item_| is a proxy delegate which is
+  // required by Vivaldi.
+  scoped_refptr<extensions::DevtoolsConnectorItem> connector_item_;
 
  private:
-  friend class GuestViewMessageFilter;
-
   class OwnerContentsObserver;
   class OpenerLifetimeObserver;
 
@@ -385,7 +397,8 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   void ResizeDueToAutoResize(content::WebContents* web_contents,
                              const gfx::Size& new_size) final;
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
-                      const content::FileChooserParams& params) final;
+                      std::unique_ptr<content::FileSelectListener> listener,
+                      const blink::mojom::FileChooserParams& params) final;
   bool ShouldFocusPageAfterCrash() final;
   void UpdatePreferredSize(content::WebContents* web_contents,
                            const gfx::Size& pref_size) final;
@@ -396,19 +409,11 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   void DidStopLoading() final;
   void RenderViewReady() final;
   void WebContentsDestroyed() final;
+  void WebContentsDidDetach() final;
 
   // ui_zoom::ZoomObserver implementation.
   void OnZoomChanged(
       const zoom::ZoomController::ZoomChangedEventData& data) final;
-
-  // See BrowserPluginGuestDelegate::WillAttach.
-  // This version also takes a |perform_attach| callback to specify
-  // attachment operations which must be done synchronously.
-  void WillAttach(content::WebContents* embedder_web_contents,
-                  int element_instance_id,
-                  bool is_full_page_plugin,
-                  base::OnceClosure perform_attach,
-                  base::OnceClosure completion_callback);
 
   void SendQueuedEvents();
 
@@ -435,6 +440,15 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
 
   GuestViewManager* GetGuestViewManager();
   void SetOwnerHost();
+
+  // TODO(ekaramad): Revisit this once MimeHandlerViewGuest is frame-based
+  // (https://crbug.com/659750); either remove or unify with
+  // BrowserPluginGuestDelegate::WillAttach.
+  void WillAttach(content::WebContents* embedder_web_contents,
+                  content::RenderFrameHost* outer_contents_frame,
+                  int browser_plugin_instance_id,
+                  bool is_full_page_plugin,
+                  base::OnceClosure completion_callback);
 
   // This guest tracks the lifetime of the WebContents specified by
   // |owner_web_contents_|. If |owner_web_contents_| is destroyed then this
@@ -514,6 +528,11 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
 
   // The routing ID of the proxy to the guest in the owner's renderer process.
   int guest_proxy_routing_id_;
+
+  // Vivaldi: Used in WebContentsDidDetach.
+  base::OnceClosure perform_attach_callback_;
+  base::OnceClosure attach_completion_callback_;
+
 
   // This is used to ensure pending tasks will not fire after this object is
   // destroyed.

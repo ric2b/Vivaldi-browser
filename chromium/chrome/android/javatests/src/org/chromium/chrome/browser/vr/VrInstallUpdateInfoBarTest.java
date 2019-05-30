@@ -4,8 +4,12 @@
 
 package org.chromium.chrome.browser.vr;
 
+import static org.chromium.chrome.browser.vr.XrTestFramework.PAGE_LOAD_TIMEOUT_S;
+import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_TIMEOUT_LONG_MS;
 import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_SVR;
+import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VIEWER_DAYDREAM;
 
+import android.graphics.PointF;
 import android.os.Build;
 import android.support.test.filters.MediumTest;
 import android.view.View;
@@ -17,6 +21,7 @@ import org.junit.Test;
 import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.test.params.ParameterAnnotations.ClassParameter;
 import org.chromium.base.test.params.ParameterAnnotations.UseRunnerDelegate;
 import org.chromium.base.test.params.ParameterSet;
@@ -26,7 +31,10 @@ import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.vr.keyboard.GvrKeyboardLoaderClient;
 import org.chromium.chrome.browser.vr.rules.XrActivityRestriction;
+import org.chromium.chrome.browser.vr.util.NativeUiUtils;
+import org.chromium.chrome.browser.vr.util.VrBrowserTransitionUtils;
 import org.chromium.chrome.browser.vr.util.VrInfoBarUtils;
 import org.chromium.chrome.browser.vr.util.VrShellDelegateUtils;
 import org.chromium.chrome.browser.vr.util.VrTestRuleUtils;
@@ -39,7 +47,7 @@ import java.util.concurrent.Callable;
 /**
  * End-to-end tests for the InfoBar that prompts the user to update or install
  * VrCore (VR Services) when attempting to use a VR feature with an outdated
- * or entirely missing version.
+ * or entirely missing version or other VR-related update prompts.
  */
 @RunWith(ParameterizedRunner.class)
 @UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
@@ -76,15 +84,15 @@ public class VrInstallUpdateInfoBarTest {
             // Out of date and missing cases are the same, but with different text
             String expectedMessage, expectedButton;
             if (checkerReturnCompatibility == VrCoreCompatibility.VR_OUT_OF_DATE) {
-                expectedMessage = mVrTestRule.getActivity().getString(
-                        R.string.vr_services_check_infobar_update_text);
-                expectedButton = mVrTestRule.getActivity().getString(
-                        R.string.vr_services_check_infobar_update_button);
+                expectedMessage = ContextUtils.getApplicationContext().getString(
+                        org.chromium.chrome.vr.R.string.vr_services_check_infobar_update_text);
+                expectedButton = ContextUtils.getApplicationContext().getString(
+                        org.chromium.chrome.vr.R.string.vr_services_check_infobar_update_button);
             } else {
-                expectedMessage = mVrTestRule.getActivity().getString(
-                        R.string.vr_services_check_infobar_install_text);
-                expectedButton = mVrTestRule.getActivity().getString(
-                        R.string.vr_services_check_infobar_install_button);
+                expectedMessage = ContextUtils.getApplicationContext().getString(
+                        org.chromium.chrome.vr.R.string.vr_services_check_infobar_install_text);
+                expectedButton = ContextUtils.getApplicationContext().getString(
+                        org.chromium.chrome.vr.R.string.vr_services_check_infobar_install_button);
             }
             VrInfoBarUtils.expectInfoBarPresent(mVrTestRule, true);
             TextView tempView = (TextView) decorView.findViewById(R.id.infobar_message);
@@ -142,5 +150,45 @@ public class VrInstallUpdateInfoBarTest {
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
     public void testInfoBarNotPresentWhenVrServicesNotSupported() throws InterruptedException {
         infoBarTestHelper(VrCoreCompatibility.VR_NOT_SUPPORTED);
+    }
+
+    /**
+     * Tests that the install/upgrade prompt for the keyboard appears when clicking on the URL
+     * bar without the keyboard installed.
+     */
+    @Test
+    @MediumTest
+    @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM)
+    public void testKeyboardInstallUpgradePromptUrlBar() throws InterruptedException {
+        testKeyboardInstallUpgradeImpl(UserFriendlyElementName.URL);
+    }
+
+    /**
+     * Tests that the install/upgrade prompt for the keyboard appears when interacting with a web
+     * text input field without the keyboard installed.
+     */
+    @Test
+    @MediumTest
+    @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM)
+    public void testKeyboardInstallUpgradePromptWebInput() throws InterruptedException {
+        testKeyboardInstallUpgradeImpl(UserFriendlyElementName.CONTENT_QUAD);
+    }
+
+    private void testKeyboardInstallUpgradeImpl(final int uiElementToClick)
+            throws InterruptedException {
+        mVrTestRule.loadUrl(
+                VrBrowserTestFramework.getFileUrlForHtmlTestFile("test_web_input_editing"),
+                PAGE_LOAD_TIMEOUT_S);
+        GvrKeyboardLoaderClient.setFailLoadForTesting(true);
+        VrBrowserTransitionUtils.forceEnterVrBrowserOrFail(POLL_TIMEOUT_LONG_MS);
+        // The prompt takes significantly longer to show when clicking on the web content, so we
+        // can't just wait for quiescence since that gets reached before the prompt shows (not sure
+        // what's causing a UI change other than the prompt). Instead, explicitly wait for the
+        // prompt to become visible before waiting for quiescence.
+        NativeUiUtils.performActionAndWaitForUiQuiescence(() -> {
+            NativeUiUtils.performActionAndWaitForVisibilityStatus(
+                    UserFriendlyElementName.EXIT_PROMPT, true /* visible */,
+                    () -> { NativeUiUtils.clickElement(uiElementToClick, new PointF()); });
+        });
     }
 }

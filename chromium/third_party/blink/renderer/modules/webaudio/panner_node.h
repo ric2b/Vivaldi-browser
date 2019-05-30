@@ -71,11 +71,11 @@ class PannerHandler final : public AudioHandler {
   ~PannerHandler() override;
 
   // AudioHandler
-  void Process(size_t frames_to_process) override;
+  void Process(uint32_t frames_to_process) override;
   void ProcessSampleAccurateValues(AudioBus* destination,
                                    const AudioBus* source,
-                                   size_t frames_to_process);
-  void ProcessOnlyAudioParams(size_t frames_to_process) override;
+                                   uint32_t frames_to_process);
+  void ProcessOnlyAudioParams(uint32_t frames_to_process) override;
   void Initialize() override;
   void Uninitialize() override;
 
@@ -118,7 +118,7 @@ class PannerHandler final : public AudioHandler {
   }
   bool RequiresTailProcessing() const final;
 
-  void SetChannelCount(unsigned long, ExceptionState&) final;
+  void SetChannelCount(unsigned, ExceptionState&) final;
   void SetChannelCountMode(const String&, ExceptionState&) final;
 
  private:
@@ -156,9 +156,8 @@ class PannerHandler final : public AudioHandler {
   bool IsDistanceConeGainDirty() const { return is_distance_cone_gain_dirty_; }
   void UpdateDirtyState();
 
-  // This Persistent doesn't make a reference cycle including the owner
-  // PannerNode. It is accessed by both audio and main thread.
-  CrossThreadPersistent<AudioListener> listener_;
+  // AudioListener is held alive by PannerNode.
+  CrossThreadWeakPersistent<AudioListener> listener_;
   std::unique_ptr<Panner> panner_;
   unsigned panning_model_;
   unsigned distance_model_;
@@ -210,20 +209,22 @@ class PannerNode final : public AudioNode {
  public:
   static PannerNode* Create(BaseAudioContext&, ExceptionState&);
   static PannerNode* Create(BaseAudioContext*,
-                            const PannerOptions&,
+                            const PannerOptions*,
                             ExceptionState&);
   PannerHandler& GetPannerHandler() const;
+
+  PannerNode(BaseAudioContext&);
 
   void Trace(blink::Visitor*) override;
 
   // Uses a 3D cartesian coordinate system
-  AudioParam* positionX() const { return position_x_; };
-  AudioParam* positionY() const { return position_y_; };
-  AudioParam* positionZ() const { return position_z_; };
+  AudioParam* positionX() const { return position_x_; }
+  AudioParam* positionY() const { return position_y_; }
+  AudioParam* positionZ() const { return position_z_; }
 
-  AudioParam* orientationX() const { return orientation_x_; };
-  AudioParam* orientationY() const { return orientation_y_; };
-  AudioParam* orientationZ() const { return orientation_z_; };
+  AudioParam* orientationX() const { return orientation_x_; }
+  AudioParam* orientationY() const { return orientation_y_; }
+  AudioParam* orientationZ() const { return orientation_z_; }
 
   String panningModel() const;
   void setPanningModel(const String&);
@@ -236,17 +237,15 @@ class PannerNode final : public AudioNode {
   double maxDistance() const;
   void setMaxDistance(double, ExceptionState&);
   double rolloffFactor() const;
-  void setRolloffFactor(double);
+  void setRolloffFactor(double, ExceptionState&);
   double coneInnerAngle() const;
   void setConeInnerAngle(double);
   double coneOuterAngle() const;
   void setConeOuterAngle(double);
   double coneOuterGain() const;
-  void setConeOuterGain(double);
+  void setConeOuterGain(double, ExceptionState&);
 
  private:
-  PannerNode(BaseAudioContext&);
-
   Member<AudioParam> position_x_;
   Member<AudioParam> position_y_;
   Member<AudioParam> position_z_;
@@ -254,6 +253,10 @@ class PannerNode final : public AudioNode {
   Member<AudioParam> orientation_x_;
   Member<AudioParam> orientation_y_;
   Member<AudioParam> orientation_z_;
+
+  // This listener is held alive here to allow referencing it from PannerHandler
+  // via weak reference.
+  Member<AudioListener> listener_;
 };
 
 }  // namespace blink

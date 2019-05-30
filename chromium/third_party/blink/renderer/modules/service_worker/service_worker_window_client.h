@@ -14,7 +14,6 @@
 
 namespace blink {
 
-class ScriptPromiseResolver;
 class ScriptState;
 
 class MODULES_EXPORT ServiceWorkerWindowClient final
@@ -22,14 +21,13 @@ class MODULES_EXPORT ServiceWorkerWindowClient final
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  // To be used by CallbackPromiseAdapter.
-  using WebType = std::unique_ptr<WebServiceWorkerClientInfo>;
-
-  static ServiceWorkerWindowClient* Take(
-      ScriptPromiseResolver*,
-      std::unique_ptr<WebServiceWorkerClientInfo>);
-
   static ServiceWorkerWindowClient* Create(const WebServiceWorkerClientInfo&);
+  static ServiceWorkerWindowClient* Create(
+      const mojom::blink::ServiceWorkerClientInfo&);
+
+  explicit ServiceWorkerWindowClient(const WebServiceWorkerClientInfo&);
+  explicit ServiceWorkerWindowClient(
+      const mojom::blink::ServiceWorkerClientInfo&);
   ~ServiceWorkerWindowClient() override;
 
   // WindowClient.idl
@@ -41,9 +39,7 @@ class MODULES_EXPORT ServiceWorkerWindowClient final
   void Trace(blink::Visitor*) override;
 
  private:
-  explicit ServiceWorkerWindowClient(const WebServiceWorkerClientInfo&);
-
-  mojom::PageVisibilityState page_visibility_state_;
+  bool page_hidden_;
   bool is_focused_;
 };
 

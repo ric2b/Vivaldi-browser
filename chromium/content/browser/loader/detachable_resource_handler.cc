@@ -28,7 +28,7 @@ namespace content {
 class DetachableResourceHandler::Controller : public ResourceController {
  public:
   explicit Controller(DetachableResourceHandler* detachable_handler)
-      : detachable_handler_(detachable_handler){};
+      : detachable_handler_(detachable_handler) {}
 
   ~Controller() override {}
 
@@ -38,12 +38,11 @@ class DetachableResourceHandler::Controller : public ResourceController {
     detachable_handler_->ResumeInternal();
   }
 
-  void ResumeForRedirect(const base::Optional<net::HttpRequestHeaders>&
-                             modified_request_headers) override {
-    DCHECK(!modified_request_headers.has_value())
-        << "Redirect with modified headers was not supported yet. "
-           "crbug.com/845683";
-    Resume();
+  void ResumeForRedirect(
+      const std::vector<std::string>& removed_headers,
+      const net::HttpRequestHeaders& modified_headers) override {
+    MarkAsUsed();
+    detachable_handler_->ResumeForRedirect(removed_headers, modified_headers);
   }
 
   void Cancel() override {
@@ -210,7 +209,7 @@ void DetachableResourceHandler::OnWillRead(
     std::unique_ptr<ResourceController> controller) {
   if (!next_handler_) {
     if (!read_buffer_.get())
-      read_buffer_ = new net::IOBuffer(kReadBufSize);
+      read_buffer_ = base::MakeRefCounted<net::IOBuffer>(kReadBufSize);
     *buf = read_buffer_;
     *buf_size = kReadBufSize;
     controller->Resume();

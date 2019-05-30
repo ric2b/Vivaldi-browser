@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "components/prefs/pref_member.h"
-#include "components/signin/core/browser/profile_management_switches.h"
+#include "components/signin/core/browser/account_consistency_method.h"
 #include "components/signin/core/browser/signin_buildflags.h"
 #include "url/gurl.h"
 
@@ -40,6 +40,8 @@ extern const char kDiceResponseHeader[];
 // The ServiceType specified by Gaia in the response header accompanying the 204
 // response. This indicates the action Chrome is supposed to lead the user to
 // perform.
+// A Java counterpart will be generated for this enum.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.signin
 enum GAIAServiceType {
   GAIA_SERVICE_TYPE_NONE = 0,    // No Gaia response header.
   GAIA_SERVICE_TYPE_SIGNOUT,     // Logout all existing sessions.
@@ -235,7 +237,6 @@ bool AppendOrRemoveDiceRequestHeader(
     const GURL& redirect_url,
     const std::string& account_id,
     bool sync_enabled,
-    bool sync_has_auth_error,
     AccountConsistencyMethod account_consistency,
     const content_settings::CookieSettings* cookie_settings,
     const std::string& device_id);

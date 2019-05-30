@@ -12,9 +12,9 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "content/common/gpu_stream_constants.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/gpu_stream_constants.h"
 #include "content/public/common/web_preferences.h"
 #include "content/renderer/pepper/host_globals.h"
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
@@ -295,7 +295,7 @@ void PPB_Graphics3D_Impl::OnGpuControlErrorMessage(const char* message,
   if (!frame)
     return;
   WebConsoleMessage console_message = WebConsoleMessage(
-      WebConsoleMessage::kLevelError, WebString::FromUTF8(message));
+      blink::mojom::ConsoleMessageLevel::kError, WebString::FromUTF8(message));
   frame->AddMessageToConsole(console_message);
 }
 
@@ -326,6 +326,11 @@ void PPB_Graphics3D_Impl::OnGpuControlLostContextMaybeReentrant() {
 
 void PPB_Graphics3D_Impl::OnGpuControlSwapBuffersCompleted(
     const gpu::SwapBuffersCompleteParams& params) {}
+
+void PPB_Graphics3D_Impl::OnGpuControlReturnData(
+    base::span<const uint8_t> data) {
+  NOTIMPLEMENTED();
+}
 
 void PPB_Graphics3D_Impl::OnSwapBuffers() {
   if (HasPendingSwap()) {

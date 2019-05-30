@@ -13,17 +13,17 @@ cr.define('inline.login', function() {
    * The auth extension host instance.
    * @type {cr.login.GaiaAuthHost}
    */
-  var authExtHost;
+  let authExtHost;
 
   /**
    * Whether the auth ready event has been fired, for testing purpose.
    */
-  var authReadyFired;
+  let authReadyFired;
 
   /**
    * Whether the login UI is loaded for signing in primary account.
    */
-  var isLoginPrimaryAccount;
+  let isLoginPrimaryAccount;
 
   function onResize(e) {
     chrome.send('switchToFullTab', [e.detail]);
@@ -32,8 +32,9 @@ cr.define('inline.login', function() {
   function onAuthReady(e) {
     $('contents').classList.toggle('loading', false);
     authReadyFired = true;
-    if (isLoginPrimaryAccount)
+    if (isLoginPrimaryAccount) {
       chrome.send('metricsHandler:recordAction', ['Signin_SigninPage_Shown']);
+    }
   }
 
   function onDropLink(e) {
@@ -93,6 +94,18 @@ cr.define('inline.login', function() {
   }
 
   /**
+   * Sends a message 'lstFetchResults'. This is a specific message  sent when
+   * the inline signin is loaded with reason REASON_FETCH_LST_ONLY. Handlers of
+   * this message would expect a single argument a base::Dictionary value that
+   * contains the values fetched from the gaia sign in endpoint.
+   * @param {string} arg The string representation of the json data returned by
+   *    the sign in dialog after it has finished the sign in process.
+   */
+  function sendLSTFetchResults(arg) {
+    chrome.send('lstFetchResults', [arg]);
+  }
+
+  /**
    * Invoked when failed to get oauth2 refresh token.
    */
   function handleOAuth2TokenFailure() {
@@ -138,6 +151,7 @@ cr.define('inline.login', function() {
 
   return {
     closeDialog: closeDialog,
+    sendLSTFetchResults: sendLSTFetchResults,
     getAuthExtHost: getAuthExtHost,
     handleOAuth2TokenFailure: handleOAuth2TokenFailure,
     initialize: initialize,

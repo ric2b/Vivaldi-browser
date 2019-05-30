@@ -6,9 +6,9 @@
 
 #include <memory>
 
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/data_use_measurement/core/data_use_ascriber.h"
 #include "components/data_use_measurement/core/url_request_classifier.h"
 #include "components/metrics/data_use_tracker.h"
@@ -54,10 +54,29 @@ class TestDataUseAscriber : public DataUseAscriber {
     return nullptr;
   }
 
+  std::unique_ptr<net::NetworkDelegate> CreateNetworkDelegate(
+      std::unique_ptr<net::NetworkDelegate> wrapped_network_delegate) override {
+    return nullptr;
+  }
+
   std::unique_ptr<URLRequestClassifier> CreateURLRequestClassifier()
       const override {
     return nullptr;
   }
+};
+
+class TestDataUseMeasurement : public DataUseMeasurement {
+ public:
+  TestDataUseMeasurement(
+      std::unique_ptr<URLRequestClassifier> url_request_classifier,
+      DataUseAscriber* ascriber)
+      : DataUseMeasurement(std::move(url_request_classifier),
+                           ascriber,
+                           nullptr) {}
+
+  void UpdateDataUseToMetricsService(int64_t total_bytes,
+                                     bool is_cellular,
+                                     bool is_metrics_service_usage) override {}
 };
 
 // static
@@ -87,7 +106,8 @@ std::unique_ptr<net::URLRequest> RequestURL(
   if (redirect)
     socket_factory->AddSocketDataProvider(&redirect_socket_data_provider);
   net::MockRead response_mock_reads[] = {
-      net::MockRead("HTTP/1.1 200 OK\r\n\r\n"), net::MockRead("response body"),
+      net::MockRead("HTTP/1.1 200 OK\r\n\r\n"),
+      net::MockRead("response body"),
       net::MockRead(net::SYNCHRONOUS, net::OK),
   };
   const auto traffic_annotation =
@@ -108,7 +128,6 @@ std::unique_ptr<net::URLRequest> RequestURL(
     request->SetUserData(
         data_use_measurement::DataUseUserData::kUserDataKey,
         std::make_unique<data_use_measurement::DataUseUserData>(
-            data_use_measurement::DataUseUserData::SUGGESTIONS,
             data_use_measurement::DataUseUserData::FOREGROUND));
   }
   request->Start();
@@ -120,10 +139,12 @@ class DataUseNetworkDelegateTest : public testing::Test {
  public:
   DataUseNetworkDelegateTest()
       : context_(true),
-        data_use_network_delegate_(std::make_unique<net::TestNetworkDelegate>(),
-                                   &test_data_use_ascriber_,
-                                   std::make_unique<TestURLRequestClassifier>(),
-                                   metrics::UpdateUsagePrefCallbackType()) {
+        data_use_network_delegate_(
+            std::make_unique<net::TestNetworkDelegate>(),
+            &test_data_use_ascriber_,
+            std::make_unique<TestDataUseMeasurement>(
+                std::make_unique<TestURLRequestClassifier>(),
+                &test_data_use_ascriber_)) {
     context_.set_client_socket_factory(&mock_socket_factory_);
     context_.set_network_delegate(&data_use_network_delegate_);
     context_.Init();
@@ -135,7 +156,8 @@ class DataUseNetworkDelegateTest : public testing::Test {
   }
 
  private:
-  base::MessageLoopForIO message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_{
+      base::test::ScopedTaskEnvironment::MainThreadType::IO};
   net::MockClientSocketFactory mock_socket_factory_;
   net::TestURLRequestContext context_;
   TestDataUseAscriber test_data_use_ascriber_;

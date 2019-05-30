@@ -78,7 +78,8 @@ class CORE_EXPORT ImageLoader : public GarbageCollectedFinalized<ImageLoader>,
   };
 
   void UpdateFromElement(UpdateFromElementBehavior = kUpdateNormal,
-                         ReferrerPolicy = kReferrerPolicyDefault);
+                         network::mojom::ReferrerPolicy =
+                             network::mojom::ReferrerPolicy::kDefault);
 
   void ElementDidMoveToNewDocument();
 
@@ -86,6 +87,10 @@ class CORE_EXPORT ImageLoader : public GarbageCollectedFinalized<ImageLoader>,
   bool ImageComplete() const { return image_complete_ && !pending_task_; }
 
   ImageResourceContent* GetContent() const { return image_content_.Get(); }
+
+  // Returns true if this loader should be updated via UpdateFromElement() when
+  // being inserted into a new parent; returns false otherwise.
+  bool ShouldUpdateOnInsertedInto(ContainerNode& insertion_point) const;
 
   // Cancels pending load events, and doesn't dispatch new ones.
   // Note: ClearImage/SetImage.*() are not a simple setter.
@@ -121,12 +126,10 @@ class CORE_EXPORT ImageLoader : public GarbageCollectedFinalized<ImageLoader>,
 
   ScriptPromise Decode(ScriptState*, ExceptionState&);
 
-  void LoadDeferredImage(ReferrerPolicy);
+  void LoadDeferredImage(network::mojom::ReferrerPolicy);
 
  protected:
-  void ImageChanged(ImageResourceContent*,
-                    CanDeferInvalidation,
-                    const IntRect*) override;
+  void ImageChanged(ImageResourceContent*, CanDeferInvalidation) override;
   void ImageNotifyFinished(ImageResourceContent*) override;
 
  private:
@@ -150,11 +153,12 @@ class CORE_EXPORT ImageLoader : public GarbageCollectedFinalized<ImageLoader>,
   };
 
   // Called from the task or from updateFromElement to initiate the load.
-  void DoUpdateFromElement(BypassMainWorldBehavior,
-                           UpdateFromElementBehavior,
-                           const KURL&,
-                           ReferrerPolicy = kReferrerPolicyDefault,
-                           UpdateType = UpdateType::kAsync);
+  void DoUpdateFromElement(
+      BypassMainWorldBehavior,
+      UpdateFromElementBehavior,
+      const KURL&,
+      network::mojom::ReferrerPolicy = network::mojom::ReferrerPolicy::kDefault,
+      UpdateType = UpdateType::kAsync);
 
   virtual void DispatchLoadEvent() = 0;
   virtual void NoImageResourceToLoad() {}
@@ -177,7 +181,9 @@ class CORE_EXPORT ImageLoader : public GarbageCollectedFinalized<ImageLoader>,
   void ClearFailedLoadURL();
   void DispatchErrorEvent();
   void CrossSiteOrCSPViolationOccurred(AtomicString);
-  void EnqueueImageLoadingMicroTask(UpdateFromElementBehavior, ReferrerPolicy);
+  void EnqueueImageLoadingMicroTask(const KURL&,
+                                    UpdateFromElementBehavior,
+                                    network::mojom::ReferrerPolicy);
 
   KURL ImageSourceToKURL(AtomicString) const;
 
@@ -200,6 +206,7 @@ class CORE_EXPORT ImageLoader : public GarbageCollectedFinalized<ImageLoader>,
   Member<ImageResourceContent> image_content_;
   Member<ImageResource> image_resource_for_image_document_;
 
+  String last_base_element_url_;
   AtomicString failed_load_url_;
   base::WeakPtr<Task> pending_task_;  // owned by Microtask
   std::unique_ptr<IncrementLoadEventDelayCount>
@@ -254,12 +261,9 @@ class CORE_EXPORT ImageLoader : public GarbageCollectedFinalized<ImageLoader>,
     enum State { kPendingMicrotask, kPendingLoad, kDispatched };
 
     DecodeRequest(ImageLoader*, ScriptPromiseResolver*);
-    DecodeRequest(DecodeRequest&&) = default;
     ~DecodeRequest() = default;
 
     void Trace(blink::Visitor*);
-
-    DecodeRequest& operator=(DecodeRequest&&) = default;
 
     uint64_t request_id() const { return request_id_; }
     State state() const { return state_; }

@@ -108,14 +108,6 @@ do_package() {
   mv "$RPMBUILD_DIR/RPMS/$ARCHITECTURE/${PKGNAME}.${ARCHITECTURE}.rpm" \
      "${OUTPUTDIR}"
 
-  if [ "${VIVALDI_SIGNING_KEY:-}" ] ; then
-    expect - <<EOSCRIPT
-      spawn rpm --addsign "${OUTPUTDIR}/${PKGNAME}.${ARCHITECTURE}.rpm"
-      expect -exact "Enter pass phrase: "
-      send -- "\r"
-      expect eof
-EOSCRIPT
-  fi
   # Make sure the package is world-readable, otherwise it causes problems when
   # copied to share drive.
   chmod a+r "${OUTPUTDIR}/${PKGNAME}.${ARCHITECTURE}.rpm"

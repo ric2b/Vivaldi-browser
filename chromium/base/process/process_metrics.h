@@ -189,7 +189,7 @@ class BASE_EXPORT ProcessMetrics {
   // process since process start.
   uint64_t GetCumulativeDiskUsageInBytes();
 
-#if defined(OS_LINUX) || defined(OS_AIX) || defined(OS_ANDROID)
+#if defined(OS_POSIX)
   // Returns the number of file descriptors currently open by the process, or
   // -1 on error.
   int GetOpenFdCount() const;
@@ -197,7 +197,7 @@ class BASE_EXPORT ProcessMetrics {
   // Returns the soft limit of file descriptors that can be opened by the
   // process, or -1 on error.
   int GetOpenFdSoftLimit() const;
-#endif  // defined(OS_LINUX) || defined(OS_AIX) || defined(OS_ANDROID)
+#endif  // defined(OS_POSIX)
 
 #if defined(OS_LINUX) || defined(OS_ANDROID)
   // Bytes of swap as reported by /proc/[pid]/status.
@@ -518,6 +518,13 @@ struct BASE_EXPORT SystemPerformanceInfo {
   uint64_t pagefile_pages_written = 0;
   // The number of write operations performed on the system's pagefiles.
   uint64_t pagefile_pages_write_ios = 0;
+  // The number of pages of physical memory available to processes running on
+  // the system.
+  uint64_t available_pages = 0;
+  // The number of pages read from disk to resolve page faults.
+  uint64_t pages_read = 0;
+  // The number of read operations initiated to resolve page faults.
+  uint64_t page_read_ios = 0;
 };
 
 // Retrieves performance counters from the operating system.
@@ -527,7 +534,7 @@ BASE_EXPORT bool GetSystemPerformanceInfo(SystemPerformanceInfo* info);
 // Collects and holds performance metrics for system memory and disk.
 // Provides functionality to retrieve the data on various platforms and
 // to serialize the stored data.
-class SystemMetrics {
+class BASE_EXPORT SystemMetrics {
  public:
   SystemMetrics();
 

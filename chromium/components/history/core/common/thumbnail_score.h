@@ -33,9 +33,6 @@ struct ThumbnailScore {
   // Returns string representation of this object.
   std::string ToString() const;
 
-  // If true thumbnail update is forced.
-  bool force_update;
-
   // How "boring" a thumbnail is. The boring score is the 0,1 ranged
   // percentage of pixels that are the most common luma. Higher boring
   // scores indicate that a higher percentage of a bitmap are all the

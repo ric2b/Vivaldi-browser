@@ -141,8 +141,7 @@
             {
               "type": "integer",
               "name": "windowId",
-              "description": "Window.id of the application window, -2 if we should use current window.",
-              "optional": true
+              "description": "id of the application window."
             },
             {
               "name": "showPopup",
@@ -182,8 +181,7 @@
           {
             "type": "integer",
             "name": "windowId",
-            "description": "Window.id of the application window. Used to find the Browser object.",
-            "optional": true
+            "description": "id of the application window. Used to find the Browser object."
           }
         ]
       },
@@ -200,8 +198,7 @@
           {
             "type": "integer",
             "name": "windowId",
-            "description": "Window.id of the application window. Used to find the Browser object.",
-            "optional": true
+            "description": "id of the application window. Used to find the Browser object."
           }
         ]
       }
@@ -237,18 +234,6 @@
           {
             "$ref": "ExtensionInfo",
             "name": "extension"
-          },
-          {
-            "type": "integer",
-            "name": "windowId",
-            "description": "Window.id of the application window, -2 if we should use current window.",
-            "optional": true
-          },
-          {
-            "type": "integer",
-            "name": "tabId",
-            "description": "Id of active tab.",
-            "optional": true
           }
         ]
       },

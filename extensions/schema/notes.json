@@ -290,24 +290,6 @@
         ]
       },
       {
-        "name": "removeTree",
-        "type": "function",
-        "description": "Recursively removes a note folder. Use this when deleting a folder.",
-        "parameters": [
-          {
-            "type": "string",
-            "serialized_type": "int64",
-            "name": "id"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": []
-          }
-        ]
-      },
-      {
         "name": "search",
         "type": "function",
         "description": "",

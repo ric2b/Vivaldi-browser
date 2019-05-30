@@ -4,6 +4,7 @@
 
 #include "content/browser/service_worker/service_worker_data_pipe_reader.h"
 
+#include "base/bind.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/service_worker/service_worker_url_request_job.h"
 #include "content/browser/service_worker/service_worker_version.h"
@@ -45,8 +46,8 @@ void ServiceWorkerDataPipeReader::Start() {
   handle_watcher_.Watch(
       stream_.get(),
       MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_PEER_CLOSED,
-      base::Bind(&ServiceWorkerDataPipeReader::OnHandleGotSignal,
-                 base::Unretained(this)));
+      base::BindRepeating(&ServiceWorkerDataPipeReader::OnHandleGotSignal,
+                          base::Unretained(this)));
   owner_->OnResponseStarted();
 }
 

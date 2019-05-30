@@ -659,8 +659,9 @@ const char kEmptyUnencryptedConfiguration[] =
 
 std::unique_ptr<base::Value> ReadDictionaryFromJson(const std::string& json) {
   std::string error;
-  std::unique_ptr<base::Value> root = base::JSONReader::ReadAndReturnError(
-      json, base::JSON_ALLOW_TRAILING_COMMAS, nullptr, &error);
+  std::unique_ptr<base::Value> root =
+      base::JSONReader::ReadAndReturnErrorDeprecated(
+          json, base::JSON_ALLOW_TRAILING_COMMAS, nullptr, &error);
   if (!root || !root->is_dict()) {
     NET_LOG(ERROR) << "Invalid JSON Dictionary: " << error;
     return nullptr;
@@ -1101,10 +1102,8 @@ base::Value ConvertOncProxySettingsToProxyConfig(
     net::ProxyBypassRules bypass_rules;
     const base::Value* exclude_domains = onc_proxy_settings.FindKeyOfType(
         ::onc::proxy::kExcludeDomains, base::Value::Type::LIST);
-    if (exclude_domains) {
-      bypass_rules.AssignFrom(
-          ConvertOncExcludeDomainsToBypassRules(*exclude_domains));
-    }
+    if (exclude_domains)
+      bypass_rules = ConvertOncExcludeDomainsToBypassRules(*exclude_domains);
     return ProxyConfigDictionary::CreateFixedServers(manual_spec,
                                                      bypass_rules.ToString());
   }

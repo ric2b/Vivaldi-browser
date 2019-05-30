@@ -59,12 +59,12 @@ void PopulateBookmarkTreeNode(
     api::bookmarks::BookmarkTreeNode* out_bookmark_tree_node) {
   DCHECK(out_bookmark_tree_node);
 
-  out_bookmark_tree_node->id = base::Int64ToString(node->id());
+  out_bookmark_tree_node->id = base::NumberToString(node->id());
 
   const BookmarkNode* parent = node->parent();
   if (parent) {
     out_bookmark_tree_node->parent_id.reset(
-        new std::string(base::Int64ToString(parent->id())));
+        new std::string(base::NumberToString(parent->id())));
     out_bookmark_tree_node->index.reset(new int(parent->GetIndexOf(node)));
   }
 
@@ -99,6 +99,13 @@ void PopulateBookmarkTreeNode(
   if (node->GetMetaInfo("Speeddial", &temp)) {
     bool speeddial = (temp == "true") ? true : false;
     out_bookmark_tree_node->speeddial = speeddial;
+  }
+  if (node->GetMetaInfo("Bookmarkbar", &temp)) {
+    bool bookmarkbar = (temp == "true") ? true : false;
+    out_bookmark_tree_node->bookmarkbar = bookmarkbar;
+  }
+  if (node->GetMetaInfo("Partner", &temp)) {
+    out_bookmark_tree_node->partner = temp;
   }
 
   out_bookmark_tree_node->trash = (node->type() ==
@@ -177,7 +184,7 @@ void GetMetaInfo(const BookmarkNode& node,
       value->SetKey(itr->first, base::Value(itr->second));
     }
   }
-  id_to_meta_info_map->Set(base::Int64ToString(node.id()), std::move(value));
+  id_to_meta_info_map->Set(base::NumberToString(node.id()), std::move(value));
 
   if (node.is_folder()) {
     for (int i = 0; i < node.child_count(); ++i) {

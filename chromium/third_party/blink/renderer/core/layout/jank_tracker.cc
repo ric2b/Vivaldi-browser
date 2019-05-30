@@ -6,11 +6,16 @@
 
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/location.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/origin_trials/origin_trials.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
+#include "third_party/blink/renderer/core/timing/dom_window_performance.h"
+#include "third_party/blink/renderer/core/timing/performance_entry.h"
+#include "third_party/blink/renderer/core/timing/window_performance.h"
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
 
 namespace blink {
@@ -38,6 +43,9 @@ static float GetMoveDistance(const FloatRect& old_rect,
 }
 
 static float RegionGranularityScale(const IntRect& viewport) {
+  if (RuntimeEnabledFeatures::JankTrackingSweepLineEnabled())
+    return 1;
+
   return kRegionGranularitySteps /
          std::min(viewport.Height(), viewport.Width());
 }
@@ -51,13 +59,17 @@ static bool EqualWithinMovementThreshold(const FloatPoint& a,
          fabs(a.Y() - b.Y()) < threshold_physical_px;
 }
 
-static bool SmallerThanRegionGranularity(const LayoutRect& rect,
+static bool SmallerThanRegionGranularity(const FloatRect& rect,
                                          float granularity_scale) {
-  return rect.Width().ToFloat() * granularity_scale < 0.5 ||
-         rect.Height().ToFloat() * granularity_scale < 0.5;
+  return rect.Width() * granularity_scale < 0.5 ||
+         rect.Height() * granularity_scale < 0.5;
 }
 
-#ifdef TRACE_JANK_REGIONS
+static const TransformPaintPropertyNode& TransformNodeFor(
+    LayoutObject& object) {
+  return object.FirstFragment().LocalBorderBoxProperties().Transform();
+}
+
 static void RegionToTracedValue(const Region& region,
                                 double granularity_scale,
                                 TracedValue& value) {
@@ -72,7 +84,15 @@ static void RegionToTracedValue(const Region& region,
   }
   value.EndArray();
 }
-#endif  // TRACE_JANK_REGIONS
+
+static void RegionToTracedValue(const JankRegion& region,
+                                double granularity_scale,
+                                TracedValue& value) {
+  Region old_region;
+  for (IntRect rect : region.GetRects())
+    old_region.Unite(Region(rect));
+  RegionToTracedValue(old_region, granularity_scale, value);
+}
 
 JankTracker::JankTracker(LocalFrameView* frame_view)
     : frame_view_(frame_view),
@@ -82,97 +102,151 @@ JankTracker::JankTracker(LocalFrameView* frame_view)
              &JankTracker::TimerFired),
       max_distance_(0.0) {}
 
+void JankTracker::AccumulateJank(const LayoutObject& source,
+                                 const PaintLayer& painting_layer,
+                                 FloatRect old_rect,
+                                 FloatRect new_rect) {
+  if (old_rect.IsEmpty() || new_rect.IsEmpty())
+    return;
+
+  if (EqualWithinMovementThreshold(LogicalStart(old_rect, source),
+                                   LogicalStart(new_rect, source), source))
+    return;
+
+  IntRect viewport =
+      IntRect(IntPoint(),
+              frame_view_->GetScrollableArea()->VisibleContentRect().Size());
+  float scale = RegionGranularityScale(viewport);
+
+  if (SmallerThanRegionGranularity(old_rect, scale) &&
+      SmallerThanRegionGranularity(new_rect, scale))
+    return;
+
+  // Ignore layout objects that move (in the coordinate space of the paint
+  // invalidation container) on scroll.
+  // TODO(skobes): Find a way to detect when these objects jank.
+  if (source.IsFixedPositioned() || source.IsStickyPositioned())
+    return;
+
+  // SVG elements don't participate in the normal layout algorithms and are
+  // more likely to be used for animations.
+  if (source.IsSVG())
+    return;
+
+  const auto& local_xform = TransformNodeFor(painting_layer.GetLayoutObject());
+  const auto& root_xform = TransformNodeFor(*source.View());
+
+  GeometryMapper::SourceToDestinationRect(local_xform, root_xform, old_rect);
+  GeometryMapper::SourceToDestinationRect(local_xform, root_xform, new_rect);
+
+  if (!old_rect.Intersects(viewport) && !new_rect.Intersects(viewport))
+    return;
+
+  DVLOG(2) << source.DebugName() << " moved from " << old_rect.ToString()
+           << " to " << new_rect.ToString();
+
+  max_distance_ =
+      std::max(max_distance_, GetMoveDistance(old_rect, new_rect, source));
+
+  IntRect visible_old_rect = RoundedIntRect(old_rect);
+  visible_old_rect.Intersect(viewport);
+
+  IntRect visible_new_rect = RoundedIntRect(new_rect);
+  visible_new_rect.Intersect(viewport);
+
+  visible_old_rect.Scale(scale);
+  visible_new_rect.Scale(scale);
+
+  if (RuntimeEnabledFeatures::JankTrackingSweepLineEnabled()) {
+    region_experimental_.AddRect(visible_old_rect);
+    region_experimental_.AddRect(visible_new_rect);
+  } else {
+    region_.Unite(Region(visible_old_rect));
+    region_.Unite(Region(visible_new_rect));
+  }
+}
+
 void JankTracker::NotifyObjectPrePaint(const LayoutObject& object,
                                        const LayoutRect& old_visual_rect,
                                        const PaintLayer& painting_layer) {
   if (!IsActive())
     return;
 
-  LayoutRect new_visual_rect = object.FirstFragment().VisualRect();
-  if (old_visual_rect.IsEmpty() || new_visual_rect.IsEmpty())
+  AccumulateJank(object, painting_layer, FloatRect(old_visual_rect),
+                 FloatRect(object.FirstFragment().VisualRect()));
+}
+
+void JankTracker::NotifyCompositedLayerMoved(const PaintLayer& paint_layer,
+                                             FloatRect old_layer_rect,
+                                             FloatRect new_layer_rect) {
+  if (!IsActive())
     return;
 
-  if (EqualWithinMovementThreshold(
-          LogicalStart(FloatRect(old_visual_rect), object),
-          LogicalStart(FloatRect(new_visual_rect), object), object))
+  // Make sure we can access a transform node.
+  LayoutObject& layout_object = paint_layer.GetLayoutObject();
+  if (!layout_object.FirstFragment().HasLocalBorderBoxProperties())
     return;
 
-  IntRect viewport = frame_view_->GetScrollableArea()->VisibleContentRect();
-  float scale = RegionGranularityScale(viewport);
+  // Convert to the local transform space, whose origin is the layer's previous
+  // location because the property trees haven't been updated yet.
+  FloatPoint transform_parent_offset = -old_layer_rect.Location();
+  old_layer_rect.MoveBy(transform_parent_offset);
+  new_layer_rect.MoveBy(transform_parent_offset);
 
-  if (SmallerThanRegionGranularity(old_visual_rect, scale) &&
-      SmallerThanRegionGranularity(new_visual_rect, scale))
-    return;
-
-  const auto* local_transform = painting_layer.GetLayoutObject()
-                                    .FirstFragment()
-                                    .LocalBorderBoxProperties()
-                                    .Transform();
-  const auto* ancestor_transform = painting_layer.GetLayoutObject()
-                                       .View()
-                                       ->FirstFragment()
-                                       .LocalBorderBoxProperties()
-                                       .Transform();
-
-  FloatRect old_visual_rect_abs = FloatRect(old_visual_rect);
-  GeometryMapper::SourceToDestinationRect(local_transform, ancestor_transform,
-                                          old_visual_rect_abs);
-
-  FloatRect new_visual_rect_abs = FloatRect(new_visual_rect);
-  GeometryMapper::SourceToDestinationRect(local_transform, ancestor_transform,
-                                          new_visual_rect_abs);
-
-  // TOOD(crbug.com/842282): Consider tracking a separate jank score for each
-  // transform space to avoid these local-to-absolute conversions, once we have
-  // a better idea of how to aggregate multiple scores for a page.
-  // See review thread of http://crrev.com/c/1046155 for more details.
-
-  if (!old_visual_rect_abs.Intersects(viewport) &&
-      !new_visual_rect_abs.Intersects(viewport))
-    return;
-
-  DVLOG(2) << object.DebugName() << " moved from "
-           << old_visual_rect_abs.ToString() << " to "
-           << new_visual_rect_abs.ToString();
-
-  max_distance_ = std::max(
-      max_distance_,
-      GetMoveDistance(old_visual_rect_abs, new_visual_rect_abs, object));
-
-  IntRect visible_old_visual_rect = RoundedIntRect(old_visual_rect_abs);
-  visible_old_visual_rect.Intersect(viewport);
-
-  IntRect visible_new_visual_rect = RoundedIntRect(new_visual_rect_abs);
-  visible_new_visual_rect.Intersect(viewport);
-
-  visible_old_visual_rect.Scale(scale);
-  visible_new_visual_rect.Scale(scale);
-
-  region_.Unite(Region(visible_old_visual_rect));
-  region_.Unite(Region(visible_new_visual_rect));
+  AccumulateJank(layout_object, paint_layer, old_layer_rect, new_layer_rect);
 }
 
 void JankTracker::NotifyPrePaintFinished() {
-  if (!IsActive() || region_.IsEmpty())
+  if (!IsActive())
+    return;
+  bool use_sweep_line = RuntimeEnabledFeatures::JankTrackingSweepLineEnabled();
+  bool region_is_empty =
+      use_sweep_line ? region_experimental_.IsEmpty() : region_.IsEmpty();
+  if (region_is_empty)
     return;
 
   IntRect viewport = frame_view_->GetScrollableArea()->VisibleContentRect();
   double granularity_scale = RegionGranularityScale(viewport);
   viewport.Scale(granularity_scale);
-  double viewport_area = double(viewport.Width()) * double(viewport.Height());
 
-  double jank_fraction = region_.Area() / viewport_area;
+  if (viewport.IsEmpty())
+    return;
+
+  double viewport_area = double(viewport.Width()) * double(viewport.Height());
+  uint64_t region_area =
+      use_sweep_line ? region_experimental_.Area() : region_.Area();
+  double jank_fraction = region_area / viewport_area;
+  DCHECK_GT(jank_fraction, 0);
+
   score_ += jank_fraction;
 
   DVLOG(1) << "viewport " << (jank_fraction * 100)
            << "% janked, raising score to " << score_;
 
+  LocalFrame& frame = frame_view_->GetFrame();
+
   TRACE_EVENT_INSTANT2("loading", "FrameLayoutJank", TRACE_EVENT_SCOPE_THREAD,
                        "data",
                        PerFrameTraceData(jank_fraction, granularity_scale),
-                       "frame", ToTraceValue(&frame_view_->GetFrame()));
+                       "frame", ToTraceValue(&frame));
 
-  region_ = Region();
+  frame.Client()->DidObserveLayoutJank(jank_fraction);
+
+  if (origin_trials::LayoutJankAPIEnabled(frame.GetDocument()) &&
+      frame.DomWindow()) {
+    WindowPerformance* performance =
+        DOMWindowPerformance::performance(*frame.DomWindow());
+    if (performance &&
+        (performance->HasObserverFor(PerformanceEntry::kLayoutJank) ||
+         performance->ShouldBufferEntries())) {
+      performance->AddLayoutJankFraction(jank_fraction);
+    }
+  }
+
+  if (use_sweep_line)
+    region_experimental_.Reset();
+  else
+    region_ = Region();
 }
 
 void JankTracker::NotifyInput(const WebInputEvent& event) {
@@ -212,14 +286,10 @@ std::unique_ptr<TracedValue> JankTracker::PerFrameTraceData(
   value->SetDouble("jank_fraction", jank_fraction);
   value->SetDouble("cumulative_score", score_);
   value->SetDouble("max_distance", max_distance_);
-
-#ifdef TRACE_JANK_REGIONS
-  // Jank regions can be included in trace event by defining TRACE_JANK_REGIONS
-  // at the top of this file. This is useful for debugging and visualizing, but
-  // might impact performance negatively.
-  RegionToTracedValue(region_, granularity_scale, *value);
-#endif
-
+  if (RuntimeEnabledFeatures::JankTrackingSweepLineEnabled())
+    RegionToTracedValue(region_experimental_, granularity_scale, *value);
+  else
+    RegionToTracedValue(region_, granularity_scale, *value);
   value->SetBoolean("is_main_frame", frame_view_->GetFrame().IsMainFrame());
   return value;
 }

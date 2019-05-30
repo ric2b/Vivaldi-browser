@@ -1,9 +1,8 @@
 {% filter format_blink_cpp_source_code %}
 
 {% include 'copyright_block.txt' %}
-
-#ifndef {{cpp_class}}_h
-#define {{cpp_class}}_h
+#ifndef {{header_guard}}
+#define {{header_guard}}
 
 {% for filename in header_includes %}
 #include "{{filename}}"
@@ -17,10 +16,16 @@ class {{forward_declaration}};
 
 class {{exported}}{{cpp_class}} final : public CallbackFunctionBase {
  public:
-  static {{cpp_class}}* Create(v8::Local<v8::Function> callback_function) {
-    return new {{cpp_class}}(callback_function);
+  static {{cpp_class}}* Create(
+      {%- if is_treat_non_object_as_null %}v8::Local<v8::Object>
+      {%- else %}v8::Local<v8::Function>{% endif %} callback_function) {
+    return MakeGarbageCollected<{{cpp_class}}>(callback_function);
   }
 
+  explicit {{cpp_class}}(
+      {%- if is_treat_non_object_as_null %}v8::Local<v8::Object>
+      {%- else %}v8::Local<v8::Function>{% endif %} callback_function)
+      : CallbackFunctionBase(callback_function) {}
   ~{{cpp_class}}() override = default;
 
   // NameClient overrides:
@@ -47,9 +52,19 @@ class {{exported}}{{cpp_class}} final : public CallbackFunctionBase {
   void InvokeAndReportException({{argument_declarations | join(', ')}});
 {% endif %}
 
- private:
-  explicit {{cpp_class}}(v8::Local<v8::Function> callback_function)
-      : CallbackFunctionBase(callback_function) {}
+{% if callback_function_name == 'EventHandlerNonNull' %}
+  // Returns true if the callback is runnable, otherwise returns false and
+  // throws an exception. 'beforeunload' event need to have priority over pause
+  // of execution contexts.
+  enum class IgnorePause { kDontIgnore, kIgnore };
+  bool IsRunnableOrThrowException(IgnorePause);
+
+  // Performs "invoke" without checking the runnability check, which must be
+  // done prior to this call by |IsRunnableOrThrowException|.
+  // https://heycam.github.io/webidl/#es-invoking-callback-functions
+  // This function may throw unlike InvokeAndReportException.
+  v8::Maybe<{{return_cpp_type}}> InvokeWithoutRunnabilityCheck({{argument_declarations | join(', ')}}) WARN_UNUSED_RESULT;
+{% endif %}
 };
 
 template <>
@@ -57,6 +72,8 @@ class V8PersistentCallbackFunction<{{cpp_class}}> final : public V8PersistentCal
   using V8CallbackFunction = {{cpp_class}};
 
  public:
+  explicit V8PersistentCallbackFunction(V8CallbackFunction* callback_function)
+      : V8PersistentCallbackFunctionBase(callback_function) {}
   ~V8PersistentCallbackFunction() override = default;
 
   // Returns a wrapper-tracing version of this callback function.
@@ -68,9 +85,6 @@ class V8PersistentCallbackFunction<{{cpp_class}}> final : public V8PersistentCal
 {% endif %}
 
  private:
-  explicit V8PersistentCallbackFunction(V8CallbackFunction* callback_function)
-      : V8PersistentCallbackFunctionBase(callback_function) {}
-
   V8CallbackFunction* Proxy() {
     return As<V8CallbackFunction>();
   }
@@ -89,6 +103,6 @@ Persistent<{{cpp_class}}> WrapPersistent({{cpp_class}}*) = delete;
 
 }  // namespace blink
 
-#endif  // {{cpp_class}}_h
+#endif  // {{header_guard}}
 
 {% endfilter %}{# format_blink_cpp_source_code #}

@@ -4,8 +4,10 @@
 
 #include "chrome/browser/chromeos/accessibility/chromevox_panel.h"
 
+#include "ash/public/interfaces/accessibility_controller.mojom.h"
 #include "ash/public/interfaces/constants.mojom.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/service_manager_connection.h"
 #include "extensions/common/constants.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -19,15 +21,6 @@ const char kFocusURLFragment[] = "focus";
 const char kFullscreenURLFragment[] = "fullscreen";
 const char kWidgetName[] = "ChromeVoxPanel";
 const int kPanelHeight = 35;
-
-ash::mojom::AccessibilityControllerPtr GetAccessibilityController() {
-  // Connect to the accessibility mojo interface in ash.
-  ash::mojom::AccessibilityControllerPtr accessibility_controller;
-  content::ServiceManagerConnection::GetForProcess()
-      ->GetConnector()
-      ->BindInterface(ash::mojom::kServiceName, &accessibility_controller);
-  return accessibility_controller;
-}
 
 }  // namespace
 
@@ -77,12 +70,12 @@ void ChromeVoxPanel::EnterFullscreen() {
 
 void ChromeVoxPanel::ExitFullscreen() {
   GetWidget()->Deactivate();
-  GetWidget()->widget_delegate()->set_can_activate(false);
+  GetWidget()->widget_delegate()->SetCanActivate(false);
   SetAccessibilityPanelFullscreen(false);
 }
 
 void ChromeVoxPanel::Focus() {
-  GetWidget()->widget_delegate()->set_can_activate(true);
+  GetWidget()->widget_delegate()->SetCanActivate(true);
   GetWidget()->Activate();
   GetContentsView()->RequestFocus();
 }
@@ -95,7 +88,7 @@ void ChromeVoxPanel::SetAccessibilityPanelFullscreen(bool fullscreen) {
 }
 
 std::string ChromeVoxPanel::GetUrlForContent() {
-  std::string url("chrome-extension://");
+  std::string url(EXTENSION_PREFIX);
   url += extension_misc::kChromeVoxExtensionId;
   url += kChromeVoxPanelRelativeUrl;
 

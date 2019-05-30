@@ -5,6 +5,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_XR_XR_FRAME_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_XR_XR_FRAME_H_
 
+#include <memory>
+
 #include "device/vr/public/mojom/vr_service.mojom-blink.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_member.h"
@@ -14,12 +16,14 @@
 
 namespace blink {
 
-class XRCoordinateSystem;
-class XRDevicePose;
+class ExceptionState;
 class XRInputPose;
 class XRInputSource;
+class XRPose;
+class XRReferenceSpace;
 class XRSession;
-class XRView;
+class XRSpace;
+class XRViewerPose;
 
 class XRFrame final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
@@ -29,17 +33,25 @@ class XRFrame final : public ScriptWrappable {
 
   XRSession* session() const { return session_; }
 
-  const HeapVector<Member<XRView>>& views() const;
-  XRDevicePose* getDevicePose(XRCoordinateSystem*) const;
-  XRInputPose* getInputPose(XRInputSource*, XRCoordinateSystem*) const;
+  XRViewerPose* getViewerPose(XRReferenceSpace*, ExceptionState&) const;
+  XRInputPose* getInputPose(XRInputSource*,
+                            XRReferenceSpace*,
+                            ExceptionState&) const;
+  XRPose* getPose(XRSpace*, XRSpace*, ExceptionState&);
 
   void SetBasePoseMatrix(const TransformationMatrix&);
 
   void Trace(blink::Visitor*) override;
 
+  void Deactivate();
+
  private:
   const Member<XRSession> session_;
+
+  // Maps from mojo space to headset space.
   std::unique_ptr<TransformationMatrix> base_pose_matrix_;
+
+  bool active_ = true;
 };
 
 }  // namespace blink

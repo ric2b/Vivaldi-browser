@@ -5,9 +5,10 @@
 #ifndef STORAGE_BROWSER_FILEAPI_FILE_WRITER_IMPL_H_
 #define STORAGE_BROWSER_FILEAPI_FILE_WRITER_IMPL_H_
 
+#include "base/component_export.h"
+#include "base/memory/weak_ptr.h"
 #include "storage/browser/fileapi/file_system_operation_runner.h"
 #include "storage/browser/fileapi/file_system_url.h"
-#include "storage/browser/storage_browser_export.h"
 #include "third_party/blink/public/mojom/filesystem/file_writer.mojom.h"
 
 namespace storage {
@@ -16,7 +17,8 @@ namespace storage {
 // FileSystemOperationRunner and BlobStorageContext so all methods should be
 // called on the sequence those instances live on. In chromium that means all
 // usage has to be on the IO thread.
-class STORAGE_EXPORT FileWriterImpl : public blink::mojom::FileWriter {
+class COMPONENT_EXPORT(STORAGE_BROWSER) FileWriterImpl
+    : public blink::mojom::FileWriter {
  public:
   FileWriterImpl(FileSystemURL url,
                  std::unique_ptr<FileSystemOperationRunner> operation_runner,
@@ -26,6 +28,9 @@ class STORAGE_EXPORT FileWriterImpl : public blink::mojom::FileWriter {
   void Write(uint64_t position,
              blink::mojom::BlobPtr blob,
              WriteCallback callback) override;
+  void WriteStream(uint64_t position,
+                   mojo::ScopedDataPipeConsumerHandle stream,
+                   WriteStreamCallback callback) override;
   void Truncate(uint64_t length, TruncateCallback callback) override;
 
  private:
@@ -37,6 +42,11 @@ class STORAGE_EXPORT FileWriterImpl : public blink::mojom::FileWriter {
                            std::unique_ptr<BlobDataHandle> blob,
                            base::File::Error result,
                            const base::File::Info& file_info);
+  void DoWriteStreamWithFileInfo(WriteCallback callback,
+                                 uint64_t position,
+                                 mojo::ScopedDataPipeConsumerHandle data_pipe,
+                                 base::File::Error result,
+                                 const base::File::Info& file_info);
 
   struct WriteState {
     uint64_t bytes_written = 0;
@@ -51,6 +61,8 @@ class STORAGE_EXPORT FileWriterImpl : public blink::mojom::FileWriter {
   const std::unique_ptr<FileSystemOperationRunner> operation_runner_;
   const base::WeakPtr<BlobStorageContext> blob_context_;
   const FileSystemURL url_;
+
+  base::WeakPtrFactory<FileWriterImpl> weak_ptr_factory_;
 };
 
 }  // namespace storage

@@ -22,7 +22,7 @@
 class Profile;
 
 namespace crostini {
-enum class ConciergeClientResult;
+enum class CrostiniResult;
 }  // namespace crostini
 
 namespace chromeos {
@@ -44,7 +44,7 @@ class StorageHandler : public ::settings::SettingsPageUIHandler {
   // SettingsPageUIHandler implementation.
   void RegisterMessages() override;
   void OnJavascriptAllowed() override {}
-  void OnJavascriptDisallowed() override {}
+  void OnJavascriptDisallowed() override;
 
  private:
   // Handlers of JS messages.
@@ -94,7 +94,7 @@ class StorageHandler : public ::settings::SettingsPageUIHandler {
   void UpdateCrostiniSize();
 
   // Callback to update the UI about Crostini VMs and their apps and cache.
-  void OnGetCrostiniSize(crostini::ConciergeClientResult result, int64_t size);
+  void OnGetCrostiniSize(crostini::CrostiniResult result, int64_t size);
 
   // Requests updating the total size of other users' data.
   void UpdateOtherUsersSize();

@@ -7,10 +7,10 @@
 
 #include <memory>
 
+#include "base/macros.h"
 #include "third_party/blink/renderer/platform/audio/audio_array.h"
 #include "third_party/blink/renderer/platform/audio/fft_frame.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
-#include "third_party/blink/renderer/platform/wtf/noncopyable.h"
 
 namespace blink {
 
@@ -22,14 +22,15 @@ namespace blink {
 // smaller than that of the FFTConvolver.
 class PLATFORM_EXPORT SimpleFFTConvolver {
   USING_FAST_MALLOC(SimpleFFTConvolver);
-  WTF_MAKE_NONCOPYABLE(SimpleFFTConvolver);
 
  public:
   SimpleFFTConvolver(
       size_t input_block_size,
       const std::unique_ptr<AudioFloatArray>& convolution_kernel);
 
-  void Process(const float* source_p, float* dest_p, size_t frames_to_process);
+  void Process(const float* source_p,
+               float* dest_p,
+               uint32_t frames_to_process);
 
   void Reset();
 
@@ -51,6 +52,8 @@ class PLATFORM_EXPORT SimpleFFTConvolver {
   // Saves the 2nd half of the FFT buffer, so we can do an overlap-add with the
   // 1st half of the next one
   AudioFloatArray last_overlap_buffer_;
+
+  DISALLOW_COPY_AND_ASSIGN(SimpleFFTConvolver);
 };
 
 }  // namespace blink

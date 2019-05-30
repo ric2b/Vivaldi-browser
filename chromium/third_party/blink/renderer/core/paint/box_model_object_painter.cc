@@ -56,10 +56,14 @@ BoxModelObjectPainter::BoxModelObjectPainter(const LayoutBoxModelObject& box,
       box_model_(box),
       flow_box_(flow_box) {}
 
-bool BoxModelObjectPainter::
-    IsPaintingBackgroundOfPaintContainerIntoScrollingContentsLayer(
-        const LayoutBoxModelObject* box_model_,
-        const PaintInfo& paint_info) {
+bool BoxModelObjectPainter::IsPaintingScrollingBackground(
+    const LayoutBoxModelObject* box_model_,
+    const PaintInfo& paint_info) {
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
+    // TODO(wangxianzhu): For CAP, remove this method and let callers use
+    // PaintInfo::IsPaintScrollingBackground() directly.
+    return paint_info.IsPaintingScrollingBackground();
+  }
   return paint_info.PaintFlags() & kPaintLayerPaintingOverflowContents &&
          !(paint_info.PaintFlags() &
            kPaintLayerPaintingCompositingBackgroundPhase) &&
@@ -69,13 +73,14 @@ bool BoxModelObjectPainter::
 void BoxModelObjectPainter::PaintTextClipMask(GraphicsContext& context,
                                               const IntRect& mask_rect,
                                               const LayoutPoint& paint_offset,
-                                              bool) {
+                                              bool object_has_multiple_boxes) {
   PaintInfo paint_info(context, mask_rect, PaintPhase::kTextClip,
                        kGlobalPaintNormalPhase, 0);
   if (flow_box_) {
     LayoutSize local_offset = ToLayoutSize(flow_box_->Location());
-    if (box_model_.StyleRef().BoxDecorationBreak() ==
-        EBoxDecorationBreak::kSlice) {
+    if (object_has_multiple_boxes &&
+        box_model_.StyleRef().BoxDecorationBreak() ==
+            EBoxDecorationBreak::kSlice) {
       local_offset -= LogicalOffsetOnLine(*flow_box_);
     }
     const RootInlineBox& root = flow_box_->Root();
@@ -98,8 +103,7 @@ LayoutRect BoxModelObjectPainter::AdjustRectForScrolledContent(
   LayoutRect scrolled_paint_rect = rect;
   GraphicsContext& context = paint_info.context;
   if (info.is_clipped_with_local_scrolling &&
-      !IsPaintingBackgroundOfPaintContainerIntoScrollingContentsLayer(
-          &box_model_, paint_info)) {
+      !IsPaintingScrollingBackground(&box_model_, paint_info)) {
     // Clip to the overflow area.
     const LayoutBox& this_box = ToLayoutBox(box_model_);
     // TODO(chrishtr): this should be pixel-snapped.

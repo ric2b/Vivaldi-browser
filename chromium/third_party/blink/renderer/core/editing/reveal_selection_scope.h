@@ -39,13 +39,13 @@ class Editor;
 class LocalFrame;
 
 class RevealSelectionScope {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
 
  public:
   explicit RevealSelectionScope(LocalFrame&);
   ~RevealSelectionScope();
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
  private:
   Editor& GetEditor();

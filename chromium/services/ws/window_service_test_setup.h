@@ -39,6 +39,11 @@ class WindowServiceTestSetup {
   std::unique_ptr<EmbeddingHelper> CreateEmbedding(aura::Window* embed_root,
                                                    uint32_t flags = 0);
 
+  void set_ack_events_immediately(bool value) {
+    ack_events_immediately_ = value;
+  }
+  bool ack_events_immediately() const { return ack_events_immediately_; }
+
   aura::Window* root() { return aura_test_helper_.root_window(); }
   TestWindowServiceDelegate* delegate() { return &delegate_; }
   TestWindowTreeClient* window_tree_client() { return &window_tree_client_; }
@@ -68,6 +73,9 @@ class WindowServiceTestSetup {
   TestWindowTreeClient window_tree_client_;
   std::unique_ptr<WindowTree> window_tree_;
   std::unique_ptr<WindowTreeTestHelper> window_tree_test_helper_;
+
+  // If true, any events that are sent to clients are acked immediately.
+  bool ack_events_immediately_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(WindowServiceTestSetup);
 };

@@ -14,7 +14,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread.h"
-#include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
@@ -36,10 +35,6 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 
-#if defined(OS_WIN)
-#include "components/password_manager/core/browser/webdata/password_web_data_service_win.h"
-#endif
-
 #include "app/vivaldi_resources.h"
 #include "importer/imported_notes_entry.h"
 #include "importer/imported_speeddial_entry.h"
@@ -48,12 +43,12 @@
 #include "notes/notes_model.h"
 #include "ui/base/l10n/l10n_util.h"
 
-using bookmarks::BookmarkModel;
-using bookmarks::BookmarkNode;
-
 using vivaldi::Notes_Model;
 using vivaldi::NotesModelFactory;
 using vivaldi::Notes_Node;
+
+using bookmarks::BookmarkModel;
+using bookmarks::BookmarkNode;
 
 namespace {
 
@@ -108,13 +103,6 @@ void ProfileWriter::AddPasswordForm(const autofill::PasswordForm& form) {
       profile_, ServiceAccessType::EXPLICIT_ACCESS)->AddLogin(form);
 }
 
-#if defined(OS_WIN)
-void ProfileWriter::AddIE7PasswordInfo(const IE7PasswordInfo& info) {
-  WebDataServiceFactory::GetPasswordWebDataForProfile(
-      profile_, ServiceAccessType::EXPLICIT_ACCESS)->AddIE7Login(info);
-}
-#endif
-
 void ProfileWriter::AddHistoryPage(const history::URLRows& page,
                                    history::VisitSource visit_source) {
   if (!page.empty())
@@ -124,8 +112,8 @@ void ProfileWriter::AddHistoryPage(const history::URLRows& page,
   // Measure the size of the history page after Auto Import on first run.
   if (first_run::IsChromeFirstRun() &&
       visit_source == history::SOURCE_IE_IMPORTED) {
-    UMA_HISTOGRAM_COUNTS("Import.ImportedHistorySize.AutoImportFromIE",
-                         page.size());
+    UMA_HISTOGRAM_COUNTS_1M("Import.ImportedHistorySize.AutoImportFromIE",
+                            page.size());
   }
 }
 
@@ -157,9 +145,7 @@ void ProfileWriter::AddBookmarks(
   // Reorder bookmarks so that the toolbar entries come first.
   std::vector<ImportedBookmarkEntry> toolbar_bookmarks;
   std::vector<ImportedBookmarkEntry> reordered_bookmarks;
-  for (std::vector<ImportedBookmarkEntry>::const_iterator it =
-           bookmarks.begin();
-       it != bookmarks.end(); ++it) {
+  for (auto it = bookmarks.begin(); it != bookmarks.end(); ++it) {
     if (it->in_toolbar)
       toolbar_bookmarks.push_back(*it);
     else
@@ -206,8 +192,7 @@ void ProfileWriter::AddBookmarks(
     // Ensure any enclosing folders are present in the model.  The bookmark's
     // enclosing folder structure should be
     //   path[0] > path[1] > ... > path[size() - 1]
-    for (std::vector<base::string16>::const_iterator folder_name =
-             bookmark->path.begin();
+    for (auto folder_name = bookmark->path.begin();
          folder_name != bookmark->path.end(); ++folder_name) {
       if (bookmark->in_toolbar && parent == bookmark_bar &&
           folder_name == bookmark->path.begin()) {
@@ -247,6 +232,7 @@ void ProfileWriter::AddBookmarks(
                                                bookmark->nickname,
                                                bookmark->description,
                                                bookmark->thumbnail,
+                                               base::string16(), // partner
                                                bookmark->speeddial,
                                                &bookmark->visited_time);
     }
@@ -254,9 +240,7 @@ void ProfileWriter::AddBookmarks(
 
   // In order to keep the imported-to folders from appearing in the 'recently
   // added to' combobox, reset their modified times.
-  for (std::set<const BookmarkNode*>::const_iterator i =
-           folders_added_to.begin();
-       i != folders_added_to.end(); ++i) {
+  for (auto i = folders_added_to.begin(); i != folders_added_to.end(); ++i) {
     model->ResetDateFolderModified(*i);
   }
 
@@ -265,90 +249,6 @@ void ProfileWriter::AddBookmarks(
   // If the user was previously using a toolbar, we should show the bar.
   if (import_to_top_level && !add_all_to_top_level)
     ShowBookmarkBar(profile_);
-}
-
-void ProfileWriter::AddSpeedDial(
-    const std::vector<ImportedSpeedDialEntry>& speeddial) {
-  if (speeddial.empty())
-    return;
-
-  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile_);
-  DCHECK(model->loaded());
-  const BookmarkNode* bookmark_bar = model->bookmark_bar_node();
-  const base::string16& first_folder_name =
-      l10n_util::GetStringUTF16(IDS_SPEEDDIAL_GROUP_FROM_OPERA);
-
-  model->BeginExtensiveChanges();
-
-  const BookmarkNode* top_level_folder = NULL;
-
-  base::string16 name =
-      GenerateUniqueFolderName(model, first_folder_name);
-
-  BookmarkNode::MetaInfoMap meta_info;
-  meta_info["Speeddial"] = "true";
-  top_level_folder = model->AddFolderWithMetaInfo(
-      bookmark_bar, bookmark_bar->child_count(), name, &meta_info);
-
-  for (auto& item : speeddial) {
-    if (!model->AddURL(top_level_folder, top_level_folder->child_count(),
-                       item.title, item.url))
-      break;
-  }
-
-  model->EndExtensiveChanges();
-}
-
-
-void ProfileWriter::AddNotes(const std::vector<ImportedNotesEntry> &notes,
-                             const base::string16 &top_level_folder_name) {
-  Notes_Model *model = NotesModelFactory::GetForBrowserContext(profile_);
-
-  model->BeginExtensiveChanges();
-
-  std::set<const Notes_Node *> folders_added_to;
-  const Notes_Node *top_level_folder = NULL;
-  for (std::vector<ImportedNotesEntry>::const_iterator note = notes.begin();
-       note != notes.end(); ++note) {
-
-    const Notes_Node *parent = NULL;
-    // Add to a folder that will contain all the imported notes.
-    // The first time we do so, create the folder.
-    if (!top_level_folder) {
-      base::string16 name;
-      name = l10n_util::GetStringUTF16(IDS_NOTES_GROUP_FROM_OPERA);
-      top_level_folder = model->AddFolder(
-          model->main_node(),
-          model->main_node()->child_count(),
-          name);
-    }
-    parent = top_level_folder;
-
-    // Ensure any enclosing folders are present in the model.  The note's
-    // enclosing folder structure should be
-    //   path[0] > path[1] > ... > path[size() - 1]
-    for (std::vector<base::string16>::const_iterator folder_name =
-             note->path.begin();
-         folder_name != note->path.end(); ++folder_name) {
-
-      const Notes_Node *child = NULL;
-      for (int index = 0; index < parent->child_count(); ++index) {
-        const Notes_Node *node = parent->GetChild(index);
-        if (node->is_folder() && node->GetTitle() == *folder_name) {
-          child = node;
-          break;
-        }
-      }
-      if (!child) {
-        child = model->AddFolder(parent, parent->child_count(), *folder_name);
-      }
-      parent = child;
-    }
-
-    folders_added_to.insert(parent);
-    model->AddNote(parent, parent->child_count(), note->is_folder, *note);
-  }
-  model->EndExtensiveChanges();
 }
 
 void ProfileWriter::AddFavicons(
@@ -460,3 +360,87 @@ void ProfileWriter::AddAutofillFormDataEntries(
 }
 
 ProfileWriter::~ProfileWriter() {}
+
+void ProfileWriter::AddSpeedDial(
+    const std::vector<ImportedSpeedDialEntry>& speeddial) {
+  if (speeddial.empty())
+    return;
+
+  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile_);
+  DCHECK(model->loaded());
+  const BookmarkNode* bookmark_bar = model->bookmark_bar_node();
+  const base::string16& first_folder_name =
+      l10n_util::GetStringUTF16(IDS_SPEEDDIAL_GROUP_FROM_OPERA);
+
+  model->BeginExtensiveChanges();
+
+  const BookmarkNode* top_level_folder = NULL;
+
+  base::string16 name =
+      GenerateUniqueFolderName(model, first_folder_name);
+
+  BookmarkNode::MetaInfoMap meta_info;
+  meta_info["Speeddial"] = "true";
+  top_level_folder = model->AddFolderWithMetaInfo(
+      bookmark_bar, bookmark_bar->child_count(), name, &meta_info);
+
+  for (auto& item : speeddial) {
+    if (!model->AddURL(top_level_folder, top_level_folder->child_count(),
+                       item.title, item.url))
+      break;
+  }
+
+  model->EndExtensiveChanges();
+}
+
+
+void ProfileWriter::AddNotes(const std::vector<ImportedNotesEntry> &notes,
+                             const base::string16 &top_level_folder_name) {
+  Notes_Model *model = NotesModelFactory::GetForBrowserContext(profile_);
+
+  model->BeginExtensiveChanges();
+
+  std::set<const Notes_Node *> folders_added_to;
+  const Notes_Node *top_level_folder = NULL;
+  for (std::vector<ImportedNotesEntry>::const_iterator note = notes.begin();
+       note != notes.end(); ++note) {
+
+    const Notes_Node *parent = NULL;
+    // Add to a folder that will contain all the imported notes.
+    // The first time we do so, create the folder.
+    if (!top_level_folder) {
+      base::string16 name;
+      name = l10n_util::GetStringUTF16(IDS_NOTES_GROUP_FROM_OPERA);
+      top_level_folder = model->AddFolder(
+          model->main_node(),
+          model->main_node()->child_count(),
+          name);
+    }
+    parent = top_level_folder;
+
+    // Ensure any enclosing folders are present in the model.  The note's
+    // enclosing folder structure should be
+    //   path[0] > path[1] > ... > path[size() - 1]
+    for (std::vector<base::string16>::const_iterator folder_name =
+             note->path.begin();
+         folder_name != note->path.end(); ++folder_name) {
+
+      const Notes_Node *child = NULL;
+      for (int index = 0; index < parent->child_count(); ++index) {
+        const Notes_Node *node = parent->GetChild(index);
+        if (node->is_folder() && node->GetTitle() == *folder_name) {
+          child = node;
+          break;
+        }
+      }
+      if (!child) {
+        child = model->AddFolder(parent, parent->child_count(), *folder_name);
+      }
+      parent = child;
+    }
+
+    folders_added_to.insert(parent);
+    model->AddNote(parent, parent->child_count(), note->is_folder, *note);
+  }
+  model->EndExtensiveChanges();
+}

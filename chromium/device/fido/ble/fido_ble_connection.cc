@@ -100,7 +100,10 @@ const BluetoothRemoteGattService* GetFidoService(
   }
 
   for (const auto* service : device->GetGattServices()) {
-    if (service->GetUUID() == BluetoothUUID(kFidoServiceUUID))
+    // This assumes that no device is representing as both a FIDO BLE
+    // and a caBLE device.
+    if (service->GetUUID() == BluetoothUUID(kFidoServiceUUID) ||
+        service->GetUUID() == BluetoothUUID(kCableAdvertisementUUID128))
       return service;
   }
 
@@ -469,6 +472,13 @@ void FidoBleConnection::OnStartNotifySessionError(
     BluetoothGattService::GattErrorCode error_code) {
   LOG(ERROR) << "StartNotifySession() failed: " << ToString(error_code);
   std::move(pending_connection_callback_).Run(false);
+}
+
+void FidoBleConnection::DeviceAddressChanged(BluetoothAdapter* adapter,
+                                             BluetoothDevice* device,
+                                             const std::string& old_address) {
+  if (address_ == old_address)
+    address_ = device->GetAddress();
 }
 
 void FidoBleConnection::GattCharacteristicValueChanged(

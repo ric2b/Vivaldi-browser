@@ -32,9 +32,10 @@ bool RenderFrameMetadata::operator==(const RenderFrameMetadata& other) const {
          device_scale_factor == other.device_scale_factor &&
          viewport_size_in_pixels == other.viewport_size_in_pixels &&
          page_scale_factor == other.page_scale_factor &&
-#if defined(OS_ANDROID)
+         external_page_scale_factor == other.external_page_scale_factor &&
          top_controls_height == other.top_controls_height &&
          top_controls_shown_ratio == other.top_controls_shown_ratio &&
+#if defined(OS_ANDROID)
          bottom_controls_height == other.bottom_controls_height &&
          bottom_controls_shown_ratio == other.bottom_controls_shown_ratio &&
          min_page_scale_factor == other.min_page_scale_factor &&
@@ -44,7 +45,7 @@ bool RenderFrameMetadata::operator==(const RenderFrameMetadata& other) const {
          root_layer_size == other.root_layer_size &&
          has_transparent_background == other.has_transparent_background &&
 #endif
-         local_surface_id == other.local_surface_id;
+         local_surface_id_allocation == other.local_surface_id_allocation;
 }
 
 bool RenderFrameMetadata::operator!=(const RenderFrameMetadata& other) const {

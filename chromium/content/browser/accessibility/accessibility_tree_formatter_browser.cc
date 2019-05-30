@@ -4,7 +4,6 @@
 
 #include "content/browser/accessibility/accessibility_tree_formatter_browser.h"
 
-
 namespace content {
 
 std::unique_ptr<base::DictionaryValue>
@@ -26,6 +25,13 @@ AccessibilityTreeFormatterBrowser::BuildAccessibilityTreeForProcess(
 std::unique_ptr<base::DictionaryValue>
 AccessibilityTreeFormatterBrowser::BuildAccessibilityTreeForWindow(
     gfx::AcceleratedWidget widget) {
+  NOTREACHED();
+  return nullptr;
+}
+
+std::unique_ptr<base::DictionaryValue>
+AccessibilityTreeFormatterBrowser::BuildAccessibilityTreeForPattern(
+    const base::StringPiece& pattern) {
   NOTREACHED();
   return nullptr;
 }

@@ -33,7 +33,7 @@ class DataObjectObserver : public GarbageCollected<DataObjectObserver>,
 };
 
 TEST_F(DataObjectTest, DataObjectObserver) {
-  DataObjectObserver* observer = new DataObjectObserver;
+  DataObjectObserver* observer = MakeGarbageCollected<DataObjectObserver>();
   data_object_->AddObserver(observer);
 
   data_object_->ClearAll();
@@ -62,7 +62,7 @@ TEST_F(DataObjectTest, DataObjectObserver) {
   EXPECT_EQ(1U, data_object_->length());
   EXPECT_EQ(3U, observer->call_count());
 
-  DataObjectObserver* observer2 = new DataObjectObserver;
+  DataObjectObserver* observer2 = MakeGarbageCollected<DataObjectObserver>();
   data_object_->AddObserver(observer2);
 
   String file_path = test::BlinkRootDir();
@@ -95,7 +95,8 @@ TEST_F(DataObjectTest, addItemWithFilenameAndNoTitle) {
 
   Blob* blob = item->GetAsFile();
   ASSERT_TRUE(blob->IsFile());
-  File* file = ToFile(blob);
+  auto* file = DynamicTo<File>(blob);
+  ASSERT_TRUE(file);
   EXPECT_TRUE(file->HasBackingFile());
   EXPECT_EQ(File::kIsUserVisible, file->GetUserVisibility());
   EXPECT_EQ(file_path, file->GetPath());
@@ -112,8 +113,8 @@ TEST_F(DataObjectTest, addItemWithFilenameAndTitle) {
   EXPECT_EQ(DataObjectItem::kFileKind, item->Kind());
 
   Blob* blob = item->GetAsFile();
-  ASSERT_TRUE(blob->IsFile());
-  File* file = ToFile(blob);
+  auto* file = DynamicTo<File>(blob);
+  ASSERT_TRUE(file);
   EXPECT_TRUE(file->HasBackingFile());
   EXPECT_EQ(File::kIsUserVisible, file->GetUserVisibility());
   EXPECT_EQ(file_path, file->GetPath());

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "ash/public/cpp/app_list/app_list_config.h"
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "chrome/browser/extensions/chrome_app_icon.h"
@@ -27,6 +28,7 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_test.h"
 #include "chrome/browser/ui/app_list/chrome_app_list_item.h"
 #include "chrome/browser/ui/app_list/extension_app_model_builder.h"
+#include "chrome/browser/ui/app_list/md_icon_normalizer.h"
 #include "chrome/browser/ui/app_list/search/extension_app_result.h"
 #include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/test/test_app_list_controller_delegate.h"
@@ -42,6 +44,15 @@ constexpr char kTestAppId[] = "emfkafnhnpcmabnnkckkchdilgeoekbo";
 // Receives icon image updates from ChromeAppIcon.
 class TestAppIcon : public ChromeAppIconDelegate {
  public:
+  TestAppIcon(content::BrowserContext* context,
+              const std::string& app_id,
+              int size,
+              const ChromeAppIconService::ResizeFunction& resize_function) {
+    app_icon_ = ChromeAppIconService::Get(context)->CreateIcon(
+        this, app_id, size, resize_function);
+    DCHECK(app_icon_);
+  }
+
   TestAppIcon(content::BrowserContext* context,
               const std::string& app_id,
               int size) {
@@ -162,20 +173,18 @@ bool AreAllImageRepresentationsDifferent(const gfx::ImageSkia& image1,
   for (size_t i = 0; i < image1_reps.size(); ++i) {
     const float scale = image1_reps[i].scale();
     const gfx::ImageSkiaRep& image_rep2 = image2.GetRepresentation(scale);
-    if (gfx::test::AreBitmapsClose(image1_reps[i].sk_bitmap(),
-                                   image_rep2.sk_bitmap(), 0)) {
+    if (gfx::test::AreBitmapsClose(image1_reps[i].GetBitmap(),
+                                   image_rep2.GetBitmap(), 0)) {
       return false;
     }
   }
   return true;
 }
 
-// Waits until icon content of the item is changed for all representations.
-template <typename T>
-void WaitForIconUpdates(const T& item) {
-  item.icon().EnsureRepsForSupportedScales();
-  std::unique_ptr<gfx::ImageSkia> reference_image = item.icon().DeepCopy();
-  while (!AreAllImageRepresentationsDifferent(*reference_image, item.icon()))
+void WaitForIconUpdates(const gfx::ImageSkia& icon) {
+  icon.EnsureRepsForSupportedScales();
+  std::unique_ptr<gfx::ImageSkia> reference_image = icon.DeepCopy();
+  while (!AreAllImageRepresentationsDifferent(*reference_image, icon))
     base::RunLoop().RunUntilIdle();
 }
 
@@ -304,14 +313,18 @@ TEST_F(ChromeAppIconWithModelTest, IconsTheSame) {
   // updated and take image snapshot.
   ChromeAppListItem* app_list_item = FindAppListItem(kTestAppId);
   ASSERT_TRUE(app_list_item);
-  WaitForIconUpdates<ChromeAppListItem>(*app_list_item);
+  WaitForIconUpdates(app_list_item->icon());
   std::unique_ptr<gfx::ImageSkia> app_list_item_image =
       app_list_item->icon().DeepCopy();
+
+  const ChromeAppIconService::ResizeFunction resize_function =
+      base::BindRepeating(&app_list::MaybeResizeAndPadIconForMd);
 
   // Load reference icon sized for the app list.
   TestAppIcon reference_icon_app_list(
       profile(), kTestAppId,
-      app_list::AppListConfig::instance().grid_icon_dimension());
+      app_list::AppListConfig::instance().grid_icon_dimension(),
+      resize_function);
 
   // Wait until reference data is loaded.
   reference_icon_app_list.image_skia().EnsureRepsForSupportedScales();
@@ -325,7 +338,8 @@ TEST_F(ChromeAppIconWithModelTest, IconsTheSame) {
   // Load reference icon sized for the search result.
   TestAppIcon reference_icon_search(
       profile(), kTestAppId,
-      app_list::AppListConfig::instance().recommended_app_icon_dimension());
+      app_list::AppListConfig::instance().suggestion_chip_icon_dimension(),
+      resize_function);
 
   // Wait until reference data is loaded.
   reference_icon_search.image_skia().EnsureRepsForSupportedScales();
@@ -335,12 +349,13 @@ TEST_F(ChromeAppIconWithModelTest, IconsTheSame) {
   app_list::ExtensionAppResult search(profile(), kTestAppId,
                                       app_list_controller(),
                                       /* is_recommendation */ true);
-  WaitForIconUpdates<app_list::ExtensionAppResult>(search);
-  EXPECT_TRUE(AreEqual(reference_icon_search.image_skia(), search.icon()));
+  WaitForIconUpdates(search.chip_icon());
+  EXPECT_TRUE(AreEqual(reference_icon_search.image_skia(), search.chip_icon()));
 
   // Load reference icon sized for the shelf.
   TestAppIcon reference_icon_shelf(profile(), kTestAppId,
-                                   extension_misc::EXTENSION_ICON_MEDIUM);
+                                   extension_misc::EXTENSION_ICON_MEDIUM,
+                                   resize_function);
 
   // Wait until reference data is loaded.
   reference_icon_shelf.image_skia().EnsureRepsForSupportedScales();
@@ -349,9 +364,9 @@ TEST_F(ChromeAppIconWithModelTest, IconsTheSame) {
 
   TestAppIconLoader loader_delegate;
   ChromeAppIconLoader loader(profile(), extension_misc::EXTENSION_ICON_MEDIUM,
-                             &loader_delegate);
+                             resize_function, &loader_delegate);
   loader.FetchImage(kTestAppId);
-  WaitForIconUpdates<TestAppIconLoader>(loader_delegate);
+  WaitForIconUpdates(loader_delegate.icon());
   EXPECT_TRUE(
       AreEqual(reference_icon_shelf.image_skia(), loader_delegate.icon()));
 
@@ -375,16 +390,20 @@ TEST_F(ChromeAppIconTest, ChromeBadging) {
   // Badging should be applied once package is installed.
   arc_test.app_instance()->RefreshAppList();
   std::vector<arc::mojom::AppInfo> fake_apps = arc_test.fake_apps();
-  fake_apps[0].package_name = arc_test.fake_packages()[0].package_name;
+  fake_apps[0].package_name = arc_test.fake_packages()[0]->package_name;
   arc_test.app_instance()->SendRefreshAppList(fake_apps);
-  arc_test.app_instance()->SendRefreshPackageList(arc_test.fake_packages());
-  EXPECT_EQ(1U, reference_icon.icon_update_count());
+  arc_test.app_instance()->SendRefreshPackageList(
+      ArcAppTest::ClonePackages(arc_test.fake_packages()));
+
+  // Expect the package list refresh to generate two icon updates - one called
+  // by ArcAppListPrefs, and one called by LaunchExtensionAppUpdate.
+  EXPECT_EQ(2U, reference_icon.icon_update_count());
   EXPECT_FALSE(AreEqual(reference_icon.image_skia(), image_before_badging));
 
   // Opts out the Play Store. Badge should be gone and icon image is the same
   // as it was before badging.
   arc::SetArcPlayStoreEnabledForProfile(profile(), false);
-  EXPECT_EQ(2U, reference_icon.icon_update_count());
+  EXPECT_EQ(3U, reference_icon.icon_update_count());
   EXPECT_TRUE(AreEqual(reference_icon.image_skia(), image_before_badging));
 }
 

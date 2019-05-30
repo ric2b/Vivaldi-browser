@@ -13,7 +13,6 @@ class ChromeBrowserMainPartsAndroid : public ChromeBrowserMainParts {
  public:
   ChromeBrowserMainPartsAndroid(
       const content::MainFunctionParams& parameters,
-      std::unique_ptr<ui::DataPack> data_pack,
       ChromeFeatureListCreator* chrome_feature_list_creator);
   ~ChromeBrowserMainPartsAndroid() override;
 
@@ -27,7 +26,6 @@ class ChromeBrowserMainPartsAndroid : public ChromeBrowserMainParts {
   void ShowMissingLocaleMessageBox() override;
 
  private:
-  std::unique_ptr<base::MessageLoop> main_message_loop_;
   std::unique_ptr<android::ChromeBackupWatcher> backup_watcher_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainPartsAndroid);

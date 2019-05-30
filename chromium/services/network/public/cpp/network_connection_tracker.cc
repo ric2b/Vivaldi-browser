@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "services/network/public/mojom/network_change_manager.mojom.h"
@@ -82,6 +83,16 @@ bool NetworkConnectionTracker::GetConnectionType(
     connection_type_callbacks_.push_back(std::move(callback));
   }
   return false;
+}
+
+bool NetworkConnectionTracker::IsOffline() {
+  base::subtle::Atomic32 type_value =
+      base::subtle::NoBarrier_Load(&connection_type_);
+  if (type_value != kConnectionTypeInvalid) {
+    auto type = static_cast<network::mojom::ConnectionType>(type_value);
+    return type == network::mojom::ConnectionType::CONNECTION_NONE;
+  }
+  return true;
 }
 
 // static

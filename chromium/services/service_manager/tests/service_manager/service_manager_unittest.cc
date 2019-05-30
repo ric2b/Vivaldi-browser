@@ -12,7 +12,6 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
-#include "base/guid.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop_current.h"
@@ -21,19 +20,23 @@
 #include "base/process/process_handle.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/test/scoped_task_environment.h"
+#include "base/token.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "mojo/public/cpp/platform/platform_handle.h"
 #include "mojo/public/cpp/system/invitation.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
+#include "services/service_manager/public/cpp/constants.h"
 #include "services/service_manager/public/cpp/service.h"
-#include "services/service_manager/public/cpp/service_context.h"
-#include "services/service_manager/public/cpp/service_test.h"
-#include "services/service_manager/public/mojom/constants.mojom.h"
+#include "services/service_manager/public/cpp/service_binding.h"
+#include "services/service_manager/public/cpp/test/test_service_manager.h"
 #include "services/service_manager/public/mojom/service_manager.mojom.h"
-#include "services/service_manager/runner/common/client_util.h"
-#include "services/service_manager/tests/service_manager/service_manager_unittest.mojom.h"
+#include "services/service_manager/service_process_launcher.h"
+#include "services/service_manager/tests/service_manager/service_manager.test-mojom.h"
+#include "services/service_manager/tests/service_manager/test_manifests.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 namespace service_manager {
 
@@ -65,15 +68,14 @@ void OnServicePIDReceivedCallback(std::string* service_name,
   continuation.Run();
 }
 
-class ServiceManagerTestClient : public test::ServiceTestClient,
-                                 public test::mojom::CreateInstanceTest {
+class TestService : public Service, public test::mojom::CreateInstanceTest {
  public:
-  explicit ServiceManagerTestClient(test::ServiceTest* test)
-      : test::ServiceTestClient(test), binding_(this) {
+  explicit TestService(mojom::ServiceRequest request)
+      : service_binding_(this, std::move(request)) {
     registry_.AddInterface<test::mojom::CreateInstanceTest>(
-        base::Bind(&ServiceManagerTestClient::Create, base::Unretained(this)));
+        base::BindRepeating(&TestService::Create, base::Unretained(this)));
   }
-  ~ServiceManagerTestClient() override {}
+  ~TestService() override = default;
 
   const Identity& target_identity() const { return target_identity_; }
 
@@ -82,8 +84,10 @@ class ServiceManagerTestClient : public test::ServiceTestClient,
     wait_for_target_identity_loop_->Run();
   }
 
+  Connector* connector() { return service_binding_.GetConnector(); }
+
  private:
-  // test::ServiceTestClient:
+  // Service:
   void OnBindInterface(const BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override {
@@ -103,22 +107,23 @@ class ServiceManagerTestClient : public test::ServiceTestClient,
       wait_for_target_identity_loop_->Quit();
   }
 
-  service_manager::Identity target_identity_;
+  ServiceBinding service_binding_;
+  Identity target_identity_;
   std::unique_ptr<base::RunLoop> wait_for_target_identity_loop_;
 
   BinderRegistry registry_;
-  mojo::Binding<test::mojom::CreateInstanceTest> binding_;
+  mojo::Binding<test::mojom::CreateInstanceTest> binding_{this};
 
-  DISALLOW_COPY_AND_ASSIGN(ServiceManagerTestClient);
+  DISALLOW_COPY_AND_ASSIGN(TestService);
 };
 
-class SimpleService {
+class SimpleService : public Service {
  public:
   explicit SimpleService(mojom::ServiceRequest request)
-      : context_(std::make_unique<ServiceImpl>(this), std::move(request)) {}
-  ~SimpleService() {}
+      : binding_(this, std::move(request)) {}
+  ~SimpleService() override {}
 
-  Connector* connector() { return context_.connector(); }
+  Connector* connector() { return binding_.GetConnector(); }
 
   void WaitForDisconnect() {
     base::RunLoop loop;
@@ -127,24 +132,14 @@ class SimpleService {
   }
 
  private:
-  class ServiceImpl : public Service {
-   public:
-    explicit ServiceImpl(SimpleService* service) : service_(service) {}
-    ~ServiceImpl() override {}
+  // Service:
+  void OnDisconnected() override {
+    if (connection_lost_closure_)
+      std::move(connection_lost_closure_).Run();
+    Terminate();
+  }
 
-    bool OnServiceManagerConnectionLost() override {
-      if (service_->connection_lost_closure_)
-        std::move(service_->connection_lost_closure_).Run();
-      return true;
-    }
-
-   private:
-    SimpleService* service_;
-
-    DISALLOW_COPY_AND_ASSIGN(ServiceImpl);
-  };
-
-  ServiceContext context_;
+  ServiceBinding binding_;
   base::OnceClosure connection_lost_closure_;
 
   DISALLOW_COPY_AND_ASSIGN(SimpleService);
@@ -152,14 +147,14 @@ class SimpleService {
 
 }  // namespace
 
-class ServiceManagerTest : public test::ServiceTest,
+class ServiceManagerTest : public testing::Test,
                            public mojom::ServiceManagerListener {
  public:
   ServiceManagerTest()
-      : test::ServiceTest("service_manager_unittest"),
-        service_(nullptr),
-        binding_(this) {}
-  ~ServiceManagerTest() override {}
+      : test_service_manager_(GetTestManifests()),
+        test_service_(
+            test_service_manager_.RegisterTestInstance(kTestServiceName)) {}
+  ~ServiceManagerTest() override = default;
 
  protected:
   struct InstanceInfo {
@@ -169,6 +164,8 @@ class ServiceManagerTest : public test::ServiceTest,
     Identity identity;
     base::ProcessId pid;
   };
+
+  Connector* connector() { return test_service_.connector(); }
 
   void AddListenerAndWaitForApplications() {
     mojom::ServiceManagerPtr service_manager;
@@ -196,18 +193,17 @@ class ServiceManagerTest : public test::ServiceTest,
   }
 
   void WaitForTargetIdentityCall() {
-    service_->WaitForTargetIdentityCall();
+    test_service_.WaitForTargetIdentityCall();
   }
 
   const Identity& target_identity() const {
-    DCHECK(service_);
-    return service_->target_identity();
+    return test_service_.target_identity();
   }
 
   const std::vector<InstanceInfo>& instances() const { return instances_; }
 
   using ServiceStartedCallback =
-      base::Callback<void(const service_manager::Identity&)>;
+      base::RepeatingCallback<void(const service_manager::Identity&)>;
   void set_service_started_callback(const ServiceStartedCallback& callback) {
     service_started_callback_ = callback;
   }
@@ -228,12 +224,13 @@ class ServiceManagerTest : public test::ServiceTest,
 
   void WaitForInstanceToStart(const Identity& identity) {
     base::RunLoop loop;
-    set_service_started_callback(base::Bind(
+    set_service_started_callback(base::BindRepeating(
         [](base::RunLoop* loop, const Identity* expected_identity,
            const Identity& identity) {
           EXPECT_EQ(expected_identity->name(), identity.name());
-          EXPECT_EQ(expected_identity->user_id(), identity.user_id());
-          EXPECT_EQ(expected_identity->instance(), identity.instance());
+          EXPECT_EQ(expected_identity->instance_group(),
+                    identity.instance_group());
+          EXPECT_EQ(expected_identity->instance_id(), identity.instance_id());
           loop->Quit();
         },
         &loop, &identity));
@@ -246,11 +243,10 @@ class ServiceManagerTest : public test::ServiceTest,
     CHECK(base::PathService::Get(base::DIR_ASSETS, &target_path));
 
 #if defined(OS_WIN)
-    target_path = target_path.Append(
-        FILE_PATH_LITERAL("service_manager_unittest_target.exe"));
+    target_path =
+        target_path.AppendASCII(kTestTargetName).AddExtensionASCII("exe");
 #else
-    target_path = target_path.Append(
-        FILE_PATH_LITERAL("service_manager_unittest_target"));
+    target_path = target_path.Append(FILE_PATH_LITERAL(kTestTargetName));
 #endif
 
     base::CommandLine child_command_line(target_path);
@@ -269,17 +265,13 @@ class ServiceManagerTest : public test::ServiceTest,
 
     mojo::OutgoingInvitation invitation;
     service_manager::mojom::ServicePtr client =
-        service_manager::PassServiceRequestOnCommandLine(&invitation,
-                                                         &child_command_line);
+        ServiceProcessLauncher::PassServiceRequestOnCommandLine(
+            &invitation, &child_command_line);
     service_manager::mojom::PIDReceiverPtr receiver;
-
-    service_manager::Identity target("service_manager_unittest_target",
-                                     service_manager::mojom::kInheritUserID);
-    connector()->StartService(target, std::move(client),
-                              MakeRequest(&receiver));
-    Connector::TestApi test_api(connector());
-    test_api.SetStartServiceCallback(base::Bind(
-        &ServiceManagerTest::OnConnectionCompleted, base::Unretained(this)));
+    connector()->RegisterServiceInstance(
+        service_manager::Identity(kTestTargetName, kSystemInstanceGroup,
+                                  base::Token{}, base::Token::CreateRandom()),
+        std::move(client), mojo::MakeRequest(&receiver));
 
     target_ = base::LaunchProcess(child_command_line, options);
     DCHECK(target_.IsValid());
@@ -300,14 +292,15 @@ class ServiceManagerTest : public test::ServiceTest,
     set_service_failed_to_start_callback(base::BindRepeating(
         &OnServiceFailedToStartCallback, &failed_to_start, loop.QuitClosure()));
 
-    connector()->StartService("service_manager_unittest_embedder");
+    connector()->WarmService(
+        service_manager::ServiceFilter::ByName(kTestEmbedderName));
     loop.Run();
     EXPECT_FALSE(failed_to_start);
     EXPECT_EQ(1, start_count);
-    EXPECT_EQ("service_manager_unittest_embedder", service_name);
+    EXPECT_EQ(kTestEmbedderName, service_name);
   }
 
-  void StartService(const Identity& identity, bool expect_service_started) {
+  void StartService(const ServiceFilter& filter, bool expect_service_started) {
     int start_count = 0;
     base::RunLoop loop;
     std::string service_name;
@@ -318,7 +311,7 @@ class ServiceManagerTest : public test::ServiceTest,
     set_service_failed_to_start_callback(base::BindRepeating(
         &OnServiceFailedToStartCallback, &failed_to_start, loop.QuitClosure()));
 
-    connector()->StartService(identity);
+    connector()->WarmService(filter);
     if (!expect_service_started) {
       // Wait briefly and test no new service was created.
       base::MessageLoopCurrent::Get()->task_runner()->PostDelayedTask(
@@ -329,7 +322,7 @@ class ServiceManagerTest : public test::ServiceTest,
     EXPECT_FALSE(failed_to_start);
     if (expect_service_started) {
       EXPECT_EQ(1, start_count);
-      EXPECT_EQ(identity.name(), service_name);
+      EXPECT_EQ(filter.service_name(), service_name);
     } else {
       // The callback was not invoked, nothing should have been set.
       EXPECT_EQ(0, start_count);
@@ -342,11 +335,7 @@ class ServiceManagerTest : public test::ServiceTest,
   }
 
  private:
-  // test::ServiceTest:
-  std::unique_ptr<Service> CreateService() override {
-    service_ = new ServiceManagerTestClient(this);
-    return base::WrapUnique(service_);
-  }
+  // Service:
 
   // mojom::ServiceManagerListener:
   void OnInit(std::vector<mojom::RunningServiceInfoPtr> instances) override {
@@ -390,10 +379,11 @@ class ServiceManagerTest : public test::ServiceTest,
       service_pid_received_callback_.Run(identity, pid);
   }
 
-  void OnConnectionCompleted(mojom::ConnectResult, const Identity&) {}
+  base::test::ScopedTaskEnvironment task_environment_;
+  TestServiceManager test_service_manager_;
+  TestService test_service_;
 
-  ServiceManagerTestClient* service_;
-  mojo::Binding<mojom::ServiceManagerListener> binding_;
+  mojo::Binding<mojom::ServiceManagerListener> binding_{this};
   std::vector<InstanceInfo> instances_;
   std::vector<InstanceInfo> initial_instances_;
   std::unique_ptr<base::RunLoop> wait_for_instances_loop_;
@@ -417,7 +407,7 @@ TEST_F(ServiceManagerTest, CreateInstance) {
 
   // 3. Validate that this test suite's name was received from the application
   //    manager.
-  EXPECT_TRUE(ContainsInstanceWithName("service_manager_unittest"));
+  EXPECT_TRUE(ContainsInstanceWithName(kTestServiceName));
 
   // 4. Validate that the right applications/processes were created.
   //    Note that the target process will be created even if the tests are
@@ -427,8 +417,7 @@ TEST_F(ServiceManagerTest, CreateInstance) {
     auto& instance = instances().back();
     // We learn about the target process id via a ping from it.
     EXPECT_EQ(target_identity(), instance.identity);
-    EXPECT_EQ("service_manager_unittest_target",
-              instance.identity.name());
+    EXPECT_EQ(kTestTargetName, instance.identity.name());
     EXPECT_NE(base::kNullProcessId, instance.pid);
   }
 
@@ -439,79 +428,75 @@ TEST_F(ServiceManagerTest, CreateInstance) {
 // the service again, a new service is created unless the same user ID and
 // instance names are used.
 TEST_F(ServiceManagerTest, CreatePackagedRegularInstances) {
-  constexpr char kRegularServiceName[] = "service_manager_unittest_regular";
-
   AddListenerAndWaitForApplications();
 
   // Connect to the embedder service first.
   StartEmbedderService();
 
-  Identity identity(kRegularServiceName);
-  StartService(identity, /*expect_service_started=*/true);
+  auto filter = ServiceFilter::ByName(kTestRegularServiceName);
+  StartService(filter, /*expect_service_started=*/true);
 
   // Retstarting with the same identity reuses the existing service.
-  StartService(identity, /*expect_service_started=*/false);
+  StartService(filter, /*expect_service_started=*/false);
 
-  // Starting with a different user ID creates a new service.
-  Identity other_user_identity(kRegularServiceName, base::GenerateGUID());
-  StartService(other_user_identity, /*expect_service_started=*/true);
+  // Starting with a different instance group creates a new service.
+  auto other_group_filter = ServiceFilter::ByNameInGroup(
+      kTestRegularServiceName, base::Token::CreateRandom());
+  StartService(other_group_filter, /*expect_service_started=*/true);
 
-  // Starting with a different instance name creates a new service as well.
-  Identity instance_identity(kRegularServiceName, mojom::kInheritUserID,
-                             "my_instance");
-  StartService(instance_identity, /*expect_service_started=*/true);
+  // Starting with a different instance ID creates a new service as well.
+  auto other_id_filter =
+      ServiceFilter::ByNameWithId(kTestRegularServiceName, base::Token{1, 2});
+  StartService(other_id_filter, /*expect_service_started=*/true);
 }
 
-// Tests that starting an all_users packaged service works, and that when
+// Tests that starting a shared instance packaged service works, and that when
 // starting that service again, a new service is created only when a different
 // instance name is specified.
-TEST_F(ServiceManagerTest, CreatePackagedAllUsersInstances) {
-  constexpr char kAllUsersServiceName[] =
-      "service_manager_unittest_shared_instance_across_users";
-
+TEST_F(ServiceManagerTest, CreatePackagedSharedAcrossGroupsInstances) {
   AddListenerAndWaitForApplications();
 
   // Connect to the embedder service first.
   StartEmbedderService();
 
-  Identity identity(kAllUsersServiceName);
-  StartService(identity, /*expect_service_started=*/true);
+  auto filter = ServiceFilter::ByName(kTestSharedServiceName);
+  StartService(filter, /*expect_service_started=*/true);
 
-  // Start again with a different user-id, the existing service should be
+  // Start again with a different instance group. The existing service should be
   // reused.
-  Identity other_user_identity(kAllUsersServiceName, base::GenerateGUID());
-  StartService(other_user_identity, /*expect_service_started=*/false);
+  auto other_group_filter = ServiceFilter::ByNameInGroup(
+      kTestSharedServiceName, base::Token::CreateRandom());
+  StartService(other_group_filter, /*expect_service_started=*/false);
 
-  // Start again with a difference instance name, in that case a new service
+  // Start again with a difference instance ID. In that case a new service
   // should get created.
-  Identity instance_identity(kAllUsersServiceName, base::GenerateGUID(),
-                             "my_instance");
-  StartService(instance_identity, /*expect_service_started=*/true);
+  auto other_id_filter = ServiceFilter::ByNameWithIdInGroup(
+      kTestSharedServiceName, base::Token{1, 2}, base::Token::CreateRandom());
+  StartService(other_id_filter, /*expect_service_started=*/true);
 }
 
 // Tests that creating a singleton packaged service works, and that when
 // starting that service again a new service is never created.
 TEST_F(ServiceManagerTest, CreatePackagedSingletonInstances) {
-  constexpr char kSingletonServiceName[] = "service_manager_unittest_singleton";
   AddListenerAndWaitForApplications();
 
   // Connect to the embedder service first.
   StartEmbedderService();
 
-  Identity identity(kSingletonServiceName);
-  StartService(identity, /*expect_service_started=*/true);
+  auto filter = ServiceFilter::ByName(kTestSingletonServiceName);
+  StartService(filter, /*expect_service_started=*/true);
 
-  // Start again with a different user-id, the existing service should be
+  // Start again with a different instance group. The existing service should be
   // reused.
-  Identity other_user_identity(kSingletonServiceName, base::GenerateGUID());
-  StartService(other_user_identity, /*expect_service_started=*/false);
+  auto other_group_filter = ServiceFilter::ByNameInGroup(
+      kTestSingletonServiceName, base::Token::CreateRandom());
+  StartService(other_group_filter, /*expect_service_started=*/false);
 
-  // Start again with the same user-ID but a difference instance name, the
+  // Start again with the same instance group but a difference instance ID. The
   // existing service should still be reused.
-  // should get created.
-  Identity instance_identity(kSingletonServiceName, mojom::kInheritUserID,
-                             "my_instance");
-  StartService(instance_identity, /*expect_service_started=*/false);
+  auto other_id_filter =
+      ServiceFilter::ByNameWithId(kTestSingletonServiceName, base::Token{3, 4});
+  StartService(other_id_filter, /*expect_service_started=*/false);
 }
 
 TEST_F(ServiceManagerTest, PIDReceivedCallback) {
@@ -528,10 +513,10 @@ TEST_F(ServiceManagerTest, PIDReceivedCallback) {
     set_service_failed_to_start_callback(base::BindRepeating(
         &OnServiceFailedToStartCallback, &failed_to_start, loop.QuitClosure()));
 
-    connector()->StartService("service_manager_unittest_embedder");
+    connector()->WarmService(ServiceFilter::ByName(kTestEmbedderName));
     loop.Run();
     EXPECT_FALSE(failed_to_start);
-    EXPECT_EQ("service_manager_unittest_embedder", service_name);
+    EXPECT_EQ(kTestEmbedderName, service_name);
     EXPECT_NE(pid, 0u);
   }
 }
@@ -539,30 +524,34 @@ TEST_F(ServiceManagerTest, PIDReceivedCallback) {
 TEST_F(ServiceManagerTest, ClientProcessCapabilityEnforced) {
   AddListenerAndWaitForApplications();
 
-  const std::string kTestService = "service_manager_unittest_target";
-  const Identity kInstance1Id(kTestService, mojom::kRootUserID, "1");
-  const Identity kInstance2Id(kTestService, mojom::kRootUserID);
+  const std::string kTestService = kTestTargetName;
+  const Identity kInstance1Id(kTestService, kSystemInstanceGroup,
+                              base::Token{1, 2}, base::Token::CreateRandom());
+  const Identity kInstance2Id(kTestService, kSystemInstanceGroup,
+                              base::Token{3, 4}, base::Token::CreateRandom());
 
   // Introduce a new service instance for service_manager_unittest_target,
-  // using the client_process capability.
+  // which should be allowed because the test service has
+  // |can_create_other_service_instances| set to |true| in its manifest.
   mojom::ServicePtr test_service_proxy1;
   SimpleService test_service1(mojo::MakeRequest(&test_service_proxy1));
   mojom::PIDReceiverPtr pid_receiver1;
-  connector()->StartService(kInstance1Id, std::move(test_service_proxy1),
-                            mojo::MakeRequest(&pid_receiver1));
+  connector()->RegisterServiceInstance(kInstance1Id,
+                                       std::move(test_service_proxy1),
+                                       mojo::MakeRequest(&pid_receiver1));
   pid_receiver1->SetPID(42);
   WaitForInstanceToStart(kInstance1Id);
   EXPECT_EQ(1u, instances().size());
-  EXPECT_TRUE(ContainsInstanceWithName("service_manager_unittest_target"));
+  EXPECT_TRUE(ContainsInstanceWithName(kTestTargetName));
 
   // Now use the new instance (which does not have client_process capability)
   // to attempt introduction of yet another instance. This should fail.
   mojom::ServicePtr test_service_proxy2;
   SimpleService test_service2(mojo::MakeRequest(&test_service_proxy2));
   mojom::PIDReceiverPtr pid_receiver2;
-  test_service1.connector()->StartService(kInstance2Id,
-                                          std::move(test_service_proxy2),
-                                          mojo::MakeRequest(&pid_receiver2));
+  test_service1.connector()->RegisterServiceInstance(
+      kInstance2Id, std::move(test_service_proxy2),
+      mojo::MakeRequest(&pid_receiver2));
   pid_receiver2->SetPID(43);
 
   // The new service should be disconnected immediately.

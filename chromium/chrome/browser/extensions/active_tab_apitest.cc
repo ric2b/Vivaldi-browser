@@ -4,7 +4,11 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/logging.h"
+#include "base/macros.h"
+#include "base/strings/stringprintf.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -20,34 +24,108 @@
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
 #include "net/base/filename_util.h"
+#include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/network/public/cpp/features.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/extensions/extension_tab_util_delegate_chromeos.h"
-#include "chromeos/login/scoped_test_public_session_login_state.h"
+#include "chromeos/login/login_state/scoped_test_public_session_login_state.h"
 #endif
 
 namespace extensions {
 namespace {
 
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ActiveTab) {
+enum class TestMode {
+  kWithoutAny,
+  kWithRuntimeHostPermissions,
+  kWithOutOfBlinkCors,
+  kWithOutOfBlinkCorsAndRuntimeHostPermissions,
+};
+
+class ExtensionActiveTabTest : public ExtensionApiTest,
+                               public testing::WithParamInterface<TestMode> {
+ public:
+  ExtensionActiveTabTest() = default;
+
+  // ExtensionApiTest override:
+  void SetUp() override {
+    std::vector<base::Feature> enabled_features;
+    std::vector<base::Feature> disabled_features;
+    if (ShouldEnableRuntimeHostPermissions())
+      enabled_features.push_back(extensions_features::kRuntimeHostPermissions);
+    else
+      disabled_features.push_back(extensions_features::kRuntimeHostPermissions);
+    if (ShouldEnableOutOfBlinkCors()) {
+      enabled_features.push_back(network::features::kOutOfBlinkCors);
+      enabled_features.push_back(network::features::kNetworkService);
+    } else {
+      disabled_features.push_back(network::features::kOutOfBlinkCors);
+      disabled_features.push_back(network::features::kNetworkService);
+    }
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
+    ExtensionApiTest::SetUp();
+  }
+
+  void SetUpOnMainThread() override {
+    ExtensionApiTest::SetUpOnMainThread();
+
+    // Map all hosts to localhost.
+    host_resolver()->AddRule("*", "127.0.0.1");
+
+    ASSERT_EQ(ShouldEnableRuntimeHostPermissions(),
+              base::FeatureList::IsEnabled(
+                  extensions_features::kRuntimeHostPermissions));
+
+    ASSERT_EQ(ShouldEnableOutOfBlinkCors(),
+              base::FeatureList::IsEnabled(network::features::kOutOfBlinkCors));
+    ASSERT_EQ(ShouldEnableOutOfBlinkCors(),
+              base::FeatureList::IsEnabled(network::features::kNetworkService));
+  }
+
+ private:
+  bool ShouldEnableRuntimeHostPermissions() const {
+    TestMode mode = GetParam();
+    return mode == TestMode::kWithRuntimeHostPermissions ||
+           mode == TestMode::kWithOutOfBlinkCorsAndRuntimeHostPermissions;
+  }
+
+  bool ShouldEnableOutOfBlinkCors() const {
+    TestMode mode = GetParam();
+    return mode == TestMode::kWithOutOfBlinkCors ||
+           mode == TestMode::kWithOutOfBlinkCorsAndRuntimeHostPermissions;
+  }
+
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(ExtensionActiveTabTest);
+};
+
+IN_PROC_BROWSER_TEST_P(ExtensionActiveTabTest, ActiveTab) {
   ASSERT_TRUE(StartEmbeddedTestServer());
 
+  ExtensionTestMessageListener background_page_ready("ready",
+                                                     false /*will_reply*/);
   const Extension* extension =
       LoadExtension(test_data_dir_.AppendASCII("active_tab"));
   ASSERT_TRUE(extension);
+  ASSERT_TRUE(background_page_ready.WaitUntilSatisfied());
 
   // Shouldn't be initially granted based on activeTab.
   {
+    ExtensionTestMessageListener navigation_count_listener(
+        "1", false /*will_reply*/);
     ResultCatcher catcher;
     ui_test_utils::NavigateToURL(
         browser(),
         embedded_test_server()->GetURL(
-            "/extensions/api_test/active_tab/page.html"));
+            "google.com", "/extensions/api_test/active_tab/page.html"));
     EXPECT_TRUE(catcher.GetNextResult()) << message_;
+    EXPECT_TRUE(navigation_count_listener.WaitUntilSatisfied());
   }
 
   // Do one pass of BrowserAction without granting activeTab permission,
@@ -75,8 +153,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ActiveTab) {
   {
     // Setup state.
     chromeos::ScopedTestPublicSessionLoginState login_state;
-    auto delegate = std::make_unique<ExtensionTabUtilDelegateChromeOS>();
-    ExtensionTabUtil::SetPlatformDelegate(delegate.get());
+    ExtensionTabUtil::SetPlatformDelegate(
+        std::make_unique<ExtensionTabUtilDelegateChromeOS>());
 
     ExtensionTestMessageListener listener(false);
     ResultCatcher catcher;
@@ -91,16 +169,49 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ActiveTab) {
   }
 #endif
 
-  // Changing page should go back to it not having access.
+  // Navigating to a different page on the same origin should revoke extension's
+  // access to the tab, unless the runtime host permissions feature is enabled.
   {
+    ExtensionTestMessageListener navigation_count_listener(
+        "2", false /*will_reply*/);
     ResultCatcher catcher;
     ui_test_utils::NavigateToURL(
         browser(),
         embedded_test_server()->GetURL(
-            "/extensions/api_test/active_tab/final_page.html"));
+            "google.com", "/extensions/api_test/active_tab/final_page.html"));
     EXPECT_TRUE(catcher.GetNextResult()) << message_;
+    EXPECT_TRUE(navigation_count_listener.WaitUntilSatisfied());
+  }
+
+  // Navigating to a different origin should revoke extension's access to the
+  // tab.
+  {
+    ExtensionTestMessageListener navigation_count_listener(
+        "3", false /*will_reply*/);
+    ResultCatcher catcher;
+    ui_test_utils::NavigateToURL(
+        browser(),
+        embedded_test_server()->GetURL(
+            "example.com", "/extensions/api_test/active_tab/final_page.html"));
+    EXPECT_TRUE(catcher.GetNextResult()) << message_;
+    EXPECT_TRUE(navigation_count_listener.WaitUntilSatisfied());
   }
 }
+
+INSTANTIATE_TEST_SUITE_P(WithoutAny,
+                         ExtensionActiveTabTest,
+                         testing::Values(TestMode::kWithoutAny));
+INSTANTIATE_TEST_SUITE_P(
+    WithRuntimeHostPermissions,
+    ExtensionActiveTabTest,
+    testing::Values(TestMode::kWithRuntimeHostPermissions));
+INSTANTIATE_TEST_SUITE_P(WithOutOtBlinkCors,
+                         ExtensionActiveTabTest,
+                         testing::Values(TestMode::kWithOutOfBlinkCors));
+INSTANTIATE_TEST_SUITE_P(
+    WithAll,
+    ExtensionActiveTabTest,
+    testing::Values(TestMode::kWithOutOfBlinkCorsAndRuntimeHostPermissions));
 
 // Tests the behavior of activeTab and its relation to an extension's ability to
 // xhr file urls and inject scripts in file frames.

@@ -31,14 +31,14 @@ namespace blink {
 class FloatSize;
 class SVGTransformTearOff;
 
-enum SVGTransformType {
-  kSvgTransformUnknown = 0,
-  kSvgTransformMatrix = 1,
-  kSvgTransformTranslate = 2,
-  kSvgTransformScale = 3,
-  kSvgTransformRotate = 4,
-  kSvgTransformSkewx = 5,
-  kSvgTransformSkewy = 6
+enum class SVGTransformType {
+  kUnknown = 0,
+  kMatrix = 1,
+  kTranslate = 2,
+  kScale = 3,
+  kRotate = 4,
+  kSkewx = 5,
+  kSkewy = 6
 };
 
 class SVGTransform final : public SVGPropertyBase {
@@ -50,18 +50,25 @@ class SVGTransform final : public SVGPropertyBase {
     kConstructZeroTransform
   };
 
-  static SVGTransform* Create() { return new SVGTransform(); }
+  static SVGTransform* Create() { return MakeGarbageCollected<SVGTransform>(); }
 
   static SVGTransform* Create(
       SVGTransformType type,
       ConstructionMode mode = kConstructIdentityTransform) {
-    return new SVGTransform(type, mode);
+    return MakeGarbageCollected<SVGTransform>(type, mode);
   }
 
   static SVGTransform* Create(const AffineTransform& affine_transform) {
-    return new SVGTransform(affine_transform);
+    return MakeGarbageCollected<SVGTransform>(affine_transform);
   }
 
+  SVGTransform();
+  SVGTransform(SVGTransformType, ConstructionMode);
+  explicit SVGTransform(const AffineTransform&);
+  SVGTransform(SVGTransformType,
+               float,
+               const FloatPoint&,
+               const AffineTransform&);
   ~SVGTransform() override;
 
   SVGTransform* Clone() const;
@@ -106,14 +113,6 @@ class SVGTransform final : public SVGPropertyBase {
   AnimatedPropertyType GetType() const override { return ClassType(); }
 
  private:
-  SVGTransform();
-  SVGTransform(SVGTransformType, ConstructionMode);
-  explicit SVGTransform(const AffineTransform&);
-  SVGTransform(SVGTransformType,
-               float,
-               const FloatPoint&,
-               const AffineTransform&);
-
   SVGTransformType transform_type_;
   float angle_;
   FloatPoint center_;

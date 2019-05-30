@@ -19,6 +19,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/win/scoped_handle.h"
 #include "net/test/python_utils.h"
 
@@ -53,7 +54,7 @@ bool ReadData(HANDLE read_fd,
   // Prepare a timeout in case the server fails to start.
   bool unblocked = false;
   thread.task_runner()->PostDelayedTask(
-      FROM_HERE, base::Bind(UnblockPipe, write_fd, bytes_max, &unblocked),
+      FROM_HERE, base::BindOnce(UnblockPipe, write_fd, bytes_max, &unblocked),
       TestTimeouts::action_max_timeout());
 
   DWORD bytes_read = 0;
@@ -71,7 +72,9 @@ bool ReadData(HANDLE read_fd,
     bytes_read += num_bytes;
   }
 
+  base::ScopedAllowBaseSyncPrimitivesForTesting allow_thread_join;
   thread.Stop();
+
   // If the timeout kicked in, abort.
   if (unblocked) {
     LOG(ERROR) << "Timeout exceeded for ReadData";
@@ -121,8 +124,9 @@ bool LocalTestServer::LaunchPython(const base::FilePath& testserver_path) {
   // safe to truncate the handle (when passing it from 64-bit to
   // 32-bit) or sign-extend the handle (when passing it from 32-bit to
   // 64-bit)."
-  python_command.AppendArg("--startup-pipe=" +
-      base::IntToString(reinterpret_cast<uintptr_t>(child_write)));
+  python_command.AppendArg(
+      "--startup-pipe=" +
+      base::NumberToString(reinterpret_cast<uintptr_t>(child_write)));
 
   base::LaunchOptions launch_options;
 

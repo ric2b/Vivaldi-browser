@@ -6,7 +6,9 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_BACKGROUND_FETCH_BACKGROUND_FETCH_BRIDGE_H_
 
 #include <memory>
-#include "third_party/blink/public/platform/modules/background_fetch/background_fetch.mojom-blink.h"
+
+#include "base/macros.h"
+#include "third_party/blink/public/mojom/background_fetch/background_fetch.mojom-blink.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_registration.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
@@ -17,7 +19,6 @@
 namespace blink {
 
 class BackgroundFetchRegistration;
-class WebServiceWorkerRequest;
 
 // The bridge is responsible for establishing and maintaining the Mojo
 // connection to the BackgroundFetchService. It's keyed on an active Service
@@ -26,7 +27,6 @@ class BackgroundFetchBridge final
     : public GarbageCollectedFinalized<BackgroundFetchBridge>,
       public Supplement<ServiceWorkerRegistration> {
   USING_GARBAGE_COLLECTED_MIXIN(BackgroundFetchBridge);
-  WTF_MAKE_NONCOPYABLE(BackgroundFetchBridge);
 
  public:
   static const char kSupplementName[];
@@ -45,15 +45,17 @@ class BackgroundFetchBridge final
 
   static BackgroundFetchBridge* From(ServiceWorkerRegistration* registration);
 
+  explicit BackgroundFetchBridge(ServiceWorkerRegistration& registration);
   virtual ~BackgroundFetchBridge();
 
   // Creates a new Background Fetch registration identified by |developer_id|
   // for the sequence of |requests|. The |callback| will be invoked when the
   // registration has been created.
   void Fetch(const String& developer_id,
-             Vector<WebServiceWorkerRequest> requests,
+             Vector<mojom::blink::FetchAPIRequestPtr> requests,
              mojom::blink::BackgroundFetchOptionsPtr options,
              const SkBitmap& icon,
+             mojom::blink::BackgroundFetchUkmDataPtr ukm_data,
              RegistrationCallback callback);
 
   // Gets the size of the icon to be displayed in Background Fetch UI.
@@ -62,14 +64,14 @@ class BackgroundFetchBridge final
   // Matches completed requests for the fetch associated with the |developer_id|
   // and |unique_id| and returns the {request, response} pairs based on the rest
   // of the arguments. If |filter_by_request| is true, only response(s) for
-  // |request_to_match| are returned. |cache_query_params| are options for the
+  // |request_to_match| are returned. |cache_query_options|s are options for the
   // query to the cache storage. |match_all|, when true, returns all responses
   // from the result set, and when false, returns only the first one.
   void MatchRequests(
       const String& developer_id,
       const String& unique_id,
-      base::Optional<WebServiceWorkerRequest> request_to_match,
-      mojom::blink::QueryParamsPtr cache_query_params,
+      mojom::blink::FetchAPIRequestPtr request_to_match,
+      mojom::blink::CacheQueryOptionsPtr cache_query_options,
       bool match_all,
       mojom::blink::BackgroundFetchService::MatchRequestsCallback callback);
 
@@ -108,8 +110,6 @@ class BackgroundFetchBridge final
       mojom::blink::BackgroundFetchRegistrationObserverPtr observer);
 
  private:
-  explicit BackgroundFetchBridge(ServiceWorkerRegistration& registration);
-
   // Returns an initialized BackgroundFetchService*. A connection will be
   // established after the first call to this method.
   mojom::blink::BackgroundFetchService* GetService();
@@ -120,6 +120,8 @@ class BackgroundFetchBridge final
       mojom::blink::BackgroundFetchRegistrationPtr registration_ptr);
 
   mojom::blink::BackgroundFetchServicePtr background_fetch_service_;
+
+  DISALLOW_COPY_AND_ASSIGN(BackgroundFetchBridge);
 };
 
 }  // namespace blink

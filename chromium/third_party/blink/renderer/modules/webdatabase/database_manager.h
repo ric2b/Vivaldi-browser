@@ -26,9 +26,10 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_WEBDATABASE_DATABASE_MANAGER_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_WEBDATABASE_DATABASE_MANAGER_H_
 
+#include "base/macros.h"
 #include "third_party/blink/renderer/modules/webdatabase/database_context.h"
 #include "third_party/blink/renderer/modules/webdatabase/database_error.h"
-#include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
@@ -43,7 +44,6 @@ class SecurityOrigin;
 class V8DatabaseCallback;
 
 class DatabaseManager {
-  WTF_MAKE_NONCOPYABLE(DatabaseManager);
   USING_FAST_MALLOC(DatabaseManager);
 
  public:
@@ -102,17 +102,18 @@ class DatabaseManager {
 
   static void LogErrorMessage(ExecutionContext*, const String& message);
 
-  // m_contextMap can have two or more entries even though we don't support
+  // context_map_ can have two or more entries even though we don't support
   // Web SQL on workers because single Blink process can have multiple main
   // contexts.
-  typedef PersistentHeapHashMap<Member<ExecutionContext>,
-                                Member<DatabaseContext>>
+  typedef HeapHashMap<Member<ExecutionContext>, Member<DatabaseContext>>
       ContextMap;
-  ContextMap context_map_;
+  Persistent<ContextMap> context_map_;
 #if DCHECK_IS_ON()
   int database_context_registered_count_ = 0;
   int database_context_instance_count_ = 0;
 #endif
+
+  DISALLOW_COPY_AND_ASSIGN(DatabaseManager);
 };
 
 }  // namespace blink

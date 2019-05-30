@@ -5,49 +5,48 @@
 #include "base/allocator/partition_allocator/partition_alloc.h"
 
 #include <string.h>
+
+#include <memory>
 #include <type_traits>
 
 #include "base/allocator/partition_allocator/partition_direct_map_extent.h"
 #include "base/allocator/partition_allocator/partition_oom.h"
 #include "base/allocator/partition_allocator/partition_page.h"
 #include "base/allocator/partition_allocator/spin_lock.h"
-#include "base/compiler_specific.h"
-#include "base/lazy_instance.h"
+#include "base/logging.h"
+#include "base/no_destructor.h"
+
+namespace base {
 
 // Two partition pages are used as guard / metadata page so make sure the super
 // page size is bigger.
-static_assert(base::kPartitionPageSize * 4 <= base::kSuperPageSize,
-              "ok super page size");
-static_assert(!(base::kSuperPageSize % base::kPartitionPageSize),
-              "ok super page multiple");
+static_assert(kPartitionPageSize * 4 <= kSuperPageSize, "ok super page size");
+static_assert(!(kSuperPageSize % kPartitionPageSize), "ok super page multiple");
 // Four system pages gives us room to hack out a still-guard-paged piece
 // of metadata in the middle of a guard partition page.
-static_assert(base::kSystemPageSize * 4 <= base::kPartitionPageSize,
+static_assert(kSystemPageSize * 4 <= kPartitionPageSize,
               "ok partition page size");
-static_assert(!(base::kPartitionPageSize % base::kSystemPageSize),
+static_assert(!(kPartitionPageSize % kSystemPageSize),
               "ok partition page multiple");
-static_assert(sizeof(base::internal::PartitionPage) <= base::kPageMetadataSize,
+static_assert(sizeof(internal::PartitionPage) <= kPageMetadataSize,
               "PartitionPage should not be too big");
-static_assert(sizeof(base::internal::PartitionBucket) <=
-                  base::kPageMetadataSize,
+static_assert(sizeof(internal::PartitionBucket) <= kPageMetadataSize,
               "PartitionBucket should not be too big");
-static_assert(sizeof(base::internal::PartitionSuperPageExtentEntry) <=
-                  base::kPageMetadataSize,
+static_assert(sizeof(internal::PartitionSuperPageExtentEntry) <=
+                  kPageMetadataSize,
               "PartitionSuperPageExtentEntry should not be too big");
-static_assert(base::kPageMetadataSize * base::kNumPartitionPagesPerSuperPage <=
-                  base::kSystemPageSize,
+static_assert(kPageMetadataSize * kNumPartitionPagesPerSuperPage <=
+                  kSystemPageSize,
               "page metadata fits in hole");
 // Limit to prevent callers accidentally overflowing an int size.
-static_assert(base::kGenericMaxDirectMapped <=
-                  (1UL << 31) + base::kPageAllocationGranularity,
+static_assert(kGenericMaxDirectMapped <=
+                  (1UL << 31) + kPageAllocationGranularity,
               "maximum direct mapped allocation");
 // Check that some of our zanier calculations worked out as expected.
-static_assert(base::kGenericSmallestBucket == 8, "generic smallest bucket");
-static_assert(base::kGenericMaxBucketed == 983040, "generic max bucketed");
-static_assert(base::kMaxSystemPagesPerSlotSpan < (1 << 8),
+static_assert(kGenericSmallestBucket == 8, "generic smallest bucket");
+static_assert(kGenericMaxBucketed == 983040, "generic max bucketed");
+static_assert(kMaxSystemPagesPerSlotSpan < (1 << 8),
               "System pages per slot span must be less than 128.");
-
-namespace base {
 
 internal::PartitionRootBase::PartitionRootBase() = default;
 internal::PartitionRootBase::~PartitionRootBase() = default;
@@ -58,8 +57,10 @@ PartitionRootGeneric::~PartitionRootGeneric() = default;
 PartitionAllocatorGeneric::PartitionAllocatorGeneric() = default;
 PartitionAllocatorGeneric::~PartitionAllocatorGeneric() = default;
 
-static LazyInstance<subtle::SpinLock>::Leaky g_initialized_lock =
-    LAZY_INSTANCE_INITIALIZER;
+subtle::SpinLock& GetLock() {
+  static NoDestructor<subtle::SpinLock> s_initialized_lock;
+  return *s_initialized_lock;
+}
 static bool g_initialized = false;
 
 void (*internal::PartitionRootBase::gOomHandlingFunction)() = nullptr;
@@ -70,7 +71,7 @@ PartitionAllocHooks::FreeHook* PartitionAllocHooks::free_hook_ = nullptr;
 static void PartitionAllocBaseInit(internal::PartitionRootBase* root) {
   DCHECK(!root->initialized);
   {
-    subtle::SpinLock::Guard guard(g_initialized_lock.Get());
+    subtle::SpinLock::Guard guard(GetLock());
     if (!g_initialized) {
       g_initialized = true;
       // We mark the sentinel bucket/page as free to make sure it is skipped by
@@ -206,12 +207,10 @@ bool PartitionReallocDirectMappedInPlace(PartitionRootGeneric* root,
 
   // bucket->slot_size is the current size of the allocation.
   size_t current_size = page->bucket->slot_size;
-  if (new_size == current_size)
-    return true;
-
   char* char_ptr = static_cast<char*>(internal::PartitionPage::ToPointer(page));
-
-  if (new_size < current_size) {
+  if (new_size == current_size) {
+    // No need to move any memory around, but update size and cookie below.
+  } else if (new_size < current_size) {
     size_t map_size =
         internal::PartitionDirectMapExtent::FromPage(page)->map_size;
 
@@ -223,20 +222,17 @@ bool PartitionReallocDirectMappedInPlace(PartitionRootGeneric* root,
     // Shrink by decommitting unneeded pages and making them inaccessible.
     size_t decommit_size = current_size - new_size;
     root->DecommitSystemPages(char_ptr + new_size, decommit_size);
-    CHECK(SetSystemPagesAccess(char_ptr + new_size, decommit_size,
-                               PageInaccessible));
+    SetSystemPagesAccess(char_ptr + new_size, decommit_size, PageInaccessible);
   } else if (new_size <=
              internal::PartitionDirectMapExtent::FromPage(page)->map_size) {
     // Grow within the actually allocated memory. Just need to make the
     // pages accessible again.
     size_t recommit_size = new_size - current_size;
-    CHECK(SetSystemPagesAccess(char_ptr + current_size, recommit_size,
-                               PageReadWrite));
+    SetSystemPagesAccess(char_ptr + current_size, recommit_size, PageReadWrite);
     root->RecommitSystemPages(char_ptr + current_size, recommit_size);
 
 #if DCHECK_IS_ON()
-    memset(char_ptr + current_size, internal::kUninitializedByte,
-           recommit_size);
+    memset(char_ptr + current_size, kUninitializedByte, recommit_size);
 #endif
   } else {
     // We can't perform the realloc in-place.
@@ -263,6 +259,10 @@ void* PartitionReallocGenericFlags(PartitionRootGeneric* root,
                                    size_t new_size,
                                    const char* type_name) {
 #if defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
+  // Make MEMORY_TOOL_REPLACES_ALLOCATOR behave the same for max size
+  // as other alloc code.
+  if (new_size > kGenericMaxDirectMapped)
+    return nullptr;
   void* result = realloc(ptr, new_size);
   CHECK(result || flags & PartitionAllocReturnNull);
   return result;
@@ -277,8 +277,7 @@ void* PartitionReallocGenericFlags(PartitionRootGeneric* root,
   if (new_size > kGenericMaxDirectMapped) {
     if (flags & PartitionAllocReturnNull)
       return nullptr;
-    else
-      internal::PartitionExcessiveAllocationSize();
+    internal::PartitionExcessiveAllocationSize();
   }
 
   internal::PartitionPage* page = internal::PartitionPage::FromPointer(
@@ -321,8 +320,7 @@ void* PartitionReallocGenericFlags(PartitionRootGeneric* root,
   if (!ret) {
     if (flags & PartitionAllocReturnNull)
       return nullptr;
-    else
-      internal::PartitionExcessiveAllocationSize();
+    internal::PartitionExcessiveAllocationSize();
   }
 
   size_t copy_size = actual_old_size;
@@ -692,11 +690,12 @@ void PartitionRoot::DumpStats(const char* partition_name,
   stats.total_committed_bytes = this->total_size_of_committed_pages;
   DCHECK(!this->total_size_of_direct_mapped_pages);
 
-  static const size_t kMaxReportableBuckets = 4096 / sizeof(void*);
+  static constexpr size_t kMaxReportableBuckets = 4096 / sizeof(void*);
   std::unique_ptr<PartitionBucketMemoryStats[]> memory_stats;
-  if (!is_light_dump)
+  if (!is_light_dump) {
     memory_stats = std::unique_ptr<PartitionBucketMemoryStats[]>(
         new PartitionBucketMemoryStats[kMaxReportableBuckets]);
+  }
 
   const size_t partition_num_buckets = this->num_buckets;
   DCHECK(partition_num_buckets <= kMaxReportableBuckets);

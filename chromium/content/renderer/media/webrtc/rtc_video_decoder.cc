@@ -20,10 +20,11 @@
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/webrtc/api/video/video_frame.h"
+#include "third_party/webrtc/media/base/vp9_profile.h"
 #include "third_party/webrtc/modules/video_coding/codecs/h264/include/h264.h"
 #include "third_party/webrtc/rtc_base/bind.h"
-#include "third_party/webrtc/rtc_base/refcount.h"
-#include "third_party/webrtc/rtc_base/refcountedobject.h"
+#include "third_party/webrtc/rtc_base/ref_count.h"
+#include "third_party/webrtc/rtc_base/ref_counted_object.h"
 
 #if defined(OS_WIN)
 #include "base/command_line.h"
@@ -91,8 +92,10 @@ RTCVideoDecoder::~RTCVideoDecoder() {
 
 // static
 std::unique_ptr<RTCVideoDecoder> RTCVideoDecoder::Create(
-    webrtc::VideoCodecType type,
+    const webrtc::SdpVideoFormat& format,
     media::GpuVideoAcceleratorFactories* factories) {
+  const webrtc::VideoCodecType type =
+      webrtc::PayloadStringToCodecType(format.name);
   std::unique_ptr<RTCVideoDecoder> decoder;
 // See https://bugs.chromium.org/p/webrtc/issues/detail?id=5717.
 #if defined(OS_WIN)
@@ -110,9 +113,21 @@ std::unique_ptr<RTCVideoDecoder> RTCVideoDecoder::Create(
     case webrtc::kVideoCodecVP8:
       profile = media::VP8PROFILE_ANY;
       break;
-    case webrtc::kVideoCodecVP9:
-      profile = media::VP9PROFILE_MIN;
+    case webrtc::kVideoCodecVP9: {
+      const webrtc::VP9Profile vp9_profile =
+          webrtc::ParseSdpForVP9Profile(format.parameters)
+              .value_or(webrtc::VP9Profile::kProfile0);
+      switch (vp9_profile) {
+        case webrtc::VP9Profile::kProfile2:
+          profile = media::VP9PROFILE_PROFILE2;
+          break;
+        case webrtc::VP9Profile::kProfile0:
+        default:
+          profile = media::VP9PROFILE_PROFILE0;
+          break;
+      }
       break;
+    }
     case webrtc::kVideoCodecH264:
       profile = media::H264PROFILE_MAIN;
       break;
@@ -135,12 +150,6 @@ std::unique_ptr<RTCVideoDecoder> RTCVideoDecoder::Create(
   else
     factories->GetTaskRunner()->DeleteSoon(FROM_HERE, decoder.release());
   return decoder;
-}
-
-// static
-void RTCVideoDecoder::Destroy(webrtc::VideoDecoder* decoder,
-                              media::GpuVideoAcceleratorFactories* factories) {
-  factories->GetTaskRunner()->DeleteSoon(FROM_HERE, decoder);
 }
 
 int32_t RTCVideoDecoder::InitDecode(const webrtc::VideoCodec* codecSettings,
@@ -233,16 +242,22 @@ int32_t RTCVideoDecoder::Decode(
     // TODO(wuchengli): VDA should handle it. Remove this when
     // http://crosbug.com/p/21913 is fixed.
 
-    // If we're are in an error condition, increase the counter.
-    vda_error_counter_ += vda_error_counter_ ? 1 : 0;
-
+    DCHECK(new_frame_size.IsEmpty());
+    // Increase the error counter, if we are already in an error state. Also,
+    // increase the counter if we keep receiving keyframes without size set.
+    vda_error_counter_ +=
+        vda_error_counter_ || input_image._frameType == webrtc::kVideoFrameKey
+            ? 1
+            : 0;
+    if (ShouldFallbackToSoftwareDecode())
+      return WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
     DVLOG(1) << "The first frame should have resolution. Drop this.";
     return WEBRTC_VIDEO_CODEC_ERROR;
   }
 
   // Create buffer metadata.
-  BufferData buffer_data(next_bitstream_buffer_id_, input_image._timeStamp,
-                         input_image._length, gfx::Rect(frame_size_));
+  BufferData buffer_data(next_bitstream_buffer_id_, input_image.Timestamp(),
+                         input_image.size(), gfx::Rect(frame_size_));
   // Mask against 30 bits, to avoid (undefined) wraparound on signed integer.
   next_bitstream_buffer_id_ = (next_bitstream_buffer_id_ + 1) & ID_LAST;
 
@@ -251,7 +266,7 @@ int32_t RTCVideoDecoder::Decode(
   // immediately. Otherwise, save the buffer in the queue for later decode.
   std::unique_ptr<base::SharedMemory> shm_buffer;
   if (!need_to_reset_for_midstream_resize && pending_buffers_.empty())
-    shm_buffer = GetSHM_Locked(input_image._length);
+    shm_buffer = GetSHM_Locked(input_image.size());
   if (!shm_buffer) {
     if (!SaveToPendingBuffers_Locked(input_image, buffer_data)) {
       // We have exceeded the pending buffers count, we are severely behind.
@@ -347,6 +362,7 @@ void RTCVideoDecoder::ProvidePictureBuffers(uint32_t buffer_count,
     picture_buffers.push_back(media::PictureBuffer(next_picture_buffer_id_++,
                                                    size, ids, mailboxes,
                                                    texture_target, format));
+    picture_buffers_at_display_.emplace(picture_buffers.back().id(), 0);
     const bool inserted =
         assigned_picture_buffers_
             .insert(std::make_pair(picture_buffers.back().id(),
@@ -361,32 +377,36 @@ void RTCVideoDecoder::DismissPictureBuffer(int32_t id) {
   DVLOG(3) << "DismissPictureBuffer. id=" << id;
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
 
-  std::map<int32_t, media::PictureBuffer>::iterator it =
-      assigned_picture_buffers_.find(id);
+  auto it = assigned_picture_buffers_.find(id);
   if (it == assigned_picture_buffers_.end()) {
     NOTREACHED() << "Missing picture buffer: " << id;
     return;
   }
 
-  media::PictureBuffer buffer_to_dismiss = it->second;
-  assigned_picture_buffers_.erase(it);
-
-  if (!picture_buffers_at_display_.count(id)) {
-    // We can delete the texture immediately as it's not being displayed.
-    for (const auto& texture_id : buffer_to_dismiss.client_texture_ids())
-      factories_->DeleteTexture(texture_id);
-    return;
-  }
   // Not destroying a texture in display in |picture_buffers_at_display_|.
   // Postpone deletion until after it's returned to us.
+  media::PictureBuffer::TextureIds texture_ids =
+      (it->second).client_texture_ids();
+  auto picture_buffer_it = picture_buffers_at_display_.find(id);
+  if (picture_buffer_it != picture_buffers_at_display_.end() &&
+      picture_buffer_it->second > 0) {
+    DCHECK(!textures_to_be_deleted_.count(id));
+    textures_to_be_deleted_[id] = texture_ids;
+  } else {
+    // Otherwise, we can delete the texture immediately.
+    for (const auto texture_id : texture_ids)
+      factories_->DeleteTexture(texture_id);
+    if (picture_buffer_it != picture_buffers_at_display_.end())
+      picture_buffers_at_display_.erase(picture_buffer_it);
+  }
+  assigned_picture_buffers_.erase(it);
 }
 
 void RTCVideoDecoder::PictureReady(const media::Picture& picture) {
   DVLOG(3) << "PictureReady";
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
 
-  std::map<int32_t, media::PictureBuffer>::iterator it =
-      assigned_picture_buffers_.find(picture.picture_buffer_id());
+  auto it = assigned_picture_buffers_.find(picture.picture_buffer_id());
   if (it == assigned_picture_buffers_.end()) {
     NOTREACHED() << "Missing picture buffer: " << picture.picture_buffer_id();
     NotifyError(media::VideoDecodeAccelerator::PLATFORM_FAILURE);
@@ -421,11 +441,8 @@ void RTCVideoDecoder::PictureReady(const media::Picture& picture) {
     NotifyError(media::VideoDecodeAccelerator::PLATFORM_FAILURE);
     return;
   }
-  bool inserted = picture_buffers_at_display_
-                      .insert(std::make_pair(picture.picture_buffer_id(),
-                                             pb.client_texture_ids()))
-                      .second;
-  DCHECK(inserted);
+
+  ++picture_buffers_at_display_[picture.picture_buffer_id()];
 
   // Create a WebRTC video frame.
   webrtc::VideoFrame decoded_image(
@@ -614,7 +631,7 @@ void RTCVideoDecoder::SaveToDecodeBuffers_Locked(
     const webrtc::EncodedImage& input_image,
     std::unique_ptr<base::SharedMemory> shm_buffer,
     const BufferData& buffer_data) {
-  memcpy(shm_buffer->memory(), input_image._buffer, input_image._length);
+  memcpy(shm_buffer->memory(), input_image.data(), input_image.size());
 
   // Store the buffer and the metadata to the queue.
   decode_buffers_.emplace_back(std::move(shm_buffer), buffer_data);
@@ -634,13 +651,13 @@ bool RTCVideoDecoder::SaveToPendingBuffers_Locked(
   }
 
   // Clone the input image and save it to the queue.
-  uint8_t* buffer = new uint8_t[input_image._length];
+  uint8_t* buffer = new uint8_t[input_image.size()];
   // TODO(wuchengli): avoid memcpy. Extend webrtc::VideoDecoder::Decode()
   // interface to take a non-const ptr to the frame and add a method to the
   // frame that will swap buffers with another.
-  memcpy(buffer, input_image._buffer, input_image._length);
-  webrtc::EncodedImage encoded_image(
-      buffer, input_image._length, input_image._length);
+  memcpy(buffer, input_image.data(), input_image.size());
+  webrtc::EncodedImage encoded_image(buffer, input_image.size(),
+                                     input_image.size());
   std::pair<webrtc::EncodedImage, BufferData> buffer_pair =
       std::make_pair(encoded_image, buffer_data);
 
@@ -658,17 +675,17 @@ void RTCVideoDecoder::MovePendingBuffersToDecodeBuffers() {
     // Drop the frame if it comes before Release.
     if (!IsBufferAfterReset(buffer_data.bitstream_buffer_id,
                             reset_bitstream_buffer_id_)) {
-      delete[] input_image._buffer;
+      delete[] input_image.data();
       pending_buffers_.pop_front();
       continue;
     }
     // Get shared memory and save it to decode buffers.
     std::unique_ptr<base::SharedMemory> shm_buffer =
-        GetSHM_Locked(input_image._length);
+        GetSHM_Locked(input_image.size());
     if (!shm_buffer)
       return;
     SaveToDecodeBuffers_Locked(input_image, std::move(shm_buffer), buffer_data);
-    delete[] input_image._buffer;
+    delete[] input_image.data();
     pending_buffers_.pop_front();
   }
 }
@@ -724,18 +741,20 @@ void RTCVideoDecoder::ReusePictureBuffer(int64_t picture_buffer_id) {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
   DVLOG(3) << "ReusePictureBuffer. id=" << picture_buffer_id;
 
-  DCHECK(!picture_buffers_at_display_.empty());
-  PictureBufferTextureMap::iterator display_iterator =
-      picture_buffers_at_display_.find(picture_buffer_id);
-  const auto texture_ids = display_iterator->second;
-  DCHECK(display_iterator != picture_buffers_at_display_.end());
-  picture_buffers_at_display_.erase(display_iterator);
+  auto picture_buffer_it = picture_buffers_at_display_.find(picture_buffer_id);
+  DCHECK(picture_buffer_it != picture_buffers_at_display_.end());
+  DCHECK_GT(picture_buffer_it->second, 0u);
+  --picture_buffer_it->second;
 
-  if (!assigned_picture_buffers_.count(picture_buffer_id)) {
-    // This picture was dismissed while in display, so we postponed deletion.
-    for (const auto& id : texture_ids)
-      factories_->DeleteTexture(id);
-    return;
+  if (picture_buffer_it->second == 0) {
+    auto iter = textures_to_be_deleted_.find(picture_buffer_id);
+    if (iter != textures_to_be_deleted_.end()) {
+      // This picture was dismissed while in display, so we postponed deletion.
+      for (const auto id : iter->second)
+        factories_->DeleteTexture(id);
+      textures_to_be_deleted_.erase(iter);
+      return;
+    }
   }
 
   // DestroyVDA() might already have been called.
@@ -781,17 +800,8 @@ void RTCVideoDecoder::CreateVDA(media::VideoCodecProfile profile,
 void RTCVideoDecoder::DestroyTextures() {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
 
-  // Not destroying PictureBuffers in |picture_buffers_at_display_| yet, since
-  // their textures may still be in use by the user of this RTCVideoDecoder.
-  for (const auto& picture_buffer_at_display : picture_buffers_at_display_)
-    assigned_picture_buffers_.erase(picture_buffer_at_display.first);
-
-  for (const auto& assigned_picture_buffer : assigned_picture_buffers_) {
-    for (const auto& id : assigned_picture_buffer.second.client_texture_ids())
-      factories_->DeleteTexture(id);
-  }
-
-  assigned_picture_buffers_.clear();
+  while (!assigned_picture_buffers_.empty())
+    DismissPictureBuffer(assigned_picture_buffers_.begin()->first);
 }
 
 void RTCVideoDecoder::DestroyVDA() {
@@ -915,7 +925,7 @@ void RTCVideoDecoder::DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent()
 void RTCVideoDecoder::ClearPendingBuffers() {
   // Delete WebRTC input buffers.
   for (const auto& pending_buffer : pending_buffers_)
-    delete[] pending_buffer.first._buffer;
+    delete[] pending_buffer.first.data();
   pending_buffers_.clear();
 }
 

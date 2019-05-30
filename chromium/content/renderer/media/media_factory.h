@@ -33,6 +33,7 @@ class WebLocalFrame;
 class WebMediaPlayer;
 class WebMediaPlayerClient;
 class WebMediaPlayerEncryptedMediaClient;
+class WebMediaStreamRendererFactory;
 }
 
 namespace cc {
@@ -47,9 +48,6 @@ class MediaObserver;
 class RemotePlaybackClientWrapper;
 class RendererWebMediaPlayerDelegate;
 class WebEncryptedMediaClientImpl;
-#if defined(OS_ANDROID)
-class RendererMediaPlayerManager;
-#endif
 }
 
 namespace service_manager {
@@ -63,18 +61,12 @@ namespace content {
 
 class RenderFrameImpl;
 class MediaInterfaceFactory;
-class MediaStreamRendererFactory;
-
-#if defined(OS_ANDROID)
-class RendererMediaPlayerManager;
-#endif
 
 // Assist to RenderFrameImpl in creating various media clients.
 class MediaFactory {
  public:
   // Helper function returning whether VideoSurfaceLayer should be enabled.
-  static media::WebMediaPlayerParams::SurfaceLayerMode
-  GetVideoSurfaceLayerMode();
+  static blink::WebMediaPlayer::SurfaceLayerMode GetVideoSurfaceLayerMode();
 
   // Helper function returning whether VideoSurfaceLayer should be enabled for
   // MediaStreams.
@@ -91,6 +83,13 @@ class MediaFactory {
   // factory duties. This should be called by RenderFrameImpl as soon as its own
   // interface provider is bound.
   void SetupMojo();
+
+  // Creates the VideoFrameSubmitter and its task_runner based on the current
+  // SurfaceLayerMode;
+  std::unique_ptr<blink::WebVideoFrameSubmitter> CreateSubmitter(
+      scoped_refptr<base::SingleThreadTaskRunner>*
+          video_frame_compositor_task_runner,
+      const cc::LayerTreeSettings& settings);
 
   // Creates a new WebMediaPlayer for the given |source| (either a stream or
   // URL). All pointers other than |initial_cdm| are required to be non-null.
@@ -120,6 +119,7 @@ class MediaFactory {
   std::unique_ptr<media::RendererFactorySelector> CreateRendererFactorySelector(
       media::MediaLog* media_log,
       bool use_media_player,
+      bool enable_mojo_renderer,
       media::DecoderFactory* decoder_factory,
       std::unique_ptr<media::RemotePlaybackClientWrapper> client_wrapper,
       base::WeakPtr<media::MediaObserver>* out_media_observer);
@@ -129,22 +129,19 @@ class MediaFactory {
       const blink::WebString& sink_id,
       const blink::WebSecurityOrigin& security_origin,
       blink::WebLocalFrame* frame,
-      blink::WebLayerTreeView* layer_tree_view);
+      blink::WebLayerTreeView* layer_tree_view,
+      const cc::LayerTreeSettings& settings);
 
   // Returns the media delegate for WebMediaPlayer usage.  If
   // |media_player_delegate_| is NULL, one is created.
   media::RendererWebMediaPlayerDelegate* GetWebMediaPlayerDelegate();
 
-  // Creates a MediaStreamRendererFactory used for creating audio and video
-  // renderers for WebMediaPlayerMS.
-  std::unique_ptr<MediaStreamRendererFactory>
+  // Creates a blink::WebMediaStreamRendererFactory used for creating audio and
+  // video renderers for WebMediaPlayerMS.
+  std::unique_ptr<blink::WebMediaStreamRendererFactory>
   CreateMediaStreamRendererFactory();
 
   media::DecoderFactory* GetDecoderFactory();
-
-#if defined(OS_ANDROID)
-  RendererMediaPlayerManager* GetMediaPlayerManager();
-#endif
 
 #if BUILDFLAG(ENABLE_MEDIA_REMOTING)
   media::mojom::RemoterFactory* GetRemoterFactory();
@@ -170,16 +167,6 @@ class MediaFactory {
   // Lifetime matches that of the owning |render_frame_|. Will always be valid
   // once assigned.
   service_manager::InterfaceProvider* remote_interfaces_ = nullptr;
-
-#if defined(OS_ANDROID)
-  // Manages media players and sessions in this render frame for communicating
-  // with the real media player and sessions in the browser process.
-  // Lifetime is tied to the RenderFrame via the RenderFrameObserver interface.
-  // NOTE: This currently only being used in the case where we are casting. See
-  // also WebMediaPlayerCast (renderer side) and RemoteMediaPlayerManager
-  // (browser side).
-  RendererMediaPlayerManager* media_player_manager_ = nullptr;
-#endif
 
   // Manages play, pause notifications for WebMediaPlayer implementations; its
   // lifetime is tied to the RenderFrame via the RenderFrameObserver interface.

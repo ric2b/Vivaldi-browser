@@ -411,8 +411,8 @@ void ThumbnailDatabase::Vacuum() {
   ignore_result(db_.Execute("VACUUM"));
 }
 
-void ThumbnailDatabase::TrimMemory(bool aggressively) {
-  db_.TrimMemory(aggressively);
+void ThumbnailDatabase::TrimMemory() {
+  db_.TrimMemory();
 }
 
 std::map<favicon_base::FaviconID, IconMappingsForExpiry>
@@ -776,8 +776,7 @@ bool ThumbnailDatabase::GetIconMappingsForPageURL(
     return false;
 
   bool result = false;
-  for (std::vector<IconMapping>::iterator m = mapping_data.begin();
-       m != mapping_data.end(); ++m) {
+  for (auto m = mapping_data.begin(); m != mapping_data.end(); ++m) {
     if (required_icon_types.count(m->icon_type) != 0) {
       result = true;
       if (!filtered_mapping_data)

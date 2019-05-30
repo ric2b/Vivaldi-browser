@@ -26,6 +26,7 @@
 
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/lifecycle_notifier.h"
 #include "third_party/blink/renderer/platform/lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -40,7 +41,7 @@ class DummyContext final
   USING_GARBAGE_COLLECTED_MIXIN(DummyContext);
 
  public:
-  static DummyContext* Create() { return new DummyContext; }
+  static DummyContext* Create() { return MakeGarbageCollected<DummyContext>(); }
 
   void Trace(blink::Visitor* visitor) override {
     LifecycleNotifier<DummyContext, TestingObserver>::Trace(visitor);
@@ -57,8 +58,11 @@ class TestingObserver final
 
  public:
   static TestingObserver* Create(DummyContext* context) {
-    return new TestingObserver(context);
+    return MakeGarbageCollected<TestingObserver>(context);
   }
+
+  explicit TestingObserver(DummyContext* context)
+      : LifecycleObserver(context), context_destroyed_called_(false) {}
 
   void ContextDestroyed(DummyContext* destroyed_context) {
     if (observer_to_remove_on_destruct_) {
@@ -87,9 +91,6 @@ class TestingObserver final
   bool ContextDestroyedCalled() const { return context_destroyed_called_; }
 
  private:
-  explicit TestingObserver(DummyContext* context)
-      : LifecycleObserver(context), context_destroyed_called_(false) {}
-
   Member<TestingObserver> observer_to_remove_on_destruct_;
   bool context_destroyed_called_;
 };
@@ -158,7 +159,7 @@ TEST(LifecycleContextTest, ShouldNotHitCFICheckOnIncrementalMarking) {
 
   while (thread_state->GetGCState() ==
          ThreadState::kIncrementalMarkingStepScheduled)
-    thread_state->IncrementalMarkingStep();
+    thread_state->IncrementalMarkingStep(BlinkGC::kNoHeapPointersOnStack);
   thread_state->IncrementalMarkingFinalize();
 
   RuntimeEnabledFeatures::SetHeapIncrementalMarkingEnabled(was_enabled);

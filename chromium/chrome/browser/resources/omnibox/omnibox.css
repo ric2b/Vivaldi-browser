@@ -2,46 +2,24 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. */
 
-.autocomplete-results-table {
-  margin-bottom: 1.5em;
+html {
+  height: 100%;
 }
 
-.autocomplete-results-table th {
-  background-color: #C0C0C0;
-}
+body {
+  --action-color: rgb(66, 133, 244);
+  --border-color: #ddd;
 
-.autocomplete-results-table td {
-  background-color: #F0F0F0;
-}
-
-.group-separator {
-  display: block;
-  text-decoration: underline;
-}
-
-.check-mark {
-  color: green;
-  text-align: center;
-}
-
-.x-mark {
-  color: red;
-  text-align: center;
-}
-
-p {
+  background-color: #fcfcfc;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   margin: 0;
+  min-width: 900px;
+  padding: 8px;
 }
 
-.input-section {
-  margin-bottom: 1em;
-}
-
-.table-header {
-  white-space: nowrap;
-}
-
-.additional-info-property,
-.additional-info-value {
-  white-space: nowrap;
+omnibox-input {
+  margin-bottom: 30px;
 }

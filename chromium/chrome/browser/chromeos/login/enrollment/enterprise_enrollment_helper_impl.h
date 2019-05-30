@@ -13,36 +13,54 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/chromeos/login/enrollment/enterprise_enrollment_helper.h"
+#include "chrome/browser/chromeos/policy/device_account_initializer.h"
+#include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
 #include "chrome/browser/chromeos/policy/enrollment_config.h"
 #include "components/policy/core/common/cloud/enterprise_metrics.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 
 namespace policy {
+class DMAuth;
 class PolicyOAuth2TokenFetcher;
 }
 
 namespace chromeos {
 
-class EnterpriseEnrollmentHelperImpl : public EnterpriseEnrollmentHelper {
+class EnterpriseEnrollmentHelperImpl
+    : public EnterpriseEnrollmentHelper,
+      public policy::DeviceAccountInitializer::Delegate,
+      public policy::DeviceCloudPolicyManagerChromeOS::Observer {
  public:
-  EnterpriseEnrollmentHelperImpl(
-      EnrollmentStatusConsumer* status_consumer,
-      ActiveDirectoryJoinDelegate* ad_join_delegate,
-      const policy::EnrollmentConfig& enrollment_config,
-      const std::string& enrolling_user_domain);
+  EnterpriseEnrollmentHelperImpl();
   ~EnterpriseEnrollmentHelperImpl() override;
 
-  // Overridden from EnterpriseEnrollmentHelper:
+  // EnterpriseEnrollmentHelper:
   void EnrollUsingAuthCode(const std::string& auth_code,
                            bool fetch_additional_token) override;
   void EnrollUsingToken(const std::string& token) override;
+  void EnrollUsingEnrollmentToken(const std::string& token) override;
   void EnrollUsingAttestation() override;
   void EnrollForOfflineDemo() override;
-  void ClearAuth(const base::Closure& callback) override;
+  void RestoreAfterRollback() override;
+  void ClearAuth(base::OnceClosure callback) override;
   void UseLicenseType(policy::LicenseType type) override;
   void GetDeviceAttributeUpdatePermission() override;
   void UpdateDeviceAttributes(const std::string& asset_id,
                               const std::string& location) override;
+  void Setup(ActiveDirectoryJoinDelegate* ad_join_delegate,
+             const policy::EnrollmentConfig& enrollment_config,
+             const std::string& enrolling_user_domain) override;
+
+  // DeviceCloudPolicyManagerChromeOS::Observer:
+  void OnDeviceCloudPolicyManagerConnected() override;
+  void OnDeviceCloudPolicyManagerDisconnected() override;
+
+  // policy::DeviceAccountInitializer::Delegate:
+  void OnDeviceAccountTokenFetched(bool empty_token) override;
+  void OnDeviceAccountTokenStored() override;
+  void OnDeviceAccountTokenError(policy::EnrollmentStatus status) override;
+  void OnDeviceAccountClientError(
+      policy::DeviceManagementStatus status) override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(EnterpriseEnrollmentTest,
@@ -53,7 +71,8 @@ class EnterpriseEnrollmentHelperImpl : public EnterpriseEnrollmentHelper {
   // Checks if license type selection should be performed during enrollment.
   bool ShouldCheckLicenseType() const;
 
-  void DoEnroll(const std::string& token);
+  // Attempt enrollment using |auth_data| for authentication.
+  void DoEnroll(std::unique_ptr<policy::DMAuth> auth_data);
 
   // Handles completion of the OAuth2 token fetch attempt.
   void OnTokenFetched(bool is_additional_token,
@@ -81,10 +100,13 @@ class EnterpriseEnrollmentHelperImpl : public EnterpriseEnrollmentHelper {
 
   // Called by ProfileHelper when a signin profile clearance has finished.
   // |callback| is a callback, that was passed to ClearAuth() before.
-  void OnSigninProfileCleared(const base::Closure& callback);
+  void OnSigninProfileCleared(base::OnceClosure callback);
 
-  const policy::EnrollmentConfig enrollment_config_;
-  const std::string enrolling_user_domain_;
+  // Called when CloudPolicyClient exists, so device account can be initialized.
+  void RestoreAfterRollbackInitialized();
+
+  policy::EnrollmentConfig enrollment_config_;
+  std::string enrolling_user_domain_;
   bool fetch_additional_token_;
 
   std::string additional_token_;
@@ -95,13 +117,14 @@ class EnterpriseEnrollmentHelperImpl : public EnterpriseEnrollmentHelper {
     OAUTH_FINISHED
   } oauth_status_ = OAUTH_NOT_STARTED;
   bool oauth_data_cleared_ = false;
-  std::string oauth_token_;
+  std::unique_ptr<policy::DMAuth> auth_data_;
   bool success_ = false;
   ActiveDirectoryJoinDelegate* ad_join_delegate_ = nullptr;
 
   std::unique_ptr<policy::PolicyOAuth2TokenFetcher> oauth_fetcher_;
+  std::unique_ptr<policy::DeviceAccountInitializer> device_account_initializer_;
 
-  base::WeakPtrFactory<EnterpriseEnrollmentHelperImpl> weak_ptr_factory_;
+  base::WeakPtrFactory<EnterpriseEnrollmentHelperImpl> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(EnterpriseEnrollmentHelperImpl);
 };

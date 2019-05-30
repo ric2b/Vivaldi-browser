@@ -38,13 +38,24 @@ void PrintSectionHelp(const std::string& line,
 // the colon is the command (and is highlighted). After the colon if there is
 // a square bracket, the contents of the bracket is dimmed.
 //
+// The link_tag is set, it will be used for markdown output links. This is
+// used when generating the markdown for all help topics. If empty, no link tag
+// will be emitted. In non-markdown mode, this parameter will be ignored.
+//
 // The line is indented 2 spaces.
-void PrintShortHelp(const std::string& line);
+void PrintShortHelp(const std::string& line,
+                    const std::string& link_tag = std::string());
 
+// Prints a longer help section.
+//
 // Rules:
 // - Lines beginning with non-whitespace are highlighted up to the first
 //   colon (or the whole line if not).
 // - Lines whose first non-whitespace character is a # are dimmed.
+//
+// The tag will be used as a link target for the first header. This is used
+// when generating the markdown for all help topics. If empty, no link tag will
+// be emitted. Used only in markdown mode.
 void PrintLongHelp(const std::string& text, const std::string& tag = "");
 
 #endif  // TOOLS_GN_STANDARD_OUT_H_

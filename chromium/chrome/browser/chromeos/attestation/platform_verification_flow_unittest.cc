@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chromeos/attestation/fake_certificate.h"
@@ -114,7 +115,7 @@ class PlatformVerificationFlowTest : public ::testing::Test {
     callback_ = base::Bind(&PlatformVerificationFlowTest::FakeChallengeCallback,
                            base::Unretained(this));
 
-    settings_helper_.ReplaceProvider(kAttestationForContentProtectionEnabled);
+    settings_helper_.ReplaceDeviceSettingsProviderWithStub();
     settings_helper_.SetBoolean(kAttestationForContentProtectionEnabled, true);
   }
 

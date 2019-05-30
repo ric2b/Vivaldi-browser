@@ -51,7 +51,7 @@ void MessageReader::DoRead() {
   // have messages that we haven't finished processing yet.
   bool read_succeeded = true;
   while (read_succeeded && !closed_ && !read_pending_) {
-    read_buffer_ = new net::IOBuffer(kReadBufferSize);
+    read_buffer_ = base::MakeRefCounted<net::IOBuffer>(kReadBufferSize);
     int result = socket_->Read(
         read_buffer_.get(),
         kReadBufferSize,
@@ -108,8 +108,8 @@ void MessageReader::OnDataReceived(net::IOBuffer* data, int data_size) {
       break;
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&MessageReader::RunCallback, weak_factory_.GetWeakPtr(),
-                   base::Passed(base::WrapUnique(buffer))));
+        base::BindOnce(&MessageReader::RunCallback, weak_factory_.GetWeakPtr(),
+                       base::Passed(base::WrapUnique(buffer))));
   }
 }
 

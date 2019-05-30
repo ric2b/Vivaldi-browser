@@ -90,13 +90,13 @@ void ClientVideoDispatcher::OnIncomingMessage(
     client_stub_->SetVideoLayout(layout);
   }
 
-  PendingFramesList::iterator pending_frame =
+  auto pending_frame =
       pending_frames_.insert(pending_frames_.end(), PendingFrame(frame_id));
 
   video_stub_->ProcessVideoPacket(
       std::move(video_packet),
-      base::Bind(&ClientVideoDispatcher::OnPacketDone,
-                 weak_factory_.GetWeakPtr(), pending_frame));
+      base::BindOnce(&ClientVideoDispatcher::OnPacketDone,
+                     weak_factory_.GetWeakPtr(), pending_frame));
 }
 
 void ClientVideoDispatcher::OnPacketDone(

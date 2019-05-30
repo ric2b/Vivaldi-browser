@@ -107,13 +107,13 @@ void MP4StreamParser::Init(
     const EndMediaSegmentCB& end_of_segment_cb,
     MediaLog* media_log) {
   DCHECK_EQ(state_, kWaitingForInit);
-  DCHECK(init_cb_.is_null());
-  DCHECK(!init_cb.is_null());
-  DCHECK(!config_cb.is_null());
-  DCHECK(!new_buffers_cb.is_null());
-  DCHECK(!encrypted_media_init_data_cb.is_null());
-  DCHECK(!new_segment_cb.is_null());
-  DCHECK(!end_of_segment_cb.is_null());
+  DCHECK(!init_cb_);
+  DCHECK(init_cb);
+  DCHECK(config_cb);
+  DCHECK(new_buffers_cb);
+  DCHECK(encrypted_media_init_data_cb);
+  DCHECK(new_segment_cb);
+  DCHECK(end_of_segment_cb);
 
   ChangeState(kParsingBoxes);
   init_cb_ = std::move(init_cb);
@@ -560,7 +560,7 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
           return false;
       }
       video_config.Initialize(entry.video_codec, entry.video_codec_profile,
-                              PIXEL_FORMAT_I420, COLOR_SPACE_HD_REC709,
+                              PIXEL_FORMAT_I420, VideoColorSpace::REC709(),
                               CalculateRotation(track->header, moov_->header),
                               coded_size, visible_rect, natural_size,
                               // No decoder-specific buffer needed for AVC;
@@ -641,7 +641,7 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
 
   DVLOG(1) << "liveness: " << params.liveness;
 
-  if (!init_cb_.is_null()) {
+  if (init_cb_) {
     params.detected_audio_track_count = detected_audio_track_count;
     params.detected_video_track_count = detected_video_track_count;
     params.detected_text_track_count = detected_text_track_count;

@@ -47,7 +47,7 @@ class Value {
   ~Value();
 
   Value& operator=(const Value& other);
-  Value& operator=(Value&& other) = default;
+  Value& operator=(Value&& other) noexcept;
 
   Type type() const { return type_; }
 
@@ -113,23 +113,25 @@ class Value {
   // false and sets the error.
   bool VerifyTypeIs(Type t, Err* err) const;
 
-  // Compares values. Only the "value" is compared, not the origin.
+  // Compares values. Only the "value" is compared, not the origin. Scope
+  // values check only the contents of the current scope, and do not go to
+  // parent scopes.
   bool operator==(const Value& other) const;
   bool operator!=(const Value& other) const;
 
  private:
-  // This are a lot of objects associated with every Value that need
-  // initialization and tear down every time. It might be more efficient to
-  // create a union of objects (see small_map) and only use the one we care
-  // about.
-  Type type_;
-  std::string string_value_;
-  bool boolean_value_;
-  int64_t int_value_;
-  std::vector<Value> list_value_;
-  std::unique_ptr<Scope> scope_value_;
+  void Deallocate();
 
-  const ParseNode* origin_;
+  Type type_ = NONE;
+  const ParseNode* origin_ = nullptr;
+
+  union {
+    bool boolean_value_;
+    int64_t int_value_;
+    std::string string_value_;
+    std::vector<Value> list_value_;
+    std::unique_ptr<Scope> scope_value_;
+  };
 };
 
 #endif  // TOOLS_GN_VALUE_H_

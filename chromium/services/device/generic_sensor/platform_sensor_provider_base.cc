@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/stl_util.h"
 #include "services/device/public/mojom/sensor_provider.mojom.h"
 
@@ -15,7 +16,8 @@ namespace {
 
 const uint64_t kReadingBufferSize = sizeof(SensorReadingSharedBuffer);
 const uint64_t kSharedBufferSizeInBytes =
-    kReadingBufferSize * static_cast<uint64_t>(mojom::SensorType::LAST);
+    kReadingBufferSize *
+    (static_cast<uint64_t>(mojom::SensorType::kMaxValue) + 1);
 
 }  // namespace
 

@@ -5,6 +5,7 @@
 #ifndef SERVICES_AUDIO_LOOPBACK_STREAM_H_
 #define SERVICES_AUDIO_LOOPBACK_STREAM_H_
 
+#include <atomic>
 #include <map>
 #include <memory>
 #include <utility>
@@ -98,13 +99,6 @@ class LoopbackStream : public media::mojom::AudioInputStream,
   // than 1.0.
   static constexpr double kMaxVolume = 2.0;
 
-  // The amount of time in the past from which to capture the audio. The audio
-  // recorded from each LoopbackGroupMember is being generated with a target
-  // playout time in the near future (usually 1 to 20 ms). To avoid underflow,
-  // LoopbackStream fetches the audio from a position in the recent past.
-  static constexpr base::TimeDelta kCaptureDelay =
-      base::TimeDelta::FromMilliseconds(20);
-
  private:
   // Drives all audio flows, re-mixing the audio from multiple SnooperNodes into
   // a single audio stream. This class mainly operates on a separate task runner
@@ -159,6 +153,12 @@ class LoopbackStream : public media::mojom::AudioInputStream,
     // becomes stopped.
     void GenerateMoreAudio();
 
+    // TODO(crbug.com/888478): Remove this and all call points after diagnosis.
+    // This generates crash key strings exposing the current state of the flow
+    // network, and also ensures |mix_bus_| is valid, hasn't been corrupted, and
+    // that writing to its data arrays will not cause a page fault.
+    void HelpDiagnoseCauseOfLoopbackCrash(const char* event);
+
     const base::TickClock* clock_;
 
     // Task runner that calls GenerateMoreAudio() to drive all the audio data
@@ -194,12 +194,24 @@ class LoopbackStream : public media::mojom::AudioInputStream,
     int64_t frames_elapsed_ = 0;
     base::TimeTicks next_generate_time_;
 
+    // The amount of time in the past from which to capture the audio. The audio
+    // recorded from each SnooperNode input is being generated with a target
+    // playout time in the near future (usually 1 to 20 ms). To avoid underflow,
+    // audio is always fetched from a safe position in the recent past.
+    //
+    // This is updated to match the SnooperNode whose recording is most delayed.
+    base::TimeDelta capture_delay_;
+
     // Used to transfer the audio from each SnooperNode and mix them into a
     // single audio signal. |transfer_bus_| is only allocated when first needed,
     // but |mix_bus_| is allocated in the constructor because it is always
     // needed.
     std::unique_ptr<media::AudioBus> transfer_bus_;
     const std::unique_ptr<media::AudioBus> mix_bus_;
+
+    // TODO(crbug.com/888478): Remove these after diagnosis.
+    volatile uint32_t magic_bytes_;
+    static std::atomic<int> instance_count_;
 
     SEQUENCE_CHECKER(control_sequence_);
 

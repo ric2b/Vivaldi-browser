@@ -15,8 +15,8 @@
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
-#include "base/memory/linked_ptr.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -214,9 +214,9 @@ void VivaldiSessionService::BuildCommandsForTab(const SessionID& window_id,
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::TabHelper* extensions_tab_helper =
       extensions::TabHelper::FromWebContents(tab);
-  if (extensions_tab_helper->extension_app()) {
+  if (extensions_tab_helper->is_app()) {
     ScheduleCommand(sessions::CreateSetTabExtensionAppIDCommand(
-        session_id, extensions_tab_helper->extension_app()->id()));
+        session_id, extensions_tab_helper->GetAppId()));
   }
 #endif
   if (!tab->GetExtData().empty()) {
@@ -229,13 +229,13 @@ void VivaldiSessionService::BuildCommandsForTab(const SessionID& window_id,
         session_id, ua_override));
   }
   for (int i = min_index; i < max_index; ++i) {
-    const NavigationEntry* entry =
+    NavigationEntry* entry =
         (i == pending_index) ? tab->GetController().GetPendingEntry()
                              : tab->GetController().GetEntryAtIndex(i);
     DCHECK(entry);
     if (ShouldTrackURLForRestore(entry->GetVirtualURL())) {
       const SerializedNavigationEntry navigation =
-          ContentSerializedNavigationBuilder::FromNavigationEntry(i, *entry);
+          ContentSerializedNavigationBuilder::FromNavigationEntry(i, entry);
       ScheduleCommand(CreateUpdateTabNavigationCommand(session_id, navigation));
     }
   }
@@ -254,7 +254,8 @@ void VivaldiSessionService::BuildCommandsForTab(const SessionID& window_id,
       session_storage_namespace->id()));
 }
 
-void VivaldiSessionService::BuildCommandsForBrowser(Browser* browser) {
+void VivaldiSessionService::BuildCommandsForBrowser(Browser* browser,
+                                                    std::vector<int>* ids) {
   DCHECK(browser);
   DCHECK(browser->session_id().id());
 
@@ -277,8 +278,18 @@ void VivaldiSessionService::BuildCommandsForBrowser(Browser* browser) {
   for (int i = 0; i < tab_strip->count(); ++i) {
     content::WebContents* tab = tab_strip->GetWebContentsAt(i);
     DCHECK(tab);
-    BuildCommandsForTab(browser->session_id(), tab, i,
-                        tab_strip->IsTabPinned(i));
+    if (ids) {
+      int id = extensions::ExtensionTabUtil::GetTabId(tab);
+      for (unsigned i = 0; i < ids->size(); i++) {
+        if (ids->at(i) == id) {
+          BuildCommandsForTab(browser->session_id(), tab, i,
+                              tab_strip->IsTabPinned(i));
+        }
+      }
+    } else {
+      BuildCommandsForTab(browser->session_id(), tab, i,
+                         tab_strip->IsTabPinned(i));
+    }
   }
   ScheduleCommand(sessions::CreateSetSelectedTabInWindowCommand(
       browser->session_id(), browser->tab_strip_model()->active_index()));
@@ -332,7 +343,8 @@ void VivaldiSessionService::ShowBrowser(Browser* browser,
                                         int selected_tab_index) {
   DCHECK(browser);
   DCHECK(browser->tab_strip_model()->count());
-  browser->tab_strip_model()->ActivateTabAt(selected_tab_index, true);
+  browser->tab_strip_model()->ActivateTabAt(
+      selected_tab_index, {TabStripModel::GestureType::kOther});
 
   if (browser_ == browser)
     return;

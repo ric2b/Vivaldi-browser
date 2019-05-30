@@ -24,6 +24,8 @@
 #include "third_party/blink/renderer/core/css/style_property_serializer.h"
 
 #include <bitset>
+
+#include "base/stl_util.h"
 #include "third_party/blink/renderer/core/css/css_custom_property_declaration.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_markup.h"
@@ -872,11 +874,11 @@ String StylePropertySerializer::GetLayeredShorthandValue(
   // Begin by collecting the properties into a vector.
   HeapVector<Member<const CSSValue>> values(size);
   // If the below loop succeeds, there should always be at minimum 1 layer.
-  size_t num_layers = 1U;
+  wtf_size_t num_layers = 1U;
 
   // TODO(timloh): Shouldn't we fail if the lists are differently sized, with
   // the exception of background-color?
-  for (size_t i = 0; i < size; i++) {
+  for (unsigned i = 0; i < size; i++) {
     values[i] = property_set_.GetPropertyCSSValue(*shorthand.properties()[i]);
     if (values[i]->IsBaseValueList()) {
       const CSSValueList* value_list = ToCSSValueList(values[i]);
@@ -887,7 +889,7 @@ String StylePropertySerializer::GetLayeredShorthandValue(
   StringBuilder result;
 
   // Now stitch the properties together.
-  for (size_t layer = 0; layer < num_layers; layer++) {
+  for (wtf_size_t layer = 0; layer < num_layers; layer++) {
     StringBuilder layer_result;
     bool use_repeat_x_shorthand = false;
     bool use_repeat_y_shorthand = false;
@@ -1037,7 +1039,7 @@ String StylePropertySerializer::BorderPropertyValue(
     const StylePropertyShorthand& color) const {
   const StylePropertyShorthand properties[3] = {width, style, color};
   StringBuilder result;
-  for (size_t i = 0; i < arraysize(properties); ++i) {
+  for (size_t i = 0; i < base::size(properties); ++i) {
     String value = GetCommonValue(properties[i]);
     if (value.IsNull())
       return String();
@@ -1056,7 +1058,7 @@ String StylePropertySerializer::BorderImagePropertyValue() const {
       &GetCSSPropertyBorderImageSource(), &GetCSSPropertyBorderImageSlice(),
       &GetCSSPropertyBorderImageWidth(), &GetCSSPropertyBorderImageOutset(),
       &GetCSSPropertyBorderImageRepeat()};
-  size_t length = arraysize(properties);
+  size_t length = base::size(properties);
   for (size_t i = 0; i < length; ++i) {
     const CSSValue& value = *property_set_.GetPropertyCSSValue(*properties[i]);
     if (!result.IsEmpty())
@@ -1072,15 +1074,15 @@ static void AppendBackgroundRepeatValue(StringBuilder& builder,
                                         const CSSValue& repeat_xcss_value,
                                         const CSSValue& repeat_ycss_value) {
   // FIXME: Ensure initial values do not appear in CSS_VALUE_LISTS.
-  DEFINE_STATIC_LOCAL(CSSIdentifierValue, initial_repeat_value,
+  DEFINE_STATIC_LOCAL(Persistent<CSSIdentifierValue>, initial_repeat_value,
                       (CSSIdentifierValue::Create(CSSValueRepeat)));
   const CSSIdentifierValue& repeat_x =
       repeat_xcss_value.IsInitialValue()
-          ? initial_repeat_value
+          ? *initial_repeat_value
           : ToCSSIdentifierValue(repeat_xcss_value);
   const CSSIdentifierValue& repeat_y =
       repeat_ycss_value.IsInitialValue()
-          ? initial_repeat_value
+          ? *initial_repeat_value
           : ToCSSIdentifierValue(repeat_ycss_value);
   CSSValueID repeat_x_value_id = repeat_x.GetValueID();
   CSSValueID repeat_y_value_id = repeat_y.GetValueID();

@@ -71,7 +71,8 @@ DialogOverlayImpl::DialogOverlayImpl(const JavaParamRef<jobject>& obj,
                                      bool power_efficient)
     : WebContentsObserver(web_contents),
       rfhi_(rfhi),
-      power_efficient_(power_efficient) {
+      power_efficient_(power_efficient),
+      observed_window_android_(false) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(rfhi_);
 
@@ -105,9 +106,11 @@ void DialogOverlayImpl::CompleteInit(JNIEnv* env,
   // Send the initial token, if there is one.  The observer will notify us about
   // changes only.
   if (auto* window = web_contents()->GetNativeView()->GetWindowAndroid()) {
+    RegisterWindowObserverIfNeeded(window);
     ScopedJavaLocalRef<jobject> token = window->GetWindowToken();
-    if (!token.is_null())
+    if (!token.is_null()) {
       Java_DialogOverlayImpl_onWindowToken(env, obj, token);
+    }
     // else we will send one if we get a callback from ViewAndroid.
   }
 }
@@ -117,7 +120,7 @@ DialogOverlayImpl::~DialogOverlayImpl() {
 }
 
 void DialogOverlayImpl::Stop() {
-  UnregisterForTokensIfNeeded();
+  UnregisterCallbacksIfNeeded();
 
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = obj_.get(env);
@@ -129,7 +132,7 @@ void DialogOverlayImpl::Stop() {
 
 void DialogOverlayImpl::Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  UnregisterForTokensIfNeeded();
+  UnregisterCallbacksIfNeeded();
   // We delete soon since this might be part of an onDismissed callback.
   BrowserThread::DeleteSoon(BrowserThread::UI, FROM_HERE, this);
 }
@@ -145,7 +148,7 @@ void DialogOverlayImpl::GetCompositorOffset(
                                                  point.y());
 }
 
-void DialogOverlayImpl::UnregisterForTokensIfNeeded() {
+void DialogOverlayImpl::UnregisterCallbacksIfNeeded() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (!rfhi_)
@@ -157,7 +160,12 @@ void DialogOverlayImpl::UnregisterForTokensIfNeeded() {
   WebContentsDelegate* delegate = web_contents()->GetDelegate();
   if (delegate)
     delegate->SetOverlayMode(false);
-
+  if (observed_window_android_) {
+    auto* window_android = web_contents()->GetNativeView()->GetWindowAndroid();
+    if (window_android)
+      window_android->RemoveObserver(this);
+    observed_window_android_ = false;
+  }
   web_contents()->GetNativeView()->RemoveObserver(this);
   rfhi_ = nullptr;
 }
@@ -187,6 +195,11 @@ void DialogOverlayImpl::OnVisibilityChanged(content::Visibility visibility) {
     Stop();
 }
 
+void DialogOverlayImpl::OnRootWindowVisibilityChanged(bool visible) {
+  if (!visible)
+    Stop();
+}
+
 void DialogOverlayImpl::WebContentsDestroyed() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   Stop();
@@ -213,9 +226,10 @@ void DialogOverlayImpl::OnAttachedToWindow() {
 
   ScopedJavaLocalRef<jobject> token;
 
-  if (auto* window = web_contents()->GetNativeView()->GetWindowAndroid())
+  if (auto* window = web_contents()->GetNativeView()->GetWindowAndroid()) {
+    RegisterWindowObserverIfNeeded(window);
     token = window->GetWindowToken();
-
+  }
   ScopedJavaLocalRef<jobject> obj = obj_.get(env);
   if (!obj.is_null())
     Java_DialogOverlayImpl_onWindowToken(env, obj, token);
@@ -226,11 +240,19 @@ void DialogOverlayImpl::OnDetachedFromWindow() {
   ScopedJavaLocalRef<jobject> obj = obj_.get(env);
   if (!obj.is_null())
     Java_DialogOverlayImpl_onWindowToken(env, obj, nullptr);
+  Stop();
+}
+
+void DialogOverlayImpl::RegisterWindowObserverIfNeeded(
+    ui::WindowAndroid* window) {
+  if (!observed_window_android_) {
+    observed_window_android_ = true;
+    window->AddObserver(this);
+  }
 }
 
 static jint JNI_DialogOverlayImpl_RegisterSurface(
     JNIEnv* env,
-    const base::android::JavaParamRef<jclass>& jcaller,
     const JavaParamRef<jobject>& surface) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return gpu::GpuSurfaceTracker::Get()->AddSurfaceForNativeWidget(
@@ -240,7 +262,6 @@ static jint JNI_DialogOverlayImpl_RegisterSurface(
 
 static void JNI_DialogOverlayImpl_UnregisterSurface(
     JNIEnv* env,
-    const base::android::JavaParamRef<jclass>& jcaller,
     jint surface_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   gpu::GpuSurfaceTracker::Get()->RemoveSurface(surface_id);
@@ -249,7 +270,6 @@ static void JNI_DialogOverlayImpl_UnregisterSurface(
 static ScopedJavaLocalRef<jobject>
 JNI_DialogOverlayImpl_LookupSurfaceForTesting(
     JNIEnv* env,
-    const base::android::JavaParamRef<jclass>& jcaller,
     jint surfaceId) {
   gl::ScopedJavaSurface surface =
       gpu::GpuSurfaceTracker::Get()->AcquireJavaSurface(surfaceId);

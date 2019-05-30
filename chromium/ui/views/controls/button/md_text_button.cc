@@ -7,7 +7,6 @@
 #include "base/i18n/case_conversion.h"
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
@@ -18,7 +17,6 @@
 #include "ui/views/animation/ink_drop_painted_layer_delegates.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
-#include "ui/views/controls/button/blue_button.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/painter.h"
@@ -77,10 +75,15 @@ void MdTextButton::set_corner_radius(float radius) {
 void MdTextButton::OnPaintBackground(gfx::Canvas* canvas) {
   LabelButton::OnPaintBackground(canvas);
   if (hover_animation().is_animating() || state() == STATE_HOVERED) {
-    const int kHoverAlpha = is_prominent_ ? 0x0c : 0x05;
-    SkScalar alpha = hover_animation().CurrentValueBetween(0, kHoverAlpha);
+    bool is_dark_mode = GetNativeTheme()->SystemDarkModeEnabled();
+    int hover_alpha = is_prominent_ ? 0x0C : 0x05;
+    if (is_dark_mode)
+      hover_alpha = 0x0A;
+    const SkColor hover_color =
+        is_dark_mode && !is_prominent_ ? gfx::kGoogleBlue300 : SK_ColorBLACK;
+    SkScalar alpha = hover_animation().CurrentValueBetween(0, hover_alpha);
     cc::PaintFlags flags;
-    flags.setColor(SkColorSetA(SK_ColorBLACK, alpha));
+    flags.setColor(SkColorSetA(hover_color, alpha));
     flags.setStyle(cc::PaintFlags::kFill_Style);
     flags.setAntiAlias(true);
     canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()), corner_radius_, flags);
@@ -96,37 +99,38 @@ SkColor MdTextButton::GetInkDropBaseColor() const {
   return color_utils::DeriveDefaultIconColor(label()->enabled_color());
 }
 
-std::unique_ptr<InkDrop> MdTextButton::CreateInkDrop() {
-  return CreateDefaultFloodFillInkDropImpl();
-}
-
-std::unique_ptr<views::InkDropRipple> MdTextButton::CreateInkDropRipple()
-    const {
-  return std::unique_ptr<views::InkDropRipple>(
-      new views::FloodFillInkDropRipple(
-          size(), GetInkDropCenterBasedOnLastEvent(), GetInkDropBaseColor(),
-          ink_drop_visible_opacity()));
-}
-
 void MdTextButton::StateChanged(ButtonState old_state) {
   LabelButton::StateChanged(old_state);
   UpdateColors();
 }
 
+void MdTextButton::OnFocus() {
+  LabelButton::OnFocus();
+  UpdateColors();
+}
+
+void MdTextButton::OnBlur() {
+  LabelButton::OnBlur();
+  UpdateColors();
+}
+
 std::unique_ptr<views::InkDropHighlight> MdTextButton::CreateInkDropHighlight()
     const {
+  bool is_dark_mode = GetNativeTheme()->SystemDarkModeEnabled();
   // The prominent button hover effect is a shadow.
   const int kYOffset = 1;
   const int kSkiaBlurRadius = 2;
   const int shadow_alpha = is_prominent_ ? 0x3D : 0x1A;
+  const SkColor shadow_color =
+      is_dark_mode && is_prominent_ ? gfx::kGoogleBlue300 : SK_ColorBLACK;
   std::vector<gfx::ShadowValue> shadows;
   // The notion of blur that gfx::ShadowValue uses is twice the Skia/CSS value.
   // Skia counts the number of pixels outside the mask area whereas
   // gfx::ShadowValue counts together the number of pixels inside and outside
   // the mask bounds.
-  shadows.push_back(gfx::ShadowValue(gfx::Vector2d(0, kYOffset),
-                                     2 * kSkiaBlurRadius,
-                                     SkColorSetA(SK_ColorBLACK, shadow_alpha)));
+  shadows.push_back(gfx::ShadowValue(
+      gfx::Vector2d(0, kYOffset), 2 * kSkiaBlurRadius,
+      SkColorSetA(shadow_color, is_dark_mode ? 0x7F : shadow_alpha)));
   const SkColor fill_color =
       SkColorSetA(SK_ColorWHITE, is_prominent_ ? 0x0D : 0x05);
   return std::make_unique<InkDropHighlight>(
@@ -161,7 +165,6 @@ MdTextButton::MdTextButton(ButtonListener* listener, int button_context)
   const int minimum_width = LayoutProvider::Get()->GetDistanceMetric(
       DISTANCE_DIALOG_BUTTON_MINIMUM_WIDTH);
   SetMinSize(gfx::Size(minimum_width, 0));
-  SetFocusPainter(nullptr);
   SetInstallFocusRingOnFocus(true);
   label()->SetAutoColorReadabilityEnabled(false);
   set_request_focus_on_press(false);
@@ -197,12 +200,9 @@ void MdTextButton::UpdatePadding() {
       style::GetFont(style::CONTEXT_BUTTON_MD, style::STYLE_PRIMARY)
           .GetFontSize();
   // TODO(tapted): This should get |target_height| using LayoutProvider::
-  // GetControlHeightForFont(). It can't because that only returns a correct
-  // result with --secondary-ui-md, and MdTextButtons appear in top chrome
-  // without that.
-  const int base_height =
-      ui::MaterialDesignController::IsNewerMaterialUi() ? 32 : 28;
-  int target_height = std::max(base_height + size_delta * 2,
+  // GetControlHeightForFont().
+  constexpr int kBaseHeight = 32;
+  int target_height = std::max(kBaseHeight + size_delta * 2,
                                label()->font_list().GetFontSize() * 2);
 
   int label_height = label()->GetPreferredSize().height();
@@ -227,11 +227,11 @@ void MdTextButton::UpdateColors() {
   if (!explicitly_set_normal_color()) {
     const auto colors = explicitly_set_colors();
     LabelButton::SetEnabledTextColors(enabled_text_color);
-    // Non-prominent, disabled buttons need the disabled color explicitly set.
+    // Disabled buttons need the disabled color explicitly set.
     // This ensures that label()->enabled_color() returns the correct color as
     // the basis for calculating the stroke color. enabled_text_color isn't used
     // since a descendant could have overridden the label enabled color.
-    if (is_disabled && !is_prominent_) {
+    if (is_disabled) {
       LabelButton::SetTextColor(STATE_DISABLED,
                                 style::GetColor(*this, label()->text_context(),
                                                 style::STYLE_DISABLED));
@@ -239,13 +239,7 @@ void MdTextButton::UpdateColors() {
     set_explicitly_set_colors(colors);
   }
 
-  // Prominent buttons keep their enabled text color; disabled state is conveyed
-  // by shading the background instead.
-  if (is_prominent_)
-    SetTextColor(STATE_DISABLED, enabled_text_color);
-
   ui::NativeTheme* theme = GetNativeTheme();
-  SkColor text_color = label()->enabled_color();
   SkColor bg_color =
       theme->GetSystemColor(ui::NativeTheme::kColorId_DialogBackground);
 
@@ -253,10 +247,11 @@ void MdTextButton::UpdateColors() {
     bg_color = *bg_color_override_;
   } else if (is_prominent_) {
     bg_color = theme->GetSystemColor(
-        ui::NativeTheme::kColorId_ProminentButtonColor);
+        HasFocus() ? ui::NativeTheme::kColorId_ProminentButtonFocusedColor
+                   : ui::NativeTheme::kColorId_ProminentButtonColor);
     if (is_disabled) {
-      bg_color = color_utils::BlendTowardOppositeLuma(
-          bg_color, gfx::kDisabledControlAlpha);
+      bg_color = theme->GetSystemColor(
+          ui::NativeTheme::kColorId_ProminentButtonDisabledColor);
     }
   }
 
@@ -270,25 +265,11 @@ void MdTextButton::UpdateColors() {
   if (is_prominent_) {
     stroke_color = SK_ColorTRANSPARENT;
   } else {
-    int stroke_alpha;
-    if (is_disabled) {
-      // Disabled, non-prominent buttons need a lighter stroke. This alpha
-      // value will take the disabled button colors, a1a192 @ 1.0 alpha for
-      // non-Harmony, 9e9e9e @ 1.0 alpha for Harmony and turn it into
-      // e6e6e6 @ 1.0 alpha (or very close to it) or an effective 000000 @ 0.1
-      // alpha for the stroke color. The same alpha value will work with both
-      // Harmony and non-Harmony colors.
-      stroke_alpha = 0x43;
-    } else {
-      // These alpha values will take the enabled button colors, 757575 @ 1.0
-      // alpha turn it into an effective b2b2b2 @ 1.0 alpha or 000000 @ 0.3 for
-      // the stroke_color.
-      stroke_alpha = 0x8f;
-    }
-    stroke_color = SkColorSetA(text_color, stroke_alpha);
+    stroke_color = SkColorSetA(
+        theme->GetSystemColor(ui::NativeTheme::kColorId_ButtonBorderColor),
+        is_disabled ? 0x43 : SK_AlphaOPAQUE);
   }
 
-  DCHECK_EQ(SK_AlphaOPAQUE, static_cast<int>(SkColorGetA(bg_color)));
   SetBackground(
       CreateBackgroundFromPainter(Painter::CreateRoundRectWith1PxBorderPainter(
           bg_color, stroke_color, corner_radius_)));

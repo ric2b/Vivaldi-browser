@@ -4,11 +4,13 @@
 
 #include "net/proxy_resolution/pac_file_fetcher_impl.h"
 
+#include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/data_url.h"
@@ -52,12 +54,23 @@ bool IsPacMimeType(const std::string& mime_type) {
   static const char* const kSupportedPacMimeTypes[] = {
       "application/x-ns-proxy-autoconfig", "application/x-javascript-config",
   };
-  for (size_t i = 0; i < arraysize(kSupportedPacMimeTypes); ++i) {
+  for (size_t i = 0; i < base::size(kSupportedPacMimeTypes); ++i) {
     if (base::LowerCaseEqualsASCII(mime_type, kSupportedPacMimeTypes[i]))
       return true;
   }
   return false;
 }
+
+struct BomMapping {
+  base::StringPiece prefix;
+  const char* charset;
+};
+
+const BomMapping kBomMappings[] = {
+    {"\xFE\xFF", "utf-16be"},
+    {"\xFF\xFE", "utf-16le"},
+    {"\xEF\xBB\xBF", "utf-8"},
+};
 
 // Converts |bytes| (which is encoded by |charset|) to UTF16, saving the resul
 // to |*utf16|.
@@ -65,19 +78,27 @@ bool IsPacMimeType(const std::string& mime_type) {
 void ConvertResponseToUTF16(const std::string& charset,
                             const std::string& bytes,
                             base::string16* utf16) {
-  const char* codepage;
-
   if (charset.empty()) {
-    // Assume ISO-8859-1 if no charset was specified.
-    codepage = kCharsetLatin1;
-  } else {
-    // Otherwise trust the charset that was provided.
-    codepage = charset.c_str();
+    // Guess the charset by looking at the BOM.
+    base::StringPiece bytes_str(bytes);
+    for (const auto& bom : kBomMappings) {
+      if (bytes_str.starts_with(bom.prefix)) {
+        return ConvertResponseToUTF16(
+            bom.charset,
+            // Strip the BOM in the converted response.
+            bytes.substr(bom.prefix.size()), utf16);
+      }
+    }
+
+    // Otherwise assume ISO-8859-1 if no charset was specified.
+    return ConvertResponseToUTF16(kCharsetLatin1, bytes, utf16);
   }
+
+  DCHECK(!charset.empty());
 
   // Be generous in the conversion -- if any characters lie outside of |charset|
   // (i.e. invalid), then substitute them with U+FFFD rather than failing.
-  ConvertToUTF16WithSubstitutions(bytes, codepage, utf16);
+  ConvertToUTF16WithSubstitutions(bytes, charset.c_str(), utf16);
 }
 
 }  // namespace
@@ -185,8 +206,8 @@ int PacFileFetcherImpl::Fetch(
 
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&PacFileFetcherImpl::OnTimeout, weak_factory_.GetWeakPtr(),
-                 cur_request_id_),
+      base::BindOnce(&PacFileFetcherImpl::OnTimeout, weak_factory_.GetWeakPtr(),
+                     cur_request_id_),
       max_duration_);
 
   // Start the request.

@@ -68,6 +68,7 @@ class TargetGenerator {
   bool FillDependentConfigs();  // Includes all types of dependent configs.
   bool FillData();
   bool FillDependencies();  // Includes data dependencies.
+  bool FillMetadata();
   bool FillTestonly();
   bool FillAssertNoDeps();
   bool FillWriteRuntimeDeps();

@@ -26,18 +26,21 @@
 namespace blink {
 
 inline SVGCircleElement::SVGCircleElement(Document& document)
-    : SVGGeometryElement(SVGNames::circleTag, document),
+    : SVGGeometryElement(svg_names::kCircleTag, document),
       cx_(SVGAnimatedLength::Create(this,
-                                    SVGNames::cxAttr,
-                                    SVGLength::Create(SVGLengthMode::kWidth),
+                                    svg_names::kCxAttr,
+                                    SVGLengthMode::kWidth,
+                                    SVGLength::Initial::kUnitlessZero,
                                     CSSPropertyCx)),
       cy_(SVGAnimatedLength::Create(this,
-                                    SVGNames::cyAttr,
-                                    SVGLength::Create(SVGLengthMode::kHeight),
+                                    svg_names::kCyAttr,
+                                    SVGLengthMode::kHeight,
+                                    SVGLength::Initial::kUnitlessZero,
                                     CSSPropertyCy)),
       r_(SVGAnimatedLength::Create(this,
-                                   SVGNames::rAttr,
-                                   SVGLength::Create(SVGLengthMode::kOther),
+                                   svg_names::kRAttr,
+                                   SVGLengthMode::kOther,
+                                   SVGLength::Initial::kUnitlessZero,
                                    CSSPropertyR)) {
   AddToPropertyMap(cx_);
   AddToPropertyMap(cy_);
@@ -93,8 +96,8 @@ void SVGCircleElement::CollectStyleForPresentationAttribute(
 }
 
 void SVGCircleElement::SvgAttributeChanged(const QualifiedName& attr_name) {
-  if (attr_name == SVGNames::rAttr || attr_name == SVGNames::cxAttr ||
-      attr_name == SVGNames::cyAttr) {
+  if (attr_name == svg_names::kRAttr || attr_name == svg_names::kCxAttr ||
+      attr_name == svg_names::kCyAttr) {
     UpdateRelativeLengthsInformation();
     GeometryPresentationAttributeChanged(attr_name);
     return;

@@ -7,13 +7,25 @@
 #include <vector>
 
 #include "ui/accessibility/ax_action_data.h"
+#include "ui/accessibility/ax_node_data.h"
+#include "ui/accessibility/ax_tree_data.h"
 #include "ui/accessibility/platform/ax_unique_id.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/transform.h"
 #include "ui/views/accessibility/ax_aura_obj_cache.h"
 #include "ui/views/accessibility/ax_aura_obj_wrapper.h"
+#include "ui/views/accessibility/ax_virtual_view.h"
 
 namespace views {
+
+AXTreeSourceViews::AXTreeSourceViews(AXAuraObjWrapper* root,
+                                     const ui::AXTreeID& tree_id)
+    : root_(root), tree_id_(tree_id) {
+  DCHECK(root_);
+  DCHECK_NE(tree_id_, ui::AXTreeIDUnknown());
+}
+
+AXTreeSourceViews::~AXTreeSourceViews() = default;
 
 void AXTreeSourceViews::HandleAccessibleAction(const ui::AXActionData& action) {
   int id = action.target_node_id;
@@ -34,24 +46,36 @@ void AXTreeSourceViews::HandleAccessibleAction(const ui::AXActionData& action) {
 }
 
 bool AXTreeSourceViews::GetTreeData(ui::AXTreeData* tree_data) const {
+  tree_data->tree_id = tree_id_;
   tree_data->loaded = true;
   tree_data->loading_progress = 1.0;
   AXAuraObjWrapper* focus = AXAuraObjCache::GetInstance()->GetFocus();
   if (focus)
-    tree_data->focus_id = focus->GetUniqueId().Get();
+    tree_data->focus_id = focus->GetUniqueId();
   return true;
+}
+
+AXAuraObjWrapper* AXTreeSourceViews::GetRoot() const {
+  return root_;
 }
 
 AXAuraObjWrapper* AXTreeSourceViews::GetFromId(int32_t id) const {
   AXAuraObjWrapper* root = GetRoot();
   // Root might not be in the cache.
-  if (id == root->GetUniqueId().Get())
+  if (id == root->GetUniqueId())
     return root;
-  return AXAuraObjCache::GetInstance()->Get(id);
+  AXAuraObjWrapper* wrapper = AXAuraObjCache::GetInstance()->Get(id);
+
+  // We must do a lookup in AXVirtualView as well if the main cache doesn't hold
+  // this node.
+  if (!wrapper && AXVirtualView::GetFromId(id))
+    return AXVirtualView::GetFromId(id)->GetWrapper();
+
+  return wrapper;
 }
 
 int32_t AXTreeSourceViews::GetId(AXAuraObjWrapper* node) const {
-  return node->GetUniqueId().Get();
+  return node->GetUniqueId();
 }
 
 void AXTreeSourceViews::GetChildren(
@@ -89,6 +113,12 @@ void AXTreeSourceViews::SerializeNode(AXAuraObjWrapper* node,
                                       ui::AXNodeData* out_data) const {
   node->Serialize(out_data);
 
+  if (out_data->role == ax::mojom::Role::kWindow ||
+      out_data->role == ax::mojom::Role::kDialog) {
+    // Add clips children flag by default to these roles.
+    out_data->AddBoolAttribute(ax::mojom::BoolAttribute::kClipsChildren, true);
+  }
+
   // Converts the global coordinates reported by each AXAuraObjWrapper
   // into parent-relative coordinates to be used in the accessibility
   // tree. That way when any Window, Widget, or View moves (and fires
@@ -99,8 +129,9 @@ void AXTreeSourceViews::SerializeNode(AXAuraObjWrapper* node,
     return;
   ui::AXNodeData parent_data;
   parent->Serialize(&parent_data);
-  out_data->location.Offset(-parent_data.location.OffsetFromOrigin());
-  out_data->offset_container_id = parent->GetUniqueId().Get();
+  out_data->relative_bounds.bounds.Offset(
+      -parent_data.relative_bounds.bounds.OffsetFromOrigin());
+  out_data->relative_bounds.offset_container_id = parent->GetUniqueId();
 }
 
 std::string AXTreeSourceViews::ToString(AXAuraObjWrapper* root,
@@ -118,9 +149,5 @@ std::string AXTreeSourceViews::ToString(AXAuraObjWrapper* root,
 
   return output;
 }
-
-AXTreeSourceViews::AXTreeSourceViews() = default;
-
-AXTreeSourceViews::~AXTreeSourceViews() = default;
 
 }  // namespace views

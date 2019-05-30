@@ -7,23 +7,25 @@
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/ui/app_list/app_context_menu.h"
+#include "chrome/browser/ui/app_list/app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/internal_app/internal_app_metadata.h"
 #include "ui/base/l10n/l10n_util.h"
-
-namespace {
-
-void RecordActiveHistogram(app_list::InternalAppName name) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "Apps.AppListInternalApp.Activate", name);
-}
-
-}  // namespace
 
 // static
 const char InternalAppItem::kItemType[] = "InternalAppItem";
 
+// TODO(crbug.com/826982): move UMA_HISTOGRAM_ENUMERATION code to
+// built_in_chromeos_apps.cc when the AppService feature is enabled by default.
+
+// static
+void InternalAppItem::RecordActiveHistogram(const std::string& app_id) {
+  app_list::InternalAppName name = app_list::GetInternalAppNameByAppId(app_id);
+  UMA_HISTOGRAM_ENUMERATION("Apps.AppListInternalApp.Activate", name);
+}
+
 InternalAppItem::InternalAppItem(
     Profile* profile,
+    AppListModelUpdater* model_updater,
     const app_list::AppListSyncableService::SyncItem* sync_item,
     const app_list::InternalApp& internal_app)
     : ChromeAppListItem(profile, internal_app.app_id) {
@@ -34,7 +36,10 @@ InternalAppItem::InternalAppItem(
   if (sync_item && sync_item->item_ordinal.IsValid())
     UpdateFromSync(sync_item);
   else
-    SetDefaultPositionIfApplicable();
+    SetDefaultPositionIfApplicable(model_updater);
+
+  // Set model updater last to avoid being called during construction.
+  set_model_updater(model_updater);
 }
 
 InternalAppItem::~InternalAppItem() = default;
@@ -44,7 +49,7 @@ const char* InternalAppItem::GetItemType() const {
 }
 
 void InternalAppItem::Activate(int event_flags) {
-  RecordActiveHistogram(app_list::GetInternalAppNameByAppId(id()));
+  RecordActiveHistogram(id());
   app_list::OpenInternalApp(id(), profile(), event_flags);
 }
 

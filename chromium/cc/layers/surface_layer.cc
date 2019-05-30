@@ -34,19 +34,20 @@ SurfaceLayer::~SurfaceLayer() {
   DCHECK(!layer_tree_host());
 }
 
-void SurfaceLayer::SetPrimarySurfaceId(const viz::SurfaceId& surface_id,
-                                       const DeadlinePolicy& deadline_policy) {
+void SurfaceLayer::SetSurfaceId(const viz::SurfaceId& surface_id,
+                                const DeadlinePolicy& deadline_policy) {
   if (surface_range_.end() == surface_id &&
       deadline_policy.use_existing_deadline()) {
     return;
   }
-
-  TRACE_EVENT_WITH_FLOW2(
-      TRACE_DISABLED_BY_DEFAULT("viz.surface_id_flow"),
-      "LocalSurfaceId.Embed.Flow",
-      TRACE_ID_GLOBAL(surface_id.local_surface_id().embed_trace_id()),
-      TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "step",
-      "SetPrimarySurfaceId", "surface_id", surface_id.ToString());
+  if (surface_id.local_surface_id().is_valid()) {
+    TRACE_EVENT_WITH_FLOW2(
+        TRACE_DISABLED_BY_DEFAULT("viz.surface_id_flow"),
+        "LocalSurfaceId.Embed.Flow",
+        TRACE_ID_GLOBAL(surface_id.local_surface_id().embed_trace_id()),
+        TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "step",
+        "SetSurfaceId", "surface_id", surface_id.ToString());
+  }
 
   if (layer_tree_host() && surface_range_.IsValid())
     layer_tree_host()->RemoveSurfaceRange(surface_range_);
@@ -67,7 +68,11 @@ void SurfaceLayer::SetPrimarySurfaceId(const viz::SurfaceId& surface_id,
   SetNeedsCommit();
 }
 
-void SurfaceLayer::SetFallbackSurfaceId(const viz::SurfaceId& surface_id) {
+void SurfaceLayer::SetOldestAcceptableFallback(
+    const viz::SurfaceId& surface_id) {
+  // The fallback should never move backwards.
+  DCHECK(!surface_range_.start() ||
+         !surface_range_.start()->IsNewerThan(surface_id));
   if (surface_range_.start() == surface_id)
     return;
   TRACE_EVENT_WITH_FLOW2(
@@ -75,7 +80,7 @@ void SurfaceLayer::SetFallbackSurfaceId(const viz::SurfaceId& surface_id) {
       "LocalSurfaceId.Submission.Flow",
       TRACE_ID_GLOBAL(surface_id.local_surface_id().submission_trace_id()),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "step",
-      "SetFallbackSurfaceId", "surface_id", surface_id.ToString());
+      "SetOldestAcceptableFallback", "surface_id", surface_id.ToString());
 
   if (layer_tree_host() && surface_range_.IsValid())
     layer_tree_host()->RemoveSurfaceRange(surface_range_);
@@ -103,7 +108,16 @@ void SurfaceLayer::SetSurfaceHitTestable(bool surface_hit_testable) {
   if (surface_hit_testable_ == surface_hit_testable)
     return;
   surface_hit_testable_ = surface_hit_testable;
+}
+
+void SurfaceLayer::SetHasPointerEventsNone(bool has_pointer_events_none) {
+  if (has_pointer_events_none_ == has_pointer_events_none)
+    return;
+  has_pointer_events_none_ = has_pointer_events_none;
   SetNeedsPushProperties();
+  // Change of pointer-events property triggers an update of viz hit test data,
+  // we need to commit in order to submit the new data with compositor frame.
+  SetNeedsCommit();
 }
 
 void SurfaceLayer::SetMayContainVideo(bool may_contain_video) {
@@ -140,11 +154,12 @@ void SurfaceLayer::PushPropertiesTo(LayerImpl* layer) {
   TRACE_EVENT0("cc", "SurfaceLayer::PushPropertiesTo");
   SurfaceLayerImpl* layer_impl = static_cast<SurfaceLayerImpl*>(layer);
   layer_impl->SetRange(surface_range_, std::move(deadline_in_frames_));
-  // Unless the client explicitly calls SetPrimarySurfaceId again after this
+  // Unless the client explicitly calls SetSurfaceId again after this
   // commit, don't block on |surface_range_| again.
   deadline_in_frames_ = 0u;
   layer_impl->SetStretchContentToFillBounds(stretch_content_to_fill_bounds_);
   layer_impl->SetSurfaceHitTestable(surface_hit_testable_);
+  layer_impl->SetHasPointerEventsNone(has_pointer_events_none_);
 }
 
 }  // namespace cc

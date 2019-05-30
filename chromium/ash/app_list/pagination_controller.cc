@@ -4,8 +4,8 @@
 
 #include "ash/app_list/pagination_controller.h"
 
+#include "ash/app_list/app_list_metrics.h"
 #include "ash/app_list/pagination_model.h"
-#include "ash/public/cpp/app_list/app_list_constants.h"
 #include "base/metrics/histogram_macros.h"
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/rect.h"
@@ -68,13 +68,8 @@ bool PaginationController::OnGestureEvent(const ui::GestureEvent& event,
       float scroll = scroll_axis_ == SCROLL_AXIS_HORIZONTAL
                          ? details.scroll_x_hint()
                          : details.scroll_y_hint();
-      if (scroll == 0 ||
-          !pagination_model_->IsValidPageRelative(scroll < 0 ? 1 : -1)) {
-        // scroll > 0 means moving contents right or down. That is,
-        // transitioning to the previous page. If scrolling to an invalid page,
-        // do not handle this event.
+      if (scroll == 0)
         return false;
-      }
       pagination_model_->StartScroll();
       return true;
     }
@@ -82,6 +77,13 @@ bool PaginationController::OnGestureEvent(const ui::GestureEvent& event,
       float scroll = scroll_axis_ == SCROLL_AXIS_HORIZONTAL
                          ? details.scroll_x()
                          : details.scroll_y();
+      if (!pagination_model_->IsValidPageRelative(scroll < 0 ? 1 : -1) &&
+          !pagination_model_->has_transition()) {
+        // scroll > 0 means moving contents right or down. That is,
+        // transitioning to the previous page. If scrolling to an invalid page,
+        // ignore the event until movement continues in a valid direction.
+        return true;
+      }
       int width = scroll_axis_ == SCROLL_AXIS_HORIZONTAL ? bounds.width()
                                                          : bounds.height();
       pagination_model_->UpdateScroll(scroll / width);

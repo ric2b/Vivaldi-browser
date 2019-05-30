@@ -23,6 +23,7 @@
 
 #include "gtest/gtest.h"
 #include "absl/base/internal/cycleclock.h"
+#include "absl/hash/hash_testing.h"
 #include "absl/meta/type_traits.h"
 
 #if defined(_MSC_VER) && _MSC_VER == 1900
@@ -50,7 +51,7 @@ template <typename T>
 class Uint128FloatTraitsTest : public ::testing::Test {};
 typedef ::testing::Types<float, double, long double> FloatingPointTypes;
 
-TYPED_TEST_CASE(Uint128IntegerTraitsTest, IntegerTypes);
+TYPED_TEST_SUITE(Uint128IntegerTraitsTest, IntegerTypes);
 
 TYPED_TEST(Uint128IntegerTraitsTest, ConstructAssignTest) {
   static_assert(std::is_constructible<absl::uint128, TypeParam>::value,
@@ -61,7 +62,7 @@ TYPED_TEST(Uint128IntegerTraitsTest, ConstructAssignTest) {
                 "TypeParam must not be assignable from absl::uint128");
 }
 
-TYPED_TEST_CASE(Uint128FloatTraitsTest, FloatingPointTypes);
+TYPED_TEST_SUITE(Uint128FloatTraitsTest, FloatingPointTypes);
 
 TYPED_TEST(Uint128FloatTraitsTest, ConstructAssignTest) {
   static_assert(std::is_constructible<absl::uint128, TypeParam>::value,
@@ -437,6 +438,31 @@ TEST(Uint128, NumericLimitsTest) {
   EXPECT_EQ(0, std::numeric_limits<absl::uint128>::min());
   EXPECT_EQ(0, std::numeric_limits<absl::uint128>::lowest());
   EXPECT_EQ(absl::Uint128Max(), std::numeric_limits<absl::uint128>::max());
+}
+
+TEST(Uint128, Hash) {
+  EXPECT_TRUE(absl::VerifyTypeImplementsAbslHashCorrectly({
+      // Some simple values
+      absl::uint128{0},
+      absl::uint128{1},
+      ~absl::uint128{},
+      // 64 bit limits
+      absl::uint128{std::numeric_limits<int64_t>::max()},
+      absl::uint128{std::numeric_limits<uint64_t>::max()} + 0,
+      absl::uint128{std::numeric_limits<uint64_t>::max()} + 1,
+      absl::uint128{std::numeric_limits<uint64_t>::max()} + 2,
+      // Keeping high same
+      absl::uint128{1} << 62,
+      absl::uint128{1} << 63,
+      // Keeping low same
+      absl::uint128{1} << 64,
+      absl::uint128{1} << 65,
+      // 128 bit limits
+      std::numeric_limits<absl::uint128>::max(),
+      std::numeric_limits<absl::uint128>::max() - 1,
+      std::numeric_limits<absl::uint128>::min() + 1,
+      std::numeric_limits<absl::uint128>::min(),
+  }));
 }
 
 }  // namespace

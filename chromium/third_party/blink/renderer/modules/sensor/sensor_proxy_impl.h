@@ -9,6 +9,7 @@
 
 #include "mojo/public/cpp/bindings/binding.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
@@ -20,7 +21,6 @@ class SensorProviderProxy;
 class SensorProxyImpl final : public SensorProxy,
                               public device::mojom::blink::SensorClient {
   USING_PRE_FINALIZER(SensorProxyImpl, Dispose);
-  WTF_MAKE_NONCOPYABLE(SensorProxyImpl);
 
  public:
   SensorProxyImpl(device::mojom::blink::SensorType,
@@ -90,6 +90,8 @@ class SensorProxyImpl final : public SensorProxy,
 
   WTF::Vector<double> active_frequencies_;
   TaskRunnerTimer<SensorProxyImpl> polling_timer_;
+
+  DISALLOW_COPY_AND_ASSIGN(SensorProxyImpl);
 };
 
 }  // namespace blink

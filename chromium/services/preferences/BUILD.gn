@@ -2,25 +2,14 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//services/catalog/public/tools/catalog.gni")
-import("//services/service_manager/public/service_manifest.gni")
 import("//testing/test.gni")
-
-service_manifest("manifest") {
-  name = "preferences"
-  source = "manifest.json"
-}
-
-service_manifest("local_state_manifest") {
-  name = "local_state"
-  source = "local_state_manifest.json"
-}
 
 source_set("preferences") {
   visibility = [
     ":*",
     "//services/preferences/public/cpp:service_main",
   ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
   deps = [
     "//components/prefs",
     "//services/preferences/public/cpp",
@@ -68,25 +57,10 @@ source_set("tests") {
   ]
   if (!is_ios) {
     sources += [ "pref_service_factory_unittest.cc" ]
-    deps += [ "//services/service_manager/public/cpp:service_test_support" ]
+    deps += [
+      "//services/preferences/public/cpp:manifest",
+      "//services/service_manager/public/cpp/test:test_support",
+      "//services/service_manager/public/mojom",
+    ]
   }
-}
-
-service_manifest("unittest_manifest") {
-  name = "prefs_unittests"
-  source = "unittest_manifest.json"
-  packaged_services = [
-    ":manifest",
-    ":unittest_helper_manifest",
-  ]
-}
-
-service_manifest("unittest_helper_manifest") {
-  name = "prefs_unittest_helper"
-  source = "unittest_helper_manifest.json"
-}
-
-catalog("tests_catalog") {
-  testonly = true
-  embedded_services = [ ":unittest_manifest" ]
 }

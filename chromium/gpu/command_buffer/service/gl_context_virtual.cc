@@ -13,18 +13,25 @@
 #include "ui/gl/gpu_preference.h"
 #include "ui/gl/gpu_timing.h"
 
+// TODO(crbug.com/892490): remove this once the cause of this bug is
+// known.
+#if defined(OS_ANDROID)
+#include "base/debug/dump_without_crashing.h"
+#endif
+
 namespace gpu {
 
-GLContextVirtual::GLContextVirtual(gl::GLShareGroup* share_group,
-                                   gl::GLContext* shared_context,
-                                   base::WeakPtr<DecoderContext> decoder)
+GLContextVirtual::GLContextVirtual(
+    gl::GLShareGroup* share_group,
+    gl::GLContext* shared_context,
+    base::WeakPtr<GLContextVirtualDelegate> delegate)
     : GLContext(share_group),
       shared_context_(shared_context),
-      decoder_(decoder) {}
+      delegate_(delegate) {}
 
 bool GLContextVirtual::Initialize(gl::GLSurface* compatible_surface,
                                   const gl::GLContextAttribs& attribs) {
-  SetGLStateRestorer(new GLStateRestorerImpl(decoder_));
+  SetGLStateRestorer(new GLStateRestorerImpl(delegate_));
   return shared_context_->MakeVirtuallyCurrent(this, compatible_surface);
 }
 
@@ -34,10 +41,15 @@ void GLContextVirtual::Destroy() {
 }
 
 bool GLContextVirtual::MakeCurrent(gl::GLSurface* surface) {
-  if (decoder_.get())
+  if (delegate_.get())
     return shared_context_->MakeVirtuallyCurrent(this, surface);
 
   LOG(ERROR) << "Trying to make virtual context current without decoder.";
+// TODO(crbug.com/892490): remove this once the cause of this bug is
+// known.
+#if defined(OS_ANDROID)
+  base::debug::DumpWithoutCrashing();
+#endif
   return false;
 }
 

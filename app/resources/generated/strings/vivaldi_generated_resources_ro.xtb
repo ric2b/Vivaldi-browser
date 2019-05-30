@@ -36,7 +36,6 @@
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
 <translation id="1723824996674794290">&amp;Fereastră nouă</translation>
 <translation id="1729533290416704613">De asemenea controlează ce pagină să fie afișată la căutare din Omnibox.</translation>
-<translation id="1731589410171062430">Total: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /> (<ph name="NUMBER_OF_PAGES" /> <ph name="PAGE_OR_PAGES_LABEL" />)</translation>
 <translation id="1744108098763830590">pagina de fundal</translation>
 <translation id="1805822111539868586">Inspectează vizualizările</translation>
 <translation id="1828901632669367785">Tipărește folosind dialogul de sistem...</translation>
@@ -46,7 +45,6 @@
 <translation id="1901303067676059328">Select&amp;ează tot</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">Elimină tot</translation>
-<translation id="1974060860693918893">Avansat</translation>
 <translation id="1989112275319619282">Răsfoiește</translation>
 <translation id="1992397118740194946">Nu este setat</translation>
 <translation id="1994173015038366702">URL-ul site-ului web</translation>
@@ -92,9 +90,7 @@
 <translation id="26224892172169984">Nu permite niciunui site web să gestioneze protocoale</translation>
 <translation id="2662876636500006917">Magazinul web Vivaldi</translation>
 <translation id="2678063897982469759">Reactivează</translation>
-<translation id="2679385451463308372">Tipărește folosind caseta de dialog a sistemului…</translation>
 <translation id="2721037002783622288">&amp;Caută imaginea cu <ph name="SEARCH_ENGINE" /></translation>
-<translation id="2726934403674109201">(<ph name="COUNT" /> în total)</translation>
 <translation id="2785873697295365461">Descriptorii fișierelor</translation>
 <translation id="2809586584051668049">și încă <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2812989263793994277">Nu arăta nicio imagine</translation>
@@ -102,7 +98,6 @@
 <translation id="2850541429955027218">Adaugă o temă</translation>
 <translation id="2861941300086904918">Manager de securitate pentru clientul nativ</translation>
 <translation id="2889064240420137087">Deschide linkul cu...</translation>
-<translation id="2890678560483811744">Referința paginii este în afara limitelor</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> nu a putut comunica cu imprimanta. Asigurați-vă că imprimanta este conectată și încercați din nou.</translation>
 <translation id="2904456025988372123">Întreabă atunci când un site web încearcă să descarce automat fișiere după primul fișier</translation>
 <translation id="2913331724188855103">Permite site-urilor web să salveze și să citească datele asociate cookie-urilor (recomandat)</translation>
@@ -129,20 +124,17 @@
 <translation id="3222066309010235055">Program de randare în avans: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Microfon</translation>
 <translation id="3241680850019875542">Selectează directorul rădăcină al extensiei ce trebuie împachetată. Pentru a actualiza o extensie, selectează și fișierul cu cheia privată pentru reutilizare.</translation>
-<translation id="3269093882174072735">Încarcă imaginea</translation>
 <translation id="3280237271814976245">Salvează c&amp;a...</translation>
 <translation id="3288047731229977326">Extensiile care rulează în modul pentru dezvoltatori pot dăuna calculatorului. Dacă nu sunteți dezvoltator, pentru siguranță ar fi bine să dezactivați aceste extensii.</translation>
 <translation id="329838636886466101">Repară</translation>
 <translation id="3303818374450886607">Cópii</translation>
 <translation id="3305661444342691068">Deschide PDF-ul în previzualizare</translation>
 <translation id="3317459757438853210">Față-verso</translation>
-<translation id="3319048459796106952">Fereastră nouă &amp;incognito</translation>
 <translation id="3341703758641437857">Permite accesul la URL-urile fișierului</translation>
 <translation id="3347086966102161372">C&amp;opiază adresa imaginii</translation>
 <translation id="3360297538363969800">Tipărirea a eșuat. Verificați imprimanta și încercați din nou.</translation>
 <translation id="3378503599595235699">Păstrează datele locale numai până la închiderea browserului</translation>
 <translation id="3378572629723696641">Este posibil ca această extensie să fie deteriorată.</translation>
-<translation id="3396331542604645348">Imprimanta selectată nu este disponibilă sau nu este instalată corect.  Verificați imprimanta sau încercați să selectați altă imprimantă.</translation>
 <translation id="3432227430032737297">Elimină toate cookie-urile arătate</translation>
 <translation id="3435896845095436175">Activează</translation>
 <translation id="3440761377721825626">Întreabă atunci când un site web vrea să folosească un plugin pentru a vă accesa calculatorul</translation>
@@ -205,7 +197,6 @@
 <translation id="4593021220803146968">&amp;Accesează <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplicațiile și extensiile pot fi modificate numai de administrator (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">O extensie a modificat pagina care este afișată la deschiderea unei file noi.</translation>
-<translation id="4628314759732363424">Modificare...</translation>
 <translation id="4677772697204437347">Memorie GPU</translation>
 <translation id="4681930562518940301">Deschide &amp;imaginea originală într-o filă nouă</translation>
 <translation id="4688541352655220763">Puteți folosi această caracteristică pentru afișarea de conținut din Vivaldi pe televizor sau pe alte dispozitive.</translation>
@@ -236,17 +227,14 @@
 <translation id="5233736638227740678">Li&amp;pește</translation>
 <translation id="5265562206369321422">Offline de mai mult de o săptămână</translation>
 <translation id="5269977353971873915">Tipărirea a eșuat</translation>
-<translation id="5271549068863921519">Salvează parola</translation>
 <translation id="52912272896845572">Fișierul cu cheia privată este nevalid.</translation>
 <translation id="5301954838959518834">OK, am înțeles</translation>
 <translation id="5317780077021120954">Salvează</translation>
-<translation id="5329858601952122676">&amp;Șterge</translation>
 <translation id="5355926466126177564">Extensia „<ph name="EXTENSION_NAME" />” a modificat pagina care este afișată la căutarea din Omnibox.</translation>
 <translation id="5362741141255528695">Selectează fișierul cu cheia privată.</translation>
 <translation id="5370819323174483825">&amp;Reîncarcă</translation>
 <translation id="5398572795982417028">Referința paginii este în afara limitelor, limita este <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5431318178759467895">Color</translation>
-<translation id="5451285724299252438">casetă de text pentru intervalul de pagini</translation>
 <translation id="5483785310822538350">Revocă accesul la fișiere și la dispozitive</translation>
 <translation id="5485102783864353244">Adaugă o aplicație</translation>
 <translation id="5488468185303821006">Permite în incognito</translation>
@@ -255,7 +243,6 @@
 <translation id="5542132724887566711">Profil</translation>
 <translation id="5556459405103347317">Reîncarcă</translation>
 <translation id="5575473780076478375">Extensie incognito: <ph name="EXTENSION_NAME" /></translation>
-<translation id="5581700288664681403">Se încarcă <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="5623842676595125836">Jurnal</translation>
 <translation id="5627086634964711283">De asemenea controlează ce pagină să fie afișată la clic pe butonul Pagina inițială.</translation>
 <translation id="563535393368633106">Întreabă înainte de accesare (recomandat)</translation>
@@ -271,7 +258,6 @@
 <translation id="5780973441651030252">Prioritatea procesului</translation>
 <translation id="5804241973901381774">Permisiuni</translation>
 <translation id="5828633471261496623">Se tipărește...</translation>
-<translation id="5829401023154985950">Gestionare...</translation>
 <translation id="583281660410589416">Necunoscut</translation>
 <translation id="5838456317242088717">Sesiunea privată actuală</translation>
 <translation id="5908769186679515905">Împiedică site-urile web să ruleze Flash</translation>
@@ -324,7 +310,6 @@
 <translation id="6787839852456839824">Comenzi rapide de la tastatură</translation>
 <translation id="6788210894632713004">Extensie neîmpachetată</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
-<translation id="6807889908376551050">Arată-le pe toate...</translation>
 <translation id="6812841287760418429">Păstrează modificările</translation>
 <translation id="6817174620439930047">Întreabă când un site web intenționează să folosească mesaje rezervate sistemului pentru accesarea dispozitivelor MIDI (recomandat)</translation>
 <translation id="682123305478866682">Proiectează desktopul</translation>
@@ -401,7 +386,6 @@ Păstrează fișierul cu cheia într-un loc sigur. Acesta va fi necesar la crear
 <translation id="8339059274628563283">Date salvate local pentru <ph name="SITE" /></translation>
 <translation id="8351419472474436977">Această extensie a preluat controlul asupra setărilor de proxy, ceea ce înseamnă că poate modifica, întrerupe sau intercepta tot ceea ce faceți online. Dacă nu știți sigur de ce a apărut această modificare, probabil că nu ați aprobat-o.</translation>
 <translation id="8382913212082956454">Copiază adresa de &amp;e-mail</translation>
-<translation id="839736845446313156">Înregistrare</translation>
 <translation id="8413385045638830869">Mai întâi întreabă (recomandat)</translation>
 <translation id="8523849605371521713">Adăugat prin politica firmei</translation>
 <translation id="8546306075665861288">Memorie cache de imagini</translation>
@@ -411,8 +395,6 @@ Păstrează fișierul cu cheia într-un loc sigur. Acesta va fi necesar la crear
 <translation id="8615618338313291042">Aplicație incognito: <ph name="APP_NAME" /></translation>
 <translation id="8627151598708688654">Selectează sursa</translation>
 <translation id="862750493060684461">Memorie cache CSS</translation>
-<translation id="8652487083013326477">buton radio pentru intervalul de pagini</translation>
-<translation id="8658595122208653918">Schimbă opțiunile pentru imprimantă...</translation>
 <translation id="8664389313780386848">&amp;Afișează sursa paginii</translation>
 <translation id="8708000541097332489">Șterge la ieșire</translation>
 <translation id="8714838604780058252">Grafică de fundal</translation>
@@ -427,7 +409,6 @@ Păstrează fișierul cu cheia într-un loc sigur. Acesta va fi necesar la crear
 <translation id="8813811964357448561">foaie de hârtie</translation>
 <translation id="8823514049557262177">Copiază te&amp;xtul linkului</translation>
 <translation id="8859174528519900719">Subcadru: <ph name="SUBFRAME_SITE" /></translation>
-<translation id="8876309039915144086">Generează o parolă...</translation>
 <translation id="8899851313684471736">Deschide linkul într-o &amp;fereastră nouă</translation>
 <translation id="8910146161325739742">Partajați-vă ecranul</translation>
 <translation id="8915370057835397490">Se încarcă sugestiile</translation>

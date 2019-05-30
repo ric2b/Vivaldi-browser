@@ -78,7 +78,7 @@ static const Cursor& MiddleClickAutoscrollCursor(const FloatSize& velocity) {
 }
 
 AutoscrollController* AutoscrollController::Create(Page& page) {
-  return new AutoscrollController(page);
+  return MakeGarbageCollected<AutoscrollController>(page);
 }
 
 AutoscrollController::AutoscrollController(Page& page) : page_(&page) {}
@@ -201,7 +201,7 @@ void AutoscrollController::UpdateDragAndDrop(Node* drop_target_node,
     autoscroll_type_ = kAutoscrollForDragAndDrop;
     autoscroll_layout_object_ = scrollable;
     drag_and_drop_autoscroll_start_time_ = event_time;
-    UseCounter::Count(autoscroll_layout_object_->GetFrame(),
+    UseCounter::Count(drop_target_node->GetDocument(),
                       WebFeature::kDragAndDropScrollStart);
     ScheduleMainThreadAnimation();
   } else if (autoscroll_layout_object_ != scrollable) {
@@ -293,7 +293,8 @@ void AutoscrollController::StartMiddleClickAutoscroll(
   middle_click_mode_ = kMiddleClickInitial;
   middle_click_autoscroll_start_pos_global_ = position_global;
 
-  UseCounter::Count(frame, WebFeature::kMiddleClickAutoscrollStart);
+  UseCounter::Count(frame->GetDocument(),
+                    WebFeature::kMiddleClickAutoscrollStart);
 
   last_velocity_ = FloatSize();
 

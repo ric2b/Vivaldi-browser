@@ -27,8 +27,8 @@
 #include <algorithm>
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
+#include "third_party/blink/renderer/core/content_capture/content_capture_manager.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
@@ -60,9 +60,11 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/text_autosizer.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
+#include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment_traversal.h"
 #include "third_party/blink/renderer/platform/fonts/character_range.h"
 #include "third_party/blink/renderer/platform/geometry/float_quad.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/text/bidi_resolver.h"
 #include "third_party/blink/renderer/platform/text/character.h"
@@ -79,6 +81,7 @@ struct SameSizeAsLayoutText : public LayoutObject {
   float widths[4];
   String text;
   void* pointers[2];
+  NodeHolder node_holder;
 };
 
 static_assert(sizeof(LayoutText) == sizeof(SameSizeAsLayoutText),
@@ -128,6 +131,8 @@ LayoutText::LayoutText(Node* node, scoped_refptr<StringImpl> str)
       known_to_have_no_overflow_and_no_fallback_fonts_(false),
       contains_only_whitespace_or_nbsp_(
           static_cast<unsigned>(OnlyWhitespaceOrNbsp::kUnknown)),
+      is_text_fragment_(false),
+      has_abstract_inline_text_box_(false),
       min_width_(-1),
       max_width_(-1),
       first_line_min_width_(0),
@@ -164,10 +169,6 @@ LayoutText* LayoutText::CreateEmptyAnonymous(
   return text;
 }
 
-bool LayoutText::IsTextFragment() const {
-  return false;
-}
-
 bool LayoutText::IsWordBreak() const {
   return false;
 }
@@ -179,7 +180,7 @@ void LayoutText::StyleDidChange(StyleDifference diff,
   // We do have to schedule layouts, though, since a style change can force us
   // to need to relayout.
   if (diff.NeedsFullLayout()) {
-    SetNeedsLayoutAndPrefWidthsRecalc(LayoutInvalidationReason::kStyleChange);
+    SetNeedsLayoutAndPrefWidthsRecalc(layout_invalidation_reason::kStyleChange);
     known_to_have_no_overflow_and_no_fallback_fonts_ = false;
   }
 
@@ -193,7 +194,7 @@ void LayoutText::StyleDidChange(StyleDifference diff,
     TransformText();
 
   // This is an optimization that kicks off font load before layout.
-  if (!GetText().ContainsOnlyWhitespace())
+  if (!GetText().ContainsOnlyWhitespaceOrEmpty())
     new_style.GetFont().WillUseFontData(GetText());
 
   TextAutosizer* text_autosizer = GetDocument().GetTextAutosizer();
@@ -227,6 +228,13 @@ void LayoutText::WillBeDestroyed() {
           g_secure_text_timers ? g_secure_text_timers->Take(this) : nullptr)
     delete secure_text_timer;
 
+  if (!node_holder_.is_empty) {
+    DCHECK(GetContentCaptureManager());
+    GetContentCaptureManager()->OnLayoutTextWillBeDestroyed(node_holder_);
+    node_holder_.text_holder.reset();
+    node_holder_.is_empty = true;
+  }
+
   RemoveAndDestroyTextBoxes();
   LayoutObject::WillBeDestroyed();
   valid_ng_items_ = false;
@@ -256,9 +264,10 @@ void LayoutText::SetFirstInlineFragment(NGPaintFragment* first_fragment) {
   // TODO(layout-dev): Because We should call |WillDestroy()| once for
   // associated fragments, when you reuse fragments, you should construct
   // NGAbstractInlineTextBox for them.
-  for (NGPaintFragment* fragment : NGPaintFragment::InlineFragmentsFor(this))
-    NGAbstractInlineTextBox::WillDestroy(fragment);
-  NGPaintFragment::ResetInlineFragmentsFor(this);
+  if (has_abstract_inline_text_box_) {
+    for (NGPaintFragment* fragment : NGPaintFragment::InlineFragmentsFor(this))
+      NGAbstractInlineTextBox::WillDestroy(fragment);
+  }
   first_paint_fragment_ = first_fragment;
 }
 
@@ -272,21 +281,43 @@ void LayoutText::InLayoutNGInlineFormattingContextWillChange(bool new_value) {
 
 Vector<LayoutText::TextBoxInfo> LayoutText::GetTextBoxInfo() const {
   Vector<TextBoxInfo> results;
-  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
+  if (const NGOffsetMapping* mapping = GetNGOffsetMapping()) {
     auto fragments = NGPaintFragment::InlineFragmentsFor(this);
-    if (fragments.IsInLayoutNGInlineFormattingContext()) {
-      for (const NGPaintFragment* fragment : fragments) {
-        const NGPhysicalTextFragment& text_fragment =
-            ToNGPhysicalTextFragment(fragment->PhysicalFragment());
-        results.push_back(TextBoxInfo{
-            {fragment->InlineOffsetToContainerBox().ToLayoutPoint(),
-             text_fragment.Size().ToLayoutSize()},
-            // TODO(kojii): Compute DOM offset, not text content offset.
-            text_fragment.StartOffset(),
-            text_fragment.Length()});
+    for (const NGPaintFragment* fragment : fragments) {
+      const NGPhysicalTextFragment& text_fragment =
+          ToNGPhysicalTextFragment(fragment->PhysicalFragment());
+      // When the corresponding DOM range contains collapsed whitespaces, NG
+      // produces one fragment but legacy produces multiple text boxes broken at
+      // collapsed whitespaces. We break the fragment at collapsed whitespaces
+      // to match the legacy output.
+      // TODO(xiaochengh): We need to report boxes of ::before/after text, which
+      // |NGOffsetMapping| doesn't support.
+      for (const NGOffsetMappingUnit& unit :
+           mapping->GetMappingUnitsForTextContentOffsetRange(
+               text_fragment.StartOffset(), text_fragment.EndOffset())) {
+        if (unit.GetType() == NGOffsetMappingUnitType::kCollapsed)
+          continue;
+        // [clamped_start, clamped_end] of |fragment| matches a legacy text box.
+        const unsigned clamped_start =
+            std::max(unit.TextContentStart(), text_fragment.StartOffset());
+        const unsigned clamped_end =
+            std::min(unit.TextContentEnd(), text_fragment.EndOffset());
+        DCHECK_LT(clamped_start, clamped_end);
+        const unsigned box_length = clamped_end - clamped_start;
+
+        // Compute rect of the legacy text box.
+        LayoutRect rect =
+            text_fragment.LocalRect(clamped_start, clamped_end).ToLayoutRect();
+        rect.MoveBy(fragment->InlineOffsetToContainerBox().ToLayoutPoint());
+
+        // Compute start of the legacy text box.
+        const base::Optional<unsigned> box_start =
+            CaretOffsetForPosition(mapping->GetLastPosition(clamped_start));
+        DCHECK(box_start.has_value());
+        results.push_back(TextBoxInfo{rect, box_start.value(), box_length});
       }
-      return results;
     }
+    return results;
   }
 
   for (const InlineTextBox* text_box : TextBoxes()) {
@@ -350,7 +381,7 @@ String LayoutText::PlainText() const {
     plain_text_builder.Append(text);
     if (text_box->NextForSameLayoutObject() &&
         text_box->NextForSameLayoutObject()->Start() > text_box->end() &&
-        text.length() && !text.Right(1).ContainsOnlyWhitespace())
+        text.length() && !text.Right(1).ContainsOnlyWhitespaceOrEmpty())
       plain_text_builder.Append(kSpaceCharacter);
   }
   return plain_text_builder.ToString();
@@ -417,7 +448,7 @@ static IntRect EllipsisRectForBox(InlineTextBox* box,
   if (!box)
     return IntRect();
 
-  unsigned short truncation = box->Truncation();
+  uint16_t truncation = box->Truncation();
   if (truncation == kCNoTruncation)
     return IntRect();
 
@@ -459,13 +490,18 @@ void LayoutText::Quads(Vector<FloatQuad>& quads,
                        LocalOrAbsoluteOption local_or_absolute,
                        MapCoordinatesFlags mode) const {
   if (const NGPhysicalBoxFragment* box_fragment =
-          EnclosingBlockFlowFragment()) {
+          ContainingBlockFlowFragment()) {
     const auto children =
         NGInlineFragmentTraversal::SelfFragmentsOf(*box_fragment, this);
+    const LayoutBlock* block_for_flipping = nullptr;
+    if (UNLIKELY(HasFlippedBlocksWritingMode()))
+      block_for_flipping = ContainingBlock();
     for (const auto& child : children) {
       // TODO(layout-dev): We should have NG version of |EllipsisRectForBox()|
-      AccumlateQuads(quads, IntRect(), local_or_absolute, mode,
-                     child.RectInContainerBox().ToLayoutRect());
+      LayoutRect rect = child.RectInContainerBox().ToLayoutRect();
+      if (UNLIKELY(block_for_flipping))
+        block_for_flipping->FlipForWritingMode(rect);
+      AccumlateQuads(quads, IntRect(), local_or_absolute, mode, rect);
     }
     return;
   }
@@ -559,6 +595,9 @@ void LayoutText::AbsoluteQuadsForRange(Vector<FloatQuad>& quads,
     // Find fragments that have text for the specified range.
     DCHECK_LE(start, end);
     auto fragments = NGPaintFragment::InlineFragmentsFor(this);
+    const LayoutBlock* block_for_flipping = nullptr;
+    if (UNLIKELY(HasFlippedBlocksWritingMode()))
+      block_for_flipping = ContainingBlock();
     for (const NGPaintFragment* fragment : fragments) {
       const NGPhysicalTextFragment& text_fragment =
           ToNGPhysicalTextFragment(fragment->PhysicalFragment());
@@ -568,10 +607,12 @@ void LayoutText::AbsoluteQuadsForRange(Vector<FloatQuad>& quads,
       const unsigned clamped_start =
           std::max(start, text_fragment.StartOffset());
       const unsigned clamped_end = std::min(end, text_fragment.EndOffset());
-      NGPhysicalOffsetRect rect =
-          text_fragment.LocalRect(clamped_start, clamped_end);
-      rect.offset += fragment->InlineOffsetToContainerBox();
-      const FloatQuad quad = LocalToAbsoluteQuad(rect.ToFloatRect());
+      LayoutRect rect =
+          text_fragment.LocalRect(clamped_start, clamped_end).ToLayoutRect();
+      rect.MoveBy(fragment->InlineOffsetToContainerBox().ToLayoutPoint());
+      if (UNLIKELY(block_for_flipping))
+        block_for_flipping->FlipForWritingMode(rect);
+      const FloatQuad quad = LocalToAbsoluteQuad(FloatRect(rect));
       if (clamped_start < clamped_end) {
         quads.push_back(quad);
         found_non_collapsed_quad = true;
@@ -715,10 +756,7 @@ CreatePositionWithAffinityForBoxAfterAdjustingOffsetForBiDi(
     ShouldAffinityBeDownstream should_affinity_be_downstream) {
   DCHECK(box);
   DCHECK_GE(offset, 0);
-
-  // TODO(layout-dev): Stop passing out-of-range |offset|.
-  if (static_cast<unsigned>(offset) > box->Len())
-    offset = box->Len();
+  DCHECK_LE(static_cast<unsigned>(offset), box->Len());
 
   if (offset && static_cast<unsigned>(offset) < box->Len()) {
     return CreatePositionWithAffinityForBox(box, box->Start() + offset,
@@ -736,7 +774,7 @@ CreatePositionWithAffinityForBoxAfterAdjustingOffsetForBiDi(
 
 PositionWithAffinity LayoutText::PositionForPoint(
     const LayoutPoint& point) const {
-  if (const LayoutBlockFlow* ng_block_flow = EnclosingNGBlockFlow())
+  if (const LayoutBlockFlow* ng_block_flow = ContainingNGBlockFlow())
     return ng_block_flow->PositionForPoint(point);
 
   DCHECK(CanUseInlineBox(*this));
@@ -768,11 +806,10 @@ PositionWithAffinity LayoutText::PositionForPoint(
         ShouldAffinityBeDownstream should_affinity_be_downstream;
         if (LineDirectionPointFitsInBox(point_line_direction.ToInt(), box,
                                         should_affinity_be_downstream)) {
+          const int offset = box->OffsetForPosition(
+              point_line_direction, IncludePartialGlyphs, BreakGlyphs);
           return CreatePositionWithAffinityForBoxAfterAdjustingOffsetForBiDi(
-              box,
-              box->OffsetForPosition(point_line_direction, IncludePartialGlyphs,
-                                     BreakGlyphs),
-              should_affinity_be_downstream);
+              box, offset, should_affinity_be_downstream);
         }
       }
     }
@@ -780,15 +817,13 @@ PositionWithAffinity LayoutText::PositionForPoint(
   }
 
   if (last_box) {
+    const int offset = last_box->OffsetForPosition(
+        point_line_direction, IncludePartialGlyphs, BreakGlyphs);
     ShouldAffinityBeDownstream should_affinity_be_downstream;
     LineDirectionPointFitsInBox(point_line_direction.ToInt(), last_box,
                                 should_affinity_be_downstream);
     return CreatePositionWithAffinityForBoxAfterAdjustingOffsetForBiDi(
-        last_box,
-        last_box->OffsetForPosition(point_line_direction, IncludePartialGlyphs,
-                                    BreakGlyphs) +
-            last_box->Start(),
-        should_affinity_be_downstream);
+        last_box, offset, should_affinity_be_downstream);
   }
   return CreatePositionWithAffinity(0);
 }
@@ -962,8 +997,8 @@ void LayoutText::TrimmedPrefWidths(LayoutUnit lead_width_layout_unit,
 
   int len = TextLength();
 
-  if (!len ||
-      (strip_front_spaces && GetText().Impl()->ContainsOnlyWhitespace())) {
+  if (!len || (strip_front_spaces &&
+               GetText().Impl()->ContainsOnlyWhitespaceOrEmpty())) {
     first_line_min_width = LayoutUnit();
     last_line_min_width = LayoutUnit();
     first_line_max_width = LayoutUnit();
@@ -1113,14 +1148,14 @@ static float MaxWordFragmentWidth(LayoutText* layout_text,
                                   const Font& font,
                                   TextDirection text_direction,
                                   Hyphenation& hyphenation,
-                                  unsigned word_offset,
-                                  unsigned word_length,
+                                  wtf_size_t word_offset,
+                                  wtf_size_t word_length,
                                   int& suffix_start) {
   suffix_start = 0;
   if (word_length <= Hyphenation::kMinimumSuffixLength)
     return 0;
 
-  Vector<size_t, 8> hyphen_locations = hyphenation.HyphenLocations(
+  Vector<wtf_size_t, 8> hyphen_locations = hyphenation.HyphenLocations(
       StringView(layout_text->GetText(), word_offset, word_length));
   if (hyphen_locations.IsEmpty())
     return 0;
@@ -1130,8 +1165,8 @@ static float MaxWordFragmentWidth(LayoutText* layout_text,
   float max_fragment_width = 0;
   TextRun run = ConstructTextRun(font, layout_text, word_offset, word_length,
                                  style, text_direction);
-  size_t end = word_length;
-  for (size_t start : hyphen_locations) {
+  wtf_size_t end = word_length;
+  for (wtf_size_t start : hyphen_locations) {
     float fragment_width = font.GetCharacterRange(run, start, end).Width();
 
     if (fragment_width <= minimum_fragment_width_to_consider)
@@ -1229,7 +1264,7 @@ void LayoutText::ComputePreferredLogicalWidths(
 
     if (run) {
       // Treat adjacent runs with the same resolved directionality
-      // (TextDirection as opposed to WTF::Unicode::Direction) as belonging
+      // (TextDirection as opposed to WTF::unicode::Direction) as belonging
       // to the same run to avoid breaking unnecessarily.
       while (i >= run->Stop() ||
              (run->Next() && run->Next()->Direction() == run->Direction()))
@@ -1531,46 +1566,95 @@ UChar32 LayoutText::FirstCharacterAfterWhitespaceCollapsing() const {
     String text = text_box->GetText();
     return text.length() ? text.CharacterStartingAt(0) : 0;
   }
-  // TODO(kojii): Support LayoutNG once we have NGInlineItem pointers.
+  if (const NGPaintFragment* paint_fragment = FirstInlineFragment()) {
+    const StringView text =
+        ToNGPhysicalTextFragment(paint_fragment->PhysicalFragment()).Text();
+    return text.length() ? text.CodepointAt(0) : 0;
+  }
   return 0;
 }
 
 UChar32 LayoutText::LastCharacterAfterWhitespaceCollapsing() const {
   if (InlineTextBox* text_box = LastTextBox()) {
     String text = text_box->GetText();
-    return text.length() ? text.CharacterStartingAt(text.length() - 1) : 0;
+    return text.length() ? StringView(text).CodepointAt(text.length() - 1) : 0;
   }
-  // TODO(kojii): Support LayoutNG once we have NGInlineItem pointers.
+  if (const NGPaintFragment* paint_fragment = FirstInlineFragment()) {
+    const StringView text =
+        ToNGPhysicalTextFragment(
+            paint_fragment->LastForSameLayoutObject()->PhysicalFragment())
+            .Text();
+    return text.length() ? text.CodepointAt(text.length() - 1) : 0;
+  }
   return 0;
 }
 
 FloatPoint LayoutText::FirstRunOrigin() const {
-  return FloatPoint(FirstRunX(), FirstRunY());
-}
-
-float LayoutText::FirstRunX() const {
-  return FirstTextBox() ? FirstTextBox()->X().ToFloat() : 0;
-}
-
-float LayoutText::FirstRunY() const {
-  return FirstTextBox() ? FirstTextBox()->Y().ToFloat() : 0;
+  if (const NGPaintFragment* fragment = FirstInlineFragment()) {
+    LayoutPoint origin = fragment->InlineOffsetToContainerBox().ToLayoutPoint();
+    if (UNLIKELY(HasFlippedBlocksWritingMode())) {
+      LayoutRect line_box_rect(origin, fragment->Size().ToLayoutSize());
+      ContainingBlock()->FlipForWritingMode(line_box_rect);
+      return FloatPoint(line_box_rect.Location());
+    }
+    return FloatPoint(origin);
+  }
+  if (const auto* text_box = FirstTextBox())
+    return FloatPoint(text_box->Location());
+  return FloatPoint();
 }
 
 bool LayoutText::CanOptimizeSetText() const {
   // If we have only one line of text and "contain: layout size" we can avoid
   // doing a layout and only paint in the SetText() operation.
   return Parent()->IsLayoutBlockFlow() &&
-         (Parent()->ShouldApplyLayoutContainment() &&
-          Parent()->ShouldApplySizeContainment()) &&
-         FirstTextBox() &&
-         (FirstTextBox() == LastTextBox() &&
-          // If "line-height" is "normal" we might need to recompute the
-          // baseline which is not straight forward.
-          !StyleRef().LineHeight().IsNegative() &&
-          // We would need to recompute the position if "direction" is "rtl" or
-          // "text-align" is not the default one.
-          StyleRef().IsLeftToRightDirection() &&
-          (StyleRef().GetTextAlign(true) == ETextAlign::kStart));
+         Parent()->ShouldApplyLayoutContainment() &&
+         Parent()->ShouldApplySizeContainment() &&
+         // If we have "text-overflow: ellipsis" we need to check if we need or
+         // not ellipsis in the new text and recompute its position.
+         !ToLayoutBlockFlow(Parent())->ShouldTruncateOverflowingText() &&
+         !PreviousSibling() && !NextSibling() && FirstTextBox() &&
+         FirstTextBox() == LastTextBox() &&
+         // If "line-height" is "normal" we might need to recompute the
+         // baseline which is not straight forward.
+         !StyleRef().LineHeight().IsNegative() &&
+         // We would need to recompute the position if "direction" is "rtl".
+         StyleRef().IsLeftToRightDirection() &&
+         // We would need to layout the text if it is justified.
+         (StyleRef().GetTextAlign(true) != ETextAlign::kJustify);
+}
+
+void LayoutText::SetFirstTextBoxLogicalLeft(float text_width) const {
+  DCHECK(FirstTextBox());
+  DCHECK(ContainingBlock());
+  DCHECK(StyleRef().IsLeftToRightDirection());
+
+  LayoutUnit offset_left = ContainingBlock()->LogicalLeftOffsetForContent();
+  LayoutUnit available_space = ContainingBlock()->ContentLogicalWidth();
+
+  // If |text_width| is bigger than |available_space| it's because the text
+  // doesn't wrap so we don't need to align anything.
+  if (text_width < available_space) {
+    switch (StyleRef().GetTextAlign(true)) {
+      case ETextAlign::kLeft:
+      case ETextAlign::kWebkitLeft:
+      case ETextAlign::kJustify:
+      case ETextAlign::kStart:
+        // Do nothing.
+        break;
+      case ETextAlign::kRight:
+      case ETextAlign::kWebkitRight:
+      case ETextAlign::kEnd:
+        offset_left += available_space - text_width;
+        break;
+      case ETextAlign::kCenter:
+      case ETextAlign::kWebkitCenter:
+        offset_left += (available_space - text_width) / 2;
+        break;
+    }
+  }
+
+  FirstTextBox()->SetLogicalLeft(offset_left);
 }
 
 void LayoutText::SetTextWithOffset(scoped_refptr<StringImpl> text,
@@ -1592,12 +1676,13 @@ void LayoutText::SetTextWithOffset(scoped_refptr<StringImpl> text,
     FloatRect glyph_bounds;
     float text_width =
         style_to_use->GetFont().Width(text_run, nullptr, &glyph_bounds);
-    // TODO(rego): We could avoid measuring text width in some specific
-    // situations (e.g. if "white-space" property is "pre" and "overflow-wrap"
-    // is "normal").
-    if (text_width <= ContainingBlock()->ContentLogicalWidth()) {
+    // If the text is not wrapping we don't care if it fits or not in the
+    // container as it's not going to be split in multiple lines.
+    if (!style_to_use->AutoWrap() ||
+        (text_width <= ContainingBlock()->ContentLogicalWidth())) {
       FirstTextBox()->ManuallySetStartLenAndLogicalWidth(
           offset, text->length(), LayoutUnit(text_width));
+      SetFirstTextBoxLogicalLeft(text_width);
       SetText(std::move(text), force, true);
       lines_dirty_ = false;
       valid_ng_items_ = false;
@@ -1722,16 +1807,6 @@ UChar LayoutText::PreviousCharacter() const {
   return prev;
 }
 
-void LayoutText::AddLayerHitTestRects(
-    LayerHitTestRects&,
-    const PaintLayer* current_layer,
-    const LayoutPoint& layer_offset,
-    TouchAction supported_fast_actions,
-    const LayoutRect& container_rect,
-    TouchAction container_whitelisted_touch_action) const {
-  // Text nodes aren't event targets, so don't descend any further.
-}
-
 void LayoutText::SetTextInternal(scoped_refptr<StringImpl> text) {
   DCHECK(text);
   text_ = String(std::move(text));
@@ -1802,7 +1877,7 @@ void LayoutText::SetText(scoped_refptr<StringImpl> text,
       SetShouldDoFullPaintInvalidation();
     } else {
       SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
-          LayoutInvalidationReason::kTextChanged);
+          layout_invalidation_reason::kTextChanged);
     }
   }
   known_to_have_no_overflow_and_no_fallback_fonts_ = false;
@@ -1833,12 +1908,11 @@ void LayoutText::DirtyLineBoxes() {
   valid_ng_items_ = false;
 }
 
-InlineTextBox* LayoutText::CreateTextBox(int start, unsigned short length) {
+InlineTextBox* LayoutText::CreateTextBox(int start, uint16_t length) {
   return new InlineTextBox(LineLayoutItem(this), start, length);
 }
 
-InlineTextBox* LayoutText::CreateInlineTextBox(int start,
-                                               unsigned short length) {
+InlineTextBox* LayoutText::CreateInlineTextBox(int start, uint16_t length) {
   InlineTextBox* text_box = CreateTextBox(start, length);
   MutableTextBoxes().AppendLineBox(text_box);
   return text_box;
@@ -1932,13 +2006,16 @@ float LayoutText::Width(unsigned from,
 
 LayoutRect LayoutText::LinesBoundingBox() const {
   if (const NGPhysicalBoxFragment* box_fragment =
-          EnclosingBlockFlowFragment()) {
+          ContainingBlockFlowFragment()) {
     NGPhysicalOffsetRect bounding_box;
     auto children =
         NGInlineFragmentTraversal::SelfFragmentsOf(*box_fragment, this);
     for (const auto& child : children)
       bounding_box.UniteIfNonZero(child.RectInContainerBox());
-    return bounding_box.ToLayoutRect();
+    LayoutRect rect = bounding_box.ToLayoutRect();
+    if (HasFlippedBlocksWritingMode())
+      ContainingBlock()->FlipForWritingMode(rect);
+    return rect;
   }
 
   LayoutRect result;
@@ -1971,6 +2048,13 @@ LayoutRect LayoutText::LinesBoundingBox() const {
 }
 
 LayoutRect LayoutText::VisualOverflowRect() const {
+  if (IsInLayoutNGInlineFormattingContext()) {
+    LayoutRect rect;
+    if (NGPaintFragment::FlippedLocalVisualRectFor(this, &rect))
+      return rect;
+    NOTREACHED();
+  }
+
   if (!FirstTextBox())
     return LayoutRect();
 
@@ -2016,19 +2100,22 @@ LayoutRect LayoutText::VisualOverflowRect() const {
 }
 
 LayoutRect LayoutText::LocalVisualRectIgnoringVisibility() const {
-  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    LayoutRect visual_rect;
-    if (NGPaintFragment::FlippedLocalVisualRectFor(this, &visual_rect))
-      return visual_rect;
+  if (IsInLayoutNGInlineFormattingContext()) {
+    LayoutRect rect;
+    if (NGPaintFragment::FlippedLocalVisualRectFor(this, &rect)) {
+      if (!IsSelected())
+        return rect;
+      return UnionRect(rect, LocalSelectionRect());
+    }
+    NOTREACHED();
   }
-
   return UnionRect(VisualOverflowRect(), LocalSelectionRect());
 }
 
 LayoutRect LayoutText::LocalSelectionRect() const {
   DCHECK(!NeedsLayout());
 
-  if (GetSelectionState() == SelectionState::kNone)
+  if (!IsSelected())
     return LayoutRect();
   LayoutBlock* cb = ContainingBlock();
   if (!cb)
@@ -2048,6 +2135,15 @@ LayoutRect LayoutText::LocalSelectionRect() const {
       fragment_rect.offset += fragment->InlineOffsetToContainerBox();
       rect.Unite(fragment_rect.ToLayoutRect());
     }
+
+    if (!HasFlippedBlocksWritingMode())
+      return rect;
+    // Since legacy requires LocalSelectionRect return flipped block direction,
+    // we need to convert physical coordinates into physical coordinates in
+    // flipped block direction.
+    NGPaintFragment* container = NGPaintFragment::GetForInlineContainer(this);
+    DCHECK(container);
+    ToLayoutBox(container->GetLayoutObject())->FlipForWritingMode(rect);
     return rect;
   }
 
@@ -2084,7 +2180,13 @@ Position LayoutText::PositionForCaretOffset(unsigned offset) const {
     return Position();
   DCHECK(node->IsTextNode());
   // TODO(layout-dev): Support offset change due to text-transform.
-  return Position(node, offset);
+#if DCHECK_IS_ON()
+  // Ensures that the clamping hack kicks in only with text-transform.
+  if (StyleRef().TextTransform() == ETextTransform::kNone)
+    DCHECK_LE(offset, ToText(node)->length());
+#endif
+  const unsigned clamped_offset = std::min(offset, ToText(node)->length());
+  return Position(node, clamped_offset);
 }
 
 base::Optional<unsigned> LayoutText::CaretOffsetForPosition(
@@ -2338,11 +2440,10 @@ void LayoutText::MomentarilyRevealLastTypedCharacter(
 
 scoped_refptr<AbstractInlineTextBox> LayoutText::FirstAbstractInlineTextBox() {
   if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    LayoutObject* const first_letter_part = GetFirstLetterPart();
-    auto fragments = NGPaintFragment::InlineFragmentsFor(
-        first_letter_part ? first_letter_part : this);
+    auto fragments = NGPaintFragment::InlineFragmentsFor(this);
     if (!fragments.IsEmpty() &&
         fragments.IsInLayoutNGInlineFormattingContext()) {
+      has_abstract_inline_text_box_ = true;
       return NGAbstractInlineTextBox::GetOrCreate(LineLayoutText(this),
                                                   **fragments.begin());
     }
@@ -2381,19 +2482,7 @@ void LayoutText::InvalidateDisplayItemClients(
 // the first run's x and y, but that would involve updating many test results.
 LayoutRect LayoutText::DebugRect() const {
   IntRect lines_box = EnclosingIntRect(LinesBoundingBox());
-  FloatPoint first_run_offset;
-  if (const NGPhysicalBoxFragment* box_fragment =
-          EnclosingBlockFlowFragment()) {
-    const auto fragments =
-        NGInlineFragmentTraversal::SelfFragmentsOf(*box_fragment, this);
-    if (fragments.size()) {
-      const auto& child = fragments[0];
-      first_run_offset = {child.offset_to_container_box.left.ToFloat(),
-                          child.offset_to_container_box.top.ToFloat()};
-    }
-  } else {
-    first_run_offset = {FirstRunX(), FirstRunY()};
-  }
+  FloatPoint first_run_offset = FirstRunOrigin();
   LayoutRect rect =
       LayoutRect(IntRect(first_run_offset.X(), first_run_offset.Y(),
                          lines_box.Width(), lines_box.Height()));
@@ -2402,6 +2491,49 @@ LayoutRect LayoutText::DebugRect() const {
     block->AdjustChildDebugRect(rect);
 
   return rect;
+}
+
+NodeHolder LayoutText::EnsureNodeHolder() {
+  if (node_holder_.is_empty) {
+    if (auto* content_capture_manager = GetContentCaptureManager())
+      node_holder_ = content_capture_manager->GetNodeHolder(*GetNode());
+  }
+  return node_holder_;
+}
+
+ContentCaptureManager* LayoutText::GetContentCaptureManager() {
+  if (auto* node = GetNode()) {
+    if (auto* frame = node->GetDocument().GetFrame()) {
+      return frame->LocalFrameRoot().GetContentCaptureManager();
+    }
+  }
+  return nullptr;
+}
+
+void LayoutText::SetInlineItems(NGInlineItem* begin, NGInlineItem* end) {
+#if DCHECK_IS_ON()
+  for (NGInlineItem* item = begin; item != end; ++item) {
+    DCHECK_EQ(item->GetLayoutObject(), this);
+  }
+#endif
+  NGInlineItems* items = GetNGInlineItems();
+  if (!items)
+    return;
+  valid_ng_items_ = true;
+  items->SetRange(begin, end);
+}
+
+void LayoutText::ClearInlineItems() {
+  valid_ng_items_ = false;
+  if (NGInlineItems* items = GetNGInlineItems())
+    items->Clear();
+}
+
+const NGInlineItems& LayoutText::InlineItems() const {
+  DCHECK(valid_ng_items_);
+  DCHECK(GetNGInlineItems());
+  DCHECK(!GetNGInlineItems()->IsEmpty());
+  return *GetNGInlineItems();
 }
 
 }  // namespace blink

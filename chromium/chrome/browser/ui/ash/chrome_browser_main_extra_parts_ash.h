@@ -20,7 +20,7 @@ class NetworkPortalNotificationController;
 }
 
 namespace policy {
-class DisplayRotationDefaultHandler;
+class DisplaySettingsHandler;
 }
 
 namespace ui {
@@ -36,12 +36,12 @@ class AppListClientImpl;
 class AshShellInit;
 class CastConfigClientMediaRouter;
 class ChromeNewWindowClient;
-class DataPromoNotification;
 class ImeControllerClient;
 class ImmersiveContextMus;
-class ImmersiveHandlerFactoryMus;
+class KioskNextShellClient;
 class LoginScreenClient;
 class MediaClient;
+class MobileDataNotifications;
 class NetworkConnectDelegateChromeOS;
 class NightLightClient;
 class ScreenOrientationDelegateChromeos;
@@ -88,7 +88,6 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
 
   // Initialized in PreProfileInit if ash config == MASH:
   std::unique_ptr<ImmersiveContextMus> immersive_context_;
-  std::unique_ptr<ImmersiveHandlerFactoryMus> immersive_handler_factory_;
   std::unique_ptr<aura::UserActivityForwarder> user_activity_forwarder_;
   std::unique_ptr<ui::UserActivityDetector> user_activity_detector_;
 
@@ -120,13 +119,13 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
 
   // Initialized in PostProfileInit in all configs:
   std::unique_ptr<CastConfigClientMediaRouter> cast_config_client_media_router_;
+  std::unique_ptr<KioskNextShellClient> kiosk_next_shell_client_;
   std::unique_ptr<LoginScreenClient> login_screen_client_;
   std::unique_ptr<MediaClient> media_client_;
-  std::unique_ptr<policy::DisplayRotationDefaultHandler>
-      display_rotation_handler_;
+  std::unique_ptr<policy::DisplaySettingsHandler> display_settings_handler_;
 
   // Initialized in PostBrowserStart in all configs:
-  std::unique_ptr<DataPromoNotification> data_promo_notification_;
+  std::unique_ptr<MobileDataNotifications> mobile_data_notifications_;
   std::unique_ptr<NightLightClient> night_light_client_;
 
   // Created for mash (both in single and multi-process).

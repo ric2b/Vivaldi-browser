@@ -17,12 +17,11 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/mac/mac_logging.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_byteorder.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_dump_manager.h"
@@ -190,7 +189,7 @@ bool CreateVideoToolboxSession(const uint8_t* sps,
       &callback,       // output_callback
       session.InitializeInto());
   if (status) {
-    OSSTATUS_DLOG(WARNING, status) << "Failed to create VTDecompressionSession";
+    OSSTATUS_DVLOG(1, status) << "Failed to create VTDecompressionSession";
     return false;
   }
 
@@ -210,9 +209,9 @@ bool InitializeVideoToolboxInternal() {
                                 0x3d, 0xa1, 0x00, 0x00, 0x03, 0x00, 0x01, 0x00,
                                 0x00, 0x03, 0x00, 0x30, 0x8f, 0x16, 0x2d, 0x9a};
   const uint8_t pps_normal[] = {0x68, 0xe9, 0x7b, 0xcb};
-  if (!CreateVideoToolboxSession(sps_normal, arraysize(sps_normal), pps_normal,
-                                 arraysize(pps_normal), true)) {
-    DLOG(WARNING) << "Hardware decoding with VideoToolbox is not supported";
+  if (!CreateVideoToolboxSession(sps_normal, base::size(sps_normal), pps_normal,
+                                 base::size(pps_normal), true)) {
+    DVLOG(1) << "Hardware decoding with VideoToolbox is not supported";
     return false;
   }
 
@@ -222,8 +221,8 @@ bool InitializeVideoToolboxInternal() {
                                0x22, 0x10, 0x00, 0x00, 0x3e, 0x90, 0x00, 0x0e,
                                0xa6, 0x08, 0xf1, 0x22, 0x59, 0xa0};
   const uint8_t pps_small[] = {0x68, 0xe9, 0x79, 0x72, 0xc0};
-  if (!CreateVideoToolboxSession(sps_small, arraysize(sps_small), pps_small,
-                                 arraysize(pps_small), false)) {
+  if (!CreateVideoToolboxSession(sps_small, base::size(sps_small), pps_small,
+                                 base::size(pps_small), false)) {
     DLOG(WARNING) << "Software decoding with VideoToolbox is not supported";
     return false;
   }
@@ -314,13 +313,13 @@ gfx::ColorSpace GetImageBufferColorSpace(CVImageBufferRef image_buffer) {
       },
   };
   if (!GetImageBufferProperty(image_buffer, kCVImageBufferColorPrimariesKey,
-                              primaries, arraysize(primaries), &primary_id)) {
+                              primaries, base::size(primaries), &primary_id)) {
     DLOG(ERROR) << "Filed to find CVImageBufferRef primaries.";
   }
 
   // The named transfer function.
   gfx::ColorSpace::TransferID transfer_id = gfx::ColorSpace::TransferID::BT709;
-  SkColorSpaceTransferFn custom_tr_fn = {2.2f, 1, 0, 1, 0, 0, 0};
+  skcms_TransferFunction custom_tr_fn = {2.2f, 1, 0, 1, 0, 0, 0};
   struct {
     const CFStringRef cfstr;
     gfx::ColorSpace::TransferID id;
@@ -339,7 +338,7 @@ gfx::ColorSpace GetImageBufferColorSpace(CVImageBufferRef image_buffer) {
       },
   };
   if (!GetImageBufferProperty(image_buffer, kCVImageBufferTransferFunctionKey,
-                              transfers, arraysize(transfers), &transfer_id)) {
+                              transfers, base::size(transfers), &transfer_id)) {
     DLOG(ERROR) << "Filed to find CVImageBufferRef transfer.";
   }
 
@@ -355,7 +354,7 @@ gfx::ColorSpace GetImageBufferColorSpace(CVImageBufferRef image_buffer) {
       CGFloat gamma_float = 0;
       if (CFNumberGetValue(gamma_number, kCFNumberCGFloatType, &gamma_float)) {
         transfer_id = gfx::ColorSpace::TransferID::CUSTOM;
-        custom_tr_fn.fG = gamma_float;
+        custom_tr_fn.g = gamma_float;
       } else {
         DLOG(ERROR) << "Filed to get CVImageBufferRef gamma level as float.";
       }
@@ -382,7 +381,7 @@ gfx::ColorSpace GetImageBufferColorSpace(CVImageBufferRef image_buffer) {
                       gfx::ColorSpace::MatrixID::SMPTE240M,
                   }};
   if (!GetImageBufferProperty(image_buffer, kCVImageBufferYCbCrMatrixKey,
-                              matrices, arraysize(matrices), &matrix_id)) {
+                              matrices, base::size(matrices), &matrix_id)) {
     DLOG(ERROR) << "Filed to find CVImageBufferRef YUV matrix.";
   }
 
@@ -408,7 +407,7 @@ bool InitializeVideoToolbox() {
 
 VTVideoDecodeAccelerator::Task::Task(TaskType type) : type(type) {}
 
-VTVideoDecodeAccelerator::Task::Task(const Task& other) = default;
+VTVideoDecodeAccelerator::Task::Task(Task&& other) = default;
 
 VTVideoDecodeAccelerator::Task::~Task() {}
 
@@ -426,8 +425,8 @@ VTVideoDecodeAccelerator::PictureInfo::PictureInfo(uint32_t client_texture_id,
 VTVideoDecodeAccelerator::PictureInfo::~PictureInfo() {}
 
 bool VTVideoDecodeAccelerator::FrameOrder::operator()(
-    const linked_ptr<Frame>& lhs,
-    const linked_ptr<Frame>& rhs) const {
+    const std::unique_ptr<Frame>& lhs,
+    const std::unique_ptr<Frame>& rhs) const {
   // TODO(sandersd): When it is provided, use the bitstream timestamp.
   if (lhs->pic_order_cnt != rhs->pic_order_cnt)
     return lhs->pic_order_cnt > rhs->pic_order_cnt;
@@ -438,13 +437,15 @@ bool VTVideoDecodeAccelerator::FrameOrder::operator()(
 
 VTVideoDecodeAccelerator::VTVideoDecodeAccelerator(
     const BindGLImageCallback& bind_image_cb,
-    MediaLog* media_log)
+    MediaLog* media_log,
+    bool force_software_vivaldi)
     : bind_image_cb_(bind_image_cb),
       media_log_(media_log),
       gpu_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       decoder_thread_("VTDecoderThread"),
+      force_software_vivaldi_(force_software_vivaldi),
       weak_this_factory_(this) {
-  DCHECK(!bind_image_cb_.is_null());
+  DCHECK(bind_image_cb_);
 
   callback_.decompressionOutputCallback = OutputThunk;
   callback_.decompressionOutputRefCon = this;
@@ -636,10 +637,17 @@ bool VTVideoDecodeAccelerator::ConfigureDecoder() {
     return false;
   }
 
-  CFDictionarySetValue(
-      decoder_config,
-      // kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder
-      CFSTR("EnableHardwareAcceleratedVideoDecoder"), kCFBooleanTrue);
+  if (force_software_vivaldi_) {
+    CFDictionarySetValue(
+        decoder_config,
+        // kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder
+        CFSTR("EnableHardwareAcceleratedVideoDecoder"), kCFBooleanFalse);
+  } else {
+    CFDictionarySetValue(
+        decoder_config,
+        // kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder
+        CFSTR("EnableHardwareAcceleratedVideoDecoder"), kCFBooleanTrue);
+  }
 
   // VideoToolbox scales the visible rect to the output size, so we set the
   // output size for a 1:1 ratio. (Note though that VideoToolbox does not handle
@@ -855,8 +863,8 @@ void VTVideoDecodeAccelerator::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
   // no image.
   if (!frame->has_slice) {
     gpu_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&VTVideoDecodeAccelerator::DecodeDone, weak_this_, frame));
+        FROM_HERE, base::BindOnce(&VTVideoDecodeAccelerator::DecodeDone,
+                                  weak_this_, frame));
     return;
   }
 
@@ -1011,7 +1019,7 @@ void VTVideoDecodeAccelerator::Output(void* source_frame_refcon,
   frame->image.reset(image_buffer, base::scoped_policy::RETAIN);
   gpu_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&VTVideoDecodeAccelerator::DecodeDone, weak_this_, frame));
+      base::BindOnce(&VTVideoDecodeAccelerator::DecodeDone, weak_this_, frame));
 }
 
 void VTVideoDecodeAccelerator::DecodeDone(Frame* frame) {
@@ -1037,9 +1045,9 @@ void VTVideoDecodeAccelerator::DecodeDone(Frame* frame) {
   }
 
   Task task(TASK_FRAME);
-  task.frame = pending_frames_[bitstream_id];
+  task.frame = std::move(pending_frames_[bitstream_id]);
   pending_frames_.erase(bitstream_id);
-  task_queue_.push(task);
+  task_queue_.push(std::move(task));
   ProcessWorkQueues();
 }
 
@@ -1058,7 +1066,7 @@ void VTVideoDecodeAccelerator::FlushTask(TaskType type) {
   // Queue a task even if flushing fails, so that destruction always completes.
   gpu_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&VTVideoDecodeAccelerator::FlushDone, weak_this_, type));
+      base::BindOnce(&VTVideoDecodeAccelerator::FlushDone, weak_this_, type));
 }
 
 void VTVideoDecodeAccelerator::FlushDone(TaskType type) {
@@ -1092,10 +1100,11 @@ void VTVideoDecodeAccelerator::Decode(scoped_refptr<DecoderBuffer> buffer,
   assigned_bitstream_ids_.insert(bitstream_id);
 
   Frame* frame = new Frame(bitstream_id);
-  pending_frames_[bitstream_id] = make_linked_ptr(frame);
+  pending_frames_[bitstream_id] = base::WrapUnique(frame);
   decoder_thread_.task_runner()->PostTask(
-      FROM_HERE, base::Bind(&VTVideoDecodeAccelerator::DecodeTask,
-                            base::Unretained(this), std::move(buffer), frame));
+      FROM_HERE,
+      base::BindOnce(&VTVideoDecodeAccelerator::DecodeTask,
+                     base::Unretained(this), std::move(buffer), frame));
 }
 
 void VTVideoDecodeAccelerator::AssignPictureBuffers(
@@ -1121,7 +1130,7 @@ void VTVideoDecodeAccelerator::AssignPictureBuffers(
   // future work after that happens.
   gpu_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&VTVideoDecodeAccelerator::ProcessWorkQueues, weak_this_));
+      base::BindOnce(&VTVideoDecodeAccelerator::ProcessWorkQueues, weak_this_));
 }
 
 void VTVideoDecodeAccelerator::ReusePictureBuffer(int32_t picture_id) {
@@ -1185,7 +1194,7 @@ bool VTVideoDecodeAccelerator::ProcessTaskQueue() {
   if (task_queue_.empty())
     return false;
 
-  const Task& task = task_queue_.front();
+  Task& task = task_queue_.front();
   switch (task.type) {
     case TASK_FRAME: {
       bool reorder_queue_has_space =
@@ -1198,7 +1207,7 @@ bool VTVideoDecodeAccelerator::ProcessTaskQueue() {
         DVLOG(2) << "Decode(" << task.frame->bitstream_id << ") complete";
         assigned_bitstream_ids_.erase(task.frame->bitstream_id);
         client_->NotifyEndOfBitstreamBuffer(task.frame->bitstream_id);
-        reorder_queue_.push(task.frame);
+        reorder_queue_.push(std::move(task.frame));
         task_queue_.pop();
         return true;
       }
@@ -1242,7 +1251,7 @@ bool VTVideoDecodeAccelerator::ProcessReorderQueue() {
   if (reorder_queue_.empty())
     return false;
 
-  // If the next task is a flush (because there is a pending flush or becuase
+  // If the next task is a flush (because there is a pending flush or because
   // the next frame is an IDR), then we don't need a full reorder buffer to send
   // the next frame.
   bool flushing =
@@ -1344,9 +1353,21 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
 
   DVLOG(3) << "PictureReady(picture_id=" << picture_id << ", "
            << "bitstream_id=" << frame.bitstream_id << ")";
-  client_->PictureReady(Picture(picture_id, frame.bitstream_id,
-                                gfx::Rect(frame.image_size), color_space,
-                                true));
+  Picture picture(picture_id, frame.bitstream_id, gfx::Rect(frame.image_size),
+                  color_space, true);
+  // The GLImageIOSurface keeps the IOSurface alive as long as it exists, but
+  // bound textures do not, and they can outlive the GLImageIOSurface if they
+  // are deleted in the command buffer before they are used by the platform GL
+  // implementation. (https://crbug.com/930479#c69)
+  //
+  // A fence is required whenever a GLImage is bound, but we can't know in
+  // advance whether that will happen.
+  //
+  // TODO(sandersd): Can GLImageIOSurface be responsible for fences, so that
+  // we don't need to use them when the image is never bound? Bindings are
+  // typically only created when WebGL is in use.
+  picture.set_read_lock_fences_enabled(true);
+  client_->PictureReady(std::move(picture));
   return true;
 }
 
@@ -1357,8 +1378,8 @@ void VTVideoDecodeAccelerator::NotifyError(
   if (!gpu_task_runner_->BelongsToCurrentThread()) {
     gpu_task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&VTVideoDecodeAccelerator::NotifyError, weak_this_,
-                   vda_error_type, session_failure_type));
+        base::BindOnce(&VTVideoDecodeAccelerator::NotifyError, weak_this_,
+                       vda_error_type, session_failure_type));
   } else if (state_ == STATE_DECODING) {
     state_ = STATE_ERROR;
     UMA_HISTOGRAM_ENUMERATION("Media.VTVDA.SessionFailureReason",
@@ -1386,8 +1407,8 @@ void VTVideoDecodeAccelerator::QueueFlush(TaskType type) {
   DCHECK(gpu_task_runner_->BelongsToCurrentThread());
   pending_flush_tasks_.push(type);
   decoder_thread_.task_runner()->PostTask(
-      FROM_HERE, base::Bind(&VTVideoDecodeAccelerator::FlushTask,
-                            base::Unretained(this), type));
+      FROM_HERE, base::BindOnce(&VTVideoDecodeAccelerator::FlushTask,
+                                base::Unretained(this), type));
 
   // If this is a new flush request, see if we can make progress.
   if (pending_flush_tasks_.size() == 1)

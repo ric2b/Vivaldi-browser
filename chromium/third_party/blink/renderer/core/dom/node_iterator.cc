@@ -185,7 +185,7 @@ void NodeIterator::UpdateForNodeRemoval(Node& removed_node,
       if (node)
         reference_node.node = node;
     } else {
-      // FIXME: This branch doesn't appear to have any LayoutTests.
+      // FIXME: This branch doesn't appear to have any web tests.
       node = NodeTraversal::Next(removed_node, root());
       // Move out from under the node being removed if the reference node is
       // a descendant of the node being removed.
@@ -199,7 +199,7 @@ void NodeIterator::UpdateForNodeRemoval(Node& removed_node,
   }
 }
 
-void NodeIterator::Trace(blink::Visitor* visitor) {
+void NodeIterator::Trace(Visitor* visitor) {
   visitor->Trace(reference_node_);
   visitor->Trace(candidate_node_);
   ScriptWrappable::Trace(visitor);

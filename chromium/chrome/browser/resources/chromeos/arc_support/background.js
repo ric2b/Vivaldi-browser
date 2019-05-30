@@ -34,6 +34,12 @@ var currentDeviceId = null;
 var lastFocusedElement = null;
 
 /**
+ * Stores locale set for the current browser process.
+ * @type {string}
+ */
+var locale = null;
+
+/**
  * Host window outer default width.
  * @const {number}
  */
@@ -220,7 +226,10 @@ class MetricsPreferenceCheckbox extends PreferenceCheckbox {
     super.onPreferenceChanged(isEnabled, isManaged);
 
     // Hide the checkbox if it is not allowed to (re-)enable.
-    var canEnable = !isEnabled && !isManaged;
+    // TODO(jhorwich) Remove checkbox functionality from the metrics notice as
+    // we've removed the ability for a device owner to enable it during ARC
+    // setup.
+    var canEnable = false;
     this.checkbox_.hidden = !canEnable;
     this.textLabel_.hidden = canEnable;
     var label = canEnable ? this.label_ : this.textLabel_;
@@ -235,16 +244,20 @@ class MetricsPreferenceCheckbox extends PreferenceCheckbox {
     // So, meanwhile, we set the link everytime we update the text.
     // TODO: fix the translation text, and main html.
     var learnMoreLink = label.querySelector(this.learnMoreLinkId_);
-    learnMoreLink.addEventListener(
-        'click', (event) => this.onLearnMoreLinkClicked(event));
-    learnMoreLink.addEventListener(
-        'keydown', (event) => this.suppressKeyDown(event));
+    if (learnMoreLink) {
+      learnMoreLink.addEventListener(
+          'click', (event) => this.onLearnMoreLinkClicked(event));
+      learnMoreLink.addEventListener(
+          'keydown', (event) => this.suppressKeyDown(event));
+    }
     // settings-link is used only in privacy section.
     var settingsLink = label.querySelector('#settings-link');
-    settingsLink.addEventListener(
-        'click', (event) => this.onPrivacySettingsLinkClicked(event));
-    settingsLink.addEventListener(
-        'keydown', (event) => this.suppressKeyDown(event));
+    if (settingsLink) {
+      settingsLink.addEventListener(
+          'click', (event) => this.onPrivacySettingsLinkClicked(event));
+      settingsLink.addEventListener(
+          'keydown', (event) => this.suppressKeyDown(event));
+    }
   }
 
   /** Called when "privacy settings" link is clicked. */
@@ -313,14 +326,15 @@ class TermsOfServicePage {
         this.onTermsViewRequestCompleted_.bind(this), requestFilter);
     this.countryCode = countryCode.toLowerCase();
 
-    var scriptSetCountryCode =
+    var scriptInitTermsView =
         'document.countryCode = \'' + this.countryCode + '\';';
-    scriptSetCountryCode += 'document.viewMode = \'large-view\';';
+    scriptInitTermsView += 'document.language = \'' + locale + '\';';
+    scriptInitTermsView += 'document.viewMode = \'large-view\';';
     this.termsView_.addContentScripts([
       {
         name: 'preProcess',
         matches: ['https://play.google.com/*'],
-        js: {code: scriptSetCountryCode},
+        js: {code: scriptInitTermsView},
         run_at: 'document_start'
       },
       {
@@ -434,7 +448,7 @@ class TermsOfServicePage {
       return;
     }
 
-    var defaultLocation = 'https://play.google.com/about/play-terms.html';
+    var defaultLocation = 'https://play.google.com/about/play-terms/';
     if (this.termsView_.src) {
       // This is reloading the page, typically clicked RETRY on error page.
       this.fastLocation_ = undefined;
@@ -448,7 +462,7 @@ class TermsOfServicePage {
       this.fastLocation_ = this.getFastLocation_();
       if (this.fastLocation_) {
         this.termsView_.src = 'https://play.google.com/intl/' +
-            this.fastLocation_ + '/about/play-terms.html';
+            this.fastLocation_ + '/about/play-terms/';
       } else {
         this.termsView_.src = defaultLocation;
       }
@@ -463,12 +477,12 @@ class TermsOfServicePage {
    * Returns undefined in case the fast location cannot be found.
    */
   getFastLocation_() {
-    var matchByLangZone = navigator.language + '_' + this.countryCode;
+    var matchByLangZone = locale + '_' + this.countryCode;
     if (PLAYSTORE_TOS_LOCALIZATIONS.indexOf(matchByLangZone) >= 0) {
       return matchByLangZone;
     }
 
-    var langSegments = navigator.language.split('-');
+    var langSegments = locale.split('-');
     if (langSegments.length == 2) {
       var matchByShortLangZone = langSegments[0] + '_' + this.countryCode;
       if (PLAYSTORE_TOS_LOCALIZATIONS.indexOf(matchByShortLangZone) >= 0) {
@@ -533,7 +547,7 @@ class TermsOfServicePage {
         // For fast location load make sure we have right terms displayed.
         this.fastLocation_ = undefined;
         var checkInitialLangZoneTerms = 'processLangZoneTerms(true, \'' +
-            navigator.language + '\', \'' + this.countryCode + '\');';
+            locale + '\', \'' + this.countryCode + '\');';
         var details = {code: checkInitialLangZoneTerms};
         termsPage.termsView_.executeScript(details, function(results) {});
       }
@@ -559,7 +573,7 @@ class TermsOfServicePage {
     // In case we failed with fast location let retry default scheme.
     if (this.fastLocation_) {
       this.fastLocation_ = undefined;
-      this.termsView_.src = 'https://play.google.com/about/play-terms.html';
+      this.termsView_.src = 'https://play.google.com/about/play-terms/';
       return;
     }
     this.onTermsViewLoadAborted_(
@@ -711,6 +725,7 @@ function initialize(data, deviceId) {
   var loadTimeData = appWindow.contentWindow.loadTimeData;
   loadTimeData.data = data;
   appWindow.contentWindow.i18nTemplate.process(doc, loadTimeData);
+  locale = loadTimeData.getString('locale');
 
   // Initialize preference connected checkboxes in terms of service page.
   termsPage = new TermsOfServicePage(
@@ -915,8 +930,8 @@ function showURLOverlay(url) {
  * the content of terms view.
  */
 function showPrivacyPolicyOverlay() {
-  var defaultLink = 'https://www.google.com/intl/' + navigator.language +
-      '/policies/privacy/';
+  var defaultLink =
+      'https://www.google.com/intl/' + locale + '/policies/privacy/';
   if (termsPage.isManaged_) {
     showURLOverlay(defaultLink);
     return;

@@ -6,8 +6,9 @@
 #define CONTENT_COMMON_NAVIGATION_SUBRESOURCE_LOADER_PARAMS_H_
 
 #include "base/memory/weak_ptr.h"
-#include "content/common/service_worker/controller_service_worker.mojom.h"
+#include "content/common/content_export.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/controller_service_worker.mojom.h"
 
 namespace content {
 
@@ -25,10 +26,12 @@ struct CONTENT_EXPORT SubresourceLoaderParams {
   SubresourceLoaderParams(SubresourceLoaderParams&& other);
   SubresourceLoaderParams& operator=(SubresourceLoaderParams&& other);
 
-  // The subresource loader factory info that is to be used to create a
-  // subresource loader in the renderer.
-  network::mojom::URLLoaderFactoryPtrInfo loader_factory_info;
+  // For AppCache.
+  // Subresource loader factory info for appcache, that is to be used to
+  // create a subresource loader in the renderer.
+  network::mojom::URLLoaderFactoryPtrInfo appcache_loader_factory_info;
 
+  // For ServiceWorkers.
   // The controller service worker, non-null if the frame is to be
   // controlled by the service worker.
   //
@@ -36,7 +39,7 @@ struct CONTENT_EXPORT SubresourceLoaderParams {
   // updated before being sent over Mojo and then registered with
   // |controller_service_worker_object_host|. See
   // ServiceWorkerObjectHost::CreateIncompleteObjectInfo() for details.
-  mojom::ControllerServiceWorkerInfoPtr controller_service_worker_info;
+  blink::mojom::ControllerServiceWorkerInfoPtr controller_service_worker_info;
   base::WeakPtr<ServiceWorkerObjectHost> controller_service_worker_object_host;
 };
 

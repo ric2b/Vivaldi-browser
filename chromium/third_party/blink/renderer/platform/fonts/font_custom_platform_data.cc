@@ -39,7 +39,6 @@
 #include "third_party/blink/renderer/platform/fonts/opentype/font_settings.h"
 #include "third_party/blink/renderer/platform/fonts/web_font_decoder.h"
 #include "third_party/blink/renderer/platform/fonts/web_font_typeface_factory.h"
-#include "third_party/blink/renderer/platform/graphics/paint/paint_typeface.h"
 #include "third_party/blink/renderer/platform/shared_buffer.h"
 #include "third_party/skia/include/core/SkStream.h"
 #include "third_party/skia/include/core/SkTypeface.h"
@@ -108,19 +107,19 @@ FontPlatformData FontCustomPlatformData::GetFontPlatformData(
 
     if (variation_settings && variation_settings->size() < UINT16_MAX) {
       axes.ReserveCapacity(variation_settings->size() + axes.size());
-      for (size_t i = 0; i < variation_settings->size(); ++i) {
-        SkFontArguments::Axis axis = {
-            AtomicStringToFourByteTag(variation_settings->at(i).Tag()),
-            SkFloatToScalar(variation_settings->at(i).Value())};
+      for (const auto& setting : *variation_settings) {
+        SkFontArguments::Axis axis = {AtomicStringToFourByteTag(setting.Tag()),
+                                      SkFloatToScalar(setting.Value())};
         axes.push_back(axis);
       }
     }
 
-    sk_sp<SkTypeface> sk_variation_font(
-        FontManagerForSubType(font_sub_type)
-            ->makeFromStream(
-                base_typeface_->openStream(nullptr)->duplicate(),
-                SkFontArguments().setAxes(axes.data(), axes.size())));
+    int index;
+    std::unique_ptr<SkStreamAsset> stream(base_typeface_->openStream(&index));
+    sk_sp<SkTypeface> sk_variation_font(FontManagerForSubType(font_sub_type)
+        ->makeFromStream(std::move(stream),
+                         SkFontArguments().setCollectionIndex(index)
+                                          .setAxes(axes.data(), axes.size())));
 
     if (sk_variation_font) {
       return_typeface = sk_variation_font;
@@ -133,9 +132,7 @@ FontPlatformData FontCustomPlatformData::GetFontPlatformData(
     }
   }
 
-  // TODO(vmpstr): Handle web fonts PaintTypefaces.
-  PaintTypeface paint_tf = PaintTypeface::FromSkTypeface(return_typeface);
-  return FontPlatformData(std::move(paint_tf), CString(), size,
+  return FontPlatformData(std::move(return_typeface), CString(), size,
                           bold && !base_typeface_->isBold(),
                           italic && !base_typeface_->isItalic(), orientation);
 }

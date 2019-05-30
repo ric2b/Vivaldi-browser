@@ -28,10 +28,10 @@ import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.embedder_support.view.ContentView;
-import org.chromium.content.browser.test.util.TestSelectionPopupController;
 import org.chromium.content_public.browser.SelectionClient;
 import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.test.util.TestSelectionPopupController;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
@@ -98,9 +98,8 @@ public class ContextualSearchTapEventTest {
         @Override
         public void startSearchTermResolutionRequest(String selection) {
             // Skip native calls and immediately "resolve" the search term.
-            onSearchTermResolutionResponse(
-                    true, 200, selection, selection, "", "", false, 0, 10, "", "", "", "",
-                    QuickActionCategory.NONE);
+            onSearchTermResolutionResponse(true, 200, selection, selection, "", "", false, 0, 10,
+                    "", "", "", "", QuickActionCategory.NONE, 0, "", "");
         }
 
         @Override
@@ -357,27 +356,5 @@ public class ContextualSearchTapEventTest {
         generateSelectWordAroundCaretAck();
         Assert.assertEquals(mPanelManager.getRequestPanelShowCount(), 0);
         Assert.assertEquals(mPanelManager.getPanelHideCount(), 0);
-    }
-
-    /**
-     * Tests that a Long-press gesture suppresses the panel when Smart Selection is enabled.
-     */
-    @Test
-    @SmallTest
-    @Feature({"ContextualSearch"})
-    @Restriction(Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    public void testLongpressWithSmartSelectionSuppresses() {
-        Assert.assertEquals(mPanelManager.getRequestPanelShowCount(), 0);
-
-        // Tell the ContextualSearchManager that Smart Selection is enabled.
-        mContextualSearchManager.suppressContextualSearchForSmartSelection(true);
-
-        // Fake a selection event.
-        mockLongpressText("text");
-        // Generate the surrounding-text-available callback.
-        // Surrounding text is gathered for longpress due to icing integration.
-        generateTextSurroundingSelectionAvailable();
-
-        Assert.assertEquals(mPanelManager.getRequestPanelShowCount(), 0);
     }
 }

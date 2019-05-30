@@ -63,13 +63,42 @@
             </div>
           </div>
         </div>
-        <div id="offline-content-list" hidden></div>
+        <div id="offline-content-list" class="list-hidden" hidden>
+          <div id="offline-content-list-visibility-card"
+              onclick="toggleOfflineContentListVisibility(true)">
+            <div id="offline-content-list-title"
+                jsselect="offlineContentList" jscontent="title">
+            </div>
+            <div>
+              <div id="offline-content-list-show-text"
+                  jsselect="offlineContentList" jscontent="showText">
+              </div>
+              <div id="offline-content-list-hide-text"
+                  jsselect="offlineContentList" jscontent="hideText">
+              </div>
+            </div>
+          </div>
+          <div id="offline-content-suggestions"></div>
+          <div id="offline-content-list-action">
+            <a class="link-button" onclick="launchDownloadsPage()"
+                jsselect="offlineContentList" jscontent="actionText">
+            </a>
+          </div>
+        </div>
         <div id="offline-content-summary" onclick="launchDownloadsPage()" hidden>
           <div class="offline-content-summary-images">
-            <img id="earth" src="../../../../chromium/components/neterror/resources/offline_content/earth.svg">
-            <img id="music-note" src="../../../../chromium/components/neterror/resources/offline_content/music-note.svg">
-            <img id="video" src="../../../../chromium/components/neterror/resources/offline_content/video.svg">
-            <img id="image" src="../../../../chromium/components/neterror/resources/offline_content/image.svg">
+            <div class="offline-content-summary-image-truncate">
+              <img id="earth" src="../../../chromium/components/neterror/resources/images/generic-globe.svg">
+            </div>
+            <div class="offline-content-summary-image-truncate">
+              <img id="music-note" src="../../../chromium/components/neterror/resources/images/music-note.svg">
+            </div>
+            <div class="offline-content-summary-image-truncate">
+              <img id="video" src="../../../chromium/components/neterror/resources/images/video.svg">
+            </div>
+            <div>
+              <img id="image" src="../../../chromium/components/neterror/resources/images/image.svg">
+            </div>
           </div>
           <div class="offline-content-summary-description"
               jsselect="offlineContentSummary" jscontent="description">
@@ -89,20 +118,25 @@
             jsselect="reloadButton"
             jsvalues=".url:reloadUrl; .trackingId:reloadTrackingId"
             jscontent="msg"></button>
-        <button id="show-saved-copy-button"
-            class="blue-button text-button"
-            onclick="showSavedCopyButtonClick()"
-            jsselect="showSavedCopyButton"
-            jscontent="msg" jsvalues="title:title; .primary:primary">
-        </button>
         <button id="download-button"
             class="blue-button text-button"
             onclick="downloadButtonClick()"
             jsselect="downloadButton"
             jscontent="msg" jsvalues=".disabledText:disabledMsg">
         </button>
+        <div id="save-page-for-later-button" class="hidden">
+          <a class="link-button" onclick="savePageLaterClick()"
+            jsselect="savePageLater"
+            jscontent="savePageMsg">
+          </a>
+        </div>
+        <div id="cancel-save-page-button" class="hidden"
+          onclick="cancelSavePageClick()"
+          jsselect="savePageLater"
+          jsvalues=".innerHTML:cancelMsg">
+        </div>
       </div>
-      <button id="details-button" class="text-button small-link"
+      <button id="details-button" class="secondary-button text-button small-link"
          onclick="detailsButtonClick(); toggleHelpBox()" jscontent="details"
          jsdisplay="(suggestionsDetails && suggestionsDetails.length > 0) || diagnose"
          jsvalues=".detailsText:details; .hideDetailsText:hideDetails;"></button>

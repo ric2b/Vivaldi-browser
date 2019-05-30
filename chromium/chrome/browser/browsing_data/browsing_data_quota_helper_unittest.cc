@@ -9,9 +9,11 @@
 
 #include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/stl_util.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browsing_data/browsing_data_quota_helper_impl.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/test/test_browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
@@ -37,8 +39,8 @@ class BrowsingDataQuotaHelperTest : public testing::Test {
     EXPECT_TRUE(dir_.CreateUniqueTempDir());
     quota_manager_ = new storage::QuotaManager(
         false, dir_.GetPath(),
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::IO).get(), nullptr,
-        storage::GetQuotaSettingsFunc());
+        base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}).get(),
+        nullptr, storage::GetQuotaSettingsFunc());
     helper_ = new BrowsingDataQuotaHelperImpl(quota_manager_.get());
   }
 
@@ -139,7 +141,7 @@ TEST_F(BrowsingDataQuotaHelperTest, FetchData) {
       {"http://example2.com/", StorageType::kTemporary, 1000},
   };
 
-  RegisterClient(kOrigins, arraysize(kOrigins));
+  RegisterClient(kOrigins, base::size(kOrigins));
   StartFetching();
   content::RunAllTasksUntilIdle();
   EXPECT_TRUE(fetching_completed());
@@ -168,7 +170,7 @@ TEST_F(BrowsingDataQuotaHelperTest, IgnoreExtensionsAndDevTools) {
        StorageType::kPersistent, 100000},
   };
 
-  RegisterClient(kOrigins, arraysize(kOrigins));
+  RegisterClient(kOrigins, base::size(kOrigins));
   StartFetching();
   content::RunAllTasksUntilIdle();
   EXPECT_TRUE(fetching_completed());

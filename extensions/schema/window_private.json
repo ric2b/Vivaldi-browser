@@ -293,6 +293,28 @@
             "name": "tabId"
           }
         ]
+      },
+      {
+        "name": "onWindowCreated",
+        "type": "function",
+        "description": "Fired when a window is created, even for guest windows.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          }
+        ]
+      },
+      {
+        "name": "onWindowClosed",
+        "type": "function",
+        "description": "Fired when a window is closed, even for guest windows.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          }
+        ]
       }
     ]
   }

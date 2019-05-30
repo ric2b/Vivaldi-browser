@@ -21,9 +21,13 @@
 #include "net/http/http_stream_factory.h"
 #include "net/third_party/quic/core/crypto/crypto_protocol.h"
 #include "net/third_party/quic/core/quic_packets.h"
-#include "net/third_party/spdy/core/spdy_protocol.h"
+#include "net/third_party/quiche/src/spdy/core/spdy_protocol.h"
 #include "net/url_request/url_request_context_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+#include "base/mac/mac_util.h"
+#endif
 
 namespace network_session_configurator {
 
@@ -58,15 +62,15 @@ TEST_F(NetworkSessionConfiguratorTest, Defaults) {
   EXPECT_FALSE(params_.ignore_certificate_errors);
   EXPECT_EQ(0u, params_.testing_fixed_http_port);
   EXPECT_EQ(0u, params_.testing_fixed_https_port);
-  EXPECT_EQ(params_.tcp_fast_open_mode,
-            net::HttpNetworkSession::Params::TcpFastOpenMode::DISABLED);
   EXPECT_FALSE(params_.enable_user_alternate_protocol_ports);
 
   EXPECT_TRUE(params_.enable_http2);
   EXPECT_TRUE(params_.http2_settings.empty());
+  EXPECT_FALSE(params_.greased_http2_frame);
   EXPECT_FALSE(params_.enable_websocket_over_http2);
 
   EXPECT_FALSE(params_.enable_quic);
+  EXPECT_FALSE(params_.enable_quic_proxies_for_https_urls);
   EXPECT_EQ("Chrome/52.0.2709.0 Linux x86_64", params_.quic_user_agent_id);
   EXPECT_EQ(0u, params_.origins_to_force_quic_on.size());
 }
@@ -117,9 +121,13 @@ TEST_F(NetworkSessionConfiguratorTest, EnableQuicFromFieldTrialGroup) {
   EXPECT_FALSE(params_.quic_estimate_initial_rtt);
   EXPECT_FALSE(params_.quic_migrate_sessions_on_network_change_v2);
   EXPECT_FALSE(params_.quic_migrate_sessions_early_v2);
+  EXPECT_FALSE(params_.quic_retry_on_alternate_network_before_handshake);
+  EXPECT_FALSE(params_.quic_migrate_idle_sessions);
   EXPECT_FALSE(params_.quic_go_away_on_path_degrading);
   EXPECT_FALSE(params_.quic_allow_server_migration);
   EXPECT_TRUE(params_.quic_host_whitelist.empty());
+  EXPECT_EQ(net::kDefaultRetransmittableOnWireTimeoutMillisecs,
+            params_.quic_retransmittable_on_wire_timeout_milliseconds);
 
   net::HttpNetworkSession::Params default_params;
   EXPECT_EQ(default_params.quic_supported_versions,
@@ -145,6 +153,17 @@ TEST_F(NetworkSessionConfiguratorTest, EnableQuicForDataReductionProxy) {
   ParseFieldTrials();
 
   EXPECT_TRUE(params_.enable_quic);
+}
+
+TEST_F(NetworkSessionConfiguratorTest, EnableQuicProxiesForHttpsUrls) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["enable_quic_proxies_for_https_urls"] = "true";
+  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
+
+  ParseFieldTrials();
+
+  EXPECT_TRUE(params_.enable_quic_proxies_for_https_urls);
 }
 
 TEST_F(NetworkSessionConfiguratorTest,
@@ -203,6 +222,18 @@ TEST_F(NetworkSessionConfiguratorTest,
   ParseFieldTrials();
 
   EXPECT_TRUE(params_.quic_goaway_sessions_on_ip_change);
+}
+
+TEST_F(NetworkSessionConfiguratorTest,
+       QuicRetransmittableOnWireTimeoutMillisecondsFieldTrialParams) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["retransmittable_on_wire_timeout_milliseconds"] = "1000";
+  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
+
+  ParseFieldTrials();
+
+  EXPECT_EQ(1000, params_.quic_retransmittable_on_wire_timeout_milliseconds);
 }
 
 TEST_F(NetworkSessionConfiguratorTest,
@@ -347,6 +378,18 @@ TEST_F(NetworkSessionConfiguratorTest,
 }
 
 TEST_F(NetworkSessionConfiguratorTest,
+       QuicRetryOnAlternateNetworkBeforeHandshakeFromFieldTrialParams) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["retry_on_alternate_network_before_handshake"] = "true";
+  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
+
+  ParseFieldTrials();
+
+  EXPECT_TRUE(params_.quic_retry_on_alternate_network_before_handshake);
+}
+
+TEST_F(NetworkSessionConfiguratorTest,
        QuicGoawayOnPathDegradingFromFieldTrialParams) {
   std::map<std::string, std::string> field_trial_params;
   field_trial_params["go_away_on_path_degrading"] = "true";
@@ -356,6 +399,21 @@ TEST_F(NetworkSessionConfiguratorTest,
   ParseFieldTrials();
 
   EXPECT_TRUE(params_.quic_go_away_on_path_degrading);
+}
+
+TEST_F(NetworkSessionConfiguratorTest,
+       QuicIdleSessionMigrationPeriodFromFieldTrialParams) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["migrate_idle_sessions"] = "true";
+  field_trial_params["idle_session_migration_period_seconds"] = "15";
+  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
+
+  ParseFieldTrials();
+
+  EXPECT_TRUE(params_.quic_migrate_idle_sessions);
+  EXPECT_EQ(base::TimeDelta::FromSeconds(15),
+            params_.quic_idle_session_migration_period);
 }
 
 TEST_F(NetworkSessionConfiguratorTest,
@@ -547,30 +605,6 @@ TEST_F(NetworkSessionConfiguratorTest, Http2SettingsFromFieldTrialParams) {
   EXPECT_EQ(expected_settings, params_.http2_settings);
 }
 
-TEST_F(NetworkSessionConfiguratorTest, TCPFastOpenEnabled) {
-  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
-  command_line.AppendSwitch(switches::kEnableTcpFastOpen);
-  ParseCommandLineAndFieldTrials(command_line);
-  EXPECT_EQ(params_.tcp_fast_open_mode,
-            net::HttpNetworkSession::Params::TcpFastOpenMode::ENABLED_FOR_ALL);
-}
-
-TEST_F(NetworkSessionConfiguratorTest, TCPFastOpenHttpsEnabled) {
-  base::FieldTrialList::CreateFieldTrial("TCPFastOpen", "HttpsEnabled");
-
-  ParseFieldTrials();
-  EXPECT_EQ(
-      params_.tcp_fast_open_mode,
-      net::HttpNetworkSession::Params::TcpFastOpenMode::ENABLED_FOR_SSL_ONLY);
-
-  // Make sure that the command line flag overrides the field trial.
-  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
-  command_line.AppendSwitch(switches::kEnableTcpFastOpen);
-  ParseCommandLineAndFieldTrials(command_line);
-  EXPECT_EQ(params_.tcp_fast_open_mode,
-            net::HttpNetworkSession::Params::TcpFastOpenMode::ENABLED_FOR_ALL);
-}
-
 TEST_F(NetworkSessionConfiguratorTest, ForceQuic) {
   struct {
     bool force_enabled;
@@ -707,81 +741,37 @@ TEST_F(NetworkSessionConfiguratorTest, HostRules) {
   EXPECT_EQ("foo", host_port_pair.host());
 }
 
-TEST_F(NetworkSessionConfiguratorTest, TokenBindingDisabled) {
-  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
-  ParseCommandLineAndFieldTrials(command_line);
-
-  EXPECT_FALSE(params_.enable_token_binding);
-}
-
-TEST_F(NetworkSessionConfiguratorTest, ChannelIDEnabled) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kChannelID);
-
-  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
-  ParseCommandLineAndFieldTrials(command_line);
-
-  EXPECT_TRUE(params_.enable_channel_id);
-}
-
-TEST_F(NetworkSessionConfiguratorTest, ChannelIDDisabled) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(features::kChannelID);
-
-  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
-  ParseCommandLineAndFieldTrials(command_line);
-
-  EXPECT_FALSE(params_.enable_channel_id);
-}
-
 TEST_F(NetworkSessionConfiguratorTest, DefaultCacheBackend) {
-  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
 #if defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_CHROMEOS)
   EXPECT_EQ(net::URLRequestContextBuilder::HttpCacheParams::DISK_SIMPLE,
-            ChooseCacheType(command_line));
+            ChooseCacheType());
+#elif defined(OS_MACOSX) && !defined(OS_IOS)
+  EXPECT_EQ(
+      base::mac::IsAtLeastOS10_14()
+          ? net::URLRequestContextBuilder::HttpCacheParams::DISK_SIMPLE
+          : net::URLRequestContextBuilder::HttpCacheParams::DISK_BLOCKFILE,
+      ChooseCacheType());
 #else
   EXPECT_EQ(net::URLRequestContextBuilder::HttpCacheParams::DISK_BLOCKFILE,
-            ChooseCacheType(command_line));
-#endif
-}
-
-TEST_F(NetworkSessionConfiguratorTest, UseSimpleCacheBackendOn) {
-  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
-  command_line.AppendSwitchASCII(switches::kUseSimpleCacheBackend, "on");
-  EXPECT_EQ(net::URLRequestContextBuilder::HttpCacheParams::DISK_SIMPLE,
-            ChooseCacheType(command_line));
-}
-
-TEST_F(NetworkSessionConfiguratorTest, UseSimpleCacheBackendOff) {
-  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
-  command_line.AppendSwitchASCII(switches::kUseSimpleCacheBackend, "off");
-#if !defined(OS_ANDROID)
-  EXPECT_EQ(net::URLRequestContextBuilder::HttpCacheParams::DISK_BLOCKFILE,
-            ChooseCacheType(command_line));
-#else  // defined(OS_ANDROID)
-  // Android always uses the simple cache.
-  EXPECT_EQ(net::URLRequestContextBuilder::HttpCacheParams::DISK_SIMPLE,
-            ChooseCacheType(command_line));
+            ChooseCacheType());
 #endif
 }
 
 TEST_F(NetworkSessionConfiguratorTest, SimpleCacheTrialExperimentYes) {
-  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
   base::FieldTrialList::CreateFieldTrial("SimpleCacheTrial", "ExperimentYes");
   EXPECT_EQ(net::URLRequestContextBuilder::HttpCacheParams::DISK_SIMPLE,
-            ChooseCacheType(command_line));
+            ChooseCacheType());
 }
 
 TEST_F(NetworkSessionConfiguratorTest, SimpleCacheTrialDisable) {
-  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
   base::FieldTrialList::CreateFieldTrial("SimpleCacheTrial", "Disable");
 #if !defined(OS_ANDROID)
   EXPECT_EQ(net::URLRequestContextBuilder::HttpCacheParams::DISK_BLOCKFILE,
-            ChooseCacheType(command_line));
+            ChooseCacheType());
 #else  // defined(OS_ANDROID)
   // Android always uses the simple cache.
   EXPECT_EQ(net::URLRequestContextBuilder::HttpCacheParams::DISK_SIMPLE,
-            ChooseCacheType(command_line));
+            ChooseCacheType());
 #endif
 }
 
@@ -794,6 +784,37 @@ TEST_F(NetworkSessionConfiguratorTest, QuicHeadersIncludeH2StreamDependency) {
   ParseFieldTrials();
 
   EXPECT_TRUE(params_.quic_headers_include_h2_stream_dependency);
+}
+
+TEST_F(NetworkSessionConfiguratorTest, Http2GreaseSettings) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["http2_grease_settings"] = "true";
+  variations::AssociateVariationParams("HTTP2", "Enabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("HTTP2", "Enabled");
+
+  ParseFieldTrials();
+
+  bool greased_setting_found = false;
+  for (const auto& setting : params_.http2_settings) {
+    if ((setting.first & 0x0f0f) == 0x0a0a) {
+      greased_setting_found = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(greased_setting_found);
+}
+
+TEST_F(NetworkSessionConfiguratorTest, Http2GreaseFrameType) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["http2_grease_frame_type"] = "true";
+  variations::AssociateVariationParams("HTTP2", "Enabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("HTTP2", "Enabled");
+
+  ParseFieldTrials();
+
+  ASSERT_TRUE(params_.greased_http2_frame);
+  const uint8_t frame_type = params_.greased_http2_frame.value().type;
+  EXPECT_EQ(0x0b, frame_type % 0x1f);
 }
 
 TEST_F(NetworkSessionConfiguratorTest,

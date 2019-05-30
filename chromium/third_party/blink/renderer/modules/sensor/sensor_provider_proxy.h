@@ -5,9 +5,10 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_SENSOR_SENSOR_PROVIDER_PROXY_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_SENSOR_SENSOR_PROVIDER_PROXY_H_
 
+#include "base/macros.h"
 #include "services/device/public/mojom/sensor.mojom-blink.h"
 #include "services/device/public/mojom/sensor_provider.mojom-blink.h"
-#include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 
@@ -19,15 +20,15 @@ class SensorProxy;
 // 'SensorProxy' instances.
 class SensorProviderProxy final
     : public GarbageCollectedFinalized<SensorProviderProxy>,
-      public Supplement<LocalFrame> {
+      public Supplement<Document> {
   USING_GARBAGE_COLLECTED_MIXIN(SensorProviderProxy);
-  WTF_MAKE_NONCOPYABLE(SensorProviderProxy);
 
  public:
   static const char kSupplementName[];
 
-  static SensorProviderProxy* From(LocalFrame*);
+  static SensorProviderProxy* From(Document*);
 
+  explicit SensorProviderProxy(Document&);
   ~SensorProviderProxy();
 
   SensorProxy* CreateSensorProxy(device::mojom::blink::SensorType, Page*);
@@ -50,7 +51,6 @@ class SensorProviderProxy final
   const SensorsSet& sensor_proxies() const { return sensor_proxies_; }
 
   // For SensorProviderProxy personal use.
-  explicit SensorProviderProxy(LocalFrame&);
   void InitializeIfNeeded();
   bool IsInitialized() const { return sensor_provider_.is_bound(); }
   void OnSensorProviderConnectionError();
@@ -58,6 +58,8 @@ class SensorProviderProxy final
 
   device::mojom::blink::SensorProviderPtr sensor_provider_;
   bool inspector_mode_;
+
+  DISALLOW_COPY_AND_ASSIGN(SensorProviderProxy);
 };
 
 }  // namespace blink

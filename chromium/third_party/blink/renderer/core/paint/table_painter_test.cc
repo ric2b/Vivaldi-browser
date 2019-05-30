@@ -11,10 +11,12 @@
 // TableRowPainter and TableCellPainter. It's difficult to separate the tests
 // into individual files because of dependencies among the painter classes.
 
+using testing::ElementsAre;
+
 namespace blink {
 
 using TablePainterTest = PaintControllerPaintTest;
-INSTANTIATE_PAINT_TEST_CASE_P(TablePainterTest);
+INSTANTIATE_PAINT_TEST_SUITE_P(TablePainterTest);
 
 TEST_P(TablePainterTest, Background) {
   SetBodyInnerHTML(R"HTML(
@@ -34,22 +36,22 @@ TEST_P(TablePainterTest, Background) {
 
   InvalidateAll(RootPaintController());
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
-  IntRect interest_rect(0, 0, 200, 200);
-  Paint(&interest_rect);
+  Paint(IntRect(0, 0, 200, 200));
 
-  EXPECT_DISPLAY_LIST(
-      RootPaintController().GetDisplayItemList(), 2,
-      TestDisplayItem(ViewBackgroundClient(), DisplayItem::kDocumentBackground),
-      TestDisplayItem(row1, DisplayItem::kBoxDecorationBackground));
+  EXPECT_THAT(
+      RootPaintController().GetDisplayItemList(),
+      ElementsAre(IsSameId(&ViewScrollingBackgroundClient(),
+                           DisplayItem::kDocumentBackground),
+                  IsSameId(&row1, DisplayItem::kBoxDecorationBackground)));
 
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
-  interest_rect = IntRect(0, 300, 200, 1000);
-  Paint(&interest_rect);
+  Paint(IntRect(0, 300, 200, 1000));
 
-  EXPECT_DISPLAY_LIST(
-      RootPaintController().GetDisplayItemList(), 2,
-      TestDisplayItem(ViewBackgroundClient(), DisplayItem::kDocumentBackground),
-      TestDisplayItem(row2, DisplayItem::kBoxDecorationBackground));
+  EXPECT_THAT(
+      RootPaintController().GetDisplayItemList(),
+      ElementsAre(IsSameId(&ViewScrollingBackgroundClient(),
+                           DisplayItem::kDocumentBackground),
+                  IsSameId(&row2, DisplayItem::kBoxDecorationBackground)));
 }
 
 TEST_P(TablePainterTest, BackgroundWithCellSpacing) {
@@ -77,35 +79,35 @@ TEST_P(TablePainterTest, BackgroundWithCellSpacing) {
   InvalidateAll(RootPaintController());
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
   // Intersects cell1 and the spacing between cell1 and cell2.
-  IntRect interest_rect(0, 200, 200, 150);
-  Paint(&interest_rect);
+  Paint(IntRect(0, 200, 200, 150));
 
-  EXPECT_DISPLAY_LIST(
-      RootPaintController().GetDisplayItemList(), 3,
-      TestDisplayItem(ViewBackgroundClient(), DisplayItem::kDocumentBackground),
-      TestDisplayItem(row1, DisplayItem::kBoxDecorationBackground),
-      TestDisplayItem(cell1, DisplayItem::kBoxDecorationBackground));
+  EXPECT_THAT(
+      RootPaintController().GetDisplayItemList(),
+      ElementsAre(IsSameId(&ViewScrollingBackgroundClient(),
+                           DisplayItem::kDocumentBackground),
+                  IsSameId(&row1, DisplayItem::kBoxDecorationBackground),
+                  IsSameId(&cell1, DisplayItem::kBoxDecorationBackground)));
 
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
   // Intersects the spacing only.
-  interest_rect = IntRect(0, 250, 100, 100);
-  Paint(&interest_rect);
+  Paint(IntRect(0, 250, 100, 100));
 
-  EXPECT_DISPLAY_LIST(
-      RootPaintController().GetDisplayItemList(), 2,
-      TestDisplayItem(ViewBackgroundClient(), DisplayItem::kDocumentBackground),
-      TestDisplayItem(row1, DisplayItem::kBoxDecorationBackground));
+  EXPECT_THAT(
+      RootPaintController().GetDisplayItemList(),
+      ElementsAre(IsSameId(&ViewScrollingBackgroundClient(),
+                           DisplayItem::kDocumentBackground),
+                  IsSameId(&row1, DisplayItem::kBoxDecorationBackground)));
 
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
   // Intersects cell2 only.
-  interest_rect = IntRect(0, 350, 200, 150);
-  Paint(&interest_rect);
+  Paint(IntRect(0, 350, 200, 150));
 
-  EXPECT_DISPLAY_LIST(
-      RootPaintController().GetDisplayItemList(), 3,
-      TestDisplayItem(ViewBackgroundClient(), DisplayItem::kDocumentBackground),
-      TestDisplayItem(row2, DisplayItem::kBoxDecorationBackground),
-      TestDisplayItem(cell2, DisplayItem::kBoxDecorationBackground));
+  EXPECT_THAT(
+      RootPaintController().GetDisplayItemList(),
+      ElementsAre(IsSameId(&ViewScrollingBackgroundClient(),
+                           DisplayItem::kDocumentBackground),
+                  IsSameId(&row2, DisplayItem::kBoxDecorationBackground),
+                  IsSameId(&cell2, DisplayItem::kBoxDecorationBackground)));
 }
 
 TEST_P(TablePainterTest, BackgroundInSelfPaintingRow) {
@@ -130,35 +132,33 @@ TEST_P(TablePainterTest, BackgroundInSelfPaintingRow) {
   InvalidateAll(RootPaintController());
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
   // Intersects cell1 and the spacing between cell1 and cell2.
-  IntRect interest_rect(200, 0, 200, 200);
-  Paint(&interest_rect);
+  Paint(IntRect(200, 0, 200, 200));
 
-  EXPECT_DISPLAY_LIST(
-      RootPaintController().GetDisplayItemList(), 3,
-      TestDisplayItem(ViewBackgroundClient(), DisplayItem::kDocumentBackground),
-      TestDisplayItem(row, DisplayItem::kBoxDecorationBackground),
-      TestDisplayItem(cell1, DisplayItem::kBoxDecorationBackground));
+  EXPECT_THAT(
+      RootPaintController().GetDisplayItemList(),
+      ElementsAre(IsSameId(&ViewScrollingBackgroundClient(),
+                           DisplayItem::kDocumentBackground),
+                  IsSameId(&row, DisplayItem::kBoxDecorationBackground),
+                  IsSameId(&cell1, DisplayItem::kBoxDecorationBackground)));
 
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
   // Intersects the spacing only.
-  interest_rect = IntRect(300, 0, 100, 100);
-  Paint(&interest_rect);
+  Paint(IntRect(300, 0, 100, 100));
 
-  EXPECT_DISPLAY_LIST(RootPaintController().GetDisplayItemList(), 1,
-                      TestDisplayItem(ViewBackgroundClient(),
-                                      DisplayItem::kDocumentBackground));
+  EXPECT_THAT(RootPaintController().GetDisplayItemList(),
+              ElementsAre(IsSameId(&ViewScrollingBackgroundClient(),
+                                   DisplayItem::kDocumentBackground)));
 
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
   // Intersects cell2 only.
-  interest_rect = IntRect(450, 0, 200, 200);
-  Paint(&interest_rect);
+  Paint(IntRect(450, 0, 200, 200));
 
-    EXPECT_DISPLAY_LIST(
-        RootPaintController().GetDisplayItemList(), 3,
-        TestDisplayItem(ViewBackgroundClient(),
-                        DisplayItem::kDocumentBackground),
-        TestDisplayItem(row, DisplayItem::kBoxDecorationBackground),
-        TestDisplayItem(cell2, DisplayItem::kBoxDecorationBackground));
+  EXPECT_THAT(
+      RootPaintController().GetDisplayItemList(),
+      ElementsAre(IsSameId(&ViewScrollingBackgroundClient(),
+                           DisplayItem::kDocumentBackground),
+                  IsSameId(&row, DisplayItem::kBoxDecorationBackground),
+                  IsSameId(&cell2, DisplayItem::kBoxDecorationBackground)));
 }
 
 TEST_P(TablePainterTest, CollapsedBorderAndOverflow) {
@@ -175,21 +175,20 @@ TEST_P(TablePainterTest, CollapsedBorderAndOverflow) {
   )HTML");
 
   auto& cell = *ToLayoutTableCell(GetLayoutObjectByElementId("cell"));
-
   InvalidateAll(RootPaintController());
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
   // Intersects the overflowing part of cell but not border box.
-  IntRect interest_rect(0, 0, 100, 100);
-  Paint(&interest_rect);
+  Paint(IntRect(0, 0, 100, 100));
 
   // We should paint all display items of cell.
-  EXPECT_DISPLAY_LIST(
-      RootPaintController().GetDisplayItemList(), 4,
-      TestDisplayItem(ViewBackgroundClient(), DisplayItem::kDocumentBackground),
-      TestDisplayItem(cell, DisplayItem::kBoxDecorationBackground),
-      TestDisplayItem(*cell.Row(), DisplayItem::kTableCollapsedBorders),
-      TestDisplayItem(cell, DisplayItem::PaintPhaseToDrawingType(
-                                PaintPhase::kSelfOutlineOnly)));
+  EXPECT_THAT(
+      RootPaintController().GetDisplayItemList(),
+      ElementsAre(IsSameId(&ViewScrollingBackgroundClient(),
+                           DisplayItem::kDocumentBackground),
+                  IsSameId(&cell, DisplayItem::kBoxDecorationBackground),
+                  IsSameId(cell.Row(), DisplayItem::kTableCollapsedBorders),
+                  IsSameId(&cell, DisplayItem::PaintPhaseToDrawingType(
+                                      PaintPhase::kSelfOutlineOnly))));
 }
 
 }  // namespace blink

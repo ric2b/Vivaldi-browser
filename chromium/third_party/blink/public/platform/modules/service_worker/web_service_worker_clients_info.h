@@ -6,46 +6,30 @@
 #define THIRD_PARTY_BLINK_PUBLIC_PLATFORM_MODULES_SERVICE_WORKER_WEB_SERVICE_WORKER_CLIENTS_INFO_H_
 
 #include "services/network/public/mojom/request_context_frame_type.mojom-shared.h"
-#include "third_party/blink/public/mojom/page/page_visibility_state.mojom-shared.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_client.mojom-shared.h"
-#include "third_party/blink/public/platform/web_callbacks.h"
+#include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
-#include "third_party/blink/public/platform/web_url_request.h"
-#include "third_party/blink/public/platform/web_vector.h"
-
-#include <memory>
 
 namespace blink {
 
-struct WebServiceWorkerError;
-
+// The only usage of this class is to carry the source of an extendable message
+// dispatched via content.mojom.ServiceWorker across the boundary of Content and
+// Blink.
+// TODO(crbug.com/879019): Remove this class once we move
+// content.mojom.ServiceWorker impl into Blink.
 struct WebServiceWorkerClientInfo {
-  WebServiceWorkerClientInfo()
-      : page_visibility_state(mojom::PageVisibilityState::kMaxValue),
-        is_focused(false),
-        frame_type(network::mojom::RequestContextFrameType::kNone),
-        client_type(mojom::ServiceWorkerClientType::kWindow) {}
+  WebServiceWorkerClientInfo() = default;
 
   WebString uuid;
 
-  mojom::PageVisibilityState page_visibility_state;
-  bool is_focused;
+  bool page_hidden = true;
+  bool is_focused = false;
   WebURL url;
-  network::mojom::RequestContextFrameType frame_type;
-  mojom::ServiceWorkerClientType client_type;
+  network::mojom::RequestContextFrameType frame_type =
+      network::mojom::RequestContextFrameType::kNone;
+  mojom::ServiceWorkerClientType client_type =
+      mojom::ServiceWorkerClientType::kWindow;
 };
-
-struct WebServiceWorkerClientsInfo {
-  WebVector<WebServiceWorkerClientInfo> clients;
-};
-
-// Two WebCallbacks, one for one client, one for a WebVector of clients.
-using WebServiceWorkerClientCallbacks =
-    WebCallbacks<std::unique_ptr<WebServiceWorkerClientInfo>,
-                 const WebServiceWorkerError&>;
-using WebServiceWorkerClientsCallbacks =
-    WebCallbacks<const WebServiceWorkerClientsInfo&,
-                 const WebServiceWorkerError&>;
 
 }  // namespace blink
 

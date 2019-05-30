@@ -44,7 +44,7 @@ BroadcastChannel* BroadcastChannel::Create(ExecutionContext* execution_context,
         "Can't create BroadcastChannel in an opaque origin");
     return nullptr;
   }
-  return new BroadcastChannel(execution_context, name);
+  return MakeGarbageCollected<BroadcastChannel>(execution_context, name);
 }
 
 BroadcastChannel::~BroadcastChannel() = default;
@@ -78,11 +78,11 @@ void BroadcastChannel::close() {
 }
 
 const AtomicString& BroadcastChannel::InterfaceName() const {
-  return EventTargetNames::BroadcastChannel;
+  return event_target_names::kBroadcastChannel;
 }
 
 bool BroadcastChannel::HasPendingActivity() const {
-  return binding_.is_bound() && HasEventListeners(EventTypeNames::message);
+  return binding_.is_bound() && HasEventListeners(event_type_names::kMessage);
 }
 
 void BroadcastChannel::ContextDestroyed(ExecutionContext*) {

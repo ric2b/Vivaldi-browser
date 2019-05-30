@@ -31,7 +31,7 @@ std::string GetAccountId() {
   // impossible to discover otherwise.
   return "user@gmail.com";
 #else
-  return "gaia_id_for_user@gmail.com";
+  return "gaia_id_for_user_gmail.com";
 #endif
 }
 
@@ -44,7 +44,7 @@ class UserConsentEqualityChecker : public SingleClientStatusChangeChecker {
       : SingleClientStatusChangeChecker(service), fake_server_(fake_server) {
     for (const UserConsentSpecifics& specifics : expected_specifics) {
       expected_specifics_.insert(std::pair<int64_t, UserConsentSpecifics>(
-          specifics.confirmation_grd_id(), specifics));
+          specifics.consent_case(), specifics));
     }
   }
 
@@ -65,8 +65,7 @@ class UserConsentEqualityChecker : public SingleClientStatusChangeChecker {
     // modify |expected_specifics_|.
     for (const SyncEntity& entity : entities) {
       UserConsentSpecifics server_specifics = entity.specifics().user_consent();
-      auto iter =
-          expected_specifics_.find(server_specifics.confirmation_grd_id());
+      auto iter = expected_specifics_.find(server_specifics.consent_case());
       EXPECT_TRUE(expected_specifics_.end() != iter);
       if (expected_specifics_.end() == iter) {
         return false;
@@ -84,6 +83,9 @@ class UserConsentEqualityChecker : public SingleClientStatusChangeChecker {
 
  private:
   FakeServer* fake_server_;
+  // TODO(markusheintz): User a string with the serialized proto instead of an
+  // int. The requires creating better expectations with a proper creation
+  // time.
   std::multimap<int64_t, UserConsentSpecifics> expected_specifics_;
 
   DISALLOW_COPY_AND_ASSIGN(UserConsentEqualityChecker);
@@ -102,19 +104,11 @@ class SingleClientUserConsentsSyncTest : public SyncTest {
         .Wait();
   }
 
-  void SetSyncUserConsentSeparateTypeFeature(bool value) {
-    SyncTest::feature_list_.InitWithFeatureState(
-        switches::kSyncUserConsentSeparateType, value);
-  }
-
  private:
   DISALLOW_COPY_AND_ASSIGN(SingleClientUserConsentsSyncTest);
 };
 
-IN_PROC_BROWSER_TEST_F(SingleClientUserConsentsSyncTest,
-                       ShouldSubmitAsSeparateConsentDatatypeWhenEnabled) {
-  SetSyncUserConsentSeparateTypeFeature(true);
-
+IN_PROC_BROWSER_TEST_F(SingleClientUserConsentsSyncTest, ShouldSubmit) {
   ASSERT_TRUE(SetupSync());
   ASSERT_EQ(0u, GetFakeServer()
                     ->GetSyncEntitiesByModelType(syncer::USER_CONSENTS)
@@ -122,7 +116,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientUserConsentsSyncTest,
   consent_auditor::ConsentAuditor* consent_service =
       ConsentAuditorFactory::GetForProfile(GetProfile(0));
   UserConsentSpecifics specifics;
-  specifics.set_confirmation_grd_id(1);
+  specifics.mutable_sync_consent()->set_confirmation_grd_id(1);
   specifics.set_account_id(GetAccountId());
 
   SyncConsent sync_consent;
@@ -136,10 +130,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientUserConsentsSyncTest,
 IN_PROC_BROWSER_TEST_F(
     SingleClientUserConsentsSyncTest,
     ShouldPreserveConsentsOnDisableSyncAndResubmitWhenReenabled) {
-  SetSyncUserConsentSeparateTypeFeature(true);
-
   UserConsentSpecifics specifics;
-  specifics.set_confirmation_grd_id(1);
+  specifics.mutable_sync_consent()->set_confirmation_grd_id(1);
   // Account id may be compared to the synced account, thus, we need them to
   // match.
   specifics.set_account_id(GetAccountId());
@@ -153,10 +145,45 @@ IN_PROC_BROWSER_TEST_F(
   sync_consent.set_status(UserConsentTypes::GIVEN);
   consent_service->RecordSyncConsent(GetAccountId(), sync_consent);
 
-  GetClient(0)->StopSyncService(syncer::SyncService::CLEAR_DATA);
+  GetClient(0)->StopSyncServiceAndClearData();
   ASSERT_TRUE(GetClient(0)->StartSyncService());
 
   EXPECT_TRUE(ExpectUserConsents({specifics}));
+}
+
+IN_PROC_BROWSER_TEST_F(SingleClientUserConsentsSyncTest,
+                       ShouldPreserveConsentsLoggedBeforeSyncSetup) {
+  SyncConsent consent1;
+  consent1.set_confirmation_grd_id(1);
+  consent1.set_status(UserConsentTypes::GIVEN);
+  SyncConsent consent2;
+  consent2.set_confirmation_grd_id(2);
+  consent2.set_status(UserConsentTypes::GIVEN);
+
+  UserConsentSpecifics specifics1;
+  *specifics1.mutable_sync_consent() = consent1;
+  specifics1.set_account_id(GetAccountId());
+  UserConsentSpecifics specifics2;
+  *specifics2.mutable_sync_consent() = consent2;
+  specifics2.set_account_id(GetAccountId());
+
+  // Set up the clients (profiles), but do *not* set up Sync yet.
+  ASSERT_TRUE(SetupClients());
+
+  // Now we can already record a consent, but of course it won't make it to the
+  // server yet.
+  consent_auditor::ConsentAuditor* consent_service =
+      ConsentAuditorFactory::GetForProfile(GetProfile(0));
+  consent_service->RecordSyncConsent(GetAccountId(), consent1);
+  EXPECT_TRUE(ExpectUserConsents({}));
+
+  // Once we turn on Sync, the consent gets uploaded.
+  ASSERT_TRUE(SetupSync());
+  EXPECT_TRUE(ExpectUserConsents({specifics1}));
+
+  // Another consent can also be added now.
+  consent_service->RecordSyncConsent(GetAccountId(), consent2);
+  EXPECT_TRUE(ExpectUserConsents({specifics1, specifics2}));
 }
 
 // ChromeOS does not support late signin after profile creation, so the test
@@ -164,21 +191,13 @@ IN_PROC_BROWSER_TEST_F(
 #if !defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(SingleClientUserConsentsSyncTest,
                        ShouldSubmitIfSignedInAlthoughFullSyncNotEnabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      // Enabled.
-      {switches::kSyncStandaloneTransport,
-       switches::kSyncUserConsentSeparateType},
-      // Disabled.
-      {});
-
   // We avoid calling SetupSync(), because we don't want to turn on full sync,
   // only sign in such that the standalone transport starts.
   ASSERT_TRUE(SetupClients());
-  ASSERT_TRUE(GetClient(0)->SignIn());
+  ASSERT_TRUE(GetClient(0)->SignInPrimaryAccount());
   ASSERT_TRUE(GetClient(0)->AwaitEngineInitialization());
   ASSERT_TRUE(AwaitQuiescence());
-  ASSERT_FALSE(GetSyncService(0)->IsSyncActive())
+  ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureActive())
       << "Full sync should be disabled";
   ASSERT_EQ(syncer::SyncService::TransportState::ACTIVE,
             GetSyncService(0)->GetTransportState());
@@ -193,7 +212,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientUserConsentsSyncTest,
       ->RecordSyncConsent(GetAccountId(), sync_consent);
 
   UserConsentSpecifics specifics;
-  specifics.set_confirmation_grd_id(1);
+  SyncConsent* expected_sync_consent = specifics.mutable_sync_consent();
+  expected_sync_consent->set_confirmation_grd_id(1);
+  expected_sync_consent->set_status(UserConsentTypes::GIVEN);
   // Account id may be compared to the synced account, thus, we need them to
   // match.
   specifics.set_account_id(GetAccountId());

@@ -7,7 +7,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/core/editing/markers/spelling_marker.h"
 #include "third_party/blink/renderer/core/editing/markers/spelling_marker_list_impl.h"
-#include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 
 namespace blink {
 
@@ -16,10 +16,12 @@ namespace blink {
 
 class SpellingMarkerListImplTest : public testing::Test {
  protected:
-  SpellingMarkerListImplTest() : marker_list_(new SpellingMarkerListImpl()) {}
+  SpellingMarkerListImplTest()
+      : marker_list_(MakeGarbageCollected<SpellingMarkerListImpl>()) {}
 
   DocumentMarker* CreateMarker(unsigned start_offset, unsigned end_offset) {
-    return new SpellingMarker(start_offset, end_offset, g_empty_string);
+    return MakeGarbageCollected<SpellingMarker>(start_offset, end_offset,
+                                                g_empty_string);
   }
 
   Persistent<SpellingMarkerListImpl> marker_list_;

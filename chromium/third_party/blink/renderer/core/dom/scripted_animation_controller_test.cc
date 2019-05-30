@@ -5,12 +5,13 @@
 #include "third_party/blink/renderer/core/dom/scripted_animation_controller.h"
 
 #include <memory>
+
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
-#include "third_party/blink/renderer/core/dom/events/event_listener.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
+#include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/dom/frame_request_callback_collection.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -117,14 +118,10 @@ TEST_F(ScriptedAnimationControllerTest, EnqueueWithinTask) {
 
 namespace {
 
-class RunTaskEventListener final : public EventListener {
+class RunTaskEventListener final : public NativeEventListener {
  public:
-  RunTaskEventListener(base::RepeatingClosure task)
-      : EventListener(kCPPEventListenerType), task_(std::move(task)) {}
-  void handleEvent(ExecutionContext*, Event*) override { task_.Run(); }
-  bool operator==(const EventListener& other) const override {
-    return this == &other;
-  }
+  RunTaskEventListener(base::RepeatingClosure task) : task_(std::move(task)) {}
+  void Invoke(ExecutionContext*, Event*) override { task_.Run(); }
 
  private:
   base::RepeatingClosure task_;
@@ -139,7 +136,8 @@ TEST_F(ScriptedAnimationControllerTest, EnqueueTaskAndEvent) {
 
   Controller().EnqueueTask(observer.CreateTask(1));
   GetDocument().addEventListener(
-      "test", new RunTaskEventListener(observer.CreateTask(2)));
+      "test",
+      MakeGarbageCollected<RunTaskEventListener>(observer.CreateTask(2)));
   Event* event = Event::Create("test");
   event->SetTarget(&GetDocument());
   Controller().EnqueueEvent(event);
@@ -173,7 +171,8 @@ TEST_F(ScriptedAnimationControllerTest, RegisterCallbackAndEnqueueTask) {
   Event* event = Event::Create("test");
   event->SetTarget(&GetDocument());
 
-  Controller().RegisterCallback(new RunTaskCallback(observer.CreateTask(1)));
+  Controller().RegisterCallback(
+      MakeGarbageCollected<RunTaskCallback>(observer.CreateTask(1)));
   Controller().EnqueueTask(observer.CreateTask(2));
   EXPECT_EQ(0u, observer.Order().size());
 
@@ -186,14 +185,17 @@ TEST_F(ScriptedAnimationControllerTest, RegisterCallbackAndEnqueueTask) {
 TEST_F(ScriptedAnimationControllerTest, TestHasCallback) {
   TaskOrderObserver observer;
 
-  Controller().RegisterCallback(new RunTaskCallback(observer.CreateTask(1)));
+  Controller().RegisterCallback(
+      MakeGarbageCollected<RunTaskCallback>(observer.CreateTask(1)));
   EXPECT_TRUE(Controller().HasCallback());
 
   Controller().CancelCallback(1);
   EXPECT_FALSE(Controller().HasCallback());
 
-  Controller().RegisterCallback(new RunTaskCallback(observer.CreateTask(1)));
-  Controller().RegisterCallback(new RunTaskCallback(observer.CreateTask(2)));
+  Controller().RegisterCallback(
+      MakeGarbageCollected<RunTaskCallback>(observer.CreateTask(1)));
+  Controller().RegisterCallback(
+      MakeGarbageCollected<RunTaskCallback>(observer.CreateTask(2)));
   EXPECT_TRUE(Controller().HasCallback());
 
   Controller().CancelCallback(1);

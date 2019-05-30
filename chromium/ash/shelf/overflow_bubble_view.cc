@@ -18,7 +18,6 @@
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/insets.h"
-#include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
@@ -35,87 +34,87 @@ constexpr int kMinimumMargin = 8;
 
 }  // namespace
 
-OverflowBubbleView::OverflowBubbleView(Shelf* shelf)
-    : shelf_(shelf),
-      shelf_view_(nullptr),
-      background_animator_(SHELF_BACKGROUND_OVERLAP,
+OverflowBubbleView::OverflowBubbleView(ShelfView* shelf_view,
+                                       views::View* anchor,
+                                       SkColor background_color)
+    : ShelfBubble(anchor, shelf_view->shelf()->alignment(), background_color),
+      shelf_(shelf_view->shelf()),
+      shelf_view_(shelf_view),
+      background_animator_(SHELF_BACKGROUND_DEFAULT,
                            // Don't pass the Shelf so the translucent color is
                            // always used.
                            nullptr,
                            Shell::Get()->wallpaper_controller()) {
   DCHECK(shelf_);
 
+  set_border_radius(ShelfConstants::shelf_size() / 2);
   background_animator_.AddObserver(this);
-}
-
-OverflowBubbleView::~OverflowBubbleView() {
-  background_animator_.RemoveObserver(this);
-}
-
-void OverflowBubbleView::InitOverflowBubble(views::View* anchor,
-                                            ShelfView* shelf_view) {
-  shelf_view_ = shelf_view;
-
-  SetAnchorView(anchor);
-  set_arrow(views::BubbleBorder::NONE);
+  SetArrow(views::BubbleBorder::NONE);
   SetBackground(nullptr);
+  set_shadow(views::BubbleBorder::NO_ASSETS);
+  set_close_on_deactivate(false);
+  set_accept_events(true);
+
   if (shelf_->IsHorizontalAlignment())
     set_margins(gfx::Insets(0, kEndPadding));
   else
     set_margins(gfx::Insets(kEndPadding, 0));
-  set_shadow(views::BubbleBorder::NO_ASSETS);
-  set_close_on_deactivate(false);
-  set_accept_events(true);
 
   // Makes bubble view has a layer and clip its children layers.
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
   layer()->SetMasksToBounds(true);
 
-  // Place the bubble in the same root window as the anchor.
-  set_parent_window(
-      anchor_widget()->GetNativeWindow()->GetRootWindow()->GetChildById(
-          kShellWindowId_ShelfBubbleContainer));
-
-  views::BubbleDialogDelegateView::CreateBubble(this);
-
-  // This can only be set after bubble creation:
-  if (chromeos::switches::ShouldUseShelfNewUi())
-    GetBubbleFrameView()->bubble_border()->SetCornerRadius(
-        ShelfConstants::shelf_size() / 2);
+  CreateBubble();
 
   AddChildView(shelf_view_);
 }
 
-void OverflowBubbleView::ProcessGestureEvent(const ui::GestureEvent& event) {
+OverflowBubbleView::~OverflowBubbleView() {
+  background_animator_.RemoveObserver(this);
+}
+
+bool OverflowBubbleView::ProcessGestureEvent(const ui::GestureEvent& event) {
+  // Handle scroll-related events, but don't do anything special for begin and
+  // end.
+  if (event.type() == ui::ET_GESTURE_SCROLL_BEGIN ||
+      event.type() == ui::ET_GESTURE_SCROLL_END) {
+    return true;
+  }
   if (event.type() != ui::ET_GESTURE_SCROLL_UPDATE)
-    return;
+    return false;
 
   if (shelf_->IsHorizontalAlignment())
     ScrollByXOffset(static_cast<int>(-event.details().scroll_x()));
   else
     ScrollByYOffset(static_cast<int>(-event.details().scroll_y()));
-  Layout();
+  return true;
 }
 
-void OverflowBubbleView::ScrollByXOffset(int x_offset) {
+int OverflowBubbleView::ScrollByXOffset(int x_offset) {
   const gfx::Rect visible_bounds(GetContentsBounds());
   const gfx::Size contents_size(shelf_view_->GetPreferredSize());
 
   DCHECK_GE(contents_size.width(), visible_bounds.width());
-  int x = std::min(contents_size.width() - visible_bounds.width(),
-                   std::max(0, scroll_offset_.x() + x_offset));
+  const int old_x = scroll_offset_.x();
+  const int x = std::min(contents_size.width() - visible_bounds.width(),
+                         std::max(0, old_x + x_offset));
   scroll_offset_.set_x(x);
+  Layout();
+  return x - old_x;
 }
 
-void OverflowBubbleView::ScrollByYOffset(int y_offset) {
+int OverflowBubbleView::ScrollByYOffset(int y_offset) {
   const gfx::Rect visible_bounds(GetContentsBounds());
   const gfx::Size contents_size(shelf_view_->GetPreferredSize());
 
-  DCHECK_GE(contents_size.width(), visible_bounds.width());
-  int y = std::min(contents_size.height() - visible_bounds.height(),
-                   std::max(0, scroll_offset_.y() + y_offset));
+  DCHECK_GE(contents_size.height(), visible_bounds.height());
+  const int old_y = scroll_offset_.y();
+  const int y = std::min(contents_size.height() - visible_bounds.height(),
+                         std::max(0, old_y + y_offset));
   scroll_offset_.set_y(y);
+  Layout();
+  return y - old_y;
 }
 
 gfx::Size OverflowBubbleView::CalculatePreferredSize() const {
@@ -154,7 +153,6 @@ void OverflowBubbleView::ChildPreferredSizeChanged(views::View* child) {
     ScrollByXOffset(0);
   else
     ScrollByYOffset(0);
-  Layout();
 }
 
 bool OverflowBubbleView::OnMouseWheel(const ui::MouseWheelEvent& event) {
@@ -166,7 +164,6 @@ bool OverflowBubbleView::OnMouseWheel(const ui::MouseWheelEvent& event) {
     ScrollByXOffset(-event.y_offset());
   else
     ScrollByYOffset(-event.y_offset());
-  Layout();
 
   return true;
 }
@@ -176,12 +173,7 @@ void OverflowBubbleView::OnScrollEvent(ui::ScrollEvent* event) {
     ScrollByXOffset(static_cast<int>(-event->x_offset()));
   else
     ScrollByYOffset(static_cast<int>(-event->y_offset()));
-  Layout();
   event->SetHandled();
-}
-
-int OverflowBubbleView::GetDialogButtons() const {
-  return ui::DIALOG_BUTTON_NONE;
 }
 
 gfx::Rect OverflowBubbleView::GetBubbleBounds() {
@@ -231,6 +223,14 @@ bool OverflowBubbleView::CanActivate() const {
   aura::Window* bubble_window = GetWidget()->GetNativeWindow();
   aura::Window* shelf_window = shelf_->shelf_widget()->GetNativeWindow();
   return active_window == bubble_window || active_window == shelf_window;
+}
+
+bool OverflowBubbleView::ShouldCloseOnPressDown() {
+  return false;
+}
+
+bool OverflowBubbleView::ShouldCloseOnMouseExit() {
+  return false;
 }
 
 void OverflowBubbleView::UpdateShelfBackground(SkColor color) {

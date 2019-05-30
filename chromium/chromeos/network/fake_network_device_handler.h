@@ -5,16 +5,20 @@
 #ifndef CHROMEOS_NETWORK_FAKE_NETWORK_DEVICE_HANDLER_H_
 #define CHROMEOS_NETWORK_FAKE_NETWORK_DEVICE_HANDLER_H_
 
+#include <string>
+#include <vector>
+
 #include "base/compiler_specific.h"
+#include "base/component_export.h"
 #include "base/macros.h"
-#include "chromeos/chromeos_export.h"
 #include "chromeos/network/network_device_handler.h"
 
 namespace chromeos {
 
 // This is a fake implementation which does nothing. Use this as a base class
 // for concrete fake handlers.
-class CHROMEOS_EXPORT FakeNetworkDeviceHandler : public NetworkDeviceHandler {
+class COMPONENT_EXPORT(CHROMEOS_NETWORK) FakeNetworkDeviceHandler
+    : public NetworkDeviceHandler {
  public:
   FakeNetworkDeviceHandler();
   ~FakeNetworkDeviceHandler() override;
@@ -92,8 +96,18 @@ class CHROMEOS_EXPORT FakeNetworkDeviceHandler : public NetworkDeviceHandler {
       const base::Closure& callback,
       const network_handler::ErrorCallback& error_callback) override;
 
+  void AddWifiWakeOnPacketOfTypes(
+      const std::vector<std::string>& types,
+      const base::Closure& callback,
+      const network_handler::ErrorCallback& error_callback) override;
+
   void RemoveWifiWakeOnPacketConnection(
       const net::IPEndPoint& ip_endpoint,
+      const base::Closure& callback,
+      const network_handler::ErrorCallback& error_callback) override;
+
+  void RemoveWifiWakeOnPacketOfTypes(
+      const std::vector<std::string>& types,
       const base::Closure& callback,
       const network_handler::ErrorCallback& error_callback) override;
 

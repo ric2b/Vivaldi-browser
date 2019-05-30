@@ -10,89 +10,34 @@ group("webrtc_overrides") {
   ]
 }
 
-config("jingle_unexported_configs") {
-  include_dirs = [
-    "../../third_party/webrtc_overrides",
-    "../../testing/gtest/include",
-    "../../third_party/libyuv/include",
-    "../../third_party/usrsctp/usrsctplib",
-    "../../third_party/webrtc",
-  ]
-}
-
-config("jingle_public_configs") {
-  include_dirs = [
-    "../../third_party/webrtc_overrides",
-    "../../testing/gtest/include",
-    "../../third_party/webrtc",
-  ]
-}
-
-group("jingle_deps") {
+source_set("webrtc") {
   public_deps = [
-    "//third_party/expat",
-  ]
-  deps = [
-    "//base",
-    "//crypto:platform",
-    "//net",
-  ]
-}
-
-static_library("webrtc") {
-  public_deps = [
-    ":jingle_deps",
-
     # TODO(kjellander): Start cleaning up this target as soon as
     # https://codereview.chromium.org/2022833002/ is landed. The target should
     # be removed entirely if possible.
-    "//third_party/libjingle_xmpp:rtc_task_runner",
     "//third_party/webrtc/rtc_base:rtc_base_approved",
   ]
   deps = [
     "//third_party/webrtc/p2p:rtc_p2p",
   ]
 
-  if (is_win) {
-    cflags = [ "/wd4005" ]
-  }
-
-  if (is_nacl) {
-    # For NACL, we have to add a default implementation for field_trial and
-    # runtime_enabled_features.
+  # When Chromium is built for NACL or Chromecast, WebRTC provides a
+  # field_trial implementation so there is no need to depend on
+  # ":field_trial".
+  # This configuration happens here:
+  # https://cs.chromium.org/chromium/src/third_party/webrtc/webrtc.gni?l=44-51&rcl=95c56eebe0a2b31ad5752138d15b431124e17d36
+  if (!is_chromecast && !is_nacl) {
+    # When Chromium doesn't build for NaCL or Chromecast, WebRTC doesn't
+    # provide an implementation for field_trial and a custom one (that uses
+    # base/metrics/field_trial.h is provided).
     deps += [
-      "//native_client_sdk/src/libraries/nacl_io",
-      "//third_party/webrtc/system_wrappers:field_trial_default",
-      "//third_party/webrtc/system_wrappers:runtime_enabled_features_default",
-    ]
-  } else if (is_chromecast) {
-    # Cast builds use the default implementation for field_trial and
-    # runtime_enabled_features.
-    deps += [
-      "//third_party/webrtc/system_wrappers:field_trial_default",
-      "//third_party/webrtc/system_wrappers:runtime_enabled_features_default",
-    ]
-  } else {
-    # Otherwise, we just add the field_trial which redirects to base and
-    # runtime_enabled_features which redirects to content/public/common.
-    sources = [
-      "field_trial.cc",
-      "runtime_enabled_features.cc",
-    ]
-    deps += [
+      ":field_trial",
       "//base",
-      "//third_party/webrtc/system_wrappers:runtime_enabled_features_api",
     ]
   }
 
-  configs += [
-    ":jingle_unexported_configs",
-    "//third_party/webrtc:common_config",
-  ]
-  public_configs = [
-    ":jingle_public_configs",
-    "//third_party/webrtc:common_inherited_config",
-  ]
+  configs += [ "//third_party/webrtc:common_config" ]
+  public_configs = [ "//third_party/webrtc:common_inherited_config" ]
 }
 
 static_library("init_webrtc") {
@@ -100,18 +45,22 @@ static_library("init_webrtc") {
     "init_webrtc.cc",
     "init_webrtc.h",
   ]
-  configs += [
-    ":jingle_unexported_configs",
-    "//third_party/webrtc:common_config",
-  ]
+  configs += [ "//third_party/webrtc:common_config" ]
   public_configs = [
-    ":jingle_public_configs",
     "//third_party/webrtc:common_inherited_config",
+
+    # TODO(mbonadei): Abseil config propagation is needed because
+    # WebRTC's BUILD.gn files don't use `public_deps`, there are
+    # good reasons for this, but they may disappear in the future.
+    # In that case it is ok to remove these two lines.
+    "//third_party/abseil-cpp:absl_include_config",
+    "//third_party/abseil-cpp:absl_define_config",
   ]
   public_deps = [
     ":libjingle_webrtc_common",
   ]
   deps = [
+    ":metrics",
     ":task_queue_impl",
     "//base",
     "//third_party/webrtc/rtc_base",
@@ -119,20 +68,30 @@ static_library("init_webrtc") {
   ]
 }
 
+static_library("metrics") {
+  sources = [
+    "metrics.cc",
+  ]
+  deps = [
+    "//base",
+  ]
+}
+
+static_library("field_trial") {
+  sources = [
+    "field_trial.cc",
+  ]
+  deps = [
+    "//base",
+  ]
+}
+
 source_set("libjingle_webrtc_common") {
-  configs += [
-    ":jingle_unexported_configs",
-    "//third_party/webrtc:common_config",
-  ]
-  public_configs = [
-    ":jingle_public_configs",
-    "//third_party/webrtc:common_inherited_config",
-  ]
+  configs += [ "//third_party/webrtc:common_config" ]
+  public_configs = [ "//third_party/webrtc:common_inherited_config" ]
 
   deps = [
     ":webrtc",
-    "//third_party/libsrtp",
-    "//third_party/usrsctp",
     "//third_party/webrtc/media:rtc_media",
     "//third_party/webrtc/media:rtc_media_base",
     "//third_party/webrtc/modules/video_capture",
@@ -142,13 +101,27 @@ source_set("libjingle_webrtc_common") {
   ]
 }
 
+# TODO(bugs.webrtc.org/10284): Remove when TaskQueue factory is propagated
+# explicetely to all components that needs it.
 source_set("task_queue_impl") {
   sources = [
-    "rtc_base/task_queue.cc",
+    "task_queue_impl.cc",
+  ]
+  configs += [ "//third_party/webrtc:library_impl_config" ]
+  deps = [
+    ":task_queue_factory",
+    "//third_party/webrtc/api/task_queue:global_task_queue_factory",
+  ]
+}
+
+source_set("task_queue_factory") {
+  sources = [
+    "task_queue_factory.cc",
+    "task_queue_factory.h",
   ]
   deps = [
     "//base",
-    "//third_party/webrtc/rtc_base:refcount",
-    "//third_party/webrtc/rtc_base:rtc_task_queue_api",
+    "//third_party/webrtc/api/task_queue",
+    "//third_party/webrtc/api/task_queue:task_queue_factory",
   ]
 }

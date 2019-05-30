@@ -36,7 +36,7 @@ namespace blink {
 
 V0CustomElementCallbackQueue* V0CustomElementCallbackQueue::Create(
     Element* element) {
-  return new V0CustomElementCallbackQueue(element);
+  return MakeGarbageCollected<V0CustomElementCallbackQueue>(element);
 }
 
 V0CustomElementCallbackQueue::V0CustomElementCallbackQueue(Element* element)
@@ -73,7 +73,7 @@ bool V0CustomElementCallbackQueue::ProcessInElementQueue(
   return did_work;
 }
 
-void V0CustomElementCallbackQueue::Trace(blink::Visitor* visitor) {
+void V0CustomElementCallbackQueue::Trace(Visitor* visitor) {
   visitor->Trace(element_);
   visitor->Trace(queue_);
 }

@@ -15,10 +15,7 @@
 namespace safe_browsing {
 
 // TestSafeBrowsingService functions:
-TestSafeBrowsingService::TestSafeBrowsingService()
-    : SafeBrowsingService(),
-      serialized_download_report_(base::EmptyString()),
-      use_v4_local_db_manager_(false) {
+TestSafeBrowsingService::TestSafeBrowsingService() {
 #if defined(FULL_SAFE_BROWSING)
   services_delegate_ = ServicesDelegate::CreateForTest(this, this);
 #endif  // defined(FULL_SAFE_BROWSING)
@@ -34,6 +31,15 @@ V4ProtocolConfig TestSafeBrowsingService::GetV4ProtocolConfig() const {
 
 void TestSafeBrowsingService::UseV4LocalDatabaseManager() {
   use_v4_local_db_manager_ = true;
+}
+
+std::unique_ptr<SafeBrowsingService::StateSubscription>
+TestSafeBrowsingService::RegisterStateCallback(
+    const base::Callback<void(void)>& callback) {
+  // This override is required since TestSafeBrowsingService can be destroyed
+  // before CertificateReportingService, which causes a crash due to the
+  // leftover callback at destruction time.
+  return nullptr;
 }
 
 std::string TestSafeBrowsingService::serilized_download_report() {

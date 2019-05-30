@@ -4,15 +4,19 @@
 
 #include "chrome/browser/ui/views/media_router/media_router_views_ui.h"
 
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/media/router/media_router_metrics.h"
 #include "chrome/browser/ui/media_router/media_sink_with_cast_modes.h"
 #include "chrome/browser/ui/media_router/ui_media_sink.h"
-#include "chrome/browser/ui/views/media_router/cast_dialog_view.h"
 #include "chrome/common/media_router/route_request_result.h"
 #include "chrome/grit/generated_resources.h"
+#include "content/public/browser/browser_context.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace media_router {
@@ -20,10 +24,19 @@ namespace media_router {
 namespace {
 
 // Returns true if |issue| is associated with |ui_sink|.
-bool IssueMatches(const Issue& issue, const UIMediaSink ui_sink) {
+bool IssueMatches(const Issue& issue, const UIMediaSink& ui_sink) {
   return issue.info().sink_id == ui_sink.id ||
-         (!issue.info().route_id.empty() &&
-          issue.info().route_id == ui_sink.route_id);
+         (!issue.info().route_id.empty() && ui_sink.route &&
+          issue.info().route_id == ui_sink.route->media_route_id());
+}
+
+base::string16 GetSinkFriendlyName(const MediaSink& sink) {
+  // Use U+2010 (HYPHEN) instead of ASCII hyphen to avoid problems with RTL
+  // languages.
+  const char* separator = u8" \u2010 ";
+  return base::UTF8ToUTF16(sink.description() ? sink.name() + separator +
+                                                    sink.description().value()
+                                              : sink.name());
 }
 
 }  // namespace
@@ -37,7 +50,8 @@ MediaRouterViewsUI::~MediaRouterViewsUI() {
 
 void MediaRouterViewsUI::AddObserver(CastDialogController::Observer* observer) {
   observers_.AddObserver(observer);
-  observer->OnModelUpdated(model_);
+  // TODO(takumif): Update the header when this object is initialized instead.
+  UpdateModelHeader();
 }
 
 void MediaRouterViewsUI::RemoveObserver(
@@ -47,13 +61,8 @@ void MediaRouterViewsUI::RemoveObserver(
 
 void MediaRouterViewsUI::StartCasting(const std::string& sink_id,
                                       MediaCastMode cast_mode) {
-  if (cast_mode == LOCAL_FILE) {
-    local_file_sink_id_ = sink_id;
-    OpenFileDialog();
-  } else {
-    CreateRoute(sink_id, cast_mode);
-    UpdateSinks();
-  }
+  CreateRoute(sink_id, cast_mode);
+  UpdateSinks();
 }
 
 void MediaRouterViewsUI::StopCasting(const std::string& route_id) {
@@ -62,6 +71,16 @@ void MediaRouterViewsUI::StopCasting(const std::string& route_id) {
   // |route_id| below this line.
   UpdateSinks();
   TerminateRoute(terminating_route_id_.value());
+}
+
+void MediaRouterViewsUI::ChooseLocalFile(
+    base::OnceCallback<void(const ui::SelectedFileInfo*)> callback) {
+  file_selection_callback_ = std::move(callback);
+  OpenFileDialog();
+}
+
+void MediaRouterViewsUI::ClearIssue(const Issue::Id& issue_id) {
+  RemoveIssue(issue_id);
 }
 
 std::vector<MediaSinkWithCastModes> MediaRouterViewsUI::GetEnabledSinks()
@@ -74,11 +93,19 @@ std::vector<MediaSinkWithCastModes> MediaRouterViewsUI::GetEnabledSinks()
     return base::StartsWith(sink.sink.id(),
                             "pseudo:", base::CompareCase::SENSITIVE);
   });
-  return sinks;
-}
 
-void MediaRouterViewsUI::Close() {
-  CastDialogView::HideDialog();
+  // Filter out cloud sinks if the window is incognito. Casting to cloud sinks
+  // from incognito is not currently supported by the Cloud MRP.  This is not
+  // the best place to do this, but the Media Router browser service and
+  // extension process are shared between normal and incognito, so incognito
+  // behaviors around sink availability have to be handled at the UI layer.
+  if (initiator()->GetBrowserContext()->IsOffTheRecord()) {
+    base::EraseIf(sinks, [](const MediaSinkWithCastModes& sink) {
+      return sink.sink.IsMaybeCloudSink();
+    });
+  }
+
+  return sinks;
 }
 
 void MediaRouterViewsUI::InitCommon(content::WebContents* initiator) {
@@ -104,8 +131,6 @@ void MediaRouterViewsUI::OnRoutesUpdated(
 }
 
 void MediaRouterViewsUI::UpdateSinks() {
-  model_.set_dialog_header(
-      l10n_util::GetStringUTF16(IDS_MEDIA_ROUTER_AUTO_CAST_MODE));
   std::vector<UIMediaSink> media_sinks;
   for (const MediaSinkWithCastModes& sink : GetEnabledSinks()) {
     auto route_it = std::find_if(
@@ -126,12 +151,12 @@ UIMediaSink MediaRouterViewsUI::ConvertToUISink(
     const base::Optional<Issue>& issue) {
   UIMediaSink ui_sink;
   ui_sink.id = sink.sink.id();
-  ui_sink.friendly_name = base::UTF8ToUTF16(sink.sink.name());
+  ui_sink.friendly_name = GetSinkFriendlyName(sink.sink);
   ui_sink.icon_type = sink.sink.icon_type();
 
   if (route) {
     ui_sink.status_text = base::UTF8ToUTF16(route->description());
-    ui_sink.route_id = route->media_route_id();
+    ui_sink.route = *route;
     ui_sink.state = terminating_route_id_ && route->media_route_id() ==
                                                  terminating_route_id_.value()
                         ? UIMediaSinkState::DISCONNECTING
@@ -142,6 +167,10 @@ UIMediaSink MediaRouterViewsUI::ConvertToUISink(
                         ? UIMediaSinkState::CONNECTING
                         : UIMediaSinkState::AVAILABLE;
     ui_sink.cast_modes = sink.cast_modes;
+  }
+  if (ui_sink.icon_type == SinkIconType::HANGOUT &&
+      ui_sink.state == UIMediaSinkState::AVAILABLE && sink.sink.domain()) {
+    ui_sink.status_text = base::UTF8ToUTF16(*sink.sink.domain());
   }
   if (issue && IssueMatches(*issue, ui_sink))
     ui_sink.issue = issue;
@@ -158,15 +187,44 @@ void MediaRouterViewsUI::OnIssueCleared() {
   UpdateSinks();
 }
 
+void MediaRouterViewsUI::OnDefaultPresentationChanged(
+    const content::PresentationRequest& presentation_request) {
+  // This sets the default cast mode to presentation when the dialog is opened.
+  // So we need to update the header to reflect that.
+  MediaRouterUIBase::OnDefaultPresentationChanged(presentation_request);
+  UpdateModelHeader();
+}
+
+void MediaRouterViewsUI::OnDefaultPresentationRemoved() {
+  MediaRouterUIBase::OnDefaultPresentationRemoved();
+  UpdateModelHeader();
+}
+
+void MediaRouterViewsUI::UpdateModelHeader() {
+  const base::string16 source_name = GetPresentationRequestSourceName();
+  const base::string16 header_text =
+      source_name.empty()
+          ? l10n_util::GetStringUTF16(IDS_MEDIA_ROUTER_CAST_DIALOG_TITLE)
+          : l10n_util::GetStringFUTF16(IDS_MEDIA_ROUTER_PRESENTATION_CAST_MODE,
+                                       source_name);
+  model_.set_dialog_header(header_text);
+  for (CastDialogController::Observer& observer : observers_)
+    observer.OnModelUpdated(model_);
+}
+
 void MediaRouterViewsUI::FileDialogFileSelected(
     const ui::SelectedFileInfo& file_info) {
-  CreateRoute(local_file_sink_id_.value(), LOCAL_FILE);
-  local_file_sink_id_.reset();
+  std::move(file_selection_callback_).Run(&file_info);
 }
 
 void MediaRouterViewsUI::FileDialogSelectionFailed(const IssueInfo& issue) {
   MediaRouterUIBase::FileDialogSelectionFailed(issue);
-  local_file_sink_id_.reset();
+  std::move(file_selection_callback_).Run(nullptr);
+}
+
+void MediaRouterViewsUI::FileDialogSelectionCanceled() {
+  MediaRouterUIBase::FileDialogSelectionCanceled();
+  std::move(file_selection_callback_).Run(nullptr);
 }
 
 }  // namespace media_router

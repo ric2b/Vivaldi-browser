@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/base_switches.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/debug/leak_annotations.h"
@@ -69,7 +70,6 @@
 #include "services/service_manager/embedder/switches.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "services/service_manager/runner/common/client_util.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
 
 #if defined(OS_POSIX)
@@ -84,7 +84,7 @@ namespace {
 const int kConnectionTimeoutS = 15;
 
 base::LazyInstance<base::ThreadLocalPointer<ChildThreadImpl>>::DestructorAtExit
-    g_lazy_tls = LAZY_INSTANCE_INITIALIZER;
+    g_lazy_child_thread_impl_tls = LAZY_INSTANCE_INITIALIZER;
 
 // This isn't needed on Windows because there the sandbox's job object
 // terminates child processes automatically. For unsandboxed processes (i.e.
@@ -172,61 +172,6 @@ class SuicideOnChannelErrorFilter : public IPC::MessageFilter {
 };
 
 #endif  // OS(POSIX)
-
-#if defined(OS_ANDROID)
-// A class that allows for triggering a clean shutdown from another
-// thread through draining the main thread's msg loop.
-class QuitClosure {
- public:
-  QuitClosure();
-  ~QuitClosure();
-
-  void BindToMainThread();
-  void PostQuitFromNonMainThread();
-
- private:
-  static void PostClosure(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-      base::Closure closure);
-
-  base::Lock lock_;
-  base::ConditionVariable cond_var_;
-  base::Closure closure_;
-};
-
-QuitClosure::QuitClosure() : cond_var_(&lock_) {
-}
-
-QuitClosure::~QuitClosure() {
-}
-
-void QuitClosure::PostClosure(
-    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-    base::Closure closure) {
-  task_runner->PostTask(FROM_HERE, closure);
-}
-
-void QuitClosure::BindToMainThread() {
-  base::AutoLock lock(lock_);
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner(
-      base::ThreadTaskRunnerHandle::Get());
-  base::Closure quit_closure =
-      base::RunLoop::QuitCurrentWhenIdleClosureDeprecated();
-  closure_ = base::Bind(&QuitClosure::PostClosure, task_runner, quit_closure);
-  cond_var_.Signal();
-}
-
-void QuitClosure::PostQuitFromNonMainThread() {
-  base::AutoLock lock(lock_);
-  while (closure_.is_null())
-    cond_var_.Wait();
-
-  closure_.Run();
-}
-
-base::LazyInstance<QuitClosure>::DestructorAtExit g_quit_closure =
-    LAZY_INSTANCE_INITIALIZER;
-#endif
 
 base::Optional<mojo::IncomingInvitation> InitializeMojoIPCChannel() {
   TRACE_EVENT0("startup", "InitializeMojoIPCChannel");
@@ -364,18 +309,14 @@ bool ChildThreadImpl::ChildThreadMessageRouter::RouteMessage(
   return handled;
 }
 
-ChildThreadImpl::ChildThreadImpl()
-    : route_provider_binding_(this),
-      router_(this),
-      channel_connected_factory_(
-          new base::WeakPtrFactory<ChildThreadImpl>(this)),
-      weak_factory_(this) {
-  Init(Options::Builder().Build());
-}
+ChildThreadImpl::ChildThreadImpl(base::RepeatingClosure quit_closure)
+    : ChildThreadImpl(std::move(quit_closure), Options::Builder().Build()) {}
 
-ChildThreadImpl::ChildThreadImpl(const Options& options)
+ChildThreadImpl::ChildThreadImpl(base::RepeatingClosure quit_closure,
+                                 const Options& options)
     : route_provider_binding_(this),
       router_(this),
+      quit_closure_(std::move(quit_closure)),
       browser_process_io_runner_(options.browser_process_io_runner),
       channel_connected_factory_(
           new base::WeakPtrFactory<ChildThreadImpl>(this)),
@@ -423,7 +364,7 @@ void ChildThreadImpl::ConnectChannel() {
 
 void ChildThreadImpl::Init(const Options& options) {
   TRACE_EVENT0("startup", "ChildThreadImpl::Init");
-  g_lazy_tls.Pointer()->Set(this);
+  g_lazy_child_thread_impl_tls.Pointer()->Set(this);
   on_channel_error_called_ = false;
   main_thread_runner_ = base::ThreadTaskRunnerHandle::Get();
 #if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
@@ -560,10 +501,6 @@ void ChildThreadImpl::Init(const Options& options) {
                      channel_connected_factory_->GetWeakPtr()),
       base::TimeDelta::FromSeconds(connection_timeout));
 
-#if defined(OS_ANDROID)
-  g_quit_closure.Get().BindToMainThread();
-#endif
-
   // In single-process mode, there is no need to synchronize trials to the
   // browser process (because it's the same process).
   if (!IsInBrowserProcess()) {
@@ -571,20 +508,6 @@ void ChildThreadImpl::Init(const Options& options) {
         new variations::ChildProcessFieldTrialSyncer(this));
     field_trial_syncer_->InitFieldTrialObserving(
         *base::CommandLine::ForCurrentProcess());
-  }
-
-  if (base::FeatureList::IsEnabled(features::kMemoryCoordinator)) {
-    // Disable MemoryPressureListener when memory coordinator is enabled.
-    base::MemoryPressureListener::SetNotificationsSuppressed(true);
-
-    // TODO(bashi): Revisit how to manage the lifetime of
-    // ChildMemoryCoordinatorImpl.
-    // https://codereview.chromium.org/2094583002/#msg52
-    mojom::MemoryCoordinatorHandlePtr parent_coordinator;
-    GetConnector()->BindInterface(mojom::kBrowserServiceName,
-                                  mojo::MakeRequest(&parent_coordinator));
-    memory_coordinator_ =
-        CreateChildMemoryCoordinator(std::move(parent_coordinator), this);
   }
 }
 
@@ -605,9 +528,6 @@ void ChildThreadImpl::InitTracing() {
 
   channel_->AddFilter(new tracing::ChildTraceMessageFilter(
       ChildProcess::current()->io_task_runner()));
-
-  trace_event_agent_ = tracing::TraceEventAgent::Create(
-      GetConnector(), false /* request_clock_sync_marker_on_android */);
 }
 
 ChildThreadImpl::~ChildThreadImpl() {
@@ -626,7 +546,7 @@ ChildThreadImpl::~ChildThreadImpl() {
   // automatically.  We used to watch the object handle on Windows to do this,
   // but it wasn't possible to do so on POSIX.
   channel_->ClearIPCTaskRunner();
-  g_lazy_tls.Pointer()->Set(nullptr);
+  g_lazy_child_thread_impl_tls.Pointer()->Set(nullptr);
 }
 
 void ChildThreadImpl::Shutdown() {}
@@ -644,7 +564,7 @@ void ChildThreadImpl::OnChannelError() {
   // If this thread runs in the browser process, only Thread::Stop should
   // stop its message loop. Otherwise, QuitWhenIdle could race Thread::Stop.
   if (!IsInBrowserProcess())
-    base::RunLoop::QuitCurrentWhenIdleDeprecated();
+    quit_closure_.Run();
 }
 
 bool ChildThreadImpl::Send(IPC::Message* msg) {
@@ -672,22 +592,6 @@ mojom::FontCacheWin* ChildThreadImpl::GetFontCacheWin() {
                                   &font_cache_win_ptr_);
   }
   return font_cache_win_ptr_.get();
-}
-#elif defined(OS_MACOSX)
-bool ChildThreadImpl::LoadFont(const base::string16& font_name,
-                               float font_point_size,
-                               mojo::ScopedSharedBufferHandle* out_font_data,
-                               uint32_t* out_font_id) {
-  return GetFontLoaderMac()->LoadFont(font_name, font_point_size, out_font_data,
-                                      out_font_id);
-}
-
-mojom::FontLoaderMac* ChildThreadImpl::GetFontLoaderMac() {
-  if (!font_loader_mac_ptr_) {
-    GetConnector()->BindInterface(mojom::kBrowserServiceName,
-                                  &font_loader_mac_ptr_);
-  }
-  return font_loader_mac_ptr_.get();
 }
 #endif
 
@@ -764,9 +668,13 @@ void ChildThreadImpl::OnAssociatedInterfaceRequest(
 
 void ChildThreadImpl::StartServiceManagerConnection() {
   DCHECK(service_manager_connection_);
-  service_manager_connection_->Start();
   GetContentClient()->OnServiceManagerConnected(
       service_manager_connection_.get());
+
+  // NOTE: You must register any ConnectionFilter instances on
+  // |service_manager_connection_| *before* this call to |Start()|, otherwise
+  // incoming interface requests may race with the registration.
+  service_manager_connection_->Start();
 }
 
 bool ChildThreadImpl::OnControlMessageReceived(const IPC::Message& msg) {
@@ -774,7 +682,7 @@ bool ChildThreadImpl::OnControlMessageReceived(const IPC::Message& msg) {
 }
 
 void ChildThreadImpl::ProcessShutdown() {
-  base::RunLoop::QuitCurrentWhenIdleDeprecated();
+  quit_closure_.Run();
 }
 
 #if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
@@ -792,18 +700,8 @@ void ChildThreadImpl::OnChildControlRequest(
 }
 
 ChildThreadImpl* ChildThreadImpl::current() {
-  return g_lazy_tls.Pointer()->Get();
+  return g_lazy_child_thread_impl_tls.Pointer()->Get();
 }
-
-#if defined(OS_ANDROID)
-// The method must NOT be called on the child thread itself.
-// It may block the child thread if so.
-void ChildThreadImpl::ShutdownThread() {
-  DCHECK(!ChildThreadImpl::current()) <<
-      "this method should NOT be called from child thread itself";
-  g_quit_closure.Get().PostQuitFromNonMainThread();
-}
-#endif
 
 void ChildThreadImpl::OnProcessFinalRelease() {
   if (on_channel_error_called_)

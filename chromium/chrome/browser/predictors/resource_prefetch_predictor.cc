@@ -8,6 +8,7 @@
 #include <set>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
@@ -33,13 +34,6 @@ namespace {
 
 const float kMinOriginConfidenceToTriggerPreconnect = 0.75f;
 const float kMinOriginConfidenceToTriggerPreresolve = 0.2f;
-
-// For reporting events of interest that are not tied to any navigation.
-enum ReportingEvent {
-  REPORTING_EVENT_ALL_HISTORY_CLEARED = 0,
-  REPORTING_EVENT_PARTIAL_HISTORY_CLEARED = 1,
-  REPORTING_EVENT_COUNT = 2
-};
 
 float ComputeRedirectConfidence(const predictors::RedirectStat& redirect) {
   return (redirect.number_of_hits() + 0.0) /
@@ -136,9 +130,6 @@ ResourcePrefetchPredictor::ResourcePrefetchPredictor(
       history_service_observer_(this),
       weak_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  // Some form of learning has to be enabled.
-  DCHECK(config_.IsLearningEnabled());
 }
 
 ResourcePrefetchPredictor::~ResourcePrefetchPredictor() {}
@@ -200,9 +191,7 @@ void ResourcePrefetchPredictor::RecordPageRequestSummary(
 
   const std::string& host = summary->main_frame_url.host();
   LearnRedirect(summary->initial_url.host(), host, host_redirect_data_.get());
-
-  if (config_.is_origin_learning_enabled)
-    LearnOrigins(host, summary->main_frame_url.GetOrigin(), summary->origins);
+  LearnOrigins(host, summary->main_frame_url.GetOrigin(), summary->origins);
 
   if (observer_)
     observer_->OnNavigationLearned(*summary);
@@ -443,17 +432,10 @@ void ResourcePrefetchPredictor::OnURLsDeleted(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(initialization_state_ == INITIALIZED);
 
-  if (deletion_info.IsAllHistory()) {
+  if (deletion_info.IsAllHistory())
     DeleteAllUrls();
-    UMA_HISTOGRAM_ENUMERATION("ResourcePrefetchPredictor.ReportingEvent",
-                              REPORTING_EVENT_ALL_HISTORY_CLEARED,
-                              REPORTING_EVENT_COUNT);
-  } else {
+  else
     DeleteUrls(deletion_info.deleted_rows());
-    UMA_HISTOGRAM_ENUMERATION("ResourcePrefetchPredictor.ReportingEvent",
-                              REPORTING_EVENT_PARTIAL_HISTORY_CLEARED,
-                              REPORTING_EVENT_COUNT);
-  }
 }
 
 void ResourcePrefetchPredictor::OnHistoryServiceLoaded(

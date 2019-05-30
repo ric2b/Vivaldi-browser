@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
@@ -23,11 +24,13 @@
 #include "content/browser/indexed_db/indexed_db_connection.h"
 #include "content/browser/indexed_db/indexed_db_cursor.h"
 #include "content/browser/indexed_db/indexed_db_fake_backing_store.h"
+#include "content/browser/indexed_db/indexed_db_leveldb_coding.h"
 #include "content/browser/indexed_db/indexed_db_transaction.h"
 #include "content/browser/indexed_db/indexed_db_value.h"
 #include "content/browser/indexed_db/mock_indexed_db_callbacks.h"
 #include "content/browser/indexed_db/mock_indexed_db_database_callbacks.h"
 #include "content/browser/indexed_db/mock_indexed_db_factory.h"
+#include "content/browser/indexed_db/scopes/disjoint_range_lock_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -45,6 +48,8 @@ namespace content {
 
 class IndexedDBDatabaseTest : public ::testing::Test {
  public:
+  IndexedDBDatabaseTest() : lock_manager_(kIndexedDBLockLevelCount) {}
+
   void SetUp() override {
     backing_store_ = new IndexedDBFakeBackingStore();
     factory_ = new MockIndexedDBFactory();
@@ -56,7 +61,8 @@ class IndexedDBDatabaseTest : public ::testing::Test {
 
     std::tie(db_, s) = IndexedDBDatabase::Create(
         ASCIIToUTF16("db"), backing_store_.get(), factory_.get(),
-        std::move(metadata_coding), IndexedDBDatabase::Identifier());
+        std::move(metadata_coding), IndexedDBDatabase::Identifier(),
+        &lock_manager_);
     ASSERT_TRUE(s.ok());
     EXPECT_FALSE(backing_store_->HasOneRef());  // local and db
   }
@@ -69,6 +75,7 @@ class IndexedDBDatabaseTest : public ::testing::Test {
 
  private:
   TestBrowserThreadBundle thread_bundle_;
+  DisjointRangeLockManager lock_manager_;
 };
 
 TEST_F(IndexedDBDatabaseTest, BackingStoreRetention) {
@@ -130,8 +137,11 @@ TEST_F(IndexedDBDatabaseTest, ForcedClose) {
 
   const int64_t transaction_id = 123;
   const std::vector<int64_t> scope;
-  db_->CreateTransaction(transaction_id, request->connection(), scope,
-                         blink::kWebIDBTransactionModeReadOnly);
+  IndexedDBTransaction* transaction = request->connection()->CreateTransaction(
+      transaction_id, std::set<int64_t>(scope.begin(), scope.end()),
+      blink::mojom::IDBTransactionMode::ReadOnly,
+      new IndexedDBBackingStore::Transaction(backing_store_.get()));
+  db_->RegisterAndScheduleTransaction(transaction);
 
   request->connection()->ForceClose();
 
@@ -305,6 +315,45 @@ TEST_F(IndexedDBDatabaseTest, ForceDelete) {
   EXPECT_TRUE(request2->success_called());
 }
 
+TEST_F(IndexedDBDatabaseTest, ForceCloseWhileOpenPending) {
+  // Verify that pending connection requests are handled correctly during a
+  // ForceClose.
+  scoped_refptr<MockIndexedDBCallbacks> request1(new MockIndexedDBCallbacks());
+  scoped_refptr<MockIndexedDBDatabaseCallbacks> callbacks1(
+      new MockIndexedDBDatabaseCallbacks());
+  const int64_t transaction_id1 = 1;
+  std::unique_ptr<IndexedDBPendingConnection> connection(
+      std::make_unique<IndexedDBPendingConnection>(
+          request1, callbacks1, kFakeChildProcessId, transaction_id1,
+          IndexedDBDatabaseMetadata::DEFAULT_VERSION));
+  db_->OpenConnection(std::move(connection));
+
+  EXPECT_EQ(db_->ConnectionCount(), 1UL);
+  EXPECT_EQ(db_->ActiveOpenDeleteCount(), 0UL);
+  EXPECT_EQ(db_->PendingOpenDeleteCount(), 0UL);
+  EXPECT_FALSE(backing_store_->HasOneRef());  // local and db
+
+  scoped_refptr<MockIndexedDBCallbacks> request2(
+      new MockIndexedDBCallbacks(false));
+  scoped_refptr<MockIndexedDBDatabaseCallbacks> callbacks2(
+      new MockIndexedDBDatabaseCallbacks());
+  const int64_t transaction_id2 = 2;
+  std::unique_ptr<IndexedDBPendingConnection> connection2(
+      std::make_unique<IndexedDBPendingConnection>(
+          request1, callbacks1, kFakeChildProcessId, transaction_id2, 3));
+  db_->OpenConnection(std::move(connection2));
+
+  EXPECT_EQ(db_->ConnectionCount(), 1UL);
+  EXPECT_EQ(db_->ActiveOpenDeleteCount(), 1UL);
+  EXPECT_EQ(db_->PendingOpenDeleteCount(), 0UL);
+  EXPECT_FALSE(backing_store_->HasOneRef());  // local and db
+
+  db_->ForceClose();
+  EXPECT_EQ(db_->ConnectionCount(), 0UL);
+  EXPECT_EQ(db_->ActiveOpenDeleteCount(), 0UL);
+  EXPECT_EQ(db_->PendingOpenDeleteCount(), 0UL);
+}
+
 leveldb::Status DummyOperation(IndexedDBTransaction* transaction) {
   return leveldb::Status::OK();
 }
@@ -312,7 +361,8 @@ leveldb::Status DummyOperation(IndexedDBTransaction* transaction) {
 class IndexedDBDatabaseOperationTest : public testing::Test {
  public:
   IndexedDBDatabaseOperationTest()
-      : commit_success_(leveldb::Status::OK()),
+      : lock_manager_(kIndexedDBLockLevelCount),
+        commit_success_(leveldb::Status::OK()),
         factory_(new MockIndexedDBFactory()) {}
 
   void SetUp() override {
@@ -323,7 +373,8 @@ class IndexedDBDatabaseOperationTest : public testing::Test {
     leveldb::Status s;
     std::tie(db_, s) = IndexedDBDatabase::Create(
         ASCIIToUTF16("db"), backing_store_.get(), factory_.get(),
-        std::move(metadata_coding), IndexedDBDatabase::Identifier());
+        std::move(metadata_coding), IndexedDBDatabase::Identifier(),
+        &lock_manager_);
     ASSERT_TRUE(s.ok());
 
     request_ = new MockIndexedDBCallbacks();
@@ -340,9 +391,9 @@ class IndexedDBDatabaseOperationTest : public testing::Test {
                                                         db_, callbacks_);
     transaction_ = connection_->CreateTransaction(
         transaction_id, std::set<int64_t>() /*scope*/,
-        blink::kWebIDBTransactionModeVersionChange,
+        blink::mojom::IDBTransactionMode::VersionChange,
         new IndexedDBFakeBackingStore::FakeTransaction(commit_success_));
-    db_->TransactionCreated(transaction_);
+    db_->RegisterAndScheduleTransaction(transaction_);
 
     // Add a dummy task which takes the place of the VersionChangeOperation
     // which kicks off the upgrade. This ensures that the transaction has
@@ -364,6 +415,7 @@ private:
   scoped_refptr<MockIndexedDBDatabaseCallbacks> callbacks_;
   IndexedDBTransaction* transaction_;
   std::unique_ptr<IndexedDBConnection> connection_;
+  DisjointRangeLockManager lock_manager_;
 
   leveldb::Status commit_success_;
 
@@ -460,7 +512,7 @@ TEST_F(IndexedDBDatabaseOperationTest, CreatePutDelete) {
   scoped_refptr<MockIndexedDBCallbacks> request(
       new MockIndexedDBCallbacks(false));
   db_->Put(transaction_, store_id, &value, std::move(key),
-           blink::kWebIDBPutModeAddOnly, request, index_keys);
+           blink::mojom::IDBPutMode::AddOnly, request, index_keys);
 
   // Deletion is asynchronous.
   db_->DeleteObjectStore(transaction_, store_id);

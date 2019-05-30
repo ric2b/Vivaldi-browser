@@ -7,8 +7,9 @@
 
 #include "extensions/browser/api/execute_code_function.h"
 
+#include "base/bind.h"
 #include "base/task/post_task.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "extensions/browser/component_extension_resource_manager.h"
 #include "extensions/browser/extension_api_frame_id_map.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -52,7 +53,9 @@ void ExecuteCodeFunction::GetFileURLAndMaybeLocalizeInBackground(
     const std::string& extension_default_locale,
     bool might_require_localization,
     std::string* data) {
-  base::AssertBlockingAllowed();
+  // TODO(karandeepb): Limit scope of ScopedBlockingCall.
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   // TODO(devlin): FilePathToFileURL() doesn't need to be done on a blocking
   // task runner, so we could do that on the UI thread and then avoid the hop
@@ -83,7 +86,6 @@ ExecuteCodeFunction::GetFileURLAndLocalizeComponentResourceInBackground(
     const base::FilePath& extension_path,
     const std::string& extension_default_locale,
     bool might_require_localization) {
-  base::AssertBlockingAllowed();
   GetFileURLAndMaybeLocalizeInBackground(
       extension_id, extension_path, extension_default_locale,
       might_require_localization, data.get());
@@ -175,10 +177,6 @@ bool ExecuteCodeFunction::Execute(const std::string& code_string,
   return true;
 }
 
-bool ExecuteCodeFunction::HasPermission() {
-  return true;
-}
-
 ExtensionFunction::ResponseAction ExecuteCodeFunction::Run() {
   InitResult init_result = Init();
   EXTENSION_FUNCTION_VALIDATE(init_result != VALIDATION_FAILURE);
@@ -232,18 +230,19 @@ bool ExecuteCodeFunction::LoadFile(const std::string& file,
   // DCHECK.
   bool might_require_localization = ShouldInsertCSS() && !extension_id.empty();
 
-  int resource_id;
+  ComponentExtensionResourceInfo resource_info;
   const ComponentExtensionResourceManager*
       component_extension_resource_manager =
           ExtensionsBrowserClient::Get()
               ->GetComponentExtensionResourceManager();
   if (component_extension_resource_manager &&
       component_extension_resource_manager->IsComponentExtensionResource(
-          resource_.extension_root(),
-          resource_.relative_path(),
-          &resource_id)) {
+          resource_.extension_root(), resource_.relative_path(),
+          &resource_info)) {
+    DCHECK(!resource_info.gzipped);
     base::StringPiece resource =
-        ui::ResourceBundle::GetSharedInstance().GetRawDataResource(resource_id);
+        ui::ResourceBundle::GetSharedInstance().GetRawDataResource(
+            resource_info.resource_id);
     std::unique_ptr<std::string> data(
         new std::string(resource.data(), resource.size()));
 

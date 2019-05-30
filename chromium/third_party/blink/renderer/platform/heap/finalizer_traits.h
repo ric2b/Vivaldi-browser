@@ -28,7 +28,7 @@ struct FinalizerTraitImpl<T, true> {
   static void Finalize(void* obj) {
     static_assert(sizeof(T), "T must be fully defined");
     static_cast<T*>(obj)->FinalizeGarbageCollectedObject();
-  };
+  }
 };
 
 template <typename T>
@@ -36,7 +36,7 @@ struct FinalizerTraitImpl<T, false> {
   STATIC_ONLY(FinalizerTraitImpl);
   static void Finalize(void* obj) {
     static_assert(sizeof(T), "T must be fully defined");
-  };
+  }
 };
 
 // The FinalizerTrait is used to determine if a type requires finalization and
@@ -77,7 +77,7 @@ template <typename T, typename Allocator>
 struct FinalizerTrait<WTF::ListHashSetNode<T, Allocator>> {
   STATIC_ONLY(FinalizerTrait);
   static const bool kNonTrivialFinalizer =
-      !WTF::IsTriviallyDestructible<T>::value;
+      !std::is_trivially_destructible<T>::value;
   static void Finalize(void* obj) {
     FinalizerTraitImpl<WTF::ListHashSetNode<T, Allocator>,
                        kNonTrivialFinalizer>::Finalize(obj);
@@ -110,7 +110,7 @@ template <typename Table>
 struct FinalizerTrait<HeapHashTableBacking<Table>> {
   STATIC_ONLY(FinalizerTrait);
   static const bool kNonTrivialFinalizer =
-      !WTF::IsTriviallyDestructible<typename Table::ValueType>::value;
+      !std::is_trivially_destructible<typename Table::ValueType>::value;
   static void Finalize(void* obj) {
     FinalizerTraitImpl<HeapHashTableBacking<Table>,
                        kNonTrivialFinalizer>::Finalize(obj);

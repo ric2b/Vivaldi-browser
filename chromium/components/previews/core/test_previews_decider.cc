@@ -11,26 +11,31 @@ TestPreviewsDecider::TestPreviewsDecider(bool allow_previews)
 
 TestPreviewsDecider::~TestPreviewsDecider() {}
 
-bool TestPreviewsDecider::ShouldAllowPreviewAtECT(
-    const net::URLRequest& request,
-    previews::PreviewsType type,
-    net::EffectiveConnectionType effective_connection_type_threshold,
-    const std::vector<std::string>& host_blacklist_from_server,
-    bool ignore_long_term_black_list_rules) const {
+bool TestPreviewsDecider::ShouldAllowPreviewAtNavigationStart(
+    PreviewsUserData* previews_data,
+    const GURL& url,
+    bool is_reload,
+    PreviewsType type) const {
   return allow_previews_;
 }
 
-bool TestPreviewsDecider::ShouldAllowPreview(
-    const net::URLRequest& request,
-    previews::PreviewsType type) const {
+bool TestPreviewsDecider::ShouldCommitPreview(PreviewsUserData* previews_data,
+                                              const GURL& url,
+                                              PreviewsType type) const {
   return allow_previews_;
 }
 
-bool TestPreviewsDecider::IsURLAllowedForPreview(const net::URLRequest& request,
-                                                 PreviewsType type) const {
-  return allow_previews_;
+bool TestPreviewsDecider::LoadPageHints(const GURL& url) {
+  return true;
 }
 
-void TestPreviewsDecider::LoadResourceHints(const net::URLRequest& request) {}
+bool TestPreviewsDecider::GetResourceLoadingHints(
+    const GURL& url,
+    std::vector<std::string>* out_resource_patterns_to_block) const {
+  return false;
+}
+
+void TestPreviewsDecider::LogHintCacheMatch(const GURL& url,
+                                            bool is_committed) const {}
 
 }  // namespace previews

@@ -17,7 +17,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/profile_management_switches.h"
+#include "components/signin/core/browser/account_consistency_method.h"
 #include "components/zoom/test/zoom_test_utils.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/navigation_entry.h"
@@ -247,7 +247,7 @@ IN_PROC_BROWSER_TEST_F(ZoomControllerBrowserTest, NavigationResetsManualMode) {
 IN_PROC_BROWSER_TEST_F(ZoomControllerBrowserTest,
                        SettingsZoomAfterSigninWorks) {
   GURL signin_url(std::string(chrome::kChromeUIChromeSigninURL)
-                      .append("?access_point=0&reason=0"));
+                      .append("?access_point=0&reason=5"));
   // We open the signin page in a new tab so that the ZoomController is
   // created against the HostZoomMap of the special StoragePartition that
   // backs the signin page. When we subsequently navigate away from the

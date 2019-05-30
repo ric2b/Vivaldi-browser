@@ -8,6 +8,8 @@
 #include <utility>
 
 #include "base/metrics/field_trial.h"
+#include "base/task/post_task.h"
+#include "build/build_config.h"
 #include "chrome/browser/media/webrtc/media_stream_device_permissions.h"
 #include "chrome/browser/media/webrtc/media_stream_devices_controller.h"
 #include "chrome/browser/permissions/permission_manager.h"
@@ -15,6 +17,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
@@ -29,14 +32,17 @@
 #include "chrome/browser/media/webrtc/screen_capture_infobar_delegate_android.h"
 #include "chrome/browser/permissions/permission_uma_util.h"
 #include "chrome/browser/permissions/permission_util.h"
-
 #endif  // defined(OS_ANDROID)
+
+#if defined(OS_MACOSX)
+#include "chrome/browser/media/webrtc/system_media_capture_permissions_mac.h"
+#endif
 
 using content::BrowserThread;
 
 using RepeatingMediaResponseCallback =
-    base::RepeatingCallback<void(const content::MediaStreamDevices& devices,
-                                 content::MediaStreamRequestResult result,
+    base::RepeatingCallback<void(const blink::MediaStreamDevices& devices,
+                                 blink::MediaStreamRequestResult result,
                                  std::unique_ptr<content::MediaStreamUI> ui)>;
 
 struct PermissionBubbleMediaAccessHandler::PendingAccessRequest {
@@ -51,7 +57,8 @@ struct PermissionBubbleMediaAccessHandler::PendingAccessRequest {
   RepeatingMediaResponseCallback callback;
 };
 
-PermissionBubbleMediaAccessHandler::PermissionBubbleMediaAccessHandler() {
+PermissionBubbleMediaAccessHandler::PermissionBubbleMediaAccessHandler()
+    : weak_factory_(this) {
   // PermissionBubbleMediaAccessHandler should be created on UI thread.
   // Otherwise, it will not receive
   // content::NOTIFICATION_WEB_CONTENTS_DESTROYED, and that will result in
@@ -66,30 +73,30 @@ PermissionBubbleMediaAccessHandler::~PermissionBubbleMediaAccessHandler() {}
 
 bool PermissionBubbleMediaAccessHandler::SupportsStreamType(
     content::WebContents* web_contents,
-    const content::MediaStreamType type,
+    const blink::MediaStreamType type,
     const extensions::Extension* extension) {
 #if defined(OS_ANDROID)
-  return type == content::MEDIA_DEVICE_VIDEO_CAPTURE ||
-         type == content::MEDIA_DEVICE_AUDIO_CAPTURE ||
-         type == content::MEDIA_GUM_DESKTOP_VIDEO_CAPTURE ||
-         type == content::MEDIA_DISPLAY_VIDEO_CAPTURE;
+  return type == blink::MEDIA_DEVICE_VIDEO_CAPTURE ||
+         type == blink::MEDIA_DEVICE_AUDIO_CAPTURE ||
+         type == blink::MEDIA_GUM_DESKTOP_VIDEO_CAPTURE ||
+         type == blink::MEDIA_DISPLAY_VIDEO_CAPTURE;
 #else
-  return type == content::MEDIA_DEVICE_VIDEO_CAPTURE ||
-         type == content::MEDIA_DEVICE_AUDIO_CAPTURE;
+  return type == blink::MEDIA_DEVICE_VIDEO_CAPTURE ||
+         type == blink::MEDIA_DEVICE_AUDIO_CAPTURE;
 #endif
 }
 
 bool PermissionBubbleMediaAccessHandler::CheckMediaAccessPermission(
     content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
-    content::MediaStreamType type,
+    blink::MediaStreamType type,
     const extensions::Extension* extension) {
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(render_frame_host);
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   ContentSettingsType content_settings_type =
-      type == content::MEDIA_DEVICE_AUDIO_CAPTURE
+      type == blink::MEDIA_DEVICE_AUDIO_CAPTURE
           ? CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC
           : CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA;
 
@@ -115,18 +122,20 @@ void PermissionBubbleMediaAccessHandler::HandleRequest(
           chrome::android::kUserMediaScreenCapturing)) {
     // If screen capturing isn't enabled on Android, we'll use "invalid state"
     // as result, same as on desktop.
-    std::move(callback).Run(content::MediaStreamDevices(),
-                            content::MEDIA_DEVICE_INVALID_STATE, nullptr);
+    std::move(callback).Run(blink::MediaStreamDevices(),
+                            blink::MEDIA_DEVICE_INVALID_STATE, nullptr);
     return;
   }
 #endif  // defined(OS_ANDROID)
 
-  RequestsQueue& queue = pending_requests_[web_contents];
-  queue.push_back(PendingAccessRequest(
-      request, base::AdaptCallbackForRepeating(std::move(callback))));
+  RequestsMap& requests_map = pending_requests_[web_contents];
+  requests_map.emplace(
+      next_request_id_++,
+      PendingAccessRequest(
+          request, base::AdaptCallbackForRepeating(std::move(callback))));
 
   // If this is the only request then show the infobar.
-  if (queue.size() == 1)
+  if (requests_map.size() == 1)
     ProcessQueuedAccessRequest(web_contents);
 }
 
@@ -134,8 +143,7 @@ void PermissionBubbleMediaAccessHandler::ProcessQueuedAccessRequest(
     content::WebContents* web_contents) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  std::map<content::WebContents*, RequestsQueue>::iterator it =
-      pending_requests_.find(web_contents);
+  auto it = pending_requests_.find(web_contents);
 
   if (it == pending_requests_.end() || it->second.empty()) {
     // Don't do anything if the tab was closed.
@@ -144,13 +152,15 @@ void PermissionBubbleMediaAccessHandler::ProcessQueuedAccessRequest(
 
   DCHECK(!it->second.empty());
 
-  const content::MediaStreamRequest request = it->second.front().request;
+  const int request_id = it->second.begin()->first;
+  const content::MediaStreamRequest& request =
+      it->second.begin()->second.request;
 #if defined(OS_ANDROID)
   if (IsScreenCaptureMediaType(request.video_type)) {
     ScreenCaptureInfoBarDelegateAndroid::Create(
         web_contents, request,
         base::Bind(&PermissionBubbleMediaAccessHandler::OnAccessRequestResponse,
-                   base::Unretained(this), web_contents));
+                   base::Unretained(this), web_contents, request_id));
     return;
   }
 #endif
@@ -158,28 +168,29 @@ void PermissionBubbleMediaAccessHandler::ProcessQueuedAccessRequest(
   MediaStreamDevicesController::RequestPermissions(
       request,
       base::Bind(&PermissionBubbleMediaAccessHandler::OnAccessRequestResponse,
-                 base::Unretained(this), web_contents));
+                 base::Unretained(this), web_contents, request_id));
 }
 
 void PermissionBubbleMediaAccessHandler::UpdateMediaRequestState(
     int render_process_id,
     int render_frame_id,
     int page_request_id,
-    content::MediaStreamType stream_type,
+    blink::MediaStreamType stream_type,
     content::MediaRequestState state) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (state != content::MEDIA_REQUEST_STATE_CLOSING)
     return;
 
   bool found = false;
-  for (RequestsQueues::iterator rqs_it = pending_requests_.begin();
-       rqs_it != pending_requests_.end(); ++rqs_it) {
-    RequestsQueue& queue = rqs_it->second;
-    for (RequestsQueue::iterator it = queue.begin(); it != queue.end(); ++it) {
-      if (it->request.render_process_id == render_process_id &&
-          it->request.render_frame_id == render_frame_id &&
-          it->request.page_request_id == page_request_id) {
-        queue.erase(it);
+  for (auto requests_it = pending_requests_.begin();
+       requests_it != pending_requests_.end(); ++requests_it) {
+    RequestsMap& requests_map = requests_it->second;
+    for (RequestsMap::iterator it = requests_map.begin();
+         it != requests_map.end(); ++it) {
+      if (it->second.request.render_process_id == render_process_id &&
+          it->second.request.render_frame_id == render_frame_id &&
+          it->second.request.page_request_id == page_request_id) {
+        requests_map.erase(it);
         found = true;
         break;
       }
@@ -191,37 +202,88 @@ void PermissionBubbleMediaAccessHandler::UpdateMediaRequestState(
 
 void PermissionBubbleMediaAccessHandler::OnAccessRequestResponse(
     content::WebContents* web_contents,
-    const content::MediaStreamDevices& devices,
-    content::MediaStreamRequestResult result,
+    int request_id,
+    const blink::MediaStreamDevices& devices,
+    blink::MediaStreamRequestResult result,
     std::unique_ptr<content::MediaStreamUI> ui) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  std::map<content::WebContents*, RequestsQueue>::iterator it =
-      pending_requests_.find(web_contents);
-  if (it == pending_requests_.end()) {
+  auto request_maps_it = pending_requests_.find(web_contents);
+  if (request_maps_it == pending_requests_.end()) {
     // WebContents has been destroyed. Don't need to do anything.
     return;
   }
 
-  RequestsQueue& queue(it->second);
-  if (queue.empty())
+  RequestsMap& requests_map(request_maps_it->second);
+  if (requests_map.empty())
     return;
 
-  RepeatingMediaResponseCallback callback = queue.front().callback;
-  queue.pop_front();
+  auto request_it = requests_map.find(request_id);
+  DCHECK(request_it != requests_map.end());
+  if (request_it == requests_map.end())
+    return;
 
-  if (!queue.empty()) {
+  blink::MediaStreamRequestResult final_result = result;
+
+#if defined(OS_MACOSX)
+  // If the request was approved, ask for system permissions if needed, and run
+  // this function again when done.
+  if (result == blink::MEDIA_DEVICE_OK) {
+    const content::MediaStreamRequest& request = request_it->second.request;
+    if (request.audio_type == blink::MEDIA_DEVICE_AUDIO_CAPTURE) {
+      const SystemPermission system_audio_permission =
+          CheckSystemAudioCapturePermission();
+      if (system_audio_permission == SystemPermission::kNotDetermined) {
+        // Using WeakPtr since callback can come at any time and we might be
+        // destroyed.
+        RequestSystemAudioCapturePermisson(
+            base::BindOnce(
+                &PermissionBubbleMediaAccessHandler::OnAccessRequestResponse,
+                weak_factory_.GetWeakPtr(), web_contents, request_id, devices,
+                result, std::move(ui)),
+            {content::BrowserThread::UI});
+        return;
+      } else if (system_audio_permission == SystemPermission::kNotAllowed) {
+        final_result = blink::MEDIA_DEVICE_SYSTEM_PERMISSION_DENIED;
+      }
+    }
+
+    if (request.video_type == blink::MEDIA_DEVICE_VIDEO_CAPTURE) {
+      const SystemPermission system_video_permission =
+          CheckSystemVideoCapturePermission();
+      if (system_video_permission == SystemPermission::kNotDetermined) {
+        // Using WeakPtr since callback can come at any time and we might be
+        // destroyed.
+        RequestSystemVideoCapturePermisson(
+            base::BindOnce(
+                &PermissionBubbleMediaAccessHandler::OnAccessRequestResponse,
+                weak_factory_.GetWeakPtr(), web_contents, request_id, devices,
+                result, std::move(ui)),
+            {content::BrowserThread::UI});
+        return;
+      } else if (system_video_permission == SystemPermission::kNotAllowed) {
+        final_result = blink::MEDIA_DEVICE_SYSTEM_PERMISSION_DENIED;
+      }
+    }
+  }
+#endif  // defined(OS_MACOSX)
+
+  RepeatingMediaResponseCallback callback =
+      std::move(request_it->second.callback);
+  requests_map.erase(request_it);
+
+  if (!requests_map.empty()) {
     // Post a task to process next queued request. It has to be done
     // asynchronously to make sure that calling infobar is not destroyed until
     // after this function returns.
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(
             &PermissionBubbleMediaAccessHandler::ProcessQueuedAccessRequest,
             base::Unretained(this), web_contents));
   }
 
-  callback.Run(devices, result, std::move(ui));
+  std::move(callback).Run(devices, final_result, std::move(ui));
 }
 
 void PermissionBubbleMediaAccessHandler::Observe(

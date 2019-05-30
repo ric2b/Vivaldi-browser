@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/strings/utf_string_conversions.h"
@@ -101,8 +102,7 @@ ExtensionDevToolsInfoBar* ExtensionDevToolsInfoBar::Create(
     const std::string& extension_name,
     ExtensionDevToolsClientHost* client_host,
     const base::Closure& dismissed_callback) {
-  ExtensionInfoBars::iterator it =
-      g_extension_info_bars.Get().find(extension_id);
+  auto it = g_extension_info_bars.Get().find(extension_id);
   ExtensionDevToolsInfoBar* infobar = nullptr;
   if (it != g_extension_info_bars.Get().end())
     infobar = it->second;

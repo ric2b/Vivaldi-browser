@@ -14,12 +14,10 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/test/browser_test_utils.h"
-#include "ui/views/controls/button/blue_button.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/widget/widget.h"
 
@@ -124,8 +122,6 @@ class SadTabViewInteractiveUITest : public InProcessBrowserTest {
   }
 
  private:
-  test::ScopedMacViewsBrowserMode views_mode_{true};
-
   DISALLOW_COPY_AND_ASSIGN(SadTabViewInteractiveUITest);
 };
 
@@ -199,7 +195,7 @@ IN_PROC_BROWSER_TEST_F(SadTabViewInteractiveUITest,
   // Switch back to the first tab.
   TabStripModel* tab_strip_model = browser()->tab_strip_model();
   EXPECT_EQ(1, tab_strip_model->active_index());
-  tab_strip_model->ActivateTabAt(0, true);
+  tab_strip_model->ActivateTabAt(0, {TabStripModel::GestureType::kOther});
   EXPECT_EQ(0, tab_strip_model->active_index());
   content::WebContents* web_contents = tab_strip_model->GetActiveWebContents();
   EXPECT_TRUE(web_contents->IsCrashed());
@@ -211,7 +207,7 @@ IN_PROC_BROWSER_TEST_F(SadTabViewInteractiveUITest,
   EXPECT_FALSE(web_contents->IsCrashed());
 
   // Switch to the second tab, reload it too.
-  tab_strip_model->ActivateTabAt(1, true);
+  tab_strip_model->ActivateTabAt(1, {TabStripModel::GestureType::kOther});
   web_contents = tab_strip_model->GetActiveWebContents();
   EXPECT_TRUE(web_contents->IsCrashed());
   ClickOnActionButtonInSadTab();

@@ -15,14 +15,12 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.download.ui.DownloadHistoryAdapter.SubsectionHeader;
 import org.chromium.chrome.browser.download.ui.DownloadItemSelectionDelegate.SubsectionHeaderSelectionObserver;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.widget.DateDividedAdapter.TimedItem;
-import org.chromium.chrome.browser.widget.TintedImageView;
 import org.chromium.chrome.browser.widget.selection.SelectableItemView;
+import org.chromium.chrome.download.R;
 
 import java.util.Set;
 
@@ -31,8 +29,6 @@ import java.util.Set;
  */
 public class OfflineGroupHeaderView
         extends SelectableItemView<TimedItem> implements SubsectionHeaderSelectionObserver {
-    private final int mIconBackgroundColorSelected;
-    private final int mIconBackgroundColor;
     private final int mIconBackgroundResId;
     private final ColorStateList mIconForegroundColorList;
     private final ColorStateList mCheckedIconForegroundColorList;
@@ -43,29 +39,22 @@ public class OfflineGroupHeaderView
 
     private TextView mDescriptionTextView;
     private ImageView mExpandImage;
-    private TintedImageView mIconImageView;
+    private ImageView mIconImageView;
 
     public OfflineGroupHeaderView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        mIconBackgroundColor = DownloadUtils.getIconBackgroundColor(context);
-        mIconBackgroundColorSelected =
-                ApiCompatibilityUtils.getColor(getResources(), R.color.modern_grey_600);
         mCheckedIconForegroundColorList = DownloadUtils.getIconForegroundColorList(context);
         mIconBackgroundResId = R.drawable.list_item_icon_modern_bg;
 
-        if (FeatureUtilities.isChromeModernDesignEnabled()) {
-            mIconForegroundColorList =
-                    AppCompatResources.getColorStateList(context, R.color.dark_mode_tint);
-        } else {
-            mIconForegroundColorList = DownloadUtils.getIconForegroundColorList(context);
-        }
+        mIconForegroundColorList =
+                AppCompatResources.getColorStateList(context, R.color.standard_mode_tint);
     }
 
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
 
-        mIconImageView = (TintedImageView) findViewById(R.id.icon_view);
+        mIconImageView = findViewById(R.id.icon_view);
         mDescriptionTextView = (TextView) findViewById(R.id.description);
         mExpandImage = (ImageView) findViewById(R.id.expand_icon);
     }
@@ -122,28 +111,20 @@ public class OfflineGroupHeaderView
 
     private void updateCheckIcon(boolean checked) {
         if (checked) {
-            if (FeatureUtilities.isChromeModernDesignEnabled()) {
-                mIconImageView.setBackgroundResource(mIconBackgroundResId);
-                mIconImageView.getBackground().setLevel(
-                        getResources().getInteger(R.integer.list_item_level_selected));
-            } else {
-                mIconImageView.setBackgroundColor(mIconBackgroundColorSelected);
-            }
+            mIconImageView.setBackgroundResource(mIconBackgroundResId);
+            mIconImageView.getBackground().setLevel(
+                    getResources().getInteger(R.integer.list_item_level_selected));
 
             mIconImageView.setImageDrawable(mCheckDrawable);
-            mIconImageView.setTint(mCheckedIconForegroundColorList);
+            ApiCompatibilityUtils.setImageTintList(mIconImageView, mCheckedIconForegroundColorList);
             mCheckDrawable.start();
         } else {
-            if (FeatureUtilities.isChromeModernDesignEnabled()) {
-                mIconImageView.setBackgroundResource(mIconBackgroundResId);
-                mIconImageView.getBackground().setLevel(
-                        getResources().getInteger(R.integer.list_item_level_default));
-            } else {
-                mIconImageView.setBackgroundColor(mIconBackgroundColor);
-            }
+            mIconImageView.setBackgroundResource(mIconBackgroundResId);
+            mIconImageView.getBackground().setLevel(
+                    getResources().getInteger(R.integer.list_item_level_default));
 
             mIconImageView.setImageResource(R.drawable.ic_chrome);
-            mIconImageView.setTint(mIconForegroundColorList);
+            ApiCompatibilityUtils.setImageTintList(mIconImageView, mIconForegroundColorList);
         }
     }
 

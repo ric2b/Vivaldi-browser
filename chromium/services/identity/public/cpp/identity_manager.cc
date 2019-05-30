@@ -4,7 +4,23 @@
 
 #include "services/identity/public/cpp/identity_manager.h"
 
+#include <string>
+
+#include "build/build_config.h"
+#include "components/signin/core/browser/account_fetcher_service.h"
+#include "components/signin/core/browser/ubertoken_fetcher_impl.h"
 #include "google_apis/gaia/gaia_auth_util.h"
+#include "services/identity/public/cpp/accounts_cookie_mutator.h"
+#include "services/identity/public/cpp/accounts_mutator.h"
+#include "services/identity/public/cpp/diagnostics_provider.h"
+#include "services/identity/public/cpp/primary_account_mutator.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+
+#if defined(OS_ANDROID)
+#include "components/signin/core/browser/oauth2_token_service_delegate_android.h"
+#endif
+
+#include "app/vivaldi_apptools.h"
 
 namespace identity {
 
@@ -23,203 +39,176 @@ const char kSupervisedUserPseudoEmail[] = "managed_user@localhost";
 // TODO(860492): Remove this once supervised user support is removed.
 const char kSupervisedUserPseudoGaiaID[] = "managed_user_gaia_id";
 
-// Maps a vector of gaia::ListedAccount structs to a corresponding vector of
-// AccountInfo structs.
-std::vector<AccountInfo> ListedAccountsToAccountInfos(
-    const std::vector<gaia::ListedAccount>& listed_accounts) {
-  std::vector<AccountInfo> account_infos;
-
-  for (const auto& listed_account : listed_accounts) {
-    AccountInfo account_info;
-    account_info.account_id = listed_account.id;
-    account_info.gaia = listed_account.gaia_id;
-    account_info.email = listed_account.email;
-    account_infos.push_back(account_info);
-  }
-
-  return account_infos;
-}
-
 }  // namespace
 
 IdentityManager::IdentityManager(
     SigninManagerBase* signin_manager,
     ProfileOAuth2TokenService* token_service,
+    AccountFetcherService* account_fetcher_service,
     AccountTrackerService* account_tracker_service,
-    GaiaCookieManagerService* gaia_cookie_manager_service)
+    GaiaCookieManagerService* gaia_cookie_manager_service,
+    std::unique_ptr<PrimaryAccountMutator> primary_account_mutator,
+    std::unique_ptr<AccountsMutator> accounts_mutator,
+    std::unique_ptr<AccountsCookieMutator> accounts_cookie_mutator,
+    std::unique_ptr<DiagnosticsProvider> diagnostics_provider)
     : signin_manager_(signin_manager),
       token_service_(token_service),
+      account_fetcher_service_(account_fetcher_service),
       account_tracker_service_(account_tracker_service),
-      gaia_cookie_manager_service_(gaia_cookie_manager_service) {
-  // Initialize the state of the primary account.
-  primary_account_info_ = signin_manager_->GetAuthenticatedAccountInfo();
-
-  // Initialize the state of accounts with refresh tokens.
-  // |account_id| is moved into |accounts_with_refresh_tokens_|.
-  // Do not change this to "const std::string&".
-  for (std::string account_id : token_service->GetAccounts()) {
-    AccountInfo account_info =
-        account_tracker_service_->GetAccountInfo(account_id);
-
-    // In the context of supervised users, the ProfileOAuth2TokenService is used
-    // without the AccountTrackerService being used. This is the only case in
-    // which the AccountTrackerService will potentially not know about the
-    // account. In this context, |account_id| is always set to
-    // kSupervisedUserPseudoEmail.
-    // TODO(860492): Remove this special case once supervised user support is
-    // removed.
-    DCHECK(!account_info.IsEmpty() || account_id == kSupervisedUserPseudoEmail);
-
-    if (account_id == kSupervisedUserPseudoEmail && account_info.IsEmpty()) {
-      // Populate the information manually to maintain the invariant that the
-      // account ID, gaia ID, and email are always set.
-      account_info.account_id = account_id;
-      account_info.email = kSupervisedUserPseudoEmail;
-      account_info.gaia = kSupervisedUserPseudoGaiaID;
-    }
-
-    accounts_with_refresh_tokens_.emplace(std::move(account_id),
-                                          std::move(account_info));
-  }
-
+      gaia_cookie_manager_service_(gaia_cookie_manager_service),
+      primary_account_mutator_(std::move(primary_account_mutator)),
+      accounts_mutator_(std::move(accounts_mutator)),
+      accounts_cookie_mutator_(std::move(accounts_cookie_mutator)),
+      diagnostics_provider_(std::move(diagnostics_provider)) {
+  DCHECK(account_fetcher_service_);
+  DCHECK(accounts_cookie_mutator_);
+  DCHECK(diagnostics_provider_);
   signin_manager_->AddObserver(this);
-#if !defined(OS_CHROMEOS)
-  SigninManager::FromSigninManagerBase(signin_manager_)
-      ->set_diagnostics_client(this);
-#endif
   token_service_->AddDiagnosticsObserver(this);
   token_service_->AddObserver(this);
-  token_service_->set_diagnostics_client(this);
+  account_tracker_service_->AddObserver(this);
   gaia_cookie_manager_service_->AddObserver(this);
 }
 
 IdentityManager::~IdentityManager() {
   signin_manager_->RemoveObserver(this);
-#if !defined(OS_CHROMEOS)
-  SigninManager::FromSigninManagerBase(signin_manager_)
-      ->set_diagnostics_client(nullptr);
-#endif
   token_service_->RemoveObserver(this);
   token_service_->RemoveDiagnosticsObserver(this);
-  token_service_->set_diagnostics_client(nullptr);
+  account_tracker_service_->RemoveObserver(this);
   gaia_cookie_manager_service_->RemoveObserver(this);
 }
 
 AccountInfo IdentityManager::GetPrimaryAccountInfo() const {
-#if defined(OS_CHROMEOS)
-  // On ChromeOS in production, the authenticated account is set very early in
-  // startup and never changed. Hence, the information held by the
-  // IdentityManager should always correspond to that held by SigninManager.
-  // NOTE: the above invariant is not guaranteed to hold in tests. If you
-  // are seeing this DCHECK go off in a testing context, it means that you need
-  // to set the IdentityManager's primary account info in the test at the place
-  // where you are setting the authenticated account info in the SigninManager.
-  // TODO(blundell): Add the API to do this once we hit the first case and
-  // document the API to use here.
-  DCHECK_EQ(signin_manager_->GetAuthenticatedAccountId(),
-            primary_account_info_.account_id);
+  return signin_manager_->GetAuthenticatedAccountInfo();
+}
 
-  // Note: If the primary account's refresh token gets revoked, then the account
-  // gets removed from AccountTrackerService (via
-  // AccountFetcherService::OnRefreshTokenRevoked), and so SigninManager's
-  // GetAuthenticatedAccountInfo is empty (even though
-  // GetAuthenticatedAccountId is NOT empty).
-  if (!signin_manager_->GetAuthenticatedAccountInfo().account_id.empty()) {
-    DCHECK_EQ(signin_manager_->GetAuthenticatedAccountInfo().account_id,
-              primary_account_info_.account_id);
-    DCHECK_EQ(signin_manager_->GetAuthenticatedAccountInfo().gaia,
-              primary_account_info_.gaia);
-
-    // TODO(842670): As described in the bug, AccountTrackerService's email
-    // address can be updated after it is initially set on ChromeOS. Figure out
-    // right long-term solution for this problem.
-    if (signin_manager_->GetAuthenticatedAccountInfo().email !=
-        primary_account_info_.email) {
-      // This update should only be to move it from normalized form to the form
-      // in which the user entered the email when creating the account. The
-      // below check verifies that the normalized forms of the two email
-      // addresses are identical.
-      DCHECK(gaia::AreEmailsSame(
-          signin_manager_->GetAuthenticatedAccountInfo().email,
-          primary_account_info_.email));
-      primary_account_info_.email =
-          signin_manager_->GetAuthenticatedAccountInfo().email;
-    }
-  }
-#endif  // defined(OS_CHROMEOS)
-  return primary_account_info_;
+const std::string& IdentityManager::GetPrimaryAccountId() const {
+  return signin_manager_->GetAuthenticatedAccountId();
 }
 
 bool IdentityManager::HasPrimaryAccount() const {
-  return !primary_account_info_.account_id.empty();
+  return signin_manager_->IsAuthenticated();
 }
-
-#if !defined(OS_CHROMEOS)
-void IdentityManager::ClearPrimaryAccount(
-    ClearAccountTokensAction token_action,
-    signin_metrics::ProfileSignout signout_source_metric,
-    signin_metrics::SignoutDelete signout_delete_metric) {
-  SigninManager* signin_manager =
-      SigninManager::FromSigninManagerBase(signin_manager_);
-
-  switch (token_action) {
-    case IdentityManager::ClearAccountTokensAction::kDefault:
-      signin_manager->SignOut(signout_source_metric, signout_delete_metric);
-      break;
-    case IdentityManager::ClearAccountTokensAction::kKeepAll:
-      signin_manager->SignOutAndKeepAllAccounts(signout_source_metric,
-                                                signout_delete_metric);
-      break;
-    case IdentityManager::ClearAccountTokensAction::kRemoveAll:
-      signin_manager->SignOutAndRemoveAllAccounts(signout_source_metric,
-                                                  signout_delete_metric);
-      break;
-  }
-
-  // NOTE: |primary_account_| member is cleared in WillFireGoogleSignedOut()
-  // and IdentityManager::Observers are notified in GoogleSignedOut();
-}
-#endif  // defined(OS_CHROMEOS)
 
 std::vector<AccountInfo> IdentityManager::GetAccountsWithRefreshTokens() const {
-  // TODO(blundell): It seems wasteful to construct this vector every time this
-  // method is called, but it also seems bad to maintain the vector as an ivar
-  // along the map.
-  std::vector<AccountInfo> accounts;
-  accounts.reserve(accounts_with_refresh_tokens_.size());
+  std::vector<std::string> account_ids_with_tokens =
+      token_service_->GetAccounts();
 
-  for (const auto& pair : accounts_with_refresh_tokens_) {
-    accounts.push_back(pair.second);
+  std::vector<AccountInfo> accounts;
+  accounts.reserve(account_ids_with_tokens.size());
+
+  for (const std::string& account_id : account_ids_with_tokens) {
+    accounts.push_back(GetAccountInfoForAccountWithRefreshToken(account_id));
   }
 
   return accounts;
 }
 
-std::vector<AccountInfo> IdentityManager::GetAccountsInCookieJar(
-    const std::string& source) const {
+AccountsInCookieJarInfo IdentityManager::GetAccountsInCookieJar() const {
   // TODO(859882): Change this implementation to interact asynchronously with
   // GaiaCookieManagerService as detailed in
   // https://docs.google.com/document/d/1hcrJ44facCSHtMGBmPusvcoP-fAR300Hi-UFez8ffYQ/edit?pli=1#heading=h.w97eil1cygs2.
-  std::vector<gaia::ListedAccount> listed_accounts;
-  gaia_cookie_manager_service_->ListAccounts(&listed_accounts, nullptr, source);
+  std::vector<gaia::ListedAccount> signed_in_accounts;
+  std::vector<gaia::ListedAccount> signed_out_accounts;
 
-  return ListedAccountsToAccountInfos(listed_accounts);
+  if (vivaldi::IsVivaldiRunning())
+    return AccountsInCookieJarInfo(true, signed_in_accounts,
+      signed_out_accounts);
+
+  bool accounts_are_fresh = gaia_cookie_manager_service_->ListAccounts(
+      &signed_in_accounts, &signed_out_accounts);
+
+  return AccountsInCookieJarInfo(accounts_are_fresh, signed_in_accounts,
+                                 signed_out_accounts);
 }
 
 bool IdentityManager::HasAccountWithRefreshToken(
     const std::string& account_id) const {
-  return base::ContainsKey(accounts_with_refresh_tokens_, account_id);
+  return token_service_->RefreshTokenIsAvailable(account_id);
+}
+
+bool IdentityManager::HasAccountWithRefreshTokenInPersistentErrorState(
+    const std::string& account_id) const {
+  return GetErrorStateOfRefreshTokenForAccount(account_id).IsPersistentError();
+}
+
+GoogleServiceAuthError IdentityManager::GetErrorStateOfRefreshTokenForAccount(
+    const std::string& account_id) const {
+  return token_service_->GetAuthError(account_id);
 }
 
 bool IdentityManager::HasPrimaryAccountWithRefreshToken() const {
-  return HasAccountWithRefreshToken(GetPrimaryAccountInfo().account_id);
+  return HasAccountWithRefreshToken(GetPrimaryAccountId());
+}
+
+bool IdentityManager::AreRefreshTokensLoaded() const {
+  return token_service_->AreAllCredentialsLoaded();
+}
+
+base::Optional<AccountInfo> IdentityManager::FindExtendedAccountInfoForAccount(
+    const CoreAccountInfo& account_info) const {
+  AccountInfo extended_account_info =
+      account_tracker_service_->GetAccountInfo(account_info.account_id);
+
+  // AccountTrackerService always returns an AccountInfo, even on failure. In
+  // case of failure, the AccountInfo will be unpopulated, thus we should not
+  // be able to find a valid refresh token.
+  if (!HasAccountWithRefreshToken(extended_account_info.account_id))
+    return base::nullopt;
+
+  return GetAccountInfoForAccountWithRefreshToken(account_info.account_id);
+}
+
+base::Optional<AccountInfo>
+IdentityManager::FindAccountInfoForAccountWithRefreshTokenByAccountId(
+    const std::string& account_id) const {
+  AccountInfo account_info =
+      account_tracker_service_->GetAccountInfo(account_id);
+
+  // AccountTrackerService always returns an AccountInfo, even on failure. In
+  // case of failure, the AccountInfo will be unpopulated, thus we should not
+  // be able to find a valid refresh token.
+  if (!HasAccountWithRefreshToken(account_info.account_id))
+    return base::nullopt;
+
+  return GetAccountInfoForAccountWithRefreshToken(account_info.account_id);
+}
+
+base::Optional<AccountInfo>
+IdentityManager::FindAccountInfoForAccountWithRefreshTokenByEmailAddress(
+    const std::string& email_address) const {
+  AccountInfo account_info =
+      account_tracker_service_->FindAccountInfoByEmail(email_address);
+
+  // AccountTrackerService always returns an AccountInfo, even on failure. In
+  // case of failure, the AccountInfo will be unpopulated, thus we should not
+  // be able to find a valid refresh token.
+  if (!HasAccountWithRefreshToken(account_info.account_id))
+    return base::nullopt;
+
+  return GetAccountInfoForAccountWithRefreshToken(account_info.account_id);
+}
+
+base::Optional<AccountInfo>
+IdentityManager::FindAccountInfoForAccountWithRefreshTokenByGaiaId(
+    const std::string& gaia_id) const {
+  AccountInfo account_info =
+      account_tracker_service_->FindAccountInfoByGaiaId(gaia_id);
+
+  // AccountTrackerService always returns an AccountInfo, even on failure. In
+  // case of failure, the AccountInfo will be unpopulated, thus we should not
+  // be able to find a valid refresh token.
+  if (!HasAccountWithRefreshToken(account_info.account_id))
+    return base::nullopt;
+
+  return GetAccountInfoForAccountWithRefreshToken(account_info.account_id);
 }
 
 std::unique_ptr<AccessTokenFetcher>
 IdentityManager::CreateAccessTokenFetcherForAccount(
     const std::string& account_id,
     const std::string& oauth_consumer_name,
-    const OAuth2TokenService::ScopeSet& scopes,
+    const identity::ScopeSet& scopes,
     AccessTokenFetcher::TokenCallback callback,
     AccessTokenFetcher::Mode mode) {
   return std::make_unique<AccessTokenFetcher>(account_id, oauth_consumer_name,
@@ -227,9 +216,36 @@ IdentityManager::CreateAccessTokenFetcherForAccount(
                                               std::move(callback), mode);
 }
 
+std::unique_ptr<AccessTokenFetcher>
+IdentityManager::CreateAccessTokenFetcherForAccount(
+    const std::string& account_id,
+    const std::string& oauth_consumer_name,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    const identity::ScopeSet& scopes,
+    AccessTokenFetcher::TokenCallback callback,
+    AccessTokenFetcher::Mode mode) {
+  return std::make_unique<AccessTokenFetcher>(
+      account_id, oauth_consumer_name, token_service_, url_loader_factory,
+      scopes, std::move(callback), mode);
+}
+
+std::unique_ptr<AccessTokenFetcher>
+IdentityManager::CreateAccessTokenFetcherForClient(
+    const std::string& account_id,
+    const std::string& client_id,
+    const std::string& client_secret,
+    const std::string& oauth_consumer_name,
+    const identity::ScopeSet& scopes,
+    AccessTokenFetcher::TokenCallback callback,
+    AccessTokenFetcher::Mode mode) {
+  return std::make_unique<AccessTokenFetcher>(
+      account_id, client_id, client_secret, oauth_consumer_name, token_service_,
+      scopes, std::move(callback), mode);
+}
+
 void IdentityManager::RemoveAccessTokenFromCache(
     const std::string& account_id,
-    const OAuth2TokenService::ScopeSet& scopes,
+    const identity::ScopeSet& scopes,
     const std::string& access_token) {
   // TODO(843510): Consider making the request to ProfileOAuth2TokenService
   // asynchronously once there are no direct clients of PO2TS. This change would
@@ -239,6 +255,113 @@ void IdentityManager::RemoveAccessTokenFromCache(
   // token from the cache and then immediately requests an access token).
   token_service_->InvalidateAccessToken(account_id, scopes, access_token);
 }
+
+std::unique_ptr<signin::UbertokenFetcher>
+IdentityManager::CreateUbertokenFetcherForAccount(
+    const std::string& account_id,
+    signin::UbertokenFetcher::CompletionCallback callback,
+    gaia::GaiaSource source,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    bool bount_to_channel_id) {
+  return std::make_unique<signin::UbertokenFetcherImpl>(
+      account_id, token_service_, std::move(callback), source,
+      url_loader_factory, bount_to_channel_id);
+}
+
+// static
+bool IdentityManager::IsAccountIdMigrationSupported() {
+  return AccountTrackerService::IsMigrationSupported();
+}
+
+// static
+void IdentityManager::RegisterPrefs(PrefRegistrySimple* registry) {
+  SigninManagerBase::RegisterPrefs(registry);
+}
+
+void IdentityManager::LegacySetAccountIdMigrationDone() {
+  account_tracker_service_->SetMigrationDone();
+}
+
+IdentityManager::AccountIdMigrationState
+IdentityManager::GetAccountIdMigrationState() const {
+  return static_cast<IdentityManager::AccountIdMigrationState>(
+      account_tracker_service_->GetMigrationState());
+}
+
+PrimaryAccountMutator* IdentityManager::GetPrimaryAccountMutator() {
+  return primary_account_mutator_.get();
+}
+
+std::string IdentityManager::LegacyPickAccountIdForAccount(
+    const std::string& gaia,
+    const std::string& email) const {
+  return account_tracker_service_->PickAccountIdForAccount(gaia, email);
+}
+
+AccountsMutator* IdentityManager::GetAccountsMutator() {
+  return accounts_mutator_.get();
+}
+
+AccountsCookieMutator* IdentityManager::GetAccountsCookieMutator() {
+  return accounts_cookie_mutator_.get();
+}
+
+void IdentityManager::OnNetworkInitialized() {
+  gaia_cookie_manager_service_->InitCookieListener();
+  account_fetcher_service_->OnNetworkInitialized();
+}
+
+void IdentityManager::LegacyLoadCredentialsForSupervisedUser(
+    const std::string& primary_account_id) {
+  token_service_->LoadCredentials(primary_account_id);
+}
+
+DiagnosticsProvider* IdentityManager::GetDiagnosticsProvider() {
+  return diagnostics_provider_.get();
+}
+
+std::string IdentityManager::LegacySeedAccountInfo(const AccountInfo& info) {
+  return account_tracker_service_->SeedAccountInfo(info);
+}
+
+#if defined(OS_IOS)
+void IdentityManager::ForceTriggerOnCookieChange() {
+  gaia_cookie_manager_service_->ForceOnCookieChangeProcessing();
+}
+
+void IdentityManager::LegacyAddAccountFromSystem(
+    const std::string& account_id) {
+  token_service_->GetDelegate()->AddAccountFromSystem(account_id);
+}
+#endif
+
+#if defined(OS_ANDROID) || defined(OS_IOS)
+void IdentityManager::LegacyReloadAccountsFromSystem() {
+  token_service_->GetDelegate()->ReloadAccountsFromSystem(
+      GetPrimaryAccountId());
+}
+#endif
+
+#if defined(OS_ANDROID)
+base::android::ScopedJavaLocalRef<jobject>
+IdentityManager::LegacyGetAccountTrackerServiceJavaObject() {
+  return account_tracker_service_->GetJavaObject();
+}
+
+base::android::ScopedJavaLocalRef<jobject>
+IdentityManager::LegacyGetOAuth2TokenServiceJavaObject() {
+  OAuth2TokenServiceDelegateAndroid* delegate =
+      static_cast<OAuth2TokenServiceDelegateAndroid*>(
+          token_service_->GetDelegate());
+  return delegate->GetJavaObject();
+}
+
+void IdentityManager::ForceRefreshOfExtendedAccountInfo(
+    const std::string& account_id) {
+  DCHECK(HasAccountWithRefreshToken(account_id));
+  account_fetcher_service_->ForceRefreshOfAccountInfo(account_id);
+}
+#endif
 
 void IdentityManager::AddObserver(Observer* observer) {
   observer_list_.AddObserver(observer);
@@ -256,6 +379,22 @@ void IdentityManager::RemoveDiagnosticsObserver(DiagnosticsObserver* observer) {
   diagnostics_observer_list_.RemoveObserver(observer);
 }
 
+SigninManagerBase* IdentityManager::GetSigninManager() {
+  return signin_manager_;
+}
+
+ProfileOAuth2TokenService* IdentityManager::GetTokenService() {
+  return token_service_;
+}
+
+AccountTrackerService* IdentityManager::GetAccountTrackerService() {
+  return account_tracker_service_;
+}
+
+GaiaCookieManagerService* IdentityManager::GetGaiaCookieManagerService() {
+  return gaia_cookie_manager_service_;
+}
+
 void IdentityManager::SetPrimaryAccountSynchronouslyForTests(
     const std::string& gaia_id,
     const std::string& email_address,
@@ -269,38 +408,49 @@ void IdentityManager::SetPrimaryAccountSynchronously(
     const std::string& email_address,
     const std::string& refresh_token) {
   signin_manager_->SetAuthenticatedAccountInfo(gaia_id, email_address);
-  primary_account_info_ = signin_manager_->GetAuthenticatedAccountInfo();
 
   if (!refresh_token.empty()) {
-    token_service_->UpdateCredentials(primary_account_info_.account_id,
-                                      refresh_token);
+    // Note: Source for the operation is |Unknown| as the method
+    // |SetPrimaryAccountSynchronously| is only used for testing.
+    token_service_->UpdateCredentials(
+        GetPrimaryAccountId(), refresh_token,
+        signin_metrics::SourceForRefreshTokenOperation::kUnknown);
   }
 }
 
-#if !defined(OS_CHROMEOS)
-void IdentityManager::WillFireGoogleSigninSucceeded(
-    const AccountInfo& account_info) {
-  // TODO(843510): Consider setting this info and notifying observers
-  // asynchronously in response to GoogleSigninSucceeded() once there are no
-  // direct clients of SigninManager.
-  primary_account_info_ = account_info;
-}
-
-void IdentityManager::WillFireGoogleSignedOut(const AccountInfo& account_info) {
-  // TODO(843510): Consider setting this info and notifying observers
-  // asynchronously in response to GoogleSigninSucceeded() once there are no
-  // direct clients of SigninManager.
-  DCHECK_EQ(account_info.account_id, primary_account_info_.account_id);
-  DCHECK_EQ(account_info.gaia, primary_account_info_.gaia);
-  DCHECK(gaia::AreEmailsSame(account_info.email, primary_account_info_.email));
-  primary_account_info_ = AccountInfo();
-}
+AccountInfo IdentityManager::GetAccountInfoForAccountWithRefreshToken(
+    const std::string& account_id) const {
+  // TODO(https://crbug.com/919793): This invariant is not currently possible to
+  // enforce on Android due to the underlying relationship between
+  // O2TS::GetAccounts(), O2TS::RefreshTokenIsAvailable(), and
+  // O2TS::Observer::OnRefreshTokenAvailable().
+#if !defined(OS_ANDROID)
+  DCHECK(HasAccountWithRefreshToken(account_id));
 #endif
 
+  AccountInfo account_info =
+      account_tracker_service_->GetAccountInfo(account_id);
+
+  // In the context of supervised users, the ProfileOAuth2TokenService is used
+  // without the AccountTrackerService being used. This is the only case in
+  // which the AccountTrackerService will potentially not know about the
+  // account. In this context, |account_id| is always set to
+  // kSupervisedUserPseudoEmail. Populate the information manually in this case
+  // to maintain the invariant that the account ID, gaia ID, and email are
+  // always set.
+  // TODO(860492): Remove this special case once supervised user support is
+  // removed.
+  DCHECK(!account_info.IsEmpty() || account_id == kSupervisedUserPseudoEmail);
+  if (account_id == kSupervisedUserPseudoEmail && account_info.IsEmpty()) {
+    account_info.account_id = account_id;
+    account_info.email = kSupervisedUserPseudoEmail;
+    account_info.gaia = kSupervisedUserPseudoGaiaID;
+  }
+
+  return account_info;
+}
+
 void IdentityManager::GoogleSigninSucceeded(const AccountInfo& account_info) {
-  DCHECK(account_info.account_id == primary_account_info_.account_id);
-  DCHECK(account_info.gaia == primary_account_info_.gaia);
-  DCHECK(account_info.email == primary_account_info_.email);
   for (auto& observer : observer_list_) {
     observer.OnPrimaryAccountSet(account_info);
   }
@@ -313,142 +463,63 @@ void IdentityManager::GoogleSignedOut(const AccountInfo& account_info) {
   }
 }
 
-void IdentityManager::WillFireOnRefreshTokenAvailable(
-    const std::string& account_id,
-    bool is_valid) {
-  DCHECK(!pending_token_available_state_);
-  AccountInfo account_info =
-      account_tracker_service_->GetAccountInfo(account_id);
-
-  // In the context of supervised users, the ProfileOAuth2TokenService is used
-  // without the AccountTrackerService being used. This is the only case in
-  // which the AccountTrackerService will potentially not know about the
-  // account. In this context, |account_id| is always set to
-  // kSupervisedUserPseudoEmail.
-  // TODO(860492): Remove this special case once supervised user support is
-  // removed.
-  DCHECK(!account_info.IsEmpty() || account_id == kSupervisedUserPseudoEmail);
-  if (account_id == kSupervisedUserPseudoEmail && account_info.IsEmpty()) {
-    // Populate the information manually to maintain the invariant that the
-    // account ID, gaia ID, and email are always set.
-    account_info.account_id = account_id;
-    account_info.email = kSupervisedUserPseudoEmail;
-    account_info.gaia = kSupervisedUserPseudoGaiaID;
-  }
-
-  // The account might have already been present (e.g., this method can fire on
-  // updating an invalid token to a valid one or vice versa); in this case we
-  // sanity-check that the cached account info has the expected values.
-  auto iterator = accounts_with_refresh_tokens_.find(account_id);
-  if (iterator != accounts_with_refresh_tokens_.end()) {
-    DCHECK_EQ(account_info.gaia, iterator->second.gaia);
-    DCHECK(gaia::AreEmailsSame(account_info.email, iterator->second.email));
-  } else {
-    auto insertion_result = accounts_with_refresh_tokens_.emplace(
-        account_id, std::move(account_info));
-    DCHECK(insertion_result.second);
-    iterator = insertion_result.first;
-  }
-
-  PendingTokenAvailableState pending_token_available_state;
-  pending_token_available_state.account_info = iterator->second;
-  pending_token_available_state.refresh_token_is_valid = is_valid;
-  pending_token_available_state_ = std::move(pending_token_available_state);
-}
-
-void IdentityManager::WillFireOnRefreshTokenRevoked(
-    const std::string& account_id) {
-  DCHECK(!pending_token_revoked_info_);
-
-  auto iterator = accounts_with_refresh_tokens_.find(account_id);
-  if (iterator == accounts_with_refresh_tokens_.end()) {
-    // A corner case exists wherein the token service revokes tokens while
-    // loading tokens during initial startup. This is the only case in which it
-    // is expected that we could receive this notification without having
-    // previously received a notification that this account was available. In
-    // this case, we simply do not forward on the notification, for the
-    // following reasons: (1) We may not have a fully-populated |account_info|
-    // to send as the argument. (2) Sending the notification breaks clients'
-    // expectations that IdentityManager will only fire RefreshTokenRemoved
-    // notifications for accounts that it previously knew about.
-    DCHECK(!token_service_->AreAllCredentialsLoaded());
-    return;
-  }
-
-  accounts_with_refresh_tokens_.erase(iterator);
-
-  pending_token_revoked_info_ =
-      account_tracker_service_->GetAccountInfo(account_id);
-
-  // In the context of supervised users, the ProfileOAuth2TokenService is used
-  // without the AccountTrackerService being used. This is the only case in
-  // which the AccountTrackerService will potentially not know about the
-  // account. In this context, |account_id| is always set to
-  // kSupervisedUserPseudoEmail.
-
-  // TODO(860492): Remove this special case once supervised user support is
-  // removed.
-  DCHECK(!pending_token_revoked_info_->IsEmpty() ||
-         account_id == kSupervisedUserPseudoEmail);
-  if (account_id == kSupervisedUserPseudoEmail &&
-      pending_token_revoked_info_->IsEmpty()) {
-    // Populate the information manually to maintain the invariant that the
-    // account ID, gaia ID, and email are always set.
-    pending_token_revoked_info_->account_id = account_id;
-    pending_token_revoked_info_->email = account_id;
-    pending_token_revoked_info_->gaia = kSupervisedUserPseudoGaiaID;
-  }
+void IdentityManager::GoogleSigninFailed(const GoogleServiceAuthError& error) {
+  for (auto& observer : observer_list_)
+    observer.OnPrimaryAccountSigninFailed(error);
 }
 
 void IdentityManager::OnRefreshTokenAvailable(const std::string& account_id) {
-  DCHECK(pending_token_available_state_);
-  DCHECK_EQ(pending_token_available_state_->account_info.account_id,
-            account_id);
-
-  // Move the state out of |pending_token_available_state_| in case any observer
-  // callbacks fired below result in mutations of refresh tokens.
-  AccountInfo account_info =
-      std::move(pending_token_available_state_->account_info);
-  bool refresh_token_is_valid =
-      pending_token_available_state_->refresh_token_is_valid;
-
-  pending_token_available_state_.reset();
+  CoreAccountInfo account_info =
+      GetAccountInfoForAccountWithRefreshToken(account_id);
 
   for (auto& observer : observer_list_) {
-    observer.OnRefreshTokenUpdatedForAccount(account_info,
-                                             refresh_token_is_valid);
+    observer.OnRefreshTokenUpdatedForAccount(account_info);
   }
 }
 
 void IdentityManager::OnRefreshTokenRevoked(const std::string& account_id) {
-  // NOTE: It is possible for |pending_token_revoked_info_| to be null in the
-  // corner case of tokens being revoked during initial startup (see
-  // WillFireOnRefreshTokenRevoked() above).
-  if (!pending_token_revoked_info_) {
-    return;
-  }
-
-  DCHECK_EQ(pending_token_revoked_info_->account_id, account_id);
-
-  // Move the state out of |pending_token_revoked_info_| in case any observer
-  // callbacks fired below result in mutations of refresh tokens.
-  AccountInfo account_info = pending_token_revoked_info_.value();
-  pending_token_revoked_info_.reset();
-
   for (auto& observer : observer_list_) {
-    observer.OnRefreshTokenRemovedForAccount(account_info);
+    observer.OnRefreshTokenRemovedForAccount(account_id);
   }
 }
 
+void IdentityManager::OnRefreshTokensLoaded() {
+  for (auto& observer : observer_list_)
+    observer.OnRefreshTokensLoaded();
+}
+
+void IdentityManager::OnEndBatchChanges() {
+  for (auto& observer : observer_list_)
+    observer.OnEndBatchOfRefreshTokenStateChanges();
+}
+
+void IdentityManager::OnAuthErrorChanged(
+    const std::string& account_id,
+    const GoogleServiceAuthError& auth_error) {
+  CoreAccountInfo account_info =
+      GetAccountInfoForAccountWithRefreshToken(account_id);
+
+  for (auto& observer : observer_list_)
+    observer.OnErrorStateOfRefreshTokenUpdatedForAccount(account_info,
+                                                         auth_error);
+}
+
 void IdentityManager::OnGaiaAccountsInCookieUpdated(
-    const std::vector<gaia::ListedAccount>& accounts,
+    const std::vector<gaia::ListedAccount>& signed_in_accounts,
     const std::vector<gaia::ListedAccount>& signed_out_accounts,
     const GoogleServiceAuthError& error) {
-  std::vector<AccountInfo> account_infos =
-      ListedAccountsToAccountInfos(accounts);
+  AccountsInCookieJarInfo accounts_in_cookie_jar_info(
+      error == GoogleServiceAuthError::AuthErrorNone(), signed_in_accounts,
+      signed_out_accounts);
 
   for (auto& observer : observer_list_) {
-    observer.OnAccountsInCookieUpdated(account_infos);
+    observer.OnAccountsInCookieUpdated(accounts_in_cookie_jar_info, error);
+  }
+}
+
+void IdentityManager::OnGaiaCookieDeletedByUserAction() {
+  for (auto& observer : observer_list_) {
+    observer.OnAccountsCookieDeletedByUserAction();
   }
 }
 
@@ -461,6 +532,49 @@ void IdentityManager::OnAccessTokenRequested(
   for (auto& observer : diagnostics_observer_list_) {
     observer.OnAccessTokenRequested(account_id, consumer_id, scopes);
   }
+}
+
+void IdentityManager::OnFetchAccessTokenComplete(const std::string& account_id,
+                                                 const std::string& consumer_id,
+                                                 const ScopeSet& scopes,
+                                                 GoogleServiceAuthError error,
+                                                 base::Time expiration_time) {
+  for (auto& observer : diagnostics_observer_list_)
+    observer.OnAccessTokenRequestCompleted(account_id, consumer_id, scopes,
+                                           error, expiration_time);
+}
+
+void IdentityManager::OnAccessTokenRemoved(const std::string& account_id,
+                                           const ScopeSet& scopes) {
+  for (auto& observer : diagnostics_observer_list_)
+    observer.OnAccessTokenRemovedFromCache(account_id, scopes);
+}
+
+void IdentityManager::OnRefreshTokenAvailableFromSource(
+    const std::string& account_id,
+    bool is_refresh_token_valid,
+    const std::string& source) {
+  for (auto& observer : diagnostics_observer_list_)
+    observer.OnRefreshTokenUpdatedForAccountFromSource(
+        account_id, is_refresh_token_valid, source);
+}
+
+void IdentityManager::OnRefreshTokenRevokedFromSource(
+    const std::string& account_id,
+    const std::string& source) {
+  for (auto& observer : diagnostics_observer_list_)
+    observer.OnRefreshTokenRemovedForAccountFromSource(account_id, source);
+}
+
+void IdentityManager::OnAccountUpdated(const AccountInfo& info) {
+  for (auto& observer : observer_list_) {
+    observer.OnExtendedAccountInfoUpdated(info);
+  }
+}
+
+void IdentityManager::OnAccountRemoved(const AccountInfo& info) {
+  for (auto& observer : observer_list_)
+    observer.OnExtendedAccountInfoRemoved(info);
 }
 
 }  // namespace identity

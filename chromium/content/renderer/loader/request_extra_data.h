@@ -15,7 +15,6 @@
 #include "content/renderer/loader/frame_request_blocker.h"
 #include "content/renderer/loader/navigation_response_override_parameters.h"
 #include "content/renderer/loader/web_url_loader_impl.h"
-#include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "ui/base/page_transition_types.h"
@@ -34,9 +33,8 @@ class CONTENT_EXPORT RequestExtraData : public blink::WebURLRequest::ExtraData {
   RequestExtraData();
   ~RequestExtraData() override;
 
-  void set_visibility_state(
-      blink::mojom::PageVisibilityState visibility_state) {
-    visibility_state_ = visibility_state;
+  void set_is_preprerendering(bool is_prerendering) {
+    is_prerendering_ = is_prerendering;
   }
   void set_render_frame_id(int render_frame_id) {
     render_frame_id_ = render_frame_id;
@@ -73,12 +71,6 @@ class CONTENT_EXPORT RequestExtraData : public blink::WebURLRequest::ExtraData {
   void set_custom_user_agent(const blink::WebString& custom_user_agent) {
     custom_user_agent_ = custom_user_agent;
   }
-  const blink::WebString& requested_with() const {
-    return requested_with_;
-  }
-  void set_requested_with(const blink::WebString& requested_with) {
-    requested_with_ = requested_with;
-  }
 
   // PlzNavigate: |navigation_response_override| is used to override certain
   // parameters of navigation requests.
@@ -92,15 +84,6 @@ class CONTENT_EXPORT RequestExtraData : public blink::WebURLRequest::ExtraData {
     navigation_response_override_ = std::move(response_override);
   }
 
-  // |continue_navigation| is used to continue a navigation on the renderer
-  // process that has already been started on the browser process.
-  base::OnceClosure TakeContinueNavigationFunctionOwnerShip() {
-    return std::move(continue_navigation_function_);
-  }
-  void set_continue_navigation_function(base::OnceClosure continue_navigation) {
-    continue_navigation_function_ = std::move(continue_navigation);
-  }
-
   void set_initiated_in_secure_context(bool secure) {
     initiated_in_secure_context_ = secure;
   }
@@ -112,15 +95,6 @@ class CONTENT_EXPORT RequestExtraData : public blink::WebURLRequest::ExtraData {
     is_for_no_state_prefetch_ = prefetch;
   }
 
-  // The request is downloaded to the network cache, but not rendered or
-  // executed.
-  bool download_to_network_cache_only() const {
-    return download_to_network_cache_only_;
-  }
-  void set_download_to_network_cache_only(bool download_to_cache) {
-    download_to_network_cache_only_ = download_to_cache;
-  }
-
   // Copy of the settings value determining if mixed plugin content should be
   // blocked.
   bool block_mixed_plugin_content() const {
@@ -128,14 +102,6 @@ class CONTENT_EXPORT RequestExtraData : public blink::WebURLRequest::ExtraData {
   }
   void set_block_mixed_plugin_content(bool block_mixed_plugin_content) {
     block_mixed_plugin_content_ = block_mixed_plugin_content;
-  }
-
-  // Indicates whether a navigation was initiated by the browser or renderer.
-  bool navigation_initiated_by_renderer() const {
-    return navigation_initiated_by_renderer_;
-  }
-  void set_navigation_initiated_by_renderer(bool navigation_by_renderer) {
-    navigation_initiated_by_renderer_ = navigation_by_renderer;
   }
 
   // Determines whether SameSite cookies will be attached to the request
@@ -165,26 +131,20 @@ class CONTENT_EXPORT RequestExtraData : public blink::WebURLRequest::ExtraData {
   void CopyToResourceRequest(network::ResourceRequest* request) const;
 
  private:
-  blink::mojom::PageVisibilityState visibility_state_;
-  int render_frame_id_;
-  bool is_main_frame_;
-  bool allow_download_;
-  ui::PageTransition transition_type_;
-  int service_worker_provider_id_;
-  bool originated_from_service_worker_;
+  bool is_prerendering_ = false;
+  int render_frame_id_ = MSG_ROUTING_NONE;
+  bool is_main_frame_ = false;
+  bool allow_download_ = true;
+  ui::PageTransition transition_type_ = ui::PAGE_TRANSITION_LINK;
+  int service_worker_provider_id_ = kInvalidServiceWorkerProviderId;
+  bool originated_from_service_worker_ = false;
   blink::WebString custom_user_agent_;
-  blink::WebString requested_with_;
   std::unique_ptr<NavigationResponseOverrideParameters>
       navigation_response_override_;
-  // TODO(arthursonzogni): Move most of the |navigation_response_override_|
-  // content as parameters of this function.
-  base::OnceClosure continue_navigation_function_;
-  bool initiated_in_secure_context_;
-  bool is_for_no_state_prefetch_;
-  bool download_to_network_cache_only_;
-  bool block_mixed_plugin_content_;
-  bool navigation_initiated_by_renderer_;
-  bool attach_same_site_cookies_;
+  bool initiated_in_secure_context_ = false;
+  bool is_for_no_state_prefetch_ = false;
+  bool block_mixed_plugin_content_ = false;
+  bool attach_same_site_cookies_ = false;
   std::vector<std::unique_ptr<URLLoaderThrottle>> url_loader_throttles_;
   scoped_refptr<FrameRequestBlocker> frame_request_blocker_;
 

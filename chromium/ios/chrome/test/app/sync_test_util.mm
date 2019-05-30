@@ -17,7 +17,10 @@
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/keyed_service/core/service_access_type.h"
+#include "components/sync/device_info/device_info.h"
+#include "components/sync/device_info/device_info_sync_service.h"
 #include "components/sync/device_info/local_device_info_provider.h"
+#include "components/sync/driver/sync_service.h"
 #include "components/sync/engine/net/http_bridge_network_resources.h"
 #include "components/sync/test/fake_server/entity_builder_factory.h"
 #include "components/sync/test/fake_server/fake_server.h"
@@ -27,6 +30,7 @@
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
+#include "ios/chrome/browser/sync/device_info_sync_service_factory.h"
 #include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
@@ -51,7 +55,8 @@ void OverrideSyncNetworkResources(
       chrome_test_util::GetOriginalBrowserState();
   DCHECK(browser_state);
   browser_sync::ProfileSyncService* service =
-      ProfileSyncServiceFactory::GetForBrowserState(browser_state);
+      ProfileSyncServiceFactory::GetAsProfileSyncServiceForBrowserState(
+          browser_state);
   service->OverrideNetworkResourcesForTest(std::move(resources));
 }
 
@@ -96,9 +101,9 @@ void StopSync() {
 void TriggerSyncCycle(syncer::ModelType type) {
   ios::ChromeBrowserState* browser_state =
       chrome_test_util::GetOriginalBrowserState();
-  browser_sync::ProfileSyncService* profile_sync_service =
+  syncer::SyncService* sync_service =
       ProfileSyncServiceFactory::GetForBrowserState(browser_state);
-  profile_sync_service->TriggerRefresh({type});
+  sync_service->TriggerRefresh({type});
 }
 
 void ClearSyncServerData() {
@@ -160,11 +165,11 @@ std::string GetSyncCacheGuid() {
   DCHECK(IsSyncInitialized());
   ios::ChromeBrowserState* browser_state =
       chrome_test_util::GetOriginalBrowserState();
-  browser_sync::ProfileSyncService* profile_sync_service =
-      ProfileSyncServiceFactory::GetForBrowserState(browser_state);
+  syncer::DeviceInfoSyncService* service =
+      DeviceInfoSyncServiceFactory::GetForBrowserState(browser_state);
   const syncer::LocalDeviceInfoProvider* info_provider =
-      profile_sync_service->GetLocalDeviceInfoProvider();
-  return info_provider->GetLocalSyncCacheGUID();
+      service->GetLocalDeviceInfoProvider();
+  return info_provider->GetLocalDeviceInfo()->guid();
 }
 
 void InjectAutofillProfileOnFakeSyncServer(std::string guid,
@@ -177,8 +182,9 @@ void InjectAutofillProfileOnFakeSyncServer(std::string guid,
   autofill_profile->set_guid(guid);
 
   std::unique_ptr<syncer::LoopbackServerEntity> entity =
-      syncer::PersistentUniqueClientEntity::CreateFromEntitySpecifics(
-          guid, entity_specifics, 12345, 12345);
+      syncer::PersistentUniqueClientEntity::CreateFromSpecificsForTesting(
+          /*non_unique_name=*/std::string(), /*client_tag=*/guid,
+          entity_specifics, 12345, 12345);
   gSyncFakeServer->InjectEntity(std::move(entity));
 }
 
@@ -267,8 +273,9 @@ void InjectTypedURLOnFakeSyncServer(const std::string& url) {
   typedUrl->add_visit_transitions(sync_pb::SyncEnums::TYPED);
 
   std::unique_ptr<syncer::LoopbackServerEntity> entity =
-      syncer::PersistentUniqueClientEntity::CreateFromEntitySpecifics(
-          url, entitySpecifics, 12345, 12345);
+      syncer::PersistentUniqueClientEntity::CreateFromSpecificsForTesting(
+          /*non_unique_name=*/std::string(), /*client_tag=*/url,
+          entitySpecifics, 12345, 12345);
   gSyncFakeServer->InjectEntity(std::move(entity));
 }
 

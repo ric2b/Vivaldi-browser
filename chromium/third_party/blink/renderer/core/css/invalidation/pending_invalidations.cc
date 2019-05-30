@@ -32,7 +32,7 @@ void PendingInvalidations::ScheduleInvalidationSetsForNode(
       if (invalidation_set->WholeSubtreeInvalid()) {
         node.SetNeedsStyleRecalc(kSubtreeStyleChange,
                                  StyleChangeReasonForTracing::Create(
-                                     StyleChangeReason::kStyleInvalidator));
+                                     style_change_reason::kStyleInvalidator));
         requires_descendant_invalidation = false;
         break;
       }
@@ -40,7 +40,7 @@ void PendingInvalidations::ScheduleInvalidationSetsForNode(
       if (invalidation_set->InvalidatesSelf()) {
         node.SetNeedsStyleRecalc(kLocalStyleChange,
                                  StyleChangeReasonForTracing::Create(
-                                     StyleChangeReason::kStyleInvalidator));
+                                     style_change_reason::kStyleInvalidator));
       }
 
       if (!invalidation_set->IsEmpty())
@@ -94,7 +94,7 @@ void PendingInvalidations::ScheduleSiblingInvalidationsAsDescendants(
     if (invalidation_set->WholeSubtreeInvalid()) {
       scheduling_parent.SetNeedsStyleRecalc(
           kSubtreeStyleChange, StyleChangeReasonForTracing::Create(
-                                   StyleChangeReason::kStyleInvalidator));
+                                   style_change_reason::kStyleInvalidator));
       return;
     }
     if (invalidation_set->InvalidatesSelf() &&
@@ -102,11 +102,12 @@ void PendingInvalidations::ScheduleSiblingInvalidationsAsDescendants(
       pending_invalidations.Descendants().push_back(invalidation_set);
 
     if (DescendantInvalidationSet* descendants =
-            ToSiblingInvalidationSet(*invalidation_set).SiblingDescendants()) {
+            To<SiblingInvalidationSet>(*invalidation_set)
+                .SiblingDescendants()) {
       if (descendants->WholeSubtreeInvalid()) {
         scheduling_parent.SetNeedsStyleRecalc(
             kSubtreeStyleChange, StyleChangeReasonForTracing::Create(
-                                     StyleChangeReason::kStyleInvalidator));
+                                     style_change_reason::kStyleInvalidator));
         return;
       }
       if (!pending_invalidations.Descendants().Contains(descendants))
@@ -130,7 +131,8 @@ void PendingInvalidations::RescheduleSiblingInvalidationsAsDescendants(
   for (const auto& invalidation_set : pending_invalidations.Siblings()) {
     invalidation_lists.descendants.push_back(invalidation_set);
     if (DescendantInvalidationSet* descendants =
-            ToSiblingInvalidationSet(*invalidation_set).SiblingDescendants()) {
+            To<SiblingInvalidationSet>(*invalidation_set)
+                .SiblingDescendants()) {
       invalidation_lists.descendants.push_back(descendants);
     }
   }

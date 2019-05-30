@@ -15,7 +15,7 @@
 #include "base/time/time.h"
 #include "content/common/content_export.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
-#include "services/network/public/mojom/cookie_manager.mojom.h"
+#include "services/network/public/mojom/cookie_manager.mojom-forward.h"
 
 class GURL;
 
@@ -50,6 +50,7 @@ class DatabaseTracker;
 namespace content {
 
 class AppCacheService;
+class BackgroundSyncContext;
 class BrowserContext;
 class CacheStorageContext;
 class DOMStorageContext;
@@ -58,7 +59,6 @@ class GeneratedCodeCacheContext;
 class PlatformNotificationContext;
 class ServiceWorkerContext;
 class SharedWorkerService;
-class WebPackageContext;
 
 #if !defined(OS_ANDROID)
 class HostZoomLevelContext;
@@ -75,6 +75,8 @@ class ZoomLevelDelegate;
 class CONTENT_EXPORT StoragePartition {
  public:
   virtual base::FilePath GetPath() = 0;
+  // These can't be called when the network service is enabled, since net/ runs
+  // in a separate process.
   virtual net::URLRequestContextGetter* GetURLRequestContext() = 0;
   virtual net::URLRequestContextGetter* GetMediaURLRequestContext() = 0;
 
@@ -100,6 +102,7 @@ class CONTENT_EXPORT StoragePartition {
   GetCookieManagerForBrowserProcess() = 0;
   virtual storage::QuotaManager* GetQuotaManager() = 0;
   virtual AppCacheService* GetAppCacheService() = 0;
+  virtual BackgroundSyncContext* GetBackgroundSyncContext() = 0;
   virtual storage::FileSystemContext* GetFileSystemContext() = 0;
   virtual storage::DatabaseTracker* GetDatabaseTracker() = 0;
   virtual DOMStorageContext* GetDOMStorageContext() = 0;
@@ -114,7 +117,6 @@ class CONTENT_EXPORT StoragePartition {
   virtual ZoomLevelDelegate* GetZoomLevelDelegate() = 0;
 #endif  // !defined(OS_ANDROID)
   virtual PlatformNotificationContext* GetPlatformNotificationContext() = 0;
-  virtual WebPackageContext* GetWebPackageContext() = 0;
 
   enum : uint32_t {
     REMOVE_DATA_MASK_APPCACHE = 1 << 0,
@@ -163,16 +165,11 @@ class CONTENT_EXPORT StoragePartition {
 
   // Similar to ClearDataForOrigin().
   // Deletes all data out for the StoragePartition if |storage_origin| is empty.
-  // |origin_matcher| is present if special storage policy is to be handled,
-  // otherwise the callback can be null (base::Callback::is_null() == true).
   // |callback| is called when data deletion is done or at least the deletion is
   // scheduled.
-  // storage_origin and origin_matcher_function are used for different
-  // subsystems. One does not imply the other.
   virtual void ClearData(uint32_t remove_mask,
                          uint32_t quota_storage_remove_mask,
                          const GURL& storage_origin,
-                         const OriginMatcherFunction& origin_matcher,
                          const base::Time begin,
                          const base::Time end,
                          base::OnceClosure callback) = 0;
@@ -188,6 +185,10 @@ class CONTENT_EXPORT StoragePartition {
   //   (created_after_time/created_before_time), so when deleting cookies
   //   |begin| and |end| will be used ignoring the interval in
   //   |cookie_deletion_filter|.
+  //   If |perform_storage_cleanup| is true, the storage will try to remove
+  //   traces about deleted data from disk. This is an expensive operation that
+  //   should only be performed if we are sure that almost all data will be
+  //   deleted anyway.
   // * |callback| is called when data deletion is done or at least the deletion
   //   is scheduled.
   // Note: Make sure you know what you are doing before clearing cookies
@@ -197,6 +198,7 @@ class CONTENT_EXPORT StoragePartition {
       uint32_t quota_storage_remove_mask,
       const OriginMatcherFunction& origin_matcher,
       network::mojom::CookieDeletionFilterPtr cookie_deletion_filter,
+      bool perform_storage_cleanup,
       const base::Time begin,
       const base::Time end,
       base::OnceClosure callback) = 0;
@@ -209,6 +211,16 @@ class CONTENT_EXPORT StoragePartition {
       const base::Time begin,
       const base::Time end,
       const base::Callback<bool(const GURL&)>& url_matcher,
+      base::OnceClosure callback) = 0;
+
+  // Clears code caches associated with this StoragePartition.
+  // If |begin| and |end| are not null, only entries with
+  // timestamps inbetween are deleted. If |url_matcher| is not null, only
+  // entries with URLs for which the |url_matcher| returns true are deleted.
+  virtual void ClearCodeCaches(
+      base::Time begin,
+      base::Time end,
+      const base::RepeatingCallback<bool(const GURL&)>& url_matcher,
       base::OnceClosure callback) = 0;
 
   // Write any unwritten data to disk.

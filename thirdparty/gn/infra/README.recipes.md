@@ -3,13 +3,61 @@
 ## Table of Contents
 
 **[Recipe Modules](#Recipe-Modules)**
+  * [macos_sdk](#recipe_modules-macos_sdk) &mdash; The `macos_sdk` module provides safe functions to access a semi-hermetic XCode installation.
   * [windows_sdk](#recipe_modules-windows_sdk)
 
 **[Recipes](#Recipes)**
   * [gn](#recipes-gn) &mdash; Recipe for building GN.
+  * [macos_sdk:examples/full](#recipes-macos_sdk_examples_full)
   * [windows_sdk:examples/full](#recipes-windows_sdk_examples_full)
 ## Recipe Modules
 
+### *recipe_modules* / [macos\_sdk](/infra/recipe_modules/macos_sdk)
+
+[DEPS](/infra/recipe_modules/macos_sdk/__init__.py#5): [recipe\_engine/cipd][recipe_engine/recipe_modules/cipd], [recipe\_engine/context][recipe_engine/recipe_modules/context], [recipe\_engine/json][recipe_engine/recipe_modules/json], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/step][recipe_engine/recipe_modules/step]
+
+The `macos_sdk` module provides safe functions to access a semi-hermetic
+XCode installation.
+
+Available only to Google-run bots.
+
+#### **class [MacOSSDKApi](/infra/recipe_modules/macos_sdk/api.py#14)([RecipeApi][recipe_engine/wkt/RecipeApi]):**
+
+API for using OS X SDK distributed via CIPD.
+
+&emsp; **@contextmanager**<br>&mdash; **def [\_\_call\_\_](/infra/recipe_modules/macos_sdk/api.py#24)(self):**
+
+Sets up the XCode SDK environment.
+
+This call is a no-op on non-Mac platforms.
+
+This will deploy the helper tool and the XCode.app bundle at
+`[START_DIR]/cache/macos_sdk`.
+
+To avoid machines rebuilding these on every run, set up a named cache in
+your cr-buildbucket.cfg file like:
+
+    caches: {
+      # Cache for mac_toolchain tool and XCode.app
+      name: "macos_sdk"
+      path: "macos_sdk"
+    }
+
+If you have builders which e.g. use a non-current SDK, you can give them
+a uniqely named cache:
+
+    caches: {
+      # Cache for N-1 version mac_toolchain tool and XCode.app
+      name: "macos_sdk_old"
+      path: "macos_sdk"
+    }
+
+Usage:
+  with api.macos_sdk():
+    # sdk with mac build bits
+
+Raises:
+    StepFailure or InfraFailure.
 ### *recipe_modules* / [windows\_sdk](/infra/recipe_modules/windows_sdk)
 
 [DEPS](/infra/recipe_modules/windows_sdk/__init__.py#5): [recipe\_engine/cipd][recipe_engine/recipe_modules/cipd], [recipe\_engine/context][recipe_engine/recipe_modules/context], [recipe\_engine/json][recipe_engine/recipe_modules/json], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/step][recipe_engine/recipe_modules/step]
@@ -18,16 +66,11 @@
 
 API for using Windows SDK distributed via CIPD.
 
-&emsp; **@contextmanager**<br>&mdash; **def [\_\_call\_\_](/infra/recipe_modules/windows_sdk/api.py#18)(self, path=None, version=None, enabled=True):**
+&emsp; **@contextmanager**<br>&mdash; **def [\_\_call\_\_](/infra/recipe_modules/windows_sdk/api.py#19)(self):**
 
-Setups the SDK environment when enabled.
+Setups the Windows SDK environment.
 
-Args:
-  path (path): Path to a directory where to install the SDK
-    (default is '[start_dir]/cipd/windows_sdk')
-  version (str): CIPD instance ID, tag or ref of the SDK
-    (default is set via $infra/windows_sdk.version property)
-  enabled (bool): Whether the SDK should be used or not.
+This call is a no-op on non-Windows platforms.
 
 Raises:
     StepFailure or InfraFailure.
@@ -35,11 +78,16 @@ Raises:
 
 ### *recipes* / [gn](/infra/recipes/gn.py)
 
-[DEPS](/infra/recipes/gn.py#8): [windows\_sdk](#recipe_modules-windows_sdk), [recipe\_engine/buildbucket][recipe_engine/recipe_modules/buildbucket], [recipe\_engine/cipd][recipe_engine/recipe_modules/cipd], [recipe\_engine/context][recipe_engine/recipe_modules/context], [recipe\_engine/file][recipe_engine/recipe_modules/file], [recipe\_engine/json][recipe_engine/recipe_modules/json], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/python][recipe_engine/recipe_modules/python], [recipe\_engine/raw\_io][recipe_engine/recipe_modules/raw_io], [recipe\_engine/step][recipe_engine/recipe_modules/step]
+[DEPS](/infra/recipes/gn.py#8): [macos\_sdk](#recipe_modules-macos_sdk), [windows\_sdk](#recipe_modules-windows_sdk), [recipe\_engine/buildbucket][recipe_engine/recipe_modules/buildbucket], [recipe\_engine/cipd][recipe_engine/recipe_modules/cipd], [recipe\_engine/context][recipe_engine/recipe_modules/context], [recipe\_engine/file][recipe_engine/recipe_modules/file], [recipe\_engine/json][recipe_engine/recipe_modules/json], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/python][recipe_engine/recipe_modules/python], [recipe\_engine/raw\_io][recipe_engine/recipe_modules/raw_io], [recipe\_engine/step][recipe_engine/recipe_modules/step]
 
 Recipe for building GN.
 
-&mdash; **def [RunSteps](/infra/recipes/gn.py#28)(api, repository):**
+&mdash; **def [RunSteps](/infra/recipes/gn.py#29)(api, repository):**
+### *recipes* / [macos\_sdk:examples/full](/infra/recipe_modules/macos_sdk/examples/full.py)
+
+[DEPS](/infra/recipe_modules/macos_sdk/examples/full.py#5): [macos\_sdk](#recipe_modules-macos_sdk), [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/step][recipe_engine/recipe_modules/step]
+
+&mdash; **def [RunSteps](/infra/recipe_modules/macos_sdk/examples/full.py#13)(api):**
 ### *recipes* / [windows\_sdk:examples/full](/infra/recipe_modules/windows_sdk/examples/full.py)
 
 [DEPS](/infra/recipe_modules/windows_sdk/examples/full.py#5): [windows\_sdk](#recipe_modules-windows_sdk), [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/properties][recipe_engine/recipe_modules/properties], [recipe\_engine/step][recipe_engine/recipe_modules/step]

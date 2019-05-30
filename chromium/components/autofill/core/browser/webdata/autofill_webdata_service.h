@@ -12,6 +12,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/supports_user_data.h"
+#include "components/autofill/core/browser/webdata/autofill_change.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/sync/base/model_type.h"
@@ -83,6 +84,10 @@ class AutofillWebDataService : public AutofillWebData,
   void UpdateAutofillEntries(
       const std::vector<AutofillEntry>& autofill_entries) override;
 
+  void SetAutofillProfileChangedCallback(
+      base::RepeatingCallback<void(const AutofillProfileDeepChange&)>
+          change_cb);
+
   // Credit cards.
   void AddCreditCard(const CreditCard& credit_card) override;
   void UpdateCreditCard(const CreditCard& credit_card) override;
@@ -136,6 +141,11 @@ class AutofillWebDataService : public AutofillWebData,
   // Returns a task runner that can be used to schedule tasks on the DB
   // sequence.
   base::SingleThreadTaskRunner* GetDBTaskRunner();
+
+  // Triggers an Autocomplete retention policy run which will cleanup data that
+  // hasn't been used since over the retention threshold.
+  virtual WebDataServiceBase::Handle RemoveExpiredAutocompleteEntries(
+      WebDataServiceConsumer* consumer);
 
  protected:
   ~AutofillWebDataService() override;

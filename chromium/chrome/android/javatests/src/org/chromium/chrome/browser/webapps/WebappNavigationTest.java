@@ -45,11 +45,11 @@ import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.MenuUtils;
 import org.chromium.chrome.test.util.browser.WebappTestPage;
 import org.chromium.chrome.test.util.browser.contextmenu.ContextMenuUtils;
-import org.chromium.content.browser.test.NativeLibraryTestRule;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.test.NativeLibraryTestRule;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.base.PageTransition;
@@ -187,7 +187,7 @@ public class WebappNavigationTest {
         ChromeTabUtils.waitForTabPageLoaded(customTab.getActivityTab(), offOriginUrl());
 
         Assert.assertEquals(
-                getDefaultPrimaryColorForCct(), customTab.getToolbarManager().getPrimaryColor());
+                getDefaultPrimaryColor(), customTab.getToolbarManager().getPrimaryColor());
     }
 
     /**
@@ -228,7 +228,7 @@ public class WebappNavigationTest {
         CustomTabActivity customTab = ChromeActivityTestRule.waitFor(CustomTabActivity.class);
         ChromeTabUtils.waitForTabPageLoaded(customTab.getActivityTab(), offOriginUrl());
         Assert.assertEquals(
-                getDefaultPrimaryColorForCct(), customTab.getToolbarManager().getPrimaryColor());
+                getDefaultPrimaryColor(), customTab.getToolbarManager().getPrimaryColor());
     }
 
     /**
@@ -361,8 +361,11 @@ public class WebappNavigationTest {
         WebappActivityTestRule.assertToolbarShowState(activity, true);
 
         // Navigate back to in-scope through a close button.
-        ThreadUtils.runOnUiThreadBlocking(() -> activity.getToolbarManager()
-                .getToolbarLayout().findViewById(R.id.close_button).callOnClick());
+        ThreadUtils.runOnUiThreadBlocking(()
+                                                  -> activity.getToolbarManager()
+                                                             .getToolbarLayoutForTesting()
+                                                             .findViewById(R.id.close_button)
+                                                             .callOnClick());
 
         // We should end up on most recent in-scope URL.
         ChromeTabUtils.waitForTabPageLoaded(tab, otherInScopeUrl);
@@ -398,10 +401,11 @@ public class WebappNavigationTest {
 
         // Close the Minimal UI.
         WebappActivityTestRule.assertToolbarShowState(activity, true);
-        ThreadUtils.runOnUiThreadBlocking(() -> activity.getToolbarManager()
-                                                        .getToolbarLayout()
-                                                        .findViewById(R.id.close_button)
-                                                        .callOnClick());
+        ThreadUtils.runOnUiThreadBlocking(()
+                                                  -> activity.getToolbarManager()
+                                                             .getToolbarLayoutForTesting()
+                                                             .findViewById(R.id.close_button)
+                                                             .callOnClick());
 
         // The WebappActivity should be navigated to the page prior to the redirect.
         ChromeTabUtils.waitForTabPageLoaded(activity.getActivityTab(), initialInScopeUrl);
@@ -421,13 +425,8 @@ public class WebappNavigationTest {
     }
 
     private long getDefaultPrimaryColor() {
-        return ApiCompatibilityUtils.getColor(
-                mActivityTestRule.getActivity().getResources(), R.color.default_primary_color);
-    }
-
-    private long getDefaultPrimaryColorForCct() {
         return ColorUtils.getDefaultThemeColor(
-                mActivityTestRule.getActivity().getResources(), true, false);
+                mActivityTestRule.getActivity().getResources(), false);
     }
 
     private String offOriginUrl() {

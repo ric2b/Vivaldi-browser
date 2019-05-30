@@ -5,16 +5,15 @@
 #ifndef ASH_SYSTEM_NETWORK_TRAY_NETWORK_STATE_OBSERVER_H_
 #define ASH_SYSTEM_NETWORK_TRAY_NETWORK_STATE_OBSERVER_H_
 
+#include <vector>
+
 #include "base/macros.h"
 #include "base/timer/timer.h"
 #include "chromeos/network/network_state_handler_observer.h"
-#include "chromeos/network/portal_detector/network_portal_detector.h"
 
 namespace ash {
 
-class TrayNetworkStateObserver
-    : public chromeos::NetworkStateHandlerObserver,
-      public chromeos::NetworkPortalDetector::Observer {
+class TrayNetworkStateObserver : public chromeos::NetworkStateHandlerObserver {
  public:
   class Delegate {
    public:
@@ -33,17 +32,10 @@ class TrayNetworkStateObserver
   // NetworkStateHandlerObserver
   void NetworkListChanged() override;
   void DeviceListChanged() override;
-  void DefaultNetworkChanged(const chromeos::NetworkState* network) override;
-  void NetworkConnectionStateChanged(
-      const chromeos::NetworkState* network) override;
+  void ActiveNetworksChanged(const std::vector<const chromeos::NetworkState*>&
+                                 active_networks) override;
   void NetworkPropertiesUpdated(const chromeos::NetworkState* network) override;
   void DevicePropertiesUpdated(const chromeos::DeviceState* device) override;
-
-  // NetworkPortalDetector::Observer
-  void OnPortalDetectionCompleted(
-      const chromeos::NetworkState* network,
-      const chromeos::NetworkPortalDetector::CaptivePortalState& state)
-      override;
 
  private:
   void SignalUpdate(bool notify_a11y);
@@ -51,9 +43,6 @@ class TrayNetworkStateObserver
 
   // Unowned Delegate pointer (must outlive this instance).
   Delegate* delegate_;
-
-  // Set to true when we should purge stale icons in the cache.
-  bool purge_icons_;
 
   // Frequency at which to push NetworkStateChanged updates. This avoids
   // unnecessarily frequent UI updates (which can be expensive). We set this

@@ -10,7 +10,7 @@
 #include "third_party/blink/renderer/core/html/canvas/image_data.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/platform/graphics/color_correction_test_utils.h"
-#include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
+#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/skia/include/core/SkSurface.h"
@@ -63,8 +63,7 @@ void MockCanvasAsyncBlobCreator::PostDelayedTaskToCurrentThread(
     base::OnceClosure task,
     double delay_ms) {
   DCHECK(IsMainThread());
-  Platform::Current()->MainThread()->GetTaskRunner()->PostTask(location,
-                                                               std::move(task));
+  Thread::Current()->GetTaskRunner()->PostTask(location, std::move(task));
 }
 
 //==============================================================================
@@ -99,7 +98,7 @@ class MockCanvasAsyncBlobCreatorWithoutComplete
 
  protected:
   void ScheduleInitiateEncoding(double quality) override {
-    Platform::Current()->MainThread()->GetTaskRunner()->PostTask(
+    Thread::Current()->GetTaskRunner()->PostTask(
         FROM_HERE,
         WTF::Bind(&MockCanvasAsyncBlobCreatorWithoutComplete::InitiateEncoding,
                   WrapPersistent(this), quality, TimeTicks::Max()));
@@ -142,22 +141,25 @@ scoped_refptr<StaticBitmapImage> CreateTransparentImage(int width, int height) {
 
 void CanvasAsyncBlobCreatorTest::
     PrepareMockCanvasAsyncBlobCreatorWithoutStart() {
-  async_blob_creator_ = new MockCanvasAsyncBlobCreatorWithoutStart(
-      CreateTransparentImage(20, 20), &GetDocument());
+  async_blob_creator_ =
+      MakeGarbageCollected<MockCanvasAsyncBlobCreatorWithoutStart>(
+          CreateTransparentImage(20, 20), &GetDocument());
 }
 
 void CanvasAsyncBlobCreatorTest::
     PrepareMockCanvasAsyncBlobCreatorWithoutComplete() {
-  async_blob_creator_ = new MockCanvasAsyncBlobCreatorWithoutComplete(
-      CreateTransparentImage(20, 20), &GetDocument());
+  async_blob_creator_ =
+      MakeGarbageCollected<MockCanvasAsyncBlobCreatorWithoutComplete>(
+          CreateTransparentImage(20, 20), &GetDocument());
 }
 
 void CanvasAsyncBlobCreatorTest::PrepareMockCanvasAsyncBlobCreatorFail() {
   // We reuse the class MockCanvasAsyncBlobCreatorWithoutComplete because
   // this test case is expected to fail at initialization step before
   // completion.
-  async_blob_creator_ = new MockCanvasAsyncBlobCreatorWithoutComplete(
-      CreateTransparentImage(20, 20), &GetDocument(), true);
+  async_blob_creator_ =
+      MakeGarbageCollected<MockCanvasAsyncBlobCreatorWithoutComplete>(
+          CreateTransparentImage(20, 20), &GetDocument(), true);
 }
 
 void CanvasAsyncBlobCreatorTest::TearDown() {
@@ -243,30 +245,29 @@ TEST_F(CanvasAsyncBlobCreatorTest, ColorManagedConvertToBlob) {
   color_space_params.push_back(std::pair<sk_sp<SkColorSpace>, SkColorType>(
       SkColorSpace::MakeSRGBLinear(), kRGBA_F16_SkColorType));
   color_space_params.push_back(std::pair<sk_sp<SkColorSpace>, SkColorType>(
-      SkColorSpace::MakeRGB(SkColorSpace::kLinear_RenderTargetGamma,
-                            SkColorSpace::kDCIP3_D65_Gamut),
+      SkColorSpace::MakeRGB(SkNamedTransferFn::kLinear, SkNamedGamut::kDCIP3),
       kRGBA_F16_SkColorType));
   color_space_params.push_back(std::pair<sk_sp<SkColorSpace>, SkColorType>(
-      SkColorSpace::MakeRGB(SkColorSpace::kLinear_RenderTargetGamma,
-                            SkColorSpace::kRec2020_Gamut),
+      SkColorSpace::MakeRGB(SkNamedTransferFn::kLinear, SkNamedGamut::kRec2020),
       kRGBA_F16_SkColorType));
+  color_space_params.push_back(std::pair<sk_sp<SkColorSpace>, SkColorType>(
+      nullptr, kRGBA_F16_SkColorType));
+  color_space_params.push_back(
+      std::pair<sk_sp<SkColorSpace>, SkColorType>(nullptr, kN32_SkColorType));
 
   std::list<String> blob_mime_types = {"image/png", "image/webp", "image/jpeg"};
   std::list<String> blob_color_spaces = {kSRGBImageColorSpaceName,
                                          kDisplayP3ImageColorSpaceName,
                                          kRec2020ImageColorSpaceName};
-  // SkPngEncoder still does not support 16bit PNG encoding. Add
-  // kRGBA16ImagePixelFormatName to blob_pixel_formats when this is fixed.
-  // crbug.com/840372
-  // bugs.chromium.org/p/skia/issues/detail?id=7926
-  // https://fiddle.skia.org/c/b795f0141f4e1a5773bf9494b5bc87b5
-  std::list<String> blob_pixel_formats = {kRGBA8ImagePixelFormatName};
+  std::list<String> blob_pixel_formats = {
+      kRGBA8ImagePixelFormatName, kRGBA16ImagePixelFormatName,
+  };
 
-  // The maximum difference locally observed is 3.
-  const unsigned uint8_color_tolerance = 5;
-  const float f16_color_tolerance = 0.01;
-  // The maximum difference locally observed has the order of e^-6.
-  const float xyz_d50_color_space_component_tolerance = 0.001;
+  // Maximum differences are both observed locally with
+  // kRGBA16ImagePixelFormatName, kSRGBImageColorSpaceName and nil input color
+  // space
+  const unsigned uint8_color_tolerance = 3;
+  const float f16_color_tolerance = 0.015;
 
   for (auto color_space_param : color_space_params) {
     for (auto blob_mime_type : blob_mime_types) {
@@ -274,15 +275,15 @@ TEST_F(CanvasAsyncBlobCreatorTest, ColorManagedConvertToBlob) {
         for (auto blob_pixel_format : blob_pixel_formats) {
           // Create the StaticBitmapImage in canvas_color_space
           sk_sp<SkImage> source_image = DrawAndReturnImage(color_space_param);
-          scoped_refptr<UnacceleratedStaticBitmapImage> source_bitmap_image =
-              UnacceleratedStaticBitmapImage::Create(source_image);
+          scoped_refptr<StaticBitmapImage> source_bitmap_image =
+              StaticBitmapImage::Create(source_image);
 
           // Prepare encoding options
-          ImageEncodeOptions options;
-          options.setQuality(1);
-          options.setType(blob_mime_type);
-          options.setColorSpace(blob_color_space);
-          options.setPixelFormat(blob_pixel_format);
+          ImageEncodeOptions* options = ImageEncodeOptions::Create();
+          options->setQuality(1);
+          options->setType(blob_mime_type);
+          options->setColorSpace(blob_color_space);
+          options->setPixelFormat(blob_pixel_format);
 
           // Encode the image using CanvasAsyncBlobCreator
           CanvasAsyncBlobCreator* async_blob_creator =
@@ -298,16 +299,24 @@ TEST_F(CanvasAsyncBlobCreatorTest, ColorManagedConvertToBlob) {
               async_blob_creator->GetEncodedImageForConvertToBlobTest().size());
           sk_sp<SkImage> decoded_img = SkImage::MakeFromEncoded(sk_data);
 
-          sk_sp<SkImage> ref_image = source_image->makeColorSpace(
+          sk_sp<SkColorSpace> expected_color_space =
               CanvasAsyncBlobCreator::BlobColorSpaceToSkColorSpace(
-                  blob_color_space));
+                  blob_color_space);
+          SkColorType expected_color_type =
+              (blob_pixel_format == kRGBA8ImagePixelFormatName)
+                  ? kN32_SkColorType
+                  : kRGBA_F16_SkColorType;
+          scoped_refptr<StaticBitmapImage> ref_bitmap =
+              source_bitmap_image->ConvertToColorSpace(expected_color_space,
+                                                       expected_color_type);
+          sk_sp<SkImage> ref_image =
+              ref_bitmap->PaintImageForCurrentFrame().GetSkImage();
 
           // Jpeg does not support transparent images.
           bool compare_alpha = (blob_mime_type != "image/jpeg");
           ASSERT_TRUE(ColorCorrectionTestUtils::MatchSkImages(
               ref_image, decoded_img, uint8_color_tolerance,
-              f16_color_tolerance, xyz_d50_color_space_component_tolerance,
-              compare_alpha));
+              f16_color_tolerance, compare_alpha));
         }
       }
     }

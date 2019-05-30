@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ash/public/interfaces/wallpaper.mojom.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
@@ -19,8 +20,10 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
+#include "chrome/browser/chromeos/login/test/fake_gaia_mixin.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -34,10 +37,11 @@
 #include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/common/chrome_paths.h"
-#include "chromeos/chromeos_paths.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_paths.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
+#include "chromeos/dbus/constants/dbus_paths.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
@@ -131,18 +135,15 @@ class WallpaperPolicyTest : public LoginManagerTest,
                             public ash::mojom::WallpaperObserver {
  protected:
   WallpaperPolicyTest()
-      : LoginManagerTest(true),
-        wallpaper_change_count_(0),
+      : LoginManagerTest(true, true),
         owner_key_util_(new ownership::MockOwnerKeyUtil()),
-        fake_session_manager_client_(new FakeSessionManagerClient),
-        observer_binding_(this),
-        weak_ptr_factory_(this) {
-    testUsers_.push_back(AccountId::FromUserEmailGaiaId(
-        LoginManagerTest::kEnterpriseUser1,
-        LoginManagerTest::kEnterpriseUser1GaiaId));
-    testUsers_.push_back(AccountId::FromUserEmailGaiaId(
-        LoginManagerTest::kEnterpriseUser2,
-        LoginManagerTest::kEnterpriseUser2GaiaId));
+        fake_session_manager_client_(new FakeSessionManagerClient) {
+    testUsers_.push_back(
+        AccountId::FromUserEmailGaiaId(FakeGaiaMixin::kEnterpriseUser1,
+                                       FakeGaiaMixin::kEnterpriseUser1GaiaId));
+    testUsers_.push_back(
+        AccountId::FromUserEmailGaiaId(FakeGaiaMixin::kEnterpriseUser2,
+                                       FakeGaiaMixin::kEnterpriseUser2GaiaId));
   }
 
   std::unique_ptr<policy::UserPolicyBuilder> GetUserPolicyBuilder(
@@ -150,7 +151,8 @@ class WallpaperPolicyTest : public LoginManagerTest,
     std::unique_ptr<policy::UserPolicyBuilder> user_policy_builder(
         new policy::UserPolicyBuilder());
     base::FilePath user_keys_dir;
-    EXPECT_TRUE(base::PathService::Get(DIR_USER_POLICY_KEYS, &user_keys_dir));
+    EXPECT_TRUE(base::PathService::Get(dbus_paths::DIR_USER_POLICY_KEYS,
+                                       &user_keys_dir));
     const std::string sanitized_user_id =
         CryptohomeClient::GetStubSanitizedUsername(
             cryptohome::CreateAccountIdentifierFromAccountId(account_id));
@@ -181,6 +183,11 @@ class WallpaperPolicyTest : public LoginManagerTest,
 
     LoginManagerTest::SetUpInProcessBrowserTestFixture();
     ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir_));
+
+    // Set some fake state keys to make sure they are not empty.
+    std::vector<std::string> state_keys;
+    state_keys.push_back("1");
+    fake_session_manager_client_->set_server_backed_state_keys(state_keys);
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -232,7 +239,7 @@ class WallpaperPolicyTest : public LoginManagerTest,
       ADD_FAILURE() << "No image representation.";
       average_color_ = SkColorSetARGB(0, 0, 0, 0);
     }
-    average_color_ = ComputeAverageColor(representation.sk_bitmap());
+    average_color_ = ComputeAverageColor(representation.GetBitmap());
     if (run_loop_)
       run_loop_->Quit();
   }
@@ -258,6 +265,7 @@ class WallpaperPolicyTest : public LoginManagerTest,
   }
 
   std::string ConstructPolicy(const std::string& relative_path) const {
+    base::ScopedAllowBlockingForTesting allow_io;
     std::string image_data;
     if (!base::ReadFileToString(test_data_dir_.Append(relative_path),
                                 &image_data)) {
@@ -321,21 +329,23 @@ class WallpaperPolicyTest : public LoginManagerTest,
 
   base::FilePath test_data_dir_;
   std::unique_ptr<base::RunLoop> run_loop_;
-  int wallpaper_change_count_;
+  int wallpaper_change_count_ = 0;
   std::unique_ptr<policy::UserPolicyBuilder> user_policy_builders_[2];
   policy::DevicePolicyBuilder device_policy_;
   scoped_refptr<ownership::MockOwnerKeyUtil> owner_key_util_;
   FakeSessionManagerClient* fake_session_manager_client_;
   std::vector<AccountId> testUsers_;
+  FakeGaiaMixin fake_gaia_{&mixin_host_, embedded_test_server()};
 
  private:
   // The binding this instance uses to implement ash::mojom::WallpaperObserver.
-  mojo::AssociatedBinding<ash::mojom::WallpaperObserver> observer_binding_;
+  mojo::AssociatedBinding<ash::mojom::WallpaperObserver> observer_binding_{
+      this};
 
   // The average ARGB color of the current wallpaper.
   base::Optional<SkColor> average_color_;
 
-  base::WeakPtrFactory<WallpaperPolicyTest> weak_ptr_factory_;
+  base::WeakPtrFactory<WallpaperPolicyTest> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(WallpaperPolicyTest);
 };
@@ -381,29 +391,6 @@ IN_PROC_BROWSER_TEST_F(WallpaperPolicyTest, DISABLED_SetResetClear) {
   // Check wallpaper change count to ensure that setting the second user's
   // wallpaper didn't have any effect.
   ASSERT_EQ(3, wallpaper_change_count_);
-}
-
-IN_PROC_BROWSER_TEST_F(WallpaperPolicyTest, PRE_PRE_PersistOverLogout) {
-  SetSystemSalt();
-  RegisterUser(testUsers_[0]);
-  StartupUtils::MarkOobeCompleted();
-}
-
-IN_PROC_BROWSER_TEST_F(WallpaperPolicyTest, PRE_PersistOverLogout) {
-  SetSystemSalt();
-  LoginUser(testUsers_[0]);
-
-  // Set wallpaper policy to red image.
-  InjectPolicy(0, kRedImageFileName);
-
-  // Run until wallpaper has changed to expected color.
-  RunUntilWallpaperChangeToColor(kRedImageColor);
-  StartupUtils::MarkOobeCompleted();
-}
-
-IN_PROC_BROWSER_TEST_F(WallpaperPolicyTest, PersistOverLogout) {
-  LoginUser(testUsers_[0]);
-  RunUntilWallpaperChangeToColor(kRedImageColor);
 }
 
 IN_PROC_BROWSER_TEST_F(WallpaperPolicyTest, PRE_DevicePolicyTest) {

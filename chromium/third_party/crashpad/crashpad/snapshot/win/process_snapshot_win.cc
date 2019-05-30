@@ -21,8 +21,10 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/strings/stringprintf.h"
+#include "base/numerics/safe_conversions.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "util/misc/from_pointer_cast.h"
 #include "util/misc/time.h"
 #include "util/win/nt_internals.h"
@@ -63,9 +65,9 @@ bool ProcessSnapshotWin::Initialize(
 
   if (exception_information_address != 0) {
     ExceptionInformation exception_information = {};
-    if (!process_reader_.ReadMemory(exception_information_address,
-                                    sizeof(exception_information),
-                                    &exception_information)) {
+    if (!process_reader_.Memory()->Read(exception_information_address,
+                                        sizeof(exception_information),
+                                        &exception_information)) {
       LOG(WARNING) << "ReadMemory ExceptionInformation failed";
       return false;
     }
@@ -232,6 +234,11 @@ std::vector<const MemorySnapshot*> ProcessSnapshotWin::ExtraMemory() const {
   return extra_memory;
 }
 
+const ProcessMemory* ProcessSnapshotWin::Memory() const {
+  INITIALIZATION_STATE_DCHECK_VALID(initialized_);
+  return process_reader_.Memory();
+}
+
 void ProcessSnapshotWin::InitializeThreads(
     bool gather_indirectly_referenced_memory,
     uint32_t indirectly_referenced_memory_cap) {
@@ -271,7 +278,7 @@ void ProcessSnapshotWin::InitializeUnloadedModules() {
   // and 32-reading-32, so at the moment, we simply do not retrieve unloaded
   // modules for 64-reading-32. See https://crashpad.chromium.org/bug/89.
 
-#if defined(ARCH_CPU_X86_64)
+#if defined(ARCH_CPU_X86_64) || defined(ARCH_CPU_ARM64)
   if (!process_reader_.Is64Bit()) {
     LOG(ERROR)
         << "reading unloaded modules across bitness not currently supported";
@@ -298,9 +305,9 @@ void ProcessSnapshotWin::InitializeUnloadedModules() {
       FromPointerCast<WinVMAddress>(event_trace_address);
 
   Traits::Pointer pointer_to_array;
-  if (!process_reader_.ReadMemory(address_in_target_process,
-                                  sizeof(pointer_to_array),
-                                  &pointer_to_array)) {
+  if (!process_reader_.Memory()->Read(address_in_target_process,
+                                      sizeof(pointer_to_array),
+                                      &pointer_to_array)) {
     LOG(ERROR) << "failed to read target address";
     return;
   }
@@ -311,7 +318,7 @@ void ProcessSnapshotWin::InitializeUnloadedModules() {
 
   const size_t data_size = *element_size * *element_count;
   std::vector<uint8_t> data(data_size);
-  if (!process_reader_.ReadMemory(pointer_to_array, data_size, &data[0])) {
+  if (!process_reader_.Memory()->Read(pointer_to_array, data_size, &data[0])) {
     LOG(ERROR) << "failed to read unloaded module data";
     return;
   }
@@ -328,7 +335,7 @@ void ProcessSnapshotWin::InitializeUnloadedModules() {
           uet.TimeDateStamp,
           base::UTF16ToUTF8(base::StringPiece16(
               uet.ImageName,
-              wcsnlen(uet.ImageName, arraysize(uet.ImageName))))));
+              wcsnlen(uet.ImageName, base::size(uet.ImageName))))));
     }
   }
 }
@@ -377,14 +384,15 @@ void ProcessSnapshotWin::InitializePebData(
   AddMemorySnapshot(peb_address, peb_size, &extra_memory_);
 
   process_types::PEB<Traits> peb_data;
-  if (!process_reader_.ReadMemory(peb_address, peb_size, &peb_data)) {
+  if (!process_reader_.Memory()->Read(
+          peb_address, base::checked_cast<size_t>(peb_size), &peb_data)) {
     LOG(ERROR) << "ReadMemory PEB";
     return;
   }
 
   process_types::PEB_LDR_DATA<Traits> peb_ldr_data;
   AddMemorySnapshot(peb_data.Ldr, sizeof(peb_ldr_data), &extra_memory_);
-  if (!process_reader_.ReadMemory(
+  if (!process_reader_.Memory()->Read(
           peb_data.Ldr, sizeof(peb_ldr_data), &peb_ldr_data)) {
     LOG(ERROR) << "ReadMemory PEB_LDR_DATA";
   } else {
@@ -406,9 +414,9 @@ void ProcessSnapshotWin::InitializePebData(
   }
 
   process_types::RTL_USER_PROCESS_PARAMETERS<Traits> process_parameters;
-  if (!process_reader_.ReadMemory(peb_data.ProcessParameters,
-                                  sizeof(process_parameters),
-                                  &process_parameters)) {
+  if (!process_reader_.Memory()->Read(peb_data.ProcessParameters,
+                                      sizeof(process_parameters),
+                                      &process_parameters)) {
     LOG(ERROR) << "ReadMemory RTL_USER_PROCESS_PARAMETERS";
     return;
   }
@@ -496,7 +504,7 @@ void ProcessSnapshotWin::AddMemorySnapshotForLdrLIST_ENTRY(
   for (;;) {
     // |cur| is the pointer to LIST_ENTRY embedded in the LDR_DATA_TABLE_ENTRY.
     // So we need to offset back to the beginning of the structure.
-    if (!process_reader_.ReadMemory(
+    if (!process_reader_.Memory()->Read(
             cur - offset_of_member, sizeof(entry), &entry)) {
       return;
     }
@@ -520,16 +528,16 @@ WinVMSize ProcessSnapshotWin::DetermineSizeOfEnvironmentBlock(
   // be more than enough.
   std::wstring env_block;
   env_block.resize(32768);
-  WinVMSize bytes_read = process_reader_.ReadAvailableMemory(
+  size_t bytes_read = process_reader_.Memory()->ReadAvailableMemory(
       start_of_environment_block,
       env_block.size() * sizeof(env_block[0]),
       &env_block[0]);
   env_block.resize(
       static_cast<unsigned int>(bytes_read / sizeof(env_block[0])));
   static constexpr wchar_t terminator[] = {0, 0};
-  size_t at = env_block.find(std::wstring(terminator, arraysize(terminator)));
+  size_t at = env_block.find(std::wstring(terminator, base::size(terminator)));
   if (at != std::wstring::npos)
-    env_block.resize(at + arraysize(terminator));
+    env_block.resize(at + base::size(terminator));
 
   return env_block.size() * sizeof(env_block[0]);
 }
@@ -543,7 +551,7 @@ void ProcessSnapshotWin::ReadLock(
   // RTL_CRITICAL_SECTION_DEBUG.
 
   process_types::RTL_CRITICAL_SECTION<Traits> critical_section;
-  if (!process_reader_.ReadMemory(
+  if (!process_reader_.Memory()->Read(
           start, sizeof(critical_section), &critical_section)) {
     LOG(ERROR) << "failed to read RTL_CRITICAL_SECTION";
     return;

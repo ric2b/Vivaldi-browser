@@ -12,15 +12,15 @@
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_plugin_container.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/editing/finder/text_finder.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 
 namespace blink {
 
 class WebLocalFrameImpl;
 class WebString;
-struct WebFindOptions;
 struct WebFloatRect;
 
 class CORE_EXPORT FindInPage final
@@ -30,12 +30,14 @@ class CORE_EXPORT FindInPage final
  public:
   static FindInPage* Create(WebLocalFrameImpl& frame,
                             InterfaceRegistry* interface_registry) {
-    return new FindInPage(frame, interface_registry);
+    return MakeGarbageCollected<FindInPage>(frame, interface_registry);
   }
+
+  FindInPage(WebLocalFrameImpl& frame, InterfaceRegistry* interface_registry);
 
   bool FindInternal(int identifier,
                     const WebString& search_text,
-                    const WebFindOptions&,
+                    const mojom::blink::FindOptions&,
                     bool wrap_within_frame,
                     bool* active_now = nullptr);
 
@@ -101,8 +103,6 @@ class CORE_EXPORT FindInPage final
   }
 
  private:
-  FindInPage(WebLocalFrameImpl& frame, InterfaceRegistry* interface_registry);
-
   // Will be initialized after first call to ensureTextFinder().
   Member<TextFinder> text_finder_;
 

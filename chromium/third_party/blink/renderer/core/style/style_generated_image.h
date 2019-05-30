@@ -39,8 +39,10 @@ class ImageResourceObserver;
 class CORE_EXPORT StyleGeneratedImage final : public StyleImage {
  public:
   static StyleGeneratedImage* Create(const CSSImageGeneratorValue& value) {
-    return new StyleGeneratedImage(value);
+    return MakeGarbageCollected<StyleGeneratedImage>(value);
   }
+
+  StyleGeneratedImage(const CSSImageGeneratorValue&);
 
   WrappedImagePtr Data() const override { return image_generator_value_.Get(); }
 
@@ -50,8 +52,7 @@ class CORE_EXPORT StyleGeneratedImage final : public StyleImage {
   FloatSize ImageSize(const Document&,
                       float multiplier,
                       const LayoutSize& default_object_size) const override;
-  bool ImageHasRelativeSize() const override { return !fixed_size_; }
-  bool UsesImageContainerSize() const override { return !fixed_size_; }
+  bool HasIntrinsicSize() const override { return fixed_size_; }
   void AddClient(ImageResourceObserver*) override;
   void RemoveClient(ImageResourceObserver*) override;
   // The |target_size| is the desired image size
@@ -64,7 +65,7 @@ class CORE_EXPORT StyleGeneratedImage final : public StyleImage {
   void Trace(blink::Visitor*) override;
 
  private:
-  StyleGeneratedImage(const CSSImageGeneratorValue&);
+  bool IsEqual(const StyleImage&) const override;
 
   // TODO(sashab): Replace this with <const CSSImageGeneratorValue> once
   // Member<> supports const types.

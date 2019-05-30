@@ -7,6 +7,7 @@
 #include <sstream>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
@@ -82,7 +83,7 @@ void AddLogin(PasswordStore* store, const PasswordForm& form) {
       base::WaitableEvent::ResetPolicy::MANUAL,
       base::WaitableEvent::InitialState::NOT_SIGNALED);
   store->AddLogin(form);
-  store->ScheduleTask(base::Bind(&PasswordStoreCallback, &wait_event));
+  store->ScheduleTask(base::BindOnce(&PasswordStoreCallback, &wait_event));
   wait_event.Wait();
 }
 
@@ -92,7 +93,7 @@ void UpdateLogin(PasswordStore* store, const PasswordForm& form) {
       base::WaitableEvent::ResetPolicy::MANUAL,
       base::WaitableEvent::InitialState::NOT_SIGNALED);
   store->UpdateLogin(form);
-  store->ScheduleTask(base::Bind(&PasswordStoreCallback, &wait_event));
+  store->ScheduleTask(base::BindOnce(&PasswordStoreCallback, &wait_event));
   wait_event.Wait();
 }
 
@@ -111,7 +112,7 @@ void RemoveLogin(PasswordStore* store, const PasswordForm& form) {
       base::WaitableEvent::ResetPolicy::MANUAL,
       base::WaitableEvent::InitialState::NOT_SIGNALED);
   store->RemoveLogin(form);
-  store->ScheduleTask(base::Bind(&PasswordStoreCallback, &wait_event));
+  store->ScheduleTask(base::BindOnce(&PasswordStoreCallback, &wait_event));
   wait_event.Wait();
 }
 

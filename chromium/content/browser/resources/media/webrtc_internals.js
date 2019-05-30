@@ -109,8 +109,9 @@ document.addEventListener('DOMContentLoaded', initialize);
 
 /** Sends a request to the browser to get peer connection statistics. */
 function requestStats() {
-  if (Object.keys(peerConnectionDataStore).length > 0)
+  if (Object.keys(peerConnectionDataStore).length > 0) {
     chrome.send('getAllStats');
+  }
 }
 
 
@@ -161,8 +162,8 @@ function appendChildWithText(parent, tag, text) {
  * @param {!PeerConnectionUpdateEntry} update The peer connection update data.
  */
 function addPeerConnectionUpdate(peerConnectionElement, update) {
-  peerConnectionUpdateTable.addPeerConnectionUpdate(peerConnectionElement,
-                                                    update);
+  peerConnectionUpdateTable.addPeerConnectionUpdate(
+      peerConnectionElement, update);
   extractSsrcInfo(update);
   peerConnectionDataStore[peerConnectionElement.id].addUpdate(update);
 }
@@ -207,8 +208,8 @@ function addPeerConnection(data) {
   }
 
   var p = document.createElement('p');
-  p.textContent = data.url + ', ' + data.rtcConfiguration + ', ' +
-      data.constraints;
+  p.textContent =
+      data.url + ', ' + data.rtcConfiguration + ', ' + data.constraints;
   peerConnectionElement.appendChild(p);
 
   return peerConnectionElement;
@@ -238,8 +239,9 @@ function updateAllPeerConnections(data) {
     var peerConnection = addPeerConnection(data[i]);
 
     var log = data[i].log;
-    if (!log)
+    if (!log) {
       continue;
+    }
     for (var j = 0; j < log.length; ++j) {
       addPeerConnectionUpdate(peerConnection, log[j]);
     }
@@ -259,8 +261,9 @@ function updateAllPeerConnections(data) {
  */
 function addStats(data) {
   var peerConnectionElement = $(getPeerConnectionId(data));
-  if (!peerConnectionElement)
+  if (!peerConnectionElement) {
     return;
+  }
 
   for (var i = 0; i < data.reports.length; ++i) {
     var report = data.reports[i];
@@ -290,12 +293,12 @@ function addGetUserMedia(data) {
 
   appendChildWithText(requestDiv, 'div', 'Caller origin: ' + data.origin);
   appendChildWithText(requestDiv, 'div', 'Caller process id: ' + data.pid);
-  appendChildWithText(requestDiv, 'span', 'Audio Constraints').style.fontWeight
-      = 'bold';
+  appendChildWithText(requestDiv, 'span', 'Audio Constraints')
+      .style.fontWeight = 'bold';
   appendChildWithText(requestDiv, 'div', data.audio);
 
-  appendChildWithText(requestDiv, 'span', 'Video Constraints').style.fontWeight
-      = 'bold';
+  appendChildWithText(requestDiv, 'span', 'Video Constraints')
+      .style.fontWeight = 'bold';
   appendChildWithText(requestDiv, 'div', data.video);
 }
 
@@ -307,18 +310,20 @@ function addGetUserMedia(data) {
  */
 function removeGetUserMediaForRenderer(data) {
   for (var i = userMediaRequests.length - 1; i >= 0; --i) {
-    if (userMediaRequests[i].rid == data.rid)
+    if (userMediaRequests[i].rid == data.rid) {
       userMediaRequests.splice(i, 1);
+    }
   }
 
   var requests = $(USER_MEDIA_TAB_ID).childNodes;
   for (var i = 0; i < requests.length; ++i) {
-    if (requests[i].rid == data.rid)
+    if (requests[i].rid == data.rid) {
       $(USER_MEDIA_TAB_ID).removeChild(requests[i]);
-
+    }
   }
-  if ($(USER_MEDIA_TAB_ID).childNodes.length == 0)
+  if ($(USER_MEDIA_TAB_ID).childNodes.length == 0) {
     tabView.removeTab(USER_MEDIA_TAB_ID);
+  }
 }
 
 

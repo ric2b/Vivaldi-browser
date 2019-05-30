@@ -26,31 +26,36 @@
 namespace blink {
 
 inline SVGRectElement::SVGRectElement(Document& document)
-    : SVGGeometryElement(SVGNames::rectTag, document),
+    : SVGGeometryElement(svg_names::kRectTag, document),
       x_(SVGAnimatedLength::Create(this,
-                                   SVGNames::xAttr,
-                                   SVGLength::Create(SVGLengthMode::kWidth),
+                                   svg_names::kXAttr,
+                                   SVGLengthMode::kWidth,
+                                   SVGLength::Initial::kUnitlessZero,
                                    CSSPropertyX)),
       y_(SVGAnimatedLength::Create(this,
-                                   SVGNames::yAttr,
-                                   SVGLength::Create(SVGLengthMode::kHeight),
+                                   svg_names::kYAttr,
+                                   SVGLengthMode::kHeight,
+                                   SVGLength::Initial::kUnitlessZero,
                                    CSSPropertyY)),
       width_(SVGAnimatedLength::Create(this,
-                                       SVGNames::widthAttr,
-                                       SVGLength::Create(SVGLengthMode::kWidth),
+                                       svg_names::kWidthAttr,
+                                       SVGLengthMode::kWidth,
+                                       SVGLength::Initial::kUnitlessZero,
                                        CSSPropertyWidth)),
-      height_(
-          SVGAnimatedLength::Create(this,
-                                    SVGNames::heightAttr,
-                                    SVGLength::Create(SVGLengthMode::kHeight),
-                                    CSSPropertyHeight)),
+      height_(SVGAnimatedLength::Create(this,
+                                        svg_names::kHeightAttr,
+                                        SVGLengthMode::kHeight,
+                                        SVGLength::Initial::kUnitlessZero,
+                                        CSSPropertyHeight)),
       rx_(SVGAnimatedLength::Create(this,
-                                    SVGNames::rxAttr,
-                                    SVGLength::Create(SVGLengthMode::kWidth),
+                                    svg_names::kRxAttr,
+                                    SVGLengthMode::kWidth,
+                                    SVGLength::Initial::kUnitlessZero,
                                     CSSPropertyRx)),
       ry_(SVGAnimatedLength::Create(this,
-                                    SVGNames::ryAttr,
-                                    SVGLength::Create(SVGLengthMode::kHeight),
+                                    svg_names::kRyAttr,
+                                    SVGLengthMode::kHeight,
+                                    SVGLength::Initial::kUnitlessZero,
                                     CSSPropertyRy)) {
   AddToPropertyMap(x_);
   AddToPropertyMap(y_);
@@ -134,9 +139,10 @@ void SVGRectElement::CollectStyleForPresentationAttribute(
 }
 
 void SVGRectElement::SvgAttributeChanged(const QualifiedName& attr_name) {
-  if (attr_name == SVGNames::xAttr || attr_name == SVGNames::yAttr ||
-      attr_name == SVGNames::widthAttr || attr_name == SVGNames::heightAttr ||
-      attr_name == SVGNames::rxAttr || attr_name == SVGNames::ryAttr) {
+  if (attr_name == svg_names::kXAttr || attr_name == svg_names::kYAttr ||
+      attr_name == svg_names::kWidthAttr ||
+      attr_name == svg_names::kHeightAttr || attr_name == svg_names::kRxAttr ||
+      attr_name == svg_names::kRyAttr) {
     UpdateRelativeLengthsInformation();
     GeometryPresentationAttributeChanged(attr_name);
     return;

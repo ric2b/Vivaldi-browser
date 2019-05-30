@@ -10,6 +10,8 @@ cr.define('header_test', function() {
     HeaderWithCopies: 'header with copies',
     HeaderWithNup: 'header with nup',
     HeaderChangesForState: 'header changes for state',
+    ButtonOrder: 'button order',
+    EnterprisePolicy: 'enterprise policy',
   };
 
   const suiteName = 'HeaderTest';
@@ -19,13 +21,16 @@ cr.define('header_test', function() {
 
     /** @override */
     setup(function() {
-      // Only care about copies, duplex, pages, and pages per sheet.
+      // The header cares about color, duplex, and header/footer to determine
+      // whether to show the enterprise managed icon, and pages, copies, and
+      // duplex to compute the number of sheets of paper.
       const settings = {
         copies: {
           value: '1',
           unavailableValue: '1',
           valid: true,
           available: true,
+          setByPolicy: false,
           key: '',
         },
         duplex: {
@@ -33,6 +38,7 @@ cr.define('header_test', function() {
           unavailableValue: false,
           valid: true,
           available: true,
+          setByPolicy: false,
           key: 'isDuplexEnabled',
         },
         pages: {
@@ -40,6 +46,7 @@ cr.define('header_test', function() {
           unavailableValue: [],
           valid: true,
           available: true,
+          setByPolicy: false,
           key: '',
         },
       };
@@ -50,10 +57,10 @@ cr.define('header_test', function() {
       header.destination = new print_preview.Destination(
           'FooDevice', print_preview.DestinationType.GOOGLE,
           print_preview.DestinationOrigin.COOKIES, 'FooName',
-          true /* isRecent */,
           print_preview.DestinationConnectionStatus.ONLINE);
       header.errorMessage = '';
       header.state = print_preview_new.State.READY;
+      header.managed = false;
       document.body.appendChild(header);
     });
 
@@ -64,7 +71,7 @@ cr.define('header_test', function() {
               print_preview.Destination.GooglePromotedId.SAVE_AS_PDF,
               print_preview.DestinationType.LOCAL,
               print_preview.DestinationOrigin.LOCAL,
-              loadTimeData.getString('printToPDF'), false,
+              loadTimeData.getString('printToPDF'),
               print_preview.DestinationConnectionStatus.ONLINE));
     }
 
@@ -111,7 +118,7 @@ cr.define('header_test', function() {
     // the print button is disabled appropriately.
     test(assert(TestNames.HeaderChangesForState), function() {
       const summary = header.$$('.summary');
-      const printButton = header.$$('.print');
+      const printButton = header.$$('.action-button');
       assertEquals('Total: 1 sheet of paper', summary.textContent);
       assertFalse(printButton.disabled);
 
@@ -138,6 +145,35 @@ cr.define('header_test', function() {
       header.set('state', print_preview_new.State.FATAL_ERROR);
       assertEquals(testError, summary.textContent);
       assertTrue(printButton.disabled);
+    });
+
+    // Tests that the buttons are in the correct order for different platforms.
+    // See https://crbug.com/880562.
+    test(assert(TestNames.ButtonOrder), function() {
+      // Verify that there are only 2 buttons.
+      assertEquals(
+          2, header.shadowRoot.querySelectorAll('paper-button').length);
+
+      const firstButton = header.$$('paper-button:first-child');
+      const lastButton = header.$$('paper-button:last-child');
+      const printButton = header.$$('paper-button.action-button');
+      const cancelButton = header.$$('paper-button.cancel-button');
+
+      if (cr.isWindows) {
+        // On Windows, the print button is on the left.
+        assertEquals(firstButton, printButton);
+        assertEquals(lastButton, cancelButton);
+      } else {
+        assertEquals(firstButton, cancelButton);
+        assertEquals(lastButton, printButton);
+      }
+    });
+
+    // Tests that enterprise badge shows up if any setting is managed.
+    test(assert(TestNames.EnterprisePolicy), function() {
+      assertTrue(header.$$('iron-icon').hidden);
+      header.managed = true;
+      assertFalse(header.$$('iron-icon').hidden);
     });
   });
 

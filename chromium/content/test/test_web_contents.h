@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/unguessable_token.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/test/web_contents_tester.h"
 #include "content/test/test_render_frame_host.h"
@@ -53,21 +54,25 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   static TestWebContents* Create(const CreateParams& params);
 
   // WebContentsImpl overrides (returning the same values, but in Test* types)
-  TestRenderFrameHost* GetMainFrame() const override;
-  TestRenderViewHost* GetRenderViewHost() const override;
+  TestRenderFrameHost* GetMainFrame() override;
+  TestRenderViewHost* GetRenderViewHost() override;
   // Overrides to avoid establishing Mojo connection with renderer process.
   int DownloadImage(const GURL& url,
                     bool is_favicon,
                     uint32_t max_bitmap_size,
                     bool bypass_cache,
                     ImageDownloadCallback callback) override;
-  const GURL& GetLastCommittedURL() const override;
-  const base::string16& GetTitle() const override;
+  const GURL& GetLastCommittedURL() override;
+  const base::string16& GetTitle() override;
 
   // WebContentsTester implementation.
   void CommitPendingNavigation() override;
   TestRenderFrameHost* GetPendingMainFrame() override;
   void NavigateAndCommit(const GURL& url) override;
+  void NavigateAndFail(
+      const GURL& url,
+      int error_code,
+      scoped_refptr<net::HttpResponseHeaders> response_headers) override;
   void TestSetIsLoading(bool value) override;
   void TestDidNavigate(RenderFrameHost* render_frame_host,
                        int nav_entry_id,
@@ -132,7 +137,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   }
 
   // Allows us to simulate that a contents was created via CreateNewWindow.
-  void AddPendingContents(std::unique_ptr<WebContents> contents);
+  void AddPendingContents(std::unique_ptr<WebContentsImpl> contents);
 
   // Establish expected arguments for |SetHistoryOffsetAndLength()|. When
   // |SetHistoryOffsetAndLength()| is called, the arguments are compared
@@ -157,6 +162,8 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
 
   void SetLastActiveTime(base::TimeTicks last_active_time) override;
 
+  base::UnguessableToken GetAudioGroupId() override;
+
  protected:
   // The deprecated WebContentsTester still needs to subclass this.
   explicit TestWebContents(BrowserContext* browser_context);
@@ -169,11 +176,11 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
       int32_t main_frame_route_id,
       int32_t main_frame_widget_route_id,
       const mojom::CreateNewWindowParams& params,
+      bool has_user_gesture,
       SessionStorageNamespace* session_storage_namespace) override;
   void CreateNewWidget(int32_t render_process_id,
                        int32_t route_id,
-                       mojom::WidgetPtr widget,
-                       blink::WebPopupType popup_type) override;
+                       mojom::WidgetPtr widget) override;
   void CreateNewFullscreenWidget(int32_t render_process_id,
                                  int32_t route_id,
                                  mojom::WidgetPtr widget) override;
@@ -205,6 +212,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   GURL last_committed_url_;
   base::Optional<base::string16> title_;
   bool pause_subresource_loading_called_;
+  base::UnguessableToken audio_group_id_;
 };
 
 }  // namespace content

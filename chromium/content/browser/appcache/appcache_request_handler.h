@@ -81,10 +81,12 @@ class CONTENT_EXPORT AppCacheRequestHandler
       FallbackCallback fallback_callback) override;
   // MaybeCreateLoaderForResponse always returns synchronously.
   bool MaybeCreateLoaderForResponse(
+      const network::ResourceRequest& request,
       const network::ResourceResponseHead& response,
       network::mojom::URLLoaderPtr* loader,
       network::mojom::URLLoaderClientRequest* client_request,
-      ThrottlingURLLoader* url_loader) override;
+      ThrottlingURLLoader* url_loader,
+      bool* skip_other_interceptors) override;
   base::Optional<SubresourceLoaderParams> MaybeCreateSubresourceLoaderParams()
       override;
 
@@ -109,12 +111,9 @@ class CONTENT_EXPORT AppCacheRequestHandler
   static std::unique_ptr<AppCacheRequestHandler>
   InitializeForMainResourceNetworkService(
       const network::ResourceRequest& request,
-      base::WeakPtr<AppCacheHost> appcache_host,
-      scoped_refptr<network::SharedURLLoaderFactory> network_loader_factory);
+      base::WeakPtr<AppCacheHost> appcache_host);
 
-  static bool IsMainResourceType(ResourceType type) {
-    return IsResourceTypeFrame(type) || type == RESOURCE_TYPE_SHARED_WORKER;
-  }
+  static bool IsMainResourceType(ResourceType type);
 
   // Called by unittests to indicate that we are in test mode.
   static void SetRunningInTests(bool in_tests);
@@ -257,9 +256,6 @@ class CONTENT_EXPORT AppCacheRequestHandler
   // (i.e. when |loader_callback_| is fired with a non-null
   // RequestHandler for non-error cases.
   bool should_create_subresource_loader_ = false;
-
-  // The network URL loader factory.
-  scoped_refptr<network::SharedURLLoaderFactory> network_loader_factory_;
 
   // The AppCache host instance. We pass this to the
   // AppCacheSubresourceURLFactory instance on creation.

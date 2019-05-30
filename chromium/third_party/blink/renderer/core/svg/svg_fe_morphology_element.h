@@ -28,9 +28,7 @@
 
 namespace blink {
 
-template <>
-const SVGEnumerationStringEntries&
-GetStaticStringEntries<MorphologyOperatorType>();
+DECLARE_SVG_ENUM_MAP(MorphologyOperatorType);
 
 class SVGFEMorphologyElement final
     : public SVGFilterPrimitiveStandardAttributes {
@@ -38,6 +36,8 @@ class SVGFEMorphologyElement final
 
  public:
   DECLARE_NODE_FACTORY(SVGFEMorphologyElement);
+
+  explicit SVGFEMorphologyElement(Document&);
 
   SVGAnimatedNumber* radiusX() { return radius_->FirstNumber(); }
   SVGAnimatedNumber* radiusY() { return radius_->SecondNumber(); }
@@ -49,11 +49,10 @@ class SVGFEMorphologyElement final
   void Trace(blink::Visitor*) override;
 
  private:
-  explicit SVGFEMorphologyElement(Document&);
-
   bool SetFilterEffectAttribute(FilterEffect*, const QualifiedName&) override;
   void SvgAttributeChanged(const QualifiedName&) override;
   FilterEffect* Build(SVGFilterBuilder*, Filter*) override;
+  bool TaintsOrigin() const override { return false; }
 
   Member<SVGAnimatedNumberOptionalNumber> radius_;
   Member<SVGAnimatedString> in1_;

@@ -19,12 +19,14 @@
 #include <memory>
 
 #include "base/files/scoped_file.h"
-#include "base/macros.h"
 #include "base/posix/eintr_wrapper.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "media/base/video_types.h"
 #include "media/gpu/buildflags.h"
+#include "media/gpu/macros.h"
 #include "media/gpu/v4l2/generic_v4l2_device.h"
 #include "ui/gfx/native_pixmap.h"
 #include "ui/gl/egl_util.h"
@@ -45,10 +47,6 @@ using media_gpu_v4l2::StubPathMap;
 static const base::FilePath::CharType kV4l2Lib[] =
     FILE_PATH_LITERAL("/usr/lib/libv4l2.so");
 #endif
-
-#define DVLOGF(level) DVLOG(level) << __func__ << "(): "
-#define VLOGF(level) VLOG(level) << __func__ << "(): "
-#define VPLOGF(level) VPLOG(level) << __func__ << "(): "
 
 namespace media {
 
@@ -154,7 +152,7 @@ bool GenericV4L2Device::Open(Type type, uint32_t v4l2_pixfmt) {
   std::string path = GetDevicePathFor(type, v4l2_pixfmt);
 
   if (path.empty()) {
-    VLOGF(1) << "No devices supporting " << std::hex << "0x" << v4l2_pixfmt
+    VLOGF(1) << "No devices supporting " << FourccToString(v4l2_pixfmt)
              << " for type: " << static_cast<int>(type);
     return false;
   }
@@ -210,9 +208,9 @@ bool GenericV4L2Device::CanCreateEGLImageFrom(uint32_t v4l2_pixfmt) {
 
   return std::find(
              kEGLImageDrmFmtsSupported,
-             kEGLImageDrmFmtsSupported + arraysize(kEGLImageDrmFmtsSupported),
+             kEGLImageDrmFmtsSupported + base::size(kEGLImageDrmFmtsSupported),
              V4L2PixFmtToDrmFormat(v4l2_pixfmt)) !=
-         kEGLImageDrmFmtsSupported + arraysize(kEGLImageDrmFmtsSupported);
+         kEGLImageDrmFmtsSupported + base::size(kEGLImageDrmFmtsSupported);
 }
 
 EGLImageKHR GenericV4L2Device::CreateEGLImage(
@@ -301,8 +299,14 @@ scoped_refptr<gl::GLImage> GenericV4L2Device::CreateGLImage(
   gfx::NativePixmapHandle native_pixmap_handle;
 
   std::vector<base::ScopedFD> duped_fds;
-  for (const auto& fd : dmabuf_fds) {
-    duped_fds.emplace_back(HANDLE_EINTR(dup(fd.get())));
+  // The number of file descriptors can be less than the number of planes when
+  // v4l2 pix fmt, |fourcc|, is a single plane format. Duplicating the last
+  // file descriptor should be safely used for the later planes, because they
+  // are on the last buffer.
+  for (size_t i = 0; i < num_planes; ++i) {
+    int fd =
+        i < dmabuf_fds.size() ? dmabuf_fds[i].get() : dmabuf_fds.back().get();
+    duped_fds.emplace_back(HANDLE_EINTR(dup(fd)));
     if (!duped_fds.back().is_valid()) {
       VPLOGF(1) << "Failed duplicating a dmabuf fd";
       return nullptr;
@@ -334,19 +338,15 @@ scoped_refptr<gl::GLImage> GenericV4L2Device::CreateGLImage(
   }
 
   gfx::BufferFormat buffer_format = gfx::BufferFormat::BGRA_8888;
-  unsigned internal_format = GL_BGRA_EXT;
   switch (fourcc) {
     case DRM_FORMAT_ARGB8888:
       buffer_format = gfx::BufferFormat::BGRA_8888;
-      internal_format = GL_BGRA_EXT;
       break;
     case DRM_FORMAT_NV12:
       buffer_format = gfx::BufferFormat::YUV_420_BIPLANAR;
-      internal_format = GL_RGB_YCBCR_420V_CHROMIUM;
       break;
     case DRM_FORMAT_YVU420:
       buffer_format = gfx::BufferFormat::YVU_420;
-      internal_format = GL_RGB_YCRCB_420_CHROMIUM;
       break;
     default:
       NOTREACHED();
@@ -360,9 +360,9 @@ scoped_refptr<gl::GLImage> GenericV4L2Device::CreateGLImage(
 
   DCHECK(pixmap);
 
-  scoped_refptr<gl::GLImageNativePixmap> image(
-      new gl::GLImageNativePixmap(size, internal_format));
-  bool ret = image->Initialize(pixmap.get(), buffer_format);
+  auto image =
+      base::MakeRefCounted<gl::GLImageNativePixmap>(size, buffer_format);
+  bool ret = image->Initialize(std::move(pixmap));
   DCHECK(ret);
   return image;
 }
@@ -381,11 +381,11 @@ GLenum GenericV4L2Device::GetTextureTarget() {
   return GL_TEXTURE_EXTERNAL_OES;
 }
 
-uint32_t GenericV4L2Device::PreferredInputFormat(Type type) {
+std::vector<uint32_t> GenericV4L2Device::PreferredInputFormat(Type type) {
   if (type == Type::kEncoder)
-    return V4L2_PIX_FMT_NV12M;
+    return {V4L2_PIX_FMT_NV12M, V4L2_PIX_FMT_NV12};
 
-  return 0;
+  return {};
 }
 
 std::vector<uint32_t> GenericV4L2Device::GetSupportedImageProcessorPixelformats(
@@ -465,6 +465,11 @@ bool GenericV4L2Device::IsJpegDecodingSupported() {
   return !devices.empty();
 }
 
+bool GenericV4L2Device::IsJpegEncodingSupported() {
+  const auto& devices = GetDevicesForType(Type::kJpegEncoder);
+  return !devices.empty();
+}
+
 bool GenericV4L2Device::OpenDevicePath(const std::string& path, Type type) {
   DCHECK(!device_fd_.is_valid());
 
@@ -510,6 +515,7 @@ void GenericV4L2Device::EnumerateDevicesForType(Type type) {
   static const std::string kEncoderDevicePattern = "/dev/video-enc";
   static const std::string kImageProcessorDevicePattern = "/dev/image-proc";
   static const std::string kJpegDecoderDevicePattern = "/dev/jpeg-dec";
+  static const std::string kJpegEncoderDevicePattern = "/dev/jpeg-enc";
 
   std::string device_pattern;
   v4l2_buf_type buf_type;
@@ -529,6 +535,10 @@ void GenericV4L2Device::EnumerateDevicesForType(Type type) {
     case Type::kJpegDecoder:
       device_pattern = kJpegDecoderDevicePattern;
       buf_type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+      break;
+    case Type::kJpegEncoder:
+      device_pattern = kJpegEncoderDevicePattern;
+      buf_type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
       break;
   }
 

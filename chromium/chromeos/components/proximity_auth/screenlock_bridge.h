@@ -68,10 +68,6 @@ class ScreenlockBridge {
     // go to state where password is required for unlock.
     void SetHardlockOnClick();
 
-    // If the current lock screen is a trial run to introduce users to Easy
-    // Unlock, the icon will record metrics upon click.
-    void SetTrialRun();
-
     std::string GetIDString() const;
 
     UserPodCustomIcon icon() const { return icon_; }
@@ -84,8 +80,6 @@ class ScreenlockBridge {
 
     bool hardlock_on_click() const { return hardlock_on_click_; }
 
-    bool is_trial_run() const { return is_trial_run_; }
-
    private:
     UserPodCustomIcon icon_;
 
@@ -95,8 +89,6 @@ class ScreenlockBridge {
     base::string16 aria_label_;
 
     bool hardlock_on_click_;
-
-    bool is_trial_run_;
 
     DISALLOW_COPY_AND_ASSIGN(UserPodCustomIconOptions);
   };
@@ -118,6 +110,8 @@ class ScreenlockBridge {
     virtual void HideUserPodCustomIcon(const AccountId& account_id) = 0;
 
     // (Re)enable lock screen UI.
+    // TODO(crbug.com/927498): Remove TestLockHandler dependency on this, and
+    // then remove this method.
     virtual void EnableInput() = 0;
 
     // Set the authentication type to be used on the lock screen.

@@ -33,8 +33,8 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.invalidation.PendingInvalidation;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.sync.AndroidSyncSettings;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 
 /**
  * Tests for ChromeBrowserSyncAdapter.
@@ -87,8 +87,8 @@ public class ChromeBrowserSyncAdapterTest {
     }
 
     private void performSyncWithBundle(Bundle bundle) {
-        mSyncAdapter.onPerformSync(TEST_ACCOUNT, bundle, AndroidSyncSettings.getContractAuthority(),
-                null, new SyncResult());
+        mSyncAdapter.onPerformSync(TEST_ACCOUNT, bundle,
+                AndroidSyncSettings.get().getContractAuthority(), null, new SyncResult());
     }
 
     private void sendChromeToBackground(Activity activity) {

@@ -542,7 +542,7 @@ CodeMirror.prototype = {
   undo: function() {},
   unlinkDoc: function(other) {}
 };
-/** @type {!{cursorDiv: Element, lineSpace: Element}} */
+/** @type {!{cursorDiv: Element, lineSpace: Element, gutters: Element}} */
 CodeMirror.prototype.display;
 /** @type {!{mode: string, lineWrapping: boolean}} */
 CodeMirror.prototype.options;
@@ -714,13 +714,6 @@ const acorn = {
   /**
    * @param {string} text
    * @param {Object.<string, boolean>} options
-   * @return {!ESTree.Node}
-   */
-  parse_dammit: function(text, options) {},
-
-  /**
-   * @param {string} text
-   * @param {Object.<string, boolean>} options
    * @return {!Acorn.Tokenizer}
    */
   tokenizer: function(text, options) {},
@@ -736,6 +729,15 @@ const acorn = {
     eof: new Acorn.TokenType()
   }
 };
+
+acorn.loose = {};
+
+/**
+ * @param {string} text
+ * @param {Object.<string, boolean>} options
+ * @return {!ESTree.Node}
+ */
+acorn.loose.parse = function(text, options) {};
 
 const Acorn = {};
 /**

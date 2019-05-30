@@ -33,15 +33,14 @@
 #include "components/feature_engagement/internal/system_time_provider.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/feature_list.h"
-#include "components/leveldb_proto/proto_database_impl.h"
+#include "components/leveldb_proto/public/proto_database_provider.h"
 
 namespace feature_engagement {
 
 namespace {
-const base::FilePath::CharType kEventDBStorageDir[] =
-    FILE_PATH_LITERAL("EventDB");
-const base::FilePath::CharType kAvailabilityDBStorageDir[] =
-    FILE_PATH_LITERAL("AvailabilityDB");
+
+const char kEventDBName[] = "EventDB";
+const char kAvailabilityDBName[] = "AvailabilityDB";
 
 // Creates a TrackerImpl that is usable for a demo mode.
 std::unique_ptr<Tracker> CreateDemoModeTracker() {
@@ -91,18 +90,20 @@ std::unique_ptr<Tracker> CreateDemoModeTracker() {
 // static
 Tracker* Tracker::Create(
     const base::FilePath& storage_dir,
-    const scoped_refptr<base::SequencedTaskRunner>& background_task_runner) {
+    const scoped_refptr<base::SequencedTaskRunner>& background_task_runner,
+    leveldb_proto::ProtoDatabaseProvider* db_provider) {
   DVLOG(2) << "Creating Tracker";
   if (base::FeatureList::IsEnabled(kIPHDemoMode))
     return CreateDemoModeTracker().release();
 
-  std::unique_ptr<leveldb_proto::ProtoDatabase<Event>> event_db =
-      std::make_unique<leveldb_proto::ProtoDatabaseImpl<Event>>(
-          background_task_runner);
+  base::FilePath event_storage_dir =
+      storage_dir.AppendASCII(std::string(kEventDBName));
+  auto event_db = db_provider->GetDB<Event>(
+      leveldb_proto::ProtoDbType::FEATURE_ENGAGEMENT_EVENT, event_storage_dir,
+      background_task_runner);
 
-  base::FilePath event_storage_dir = storage_dir.Append(kEventDBStorageDir);
-  auto event_store = std::make_unique<PersistentEventStore>(
-      event_storage_dir, std::move(event_db));
+  auto event_store =
+      std::make_unique<PersistentEventStore>(std::move(event_db));
 
   auto configuration = std::make_unique<ChromeVariationsConfiguration>();
   configuration->ParseFeatureConfigs(GetAllFeatures());
@@ -121,10 +122,10 @@ Tracker* Tracker::Create(
   auto time_provider = std::make_unique<SystemTimeProvider>();
 
   base::FilePath availability_storage_dir =
-      storage_dir.Append(kAvailabilityDBStorageDir);
-  auto availability_db =
-      std::make_unique<leveldb_proto::ProtoDatabaseImpl<Availability>>(
-          background_task_runner);
+      storage_dir.AppendASCII(std::string(kAvailabilityDBName));
+  auto availability_db = db_provider->GetDB<Availability>(
+      leveldb_proto::ProtoDbType::FEATURE_ENGAGEMENT_AVAILABILITY,
+      availability_storage_dir, background_task_runner);
   auto availability_store_loader = base::BindOnce(
       &PersistentAvailabilityStore::LoadAndUpdateStore,
       availability_storage_dir, std::move(availability_db), GetAllFeatures());

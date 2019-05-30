@@ -30,8 +30,8 @@ import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.webapk.lib.common.WebApkConstants;
 
@@ -115,7 +115,7 @@ public class StartupLoadingMetricsTest {
     private void startWebApkActivity(final String startUrl) throws InterruptedException {
         Intent intent =
                 new Intent(InstrumentationRegistry.getTargetContext(), WebApkActivity.class);
-        intent.putExtra(WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME, "org.chromium.webapk.http");
+        intent.putExtra(WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME, "org.chromium.webapk");
         intent.putExtra(ShortcutHelper.EXTRA_URL, startUrl);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 

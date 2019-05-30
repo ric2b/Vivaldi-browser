@@ -9,6 +9,24 @@ suite('InternetDetailPage', function() {
   /** @type {NetworkingPrivate} */
   let api_;
 
+  /** @type {Object} */
+  let prefs_ = {
+    'vpn_config_allowed': {
+      key: 'vpn_config_allowed',
+      type: chrome.settingsPrivate.PrefType.BOOLEAN,
+      value: true,
+    },
+    // Added use_shared_proxies because triggering a change in prefs_ without
+    // it will fail a "Pref is missing" assertion in the network-proxy-section
+    'settings': {
+      'use_shared_proxies': {
+        key: 'use_shared_proxies',
+        type: chrome.settingsPrivate.PrefType.BOOLEAN,
+        value: true,
+      },
+    },
+  };
+
   suiteSetup(function() {
     loadTimeData.overrideValues({
       internetAddConnection: 'internetAddConnection',
@@ -65,6 +83,12 @@ suite('InternetDetailPage', function() {
     return allowShared;
   }
 
+  function getButton(buttonId) {
+    const button = internetDetailPage.$$(`#${buttonId}`);
+    assertTrue(!!button);
+    return button;
+  }
+
   setup(function() {
     PolymerTest.clearBody();
     internetDetailPage =
@@ -72,6 +96,7 @@ suite('InternetDetailPage', function() {
     assertTrue(!!internetDetailPage);
     api_.resetForTest();
     internetDetailPage.networkingPrivate = api_;
+    internetDetailPage.prefs = Object.assign({}, prefs_);
     document.body.appendChild(internetDetailPage);
     return flushAsync();
   });
@@ -83,6 +108,8 @@ suite('InternetDetailPage', function() {
   });
 
   suite('DetailsPage', function() {
+    test('LoadPage', function() {});
+
     test('WiFi', function() {
       api_.enableNetworkType('WiFi');
       setNetworksForTest([{GUID: 'wifi1_guid', Name: 'wifi1', Type: 'WiFi'}]);
@@ -177,6 +204,56 @@ suite('InternetDetailPage', function() {
         let allowShared = getAllowSharedProxy();
         assertFalse(allowShared.hasAttribute('hidden'));
         assertFalse(allowShared.disabled);
+      });
+    });
+
+    test('VPN config allowed', function() {
+      api_.enableNetworkType('VPN');
+      setNetworksForTest([{
+        GUID: 'vpn_guid',
+        Name: 'vpn_user',
+        Type: 'VPN',
+      }]);
+      internetDetailPage.init('vpn_guid', 'VPN', 'vpn_user');
+      prefs_.vpn_config_allowed.value = true;
+      internetDetailPage.prefs = Object.assign({}, prefs_);
+      return flushAsync().then(() => {
+        const disconnectButton = getButton('disconnect');
+        assertFalse(disconnectButton.hasAttribute('enforced_'));
+        assertFalse(!!disconnectButton.$$('cr-policy-pref-indicator'));
+      });
+    });
+
+    test('VPN config disallowed', function() {
+      api_.enableNetworkType('VPN');
+      setNetworksForTest([{
+        GUID: 'vpn_guid',
+        Name: 'vpn_user',
+        Type: 'VPN',
+      }]);
+      internetDetailPage.init('vpn_guid', 'VPN', 'vpn_user');
+      prefs_.vpn_config_allowed.value = false;
+      internetDetailPage.prefs = Object.assign({}, prefs_);
+      return flushAsync().then(() => {
+        const disconnectButton = getButton('disconnect');
+        assertTrue(disconnectButton.hasAttribute('enforced_'));
+        assertTrue(!!disconnectButton.$$('cr-policy-pref-indicator'));
+      });
+    });
+
+    test('Connect button disabled on cellular scan', function() {
+      api_.enableNetworkType('Cellular');
+      setNetworksForTest([{
+        GUID: 'cell_guid',
+        Name: 'cell_user',
+        Type: 'Cellular',
+        ConnectionState: 'NotConnected',
+        Cellular: {SIMLockStatus: {LockType: 'sim-pin'}}
+      }]);
+      internetDetailPage.init('cell_guid', 'Cellular', 'cell_user');
+      return flushAsync().then(() => {
+        const connectButton = getButton('connect');
+        assertTrue(connectButton.hasAttribute('disabled'));
       });
     });
   });

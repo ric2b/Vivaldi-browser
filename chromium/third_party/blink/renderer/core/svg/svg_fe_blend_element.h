@@ -38,21 +38,20 @@ class SVGFEBlendElement final : public SVGFilterPrimitiveStandardAttributes {
     kModeScreen = 3,
     kModeDarken = 4,
     kModeLighten = 5,
-
-    // The following modes do not map to IDL constants on
-    // SVGFEBlendElement.
-    kModeOverlay,
-    kModeColorDodge,
-    kModeColorBurn,
-    kModeHardLight,
-    kModeSoftLight,
-    kModeDifference,
-    kModeExclusion,
-    kModeHue,
-    kModeSaturation,
-    kModeColor,
-    kModeLuminosity,
+    kModeOverlay = 6,
+    kModeColorDodge = 7,
+    kModeColorBurn = 8,
+    kModeHardLight = 9,
+    kModeSoftLight = 10,
+    kModeDifference = 11,
+    kModeExclusion = 12,
+    kModeHue = 13,
+    kModeSaturation = 14,
+    kModeColor = 15,
+    kModeLuminosity = 16,
   };
+
+  explicit SVGFEBlendElement(Document&);
 
   DECLARE_NODE_FACTORY(SVGFEBlendElement);
   SVGAnimatedString* in1() { return in1_.Get(); }
@@ -62,23 +61,18 @@ class SVGFEBlendElement final : public SVGFilterPrimitiveStandardAttributes {
   void Trace(blink::Visitor*) override;
 
  private:
-  explicit SVGFEBlendElement(Document&);
-
   bool SetFilterEffectAttribute(FilterEffect*,
                                 const QualifiedName& attr_name) override;
   void SvgAttributeChanged(const QualifiedName&) override;
   FilterEffect* Build(SVGFilterBuilder*, Filter*) override;
+  bool TaintsOrigin() const override { return false; }
 
   Member<SVGAnimatedString> in1_;
   Member<SVGAnimatedString> in2_;
   Member<SVGAnimatedEnumeration<Mode>> mode_;
 };
 
-template <>
-const SVGEnumerationStringEntries&
-GetStaticStringEntries<SVGFEBlendElement::Mode>();
-template <>
-unsigned short GetMaxExposedEnumValue<SVGFEBlendElement::Mode>();
+DECLARE_SVG_ENUM_MAP(SVGFEBlendElement::Mode);
 
 }  // namespace blink
 

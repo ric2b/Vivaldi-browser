@@ -26,9 +26,9 @@
 #include "ppapi/thunk/enter.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "third_party/blink/public/mojom/filesystem/file_system.mojom.h"
+#include "third_party/blink/public/mojom/web_feature/web_feature.mojom.h"
 #include "third_party/blink/public/platform/file_path_conversion.h"
 #include "third_party/blink/public/platform/web_data.h"
-#include "third_party/blink/public/platform/web_feature.mojom.h"
 #include "third_party/blink/public/platform/web_http_body.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -238,15 +238,13 @@ bool CreateWebURLRequest(PP_Instance instance,
         WebString::FromUTF8(data->custom_content_transfer_encoding));
   }
 
-  if (data->has_custom_user_agent || !name_version.empty()) {
+  if (!name_version.empty())
+    dest->SetRequestedWithHeader(WebString::FromUTF8(name_version));
+
+  if (data->has_custom_user_agent) {
     auto extra_data = std::make_unique<RequestExtraData>();
-    if (data->has_custom_user_agent) {
-      extra_data->set_custom_user_agent(
-          WebString::FromUTF8(data->custom_user_agent));
-    }
-    if (!name_version.empty()) {
-      extra_data->set_requested_with(WebString::FromUTF8(name_version));
-    }
+    extra_data->set_custom_user_agent(
+        WebString::FromUTF8(data->custom_user_agent));
     dest->SetExtraData(std::move(extra_data));
   }
 

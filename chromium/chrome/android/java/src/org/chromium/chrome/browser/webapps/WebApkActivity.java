@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.webapps;
 
-import static org.chromium.webapk.lib.common.WebApkConstants.WEBAPK_PACKAGE_PREFIX;
-
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -18,8 +16,6 @@ import org.chromium.chrome.browser.metrics.WebApkSplashscreenMetrics;
 import org.chromium.chrome.browser.metrics.WebApkUma;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.webapk.lib.common.WebApkConstants;
-
-import java.util.concurrent.TimeUnit;
 
 /**
  * An Activity is designed for WebAPKs (native Android apps) and displays a webapp in a nearly
@@ -39,23 +35,9 @@ public class WebApkActivity extends WebappActivity {
     @VisibleForTesting
     public static final String STARTUP_UMA_HISTOGRAM_SUFFIX = ".WebApk";
 
-    /**
-     * Tries extracting the WebAPK short name from the passed in intent. Returns null if the intent
-     * does not launch a WebApkActivity. This method is slow. It makes several PackageManager calls.
-     */
-    public static String slowExtractNameFromIntentIfTargetIsWebApk(Intent intent) {
-        // Check for intents targetted at WebApkActivity and WebApkActivity0-9.
-        if (!intent.getComponent().getClassName().startsWith(WebApkActivity.class.getName())) {
-            return null;
-        }
-
-        WebApkInfo info = WebApkInfo.create(intent);
-        return (info != null) ? info.shortName() : null;
-    }
-
     @Override
-    protected boolean isVerified() {
-        return true;
+    public @WebappScopePolicy.Type int scopePolicy() {
+        return WebappScopePolicy.Type.STRICT;
     }
 
     @Override
@@ -77,12 +59,13 @@ public class WebApkActivity extends WebappActivity {
                 IntentUtils.safeGetStringExtra(intent, WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME);
 
         // Use the lightweight FRE for unbound WebAPKs.
-        return webApkPackageName != null && !webApkPackageName.startsWith(WEBAPK_PACKAGE_PREFIX);
+        return webApkPackageName != null
+                && !webApkPackageName.startsWith(WebApkConstants.WEBAPK_PACKAGE_PREFIX);
     }
 
     @Override
-    public String getNativeClientPackageName() {
-        return getWebappInfo().apkPackageName();
+    public String getWebApkPackageName() {
+        return getWebappInfo().webApkPackageName();
     }
 
     @Override
@@ -95,8 +78,7 @@ public class WebApkActivity extends WebappActivity {
     protected void recordIntentToCreationTime(long timeMs) {
         super.recordIntentToCreationTime(timeMs);
 
-        RecordHistogram.recordTimesHistogram(
-                "MobileStartup.IntentToCreationTime.WebApk", timeMs, TimeUnit.MILLISECONDS);
+        RecordHistogram.recordTimesHistogram("MobileStartup.IntentToCreationTime.WebApk", timeMs);
     }
 
     @Override
@@ -159,5 +141,12 @@ public class WebApkActivity extends WebappActivity {
         super.initializeStartupMetrics();
         mWebApkSplashscreenMetrics = new WebApkSplashscreenMetrics();
         addSplashscreenObserver(mWebApkSplashscreenMetrics);
+    }
+
+    @Override
+    protected boolean loadUrlIfPostShareTarget(WebappInfo webappInfo) {
+        WebApkInfo webApkInfo = (WebApkInfo) webappInfo;
+        return WebApkPostShareTargetNavigator.navigateIfPostShareTarget(
+                webApkInfo, getActivityTab().getWebContents());
     }
 }

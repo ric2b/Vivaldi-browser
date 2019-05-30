@@ -22,7 +22,6 @@
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop_current.h"
@@ -70,7 +69,6 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function_dispatcher.h"
@@ -92,8 +90,9 @@
 
 using content::BrowserContext;
 using content::BrowserThread;
-using download::DownloadItem;
 using content::DownloadManager;
+using download::DownloadItem;
+using download::DownloadPathReservationTracker;
 
 namespace download_extension_errors {
 
@@ -193,7 +192,7 @@ const char* const kDangerStrings[] = {
     kDangerSafe,     kDangerUncommon,
     kDangerAccepted, kDangerHost,
     kDangerUnwanted, kDangerWhitelistedByPolicy};
-static_assert(arraysize(kDangerStrings) == download::DOWNLOAD_DANGER_TYPE_MAX,
+static_assert(base::size(kDangerStrings) == download::DOWNLOAD_DANGER_TYPE_MAX,
               "kDangerStrings should have DOWNLOAD_DANGER_TYPE_MAX elements");
 
 // Note: Any change to the state strings, should be accompanied by a
@@ -204,22 +203,22 @@ const char* const kStateStrings[] = {
   kStateInterrupted,
   kStateInterrupted,
 };
-static_assert(arraysize(kStateStrings) ==
+static_assert(base::size(kStateStrings) ==
                   download::DownloadItem::MAX_DOWNLOAD_STATE,
               "kStateStrings should have MAX_DOWNLOAD_STATE elements");
 
 const char* DangerString(download::DownloadDangerType danger) {
   DCHECK(danger >= 0);
   DCHECK(danger <
-         static_cast<download::DownloadDangerType>(arraysize(kDangerStrings)));
+         static_cast<download::DownloadDangerType>(base::size(kDangerStrings)));
   if (danger < 0 || danger >= static_cast<download::DownloadDangerType>(
-                                  arraysize(kDangerStrings)))
+                                  base::size(kDangerStrings)))
     return "";
   return kDangerStrings[danger];
 }
 
 download::DownloadDangerType DangerEnumFromString(const std::string& danger) {
-  for (size_t i = 0; i < arraysize(kDangerStrings); ++i) {
+  for (size_t i = 0; i < base::size(kDangerStrings); ++i) {
     if (danger == kDangerStrings[i])
       return static_cast<download::DownloadDangerType>(i);
   }
@@ -229,16 +228,16 @@ download::DownloadDangerType DangerEnumFromString(const std::string& danger) {
 const char* StateString(download::DownloadItem::DownloadState state) {
   DCHECK(state >= 0);
   DCHECK(state < static_cast<download::DownloadItem::DownloadState>(
-                     arraysize(kStateStrings)));
+                     base::size(kStateStrings)));
   if (state < 0 || state >= static_cast<download::DownloadItem::DownloadState>(
-                                arraysize(kStateStrings)))
+                                base::size(kStateStrings)))
     return "";
   return kStateStrings[state];
 }
 
 download::DownloadItem::DownloadState StateEnumFromString(
     const std::string& state) {
-  for (size_t i = 0; i < arraysize(kStateStrings); ++i) {
+  for (size_t i = 0; i < base::size(kStateStrings); ++i) {
     if ((kStateStrings[i] != NULL) && (state == kStateStrings[i]))
       return static_cast<DownloadItem::DownloadState>(i);
   }
@@ -345,8 +344,10 @@ bool DownloadFileIconExtractorImpl::ExtractIconURLForPath(
 void DownloadFileIconExtractorImpl::OnIconLoadComplete(
     float scale, const IconURLCallback& callback, gfx::Image* icon) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  callback.Run(!icon ? std::string() : webui::GetBitmapDataUrl(
-      icon->ToImageSkia()->GetRepresentation(scale).sk_bitmap()));
+  callback.Run(
+      !icon ? std::string()
+            : webui::GetBitmapDataUrl(
+                  icon->ToImageSkia()->GetRepresentation(scale).GetBitmap()));
 }
 
 IconLoader::IconSize IconLoaderSizeFromPixelSize(int pixel_size) {
@@ -500,8 +501,8 @@ void CompileDownloadQueryOrderBy(
   if (sorter_types.Get().empty())
     InitSortTypeMap(sorter_types.Pointer());
 
-  for (std::vector<std::string>::const_iterator iter = order_by_strs.begin();
-       iter != order_by_strs.end(); ++iter) {
+  for (auto iter = order_by_strs.cbegin(); iter != order_by_strs.cend();
+       ++iter) {
     std::string term_str = *iter;
     if (term_str.empty())
       continue;
@@ -602,8 +603,8 @@ void RunDownloadQuery(
   query_out.Search(all_items.begin(), all_items.end(), results);
 }
 
-DownloadPathReservationTracker::FilenameConflictAction ConvertConflictAction(
-    downloads::FilenameConflictAction action) {
+download::DownloadPathReservationTracker::FilenameConflictAction
+ConvertConflictAction(downloads::FilenameConflictAction action) {
   switch (action) {
     case downloads::FILENAME_CONFLICT_ACTION_NONE:
     case downloads::FILENAME_CONFLICT_ACTION_UNIQUIFY:
@@ -614,7 +615,7 @@ DownloadPathReservationTracker::FilenameConflictAction ConvertConflictAction(
       return DownloadPathReservationTracker::PROMPT;
   }
   NOTREACHED();
-  return DownloadPathReservationTracker::UNIQUIFY;
+  return download::DownloadPathReservationTracker::UNIQUIFY;
 }
 
 class ExtensionDownloadsEventRouterData : public base::SupportsUserData::Data {
@@ -711,8 +712,7 @@ class ExtensionDownloadsEventRouterData : public base::SupportsUserData::Data {
 
   void DeterminerRemoved(const std::string& extension_id) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    for (DeterminerInfoVector::iterator iter = determiners_.begin();
-         iter != determiners_.end();) {
+    for (auto iter = determiners_.begin(); iter != determiners_.end();) {
       if (iter->extension_id == extension_id) {
         iter = determiners_.erase(iter);
       } else {
@@ -837,8 +837,7 @@ class ExtensionDownloadsEventRouterData : public base::SupportsUserData::Data {
   // This is safe to call even while not waiting for determiners to call back;
   // in that case, the callbacks will be null so they won't be Run.
   void CheckAllDeterminersCalled() {
-    for (DeterminerInfoVector::iterator iter = determiners_.begin();
-         iter != determiners_.end(); ++iter) {
+    for (auto iter = determiners_.begin(); iter != determiners_.end(); ++iter) {
       if (!iter->reported)
         return;
     }
@@ -1003,10 +1002,6 @@ bool DownloadsDownloadFunction::RunAsync() {
             &error_))
     return false;
 
-  content::StoragePartition* storage_partition =
-      BrowserContext::GetStoragePartition(
-          render_frame_host()->GetProcess()->GetBrowserContext(),
-          render_frame_host()->GetSiteInstance());
   net::NetworkTrafficAnnotationTag traffic_annotation =
       net::DefineNetworkTrafficAnnotation("downloads_api_run_async", R"(
         semantics {
@@ -1040,8 +1035,7 @@ bool DownloadsDownloadFunction::RunAsync() {
       new download::DownloadUrlParameters(
           download_url, render_frame_host()->GetProcess()->GetID(),
           render_frame_host()->GetRenderViewHost()->GetRoutingID(),
-          render_frame_host()->GetRoutingID(),
-          storage_partition->GetURLRequestContext(), traffic_annotation));
+          render_frame_host()->GetRoutingID(), traffic_annotation));
 
   base::FilePath creator_suggested_filename;
   if (options.filename.get()) {
@@ -1228,7 +1222,7 @@ ExtensionFunction::ResponseAction DownloadsResumeFunction::Run() {
   }
   // Note that if the item isn't paused, this will be a no-op, and the extension
   // call will seem successful.
-  download_item->Resume();
+  download_item->Resume(user_gesture());
   RecordApiFunctions(DOWNLOADS_FUNCTION_RESUME);
   return RespondNow(NoArguments());
 }
@@ -1586,8 +1580,7 @@ ExtensionFunction::ResponseAction DownloadsSetShelfEnabledFunction::Run() {
 
   BrowserList* browsers = BrowserList::GetInstance();
   if (browsers) {
-    for (BrowserList::const_iterator iter = browsers->begin();
-        iter != browsers->end(); ++iter) {
+    for (auto iter = browsers->begin(); iter != browsers->end(); ++iter) {
       const Browser* browser = *iter;
       DownloadCoreService* current_service =
           DownloadCoreServiceFactory::GetForBrowserContext(browser->profile());
@@ -1694,8 +1687,7 @@ void ExtensionDownloadsEventRouter::
 
 void ExtensionDownloadsEventRouter::SetShelfEnabled(const Extension* extension,
                                                     bool enabled) {
-  std::set<const Extension*>::iterator iter =
-      shelf_disabling_extensions_.find(extension);
+  auto iter = shelf_disabling_extensions_.find(extension);
   if (iter == shelf_disabling_extensions_.end()) {
     if (!enabled)
       shelf_disabling_extensions_.insert(extension);
@@ -2034,7 +2026,7 @@ void ExtensionDownloadsEventRouter::DispatchEvent(
     events::HistogramValue histogram_value,
     const std::string& event_name,
     bool include_incognito,
-    const Event::WillDispatchCallback& will_dispatch_callback,
+    Event::WillDispatchCallback will_dispatch_callback,
     std::unique_ptr<base::Value> arg) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!EventRouter::Get(profile_))
@@ -2057,7 +2049,7 @@ void ExtensionDownloadsEventRouter::DispatchEvent(
   auto event =
       std::make_unique<Event>(histogram_value, event_name, std::move(args),
                               restrict_to_browser_context);
-  event->will_dispatch_callback = will_dispatch_callback;
+  event->will_dispatch_callback = std::move(will_dispatch_callback);
   EventRouter::Get(profile_)->BroadcastEvent(std::move(event));
   DownloadsNotificationSource notification_source;
   notification_source.event_name = event_name;
@@ -2075,8 +2067,7 @@ void ExtensionDownloadsEventRouter::OnExtensionUnloaded(
     const Extension* extension,
     UnloadedExtensionReason reason) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  std::set<const Extension*>::iterator iter =
-      shelf_disabling_extensions_.find(extension);
+  auto iter = shelf_disabling_extensions_.find(extension);
   if (iter != shelf_disabling_extensions_.end())
     shelf_disabling_extensions_.erase(iter);
 }

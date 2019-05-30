@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/reset_password/reset_password_ui.h"
 
+#include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
@@ -139,11 +140,7 @@ base::DictionaryValue ResetPasswordUI::PopulateStrings() const {
   bool known_password_type =
       password_type_ !=
       safe_browsing::PasswordReuseEvent::REUSED_PASSWORD_TYPE_UNKNOWN;
-  if (!known_password_type) {
-    UMA_HISTOGRAM_ENUMERATION(
-        safe_browsing::kInterstitialActionByUserNavigationHistogram,
-        safe_browsing::WarningAction::SHOWN);
-  }
+
   int heading_string_id = known_password_type
                               ? IDS_RESET_PASSWORD_WARNING_HEADING
                               : IDS_RESET_PASSWORD_HEADING;

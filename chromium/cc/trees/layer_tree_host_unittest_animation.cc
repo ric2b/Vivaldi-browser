@@ -638,8 +638,7 @@ class LayerTreeHostAnimationTestForceRedraw
       layer_tree_host()->SetNeedsAnimate();
   }
 
-  void UpdateLayerTreeHost(
-      LayerTreeHostClient::VisualStateUpdate requested_update) override {
+  void UpdateLayerTreeHost() override {
     layer_tree_host()->SetNeedsCommitWithForcedRedraw();
   }
 
@@ -926,9 +925,8 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationAdjusted
         GetImplAnimationHost(&host_impl)
             ->GetElementAnimationsForElementId(layer->element_id());
     DCHECK(element_animations);
-    DCHECK(element_animations->keyframe_effects_list().might_have_observers());
     KeyframeEffect* keyframe_effect =
-        &*element_animations->keyframe_effects_list().begin();
+        &*element_animations->FirstKeyframeEffectForTesting();
     DCHECK(keyframe_effect);
     return *keyframe_effect;
   }
@@ -1062,8 +1060,7 @@ class LayerTreeHostPresentationDuringAnimation
 
   void DisplayReceivedCompositorFrameOnThread(
       const viz::CompositorFrame& frame) override {
-    if (frame.metadata.request_presentation_feedback)
-      received_token_ = frame.metadata.frame_token;
+    received_token_ = frame.metadata.frame_token;
   }
 
   void AfterTest() override {
@@ -2242,8 +2239,7 @@ class LayerTreeHostAnimationTestSetPotentiallyAnimatingOnLacDestruction
 
   void DidCommit() override { PostSetNeedsCommitToMainThread(); }
 
-  void UpdateLayerTreeHost(
-      LayerTreeHostClient::VisualStateUpdate requested_update) override {
+  void UpdateLayerTreeHost() override {
     if (layer_tree_host()->SourceFrameNumber() == 2) {
       // Destroy animation.
       timeline_->DetachAnimation(animation_.get());
@@ -2320,8 +2316,7 @@ class LayerTreeHostAnimationTestRebuildPropertyTreesOnAnimationSetNeedsCommit
       PostSetNeedsCommitToMainThread();
   }
 
-  void UpdateLayerTreeHost(
-      LayerTreeHostClient::VisualStateUpdate requested_update) override {
+  void UpdateLayerTreeHost() override {
     if (layer_tree_host()->SourceFrameNumber() == 1) {
       EXPECT_FALSE(layer_tree_host()->property_trees()->needs_rebuild);
       AddAnimatedTransformToAnimation(animation_child_.get(), 1.0, 5, 5);

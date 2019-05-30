@@ -6,11 +6,10 @@
 
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/modules/remoteplayback/web_remote_playback_state.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_remote_playback_availability_callback.h"
-#include "third_party/blink/renderer/core/dom/events/event_listener.h"
+#include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
@@ -27,7 +26,8 @@ namespace blink {
 class MockFunction : public ScriptFunction {
  public:
   static testing::StrictMock<MockFunction>* Create(ScriptState* script_state) {
-    return new testing::StrictMock<MockFunction>(script_state);
+    return MakeGarbageCollected<testing::StrictMock<MockFunction>>(
+        script_state);
   }
 
   v8::Local<v8::Function> Bind() { return BindToV8Function(); }
@@ -39,15 +39,9 @@ class MockFunction : public ScriptFunction {
       : ScriptFunction(script_state) {}
 };
 
-class MockEventListenerForRemotePlayback : public EventListener {
+class MockEventListenerForRemotePlayback : public NativeEventListener {
  public:
-  MockEventListenerForRemotePlayback() : EventListener(kCPPEventListenerType) {}
-
-  bool operator==(const EventListener& other) const final {
-    return this == &other;
-  }
-
-  MOCK_METHOD2(handleEvent, void(ExecutionContext* executionContext, Event*));
+  MOCK_METHOD2(Invoke, void(ExecutionContext* executionContext, Event*));
 };
 
 class MockPresentationController final : public PresentationController {
@@ -68,16 +62,17 @@ class RemotePlaybackTest : public testing::Test,
   RemotePlaybackTest() : ScopedRemotePlaybackBackendForTest(true) {}
 
  protected:
-  void CancelPrompt(RemotePlayback* remote_playback) {
-    remote_playback->PromptCancelled();
+  void CancelPrompt(RemotePlayback& remote_playback) {
+    remote_playback.PromptCancelled();
   }
 
-  void SetState(RemotePlayback* remote_playback, WebRemotePlaybackState state) {
-    remote_playback->StateChanged(state);
+  void SetState(RemotePlayback& remote_playback,
+                mojom::blink::PresentationConnectionState state) {
+    remote_playback.StateChanged(state);
   }
 
-  bool IsListening(RemotePlayback* remote_playback) {
-    return remote_playback->is_listening_;
+  bool IsListening(RemotePlayback& remote_playback) {
+    return remote_playback.is_listening_;
   }
 };
 
@@ -88,8 +83,7 @@ TEST_F(RemotePlaybackTest, PromptCancelledRejectsWithNotAllowedError) {
 
   HTMLMediaElement* element =
       HTMLVideoElement::Create(page_holder->GetDocument());
-  RemotePlayback* remote_playback =
-      HTMLMediaElementRemotePlayback::remote(*element);
+  RemotePlayback& remote_playback = RemotePlayback::From(*element);
 
   auto* resolve = MockFunction::Create(scope.GetScriptState());
   auto* reject = MockFunction::Create(scope.GetScriptState());
@@ -97,9 +91,10 @@ TEST_F(RemotePlaybackTest, PromptCancelledRejectsWithNotAllowedError) {
   EXPECT_CALL(*resolve, Call(testing::_)).Times(0);
   EXPECT_CALL(*reject, Call(testing::_)).Times(1);
 
-  std::unique_ptr<UserGestureIndicator> indicator = Frame::NotifyUserActivation(
-      &page_holder->GetFrame(), UserGestureToken::kNewGesture);
-  remote_playback->prompt(scope.GetScriptState())
+  std::unique_ptr<UserGestureIndicator> indicator =
+      LocalFrame::NotifyUserActivation(&page_holder->GetFrame(),
+                                       UserGestureToken::kNewGesture);
+  remote_playback.prompt(scope.GetScriptState())
       .Then(resolve->Bind(), reject->Bind());
   CancelPrompt(remote_playback);
 
@@ -119,8 +114,7 @@ TEST_F(RemotePlaybackTest, PromptConnectedRejectsWhenCancelled) {
 
   HTMLMediaElement* element =
       HTMLVideoElement::Create(page_holder->GetDocument());
-  RemotePlayback* remote_playback =
-      HTMLMediaElementRemotePlayback::remote(*element);
+  RemotePlayback& remote_playback = RemotePlayback::From(*element);
 
   auto* resolve = MockFunction::Create(scope.GetScriptState());
   auto* reject = MockFunction::Create(scope.GetScriptState());
@@ -128,11 +122,13 @@ TEST_F(RemotePlaybackTest, PromptConnectedRejectsWhenCancelled) {
   EXPECT_CALL(*resolve, Call(testing::_)).Times(0);
   EXPECT_CALL(*reject, Call(testing::_)).Times(1);
 
-  SetState(remote_playback, WebRemotePlaybackState::kConnected);
+  SetState(remote_playback,
+           mojom::blink::PresentationConnectionState::CONNECTED);
 
-  std::unique_ptr<UserGestureIndicator> indicator = Frame::NotifyUserActivation(
-      &page_holder->GetFrame(), UserGestureToken::kNewGesture);
-  remote_playback->prompt(scope.GetScriptState())
+  std::unique_ptr<UserGestureIndicator> indicator =
+      LocalFrame::NotifyUserActivation(&page_holder->GetFrame(),
+                                       UserGestureToken::kNewGesture);
+  remote_playback.prompt(scope.GetScriptState())
       .Then(resolve->Bind(), reject->Bind());
   CancelPrompt(remote_playback);
 
@@ -152,8 +148,7 @@ TEST_F(RemotePlaybackTest, PromptConnectedResolvesWhenDisconnected) {
 
   HTMLMediaElement* element =
       HTMLVideoElement::Create(page_holder->GetDocument());
-  RemotePlayback* remote_playback =
-      HTMLMediaElementRemotePlayback::remote(*element);
+  RemotePlayback& remote_playback = RemotePlayback::From(*element);
 
   auto* resolve = MockFunction::Create(scope.GetScriptState());
   auto* reject = MockFunction::Create(scope.GetScriptState());
@@ -161,14 +156,16 @@ TEST_F(RemotePlaybackTest, PromptConnectedResolvesWhenDisconnected) {
   EXPECT_CALL(*resolve, Call(testing::_)).Times(1);
   EXPECT_CALL(*reject, Call(testing::_)).Times(0);
 
-  SetState(remote_playback, WebRemotePlaybackState::kConnected);
+  SetState(remote_playback,
+           mojom::blink::PresentationConnectionState::CONNECTED);
 
-  std::unique_ptr<UserGestureIndicator> indicator = Frame::NotifyUserActivation(
-      &page_holder->GetFrame(), UserGestureToken::kNewGesture);
-  remote_playback->prompt(scope.GetScriptState())
+  std::unique_ptr<UserGestureIndicator> indicator =
+      LocalFrame::NotifyUserActivation(&page_holder->GetFrame(),
+                                       UserGestureToken::kNewGesture);
+  remote_playback.prompt(scope.GetScriptState())
       .Then(resolve->Bind(), reject->Bind());
 
-  SetState(remote_playback, WebRemotePlaybackState::kDisconnected);
+  SetState(remote_playback, mojom::blink::PresentationConnectionState::CLOSED);
 
   // Runs pending promises.
   v8::MicrotasksScope::PerformCheckpoint(scope.GetIsolate());
@@ -186,34 +183,35 @@ TEST_F(RemotePlaybackTest, StateChangeEvents) {
 
   HTMLMediaElement* element =
       HTMLVideoElement::Create(page_holder->GetDocument());
-  RemotePlayback* remote_playback =
-      HTMLMediaElementRemotePlayback::remote(*element);
+  RemotePlayback& remote_playback = RemotePlayback::From(*element);
 
-  auto* connecting_handler =
-      new testing::StrictMock<MockEventListenerForRemotePlayback>();
-  auto* connect_handler =
-      new testing::StrictMock<MockEventListenerForRemotePlayback>();
-  auto* disconnect_handler =
-      new testing::StrictMock<MockEventListenerForRemotePlayback>();
+  auto* connecting_handler = MakeGarbageCollected<
+      testing::StrictMock<MockEventListenerForRemotePlayback>>();
+  auto* connect_handler = MakeGarbageCollected<
+      testing::StrictMock<MockEventListenerForRemotePlayback>>();
+  auto* disconnect_handler = MakeGarbageCollected<
+      testing::StrictMock<MockEventListenerForRemotePlayback>>();
 
-  remote_playback->addEventListener(EventTypeNames::connecting,
-                                    connecting_handler);
-  remote_playback->addEventListener(EventTypeNames::connect, connect_handler);
-  remote_playback->addEventListener(EventTypeNames::disconnect,
-                                    disconnect_handler);
+  remote_playback.addEventListener(event_type_names::kConnecting,
+                                   connecting_handler);
+  remote_playback.addEventListener(event_type_names::kConnect, connect_handler);
+  remote_playback.addEventListener(event_type_names::kDisconnect,
+                                   disconnect_handler);
 
-  EXPECT_CALL(*connecting_handler, handleEvent(testing::_, testing::_))
-      .Times(1);
-  EXPECT_CALL(*connect_handler, handleEvent(testing::_, testing::_)).Times(1);
-  EXPECT_CALL(*disconnect_handler, handleEvent(testing::_, testing::_))
-      .Times(1);
+  EXPECT_CALL(*connecting_handler, Invoke(testing::_, testing::_)).Times(1);
+  EXPECT_CALL(*connect_handler, Invoke(testing::_, testing::_)).Times(1);
+  EXPECT_CALL(*disconnect_handler, Invoke(testing::_, testing::_)).Times(1);
 
-  SetState(remote_playback, WebRemotePlaybackState::kConnecting);
-  SetState(remote_playback, WebRemotePlaybackState::kConnecting);
-  SetState(remote_playback, WebRemotePlaybackState::kConnected);
-  SetState(remote_playback, WebRemotePlaybackState::kConnected);
-  SetState(remote_playback, WebRemotePlaybackState::kDisconnected);
-  SetState(remote_playback, WebRemotePlaybackState::kDisconnected);
+  SetState(remote_playback,
+           mojom::blink::PresentationConnectionState::CONNECTING);
+  SetState(remote_playback,
+           mojom::blink::PresentationConnectionState::CONNECTING);
+  SetState(remote_playback,
+           mojom::blink::PresentationConnectionState::CONNECTED);
+  SetState(remote_playback,
+           mojom::blink::PresentationConnectionState::CONNECTED);
+  SetState(remote_playback, mojom::blink::PresentationConnectionState::CLOSED);
+  SetState(remote_playback, mojom::blink::PresentationConnectionState::CLOSED);
 
   // Verify mock expectations explicitly as the mock objects are garbage
   // collected.
@@ -230,8 +228,7 @@ TEST_F(RemotePlaybackTest,
 
   HTMLMediaElement* element =
       HTMLVideoElement::Create(page_holder->GetDocument());
-  RemotePlayback* remote_playback =
-      HTMLMediaElementRemotePlayback::remote(*element);
+  RemotePlayback& remote_playback = RemotePlayback::From(*element);
 
   MockFunction* resolve = MockFunction::Create(scope.GetScriptState());
   MockFunction* reject = MockFunction::Create(scope.GetScriptState());
@@ -239,12 +236,13 @@ TEST_F(RemotePlaybackTest,
   EXPECT_CALL(*resolve, Call(testing::_)).Times(0);
   EXPECT_CALL(*reject, Call(testing::_)).Times(1);
 
-  std::unique_ptr<UserGestureIndicator> indicator = Frame::NotifyUserActivation(
-      &page_holder->GetFrame(), UserGestureToken::kNewGesture);
-  remote_playback->prompt(scope.GetScriptState())
+  std::unique_ptr<UserGestureIndicator> indicator =
+      LocalFrame::NotifyUserActivation(&page_holder->GetFrame(),
+                                       UserGestureToken::kNewGesture);
+  remote_playback.prompt(scope.GetScriptState())
       .Then(resolve->Bind(), reject->Bind());
   HTMLMediaElementRemotePlayback::SetBooleanAttribute(
-      HTMLNames::disableremoteplaybackAttr, *element, true);
+      html_names::kDisableremoteplaybackAttr, *element, true);
 
   // Runs pending promises.
   v8::MicrotasksScope::PerformCheckpoint(scope.GetIsolate());
@@ -262,8 +260,7 @@ TEST_F(RemotePlaybackTest, DisableRemotePlaybackCancelsAvailabilityCallbacks) {
 
   HTMLMediaElement* element =
       HTMLVideoElement::Create(page_holder->GetDocument());
-  RemotePlayback* remote_playback =
-      HTMLMediaElementRemotePlayback::remote(*element);
+  RemotePlayback& remote_playback = RemotePlayback::From(*element);
 
   MockFunction* callback_function =
       MockFunction::Create(scope.GetScriptState());
@@ -281,11 +278,11 @@ TEST_F(RemotePlaybackTest, DisableRemotePlaybackCancelsAvailabilityCallbacks) {
   EXPECT_CALL(*reject, Call(testing::_)).Times(0);
 
   remote_playback
-      ->watchAvailability(scope.GetScriptState(), availability_callback)
+      .watchAvailability(scope.GetScriptState(), availability_callback)
       .Then(resolve->Bind(), reject->Bind());
 
   HTMLMediaElementRemotePlayback::SetBooleanAttribute(
-      HTMLNames::disableremoteplaybackAttr, *element, true);
+      html_names::kDisableremoteplaybackAttr, *element, true);
 
   // Runs pending promises.
   v8::MicrotasksScope::PerformCheckpoint(scope.GetIsolate());
@@ -305,8 +302,7 @@ TEST_F(RemotePlaybackTest, PromptThrowsWhenBackendDisabled) {
 
   HTMLMediaElement* element =
       HTMLVideoElement::Create(page_holder->GetDocument());
-  RemotePlayback* remote_playback =
-      HTMLMediaElementRemotePlayback::remote(*element);
+  RemotePlayback& remote_playback = RemotePlayback::From(*element);
 
   auto* resolve = MockFunction::Create(scope.GetScriptState());
   auto* reject = MockFunction::Create(scope.GetScriptState());
@@ -314,9 +310,10 @@ TEST_F(RemotePlaybackTest, PromptThrowsWhenBackendDisabled) {
   EXPECT_CALL(*resolve, Call(testing::_)).Times(0);
   EXPECT_CALL(*reject, Call(testing::_)).Times(1);
 
-  std::unique_ptr<UserGestureIndicator> indicator = Frame::NotifyUserActivation(
-      &page_holder->GetFrame(), UserGestureToken::kNewGesture);
-  remote_playback->prompt(scope.GetScriptState())
+  std::unique_ptr<UserGestureIndicator> indicator =
+      LocalFrame::NotifyUserActivation(&page_holder->GetFrame(),
+                                       UserGestureToken::kNewGesture);
+  remote_playback.prompt(scope.GetScriptState())
       .Then(resolve->Bind(), reject->Bind());
 
   // Runs pending promises.
@@ -336,8 +333,7 @@ TEST_F(RemotePlaybackTest, WatchAvailabilityWorksWhenBackendDisabled) {
 
   HTMLMediaElement* element =
       HTMLVideoElement::Create(page_holder->GetDocument());
-  RemotePlayback* remote_playback =
-      HTMLMediaElementRemotePlayback::remote(*element);
+  RemotePlayback& remote_playback = RemotePlayback::From(*element);
 
   MockFunction* callback_function =
       MockFunction::Create(scope.GetScriptState());
@@ -355,7 +351,7 @@ TEST_F(RemotePlaybackTest, WatchAvailabilityWorksWhenBackendDisabled) {
   EXPECT_CALL(*reject, Call(testing::_)).Times(0);
 
   remote_playback
-      ->watchAvailability(scope.GetScriptState(), availability_callback)
+      .watchAvailability(scope.GetScriptState(), availability_callback)
       .Then(resolve->Bind(), reject->Bind());
 
   // Runs pending promises.
@@ -369,27 +365,25 @@ TEST_F(RemotePlaybackTest, WatchAvailabilityWorksWhenBackendDisabled) {
 }
 
 TEST_F(RemotePlaybackTest, IsListening) {
-  ScopedNewRemotePlaybackPipelineForTest new_remote_playback_pipeline(true);
   V8TestingScope scope;
 
   auto page_holder = DummyPageHolder::Create();
 
   HTMLMediaElement* element =
       HTMLVideoElement::Create(page_holder->GetDocument());
-  RemotePlayback* remote_playback =
-      HTMLMediaElementRemotePlayback::remote(*element);
+  RemotePlayback& remote_playback = RemotePlayback::From(*element);
 
   LocalFrame& frame = page_holder->GetFrame();
   MockPresentationController* mock_controller =
-      new MockPresentationController(frame);
+      MakeGarbageCollected<MockPresentationController>(frame);
   Supplement<LocalFrame>::ProvideTo(
       frame, static_cast<PresentationController*>(mock_controller));
 
   EXPECT_CALL(*mock_controller,
-              AddAvailabilityObserver(testing::Eq(remote_playback)))
+              AddAvailabilityObserver(testing::Eq(&remote_playback)))
       .Times(2);
   EXPECT_CALL(*mock_controller,
-              RemoveAvailabilityObserver(testing::Eq(remote_playback)))
+              RemoveAvailabilityObserver(testing::Eq(&remote_playback)))
       .Times(2);
 
   MockFunction* callback_function =
@@ -401,33 +395,33 @@ TEST_F(RemotePlaybackTest, IsListening) {
   // message loop.
   EXPECT_CALL(*callback_function, Call(testing::_)).Times(2);
 
-  remote_playback->watchAvailability(scope.GetScriptState(),
-                                     availability_callback);
+  remote_playback.watchAvailability(scope.GetScriptState(),
+                                    availability_callback);
 
-  ASSERT_TRUE(remote_playback->Urls().IsEmpty());
+  ASSERT_TRUE(remote_playback.Urls().IsEmpty());
   ASSERT_FALSE(IsListening(remote_playback));
 
-  remote_playback->SourceChanged(WebURL(KURL("http://www.example.com")), true);
-  ASSERT_EQ((size_t)1, remote_playback->Urls().size());
+  remote_playback.SourceChanged(WebURL(KURL("http://www.example.com")), true);
+  ASSERT_EQ((size_t)1, remote_playback.Urls().size());
   ASSERT_TRUE(IsListening(remote_playback));
-  remote_playback->AvailabilityChanged(mojom::ScreenAvailability::AVAILABLE);
+  remote_playback.AvailabilityChanged(mojom::ScreenAvailability::AVAILABLE);
 
-  remote_playback->cancelWatchAvailability(scope.GetScriptState());
-  ASSERT_EQ((size_t)1, remote_playback->Urls().size());
+  remote_playback.cancelWatchAvailability(scope.GetScriptState());
+  ASSERT_EQ((size_t)1, remote_playback.Urls().size());
   ASSERT_FALSE(IsListening(remote_playback));
 
-  remote_playback->watchAvailability(scope.GetScriptState(),
-                                     availability_callback);
-  ASSERT_EQ((size_t)1, remote_playback->Urls().size());
+  remote_playback.watchAvailability(scope.GetScriptState(),
+                                    availability_callback);
+  ASSERT_EQ((size_t)1, remote_playback.Urls().size());
   ASSERT_TRUE(IsListening(remote_playback));
-  remote_playback->AvailabilityChanged(mojom::ScreenAvailability::AVAILABLE);
+  remote_playback.AvailabilityChanged(mojom::ScreenAvailability::AVAILABLE);
 
-  remote_playback->SourceChanged(WebURL(), false);
-  ASSERT_TRUE(remote_playback->Urls().IsEmpty());
+  remote_playback.SourceChanged(WebURL(), false);
+  ASSERT_TRUE(remote_playback.Urls().IsEmpty());
   ASSERT_FALSE(IsListening(remote_playback));
 
-  remote_playback->SourceChanged(WebURL(KURL("@$@#@#")), true);
-  ASSERT_TRUE(remote_playback->Urls().IsEmpty());
+  remote_playback.SourceChanged(WebURL(KURL("@$@#@#")), true);
+  ASSERT_TRUE(remote_playback.Urls().IsEmpty());
   ASSERT_FALSE(IsListening(remote_playback));
 
   // Runs pending promises.

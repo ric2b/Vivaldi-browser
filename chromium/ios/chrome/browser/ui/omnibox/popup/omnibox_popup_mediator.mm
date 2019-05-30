@@ -4,14 +4,19 @@
 
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_mediator.h"
 
+#include "base/feature_list.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #import "components/image_fetcher/ios/ios_image_data_fetcher_wrapper.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_result.h"
+#include "components/omnibox/common/omnibox_features.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/ntp/ntp_util.h"
 #import "ios/chrome/browser/ui/omnibox/autocomplete_match_formatter.h"
-#import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_generic_presenter.h"
+#import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_presenter.h"
+#import "ios/chrome/browser/web_state_list/web_state_list.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -85,11 +90,7 @@
   }
   self.open = !result.empty();
 
-  if (self.open) {
-    [self.presenter updateHeightAndAnimateAppearanceIfNecessary];
-  } else {
-    [self.presenter animateCollapse];
-  }
+  [self.presenter updatePopup];
 }
 
 - (void)setTextAlignment:(NSTextAlignment)alignment {
@@ -111,23 +112,27 @@
   const AutocompleteMatch& match =
       ((const AutocompleteResult&)_currentResult).match_at(row);
 
-  _delegate->OnMatchSelected(match, row);
+  _delegate->OnMatchSelected(match, row, WindowOpenDisposition::CURRENT_TAB);
 }
 
 - (void)autocompleteResultConsumer:(id<AutocompleteResultConsumer>)sender
-          didSelectRowForAppending:(NSUInteger)row {
+        didTapTrailingButtonForRow:(NSUInteger)row {
   const AutocompleteMatch& match =
       ((const AutocompleteResult&)_currentResult).match_at(row);
 
-  if (AutocompleteMatch::IsSearchType(match.type)) {
-    base::RecordAction(
-        base::UserMetricsAction("MobileOmniboxRefineSuggestion.Search"));
+  if (match.has_tab_match) {
+    _delegate->OnMatchSelected(match, row,
+                               WindowOpenDisposition::SWITCH_TO_TAB);
   } else {
-    base::RecordAction(
-        base::UserMetricsAction("MobileOmniboxRefineSuggestion.Url"));
+    if (AutocompleteMatch::IsSearchType(match.type)) {
+      base::RecordAction(
+          base::UserMetricsAction("MobileOmniboxRefineSuggestion.Search"));
+    } else {
+      base::RecordAction(
+          base::UserMetricsAction("MobileOmniboxRefineSuggestion.Url"));
+    }
+    _delegate->OnMatchSelectedForAppending(match);
   }
-
-  _delegate->OnMatchSelectedForAppending(match);
 }
 
 - (void)autocompleteResultConsumer:(id<AutocompleteResultConsumer>)sender

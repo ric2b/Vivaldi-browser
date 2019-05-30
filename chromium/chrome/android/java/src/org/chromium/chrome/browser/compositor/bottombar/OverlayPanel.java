@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.compositor.bottombar;
 import android.app.Activity;
 import android.content.Context;
 import android.graphics.RectF;
+import android.os.Handler;
 import android.support.annotation.IntDef;
 import android.view.ViewGroup;
 
@@ -47,14 +48,23 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
     /** The extra dp added around the close button touch target. */
     private static final int CLOSE_BUTTON_TOUCH_SLOP_DP = 5;
 
+    /** The delay after which the hide progress will be hidden. */
+    private static final long HIDE_PROGRESS_BAR_DELAY_MS = 1000 / 60 * 4;
+
     /** State of the Overlay Panel. */
-    public static enum PanelState {
+    @IntDef({PanelState.UNDEFINED, PanelState.CLOSED, PanelState.PEEKED, PanelState.EXPANDED,
+            PanelState.MAXIMIZED})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface PanelState {
+        // Values can't have gaps and should be numerated from 0.
+        // Values CLOSED - MAXIMIZED are sorted and show next states.
         // TODO(pedrosimonetti): consider removing the UNDEFINED state
-        UNDEFINED,
-        CLOSED,
-        PEEKED,
-        EXPANDED,
-        MAXIMIZED
+        int UNDEFINED = 0;
+        int CLOSED = 1;
+        int PEEKED = 2;
+        int EXPANDED = 3;
+        int MAXIMIZED = 4;
+        int NUM_ENTRIES = 5;
     }
 
     /**
@@ -92,6 +102,8 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
         int PANEL_SUPPRESS = 18;
         int PANEL_UNSUPPRESS = 19;
         int TAP_SUPPRESS = 20;
+        // Always update MAX_VALUE to match the last StateChangeReason in the list.
+        int MAX_VALUE = 20;
     }
 
     /** The activity this panel is in. */
@@ -300,7 +312,7 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
      * @return The absolute amount in DP that the browser controls have shifted off screen.
      */
     protected float getBrowserControlsOffsetDp() {
-        if (mActivity == null || mActivity.getFullscreenManager() == null) return 0.0f;
+        if (mActivity == null) return 0.0f;
         return -mActivity.getFullscreenManager().getTopControlOffset() * mPxToDp;
     }
 
@@ -341,6 +353,16 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
         } else {
             baseContentView.clearFocus();
         }
+    }
+
+    /**
+     * Returns whether the panel has been activated -- asked to show.  It may not yet be physically
+     * showing due animation.  Use {@link #isShowing} instead to determine if the panel is
+     * physically visible.
+     * @return Whether the panel is showing or about to show.
+     */
+    public boolean isActive() {
+        return mPanelShown;
     }
 
     // ============================================================================================
@@ -401,13 +423,45 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
     }
 
     /**
+     * Progress observer progress indicator animation for a panel.
+     */
+    public class PanelProgressObserver extends OverlayContentProgressObserver {
+        @Override
+        public void onProgressBarStarted() {
+            setProgressBarCompletion(0);
+            setProgressBarVisible(true);
+            requestUpdate();
+        }
+
+        @Override
+        public void onProgressBarUpdated(int progress) {
+            setProgressBarCompletion(progress);
+            requestUpdate();
+        }
+
+        @Override
+        public void onProgressBarFinished() {
+            // Hides the Progress Bar after a delay to make sure it is rendered for at least
+            // a few frames, otherwise its completion won't be visually noticeable.
+            new Handler().postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    setProgressBarVisible(false);
+                    requestUpdate();
+                }
+            }, HIDE_PROGRESS_BAR_DELAY_MS);
+        }
+    }
+
+    /**
      * Create a new OverlayPanelContent object. This can be overridden for tests.
      * @return A new OverlayPanelContent object.
      */
     @Override
     public OverlayPanelContent createNewOverlayPanelContent() {
         return new OverlayPanelContent(new OverlayContentDelegate(),
-                new OverlayContentProgressObserver(), mActivity, getBarHeight());
+                new OverlayContentProgressObserver(), mActivity, /* isIncognito= */ false,
+                getBarHeight());
     }
 
     /**
@@ -874,7 +928,7 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
 
     @Override
     public boolean onBackPressed() {
-        if (!isPanelOpened()) return false;
+        if (!isShowing()) return false;
         closePanel(StateChangeReason.BACK_PRESS, true);
         return true;
     }
@@ -889,29 +943,5 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
     public void tabModelSwitched(boolean incognito) {}
 
     @Override
-    public void tabSelected(long time, boolean incognito, int id, int prevId) {}
-
-    @Override
-    public void tabMoved(long time, boolean incognito, int id, int oldIndex, int newIndex) {}
-
-    @Override
-    public void tabClosed(long time, boolean incognito, int id) {}
-
-    @Override
-    public void tabClosureCancelled(long time, boolean incognito, int id) {}
-
-    @Override
     public void tabCreated(long time, boolean incognito, int id, int prevId, boolean selected) {}
-
-    @Override
-    public void tabPageLoadStarted(int id, boolean incognito) {}
-
-    @Override
-    public void tabPageLoadFinished(int id, boolean incognito) {}
-
-    @Override
-    public void tabLoadStarted(int id, boolean incognito) {}
-
-    @Override
-    public void tabLoadFinished(int id, boolean incognito) {}
 }

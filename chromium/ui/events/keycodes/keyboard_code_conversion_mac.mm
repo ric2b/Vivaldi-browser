@@ -11,8 +11,8 @@
 #include "base/logging.h"
 #include "base/mac/mac_logging.h"
 #include "base/mac/scoped_cftyperef.h"
-#include "base/macros.h"
 #include "base/memory/scoped_policy.h"
+#include "base/stl_util.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 
 namespace ui {
@@ -573,9 +573,9 @@ int MacKeyCodeForWindowsKeyCode(KeyboardCode keycode,
   from.keycode = keycode;
 
   const KeyCodeMap* ptr = std::lower_bound(
-      kKeyCodesMap, kKeyCodesMap + arraysize(kKeyCodesMap), from);
+      kKeyCodesMap, kKeyCodesMap + base::size(kKeyCodesMap), from);
 
-  if (ptr >= kKeyCodesMap + arraysize(kKeyCodesMap) ||
+  if (ptr >= kKeyCodesMap + base::size(kKeyCodesMap) ||
       ptr->keycode != keycode || ptr->macKeycode == -1)
     return -1;
 
@@ -892,7 +892,7 @@ UniChar TranslatedUnicodeCharFromKeyCode(TISInputSourceRef input_source,
       &buffer_length, char_buffer);
   OSSTATUS_DCHECK(ret == noErr, ret);
 
-  // TODO(chongz): Handle multiple character case. Should be rare.
+  // TODO(input-dev): Handle multiple character case. Should be rare.
   return char_buffer[0];
 }
 

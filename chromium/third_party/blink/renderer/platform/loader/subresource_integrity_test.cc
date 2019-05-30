@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/platform/loader/subresource_integrity.h"
 
 #include "base/memory/scoped_refptr.h"
+#include "base/stl_util.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/platform/crypto.h"
@@ -84,14 +85,10 @@ class SubresourceIntegrityTest : public testing::Test {
  public:
   SubresourceIntegrityTest()
       : sec_url("https://example.test:443"),
-        insec_url("http://example.test:80") {}
+        insec_url("http://example.test:80"),
+        context(MakeGarbageCollected<MockFetchContext>()) {}
 
  protected:
-  void SetUp() override {
-    context =
-        MockFetchContext::Create(MockFetchContext::kShouldLoadNewResource);
-  }
-
   SubresourceIntegrity::IntegrityFeatures Features() const {
     return RuntimeEnabledFeatures::SignatureBasedIntegrityEnabledByRuntimeFlag()
                ? SubresourceIntegrity::IntegrityFeatures::kSignatures
@@ -208,24 +205,21 @@ class SubresourceIntegrityTest : public testing::Test {
   enum Expectation { kIntegritySuccess, kIntegrityFailure };
 
   struct TestCase {
-    const KURL& origin;
-    const KURL& target;
-    const KURL* allow_origin_url;
-    const ServiceWorkerMode service_worker;
+    const KURL url;
+    network::mojom::FetchRequestMode request_mode;
+    network::mojom::FetchResponseType response_type;
     const Expectation expectation;
   };
 
-  void CheckExpectedIntegrity(const char* integrity, const TestCase test) {
+  void CheckExpectedIntegrity(const char* integrity, const TestCase& test) {
     CheckExpectedIntegrity(integrity, test, test.expectation);
   }
 
   // Allows to overwrite the test expectation for cases that are always expected
   // to fail:
   void CheckExpectedIntegrity(const char* integrity,
-                              const TestCase test,
+                              const TestCase& test,
                               Expectation expectation) {
-    context->SetSecurityOrigin(SecurityOrigin::Create(test.origin));
-
     IntegrityMetadataSet metadata_set;
     EXPECT_EQ(SubresourceIntegrity::kIntegrityParseValidResult,
               SubresourceIntegrity::ParseIntegrityAttribute(
@@ -234,54 +228,29 @@ class SubresourceIntegrityTest : public testing::Test {
     SubresourceIntegrity::ReportInfo report_info;
     EXPECT_EQ(expectation == kIntegritySuccess,
               SubresourceIntegrity::CheckSubresourceIntegrity(
-                  metadata_set, kBasicScript, strlen(kBasicScript), test.target,
-                  *CreateTestResource(test.target, test.allow_origin_url,
-                                      test.service_worker),
+                  metadata_set, kBasicScript, strlen(kBasicScript), test.url,
+                  *CreateTestResource(test.url, test.request_mode,
+                                      test.response_type),
                   report_info));
   }
 
-  Resource* CreateTestResource(const KURL& url,
-                               const KURL* allow_origin_url,
-                               ServiceWorkerMode service_worker_mode) {
-    ResourceFetcher* fetcher = ResourceFetcher::Create(context);
-    ResourceLoadScheduler* scheduler = ResourceLoadScheduler::Create();
-    Resource* resource = RawResource::CreateForTest(url, Resource::kRaw);
-    ResourceLoader* loader =
-        ResourceLoader::Create(fetcher, scheduler, resource);
+  Resource* CreateTestResource(
+      const KURL& url,
+      network::mojom::FetchRequestMode request_mode,
+      network::mojom::FetchResponseType response_type) {
+    Resource* resource = RawResource::CreateForTest(
+        url, SecurityOrigin::CreateUniqueOpaque(), ResourceType::kRaw);
 
     ResourceRequest request;
     request.SetURL(url);
+    request.SetFetchRequestMode(request_mode);
 
     ResourceResponse response(url);
-    response.SetHTTPStatusCode(200);
-
-    if (allow_origin_url) {
-      request.SetFetchRequestMode(network::mojom::FetchRequestMode::kCORS);
-      resource->MutableOptions().cors_handling_by_resource_fetcher =
-          kEnableCORSHandlingByResourceFetcher;
-      response.SetHTTPHeaderField(
-          "access-control-allow-origin",
-          SecurityOrigin::Create(*allow_origin_url)->ToAtomicString());
-      response.SetHTTPHeaderField("access-control-allow-credentials", "true");
-    }
+    response.SetHttpStatusCode(200);
+    response.SetType(response_type);
 
     resource->SetResourceRequest(request);
-
-    if (service_worker_mode != kNoServiceWorker) {
-      response.SetWasFetchedViaServiceWorker(true);
-
-      if (service_worker_mode == kSWOpaqueResponse) {
-        response.SetType(network::mojom::FetchResponseType::kOpaque);
-      } else {
-        response.SetType(network::mojom::FetchResponseType::kDefault);
-      }
-    }
-
-    StringBuilder cors_error_msg;
-    CORSStatus cors_status =
-        loader->DetermineCORSStatus(response, cors_error_msg);
-    resource->SetCORSStatus(cors_status);
-
+    resource->SetResponse(response);
     return resource;
   }
 
@@ -468,7 +437,7 @@ TEST_F(SubresourceIntegrityTest, Parsing) {
       "sha384-XVVXBGoYw6AJOh9J+Z8pBDMVVPfkBpngexkA7JqZu8d5GENND6TEIup/tA1v5GPr "
       "sha512-tbUPioKbVBplr0b1ucnWB57SJWt4x9dOE0Vy2mzCXvH3FepqDZ+"
       "07yMK81ytlg0MPaIrPAjcHqba5csorDWtKg==",
-      valid_sha384_and_sha512, arraysize(valid_sha384_and_sha512));
+      valid_sha384_and_sha512, base::size(valid_sha384_and_sha512));
 
   const IntegrityMetadata valid_sha256_and_sha256[] = {
       IntegrityMetadata("BpfBw7ivV8q2jLiT13fxDYAe2tJllusRSZ273h2nFSE=",
@@ -477,7 +446,7 @@ TEST_F(SubresourceIntegrityTest, Parsing) {
   };
   ExpectParseMultipleHashes(
       "sha256-BpfBw7ivV8q2jLiT13fxDYAe2tJllusRSZ273h2nFSE= sha256-deadbeef",
-      valid_sha256_and_sha256, arraysize(valid_sha256_and_sha256));
+      valid_sha256_and_sha256, base::size(valid_sha256_and_sha256));
 
   const IntegrityMetadata valid_sha256_and_invalid_sha256[] = {
       IntegrityMetadata("BpfBw7ivV8q2jLiT13fxDYAe2tJllusRSZ273h2nFSE=",
@@ -486,7 +455,7 @@ TEST_F(SubresourceIntegrityTest, Parsing) {
   ExpectParseMultipleHashes(
       "sha256-BpfBw7ivV8q2jLiT13fxDYAe2tJllusRSZ273h2nFSE= sha256-!!!!",
       valid_sha256_and_invalid_sha256,
-      arraysize(valid_sha256_and_invalid_sha256));
+      base::size(valid_sha256_and_invalid_sha256));
 
   const IntegrityMetadata invalid_sha256_and_valid_sha256[] = {
       IntegrityMetadata("BpfBw7ivV8q2jLiT13fxDYAe2tJllusRSZ273h2nFSE=",
@@ -495,7 +464,7 @@ TEST_F(SubresourceIntegrityTest, Parsing) {
   ExpectParseMultipleHashes(
       "sha256-!!! sha256-BpfBw7ivV8q2jLiT13fxDYAe2tJllusRSZ273h2nFSE=",
       invalid_sha256_and_valid_sha256,
-      arraysize(invalid_sha256_and_valid_sha256));
+      base::size(invalid_sha256_and_valid_sha256));
 
   ExpectParse("sha256-BpfBw7ivV8q2jLiT13fxDYAe2tJllusRSZ273h2nFSE=?foo=bar",
               "BpfBw7ivV8q2jLiT13fxDYAe2tJllusRSZ273h2nFSE=",
@@ -558,35 +527,28 @@ TEST_F(SubresourceIntegrityTest, ParsingBase64) {
 // requests, successful and failing CORS checks as well as when the response was
 // handled by a service worker.
 TEST_F(SubresourceIntegrityTest, OriginIntegrity) {
-  TestCase cases[] = {
-      // Secure origin, same origin -> integrity expected:
-      {sec_url, sec_url, nullptr, kNoServiceWorker, kIntegritySuccess},
-      {sec_url, sec_url, nullptr, kSWClearResponse, kIntegritySuccess},
+  using network::mojom::FetchRequestMode;
+  using network::mojom::FetchResponseType;
+  constexpr auto kOk = kIntegritySuccess;
+  constexpr auto kFail = kIntegrityFailure;
+  const KURL& url = sec_url;
 
-      // Insecure origin, secure target, CORS ok -> integrity expected:
-      {insec_url, sec_url, &insec_url, kNoServiceWorker, kIntegritySuccess},
-      {insec_url, sec_url, &insec_url, kSWClearResponse, kIntegritySuccess},
-      {insec_url, sec_url, nullptr, kSWClearResponse, kIntegritySuccess},
+  const TestCase cases[] = {
+      // FetchResponseType::kError never arrives because it is a loading error.
+      {url, FetchRequestMode::kNoCors, FetchResponseType::kBasic, kOk},
+      {url, FetchRequestMode::kNoCors, FetchResponseType::kCors, kOk},
+      {url, FetchRequestMode::kNoCors, FetchResponseType::kDefault, kOk},
+      {url, FetchRequestMode::kNoCors, FetchResponseType::kOpaque, kFail},
+      {url, FetchRequestMode::kNoCors, FetchResponseType::kOpaqueRedirect,
+       kFail},
 
-      // Secure origin, insecure target, CORS ok -> no failure expected:
-      {sec_url, insec_url, &sec_url, kNoServiceWorker, kIntegritySuccess},
-      {sec_url, insec_url, &sec_url, kSWClearResponse, kIntegritySuccess},
-      {sec_url, insec_url, nullptr, kSWClearResponse, kIntegritySuccess},
-
-      // Insecure origin, secure target, no CORS headers -> failure expected:
-      {insec_url, sec_url, nullptr, kNoServiceWorker, kIntegrityFailure},
-
-      // Insecure origin, secure target, CORS failure -> failure expected:
-      {insec_url, sec_url, &sec_url, kNoServiceWorker, kIntegrityFailure},
-      {insec_url, sec_url, &sec_url, kSWOpaqueResponse, kIntegrityFailure},
-      {insec_url, sec_url, nullptr, kSWOpaqueResponse, kIntegrityFailure},
-
-      // Secure origin, same origin, opaque response from service worker ->
-      // failure expected:
-      {sec_url, sec_url, &sec_url, kSWOpaqueResponse, kIntegrityFailure},
-
-      // Insecure origin, insecure target, same origin-> failure expected:
-      {sec_url, insec_url, nullptr, kNoServiceWorker, kIntegrityFailure},
+      // FetchResponseType::kError never arrives because it is a loading error.
+      // FetchResponseType::kOpaque and FetchResponseType::kOpaqueResponse
+      // never arrives: even when service worker is involved, it's handled as
+      // an error.
+      {url, FetchRequestMode::kCors, FetchResponseType::kBasic, kOk},
+      {url, FetchRequestMode::kCors, FetchResponseType::kCors, kOk},
+      {url, FetchRequestMode::kCors, FetchResponseType::kDefault, kOk},
   };
 
   MockWebCryptoDigestorFactory factory_sha256(
@@ -613,19 +575,13 @@ TEST_F(SubresourceIntegrityTest, OriginIntegrity) {
           &factory_sha512, &MockWebCryptoDigestorFactory::Create));
 
   for (const auto& test : cases) {
-    SCOPED_TRACE(
-        testing::Message()
-        << "Origin: " << test.origin.BaseAsString()
-        << ", target: " << test.target.BaseAsString()
-        << ", CORS access-control-allow-origin header: "
-        << (test.allow_origin_url ? test.allow_origin_url->BaseAsString() : "-")
-        << ", service worker: "
-        << (test.service_worker == kNoServiceWorker
-                ? "no"
-                : (test.service_worker == kSWClearResponse ? "clear response"
-                                                           : "opaque response"))
-        << ", expected result: "
-        << (test.expectation == kIntegritySuccess ? "integrity" : "failure"));
+    SCOPED_TRACE(testing::Message()
+                 << ", target: " << test.url.BaseAsString()
+                 << ", request mode: " << test.request_mode
+                 << ", response type: " << test.response_type
+                 << ", expected result: "
+                 << (test.expectation == kIntegritySuccess ? "integrity"
+                                                           : "failure"));
 
     // Verify basic sha256, sha384, and sha512 integrity checks.
     CheckExpectedIntegrity(kSha256Integrity, test);

@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
+#include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "media/mojo/interfaces/interface_factory.mojom.h"
 #include "url/gurl.h"
@@ -32,15 +33,19 @@ class CONTENT_EXPORT MediaInterfaceFactory
   // media::mojom::InterfaceFactory implementation.
   void CreateAudioDecoder(media::mojom::AudioDecoderRequest request) final;
   void CreateVideoDecoder(media::mojom::VideoDecoderRequest request) final;
-  void CreateRenderer(media::mojom::HostedRendererType type,
-                      const std::string& type_specific_id,
-                      media::mojom::RendererRequest request) final;
+  void CreateDefaultRenderer(const std::string& audio_device_id,
+                             media::mojom::RendererRequest request) final;
+#if defined(OS_ANDROID)
+  void CreateFlingingRenderer(const std::string& presentation_id,
+                              media::mojom::RendererRequest request) final;
+  void CreateMediaPlayerRenderer(media::mojom::RendererRequest request) final;
+#endif  // defined(OS_ANDROID)
   void CreateCdm(const std::string& key_system,
                  media::mojom::ContentDecryptionModuleRequest request) final;
   void CreateDecryptor(int cdm_id,
                        media::mojom::DecryptorRequest request) final;
   // TODO(xhwang): We should not expose this here.
-  void CreateCdmProxy(const std::string& cdm_guid,
+  void CreateCdmProxy(const base::Token& cdm_guid,
                       media::mojom::CdmProxyRequest request) final;
 
  private:

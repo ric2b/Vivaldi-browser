@@ -52,7 +52,11 @@ class DeprecatedStorageInfo final : public ScriptWrappable {
     kPersistent,
   };
 
-  static DeprecatedStorageInfo* Create() { return new DeprecatedStorageInfo(); }
+  static DeprecatedStorageInfo* Create() {
+    return MakeGarbageCollected<DeprecatedStorageInfo>();
+  }
+
+  DeprecatedStorageInfo();
 
   void queryUsageAndQuota(ScriptState*,
                           int storage_type,
@@ -61,15 +65,13 @@ class DeprecatedStorageInfo final : public ScriptWrappable {
 
   void requestQuota(ScriptState*,
                     int storage_type,
-                    unsigned long long new_quota_in_bytes,
+                    uint64_t new_quota_in_bytes,
                     V8StorageQuotaCallback* = nullptr,
                     V8StorageErrorCallback* = nullptr);
 
   void Trace(blink::Visitor*) override;
 
  private:
-  DeprecatedStorageInfo();
-
   DeprecatedStorageQuota* GetStorageQuota(int storage_type);
 
   mutable Member<DeprecatedStorageQuota> temporary_storage_;

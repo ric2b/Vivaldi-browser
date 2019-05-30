@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 
+#include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
@@ -384,10 +385,12 @@ TEST_F(SyncableFileOperationRunnerTest, CopyInForeignFile) {
   EXPECT_EQ(1, callback_count_);
 
   // Now the file must have been created and have the same content as temp_path.
+  // TODO(mek): AdaptCallbackForRepeating is needed here because
+  // CannedSyncableFileSystem hasn't switched to OnceCallback yet.
   ResetCallbackStatus();
   file_system_.DoVerifyFile(
       URL(kFile), kTestData,
-      ExpectStatus(FROM_HERE, File::FILE_OK));
+      base::AdaptCallbackForRepeating(ExpectStatus(FROM_HERE, File::FILE_OK)));
   content::RunAllTasksUntilIdle();
   EXPECT_EQ(1, callback_count_);
 }

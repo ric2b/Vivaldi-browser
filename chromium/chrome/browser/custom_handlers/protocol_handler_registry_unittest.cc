@@ -9,8 +9,10 @@
 #include <memory>
 #include <set>
 
+#include "base/bind.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -20,6 +22,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/sync_preferences/pref_service_syncable.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_source.h"
@@ -50,8 +53,8 @@ void AssertInterceptedIO(
 void AssertIntercepted(
     const GURL& url,
     net::URLRequestJobFactory* interceptor) {
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
       base::BindOnce(AssertInterceptedIO, url, base::Unretained(interceptor)));
   base::RunLoop().RunUntilIdle();
 }
@@ -105,9 +108,9 @@ void AssertWillHandle(
     const std::string& scheme,
     bool expected,
     ProtocolHandlerRegistry::JobInterceptorFactory* interceptor) {
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::BindOnce(AssertWillHandleIO, scheme, expected,
-                                         base::Unretained(interceptor)));
+  base::PostTaskWithTraits(FROM_HERE, {BrowserThread::IO},
+                           base::BindOnce(AssertWillHandleIO, scheme, expected,
+                                          base::Unretained(interceptor)));
   base::RunLoop().RunUntilIdle();
 }
 
@@ -151,9 +154,9 @@ class FakeDelegate : public ProtocolHandlerRegistry::Delegate {
     // the result with a task to the current thread.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(registry->GetDefaultWebClientCallback(protocol),
-                   force_os_failure_ ? shell_integration::NOT_DEFAULT
-                                     : shell_integration::IS_DEFAULT));
+        base::BindOnce(registry->GetDefaultWebClientCallback(protocol),
+                       force_os_failure_ ? shell_integration::NOT_DEFAULT
+                                         : shell_integration::IS_DEFAULT));
 
     if (!force_os_failure_)
       os_registered_protocols_.insert(protocol);
@@ -270,8 +273,7 @@ class ProtocolHandlerRegistryTest : public testing::Test {
 
   int InMemoryHandlerCount() {
     int in_memory_handler_count = 0;
-    ProtocolHandlerRegistry::ProtocolHandlerMultiMap::iterator it =
-        registry()->protocol_handlers_.begin();
+    auto it = registry()->protocol_handlers_.begin();
     for (; it != registry()->protocol_handlers_.end(); ++it)
       in_memory_handler_count += it->second.size();
     return in_memory_handler_count;
@@ -285,8 +287,7 @@ class ProtocolHandlerRegistryTest : public testing::Test {
 
   int InMemoryIgnoredHandlerCount() {
     int in_memory_ignored_handler_count = 0;
-    ProtocolHandlerRegistry::ProtocolHandlerList::iterator it =
-        registry()->ignored_protocol_handlers_.begin();
+    auto it = registry()->ignored_protocol_handlers_.begin();
     for (; it != registry()->ignored_protocol_handlers_.end(); ++it)
       in_memory_ignored_handler_count++;
     return in_memory_ignored_handler_count;

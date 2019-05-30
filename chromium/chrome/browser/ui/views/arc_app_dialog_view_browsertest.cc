@@ -4,9 +4,11 @@
 
 #include "chrome/browser/ui/app_list/arc/arc_app_dialog.h"
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
@@ -48,7 +50,7 @@ class ArcAppUninstallDialogViewBrowserTest : public InProcessBrowserTest {
     DCHECK(arc_app_list_pref_);
 
     base::RunLoop run_loop;
-    arc_app_list_pref_->SetDefaltAppsReadyCallback(run_loop.QuitClosure());
+    arc_app_list_pref_->SetDefaultAppsReadyCallback(run_loop.QuitClosure());
     run_loop.Run();
 
     app_instance_.reset(new arc::FakeAppInstance(arc_app_list_pref_));
@@ -70,14 +72,12 @@ class ArcAppUninstallDialogViewBrowserTest : public InProcessBrowserTest {
     shortcut.intent_uri = "Fake Shortcut uri 0";
     app_instance_->SendInstallShortcut(shortcut);
 
-    mojom::ArcPackageInfo package;
-    package.package_name = "fake.package.0";
-    package.package_version = 0;
-    package.last_backup_android_id = 0;
-    package.last_backup_time = 0;
-    package.sync = false;
-    app_instance_->SendRefreshPackageList(
-        std::vector<mojom::ArcPackageInfo>(1, package));
+    std::vector<mojom::ArcPackageInfoPtr> packages;
+    packages.emplace_back(mojom::ArcPackageInfo::New(
+        "fake.package.0" /* package_name */, 0 /* package_version */,
+        0 /* last_backup_android_id */, 0 /* last_backup_time */,
+        false /* sync */));
+    app_instance_->SendRefreshPackageList(std::move(packages));
   }
 
   void TearDownOnMainThread() override {
@@ -121,13 +121,10 @@ class ArcAppPermissionDialogViewBrowserTest
     app.sticky = false;
     instance()->SendAppAdded(app);
 
-    mojom::ArcPackageInfo package;
-    package.package_name = base::StringPrintf("fake.package.%d", id);
-    package.package_version = id;
-    package.last_backup_android_id = id;
-    package.last_backup_time = 0;
-    package.sync = false;
-    instance()->SendPackageAdded(package);
+    instance()->SendPackageAdded(arc::mojom::ArcPackageInfo::New(
+        base::StringPrintf("fake.package.%d", id) /* package_name */,
+        id /* package_version */, id /* last_backup_android_id */,
+        0 /* last_backup_time */, false /* sync */));
   }
 
   void set_accepted(bool accepted) { accepted_ = accepted; }

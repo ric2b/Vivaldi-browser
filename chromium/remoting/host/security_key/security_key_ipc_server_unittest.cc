@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "build/build_config.h"
 #include "ipc/ipc_channel.h"
 #include "mojo/public/cpp/platform/named_platform_channel.h"
 #include "mojo/public/cpp/system/isolated_connection.h"
@@ -25,6 +26,7 @@ namespace {
 const int kTestConnectionId = 42;
 const int kInitialConnectTimeoutMs = 250;
 const int kConnectionTimeoutErrorDeltaMs = 100;
+const int kLargeResponseTimeoutMs = 500;
 const int kLargeMessageSizeBytes = 256 * 1024;
 }  // namespace
 
@@ -347,7 +349,13 @@ TEST_F(SecurityKeyIpcServerTest,
               kConnectionTimeoutErrorDeltaMs);
 }
 
-TEST_F(SecurityKeyIpcServerTest, NoSecurityKeyRequestTimeout) {
+// Flaky on mac, https://crbug.com/936583
+#if defined(OS_MACOSX)
+#define MAYBE_NoSecurityKeyRequestTimeout DISABLED_NoSecurityKeyRequestTimeout
+#else
+#define MAYBE_NoSecurityKeyRequestTimeout NoSecurityKeyRequestTimeout
+#endif
+TEST_F(SecurityKeyIpcServerTest, MAYBE_NoSecurityKeyRequestTimeout) {
   // Create a channel and connect to it via IPC but do not send a request.
   // The channel should be closed and cleaned up if the IPC client does not
   // issue a request within the specified timeout period.
@@ -406,8 +414,7 @@ TEST_F(SecurityKeyIpcServerTest, SecurityKeyResponseTimeout) {
   WaitForOperationComplete();
   base::TimeDelta elapsed_time = base::Time::NowFromSystemTime() - start_time;
 
-  ASSERT_NEAR(elapsed_time.InMilliseconds(), request_timeout.InMilliseconds(),
-              kConnectionTimeoutErrorDeltaMs);
+  ASSERT_LT(elapsed_time.InMilliseconds(), kLargeResponseTimeoutMs);
 }
 
 TEST_F(SecurityKeyIpcServerTest, SendResponseTimeout) {

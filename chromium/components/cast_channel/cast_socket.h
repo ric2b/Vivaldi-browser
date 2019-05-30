@@ -27,6 +27,7 @@
 #include "net/base/ip_endpoint.h"
 #include "net/log/net_log_source.h"
 #include "services/network/public/mojom/network_context.mojom.h"
+#include "services/network/public/mojom/tls_socket.mojom.h"
 
 namespace net {
 class X509Certificate;
@@ -68,6 +69,8 @@ class CastSocket {
     // Invoked when |socket| receives a message.
     virtual void OnMessage(const CastSocket& socket,
                            const CastMessage& message) = 0;
+
+    virtual void OnReadyStateChanged(const CastSocket& socket);
   };
 
   virtual ~CastSocket() {}

@@ -119,8 +119,10 @@ bool FriendMatches(const Target* annotation_on,
 }  // namespace
 
 HeaderChecker::HeaderChecker(const BuildSettings* build_settings,
-                             const std::vector<const Target*>& targets)
-    : build_settings_(build_settings), lock_(), task_count_cv_() {
+                             const std::vector<const Target*>& targets,
+                             bool check_generated)
+    : build_settings_(build_settings), check_generated_(check_generated),
+      lock_(), task_count_cv_() {
   for (auto* target : targets)
     AddTargetToFileMap(target, &file_map_);
 }
@@ -155,14 +157,16 @@ void HeaderChecker::RunCheckOverFiles(const FileMap& files, bool force_check) {
         type != SOURCE_M && type != SOURCE_MM && type != SOURCE_RC)
       continue;
 
-    // If any target marks it as generated, don't check it. We have to check
-    // file_map_, which includes all known files; files only includes those
-    // being checked.
-    bool is_generated = false;
-    for (const auto& vect_i : file_map_[file.first])
-      is_generated |= vect_i.is_generated;
-    if (is_generated)
-      continue;
+    if (!check_generated_) {
+      // If any target marks it as generated, don't check it. We have to check
+      // file_map_, which includes all known files; files only includes those
+      // being checked.
+      bool is_generated = false;
+      for (const auto& vect_i : file_map_[file.first])
+        is_generated |= vect_i.is_generated;
+      if (is_generated)
+        continue;
+    }
 
     for (const auto& vect_i : file.second) {
       if (vect_i.target->check_includes()) {
@@ -269,12 +273,17 @@ bool HeaderChecker::CheckFile(const Target* from_target,
   // target. These won't exist at checking time. Since we require all generated
   // files to be somewhere in the output tree, we can just check the name to
   // see if they should be skipped.
-  if (IsFileInOuputDir(file))
+  if (!check_generated_ && IsFileInOuputDir(file))
     return true;
 
   base::FilePath path = build_settings_->GetFullPath(file);
   std::string contents;
   if (!base::ReadFileToString(path, &contents)) {
+    // A missing (not yet) generated file is an acceptable problem
+    // considering this code does not understand conditional includes.
+    if (IsFileInOuputDir(file))
+      return true;
+
     errors->emplace_back(from_target->defined_from(), "Source file not found.",
                          "The target:\n  " +
                              from_target->label().GetUserVisibleName(false) +
@@ -295,7 +304,7 @@ bool HeaderChecker::CheckFile(const Target* from_target,
                         target_include_dirs.end());
   }
 
-  bool has_errors = false;
+  size_t error_count_before = errors->size();
   CIncludeIterator iter(&input_file);
   base::StringPiece current_include;
   LocationRange range;
@@ -303,15 +312,11 @@ bool HeaderChecker::CheckFile(const Target* from_target,
     Err err;
     SourceFile include = SourceFileForInclude(current_include, include_dirs,
                                               input_file, range, &err);
-    if (!include.is_null()) {
-      if (!CheckInclude(from_target, input_file, include, range, &err)) {
-        errors->emplace_back(std::move(err));
-        has_errors = true;
-      }
-    }
+    if (!include.is_null())
+      CheckInclude(from_target, input_file, include, range, errors);
   }
 
-  return !has_errors;
+  return errors->size() == error_count_before;
 }
 
 // If the file exists:
@@ -320,11 +325,11 @@ bool HeaderChecker::CheckFile(const Target* from_target,
 //  - The dependency path to the included target must follow only public_deps.
 //  - If there are multiple targets with the header in it, only one need be
 //    valid for the check to pass.
-bool HeaderChecker::CheckInclude(const Target* from_target,
+void HeaderChecker::CheckInclude(const Target* from_target,
                                  const InputFile& source_file,
                                  const SourceFile& include_file,
                                  const LocationRange& range,
-                                 Err* err) const {
+                                 std::vector<Err>* errors) const {
   // Assume if the file isn't declared in our sources that we don't need to
   // check it. It would be nice if we could give an error if this happens, but
   // our include finder is too primitive and returns all includes, even if
@@ -332,7 +337,7 @@ bool HeaderChecker::CheckInclude(const Target* from_target,
   // not unusual for the buildfiles to not specify that header at all.
   FileMap::const_iterator found = file_map_.find(include_file);
   if (found == file_map_.end())
-    return true;
+    return;
 
   const TargetVector& targets = found->second;
   Chain chain;  // Prevent reallocating in the loop.
@@ -362,7 +367,7 @@ bool HeaderChecker::CheckInclude(const Target* from_target,
     }
   }
   if (!present_in_current_toolchain)
-    return true;
+    return;
 
   // For all targets containing this file, we require that at least one be
   // a direct or public dependency of the current target, and either (1) the
@@ -380,7 +385,7 @@ bool HeaderChecker::CheckInclude(const Target* from_target,
     // target.
     const Target* to_target = target.target;
     if (to_target == from_target)
-      return true;
+      return;
 
     bool is_permitted_chain = false;
     if (IsDependencyOf(to_target, from_target, &chain, &is_permitted_chain)) {
@@ -423,15 +428,16 @@ bool HeaderChecker::CheckInclude(const Target* from_target,
     }
   }
 
-  if (!found_dependency) {
-    DCHECK(!last_error.has_error());
-    *err = MakeUnreachableError(source_file, range, from_target, targets);
-    return false;
-  }
-  if (last_error.has_error()) {
-    // Found at least one dependency chain above, but it had an error.
-    *err = last_error;
-    return false;
+  if (!found_dependency || last_error.has_error()) {
+    if (!found_dependency) {
+      DCHECK(!last_error.has_error());
+      Err err = MakeUnreachableError(source_file, range, from_target, targets);
+      errors->push_back(std::move(err));
+    } else {
+      // Found at least one dependency chain above, but it had an error.
+      errors->push_back(std::move(last_error));
+    }
+    return;
   }
 
   // One thing we didn't check for is targets that expose their dependents
@@ -451,8 +457,6 @@ bool HeaderChecker::CheckInclude(const Target* from_target,
   //  - Save the includes found in each file and actually compute the graph of
   //    includes to detect when A implicitly includes C's header. This will not
   //    have the annoying false positive problem, but is complex to write.
-
-  return true;
 }
 
 bool HeaderChecker::IsDependencyOf(const Target* search_for,

@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -29,6 +30,7 @@
 #include "chrome/browser/resource_coordinator/utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/usb/usb_tab_helper.h"
+#include "components/device_event_log/device_event_log.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
@@ -70,6 +72,11 @@ bool IsValidStateChange(LifecycleUnitState from,
         case LifecycleUnitState::DISCARDED: {
           return reason == StateChangeReason::SYSTEM_MEMORY_PRESSURE ||
                  reason == StateChangeReason::EXTENSION_INITIATED;
+        }
+        case LifecycleUnitState::FROZEN: {
+          // Render-initiated freezing, which happens when freezing a page
+          // through ChromeDriver.
+          return reason == StateChangeReason::RENDERER_INITIATED;
         }
         default:
           return false;
@@ -125,7 +132,9 @@ bool IsValidStateChange(LifecycleUnitState from,
         //   - The freeze timeout expires, or,
         //   - The renderer notifies the browser that the page has been frozen.
         case LifecycleUnitState::DISCARDED:
-          return reason == StateChangeReason::BROWSER_INITIATED;
+          return reason == StateChangeReason::BROWSER_INITIATED ||
+                 reason == StateChangeReason::SYSTEM_MEMORY_PRESSURE ||
+                 reason == StateChangeReason::EXTENSION_INITIATED;
         // The WebContents is focused.
         case LifecycleUnitState::PENDING_FREEZE:
           return reason == StateChangeReason::USER_INITIATED;
@@ -207,7 +216,7 @@ void CheckFeatureUsage(const SiteCharacteristicsDataReader* reader,
 }
 
 void CheckIfTabCanCommunicateWithUserWhileInBackground(
-    const content::WebContents* web_contents,
+    content::WebContents* web_contents,
     DecisionDetails* details) {
   DCHECK(details);
 
@@ -451,7 +460,7 @@ base::ProcessHandle TabLifecycleUnitSource::TabLifecycleUnit::GetProcessHandle()
 LifecycleUnit::SortKey TabLifecycleUnitSource::TabLifecycleUnit::GetSortKey()
     const {
   if (base::FeatureList::IsEnabled(features::kTabRanker)) {
-    base::Optional<float> reactivation_score =
+    const base::Optional<float> reactivation_score =
         resource_coordinator::TabActivityWatcher::GetInstance()
             ->CalculateReactivationScore(web_contents());
     if (reactivation_score.has_value())
@@ -490,16 +499,7 @@ bool TabLifecycleUnitSource::TabLifecycleUnit::Load() {
 
 int TabLifecycleUnitSource::TabLifecycleUnit::
     GetEstimatedMemoryFreedOnDiscardKB() const {
-#if defined(OS_CHROMEOS)
-  std::unique_ptr<base::ProcessMetrics> process_metrics(
-      base::ProcessMetrics::CreateProcessMetrics(GetProcessHandle()));
-  base::ProcessMetrics::TotalsSummary summary =
-      process_metrics->GetTotalsSummary();
-  return summary.private_clean_kb + summary.private_dirty_kb + summary.swap_kb;
-#else
-  // TODO(fdoray): Implement this. https://crbug.com/775644
-  return 0;
-#endif
+  return GetPrivateMemoryKB(GetProcessHandle());
 }
 
 bool TabLifecycleUnitSource::TabLifecycleUnit::CanPurge() const {
@@ -526,30 +526,19 @@ bool TabLifecycleUnitSource::TabLifecycleUnit::CanFreeze(
     return false;
   }
 
-  if (!GetTabSource()->tab_lifecycles_enterprise_policy()) {
-    decision_details->AddReason(
-        DecisionFailureReason::LIFECYCLES_ENTERPRISE_POLICY_OPT_OUT);
-  }
+  bool check_heuristics = !GetStaticProactiveTabFreezeAndDiscardParams()
+                               .disable_heuristics_protections;
 
-  auto intervention_policy =
-      GetTabSource()->intervention_policy_database()->GetFreezingPolicy(
-          url::Origin::Create(web_contents()->GetLastCommittedURL()));
-
-  switch (intervention_policy) {
-    case OriginInterventions::OPT_IN:
-      decision_details->AddReason(DecisionSuccessReason::GLOBAL_WHITELIST);
-      break;
-    case OriginInterventions::OPT_OUT:
-      decision_details->AddReason(DecisionFailureReason::GLOBAL_BLACKLIST);
-      break;
-    case OriginInterventions::DEFAULT:
-      break;
-  }
+  if (check_heuristics)
+    CanFreezeHeuristicsChecks(decision_details);
 
   if (web_contents()->GetVisibility() == content::Visibility::VISIBLE)
     decision_details->AddReason(DecisionFailureReason::LIVE_STATE_VISIBLE);
 
-  CheckIfTabIsUsedInBackground(decision_details, InterventionType::kProactive);
+  if (check_heuristics) {
+    CheckIfTabIsUsedInBackground(decision_details,
+                                 InterventionType::kProactive);
+  }
 
   if (decision_details->reasons().empty()) {
     decision_details->AddReason(
@@ -611,31 +600,11 @@ bool TabLifecycleUnitSource::TabLifecycleUnit::CanDiscard(
   }
 #endif
 
-  // We deliberately run through all of the logic without early termination.
-  // This ensures that the decision details lists all possible reasons that the
-  // transition can be denied.
+  bool check_heuristics = !GetStaticProactiveTabFreezeAndDiscardParams()
+                               .disable_heuristics_protections;
 
-  if (!GetTabSource()->tab_lifecycles_enterprise_policy()) {
-    decision_details->AddReason(
-        DecisionFailureReason::LIFECYCLES_ENTERPRISE_POLICY_OPT_OUT);
-  }
-
-  if (reason == LifecycleUnitDiscardReason::PROACTIVE) {
-    auto intervention_policy =
-        GetTabSource()->intervention_policy_database()->GetDiscardingPolicy(
-            url::Origin::Create(web_contents()->GetLastCommittedURL()));
-
-    switch (intervention_policy) {
-      case OriginInterventions::OPT_IN:
-        decision_details->AddReason(DecisionSuccessReason::GLOBAL_WHITELIST);
-        break;
-      case OriginInterventions::OPT_OUT:
-        decision_details->AddReason(DecisionFailureReason::GLOBAL_BLACKLIST);
-        break;
-      case OriginInterventions::DEFAULT:
-        break;
-    }
-  }
+  if (check_heuristics)
+    CanDiscardHeuristicsChecks(decision_details, reason);
 
 #if defined(OS_CHROMEOS)
   if (web_contents()->GetVisibility() == content::Visibility::VISIBLE)
@@ -663,10 +632,12 @@ bool TabLifecycleUnitSource::TabLifecycleUnit::CanDiscard(
         DecisionFailureReason::LIVE_STATE_EXTENSION_DISALLOWED);
   }
 
-  CheckIfTabIsUsedInBackground(decision_details,
-                               reason == LifecycleUnitDiscardReason::PROACTIVE
-                                   ? InterventionType::kProactive
-                                   : InterventionType::kExternalOrUrgent);
+  if (check_heuristics) {
+    CheckIfTabIsUsedInBackground(decision_details,
+                                 reason == LifecycleUnitDiscardReason::PROACTIVE
+                                     ? InterventionType::kProactive
+                                     : InterventionType::kExternalOrUrgent);
+  }
 
   if (decision_details->reasons().empty()) {
     decision_details->AddReason(
@@ -770,7 +741,7 @@ void TabLifecycleUnitSource::TabLifecycleUnit::FinishDiscard(
   // when activated. If it was true, there would be an immediate reload when the
   // active tab of a non-visible window is discarded. SetFocused() will take
   // care of reloading the tab when it becomes active in a focused window.
-  null_contents->GetController().CopyStateFrom(old_contents->GetController(),
+  null_contents->GetController().CopyStateFrom(&old_contents->GetController(),
                                                /* needs_reload */ false);
 
   // First try to fast-kill the process, if it's just running a single tab.
@@ -800,13 +771,15 @@ void TabLifecycleUnitSource::TabLifecycleUnit::FinishDiscard(
   // Replace the discarded tab with the null version.
   const int index = tab_strip_model_->GetIndexOfWebContents(old_contents);
   DCHECK_NE(index, TabStripModel::kNoTab);
+
+  // This ensures that on reload after discard, the document has
+  // "WasDiscarded" set to true.
+  // The "WasDiscarded" state is also sent to tab_strip_model.
+  null_contents->SetWasDiscarded(true);
+
   std::unique_ptr<content::WebContents> old_contents_deleter =
       tab_strip_model_->ReplaceWebContentsAt(index, std::move(null_contents));
   DCHECK_EQ(web_contents(), raw_null_contents);
-
-  // This ensures that on reload after discard, the document has
-  // "wasDiscarded" set to true.
-  raw_null_contents->SetWasDiscarded(true);
 
   if (vivaldi::IsVivaldiRunning()) {
     // Vivaldi stores vital tab info in extdata.
@@ -824,11 +797,15 @@ void TabLifecycleUnitSource::TabLifecycleUnit::FinishDiscard(
   DCHECK_EQ(GetLoadingState(), LifecycleUnitLoadingState::UNLOADED);
 }
 
-bool TabLifecycleUnitSource::TabLifecycleUnit::DiscardImpl(
+bool TabLifecycleUnitSource::TabLifecycleUnit::Discard(
     LifecycleUnitDiscardReason reason) {
   // Can't discard a tab when it isn't in a tabstrip.
-  if (!tab_strip_model_)
+  if (!tab_strip_model_) {
+    // Logs are used to diagnose user feedback reports.
+    MEMORY_LOG(ERROR) << "Skipped discarding " << GetTitle()
+                      << " because it isn't in a tab strip.";
     return false;
+  }
 
   const LifecycleUnitState target_state =
       reason == LifecycleUnitDiscardReason::PROACTIVE &&
@@ -837,8 +814,14 @@ bool TabLifecycleUnitSource::TabLifecycleUnit::DiscardImpl(
           : LifecycleUnitState::DISCARDED;
   if (!IsValidStateChange(GetState(), target_state,
                           DiscardReasonToStateChangeReason(reason))) {
+    // Logs are used to diagnose user feedback reports.
+    MEMORY_LOG(ERROR) << "Skipped discarding " << GetTitle()
+                      << " because a transition from " << GetState() << " to "
+                      << target_state << " is not allowed.";
     return false;
   }
+
+  discard_reason_ = reason;
 
   // If the tab is not going through an urgent discard, it should be frozen
   // first. Freeze the tab and set a timer to callback to FinishDiscard() in
@@ -930,7 +913,8 @@ void TabLifecycleUnitSource::TabLifecycleUnit::OnLifecycleUnitStateChanged(
   const bool is_discarded = IsDiscardedOrPendingDiscard(GetState());
   if (was_discarded != is_discarded) {
     for (auto& observer : *observers_)
-      observer.OnDiscardedStateChange(web_contents(), is_discarded);
+      observer.OnDiscardedStateChange(web_contents(), GetDiscardReason(),
+                                      is_discarded);
   }
 }
 
@@ -997,6 +981,63 @@ void TabLifecycleUnitSource::TabLifecycleUnit::CheckIfTabIsUsedInBackground(
     decision_details->AddReason(
         DecisionFailureReason::LIVE_STATE_DEVTOOLS_OPEN);
   }
+}
+
+void TabLifecycleUnitSource::TabLifecycleUnit::CanFreezeHeuristicsChecks(
+    DecisionDetails* decision_details) const {
+  if (!GetTabSource()->tab_lifecycles_enterprise_policy()) {
+    decision_details->AddReason(
+        DecisionFailureReason::LIFECYCLES_ENTERPRISE_POLICY_OPT_OUT);
+  }
+
+  auto intervention_policy =
+      GetTabSource()->intervention_policy_database()->GetFreezingPolicy(
+          url::Origin::Create(web_contents()->GetLastCommittedURL()));
+
+  switch (intervention_policy) {
+    case OriginInterventions::OPT_IN:
+      decision_details->AddReason(DecisionSuccessReason::GLOBAL_WHITELIST);
+      break;
+    case OriginInterventions::OPT_OUT:
+      decision_details->AddReason(DecisionFailureReason::GLOBAL_BLACKLIST);
+      break;
+    case OriginInterventions::DEFAULT:
+      break;
+  }
+}
+
+void TabLifecycleUnitSource::TabLifecycleUnit::CanDiscardHeuristicsChecks(
+    DecisionDetails* decision_details,
+    LifecycleUnitDiscardReason reason) const {
+  // We deliberately run through all of the logic without early termination.
+  // This ensures that the decision details lists all possible reasons that
+  // the transition can be denied.
+  if (!GetTabSource()->tab_lifecycles_enterprise_policy()) {
+    decision_details->AddReason(
+        DecisionFailureReason::LIFECYCLES_ENTERPRISE_POLICY_OPT_OUT);
+  }
+
+  if (reason == LifecycleUnitDiscardReason::PROACTIVE) {
+    auto intervention_policy =
+        GetTabSource()->intervention_policy_database()->GetDiscardingPolicy(
+            url::Origin::Create(web_contents()->GetLastCommittedURL()));
+
+    switch (intervention_policy) {
+      case OriginInterventions::OPT_IN:
+        decision_details->AddReason(DecisionSuccessReason::GLOBAL_WHITELIST);
+        break;
+      case OriginInterventions::OPT_OUT:
+        decision_details->AddReason(DecisionFailureReason::GLOBAL_BLACKLIST);
+        break;
+      case OriginInterventions::DEFAULT:
+        break;
+    }
+  }
+}
+
+LifecycleUnitDiscardReason
+TabLifecycleUnitSource::TabLifecycleUnit::GetDiscardReason() const {
+  return discard_reason_;
 }
 
 }  // namespace resource_coordinator

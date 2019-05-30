@@ -15,7 +15,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/engagement/site_engagement_details.mojom.h"
-#include "third_party/blink/public/platform/site_engagement.mojom.h"
+#include "third_party/blink/public/mojom/site_engagement/site_engagement.mojom.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -187,7 +187,6 @@ class SiteEngagementScore {
 
   // Array holding the values corresponding to each item in Variation array.
   static ParamValues& GetParamValues();
-  static ParamValues BuildParamValues();
 
   // Keys used in the content settings dictionary.
   static const char kRawScoreKey[];

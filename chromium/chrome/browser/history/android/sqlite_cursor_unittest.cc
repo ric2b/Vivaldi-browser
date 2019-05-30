@@ -10,6 +10,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -210,7 +211,7 @@ TEST_F(SQLiteCursorTest, Run) {
   base::android::ScopedJavaLocalRef<jbyteArray> data =
       cursor->GetBlob(env, NULL, 3);
   std::vector<uint8_t> out;
-  base::android::JavaByteArrayToByteVector(env, data.obj(), &out);
+  base::android::JavaByteArrayToByteVector(env, data, &out);
   EXPECT_EQ(data_bytes->data().size(), out.size());
   EXPECT_EQ(data_bytes->data()[0], out[0]);
   cursor->Destroy(env, NULL);

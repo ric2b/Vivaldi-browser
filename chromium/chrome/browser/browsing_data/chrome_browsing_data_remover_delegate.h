@@ -25,6 +25,7 @@
 #include "extensions/buildflags/buildflags.h"
 #include "media/media_buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/browser/pepper_flash_settings_manager.h"
@@ -82,16 +83,16 @@ class ChromeBrowsingDataRemoverDelegate
 
     // "Site data" includes storage backend accessible to websites and some
     // additional metadata kept by the browser (e.g. site usage data).
-    DATA_TYPE_SITE_DATA = content::BrowsingDataRemover::DATA_TYPE_COOKIES |
-                          content::BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
-                          content::BrowsingDataRemover::DATA_TYPE_DOM_STORAGE |
-                          DATA_TYPE_PLUGIN_DATA |
+    DATA_TYPE_SITE_DATA =
+        content::BrowsingDataRemover::DATA_TYPE_COOKIES |
+        content::BrowsingDataRemover::DATA_TYPE_DOM_STORAGE |
+        content::BrowsingDataRemover::DATA_TYPE_MEDIA_LICENSES |
+        DATA_TYPE_PLUGIN_DATA |
 #if defined(OS_ANDROID)
-                          DATA_TYPE_WEB_APP_DATA |
+        DATA_TYPE_WEB_APP_DATA |
 #endif
-                          DATA_TYPE_SITE_USAGE_DATA |
-                          DATA_TYPE_DURABLE_PERMISSION |
-                          DATA_TYPE_EXTERNAL_PROTOCOL_DATA,
+        DATA_TYPE_SITE_USAGE_DATA | DATA_TYPE_DURABLE_PERMISSION |
+        DATA_TYPE_EXTERNAL_PROTOCOL_DATA,
 
     // Datatypes protected by Important Sites.
     IMPORTANT_SITES_DATA_TYPES =
@@ -109,10 +110,9 @@ class ChromeBrowsingDataRemoverDelegate
     ALL_DATA_TYPES = DATA_TYPE_SITE_DATA |  //
                      content::BrowsingDataRemover::DATA_TYPE_CACHE |
                      content::BrowsingDataRemover::DATA_TYPE_DOWNLOADS |
-                     DATA_TYPE_FORM_DATA |  //
-                     DATA_TYPE_HISTORY |    //
-                     DATA_TYPE_PASSWORDS |
-                     content::BrowsingDataRemover::DATA_TYPE_MEDIA_LICENSES |
+                     DATA_TYPE_FORM_DATA |         //
+                     DATA_TYPE_HISTORY |           //
+                     DATA_TYPE_PASSWORDS |         //
                      DATA_TYPE_CONTENT_SETTINGS |  //
                      DATA_TYPE_BOOKMARKS,
 
@@ -181,29 +181,78 @@ class ChromeBrowsingDataRemoverDelegate
       scoped_refptr<BrowsingDataFlashLSOHelper> flash_lso_helper);
 #endif
 
+  using DomainReliabilityClearer = base::RepeatingCallback<void(
+      const content::BrowsingDataFilterBuilder& filter_builder,
+      network::mojom::NetworkContext_DomainReliabilityClearMode,
+      network::mojom::NetworkContext::ClearDomainReliabilityCallback)>;
+  void OverrideDomainReliabilityClearerForTesting(
+      DomainReliabilityClearer clearer);
+
  private:
   using WebRtcEventLogManager = webrtc_event_logging::WebRtcEventLogManager;
 
-  // Called by the closures returned by CreatePendingTaskCompletionClosure().
+  // For debugging purposes. Please add new deletion tasks at the end.
+  enum class TracingDataType {
+    kSynchronous = 1,
+    kHistory = 2,
+    kHostNameResolution = 3,
+    kNaclCache = 4,
+    kPnaclCache = 5,
+    kAutofillData = 6,
+    kAutofillOrigins = 7,
+    kPluginData = 8,
+    kFlashLsoHelper = 9,
+    kDomainReliability = 10,
+    kNetworkPredictor = 11,
+    kWebrtcLogs = 12,
+    kVideoDecodeHistory = 13,
+    kCookies = 14,
+    kPasswords = 15,
+    kHttpAuthCache = 16,
+    kDisableAutoSignin = 17,
+    kPasswordsStatistics = 18,
+    kKeywordsModel = 19,
+    kReportingCache = 20,
+    kNetworkErrorLogging = 21,
+    kFlashDeauthorization = 22,
+    kOfflinePages = 23,
+    kPrecache = 24,
+    kExploreSites = 25,
+    kLegacyStrikes = 26,
+    kWebrtcEventLogs = 27,
+    kDrmLicenses = 28,
+    kHostCache = 29,
+    kTpmAttestationKeys = 30,
+    kStrikes = 31,
+  };
+
+  // Called by CreateTaskCompletionClosure().
+  void OnTaskStarted(TracingDataType data_type);
+
+  // Called by the closures returned by CreateTaskCompletionClosure().
   // Checks if all tasks have completed, and if so, calls callback_.
-  void OnTaskComplete();
+  void OnTaskComplete(TracingDataType data_type);
 
   // Increments the number of pending tasks by one, and returns a OnceClosure
   // that calls OnTaskComplete(). The Remover is complete once all the closures
   // created by this method have been invoked.
-  base::OnceClosure CreatePendingTaskCompletionClosure();
+  base::OnceClosure CreateTaskCompletionClosure(TracingDataType data_type);
 
-  // Same as CreatePendingTaskCompletionClosure() but guarantees that
+  // Same as CreateTaskCompletionClosure() but guarantees that
   // OnTaskComplete() is called if the task is dropped. That can typically
   // happen when the connection is closed while an interface call is made.
-  base::OnceClosure CreatePendingTaskCompletionClosureForMojo();
+  base::OnceClosure CreateTaskCompletionClosureForMojo(
+      TracingDataType data_type);
 
   // Callback for when TemplateURLService has finished loading. Clears the data,
   // clears the respective waiting flag, and invokes NotifyIfDone.
   void OnKeywordsLoaded(base::RepeatingCallback<bool(const GURL&)> url_filter,
                         base::OnceClosure done);
 
-#if defined (OS_CHROMEOS)
+  // A helper method that checks if time period is for "all time".
+  bool IsForAllTime() const;
+
+#if defined(OS_CHROMEOS)
   void OnClearPlatformKeys(base::OnceClosure done, base::Optional<bool> result);
 #endif
 
@@ -254,6 +303,8 @@ class ChromeBrowsingDataRemoverDelegate
   // Used to deauthorize content licenses for Pepper Flash.
   std::unique_ptr<PepperFlashSettingsManager> pepper_flash_settings_manager_;
 #endif
+
+  DomainReliabilityClearer domain_reliability_clearer_;
 
   // Used if we need to clear history.
   base::CancelableTaskTracker history_task_tracker_;

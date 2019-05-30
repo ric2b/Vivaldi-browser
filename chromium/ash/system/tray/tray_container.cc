@@ -68,14 +68,8 @@ void TrayContainer::UpdateLayout() {
       is_horizontal ? views::BoxLayout::kHorizontal
                     : views::BoxLayout::kVertical;
 
-  const int hit_region_with_separator =
-      kHitRegionPadding + TrayConstants::separator_width();
-  gfx::Insets insets(
-      is_horizontal
-          ? gfx::Insets(0, kHitRegionPadding, 0, hit_region_with_separator)
-          : gfx::Insets(kHitRegionPadding, 0, hit_region_with_separator, 0));
-  if (base::i18n::IsRTL())
-    insets.Set(insets.top(), insets.right(), insets.bottom(), insets.left());
+  gfx::Insets insets(is_horizontal ? gfx::Insets(0, kHitRegionPadding)
+                                   : gfx::Insets(kHitRegionPadding, 0));
   SetBorder(views::CreateEmptyBorder(insets));
 
   int horizontal_margin = main_axis_margin_;
@@ -84,7 +78,8 @@ void TrayContainer::UpdateLayout() {
     std::swap(horizontal_margin, vertical_margin);
 
   auto layout = std::make_unique<views::BoxLayout>(
-      orientation, gfx::Insets(vertical_margin, horizontal_margin), 0);
+      orientation, gfx::Insets(vertical_margin, horizontal_margin),
+      kUnifiedTraySpacingBetweenIcons);
   layout->set_minimum_cross_axis_size(kTrayItemSize);
   views::View::SetLayoutManager(std::move(layout));
 

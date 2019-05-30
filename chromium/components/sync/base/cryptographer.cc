@@ -39,8 +39,7 @@ Cryptographer::Cryptographer(Encryptor* encryptor) : encryptor_(encryptor) {
 Cryptographer::Cryptographer(const Cryptographer& other)
     : encryptor_(other.encryptor_),
       default_nigori_name_(other.default_nigori_name_) {
-  for (NigoriMap::const_iterator it = other.nigoris_.begin();
-       it != other.nigoris_.end(); ++it) {
+  for (auto it = other.nigoris_.begin(); it != other.nigoris_.end(); ++it) {
     std::string user_key, encryption_key, mac_key;
     it->second->ExportKeys(&user_key, &encryption_key, &mac_key);
     auto nigori_copy = std::make_unique<Nigori>();
@@ -99,15 +98,15 @@ bool Cryptographer::Encrypt(const ::google::protobuf::MessageLite& message,
 bool Cryptographer::EncryptString(const std::string& serialized,
                                   sync_pb::EncryptedData* encrypted) const {
   if (CanDecryptUsingDefaultKey(*encrypted)) {
-    const std::string& original_serialized = DecryptToString(*encrypted);
-    if (original_serialized == serialized) {
+    std::string original_serialized;
+    if (DecryptToString(*encrypted, &original_serialized) &&
+        original_serialized == serialized) {
       DVLOG(2) << "Re-encryption unnecessary, encrypted data already matches.";
       return true;
     }
   }
 
-  NigoriMap::const_iterator default_nigori =
-      nigoris_.find(default_nigori_name_);
+  auto default_nigori = nigoris_.find(default_nigori_name_);
   if (default_nigori == nigoris_.end()) {
     LOG(ERROR) << "Corrupt default key.";
     return false;
@@ -124,26 +123,29 @@ bool Cryptographer::EncryptString(const std::string& serialized,
 bool Cryptographer::Decrypt(const sync_pb::EncryptedData& encrypted,
                             ::google::protobuf::MessageLite* message) const {
   DCHECK(message);
-  std::string plaintext = DecryptToString(encrypted);
+  std::string plaintext;
+  if (!DecryptToString(encrypted, &plaintext)) {
+    return false;
+  }
   return message->ParseFromString(plaintext);
 }
 
-std::string Cryptographer::DecryptToString(
-    const sync_pb::EncryptedData& encrypted) const {
-  NigoriMap::const_iterator it = nigoris_.find(encrypted.key_name());
+bool Cryptographer::DecryptToString(const sync_pb::EncryptedData& encrypted,
+                                    std::string* decrypted) const {
+  decrypted->clear();
+  auto it = nigoris_.find(encrypted.key_name());
   if (nigoris_.end() == it) {
     // The key used to encrypt the blob is not part of the set of installed
     // nigoris.
     LOG(ERROR) << "Cannot decrypt message";
-    return std::string();
+    return false;
   }
 
-  std::string plaintext;
-  if (!it->second->Decrypt(encrypted.blob(), &plaintext)) {
-    return std::string();
+  if (!it->second->Decrypt(encrypted.blob(), decrypted)) {
+    return false;
   }
 
-  return plaintext;
+  return true;
 }
 
 bool Cryptographer::GetKeys(sync_pb::EncryptedData* encrypted) const {
@@ -347,7 +349,7 @@ std::string Cryptographer::GetDefaultNigoriKeyName() const {
 std::string Cryptographer::GetDefaultNigoriKeyData() const {
   if (!is_initialized())
     return std::string();
-  NigoriMap::const_iterator iter = nigoris_.find(default_nigori_name_);
+  auto iter = nigoris_.find(default_nigori_name_);
   if (iter == nigoris_.end())
     return std::string();
   sync_pb::NigoriKey key;

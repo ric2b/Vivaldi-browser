@@ -7,14 +7,15 @@
 
 #include <unordered_map>
 
+#include "ash/accelerometer/accelerometer_reader.h"
+#include "ash/accelerometer/accelerometer_types.h"
 #include "ash/ash_export.h"
 #include "ash/display/display_configuration_controller.h"
 #include "ash/display/window_tree_host_manager.h"
+#include "ash/public/interfaces/ash_window_manager.mojom.h"
 #include "ash/wm/tablet_mode/tablet_mode_observer.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "chromeos/accelerometer/accelerometer_reader.h"
-#include "chromeos/accelerometer/accelerometer_types.h"
 #include "ui/aura/window_observer.h"
 #include "ui/display/display.h"
 #include "ui/wm/public/activation_change_observer.h"
@@ -25,22 +26,16 @@ class Window;
 
 namespace ash {
 
-enum class OrientationLockType {
-  kAny = 0,
-  kNatural,
-  kCurrent,
-  kPortrait,
-  kLandscape,
-  kPortraitPrimary,
-  kPortraitSecondary,
-  kLandscapePrimary,
-  kLandscapeSecondary
-};
+using OrientationLockType = mojom::OrientationLockType;
 
 // Test if the orientation lock type is primary/landscape/portrait.
 bool IsPrimaryOrientation(OrientationLockType type);
 bool IsLandscapeOrientation(OrientationLockType type);
 bool IsPortraitOrientation(OrientationLockType type);
+
+ASH_EXPORT OrientationLockType GetCurrentScreenOrientation();
+ASH_EXPORT bool IsCurrentScreenOrientationLandscape();
+ASH_EXPORT bool IsCurrentScreenOrientationPrimary();
 
 ASH_EXPORT std::ostream& operator<<(std::ostream& out,
                                     const OrientationLockType& lock);
@@ -49,7 +44,7 @@ ASH_EXPORT std::ostream& operator<<(std::ostream& out,
 class ASH_EXPORT ScreenOrientationController
     : public ::wm::ActivationChangeObserver,
       public aura::WindowObserver,
-      public chromeos::AccelerometerReader::Observer,
+      public AccelerometerReader::Observer,
       public WindowTreeHostManager::Observer,
       public TabletModeObserver {
  public:
@@ -81,7 +76,7 @@ class ASH_EXPORT ScreenOrientationController
 
   OrientationLockType natural_orientation() const {
     return natural_orientation_;
-  };
+  }
 
   // Add/Remove observers.
   void AddObserver(Observer* observer);
@@ -137,9 +132,9 @@ class ASH_EXPORT ScreenOrientationController
   void OnWindowDestroying(aura::Window* window) override;
   void OnWindowVisibilityChanged(aura::Window* window, bool visible) override;
 
-  // chromeos::AccelerometerReader::Observer:
+  // AccelerometerReader::Observer:
   void OnAccelerometerUpdated(
-      scoped_refptr<const chromeos::AccelerometerUpdate> update) override;
+      scoped_refptr<const AccelerometerUpdate> update) override;
 
   // WindowTreeHostManager::Observer:
   void OnDisplayConfigurationChanged() override;
@@ -192,7 +187,7 @@ class ASH_EXPORT ScreenOrientationController
 
   // Detect screen rotation from |lid| accelerometer and automatically rotate
   // screen.
-  void HandleScreenRotation(const chromeos::AccelerometerReading& lid);
+  void HandleScreenRotation(const AccelerometerReading& lid);
 
   // Checks DisplayManager for registered rotation lock, and rotation,
   // preferences. These are then applied.

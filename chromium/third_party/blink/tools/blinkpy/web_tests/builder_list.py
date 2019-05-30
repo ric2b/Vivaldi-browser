@@ -26,18 +26,15 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-"""Represents a set of builder bots running layout tests.
+"""Represents a set of builder bots running web tests.
 
-This class is used to hold a list of builder bots running layout tests and their
+This class is used to hold a list of builder bots running web tests and their
 corresponding port names and TestExpectations specifiers.
 """
 
 import json
 
 from blinkpy.common.path_finder import PathFinder
-
-# TODO(crbug.com/818301): Remove it when we no longer have bots in this bucket.
-DEFAULT_BUCKET = 'master.tryserver.blink'
 
 
 class BuilderList(object):
@@ -83,7 +80,7 @@ class BuilderList(object):
         return sorted({b['port_name'] for b in self._builders.values()})
 
     def bucket_for_builder(self, builder_name):
-        return self._builders[builder_name].get('bucket', DEFAULT_BUCKET)
+        return self._builders[builder_name].get('bucket', '')
 
     def port_name_for_builder_name(self, builder_name):
         return self._builders[builder_name]['port_name']

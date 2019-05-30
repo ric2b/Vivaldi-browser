@@ -43,7 +43,7 @@ class WaveShaperProcessor final : public AudioDSPKernelProcessor {
  public:
   enum OverSampleType { kOverSampleNone, kOverSample2x, kOverSample4x };
 
-  WaveShaperProcessor(float sample_rate, size_t number_of_channels);
+  WaveShaperProcessor(float sample_rate, unsigned number_of_channels);
 
   ~WaveShaperProcessor() override;
 
@@ -51,10 +51,10 @@ class WaveShaperProcessor final : public AudioDSPKernelProcessor {
 
   void Process(const AudioBus* source,
                AudioBus* destination,
-               size_t frames_to_process) override;
+               uint32_t frames_to_process) override;
 
   void SetCurve(const float* curve_data, unsigned curve_length);
-  Vector<float>* Curve() const { return curve_.get(); };
+  Vector<float>* Curve() const { return curve_.get(); }
 
   void SetOversample(OverSampleType);
   OverSampleType Oversample() const { return oversample_; }

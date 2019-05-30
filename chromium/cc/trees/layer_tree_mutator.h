@@ -18,16 +18,30 @@
 
 namespace cc {
 
+enum class MutateQueuingStrategy {
+  kDrop,            // Discard request if busy.
+  kQueueAndReplace  // Queue request if busy replacing previously queued
+                    // request.
+};
+
+enum class MutateStatus {
+  kCompletedWithUpdate,  // Mutation cycle successfully ran to completion with
+                         // at least one update.
+  kCompletedNoUpdate,    // Mutation cycle successfully ran to completion but
+                         // no update was applied.
+  kCanceled              // Mutation cycle dropped from the input queue.
+};
+
 struct CC_EXPORT WorkletAnimationId {
   // Uniquely identifies the animation worklet with which this animation is
   // associated.
-  int scope_id;
+  int worklet_id;
   // Uniquely identifies the animation within its animation worklet. Note that
   // animation_id is only guaranteed to be unique per animation worklet.
   int animation_id;
 
   inline bool operator==(const WorkletAnimationId& rhs) const {
-    return (this->scope_id == rhs.scope_id) &&
+    return (this->worklet_id == rhs.worklet_id) &&
            (this->animation_id == rhs.animation_id);
   }
 };
@@ -40,11 +54,13 @@ struct CC_EXPORT AnimationWorkletInput {
     // Worklet animation's current time, from its associated timeline.
     double current_time;
     std::unique_ptr<AnimationOptions> options;
+    int num_effects;
 
     AddAndUpdateState(WorkletAnimationId worklet_animation_id,
                       std::string name,
                       double current_time,
-                      std::unique_ptr<AnimationOptions> options);
+                      std::unique_ptr<AnimationOptions> options,
+                      int num_effects);
 
     AddAndUpdateState(AddAndUpdateState&&);
     ~AddAndUpdateState();
@@ -60,13 +76,14 @@ struct CC_EXPORT AnimationWorkletInput {
   std::vector<AddAndUpdateState> added_and_updated_animations;
   std::vector<UpdateState> updated_animations;
   std::vector<WorkletAnimationId> removed_animations;
+  std::vector<WorkletAnimationId> peeked_animations;
 
   AnimationWorkletInput();
   ~AnimationWorkletInput();
 
 #if DCHECK_IS_ON()
-  // Verifies all animation states have the expected scope id.
-  bool ValidateScope(int scope_id) const;
+  // Verifies all animation states have the expected worklet id.
+  bool ValidateId(int worklet_id) const;
 #endif
   DISALLOW_COPY_AND_ASSIGN(AnimationWorkletInput);
 };
@@ -80,6 +97,12 @@ class CC_EXPORT MutatorInputState {
   void Add(AnimationWorkletInput::AddAndUpdateState&& state);
   void Update(AnimationWorkletInput::UpdateState&& state);
   void Remove(WorkletAnimationId worklet_animation_id);
+  // |Update| asks for the animation to *animate* given a current time and
+  // return the output value while |Peek| only asks for the last output value
+  // (if one available) without requiring animate or providing a current time.
+  // In particular, composited animations are updated from compositor and peeked
+  // from main thread.
+  void Peek(WorkletAnimationId worklet_animation_id);
 
   // Returns input for animation worklet with the given |scope_id| and nullptr
   // if there is no input.
@@ -102,16 +125,12 @@ class CC_EXPORT MutatorInputState {
 
 struct CC_EXPORT AnimationWorkletOutput {
   struct CC_EXPORT AnimationState {
-    AnimationState(WorkletAnimationId,
-                   base::Optional<base::TimeDelta> local_time);
+    explicit AnimationState(WorkletAnimationId);
     AnimationState(const AnimationState&);
+    ~AnimationState();
 
     WorkletAnimationId worklet_animation_id;
-    // The animator effect's local time.
-    // TODO(majidvp): This assumes each animator has a single output effect
-    // which does not hold once we state support group effects.
-    // http://crbug.com/767043
-    base::Optional<base::TimeDelta> local_time;
+    std::vector<base::Optional<base::TimeDelta>> local_times;
   };
 
   AnimationWorkletOutput();
@@ -139,9 +158,13 @@ class CC_EXPORT LayerTreeMutator {
 
   virtual void SetClient(LayerTreeMutatorClient* client) = 0;
 
-  virtual void Mutate(std::unique_ptr<MutatorInputState> input_state) = 0;
+  using DoneCallback = base::OnceCallback<void(MutateStatus)>;
+
+  virtual bool Mutate(std::unique_ptr<MutatorInputState> input_state,
+                      MutateQueuingStrategy queueing_strategy,
+                      DoneCallback done_callback) = 0;
   // TODO(majidvp): Remove when timeline inputs are known.
-  virtual bool HasAnimators() = 0;
+  virtual bool HasMutators() = 0;
 };
 
 }  // namespace cc

@@ -5,7 +5,8 @@
 module page_load_metrics.mojom;
 
 import "mojo/public/mojom/base/time.mojom";
-import "third_party/blink/public/platform/web_feature.mojom";
+import "third_party/blink/public/mojom/web_feature/web_feature.mojom";
+import "url/mojom/origin.mojom";
 
 // TimeDeltas below relative to navigation start.
 struct DocumentTiming {
@@ -24,9 +25,6 @@ struct PaintTiming {
   // Time when the first paint is performed.
   mojo_base.mojom.TimeDelta? first_paint;
 
-  // Time when the first non-blank text is painted.
-  mojo_base.mojom.TimeDelta? first_text_paint;
-
   // Time when the first image is painted.
   mojo_base.mojom.TimeDelta? first_image_paint;
 
@@ -35,6 +33,32 @@ struct PaintTiming {
 
   // (Experimental) Time when the page's primary content is painted.
   mojo_base.mojom.TimeDelta? first_meaningful_paint;
+
+  // (Experimental) Time when the page's largest image is painted.
+  mojo_base.mojom.TimeDelta? largest_image_paint;
+
+  // (Experimental) Size of the largest image of the largest image paint, by
+  // Size = Height * Width.
+  uint64 largest_image_paint_size;
+
+  // (Experimental) Time when the page's last image is painted.
+  mojo_base.mojom.TimeDelta? last_image_paint;
+
+  // (Experimental) Size of the last image of the last image paint.
+  uint64 last_image_paint_size;
+
+  // (Experimental) Time when the page's largest text is painted.
+  mojo_base.mojom.TimeDelta? largest_text_paint;
+
+  // (Experimental) Size of the largest text of the largest text paint, by
+  // Size = Height * Width.
+  uint64 largest_text_paint_size;
+
+  // (Experimental) Time when the page's last text is painted.
+  mojo_base.mojom.TimeDelta? last_text_paint;
+
+  // (Experimental) Size of the last text of the last text paint.
+  uint64 last_text_paint_size;
 };
 
 // TimeDeltas below represent durations of time during the page load.
@@ -132,7 +156,7 @@ struct PageLoadTiming {
   ParseTiming parse_timing;
   // Time between user input and navigation start. This is set for navigations
   // where the input start timing is known; currently when the navigation is
-  // initiated by a link click in the renderer.
+  // initiated by a link click in the renderer, or from the desktop omnibox.
   mojo_base.mojom.TimeDelta? input_to_navigation_start;
 
   // If you add additional members, also be sure to update page_load_timing.h.
@@ -167,12 +191,55 @@ struct ResourceDataUpdate {
   // is the aggregate of the |delta_bytes| from each timing update.
   int64 received_data_length = 0;
 
+  // The length of the response body for the resource before removing any
+  // content encodings. Only set for complete resources.
+  int64 encoded_body_length = 0;
+
   // Whether this resource load has completed.
   bool is_complete;
 
   // Compression ratio estimated from the response headers if data saver was
   // used.
   double data_reduction_proxy_compression_ratio_estimate;
+
+  // Whether this resource was tagged as an ad in the renderer. This flag can
+  // be set to true at any point during a resource load. A more recent
+  // ResourceDataUpdate can have a different flag than the previous update.
+  // Once this is set to true, it will be true for all future updates.
+  bool reported_as_ad_resource;
+
+  // Whether this resource was loaded in the top-level frame.
+  bool is_main_frame_resource;
+
+  // Whether this resource was fetched from the http cache.
+  bool was_fetched_via_cache;
+
+  // Whether this resource is the primary resource for a frame.
+  bool is_primary_frame_resource;
+
+  // Mime type for the resource found in the network response header.
+  string mime_type;
+
+  // Whether the scheme of this resource indicates a secure connection.
+  bool is_secure_scheme;
+
+  // Whether this resource was fetched via proxy.
+  bool proxy_used;
+
+  // The origin of this resource.
+  url.mojom.Origin origin;
+};
+
+// Metrics about how the page rendered during the browsing session.
+struct PageRenderData {
+  // How much visible elements in the frame shifted (bit.ly/lsm-explainer).
+  float layout_jank_score;
+};
+
+// Metrics about the time spent in tasks (cpu time) by a frame.
+struct CpuTiming {
+  // Time spent in tasks measured in wall time.
+  mojo_base.mojom.TimeDelta task_time;
 };
 
 // Sent from renderer to browser process when the PageLoadTiming for the
@@ -181,5 +248,7 @@ interface PageLoadMetrics {
   UpdateTiming(PageLoadTiming page_load_timing,
                PageLoadMetadata page_load_metadata,
                PageLoadFeatures new_features,
-               array<ResourceDataUpdate> resources);
+               array<ResourceDataUpdate> resources,
+               PageRenderData render_data,
+               CpuTiming cpu_load_timing);
 };

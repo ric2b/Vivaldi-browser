@@ -17,6 +17,8 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
 #include "content/public/common/content_switches.h"
+#include "ui/accessibility/accessibility_switches.h"
+#include "ui/accessibility/platform/ax_fragment_root_win.h"
 #include "ui/accessibility/platform/ax_system_caret_win.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
@@ -218,9 +220,9 @@ LRESULT LegacyRenderWidgetHostHWND::OnGetObject(UINT message,
   DWORD obj_id = static_cast<DWORD>(static_cast<DWORD_PTR>(l_param));
 
   if (kIdScreenReaderHoneyPot == obj_id) {
-    // When an MSAA client has responded to our fake event on this id,
-    // enable basic accessibility support. (Full screen reader support is
-    // detected later when specific more advanced APIs are accessed.)
+    // When an MSAA client has responded to fake event for this id,
+    // only basic accessibility support is enabled. (Full screen reader support
+    // is detected later when specific, more advanced APIs are accessed.)
     for (ui::IAccessible2UsageObserver& observer :
          ui::GetIAccessible2UsageObserverList()) {
       observer.OnScreenReaderHoneyPotQueried();
@@ -231,22 +233,35 @@ LRESULT LegacyRenderWidgetHostHWND::OnGetObject(UINT message,
   if (!host_)
     return static_cast<LRESULT>(0L);
 
-  if (static_cast<DWORD>(OBJID_CLIENT) == obj_id) {
-    RenderWidgetHostImpl* rwhi =
-        RenderWidgetHostImpl::From(host_->GetRenderWidgetHost());
-    if (!rwhi)
+  bool is_uia_request = static_cast<DWORD>(UiaRootObjectId) == obj_id;
+  bool is_msaa_request = static_cast<DWORD>(OBJID_CLIENT) == obj_id;
+
+  if ((is_uia_request &&
+       ::switches::IsExperimentalAccessibilityPlatformUIAEnabled()) ||
+      (is_msaa_request &&
+       !::switches::IsExperimentalAccessibilityPlatformUIAEnabled())) {
+    if (is_uia_request) {
+      // UIA, by design, insulates providers from knowing about the client(s)
+      // asking for information. When UIA interface is requested, the presence
+      // of a full-fledged accessibility technology is assumed and all support
+      // is enabled.
+      BrowserAccessibilityStateImpl::GetInstance()->EnableAccessibility();
+    }
+
+    gfx::NativeViewAccessible root = GetOrCreateWindowRootAccessible();
+    if (root == nullptr)
       return static_cast<LRESULT>(0L);
 
-    BrowserAccessibilityManagerWin* manager =
-        static_cast<BrowserAccessibilityManagerWin*>(
-            rwhi->GetRootBrowserAccessibilityManager());
-    if (!manager || !manager->GetRoot())
-      return static_cast<LRESULT>(0L);
-
-    Microsoft::WRL::ComPtr<IAccessible> root(
-        ToBrowserAccessibilityWin(manager->GetRoot())->GetCOM());
-    return LresultFromObject(IID_IAccessible, w_param,
-                             static_cast<IAccessible*>(root.Detach()));
+    if (is_uia_request) {
+      Microsoft::WRL::ComPtr<IRawElementProviderSimple> root_uia;
+      ax_fragment_root_->GetNativeViewAccessible()->QueryInterface(
+          IID_PPV_ARGS(&root_uia));
+      return UiaReturnRawElementProvider(hwnd(), w_param, l_param,
+                                         root_uia.Get());
+    } else {
+      Microsoft::WRL::ComPtr<IAccessible> root_msaa(root);
+      return LresultFromObject(IID_IAccessible, w_param, root_msaa.Detach());
+    }
   }
 
   if (static_cast<DWORD>(OBJID_CARET) == obj_id && host_->HasFocus()) {
@@ -339,7 +354,12 @@ LRESULT LegacyRenderWidgetHostHWND::OnMouseLeave(UINT message,
     // has moved outside the bounds of the parent.
     POINT cursor_pos;
     ::GetCursorPos(&cursor_pos);
-    if (::WindowFromPoint(cursor_pos) != GetParent()) {
+
+    // WindowFromPoint returns the top-most HWND. As hwnd() may not
+    // respond with HTTRANSPARENT to a WM_NCHITTEST message,
+    // it may be returned.
+    HWND window_from_point = ::WindowFromPoint(cursor_pos);
+    if (window_from_point != hwnd() && window_from_point != GetParent()) {
       bool msg_handled = false;
       ret = GetWindowEventTarget(GetParent())->HandleMouseMessage(
           message, w_param, l_param, &msg_handled);
@@ -518,6 +538,34 @@ void LegacyRenderWidgetHostHWND::PollForNextEvent() {
 
   if (!direct_manipulation_helper_->PollForNextEvent())
     DestroyAnimationObserver();
+}
+
+gfx::NativeViewAccessible
+LegacyRenderWidgetHostHWND::GetOrCreateWindowRootAccessible() {
+  RenderWidgetHostImpl* rwhi =
+      RenderWidgetHostImpl::From(host_->GetRenderWidgetHost());
+  if (!rwhi)
+    return nullptr;
+
+  BrowserAccessibilityManagerWin* manager =
+      static_cast<BrowserAccessibilityManagerWin*>(
+          rwhi->GetOrCreateRootBrowserAccessibilityManager());
+  if (!manager || !manager->GetRoot())
+    return nullptr;
+
+  BrowserAccessibilityComWin* root =
+      ToBrowserAccessibilityWin(manager->GetRoot())->GetCOM();
+
+  if (::switches::IsExperimentalAccessibilityPlatformUIAEnabled()) {
+    if (!ax_fragment_root_) {
+      ax_fragment_root_ = std::make_unique<ui::AXFragmentRootWin>(hwnd(), root);
+      ax_fragment_root_->SetParent(host_->GetParentNativeViewAccessible());
+    }
+
+    return ax_fragment_root_->GetNativeViewAccessible();
+  }
+
+  return root->GetNativeViewAccessible();
 }
 
 void LegacyRenderWidgetHostHWND::CreateAnimationObserver() {

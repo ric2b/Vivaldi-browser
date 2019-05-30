@@ -54,7 +54,7 @@ bool HasExpiredOrIncompleteResult(
     return false;
 
   // Check if at least one of the bitmaps is expired.
-  std::vector<favicon_base::FaviconRawBitmapResult>::const_iterator it =
+  auto it =
       std::find_if(bitmap_results.begin(), bitmap_results.end(), IsExpired);
   if (it != bitmap_results.end())
     return true;
@@ -77,9 +77,8 @@ bool HasExpiredOrIncompleteResult(
   std::vector<float> favicon_scales = favicon_base::GetFaviconScales();
   for (float favicon_scale : favicon_scales) {
     int edge_size_in_pixel = std::ceil(desired_size_in_dip * favicon_scale);
-    auto it = std::find(favicon_sizes.begin(), favicon_sizes.end(),
-                        gfx::Size(edge_size_in_pixel, edge_size_in_pixel));
-    if (it == favicon_sizes.end())
+    gfx::Size value(edge_size_in_pixel, edge_size_in_pixel);
+    if (!base::ContainsValue(favicon_sizes, value))
       return true;
   }
   return false;
@@ -124,16 +123,30 @@ bool FaviconURLEquals(const FaviconURL& lhs, const FaviconURL& rhs) {
 FaviconHandler::FaviconCandidate
 FaviconHandler::FaviconCandidate::FromFaviconURL(
     const favicon::FaviconURL& favicon_url,
-    const std::vector<int>& desired_pixel_sizes) {
+    const std::vector<int>& desired_pixel_sizes,
+    bool want_largest_icon) {
   FaviconCandidate candidate;
   candidate.icon_url = favicon_url.icon_url;
   candidate.icon_type = favicon_url.icon_type;
-  // TODO(crbug.com/705900): For candidates without explicit size information,
-  // sizes could be inferred for the most common cases. Namely, .ico files tend
-  // to contain the 16x16 bitmap, which would allow to improve the
-  // prioritization on desktop.
-  SelectFaviconFrameIndices(favicon_url.icon_sizes, desired_pixel_sizes,
-                            /*best_indices=*/nullptr, &candidate.score);
+
+  if (!favicon_url.icon_sizes.empty()) {
+    // For candidates with explicit size information, the score is computed
+    // based on similarity with |desired_pixel_sizes|.
+    SelectFaviconFrameIndices(favicon_url.icon_sizes, desired_pixel_sizes,
+                              /*best_indices=*/nullptr, &candidate.score);
+  } else if (want_largest_icon) {
+    // If looking for largest icon (mobile), candidates without explicit size
+    // information are scored low because they are likely small.
+    candidate.score = 0.0f;
+  } else {
+    // If looking for small icons (desktop), candidates without explicit size
+    // information are scored highest, as high as candidates with an ideal
+    // explicit size information. This guarantees all candidates without
+    // explicit size information will be processed until an ideal candidate is
+    // found (if available).
+    candidate.score = 1.0f;
+  }
+
   return candidate;
 }
 
@@ -220,29 +233,23 @@ void FaviconHandler::FetchFavicon(const GURL& page_url, bool is_same_document) {
       &cancelable_task_tracker_for_page_url_);
 }
 
-bool FaviconHandler::UpdateFaviconCandidate(
-    const DownloadedFavicon& downloaded_favicon) {
-  if (downloaded_favicon.candidate.score > best_favicon_.candidate.score)
-    best_favicon_ = downloaded_favicon;
+bool FaviconHandler::ShouldDownloadNextCandidate() const {
+  // Stop downloading if the current candidate is the last candidate.
+  if (current_candidate_index_ + 1 >= final_candidates_->size())
+    return false;
 
-  if (download_largest_icon_) {
-    // The size of the downloaded icon may not match the declared size. It's
-    // important to stop downloading if:
-    // - current candidate is only candidate.
-    // - next candidate has sizes attribute and it is not better than the best
-    //   one observed so far, which means any following candidate should also
-    //   be worse or equal too.
-    // - next candidate doesn't have sizes attributes, which means further
-    //   candidates don't have sizes attribute either (because the score lowest
-    //   and hence get sorted last during prioritization). We stop immediately
-    //   to avoid downloading them all, although we don't have the certainty
-    //   that no better favicon is among them.
-    return current_candidate_index_ + 1 >= final_candidates_->size() ||
-           (*final_candidates_)[current_candidate_index_ + 1].score <=
-               best_favicon_.candidate.score;
-  } else {
-    return best_favicon_.candidate.score == 1;
-  }
+  // Continue downloading if no valid favicon has been downloaded yet.
+  if (best_favicon_.candidate.icon_type == favicon_base::IconType::kInvalid)
+    return true;
+
+  // |next_candidate_score| is based on the sizes provided in the <link> tag,
+  // see FaviconCandidate::FromFaviconURL().
+  float next_candidate_score =
+      (*final_candidates_)[current_candidate_index_ + 1].score;
+
+  // Continue downloading only if the next candidate is better than the best one
+  // observed so far.
+  return next_candidate_score > best_favicon_.candidate.score;
 }
 
 void FaviconHandler::SetFavicon(const GURL& icon_url,
@@ -423,8 +430,8 @@ void FaviconHandler::OnGotFinalIconURLCandidates(
   for (const FaviconURL& candidate : candidates) {
     if (!candidate.icon_url.is_empty() &&
         (icon_types_.count(candidate.icon_type) != 0)) {
-      sorted_candidates.push_back(
-          FaviconCandidate::FromFaviconURL(candidate, desired_pixel_sizes));
+      sorted_candidates.push_back(FaviconCandidate::FromFaviconURL(
+          candidate, desired_pixel_sizes, download_largest_icon_));
     }
   }
 
@@ -487,7 +494,6 @@ void FaviconHandler::OnDidDownloadFavicon(
   // Mark download as finished.
   image_download_request_.Cancel();
 
-  bool request_next_icon = true;
   if (bitmaps.empty()) {
     if (http_status_code == 404) {
       DVLOG(1) << "Failed to Download Favicon:" << image_url;
@@ -513,22 +519,18 @@ void FaviconHandler::OnDidDownloadFavicon(
                                           &score);
     }
 
-    if (!image_skia.isNull()) {
-      // The downloaded icon is still valid when there is no FaviconURL update
-      // during the downloading.
-      DownloadedFavicon downloaded_favicon;
-      downloaded_favicon.image = gfx::Image(image_skia);
-      downloaded_favicon.candidate.icon_url = image_url;
-      downloaded_favicon.candidate.icon_type = icon_type;
-      downloaded_favicon.candidate.score = score;
-      request_next_icon = !UpdateFaviconCandidate(downloaded_favicon);
+    if (!image_skia.isNull() && score > best_favicon_.candidate.score) {
+      best_favicon_.image = gfx::Image(image_skia);
+      best_favicon_.candidate.icon_url = image_url;
+      best_favicon_.candidate.icon_type = icon_type;
+      best_favicon_.candidate.score = score;
     }
   }
 
-  if (request_next_icon &&
-      current_candidate_index_ + 1 < final_candidates_->size()) {
+  if (ShouldDownloadNextCandidate()) {
     // Process the next candidate.
     ++current_candidate_index_;
+    DCHECK_LT(current_candidate_index_, final_candidates_->size());
     DownloadCurrentCandidateOrAskFaviconService();
   } else {
     if (best_favicon_.candidate.icon_type == favicon_base::IconType::kInvalid) {

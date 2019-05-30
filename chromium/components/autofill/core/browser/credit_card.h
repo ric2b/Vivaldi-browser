@@ -19,6 +19,8 @@
 
 namespace autofill {
 
+struct AutofillMetadata;
+
 // A midline horizontal ellipsis (U+22EF).
 extern const base::char16 kMidlineEllipsis[];
 
@@ -46,8 +48,8 @@ class CreditCard : public AutofillDataModel {
     // convert to a FULL_SERVER_CARD.
     MASKED_SERVER_CARD,
 
-    // A card from the Wallet server with full information. This card is not
-    // locally editable.
+    // A card from the Wallet server with full information store locally. This
+    // card is not locally editable.
     FULL_SERVER_CARD,
   };
 
@@ -106,6 +108,13 @@ class CreditCard : public AutofillDataModel {
   void SetServerStatus(ServerStatus status);
   ServerStatus GetServerStatus() const;
 
+  // AutofillDataModel:
+  AutofillMetadata GetMetadata() const override;
+  bool SetMetadata(const AutofillMetadata metadata) override;
+  // Returns whether the card is deletable: if it is expired and has not been
+  // used for longer than |kDisusedCreditCardDeletionTimeDelta|.
+  bool IsDeletable() const override;
+
   // FormGroup:
   void GetMatchingTypes(const base::string16& text,
                         const std::string& app_locale,
@@ -148,14 +157,15 @@ class CreditCard : public AutofillDataModel {
   // duplicates.  The ordering is based on collation order of the textual
   // contents of the fields.
   // GUIDs, origins, labels, and unique IDs are not compared, only the values of
-  // the cards themselves.
+  // the cards themselves. A full card is equivalent to its corresponding masked
+  // card.
   int Compare(const CreditCard& credit_card) const;
 
   // Determines if |this| is a local version of the server card |other|.
   bool IsLocalDuplicateOfServerCard(const CreditCard& other) const;
 
   // Determines if |this| has the same number as |other|. If either is a masked
-  // server card, compares the last four digits only.
+  // server card, compares their last four digits and expiration dates.
   bool HasSameNumberAs(const CreditCard& other) const;
 
   // Equality operators compare GUIDs, origins, and the contents.
@@ -243,11 +253,25 @@ class CreditCard : public AutofillDataModel {
   // A label for this card formatted as 'IssuerNetwork - ****2345'.
   base::string16 NetworkAndLastFourDigits() const;
   // A label for this card formatted as 'BankName' - ****2345' if bank name
-  // experiment turned on and bank name available; otherwise, formated as
+  // experiment turned on and bank name available; otherwise, formatted as
   // 'IssuerNetwork - ****2345'.
   base::string16 NetworkOrBankNameAndLastFourDigits() const;
-  // Localized expiration for this card formatted as 'Exp: 06/17'.
-  base::string16 AbbreviatedExpirationDateForDisplay() const;
+  // A label for this card formatted as
+  // 'BankName/Netowrk' - ****2345, expires on MM/YY' if bank name
+  // experiment turned on and bank name available; otherwise, formatted as
+  // 'IssuerNetwork - ****2345, expires on MM/YY'.
+  // This label is used as a second line label when the autofill dropdown
+  // layout experiment is enabled and the cardholder name is selected.
+  base::string16 NetworkOrBankNameLastFourDigitsAndDescriptiveExpiration(
+      const std::string& app_locale) const;
+  // A label for this card formatted as 'Expires on MM/YY'.
+  // This label is used as a second line label when the autofill dropdown
+  // uses a two line layout and the credit card number is selected.
+  base::string16 DescriptiveExpiration(const std::string& app_locale) const;
+
+  // Localized expiration for this card formatted as 'Exp: 06/17' if with_prefix
+  // is true or as '06/17' otherwise.
+  base::string16 AbbreviatedExpirationDateForDisplay(bool with_prefix) const;
   // Formatted expiration date (e.g., 05/2020).
   base::string16 ExpirationDateForDisplay() const;
   // Expiration functions.
@@ -257,6 +281,9 @@ class CreditCard : public AutofillDataModel {
   // Whether the cardholder name was created from separate first name and last
   // name fields.
   bool HasFirstAndLastName() const;
+
+  // Returns whether the card has a cardholder name.
+  bool HasNameOnCard() const;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(CreditCardTest, SetExpirationDateFromString);

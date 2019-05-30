@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/modules/vr/navigator_vr.h"
 
 #include "services/metrics/public/cpp/ukm_builders.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/web/web_frame.h"
@@ -23,7 +24,6 @@
 #include "third_party/blink/renderer/modules/vr/vr_get_devices_callback.h"
 #include "third_party/blink/renderer/modules/vr/vr_pose.h"
 #include "third_party/blink/renderer/modules/xr/xr.h"
-#include "third_party/blink/renderer/platform/feature_policy/feature_policy.h"
 
 namespace blink {
 
@@ -51,7 +51,7 @@ NavigatorVR* NavigatorVR::From(Document& document) {
 NavigatorVR& NavigatorVR::From(Navigator& navigator) {
   NavigatorVR* supplement = Supplement<Navigator>::From<NavigatorVR>(navigator);
   if (!supplement) {
-    supplement = new NavigatorVR(navigator);
+    supplement = MakeGarbageCollected<NavigatorVR>(navigator);
     ProvideTo(navigator, supplement);
   }
   return *supplement;
@@ -85,7 +85,7 @@ XR* NavigatorVR::xr() {
     if (controller_) {
       if (frame->GetDocument()) {
         frame->GetDocument()->AddConsoleMessage(ConsoleMessage::Create(
-            kOtherMessageSource, kErrorMessageLevel,
+            kOtherMessageSource, mojom::ConsoleMessageLevel::kError,
             "Cannot use navigator.xr if the legacy VR API is already in use."));
       }
       return nullptr;
@@ -144,7 +144,8 @@ ScriptPromise NavigatorVR::getVRDisplays(ScriptState* script_state) {
         script_state, DOMException::Create(DOMExceptionCode::kInvalidStateError,
                                            kNotAssociatedWithDocumentMessage));
   }
-  if (!frame->IsFeatureEnabled(mojom::FeaturePolicyFeature::kWebVr)) {
+  if (!GetDocument()->IsFeatureEnabled(mojom::FeaturePolicyFeature::kWebVr,
+                                       ReportOptions::kReportOnFailure)) {
     return ScriptPromise::RejectWithDOMException(
         script_state, DOMException::Create(DOMExceptionCode::kSecurityError,
                                            kFeaturePolicyBlockedMessage));
@@ -178,7 +179,7 @@ VRController* NavigatorVR::Controller() {
     return nullptr;
 
   if (!controller_) {
-    controller_ = new VRController(this);
+    controller_ = MakeGarbageCollected<VRController>(this);
     controller_->SetListeningForActivate(focused_ && listening_for_activate_);
     controller_->FocusChanged();
   }
@@ -259,10 +260,10 @@ void NavigatorVR::DidAddEventListener(LocalDOMWindow* window,
   if (xr_)
     return;
 
-  if (event_type == EventTypeNames::vrdisplayactivate) {
+  if (event_type == event_type_names::kVrdisplayactivate) {
     listening_for_activate_ = true;
     Controller()->SetListeningForActivate(focused_);
-  } else if (event_type == EventTypeNames::vrdisplayconnect) {
+  } else if (event_type == event_type_names::kVrdisplayconnect) {
     // If the page is listening for connection events make sure we've created a
     // controller so that we'll be notified of new devices.
     Controller();
@@ -275,8 +276,8 @@ void NavigatorVR::DidRemoveEventListener(LocalDOMWindow* window,
   if (xr_)
     return;
 
-  if (event_type == EventTypeNames::vrdisplayactivate &&
-      !window->HasEventListeners(EventTypeNames::vrdisplayactivate)) {
+  if (event_type == event_type_names::kVrdisplayactivate &&
+      !window->HasEventListeners(event_type_names::kVrdisplayactivate)) {
     listening_for_activate_ = false;
     Controller()->SetListeningForActivate(false);
   }

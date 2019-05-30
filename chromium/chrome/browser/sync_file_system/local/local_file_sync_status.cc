@@ -19,7 +19,7 @@ namespace {
 using OriginAndType = LocalFileSyncStatus::OriginAndType;
 
 OriginAndType GetOriginAndType(const storage::FileSystemURL& url) {
-  return std::make_pair(url.origin(), url.type());
+  return std::make_pair(url.origin().GetURL(), url.type());
 }
 
 base::FilePath NormalizePath(const base::FilePath& path) {
@@ -52,8 +52,7 @@ bool ContainsChildOrParent(const Container& paths,
   // Check if |paths| has a child of |normalized_path|.
   // Note that descendants of |normalized_path| are stored right after
   // |normalized_path| since |normalized_path| has trailing path separator.
-  typename Container::const_iterator upper =
-      paths.upper_bound(normalized_path);
+  auto upper = paths.upper_bound(normalized_path);
 
   if (upper != paths.end() &&
       normalized_path.IsParent(get_key_helper.GetKey(upper)))
@@ -149,7 +148,7 @@ bool LocalFileSyncStatus::IsChildOrParentWriting(
     const FileSystemURL& url) const {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
-  URLBucket::const_iterator found = writing_.find(GetOriginAndType(url));
+  auto found = writing_.find(GetOriginAndType(url));
   if (found == writing_.end())
     return false;
   return ContainsChildOrParent(found->second, url.path(),
@@ -159,7 +158,7 @@ bool LocalFileSyncStatus::IsChildOrParentWriting(
 bool LocalFileSyncStatus::IsChildOrParentSyncing(
     const FileSystemURL& url) const {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  URLSet::const_iterator found = syncing_.find(GetOriginAndType(url));
+  auto found = syncing_.find(GetOriginAndType(url));
   if (found == syncing_.end())
     return false;
   return ContainsChildOrParent(found->second, url.path(),

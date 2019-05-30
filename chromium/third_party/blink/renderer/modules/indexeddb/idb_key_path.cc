@@ -38,22 +38,22 @@ namespace {
 
 // The following correspond to grammar in ECMA-262.
 const uint32_t kUnicodeLetter =
-    WTF::Unicode::kLetter_Uppercase | WTF::Unicode::kLetter_Lowercase |
-    WTF::Unicode::kLetter_Titlecase | WTF::Unicode::kLetter_Modifier |
-    WTF::Unicode::kLetter_Other | WTF::Unicode::kNumber_Letter;
+    WTF::unicode::kLetter_Uppercase | WTF::unicode::kLetter_Lowercase |
+    WTF::unicode::kLetter_Titlecase | WTF::unicode::kLetter_Modifier |
+    WTF::unicode::kLetter_Other | WTF::unicode::kNumber_Letter;
 const uint32_t kUnicodeCombiningMark =
-    WTF::Unicode::kMark_NonSpacing | WTF::Unicode::kMark_SpacingCombining;
-const uint32_t kUnicodeDigit = WTF::Unicode::kNumber_DecimalDigit;
+    WTF::unicode::kMark_NonSpacing | WTF::unicode::kMark_SpacingCombining;
+const uint32_t kUnicodeDigit = WTF::unicode::kNumber_DecimalDigit;
 const uint32_t kUnicodeConnectorPunctuation =
-    WTF::Unicode::kPunctuation_Connector;
+    WTF::unicode::kPunctuation_Connector;
 
 static inline bool IsIdentifierStartCharacter(UChar c) {
-  return (WTF::Unicode::Category(c) & kUnicodeLetter) || (c == '$') ||
+  return (WTF::unicode::Category(c) & kUnicodeLetter) || (c == '$') ||
          (c == '_');
 }
 
 static inline bool IsIdentifierCharacter(UChar c) {
-  return (WTF::Unicode::Category(c) &
+  return (WTF::unicode::Category(c) &
           (kUnicodeLetter | kUnicodeCombiningMark | kUnicodeDigit |
            kUnicodeConnectorPunctuation)) ||
          (c == '$') || (c == '_') || (c == kZeroWidthNonJoinerCharacter) ||
@@ -61,12 +61,12 @@ static inline bool IsIdentifierCharacter(UChar c) {
 }
 
 bool IsIdentifier(const String& s) {
-  size_t length = s.length();
+  wtf_size_t length = s.length();
   if (!length)
     return false;
   if (!IsIdentifierStartCharacter(s[0]))
     return false;
-  for (size_t i = 1; i < length; ++i) {
+  for (wtf_size_t i = 1; i < length; ++i) {
     if (!IsIdentifierCharacter(s[i]))
       return false;
   }
@@ -93,8 +93,8 @@ void IDBParseKeyPath(const String& key_path,
   }
 
   key_path.Split('.', /*allow_empty_entries=*/true, elements);
-  for (size_t i = 0; i < elements.size(); ++i) {
-    if (!IsIdentifier(elements[i])) {
+  for (const auto& element : elements) {
+    if (!IsIdentifier(element)) {
       error = kIDBKeyPathParseErrorIdentifier;
       return;
     }
@@ -103,82 +103,49 @@ void IDBParseKeyPath(const String& key_path,
 }
 
 IDBKeyPath::IDBKeyPath(const class String& string)
-    : type_(kStringType), string_(string) {
+    : type_(mojom::IDBKeyPathType::String), string_(string) {
   DCHECK(!string_.IsNull());
 }
 
 IDBKeyPath::IDBKeyPath(const Vector<class String>& array)
-    : type_(kArrayType), array_(array) {
+    : type_(mojom::IDBKeyPathType::Array), array_(array) {
 #if DCHECK_IS_ON()
-  for (size_t i = 0; i < array_.size(); ++i)
-    DCHECK(!array_[i].IsNull());
+  for (const auto& element : array_)
+    DCHECK(!element.IsNull());
 #endif
 }
 
 IDBKeyPath::IDBKeyPath(const StringOrStringSequence& key_path) {
   if (key_path.IsNull()) {
-    type_ = kNullType;
+    type_ = mojom::IDBKeyPathType::Null;
   } else if (key_path.IsString()) {
-    type_ = kStringType;
+    type_ = mojom::IDBKeyPathType::String;
     string_ = key_path.GetAsString();
     DCHECK(!string_.IsNull());
   } else {
     DCHECK(key_path.IsStringSequence());
-    type_ = kArrayType;
+    type_ = mojom::IDBKeyPathType::Array;
     array_ = key_path.GetAsStringSequence();
 #if DCHECK_IS_ON()
-    for (size_t i = 0; i < array_.size(); ++i)
-      DCHECK(!array_[i].IsNull());
+    for (const auto& element : array_)
+      DCHECK(!element.IsNull());
 #endif
   }
 }
 
-IDBKeyPath::IDBKeyPath(const WebIDBKeyPath& key_path) {
-  switch (key_path.KeyPathType()) {
-    case kWebIDBKeyPathTypeNull:
-      type_ = kNullType;
-      return;
-
-    case kWebIDBKeyPathTypeString:
-      type_ = kStringType;
-      string_ = key_path.String();
-      return;
-
-    case kWebIDBKeyPathTypeArray:
-      type_ = kArrayType;
-      for (size_t i = 0, size = key_path.Array().size(); i < size; ++i)
-        array_.push_back(key_path.Array()[i]);
-      return;
-  }
-  NOTREACHED();
-}
-
-IDBKeyPath::operator WebIDBKeyPath() const {
-  switch (type_) {
-    case kNullType:
-      return WebIDBKeyPath();
-    case kStringType:
-      return WebIDBKeyPath(WebString(string_));
-    case kArrayType:
-      return WebIDBKeyPath(array_);
-  }
-  NOTREACHED();
-  return WebIDBKeyPath();
-}
-
 bool IDBKeyPath::IsValid() const {
   switch (type_) {
-    case kNullType:
+    case mojom::IDBKeyPathType::Null:
       return false;
 
-    case kStringType:
+    case mojom::IDBKeyPathType::String:
       return IDBIsValidKeyPath(string_);
 
-    case kArrayType:
+    case mojom::IDBKeyPathType::Array:
       if (array_.IsEmpty())
         return false;
-      for (size_t i = 0; i < array_.size(); ++i) {
-        if (!IDBIsValidKeyPath(array_[i]))
+      for (const auto& element : array_) {
+        if (!IDBIsValidKeyPath(element))
           return false;
       }
       return true;
@@ -192,19 +159,15 @@ bool IDBKeyPath::operator==(const IDBKeyPath& other) const {
     return false;
 
   switch (type_) {
-    case kNullType:
+    case mojom::IDBKeyPathType::Null:
       return true;
-    case kStringType:
+    case mojom::IDBKeyPathType::String:
       return string_ == other.string_;
-    case kArrayType:
+    case mojom::IDBKeyPathType::Array:
       return array_ == other.array_;
   }
   NOTREACHED();
   return false;
 }
-
-STATIC_ASSERT_ENUM(kWebIDBKeyPathTypeNull, IDBKeyPath::kNullType);
-STATIC_ASSERT_ENUM(kWebIDBKeyPathTypeString, IDBKeyPath::kStringType);
-STATIC_ASSERT_ENUM(kWebIDBKeyPathTypeArray, IDBKeyPath::kArrayType);
 
 }  // namespace blink

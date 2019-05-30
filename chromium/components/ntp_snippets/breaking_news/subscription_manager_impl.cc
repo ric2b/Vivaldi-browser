@@ -100,7 +100,7 @@ void SubscriptionManagerImpl::StartAccessTokenRequest(
     access_token_fetcher_ = nullptr;
   }
 
-  OAuth2TokenService::ScopeSet scopes = {kContentSuggestionsApiScope};
+  identity::ScopeSet scopes = {kContentSuggestionsApiScope};
   access_token_fetcher_ = std::make_unique<
       identity::PrimaryAccountAccessTokenFetcher>(
       "ntp_snippets", identity_manager_, scopes,
@@ -229,12 +229,12 @@ void SubscriptionManagerImpl::DidUnsubscribe(const std::string& new_token,
 }
 
 void SubscriptionManagerImpl::OnPrimaryAccountSet(
-    const AccountInfo& account_info) {
+    const CoreAccountInfo& account_info) {
   SigninStatusChanged();
 }
 
 void SubscriptionManagerImpl::OnPrimaryAccountCleared(
-    const AccountInfo& account_info) {
+    const CoreAccountInfo& account_info) {
   SigninStatusChanged();
 }
 

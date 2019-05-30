@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/editing/position_with_affinity.h"
 #include "third_party/blink/renderer/core/editing/text_affinity.h"
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_offset_mapping.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_line_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_text_fragment.h"
@@ -57,6 +58,8 @@ bool CanResolveCaretPositionBeforeFragment(const NGPaintFragment& fragment,
                                            TextAffinity affinity) {
   if (affinity == TextAffinity::kDownstream)
     return true;
+  if (RuntimeEnabledFeatures::BidiCaretAffinityEnabled())
+    return false;
   const NGPaintFragment* current_line_paint = fragment.ContainerLineBox();
   const NGPhysicalLineBoxFragment& current_line =
       ToNGPhysicalLineBoxFragment(current_line_paint->PhysicalFragment());
@@ -74,6 +77,8 @@ bool CanResolveCaretPositionAfterFragment(const NGPaintFragment& fragment,
                                           TextAffinity affinity) {
   if (affinity == TextAffinity::kUpstream)
     return true;
+  if (RuntimeEnabledFeatures::BidiCaretAffinityEnabled())
+    return false;
   const NGPaintFragment* current_line_paint = fragment.ContainerLineBox();
   const NGPhysicalLineBoxFragment& current_line =
       ToNGPhysicalLineBoxFragment(current_line_paint->PhysicalFragment());
@@ -150,7 +155,7 @@ unsigned GetTextOffsetBefore(const NGPhysicalFragment& fragment) {
       NGOffsetMapping::GetFor(before_node)->GetTextContentOffset(before_node);
   // We should have offset mapping for atomic inline boxes.
   DCHECK(maybe_offset_before.has_value());
-  return maybe_offset_before.value();
+  return *maybe_offset_before;
 }
 
 // Returns a |kFailed| resolution if |offset| doesn't belong to the atomic
@@ -208,6 +213,8 @@ CaretPositionResolution TryResolveCaretPositionWithFragment(
 }
 
 bool NeedsBidiAdjustment(const NGCaretPosition& caret_position) {
+  if (RuntimeEnabledFeatures::BidiCaretAffinityEnabled())
+    return false;
   if (caret_position.IsNull())
     return false;
   if (caret_position.position_type != NGCaretPositionType::kAtTextOffset)
@@ -232,6 +239,42 @@ NGCaretPosition AdjustCaretPositionForBidiText(
   return BidiAdjustment::AdjustForCaretPositionResolution(caret_position);
 }
 
+bool IsUpstreamAfterLineBreak(const NGCaretPosition& caret_position) {
+  if (caret_position.position_type != NGCaretPositionType::kAtTextOffset)
+    return false;
+
+  DCHECK(caret_position.fragment);
+  DCHECK(caret_position.fragment->PhysicalFragment().IsText());
+  DCHECK(caret_position.text_offset.has_value());
+
+  const NGPhysicalTextFragment& text_fragment =
+      ToNGPhysicalTextFragment(caret_position.fragment->PhysicalFragment());
+  if (!text_fragment.IsLineBreak())
+    return false;
+  return *caret_position.text_offset == text_fragment.EndOffset();
+}
+
+NGCaretPosition BetterCandidateBetween(const NGCaretPosition& current,
+                                       const NGCaretPosition& other,
+                                       unsigned offset,
+                                       TextAffinity affinity) {
+  DCHECK(!other.IsNull());
+  if (current.IsNull())
+    return other;
+
+  // There shouldn't be too many cases where we have multiple candidates.
+  // Make sure all of them are captured and handled here.
+
+  // Only known case: either |current| or |other| is upstream after line break.
+  DCHECK_EQ(affinity, TextAffinity::kUpstream);
+  if (IsUpstreamAfterLineBreak(current)) {
+    DCHECK(!IsUpstreamAfterLineBreak(other));
+    return other;
+  }
+  DCHECK(IsUpstreamAfterLineBreak(other));
+  return current;
+}
+
 }  // namespace
 
 // The main function for compute an NGCaretPosition. See the comments at the top
@@ -243,10 +286,10 @@ NGCaretPosition ComputeNGCaretPosition(const LayoutBlockFlow& context,
   DCHECK(root_fragment) << "no paint fragment on layout object " << &context;
 
   NGCaretPosition candidate;
-  for (const auto& child :
+  for (const NGPaintFragment* child :
        NGPaintFragmentTraversal::InlineDescendantsOf(*root_fragment)) {
     const CaretPositionResolution resolution =
-        TryResolveCaretPositionWithFragment(*child.fragment, offset, affinity);
+        TryResolveCaretPositionWithFragment(*child, offset, affinity);
 
     if (resolution.type == ResolutionType::kFailed)
       continue;
@@ -258,10 +301,8 @@ NGCaretPosition ComputeNGCaretPosition(const LayoutBlockFlow& context,
       return AdjustCaretPositionForBidiText(resolution.caret_position);
 
     DCHECK_EQ(ResolutionType::kFoundCandidate, resolution.type);
-    // TODO(xiaochengh): We are not sure if we can ever find multiple
-    // candidates. Handle it once reached.
-    DCHECK(candidate.IsNull());
-    candidate = resolution.caret_position;
+    candidate = BetterCandidateBetween(candidate, resolution.caret_position,
+                                       offset, affinity);
   }
 
   return AdjustCaretPositionForBidiText(candidate);
@@ -269,12 +310,12 @@ NGCaretPosition ComputeNGCaretPosition(const LayoutBlockFlow& context,
 
 NGCaretPosition ComputeNGCaretPosition(const PositionWithAffinity& position) {
   AssertValidPositionForCaretPositionComputation(position);
-  const LayoutBlockFlow* context =
+  LayoutBlockFlow* context =
       NGInlineFormattingContextOf(position.GetPosition());
   if (!context)
     return NGCaretPosition();
 
-  const NGOffsetMapping* mapping = NGOffsetMapping::GetFor(context);
+  const NGOffsetMapping* mapping = NGInlineNode::GetOffsetMapping(context);
   DCHECK(mapping);
   const base::Optional<unsigned> maybe_offset =
       mapping->GetTextContentOffset(position.GetPosition());
@@ -284,7 +325,7 @@ NGCaretPosition ComputeNGCaretPosition(const PositionWithAffinity& position) {
     return NGCaretPosition();
   }
 
-  const unsigned offset = maybe_offset.value();
+  const unsigned offset = *maybe_offset;
   const TextAffinity affinity = position.Affinity();
   return ComputeNGCaretPosition(*context, offset, affinity);
 }
@@ -316,10 +357,9 @@ PositionWithAffinity NGCaretPosition::ToPositionInDOMTreeWithAffinity() const {
         return PositionWithAffinity();
       const NGPhysicalTextFragment& text_fragment =
           ToNGPhysicalTextFragment(fragment->PhysicalFragment());
-      const TextAffinity affinity =
-          text_offset.value() == text_fragment.EndOffset()
-              ? TextAffinity::kUpstreamIfPossible
-              : TextAffinity::kDownstream;
+      const TextAffinity affinity = *text_offset == text_fragment.EndOffset()
+                                        ? TextAffinity::kUpstreamIfPossible
+                                        : TextAffinity::kDownstream;
       return PositionWithAffinity(position, affinity);
   }
   NOTREACHED();

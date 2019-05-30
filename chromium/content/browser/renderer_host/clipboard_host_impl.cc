@@ -6,29 +6,41 @@
 
 #include <utility>
 
+#include "base/bind.h"
+#include "base/location.h"
 #include "base/macros.h"
 #include "base/pickle.h"
+#include "base/sequenced_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard.h"
+#include "ui/base/clipboard/clipboard_constants.h"
 #include "ui/base/clipboard/custom_data_helper.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "url/gurl.h"
 
 namespace content {
 
-ClipboardHostImpl::ClipboardHostImpl()
-    : clipboard_(ui::Clipboard::GetForCurrentThread()),
+ClipboardHostImpl::ClipboardHostImpl(blink::mojom::ClipboardHostRequest request)
+    : binding_(this, std::move(request)),
+      clipboard_(ui::Clipboard::GetForCurrentThread()),
       clipboard_writer_(
           new ui::ScopedClipboardWriter(ui::CLIPBOARD_TYPE_COPY_PASTE)) {}
 
 void ClipboardHostImpl::Create(blink::mojom::ClipboardHostRequest request) {
-  mojo::MakeStrongBinding(
-      base::WrapUnique<ClipboardHostImpl>(new ClipboardHostImpl()),
-      std::move(request));
+  // Clipboard implementations do interesting things, like run nested message
+  // loops. Since StrongBinding<T> synchronously destroys on failure, that can
+  // result in some unfortunate use-after-frees after the nested message loops
+  // exit.
+  auto* host = new ClipboardHostImpl(std::move(request));
+  host->binding_.set_connection_error_handler(base::BindOnce(
+      [](ClipboardHostImpl* host) {
+        base::SequencedTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, host);
+      },
+      host));
 }
 
 ClipboardHostImpl::~ClipboardHostImpl() {
@@ -55,23 +67,24 @@ void ClipboardHostImpl::IsFormatAvailable(blink::mojom::ClipboardFormat format,
   bool result = false;
   switch (format) {
     case blink::mojom::ClipboardFormat::kPlaintext:
-      result = clipboard_->IsFormatAvailable(
-                   ui::Clipboard::GetPlainTextWFormatType(), clipboard_type) ||
-               clipboard_->IsFormatAvailable(
-                   ui::Clipboard::GetPlainTextFormatType(), clipboard_type);
+      result =
+          clipboard_->IsFormatAvailable(
+              ui::ClipboardFormatType::GetPlainTextWType(), clipboard_type) ||
+          clipboard_->IsFormatAvailable(
+              ui::ClipboardFormatType::GetPlainTextType(), clipboard_type);
       break;
     case blink::mojom::ClipboardFormat::kHtml:
-      result = clipboard_->IsFormatAvailable(ui::Clipboard::GetHtmlFormatType(),
-                                             clipboard_type);
+      result = clipboard_->IsFormatAvailable(
+          ui::ClipboardFormatType::GetHtmlType(), clipboard_type);
       break;
     case blink::mojom::ClipboardFormat::kSmartPaste:
       result = clipboard_->IsFormatAvailable(
-          ui::Clipboard::GetWebKitSmartPasteFormatType(), clipboard_type);
+          ui::ClipboardFormatType::GetWebKitSmartPasteType(), clipboard_type);
       break;
     case blink::mojom::ClipboardFormat::kBookmark:
 #if defined(OS_WIN) || defined(OS_MACOSX)
-      result = clipboard_->IsFormatAvailable(ui::Clipboard::GetUrlWFormatType(),
-                                             clipboard_type);
+      result = clipboard_->IsFormatAvailable(
+          ui::ClipboardFormatType::GetUrlWType(), clipboard_type);
 #else
       result = false;
 #endif
@@ -83,11 +96,11 @@ void ClipboardHostImpl::IsFormatAvailable(blink::mojom::ClipboardFormat format,
 void ClipboardHostImpl::ReadText(ui::ClipboardType clipboard_type,
                                  ReadTextCallback callback) {
   base::string16 result;
-  if (clipboard_->IsFormatAvailable(ui::Clipboard::GetPlainTextWFormatType(),
-                                    clipboard_type)) {
+  if (clipboard_->IsFormatAvailable(
+          ui::ClipboardFormatType::GetPlainTextWType(), clipboard_type)) {
     clipboard_->ReadText(clipboard_type, &result);
   } else if (clipboard_->IsFormatAvailable(
-                 ui::Clipboard::GetPlainTextFormatType(), clipboard_type)) {
+                 ui::ClipboardFormatType::GetPlainTextType(), clipboard_type)) {
     std::string ascii;
     clipboard_->ReadAsciiText(clipboard_type, &ascii);
     result = base::ASCIIToUTF16(ascii);
@@ -149,7 +162,7 @@ void ClipboardHostImpl::WriteCustomData(
   base::Pickle pickle;
   ui::WriteCustomDataToPickle(data, &pickle);
   clipboard_writer_->WritePickledData(
-      pickle, ui::Clipboard::GetWebCustomDataFormatType());
+      pickle, ui::ClipboardFormatType::GetWebCustomDataType());
 }
 
 void ClipboardHostImpl::WriteBookmark(ui::ClipboardType,

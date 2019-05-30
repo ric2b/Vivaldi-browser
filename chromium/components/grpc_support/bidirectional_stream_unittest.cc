@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/strings/strcat.h"
 #include "base/synchronization/waitable_event.h"
+#include "build/build_config.h"
 #include "components/grpc_support/include/bidirectional_stream_c.h"
 #include "components/grpc_support/test/get_stream_engine.h"
 #include "net/base/net_errors.h"
@@ -580,7 +581,16 @@ TEST_P(BidirectionalStreamTest, ReadFailsBeforeRequestStarted) {
   bidirectional_stream_destroy(test.stream);
 }
 
-TEST_P(BidirectionalStreamTest, StreamFailBeforeReadIsExecutedOnNetworkThread) {
+// TODO(https://crbug.com/880474): This test is flaky on fuchsia_x64 builder.
+#if defined(OS_FUCHSIA)
+#define MAYBE_StreamFailBeforeReadIsExecutedOnNetworkThread \
+  DISABLED_StreamFailBeforeReadIsExecutedOnNetworkThread
+#else
+#define MAYBE_StreamFailBeforeReadIsExecutedOnNetworkThread \
+  StreamFailBeforeReadIsExecutedOnNetworkThread
+#endif
+TEST_P(BidirectionalStreamTest,
+       MAYBE_StreamFailBeforeReadIsExecutedOnNetworkThread) {
   class CustomTestBidirectionalStreamCallback
       : public TestBidirectionalStreamCallback {
     bool MaybeCancel(bidirectional_stream* stream, ResponseStep step) override {
@@ -697,8 +707,8 @@ TEST_P(BidirectionalStreamTest, FailedResolution) {
   bidirectional_stream_destroy(test.stream);
 }
 
-INSTANTIATE_TEST_CASE_P(BidirectionalStreamDelayRequestHeadersUntilFlush,
-                        BidirectionalStreamTest,
-                        ::testing::Values(true, false));
+INSTANTIATE_TEST_SUITE_P(BidirectionalStreamDelayRequestHeadersUntilFlush,
+                         BidirectionalStreamTest,
+                         ::testing::Values(true, false));
 
 }  // namespace grpc_support

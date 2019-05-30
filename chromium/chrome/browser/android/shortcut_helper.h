@@ -42,7 +42,8 @@ class ShortcutHelper {
   // added depends on the properties in |info|.
   static void AddToLauncherWithSkBitmap(content::WebContents* web_contents,
                                         const ShortcutInfo& info,
-                                        const SkBitmap& icon_bitmap);
+                                        const SkBitmap& icon_bitmap,
+                                        bool is_icon_maskable);
 
   // Shows toast notifying user that a WebAPK install is already in progress
   // when user tries to queue a new install for the same WebAPK.
@@ -85,12 +86,13 @@ class ShortcutHelper {
   // |is_generated| will be set to |true|.
   // Must be called on a background worker thread.
   static SkBitmap FinalizeLauncherIconInBackground(const SkBitmap& icon,
+                                                   bool is_icon_maskable,
                                                    const GURL& url,
                                                    bool* is_generated);
 
-  // Returns the package name of the WebAPK if WebAPKs are enabled and there is
-  // an installed WebAPK which can handle |url|. Returns empty string otherwise.
-  static std::string QueryWebApkPackage(const GURL& url);
+  // Returns the package name of one of the WebAPKs which can handle |url|.
+  // Returns an empty string if there are no matches.
+  static std::string QueryFirstWebApkPackage(const GURL& url);
 
   // Returns true if WebAPKs are enabled and there is an installed WebAPK which
   // can handle |start_url|, or there is one is being installed.

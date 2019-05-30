@@ -30,12 +30,13 @@
 
 #include <map>
 
+#include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/platform/date_components.h"
 #include "third_party/blink/renderer/platform/mhtml/mhtml_archive.h"
 #include "third_party/blink/renderer/platform/mhtml/mhtml_parser.h"
-#include "third_party/blink/renderer/platform/serialized_resource.h"
+#include "third_party/blink/renderer/platform/mhtml/serialized_resource.h"
 #include "third_party/blink/renderer/platform/shared_buffer.h"
 #include "third_party/blink/renderer/platform/testing/testing_platform_support.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
@@ -44,7 +45,8 @@
 #include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
 #include "third_party/blink/renderer/platform/wtf/time.h"
 
-using blink::URLTestHelpers::ToKURL;
+using blink::mojom::MHTMLLoadResult;
+using blink::url_test_helpers::ToKURL;
 
 namespace blink {
 namespace test {
@@ -144,7 +146,8 @@ class MHTMLArchiveTest : public testing::Test {
                          MHTMLArchive::EncodingPolicy encoding_policy,
                          const KURL& url,
                          const String& title,
-                         const String& mime_type) {
+                         const String& mime_type,
+                         bool validate) {
     // This boundary is as good as any other.  Plus it gets used in almost
     // all the examples in the MHTML spec - RFC 2557.
     String boundary = String::FromUTF8("boundary-example");
@@ -157,24 +160,44 @@ class MHTMLArchiveTest : public testing::Test {
     }
     MHTMLArchive::GenerateMHTMLFooterForTesting(boundary, mhtml_data_);
 
-    // Validate the generated MHTML.
-    MHTMLParser parser(
-        SharedBuffer::Create(mhtml_data_.data(), mhtml_data_.size()));
-    EXPECT_FALSE(parser.ParseArchive().IsEmpty())
-        << "Generated MHTML is malformed";
+    if (validate) {
+      // Validate the generated MHTML.
+      MHTMLParser parser(
+          SharedBuffer::Create(mhtml_data_.data(), mhtml_data_.size()));
+      EXPECT_FALSE(parser.ParseArchive().IsEmpty())
+          << "Generated MHTML is malformed";
+    }
   }
 
   void Serialize(const KURL& url,
                  const String& title,
                  const String& mime,
                  MHTMLArchive::EncodingPolicy encoding_policy) {
-    return GenerateMHTMLData(resources_, encoding_policy, url, title, mime);
+    return GenerateMHTMLData(resources_, encoding_policy, url, title, mime,
+                             true);
   }
 
   Vector<char>& mhtml_data() { return mhtml_data_; }
 
   WTF::Time mhtml_date() const { return mhtml_date_; }
   const String& mhtml_date_header() const { return mhtml_date_header_; }
+
+  void CheckLoadResult(const KURL url,
+                       scoped_refptr<const SharedBuffer> data,
+                       MHTMLLoadResult expected_result) {
+    // Set up histogram testing (takes snapshot of histogram data).
+    base::HistogramTester histogram_tester;
+
+    // Attempt loading the archive and check the returned pointer.
+    MHTMLArchive* archive = MHTMLArchive::Create(url, data);
+    ASSERT_TRUE(archive);
+
+    EXPECT_EQ(archive->LoadResult(), expected_result);
+
+    // Check that the correct count, and only the correct count, increased.
+    histogram_tester.ExpectUniqueSample(
+        "PageSerialization.MhtmlLoading.LoadResult", expected_result, 1);
+  }
 
  private:
   scoped_refptr<SharedBuffer> ReadFile(const char* file_name) {
@@ -332,23 +355,26 @@ TEST_F(MHTMLArchiveTest, MHTMLFromScheme) {
 
   scoped_refptr<SharedBuffer> data =
       SharedBuffer::Create(mhtml_data().data(), mhtml_data().size());
-  KURL http_url = ToKURL("http://www.example.com");
-  KURL content_url = ToKURL("content://foo");
-  KURL file_url = ToKURL("file://foo");
-  KURL special_scheme_url = ToKURL("fooscheme://bar");
 
   // MHTMLArchives can only be initialized from local schemes, http/https
   // schemes, and content scheme(Android specific).
-  EXPECT_NE(nullptr, MHTMLArchive::Create(http_url, data.get()));
+  CheckLoadResult(ToKURL("http://www.example.com"), data.get(),
+                  MHTMLLoadResult::kSuccess);
+
 #if defined(OS_ANDROID)
-  EXPECT_NE(nullptr, MHTMLArchive::Create(content_url, data.get()));
+  CheckLoadResult(ToKURL("content://foo"), data.get(),
+                  MHTMLLoadResult::kSuccess);
 #else
-  EXPECT_EQ(nullptr, MHTMLArchive::Create(content_url, data.get()));
+  CheckLoadResult(ToKURL("content://foo"), data.get(),
+                  MHTMLLoadResult::kUrlSchemeNotAllowed);
 #endif
-  EXPECT_NE(nullptr, MHTMLArchive::Create(file_url, data.get()));
-  EXPECT_EQ(nullptr, MHTMLArchive::Create(special_scheme_url, data.get()));
+  CheckLoadResult(ToKURL("file://foo"), data.get(), MHTMLLoadResult::kSuccess);
+  CheckLoadResult(ToKURL("fooscheme://bar"), data.get(),
+                  MHTMLLoadResult::kUrlSchemeNotAllowed);
+
   SchemeRegistry::RegisterURLSchemeAsLocal("fooscheme");
-  EXPECT_NE(nullptr, MHTMLArchive::Create(special_scheme_url, data.get()));
+  CheckLoadResult(ToKURL("fooscheme://bar"), data.get(),
+                  MHTMLLoadResult::kSuccess);
 }
 
 TEST_F(MHTMLArchiveTest, MHTMLDate) {
@@ -373,12 +399,15 @@ TEST_F(MHTMLArchiveTest, MHTMLDate) {
 }
 
 TEST_F(MHTMLArchiveTest, EmptyArchive) {
-  char* buf = nullptr;
+  // Test failure to load when |data| is null.
+  KURL http_url = ToKURL("http://www.example.com");
+  CheckLoadResult(http_url, nullptr, MHTMLLoadResult::kEmptyFile);
+
+  // Test failure to load when |data| is non-null but empty.
+  const char* buf = "";
   scoped_refptr<SharedBuffer> data =
       SharedBuffer::Create(buf, static_cast<size_t>(0u));
-  KURL http_url = ToKURL("http://www.example.com");
-  MHTMLArchive* archive = MHTMLArchive::Create(http_url, data.get());
-  EXPECT_EQ(nullptr, archive);
+  CheckLoadResult(http_url, data.get(), MHTMLLoadResult::kEmptyFile);
 }
 
 TEST_F(MHTMLArchiveTest, NoMainResource) {
@@ -393,9 +422,21 @@ TEST_F(MHTMLArchiveTest, NoMainResource) {
   scoped_refptr<SharedBuffer> data =
       SharedBuffer::Create(mhtml_data().data(), mhtml_data().size());
   KURL http_url = ToKURL("http://www.example.com");
-  MHTMLArchive* archive = MHTMLArchive::Create(http_url, data.get());
 
-  EXPECT_EQ(nullptr, archive);
+  CheckLoadResult(http_url, data.get(), MHTMLLoadResult::kMissingMainResource);
+}
+
+TEST_F(MHTMLArchiveTest, InvalidMHTML) {
+  const char kURL[] = "http://www.example.com";
+  // Intentionally create MHTML data with no resources.
+  Vector<SerializedResource> resources;
+  GenerateMHTMLData(resources, MHTMLArchive::kUseDefaultEncoding, ToKURL(kURL),
+                    "Test invalid mhtml", "text/html", false);
+
+  scoped_refptr<SharedBuffer> data =
+      SharedBuffer::Create(mhtml_data().data(), mhtml_data().size());
+
+  CheckLoadResult(ToKURL(kURL), data.get(), MHTMLLoadResult::kInvalidArchive);
 }
 
 }  // namespace test

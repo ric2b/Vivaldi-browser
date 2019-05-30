@@ -8,7 +8,7 @@
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "chromeos/components/proximity_auth/logging/logging.h"
+#include "chromeos/components/multidevice/logging/logging.h"
 #include "chromeos/services/secure_channel/public/cpp/shared/connection_priority.h"
 
 namespace chromeos {
@@ -49,7 +49,7 @@ class ConnectToDeviceOperation {
     }
 
     connection_priority_ = connection_priority;
-    PerformUpdateConnectionPriority(connection_priority);
+    UpdateConnectionPriorityInternal(connection_priority);
   }
 
   // Note: Canceling an ongoing connection attempt will not cause either of the
@@ -63,7 +63,7 @@ class ConnectToDeviceOperation {
     }
 
     has_finished_ = true;
-    PerformCancellation();
+    CancelInternal();
   }
 
   ConnectionPriority connection_priority() const {
@@ -78,9 +78,11 @@ class ConnectToDeviceOperation {
         failure_callback_(failure_callback),
         connection_priority_(connection_priority) {}
 
-  virtual void PerformCancellation() = 0;
-  virtual void PerformUpdateConnectionPriority(
-      ConnectionPriority connection_priority) = 0;
+  // Derived types can override these functions to implement cancellation and
+  // updating of priority.
+  virtual void CancelInternal() {}
+  virtual void UpdateConnectionPriorityInternal(
+      ConnectionPriority connection_priority) {}
 
   void OnSuccessfulConnectionAttempt(
       std::unique_ptr<AuthenticatedChannel> authenticated_channel) {

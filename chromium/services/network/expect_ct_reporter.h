@@ -41,7 +41,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) ExpectCTReporter
                    const base::Closure& failure_callback);
   ~ExpectCTReporter() override;
 
-  // net::ExpectCTReporter:
+  // net::TransportSecurityState::ExpectCTReporter:
   void OnExpectCTFailed(const net::HostPortPair& host_port_pair,
                         const GURL& report_uri,
                         base::Time expiration,
@@ -76,11 +76,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) ExpectCTReporter
   FRIEND_TEST_ALL_PREFIXES(ExpectCTReporterTest, SendReport);
   FRIEND_TEST_ALL_PREFIXES(ExpectCTReporterTest, PreflightContainsWhitespace);
   FRIEND_TEST_ALL_PREFIXES(ExpectCTReporterTest,
-                           BadCORSPreflightResponseOrigin);
+                           BadCorsPreflightResponseOrigin);
   FRIEND_TEST_ALL_PREFIXES(ExpectCTReporterTest,
-                           BadCORSPreflightResponseMethods);
+                           BadCorsPreflightResponseMethods);
   FRIEND_TEST_ALL_PREFIXES(ExpectCTReporterTest,
-                           BadCORSPreflightResponseHeaders);
+                           BadCorsPreflightResponseHeaders);
 
   // Starts a CORS preflight request to obtain permission from the server to
   // send a report with Content-Type: application/expect-ct-report+json. The

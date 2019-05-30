@@ -14,8 +14,6 @@ namespace gpu {
 namespace {
 
 void CheckGpuPreferencesEqual(GpuPreferences left, GpuPreferences right) {
-  EXPECT_EQ(left.single_process, right.single_process);
-  EXPECT_EQ(left.in_process_gpu, right.in_process_gpu);
   EXPECT_EQ(left.disable_accelerated_video_decode,
             right.disable_accelerated_video_decode);
   EXPECT_EQ(left.disable_accelerated_video_encode,
@@ -98,10 +96,10 @@ TEST(GpuPreferencesTest, EncodeDecode) {
     GpuPreferences default_prefs;
     mojom::GpuPreferences prefs_mojom;
 
-    // Make sure all feilds are included in mojo struct.
+    // Make sure all fields are included in mojo struct.
     // TODO(zmo): This test isn't perfect. If a field isn't included in
-    // mojom::GpuPreferences, but because of alignment, the two struct sizes
-    // could still be the same.
+    // mojom::GpuPreferences, the two struct sizes might still be equal due to
+    // alignment.
     EXPECT_EQ(sizeof(default_prefs), sizeof(prefs_mojom));
 
 #define GPU_PREFERENCES_FIELD(name, value)         \
@@ -110,8 +108,6 @@ TEST(GpuPreferencesTest, EncodeDecode) {
   prefs_mojom.name = value;                        \
   EXPECT_EQ(input_prefs.name, prefs_mojom.name);
 
-    GPU_PREFERENCES_FIELD(single_process, true)
-    GPU_PREFERENCES_FIELD(in_process_gpu, true)
     GPU_PREFERENCES_FIELD(disable_accelerated_video_decode, true)
     GPU_PREFERENCES_FIELD(disable_accelerated_video_encode, true)
     GPU_PREFERENCES_FIELD(gpu_startup_dialog, true)

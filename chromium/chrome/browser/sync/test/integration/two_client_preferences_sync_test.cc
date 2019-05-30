@@ -7,7 +7,8 @@
 #include "base/guid.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
-#include "build/build_config.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "chrome/browser/sync/test/integration/feature_toggler.h"
 #include "chrome/browser/sync/test/integration/preferences_helper.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sync_integration_test_util.h"
@@ -15,6 +16,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/sync/driver/sync_driver_switches.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 using preferences_helper::BooleanPrefMatches;
@@ -28,9 +30,13 @@ using preferences_helper::GetRegistry;
 using testing::Eq;
 using user_prefs::PrefRegistrySyncable;
 
-class TwoClientPreferencesSyncTest : public SyncTest {
+namespace {
+
+class TwoClientPreferencesSyncTest : public FeatureToggler, public SyncTest {
  public:
-  TwoClientPreferencesSyncTest() : SyncTest(TWO_CLIENT) {}
+  TwoClientPreferencesSyncTest()
+      : FeatureToggler(switches::kSyncPseudoUSSPreferences),
+        SyncTest(TWO_CLIENT) {}
   ~TwoClientPreferencesSyncTest() override {}
 
   bool TestUsesSelfNotifications() override { return false; }
@@ -39,20 +45,45 @@ class TwoClientPreferencesSyncTest : public SyncTest {
   DISALLOW_COPY_AND_ASSIGN(TwoClientPreferencesSyncTest);
 };
 
-IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest, E2E_ENABLED(Sanity)) {
+IN_PROC_BROWSER_TEST_P(TwoClientPreferencesSyncTest, E2E_ENABLED(Sanity)) {
   DisableVerifier();
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(StringPrefMatchChecker(prefs::kHomePage).Wait());
   const std::string new_home_page = base::StringPrintf(
       "https://example.com/%s", base::GenerateGUID().c_str());
+
+  base::HistogramTester histogram_tester;
   ChangeStringPref(0, prefs::kHomePage, new_home_page);
   ASSERT_TRUE(StringPrefMatchChecker(prefs::kHomePage).Wait());
   for (int i = 0; i < num_clients(); ++i) {
     ASSERT_EQ(new_home_page, GetPrefs(i)->GetString(prefs::kHomePage));
   }
+
+  EXPECT_EQ(0, histogram_tester.GetBucketCount(
+                   "Sync.ModelTypeEntityChange3.PREFERENCE",
+                   /*REMOTE_INITIAL_UPDATE=*/5));
+  // Client 0 may or may not see its own reflection during the test, but at
+  // least client 1 should have received one update.
+  EXPECT_NE(0, histogram_tester.GetBucketCount(
+                   "Sync.ModelTypeEntityChange3.PREFERENCE",
+                   /*REMOTE_NON_INITIAL_UPDATE=*/4));
+
+  // Metrics below are instrumented for the USS codepath only.
+  if (GetParam()) {
+    EXPECT_EQ(
+        1U,
+        histogram_tester
+            .GetAllSamples(
+                "Sync.NonReflectionUpdateFreshnessPossiblySkewed.PREFERENCE")
+            .size());
+    EXPECT_NE(0U, histogram_tester
+                      .GetAllSamples(
+                          "Sync.NonReflectionUpdateFreshnessPossiblySkewed")
+                      .size());
+  }
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest, E2E_ENABLED(BooleanPref)) {
+IN_PROC_BROWSER_TEST_P(TwoClientPreferencesSyncTest, E2E_ENABLED(BooleanPref)) {
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(BooleanPrefMatchChecker(prefs::kHomePageIsNewTabPage).Wait());
 
@@ -60,7 +91,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest, E2E_ENABLED(BooleanPref)) {
   ASSERT_TRUE(BooleanPrefMatchChecker(prefs::kHomePageIsNewTabPage).Wait());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest,
+IN_PROC_BROWSER_TEST_P(TwoClientPreferencesSyncTest,
                        E2E_ENABLED(Bidirectional)) {
   ASSERT_TRUE(SetupSync());
 
@@ -77,7 +108,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest,
             GetPrefs(0)->GetString(prefs::kHomePage));
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest,
+IN_PROC_BROWSER_TEST_P(TwoClientPreferencesSyncTest,
                        E2E_ENABLED(UnsyncableBooleanPref)) {
   ASSERT_TRUE(SetupSync());
   DisableVerifier();
@@ -96,7 +127,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest,
   ASSERT_FALSE(BooleanPrefMatches(prefs::kDisableScreenshots));
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest, E2E_ENABLED(StringPref)) {
+IN_PROC_BROWSER_TEST_P(TwoClientPreferencesSyncTest, E2E_ENABLED(StringPref)) {
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(StringPrefMatchChecker(prefs::kHomePage).Wait());
 
@@ -104,7 +135,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest, E2E_ENABLED(StringPref)) {
   ASSERT_TRUE(StringPrefMatchChecker(prefs::kHomePage).Wait());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest,
+IN_PROC_BROWSER_TEST_P(TwoClientPreferencesSyncTest,
                        E2E_ENABLED(ComplexPrefs)) {
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(IntegerPrefMatchChecker(prefs::kRestoreOnStartup).Wait());
@@ -122,17 +153,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest,
   ASSERT_TRUE(ListPrefMatchChecker(prefs::kURLsToRestoreOnStartup).Wait());
 }
 
-// Disabled due to flakiness on Chrome OS: https://crbug.com/873902.
-#if defined(OS_CHROMEOS)
-#define MAYBE_SingleClientEnabledEncryptionBothChanged \
-  DISABLED_SingleClientEnabledEncryptionBothChanged
-#else
-#define MAYBE_SingleClientEnabledEncryptionBothChanged \
-  SingleClientEnabledEncryptionBothChanged
-#endif
-IN_PROC_BROWSER_TEST_F(
-    TwoClientPreferencesSyncTest,
-    E2E_ENABLED(MAYBE_SingleClientEnabledEncryptionBothChanged)) {
+IN_PROC_BROWSER_TEST_P(TwoClientPreferencesSyncTest,
+                       E2E_ENABLED(SingleClientEnabledEncryptionBothChanged)) {
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(BooleanPrefMatchChecker(prefs::kHomePageIsNewTabPage).Wait());
   ASSERT_TRUE(StringPrefMatchChecker(prefs::kHomePage).Wait());
@@ -146,8 +168,9 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(BooleanPrefMatchChecker(prefs::kHomePageIsNewTabPage).Wait());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest,
-      E2E_ENABLED(BothClientsEnabledEncryptionAndChangedMultipleTimes)) {
+IN_PROC_BROWSER_TEST_P(
+    TwoClientPreferencesSyncTest,
+    E2E_ENABLED(BothClientsEnabledEncryptionAndChangedMultipleTimes)) {
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(BooleanPrefMatchChecker(prefs::kHomePageIsNewTabPage).Wait());
 
@@ -163,9 +186,12 @@ IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTest,
 
 // The following tests use lower-level mechanisms to wait for sync cycle
 // completions. Those only work reliably with self notifications turned on.
-class TwoClientPreferencesSyncTestWithSelfNotifications : public SyncTest {
+class TwoClientPreferencesSyncTestWithSelfNotifications : public FeatureToggler,
+                                                          public SyncTest {
  public:
-  TwoClientPreferencesSyncTestWithSelfNotifications() : SyncTest(TWO_CLIENT) {}
+  TwoClientPreferencesSyncTestWithSelfNotifications()
+      : FeatureToggler(switches::kSyncPseudoUSSPreferences),
+        SyncTest(TWO_CLIENT) {}
   ~TwoClientPreferencesSyncTestWithSelfNotifications() override {}
 
   void SetUp() override {
@@ -183,7 +209,7 @@ class TwoClientPreferencesSyncTestWithSelfNotifications : public SyncTest {
 };
 
 // Tests that late registered prefs are kept in sync with other clients.
-IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTestWithSelfNotifications,
+IN_PROC_BROWSER_TEST_P(TwoClientPreferencesSyncTestWithSelfNotifications,
                        E2E_ENABLED(LateRegisteredPrefsShouldSync)) {
   // client0 has the pref registered before sync and is modifying a pref before
   // that pref got registered with client1 (but after client1 started syncing).
@@ -222,7 +248,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTestWithSelfNotifications,
   EXPECT_THAT(GetPrefs(0)->GetBoolean(pref_name), Eq(true));
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTestWithSelfNotifications,
+IN_PROC_BROWSER_TEST_P(TwoClientPreferencesSyncTestWithSelfNotifications,
                        E2E_ENABLED(ShouldKeepLocalDataOnTypeMismatch)) {
   // Client 1 has type-conflicting data in it's pref file. Verify that incoming
   // values from sync of other type do not modify the local state.
@@ -258,7 +284,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTestWithSelfNotifications,
 
 // Verifies that priority synced preferences and regular sycned preferences are
 // kept separate.
-IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTestWithSelfNotifications,
+IN_PROC_BROWSER_TEST_P(TwoClientPreferencesSyncTestWithSelfNotifications,
                        E2E_ENABLED(ShouldIsolatePriorityPreferences)) {
   // Register a pref as priority with client0 and regular synced with client1.
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
@@ -282,3 +308,13 @@ IN_PROC_BROWSER_TEST_F(TwoClientPreferencesSyncTestWithSelfNotifications,
   EXPECT_THAT(GetPrefs(0)->GetString(pref_name), Eq("priority value"));
   EXPECT_THAT(GetPrefs(1)->GetString(pref_name), Eq("non-priority value"));
 }
+
+INSTANTIATE_TEST_SUITE_P(USS,
+                         TwoClientPreferencesSyncTest,
+                         ::testing::Values(false, true));
+
+INSTANTIATE_TEST_SUITE_P(USS,
+                         TwoClientPreferencesSyncTestWithSelfNotifications,
+                         ::testing::Values(false, true));
+
+}  // namespace

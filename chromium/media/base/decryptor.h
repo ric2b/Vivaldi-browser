@@ -36,6 +36,8 @@ class MEDIA_EXPORT Decryptor {
     kStatusMax = kError
   };
 
+  static const char* GetStatusName(Status status);
+
   // TODO(xhwang): Unify this with DemuxerStream::Type.
   enum StreamType { kAudio, kVideo, kStreamTypeMax = kVideo };
 
@@ -51,6 +53,7 @@ class MEDIA_EXPORT Decryptor {
   // If this function is called multiple times for the same |stream_type|, the
   // previously registered callback will be replaced. In other words,
   // registering a null callback cancels the originally registered callback.
+  // TODO(crbug.com/821288): Replace this with CdmContext::RegisterEventCB().
   virtual void RegisterNewKeyCB(StreamType stream_type,
                                 const NewKeyCB& key_added_cb) = 0;
 
@@ -154,6 +157,9 @@ class MEDIA_EXPORT Decryptor {
   // After this operation, the decoder is set to an uninitialized state.
   // The decoder can be reinitialized after it is uninitialized.
   virtual void DeinitializeDecoder(StreamType stream_type) = 0;
+
+  // Returns whether or not the decryptor implementation supports decrypt-only.
+  virtual bool CanAlwaysDecrypt();
 
  private:
   DISALLOW_COPY_AND_ASSIGN(Decryptor);

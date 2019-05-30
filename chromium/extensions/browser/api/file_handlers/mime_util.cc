@@ -4,6 +4,7 @@
 
 #include "extensions/browser/api/file_handlers/mime_util.h"
 
+#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/task/post_task.h"
@@ -43,6 +44,17 @@ void SniffMimeType(const base::FilePath& local_path, std::string* result) {
                        net::FilePathToFileURL(local_path),
                        std::string(),  // type_hint (passes no hint)
                        net::ForceSniffFileUrlsForHtml::kDisabled, result);
+    if (*result == "text/plain") {
+      // text/plain misidentifies AMR files, which look like scripts because
+      // they start with "#!". Use SniffMimeTypeFromLocalData to try and get a
+      // better match.
+      // TODO(amistry): Potentially add other types (i.e. SVG).
+      std::string secondary_result;
+      net::SniffMimeTypeFromLocalData(&content[0], bytes_read,
+                                      &secondary_result);
+      if (!secondary_result.empty())
+        *result = secondary_result;
+    }
   }
 }
 
@@ -61,10 +73,9 @@ void OnGetMimeTypeFromFileForNonNativeLocalPathCompleted(
 void OnGetMimeTypeFromMetadataForNonNativeLocalPathCompleted(
     const base::FilePath& local_path,
     const base::Callback<void(const std::string&)>& callback,
-    bool success,
-    const std::string& mime_type) {
-  if (success) {
-    callback.Run(mime_type);
+    const base::Optional<std::string>& mime_type) {
+  if (mime_type) {
+    callback.Run(mime_type.value());
     return;
   }
 
@@ -130,14 +141,14 @@ void GetMimeTypeForLocalPath(
 #if defined(OS_CHROMEOS)
   NonNativeFileSystemDelegate* delegate =
       ExtensionsAPIClient::Get()->GetNonNativeFileSystemDelegate();
-  if (delegate && delegate->IsUnderNonNativeLocalPath(context, local_path)) {
+  if (delegate && delegate->HasNonNativeMimeTypeProvider(context, local_path)) {
     // For non-native files, try to get the MIME type from metadata. If not
     // available, then try to guess from the extension. Never sniff (because
     // it can be very slow).
     delegate->GetNonNativeLocalPathMimeType(
         context, local_path,
-        base::Bind(&OnGetMimeTypeFromMetadataForNonNativeLocalPathCompleted,
-                   local_path, callback));
+        base::BindOnce(&OnGetMimeTypeFromMetadataForNonNativeLocalPathCompleted,
+                       local_path, callback));
     return;
   }
 #endif
@@ -184,7 +195,7 @@ void MimeTypeCollector::CollectForLocalPaths(
   if (!left_) {
     // Nothing to process.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback_, base::Passed(&result_)));
+        FROM_HERE, base::BindOnce(callback_, std::move(result_)));
     callback_ = CompletionCallback();
     return;
   }
@@ -201,7 +212,7 @@ void MimeTypeCollector::OnMimeTypeCollected(size_t index,
   (*result_)[index] = mime_type;
   if (!--left_) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback_, base::Passed(&result_)));
+        FROM_HERE, base::BindOnce(callback_, std::move(result_)));
     // Release the callback to avoid a circullar reference in case an instance
     // of this class is a member of a ref counted class, which instance is bound
     // to this callback.

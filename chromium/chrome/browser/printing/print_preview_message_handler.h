@@ -8,11 +8,11 @@
 #include "base/macros.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/services/printing/public/mojom/pdf_nup_converter.mojom.h"
 #include "components/services/pdf_compositor/public/interfaces/pdf_compositor.mojom.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
-class PrintPreviewUI;
 struct PrintHostMsg_DidPreviewDocument_Params;
 struct PrintHostMsg_DidPreviewPage_Params;
 struct PrintHostMsg_DidStartPreview_Params;
@@ -35,6 +35,7 @@ class Rect;
 
 namespace printing {
 
+class PrintPreviewUI;
 struct PageSizeMargins;
 
 // Manages the print preview handling for a WebContents.
@@ -89,25 +90,40 @@ class PrintPreviewMessageHandler
       const PrintHostMsg_PreviewIds& ids);
 
   void NotifyUIPreviewPageReady(
+      PrintPreviewUI* print_preview_ui,
       int page_number,
       const PrintHostMsg_PreviewIds& ids,
       scoped_refptr<base::RefCountedMemory> data_bytes);
   void NotifyUIPreviewDocumentReady(
+      PrintPreviewUI* print_preview_ui,
       int page_count,
       const PrintHostMsg_PreviewIds& ids,
       scoped_refptr<base::RefCountedMemory> data_bytes);
 
   // Callbacks for pdf compositor client.
   void OnCompositePdfPageDone(int page_number,
+                              int document_cookie,
                               const PrintHostMsg_PreviewIds& ids,
                               mojom::PdfCompositor::Status status,
                               base::ReadOnlySharedMemoryRegion region);
   void OnCompositePdfDocumentDone(int page_count,
+                                  int document_cookie,
                                   const PrintHostMsg_PreviewIds& ids,
                                   mojom::PdfCompositor::Status status,
                                   base::ReadOnlySharedMemoryRegion region);
 
+  void OnNupPdfConvertDone(int page_number,
+                           const PrintHostMsg_PreviewIds& ids,
+                           mojom::PdfNupConverter::Status status,
+                           base::ReadOnlySharedMemoryRegion region);
+  void OnNupPdfDocumentConvertDone(int page_count,
+                                   const PrintHostMsg_PreviewIds& ids,
+                                   mojom::PdfNupConverter::Status status,
+                                   base::ReadOnlySharedMemoryRegion region);
+
   base::WeakPtrFactory<PrintPreviewMessageHandler> weak_ptr_factory_;
+
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
 
   DISALLOW_COPY_AND_ASSIGN(PrintPreviewMessageHandler);
 };

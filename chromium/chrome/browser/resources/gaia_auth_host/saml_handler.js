@@ -16,33 +16,33 @@ cr.define('cr.login', function() {
    * The lowest version of the credentials passing API supported.
    * @type {number}
    */
-  var MIN_API_VERSION_VERSION = 1;
+  const MIN_API_VERSION_VERSION = 1;
 
   /**
    * The highest version of the credentials passing API supported.
    * @type {number}
    */
-  var MAX_API_VERSION_VERSION = 1;
+  const MAX_API_VERSION_VERSION = 1;
 
   /**
    * The key types supported by the credentials passing API.
    * @type {Array} Array of strings.
    */
-  var API_KEY_TYPES = [
+  const API_KEY_TYPES = [
     'KEY_TYPE_PASSWORD_PLAIN',
   ];
 
   /** @const */
-  var SAML_HEADER = 'google-accounts-saml';
+  const SAML_HEADER = 'google-accounts-saml';
 
   /** @const */
-  var injectedScriptName = 'samlInjected';
+  const injectedScriptName = 'samlInjected';
 
   /**
    * The script to inject into webview and its sub frames.
    * @type {string}
    */
-  var injectedJs = String.raw`
+  const injectedJs = String.raw`
       // <include src="webview_saml_injected.js">
   `;
 
@@ -61,7 +61,7 @@ cr.define('cr.login', function() {
    * @return {string} The host name of the URL.
    */
   function extractDomain(url) {
-    var a = document.createElement('a');
+    const a = document.createElement('a');
     a.href = url;
     return a.hostname;
   }
@@ -69,117 +69,115 @@ cr.define('cr.login', function() {
   /**
    * A handler to provide saml support for the given webview that hosts the
    * auth IdP pages.
-   * @extends {cr.EventTarget}
-   * @param {webview} webview
-   * @constructor
    */
-  function SamlHandler(webview) {
-    /**
-     * The webview that serves IdP pages.
-     * @type {webview}
-     */
-    this.webview_ = webview;
+  class SamlHandler extends cr.EventTarget {
+    /** @param {webview} webview */
+    constructor(webview) {
+      super();
 
-    /**
-     * Whether a Saml IdP page is display in the webview.
-     * @type {boolean}
-     */
-    this.isSamlPage_ = false;
+      /**
+       * The webview that serves IdP pages.
+       * @type {webview}
+       */
+      this.webview_ = webview;
 
-    /**
-     * Pending Saml IdP page flag that is set when a SAML_HEADER is received
-     * and is copied to |isSamlPage_| in loadcommit.
-     * @type {boolean}
-     */
-    this.pendingIsSamlPage_ = false;
+      /**
+       * Whether a Saml IdP page is display in the webview.
+       * @type {boolean}
+       */
+      this.isSamlPage_ = false;
 
-    /**
-     * The last aborted top level url. It is recorded in loadabort event and
-     * used to skip injection into Chrome's error page in the following
-     * loadcommit event.
-     * @type {string}
-     */
-    this.abortedTopLevelUrl_ = null;
+      /**
+       * Pending Saml IdP page flag that is set when a SAML_HEADER is received
+       * and is copied to |isSamlPage_| in loadcommit.
+       * @type {boolean}
+       */
+      this.pendingIsSamlPage_ = false;
 
-    /**
-     * The domain of the Saml IdP.
-     * @type {string}
-     */
-    this.authDomain = '';
+      /**
+       * The last aborted top level url. It is recorded in loadabort event and
+       * used to skip injection into Chrome's error page in the following
+       * loadcommit event.
+       * @type {string}
+       */
+      this.abortedTopLevelUrl_ = null;
 
-    /**
-     * Scraped password stored in an id to password field value map.
-     * @type {Object<string, string>}
-     * @private
-     */
-    this.passwordStore_ = {};
+      /**
+       * The domain of the Saml IdP.
+       * @type {string}
+       */
+      this.authDomain = '';
 
-    /**
-     * Whether Saml API is initialized.
-     * @type {boolean}
-     */
-    this.apiInitialized_ = false;
+      /**
+       * Scraped password stored in an id to password field value map.
+       * @type {Object<string, string>}
+       * @private
+       */
+      this.passwordStore_ = {};
 
-    /**
-     * Saml API version to use.
-     * @type {number}
-     */
-    this.apiVersion_ = 0;
+      /**
+       * Whether Saml API is initialized.
+       * @type {boolean}
+       */
+      this.apiInitialized_ = false;
 
-    /**
-     * Saml API token received.
-     * @type {string}
-     */
-    this.apiToken_ = null;
+      /**
+       * Saml API version to use.
+       * @type {number}
+       */
+      this.apiVersion_ = 0;
 
-    /**
-     * Saml API password bytes.
-     * @type {string}
-     */
-    this.apiPasswordBytes_ = null;
+      /**
+       * Saml API token received.
+       * @type {string}
+       */
+      this.apiToken_ = null;
 
-    /*
-     * Whether to abort the authentication flow and show an error messagen when
-     * content served over an unencrypted connection is detected.
-     * @type {boolean}
-     */
-    this.blockInsecureContent = false;
+      /**
+       * Saml API password bytes.
+       * @type {string}
+       */
+      this.apiPasswordBytes_ = null;
 
-    this.webviewEventManager_ = WebviewEventManager.create();
+      /*
+       * Whether to abort the authentication flow and show an error messagen
+       * when content served over an unencrypted connection is detected.
+       * @type {boolean}
+       */
+      this.blockInsecureContent = false;
 
-    this.webviewEventManager_.addEventListener(
-        this.webview_, 'contentload', this.onContentLoad_.bind(this));
-    this.webviewEventManager_.addEventListener(
-        this.webview_, 'loadabort', this.onLoadAbort_.bind(this));
-    this.webviewEventManager_.addEventListener(
-        this.webview_, 'loadcommit', this.onLoadCommit_.bind(this));
-    this.webviewEventManager_.addEventListener(
-        this.webview_, 'permissionrequest',
-        this.onPermissionRequest_.bind(this));
+      this.webviewEventManager_ = WebviewEventManager.create();
 
-    this.webviewEventManager_.addWebRequestEventListener(
-        this.webview_.request.onBeforeRequest,
-        this.onInsecureRequest.bind(this),
-        {urls: ['http://*/*', 'file://*/*', 'ftp://*/*']}, ['blocking']);
-    this.webviewEventManager_.addWebRequestEventListener(
-        this.webview_.request.onHeadersReceived,
-        this.onHeadersReceived_.bind(this),
-        {urls: ['<all_urls>'], types: ['main_frame', 'xmlhttprequest']},
-        ['blocking', 'responseHeaders']);
+      this.webviewEventManager_.addEventListener(
+          this.webview_, 'contentload', this.onContentLoad_.bind(this));
+      this.webviewEventManager_.addEventListener(
+          this.webview_, 'loadabort', this.onLoadAbort_.bind(this));
+      this.webviewEventManager_.addEventListener(
+          this.webview_, 'loadcommit', this.onLoadCommit_.bind(this));
+      this.webviewEventManager_.addEventListener(
+          this.webview_, 'permissionrequest',
+          this.onPermissionRequest_.bind(this));
 
-    this.webview_.addContentScripts([{
-      name: injectedScriptName,
-      matches: ['http://*/*', 'https://*/*'],
-      js: {code: injectedJs},
-      all_frames: true,
-      run_at: 'document_start'
-    }]);
+      this.webviewEventManager_.addWebRequestEventListener(
+          this.webview_.request.onBeforeRequest,
+          this.onInsecureRequest.bind(this),
+          {urls: ['http://*/*', 'file://*/*', 'ftp://*/*']}, ['blocking']);
+      this.webviewEventManager_.addWebRequestEventListener(
+          this.webview_.request.onHeadersReceived,
+          this.onHeadersReceived_.bind(this),
+          {urls: ['<all_urls>'], types: ['main_frame', 'xmlhttprequest']},
+          ['blocking', 'responseHeaders']);
 
-    PostMessageChannel.runAsDaemon(this.onConnected_.bind(this));
-  }
+      this.webview_.addContentScripts([{
+        name: injectedScriptName,
+        matches: ['http://*/*', 'https://*/*'],
+        js: {code: injectedJs},
+        all_frames: true,
+        run_at: 'document_start'
+      }]);
 
-  SamlHandler.prototype = {
-    __proto__: cr.EventTarget.prototype,
+      PostMessageChannel.runAsDaemon(this.onConnected_.bind(this));
+    }
 
     /**
      * Whether Saml API is used during auth.
@@ -187,7 +185,7 @@ cr.define('cr.login', function() {
      */
     get samlApiUsed() {
       return !!this.apiPasswordBytes_;
-    },
+    }
 
     /**
      * Returns the Saml API password bytes.
@@ -195,16 +193,16 @@ cr.define('cr.login', function() {
      */
     get apiPasswordBytes() {
       return this.apiPasswordBytes_;
-    },
+    }
 
     /**
      * Returns the first scraped password if any, or an empty string otherwise.
      * @return {string}
      */
     get firstScrapedPassword() {
-      var scraped = this.getConsolidatedScrapedPasswords_();
+      const scraped = this.getConsolidatedScrapedPasswords_();
       return scraped.length ? scraped[0] : '';
-    },
+    }
 
     /**
      * Returns the number of scraped passwords.
@@ -212,35 +210,35 @@ cr.define('cr.login', function() {
      */
     get scrapedPasswordCount() {
       return this.getConsolidatedScrapedPasswords_().length;
-    },
+    }
 
     /**
      * Gets the de-duped scraped passwords.
      * @return {Array<string>}
      * @private
      */
-    getConsolidatedScrapedPasswords_: function() {
-      var passwords = {};
-      for (var property in this.passwordStore_) {
+    getConsolidatedScrapedPasswords_() {
+      const passwords = {};
+      for (const property in this.passwordStore_) {
         passwords[this.passwordStore_[property]] = true;
       }
       return Object.keys(passwords);
-    },
+    }
 
     /**
      * Removes the injected content script and unbinds all listeners from the
      * webview passed to the constructor. This SAMLHandler will be unusable
      * after this function returns.
      */
-    unbindFromWebview: function() {
+    unbindFromWebview() {
       this.webview_.removeContentScripts([injectedScriptName]);
       this.webviewEventManager_.removeAllListeners();
-    },
+    }
 
     /**
      * Resets all auth states
      */
-    reset: function() {
+    reset() {
       this.isSamlPage_ = false;
       this.pendingIsSamlPage_ = false;
       this.passwordStore_ = {};
@@ -249,43 +247,45 @@ cr.define('cr.login', function() {
       this.apiVersion_ = 0;
       this.apiToken_ = null;
       this.apiPasswordBytes_ = null;
-    },
+    }
 
     /**
      * Check whether the given |password| is in the scraped passwords.
      * @return {boolean} True if the |password| is found.
      */
-    verifyConfirmedPassword: function(password) {
+    verifyConfirmedPassword(password) {
       return this.getConsolidatedScrapedPasswords_().indexOf(password) >= 0;
-    },
+    }
 
     /**
      * Invoked on the webview's contentload event.
      * @private
      */
-    onContentLoad_: function(e) {
+    onContentLoad_(e) {
       // |this.webview_.contentWindow| may be null after network error screen
       // is shown. See crbug.com/770999.
-      if (this.webview_.contentWindow)
+      if (this.webview_.contentWindow) {
         PostMessageChannel.init(this.webview_.contentWindow);
-      else
+      } else {
         console.error('SamlHandler.onContentLoad_: contentWindow is null.');
-    },
+      }
+    }
 
     /**
      * Invoked on the webview's loadabort event.
      * @private
      */
-    onLoadAbort_: function(e) {
-      if (e.isTopLevel)
+    onLoadAbort_(e) {
+      if (e.isTopLevel) {
         this.abortedTopLevelUrl_ = e.url;
-    },
+      }
+    }
 
     /**
      * Invoked on the webview's loadcommit event for both main and sub frames.
      * @private
      */
-    onLoadCommit_: function(e) {
+    onLoadCommit_(e) {
       // Skip this loadcommit if the top level load is just aborted.
       if (e.isTopLevel && e.url === this.abortedTopLevelUrl_) {
         this.abortedTopLevelUrl_ = null;
@@ -293,11 +293,12 @@ cr.define('cr.login', function() {
       }
 
       // Skip for none http/https url.
-      if (!e.url.startsWith('https://') && !e.url.startsWith('http://'))
+      if (!e.url.startsWith('https://') && !e.url.startsWith('http://')) {
         return;
+      }
 
       this.isSamlPage_ = this.pendingIsSamlPage_;
-    },
+    }
 
     /**
      * Handler for webRequest.onBeforeRequest, invoked when content served over
@@ -307,91 +308,51 @@ cr.define('cr.login', function() {
      * @param {Object} details
      * @return {!Object} Decision whether to block the request.
      */
-    onInsecureRequest: function(details) {
-      if (!this.blockInsecureContent)
+    onInsecureRequest(details) {
+      if (!this.blockInsecureContent) {
         return {};
-      var strippedUrl = stripParams(details.url);
+      }
+      const strippedUrl = stripParams(details.url);
       this.dispatchEvent(new CustomEvent(
           'insecureContentBlocked', {detail: {url: strippedUrl}}));
       return {cancel: true};
-    },
+    }
 
     /**
      * Invoked when headers are received for the main frame.
      * @private
      */
-    onHeadersReceived_: function(details) {
-      var headers = details.responseHeaders;
+    onHeadersReceived_(details) {
+      const headers = details.responseHeaders;
 
       // Check whether GAIA headers indicating the start or end of a SAML
-      // redirect are present. If so, synthesize cookies to mark these points.
-      for (var i = 0; headers && i < headers.length; ++i) {
-        var header = headers[i];
-        var headerName = header.name.toLowerCase();
+      // redirect are present.
+      for (let i = 0; headers && i < headers.length; ++i) {
+        const header = headers[i];
+        const headerName = header.name.toLowerCase();
 
         if (headerName == SAML_HEADER) {
-          var action = header.value.toLowerCase();
+          const action = header.value.toLowerCase();
           if (action == 'start') {
             this.pendingIsSamlPage_ = true;
-
-            // GAIA is redirecting to a SAML IdP. Any cookies contained in the
-            // current |headers| were set by GAIA. Any cookies set in future
-            // requests will be coming from the IdP. Append a cookie to the
-            // current |headers| that marks the point at which the redirect
-            // occurred.
-            headers.push(
-                {name: 'Set-Cookie', value: 'google-accounts-saml-start=now'});
-            return {responseHeaders: headers};
           } else if (action == 'end') {
             this.pendingIsSamlPage_ = false;
-
-            // The SAML IdP has redirected back to GAIA. Add a cookie that marks
-            // the point at which the redirect occurred occurred. It is
-            // important that this cookie be prepended to the current |headers|
-            // because any cookies contained in the |headers| were already set
-            // by GAIA, not the IdP. Due to limitations in the webRequest API,
-            // it is not trivial to prepend a cookie:
-            //
-            // The webRequest API only allows for deleting and appending
-            // headers. To prepend a cookie (C), three steps are needed:
-            // 1) Delete any headers that set cookies (e.g., A, B).
-            // 2) Append a header which sets the cookie (C).
-            // 3) Append the original headers (A, B).
-            //
-            // Due to a further limitation of the webRequest API, it is not
-            // possible to delete a header in step 1) and append an identical
-            // header in step 3). To work around this, a trailing semicolon is
-            // added to each header before appending it. Trailing semicolons are
-            // ignored by Chrome in cookie headers, causing the modified headers
-            // to actually set the original cookies.
-            var otherHeaders = [];
-            var cookies =
-                [{name: 'Set-Cookie', value: 'google-accounts-saml-end=now'}];
-            for (var j = 0; j < headers.length; ++j) {
-              if (headers[j].name.toLowerCase().startsWith('set-cookie')) {
-                var header = headers[j];
-                header.value += ';';
-                cookies.push(header);
-              } else {
-                otherHeaders.push(headers[j]);
-              }
-            }
-            return {responseHeaders: otherHeaders.concat(cookies)};
           }
         }
       }
 
       return {};
-    },
+    }
 
     /**
      * Invoked when the injected JS makes a connection.
      */
-    onConnected_: function(port) {
-      if (port.targetWindow != this.webview_.contentWindow)
+    onConnected_(port) {
+      if (port.targetWindow != this.webview_.contentWindow) {
         return;
+      }
 
-      var channel = Channel.create();
+      const channel = Channel.create();
       channel.init(port);
 
       channel.registerMessage('apiCall', this.onAPICall_.bind(this, channel));
@@ -401,9 +362,9 @@ cr.define('cr.login', function() {
           'pageLoaded', this.onPageLoaded_.bind(this, channel));
       channel.registerMessage(
           'getSAMLFlag', this.onGetSAMLFlag_.bind(this, channel));
-    },
+    }
 
-    sendInitializationSuccess_: function(channel) {
+    sendInitializationSuccess_(channel) {
       channel.send({
         name: 'apiResponse',
         response: {
@@ -412,12 +373,12 @@ cr.define('cr.login', function() {
           keyTypes: API_KEY_TYPES
         }
       });
-    },
+    }
 
-    sendInitializationFailure_: function(channel) {
+    sendInitializationFailure_(channel) {
       channel.send(
           {name: 'apiResponse', response: {result: 'initialization_failed'}});
-    },
+    }
 
     /**
      * Handlers for channel messages.
@@ -425,8 +386,8 @@ cr.define('cr.login', function() {
      * @param {Object} msg Received message.
      * @private
      */
-    onAPICall_: function(channel, msg) {
-      var call = msg.call;
+    onAPICall_(channel, msg) {
+      const call = msg.call;
       if (call.method == 'initialize') {
         if (!Number.isInteger(call.requestedVersion) ||
             call.requestedVersion < MIN_API_VERSION_VERSION) {
@@ -453,19 +414,21 @@ cr.define('cr.login', function() {
 
         this.dispatchEvent(new CustomEvent('apiPasswordAdded'));
       } else if (call.method == 'confirm') {
-        if (call.token != this.apiToken_)
+        if (call.token != this.apiToken_) {
           console.error('SamlHandler.onAPICall_: token mismatch');
+        }
       } else {
         console.error('SamlHandler.onAPICall_: unknown message');
       }
-    },
+    }
 
-    onUpdatePassword_: function(channel, msg) {
-      if (this.isSamlPage_)
+    onUpdatePassword_(channel, msg) {
+      if (this.isSamlPage_) {
         this.passwordStore_[msg.id] = msg.password;
-    },
+      }
+    }
 
-    onPageLoaded_: function(channel, msg) {
+    onPageLoaded_(channel, msg) {
       this.authDomain = extractDomain(msg.url);
       this.dispatchEvent(new CustomEvent('authPageLoaded', {
         detail: {
@@ -474,21 +437,21 @@ cr.define('cr.login', function() {
           domain: this.authDomain
         }
       }));
-    },
+    }
 
-    onPermissionRequest_: function(permissionEvent) {
+    onPermissionRequest_(permissionEvent) {
       if (permissionEvent.permission === 'media') {
         // The actual permission check happens in
         // WebUILoginView::RequestMediaAccessPermission().
         this.dispatchEvent(new CustomEvent('videoEnabled'));
         permissionEvent.request.allow();
       }
-    },
+    }
 
-    onGetSAMLFlag_: function(channel, msg) {
+    onGetSAMLFlag_(channel, msg) {
       return this.isSamlPage_;
-    },
-  };
+    }
+  }
 
   return {SamlHandler: SamlHandler};
 });

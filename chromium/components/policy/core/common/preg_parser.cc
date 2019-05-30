@@ -18,8 +18,8 @@
 #include "base/files/file_path.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -259,7 +259,7 @@ void HandleRecord(const base::string16& key_name,
 
   std::string data_utf8;
   std::string action_trigger(base::ToLowerASCII(
-      value_name.substr(arraysize(kActionTriggerPrefix) - 1)));
+      value_name.substr(base::size(kActionTriggerPrefix) - 1)));
   if (action_trigger == kActionTriggerDeleteValues) {
     if (DecodePRegStringValue(data, &data_utf8)) {
       for (const std::string& value :
@@ -277,8 +277,8 @@ void HandleRecord(const base::string16& key_name,
     }
   } else if (base::StartsWith(action_trigger, kActionTriggerDel,
                               base::CompareCase::SENSITIVE)) {
-    dict->RemoveValue(value_name.substr(arraysize(kActionTriggerPrefix) - 1 +
-                                        arraysize(kActionTriggerDel) - 1));
+    dict->RemoveValue(value_name.substr(base::size(kActionTriggerPrefix) - 1 +
+                                        base::size(kActionTriggerDel) - 1));
   } else if (base::StartsWith(action_trigger, kActionTriggerDelVals,
                               base::CompareCase::SENSITIVE)) {
     // Delete all values.
@@ -314,7 +314,7 @@ bool ReadFile(const base::FilePath& file_path,
 
   return ReadDataInternal(
       mapped_file.data(), mapped_file.length(), root, dict, status,
-      base::StringPrintf("file '%" PRIsFP "'", file_path.value().c_str()));
+      base::StringPrintf("file '%" PRFilePath "'", file_path.value().c_str()));
 }
 
 POLICY_EXPORT bool ReadDataInternal(const uint8_t* preg_data,
@@ -334,7 +334,7 @@ POLICY_EXPORT bool ReadDataInternal(const uint8_t* preg_data,
   }
 
   // Check the header.
-  const int kHeaderSize = arraysize(kPRegFileHeader);
+  const int kHeaderSize = base::size(kPRegFileHeader);
   if (!preg_data || preg_data_size < kHeaderSize ||
       memcmp(kPRegFileHeader, preg_data, kHeaderSize) != 0) {
     LOG(ERROR) << "Bad PReg " << debug_name;

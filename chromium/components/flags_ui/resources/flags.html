@@ -16,6 +16,8 @@
   <script src="chrome://resources/js/ios/web_ui.js"></script>
 </if>
 
+<script src="chrome://resources/js/cr.js"></script>
+<script src="chrome://resources/js/cr/ui/focus_outline_manager.js"></script>
 <script src="chrome://resources/js/util.js"></script>
 </head>
 <body>
@@ -23,7 +25,8 @@
   <div class="flex-container">
     <div class="flex">
       <div class="search-container">
-        <input type="text" id="search" placeholder="Search flags" tabindex="1" autocomplete="search">
+        <input type="text" id="search" placeholder="Search flags" tabindex="1"
+            autocomplete="off" spellcheck="false">
         <button class="clear-search" title="Clear search" tabindex="2"></button>
       </div>
     </div>
@@ -73,6 +76,8 @@
             tabindex="4">Available</a>
         <div id="tab-content-available" class="tab-content"
             role="tabpanel" aria-labelledby="tab-available" aria-hidden="false">
+        </div>
+        <div id="tab-content-available-template" class="template hidden">
           <!-- Non default experiments. -->
           <div jsselect="supportedFeatures"
               jsvalues="id:internal_name; class: is_default ? 'hidden' : 'experiment'"
@@ -204,7 +209,7 @@
         <div class="flex restart-notice" jstcache="0">$i18n{flagsRestartNotice}</div>
         <div class="flex">
 <if expr="not is_ios">
-          <button class="experiment-restart-button" type="button" tabindex="9">
+          <button id="experiment-restart-button" type="button" tabindex="9">
 <if expr="not chromeos">
           Relaunch Now
 </if>

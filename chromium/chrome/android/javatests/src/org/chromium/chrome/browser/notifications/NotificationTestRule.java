@@ -12,13 +12,13 @@ import org.junit.runners.model.Statement;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
-import org.chromium.chrome.browser.preferences.website.ContentSetting;
+import org.chromium.chrome.browser.preferences.website.ContentSettingValues;
 import org.chromium.chrome.browser.preferences.website.PermissionInfo;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.util.browser.notifications.MockNotificationManagerProxy;
 import org.chromium.chrome.test.util.browser.notifications.MockNotificationManagerProxy.NotificationEntry;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 
 import java.util.List;
 import java.util.concurrent.TimeoutException;
@@ -55,8 +55,8 @@ public class NotificationTestRule extends ChromeActivityTestRule<ChromeTabbedAct
     /**
      * Sets the permission to use Web Notifications for the test HTTP server's origin to |setting|.
      */
-    public void setNotificationContentSettingForOrigin(final ContentSetting setting, String origin)
-            throws InterruptedException, TimeoutException {
+    public void setNotificationContentSettingForOrigin(final @ContentSettingValues int setting,
+            String origin) throws InterruptedException, TimeoutException {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
@@ -68,9 +68,9 @@ public class NotificationTestRule extends ChromeActivityTestRule<ChromeTabbedAct
         });
 
         String permission = runJavaScriptCodeInCurrentTab("Notification.permission");
-        if (setting == ContentSetting.ALLOW) {
+        if (setting == ContentSettingValues.ALLOW) {
             Assert.assertEquals("\"granted\"", permission);
-        } else if (setting == ContentSetting.BLOCK) {
+        } else if (setting == ContentSettingValues.BLOCK) {
             Assert.assertEquals("\"denied\"", permission);
         } else {
             Assert.assertEquals("\"default\"", permission);

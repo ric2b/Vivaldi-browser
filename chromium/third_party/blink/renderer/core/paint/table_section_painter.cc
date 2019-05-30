@@ -13,9 +13,8 @@
 #include "third_party/blink/renderer/core/paint/collapsed_border_painter.h"
 #include "third_party/blink/renderer/core/paint/object_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
-#include "third_party/blink/renderer/core/paint/paint_info_with_offset.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
-#include "third_party/blink/renderer/core/paint/scoped_box_clipper.h"
+#include "third_party/blink/renderer/core/paint/scoped_paint_state.h"
 #include "third_party/blink/renderer/core/paint/table_cell_painter.h"
 #include "third_party/blink/renderer/core/paint/table_row_painter.h"
 #include "third_party/blink/renderer/platform/graphics/paint/display_item_cache_skipper.h"
@@ -65,17 +64,20 @@ void TableSectionPainter::PaintSection(const PaintInfo& paint_info) {
   if (!total_rows || !total_cols)
     return;
 
-  PaintInfoWithOffset paint_info_with_offset(layout_table_section_, paint_info);
-  const auto& local_paint_info = paint_info_with_offset.GetPaintInfo();
-  auto paint_offset = paint_info_with_offset.PaintOffset();
+  ScopedPaintState paint_state(layout_table_section_, paint_info);
+  const auto& local_paint_info = paint_state.GetPaintInfo();
+  auto paint_offset = paint_state.PaintOffset();
 
   if (local_paint_info.phase != PaintPhase::kSelfOutlineOnly) {
-    base::Optional<ScopedBoxClipper> box_clipper;
     if (local_paint_info.phase != PaintPhase::kSelfBlockBackgroundOnly &&
         local_paint_info.phase != PaintPhase::kMask) {
-      box_clipper.emplace(layout_table_section_, local_paint_info);
+      ScopedBoxContentsPaintState contents_paint_state(paint_state,
+                                                       layout_table_section_);
+      PaintObject(contents_paint_state.GetPaintInfo(),
+                  contents_paint_state.PaintOffset());
+    } else {
+      PaintObject(local_paint_info, paint_offset);
     }
-    PaintObject(local_paint_info, paint_offset);
   }
 
   if (ShouldPaintSelfOutline(local_paint_info.phase)) {
@@ -127,12 +129,15 @@ void TableSectionPainter::PaintCollapsedSectionBorders(
       !layout_table_section_.Table()->EffectiveColumns().size())
     return;
 
-  PaintInfoWithOffset paint_info_with_offset(layout_table_section_, paint_info);
-  const auto& local_paint_info = paint_info_with_offset.GetPaintInfo();
-  auto paint_offset = paint_info_with_offset.PaintOffset();
-  base::Optional<ScopedBoxClipper> box_clipper;
-  if (local_paint_info.phase != PaintPhase::kMask)
-    box_clipper.emplace(layout_table_section_, local_paint_info);
+  ScopedPaintState paint_state(layout_table_section_, paint_info);
+  base::Optional<ScopedBoxContentsPaintState> contents_paint_state;
+  if (paint_info.phase != PaintPhase::kMask)
+    contents_paint_state.emplace(paint_state, layout_table_section_);
+  const auto& local_paint_info = contents_paint_state
+                                     ? contents_paint_state->GetPaintInfo()
+                                     : paint_state.GetPaintInfo();
+  auto paint_offset = contents_paint_state ? contents_paint_state->PaintOffset()
+                                           : paint_state.PaintOffset();
 
   CellSpan dirtied_rows;
   CellSpan dirtied_columns;
@@ -143,7 +148,7 @@ void TableSectionPainter::PaintCollapsedSectionBorders(
     dirtied_columns = layout_table_section_.FullTableEffectiveColumnSpan();
   } else {
     layout_table_section_.DirtiedRowsAndEffectiveColumns(
-        TableAlignedRect(paint_info, paint_offset), dirtied_rows,
+        TableAlignedRect(local_paint_info, paint_offset), dirtied_rows,
         dirtied_columns);
   }
 
@@ -197,15 +202,16 @@ void TableSectionPainter::PaintObject(const PaintInfo& paint_info,
       dirtied_columns.Start() >= dirtied_columns.End())
     return;
 
-  const auto& overflowing_cells = layout_table_section_.OverflowingCells();
-  if (overflowing_cells.IsEmpty()) {
+  const auto& visually_overflowing_cells =
+      layout_table_section_.VisuallyOverflowingCells();
+  if (visually_overflowing_cells.IsEmpty()) {
     // This path is for 2 cases:
     // 1. Normal partial paint, without overflowing cells;
     // 2. Full paint, for small sections or big sections with many overflowing
     //    cells.
     // The difference between the normal partial paint and full paint is that
     // whether dirtied_rows and dirtied_columns cover the whole section.
-    DCHECK(!layout_table_section_.HasOverflowingCell() ||
+    DCHECK(!layout_table_section_.HasVisuallyOverflowingCell() ||
            (dirtied_rows == layout_table_section_.FullSectionRowSpan() &&
             dirtied_columns ==
                 layout_table_section_.FullTableEffectiveColumnSpan()));
@@ -230,7 +236,7 @@ void TableSectionPainter::PaintObject(const PaintInfo& paint_info,
     // This is the "partial paint path" for overflowing cells referred in
     // LayoutTableSection::ComputeOverflowFromDescendants().
     Vector<const LayoutTableCell*> cells;
-    CopyToVector(overflowing_cells, cells);
+    CopyToVector(visually_overflowing_cells, cells);
 
     HashSet<const LayoutTableCell*> spanning_cells;
     for (unsigned r = dirtied_rows.Start(); r < dirtied_rows.End(); r++) {
@@ -245,7 +251,7 @@ void TableSectionPainter::PaintObject(const PaintInfo& paint_info,
       for (unsigned c = dirtied_columns.Start();
            c < n_cols && c < dirtied_columns.End(); c++) {
         if (const auto* cell = layout_table_section_.OriginatingCellAt(r, c)) {
-          if (!overflowing_cells.Contains(cell))
+          if (!visually_overflowing_cells.Contains(cell))
             cells.push_back(cell);
         }
       }
@@ -273,7 +279,7 @@ void TableSectionPainter::PaintBoxDecorationBackground(
       dirtied_columns == layout_table_section_.FullTableEffectiveColumnSpan() &&
               dirtied_rows == layout_table_section_.FullSectionRowSpan()
           ? kFullyPainted
-          : kMayBeClippedByPaintDirtyRect;
+          : kMayBeClippedByCullRect;
   layout_table_section_.GetMutableForPainting().UpdatePaintResult(
       paint_result, paint_info.GetCullRect());
 

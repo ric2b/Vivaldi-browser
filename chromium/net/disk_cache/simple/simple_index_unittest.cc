@@ -9,13 +9,13 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/hash.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_param_associator.h"
 #include "base/pickle.h"
-#include "base/sha1.h"
 #include "base/strings/stringprintf.h"
 #include "base/task_runner.h"
 #include "base/test/mock_entropy_provider.h"
@@ -66,11 +66,8 @@ class EntryMetadataTest : public testing::Test {
 class MockSimpleIndexFile : public SimpleIndexFile,
                             public base::SupportsWeakPtr<MockSimpleIndexFile> {
  public:
-  MockSimpleIndexFile()
-      : SimpleIndexFile(NULL, NULL, net::DISK_CACHE, base::FilePath()),
-        load_result_(NULL),
-        load_index_entries_calls_(0),
-        disk_writes_(0) {}
+  explicit MockSimpleIndexFile(net::CacheType cache_type)
+      : SimpleIndexFile(nullptr, nullptr, cache_type, base::FilePath()) {}
 
   void LoadIndexEntries(base::Time cache_last_modified,
                         const base::Closure& callback,
@@ -80,7 +77,8 @@ class MockSimpleIndexFile : public SimpleIndexFile,
     ++load_index_entries_calls_;
   }
 
-  void WriteToDisk(SimpleIndex::IndexWriteToDiskReason reason,
+  void WriteToDisk(net::CacheType cache_type,
+                   SimpleIndex::IndexWriteToDiskReason reason,
                    const SimpleIndex::EntrySet& entry_set,
                    uint64_t cache_size,
                    const base::TimeTicks& start,
@@ -101,18 +99,16 @@ class MockSimpleIndexFile : public SimpleIndexFile,
 
  private:
   base::Closure load_callback_;
-  SimpleIndexLoadResult* load_result_;
-  int load_index_entries_calls_;
-  int disk_writes_;
+  SimpleIndexLoadResult* load_result_ = nullptr;
+  int load_index_entries_calls_ = 0;
+  int disk_writes_ = 0;
   SimpleIndex::EntrySet disk_write_entry_set_;
 };
 
 class SimpleIndexTest : public net::TestWithScopedTaskEnvironment,
                         public SimpleIndexDelegate {
  protected:
-  SimpleIndexTest()
-      : hashes_(base::Bind(&HashesInitializer)),
-        doom_entries_calls_(0) {}
+  SimpleIndexTest() : hashes_(base::BindRepeating(&HashesInitializer)) {}
 
   static uint64_t HashesInitializer(size_t hash_index) {
     return disk_cache::simple_util::GetEntryHashKey(
@@ -120,11 +116,12 @@ class SimpleIndexTest : public net::TestWithScopedTaskEnvironment,
   }
 
   void SetUp() override {
-    std::unique_ptr<MockSimpleIndexFile> index_file(new MockSimpleIndexFile());
+    std::unique_ptr<MockSimpleIndexFile> index_file(
+        new MockSimpleIndexFile(CacheType()));
     index_file_ = index_file->AsWeakPtr();
     index_.reset(new SimpleIndex(/* io_thread = */ nullptr,
                                  /* cleanup_tracker = */ nullptr, this,
-                                 net::DISK_CACHE, std::move(index_file)));
+                                 CacheType(), std::move(index_file)));
 
     index_->Initialize(base::Time());
   }
@@ -148,7 +145,7 @@ class SimpleIndexTest : public net::TestWithScopedTaskEnvironment,
 
   // Redirect to allow single "friend" declaration in base class.
   bool GetEntryForTesting(uint64_t key, EntryMetadata* metadata) {
-    SimpleIndex::EntrySet::iterator it = index_->entries_set_.find(key);
+    auto it = index_->entries_set_.find(key);
     if (index_->entries_set_.end() == it)
       return false;
     *metadata = it->second;
@@ -177,6 +174,8 @@ class SimpleIndexTest : public net::TestWithScopedTaskEnvironment,
   }
   int doom_entries_calls() const { return doom_entries_calls_; }
 
+  virtual net::CacheType CacheType() const { return net::DISK_CACHE; }
+
   const simple_util::ImmutableArray<uint64_t, 16> hashes_;
   std::unique_ptr<SimpleIndex> index_;
   base::WeakPtr<MockSimpleIndexFile> index_file_;
@@ -185,7 +184,12 @@ class SimpleIndexTest : public net::TestWithScopedTaskEnvironment,
   base::test::ScopedFeatureList scoped_feature_list_;
 
   std::vector<uint64_t> last_doom_entry_hashes_;
-  int doom_entries_calls_;
+  int doom_entries_calls_ = 0;
+};
+
+class SimpleIndexAppCacheTest : public SimpleIndexTest {
+ protected:
+  net::CacheType CacheType() const override { return net::APP_CACHE; }
 };
 
 TEST_F(EntryMetadataTest, Basics) {
@@ -229,11 +233,11 @@ TEST_F(EntryMetadataTest, Serialize) {
   EntryMetadata entry_metadata = NewEntryMetadataWithValues();
 
   base::Pickle pickle;
-  entry_metadata.Serialize(&pickle);
+  entry_metadata.Serialize(net::DISK_CACHE, &pickle);
 
   base::PickleIterator it(pickle);
   EntryMetadata new_entry_metadata;
-  new_entry_metadata.Deserialize(&it, true);
+  new_entry_metadata.Deserialize(net::DISK_CACHE, &it, true, true);
   CheckEntryMetadataValues(new_entry_metadata);
 
   // Test reading of old format --- the modern serialization of above entry
@@ -242,7 +246,7 @@ TEST_F(EntryMetadataTest, Serialize) {
   // rounded again when stored by EntryMetadata.
   base::PickleIterator it2(pickle);
   EntryMetadata new_entry_metadata2;
-  new_entry_metadata2.Deserialize(&it2, false);
+  new_entry_metadata2.Deserialize(net::DISK_CACHE, &it2, false, false);
   EXPECT_EQ(RoundSize(RoundSize(kTestEntrySize) | kTestEntryMemoryData),
             new_entry_metadata2.GetEntrySize());
   EXPECT_EQ(0, new_entry_metadata2.GetInMemoryData());
@@ -429,6 +433,8 @@ TEST_F(SimpleIndexTest, BasicInit) {
 
   EntryMetadata metadata;
   EXPECT_TRUE(GetEntryForTesting(hashes_.at<1>(), &metadata));
+  EXPECT_EQ(metadata.GetLastUsedTime(),
+            index()->GetLastUsedTime(hashes_.at<1>()));
   EXPECT_LT(
       now - base::TimeDelta::FromDays(2) - base::TimeDelta::FromSeconds(1),
       metadata.GetLastUsedTime());
@@ -437,6 +443,8 @@ TEST_F(SimpleIndexTest, BasicInit) {
       metadata.GetLastUsedTime());
   EXPECT_EQ(RoundSize(10u), metadata.GetEntrySize());
   EXPECT_TRUE(GetEntryForTesting(hashes_.at<2>(), &metadata));
+  EXPECT_EQ(metadata.GetLastUsedTime(),
+            index()->GetLastUsedTime(hashes_.at<2>()));
   EXPECT_LT(
       now - base::TimeDelta::FromDays(3) - base::TimeDelta::FromSeconds(1),
       metadata.GetLastUsedTime());
@@ -444,6 +452,7 @@ TEST_F(SimpleIndexTest, BasicInit) {
       now - base::TimeDelta::FromDays(3) + base::TimeDelta::FromSeconds(1),
       metadata.GetLastUsedTime());
   EXPECT_EQ(RoundSize(1000u), metadata.GetEntrySize());
+  EXPECT_EQ(base::Time(), index()->GetLastUsedTime(hashes_.at<3>()));
 }
 
 // Remove something that's going to come in from the loaded index.
@@ -704,37 +713,50 @@ TEST_F(SimpleIndexTest, DiskWriteQueued) {
   index()->SetMaxSize(1000);
   ReturnIndexFile();
 
-  EXPECT_FALSE(index()->write_to_disk_timer_.IsRunning());
+  EXPECT_FALSE(index()->HasPendingWrite());
 
   const uint64_t kHash1 = hashes_.at<1>();
   index()->Insert(kHash1);
-  EXPECT_TRUE(index()->write_to_disk_timer_.IsRunning());
+  EXPECT_TRUE(index()->HasPendingWrite());
   index()->write_to_disk_timer_.Stop();
-  EXPECT_FALSE(index()->write_to_disk_timer_.IsRunning());
+  EXPECT_FALSE(index()->HasPendingWrite());
+
+  // Attempting to insert a hash that already exists should not queue the
+  // write timer.
+  index()->Insert(kHash1);
+  EXPECT_FALSE(index()->HasPendingWrite());
 
   index()->UseIfExists(kHash1);
-  EXPECT_TRUE(index()->write_to_disk_timer_.IsRunning());
+  EXPECT_TRUE(index()->HasPendingWrite());
   index()->write_to_disk_timer_.Stop();
 
   index()->UpdateEntrySize(kHash1, 20u);
-  EXPECT_TRUE(index()->write_to_disk_timer_.IsRunning());
+  EXPECT_TRUE(index()->HasPendingWrite());
   index()->write_to_disk_timer_.Stop();
 
+  // Updating to the same size should not queue the write timer.
+  index()->UpdateEntrySize(kHash1, 20u);
+  EXPECT_FALSE(index()->HasPendingWrite());
+
   index()->Remove(kHash1);
-  EXPECT_TRUE(index()->write_to_disk_timer_.IsRunning());
+  EXPECT_TRUE(index()->HasPendingWrite());
   index()->write_to_disk_timer_.Stop();
+
+  // Removing a non-existent hash should not queue the write timer.
+  index()->Remove(kHash1);
+  EXPECT_FALSE(index()->HasPendingWrite());
 }
 
 TEST_F(SimpleIndexTest, DiskWriteExecuted) {
   index()->SetMaxSize(1000);
   ReturnIndexFile();
 
-  EXPECT_FALSE(index()->write_to_disk_timer_.IsRunning());
+  EXPECT_FALSE(index()->HasPendingWrite());
 
   const uint64_t kHash1 = hashes_.at<1>();
   index()->Insert(kHash1);
   index()->UpdateEntrySize(kHash1, 20u);
-  EXPECT_TRUE(index()->write_to_disk_timer_.IsRunning());
+  EXPECT_TRUE(index()->HasPendingWrite());
 
   EXPECT_EQ(0, index_file_->disk_writes());
   index()->write_to_disk_timer_.FireNow();
@@ -756,11 +778,11 @@ TEST_F(SimpleIndexTest, DiskWritePostponed) {
   index()->SetMaxSize(1000);
   ReturnIndexFile();
 
-  EXPECT_FALSE(index()->write_to_disk_timer_.IsRunning());
+  EXPECT_FALSE(index()->HasPendingWrite());
 
   index()->Insert(hashes_.at<1>());
   index()->UpdateEntrySize(hashes_.at<1>(), 20u);
-  EXPECT_TRUE(index()->write_to_disk_timer_.IsRunning());
+  EXPECT_TRUE(index()->HasPendingWrite());
   base::TimeTicks expected_trigger(
       index()->write_to_disk_timer_.desired_run_time());
 
@@ -768,9 +790,50 @@ TEST_F(SimpleIndexTest, DiskWritePostponed) {
   EXPECT_EQ(expected_trigger, index()->write_to_disk_timer_.desired_run_time());
   index()->Insert(hashes_.at<2>());
   index()->UpdateEntrySize(hashes_.at<2>(), 40u);
-  EXPECT_TRUE(index()->write_to_disk_timer_.IsRunning());
+  EXPECT_TRUE(index()->HasPendingWrite());
   EXPECT_LT(expected_trigger, index()->write_to_disk_timer_.desired_run_time());
   index()->write_to_disk_timer_.Stop();
+}
+
+// net::APP_CACHE mode should not need to queue disk writes in as many places
+// as the default net::DISK_CACHE mode.
+TEST_F(SimpleIndexAppCacheTest, DiskWriteQueued) {
+  index()->SetMaxSize(1000);
+  ReturnIndexFile();
+
+  EXPECT_FALSE(index()->HasPendingWrite());
+
+  const uint64_t kHash1 = hashes_.at<1>();
+  index()->Insert(kHash1);
+  EXPECT_TRUE(index()->HasPendingWrite());
+  index()->write_to_disk_timer_.Stop();
+  EXPECT_FALSE(index()->HasPendingWrite());
+
+  // Attempting to insert a hash that already exists should not queue the
+  // write timer.
+  index()->Insert(kHash1);
+  EXPECT_FALSE(index()->HasPendingWrite());
+
+  // Since net::APP_CACHE does not evict or track access times using an
+  // entry should not queue the write timer.
+  index()->UseIfExists(kHash1);
+  EXPECT_FALSE(index()->HasPendingWrite());
+
+  index()->UpdateEntrySize(kHash1, 20u);
+  EXPECT_TRUE(index()->HasPendingWrite());
+  index()->write_to_disk_timer_.Stop();
+
+  // Updating to the same size should not queue the write timer.
+  index()->UpdateEntrySize(kHash1, 20u);
+  EXPECT_FALSE(index()->HasPendingWrite());
+
+  index()->Remove(kHash1);
+  EXPECT_TRUE(index()->HasPendingWrite());
+  index()->write_to_disk_timer_.Stop();
+
+  // Removing a non-existent hash should not queue the write timer.
+  index()->Remove(kHash1);
+  EXPECT_FALSE(index()->HasPendingWrite());
 }
 
 }  // namespace disk_cache

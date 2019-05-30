@@ -19,10 +19,14 @@ struct Session;
 class Status;
 class WebView;
 
+std::string GetElementKey();
+
 std::unique_ptr<base::DictionaryValue> CreateElement(
     const std::string& element_id);
 
 std::unique_ptr<base::DictionaryValue> CreateValueFrom(const WebPoint& point);
+
+Status CheckElement(const std::string& element_id);
 
 // |root_element_id| could be null when no root element is given.
 Status FindElement(int interval_ms,
@@ -42,6 +46,11 @@ Status IsElementFocused(
     WebView* web_view,
     const std::string& element_id,
     bool* is_focused);
+
+Status IsDocumentTypeXml(
+    Session* session,
+    WebView* web_view,
+    bool* is_xml_document);
 
 Status GetElementAttribute(Session* session,
                            WebView* web_view,

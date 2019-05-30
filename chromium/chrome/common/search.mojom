@@ -34,7 +34,7 @@ interface EmbeddedSearchConnector {
 // See http://dev.chromium.org/embeddedsearch
 interface EmbeddedSearch {
   // Tells InstantExtended to set the omnibox focus state.
-  FocusOmnibox(int32 page_seq_no, OmniboxFocusState state);
+  FocusOmnibox(int32 page_seq_no, bool focus);
 
   // Tells InstantExtended to delete a most visited item.
   DeleteMostVisitedItem(int32 page_seq_no, url.mojom.Url url);
@@ -54,6 +54,9 @@ interface EmbeddedSearch {
                    url.mojom.Url url,
                    url.mojom.Url new_url,
                    string new_title) => (bool success);
+
+  // Tells InstantExtended to reorder a custom link.
+  ReorderCustomLink(int32 page_seq_no, url.mojom.Url url, int32 new_pos);
 
   // Tells InstantExtended to delete a custom link. Returns true if successful.
   DeleteCustomLink(int32 page_seq_no, url.mojom.Url url) => (bool success);
@@ -101,6 +104,21 @@ interface EmbeddedSearch {
 
   // Let the user select a local file for the NTP background.
   SelectLocalBackgroundImage();
+
+  // Add a search suggestion task id to the blocklist.
+  BlocklistSearchSuggestion(int32 task_version, int64 task_id);
+
+  // Add a search suggestion task id and hash to the blocklist.
+  BlocklistSearchSuggestionWithHash(int32 task_version, int64 task_id,
+                                    array<uint8, 4> hash);
+
+  // A search suggestion was selected, issue a new request with the suggestion
+  // temporarily added to the blocklist.
+  SearchSuggestionSelected(int32 task_version, int64 task_id,
+                                    array<uint8, 4> hash);
+
+  // Opts the user out of receiving search suggestions.
+  OptOutOfSearchSuggestions();
 };
 
 [Native]

@@ -12,7 +12,7 @@ function Action() {
 /**
  * Executes this action on the set of entries.
  */
-Action.prototype.execute = function() {
+Action.prototype.execute = () => {
 };
 
 /**
@@ -20,13 +20,13 @@ Action.prototype.execute = function() {
  *
  * @return {boolean} True if the function can execute, false if not.
  */
-Action.prototype.canExecute = function() {
+Action.prototype.canExecute = () => {
 };
 
 /**
  * @return {?string}
  */
-Action.prototype.getTitle = function() {
+Action.prototype.getTitle = () => {
 };
 
 /**
@@ -34,16 +34,15 @@ Action.prototype.getTitle = function() {
  *  alertDialog: FilesAlertDialog,
  *  errorDialog: ErrorDialog,
  *  listContainer: ListContainer,
- *  shareDialog: ShareDialog,
  * }}
  */
-var ActionModelUI;
+let ActionModelUI;
 
 /**
  * @param {!Entry} entry
  * @param {!MetadataModel} metadataModel
  * @param {!ActionModelUI} ui
- * @param {!VolumeManagerWrapper} volumeManager
+ * @param {!VolumeManager} volumeManager
  * @implements {Action}
  * @constructor
  * @struct
@@ -62,7 +61,7 @@ function DriveShareAction(entry, metadataModel, volumeManager, ui) {
   this.metadataModel_ = metadataModel;
 
   /**
-   * @private {!VolumeManagerWrapper}
+   * @private {!VolumeManager}
    * @const
    */
   this.volumeManager_ = volumeManager;
@@ -78,12 +77,13 @@ function DriveShareAction(entry, metadataModel, volumeManager, ui) {
  * @param {!Array<!Entry>} entries
  * @param {!MetadataModel} metadataModel
  * @param {!ActionModelUI} ui
- * @param {!VolumeManagerWrapper} volumeManager
+ * @param {!VolumeManager} volumeManager
  * @return {DriveShareAction}
  */
-DriveShareAction.create = function(entries, metadataModel, volumeManager, ui) {
-  if (entries.length !== 1)
+DriveShareAction.create = (entries, metadataModel, volumeManager, ui) => {
+  if (entries.length !== 1) {
     return null;
+  }
   return new DriveShareAction(entries[0], metadataModel, volumeManager, ui);
 };
 
@@ -91,32 +91,25 @@ DriveShareAction.create = function(entries, metadataModel, volumeManager, ui) {
  * @override
  */
 DriveShareAction.prototype.execute = function() {
-  // For Team Drives entries, open the Sharing dialog in a new window.
-  if (util.isTeamDriveEntry(this.entry_)) {
-    chrome.fileManagerPrivate.getEntryProperties(
-        [this.entry_], ['shareUrl'], function(results) {
-          if (chrome.runtime.lastError) {
-            console.error(chrome.runtime.lastError.message);
-            return;
-          }
-          if (results.length != 1) {
-            console.error(
-                'getEntryProperties for shareUrl should return 1 entry ' +
-                '(returned ' + results.length + ')');
-            return;
-          }
-          if (results[0].shareUrl === undefined) {
-            console.error('getEntryProperties shareUrl is undefined');
-            return;
-          }
-          util.visitURL(results[0].shareUrl);
-        }.bind(this));
-    return;
-  }
-  this.ui_.shareDialog.showEntry(this.entry_, function(result) {
-    if (result == ShareDialog.Result.NETWORK_ERROR)
-      this.ui_.errorDialog.show(str('SHARE_ERROR'), null, null, null);
-  }.bind(this));
+  // Open the Sharing dialog in a new window.
+  chrome.fileManagerPrivate.getEntryProperties(
+      [this.entry_], ['shareUrl'], results => {
+        if (chrome.runtime.lastError) {
+          console.error(chrome.runtime.lastError.message);
+          return;
+        }
+        if (results.length != 1) {
+          console.error(
+              'getEntryProperties for shareUrl should return 1 entry ' +
+              '(returned ' + results.length + ')');
+          return;
+        }
+        if (results[0].shareUrl === undefined) {
+          console.error('getEntryProperties shareUrl is undefined');
+          return;
+        }
+        util.visitURL(assert(results[0].shareUrl));
+      });
 };
 
 /**
@@ -128,13 +121,15 @@ DriveShareAction.prototype.canExecute = function() {
   const canShareItem = metadata[0].canShare !== false;
   return this.volumeManager_.getDriveConnectionState().type !==
       VolumeManagerCommon.DriveConnectionType.OFFLINE &&
-      !util.isTeamDriveRoot(this.entry_) && canShareItem;
+      (loadTimeData.getBoolean('DRIVE_FS_ENABLED') ||
+       !util.isTeamDriveRoot(this.entry_)) &&
+      canShareItem;
 };
 
 /**
  * @return {?string}
  */
-DriveShareAction.prototype.getTitle = function() {
+DriveShareAction.prototype.getTitle = () => {
   return null;
 };
 
@@ -197,28 +192,31 @@ function DriveToggleOfflineAction(entries, metadataModel, driveSyncHandler, ui,
  * @param {function()} onExecute
  * @return {DriveToggleOfflineAction}
  */
-DriveToggleOfflineAction.create = function(entries, metadataModel,
-    driveSyncHandler, ui, value, onExecute) {
-  var directoryEntries = entries.filter(function(entry) {
-    return entry.isDirectory;
-  });
-  if (directoryEntries.length > 0)
-    return null;
+DriveToggleOfflineAction.create = (entries, metadataModel, driveSyncHandler, ui, value, onExecute) => {
+  if (!loadTimeData.getBoolean('DRIVE_FS_ENABLED')) {
+    if (entries.some((entry) => entry.isDirectory)) {
+      return null;
+    }
+  }
 
-  var actionableEntries = entries.filter(function(entry) {
-    if (entry.isDirectory)
+  const actionableEntries = entries.filter(entry => {
+    if (entry.isDirectory && !loadTimeData.getBoolean('DRIVE_FS_ENABLED')) {
       return false;
-    var metadata = metadataModel.getCache(
+    }
+    const metadata = metadataModel.getCache(
         [entry], ['hosted', 'pinned'])[0];
-    if (metadata.hosted)
+    if (metadata.hosted) {
       return false;
-    if (metadata.pinned === value)
+    }
+    if (metadata.pinned === value) {
       return false;
+    }
     return true;
   });
 
-  if (actionableEntries.length === 0)
+  if (actionableEntries.length === 0) {
     return null;
+  }
 
   return new DriveToggleOfflineAction(actionableEntries, metadataModel,
       driveSyncHandler, ui, value, onExecute);
@@ -228,16 +226,17 @@ DriveToggleOfflineAction.create = function(entries, metadataModel,
  * @override
  */
 DriveToggleOfflineAction.prototype.execute = function() {
-  var entries = this.entries_;
-  if (entries.length == 0)
+  const entries = this.entries_;
+  if (entries.length == 0) {
     return;
+  }
 
-  var currentEntry;
-  var error = false;
+  let currentEntry;
+  let error = false;
 
-  var steps = {
+  const steps = {
     // Pick an entry and pin it.
-    start: function() {
+    start: () => {
       // Check if all the entries are pinned or not.
       if (entries.length === 0) {
         this.onExecute_();
@@ -248,57 +247,59 @@ DriveToggleOfflineAction.prototype.execute = function() {
           currentEntry,
           this.value_,
           steps.entryPinned);
-    }.bind(this),
+    },
 
     // Check the result of pinning.
-    entryPinned: function() {
+    entryPinned: () => {
       error = !!chrome.runtime.lastError;
       if (error && this.value_) {
         this.metadataModel_.get([currentEntry], ['size']).then(
-            function(results) {
+            results => {
               steps.showError(results[0].size);
             });
         return;
       }
       this.metadataModel_.notifyEntriesChanged([currentEntry]);
       this.metadataModel_.get([currentEntry], ['pinned']).then(steps.updateUI);
-    }.bind(this),
+    },
 
     // Update the user interface according to the cache state.
-    updateUI: function() {
+    updateUI: () => {
       this.ui_.listContainer.currentView.updateListItemsMetadata(
           'external', [currentEntry]);
-      if (!error)
+      if (!error) {
         steps.start();
-    }.bind(this),
+      }
+    },
 
     // Show an error.
-    showError: function(size) {
+    showError: size => {
       this.ui_.alertDialog.showHtml(
           str('DRIVE_OUT_OF_SPACE_HEADER'),
           strf('DRIVE_OUT_OF_SPACE_MESSAGE',
                unescape(currentEntry.name),
                util.bytesToString(size)),
           null, null, null);
-    }.bind(this)
+    }
   };
   steps.start();
 
-  if (this.value_ && this.driveSyncHandler_.isSyncSuppressed())
+  if (this.value_ && this.driveSyncHandler_.isSyncSuppressed()) {
     this.driveSyncHandler_.showDisabledMobileSyncNotification();
+  }
 };
 
 /**
  * @override
  */
-DriveToggleOfflineAction.prototype.canExecute = function() {
+DriveToggleOfflineAction.prototype.canExecute = () => {
   return true;
 };
 
 /**
  * @return {?string}
  */
-DriveToggleOfflineAction.prototype.getTitle = function() {
+DriveToggleOfflineAction.prototype.getTitle = () => {
   return null;
 };
 
@@ -332,16 +333,16 @@ function DriveCreateFolderShortcutAction(entry, shortcutsModel, onExecute) {
 
 /**
  * @param {!Array<!Entry>} entries
- * @param {!VolumeManagerWrapper} volumeManager
+ * @param {!VolumeManager} volumeManager
  * @param {!FolderShortcutsDataModel} shortcutsModel
  * @param {function()} onExecute
  * @return {DriveCreateFolderShortcutAction}
  */
-DriveCreateFolderShortcutAction.create = function(entries, volumeManager,
-    shortcutsModel, onExecute) {
-  if (entries.length !== 1 || entries[0].isFile)
+DriveCreateFolderShortcutAction.create = (entries, volumeManager, shortcutsModel, onExecute) => {
+  if (entries.length !== 1 || entries[0].isFile) {
     return null;
-  var locationInfo = volumeManager.getLocationInfo(entries[0]);
+  }
+  const locationInfo = volumeManager.getLocationInfo(entries[0]);
   if (!locationInfo || locationInfo.isSpecialSearchRoot ||
       locationInfo.isRootEntry) {
     return null;
@@ -368,7 +369,7 @@ DriveCreateFolderShortcutAction.prototype.canExecute = function() {
 /**
  * @return {?string}
  */
-DriveCreateFolderShortcutAction.prototype.getTitle = function() {
+DriveCreateFolderShortcutAction.prototype.getTitle = () => {
   return null;
 };
 
@@ -406,8 +407,7 @@ function DriveRemoveFolderShortcutAction(entry, shortcutsModel, onExecute) {
  * @param {function()} onExecute
  * @return {DriveRemoveFolderShortcutAction}
  */
-DriveRemoveFolderShortcutAction.create = function(entries, shortcutsModel,
-    onExecute) {
+DriveRemoveFolderShortcutAction.create = (entries, shortcutsModel, onExecute) => {
   if (entries.length !== 1 || entries[0].isFile ||
       !shortcutsModel.exists(entries[0])) {
     return null;
@@ -434,7 +434,7 @@ DriveRemoveFolderShortcutAction.prototype.canExecute = function() {
 /**
  * @return {?string}
  */
-DriveRemoveFolderShortcutAction.prototype.getTitle = function() {
+DriveRemoveFolderShortcutAction.prototype.getTitle = () => {
   return null;
 };
 
@@ -444,7 +444,7 @@ DriveRemoveFolderShortcutAction.prototype.getTitle = function() {
  *
  * @param {!Entry} entry The entry to open the 'Manage' page for.
  * @param {!ActionModelUI} ui
- * @param {!VolumeManagerWrapper} volumeManager
+ * @param {!VolumeManager} volumeManager
  * @implements {Action}
  * @constructor
  * @struct
@@ -459,7 +459,7 @@ function DriveManageAction(entry, volumeManager, ui) {
   this.entry_ = entry;
 
   /**
-   * @private {!VolumeManagerWrapper}
+   * @private {!VolumeManager}
    * @const
    */
   this.volumeManager_ = volumeManager;
@@ -477,12 +477,13 @@ function DriveManageAction(entry, volumeManager, ui) {
  *
  * @param {!Array<!Entry>} entries
  * @param {!ActionModelUI} ui
- * @param {!VolumeManagerWrapper} volumeManager
+ * @param {!VolumeManager} volumeManager
  * @return {DriveManageAction}
  */
-DriveManageAction.create = function(entries, volumeManager, ui) {
-  if (entries.length !== 1)
+DriveManageAction.create = (entries, volumeManager, ui) => {
+  if (entries.length !== 1) {
     return null;
+  }
 
   return new DriveManageAction(entries[0], volumeManager, ui);
 };
@@ -492,7 +493,7 @@ DriveManageAction.create = function(entries, volumeManager, ui) {
  */
 DriveManageAction.prototype.execute = function() {
   chrome.fileManagerPrivate.getEntryProperties(
-      [this.entry_], ['alternateUrl'], function(results) {
+      [this.entry_], ['alternateUrl'], results => {
         if (chrome.runtime.lastError) {
           console.error(chrome.runtime.lastError.message);
           return;
@@ -507,8 +508,8 @@ DriveManageAction.prototype.execute = function() {
           console.error('getEntryProperties alternateUrl is undefined');
           return;
         }
-        util.visitURL(results[0].alternateUrl);
-      }.bind(this));
+        util.visitURL(assert(results[0].alternateUrl));
+      });
 };
 
 /**
@@ -517,13 +518,14 @@ DriveManageAction.prototype.execute = function() {
 DriveManageAction.prototype.canExecute = function() {
   return this.volumeManager_.getDriveConnectionState().type !==
       VolumeManagerCommon.DriveConnectionType.OFFLINE &&
-      !util.isTeamDriveRoot(this.entry_);
+      (loadTimeData.getBoolean('DRIVE_FS_ENABLED') ||
+       !util.isTeamDriveRoot(this.entry_));
 };
 
 /**
  * @return {?string}
  */
-DriveManageAction.prototype.getTitle = function() {
+DriveManageAction.prototype.getTitle = () => {
   return null;
 };
 
@@ -570,19 +572,19 @@ function CustomAction(entries, id, title, onExecute) {
  */
 CustomAction.prototype.execute = function() {
   chrome.fileManagerPrivate.executeCustomAction(this.entries_, this.id_,
-      function() {
+      () => {
         if (chrome.runtime.lastError) {
           console.error('Failed to execute a custom action because of: ' +
             chrome.runtime.lastError.message);
         }
         this.onExecute_();
-      }.bind(this));
+      });
 };
 
 /**
  * @override
  */
-CustomAction.prototype.canExecute = function() {
+CustomAction.prototype.canExecute = () => {
   return true;  // Custom actions are always executable.
 };
 
@@ -597,7 +599,7 @@ CustomAction.prototype.getTitle = function() {
  * Represents a set of actions for a set of entries. Includes actions set
  * locally in JS, as well as those retrieved from the FSP API.
  *
- * @param {!VolumeManagerWrapper} volumeManager
+ * @param {!VolumeManager} volumeManager
  * @param {!MetadataModel} metadataModel
  * @param {!FolderShortcutsDataModel} shortcutsModel
  * @param {!DriveSyncHandler} driveSyncHandler
@@ -611,7 +613,7 @@ function ActionsModel(
     volumeManager, metadataModel, shortcutsModel, driveSyncHandler, ui,
     entries) {
   /**
-   * @private {!VolumeManagerWrapper}
+   * @private {!VolumeManager}
    * @const
    */
   this.volumeManager_ = volumeManager;
@@ -697,17 +699,18 @@ ActionsModel.InternalActionId = {
  * @return {!Promise}
  */
 ActionsModel.prototype.initialize = function() {
-  if (this.initializePromise_)
+  if (this.initializePromise_) {
     return this.initializePromise_;
+  }
 
-  this.initializePromise_ = new Promise(function(fulfill, reject) {
+  this.initializePromise_ = new Promise((fulfill, reject) => {
     if (this.destroyed_) {
       reject();
       return;
     }
     this.initializePromiseReject_ = reject;
 
-    var volumeInfo = this.entries_.length >= 1 &&
+    const volumeInfo = this.entries_.length >= 1 &&
         this.volumeManager_.getVolumeInfo(this.entries_[0]);
     if (!volumeInfo) {
       fulfill({});
@@ -716,8 +719,8 @@ ActionsModel.prototype.initialize = function() {
     // All entries need to be on the same volume to execute ActionsModel
     // commands.
     // TODO(sashab): Move this to util.js.
-    for (var i = 1; i < this.entries_.length; i++) {
-      var volumeInfoToCompare =
+    for (let i = 1; i < this.entries_.length; i++) {
+      const volumeInfoToCompare =
           this.volumeManager_.getVolumeInfo(this.entries_[i]);
       if (!volumeInfoToCompare ||
           volumeInfoToCompare.volumeId != volumeInfo.volumeId) {
@@ -726,16 +729,17 @@ ActionsModel.prototype.initialize = function() {
       }
     }
 
-    var actions = {};
+    const actions = {};
     switch (volumeInfo.volumeType) {
       // For Drive, actions are constructed directly in the Files app code.
       case VolumeManagerCommon.VolumeType.DRIVE:
-        var shareAction = DriveShareAction.create(
+        const shareAction = DriveShareAction.create(
             this.entries_, this.metadataModel_, this.volumeManager_, this.ui_);
-        if (shareAction)
+        if (shareAction) {
           actions[ActionsModel.CommonActionId.SHARE] = shareAction;
+        }
 
-        var saveForOfflineAction = DriveToggleOfflineAction.create(
+        const saveForOfflineAction = DriveToggleOfflineAction.create(
             this.entries_, this.metadataModel_, this.driveSyncHandler_,
             this.ui_, true, this.invalidate_.bind(this));
         if (saveForOfflineAction) {
@@ -743,7 +747,7 @@ ActionsModel.prototype.initialize = function() {
               saveForOfflineAction;
         }
 
-        var offlineNotNecessaryAction = DriveToggleOfflineAction.create(
+        const offlineNotNecessaryAction = DriveToggleOfflineAction.create(
             this.entries_, this.metadataModel_, this.driveSyncHandler_,
             this.ui_, false, this.invalidate_.bind(this));
         if (offlineNotNecessaryAction) {
@@ -751,7 +755,7 @@ ActionsModel.prototype.initialize = function() {
               offlineNotNecessaryAction;
         }
 
-        var createFolderShortcutAction =
+        const createFolderShortcutAction =
             DriveCreateFolderShortcutAction.create(this.entries_,
                 this.volumeManager_, this.shortcutsModel_,
                 this.invalidate_.bind(this));
@@ -760,7 +764,7 @@ ActionsModel.prototype.initialize = function() {
               createFolderShortcutAction;
         }
 
-        var removeFolderShortcutAction =
+        const removeFolderShortcutAction =
             DriveRemoveFolderShortcutAction.create(this.entries_,
                 this.shortcutsModel_, this.invalidate_.bind(this));
         if (removeFolderShortcutAction) {
@@ -768,7 +772,7 @@ ActionsModel.prototype.initialize = function() {
               removeFolderShortcutAction;
         }
 
-        var manageInDriveAction = DriveManageAction.create(
+        const manageInDriveAction = DriveManageAction.create(
             this.entries_, this.volumeManager_, this.ui_);
         if (manageInDriveAction) {
           actions[ActionsModel.InternalActionId.MANAGE_IN_DRIVE] =
@@ -781,27 +785,27 @@ ActionsModel.prototype.initialize = function() {
       // For FSP, fetch custom actions via an API.
       case VolumeManagerCommon.VolumeType.PROVIDED:
         chrome.fileManagerPrivate.getCustomActions(this.entries_,
-            function(customActions) {
+            customActions => {
               if (chrome.runtime.lastError) {
                 console.error('Failed to fetch custom actions because of: ' +
                     chrome.runtime.lastError.message);
               } else {
-                customActions.forEach(function(action) {
+                customActions.forEach(action => {
                   actions[action.id] = new CustomAction(
                       this.entries_, action.id, action.title || null,
                       this.invalidate_.bind(this));
-                }.bind(this));
+                });
               }
               fulfill(actions);
-            }.bind(this));
+            });
         break;
 
       default:
         fulfill(actions);
     }
-  }.bind(this)).then(function(actions) {
+  }).then(actions => {
     this.actions_ = actions;
-  }.bind(this));
+  });
 
   return this.initializePromise_;
 };
@@ -827,7 +831,7 @@ ActionsModel.prototype.getAction = function(id) {
 ActionsModel.prototype.destroy = function() {
   this.destroyed_ = true;
   if (this.initializePromiseReject_ !== null) {
-    var reject = this.initializePromiseReject_;
+    const reject = this.initializePromiseReject_;
     this.initializePromiseReject_ = null;
     reject();
   }
@@ -842,7 +846,7 @@ ActionsModel.prototype.destroy = function() {
  */
 ActionsModel.prototype.invalidate_ = function() {
   if (this.initializePromiseReject_ !== null) {
-    var reject = this.initializePromiseReject_;
+    const reject = this.initializePromiseReject_;
     this.initializePromiseReject_ = null;
     this.initializePromise_ = null;
     reject();

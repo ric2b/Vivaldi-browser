@@ -18,11 +18,11 @@
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/ink_drop_mask.h"
-#include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/image_button.h"
@@ -49,23 +49,23 @@ constexpr SkColor kSelectedColor = SkColorSetARGB(15, 0, 0, 0);
 
 constexpr SkColor kSearchTextColor = SkColorSetRGB(0x33, 0x33, 0x33);
 
-constexpr int kLightVibrantBlendAlpha = 0xE6;
-
 // Color of placeholder text in zero query state.
 constexpr SkColor kZeroQuerySearchboxColor =
     SkColorSetARGB(0x8A, 0x00, 0x00, 0x00);
 
 }  // namespace
 
-// A background that paints a solid white rounded rect with a thin grey border.
+// A background that paints a solid white rounded rect with a thin grey
+// border.
 class SearchBoxBackground : public views::Background {
  public:
   SearchBoxBackground(int corner_radius, SkColor color)
-      : corner_radius_(corner_radius), color_(color) {}
+      : corner_radius_(corner_radius) {
+    SetNativeControlColor(color);
+  }
   ~SearchBoxBackground() override {}
 
   void set_corner_radius(int corner_radius) { corner_radius_ = corner_radius; }
-  void set_color(SkColor color) { color_ = color; }
 
  private:
   // views::Background overrides:
@@ -74,12 +74,11 @@ class SearchBoxBackground : public views::Background {
 
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
-    flags.setColor(color_);
+    flags.setColor(get_color());
     canvas->DrawRoundRect(bounds, corner_radius_, flags);
   }
 
   int corner_radius_;
-  SkColor color_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchBoxBackground);
 };
@@ -197,15 +196,41 @@ class SearchBoxTextfield : public views::Textfield {
   }
 
   void OnFocus() override {
-    search_box_view_->OnOnSearchBoxFocusedChanged();
+    search_box_view_->OnSearchBoxFocusedChanged();
     Textfield::OnFocus();
   }
 
   void OnBlur() override {
-    search_box_view_->OnOnSearchBoxFocusedChanged();
+    search_box_view_->OnSearchBoxFocusedChanged();
     // Clear selection and set the caret to the end of the text.
     ClearSelection();
     Textfield::OnBlur();
+
+    // Search box focus announcement overlaps with opening or closing folder
+    // alert, so we ignored the search box in those cases. Now reset the flag
+    // here.
+    auto& accessibility = GetViewAccessibility();
+    if (accessibility.IsIgnored()) {
+      accessibility.OverrideIsIgnored(false);
+      accessibility.NotifyAccessibilityEvent(ax::mojom::Event::kTreeChanged);
+    }
+  }
+
+  void OnGestureEvent(ui::GestureEvent* event) override {
+    switch (event->type()) {
+      case ui::ET_GESTURE_LONG_PRESS:
+      case ui::ET_GESTURE_LONG_TAP:
+        // Prevent Long Press from being handled at all, if inactive
+        if (!search_box_view_->is_search_box_active()) {
+          event->SetHandled();
+          break;
+        }
+        // If |search_box_view_| is active, handle it as normal below
+        FALLTHROUGH;
+      default:
+        // Handle all other events as normal
+        Textfield::OnGestureEvent(event);
+    }
   }
 
  private:
@@ -223,7 +248,7 @@ SearchBoxViewBase::SearchBoxViewBase(SearchBoxViewDelegate* delegate)
   AddChildView(content_container_);
 
   content_container_->SetBackground(std::make_unique<SearchBoxBackground>(
-      kSearchBoxBorderCornerRadius, background_color_));
+      kSearchBoxBorderCornerRadius, kSearchBoxBackgroundDefault));
 
   box_layout_ =
       content_container_->SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -318,7 +343,7 @@ void SearchBoxViewBase::SetSearchBoxActive(bool active,
 
   is_search_box_active_ = active;
   UpdateSearchIcon();
-  UpdateBackgroundColor(background_color_);
+  UpdateBackgroundColor(kSearchBoxBackgroundDefault);
   search_box_->set_placeholder_text_draw_flags(
       active ? (base::i18n::IsRTL() ? gfx::Canvas::TEXT_ALIGN_RIGHT
                                     : gfx::Canvas::TEXT_ALIGN_LEFT)
@@ -333,8 +358,6 @@ void SearchBoxViewBase::SetSearchBoxActive(bool active,
   } else {
     search_box_->DestroyTouchSelection();
   }
-
-  search_box_right_space_->SetVisible(!active);
 
   UpdateSearchBoxBorder();
   UpdateKeyboardVisibility();
@@ -411,10 +434,12 @@ void SearchBoxViewBase::OnTabletModeChanged(bool started) {
   UpdateSearchBoxBorder();
 }
 
-void SearchBoxViewBase::OnOnSearchBoxFocusedChanged() {
+void SearchBoxViewBase::OnSearchBoxFocusedChanged() {
   UpdateSearchBoxBorder();
   Layout();
   SchedulePaint();
+
+  delegate_->SearchBoxFocusChanged(this);
 }
 
 bool SearchBoxViewBase::IsSearchBoxTrimmedQueryEmpty() const {
@@ -447,15 +472,6 @@ void SearchBoxViewBase::NotifyActiveChanged() {
   delegate_->ActiveChanged(this);
 }
 
-// TODO(crbug.com/755219): Unify this with UpdateBackgroundColor.
-void SearchBoxViewBase::SetBackgroundColor(SkColor light_vibrant) {
-  const SkColor light_vibrant_mixed = color_utils::AlphaBlend(
-      SK_ColorWHITE, light_vibrant, kLightVibrantBlendAlpha);
-  background_color_ = SK_ColorTRANSPARENT == light_vibrant
-                          ? kSearchBoxBackgroundDefault
-                          : light_vibrant_mixed;
-}
-
 void SearchBoxViewBase::SetSearchBoxColor(SkColor color) {
   search_box_color_ =
       SK_ColorTRANSPARENT == color ? kDefaultSearchboxColor : color;
@@ -464,19 +480,25 @@ void SearchBoxViewBase::SetSearchBoxColor(SkColor color) {
 void SearchBoxViewBase::UpdateButtonsVisisbility() {
   DCHECK(close_button_ && assistant_button_);
 
-  bool should_show_close_button =
+  const bool should_show_close_button =
       !search_box_->text().empty() ||
       (show_close_button_when_active_ && is_search_box_active_);
-  bool should_show_assistant_button =
+  const bool should_show_assistant_button =
       show_assistant_button_ && !should_show_close_button;
+  const bool should_show_search_box_right_space =
+      !(should_show_close_button || should_show_assistant_button);
 
   if (close_button_->visible() == should_show_close_button &&
-      assistant_button_->visible() == should_show_assistant_button) {
+      assistant_button_->visible() == should_show_assistant_button &&
+      search_box_right_space_->visible() ==
+          should_show_search_box_right_space) {
     return;
   }
 
   close_button_->SetVisible(should_show_close_button);
   assistant_button_->SetVisible(should_show_assistant_button);
+  search_box_right_space_->SetVisible(should_show_search_box_right_space);
+
   content_container_->Layout();
 }
 
@@ -486,7 +508,8 @@ void SearchBoxViewBase::ContentsChanged(views::Textfield* sender,
   search_box_->RequestFocus();
   UpdateModel(true);
   NotifyQueryChanged();
-  SetSearchBoxActive(true, ui::ET_KEY_PRESSED);
+  if (!new_contents.empty())
+    SetSearchBoxActive(true, ui::ET_KEY_PRESSED);
   UpdateButtonsVisisbility();
 }
 
@@ -502,11 +525,8 @@ bool SearchBoxViewBase::HandleGestureEvent(
 }
 
 void SearchBoxViewBase::SetSearchBoxBackgroundCornerRadius(int corner_radius) {
-  GetSearchBoxBackground()->set_corner_radius(corner_radius);
-}
-
-void SearchBoxViewBase::SetSearchBoxBackgroundColor(SkColor color) {
-  GetSearchBoxBackground()->set_color(color);
+  static_cast<SearchBoxBackground*>(GetSearchBoxBackground())
+      ->set_corner_radius(corner_radius);
 }
 
 void SearchBoxViewBase::SetSearchIconImage(gfx::ImageSkia image) {
@@ -539,11 +559,11 @@ void SearchBoxViewBase::HandleSearchBoxEvent(ui::LocatedEvent* located_event) {
 void SearchBoxViewBase::UpdateBackgroundColor(SkColor color) {
   if (is_search_box_active_)
     color = kSearchBoxBackgroundDefault;
-  GetSearchBoxBackground()->set_color(color);
+  GetSearchBoxBackground()->SetNativeControlColor(color);
 }
 
-SearchBoxBackground* SearchBoxViewBase::GetSearchBoxBackground() const {
-  return static_cast<SearchBoxBackground*>(content_container_->background());
+views::Background* SearchBoxViewBase::GetSearchBoxBackground() {
+  return content_container_->background();
 }
 
 }  // namespace search_box

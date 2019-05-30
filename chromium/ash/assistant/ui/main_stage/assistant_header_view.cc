@@ -6,12 +6,10 @@
 
 #include <memory>
 
-#include "ash/assistant/assistant_controller.h"
-#include "ash/assistant/assistant_interaction_controller.h"
-#include "ash/assistant/assistant_ui_controller.h"
 #include "ash/assistant/model/assistant_interaction_model.h"
 #include "ash/assistant/model/assistant_query.h"
 #include "ash/assistant/ui/assistant_ui_constants.h"
+#include "ash/assistant/ui/assistant_view_delegate.h"
 #include "ash/assistant/ui/logo_view/base_logo_view.h"
 #include "ash/assistant/util/animation_util.h"
 #include "ash/assistant/util/assistant_util.h"
@@ -51,28 +49,26 @@ constexpr base::TimeDelta kResponseAnimationTranslateLeftDuration =
 
 }  // namespace
 
-AssistantHeaderView::AssistantHeaderView(
-    AssistantController* assistant_controller)
-    : assistant_controller_(assistant_controller) {
+AssistantHeaderView::AssistantHeaderView(AssistantViewDelegate* delegate)
+    : delegate_(delegate) {
   InitLayout();
 
-  // The Assistant controller indirectly owns the view hierarchy to which
-  // AssistantHeaderView belongs so is guaranteed to outlive it.
-  assistant_controller_->interaction_controller()->AddModelObserver(this);
-  assistant_controller_->ui_controller()->AddModelObserver(this);
+  // The AssistantViewDelegate should outlive AssistantHeaderView.
+  delegate_->AddInteractionModelObserver(this);
+  delegate_->AddUiModelObserver(this);
 }
 
 AssistantHeaderView::~AssistantHeaderView() {
-  assistant_controller_->ui_controller()->RemoveModelObserver(this);
-  assistant_controller_->interaction_controller()->RemoveModelObserver(this);
+  delegate_->RemoveUiModelObserver(this);
+  delegate_->RemoveInteractionModelObserver(this);
+}
+
+const char* AssistantHeaderView::GetClassName() const {
+  return "AssistantHeaderView";
 }
 
 gfx::Size AssistantHeaderView::CalculatePreferredSize() const {
   return gfx::Size(INT_MAX, GetHeightForWidth(INT_MAX));
-}
-
-void AssistantHeaderView::ChildVisibilityChanged(views::View* child) {
-  PreferredSizeChanged();
 }
 
 void AssistantHeaderView::InitLayout() {
@@ -96,7 +92,8 @@ void AssistantHeaderView::InitLayout() {
   AddChildView(molecule_icon_);
 }
 
-void AssistantHeaderView::OnResponseChanged(const AssistantResponse& response) {
+void AssistantHeaderView::OnResponseChanged(
+    const std::shared_ptr<AssistantResponse>& response) {
   // We only handle the first response when animating the molecule icon. For
   // all subsequent responses the molecule icon remains unchanged.
   if (!is_first_response_)
@@ -138,7 +135,8 @@ void AssistantHeaderView::OnResponseChanged(const AssistantResponse& response) {
 void AssistantHeaderView::OnUiVisibilityChanged(
     AssistantVisibility new_visibility,
     AssistantVisibility old_visibility,
-    AssistantSource source) {
+    base::Optional<AssistantEntryPoint> entry_point,
+    base::Optional<AssistantExitPoint> exit_point) {
   if (assistant::util::IsStartingSession(new_visibility, old_visibility)) {
     // When Assistant is starting a new session, we animate in the appearance of
     // the molecule icon.

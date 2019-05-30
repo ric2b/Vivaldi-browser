@@ -6,30 +6,12 @@
 
 #include "base/no_destructor.h"
 #include "base/time/time.h"
-#include "content/public/common/service_manager_connection.h"
+#include "chrome/browser/performance_manager/performance_manager.h"
 #include "services/resource_coordinator/public/cpp/coordination_unit_id.h"
 #include "services/resource_coordinator/public/cpp/resource_coordinator_features.h"
 #include "services/resource_coordinator/public/mojom/service_constants.mojom.h"
-#include "services/service_manager/public/cpp/connector.h"
 
 namespace resource_coordinator {
-
-// static
-bool PageSignalReceiver::IsEnabled() {
-  // Check that service_manager is active and Resource Coordinator is enabled.
-  return content::ServiceManagerConnection::GetForProcess() != nullptr &&
-         resource_coordinator::IsResourceCoordinatorEnabled();
-}
-
-// static
-PageSignalReceiver* PageSignalReceiver::GetInstance() {
-  if (!IsEnabled())
-    return nullptr;
-
-  static base::NoDestructor<PageSignalReceiver> page_signal_receiver;
-
-  return page_signal_receiver.get();
-}
 
 PageSignalReceiver::PageSignalReceiver() : binding_(this) {}
 
@@ -72,26 +54,24 @@ void PageSignalReceiver::NotifyNonPersistentNotificationCreated(
 
 void PageSignalReceiver::OnLoadTimePerformanceEstimate(
     const PageNavigationIdentity& page_navigation_id,
+    base::TimeDelta load_duration,
     base::TimeDelta cpu_usage_estimate,
     uint64_t private_footprint_kb_estimate) {
-  NotifyObserversIfKnownCu(page_navigation_id,
-                           &PageSignalObserver::OnLoadTimePerformanceEstimate,
-                           cpu_usage_estimate, private_footprint_kb_estimate);
+  NotifyObserversIfKnownCu(
+      page_navigation_id, &PageSignalObserver::OnLoadTimePerformanceEstimate,
+      load_duration, cpu_usage_estimate, private_footprint_kb_estimate);
 }
 
 void PageSignalReceiver::AddObserver(PageSignalObserver* observer) {
   // When PageSignalReceiver starts to have observer, construct the mojo
   // channel.
   if (!binding_.is_bound()) {
-    content::ServiceManagerConnection* service_manager_connection =
-        content::ServiceManagerConnection::GetForProcess();
-    // Ensure service_manager is active before trying to connect to it.
-    if (service_manager_connection) {
-      service_manager::Connector* connector =
-          service_manager_connection->GetConnector();
+    performance_manager::PerformanceManager* performance_manager =
+        performance_manager::PerformanceManager::GetInstance();
+    if (performance_manager) {
       mojom::PageSignalGeneratorPtr page_signal_generator_ptr;
-      connector->BindInterface(mojom::kServiceName,
-                               mojo::MakeRequest(&page_signal_generator_ptr));
+      performance_manager->BindInterface(
+          mojo::MakeRequest(&page_signal_generator_ptr));
       mojom::PageSignalReceiverPtr page_signal_receiver_ptr;
       binding_.Bind(mojo::MakeRequest(&page_signal_receiver_ptr));
       page_signal_generator_ptr->AddReceiver(

@@ -7,11 +7,13 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/strcat.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
@@ -34,7 +36,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/common/navigation_policy.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -53,7 +55,7 @@
 
 #if defined(CHROMEOS)
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #endif
 
 namespace extensions {
@@ -864,7 +866,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
 
   // Navigate the popup to each nested URL with extension origin.
   GURL nested_urls[] = {blob_url, filesystem_url};
-  for (size_t i = 0; i < arraysize(nested_urls); i++) {
+  for (size_t i = 0; i < base::size(nested_urls); i++) {
     EXPECT_TRUE(ExecuteScript(
         popup, "location.href = '" + nested_urls[i].spec() + "';"));
 
@@ -897,7 +899,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
 
   // Navigate second subframe to each nested URL from the main frame (i.e.,
   // from non-extension process).  These should be canceled.
-  for (size_t i = 0; i < arraysize(nested_urls); i++) {
+  for (size_t i = 0; i < base::size(nested_urls); i++) {
     EXPECT_TRUE(content::NavigateIframeToURL(tab, "frame2", nested_urls[i]));
     content::RenderFrameHost* second_frame = ChildFrameAt(main_frame, 1);
 
@@ -1048,7 +1050,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   // Navigate second subframe to each nested URL from the main frame (i.e.,
   // from non-extension process).  These should be canceled.
   GURL nested_urls[] = {blob_url, filesystem_url};
-  for (size_t i = 0; i < arraysize(nested_urls); i++) {
+  for (size_t i = 0; i < base::size(nested_urls); i++) {
     EXPECT_TRUE(content::NavigateIframeToURL(tab, "frame2", nested_urls[i]));
     content::RenderFrameHost* second_frame = ChildFrameAt(main_frame, 1);
 
@@ -1095,7 +1097,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   // From the main frame, navigate its subframe to each nested URL.  This
   // should be allowed and should stay in the extension process.
   GURL nested_urls[] = {blob_url, filesystem_url};
-  for (size_t i = 0; i < arraysize(nested_urls); i++) {
+  for (size_t i = 0; i < base::size(nested_urls); i++) {
     EXPECT_TRUE(content::NavigateIframeToURL(tab, "frame0", nested_urls[i]));
     content::RenderFrameHost* child = ChildFrameAt(main_frame, 0);
     EXPECT_EQ(nested_urls[i], child->GetLastCommittedURL());
@@ -1161,16 +1163,10 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
 // https://crbug.com/656752.  These requests should still be allowed inside
 // actual <webview> guest processes created by a Chrome app; this is checked in
 // WebViewTest.Shim_TestBlobURL.
+// TODO(alexmos): Enable this test once checks are implemented in the
+// extensions NavigationThrottle. See https://crbug.com/919194.
 IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
-                       NestedURLNavigationsToAppBlocked) {
-  // TODO(alexmos):  Re-enable this test for PlzNavigate after tightening
-  // nested URL blocking for apps with the "webview" permission in
-  // ExtensionNavigationThrottle and removing the corresponding check from
-  // ChromeExtensionsNetworkDelegate.  The latter is incompatible with
-  // PlzNavigate.
-  if (content::IsBrowserSideNavigationEnabled())
-    return;
-
+                       DISABLED_NestedURLNavigationsToAppBlocked) {
   // Disabling web security is necessary to test the browser enforcement;
   // without it, the loads in this test would be blocked by
   // SecurityOrigin::canDisplay() as invalid local resource loads.
@@ -1239,7 +1235,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   // Try navigating the web tab to each nested URL with the app's origin.  This
   // should be blocked.
   GURL nested_urls[] = {blob_url, filesystem_url};
-  for (size_t i = 0; i < arraysize(nested_urls); i++) {
+  for (size_t i = 0; i < base::size(nested_urls); i++) {
     content::TestNavigationObserver observer(web_tab);
     EXPECT_TRUE(ExecuteScript(
         web_tab, "location.href = '" + nested_urls[i].spec() + "';"));
@@ -1308,8 +1304,16 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   }
 }
 
+#if defined(OS_MACOSX)
+#define MAYBE_NestedURLNavigationsViaNoOpenerPopupBlocked \
+  NestedURLNavigationsViaNoOpenerPopupBlocked
+#else
+#define MAYBE_NestedURLNavigationsViaNoOpenerPopupBlocked \
+  DISABLED_NestedURLNavigationsViaNoOpenerPopupBlocked
+#endif
+// TODO(crbug.com/909570): This test is flaky everywhere except Mac.
 IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
-                       NestedURLNavigationsViaNoOpenerPopupBlocked) {
+                       MAYBE_NestedURLNavigationsViaNoOpenerPopupBlocked) {
   // Create a simple extension without a background page.
   const Extension* extension = CreateExtension("Extension", false);
   embedded_test_server()->ServeFilesFromDirectory(extension->path());
@@ -1355,7 +1359,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   // Attempt opening the nested urls using window.open(url, '', 'noopener').
   // This should not be allowed.
   GURL nested_urls[] = {blob_url, filesystem_url};
-  for (size_t i = 0; i < arraysize(nested_urls); i++) {
+  for (size_t i = 0; i < base::size(nested_urls); i++) {
     content::WebContents* new_popup =
         OpenPopupNoOpener(tab->GetMainFrame(), nested_urls[i]);
 
@@ -1645,6 +1649,61 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
     EXPECT_EQ(subframe->GetProcess(), main_frame->GetProcess());
     EXPECT_EQ(subframe->GetSiteInstance(), main_frame->GetSiteInstance());
   }
+}
+
+// Verify that web iframes on extension frames do not attempt to aggressively
+// reuse existing processes for the same site.  This helps prevent a
+// misbehaving web iframe on an extension from slowing down other processes.
+// See https://crbug.com/899418.
+IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
+                       WebSubframeOnExtensionDoesNotReuseExistingProcess) {
+  // This test matters only *with* --site-per-process.  It depends on process
+  // reuse logic that subframes use to look for existing processes, but that
+  // logic is only turned on for sites that require a dedicated process.
+  if (!content::AreAllSitesIsolatedForTesting())
+    return;
+
+  // Create a simple extension with a background page that has an empty iframe.
+  const Extension* extension = CreateExtension("Extension", true);
+  embedded_test_server()->ServeFilesFromDirectory(extension->path());
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  // Navigate main tab to a web page on foo.com.
+  GURL foo_url(embedded_test_server()->GetURL("foo.com", "/title1.html"));
+  NavigateToURL(foo_url);
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_EQ(foo_url, tab->GetLastCommittedURL());
+
+  // So far, there should be two extension frames: one for the background page,
+  // one for the empty subframe on it.
+  ProcessManager* pm = ProcessManager::Get(profile());
+  EXPECT_EQ(2u, pm->GetAllFrames().size());
+  EXPECT_EQ(2u, pm->GetRenderFrameHostsForExtension(extension->id()).size());
+
+  // Navigate the subframe on the extension background page to foo.com, and
+  // wait for the old subframe to go away.
+  ExtensionHost* background_host =
+      pm->GetBackgroundHostForExtension(extension->id());
+  content::RenderFrameHost* background_rfh =
+      background_host->host_contents()->GetMainFrame();
+  content::RenderFrameHost* extension_subframe =
+      ChildFrameAt(background_rfh, 0);
+  content::RenderFrameDeletedObserver deleted_observer(extension_subframe);
+  EXPECT_TRUE(
+      content::ExecJs(extension_subframe,
+                      content::JsReplace("window.location = $1;", foo_url)));
+  deleted_observer.WaitUntilDeleted();
+
+  // There should now only be one extension frame for the background page.  The
+  // subframe should've swapped processes and should now be a web frame.
+  EXPECT_EQ(1u, pm->GetAllFrames().size());
+  EXPECT_EQ(1u, pm->GetRenderFrameHostsForExtension(extension->id()).size());
+  content::RenderFrameHost* subframe = ChildFrameAt(background_rfh, 0);
+  EXPECT_EQ(foo_url, subframe->GetLastCommittedURL());
+
+  // Verify that the subframe did *not* reuse the existing foo.com process.
+  EXPECT_NE(tab->GetMainFrame()->GetProcess(), subframe->GetProcess());
 }
 
 // Test to verify that loading a resource other than an icon file is

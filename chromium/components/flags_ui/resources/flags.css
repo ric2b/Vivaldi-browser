@@ -16,6 +16,8 @@ body {
   --color-light-gray: rgba(0, 0, 0, 0.54);
   --color-shadow: rgba(0, 0, 0, 0.1);
   --ease-in-out: cubic-bezier(0.4, 0.0, 0.2, 1);
+  --keyboard-focus-ring: rgba(66, 133, 244, 0.4);
+  --google-blue-400: rgb(102, 157, 246);
   --google-blue-500: rgb(66, 133, 244);
   --google-blue-700: rgb(51, 103, 214);
   --google-gray-100: rgb(245, 245, 245);
@@ -88,12 +90,12 @@ h2 {
 
 #header .flex-container .flex:first-child,
 [dir='rtl'] #header .flex-container .flex:last-child {
-  text-align: left;
+  text-align: left; /* csschecker-disable-line left-right */
 }
 
 #header .flex-container .flex:last-child,
 [dir='rtl'] #header .flex-container .flex:first-child {
-  text-align: right;
+  text-align: right; /* csschecker-disable-line left-right */
 }
 
 .hidden {
@@ -205,7 +207,7 @@ h2 {
 }
 
 [dir='rtl'] .experiment .flex-container .flex:first-child  {
-  text-align: right;
+  text-align: right; /* csschecker-disable-line left-right */
 }
 
 .experiment p {
@@ -214,7 +216,6 @@ h2 {
 
 .experiment-name {
   color: black;
-  cursor: pointer;
   display: inline-block;
   font-size: 13px;
   font-weight: 500;
@@ -244,7 +245,7 @@ h2 {
 .experiment-actions {
   flex: 0 0 auto;
   padding-inline-start: 5px;
-  text-align: right;
+  text-align: right; /* csschecker-disable-line left-right */
   width: 150px;
 }
 
@@ -291,7 +292,7 @@ h2 {
   margin: 0;
   padding: 0;
   position: relative;
-  text-align: left;
+  text-align: left; /* csschecker-disable-line left-right */
   width: 100%;
 }
 
@@ -348,7 +349,8 @@ h2 {
   margin-inline-start: -100%;
 }
 
-.selected .tab-content {
+.selected .tab-content,
+.selected .tab-content .template {
   display: block;
 }
 
@@ -370,11 +372,11 @@ h2 {
 }
 
 #needs-restart .flex:last-child {
-  text-align: right;
+  text-align: right; /* csschecker-disable-line left-right */
 }
 
 [dir='rtl'] #needs-restart .flex:last-child {
-  text-align: left;
+  text-align: left; /* csschecker-disable-line left-right */
 }
 
 #needs-restart.show {
@@ -391,33 +393,33 @@ h2 {
   line-height: 1.4;
 }
 
-.experiment-restart-button {
-  background: var(--google-blue-700);
+#experiment-restart-button {
+  background: var(--google-blue-500);
   border: 0;
   border-radius: 3px;
   color: white;
   font-size: 14px;
   padding: 14px 38px;
-  text-transform: uppercase;
 }
 
-.experiment-restart-button:active,
-.experiment-restart-button:focus {
-  background: var(--google-blue-500);
+#experiment-restart-button:active,
+#experiment-restart-button:focus,
+#experiment-restart-button:hover {
+  background: var(--google-blue-400);
   outline: 0;
 }
 
-.experiment-restart-button:hover {
-  background: var(--google-blue-500);
+html.focus-outline-visible #experiment-restart-button:focus {
+  box-shadow: 0 0 0 1px var(--keyboard-focus-ring);
 }
 
 #version {
   color: var(--color-light-gray);
-  text-align: right;
+  text-align: right; /* csschecker-disable-line left-right */
 }
 
 [dir='rtl'] #version {
-  text-align: left;
+  text-align: left; /* csschecker-disable-line left-right */
 }
 
 @media (max-width: 360px) {
@@ -434,7 +436,7 @@ h2 {
     text-align: initial;
   }
 
-  .experiment-restart-button {
+  #experiment-restart-button {
     padding: 8px;
   }
 
@@ -452,6 +454,10 @@ h2 {
     border-bottom: 1px solid #f7f7f7;
   }
 
+  .experiment-name {
+    cursor: pointer;
+  }
+
   .experiment .flex-container {
     flex-flow: column;
   }
@@ -463,7 +469,7 @@ h2 {
   .experiment .experiment-actions {
     max-width: 100%;
     padding-top: 12px;
-    text-align: left;
+    text-align: left; /* csschecker-disable-line left-right */
     width: 100%;
   }
 
@@ -473,11 +479,11 @@ h2 {
 
   #flagsTemplate > .flex-container:first-child:not('.version') {
     flex-direction: column;
-    text-align: left;
+    text-align: left; /* csschecker-disable-line left-right */
   }
 
   [dir='rtl'] #flagsTemplate > .flex-container:first-child {
-    text-align: right;
+    text-align: right; /* csschecker-disable-line left-right */
   }
 
   #flagsTemplate > .flex-container:first-child .flex {
@@ -485,14 +491,14 @@ h2 {
   }
 
   [dir='rtl'] #flagsTemplate > .flex-container #version {
-    text-align: right;
+    text-align: right; /* csschecker-disable-line left-right */
   }
 
   #needs-restart {
     padding: 8px 12px;
   }
 
-  .experiment-restart-button {
+  #experiment-restart-button {
     padding: 8px 16px;
   }
 

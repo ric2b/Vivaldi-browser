@@ -110,7 +110,11 @@ Polymer({
     networksChangeSubscriberSelectors_: {
       type: Array,
       value: function() {
-        return ['network-summary', 'settings-internet-detail-page'];
+        return [
+          'network-summary',
+          'settings-internet-detail-page',
+          'settings-internet-subpage',
+        ];
       }
     },
 
@@ -232,15 +236,17 @@ Polymer({
       // e.g. chrome://settings/internet/networks?type=WiFi
       const queryParams = settings.getQueryParameters();
       const type = queryParams.get('type');
-      if (type)
+      if (type) {
         this.subpageType_ = type;
+      }
     } else if (route == settings.routes.KNOWN_NETWORKS) {
       // Handle direct navigation to the known networks page,
       // e.g. chrome://settings/internet/knownNetworks?type=WiFi
       const queryParams = settings.getQueryParameters();
       const type = queryParams.get('type');
-      if (type)
+      if (type) {
         this.knownNetworksType_ = type;
+      }
     } else if (
         route != settings.routes.INTERNET && route != settings.routes.BASIC) {
       // If we are navigating to a non internet section, do not set focus.
@@ -248,8 +254,9 @@ Polymer({
     }
 
     if (!settings.routes.INTERNET ||
-        !settings.routes.INTERNET.contains(oldRoute))
+        !settings.routes.INTERNET.contains(oldRoute)) {
       return;
+    }
 
     // Focus the subpage arrow where appropriate.
     let element;
@@ -257,35 +264,40 @@ Polymer({
       // iron-list makes the correct timing to focus an item in the list
       // very complicated, and the item may not exist, so just focus the
       // entire list for now.
-      let subPage = this.$$('settings-internet-subpage');
-      if (subPage)
+      const subPage = this.$$('settings-internet-subpage');
+      if (subPage) {
         element = subPage.$$('#networkList');
+      }
     } else if (this.detailType_) {
       element = this.$$('network-summary')
                     .$$(`#${this.detailType_}`)
                     .$$('.subpage-arrow button');
     }
-    if (element)
+    if (element) {
       this.focusConfig_.set(oldRoute.path, element);
-    else
+    } else {
       this.focusConfig_.delete(oldRoute.path);
+    }
   },
 
   /**
    * Event triggered by a device state enabled toggle.
-   * @param {!{detail: {enabled: boolean,
-   *                    type: chrome.networkingPrivate.NetworkType}}} event
+   * @param {!CustomEvent<!{
+   *     enabled: boolean,
+   *     type: chrome.networkingPrivate.NetworkType
+   * }>} event
    * @private
    */
   onDeviceEnabledToggled_: function(event) {
-    if (event.detail.enabled)
+    if (event.detail.enabled) {
       this.networkingPrivate.enableNetworkType(event.detail.type);
-    else
+    } else {
       this.networkingPrivate.disableNetworkType(event.detail.type);
+    }
   },
 
   /**
-   * @param {!{detail: !CrOnc.NetworkProperties}} event
+   * @param {!CustomEvent<!CrOnc.NetworkProperties>} event
    * @private
    */
   onShowConfig_: function(event) {
@@ -319,7 +331,7 @@ Polymer({
   },
 
   /**
-   * @param {!{detail: !CrOnc.NetworkStateProperties}} event
+   * @param {!CustomEvent<!CrOnc.NetworkStateProperties>} event
    * @private
    */
   onShowDetail_: function(event) {
@@ -327,13 +339,14 @@ Polymer({
     const params = new URLSearchParams;
     params.append('guid', event.detail.GUID);
     params.append('type', event.detail.Type);
-    if (event.detail.Name)
+    if (event.detail.Name) {
       params.append('name', event.detail.Name);
+    }
     settings.navigateTo(settings.routes.NETWORK_DETAIL, params);
   },
 
   /**
-   * @param {!{detail: {type: string}}} event
+   * @param {!CustomEvent<!{type: string}>} event
    * @private
    */
   onShowNetworks_: function(event) {
@@ -379,17 +392,19 @@ Polymer({
    * @private
    */
   onDeviceStatesChanged_: function(newValue, oldValue) {
-    let wifiDeviceState = this.getDeviceState_(CrOnc.Type.WI_FI, newValue);
+    const wifiDeviceState = this.getDeviceState_(CrOnc.Type.WI_FI, newValue);
     let managedNetworkAvailable = false;
-    if (!!wifiDeviceState)
+    if (wifiDeviceState) {
       managedNetworkAvailable = !!wifiDeviceState.ManagedNetworkAvailable;
+    }
 
-    if (this.managedNetworkAvailable != managedNetworkAvailable)
+    if (this.managedNetworkAvailable != managedNetworkAvailable) {
       this.managedNetworkAvailable = managedNetworkAvailable;
+    }
   },
 
   /**
-   * @param {!{detail: {type: string}}} event
+   * @param {!CustomEvent<!{type: string}>} event
    * @private
    */
   onShowKnownNetworks_: function(event) {
@@ -398,17 +413,6 @@ Polymer({
     params.append('type', event.detail.type);
     this.knownNetworksType_ = event.detail.type;
     settings.navigateTo(settings.routes.KNOWN_NETWORKS, params);
-  },
-
-  /**
-   * Event triggered when the 'Add connections' div is clicked.
-   * @param {!Event} event
-   * @private
-   */
-  onExpandAddConnectionsTap_: function(event) {
-    if (event.target.id == 'expandAddConnections')
-      return;
-    this.addConnectionExpanded_ = !this.addConnectionExpanded_;
   },
 
   /** @private */
@@ -456,8 +460,9 @@ Polymer({
    */
   onGetAllExtensions_: function(extensions) {
     const vpnProviders = [];
-    for (let i = 0; i < extensions.length; ++i)
+    for (let i = 0; i < extensions.length; ++i) {
       this.addVpnProvider_(vpnProviders, extensions[i]);
+    }
     this.thirdPartyVpnProviders_ = vpnProviders;
   },
 
@@ -516,10 +521,12 @@ Polymer({
    * @private
    */
   compareArcVpnProviders_: function(arcVpnProvider1, arcVpnProvider2) {
-    if (arcVpnProvider1.LastLaunchTime > arcVpnProvider2.LastLaunchTime)
+    if (arcVpnProvider1.LastLaunchTime > arcVpnProvider2.LastLaunchTime) {
       return -1;
-    if (arcVpnProvider1.LastLaunchTime < arcVpnProvider2.LastLaunchTime)
+    }
+    if (arcVpnProvider1.LastLaunchTime < arcVpnProvider2.LastLaunchTime) {
       return 1;
+    }
     return 0;
   },
 
@@ -556,8 +563,9 @@ Polymer({
    * @return {boolean}
    */
   allowAddConnection_: function(globalPolicy, managedNetworkAvailable) {
-    if (!globalPolicy)
+    if (!globalPolicy) {
       return true;
+    }
 
     return !globalPolicy.AllowOnlyPolicyNetworksToConnect &&
         (!globalPolicy.AllowOnlyPolicyNetworksToConnectIfAvailable ||
@@ -576,10 +584,11 @@ Polymer({
   /**
    * Handles UI requests to connect to a network.
    * TODO(stevenjb): Handle Cellular activation, etc.
-   * @param {!{detail:
-   *            {networkProperties:
-                   (!CrOnc.NetworkProperties|!CrOnc.NetworkStateProperties),
-   *             bypassConnectionDialog: (boolean|undefined)}}} event
+   * @param {!CustomEvent<!{
+   *     networkProperties: (!CrOnc.NetworkProperties|
+   *         !CrOnc.NetworkStateProperties),
+   *     bypassConnectionDialog: (boolean|undefined)
+   * }>} event
    * @private
    */
   onNetworkConnect_: function(event) {
@@ -613,9 +622,13 @@ Polymer({
         console.error(
             'networkingPrivate.startConnect error: ' + message +
             ' For: ' + properties.GUID);
-        this.showConfig_(
-            true /* configAndConnect */, properties.Type, properties.GUID,
-            name);
+
+        // There is no configuration flow for Instant Tethering networks.
+        if (properties.Type != CrOnc.Type.TETHER) {
+          this.showConfig_(
+              true /* configAndConnect */, properties.Type, properties.GUID,
+              name);
+        }
       }
     });
   },

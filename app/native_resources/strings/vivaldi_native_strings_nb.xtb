@@ -2,7 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="no">
 <translation id="1055184225775184556">&amp;Angre legg til</translation>
+<translation id="1158503667684816647">Ikke vis denne dialogen igjen</translation>
 <translation id="1411638389238344450">Send lenke i epost</translation>
+<translation id="1462666970065907900">Vil du lukke dette vinduet?</translation>
 <translation id="1728549374069268714">Lim inn og gå til</translation>
 <translation id="1756026472674246267">Åpne lenke i ny fane</translation>
 <translation id="1920297417712412573">Kopier til notat</translation>
@@ -22,6 +24,7 @@
 <translation id="3914946330804881301">Importert fra Opera</translation>
 <translation id="4073157431025461511">&amp;Ikke vis igjen</translation>
 <translation id="4074744496918018786">Åpne bilde i privat vindu</translation>
+<translation id="4420816922321010053">Vil du avslutte Vivaldi?</translation>
 <translation id="4512900838580567989">Åpne lenke i ny bakgrunnsfane</translation>
 <translation id="4548358047305717967">Åpne bilde i ny bakgrunnsfane</translation>
 <translation id="4594403342090139922">&amp;Angre sletting</translation>
@@ -31,6 +34,7 @@
 <translation id="5238244642230426581">Importerte bokmerker</translation>
 <translation id="5388358297987318779">Åpne bilde</translation>
 <translation id="5416008465899576639">En ny versjon av Vivaldi er tilgjengelig.</translation>
+<translation id="5497042274492038489">Bekreft lukking av vindu</translation>
 <translation id="5648110075441906505">Åpne bilde i nytt vindu</translation>
 <translation id="5716238312826274098">Skru av varsling om oppdateringer</translation>
 <translation id="588258955323874662">Fullskjerm</translation>
@@ -44,11 +48,11 @@
 <translation id="6551219277044048123">Legg til en &amp;søkemotor...</translation>
 <translation id="6804831687363620480">Opera 15+ innstillingene er ikke tilgjengelige når nettleseren kjører. Hvis du vil importere disse innstillingene til Vivaldi, lagre arbeidet ditt og lukk alle Opera-vinduer. Deretter klikker du på Fortsett.</translation>
 <translation id="7715497554424665066">&amp;Ignorer oppdatering</translation>
+<translation id="7865983598101744945">Bekreft avslutning av nettleser</translation>
 <translation id="8099620695029051217">Kopier adresse</translation>
 <translation id="8194797478851900357">&amp;Angre flytt</translation>
 <translation id="8197810018650377191">Bokmerk siden</translation>
 <translation id="8624587806981488221">&amp;Last inn bilde på nytt</translation>
-<translation id="8647783768664050873">Klikk her for å oppdatere Vivaldi til versjon $1.</translation>
 <translation id="8773635261052182196">Du får ikke lenger se disse meldingene. Du kan aktivere dem igjen fra Vivaldi innstillinger.</translation>
 <translation id="8894900864683381599">Legg til lenken som webpanel</translation>
 <translation id="8947109330183116400">Velg HTML bokmerkefil</translation>

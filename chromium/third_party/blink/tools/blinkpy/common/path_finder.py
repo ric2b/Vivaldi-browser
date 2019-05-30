@@ -35,19 +35,25 @@ from blinkpy.common.memoized import memoized
 def add_typ_dir_to_sys_path():
     path_to_typ = get_typ_dir()
     if path_to_typ not in sys.path:
-        sys.path.append(path_to_typ)
+        sys.path.insert(0, path_to_typ)
 
 
 def add_bindings_scripts_dir_to_sys_path():
     path_to_bindings_scripts = get_bindings_scripts_dir()
     if path_to_bindings_scripts not in sys.path:
-        sys.path.append(path_to_bindings_scripts)
+        sys.path.insert(0, path_to_bindings_scripts)
 
 
 def add_blinkpy_thirdparty_dir_to_sys_path():
     path = get_blinkpy_thirdparty_dir()
     if path not in sys.path:
-        sys.path.append(path)
+        sys.path.insert(0, path)
+
+
+def add_depot_tools_dir_to_os_path():
+    path = get_depot_tools_dir()
+    if path not in os.environ['PATH']:
+        os.environ['PATH'] += os.pathsep + path
 
 
 def get_bindings_scripts_dir():
@@ -60,6 +66,10 @@ def get_blink_dir():
 
 def get_chromium_src_dir():
     return os.path.dirname(os.path.dirname(get_blink_dir()))
+
+
+def get_depot_tools_dir():
+    return os.path.join(get_chromium_src_dir(), 'third_party', 'depot_tools')
 
 
 def get_source_dir():
@@ -82,8 +92,19 @@ def get_blink_tools_dir():
 def add_blink_tools_dir_to_sys_path():
     path = get_blink_tools_dir()
     if path not in sys.path:
-        sys.path.append(path)
+        sys.path.insert(0, path)
 
+
+def _does_blink_web_tests_exist():
+    return os.path.exists(os.path.join(get_chromium_src_dir(), 'third_party',
+                                       'blink', 'web_tests'))
+
+
+TESTS_IN_BLINK = _does_blink_web_tests_exist()
+# web_tests path relative to the repository root.
+# Path separators are always '/', and this contains the trailing '/'.
+RELATIVE_WEB_TESTS = 'third_party/blink/web_tests/'
+WEB_TESTS_LAST_COMPONENT = 'web_tests'
 
 class PathFinder(object):
 
@@ -97,8 +118,8 @@ class PathFinder(object):
     def chromium_base(self):
         return self._filesystem.dirname(self._filesystem.dirname(self._blink_base()))
 
-    def layout_tests_dir(self):
-        return self.path_from_chromium_base('third_party', 'WebKit', 'LayoutTests')
+    def web_tests_dir(self):
+        return self.path_from_chromium_base('third_party', 'blink', 'web_tests')
 
     def perf_tests_dir(self):
         return self.path_from_chromium_base('third_party', 'blink', 'perf_tests')
@@ -124,8 +145,8 @@ class PathFinder(object):
     def path_from_blink_tools(self, *comps):
         return self._filesystem.join(self._filesystem.join(self.chromium_base(), 'third_party', 'blink', 'tools'), *comps)
 
-    def path_from_layout_tests(self, *comps):
-        return self._filesystem.join(self.layout_tests_dir(), *comps)
+    def path_from_web_tests(self, *comps):
+        return self._filesystem.join(self.web_tests_dir(), *comps)
 
     @memoized
     def depot_tools_base(self):

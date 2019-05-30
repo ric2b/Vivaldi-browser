@@ -14,7 +14,11 @@
 #include "content/common/content_export.h"
 #include "third_party/blink/public/platform/web_rtc_dtmf_sender_handler.h"
 #include "third_party/blink/public/platform/web_rtc_dtmf_sender_handler_client.h"
-#include "third_party/webrtc/api/dtmfsenderinterface.h"
+#include "third_party/webrtc/api/dtmf_sender_interface.h"
+
+namespace base {
+class SingleThreadTaskRunner;
+}
 
 namespace content {
 
@@ -27,7 +31,8 @@ namespace content {
 class CONTENT_EXPORT RtcDtmfSenderHandler
     : public blink::WebRTCDTMFSenderHandler {
  public:
-  explicit RtcDtmfSenderHandler(webrtc::DtmfSenderInterface* dtmf_sender);
+  RtcDtmfSenderHandler(scoped_refptr<base::SingleThreadTaskRunner> main_thread,
+                       webrtc::DtmfSenderInterface* dtmf_sender);
   ~RtcDtmfSenderHandler() override;
 
   // blink::WebRTCDTMFSenderHandler implementation.

@@ -34,11 +34,20 @@ void RenderFrameMetadataProviderImpl::Bind(
   render_frame_metadata_observer_client_binding_.Close();
   render_frame_metadata_observer_client_binding_.Bind(std::move(client_request),
                                                       task_runner_);
+
+  if (pending_report_all_frame_submission_.has_value()) {
+    ReportAllFrameSubmissionsForTesting(*pending_report_all_frame_submission_);
+    pending_report_all_frame_submission_.reset();
+  }
 }
 
 void RenderFrameMetadataProviderImpl::ReportAllFrameSubmissionsForTesting(
     bool enabled) {
-  DCHECK(render_frame_metadata_observer_ptr_);
+  if (!render_frame_metadata_observer_ptr_) {
+    pending_report_all_frame_submission_ = enabled;
+    return;
+  }
+
   render_frame_metadata_observer_ptr_->ReportAllFrameSubmissionsForTesting(
       enabled);
 }
@@ -72,8 +81,9 @@ void RenderFrameMetadataProviderImpl::OnRenderFrameMetadataChanged(
   for (Observer& observer : observers_)
     observer.OnRenderFrameMetadataChangedBeforeActivation(metadata);
 
-  if (metadata.local_surface_id != last_local_surface_id_) {
-    last_local_surface_id_ = metadata.local_surface_id;
+  if (metadata.local_surface_id_allocation !=
+      last_local_surface_id_allocation_) {
+    last_local_surface_id_allocation_ = metadata.local_surface_id_allocation;
     for (Observer& observer : observers_)
       observer.OnLocalSurfaceIdChanged(metadata);
   }

@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file.h"
-#include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -1238,6 +1237,12 @@ TEST(DiskUtilTests, TruncateLogFileToTail_NotExisting) {
   TruncateLogFileToTail(file_path, 42);
 
   EXPECT_FALSE(base::PathExists(file_path));
+}
+
+TEST(DiskUtilTests, IgnoredReportingList) {
+  EXPECT_TRUE(IsCompanyOnIgnoredReportingList(L"Google LLC"));
+  EXPECT_FALSE(IsCompanyOnIgnoredReportingList(L"google llc"));
+  EXPECT_FALSE(IsCompanyOnIgnoredReportingList(L"Unrecognized Inc"));
 }
 
 }  // namespace chrome_cleaner

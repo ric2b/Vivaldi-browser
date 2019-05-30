@@ -11,7 +11,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/dom_distiller/dom_distiller_service_factory.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
-#include "chrome/browser/ui/tab_contents/core_tab_helper_delegate.h"
 #include "components/dom_distiller/content/browser/distiller_page_web_contents.h"
 #include "components/dom_distiller/core/distiller_page.h"
 #include "components/dom_distiller/core/dom_distiller_service.h"
@@ -153,7 +152,7 @@ void DistillCurrentPageAndView(content::WebContents* old_web_contents) {
 
   // Copy all navigation state from the old WebContents to the new one.
   new_web_contents->GetController().CopyStateFrom(
-      old_web_contents->GetController(), /* needs_reload */ true);
+      &old_web_contents->GetController(), /* needs_reload */ true);
 
   // StartNavigationToDistillerViewer must come before swapping the tab contents
   // to avoid triggering a reload of the page.  This reloadmakes it very
@@ -163,10 +162,8 @@ void DistillCurrentPageAndView(content::WebContents* old_web_contents) {
                                    old_web_contents->GetLastCommittedURL());
 
   std::unique_ptr<content::WebContents> old_web_contents_owned =
-      CoreTabHelper::FromWebContents(old_web_contents)
-          ->delegate()
-          ->SwapTabContents(old_web_contents, std::move(new_web_contents),
-                            false, false);
+      old_web_contents->GetDelegate()->SwapWebContents(
+          old_web_contents, std::move(new_web_contents), false, false);
 
   std::unique_ptr<SourcePageHandleWebContents> source_page_handle(
       new SourcePageHandleWebContents(old_web_contents_owned.release(), true));

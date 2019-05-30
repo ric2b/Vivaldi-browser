@@ -12,6 +12,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/callback.h"
@@ -41,11 +42,13 @@
 namespace gfx {
 class Insets;
 class Rect;
-}
+}  // namespace gfx
 
 namespace display {
+class DisplayChangeObserver;
 class DisplayLayoutStore;
 class DisplayObserver;
+class NativeDisplayDelegate;
 class Screen;
 
 namespace test {
@@ -71,16 +74,14 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
     // Closes the mirror window if not necessary.
     virtual void CloseMirroringDisplayIfNotNecessary() = 0;
 
+    // Sets the primary display by display id.
+    virtual void SetPrimaryDisplayId(int64_t id) = 0;
+
     // Called before and after the display configuration changes.  When
     // |clear_focus| is true, the implementation should deactivate the active
     // window and set the focus window to NULL.
     virtual void PreDisplayConfigurationChange(bool clear_focus) = 0;
     virtual void PostDisplayConfigurationChange() = 0;
-
-#if defined(OS_CHROMEOS)
-    // Get the DisplayConfigurator.
-    virtual DisplayConfigurator* display_configurator() = 0;
-#endif
   };
 
   // How secondary displays will be used.
@@ -137,11 +138,9 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   TouchDeviceManager* touch_device_manager() const {
     return touch_device_manager_.get();
   }
-#endif
 
-  bool is_multi_mirroring_enabled() const {
-    return is_multi_mirroring_enabled_;
-  }
+  DisplayConfigurator* configurator() { return display_configurator_.get(); }
+#endif
 
   const UnifiedDesktopLayoutMatrix& current_unified_desktop_matrix() const {
     return current_unified_desktop_matrix_;
@@ -217,7 +216,9 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
                                const gfx::Insets* overscan_insets,
                                const gfx::Size& resolution_in_pixels,
                                float device_scale_factor,
-                               float display_zoom_factor);
+                               float display_zoom_factor,
+                               float refresh_rate,
+                               bool is_interlaced);
 
   // Register stored rotation properties for the internal display.
   void RegisterDisplayRotationProperties(bool rotation_lock,
@@ -336,6 +337,10 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
     external_display_mirror_info_ = external_display_mirror_info;
   }
 
+  void set_should_restore_mirror_mode_from_display_prefs(bool value) {
+    should_restore_mirror_mode_from_display_prefs_ = value;
+  }
+
   const base::Optional<MixedMirrorModeParams>& mixed_mirror_mode_params()
       const {
     return mixed_mirror_mode_params_;
@@ -375,11 +380,11 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // current mode to Unified Desktop.
   void SetUnifiedDesktopMatrix(const UnifiedDesktopLayoutMatrix& matrix);
 
-  // In Unified Desktop mode, we consider the first mirroring display to be the
-  // primary. It's also the top-left display in the layout matrix, and it's
-  // where the shelf is placed.
-  // This returns nullptr if we're not in unified desktop mode.
-  const Display* GetPrimaryMirroringDisplayForUnifiedDesktop() const;
+  // Returns the Unified Desktop mode mirroring display according to the
+  // supplied |cell_position| in the matrix. Returns invalid display if we're
+  // not in Unified mode.
+  Display GetMirroringDisplayForUnifiedDesktop(
+      DisplayPositionInUnifiedMatrix cell_position) const;
 
   // Returns the index of the row in the Unified Mode layout matrix which
   // contains the display with |display_id|.
@@ -420,11 +425,17 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 
   // Used to emulate display change when run in a desktop environment instead
   // of on a device.
-  void AddRemoveDisplay();
+  void AddRemoveDisplay(
+      ManagedDisplayInfo::ManagedDisplayModeList display_modes = {});
   void ToggleDisplayScaleFactor();
 
-// SoftwareMirroringController override:
 #if defined(OS_CHROMEOS)
+  void InitConfigurator(std::unique_ptr<NativeDisplayDelegate> delegate);
+  void ForceInitialConfigureWithObservers(
+      display::DisplayChangeObserver* display_change_observer,
+      display::DisplayConfigurator::Observer* display_error_observer);
+
+  // SoftwareMirroringController override:
   void SetSoftwareMirroring(bool enabled) override;
   bool SoftwareMirroringEnabled() const override;
   bool IsSoftwareMirroringEnforced() const override;
@@ -437,6 +448,7 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
       int64_t display_id,
       base::Optional<TouchDeviceIdentifier> touch_device_identifier);
   void UpdateZoomFactor(int64_t display_id, float zoom_factor);
+  bool HasUnassociatedDisplay() const;
 #endif
 
   // Sets/gets default multi display mode.
@@ -513,7 +525,8 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // Same as above but for Unified Desktop.
   void CreateUnifiedDesktopDisplayInfo(DisplayInfoList* display_info_list);
 
-  Display* FindDisplayForId(int64_t id);
+  // Finds an display for given |display_id|. Returns nullptr if not found.
+  Display* FindDisplayForId(int64_t display_id);
 
   // Add the mirror display's display info if the software based mirroring is in
   // use. This should only be called before UpdateDisplaysWith().
@@ -557,6 +570,8 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 
   // Update the info used to restore mirror mode.
   void UpdateInfoForRestoringMirrorMode();
+
+  void UpdatePrimaryDisplayIdIfNecessary();
 
   Delegate* delegate_ = nullptr;  // not owned.
 
@@ -633,6 +648,11 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // Stores external displays that were in mirror mode before.
   std::set<int64_t> external_display_mirror_info_;
 
+  // This is set to true when the display prefs have been loaded from local
+  // state to signal that we should restore the mirror mode state from
+  // |external_display_mirror_info_| in the upcoming display re-configuration.
+  bool should_restore_mirror_mode_from_display_prefs_ = false;
+
   // True if mirror mode should not be restored. Only used in test.
   bool disable_restoring_mirror_mode_for_test_ = false;
 
@@ -655,7 +675,7 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 
   base::Closure created_mirror_window_;
 
-  base::ObserverList<DisplayObserver>::Unchecked observers_;
+  base::ObserverList<DisplayObserver> observers_;
 
   // Not empty if mixed mirror mode should be turned on (the specified source
   // display is mirrored to the specified destination displays). Empty if mixed
@@ -668,6 +688,8 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   int notify_depth_ = 0;
 
 #if defined(OS_CHROMEOS)
+  std::unique_ptr<display::DisplayConfigurator> display_configurator_;
+
   std::unique_ptr<TouchDeviceManager> touch_device_manager_;
 
   // A cancelable callback to trigger sending UMA metrics when display zoom is
@@ -677,9 +699,6 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // zoom levels before making the final decision.
   base::CancelableCallback<void()> on_display_zoom_modify_timeout_;
 #endif
-
-  // Whether mirroring across multiple displays is enabled.
-  bool is_multi_mirroring_enabled_;
 
   base::WeakPtrFactory<DisplayManager> weak_ptr_factory_;
 

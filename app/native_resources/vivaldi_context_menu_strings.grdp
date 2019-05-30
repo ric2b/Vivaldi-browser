@@ -76,4 +76,46 @@
     <message name="IDS_VIV_NO_TITLE" desc="A menu is missing a name">
         (no title)
     </message>
+
+    <message name="IDS_VIV_BOOKMARK_BAR_OPEN_CURRENT_TAB" desc="Open in existing tab">
+        Open
+    </message>
+    <message name="IDS_VIV_BOOKMARK_BAR_OPEN_NEW_TAB" desc="Open in new tab">
+        Open in New Tab
+    </message>
+    <message name="IDS_VIV_BOOKMARK_BAR_OPEN_BACKGROUND_TAB" desc="Open in new tab in background">
+        Open in Background Tab
+    </message>
+    <message name="IDS_VIV_BOOKMARK_BAR_OPEN_NEW_WINDOW" desc="Open in new window">
+        Open in New Window
+    </message>
+    <message name="IDS_VIV_BOOKMARK_BAR_OPEN_NEW_PRIVATE_WINDOW" desc="Open in new private window">
+        Open in New Private Window
+    </message>
+    <message name="IDS_VIV_BOOKMARK_ADD_ACTIVE_TAB" desc="Make new bookmark out of active tab">
+        Add Active Tab
+    </message>
+    <message name="IDS_VIV_BOOKMARK_BAR_NEW_BOOKMARK" desc="Make new bookmark">
+        New Bookmark
+    </message>
+    <message name="IDS_VIV_BOOKMARK_BAR_NEW_FOLDER" desc="Make a new folder">
+        New Folder
+    </message>
+    <message name="IDS_VIV_BOOKMARK_BAR_EDIT" desc="Modify an existing bookmark/folder">
+        Edit
+    </message>
+    <message name="IDS_VIV_BOOKMARK_BAR_CUT" desc="Cut a bookmark/folder">
+        Cut
+    </message>
+    <message name="IDS_VIV_BOOKMARK_BAR_COPY" desc="Copy a bookmark/folder">
+        Copy
+    </message>
+    <message name="IDS_VIV_BOOKMARK_BAR_PASTE" desc="Paste a bookmark/folder">
+        Paste
+    </message>
+    <message name="IDS_VIV_BOOKMARK_BAR_REMOVE" desc="Delete an existing bookmark/folder">
+        Delete
+    </message>
+
+
 </grit-part>

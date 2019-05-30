@@ -28,7 +28,7 @@
 
 #include <memory>
 #include "third_party/blink/public/platform/web_rtc_dtmf_sender_handler_client.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/platform/timer.h"
 
@@ -47,6 +47,8 @@ class RTCDTMFSender final : public EventTargetWithInlineData,
  public:
   static RTCDTMFSender* Create(ExecutionContext*,
                                std::unique_ptr<WebRTCDTMFSenderHandler>);
+
+  RTCDTMFSender(ExecutionContext*, std::unique_ptr<WebRTCDTMFSenderHandler>);
   ~RTCDTMFSender() override;
 
   bool canInsertDTMF() const;
@@ -59,7 +61,7 @@ class RTCDTMFSender final : public EventTargetWithInlineData,
                   int inter_tone_gap,
                   ExceptionState&);
 
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(tonechange);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(tonechange, kTonechange)
 
   // EventTarget
   const AtomicString& InterfaceName() const override;
@@ -71,22 +73,19 @@ class RTCDTMFSender final : public EventTargetWithInlineData,
   void Trace(blink::Visitor*) override;
 
  private:
-  RTCDTMFSender(ExecutionContext*,
-                std::unique_ptr<WebRTCDTMFSenderHandler>);
   void Dispose();
 
-  void ScheduleDispatchEvent(Event*);
-  void ScheduledEventTimerFired(TimerBase*);
-
   // WebRTCDTMFSenderHandlerClient
+  void PlayoutTask();
   void DidPlayTone(const WebString&) override;
 
   std::unique_ptr<WebRTCDTMFSenderHandler> handler_;
 
   bool stopped_;
-
-  TaskRunnerTimer<RTCDTMFSender> scheduled_event_timer_;
-  HeapVector<Member<Event>> scheduled_events_;
+  String tone_buffer_;
+  int duration_;
+  int inter_tone_gap_;
+  bool playout_task_is_scheduled_ = false;
 };
 
 }  // namespace blink

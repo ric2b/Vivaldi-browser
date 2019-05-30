@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "base/strings/string16.h"
 #include "device/fido/authenticator_get_info_response.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_transport_protocol.h"
@@ -26,7 +27,7 @@ namespace device {
 // Devices are instantiated with an unknown protocol version. Users should call
 // |DiscoverSupportedProtocolAndDeviceInfo| to determine a device's
 // capabilities and initialize the instance accordingly. Instances returned by
-// |FidoDiscovery| are already fully initialized.
+// |FidoDeviceDiscovery| are not fully initialized.
 class COMPONENT_EXPORT(DEVICE_FIDO) FidoDevice {
  public:
   using WinkCallback = base::OnceClosure;
@@ -59,14 +60,17 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoDevice {
   virtual void TryWink(WinkCallback callback) = 0;
   virtual void Cancel() = 0;
   virtual std::string GetId() const = 0;
+  virtual base::string16 GetDisplayName() const;
   virtual FidoTransportProtocol DeviceTransport() const = 0;
+  virtual bool IsInPairingMode() const;
+  virtual bool IsPaired() const;
   virtual base::WeakPtr<FidoDevice> GetWeakPtr() = 0;
 
   // Sends a speculative AuthenticatorGetInfo request to determine whether the
   // device supports the CTAP2 protocol, and initializes supported_protocol_
-  // and device_info_ according to the result (unless the
-  // device::kNewCtap2Device feature is off, in which case U2F is assumed).
-  void DiscoverSupportedProtocolAndDeviceInfo(base::OnceClosure done);
+  // and device_info_ according to the result.
+  virtual void DiscoverSupportedProtocolAndDeviceInfo(base::OnceClosure done);
+
   // Returns whether supported_protocol has been correctly initialized (usually
   // by calling DiscoverSupportedProtocolAndDeviceInfo).
   bool SupportedProtocolIsInitialized();

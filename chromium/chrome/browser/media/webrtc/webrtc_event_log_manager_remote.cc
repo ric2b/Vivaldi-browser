@@ -17,7 +17,9 @@
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/task/post_task.h"
 #include "chrome/common/chrome_switches.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace webrtc_event_logging {
@@ -25,6 +27,9 @@ namespace webrtc_event_logging {
 // TODO(crbug.com/775415): Change max back to (1u << 29) after resolving the
 // issue where we read the entire file into memory.
 const size_t kMaxRemoteLogFileSizeBytes = 50000000u;
+
+const int kDefaultOutputPeriodMs = 5000;
+const int kMaxOutputPeriodMs = 60000;
 
 namespace {
 const base::TimeDelta kDefaultProactivePruningDelta =
@@ -351,13 +356,12 @@ void WebRtcRemoteEventLogManager::DisableForBrowserContext(
 }
 
 bool WebRtcRemoteEventLogManager::PeerConnectionAdded(
-    const PeerConnectionKey& key,
-    const std::string& peer_connection_id) {
+    const PeerConnectionKey& key) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   PrunePendingLogs();  // Infrequent event - good opportunity to prune.
 
-  const auto result = active_peer_connections_.emplace(key, peer_connection_id);
+  const auto result = active_peer_connections_.emplace(key, std::string());
 
   // An upload about to start might need to be suppressed.
   ManageUploadSchedule();
@@ -385,12 +389,40 @@ bool WebRtcRemoteEventLogManager::PeerConnectionRemoved(
   return true;
 }
 
+bool WebRtcRemoteEventLogManager::PeerConnectionSessionIdSet(
+    const PeerConnectionKey& key,
+    const std::string& session_id) {
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
+
+  PrunePendingLogs();  // Infrequent event - good opportunity to prune.
+
+  if (session_id.empty()) {
+    LOG(ERROR) << "Empty session ID.";
+    return false;
+  }
+
+  auto peer_connection = active_peer_connections_.find(key);
+  if (peer_connection == active_peer_connections_.end()) {
+    return false;  // Unknown peer connection; already closed?
+  }
+
+  if (!peer_connection->second.empty()) {
+    LOG(ERROR) << "Session ID already set.";
+    return false;
+  }
+
+  peer_connection->second = session_id;
+
+  return true;
+}
+
 bool WebRtcRemoteEventLogManager::StartRemoteLogging(
     int render_process_id,
     BrowserContextId browser_context_id,
-    const std::string& peer_connection_id,
+    const std::string& session_id,
     const base::FilePath& browser_context_dir,
     size_t max_file_size_bytes,
+    int output_period_ms,
     size_t web_app_id,
     std::string* log_id,
     std::string* error_message) {
@@ -400,10 +432,20 @@ bool WebRtcRemoteEventLogManager::StartRemoteLogging(
   DCHECK(error_message);
   DCHECK(error_message->empty());
 
-  if (!AreLogParametersValid(max_file_size_bytes, web_app_id, error_message)) {
+  if (output_period_ms < 0) {
+    output_period_ms = kDefaultOutputPeriodMs;
+  }
+
+  if (!AreLogParametersValid(max_file_size_bytes, output_period_ms, web_app_id,
+                             error_message)) {
     // |error_message| will have been set by AreLogParametersValid().
     DCHECK(!error_message->empty()) << "AreLogParametersValid() reported an "
                                        "error without an error message.";
+    return false;
+  }
+
+  if (session_id.empty()) {
+    *error_message = kStartRemoteLoggingFailureUnknownOrInactivePeerConnection;
     return false;
   }
 
@@ -413,7 +455,7 @@ bool WebRtcRemoteEventLogManager::StartRemoteLogging(
   }
 
   PeerConnectionKey key;
-  if (!FindPeerConnection(render_process_id, peer_connection_id, &key)) {
+  if (!FindPeerConnection(render_process_id, session_id, &key)) {
     *error_message = kStartRemoteLoggingFailureUnknownOrInactivePeerConnection;
     return false;
   }
@@ -421,8 +463,7 @@ bool WebRtcRemoteEventLogManager::StartRemoteLogging(
   // May not restart active remote logs.
   auto it = active_logs_.find(key);
   if (it != active_logs_.end()) {
-    LOG(ERROR) << "Remote logging already underway for " << peer_connection_id
-               << ".";
+    LOG(ERROR) << "Remote logging already underway for " << session_id << ".";
     *error_message = kStartRemoteLoggingFailureAlreadyLogging;
     return false;
   }
@@ -440,7 +481,7 @@ bool WebRtcRemoteEventLogManager::StartRemoteLogging(
   }
 
   return StartWritingLog(key, browser_context_dir, max_file_size_bytes,
-                         web_app_id, log_id, error_message);
+                         output_period_ms, web_app_id, log_id, error_message);
 }
 
 bool WebRtcRemoteEventLogManager::EventLogWrite(const PeerConnectionKey& key,
@@ -493,8 +534,8 @@ void WebRtcRemoteEventLogManager::GetHistory(
 
   if (!BrowserContextEnabled(browser_context_id)) {
     LOG(ERROR) << "Unknown |browser_context_id|.";
-    content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                     base::BindOnce(std::move(reply), history));
+    base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                             base::BindOnce(std::move(reply), history));
     return;
   }
 
@@ -542,8 +583,8 @@ void WebRtcRemoteEventLogManager::GetHistory(
   };
   std::sort(history.begin(), history.end(), cmp);
 
-  content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                   base::BindOnce(std::move(reply), history));
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                           base::BindOnce(std::move(reply), history));
 }
 
 void WebRtcRemoteEventLogManager::RemovePendingLogsForNotEnabledBrowserContext(
@@ -615,8 +656,8 @@ void WebRtcRemoteEventLogManager::SetWebRtcEventLogUploaderFactoryForTesting(
 void WebRtcRemoteEventLogManager::UploadConditionsHoldForTesting(
     base::OnceCallback<void(bool)> callback) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
       base::BindOnce(std::move(callback), UploadConditionsHold()));
 }
 
@@ -624,12 +665,13 @@ void WebRtcRemoteEventLogManager::ShutDownForTesting(base::OnceClosure reply) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   weak_ptr_factory_->InvalidateWeakPtrs();
   weak_ptr_factory_.reset();
-  content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                   base::BindOnce(std::move(reply)));
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                           base::BindOnce(std::move(reply)));
 }
 
 bool WebRtcRemoteEventLogManager::AreLogParametersValid(
     size_t max_file_size_bytes,
+    int output_period_ms,
     size_t web_app_id,
     std::string* error_message) const {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
@@ -649,6 +691,12 @@ bool WebRtcRemoteEventLogManager::AreLogParametersValid(
   if (max_file_size_bytes > kMaxRemoteLogFileSizeBytes) {
     LOG(WARNING) << "File size exceeds maximum allowed.";
     *error_message = kStartRemoteLoggingFailureMaxSizeTooLarge;
+    return false;
+  }
+
+  if (output_period_ms > kMaxOutputPeriodMs) {
+    LOG(WARNING) << "Output period (ms) exceeds maximum allowed.";
+    *error_message = kStartRemoteLoggingFailureOutputPeriodMsTooLarge;
     return false;
   }
 
@@ -920,6 +968,7 @@ bool WebRtcRemoteEventLogManager::StartWritingLog(
     const PeerConnectionKey& key,
     const base::FilePath& browser_context_dir,
     size_t max_file_size_bytes,
+    int output_period_ms,
     size_t web_app_id,
     std::string* log_id_out,
     std::string* error_message_out) {
@@ -966,7 +1015,8 @@ bool WebRtcRemoteEventLogManager::StartWritingLog(
   const auto it = active_logs_.emplace(key, std::move(log_file));
   DCHECK(it.second);
 
-  observer_->OnRemoteLogStarted(key, it.first->second->path());
+  observer_->OnRemoteLogStarted(key, it.first->second->path(),
+                                output_period_ms);
 
   *log_id_out = log_id;
   return true;
@@ -1253,37 +1303,38 @@ void WebRtcRemoteEventLogManager::OnWebRtcEventLogUploadComplete(
 
 bool WebRtcRemoteEventLogManager::FindPeerConnection(
     int render_process_id,
-    const std::string& peer_connection_id,
+    const std::string& session_id,
     PeerConnectionKey* key) const {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
+  DCHECK(!session_id.empty());
 
   const auto it = FindNextPeerConnection(active_peer_connections_.cbegin(),
-                                         render_process_id, peer_connection_id);
+                                         render_process_id, session_id);
   if (it == active_peer_connections_.cend()) {
     return false;
   }
 
-  // Make sure that the peer connection ID is unique for the renderer process
-  // in which it exists, though not necessarily between renderer processes.
-  // (The helper exists just to allow this DCHECK.)
-  DCHECK(FindNextPeerConnection(std::next(it), render_process_id,
-                                peer_connection_id) ==
+  // Make sure that the session ID is unique for the renderer process,
+  // though not necessarily between renderer processes.
+  // (The helper exists solely to allow this DCHECK.)
+  DCHECK(FindNextPeerConnection(std::next(it), render_process_id, session_id) ==
          active_peer_connections_.cend());
 
   *key = it->first;
   return true;
 }
 
-std::map<WebRtcEventLogPeerConnectionKey, const std::string>::const_iterator
+WebRtcRemoteEventLogManager::PeerConnectionMap::const_iterator
 WebRtcRemoteEventLogManager::FindNextPeerConnection(
-    std::map<PeerConnectionKey, const std::string>::const_iterator begin,
+    PeerConnectionMap::const_iterator begin,
     int render_process_id,
-    const std::string& peer_connection_id) const {
+    const std::string& session_id) const {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
+  DCHECK(!session_id.empty());
   const auto end = active_peer_connections_.cend();
   for (auto it = begin; it != end; ++it) {
     if (it->first.render_process_id == render_process_id &&
-        it->second == peer_connection_id) {
+        it->second == session_id) {
       return it;
     }
   }

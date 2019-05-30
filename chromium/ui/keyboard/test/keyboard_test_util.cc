@@ -5,118 +5,101 @@
 #include "ui/keyboard/test/keyboard_test_util.h"
 
 #include "base/run_loop.h"
-#include "ui/aura/window.h"
-#include "ui/aura/window_observer.h"
+#include "base/time/time.h"
+#include "ui/display/screen.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_controller_observer.h"
 
+namespace keyboard {
+
 namespace {
 
-class WindowVisibilityChangeWaiter : public aura::WindowObserver {
+class KeyboardVisibilityChangeWaiter : public KeyboardControllerObserver {
  public:
-  explicit WindowVisibilityChangeWaiter(aura::Window* window, bool wait_until)
-      : window_(window), wait_until_(wait_until) {
-    window_->AddObserver(this);
+  explicit KeyboardVisibilityChangeWaiter(bool wait_until)
+      : wait_until_(wait_until) {
+    KeyboardController::Get()->AddObserver(this);
   }
-  ~WindowVisibilityChangeWaiter() override { window_->RemoveObserver(this); }
+  ~KeyboardVisibilityChangeWaiter() override {
+    KeyboardController::Get()->RemoveObserver(this);
+  }
 
   void Wait() { run_loop_.Run(); }
 
  private:
-  void OnWindowVisibilityChanged(aura::Window* window, bool visible) override {
-    if (window_ == window && visible == wait_until_) {
+  void OnKeyboardVisibilityStateChanged(const bool is_visible) override {
+    if (is_visible == wait_until_)
       run_loop_.QuitWhenIdle();
-    }
-  }
-
-  aura::Window* window_;
-  base::RunLoop run_loop_;
-  bool const wait_until_;
-
-  DISALLOW_COPY_AND_ASSIGN(WindowVisibilityChangeWaiter);
-};
-
-class ControllerStateChangeWaiter
-    : public keyboard::KeyboardControllerObserver {
- public:
-  explicit ControllerStateChangeWaiter(keyboard::KeyboardControllerState state)
-      : controller_(keyboard::KeyboardController::Get()), state_(state) {
-    controller_->AddObserver(this);
-  }
-  ~ControllerStateChangeWaiter() override { controller_->RemoveObserver(this); }
-
-  void Wait() { run_loop_.Run(); }
-
- private:
-  void OnStateChanged(const keyboard::KeyboardControllerState state) override {
-    if (state == state_) {
-      run_loop_.QuitWhenIdle();
-    }
   }
 
   base::RunLoop run_loop_;
-  keyboard::KeyboardController* controller_;
-  keyboard::KeyboardControllerState state_;
+  const bool wait_until_;
 
-  DISALLOW_COPY_AND_ASSIGN(ControllerStateChangeWaiter);
+  DISALLOW_COPY_AND_ASSIGN(KeyboardVisibilityChangeWaiter);
 };
 
-bool WaitVisibilityChangesTo(bool visibility) {
-  aura::Window* keyboard_window =
-      keyboard::KeyboardController::Get()->GetKeyboardWindow();
-  if (keyboard_window->IsVisible() == visibility)
+bool WaitVisibilityChangesTo(bool wait_until) {
+  if (KeyboardController::Get()->IsKeyboardVisible() == wait_until)
     return true;
-  WindowVisibilityChangeWaiter waiter(keyboard_window, visibility);
+  KeyboardVisibilityChangeWaiter waiter(wait_until);
   waiter.Wait();
   return true;
 }
 
 }  // namespace
 
-namespace keyboard {
+namespace test {
+
+bool WaitUntilLoaded() {
+  // In tests, the keyboard window is mocked out so it usually "loads" within a
+  // single RunUntilIdle call.
+  base::RunLoop run_loop;
+  while (KeyboardController::Get()->GetStateForTest() ==
+         KeyboardControllerState::LOADING_EXTENSION) {
+    run_loop.RunUntilIdle();
+  }
+  return true;
+}
+
+}  // namespace test
 
 bool WaitUntilShown() {
-  return WaitVisibilityChangesTo(true);
+  // KeyboardController send a visibility update once the show animation
+  // finishes.
+  return WaitVisibilityChangesTo(true /* wait_until */);
 }
 
 bool WaitUntilHidden() {
-  return WaitVisibilityChangesTo(false);
+  // Unlike |WaitUntilShown|, KeyboardController updates its visibility
+  // at the beginning of the hide animation. There's currently no way to
+  // actually detect when the hide animation finishes.
+  // TODO(https://crbug.com/849995): Find a proper solution to this.
+  return WaitVisibilityChangesTo(false /* wait_until */);
 }
 
-void WaitControllerStateChangesTo(KeyboardControllerState state) {
-  ControllerStateChangeWaiter waiter(state);
-  waiter.Wait();
+bool IsKeyboardShowing() {
+  auto* keyboard_controller = KeyboardController::Get();
+  DCHECK(keyboard_controller->IsEnabled());
+
+  // KeyboardController sets its state to SHOWN when it is about to show.
+  return keyboard_controller->GetStateForTest() ==
+         KeyboardControllerState::SHOWN;
+}
+
+bool IsKeyboardHiding() {
+  auto* keyboard_controller = KeyboardController::Get();
+  DCHECK(keyboard_controller->IsEnabled());
+
+  return keyboard_controller->GetStateForTest() ==
+             KeyboardControllerState::WILL_HIDE ||
+         keyboard_controller->GetStateForTest() ==
+             KeyboardControllerState::HIDDEN;
 }
 
 gfx::Rect KeyboardBoundsFromRootBounds(const gfx::Rect& root_bounds,
                                        int keyboard_height) {
   return gfx::Rect(root_bounds.x(), root_bounds.bottom() - keyboard_height,
                    root_bounds.width(), keyboard_height);
-}
-
-TestKeyboardUI::TestKeyboardUI(ui::InputMethod* input_method)
-    : input_method_(input_method) {}
-
-TestKeyboardUI::~TestKeyboardUI() {
-  // Destroy the window before the delegate.
-  window_.reset();
-}
-
-aura::Window* TestKeyboardUI::GetKeyboardWindow() {
-  if (!window_) {
-    window_.reset(new aura::Window(&delegate_));
-    window_->Init(ui::LAYER_NOT_DRAWN);
-    window_->set_owned_by_parent(false);
-  }
-  return window_.get();
-}
-
-ui::InputMethod* TestKeyboardUI::GetInputMethod() {
-  return input_method_;
-}
-
-bool TestKeyboardUI::HasKeyboardWindow() const {
-  return !!window_;
 }
 
 }  // namespace keyboard

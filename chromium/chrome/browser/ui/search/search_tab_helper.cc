@@ -14,6 +14,8 @@
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/search.h"
+#include "chrome/browser/search/search_suggest/search_suggest_service.h"
+#include "chrome/browser/search/search_suggest/search_suggest_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -24,15 +26,17 @@
 #include "chrome/browser/ui/search/ntp_user_data_logger.h"
 #include "chrome/browser/ui/search/search_ipc_router_policy_impl.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/profile_sync_service.h"
 #include "components/google/core/common/google_util.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
 #include "components/search/search.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/sync/driver/sync_service.h"
+#include "components/sync/driver/sync_user_settings.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -48,8 +52,8 @@
 
 namespace {
 
-bool IsCacheableNTP(const content::WebContents* contents) {
-  const content::NavigationEntry* entry =
+bool IsCacheableNTP(content::WebContents* contents) {
+  content::NavigationEntry* entry =
       contents->GetController().GetLastCommittedEntry();
   return search::NavEntryIsInstantNTP(contents, entry) &&
          entry->GetURL() != chrome::kChromeSearchLocalNtpUrl;
@@ -57,7 +61,7 @@ bool IsCacheableNTP(const content::WebContents* contents) {
 
 // Returns true if |contents| are rendered inside an Instant process.
 bool InInstantProcess(const InstantService* instant_service,
-                      const content::WebContents* contents) {
+                      content::WebContents* contents) {
   if (!instant_service || !contents)
     return false;
 
@@ -94,10 +98,9 @@ void RecordNewTabLoadTime(content::WebContents* contents) {
 // disable a feature that should not be shown to users who prefer not to sync
 // their history.
 bool IsHistorySyncEnabled(Profile* profile) {
-  browser_sync::ProfileSyncService* sync =
-      ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
-  return sync &&
-      sync->GetPreferredDataTypes().Has(syncer::HISTORY_DELETE_DIRECTIVES);
+  syncer::SyncService* sync = ProfileSyncServiceFactory::GetForProfile(profile);
+  return sync && sync->IsSyncFeatureEnabled() &&
+         sync->GetUserSettings()->GetChosenDataTypes().Has(syncer::TYPED_URLS);
 }
 
 }  // namespace
@@ -114,6 +117,9 @@ SearchTabHelper::SearchTabHelper(content::WebContents* web_contents)
   instant_service_ = InstantServiceFactory::GetForProfile(profile());
   if (instant_service_)
     instant_service_->AddObserver(this);
+
+  search_suggest_service_ =
+      SearchSuggestServiceFactory::GetForProfile(profile());
 }
 
 SearchTabHelper::~SearchTabHelper() {
@@ -216,10 +222,8 @@ void SearchTabHelper::TitleWasSet(content::NavigationEntry* entry) {
 
 void SearchTabHelper::DidFinishLoad(content::RenderFrameHost* render_frame_host,
                                     const GURL& /* validated_url */) {
-  if (!render_frame_host->GetParent()) {
-    if (search::IsInstantNTP(web_contents_))
-      RecordNewTabLoadTime(web_contents_);
-  }
+  if (!render_frame_host->GetParent() && search::IsInstantNTP(web_contents_))
+    RecordNewTabLoadTime(web_contents_);
 }
 
 void SearchTabHelper::NavigationEntryCommitted(
@@ -244,43 +248,29 @@ void SearchTabHelper::MostVisitedItemsChanged(
   ipc_router_.SendMostVisitedItems(items, is_custom_links);
 }
 
-void SearchTabHelper::FocusOmnibox(OmniboxFocusState state) {
+void SearchTabHelper::FocusOmnibox(bool focus) {
   OmniboxView* omnibox_view = GetOmniboxView();
   if (!omnibox_view)
     return;
 
-  // Do not add a default case in the switch block for the following reasons:
-  // (1) Explicitly handle the new states. If new states are added in the
-  // OmniboxFocusState, the compiler will warn the developer to handle the new
-  // states.
-  // (2) An attacker may control the renderer and sends the browser process a
-  // malformed IPC. This function responds to the invalid |state| values by
-  // doing nothing instead of crashing the browser process (intentional no-op).
-  switch (state) {
-    case OMNIBOX_FOCUS_VISIBLE:
-      omnibox_view->SetFocus();
-      omnibox_view->model()->SetCaretVisibility(true);
-      break;
-    case OMNIBOX_FOCUS_INVISIBLE:
-      omnibox_view->SetFocus();
-      omnibox_view->model()->SetCaretVisibility(false);
-      // If the user clicked on the fakebox, any text already in the omnibox
-      // should get cleared when they start typing. Selecting all the existing
-      // text is a convenient way to accomplish this. It also gives a slight
-      // visual cue to users who really understand selection state about what
-      // will happen if they start typing.
-      omnibox_view->SelectAll(false);
+  if (focus) {
+    omnibox_view->SetFocus();
+    omnibox_view->model()->SetCaretVisibility(false);
+    // If the user clicked on the fakebox, any text already in the omnibox
+    // should get cleared when they start typing. Selecting all the existing
+    // text is a convenient way to accomplish this. It also gives a slight
+    // visual cue to users who really understand selection state about what
+    // will happen if they start typing.
+    omnibox_view->SelectAll(false);
 #if !defined(OS_WIN)
-      omnibox_view->ShowVirtualKeyboardIfEnabled();
+    omnibox_view->ShowVirtualKeyboardIfEnabled();
 #endif
-      break;
-    case OMNIBOX_FOCUS_NONE:
-      // Remove focus only if the popup is closed. This will prevent someone
-      // from changing the omnibox value and closing the popup without user
-      // interaction.
-      if (!omnibox_view->model()->popup_model()->IsOpen())
-        web_contents()->Focus();
-      break;
+  } else {
+    // Remove focus only if the popup is closed. This will prevent someone
+    // from changing the omnibox value and closing the popup without user
+    // interaction.
+    if (!omnibox_view->model()->popup_model()->IsOpen())
+      web_contents()->Focus();
   }
 }
 
@@ -315,6 +305,13 @@ bool SearchTabHelper::OnUpdateCustomLink(const GURL& url,
   DCHECK(!url.is_empty());
   if (instant_service_)
     return instant_service_->UpdateCustomLink(url, new_url, new_title);
+  return false;
+}
+
+bool SearchTabHelper::OnReorderCustomLink(const GURL& url, int new_pos) {
+  DCHECK(!url.is_empty());
+  if (instant_service_)
+    return instant_service_->ReorderCustomLink(url, new_pos);
   return false;
 }
 
@@ -463,6 +460,34 @@ const OmniboxView* SearchTabHelper::GetOmniboxView() const {
   return browser->window()->GetLocationBar()->GetOmniboxView();
 }
 
+void SearchTabHelper::OnBlocklistSearchSuggestion(int task_version,
+                                                  long task_id) {
+  if (search_suggest_service_)
+    search_suggest_service_->BlocklistSearchSuggestion(task_version, task_id);
+}
+
+void SearchTabHelper::OnBlocklistSearchSuggestionWithHash(
+    int task_version,
+    long task_id,
+    const uint8_t hash[4]) {
+  if (search_suggest_service_)
+    search_suggest_service_->BlocklistSearchSuggestionWithHash(task_version,
+                                                               task_id, hash);
+}
+
+void SearchTabHelper::OnSearchSuggestionSelected(int task_version,
+                                                 long task_id,
+                                                 const uint8_t hash[4]) {
+  if (search_suggest_service_)
+    search_suggest_service_->SearchSuggestionSelected(task_version, task_id,
+                                                      hash);
+}
+
+void SearchTabHelper::OnOptOutOfSearchSuggestions() {
+  if (search_suggest_service_)
+    search_suggest_service_->OptOutOfSearchSuggestions();
+}
+
 OmniboxView* SearchTabHelper::GetOmniboxView() {
   return const_cast<OmniboxView*>(
       const_cast<const SearchTabHelper*>(this)->GetOmniboxView());
@@ -477,3 +502,5 @@ bool SearchTabHelper::IsInputInProgress() const {
   return omnibox_view && omnibox_view->model()->user_input_in_progress() &&
          omnibox_view->model()->focus_state() == OMNIBOX_FOCUS_VISIBLE;
 }
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(SearchTabHelper)

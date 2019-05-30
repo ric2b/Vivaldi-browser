@@ -4,18 +4,20 @@
 
 /**
  * @param {DialogType} dialogType
- * @param {!VolumeManagerWrapper} volumeManager
+ * @param {!VolumeManager} volumeManager
  * @param {!FileManagerUI} ui
  * @param {!MetadataModel} metadataModel
  * @param {!DirectoryModel} directoryModel
  * @param {!FileSelectionHandler} selectionHandler
  * @param {!MetadataUpdateController} metadataUpdateController
+ * @param {!NamingController} namingController
+ * @param {!Crostini} crostini
  * @constructor
  * @struct
  */
 function TaskController(
     dialogType, volumeManager, ui, metadataModel, directoryModel,
-    selectionHandler, metadataUpdateController) {
+    selectionHandler, metadataUpdateController, namingController, crostini) {
   /**
    * @private {DialogType}
    * @const
@@ -23,7 +25,7 @@ function TaskController(
   this.dialogType_ = dialogType;
 
   /**
-   * @private {!VolumeManagerWrapper}
+   * @private {!VolumeManager}
    * @const
    */
   this.volumeManager_ = volumeManager;
@@ -58,6 +60,19 @@ function TaskController(
    * @private
    */
   this.metadataUpdateController_ = metadataUpdateController;
+
+  /**
+   * @private {!NamingController}
+   * @const
+   */
+  this.namingController_ = namingController;
+
+  /**
+   * @type {!Crostini}
+   * @const
+   * @private
+   */
+  this.crostini_ = crostini;
 
   /**
    * @type {!TaskHistory}
@@ -107,6 +122,14 @@ function TaskController(
       assertInstanceof(document.querySelector('#more-actions'), cr.ui.Command);
 
   /**
+   * Show sub menu command that uses #show-submenu as selector.
+   * @private {!cr.ui.Command}
+   * @const
+   */
+  this.showSubMenuCommand_ =
+      assertInstanceof(document.querySelector('#show-submenu'), cr.ui.Command);
+
+  /**
    * @private {Promise<!FileTasks>}
    */
   this.tasks_ = null;
@@ -127,6 +150,8 @@ function TaskController(
       'select', this.onTaskItemClicked_.bind(this));
   ui.shareMenuButton.menu.addEventListener(
       'activate', this.onTaskItemClicked_.bind(this));
+  ui.shareSubMenu.addEventListener(
+      'activate', this.onTaskItemClicked_.bind(this));
   this.selectionHandler_.addEventListener(
       FileSelectionHandler.EventType.CHANGE,
       this.onSelectionChanged_.bind(this));
@@ -140,31 +165,6 @@ function TaskController(
 }
 
 /**
- * Cached the temporary disabled task item. Used inside
- * FileSelectionHandler.createTemporaryDisabledTaskItem_().
- * @type {Object}
- * @private
- */
-TaskController.cachedDisabledTaskItem_ = null;
-
-/**
- * Create the temporary disabled task item.
- * @return {Object} Created disabled item.
- * @private
- */
-TaskController.createTemporaryDisabledTaskItem_ = function() {
-  if (!TaskController.cachedDisabledTaskItem_) {
-    TaskController.cachedDisabledTaskItem_ = {
-      title: str('TASK_OPEN'),
-      disabled: true,
-      taskId: null
-    };
-  }
-
-  return TaskController.cachedDisabledTaskItem_;
-};
-
-/**
  * Task combobox handler.
  *
  * @param {Object} event Event containing task which was clicked.
@@ -173,14 +173,15 @@ TaskController.createTemporaryDisabledTaskItem_ = function() {
 TaskController.prototype.onTaskItemClicked_ = function(event) {
   // If the clicked target has an associated command, the click event should not
   // be handled here since it is handled as a command.
-  if (event.target && event.target.command)
+  if (event.target && event.target.command) {
     return;
+  }
 
   // 'select' event from ComboButton has the item as event.item.
   // 'activate' event from cr.ui.MenuButton has the item as event.target.data.
-  var item = event.item || event.target.data;
+  const item = event.item || event.target.data;
   this.getFileTasks()
-      .then(function(tasks) {
+      .then(tasks => {
         switch (item.type) {
           case FileTasks.TaskMenuButtonItemType.ShowMenu:
             this.ui_.taskMenuButton.showMenu(false);
@@ -189,20 +190,20 @@ TaskController.prototype.onTaskItemClicked_ = function(event) {
             tasks.execute(item.task);
             break;
           case FileTasks.TaskMenuButtonItemType.ChangeDefaultTask:
-            var selection = this.selectionHandler_.selection;
-            var extensions = [];
+            const selection = this.selectionHandler_.selection;
+            const extensions = [];
 
-            for (var i = 0; i < selection.entries.length; i++) {
-              var match = /\.(\w+)$/g.exec(selection.entries[i].toURL());
+            for (let i = 0; i < selection.entries.length; i++) {
+              const match = /\.(\w+)$/g.exec(selection.entries[i].toURL());
               if (match) {
-                var ext = match[1].toUpperCase();
+                const ext = match[1].toUpperCase();
                 if (extensions.indexOf(ext) == -1) {
                   extensions.push(ext);
                 }
               }
             }
 
-            var format = '';
+            let format = '';
 
             if (extensions.length == 1) {
               format = extensions[0];
@@ -220,10 +221,11 @@ TaskController.prototype.onTaskItemClicked_ = function(event) {
           default:
             assertNotReached('Unknown task.');
         }
-      }.bind(this))
-      .catch(function(error) {
-        if (error)
+      })
+      .catch(error => {
+        if (error) {
           console.error(error.stack || error);
+        }
       });
 };
 
@@ -235,10 +237,9 @@ TaskController.prototype.onTaskItemClicked_ = function(event) {
  * @private
  */
 TaskController.prototype.changeDefaultTask_ = function(selection, task) {
-  var entries = selection.entries;
+  const entries = selection.entries;
 
-  Promise.all(entries.map((entry) => this.getMimeType_(entry))).then(function(
-      mimeTypes) {
+  Promise.all(entries.map((entry) => this.getMimeType_(entry))).then(mimeTypes => {
     chrome.fileManagerPrivate.setDefaultTask(
         task.taskId,
         entries,
@@ -251,16 +252,17 @@ TaskController.prototype.changeDefaultTask_ = function(selection, task) {
     if (this.selectionHandler_.selection === selection) {
       this.tasks_ = null;
       this.getFileTasks()
-          .then(function(tasks) {
+          .then(tasks => {
             tasks.display(this.ui_.taskMenuButton, this.ui_.shareMenuButton);
-          }.bind(this))
-          .catch(function(error) {
-            if (error)
+          })
+          .catch(error => {
+            if (error) {
               console.error(error.stack || error);
+            }
           });
     }
     this.selectionHandler_.onFileSelectionChanged();
-  }.bind(this));
+  });
 };
 
 /**
@@ -268,12 +270,19 @@ TaskController.prototype.changeDefaultTask_ = function(selection, task) {
  */
 TaskController.prototype.executeDefaultTask = function() {
   this.getFileTasks()
-      .then(function(tasks) {
-        tasks.execute(this.ui_.fileContextMenu.defaultTaskMenuItem);
-      }.bind(this))
-      .catch(function(error) {
-        if (error)
+      .then(tasks => {
+        const task = {
+          taskId: /** @type {string} */ (
+              this.ui_.fileContextMenu.defaultTaskMenuItem.taskId),
+          title: /** @type {string} */ (
+              this.ui_.fileContextMenu.defaultTaskMenuItem.label),
+        };
+        tasks.execute(task);
+      })
+      .catch(error => {
+        if (error) {
           console.error(error.stack || error);
+        }
       });
 };
 
@@ -287,18 +296,19 @@ TaskController.prototype.executeDefaultTask = function() {
  * @private
  */
 TaskController.prototype.getMimeType_ = function(entry) {
-  return this.metadataModel_.get([entry], ['contentMimeType']).then(
-      function(properties) {
-        if (properties[0].contentMimeType)
+  return this.metadataModel_.get([entry], ['contentMimeType'])
+      .then(properties => {
+        if (properties[0].contentMimeType) {
           return properties[0].contentMimeType;
-        return new Promise(function(fulfill, reject) {
-          chrome.fileManagerPrivate.getMimeType(
-              entry, function(mimeType) {
-                if (!chrome.runtime.lastError)
-                  fulfill(mimeType);
-                else
-                  reject(chrome.runtime.lastError);
-              });
+        }
+        return new Promise((fulfill, reject) => {
+          chrome.fileManagerPrivate.getMimeType(entry, mimeType => {
+            if (!chrome.runtime.lastError) {
+              fulfill(mimeType);
+            } else {
+              reject(chrome.runtime.lastError);
+            }
+          });
         });
       });
 };
@@ -308,18 +318,15 @@ TaskController.prototype.getMimeType_ = function(entry) {
  * @private
  */
 TaskController.prototype.onSelectionChanged_ = function() {
-  var selection = this.selectionHandler_.selection;
+  const selection = this.selectionHandler_.selection;
   // Caller of update context menu task items.
   // FileSelectionHandler.EventType.CHANGE
   if (this.dialogType_ === DialogType.FULL_PAGE &&
       (selection.directoryCount > 0 || selection.fileCount > 0)) {
     // Compare entries while ignoring changes inside directories.
     if (!util.isSameEntries(this.lastSelectedEntries_, selection.entries)) {
-      // Show disabled items for position calculation of the menu. They will be
-      // overridden in this.updateTasks_().
-      this.updateContextMenuTaskItems_(
-          [TaskController.createTemporaryDisabledTaskItem_()],
-          [TaskController.createTemporaryDisabledTaskItem_()]);
+      // Update the context menu if selection changed.
+      this.updateContextMenuTaskItems_([], []);
     }
   } else {
     // Update context menu.
@@ -333,18 +340,19 @@ TaskController.prototype.onSelectionChanged_ = function() {
  * @private
  */
 TaskController.prototype.updateTasks_ = function() {
-  var selection = this.selectionHandler_.selection;
+  const selection = this.selectionHandler_.selection;
   if (this.dialogType_ === DialogType.FULL_PAGE &&
       (selection.directoryCount > 0 || selection.fileCount > 0)) {
     this.getFileTasks()
-        .then(function(tasks) {
+        .then(tasks => {
           tasks.display(this.ui_.taskMenuButton, this.ui_.shareMenuButton);
           this.updateContextMenuTaskItems_(
               tasks.getOpenTaskItems(), tasks.getNonOpenTaskItems());
-        }.bind(this))
-        .catch(function(error) {
-          if (error)
+        })
+        .catch(error => {
+          if (error) {
             console.error(error.stack || error);
+          }
         });
   } else {
     this.ui_.taskMenuButton.hidden = true;
@@ -357,31 +365,35 @@ TaskController.prototype.updateTasks_ = function() {
  * @public
  */
 TaskController.prototype.getFileTasks = function() {
-  var selection = this.selectionHandler_.selection;
-  if (this.tasks_ && util.isSameEntries(this.tasksEntries_, selection.entries))
+  const selection = this.selectionHandler_.selection;
+  if (this.tasks_ &&
+      util.isSameEntries(this.tasksEntries_, selection.entries)) {
     return this.tasks_;
+  }
   this.tasksEntries_ = selection.entries;
   this.tasks_ =
-      selection.computeAdditional(this.metadataModel_).then(function() {
+      selection.computeAdditional(this.metadataModel_).then(() => {
         if (this.selectionHandler_.selection !== selection) {
-          if (util.isSameEntries(this.tasksEntries_, selection.entries))
+          if (util.isSameEntries(this.tasksEntries_, selection.entries)) {
             this.tasks_ = null;
+          }
           return Promise.reject();
         }
         return FileTasks
             .create(
                 this.volumeManager_, this.metadataModel_, this.directoryModel_,
                 this.ui_, selection.entries, assert(selection.mimeTypes),
-                this.taskHistory_)
-            .then(function(tasks) {
+                this.taskHistory_, this.namingController_, this.crostini_)
+            .then(tasks => {
               if (this.selectionHandler_.selection !== selection) {
-                if (util.isSameEntries(this.tasksEntries_, selection.entries))
+                if (util.isSameEntries(this.tasksEntries_, selection.entries)) {
                   this.tasks_ = null;
+                }
                 return Promise.reject();
               }
               return tasks;
-            }.bind(this));
-      }.bind(this));
+            });
+      });
   return this.tasks_;
 };
 
@@ -410,15 +422,26 @@ TaskController.prototype.canExecuteMoreActions = function() {
 };
 
 /**
+ * Returns whether show sub-menu command can be executed or not.
+ * @return {boolean} True if show-submenu command is executable.
+ */
+TaskController.prototype.canExecuteShowOverflow = function() {
+  // TODO (adanilo@) extend this for general sub-menu case
+  return this.ui_.shareMenuButton.overflow.firstChild !== null;
+};
+
+/**
  * Updates tasks menu item to match passed task items.
  *
- * @param {!Array<!Object>} openTasks List of OPEN tasks.
- * @param {!Array<!Object>} nonOpenTasks List of non-OPEN tasks.
+ * @param {!Array<!chrome.fileManagerPrivate.FileTask>} openTasks List of OPEN
+ *     tasks.
+ * @param {!Array<!chrome.fileManagerPrivate.FileTask>} nonOpenTasks List of
+ *     non-OPEN tasks.
  * @private
  */
 TaskController.prototype.updateContextMenuTaskItems_ = function(
     openTasks, nonOpenTasks) {
-  var defaultTask = FileTasks.getDefaultTask(openTasks, this.taskHistory_);
+  const defaultTask = FileTasks.getDefaultTask(openTasks, this.taskHistory_);
   if (defaultTask) {
     if (defaultTask.iconType) {
       this.ui_.fileContextMenu.defaultTaskMenuItem.style.backgroundImage = '';
@@ -431,11 +454,12 @@ TaskController.prototype.updateContextMenuTaskItems_ = function(
       this.ui_.fileContextMenu.defaultTaskMenuItem.style.backgroundImage = '';
     }
 
-    if (defaultTask.taskId === FileTasks.ZIP_UNPACKER_TASK_ID ||
-        defaultTask.taskId === FileTasks.ZIP_ARCHIVER_UNZIP_TASK_ID)
+    if (defaultTask.taskId === FileTasks.ZIP_ARCHIVER_UNZIP_TASK_ID) {
       this.ui_.fileContextMenu.defaultTaskMenuItem.label = str('TASK_OPEN');
-    else
-      this.ui_.fileContextMenu.defaultTaskMenuItem.label = defaultTask.title;
+    } else {
+      this.ui_.fileContextMenu.defaultTaskMenuItem.label =
+          defaultTask.label || defaultTask.title;
+    }
 
     this.ui_.fileContextMenu.defaultTaskMenuItem.disabled =
         !!defaultTask.disabled;
@@ -459,14 +483,14 @@ TaskController.prototype.updateContextMenuTaskItems_ = function(
  * @param {FileEntry} entry
  */
 TaskController.prototype.executeEntryTask = function(entry) {
-  this.metadataModel_.get([entry], ['contentMimeType']).then(function(props) {
+  this.metadataModel_.get([entry], ['contentMimeType']).then(props => {
     FileTasks
         .create(
             this.volumeManager_, this.metadataModel_, this.directoryModel_,
             this.ui_, [entry], [props[0].contentMimeType || null],
-            this.taskHistory_)
-        .then(function(tasks) {
+            this.taskHistory_, this.namingController_, this.crostini_)
+        .then(tasks => {
           tasks.executeDefault();
         });
-  }.bind(this));
+  });
 };

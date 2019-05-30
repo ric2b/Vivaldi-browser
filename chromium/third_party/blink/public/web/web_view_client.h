@@ -32,23 +32,22 @@
 #define THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_VIEW_CLIENT_H_
 
 #include "base/strings/string_piece.h"
-#include "third_party/blink/public/mojom/page/page_visibility_state.mojom-shared.h"
+#include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
+#include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/web_ax_enums.h"
 #include "third_party/blink/public/web/web_frame.h"
-#include "third_party/blink/public/web/web_popup_type.h"
 #include "third_party/blink/public/web/web_text_direction.h"
 #include "third_party/blink/public/web/web_widget_client.h"
 
 namespace blink {
 
 class WebDateTimeChooserCompletion;
-class WebFileChooserCompletion;
 class WebNode;
+class WebPagePopup;
 class WebURL;
 class WebURLRequest;
 class WebView;
-class WebWidget;
 enum class WebSandboxFlags;
 struct WebDateTimeChooserParams;
 struct WebRect;
@@ -67,20 +66,21 @@ class WebViewClient {
   // could be fulfilled.  The client should not load the request.
   // The policy parameter indicates how the new view will be displayed in
   // WebWidgetClient::show.
-  virtual WebView* CreateView(WebLocalFrame* creator,
-                              const WebURLRequest& request,
-                              const WebWindowFeatures& features,
-                              const WebString& name,
-                              WebNavigationPolicy policy,
-                              bool suppress_opener,
-                              WebSandboxFlags) {
+  virtual WebView* CreateView(
+      WebLocalFrame* creator,
+      const WebURLRequest& request,
+      const WebWindowFeatures& features,
+      const WebString& name,
+      WebNavigationPolicy policy,
+      bool suppress_opener,
+      WebSandboxFlags,
+      const FeaturePolicy::FeatureState&,
+      const SessionStorageNamespaceId& session_storage_namespace_id) {
     return nullptr;
   }
 
   // Create a new popup WebWidget.
-  virtual WebWidget* CreatePopup(WebLocalFrame*, WebPopupType) {
-    return nullptr;
-  }
+  virtual WebPagePopup* CreatePopup(WebLocalFrame*) { return nullptr; }
 
   // Returns the session storage namespace id associated with this WebView.
   virtual base::StringPiece GetSessionStorageNamespaceId() {
@@ -89,27 +89,20 @@ class WebViewClient {
 
   // Misc ----------------------------------------------------------------
 
+  // Called when a region of the WebView needs to be re-painted. This is only
+  // for non-composited WebViews that exist to contribute to a "parent" WebView
+  // painting. Otherwise invalidations are transmitted to the compositor through
+  // the layers.
+  virtual void DidInvalidateRect(const WebRect&) {}
+
   // Called when script in the page calls window.print().  If frame is
   // non-null, then it selects a particular frame, including its
   // children, to print.  Otherwise, the main frame and its children
   // should be printed.
   virtual void PrintPage(WebLocalFrame*) {}
 
-  // This method enumerates all the files in the path. It returns immediately
-  // and asynchronously invokes the WebFileChooserCompletion with all the
-  // files in the directory. Returns false if the WebFileChooserCompletion
-  // will never be called.
-  virtual bool EnumerateChosenDirectory(const WebString& path,
-                                        WebFileChooserCompletion*) {
-    return false;
-  }
-
   // Called when PageImportanceSignals for the WebView is updated.
   virtual void PageImportanceSignalsChanged() {}
-
-  // Called to get the position of the root window containing the widget
-  // in screen coordinates.
-  virtual WebRect RootWindowRect() { return WebRect(); }
 
   // Dialogs -------------------------------------------------------------
 
@@ -172,12 +165,17 @@ class WebViewClient {
   // Called when the View acquires focus.
   virtual void DidFocus(WebLocalFrame* calling_frame) {}
 
+  // Returns information about the screen where this view's widgets are being
+  // displayed.
+  virtual WebScreenInfo GetScreenInfo() = 0;
+
   // Session history -----------------------------------------------------
 
   // Tells the embedder to navigate back or forward in session history by
   // the given offset (relative to the current position in session
-  // history).
-  virtual void NavigateBackForwardSoon(int offset) {}
+  // history). |has_user_gesture| tells whether or not this is the consequence
+  // of a user action.
+  virtual void NavigateBackForwardSoon(int offset, bool has_user_gesture) {}
 
   // Returns the number of history items before/after the current
   // history item.
@@ -206,7 +204,9 @@ class WebViewClient {
 
   virtual bool CanHandleGestureEvent() { return false; }
 
-  virtual WebWidgetClient* WidgetClient() = 0;
+  // Policies -------------------------------------------------------------
+
+  virtual bool AllowPopupsDuringPageUnload() { return false; }
 };
 
 }  // namespace blink

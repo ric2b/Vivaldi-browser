@@ -12,7 +12,7 @@
 #include "base/bind_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/worker_thread.h"
 #include "extensions/common/extension_messages.h"
@@ -46,7 +46,7 @@ class WakeEventPage::WakeEventPageNativeHandler
         weak_ptr_factory_(this) {
     // Delete self on invalidation. base::Unretained because by definition this
     // can't be deleted before it's deleted.
-    context->AddInvalidationObserver(base::Bind(
+    context->AddInvalidationObserver(base::BindOnce(
         &WakeEventPageNativeHandler::DeleteSelf, base::Unretained(this)));
   }
 
@@ -57,9 +57,9 @@ class WakeEventPage::WakeEventPageNativeHandler
     // after destruction.
     RouteHandlerFunction(
         kWakeEventPageFunctionName,
-        base::Bind(&WakeEventPageNativeHandler::DoWakeEventPage,
-                   base::Unretained(this)));
-  };
+        base::BindRepeating(&WakeEventPageNativeHandler::DoWakeEventPage,
+                            base::Unretained(this)));
+  }
 
   ~WakeEventPageNativeHandler() override {}
 
@@ -93,7 +93,7 @@ class WakeEventPage::WakeEventPageNativeHandler
         v8::Boolean::New(isolate, success),
     };
     context()->SafeCallFunction(v8::Local<v8::Function>::New(isolate, callback),
-                                arraysize(args), args);
+                                base::size(args), args);
   }
 
   MakeRequestCallback make_request_;

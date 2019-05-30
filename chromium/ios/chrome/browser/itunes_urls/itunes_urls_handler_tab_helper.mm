@@ -28,8 +28,6 @@
 #error "This file requires ARC support."
 #endif
 
-DEFINE_WEB_STATE_USER_DATA_KEY(ITunesUrlsHandlerTabHelper);
-
 namespace {
 
 // The domain for iTunes appstore URLs.
@@ -141,3 +139,5 @@ void ITunesUrlsHandlerTabHelper::HandleITunesUrl(const GURL& url) {
   }
   RecordStoreKitHandlingResult(handling_result);
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(ITunesUrlsHandlerTabHelper)

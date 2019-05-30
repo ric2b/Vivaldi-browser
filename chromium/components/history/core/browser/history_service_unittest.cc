@@ -21,6 +21,12 @@
 
 #include <stdint.h>
 
+#include <algorithm>
+#include <array>
+#include <string>
+#include <vector>
+
+#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
@@ -28,6 +34,8 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind_test_util.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/history/core/browser/history_database_params.h"
@@ -55,11 +63,6 @@ class HistoryServiceTest : public testing::Test {
         query_url_success_(false) {}
 
   ~HistoryServiceTest() override {}
-
-  void OnMostVisitedURLsAvailable(const MostVisitedURLList* url_list) {
-    most_visited_urls_ = *url_list;
-    base::RunLoop::QuitCurrentWhenIdleDeprecated();
-  }
 
  protected:
   friend class BackendDelegate;
@@ -138,8 +141,8 @@ class HistoryServiceTest : public testing::Test {
     base::RunLoop run_loop;
     history_service_->QueryRedirectsFrom(
         url,
-        base::Bind(&HistoryServiceTest::OnRedirectQueryComplete,
-                   base::Unretained(this), run_loop.QuitClosure()),
+        base::BindRepeating(&HistoryServiceTest::OnRedirectQueryComplete,
+                            base::Unretained(this), run_loop.QuitClosure()),
         &tracker_);
     run_loop.Run();  // Will be exited in *QueryComplete.
   }
@@ -152,6 +155,25 @@ class HistoryServiceTest : public testing::Test {
       saved_redirects_.insert(
           saved_redirects_.end(), redirects->begin(), redirects->end());
     }
+    std::move(done).Run();
+  }
+
+  void QueryMostVisitedURLs() {
+    const int kResultCount = 20;
+    const int kDaysBack = 90;
+
+    base::RunLoop run_loop;
+    history_service_->QueryMostVisitedURLs(
+        kResultCount, kDaysBack,
+        base::BindRepeating(&HistoryServiceTest::OnQueryMostVisitedURLsComplete,
+                            base::Unretained(this), run_loop.QuitClosure()),
+        &tracker_);
+    run_loop.Run();  // Will be exited in *QueryComplete.
+  }
+
+  void OnQueryMostVisitedURLsComplete(base::OnceClosure done,
+                                      const MostVisitedURLList* url_list) {
+    most_visited_urls_ = *url_list;
     std::move(done).Run();
   }
 
@@ -497,13 +519,8 @@ TEST_F(HistoryServiceTest, MostVisitedURLs) {
       url1, base::Time::Now(), context_id, 0, GURL(),
       history::RedirectList(), ui::PAGE_TRANSITION_TYPED,
       history::SOURCE_BROWSED, false);
-  history_service_->QueryMostVisitedURLs(
-      20,
-      90,
-      base::Bind(&HistoryServiceTest::OnMostVisitedURLsAvailable,
-                 base::Unretained(this)),
-      &tracker_);
-  base::RunLoop().Run();
+
+  QueryMostVisitedURLs();
 
   EXPECT_EQ(2U, most_visited_urls_.size());
   EXPECT_EQ(url0, most_visited_urls_[0].url);
@@ -514,13 +531,8 @@ TEST_F(HistoryServiceTest, MostVisitedURLs) {
       url2, base::Time::Now(), context_id, 0, GURL(),
       history::RedirectList(), ui::PAGE_TRANSITION_TYPED,
       history::SOURCE_BROWSED, false);
-  history_service_->QueryMostVisitedURLs(
-      20,
-      90,
-      base::Bind(&HistoryServiceTest::OnMostVisitedURLsAvailable,
-                 base::Unretained(this)),
-      &tracker_);
-  base::RunLoop().Run();
+
+  QueryMostVisitedURLs();
 
   EXPECT_EQ(3U, most_visited_urls_.size());
   EXPECT_EQ(url0, most_visited_urls_[0].url);
@@ -532,13 +544,8 @@ TEST_F(HistoryServiceTest, MostVisitedURLs) {
       url2, base::Time::Now(), context_id, 0, GURL(),
       history::RedirectList(), ui::PAGE_TRANSITION_TYPED,
       history::SOURCE_BROWSED, false);
-  history_service_->QueryMostVisitedURLs(
-      20,
-      90,
-      base::Bind(&HistoryServiceTest::OnMostVisitedURLsAvailable,
-                 base::Unretained(this)),
-      &tracker_);
-  base::RunLoop().Run();
+
+  QueryMostVisitedURLs();
 
   EXPECT_EQ(3U, most_visited_urls_.size());
   EXPECT_EQ(url2, most_visited_urls_[0].url);
@@ -550,13 +557,8 @@ TEST_F(HistoryServiceTest, MostVisitedURLs) {
       url1, base::Time::Now(), context_id, 0, GURL(),
       history::RedirectList(), ui::PAGE_TRANSITION_TYPED,
       history::SOURCE_BROWSED, false);
-  history_service_->QueryMostVisitedURLs(
-      20,
-      90,
-      base::Bind(&HistoryServiceTest::OnMostVisitedURLsAvailable,
-                 base::Unretained(this)),
-      &tracker_);
-  base::RunLoop().Run();
+
+  QueryMostVisitedURLs();
 
   EXPECT_EQ(3U, most_visited_urls_.size());
   EXPECT_EQ(url1, most_visited_urls_[0].url);
@@ -569,13 +571,8 @@ TEST_F(HistoryServiceTest, MostVisitedURLs) {
       url4, base::Time::Now(), context_id, 0, GURL(),
       redirects, ui::PAGE_TRANSITION_TYPED,
       history::SOURCE_BROWSED, false);
-  history_service_->QueryMostVisitedURLs(
-      20,
-      90,
-      base::Bind(&HistoryServiceTest::OnMostVisitedURLsAvailable,
-                 base::Unretained(this)),
-      &tracker_);
-  base::RunLoop().Run();
+
+  QueryMostVisitedURLs();
 
   EXPECT_EQ(4U, most_visited_urls_.size());
   EXPECT_EQ(url1, most_visited_urls_[0].url);
@@ -619,6 +616,10 @@ class HistoryDBTaskImpl : public HistoryDBTask {
 
 // static
 const int HistoryDBTaskImpl::kWantInvokeCount = 2;
+
+base::Time UnixUsecToTime(int64_t usec) {
+  return base::Time::UnixEpoch() + base::TimeDelta::FromMicroseconds(usec);
+}
 
 }  // namespace
 
@@ -669,8 +670,7 @@ TEST_F(HistoryServiceTest, ProcessLocalDeleteDirectiveSyncOnline) {
 
   const GURL test_url("http://www.google.com/");
   for (int64_t i = 1; i <= 10; ++i) {
-    base::Time t =
-        base::Time::UnixEpoch() + base::TimeDelta::FromMicroseconds(i);
+    base::Time t = UnixUsecToTime(i);
     history_service_->AddPage(test_url, t, nullptr, 0, GURL(),
                               history::RedirectList(), ui::PAGE_TRANSITION_LINK,
                               history::SOURCE_BROWSED, false);
@@ -732,8 +732,7 @@ TEST_F(HistoryServiceTest, ProcessGlobalIdDeleteDirective) {
   ASSERT_TRUE(history_service_.get());
   const GURL test_url("http://www.google.com/");
   for (int64_t i = 1; i <= 20; i++) {
-    base::Time t =
-        base::Time::UnixEpoch() + base::TimeDelta::FromMicroseconds(i);
+    base::Time t = UnixUsecToTime(i);
     history_service_->AddPage(test_url, t, nullptr, 0, GURL(),
                               history::RedirectList(), ui::PAGE_TRANSITION_LINK,
                               history::SOURCE_BROWSED, false);
@@ -753,8 +752,7 @@ TEST_F(HistoryServiceTest, ProcessGlobalIdDeleteDirective) {
           .ToInternalValue());
   global_id_directive->set_start_time_usec(3);
   global_id_directive->set_end_time_usec(10);
-  directives.push_back(
-      syncer::SyncData::CreateRemoteData(1, entity_specs, base::Time()));
+  directives.push_back(syncer::SyncData::CreateRemoteData(1, entity_specs));
 
   // 2nd directive.
   global_id_directive->Clear();
@@ -763,8 +761,7 @@ TEST_F(HistoryServiceTest, ProcessGlobalIdDeleteDirective) {
           .ToInternalValue());
   global_id_directive->set_start_time_usec(13);
   global_id_directive->set_end_time_usec(19);
-  directives.push_back(
-      syncer::SyncData::CreateRemoteData(2, entity_specs, base::Time()));
+  directives.push_back(syncer::SyncData::CreateRemoteData(2, entity_specs));
 
   syncer::FakeSyncChangeProcessor change_processor;
   EXPECT_FALSE(history_service_
@@ -787,16 +784,11 @@ TEST_F(HistoryServiceTest, ProcessGlobalIdDeleteDirective) {
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(QueryURL(history_service_.get(), test_url));
   ASSERT_EQ(5, query_url_row_.visit_count());
-  EXPECT_EQ(base::Time::UnixEpoch() + base::TimeDelta::FromMicroseconds(1),
-            query_url_visits_[0].visit_time);
-  EXPECT_EQ(base::Time::UnixEpoch() + base::TimeDelta::FromMicroseconds(2),
-            query_url_visits_[1].visit_time);
-  EXPECT_EQ(base::Time::UnixEpoch() + base::TimeDelta::FromMicroseconds(11),
-            query_url_visits_[2].visit_time);
-  EXPECT_EQ(base::Time::UnixEpoch() + base::TimeDelta::FromMicroseconds(12),
-            query_url_visits_[3].visit_time);
-  EXPECT_EQ(base::Time::UnixEpoch() + base::TimeDelta::FromMicroseconds(20),
-            query_url_visits_[4].visit_time);
+  EXPECT_EQ(UnixUsecToTime(1), query_url_visits_[0].visit_time);
+  EXPECT_EQ(UnixUsecToTime(2), query_url_visits_[1].visit_time);
+  EXPECT_EQ(UnixUsecToTime(11), query_url_visits_[2].visit_time);
+  EXPECT_EQ(UnixUsecToTime(12), query_url_visits_[3].visit_time);
+  EXPECT_EQ(UnixUsecToTime(20), query_url_visits_[4].visit_time);
 
   // Expect two sync changes for deleting processed directives.
   const syncer::SyncChangeList& sync_changes = change_processor.changes();
@@ -813,8 +805,7 @@ TEST_F(HistoryServiceTest, ProcessTimeRangeDeleteDirective) {
   ASSERT_TRUE(history_service_.get());
   const GURL test_url("http://www.google.com/");
   for (int64_t i = 1; i <= 10; ++i) {
-    base::Time t =
-        base::Time::UnixEpoch() + base::TimeDelta::FromMicroseconds(i);
+    base::Time t = UnixUsecToTime(i);
     history_service_->AddPage(test_url, t, nullptr, 0, GURL(),
                               history::RedirectList(), ui::PAGE_TRANSITION_LINK,
                               history::SOURCE_BROWSED, false);
@@ -831,15 +822,13 @@ TEST_F(HistoryServiceTest, ProcessTimeRangeDeleteDirective) {
           ->mutable_time_range_directive();
   time_range_directive->set_start_time_usec(2);
   time_range_directive->set_end_time_usec(5);
-  directives.push_back(
-      syncer::SyncData::CreateRemoteData(1, entity_specs, base::Time()));
+  directives.push_back(syncer::SyncData::CreateRemoteData(1, entity_specs));
 
   // 2nd directive.
   time_range_directive->Clear();
   time_range_directive->set_start_time_usec(8);
   time_range_directive->set_end_time_usec(10);
-  directives.push_back(
-      syncer::SyncData::CreateRemoteData(2, entity_specs, base::Time()));
+  directives.push_back(syncer::SyncData::CreateRemoteData(2, entity_specs));
 
   syncer::FakeSyncChangeProcessor change_processor;
   EXPECT_FALSE(history_service_
@@ -862,12 +851,9 @@ TEST_F(HistoryServiceTest, ProcessTimeRangeDeleteDirective) {
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(QueryURL(history_service_.get(), test_url));
   ASSERT_EQ(3, query_url_row_.visit_count());
-  EXPECT_EQ(base::Time::UnixEpoch() + base::TimeDelta::FromMicroseconds(1),
-            query_url_visits_[0].visit_time);
-  EXPECT_EQ(base::Time::UnixEpoch() + base::TimeDelta::FromMicroseconds(6),
-            query_url_visits_[1].visit_time);
-  EXPECT_EQ(base::Time::UnixEpoch() + base::TimeDelta::FromMicroseconds(7),
-            query_url_visits_[2].visit_time);
+  EXPECT_EQ(UnixUsecToTime(1), query_url_visits_[0].visit_time);
+  EXPECT_EQ(UnixUsecToTime(6), query_url_visits_[1].visit_time);
+  EXPECT_EQ(UnixUsecToTime(7), query_url_visits_[2].visit_time);
 
   // Expect two sync changes for deleting processed directives.
   const syncer::SyncChangeList& sync_changes = change_processor.changes();
@@ -878,4 +864,124 @@ TEST_F(HistoryServiceTest, ProcessTimeRangeDeleteDirective) {
   EXPECT_EQ(2, syncer::SyncDataRemote(sync_changes[1].sync_data()).GetId());
 }
 
+// Create a delete directive for urls.  The expected entries should be
+// deleted.
+TEST_F(HistoryServiceTest, ProcessUrlDeleteDirective) {
+  ASSERT_TRUE(history_service_.get());
+  const GURL test_url1("http://www.google.com/");
+  const GURL test_url2("http://maps.google.com/");
+
+  history_service_->AddPage(test_url1, UnixUsecToTime(3), nullptr, 0, GURL(),
+                            history::RedirectList(), ui::PAGE_TRANSITION_LINK,
+                            history::SOURCE_BROWSED, false);
+  history_service_->AddPage(test_url2, UnixUsecToTime(6), nullptr, 0, GURL(),
+                            history::RedirectList(), ui::PAGE_TRANSITION_LINK,
+                            history::SOURCE_BROWSED, false);
+  history_service_->AddPage(test_url1, UnixUsecToTime(10), nullptr, 0, GURL(),
+                            history::RedirectList(), ui::PAGE_TRANSITION_LINK,
+                            history::SOURCE_BROWSED, false);
+
+  EXPECT_TRUE(QueryURL(history_service_.get(), test_url1));
+  ASSERT_EQ(2, query_url_row_.visit_count());
+  EXPECT_TRUE(QueryURL(history_service_.get(), test_url2));
+
+  // Delete the first visit of url1 and all visits of url2.
+  syncer::SyncDataList directives;
+  sync_pb::EntitySpecifics entity_specs1;
+  sync_pb::UrlDirective* url_directive =
+      entity_specs1.mutable_history_delete_directive()->mutable_url_directive();
+  url_directive->set_url(test_url1.spec());
+  url_directive->set_end_time_usec(8);
+  directives.push_back(syncer::SyncData::CreateRemoteData(1, entity_specs1));
+  sync_pb::EntitySpecifics entity_specs2;
+  url_directive =
+      entity_specs2.mutable_history_delete_directive()->mutable_url_directive();
+  url_directive->set_url(test_url2.spec());
+  url_directive->set_end_time_usec(8);
+  directives.push_back(syncer::SyncData::CreateRemoteData(2, entity_specs2));
+
+  syncer::FakeSyncChangeProcessor change_processor;
+  EXPECT_FALSE(history_service_
+                   ->MergeDataAndStartSyncing(
+                       syncer::HISTORY_DELETE_DIRECTIVES, directives,
+                       std::unique_ptr<syncer::SyncChangeProcessor>(
+                           new syncer::SyncChangeProcessorWrapperForTest(
+                               &change_processor)),
+                       std::unique_ptr<syncer::SyncErrorFactory>())
+                   .error()
+                   .IsSet());
+
+  // Inject a task to check status and keep message loop filled before
+  // directive processing finishes.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&CheckDirectiveProcessingResult,
+                     base::Time::Now() + base::TimeDelta::FromSeconds(10),
+                     &change_processor, 2));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(QueryURL(history_service_.get(), test_url1));
+  EXPECT_EQ(UnixUsecToTime(10), query_url_visits_[0].visit_time);
+  EXPECT_FALSE(QueryURL(history_service_.get(), test_url2));
+
+  // Expect a sync change for deleting processed directives.
+  const syncer::SyncChangeList& sync_changes = change_processor.changes();
+  ASSERT_EQ(2u, sync_changes.size());
+  EXPECT_EQ(syncer::SyncChange::ACTION_DELETE, sync_changes[0].change_type());
+  EXPECT_EQ(1, syncer::SyncDataRemote(sync_changes[0].sync_data()).GetId());
+  EXPECT_EQ(syncer::SyncChange::ACTION_DELETE, sync_changes[1].change_type());
+  EXPECT_EQ(2, syncer::SyncDataRemote(sync_changes[1].sync_data()).GetId());
+}
+
+// Helper to add a page with specified days back in the past.
+void AddPageInThePast(HistoryService* history,
+                      const std::string& url_spec,
+                      int days_back) {
+  const GURL url(url_spec);
+  base::Time time_in_the_past =
+      base::Time::Now() - base::TimeDelta::FromDays(days_back);
+  history->AddPage(url, time_in_the_past, nullptr, 0, GURL(),
+                   history::RedirectList(), ui::PAGE_TRANSITION_LINK,
+                   history::SOURCE_BROWSED, false);
+}
+
+// Helper to contain a callback and run loop logic.
+int GetMonthlyHostCountHelper(HistoryService* history,
+                              base::CancelableTaskTracker* tracker) {
+  base::RunLoop run_loop;
+  int count = 0;
+  history->CountUniqueHostsVisitedLastMonth(
+      base::BindLambdaForTesting([&](HistoryCountResult result) {
+        count = result.count;
+        run_loop.Quit();
+      }),
+      tracker);
+  run_loop.Run();
+  return count;
+}
+
+// Counts hosts visited in the last month.
+TEST_F(HistoryServiceTest, CountMonthlyVisitedHosts) {
+  base::HistogramTester histogram_tester;
+  HistoryService* history = history_service_.get();
+  ASSERT_TRUE(history);
+
+  AddPageInThePast(history, "http://www.google.com/", 0);
+  EXPECT_EQ(1, GetMonthlyHostCountHelper(history, &tracker_));
+
+  AddPageInThePast(history, "http://www.google.com/foo", 1);
+  AddPageInThePast(history, "https://www.google.com/foo", 5);
+  AddPageInThePast(history, "https://www.gmail.com/foo", 10);
+  // Expect 2 because only host part of URL counts.
+  EXPECT_EQ(2, GetMonthlyHostCountHelper(history, &tracker_));
+
+  AddPageInThePast(history, "https://www.gmail.com/foo", 31);
+  // Count should not change since URL added is older than a month.
+  EXPECT_EQ(2, GetMonthlyHostCountHelper(history, &tracker_));
+
+  AddPageInThePast(history, "https://www.yahoo.com/foo", 29);
+  EXPECT_EQ(3, GetMonthlyHostCountHelper(history, &tracker_));
+
+  // The time required to compute host count is reported on each computation.
+  histogram_tester.ExpectTotalCount("History.DatabaseMonthlyHostCountTime", 4);
+}
 }  // namespace history

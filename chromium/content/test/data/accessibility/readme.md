@@ -14,7 +14,7 @@ format - it's just a text dump, meant to be compared to expected output.
 The exact output can be filtered so it only dumps the specific attributes
 you care about for a specific test.
 
-One the output has been generated, it compares the output to an expectation
+Once the output has been generated, it compares the output to an expectation
 file in the same directory. If an expectation file for that test for that
 platform is present, it must match exactly or the test fails. If no
 expectation file is present, the test passes. Most tests don't have
@@ -35,6 +35,9 @@ Files used:
 * foo-expected-blink.txt -- representation of internal accessibility tree
 * foo-expected-mac.txt -- expected Mac NSAccessibility output
 * foo-expected-win.txt -- expected Win IAccessible/IAccessible2 output
+* foo-expected-uia-win.txt -- expected Win UIA output
+* foo-expected-uia-win7.txt -- expected Win7 UIA output (Version Specific
+  Expected File)
 
 Format for expected files:
 
@@ -44,10 +47,20 @@ Format for expected files:
   to a bug, or as a way to temporarily disable a test during refactoring.
 * Use 2 plus signs for indent to show hierarchy
 
+### Version Specific Expected Files
+
+UIA sometimes differs between windows 7 and later versions of 
+Windows. To account for these differences, the UIA accessibility
+tree formatter will look for a version specific expected file first:
+`foo-expected-uia-win7.txt`. If the version specific expected file 
+does not exist, the normal expected file will be used instead:
+"`foo-expected-uia-win.txt`". There is no concept of version 
+specific filters.
+
 Filters:
 
 * By default only some attributes of nodes in the accessibility tree, or
-  events fired (when running DumpAccessibilityEvents) are output.
+  events fired (when running DumpAccessibilityEvents), are output.
   This is to keep the tests robust and not prone to failure when unrelated
   changes affect the accessibility tree in unimportant ways.
 * Filters contained in the HTML file can be used to control what is output.
@@ -56,6 +69,7 @@ Filters:
 * Filters are platform-specific:
 ```
     @WIN-
+    @UIA-WIN-
     @MAC-
     @BLINK-
     @ANDROID-
@@ -76,17 +90,18 @@ Filters:
   - @WIN-DENY:name='X* - this will skip outputting any name that begins with
       the letter X.
 ```
-* By default empty attributes are skipped. To output the value an attribute
+* By default empty attributes are skipped. To output the value of an attribute
   even if it's empty, use @WIN-ALLOW-EMPTY:name, for example, and similarly
   for other platforms.
+
 
 ## Advanced:
 
 Normally the system waits for the document to finish loading before dumping
 the accessibility tree.
 
-Occasionally you may need to write a test that makes some changes to the
-document before it runs the test. In that case you can use a special
+Occasionally you may need to write a dump tree test that makes some changes to
+the document before it runs the test. In that case you can use a special
 @WAIT-FOR: directive. It should be in an HTML comment, just like
 @ALLOW-WIN: directives. The WAIT-FOR directive just specifies a text substring
 that should be present in the dump when the document is ready. The system
@@ -95,11 +110,22 @@ will keep blocking until that text appears.
 You can add as many @WAIT-FOR: directives as you want, the test won't finish
 until all strings appear.
 
+Or, you may need to write an event test that keeps dumping events until a
+specific event line. In this case, use @RUN-UNTIL-EVENT with a substring that
+should occur in the event log, e.g. @RUN-UNTIL-EVENT:IA2_EVENT_TEXT_CARET_MOVED.
+Note that @RUN-UNTIL-EVENT is only used in dump events tests, and not used in
+dump tree tests.
+
+If you add multiple @RUN-UNTIL-EVENT directives, the test will finish once any
+of them are satisfied. Note that any other events that come along with the last
+event will also be logged.
+
 To skip dumping a particular element, make its accessible name equal to
 @NO_DUMP, for example <div aria-label="@NO_DUMP"></div>.
 
 To skip dumping all children of a particular element, make its accessible
-name equal to @NO_CHILDREN_DUMP.
+name equal to @NO_CHILDREN_DUMP, for example
+<div aria-label="@NO_CHILDREN_DUMP"></div>.
 
 To load an iframe from a different site, forcing it into a different process,
 use /cross-site/HOSTNAME/ in the url, for example:
@@ -114,7 +140,7 @@ argument, for example:
 
   out/Debug/content_browsertests \
     --generate-accessibility-test-expectations
-    --gtest_filter="DumpAccessibilityTreeTest.AccessibilityA"
+    --gtest_filter="DumpAccessibilityTreeTest.AccessibilityAriaAtomic"
 
 This will replace the -expected-*.txt file with the current output. It's
 a great way to rebaseline a bunch of tests after making a change. Please

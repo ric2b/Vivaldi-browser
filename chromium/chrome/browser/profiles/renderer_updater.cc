@@ -4,9 +4,12 @@
 
 #include "chrome/browser/profiles/renderer_updater.h"
 
+#include <utility>
+
+#include "base/bind.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/renderer_configuration.mojom.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
@@ -15,6 +18,11 @@
 #include "content/public/browser/render_process_host.h"
 #include "extensions/buildflags/buildflags.h"
 #include "services/network/public/cpp/features.h"
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/login/signin/merge_session_throttling_utils.h"
+#include "chrome/browser/chromeos/login/signin/oauth2_login_manager_factory.h"
+#endif
 
 namespace {
 
@@ -50,9 +58,17 @@ void GetGuestViewDefaultContentSettingRules(
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 }  // namespace
 
-RendererUpdater::RendererUpdater(Profile* profile) : profile_(profile) {
-  signin_manager_ = SigninManagerFactory::GetForProfile(profile_);
-  signin_manager_->AddObserver(this);
+RendererUpdater::RendererUpdater(Profile* profile)
+    : profile_(profile), identity_manager_observer_(this) {
+  identity_manager_ = IdentityManagerFactory::GetForProfile(profile);
+  identity_manager_observer_.Add(identity_manager_);
+#if defined(OS_CHROMEOS)
+  oauth2_login_manager_ =
+      chromeos::OAuth2LoginManagerFactory::GetForProfile(profile_);
+  oauth2_login_manager_->AddObserver(this);
+  merge_session_running_ =
+      merge_session_throttling_utils::ShouldDelayRequestForProfile(profile_);
+#endif
   variations_http_header_provider_ =
       variations::VariationsHttpHeaderProvider::GetInstance();
   variations_http_header_provider_->AddObserver(this);
@@ -84,12 +100,19 @@ RendererUpdater::RendererUpdater(Profile* profile) : profile_(profile) {
 }
 
 RendererUpdater::~RendererUpdater() {
-  DCHECK(!signin_manager_);
+  DCHECK(!identity_manager_);
+#if defined(OS_CHROMEOS)
+  DCHECK(!oauth2_login_manager_);
+#endif
 }
 
 void RendererUpdater::Shutdown() {
-  signin_manager_->RemoveObserver(this);
-  signin_manager_ = nullptr;
+#if defined(OS_CHROMEOS)
+  oauth2_login_manager_->RemoveObserver(this);
+  oauth2_login_manager_ = nullptr;
+#endif
+  identity_manager_observer_.RemoveAll();
+  identity_manager_ = nullptr;
   variations_http_header_provider_->RemoveObserver(this);
   variations_http_header_provider_ = nullptr;
 }
@@ -102,7 +125,17 @@ void RendererUpdater::InitializeRenderer(
       Profile::FromBrowserContext(render_process_host->GetBrowserContext());
   bool is_incognito_process = profile->IsOffTheRecord();
 
-  renderer_configuration->SetInitialConfiguration(is_incognito_process);
+  chrome::mojom::ChromeOSListenerRequest chromeos_listener_request;
+#if defined(OS_CHROMEOS)
+  if (merge_session_running_) {
+    chrome::mojom::ChromeOSListenerPtr chromeos_listener;
+    chromeos_listener_request = MakeRequest(&chromeos_listener);
+    chromeos_listeners_.push_back(std::move(chromeos_listener));
+  }
+#endif  // defined(OS_CHROMEOS)
+  renderer_configuration->SetInitialConfiguration(
+      is_incognito_process, std::move(chromeos_listener_request));
+
   UpdateRenderer(&renderer_configuration);
 
   RendererContentSettingRules rules;
@@ -150,11 +183,27 @@ RendererUpdater::GetRendererConfiguration(
   return renderer_configuration;
 }
 
-void RendererUpdater::GoogleSigninSucceeded(const AccountInfo& account_info) {
+#if defined(OS_CHROMEOS)
+void RendererUpdater::OnSessionRestoreStateChanged(
+    Profile* user_profile,
+    chromeos::OAuth2LoginManager::SessionRestoreState state) {
+  merge_session_running_ =
+      merge_session_throttling_utils::ShouldDelayRequestForProfile(profile_);
+  if (merge_session_running_)
+    return;
+
+  for (auto& chromeos_listener : chromeos_listeners_)
+    chromeos_listener->MergeSessionComplete();
+  chromeos_listeners_.clear();
+}
+#endif
+
+void RendererUpdater::OnPrimaryAccountSet(const CoreAccountInfo& account_info) {
   UpdateAllRenderers();
 }
 
-void RendererUpdater::GoogleSignedOut(const AccountInfo& account_info) {
+void RendererUpdater::OnPrimaryAccountCleared(
+    const CoreAccountInfo& account_info) {
   UpdateAllRenderers();
 }
 
@@ -174,11 +223,12 @@ void RendererUpdater::UpdateAllRenderers() {
 
 void RendererUpdater::UpdateRenderer(
     chrome::mojom::RendererConfigurationAssociatedPtr* renderer_configuration) {
-  bool is_signed_in = signin_manager_->IsAuthenticated();
   (*renderer_configuration)
-      ->SetConfiguration(force_google_safesearch_.GetValue(),
-                         force_youtube_restrict_.GetValue(),
-                         allowed_domains_for_apps_.GetValue(),
-                         is_signed_in ? cached_variation_ids_header_signed_in_
-                                      : cached_variation_ids_header_);
+      ->SetConfiguration(chrome::mojom::DynamicParams::New(
+          force_google_safesearch_.GetValue(),
+          force_youtube_restrict_.GetValue(),
+          allowed_domains_for_apps_.GetValue(),
+          identity_manager_->HasPrimaryAccount()
+              ? cached_variation_ids_header_signed_in_
+              : cached_variation_ids_header_));
 }

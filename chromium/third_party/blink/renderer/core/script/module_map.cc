@@ -15,14 +15,18 @@
 namespace blink {
 
 // Entry struct represents a value in "module map" spec object.
-// https://html.spec.whatwg.org/multipage/webappapis.html#module-map
+// https://html.spec.whatwg.org/C/#module-map
 class ModuleMap::Entry final : public GarbageCollectedFinalized<Entry>,
                                public NameClient,
                                public ModuleScriptLoaderClient {
   USING_GARBAGE_COLLECTED_MIXIN(ModuleMap::Entry);
 
  public:
-  static Entry* Create(ModuleMap* map) { return new Entry(map); }
+  static Entry* Create(ModuleMap* map) {
+    return MakeGarbageCollected<Entry>(map);
+  }
+
+  explicit Entry(ModuleMap*);
   ~Entry() override {}
 
   void Trace(blink::Visitor*) override;
@@ -35,8 +39,6 @@ class ModuleMap::Entry final : public GarbageCollectedFinalized<Entry>,
   ModuleScript* GetModuleScript() const;
 
  private:
-  explicit Entry(ModuleMap*);
-
   void DispatchFinishedNotificationAsync(SingleModuleClient*);
 
   // Implements ModuleScriptLoaderClient
@@ -108,10 +110,10 @@ void ModuleMap::Trace(blink::Visitor* visitor) {
   visitor->Trace(loader_registry_);
 }
 
-// https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-single-module-script
+// <specdef href="https://html.spec.whatwg.org/C/#fetch-a-single-module-script">
 void ModuleMap::FetchSingleModuleScript(
     const ModuleScriptFetchRequest& request,
-    FetchClientSettingsObjectSnapshot* fetch_client_settings_object,
+    ResourceFetcher* fetch_client_settings_object_fetcher,
     ModuleGraphLevel level,
     ModuleScriptCustomFetchType custom_fetch_type,
     SingleModuleClient* client) {
@@ -130,16 +132,16 @@ void ModuleMap::FetchSingleModuleScript(
 
     // Steps 4-9 loads a new single module script.
     // Delegates to ModuleScriptLoader via Modulator.
-    ModuleScriptLoader::Fetch(request, fetch_client_settings_object, level,
-                              modulator_, custom_fetch_type, loader_registry_,
-                              entry);
+    ModuleScriptLoader::Fetch(request, fetch_client_settings_object_fetcher,
+                              level, modulator_, custom_fetch_type,
+                              loader_registry_, entry);
   }
   DCHECK(entry);
 
   // <spec step="3">If moduleMap[url] exists, asynchronously complete this
   // algorithm with moduleMap[url], and abort these steps.</spec>
   //
-  // <spec step="11">Set moduleMap[url] to module script, and asynchronously
+  // <spec step="12">Set moduleMap[url] to module script, and asynchronously
   // complete this algorithm with module script.</spec>
   if (client)
     entry->AddClient(client);

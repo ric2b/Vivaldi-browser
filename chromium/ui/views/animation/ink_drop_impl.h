@@ -22,7 +22,7 @@ class InkDropImplTestApi;
 }  // namespace test
 
 class InkDropRipple;
-class InkDropHost;
+class InkDropHostView;
 class InkDropHighlight;
 
 // A functional implementation of an InkDrop.
@@ -50,7 +50,7 @@ class VIEWS_EXPORT InkDropImpl : public InkDrop,
   //
   // By default the highlight will be made visible while |this| is hovered but
   // not focused and the NONE AutoHighlightMode will be used.
-  InkDropImpl(InkDropHost* ink_drop_host, const gfx::Size& host_size);
+  InkDropImpl(InkDropHostView* ink_drop_host, const gfx::Size& host_size);
   ~InkDropImpl() override;
 
   // Auto highlighting is a mechanism to show/hide the highlight based on the
@@ -60,12 +60,9 @@ class VIEWS_EXPORT InkDropImpl : public InkDrop,
   // This method is intended as a configuration option to be used after
   // construction. Behavior is undefined if |this| has already handled any
   // InkDrop inherited functions.
+  // TODO(pbos): Move along with AutoHighlightMode to views::InkDrop so users
+  // can configure inkdrops created by parent classes.
   void SetAutoHighlightMode(AutoHighlightMode auto_highlight_mode);
-
-  // Sets the AutoHighlightMode as per the platform. Platforms that show ripples
-  // will be set to HIDE_ON_RIPPLE, and platforms that don't show ripples are
-  // set to SHOW_ON_RIPPLE highlight behavior.
-  void SetAutoHighlightModeForPlatform();
 
   const base::Optional<int>& hover_highlight_fade_duration_ms() const {
     return hover_highlight_fade_duration_ms_;
@@ -274,7 +271,7 @@ class VIEWS_EXPORT InkDropImpl : public InkDrop,
 
   // The host of the ink drop. Used to create the ripples and highlights, and to
   // add/remove the root layer to/from it.
-  InkDropHost* ink_drop_host_;
+  InkDropHostView* ink_drop_host_;
 
   // The root Layer that parents the InkDropRipple layers and the
   // InkDropHighlight layers. The |root_layer_| is the one that is added and

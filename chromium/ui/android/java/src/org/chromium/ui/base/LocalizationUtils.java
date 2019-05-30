@@ -7,7 +7,6 @@ package org.chromium.ui.base;
 import android.content.res.Configuration;
 import android.view.View;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.LocaleUtils;
 import org.chromium.base.VisibleForTesting;
@@ -55,8 +54,8 @@ public class LocalizationUtils {
         if (sIsLayoutRtl == null) {
             Configuration configuration =
                     ContextUtils.getApplicationContext().getResources().getConfiguration();
-            sIsLayoutRtl = Boolean.valueOf(ApiCompatibilityUtils.getLayoutDirection(configuration)
-                    == View.LAYOUT_DIRECTION_RTL);
+            sIsLayoutRtl = Boolean.valueOf(
+                    configuration.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL);
         }
 
         return sIsLayoutRtl.booleanValue();
@@ -82,33 +81,30 @@ public class LocalizationUtils {
     }
 
     /**
-     * @return the current Chromium locale used to display UI elements.
+     * Return the asset split language associated with a given Chromium language.
      *
-     * This matches what the Android framework resolves localized string resources to, using the
-     * system locale and the application's resources. For example, if the system uses a locale
-     * that is not supported by Chromium resources (e.g. 'fur-rIT'), Android will likely fallback
-     * to 'en-rUS' strings when Resources.getString() is called, and this method will return the
-     * matching Chromium name (i.e. 'en-US').
+     * This matches the directory used to store language-based assets in bundle APK splits.
+     * E.g. for Hebrew, known as 'he' by Chromium, this method should return 'iw' because
+     * the .pak file will be stored as /assets/locales#lang_iw/he.pak within the split.
      *
-     * Using this value is only necessary to ensure that the strings accessed from the locale .pak
-     * files from C++ match the resources displayed by the Java-based UI views.
+     * @param language Chromium specific language name.
+     * @return Matching Android specific language name.
      */
-    public static String getUiLocaleStringForCompressedPak() {
-        String uiLocale = ContextUtils.getApplicationContext().getResources().getString(
-                org.chromium.ui.R.string.current_detected_ui_locale_name);
-        return uiLocale;
-    }
-
-    /**
-     * @return the language of the current Chromium locale used to display UI elements.
-     */
-    public static String getUiLanguageStringForCompressedPak() {
-        String uiLocale = getUiLocaleStringForCompressedPak();
-        int pos = uiLocale.indexOf('-');
-        if (pos > 0) {
-            return uiLocale.substring(0, pos);
+    public static String getSplitLanguageForAndroid(String language) {
+        // IMPORTANT: Keep in sync with the mapping found in:
+        // build/android/gyp/util/resource_utils.py
+        switch (language) {
+            case "he":
+                return "iw"; // Hebrew
+            case "yi":
+                return "ji"; // Yiddish
+            case "id":
+                return "in"; // Indonesian
+            case "fil":
+                return "tl"; // Filipino
+            default:
+                return language;
         }
-        return uiLocale;
     }
 
     /**
@@ -137,6 +133,19 @@ public class LocalizationUtils {
                 // NOTE: for Spanish (es), both es.pak and es-419.pak are used. Hence this works.
                 return language;
         }
+    }
+
+    /**
+     * Return true iff a locale string matches a specific language string.
+     *
+     * @param locale Chromium locale name (e.g. "fil", or "en-US").
+     * @param lang Chromium language name (e.g. "fi", or "en").
+     * @return true iff the locale name matches the languages. E.g. should
+     *         be false for ("fil", "fi") (Filipino locale + Finish language)
+     *         but true for ("en-US", "en") (USA locale + English language).
+     */
+    public static boolean chromiumLocaleMatchesLanguage(String locale, String lang) {
+        return LocaleUtils.toLanguage(locale).equals(lang);
     }
 
     private static native int nativeGetFirstStrongCharacterDirection(String string);

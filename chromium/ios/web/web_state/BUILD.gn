@@ -15,6 +15,7 @@ source_set("web_state") {
     "//ios/web/interstitials",
     "//ios/web/navigation",
     "//ios/web/navigation:core",
+    "//ios/web/navigation:wk_navigation_util",
     "//ios/web/public",
     "//ios/web/web_state/ui",
     "//ios/web/web_state/ui:crw_web_view_navigation_proxy",
@@ -58,6 +59,7 @@ source_set("wk_web_view_security_util") {
 source_set("navigation_context") {
   deps = [
     "//base",
+    "//ios/web/navigation:core",
     "//ios/web/public",
   ]
 
@@ -103,6 +105,7 @@ source_set("error_translation_util") {
   deps = [
     "//base",
     "//ios/net",
+    "//ios/web/public",
     "//net",
   ]
 
@@ -158,7 +161,6 @@ source_set("context_menu") {
     "context_menu_params.mm",
     "context_menu_params_utils.h",
     "context_menu_params_utils.mm",
-    "form_activity_params.cc",
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
@@ -166,6 +168,7 @@ source_set("context_menu") {
 
 source_set("web_frame") {
   deps = [
+    ":web_state_impl_header",
     "//base",
     "//crypto",
     "//ios/web/public",
@@ -175,6 +178,7 @@ source_set("web_frame") {
   sources = [
     "web_frame_impl.h",
     "web_frame_impl.mm",
+    "web_frame_util.mm",
     "web_frames_manager_impl.h",
     "web_frames_manager_impl.mm",
   ]

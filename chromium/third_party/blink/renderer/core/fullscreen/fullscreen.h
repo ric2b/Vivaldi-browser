@@ -33,9 +33,9 @@
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 #include "third_party/blink/renderer/platform/wtf/deque.h"
@@ -59,7 +59,9 @@ class CORE_EXPORT Fullscreen final
  public:
   static const char kSupplementName[];
 
+  explicit Fullscreen(Document&);
   virtual ~Fullscreen();
+
   static Fullscreen& From(Document&);
   static Element* FullscreenElementFrom(Document&);
   static Element* FullscreenElementForBindingFrom(TreeScope&);
@@ -79,7 +81,7 @@ class CORE_EXPORT Fullscreen final
 
   static void RequestFullscreen(Element&);
   static ScriptPromise RequestFullscreen(Element&,
-                                         const FullscreenOptions&,
+                                         const FullscreenOptions*,
                                          RequestType,
                                          ScriptState* state = nullptr);
 
@@ -106,8 +108,6 @@ class CORE_EXPORT Fullscreen final
 
  private:
   static Fullscreen* FromIfExists(Document&);
-
-  explicit Fullscreen(Document&);
 
   Document* GetDocument();
 

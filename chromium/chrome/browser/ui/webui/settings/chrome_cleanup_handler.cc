@@ -6,7 +6,9 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
@@ -17,6 +19,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/chrome_cleaner/reporter_runner_win.h"
 #include "chrome/browser/safe_browsing/chrome_cleaner/srt_field_trial_win.h"
@@ -26,6 +29,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_message_handler.h"
+#include "extensions/browser/extension_system.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using safe_browsing::ChromeCleanerController;
@@ -38,9 +42,12 @@ namespace {
 std::unique_ptr<base::ListValue> GetFilesAsListStorage(
     const std::set<base::FilePath>& files) {
   auto value = std::make_unique<base::ListValue>();
-  for (const base::FilePath& path : files)
-    value->AppendString(path.value());
-
+  for (const base::FilePath& path : files) {
+    auto item = std::make_unique<base::DictionaryValue>();
+    item->SetString("dirname", path.DirName().AsEndingWithSeparator().value());
+    item->SetString("basename", path.BaseName().value());
+    value->Append(std::move(item));
+  }
   return value;
 }
 
@@ -99,14 +106,7 @@ std::string IdleReasonToString(
 }  // namespace
 
 ChromeCleanupHandler::ChromeCleanupHandler(Profile* profile)
-    : controller_(ChromeCleanerController::GetInstance()), profile_(profile) {
-  DCHECK(g_browser_process->local_state());
-  logs_enabled_pref_.Init(g_browser_process->local_state());
-  logs_enabled_pref_.Add(
-      prefs::kSwReporterReportingEnabled,
-      base::BindRepeating(&ChromeCleanupHandler::OnLogsEnabledPrefChanged,
-                          base::Unretained(this)));
-}
+    : controller_(ChromeCleanerController::GetInstance()), profile_(profile) {}
 
 ChromeCleanupHandler::~ChromeCleanupHandler() {
   controller_->RemoveObserver(this);
@@ -125,10 +125,6 @@ void ChromeCleanupHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "restartComputer",
       base::BindRepeating(&ChromeCleanupHandler::HandleRestartComputer,
-                          base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
-      "setLogsUploadPermission",
-      base::BindRepeating(&ChromeCleanupHandler::HandleSetLogsUploadPermission,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "startCleanup",
@@ -196,18 +192,6 @@ void ChromeCleanupHandler::OnRebootRequired() {
   FireWebUIListener("chrome-cleanup-on-reboot-required");
 }
 
-void ChromeCleanupHandler::OnLogsEnabledChanged(bool logs_enabled) {
-  FireWebUIListener("chrome-cleanup-upload-permission-change",
-                    base::Value(controller_->IsReportingManagedByPolicy()),
-                    base::Value(logs_enabled));
-}
-
-void ChromeCleanupHandler::OnLogsEnabledPrefChanged() {
-  bool is_enabled = controller_->IsReportingAllowedByPolicy();
-  controller_->SetLogsEnabled(is_enabled);
-  OnLogsEnabledChanged(is_enabled);
-}
-
 void ChromeCleanupHandler::HandleRegisterChromeCleanerObserver(
     const base::ListValue* args) {
   DCHECK_EQ(0U, args->GetSize());
@@ -216,9 +200,6 @@ void ChromeCleanupHandler::HandleRegisterChromeCleanerObserver(
   base::RecordAction(
       base::UserMetricsAction("SoftwareReporter.CleanupWebui_Shown"));
   AllowJavascript();
-
-  // Send the current logs upload state.
-  OnLogsEnabledChanged(controller_->logs_enabled());
 
   FireWebUIListener("chrome-cleanup-enabled-change",
                     base::Value(controller_->IsAllowedByPolicy()));
@@ -233,9 +214,9 @@ void ChromeCleanupHandler::HandleStartScanning(const base::ListValue* args) {
   CHECK(controller_->IsAllowedByPolicy());
 
   // The state is propagated to all open tabs and should be consistent.
-  DCHECK_EQ(controller_->logs_enabled(), allow_logs_upload);
+  DCHECK_EQ(controller_->logs_enabled(profile_), allow_logs_upload);
 
-  controller_->RequestUserInitiatedScan();
+  controller_->RequestUserInitiatedScan(profile_);
 
   base::RecordAction(
       base::UserMetricsAction("SoftwareReporter.CleanupWebui_StartScanning"));
@@ -250,38 +231,24 @@ void ChromeCleanupHandler::HandleRestartComputer(const base::ListValue* args) {
   controller_->Reboot();
 }
 
-void ChromeCleanupHandler::HandleSetLogsUploadPermission(
-    const base::ListValue* args) {
-  CHECK_EQ(1U, args->GetSize());
-  bool allow_logs_upload = false;
-  args->GetBoolean(0, &allow_logs_upload);
-
-  if (allow_logs_upload) {
-    base::RecordAction(base::UserMetricsAction(
-        "SoftwareReporter.CleanupWebui_LogsUploadEnabled"));
-  } else {
-    base::RecordAction(base::UserMetricsAction(
-        "SoftwareReporter.CleanupWebui_LogsUploadDisabled"));
-  }
-
-  controller_->SetLogsEnabled(allow_logs_upload);
-}
-
 void ChromeCleanupHandler::HandleStartCleanup(const base::ListValue* args) {
   CHECK_EQ(1U, args->GetSize());
   bool allow_logs_upload = false;
   args->GetBoolean(0, &allow_logs_upload);
 
   // The state is propagated to all open tabs and should be consistent.
-  DCHECK_EQ(controller_->logs_enabled(), allow_logs_upload);
+  DCHECK_EQ(controller_->logs_enabled(profile_), allow_logs_upload);
 
   safe_browsing::RecordCleanupStartedHistogram(
       safe_browsing::CLEANUP_STARTED_FROM_PROMPT_IN_SETTINGS);
   base::RecordAction(
       base::UserMetricsAction("SoftwareReporter.CleanupWebui_StartCleanup"));
 
+  extensions::ExtensionService* extension_service =
+      extensions::ExtensionSystem::Get(profile_)->extension_service();
+
   controller_->ReplyWithUserResponse(
-      profile_,
+      profile_, extension_service,
       allow_logs_upload
           ? ChromeCleanerController::UserResponse::kAcceptedWithLogs
           : ChromeCleanerController::UserResponse::kAcceptedWithoutLogs);

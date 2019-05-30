@@ -43,13 +43,15 @@ class WindowEventContext : public GarbageCollected<WindowEventContext> {
 
   LocalDOMWindow* Window() const;
   EventTarget* Target() const;
+  EventTarget* RelatedTarget() const;
   bool HandleLocalEvents(Event&);
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
  private:
   Member<LocalDOMWindow> window_;
   Member<EventTarget> target_;
+  Member<EventTarget> related_target_;
   DISALLOW_COPY_AND_ASSIGN(WindowEventContext);
 };
 
@@ -59,6 +61,10 @@ inline LocalDOMWindow* WindowEventContext::Window() const {
 
 inline EventTarget* WindowEventContext::Target() const {
   return target_.Get();
+}
+
+inline EventTarget* WindowEventContext::RelatedTarget() const {
+  return related_target_.Get();
 }
 
 }  // namespace blink

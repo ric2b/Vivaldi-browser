@@ -6,14 +6,14 @@
 
 #include <string>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
-#include "chromeos/login/login_state.h"
+#include "chromeos/login/login_state/login_state.h"
 #include "chromeos/system/fake_statistics_provider.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/user_manager/scoped_user_manager.h"
@@ -48,18 +48,12 @@ using bluez::FakeBluetoothGattDescriptorClient;
 using bluez::FakeBluetoothGattServiceClient;
 using bluez::FakeBluetoothInputClient;
 
-using chromeos::DBusThreadManager;
-using chromeos::DBusThreadManagerSetter;
-using chromeos::PowerManagerClient;
-using chromeos::FAKE_DBUS_CLIENT_IMPLEMENTATION;
-
 class ChromeOSMetricsProviderTest : public testing::Test {
  public:
   ChromeOSMetricsProviderTest() {}
 
  protected:
   void SetUp() override {
-
     // Set up the fake Bluetooth environment,
     std::unique_ptr<BluezDBusManagerSetter> bluez_dbus_setter =
         BluezDBusManager::GetSetterForTesting();
@@ -84,10 +78,7 @@ class ChromeOSMetricsProviderTest : public testing::Test {
             new FakeBluetoothAgentManagerClient));
 
     // Set up a PowerManagerClient instance for PerfProvider.
-    std::unique_ptr<DBusThreadManagerSetter> dbus_setter =
-        DBusThreadManager::GetSetterForTesting();
-    dbus_setter->SetPowerManagerClient(std::unique_ptr<PowerManagerClient>(
-        PowerManagerClient::Create(FAKE_DBUS_CLIENT_IMPLEMENTATION)));
+    chromeos::PowerManagerClient::Initialize();
 
     // Grab pointers to members of the thread manager for easier testing.
     fake_bluetooth_adapter_client_ = static_cast<FakeBluetoothAdapterClient*>(
@@ -107,8 +98,7 @@ class ChromeOSMetricsProviderTest : public testing::Test {
   void TearDown() override {
     // Destroy the login state tracker if it was initialized.
     chromeos::LoginState::Shutdown();
-
-    DBusThreadManager::Shutdown();
+    chromeos::PowerManagerClient::Shutdown();
   }
 
  protected:
@@ -127,7 +117,8 @@ class ChromeOSMetricsProviderTest : public testing::Test {
 // Bluetooth and hardware class in the constructor.
 class TestChromeOSMetricsProvider : public ChromeOSMetricsProvider {
  public:
-  TestChromeOSMetricsProvider() {
+  TestChromeOSMetricsProvider()
+      : ChromeOSMetricsProvider(metrics::MetricsLogUploader::UMA) {
     AsyncInit(base::Bind(&TestChromeOSMetricsProvider::GetIdleCallback,
                          base::Unretained(this)));
     base::RunLoop().Run();

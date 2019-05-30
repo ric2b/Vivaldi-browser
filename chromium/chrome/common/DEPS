@@ -19,10 +19,10 @@ include_rules = [
   "+components/favicon_base",
   "+components/flags_ui/flags_ui_switches.h",
   "+components/gcm_driver",
+  "+components/metrics/call_stack_profile_builder.h",
   "+components/metrics/call_stack_profile_metrics_provider.h",
   "+components/metrics/call_stack_profile_params.h",
   "+components/metrics/child_call_stack_profile_collector.h",
-  "+components/metrics/call_stack_profile_builder.h",
   "+components/metrics/client_info.h",
   "+components/metrics/metrics_pref_names.h",
   "+components/nacl/common",
@@ -37,6 +37,7 @@ include_rules = [
   "+components/printing/common",
   "+components/safe_browsing/proto/csd.pb.h",
   "+components/safe_browsing/web_ui/constants.h",
+  "+components/strings/grit/components_strings.h",
   "+components/translate/core/common",
   "+components/url_formatter",
   "+components/variations/net",
@@ -53,9 +54,10 @@ include_rules = [
   "+rlz/buildflags/buildflags.h",
   "+sandbox/linux/services/credentials.h",
   "+services/network/public/cpp",
+  "+third_party/blink/public/mojom",
   "+third_party/boringssl/src/include",
-  "+third_party/blink/public/platform/web_client_hints_types.mojom.h",
-  "+third_party/blink/public/platform/web_feature.mojom.h",
+  "+third_party/metrics_proto",  # For heap profiler test.
+  "+third_party/widevine/cdm/buildflags.h",
   "+third_party/widevine/cdm/widevine_cdm_common.h",
 
   # FIXME - refactor code and remove these dependencies

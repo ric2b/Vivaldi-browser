@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/tick_clock.h"
@@ -24,10 +25,13 @@ namespace net {
 
 namespace {
 
+constexpr int kMaxJsonSize = 16 * 1024;
+constexpr int kMaxJsonDepth = 5;
+
 class ReportingServiceImpl : public ReportingService {
  public:
   ReportingServiceImpl(std::unique_ptr<ReportingContext> context)
-      : context_(std::move(context)), weak_factory_(this) {}
+      : context_(std::move(context)), shut_down_(false) {}
 
   // ReportingService implementation:
 
@@ -39,24 +43,46 @@ class ReportingServiceImpl : public ReportingService {
                    const std::string& type,
                    std::unique_ptr<const base::Value> body,
                    int depth) override {
+    if (shut_down_)
+      return;
+
     DCHECK(context_);
     DCHECK(context_->delegate());
 
     if (!context_->delegate()->CanQueueReport(url::Origin::Create(url)))
       return;
 
-    context_->cache()->AddReport(url, user_agent, group, type, std::move(body),
-                                 depth, context_->tick_clock()->NowTicks(), 0);
+    // Strip username, password, and ref fragment from the URL.
+    GURL sanitized_url = url.GetAsReferrer();
+    if (!sanitized_url.is_valid())
+      return;
+
+    context_->cache()->AddReport(sanitized_url, user_agent, group, type,
+                                 std::move(body), depth,
+                                 context_->tick_clock()->NowTicks(), 0);
   }
 
   void ProcessHeader(const GURL& url,
-                     const std::string& header_value) override {
-    context_->delegate()->ParseJson(
-        "[" + header_value + "]",
-        base::BindRepeating(&ReportingServiceImpl::ProcessHeaderValue,
-                            weak_factory_.GetWeakPtr(), url),
-        base::BindRepeating(
-            &ReportingHeaderParser::RecordHeaderDiscardedForJsonInvalid));
+                     const std::string& header_string) override {
+    if (shut_down_)
+      return;
+
+    if (header_string.size() > kMaxJsonSize) {
+      ReportingHeaderParser::RecordHeaderDiscardedForJsonTooBig();
+      return;
+    }
+
+    std::unique_ptr<base::Value> header_value =
+        base::JSONReader::ReadDeprecated("[" + header_string + "]",
+                                         base::JSON_PARSE_RFC, kMaxJsonDepth);
+    if (!header_value) {
+      ReportingHeaderParser::RecordHeaderDiscardedForJsonInvalid();
+      return;
+    }
+
+    DVLOG(1) << "Received Reporting policy for " << url.GetOrigin();
+    ReportingHeaderParser::ParseHeader(context_.get(), url,
+                                       std::move(header_value));
   }
 
   void RemoveBrowsingData(int data_type_mask,
@@ -71,8 +97,9 @@ class ReportingServiceImpl : public ReportingService {
                                                         data_type_mask);
   }
 
-  int GetUploadDepth(const URLRequest& request) override {
-    return context_->uploader()->GetUploadDepth(request);
+  void OnShutdown() override {
+    shut_down_ = true;
+    context_->OnShutdown();
   }
 
   const ReportingPolicy& GetPolicy() const override {
@@ -87,13 +114,13 @@ class ReportingServiceImpl : public ReportingService {
     return dict;
   }
 
- private:
-  void ProcessHeaderValue(const GURL& url, std::unique_ptr<base::Value> value) {
-    ReportingHeaderParser::ParseHeader(context_.get(), url, std::move(value));
+  ReportingContext* GetContextForTesting() const override {
+    return context_.get();
   }
 
+ private:
   std::unique_ptr<ReportingContext> context_;
-  base::WeakPtrFactory<ReportingServiceImpl> weak_factory_;
+  bool shut_down_;
 
   DISALLOW_COPY_AND_ASSIGN(ReportingServiceImpl);
 };

@@ -105,7 +105,7 @@ TEST_F(ComponentUpdaterConfiguratorImplTest, InitialDelay) {
     bool PingsEnabled() const override { return false; }
     bool TestRequest() const override { return false; }
     GURL UrlSourceOverride() const override { return GURL(); }
-    int InitialDelay() const override { return initial_delay_; };
+    int InitialDelay() const override { return initial_delay_; }
 
     void set_fast_update(bool fast_update) { fast_update_ = fast_update; }
     void set_initial_delay(int initial_delay) {
@@ -137,6 +137,43 @@ TEST_F(ComponentUpdaterConfiguratorImplTest, InitialDelay) {
     config = std::make_unique<ConfiguratorImpl>(clcp, false);
     CHECK_EQ(kDelayOneMinute, config->InitialDelay());
   }
+}
+
+TEST_F(ComponentUpdaterConfiguratorImplTest, TestRequest) {
+  class CommandLineConfigPolicy
+      : public update_client::CommandLineConfigPolicy {
+   public:
+    CommandLineConfigPolicy() = default;
+
+    // update_client::CommandLineConfigPolicy overrides.
+    bool BackgroundDownloadsEnabled() const override { return false; }
+    bool DeltaUpdatesEnabled() const override { return false; }
+    bool FastUpdate() const override { return false; }
+    bool PingsEnabled() const override { return false; }
+    bool TestRequest() const override { return test_request_; }
+    GURL UrlSourceOverride() const override { return GURL(); }
+    int InitialDelay() const override { return 0; }
+
+    void set_test_request(bool test_request) { test_request_ = test_request; }
+
+   private:
+    bool test_request_ = false;
+  };
+
+  auto config = std::make_unique<ConfiguratorImpl>(
+      update_client::CommandLineConfigPolicy(), false);
+  EXPECT_TRUE(config->ExtraRequestParams().empty());
+
+  CommandLineConfigPolicy clcp;
+  config = std::make_unique<ConfiguratorImpl>(clcp, false);
+  auto extra_request_params = config->ExtraRequestParams();
+  EXPECT_EQ(0u, extra_request_params.count("testrequest"));
+  EXPECT_EQ(0u, extra_request_params.count("testsource"));
+  clcp.set_test_request(true);
+  config = std::make_unique<ConfiguratorImpl>(clcp, false);
+  extra_request_params = config->ExtraRequestParams();
+  EXPECT_EQ("1", extra_request_params["testrequest"]);
+  EXPECT_EQ("dev", extra_request_params["testsource"]);
 }
 
 }  // namespace component_updater

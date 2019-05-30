@@ -11,8 +11,8 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -58,7 +58,7 @@ TEST(UploadDataStreamBuilderTest, CreateUploadDataStream) {
     std::unique_ptr<BlobDataHandle> handle =
         context.AddFinishedBlob(std::move(builder));
 
-    request_body->AppendBytes(kData, arraysize(kData) - 1);
+    request_body->AppendBytes(kData, base::size(kData) - 1);
     request_body->AppendFileRange(base::FilePath(kFilePath), kFileOffset,
                                   kFileLength, kFileTime);
     request_body->AppendBlob(kBlob);
@@ -152,7 +152,7 @@ TEST(UploadDataStreamBuilderTest,
     int kBufferLength = kZeroLength + 1;
     std::unique_ptr<char[]> buffer(new char[kBufferLength]);
     scoped_refptr<net::IOBuffer> io_buffer =
-        new net::WrappedIOBuffer(buffer.get());
+        base::MakeRefCounted<net::WrappedIOBuffer>(buffer.get());
     net::TestCompletionCallback read_callback;
     int result =
         upload->Read(io_buffer.get(), kBufferLength, read_callback.callback());
@@ -195,8 +195,8 @@ TEST(UploadDataStreamBuilderTest, ResetUploadStreamWithBlob) {
 
     // Read part of the data.
     const int kBufferLength = 4;
-    scoped_refptr<net::IOBufferWithSize> buffer(
-        new net::IOBufferWithSize(kBufferLength));
+    scoped_refptr<net::IOBufferWithSize> buffer =
+        base::MakeRefCounted<net::IOBufferWithSize>(kBufferLength);
     net::TestCompletionCallback read_callback;
     int result =
         upload->Read(buffer.get(), buffer->size(), read_callback.callback());
@@ -209,7 +209,7 @@ TEST(UploadDataStreamBuilderTest, ResetUploadStreamWithBlob) {
               upload->Init(init_callback.callback(), net::NetLogWithSource()));
 
     // Read all the data.
-    buffer = new net::IOBufferWithSize(kBlobDataLength);
+    buffer = base::MakeRefCounted<net::IOBufferWithSize>(kBlobDataLength);
     result =
         upload->Read(buffer.get(), buffer->size(), read_callback.callback());
     EXPECT_EQ(kBlobDataLength, read_callback.GetResult(result));

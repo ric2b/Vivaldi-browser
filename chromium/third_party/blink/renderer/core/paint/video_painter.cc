@@ -38,8 +38,8 @@ void VideoPainter::PaintReplaced(const PaintInfo& paint_info,
     return;
 
   GraphicsContext& context = paint_info.context;
-  LayoutRect content_rect = layout_video_.PhysicalContentBoxRect();
-  content_rect.MoveBy(paint_offset);
+  LayoutRect content_box_rect = layout_video_.PhysicalContentBoxRect();
+  content_box_rect.MoveBy(paint_offset);
 
   // Video frames are only painted in software for printing or capturing node
   // images via web APIs.
@@ -48,28 +48,27 @@ void VideoPainter::PaintReplaced(const PaintInfo& paint_info,
 
   bool paint_with_foreign_layer =
       !displaying_poster && !force_software_video_paint &&
-      RuntimeEnabledFeatures::SlimmingPaintV2Enabled();
+      RuntimeEnabledFeatures::CompositeAfterPaintEnabled();
   if (paint_with_foreign_layer) {
     if (cc::Layer* layer = layout_video_.MediaElement()->CcLayer()) {
-      IntRect pixel_snapped_rect = PixelSnappedIntRect(content_rect);
-      layer->SetBounds(static_cast<gfx::Size>(pixel_snapped_rect.Size()));
+      layer->SetOffsetToTransformParent(
+          gfx::Vector2dF(snapped_replaced_rect.X(), snapped_replaced_rect.Y()));
+      layer->SetBounds(gfx::Size(snapped_replaced_rect.Size()));
       layer->SetIsDrawable(true);
-      RecordForeignLayer(
-          context, layout_video_, DisplayItem::kForeignLayerVideo, layer,
-          FloatPoint(pixel_snapped_rect.Location()), pixel_snapped_rect.Size());
+      RecordForeignLayer(context, DisplayItem::kForeignLayerVideo, layer);
       return;
     }
   }
 
-  // TODO(trchen): Video rect could overflow the content rect due to object-fit.
-  // Should apply a clip here like EmbeddedObjectPainter does.
   DrawingRecorder recorder(context, layout_video_, paint_info.phase);
 
   if (displaying_poster || !force_software_video_paint) {
     // This will display the poster image, if one is present, and otherwise
     // paint nothing.
+    DCHECK(paint_info.PaintContainer());
     ImagePainter(layout_video_)
-        .PaintIntoRect(context, replaced_rect, content_rect);
+        .PaintIntoRect(context, replaced_rect, content_box_rect,
+                       paint_info.PaintContainer()->Layer());
   } else {
     PaintFlags video_flags = context.FillFlags();
     video_flags.setColor(SK_ColorBLACK);

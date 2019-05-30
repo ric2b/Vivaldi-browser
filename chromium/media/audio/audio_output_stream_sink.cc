@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/location.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "media/audio/audio_manager.h"
 #include "media/base/audio_timestamp_helper.h"
 
@@ -43,20 +44,21 @@ void AudioOutputStreamSink::Start() {
   }
   started_ = true;
   audio_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&AudioOutputStreamSink::DoStart, this, params_));
+      FROM_HERE,
+      base::BindOnce(&AudioOutputStreamSink::DoStart, this, params_));
 }
 
 void AudioOutputStreamSink::Stop() {
   ClearCallback();
   started_ = false;
   audio_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&AudioOutputStreamSink::DoStop, this));
+      FROM_HERE, base::BindOnce(&AudioOutputStreamSink::DoStop, this));
 }
 
 void AudioOutputStreamSink::Pause() {
   ClearCallback();
   audio_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&AudioOutputStreamSink::DoPause, this));
+      FROM_HERE, base::BindOnce(&AudioOutputStreamSink::DoPause, this));
 }
 
 void AudioOutputStreamSink::Play() {
@@ -65,17 +67,24 @@ void AudioOutputStreamSink::Play() {
     active_render_callback_ = render_callback_;
   }
   audio_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&AudioOutputStreamSink::DoPlay, this));
+      FROM_HERE, base::BindOnce(&AudioOutputStreamSink::DoPlay, this));
 }
 
 bool AudioOutputStreamSink::SetVolume(double volume) {
   audio_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&AudioOutputStreamSink::DoSetVolume, this, volume));
+      FROM_HERE,
+      base::BindOnce(&AudioOutputStreamSink::DoSetVolume, this, volume));
   return true;
 }
 
 OutputDeviceInfo AudioOutputStreamSink::GetOutputDeviceInfo() {
-  return OutputDeviceInfo();
+  return OutputDeviceInfo(OUTPUT_DEVICE_STATUS_OK);
+}
+
+void AudioOutputStreamSink::GetOutputDeviceInfoAsync(
+    OutputDeviceInfoCB info_cb) {
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(info_cb), GetOutputDeviceInfo()));
 }
 
 bool AudioOutputStreamSink::IsOptimizedForHardwareParameters() {

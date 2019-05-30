@@ -4,11 +4,18 @@
 
 module viz.mojom;
 
+import "mojo/public/mojom/base/unguessable_token.mojom";
 import "services/viz/public/interfaces/compositing/surface_range.mojom";
 import "services/viz/public/interfaces/compositing/shared_quad_state.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 import "ui/gfx/mojo/color_space.mojom";
 import "ui/gfx/mojo/transform.mojom";
+
+enum ProtectedVideoState {
+  kClear,
+  kSoftwareProtected,
+  kHardwareProtected,
+};
 
 struct DebugBorderQuadState {
   // Debug border color.
@@ -41,6 +48,7 @@ struct RenderPassQuadState {
   gfx.mojom.RectF tex_coord_rect;
 
   bool force_anti_aliasing_off;
+  float backdrop_filter_quality;
 };
 
 struct SolidColorQuadState {
@@ -51,7 +59,8 @@ struct SolidColorQuadState {
 struct StreamVideoQuadState {
   uint32 resource_id;
   gfx.mojom.Size resource_size_in_pixels;
-  gfx.mojom.Transform matrix;
+  gfx.mojom.PointF uv_top_left;
+  gfx.mojom.PointF uv_bottom_right;
 };
 
 struct SurfaceQuadState {
@@ -71,6 +80,7 @@ struct TextureQuadState {
   bool y_flipped;
   bool nearest_neighbor;
   bool secure_output_only;
+  ProtectedVideoState protected_video_type;
 };
 
 struct TileQuadState {
@@ -96,8 +106,11 @@ struct YUVVideoQuadState {
   float resource_multiplier;
   uint32 bits_per_channel;
   gfx.mojom.ColorSpace video_color_space;
-  bool require_overlay;
-  bool is_protected_video;
+  ProtectedVideoState protected_video_type;
+};
+
+struct VideoHoleQuadState {
+  mojo_base.mojom.UnguessableToken overlay_plane_id;
 };
 
 union DrawQuadState {
@@ -109,6 +122,7 @@ union DrawQuadState {
   TextureQuadState texture_quad_state;
   TileQuadState tile_quad_state;
   YUVVideoQuadState yuv_video_quad_state;
+  VideoHoleQuadState video_hole_quad_state;
 };
 
 struct DrawQuad {

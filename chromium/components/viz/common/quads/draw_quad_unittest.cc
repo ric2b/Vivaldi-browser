@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
+#include "base/unguessable_token.h"
 #include "cc/base/math_util.h"
 #include "cc/paint/filter_operations.h"
 #include "cc/test/fake_raster_source.h"
@@ -24,6 +25,7 @@
 #include "components/viz/common/quads/surface_draw_quad.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
 #include "components/viz/common/quads/tile_draw_quad.h"
+#include "components/viz/common/quads/video_hole_draw_quad.h"
 #include "components/viz/common/quads/yuv_video_draw_quad.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/effects/SkBlurImageFilter.h"
@@ -151,19 +153,19 @@ void CompareDrawQuad(DrawQuad* quad, DrawQuad* copy) {
   { QUAD_DATA quad_new->SetNew(shared_state, quad_rect, __VA_ARGS__); } \
   SETUP_AND_COPY_QUAD_NEW(Type, quad_new);
 
-#define CREATE_QUAD_ALL_RP(Type, a, b, c, d, e, f, g, h, copy_a)           \
+#define CREATE_QUAD_ALL_RP(Type, a, b, c, d, e, f, g, h, i, copy_a)        \
   Type* quad_all = render_pass->CreateAndAppendDrawQuad<Type>();           \
   {                                                                        \
     QUAD_DATA quad_all->SetAll(shared_state, quad_rect, quad_visible_rect, \
-                               needs_blending, a, b, c, d, e, f, g, h);    \
+                               needs_blending, a, b, c, d, e, f, g, h, i); \
   }                                                                        \
   SETUP_AND_COPY_QUAD_ALL_RP(Type, quad_all, copy_a);
 
-#define CREATE_QUAD_NEW_RP(Type, a, b, c, d, e, f, g, h, i, copy_a)          \
+#define CREATE_QUAD_NEW_RP(Type, a, b, c, d, e, f, g, h, i, j, copy_a)       \
   Type* quad_new = render_pass->CreateAndAppendDrawQuad<Type>();             \
   {                                                                          \
     QUAD_DATA quad_new->SetNew(shared_state, quad_rect, a, b, c, d, e, f, g, \
-                               h, i);                                        \
+                               h, i, j);                                     \
   }                                                                          \
   SETUP_AND_COPY_QUAD_NEW_RP(Type, quad_new, copy_a);
 
@@ -195,6 +197,7 @@ TEST(DrawQuadTest, CopyRenderPassDrawQuad) {
   gfx::PointF filters_origin;
   gfx::RectF tex_coord_rect(1, 1, 255, 254);
   bool force_anti_aliasing_off = false;
+  float backdrop_filter_quality = 1.0f;
 
   RenderPassId copied_render_pass_id = 235;
   CREATE_SHARED_STATE();
@@ -202,7 +205,8 @@ TEST(DrawQuadTest, CopyRenderPassDrawQuad) {
   CREATE_QUAD_NEW_RP(RenderPassDrawQuad, visible_rect, render_pass_id,
                      mask_resource_id, mask_uv_rect, mask_texture_size,
                      filters_scale, filters_origin, tex_coord_rect,
-                     force_anti_aliasing_off, copied_render_pass_id);
+                     force_anti_aliasing_off, backdrop_filter_quality,
+                     copied_render_pass_id);
   EXPECT_EQ(DrawQuad::RENDER_PASS, copy_quad->material);
   EXPECT_EQ(visible_rect, copy_quad->visible_rect);
   EXPECT_EQ(copied_render_pass_id, copy_quad->render_pass_id);
@@ -217,7 +221,7 @@ TEST(DrawQuadTest, CopyRenderPassDrawQuad) {
   CREATE_QUAD_ALL_RP(RenderPassDrawQuad, render_pass_id, mask_resource_id,
                      mask_uv_rect, mask_texture_size, filters_scale,
                      filters_origin, tex_coord_rect, force_anti_aliasing_off,
-                     copied_render_pass_id);
+                     backdrop_filter_quality, copied_render_pass_id);
   EXPECT_EQ(DrawQuad::RENDER_PASS, copy_quad->material);
   EXPECT_EQ(copied_render_pass_id, copy_quad->render_pass_id);
   EXPECT_EQ(mask_resource_id, copy_quad->mask_resource_id());
@@ -253,24 +257,28 @@ TEST(DrawQuadTest, CopyStreamVideoDrawQuad) {
   bool needs_blending = true;
   ResourceId resource_id = 64;
   gfx::Size resource_size_in_pixels = gfx::Size(40, 41);
-  gfx::Transform matrix = gfx::Transform(0.5, 0.25, 1, 0.75, 0, 1);
+  gfx::PointF uv_top_left(0.25f, 0.3f);
+  gfx::PointF uv_bottom_right(0.75f, 0.7f);
   CREATE_SHARED_STATE();
 
   CREATE_QUAD_NEW(StreamVideoDrawQuad, visible_rect, needs_blending,
-                  resource_id, resource_size_in_pixels, matrix);
+                  resource_id, resource_size_in_pixels, uv_top_left,
+                  uv_bottom_right);
   EXPECT_EQ(DrawQuad::STREAM_VIDEO_CONTENT, copy_quad->material);
   EXPECT_EQ(visible_rect, copy_quad->visible_rect);
   EXPECT_EQ(needs_blending, copy_quad->needs_blending);
   EXPECT_EQ(resource_id, copy_quad->resource_id());
   EXPECT_EQ(resource_size_in_pixels, copy_quad->resource_size_in_pixels());
-  EXPECT_EQ(matrix, copy_quad->matrix);
+  EXPECT_EQ(uv_top_left, copy_quad->uv_top_left);
+  EXPECT_EQ(uv_bottom_right, copy_quad->uv_bottom_right);
 
   CREATE_QUAD_ALL(StreamVideoDrawQuad, resource_id, resource_size_in_pixels,
-                  matrix);
+                  uv_top_left, uv_bottom_right);
   EXPECT_EQ(DrawQuad::STREAM_VIDEO_CONTENT, copy_quad->material);
   EXPECT_EQ(resource_id, copy_quad->resource_id());
   EXPECT_EQ(resource_size_in_pixels, copy_quad->resource_size_in_pixels());
-  EXPECT_EQ(matrix, copy_quad->matrix);
+  EXPECT_EQ(uv_top_left, copy_quad->uv_top_left);
+  EXPECT_EQ(uv_bottom_right, copy_quad->uv_bottom_right);
 }
 
 TEST(DrawQuadTest, CopySurfaceDrawQuad) {
@@ -285,16 +293,19 @@ TEST(DrawQuadTest, CopySurfaceDrawQuad) {
 
   CREATE_QUAD_NEW(SurfaceDrawQuad, visible_rect,
                   SurfaceRange(fallback_surface_id, primary_surface_id),
-                  SK_ColorWHITE, true);
+                  SK_ColorWHITE, /*stretch_content_to_fill_bounds=*/true,
+                  /*ignores_input_event=*/true);
   EXPECT_EQ(DrawQuad::SURFACE_CONTENT, copy_quad->material);
   EXPECT_EQ(visible_rect, copy_quad->visible_rect);
   EXPECT_EQ(primary_surface_id, copy_quad->surface_range.end());
   EXPECT_EQ(fallback_surface_id, *copy_quad->surface_range.start());
   EXPECT_TRUE(copy_quad->stretch_content_to_fill_bounds);
+  EXPECT_TRUE(copy_quad->ignores_input_event);
 
   CREATE_QUAD_ALL(SurfaceDrawQuad,
                   SurfaceRange(fallback_surface_id, primary_surface_id),
-                  SK_ColorWHITE, false);
+                  SK_ColorWHITE, /*stretch_content_to_fill_bounds=*/false,
+                  /*ignores_input_event=*/false);
   EXPECT_EQ(DrawQuad::SURFACE_CONTENT, copy_quad->material);
   EXPECT_EQ(primary_surface_id, copy_quad->surface_range.end());
   EXPECT_EQ(fallback_surface_id, *copy_quad->surface_range.start());
@@ -313,12 +324,14 @@ TEST(DrawQuadTest, CopyTextureDrawQuad) {
   bool y_flipped = true;
   bool nearest_neighbor = true;
   bool secure_output_only = true;
+  ui::ProtectedVideoType protected_video_type =
+      ui::ProtectedVideoType::kSoftwareProtected;
   CREATE_SHARED_STATE();
 
   CREATE_QUAD_NEW(TextureDrawQuad, visible_rect, needs_blending, resource_id,
                   premultiplied_alpha, uv_top_left, uv_bottom_right,
                   SK_ColorTRANSPARENT, vertex_opacity, y_flipped,
-                  nearest_neighbor, secure_output_only);
+                  nearest_neighbor, secure_output_only, protected_video_type);
   EXPECT_EQ(DrawQuad::TEXTURE_CONTENT, copy_quad->material);
   EXPECT_EQ(visible_rect, copy_quad->visible_rect);
   EXPECT_EQ(needs_blending, copy_quad->needs_blending);
@@ -330,11 +343,12 @@ TEST(DrawQuadTest, CopyTextureDrawQuad) {
   EXPECT_EQ(y_flipped, copy_quad->y_flipped);
   EXPECT_EQ(nearest_neighbor, copy_quad->nearest_neighbor);
   EXPECT_EQ(secure_output_only, copy_quad->secure_output_only);
+  EXPECT_EQ(protected_video_type, copy_quad->protected_video_type);
 
   CREATE_QUAD_ALL(TextureDrawQuad, resource_id, resource_size_in_pixels,
                   premultiplied_alpha, uv_top_left, uv_bottom_right,
                   SK_ColorTRANSPARENT, vertex_opacity, y_flipped,
-                  nearest_neighbor, secure_output_only);
+                  nearest_neighbor, secure_output_only, protected_video_type);
   EXPECT_EQ(DrawQuad::TEXTURE_CONTENT, copy_quad->material);
   EXPECT_EQ(resource_id, copy_quad->resource_id());
   EXPECT_EQ(resource_size_in_pixels, copy_quad->resource_size_in_pixels());
@@ -345,6 +359,7 @@ TEST(DrawQuadTest, CopyTextureDrawQuad) {
   EXPECT_EQ(y_flipped, copy_quad->y_flipped);
   EXPECT_EQ(nearest_neighbor, copy_quad->nearest_neighbor);
   EXPECT_EQ(secure_output_only, copy_quad->secure_output_only);
+  EXPECT_EQ(protected_video_type, copy_quad->protected_video_type);
 }
 
 TEST(DrawQuadTest, CopyTileDrawQuad) {
@@ -383,6 +398,21 @@ TEST(DrawQuadTest, CopyTileDrawQuad) {
   EXPECT_EQ(nearest_neighbor, copy_quad->nearest_neighbor);
 }
 
+TEST(DrawQuadTest, CopyVideoHoleDrawQuad) {
+  gfx::Rect visible_rect(40, 50, 30, 20);
+  base::UnguessableToken overlay_plane_id = base::UnguessableToken::Create();
+  CREATE_SHARED_STATE();
+
+  CREATE_QUAD_NEW(VideoHoleDrawQuad, visible_rect, overlay_plane_id);
+  EXPECT_EQ(DrawQuad::VIDEO_HOLE, copy_quad->material);
+  EXPECT_EQ(visible_rect, copy_quad->visible_rect);
+  EXPECT_EQ(overlay_plane_id, copy_quad->overlay_plane_id);
+
+  CREATE_QUAD_ALL(VideoHoleDrawQuad, overlay_plane_id);
+  EXPECT_EQ(DrawQuad::VIDEO_HOLE, copy_quad->material);
+  EXPECT_EQ(overlay_plane_id, copy_quad->overlay_plane_id);
+}
+
 TEST(DrawQuadTest, CopyYUVVideoDrawQuad) {
   gfx::Rect visible_rect(40, 50, 30, 20);
   bool needs_blending = true;
@@ -397,8 +427,8 @@ TEST(DrawQuadTest, CopyYUVVideoDrawQuad) {
   float resource_offset = 0.5f;
   float resource_multiplier = 2.001f;
   uint32_t bits_per_channel = 5;
-  bool require_overlay = true;
-  bool is_protected_video = true;
+  ui::ProtectedVideoType protected_video_type =
+      ui::ProtectedVideoType::kHardwareProtected;
   gfx::ColorSpace video_color_space = gfx::ColorSpace::CreateJpeg();
   CREATE_SHARED_STATE();
 
@@ -421,14 +451,13 @@ TEST(DrawQuadTest, CopyYUVVideoDrawQuad) {
   EXPECT_EQ(resource_offset, copy_quad->resource_offset);
   EXPECT_EQ(resource_multiplier, copy_quad->resource_multiplier);
   EXPECT_EQ(bits_per_channel, copy_quad->bits_per_channel);
-  EXPECT_FALSE(copy_quad->require_overlay);
-  EXPECT_FALSE(copy_quad->is_protected_video);
+  EXPECT_EQ(ui::ProtectedVideoType::kClear, copy_quad->protected_video_type);
 
   CREATE_QUAD_ALL(YUVVideoDrawQuad, ya_tex_coord_rect, uv_tex_coord_rect,
                   ya_tex_size, uv_tex_size, y_plane_resource_id,
                   u_plane_resource_id, v_plane_resource_id, a_plane_resource_id,
                   video_color_space, resource_offset, resource_multiplier,
-                  bits_per_channel, require_overlay, is_protected_video);
+                  bits_per_channel, protected_video_type);
   EXPECT_EQ(DrawQuad::YUV_VIDEO_CONTENT, copy_quad->material);
   EXPECT_EQ(ya_tex_coord_rect, copy_quad->ya_tex_coord_rect);
   EXPECT_EQ(uv_tex_coord_rect, copy_quad->uv_tex_coord_rect);
@@ -441,8 +470,7 @@ TEST(DrawQuadTest, CopyYUVVideoDrawQuad) {
   EXPECT_EQ(resource_offset, copy_quad->resource_offset);
   EXPECT_EQ(resource_multiplier, copy_quad->resource_multiplier);
   EXPECT_EQ(bits_per_channel, copy_quad->bits_per_channel);
-  EXPECT_EQ(require_overlay, copy_quad->require_overlay);
-  EXPECT_EQ(is_protected_video, copy_quad->is_protected_video);
+  EXPECT_EQ(protected_video_type, copy_quad->protected_video_type);
 }
 
 TEST(DrawQuadTest, CopyPictureDrawQuad) {
@@ -521,6 +549,7 @@ TEST_F(DrawQuadIteratorTest, RenderPassDrawQuad) {
   gfx::PointF filters_origin(0.f, 0.f);
   gfx::RectF tex_coord_rect(1.f, 1.f, 33.f, 19.f);
   bool force_anti_aliasing_off = false;
+  float backdrop_filter_quality = 1.0f;
 
   int copied_render_pass_id = 235;
 
@@ -528,7 +557,8 @@ TEST_F(DrawQuadIteratorTest, RenderPassDrawQuad) {
   CREATE_QUAD_NEW_RP(RenderPassDrawQuad, visible_rect, render_pass_id,
                      mask_resource_id, mask_uv_rect, mask_texture_size,
                      filters_scale, filters_origin, tex_coord_rect,
-                     force_anti_aliasing_off, copied_render_pass_id);
+                     force_anti_aliasing_off, backdrop_filter_quality,
+                     copied_render_pass_id);
   EXPECT_EQ(mask_resource_id, quad_new->mask_resource_id());
   EXPECT_EQ(1, IterateAndCount(quad_new));
   EXPECT_EQ(mask_resource_id + 1, quad_new->mask_resource_id());
@@ -538,7 +568,7 @@ TEST_F(DrawQuadIteratorTest, RenderPassDrawQuad) {
   quad_new->SetNew(shared_state, quad_rect, visible_rect, render_pass_id,
                    new_mask_resource_id, mask_uv_rect, mask_texture_size,
                    filters_scale, filters_origin, tex_coord_rect,
-                   force_anti_aliasing_off);
+                   force_anti_aliasing_off, backdrop_filter_quality);
   EXPECT_EQ(0, IterateAndCount(quad_new));
   EXPECT_EQ(0u, quad_new->mask_resource_id());
 }
@@ -558,11 +588,13 @@ TEST_F(DrawQuadIteratorTest, StreamVideoDrawQuad) {
   gfx::Rect visible_rect(40, 50, 30, 20);
   ResourceId resource_id = 64;
   gfx::Size resource_size_in_pixels = gfx::Size(40, 41);
-  gfx::Transform matrix = gfx::Transform(0.5, 0.25, 1, 0.75, 0, 1);
+  gfx::PointF uv_top_left(0.25f, 0.3f);
+  gfx::PointF uv_bottom_right(0.75f, 0.7f);
 
   CREATE_SHARED_STATE();
   CREATE_QUAD_NEW(StreamVideoDrawQuad, visible_rect, needs_blending,
-                  resource_id, resource_size_in_pixels, matrix);
+                  resource_id, resource_size_in_pixels, uv_top_left,
+                  uv_bottom_right);
   EXPECT_EQ(resource_id, quad_new->resource_id());
   EXPECT_EQ(resource_size_in_pixels, quad_new->resource_size_in_pixels());
   EXPECT_EQ(1, IterateAndCount(quad_new));
@@ -577,7 +609,8 @@ TEST_F(DrawQuadIteratorTest, SurfaceDrawQuad) {
   CREATE_SHARED_STATE();
   CREATE_QUAD_NEW(SurfaceDrawQuad, visible_rect,
                   SurfaceRange(base::nullopt, surface_id), SK_ColorWHITE,
-                  false);
+                  /*stretch_content_to_fill_bounds=*/false,
+                  /*ignores_input_event=*/false);
   EXPECT_EQ(0, IterateAndCount(quad_new));
 }
 
@@ -591,12 +624,13 @@ TEST_F(DrawQuadIteratorTest, TextureDrawQuad) {
   bool y_flipped = true;
   bool nearest_neighbor = true;
   bool secure_output_only = true;
+  ui::ProtectedVideoType protected_video_type = ui::ProtectedVideoType::kClear;
 
   CREATE_SHARED_STATE();
   CREATE_QUAD_NEW(TextureDrawQuad, visible_rect, needs_blending, resource_id,
                   premultiplied_alpha, uv_top_left, uv_bottom_right,
                   SK_ColorTRANSPARENT, vertex_opacity, y_flipped,
-                  nearest_neighbor, secure_output_only);
+                  nearest_neighbor, secure_output_only, protected_video_type);
   EXPECT_EQ(resource_id, quad_new->resource_id());
   EXPECT_EQ(1, IterateAndCount(quad_new));
   EXPECT_EQ(resource_id + 1, quad_new->resource_id());
@@ -620,6 +654,15 @@ TEST_F(DrawQuadIteratorTest, TileDrawQuad) {
   EXPECT_EQ(resource_id, quad_new->resource_id());
   EXPECT_EQ(1, IterateAndCount(quad_new));
   EXPECT_EQ(resource_id + 1, quad_new->resource_id());
+}
+
+TEST_F(DrawQuadIteratorTest, VideoHoleDrawQuad) {
+  gfx::Rect visible_rect(40, 50, 30, 20);
+  base::UnguessableToken overlay_plane_id = base::UnguessableToken::Create();
+
+  CREATE_SHARED_STATE();
+  CREATE_QUAD_NEW(VideoHoleDrawQuad, visible_rect, overlay_plane_id);
+  EXPECT_EQ(0, IterateAndCount(quad_new));
 }
 
 TEST_F(DrawQuadIteratorTest, YUVVideoDrawQuad) {
@@ -684,6 +727,9 @@ TEST(DrawQuadTest, LargestQuadType) {
       case DrawQuad::YUV_VIDEO_CONTENT:
         largest = std::max(largest, sizeof(YUVVideoDrawQuad));
         break;
+      case DrawQuad::VIDEO_HOLE:
+        largest = std::max(largest, sizeof(VideoHoleDrawQuad));
+        break;
       case DrawQuad::INVALID:
         break;
     }
@@ -724,6 +770,9 @@ TEST(DrawQuadTest, LargestQuadType) {
         break;
       case DrawQuad::YUV_VIDEO_CONTENT:
         LOG(ERROR) << "YUVVideoDrawQuad " << sizeof(YUVVideoDrawQuad);
+        break;
+      case DrawQuad::VIDEO_HOLE:
+        LOG(ERROR) << "VideoHoleDrawQuad " << sizeof(VideoHoleDrawQuad);
         break;
       case DrawQuad::INVALID:
         break;

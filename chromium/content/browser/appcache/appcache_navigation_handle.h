@@ -37,7 +37,7 @@ class ChromeAppCacheService;
 //      host id was updated.
 //
 //   5) When the navigation is ready to commit, the NavigationRequest will
-//      update the RequestNavigationParams based on the id from the
+//      update the CommitNavigationParams based on the id from the
 //      AppCacheNavigationHandle.
 //
 //   6) The commit leads to AppCache registrations happening from the renderer.
@@ -54,11 +54,22 @@ class ChromeAppCacheService;
 
 class AppCacheNavigationHandle {
  public:
-  explicit AppCacheNavigationHandle(ChromeAppCacheService* appcache_service);
+  AppCacheNavigationHandle(ChromeAppCacheService* appcache_service,
+                           int process_id);
   ~AppCacheNavigationHandle();
 
   int appcache_host_id() const { return appcache_host_id_; }
   AppCacheNavigationHandleCore* core() const { return core_.get(); }
+
+  // Called by NavigationHandleImpl::ReadyToCommitNavigation, because this is
+  // the earliest time when the process id is known.  NavigationHandleImpl needs
+  // to construct AppCacheNavigationHandle at the start of a navigation (when
+  // the final process might not be known yet) and therefore temporarily
+  // constructs AppCacheNavigationHandle with an invalid process id.
+  //
+  // SetProcessId may only be called once, and only if kInvalidUniqueID was
+  // passed to the AppCacheNavigationHandle's constructor.
+  void SetProcessId(int process_id);
 
  private:
   const int appcache_host_id_;

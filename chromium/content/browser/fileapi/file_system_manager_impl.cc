@@ -16,6 +16,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -26,6 +27,7 @@
 #include "content/browser/fileapi/browser_file_system_helper.h"
 #include "content/browser/fileapi/file_system_chooser.h"
 #include "content/common/fileapi/webblob_messages.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "ipc/ipc_platform_file.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
@@ -121,9 +123,11 @@ struct FileSystemManagerImpl::ReadDirectorySyncCallbackEntry {
 
 FileSystemManagerImpl::FileSystemManagerImpl(
     int process_id,
+    int frame_id,
     storage::FileSystemContext* file_system_context,
     scoped_refptr<ChromeBlobStorageContext> blob_storage_context)
     : process_id_(process_id),
+      frame_id_(frame_id),
       context_(file_system_context),
       security_policy_(ChildProcessSecurityPolicyImpl::GetInstance()),
       blob_storage_context_(blob_storage_context),
@@ -152,7 +156,7 @@ void FileSystemManagerImpl::BindRequest(
   bindings_.AddBinding(this, std::move(request));
 }
 
-void FileSystemManagerImpl::Open(const GURL& origin_url,
+void FileSystemManagerImpl::Open(const url::Origin& origin,
                                  blink::mojom::FileSystemType file_system_type,
                                  OpenCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -162,11 +166,12 @@ void FileSystemManagerImpl::Open(const GURL& origin_url,
     RecordAction(base::UserMetricsAction("OpenFileSystemPersistent"));
   }
   context_->OpenFileSystem(
-      origin_url, mojo::ConvertTo<storage::FileSystemType>(file_system_type),
+      origin.GetURL(),
+      mojo::ConvertTo<storage::FileSystemType>(file_system_type),
       storage::OPEN_FILE_SYSTEM_CREATE_IF_NONEXISTENT,
       base::BindOnce(&FileSystemManagerImpl::DidOpenFileSystem, GetWeakPtr(),
                      std::move(callback)));
-};
+}
 
 void FileSystemManagerImpl::ResolveURL(const GURL& filesystem_url,
                                        ResolveURLCallback callback) {
@@ -569,6 +574,11 @@ void FileSystemManagerImpl::CreateWriter(const GURL& file_path,
                                          CreateWriterCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
+  if (!base::FeatureList::IsEnabled(blink::features::kNativeFilesystemAPI)) {
+    bindings_.ReportBadMessage("FileSystemManager.CreateWriter");
+    return;
+  }
+
   FileSystemURL url(context_->CrackURL(file_path));
   base::Optional<base::File::Error> opt_error = ValidateFileSystemURL(url);
   if (opt_error) {
@@ -588,19 +598,23 @@ void FileSystemManagerImpl::CreateWriter(const GURL& file_path,
   std::move(callback).Run(base::File::FILE_OK, std::move(writer));
 }
 
-void FileSystemManagerImpl::ChooseEntry(int32_t render_frame_id,
-                                        ChooseEntryCallback callback) {
+void FileSystemManagerImpl::ChooseEntry(
+    blink::mojom::ChooseFileSystemEntryType type,
+    std::vector<blink::mojom::ChooseFileSystemEntryAcceptsOptionPtr> accepts,
+    bool include_accepts_all,
+    ChooseEntryCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (!base::FeatureList::IsEnabled(blink::features::kWritableFilesAPI)) {
+  if (!base::FeatureList::IsEnabled(blink::features::kNativeFilesystemAPI)) {
     bindings_.ReportBadMessage("FSMI_WRITABLE_FILES_DISABLED");
     return;
   }
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::BindOnce(&FileSystemChooser::CreateAndShow, process_id_,
-                     render_frame_id, std::move(callback),
-                     BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
+      base::BindOnce(
+          &FileSystemChooser::CreateAndShow, process_id_, frame_id_, type,
+          std::move(accepts), include_accepts_all, std::move(callback),
+          base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO})));
 }
 
 void FileSystemManagerImpl::Cancel(
@@ -622,6 +636,7 @@ void FileSystemManagerImpl::OnConnectionError() {
   if (bindings_.empty()) {
     in_transit_snapshot_files_.Clear();
     operation_runner_.reset();
+    cancellable_operations_.CloseAllBindings();
   }
 }
 
@@ -741,8 +756,11 @@ void FileSystemManagerImpl::DidResolveURL(
       type == storage::FileSystemContext::RESOLVED_ENTRY_NOT_FOUND)
     result = base::File::FILE_ERROR_NOT_FOUND;
 
+  base::FilePath normalized_path(
+      storage::VirtualPath::GetNormalizedFilePath(file_path));
   std::move(callback).Run(
-      mojo::ConvertTo<blink::mojom::FileSystemInfoPtr>(info), file_path,
+      mojo::ConvertTo<blink::mojom::FileSystemInfoPtr>(info),
+      std::move(normalized_path),
       type == storage::FileSystemContext::RESOLVED_ENTRY_DIRECTORY, result);
   // For ResolveURL we do not create a new operation, so no unregister here.
 }
@@ -816,12 +834,21 @@ void FileSystemManagerImpl::GetPlatformPathOnFileThread(
     storage::FileSystemContext* context,
     base::WeakPtr<FileSystemManagerImpl> file_system_manager,
     GetPlatformPathCallback callback) {
-  base::FilePath platform_path;
-  SyncGetPlatformPath(context, process_id, path, &platform_path);
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&FileSystemManagerImpl::DidGetPlatformPath,
-                     file_system_manager, std::move(callback), platform_path));
+  DCHECK(context->default_file_task_runner()->RunsTasksInCurrentSequence());
+
+  SyncGetPlatformPath(
+      context, process_id, path,
+      base::BindOnce(
+          [](base::WeakPtr<FileSystemManagerImpl> file_system_manager,
+             GetPlatformPathCallback callback,
+             const base::FilePath& platform_path) {
+            base::PostTaskWithTraits(
+                FROM_HERE, {BrowserThread::IO},
+                base::BindOnce(&FileSystemManagerImpl::DidGetPlatformPath,
+                               std::move(file_system_manager),
+                               std::move(callback), platform_path));
+          },
+          std::move(file_system_manager), std::move(callback)));
 }
 
 base::Optional<base::File::Error> FileSystemManagerImpl::ValidateFileSystemURL(

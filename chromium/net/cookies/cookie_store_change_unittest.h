@@ -103,17 +103,17 @@ class CookieStoreChangeTestBase
 template <class CookieStoreTestTraits>
 class CookieStoreChangeGlobalTest
     : public CookieStoreChangeTestBase<CookieStoreTestTraits> {};
-TYPED_TEST_CASE_P(CookieStoreChangeGlobalTest);
+TYPED_TEST_SUITE_P(CookieStoreChangeGlobalTest);
 
 template <class CookieStoreTestTraits>
 class CookieStoreChangeUrlTest
     : public CookieStoreChangeTestBase<CookieStoreTestTraits> {};
-TYPED_TEST_CASE_P(CookieStoreChangeUrlTest);
+TYPED_TEST_SUITE_P(CookieStoreChangeUrlTest);
 
 template <class CookieStoreTestTraits>
 class CookieStoreChangeNamedTest
     : public CookieStoreChangeTestBase<CookieStoreTestTraits> {};
-TYPED_TEST_CASE_P(CookieStoreChangeNamedTest);
+TYPED_TEST_SUITE_P(CookieStoreChangeNamedTest);
 
 TYPED_TEST_P(CookieStoreChangeGlobalTest, NoCookie) {
   if (!TypeParam::supports_global_cookie_tracking)
@@ -2660,68 +2660,86 @@ TYPED_TEST_P(CookieStoreChangeNamedTest, MultipleSubscriptions) {
   cookie_changes_2.clear();
 }
 
-REGISTER_TYPED_TEST_CASE_P(CookieStoreChangeGlobalTest,
-                           NoCookie,
-                           InitialCookie,
-                           InsertOne,
-                           InsertMany,
-                           DeleteOne,
-                           DeleteTwo,
-                           Overwrite,
-                           OverwriteWithHttpOnly,
-                           Deregister,
-                           DeregisterMultiple,
-                           DispatchRace,
-                           DeregisterRace,
-                           DeregisterRaceMultiple,
-                           MultipleSubscriptions);
+TYPED_TEST_P(CookieStoreChangeNamedTest, SubscriptionOutlivesStore) {
+  if (!TypeParam::supports_named_cookie_tracking)
+    return;
 
-REGISTER_TYPED_TEST_CASE_P(CookieStoreChangeUrlTest,
-                           NoCookie,
-                           InitialCookie,
-                           InsertOne,
-                           InsertMany,
-                           InsertFiltering,
-                           DeleteOne,
-                           DeleteTwo,
-                           DeleteFiltering,
-                           Overwrite,
-                           OverwriteFiltering,
-                           OverwriteWithHttpOnly,
-                           Deregister,
-                           DeregisterMultiple,
-                           DispatchRace,
-                           DeregisterRace,
-                           DeregisterRaceMultiple,
-                           DifferentSubscriptionsDisjoint,
-                           DifferentSubscriptionsDomains,
-                           DifferentSubscriptionsPaths,
-                           DifferentSubscriptionsFiltering,
-                           MultipleSubscriptions);
+  std::vector<CookieChange> cookie_changes;
+  std::unique_ptr<CookieChangeSubscription> subscription =
+      this->GetCookieStore()->GetChangeDispatcher().AddCallbackForCookie(
+          this->http_www_foo_.url(), "abc",
+          base::BindRepeating(
+              &CookieStoreChangeTestBase<TypeParam>::OnCookieChange,
+              base::Unretained(&cookie_changes)));
+  this->ResetCookieStore();
 
-REGISTER_TYPED_TEST_CASE_P(CookieStoreChangeNamedTest,
-                           NoCookie,
-                           InitialCookie,
-                           InsertOne,
-                           InsertTwo,
-                           InsertFiltering,
-                           DeleteOne,
-                           DeleteTwo,
-                           DeleteFiltering,
-                           Overwrite,
-                           OverwriteFiltering,
-                           OverwriteWithHttpOnly,
-                           Deregister,
-                           DeregisterMultiple,
-                           DispatchRace,
-                           DeregisterRace,
-                           DeregisterRaceMultiple,
-                           DifferentSubscriptionsDisjoint,
-                           DifferentSubscriptionsDomains,
-                           DifferentSubscriptionsNames,
-                           DifferentSubscriptionsPaths,
-                           DifferentSubscriptionsFiltering,
-                           MultipleSubscriptions);
+  // |subscription| outlives cookie_store - crash should not happen.
+  subscription.reset();
+}
+
+REGISTER_TYPED_TEST_SUITE_P(CookieStoreChangeGlobalTest,
+                            NoCookie,
+                            InitialCookie,
+                            InsertOne,
+                            InsertMany,
+                            DeleteOne,
+                            DeleteTwo,
+                            Overwrite,
+                            OverwriteWithHttpOnly,
+                            Deregister,
+                            DeregisterMultiple,
+                            DispatchRace,
+                            DeregisterRace,
+                            DeregisterRaceMultiple,
+                            MultipleSubscriptions);
+
+REGISTER_TYPED_TEST_SUITE_P(CookieStoreChangeUrlTest,
+                            NoCookie,
+                            InitialCookie,
+                            InsertOne,
+                            InsertMany,
+                            InsertFiltering,
+                            DeleteOne,
+                            DeleteTwo,
+                            DeleteFiltering,
+                            Overwrite,
+                            OverwriteFiltering,
+                            OverwriteWithHttpOnly,
+                            Deregister,
+                            DeregisterMultiple,
+                            DispatchRace,
+                            DeregisterRace,
+                            DeregisterRaceMultiple,
+                            DifferentSubscriptionsDisjoint,
+                            DifferentSubscriptionsDomains,
+                            DifferentSubscriptionsPaths,
+                            DifferentSubscriptionsFiltering,
+                            MultipleSubscriptions);
+
+REGISTER_TYPED_TEST_SUITE_P(CookieStoreChangeNamedTest,
+                            NoCookie,
+                            InitialCookie,
+                            InsertOne,
+                            InsertTwo,
+                            InsertFiltering,
+                            DeleteOne,
+                            DeleteTwo,
+                            DeleteFiltering,
+                            Overwrite,
+                            OverwriteFiltering,
+                            OverwriteWithHttpOnly,
+                            Deregister,
+                            DeregisterMultiple,
+                            DispatchRace,
+                            DeregisterRace,
+                            DeregisterRaceMultiple,
+                            DifferentSubscriptionsDisjoint,
+                            DifferentSubscriptionsDomains,
+                            DifferentSubscriptionsNames,
+                            DifferentSubscriptionsPaths,
+                            DifferentSubscriptionsFiltering,
+                            MultipleSubscriptions,
+                            SubscriptionOutlivesStore);
 
 }  // namespace net
 

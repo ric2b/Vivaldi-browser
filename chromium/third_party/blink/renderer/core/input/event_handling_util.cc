@@ -14,7 +14,7 @@
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 
 namespace blink {
-namespace EventHandlingUtil {
+namespace event_handling_util {
 
 HitTestResult HitTestResultInFrame(
     LocalFrame* frame,
@@ -25,8 +25,8 @@ HitTestResult HitTestResultInFrame(
 
   if (!frame || !frame->ContentLayoutObject())
     return result;
-  if (frame->View()) {
-    FloatRect rect(FloatPoint(), FloatSize(frame->View()->Size()));
+  if (LocalFrameView* frame_view = frame->View()) {
+    LayoutRect rect(LayoutPoint(), LayoutSize(frame_view->Size()));
     if (!location.Intersects(rect))
       return result;
   }
@@ -100,11 +100,6 @@ ScrollableArea* AssociatedScrollableArea(const PaintLayer* layer) {
 }
 
 ContainerNode* ParentForClickEvent(const Node& node) {
-  // IE doesn't dispatch click events for mousedown/mouseup events across form
-  // controls.
-  if (node.IsHTMLElement() && ToHTMLElement(node).IsInteractiveContent())
-    return nullptr;
-
   return FlatTreeTraversal::Parent(node);
 }
 
@@ -129,7 +124,7 @@ MouseEventWithHitTestResults PerformMouseEventHitTest(
       mev);
 }
 
-LocalFrame* SubframeForTargetNode(Node* node) {
+LocalFrame* SubframeForTargetNode(Node* node, bool* is_remote_frame) {
   if (!node)
     return nullptr;
 
@@ -141,18 +136,30 @@ LocalFrame* SubframeForTargetNode(Node* node) {
       ToLayoutEmbeddedContent(layout_object)->ChildFrameView();
   if (!frame_view)
     return nullptr;
-  if (!frame_view->IsLocalFrameView())
+  auto* local_frame_view = DynamicTo<LocalFrameView>(frame_view);
+  if (!local_frame_view) {
+    if (is_remote_frame)
+      *is_remote_frame = true;
     return nullptr;
+  }
 
-  return &ToLocalFrameView(frame_view)->GetFrame();
+  return &local_frame_view->GetFrame();
 }
 
-LocalFrame* SubframeForHitTestResult(
-    const MouseEventWithHitTestResults& hit_test_result) {
+LocalFrame* GetTargetSubframe(
+    const MouseEventWithHitTestResults& hit_test_result,
+    Node* capturing_node,
+    bool* is_remote_frame) {
+  if (capturing_node) {
+    return event_handling_util::SubframeForTargetNode(capturing_node,
+                                                      is_remote_frame);
+  }
+
   if (!hit_test_result.IsOverEmbeddedContentView())
     return nullptr;
-  return SubframeForTargetNode(hit_test_result.InnerNode());
+
+  return SubframeForTargetNode(hit_test_result.InnerNode(), is_remote_frame);
 }
 
-}  // namespace EventHandlingUtil
+}  // namespace event_handling_util
 }  // namespace blink

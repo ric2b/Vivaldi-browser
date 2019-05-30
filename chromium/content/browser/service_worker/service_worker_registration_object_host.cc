@@ -4,12 +4,15 @@
 
 #include "content/browser/service_worker/service_worker_registration_object_host.h"
 
+#include "base/bind.h"
+#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "content/browser/service_worker/service_worker_consts.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_object_host.h"
 #include "content/browser/service_worker/service_worker_provider_host.h"
 #include "content/common/service_worker/service_worker_utils.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/http/http_util.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
@@ -85,9 +88,9 @@ ServiceWorkerRegistrationObjectHost::ServiceWorkerRegistrationObjectHost(
   DCHECK(registration_.get());
   DCHECK(provider_host_);
   registration_->AddListener(this);
-  bindings_.set_connection_error_handler(
-      base::Bind(&ServiceWorkerRegistrationObjectHost::OnConnectionError,
-                 base::Unretained(this)));
+  bindings_.set_connection_error_handler(base::BindRepeating(
+      &ServiceWorkerRegistrationObjectHost::OnConnectionError,
+      base::Unretained(this)));
 }
 
 ServiceWorkerRegistrationObjectHost::~ServiceWorkerRegistrationObjectHost() {
@@ -98,9 +101,9 @@ ServiceWorkerRegistrationObjectHost::~ServiceWorkerRegistrationObjectHost() {
 blink::mojom::ServiceWorkerRegistrationObjectInfoPtr
 ServiceWorkerRegistrationObjectHost::CreateObjectInfo() {
   auto info = blink::mojom::ServiceWorkerRegistrationObjectInfo::New();
-  info->options = blink::mojom::ServiceWorkerRegistrationOptions::New(
-      registration_->pattern(), registration_->update_via_cache());
   info->registration_id = registration_->id();
+  info->scope = registration_->scope();
+  info->update_via_cache = registration_->update_via_cache();
   bindings_.AddBinding(this, mojo::MakeRequest(&info->host_ptr_info));
   info->request = mojo::MakeRequest(&remote_registration_);
 
@@ -115,12 +118,12 @@ ServiceWorkerRegistrationObjectHost::CreateObjectInfo() {
 
 void ServiceWorkerRegistrationObjectHost::OnVersionAttributesChanged(
     ServiceWorkerRegistration* registration,
-    ChangedVersionAttributesMask changed_mask,
+    blink::mojom::ChangedServiceWorkerObjectsMaskPtr changed_mask,
     const ServiceWorkerRegistrationInfo& info) {
   DCHECK_EQ(registration->id(), registration_->id());
-  SetVersionAttributes(changed_mask, registration->installing_version(),
-                       registration->waiting_version(),
-                       registration->active_version());
+  SetServiceWorkerObjects(
+      std::move(changed_mask), registration->installing_version(),
+      registration->waiting_version(), registration->active_version());
 }
 
 void ServiceWorkerRegistrationObjectHost::OnUpdateViaCacheChanged(
@@ -131,11 +134,9 @@ void ServiceWorkerRegistrationObjectHost::OnUpdateViaCacheChanged(
 void ServiceWorkerRegistrationObjectHost::OnRegistrationFailed(
     ServiceWorkerRegistration* registration) {
   DCHECK_EQ(registration->id(), registration_->id());
-  ChangedVersionAttributesMask changed_mask(
-      ChangedVersionAttributesMask::INSTALLING_VERSION |
-      ChangedVersionAttributesMask::WAITING_VERSION |
-      ChangedVersionAttributesMask::ACTIVE_VERSION);
-  SetVersionAttributes(changed_mask, nullptr, nullptr, nullptr);
+  auto changed_mask =
+      blink::mojom::ChangedServiceWorkerObjectsMask::New(true, true, true);
+  SetServiceWorkerObjects(std::move(changed_mask), nullptr, nullptr, nullptr);
 }
 
 void ServiceWorkerRegistrationObjectHost::OnUpdateFound(
@@ -205,8 +206,8 @@ void ServiceWorkerRegistrationObjectHost::DelayUpdate(
     return;
   }
 
-  BrowserThread::PostDelayedTask(
-      BrowserThread::IO, FROM_HERE,
+  base::PostDelayedTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
       base::BindOnce(std::move(update_function),
                      blink::ServiceWorkerStatusCode::kOk),
       delay);
@@ -220,7 +221,7 @@ void ServiceWorkerRegistrationObjectHost::Unregister(
   }
 
   context_->UnregisterServiceWorker(
-      registration_->pattern(),
+      registration_->scope(),
       base::AdaptCallbackForRepeating(base::BindOnce(
           &ServiceWorkerRegistrationObjectHost::UnregistrationComplete,
           weak_ptr_factory_.GetWeakPtr(), std::move(callback))));
@@ -244,7 +245,7 @@ void ServiceWorkerRegistrationObjectHost::EnableNavigationPreload(
   }
 
   context_->storage()->UpdateNavigationPreloadEnabled(
-      registration_->id(), registration_->pattern().GetOrigin(), enable,
+      registration_->id(), registration_->scope().GetOrigin(), enable,
       base::AdaptCallbackForRepeating(base::BindOnce(
           &ServiceWorkerRegistrationObjectHost::
               DidUpdateNavigationPreloadEnabled,
@@ -291,7 +292,7 @@ void ServiceWorkerRegistrationObjectHost::SetNavigationPreloadHeader(
   }
 
   context_->storage()->UpdateNavigationPreloadHeader(
-      registration_->id(), registration_->pattern().GetOrigin(), value,
+      registration_->id(), registration_->scope().GetOrigin(), value,
       base::AdaptCallbackForRepeating(base::BindOnce(
           &ServiceWorkerRegistrationObjectHost::
               DidUpdateNavigationPreloadHeader,
@@ -371,29 +372,30 @@ void ServiceWorkerRegistrationObjectHost::DidUpdateNavigationPreloadHeader(
                           base::nullopt);
 }
 
-void ServiceWorkerRegistrationObjectHost::SetVersionAttributes(
-    ChangedVersionAttributesMask changed_mask,
+void ServiceWorkerRegistrationObjectHost::SetServiceWorkerObjects(
+    blink::mojom::ChangedServiceWorkerObjectsMaskPtr changed_mask,
     ServiceWorkerVersion* installing_version,
     ServiceWorkerVersion* waiting_version,
     ServiceWorkerVersion* active_version) {
-  if (!changed_mask.changed())
+  if (!(changed_mask->installing || changed_mask->waiting ||
+        changed_mask->active))
     return;
 
   blink::mojom::ServiceWorkerObjectInfoPtr installing;
   blink::mojom::ServiceWorkerObjectInfoPtr waiting;
   blink::mojom::ServiceWorkerObjectInfoPtr active;
-  if (changed_mask.installing_changed()) {
+  if (changed_mask->installing) {
     installing =
         CreateCompleteObjectInfoToSend(provider_host_, installing_version);
   }
-  if (changed_mask.waiting_changed())
+  if (changed_mask->waiting)
     waiting = CreateCompleteObjectInfoToSend(provider_host_, waiting_version);
-  if (changed_mask.active_changed())
+  if (changed_mask->active)
     active = CreateCompleteObjectInfoToSend(provider_host_, active_version);
 
   DCHECK(remote_registration_);
-  remote_registration_->SetVersionAttributes(
-      changed_mask.changed(), std::move(installing), std::move(waiting),
+  remote_registration_->SetServiceWorkerObjects(
+      std::move(changed_mask), std::move(installing), std::move(waiting),
       std::move(active));
 }
 
@@ -422,7 +424,7 @@ bool ServiceWorkerRegistrationObjectHost::CanServeRegistrationObjectHostMethods(
 
   // TODO(falken): This check can be removed once crbug.com/439697 is fixed.
   // (Also see crbug.com/776408)
-  if (provider_host_->document_url().is_empty()) {
+  if (provider_host_->url().is_empty()) {
     std::move(*callback).Run(
         blink::mojom::ServiceWorkerErrorType::kSecurity,
         std::string(error_prefix) +
@@ -431,14 +433,13 @@ bool ServiceWorkerRegistrationObjectHost::CanServeRegistrationObjectHostMethods(
     return false;
   }
 
-  std::vector<GURL> urls = {provider_host_->document_url(),
-                            registration_->pattern()};
+  std::vector<GURL> urls = {provider_host_->url(), registration_->scope()};
   if (!ServiceWorkerUtils::AllOriginsMatchAndCanAccessServiceWorkers(urls)) {
     bindings_.ReportBadMessage(ServiceWorkerConsts::kBadMessageImproperOrigins);
     return false;
   }
 
-  if (!provider_host_->AllowServiceWorker(registration_->pattern())) {
+  if (!provider_host_->AllowServiceWorker(registration_->scope())) {
     std::move(*callback).Run(
         blink::mojom::ServiceWorkerErrorType::kDisabled,
         std::string(error_prefix) +

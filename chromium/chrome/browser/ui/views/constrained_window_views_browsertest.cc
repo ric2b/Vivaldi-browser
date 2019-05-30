@@ -13,7 +13,6 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
@@ -59,8 +58,6 @@ class ConstrainedWindowViewTest : public InProcessBrowserTest {
   ~ConstrainedWindowViewTest() override = default;
 
  private:
-  test::ScopedMacViewsBrowserMode views_mode_{true};
-
   DISALLOW_COPY_AND_ASSIGN(ConstrainedWindowViewTest);
 };
 
@@ -113,7 +110,7 @@ IN_PROC_BROWSER_TEST_F(ConstrainedWindowViewTest, MAYBE_FocusTest) {
   EXPECT_NE(dialog2->GetContentsView(), focus_manager->GetFocusedView());
 
   // Activating the previous tab should bring focus to the dialog.
-  browser()->tab_strip_model()->ActivateTabAt(tab_with_dialog, false);
+  browser()->tab_strip_model()->ActivateTabAt(tab_with_dialog);
   EXPECT_FALSE(ui_test_utils::IsViewFocused(browser(), VIEW_ID_OMNIBOX));
   EXPECT_EQ(dialog2->GetContentsView(), focus_manager->GetFocusedView());
 

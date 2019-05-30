@@ -29,16 +29,19 @@ class PdfNupConverterClient
       int document_cookie,
       uint32_t pages_per_sheet,
       const gfx::Size& page_size,
+      const gfx::Rect& printable_area,
       std::vector<base::ReadOnlySharedMemoryRegion> pdf_page_regions,
       mojom::PdfNupConverter::NupPageConvertCallback callback);
   void DoNupPdfDocumentConvert(
       int document_cookie,
       uint32_t pages_per_sheet,
       const gfx::Size& page_size,
+      const gfx::Rect& printable_area,
       base::ReadOnlySharedMemoryRegion src_pdf_document,
       mojom::PdfNupConverter::NupDocumentConvertCallback callback);
 
  private:
+  friend class content::WebContentsUserData<PdfNupConverterClient>;
   void OnDidNupPdfDocumentConvert(
       int document_cookie,
       mojom::PdfNupConverter::NupDocumentConvertCallback callback,
@@ -60,6 +63,8 @@ class PdfNupConverterClient
   std::map<int, mojom::PdfNupConverterPtr> pdf_nup_converter_map_;
 
   content::WebContents* web_contents_;
+
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
 
   DISALLOW_COPY_AND_ASSIGN(PdfNupConverterClient);
 };

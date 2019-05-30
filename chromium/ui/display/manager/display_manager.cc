@@ -18,6 +18,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/no_destructor.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -27,6 +28,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/display/display.h"
+#include "ui/display/display_features.h"
 #include "ui/display/display_finder.h"
 #include "ui/display/display_observer.h"
 #include "ui/display/display_switches.h"
@@ -39,10 +41,13 @@
 #include "ui/strings/grit/ui_strings.h"
 
 #if defined(OS_CHROMEOS)
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/time/time.h"
 #include "chromeos/system/devicemode.h"
+#include "ui/display/manager/display_change_observer.h"
+#include "ui/display/manager/display_configurator.h"
 #include "ui/display/manager/display_util.h"
+#include "ui/display/types/native_display_delegate.h"
 #endif
 
 #if defined(OS_WIN)
@@ -319,9 +324,6 @@ DisplayManager::BeginEndNotifier::~BeginEndNotifier() {
 DisplayManager::DisplayManager(std::unique_ptr<Screen> screen)
     : screen_(std::move(screen)),
       layout_store_(new DisplayLayoutStore),
-      is_multi_mirroring_enabled_(
-          !base::CommandLine::ForCurrentProcess()->HasSwitch(
-              ::switches::kDisableMultiMirroring)),
       weak_ptr_factory_(this) {
 #if defined(OS_CHROMEOS)
   configure_displays_ = chromeos::IsRunningAsSystemCompositor();
@@ -394,9 +396,9 @@ const DisplayLayout& DisplayManager::GetCurrentDisplayLayout() const {
   }
   DLOG(ERROR) << "DisplayLayout is requested for single display";
   // On release build, just fallback to default instead of blowing up.
-  static DisplayLayout layout;
-  layout.primary_id = active_display_list_[0].id();
-  return layout;
+  static base::NoDestructor<DisplayLayout> layout;
+  layout->primary_id = active_display_list_[0].id();
+  return *layout;
 }
 
 const DisplayLayout& DisplayManager::GetCurrentResolvedDisplayLayout() const {
@@ -411,13 +413,6 @@ DisplayIdList DisplayManager::GetCurrentDisplayIdList() const {
   DisplayIdList display_id_list = CreateDisplayIdList(active_display_list_);
 
   if (IsInSoftwareMirrorMode()) {
-    if (!is_multi_mirroring_enabled_) {
-      CHECK_EQ(2u, num_connected_displays());
-      // This comment is to make it easy to distinguish the crash
-      // between two checks.
-      CHECK_EQ(1u, active_display_list_.size());
-    }
-
     DisplayIdList software_mirroring_display_id_list =
         CreateDisplayIdList(software_mirroring_display_list_);
     display_id_list.insert(display_id_list.end(),
@@ -476,13 +471,19 @@ void DisplayManager::SetLayoutForCurrentDisplays(
 }
 
 const Display& DisplayManager::GetDisplayForId(int64_t display_id) const {
-  Display* display =
+  auto* display =
       const_cast<DisplayManager*>(this)->FindDisplayForId(display_id);
+  // TODO(oshima): This happens when windows in unified desktop have
+  // been moved to a normal window. Fix this.
+  if (!display && display_id != kUnifiedDisplayId)
+    DLOG(ERROR) << "Could not find display:" << display_id;
   return display ? *display : GetInvalidDisplay();
 }
 
 bool DisplayManager::IsDisplayIdValid(int64_t display_id) const {
-  return GetDisplayForId(display_id).is_valid();
+  Display* display =
+      const_cast<DisplayManager*>(this)->FindDisplayForId(display_id);
+  return !!display;
 }
 
 const Display& DisplayManager::FindDisplayContainingPoint(
@@ -592,6 +593,17 @@ bool DisplayManager::SetDisplayMode(int64_t display_id,
         info.set_device_scale_factor(display_mode.device_scale_factor());
         display_property_changed = true;
       }
+
+      if (features::IsListAllDisplayModesEnabled()) {
+        if (info.refresh_rate() != display_mode.refresh_rate()) {
+          info.set_refresh_rate(display_mode.refresh_rate());
+          resolution_changed = true;
+        }
+        if (info.is_interlaced() != display_mode.is_interlaced()) {
+          info.set_is_interlaced(display_mode.is_interlaced());
+          resolution_changed = true;
+        }
+      }
     }
     display_info_list.emplace_back(info);
   }
@@ -608,7 +620,7 @@ bool DisplayManager::SetDisplayMode(int64_t display_id,
     ReconfigureDisplays();
 #if defined(OS_CHROMEOS)
   else if (resolution_changed && configure_displays_)
-    delegate_->display_configurator()->OnConfigurationChanged();
+    display_configurator_->OnConfigurationChanged();
 #endif  // defined(OS_CHROMEOS)
 
   return resolution_changed || display_property_changed;
@@ -621,7 +633,9 @@ void DisplayManager::RegisterDisplayProperty(
     const gfx::Insets* overscan_insets,
     const gfx::Size& resolution_in_pixels,
     float device_scale_factor,
-    float display_zoom_factor) {
+    float display_zoom_factor,
+    float refresh_rate,
+    bool is_interlaced) {
   if (display_info_.find(display_id) == display_info_.end())
     display_info_[display_id] =
         ManagedDisplayInfo(display_id, std::string(), false);
@@ -630,10 +644,9 @@ void DisplayManager::RegisterDisplayProperty(
   if (display_id == kUnifiedDisplayId)
     rotation = Display::ROTATE_0;
 
-  display_info_[display_id].SetRotation(rotation,
-                                        Display::RotationSource::USER);
-  display_info_[display_id].SetRotation(rotation,
-                                        Display::RotationSource::ACTIVE);
+  ManagedDisplayInfo& info = display_info_[display_id];
+  info.SetRotation(rotation, Display::RotationSource::USER);
+  info.SetRotation(rotation, Display::RotationSource::ACTIVE);
 
   // TODO(malaykeshav|oshima): Remove this code in m71.
   //
@@ -650,21 +663,22 @@ void DisplayManager::RegisterDisplayProperty(
   // display zoom enabled, and hence we do not need to port the value for
   // zoom scale from |ui_scale|.
   if (ui_scale < 0) {
-    display_info_[display_id].set_zoom_factor(display_zoom_factor);
+    info.set_zoom_factor(display_zoom_factor);
   } else {
-    display_info_[display_id].set_zoom_factor(1.f / ui_scale);
-    display_info_[display_id].set_is_zoom_factor_from_ui_scale(true);
+    info.set_zoom_factor(1.f / ui_scale);
+    info.set_is_zoom_factor_from_ui_scale(true);
   }
 
   if (overscan_insets)
-    display_info_[display_id].SetOverscanInsets(*overscan_insets);
+    info.SetOverscanInsets(*overscan_insets);
+
+  info.set_refresh_rate(refresh_rate);
+  info.set_is_interlaced(is_interlaced);
 
   if (!resolution_in_pixels.IsEmpty()) {
     DCHECK(!Display::IsInternalDisplayId(display_id));
-    // Default refresh rate, until OnNativeDisplaysChanged() updates us with the
-    // actual display info, is 60 Hz.
-    ManagedDisplayMode mode(resolution_in_pixels, 60.0f, false, false,
-                            device_scale_factor);
+    ManagedDisplayMode mode(resolution_in_pixels, refresh_rate, is_interlaced,
+                            false, device_scale_factor);
     display_modes_[display_id] = mode;
   }
 }
@@ -714,8 +728,7 @@ void DisplayManager::RegisterDisplayRotationProperties(
 bool DisplayManager::GetSelectedModeForDisplayId(
     int64_t display_id,
     ManagedDisplayMode* mode) const {
-  std::map<int64_t, ManagedDisplayMode>::const_iterator iter =
-      display_modes_.find(display_id);
+  auto iter = display_modes_.find(display_id);
   if (iter == display_modes_.end())
     return false;
   *mode = iter->second;
@@ -741,8 +754,7 @@ bool DisplayManager::IsDisplayUIScalingEnabled() const {
 }
 
 gfx::Insets DisplayManager::GetOverscanInsets(int64_t display_id) const {
-  std::map<int64_t, ManagedDisplayInfo>::const_iterator it =
-      display_info_.find(display_id);
+  auto it = display_info_.find(display_id);
   return (it != display_info_.end()) ? it->second.overscan_insets_in_dip()
                                      : gfx::Insets();
 }
@@ -814,10 +826,11 @@ void DisplayManager::OnNativeDisplaysChanged(
       new_display_info_list.emplace_back(display_info);
     }
 
-    ManagedDisplayMode new_mode(display_info.bounds_in_native().size(),
-                                0.0 /* refresh rate */, false /* interlaced */,
-                                false /* native */,
-                                display_info.device_scale_factor());
+    ManagedDisplayMode new_mode(
+        display_info.bounds_in_native().size(), display_info.refresh_rate(),
+        display_info.is_interlaced(), display_info.native(),
+        display_info.device_scale_factor());
+
     const ManagedDisplayInfo::ManagedDisplayModeList& display_modes =
         display_info.display_modes();
     // This is empty the displays are initialized from InitFromCommandLine.
@@ -943,7 +956,7 @@ void DisplayManager::UpdateDisplaysWith(
   std::map<size_t, uint32_t> display_changes;
   std::vector<size_t> added_display_indices;
 
-  Displays::iterator curr_iter = active_display_list_.begin();
+  auto curr_iter = active_display_list_.begin();
   DisplayInfoList::const_iterator new_info_iter = new_display_info_list.begin();
 
   while (curr_iter != active_display_list_.end() ||
@@ -978,8 +991,9 @@ void DisplayManager::UpdateDisplaysWith(
       // the layout.
       // Using display.bounds() and display.work_area() would fail most of the
       // time.
-      if (force_bounds_changed_ || (current_display_info.bounds_in_native() !=
-                                    new_display_info.bounds_in_native()) ||
+      if (force_bounds_changed_ ||
+          (current_display_info.bounds_in_native() !=
+           new_display_info.bounds_in_native()) ||
           (current_display_info.GetOverscanInsetsInPixel() !=
            new_display_info.GetOverscanInsetsInPixel()) ||
           current_display.size() != new_display.size()) {
@@ -1004,7 +1018,7 @@ void DisplayManager::UpdateDisplaysWith(
       new_displays.push_back(new_display);
       ++curr_iter;
       ++new_info_iter;
-    } else if (curr_iter->id() < new_info_iter->id()) {
+    } else if (CompareDisplayIds(curr_iter->id(), new_info_iter->id())) {
       // more displays in current list between ids, which means it is deleted.
       removed_displays.push_back(*curr_iter);
       ++curr_iter;
@@ -1065,11 +1079,13 @@ void DisplayManager::UpdateDisplaysWith(
   active_display_list_.resize(active_display_list_size);
   is_updating_display_list_ = false;
 
+  UpdatePrimaryDisplayIdIfNecessary();
+
   bool notify_primary_change =
       delegate_ ? old_primary.id() != screen_->GetPrimaryDisplay().id() : false;
 
-  for (std::map<size_t, uint32_t>::iterator iter = display_changes.begin();
-       iter != display_changes.end(); ++iter) {
+  for (auto iter = display_changes.begin(); iter != display_changes.end();
+       ++iter) {
     uint32_t metrics = iter->second;
     const Display& updated_display = active_display_list_[iter->first];
 
@@ -1215,12 +1231,40 @@ void DisplayManager::SetUnifiedDesktopMatrix(
   SetDefaultMultiDisplayModeForCurrentDisplays(UNIFIED);
 }
 
-const Display* DisplayManager::GetPrimaryMirroringDisplayForUnifiedDesktop()
-    const {
+Display DisplayManager::GetMirroringDisplayForUnifiedDesktop(
+    DisplayPositionInUnifiedMatrix cell_position) const {
   if (!IsInUnifiedMode())
-    return nullptr;
+    return Display();
 
-  return &software_mirroring_display_list_[0];
+  DCHECK(!current_unified_desktop_matrix_.empty());
+
+  const size_t rows = current_unified_desktop_matrix_.size();
+  const size_t columns = current_unified_desktop_matrix_[0].size();
+
+  int64_t display_id = kInvalidDisplayId;
+  switch (cell_position) {
+    case DisplayPositionInUnifiedMatrix::kTopLeft:
+      display_id = current_unified_desktop_matrix_[0][0];
+      break;
+
+    case DisplayPositionInUnifiedMatrix::kTopRight:
+      display_id = current_unified_desktop_matrix_[0][columns - 1];
+      break;
+
+    case DisplayPositionInUnifiedMatrix::kBottomLeft:
+      display_id = current_unified_desktop_matrix_[rows - 1][0];
+      break;
+  }
+
+  DCHECK_NE(display_id, kInvalidDisplayId);
+
+  for (auto& display : software_mirroring_display_list_) {
+    if (display.id() == display_id)
+      return display;
+  }
+
+  NOTREACHED();
+  return Display();
 }
 
 int DisplayManager::GetMirroringDisplayRowIndexInUnifiedMatrix(
@@ -1240,8 +1284,7 @@ const ManagedDisplayInfo& DisplayManager::GetDisplayInfo(
     int64_t display_id) const {
   DCHECK_NE(kInvalidDisplayId, display_id);
 
-  std::map<int64_t, ManagedDisplayInfo>::const_iterator iter =
-      display_info_.find(display_id);
+  auto iter = display_info_.find(display_id);
   CHECK(iter != display_info_.end()) << display_id;
   return iter->second;
 }
@@ -1260,8 +1303,7 @@ std::string DisplayManager::GetDisplayNameForId(int64_t id) const {
   if (id == kInvalidDisplayId)
     return l10n_util::GetStringUTF8(IDS_DISPLAY_NAME_UNKNOWN);
 
-  std::map<int64_t, ManagedDisplayInfo>::const_iterator iter =
-      display_info_.find(id);
+  auto iter = display_info_.find(id);
   if (iter != display_info_.end() && !iter->second.name().empty())
     return iter->second.name();
 
@@ -1287,18 +1329,20 @@ bool DisplayManager::ShouldSetMirrorModeOn(const DisplayIdList& new_id_list) {
     return true;
   }
 
-  if (num_connected_displays_ <= 1) {
-    // The ChromeOS just boots up or it only has one display. Restore mirror
-    // mode based on the external displays' mirror info stored in the
-    // preferences. Mirror mode should be on if one of the external displays was
-    // in mirror mode before.
+  if (should_restore_mirror_mode_from_display_prefs_ ||
+      num_connected_displays_ <= 1) {
+    // The ChromeOS just boots up, the display prefs have just been loaded, or
+    // we only have one display. Restore mirror mode based on the external
+    // displays' mirror info stored in the preferences. Mirror mode should be on
+    // if one of the external displays was in mirror mode before.
+    should_restore_mirror_mode_from_display_prefs_ = false;
+
     for (int64_t id : new_id_list) {
       if (external_display_mirror_info_.count(
               GetDisplayIdWithoutOutputIndex(id))) {
         return true;
       }
     }
-    return false;
   }
   // Mirror mode should remain unchanged as long as there are more than one
   // connected displays.
@@ -1308,10 +1352,8 @@ bool DisplayManager::ShouldSetMirrorModeOn(const DisplayIdList& new_id_list) {
 void DisplayManager::SetMirrorMode(
     MirrorMode mode,
     const base::Optional<MixedMirrorModeParams>& mixed_params) {
-  if ((is_multi_mirroring_enabled_ && num_connected_displays() < 2) ||
-      (!is_multi_mirroring_enabled_ && num_connected_displays() != 2)) {
+  if (num_connected_displays() < 2)
     return;
-  }
 
   if (mode == MirrorMode::kMixed) {
     // Set mixed mirror mode parameters. This will be used to do two things:
@@ -1330,9 +1372,9 @@ void DisplayManager::SetMirrorMode(
 #if defined(OS_CHROMEOS)
   if (configure_displays_) {
     MultipleDisplayState new_state =
-        enabled ? MULTIPLE_DISPLAY_STATE_DUAL_MIRROR
+        enabled ? MULTIPLE_DISPLAY_STATE_MULTI_MIRROR
                 : MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED;
-    delegate_->display_configurator()->SetDisplayMode(new_state);
+    display_configurator_->SetDisplayMode(new_state);
     return;
   }
 #endif
@@ -1341,7 +1383,8 @@ void DisplayManager::SetMirrorMode(
   ReconfigureDisplays();
 }
 
-void DisplayManager::AddRemoveDisplay() {
+void DisplayManager::AddRemoveDisplay(
+    ManagedDisplayInfo::ManagedDisplayModeList display_modes) {
   DCHECK(!active_display_list_.empty());
 
   DisplayInfoList new_display_info_list;
@@ -1352,13 +1395,33 @@ void DisplayManager::AddRemoveDisplay() {
   new_display_info_list.push_back(first_display);
   // Add if there is only one display connected.
   if (num_connected_displays() == 1) {
+    gfx::Rect host_bounds = first_display.bounds_in_native();
+    if (display_modes.empty()) {
+      display_modes.emplace_back(
+          gfx::Size(600 /* width */, host_bounds.height()),
+          60.0, /* refresh_rate */
+          false /* is_interlaced */, true /* native */);
+    }
+
+    // Find native display mode (or just the first one if there is no
+    // mode marked as native) and create a display with this mode as a default
+    const ManagedDisplayMode* native_display_mode = &(display_modes[0]);
+    for (const ManagedDisplayMode& display_mode : display_modes) {
+      if (display_mode.native()) {
+        native_display_mode = &display_mode;
+        break;
+      }
+    }
+
     const int kVerticalOffsetPx = 100;
     // Layout the 2nd display below the primary as with the real device.
-    gfx::Rect host_bounds = first_display.bounds_in_native();
-    new_display_info_list.push_back(
-        ManagedDisplayInfo::CreateFromSpec(base::StringPrintf(
-            "%d+%d-600x%d", host_bounds.x(),
-            host_bounds.bottom() + kVerticalOffsetPx, host_bounds.height())));
+    ManagedDisplayInfo display = ManagedDisplayInfo::CreateFromSpec(
+        base::StringPrintf("%d+%d-%dx%d", host_bounds.x(),
+                           host_bounds.bottom() + kVerticalOffsetPx,
+                           native_display_mode->size().width(),
+                           native_display_mode->size().height()));
+    display.SetManagedDisplayModes(std::move(display_modes));
+    new_display_info_list.push_back(std::move(display));
   }
   num_connected_displays_ = new_display_info_list.size();
   ClearMirroringSourceAndDestination();
@@ -1380,6 +1443,25 @@ void DisplayManager::ToggleDisplayScaleFactor() {
 }
 
 #if defined(OS_CHROMEOS)
+void DisplayManager::InitConfigurator(
+    std::unique_ptr<NativeDisplayDelegate> delegate) {
+  display_configurator_ = std::make_unique<display::DisplayConfigurator>();
+  display_configurator_->Init(std::move(delegate),
+                              false /* is_panel_fitting_enabled */);
+}
+
+void DisplayManager::ForceInitialConfigureWithObservers(
+    display::DisplayChangeObserver* display_change_observer,
+    display::DisplayConfigurator::Observer* display_error_observer) {
+  // Register |display_change_observer_| first so that the rest of
+  // observer gets invoked after the root windows are configured.
+  display_configurator_->AddObserver(display_change_observer);
+  display_configurator_->AddObserver(display_error_observer);
+  display_configurator_->set_state_controller(display_change_observer);
+  display_configurator_->set_mirroring_controller(this);
+  display_configurator_->ForceInitialConfigure();
+}
+
 void DisplayManager::SetSoftwareMirroring(bool enabled) {
   SetMultiDisplayMode(enabled ? MIRRORING
                               : current_default_multi_display_mode_);
@@ -1501,6 +1583,10 @@ void DisplayManager::UpdateZoomFactor(int64_t display_id, float zoom_factor) {
       break;
     }
   }
+}
+
+bool DisplayManager::HasUnassociatedDisplay() const {
+  return display_configurator_->has_unassociated_display();
 }
 #endif
 
@@ -1661,10 +1747,8 @@ void DisplayManager::CreateSoftwareMirroringDisplayInfo(
   // mirrored.
   switch (multi_display_mode_) {
     case MIRRORING: {
-      if ((is_multi_mirroring_enabled_ && display_info_list->size() < 2) ||
-          (!is_multi_mirroring_enabled_ && display_info_list->size() != 2)) {
+      if (display_info_list->size() < 2)
         return;
-      }
 
       std::set<int64_t> destination_ids;
       int64_t source_id = kInvalidDisplayId;
@@ -1948,10 +2032,6 @@ Display* DisplayManager::FindDisplayForId(int64_t id) {
                    [id](const Display& display) { return display.id() == id; });
   if (iter != active_display_list_.end())
     return &(*iter);
-  // TODO(oshima): This happens when windows in unified desktop have
-  // been moved to a normal window. Fix this.
-  if (id != kUnifiedDisplayId)
-    DLOG(ERROR) << "Could not find display:" << id;
   return nullptr;
 }
 
@@ -2150,6 +2230,19 @@ void DisplayManager::UpdateInfoForRestoringMirrorMode() {
   if (num_connected_displays_ <= 1)
     return;
 
+  // The display prefs have just been loaded and we're waiting for the
+  // reconfiguration of the displays to apply the newly loaded prefs. We should
+  // not overwrite the newly-loaded external display mirror configs.
+  // https://crbug.com/936884.
+  if (should_restore_mirror_mode_from_display_prefs_)
+    return;
+
+  // External displays mirrored because of forced tablet mode mirroring should
+  // not be considered candidates for restoring their mirrored state.
+  // https://crbug.com/919994.
+  if (layout_store_->forced_mirror_mode_for_tablet())
+    return;
+
   for (auto id : GetCurrentDisplayIdList()) {
     if (Display::IsInternalDisplayId(id))
       continue;
@@ -2160,6 +2253,21 @@ void DisplayManager::UpdateInfoForRestoringMirrorMode() {
       external_display_mirror_info_.emplace(masked_id);
     else
       external_display_mirror_info_.erase(masked_id);
+  }
+}
+
+void DisplayManager::UpdatePrimaryDisplayIdIfNecessary() {
+  if (num_connected_displays() < 2)
+    return;
+
+  const display::DisplayIdList list = GetCurrentDisplayIdList();
+  const display::DisplayLayout& layout =
+      layout_store()->GetRegisteredDisplayLayout(list);
+  layout_store()->UpdateDefaultUnified(list, layout.default_unified);
+  if (delegate_ && GetNumDisplays() > 1) {
+    delegate_->SetPrimaryDisplayId(
+        layout.primary_id == display::kInvalidDisplayId ? list[0]
+                                                        : layout.primary_id);
   }
 }
 

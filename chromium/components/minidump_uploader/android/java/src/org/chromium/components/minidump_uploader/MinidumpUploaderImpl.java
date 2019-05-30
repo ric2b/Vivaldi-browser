@@ -7,6 +7,7 @@ package org.chromium.components.minidump_uploader;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.components.minidump_uploader.MinidumpUploadCallable.MinidumpUploadStatus;
 
 import java.io.File;
 
@@ -31,7 +32,7 @@ public class MinidumpUploaderImpl implements MinidumpUploader {
      * Whether the current job has been canceled. This is written to from the main thread, and read
      * from the worker thread.
      */
-    private volatile boolean mCancelUpload = false;
+    private volatile boolean mCancelUpload;
 
     /**
      * The thread used for the actual work of uploading minidumps.
@@ -103,12 +104,13 @@ public class MinidumpUploaderImpl implements MinidumpUploader {
                 Log.i(TAG, "Attempting to upload " + minidump.getName());
                 MinidumpUploadCallable uploadCallable =
                         createMinidumpUploadCallable(minidump, fileManager.getCrashUploadLogFile());
+                @MinidumpUploadStatus
                 int uploadResult = uploadCallable.call();
 
                 // Record metrics about the upload.
-                if (uploadResult == MinidumpUploadCallable.UPLOAD_SUCCESS) {
+                if (uploadResult == MinidumpUploadStatus.SUCCESS) {
                     mDelegate.recordUploadSuccess(minidump);
-                } else if (uploadResult == MinidumpUploadCallable.UPLOAD_FAILURE) {
+                } else if (uploadResult == MinidumpUploadStatus.FAILURE) {
                     // Only record a failure after we have maxed out the allotted tries.
                     // Note: Add 1 to include the most recent failure, since the minidump's filename
                     // is from before the failure.
@@ -135,7 +137,7 @@ public class MinidumpUploaderImpl implements MinidumpUploader {
                 // incremented, even if the upload failed. This is because a common reason for
                 // cancelation is loss of network connectivity, which does result in a failure, but
                 // it's a transient failure rather than something non-recoverable.
-                if (uploadResult == MinidumpUploadCallable.UPLOAD_FAILURE) {
+                if (uploadResult == MinidumpUploadStatus.FAILURE) {
                     String newName = CrashFileManager.tryIncrementAttemptNumber(minidump);
                     if (newName == null) {
                         Log.w(TAG, "Failed to increment attempt number of " + minidump);

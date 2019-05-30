@@ -8,19 +8,14 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/location.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/time/tick_clock.h"
 #include "base/time/time.h"
-#include "chromeos/components/proximity_auth/logging/logging.h"
+#include "chromeos/components/multidevice/logging/logging.h"
 #include "chromeos/components/proximity_auth/metrics.h"
 #include "chromeos/components/proximity_auth/proximity_auth_pref_manager.h"
-#include "chromeos/components/proximity_auth/proximity_monitor_observer.h"
 #include "chromeos/services/secure_channel/public/cpp/client/client_channel.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
-
-using device::BluetoothDevice;
 
 namespace proximity_auth {
 
@@ -34,13 +29,11 @@ const double kRssiSampleWeight = 0.3;
 const int kDefaultRssiThreshold = -70;
 
 ProximityMonitorImpl::ProximityMonitorImpl(
-    cryptauth::RemoteDeviceRef remote_device,
+    chromeos::multidevice::RemoteDeviceRef remote_device,
     chromeos::secure_channel::ClientChannel* channel,
-    cryptauth::Connection* connection,
     ProximityAuthPrefManager* pref_manager)
     : remote_device_(remote_device),
       channel_(channel),
-      connection_(connection),
       pref_manager_(pref_manager),
       remote_device_is_in_proximity_(false),
       is_active_(false),
@@ -49,8 +42,8 @@ ProximityMonitorImpl::ProximityMonitorImpl(
       weak_ptr_factory_(this) {
   if (device::BluetoothAdapterFactory::IsBluetoothSupported()) {
     device::BluetoothAdapterFactory::GetAdapter(
-        base::Bind(&ProximityMonitorImpl::OnAdapterInitialized,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&ProximityMonitorImpl::OnAdapterInitialized,
+                       weak_ptr_factory_.GetWeakPtr()));
   } else {
     PA_LOG(ERROR) << "[Proximity] Proximity monitoring unavailable: "
                   << "Bluetooth is unsupported on this platform.";
@@ -81,20 +74,12 @@ void ProximityMonitorImpl::RecordProximityMetricsOnAuthSuccess() {
                                     : metrics::kUnknownProximityValue;
 
   std::string remote_device_model = metrics::kUnknownDeviceModel;
-  cryptauth::RemoteDeviceRef remote_device = remote_device_;
+  chromeos::multidevice::RemoteDeviceRef remote_device = remote_device_;
   if (!remote_device.name().empty())
     remote_device_model = remote_device.name();
 
   metrics::RecordAuthProximityRollingRssi(round(rssi_rolling_average));
   metrics::RecordAuthProximityRemoteDeviceModelHash(remote_device_model);
-}
-
-void ProximityMonitorImpl::AddObserver(ProximityMonitorObserver* observer) {
-  observers_.AddObserver(observer);
-}
-
-void ProximityMonitorImpl::RemoveObserver(ProximityMonitorObserver* observer) {
-  observers_.RemoveObserver(observer);
 }
 
 void ProximityMonitorImpl::OnAdapterInitialized(
@@ -136,62 +121,29 @@ bool ProximityMonitorImpl::ShouldPoll() const {
 void ProximityMonitorImpl::Poll() {
   DCHECK(ShouldPoll());
 
-  if (base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi)) {
-    if (channel_->is_disconnected()) {
-      PA_LOG(ERROR) << "Channel is disconnected.";
-      ClearProximityState();
-      return;
-    }
-
-    channel_->GetConnectionMetadata(
-        base::BindOnce(&ProximityMonitorImpl::OnGetConnectionMetadata,
-                       weak_ptr_factory_.GetWeakPtr()));
-  } else {
-    std::string address = connection_->GetDeviceAddress();
-    BluetoothDevice* device = bluetooth_adapter_->GetDevice(address);
-
-    if (!device) {
-      PA_LOG(ERROR) << "Unknown Bluetooth device with address " << address;
-      ClearProximityState();
-      return;
-    }
-    if (!device->IsConnected()) {
-      PA_LOG(ERROR) << "Bluetooth device with address " << address
-                    << " is not connected.";
-      ClearProximityState();
-      return;
-    }
-
-    device->GetConnectionInfo(
-        base::BindRepeating(&ProximityMonitorImpl::OnConnectionInfo,
-                            weak_ptr_factory_.GetWeakPtr()));
+  if (channel_->is_disconnected()) {
+    PA_LOG(ERROR) << "Channel is disconnected.";
+    ClearProximityState();
+    return;
   }
+
+  channel_->GetConnectionMetadata(
+      base::BindOnce(&ProximityMonitorImpl::OnGetConnectionMetadata,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ProximityMonitorImpl::OnGetConnectionMetadata(
     chromeos::secure_channel::mojom::ConnectionMetadataPtr
         connection_metadata) {
-  DCHECK(base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi));
-
   if (connection_metadata->bluetooth_connection_metadata)
     OnGetRssi(connection_metadata->bluetooth_connection_metadata->current_rssi);
   else
     OnGetRssi(base::nullopt);
 }
 
-void ProximityMonitorImpl::OnConnectionInfo(
-    const BluetoothDevice::ConnectionInfo& connection_info) {
-  DCHECK(!base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi));
-
-  if (connection_info.rssi == BluetoothDevice::kUnknownPower)
-    OnGetRssi(base::nullopt);
-  else
-    OnGetRssi(connection_info.rssi);
-}
-
 void ProximityMonitorImpl::OnGetRssi(const base::Optional<int32_t>& rssi) {
   if (!is_active_) {
-    PA_LOG(INFO) << "Received RSSI after stopping.";
+    PA_LOG(VERBOSE) << "Received RSSI after stopping.";
     return;
   }
 
@@ -205,10 +157,8 @@ void ProximityMonitorImpl::OnGetRssi(const base::Optional<int32_t>& rssi) {
 }
 
 void ProximityMonitorImpl::ClearProximityState() {
-  if (is_active_ && remote_device_is_in_proximity_) {
-    for (auto& observer : observers_)
-      observer.OnProximityStateChanged();
-  }
+  if (is_active_ && remote_device_is_in_proximity_)
+    NotifyProximityStateChanged();
 
   remote_device_is_in_proximity_ = false;
   rssi_rolling_average_.reset();
@@ -231,16 +181,15 @@ void ProximityMonitorImpl::CheckForProximityStateChange() {
       rssi_rolling_average_ && *rssi_rolling_average_ > rssi_threshold_;
 
   if (rssi_rolling_average_ && !is_now_in_proximity) {
-    PA_LOG(INFO) << "Not in proximity. Rolling RSSI average: "
-                 << *rssi_rolling_average_;
+    PA_LOG(VERBOSE) << "Not in proximity. Rolling RSSI average: "
+                    << *rssi_rolling_average_;
   }
 
   if (remote_device_is_in_proximity_ != is_now_in_proximity) {
-    PA_LOG(INFO) << "[Proximity] Updated proximity state: "
-                 << (is_now_in_proximity ? "proximate" : "distant");
+    PA_LOG(VERBOSE) << "[Proximity] Updated proximity state: "
+                    << (is_now_in_proximity ? "proximate" : "distant");
     remote_device_is_in_proximity_ = is_now_in_proximity;
-    for (auto& observer : observers_)
-      observer.OnProximityStateChanged();
+    NotifyProximityStateChanged();
   }
 }
 

@@ -15,8 +15,32 @@
  *     See returnFlagsExperiments() for the structure of this object.
  */
 function renderTemplate(experimentalFeaturesData) {
-  // This is the javascript code that processes the template:
-  jstProcess(new JsEvalContext(experimentalFeaturesData), $('flagsTemplate'));
+  var templateToProcess = jstGetTemplate('tab-content-available-template');
+  var content = $('tab-content-available');
+
+  if (content.childNodes > 0) {
+    // Already processed, use the internal content area template.
+    templateToProcess =  content;
+  } else {
+    // Duplicate the template into the content area.
+    // This prevents the misrendering of available flags when the template
+    // is rerendered. Example - resetting flags.
+    content.textContent = '';
+    content.appendChild(templateToProcess);
+  }
+
+  // Process the templates: available / unavailable flags.
+  jstProcess(new JsEvalContext(experimentalFeaturesData), templateToProcess);
+
+  // Unavailable flags are not shown on iOS.
+  var unavailableTemplate = $('tab-content-unavailable');
+  if (unavailableTemplate) {
+    jstProcess(new JsEvalContext(experimentalFeaturesData),
+        $('tab-content-unavailable'));
+  }
+
+  // Update the restart container.
+  jstProcess(new JsEvalContext(experimentalFeaturesData), $('needs-restart'));
 
   // Add handlers to dynamically created HTML elements.
   var elements = document.getElementsByClassName('experiment-select');
@@ -44,9 +68,10 @@ function renderTemplate(experimentalFeaturesData) {
     };
   }
 
-  elements = document.getElementsByClassName('experiment-restart-button');
-  for (var i = 0; i < elements.length; ++i) {
-    elements[i].onclick = restartBrowser;
+  var element = $('experiment-restart-button');
+  assert(element || cr.isIOS);
+  if (element) {
+    element.onclick = restartBrowser;
   }
 
   // Tab panel selection.
@@ -89,8 +114,9 @@ function highlightReferencedFlag() {
     var el = document.querySelector(window.location.hash);
     if (el && !el.classList.contains('referenced')) {
       // Unhighlight whatever's highlighted.
-      if (document.querySelector('.referenced'))
+      if (document.querySelector('.referenced')) {
         document.querySelector('.referenced').classList.remove('referenced');
+      }
       // Highlight the referenced element.
       el.classList.add('referenced');
 
@@ -172,15 +198,17 @@ function returnExperimentalFeatures(experimentalFeaturesData) {
   var bodyContainer = $('body-container');
   renderTemplate(experimentalFeaturesData);
 
-  if (experimentalFeaturesData.showBetaChannelPromotion)
+  if (experimentalFeaturesData.showBetaChannelPromotion) {
     $('channel-promo-beta').hidden = false;
-  else if (experimentalFeaturesData.showDevChannelPromotion)
+  } else if (experimentalFeaturesData.showDevChannelPromotion) {
     $('channel-promo-dev').hidden = false;
+  }
 
   bodyContainer.style.visibility = 'visible';
   var ownerWarningDiv = $('owner-warning');
-  if (ownerWarningDiv)
+  if (ownerWarningDiv) {
     ownerWarningDiv.hidden = !experimentalFeaturesData.showOwnerWarning;
+  }
 }
 
 /**
@@ -464,8 +492,12 @@ FlagSearch.prototype = {
   }
 };
 
-// Get and display the data upon loading.
-document.addEventListener('DOMContentLoaded', requestExperimentalFeaturesData);
+document.addEventListener('DOMContentLoaded', function() {
+  // Get and display the data upon loading.
+  requestExperimentalFeaturesData();
+
+  cr.ui.FocusOutlineManager.forDocument(document);
+});
 
 // Update the highlighted flag when the hash changes.
 window.addEventListener('hashchange', highlightReferencedFlag);

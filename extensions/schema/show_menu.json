@@ -179,18 +179,22 @@
     ],
     "functions": [
       {
-        "name": "create",
+        "name": "showContextMenu",
         "type": "function",
         "description": "Creates a new context menu.",
         "parameters": [
           {
+            "type": "array",
+            "name": "items",
+            "items": {"$ref": "MenuItem"},
+            "description": "Menu items with string label. When clicked a callback is called with a zero based index."
+          },
+          {
             "type": "object",
-            "name": "createProperties",
+            "name": "properties",
             "properties": {
-                "mode": {"type": "string", "description": "Menu mode. 'context' or 'menubar'"},
-                "left": {"type": "integer", "description": "Left position of menu, screen coordinates."},
-                "top": {"type": "integer", "description": "Top position of menu, screen coordinates."},
-                "items": {"type": "array", "items": {"$ref": "MenuItem"}, "description": "Menu items with string label. When clicked a callback is called with a zero based index."}
+                "left": {"type": "number", "description": "Left position of menu, screen coordinates."},
+                "top": {"type": "number", "description": "Top position of menu, screen coordinates."}
             }
           },
           {
@@ -205,7 +209,24 @@
               }
             ]
           }
-
+        ]
+      },
+      {
+        "name": "setupMainMenu",
+        "type": "function",
+        "description": "Setup application's main menu",
+        "parameters": [
+          {
+            "name": "items",
+            "type": "array",
+            "items": {"$ref": "MenuItem"},
+            "description": "Menu items with string label."
+          },
+          {
+            "name": "mode",
+            "type": "string",
+            "description": "Menu mode. 'context' or 'menubar'"
+          }
         ]
       }
     ],
@@ -215,11 +236,17 @@
         "type": "function",
         "description": "Fired when a main menu command is selected.",
         "parameters": [
+           {
+            "type": "integer",
+            "name": "windowId",
+            "minimum": 0,
+            "description": "id of window where command was executed"
+          },
           {
             "type": "integer",
             "name": "commandId",
             "minimum": 0,
-            "description":"id of the command selected."
+            "description": "id of the command selected."
           },
           {
             "type": "string",
@@ -231,7 +258,13 @@
       {
         "name": "onOpen",
         "type": "function",
-        "description": "Fired when a menu opens.",
+        "description": "Fires before menu opens",
+        "parameters": []
+      },
+      {
+        "name": "onClose",
+        "type": "function",
+        "description": "Fires before menu closes",
         "parameters": []
       },
       {

@@ -1,6 +1,11 @@
 include_rules = [
+  # Chrome OS depends on views, so allow code in this directory to depend on
+  # ui/views.
+  "+chrome/browser/ui/views",
+
   "+media/audio/sounds",
   "+services/device/public/mojom",
+  "+services/network",
 ]
 
 specific_include_rules = {

@@ -9,13 +9,12 @@
 #include <stdint.h>
 
 #include <memory>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/compiler_specific.h"
-#include "base/containers/hash_tables.h"
+#include "base/hash.h"
 #include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
@@ -41,7 +40,6 @@ class USB_MIDI_EXPORT MidiManagerUsb : public MidiManager,
 
   // MidiManager implementation.
   void StartInitialization() override;
-  void Finalize() override;
   void DispatchSendMidiData(MidiManagerClient* client,
                             uint32_t port_index,
                             const std::vector<uint8_t>& data,
@@ -69,16 +67,12 @@ class USB_MIDI_EXPORT MidiManagerUsb : public MidiManager,
   const UsbMidiInputStream* input_stream() const { return input_stream_.get(); }
 
  private:
-  using Callback = base::OnceCallback<void(mojom::Result)>;
-
   // Initializes this object.
-  // When the initialization finishes, |callback| will be called with the
-  // result.
+  // When the initialization finishes, CompleteInitialization will be called
+  // with the result on the same thread, but asynchronously.
   // When this factory is destroyed during the operation, the operation
-  // will be canceled silently (i.e. |callback| will not be called).
-  // The function is public just for unit tests. Do not call this function
-  // outside code for testing.
-  void Initialize(Callback callback);
+  // will be canceled silently (i.e. CompleteInitialization will not be called).
+  void Initialize();
 
   void OnEnumerateDevicesDone(bool result, UsbMidiDevice::Devices* devices);
   bool AddPorts(UsbMidiDevice* device, int device_id);
@@ -93,10 +87,11 @@ class USB_MIDI_EXPORT MidiManagerUsb : public MidiManager,
   std::vector<std::unique_ptr<UsbMidiOutputStream>> output_streams_;
   std::unique_ptr<UsbMidiInputStream> input_stream_;
 
-  Callback initialize_callback_;
-
   // A map from <endpoint_number, cable_number> to the index of input jacks.
-  base::hash_map<std::pair<int, int>, size_t> input_jack_dictionary_;
+  std::unordered_map<std::pair<int, int>,
+                     size_t,
+                     base::IntPairHash<std::pair<int, int>>>
+      input_jack_dictionary_;
 
   DISALLOW_COPY_AND_ASSIGN(MidiManagerUsb);
 };

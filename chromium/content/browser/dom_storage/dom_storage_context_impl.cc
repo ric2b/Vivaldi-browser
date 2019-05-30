@@ -12,14 +12,13 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/guid.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -28,11 +27,10 @@
 #include "content/browser/dom_storage/dom_storage_namespace.h"
 #include "content/browser/dom_storage/dom_storage_task_runner.h"
 #include "content/browser/dom_storage/session_storage_database.h"
-#include "content/common/dom_storage/dom_storage_namespace_ids.h"
 #include "content/common/dom_storage/dom_storage_types.h"
 #include "content/public/browser/dom_storage_context.h"
-#include "content/public/browser/local_storage_usage_info.h"
 #include "content/public/browser/session_storage_usage_info.h"
+#include "content/public/browser/storage_usage_info.h"
 #include "storage/browser/quota/special_storage_policy.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -110,7 +108,7 @@ DOMStorageNamespace* DOMStorageContextImpl::GetStorageNamespace(
     const std::string& namespace_id) {
   if (is_shutdown_)
     return nullptr;
-  StorageNamespaceMap::iterator found = namespaces_.find(namespace_id);
+  auto found = namespaces_.find(namespace_id);
   if (found == namespaces_.end())
     return nullptr;
   return found->second.get();
@@ -302,7 +300,7 @@ void DOMStorageContextImpl::CloneSessionNamespace(
     return;
   DCHECK(!existing_id.empty());
   DCHECK(!new_id.empty());
-  StorageNamespaceMap::iterator found = namespaces_.find(existing_id);
+  auto found = namespaces_.find(existing_id);
   if (found != namespaces_.end()) {
     namespaces_[new_id] = found->second->Clone(new_id);
     return;

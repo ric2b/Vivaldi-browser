@@ -16,6 +16,8 @@
 
 namespace web {
 
+class NavigationItemImpl;
+
 // Tracks information related to a single navigation.
 class NavigationContextImpl : public NavigationContext {
  public:
@@ -58,7 +60,6 @@ class NavigationContextImpl : public NavigationContext {
   void SetError(NSError* error);
   void SetResponseHeaders(
       const scoped_refptr<net::HttpResponseHeaders>& response_headers);
-  void SetIsRendererInitiated(bool is_renderer_initiated);
 
   // Optional unique id of the navigation item associated with this navigaiton.
   int GetNavigationItemUniqueID() const;
@@ -85,6 +86,27 @@ class NavigationContextImpl : public NavigationContext {
   bool IsNativeContentPresented() const;
   void SetIsNativeContentPresented(bool is_native_content_presented);
 
+  // true if this navigation context is a placeholder navigation.
+  bool IsPlaceholderNavigation() const;
+  void SetPlaceholderNavigation(bool flag);
+
+  // MIMEType of the navigation.
+  void SetMimeType(NSString* mime_type);
+  NSString* GetMimeType() const;
+
+  // Returns pending navigation item.
+  NavigationItemImpl* GetItem();
+
+  // Similar to GetItem(), but this method transfers the ownership to the
+  // caller. Clients may use this method to commit navigation item or transfer
+  // the item to a different navigation context or back to the navigation
+  // manager.
+  std::unique_ptr<NavigationItemImpl> ReleaseItem();
+
+  // Stores pending navigation item. Clients may use this method to store
+  // pending navigation item after navigation context was created.
+  void SetItem(std::unique_ptr<NavigationItemImpl> item);
+
  private:
   NavigationContextImpl(WebState* web_state,
                         const GURL& url,
@@ -101,7 +123,7 @@ class NavigationContextImpl : public NavigationContext {
   bool has_committed_ = false;
   bool is_download_ = false;
   bool is_post_ = false;
-  NSError* error_;
+  NSError* error_ = nil;
   scoped_refptr<net::HttpResponseHeaders> response_headers_;
   bool is_renderer_initiated_ = false;
   int navigation_item_unique_id_ = -1;
@@ -109,6 +131,14 @@ class NavigationContextImpl : public NavigationContext {
   bool is_loading_error_page_ = false;
   bool is_loading_html_string_ = false;
   bool is_native_content_presented_ = false;
+  bool is_placeholder_navigation_ = false;
+  NSString* mime_type_ = nil;
+
+  // Holds pending navigation item in this object. Pending item is stored in
+  // NavigationContext after context is created. The item is still stored in
+  // NavigationManager if the navigated was requested, but context does not yet
+  // exist or when navigation was aborted.
+  std::unique_ptr<NavigationItemImpl> item_;
 
   DISALLOW_COPY_AND_ASSIGN(NavigationContextImpl);
 };

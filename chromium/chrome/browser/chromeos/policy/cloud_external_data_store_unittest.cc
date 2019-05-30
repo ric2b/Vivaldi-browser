@@ -11,6 +11,7 @@
 #include "base/compiler_specific.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/test/test_simple_task_runner.h"
 #include "components/policy/core/common/cloud/resource_cache.h"
 #include "crypto/sha2.h"
@@ -57,27 +58,28 @@ CouldExternalDataStoreTest::CouldExternalDataStoreTest()
 
 void CouldExternalDataStoreTest::SetUp() {
   ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
-  resource_cache_.reset(new ResourceCache(temp_dir_.GetPath(), task_runner_));
+  resource_cache_.reset(new ResourceCache(temp_dir_.GetPath(), task_runner_,
+                                          /* max_cache_size */ base::nullopt));
 }
 
 TEST_F(CouldExternalDataStoreTest, StoreAndLoad) {
   // Write an entry to a store.
   CloudExternalDataStore store(kKey1, task_runner_, resource_cache_.get());
-  EXPECT_TRUE(store.Store(kPolicy1, kData1Hash, kData1));
+  EXPECT_FALSE(store.Store(kPolicy1, kData1Hash, kData1).empty());
 
   // Check that loading and verifying the entry against an invalid hash fails.
   std::string data;
-  EXPECT_FALSE(store.Load(kPolicy1, kData2Hash, kMaxSize, &data));
+  EXPECT_TRUE(store.Load(kPolicy1, kData2Hash, kMaxSize, &data).empty());
 
   // Check that loading and verifying the entry against its hash succeeds.
-  EXPECT_TRUE(store.Load(kPolicy1, kData1Hash, kMaxSize, &data));
+  EXPECT_FALSE(store.Load(kPolicy1, kData1Hash, kMaxSize, &data).empty());
   EXPECT_EQ(kData1, data);
 }
 
 TEST_F(CouldExternalDataStoreTest, StoreTooLargeAndLoad) {
   // Write an entry to a store.
   CloudExternalDataStore store(kKey1, task_runner_, resource_cache_.get());
-  EXPECT_TRUE(store.Store(kPolicy1, kData1Hash, kData2));
+  EXPECT_FALSE(store.Store(kPolicy1, kData1Hash, kData2).empty());
 
   // Check that the entry has been written to the resource cache backing the
   // store.
@@ -89,7 +91,7 @@ TEST_F(CouldExternalDataStoreTest, StoreTooLargeAndLoad) {
   // Check that loading the entry fails when the maximum allowed data size is
   // smaller than the entry size.
   std::string data;
-  EXPECT_FALSE(store.Load(kPolicy1, kData1Hash, 1, &data));
+  EXPECT_TRUE(store.Load(kPolicy1, kData1Hash, 1, &data).empty());
 
   // Verify that the oversized entry has been detected and removed from the
   // resource cache.
@@ -100,7 +102,7 @@ TEST_F(CouldExternalDataStoreTest, StoreTooLargeAndLoad) {
 TEST_F(CouldExternalDataStoreTest, StoreInvalidAndLoad) {
   // Construct a store entry whose hash and contents do not match.
   CloudExternalDataStore store(kKey1, task_runner_, resource_cache_.get());
-  EXPECT_TRUE(store.Store(kPolicy1, kData1Hash, kData2));
+  EXPECT_FALSE(store.Store(kPolicy1, kData1Hash, kData2).empty());
 
   // Check that the entry has been written to the resource cache backing the
   // store.
@@ -111,7 +113,7 @@ TEST_F(CouldExternalDataStoreTest, StoreInvalidAndLoad) {
 
   // Check that loading and verifying the entry against its hash fails.
   std::string data;
-  EXPECT_FALSE(store.Load(kPolicy1, kData1Hash, kMaxSize, &data));
+  EXPECT_TRUE(store.Load(kPolicy1, kData1Hash, kMaxSize, &data).empty());
 
   // Verify that the corrupted entry has been detected and removed from the
   // resource cache.
@@ -122,14 +124,14 @@ TEST_F(CouldExternalDataStoreTest, StoreInvalidAndLoad) {
 TEST_F(CouldExternalDataStoreTest, Prune) {
   // Write two entries to a store.
   CloudExternalDataStore store(kKey1, task_runner_, resource_cache_.get());
-  EXPECT_TRUE(store.Store(kPolicy1, kData1Hash, kData1));
-  EXPECT_TRUE(store.Store(kPolicy2, kData2Hash, kData2));
+  EXPECT_FALSE(store.Store(kPolicy1, kData1Hash, kData1).empty());
+  EXPECT_FALSE(store.Store(kPolicy2, kData2Hash, kData2).empty());
 
   // Check that loading and verifying the entries against their hashes succeeds.
   std::string data;
-  EXPECT_TRUE(store.Load(kPolicy1, kData1Hash, kMaxSize, &data));
+  EXPECT_FALSE(store.Load(kPolicy1, kData1Hash, kMaxSize, &data).empty());
   EXPECT_EQ(kData1, data);
-  EXPECT_TRUE(store.Load(kPolicy2, kData2Hash, kMaxSize, &data));
+  EXPECT_FALSE(store.Load(kPolicy2, kData2Hash, kMaxSize, &data).empty());
   EXPECT_EQ(kData2, data);
 
   // Prune the store, allowing only an entry for the first policy with its
@@ -161,9 +163,9 @@ TEST_F(CouldExternalDataStoreTest, Prune) {
 TEST_F(CouldExternalDataStoreTest, SharedCache) {
   // Write entries to two stores for two different cache_keys sharing a cache.
   CloudExternalDataStore store1(kKey1, task_runner_, resource_cache_.get());
-  EXPECT_TRUE(store1.Store(kPolicy1, kData1Hash, kData1));
+  EXPECT_FALSE(store1.Store(kPolicy1, kData1Hash, kData1).empty());
   CloudExternalDataStore store2(kKey2, task_runner_, resource_cache_.get());
-  EXPECT_TRUE(store2.Store(kPolicy2, kData2Hash, kData2));
+  EXPECT_FALSE(store2.Store(kPolicy2, kData2Hash, kData2).empty());
 
   // Check that the entries have been assigned to the correct keys in the
   // resource cache backing the stores.
@@ -177,12 +179,12 @@ TEST_F(CouldExternalDataStoreTest, SharedCache) {
 
   // Check that each entry can be loaded from the correct store.
   std::string data;
-  EXPECT_TRUE(store1.Load(kPolicy1, kData1Hash, kMaxSize, &data));
+  EXPECT_FALSE(store1.Load(kPolicy1, kData1Hash, kMaxSize, &data).empty());
   EXPECT_EQ(kData1, data);
-  EXPECT_FALSE(store1.Load(kPolicy2, kData2Hash, kMaxSize, &data));
+  EXPECT_TRUE(store1.Load(kPolicy2, kData2Hash, kMaxSize, &data).empty());
 
-  EXPECT_FALSE(store2.Load(kPolicy1, kData1Hash, kMaxSize, &data));
-  EXPECT_TRUE(store2.Load(kPolicy2, kData2Hash, kMaxSize, &data));
+  EXPECT_TRUE(store2.Load(kPolicy1, kData1Hash, kMaxSize, &data).empty());
+  EXPECT_FALSE(store2.Load(kPolicy2, kData2Hash, kMaxSize, &data).empty());
   EXPECT_EQ(kData2, data);
 
   // Prune the first store, allowing no entries to be kept.

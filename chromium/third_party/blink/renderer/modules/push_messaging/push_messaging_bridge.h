@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_PUSH_MESSAGING_PUSH_MESSAGING_BRIDGE_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_PUSH_MESSAGING_PUSH_MESSAGING_BRIDGE_H_
 
+#include "base/macros.h"
 #include "third_party/blink/public/platform/modules/permissions/permission.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/permissions/permission_status.mojom-blink.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_registration.h"
@@ -26,28 +27,28 @@ class PushMessagingBridge final
     : public GarbageCollectedFinalized<PushMessagingBridge>,
       public Supplement<ServiceWorkerRegistration> {
   USING_GARBAGE_COLLECTED_MIXIN(PushMessagingBridge);
-  WTF_MAKE_NONCOPYABLE(PushMessagingBridge);
 
  public:
   static const char kSupplementName[];
 
   static PushMessagingBridge* From(ServiceWorkerRegistration* registration);
 
+  explicit PushMessagingBridge(ServiceWorkerRegistration& registration);
   virtual ~PushMessagingBridge();
 
   // Asynchronously determines the permission state for the current origin.
   ScriptPromise GetPermissionState(ScriptState* script_state,
-                                   const PushSubscriptionOptionsInit& options);
+                                   const PushSubscriptionOptionsInit* options);
 
  private:
-  explicit PushMessagingBridge(ServiceWorkerRegistration& registration);
-
   // Method to be invoked when the permission status has been retrieved from the
   // permission service. Will settle the given |resolver|.
   void DidGetPermissionState(ScriptPromiseResolver* resolver,
                              mojom::blink::PermissionStatus status);
 
   mojom::blink::PermissionServicePtr permission_service_;
+
+  DISALLOW_COPY_AND_ASSIGN(PushMessagingBridge);
 };
 
 }  // namespace blink

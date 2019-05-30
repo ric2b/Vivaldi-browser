@@ -27,10 +27,10 @@ import sys
 import tempfile
 import time
 
+import cluster
 import cyglog_to_orderfile
 import cygprofile_utils
 import patch_orderfile
-import phased_orderfile
 import process_profiles
 import profile_android_startup
 import symbol_extractor
@@ -46,6 +46,14 @@ from pylib import constants
 # Needs to happen early for GetBuildType()/GetOutDirectory() to work correctly
 constants.SetBuildType('Release')
 
+
+# Architecture specific GN args. Trying to build an orderfile for an
+# architecture not listed here will eventually throw.
+_ARCH_GN_ARGS = {
+    'arm': [ 'target_cpu = "arm"' ],
+    'arm64': [ 'target_cpu = "arm64"',
+               'android_64bit_browser = true'],
+}
 
 class CommandError(Exception):
   """Indicates that a dispatched shell command exited with a non-zero status."""
@@ -228,7 +236,7 @@ class ClankCompiler(object):
   """Handles compilation of clank."""
 
   def __init__(self, out_dir, step_recorder, arch, jobs, max_load, use_goma,
-               goma_dir, system_health_profiling):
+               goma_dir, system_health_profiling, monochrome):
     self._out_dir = out_dir
     self._step_recorder = step_recorder
     self._arch = arch
@@ -237,12 +245,22 @@ class ClankCompiler(object):
     self._use_goma = use_goma
     self._goma_dir = goma_dir
     self._system_health_profiling = system_health_profiling
+    if monochrome:
+      self._apk = 'Monochrome.apk'
+      self._apk_target = 'monochrome_apk'
+      self._libname = 'libmonochrome'
+      self._libchrome_target = 'monochrome'
+    else:
+      self._apk = 'Chrome.apk'
+      self._apk_target = 'chrome_apk'
+      self._libname = 'libchrome'
+      self._libchrome_target = 'libchrome'
 
     self.obj_dir = os.path.join(self._out_dir, 'Release', 'obj')
     self.lib_chrome_so = os.path.join(
-        self._out_dir, 'Release', 'lib.unstripped', 'libchrome.so')
-    self.chrome_apk = os.path.join(
-        self._out_dir, 'Release', 'apks', 'Chrome.apk')
+        self._out_dir, 'Release', 'lib.unstripped',
+        '{}.so'.format(self._libname))
+    self.chrome_apk = os.path.join(self._out_dir, 'Release', 'apks', self._apk)
 
   def Build(self, instrumented, target):
     """Builds the provided ninja target with or without order_profiling on.
@@ -259,15 +277,11 @@ class ClankCompiler(object):
         'is_chrome_branded=true',
         'is_debug=false',
         'is_official_build=true',
-        # We have to build with no symbols if profiling and minimal symbols
-        # otherwise for libchrome.so to fit under the 4 GB limit.
-        # crbug.com/574476
-        'symbol_level=' + ('0' if instrumented else '1'),
-        'target_cpu="' + self._arch + '"',
         'target_os="android"',
         'use_goma=' + str(self._use_goma).lower(),
         'use_order_profiling=' + str(instrumented).lower(),
     ]
+    args += _ARCH_GN_ARGS[self._arch]
     if self._goma_dir:
       args += ['goma_dir="%s"' % self._goma_dir]
     if self._system_health_profiling:
@@ -291,7 +305,7 @@ class ClankCompiler(object):
     """
     if force_relink:
       self._step_recorder.RunCommand(['rm', '-rf', self.lib_chrome_so])
-    self.Build(instrumented, 'chrome_apk')
+    self.Build(instrumented, self._apk_target)
 
   def CompileLibchrome(self, instrumented, force_relink=False):
     """Builds a libchrome.so either with or without order_profiling on.
@@ -302,7 +316,7 @@ class ClankCompiler(object):
     """
     if force_relink:
       self._step_recorder.RunCommand(['rm', '-rf', self.lib_chrome_so])
-    self.Build(instrumented, 'libchrome')
+    self.Build(instrumented, self._libchrome_target)
 
 
 class OrderfileUpdater(object):
@@ -452,6 +466,9 @@ class OrderfileGenerator(object):
       assert not options.profile_save_dir, (
           '--profile-save-dir cannot be used with --skip-profile')
 
+    # Outlined function handling enabled by default for all architectures.
+    self._order_outlined_functions = not options.noorder_outlined_functions
+
     self._output_data = {}
     self._step_recorder = StepRecorder(options.buildbot)
     self._compiler = None
@@ -521,29 +538,16 @@ class OrderfileGenerator(object):
     profiles = process_profiles.ProfileManager(files)
     processor = process_profiles.SymbolOffsetProcessor(
         self._compiler.lib_chrome_so)
-    phaser = phased_orderfile.PhasedAnalyzer(profiles, processor)
-    if self._options.offsets_for_memory:
-      profile_offsets = phaser.GetOffsetsForMemoryFootprint()
-    else:
-      profile_offsets = phaser.GetOffsetsForStartup()
-    self._output_data['orderfile_size'] = {
-        'startup_kib': processor.OffsetsPrimarySize(
-            profile_offsets.startup) / 1024,
-        'common_kib': processor.OffsetsPrimarySize(
-            profile_offsets.common) / 1024,
-        'interaction_kib': processor.OffsetsPrimarySize(
-            profile_offsets.interaction) / 1024}
-
-    offsets_list = (profile_offsets.startup +
-                    profile_offsets.common +
-                    profile_offsets.interaction)
-    ordered_symbols = processor.GetOrderedSymbols(offsets_list)
+    ordered_symbols= cluster.ClusterOffsets(profiles, processor)
     if not ordered_symbols:
       raise Exception('Failed to get ordered symbols')
+    self._output_data['offsets_kib'] = processor.SymbolsSize(
+            ordered_symbols) / 1024
     with open(self._GetUnpatchedOrderfileFilename(), 'w') as orderfile:
       orderfile.write('\n'.join(ordered_symbols))
 
   def _CollectLegacyProfile(self):
+    files = []
     try:
       files = self._profiler.CollectProfile(
           self._compiler.chrome_apk,
@@ -583,7 +587,7 @@ class OrderfileGenerator(object):
     self._step_recorder.BeginStep('Patch Orderfile')
     patch_orderfile.GeneratePatchedOrderfile(
         self._GetUnpatchedOrderfileFilename(), self._compiler.lib_chrome_so,
-        self._GetPathToOrderfile())
+        self._GetPathToOrderfile(), self._order_outlined_functions)
 
   def _VerifySymbolOrder(self):
     self._step_recorder.BeginStep('Verify Symbol Order')
@@ -647,13 +651,20 @@ class OrderfileGenerator(object):
     Args:
       filename: (str) Orderfile to upload.
     """
-    # First compute hashes so that we can download them later if we need to
+    # First compute hashes so that we can download them later if we need to.
     self._step_recorder.BeginStep('Compute hash for ' + filename)
     self._RecordHash(filename)
     if self._options.buildbot:
       self._step_recorder.BeginStep('Archive ' + filename)
       self._orderfile_updater.UploadToCloudStorage(
           filename, use_debug_location=False)
+
+  def UploadReadyOrderfiles(self):
+    self._step_recorder.BeginStep('Upload Ready Orderfiles')
+    for file_name in [self._GetUnpatchedOrderfileFilename(),
+        self._GetPathToOrderfile()]:
+      self._orderfile_updater.UploadToCloudStorage(
+          file_name, use_debug_location=False)
 
   def _GetHashFilePathAndContents(self, base_file):
     """Gets the name and content of the hash file created from uploading the
@@ -694,8 +705,13 @@ class OrderfileGenerator(object):
             self._instrumented_out_dir,
             self._step_recorder, self._options.arch, self._options.jobs,
             self._options.max_load, self._options.use_goma,
-            self._options.goma_dir, self._options.system_health_orderfile)
-        self._compiler.CompileChromeApk(True)
+            self._options.goma_dir, self._options.system_health_orderfile,
+            self._options.monochrome)
+        if not self._options.pregenerated_profiles:
+          # If there are pregenerated profiles, the instrumented build should
+          # not be changed to avoid invalidating the pregenerated profile
+          # offsets.
+          self._compiler.CompileChromeApk(True)
         self._GenerateAndProcessProfile()
         self._MaybeArchiveOrderfile(self._GetUnpatchedOrderfileFilename())
         profile_uploaded = True
@@ -707,7 +723,7 @@ class OrderfileGenerator(object):
       with file(self._options.manual_symbol_offsets) as f:
         symbol_offsets = [int(x) for x in f.xreadlines()]
       processor = process_profiles.SymbolOffsetProcessor(
-          self._options.manual_libname)
+          self._compiler.manual_libname)
       generator = cyglog_to_orderfile.OffsetOrderfileGenerator(
           processor, cyglog_to_orderfile.ObjectFileProcessor(
               self._options.manual_objdir))
@@ -727,7 +743,7 @@ class OrderfileGenerator(object):
             self._uninstrumented_out_dir, self._step_recorder,
             self._options.arch, self._options.jobs, self._options.max_load,
             self._options.use_goma, self._options.goma_dir,
-            self._options.system_health_orderfile)
+            self._options.system_health_orderfile, self._options.monochrome)
         self._compiler.CompileLibchrome(False)
         self._PatchOrderfile()
         # Because identical code folding is a bit different with and without
@@ -773,9 +789,9 @@ def CreateArgumentParser():
       '--verify', action='store_true',
       help='If true, the script only verifies the current orderfile')
   parser.add_argument('--target-arch', action='store', dest='arch',
-                      default=cygprofile_utils.DetectArchitecture(),
-                      choices=['arm', 'arm64', 'x86', 'x86_64', 'x64', 'mips'],
-                      help='The target architecture for which to build')
+                      default='arm',
+                      choices=['arm', 'arm64'],
+                      help='The target architecture for which to build.')
   parser.add_argument('--output-json', action='store', dest='json_file',
                       help='Location to save stats in json format')
   parser.add_argument(
@@ -803,14 +819,14 @@ def CreateArgumentParser():
       '--use-goma', action='store_true', help='Enable GOMA.', default=False)
   parser.add_argument('--adb-path', help='Path to the adb binary.')
 
-  parser.add_argument('--system-health-orderfile', action='store_true',
-                      help=('Create an orderfile based on system health '
-                            'benchmarks.'),
-                      default=False)
-  parser.add_argument('--offsets-for-memory', action='store_true',
-                      help=('Favor memory savings in the orderfile. Used '
-                            'with --system-health-orderfile.'),
-                      default=False)
+  parser.add_argument('--nosystem-health-orderfile', action='store_false',
+                      dest='system_health_orderfile', default=True,
+                      help=('Create an orderfile based on an about:blank '
+                            'startup benchmark instead of system health '
+                            'benchmarks.'))
+  parser.add_argument('--monochrome', action='store_true',
+                      help=('Compile and instrument monochrome (for post-N '
+                            'devices).'))
 
   parser.add_argument('--manual-symbol-offsets', default=None, type=str,
                       help=('File of list of ordered symbol offsets generated '
@@ -822,6 +838,8 @@ def CreateArgumentParser():
   parser.add_argument('--manual-objdir', default=None, type=str,
                       help=('Root of object file directory corresponding to '
                             '--manual-symbol-offsets.'))
+  parser.add_argument('--noorder-outlined-functions', action='store_true',
+                      help='Disable outlined functions in the orderfile.')
   parser.add_argument('--pregenerated-profiles', default=None, type=str,
                       help=('Pregenerated profiles to use instead of running '
                             'profile step. Cannot be used with '
@@ -830,6 +848,11 @@ def CreateArgumentParser():
                       help=('Directory to save any profiles created. These can '
                             'be used with --pregenerated-profiles.  Cannot be '
                             'used with --skip-profiles.'))
+  parser.add_argument('--upload-ready-orderfiles', action='store_true',
+                      help=('Skip orderfile generation and manually upload '
+                            'orderfiles (both patched and unpatched) from '
+                            'their normal location in the tree to the cloud '
+                            'storage. DANGEROUS! USE WITH CARE!'))
 
   profile_android_startup.AddProfileCollectionArguments(parser)
   return parser
@@ -852,6 +875,8 @@ def CreateOrderfile(options, orderfile_updater_class):
   try:
     if options.verify:
       generator._VerifySymbolOrder()
+    elif options.upload_ready_orderfiles:
+      return generator.UploadReadyOrderfiles()
     else:
       return generator.Generate()
   finally:

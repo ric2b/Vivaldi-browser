@@ -14,7 +14,7 @@ extern const char kInvalidatorInvalidationState[];
 
 extern const char kInvalidatorSavedInvalidations[];
 
-extern const char kInvalidationServiceUseGCMChannel[];
+extern const char kFCMInvalidationClientIDCache[];
 
 }  // namespace prefs
 }  // namespace invalidation

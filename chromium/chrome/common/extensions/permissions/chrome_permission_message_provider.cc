@@ -4,13 +4,13 @@
 
 #include "chrome/common/extensions/permissions/chrome_permission_message_provider.h"
 
+#include <tuple>
 #include <vector>
 
 #include "base/metrics/field_trial.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/common/extensions/permissions/chrome_permission_message_rules.h"
 #include "extensions/common/extensions_client.h"
 #include "extensions/common/permissions/permission_message_util.h"
 #include "extensions/common/permissions/permission_set.h"
@@ -28,11 +28,8 @@ class ComparablePermission {
   explicit ComparablePermission(const PermissionMessage& msg) : msg_(&msg) {}
 
   bool operator<(const ComparablePermission& rhs) const {
-    if (msg_->message() < rhs.msg_->message())
-      return true;
-    if (msg_->message() > rhs.msg_->message())
-      return false;
-    return msg_->submessages() < rhs.msg_->submessages();
+    return std::tie(msg_->message(), msg_->submessages()) <
+           std::tie(rhs.msg_->message(), rhs.msg_->submessages());
   }
 
   bool operator==(const ComparablePermission& rhs) const {
@@ -57,30 +54,10 @@ ChromePermissionMessageProvider::~ChromePermissionMessageProvider() {
 
 PermissionMessages ChromePermissionMessageProvider::GetPermissionMessages(
     const PermissionIDSet& permissions) const {
-  std::vector<ChromePermissionMessageRule> rules =
+  const std::vector<ChromePermissionMessageRule> rules =
       ChromePermissionMessageRule::GetAllRules();
 
-  // Apply each of the rules, in order, to generate the messages for the given
-  // permissions. Once a permission is used in a rule, remove it from the set
-  // of available permissions so it cannot be applied to subsequent rules.
-  PermissionIDSet remaining_permissions = permissions;
-  PermissionMessages messages;
-  for (const auto& rule : rules) {
-    // Only apply the rule if we have all the required permission IDs.
-    if (remaining_permissions.ContainsAllIDs(rule.required_permissions())) {
-      // We can apply the rule. Add all the required permissions, and as many
-      // optional permissions as we can, to the new message.
-      PermissionIDSet used_permissions =
-          remaining_permissions.GetAllPermissionsWithIDs(
-              rule.all_permissions());
-      messages.push_back(rule.GetPermissionMessage(used_permissions));
-
-      remaining_permissions =
-          PermissionIDSet::Difference(remaining_permissions, used_permissions);
-    }
-  }
-
-  return messages;
+  return GetPermissionMessagesHelper(permissions, rules);
 }
 
 bool ChromePermissionMessageProvider::IsPrivilegeIncrease(
@@ -106,6 +83,21 @@ PermissionIDSet ChromePermissionMessageProvider::GetAllPermissionIDs(
   AddManifestPermissions(permissions, &permission_ids);
   AddHostPermissions(permissions, &permission_ids, extension_type);
   return permission_ids;
+}
+
+PermissionMessages
+ChromePermissionMessageProvider::GetPowerfulPermissionMessages(
+    const PermissionIDSet& permissions) const {
+  std::vector<ChromePermissionMessageRule> rules =
+      ChromePermissionMessageRule::GetAllRules();
+
+  // TODO(crbug.com/888981): Find a better way to get wanted rules. Maybe add a
+  // bool to each one telling if we should consider it here or not.
+  constexpr size_t rules_considered = 15;
+  rules.erase(rules.begin() + std::min(rules_considered, rules.size()),
+              rules.end());
+
+  return GetPermissionMessagesHelper(permissions, rules);
 }
 
 void ChromePermissionMessageProvider::AddAPIPermissions(
@@ -265,6 +257,32 @@ bool ChromePermissionMessageProvider::IsHostPrivilegeIncrease(
     }
   }
   return false;
+}
+
+PermissionMessages ChromePermissionMessageProvider::GetPermissionMessagesHelper(
+    const PermissionIDSet& permissions,
+    const std::vector<ChromePermissionMessageRule>& rules) const {
+  // Apply each of the rules, in order, to generate the messages for the given
+  // permissions. Once a permission is used in a rule, remove it from the set
+  // of available permissions so it cannot be applied to subsequent rules.
+  PermissionIDSet remaining_permissions = permissions;
+  PermissionMessages messages;
+  for (const auto& rule : rules) {
+    // Only apply the rule if we have all the required permission IDs.
+    if (remaining_permissions.ContainsAllIDs(rule.required_permissions())) {
+      // We can apply the rule. Add all the required permissions, and as many
+      // optional permissions as we can, to the new message.
+      PermissionIDSet used_permissions =
+          remaining_permissions.GetAllPermissionsWithIDs(
+              rule.all_permissions());
+      messages.push_back(rule.GetPermissionMessage(used_permissions));
+
+      remaining_permissions =
+          PermissionIDSet::Difference(remaining_permissions, used_permissions);
+    }
+  }
+
+  return messages;
 }
 
 }  // namespace extensions

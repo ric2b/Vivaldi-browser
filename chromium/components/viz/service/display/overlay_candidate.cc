@@ -15,9 +15,12 @@
 #include "components/viz/common/quads/stream_video_draw_quad.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
 #include "components/viz/common/quads/tile_draw_quad.h"
+#include "components/viz/common/quads/video_hole_draw_quad.h"
+#include "components/viz/common/quads/yuv_video_draw_quad.h"
 #include "components/viz/service/display/display_resource_provider.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/vector3d_f.h"
+#include "ui/gl/dc_renderer_layer_params.h"
 
 namespace viz {
 
@@ -76,102 +79,6 @@ gfx::OverlayTransform GetOverlayTransform(const gfx::Transform& quad_transform,
     return gfx::OVERLAY_TRANSFORM_INVALID;
 }
 
-// Apply transform |delta| to |in| and return the resulting transform,
-// or OVERLAY_TRANSFORM_INVALID.
-gfx::OverlayTransform ComposeTransforms(gfx::OverlayTransform delta,
-                                        gfx::OverlayTransform in) {
-  // There are 8 different possible transforms. We can characterize these
-  // by looking at where the origin moves and the direction the horizontal goes.
-  // (TL=top-left, BR=bottom-right, H=horizontal, V=vertical).
-  // NONE: TL, H
-  // FLIP_VERTICAL: BL, H
-  // FLIP_HORIZONTAL: TR, H
-  // ROTATE_90: TR, V
-  // ROTATE_180: BR, H
-  // ROTATE_270: BL, V
-  // Missing transforms: TL, V & BR, V
-  // Basic combinations:
-  // Flip X & Y -> Rotate 180 (TL,H -> TR,H -> BR,H or TL,H -> BL,H -> BR,H)
-  // Flip X or Y + Rotate 180 -> other flip (eg, TL,H -> TR,H -> BL,H)
-  // Rotate + Rotate simply adds values.
-  // Rotate 90/270 + flip is invalid because we can only have verticals with
-  // the origin in TR or BL.
-  if (delta == gfx::OVERLAY_TRANSFORM_NONE)
-    return in;
-  switch (in) {
-    case gfx::OVERLAY_TRANSFORM_NONE:
-      return delta;
-    case gfx::OVERLAY_TRANSFORM_FLIP_VERTICAL:
-      switch (delta) {
-        case gfx::OVERLAY_TRANSFORM_FLIP_VERTICAL:
-          return gfx::OVERLAY_TRANSFORM_NONE;
-        case gfx::OVERLAY_TRANSFORM_FLIP_HORIZONTAL:
-          return gfx::OVERLAY_TRANSFORM_ROTATE_180;
-        case gfx::OVERLAY_TRANSFORM_ROTATE_180:
-          return gfx::OVERLAY_TRANSFORM_FLIP_HORIZONTAL;
-        default:
-          return gfx::OVERLAY_TRANSFORM_INVALID;
-      }
-      break;
-    case gfx::OVERLAY_TRANSFORM_FLIP_HORIZONTAL:
-      switch (delta) {
-        case gfx::OVERLAY_TRANSFORM_FLIP_HORIZONTAL:
-          return gfx::OVERLAY_TRANSFORM_NONE;
-        case gfx::OVERLAY_TRANSFORM_FLIP_VERTICAL:
-          return gfx::OVERLAY_TRANSFORM_ROTATE_180;
-        case gfx::OVERLAY_TRANSFORM_ROTATE_90:
-        case gfx::OVERLAY_TRANSFORM_ROTATE_180:
-          return gfx::OVERLAY_TRANSFORM_FLIP_VERTICAL;
-        case gfx::OVERLAY_TRANSFORM_ROTATE_270:
-        default:
-          return gfx::OVERLAY_TRANSFORM_INVALID;
-      }
-      break;
-    case gfx::OVERLAY_TRANSFORM_ROTATE_90:
-      switch (delta) {
-        case gfx::OVERLAY_TRANSFORM_ROTATE_90:
-          return gfx::OVERLAY_TRANSFORM_ROTATE_180;
-        case gfx::OVERLAY_TRANSFORM_ROTATE_180:
-          return gfx::OVERLAY_TRANSFORM_ROTATE_270;
-        case gfx::OVERLAY_TRANSFORM_ROTATE_270:
-          return gfx::OVERLAY_TRANSFORM_NONE;
-        default:
-          return gfx::OVERLAY_TRANSFORM_INVALID;
-      }
-      break;
-    case gfx::OVERLAY_TRANSFORM_ROTATE_180:
-      switch (delta) {
-        case gfx::OVERLAY_TRANSFORM_FLIP_HORIZONTAL:
-          return gfx::OVERLAY_TRANSFORM_FLIP_VERTICAL;
-        case gfx::OVERLAY_TRANSFORM_FLIP_VERTICAL:
-          return gfx::OVERLAY_TRANSFORM_FLIP_HORIZONTAL;
-        case gfx::OVERLAY_TRANSFORM_ROTATE_90:
-          return gfx::OVERLAY_TRANSFORM_ROTATE_270;
-        case gfx::OVERLAY_TRANSFORM_ROTATE_180:
-          return gfx::OVERLAY_TRANSFORM_NONE;
-        case gfx::OVERLAY_TRANSFORM_ROTATE_270:
-          return gfx::OVERLAY_TRANSFORM_ROTATE_90;
-        default:
-          return gfx::OVERLAY_TRANSFORM_INVALID;
-      }
-      break;
-    case gfx::OVERLAY_TRANSFORM_ROTATE_270:
-      switch (delta) {
-        case gfx::OVERLAY_TRANSFORM_ROTATE_90:
-          return gfx::OVERLAY_TRANSFORM_NONE;
-        case gfx::OVERLAY_TRANSFORM_ROTATE_180:
-          return gfx::OVERLAY_TRANSFORM_ROTATE_90;
-        case gfx::OVERLAY_TRANSFORM_ROTATE_270:
-          return gfx::OVERLAY_TRANSFORM_ROTATE_180;
-        default:
-          return gfx::OVERLAY_TRANSFORM_INVALID;
-      }
-      break;
-    default:
-      return gfx::OVERLAY_TRANSFORM_INVALID;
-  }
-}
-
 }  // namespace
 
 OverlayCandidate::OverlayCandidate()
@@ -223,6 +130,9 @@ bool OverlayCandidate::FromDrawQuad(DisplayResourceProvider* resource_provider,
     case DrawQuad::TILED_CONTENT:
       return FromTileQuad(resource_provider, TileDrawQuad::MaterialCast(quad),
                           candidate);
+    case DrawQuad::VIDEO_HOLE:
+      return FromVideoHoleQuad(
+          resource_provider, VideoHoleDrawQuad::MaterialCast(quad), candidate);
     case DrawQuad::STREAM_VIDEO_CONTENT:
       return FromStreamVideoQuad(resource_provider,
                                  StreamVideoDrawQuad::MaterialCast(quad),
@@ -266,12 +176,28 @@ bool OverlayCandidate::IsOccluded(const OverlayCandidate& candidate,
 }
 
 // static
+bool OverlayCandidate::RequiresOverlay(const DrawQuad* quad) {
+  switch (quad->material) {
+    case DrawQuad::TEXTURE_CONTENT:
+      return TextureDrawQuad::MaterialCast(quad)->protected_video_type ==
+             ui::ProtectedVideoType::kHardwareProtected;
+    case DrawQuad::VIDEO_HOLE:
+      return true;
+    case DrawQuad::YUV_VIDEO_CONTENT:
+      return YUVVideoDrawQuad::MaterialCast(quad)->protected_video_type ==
+             ui::ProtectedVideoType::kHardwareProtected;
+    default:
+      return false;
+  }
+}
+
+// static
 bool OverlayCandidate::IsOccludedByFilteredQuad(
     const OverlayCandidate& candidate,
     QuadList::ConstIterator quad_list_begin,
     QuadList::ConstIterator quad_list_end,
     const base::flat_map<RenderPassId, cc::FilterOperations*>&
-        render_pass_background_filters) {
+        render_pass_backdrop_filters) {
   for (auto overlap_iter = quad_list_begin; overlap_iter != quad_list_end;
        ++overlap_iter) {
     if (overlap_iter->material == DrawQuad::RENDER_PASS) {
@@ -281,7 +207,7 @@ bool OverlayCandidate::IsOccludedByFilteredQuad(
       const RenderPassDrawQuad* render_pass_draw_quad =
           RenderPassDrawQuad::MaterialCast(*overlap_iter);
       if (candidate.display_rect.Intersects(overlap_rect) &&
-          render_pass_background_filters.count(
+          render_pass_backdrop_filters.count(
               render_pass_draw_quad->render_pass_id)) {
         return true;
       }
@@ -301,6 +227,7 @@ bool OverlayCandidate::FromDrawQuadResource(
     return false;
 
   candidate->format = resource_provider->GetBufferFormat(resource_id);
+  candidate->color_space = resource_provider->GetColorSpace(resource_id);
   if (!base::ContainsValue(kOverlayFormats, candidate->format))
     return false;
 
@@ -324,11 +251,33 @@ bool OverlayCandidate::FromDrawQuadResource(
 }
 
 // static
+// For VideoHoleDrawQuad, only calculate geometry information
+// and put it in the |candidate|.
+bool OverlayCandidate::FromVideoHoleQuad(
+    DisplayResourceProvider* resource_provider,
+    const VideoHoleDrawQuad* quad,
+    OverlayCandidate* candidate) {
+  gfx::OverlayTransform overlay_transform = GetOverlayTransform(
+      quad->shared_quad_state->quad_to_target_transform, false);
+  if (overlay_transform == gfx::OVERLAY_TRANSFORM_INVALID)
+    return false;
+
+  auto& transform = quad->shared_quad_state->quad_to_target_transform;
+  candidate->display_rect = gfx::RectF(quad->rect);
+  transform.TransformRect(&candidate->display_rect);
+  candidate->transform = overlay_transform;
+
+  return true;
+}
+
+// static
 bool OverlayCandidate::FromTextureQuad(
     DisplayResourceProvider* resource_provider,
     const TextureDrawQuad* quad,
     OverlayCandidate* candidate) {
-  if (quad->background_color != SK_ColorTRANSPARENT)
+  if (quad->background_color != SK_ColorTRANSPARENT &&
+      (quad->background_color != SK_ColorBLACK ||
+       quad->ShouldDrawWithBlending()))
     return false;
   if (!FromDrawQuadResource(resource_provider, quad, quad->resource_id(),
                             quad->y_flipped, candidate)) {
@@ -361,42 +310,14 @@ bool OverlayCandidate::FromStreamVideoQuad(
                             candidate)) {
     return false;
   }
-  if (!quad->matrix.IsScaleOrTranslation()) {
-    // We cannot handle anything other than scaling & translation for texture
-    // coordinates yet.
-    return false;
-  }
+
   candidate->resource_id = quad->resource_id();
   candidate->resource_size_in_pixels = quad->resource_size_in_pixels();
+  candidate->uv_rect = BoundingRect(quad->uv_top_left, quad->uv_bottom_right);
 #if defined(OS_ANDROID)
   candidate->is_backed_by_surface_texture =
       resource_provider->IsBackedBySurfaceTexture(quad->resource_id());
 #endif
-
-  gfx::Point3F uv0 = gfx::Point3F(0, 0, 0);
-  gfx::Point3F uv1 = gfx::Point3F(1, 1, 0);
-  quad->matrix.TransformPoint(&uv0);
-  quad->matrix.TransformPoint(&uv1);
-  gfx::Vector3dF delta = uv1 - uv0;
-  if (delta.x() < 0) {
-    candidate->transform = ComposeTransforms(
-        gfx::OVERLAY_TRANSFORM_FLIP_HORIZONTAL, candidate->transform);
-    float x0 = uv0.x();
-    uv0.set_x(uv1.x());
-    uv1.set_x(x0);
-    delta.set_x(-delta.x());
-  }
-
-  if (delta.y() < 0) {
-    // In this situation, uv0y < uv1y. Since we overlay inverted, a request
-    // to invert the source texture means we can just output the texture
-    // normally and it will be correct.
-    candidate->uv_rect = gfx::RectF(uv0.x(), uv1.y(), delta.x(), -delta.y());
-  } else {
-    candidate->transform = ComposeTransforms(
-        gfx::OVERLAY_TRANSFORM_FLIP_VERTICAL, candidate->transform);
-    candidate->uv_rect = gfx::RectF(uv0.x(), uv0.y(), delta.x(), delta.y());
-  }
   return true;
 }
 
@@ -418,6 +339,17 @@ OverlayCandidateList& OverlayCandidateList::operator=(
 
 void OverlayCandidateList::AddPromotionHint(const OverlayCandidate& candidate) {
   promotion_hint_info_map_[candidate.resource_id] = candidate.display_rect;
+}
+
+void OverlayCandidateList::AddToPromotionHintRequestorSetIfNeeded(
+    const DisplayResourceProvider* resource_provider,
+    const DrawQuad* quad) {
+  if (quad->material != DrawQuad::STREAM_VIDEO_CONTENT)
+    return;
+  ResourceId id = StreamVideoDrawQuad::MaterialCast(quad)->resource_id();
+  if (!resource_provider->DoesResourceWantPromotionHint(id))
+    return;
+  promotion_hint_requestor_set_.insert(id);
 }
 
 }  // namespace viz

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/hover_button.h"
 
+#include <algorithm>
+
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -11,14 +13,13 @@
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_impl.h"
-#include "ui/views/animation/ink_drop_ripple.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/grid_layout.h"
+#include "ui/views/view_class_properties.h"
 
 namespace {
 
@@ -66,21 +67,20 @@ void SetTooltipAndAccessibleName(views::Button* parent,
 
 HoverButton::HoverButton(views::ButtonListener* button_listener,
                          const base::string16& text)
-    : views::MenuButton(text, this, false),
+    : views::MenuButton(text, this),
       title_(nullptr),
       subtitle_(nullptr),
       icon_view_(nullptr),
-      secondary_icon_view_(nullptr),
+      secondary_view_(nullptr),
       listener_(button_listener) {
   SetInstallFocusRingOnFocus(false);
   SetFocusBehavior(FocusBehavior::ALWAYS);
-  SetFocusPainter(nullptr);
 
   const int vert_spacing = ChromeLayoutProvider::Get()->GetDistanceMetric(
       DISTANCE_CONTROL_LIST_VERTICAL);
   SetBorder(CreateBorderWithVerticalSpacing(vert_spacing));
 
-  SetInkDropMode(views::InkDropHostView::InkDropMode::ON);
+  SetInkDropMode(InkDropMode::ON);
 }
 
 HoverButton::HoverButton(views::ButtonListener* button_listener,
@@ -94,7 +94,9 @@ HoverButton::HoverButton(views::ButtonListener* button_listener,
                          std::unique_ptr<views::View> icon_view,
                          const base::string16& title,
                          const base::string16& subtitle,
-                         std::unique_ptr<views::View> secondary_icon_view)
+                         std::unique_ptr<views::View> secondary_view,
+                         bool resize_row_for_secondary_view,
+                         bool secondary_view_can_process_events)
     : HoverButton(button_listener, base::string16()) {
   label()->SetHandlesTooltips(false);
   ChromeLayoutProvider* layout_provider = ChromeLayoutProvider::Get();
@@ -174,19 +176,31 @@ HoverButton::HoverButton(views::ButtonListener* button_listener,
   title_wrapper->set_can_process_events_within_subtree(false);
   grid_layout->AddView(title_wrapper);
 
-  secondary_icon_view_ = secondary_icon_view.get();
-  if (secondary_icon_view) {
+  if (secondary_view) {
     columns->AddColumn(views::GridLayout::CENTER, views::GridLayout::CENTER,
                        views::GridLayout::kFixedSize,
                        views::GridLayout::USE_PREF, 0, 0);
-    // Make sure hovering over |secondary_icon_view| also hovers the
-    // |HoverButton|.
-    secondary_icon_view->set_can_process_events_within_subtree(false);
-    // |secondary_icon_view| needs a layer otherwise it's obscured by the layer
+    secondary_view_ = secondary_view.get();
+    secondary_view->set_can_process_events_within_subtree(
+        secondary_view_can_process_events);
+    // |secondary_view| needs a layer otherwise it's obscured by the layer
     // used in drawing ink drops.
-    secondary_icon_view->SetPaintToLayer();
-    secondary_icon_view->layer()->SetFillsBoundsOpaquely(false);
-    grid_layout->AddView(secondary_icon_view.release(), 1, num_labels);
+    secondary_view->SetPaintToLayer();
+    secondary_view->layer()->SetFillsBoundsOpaquely(false);
+    grid_layout->AddView(secondary_view.release(), 1, num_labels);
+
+    if (!resize_row_for_secondary_view) {
+      insets_ = views::MenuButton::GetInsets();
+      auto secondary_ctl_size = secondary_view_->GetPreferredSize();
+      if (secondary_ctl_size.height() > row_height) {
+        // Secondary view is larger. Reduce the insets.
+        int reduced_inset = (secondary_ctl_size.height() - row_height) / 2;
+        insets_.value().set_top(
+            std::max(insets_.value().top() - reduced_inset, 0));
+        insets_.value().set_bottom(
+            std::max(insets_.value().bottom() - reduced_inset, 0));
+      }
+    }
   }
 
   if (!subtitle.empty()) {
@@ -241,6 +255,12 @@ bool HoverButton::IsTriggerableEventType(const ui::Event& event) {
   return MenuButton::IsTriggerableEventType(event);
 }
 
+gfx::Insets HoverButton::GetInsets() const {
+  if (insets_)
+    return insets_.value();
+  return views::MenuButton::GetInsets();
+}
+
 void HoverButton::SetSubtitleElideBehavior(gfx::ElideBehavior elide_behavior) {
   if (subtitle_ && !subtitle_->text().empty())
     subtitle_->SetElideBehavior(elide_behavior);
@@ -273,10 +293,6 @@ views::Button::KeyClickAction HoverButton::GetKeyClickActionForEvent(
   return MenuButton::GetKeyClickActionForEvent(event);
 }
 
-void HoverButton::SetHighlightingView(views::View* highlighting_view) {
-  highlighting_view_ = highlighting_view;
-}
-
 void HoverButton::StateChanged(ButtonState old_state) {
   MenuButton::StateChanged(old_state);
 
@@ -289,38 +305,18 @@ void HoverButton::StateChanged(ButtonState old_state) {
   }
 }
 
-bool HoverButton::ShouldUseFloodFillInkDrop() const {
-  return true;
-}
-
 SkColor HoverButton::GetInkDropBaseColor() const {
   return views::style::GetColor(*this, views::style::CONTEXT_BUTTON,
                                 STYLE_SECONDARY);
 }
 
 std::unique_ptr<views::InkDrop> HoverButton::CreateInkDrop() {
-  std::unique_ptr<views::InkDrop> ink_drop = LabelButton::CreateInkDrop();
+  std::unique_ptr<views::InkDrop> ink_drop = MenuButton::CreateInkDrop();
   // Turn on highlighting when the button is focused only - hovering the button
   // will request focus.
-  // Note that the setup done in Button::CreateInkDrop() needs to be repeated
-  // here to configure flood-fill ink drops from LabelButton.
   ink_drop->SetShowHighlightOnFocus(true);
   ink_drop->SetShowHighlightOnHover(false);
   return ink_drop;
-}
-
-std::unique_ptr<views::InkDropHighlight> HoverButton::CreateInkDropHighlight()
-    const {
-  // HoverButtons are supposed to encompass the full width of their parent, so
-  // remove the rounded corners.
-  std::unique_ptr<views::InkDropHighlight> highlight(
-      new views::InkDropHighlight(
-          highlighting_view_->size(), 0,
-          gfx::RectF(GetMirroredRect(highlighting_view_->GetContentsBounds()))
-              .CenterPoint(),
-          GetInkDropBaseColor()));
-  highlight->set_explode_size(gfx::SizeF(CalculateLargeInkDropSize(size())));
-  return highlight;
 }
 
 void HoverButton::Layout() {
@@ -338,14 +334,14 @@ views::View* HoverButton::GetTooltipHandlerForPoint(const gfx::Point& point) {
   if (!HitTestPoint(point))
     return nullptr;
 
-  // Let the secondary icon handle it if it has a tooltip.
-  if (secondary_icon_view_) {
-    gfx::Point point_in_icon_coords(point);
-    ConvertPointToTarget(this, secondary_icon_view_, &point_in_icon_coords);
+  // Let the secondary control handle it if it has a tooltip.
+  if (secondary_view_) {
+    gfx::Point point_in_secondary_view(point);
+    ConvertPointToTarget(this, secondary_view_, &point_in_secondary_view);
     base::string16 tooltip;
-    if (secondary_icon_view_->HitTestPoint(point_in_icon_coords) &&
-        secondary_icon_view_->GetTooltipText(point_in_icon_coords, &tooltip)) {
-      return secondary_icon_view_;
+    if (secondary_view_->HitTestPoint(point_in_secondary_view) &&
+        secondary_view_->GetTooltipText(point_in_secondary_view, &tooltip)) {
+      return secondary_view_;
     }
   }
 
@@ -357,6 +353,12 @@ views::View* HoverButton::GetTooltipHandlerForPoint(const gfx::Point& point) {
 }
 
 void HoverButton::OnBoundsChanged(const gfx::Rect& previous_bounds) {
+  // HoverButtons use a rectangular highlight to encompass the full width of
+  // their parent.
+  auto path = std::make_unique<SkPath>();
+  path->addRect(RectToSkRect(GetLocalBounds()));
+  SetProperty(views::kHighlightPathKey, path.release());
+
   if (title_) {
     SetTooltipAndAccessibleName(this, title_, subtitle_, GetLocalBounds(),
                                 taken_width_, auto_compute_tooltip_);

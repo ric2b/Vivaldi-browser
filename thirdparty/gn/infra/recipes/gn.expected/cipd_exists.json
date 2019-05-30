@@ -50,7 +50,7 @@
       "-root",
       "[START_DIR]/cipd",
       "-ensure-file",
-      "infra/ninja/${platform} version:1.8.2\nfuchsia/clang/${platform} goma",
+      "infra/ninja/${platform} version:1.8.2\nfuchsia/clang/${platform} goma\n@Subdir sysroot\nfuchsia/sysroot/${platform} git_revision:a28dfa20af063e5ca00634024c85732e20220419",
       "-json-output",
       "/path/to/tmp/json"
     ],
@@ -67,6 +67,12 @@
       "@@@STEP_LOG_LINE@json.output@      {@@@",
       "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-version:1.8.2---\", @@@",
       "@@@STEP_LOG_LINE@json.output@        \"package\": \"infra/ninja/${platform}\"@@@",
+      "@@@STEP_LOG_LINE@json.output@      }@@@",
+      "@@@STEP_LOG_LINE@json.output@    ], @@@",
+      "@@@STEP_LOG_LINE@json.output@    \"sysroot\": [@@@",
+      "@@@STEP_LOG_LINE@json.output@      {@@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-git_revision:a28\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"package\": \"fuchsia/sysroot/${platform}\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }@@@",
       "@@@STEP_LOG_LINE@json.output@    ]@@@",
       "@@@STEP_LOG_LINE@json.output@  }@@@",
@@ -96,8 +102,9 @@
     "env": {
       "AR": "[START_DIR]/cipd/bin/llvm-ar",
       "CC": "[START_DIR]/cipd/bin/clang",
+      "CFLAGS": "--sysroot=[START_DIR]/cipd/sysroot",
       "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "-static-libstdc++ -ldl -lpthread"
+      "LDFLAGS": "--sysroot=[START_DIR]/cipd/sysroot"
     },
     "name": "debug.build.generate",
     "~followup_annotations": [
@@ -114,8 +121,9 @@
     "env": {
       "AR": "[START_DIR]/cipd/bin/llvm-ar",
       "CC": "[START_DIR]/cipd/bin/clang",
+      "CFLAGS": "--sysroot=[START_DIR]/cipd/sysroot",
       "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "-static-libstdc++ -ldl -lpthread"
+      "LDFLAGS": "--sysroot=[START_DIR]/cipd/sysroot"
     },
     "name": "debug.build.ninja",
     "~followup_annotations": [
@@ -146,14 +154,17 @@
     "cmd": [
       "python",
       "-u",
-      "[START_DIR]/gn/build/gen.py"
+      "[START_DIR]/gn/build/gen.py",
+      "--use-lto",
+      "--use-icf"
     ],
     "cwd": "[START_DIR]/gn",
     "env": {
       "AR": "[START_DIR]/cipd/bin/llvm-ar",
       "CC": "[START_DIR]/cipd/bin/clang",
+      "CFLAGS": "--sysroot=[START_DIR]/cipd/sysroot",
       "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "-static-libstdc++ -ldl -lpthread"
+      "LDFLAGS": "--sysroot=[START_DIR]/cipd/sysroot"
     },
     "name": "release.build.generate",
     "~followup_annotations": [
@@ -170,8 +181,9 @@
     "env": {
       "AR": "[START_DIR]/cipd/bin/llvm-ar",
       "CC": "[START_DIR]/cipd/bin/clang",
+      "CFLAGS": "--sysroot=[START_DIR]/cipd/sysroot",
       "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "-static-libstdc++ -ldl -lpthread"
+      "LDFLAGS": "--sysroot=[START_DIR]/cipd/sysroot"
     },
     "name": "release.build.ninja",
     "~followup_annotations": [
@@ -192,18 +204,18 @@
       "cipd",
       "pkg-build",
       "-pkg-def",
-      "{\"data\": [{\"file\": \"gn\"}, {\"version_file\": \".versions/gn.cipd_version\"}], \"install_mode\": \"copy\", \"package\": \"gn/gn/linux-amd64\", \"root\": \"[START_DIR]/gn/out\"}",
+      "{\"data\": [{\"file\": \"gn\"}, {\"version_file\": \".versions/gn.cipd_version\"}], \"install_mode\": \"copy\", \"package\": \"gn/gn/${platform}\", \"root\": \"[START_DIR]/gn/out\"}",
       "-out",
       "[CLEANUP]/gn.cipd",
       "-json-output",
       "/path/to/tmp/json"
     ],
-    "name": "build gn/gn/linux-amd64",
+    "name": "build gn/gn/${platform}",
     "~followup_annotations": [
       "@@@STEP_LOG_LINE@json.output@{@@@",
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
       "@@@STEP_LOG_LINE@json.output@    \"instance_id\": \"40-chars-fake-of-the-package-instance_id\", @@@",
-      "@@@STEP_LOG_LINE@json.output@    \"package\": \"gn/gn/linux-amd64\"@@@",
+      "@@@STEP_LOG_LINE@json.output@    \"package\": \"gn/gn/${platform}\"@@@",
       "@@@STEP_LOG_LINE@json.output@  }@@@",
       "@@@STEP_LOG_LINE@json.output@}@@@",
       "@@@STEP_LOG_END@json.output@@@"
@@ -223,13 +235,13 @@
     "cmd": [
       "cipd",
       "search",
-      "gn/gn/linux-amd64",
+      "gn/gn/${platform}",
       "-tag",
       "git_revision:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "-json-output",
       "/path/to/tmp/json"
     ],
-    "name": "cipd search gn/gn/linux-amd64 git_revision:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "name": "cipd search gn/gn/${platform} git_revision:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "~followup_annotations": [
       "@@@STEP_LOG_LINE@json.output@{@@@",
       "@@@STEP_LOG_LINE@json.output@  \"result\": [@@@",

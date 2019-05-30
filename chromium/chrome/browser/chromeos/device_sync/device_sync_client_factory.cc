@@ -5,11 +5,12 @@
 #include "chrome/browser/chromeos/device_sync/device_sync_client_factory.h"
 
 #include "base/macros.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/chromeos_features.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/services/device_sync/public/cpp/device_sync_client.h"
 #include "chromeos/services/device_sync/public/cpp/device_sync_client_impl.h"
 #include "chromeos/services/multidevice_setup/public/cpp/prefs.h"
@@ -44,6 +45,9 @@ class DeviceSyncClientHolder : public KeyedService {
   DeviceSyncClient* device_sync_client() { return device_sync_client_.get(); }
 
  private:
+  // KeyedService:
+  void Shutdown() override { device_sync_client_.reset(); }
+
   std::unique_ptr<DeviceSyncClient> device_sync_client_;
 
   DISALLOW_COPY_AND_ASSIGN(DeviceSyncClientHolder);
@@ -76,12 +80,14 @@ KeyedService* DeviceSyncClientFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   // TODO(crbug.com/848347): Check prohibited by policy in services that depend
   // on this Factory, not here.
-  if (IsEnrollmentAllowedByPolicy(context) &&
-      base::FeatureList::IsEnabled(chromeos::features::kMultiDeviceApi)) {
+  if (IsEnrollmentAllowedByPolicy(context))
     return new DeviceSyncClientHolder(context);
-  }
 
   return nullptr;
+}
+
+bool DeviceSyncClientFactory::ServiceIsNULLWhileTesting() const {
+  return true;
 }
 
 }  // namespace device_sync

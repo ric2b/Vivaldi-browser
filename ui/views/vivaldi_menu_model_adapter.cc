@@ -28,4 +28,20 @@ void MenuModelAdapter::VivaldiUpdateMenu(MenuItemView* menu,
   BuildMenuImpl(menu, model);
 }
 
+void MenuModelAdapter::VivaldiSelectionChanged(MenuItemView* menu) {
+  // Ignore selection of the root menu.
+  if (menu == menu->GetRootMenuItem())
+    return;
+
+  const int id = menu->GetCommand();
+  ui::MenuModel* model = menu_model_;
+  int index = 0;
+  if (ui::MenuModel::GetModelAndIndexForCommandId(id, &model, &index)) {
+    model->VivaldiHighlightChangedTo(index);
+    return;
+  }
+
+  NOTREACHED();
+}
+
 }  // namespace views

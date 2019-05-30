@@ -51,7 +51,7 @@ bool CanBeAnchorNode<EditingInFlatTreeStrategy>(Node* node) {
 #endif
 
 template <typename Strategy>
-void PositionTemplate<Strategy>::Trace(blink::Visitor* visitor) {
+void PositionTemplate<Strategy>::Trace(Visitor* visitor) {
   visitor->Trace(anchor_node_);
 }
 
@@ -97,25 +97,23 @@ PositionTemplate<Strategy>::PositionTemplate(const Node* anchor_node,
     : anchor_node_(const_cast<Node*>(anchor_node)),
       offset_(0),
       anchor_type_(anchor_type) {
-  if (!anchor_node_) {
-    anchor_type_ = PositionAnchorType::kOffsetInAnchor;
-    return;
-  }
+#if DCHECK_IS_ON()
+  DCHECK(anchor_node_);
+  DCHECK_NE(anchor_type_, PositionAnchorType::kOffsetInAnchor);
+  DCHECK(CanBeAnchorNode<Strategy>(anchor_node_.Get())) << anchor_node_;
   if (anchor_node_->IsTextNode()) {
     DCHECK(anchor_type_ == PositionAnchorType::kBeforeAnchor ||
-           anchor_type_ == PositionAnchorType::kAfterAnchor);
+           anchor_type_ == PositionAnchorType::kAfterAnchor)
+        << *this;
     return;
   }
-  if (anchor_node_->IsDocumentNode()) {
-    // Since |RangeBoundaryPoint| can't represent before/after Document, we
-    // should not use them.
-    DCHECK(IsBeforeChildren() || IsAfterChildren()) << anchor_type_;
+  if (!Strategy::Parent(*anchor_node_)) {
+    // Before/After |anchor_node_| should have a parent node for converting
+    // to offset in anchor position.
+    DCHECK(IsBeforeChildren() || IsAfterChildren()) << *this;
     return;
   }
-#if DCHECK_IS_ON()
-  DCHECK(CanBeAnchorNode<Strategy>(anchor_node_.Get())) << anchor_node_;
 #endif
-  DCHECK_NE(anchor_type_, PositionAnchorType::kOffsetInAnchor);
 }
 
 // TODO(editing-dev): Once we change type of |anchor_node_| to
@@ -190,8 +188,12 @@ Node* PositionTemplate<Strategy>::ComputeContainerNode() const {
     case PositionAnchorType::kOffsetInAnchor:
       return anchor_node_.Get();
     case PositionAnchorType::kBeforeAnchor:
-    case PositionAnchorType::kAfterAnchor:
-      return Strategy::Parent(*anchor_node_);
+    case PositionAnchorType::kAfterAnchor: {
+      Node* const parent = Strategy::Parent(*anchor_node_);
+      // TODO(https://crbug.com/889737), Once we fix the issue, we should have
+      // |DCHECK(parent)|.
+      return parent;
+    }
   }
   NOTREACHED();
   return nullptr;
@@ -393,8 +395,8 @@ bool PositionTemplate<Strategy>::IsValidFor(const Document& document) const {
          OffsetInContainerNode() <= LastOffsetInNode(*AnchorNode());
 }
 
-int ComparePositions(const PositionInFlatTree& position_a,
-                     const PositionInFlatTree& position_b) {
+int16_t ComparePositions(const PositionInFlatTree& position_a,
+                         const PositionInFlatTree& position_b) {
   DCHECK(position_a.IsNotNull());
   DCHECK(position_b.IsNotNull());
 
@@ -409,7 +411,7 @@ int ComparePositions(const PositionInFlatTree& position_a,
 }
 
 template <typename Strategy>
-int PositionTemplate<Strategy>::CompareTo(
+int16_t PositionTemplate<Strategy>::CompareTo(
     const PositionTemplate<Strategy>& other) const {
   return ComparePositions(*this, other);
 }

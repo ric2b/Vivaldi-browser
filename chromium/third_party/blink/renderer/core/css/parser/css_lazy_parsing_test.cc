@@ -23,8 +23,8 @@ class CSSLazyParsingTest : public testing::Test {
     return rule->HasParsedProperties();
   }
 
-  StyleRule* RuleAt(StyleSheetContents* sheet, size_t index) {
-    return ToStyleRule(sheet->ChildRules()[index]);
+  StyleRule* RuleAt(StyleSheetContents* sheet, wtf_size_t index) {
+    return To<StyleRule>(sheet->ChildRules()[index].Get());
   }
 
  protected:
@@ -38,16 +38,14 @@ TEST_F(CSSLazyParsingTest, Simple) {
 
   String sheet_text = "body { background-color: red; }";
   CSSParser::ParseSheet(context, style_sheet, sheet_text,
-                        true /* lazy parse */);
+                        CSSDeferPropertyParsing::kYes);
   StyleRule* rule = RuleAt(style_sheet, 0);
   EXPECT_FALSE(HasParsedProperties(rule));
   rule->Properties();
   EXPECT_TRUE(HasParsedProperties(rule));
 }
 
-// Avoid parsing rules with ::before or ::after to avoid causing
-// collectFeatures() when we trigger parsing for attr();
-TEST_F(CSSLazyParsingTest, DontLazyParseBeforeAfter) {
+TEST_F(CSSLazyParsingTest, LazyParseBeforeAfter) {
   CSSParserContext* context = CSSParserContext::Create(
       kHTMLStandardMode, SecureContextMode::kInsecureContext);
   StyleSheetContents* style_sheet = StyleSheetContents::Create(context);
@@ -55,10 +53,10 @@ TEST_F(CSSLazyParsingTest, DontLazyParseBeforeAfter) {
   String sheet_text =
       "p::before { content: 'foo' } p .class::after { content: 'bar' } ";
   CSSParser::ParseSheet(context, style_sheet, sheet_text,
-                        true /* lazy parse */);
+                        CSSDeferPropertyParsing::kYes);
 
-  EXPECT_TRUE(HasParsedProperties(RuleAt(style_sheet, 0)));
-  EXPECT_TRUE(HasParsedProperties(RuleAt(style_sheet, 1)));
+  EXPECT_FALSE(HasParsedProperties(RuleAt(style_sheet, 0)));
+  EXPECT_FALSE(HasParsedProperties(RuleAt(style_sheet, 1)));
 }
 
 // Test for crbug.com/664115 where |shouldConsiderForMatchingRules| would flip
@@ -72,7 +70,7 @@ TEST_F(CSSLazyParsingTest, ShouldConsiderForMatchingRulesDoesntChange1) {
 
   String sheet_text = "p::first-letter { ,badness, } ";
   CSSParser::ParseSheet(context, style_sheet, sheet_text,
-                        true /* lazy parse */);
+                        CSSDeferPropertyParsing::kYes);
 
   StyleRule* rule = RuleAt(style_sheet, 0);
   EXPECT_FALSE(HasParsedProperties(rule));
@@ -88,8 +86,8 @@ TEST_F(CSSLazyParsingTest, ShouldConsiderForMatchingRulesDoesntChange1) {
       rule->ShouldConsiderForMatchingRules(false /* includeEmptyRules */));
 }
 
-// Test the same thing as above, with a property that does not get lazy parsed,
-// to ensure that we perform the optimization where possible.
+// Test the same thing as above with lazy parsing off to ensure that we perform
+// the optimization where possible.
 TEST_F(CSSLazyParsingTest, ShouldConsiderForMatchingRulesSimple) {
   CSSParserContext* context = CSSParserContext::Create(
       kHTMLStandardMode, SecureContextMode::kInsecureContext);
@@ -97,7 +95,7 @@ TEST_F(CSSLazyParsingTest, ShouldConsiderForMatchingRulesSimple) {
 
   String sheet_text = "p::before { ,badness, } ";
   CSSParser::ParseSheet(context, style_sheet, sheet_text,
-                        true /* lazy parse */);
+                        CSSDeferPropertyParsing::kNo);
 
   StyleRule* rule = RuleAt(style_sheet, 0);
   EXPECT_TRUE(HasParsedProperties(rule));
@@ -124,7 +122,7 @@ TEST_F(CSSLazyParsingTest, ChangeDocuments) {
 
     String sheet_text = "body { background-color: red; } p { color: orange;  }";
     CSSParser::ParseSheet(context, cached_contents_, sheet_text,
-                          true /* lazy parse */);
+                          CSSDeferPropertyParsing::kYes);
 
     // Parse the first property set with the first document as owner.
     StyleRule* rule = RuleAt(cached_contents_, 0);

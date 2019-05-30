@@ -11,6 +11,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
@@ -52,8 +53,9 @@ class GetAPINatives : public ObjectBackedNativeHandler {
   GetAPINatives(ScriptContext* context,
                 NativeExtensionBindingsSystem* bindings_system)
       : ObjectBackedNativeHandler(context), bindings_system_(bindings_system) {
-    DCHECK_EQ(base::FeatureList::IsEnabled(features::kNativeCrxBindings),
-              !!bindings_system);
+    DCHECK_EQ(
+        base::FeatureList::IsEnabled(extensions_features::kNativeCrxBindings),
+        !!bindings_system);
   }
   ~GetAPINatives() override {}
 
@@ -85,8 +87,8 @@ class GetAPINatives : public ObjectBackedNativeHandler {
       args.GetReturnValue().Set(api);
     };
 
-    RouteHandlerFunction("get",
-                         base::Bind(get_api, context(), bindings_system_));
+    RouteHandlerFunction(
+        "get", base::BindRepeating(get_api, context(), bindings_system_));
   }
 
  private:
@@ -108,10 +110,12 @@ class ModuleSystemTestEnvironment::AssertNatives
 
   // ObjectBackedNativeHandler:
   void AddRoutes() override {
-    RouteHandlerFunction("AssertTrue", base::Bind(&AssertNatives::AssertTrue,
-                                                  base::Unretained(this)));
-    RouteHandlerFunction("AssertFalse", base::Bind(&AssertNatives::AssertFalse,
-                                                   base::Unretained(this)));
+    RouteHandlerFunction("AssertTrue",
+                         base::BindRepeating(&AssertNatives::AssertTrue,
+                                             base::Unretained(this)));
+    RouteHandlerFunction("AssertFalse",
+                         base::BindRepeating(&AssertNatives::AssertFalse,
+                                             base::Unretained(this)));
   }
 
   bool assertion_made() { return assertion_made_; }
@@ -160,7 +164,7 @@ ModuleSystemTestEnvironment::ModuleSystemTestEnvironment(
   context_->v8_context()->Enter();
   assert_natives_ = new AssertNatives(context_);
 
-  if (base::FeatureList::IsEnabled(features::kNativeCrxBindings))
+  if (base::FeatureList::IsEnabled(extensions_features::kNativeCrxBindings))
     bindings_system_ = std::make_unique<NativeExtensionBindingsSystem>(nullptr);
 
   {
@@ -243,8 +247,14 @@ v8::Local<v8::Object> ModuleSystemTestEnvironment::CreateGlobal(
     const std::string& name) {
   v8::EscapableHandleScope handle_scope(isolate_);
   v8::Local<v8::Object> object = v8::Object::New(isolate_);
-  isolate_->GetCurrentContext()->Global()->Set(
-      v8::String::NewFromUtf8(isolate_, name.c_str()), object);
+  isolate_->GetCurrentContext()
+      ->Global()
+      ->Set(context_->v8_context(),
+            v8::String::NewFromUtf8(isolate_, name.c_str(),
+                                    v8::NewStringType::kInternalized)
+                .ToLocalChecked(),
+            object)
+      .ToChecked();
   return handle_scope.Escape(object);
 }
 

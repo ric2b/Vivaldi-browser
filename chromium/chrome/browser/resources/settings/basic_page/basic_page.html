@@ -3,6 +3,7 @@
 <link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="../appearance_page/appearance_page.html">
+<link rel="import" href="../autofill_page/autofill_page.html">
 <link rel="import" href="../change_password_page/change_password_page.html">
 <link rel="import" href="../controls/settings_idle_load.html">
 <link rel="import" href="../on_startup_page/on_startup_page.html">
@@ -18,10 +19,12 @@
 <link rel="import" href="../android_apps_page/android_apps_browser_proxy.html">
 <link rel="import" href="../android_apps_page/android_apps_page.html">
 <link rel="import" href="../bluetooth_page/bluetooth_page.html">
+<link rel="import" href="../kiosk_next_shell_page/kiosk_next_shell_page.html">
 <link rel="import" href="../crostini_page/crostini_page.html">
+<link rel="import" href="../kiosk_next_shell_page/kiosk_next_shell_page.html">
 <link rel="import" href="../device_page/device_page.html">
 <link rel="import" href="../internet_page/internet_page.html">
-<link rel="import" href="../multidevice_page/multidevice_page_container.html">
+<link rel="import" href="../multidevice_page/multidevice_page.html">
 </if>
 
 <if expr="not chromeos">
@@ -118,16 +121,12 @@
             </settings-bluetooth-page>
           </settings-section>
         </template>
-        <template is="dom-if"
-            if="[[canShowMultideviceSection_(showMultidevice, pageVisibility)]]"
+        <template is="dom-if" if="[[showPage_(pageVisibility.multidevice)]]"
             restamp>
           <settings-section page-title="$i18n{multidevicePageTitle}"
-              section="multidevice"
-              hidden$="[[!doesChromebookSupportMultiDeviceSection_]]">
-            <settings-multidevice-page-container
-                does-chromebook-support-multi-device-features=
-                    "{{doesChromebookSupportMultiDeviceSection_}}">
-            </settings-multidevice-page-container>
+              section="multidevice">
+            <settings-multidevice-page prefs="{{prefs}}">
+            </settings-multidevice-page>
           </settings-section>
         </template>
 </if>
@@ -140,9 +139,17 @@
           <settings-section page-title="$i18n{peoplePageTitle}"
               section="people">
             <settings-people-page prefs="{{prefs}}"
-                autofill-home-enabled="[[autofillHomeEnabled]]"
                 page-visibility="[[pageVisibility]]">
             </settings-people-page>
+          </settings-section>
+        </template>
+        <template is="dom-if" if="[[showPage_(pageVisibility.autofill)]]"
+            restamp>
+          <settings-section page-title="$i18n{autofillPageTitle}"
+              section="autofill">
+            <settings-autofill-page prefs="{{prefs}}"
+                page-visibility="[[pageVisibility]]">
+            </settings-autofill-page>
           </settings-section>
         </template>
         <template is="dom-if" if="[[showPage_(pageVisibility.appearance)]]"
@@ -180,21 +187,30 @@
           </settings-section>
         </template>
 <if expr="chromeos">
-        <template is="dom-if"
-            if="[[shouldShowAndroidApps_(showAndroidApps, androidAppsInfo, pageVisibility)]]"
-            restamp>
+        <template is="dom-if" if="[[shouldCreateAndroidAppsSection_(
+            showAndroidApps, pageVisibility)]]" restamp>
           <settings-section page-title="$i18n{androidAppsPageTitle}"
-              section="androidApps">
+              section="androidApps" hidden$="[[!shouldShowAndroidAppsSection_(
+              androidAppsInfo)]]">
             <settings-android-apps-page prefs="{{prefs}}"
                 android-apps-info="[[androidAppsInfo]]"
                 have-play-store-app="[[havePlayStoreApp]]">
             </settings-android-apps-page>
           </settings-section>
         </template>
+        <template is="dom-if" if="[[showKioskNextShell]]" restamp>
+          <settings-section
+              page-title="$i18n{kioskNextShellPageTitle}"
+              section="kiosk-next-shell">
+            <settings-kiosk-next-shell-page prefs="{{prefs}}">
+            </settings-kiosk-next-shell-page>
+          </settings-section>
+        </template>
         <template is="dom-if" if="[[showCrostini]]" restamp>
           <settings-section page-title="$i18n{crostiniPageTitle}"
               section="crostini">
-            <settings-crostini-page prefs="{{prefs}}">
+            <settings-crostini-page prefs="{{prefs}}"
+                allow-crostini="[[allowCrostini_]]">
             </settings-crostini-page>
           </settings-section>
         </template>
@@ -223,9 +239,8 @@
           inSearchMode, hasExpandedSection_)]]">
         <div id="toggleSpacer"></div>
         <h2 id="toggleContainer">
-          <paper-button id="advancedToggle"
-              aria-active-attribute="aria-expanded"
-              on-click="advancedToggleClicked_">
+          <paper-button id="advancedToggle" on-click="advancedToggleClicked_"
+              aria-expanded$="[[boolToString_(advancedToggleExpanded)]]">
             <span>$i18n{advancedPageTitle}</span>
             <iron-icon icon="[[getArrowIcon_(advancedToggleExpanded)]]">
             </iron-icon>
@@ -256,16 +271,6 @@
                 <settings-privacy-page prefs="{{prefs}}"
                     page-visibility="[[pageVisibility.privacy]]">
                 </settings-privacy-page>
-              </settings-section>
-            </template>
-            <template is="dom-if" if="[[shouldShowPasswordsAndForms_(
-                autofillHomeEnabled, pageVisibility)]]"
-                restamp>
-              <settings-section
-                  page-title="$i18n{passwordsAndAutofillPageTitle}"
-                  section="passwordsAndForms">
-                <settings-passwords-and-forms-page prefs="{{prefs}}">
-                </settings-passwords-and-forms-page>
               </settings-section>
             </template>
             <template is="dom-if" if="[[showPage_(pageVisibility.languages)]]"

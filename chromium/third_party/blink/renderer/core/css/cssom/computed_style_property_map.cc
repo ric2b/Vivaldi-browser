@@ -9,6 +9,7 @@
 #include "third_party/blink/renderer/core/css/css_function_value.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_variable_data.h"
+#include "third_party/blink/renderer/core/css/properties/css_property_ref.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/pseudo_element.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
@@ -162,7 +163,7 @@ const CSSValue* ComputedTransform(const ComputedStyle& style) {
 
 }  // namespace
 
-unsigned int ComputedStylePropertyMap::size() {
+unsigned int ComputedStylePropertyMap::size() const {
   const ComputedStyle* style = UpdateStyle();
   if (!style)
     return 0;
@@ -174,8 +175,11 @@ unsigned int ComputedStylePropertyMap::size() {
              .size();
 }
 
-bool ComputedStylePropertyMap::ComparePropertyNames(const String& a,
-                                                    const String& b) {
+bool ComputedStylePropertyMap::ComparePropertyNames(
+    const CSSPropertyName& name_a,
+    const CSSPropertyName& name_b) {
+  AtomicString a = name_a.ToAtomicString();
+  AtomicString b = name_b.ToAtomicString();
   if (a.StartsWith("--"))
     return b.StartsWith("--") && WTF::CodePointCompareLessThan(a, b);
   if (a.StartsWith("-")) {
@@ -198,7 +202,7 @@ Node* ComputedStylePropertyMap::StyledNode() const {
   return nullptr;
 }
 
-const ComputedStyle* ComputedStylePropertyMap::UpdateStyle() {
+const ComputedStyle* ComputedStylePropertyMap::UpdateStyle() const {
   Node* node = StyledNode();
   if (!node || !node->InActiveDocument())
     return nullptr;
@@ -221,7 +225,7 @@ const ComputedStyle* ComputedStylePropertyMap::UpdateStyle() {
 }
 
 const CSSValue* ComputedStylePropertyMap::GetProperty(
-    CSSPropertyID property_id) {
+    CSSPropertyID property_id) const {
   const ComputedStyle* style = UpdateStyle();
   if (!style)
     return nullptr;
@@ -234,17 +238,20 @@ const CSSValue* ComputedStylePropertyMap::GetProperty(
     default:
       return CSSProperty::Get(property_id)
           .CSSValueFromComputedStyle(*style, nullptr /* layout_object */,
-                                     StyledNode(), false);
+                                     StyledNode(),
+                                     false /* allow_visited_style */);
   }
 }
 
 const CSSValue* ComputedStylePropertyMap::GetCustomProperty(
-    AtomicString property_name) {
+    AtomicString property_name) const {
   const ComputedStyle* style = UpdateStyle();
   if (!style)
     return nullptr;
-  return ComputedStyleCSSValueMapping::Get(
-      property_name, *style, node_->GetDocument().GetPropertyRegistry());
+  CSSPropertyRef ref(property_name, node_->GetDocument());
+  return ref.GetProperty().CSSValueFromComputedStyle(
+      *style, nullptr /* layout_object */, StyledNode(),
+      false /* allow_visited_style */);
 }
 
 void ComputedStylePropertyMap::ForEachProperty(
@@ -255,7 +262,7 @@ void ComputedStylePropertyMap::ForEachProperty(
 
   // Have to sort by all properties by code point, so we have to store
   // them in a buffer first.
-  HeapVector<std::pair<AtomicString, Member<const CSSValue>>> values;
+  HeapVector<std::pair<CSSPropertyName, Member<const CSSValue>>> values;
   for (const CSSProperty* property :
        CSSComputedStyleDeclaration::ComputableProperties()) {
     DCHECK(property);
@@ -263,7 +270,7 @@ void ComputedStylePropertyMap::ForEachProperty(
     const CSSValue* value = property->CSSValueFromComputedStyle(
         *style, nullptr /* layout_object */, StyledNode(), false);
     if (value)
-      values.emplace_back(property->GetPropertyNameAtomicString(), value);
+      values.emplace_back(CSSPropertyName(property->PropertyID()), value);
   }
 
   PropertyRegistry* registry =
@@ -271,7 +278,7 @@ void ComputedStylePropertyMap::ForEachProperty(
 
   for (const auto& name_value :
        ComputedStyleCSSValueMapping::GetVariables(*style, registry)) {
-    values.emplace_back(name_value.key, name_value.value);
+    values.emplace_back(CSSPropertyName(name_value.key), name_value.value);
   }
 
   std::sort(values.begin(), values.end(), [](const auto& a, const auto& b) {
@@ -283,7 +290,7 @@ void ComputedStylePropertyMap::ForEachProperty(
 }
 
 String ComputedStylePropertyMap::SerializationForShorthand(
-    const CSSProperty& property) {
+    const CSSProperty& property) const {
   DCHECK(property.IsShorthand());
   const ComputedStyle* style = UpdateStyle();
   if (!style) {

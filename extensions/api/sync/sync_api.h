@@ -13,9 +13,10 @@
 
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
+#include "components/sync/driver/sync_service.h"
+#include "components/sync/driver/sync_service_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
-#include "sync/vivaldi_sync_manager_observer.h"
 
 class VivaldiSyncModel;
 
@@ -31,30 +32,18 @@ namespace extensions {
 
 // Observes SyncModel and then routes the notifications as events to
 // the extension system.
-class SyncEventRouter : public ::vivaldi::VivaldiSyncManagerObserver {
+class SyncEventRouter : public syncer::SyncServiceObserver {
  public:
   explicit SyncEventRouter(Profile* profile);
   ~SyncEventRouter() override;
 
-  // VivaldiSyncModelObserver:
-
-  void OnAccessTokenRequested() override;
-  void OnEncryptionPasswordRequested() override;
-  void OnEngineStarted() override;
-  void OnEngineInitFailed() override;
-  void OnBeginSyncing() override;
-  void OnEndSyncing() override;
-  void OnEngineStopped() override;
-  void OnDeletingSyncManager() override;
+  // syncer::SyncServiceObserver implementation.
+  void OnStateChanged(syncer::SyncService* sync) override;
+  void OnSyncCycleCompleted(syncer::SyncService* sync) override;
+  void OnSyncShutdown(syncer::SyncService* sync) override;
 
  private:
-  // Helper to actually dispatch an event to extension listeners.
-  void DispatchEvent(const std::string& event_name,
-                     std::unique_ptr<base::ListValue> event_args);
-
-  content::BrowserContext* browser_context_;
-
-  base::WeakPtr<::vivaldi::VivaldiSyncManager> manager_;
+  Profile* profile_;
 
   DISALLOW_COPY_AND_ASSIGN(SyncEventRouter);
 };
@@ -73,6 +62,9 @@ class SyncAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
   // EventRouter::Observer implementation.
   void OnListenerAdded(const EventListenerInfo& details) override;
 
+  void StartSyncSetup(syncer::SyncService* sync);
+  void SyncSetupComplete();
+
  private:
   friend class BrowserContextKeyedAPIFactory<SyncAPI>;
 
@@ -86,9 +78,11 @@ class SyncAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
 
   // Created lazily upon OnListenerAdded.
   std::unique_ptr<SyncEventRouter> sync_event_router_;
+
+  std::unique_ptr<syncer::SyncSetupInProgressHandle> sync_setup_handle_;
 };
 
-class SyncStartFunction : public ChromeAsyncExtensionFunction {
+class SyncStartFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.start", SYNC_START)
   SyncStartFunction() = default;
@@ -96,25 +90,25 @@ class SyncStartFunction : public ChromeAsyncExtensionFunction {
  private:
   ~SyncStartFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(SyncStartFunction);
 };
 
-class SyncRefreshTokenFunction : public ChromeAsyncExtensionFunction {
+class SyncStopFunction : public UIThreadExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("sync.refreshToken", SYNC_REFRESH_TOKEN)
-  SyncRefreshTokenFunction() = default;
+  DECLARE_EXTENSION_FUNCTION("sync.stop", SYNC_STOP)
+  SyncStopFunction() = default;
 
  private:
-  ~SyncRefreshTokenFunction() override = default;
+  ~SyncStopFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
-  DISALLOW_COPY_AND_ASSIGN(SyncRefreshTokenFunction);
+  DISALLOW_COPY_AND_ASSIGN(SyncStopFunction);
 };
 
-class SyncSetEncryptionPasswordFunction : public ChromeAsyncExtensionFunction {
+class SyncSetEncryptionPasswordFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.setEncryptionPassword",
                              SYNC_SET_ENCRYPTION_PASSWORD)
@@ -123,40 +117,28 @@ class SyncSetEncryptionPasswordFunction : public ChromeAsyncExtensionFunction {
  private:
   ~SyncSetEncryptionPasswordFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(SyncSetEncryptionPasswordFunction);
 };
 
-class SyncIsFirstSetupFunction : public ChromeAsyncExtensionFunction {
+class SyncGetDefaultSessionNameFunction : public UIThreadExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("sync.isFirstSetup", SYNC_IS_FIRST_SETUP)
-  SyncIsFirstSetupFunction() = default;
+  DECLARE_EXTENSION_FUNCTION("sync.getDefaultSessionName",
+                             SYNC_GET_DEFAULT_SESSION_NAME)
+  SyncGetDefaultSessionNameFunction();
 
  private:
-  ~SyncIsFirstSetupFunction() override = default;
+  ~SyncGetDefaultSessionNameFunction() override;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
-  DISALLOW_COPY_AND_ASSIGN(SyncIsFirstSetupFunction);
+  void OnGetDefaultSessionName(const std::string& session_name);
+
+  DISALLOW_COPY_AND_ASSIGN(SyncGetDefaultSessionNameFunction);
 };
 
-class SyncIsEncryptionPasswordSetUpFunction
-    : public ChromeAsyncExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("sync.isEncryptionPasswordSetUp",
-                             SYNC_IS_ENCRYPTION_PASSWORD_SET_UP)
-  SyncIsEncryptionPasswordSetUpFunction() = default;
-
- private:
-  ~SyncIsEncryptionPasswordSetUpFunction() override = default;
-  // ExtensionFunction:
-  bool RunAsync() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SyncIsEncryptionPasswordSetUpFunction);
-};
-
-class SyncSetTypesFunction : public ChromeAsyncExtensionFunction {
+class SyncSetTypesFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.setTypes", SYNC_SET_TYPES)
   SyncSetTypesFunction() = default;
@@ -164,38 +146,39 @@ class SyncSetTypesFunction : public ChromeAsyncExtensionFunction {
  private:
   ~SyncSetTypesFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(SyncSetTypesFunction);
 };
 
-class SyncGetTypesFunction : public ChromeAsyncExtensionFunction {
+class SyncGetEngineStateFunction : public UIThreadExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("sync.getTypes", SYNC_GET_TYPES)
-  SyncGetTypesFunction() = default;
+  DECLARE_EXTENSION_FUNCTION("sync.getEngineState", SYNC_GET_ENGINE_STATE)
+  SyncGetEngineStateFunction() = default;
 
  private:
-  ~SyncGetTypesFunction() override = default;
+  ~SyncGetEngineStateFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
-  DISALLOW_COPY_AND_ASSIGN(SyncGetTypesFunction);
+  DISALLOW_COPY_AND_ASSIGN(SyncGetEngineStateFunction);
 };
 
-class SyncGetStatusFunction : public ChromeAsyncExtensionFunction {
+class SyncGetLastCycleStateFunction : public UIThreadExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("sync.getStatus", SYNC_GET_STATUS)
-  SyncGetStatusFunction() = default;
+  DECLARE_EXTENSION_FUNCTION("sync.getLastCycleState",
+                             SYNC_GET_LAST_CYCLE_STATE)
+  SyncGetLastCycleStateFunction() = default;
 
  private:
-  ~SyncGetStatusFunction() override = default;
+  ~SyncGetLastCycleStateFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
-  DISALLOW_COPY_AND_ASSIGN(SyncGetStatusFunction);
+  DISALLOW_COPY_AND_ASSIGN(SyncGetLastCycleStateFunction);
 };
 
-class SyncSetupCompleteFunction : public ChromeAsyncExtensionFunction {
+class SyncSetupCompleteFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.setupComplete", SYNC_SETUP_COMPLETE)
   SyncSetupCompleteFunction() = default;
@@ -203,25 +186,12 @@ class SyncSetupCompleteFunction : public ChromeAsyncExtensionFunction {
  private:
   ~SyncSetupCompleteFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(SyncSetupCompleteFunction);
 };
 
-class SyncLogoutFunction : public ChromeAsyncExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("sync.logout", SYNC_LOGOUT)
-  SyncLogoutFunction() = default;
-
- private:
-  ~SyncLogoutFunction() override = default;
-  // ExtensionFunction:
-  bool RunAsync() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SyncLogoutFunction);
-};
-
-class SyncClearDataFunction : public ChromeAsyncExtensionFunction {
+class SyncClearDataFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.clearData", SYNC_CLEAR_DATA)
   SyncClearDataFunction() = default;
@@ -229,13 +199,13 @@ class SyncClearDataFunction : public ChromeAsyncExtensionFunction {
  private:
   ~SyncClearDataFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(SyncClearDataFunction);
 };
 
 class SyncUpdateNotificationClientStatusFunction
-    : public ChromeAsyncExtensionFunction {
+    : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.updateNotificationClientStatus",
                              SYNC_UPDATE_NOTIFICATION_CLIENT_STATUS)
@@ -244,12 +214,12 @@ class SyncUpdateNotificationClientStatusFunction
  private:
   ~SyncUpdateNotificationClientStatusFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(SyncUpdateNotificationClientStatusFunction);
 };
 
-class SyncNotificationReceivedFunction : public ChromeAsyncExtensionFunction {
+class SyncNotificationReceivedFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.notificationReceived",
                              SYNC_NOTIFICATION_RECEIVED)
@@ -258,7 +228,7 @@ class SyncNotificationReceivedFunction : public ChromeAsyncExtensionFunction {
  private:
   ~SyncNotificationReceivedFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(SyncNotificationReceivedFunction);
 };

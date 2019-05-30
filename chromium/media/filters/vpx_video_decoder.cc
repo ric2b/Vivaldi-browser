@@ -13,17 +13,15 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/sys_byteorder.h"
-#include "base/sys_info.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
+#include "media/base/limits.h"
 #include "media/base/media_switches.h"
 #include "media/filters/frame_buffer_pool.h"
 #include "third_party/libvpx/source/libvpx/vpx/vp8dx.h"
@@ -37,41 +35,24 @@ namespace media {
 
 // Returns the number of threads.
 static int GetVpxVideoDecoderThreadCount(const VideoDecoderConfig& config) {
-  // Always try to use at least two threads for video decoding.  There is little
-  // reason not to since current day CPUs tend to be multi-core and we measured
-  // performance benefits on older machines such as P4s with hyperthreading.
-  constexpr int kDecodeThreads = 2;
-  constexpr int kMaxDecodeThreads = 32;
+  // vp8a doesn't really need more threads.
+  int desired_threads = limits::kMinVideoDecodeThreads;
 
-  // Refer to http://crbug.com/93932 for tsan suppressions on decoding.
-  int decode_threads = kDecodeThreads;
-
-  const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
-  std::string threads(cmd_line->GetSwitchValueASCII(switches::kVideoThreads));
-  if (threads.empty() || !base::StringToInt(threads, &decode_threads)) {
-    if (config.codec() == kCodecVP9) {
-      // For VP9 decode when using the default thread count, increase the number
-      // of decode threads to equal the maximum number of tiles possible for
-      // higher resolution streams.
-      const int width = config.coded_size().width();
-      if (width >= 8192)
-        decode_threads = 32;
-      else if (width >= 4096)
-        decode_threads = 16;
-      else if (width >= 2048)
-        decode_threads = 8;
-      else if (width >= 1024)
-        decode_threads = 4;
-    }
-
-    decode_threads =
-        std::min(decode_threads, base::SysInfo::NumberOfProcessors());
-    return decode_threads;
+  // For VP9 decoding increase the number of decode threads to equal the
+  // maximum number of tiles possible for higher resolution streams.
+  if (config.codec() == kCodecVP9) {
+    const int width = config.coded_size().width();
+    if (width >= 8192)
+      desired_threads = 32;
+    else if (width >= 4096)
+      desired_threads = 16;
+    else if (width >= 2048)
+      desired_threads = 8;
+    else if (width >= 1024)
+      desired_threads = 4;
   }
 
-  decode_threads = std::max(decode_threads, 0);
-  decode_threads = std::min(decode_threads, kMaxDecodeThreads);
-  return decode_threads;
+  return VideoDecoder::GetRecommendedThreadCount(desired_threads);
 }
 
 static std::unique_ptr<vpx_codec_ctx> InitializeVpxContext(
@@ -131,13 +112,13 @@ std::string VpxVideoDecoder::GetDisplayName() const {
   return "VpxVideoDecoder";
 }
 
-void VpxVideoDecoder::Initialize(
-    const VideoDecoderConfig& config,
-    bool /* low_delay */,
-    CdmContext* /* cdm_context */,
-    const InitCB& init_cb,
-    const OutputCB& output_cb,
-    const WaitingForDecryptionKeyCB& /* waiting_for_decryption_key_cb */) {
+void VpxVideoDecoder::Initialize(const VideoDecoderConfig& config,
+                                 bool /* low_delay */,
+                                 CdmContext* /* cdm_context */,
+                                 const InitCB& init_cb,
+                                 const OutputCB& output_cb,
+                                 const WaitingCB& /* waiting_cb */) {
+  DVLOG(1) << __func__ << ": " << config.AsHumanReadableString();
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(config.IsValidConfig());
 
@@ -161,7 +142,7 @@ void VpxVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
   DVLOG(3) << __func__ << ": " << buffer->AsHumanReadableString();
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(buffer);
-  DCHECK(!decode_cb.is_null());
+  DCHECK(decode_cb);
   DCHECK_NE(state_, kUninitialized)
       << "Called Decode() before successful Initialize()";
 
@@ -184,16 +165,8 @@ void VpxVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
     return;
   }
 
-  bool decode_okay;
   scoped_refptr<VideoFrame> video_frame;
-  if (config_.codec() == kCodecVP9) {
-    SCOPED_UMA_HISTOGRAM_TIMER("Media.VpxVideoDecoder.Vp9DecodeTime");
-    decode_okay = VpxDecode(buffer.get(), &video_frame);
-  } else {
-    decode_okay = VpxDecode(buffer.get(), &video_frame);
-  }
-
-  if (!decode_okay) {
+  if (!VpxDecode(buffer.get(), &video_frame)) {
     state_ = kError;
     bound_decode_cb.Run(DecodeStatus::DECODE_ERROR);
     return;
@@ -313,14 +286,12 @@ bool VpxVideoDecoder::VpxDecode(const DecoderBuffer* buffer,
   DCHECK(video_frame);
   DCHECK(!buffer->end_of_stream());
 
-  int64_t timestamp = buffer->timestamp().InMicroseconds();
-  void* user_priv = reinterpret_cast<void*>(&timestamp);
   {
-    TRACE_EVENT2("media", "vpx_codec_decode", "timestamp", timestamp,
-                 "buffer size (B)", buffer->data_size());
+    TRACE_EVENT1("media", "vpx_codec_decode", "buffer",
+                 buffer->AsHumanReadableString());
     vpx_codec_err_t status =
         vpx_codec_decode(vpx_codec_.get(), buffer->data(), buffer->data_size(),
-                         user_priv, 0 /* deadline */);
+                         nullptr /* user_priv */, 0 /* deadline */);
     if (status != VPX_CODEC_OK) {
       DLOG(ERROR) << "vpx_codec_decode() error: "
                   << vpx_codec_err_to_string(status);
@@ -334,11 +305,6 @@ bool VpxVideoDecoder::VpxDecode(const DecoderBuffer* buffer,
   if (!vpx_image) {
     *video_frame = nullptr;
     return true;
-  }
-
-  if (vpx_image->user_priv != user_priv) {
-    DLOG(ERROR) << "Invalid output timestamp.";
-    return false;
   }
 
   const vpx_image_t* vpx_image_alpha = nullptr;
@@ -362,18 +328,14 @@ bool VpxVideoDecoder::VpxDecode(const DecoderBuffer* buffer,
                       (*video_frame)->visible_rect().height());
   }
 
-  (*video_frame)->set_timestamp(base::TimeDelta::FromMicroseconds(timestamp));
+  (*video_frame)->set_timestamp(buffer->timestamp());
 
   // Default to the color space from the config, but if the bistream specifies
   // one, prefer that instead.
-  ColorSpace color_space = config_.color_space();
-  if (vpx_image->cs == VPX_CS_BT_709)
-    color_space = COLOR_SPACE_HD_REC709;
-  else if (vpx_image->cs == VPX_CS_BT_601 || vpx_image->cs == VPX_CS_SMPTE_170)
-    color_space = COLOR_SPACE_SD_REC601;
-  (*video_frame)
-      ->metadata()
-      ->SetInteger(VideoFrameMetadata::COLOR_SPACE, color_space);
+  if (config_.color_space_info().IsSpecified()) {
+    (*video_frame)
+        ->set_color_space(config_.color_space_info().ToGfxColorSpace());
+  }
 
   if (config_.color_space_info().IsSpecified()) {
     // config_.color_space_info() comes from the color tag which is
@@ -456,14 +418,13 @@ VpxVideoDecoder::AlphaDecodeStatus VpxVideoDecoder::DecodeAlphaPlane(
 
   // Try and decode buffer->side_data() minus the first 8 bytes as a full
   // frame.
-  int64_t timestamp_alpha = buffer->timestamp().InMicroseconds();
-  void* user_priv_alpha = reinterpret_cast<void*>(&timestamp_alpha);
   {
-    TRACE_EVENT1("media", "vpx_codec_decode_alpha", "timestamp_alpha",
-                 timestamp_alpha);
-    vpx_codec_err_t status = vpx_codec_decode(
-        vpx_codec_alpha_.get(), buffer->side_data() + 8,
-        buffer->side_data_size() - 8, user_priv_alpha, 0 /* deadline */);
+    TRACE_EVENT1("media", "vpx_codec_decode_alpha", "buffer",
+                 buffer->AsHumanReadableString());
+    vpx_codec_err_t status =
+        vpx_codec_decode(vpx_codec_alpha_.get(), buffer->side_data() + 8,
+                         buffer->side_data_size() - 8, nullptr /* user_priv */,
+                         0 /* deadline */);
     if (status != VPX_CODEC_OK) {
       DLOG(ERROR) << "vpx_codec_decode() failed for the alpha: "
                   << vpx_codec_error(vpx_codec_.get());
@@ -475,11 +436,6 @@ VpxVideoDecoder::AlphaDecodeStatus VpxVideoDecoder::DecodeAlphaPlane(
   *vpx_image_alpha = vpx_codec_get_frame(vpx_codec_alpha_.get(), &iter_alpha);
   if (!(*vpx_image_alpha)) {
     return kNoAlphaPlaneData;
-  }
-
-  if ((*vpx_image_alpha)->user_priv != user_priv_alpha) {
-    DLOG(ERROR) << "Invalid output timestamp on alpha.";
-    return kAlphaPlaneError;
   }
 
   if ((*vpx_image_alpha)->d_h != vpx_image->d_h ||
@@ -503,6 +459,10 @@ bool VpxVideoDecoder::CopyVpxImageToVideoFrame(
   switch (vpx_image->fmt) {
     case VPX_IMG_FMT_I420:
       codec_format = vpx_image_alpha ? PIXEL_FORMAT_I420A : PIXEL_FORMAT_I420;
+      break;
+
+    case VPX_IMG_FMT_I422:
+      codec_format = PIXEL_FORMAT_I422;
       break;
 
     case VPX_IMG_FMT_I444:

@@ -3,14 +3,42 @@
 // found in the LICENSE file.
 
 /**
+ * @typedef {{path: string,
+ *            pathDisplayText: string}}
+ */
+let CrostiniSharedPath;
+
+/**
  * @fileoverview A helper object used by the "Linux Apps" (Crostini) section
  * to install and uninstall Crostini.
  */
 cr.define('settings', function() {
   /** @interface */
   class CrostiniBrowserProxy {
+    /* Show crostini installer. */
     requestCrostiniInstallerView() {}
+
+    /* Show remove crostini dialog. */
     requestRemoveCrostini() {}
+
+    /**
+     * @param {!Array<string>} paths Paths to sanitze.
+     * @return {!Promise<!Array<string>>} Text to display in UI.
+     */
+    getCrostiniSharedPathsDisplayText(paths) {}
+
+    /** @param {string} path Path to stop sharing. */
+    removeCrostiniSharedPath(path) {}
+
+    /* Request chrome send a crostini-installer-status-changed event with the
+    current installer status */
+    requestCrostiniInstallerStatus() {}
+
+    /* Export crostini container. */
+    exportCrostiniContainer() {}
+
+    /* Import crostini container. */
+    importCrostiniContainer() {}
   }
 
   /** @implements {settings.CrostiniBrowserProxy} */
@@ -23,6 +51,31 @@ cr.define('settings', function() {
     /** @override */
     requestRemoveCrostini() {
       chrome.send('requestRemoveCrostini');
+    }
+
+    /** @override */
+    getCrostiniSharedPathsDisplayText(paths) {
+      return cr.sendWithPromise('getCrostiniSharedPathsDisplayText', paths);
+    }
+
+    /** @override */
+    removeCrostiniSharedPath(path) {
+      chrome.send('removeCrostiniSharedPath', [path]);
+    }
+
+    /** @override */
+    requestCrostiniInstallerStatus() {
+      chrome.send('requestCrostiniInstallerStatus');
+    }
+
+    /** @override */
+    exportCrostiniContainer() {
+      chrome.send('exportCrostiniContainer');
+    }
+
+    /** @override */
+    importCrostiniContainer() {
+      chrome.send('importCrostiniContainer');
     }
   }
 

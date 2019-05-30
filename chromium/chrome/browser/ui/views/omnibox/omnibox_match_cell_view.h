@@ -17,6 +17,9 @@ class OmniboxTextView;
 
 class OmniboxMatchCellView : public views::View {
  public:
+  // The right-hand margin used for rows.
+  static constexpr int kMarginRight = 8;
+
   explicit OmniboxMatchCellView(OmniboxResultView* result_view);
   ~OmniboxMatchCellView() override;
 
@@ -26,9 +29,7 @@ class OmniboxMatchCellView : public views::View {
   OmniboxTextView* description() { return description_view_; }
   OmniboxTextView* separator() { return separator_view_; }
 
-  // Used to define the amount the keyword view overlaps with the suggestion
-  // view in non-keyword mode.
-  int IconWidthAndPadding() const;
+  static int GetTextIndent();
 
   void OnMatchUpdate(const OmniboxResultView* result_view,
                      const AutocompleteMatch& match);
@@ -37,10 +38,13 @@ class OmniboxMatchCellView : public views::View {
   gfx::Size CalculatePreferredSize() const override;
   bool CanProcessEventsWithinSubtree() const override;
 
-  // The right-hand margin used for rows with the refresh UI.
-  static constexpr int kRefreshMarginRight = 8;
-
  protected:
+  enum class LayoutStyle {
+    OLD_ANSWER,
+    ONE_LINE_SUGGESTION,
+    TWO_LINE_SUGGESTION,
+  };
+
   // views::View:
   void Layout() override;
   const char* GetClassName() const override;
@@ -49,10 +53,9 @@ class OmniboxMatchCellView : public views::View {
   void LayoutNewStyleTwoLineSuggestion();
   void LayoutOneLineSuggestion(int icon_view_width, int text_indent);
 
-  bool is_old_style_answer_;
-  bool is_rich_suggestion_;
-  bool is_search_type_;
-  bool should_show_tab_match_ = false;
+  bool is_rich_suggestion_ = false;
+  bool is_search_type_ = false;
+  LayoutStyle layout_style_ = LayoutStyle::ONE_LINE_SUGGESTION;
 
   // Weak pointers for easy reference.
   // An icon representing the type or content.
@@ -64,6 +67,18 @@ class OmniboxMatchCellView : public views::View {
   OmniboxTextView* separator_view_;
 
  private:
+  void SetTailSuggestCommonPrefixWidth(const base::string16& common_prefix);
+
+  // This (permanently) holds the rendered width of
+  // AutocompleteMatch::kEllipsis so that we don't have to keep calculating
+  // it.
+  int ellipsis_width_ = 0;
+
+  // This holds the rendered width of the common prefix of a set of tail
+  // suggestions so that it doesn't have to be re-calculated if the prefix
+  // doesn't change.
+  int tail_suggest_common_prefix_width_ = 0;
+
   DISALLOW_COPY_AND_ASSIGN(OmniboxMatchCellView);
 };
 

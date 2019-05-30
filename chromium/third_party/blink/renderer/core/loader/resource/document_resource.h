@@ -41,6 +41,11 @@ class CORE_EXPORT DocumentResource final : public TextResource {
   static DocumentResource* FetchSVGDocument(FetchParameters&,
                                             ResourceFetcher*,
                                             ResourceClient*);
+
+  DocumentResource(const ResourceRequest&,
+                   ResourceType,
+                   const ResourceLoaderOptions&,
+                   const TextResourceDecoderOptions&);
   ~DocumentResource() override;
   void Trace(blink::Visitor*) override;
 
@@ -52,21 +57,17 @@ class CORE_EXPORT DocumentResource final : public TextResource {
   class SVGDocumentResourceFactory : public ResourceFactory {
    public:
     SVGDocumentResourceFactory()
-        : ResourceFactory(Resource::kSVGDocument,
+        : ResourceFactory(ResourceType::kSVGDocument,
                           TextResourceDecoderOptions::kXMLContent) {}
 
     Resource* Create(
         const ResourceRequest& request,
         const ResourceLoaderOptions& options,
         const TextResourceDecoderOptions& decoder_options) const override {
-      return new DocumentResource(request, Resource::kSVGDocument, options,
-                                  decoder_options);
+      return MakeGarbageCollected<DocumentResource>(
+          request, ResourceType::kSVGDocument, options, decoder_options);
     }
   };
-  DocumentResource(const ResourceRequest&,
-                   Type,
-                   const ResourceLoaderOptions&,
-                   const TextResourceDecoderOptions&);
 
   bool MimeTypeAllowed() const;
   Document* CreateDocument(const KURL&);
@@ -77,8 +78,8 @@ class CORE_EXPORT DocumentResource final : public TextResource {
 DEFINE_TYPE_CASTS(DocumentResource,
                   Resource,
                   resource,
-                  resource->GetType() == Resource::kSVGDocument,
-                  resource.GetType() == Resource::kSVGDocument);
+                  resource->GetType() == ResourceType::kSVGDocument,
+                  resource.GetType() == ResourceType::kSVGDocument);
 
 }  // namespace blink
 

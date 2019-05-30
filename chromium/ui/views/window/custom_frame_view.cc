@@ -9,6 +9,7 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "third_party/skia/include/core/SkPath.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -16,7 +17,6 @@
 #include "ui/gfx/font.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image.h"
-#include "ui/gfx/path.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/resources/grit/views_resources.h"
@@ -175,7 +175,7 @@ int CustomFrameView::NonClientHitTest(const gfx::Point& point) {
 }
 
 void CustomFrameView::GetWindowMask(const gfx::Size& size,
-                                    gfx::Path* window_mask) {
+                                    SkPath* window_mask) {
   DCHECK(window_mask);
   if (frame_->IsMaximized() || !ShouldShowTitleBarAndBorder())
     return;
@@ -274,7 +274,7 @@ gfx::Size CustomFrameView::GetMaximumSize() const {
 
 void CustomFrameView::ButtonPressed(Button* sender, const ui::Event& event) {
   if (sender == close_button_)
-    frame_->Close();
+    frame_->CloseWithReason(views::Widget::ClosedReason::kCloseButtonClicked);
   else if (sender == minimize_button_)
     frame_->Minimize();
   else if (sender == maximize_button_)
@@ -522,8 +522,7 @@ void CustomFrameView::LayoutWindowControls() {
       button_order->trailing_buttons();
 
   ImageButton* button = NULL;
-  for (std::vector<views::FrameButton>::const_iterator it =
-           leading_buttons.begin(); it != leading_buttons.end(); ++it) {
+  for (auto it = leading_buttons.begin(); it != leading_buttons.end(); ++it) {
     button = GetImageButton(*it);
     if (!button)
       continue;
@@ -538,8 +537,8 @@ void CustomFrameView::LayoutWindowControls() {
 
   // Trailing buttions are laid out in a RTL fashion
   next_button_x = width() - FrameBorderThickness();
-  for (std::vector<views::FrameButton>::const_reverse_iterator it =
-           trailing_buttons.rbegin(); it != trailing_buttons.rend(); ++it) {
+  for (auto it = trailing_buttons.rbegin(); it != trailing_buttons.rend();
+       ++it) {
     button = GetImageButton(*it);
     if (!button)
       continue;

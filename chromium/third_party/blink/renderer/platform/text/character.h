@@ -78,12 +78,12 @@ class PLATFORM_EXPORT Character {
   }
 
   static unsigned ExpansionOpportunityCount(const LChar*,
-                                            size_t length,
+                                            unsigned length,
                                             TextDirection,
                                             bool& is_after_expansion,
                                             const TextJustify);
   static unsigned ExpansionOpportunityCount(const UChar*,
-                                            size_t length,
+                                            unsigned length,
                                             TextDirection,
                                             bool& is_after_expansion,
                                             const TextJustify);
@@ -100,7 +100,7 @@ class PLATFORM_EXPORT Character {
 
   static bool IsUprightInMixedVertical(UChar32 character);
 
-  // https://html.spec.whatwg.org/multipage/scripting.html#prod-potentialcustomelementname
+  // https://html.spec.whatwg.org/C/#prod-potentialcustomelementname
   static bool IsPotentialCustomElementName8BitChar(LChar ch) {
     return IsASCIILower(ch) || IsASCIIDigit(ch) || ch == '-' || ch == '.' ||
            ch == '_' || ch == 0xb7 || (0xc0 <= ch && ch != 0xd7 && ch != 0xf7);
@@ -153,7 +153,7 @@ class PLATFORM_EXPORT Character {
   static bool IsRegionalIndicator(UChar32);
   static bool IsModifier(UChar32 c) { return c >= 0x1F3FB && c <= 0x1F3FF; }
   // http://www.unicode.org/reports/tr51/proposed.html#flag-emoji-tag-sequences
-  static bool IsEmojiFlagSequenceTag(UChar32);
+  static bool IsEmojiTagSequence(UChar32);
 
   static inline UChar NormalizeSpaces(UChar character) {
     if (TreatAsSpace(character))
@@ -174,7 +174,7 @@ class PLATFORM_EXPORT Character {
     // http://www.whatwg.org/specs/web-apps/current-work/multipage/common-microsyntaxes.html#space-character
     // This function returns true for 0x000B also, so that this is backward
     // compatible.  Otherwise, the test
-    // LayoutTests/canvas/philip/tests/2d.text.draw.space.collapse.space.html
+    // web_tests/canvas/philip/tests/2d.text.draw.space.collapse.space.html
     // will fail
     return c == 0x0009 || (c >= 0x000A && c <= 0x000D);
   }

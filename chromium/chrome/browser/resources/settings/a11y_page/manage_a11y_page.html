@@ -1,5 +1,6 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/cr_elements/cr_link_row/cr_link_row.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
@@ -24,8 +25,10 @@
 
       h2 ~ .settings-box,
       h2 ~ settings-toggle-button,
+      h2 ~ cr-link-row,
       iron-collapse .settings-box,
-      iron-collapse settings-toggle-button {
+      iron-collapse settings-toggle-button,
+      iron-collapse cr-link-row {
         margin-inline-end: var(--settings-box-row-padding);
         margin-inline-start: var(--settings-box-row-indent);
         padding-inline-end: 0;
@@ -49,7 +52,7 @@
     <iron-collapse opened="[[prefs.settings.accessibility.value]]">
       <div class="settings-box"
           on-click="onChromeVoxSettingsTap_" actionable>
-        <div class="start">$i18n{chromeVoxOptionsLabel}</div>
+        <div class="start" aria-hidden="true">$i18n{chromeVoxOptionsLabel}</div>
         <paper-icon-button-light class="icon-external">
           <button aria-label="$i18n{chromeVoxOptionsLabel}"></button>
         </paper-icon-button-light>
@@ -67,25 +70,18 @@
     <iron-collapse opened="[[prefs.settings.a11y.select_to_speak.value]]">
       <div class="settings-box"
           on-click="onSelectToSpeakSettingsTap_" actionable>
-        <div class="start">$i18n{selectToSpeakOptionsLabel}</div>
+        <div class="start" aria-hidden="true">
+          $i18n{selectToSpeakOptionsLabel}
+        </div>
         <paper-icon-button-light class="icon-external">
           <button aria-label="$i18n{selectToSpeakOptionsLabel}"></button>
         </paper-icon-button-light>
       </div>
     </iron-collapse>
-    <div class="settings-box two-line" on-click="onManageTtsSettingsTap_"
-        actionable>
-      <div class="start">
-        $i18n{manageTtsSettings}
-        <div class="secondary" id="appearanceSettingsSecondary">
-          $i18n{ttsSettingsLinkDescription}
-        </div>
-      </div>
-      <paper-icon-button-light class="subpage-arrow">
-        <button aria-label="$i18n{manageTtsSettings}"
-            aria-describedby="appearanceSettingsSecondary"></button>
-      </paper-icon-button-light>
-    </div>
+
+    <cr-link-row class="hr" label="$i18n{manageTtsSettings}"
+        on-click="onManageTtsSettingsTap_"
+        sub-label="$i18n{ttsSettingsLinkDescription}" embedded></cr-link-row>
 
     <h2>$i18n{displayHeading}</h2>
     <settings-toggle-button class="first"
@@ -105,45 +101,25 @@
           disabled="[[!prefs.settings.a11y.screen_magnifier.value]]">
       </settings-dropdown-menu>
     </div>
-    <template is="dom-if" if="[[dockedMagnifierFeatureEnabled_]]" restamp>
-      <settings-toggle-button
-          pref="{{prefs.ash.docked_magnifier.enabled}}"
-          label="$i18n{dockedMagnifierLabel}"
-          disabled="[[prefs.settings.a11y.screen_magnifier.value]]">
-      </settings-toggle-button>
-      <div class="settings-box continuation">
-        <div class="start sub-item">$i18n{dockedMagnifierZoomLabel}</div>
-        <settings-dropdown-menu label="$i18n{dockedMagnifierZoomLabel}"
-            pref="{{prefs.ash.docked_magnifier.scale}}"
-            menu-options="[[screenMagnifierZoomOptions_]]"
-            disabled="[[!prefs.ash.docked_magnifier.enabled.value]]">
-        </settings-dropdown-menu>
-      </div>
-    </template>
-    <div class="settings-box two-line" on-click="onDisplayTap_" actionable>
-      <div class="start">
-        $i18n{displaySettingsTitle}
-        <div class="secondary" id="displaySettingsSecondary">
-          $i18n{displaySettingsDescription}
-        </div>
-      </div>
-      <paper-icon-button-light class="subpage-arrow">
-        <button aria-label="$i18n{displaySettingsTitle}"
-            aria-describedby="displaySettingsSecondary"></button>
-      </paper-icon-button-light>
+    <settings-toggle-button
+        pref="{{prefs.ash.docked_magnifier.enabled}}"
+        label="$i18n{dockedMagnifierLabel}"
+        disabled="[[prefs.settings.a11y.screen_magnifier.value]]">
+    </settings-toggle-button>
+    <div class="settings-box continuation">
+      <div class="start sub-item">$i18n{dockedMagnifierZoomLabel}</div>
+      <settings-dropdown-menu label="$i18n{dockedMagnifierZoomLabel}"
+          pref="{{prefs.ash.docked_magnifier.scale}}"
+          menu-options="[[screenMagnifierZoomOptions_]]"
+          disabled="[[!prefs.ash.docked_magnifier.enabled.value]]">
+      </settings-dropdown-menu>
     </div>
-    <div class="settings-box two-line" on-click="onAppearanceTap_" actionable>
-      <div class="start">
-        $i18n{appearanceSettingsTitle}
-        <div class="secondary" id="appearanceSettingsSecondary">
-          $i18n{appearanceSettingsDescription}
-        </div>
-      </div>
-      <paper-icon-button-light class="subpage-arrow">
-        <button aria-label="$i18n{appearanceSettingsTitle}"
-            aria-describedby="appearanceSettingsSecondary"></button>
-      </paper-icon-button-light>
-    </div>
+    <cr-link-row class="hr" label="$i18n{displaySettingsTitle}"
+        on-click="onDisplayTap_" sub-label="$i18n{displaySettingsDescription}"
+        embedded></cr-link-row>
+    <cr-link-row class="hr" label="$i18n{appearanceSettingsTitle}"
+        on-click="onAppearanceTap_"
+        sub-label="$i18n{appearanceSettingsDescription}" embedded></cr-link-row>
 
     <h2>$i18n{keyboardAndTextInputHeading}</h2>
     <settings-toggle-button class="first"
@@ -167,40 +143,28 @@
         pref="{{prefs.settings.a11y.caret_highlight}}"
         label="$i18n{caretHighlightLabel}">
     </settings-toggle-button>
-    <template is="dom-if" if="[[showExperimentalFeatures_]]">
+    <template is="dom-if" if="[[showExperimentalSwitchAccess_]]">
       <settings-toggle-button
           pref="{{prefs.settings.a11y.switch_access}}"
           label="$i18n{switchAccessLabel}">
       </settings-toggle-button>
       <iron-collapse opened="[[prefs.settings.a11y.switch_access.value]]">
-        <div class="settings-box continuation" actionable
-            on-click="onSwitchAccessSettingsTap_">
-          <div class="start">$i18n{switchAccessOptionsLabel}</div>
-          <paper-icon-button-light class="icon-external">
-            <button aria-label="$i18n{switchAccessOptionsLabel}"></button>
-          </paper-icon-button-light>
-        </div>
+        <cr-link-row label="$i18n{switchAccessOptionsLabel}"
+            on-click="onSwitchAccessSettingsTap_" embedded external>
+        </cr-link-row>
       </iron-collapse>
     </template>
-    <div class="settings-box two-line" on-click="onKeyboardTap_" actionable>
-      <div class="start">
-        $i18n{keyboardSettingsTitle}
-        <div class="secondary" id="keyboardSettingsSecondary">
-          $i18n{keyboardSettingsDescription}
-        </div>
-      </div>
-      <paper-icon-button-light class="subpage-arrow">
-        <button aria-label="$i18n{keyboardSettingsTitle}"
-            aria-describedby="keyboardSettingsSecondary"></button>
-      </paper-icon-button-light>
-    </div>
+    <cr-link-row class="hr" label="$i18n{keyboardSettingsTitle}"
+        on-click="onKeyboardTap_" sub-label="$i18n{keyboardSettingsDescription}"
+        embedded></cr-link-row>
 
     <h2>$i18n{mouseAndTouchpadHeading}</h2>
     <settings-toggle-button class="first"
         pref="{{prefs.settings.a11y.autoclick}}"
         label="$i18n{clickOnStopLabel}">
     </settings-toggle-button>
-    <div class="settings-box continuation">
+    <div class="settings-box continuation"
+        hidden$="[[!prefs.settings.a11y.autoclick.value]]">
       <div class="start sub-item">$i18n{delayBeforeClickLabel}</div>
       <settings-dropdown-menu label="$i18n{delayBeforeClickLabel}"
           pref="{{prefs.settings.a11y.autoclick_delay_ms}}"
@@ -208,6 +172,38 @@
           disabled="[[!prefs.settings.a11y.autoclick.value]]">
       </settings-dropdown-menu>
     </div>
+    <template is="dom-if" if="[[showExperimentalAutoclick_]]">
+      <div class="settings-box continuation"
+          hidden$="[[!prefs.settings.a11y.autoclick.value]]">
+        <div class="start sub-item" id="autoclickEventTypeLabel">
+          $i18n{autoclickEventTypeLabel}
+        </div>
+        <settings-dropdown-menu aria-labeledby="autoclickEventTypeLabel"
+            pref="{{prefs.settings.a11y.autoclick_event_type}}"
+            menu-options="[[autoClickEventTypeOptions_]]"
+            disabled="[[!prefs.settings.a11y.autoclick.value]]">
+        </settings-dropdown-menu>
+      </div>
+      <div class="sub-item">
+        <settings-toggle-button class="continuation sub-item"
+          hidden$="[[!prefs.settings.a11y.autoclick.value]]"
+          pref="{{prefs.settings.a11y.autoclick_revert_to_left_click}}"
+          label="$i18n{autoclickRevertToLeftClick}">
+        </settings-toggle-button>
+      </div>
+      <div class="settings-box continuation"
+          hidden$="[[!prefs.settings.a11y.autoclick.value]]">
+        <div class="start sub-item" id="autoclickMovementThresholdLabel">
+          $i18n{autoclickMovementThresholdLabel}
+        </div>
+        <settings-dropdown-menu
+            aria-labelledby="autoclickMovementThresholdLabel"
+            pref="{{prefs.settings.a11y.autoclick_movement_threshold}}"
+            menu-options="[[autoClickMovementThresholdOptions_]]"
+            disabled="[[!prefs.settings.a11y.autoclick.value]]">
+        </settings-dropdown-menu>
+      </div>
+    </template>
     <settings-toggle-button
         pref="{{prefs.settings.a11y.large_cursor_enabled}}"
         label="$i18n{largeMouseCursorLabel}">
@@ -226,18 +222,9 @@
         pref="{{prefs.settings.a11y.cursor_highlight}}"
         label="$i18n{cursorHighlightLabel}">
     </settings-toggle-button>
-    <div class="settings-box two-line" on-click="onMouseTap_" actionable>
-      <div class="start">
-        $i18n{mouseSettingsTitle}
-        <div class="secondary" id="mouseSettingsSecondary">
-          $i18n{mouseSettingsDescription}
-        </div>
-        </div>
-        <paper-icon-button-light class="subpage-arrow">
-          <button aria-label="$i18n{mouseSettingsTitle}"
-              aria-describedby="mouseSettingsSecondary"></button>
-        </paper-icon-button-light>
-    </div>
+    <cr-link-row class="hr" label="$i18n{mouseSettingsTitle}"
+        on-click="onMouseTap_" sub-label="$i18n{mouseSettingsDescription}"
+        embedded></cr-link-row>
 
     <h2>$i18n{audioHeading}</h2>
     <settings-toggle-button class="first"

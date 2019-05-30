@@ -16,7 +16,6 @@
 class BookmarkBarView;
 class Browser;
 class BrowserViewLayoutDelegate;
-class ContentsLayoutManager;
 class ImmersiveModeController;
 class InfoBarContainerView;
 class TabStrip;
@@ -28,6 +27,7 @@ class Size;
 
 namespace views {
 class ClientView;
+class View;
 }
 
 namespace web_modal {
@@ -50,7 +50,6 @@ class BrowserViewLayout : public views::LayoutManager {
             views::View* toolbar,
             InfoBarContainerView* infobar_container,
             views::View* contents_container,
-            ContentsLayoutManager* contents_layout_manager,
             ImmersiveModeController* immersive_mode_controller);
 
   // Sets or updates views that are not available when |this| is initialized.
@@ -66,9 +65,6 @@ class BrowserViewLayout : public views::LayoutManager {
 
   web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHost();
 
-  // Returns the minimum size of the browser view.
-  gfx::Size GetMinimumSize();
-
   // Returns the bounding box, in widget coordinates,  for the find bar.
   gfx::Rect GetFindBarBoundingBox() const;
 
@@ -80,6 +76,7 @@ class BrowserViewLayout : public views::LayoutManager {
 
   // views::LayoutManager overrides:
   void Layout(views::View* host) override;
+  gfx::Size GetMinimumSize(const views::View* host) const override;
   gfx::Size GetPreferredSize(const views::View* host) const override;
 
   // Returns true if an infobar is showing.
@@ -92,6 +89,7 @@ class BrowserViewLayout : public views::LayoutManager {
   class WebContentsModalDialogHostViews;
 
   Browser* browser() { return browser_; }
+  const Browser* browser() const { return browser_; }
 
   // Layout the following controls, starting at |top|, returns the coordinate
   // of the bottom of the control, for laying out the next control.
@@ -137,7 +135,6 @@ class BrowserViewLayout : public views::LayoutManager {
   BookmarkBarView* bookmark_bar_;
   InfoBarContainerView* infobar_container_;
   views::View* contents_container_;
-  ContentsLayoutManager* contents_layout_manager_;
   views::View* download_shelf_;
 
   ImmersiveModeController* immersive_mode_controller_;

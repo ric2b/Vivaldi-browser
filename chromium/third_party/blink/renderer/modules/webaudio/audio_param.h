@@ -30,6 +30,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_WEBAUDIO_AUDIO_PARAM_H_
 
 #include <sys/types.h>
+#include <atomic>
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/core/typed_arrays/array_buffer_view_helpers.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
@@ -91,6 +92,8 @@ enum AudioParamType {
 // processing classes have additional references. An AudioParamHandler can
 // outlive the owner AudioParam, and it never dies before the owner AudioParam
 // dies.
+//
+// Connected to AudioNodeOutput using AudioNodeWiring.
 class AudioParamHandler final : public ThreadSafeRefCounted<AudioParamHandler>,
                                 public AudioSummingJunction {
  public:
@@ -147,7 +150,7 @@ class AudioParamHandler final : public ThreadSafeRefCounted<AudioParamHandler>,
   AutomationRate GetAutomationRate() const { return automation_rate_; }
   void SetAutomationRate(AutomationRate automation_rate) {
     automation_rate_ = automation_rate;
-  };
+  }
 
   bool IsAutomationRateFixed() const {
     return rate_mode_ == AutomationRateMode::kFixed;
@@ -193,11 +196,9 @@ class AudioParamHandler final : public ThreadSafeRefCounted<AudioParamHandler>,
   // Must be called in the context's render thread.
   void CalculateSampleAccurateValues(float* values, unsigned number_of_values);
 
-  // Connect an audio-rate signal to control this parameter.
-  void Connect(AudioNodeOutput&);
-  void Disconnect(AudioNodeOutput&);
-
-  float IntrinsicValue() const { return NoBarrierLoad(&intrinsic_value_); }
+  float IntrinsicValue() const {
+    return intrinsic_value_.load(std::memory_order_relaxed);
+  }
 
  private:
   AudioParamHandler(BaseAudioContext&,
@@ -228,7 +229,7 @@ class AudioParamHandler final : public ThreadSafeRefCounted<AudioParamHandler>,
   String custom_param_name_;
 
   // Intrinsic value
-  float intrinsic_value_;
+  std::atomic<float> intrinsic_value_;
   void SetIntrinsicValue(float new_value);
 
   float default_value_;
@@ -248,6 +249,11 @@ class AudioParamHandler final : public ThreadSafeRefCounted<AudioParamHandler>,
   // The destination node used to get necessary information like the smaple rate
   // and context time.
   scoped_refptr<AudioDestinationHandler> destination_handler_;
+
+  // Audio bus to sum in any connections to the AudioParam.
+  scoped_refptr<AudioBus> summing_bus_;
+
+  friend class AudioNodeWiring;
 };
 
 // AudioParam class represents web-exposed AudioParam interface.
@@ -270,6 +276,13 @@ class AudioParam final : public ScriptWrappable {
       float min_value = -std::numeric_limits<float>::max(),
       float max_value = std::numeric_limits<float>::max());
 
+  AudioParam(BaseAudioContext&,
+             AudioParamType,
+             double default_value,
+             AudioParamHandler::AutomationRate rate,
+             AudioParamHandler::AutomationRateMode rate_mode,
+             float min,
+             float max);
   ~AudioParam() override;
 
   void Trace(blink::Visitor*) override;
@@ -314,14 +327,6 @@ class AudioParam final : public ScriptWrappable {
   AudioParam* cancelAndHoldAtTime(double start_time, ExceptionState&);
 
  private:
-  AudioParam(BaseAudioContext&,
-             AudioParamType,
-             double default_value,
-             AudioParamHandler::AutomationRate rate,
-             AudioParamHandler::AutomationRateMode rate_mode,
-             float min,
-             float max);
-
   void WarnIfOutsideRange(const String& param_methd, float value);
 
   scoped_refptr<AudioParamHandler> handler_;

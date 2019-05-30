@@ -20,7 +20,7 @@ settings.EDIT_STARTUP_URL_EVENT = 'edit-startup-url';
 Polymer({
   is: 'settings-startup-url-entry',
 
-  behaviors: [FocusRowBehavior],
+  behaviors: [cr.ui.FocusRowBehavior],
 
   properties: {
     editable: {
@@ -30,15 +30,6 @@ Polymer({
 
     /** @type {!StartupPageInfo} */
     model: Object,
-  },
-
-  /**
-   * @param {string} url Location of an image to get a set of icons for.
-   * @return {string} A set of icon URLs.
-   * @private
-   */
-  getIconSet_: function(url) {
-    return cr.icon.getFavicon(url);
   },
 
   /** @private */

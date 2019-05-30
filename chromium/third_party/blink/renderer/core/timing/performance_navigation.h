@@ -32,7 +32,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_TIMING_PERFORMANCE_NAVIGATION_H_
 
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 
@@ -50,8 +50,10 @@ class CORE_EXPORT PerformanceNavigation final : public ScriptWrappable,
 
  public:
   static PerformanceNavigation* Create(LocalFrame* frame) {
-    return new PerformanceNavigation(frame);
+    return MakeGarbageCollected<PerformanceNavigation>(frame);
   }
+
+  explicit PerformanceNavigation(LocalFrame*);
 
   enum PerformanceNavigationType {
     kTypeNavigate,
@@ -60,15 +62,12 @@ class CORE_EXPORT PerformanceNavigation final : public ScriptWrappable,
     kTypeReserved = 255
   };
 
-  unsigned short type() const;
-  unsigned short redirectCount() const;
+  uint8_t type() const;
+  uint16_t redirectCount() const;
 
   ScriptValue toJSONForBinding(ScriptState*) const;
 
   void Trace(blink::Visitor*) override;
-
- private:
-  explicit PerformanceNavigation(LocalFrame*);
 };
 
 }  // namespace blink

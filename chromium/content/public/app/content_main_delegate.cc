@@ -26,10 +26,6 @@ int ContentMainDelegate::RunProcess(
   return -1;
 }
 
-ui::DataPack* ContentMainDelegate::LoadServiceManifestDataPack() {
-  return nullptr;
-}
-
 #if defined(OS_MACOSX)
 
 bool ContentMainDelegate::ProcessRegistersWithSystemProcess(
@@ -59,10 +55,6 @@ int ContentMainDelegate::TerminateForFatalInitializationError() {
   return 0;
 }
 
-bool ContentMainDelegate::ShouldEnableProfilerRecording() {
-  return false;
-}
-
 service_manager::ProcessType ContentMainDelegate::OverrideProcessType() {
   return service_manager::ProcessType::kDefault;
 }
@@ -74,6 +66,10 @@ void ContentMainDelegate::AdjustServiceProcessCommandLine(
 void ContentMainDelegate::OnServiceManagerInitialized(
     const base::Closure& quit_closure,
     service_manager::BackgroundServiceManager* service_manager) {}
+
+bool ContentMainDelegate::ShouldCreateFeatureList() {
+  return true;
+}
 
 ContentBrowserClient* ContentMainDelegate::CreateContentBrowserClient() {
 #if defined(CHROME_MULTIPLE_DLL_CHILD)

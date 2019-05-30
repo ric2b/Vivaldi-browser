@@ -17,8 +17,10 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/ip_endpoint.h"
+#include "net/base/load_timing_info.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_export.h"
 #include "net/base/network_change_notifier.h"
@@ -30,7 +32,7 @@
 #include "net/spdy/spdy_session_key.h"
 #include "net/ssl/ssl_config_service.h"
 #include "net/third_party/quic/core/quic_versions.h"
-#include "net/third_party/spdy/core/spdy_protocol.h"
+#include "net/third_party/quiche/src/spdy/core/spdy_protocol.h"
 
 namespace base {
 namespace trace_event {
@@ -45,7 +47,9 @@ class HostResolver;
 class HttpServerProperties;
 class HttpStreamRequest;
 class NetLogWithSource;
+class NetworkQualityEstimator;
 class SpdySession;
+class StreamSocket;
 class TransportSecurityState;
 
 // This is a very simple pool for open SpdySessions.
@@ -55,6 +59,16 @@ class NET_EXPORT SpdySessionPool
       public CertDatabase::Observer {
  public:
   typedef base::TimeTicks (*TimeFunc)(void);
+
+  // Struct to hold randomly generated frame parameters to be used for sending
+  // frames on the wire to "grease" frame type.  Frame type has to be one of
+  // the reserved values defined in
+  // https://tools.ietf.org/html/draft-bishop-httpbis-grease-00.
+  struct GreasedHttp2Frame {
+    uint8_t type;
+    uint8_t flags;
+    std::string payload;
+  };
 
   SpdySessionPool(
       HostResolver* host_resolver,
@@ -66,7 +80,9 @@ class NET_EXPORT SpdySessionPool
       bool support_ietf_format_quic_altsvc,
       size_t session_max_recv_window_size,
       const spdy::SettingsMap& initial_settings,
-      SpdySessionPool::TimeFunc time_func);
+      const base::Optional<GreasedHttp2Frame>& greased_http2_frame,
+      SpdySessionPool::TimeFunc time_func,
+      NetworkQualityEstimator* network_quality_estimator);
   ~SpdySessionPool() override;
 
   // In the functions below, a session is "available" if this pool has
@@ -81,12 +97,28 @@ class NET_EXPORT SpdySessionPool
   // not already be a session for the given key.
   //
   // Returns the new SpdySession. Note that the SpdySession begins reading from
-  // |connection| on a subsequent event loop iteration, so it may be closed
-  // immediately afterwards if the first read of |connection| fails.
+  // |client_socket_handle| on a subsequent event loop iteration, so it may be
+  // closed immediately afterwards if the first read of |client_socket_handle|
+  // fails.
+  base::WeakPtr<SpdySession> CreateAvailableSessionFromSocketHandle(
+      const SpdySessionKey& key,
+      bool is_trusted_proxy,
+      std::unique_ptr<ClientSocketHandle> client_socket_handle,
+      const NetLogWithSource& net_log);
+
+  // Just like the above method, except it takes a SocketStream instead of a
+  // ClientSocketHandle, and separate connect timing information. When this
+  // constructor is used, there is no socket pool beneath the SpdySession.
+  // Instead, the session takes exclusive ownership of the underting socket, and
+  // destroying the session will directly destroy the socket, as opposed to
+  // disconnected it and then returning it to the socket pool. This is intended
+  // for use with H2 proxies, which are layered beneath the socket pools and
+  // can have sockets above them for tunnels, which are put in a socket pool.
   base::WeakPtr<SpdySession> CreateAvailableSessionFromSocket(
       const SpdySessionKey& key,
       bool is_trusted_proxy,
-      std::unique_ptr<ClientSocketHandle> connection,
+      std::unique_ptr<StreamSocket> socket_stream,
+      const LoadTimingInfo::ConnectTiming& connect_timing,
       const NetLogWithSource& net_log);
 
   // If there is an available session for |key|, return it.
@@ -194,6 +226,11 @@ class NET_EXPORT SpdySessionPool
   // not have a SpdySessionKey.
   void RemoveRequestFromSpdySessionRequestMap(HttpStreamRequest* request);
 
+  void set_network_quality_estimator(
+      NetworkQualityEstimator* network_quality_estimator) {
+    network_quality_estimator_ = network_quality_estimator;
+  }
+
  private:
   friend class SpdySessionPoolPeer;  // For testing.
 
@@ -234,6 +271,18 @@ class NET_EXPORT SpdySessionPool
   void CloseCurrentSessionsHelper(Error error,
                                   const std::string& description,
                                   bool idle_only);
+
+  // Creates a new session. The session must be initialized before
+  // InsertSession() is invoked.
+  std::unique_ptr<SpdySession> CreateSession(const SpdySessionKey& key,
+                                             bool is_trusted_proxy,
+                                             NetLog* net_log);
+  // Adds a new session previously created with CreateSession to the pool.
+  // |source_net_log| is the NetLog for the object that created the session.
+  base::WeakPtr<SpdySession> InsertSession(
+      const SpdySessionKey& key,
+      std::unique_ptr<SpdySession> new_session,
+      const NetLogWithSource& source_net_log);
 
   HttpServerProperties* http_server_properties_;
 
@@ -276,6 +325,11 @@ class NET_EXPORT SpdySessionPool
   // and maximum HPACK dynamic table size.
   const spdy::SettingsMap initial_settings_;
 
+  // If set, an HTTP/2 frame with a reserved frame type will be sent after every
+  // valid HTTP/2 frame.  See
+  // https://tools.ietf.org/html/draft-bishop-httpbis-grease-00.
+  const base::Optional<GreasedHttp2Frame> greased_http2_frame_;
+
   // TODO(xunjieli): Merge these two.
   SpdySessionRequestMap spdy_session_request_map_;
   typedef std::map<SpdySessionKey, std::list<base::Closure>>
@@ -284,6 +338,8 @@ class NET_EXPORT SpdySessionPool
 
   TimeFunc time_func_;
   ServerPushDelegate* push_delegate_;
+
+  NetworkQualityEstimator* network_quality_estimator_;
 
   DISALLOW_COPY_AND_ASSIGN(SpdySessionPool);
 };

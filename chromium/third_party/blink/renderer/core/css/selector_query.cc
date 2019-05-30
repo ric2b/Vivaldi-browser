@@ -46,7 +46,7 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 #if DCHECK_IS_ON() || defined(RELEASE_QUERY_STATS)
 static SelectorQuery::QueryStats& CurrentQueryStats() {
@@ -503,7 +503,7 @@ SelectorQuery::SelectorQuery(CSSSelectorList selector_list)
       // We only use the fast path when in standards mode where #id selectors
       // are case sensitive, so we need the same behavior for [id=value].
       if (current->Match() == CSSSelector::kAttributeExact &&
-          current->Attribute() == idAttr &&
+          current->Attribute() == kIdAttr &&
           current->AttributeMatch() == CSSSelector::kCaseSensitive) {
         selector_id_ = current->Value();
         break;
@@ -534,8 +534,7 @@ SelectorQuery* SelectorQueryCache::Add(const AtomicString& selectors,
 
   CSSSelectorList selector_list = CSSParser::ParseSelector(
       CSSParserContext::Create(
-          document, document.BaseURL(),
-          false /* is_opaque_response_from_service_worker */,
+          document, document.BaseURL(), true /* origin_clean */,
           document.GetReferrerPolicy(), WTF::TextEncoding(),
           CSSParserContext::kSnapshotProfile),
       nullptr, selectors);

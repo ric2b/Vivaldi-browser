@@ -34,12 +34,12 @@
 #include <memory>
 #include <utility>
 
+#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
-#include "third_party/blink/renderer/platform/wtf/noncopyable.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/type_traits.h"
@@ -58,7 +58,7 @@ class JSONObject;
 
 class PLATFORM_EXPORT JSONValue {
   USING_FAST_MALLOC(JSONValue);
-  WTF_MAKE_NONCOPYABLE(JSONValue);
+  DISALLOW_COPY_AND_ASSIGN(JSONValue);
 
  public:
   static const int kMaxDepth = 1000;
@@ -198,7 +198,7 @@ class PLATFORM_EXPORT JSONObject : public JSONValue {
   void WriteJSON(StringBuilder* output) const override;
   std::unique_ptr<JSONValue> Clone() const override;
 
-  size_t size() const { return data_.size(); }
+  wtf_size_t size() const { return data_.size(); }
 
   void SetBoolean(const String& name, bool);
   void SetInteger(const String& name, int);
@@ -218,7 +218,7 @@ class PLATFORM_EXPORT JSONObject : public JSONValue {
   JSONObject* GetJSONObject(const String& name) const;
   JSONArray* GetArray(const String& name) const;
   JSONValue* Get(const String& name) const;
-  Entry at(size_t index) const;
+  Entry at(wtf_size_t index) const;
 
   bool BooleanProperty(const String& name, bool default_value) const;
   int IntegerProperty(const String& name, int default_value) const;
@@ -279,8 +279,8 @@ class PLATFORM_EXPORT JSONArray : public JSONValue {
   void PushObject(std::unique_ptr<JSONObject>);
   void PushArray(std::unique_ptr<JSONArray>);
 
-  JSONValue* at(size_t index) const;
-  size_t size() const { return data_.size(); }
+  JSONValue* at(wtf_size_t index) const;
+  wtf_size_t size() const { return data_.size(); }
 
  protected:
   void PrettyWriteJSONInternal(StringBuilder* output, int depth) const override;

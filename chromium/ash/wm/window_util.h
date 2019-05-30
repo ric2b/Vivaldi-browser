@@ -6,6 +6,7 @@
 #define ASH_WM_WINDOW_UTIL_H_
 
 #include <stdint.h>
+#include <vector>
 
 #include "ash/ash_export.h"
 #include "ui/base/ui_base_types.h"
@@ -20,12 +21,9 @@ class Point;
 
 namespace ui {
 class Event;
-class EventHandler;
 }
 
 namespace ash {
-
-class ImmersiveFullscreenController;
 
 namespace wm {
 
@@ -97,27 +95,37 @@ ASH_EXPORT void SetChildrenUseExtendedHitRegionForWindow(aura::Window* window);
 // forward to an associated widget.
 ASH_EXPORT void CloseWidgetForWindow(aura::Window* window);
 
-// Adds or removes a handler to receive events targeted at this window, before
-// this window handles the events itself; the handler does not receive events
-// from embedded windows. This only supports windows with internal widgets;
-// see ash::GetInternalWidgetForWindow(). Ownership of the handler is not
-// transferred.
-//
-// Also note that the target of these events is always an aura::Window.
-ASH_EXPORT void AddLimitedPreTargetHandlerForWindow(ui::EventHandler* handler,
-                                                    aura::Window* window);
-ASH_EXPORT void RemoveLimitedPreTargetHandlerForWindow(
-    ui::EventHandler* handler,
+// Installs a resize handler on the window that makes it easier to resize
+// the window.
+ASH_EXPORT void InstallResizeHandleWindowTargeterForWindow(
     aura::Window* window);
 
-// Installs a resize handler on the window that makes it easier to resize
-// the window. See ResizeHandleWindowTargeter for the specifics.
-ASH_EXPORT void InstallResizeHandleWindowTargeterForWindow(
-    aura::Window* window,
-    ImmersiveFullscreenController* immersive_fullscreen_controller);
+// Sets up the given window to be draggable via gesture sequences in certain
+// circumstances. See aura::client::kGestureDragFromClientAreaTopMovesWindow.
+ASH_EXPORT void MakeGestureDraggableInImmersiveMode(aura::Window* frame_window);
 
 // Returns true if |window| is currently in tab-dragging process.
 ASH_EXPORT bool IsDraggingTabs(const aura::Window* window);
+
+// Returns true if |window| should be excluded from the cycle list and/or
+// overview.
+ASH_EXPORT bool ShouldExcludeForBothCycleListAndOverview(
+    const aura::Window* window);
+ASH_EXPORT bool ShouldExcludeForCycleList(const aura::Window* window);
+ASH_EXPORT bool ShouldExcludeForOverview(const aura::Window* window);
+
+// Removes all windows in |out_window_list| whose transient root is also in
+// |out_window_list|. This is used by overview and window cycler to avoid
+// showing multiple previews for windows linked by transient.
+ASH_EXPORT void RemoveTransientDescendants(
+    std::vector<aura::Window*>* out_window_list);
+
+// Hides a list of |windows| without any animations, in case users wants to hide
+// them right away or apply their own animations. Setting |minimize| to true
+// will result in also setting the window states to minimized.
+ASH_EXPORT void HideAndMaybeMinimizeWithoutAnimation(
+    std::vector<aura::Window*> windows,
+    bool minimize);
 
 }  // namespace wm
 }  // namespace ash

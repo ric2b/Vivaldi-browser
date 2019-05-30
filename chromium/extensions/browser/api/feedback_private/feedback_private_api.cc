@@ -8,22 +8,22 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/metrics/user_metrics.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/feedback/system_logs/system_logs_fetcher.h"
 #include "components/feedback/tracing_manager.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/api/feedback_private/feedback_private_delegate.h"
 #include "extensions/browser/api/feedback_private/feedback_service.h"
@@ -56,9 +56,9 @@ static base::LazyInstance<BrowserContextKeyedAPIFactory<FeedbackPrivateAPI>>::
 namespace {
 
 constexpr base::FilePath::CharType kBluetoothLogsFilePath[] =
-    FILE_PATH_LITERAL("/var/log/bluetooth/log.gz");
+    FILE_PATH_LITERAL("/var/log/bluetooth/log.bz2");
 
-constexpr char kBluetoothLogsAttachmentName[] = "bluetooth_logs.gz";
+constexpr char kBluetoothLogsAttachmentName[] = "bluetooth_logs.bz2";
 
 // Getting the filename of a blob prepends a "C:\fakepath" to the filename.
 // This is undesirable, strip it if it exists.
@@ -66,7 +66,7 @@ std::string StripFakepath(const std::string& path) {
   constexpr char kFakePathStr[] = "C:\\fakepath\\";
   if (base::StartsWith(path, kFakePathStr,
                        base::CompareCase::INSENSITIVE_ASCII))
-    return path.substr(arraysize(kFakePathStr) - 1);
+    return path.substr(base::size(kFakePathStr) - 1);
   return path;
 }
 
@@ -126,7 +126,9 @@ void FeedbackPrivateAPI::RequestFeedbackForFlow(
     const std::string& category_tag,
     const std::string& extra_diagnostics,
     const GURL& page_url,
-    api::feedback_private::FeedbackFlow flow) {
+    api::feedback_private::FeedbackFlow flow,
+    bool from_assistant,
+    bool include_bluetooth_logs) {
   if (browser_context_ && EventRouter::Get(browser_context_)) {
     FeedbackInfo info;
     info.description = description_template;
@@ -135,6 +137,11 @@ void FeedbackPrivateAPI::RequestFeedbackForFlow(
     info.category_tag = std::make_unique<std::string>(category_tag);
     info.page_url = std::make_unique<std::string>(page_url.spec());
     info.system_information = std::make_unique<SystemInformationList>();
+#if defined(OS_CHROMEOS)
+    info.from_assistant = std::make_unique<bool>(from_assistant);
+    info.include_bluetooth_logs =
+        std::make_unique<bool>(include_bluetooth_logs);
+#endif  // defined(OS_CHROMEOS)
 
     // Any extra diagnostics information should be added to the sys info.
     if (!extra_diagnostics.empty()) {
@@ -204,6 +211,7 @@ ExtensionFunction::ResponseAction FeedbackPrivateGetUserEmailFunction::Run() {
 
 ExtensionFunction::ResponseAction
 FeedbackPrivateGetSystemInformationFunction::Run() {
+  VLOG(1) << "Fetching system logs started.";
   // Self-deleting object.
   system_logs::SystemLogsFetcher* fetcher =
       ExtensionsAPIClient::Get()
@@ -217,6 +225,7 @@ FeedbackPrivateGetSystemInformationFunction::Run() {
 
 void FeedbackPrivateGetSystemInformationFunction::OnCompleted(
     std::unique_ptr<system_logs::SystemLogsResponse> sys_info) {
+  VLOG(1) << "Received system logs.";
   SystemInformationList sys_info_list;
   if (sys_info) {
     sys_info_list.reserve(sys_info->size());
@@ -267,6 +276,7 @@ void FeedbackPrivateReadLogSourceFunction::OnCompleted(
 #endif  // defined(OS_CHROMEOS)
 
 ExtensionFunction::ResponseAction FeedbackPrivateSendFeedbackFunction::Run() {
+  VLOG(1) << "Sending feedback report started.";
   std::unique_ptr<feedback_private::SendFeedback::Params> params(
       feedback_private::SendFeedback::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -315,14 +325,22 @@ ExtensionFunction::ResponseAction FeedbackPrivateSendFeedbackFunction::Run() {
   }
 
 #if defined(OS_CHROMEOS)
+  feedback_data->set_from_assistant(feedback_info.from_assistant &&
+                                    *feedback_info.from_assistant);
+  feedback_data->set_assistant_debug_info_allowed(
+      feedback_info.assistant_debug_info_allowed &&
+      *feedback_info.assistant_debug_info_allowed);
+
   delegate->FetchAndMergeIwlwifiDumpLogsIfPresent(
       std::move(sys_logs), browser_context(),
-      base::Bind(&FeedbackPrivateSendFeedbackFunction::OnAllLogsFetched, this,
-                 feedback_data, feedback_info.send_histograms,
-                 feedback_info.send_bluetooth_logs &&
-                     *feedback_info.send_bluetooth_logs));
+      base::BindOnce(
+          &FeedbackPrivateSendFeedbackFunction::OnAllLogsFetched, this,
+          feedback_data,
+          feedback_info.send_histograms && *feedback_info.send_histograms,
+          feedback_info.send_bluetooth_logs &&
+              *feedback_info.send_bluetooth_logs));
 #else
-  OnAllLogsFetched(feedback_data, feedback_info.send_histograms,
+  OnAllLogsFetched(feedback_data, false /* send_histograms */,
                    false /* send_bluetooth_logs */, std::move(sys_logs));
 #endif  // defined(OS_CHROMEOS)
 
@@ -334,12 +352,9 @@ void FeedbackPrivateSendFeedbackFunction::OnAllLogsFetched(
     bool send_histograms,
     bool send_bluetooth_logs,
     std::unique_ptr<system_logs::SystemLogsResponse> sys_logs) {
-  feedback_data->SetAndCompressSystemInfo(std::move(sys_logs));
+  VLOG(1) << "All logs have been fetched. Proceeding with sending the report.";
 
-  FeedbackService* service = FeedbackPrivateAPI::GetFactoryInstance()
-                                 ->Get(browser_context())
-                                 ->GetService();
-  DCHECK(service);
+  feedback_data->SetAndCompressSystemInfo(std::move(sys_logs));
 
   if (send_histograms) {
     auto histograms = std::make_unique<std::string>();
@@ -358,6 +373,11 @@ void FeedbackPrivateSendFeedbackFunction::OnAllLogsFetched(
                              std::move(bluetooth_logs));
     }
   }
+
+  FeedbackService* service = FeedbackPrivateAPI::GetFactoryInstance()
+                                 ->Get(browser_context())
+                                 ->GetService();
+  DCHECK(service);
 
   service->SendFeedback(
       feedback_data,

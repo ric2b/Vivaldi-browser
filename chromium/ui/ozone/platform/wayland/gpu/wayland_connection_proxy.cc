@@ -4,6 +4,9 @@
 
 #include "ui/ozone/platform/wayland/gpu/wayland_connection_proxy.h"
 
+#include <utility>
+
+#include "base/bind.h"
 #include "base/process/process.h"
 #include "third_party/khronos/EGL/egl.h"
 #include "ui/ozone/common/linux/drm_util_linux.h"
@@ -13,8 +16,7 @@ namespace ui {
 
 WaylandConnectionProxy::WaylandConnectionProxy(WaylandConnection* connection)
     : connection_(connection),
-      gpu_thread_runner_(connection_ ? nullptr
-                                     : base::ThreadTaskRunnerHandle::Get()) {}
+      gpu_thread_runner_(base::ThreadTaskRunnerHandle::Get()) {}
 
 WaylandConnectionProxy::~WaylandConnectionProxy() = default;
 
@@ -23,6 +25,14 @@ void WaylandConnectionProxy::SetWaylandConnection(
   // This is an IO child thread. To satisfy our needs, we pass interface here
   // and bind it again on a gpu main thread, where buffer swaps happen.
   wc_ptr_info_ = wc_ptr.PassInterface();
+}
+
+void WaylandConnectionProxy::ResetGbmDevice() {
+#if defined(WAYLAND_GBM)
+  gbm_device_.reset();
+#else
+  NOTREACHED();
+#endif
 }
 
 void WaylandConnectionProxy::CreateZwpLinuxDmabuf(
@@ -86,11 +96,40 @@ void WaylandConnectionProxy::DestroyZwpLinuxDmabufInternal(uint32_t buffer_id) {
   wc_ptr_->DestroyZwpLinuxDmabuf(buffer_id);
 }
 
-void WaylandConnectionProxy::ScheduleBufferSwap(gfx::AcceleratedWidget widget,
-                                                uint32_t buffer_id) {
+void WaylandConnectionProxy::ScheduleBufferSwap(
+    gfx::AcceleratedWidget widget,
+    uint32_t buffer_id,
+    const gfx::Rect& damage_region,
+    wl::BufferSwapCallback callback) {
   DCHECK(gpu_thread_runner_->BelongsToCurrentThread());
   DCHECK(wc_ptr_);
-  wc_ptr_->ScheduleBufferSwap(widget, buffer_id);
+  wc_ptr_->ScheduleBufferSwap(widget, buffer_id, damage_region,
+                              std::move(callback));
+}
+
+void WaylandConnectionProxy::CreateShmBufferForWidget(
+    gfx::AcceleratedWidget widget,
+    base::File file,
+    size_t length,
+    const gfx::Size size) {
+  if (!bound_) {
+    wc_ptr_.Bind(std::move(wc_ptr_info_));
+    bound_ = true;
+  }
+  DCHECK(wc_ptr_);
+  wc_ptr_->CreateShmBufferForWidget(widget, std::move(file), length, size);
+}
+
+void WaylandConnectionProxy::PresentShmBufferForWidget(
+    gfx::AcceleratedWidget widget,
+    const gfx::Rect& damage) {
+  DCHECK(wc_ptr_);
+  wc_ptr_->PresentShmBufferForWidget(widget, damage);
+}
+
+void WaylandConnectionProxy::DestroyShmBuffer(gfx::AcceleratedWidget widget) {
+  DCHECK(wc_ptr_);
+  wc_ptr_->DestroyShmBuffer(widget);
 }
 
 WaylandWindow* WaylandConnectionProxy::GetWindow(
@@ -108,24 +147,16 @@ void WaylandConnectionProxy::ScheduleFlush() {
                 "when multi-process moe is used";
 }
 
-wl_shm* WaylandConnectionProxy::shm() {
-  wl_shm* shm = nullptr;
-  if (connection_)
-    shm = connection_->shm();
-  return shm;
-}
 
 intptr_t WaylandConnectionProxy::Display() {
   if (connection_)
     return reinterpret_cast<intptr_t>(connection_->display());
 
 #if defined(WAYLAND_GBM)
-  // It must not be a single process mode. Thus, shared dmabuf approach is used,
-  // which requires |gbm_device_|.
-  DCHECK(gbm_device_);
   return EGL_DEFAULT_DISPLAY;
-#endif
+#else
   return 0;
+#endif
 }
 
 void WaylandConnectionProxy::AddBindingWaylandConnectionClient(

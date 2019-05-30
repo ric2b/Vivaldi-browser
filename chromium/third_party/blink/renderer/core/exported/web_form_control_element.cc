@@ -62,7 +62,7 @@ WebString WebFormControlElement::FormControlType() const {
 WebString WebFormControlElement::FormControlTypeForAutofill() const {
   if (auto* input = ToHTMLInputElementOrNull(*private_)) {
     if (input->IsTextField() && input->HasBeenPasswordField())
-      return InputTypeNames::password;
+      return input_type_names::kPassword;
   }
 
   return ConstUnwrap<HTMLFormControlElement>()->type();
@@ -117,11 +117,15 @@ bool WebFormControlElement::AutoComplete() const {
 
 void WebFormControlElement::SetValue(const WebString& value, bool send_events) {
   if (auto* input = ToHTMLInputElementOrNull(*private_)) {
-    input->setValue(
-        value, send_events ? kDispatchInputAndChangeEvent : kDispatchNoEvent);
+    input->setValue(value,
+                    send_events
+                        ? TextFieldEventBehavior::kDispatchInputAndChangeEvent
+                        : TextFieldEventBehavior::kDispatchNoEvent);
   } else if (auto* textarea = ToHTMLTextAreaElementOrNull(*private_)) {
     textarea->setValue(
-        value, send_events ? kDispatchInputAndChangeEvent : kDispatchNoEvent);
+        value, send_events
+                   ? TextFieldEventBehavior::kDispatchInputAndChangeEvent
+                   : TextFieldEventBehavior::kDispatchNoEvent);
   } else if (auto* select = ToHTMLSelectElementOrNull(*private_)) {
     select->setValue(value, send_events);
   }
@@ -135,10 +139,10 @@ void WebFormControlElement::SetAutofillValue(const WebString& value) {
                                             nullptr);
     }
     Unwrap<Element>()->DispatchScopedEvent(
-        *Event::CreateBubble(EventTypeNames::keydown));
+        *Event::CreateBubble(event_type_names::kKeydown));
     Unwrap<TextControlElement>()->SetAutofillValue(value);
     Unwrap<Element>()->DispatchScopedEvent(
-        *Event::CreateBubble(EventTypeNames::keyup));
+        *Event::CreateBubble(event_type_names::kKeyup));
     if (!Focused()) {
       Unwrap<Element>()->DispatchBlurEvent(nullptr, kWebFocusTypeForward,
                                            nullptr);
@@ -249,7 +253,7 @@ WebFormControlElement::WebFormControlElement(HTMLFormControlElement* elem)
 
 DEFINE_WEB_NODE_TYPE_CASTS(WebFormControlElement,
                            IsElementNode() &&
-                               ConstUnwrap<Element>()->IsFormControlElement());
+                               ConstUnwrap<Element>()->IsFormControlElement())
 
 WebFormControlElement& WebFormControlElement::operator=(
     HTMLFormControlElement* elem) {

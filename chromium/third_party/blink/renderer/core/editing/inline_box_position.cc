@@ -45,7 +45,7 @@ namespace blink {
 
 namespace {
 
-const int kBlockFlowAdjustmentMaxRecursionDepth = 1024;
+const int kBlockFlowAdjustmentMaxRecursionDepth = 256;
 
 bool IsNonTextLeafChild(LayoutObject* object) {
   if (object->SlowFirstChild())
@@ -104,14 +104,12 @@ PositionTemplate<Strategy> UpstreamIgnoringEditingBoundaries(
   return position;
 }
 
-InlineBoxPosition AdjustInlineBoxPositionForTextDirection(
-    InlineBox* inline_box,
-    int caret_offset,
-    UnicodeBidi unicode_bidi) {
+InlineBoxPosition AdjustInlineBoxPositionForTextDirection(InlineBox* inline_box,
+                                                          int caret_offset) {
   DCHECK(caret_offset == inline_box->CaretLeftmostOffset() ||
          caret_offset == inline_box->CaretRightmostOffset());
   return BidiAdjustment::AdjustForCaretPositionResolution(
-      InlineBoxPosition(inline_box, caret_offset), unicode_bidi);
+      InlineBoxPosition(inline_box, caret_offset));
 }
 
 // Returns true if |caret_offset| is at edge of |box| based on |affinity|.
@@ -143,8 +141,9 @@ InlineBoxPosition ComputeInlineBoxPositionForTextNode(
     int caret_max_offset = box->CaretMaxOffset();
 
     if (caret_offset < caret_min_offset || caret_offset > caret_max_offset ||
-        (caret_offset == caret_max_offset && box->IsLineBreak()))
-      continue;
+        (caret_offset == caret_max_offset && box->IsLineBreak())) {
+        continue;
+    }
 
     if (caret_offset > caret_min_offset && caret_offset < caret_max_offset)
       return InlineBoxPosition(box, caret_offset);
@@ -156,8 +155,12 @@ InlineBoxPosition ComputeInlineBoxPositionForTextNode(
 
     candidate = box;
   }
+
+  // TODO(editing-dev): The fixup below seems hacky. It may also be incorrect in
+  // non-ltr text. Make it saner.
   if (candidate && candidate == text_layout_object->LastTextBox() &&
-      affinity == TextAffinity::kDownstream) {
+      affinity == TextAffinity::kDownstream &&
+      caret_offset == candidate->CaretMaxOffset()) {
     inline_box = SearchAheadForBetterMatch(text_layout_object);
     if (inline_box)
       caret_offset = inline_box->CaretMinOffset();
@@ -167,8 +170,7 @@ InlineBoxPosition ComputeInlineBoxPositionForTextNode(
 
   if (!inline_box)
     return InlineBoxPosition();
-  return AdjustInlineBoxPositionForTextDirection(
-      inline_box, caret_offset, text_layout_object->Style()->GetUnicodeBidi());
+  return AdjustInlineBoxPositionForTextDirection(inline_box, caret_offset);
 }
 
 InlineBoxPosition ComputeInlineBoxPositionForAtomicInline(
@@ -183,8 +185,7 @@ InlineBoxPosition ComputeInlineBoxPositionForAtomicInline(
   if ((caret_offset > inline_box->CaretMinOffset() &&
        caret_offset < inline_box->CaretMaxOffset()))
     return InlineBoxPosition(inline_box, caret_offset);
-  return AdjustInlineBoxPositionForTextDirection(
-      inline_box, caret_offset, layout_object->Style()->GetUnicodeBidi());
+  return AdjustInlineBoxPositionForTextDirection(inline_box, caret_offset);
 }
 
 template <typename Strategy>
@@ -216,8 +217,7 @@ PositionWithAffinityTemplate<Strategy> AdjustBlockFlowPositionToInline(
   }
   const PositionTemplate<Strategy>& upstream_equivalent =
       UpstreamIgnoringEditingBoundaries(position);
-  if (upstream_equivalent == position ||
-      DownstreamIgnoringEditingBoundaries(upstream_equivalent) == position)
+  if (upstream_equivalent == position)
     return PositionWithAffinityTemplate<Strategy>();
 
   return ComputeInlineAdjustedPositionAlgorithm(
@@ -283,12 +283,7 @@ bool NeedsLineEndAdjustment(
 // Returns the first InlineBoxPosition at next line of last InlineBoxPosition
 // in |layout_object| if it exists to avoid making InlineBoxPosition at end of
 // line.
-template <typename Strategy>
-InlineBoxPosition NextLinePositionOf(
-    const PositionWithAffinityTemplate<Strategy>& adjusted) {
-  const PositionTemplate<Strategy>& position = adjusted.GetPosition();
-  const LayoutText& layout_text =
-      ToLayoutTextOrDie(*position.AnchorNode()->GetLayoutObject());
+InlineBoxPosition NextLinePositionOf(const LayoutText& layout_text) {
   InlineTextBox* const last = layout_text.LastTextBox();
   if (!last)
     return InlineBoxPosition();
@@ -300,17 +295,31 @@ InlineBoxPosition NextLinePositionOf(
       continue;
 
     return AdjustInlineBoxPositionForTextDirection(
-        inline_box, inline_box->CaretMinOffset(),
-        layout_text.Style()->GetUnicodeBidi());
+        inline_box, inline_box->CaretMinOffset());
   }
   return InlineBoxPosition();
+}
+
+template <typename Strategy>
+InlineBoxPosition ComputeInlineBoxPositionForLineEnd(
+    const PositionWithAffinityTemplate<Strategy>& adjusted) {
+  const LayoutText& layout_text = ToLayoutText(
+      *adjusted.GetPosition().AnchorNode()->GetLayoutObject());
+  const InlineBoxPosition next_line_position = NextLinePositionOf(layout_text);
+  if (next_line_position.inline_box)
+    return next_line_position;
+  // |adjusted| is after line end and no layout object after the position.
+  // Fall back to previous position.
+  DCHECK_GE(layout_text.TextLength(), 1u);
+  return ComputeInlineBoxPositionForTextNode(
+      &layout_text, layout_text.TextLength() - 1u, adjusted.Affinity());
 }
 
 template <typename Strategy>
 InlineBoxPosition ComputeInlineBoxPositionForInlineAdjustedPositionAlgorithm(
     const PositionWithAffinityTemplate<Strategy>& adjusted) {
   if (NeedsLineEndAdjustment(adjusted))
-    return NextLinePositionOf(adjusted);
+    return ComputeInlineBoxPositionForLineEnd(adjusted);
 
   const PositionTemplate<Strategy>& position = adjusted.GetPosition();
   DCHECK(!position.AnchorNode()->IsShadowRoot()) << adjusted;

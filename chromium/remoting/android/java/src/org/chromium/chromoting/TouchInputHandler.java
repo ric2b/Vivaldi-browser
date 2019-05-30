@@ -49,7 +49,7 @@ public class TouchInputHandler {
      * Used for tracking swipe gestures. Only the Y-direction is needed for responding to swipe-up
      * or swipe-down.
      */
-    private float mTotalMotionY = 0;
+    private float mTotalMotionY;
 
     /**
      * Distance in pixels beyond which a motion gesture is considered to be a swipe. This is
@@ -73,31 +73,31 @@ public class TouchInputHandler {
      * Set to true to prevent any further movement of the cursor, for example, when showing the
      * keyboard to prevent the cursor wandering from the area where keystrokes should be sent.
      */
-    private boolean mSuppressCursorMovement = false;
+    private boolean mSuppressCursorMovement;
 
     /**
      * Set to true to suppress the fling animation at the end of a gesture, for example, when
      * dragging whilst a button is held down.
      */
-    private boolean mSuppressFling = false;
+    private boolean mSuppressFling;
 
     /**
      * Set to true when 2-finger fling (scroll gesture with final velocity) is detected to trigger
      * a scrolling animation.
      */
-    private boolean mScrollFling = false;
+    private boolean mScrollFling;
 
     /**
      * Set to true when 3-finger swipe gesture is complete, so that further movement doesn't
      * trigger more swipe actions.
      */
-    private boolean mSwipeCompleted = false;
+    private boolean mSwipeCompleted;
 
     /**
      * Set to true when a 1 finger pan gesture originates with a longpress.  This means the user
      * is performing a drag operation.
      */
-    private boolean mIsDragging = false;
+    private boolean mIsDragging;
 
     private Event.ParameterCallback<Boolean, Void> mProcessAnimationCallback;
 
@@ -171,12 +171,12 @@ public class TouchInputHandler {
         }
 
         @Override
-        public RenderStub.InputFeedbackType getShortPressFeedbackType() {
+        public @RenderStub.InputFeedbackType int getShortPressFeedbackType() {
             return RenderStub.InputFeedbackType.NONE;
         }
 
         @Override
-        public RenderStub.InputFeedbackType getLongPressFeedbackType() {
+        public @RenderStub.InputFeedbackType int getLongPressFeedbackType() {
             return RenderStub.InputFeedbackType.NONE;
         }
 
@@ -313,25 +313,25 @@ public class TouchInputHandler {
 
     private void handleInputModeChanged(
             InputModeChangedEventParameter parameter, InputEventSender injector) {
-        final Desktop.InputMode inputMode = parameter.inputMode;
-        final CapabilityManager.HostCapability hostTouchCapability =
-                parameter.hostCapability;
+        final @Desktop.InputMode int inputMode = parameter.inputMode;
+        final @CapabilityManager.HostCapability int hostTouchCapability = parameter.hostCapability;
         // We need both input mode and host input capabilities to select the input
         // strategy.
-        if (!inputMode.isSet() || !hostTouchCapability.isSet()) {
+        if (!CapabilityManager.hostCapabilityIsSet(inputMode)
+                || !CapabilityManager.hostCapabilityIsSet(hostTouchCapability)) {
             return;
         }
 
         switch (inputMode) {
-            case TRACKPAD:
+            case Desktop.InputMode.TRACKPAD:
                 setInputStrategy(new TrackpadInputStrategy(mRenderData, injector));
                 mDesktopCanvas.adjustViewportForSystemUi(true);
                 moveCursorToScreenCenter();
                 break;
 
-            case TOUCH:
+            case Desktop.InputMode.TOUCH:
                 mDesktopCanvas.adjustViewportForSystemUi(false);
-                if (hostTouchCapability.isSupported()) {
+                if (CapabilityManager.hostCapabilityIsSupported(hostTouchCapability)) {
                     setInputStrategy(new TouchInputStrategy(mRenderData, injector));
                 } else {
                     setInputStrategy(

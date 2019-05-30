@@ -7,22 +7,22 @@ package org.chromium.chrome.test.util;
 import android.content.Context;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.ListView;
 
 import org.junit.Assert;
 
 import org.chromium.base.ThreadUtils;
-import org.chromium.chrome.browser.omnibox.AutocompleteController;
-import org.chromium.chrome.browser.omnibox.AutocompleteController.OnSuggestionsReceivedListener;
 import org.chromium.chrome.browser.omnibox.LocationBarLayout;
 import org.chromium.chrome.browser.omnibox.MatchClassificationStyle;
-import org.chromium.chrome.browser.omnibox.OmniboxSuggestion;
-import org.chromium.chrome.browser.omnibox.OmniboxSuggestion.MatchClassification;
-import org.chromium.chrome.browser.omnibox.OmniboxSuggestionsList;
 import org.chromium.chrome.browser.omnibox.UrlBar;
+import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteController;
+import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteController.OnSuggestionsReceivedListener;
+import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion;
+import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion.MatchClassification;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.TouchCommon;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.TouchCommon;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -76,9 +76,8 @@ public class OmniboxTestUtils {
                 int type, String text, String url) {
             List<MatchClassification> classifications = new ArrayList<>();
             classifications.add(new MatchClassification(0, MatchClassificationStyle.NONE));
-            mSuggestions.add(new OmniboxSuggestion(
-                    type, false, 0, 0, text, classifications, null, classifications,
-                    null, null, "", url, false, false));
+            mSuggestions.add(new OmniboxSuggestion(type, false, 0, 0, text, classifications, null,
+                    classifications, null, "", url, false, false));
             return this;
         }
 
@@ -307,8 +306,13 @@ public class OmniboxTestUtils {
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return (doesUrlBarHaveFocus(urlBar) == active)
-                        && (isKeyboardActiveForView(urlBar) == active);
+                if (doesUrlBarHaveFocus(urlBar) != active) {
+                    updateFailureReason("URL Bar did not have expected focus: " + active);
+                    return false;
+                }
+                updateFailureReason(
+                        "The keyboard did not reach the expected active state: " + active);
+                return isKeyboardActiveForView(urlBar) == active;
             }
         });
     }
@@ -333,7 +337,8 @@ public class OmniboxTestUtils {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                OmniboxSuggestionsList suggestionsList = locationBar.getSuggestionList();
+                ListView suggestionsList =
+                        locationBar.getAutocompleteCoordinator().getSuggestionList();
                 if (suggestionsList == null) {
                     updateFailureReason("suggestionList is null");
                     return false;
@@ -361,7 +366,8 @@ public class OmniboxTestUtils {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                OmniboxSuggestionsList suggestionsList = locationBar.getSuggestionList();
+                ListView suggestionsList =
+                        locationBar.getAutocompleteCoordinator().getSuggestionList();
                 return suggestionsList != null
                         && suggestionsList.isShown()
                         && suggestionsList.getCount() == expectedCount;

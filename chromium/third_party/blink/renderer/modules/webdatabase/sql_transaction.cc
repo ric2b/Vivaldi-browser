@@ -28,6 +28,7 @@
 
 #include "third_party/blink/renderer/modules/webdatabase/sql_transaction.h"
 
+#include "base/stl_util.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/modules/webdatabase/database.h"
 #include "third_party/blink/renderer/modules/webdatabase/database_authorizer.h"
@@ -85,8 +86,8 @@ SQLTransaction* SQLTransaction::Create(Database* db,
                                        OnSuccessCallback* success_callback,
                                        OnErrorCallback* error_callback,
                                        bool read_only) {
-  return new SQLTransaction(db, callback, success_callback, error_callback,
-                            read_only);
+  return MakeGarbageCollected<SQLTransaction>(db, callback, success_callback,
+                                              error_callback, read_only);
 }
 
 SQLTransaction::SQLTransaction(Database* db,
@@ -152,7 +153,7 @@ SQLTransaction::StateFunction SQLTransaction::StateFunctionFor(
       &SQLTransaction::DeliverSuccessCallback            // 12.
   };
 
-  DCHECK(arraysize(kStateFunctions) ==
+  DCHECK(base::size(kStateFunctions) ==
          static_cast<int>(SQLTransactionState::kNumberOfStates));
   DCHECK(state < SQLTransactionState::kNumberOfStates);
 
@@ -198,13 +199,11 @@ SQLTransactionState SQLTransaction::DeliverTransactionCallback() {
   // jump to the error callback.
   SQLTransactionState next_state = SQLTransactionState::kRunStatements;
   if (should_deliver_error_callback) {
-    database_->ReportStartTransactionResult(5, SQLError::kUnknownErr, 0);
     transaction_error_ = SQLErrorData::Create(
         SQLError::kUnknownErr,
         "the SQLTransactionCallback was null or threw an exception");
     next_state = SQLTransactionState::kDeliverTransactionErrorCallback;
   }
-  database_->ReportStartTransactionResult(0, -1, 0);  // OK
   return next_state;
 }
 
@@ -249,7 +248,6 @@ SQLTransactionState SQLTransaction::DeliverStatementCallback() {
   execute_sql_allowed_ = false;
 
   if (result) {
-    database_->ReportCommitTransactionResult(2, SQLError::kUnknownErr, 0);
     transaction_error_ =
         SQLErrorData::Create(SQLError::kUnknownErr,
                              "the statement callback raised an exception or "

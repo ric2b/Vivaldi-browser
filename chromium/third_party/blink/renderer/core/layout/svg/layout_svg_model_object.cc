@@ -32,11 +32,9 @@
 
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_container.h"
-#include "third_party/blink/renderer/core/layout/svg/layout_svg_root.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_layout_support.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_resources.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_resources_cache.h"
-#include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/svg/svg_graphics_element.h"
 
 namespace blink {
@@ -56,7 +54,7 @@ void LayoutSVGModelObject::MapLocalToAncestor(
   SVGLayoutSupport::MapLocalToAncestor(this, ancestor, transform_state, flags);
 }
 
-LayoutRect LayoutSVGModelObject::AbsoluteVisualRect() const {
+LayoutRect LayoutSVGModelObject::VisualRectInDocument() const {
   return SVGLayoutSupport::VisualRectInAncestorSpace(*this, *View());
 }
 
@@ -89,10 +87,9 @@ void LayoutSVGModelObject::AbsoluteQuads(Vector<FloatQuad>& quads,
 
 // This method is called from inside PaintOutline(), and since we call
 // PaintOutline() while transformed to our coord system, return local coords.
-void LayoutSVGModelObject::AddOutlineRects(
-    Vector<LayoutRect>& rects,
-    const LayoutPoint&,
-    IncludeBlockVisualOverflowOrNot) const {
+void LayoutSVGModelObject::AddOutlineRects(Vector<LayoutRect>& rects,
+                                           const LayoutPoint&,
+                                           NGOutlineType) const {
   rects.push_back(LayoutRect(VisualRectInLocalSVGCoordinates()));
 }
 
@@ -106,24 +103,6 @@ void LayoutSVGModelObject::WillBeDestroyed() {
   LayoutObject::WillBeDestroyed();
 }
 
-void LayoutSVGModelObject::ComputeLayerHitTestRects(
-    LayerHitTestRects& rects,
-    TouchAction supported_fast_actions) const {
-  // Using just the rect for the SVGRoot is good enough for now.
-  SVGLayoutSupport::FindTreeRootObject(this)->ComputeLayerHitTestRects(
-      rects, supported_fast_actions);
-}
-
-void LayoutSVGModelObject::AddLayerHitTestRects(
-    LayerHitTestRects&,
-    const PaintLayer* current_layer,
-    const LayoutPoint& layer_offset,
-    TouchAction supported_fast_actions,
-    const LayoutRect& container_rect,
-    TouchAction container_whitelisted_touch_action) const {
-  // We don't walk into SVG trees at all - just report their container.
-}
-
 void LayoutSVGModelObject::StyleDidChange(StyleDifference diff,
                                           const ComputedStyle* old_style) {
   // Since layout depends on the bounds of the filter, we need to force layout
@@ -132,7 +111,7 @@ void LayoutSVGModelObject::StyleDidChange(StyleDifference diff,
   // before and thus will not flag paint in ClientLayoutChanged.
   if (diff.FilterChanged()) {
     SetNeedsLayoutAndFullPaintInvalidation(
-        LayoutInvalidationReason::kStyleChange);
+        layout_invalidation_reason::kStyleChange);
   }
 
   if (diff.NeedsFullLayout()) {
@@ -157,14 +136,6 @@ void LayoutSVGModelObject::StyleDidChange(StyleDifference diff,
   LayoutObject::StyleDidChange(diff, old_style);
   SVGResources::UpdateClipPathFilterMask(*GetElement(), old_style, StyleRef());
   SVGResourcesCache::ClientStyleChanged(*this, diff, StyleRef());
-}
-
-bool LayoutSVGModelObject::NodeAtPoint(HitTestResult&,
-                                       const HitTestLocation&,
-                                       const LayoutPoint&,
-                                       HitTestAction) {
-  NOTREACHED();
-  return false;
 }
 
 }  // namespace blink

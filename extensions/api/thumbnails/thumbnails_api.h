@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/memory/shared_memory_handle.h"
+#include "browser/thumbnails/vivaldi_capture_contents.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "extensions/common/api/extension_types.h"
 #include "extensions/schema/thumbnails.h"
@@ -74,6 +75,9 @@ class ThumbnailsCaptureUIFunction : public ChromeAsyncExtensionFunction {
   base::FilePath file_path_;
   bool save_to_disk_ = false;
   std::string save_folder_;
+  std::string save_file_pattern_;
+  GURL url_;
+  std::string title_;
 
   DISALLOW_COPY_AND_ASSIGN(ThumbnailsCaptureUIFunction);
 };
@@ -117,8 +121,32 @@ class ThumbnailsCaptureTabFunction : public ChromeAsyncExtensionFunction {
   std::string save_folder_;
   int width_ = 0;
   int height_ = 0;
+  std::string save_file_pattern_;
+  GURL url_;
+  std::string title_;
 
   DISALLOW_COPY_AND_ASSIGN(ThumbnailsCaptureTabFunction);
+};
+
+class ThumbnailsCaptureUrlFunction : public UIThreadExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("thumbnails.captureUrl", THUMBNAILS_CAPTUREURL)
+  ThumbnailsCaptureUrlFunction();
+
+ protected:
+  ~ThumbnailsCaptureUrlFunction() override;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  void OnCapturedAndScaled(const SkBitmap& bitmap, bool success);
+  void OnBookmarkThumbnailStored(int bookmark_id, std::string& image_url);
+
+ private:
+  scoped_refptr<::vivaldi::ThumbnailCaptureContents> capture_page_;
+  int bookmark_id_ = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(ThumbnailsCaptureUrlFunction);
 };
 
 }  // namespace extensions

@@ -4,12 +4,14 @@
 
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "chrome/browser/sync/test/integration/autofill_helper.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "components/autofill/core/browser/autofill_profile.h"
+#include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/webdata/autofill_table.h"
@@ -38,6 +40,17 @@ using autofill_helper::RemoveProfile;
 using autofill_helper::SetCreditCards;
 using autofill_helper::UpdateProfile;
 
+// Copied from data_type_debug_info_emitter.cc.
+enum ModelTypeEntityChange {
+  LOCAL_DELETION = 0,
+  LOCAL_CREATION = 1,
+  LOCAL_UPDATE = 2,
+  REMOTE_DELETION = 3,
+  REMOTE_NON_INITIAL_UPDATE = 4,
+  REMOTE_INITIAL_UPDATE = 5,
+  MODEL_TYPE_ENTITY_CHANGE_COUNT = 6
+};
+
 // Class that enables or disables USS based on test parameter. Must be the first
 // base class of the test fixture.
 // TODO(jkrcal): When the new implementation fully launches, remove this class,
@@ -64,7 +77,11 @@ class TwoClientAutofillProfileSyncTest : public UssSwitchToggler,
   TwoClientAutofillProfileSyncTest() : SyncTest(TWO_CLIENT) {}
   ~TwoClientAutofillProfileSyncTest() override {}
 
-  bool TestUsesSelfNotifications() override { return false; }
+  // Tests that check Sync.ModelTypeEntityChange* histograms require
+  // self-notifications. The reason is that every commit will eventually trigger
+  // an incoming update on the same client, and without self-notifications we
+  // have no good way to reliably trigger these updates.
+  bool TestUsesSelfNotifications() override { return true; }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TwoClientAutofillProfileSyncTest);
@@ -108,6 +125,39 @@ IN_PROC_BROWSER_TEST_P(TwoClientAutofillProfileSyncTest,
   EXPECT_EQ(0U, GetAllAutoFillProfiles(0).size());
 }
 
+IN_PROC_BROWSER_TEST_P(TwoClientAutofillProfileSyncTest,
+                       SyncHistogramsInitialSync) {
+  ASSERT_TRUE(SetupClients());
+
+  AddProfile(0, CreateAutofillProfile(PROFILE_HOMER));
+  ASSERT_EQ(1U, GetAllAutoFillProfiles(0).size());
+
+  AddProfile(1, CreateAutofillProfile(PROFILE_MARION));
+  ASSERT_EQ(1U, GetAllAutoFillProfiles(1).size());
+
+  base::HistogramTester histograms;
+
+  ASSERT_TRUE(SetupSync());
+  ASSERT_EQ(2U, GetAllAutoFillProfiles(0).size());
+
+  // The order of events is roughly: First client (whichever that happens to be)
+  // connects to the server, commits its entity, and gets no initial updates
+  // because nothing was on the server yet. Then the second client connects,
+  // commits its entity, and receives the first client's entity as an initial
+  // update. Then the first client receives the second's entity as a non-initial
+  // update. And finally, at some point, each client receives its own entity
+  // back as a non-initial update, for a total of 1 initial and 3 non-initial
+  // updates.
+  histograms.ExpectBucketCount("Sync.ModelTypeEntityChange3.AUTOFILL_PROFILE",
+                               LOCAL_CREATION, 2);
+  histograms.ExpectBucketCount("Sync.ModelTypeEntityChange3.AUTOFILL_PROFILE",
+                               REMOTE_INITIAL_UPDATE, 1);
+  histograms.ExpectBucketCount("Sync.ModelTypeEntityChange3.AUTOFILL_PROFILE",
+                               REMOTE_NON_INITIAL_UPDATE, 3);
+  histograms.ExpectTotalCount("Sync.ModelTypeEntityChange3.AUTOFILL_PROFILE",
+                              6);
+}
+
 IN_PROC_BROWSER_TEST_P(TwoClientAutofillProfileSyncTest, AddDuplicateProfiles) {
   ASSERT_TRUE(SetupClients());
 
@@ -132,6 +182,58 @@ IN_PROC_BROWSER_TEST_P(TwoClientAutofillProfileSyncTest,
   ASSERT_TRUE(SetupSync());
   EXPECT_TRUE(AutofillProfileChecker(0, 1).Wait());
   EXPECT_EQ(1U, GetAllAutoFillProfiles(0).size());
+}
+
+IN_PROC_BROWSER_TEST_P(TwoClientAutofillProfileSyncTest,
+                       AddDuplicateProfiles_OneIsVerified) {
+  ASSERT_TRUE(SetupClients());
+
+  // Create two identical profiles where one of them is verified, additionally.
+  AutofillProfile profile0 = autofill::test::GetFullProfile();
+  AutofillProfile profile1 =
+      autofill::test::GetVerifiedProfile();  // I.e. Full + Verified.
+  std::string verified_origin = profile1.origin();
+
+  AddProfile(0, profile0);
+  AddProfile(1, profile1);
+  ASSERT_TRUE(SetupSync());
+  EXPECT_TRUE(AutofillProfileChecker(0, 1).Wait());
+
+  EXPECT_EQ(1U, GetAllAutoFillProfiles(0).size());
+  EXPECT_EQ(verified_origin, GetAllAutoFillProfiles(0)[0]->origin());
+  EXPECT_EQ(verified_origin, GetAllAutoFillProfiles(1)[0]->origin());
+}
+
+IN_PROC_BROWSER_TEST_P(
+    TwoClientAutofillProfileSyncTest,
+    AddDuplicateProfiles_OneIsVerified_NonverifiedComesLater) {
+  ASSERT_TRUE(SetupClients());
+
+  AutofillProfile profile0 = autofill::test::GetFullProfile();
+  AutofillProfile profile1 =
+      autofill::test::GetVerifiedProfile();  // I.e. Full + Verified.
+  std::string verified_origin = profile1.origin();
+
+  // We start by having the verified profile.
+  AddProfile(1, profile1);
+  ASSERT_TRUE(SetupSync());
+  EXPECT_TRUE(AutofillProfileChecker(0, 1).Wait());
+
+  EXPECT_EQ(1U, GetAllAutoFillProfiles(0).size());
+  EXPECT_EQ(verified_origin, GetAllAutoFillProfiles(0)[0]->origin());
+  EXPECT_EQ(verified_origin, GetAllAutoFillProfiles(1)[0]->origin());
+
+  // Add the same (but non-verified) profile on the other client, afterwards.
+  AddProfile(0, profile0);
+  EXPECT_TRUE(AutofillProfileChecker(0, 1).Wait());
+
+  // The profiles should de-duplicate via sync on both other client, the
+  // verified one should win.
+  EXPECT_EQ(1U, GetAllAutoFillProfiles(0).size());
+  EXPECT_EQ(1U, GetAllAutoFillProfiles(0).size());
+
+  EXPECT_EQ(verified_origin, GetAllAutoFillProfiles(0)[0]->origin());
+  EXPECT_EQ(verified_origin, GetAllAutoFillProfiles(1)[0]->origin());
 }
 
 // Tests that a null profile does not get synced across clients.
@@ -337,19 +439,53 @@ IN_PROC_BROWSER_TEST_P(TwoClientAutofillProfileSyncTest, DeleteAndUpdate) {
 
   // Make the two clients have the same profile.
   AddProfile(0, CreateAutofillProfile(PROFILE_HOMER));
-  EXPECT_TRUE(AutofillProfileChecker(0, 1).Wait());
-  EXPECT_EQ(1U, GetAllAutoFillProfiles(0).size());
+  ASSERT_TRUE(AutofillProfileChecker(0, 1).Wait());
+  ASSERT_EQ(1U, GetAllAutoFillProfiles(0).size());
 
   RemoveProfile(0, GetAllAutoFillProfiles(0)[0]->guid());
-  UpdateProfile(1,
-                GetAllAutoFillProfiles(1)[0]->guid(),
-                AutofillType(autofill::NAME_FIRST),
-                base::ASCIIToUTF16("Bart"));
+  UpdateProfile(1, GetAllAutoFillProfiles(1)[0]->guid(),
+                AutofillType(autofill::NAME_FIRST), base::ASCIIToUTF16("Bart"));
 
   EXPECT_TRUE(AutofillProfileChecker(0, 1).Wait());
-  // TODO(crbug.com/870333): The result should be deterministic for USS (either
-  // update or delete, but always do the same).
+  // The exact result is non-deterministic without a strong consistency model
+  // server-side, but both clients should converge (either update or delete).
   EXPECT_EQ(GetAllAutoFillProfiles(0).size(), GetAllAutoFillProfiles(1).size());
+}
+
+// Tests that modifying a profile at the same time on two clients while
+// syncing results in a conflict where the update wins. This only works with
+// a server that supports a strong consistency model and is hence capable of
+// detecting conflicts server-side.
+IN_PROC_BROWSER_TEST_P(TwoClientAutofillProfileSyncTest,
+                       DeleteAndUpdateWithStrongConsistency) {
+  if (GetParam() == false) {
+    // TODO(crbug.com/890746): There seems to be a bug in directory code that
+    // resolves conflicts in a way that local deletion wins over a remote
+    // update, which makes this test non-deterministic, because the logic is
+    // asymmetric (so the outcome depends on which client commits first).
+    // For now, we "disable" the test.
+    return;
+  }
+
+  ASSERT_TRUE(SetupSync());
+  GetFakeServer()->EnableStrongConsistencyWithConflictDetectionModel();
+
+  // Make the two clients have the same profile.
+  AddProfile(0, CreateAutofillProfile(PROFILE_HOMER));
+  ASSERT_TRUE(AutofillProfileChecker(0, 1).Wait());
+  ASSERT_EQ(1U, GetAllAutoFillProfiles(0).size());
+
+  RemoveProfile(0, GetAllAutoFillProfiles(0)[0]->guid());
+  UpdateProfile(1, GetAllAutoFillProfiles(1)[0]->guid(),
+                AutofillType(autofill::NAME_FIRST), base::ASCIIToUTF16("Bart"));
+
+  // One of the two clients (the second one committing) will be requested by the
+  // server to resolve the conflict and recommit. The conflict resolution should
+  // be undeletion wins, which can mean local wins or remote wins, depending on
+  // which client is involved.
+  EXPECT_TRUE(AutofillProfileChecker(0, 1).Wait());
+  EXPECT_EQ(1U, GetAllAutoFillProfiles(0).size());
+  EXPECT_EQ(1U, GetAllAutoFillProfiles(1).size());
 }
 
 IN_PROC_BROWSER_TEST_P(TwoClientAutofillProfileSyncTest, MaxLength) {
@@ -456,8 +592,8 @@ IN_PROC_BROWSER_TEST_P(TwoClientAutofillProfileSyncTest,
 
 // Only parametrize the tests above that test autofill_profile, the tests below
 // address autocomplete and thus do not need parametrizing.
-INSTANTIATE_TEST_CASE_P(USS,
-                        TwoClientAutofillProfileSyncTest,
-                        ::testing::Values(false, true));
+INSTANTIATE_TEST_SUITE_P(USS,
+                         TwoClientAutofillProfileSyncTest,
+                         ::testing::Values(false, true));
 
 }  // namespace

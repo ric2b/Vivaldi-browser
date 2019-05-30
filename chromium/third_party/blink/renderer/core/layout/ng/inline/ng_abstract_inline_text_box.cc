@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment_traversal.h"
 #include "third_party/blink/renderer/platform/fonts/character_range.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_buffer.h"
+#include "third_party/blink/renderer/platform/fonts/shaping/shape_result_view.h"
 
 namespace blink {
 
@@ -146,11 +147,12 @@ void NGAbstractInlineTextBox::CharacterWidths(Vector<float>& widths) const {
     widths.resize(Len());
     return;
   }
-  const ShapeResult& shape_result = *PhysicalTextFragment().TextShapeResult();
-  ShapeResultBuffer buffer;
-  buffer.AppendResult(&shape_result);
-  const Vector<CharacterRange> ranges = buffer.IndividualCharacterRanges(
-      shape_result.Direction(), shape_result.Width());
+  // TODO(layout-dev): Add support for IndividualCharacterRanges to
+  // ShapeResultView to avoid the copy below.
+  auto shape_result =
+      PhysicalTextFragment().TextShapeResult()->CreateShapeResult();
+  Vector<CharacterRange> ranges;
+  shape_result->IndividualCharacterRanges(&ranges);
   widths.ReserveCapacity(ranges.size());
   widths.resize(0);
   for (const auto& range : ranges)
@@ -164,6 +166,9 @@ void NGAbstractInlineTextBox::CharacterWidths(Vector<float>& widths) const {
 String NGAbstractInlineTextBox::GetText() const {
   if (!fragment_ || !GetLineLayoutItem())
     return String();
+
+  String result = PhysicalTextFragment().Text().ToString();
+
   // For compatibility with |InlineTextBox|, we should have a space character
   // for soft line break.
   // Following tests require this:
@@ -171,8 +176,15 @@ String NGAbstractInlineTextBox::GetText() const {
   //  - accessibility/inline-text-changes.html
   //  - accessibility/inline-text-word-boundaries.html
   if (NeedsTrailingSpace())
-    return PhysicalTextFragment().Text().ToString() + " ";
-  return PhysicalTextFragment().Text().ToString();
+    result = result + " ";
+
+  // When the CSS first-letter pseudoselector is used, the LayoutText for the
+  // first letter is excluded from the accessibility tree, so we need to prepend
+  // its text here.
+  if (LayoutText* first_letter = GetFirstLetterPseudoLayoutText())
+    result = first_letter->GetText().SimplifyWhiteSpace() + result;
+
+  return result;
 }
 
 bool NGAbstractInlineTextBox::IsFirst() const {

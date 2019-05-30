@@ -26,7 +26,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread.h"
@@ -257,7 +256,7 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   // Handles mid stream resolution changes.
   void HandleResolutionChanged(int width, int height);
 
-  typedef std::map<int32_t, linked_ptr<DXVAPictureBuffer>> OutputBuffers;
+  using OutputBuffers = std::map<int32_t, std::unique_ptr<DXVAPictureBuffer>>;
 
   // Tells the client to dismiss the stale picture buffers passed in.
   void DismissStaleBuffers(bool force);
@@ -417,8 +416,6 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
 
   // Reset token for the DX11 device manager.
   uint32_t dx11_dev_manager_reset_token_;
-
-  uint32_t dx11_dev_manager_reset_token_format_conversion_;
 
   // The EGL config to use for decoded frames.
   EGLConfig egl_config_;

@@ -12,7 +12,7 @@
 #include "ui/base/test/material_design_controller_test_api.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/views/animation/ink_drop.h"
-#include "ui/views/animation/ink_drop_host.h"
+#include "ui/views/animation/ink_drop_host_view.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/ink_drop_state.h"
 #include "ui/views/animation/ink_drop_stub.h"
@@ -76,9 +76,9 @@ InkDropType InkDropTest::GetInkDropType() const {
 
 // Note: First argument is optional and intentionally left blank.
 // (it's a prefix for the generated test cases)
-INSTANTIATE_TEST_CASE_P(,
-                        InkDropTest,
-                        testing::Values(INK_DROP_STUB, INK_DROP_IMPL));
+INSTANTIATE_TEST_SUITE_P(,
+                         InkDropTest,
+                         testing::Values(INK_DROP_STUB, INK_DROP_IMPL));
 
 TEST_P(InkDropTest,
        VerifyInkDropLayersRemovedAfterDestructionWhenRippleIsActive) {

@@ -8,9 +8,11 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
+#include "net/base/ip_endpoint.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_request_info.h"
 #include "net/http/http_response_headers.h"
@@ -52,7 +54,8 @@ WebSocketHttp2HandshakeStream::WebSocketHttp2HandshakeStream(
       request_info_(nullptr),
       stream_closed_(false),
       stream_error_(OK),
-      response_headers_complete_(false) {
+      response_headers_complete_(false),
+      weak_ptr_factory_(this) {
   DCHECK(connect_delegate);
   DCHECK(request);
 }
@@ -100,7 +103,7 @@ int WebSocketHttp2HandshakeStream::SendRequest(
     OnFailure("Error getting IP address.");
     return result;
   }
-  http_response_info_->socket_address = HostPortPair::FromIPEndPoint(address);
+  http_response_info_->remote_endpoint = address;
 
   auto request = std::make_unique<WebSocketHandshakeRequestInfo>(
       request_info_->url, base::Time::Now());
@@ -216,13 +219,6 @@ void WebSocketHttp2HandshakeStream::PopulateNetErrorDetails(
   return;
 }
 
-Error WebSocketHttp2HandshakeStream::GetTokenBindingSignature(
-    crypto::ECPrivateKey* key,
-    TokenBindingType tb_type,
-    std::vector<uint8_t>* out) {
-  return stream_->GetTokenBindingSignature(key, tb_type, out);
-}
-
 void WebSocketHttp2HandshakeStream::Drain(HttpNetworkSession* session) {
   Close(true /* not_reusable */);
 }
@@ -255,6 +251,11 @@ std::unique_ptr<WebSocketStream> WebSocketHttp2HandshakeStream::Upgrade() {
   return std::make_unique<WebSocketDeflateStream>(
       std::move(basic_stream), extension_params_->deflate_parameters,
       std::make_unique<WebSocketDeflatePredictorImpl>());
+}
+
+base::WeakPtr<WebSocketHandshakeStreamBase>
+WebSocketHttp2HandshakeStream::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 void WebSocketHttp2HandshakeStream::OnHeadersSent() {
@@ -378,7 +379,7 @@ void WebSocketHttp2HandshakeStream::OnFinishOpeningHandshake() {
   DCHECK(http_response_info_);
   WebSocketDispatchOnFinishOpeningHandshake(
       connect_delegate_, request_info_->url, http_response_info_->headers,
-      http_response_info_->socket_address, http_response_info_->response_time);
+      http_response_info_->remote_endpoint, http_response_info_->response_time);
 }
 
 void WebSocketHttp2HandshakeStream::OnFailure(const std::string& message) {

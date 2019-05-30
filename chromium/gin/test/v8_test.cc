@@ -15,7 +15,9 @@ using v8::HandleScope;
 
 namespace gin {
 
-V8Test::V8Test() = default;
+V8Test::V8Test()
+    : scoped_task_environment_(
+          base::test::ScopedTaskEnvironment::MainThreadType::IO) {}
 
 V8Test::~V8Test() = default;
 
@@ -25,12 +27,9 @@ void V8Test::SetUp() {
   gin::V8Initializer::LoadV8Natives();
 #endif
   gin::IsolateHolder::Initialize(gin::IsolateHolder::kStrictMode,
-                                 gin::IsolateHolder::kStableV8Extras,
                                  gin::ArrayBufferAllocator::SharedInstance());
 
-  instance_.reset(new gin::IsolateHolder(
-      base::ThreadTaskRunnerHandle::Get(),
-      gin::IsolateHolder::IsolateType::kBlinkMainThread));
+  instance_ = CreateIsolateHolder();
   instance_->isolate()->Enter();
   HandleScope handle_scope(instance_->isolate());
   context_.Reset(instance_->isolate(), Context::New(instance_->isolate()));
@@ -45,6 +44,12 @@ void V8Test::TearDown() {
   }
   instance_->isolate()->Exit();
   instance_.reset();
+}
+
+std::unique_ptr<gin::IsolateHolder> V8Test::CreateIsolateHolder() const {
+  return std::make_unique<gin::IsolateHolder>(
+      base::ThreadTaskRunnerHandle::Get(),
+      gin::IsolateHolder::IsolateType::kBlinkMainThread);
 }
 
 }  // namespace gin

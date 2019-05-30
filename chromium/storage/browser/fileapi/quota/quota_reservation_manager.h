@@ -12,11 +12,11 @@
 #include <utility>
 
 #include "base/callback_forward.h"
+#include "base/component_export.h"
 #include "base/files/file.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "storage/browser/storage_browser_export.h"
 #include "storage/common/fileapi/file_system_types.h"
 
 namespace content {
@@ -32,18 +32,18 @@ namespace storage {
 class QuotaReservation;
 class QuotaReservationBuffer;
 
-class STORAGE_EXPORT QuotaReservationManager {
+class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaReservationManager {
  public:
   // Callback for ReserveQuota. When this callback returns false, ReserveQuota
   // operation should be reverted.
   using ReserveQuotaCallback =
-      base::Callback<bool(base::File::Error error, int64_t delta)>;
+      base::OnceCallback<bool(base::File::Error error, int64_t delta)>;
 
   // An abstraction of backing quota system.
-  class STORAGE_EXPORT QuotaBackend {
+  class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaBackend {
    public:
-    QuotaBackend() {}
-    virtual ~QuotaBackend() {}
+    QuotaBackend() = default;
+    virtual ~QuotaBackend() = default;
 
     // Reserves or reclaims |delta| of quota for |origin| and |type| pair.
     // Reserved quota should be counted as usage, but it should be on-memory
@@ -54,7 +54,7 @@ class STORAGE_EXPORT QuotaReservationManager {
     virtual void ReserveQuota(const url::Origin& origin,
                               FileSystemType type,
                               int64_t delta,
-                              const ReserveQuotaCallback& callback) = 0;
+                              ReserveQuotaCallback callback) = 0;
 
     // Reclaims |size| of quota for |origin| and |type|.
     virtual void ReleaseReservedQuota(const url::Origin& origin,
@@ -95,7 +95,7 @@ class STORAGE_EXPORT QuotaReservationManager {
   void ReserveQuota(const url::Origin& origin,
                     FileSystemType type,
                     int64_t delta,
-                    const ReserveQuotaCallback& callback);
+                    ReserveQuotaCallback callback);
 
   void ReleaseReservedQuota(const url::Origin& origin,
                             FileSystemType type,

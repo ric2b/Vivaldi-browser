@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/location.h"
@@ -265,7 +266,7 @@ const char* const kTestParams[] = {"8.8.4.4", "2001:4860:4860::8888"};
 // string.
 std::string NormalizeJson(const std::string& json) {
   std::string result = json;
-  std::unique_ptr<base::Value> value = base::JSONReader::Read(result);
+  base::Optional<base::Value> value = base::JSONReader::Read(result);
   DCHECK(value) << result;
   base::JSONWriter::Write(*value, &result);
   return result;
@@ -340,16 +341,7 @@ class PrivetHTTPTest : public TestWithParam<const char*> {
     DCHECK(!resource_requests.empty());
 
     const network::ResourceRequest& resource_request = resource_requests[0];
-    if (!resource_request.request_body ||
-        resource_request.request_body->elements()->empty())
-      return std::string();
-
-    const network::DataElement& data_element =
-        resource_request.request_body->elements()->at(0);
-    if (data_element.type() != network::DataElement::TYPE_BYTES)
-      return std::string();
-
-    return std::string(data_element.bytes(), data_element.length());
+    return network::GetUploadData(resource_request);
   }
 
   const GURL kInfoURL;
@@ -435,7 +427,7 @@ class PrivetInfoTest : public PrivetHTTPTest {
   StrictMock<MockJSONCallback> info_callback_;
 };
 
-INSTANTIATE_TEST_CASE_P(PrivetTests, PrivetInfoTest, ValuesIn(kTestParams));
+INSTANTIATE_TEST_SUITE_P(PrivetTests, PrivetInfoTest, ValuesIn(kTestParams));
 
 TEST_P(PrivetInfoTest, SuccessfulInfo) {
   info_operation_->Start();
@@ -469,7 +461,9 @@ class PrivetRegisterTest : public PrivetHTTPTest {
   PrivetURLLoader::RetryImmediatelyForTest retry_immediately_;
 };
 
-INSTANTIATE_TEST_CASE_P(PrivetTests, PrivetRegisterTest, ValuesIn(kTestParams));
+INSTANTIATE_TEST_SUITE_P(PrivetTests,
+                         PrivetRegisterTest,
+                         ValuesIn(kTestParams));
 
 TEST_P(PrivetRegisterTest, RegisterSuccessSimple) {
   register_operation_->Start();
@@ -585,9 +579,9 @@ class PrivetCapabilitiesTest : public PrivetHTTPTest {
   StrictMock<MockJSONCallback> capabilities_callback_;
 };
 
-INSTANTIATE_TEST_CASE_P(PrivetTests,
-                        PrivetCapabilitiesTest,
-                        ValuesIn(kTestParams));
+INSTANTIATE_TEST_SUITE_P(PrivetTests,
+                         PrivetCapabilitiesTest,
+                         ValuesIn(kTestParams));
 
 TEST_P(PrivetCapabilitiesTest, SuccessfulCapabilities) {
   capabilities_operation_->Start();
@@ -703,9 +697,9 @@ class PrivetLocalPrintTest : public PrivetHTTPTest {
       run_tasks_immediately_for_local_print_;
 };
 
-INSTANTIATE_TEST_CASE_P(PrivetTests,
-                        PrivetLocalPrintTest,
-                        ValuesIn(kTestParams));
+INSTANTIATE_TEST_SUITE_P(PrivetTests,
+                         PrivetLocalPrintTest,
+                         ValuesIn(kTestParams));
 
 TEST_P(PrivetLocalPrintTest, SuccessfulLocalPrint) {
   local_print_operation_->SetUsername("sample@gmail.com");
@@ -760,6 +754,8 @@ TEST_P(PrivetLocalPrintTest, SuccessfulPWGLocalPrint) {
   EXPECT_TRUE(SuccessfulResponse(kSubmitDocURL, kSampleLocalPrintResponse));
   EXPECT_EQ("foobar", GetUploadData(kSubmitDocURL));
 
+  EXPECT_EQ(printing::DuplexMode::SIMPLEX,
+            pwg_converter_->bitmap_settings().duplex_mode);
   EXPECT_EQ(printing::TRANSFORM_NORMAL,
             pwg_converter_->bitmap_settings().odd_page_transform);
   EXPECT_FALSE(pwg_converter_->bitmap_settings().rotate_all_pages);
@@ -773,7 +769,9 @@ TEST_P(PrivetLocalPrintTest, SuccessfulPWGLocalPrintDuplex) {
   local_print_operation_->SetUsername("sample@gmail.com");
   local_print_operation_->SetJobname("Sample job name");
   local_print_operation_->SetData(RefCountedBytesFromString("foobar"));
-  local_print_operation_->SetTicket(kSampleCJTDuplex);
+  base::Optional<base::Value> ticket = base::JSONReader::Read(kSampleCJTDuplex);
+  ASSERT_TRUE(ticket);
+  local_print_operation_->SetTicket(std::move(*ticket));
   local_print_operation_->SetCapabilities(
       kSampleCapabilitiesResponsePWGSettings);
   local_print_operation_->Start();
@@ -792,6 +790,8 @@ TEST_P(PrivetLocalPrintTest, SuccessfulPWGLocalPrintDuplex) {
       SuccessfulResponse(kSubmitDocWithJobIDURL, kSampleLocalPrintResponse));
   EXPECT_EQ("foobar", GetUploadData(kSubmitDocWithJobIDURL));
 
+  EXPECT_EQ(printing::DuplexMode::SHORT_EDGE,
+            pwg_converter_->bitmap_settings().duplex_mode);
   EXPECT_EQ(printing::TRANSFORM_ROTATE_180,
             pwg_converter_->bitmap_settings().odd_page_transform);
   EXPECT_FALSE(pwg_converter_->bitmap_settings().rotate_all_pages);
@@ -805,7 +805,9 @@ TEST_P(PrivetLocalPrintTest, SuccessfulPWGLocalPrintMono) {
   local_print_operation_->SetUsername("sample@gmail.com");
   local_print_operation_->SetJobname("Sample job name");
   local_print_operation_->SetData(RefCountedBytesFromString("foobar"));
-  local_print_operation_->SetTicket(kSampleCJTMono);
+  base::Optional<base::Value> ticket = base::JSONReader::Read(kSampleCJTMono);
+  ASSERT_TRUE(ticket);
+  local_print_operation_->SetTicket(std::move(*ticket));
   local_print_operation_->SetCapabilities(
       kSampleCapabilitiesResponsePWGSettings);
   local_print_operation_->Start();
@@ -837,7 +839,9 @@ TEST_P(PrivetLocalPrintTest, SuccessfulPWGLocalPrintMonoToGRAY8Printer) {
   local_print_operation_->SetUsername("sample@gmail.com");
   local_print_operation_->SetJobname("Sample job name");
   local_print_operation_->SetData(RefCountedBytesFromString("foobar"));
-  local_print_operation_->SetTicket(kSampleCJTMono);
+  base::Optional<base::Value> ticket = base::JSONReader::Read(kSampleCJTMono);
+  ASSERT_TRUE(ticket);
+  local_print_operation_->SetTicket(std::move(*ticket));
   local_print_operation_->SetCapabilities(
       kSampleCapabilitiesResponsePWGSettingsMono);
   local_print_operation_->Start();
@@ -868,7 +872,9 @@ TEST_P(PrivetLocalPrintTest, SuccessfulPWGLocalPrintMonoToGRAY8Printer) {
 TEST_P(PrivetLocalPrintTest, SuccessfulLocalPrintWithCreatejob) {
   local_print_operation_->SetUsername("sample@gmail.com");
   local_print_operation_->SetJobname("Sample job name");
-  local_print_operation_->SetTicket(kSampleCJT);
+  base::Optional<base::Value> ticket = base::JSONReader::Read(kSampleCJT);
+  ASSERT_TRUE(ticket);
+  local_print_operation_->SetTicket(std::move(*ticket));
   local_print_operation_->SetData(
       RefCountedBytesFromString("Sample print data"));
   local_print_operation_->SetCapabilities(kSampleCapabilitiesResponse);
@@ -899,7 +905,9 @@ TEST_P(PrivetLocalPrintTest, SuccessfulLocalPrintWithOverlongName) {
   local_print_operation_->SetUsername("sample@gmail.com");
   local_print_operation_->SetJobname(
       "123456789:123456789:123456789:123456789:123456789:123456789:123456789:");
-  local_print_operation_->SetTicket(kSampleCJT);
+  base::Optional<base::Value> ticket = base::JSONReader::Read(kSampleCJT);
+  ASSERT_TRUE(ticket);
+  local_print_operation_->SetTicket(std::move(*ticket));
   local_print_operation_->SetCapabilities(kSampleCapabilitiesResponse);
   local_print_operation_->SetData(
       RefCountedBytesFromString("Sample print data"));
@@ -922,7 +930,9 @@ TEST_P(PrivetLocalPrintTest, SuccessfulLocalPrintWithOverlongName) {
 TEST_P(PrivetLocalPrintTest, PDFPrintInvalidDocumentTypeRetry) {
   local_print_operation_->SetUsername("sample@gmail.com");
   local_print_operation_->SetJobname("Sample job name");
-  local_print_operation_->SetTicket(kSampleCJT);
+  base::Optional<base::Value> ticket = base::JSONReader::Read(kSampleCJT);
+  ASSERT_TRUE(ticket);
+  local_print_operation_->SetTicket(std::move(*ticket));
   local_print_operation_->SetCapabilities(kSampleCapabilitiesResponse);
   local_print_operation_->SetData(RefCountedBytesFromString("sample_data"));
   local_print_operation_->Start();
@@ -949,7 +959,9 @@ TEST_P(PrivetLocalPrintTest, PDFPrintInvalidDocumentTypeRetry) {
 TEST_P(PrivetLocalPrintTest, LocalPrintRetryOnInvalidJobID) {
   local_print_operation_->SetUsername("sample@gmail.com");
   local_print_operation_->SetJobname("Sample job name");
-  local_print_operation_->SetTicket(kSampleCJT);
+  base::Optional<base::Value> ticket = base::JSONReader::Read(kSampleCJT);
+  ASSERT_TRUE(ticket);
+  local_print_operation_->SetTicket(std::move(*ticket));
   local_print_operation_->SetCapabilities(kSampleCapabilitiesResponse);
   local_print_operation_->SetData(
       RefCountedBytesFromString("Sample print data"));

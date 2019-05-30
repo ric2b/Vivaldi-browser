@@ -4,11 +4,12 @@
 
 // <include src="utils.js">
 // <include src="setting_zippy.js">
+// <include src="voice_match_entry.js">
 // <include src="assistant_get_more.js">
 // <include src="assistant_loading.js">
-// <include src="assistant_ready.js">
 // <include src="assistant_third_party.js">
 // <include src="assistant_value_prop.js">
+// <include src="assistant_voice_match.js">
 
 /**
  * @fileoverview Polymer element for displaying material design assistant
@@ -22,17 +23,52 @@ Polymer({
   behaviors: [OobeDialogHostBehavior],
 
   /**
-   * Signal from host to show the screen.
+   * Indicates the type of the opt-in flow.
    */
-  onShow: function() {
+  FlowType: {
+    // The whole consent flow.
+    CONSENT_FLOW: 0,
+    // The voice match enrollment flow.
+    SPEAKER_ID_ENROLLMENT: 1,
+    // The voice match retrain flow.
+    SPEAKER_ID_RETRAIN: 2,
+  },
+
+  /**
+   * Signal from host to show the screen.
+   * @param {?number} type The type of the flow.
+   */
+  onShow: function(type) {
+    var flowType = Number(type);
+    switch (flowType) {
+      case this.FlowType.CONSENT_FLOW:
+      case this.FlowType.SPEAKER_ID_ENROLLMENT:
+      case this.FlowType.SPEAKER_ID_RETRAIN:
+        this.flowType = flowType;
+        break;
+      default:
+        console.error('Invalid flow type, using default.');
+        this.flowType = this.FlowType.CONSENT_FLOW;
+        break;
+    }
+
     this.boundShowLoadingScreen = this.showLoadingScreen.bind(this);
     this.boundOnScreenLoadingError = this.onScreenLoadingError.bind(this);
     this.boundOnScreenLoaded = this.onScreenLoaded.bind(this);
 
     this.$['loading'].onBeforeShow();
     this.$['loading'].addEventListener('reload', this.onReload.bind(this));
-    this.showScreen(this.$['value-prop']);
-    chrome.send('assistantOptInFlow.initialized');
+
+    switch (this.flowType) {
+      case this.FlowType.SPEAKER_ID_ENROLLMENT:
+      case this.FlowType.SPEAKER_ID_RETRAIN:
+        this.$['value-prop'].hidden = true;
+        this.showScreen(this.$['voice-match']);
+        break;
+      default:
+        this.showScreen(this.$['value-prop']);
+    }
+    chrome.send('login.AssistantOptInFlowScreen.initialized', [this.flowType]);
   },
 
   /**
@@ -40,9 +76,8 @@ Polymer({
    * @param {!Object} data New dictionary with i18n values.
    */
   reloadContent: function(data) {
-    // Reload global local strings, process DOM tree again.
-    loadTimeData.overrideValues(data);
-    i18nTemplate.process(document, loadTimeData);
+    this.voiceMatchFeatureEnabled = data['voiceMatchFeatureEnabled'];
+    data['flowType'] = this.flowType;
     this.$['value-prop'].reloadContent(data);
     this.$['third-party'].reloadContent(data);
     this.$['get-more'].reloadContent(data);
@@ -78,7 +113,19 @@ Polymer({
         this.showScreen(this.$['third-party']);
         break;
       case this.$['third-party']:
-        this.showScreen(this.$['get-more']);
+        if (this.voiceMatchFeatureEnabled) {
+          this.showScreen(this.$['voice-match']);
+        } else {
+          this.showScreen(this.$['get-more']);
+        }
+        break;
+      case this.$['voice-match']:
+        if (this.flowType == this.FlowType.SPEAKER_ID_ENROLLMENT ||
+            this.flowType == this.FlowType.SPEAKER_ID_RETRAIN) {
+          chrome.send('login.AssistantOptInFlowScreen.flowFinished');
+        } else {
+          this.showScreen(this.$['get-more']);
+        }
         break;
       case this.$['get-more']:
         this.showScreen(this.$['ready']);
@@ -86,6 +133,32 @@ Polymer({
       default:
         console.error('Undefined');
         chrome.send('dialogClose');
+    }
+  },
+
+  /**
+   * Called when the Voice match state is updated.
+   * @param {string} state the voice match state.
+   */
+  onVoiceMatchUpdate: function(state) {
+    if (!this.currentScreen == this.$['voice-match']) {
+      return;
+    }
+    switch (state) {
+      case 'listen':
+        this.$['voice-match'].listenForHotword();
+        break;
+      case 'process':
+        this.$['voice-match'].processingHotword();
+        break;
+      case 'done':
+        this.$['voice-match'].voiceMatchDone();
+        break;
+      case 'failure':
+        this.onScreenLoadingError();
+        break;
+      default:
+        break;
     }
   },
 

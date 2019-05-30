@@ -20,6 +20,7 @@
 #include "content/browser/background_fetch/background_fetch_constants.h"
 #include "content/common/content_export.h"
 #include "content/common/service_worker/service_worker_types.h"
+#include "content/public/browser/background_fetch_response.h"
 #include "url/gurl.h"
 
 namespace storage {
@@ -30,6 +31,7 @@ namespace content {
 
 struct BackgroundFetchResponse;
 struct BackgroundFetchResult;
+class ChromeBlobStorageContext;
 
 // Simple class to encapsulate the components of a fetch request.
 // TODO(peter): This can likely change to have a single owner, and thus become
@@ -38,7 +40,8 @@ class CONTENT_EXPORT BackgroundFetchRequestInfo
     : public base::RefCountedDeleteOnSequence<BackgroundFetchRequestInfo> {
  public:
   BackgroundFetchRequestInfo(int request_index,
-                             const ServiceWorkerFetchRequest& fetch_request);
+                             blink::mojom::FetchAPIRequestPtr fetch_request,
+                             uint64_t request_body_size);
 
   // Sets the download GUID to a newly generated value. Can only be used if no
   // GUID is already set.
@@ -48,10 +51,15 @@ class CONTENT_EXPORT BackgroundFetchRequestInfo
   // retrieved from storage). Can only be used if no GUID is already set.
   void SetDownloadGuid(const std::string& download_guid);
 
-  // Populates the cached state for the in-progress download.
+  // Extracts the headers and the status code.
   void PopulateWithResponse(std::unique_ptr<BackgroundFetchResponse> response);
 
   void SetResult(std::unique_ptr<BackgroundFetchResult> result);
+
+  // Creates an empty result, with no response, and assigns |failure_reason|
+  // as its failure_reason.
+  void SetEmptyResultWithFailureReason(
+      BackgroundFetchResult::FailureReason failure_reason);
 
   // Returns the index of this request within a Background Fetch registration.
   int request_index() const { return request_index_; }
@@ -61,9 +69,24 @@ class CONTENT_EXPORT BackgroundFetchRequestInfo
   const std::string& download_guid() const { return download_guid_; }
 
   // Returns the Fetch API Request object that details the developer's request.
-  const ServiceWorkerFetchRequest& fetch_request() const {
+  const blink::mojom::FetchAPIRequestPtr& fetch_request() const {
     return fetch_request_;
   }
+
+  // Returns the Fetch API Request Ptr object that details the developer's
+  // request.
+  const blink::mojom::FetchAPIRequestPtr& fetch_request_ptr() const {
+    return fetch_request_;
+  }
+
+  // Returns the size of the blob to upload.
+  uint64_t request_body_size() const { return request_body_size_; }
+
+  void set_can_populate_body(bool can_populate_body) {
+    can_populate_body_ = can_populate_body;
+  }
+
+  bool can_populate_body() const { return can_populate_body_; }
 
   // Returns the response code for the download. Available for both successful
   // and failed requests.
@@ -80,15 +103,20 @@ class CONTENT_EXPORT BackgroundFetchRequestInfo
   // Returns the URL chain for the response, including redirects.
   const std::vector<GURL>& GetURLChain() const;
 
-  // Returns the blob data handle for the response. Only available when dealing
-  // with in-memory downloads.
-  const base::Optional<storage::BlobDataHandle>& GetBlobDataHandle() const;
+  // Creates a blob data handle for the response.
+  void CreateResponseBlobDataHandle(
+      ChromeBlobStorageContext* blob_storage_context);
 
-  // Returns the absolute path to the file in which the response is stored.
-  const base::FilePath& GetFilePath() const;
+  // Returns the blob data handle for the response.
+  // `CreateResponseBlobDataHandle` must have been called before this.
+  storage::BlobDataHandle* GetResponseBlobDataHandle();
 
-  // Returns the size of the file containing the response, in bytes.
-  int64_t GetFileSize() const;
+  // Hands over ownership of the blob data handle.
+  // `CreateResponseBlobDataHandle` must have been called before this.
+  std::unique_ptr<storage::BlobDataHandle> TakeResponseBlobDataHandle();
+
+  // Returns the size of the response.
+  uint64_t GetResponseSize() const;
 
   // Returns the time at which the response was completed.
   const base::Time& GetResponseTime() const;
@@ -105,7 +133,8 @@ class CONTENT_EXPORT BackgroundFetchRequestInfo
 
   // ---- Data associated with the request -------------------------------------
   int request_index_ = kInvalidBackgroundFetchRequestIndex;
-  ServiceWorkerFetchRequest fetch_request_;
+  blink::mojom::FetchAPIRequestPtr fetch_request_;
+  uint64_t request_body_size_;
 
   // ---- Data associated with the in-progress download ------------------------
   std::string download_guid_;
@@ -116,9 +145,12 @@ class CONTENT_EXPORT BackgroundFetchRequestInfo
   std::string response_text_;
   std::map<std::string, std::string> response_headers_;
   std::vector<GURL> url_chain_;
+  bool can_populate_body_ = false;
 
   // ---- Data associated with the response ------------------------------------
   std::unique_ptr<BackgroundFetchResult> result_;
+  std::unique_ptr<storage::BlobDataHandle> blob_data_handle_;
+  uint64_t response_size_ = 0u;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

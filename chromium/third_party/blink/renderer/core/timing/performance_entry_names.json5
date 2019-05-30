@@ -1,12 +1,14 @@
 {
   metadata: {
-    namespace: "PerformanceEntry",
+    namespace: "performance_entry_names",
     export: "CORE_EXPORT",
   },
 
   data: [
+    "element",
     "event",
     "firstInput",
+    "layoutJank",
     "longtask",
     "mark",
     "measure",

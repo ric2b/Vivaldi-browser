@@ -84,10 +84,10 @@ void TooltipIcon::ShowBubble() {
 
   bubble_ = new InfoBubble(this, tooltip_);
   bubble_->set_preferred_width(preferred_width_);
-  bubble_->set_arrow(anchor_point_arrow_);
+  bubble_->SetArrow(anchor_point_arrow_);
   // When shown due to a gesture event, close on deactivate (i.e. don't use
   // "focusless").
-  bubble_->set_can_activate(!mouse_inside_);
+  bubble_->SetCanActivate(!mouse_inside_);
 
   bubble_->Show();
   observer_.Add(bubble_->GetWidget());

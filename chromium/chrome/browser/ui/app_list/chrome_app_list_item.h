@@ -58,6 +58,7 @@ class ChromeAppListItem {
   const syncer::StringOrdinal& position() const { return metadata_->position; }
   const std::string& name() const { return metadata_->name; }
   bool is_folder() const { return metadata_->is_folder; }
+  bool is_persistent() const { return metadata_->is_persistent; }
   const gfx::ImageSkia& icon() const { return metadata_->icon; }
   bool is_page_break() const { return metadata_->is_page_break; }
 
@@ -76,6 +77,7 @@ class ChromeAppListItem {
   void SetFolderId(const std::string& folder_id);
   void SetPosition(const syncer::StringOrdinal& position);
   void SetIsPageBreak(bool is_page_break);
+  void SetIsPersistent(bool is_persistent);
 
   // The following methods won't make changes to Ash and it should be called
   // by this item itself or the model updater.
@@ -112,8 +114,9 @@ class ChromeAppListItem {
 
   std::string ToDebugString() const;
 
-  // Set the default position if it exists.
-  void SetDefaultPositionIfApplicable();
+  // Set the default position if it exists. Otherwise set the first available
+  // position in the app list if |model_updater| is not null.
+  void SetDefaultPositionIfApplicable(AppListModelUpdater* model_updater);
 
  protected:
   ChromeAppListItem(Profile* profile, const std::string& app_id);

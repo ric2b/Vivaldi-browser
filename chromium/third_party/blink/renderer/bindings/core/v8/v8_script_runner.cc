@@ -69,7 +69,8 @@ void ThrowScriptForbiddenException(v8::Isolate* isolate) {
   V8ThrowException::ThrowError(isolate, "Script execution is forbidden.");
 }
 
-v8::Local<v8::Value> ThrowStackOverflowExceptionIfNeeded(v8::Isolate* isolate) {
+v8::MaybeLocal<v8::Value> ThrowStackOverflowExceptionIfNeeded(
+    v8::Isolate* isolate) {
   if (V8PerIsolateData::From(isolate)->IsHandlingRecursionLevelError()) {
     // If we are already handling a recursion level error, we should
     // not invoke v8::Function::Call.
@@ -80,12 +81,13 @@ v8::Local<v8::Value> ThrowStackOverflowExceptionIfNeeded(v8::Isolate* isolate) {
   V8PerIsolateData::From(isolate)->SetIsHandlingRecursionLevelError(true);
 
   ScriptForbiddenScope::AllowUserAgentScript allow_script;
-  v8::Local<v8::Value> result =
-      v8::Function::New(isolate->GetCurrentContext(),
-                        ThrowStackOverflowException, v8::Local<v8::Value>(), 0,
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
+  v8::MaybeLocal<v8::Value> result =
+      v8::Function::New(context, ThrowStackOverflowException,
+                        v8::Local<v8::Value>(), 0,
                         v8::ConstructorBehavior::kThrow)
           .ToLocalChecked()
-          ->Call(v8::Undefined(isolate), 0, nullptr);
+          ->Call(context, v8::Undefined(isolate), 0, nullptr);
 
   V8PerIsolateData::From(isolate)->SetIsHandlingRecursionLevelError(false);
   return result;
@@ -98,7 +100,7 @@ v8::MaybeLocal<v8::Script> CompileScriptInternal(
     v8::ScriptOrigin origin,
     v8::ScriptCompiler::CompileOptions compile_options,
     v8::ScriptCompiler::NoCacheReason no_cache_reason,
-    InspectorCompileScriptEvent::V8CacheResult* cache_result) {
+    inspector_compile_script_event::V8CacheResult* cache_result) {
   v8::Local<v8::String> code = V8String(isolate, source_code.Source());
 
   if (ScriptStreamer* streamer = source_code.Streamer()) {
@@ -113,7 +115,7 @@ v8::MaybeLocal<v8::Script> CompileScriptInternal(
 
   // Allow inspector to use its own compilation cache store.
   v8::ScriptCompiler::CachedData* inspector_data = nullptr;
-  probe::consumeCompilationCache(execution_context, source_code,
+  probe::ConsumeCompilationCache(execution_context, source_code,
                                  &inspector_data);
   if (inspector_data) {
     v8::ScriptCompiler::Source source(code, origin, inspector_data);
@@ -147,18 +149,12 @@ v8::MaybeLocal<v8::Script> CompileScriptInternal(
       }
       if (cache_result) {
         cache_result->consume_result = base::make_optional(
-            InspectorCompileScriptEvent::V8CacheResult::ConsumeResult(
+            inspector_compile_script_event::V8CacheResult::ConsumeResult(
                 v8::ScriptCompiler::kConsumeCodeCache, cached_data->length,
                 cached_data->rejected));
       }
       return script;
     }
-    case v8::ScriptCompiler::kProduceCodeCache:
-    case v8::ScriptCompiler::kProduceFullCodeCache:
-    case v8::ScriptCompiler::kProduceParserCache:
-    case v8::ScriptCompiler::kConsumeParserCache:
-      NOTREACHED();
-      break;
   }
 
   // All switch branches should return and we should never get here.
@@ -172,7 +168,7 @@ v8::MaybeLocal<v8::Script> CompileScriptInternal(
 v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
     ScriptState* script_state,
     const ScriptSourceCode& source,
-    AccessControlStatus access_control_status,
+    SanitizeScriptErrors sanitize_script_errors,
     v8::ScriptCompiler::CompileOptions compile_options,
     v8::ScriptCompiler::NoCacheReason no_cache_reason,
     const ReferrerScriptInfo& referrer_info) {
@@ -199,9 +195,11 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
       V8String(isolate, file_name),
       v8::Integer::New(isolate, script_start_position.line_.ZeroBasedInt()),
       v8::Integer::New(isolate, script_start_position.column_.ZeroBasedInt()),
-      v8::Boolean::New(isolate, access_control_status == kSharableCrossOrigin),
+      v8::Boolean::New(isolate, sanitize_script_errors ==
+                                    SanitizeScriptErrors::kDoNotSanitize),
       v8::Local<v8::Integer>(), V8String(isolate, source.SourceMapUrl()),
-      v8::Boolean::New(isolate, access_control_status == kOpaqueResource),
+      v8::Boolean::New(
+          isolate, sanitize_script_errors == SanitizeScriptErrors::kSanitize),
       v8::False(isolate),  // is_wasm
       v8::False(isolate),  // is_module
       referrer_info.ToV8HostDefinedOptions(isolate));
@@ -211,12 +209,12 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
                                  compile_options, no_cache_reason, nullptr);
   }
 
-  InspectorCompileScriptEvent::V8CacheResult cache_result;
+  inspector_compile_script_event::V8CacheResult cache_result;
   v8::MaybeLocal<v8::Script> script =
       CompileScriptInternal(isolate, execution_context, source, origin,
                             compile_options, no_cache_reason, &cache_result);
   TRACE_EVENT_END1(kTraceEventCategoryGroup, "v8.compile", "data",
-                   InspectorCompileScriptEvent::Data(
+                   inspector_compile_script_event::Data(
                        file_name, script_start_position, cache_result,
                        source.Streamer(), source.NotStreamingReason()));
   return script;
@@ -224,28 +222,70 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
 
 v8::MaybeLocal<v8::Module> V8ScriptRunner::CompileModule(
     v8::Isolate* isolate,
-    const String& source,
+    const String& source_text,
+    SingleCachedMetadataHandler* cache_handler,
     const String& file_name,
-    AccessControlStatus access_control_status,
     const TextPosition& start_position,
+    v8::ScriptCompiler::CompileOptions compile_options,
+    v8::ScriptCompiler::NoCacheReason no_cache_reason,
     const ReferrerScriptInfo& referrer_info) {
-  TRACE_EVENT1("v8,devtools.timeline", "v8.compileModule", "fileName",
-               file_name.Utf8());
+  constexpr const char* kTraceEventCategoryGroup = "v8,devtools.timeline";
+  TRACE_EVENT_BEGIN1(kTraceEventCategoryGroup, "v8.compileModule", "fileName",
+                     file_name.Utf8());
 
+  // |resource_is_shared_cross_origin| is always true and |resource_is_opaque|
+  // is always false because CORS is enforced to module scripts.
   v8::ScriptOrigin origin(
       V8String(isolate, file_name),
       v8::Integer::New(isolate, start_position.line_.ZeroBasedInt()),
       v8::Integer::New(isolate, start_position.column_.ZeroBasedInt()),
-      v8::Boolean::New(isolate, access_control_status == kSharableCrossOrigin),
-      v8::Local<v8::Integer>(),    // script id
-      v8::String::Empty(isolate),  // source_map_url
-      v8::Boolean::New(isolate, access_control_status == kOpaqueResource),
-      v8::False(isolate),  // is_wasm
-      v8::True(isolate),   // is_module
+      v8::Boolean::New(isolate, true),   // resource_is_shared_cross_origin
+      v8::Local<v8::Integer>(),          // script id
+      v8::String::Empty(isolate),        // source_map_url
+      v8::Boolean::New(isolate, false),  // resource_is_opaque
+      v8::False(isolate),                // is_wasm
+      v8::True(isolate),                 // is_module
       referrer_info.ToV8HostDefinedOptions(isolate));
 
-  v8::ScriptCompiler::Source script_source(V8String(isolate, source), origin);
-  return v8::ScriptCompiler::CompileModule(isolate, &script_source);
+  v8::Local<v8::String> code = V8String(isolate, source_text);
+
+  v8::MaybeLocal<v8::Module> script;
+  inspector_compile_script_event::V8CacheResult cache_result;
+
+  switch (compile_options) {
+    case v8::ScriptCompiler::kNoCompileOptions:
+    case v8::ScriptCompiler::kEagerCompile: {
+      v8::ScriptCompiler::Source source(code, origin);
+      script = v8::ScriptCompiler::CompileModule(
+          isolate, &source, compile_options, no_cache_reason);
+      break;
+    }
+
+    case v8::ScriptCompiler::kConsumeCodeCache: {
+      // Compile a script, and consume a V8 cache that was generated previously.
+      DCHECK(cache_handler);
+      v8::ScriptCompiler::CachedData* cached_data =
+          V8CodeCache::CreateCachedData(cache_handler);
+      v8::ScriptCompiler::Source source(code, origin, cached_data);
+      script = v8::ScriptCompiler::CompileModule(
+          isolate, &source, compile_options, no_cache_reason);
+      if (cached_data->rejected) {
+        cache_handler->ClearCachedMetadata(
+            CachedMetadataHandler::kSendToPlatform);
+      }
+      cache_result.consume_result = base::make_optional(
+          inspector_compile_script_event::V8CacheResult::ConsumeResult(
+              compile_options, cached_data->length, cached_data->rejected));
+      break;
+    }
+  }
+
+  TRACE_EVENT_END1(kTraceEventCategoryGroup, "v8.compileModule", "data",
+                   inspector_compile_script_event::Data(
+                       file_name, start_position, cache_result, false,
+                       ScriptStreamer::kModuleScript));
+
+  return script;
 }
 
 v8::MaybeLocal<v8::Value> V8ScriptRunner::RunCompiledScript(
@@ -254,7 +294,7 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::RunCompiledScript(
     ExecutionContext* context) {
   DCHECK(!script.IsEmpty());
   ScopedFrameBlamer frame_blamer(
-      context->IsDocument() ? ToDocument(context)->GetFrame() : nullptr);
+      IsA<Document>(context) ? To<Document>(context)->GetFrame() : nullptr);
 
   v8::Local<v8::Value> script_name =
       script->GetUnboundScript()->GetScriptName();
@@ -278,10 +318,14 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::RunCompiledScript(
     v8::Isolate::SafeForTerminationScope safe_for_termination(isolate);
     v8::MicrotasksScope microtasks_scope(isolate,
                                          v8::MicrotasksScope::kRunMicrotasks);
+    v8::Local<v8::String> script_url;
+    if (!script_name->ToString(isolate->GetCurrentContext())
+             .ToLocal(&script_url))
+      return result;
+
     // ToCoreString here should be zero copy due to externalized string
     // unpacked.
-    String script_url = ToCoreString(script_name->ToString(isolate));
-    probe::ExecuteScript probe(context, script_url);
+    probe::ExecuteScript probe(context, ToCoreString(script_url));
     result = script->Run(isolate->GetCurrentContext());
   }
 
@@ -308,9 +352,9 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::CompileAndRunInternalScript(
   // Use default ScriptReferrerInfo here:
   // - nonce: empty for internal script, and
   // - parser_state: always "not parser inserted" for internal scripts.
-  if (!V8ScriptRunner::CompileScript(script_state, source_code,
-                                     kSharableCrossOrigin, compile_options,
-                                     no_cache_reason, ReferrerScriptInfo())
+  if (!V8ScriptRunner::CompileScript(
+           script_state, source_code, SanitizeScriptErrors::kDoNotSanitize,
+           compile_options, no_cache_reason, ReferrerScriptInfo())
            .ToLocal(&script))
     return v8::MaybeLocal<v8::Value>();
 
@@ -336,8 +380,7 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::CallAsConstructor(
 
   int depth = v8::MicrotasksScope::GetCurrentDepth(isolate);
   if (depth >= kMaxRecursionDepth)
-    return v8::MaybeLocal<v8::Value>(
-        ThrowStackOverflowExceptionIfNeeded(isolate));
+    return ThrowStackOverflowExceptionIfNeeded(isolate);
 
   CHECK(!context->IsIteratingOverObservers());
 
@@ -357,9 +400,19 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::CallAsConstructor(
   v8::MicrotasksScope microtasks_scope(isolate,
                                        v8::MicrotasksScope::kRunMicrotasks);
   probe::CallFunction probe(context, function, depth);
+
+  if (!depth) {
+    TRACE_EVENT_BEGIN1("devtools.timeline", "FunctionCall", "data",
+                       inspector_function_call_event::Data(context, function));
+  }
+
   v8::MaybeLocal<v8::Value> result =
       constructor->CallAsConstructor(isolate->GetCurrentContext(), argc, argv);
   CHECK(!isolate->IsDead());
+
+  if (!depth)
+    TRACE_EVENT_END0("devtools.timeline", "FunctionCall");
+
   return result;
 }
 
@@ -371,7 +424,7 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::CallFunction(
     v8::Local<v8::Value> args[],
     v8::Isolate* isolate) {
   LocalFrame* frame =
-      context->IsDocument() ? ToDocument(context)->GetFrame() : nullptr;
+      IsA<Document>(context) ? To<Document>(context)->GetFrame() : nullptr;
   ScopedFrameBlamer frame_blamer(frame);
   TRACE_EVENT0("v8", "v8.callFunction");
   RuntimeCallStatsScopedTracer rcs_scoped_tracer(isolate);
@@ -379,8 +432,7 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::CallFunction(
 
   int depth = v8::MicrotasksScope::GetCurrentDepth(isolate);
   if (depth >= kMaxRecursionDepth)
-    return v8::MaybeLocal<v8::Value>(
-        ThrowStackOverflowExceptionIfNeeded(isolate));
+    return ThrowStackOverflowExceptionIfNeeded(isolate);
 
   CHECK(!context->IsIteratingOverObservers());
 
@@ -392,14 +444,21 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::CallFunction(
   DCHECK(!frame || BindingSecurity::ShouldAllowAccessToFrame(
                        ToLocalDOMWindow(function->CreationContext()), frame,
                        BindingSecurity::ErrorReportOption::kDoNotReport));
-  CHECK(!ThreadState::Current()->IsWrapperTracingForbidden());
   v8::Isolate::SafeForTerminationScope safe_for_termination(isolate);
   v8::MicrotasksScope microtasks_scope(isolate,
                                        v8::MicrotasksScope::kRunMicrotasks);
+  if (!depth) {
+    TRACE_EVENT_BEGIN1("devtools.timeline", "FunctionCall", "data",
+                       inspector_function_call_event::Data(context, function));
+  }
+
   probe::CallFunction probe(context, function, depth);
   v8::MaybeLocal<v8::Value> result =
       function->Call(isolate->GetCurrentContext(), receiver, argc, args);
   CHECK(!isolate->IsDead());
+
+  if (!depth)
+    TRACE_EVENT_END0("devtools.timeline", "FunctionCall");
 
   return result;
 }
@@ -414,7 +473,6 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::CallInternalFunction(
   RuntimeCallStatsScopedTracer rcs_scoped_tracer(isolate);
   RUNTIME_CALL_TIMER_SCOPE(isolate, RuntimeCallStats::CounterId::kV8);
 
-  CHECK(!ThreadState::Current()->IsWrapperTracingForbidden());
   v8::Isolate::SafeForTerminationScope safe_for_termination(isolate);
   v8::MicrotasksScope microtasks_scope(
       isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
@@ -440,7 +498,7 @@ void V8ScriptRunner::ReportException(v8::Isolate* isolate,
                                      v8::Local<v8::Value> exception) {
   DCHECK(!exception.IsEmpty());
 
-  // https://html.spec.whatwg.org/multipage/webappapis.html#report-the-error
+  // https://html.spec.whatwg.org/C/#report-the-error
   v8::Local<v8::Message> message =
       v8::Exception::CreateMessage(isolate, exception);
   if (IsMainThread())
@@ -452,7 +510,7 @@ void V8ScriptRunner::ReportException(v8::Isolate* isolate,
 v8::MaybeLocal<v8::Value> V8ScriptRunner::CallExtraHelper(
     ScriptState* script_state,
     const char* name,
-    size_t num_args,
+    uint32_t num_args,
     v8::Local<v8::Value>* args) {
   v8::Isolate* isolate = script_state->GetIsolate();
   v8::Local<v8::Value> function_value;

@@ -5,6 +5,8 @@
 #ifndef UI_AURA_MUS_INPUT_METHOD_MUS_H_
 #define UI_AURA_MUS_INPUT_METHOD_MUS_H_
 
+#include <memory>
+
 #include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
@@ -64,15 +66,22 @@ class AURA_EXPORT InputMethodMus : public ui::InputMethodBase {
 
   void UpdateTextInputType();
 
-  // Runs all pending callbacks with UNHANDLED. This is called during shutdown,
+  // Runs all pending callbacks with HANDLED. This is called during shutdown,
   // or any time |input_method_ptr_| is reset to ensure we don't leave mus
-  // waiting for an ack.
-  void AckPendingCallbacksUnhandled();
+  // waiting for an ack. We ack HANDLED because the input method can be reset
+  // due to focus changes in response to shortcuts (e.g. Ctrl-T opening a tab)
+  // and we don't want the window manager to try to process the accelerators.
+  // https://crbug.com/874098
+  void AckPendingCallbacks();
 
   // Called when the server responds to our request to process an event.
   void ProcessKeyEventCallback(
       const ui::KeyEvent& event,
       bool handled);
+
+  // Callback for |text_input_client_| when the input client data may have
+  // changed.
+  void OnTextInputClientDataChanged(const ui::TextInputClient* client);
 
   // Delegate used to update window related ime state. This may be null in
   // tests.
@@ -90,6 +99,10 @@ class AURA_EXPORT InputMethodMus : public ui::InputMethodBase {
   // the response from the server. These are removed when the response is
   // received (ProcessKeyEventCallback()).
   base::circular_deque<EventResultCallback> pending_callbacks_;
+
+  // Data that was sent to RemoteTextInputClient. Used to suppress sending
+  // duplicate data.
+  ws::mojom::TextInputClientDataPtr last_sent_text_input_client_data_;
 
   DISALLOW_COPY_AND_ASSIGN(InputMethodMus);
 };

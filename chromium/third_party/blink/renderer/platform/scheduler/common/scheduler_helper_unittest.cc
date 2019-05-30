@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/platform/scheduler/common/scheduler_helper.h"
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
@@ -44,7 +45,7 @@ void AppendToVectorReentrantTask(base::SingleThreadTaskRunner* task_runner,
   }
 }
 
-};  // namespace
+}  // namespace
 
 class SchedulerHelperTest : public testing::Test {
  public:
@@ -62,7 +63,7 @@ class SchedulerHelperTest : public testing::Test {
     sequence_manager_ = sequence_manager.get();
     scheduler_helper_ = std::make_unique<NonMainThreadSchedulerHelper>(
         std::move(sequence_manager), nullptr, TaskType::kInternalTest);
-    default_task_runner_ = scheduler_helper_->DefaultNonMainThreadTaskQueue();
+    default_task_runner_ = scheduler_helper_->DefaultTaskRunner();
   }
 
   ~SchedulerHelperTest() override = default;
@@ -131,11 +132,11 @@ TEST_F(SchedulerHelperTest, IsShutdown) {
 
 TEST_F(SchedulerHelperTest, GetNumberOfPendingTasks) {
   std::vector<std::string> run_order;
-  scheduler_helper_->DefaultNonMainThreadTaskQueue()->PostTask(
+  scheduler_helper_->DefaultTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&AppendToVectorTestTask, &run_order, "D1"));
-  scheduler_helper_->DefaultNonMainThreadTaskQueue()->PostTask(
+  scheduler_helper_->DefaultTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&AppendToVectorTestTask, &run_order, "D2"));
-  scheduler_helper_->ControlNonMainThreadTaskQueue()->PostTask(
+  scheduler_helper_->ControlNonMainThreadTaskQueue()->task_runner()->PostTask(
       FROM_HERE, base::BindOnce(&AppendToVectorTestTask, &run_order, "C1"));
   EXPECT_EQ(3U, sequence_manager_->PendingTasksCount());
   task_environment_.RunUntilIdle();
@@ -156,8 +157,8 @@ TEST_F(SchedulerHelperTest, ObserversNotifiedFor_DefaultTaskRunner) {
   MockTaskObserver observer;
   scheduler_helper_->AddTaskObserver(&observer);
 
-  scheduler_helper_->DefaultNonMainThreadTaskQueue()->PostTask(
-      FROM_HERE, base::BindOnce(&NopTask));
+  scheduler_helper_->DefaultTaskRunner()->PostTask(FROM_HERE,
+                                                   base::BindOnce(&NopTask));
 
   EXPECT_CALL(observer, WillProcessTask(_)).Times(1);
   EXPECT_CALL(observer, DidProcessTask(_)).Times(1);
@@ -168,7 +169,7 @@ TEST_F(SchedulerHelperTest, ObserversNotNotifiedFor_ControlTaskQueue) {
   MockTaskObserver observer;
   scheduler_helper_->AddTaskObserver(&observer);
 
-  scheduler_helper_->ControlNonMainThreadTaskQueue()->PostTask(
+  scheduler_helper_->ControlNonMainThreadTaskQueue()->task_runner()->PostTask(
       FROM_HERE, base::BindOnce(&NopTask));
 
   EXPECT_CALL(observer, WillProcessTask(_)).Times(0);

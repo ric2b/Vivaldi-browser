@@ -23,6 +23,7 @@
 #include "components/bookmarks/managed/managed_bookmark_service.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/page_navigator.h"
+#include "ui/base/accelerators/menu_label_accelerator_util.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
@@ -33,6 +34,10 @@
 #include "ui/views/controls/menu/submenu_view.h"
 #include "ui/views/widget/tooltip_manager.h"
 #include "ui/views/widget/widget.h"
+
+#include "app/vivaldi_apptools.h"
+#include "browser/menus/vivaldi_bookmark_context_menu.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using base::UserMetricsAction;
 using bookmarks::BookmarkModel;
@@ -52,9 +57,17 @@ SkColor TextColorForMenu(MenuItemView* menu, views::Widget* widget) {
   // macOS incognito currently has a light on dark bookmark bar, but
   // dark on light menus, so using the theme color in the folders is
   // incorrect.
+  if (vivaldi::IsVivaldiRunning()) {
+    // Use the same code as in MenuItemView::GetTextColor() for best result.
+    if (widget && widget->GetNativeTheme()) {
+      return widget->GetNativeTheme()->GetSystemColor(
+          ui::NativeTheme::kColorId_EnabledMenuItemForegroundColor);
+    }
+  } else {
   if (widget && widget->GetThemeProvider()) {
     return widget->GetThemeProvider()->GetColor(
         ThemeProperties::COLOR_BOOKMARK_TEXT);
+  }
   }
 #endif
   return menu->GetNativeTheme()->GetSystemColor(
@@ -91,6 +104,19 @@ void BookmarkMenuDelegate::Init(views::MenuDelegate* real_delegate,
   GetBookmarkModel()->AddObserver(this);
   real_delegate_ = real_delegate;
   location_ = location;
+  // Assume that the menu will only use mnemonics if there's already a parent
+  // menu and that parent uses them. In cases where the BookmarkMenuDelegate
+  // will be the root, client code does not current enable mnemonics.
+  menu_uses_mnemonics_ = parent && parent->GetRootMenuItem()->has_mnemonics();
+
+  if (vivaldi::IsVivaldiRunning()) {
+    // The menu has been set up to be able to show mnemonics in the controller.
+    // If we want to display those we should not escape ampersands. Ampersands
+    // are escaped by setting 'menu_uses_mnemonics_' to true.
+    menu_uses_mnemonics_ = !profile_->GetPrefs()->GetBoolean(
+        vivaldiprefs::kBookmarksUnderlineMenuLetter);
+  }
+
   if (parent) {
     parent_menu_item_ = parent;
 
@@ -142,10 +168,20 @@ void BookmarkMenuDelegate::SetActiveMenu(const BookmarkNode* node,
   menu_ = node_to_menu_map_[node];
 }
 
+// Added by vivaldi
+void BookmarkMenuDelegate::VivaldiSelectionChanged(views::MenuItemView* menu) {
+  const BookmarkNode* node = menu_id_to_node_map_[menu->GetCommand()];
+  vivaldi::HandleHoverUrl(browser_, node ? node->url().spec() : std::string());
+}
+
 base::string16 BookmarkMenuDelegate::GetTooltipText(
     int id,
     const gfx::Point& screen_loc) const {
-  MenuIDToNodeMap::const_iterator i = menu_id_to_node_map_.find(id);
+  if (vivaldi::IsVivaldiRunning() && vivaldi::IsVivaldiMenuItem(id)) {
+    return base::string16();
+  }
+
+  auto i = menu_id_to_node_map_.find(id);
   // When removing bookmarks it may be possible to end up here without a node.
   if (i == menu_id_to_node_map_.end()) {
     DCHECK(is_mutating_model_);
@@ -172,6 +208,13 @@ bool BookmarkMenuDelegate::IsTriggerableEvent(views::MenuItemView* menu,
 void BookmarkMenuDelegate::ExecuteCommand(int id, int mouse_event_flags) {
   DCHECK(menu_id_to_node_map_.find(id) != menu_id_to_node_map_.end());
 
+  if (vivaldi::IsVivaldiRunning()) {
+    const BookmarkNode* node = menu_id_to_node_map_[id];
+    vivaldi::ExecuteBookmarkMenuCommand(browser_, id, node ? node->id() : -1,
+                                        mouse_event_flags);
+    return;
+  }
+
   const BookmarkNode* node = menu_id_to_node_map_[id];
   std::vector<const BookmarkNode*> selection;
   selection.push_back(node);
@@ -194,7 +237,7 @@ bool BookmarkMenuDelegate::ShouldExecuteCommandWithoutClosingMenu(
 bool BookmarkMenuDelegate::GetDropFormats(
     MenuItemView* menu,
     int* formats,
-    std::set<ui::Clipboard::FormatType>* format_types) {
+    std::set<ui::ClipboardFormatType>* format_types) {
   *formats = ui::OSExchangeData::URL;
   format_types->insert(BookmarkNodeData::GetBookmarkFormatType());
   return true;
@@ -243,6 +286,10 @@ int BookmarkMenuDelegate::GetDropOperation(
     MenuItemView* item,
     const ui::DropTargetEvent& event,
     views::MenuDelegate::DropPosition* position) {
+  if (vivaldi::IsVivaldiRunning() &&
+      vivaldi::IsVivaldiMenuItem(item->GetCommand())) {
+    return ui::DragDropTypes::DRAG_NONE;
+  }
   // Should only get here if we have drop data.
   DCHECK(drop_data_.is_valid());
 
@@ -323,6 +370,9 @@ bool BookmarkMenuDelegate::ShowContextMenu(MenuItemView* source,
                                            int id,
                                            const gfx::Point& p,
                                            ui::MenuSourceType source_type) {
+  if (vivaldi::IsVivaldiRunning() && vivaldi::IsVivaldiMenuItem(id)) {
+    return false;
+  }
   DCHECK(menu_id_to_node_map_.find(id) != menu_id_to_node_map_.end());
   const BookmarkNode* node = menu_id_to_node_map_[id];
   std::vector<const BookmarkNode*> nodes(1, node);
@@ -335,6 +385,11 @@ bool BookmarkMenuDelegate::ShowContextMenu(MenuItemView* source,
 }
 
 bool BookmarkMenuDelegate::CanDrag(MenuItemView* menu) {
+  if (vivaldi::IsVivaldiRunning() &&
+      vivaldi::IsVivaldiMenuItem(menu->GetCommand())) {
+    return false;
+  }
+
   const BookmarkNode* node = menu_id_to_node_map_[menu->GetCommand()];
   // Don't let users drag the other folder.
   return node->parent() != GetBookmarkModel()->root_node();
@@ -372,7 +427,7 @@ void BookmarkMenuDelegate::BookmarkModelChanged() {
 void BookmarkMenuDelegate::BookmarkNodeFaviconChanged(
     BookmarkModel* model,
     const BookmarkNode* node) {
-  NodeToMenuMap::iterator menu_pair = node_to_menu_map_.find(node);
+  auto menu_pair = node_to_menu_map_.find(node);
   if (menu_pair == node_to_menu_map_.end())
     return;  // We're not showing a menu item for the node.
 
@@ -396,9 +451,8 @@ void BookmarkMenuDelegate::WillRemoveBookmarks(
 
   // Remove the menu items.
   std::set<MenuItemView*> changed_parent_menus;
-  for (std::vector<const BookmarkNode*>::const_iterator i(bookmarks.begin());
-       i != bookmarks.end(); ++i) {
-    NodeToMenuMap::iterator node_to_menu = node_to_menu_map_.find(*i);
+  for (auto i(bookmarks.begin()); i != bookmarks.end(); ++i) {
+    auto node_to_menu = node_to_menu_map_.find(*i);
     if (node_to_menu != node_to_menu_map_.end()) {
       MenuItemView* menu = node_to_menu->second;
       MenuItemView* parent = menu->GetParentMenuItem();
@@ -420,11 +474,9 @@ void BookmarkMenuDelegate::WillRemoveBookmarks(
   DCHECK_LE(changed_parent_menus.size(), 1U);
 
   // Remove any descendants of the removed nodes in |node_to_menu_map_|.
-  for (NodeToMenuMap::iterator i(node_to_menu_map_.begin());
-       i != node_to_menu_map_.end(); ) {
+  for (auto i(node_to_menu_map_.begin()); i != node_to_menu_map_.end();) {
     bool ancestor_removed = false;
-    for (std::vector<const BookmarkNode*>::const_iterator j(bookmarks.begin());
-         j != bookmarks.end(); ++j) {
+    for (auto j(bookmarks.begin()); j != bookmarks.end(); ++j) {
       if (i->first->HasAncestor(*j)) {
         ancestor_removed = true;
         break;
@@ -438,8 +490,8 @@ void BookmarkMenuDelegate::WillRemoveBookmarks(
     }
   }
 
-  for (std::set<MenuItemView*>::const_iterator i(changed_parent_menus.begin());
-       i != changed_parent_menus.end(); ++i)
+  for (auto i(changed_parent_menus.begin()); i != changed_parent_menus.end();
+       ++i)
     (*i)->ChildrenChanged();
 }
 
@@ -515,9 +567,9 @@ void BookmarkMenuDelegate::BuildMenuForPermanentNode(const BookmarkNode* node,
     menu->AppendSeparator();
   }
 
-  AddMenuToMaps(
-      menu->AppendSubMenuWithIcon(next_menu_id_++, node->GetTitle(), icon),
-      node);
+  AddMenuToMaps(menu->AppendSubMenuWithIcon(
+                    next_menu_id_++, MaybeEscapeLabel(node->GetTitle()), icon),
+                node);
 }
 
 void BookmarkMenuDelegate::BuildMenuForManagedNode(MenuItemView* menu) {
@@ -536,23 +588,46 @@ void BookmarkMenuDelegate::BuildMenu(const BookmarkNode* parent,
   DCHECK(parent->empty() || start_child_index < parent->child_count());
   ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
   const gfx::ImageSkia folder_icon =
+      vivaldi::IsVivaldiRunning() ?
+      vivaldi::GetBookmarkFolderIcon(TextColorForMenu(menu, parent_)) :
       chrome::GetBookmarkFolderIcon(TextColorForMenu(menu, parent_));
+
+  std::vector<bookmarks::BookmarkNode*> nodes;
+  if (vivaldi::IsVivaldiRunning()) {
+    vivaldi::SortBookmarkNodes(parent, nodes);
+    // Call vivaldi::AddVivaldiBookmarkMenuItems here if in front of bookmarks.
+    vivaldi::AddSeparator(menu);
+  }
+
   for (int i = start_child_index; i < parent->child_count(); ++i) {
-    const BookmarkNode* node = parent->GetChild(i);
+    const BookmarkNode* node = vivaldi::IsVivaldiRunning() ? nodes[i] :
+        parent->GetChild(i);
+    if (vivaldi::IsVivaldiRunning()) {
+      if (vivaldi::AddIfSeparator(node, menu))
+        continue;
+    }
     const int id = next_menu_id_++;
     MenuItemView* child_menu_item;
     if (node->is_url()) {
       const gfx::Image& image = GetBookmarkModel()->GetFavicon(node);
       const gfx::ImageSkia* icon = image.IsEmpty() ?
+          vivaldi::IsVivaldiRunning() ? vivaldi::GetBookmarkDefaultIcon() :
           rb->GetImageSkiaNamed(IDR_DEFAULT_FAVICON) : image.ToImageSkia();
-      child_menu_item =
-          menu->AppendMenuItemWithIcon(id, node->GetTitle(), *icon);
+      child_menu_item = menu->AppendMenuItemWithIcon(
+          id, MaybeEscapeLabel(node->GetTitle()), *icon);
     } else {
       DCHECK(node->is_folder());
-      child_menu_item =
-          menu->AppendSubMenuWithIcon(id, node->GetTitle(), folder_icon);
+      child_menu_item = menu->AppendSubMenuWithIcon(
+          id, MaybeEscapeLabel(node->GetTitle()),
+          vivaldi::IsVivaldiRunning() && node->GetSpeeddial() ?
+          vivaldi::GetBookmarkSpeeddialIcon(TextColorForMenu(menu, parent_)) :
+          folder_icon);
     }
     AddMenuToMaps(child_menu_item, node);
+  }
+  if (vivaldi::IsVivaldiRunning() && start_child_index == 0) {
+    vivaldi::AddSeparator(menu);
+    vivaldi::AddVivaldiBookmarkMenuItems(profile_, menu, parent);
   }
 }
 
@@ -560,4 +635,9 @@ void BookmarkMenuDelegate::AddMenuToMaps(MenuItemView* menu,
                                          const BookmarkNode* node) {
   menu_id_to_node_map_[menu->GetCommand()] = node;
   node_to_menu_map_[node] = menu;
+}
+
+base::string16 BookmarkMenuDelegate::MaybeEscapeLabel(
+    const base::string16& label) {
+  return menu_uses_mnemonics_ ? ui::EscapeMenuLabelAmpersands(label) : label;
 }

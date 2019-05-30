@@ -71,7 +71,7 @@ class TestPaintArtifact {
   TestPaintArtifact& Properties(const TransformPaintPropertyNode& transform,
                                 const ClipPaintPropertyNode& clip,
                                 const EffectPaintPropertyNode& effect) {
-    return Properties(PropertyTreeState(&transform, &clip, &effect));
+    return Properties(PropertyTreeState(transform, clip, effect));
   }
   TestPaintArtifact& Properties(const RefCountedPropertyTreeState& properties) {
     return Properties(properties.GetPropertyTreeState());
@@ -93,20 +93,15 @@ class TestPaintArtifact {
   // Add display item in the chunk. Each display item will have a different
   // automatically created client.
   TestPaintArtifact& RectDrawing(const FloatRect& bounds, Color color);
-  TestPaintArtifact& ForeignLayer(const FloatPoint& location,
-                                  const IntSize& size,
-                                  scoped_refptr<cc::Layer> layer);
   TestPaintArtifact& ScrollHitTest(
       const TransformPaintPropertyNode& scroll_offset);
+
+  TestPaintArtifact& ForeignLayer(scoped_refptr<cc::Layer> layer);
 
   // Add display item with the specified client in the chunk.
   TestPaintArtifact& RectDrawing(FakeDisplayItemClient&,
                                  const FloatRect& bounds,
                                  Color);
-  TestPaintArtifact& ForeignLayer(FakeDisplayItemClient&,
-                                  const FloatPoint&,
-                                  const IntSize&,
-                                  scoped_refptr<cc::Layer>);
   TestPaintArtifact& ScrollHitTest(
       FakeDisplayItemClient&,
       const TransformPaintPropertyNode& scroll_offset);
@@ -127,7 +122,7 @@ class TestPaintArtifact {
   // Create a new display item client which is owned by this TestPaintArtifact.
   FakeDisplayItemClient& NewClient();
 
-  FakeDisplayItemClient& Client(size_t) const;
+  FakeDisplayItemClient& Client(wtf_size_t) const;
 
  private:
   class DummyRectClient;

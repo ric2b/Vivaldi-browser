@@ -86,6 +86,7 @@ extern const char kNoTabInBrowserWindowError[];
 extern const char kPerOriginOnlyInAutomaticError[];
 extern const char kWindowNotFoundError[];
 extern const char kTabIndexNotFoundError[];
+extern const char kNotFoundNextPageError[];
 extern const char kTabNotFoundError[];
 extern const char kCannotDiscardTab[];
 extern const char kCannotFindTabToDiscard[];
@@ -101,12 +102,13 @@ extern const char kSupportedInWindowsOnlyError[];
 extern const char kInvalidWindowTypeError[];
 extern const char kInvalidWindowStateError[];
 extern const char kScreenshotsDisabled[];
-extern const char kCannotUpdateMuteDisabled[];
 extern const char kCannotUpdateMuteCaptured[];
 extern const char kCannotDetermineLanguageOfUnloadedTab[];
 extern const char kMissingLockWindowFullscreenPrivatePermission[];
+extern const char kJavaScriptUrlsNotAllowedInTabsUpdate[];
+extern const char kBrowserWindowNotAllowed[];
 
-};  // namespace tabs_constants
-};  // namespace extensions
+}  // namespace tabs_constants
+}  // namespace extensions
 
 #endif  // CHROME_BROWSER_EXTENSIONS_API_TABS_TABS_CONSTANTS_H_

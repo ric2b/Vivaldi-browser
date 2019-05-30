@@ -15,22 +15,21 @@ class Accelerometer : public Sensor {
 
  public:
   static Accelerometer* Create(ExecutionContext*,
-                               const SpatialSensorOptions&,
+                               const SpatialSensorOptions*,
                                ExceptionState&);
   static Accelerometer* Create(ExecutionContext*, ExceptionState&);
+
+  Accelerometer(ExecutionContext*,
+                const SpatialSensorOptions*,
+                ExceptionState&,
+                device::mojom::blink::SensorType,
+                const Vector<mojom::FeaturePolicyFeature>&);
 
   double x(bool& is_null) const;
   double y(bool& is_null) const;
   double z(bool& is_null) const;
 
   void Trace(blink::Visitor*) override;
-
- protected:
-  Accelerometer(ExecutionContext*,
-                const SpatialSensorOptions&,
-                ExceptionState&,
-                device::mojom::blink::SensorType,
-                const Vector<mojom::FeaturePolicyFeature>&);
 };
 
 }  // namespace blink

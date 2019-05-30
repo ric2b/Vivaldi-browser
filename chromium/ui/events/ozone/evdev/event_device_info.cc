@@ -8,7 +8,7 @@
 
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "ui/events/devices/device_util_linux.h"
 
@@ -73,17 +73,12 @@ bool GetDeviceName(int fd, const base::FilePath& path, std::string* name) {
   return true;
 }
 
-bool GetDeviceIdentifiers(int fd,
-                          const base::FilePath& path,
-                          uint16_t* vendor,
-                          uint16_t* product) {
-  struct input_id evdev_id;
-  if (ioctl(fd, EVIOCGID, &evdev_id) < 0) {
+bool GetDeviceIdentifiers(int fd, const base::FilePath& path, input_id* id) {
+  *id = {};
+  if (ioctl(fd, EVIOCGID, id) < 0) {
     PLOG(INFO) << "Failed EVIOCGID (path=" << path.value() << ")";
     return false;
   }
-  *vendor = evdev_id.vendor;
-  *product = evdev_id.product;
   return true;
 }
 
@@ -121,6 +116,24 @@ void AssignBitset(const unsigned long* src,
   memcpy(dst, src, std::min(src_len, dst_len) * sizeof(unsigned long));
   if (src_len < dst_len)
     memset(&dst[src_len], 0, (dst_len - src_len) * sizeof(unsigned long));
+}
+
+bool IsBlacklistedAbsoluteMouseDevice(const input_id& id) {
+  static constexpr struct {
+    uint16_t vid;
+    uint16_t pid;
+  } kUSBLegacyBlackListedDevices[] = {
+      {0x222a, 0x0001},  // ILITEK ILITEK-TP
+  };
+
+  for (size_t i = 0; i < base::size(kUSBLegacyBlackListedDevices); ++i) {
+    if (id.vendor == kUSBLegacyBlackListedDevices[i].vid &&
+        id.product == kUSBLegacyBlackListedDevices[i].pid) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 }  // namespace
@@ -190,46 +203,48 @@ bool EventDeviceInfo::Initialize(int fd, const base::FilePath& path) {
   if (!GetDeviceName(fd, path, &name_))
     return false;
 
-  if (!GetDeviceIdentifiers(fd, path, &vendor_id_, &product_id_))
+  if (!GetDeviceIdentifiers(fd, path, &input_id_))
     return false;
 
   GetDevicePhysInfo(fd, path, &phys_);
 
-  device_type_ = GetInputDeviceTypeFromPath(path);
+  device_type_ = GetInputDeviceTypeFromId(input_id_);
+  if (device_type_ == InputDeviceType::INPUT_DEVICE_UNKNOWN)
+    device_type_ = GetInputDeviceTypeFromPath(path);
 
   return true;
 }
 
 void EventDeviceInfo::SetEventTypes(const unsigned long* ev_bits, size_t len) {
-  AssignBitset(ev_bits, len, ev_bits_, arraysize(ev_bits_));
+  AssignBitset(ev_bits, len, ev_bits_, base::size(ev_bits_));
 }
 
 void EventDeviceInfo::SetKeyEvents(const unsigned long* key_bits, size_t len) {
-  AssignBitset(key_bits, len, key_bits_, arraysize(key_bits_));
+  AssignBitset(key_bits, len, key_bits_, base::size(key_bits_));
 }
 
 void EventDeviceInfo::SetRelEvents(const unsigned long* rel_bits, size_t len) {
-  AssignBitset(rel_bits, len, rel_bits_, arraysize(rel_bits_));
+  AssignBitset(rel_bits, len, rel_bits_, base::size(rel_bits_));
 }
 
 void EventDeviceInfo::SetAbsEvents(const unsigned long* abs_bits, size_t len) {
-  AssignBitset(abs_bits, len, abs_bits_, arraysize(abs_bits_));
+  AssignBitset(abs_bits, len, abs_bits_, base::size(abs_bits_));
 }
 
 void EventDeviceInfo::SetMscEvents(const unsigned long* msc_bits, size_t len) {
-  AssignBitset(msc_bits, len, msc_bits_, arraysize(msc_bits_));
+  AssignBitset(msc_bits, len, msc_bits_, base::size(msc_bits_));
 }
 
 void EventDeviceInfo::SetSwEvents(const unsigned long* sw_bits, size_t len) {
-  AssignBitset(sw_bits, len, sw_bits_, arraysize(sw_bits_));
+  AssignBitset(sw_bits, len, sw_bits_, base::size(sw_bits_));
 }
 
 void EventDeviceInfo::SetLedEvents(const unsigned long* led_bits, size_t len) {
-  AssignBitset(led_bits, len, led_bits_, arraysize(led_bits_));
+  AssignBitset(led_bits, len, led_bits_, base::size(led_bits_));
 }
 
 void EventDeviceInfo::SetProps(const unsigned long* prop_bits, size_t len) {
-  AssignBitset(prop_bits, len, prop_bits_, arraysize(prop_bits_));
+  AssignBitset(prop_bits, len, prop_bits_, base::size(prop_bits_));
 }
 
 void EventDeviceInfo::SetAbsInfo(unsigned int code,
@@ -262,9 +277,8 @@ void EventDeviceInfo::SetDeviceType(InputDeviceType type) {
   device_type_ = type;
 }
 
-void EventDeviceInfo::SetId(uint16_t vendor_id, uint16_t product_id) {
-  vendor_id_ = vendor_id;
-  product_id_ = product_id;
+void EventDeviceInfo::SetId(input_id id) {
+  input_id_ = id;
 }
 
 bool EventDeviceInfo::HasEventType(unsigned int type) const {
@@ -460,6 +474,37 @@ bool EventDeviceInfo::HasGamepad() const {
   return support_gamepad_btn && !HasTablet() && !HasKeyboard();
 }
 
+// static
+ui::InputDeviceType EventDeviceInfo::GetInputDeviceTypeFromId(input_id id) {
+  static constexpr struct {
+    uint16_t vid;
+    uint16_t pid;
+  } kUSBInternalDevices[] = {
+    { 0x18d1, 0x5030 }, // Google, Hammer PID
+    { 0x1fd2, 0x8103 }  // LG, Internal TouchScreen PID
+  };
+
+  if (id.bustype == BUS_USB) {
+    for (size_t i = 0; i < base::size(kUSBInternalDevices); ++i) {
+      if (id.vendor == kUSBInternalDevices[i].vid &&
+          id.product == kUSBInternalDevices[i].pid)
+        return InputDeviceType::INPUT_DEVICE_INTERNAL;
+    }
+  }
+
+  switch (id.bustype) {
+    case BUS_I2C:
+    case BUS_I8042:
+      return ui::InputDeviceType::INPUT_DEVICE_INTERNAL;
+    case BUS_USB:
+      return ui::InputDeviceType::INPUT_DEVICE_USB;
+    case BUS_BLUETOOTH:
+      return ui::InputDeviceType::INPUT_DEVICE_BLUETOOTH;
+    default:
+      return ui::InputDeviceType::INPUT_DEVICE_UNKNOWN;
+  }
+}
+
 EventDeviceInfo::LegacyAbsoluteDeviceType
 EventDeviceInfo::ProbeLegacyAbsoluteDevice() const {
   if (!HasAbsXY())
@@ -479,7 +524,8 @@ EventDeviceInfo::ProbeLegacyAbsoluteDevice() const {
     return LegacyAbsoluteDeviceType::TOUCHSCREEN;
 
   // ABS_Z mitigation for extra device on some Elo devices.
-  if (HasKeyEvent(BTN_LEFT) && !HasAbsEvent(ABS_Z))
+  if (HasKeyEvent(BTN_LEFT) && !HasAbsEvent(ABS_Z) &&
+      !IsBlacklistedAbsoluteMouseDevice(input_id_))
     return LegacyAbsoluteDeviceType::TOUCHSCREEN;
 
   return LegacyAbsoluteDeviceType::NONE;

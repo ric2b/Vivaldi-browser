@@ -15,9 +15,11 @@
 #include "media/media_buildflags.h"
 #include "media/mojo/interfaces/video_decoder.mojom.h"
 #include "media/mojo/services/media_mojo_export.h"
+#include "media/video/supported_video_decoder_config.h"
 
 namespace base {
 class SingleThreadTaskRunner;
+class Token;
 }  // namespace base
 
 namespace gfx {
@@ -54,6 +56,9 @@ class MEDIA_MOJO_EXPORT MojoMediaClient {
   virtual std::unique_ptr<AudioDecoder> CreateAudioDecoder(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
+  virtual std::vector<SupportedVideoDecoderConfig>
+  GetSupportedVideoDecoderConfigs();
+
   virtual std::unique_ptr<VideoDecoder> CreateVideoDecoder(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       MediaLog* media_log,
@@ -78,7 +83,7 @@ class MEDIA_MOJO_EXPORT MojoMediaClient {
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   // Creates a CdmProxy that proxies part of CDM functionalities to a different
   // entity, e.g. hardware CDM modules.
-  virtual std::unique_ptr<CdmProxy> CreateCdmProxy(const std::string& cdm_guid);
+  virtual std::unique_ptr<CdmProxy> CreateCdmProxy(const base::Token& cdm_guid);
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
  protected:

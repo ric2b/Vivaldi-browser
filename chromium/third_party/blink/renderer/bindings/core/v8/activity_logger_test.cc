@@ -17,8 +17,8 @@
 
 namespace blink {
 
-using blink::FrameTestHelpers::WebViewHelper;
-using blink::FrameTestHelpers::PumpPendingRequestsForFrameToLoad;
+using blink::frame_test_helpers::WebViewHelper;
+using blink::frame_test_helpers::PumpPendingRequestsForFrameToLoad;
 
 class TestActivityLogger : public V8DOMActivityLogger {
  public:
@@ -58,8 +58,8 @@ class TestActivityLogger : public V8DOMActivityLogger {
   void clear() { logged_activities_.clear(); }
   bool VerifyActivities(const Vector<String>& expected) const {
     EXPECT_EQ(expected.size(), logged_activities_.size());
-    for (size_t i = 0; i < std::min(expected.size(), logged_activities_.size());
-         ++i) {
+    for (wtf_size_t i = 0;
+         i < std::min(expected.size(), logged_activities_.size()); ++i) {
       EXPECT_STREQ(expected[i].Utf8().data(),
                    logged_activities_[i].Utf8().data());
     }
@@ -81,8 +81,8 @@ class ActivityLoggerTest : public testing::Test {
                               ->MainFrameImpl()
                               ->GetFrame()
                               ->GetScriptController();
-    FrameTestHelpers::LoadFrame(web_view_helper_.GetWebView()->MainFrameImpl(),
-                                "about:blank");
+    frame_test_helpers::LoadFrame(
+        web_view_helper_.GetWebView()->MainFrameImpl(), "about:blank");
   }
 
   ~ActivityLoggerTest() override { WebCache::Clear(); }
@@ -95,8 +95,9 @@ class ActivityLoggerTest : public testing::Test {
 
   void ExecuteScriptInIsolatedWorld(const String& script) const {
     v8::HandleScope scope(v8::Isolate::GetCurrent());
-    script_controller_->ExecuteScriptInIsolatedWorld(kIsolatedWorldId,
-                                                     ScriptSourceCode(script));
+    script_controller_->ExecuteScriptInIsolatedWorld(
+        kIsolatedWorldId, ScriptSourceCode(script), KURL(),
+        SanitizeScriptErrors::kSanitize);
     PumpPendingRequestsForFrameToLoad(web_view_helper_.LocalMainFrame());
   }
 

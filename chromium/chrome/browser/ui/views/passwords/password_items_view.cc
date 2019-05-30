@@ -126,17 +126,18 @@ std::unique_ptr<views::Label> CreatePasswordLabel(
     int federation_message_id,
     bool are_passwords_revealed) {
   base::string16 text =
-      form.federation_origin.unique()
+      form.federation_origin.opaque()
           ? form.password_value
-          : l10n_util::GetStringFUTF16(
-                federation_message_id,
-                base::UTF8ToUTF16(form.federation_origin.host()));
-  auto label = std::make_unique<views::Label>(text, CONTEXT_BODY_TEXT_LARGE,
-                                              STYLE_SECONDARY);
+          : l10n_util::GetStringFUTF16(federation_message_id,
+                                       GetDisplayFederation(form));
+  int text_style = form.federation_origin.opaque() ? STYLE_SECONDARY_MONOSPACED
+                                                   : STYLE_SECONDARY;
+  auto label =
+      std::make_unique<views::Label>(text, CONTEXT_BODY_TEXT_LARGE, text_style);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  if (form.federation_origin.unique() && !are_passwords_revealed)
+  if (form.federation_origin.opaque() && !are_passwords_revealed)
     label->SetObscured(true);
-  if (!form.federation_origin.unique())
+  if (!form.federation_origin.opaque())
     label->SetElideBehavior(gfx::ELIDE_HEAD);
 
   return label;
@@ -295,6 +296,7 @@ gfx::Size PasswordItemsView::CalculatePreferredSize() const {
 
 void PasswordItemsView::ButtonPressed(views::Button* sender,
                                       const ui::Event& event) {
-  model()->OnManageClicked();
+  model()->OnManageClicked(
+      password_manager::ManagePasswordsReferrer::kManagePasswordsBubble);
   CloseBubble();
 }

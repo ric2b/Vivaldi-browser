@@ -14,7 +14,6 @@
 
 namespace blink {
 
-class HeapObjectHeader;
 class MarkingVisitor;
 class Visitor;
 
@@ -26,13 +25,6 @@ using MarkingVisitorCallback = void (*)(MarkingVisitor*, void*);
 using TraceCallback = VisitorCallback;
 using WeakCallback = VisitorCallback;
 using EphemeronCallback = VisitorCallback;
-using NameCallback = const char* (*)(const void* self);
-
-// Callback used for unit testing the marking of conservative pointers
-// (|CheckAndMarkPointer|). For each pointer that has been discovered to point
-// to a heap object, the callback is invoked with a pointer to its header. If
-// the callback returns true, the object will not be marked.
-using MarkedPointerCallbackForTesting = bool (*)(HeapObjectHeader*);
 
 // Simple alias to avoid heap compaction type signatures turning into
 // a sea of generic |void*|s.
@@ -104,7 +96,8 @@ class PLATFORM_EXPORT BlinkGC final {
     kTesting = 7,
     kIncrementalIdleGC = 8,
     kIncrementalV8FollowupGC = 9,
-    kMaxValue = kIncrementalV8FollowupGC,
+    kUnifiedHeapGC = 10,
+    kMaxValue = kUnifiedHeapGC,
   };
 
   enum ArenaIndices {

@@ -171,7 +171,7 @@ class RequestImpl : public WebHistoryService::Request {
 
   // Tells the request to do its thang.
   void Start() override {
-    OAuth2TokenService::ScopeSet oauth_scopes;
+    identity::ScopeSet oauth_scopes;
     oauth_scopes.insert(kHistoryOAuthScope);
 
     access_token_fetcher_ =
@@ -199,10 +199,10 @@ class RequestImpl : public WebHistoryService::Request {
     // If the response code indicates that the token might not be valid,
     // invalidate the token and try again.
     if (response_code_ == net::HTTP_UNAUTHORIZED && ++auth_retry_count_ <= 1) {
-      OAuth2TokenService::ScopeSet oauth_scopes;
+      identity::ScopeSet oauth_scopes;
       oauth_scopes.insert(kHistoryOAuthScope);
       identity_manager_->RemoveAccessTokenFromCache(
-          identity_manager_->GetPrimaryAccountInfo().account_id, oauth_scopes,
+          identity_manager_->GetPrimaryAccountId(), oauth_scopes,
           access_token_);
 
       access_token_.clear();
@@ -283,8 +283,9 @@ class RequestImpl : public WebHistoryService::Request {
 // history server.
 std::string ServerTimeString(base::Time time) {
   if (time < base::Time::UnixEpoch())
-    return base::Int64ToString(0);
-  return base::Int64ToString((time - base::Time::UnixEpoch()).InMicroseconds());
+    return base::NumberToString(0);
+  return base::NumberToString(
+      (time - base::Time::UnixEpoch()).InMicroseconds());
 }
 
 // Returns a URL for querying the history server for a query specified by
@@ -315,8 +316,8 @@ GURL GetQueryUrl(const base::string16& text_query,
   }
 
   if (options.max_count) {
-    url = net::AppendQueryParameter(
-        url, "num", base::IntToString(options.max_count));
+    url = net::AppendQueryParameter(url, "num",
+                                    base::NumberToString(options.max_count));
   }
 
   if (!text_query.empty())
@@ -384,7 +385,7 @@ std::unique_ptr<base::DictionaryValue> WebHistoryService::ReadResponse(
   std::unique_ptr<base::DictionaryValue> result;
   if (request->GetResponseCode() == net::HTTP_OK) {
     std::unique_ptr<base::Value> value =
-        base::JSONReader::Read(request->GetResponseBody());
+        base::JSONReader::ReadDeprecated(request->GetResponseBody());
     if (value && value->is_dict())
       result.reset(static_cast<base::DictionaryValue*>(value.release()));
     else

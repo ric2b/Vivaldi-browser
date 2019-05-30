@@ -30,7 +30,9 @@ SWITCHES_EXPORT extern const char kVivaldiUpdateURL[];
 SWITCHES_EXPORT extern const char kLaunchUpdater[];
 #endif
 SWITCHES_EXPORT extern const char kTestAlreadyRunningDialog[];
-
+#if defined(OS_MACOSX)
+SWITCHES_EXPORT extern const char kDontForceGpuDecodeMac[];
+#endif
 }  // namespace switches
 
 #endif  // BASE_VIVALDI_SWITCHES_H_

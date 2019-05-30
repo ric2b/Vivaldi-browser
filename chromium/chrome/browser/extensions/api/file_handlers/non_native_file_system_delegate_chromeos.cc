@@ -4,6 +4,9 @@
 
 #include "chrome/browser/extensions/api/file_handlers/non_native_file_system_delegate_chromeos.h"
 
+#include <string>
+#include <utility>
+
 #include "chrome/browser/chromeos/file_manager/filesystem_api_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
@@ -21,12 +24,19 @@ bool NonNativeFileSystemDelegateChromeOS::IsUnderNonNativeLocalPath(
       Profile::FromBrowserContext(context), path);
 }
 
+bool NonNativeFileSystemDelegateChromeOS::HasNonNativeMimeTypeProvider(
+    content::BrowserContext* context,
+    const base::FilePath& path) {
+  return file_manager::util::HasNonNativeMimeTypeProvider(
+      Profile::FromBrowserContext(context), path);
+}
+
 void NonNativeFileSystemDelegateChromeOS::GetNonNativeLocalPathMimeType(
     content::BrowserContext* context,
     const base::FilePath& path,
-    const base::Callback<void(bool, const std::string&)>& callback) {
+    base::OnceCallback<void(const base::Optional<std::string>&)> callback) {
   return file_manager::util::GetNonNativeLocalPathMimeType(
-      Profile::FromBrowserContext(context), path, callback);
+      Profile::FromBrowserContext(context), path, std::move(callback));
 }
 
 // Checks whether |path| points to a non-local filesystem directory and calls

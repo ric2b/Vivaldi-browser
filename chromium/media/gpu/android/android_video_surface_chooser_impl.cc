@@ -113,6 +113,11 @@ void AndroidVideoSurfaceChooserImpl::Choose() {
   if (!current_state_.is_compositor_promotable)
     new_overlay_state = kUsingTextureOwner;
 
+  // If we're PIP'd, then don't use an overlay unless it is required.  It isn't
+  // positioned exactly right in some cases (crbug.com/917984).
+  if (current_state_.is_persistent_video)
+    new_overlay_state = kUsingTextureOwner;
+
   // If we're expecting a relayout, then don't transition to overlay if we're
   // not already in one.  We don't want to transition out, though.  This lets us
   // delay entering on a fullscreen transition until blink relayout is complete.
@@ -147,6 +152,9 @@ void AndroidVideoSurfaceChooserImpl::Choose() {
 
   // If we have no factory, then we definitely don't want to use overlays.
   if (!overlay_factory_)
+    new_overlay_state = kUsingTextureOwner;
+
+  if (current_state_.always_use_texture_owner)
     new_overlay_state = kUsingTextureOwner;
 
   // Make sure that we're in |new_overlay_state_|.

@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "components/arc/arc_service_manager.h"
@@ -96,11 +97,11 @@ class ArcBrowserContextKeyedServiceFactoryBase
   static Service* GetForBrowserContextForTesting(
       content::BrowserContext* context) {
     Factory::GetInstance()->SetTestingFactoryAndUse(
-        context,
-        [](content::BrowserContext* context) -> std::unique_ptr<KeyedService> {
+        context, base::BindRepeating([](content::BrowserContext* context)
+                                         -> std::unique_ptr<KeyedService> {
           return std::make_unique<Service>(
               context, ArcServiceManager::Get()->arc_bridge_service());
-        });
+        }));
     return GetForBrowserContext(context);
   }
 

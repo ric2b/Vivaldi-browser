@@ -37,7 +37,7 @@ static inline float DistanceLine(const FloatPoint& start,
 }
 
 struct QuadraticBezier {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
   QuadraticBezier() = default;
   QuadraticBezier(const FloatPoint& s, const FloatPoint& c, const FloatPoint& e)
       : start(s), control(c), end(e), split_depth(0) {}
@@ -70,11 +70,11 @@ struct QuadraticBezier {
   FloatPoint start;
   FloatPoint control;
   FloatPoint end;
-  unsigned short split_depth;
+  uint16_t split_depth;
 };
 
 struct CubicBezier {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
   CubicBezier() = default;
   CubicBezier(const FloatPoint& s,
               const FloatPoint& c1,
@@ -116,12 +116,12 @@ struct CubicBezier {
   FloatPoint control1;
   FloatPoint control2;
   FloatPoint end;
-  unsigned short split_depth;
+  uint16_t split_depth;
 };
 
 template <class CurveType>
 static float CurveLength(PathTraversalState& traversal_state, CurveType curve) {
-  static const unsigned short kCurveSplitDepthLimit = 20;
+  static const uint16_t kCurveSplitDepthLimit = 20;
   static const double kPathSegmentLengthToleranceSquared = 1.e-16;
 
   double curve_scale_for_tolerance_squared = curve.MagnitudeSquared();

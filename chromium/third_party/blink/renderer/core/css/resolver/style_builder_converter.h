@@ -27,6 +27,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_CSS_RESOLVER_STYLE_BUILDER_CONVERTER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_RESOLVER_STYLE_BUILDER_CONVERTER_H_
 
+#include "cc/input/scroll_snap_data.h"
 #include "third_party/blink/renderer/core/css/css_function_value.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
@@ -45,8 +46,8 @@
 #include "third_party/blink/renderer/core/style/svg_computed_style_defs.h"
 #include "third_party/blink/renderer/core/style/transform_origin.h"
 #include "third_party/blink/renderer/platform/fonts/font_description.h"
+#include "third_party/blink/renderer/platform/geometry/length_size.h"
 #include "third_party/blink/renderer/platform/graphics/image_orientation.h"
-#include "third_party/blink/renderer/platform/length_size.h"
 #include "third_party/blink/renderer/platform/text/tab_size.h"
 #include "third_party/blink/renderer/platform/transforms/rotation.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
@@ -167,6 +168,8 @@ class StyleBuilderConverter {
   static TabSize ConvertLengthOrTabSpaces(StyleResolverState&, const CSSValue&);
   static Length ConvertLineHeight(StyleResolverState&, const CSSValue&);
   static float ConvertNumberOrPercentage(StyleResolverState&, const CSSValue&);
+  static float ConvertAlpha(StyleResolverState&,
+                            const CSSValue&);  // clamps to [0,1]
   static StyleOffsetRotation ConvertOffsetRotate(StyleResolverState&,
                                                  const CSSValue&);
   static LengthPoint ConvertPosition(StyleResolverState&, const CSSValue&);
@@ -181,8 +184,6 @@ class StyleBuilderConverter {
   static ShadowData ConvertShadow(const CSSToLengthConversionData&,
                                   StyleResolverState*,
                                   const CSSValue&);
-  static double ConvertValueToNumber(const CSSFunctionValue*,
-                                     const CSSPrimitiveValue*);
   static scoped_refptr<ShadowList> ConvertShadowList(StyleResolverState&,
                                                      const CSSValue&);
   static ShapeValue* ConvertShapeValue(StyleResolverState&, const CSSValue&);
@@ -231,8 +232,10 @@ class StyleBuilderConverter {
       const OrderedNamedGridLines&,
       NamedGridLinesMap&);
 
-  static ScrollSnapType ConvertSnapType(StyleResolverState&, const CSSValue&);
-  static ScrollSnapAlign ConvertSnapAlign(StyleResolverState&, const CSSValue&);
+  static cc::ScrollSnapType ConvertSnapType(StyleResolverState&,
+                                            const CSSValue&);
+  static cc::ScrollSnapAlign ConvertSnapAlign(StyleResolverState&,
+                                              const CSSValue&);
   static scoped_refptr<TranslateTransformOperation> ConvertTranslate(
       StyleResolverState&,
       const CSSValue&);
@@ -254,7 +257,8 @@ class StyleBuilderConverter {
   static Length ConvertPositionLength(StyleResolverState&, const CSSValue&);
   static Rotation ConvertRotation(const CSSValue&);
 
-  static const CSSValue& ConvertRegisteredPropertyInitialValue(const CSSValue&);
+  static const CSSValue& ConvertRegisteredPropertyInitialValue(const Document&,
+                                                               const CSSValue&);
   static const CSSValue& ConvertRegisteredPropertyValue(
       const StyleResolverState&,
       const CSSValue&);
@@ -327,11 +331,11 @@ Length StyleBuilderConverter::ConvertPositionLength(StyleResolverState& state,
   if (value.IsIdentifierValue()) {
     switch (ToCSSIdentifierValue(value).GetValueID()) {
       case cssValueFor0:
-        return Length(0, kPercent);
+        return Length::Percent(0);
       case cssValueFor100:
-        return Length(100, kPercent);
+        return Length::Percent(100);
       case CSSValueCenter:
-        return Length(50, kPercent);
+        return Length::Percent(50);
       default:
         NOTREACHED();
     }

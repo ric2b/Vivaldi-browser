@@ -8,18 +8,14 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/no_destructor.h"
 #include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
 
 class KeyedService;
 
-namespace base {
-template <typename T>
-struct DefaultSingletonTraits;
-}
-
 namespace favicon {
 class LargeIconService;
-};
+}
 
 namespace ios {
 class ChromeBrowserState;
@@ -37,10 +33,10 @@ class IOSChromeLargeIconServiceFactory
 
   // Returns the default factory used to build LargeIconServices. Can be
   // registered with SetTestingFactory to use real instances during testing.
-  static TestingFactoryFunction GetDefaultFactory();
+  static TestingFactory GetDefaultFactory();
 
  private:
-  friend struct base::DefaultSingletonTraits<IOSChromeLargeIconServiceFactory>;
+  friend class base::NoDestructor<IOSChromeLargeIconServiceFactory>;
 
   IOSChromeLargeIconServiceFactory();
   ~IOSChromeLargeIconServiceFactory() override;

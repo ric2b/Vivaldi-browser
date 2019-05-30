@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/sync_socket.h"
@@ -90,7 +91,7 @@ void MojoAudioInputStream::OnStreamCreated(
 
   DCHECK(socket_handle.is_valid());
 
-  base::ResetAndReturn(&stream_created_callback_)
+  std::move(stream_created_callback_)
       .Run({base::in_place, std::move(shared_memory_region),
             std::move(socket_handle)},
            initially_muted);

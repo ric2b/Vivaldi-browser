@@ -25,14 +25,12 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/transform.h"
 
+class SkPath;
+
 namespace base {
 namespace trace_event {
 class TracedValue;
 }
-}
-
-namespace gfx {
-class Path;
 }
 
 namespace viz {
@@ -41,7 +39,7 @@ class CompositorFrame;
 
 namespace exo {
 class Buffer;
-class LayerTreeFrameSinkHolder;
+class FrameSinkResourceManager;
 class SurfaceObserver;
 class Surface;
 
@@ -152,6 +150,10 @@ class Surface final : public ui::PropertyHandler {
   // Request "parent" for surface.
   void SetParent(Surface* parent, const gfx::Point& position);
 
+  // Request that surface should have a specific ID assigned by client.
+  void SetClientSurfaceId(int32_t client_surface_id);
+  int32_t GetClientSurfaceId() const;
+
   // Surface state (damage regions, attached buffers, etc.) is double-buffered.
   // A Commit() call atomically applies all pending state, replacing the
   // current state. Commit() is not guaranteed to be synchronous. See
@@ -174,7 +176,7 @@ class Surface final : public ui::PropertyHandler {
   void AppendSurfaceHierarchyContentsToFrame(
       const gfx::Point& origin,
       float device_scale_factor,
-      LayerTreeFrameSinkHolder* frame_sink_holder,
+      FrameSinkResourceManager* resource_manager,
       viz::CompositorFrame* frame);
 
   // Returns true if surface is in synchronized mode.
@@ -190,7 +192,7 @@ class Surface final : public ui::PropertyHandler {
   bool HitTest(const gfx::Point& point) const;
 
   // Sets |mask| to the path that delineates the hit test region of the surface.
-  void GetHitTestMask(gfx::Path* mask) const;
+  void GetHitTestMask(SkPath* mask) const;
 
   // Set the surface delegate.
   void SetSurfaceDelegate(SurfaceDelegate* delegate);
@@ -236,6 +238,12 @@ class Surface final : public ui::PropertyHandler {
     return pending_damage_.Contains(damage);
   }
 
+  // Set occlusion tracking region for surface.
+  void SetOcclusionTracking(bool tracking);
+
+  // Triggers sending an occlusion update to observers.
+  void OnWindowOcclusionChanged();
+
  private:
   struct State {
     State();
@@ -280,10 +288,10 @@ class Surface final : public ui::PropertyHandler {
   // contents of the attached buffer (or id 0, if no buffer is attached).
   // UpdateSurface must be called afterwards to ensure the release callback
   // will be called.
-  void UpdateResource(LayerTreeFrameSinkHolder* frame_sink_holder);
+  void UpdateResource(FrameSinkResourceManager* resource_manager);
 
   // Updates buffer_transform_ to match the current buffer parameters.
-  void UpdateBufferTransform();
+  void UpdateBufferTransform(bool y_invert);
 
   // Puts the current surface into a draw quad, and appends the draw quads into
   // the |frame|.
@@ -389,6 +397,9 @@ class Surface final : public ui::PropertyHandler {
 
   // Surface observer list. Surface does not own the observers.
   base::ObserverList<SurfaceObserver, true>::Unchecked observers_;
+
+  // Whether this surface is tracking occlusion for the client.
+  bool is_tracking_occlusion_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(Surface);
 };

@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "base/run_loop.h"
 #include "components/crx_file/id_util.h"
 #include "components/policy/core/common/configuration_policy_provider.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
@@ -35,6 +36,9 @@ ExtensionManagementPrefUpdaterBase::ExtensionManagementPrefUpdaterBase() {
 }
 
 ExtensionManagementPrefUpdaterBase::~ExtensionManagementPrefUpdaterBase() {
+  // Make asynchronous calls finished to deliver all preference changes to the
+  // NetworkService and extension processes.
+  base::RunLoop().RunUntilIdle();
 }
 
 // Helper functions for per extension settings ---------------------------------
@@ -196,6 +200,34 @@ void ExtensionManagementPrefUpdaterBase::RemovePolicyBlockedHost(
     const std::string& host) {
   DCHECK(prefix == schema::kWildcard || crx_file::id_util::IdIsValid(prefix));
   RemoveStringFromList(make_path(prefix, schema::kPolicyBlockedHosts), host);
+}
+
+// Helper functions for 'runtime_allowed_hosts' manipulation ------------------
+
+void ExtensionManagementPrefUpdaterBase::UnsetPolicyAllowedHosts(
+    const std::string& prefix) {
+  DCHECK(prefix == schema::kWildcard || crx_file::id_util::IdIsValid(prefix));
+  pref_->Remove(make_path(prefix, schema::kPolicyAllowedHosts), nullptr);
+}
+
+void ExtensionManagementPrefUpdaterBase::ClearPolicyAllowedHosts(
+    const std::string& prefix) {
+  DCHECK(prefix == schema::kWildcard || crx_file::id_util::IdIsValid(prefix));
+  ClearList(make_path(prefix, schema::kPolicyAllowedHosts));
+}
+
+void ExtensionManagementPrefUpdaterBase::AddPolicyAllowedHost(
+    const std::string& prefix,
+    const std::string& host) {
+  DCHECK(prefix == schema::kWildcard || crx_file::id_util::IdIsValid(prefix));
+  AddStringToList(make_path(prefix, schema::kPolicyAllowedHosts), host);
+}
+
+void ExtensionManagementPrefUpdaterBase::RemovePolicyAllowedHost(
+    const std::string& prefix,
+    const std::string& host) {
+  DCHECK(prefix == schema::kWildcard || crx_file::id_util::IdIsValid(prefix));
+  RemoveStringFromList(make_path(prefix, schema::kPolicyAllowedHosts), host);
 }
 
 // Helper functions for 'allowed_permissions' manipulation ---------------------

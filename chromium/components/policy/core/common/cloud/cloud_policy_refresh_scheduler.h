@@ -14,7 +14,7 @@
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "components/policy/policy_export.h"
-#include "net/base/network_change_notifier.h"
+#include "services/network/public/cpp/network_connection_tracker.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -22,12 +22,14 @@ class SequencedTaskRunner;
 
 namespace policy {
 
+class CloudPolicyService;
+
 // Observes CloudPolicyClient and CloudPolicyStore to trigger periodic policy
 // fetches and issue retries on error conditions.
 class POLICY_EXPORT CloudPolicyRefreshScheduler
     : public CloudPolicyClient::Observer,
       public CloudPolicyStore::Observer,
-      public net::NetworkChangeNotifier::NetworkChangeObserver {
+      public network::NetworkConnectionTracker::NetworkConnectionObserver {
  public:
   // Refresh constants.
   static const int64_t kDefaultRefreshDelayMs;
@@ -39,12 +41,15 @@ class POLICY_EXPORT CloudPolicyRefreshScheduler
   static const int64_t kRefreshDelayMinMs;
   static const int64_t kRefreshDelayMaxMs;
 
-  // |client| and |store| pointers must stay valid throughout the
+  // |client|, |store| and |service| pointers must stay valid throughout the
   // lifetime of CloudPolicyRefreshScheduler.
   CloudPolicyRefreshScheduler(
       CloudPolicyClient* client,
       CloudPolicyStore* store,
-      const scoped_refptr<base::SequencedTaskRunner>& task_runner);
+      CloudPolicyService* service,
+      const scoped_refptr<base::SequencedTaskRunner>& task_runner,
+      network::NetworkConnectionTrackerGetter
+          network_connection_tracker_getter);
   ~CloudPolicyRefreshScheduler() override;
 
   base::Time last_refresh() const { return last_refresh_; }
@@ -69,9 +74,7 @@ class POLICY_EXPORT CloudPolicyRefreshScheduler
 
   // Whether the invalidations service is available and receiving notifications
   // of policy updates.
-  bool invalidations_available() {
-    return invalidations_available_;
-  }
+  bool invalidations_available() const { return invalidations_available_; }
 
   // CloudPolicyClient::Observer:
   void OnPolicyFetched(CloudPolicyClient* client) override;
@@ -82,10 +85,9 @@ class POLICY_EXPORT CloudPolicyRefreshScheduler
   void OnStoreLoaded(CloudPolicyStore* store) override;
   void OnStoreError(CloudPolicyStore* store) override;
 
-  // net::NetworkChangeNotifier::NetworkChangeObserver:
+  // network::NetworkConnectionTracker::NetworkConnectionObserver:
   // Triggered also when the device wakes up.
-  void OnNetworkChanged(
-      net::NetworkChangeNotifier::ConnectionType type) override;
+  void OnConnectionChanged(network::mojom::ConnectionType type) override;
 
   void set_last_refresh_for_testing(base::Time last_refresh);
 
@@ -114,11 +116,21 @@ class POLICY_EXPORT CloudPolicyRefreshScheduler
   // Sets the |last_refresh_| and |last_refresh_ticks_| to current time.
   void UpdateLastRefresh();
 
+  // Called when policy was refreshed after refresh request.
+  // It is different than OnPolicyFetched(), which will be called every time
+  // policy was fetched by the |client_|, does not matter where it was
+  // requested.
+  void OnPolicyRefreshed(bool success);
+
   CloudPolicyClient* client_;
   CloudPolicyStore* store_;
+  CloudPolicyService* service_;
 
   // For scheduling delayed tasks.
   const scoped_refptr<base::SequencedTaskRunner> task_runner_;
+
+  // For listening for network connection changes.
+  network::NetworkConnectionTracker* network_connection_tracker_;
 
   // The delayed refresh callback.
   base::CancelableClosure refresh_callback_;
@@ -148,6 +160,8 @@ class POLICY_EXPORT CloudPolicyRefreshScheduler
   // Used to measure how long it took for the invalidations service to report
   // its initial status.
   base::Time creation_time_;
+
+  base::WeakPtrFactory<CloudPolicyRefreshScheduler> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(CloudPolicyRefreshScheduler);
 };

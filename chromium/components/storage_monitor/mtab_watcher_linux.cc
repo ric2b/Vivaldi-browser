@@ -11,8 +11,8 @@
 #include <stdio.h>
 
 #include "base/bind.h"
-#include "base/macros.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/stl_util.h"
+#include "base/threading/scoped_blocking_call.h"
 
 namespace {
 
@@ -39,7 +39,6 @@ MtabWatcherLinux::MtabWatcherLinux(const base::FilePath& mtab_path,
                                    const UpdateMtabCallback& callback)
     : mtab_path_(mtab_path), callback_(callback), weak_ptr_factory_(this) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  base::AssertBlockingAllowed();
   bool ret = file_watcher_.Watch(
       mtab_path_, false,
       base::Bind(&MtabWatcherLinux::OnFilePathChanged,
@@ -54,12 +53,12 @@ MtabWatcherLinux::MtabWatcherLinux(const base::FilePath& mtab_path,
 
 MtabWatcherLinux::~MtabWatcherLinux() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  base::AssertBlockingAllowed();
 }
 
 void MtabWatcherLinux::ReadMtab() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   FILE* fp = setmntent(mtab_path_.value().c_str(), "r");
   if (!fp)
@@ -73,7 +72,7 @@ void MtabWatcherLinux::ReadMtab() const {
   // devices that have been mounted over.
   while (getmntent_r(fp, &entry, buf, sizeof(buf))) {
     // We only care about real file systems.
-    for (size_t i = 0; i < arraysize(kKnownFileSystems); ++i) {
+    for (size_t i = 0; i < base::size(kKnownFileSystems); ++i) {
       if (strcmp(kKnownFileSystems[i], entry.mnt_type) == 0) {
         device_map[base::FilePath(entry.mnt_dir)] =
             base::FilePath(entry.mnt_fsname);
@@ -89,7 +88,6 @@ void MtabWatcherLinux::ReadMtab() const {
 void MtabWatcherLinux::OnFilePathChanged(
     const base::FilePath& path, bool error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  base::AssertBlockingAllowed();
 
   if (path != mtab_path_) {
     // This cannot happen unless FilePathWatcher is buggy. Just ignore this

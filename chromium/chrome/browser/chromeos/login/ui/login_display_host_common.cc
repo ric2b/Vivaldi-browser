@@ -4,7 +4,8 @@
 
 #include "chrome/browser/chromeos/login/ui/login_display_host_common.h"
 
-#include "ash/shell.h"
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/app_launch_controller.h"
@@ -12,15 +13,14 @@
 #include "chrome/browser/chromeos/login/demo_mode/demo_app_launcher.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
-#include "chrome/browser/chromeos/mobile_config.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/system/device_disabling_manager.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/browser/ui/webui/chromeos/internet_detail_dialog.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "ui/base/ui_base_features.h"
-#include "ui/wm/public/scoped_drag_drop_disabler.h"
 
 namespace chromeos {
 namespace {
@@ -47,16 +47,6 @@ LoginDisplayHostCommon::LoginDisplayHostCommon() : weak_factory_(this) {
       new ScopedKeepAlive(KeepAliveOrigin::LOGIN_DISPLAY_HOST_WEBUI,
                           KeepAliveRestartOption::DISABLED));
 
-  // Disable Drag'n'Drop for the login session.
-  // ash::Shell may be null in tests.
-  // TODO(crbug.com/854328): Mash support.
-  if (ash::Shell::HasInstance() && !features::IsUsingWindowService()) {
-    scoped_drag_drop_disabler_.reset(
-        new wm::ScopedDragDropDisabler(ash::Shell::GetPrimaryRootWindow()));
-  } else {
-    NOTIMPLEMENTED();
-  }
-
   // Close the login screen on NOTIFICATION_APP_TERMINATING.
   registrar_.Add(this, chrome::NOTIFICATION_APP_TERMINATING,
                  content::NotificationService::AllSources());
@@ -76,6 +66,11 @@ void LoginDisplayHostCommon::BeforeSessionStart() {
 }
 
 void LoginDisplayHostCommon::Finalize(base::OnceClosure completion_callback) {
+  // If finalize is called twice the LoginDisplayHost instance will be deleted
+  // multiple times.
+  CHECK(!is_finalizing_);
+  is_finalizing_ = true;
+
   completion_callbacks_.push_back(std::move(completion_callback));
   OnFinalize();
 }
@@ -105,9 +100,6 @@ void LoginDisplayHostCommon::StartSignInScreen(
             << users.size();
     StartupUtils::MarkDeviceRegistered(base::OnceClosure());
   }
-
-  // Initiate mobile config load.
-  MobileConfig::GetInstance();
 
   // Initiate device policy fetching.
   policy::BrowserPolicyConnectorChromeOS* connector =
@@ -190,8 +182,12 @@ void LoginDisplayHostCommon::CompleteLogin(const UserContext& user_context) {
 }
 
 void LoginDisplayHostCommon::OnGaiaScreenReady() {
-  if (GetExistingUserController())
+  if (GetExistingUserController()) {
     GetExistingUserController()->OnGaiaScreenReady();
+  } else {
+    // Used to debug crbug.com/902315. Feel free to remove after that is fixed.
+    LOG(ERROR) << "OnGaiaScreenReady: there is no existing user controller";
+  }
 }
 
 void LoginDisplayHostCommon::SetDisplayEmail(const std::string& email) {
@@ -265,6 +261,7 @@ void LoginDisplayHostCommon::ShutdownDisplayHost() {
   if (shutting_down_)
     return;
 
+  ProfileHelper::Get()->ClearSigninProfile(base::DoNothing());
   shutting_down_ = true;
   registrar_.RemoveAll();
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);

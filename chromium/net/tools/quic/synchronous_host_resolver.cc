@@ -4,11 +4,16 @@
 
 #include "net/tools/quic/synchronous_host_resolver.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/at_exit.h"
+#include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/simple_thread.h"
@@ -37,21 +42,17 @@ class ResolverThread : public base::SimpleThread {
   void Run() override;
 
  private:
-  void OnResolutionComplete(int rv);
+  void OnResolutionComplete(base::OnceClosure on_done, int rv);
 
   AddressList* addresses_;
   std::string host_;
   int rv_;
 
-  base::WeakPtrFactory<ResolverThread> weak_factory_;
-
   DISALLOW_COPY_AND_ASSIGN(ResolverThread);
 };
 
 ResolverThread::ResolverThread()
-    : SimpleThread("resolver_thread"),
-      rv_(ERR_UNEXPECTED),
-      weak_factory_(this) {}
+    : SimpleThread("resolver_thread"), rv_(ERR_UNEXPECTED) {}
 
 ResolverThread::~ResolverThread() = default;
 
@@ -65,19 +66,24 @@ void ResolverThread::Run() {
   std::unique_ptr<net::HostResolverImpl> resolver(
       new net::HostResolverImpl(options, &net_log));
 
-  std::unique_ptr<net::HostResolver::Request> request;
   HostPortPair host_port_pair(host_, 80);
-  rv_ = resolver->Resolve(HostResolver::RequestInfo(host_port_pair),
-                          DEFAULT_PRIORITY, addresses_,
-                          base::Bind(&ResolverThread::OnResolutionComplete,
-                                     weak_factory_.GetWeakPtr()),
-                          &request, NetLogWithSource());
+  std::unique_ptr<net::HostResolver::ResolveHostRequest> request =
+      resolver->CreateRequest(host_port_pair, NetLogWithSource(),
+                              base::nullopt);
 
-  if (rv_ != ERR_IO_PENDING)
-    return;
+  base::RunLoop run_loop;
+  rv_ = request->Start(base::BindOnce(&ResolverThread::OnResolutionComplete,
+                                      base::Unretained(this),
+                                      run_loop.QuitClosure()));
 
-  // Run the mesage loop until OnResolutionComplete quits it.
-  base::RunLoop().Run();
+  if (rv_ == ERR_IO_PENDING) {
+    // Run the message loop until OnResolutionComplete quits it.
+    run_loop.Run();
+  }
+
+  if (rv_ == OK) {
+    *addresses_ = request->GetAddressResults().value();
+  }
 }
 
 int ResolverThread::Resolve(const std::string& host, AddressList* addresses) {
@@ -88,10 +94,9 @@ int ResolverThread::Resolve(const std::string& host, AddressList* addresses) {
   return rv_;
 }
 
-void ResolverThread::OnResolutionComplete(int rv) {
+void ResolverThread::OnResolutionComplete(base::OnceClosure on_done, int rv) {
   rv_ = rv;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::RunLoop::QuitCurrentWhenIdleClosureDeprecated());
+  std::move(on_done).Run();
 }
 
 }  // namespace

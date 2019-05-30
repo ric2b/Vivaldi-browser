@@ -12,8 +12,19 @@
 #error "This file requires ARC support."
 #endif
 
-bool IsVisibleUrlNewTabPage(web::WebState* web_state) {
-  web::NavigationItem* item =
-      web_state->GetNavigationManager()->GetVisibleItem();
-  return item && item->GetURL().GetOrigin() == kChromeUINewTabURL;
+bool IsURLNewTabPage(const GURL& url) {
+  return url.GetOrigin() == kChromeUINewTabURL;
+}
+
+bool IsVisibleURLNewTabPage(web::WebState* web_state) {
+  if (!web_state)
+    return false;
+  return IsURLNewTabPage(web_state->GetVisibleURL());
+}
+
+bool IsNTPWithoutHistory(web::WebState* web_state) {
+  return IsVisibleURLNewTabPage(web_state) &&
+         web_state->GetNavigationManager() &&
+         !web_state->GetNavigationManager()->CanGoBack() &&
+         !web_state->GetNavigationManager()->CanGoForward();
 }

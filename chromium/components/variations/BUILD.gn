@@ -15,16 +15,12 @@ static_library("variations") {
     "android/variations_associated_data_android.cc",
     "android/variations_seed_bridge.cc",
     "android/variations_seed_bridge.h",
-    "caching_permuted_entropy_provider.cc",
-    "caching_permuted_entropy_provider.h",
     "child_process_field_trial_syncer.cc",
     "child_process_field_trial_syncer.h",
     "client_filterable_state.cc",
     "client_filterable_state.h",
     "entropy_provider.cc",
     "entropy_provider.h",
-    "experiment_labels.cc",
-    "experiment_labels.h",
     "hashing.cc",
     "hashing.h",
     "metrics.cc",
@@ -35,7 +31,6 @@ static_library("variations") {
     "processed_study.cc",
     "processed_study.h",
     "proto/client_variations.proto",
-    "proto/permuted_entropy_cache.proto",
     "proto/study.proto",
     "proto/variations_seed.proto",
     "seed_response.cc",
@@ -52,12 +47,12 @@ static_library("variations") {
     "variations_associated_data.h",
     "variations_crash_keys.cc",
     "variations_crash_keys.h",
-    "variations_experiment_util.cc",
-    "variations_experiment_util.h",
     "variations_http_header_provider.cc",
     "variations_http_header_provider.h",
     "variations_id_collection.cc",
     "variations_id_collection.h",
+    "variations_murmur_hash.cc",
+    "variations_murmur_hash.h",
     "variations_request_scheduler.cc",
     "variations_request_scheduler.h",
     "variations_seed_processor.cc",
@@ -104,12 +99,16 @@ if (is_android) {
   }
 
   android_library("load_seed_result_enum_java") {
-    deps = [ "//base:base_java" ]
+    deps = [
+      "//base:base_java",
+    ]
     srcjar_deps = [ ":load_seed_result_enum_srcjar" ]
   }
 
   java_cpp_enum("load_seed_result_enum_srcjar") {
-    sources = [ "metrics.h" ]
+    sources = [
+      "metrics.h",
+    ]
   }
 }
 
@@ -134,10 +133,8 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "active_field_trials_unittest.cc",
-    "caching_permuted_entropy_provider_unittest.cc",
     "child_process_field_trial_syncer_unittest.cc",
     "entropy_provider_unittest.cc",
-    "experiment_labels_unittest.cc",
     "hashing_unittest.cc",
     "net/variations_command_line_unittest.cc",
     "net/variations_http_headers_unittest.cc",
@@ -147,6 +144,7 @@ source_set("unit_tests") {
     "variations_crash_keys_unittest.cc",
     "variations_http_header_provider_unittest.cc",
     "variations_id_collection_unittest.cc",
+    "variations_murmur_hash_unittest.cc",
     "variations_request_scheduler_unittest.cc",
     "variations_seed_processor_unittest.cc",
     "variations_seed_simulator_unittest.cc",
@@ -167,6 +165,7 @@ source_set("unit_tests") {
     "//components/variations/field_trial_config:field_trial_config",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/smhasher:murmurhash3",
     "//third_party/zlib/google:compression_utils",
   ]
 }

@@ -12,7 +12,7 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_task_environment.h"
-#include "components/image_fetcher/core/image_decoder.h"
+#include "components/image_fetcher/core/fake_image_decoder.h"
 #include "components/image_fetcher/core/image_fetcher.h"
 #include "net/http/http_util.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
@@ -31,40 +31,10 @@ namespace image_fetcher {
 
 namespace {
 
-const char kFetchID[] = "fetch-1";
-const char kFetchID2[] = "fetch-2";
-const char kImageData[] = "data";
-const char kImageURL[] = "http://image.test/test.png";
+constexpr char kImageData[] = "data";
+constexpr char kImageURL[] = "http://image.test/test.png";
 
-// Always decodes a valid image for all non-empty input.
-class FakeImageDecoder : public image_fetcher::ImageDecoder {
- public:
-  void DecodeImage(
-      const std::string& image_data,
-      const gfx::Size& desired_image_frame_size,
-      const image_fetcher::ImageDecodedCallback& callback) override {
-    ASSERT_TRUE(enabled_);
-    gfx::Image image;
-    if (!image_data.empty()) {
-      ASSERT_EQ(kImageData, image_data);
-      image = gfx::test::CreateImage(2, 3);
-    }
-    if (before_image_decoded_) {
-      base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                       before_image_decoded_);
-    }
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(callback, image));
-  }
-  void SetBeforeImageDecoded(const base::RepeatingClosure& callback) {
-    before_image_decoded_ = callback;
-  }
-  void SetEnabled(bool enabled) { enabled_ = enabled; }
-
- private:
-  bool enabled_ = true;
-  base::RepeatingClosure before_image_decoded_;
-};
+constexpr char kImageUmaName[] = "TestUma";
 
 class ImageFetcherImplTest : public testing::Test {
  public:
@@ -107,11 +77,11 @@ TEST_F(ImageFetcherImplTest, FetchImageAndDataSuccess) {
   base::MockCallback<ImageDataFetcherCallback> data_callback;
   base::MockCallback<ImageFetcherCallback> image_callback;
   EXPECT_CALL(data_callback, Run(kImageData, _));
-  EXPECT_CALL(image_callback, Run(kFetchID, ValidImage(), _));
+  EXPECT_CALL(image_callback, Run(ValidImage(), _));
 
-  image_fetcher()->FetchImageAndData(kFetchID, GURL(kImageURL),
-                                     data_callback.Get(), image_callback.Get(),
-                                     TRAFFIC_ANNOTATION_FOR_TESTS);
+  image_fetcher()->FetchImageAndData(
+      GURL(kImageURL), data_callback.Get(), image_callback.Get(),
+      ImageFetcherParams(TRAFFIC_ANNOTATION_FOR_TESTS, kImageUmaName));
   RunUntilIdle();
 }
 
@@ -121,34 +91,34 @@ TEST_F(ImageFetcherImplTest, FetchImageAndData3xSuccess) {
   base::MockCallback<ImageDataFetcherCallback> data_callback1;
   base::MockCallback<ImageFetcherCallback> image_callback1;
   EXPECT_CALL(data_callback1, Run(kImageData, _));
-  EXPECT_CALL(image_callback1, Run(kFetchID, ValidImage(), _));
+  EXPECT_CALL(image_callback1, Run(ValidImage(), _));
 
   image_fetcher()->FetchImageAndData(
-      kFetchID, GURL(kImageURL), data_callback1.Get(), image_callback1.Get(),
-      TRAFFIC_ANNOTATION_FOR_TESTS);
+      GURL(kImageURL), data_callback1.Get(), image_callback1.Get(),
+      ImageFetcherParams(TRAFFIC_ANNOTATION_FOR_TESTS, kImageUmaName));
 
   base::MockCallback<ImageDataFetcherCallback> data_callback2;
   base::MockCallback<ImageFetcherCallback> image_callback2;
   EXPECT_CALL(data_callback2, Run(kImageData, _));
-  EXPECT_CALL(image_callback2, Run(kFetchID, ValidImage(), _));
+  EXPECT_CALL(image_callback2, Run(ValidImage(), _));
 
   // This call happens before the network request completes.
   image_fetcher()->FetchImageAndData(
-      kFetchID, GURL(kImageURL), data_callback2.Get(), image_callback2.Get(),
-      TRAFFIC_ANNOTATION_FOR_TESTS);
+      GURL(kImageURL), data_callback2.Get(), image_callback2.Get(),
+      ImageFetcherParams(TRAFFIC_ANNOTATION_FOR_TESTS, kImageUmaName));
 
   base::MockCallback<ImageDataFetcherCallback> data_callback3;
   base::MockCallback<ImageFetcherCallback> image_callback3;
   EXPECT_CALL(data_callback3, Run(kImageData, _));
-  EXPECT_CALL(image_callback3, Run(kFetchID, ValidImage(), _));
+  EXPECT_CALL(image_callback3, Run(ValidImage(), _));
 
   image_decoder()->SetBeforeImageDecoded(base::BindLambdaForTesting([&]() {
     // This happens after the network request completes.
     // Shouldn't need to fetch.
     test_url_loader_factory()->AddResponse(kImageURL, "", net::HTTP_NOT_FOUND);
     image_fetcher()->FetchImageAndData(
-        kFetchID2, GURL(kImageURL), data_callback3.Get(), image_callback3.Get(),
-        TRAFFIC_ANNOTATION_FOR_TESTS);
+        GURL(kImageURL), data_callback3.Get(), image_callback3.Get(),
+        ImageFetcherParams(TRAFFIC_ANNOTATION_FOR_TESTS, kImageUmaName));
   }));
 
   RunUntilIdle();
@@ -161,20 +131,20 @@ TEST_F(ImageFetcherImplTest, FetchImageAndData2xFail) {
   base::MockCallback<ImageDataFetcherCallback> data_callback1;
   base::MockCallback<ImageFetcherCallback> image_callback1;
   EXPECT_CALL(data_callback1, Run("", _));
-  EXPECT_CALL(image_callback1, Run(kFetchID, EmptyImage(), _));
+  EXPECT_CALL(image_callback1, Run(EmptyImage(), _));
 
   image_fetcher()->FetchImageAndData(
-      kFetchID, GURL(kImageURL), data_callback1.Get(), image_callback1.Get(),
-      TRAFFIC_ANNOTATION_FOR_TESTS);
+      GURL(kImageURL), data_callback1.Get(), image_callback1.Get(),
+      ImageFetcherParams(TRAFFIC_ANNOTATION_FOR_TESTS, kImageUmaName));
 
   base::MockCallback<ImageDataFetcherCallback> data_callback2;
   base::MockCallback<ImageFetcherCallback> image_callback2;
   EXPECT_CALL(data_callback2, Run("", _));
-  EXPECT_CALL(image_callback2, Run(kFetchID, EmptyImage(), _));
+  EXPECT_CALL(image_callback2, Run(EmptyImage(), _));
 
   image_fetcher()->FetchImageAndData(
-      kFetchID2, GURL(kImageURL), data_callback2.Get(), image_callback2.Get(),
-      TRAFFIC_ANNOTATION_FOR_TESTS);
+      GURL(kImageURL), data_callback2.Get(), image_callback2.Get(),
+      ImageFetcherParams(TRAFFIC_ANNOTATION_FOR_TESTS, kImageUmaName));
 
   RunUntilIdle();
 }
@@ -186,8 +156,8 @@ TEST_F(ImageFetcherImplTest, FetchOnlyData) {
   EXPECT_CALL(data_callback, Run(kImageData, _));
 
   image_fetcher()->FetchImageAndData(
-      kFetchID, GURL(kImageURL), data_callback.Get(), ImageFetcherCallback(),
-      TRAFFIC_ANNOTATION_FOR_TESTS);
+      GURL(kImageURL), data_callback.Get(), ImageFetcherCallback(),
+      ImageFetcherParams(TRAFFIC_ANNOTATION_FOR_TESTS, kImageUmaName));
 
   RunUntilIdle();
 }
@@ -198,15 +168,15 @@ TEST_F(ImageFetcherImplTest, FetchDataThenImage) {
   EXPECT_CALL(data_callback, Run(kImageData, _));
 
   image_fetcher()->FetchImageAndData(
-      kFetchID, GURL(kImageURL), data_callback.Get(), ImageFetcherCallback(),
-      TRAFFIC_ANNOTATION_FOR_TESTS);
+      GURL(kImageURL), data_callback.Get(), ImageFetcherCallback(),
+      ImageFetcherParams(TRAFFIC_ANNOTATION_FOR_TESTS, kImageUmaName));
 
   base::MockCallback<ImageFetcherCallback> image_callback;
-  EXPECT_CALL(image_callback, Run(kFetchID, ValidImage(), _));
+  EXPECT_CALL(image_callback, Run(ValidImage(), _));
 
   image_fetcher()->FetchImageAndData(
-      kFetchID2, GURL(kImageURL), ImageDataFetcherCallback(),
-      image_callback.Get(), TRAFFIC_ANNOTATION_FOR_TESTS);
+      GURL(kImageURL), ImageDataFetcherCallback(), image_callback.Get(),
+      ImageFetcherParams(TRAFFIC_ANNOTATION_FOR_TESTS, kImageUmaName));
 
   RunUntilIdle();
 }
@@ -215,11 +185,11 @@ TEST_F(ImageFetcherImplTest, FetchImageThenData) {
   test_url_loader_factory()->AddResponse(kImageURL, kImageData);
 
   base::MockCallback<ImageFetcherCallback> image_callback;
-  EXPECT_CALL(image_callback, Run(kFetchID, ValidImage(), _));
+  EXPECT_CALL(image_callback, Run(ValidImage(), _));
 
   image_fetcher()->FetchImageAndData(
-      kFetchID, GURL(kImageURL), ImageDataFetcherCallback(),
-      image_callback.Get(), TRAFFIC_ANNOTATION_FOR_TESTS);
+      GURL(kImageURL), ImageDataFetcherCallback(), image_callback.Get(),
+      ImageFetcherParams(TRAFFIC_ANNOTATION_FOR_TESTS, kImageUmaName));
 
   base::MockCallback<ImageDataFetcherCallback> data_callback;
   EXPECT_CALL(data_callback, Run(kImageData, _));
@@ -229,8 +199,8 @@ TEST_F(ImageFetcherImplTest, FetchImageThenData) {
     // Shouldn't need to fetch.
     test_url_loader_factory()->AddResponse(kImageURL, "", net::HTTP_NOT_FOUND);
     image_fetcher()->FetchImageAndData(
-        kFetchID2, GURL(kImageURL), data_callback.Get(), ImageFetcherCallback(),
-        TRAFFIC_ANNOTATION_FOR_TESTS);
+        GURL(kImageURL), data_callback.Get(), ImageFetcherCallback(),
+        ImageFetcherParams(TRAFFIC_ANNOTATION_FOR_TESTS, kImageUmaName));
   }));
 
   RunUntilIdle();

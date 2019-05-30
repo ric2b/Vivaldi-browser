@@ -11,9 +11,9 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "components/google/core/common/google_util.h"
@@ -155,10 +155,13 @@ bool IsURLAllowedForSupervisedUser(const GURL& url, Profile* profile) {
 }
 
 bool ShouldShowLocalNewTab(Profile* profile) {
+#if !defined(OS_ANDROID)
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   return command_line->HasSwitch(switches::kForceLocalNtp) ||
          (base::FeatureList::IsEnabled(features::kUseGoogleLocalNtp) &&
           profile && DefaultSearchProviderIsGoogle(profile));
+#endif
+  return false;
 }
 
 bool ShouldDelayRemoteNTP(const GURL& search_provider_url, Profile* profile) {
@@ -216,12 +219,12 @@ struct NewTabURLDetails {
   const NewTabURLState state;
 };
 
-bool IsRenderedInInstantProcess(const content::WebContents* contents,
+bool IsRenderedInInstantProcess(content::WebContents* contents,
                                 Profile* profile) {
 #if defined(OS_ANDROID)
   return false;
 #else
-  const content::RenderProcessHost* process_host =
+  content::RenderProcessHost* process_host =
       contents->GetMainFrame()->GetProcess();
   if (!process_host)
     return false;
@@ -267,22 +270,22 @@ bool IsNTPURL(const GURL& url, Profile* profile) {
                      url == chrome::kChromeSearchLocalNtpUrl);
 }
 
-bool IsInstantNTP(const content::WebContents* contents) {
+bool IsInstantNTP(content::WebContents* contents) {
   if (!contents)
     return false;
 
   if (contents->ShowingInterstitialPage())
     return false;
 
-  const content::NavigationEntry* entry =
+  content::NavigationEntry* entry =
       contents->GetController().GetLastCommittedEntry();
   if (!entry)
     entry = contents->GetController().GetVisibleEntry();
   return NavEntryIsInstantNTP(contents, entry);
 }
 
-bool NavEntryIsInstantNTP(const content::WebContents* contents,
-                          const content::NavigationEntry* entry) {
+bool NavEntryIsInstantNTP(content::WebContents* contents,
+                          content::NavigationEntry* entry) {
   if (!contents || !entry || !IsInstantExtendedAPIEnabled())
     return false;
 

@@ -226,7 +226,10 @@ chromium_strings.grd. -->
           Chrome OS is made possible by additional <ph name="BEGIN_LINK_CROS_OSS">&lt;a target="_blank" href="$1"&gt;</ph>open source software<ph name="END_LINK_CROS_OSS">&lt;/a&gt;</ph>.
         </message>
         <message name="IDS_ABOUT_CROS_WITH_LINUX_VERSION_LICENSE" desc="Additional text displayed beneath the Chromium open source URLs for Chrome OS when Crostini is installed.">
-          Chrome OS is made possible by additional <ph name="BEGIN_LINK_CROS_OSS">&lt;a target="_blank" href="$1"&gt;</ph>open source software<ph name="END_LINK_CROS_OSS">&lt;/a&gt;</ph>, as is <ph name="BEGIN_LINK_LINUX_OSS">&lt;a target="_blank" href="$1"&gt;</ph>Linux (Beta)<ph name="END_LINK_LINUX_OSS">&lt;/a&gt;</ph>.
+          Chrome OS is made possible by additional <ph name="BEGIN_LINK_CROS_OSS">&lt;a target="_blank" href="$1"&gt;</ph>open source software<ph name="END_LINK_CROS_OSS">&lt;/a&gt;</ph>, as is <ph name="BEGIN_LINK_LINUX_OSS">&lt;a target="_blank" href="$2"&gt;</ph>Linux (Beta)<ph name="END_LINK_LINUX_OSS">&lt;/a&gt;</ph>.
+        </message>
+        <message name="IDS_ABOUT_SAFETY_INFORMATION" desc="The safety label in the About box.">
+          Important use and safety information
         </message>
         <message name="IDS_ABOUT_TERMS_OF_SERVICE" desc="The terms of service label in the About box.">
           Google Chrome OS <ph name="TERMS_OF_SERVICE_LINK">&lt;a target="_blank" href="$1"&gt;</ph>Terms of Service<ph name="END_TERMS_OF_SERVICE_LINK">&lt;/a&gt;</ph>
@@ -521,10 +524,6 @@ Google Chrome is unable to recover your settings.
       </if>
 
       <!-- Extension/App install prompt -->
-      <message name="IDS_EXTENSION_INLINE_INSTALL_PROMPT_TITLE" desc="Titlebar of the extension or app inline installation prompt window">
-        Add to Chrome
-      </message>
-
       <if expr="enable_extensions">
         <!-- Extension installed bubble -->
         <message name="IDS_EXTENSION_INSTALLED_HEADING" desc="Title of the extension-installed bubble. Instructs that the extension was installed.">
@@ -532,6 +531,11 @@ Google Chrome is unable to recover your settings.
         </message>
         <message name="IDS_EXTENSION_INSTALLED_SYNC_PROMO_LINK_NEW" desc="Text of the link to sign in to Chrome from the extension installed bubble. This will be converted to a link, with additional text around it.">
           sign in to Chrome
+        </message>
+
+        <!-- Extension uninstall prompt -->
+        <message name="IDS_EXTENSION_UNINSTALL_PROMPT_REMOVE_DATA_CHECKBOX" desc="Checkbox text to ask the user whether they want to remove associated data at uninstall time. Only used when uninstalling an app associated with a particular website.">
+          Also clear data from Chrome (<ph name="URL">$1<ex>www.google.com</ex></ph>)
         </message>
 
         <!-- Extension context menu -->
@@ -579,6 +583,10 @@ Google Chrome is unable to recover your settings.
 
       <message name="IDS_APPMENU_TOOLTIP_UPDATE_AVAILABLE" desc="The tooltip to show for the browser menu when an update is available">
         Customize and control Google Chrome. Update is available.
+      </message>
+
+      <message name="IDS_APPMENU_TOOLTIP_ALERT" desc="The tooltip to show for the browser menu when a non-update alert is displayed">
+        Customize and control Google Chrome. Something needs your attention - click for details.
       </message>
 
       <message name="IDS_OPEN_IN_CHROME" desc="The text label of the Open in Chrome menu item for the Hosted App app menu">
@@ -692,13 +700,11 @@ Signing in anyway will merge Chrome information like bookmarks, history, and oth
         </message>
       </if>
 
-      <if expr="toolkit_views">
-        <message name="IDS_ENTERPRISE_FORCE_SIGNOUT_EXPLANATION" desc="Text of the reason to sign out">
-          Authentication certificate failed. Please sign in to Google Chrome again as <ph name="USER_NAME">$1<ex>pat@example.com</ex></ph> or contact your administrator for more information. <ph name="ADDITIONAL_EXPLANATION">$2</ph>
+      <!-- about:browser-switch strings -->
+      <if expr="is_win or is_macosx or (is_linux and not is_chromeos)">
+        <message name="IDS_ABOUT_BROWSER_SWITCH_DESCRIPTION" desc="Description shown while waiting for an alternative browser to open">
+          Your system administrator has configured Google Chrome to open an alternative browser to access <ph name="TARGET_URL_HOSTNAME">$1<ex>example.com</ex></ph>.
         </message>
-        <message name="IDS_ENTERPRISE_FORCE_SIGNOUT_EXPLANATION_WITHOUT_USER_NAME" desc="Text of the reason to sign out when there is no valid email address">
-          Authentication certificate failed. Please sign in to Google Chrome again or contact your administrator for more information. <ph name="ADDITIONAL_EXPLANATION">$2</ph>
-      </message>
       </if>
 
       <!-- Signin Email Confirmation tab modal dialog -->
@@ -711,7 +717,7 @@ Signing in anyway will merge Chrome information like bookmarks, history, and oth
       <!-- Chrome Cleanup prompt -->
       <if expr="is_win">
         <message name="IDS_CHROME_CLEANUP_PROMPT_EXPLANATION" desc="Description in the Chrome Cleanup dialog that Chrome browser shows when unwanted software, like ad injectors or software that changes the user's settings without their knowledge, is found on the user's computer. Appears under the title asking 'Remove harmful software?' Actor is Chrome; we are asking, Do you want Chrome to remove harmful software? 'it' is harmful software. User has the option of clicking 'Remove' to proceed with a cleanup, or 'Details' to see more details. The description is also shown on the Chrome Cleanup section of the Settings page, under 'Remove harmful software' title. Preferrably, the translation for this string should parallel IDS_SETTINGS_RESET_CLEANUP_EXPLANATION_CURRENTLY_REMOVING.">
-          There's harmful software on your computer. Chrome can remove it and restore your settings to make your browser work normally again.
+          There's harmful software on your computer. Chrome can remove it, restore your settings, and disable extensions to make your browser work normally again.
         </message>
       </if>
 
@@ -731,6 +737,9 @@ Signing in anyway will merge Chrome information like bookmarks, history, and oth
         </message>
       </if>
       <if expr="chromeos">
+        <message name="IDS_SIGNIN_ERROR_SECONDARY_ACCOUNT_DISPLAY_SOURCE" desc="Context title shown in the notification header of sign-in error notification for Chrome OS Secondary Accounts.">
+          Chrome OS System
+        </message>
         <message name="IDS_SYNC_PASSPHRASE_ERROR_BUBBLE_VIEW_MESSAGE" desc="Message in the sync error bubble view when the user needs to update their sync passphrase.">
           Chrome OS could not sync your data. Please update your Sync passphrase.
         </message>
@@ -754,13 +763,6 @@ Signing in anyway will merge Chrome information like bookmarks, history, and oth
       <message name="IDS_AUTOFILL_DESCRIBE_LOCAL_COPY" desc="Text label that described a Wallet credit card which has been copied to the local Chrome instance.">
         Copied to Chrome
       </message>
-
-      <!-- Chrome OS keyboard overlay-->
-      <if expr="chromeos">
-        <message name="IDS_KEYBOARD_OVERLAY_SHOW_WRENCH_MENU" desc="The text in the keyboard overlay to explain the shortcut that opens the main Chrome menu.">
-          Show Chrome menu
-        </message>
-      </if>
 
       <!-- App list -->
       <if expr="enable_app_list">
@@ -857,7 +859,7 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
 
         <!-- User pod remove sync warning text -->
         <message name="IDS_LOGIN_POD_USER_REMOVE_WARNING_SYNC" desc="Main text shown as a warning when attempting to remove an user.">
-          This person's browsing data will be deleted from this device. To recover the data, sign in to Chrome as $2.
+          This person's browsing data will be deleted from this device. To recover the data, sign in to Chrome as <ph name="USER_EMAIL">$2<ex>foo@example.com</ex></ph>.
         </message>
 
         <!-- Tutorial -->
@@ -939,6 +941,12 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
 
       <!-- content area context menus. Android does not use it -->
       <if expr="not is_android">
+        <message name="IDS_CONTENT_CONTEXT_ACCESSIBILITY_LABELS_BUBBLE_TEXT" desc="The text of a bubble that confirms users allows integrating the accessibility labels service of Google to Chromium.">
+          If an image doesn’t have a useful description, Chrome will try to provide one for you. To create descriptions, images are sent to Google. You can turn this off in settings at any time.
+        </message>
+        <message name="IDS_CONTENT_CONTEXT_ACCESSIBILITY_LABELS_BUBBLE_TEXT_ONCE" desc="The text of a bubble that confirms users allows integrating the accessibility labels service of Google to Chromium just once.">
+          If an image doesn’t have a useful description, Chrome will try to provide one for you. To create descriptions, images are sent to Google.
+        </message>
         <message name="IDS_CONTENT_CONTEXT_SPELLING_BUBBLE_TEXT" desc="The text of a bubble that confirms users allows integrating the spelling service of Google to Chrome.">
           Google Chrome can provide smarter spell-checking by sending what you type in the browser to Google servers, allowing you to use the same spell-checking technology used by Google search.
         </message>
@@ -1012,9 +1020,6 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
       </message>
 
       <!-- User menu errors -->
-      <message name="IDS_SYNC_ERROR_USER_MENU_SUPERVISED_SIGNIN_MESSAGE" desc="Message of the out-of-date signin token error for supervised users in the header of desktop user menu.">
-        Your manager must remove and add you back to Chrome.
-      </message>
       <message name="IDS_SYNC_ERROR_USER_MENU_UPGRADE_MESSAGE" desc="Message of the out-of-date Chrome client error in the header of desktop user menu.">
         Chrome is out of date
       </message>
@@ -1057,10 +1062,10 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
          other {Google Chrome will restart in # seconds}}
       </message>
       <message name="IDS_CRITICAL_NOTIFICATION_TITLE_ALTERNATE" desc="The title for a bubble that appears when there is a critical update and Chrome must restart to install it. The title was previously countng down to an automatic restart and now it has finished. Will only be seen if a web page stops the shutdown process.">
-        You should restart Google Chrome now.
+        You should restart Google Chrome now
       </message>
       <message name="IDS_CRITICAL_NOTIFICATION_TEXT" desc="Explanation text for the bubble that appears when there is a critical update and Chrome must restart to install it.">
-        A special security update for Google Chrome was just applied; you should restart now for it to take effect (we'll restore your tabs).
+        A special security update for Google Chrome was just applied. Restart now and we'll restore your tabs.
       </message>
 
       <!-- Dialog that asks whether user wants to participate in Safe Browsing Extended Reporting -->

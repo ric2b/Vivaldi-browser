@@ -49,6 +49,21 @@ Polymer({
       notify: true,
     },
 
+    /**
+     * Whether preview is currently speaking.
+     * @private
+     */
+    isPreviewing_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /** @private */
+    previewText_: {
+      type: String,
+      value: '',
+    },
+
     /** Whether any voices are loaded. */
     hasVoices: {
       type: Boolean,
@@ -64,18 +79,23 @@ Polymer({
 
   /** @override */
   ready: function() {
+    // Populate the preview text with textToSpeechPreviewInput. Users can change
+    // this to their own value later.
+    this.previewText_ = this.i18n('textToSpeechPreviewInput');
     this.addWebUIListener(
         'all-voice-data-updated', this.populateVoiceList_.bind(this));
     chrome.send('getAllTtsVoiceData');
     this.addWebUIListener(
         'tts-extensions-updated', this.populateExtensionList_.bind(this));
+    this.addWebUIListener(
+        'tts-preview-state-changed', this.onTtsPreviewStateChanged_.bind(this));
     chrome.send('getTtsExtensions');
   },
 
   /**
    * Ticks for the Speech Rate slider. Non-linear as we expect people
    * to want more control near 1.0.
-   * @return Array<SliderTick>
+   * @return Array<cr_slider.SliderTick>
    * @private
    */
   speechRateTicks_: function() {
@@ -91,7 +111,7 @@ Polymer({
   /**
    * Ticks for the Speech Pitch slider. Valid pitches are between 0 and 2,
    * exclusive of 0.
-   * @return Array<SliderTick>
+   * @return Array<cr_slider.SliderTick>
    * @private
    */
   speechPitchTicks_: function() {
@@ -104,7 +124,7 @@ Polymer({
    * Ticks for the Speech Volume slider. Valid volumes are between 0 and
    * 1 (100%), but volumes lower than .2 are excluded as being too quiet.
    * The values are linear between .2 and 1.0.
-   * @return Array<SliderTick>
+   * @return Array<cr_slider.SliderTick>
    * @private
    */
   speechVolumeTicks_: function() {
@@ -116,14 +136,15 @@ Polymer({
   /**
    * Initializes i18n labels for ticks arrays.
    * @param {number} tick The value to make a tick for.
-   * @return {SliderTick}
+   * @return {cr_slider.SliderTick}
    * @private
    */
   initTick_: function(tick) {
-    let value = Math.round(100 * tick);
-    let strValue = value.toFixed(0);
-    let label = strValue === '100' ? this.i18n('defaultPercentage', strValue) :
-                                     this.i18n('percentage', strValue);
+    const value = Math.round(100 * tick);
+    const strValue = value.toFixed(0);
+    const label = strValue === '100' ?
+        this.i18n('defaultPercentage', strValue) :
+        this.i18n('percentage', strValue);
     return {label: label, value: tick, ariaValue: value};
   },
 
@@ -138,16 +159,31 @@ Polymer({
   },
 
   /**
+   * Returns true if voices are loaded and preview is not currently speaking and
+   * there is text to preview.
+   * @param {!Array<TtsHandlerVoice>} voices
+   * @param {boolean} isPreviewing
+   * @param {boolean} previewText
+   * @return {boolean}
+   * @private
+   */
+  enablePreviewButton_: function(voices, isPreviewing, previewText) {
+    const nonWhitespaceRe = /\S+/;
+    const hasPreviewText = nonWhitespaceRe.exec(previewText) != null;
+    return this.hasVoices_(voices) && !isPreviewing && hasPreviewText;
+  },
+
+  /**
    * Populates the list of languages and voices for the UI to use in display.
    * @param {Array<TtsHandlerVoice>} voices
    * @private
    */
   populateVoiceList_: function(voices) {
     // Build a map of language code to human-readable language and voice.
-    let result = {};
-    let languageCodeMap = {};
-    let pref = this.prefs.settings['language']['preferred_languages'];
-    let preferredLangs = pref.value.split(',');
+    const result = {};
+    const languageCodeMap = {};
+    const pref = this.prefs.settings['language']['preferred_languages'];
+    const preferredLangs = pref.value.split(',');
     voices.forEach(voice => {
       if (!result[voice.languageCode]) {
         result[voice.languageCode] = {
@@ -209,6 +245,16 @@ Polymer({
   },
 
   /**
+   * Called when the TTS voice preview state changes between speaking and not
+   * speaking.
+   * @param {boolean} isSpeaking
+   * @private
+   */
+  onTtsPreviewStateChanged_: function(isSpeaking) {
+    this.isPreviewing_ = isSpeaking;
+  },
+
+  /**
    * A function used for sorting languages alphabetically.
    * @param {Object} first A languageToVoices array item.
    * @param {Object} second A languageToVoices array item.
@@ -249,15 +295,16 @@ Polymer({
    * @private
    */
   updateLangToVoicePrefs_: function(langToVoices) {
-    if (langToVoices.length == 0)
+    if (langToVoices.length == 0) {
       return;
-    let allCodes = new Set(
+    }
+    const allCodes = new Set(
         Object.keys(this.prefs.settings['tts']['lang_to_voice_name'].value));
-    for (let code in langToVoices) {
+    for (const code in langToVoices) {
       // Remove from allCodes, to track what we've found a default for.
       allCodes.delete(code);
-      let voices = langToVoices[code].voices;
-      let defaultVoiceForLang =
+      const voices = langToVoices[code].voices;
+      const defaultVoiceForLang =
           this.prefs.settings['tts']['lang_to_voice_name'].value[code];
       if (!defaultVoiceForLang || defaultVoiceForLang === '') {
         // Initialize prefs that have no value
@@ -268,8 +315,9 @@ Polymer({
       }
       // See if the set voice ID is in the voices list, in which case we are
       // done checking this language.
-      if (voices.some(voice => voice.id === defaultVoiceForLang))
+      if (voices.some(voice => voice.id === defaultVoiceForLang)) {
         continue;
+      }
       // Change prefs that point to voices that no longer exist.
       this.set(
           'prefs.settings.tts.lang_to_voice_name.value.' + code,
@@ -278,7 +326,7 @@ Polymer({
     // If there are any items left in allCodes, they are for languages that are
     // no longer covered by the UI. We could now delete them from the
     // lang_to_voice_name pref.
-    for (let code of allCodes) {
+    for (const code of allCodes) {
       this.set('prefs.settings.tts.lang_to_voice_name.value.' + code, '');
     }
   },
@@ -292,8 +340,9 @@ Polymer({
    * @private
    */
   setDefaultPreviewVoiceForLocale_: function(allVoices, languageCodeMap) {
-    if (!allVoices || allVoices.length == 0)
+    if (!allVoices || allVoices.length == 0) {
       return;
+    }
 
     // Force a synchronous render so that we can set the default.
     this.$.previewVoiceOptions.render();
@@ -301,15 +350,16 @@ Polymer({
     // Set something if nothing exists. This useful for new users where
     // sometimes browserProxy.getProspectiveUILanguage() does not complete the
     // callback.
-    if (!this.defaultPreviewVoice)
+    if (!this.defaultPreviewVoice) {
       this.set('defaultPreviewVoice', this.getBestVoiceForLocale_(allVoices));
+    }
 
-    let browserProxy = settings.LanguagesBrowserProxyImpl.getInstance();
+    const browserProxy = settings.LanguagesBrowserProxyImpl.getInstance();
     browserProxy.getProspectiveUILanguage().then(prospectiveUILanguage => {
       let result;
       if (prospectiveUILanguage && prospectiveUILanguage != '' &&
           languageCodeMap[prospectiveUILanguage]) {
-        let code = languageCodeMap[prospectiveUILanguage];
+        const code = languageCodeMap[prospectiveUILanguage];
         // First try the pref value.
         result = this.prefs.settings['tts']['lang_to_voice_name'].value[code];
       }
@@ -343,8 +393,7 @@ Polymer({
   /** @private */
   onPreviewTtsClick_: function() {
     chrome.send(
-        'previewTtsVoice',
-        [this.$.previewInput.value, this.$.previewVoice.value]);
+        'previewTtsVoice', [this.previewText_, this.$.previewVoice.value]);
     chrome.metricsPrivate.recordSparseHashable(
         'TextToSpeech.Settings.PreviewVoiceClicked', this.$.previewVoice.value);
   },
@@ -354,9 +403,9 @@ Polymer({
     // Log the default voice the user selected. Each voice has at most one
     // language, so there's no need to log language as well.
     // The event target is the settings-dropdown-menu.
-    let target = /** @type {{prefStringValue_: function():string}} */
+    const target = /** @type {{prefStringValue_: function():string}} */
         (event.target);
-    let newDefault = target.prefStringValue_();
+    const newDefault = target.prefStringValue_();
     chrome.metricsPrivate.recordSparseHashable(
         'TextToSpeech.Settings.DefaultVoicePicked', newDefault);
   },

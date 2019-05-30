@@ -4,8 +4,11 @@
 
 #include "content/browser/frame_host/keep_alive_handle_factory.h"
 
+#include "base/bind.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/task/post_task.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_features.h"
@@ -39,8 +42,8 @@ class KeepAliveHandleFactory::Context final : public base::RefCounted<Context> {
 
   void DetachLater(base::TimeDelta timeout) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    BrowserThread::PostDelayedTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostDelayedTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&Context::Detach, AsWeakPtr()), timeout);
   }
 

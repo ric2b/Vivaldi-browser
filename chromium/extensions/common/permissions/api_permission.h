@@ -18,8 +18,7 @@ namespace extensions {
 
 class PermissionIDSet;
 class APIPermissionInfo;
-class ChromeAPIPermissions;
-class VivaldiAPIPermissions;
+class PermissionsInfo;
 
 // APIPermission is for handling some complex permissions. Please refer to
 // extensions::SocketPermission as an example.
@@ -97,7 +96,7 @@ class APIPermission {
     kDownloadsInternal = 52,
     kDownloadsOpen = 53,
     kDownloadsShelf = 54,
-    kEasyUnlockPrivate = 55,
+    kDeleted_EasyUnlockPrivate = 55,
     kEchoPrivate = 56,
     kEmbeddedExtensionOptions = 57,
     kEnterprisePlatformKeys = 58,
@@ -133,7 +132,7 @@ class APIPermission {
     kIdltest = 88,
     kIdle = 89,
     kImeWindowEnabled = 90,
-    kInlineInstallPrivate = 91,
+    kDeleted_InlineInstallPrivate = 91,
     kInput = 92,
     kInputMethodPrivate = 93,
     kDeleted_InterceptAllKeys = 94,
@@ -176,7 +175,7 @@ class APIPermission {
     kSocket = 131,
     kStartupPages = 132,
     kStorage = 133,
-    kStreamsPrivate = 134,
+    kDeleted_StreamsPrivate = 134,
     kSyncFileSystem = 135,
     kSystemPrivate = 136,
     kSystemDisplay = 137,
@@ -209,7 +208,7 @@ class APIPermission {
     kWebstoreWidgetPrivate = 164,
     kWebView = 165,
     kWindowShape = 166,
-    kScreenlockPrivate = 167,
+    kDeleted_ScreenlockPrivate = 167,
     kSystemCpu = 168,
     kSystemMemory = 169,
     kSystemNetwork = 170,
@@ -331,16 +330,19 @@ class APIPermission {
   virtual std::unique_ptr<base::Value> ToValue() const = 0;
 
   // Clones this.
-  virtual APIPermission* Clone() const = 0;
+  virtual std::unique_ptr<APIPermission> Clone() const = 0;
 
   // Returns a new API permission which equals this - |rhs|.
-  virtual APIPermission* Diff(const APIPermission* rhs) const = 0;
+  virtual std::unique_ptr<APIPermission> Diff(
+      const APIPermission* rhs) const = 0;
 
   // Returns a new API permission which equals the union of this and |rhs|.
-  virtual APIPermission* Union(const APIPermission* rhs) const = 0;
+  virtual std::unique_ptr<APIPermission> Union(
+      const APIPermission* rhs) const = 0;
 
   // Returns a new API permission which equals the intersect of this and |rhs|.
-  virtual APIPermission* Intersect(const APIPermission* rhs) const = 0;
+  virtual std::unique_ptr<APIPermission> Intersect(
+      const APIPermission* rhs) const = 0;
 
   // IPC functions
   // Writes this into the given IPC message |m|.
@@ -383,14 +385,26 @@ class APIPermissionInfo {
     kFlagSupportsContentCapabilities = 1 << 5,
   };
 
-  typedef APIPermission* (*APIPermissionConstructor)(const APIPermissionInfo*);
+  using APIPermissionConstructor =
+      std::unique_ptr<APIPermission> (*)(const APIPermissionInfo*);
 
   typedef std::set<APIPermission::ID> IDSet;
+
+  // This exists to allow aggregate initialization, so that default values
+  // for flags, etc. can be omitted.
+  // TODO(yoz): Simplify the way initialization is done. APIPermissionInfo
+  // should be the simple data struct.
+  struct InitInfo {
+    APIPermission::ID id;
+    const char* name;
+    int flags;
+    APIPermissionInfo::APIPermissionConstructor constructor;
+  };
 
   ~APIPermissionInfo();
 
   // Creates a APIPermission instance.
-  APIPermission* CreateAPIPermission() const;
+  std::unique_ptr<APIPermission> CreateAPIPermission() const;
 
   int flags() const { return flags_; }
 
@@ -423,25 +437,11 @@ class APIPermissionInfo {
   }
 
  private:
-  // Instances should only be constructed from within a PermissionsProvider.
-  friend class CastAPIPermissions;
-  friend class ChromeAPIPermissions;
-  friend class ExtensionsAPIPermissions;
-  friend class VivaldiAPIPermissions;
+  // Instances should only be constructed from within a PermissionsInfo.
+  friend class PermissionsInfo;
   // Implementations of APIPermission will want to get the permission message,
   // but this class's implementation should be hidden from everyone else.
   friend class APIPermission;
-
-  // This exists to allow aggregate initialization, so that default values
-  // for flags, etc. can be omitted.
-  // TODO(yoz): Simplify the way initialization is done. APIPermissionInfo
-  // should be the simple data struct.
-  struct InitInfo {
-    APIPermission::ID id;
-    const char* name;
-    int flags;
-    APIPermissionInfo::APIPermissionConstructor constructor;
-  };
 
   explicit APIPermissionInfo(const InitInfo& info);
 

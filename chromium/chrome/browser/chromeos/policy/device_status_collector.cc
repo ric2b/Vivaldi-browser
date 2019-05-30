@@ -12,21 +12,24 @@
 #include <limits>
 #include <set>
 #include <sstream>
+#include <utility>
 
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/feature_list.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/optional.h"
 #include "base/posix/eintr_wrapper.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/values.h"
@@ -49,12 +52,14 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/audio/cras_audio_handler.h"
+#include "chromeos/dbus/cryptohome/rpc.pb.h"
+#include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager/idle.pb.h"
 #include "chromeos/dbus/update_engine_client.h"
 #include "chromeos/dbus/util/version_loader.h"
 #include "chromeos/disks/disk_mount_manager.h"
-#include "chromeos/login/login_state.h"
+#include "chromeos/login/login_state/login_state.h"
 #include "chromeos/network/device_state.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state.h"
@@ -77,6 +82,7 @@
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
 #include "components/version_info/version_info.h"
+#include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "storage/browser/fileapi/external_mount_points.h"
@@ -255,6 +261,59 @@ bool ReadAndroidStatus(
   return true;
 }
 
+// Converts the given GetTpmStatusReply to TpmStatusInfo.
+policy::TpmStatusInfo GetTpmStatusReplyToTpmStatusInfo(
+    const base::Optional<cryptohome::BaseReply>& reply) {
+  policy::TpmStatusInfo tpm_status_info;
+
+  if (!reply.has_value()) {
+    LOG(ERROR) << "GetTpmStatus call failed with empty reply.";
+    return tpm_status_info;
+  }
+  if (reply->has_error() &&
+      reply->error() != cryptohome::CRYPTOHOME_ERROR_NOT_SET) {
+    LOG(ERROR) << "GetTpmStatus failed with error: " << reply->error();
+    return tpm_status_info;
+  }
+  if (!reply->HasExtension(cryptohome::GetTpmStatusReply::reply)) {
+    LOG(ERROR)
+        << "GetTpmStatus failed with no GetTpmStatusReply extension in reply.";
+    return tpm_status_info;
+  }
+
+  auto reply_proto = reply->GetExtension(cryptohome::GetTpmStatusReply::reply);
+
+  tpm_status_info.enabled = reply_proto.enabled();
+  tpm_status_info.owned = reply_proto.owned();
+  tpm_status_info.initialized = reply_proto.initialized();
+  tpm_status_info.attestation_prepared = reply_proto.attestation_prepared();
+  tpm_status_info.attestation_enrolled = reply_proto.attestation_enrolled();
+  tpm_status_info.dictionary_attack_counter =
+      reply_proto.dictionary_attack_counter();
+  tpm_status_info.dictionary_attack_threshold =
+      reply_proto.dictionary_attack_threshold();
+  tpm_status_info.dictionary_attack_lockout_in_effect =
+      reply_proto.dictionary_attack_lockout_in_effect();
+  tpm_status_info.dictionary_attack_lockout_seconds_remaining =
+      reply_proto.dictionary_attack_lockout_seconds_remaining();
+  tpm_status_info.boot_lockbox_finalized = reply_proto.boot_lockbox_finalized();
+
+  return tpm_status_info;
+}
+
+void ReadTpmStatus(policy::DeviceStatusCollector::TpmStatusReceiver callback) {
+  // D-Bus calls are allowed only on the UI thread.
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  chromeos::DBusThreadManager::Get()->GetCryptohomeClient()->GetTpmStatus(
+      cryptohome::GetTpmStatusRequest(),
+      base::BindOnce(
+          [](policy::DeviceStatusCollector::TpmStatusReceiver callback,
+             base::Optional<cryptohome::BaseReply> reply) {
+            std::move(callback).Run(GetTpmStatusReplyToTpmStatusInfo(reply));
+          },
+          std::move(callback)));
+}
+
 // Returns the DeviceLocalAccount associated with the current kiosk session.
 // Returns null if there is no active kiosk session, or if that kiosk
 // session has been removed from policy since the session started, in which
@@ -281,13 +340,7 @@ std::unique_ptr<policy::DeviceLocalAccount> GetCurrentKioskDeviceLocalAccount(
 }
 
 base::Version GetPlatformVersion() {
-  int32_t major_version;
-  int32_t minor_version;
-  int32_t bugfix_version;
-  base::SysInfo::OperatingSystemVersionNumbers(&major_version, &minor_version,
-                                               &bugfix_version);
-  return base::Version(base::StringPrintf("%d.%d.%d", major_version,
-                                          minor_version, bugfix_version));
+  return base::Version(base::SysInfo::OperatingSystemVersion());
 }
 
 // Helper routine to convert from Shill-provided signal strength (percent)
@@ -313,6 +366,12 @@ bool IsKioskApp() {
   auto user_type = chromeos::LoginState::Get()->GetLoggedInUserType();
   return user_type == chromeos::LoginState::LOGGED_IN_USER_KIOSK_APP ||
          user_type == chromeos::LoginState::LOGGED_IN_USER_ARC_KIOSK_APP;
+}
+
+// Utility method to turn cpu_temp_fetcher_ to OnceCallback
+std::vector<em::CPUTempInfo> InvokeCpuTempFetcher(
+    policy::DeviceStatusCollector::CPUTempFetcher fetcher) {
+  return fetcher.Run();
 }
 
 }  // namespace
@@ -393,6 +452,18 @@ class GetStatusState : public base::RefCountedThreadSafe<GetStatusState> {
         base::Bind(&GetStatusState::OnAndroidInfoReceived, this));
   }
 
+  void FetchTpmStatus(const policy::DeviceStatusCollector::TpmStatusFetcher&
+                          tpm_status_fetcher) {
+    tpm_status_fetcher.Run(
+        base::BindOnce(&GetStatusState::OnTpmStatusReceived, this));
+  }
+
+  void FetchProbeData(
+      policy::DeviceStatusCollector::ProbeDataFetcher probe_data_fetcher) {
+    std::move(probe_data_fetcher)
+        .Run(base::BindOnce(&GetStatusState::OnProbeDataReceived, this));
+  }
+
  private:
   friend class RefCountedThreadSafe<GetStatusState>;
 
@@ -406,19 +477,25 @@ class GetStatusState : public base::RefCountedThreadSafe<GetStatusState> {
   }
 
   void OnVolumeInfoReceived(const std::vector<em::VolumeInfo>& volume_info) {
-    device_status_->clear_volume_info();
+    device_status_->clear_volume_infos();
     for (const em::VolumeInfo& info : volume_info)
-      *device_status_->add_volume_info() = info;
+      *device_status_->add_volume_infos() = info;
   }
 
   void OnCPUTempInfoReceived(
       const std::vector<em::CPUTempInfo>& cpu_temp_info) {
-    if (cpu_temp_info.empty())
-      DLOG(WARNING) << "Unable to read CPU temp information.";
+    // Only one of OnProbeDataReceived and OnCPUTempInfoReceived should be
+    // called.
+    DCHECK(device_status_->cpu_temp_infos_size() == 0);
 
-    device_status_->clear_cpu_temp_info();
-    for (const em::CPUTempInfo& info : cpu_temp_info)
-      *device_status_->add_cpu_temp_info() = info;
+    DLOG_IF(WARNING, cpu_temp_info.empty())
+        << "Unable to read CPU temp information.";
+    base::Time timestamp = base::Time::Now();
+    for (const em::CPUTempInfo& info : cpu_temp_info) {
+      auto* new_info = device_status_->add_cpu_temp_infos();
+      *new_info = info;
+      new_info->set_timestamp(timestamp.ToJavaTime());
+    }
   }
 
   void OnAndroidInfoReceived(const std::string& status,
@@ -427,6 +504,95 @@ class GetStatusState : public base::RefCountedThreadSafe<GetStatusState> {
         session_status_->mutable_android_status();
     android_status->set_status_payload(status);
     android_status->set_droid_guard_info(droid_guard_info);
+  }
+
+  void OnTpmStatusReceived(const TpmStatusInfo& tpm_status_struct) {
+    // Make sure we edit the state on the right thread.
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+    em::TpmStatusInfo* const tpm_status_proto =
+        device_status_->mutable_tpm_status_info();
+
+    tpm_status_proto->set_enabled(tpm_status_struct.enabled);
+    tpm_status_proto->set_owned(tpm_status_struct.owned);
+    tpm_status_proto->set_tpm_initialized(tpm_status_struct.initialized);
+    tpm_status_proto->set_attestation_prepared(
+        tpm_status_struct.attestation_prepared);
+    tpm_status_proto->set_attestation_enrolled(
+        tpm_status_struct.attestation_enrolled);
+    tpm_status_proto->set_dictionary_attack_counter(
+        tpm_status_struct.dictionary_attack_counter);
+    tpm_status_proto->set_dictionary_attack_threshold(
+        tpm_status_struct.dictionary_attack_threshold);
+    tpm_status_proto->set_dictionary_attack_lockout_in_effect(
+        tpm_status_struct.dictionary_attack_lockout_in_effect);
+    tpm_status_proto->set_dictionary_attack_lockout_seconds_remaining(
+        tpm_status_struct.dictionary_attack_lockout_seconds_remaining);
+    tpm_status_proto->set_boot_lockbox_finalized(
+        tpm_status_struct.boot_lockbox_finalized);
+  }
+
+  void OnProbeDataReceived(
+      const base::Optional<runtime_probe::ProbeResult>& probe_result,
+      const base::circular_deque<std::unique_ptr<SampledData>>& samples) {
+    // Make sure we edit the state on the right thread.
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    // Only one of OnProbeDataReceived and OnCPUTempInfoReceived should be
+    // called.
+    DCHECK(device_status_->cpu_temp_infos_size() == 0);
+
+    // Store CPU measurement samples.
+    for (const std::unique_ptr<SampledData>& sample_data : samples) {
+      for (auto it = sample_data->cpu_samples.begin();
+           it != sample_data->cpu_samples.end(); it++) {
+        auto* new_info = device_status_->add_cpu_temp_infos();
+        *new_info = it->second;
+      }
+    }
+
+    if (!probe_result.has_value())
+      return;
+    if (probe_result.value().error() !=
+        runtime_probe::RUNTIME_PROBE_ERROR_NOT_SET) {
+      return;
+    }
+    if (probe_result.value().battery_size() > 0) {
+      em::PowerStatus* const power_status =
+          device_status_->mutable_power_status();
+      for (const auto& battery : probe_result.value().battery()) {
+        em::BatteryInfo* const battery_info = power_status->add_batteries();
+        battery_info->set_serial(battery.values().serial_number());
+        battery_info->set_manufacturer(battery.values().manufacturer());
+        battery_info->set_cycle_count(battery.values().cycle_count_smart());
+        // uAh to mAh
+        battery_info->set_design_capacity(
+            battery.values().charge_full_design() / 1000);
+        battery_info->set_full_charge_capacity(battery.values().charge_full() /
+                                               1000);
+        // uV to mV:
+        battery_info->set_design_min_voltage(
+            battery.values().voltage_min_design() / 1000);
+
+        for (const std::unique_ptr<SampledData>& sample_data : samples) {
+          auto it = sample_data->battery_samples.find(battery.name());
+          if (it != sample_data->battery_samples.end())
+            battery_info->add_samples()->CheckTypeAndMergeFrom(it->second);
+        }
+      }
+    }
+    if (probe_result.value().storage_size() > 0) {
+      em::StorageStatus* const storage_status =
+          device_status_->mutable_storage_status();
+      for (const auto& storage : probe_result.value().storage()) {
+        em::DiskInfo* const disk_info = storage_status->add_disks();
+        disk_info->set_serial(base::NumberToString(storage.values().serial()));
+        disk_info->set_manufacturer(
+            base::NumberToString(storage.values().manfid()));
+        disk_info->set_model(storage.values().name());
+        disk_info->set_type(storage.values().type());
+        disk_info->set_size(storage.values().size());
+      }
+    }
   }
 
   const scoped_refptr<base::SequencedTaskRunner> task_runner_;
@@ -467,6 +633,7 @@ class DeviceStatusCollector::ActivityStorage {
   // be stored.
   void AddActivityPeriod(Time start,
                          Time end,
+                         Time now,
                          const std::string& active_user_email);
 
   // Clears stored activity periods outside of storage range defined by
@@ -502,7 +669,9 @@ class DeviceStatusCollector::ActivityStorage {
   void ProcessActivityPeriods(const base::DictionaryValue& activity_times,
                               const std::vector<std::string>& reporting_users,
                               base::DictionaryValue* const filtered_times);
-  void StoreChildScreenTime(Time activity_day_start, TimeDelta activity);
+  void StoreChildScreenTime(Time activity_day_start,
+                            TimeDelta activity,
+                            Time now);
 
   // Determine the day key (milliseconds since epoch for corresponding
   // |day_start_| in UTC) for a given |timestamp|.
@@ -520,6 +689,32 @@ class DeviceStatusCollector::ActivityStorage {
 
   DISALLOW_COPY_AND_ASSIGN(ActivityStorage);
 };
+
+TpmStatusInfo::TpmStatusInfo() = default;
+TpmStatusInfo::TpmStatusInfo(const TpmStatusInfo&) = default;
+TpmStatusInfo::TpmStatusInfo(
+    bool enabled,
+    bool owned,
+    bool initialized,
+    bool attestation_prepared,
+    bool attestation_enrolled,
+    int32_t dictionary_attack_counter,
+    int32_t dictionary_attack_threshold,
+    bool dictionary_attack_lockout_in_effect,
+    int32_t dictionary_attack_lockout_seconds_remaining,
+    bool boot_lockbox_finalized)
+    : enabled(enabled),
+      owned(owned),
+      initialized(initialized),
+      attestation_prepared(attestation_prepared),
+      attestation_enrolled(attestation_enrolled),
+      dictionary_attack_counter(dictionary_attack_counter),
+      dictionary_attack_threshold(dictionary_attack_threshold),
+      dictionary_attack_lockout_in_effect(dictionary_attack_lockout_in_effect),
+      dictionary_attack_lockout_seconds_remaining(
+          dictionary_attack_lockout_seconds_remaining),
+      boot_lockbox_finalized(boot_lockbox_finalized) {}
+TpmStatusInfo::~TpmStatusInfo() = default;
 
 DeviceStatusCollector::ActivityStorage::ActivityStorage(
     PrefService* pref_service,
@@ -542,6 +737,7 @@ DeviceStatusCollector::ActivityStorage::~ActivityStorage() = default;
 void DeviceStatusCollector::ActivityStorage::AddActivityPeriod(
     Time start,
     Time end,
+    Time now,
     const std::string& active_user_email) {
   DCHECK(start <= end);
 
@@ -567,7 +763,7 @@ void DeviceStatusCollector::ActivityStorage::AddActivityPeriod(
     if (user_manager::UserManager::Get()->IsLoggedInAsChildUser() &&
         !is_enterprise_reporting_) {
       StoreChildScreenTime(day_start - TimeDelta::FromDays(1),
-                           TimeDelta::FromMilliseconds(activity));
+                           TimeDelta::FromMilliseconds(activity), now);
     }
 
     start = day_start;
@@ -657,7 +853,7 @@ DeviceStatusCollector::ActivityStorage::GetFilteredActivityPeriods(
 std::string DeviceStatusCollector::ActivityStorage::MakeActivityPeriodPrefKey(
     int64_t start,
     const std::string& user_email) {
-  const std::string day_key = base::Int64ToString(start);
+  const std::string day_key = base::NumberToString(start);
   if (user_email.empty())
     return day_key;
 
@@ -723,25 +919,36 @@ int64_t DeviceStatusCollector::ActivityStorage::TimestampToDayKey(
 
 void DeviceStatusCollector::ActivityStorage::StoreChildScreenTime(
     Time activity_day_start,
-    TimeDelta activity) {
+    TimeDelta activity,
+    Time now) {
   DCHECK(user_manager::UserManager::Get()->IsLoggedInAsChildUser() &&
          !is_enterprise_reporting_);
 
   // Today's start time.
-  Time today_start = Time::Now().LocalMidnight() + day_start_;
+  Time today_start = now.LocalMidnight() + day_start_;
+  if (today_start > now)
+    today_start -= TimeDelta::FromDays(1);
+
+  // The activity windows always start and end on the reset time of two
+  // consecutive days, so it is not possible to have a window starting after
+  // the current day's reset time.
+  DCHECK(activity_day_start <= today_start);
 
   TimeDelta previous_activity = TimeDelta::FromMilliseconds(
       pref_service_->GetInteger(prefs::kChildScreenTimeMilliseconds));
 
   // If this activity window belongs to the current day, the screen time pref
   // should be updated.
-  if (activity_day_start >= today_start) {
+  if (activity_day_start == today_start) {
     pref_service_->SetInteger(prefs::kChildScreenTimeMilliseconds,
                               (previous_activity + activity).InMilliseconds());
-    pref_service_->SetTime(prefs::kLastChildScreenTimeSaved, Time::Now());
+    pref_service_->SetTime(prefs::kLastChildScreenTimeSaved, now);
   }
   pref_service_->CommitPendingWrite();
 }
+
+SampledData::SampledData() = default;
+SampledData::~SampledData() = default;
 
 DeviceStatusCollector::DeviceStatusCollector(
     PrefService* pref_service,
@@ -750,6 +957,7 @@ DeviceStatusCollector::DeviceStatusCollector(
     const CPUStatisticsFetcher& cpu_statistics_fetcher,
     const CPUTempFetcher& cpu_temp_fetcher,
     const AndroidStatusFetcher& android_status_fetcher,
+    const TpmStatusFetcher& tpm_status_fetcher,
     TimeDelta activity_day_start,
     bool is_enterprise_reporting)
     : max_stored_past_activity_interval_(kMaxStoredPastActivityInterval),
@@ -762,11 +970,13 @@ DeviceStatusCollector::DeviceStatusCollector(
       cpu_statistics_fetcher_(cpu_statistics_fetcher),
       cpu_temp_fetcher_(cpu_temp_fetcher),
       android_status_fetcher_(android_status_fetcher),
+      tpm_status_fetcher_(tpm_status_fetcher),
       statistics_provider_(provider),
       cros_settings_(chromeos::CrosSettings::Get()),
-      power_manager_(
-          chromeos::DBusThreadManager::Get()->GetPowerManagerClient()),
+      power_manager_(chromeos::PowerManagerClient::Get()),
       session_manager_(session_manager::SessionManager::Get()),
+      runtime_probe_(
+          chromeos::DBusThreadManager::Get()->GetRuntimeProbeClient()),
       is_enterprise_reporting_(is_enterprise_reporting),
       activity_day_start_(activity_day_start),
       task_runner_(nullptr),
@@ -787,6 +997,13 @@ DeviceStatusCollector::DeviceStatusCollector(
 
   if (android_status_fetcher_.is_null())
     android_status_fetcher_ = base::Bind(&ReadAndroidStatus);
+
+  if (tpm_status_fetcher_.is_null())
+    tpm_status_fetcher_ = base::BindRepeating(&ReadTpmStatus);
+
+  if (probe_data_fetcher_.is_null())
+    probe_data_fetcher_ = base::BindRepeating(
+        &DeviceStatusCollector::FetchProbeData, weak_factory_.GetWeakPtr());
 
   idle_poll_timer_.Start(FROM_HERE,
                          TimeDelta::FromSeconds(kIdlePollIntervalSeconds), this,
@@ -820,10 +1037,20 @@ DeviceStatusCollector::DeviceStatusCollector(
       chromeos::kReportOsUpdateStatus, callback);
   running_kiosk_app_subscription_ = cros_settings_->AddSettingsObserver(
       chromeos::kReportRunningKioskApp, callback);
+  power_status_subscription_ = cros_settings_->AddSettingsObserver(
+      chromeos::kReportDevicePowerStatus, callback);
+  storage_status_subscription_ = cros_settings_->AddSettingsObserver(
+      chromeos::kReportDeviceStorageStatus, callback);
+  board_status_subscription_ = cros_settings_->AddSettingsObserver(
+      chromeos::kReportDeviceBoardStatus, callback);
 
   // Watch for changes on the device state to calculate the child's active time.
   power_manager_->AddObserver(this);
-  session_manager_->AddObserver(this);
+  if (base::FeatureList::IsEnabled(features::kUsageTimeStateNotifier)) {
+    chromeos::UsageTimeStateNotifier::GetInstance()->AddObserver(this);
+  } else {
+    session_manager_->AddObserver(this);
+  }
 
   // Fetch the current values of the policies.
   UpdateReportingSettings();
@@ -866,20 +1093,22 @@ DeviceStatusCollector::DeviceStatusCollector(
 
 DeviceStatusCollector::~DeviceStatusCollector() {
   power_manager_->RemoveObserver(this);
-  session_manager_->RemoveObserver(this);
+  if (base::FeatureList::IsEnabled(features::kUsageTimeStateNotifier)) {
+    chromeos::UsageTimeStateNotifier::GetInstance()->RemoveObserver(this);
+  } else {
+    session_manager_->RemoveObserver(this);
+  }
 }
 
 // static
 void DeviceStatusCollector::RegisterPrefs(PrefRegistrySimple* registry) {
-  registry->RegisterDictionaryPref(prefs::kDeviceActivityTimes,
-                                   std::make_unique<base::DictionaryValue>());
+  registry->RegisterDictionaryPref(prefs::kDeviceActivityTimes);
 }
 
 // static
 void DeviceStatusCollector::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kReportArcStatusEnabled, false);
-  registry->RegisterDictionaryPref(prefs::kUserActivityTimes,
-                                   std::make_unique<base::DictionaryValue>());
+  registry->RegisterDictionaryPref(prefs::kUserActivityTimes);
   registry->RegisterTimePref(prefs::kLastChildScreenTimeReset, Time());
   registry->RegisterTimePref(prefs::kLastChildScreenTimeSaved, Time());
   registry->RegisterIntegerPref(prefs::kChildScreenTimeMilliseconds, 0);
@@ -895,9 +1124,7 @@ TimeDelta DeviceStatusCollector::GetActiveChildScreenTime() {
 }
 
 void DeviceStatusCollector::CheckIdleState() {
-  CalculateIdleState(kIdleStateThresholdSeconds,
-                     base::Bind(&DeviceStatusCollector::IdleStateCallback,
-                                base::Unretained(this)));
+  ProcessIdleState(ui::CalculateIdleState(kIdleStateThresholdSeconds));
 }
 
 void DeviceStatusCollector::UpdateReportingSettings() {
@@ -947,6 +1174,18 @@ void DeviceStatusCollector::UpdateReportingSettings() {
                                   &report_hardware_status_)) {
     report_hardware_status_ = is_enterprise_reporting_;
   }
+  if (!cros_settings_->GetBoolean(chromeos::kReportDevicePowerStatus,
+                                  &report_power_status_)) {
+    report_power_status_ = false;
+  }
+  if (!cros_settings_->GetBoolean(chromeos::kReportDeviceStorageStatus,
+                                  &report_storage_status_)) {
+    report_storage_status_ = false;
+  }
+  if (!cros_settings_->GetBoolean(chromeos::kReportDeviceBoardStatus,
+                                  &report_board_status_)) {
+    report_board_status_ = false;
+  }
 
   if (!report_hardware_status_) {
     ClearCachedResourceUsage();
@@ -977,7 +1216,7 @@ void DeviceStatusCollector::ClearCachedResourceUsage() {
   last_cpu_idle_ = 0;
 }
 
-void DeviceStatusCollector::IdleStateCallback(ui::IdleState state) {
+void DeviceStatusCollector::ProcessIdleState(ui::IdleState state) {
   // Do nothing if device activity reporting is disabled or if it's a child
   // account. Usage time for child accounts are calculated differently.
   if (!report_activity_times_ || !is_enterprise_reporting_ ||
@@ -998,10 +1237,11 @@ void DeviceStatusCollector::IdleStateCallback(ui::IdleState state) {
     if (active_seconds < 0 ||
         active_seconds >= static_cast<int>((2 * kIdlePollIntervalSeconds))) {
       activity_storage_->AddActivityPeriod(
-          now - TimeDelta::FromSeconds(kIdlePollIntervalSeconds), now,
+          now - TimeDelta::FromSeconds(kIdlePollIntervalSeconds), now, now,
           user_email);
     } else {
-      activity_storage_->AddActivityPeriod(last_idle_check_, now, user_email);
+      activity_storage_->AddActivityPeriod(last_idle_check_, now, now,
+                                           user_email);
     }
 
     activity_storage_->PruneActivityPeriods(
@@ -1018,8 +1258,20 @@ void DeviceStatusCollector::OnSessionStateChanged() {
       session_manager::SessionState::ACTIVE;
 }
 
+void DeviceStatusCollector::OnUsageTimeStateChange(
+    chromeos::UsageTimeStateNotifier::UsageTimeState state) {
+  UpdateChildUsageTime();
+  last_state_active_ =
+      state == chromeos::UsageTimeStateNotifier::UsageTimeState::ACTIVE;
+}
+
 void DeviceStatusCollector::ScreenIdleStateChanged(
     const power_manager::ScreenIdleState& state) {
+  // This logic are going to be done by OnUsageTimeStateChange method if
+  // UsageTimeStateNotifier feature is enabled.
+  if (base::FeatureList::IsEnabled(features::kUsageTimeStateNotifier))
+    return;
+
   UpdateChildUsageTime();
   // It is active if screen is on and if the session is also active.
   last_state_active_ =
@@ -1029,17 +1281,33 @@ void DeviceStatusCollector::ScreenIdleStateChanged(
 
 void DeviceStatusCollector::SuspendImminent(
     power_manager::SuspendImminent::Reason reason) {
+  // This logic are going to be done by OnUsageTimeStateChange method if
+  // UsageTimeStateNotifier feature is enabled.
+  if (base::FeatureList::IsEnabled(features::kUsageTimeStateNotifier))
+    return;
+
   UpdateChildUsageTime();
   // Device is going to be suspeded, so it won't be active.
   last_state_active_ = false;
 }
 
 void DeviceStatusCollector::SuspendDone(const base::TimeDelta& sleep_duration) {
+  // This logic are going to be done by OnUsageTimeStateChange method if
+  // UsageTimeStateNotifier feature is enabled.
+  if (base::FeatureList::IsEnabled(features::kUsageTimeStateNotifier))
+    return;
+
   UpdateChildUsageTime();
   // Device is returning from suspension, so it is considered active if the
   // session is also active.
   last_state_active_ = session_manager_->session_state() ==
                        session_manager::SessionState::ACTIVE;
+}
+
+void DeviceStatusCollector::PowerChanged(
+    const power_manager::PowerSupplyProperties& prop) {
+  if (!power_status_callback_.is_null())
+    std::move(power_status_callback_).Run(prop);
 }
 
 void DeviceStatusCollector::UpdateChildUsageTime() {
@@ -1048,16 +1316,13 @@ void DeviceStatusCollector::UpdateChildUsageTime() {
     return;
   }
 
-  if (last_active_check_.is_null()) {
-    last_active_check_ = GetCurrentTime();
-    return;
-  }
-
   // Only child accounts should be using this method.
   CHECK(user_manager::UserManager::Get()->IsLoggedInAsChildUser());
 
   Time now = GetCurrentTime();
   Time reset_time = now.LocalMidnight() + activity_day_start_;
+  if (reset_time > now)
+    reset_time -= TimeDelta::FromDays(1);
   // Reset screen time if it has not been reset today.
   if (reset_time > pref_service_->GetTime(prefs::kLastChildScreenTimeReset)) {
     pref_service_->SetTime(prefs::kLastChildScreenTimeReset, now);
@@ -1065,9 +1330,20 @@ void DeviceStatusCollector::UpdateChildUsageTime() {
     pref_service_->CommitPendingWrite();
   }
 
-  if (last_state_active_) {
-    activity_storage_->AddActivityPeriod(last_active_check_, now,
-                                         GetUserForActivityReporting());
+  if (!last_active_check_.is_null() && last_state_active_) {
+    // If it's been too long since the last report, or if the activity is
+    // negative (which can happen when the clock changes), assume a single
+    // interval of activity. This is the same strategy used to enterprise users.
+    base::TimeDelta active_seconds = now - last_active_check_;
+    if (active_seconds < base::TimeDelta::FromSeconds(0) ||
+        active_seconds >= (2 * kUpdateChildActiveTimeInterval)) {
+      activity_storage_->AddActivityPeriod(now - kUpdateChildActiveTimeInterval,
+                                           now, now,
+                                           GetUserForActivityReporting());
+    } else {
+      activity_storage_->AddActivityPeriod(last_active_check_, now, now,
+                                           GetUserForActivityReporting());
+    }
 
     activity_storage_->PruneActivityPeriods(
         now, max_stored_past_activity_interval_,
@@ -1112,10 +1388,11 @@ void DeviceStatusCollector::SampleResourceUsage() {
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       cpu_statistics_fetcher_,
       base::Bind(&DeviceStatusCollector::ReceiveCPUStatistics,
-                 weak_factory_.GetWeakPtr()));
+                 weak_factory_.GetWeakPtr(), base::Time::Now()));
 }
 
-void DeviceStatusCollector::ReceiveCPUStatistics(const std::string& stats) {
+void DeviceStatusCollector::ReceiveCPUStatistics(const base::Time& timestamp,
+                                                 const std::string& stats) {
   int cpu_usage_percent = 0;
   if (stats.empty()) {
     DLOG(WARNING) << "Unable to read CPU statistics";
@@ -1166,6 +1443,150 @@ void DeviceStatusCollector::ReceiveCPUStatistics(const std::string& stats) {
   // sample.
   if (resource_usage_.size() > kMaxResourceUsageSamples)
     resource_usage_.pop_front();
+
+  std::unique_ptr<SampledData> sample = std::make_unique<SampledData>();
+  sample->timestamp = base::Time::Now();
+
+  if (report_power_status_) {
+    runtime_probe::ProbeRequest request;
+    request.add_categories(runtime_probe::ProbeRequest::battery);
+    runtime_probe_->ProbeCategories(
+        request, base::BindOnce(&DeviceStatusCollector::SampleProbeData,
+                                weak_factory_.GetWeakPtr(), std::move(sample),
+                                SamplingProbeResultCallback()));
+  } else {
+    base::PostTaskWithTraitsAndReplyWithResult(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+        base::BindOnce(&InvokeCpuTempFetcher, cpu_temp_fetcher_),
+        base::BindOnce(&DeviceStatusCollector::ReceiveCPUTemperature,
+                       weak_factory_.GetWeakPtr(), std::move(sample),
+                       SamplingCallback()));
+  }
+}
+
+void DeviceStatusCollector::SampleProbeData(
+    std::unique_ptr<SampledData> sample,
+    SamplingProbeResultCallback callback,
+    base::Optional<runtime_probe::ProbeResult> result) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!result.has_value())
+    return;
+  if (result.value().error() != runtime_probe::RUNTIME_PROBE_ERROR_NOT_SET)
+    return;
+
+  if (result.value().battery_size() == 0)
+    return;
+
+  for (const auto& battery : result.value().battery()) {
+    enterprise_management::BatterySample battery_sample;
+    battery_sample.set_timestamp(sample->timestamp.ToJavaTime());
+    // Convert uV to mV
+    battery_sample.set_voltage(battery.values().voltage_now() / 1000);
+    // Convert uAh to mAh
+    battery_sample.set_remaining_capacity(battery.values().charge_now() / 1000);
+    // Convert 0.1 Kelvin to Celsius
+    battery_sample.set_temperature(
+        (battery.values().temperature_smart() - 2731) / 10);
+    sample->battery_samples[battery.name()] = battery_sample;
+  }
+  SamplingCallback completion_callback;
+  if (!callback.is_null())
+    completion_callback = base::BindOnce(std::move(callback), result);
+
+  // PowerManagerClient::Observer::PowerChanged can be called as a result of
+  // power_manager_->RequestStatusUpdate() as well as for other reasons,
+  // so we store power_status_callback_ here instead of triggering
+  // SampleDischargeRate from PowerChanged().
+  DCHECK(power_status_callback_.is_null());  // Previous sampling is completed.
+
+  power_status_callback_ = base::BindOnce(
+      &DeviceStatusCollector::SampleDischargeRate, weak_factory_.GetWeakPtr(),
+      std::move(sample), std::move(completion_callback));
+  power_manager_->RequestStatusUpdate();
+}
+
+void DeviceStatusCollector::SampleDischargeRate(
+    std::unique_ptr<SampledData> sample,
+    SamplingCallback callback,
+    const power_manager::PowerSupplyProperties& prop) {
+  if (prop.has_battery_discharge_rate()) {
+    int discharge_rate_mW =
+        static_cast<int>(prop.battery_discharge_rate() * 1000);
+    for (auto it = sample->battery_samples.begin();
+         it != sample->battery_samples.end(); it++) {
+      it->second.set_discharge_rate(discharge_rate_mW);
+    }
+  }
+
+  if (prop.has_battery_percent() && prop.battery_percent() >= 0) {
+    int percent = static_cast<int>(prop.battery_percent());
+    for (auto it = sample->battery_samples.begin();
+         it != sample->battery_samples.end(); it++) {
+      it->second.set_charge_rate(percent);
+    }
+  }
+
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+      base::BindOnce(&InvokeCpuTempFetcher, cpu_temp_fetcher_),
+      base::BindOnce(&DeviceStatusCollector::ReceiveCPUTemperature,
+                     weak_factory_.GetWeakPtr(), std::move(sample),
+                     std::move(callback)));
+}
+
+void DeviceStatusCollector::ReceiveCPUTemperature(
+    std::unique_ptr<SampledData> sample,
+    SamplingCallback callback,
+    std::vector<em::CPUTempInfo> measurements) {
+  auto timestamp = sample->timestamp.ToJavaTime();
+  for (const auto& measurement : measurements) {
+    sample->cpu_samples[measurement.cpu_label()] = measurement;
+    sample->cpu_samples[measurement.cpu_label()].set_timestamp(timestamp);
+  }
+  AddDataSample(std::move(sample), std::move(callback));
+}
+
+void DeviceStatusCollector::AddDataSample(std::unique_ptr<SampledData> sample,
+                                          SamplingCallback callback) {
+  sampled_data_.push_back(std::move(sample));
+
+  // If our cache of samples is full, throw out old samples to make room for new
+  // sample.
+  if (sampled_data_.size() > kMaxResourceUsageSamples)
+    sampled_data_.pop_front();
+  // We have two code paths that end here. One is regular sampling, that does
+  // not have final callback, and full report request, that would use callback
+  // to receive ProbeResponse.
+  if (!callback.is_null())
+    std::move(callback).Run();
+}
+
+void DeviceStatusCollector::FetchProbeData(
+    policy::DeviceStatusCollector::ProbeDataReceiver callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  runtime_probe::ProbeRequest request;
+  if (report_power_status_)
+    request.add_categories(runtime_probe::ProbeRequest::battery);
+  if (report_storage_status_)
+    request.add_categories(runtime_probe::ProbeRequest::storage);
+
+  auto sample = std::make_unique<SampledData>();
+  sample->timestamp = base::Time::Now();
+  auto completion_callback =
+      base::BindOnce(&DeviceStatusCollector::OnProbeDataFetched,
+                     weak_factory_.GetWeakPtr(), std::move(callback));
+
+  runtime_probe_->ProbeCategories(
+      request, base::BindOnce(&DeviceStatusCollector::SampleProbeData,
+                              weak_factory_.GetWeakPtr(), std::move(sample),
+                              std::move(completion_callback)));
+}
+
+void DeviceStatusCollector::OnProbeDataFetched(
+    policy::DeviceStatusCollector::ProbeDataReceiver callback,
+    base::Optional<runtime_probe::ProbeResult> reply) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  std::move(callback).Run(reply, sampled_data_);
 }
 
 void DeviceStatusCollector::ReportingUsersChanged() {
@@ -1223,7 +1644,7 @@ bool DeviceStatusCollector::GetActivityTimes(
     int64_t end_timestamp =
         activity_period.start_timestamp + Time::kMillisecondsPerDay;
 
-    em::ActiveTimePeriod* active_period = status->add_active_period();
+    em::ActiveTimePeriod* active_period = status->add_active_periods();
     em::TimePeriod* period = active_period->mutable_time_period();
     period->set_start_timestamp(activity_period.start_timestamp);
     period->set_end_timestamp(end_timestamp);
@@ -1277,6 +1698,27 @@ bool DeviceStatusCollector::GetBootMode(em::DeviceStatusReportRequest* status) {
   return anything_reported;
 }
 
+bool DeviceStatusCollector::GetWriteProtectSwitch(
+    em::DeviceStatusReportRequest* status) {
+  std::string firmware_write_protect;
+  if (!statistics_provider_->GetMachineStatistic(
+          chromeos::system::kFirmwareWriteProtectBootKey,
+          &firmware_write_protect)) {
+    return false;
+  }
+
+  if (firmware_write_protect ==
+      chromeos::system::kFirmwareWriteProtectBootValueOff) {
+    status->set_write_protect_switch(false);
+  } else if (firmware_write_protect ==
+             chromeos::system::kFirmwareWriteProtectBootValueOn) {
+    status->set_write_protect_switch(true);
+  } else {
+    return false;
+  }
+  return true;
+}
+
 bool DeviceStatusCollector::GetNetworkInterfaces(
     em::DeviceStatusReportRequest* status) {
   // Maps shill device type strings to proto enum constants.
@@ -1319,17 +1761,17 @@ bool DeviceStatusCollector::GetNetworkInterfaces(
   for (device = device_list.begin(); device != device_list.end(); ++device) {
     // Determine the type enum constant for |device|.
     size_t type_idx = 0;
-    for (; type_idx < arraysize(kDeviceTypeMap); ++type_idx) {
+    for (; type_idx < base::size(kDeviceTypeMap); ++type_idx) {
       if ((*device)->type() == kDeviceTypeMap[type_idx].type_string)
         break;
     }
 
     // If the type isn't in |kDeviceTypeMap|, the interface is not relevant for
     // reporting. This filters out VPN devices.
-    if (type_idx >= arraysize(kDeviceTypeMap))
+    if (type_idx >= base::size(kDeviceTypeMap))
       continue;
 
-    em::NetworkInterface* interface = status->add_network_interface();
+    em::NetworkInterface* interface = status->add_network_interfaces();
     interface->set_type(kDeviceTypeMap[type_idx].type_constant);
     if (!(*device)->mac_address().empty())
       interface->set_mac_address((*device)->mac_address());
@@ -1361,7 +1803,7 @@ bool DeviceStatusCollector::GetNetworkInterfaces(
     em::NetworkState::ConnectionState connection_state_enum =
         em::NetworkState::UNKNOWN;
     const std::string connection_state_string(state->connection_state());
-    for (size_t i = 0; i < arraysize(kConnectionStateMap); ++i) {
+    for (size_t i = 0; i < base::size(kConnectionStateMap); ++i) {
       if (connection_state_string == kConnectionStateMap[i].state_string) {
         connection_state_enum = kConnectionStateMap[i].state_constant;
         break;
@@ -1369,7 +1811,7 @@ bool DeviceStatusCollector::GetNetworkInterfaces(
     }
 
     // Copy fields from NetworkState into the status report.
-    em::NetworkState* proto_state = status->add_network_state();
+    em::NetworkState* proto_state = status->add_network_states();
     proto_state->set_connection_state(connection_state_enum);
     anything_reported = true;
 
@@ -1409,7 +1851,7 @@ bool DeviceStatusCollector::GetUsers(em::DeviceStatusReportRequest* status) {
     if (!user->HasGaiaAccount())
       continue;
 
-    em::DeviceUser* device_user = status->add_user();
+    em::DeviceUser* device_user = status->add_users();
     if (chromeos::ChromeUserManager::Get()->ShouldReportUser(
             user->GetAccountId().GetUserEmail())) {
       device_user->set_type(em::DeviceUser::USER_TYPE_MANAGED);
@@ -1429,24 +1871,33 @@ bool DeviceStatusCollector::GetHardwareStatus(
   // Sample disk volume info in a background thread.
   state->SampleVolumeInfo(volume_info_fetcher_);
 
-  // Sample CPU temperature in a background thread.
-  state->SampleCPUTempInfo(cpu_temp_fetcher_);
-
   // Add CPU utilization and free RAM. Note that these stats are sampled in
   // regular intervals. Unlike CPU temp and volume info these are not one-time
   // sampled values, hence the difference in logic.
   status->set_system_ram_total(base::SysInfo::AmountOfPhysicalMemory());
-  status->clear_system_ram_free();
-  status->clear_cpu_utilization_pct();
+  status->clear_system_ram_free_samples();
+  status->clear_cpu_utilization_pct_samples();
   for (const ResourceUsage& usage : resource_usage_) {
-    status->add_cpu_utilization_pct(usage.cpu_usage_percent);
-    status->add_system_ram_free(usage.bytes_of_ram_free);
+    status->add_cpu_utilization_pct_samples(usage.cpu_usage_percent);
+    status->add_system_ram_free_samples(usage.bytes_of_ram_free);
   }
 
   // Get the current device sound volume level.
   chromeos::CrasAudioHandler* audio_handler = chromeos::CrasAudioHandler::Get();
   status->set_sound_volume(audio_handler->GetOutputVolumePercent());
 
+  // Fetch TPM status information on a background thread.
+  state->FetchTpmStatus(tpm_status_fetcher_);
+
+  // clear
+  status->clear_cpu_temp_infos();
+
+  if (report_power_status_ || report_storage_status_) {
+    state->FetchProbeData(probe_data_fetcher_);
+  } else {
+    // Sample CPU temperature in a background thread.
+    state->SampleCPUTempInfo(cpu_temp_fetcher_);
+  }
   return true;
 }
 
@@ -1587,8 +2038,10 @@ void DeviceStatusCollector::GetDeviceStatus(
   if (report_users_)
     anything_reported |= GetUsers(status);
 
-  if (report_hardware_status_)
+  if (report_hardware_status_) {
     anything_reported |= GetHardwareStatus(status, state);
+    anything_reported |= GetWriteProtectSwitch(status);
+  }
 
   if (report_os_update_status_)
     anything_reported |= GetOsUpdateStatus(status);

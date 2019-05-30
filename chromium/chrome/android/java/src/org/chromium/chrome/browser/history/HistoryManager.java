@@ -35,6 +35,7 @@ import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
 import org.chromium.chrome.browser.preferences.PrefChangeRegistrar.PrefObserver;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
+import org.chromium.chrome.browser.preferences.privacy.ClearBrowsingDataTabsFragment;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
@@ -42,7 +43,7 @@ import org.chromium.chrome.browser.snackbar.Snackbar;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
+import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.util.ConversionUtils;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.widget.selection.SelectableListLayout;
@@ -124,8 +125,8 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
         // 3. Initialize toolbar.
         mToolbar = (HistoryManagerToolbar) mSelectableListLayout.initializeToolbar(
                 R.layout.history_toolbar, mSelectionDelegate, R.string.menu_history, null,
-                R.id.normal_menu_group, R.id.selection_mode_menu_group,
-                R.color.modern_primary_color, this, true, isSeparateActivity);
+                R.id.normal_menu_group, R.id.selection_mode_menu_group, this, true,
+                isSeparateActivity);
         mToolbar.setManager(this);
         mToolbar.initializeSearchView(this, R.string.history_manager_search, R.id.search_menu_id);
         mToolbar.setInfoMenuItem(R.id.info_menu_id);
@@ -221,11 +222,25 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
             recordSelectionCountHistorgram("Remove");
             recordUserActionWithOptionalSearch("RemoveSelected");
 
+            int numItemsRemoved = 0;
+            HistoryItem lastItemRemoved = null;
             for (HistoryItem historyItem : mSelectionDelegate.getSelectedItems()) {
                 mHistoryAdapter.markItemForRemoval(historyItem);
+                numItemsRemoved++;
+                lastItemRemoved = historyItem;
             }
+
             mHistoryAdapter.removeItems();
             mSelectionDelegate.clearSelection();
+
+            if (numItemsRemoved == 1) {
+                assert lastItemRemoved != null;
+                announceItemRemoved(lastItemRemoved);
+            } else if (numItemsRemoved > 1) {
+                mRecyclerView.announceForAccessibility(mRecyclerView.getContext().getString(
+                        R.string.multiple_history_items_deleted, numItemsRemoved));
+            }
+
             return true;
         } else if (item.getItemId() == R.id.search_menu_id) {
             mHistoryAdapter.removeHeader();
@@ -284,6 +299,12 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
         }
         mHistoryAdapter.markItemForRemoval(item);
         mHistoryAdapter.removeItems();
+        announceItemRemoved(item);
+    }
+
+    private void announceItemRemoved(HistoryItem item) {
+        mRecyclerView.announceForAccessibility(
+                mRecyclerView.getContext().getString(R.string.delete_message, item.getTitle()));
     }
 
     /**
@@ -356,8 +377,7 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
      */
     public void openClearBrowsingDataPreference() {
         recordUserAction("ClearBrowsingData");
-        Intent intent = PreferencesLauncher.createIntentForClearBrowsingDataPage(mActivity);
-        IntentUtils.safeStartActivity(mActivity, intent);
+        PreferencesLauncher.launchSettingsPage(mActivity, ClearBrowsingDataTabsFragment.class);
     }
 
     @Override

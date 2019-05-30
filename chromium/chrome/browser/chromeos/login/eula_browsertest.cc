@@ -12,6 +12,7 @@
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "chrome/browser/chromeos/login/test/js_checker.h"
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
@@ -101,7 +102,7 @@ class EulaTest : public OobeBaseTest {
     // would not hit the embedded test server.
     const GURL fake_eula_url =
         embedded_test_server()->base_url().Resolve(kFakeOnlineEulaPath);
-    JS().Evaluate(
+    test::OobeJS().Evaluate(
         base::StringPrintf("loadTimeData.overrideValues({eulaOnlineUrl: '%s'});"
                            "Oobe.updateLocalizedContent();",
                            fake_eula_url.spec().c_str()));
@@ -132,7 +133,7 @@ class EulaTest : public OobeBaseTest {
   content::WebContents* FindEulaContents() {
     // Tag the Eula webview in use with a unique name.
     constexpr char kUniqueEulaWebviewName[] = "unique-eula-webview-name";
-    JS().Evaluate(base::StringPrintf(
+    test::OobeJS().Evaluate(base::StringPrintf(
         "(function(){"
         "  var eulaWebView = $('oobe-eula-md').$.crosEulaFrame;"
         "  eulaWebView.name = '%s';"

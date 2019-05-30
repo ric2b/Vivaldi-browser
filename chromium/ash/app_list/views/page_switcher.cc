@@ -8,8 +8,8 @@
 #include <memory>
 #include <utility>
 
+#include "ash/app_list/app_list_metrics.h"
 #include "ash/app_list/pagination_model.h"
-#include "ash/public/cpp/app_list/app_list_constants.h"
 #include "base/i18n/number_formatting.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
@@ -231,7 +231,7 @@ void PageSwitcher::Layout() {
 
 void PageSwitcher::ButtonPressed(views::Button* sender,
                                  const ui::Event& event) {
-  if (!model_)
+  if (!model_ || ignore_button_press_)
     return;
 
   for (int i = 0; i < buttons_->child_count(); ++i) {

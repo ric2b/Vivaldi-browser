@@ -16,7 +16,7 @@
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/visibility.h"
 #include "content/public/common/frame_navigate_params.h"
-#include "content/public/common/resource_load_info.mojom.h"
+#include "content/public/common/resource_load_info.mojom-forward.h"
 #include "content/public/common/resource_type.h"
 #include "ipc/ipc_listener.h"
 #include "mojo/public/cpp/system/message_pipe.h"
@@ -25,7 +25,6 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
-#include "ui/gfx/range/range.h"
 
 namespace blink {
 namespace mojom {
@@ -328,6 +327,12 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // failure methods will also be invoked.
   virtual void NavigationStopped() {}
 
+  // This method is invoked when the WebContents reloads all the LoFi images in
+  // the frame. LoFi is a type of Preview where Chrome shows gray boxes in place
+  // of the images on a webpage in order to conserve data for data-sensitive
+  // users. See http://bit.ly/LoFiPublicDoc.
+  virtual void DidReloadLoFiImages() {}
+
   // Called when there has been direct user interaction with the WebContents.
   // The type argument specifies the kind of interaction. Direct user input
   // signalled through this callback includes:
@@ -350,6 +355,21 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // Invoked when the given frame changes its window.name property.
   virtual void FrameNameChanged(RenderFrameHost* render_frame_host,
                                 const std::string& name) {}
+
+  // Called when the sticky user activation bit has been set on the frame.
+  // This will not be called for new RenderFrameHosts whose underlying
+  // FrameTreeNode was already activated. This should not be used to determine a
+  // RenderFrameHost's user activation state.
+  virtual void FrameReceivedFirstUserActivation(
+      RenderFrameHost* render_frame_host) {}
+
+  // Invoked when the display state of the frame changes.
+  virtual void FrameDisplayStateChanged(RenderFrameHost* render_frame_host,
+                                        bool is_display_none) {}
+
+  // Invoked when a frame changes size.
+  virtual void FrameSizeChanged(RenderFrameHost* render_frame_host,
+                                const gfx::Size& frame_size) {}
 
   // This method is invoked when the title of the WebContents is set. Note that
   // |entry| may be null if the web page whose title changed has not yet had a
@@ -385,6 +405,11 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   virtual void PluginHungStatusChanged(int plugin_child_id,
                                        const base::FilePath& plugin_path,
                                        bool is_hung) {}
+
+  // Notifies that an inner WebContents instance has been created with the
+  // observed WebContents as its container. |inner_web_contents| has not been
+  // added to the WebContents tree at this point, but can be observed safely.
+  virtual void InnerWebContentsCreated(WebContents* inner_web_contents) {}
 
   // Invoked when WebContents::Clone() was used to clone a WebContents.
   virtual void DidCloneToNewWebContents(WebContents* old_web_contents,
@@ -432,9 +457,11 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // Invoked before a form repost warning is shown.
   virtual void BeforeFormRepostWarningShow() {}
 
-  // Invoked when the beforeunload handler fires. The time is from the renderer
-  // process.
-  virtual void BeforeUnloadFired(const base::TimeTicks& proceed_time) {}
+  // Invoked when the beforeunload handler fires. |proceed| is set to true if
+  // the beforeunload can safely proceed, otherwise it should be interrupted.
+  // The time is from the renderer process.
+  virtual void BeforeUnloadFired(bool proceed,
+                                 const base::TimeTicks& proceed_time) {}
 
   // Invoked when a user cancels a before unload dialog.
   virtual void BeforeUnloadDialogCancelled() {}
@@ -449,11 +476,6 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
 
   // Invoked when theme color is changed to |theme_color|.
   virtual void DidChangeThemeColor(SkColor theme_color) {}
-
-  // Invoked when text selection is changed.
-  virtual void DidChangeTextSelection(const base::string16& text,
-                                      const gfx::Range& range,
-                                      size_t offset) {}
 
   // Invoked when media is playing or paused.  |id| is unique per player and per
   // RenderFrameHost.  There may be multiple players within a RenderFrameHost
@@ -560,6 +582,12 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   bool OnMessageReceived(const IPC::Message& message) override;
 
   WebContents* web_contents() const;
+
+  // NOTE(andre@vivaldi.com) : This is invoked only for embedded contents where
+  // the containing element node is removed.
+  virtual void WebContentsDidDetach() {}
+  // Element node is attached.
+  virtual void WebContentsDidAttach() {}
 
  protected:
   // Use this constructor when the object is tied to a single WebContents for

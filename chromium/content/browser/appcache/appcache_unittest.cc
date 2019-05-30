@@ -12,34 +12,11 @@
 #include "content/browser/appcache/appcache_host.h"
 #include "content/browser/appcache/mock_appcache_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/appcache/appcache.mojom.h"
+#include "third_party/blink/public/mojom/appcache/appcache_info.mojom.h"
+#include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 
 namespace content {
-
-namespace {
-
-class MockAppCacheFrontend : public AppCacheFrontend {
- public:
-  void OnCacheSelected(int host_id, const AppCacheInfo& info) override {}
-  void OnStatusChanged(const std::vector<int>& host_ids,
-                       AppCacheStatus status) override {}
-  void OnEventRaised(const std::vector<int>& host_ids,
-                     AppCacheEventID event_id) override {}
-  void OnProgressEventRaised(const std::vector<int>& host_ids,
-                             const GURL& url,
-                             int num_total,
-                             int num_complete) override {}
-  void OnErrorEventRaised(const std::vector<int>& host_ids,
-                          const AppCacheErrorDetails& details) override {}
-  void OnLogMessage(int host_id,
-                    AppCacheLogLevel log_level,
-                    const std::string& message) override {}
-  void OnContentBlocked(int host_id, const GURL& manifest_url) override {}
-  void OnSetSubresourceFactory(
-      int host_id,
-      network::mojom::URLLoaderFactoryPtr url_loader_factory) override {}
-};
-
-}  // namespace
 
 class AppCacheTest : public testing::Test {
   base::test::ScopedTaskEnvironment scoped_task_environment_;
@@ -47,15 +24,20 @@ class AppCacheTest : public testing::Test {
 
 TEST_F(AppCacheTest, CleanupUnusedCache) {
   MockAppCacheService service;
-  MockAppCacheFrontend frontend;
   scoped_refptr<AppCache> cache(new AppCache(service.storage(), 111));
   cache->set_complete(true);
   scoped_refptr<AppCacheGroup> group(
       new AppCacheGroup(service.storage(), GURL("http://blah/manifest"), 111));
   group->AddCache(cache.get());
 
-  AppCacheHost host1(1, &frontend, &service);
-  AppCacheHost host2(2, &frontend, &service);
+  blink::mojom::AppCacheFrontendPtr frontend1;
+  mojo::MakeRequest(&frontend1);
+  AppCacheHost host1(/*host_id=*/1, /*process_id=*/1, /*render_frame_id=*/1,
+                     std::move(frontend1), &service);
+  blink::mojom::AppCacheFrontendPtr frontend2;
+  mojo::MakeRequest(&frontend2);
+  AppCacheHost host2(/*host_id=*/2, /*process_id=*/2, /*render_frame_id=*/2,
+                     std::move(frontend2), &service);
 
   host1.AssociateCompleteCache(cache.get());
   host2.AssociateCompleteCache(cache.get());

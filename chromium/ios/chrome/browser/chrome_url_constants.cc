@@ -6,7 +6,7 @@
 
 #include <stddef.h>
 
-#include "base/macros.h"
+#include "base/stl_util.h"
 
 const char kChromeUIScheme[] = "chrome";
 
@@ -14,6 +14,7 @@ const char kChromeUIChromeURLsURL[] = "chrome://chrome-urls/";
 const char kChromeUICreditsURL[] = "chrome://credits/";
 const char kChromeUIFlagsURL[] = "chrome://flags/";
 const char kChromeUIHistoryURL[] = "chrome://history/";
+const char kChromeUIInspectURL[] = "chrome://inspect/";
 const char kChromeUINewTabURL[] = "chrome://newtab/";
 const char kChromeUINTPTilesInternalsURL[] = "chrome://ntp-tiles-internals/";
 const char kChromeUIOfflineURL[] = "chrome://offline/";
@@ -32,6 +33,7 @@ const char kChromeUIFlagsHost[] = "flags";
 const char kChromeUIGCMInternalsHost[] = "gcm-internals";
 const char kChromeUIHistogramHost[] = "histograms";
 const char kChromeUIHistoryHost[] = "history";
+const char kChromeUIInspectHost[] = "inspect";
 const char kChromeUINetExportHost[] = "net-export";
 const char kChromeUINewTabHost[] = "newtab";
 const char kChromeUINTPTilesInternalsHost[] = "ntp-tiles-internals";
@@ -44,8 +46,9 @@ const char kChromeUISignInInternalsHost[] = "signin-internals";
 const char kChromeUISuggestionsHost[] = "suggestions";
 const char kChromeUISyncInternalsHost[] = "sync-internals";
 const char kChromeUITermsHost[] = "terms";
-const char kChromeUIVersionHost[] = "version";
 const char kChromeUIURLKeyedMetricsHost[] = "ukm";
+const char kChromeUIUserActionsHost[] = "user-actions";
+const char kChromeUIVersionHost[] = "version";
 
 // Add hosts here to be included in chrome://chrome-urls (about:about).
 // These hosts will also be suggested by BuiltinProvider.
@@ -55,6 +58,7 @@ const char* const kChromeHostURLs[] = {
     kChromeUICreditsHost,
     kChromeUIFlagsHost,
     kChromeUIHistogramHost,
+    kChromeUIInspectHost,
     kChromeUINetExportHost,
     kChromeUINewTabHost,
     kChromeUINTPTilesInternalsHost,
@@ -63,9 +67,10 @@ const char* const kChromeHostURLs[] = {
     kChromeUISuggestionsHost,
     kChromeUISyncInternalsHost,
     kChromeUITermsHost,
+    kChromeUIUserActionsHost,
     kChromeUIVersionHost,
 };
-const size_t kNumberOfChromeHostURLs = arraysize(kChromeHostURLs);
+const size_t kNumberOfChromeHostURLs = base::size(kChromeHostURLs);
 
 const char kSyncGoogleDashboardURL[] =
     "https://www.google.com/settings/chrome/sync/";
@@ -106,3 +111,5 @@ const char kGoogleMyAccountURL[] =
 
 const char kReadingListReferrerURL[] =
     "chrome://do_not_consider_for_most_visited/reading_list";
+
+const char kChromeUIAboutNewTabURL[] = "about://newtab/";

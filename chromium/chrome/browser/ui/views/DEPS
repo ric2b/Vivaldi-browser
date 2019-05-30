@@ -1,6 +1,6 @@
 include_rules = [
  "+chrome/browser/ui/views",
- "+mash/common",
+ "+chrome/services/app_service/public",
  "+services/ws/public/cpp",
  "+third_party/libaddressinput",
 ]

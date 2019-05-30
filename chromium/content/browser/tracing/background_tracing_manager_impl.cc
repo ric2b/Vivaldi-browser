@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
 #include "base/location.h"
@@ -13,6 +14,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -22,6 +24,7 @@
 #include "content/browser/tracing/background_tracing_rule.h"
 #include "content/browser/tracing/trace_message_filter.h"
 #include "content/browser/tracing/tracing_controller_impl.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/tracing_delegate.h"
@@ -113,11 +116,9 @@ BackgroundTracingManagerImpl::~BackgroundTracingManagerImpl() {
 }
 
 void BackgroundTracingManagerImpl::AddMetadataGeneratorFunction() {
-  TracingControllerImpl::GetInstance()
-      ->GetTraceEventAgent()
-      ->AddMetadataGeneratorFunction(base::BindRepeating(
-          &BackgroundTracingManagerImpl::GenerateMetadataDict,
-          base::Unretained(this)));
+  tracing::TraceEventAgent::GetInstance()->AddMetadataGeneratorFunction(
+      base::BindRepeating(&BackgroundTracingManagerImpl::GenerateMetadataDict,
+                          base::Unretained(this)));
 }
 
 void BackgroundTracingManagerImpl::WhenIdle(
@@ -343,8 +344,8 @@ BackgroundTracingManagerImpl::GetRuleAbleToTriggerTracing(
 void BackgroundTracingManagerImpl::OnHistogramTrigger(
     const std::string& histogram_name) {
   if (!content::BrowserThread::CurrentlyOn(content::BrowserThread::UI)) {
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::UI},
         base::BindOnce(&BackgroundTracingManagerImpl::OnHistogramTrigger,
                        base::Unretained(this), histogram_name));
     return;
@@ -363,8 +364,8 @@ void BackgroundTracingManagerImpl::TriggerNamedEvent(
     BackgroundTracingManagerImpl::TriggerHandle handle,
     StartedFinalizingCallback callback) {
   if (!content::BrowserThread::CurrentlyOn(content::BrowserThread::UI)) {
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::UI},
         base::BindOnce(&BackgroundTracingManagerImpl::TriggerNamedEvent,
                        base::Unretained(this), handle, std::move(callback)));
     return;
@@ -489,7 +490,7 @@ void BackgroundTracingManagerImpl::InvalidateTriggerHandlesForTesting() {
 void BackgroundTracingManagerImpl::SetRuleTriggeredCallbackForTesting(
     const base::Closure& callback) {
   rule_triggered_callback_for_testing_ = callback;
-};
+}
 
 void BackgroundTracingManagerImpl::FireTimerForTesting() {
   DCHECK(tracing_timer_);
@@ -502,10 +503,29 @@ void BackgroundTracingManagerImpl::StartTracing(
   TraceConfig config = GetConfigForCategoryPreset(preset, record_mode);
   if (requires_anonymized_data_)
     config.EnableArgumentFilter();
+#if defined(OS_ANDROID)
+  // Set low trace buffer size on Android in order to upload small trace files.
+  if (config_->tracing_mode() == BackgroundTracingConfigImpl::PREEMPTIVE) {
+    config.SetTraceBufferSizeInEvents(20000);
+    config.SetTraceBufferSizeInKb(500);
+  }
+#endif
 
   is_tracing_ = TracingControllerImpl::GetInstance()->StartTracing(
-      config, base::Bind(&BackgroundTracingManagerImpl::OnStartTracingDone,
-                         base::Unretained(this), preset));
+      config, base::BindOnce(&BackgroundTracingManagerImpl::OnStartTracingDone,
+                             base::Unretained(this), preset));
+
+  // Activate the categories immediately. StartTracing eventually does this
+  // itself, but asynchronously via PostTask, and in the meantime events will be
+  // dropped. This ensures that we start recording events for those categories
+  // immediately.
+  if (is_tracing_) {
+    uint8_t modes = base::trace_event::TraceLog::RECORDING_MODE;
+    if (!config.event_filters().empty())
+      modes |= base::trace_event::TraceLog::FILTERING_MODE;
+    base::trace_event::TraceLog::GetInstance()->SetEnabled(config, modes);
+  }
+
   RecordBackgroundTracingMetric(RECORDING_ENABLED);
 }
 
@@ -532,8 +552,8 @@ void BackgroundTracingManagerImpl::OnFinalizeStarted(
 
 void BackgroundTracingManagerImpl::OnFinalizeComplete(bool success) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&BackgroundTracingManagerImpl::OnFinalizeComplete,
                        base::Unretained(this), success));
     return;
@@ -628,12 +648,48 @@ void BackgroundTracingManagerImpl::BeginFinalizing(
 }
 
 void BackgroundTracingManagerImpl::AbortScenario() {
+  if (is_tracing_) {
+    scoped_refptr<TracingControllerImpl::TraceDataEndpoint> trace_data_endpoint;
+    trace_data_endpoint =
+        TracingControllerImpl::CreateCallbackEndpoint(base::BindRepeating(
+            &BackgroundTracingManagerImpl::OnAbortScenarioReceived,
+            base::Unretained(this)));
+
+    content::TracingControllerImpl::GetInstance()->StopTracing(
+        trace_data_endpoint);
+  } else {
+    OnAbortScenarioReceived(nullptr, nullptr);
+  }
+}
+
+void BackgroundTracingManagerImpl::OnAbortScenarioReceived(
+    std::unique_ptr<const base::DictionaryValue> metadata,
+    base::RefCountedString* trace_str) {
+  if (base::trace_event::TraceLog::GetInstance()->IsEnabled()) {
+    // Since the BackgroundTracingManager directly enables tracing
+    // in TraceLog, in addition to going through Mojo, there's an edge-case
+    // where tracing is rapidly stopped after starting, too quickly for the
+    // TraceEventAgent of the browser process to register itself, which means
+    // that we're left in a state where the Mojo interface doesn't think we're
+    // tracing but TraceLog is still enabled. If that's the case, we abort
+    // tracing here.
+    auto record_mode =
+        (config_->tracing_mode() == BackgroundTracingConfigImpl::PREEMPTIVE)
+            ? base::trace_event::RECORD_CONTINUOUSLY
+            : base::trace_event::RECORD_UNTIL_FULL;
+    TraceConfig config =
+        GetConfigForCategoryPreset(config_->category_preset(), record_mode);
+
+    uint8_t modes = base::trace_event::TraceLog::RECORDING_MODE;
+    if (!config.event_filters().empty())
+      modes |= base::trace_event::TraceLog::FILTERING_MODE;
+    base::trace_event::TraceLog::GetInstance()->SetDisabled(modes);
+  }
+
   is_tracing_ = false;
   triggered_named_event_handle_ = -1;
   config_.reset();
   tracing_timer_.reset();
-
-  content::TracingControllerImpl::GetInstance()->StopTracing(nullptr);
 
   for (auto* observer : background_tracing_observers_)
     observer->OnScenarioAborted();
@@ -652,7 +708,10 @@ TraceConfig BackgroundTracingManagerImpl::GetConfigForCategoryPreset(
           "disabled-by-default-v8.runtime_stats",
           record_mode);
     case BackgroundTracingConfigImpl::CategoryPreset::BENCHMARK_GPU:
-      return TraceConfig("benchmark,toplevel,gpu", record_mode);
+      return TraceConfig(
+          "benchmark,toplevel,gpu,base,mojom,ipc,"
+          "disabled-by-default-system_stats,disabled-by-default-cpu_profiler",
+          record_mode);
     case BackgroundTracingConfigImpl::CategoryPreset::BENCHMARK_IPC:
       return TraceConfig("benchmark,toplevel,ipc", record_mode);
     case BackgroundTracingConfigImpl::CategoryPreset::BENCHMARK_STARTUP: {
@@ -668,8 +727,10 @@ TraceConfig BackgroundTracingManagerImpl::GetConfigForCategoryPreset(
       return TraceConfig("blink.console,v8", record_mode);
     case BackgroundTracingConfigImpl::CategoryPreset::BENCHMARK_NAVIGATION: {
       auto config = TraceConfig(
-          "benchmark,toplevel,ipc,base,browser,navigation,omnibox,"
-          "safe_browsing,disabled-by-default-system_stats",
+          "benchmark,toplevel,ipc,base,browser,navigation,omnibox,ui,shutdown,"
+          "safe_browsing,Java,EarlyJava,loading,startup,mojom,renderer_host,"
+          "disabled-by-default-system_stats,disabled-by-default-cpu_profiler,"
+          "dwrite,fonts",
           record_mode);
       // Filter only browser process events.
       base::trace_event::TraceConfig::ProcessFilterConfig process_config(
@@ -677,6 +738,26 @@ TraceConfig BackgroundTracingManagerImpl::GetConfigForCategoryPreset(
       config.SetProcessFilterConfig(process_config);
       return config;
     }
+    case BackgroundTracingConfigImpl::CategoryPreset::BENCHMARK_RENDERERS:
+      return TraceConfig(
+          "benchmark,toplevel,ipc,base,ui,v8,renderer,blink,blink_gc,mojom,"
+          "latency,latencyInfo,renderer_host,cc,memory,dwrite,fonts,"
+          "disabled-by-default-v8.gc,"
+          "disabled-by-default-blink_gc,"
+          "disabled-by-default-renderer.scheduler,"
+          "disabled-by-default-system_stats,disabled-by-default-cpu_profiler",
+          record_mode);
+    case BackgroundTracingConfigImpl::CategoryPreset::BENCHMARK_SERVICEWORKER:
+      return TraceConfig(
+          "benchmark,toplevel,ipc,base,ServiceWorker,CacheStorage,Blob,"
+          "loader,loading,navigation,blink.user_timing,"
+          "disabled-by-default-network",
+          record_mode);
+    case BackgroundTracingConfigImpl::CategoryPreset::BENCHMARK_POWER:
+      return TraceConfig(
+          "benchmark,toplevel,ipc,base,audio,compositor,gpu,media,memory,midi,"
+          "native,omnibox,renderer,skia,task_scheduler,ui,v8,views,webaudio",
+          record_mode);
     case BackgroundTracingConfigImpl::CategoryPreset::BLINK_STYLE:
       return TraceConfig("blink_style", record_mode);
 
@@ -692,7 +773,6 @@ TraceConfig BackgroundTracingManagerImpl::GetConfigForCategoryPreset(
       config.ResetMemoryDumpConfig(memory_config);
       return config;
     }
-
     case BackgroundTracingConfigImpl::CategoryPreset::CATEGORY_PRESET_UNSET:
       NOTREACHED();
   }

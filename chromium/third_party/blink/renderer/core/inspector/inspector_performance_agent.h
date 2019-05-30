@@ -23,6 +23,7 @@ class CallFunction;
 class ExecuteScript;
 class RecalculateStyle;
 class UpdateLayout;
+class V8Compile;
 }  // namespace probe
 
 class CORE_EXPORT InspectorPerformanceAgent final
@@ -32,8 +33,10 @@ class CORE_EXPORT InspectorPerformanceAgent final
   void Trace(blink::Visitor*) override;
 
   static InspectorPerformanceAgent* Create(InspectedFrames* inspected_frames) {
-    return new InspectorPerformanceAgent(inspected_frames);
+    return MakeGarbageCollected<InspectorPerformanceAgent>(inspected_frames);
   }
+
+  explicit InspectorPerformanceAgent(InspectedFrames*);
   ~InspectorPerformanceAgent() override;
 
   void Restore() override;
@@ -41,6 +44,7 @@ class CORE_EXPORT InspectorPerformanceAgent final
   // Performance protocol domain implementation.
   protocol::Response enable() override;
   protocol::Response disable() override;
+  protocol::Response setTimeDomain(const String& time_domain) override;
   protocol::Response getMetrics(
       std::unique_ptr<protocol::Array<protocol::Performance::Metric>>*
           out_result) override;
@@ -55,6 +59,8 @@ class CORE_EXPORT InspectorPerformanceAgent final
   void Did(const probe::RecalculateStyle&);
   void Will(const probe::UpdateLayout&);
   void Did(const probe::UpdateLayout&);
+  void Will(const probe::V8Compile&);
+  void Did(const probe::V8Compile&);
 
   // TaskTimeObserver implementation.
   void WillProcessTask(base::TimeTicks start_time) override;
@@ -62,10 +68,11 @@ class CORE_EXPORT InspectorPerformanceAgent final
                       base::TimeTicks end_time) override;
 
  private:
-  explicit InspectorPerformanceAgent(InspectedFrames*);
   void ScriptStarts();
   void ScriptEnds();
   void InnerEnable();
+  TimeTicks GetTimeTicksNow();
+  TimeTicks GetThreadTimeNow();
 
   Member<InspectedFrames> inspected_frames_;
   TimeDelta layout_duration_;
@@ -76,11 +83,15 @@ class CORE_EXPORT InspectorPerformanceAgent final
   TimeTicks script_start_ticks_;
   TimeDelta task_duration_;
   TimeTicks task_start_ticks_;
+  TimeDelta v8compile_duration_;
+  TimeTicks v8compile_start_ticks_;
+  TimeTicks thread_time_origin_;
   unsigned long long layout_count_ = 0;
   unsigned long long recalc_style_count_ = 0;
   int script_call_depth_ = 0;
   int layout_depth_ = 0;
   InspectorAgentState::Boolean enabled_;
+  InspectorAgentState::Boolean use_thread_ticks_;
   DISALLOW_COPY_AND_ASSIGN(InspectorPerformanceAgent);
 };
 

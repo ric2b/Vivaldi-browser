@@ -6,8 +6,10 @@
 
 #include <stddef.h>
 #include <algorithm>
+#include <utility>
 
-#include "base/macros.h"
+#include "base/no_destructor.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -47,13 +49,12 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "url/gurl.h"
 
-#include "app/vivaldi_apptools.h"
-#include "app/vivaldi_constants.h"
-
 #if defined(OS_CHROMEOS)
 #include "ash/public/cpp/window_pin_type.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 #include "content/browser/site_instance_impl.h"
 
 using content::NavigationEntry;
@@ -84,7 +85,7 @@ Browser* GetBrowserInProfileWithId(Profile* profile,
 
   if (error_message)
     *error_message = ErrorUtils::FormatErrorMessage(
-        tabs_constants::kWindowNotFoundError, base::IntToString(window_id));
+        tabs_constants::kWindowNotFoundError, base::NumberToString(window_id));
 
   return nullptr;
 }
@@ -94,7 +95,11 @@ Browser* CreateBrowser(Profile* profile,
                        bool user_gesture,
                        std::string* error) {
   Browser::CreateParams params(Browser::TYPE_TABBED, profile, user_gesture);
-  Browser* browser = new Browser(params);
+  Browser* browser = Browser::Create(params);
+  if (!browser) {
+    *error = tabs_constants::kBrowserWindowNotAllowed;
+    return nullptr;
+  }
   browser->window()->Show();
   return browser;
 }
@@ -109,7 +114,16 @@ int GetTabIdForExtensions(const WebContents* web_contents) {
   return SessionTabHelper::IdForTab(web_contents).id();
 }
 
-ExtensionTabUtil::Delegate* g_extension_tab_util_delegate = nullptr;
+std::unique_ptr<ExtensionTabUtil::Delegate>&
+GetExtensionTabUtilDelegateWrapper() {
+  static base::NoDestructor<std::unique_ptr<ExtensionTabUtil::Delegate>>
+      delegate_wrapper;
+  return *delegate_wrapper;
+}
+
+ExtensionTabUtil::Delegate* GetExtensionTabUtilDelegate() {
+  return GetExtensionTabUtilDelegateWrapper().get();
+}
 
 }  // namespace
 
@@ -166,7 +180,7 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(
             &opener_browser, nullptr, &opener, nullptr)) {
       if (error) {
         *error = ErrorUtils::FormatErrorMessage(
-            tabs_constants::kTabNotFoundError, base::IntToString(opener_id));
+            tabs_constants::kTabNotFoundError, base::NumberToString(opener_id));
       }
       return nullptr;
     }
@@ -213,7 +227,8 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(
   // We let "Vivaldi" go through because adding "incognito split" to the
   // manifest does not work. Note there might be other methods we need to fix
   // but this was the most glaring one while adding VB-235.
-  if (!vivaldi::IsVivaldiApp(function->extension_id()) &&
+  if (function->extension() &&
+      !vivaldi::IsVivaldiApp(function->extension_id()) &&
       url.SchemeIs(kExtensionScheme) &&
       (!function->extension() ||
        !IncognitoInfo::IsSplitMode(function->extension())) &&
@@ -224,7 +239,11 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(
     if (!browser) {
       Browser::CreateParams params =
           Browser::CreateParams(Browser::TYPE_TABBED, profile, user_gesture);
-      browser = new Browser(params);
+      browser = Browser::Create(params);
+      if (!browser) {
+        *error = tabs_constants::kBrowserWindowNotAllowed;
+        return nullptr;
+      }
       browser->window()->Show();
     }
   }
@@ -510,12 +529,11 @@ bool ExtensionTabUtil::IsDiscarded(content::WebContents* contents) {
 std::unique_ptr<api::tabs::MutedInfo> ExtensionTabUtil::CreateMutedInfo(
     content::WebContents* contents) {
   DCHECK(contents);
-  std::unique_ptr<api::tabs::MutedInfo> info(new api::tabs::MutedInfo);
+  auto info = std::make_unique<api::tabs::MutedInfo>();
   info->muted = contents->IsAudioMuted();
   switch (chrome::GetTabAudioMutedReason(contents)) {
     case TabMutedReason::NONE:
       break;
-    case TabMutedReason::AUDIO_INDICATOR:
     case TabMutedReason::CONTENT_SETTING:
     case TabMutedReason::CONTENT_SETTING_CHROME:
     case TabMutedReason::CONTEXT_MENU:
@@ -526,19 +544,17 @@ std::unique_ptr<api::tabs::MutedInfo> ExtensionTabUtil::CreateMutedInfo(
       break;
     case TabMutedReason::EXTENSION:
       info->reason = api::tabs::MUTED_INFO_REASON_EXTENSION;
-      info->extension_id.reset(
-          new std::string(chrome::GetExtensionIdForMutedTab(contents)));
+      info->extension_id = std::make_unique<std::string>(
+          LastMuteMetadata::FromWebContents(contents)->extension_id);
+      DCHECK(!info->extension_id->empty());
       break;
   }
   return info;
 }
 
 // static
-void ExtensionTabUtil::SetPlatformDelegate(Delegate* delegate) {
-  // Allow setting it only once (also allow reset to nullptr, but then take
-  // special care to free it).
-  CHECK(!g_extension_tab_util_delegate || !delegate);
-  g_extension_tab_util_delegate = delegate;
+void ExtensionTabUtil::SetPlatformDelegate(std::unique_ptr<Delegate> delegate) {
+  GetExtensionTabUtilDelegateWrapper() = std::move(delegate);
 }
 
 // static
@@ -568,9 +584,10 @@ void ExtensionTabUtil::ScrubTabForExtension(const Extension* extension,
     tab->title.reset();
     tab->fav_icon_url.reset();
   }
-  if (g_extension_tab_util_delegate)
-    g_extension_tab_util_delegate->ScrubTabForExtension(extension, contents,
+  if (GetExtensionTabUtilDelegate()) {
+    GetExtensionTabUtilDelegate()->ScrubTabForExtension(extension, contents,
                                                         tab);
+  }
 }
 
 bool ExtensionTabUtil::GetTabStripModel(const WebContents* web_contents,
@@ -670,7 +687,7 @@ bool ExtensionTabUtil::IsKillURL(const GURL& url) {
     return false;
 
   base::StringPiece fixed_host = fixed_url.host_piece();
-  for (size_t i = 0; i < arraysize(kill_hosts); ++i) {
+  for (size_t i = 0; i < base::size(kill_hosts); ++i) {
     if (fixed_host == kill_hosts[i])
       return true;
   }
@@ -689,8 +706,12 @@ void ExtensionTabUtil::CreateTab(std::unique_ptr<WebContents> web_contents,
   const bool browser_created = !browser;
   if (!browser) {
     Browser::CreateParams params = Browser::CreateParams(profile, user_gesture);
-    browser = new Browser(params);
+    browser = Browser::Create(params);
   }
+
+  if (!browser)
+    return;
+
   NavigateParams params(browser, std::move(web_contents));
 
   // The extension_app_id parameter ends up as app_name in the Browser
@@ -742,7 +763,9 @@ bool ExtensionTabUtil::OpenOptionsPageFromAPI(
   DCHECK(!profile->IsOffTheRecord() || IncognitoInfo::IsSplitMode(extension));
   Browser* browser = chrome::FindBrowserWithProfile(profile);
   if (!browser)
-    browser = new Browser(Browser::CreateParams(profile, true));
+    browser = Browser::Create(Browser::CreateParams(profile, true));
+  if (!browser)
+    return false;
   return extensions::ExtensionTabUtil::OpenOptionsPage(extension, browser);
 }
 
@@ -795,7 +818,7 @@ bool ExtensionTabUtil::OpenOptionsPage(const Extension* extension,
 
 // static
 bool ExtensionTabUtil::BrowserSupportsTabs(Browser* browser) {
-  return browser && browser->tab_strip_model() && !browser->is_devtools();
+  return browser && !browser->is_devtools();
 }
 
 }  // namespace extensions

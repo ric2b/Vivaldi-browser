@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
@@ -31,10 +32,11 @@ URLLoaderFactory::URLLoaderFactory(
     NetworkContext* context,
     mojom::URLLoaderFactoryParamsPtr params,
     scoped_refptr<ResourceSchedulerClient> resource_scheduler_client,
-    cors::CORSURLLoaderFactory* cors_url_loader_factory)
+    cors::CorsURLLoaderFactory* cors_url_loader_factory)
     : context_(context),
       params_(std::move(params)),
       resource_scheduler_client_(std::move(resource_scheduler_client)),
+      header_client_(std::move(params_->header_client)),
       cors_url_loader_factory_(cors_url_loader_factory) {
   DCHECK(context);
   DCHECK_NE(mojom::kInvalidProcessId, params_->process_id);
@@ -82,16 +84,6 @@ void URLLoaderFactory::CreateLoaderAndStart(
         origin_head_same_as_request_origin);
   }
 
-  bool report_raw_headers = false;
-  if (url_request.report_raw_headers) {
-    const NetworkService* service = context_->network_service();
-    report_raw_headers =
-        service && service->HasRawHeadersAccess(params_->process_id);
-    if (!report_raw_headers)
-      DLOG(ERROR) << "Denying raw headers request by process "
-                  << params_->process_id;
-  }
-
   mojom::NetworkServiceClient* network_service_client = nullptr;
   base::WeakPtr<KeepaliveStatisticsRecorder> keepalive_statistics_recorder;
   base::WeakPtr<NetworkUsageAccumulator> network_usage_accumulator;
@@ -104,10 +96,10 @@ void URLLoaderFactory::CreateLoaderAndStart(
         context_->network_service()->network_usage_accumulator()->AsWeakPtr();
   }
 
+  bool exhausted = false;
   if (url_request.keepalive && keepalive_statistics_recorder) {
     // This logic comes from
     // content::ResourceDispatcherHostImpl::BeginRequestInternal.
-    bool exhausted = false;
     // This is needed because we want to know whether the request is initiated
     // by fetch() or not. We hope that we can unify these restrictions and
     // remove the reference to fetch_request_context_type in the future.
@@ -126,28 +118,29 @@ void URLLoaderFactory::CreateLoaderAndStart(
             kMaxKeepaliveConnectionsPerProcessForFetchAPI) {
       exhausted = true;
     }
-    if (exhausted) {
-      if (client) {
-        URLLoaderCompletionStatus status;
-        status.error_code = net::ERR_INSUFFICIENT_RESOURCES;
-        status.exists_in_cache = false;
-        status.completion_time = base::TimeTicks::Now();
-        client->OnComplete(status);
-      }
-      return;
-    }
+  }
+
+  if (!context_->CanCreateLoader(params_->process_id))
+    exhausted = true;
+
+  if (exhausted) {
+    URLLoaderCompletionStatus status;
+    status.error_code = net::ERR_INSUFFICIENT_RESOURCES;
+    status.exists_in_cache = false;
+    status.completion_time = base::TimeTicks::Now();
+    client->OnComplete(status);
+    return;
   }
 
   auto loader = std::make_unique<URLLoader>(
       context_->url_request_context(), network_service_client,
-      base::BindOnce(&cors::CORSURLLoaderFactory::DestroyURLLoader,
+      base::BindOnce(&cors::CorsURLLoaderFactory::DestroyURLLoader,
                      base::Unretained(cors_url_loader_factory_)),
-      std::move(request), options, url_request, report_raw_headers,
-      std::move(client),
+      std::move(request), options, url_request, std::move(client),
       static_cast<net::NetworkTrafficAnnotationTag>(traffic_annotation),
       params_.get(), request_id, resource_scheduler_client_,
       std::move(keepalive_statistics_recorder),
-      std::move(network_usage_accumulator));
+      std::move(network_usage_accumulator), header_client_.get());
   cors_url_loader_factory_->OnLoaderCreated(std::move(loader));
 }
 

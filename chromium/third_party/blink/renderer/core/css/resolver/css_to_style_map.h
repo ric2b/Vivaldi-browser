@@ -25,14 +25,13 @@
 
 #include "third_party/blink/renderer/core/animation/css/css_transition_data.h"
 #include "third_party/blink/renderer/core/animation/timing.h"
-#include "third_party/blink/renderer/core/css_property_names.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/platform/animation/timing_function.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 
 namespace blink {
 
-class Document;
 class FillLayer;
 class CSSValue;
 class StyleResolverState;
@@ -78,12 +77,8 @@ class CSSToStyleMap {
   static CSSTransitionData::TransitionProperty MapAnimationProperty(
       const CSSValue&);
 
-  // Pass a Document* if allow_step_middle is true so that the usage can be
-  // counted.
   static scoped_refptr<TimingFunction> MapAnimationTimingFunction(
-      const CSSValue&,
-      bool allow_step_middle = false,
-      Document* = nullptr);
+      const CSSValue&);
 
   static void MapNinePieceImage(StyleResolverState&,
                                 CSSPropertyID,

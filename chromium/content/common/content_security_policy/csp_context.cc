@@ -15,9 +15,11 @@ bool ShouldCheckPolicy(const ContentSecurityPolicy& policy,
                        CSPContext::CheckCSPDisposition check_csp_disposition) {
   switch (check_csp_disposition) {
     case CSPContext::CHECK_REPORT_ONLY_CSP:
-      return policy.header.type == blink::kWebContentSecurityPolicyTypeReport;
+      return policy.header.type ==
+             blink::mojom::ContentSecurityPolicyType::kReport;
     case CSPContext::CHECK_ENFORCED_CSP:
-      return policy.header.type == blink::kWebContentSecurityPolicyTypeEnforce;
+      return policy.header.type ==
+             blink::mojom::ContentSecurityPolicyType::kEnforce;
     case CSPContext::CHECK_ALL_CSP:
       return true;
   }
@@ -32,7 +34,7 @@ CSPContext::~CSPContext() {}
 
 bool CSPContext::IsAllowedByCsp(CSPDirective::Name directive_name,
                                 const GURL& url,
-                                bool is_redirect,
+                                bool has_followed_redirect,
                                 bool is_response_check,
                                 const SourceLocation& source_location,
                                 CheckCSPDisposition check_csp_disposition,
@@ -44,8 +46,8 @@ bool CSPContext::IsAllowedByCsp(CSPDirective::Name directive_name,
   for (const auto& policy : policies_) {
     if (ShouldCheckPolicy(policy, check_csp_disposition)) {
       allow &= ContentSecurityPolicy::Allow(
-          policy, directive_name, url, is_redirect, is_response_check, this,
-          source_location, is_form_submission);
+          policy, directive_name, url, has_followed_redirect, is_response_check,
+          this, source_location, is_form_submission);
     }
   }
 
@@ -80,7 +82,7 @@ void CSPContext::SetSelf(const url::Origin origin) {
 
   // When the origin is unique, no URL should match with 'self'. That's why
   // |self_source_| stays undefined here.
-  if (origin.unique())
+  if (origin.opaque())
     return;
 
   if (origin.scheme() == url::kFileScheme) {
@@ -105,7 +107,7 @@ bool CSPContext::SchemeShouldBypassCSP(const base::StringPiece& scheme) {
 }
 
 void CSPContext::SanitizeDataForUseInCspViolation(
-    bool is_redirect,
+    bool has_followed_redirect,
     CSPDirective::Name directive,
     GURL* blocked_url,
     SourceLocation* source_location) const {
@@ -127,7 +129,7 @@ CSPViolationParams::CSPViolationParams(
     const std::vector<std::string>& report_endpoints,
     bool use_reporting_api,
     const std::string& header,
-    const blink::WebContentSecurityPolicyType& disposition,
+    const blink::mojom::ContentSecurityPolicyType& disposition,
     bool after_redirect,
     const SourceLocation& source_location)
     : directive(directive),

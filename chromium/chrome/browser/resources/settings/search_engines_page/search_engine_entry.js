@@ -9,7 +9,7 @@
 Polymer({
   is: 'settings-search-engine-entry',
 
-  behaviors: [FocusRowBehavior],
+  behaviors: [cr.ui.FocusRowBehavior],
 
   properties: {
     /** @type {!SearchEngine} */
@@ -64,16 +64,6 @@ Polymer({
     return canBeDefault || canBeEdited || canBeRemoved;
   },
 
-  /**
-   * @param {?string} url The icon URL if available.
-   * @return {string} A set of icon URLs.
-   * @private
-   */
-  getIconSet_: function(url) {
-    // Force default icon, if no |engine.iconURL| is available.
-    return cr.icon.getFavicon(url || '');
-  },
-
   /** @private */
   onDeleteTap_: function() {
     this.browserProxy_.removeSearchEngine(this.engine.modelIndex);
@@ -83,7 +73,9 @@ Polymer({
   /** @private */
   onDotsTap_: function() {
     /** @type {!CrActionMenuElement} */ (this.$$('cr-action-menu'))
-        .showAt(assert(this.$$('paper-icon-button-light button')));
+        .showAt(assert(this.$$('paper-icon-button-light button')), {
+          anchorAlignmentY: AnchorAlignment.AFTER_END,
+        });
   },
 
   /**

@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.webapps;
 
 import android.content.Intent;
-import android.text.TextUtils;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.ShortcutHelper;
@@ -42,10 +41,10 @@ public class WebappDelegateFactory extends TabDelegateFactory {
             // compatibility we relaunch it the hard way.
             String startUrl = mActivity.getWebappInfo().uri().toString();
 
-            String webApkPackageName = mActivity.getWebappInfo().apkPackageName();
-            if (!TextUtils.isEmpty(webApkPackageName)) {
+            WebappInfo webappInfo = mActivity.getWebappInfo();
+            if (webappInfo.isForWebApk()) {
                 Intent intent = WebApkNavigationClient.createLaunchWebApkIntent(
-                        webApkPackageName, startUrl, false /* forceNavigation */);
+                        webappInfo.webApkPackageName(), startUrl, false /* forceNavigation */);
                 IntentUtils.safeStartActivity(ContextUtils.getApplicationContext(), intent);
                 return;
             }
@@ -55,8 +54,7 @@ public class WebappDelegateFactory extends TabDelegateFactory {
             intent.setPackage(mActivity.getPackageName());
             mActivity.getWebappInfo().setWebappIntentExtras(intent);
 
-            intent.putExtra(
-                    ShortcutHelper.EXTRA_MAC, ShortcutHelper.getEncodedMac(mActivity, startUrl));
+            intent.putExtra(ShortcutHelper.EXTRA_MAC, ShortcutHelper.getEncodedMac(startUrl));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             IntentUtils.safeStartActivity(ContextUtils.getApplicationContext(), intent);
         }
@@ -88,7 +86,7 @@ public class WebappDelegateFactory extends TabDelegateFactory {
     }
 
     @Override
-    public boolean canShowAppBanners(Tab tab) {
+    public boolean canShowAppBanners() {
         // Do not show banners when we are in a standalone activity.
         return false;
     }

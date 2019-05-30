@@ -28,11 +28,11 @@
 
 #include "base/macros.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_mode.h"
-#include "third_party/blink/renderer/core/css_property_names.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
-#include "third_party/blink/renderer/platform/heap/heap_allocator.h"
+#include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/bit_vector.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 
@@ -46,7 +46,7 @@ class ExecutionContext;
 class LocalFrame;
 class StyleSheetContents;
 // Definition for UseCounter features can be found in:
-// third_party/blink/public/platform/web_feature.mojom
+// third_party/blink/public/mojom/web_feature/web_feature.mojom
 
 // UseCounter is used for counting the number of times features of
 // Blink are used on real web pages and help us know commonly
@@ -75,6 +75,8 @@ class CORE_EXPORT UseCounter {
     kSVGImageContext,
     // Counters for extensions.
     kExtensionContext,
+    // Context for file:// URLs.
+    kFileContext,
     // Context when counters should be disabled (eg, internal pages such as
     // about, chrome-devtools, etc).
     kDisabledContext
@@ -98,10 +100,6 @@ class CORE_EXPORT UseCounter {
   };
 
   // "count" sets the bit for this feature to 1. Repeated calls are ignored.
-  // Count(const LocalFrame*) is being deprecated since during a navigation it
-  // may pick the wrong DocumentLoader (will guess and avoid using the
-  // provisional document loader when both loaders are present).
-  static void Count(const LocalFrame*, WebFeature);
   static void Count(DocumentLoader*, WebFeature);
   static void Count(const Document&, WebFeature);
   static void Count(ExecutionContext*, WebFeature);

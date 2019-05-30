@@ -28,14 +28,30 @@ static const unsigned char* g_style_invalidator_tracing_enabled = nullptr;
   if (UNLIKELY(*g_style_invalidator_tracing_enabled))                    \
     TRACE_STYLE_INVALIDATOR_INVALIDATION(element, reason);
 
-void StyleInvalidator::Invalidate(Document& document) {
+void StyleInvalidator::Invalidate(Document& document, Element* root_element) {
   SiblingData sibling_data;
-  if (UNLIKELY(document.NeedsStyleInvalidation()))
+
+  if (UNLIKELY(document.NeedsStyleInvalidation())) {
+    DCHECK(root_element == document.documentElement());
     PushInvalidationSetsForContainerNode(document, sibling_data);
-  if (Element* document_element = document.documentElement())
-    Invalidate(*document_element, sibling_data);
+    document.ClearNeedsStyleInvalidation();
+    DCHECK(sibling_data.IsEmpty());
+  }
+
+  if (root_element) {
+    Invalidate(*root_element, sibling_data);
+    if (!sibling_data.IsEmpty()) {
+      for (Element* child = ElementTraversal::NextSibling(*root_element); child;
+           child = ElementTraversal::NextSibling(*child)) {
+        Invalidate(*child, sibling_data);
+      }
+    }
+    for (Node* ancestor = root_element; ancestor;
+         ancestor = ancestor->ParentOrShadowHostNode()) {
+      ancestor->ClearChildNeedsStyleInvalidation();
+    }
+  }
   document.ClearChildNeedsStyleInvalidation();
-  document.ClearNeedsStyleInvalidation();
   pending_invalidation_map_.clear();
 }
 
@@ -153,9 +169,9 @@ bool StyleInvalidator::SiblingData::MatchCurrentInvalidationSets(
     if (const DescendantInvalidationSet* descendants =
             invalidation_set.SiblingDescendants()) {
       if (descendants->WholeSubtreeInvalid()) {
-        element.SetNeedsStyleRecalc(kSubtreeStyleChange,
-                                    StyleChangeReasonForTracing::Create(
-                                        StyleChangeReason::kStyleInvalidator));
+        element.SetNeedsStyleRecalc(
+            kSubtreeStyleChange, StyleChangeReasonForTracing::Create(
+                                     style_change_reason::kStyleInvalidator));
         return true;
       }
 
@@ -177,7 +193,7 @@ void StyleInvalidator::PushInvalidationSetsForContainerNode(
   for (const auto& invalidation_set : pending_invalidations.Siblings()) {
     CHECK(invalidation_set->IsAlive());
     sibling_data.PushInvalidationSet(
-        ToSiblingInvalidationSet(*invalidation_set));
+        To<SiblingInvalidationSet>(*invalidation_set));
   }
 
   if (node.GetStyleChangeType() >= kSubtreeStyleChange)
@@ -193,7 +209,7 @@ void StyleInvalidator::PushInvalidationSetsForContainerNode(
           TRACE_DISABLED_BY_DEFAULT("devtools.timeline.invalidationTracking"),
           "StyleInvalidatorInvalidationTracking", TRACE_EVENT_SCOPE_THREAD,
           "data",
-          InspectorStyleInvalidatorInvalidateEvent::InvalidationList(
+          inspector_style_invalidator_invalidate_event::InvalidationList(
               node, pending_invalidations.Descendants()));
     }
   }
@@ -260,7 +276,7 @@ void StyleInvalidator::Invalidate(Element& element, SiblingData& sibling_data) {
     } else if (CheckInvalidationSetsAgainstElement(element, sibling_data)) {
       element.SetNeedsStyleRecalc(kLocalStyleChange,
                                   StyleChangeReasonForTracing::Create(
-                                      StyleChangeReason::kStyleInvalidator));
+                                      style_change_reason::kStyleInvalidator));
     }
     if (UNLIKELY(element.NeedsStyleInvalidation()))
       PushInvalidationSetsForContainerNode(element, sibling_data);
@@ -279,7 +295,7 @@ void StyleInvalidator::Invalidate(Element& element, SiblingData& sibling_data) {
     if (InsertionPointCrossing() && element.IsV0InsertionPoint()) {
       element.SetNeedsStyleRecalc(kSubtreeStyleChange,
                                   StyleChangeReasonForTracing::Create(
-                                      StyleChangeReason::kStyleInvalidator));
+                                      style_change_reason::kStyleInvalidator));
     }
   }
 
@@ -304,10 +320,11 @@ void StyleInvalidator::InvalidateSlotDistributedElements(
       continue;
     if (!distributed_node->IsElementNode())
       continue;
-    if (MatchesCurrentInvalidationSetsAsSlotted(ToElement(*distributed_node)))
+    if (MatchesCurrentInvalidationSetsAsSlotted(ToElement(*distributed_node))) {
       distributed_node->SetNeedsStyleRecalc(
           kLocalStyleChange, StyleChangeReasonForTracing::Create(
-                                 StyleChangeReason::kStyleInvalidator));
+                                 style_change_reason::kStyleInvalidator));
+    }
   }
 }
 

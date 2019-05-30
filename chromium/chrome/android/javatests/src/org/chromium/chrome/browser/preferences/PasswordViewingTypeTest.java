@@ -29,7 +29,7 @@ import org.chromium.components.signin.test.util.AccountHolder;
 import org.chromium.components.signin.test.util.FakeAccountManagerDelegate;
 import org.chromium.components.sync.AndroidSyncSettings;
 import org.chromium.components.sync.test.util.MockSyncContentResolverDelegate;
-import org.chromium.content.browser.test.NativeLibraryTestRule;
+import org.chromium.content_public.browser.test.NativeLibraryTestRule;
 
 /**
  * Tests for verifying whether users are presented with the correct option of viewing
@@ -61,8 +61,8 @@ public class PasswordViewingTypeTest {
         mPasswordsPref = (ChromeBasePreference) mMainPreferences.findPreference(
                 MainPreferences.PREF_SAVED_PASSWORDS);
         AndroidSyncSettings.overrideForTests(mSyncContentResolverDelegate, null);
-        mAuthority = AndroidSyncSettings.getContractAuthority();
-        AndroidSyncSettings.updateAccount(mAccount);
+        mAuthority = AndroidSyncSettings.get().getContractAuthority();
+        AndroidSyncSettings.get().updateAccount(mAccount);
         mActivityTestRule.loadNativeLibraryAndInitBrowserProcess();
     }
 
@@ -71,8 +71,7 @@ public class PasswordViewingTypeTest {
                 FakeAccountManagerDelegate.DISABLE_PROFILE_DATA_SOURCE);
         AccountManagerFacade.overrideAccountManagerFacadeForTests(mAccountManager);
         mAccount = AccountManagerFacade.createAccountFromName("account@example.com");
-        AccountHolder.Builder accountHolder =
-                AccountHolder.builder(mAccount).password("password").alwaysAccept(true);
+        AccountHolder.Builder accountHolder = AccountHolder.builder(mAccount).alwaysAccept(true);
         mAccountManager.addAccountHolderBlocking(accountHolder.build());
     }
 
@@ -145,7 +144,7 @@ public class PasswordViewingTypeTest {
     public void testUserRedirectSyncSettings() throws InterruptedException {
         setSyncability(true);
         overrideProfileSyncService(false);
-        Assert.assertTrue(AndroidSyncSettings.isSyncEnabled());
+        Assert.assertTrue(AndroidSyncSettings.get().isSyncEnabled());
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {

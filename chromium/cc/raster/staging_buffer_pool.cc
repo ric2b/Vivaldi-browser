@@ -6,14 +6,16 @@
 
 #include <memory>
 
-#include "base/memory/memory_coordinator_client_registry.h"
+#include "base/bind.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "cc/base/container_util.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "components/viz/common/resources/resource_sizes.h"
+#include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/raster_interface.h"
+#include "gpu/command_buffer/client/shared_image_interface.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -35,14 +37,16 @@ const int kMaxCheckForQueryResultAvailableAttempts = 256;
 // Delay before a staging buffer might be released.
 const int kStagingBufferExpirationDelayMs = 1000;
 
-bool CheckForQueryResult(gpu::raster::RasterInterface* ri, unsigned query_id) {
-  unsigned complete = 1;
+bool CheckForQueryResult(gpu::raster::RasterInterface* ri, GLuint query_id) {
+  DCHECK(query_id);
+  GLuint complete = 1;
   ri->GetQueryObjectuivEXT(query_id, GL_QUERY_RESULT_AVAILABLE_EXT, &complete);
   return !!complete;
 }
 
-void WaitForQueryResult(gpu::raster::RasterInterface* ri, unsigned query_id) {
+void WaitForQueryResult(gpu::raster::RasterInterface* ri, GLuint query_id) {
   TRACE_EVENT0("cc", "WaitForQueryResult");
+  DCHECK(query_id);
 
   int attempts_left = kMaxCheckForQueryResultAvailableAttempts;
   while (attempts_left--) {
@@ -57,38 +61,29 @@ void WaitForQueryResult(gpu::raster::RasterInterface* ri, unsigned query_id) {
         kCheckForQueryResultAvailableTickRateMs));
   }
 
-  unsigned result = 0;
+  GLuint result = 0;
   ri->GetQueryObjectuivEXT(query_id, GL_QUERY_RESULT_EXT, &result);
 }
 
 }  // namespace
 
 StagingBuffer::StagingBuffer(const gfx::Size& size, viz::ResourceFormat format)
-    : size(size),
-      format(format),
-      texture_id(0),
-      image_id(0),
-      query_id(0),
-      content_id(0) {}
+    : size(size), format(format) {}
 
 StagingBuffer::~StagingBuffer() {
-  DCHECK_EQ(texture_id, 0u);
-  DCHECK_EQ(image_id, 0u);
+  DCHECK(mailbox.IsZero());
   DCHECK_EQ(query_id, 0u);
 }
 
-void StagingBuffer::DestroyGLResources(gpu::raster::RasterInterface* ri) {
+void StagingBuffer::DestroyGLResources(gpu::raster::RasterInterface* ri,
+                                       gpu::SharedImageInterface* sii) {
   if (query_id) {
     ri->DeleteQueriesEXT(1, &query_id);
     query_id = 0;
   }
-  if (image_id) {
-    ri->DestroyImageCHROMIUM(image_id);
-    image_id = 0;
-  }
-  if (texture_id) {
-    ri->DeleteTextures(1, &texture_id);
-    texture_id = 0;
+  if (!mailbox.IsZero()) {
+    sii->DestroySharedImage(sync_token, mailbox);
+    mailbox.SetZero();
   }
 }
 
@@ -98,9 +93,9 @@ void StagingBuffer::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
   if (!gpu_memory_buffer)
     return;
 
-  gfx::GpuMemoryBufferId buffer_id = gpu_memory_buffer->GetId();
+  // Use |this| as the id, which works with multiple StagingBuffers.
   std::string buffer_dump_name =
-      base::StringPrintf("cc/one_copy/staging_memory/buffer_%d", buffer_id.id);
+      base::StringPrintf("cc/one_copy/staging_memory/buffer_%p", this);
   MemoryAllocatorDump* buffer_dump = pmd->CreateAllocatorDump(buffer_dump_name);
 
   uint64_t buffer_size_in_bytes =
@@ -139,17 +134,15 @@ StagingBufferPool::StagingBufferPool(
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       this, "cc::StagingBufferPool", base::ThreadTaskRunnerHandle::Get());
 
-  base::MemoryCoordinatorClientRegistry::GetInstance()->Register(this);
   memory_pressure_listener_.reset(new base::MemoryPressureListener(
       base::BindRepeating(&StagingBufferPool::OnMemoryPressure,
                           weak_ptr_factory_.GetWeakPtr())));
 
-  reduce_memory_usage_callback_ = base::Bind(
+  reduce_memory_usage_callback_ = base::BindRepeating(
       &StagingBufferPool::ReduceMemoryUsage, weak_ptr_factory_.GetWeakPtr());
 }
 
 StagingBufferPool::~StagingBufferPool() {
-  base::MemoryCoordinatorClientRegistry::GetInstance()->Unregister(this);
   base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
       this);
 }
@@ -254,17 +247,20 @@ std::unique_ptr<StagingBuffer> StagingBufferPool::AcquireStagingBuffer(
       worker_context_provider_);
 
   gpu::raster::RasterInterface* ri = scoped_context.RasterInterface();
+  gpu::SharedImageInterface* sii =
+      worker_context_provider_->SharedImageInterface();
   DCHECK(ri);
 
   // Check if any busy buffers have become available.
-  if (worker_context_provider_->ContextCapabilities().sync_query) {
-    while (!busy_buffers_.empty()) {
-      if (!CheckForQueryResult(ri, busy_buffers_.front()->query_id))
-        break;
+  while (!busy_buffers_.empty()) {
+    // Early out if query isn't used, or if query isn't complete yet.  Query is
+    // created in OneCopyRasterBufferProvider::CopyOnWorkerThread().
+    if (!busy_buffers_.front()->query_id ||
+        !CheckForQueryResult(ri, busy_buffers_.front()->query_id))
+      break;
 
-      MarkStagingBufferAsFree(busy_buffers_.front().get());
-      free_buffers_.push_back(PopFront(&busy_buffers_));
-    }
+    MarkStagingBufferAsFree(busy_buffers_.front().get());
+    free_buffers_.push_back(PopFront(&busy_buffers_));
   }
 
   // Wait for memory usage of non-free buffers to become less than the limit.
@@ -275,12 +271,12 @@ std::unique_ptr<StagingBuffer> StagingBufferPool::AcquireStagingBuffer(
     if (busy_buffers_.empty())
       break;
 
-    if (worker_context_provider_->ContextCapabilities().sync_query) {
+    if (busy_buffers_.front()->query_id) {
       WaitForQueryResult(ri, busy_buffers_.front()->query_id);
       MarkStagingBufferAsFree(busy_buffers_.front().get());
       free_buffers_.push_back(PopFront(&busy_buffers_));
     } else {
-      // Fall-back to glFinish if CHROMIUM_sync_query is not available.
+      // Fall back to glFinish if query isn't used.
       ri->Finish();
       while (!busy_buffers_.empty()) {
         MarkStagingBufferAsFree(busy_buffers_.front().get());
@@ -329,7 +325,7 @@ std::unique_ptr<StagingBuffer> StagingBufferPool::AcquireStagingBuffer(
     if (free_buffers_.empty())
       break;
 
-    free_buffers_.front()->DestroyGLResources(ri);
+    free_buffers_.front()->DestroyGLResources(ri, sii);
     MarkStagingBufferAsBusy(free_buffers_.front().get());
     RemoveStagingBuffer(free_buffers_.front().get());
     free_buffers_.pop_front();
@@ -400,14 +396,19 @@ void StagingBufferPool::ReleaseBuffersNotUsedSince(base::TimeTicks time) {
 
     gpu::raster::RasterInterface* ri = scoped_context.RasterInterface();
     DCHECK(ri);
+    gpu::SharedImageInterface* sii =
+        worker_context_provider_->SharedImageInterface();
+    DCHECK(sii);
 
+    bool destroyed_buffers = false;
     // Note: Front buffer is guaranteed to be LRU so we can stop releasing
     // buffers as soon as we find a buffer that has been used since |time|.
     while (!free_buffers_.empty()) {
       if (free_buffers_.front()->last_usage > time)
-        return;
+        break;
 
-      free_buffers_.front()->DestroyGLResources(ri);
+      destroyed_buffers = true;
+      free_buffers_.front()->DestroyGLResources(ri, sii);
       MarkStagingBufferAsBusy(free_buffers_.front().get());
       RemoveStagingBuffer(free_buffers_.front().get());
       free_buffers_.pop_front();
@@ -415,19 +416,19 @@ void StagingBufferPool::ReleaseBuffersNotUsedSince(base::TimeTicks time) {
 
     while (!busy_buffers_.empty()) {
       if (busy_buffers_.front()->last_usage > time)
-        return;
+        break;
 
-      busy_buffers_.front()->DestroyGLResources(ri);
+      destroyed_buffers = true;
+      busy_buffers_.front()->DestroyGLResources(ri, sii);
       RemoveStagingBuffer(busy_buffers_.front().get());
       busy_buffers_.pop_front();
     }
-  }
-}
 
-void StagingBufferPool::OnPurgeMemory() {
-  base::AutoLock lock(lock_);
-  // Release all buffers, regardless of how recently they were used.
-  ReleaseBuffersNotUsedSince(base::TimeTicks() + base::TimeDelta::Max());
+    if (destroyed_buffers) {
+      ri->OrderingBarrierCHROMIUM();
+      worker_context_provider_->ContextSupport()->FlushPendingWork();
+    }
+  }
 }
 
 void StagingBufferPool::OnMemoryPressure(
@@ -438,6 +439,7 @@ void StagingBufferPool::OnMemoryPressure(
     case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE:
       break;
     case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL:
+      // Release all buffers, regardless of how recently they were used.
       ReleaseBuffersNotUsedSince(base::TimeTicks() + base::TimeDelta::Max());
       break;
   }

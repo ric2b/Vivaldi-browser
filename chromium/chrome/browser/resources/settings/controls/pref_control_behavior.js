@@ -30,10 +30,11 @@ const PrefControlBehavior = {
    */
   validatePref_: function() {
     CrSettingsPrefs.initialized.then(() => {
-      if (!this.pref) {
+      if (this.pref === undefined) {
         let error = 'Pref not found for element ' + this.tagName;
-        if (this.id)
+        if (this.id) {
           error += '#' + this.id;
+        }
         error += ' in ' + this.domHost.tagName;
         console.error(error);
       }

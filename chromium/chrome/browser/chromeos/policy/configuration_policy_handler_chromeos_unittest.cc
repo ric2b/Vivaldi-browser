@@ -310,14 +310,14 @@ TEST(PinnedLauncherAppsPolicyHandler, PrefTranslation) {
   // Extension IDs are OK.
   base::Value entry1("abcdefghijklmnopabcdefghijklmnop");
   auto entry1_dict = std::make_unique<base::DictionaryValue>();
-  entry1_dict->Set(kPinnedAppsPrefAppIDPath, entry1.CreateDeepCopy());
+  entry1_dict->Set(kPinnedAppsPrefAppIDKey, entry1.CreateDeepCopy());
   expected_pinned_apps.Append(std::move(entry1_dict));
   list.Append(entry1.CreateDeepCopy());
 
   // Android appds are OK.
   base::Value entry2("com.google.android.gm");
   auto entry2_dict = std::make_unique<base::DictionaryValue>();
-  entry2_dict->Set(kPinnedAppsPrefAppIDPath, entry2.CreateDeepCopy());
+  entry2_dict->Set(kPinnedAppsPrefAppIDKey, entry2.CreateDeepCopy());
   expected_pinned_apps.Append(std::move(entry2_dict));
   list.Append(entry2.CreateDeepCopy());
 
@@ -344,10 +344,11 @@ TEST_F(LoginScreenPowerManagementPolicyHandlerTest, Empty) {
 
 TEST_F(LoginScreenPowerManagementPolicyHandlerTest, ValidPolicy) {
   PolicyMap policy_map;
-  policy_map.Set(key::kDeviceLoginScreenPowerManagement, POLICY_LEVEL_MANDATORY,
-                 POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                 base::JSONReader::Read(kLoginScreenPowerManagementPolicy),
-                 nullptr);
+  policy_map.Set(
+      key::kDeviceLoginScreenPowerManagement, POLICY_LEVEL_MANDATORY,
+      POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+      base::JSONReader::ReadDeprecated(kLoginScreenPowerManagementPolicy),
+      nullptr);
   LoginScreenPowerManagementPolicyHandler handler(chrome_schema_);
   PolicyErrorMap errors;
   EXPECT_TRUE(handler.CheckPolicySettings(policy_map, &errors));

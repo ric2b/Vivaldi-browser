@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/strings/string_split.h"
@@ -16,14 +17,15 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_downloader_delegate.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/account_fetcher_service_factory.h"
-#include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/signin/core/browser/account_fetcher_service.h"
+#include "components/signin/core/browser/account_info.h"
 #include "components/signin/core/browser/avatar_icon_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
@@ -47,14 +49,12 @@ constexpr char kAuthorizationHeader[] = "Bearer %s";
 ProfileDownloader::ProfileDownloader(ProfileDownloaderDelegate* delegate)
     : delegate_(delegate),
       picture_status_(PICTURE_FAILED),
-      account_tracker_service_(AccountTrackerServiceFactory::GetForProfile(
-          delegate_->GetBrowserProfile())),
       identity_manager_(IdentityManagerFactory::GetForProfile(
           delegate_->GetBrowserProfile())),
       identity_manager_observer_(this),
       waiting_for_account_info_(false) {
   DCHECK(delegate_);
-  account_tracker_service_->AddObserver(this);
+  identity_manager_observer_.Add(identity_manager_);
 }
 
 void ProfileDownloader::Start() {
@@ -73,13 +73,9 @@ void ProfileDownloader::StartForAccount(const std::string& account_id) {
     return;
   }
 
-  account_id_ = account_id.empty()
-                    ? identity_manager_->GetPrimaryAccountInfo().account_id
-                    : account_id;
-  if (identity_manager_->HasAccountWithRefreshToken(account_id_))
-    StartFetchingOAuth2AccessToken();
-  else
-    identity_manager_observer_.Add(identity_manager_);
+  account_id_ = account_id.empty() ? identity_manager_->GetPrimaryAccountId()
+                                   : account_id;
+  StartFetchingOAuth2AccessToken();
 }
 
 base::string16 ProfileDownloader::GetProfileHostedDomain() const {
@@ -119,12 +115,16 @@ std::string ProfileDownloader::GetProfilePictureURL() const {
 
 void ProfileDownloader::StartFetchingImage() {
   VLOG(1) << "Fetching user entry with token: " << auth_token_;
-  account_info_ = account_tracker_service_->GetAccountInfo(account_id_);
+  auto maybe_account_info =
+      identity_manager_->FindAccountInfoForAccountWithRefreshTokenByAccountId(
+          account_id_);
+  if (maybe_account_info.has_value())
+    account_info_ = maybe_account_info.value();
 
-  if (delegate_->IsPreSignin()) {
-    AccountFetcherServiceFactory::GetForProfile(delegate_->GetBrowserProfile())
-        ->FetchUserInfoBeforeSignin(account_id_);
-  }
+#if defined(OS_ANDROID)
+  if (delegate_->IsPreSignin())
+    identity_manager_->ForceRefreshOfExtendedAccountInfo(account_id_);
+#endif
 
   if (account_info_.IsValid()) {
     // FetchImageData might call the delegate's OnProfileDownloadSuccess
@@ -137,7 +137,7 @@ void ProfileDownloader::StartFetchingImage() {
 }
 
 void ProfileDownloader::StartFetchingOAuth2AccessToken() {
-  OAuth2TokenService::ScopeSet scopes;
+  identity::ScopeSet scopes;
   scopes.insert(GaiaConstants::kGoogleUserInfoProfile);
   // Required to determine if lock should be enabled.
   scopes.insert(GaiaConstants::kGoogleUserInfoEmail);
@@ -147,12 +147,12 @@ void ProfileDownloader::StartFetchingOAuth2AccessToken() {
           account_id_, "profile_downloader", scopes,
           base::BindOnce(&ProfileDownloader::OnAccessTokenFetchComplete,
                          base::Unretained(this)),
-          identity::AccessTokenFetcher::Mode::kImmediate);
+          identity::AccessTokenFetcher::Mode::kWaitUntilRefreshTokenAvailable);
 }
 
 ProfileDownloader::~ProfileDownloader() {
   oauth2_access_token_fetcher_.reset();
-  account_tracker_service_->RemoveObserver(this);
+  identity_manager_observer_.Remove(identity_manager_);
 }
 
 void ProfileDownloader::FetchImageData() {
@@ -164,7 +164,7 @@ void ProfileDownloader::FetchImageData() {
     return;
   }
 
-  if (account_info_.picture_url == AccountTrackerService::kNoPictureURLFound) {
+  if (account_info_.picture_url == kNoPictureURLFound) {
     VLOG(1) << "No picture URL for account " << account_info_.email
             << ". Using the default profile picture.";
     picture_status_ = PICTURE_DEFAULT;
@@ -289,16 +289,6 @@ void ProfileDownloader::OnDecodeImageFailed() {
       this, ProfileDownloaderDelegate::IMAGE_DECODE_FAILED);
 }
 
-void ProfileDownloader::OnRefreshTokenUpdatedForAccount(
-    const AccountInfo& account_info,
-    bool is_valid) {
-  if (!is_valid || account_info.account_id != account_id_)
-    return;
-
-  identity_manager_observer_.Remove(identity_manager_);
-  StartFetchingOAuth2AccessToken();
-}
-
 void ProfileDownloader::OnAccessTokenFetchComplete(
     GoogleServiceAuthError error,
     identity::AccessTokenInfo access_token_info) {
@@ -315,7 +305,7 @@ void ProfileDownloader::OnAccessTokenFetchComplete(
   StartFetchingImage();
 }
 
-void ProfileDownloader::OnAccountUpdated(const AccountInfo& info) {
+void ProfileDownloader::OnExtendedAccountInfoUpdated(const AccountInfo& info) {
   if (info.account_id == account_id_ && info.IsValid()) {
     account_info_ = info;
 

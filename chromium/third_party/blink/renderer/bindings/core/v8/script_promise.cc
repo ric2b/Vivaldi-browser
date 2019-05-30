@@ -30,6 +30,7 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 
+#include "base/macros.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_for_core.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
@@ -45,15 +46,24 @@ namespace {
 
 class PromiseAllHandler final
     : public GarbageCollectedFinalized<PromiseAllHandler> {
-  WTF_MAKE_NONCOPYABLE(PromiseAllHandler);
-
  public:
   static ScriptPromise All(ScriptState* script_state,
                            const Vector<ScriptPromise>& promises) {
     if (promises.IsEmpty())
       return ScriptPromise::Cast(script_state,
                                  v8::Array::New(script_state->GetIsolate()));
-    return (new PromiseAllHandler(script_state, promises))->resolver_.Promise();
+    return (MakeGarbageCollected<PromiseAllHandler>(script_state, promises))
+        ->resolver_.Promise();
+  }
+
+  PromiseAllHandler(ScriptState* script_state, Vector<ScriptPromise> promises)
+      : number_of_pending_promises_(promises.size()), resolver_(script_state) {
+    DCHECK(!promises.IsEmpty());
+    values_.resize(promises.size());
+    for (wtf_size_t i = 0; i < promises.size(); ++i) {
+      promises[i].Then(CreateFulfillFunction(script_state, i),
+                       CreateRejectFunction(script_state));
+    }
   }
 
   virtual void Trace(blink::Visitor* visitor) {}
@@ -68,12 +78,21 @@ class PromiseAllHandler final
 
     static v8::Local<v8::Function> Create(ScriptState* script_state,
                                           ResolveType resolve_type,
-                                          size_t index,
+                                          wtf_size_t index,
                                           PromiseAllHandler* handler) {
-      AdapterFunction* self =
-          new AdapterFunction(script_state, resolve_type, index, handler);
+      AdapterFunction* self = MakeGarbageCollected<AdapterFunction>(
+          script_state, resolve_type, index, handler);
       return self->BindToV8Function();
     }
+
+    AdapterFunction(ScriptState* script_state,
+                    ResolveType resolve_type,
+                    wtf_size_t index,
+                    PromiseAllHandler* handler)
+        : ScriptFunction(script_state),
+          resolve_type_(resolve_type),
+          index_(index),
+          handler_(handler) {}
 
     void Trace(blink::Visitor* visitor) override {
       visitor->Trace(handler_);
@@ -81,15 +100,6 @@ class PromiseAllHandler final
     }
 
    private:
-    AdapterFunction(ScriptState* script_state,
-                    ResolveType resolve_type,
-                    size_t index,
-                    PromiseAllHandler* handler)
-        : ScriptFunction(script_state),
-          resolve_type_(resolve_type),
-          index_(index),
-          handler_(handler) {}
-
     ScriptValue Call(ScriptValue value) override {
       if (resolve_type_ == kFulfilled)
         handler_->OnFulfilled(index_, value);
@@ -100,21 +110,12 @@ class PromiseAllHandler final
     }
 
     const ResolveType resolve_type_;
-    const size_t index_;
+    const wtf_size_t index_;
     Member<PromiseAllHandler> handler_;
   };
 
-  PromiseAllHandler(ScriptState* script_state, Vector<ScriptPromise> promises)
-      : number_of_pending_promises_(promises.size()), resolver_(script_state) {
-    DCHECK(!promises.IsEmpty());
-    values_.resize(promises.size());
-    for (size_t i = 0; i < promises.size(); ++i)
-      promises[i].Then(CreateFulfillFunction(script_state, i),
-                       CreateRejectFunction(script_state));
-  }
-
   v8::Local<v8::Function> CreateFulfillFunction(ScriptState* script_state,
-                                                size_t index) {
+                                                wtf_size_t index) {
     return AdapterFunction::Create(script_state, AdapterFunction::kFulfilled,
                                    index, this);
   }
@@ -124,7 +125,7 @@ class PromiseAllHandler final
                                    this);
   }
 
-  void OnFulfilled(size_t index, const ScriptValue& value) {
+  void OnFulfilled(wtf_size_t index, const ScriptValue& value) {
     if (is_settled_)
       return;
 
@@ -133,14 +134,8 @@ class PromiseAllHandler final
     if (--number_of_pending_promises_ > 0)
       return;
 
-    v8::Local<v8::Array> values =
-        v8::Array::New(value.GetIsolate(), values_.size());
-    for (size_t i = 0; i < values_.size(); ++i) {
-      if (!V8CallBoolean(values->CreateDataProperty(value.GetContext(), i,
-                                                    values_[i].V8Value())))
-        return;
-    }
-
+    v8::Local<v8::Value> values =
+        ToV8(values_, value.GetContext()->Global(), value.GetIsolate());
     MarkPromiseSettled();
     resolver_.Resolve(values);
   }
@@ -165,6 +160,8 @@ class PromiseAllHandler final
   // This is cleared when owners of this handler, that is, given promises are
   // settled.
   Vector<ScriptValue> values_;
+
+  DISALLOW_COPY_AND_ASSIGN(PromiseAllHandler);
 };
 
 }  // namespace
@@ -251,24 +248,32 @@ ScriptPromise ScriptPromise::Then(v8::Local<v8::Function> on_fulfilled,
   if (promise_.IsEmpty())
     return ScriptPromise();
 
-  v8::Local<v8::Object> promise = promise_.V8Value().As<v8::Object>();
+  v8::Local<v8::Promise> promise = promise_.V8Value().As<v8::Promise>();
 
-  DCHECK(promise->IsPromise());
-  // Return this Promise if no handlers are given.
-  // In fact it is not the exact bahavior of Promise.prototype.then
-  // but that is not a problem in this case.
-  v8::Local<v8::Promise> result_promise = promise.As<v8::Promise>();
-  if (!on_fulfilled.IsEmpty()) {
-    if (!result_promise->Then(script_state_->GetContext(), on_fulfilled)
-             .ToLocal(&result_promise))
+  if (on_fulfilled.IsEmpty() && on_rejected.IsEmpty())
+    return *this;
+
+  v8::Local<v8::Promise> result_promise;
+  if (on_rejected.IsEmpty()) {
+    if (!promise->Then(script_state_->GetContext(), on_fulfilled)
+             .ToLocal(&result_promise)) {
       return ScriptPromise();
-  }
-  if (!on_rejected.IsEmpty()) {
-    if (!result_promise->Catch(script_state_->GetContext(), on_rejected)
-             .ToLocal(&result_promise))
-      return ScriptPromise();
+    }
+    return ScriptPromise(script_state_, result_promise);
   }
 
+  if (on_fulfilled.IsEmpty()) {
+    if (!promise->Catch(script_state_->GetContext(), on_rejected)
+             .ToLocal(&result_promise)) {
+      return ScriptPromise();
+    }
+    return ScriptPromise(script_state_, result_promise);
+  }
+
+  if (!promise->Then(script_state_->GetContext(), on_fulfilled, on_rejected)
+           .ToLocal(&result_promise)) {
+    return ScriptPromise();
+  }
   return ScriptPromise(script_state_, result_promise);
 }
 
@@ -337,6 +342,12 @@ v8::Local<v8::Promise> ScriptPromise::RejectRaw(ScriptState* script_state,
   v8::Local<v8::Promise> promise = resolver->GetPromise();
   resolver->Reject(script_state->GetContext(), value).ToChecked();
   return promise;
+}
+
+void ScriptPromise::MarkAsHandled() {
+  if (promise_.IsEmpty())
+    return;
+  promise_.V8Value().As<v8::Promise>()->MarkAsHandled();
 }
 
 ScriptPromise ScriptPromise::All(ScriptState* script_state,

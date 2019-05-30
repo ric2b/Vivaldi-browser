@@ -36,6 +36,7 @@ namespace ui {
 
 class SurfaceOzoneCanvas;
 class OverlaySurface;
+class PlatformWindowSurface;
 
 // The Ozone interface allows external implementations to hook into Chromium to
 // provide a system specific implementation. The Ozone interface supports two
@@ -94,6 +95,11 @@ class OZONE_BASE_EXPORT SurfaceFactoryOzone {
       VkImage* vk_image);
 #endif
 
+  // Creates a rendering and presentation API agnostic surface for a platform
+  // window.
+  virtual std::unique_ptr<PlatformWindowSurface> CreatePlatformWindowSurface(
+      gfx::AcceleratedWidget window);
+
   // Creates an overlay surface for a platform window.
   virtual std::unique_ptr<OverlaySurface> CreateOverlaySurface(
       gfx::AcceleratedWidget window);
@@ -103,11 +109,6 @@ class OZONE_BASE_EXPORT SurfaceFactoryOzone {
   // Note: The platform must support creation of SurfaceOzoneCanvas from the
   // Browser Process using only the handle contained in gfx::AcceleratedWidget.
   virtual std::unique_ptr<SurfaceOzoneCanvas> CreateCanvasForWidget(
-      gfx::AcceleratedWidget widget);
-
-  // Returns all scanout formats for |widget| representing a particular display
-  // controller or default display controller for kNullAcceleratedWidget.
-  virtual std::vector<gfx::BufferFormat> GetScanoutFormats(
       gfx::AcceleratedWidget widget);
 
   // Create a single native buffer to be used for overlay planes or zero copy

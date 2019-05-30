@@ -4,6 +4,10 @@
 
 #include "base/task/task_scheduler/platform_native_worker_pool_win.h"
 
+#include <algorithm>
+#include <utility>
+
+#include "base/system/sys_info.h"
 #include "base/task/task_scheduler/task_tracker.h"
 
 namespace base {
@@ -11,8 +15,9 @@ namespace internal {
 
 PlatformNativeWorkerPoolWin::PlatformNativeWorkerPoolWin(
     TrackedRef<TaskTracker> task_tracker,
-    DelayedTaskManager* delayed_task_manager)
-    : SchedulerWorkerPool(task_tracker, delayed_task_manager) {}
+    TrackedRef<Delegate> delegate)
+    : SchedulerWorkerPool(std::move(task_tracker),
+                          std::move(delegate)) {}
 
 PlatformNativeWorkerPoolWin::~PlatformNativeWorkerPoolWin() {
 #if DCHECK_IS_ON()
@@ -40,10 +45,10 @@ void PlatformNativeWorkerPoolWin::Start() {
 
   size_t local_num_sequences_before_start;
   {
-    auto transaction(priority_queue_.BeginTransaction());
+    AutoSchedulerLock auto_lock(lock_);
     DCHECK(!started_);
     started_ = true;
-    local_num_sequences_before_start = transaction->Size();
+    local_num_sequences_before_start = priority_queue_.Size();
   }
 
   // Schedule sequences added to |priority_queue_| before Start().
@@ -57,6 +62,11 @@ void PlatformNativeWorkerPoolWin::JoinForTesting() {
   DCHECK(!join_for_testing_returned_.IsSet());
   join_for_testing_returned_.Set();
 #endif
+}
+
+void PlatformNativeWorkerPoolWin::ReEnqueueSequenceChangingPool(
+    SequenceAndTransaction sequence_and_transaction) {
+  OnCanScheduleSequence(std::move(sequence_and_transaction));
 }
 
 // static
@@ -75,8 +85,10 @@ void CALLBACK PlatformNativeWorkerPoolWin::RunNextSequence(
   sequence = worker_pool->task_tracker_->RunAndPopNextTask(
       std::move(sequence.get()), worker_pool);
 
-  // Re-enqueue sequence and then submit another task to the Windows thread
-  // pool.
+  // Reenqueue sequence and then submit another task to the Windows thread pool.
+  //
+  // TODO(fdoray): Use |delegate_| to decide in which pool the Sequence should
+  // be reenqueued.
   if (sequence)
     worker_pool->OnCanScheduleSequence(std::move(sequence));
 
@@ -84,26 +96,46 @@ void CALLBACK PlatformNativeWorkerPoolWin::RunNextSequence(
 }
 
 scoped_refptr<Sequence> PlatformNativeWorkerPoolWin::GetWork() {
-  auto transaction(priority_queue_.BeginTransaction());
-
+  AutoSchedulerLock auto_lock(lock_);
   // The PQ should never be empty here as there's a 1:1 correspondence between
   // a call to ScheduleSequence()/SubmitThreadpoolWork() and GetWork().
-  DCHECK(!transaction->IsEmpty());
-  return transaction->PopSequence();
+  DCHECK(!priority_queue_.IsEmpty());
+  return priority_queue_.PopSequence();
 }
 
 void PlatformNativeWorkerPoolWin::OnCanScheduleSequence(
     scoped_refptr<Sequence> sequence) {
-  const SequenceSortKey sequence_sort_key = sequence->GetSortKey();
-  auto transaction(priority_queue_.BeginTransaction());
+  OnCanScheduleSequence(
+      SequenceAndTransaction::FromSequence(std::move(sequence)));
+}
 
-  transaction->Push(std::move(sequence), sequence_sort_key);
-  if (started_) {
-    // TODO(fdoray): Handle priorities by having different work objects and
-    // using ::SetThreadpoolCallbackPriority() and
-    // ::SetThreadpoolCallbackRunsLong().
-    ::SubmitThreadpoolWork(work_);
+void PlatformNativeWorkerPoolWin::OnCanScheduleSequence(
+    SequenceAndTransaction sequence_and_transaction) {
+  {
+    AutoSchedulerLock auto_lock(lock_);
+    priority_queue_.Push(std::move(sequence_and_transaction.sequence),
+                         sequence_and_transaction.transaction.GetSortKey());
+    if (!started_)
+      return;
   }
+  // TODO(fdoray): Handle priorities by having different work objects and using
+  // SetThreadpoolCallbackPriority() and SetThreadpoolCallbackRunsLong().
+  ::SubmitThreadpoolWork(work_);
+}
+
+size_t PlatformNativeWorkerPoolWin::GetMaxConcurrentNonBlockedTasksDeprecated()
+    const {
+  // The Windows Thread Pool API gives us no control over the number of workers
+  // that are active at one time. Consequently, we cannot report a true value
+  // here. Instead, the values were chosen to match
+  // TaskScheduler::StartWithDefaultParams.
+  const int num_cores = SysInfo::NumberOfProcessors();
+  return std::max(3, num_cores - 1);
+}
+
+void PlatformNativeWorkerPoolWin::ReportHeartbeatMetrics() const {
+  // Windows Thread Pool API does not provide the capability to determine the
+  // number of worker threads created.
 }
 
 }  // namespace internal

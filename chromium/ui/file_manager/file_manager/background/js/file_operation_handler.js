@@ -9,7 +9,7 @@
  * @constructor
  * @struct
  */
-var FileOperationHandler = function(fileOperationManager, progressCenter) {
+const FileOperationHandler = function(fileOperationManager, progressCenter) {
   /**
    * File operation manager.
    * @type {!FileOperationManager}
@@ -61,13 +61,14 @@ FileOperationHandler.PENDING_TIME_MS_ = 500;
  * @return {string} message.
  * @private
  */
-FileOperationHandler.getMessage_ = function(event) {
+FileOperationHandler.getMessage_ = event => {
   if (event.reason === fileOperationUtil.EventRouter.EventType.ERROR) {
     switch (event.error.code) {
       case util.FileOperationErrorType.TARGET_EXISTS:
         var name = event.error.data.name;
-        if (event.error.data.isDirectory)
+        if (event.error.data.isDirectory) {
           name += '/';
+        }
         switch (event.status.operationType) {
           case 'COPY': return strf('COPY_TARGET_EXISTS_ERROR', name);
           case 'MOVE': return strf('MOVE_TARGET_EXISTS_ERROR', name);
@@ -76,7 +77,7 @@ FileOperationHandler.getMessage_ = function(event) {
         }
 
       case util.FileOperationErrorType.FILESYSTEM_ERROR:
-        var detail = util.getFileErrorString(event.error.data.name);
+        const detail = util.getFileErrorString(event.error.data.name);
         switch (event.status.operationType) {
           case 'COPY': return strf('COPY_FILESYSTEM_ERROR', detail);
           case 'MOVE': return strf('MOVE_FILESYSTEM_ERROR', detail);
@@ -101,7 +102,7 @@ FileOperationHandler.getMessage_ = function(event) {
       default: return strf('TRANSFER_FILE_NAME', name);
     }
   } else {
-    var remainNumber = event.status.numRemainingItems;
+    const remainNumber = event.status.numRemainingItems;
     switch (event.status.operationType) {
       case 'COPY': return strf('COPY_ITEMS_REMAINING', remainNumber);
       case 'MOVE': return strf('MOVE_ITEMS_REMAINING', remainNumber);
@@ -117,12 +118,12 @@ FileOperationHandler.getMessage_ = function(event) {
  * @return {string} message.
  * @private
  */
-FileOperationHandler.getDeleteMessage_ = function(event) {
+FileOperationHandler.getDeleteMessage_ = event => {
   event = /** @type {FileOperationProgressEvent} */ (event);
   if (event.reason === fileOperationUtil.EventRouter.EventType.ERROR) {
     return str('DELETE_ERROR');
   } else if (event.entries.length == 1) {
-    var fileName = event.entries[0].name;
+    const fileName = event.entries[0].name;
     return strf('DELETE_FILE_NAME', fileName);
   } else if (event.entries.length > 1) {
     return strf('DELETE_ITEMS_REMAINING', event.entries.length);
@@ -138,7 +139,7 @@ FileOperationHandler.getDeleteMessage_ = function(event) {
  *     operation type.
  * @private
  */
-FileOperationHandler.getType_ = function(operationType) {
+FileOperationHandler.getType_ = operationType => {
   switch (operationType) {
     case 'COPY': return ProgressItemType.COPY;
     case 'MOVE': return ProgressItemType.MOVE;
@@ -155,12 +156,12 @@ FileOperationHandler.getType_ = function(operationType) {
  * @private
  */
 FileOperationHandler.prototype.onCopyProgress_ = function(event) {
-  var EventType = fileOperationUtil.EventRouter.EventType;
+  const EventType = fileOperationUtil.EventRouter.EventType;
   event = /** @type {FileOperationProgressEvent} */ (event);
 
   // Update progress center.
-  var progressCenter = this.progressCenter_;
-  var item;
+  const progressCenter = this.progressCenter_;
+  let item;
   switch (event.reason) {
     case EventType.BEGIN:
       item = new ProgressCenterItem();
@@ -220,13 +221,13 @@ FileOperationHandler.prototype.onCopyProgress_ = function(event) {
  * @private
  */
 FileOperationHandler.prototype.onDeleteProgress_ = function(event) {
-  var EventType = fileOperationUtil.EventRouter.EventType;
+  const EventType = fileOperationUtil.EventRouter.EventType;
   event = /** @type {FileOperationProgressEvent} */ (event);
 
   // Update progress center.
-  var progressCenter = this.progressCenter_;
-  var item;
-  var pending;
+  const progressCenter = this.progressCenter_;
+  let item;
+  let pending;
   switch (event.reason) {
     case EventType.BEGIN:
       item = new ProgressCenterItem();
@@ -254,8 +255,9 @@ FileOperationHandler.prototype.onDeleteProgress_ = function(event) {
       item.message = FileOperationHandler.getDeleteMessage_(event);
       item.progressMax = event.totalBytes;
       item.progressValue = event.processedBytes;
-      if (!pending)
+      if (!pending) {
         progressCenter.updateItem(item);
+      }
       break;
 
     case EventType.SUCCESS:
@@ -282,10 +284,12 @@ FileOperationHandler.prototype.onDeleteProgress_ = function(event) {
       }
 
       // Apply the change.
-      if (!pending || event.reason === EventType.ERROR)
+      if (!pending || event.reason === EventType.ERROR) {
         progressCenter.updateItem(item);
-      if (pending)
+      }
+      if (pending) {
         delete this.pendingItems_[event.taskId];
+      }
       break;
   }
 };
@@ -298,8 +302,9 @@ FileOperationHandler.prototype.onDeleteProgress_ = function(event) {
  */
 FileOperationHandler.prototype.showPendingItem_ = function(item) {
   // The item is already gone.
-  if (!this.pendingItems_[item.id])
+  if (!this.pendingItems_[item.id]) {
     return;
+  }
   delete this.pendingItems_[item.id];
   this.progressCenter_.updateItem(item);
 };

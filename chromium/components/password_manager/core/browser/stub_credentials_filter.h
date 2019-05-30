@@ -19,23 +19,14 @@ class StubCredentialsFilter : public CredentialsFilter {
   ~StubCredentialsFilter() override;
 
   // CredentialsFilter
-  std::vector<std::unique_ptr<autofill::PasswordForm>> FilterResults(
-      std::vector<std::unique_ptr<autofill::PasswordForm>> results)
-      const override;
   bool ShouldSave(const autofill::PasswordForm& form) const override;
   bool ShouldSaveGaiaPasswordHash(
       const autofill::PasswordForm& form) const override;
   bool ShouldSaveEnterprisePasswordHash(
       const autofill::PasswordForm& form) const override;
   void ReportFormLoginSuccess(
-      const PasswordFormManager& form_manager) const override;
+      const PasswordFormManagerInterface& form_manager) const override;
   bool IsSyncAccountEmail(const std::string& username) const override;
-
-  // A version of FilterResult without moveable arguments, which cannot be
-  // mocked in GMock. StubCredentialsFilter::FilterResults(arg) calls
-  // FilterResultsPtr(&arg).
-  virtual void FilterResultsPtr(
-      std::vector<std::unique_ptr<autofill::PasswordForm>>* results) const;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(StubCredentialsFilter);

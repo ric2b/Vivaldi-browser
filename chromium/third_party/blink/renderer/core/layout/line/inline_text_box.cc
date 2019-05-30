@@ -30,7 +30,6 @@
 #include "third_party/blink/renderer/core/layout/api/line_layout_br.h"
 #include "third_party/blink/renderer/core/layout/api/line_layout_ruby_run.h"
 #include "third_party/blink/renderer/core/layout/api/line_layout_ruby_text.h"
-#include "third_party/blink/renderer/core/layout/api/selection_state.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/line/abstract_inline_text_box.h"
 #include "third_party/blink/renderer/core/layout/line/ellipsis_box.h"
@@ -48,7 +47,7 @@ namespace blink {
 
 struct SameSizeAsInlineTextBox : public InlineBox {
   unsigned variables[1];
-  unsigned short variables2[2];
+  uint16_t variables2[2];
   void* pointers[2];
 };
 
@@ -316,7 +315,7 @@ void InlineTextBox::AttachLine() {
   GetLineLayoutItem().AttachTextBox(this);
 }
 
-void InlineTextBox::SetTruncation(unsigned truncation) {
+void InlineTextBox::SetTruncation(uint16_t truncation) {
   if (truncation == truncation_)
     return;
 

@@ -22,9 +22,9 @@ import org.chromium.base.process_launcher.ChildProcessLauncher;
 import org.chromium.base.process_launcher.FileDescriptorInfo;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Feature;
-import org.chromium.content.browser.test.ContentJUnit4ClassRunner;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.ContentJUnit4ClassRunner;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_shell_apk.ChildProcessLauncherTestUtils;
 import org.chromium.content_shell_apk.IChildProcessTest;
 
@@ -160,11 +160,6 @@ public class ChildProcessLauncherTest {
         public void onRunMain() {
             Assert.assertEquals(0, mOnRunMainHelper.getCallCount());
             mOnRunMainHelper.notifyCalled();
-        }
-
-        @Override
-        public void onDestroy() {
-            Assert.assertEquals(0, mOnDestroyHelper.getCallCount());
         }
 
         public void waitForOnConnectionSetupCalled() throws InterruptedException, TimeoutException {

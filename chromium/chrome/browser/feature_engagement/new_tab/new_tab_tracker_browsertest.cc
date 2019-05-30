@@ -4,13 +4,14 @@
 
 #include "chrome/browser/feature_engagement/new_tab/new_tab_tracker.h"
 
+#include "base/bind.h"
 #include "base/run_loop.h"
 #include "chrome/browser/feature_engagement/new_tab/new_tab_tracker_factory.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/views/feature_promos/new_tab_promo_bubble_view.h"
+#include "chrome/browser/ui/views/feature_promos/feature_promo_bubble_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/tabs/new_tab_button.h"
@@ -50,7 +51,7 @@ class NewTabTrackerBrowserTest : public InProcessBrowserTest {
 
   void SetUpOnMainThread() override {
     TrackerFactory::GetInstance()->SetTestingFactoryAndUse(
-        browser()->profile(), &BuildTestTrackerFactory);
+        browser()->profile(), base::BindRepeating(&BuildTestTrackerFactory));
 
     // Ensure all initialization is finished.
     base::RunLoop().RunUntilIdle();

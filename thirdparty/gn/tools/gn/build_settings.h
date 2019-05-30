@@ -39,8 +39,10 @@ class BuildSettings {
   // Absolute path of the source root on the local system. Everything is
   // relative to this. Does not end in a [back]slash.
   const base::FilePath& root_path() const { return root_path_; }
+  const base::FilePath& dotfile_name() const { return dotfile_name_; }
   const std::string& root_path_utf8() const { return root_path_utf8_; }
   void SetRootPath(const base::FilePath& r);
+  void set_dotfile_name(const base::FilePath& d) { dotfile_name_ = d; }
 
   // When nonempty, specifies a parallel directory higherarchy in which to
   // search for buildfiles if they're not found in the root higherarchy. This
@@ -129,6 +131,7 @@ class BuildSettings {
 
  private:
   Label root_target_label_;
+  base::FilePath dotfile_name_;
   base::FilePath root_path_;
   std::string root_path_utf8_;
   base::FilePath secondary_source_path_;

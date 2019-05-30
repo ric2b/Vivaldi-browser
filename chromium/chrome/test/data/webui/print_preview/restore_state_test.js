@@ -51,11 +51,15 @@ cr.define('restore_state_test', function() {
           stickySettings.vendorOptions.printArea,
           page.settings.vendorItems.value.printArea);
 
-      [['margins', 'marginsType'], ['color', 'isColorEnabled'],
+      [['margins', 'marginsType'],
+       ['color', 'isColorEnabled'],
        ['headerFooter', 'isHeaderFooterEnabled'],
-       ['layout', 'isLandscapeEnabled'], ['collate', 'isCollateEnabled'],
+       ['layout', 'isLandscapeEnabled'],
+       ['collate', 'isCollateEnabled'],
        ['fitToPage', 'isFitToPageEnabled'],
-       ['cssBackground', 'isCssBackgroundEnabled'], ['scaling', 'scaling'],
+       ['cssBackground', 'isCssBackgroundEnabled'],
+       ['scaling', 'scaling'],
+       ['customScaling', 'customScaling'],
       ].forEach(keys => {
         assertEquals(stickySettings[keys[1]], page.settings[keys[0]].value);
       });
@@ -111,6 +115,7 @@ cr.define('restore_state_test', function() {
           printArea: 6,
         },
         marginsType: 3, /* custom */
+        customScaling: true,
         scaling: '90',
         isHeaderFooterEnabled: true,
         isCssBackgroundEnabled: true,
@@ -145,6 +150,7 @@ cr.define('restore_state_test', function() {
           printArea: 4,
         },
         marginsType: 0, /* default */
+        customScaling: false,
         scaling: '120',
         isHeaderFooterEnabled: false,
         isCssBackgroundEnabled: false,
@@ -193,7 +199,12 @@ cr.define('restore_state_test', function() {
           section: 'print-preview-media-size-settings',
           settingName: 'mediaSize',
           key: 'mediaSize',
-          value: {width_microns: 20000, height_microns: 20000},
+          value: {
+            name: 'CUSTOM_SQUARE',
+            width_microns: 215900,
+            height_microns: 215900,
+            custom_display_name: 'CUSTOM_SQUARE',
+          },
         },
         {
           section: 'print-preview-margins-settings',
@@ -205,7 +216,13 @@ cr.define('restore_state_test', function() {
           section: 'print-preview-dpi-settings',
           settingName: 'dpi',
           key: 'dpi',
-          value: {horizontal_dpi: 1000, vertical_dpi: 1000},
+          value: {horizontal_dpi: 100, vertical_dpi: 100},
+        },
+        {
+          section: 'print-preview-scaling-settings',
+          settingName: 'customScaling',
+          key: 'customScaling',
+          value: true,
         },
         {
           section: 'print-preview-scaling-settings',
@@ -260,8 +277,9 @@ cr.define('restore_state_test', function() {
           .then(function() {
             // Set all the settings sections.
             testData.forEach((testValue, index) => {
-              if (index == testData.length - 1)
+              if (index == testData.length - 1) {
                 nativeLayer.resetResolver('saveAppState');
+              }
               page.$$(testValue.section)
                   .setSetting(testValue.settingName, testValue.value);
             });

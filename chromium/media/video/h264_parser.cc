@@ -8,8 +8,8 @@
 #include <memory>
 
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/numerics/safe_math.h"
+#include "base/stl_util.h"
 #include "media/base/subsample_entry.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -77,6 +77,27 @@ bool H264SliceHeader::IsSISlice() const {
 
 H264NALU::H264NALU() {
   memset(this, 0, sizeof(*this));
+}
+
+// static
+void H264SPS::GetLevelConfigFromProfileLevel(VideoCodecProfile profile,
+                                             uint8_t level,
+                                             int* level_idc,
+                                             bool* constraint_set3_flag) {
+  // Spec A.3.1.
+  // Note: we always use h264_output_level = 9 to indicate Level 1b in
+  //       VideoEncodeAccelerator::Config, in order to tell apart from Level 1.1
+  //       which level IDC is also 11.
+  // For Baseline and Main profile, if requested level is Level 1b, set
+  // level_idc to 11 and constraint_set3_flag to true. Otherwise, set level_idc
+  // to 9 for Level 1b, and ten times level number for others.
+  if ((profile == H264PROFILE_BASELINE || profile == H264PROFILE_MAIN) &&
+      level == kLevelIDC1B) {
+    *level_idc = 11;
+    *constraint_set3_flag = true;
+  } else {
+    *level_idc = level;
+  }
 }
 
 H264SPS::H264SPS() {
@@ -173,6 +194,33 @@ VideoColorSpace H264SPS::GetColorSpace() const {
   }
 }
 
+uint8_t H264SPS::GetIndicatedLevel() const {
+  // Spec A.3.1 and A.3.2
+  // For Baseline, Constrained Baseline and Main profile, the indicated level is
+  // Level 1b if level_idc is equal to 11 and constraint_set3_flag is true.
+  if ((profile_idc == H264SPS::kProfileIDCBaseline ||
+       profile_idc == H264SPS::kProfileIDCConstrainedBaseline ||
+       profile_idc == H264SPS::kProfileIDCMain) &&
+      level_idc == 11 && constraint_set3_flag) {
+    return kLevelIDC1B;  // Level 1b
+  }
+
+  // Otherwise, the level_idc is equal to 9 for Level 1b, and others are equal
+  // to values of ten times the level numbers.
+  return base::checked_cast<uint8_t>(level_idc);
+}
+
+bool H264SPS::CheckIndicatedLevelWithinTarget(uint8_t target_level) const {
+  // See table A-1 in spec.
+  // Level 1.0 < 1b < 1.1 < 1.2 .... (in numeric order).
+  uint8_t level = GetIndicatedLevel();
+  if (target_level == kLevelIDC1p0)
+    return level == kLevelIDC1p0;
+  if (target_level == kLevelIDC1B)
+    return level == kLevelIDC1p0 || level == kLevelIDC1B;
+  return level <= target_level;
+}
+
 H264PPS::H264PPS() {
   memset(this, 0, sizeof(*this));
 }
@@ -247,7 +295,7 @@ static const int kTableSarWidth[] = {0,  1,  12, 10, 16,  40, 24, 20, 32,
                                      80, 18, 15, 64, 160, 4,  3,  2};
 static const int kTableSarHeight[] = {0,  1,  11, 11, 11, 33, 11, 11, 11,
                                       33, 11, 11, 33, 99, 3,  2,  1};
-static_assert(arraysize(kTableSarWidth) == arraysize(kTableSarHeight),
+static_assert(base::size(kTableSarWidth) == base::size(kTableSarHeight),
               "sar tables must have the same size");
 
 H264Parser::H264Parser() {
@@ -761,7 +809,7 @@ H264Parser::Result H264Parser::ParseSPSScalingLists(H264SPS* sps) {
     READ_BOOL_OR_RETURN(&seq_scaling_list_present_flag);
 
     if (seq_scaling_list_present_flag) {
-      res = ParseScalingList(arraysize(sps->scaling_list4x4[i]),
+      res = ParseScalingList(base::size(sps->scaling_list4x4[i]),
                              sps->scaling_list4x4[i], &use_default);
       if (res != kOk)
         return res;
@@ -780,7 +828,7 @@ H264Parser::Result H264Parser::ParseSPSScalingLists(H264SPS* sps) {
     READ_BOOL_OR_RETURN(&seq_scaling_list_present_flag);
 
     if (seq_scaling_list_present_flag) {
-      res = ParseScalingList(arraysize(sps->scaling_list8x8[i]),
+      res = ParseScalingList(base::size(sps->scaling_list8x8[i]),
                              sps->scaling_list8x8[i], &use_default);
       if (res != kOk)
         return res;
@@ -808,7 +856,7 @@ H264Parser::Result H264Parser::ParsePPSScalingLists(const H264SPS& sps,
     READ_BOOL_OR_RETURN(&pic_scaling_list_present_flag);
 
     if (pic_scaling_list_present_flag) {
-      res = ParseScalingList(arraysize(pps->scaling_list4x4[i]),
+      res = ParseScalingList(base::size(pps->scaling_list4x4[i]),
                              pps->scaling_list4x4[i], &use_default);
       if (res != kOk)
         return res;
@@ -834,7 +882,7 @@ H264Parser::Result H264Parser::ParsePPSScalingLists(const H264SPS& sps,
       READ_BOOL_OR_RETURN(&pic_scaling_list_present_flag);
 
       if (pic_scaling_list_present_flag) {
-        res = ParseScalingList(arraysize(pps->scaling_list8x8[i]),
+        res = ParseScalingList(base::size(pps->scaling_list8x8[i]),
                                pps->scaling_list8x8[i], &use_default);
         if (res != kOk)
           return res;
@@ -891,7 +939,7 @@ H264Parser::Result H264Parser::ParseVUIParameters(H264SPS* sps) {
       READ_BITS_OR_RETURN(16, &sps->sar_width);
       READ_BITS_OR_RETURN(16, &sps->sar_height);
     } else {
-      const int max_aspect_ratio_idc = arraysize(kTableSarWidth) - 1;
+      const int max_aspect_ratio_idc = base::size(kTableSarWidth) - 1;
       IN_RANGE_OR_RETURN(aspect_ratio_idc, 0, max_aspect_ratio_idc);
       sps->sar_width = kTableSarWidth[aspect_ratio_idc];
       sps->sar_height = kTableSarHeight[aspect_ratio_idc];
@@ -1325,7 +1373,7 @@ H264Parser::Result H264Parser::ParseDecRefPicMarking(H264SliceHeader* shdr) {
     H264DecRefPicMarking* marking;
     if (shdr->adaptive_ref_pic_marking_mode_flag) {
       size_t i;
-      for (i = 0; i < arraysize(shdr->ref_pic_marking); ++i) {
+      for (i = 0; i < base::size(shdr->ref_pic_marking); ++i) {
         marking = &shdr->ref_pic_marking[i];
 
         READ_UE_OR_RETURN(&marking->memory_mgmnt_control_operation);
@@ -1350,7 +1398,7 @@ H264Parser::Result H264Parser::ParseDecRefPicMarking(H264SliceHeader* shdr) {
           return kInvalidStream;
       }
 
-      if (i == arraysize(shdr->ref_pic_marking)) {
+      if (i == base::size(shdr->ref_pic_marking)) {
         DVLOG(1) << "Ran out of dec ref pic marking fields";
         return kUnsupportedStream;
       }

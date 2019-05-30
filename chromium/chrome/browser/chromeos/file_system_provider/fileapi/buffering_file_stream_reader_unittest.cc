@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
@@ -101,7 +102,8 @@ TEST_F(FileSystemProviderBufferingFileStreamReaderTest, Read) {
   // For the first read, the internal file stream reader is fired, as there is
   // no data in the preloading buffer.
   {
-    scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(kChunkSize));
+    scoped_refptr<net::IOBuffer> buffer =
+        base::MakeRefCounted<net::IOBuffer>(kChunkSize);
     std::vector<int> read_log;
     const int result = reader.Read(
         buffer.get(), kChunkSize, base::Bind(&LogValue<int>, &read_log));
@@ -118,7 +120,8 @@ TEST_F(FileSystemProviderBufferingFileStreamReaderTest, Read) {
   // the internal file stream reader.
   {
     inner_read_log.clear();
-    scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(kChunkSize));
+    scoped_refptr<net::IOBuffer> buffer =
+        base::MakeRefCounted<net::IOBuffer>(kChunkSize);
     std::vector<int> read_log;
     const int result = reader.Read(
         buffer.get(), kChunkSize, base::Bind(&LogValue<int>, &read_log));
@@ -134,7 +137,8 @@ TEST_F(FileSystemProviderBufferingFileStreamReaderTest, Read) {
   // valid to return less bytes than requested.
   {
     inner_read_log.clear();
-    scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(kChunkSize));
+    scoped_refptr<net::IOBuffer> buffer =
+        base::MakeRefCounted<net::IOBuffer>(kChunkSize);
     std::vector<int> read_log;
     const int result = reader.Read(
         buffer.get(), kChunkSize, base::Bind(&LogValue<int>, &read_log));
@@ -150,7 +154,8 @@ TEST_F(FileSystemProviderBufferingFileStreamReaderTest, Read) {
   // file stream reader.
   {
     inner_read_log.clear();
-    scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(kChunkSize));
+    scoped_refptr<net::IOBuffer> buffer =
+        base::MakeRefCounted<net::IOBuffer>(kChunkSize);
     std::vector<int> read_log;
     const int result = reader.Read(
         buffer.get(), kChunkSize, base::Bind(&LogValue<int>, &read_log));
@@ -173,7 +178,8 @@ TEST_F(FileSystemProviderBufferingFileStreamReaderTest, Read_Directly) {
 
   // First read couple of bytes, so the internal buffer is filled out.
   {
-    scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(kChunkSize));
+    scoped_refptr<net::IOBuffer> buffer =
+        base::MakeRefCounted<net::IOBuffer>(kChunkSize);
     std::vector<int> read_log;
     const int result = reader.Read(
         buffer.get(), kChunkSize, base::Bind(&LogValue<int>, &read_log));
@@ -193,7 +199,8 @@ TEST_F(FileSystemProviderBufferingFileStreamReaderTest, Read_Directly) {
   // as much as available in the internal buffer.
   {
     inner_read_log.clear();
-    scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(read_bytes));
+    scoped_refptr<net::IOBuffer> buffer =
+        base::MakeRefCounted<net::IOBuffer>(read_bytes);
     std::vector<int> read_log;
     const int result = reader.Read(
         buffer.get(), read_bytes, base::Bind(&LogValue<int>, &read_log));
@@ -209,7 +216,8 @@ TEST_F(FileSystemProviderBufferingFileStreamReaderTest, Read_Directly) {
   // the internal buffer.
   {
     inner_read_log.clear();
-    scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(read_bytes));
+    scoped_refptr<net::IOBuffer> buffer =
+        base::MakeRefCounted<net::IOBuffer>(read_bytes);
     std::vector<int> read_log;
     const int result = reader.Read(
         buffer.get(), read_bytes, base::Bind(&LogValue<int>, &read_log));
@@ -232,7 +240,8 @@ TEST_F(FileSystemProviderBufferingFileStreamReaderTest,
       kPreloadingBufferLength, kFileSize);
   // First read couple of bytes, so the internal buffer is filled out.
   {
-    scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(kChunkSize));
+    scoped_refptr<net::IOBuffer> buffer =
+        base::MakeRefCounted<net::IOBuffer>(kChunkSize);
     std::vector<int> read_log;
     const int result = reader.Read(
         buffer.get(), kChunkSize, base::Bind(&LogValue<int>, &read_log));
@@ -251,7 +260,8 @@ TEST_F(FileSystemProviderBufferingFileStreamReaderTest,
     inner_read_log.clear();
     const int chunk_size = 20;
     ASSERT_LT(kPreloadingBufferLength, chunk_size);
-    scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(chunk_size));
+    scoped_refptr<net::IOBuffer> buffer =
+        base::MakeRefCounted<net::IOBuffer>(chunk_size);
     std::vector<int> read_log;
     const int result = reader.Read(
         buffer.get(), chunk_size, base::Bind(&LogValue<int>, &read_log));
@@ -279,7 +289,8 @@ TEST_F(FileSystemProviderBufferingFileStreamReaderTest,
   ASSERT_LT(read_bytes, kPreloadingBufferLength);
   ASSERT_LE(read_bytes, total_bytes_to_read);
 
-  scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(read_bytes));
+  scoped_refptr<net::IOBuffer> buffer =
+      base::MakeRefCounted<net::IOBuffer>(read_bytes);
   std::vector<int> read_log;
   const int result = reader.Read(
       buffer.get(), read_bytes, base::Bind(&LogValue<int>, &read_log));
@@ -305,7 +316,8 @@ TEST_F(FileSystemProviderBufferingFileStreamReaderTest,
   const int read_bytes = 2;
   ASSERT_LT(read_bytes, kPreloadingBufferLength);
 
-  scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(read_bytes));
+  scoped_refptr<net::IOBuffer> buffer =
+      base::MakeRefCounted<net::IOBuffer>(read_bytes);
   std::vector<int> read_log;
   const int result = reader.Read(
       buffer.get(), read_bytes, base::Bind(&LogValue<int>, &read_log));
@@ -325,7 +337,8 @@ TEST_F(FileSystemProviderBufferingFileStreamReaderTest, Read_WithError) {
           new FakeFileStreamReader(&inner_read_log, net::ERR_ACCESS_DENIED)),
       kPreloadingBufferLength, kFileSize);
 
-  scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(kChunkSize));
+  scoped_refptr<net::IOBuffer> buffer =
+      base::MakeRefCounted<net::IOBuffer>(kChunkSize);
   std::vector<int> read_log;
   const int result = reader.Read(
       buffer.get(), kChunkSize, base::Bind(&LogValue<int>, &read_log));

@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/android/config.gni")
 import("//build/config/clang/clang.gni")
 import("//build/config/sysroot.gni")  # Imports android/config.gni.
 import("//build/toolchain/gcc_toolchain.gni")
@@ -57,7 +58,8 @@ template("android_clang_toolchain") {
     ld = cxx
     readelf = _tool_prefix + "readelf"
     nm = _tool_prefix + "nm"
-    strip = rebase_path("//third_party/eu-strip/bin/eu-strip", root_build_dir)
+    strip = rebase_path("//buildtools/third_party/eu-strip/bin/eu-strip",
+                        root_build_dir)
     use_unstripped_as_runtime_outputs = android_unstripped_runtime_outputs
 
     # Don't use .cr.so for loadable_modules since they are always loaded via

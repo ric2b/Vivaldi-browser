@@ -16,6 +16,20 @@ source_set("dialogs") {
   configs += [ "//build/config/compiler:enable_arc" ]
 }
 
+source_set("feature_flags") {
+  sources = [
+    "dialog_features.h",
+    "dialog_features.mm",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+
+  deps = [
+    "//base",
+    "//components/flags_ui",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
 
@@ -36,6 +50,8 @@ source_set("unit_tests") {
 source_set("dialogs_internal") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
+    "completion_block_util.h",
+    "completion_block_util.mm",
     "dialog_presenter.h",
     "dialog_presenter.mm",
     "java_script_dialog_presenter_impl.h",
@@ -51,6 +67,8 @@ source_set("dialogs_internal") {
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/alert_coordinator",
+    "//ios/chrome/browser/ui/alert_coordinator",
+    "//ios/chrome/browser/ui/dialogs/non_modal",
     "//ios/web",
     "//ui/base",
     "//url",
@@ -62,6 +80,7 @@ source_set("unit_tests_internal") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
+    "completion_block_util_unittest.mm",
     "dialog_presenter_unittest.mm",
     "java_script_dialog_presenter_impl_unittest.mm",
     "nsurl_protection_space_util_unittest.mm",
@@ -91,9 +110,9 @@ source_set("eg_tests") {
     "//base",
     "//base/test:test_support",
     "//components/strings",
+    "//components/url_formatter",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/ui",
-    "//ios/chrome/browser/ui/tools_menu/public",
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/earl_grey:test_support",
     "//ios/testing/earl_grey:earl_grey_support",

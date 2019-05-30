@@ -15,6 +15,7 @@
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "chrome/browser/background_fetch/background_fetch_download_client.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_image_download_client.h"
 #include "chrome/browser/download/download_task_scheduler_impl.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
@@ -23,10 +24,11 @@
 #include "components/download/public/background_service/clients.h"
 #include "components/download/public/background_service/download_service.h"
 #include "components/download/public/background_service/features.h"
-#include "components/download/public/background_service/task_scheduler.h"
+#include "components/download/public/task/task_scheduler.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/offline_pages/buildflags/buildflags.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
@@ -76,14 +78,23 @@ KeyedService* DownloadServiceFactory::BuildServiceInstanceFor(
       std::make_pair(download::DownloadClient::BACKGROUND_FETCH,
                      std::make_unique<BackgroundFetchDownloadClient>(context)));
 
+#if defined(CHROMEOS)
+  if (!context->IsOffTheRecord()) {
+    clients->insert(
+        std::make_pair(download::DownloadClient::PLUGIN_VM_IMAGE,
+                       std::make_unique<plugin_vm::PluginVmImageDownloadClient>(
+                           Profile::FromBrowserContext(context))));
+  }
+#endif
+
   // Build in memory download service for incognito profile.
   if (context->IsOffTheRecord() &&
       base::FeatureList::IsEnabled(download::kDownloadServiceIncognito)) {
     content::BrowserContext::BlobContextGetter blob_context_getter =
         content::BrowserContext::GetBlobStorageContext(context);
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
-        content::BrowserThread::GetTaskRunnerForThread(
-            content::BrowserThread::IO);
+        base::CreateSingleThreadTaskRunnerWithTraits(
+            {content::BrowserThread::IO});
 
     return download::BuildInMemoryDownloadService(
         context, std::move(clients), content::GetNetworkConnectionTracker(),

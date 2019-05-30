@@ -9,6 +9,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
@@ -20,9 +21,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/fake_profile_oauth2_token_service_builder.h"
-#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/browser/supervised_user/legacy/custodian_profile_downloader_service.h"
 #include "chrome/browser/supervised_user/legacy/custodian_profile_downloader_service_factory.h"
 #include "chrome/browser/supervised_user/permission_request_creator.h"
@@ -35,12 +34,11 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "components/version_info/version_info.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/buildflags/buildflags.h"
+#include "services/identity/public/cpp/identity_test_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -186,15 +184,18 @@ class SupervisedUserServiceTest : public ::testing::Test {
   SupervisedUserServiceTest() {}
 
   void SetUp() override {
-    TestingProfile::Builder builder;
-    builder.AddTestingFactory(ProfileOAuth2TokenServiceFactory::GetInstance(),
-                              BuildFakeProfileOAuth2TokenService);
-    profile_ = builder.Build();
+    profile_ = IdentityTestEnvironmentProfileAdaptor::
+        CreateProfileForIdentityTestEnvironment({});
+    identity_test_environment_adaptor_ =
+        std::make_unique<IdentityTestEnvironmentProfileAdaptor>(profile_.get());
     supervised_user_service_ =
         SupervisedUserServiceFactory::GetForProfile(profile_.get());
   }
 
-  void TearDown() override { profile_.reset(); }
+  void TearDown() override {
+    identity_test_environment_adaptor_.reset();
+    profile_.reset();
+  }
 
   ~SupervisedUserServiceTest() override {}
 
@@ -205,19 +206,18 @@ class SupervisedUserServiceTest : public ::testing::Test {
                         base::Unretained(result_holder)));
   }
 
+  identity::IdentityTestEnvironment* identity_test_env() {
+    return identity_test_environment_adaptor_->identity_test_env();
+  }
+
+  std::unique_ptr<IdentityTestEnvironmentProfileAdaptor>
+      identity_test_environment_adaptor_;
   content::TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<TestingProfile> profile_;
   SupervisedUserService* supervised_user_service_;
 };
 
 }  // namespace
-
-TEST_F(SupervisedUserServiceTest, ChangesIncludedSessionOnChangedSettings) {
-  supervised_user_service_->Init();
-  EXPECT_TRUE(supervised_user_service_->IncludesSyncSessionsType());
-  profile_->GetPrefs()->SetBoolean(prefs::kForceSessionSync, false);
-  EXPECT_FALSE(supervised_user_service_->IncludesSyncSessionsType());
-}
 
 #if !defined(OS_ANDROID)
 // Ensure that the CustodianProfileDownloaderService shuts down cleanly. If no
@@ -228,8 +228,8 @@ TEST_F(SupervisedUserServiceTest, ShutDownCustodianProfileDownloader) {
 
   // Emulate being logged in, then start to download a profile so a
   // ProfileDownloader gets created.
-  SigninManagerFactory::GetForProfile(profile_.get())->
-      SetAuthenticatedAccountInfo("12345", "Logged In");
+  identity_test_env()->MakePrimaryAccountAvailable("Logged In");
+
   downloader_service->DownloadProfile(base::Bind(&OnProfileDownloadedFail));
 }
 #endif
@@ -403,20 +403,20 @@ class SupervisedUserServiceExtensionTestBase
   }
 
  protected:
-  scoped_refptr<extensions::Extension> MakeThemeExtension() {
+  scoped_refptr<const extensions::Extension> MakeThemeExtension() {
     std::unique_ptr<base::DictionaryValue> source(new base::DictionaryValue());
     source->SetString(extensions::manifest_keys::kName, "Theme");
     source->Set(extensions::manifest_keys::kTheme,
                 std::make_unique<base::DictionaryValue>());
     source->SetString(extensions::manifest_keys::kVersion, "1.0");
     extensions::ExtensionBuilder builder;
-    scoped_refptr<extensions::Extension> extension =
+    scoped_refptr<const extensions::Extension> extension =
         builder.SetManifest(std::move(source)).Build();
     return extension;
   }
 
-  scoped_refptr<extensions::Extension> MakeExtension(bool by_custodian) {
-    scoped_refptr<extensions::Extension> extension =
+  scoped_refptr<const extensions::Extension> MakeExtension(bool by_custodian) {
+    scoped_refptr<const extensions::Extension> extension =
         extensions::ExtensionBuilder("Extension").Build();
     extensions::util::SetWasInstalledByCustodian(extension->id(),
                                                  profile_.get(), by_custodian);
@@ -442,16 +442,6 @@ class SupervisedUserServiceExtensionTest
  public:
   SupervisedUserServiceExtensionTest()
       : SupervisedUserServiceExtensionTestBase(true) {}
-
- protected:
-  void InitSupervisedUserInitiatedExtensionInstallFeature(bool enabled) {
-    if (enabled) {
-      scoped_feature_list_.InitAndEnableFeature(
-          supervised_users::kSupervisedUserInitiatedExtensionInstall);
-    }
-  }
-
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 TEST_F(SupervisedUserServiceExtensionTest,
@@ -460,13 +450,10 @@ TEST_F(SupervisedUserServiceExtensionTest,
       SupervisedUserServiceFactory::GetForProfile(profile_.get());
   ASSERT_TRUE(profile_->IsSupervised());
 
-  // Disable supervised user initiated installs.
-  InitSupervisedUserInitiatedExtensionInstallFeature(false);
-
   // Check that a supervised user can install and uninstall a theme even if
   // they are not allowed to install extensions.
   {
-    scoped_refptr<extensions::Extension> theme = MakeThemeExtension();
+    scoped_refptr<const extensions::Extension> theme = MakeThemeExtension();
 
     base::string16 error_1;
     EXPECT_TRUE(supervised_user_service->UserMayLoad(theme.get(), &error_1));
@@ -481,7 +468,7 @@ TEST_F(SupervisedUserServiceExtensionTest,
   // Now check a different kind of extension; the supervised user should not be
   // able to load it.
   {
-    scoped_refptr<extensions::Extension> extension = MakeExtension(false);
+    scoped_refptr<const extensions::Extension> extension = MakeExtension(false);
 
     base::string16 error;
     EXPECT_FALSE(supervised_user_service->UserMayLoad(extension.get(), &error));
@@ -491,7 +478,7 @@ TEST_F(SupervisedUserServiceExtensionTest,
   {
     // Check that a custodian-installed extension may be loaded, but not
     // uninstalled.
-    scoped_refptr<extensions::Extension> extension = MakeExtension(true);
+    scoped_refptr<const extensions::Extension> extension = MakeExtension(true);
 
     base::string16 error_1;
     EXPECT_TRUE(
@@ -510,18 +497,25 @@ TEST_F(SupervisedUserServiceExtensionTest,
 #endif
 }
 
+// TODO(crbug.com/910597): Flaky due to use of ScopedFeatureList.
 TEST_F(SupervisedUserServiceExtensionTest,
-       ExtensionManagementPolicyProviderWithSUInitiatedInstalls) {
+       DISABLED_ExtensionManagementPolicyProviderWithSUInitiatedInstalls) {
+  // Enable supervised user initiated installs.
+  // TODO(crbug.com/846380): ScopedFeatureList must be initialized before the
+  // TestBrowserThreadBundle in ExtensionServiceTestBase to avoid races between
+  // threads.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      supervised_users::kSupervisedUserInitiatedExtensionInstall);
+
   SupervisedUserService* supervised_user_service =
       SupervisedUserServiceFactory::GetForProfile(profile_.get());
   ASSERT_TRUE(profile_->IsSupervised());
 
-  // Enable supervised user initiated installs.
-  InitSupervisedUserInitiatedExtensionInstallFeature(true);
   // The supervised user should be able to load and uninstall the extensions
   // they install.
   {
-    scoped_refptr<extensions::Extension> extension = MakeExtension(false);
+    scoped_refptr<const extensions::Extension> extension = MakeExtension(false);
 
     base::string16 error;
     EXPECT_TRUE(supervised_user_service->UserMayLoad(extension.get(), &error));
@@ -550,7 +544,7 @@ TEST_F(SupervisedUserServiceExtensionTest,
 
   {
     // A custodian-installed extension may be loaded, but not uninstalled.
-    scoped_refptr<extensions::Extension> extension = MakeExtension(true);
+    scoped_refptr<const extensions::Extension> extension = MakeExtension(true);
 
     base::string16 error_1;
     EXPECT_TRUE(

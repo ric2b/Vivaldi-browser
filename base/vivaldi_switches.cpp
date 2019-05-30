@@ -26,4 +26,9 @@ const char kLaunchUpdater[] = "launch-updater";
 // on startup if Vivaldi is already running.
 const char kTestAlreadyRunningDialog[] = "test-already-running-dialog";
 
+#if defined(OS_MACOSX)
+// This switch disables forced gpu viceo decode on mac
+const char kDontForceGpuDecodeMac[] = "dont-force-gpu-decode-mac";
+#endif
+
 }  // namespace switches

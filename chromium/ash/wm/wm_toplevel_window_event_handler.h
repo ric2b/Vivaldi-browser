@@ -12,6 +12,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "ui/aura/window_observer.h"
+#include "ui/display/display_observer.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/wm/public/window_move_client.h"
 
@@ -38,7 +39,8 @@ namespace wm {
 // EventHandler.
 class ASH_EXPORT WmToplevelWindowEventHandler
     : public WindowTreeHostManager::Observer,
-      public aura::WindowObserver {
+      public aura::WindowObserver,
+      public display::DisplayObserver {
  public:
   // Describes what triggered ending the drag.
   enum class DragResult {
@@ -55,18 +57,25 @@ class ASH_EXPORT WmToplevelWindowEventHandler
   WmToplevelWindowEventHandler();
   ~WmToplevelWindowEventHandler() override;
 
+  // display::DisplayObserver:
+  void OnDisplayMetricsChanged(const display::Display& display,
+                               uint32_t metrics) override;
+
   void OnKeyEvent(ui::KeyEvent* event);
   void OnMouseEvent(ui::MouseEvent* event, aura::Window* target);
   void OnGestureEvent(ui::GestureEvent* event, aura::Window* target);
 
   // Attempts to start a drag if one is not already in progress. Returns true if
   // successful. |end_closure| is run when the drag completes, including if the
-  // drag is not started.
+  // drag is not started. If |update_gesture_target| is true, the gesture
+  // target is forcefully updated and gesture events are transferred to
+  // new target if any.
   bool AttemptToStartDrag(aura::Window* window,
                           const gfx::Point& point_in_parent,
                           int window_component,
                           ::wm::WindowMoveSource source,
-                          EndClosure end_closure);
+                          EndClosure end_closure,
+                          bool update_gesture_target);
 
   // If there is a drag in progress it is reverted, otherwise does nothing.
   void RevertDrag();
@@ -111,10 +120,8 @@ class ASH_EXPORT WmToplevelWindowEventHandler
   // Called when mouse capture is lost.
   void HandleCaptureLost(ui::LocatedEvent* event);
 
-  // Sets |window|'s state type to |new_state_type|. Called after the drag has
-  // been completed for fling gestures.
-  void SetWindowStateTypeFromGesture(aura::Window* window,
-                                     mojom::WindowStateType new_state_type);
+  // Handles the gesture fling or swipe event.
+  void HandleFlingOrSwipe(ui::GestureEvent* event);
 
   // Invoked from ScopedWindowResizer if the window is destroyed.
   void ResizerWindowDestroyed();
@@ -136,11 +143,6 @@ class ASH_EXPORT WmToplevelWindowEventHandler
   // The point for the first finger at the time that it initially touched the
   // screen.
   gfx::Point first_finger_touch_point_;
-
-  // The window bounds when the drag was started. When a window is minimized,
-  // maximized or snapped via a swipe/fling gesture, the restore bounds should
-  // be set to the bounds of the window when the drag was started.
-  gfx::Rect pre_drag_window_bounds_;
 
   // Is a window move/resize in progress because of gesture events?
   bool in_gesture_drag_ = false;

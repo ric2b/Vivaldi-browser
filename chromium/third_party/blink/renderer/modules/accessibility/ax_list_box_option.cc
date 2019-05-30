@@ -36,8 +36,6 @@
 
 namespace blink {
 
-using namespace HTMLNames;
-
 AXListBoxOption::AXListBoxOption(LayoutObject* layout_object,
                                  AXObjectCacheImpl& ax_object_cache)
     : AXLayoutObject(layout_object, ax_object_cache) {}
@@ -46,11 +44,11 @@ AXListBoxOption::~AXListBoxOption() = default;
 
 AXListBoxOption* AXListBoxOption::Create(LayoutObject* layout_object,
                                          AXObjectCacheImpl& ax_object_cache) {
-  return new AXListBoxOption(layout_object, ax_object_cache);
+  return MakeGarbageCollected<AXListBoxOption>(layout_object, ax_object_cache);
 }
 
-AccessibilityRole AXListBoxOption::DetermineAccessibilityRole() {
-  if ((aria_role_ = DetermineAriaRoleAttribute()) != kUnknownRole)
+ax::mojom::Role AXListBoxOption::DetermineAccessibilityRole() {
+  if ((aria_role_ = DetermineAriaRoleAttribute()) != ax::mojom::Role::kUnknown)
     return aria_role_;
 
   // http://www.w3.org/TR/wai-aria/complete#presentation
@@ -59,9 +57,9 @@ AccessibilityRole AXListBoxOption::DetermineAccessibilityRole() {
   // does not cause the content contained within the element to be removed from
   // the accessibility tree.
   if (IsParentPresentationalRole())
-    return kStaticTextRole;
+    return ax::mojom::Role::kStaticText;
 
-  return kListBoxOptionRole;
+  return ax::mojom::Role::kListBoxOption;
 }
 
 bool AXListBoxOption::IsParentPresentationalRole() const {
@@ -111,7 +109,7 @@ bool AXListBoxOption::ComputeAccessibilityIsIgnored(
 String AXListBoxOption::TextAlternative(bool recursive,
                                         bool in_aria_labelled_by_traversal,
                                         AXObjectSet& visited,
-                                        AXNameFrom& name_from,
+                                        ax::mojom::NameFrom& name_from,
                                         AXRelatedObjectVector* related_objects,
                                         NameSources* name_sources) const {
   // If nameSources is non-null, relatedObjects is used in filling it in, so it
@@ -129,7 +127,7 @@ String AXListBoxOption::TextAlternative(bool recursive,
   if (found_text_alternative && !name_sources)
     return text_alternative;
 
-  name_from = kAXNameFromContents;
+  name_from = ax::mojom::NameFrom::kContents;
   text_alternative = ToHTMLOptionElement(GetNode())->DisplayLabel();
   if (name_sources) {
     name_sources->push_back(NameSource(found_text_alternative));

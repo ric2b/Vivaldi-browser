@@ -16,7 +16,8 @@ WebGLExtensionName EXTDisjointTimerQueryWebGL2::GetName() const {
 
 EXTDisjointTimerQueryWebGL2* EXTDisjointTimerQueryWebGL2::Create(
     WebGLRenderingContextBase* context) {
-  EXTDisjointTimerQueryWebGL2* o = new EXTDisjointTimerQueryWebGL2(context);
+  EXTDisjointTimerQueryWebGL2* o =
+      MakeGarbageCollected<EXTDisjointTimerQueryWebGL2>(context);
   return o;
 }
 
@@ -36,13 +37,8 @@ void EXTDisjointTimerQueryWebGL2::queryCounterEXT(WebGLQuery* query,
   if (scoped.IsLost())
     return;
 
-  DCHECK(query);
-  if (query->IsDeleted() ||
-      !query->Validate(scoped.Context()->ContextGroup(), scoped.Context())) {
-    scoped.Context()->SynthesizeGLError(GL_INVALID_OPERATION, "queryCounterEXT",
-                                        "invalid query");
+  if (!scoped.Context()->ValidateWebGLObject("queryCounterEXT", query))
     return;
-  }
 
   if (target != GL_TIMESTAMP_EXT) {
     scoped.Context()->SynthesizeGLError(GL_INVALID_ENUM, "queryCounterEXT",

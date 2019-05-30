@@ -7,17 +7,25 @@
 
 #import <Foundation/Foundation.h>
 
-#import "ios/chrome/browser/autofill/form_input_accessory_view_delegate.h"
+#include "components/password_manager/core/browser/password_store.h"
+#import "ios/chrome/browser/autofill/form_input_navigator.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
 
+@class ChromeCoordinator;
 @protocol FormInputAccessoryConsumer;
-@protocol FormInputAccessoryViewProvider;
+@protocol FormInputSuggestionsProvider;
 @class JsSuggestionManager;
-class WebStateList;
+
+namespace autofill {
+class PersonalDataManager;
+}
+
 namespace web {
 class WebState;
 }
+
+class WebStateList;
 
 // This class contains all the logic to get and provide keyboard input accessory
 // views to its consumer. As well as telling the consumer when the default
@@ -26,11 +34,26 @@ class WebState;
 
 // Returns a mediator observing the passed `WebStateList` and associated with
 // the passed consumer. `webSateList` can be nullptr and `consumer` can be nil.
-- (instancetype)initWithConsumer:(id<FormInputAccessoryConsumer>)consumer
-                    webStateList:(WebStateList*)webStateList;
+- (instancetype)
+       initWithConsumer:(id<FormInputAccessoryConsumer>)consumer
+           webStateList:(WebStateList*)webStateList
+    personalDataManager:(autofill::PersonalDataManager*)personalDataManager
+          passwordStore:
+              (scoped_refptr<password_manager::PasswordStore>)passwordStore;
 
 // Unavailable, use initWithConsumer:webStateList: instead.
 - (instancetype)init NS_UNAVAILABLE;
+
+// Disables suggestions updates and asks the consumer to remove the current
+// ones.
+- (void)disableSuggestions;
+
+// Enables suggestions updates and sends the current ones, if any, to the
+// consumer.
+- (void)enableSuggestions;
+
+// Stops observing all objects.
+- (void)disconnect;
 
 @end
 
@@ -45,7 +68,7 @@ class WebState;
 
 // The objects that can provide a custom input accessory view while filling
 // forms.
-- (void)injectProviders:(NSArray<id<FormInputAccessoryViewProvider>>*)providers;
+- (void)injectProviders:(NSArray<id<FormInputSuggestionsProvider>>*)providers;
 
 @end
 

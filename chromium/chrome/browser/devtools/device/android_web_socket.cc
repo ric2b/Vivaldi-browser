@@ -4,6 +4,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -72,9 +73,10 @@ class AndroidDeviceManager::AndroidWebSocket::WebSocketImpl {
     DCHECK(thread_checker_.CalledOnValidThread());
     DCHECK(socket_);
 
-    scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(kBufferSize));
+    scoped_refptr<net::IOBuffer> buffer =
+        base::MakeRefCounted<net::IOBuffer>(kBufferSize);
 
-    if (response_buffer_.size() > 0)
+    if (!response_buffer_.empty())
       ProcessResponseBuffer(buffer);
     else
       Read(buffer);
@@ -156,7 +158,7 @@ class AndroidDeviceManager::AndroidWebSocket::WebSocketImpl {
       return;
 
     scoped_refptr<net::StringIOBuffer> buffer =
-        new net::StringIOBuffer(request_buffer_);
+        base::MakeRefCounted<net::StringIOBuffer>(request_buffer_);
     result = socket_->Write(buffer.get(), buffer->size(),
                             base::Bind(&WebSocketImpl::SendPendingRequests,
                                        weak_factory_.GetWeakPtr()),

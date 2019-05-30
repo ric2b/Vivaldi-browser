@@ -5,10 +5,8 @@
 package org.chromium.chrome.browser.signin;
 
 import android.content.Context;
-import android.content.res.ColorStateList;
 import android.graphics.drawable.Drawable;
 import android.support.annotation.Nullable;
-import android.support.v4.graphics.drawable.DrawableCompat;
 import android.support.v7.content.res.AppCompatResources;
 import android.util.AttributeSet;
 import android.view.View;
@@ -18,6 +16,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import org.chromium.chrome.R;
+import org.chromium.ui.UiUtils;
 import org.chromium.ui.drawable.AnimationLooper;
 import org.chromium.ui.widget.ButtonCompat;
 
@@ -31,9 +30,12 @@ public class SigninView extends LinearLayout {
     private TextView mAccountTextPrimary;
     private TextView mAccountTextSecondary;
     private ImageView mAccountPickerEndImage;
+    private TextView mSyncTitle;
     private TextView mSyncDescription;
-    private TextView mPersonalizationDescription;
-    private TextView mGoogleServicesDescription;
+    private TextView mTapToSearchTitle;
+    private TextView mTapToSearchDescription;
+    private TextView mSafeBrowsingTitle;
+    private TextView mSafeBrowsingDescription;
     private TextView mDetailsDescription;
     private ButtonCompat mAcceptButton;
     private Button mRefuseButton;
@@ -49,23 +51,20 @@ public class SigninView extends LinearLayout {
     protected void onFinishInflate() {
         super.onFinishInflate();
 
-        mScrollView = (SigninScrollView) findViewById(R.id.signin_scroll_view);
-        mHeaderImage = (ImageView) findViewById(R.id.signin_header_image);
-        mTitle = (TextView) findViewById(R.id.signin_title);
+        mScrollView = findViewById(R.id.signin_scroll_view);
+        mHeaderImage = findViewById(R.id.signin_header_image);
+        mTitle = findViewById(R.id.signin_title);
         mAccountPicker = findViewById(R.id.signin_account_picker);
-        mAccountImage = (ImageView) findViewById(R.id.account_image);
-        mAccountTextPrimary = (TextView) findViewById(R.id.account_text_primary);
-        mAccountTextSecondary = (TextView) findViewById(R.id.account_text_secondary);
-        mAccountPickerEndImage = (ImageView) findViewById(R.id.account_picker_end_image);
-        mSyncDescription = (TextView) findViewById(R.id.signin_sync_description);
-        mPersonalizationDescription =
-                (TextView) findViewById(R.id.signin_personalization_description);
-        mGoogleServicesDescription =
-                (TextView) findViewById(R.id.signin_google_services_description);
-        mDetailsDescription = (TextView) findViewById(R.id.signin_details_description);
-        mAcceptButton = (ButtonCompat) findViewById(R.id.positive_button);
-        mRefuseButton = (Button) findViewById(R.id.negative_button);
-        mMoreButton = (Button) findViewById(R.id.more_button);
+        mAccountImage = findViewById(R.id.account_image);
+        mAccountTextPrimary = findViewById(R.id.account_text_primary);
+        mAccountTextSecondary = findViewById(R.id.account_text_secondary);
+        mAccountPickerEndImage = findViewById(R.id.account_picker_end_image);
+        mSyncTitle = findViewById(R.id.signin_sync_title);
+        mSyncDescription = findViewById(R.id.signin_sync_description);
+        mDetailsDescription = findViewById(R.id.signin_details_description);
+        mAcceptButton = findViewById(R.id.positive_button);
+        mRefuseButton = findViewById(R.id.negative_button);
+        mMoreButton = findViewById(R.id.more_button);
         mAcceptButtonEndPadding = findViewById(R.id.positive_button_end_padding);
 
         mAnimationLooper = AnimationLooper.create(mHeaderImage.getDrawable());
@@ -99,16 +98,12 @@ public class SigninView extends LinearLayout {
         return mAccountPickerEndImage;
     }
 
+    TextView getSyncTitleView() {
+        return mSyncTitle;
+    }
+
     TextView getSyncDescriptionView() {
         return mSyncDescription;
-    }
-
-    TextView getPersonalizationDescriptionView() {
-        return mPersonalizationDescription;
-    }
-
-    TextView getGoogleServicesDescriptionView() {
-        return mGoogleServicesDescription;
     }
 
     TextView getDetailsDescriptionView() {
@@ -140,13 +135,8 @@ public class SigninView extends LinearLayout {
     }
 
     static Drawable getExpandArrowDrawable(Context context) {
-        Drawable drawable =
-                AppCompatResources.getDrawable(context, R.drawable.ic_expand_more_black_24dp);
-        assert drawable != null;
-        Drawable tintableDrawable = DrawableCompat.wrap(drawable).mutate();
-        ColorStateList tint = AppCompatResources.getColorStateList(context, R.color.dark_mode_tint);
-        DrawableCompat.setTintList(tintableDrawable, tint);
-        return tintableDrawable;
+        return UiUtils.getTintedDrawable(
+                context, R.drawable.ic_expand_more_black_24dp, R.color.standard_mode_tint);
     }
 
     static Drawable getCheckmarkDrawable(Context context) {

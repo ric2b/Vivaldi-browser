@@ -7,13 +7,13 @@
 
 #import <Foundation/Foundation.h>
 
+#import "ios/chrome/browser/ui/main/tab_switcher.h"
 #import "ios/chrome/browser/ui/tab_grid/tab_grid_mediator.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_switcher.h"
 
 @protocol TabGridPaging;
 @class TabGridURLLoader;
 
-// An opque adaptor for the TabSwitcher protocol into the TabGrid.
+// An opaque adaptor for the TabSwitcher protocol into the TabGrid.
 // Consuming objects should be passed instances of this object as an
 // id<TabSwitcher>.
 // All of the methods and properties on this class are internal API fot the

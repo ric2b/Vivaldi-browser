@@ -14,7 +14,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
-#include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/autofill_profile_validation_util.h"
 #include "third_party/libaddressinput/src/cpp/include/libaddressinput/address_data.h"
 #include "third_party/libaddressinput/src/cpp/include/libaddressinput/address_validator.h"
@@ -36,16 +35,16 @@ const int kRulesLoadingTimeoutSeconds = 5;
 }  // namespace
 
 AutofillProfileValidator::ValidationRequest::ValidationRequest(
-    base::WeakPtr<AutofillProfile> profile,
+    base::WeakPtr<const AutofillProfile> profile,
     autofill::AddressValidator* validator,
     AutofillProfileValidatorCallback on_validated)
-    : profile_(profile),
+    : profile_(*profile),
       validator_(validator),
       on_validated_(std::move(on_validated)),
       has_responded_(false),
-      on_timeout_(base::Bind(&ValidationRequest::OnRulesLoaded,
-                             base::Unretained(this))) {
-  DCHECK(profile_);
+      weak_factory_(this) {
+  on_timeout_.Reset(base::BindOnce(&ValidationRequest::OnRulesLoaded,
+                             weak_factory_.GetWeakPtr()));
   base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, on_timeout_.callback(),
       base::TimeDelta::FromSeconds(kRulesLoadingTimeoutSeconds));
@@ -62,12 +61,8 @@ void AutofillProfileValidator::ValidationRequest::OnRulesLoaded() {
     return;
   has_responded_ = true;
 
-  if (!profile_)
-    return;
-
-  profile_validation_util::ValidateProfile(profile_.get(), validator_);
-
-  std::move(on_validated_).Run(profile_.get());
+  profile_validation_util::ValidateProfile(&profile_, validator_);
+  std::move(on_validated_).Run(&profile_);
 }
 
 AutofillProfileValidator::AutofillProfileValidator(
@@ -78,13 +73,14 @@ AutofillProfileValidator::AutofillProfileValidator(
 AutofillProfileValidator::~AutofillProfileValidator() {}
 
 void AutofillProfileValidator::StartProfileValidation(
-    AutofillProfile* profile,
+    const AutofillProfile* profile,
     AutofillProfileValidatorCallback cb) {
   DCHECK(profile);
   if (!profile)
     return;
+
   std::unique_ptr<ValidationRequest> request(
-      std::make_unique<ValidationRequest>(profile->AsWeakPtr(),
+      std::make_unique<ValidationRequest>(profile->GetWeakPtr(),
                                           &address_validator_, std::move(cb)));
 
   // If the |region_code| is not a valid code according to our source, calling
@@ -100,7 +96,7 @@ void AutofillProfileValidator::StartProfileValidation(
 
     // Start loading the rules for the region. If the rules were already in the
     // process of being loaded, this call will do nothing.
-    address_validator_.LoadRules(region_code);
+    LoadRulesForRegion(region_code);
   }
 }
 

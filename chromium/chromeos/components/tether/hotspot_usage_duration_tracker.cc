@@ -6,7 +6,7 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "base/time/clock.h"
-#include "chromeos/components/proximity_auth/logging/logging.h"
+#include "chromeos/components/multidevice/logging/logging.h"
 
 namespace chromeos {
 
@@ -58,8 +58,8 @@ void HotspotUsageDurationTracker::OnActiveHostChanged(
       // a connection is established.
       last_connection_start_ = base::Time();
 
-      PA_LOG(INFO) << "Connection to hotspot has ended. Duration was "
-                   << duration.InSeconds() << " second(s).";
+      PA_LOG(VERBOSE) << "Connection to hotspot has ended. Duration was "
+                      << duration.InSeconds() << " second(s).";
       UMA_HISTOGRAM_CUSTOM_TIMES(
           "InstantTethering.HotspotUsageDuration", duration,
           base::TimeDelta::FromSeconds(kMinDurationSeconds) /* min */,

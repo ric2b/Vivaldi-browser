@@ -26,6 +26,12 @@ POLICY_EXPORT extern const char kParamPlatform[];
 POLICY_EXPORT extern const char kParamRequest[];
 POLICY_EXPORT extern const char kParamRetry[];
 
+// Policy constants used in authorization header.
+POLICY_EXPORT extern const char kAuthHeader[];
+POLICY_EXPORT extern const char kServiceTokenAuthHeaderPrefix[];
+POLICY_EXPORT extern const char kDMTokenAuthHeaderPrefix[];
+POLICY_EXPORT extern const char kEnrollmentTokenAuthHeaderPrefix[];
+
 // String extern constants for the device and app type we report to the server.
 POLICY_EXPORT extern const char kValueAppType[];
 POLICY_EXPORT extern const char kValueDeviceType[];
@@ -156,6 +162,13 @@ enum class LicenseType {
   PERPETUAL,  // Perpetual license
   ANNUAL,     // Annual license
   KIOSK       // Single App Kiosk license
+};
+
+// Indicate this device's market segment. go/cros-rlz-segments
+enum class MarketSegment {
+  UNKNOWN,  // If device is not enrolled or market segment is not specified.
+  EDUCATION,
+  ENTERPRISE,
 };
 
 }  // namespace policy

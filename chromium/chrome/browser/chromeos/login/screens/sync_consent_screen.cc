@@ -6,18 +6,19 @@
 
 #include <string>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/consent_auditor/consent_auditor_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/common/pref_names.h"
-#include "components/browser_sync/profile_sync_service.h"
 #include "components/consent_auditor/consent_auditor.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/signin_manager.h"
+#include "components/sync/driver/sync_service.h"
 #include "components/user_manager/user_manager.h"
+#include "services/identity/public/cpp/identity_manager.h"
 
 namespace chromeos {
 namespace {
@@ -27,8 +28,13 @@ constexpr const char kUserActionContinueWithSyncOnly[] =
 constexpr const char kUserActionContinueWithSyncAndPersonalization[] =
     "continue-with-sync-and-personalization";
 
-browser_sync::ProfileSyncService* GetSyncService(Profile* profile) {
-  if (ProfileSyncServiceFactory::HasProfileSyncService(profile))
+// Delay showing chrome sync settings by this amount of time to make them
+// show on top of the restored tabs and windows.
+constexpr base::TimeDelta kSyncConsentSettingsShowDelay =
+    base::TimeDelta::FromSeconds(3);
+
+syncer::SyncService* GetSyncService(Profile* profile) {
+  if (ProfileSyncServiceFactory::HasSyncService(profile))
     return ProfileSyncServiceFactory::GetForProfile(profile);
   return nullptr;
 }
@@ -36,17 +42,31 @@ browser_sync::ProfileSyncService* GetSyncService(Profile* profile) {
 }  // namespace
 
 // static
-void SyncConsentScreen::MaybeLaunchSyncConstentSettings(Profile* profile) {
+void SyncConsentScreen::MaybeLaunchSyncConsentSettings(Profile* profile) {
   if (profile->GetPrefs()->GetBoolean(prefs::kShowSyncSettingsOnSessionStart)) {
-    profile->GetPrefs()->ClearPref(prefs::kShowSyncSettingsOnSessionStart);
-    chrome::ShowSettingsSubPageForProfile(profile, "syncSetup");
+    // TODO (alemate): In a very special case when chrome is exiting at the very
+    // moment we show Settings, it might crash here because profile could be
+    // already destroyed. This needs to be fixed.
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(
+            [](Profile* profile) {
+              profile->GetPrefs()->ClearPref(
+                  prefs::kShowSyncSettingsOnSessionStart);
+              chrome::ShowSettingsSubPageForProfile(profile, "syncSetup");
+            },
+            base::Unretained(profile)),
+        kSyncConsentSettingsShowDelay);
   }
 }
 
-SyncConsentScreen::SyncConsentScreen(BaseScreenDelegate* base_screen_delegate,
-                                     SyncConsentScreenView* view)
+SyncConsentScreen::SyncConsentScreen(
+    BaseScreenDelegate* base_screen_delegate,
+    SyncConsentScreenView* view,
+    const base::RepeatingClosure& exit_callback)
     : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_SYNC_CONSENT),
-      view_(view) {
+      view_(view),
+      exit_callback_(exit_callback) {
   DCHECK(view_);
   view_->Bind(this);
 }
@@ -62,7 +82,7 @@ void SyncConsentScreen::Show() {
   UpdateScreen();
 
   if (behavior_ == SyncScreenBehavior::SKIP) {
-    Finish(ScreenExitCode::SYNC_CONSENT_FINISHED);
+    exit_callback_.Run();
     return;
   }
 
@@ -87,12 +107,12 @@ void SyncConsentScreen::Hide() {
 void SyncConsentScreen::OnUserAction(const std::string& action_id) {
   if (action_id == kUserActionContinueWithSyncOnly) {
     // TODO(alemate) https://crbug.com/822889
-    Finish(ScreenExitCode::SYNC_CONSENT_FINISHED);
+    exit_callback_.Run();
     return;
   }
   if (action_id == kUserActionContinueWithSyncAndPersonalization) {
     // TODO(alemate) https://crbug.com/822889
-    Finish(ScreenExitCode::SYNC_CONSENT_FINISHED);
+    exit_callback_.Run();
     return;
   }
   BaseScreen::OnUserAction(action_id);
@@ -108,14 +128,14 @@ void SyncConsentScreen::OnContinueAndReview(
   RecordConsent(consent_description, consent_confirmation);
   profile_->GetPrefs()->SetBoolean(prefs::kShowSyncSettingsOnSessionStart,
                                    true);
-  Finish(ScreenExitCode::SYNC_CONSENT_FINISHED);
+  exit_callback_.Run();
 }
 
 void SyncConsentScreen::OnContinueWithDefaults(
     const std::vector<int>& consent_description,
     const int consent_confirmation) {
   RecordConsent(consent_description, consent_confirmation);
-  Finish(ScreenExitCode::SYNC_CONSENT_FINISHED);
+  exit_callback_.Run();
 }
 
 void SyncConsentScreen::SetDelegateForTesting(
@@ -174,7 +194,7 @@ void SyncConsentScreen::UpdateScreen() {
 
   // Screen is shown and behavior has changed.
   if (behavior_ == SyncScreenBehavior::SKIP)
-    Finish(ScreenExitCode::SYNC_CONSENT_FINISHED);
+    exit_callback_.Run();
 
   if (behavior_ == SyncScreenBehavior::SHOW) {
     view_->SetThrobberVisible(false /*visible*/);
@@ -188,8 +208,7 @@ void SyncConsentScreen::RecordConsent(
   consent_auditor::ConsentAuditor* consent_auditor =
       ConsentAuditorFactory::GetForProfile(profile_);
   const std::string& google_account_id =
-      SigninManagerFactory::GetForProfile(profile_)
-          ->GetAuthenticatedAccountId();
+      IdentityManagerFactory::GetForProfile(profile_)->GetPrimaryAccountId();
   // TODO(alemate): Support unified_consent_enabled
   sync_pb::UserConsentTypes::SyncConsent sync_consent;
   sync_consent.set_confirmation_grd_id(consent_confirmation);
@@ -209,8 +228,7 @@ void SyncConsentScreen::RecordConsent(
 bool SyncConsentScreen::IsProfileSyncDisabledByPolicy() const {
   if (test_sync_disabled_by_policy_.has_value())
     return test_sync_disabled_by_policy_.value();
-  const browser_sync::ProfileSyncService* sync_service =
-      GetSyncService(profile_);
+  const syncer::SyncService* sync_service = GetSyncService(profile_);
   return sync_service->HasDisableReason(
       syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
 }
@@ -218,8 +236,7 @@ bool SyncConsentScreen::IsProfileSyncDisabledByPolicy() const {
 bool SyncConsentScreen::IsProfileSyncEngineInitialized() const {
   if (test_sync_engine_initialized_.has_value())
     return test_sync_engine_initialized_.value();
-  const browser_sync::ProfileSyncService* sync_service =
-      GetSyncService(profile_);
+  const syncer::SyncService* sync_service = GetSyncService(profile_);
   return sync_service->IsEngineInitialized();
 }
 

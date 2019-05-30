@@ -103,6 +103,10 @@ class CORE_EXPORT CSSSelector {
 
   bool operator==(const CSSSelector&) const;
 
+  static constexpr unsigned kIdSpecificity = 0x010000;
+  static constexpr unsigned kClassLikeSpecificity = 0x000100;
+  static constexpr unsigned kTagSpecificity = 0x000001;
+
   // http://www.w3.org/TR/css3-selectors/#specificity
   // We use 256 as the base of the specificity number system.
   unsigned Specificity() const;
@@ -159,11 +163,13 @@ class CORE_EXPORT CSSSelector {
     kPseudoLink,
     kPseudoVisited,
     kPseudoAny,
-    kPseudoMatches,
-    kPseudoIS,
+    kPseudoIs,
+    kPseudoWhere,
     kPseudoAnyLink,
     kPseudoWebkitAnyLink,
     kPseudoAutofill,
+    kPseudoAutofillPreviewed,
+    kPseudoAutofillSelected,
     kPseudoHover,
     kPseudoDrag,
     kPseudoFocus,
@@ -236,6 +242,7 @@ class CORE_EXPORT CSSSelector {
     kPseudoHostContext,
     kPseudoShadow,
     kPseudoSpatialNavigationFocus,
+    kPseudoSpatialNavigationInterest,
     kPseudoIsHtml,
     kPseudoListBox,
     kPseudoHostHasAppearance,
@@ -374,13 +381,17 @@ class CORE_EXPORT CSSSelector {
   }
 
   bool MatchesPseudoElement() const;
+  bool IsTreeAbidingPseudoElement() const;
+  bool IsAllowedAfterPart() const;
 
   bool HasContentPseudo() const;
   bool HasSlottedPseudo() const;
   bool HasDeepCombinatorOrShadowPseudo() const;
+  // Returns true if the immediately preceeding simple selector is ::part.
+  bool FollowsPart() const;
   bool NeedsUpdatedDistribution() const;
-  bool HasPseudoMatches() const;
-  bool HasPseudoIS() const;
+  bool HasPseudoIs() const;
+  bool HasPseudoWhere() const;
 
  private:
   unsigned relation_ : 4;     // enum RelationType
@@ -459,7 +470,7 @@ inline CSSSelector::AttributeMatchType CSSSelector::AttributeMatch() const {
 }
 
 inline bool CSSSelector::IsASCIILower(const AtomicString& value) {
-  for (size_t i = 0; i < value.length(); ++i) {
+  for (wtf_size_t i = 0; i < value.length(); ++i) {
     if (IsASCIIUpper(value[i]))
       return false;
   }

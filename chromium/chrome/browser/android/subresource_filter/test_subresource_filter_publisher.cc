@@ -20,8 +20,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browser_process.h"
-#include "components/subresource_filter/content/browser/content_ruleset_service.h"
-#include "components/subresource_filter/core/browser/ruleset_service.h"
+#include "components/subresource_filter/content/browser/ruleset_service.h"
 #include "components/subresource_filter/core/common/unindexed_ruleset.h"
 #include "content/public/browser/browser_thread.h"
 #include "jni/TestSubresourceFilterPublisher_jni.h"
@@ -52,7 +51,7 @@ url_pattern_index::proto::UrlRule CreateSuffixRule(const std::string& suffix) {
 }
 
 void OnPublished(std::unique_ptr<base::ScopedTempDir> scoped_temp_dir,
-                 subresource_filter::ContentRulesetService* service,
+                 subresource_filter::RulesetService* service,
                  base::android::ScopedJavaGlobalRef<jobject> publisher) {
   base::ScopedAllowBlockingForTesting allow_blocking;
   // Ensure the callback does not retain |publisher| by resetting it.
@@ -95,9 +94,8 @@ void JNI_TestSubresourceFilterPublisher_CreateAndPublishRulesetDisallowingSuffix
                       reinterpret_cast<const char*>(ruleset_contents.data()),
                       ruleset_size_as_int));
 
-  subresource_filter::ContentRulesetService* service =
+  subresource_filter::RulesetService* service =
       g_browser_process->subresource_filter_ruleset_service();
-  service->SetIsAfterStartupForTesting();
   service->SetRulesetPublishedCallbackForTesting(base::BindRepeating(
       &OnPublished, base::Passed(&scoped_temp_dir), service, publisher));
 

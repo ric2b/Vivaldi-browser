@@ -33,6 +33,7 @@
 #include "base/macros.h"
 #include "third_party/blink/public/common/manifest/web_display_mode.h"
 #include "third_party/blink/public/platform/pointer_properties.h"
+#include "third_party/blink/public/platform/web_color_scheme.h"
 #include "third_party/blink/public/platform/web_effective_connection_type.h"
 #include "third_party/blink/public/platform/web_viewport_style.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_cache_options.h"
@@ -47,7 +48,7 @@
 #include "third_party/blink/renderer/core/settings_macros.h"
 #include "third_party/blink/renderer/platform/fonts/generic_font_family_settings.h"
 #include "third_party/blink/renderer/platform/geometry/int_size.h"
-#include "third_party/blink/renderer/platform/graphics/high_contrast_settings.h"
+#include "third_party/blink/renderer/platform/graphics/dark_mode_settings.h"
 #include "third_party/blink/renderer/platform/graphics/image_animation_policy.h"
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
@@ -73,12 +74,15 @@ class CORE_EXPORT Settings {
   void SetBypassCSP(bool enabled) { bypass_csp_ = enabled; }
   bool BypassCSP() const { return bypass_csp_; }
 
-  // Only set by Layout Tests, and only used if textAutosizingEnabled() returns
+  // Only set by web tests, and only used if TextAutosizingEnabled() returns
   // true.
   void SetTextAutosizingWindowSizeOverride(const IntSize&);
   const IntSize& TextAutosizingWindowSizeOverride() const {
     return text_autosizing_window_size_override_;
   }
+
+  void SetForceDarkModeEnabled(bool enabled);
+  bool ForceDarkModeEnabled() const { return force_dark_mode_; }
 
   SETTINGS_GETTERS_AND_SETTERS
 
@@ -87,12 +91,6 @@ class CORE_EXPORT Settings {
   static bool MockScrollbarsEnabled();
 
   void SetDelegate(SettingsDelegate*);
-
-  // TODO(lunalu): Service worker and shared worker count feature usage on the
-  // blink side use counter via the shadow page. Once blink side use counter is
-  // removed, this flag is no longer needed (crbug.com/811948).
-  void SetIsShadowPage(bool);
-  bool IsShadowPage() const { return is_shadow_page_; }
 
  private:
   Settings();
@@ -104,11 +102,8 @@ class CORE_EXPORT Settings {
   GenericFontFamilySettings generic_font_family_settings_;
   IntSize text_autosizing_window_size_override_;
   bool text_autosizing_enabled_ : 1;
-  // TODO(lunalu): Service worker is counting feature usage on the blink side
-  // use counter via the shadow page. Once blink side use counter is removed,
-  // this flag is no longer needed (crbug.com/811948).
-  bool is_shadow_page_;
   bool bypass_csp_ = false;
+  bool force_dark_mode_ = false;
 
   SETTINGS_MEMBER_VARIABLES
 

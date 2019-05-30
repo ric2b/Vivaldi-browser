@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
@@ -123,9 +124,9 @@ class WebUIWebViewBrowserTest : public WebUIBrowserTest {
 #if defined(OS_CHROMEOS)
     return GURL(chrome::kChromeUIOobeURL).Resolve("/login");
 #else
-    return GURL(signin::GetPromoURLForTab(
+    return GURL(signin::GetEmbeddedPromoURL(
         signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE,
-        signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT, false));
+        signin_metrics::Reason::REASON_FORCED_SIGNIN_PRIMARY_ACCOUNT, false));
 #endif
   }
 
@@ -242,8 +243,9 @@ IN_PROC_BROWSER_TEST_F(WebUIWebViewBrowserTest,
       base::Value(GetTestUrl("empty.html").spec())));
 }
 
-#if defined(OS_CHROMEOS) && !defined(NDEBUG)
+#if defined(OS_CHROMEOS) && (!defined(NDEBUG) || defined(ADDRESS_SANITIZER))
 // TODO(crbug.com/859320) Fails on CrOS dbg with --enable-features=Mash.
+// TODO(crbug.com/893472) Flaky on CrOS ASan LSan
 #define MAYBE_AddContentScriptsWithNewWindowAPI \
   DISABLED_AddContentScriptsWithNewWindowAPI
 #else

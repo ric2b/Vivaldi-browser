@@ -102,7 +102,7 @@ void LoadPaper(const wchar_t* printer,
       paper.display_name = base::WideToUTF8(tmp_name);
     }
     if (!ids.empty())
-      paper.vendor_id = base::UintToString(ids[i]);
+      paper.vendor_id = base::NumberToString(ids[i]);
     caps->papers.push_back(paper);
   }
 
@@ -291,8 +291,11 @@ bool PrintBackendWin::GetPrinterSemanticCapsAndDefaults(
   caps.color_model = printing::COLOR;
   caps.bw_model = printing::GRAY;
 
-  caps.duplex_capable =
-      (DeviceCapabilities(name, port, DC_DUPLEX, nullptr, nullptr) == 1);
+  caps.duplex_modes.push_back(SIMPLEX);
+  if (DeviceCapabilities(name, port, DC_DUPLEX, nullptr, nullptr) == 1) {
+    caps.duplex_modes.push_back(LONG_EDGE);
+    caps.duplex_modes.push_back(SHORT_EDGE);
+  }
 
   caps.collate_capable =
       (DeviceCapabilities(name, port, DC_COLLATE, nullptr, nullptr) == 1);

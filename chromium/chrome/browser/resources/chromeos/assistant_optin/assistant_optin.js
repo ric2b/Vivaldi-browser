@@ -10,14 +10,15 @@
 // <include src="../login/oobe_dialog.js">
 // <include src="assistant_optin_flow.js">
 
-cr.define('assistantOptInFlow', function() {
+cr.define('login.AssistantOptInFlowScreen', function() {
   return {
 
     /**
      * Starts the assistant opt-in flow.
+     * @param {number} type The type of the flow.
      */
-    show: function() {
-      $('assistant-optin-flow-card').onShow();
+    show: function(type) {
+      $('assistant-optin-flow-card').onShow(type);
     },
 
     /**
@@ -44,6 +45,14 @@ cr.define('assistantOptInFlow', function() {
       $('assistant-optin-flow-card').showNextScreen();
     },
 
+    /**
+     * Called when the Voice match state is updated.
+     * @param {string} state the voice match state.
+     */
+    onVoiceMatchUpdate: function(state) {
+      $('assistant-optin-flow-card').onVoiceMatchUpdate(state);
+    },
+
     closeDialog: function() {
       chrome.send('dialogClose');
     },
@@ -51,5 +60,6 @@ cr.define('assistantOptInFlow', function() {
 });
 
 document.addEventListener('DOMContentLoaded', function() {
-  assistantOptInFlow.show();
+  var url = new URL(document.URL);
+  login.AssistantOptInFlowScreen.show(url.searchParams.get('flow-type'));
 });

@@ -37,16 +37,15 @@ namespace blink {
 class AXObjectCacheImpl;
 
 class AXSVGRoot final : public AXLayoutObject {
- protected:
-  AXSVGRoot(LayoutObject*, AXObjectCacheImpl&);
-
  public:
   static AXSVGRoot* Create(LayoutObject*, AXObjectCacheImpl&);
+
+  AXSVGRoot(LayoutObject*, AXObjectCacheImpl&);
   ~AXSVGRoot() override;
 
   void SetParent(AXObject*) override;
 
-  AccessibilityRole DetermineAccessibilityRole() override;
+  ax::mojom::Role DetermineAccessibilityRole() override;
   bool ComputeAccessibilityIsIgnored(IgnoredReasons*) const override;
 
  private:

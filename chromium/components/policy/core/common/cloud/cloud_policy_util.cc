@@ -35,7 +35,8 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/sys_info.h"
+#include "base/stl_util.h"
+#include "base/system/sys_info.h"
 #include "components/version_info/version_info.h"
 
 #if defined(OS_WIN)
@@ -48,11 +49,11 @@
 #include "base/mac/scoped_cftyperef.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #endif
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #endif
 
 namespace policy {
@@ -95,7 +96,7 @@ std::string GetMachineName() {
   return std::string();
 #elif defined(OS_WIN)
   wchar_t computer_name[MAX_COMPUTERNAME_LENGTH + 1] = {0};
-  DWORD size = arraysize(computer_name);
+  DWORD size = base::size(computer_name);
   if (::GetComputerNameW(computer_name, &size)) {
     std::string result;
     bool conversion_successful = base::WideToUTF8(computer_name, size, &result);

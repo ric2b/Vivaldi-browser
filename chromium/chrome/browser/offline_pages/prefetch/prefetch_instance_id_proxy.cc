@@ -41,9 +41,9 @@ void PrefetchInstanceIDProxy::GetGCMToken(
   DCHECK(IsPrefetchingOfflinePagesEnabled());
   if (!token_.empty()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&PrefetchInstanceIDProxy::GotGCMToken,
-                              weak_factory_.GetWeakPtr(), callback, token_,
-                              InstanceID::SUCCESS));
+        FROM_HERE, base::BindOnce(&PrefetchInstanceIDProxy::GotGCMToken,
+                                  weak_factory_.GetWeakPtr(), callback, token_,
+                                  InstanceID::SUCCESS));
     return;
   }
 
@@ -55,7 +55,7 @@ void PrefetchInstanceIDProxy::GetGCMToken(
   DCHECK(instance_id);
 
   instance_id->GetToken(kProdSenderId, kScopeGCM,
-                        std::map<std::string, std::string>(),
+                        std::map<std::string, std::string>(), /*is_lazy=*/false,
                         base::Bind(&PrefetchInstanceIDProxy::GotGCMToken,
                                    weak_factory_.GetWeakPtr(), callback));
 }

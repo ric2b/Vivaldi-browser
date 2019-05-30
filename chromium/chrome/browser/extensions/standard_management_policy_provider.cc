@@ -92,15 +92,6 @@ bool StandardManagementPolicyProvider::UserMayLoad(
   if (extension->from_bookmark())
     return true;
 
-  ExtensionManagement::InstallationMode installation_mode =
-      settings_->GetInstallationMode(extension);
-
-  // Force-installed extensions cannot be overwritten manually.
-  if (!Manifest::IsPolicyLocation(extension->location()) &&
-      installation_mode == ExtensionManagement::INSTALLATION_FORCED) {
-    return ReturnLoadError(extension, error);
-  }
-
   // Check whether the extension type is allowed.
   //
   // If you get a compile error here saying that the type you added is not
@@ -118,7 +109,8 @@ bool StandardManagementPolicyProvider::UserMayLoad(
     case Manifest::TYPE_LEGACY_PACKAGED_APP:
     case Manifest::TYPE_PLATFORM_APP:
     case Manifest::TYPE_SHARED_MODULE: {
-      if (!settings_->IsAllowedManifestType(extension->GetType()))
+      if (!settings_->IsAllowedManifestType(extension->GetType(),
+                                            extension->id()))
         return ReturnLoadError(extension, error);
       break;
     }
@@ -126,10 +118,27 @@ bool StandardManagementPolicyProvider::UserMayLoad(
       NOTREACHED();
   }
 
+  ExtensionManagement::InstallationMode installation_mode =
+      settings_->GetInstallationMode(extension);
   if (installation_mode == ExtensionManagement::INSTALLATION_BLOCKED)
     return ReturnLoadError(extension, error);
 
   return true;
+}
+
+bool StandardManagementPolicyProvider::UserMayInstall(
+    const Extension* extension,
+    base::string16* error) const {
+  ExtensionManagement::InstallationMode installation_mode =
+      settings_->GetInstallationMode(extension);
+
+  // Force-installed extensions cannot be overwritten manually.
+  if (!Manifest::IsPolicyLocation(extension->location()) &&
+      installation_mode == ExtensionManagement::INSTALLATION_FORCED) {
+    return ReturnLoadError(extension, error);
+  }
+
+  return UserMayLoad(extension, error);
 }
 
 bool StandardManagementPolicyProvider::UserMayModifySettings(

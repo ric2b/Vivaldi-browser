@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
 namespace blink {
+namespace test {
 
 namespace {
 
@@ -55,13 +56,13 @@ TEST_F(AccessibilityObjectModelTest, SetAccessibleNodeRole) {
   ASSERT_NE(nullptr, button);
 
   auto* axButton = cache->GetOrCreate(button);
-  EXPECT_EQ(kButtonRole, axButton->RoleValue());
+  EXPECT_EQ(ax::mojom::Role::kButton, axButton->RoleValue());
 
   button->accessibleNode()->setRole("slider");
   EXPECT_EQ("slider", button->accessibleNode()->role());
 
   axButton = cache->GetOrCreate(button);
-  EXPECT_EQ(kSliderRole, axButton->RoleValue());
+  EXPECT_EQ(ax::mojom::Role::kSlider, axButton->RoleValue());
 }
 
 TEST_F(AccessibilityObjectModelTest, AOMDoesNotReflectARIA) {
@@ -81,11 +82,11 @@ TEST_F(AccessibilityObjectModelTest, AOMDoesNotReflectARIA) {
   auto* cache = AXObjectCache();
   ASSERT_NE(nullptr, cache);
   auto* axTextBox = cache->GetOrCreate(textbox);
-  EXPECT_EQ(kTextFieldWithComboBoxRole, axTextBox->RoleValue());
-  AXNameFrom name_from;
+  EXPECT_EQ(ax::mojom::Role::kTextFieldWithComboBox, axTextBox->RoleValue());
+  ax::mojom::NameFrom name_from;
   AXObject::AXObjectVector name_objects;
   EXPECT_EQ("Combo", axTextBox->GetName(name_from, &name_objects));
-  EXPECT_EQ(axTextBox->Restriction(), kDisabled);
+  EXPECT_EQ(axTextBox->Restriction(), kRestrictionDisabled);
 
   // The AOM properties should still all be null.
   EXPECT_EQ(nullptr, textbox->accessibleNode()->role());
@@ -112,11 +113,11 @@ TEST_F(AccessibilityObjectModelTest, AOMPropertiesCanBeCleared) {
   auto* cache = AXObjectCache();
   ASSERT_NE(nullptr, cache);
   auto* axButton = cache->GetOrCreate(button);
-  EXPECT_EQ(kCheckBoxRole, axButton->RoleValue());
-  AXNameFrom name_from;
+  EXPECT_EQ(ax::mojom::Role::kCheckBox, axButton->RoleValue());
+  ax::mojom::NameFrom name_from;
   AXObject::AXObjectVector name_objects;
   EXPECT_EQ("Check", axButton->GetName(name_from, &name_objects));
-  EXPECT_EQ(axButton->Restriction(), kDisabled);
+  EXPECT_EQ(axButton->Restriction(), kRestrictionDisabled);
 
   // Now set the AOM properties to override.
   button->accessibleNode()->setRole("radio");
@@ -125,9 +126,9 @@ TEST_F(AccessibilityObjectModelTest, AOMPropertiesCanBeCleared) {
 
   // Assert that the AX object was affected by AOM properties.
   axButton = cache->GetOrCreate(button);
-  EXPECT_EQ(kRadioButtonRole, axButton->RoleValue());
+  EXPECT_EQ(ax::mojom::Role::kRadioButton, axButton->RoleValue());
   EXPECT_EQ("Radio", axButton->GetName(name_from, &name_objects));
-  EXPECT_EQ(axButton->Restriction(), kNone);
+  EXPECT_EQ(axButton->Restriction(), kRestrictionNone);
 
   // Null the AOM properties.
   button->accessibleNode()->setRole(g_null_atom);
@@ -136,9 +137,9 @@ TEST_F(AccessibilityObjectModelTest, AOMPropertiesCanBeCleared) {
 
   // The AX Object should now revert to ARIA.
   axButton = cache->GetOrCreate(button);
-  EXPECT_EQ(kCheckBoxRole, axButton->RoleValue());
+  EXPECT_EQ(ax::mojom::Role::kCheckBox, axButton->RoleValue());
   EXPECT_EQ("Check", axButton->GetName(name_from, &name_objects));
-  EXPECT_EQ(axButton->Restriction(), kDisabled);
+  EXPECT_EQ(axButton->Restriction(), kRestrictionDisabled);
 }
 
 TEST_F(AccessibilityObjectModelTest, RangeProperties) {
@@ -239,8 +240,8 @@ TEST_F(AccessibilityObjectModelTest, Grid) {
 
   auto* ax_cell = cache->GetOrCreate(cell);
   EXPECT_TRUE(ax_cell->IsTableCellLikeRole());
-  EXPECT_EQ(8U, ax_cell->AriaColumnIndex());
-  EXPECT_EQ(5U, ax_cell->AriaRowIndex());
+  EXPECT_EQ(0U, ax_cell->AriaColumnIndex());
+  EXPECT_EQ(0U, ax_cell->AriaRowIndex());
 
   auto* ax_cell2 = cache->GetOrCreate(cell2);
   EXPECT_TRUE(ax_cell2->IsTableCellLikeRole());
@@ -316,16 +317,16 @@ TEST_F(AccessibilityObjectModelTest, SparseAttributes) {
   ASSERT_EQ("Widget",
             sparse_attributes
                 .string_attributes[AXStringAttribute::kAriaRoleDescription]);
-  ASSERT_EQ(kListBoxOptionRole,
+  ASSERT_EQ(ax::mojom::Role::kListBoxOption,
             sparse_attributes
                 .object_attributes[AXObjectAttribute::kAriaActiveDescendant]
                 ->RoleValue());
   ASSERT_EQ(
-      kContentInfoRole,
+      ax::mojom::Role::kContentInfo,
       sparse_attributes.object_attributes[AXObjectAttribute::kAriaDetails]
           ->RoleValue());
   ASSERT_EQ(
-      kArticleRole,
+      ax::mojom::Role::kArticle,
       sparse_attributes.object_attributes[AXObjectAttribute::kAriaErrorMessage]
           ->RoleValue());
 
@@ -347,14 +348,15 @@ TEST_F(AccessibilityObjectModelTest, SparseAttributes) {
   ASSERT_EQ("Object",
             sparse_attributes2
                 .string_attributes[AXStringAttribute::kAriaRoleDescription]);
-  ASSERT_EQ(kCellRole,
+  ASSERT_EQ(ax::mojom::Role::kCell,
             sparse_attributes2
                 .object_attributes[AXObjectAttribute::kAriaActiveDescendant]
                 ->RoleValue());
-  ASSERT_EQ(kFormRole, sparse_attributes2
-                           .object_attributes[AXObjectAttribute::kAriaDetails]
-                           ->RoleValue());
-  ASSERT_EQ(kBannerRole,
+  ASSERT_EQ(
+      ax::mojom::Role::kForm,
+      sparse_attributes2.object_attributes[AXObjectAttribute::kAriaDetails]
+          ->RoleValue());
+  ASSERT_EQ(ax::mojom::Role::kBanner,
             sparse_attributes2
                 .object_attributes[AXObjectAttribute::kAriaErrorMessage]
                 ->RoleValue());
@@ -386,7 +388,7 @@ TEST_F(AccessibilityObjectModelTest, LabeledBy) {
   AccessibleNodeList* node_list = target->accessibleNode()->labeledBy();
   ASSERT_EQ(nullptr, node_list);
 
-  node_list = new AccessibleNodeList();
+  node_list = MakeGarbageCollected<AccessibleNodeList>();
   node_list->add(l3->accessibleNode());
   target->accessibleNode()->setLabeledBy(node_list);
 
@@ -399,4 +401,5 @@ TEST_F(AccessibilityObjectModelTest, LabeledBy) {
 
 }  // namespace
 
+}  // namespace test
 }  // namespace blink

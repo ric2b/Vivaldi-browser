@@ -33,7 +33,7 @@ function ActionsSubmenu(menu) {
  * @private
  */
 ActionsSubmenu.prototype.addMenuItem_ = function(options) {
-  var menuItem = this.menu_.addMenuItem(options);
+  const menuItem = this.menu_.addMenuItem(options);
   menuItem.parentNode.insertBefore(menuItem, this.separator_);
   this.items_.push(menuItem);
   return menuItem;
@@ -43,24 +43,24 @@ ActionsSubmenu.prototype.addMenuItem_ = function(options) {
  * @param {ActionsModel} actionsModel
  */
 ActionsSubmenu.prototype.setActionsModel = function(actionsModel) {
-  this.items_.forEach(function(item) {
+  this.items_.forEach(item => {
     item.parentNode.removeChild(item);
   });
   this.items_ = [];
 
-  var remainingActions = {};
+  const remainingActions = {};
   if (actionsModel) {
-    var actions = actionsModel.getActions();
+    const actions = actionsModel.getActions();
      Object.keys(actions).forEach(
-        function(key) {
+        key => {
           remainingActions[key] = actions[key];
         });
   }
 
   // First add the sharing item (if available).
-  var shareAction = remainingActions[ActionsModel.CommonActionId.SHARE];
+  const shareAction = remainingActions[ActionsModel.CommonActionId.SHARE];
   if (shareAction) {
-    var menuItem = this.addMenuItem_({});
+    const menuItem = this.addMenuItem_({});
     menuItem.command = '#share';
     menuItem.classList.toggle('hide-on-toolbar', true);
     delete remainingActions[ActionsModel.CommonActionId.SHARE];
@@ -68,29 +68,16 @@ ActionsSubmenu.prototype.setActionsModel = function(actionsModel) {
   util.queryDecoratedElement('#share', cr.ui.Command).canExecuteChange();
 
   // Then add the Manage in Drive item (if available).
-  var manageInDriveAction =
+  const manageInDriveAction =
       remainingActions[ActionsModel.InternalActionId.MANAGE_IN_DRIVE];
   if (manageInDriveAction) {
-    var menuItem = this.addMenuItem_({});
+    const menuItem = this.addMenuItem_({});
     menuItem.command = '#manage-in-drive';
     menuItem.classList.toggle('hide-on-toolbar', true);
     delete remainingActions[ActionsModel.InternalActionId.MANAGE_IN_DRIVE];
   }
   util.queryDecoratedElement('#manage-in-drive', cr.ui.Command)
       .canExecuteChange();
-
-  // Managing shortcuts is shown just before custom actions.
-  var createFolderShortcutAction = remainingActions[
-      ActionsModel.InternalActionId.CREATE_FOLDER_SHORTCUT];
-  if (createFolderShortcutAction) {
-    var menuItem = this.addMenuItem_({});
-    menuItem.command = '#create-folder-shortcut';
-    delete remainingActions[
-      ActionsModel.InternalActionId.CREATE_FOLDER_SHORTCUT
-    ];
-  }
-  util.queryDecoratedElement(
-      '#create-folder-shortcut', cr.ui.Command).canExecuteChange();
 
   // Removing shortcuts is not rendered in the submenu to keep the previous
   // behavior. Shortcuts can be removed in the left nav using the roots menu.
@@ -100,15 +87,16 @@ ActionsSubmenu.prototype.setActionsModel = function(actionsModel) {
 
   // Both save-for-offline and offline-not-necessary are handled by the single
   // #toggle-pinned command.
-  var saveForOfflineAction = remainingActions[
+  const saveForOfflineAction = remainingActions[
       ActionsModel.CommonActionId.SAVE_FOR_OFFLINE];
-  var offlineNotNecessaryAction = remainingActions[
+  const offlineNotNecessaryAction = remainingActions[
       ActionsModel.CommonActionId.OFFLINE_NOT_NECESSARY];
   if (saveForOfflineAction || offlineNotNecessaryAction) {
-    var menuItem = this.addMenuItem_({});
+    const menuItem = this.addMenuItem_({});
     menuItem.command = '#toggle-pinned';
-    if (saveForOfflineAction)
+    if (saveForOfflineAction) {
       delete remainingActions[ActionsModel.CommonActionId.SAVE_FOR_OFFLINE];
+    }
     if (offlineNotNecessaryAction) {
       delete remainingActions[
         ActionsModel.CommonActionId.OFFLINE_NOT_NECESSARY
@@ -119,15 +107,15 @@ ActionsSubmenu.prototype.setActionsModel = function(actionsModel) {
       '#toggle-pinned', cr.ui.Command).canExecuteChange();
 
   // Process all the rest as custom actions.
-  Object.keys(remainingActions).forEach(function(key) {
-    var action = remainingActions[key];
-    var options = { label: action.getTitle() };
-    var menuItem = this.addMenuItem_(options);
+  Object.keys(remainingActions).forEach(key => {
+    const action = remainingActions[key];
+    const options = { label: action.getTitle() };
+    const menuItem = this.addMenuItem_(options);
 
-    menuItem.addEventListener('activate', function() {
+    menuItem.addEventListener('activate', () => {
       action.execute();
     });
-  }.bind(this));
+  });
 
   this.separator_.hidden = !this.items_.length;
 };

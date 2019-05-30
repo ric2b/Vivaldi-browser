@@ -8,6 +8,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "components/search_engines/template_url_service.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state_manager.h"
@@ -44,7 +45,8 @@ class SettingsNavigationControllerTest : public PlatformTest {
     TestChromeBrowserState::Builder test_cbs_builder;
     test_cbs_builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
-        &AuthenticationServiceFake::CreateAuthenticationService);
+        base::BindRepeating(
+            &AuthenticationServiceFake::CreateAuthenticationService));
     test_cbs_builder.AddTestingFactory(
         ios::TemplateURLServiceFactory::GetInstance(),
         ios::TemplateURLServiceFactory::GetDefaultFactory());
@@ -62,7 +64,7 @@ class SettingsNavigationControllerTest : public PlatformTest {
     initialValueForSpdyProxyEnabled_ =
         [[defaults stringForKey:kSpdyProxyEnabled] copy];
     [defaults setObject:@"Disabled" forKey:kSpdyProxyEnabled];
-  };
+  }
 
   ~SettingsNavigationControllerTest() override {
     if (initialValueForSpdyProxyEnabled_) {

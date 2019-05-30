@@ -223,7 +223,6 @@ function getContentShellBinaryPath(dirPath) {
 
 function runTests(buildDirectoryPath, useDebugDevtools) {
   var testArgs = getInspectorTests().concat([
-    '--no-pixel-tests',
     '--build-directory',
     buildDirectoryPath,
     '--target',
@@ -255,7 +254,7 @@ function runTests(buildDirectoryPath, useDebugDevtools) {
     console.log('=============================================\n');
   }
   var args = [BLINK_TEST_PATH].concat(testArgs).concat(getTestFlags());
-  console.log(`Running layout tests with args: ${args}`);
+  console.log(`Running web tests with args: ${args}`);
   childProcess.spawn(PYTHON, args, {stdio: 'inherit'});
 }
 

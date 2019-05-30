@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ash/public/cpp/wallpaper_types.h"
+#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
@@ -183,9 +184,11 @@ void WallpaperSetWallpaperFunction::OnWallpaperDecoded(
       extensions::api::wallpaper::ToString(params_->details.layout));
   wallpaper_api_util::RecordCustomWallpaperLayout(layout);
 
+  const std::string file_name =
+      base::FilePath(params_->details.filename).BaseName().value();
   WallpaperControllerClient::Get()->SetCustomWallpaper(
-      account_id_, wallpaper_files_id_, params_->details.filename, layout,
-      image, false /*preview_mode=*/);
+      account_id_, wallpaper_files_id_, file_name, layout, image,
+      /*preview_mode=*/false);
   unsafe_wallpaper_decoder_ = nullptr;
 
   // We need to generate thumbnail image anyway to make the current third party

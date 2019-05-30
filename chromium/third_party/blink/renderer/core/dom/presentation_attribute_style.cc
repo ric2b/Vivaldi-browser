@@ -34,11 +34,11 @@
 
 #include "base/macros.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
 #include "third_party/blink/renderer/core/dom/attribute.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/hash_functions.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
@@ -46,7 +46,7 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 struct PresentationAttributeCacheKey {
   PresentationAttributeCacheKey() : tag_name(nullptr) {}
@@ -64,7 +64,7 @@ static bool operator!=(const PresentationAttributeCacheKey& a,
 struct PresentationAttributeCacheEntry final
     : public GarbageCollectedFinalized<PresentationAttributeCacheEntry> {
  public:
-  void Trace(blink::Visitor* visitor) { visitor->Trace(value); }
+  void Trace(Visitor* visitor) { visitor->Trace(value); }
 
   PresentationAttributeCacheKey key;
   Member<CSSPropertyValueSet> value;
@@ -75,9 +75,9 @@ using PresentationAttributeCache =
                 Member<PresentationAttributeCacheEntry>,
                 AlreadyHashed>;
 static PresentationAttributeCache& GetPresentationAttributeCache() {
-  DEFINE_STATIC_LOCAL(PresentationAttributeCache, cache,
-                      (new PresentationAttributeCache));
-  return cache;
+  DEFINE_STATIC_LOCAL(Persistent<PresentationAttributeCache>, cache,
+                      (MakeGarbageCollected<PresentationAttributeCache>()));
+  return *cache;
 }
 
 static bool AttributeNameSort(const std::pair<StringImpl*, AtomicString>& p1,
@@ -105,7 +105,7 @@ static void MakePresentationAttributeCacheKey(
       return;
     // FIXME: Background URL may depend on the base URL and can't be shared.
     // Disallow caching.
-    if (attr.GetName() == backgroundAttr)
+    if (attr.GetName() == kBackgroundAttr)
       return;
     result.attributes_and_values.push_back(
         std::make_pair(attr.LocalName().Impl(), attr.Value()));
@@ -174,7 +174,7 @@ CSSPropertyValueSet* ComputePresentationAttributeStyle(Element& element) {
     AttributeCollection attributes = element.AttributesWithoutUpdate();
     for (const Attribute& attr : attributes) {
       element.CollectStyleForPresentationAttribute(
-          attr.GetName(), attr.Value(), ToMutableCSSPropertyValueSet(style));
+          attr.GetName(), attr.Value(), To<MutableCSSPropertyValueSet>(style));
     }
   }
 
@@ -182,7 +182,7 @@ CSSPropertyValueSet* ComputePresentationAttributeStyle(Element& element) {
     return style;
 
   PresentationAttributeCacheEntry* new_entry =
-      new PresentationAttributeCacheEntry;
+      MakeGarbageCollected<PresentationAttributeCacheEntry>();
   new_entry->key = cache_key;
   new_entry->value = style;
 

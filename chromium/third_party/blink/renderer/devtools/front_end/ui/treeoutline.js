@@ -41,8 +41,9 @@ UI.TreeOutline = class extends Common.Object {
     this._comparator = null;
 
     this.contentElement = this._rootElement._childrenListNode;
-    this.contentElement.addEventListener('keydown', this._treeKeyDown.bind(this), true);
+    this.contentElement.addEventListener('keydown', this._treeKeyDown.bind(this), false);
 
+    this._preventTabOrder = false;
     this._showSelectionOnKeyboardFocus = false;
     this._focusable = true;
     this.setFocusable(this._focusable);
@@ -54,9 +55,11 @@ UI.TreeOutline = class extends Common.Object {
 
   /**
    * @param {boolean} show
+   * @param {boolean=} preventTabOrder
    */
-  setShowSelectionOnKeyboardFocus(show) {
+  setShowSelectionOnKeyboardFocus(show, preventTabOrder) {
     this.contentElement.classList.toggle('hide-selection-when-blurred', show);
+    this._preventTabOrder = !!preventTabOrder;
     this._showSelectionOnKeyboardFocus = show;
   }
 
@@ -174,6 +177,10 @@ UI.TreeOutline = class extends Common.Object {
       this.contentElement.focus();
   }
 
+  useLightSelectionColor() {
+    this._useLightSelectionColor = true;
+  }
+
   /**
    * @param {!UI.TreeElement} element
    */
@@ -222,6 +229,12 @@ UI.TreeOutline = class extends Common.Object {
     return true;
   }
 
+  forceSelect() {
+    if (this.selectedTreeElement)
+      this.selectedTreeElement.deselect();
+    this._selectFirst();
+  }
+
   /**
    * @return {boolean}
    */
@@ -252,8 +265,7 @@ UI.TreeOutline = class extends Common.Object {
    * @param {!Event} event
    */
   _treeKeyDown(event) {
-    if (!this.selectedTreeElement || event.target !== this.selectedTreeElement.listItemElement || event.shiftKey ||
-        event.metaKey || event.ctrlKey)
+    if (!this.selectedTreeElement || event.shiftKey || event.metaKey || event.ctrlKey || UI.isEditing())
       return;
 
     let handled = false;
@@ -937,7 +949,7 @@ UI.TreeElement = class {
    * @return {boolean}
    */
   collapseOrAscend(altKey) {
-    if (this.expanded) {
+    if (this.expanded && this._collapsible) {
       if (altKey)
         this.collapseRecursively();
       else
@@ -1036,8 +1048,11 @@ UI.TreeElement = class {
    * @return {boolean}
    */
   select(omitFocus, selectedByUser) {
-    if (!this.treeOutline || !this.selectable || this.selected)
+    if (!this.treeOutline || !this.selectable || this.selected) {
+      if (!omitFocus)
+        this.listItemElement.focus();
       return false;
+    }
     // Wait to deselect this element so that focus only changes once
     const lastSelected = this.treeOutline.selectedTreeElement;
     this.treeOutline.selectedTreeElement = null;
@@ -1045,6 +1060,8 @@ UI.TreeElement = class {
     if (this.treeOutline._rootElement === this) {
       if (lastSelected)
         lastSelected.deselect();
+      if (!omitFocus)
+        this.listItemElement.focus();
       return false;
     }
 
@@ -1068,7 +1085,7 @@ UI.TreeElement = class {
    */
   _setFocusable(focusable) {
     if (focusable) {
-      this._listItemNode.setAttribute('tabIndex', 0);
+      this._listItemNode.setAttribute('tabIndex', this.treeOutline && this.treeOutline._preventTabOrder ? -1 : 0);
       this._listItemNode.addEventListener('focus', this._boundOnFocus, false);
       this._listItemNode.addEventListener('blur', this._boundOnBlur, false);
     } else {
@@ -1079,11 +1096,15 @@ UI.TreeElement = class {
   }
 
   _onFocus() {
+    if (this.treeOutline._useLightSelectionColor)
+      return;
     if (!this.treeOutline.contentElement.classList.contains('hide-selection-when-blurred'))
       this._listItemNode.classList.add('force-white-icons');
   }
 
   _onBlur() {
+    if (this.treeOutline._useLightSelectionColor)
+      return;
     if (!this.treeOutline.contentElement.classList.contains('hide-selection-when-blurred'))
       this._listItemNode.classList.remove('force-white-icons');
   }

@@ -5,52 +5,68 @@
 #ifndef COMPONENTS_PREVIEWS_CONTENT_PREVIEWS_HINTS_H_
 #define COMPONENTS_PREVIEWS_CONTENT_PREVIEWS_HINTS_H_
 
-#include <map>
 #include <memory>
-#include <set>
+#include <string>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/sequence_checker.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "components/previews/content/hint_cache.h"
-#include "components/previews/content/previews_hints.h"
-#include "components/previews/core/previews_user_data.h"
-#include "components/url_matcher/url_matcher.h"
+#include "components/previews/content/previews_hints_util.h"
+#include "components/previews/content/previews_user_data.h"
+#include "components/previews/core/host_filter.h"
+#include "net/nqe/effective_connection_type.h"
 
 class GURL;
 
 namespace optimization_guide {
-struct ComponentInfo;
+struct HintsComponentInfo;
 }
 
 namespace previews {
 
-// Holds previews hints extracted from the configuration.
+// Holds previews hints extracted from a hint component.
 class PreviewsHints {
  public:
   ~PreviewsHints();
 
-  // Creates a Hints instance from the provided configuration.
-  static std::unique_ptr<PreviewsHints> CreateFromConfig(
-      const optimization_guide::proto::Configuration& config,
-      const optimization_guide::ComponentInfo& info);
+  // Loads the component associated with the provided component info and creates
+  // a PreviewsHints instance from it. If |component_update_info| is provided,
+  // then the page hints from the component will be moved into it and later used
+  // to update the component hints in the hint cache store. This must be called
+  // using a background task runner as it requires a significant amount of
+  // processing.
+  static std::unique_ptr<PreviewsHints> CreateFromHintsComponent(
+      const optimization_guide::HintsComponentInfo& info,
+      std::unique_ptr<HintCacheStore::ComponentUpdateData>
+          component_update_data);
 
-  // Returns the matching PageHint for |document_url| if found in |hint|.
-  // TODO(dougarnett): Consider moving to some hint_util file.
-  static const optimization_guide::proto::PageHint* FindPageHint(
-      const GURL& document_url,
-      const optimization_guide::proto::Hint& hint);
+  // Creates a Hints instance from the provided hints configuration. This must
+  // be called using a background task runner as it requires a significant
+  // amount of processing.
+  static std::unique_ptr<PreviewsHints> CreateFromHintsConfiguration(
+      std::unique_ptr<optimization_guide::proto::Configuration> config,
+      std::unique_ptr<HintCacheStore::ComponentUpdateData>
+          component_update_data);
 
-  void Initialize();
+  // Set |hint_cache_| and updates the hint cache's component data if
+  // |component_update_data_| is not a nullptr. In the case where
+  // |component_update_data_| is a nullptr, the callback is run synchronously;
+  // otherwise, it is run asynchronously after the cache's component data update
+  // completes.
+  void Initialize(HintCache* hint_cache, base::OnceClosure callback);
 
   // Whether the URL is whitelisted for the given previews type. If so,
-  // |out_inflation_percent| will be populated if meta data available for it.
-  // This first checks the top-level whitelist and, if not whitelisted there,
-  // it will check the HintCache for having a loaded, matching PageHint that
-  // whitelists it.
+  // |out_inflation_percent| and |out_ect_threshold| will be populated if
+  // metadata is available for them.
   bool IsWhitelisted(const GURL& url,
                      PreviewsType type,
-                     int* out_inflation_percent);
+                     int* out_inflation_percent,
+                     net::EffectiveConnectionType* out_ect_threshold) const;
+
+  // Whether the URL is blacklisted for the given previews type.
+  bool IsBlacklisted(const GURL& url, PreviewsType type) const;
 
   // Returns whether |url| may have PageHints and triggers asynchronous load
   // of such hints are not currently available synchronously. |callback| is
@@ -58,23 +74,43 @@ class PreviewsHints {
   bool MaybeLoadOptimizationHints(const GURL& url,
                                   HintLoadedCallback callback) const;
 
+  // Whether |url| has loaded resource loading hints and, if it does, populates
+  // |out_resource_patterns_to_block| with the resource patterns to block.
+  bool GetResourceLoadingHints(
+      const GURL& url,
+      std::vector<std::string>* out_resource_patterns_to_block) const;
+
+  // Logs UMA for whether the HintCache has a matching Hint and also a matching
+  // PageHint for |url|. Records the client's current |ect| as well. This is
+  // useful for measuring the effectiveness of the page hints provided by Cacao.
+  void LogHintCacheMatch(const GURL& url,
+                         bool is_committed,
+                         net::EffectiveConnectionType ect) const;
+
  private:
-  PreviewsHints();
+  friend class PreviewsHintsTest;
 
-  // The URLMatcher used to match whether a URL has any hints associated with
-  // it.
-  url_matcher::URLMatcher url_matcher_;
+  // Constructs PreviewsHints with |component_update_data|. This
+  // ComponentUpdateData is later moved into the HintCache during Initialize().
+  PreviewsHints(std::unique_ptr<HintCacheStore::ComponentUpdateData>
+                    component_update_data);
 
-  // Holds the hint cache (if any optimizations using it are enabled).
-  std::unique_ptr<HintCache> hint_cache_;
+  // Parses optimization filters from |config| and populates corresponding
+  // supported blacklists in this object.
+  void ParseOptimizationFilters(
+      const optimization_guide::proto::Configuration& config);
 
-  // A map from the condition set ID to associated whitelist Optimization
-  // details.
-  std::map<url_matcher::URLMatcherConditionSet::ID,
-           std::set<std::pair<PreviewsType, int>>>
-      whitelist_;
+  // Holds a pointer to the hint cache; the cache is owned by the optimization
+  // guide, which is guaranteed to outlive PreviewsHints.
+  HintCache* hint_cache_;
 
-  std::vector<optimization_guide::proto::Hint> initial_hints_;
+  // ComponentUpdateData provided by the HintCache and populated during
+  // PreviewsHints::Create(). |component_update_data_| is set during
+  // construction and moved into the HintCache during Initialize().
+  std::unique_ptr<HintCacheStore::ComponentUpdateData> component_update_data_;
+
+  // Blacklist of host suffixes for LITE_PAGE_REDIRECT Previews.
+  std::unique_ptr<HostFilter> lite_page_redirect_blacklist_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

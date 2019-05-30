@@ -10,8 +10,8 @@
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #include "ios/chrome/browser/ui/history/history_local_commands.h"
 #import "ios/chrome/browser/ui/history/public/history_presentation_delegate.h"
-#import "ios/chrome/browser/ui/settings/clear_browsing_data_local_commands.h"
-#import "ios/chrome/browser/ui/settings/clear_browsing_data_table_view_controller.h"
+#import "ios/chrome/browser/ui/settings/clear_browsing_data/clear_browsing_data_local_commands.h"
+#import "ios/chrome/browser/ui/settings/clear_browsing_data/clear_browsing_data_table_view_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_presentation_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_presentation_controller_delegate.h"
@@ -23,7 +23,8 @@
 #endif
 
 @interface HistoryClearBrowsingDataCoordinator ()<
-    UIViewControllerTransitioningDelegate>
+    UIViewControllerTransitioningDelegate,
+    TableViewPresentationControllerDelegate>
 
 // ViewControllers being managed by this Coordinator.
 @property(strong, nonatomic)
@@ -71,7 +72,24 @@
 
 - (void)stopWithCompletion:(ProceduralBlock)completionHandler {
   if (self.historyClearBrowsingDataNavigationController) {
-    [self dismissClearBrowsingDataWithCompletion:completionHandler];
+    [self.clearBrowsingDataTableViewController prepareForDismissal];
+    [self.historyClearBrowsingDataNavigationController
+        dismissViewControllerAnimated:YES
+                           completion:^() {
+                             // completionHandler might trigger
+                             // dismissHistoryWithCompletion, which will call
+                             // stopWithCompletion:, so
+                             // historyClearBrowsingDataNavigationController
+                             // needs to be nil, otherwise stopWithCompletion:
+                             // will call dismiss with nothing to dismiss and
+                             // therefore not trigger its own completionHandler.
+                             self.clearBrowsingDataTableViewController = nil;
+                             self.historyClearBrowsingDataNavigationController =
+                                 nil;
+                             if (completionHandler) {
+                               completionHandler();
+                             }
+                           }];
   } else if (completionHandler) {
     completionHandler();
   }
@@ -80,13 +98,14 @@
 #pragma mark - ClearBrowsingDataLocalCommands
 
 - (void)openURL:(const GURL&)URL {
+  DCHECK(self.historyClearBrowsingDataNavigationController);
   OpenNewTabCommand* command =
       [[OpenNewTabCommand alloc] initWithURL:URL
                                     referrer:web::Referrer()
                                  inIncognito:NO
                                 inBackground:NO
                                     appendTo:kLastTab];
-  [self dismissClearBrowsingDataWithCompletion:^() {
+  [self stopWithCompletion:^() {
     [self.localDispatcher dismissHistoryWithCompletion:^{
       [self.loader webPageOrderedOpen:command];
       [self.presentationDelegate showActiveRegularTabFromHistory];
@@ -94,27 +113,9 @@
   }];
 }
 
-- (void)dismissClearBrowsingDataWithCompletion:
-    (ProceduralBlock)completionHandler {
+- (void)dismissClearBrowsingData {
   DCHECK(self.historyClearBrowsingDataNavigationController);
-  [self.clearBrowsingDataTableViewController prepareForDismissal];
-  [self.historyClearBrowsingDataNavigationController
-      dismissViewControllerAnimated:YES
-                         completion:^() {
-                           // completionHandler might trigger
-                           // dismissHistoryWithCompletion, which will call
-                           // stopWithCompletion:, so
-                           // historyClearBrowsingDataNavigationController needs
-                           // to be nil, otherwise stopWithCompletion: will call
-                           // dismiss with nothing to dismiss and therefore not
-                           // trigger its own completionHandler.
-                           self.clearBrowsingDataTableViewController = nil;
-                           self.historyClearBrowsingDataNavigationController =
-                               nil;
-                           if (completionHandler) {
-                             completionHandler();
-                           }
-                         }];
+  [self stopWithCompletion:nil];
 }
 
 #pragma mark - UIViewControllerTransitioningDelegate
@@ -127,8 +128,20 @@ presentationControllerForPresentedViewController:(UIViewController*)presented
       [[TableViewPresentationController alloc]
           initWithPresentedViewController:presented
                  presentingViewController:presenting];
-
+  controller.modalDelegate = self;
   return controller;
+}
+
+#pragma mark - TableViewPresentationControllerDelegate
+
+- (BOOL)presentationControllerShouldDismissOnTouchOutside:
+    (TableViewPresentationController*)controller {
+  return YES;
+}
+
+- (void)presentationControllerWillDismiss:
+    (TableViewPresentationController*)controller {
+  [self stopWithCompletion:nil];
 }
 
 @end

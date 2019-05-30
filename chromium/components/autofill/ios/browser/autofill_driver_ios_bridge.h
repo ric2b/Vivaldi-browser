@@ -15,14 +15,19 @@ namespace autofill {
 struct FormData;
 }
 
+namespace web {
+class WebFrame;
+}
+
 // Interface used to pipe form data from AutofillDriverIOS to the embedder.
 @protocol AutofillDriverIOSBridge
 
-- (void)onFormDataFilled:(uint16_t)query_id
-                  result:(const autofill::FormData&)result;
+- (void)fillFormData:(const autofill::FormData&)form
+             inFrame:(web::WebFrame*)frame;
 
-- (void)sendAutofillTypePredictionsToRenderer:
-    (const std::vector<autofill::FormDataPredictions>&)forms;
+- (void)fillFormDataPredictions:
+            (const std::vector<autofill::FormDataPredictions>&)forms
+                        inFrame:(web::WebFrame*)frame;
 
 @end
 

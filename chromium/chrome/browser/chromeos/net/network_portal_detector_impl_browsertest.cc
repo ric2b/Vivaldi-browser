@@ -4,6 +4,8 @@
 
 #include <memory>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
@@ -16,13 +18,12 @@
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/net/network_portal_detector_impl.h"
 #include "chrome/browser/chromeos/net/network_portal_detector_test_utils.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/network/network_portal_notification_controller.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/shill_service_client.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
@@ -57,7 +58,7 @@ constexpr char kWifiGuid[] = "wifi";
 
 void ErrorCallbackFunction(const std::string& error_name,
                            const std::string& error_message) {
-  CHECK(false) << "Shill Error: " << error_name << " : " << error_message;
+  LOG(FATAL) << "Shill Error: " << error_name << " : " << error_message;
 }
 
 void SetConnected(const std::string& service_path) {
@@ -74,7 +75,7 @@ class NetworkPortalDetectorImplBrowserTest
       public captive_portal::CaptivePortalDetectorTestBase {
  public:
   NetworkPortalDetectorImplBrowserTest()
-      : LoginManagerTest(false),
+      : LoginManagerTest(false, true),
         test_account_id_(
             AccountId::FromUserEmailGaiaId(kTestUser, kTestUserGaiaId)),
         network_portal_detector_(nullptr) {}
@@ -96,7 +97,7 @@ class NetworkPortalDetectorImplBrowserTest
         base::Bind(&ErrorCallbackFunction));
 
     display_service_ = std::make_unique<NotificationDisplayServiceTester>(
-        chromeos::ProfileHelper::GetSigninProfile());
+        nullptr /* profile */);
 
     network_portal_detector_ =
         new NetworkPortalDetectorImpl(test_loader_factory());
@@ -270,8 +271,8 @@ IN_PROC_BROWSER_TEST_P(NetworkPortalDetectorImplBrowserTestIgnoreProxy,
   TestImpl(GetParam());
 }
 
-INSTANTIATE_TEST_CASE_P(CaptivePortalAuthenticationIgnoresProxy,
-                        NetworkPortalDetectorImplBrowserTestIgnoreProxy,
-                        testing::Bool());
+INSTANTIATE_TEST_SUITE_P(CaptivePortalAuthenticationIgnoresProxy,
+                         NetworkPortalDetectorImplBrowserTestIgnoreProxy,
+                         testing::Bool());
 
 }  // namespace chromeos

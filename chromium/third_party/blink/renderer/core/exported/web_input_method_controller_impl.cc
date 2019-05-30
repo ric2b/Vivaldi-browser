@@ -75,13 +75,15 @@ bool WebInputMethodControllerImpl::SetComposition(
   }
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      Frame::NotifyUserActivation(GetFrame(), UserGestureToken::kNewGesture);
+      LocalFrame::NotifyUserActivation(GetFrame(),
+                                       UserGestureToken::kNewGesture);
 
   GetInputMethodController().SetComposition(
       String(text), ImeTextSpanVectorBuilder::Build(ime_text_spans),
       selection_start, selection_end);
 
-  return text.IsEmpty() || GetInputMethodController().HasComposition();
+  return text.IsEmpty() ||
+         (GetFrame() && GetInputMethodController().HasComposition());
 }
 
 bool WebInputMethodControllerImpl::FinishComposingText(
@@ -91,7 +93,7 @@ bool WebInputMethodControllerImpl::FinishComposingText(
   // all the time. For instance, resetInputMethod call on RenderViewImpl could
   // be after losing the focus on frame. But since we return the core frame
   // in WebViewImpl::focusedLocalFrameInWidget(), we will reach here with
-  // |m_webLocalFrame| not focused on page.
+  // |web_frame_| not focused on page.
 
   if (WebPlugin* plugin = FocusedPluginIfInputMethodSupported())
     return plugin->FinishComposingText(selection_behavior);
@@ -112,7 +114,8 @@ bool WebInputMethodControllerImpl::CommitText(
     const WebRange& replacement_range,
     int relative_caret_position) {
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      Frame::NotifyUserActivation(GetFrame(), UserGestureToken::kNewGesture);
+      LocalFrame::NotifyUserActivation(GetFrame(),
+                                       UserGestureToken::kNewGesture);
 
   if (WebPlugin* plugin = FocusedPluginIfInputMethodSupported()) {
     return plugin->CommitText(text, ime_text_spans, replacement_range,
@@ -200,6 +203,7 @@ LocalFrame* WebInputMethodControllerImpl::GetFrame() const {
 
 InputMethodController& WebInputMethodControllerImpl::GetInputMethodController()
     const {
+  DCHECK(GetFrame());
   return GetFrame()->GetInputMethodController();
 }
 

@@ -18,7 +18,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-// https://html.spec.whatwg.org/#htmlelement
+// https://html.spec.whatwg.org/C/#htmlelement
 [HTMLConstructor]
 interface HTMLElement : Element {
     // metadata attributes
@@ -41,7 +41,7 @@ interface HTMLElement : Element {
     [Measure] attribute DOMString autocapitalize;
 
     // HTMLElement implements ElementContentEditable
-    // https://html.spec.whatwg.org/#contenteditable
+    // https://html.spec.whatwg.org/C/#contenteditable
     [CEReactions, CustomElementCallbacks, RaisesException=Setter] attribute DOMString contentEditable;
     [ImplementedAs=isContentEditableForBinding] readonly attribute boolean isContentEditable;
     [CEReactions, Reflect, ReflectOnly=("none","text","tel","url","email","numeric","decimal","search")] attribute DOMString inputMode;
@@ -58,10 +58,15 @@ interface HTMLElement : Element {
     // https://drafts.csswg.org/cssom/#the-elementcssinlinestyle-interface
     [Affects=Nothing, SameObject, PerWorldBindings, PutForwards=cssText] readonly attribute CSSStyleDeclaration style;
 
+    // Form-associated custom elements
+    // https://docs.google.com/document/d/1JO8puctCSpW-ZYGU8lF-h4FWRIDQNDVexzHoOQ2iQmY/edit?pli=1#heading=h.pjt9nhs3gu3k
+    [RuntimeEnabled=ElementInternals, RaisesException] ElementInternals attachInternals();
+
     // Non-standard APIs
-    [Affects=Nothing, CEReactions, CustomElementCallbacks, RaisesException=Setter, MeasureAs=HTMLElementInnerText] attribute [TreatNullAs=NullString] DOMString innerText;
-    [Affects=Nothing, CEReactions, CustomElementCallbacks, RaisesException=Setter, MeasureAs=HTMLElementOuterText] attribute [TreatNullAs=NullString] DOMString outerText;
+    [Affects=Nothing, CEReactions, CustomElementCallbacks, RaisesException=Setter, MeasureAs=HTMLElementInnerText] attribute ([TreatNullAs=EmptyString] DOMString or TrustedScript) innerText;
+    [Affects=Nothing, CEReactions, CustomElementCallbacks, RaisesException=Setter, MeasureAs=HTMLElementOuterText] attribute [TreatNullAs=EmptyString] DOMString outerText;
 };
 
 HTMLElement implements GlobalEventHandlers;
+HTMLElement implements DocumentAndElementEventHandlers;
 HTMLElement implements NoncedElement;

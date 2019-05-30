@@ -11,9 +11,14 @@
 @interface BrowserContainerViewController : UIViewController
 
 // Adds the given |contentView| as a subview and removes the previously added
-// |contentView| if any. If |contentView| is nil then only old content view is
-// removed.
-- (void)displayContentView:(UIView*)contentView;
+// |contentView| or |contentViewController|, if any. If |contentView| is nil
+// then only old content view or view controller is removed.
+@property(nonatomic, strong) UIView* contentView;
+
+// Adds the given |contentViewController| as a child view controller and removes
+// the previously added |contentViewController| if any.  Setting
+// |contentViewController| does not clear |contentView|.
+@property(nonatomic, strong) UIViewController* contentViewController;
 
 @end
 

@@ -21,7 +21,7 @@ const char* GetNameForThreadType(WebThreadType thread_type) {
       return "DedicatedWorker thread";
     case WebThreadType::kSharedWorkerThread:
       return "SharedWorker thread";
-    case WebThreadType::kAnimationWorkletThread:
+    case WebThreadType::kAnimationAndPaintWorkletThread:
       return "AnimationWorklet thread";
     case WebThreadType::kServiceWorkerThread:
       return "ServiceWorker thread";
@@ -33,8 +33,6 @@ const char* GetNameForThreadType(WebThreadType thread_type) {
       return "Database thread";
     case WebThreadType::kWebAudioThread:
       return "WebAudio thread";
-    case WebThreadType::kScriptStreamerThread:
-      return "ScriptStreamer thread";
     case WebThreadType::kOfflineAudioRenderThread:
       return "OfflineAudioRender thread";
     case WebThreadType::kReverbConvolutionBackgroundThread:

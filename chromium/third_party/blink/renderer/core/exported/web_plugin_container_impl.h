@@ -38,7 +38,7 @@
 #include "third_party/blink/public/platform/web_touch_event.h"
 #include "third_party/blink/public/web/web_plugin_container.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/frame/embedded_content_view.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/compiler.h"
@@ -78,11 +78,12 @@ class CORE_EXPORT WebPluginContainerImpl final
  public:
   static WebPluginContainerImpl* Create(HTMLPlugInElement& element,
                                         WebPlugin* web_plugin) {
-    return new WebPluginContainerImpl(element, web_plugin);
+    return MakeGarbageCollected<WebPluginContainerImpl>(element, web_plugin);
   }
   // Check if plugins support a given command |name|.
   static bool SupportsCommand(const WebString& name);
 
+  WebPluginContainerImpl(HTMLPlugInElement&, WebPlugin*);
   ~WebPluginContainerImpl() override;
 
   // EmbeddedContentView methods
@@ -124,8 +125,8 @@ class CORE_EXPORT WebPluginContainerImpl final
   WebDocument GetDocument() override;
   void DispatchProgressEvent(const WebString& type,
                              bool length_computable,
-                             unsigned long long loaded,
-                             unsigned long long total,
+                             uint64_t loaded,
+                             uint64_t total,
                              const WebString& url) override;
   void EnqueueMessageEvent(const WebDOMMessageEvent&) override;
   void Invalidate() override;
@@ -168,9 +169,6 @@ class CORE_EXPORT WebPluginContainerImpl final
   // Whether the plugin supports its own paginated print. The other print
   // interface methods are called only if this method returns true.
   bool SupportsPaginatedPrint() const;
-  // If the plugin content should not be scaled to the printable area of
-  // the page, then this method should return true.
-  bool IsPrintScalingDisabled() const;
   // Returns true on success and sets the out parameter to the print preset
   // options for the document.
   bool GetPrintPresetOptionsFromDocument(WebPrintPresetOptions*) const;
@@ -192,7 +190,7 @@ class CORE_EXPORT WebPluginContainerImpl final
 
   // Resource load events for the plugin's source data:
   void DidReceiveResponse(const ResourceResponse&);
-  void DidReceiveData(const char* data, int data_length);
+  void DidReceiveData(const char* data, size_t data_length);
   void DidFinishLoading();
   void DidFailLoading(const ResourceError&);
 
@@ -214,8 +212,6 @@ class CORE_EXPORT WebPluginContainerImpl final
       IntRect& window_rect,
       IntRect& clipped_local_rect,
       IntRect& unclipped_int_local_rect) const;
-
-  WebPluginContainerImpl(HTMLPlugInElement&, WebPlugin*);
 
   WebTouchEvent TransformTouchEvent(const WebInputEvent&);
   WebCoalescedInputEvent TransformCoalescedTouchEvent(

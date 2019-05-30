@@ -11,6 +11,8 @@ source_set("sync") {
     # BUILD.gn depedency.
     "consent_auditor_factory.cc",
     "consent_auditor_factory.h",
+    "device_info_sync_service_factory.h",
+    "device_info_sync_service_factory.mm",
     "ios_chrome_sync_client.h",
     "ios_chrome_sync_client.mm",
     "ios_chrome_synced_tab_delegate.h",
@@ -21,14 +23,14 @@ source_set("sync") {
     "model_type_store_service_factory.h",
     "profile_sync_service_factory.cc",
     "profile_sync_service_factory.h",
+    "session_sync_service_factory.h",
+    "session_sync_service_factory.mm",
     "sync_observer_bridge.h",
     "sync_observer_bridge.mm",
     "sync_setup_service.cc",
     "sync_setup_service.h",
     "sync_setup_service_factory.cc",
     "sync_setup_service_factory.h",
-    "synced_sessions_bridge.h",
-    "synced_sessions_bridge.mm",
   ]
   deps = [
     "//base",
@@ -42,7 +44,6 @@ source_set("sync") {
     "//components/keyed_service/ios",
     "//components/network_time",
     "//components/password_manager/core/browser",
-    "//components/password_manager/sync/browser",
     "//components/pref_registry",
     "//components/prefs",
     "//components/reading_list/core",
@@ -52,7 +53,6 @@ source_set("sync") {
     "//components/sync",
     "//components/sync_preferences",
     "//components/sync_sessions",
-    "//components/unified_consent",
     "//components/version_info",
     "//google_apis",
     "//ios/chrome/browser",
@@ -104,13 +104,13 @@ source_set("test_support") {
     "//components/browser_sync:test_support",
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
-    "//components/signin/core/browser",
     "//components/sync",
     "//components/sync:test_support_driver",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/signin",
     "//ios/chrome/common",
     "//ios/web",
+    "//ui/base",
   ]
   public_deps = [
     "//testing/gmock",
@@ -121,12 +121,14 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "profile_sync_service_factory_unittest.cc",
+    "session_sync_service_factory_unittest.cc",
   ]
   deps = [
     ":sync",
     "//base",
     "//components/browser_sync",
     "//components/sync",
+    "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/web/public/test",
     "//testing/gtest",

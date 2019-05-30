@@ -29,8 +29,9 @@
 #include "third_party/blink/renderer/core/style/border_image_length_box.h"
 #include "third_party/blink/renderer/core/style/data_ref.h"
 #include "third_party/blink/renderer/core/style/style_image.h"
-#include "third_party/blink/renderer/platform/layout_unit.h"
-#include "third_party/blink/renderer/platform/length_box.h"
+#include "third_party/blink/renderer/platform/geometry/layout_unit.h"
+#include "third_party/blink/renderer/platform/geometry/length_box.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/ref_counted.h"
 
@@ -86,7 +87,7 @@ class CORE_EXPORT NinePieceImage {
     NinePieceImage image;
     image.data_.Access()->image_slices = LengthBox(0);
     image.data_.Access()->fill = true;
-    image.data_.Access()->border_slices = BorderImageLengthBox(Length(kAuto));
+    image.data_.Access()->border_slices = BorderImageLengthBox(Length::Auto());
     return image;
   }
 

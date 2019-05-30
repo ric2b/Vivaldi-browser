@@ -50,7 +50,7 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 namespace {
 
@@ -74,7 +74,6 @@ TextIteratorBehavior AdjustBehaviorFlags<EditingInFlatTreeStrategy>(
       .SetExcludeAutofilledValue(behavior.ForSelectionToString() ||
                                  behavior.ExcludeAutofilledValue())
       .SetEntersOpenShadowRoots(false)
-      .SetEntersTextControls(false)
       .Build();
 }
 
@@ -86,7 +85,7 @@ static inline bool HasDisplayContents(const Node& node) {
 // |node| is neither a shadow root nor the owner of a layout object.
 static bool NotSkipping(const Node& node) {
   return node.GetLayoutObject() || HasDisplayContents(node) ||
-         (node.IsShadowRoot() && node.OwnerShadowHost()->GetLayoutObject());
+         (IsA<ShadowRoot>(node) && node.OwnerShadowHost()->GetLayoutObject());
 }
 
 template <typename Strategy>
@@ -132,7 +131,7 @@ const Node* PastLastNode(const Node& range_end_container,
   return nullptr;
 }
 
-// Figure out the initial value of m_shadowDepth: the depth of startContainer's
+// Figure out the initial value of shadow_depth_: the depth of start_container's
 // tree scope from the common ancestor tree scope.
 template <typename Strategy>
 unsigned ShadowDepthOf(const Node& start_container, const Node& end_container);
@@ -163,6 +162,24 @@ bool IsRenderedAsTable(const Node* node) {
     return false;
   LayoutObject* layout_object = node->GetLayoutObject();
   return layout_object && layout_object->IsTable();
+}
+
+bool ShouldHandleChildren(const Node& node,
+                          const TextIteratorBehavior& behavior) {
+  // To support |TextIteratorEmitsImageAltText|, we don't traversal child
+  // nodes, in flat tree.
+  if (IsHTMLImageElement(node))
+    return false;
+  // Traverse internals of text control elements in flat tree only when
+  // |EntersTextControls| flag is set.
+  if (!behavior.EntersTextControls() && IsTextControl(node))
+    return false;
+
+  if (node.IsElementNode()) {
+    if (auto* context = ToElement(node).GetDisplayLockContext())
+      return context->IsActivatable();
+  }
+  return true;
 }
 
 }  // namespace
@@ -241,12 +258,12 @@ template <typename Strategy>
 bool TextIteratorAlgorithm<Strategy>::HandleRememberedProgress() {
   // Handle remembered node that needed a newline after the text node's newline
   if (needs_another_newline_) {
-    // Emit the extra newline, and position it *inside* m_node, after m_node's
+    // Emit the extra newline, and position it *inside* node_, after node_'s
     // contents, in case it's a block, in the same way that we position the
     // first newline. The range for the emitted newline should start where the
     // line break begins.
     // FIXME: It would be cleaner if we emitted two newlines during the last
-    // iteration, instead of using m_needsAnotherNewline.
+    // iteration, instead of using needs_another_newline_.
     Node* last_child = Strategy::LastChild(*node_);
     const Node* base_node = last_child ? last_child : node_.Get();
     EmitChar16AfterNode('\n', *base_node);
@@ -294,20 +311,21 @@ void TextIteratorAlgorithm<Strategy>::Advance() {
 
     LayoutObject* layout_object = node_->GetLayoutObject();
     if (!layout_object) {
-      if (node_->IsShadowRoot() || HasDisplayContents(*node_)) {
+      if (IsA<ShadowRoot>(node_.Get()) || HasDisplayContents(*node_)) {
         // Shadow roots or display: contents elements don't have LayoutObjects,
         // but we want to visit children anyway.
         iteration_progress_ = iteration_progress_ < kHandledNode
                                   ? kHandledNode
                                   : iteration_progress_;
-        handle_shadow_root_ = node_->IsShadowRoot();
+        handle_shadow_root_ = IsA<ShadowRoot>(node_.Get());
       } else {
         iteration_progress_ = kHandledChildren;
       }
     } else {
       // Enter author shadow roots, from youngest, if any and if necessary.
       if (iteration_progress_ < kHandledOpenShadowRoots) {
-        if (EntersOpenShadowRoots() && node_->IsElementNode() &&
+        if (std::is_same<Strategy, EditingStrategy>::value &&
+            EntersOpenShadowRoots() && node_->IsElementNode() &&
             ToElement(node_)->OpenShadowRoot()) {
           ShadowRoot* youngest_shadow_root = ToElement(node_)->OpenShadowRoot();
           DCHECK(youngest_shadow_root->GetType() == ShadowRootType::V0 ||
@@ -324,7 +342,8 @@ void TextIteratorAlgorithm<Strategy>::Advance() {
 
       // Enter user-agent shadow root, if necessary.
       if (iteration_progress_ < kHandledUserAgentShadowRoot) {
-        if (EntersTextControls() && layout_object->IsTextControl()) {
+        if (std::is_same<Strategy, EditingStrategy>::value &&
+            EntersTextControls() && layout_object->IsTextControl()) {
           ShadowRoot* user_agent_shadow_root =
               ToElement(node_)->UserAgentShadowRoot();
           DCHECK(user_agent_shadow_root->IsUserAgent());
@@ -369,12 +388,10 @@ void TextIteratorAlgorithm<Strategy>::Advance() {
     // calling exitNode() as we come back thru a parent node.
     //
     // 1. Iterate over child nodes, if we haven't done yet.
-    // To support |TextIteratorEmitsImageAltText|, we don't traversal child
-    // nodes, in flat tree.
-    Node* next =
-        iteration_progress_ < kHandledChildren && !IsHTMLImageElement(*node_)
-            ? Strategy::FirstChild(*node_)
-            : nullptr;
+    Node* next = iteration_progress_ < kHandledChildren &&
+                         ShouldHandleChildren(*node_, behavior_)
+                     ? Strategy::FirstChild(*node_)
+                     : nullptr;
     if (!next) {
       // 2. If we've already iterated children or they are not available, go to
       // the next sibling node.
@@ -404,12 +421,12 @@ void TextIteratorAlgorithm<Strategy>::Advance() {
           // 4. Reached the top of a shadow root. If it's created by author,
           // then try to visit the next
           // sibling shadow root, if any.
-          if (!node_->IsShadowRoot()) {
+          const auto* shadow_root = DynamicTo<ShadowRoot>(node_.Get());
+          if (!shadow_root) {
             NOTREACHED();
             should_stop_ = true;
             return;
           }
-          const ShadowRoot* shadow_root = ToShadowRoot(node_);
           if (shadow_root->GetType() == ShadowRootType::V0 ||
               shadow_root->GetType() == ShadowRootType::kOpen) {
             // We are the shadow root; exit from here and go back to
@@ -489,7 +506,7 @@ bool TextIteratorAlgorithm<Strategy>::SupportsAltText(const Node& node) {
   if (IsHTMLImageElement(element))
     return true;
   if (IsHTMLInputElement(element) &&
-      ToHTMLInputElement(node).type() == InputTypeNames::image)
+      ToHTMLInputElement(node).type() == input_type_names::kImage)
     return true;
   return false;
 }
@@ -538,7 +555,7 @@ void TextIteratorAlgorithm<Strategy>::HandleReplacedElement() {
     return;
   }
   // TODO(editing-dev): We can remove |UpdateForReplacedElement()| call when
-  // we address layout test failures (text diff by newlines only) and unit
+  // we address web test failures (text diff by newlines only) and unit
   // tests, e.g. TextIteratorTest.IgnoreAltTextInTextControls.
   text_state_.UpdateForReplacedElement(*node_);
 }
@@ -577,16 +594,16 @@ static bool ShouldEmitNewlinesBeforeAndAfterNode(const Node& node) {
   if (!r) {
     if (HasDisplayContents(node))
       return false;
-    return (node.HasTagName(blockquoteTag) || node.HasTagName(ddTag) ||
-            node.HasTagName(divTag) || node.HasTagName(dlTag) ||
-            node.HasTagName(dtTag) || node.HasTagName(h1Tag) ||
-            node.HasTagName(h2Tag) || node.HasTagName(h3Tag) ||
-            node.HasTagName(h4Tag) || node.HasTagName(h5Tag) ||
-            node.HasTagName(h6Tag) || node.HasTagName(hrTag) ||
-            node.HasTagName(liTag) || node.HasTagName(listingTag) ||
-            node.HasTagName(olTag) || node.HasTagName(pTag) ||
-            node.HasTagName(preTag) || node.HasTagName(trTag) ||
-            node.HasTagName(ulTag));
+    return (node.HasTagName(kBlockquoteTag) || node.HasTagName(kDdTag) ||
+            node.HasTagName(kDivTag) || node.HasTagName(kDlTag) ||
+            node.HasTagName(kDtTag) || node.HasTagName(kH1Tag) ||
+            node.HasTagName(kH2Tag) || node.HasTagName(kH3Tag) ||
+            node.HasTagName(kH4Tag) || node.HasTagName(kH5Tag) ||
+            node.HasTagName(kH6Tag) || node.HasTagName(kHrTag) ||
+            node.HasTagName(kLiTag) || node.HasTagName(kListingTag) ||
+            node.HasTagName(kOlTag) || node.HasTagName(kPTag) ||
+            node.HasTagName(kPreTag) || node.HasTagName(kTrTag) ||
+            node.HasTagName(kUlTag));
   }
 
   // Need to make an exception for option and optgroup, because we want to
@@ -636,16 +653,16 @@ bool TextIteratorAlgorithm<Strategy>::ShouldEmitNewlineBeforeNode(
 }
 
 static bool ShouldEmitExtraNewlineForNode(const Node* node) {
-  // https://html.spec.whatwg.org/multipage/dom.html#the-innertext-idl-attribute
+  // https://html.spec.whatwg.org/C/#the-innertext-idl-attribute
   // Append two required linebreaks after a P element.
   LayoutObject* r = node->GetLayoutObject();
   if (!r || !r->IsBox())
     return false;
 
-  return node->HasTagName(pTag);
+  return node->HasTagName(kPTag);
 }
 
-// Whether or not we should emit a character as we enter m_node (if it's a
+// Whether or not we should emit a character as we enter node_ (if it's a
 // container) or as we hit it (if it's atomic).
 template <typename Strategy>
 bool TextIteratorAlgorithm<Strategy>::ShouldRepresentNodeOffsetZero() {
@@ -676,15 +693,15 @@ bool TextIteratorAlgorithm<Strategy>::ShouldRepresentNodeOffsetZero() {
     return false;
 
   // If we are outside the start container's subtree, assume we need to emit.
-  // FIXME: m_startContainer could be an inline block
+  // FIXME: start_container_ could be an inline block
   if (!Strategy::IsDescendantOf(*node_, *start_container_))
     return true;
 
-  // If we started as m_startContainer offset 0 and the current node is a
+  // If we started as start_container_ offset 0 and the current node is a
   // descendant of the start container, we already had enough context to
   // correctly decide whether to emit after a preceding block. We chose not to
-  // emit (m_hasEmitted is false), so don't second guess that now.
-  // NOTE: Is this really correct when m_node is not a leftmost descendant?
+  // emit (has_emitted_ is false), so don't second guess that now.
+  // NOTE: Is this really correct when node_ is not a leftmost descendant?
   // Probably immaterial since we likely would have already emitted something by
   // now.
   if (!start_offset_)
@@ -727,15 +744,15 @@ bool TextIteratorAlgorithm<Strategy>::ShouldEmitSpaceBeforeAndAfterNode(
 
 template <typename Strategy>
 void TextIteratorAlgorithm<Strategy>::RepresentNodeOffsetZero() {
-  // Emit a character to show the positioning of m_node.
+  // Emit a character to show the positioning of node_.
 
   // TODO(editing-dev): We should rewrite this below code fragment to utilize
   // early-return style.
   // When we haven't been emitting any characters,
-  // shouldRepresentNodeOffsetZero() can create VisiblePositions, which is
-  // expensive. So, we perform the inexpensive checks on m_node to see if it
+  // ShouldRepresentNodeOffsetZero() can create VisiblePositions, which is
+  // expensive. So, we perform the inexpensive checks on |node_| to see if it
   // necessitates emitting a character first and will early return before
-  // encountering shouldRepresentNodeOffsetZero()s worse case behavior.
+  // encountering ShouldRepresentNodeOffsetZero()s worse case behavior.
   if (ShouldEmitTabBeforeNode(*node_)) {
     if (ShouldRepresentNodeOffsetZero())
       EmitChar16BeforeNode('\t', *node_);
@@ -763,18 +780,18 @@ template <typename Strategy>
 void TextIteratorAlgorithm<Strategy>::ExitNode() {
   // prevent emitting a newline when exiting a collapsed block at beginning of
   // the range
-  // FIXME: !m_hasEmitted does not necessarily mean there was a collapsed
+  // FIXME: !has_emitted_ does not necessarily mean there was a collapsed
   // block... it could have been an hr (e.g.). Also, a collapsed block could
   // have height (e.g. a table) and therefore look like a blank line.
   if (!text_state_.HasEmitted())
     return;
 
-  // Emit with a position *inside* m_node, after m_node's contents, in
+  // Emit with a position *inside* node_, after node_'s contents, in
   // case it is a block, because the run should start where the
   // emitted character is positioned visually.
   Node* last_child = Strategy::LastChild(*node_);
   const Node* base_node = last_child ? last_child : node_.Get();
-  // FIXME: This shouldn't require the m_lastTextNode to be true, but we can't
+  // FIXME: This shouldn't require the last_text_node to be true, but we can't
   // change that without making the logic in _web_attributedStringFromRange
   // match. We'll get that for free when we switch to use TextIterator in
   // _web_attributedStringFromRange. See <rdar://problem/5428427> for an example

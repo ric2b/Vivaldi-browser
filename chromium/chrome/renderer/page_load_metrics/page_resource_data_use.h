@@ -7,6 +7,10 @@
 
 #include "base/macros.h"
 #include "chrome/common/page_load_metrics/page_load_metrics.mojom.h"
+#include "content/public/common/resource_type.h"
+#include "url/origin.h"
+
+class GURL;
 
 namespace network {
 struct ResourceResponseHead;
@@ -20,10 +24,13 @@ namespace page_load_metrics {
 class PageResourceDataUse {
  public:
   PageResourceDataUse();
+  PageResourceDataUse(const PageResourceDataUse& other);
   ~PageResourceDataUse();
 
-  void DidStartResponse(int resource_id,
-                        const network::ResourceResponseHead& response_head);
+  void DidStartResponse(const GURL& response_url,
+                        int resource_id,
+                        const network::ResourceResponseHead& response_head,
+                        content::ResourceType resource_type);
 
   // Updates received bytes.
   void DidReceiveTransferSizeUpdate(int received_data_length);
@@ -39,6 +46,9 @@ class PageResourceDataUse {
   bool IsFinishedLoading();
 
   int resource_id() const { return resource_id_; }
+
+  void SetReportedAsAdResource(bool reported_as_ad_resource);
+  void SetIsMainFrameResource(bool is_main_frame_resource);
 
   // Creates a ResourceDataUpdate mojo for this resource. This page resource
   // contains information since the last time update. Should be called at most
@@ -56,11 +66,22 @@ class PageResourceDataUse {
   // used.
   double data_reduction_proxy_compression_ratio_estimate_;
 
-  uint64_t total_received_bytes_;
-  uint64_t last_update_bytes_;
+  uint64_t total_received_bytes_ = 0;
+  uint64_t last_update_bytes_ = 0;
+  uint64_t encoded_body_length_ = 0;
 
   bool is_complete_;
   bool is_canceled_;
+  bool reported_as_ad_resource_;
+  bool is_main_frame_resource_;
+  bool was_fetched_via_cache_;
+  bool is_secure_scheme_;
+  bool proxy_used_;
+  bool is_primary_frame_resource_ = false;
+
+  url::Origin origin_;
+
+  std::string mime_type_;
 
   DISALLOW_ASSIGN(PageResourceDataUse);
 };

@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/path_service.h"
@@ -45,13 +46,13 @@
 #include "components/policy/core/browser/android/android_combined_policy_provider.h"
 #endif
 
-#if !defined(OS_CHROMEOS) && BUILDFLAG(ENABLE_EXTENSIONS)
-#include "chrome/browser/extensions/api/enterprise_reporting_private/enterprise_reporting_policy_migrator.h"
-#endif  // !defined(OS_CHROMEOS) && BUILDFLAG(ENABLE_EXTENSIONS)
-
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
 #include "chrome/browser/policy/machine_level_user_cloud_policy_controller.h"
 #include "components/policy/core/common/cloud/machine_level_user_cloud_policy_manager.h"
+#endif
+
+#if defined(OS_WIN)
+#include "chrome/browser/browser_switcher/browser_switcher_policy_migrator.h"
 #endif
 
 namespace policy {
@@ -59,12 +60,20 @@ namespace policy {
 namespace {
 
 void AddMigrators(ConfigurationPolicyProvider* provider) {
-  DCHECK(provider);
-#if !defined(OS_CHROMEOS) && BUILDFLAG(ENABLE_EXTENSIONS)
+#if defined(OS_WIN)
   provider->AddMigrator(
-      std::make_unique<extensions::enterprise_reporting::
-                           EnterpriseReportingPolicyMigrator>());
-#endif  // !defined(OS_CHROMEOS) && BUILDFLAG(ENABLE_EXTENSIONS)
+      std::make_unique<browser_switcher::BrowserSwitcherPolicyMigrator>());
+#endif
+}
+
+bool ProviderHasPolicies(const ConfigurationPolicyProvider* provider) {
+  if (!provider)
+    return false;
+  for (const auto& pair : provider->policies()) {
+    if (!pair.second->empty())
+      return true;
+  }
+  return false;
 }
 
 }  // namespace
@@ -104,6 +113,16 @@ void ChromeBrowserPolicyConnector::Init(
 
 bool ChromeBrowserPolicyConnector::IsEnterpriseManaged() const {
   NOTREACHED() << "This method is only defined for Chrome OS";
+  return false;
+}
+
+bool ChromeBrowserPolicyConnector::HasMachineLevelPolicies() {
+  if (ProviderHasPolicies(GetPlatformProvider()))
+    return true;
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+  if (ProviderHasPolicies(machine_level_user_cloud_policy_manager_))
+    return true;
+#endif  // !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
   return false;
 }
 

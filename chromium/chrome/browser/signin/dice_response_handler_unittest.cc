@@ -5,6 +5,7 @@
 #include "chrome/browser/signin/dice_response_handler.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -12,28 +13,21 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/scoped_observer.h"
-#include "base/test/test_mock_time_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/time/time.h"
-#include "chrome/browser/signin/mutable_profile_oauth2_token_service_delegate.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/signin/core/browser/about_signin_internals.h"
+#include "components/signin/core/browser/account_consistency_method.h"
 #include "components/signin/core/browser/account_reconcilor.h"
-#include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/dice_account_reconcilor_delegate.h"
-#include "components/signin/core/browser/fake_gaia_cookie_manager_service.h"
-#include "components/signin/core/browser/fake_signin_manager.h"
-#include "components/signin/core/browser/profile_management_switches.h"
-#include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/core/browser/test_signin_client.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "google_apis/gaia/fake_oauth2_token_service_delegate.h"
-#include "google_apis/gaia/gaia_constants.h"
+#include "services/identity/public/cpp/identity_test_environment.h"
+#include "services/identity/public/cpp/identity_test_utils.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -44,8 +38,7 @@ using signin::DiceResponseParams;
 namespace {
 
 const char kAuthorizationCode[] = "authorization_code";
-const char kEmail[] = "email";
-const char kGaiaID[] = "gaia_id";
+const char kEmail[] = "test@email.com";
 const int kSessionIndex = 42;
 
 // TestSigninClient implementation that intercepts the GaiaAuthConsumer and
@@ -59,7 +52,7 @@ class DiceTestSigninClient : public TestSigninClient, public GaiaAuthConsumer {
 
   std::unique_ptr<GaiaAuthFetcher> CreateGaiaAuthFetcher(
       GaiaAuthConsumer* consumer,
-      const std::string& source,
+      gaia::GaiaSource source,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
       override {
     DCHECK(!consumer_ || (consumer_ == consumer));
@@ -78,28 +71,6 @@ class DiceTestSigninClient : public TestSigninClient, public GaiaAuthConsumer {
   DISALLOW_COPY_AND_ASSIGN(DiceTestSigninClient);
 };
 
-// Checks if OnRefreshTokenAvailable() has been called for the specified
-// account.
-class DiceTestTokenServiceObserver : public OAuth2TokenService::Observer {
- public:
-  explicit DiceTestTokenServiceObserver(const std::string& account_id)
-      : account_id_(account_id) {}
-
-  bool token_received() { return token_received_; }
-
- private:
-  // OAuth2TokenServiceObserver:
-  void OnRefreshTokenAvailable(const std::string& account_id) override {
-    if (account_id == account_id_)
-      token_received_ = true;
-  }
-
-  bool token_received_ = false;
-  std::string account_id_;
-
-  DISALLOW_COPY_AND_ASSIGN(DiceTestTokenServiceObserver);
-};
-
 class DiceResponseHandlerTest : public testing::Test,
                                 public AccountReconcilor::Observer {
  public:
@@ -116,44 +87,31 @@ class DiceResponseHandlerTest : public testing::Test,
 
  protected:
   DiceResponseHandlerTest()
-      : loop_(base::MessageLoop::TYPE_IO),  // URLRequestContext requires IO.
-        task_runner_(new base::TestMockTimeTaskRunner()),
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::
+                IO_MOCK_TIME),  // URLRequestContext requires IO.
         signin_client_(&pref_service_),
-        token_service_(&pref_service_,
-                       std::make_unique<FakeOAuth2TokenServiceDelegate>()),
+        identity_test_env_(/*test_url_loader_factory=*/nullptr,
+                           &pref_service_,
+                           signin::AccountConsistencyMethod::kDice,
+                           &signin_client_),
         signin_error_controller_(
-            SigninErrorController::AccountMode::PRIMARY_ACCOUNT),
-        signin_manager_(&signin_client_,
-                        &token_service_,
-                        &account_tracker_service_,
-                        nullptr,
-                        &signin_error_controller_),
-        cookie_service_(&token_service_,
-                        GaiaConstants::kChromeSource,
-                        &signin_client_,
-                        /*use_fake_url_fetcher=*/false),
-        about_signin_internals_(&token_service_,
-                                &account_tracker_service_,
-                                &signin_manager_,
+            SigninErrorController::AccountMode::PRIMARY_ACCOUNT,
+            identity_test_env_.identity_manager()),
+        about_signin_internals_(identity_test_env_.identity_manager(),
                                 &signin_error_controller_,
-                                &cookie_service_,
                                 signin::AccountConsistencyMethod::kDice),
         reconcilor_blocked_count_(0),
         reconcilor_unblocked_count_(0) {
-    loop_.SetTaskRunner(task_runner_);
-    DCHECK_EQ(task_runner_, base::ThreadTaskRunnerHandle::Get());
     EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
     AboutSigninInternals::RegisterPrefs(pref_service_.registry());
-    AccountTrackerService::RegisterPrefs(pref_service_.registry());
-    SigninManager::RegisterProfilePrefs(pref_service_.registry());
     auto account_reconcilor_delegate =
         std::make_unique<signin::DiceAccountReconcilorDelegate>(
-            &signin_client_, signin::AccountConsistencyMethod::kDisabled);
+            &signin_client_, signin::AccountConsistencyMethod::kDiceMigration);
     account_reconcilor_ = std::make_unique<AccountReconcilor>(
-        &token_service_, &signin_manager_, &signin_client_, nullptr,
+        identity_test_env_.identity_manager(), &signin_client_,
         std::move(account_reconcilor_delegate));
     about_signin_internals_.Initialize(&signin_client_);
-    account_tracker_service_.Initialize(&pref_service_, base::FilePath());
     account_reconcilor_->AddObserver(this);
   }
 
@@ -161,29 +119,23 @@ class DiceResponseHandlerTest : public testing::Test,
     account_reconcilor_->RemoveObserver(this);
     account_reconcilor_->Shutdown();
     about_signin_internals_.Shutdown();
-    cookie_service_.Shutdown();
     signin_error_controller_.Shutdown();
-    signin_manager_.Shutdown();
-    account_tracker_service_.Shutdown();
-    token_service_.Shutdown();
-    signin_client_.Shutdown();
-    task_runner_->ClearPendingTasks();
   }
 
   void InitializeDiceResponseHandler(
       signin::AccountConsistencyMethod account_consistency) {
     DCHECK(!dice_response_handler_);
     dice_response_handler_ = std::make_unique<DiceResponseHandler>(
-        &signin_client_, &signin_manager_, &token_service_,
-        &account_tracker_service_, account_reconcilor_.get(),
-        &about_signin_internals_, account_consistency, temp_dir_.GetPath());
+        &signin_client_, identity_test_env_.identity_manager(),
+        account_reconcilor_.get(), &about_signin_internals_,
+        account_consistency, temp_dir_.GetPath());
   }
 
   DiceResponseParams MakeDiceParams(DiceAction action) {
     DiceResponseParams dice_params;
     dice_params.user_intention = action;
     DiceResponseParams::AccountInfo account_info;
-    account_info.gaia_id = kGaiaID;
+    account_info.gaia_id = identity::GetTestGaiaIdForEmail(kEmail);
     account_info.email = kEmail;
     account_info.session_index = kSessionIndex;
     switch (action) {
@@ -210,26 +162,20 @@ class DiceResponseHandlerTest : public testing::Test,
     return dice_params;
   }
 
-  std::string GetRefreshToken(const std::string& account_id) {
-    return static_cast<FakeOAuth2TokenServiceDelegate*>(
-               token_service_.GetDelegate())
-        ->GetRefreshToken(account_id);
-  }
-
   // AccountReconcilor::Observer:
   void OnBlockReconcile() override { ++reconcilor_blocked_count_; }
   void OnUnblockReconcile() override { ++reconcilor_unblocked_count_; }
 
-  base::MessageLoop loop_;
+  identity::IdentityManager* identity_manager() {
+    return identity_test_env_.identity_manager();
+  }
+
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   base::ScopedTempDir temp_dir_;
-  scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
   sync_preferences::TestingPrefServiceSyncable pref_service_;
   DiceTestSigninClient signin_client_;
-  ProfileOAuth2TokenService token_service_;
-  AccountTrackerService account_tracker_service_;
+  identity::IdentityTestEnvironment identity_test_env_;
   SigninErrorController signin_error_controller_;
-  FakeSigninManager signin_manager_;
-  FakeGaiaCookieManagerService cookie_service_;
   AboutSigninInternals about_signin_internals_;
   std::unique_ptr<AccountReconcilor> account_reconcilor_;
   std::unique_ptr<DiceResponseHandler> dice_response_handler_;
@@ -267,9 +213,9 @@ TEST_F(DiceResponseHandlerTest, Signin) {
   InitializeDiceResponseHandler(signin::AccountConsistencyMethod::kDice);
   DiceResponseParams dice_params = MakeDiceParams(DiceAction::SIGNIN);
   const auto& account_info = dice_params.signin_info->account_info;
-  std::string account_id = account_tracker_service_.PickAccountIdForAccount(
+  std::string account_id = identity_manager()->LegacyPickAccountIdForAccount(
       account_info.gaia_id, account_info.email);
-  ASSERT_FALSE(token_service_.RefreshTokenIsAvailable(account_id));
+  EXPECT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id));
   dice_response_handler_->ProcessDiceHeader(
       dice_params, std::make_unique<TestProcessDiceHeaderDelegate>(this));
   // Check that a GaiaAuthFetcher has been created.
@@ -282,15 +228,18 @@ TEST_F(DiceResponseHandlerTest, Signin) {
                                           false /* is_child_account */,
                                           true /* is_advanced_protection*/));
   // Check that the token has been inserted in the token service.
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id));
+  EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(account_id));
   EXPECT_TRUE(auth_error_email_.empty());
   EXPECT_EQ(GoogleServiceAuthError::NONE, auth_error_.state());
   // Check that the reconcilor was blocked and unblocked exactly once.
   EXPECT_EQ(1, reconcilor_blocked_count_);
   EXPECT_EQ(1, reconcilor_unblocked_count_);
   // Check that the AccountInfo::is_under_advanced_protection is set.
-  EXPECT_TRUE(account_tracker_service_.GetAccountInfo(account_id)
-                  .is_under_advanced_protection);
+  EXPECT_TRUE(
+      identity_manager()
+          ->FindAccountInfoForAccountWithRefreshTokenByAccountId(account_id)
+          .value()
+          .is_under_advanced_protection);
 }
 
 // Checks that a GaiaAuthFetcher failure is handled correctly.
@@ -298,9 +247,9 @@ TEST_F(DiceResponseHandlerTest, SigninFailure) {
   InitializeDiceResponseHandler(signin::AccountConsistencyMethod::kDice);
   DiceResponseParams dice_params = MakeDiceParams(DiceAction::SIGNIN);
   const auto& account_info = dice_params.signin_info->account_info;
-  std::string account_id = account_tracker_service_.PickAccountIdForAccount(
+  std::string account_id = identity_manager()->LegacyPickAccountIdForAccount(
       account_info.gaia_id, account_info.email);
-  ASSERT_FALSE(token_service_.RefreshTokenIsAvailable(account_id));
+  EXPECT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id));
   dice_response_handler_->ProcessDiceHeader(
       dice_params, std::make_unique<TestProcessDiceHeaderDelegate>(this));
   // Check that a GaiaAuthFetcher has been created.
@@ -315,7 +264,7 @@ TEST_F(DiceResponseHandlerTest, SigninFailure) {
   EXPECT_EQ(
       0u, dice_response_handler_->GetPendingDiceTokenFetchersCountForTesting());
   // Check that the token has not been inserted in the token service.
-  EXPECT_FALSE(token_service_.RefreshTokenIsAvailable(account_id));
+  EXPECT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id));
   EXPECT_EQ(account_info.email, auth_error_email_);
   EXPECT_EQ(error_state, auth_error_.state());
 }
@@ -326,9 +275,9 @@ TEST_F(DiceResponseHandlerTest, SigninRepeatedWithSameAccount) {
   InitializeDiceResponseHandler(signin::AccountConsistencyMethod::kDice);
   DiceResponseParams dice_params = MakeDiceParams(DiceAction::SIGNIN);
   const auto& account_info = dice_params.signin_info->account_info;
-  std::string account_id = account_tracker_service_.PickAccountIdForAccount(
+  std::string account_id = identity_manager()->LegacyPickAccountIdForAccount(
       account_info.gaia_id, account_info.email);
-  ASSERT_FALSE(token_service_.RefreshTokenIsAvailable(account_id));
+  ASSERT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id));
   dice_response_handler_->ProcessDiceHeader(
       dice_params, std::make_unique<TestProcessDiceHeaderDelegate>(this));
   // Check that a GaiaAuthFetcher has been created.
@@ -345,9 +294,12 @@ TEST_F(DiceResponseHandlerTest, SigninRepeatedWithSameAccount) {
       "refresh_token", "access_token", 10, false /* is_child_account */,
       false /* is_advanced_protection*/));
   // Check that the token has been inserted in the token service.
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id));
-  EXPECT_FALSE(account_tracker_service_.GetAccountInfo(account_id)
-                   .is_under_advanced_protection);
+  EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(account_id));
+  EXPECT_FALSE(
+      identity_manager()
+          ->FindAccountInfoForAccountWithRefreshTokenByAccountId(account_id)
+          .value()
+          .is_under_advanced_protection);
 }
 
 // Checks that two SIGNIN requests can happen concurrently.
@@ -359,12 +311,12 @@ TEST_F(DiceResponseHandlerTest, SigninWithTwoAccounts) {
   dice_params_2.signin_info->account_info.email = "other_email";
   dice_params_2.signin_info->account_info.gaia_id = "other_gaia_id";
   const auto& account_info_2 = dice_params_2.signin_info->account_info;
-  std::string account_id_1 = account_tracker_service_.PickAccountIdForAccount(
+  std::string account_id_1 = identity_manager()->LegacyPickAccountIdForAccount(
       account_info_1.gaia_id, account_info_1.email);
-  std::string account_id_2 = account_tracker_service_.PickAccountIdForAccount(
+  std::string account_id_2 = identity_manager()->LegacyPickAccountIdForAccount(
       account_info_2.gaia_id, account_info_2.email);
-  ASSERT_FALSE(token_service_.RefreshTokenIsAvailable(account_id_1));
-  ASSERT_FALSE(token_service_.RefreshTokenIsAvailable(account_id_2));
+  ASSERT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id_1));
+  ASSERT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id_2));
   // Start first request.
   dice_response_handler_->ProcessDiceHeader(
       dice_params_1, std::make_unique<TestProcessDiceHeaderDelegate>(this));
@@ -384,17 +336,23 @@ TEST_F(DiceResponseHandlerTest, SigninWithTwoAccounts) {
       "refresh_token", "access_token", 10, false /* is_child_account */,
       true /* is_advanced_protection*/));
   // Check that the token has been inserted in the token service.
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id_1));
-  EXPECT_TRUE(account_tracker_service_.GetAccountInfo(account_id_1)
-                  .is_under_advanced_protection);
+  EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(account_id_1));
+  EXPECT_TRUE(
+      identity_manager()
+          ->FindAccountInfoForAccountWithRefreshTokenByAccountId(account_id_1)
+          .value()
+          .is_under_advanced_protection);
   // Simulate GaiaAuthFetcher success for the second request.
   consumer_2->OnClientOAuthSuccess(GaiaAuthConsumer::ClientOAuthResult(
       "refresh_token", "access_token", 10, false /* is_child_account */,
       false /* is_advanced_protection*/));
   // Check that the token has been inserted in the token service.
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id_2));
-  EXPECT_FALSE(account_tracker_service_.GetAccountInfo(account_id_2)
-                   .is_under_advanced_protection);
+  EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(account_id_2));
+  EXPECT_FALSE(
+      identity_manager()
+          ->FindAccountInfoForAccountWithRefreshTokenByAccountId(account_id_2)
+          .value()
+          .is_under_advanced_protection);
   // Check that the reconcilor was blocked and unblocked exactly once.
   EXPECT_EQ(1, reconcilor_blocked_count_);
   EXPECT_EQ(1, reconcilor_unblocked_count_);
@@ -406,9 +364,9 @@ TEST_F(DiceResponseHandlerTest, SigninEnableSyncAfterRefreshTokenFetched) {
   InitializeDiceResponseHandler(signin::AccountConsistencyMethod::kDice);
   DiceResponseParams dice_params = MakeDiceParams(DiceAction::SIGNIN);
   const auto& account_info = dice_params.signin_info->account_info;
-  std::string account_id = account_tracker_service_.PickAccountIdForAccount(
+  std::string account_id = identity_manager()->LegacyPickAccountIdForAccount(
       account_info.gaia_id, account_info.email);
-  ASSERT_FALSE(token_service_.RefreshTokenIsAvailable(account_id));
+  ASSERT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id));
   dice_response_handler_->ProcessDiceHeader(
       dice_params, std::make_unique<TestProcessDiceHeaderDelegate>(this));
   // Check that a GaiaAuthFetcher has been created.
@@ -419,7 +377,7 @@ TEST_F(DiceResponseHandlerTest, SigninEnableSyncAfterRefreshTokenFetched) {
                                           false /* is_child_account */,
                                           false /* is_advanced_protection*/));
   // Check that the token has been inserted in the token service.
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id));
+  EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(account_id));
   // Check that delegate was not called to enable sync.
   EXPECT_EQ("", enable_sync_account_id_);
 
@@ -438,9 +396,9 @@ TEST_F(DiceResponseHandlerTest, SigninEnableSyncBeforeRefreshTokenFetched) {
   InitializeDiceResponseHandler(signin::AccountConsistencyMethod::kDice);
   DiceResponseParams dice_params = MakeDiceParams(DiceAction::SIGNIN);
   const auto& account_info = dice_params.signin_info->account_info;
-  std::string account_id = account_tracker_service_.PickAccountIdForAccount(
+  std::string account_id = identity_manager()->LegacyPickAccountIdForAccount(
       account_info.gaia_id, account_info.email);
-  ASSERT_FALSE(token_service_.RefreshTokenIsAvailable(account_id));
+  ASSERT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id));
   dice_response_handler_->ProcessDiceHeader(
       dice_params, std::make_unique<TestProcessDiceHeaderDelegate>(this));
   // Check that a GaiaAuthFetcher has been created.
@@ -459,7 +417,7 @@ TEST_F(DiceResponseHandlerTest, SigninEnableSyncBeforeRefreshTokenFetched) {
                                           false /* is_child_account */,
                                           false /* is_advanced_protection*/));
   // Check that the token has been inserted in the token service.
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id));
+  EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(account_id));
   // Check that delegate was called to enable sync.
   EXPECT_EQ(account_id, enable_sync_account_id_);
 }
@@ -468,9 +426,9 @@ TEST_F(DiceResponseHandlerTest, Timeout) {
   InitializeDiceResponseHandler(signin::AccountConsistencyMethod::kDice);
   DiceResponseParams dice_params = MakeDiceParams(DiceAction::SIGNIN);
   const auto& account_info = dice_params.signin_info->account_info;
-  std::string account_id = account_tracker_service_.PickAccountIdForAccount(
+  std::string account_id = identity_manager()->LegacyPickAccountIdForAccount(
       account_info.gaia_id, account_info.email);
-  ASSERT_FALSE(token_service_.RefreshTokenIsAvailable(account_id));
+  ASSERT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id));
   dice_response_handler_->ProcessDiceHeader(
       dice_params, std::make_unique<TestProcessDiceHeaderDelegate>(this));
   // Check that a GaiaAuthFetcher has been created.
@@ -478,12 +436,12 @@ TEST_F(DiceResponseHandlerTest, Timeout) {
   EXPECT_EQ(
       1u, dice_response_handler_->GetPendingDiceTokenFetchersCountForTesting());
   // Force a timeout.
-  task_runner_->FastForwardBy(
+  scoped_task_environment_.FastForwardBy(
       base::TimeDelta::FromSeconds(kDiceTokenFetchTimeoutSeconds + 1));
   EXPECT_EQ(
       0u, dice_response_handler_->GetPendingDiceTokenFetchersCountForTesting());
   // Check that the token has not been inserted in the token service.
-  EXPECT_FALSE(token_service_.RefreshTokenIsAvailable(account_id));
+  EXPECT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id));
   // Check that the reconcilor was blocked and unblocked exactly once.
   EXPECT_EQ(1, reconcilor_blocked_count_);
   EXPECT_EQ(1, reconcilor_unblocked_count_);
@@ -491,31 +449,45 @@ TEST_F(DiceResponseHandlerTest, Timeout) {
 
 TEST_F(DiceResponseHandlerTest, SignoutMainAccount) {
   InitializeDiceResponseHandler(signin::AccountConsistencyMethod::kDice);
-  const char kSecondaryGaiaID[] = "secondary_account";
+  const char kSecondaryEmail[] = "other@gmail.com";
   DiceResponseParams dice_params = MakeDiceParams(DiceAction::SIGNOUT);
-  const auto& account_info = dice_params.signout_info->account_infos[0];
-  std::string account_id = account_tracker_service_.PickAccountIdForAccount(
-      account_info.gaia_id, account_info.email);
+  const auto& dice_account_info = dice_params.signout_info->account_infos[0];
   // User is signed in to Chrome, and has some refresh token for a secondary
   // account.
-  signin_manager_.SignIn(account_info.gaia_id, account_info.email, "password");
-  token_service_.UpdateCredentials(account_id, "token1");
-  token_service_.UpdateCredentials(kSecondaryGaiaID, "token2");
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id));
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(kSecondaryGaiaID));
-  EXPECT_TRUE(signin_manager_.IsAuthenticated());
+  AccountInfo account_info =
+      identity_test_env_.MakePrimaryAccountAvailable(dice_account_info.email);
+  AccountInfo secondary_account_info =
+      identity_test_env_.MakeAccountAvailable(kSecondaryEmail);
+  EXPECT_TRUE(
+      identity_manager()->HasAccountWithRefreshToken(account_info.account_id));
+  EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(
+      secondary_account_info.account_id));
+  EXPECT_TRUE(identity_manager()->HasPrimaryAccount());
   // Receive signout response for the main account.
   dice_response_handler_->ProcessDiceHeader(
       dice_params, std::make_unique<TestProcessDiceHeaderDelegate>(this));
 
   // User is not signed out, token for the main account is now invalid,
   // secondary account is untouched.
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id));
-  EXPECT_EQ(MutableProfileOAuth2TokenServiceDelegate::kInvalidRefreshToken,
-            GetRefreshToken(account_id));
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(kSecondaryGaiaID));
-  EXPECT_EQ("token2", GetRefreshToken(kSecondaryGaiaID));
-  EXPECT_TRUE(signin_manager_.IsAuthenticated());
+  EXPECT_TRUE(
+      identity_manager()->HasAccountWithRefreshToken(account_info.account_id));
+  EXPECT_TRUE(
+      identity_manager()->HasAccountWithRefreshTokenInPersistentErrorState(
+          account_info.account_id));
+  auto error = identity_manager()->GetErrorStateOfRefreshTokenForAccount(
+      account_info.account_id);
+  EXPECT_EQ(GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS, error.state());
+  EXPECT_EQ(GoogleServiceAuthError::InvalidGaiaCredentialsReason::
+                CREDENTIALS_REJECTED_BY_CLIENT,
+            error.GetInvalidGaiaCredentialsReason());
+
+  EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(
+      secondary_account_info.account_id));
+  EXPECT_FALSE(
+      identity_manager()->HasAccountWithRefreshTokenInPersistentErrorState(
+          secondary_account_info.account_id));
+
+  EXPECT_TRUE(identity_manager()->HasPrimaryAccount());
   // Check that the reconcilor was not blocked.
   EXPECT_EQ(0, reconcilor_blocked_count_);
   EXPECT_EQ(0, reconcilor_unblocked_count_);
@@ -524,36 +496,34 @@ TEST_F(DiceResponseHandlerTest, SignoutMainAccount) {
 TEST_F(DiceResponseHandlerTest, MigrationSignout) {
   InitializeDiceResponseHandler(
       signin::AccountConsistencyMethod::kDiceMigration);
-  const char kSecondaryGaiaID[] = "secondary_account";
   const char kSecondaryEmail[] = "other@gmail.com";
   DiceResponseParams dice_params = MakeDiceParams(DiceAction::SIGNOUT);
-  dice_params.signout_info->account_infos.emplace_back(kSecondaryGaiaID,
-                                                       kSecondaryEmail, 1);
+  dice_params.signout_info->account_infos.emplace_back(
+      identity::GetTestGaiaIdForEmail(kSecondaryEmail), kSecondaryEmail, 1);
   const auto& main_account_info = dice_params.signout_info->account_infos[0];
-  std::string account_id = account_tracker_service_.PickAccountIdForAccount(
-      main_account_info.gaia_id, main_account_info.email);
-  std::string secondary_account_id =
-      account_tracker_service_.PickAccountIdForAccount(kSecondaryGaiaID,
-                                                       kSecondaryEmail);
 
   // User is signed in to Chrome, and has some refresh token for a secondary
   // account.
-  signin_manager_.SignIn(main_account_info.gaia_id, main_account_info.email,
-                         "password");
-  token_service_.UpdateCredentials(account_id, "token1");
-  token_service_.UpdateCredentials(secondary_account_id, "token2");
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id));
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(secondary_account_id));
-  EXPECT_TRUE(signin_manager_.IsAuthenticated());
+  AccountInfo account_info =
+      identity_test_env_.MakePrimaryAccountAvailable(main_account_info.email);
+  AccountInfo secondary_account_info =
+      identity_test_env_.MakeAccountAvailable(kSecondaryEmail);
+  EXPECT_TRUE(
+      identity_manager()->HasAccountWithRefreshToken(account_info.account_id));
+  EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(
+      secondary_account_info.account_id));
+  EXPECT_TRUE(identity_manager()->HasPrimaryAccount());
 
   // Receive signout response for all accounts.
   dice_response_handler_->ProcessDiceHeader(
       dice_params, std::make_unique<TestProcessDiceHeaderDelegate>(this));
 
   // User is not signed out from Chrome, only the secondary token is deleted.
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id));
-  EXPECT_FALSE(token_service_.RefreshTokenIsAvailable(secondary_account_id));
-  EXPECT_TRUE(signin_manager_.IsAuthenticated());
+  EXPECT_TRUE(
+      identity_manager()->HasAccountWithRefreshToken(account_info.account_id));
+  EXPECT_FALSE(identity_manager()->HasAccountWithRefreshToken(
+      secondary_account_info.account_id));
+  EXPECT_TRUE(identity_manager()->HasPrimaryAccount());
   // Check that the reconcilor was not blocked.
   EXPECT_EQ(0, reconcilor_blocked_count_);
   EXPECT_EQ(0, reconcilor_unblocked_count_);
@@ -561,68 +531,75 @@ TEST_F(DiceResponseHandlerTest, MigrationSignout) {
 
 TEST_F(DiceResponseHandlerTest, SignoutSecondaryAccount) {
   InitializeDiceResponseHandler(signin::AccountConsistencyMethod::kDice);
-  const char kMainGaiaID[] = "main_account";
   const char kMainEmail[] = "main@gmail.com";
-  std::string main_account_id =
-      account_tracker_service_.PickAccountIdForAccount(kMainGaiaID, kMainEmail);
   DiceResponseParams dice_params = MakeDiceParams(DiceAction::SIGNOUT);
-  const auto& account_info = dice_params.signout_info->account_infos[0];
-  std::string account_id = account_tracker_service_.PickAccountIdForAccount(
-      account_info.gaia_id, account_info.email);
+  const auto& secondary_dice_account_info =
+      dice_params.signout_info->account_infos[0];
   // User is signed in to Chrome, and has some refresh token for a secondary
   // account.
-  signin_manager_.SignIn(kMainGaiaID, "user", "password");
-  token_service_.UpdateCredentials(main_account_id, "token2");
-  token_service_.UpdateCredentials(account_id, "token1");
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id));
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(main_account_id));
-  EXPECT_TRUE(signin_manager_.IsAuthenticated());
+  AccountInfo main_account_info =
+      identity_test_env_.MakePrimaryAccountAvailable(kMainEmail);
+  AccountInfo secondary_account_info = identity_test_env_.MakeAccountAvailable(
+      secondary_dice_account_info.email);
+  EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(
+      secondary_account_info.account_id));
+  EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(
+      main_account_info.account_id));
+  EXPECT_TRUE(identity_manager()->HasPrimaryAccount());
   // Receive signout response for the secondary account.
   dice_response_handler_->ProcessDiceHeader(
       dice_params, std::make_unique<TestProcessDiceHeaderDelegate>(this));
 
   // Only the token corresponding the the Dice parameter has been removed, and
   // the user is still signed in.
-  EXPECT_FALSE(token_service_.RefreshTokenIsAvailable(account_id));
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(main_account_id));
-  EXPECT_TRUE(signin_manager_.IsAuthenticated());
+  EXPECT_FALSE(identity_manager()->HasAccountWithRefreshToken(
+      secondary_account_info.account_id));
+  EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(
+      main_account_info.account_id));
+  EXPECT_TRUE(identity_manager()->HasPrimaryAccount());
 }
 
 TEST_F(DiceResponseHandlerTest, SignoutWebOnly) {
   InitializeDiceResponseHandler(signin::AccountConsistencyMethod::kDice);
-  const char kSecondaryAccountID[] = "secondary_account";
+  const char kSecondaryEmail[] = "other@gmail.com";
   DiceResponseParams dice_params = MakeDiceParams(DiceAction::SIGNOUT);
-  const auto& account_info = dice_params.signout_info->account_infos[0];
-  std::string account_id = account_tracker_service_.PickAccountIdForAccount(
-      account_info.gaia_id, account_info.email);
+  const auto& dice_account_info = dice_params.signout_info->account_infos[0];
   // User is NOT signed in to Chrome, and has some refresh tokens for two
   // accounts.
-  token_service_.UpdateCredentials(account_id, "refresh_token");
-  token_service_.UpdateCredentials(kSecondaryAccountID, "refresh_token");
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id));
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(kSecondaryAccountID));
-  EXPECT_FALSE(signin_manager_.IsAuthenticated());
+  AccountInfo account_info =
+      identity_test_env_.MakeAccountAvailable(dice_account_info.email);
+  AccountInfo secondary_account_info =
+      identity_test_env_.MakeAccountAvailable(kSecondaryEmail);
+  EXPECT_TRUE(
+      identity_manager()->HasAccountWithRefreshToken(account_info.account_id));
+  EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(
+      secondary_account_info.account_id));
+  EXPECT_FALSE(identity_manager()->HasPrimaryAccount());
   // Receive signout response.
   dice_response_handler_->ProcessDiceHeader(
       dice_params, std::make_unique<TestProcessDiceHeaderDelegate>(this));
   // Only the token corresponding the the Dice parameter has been removed.
-  EXPECT_FALSE(token_service_.RefreshTokenIsAvailable(account_id));
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(kSecondaryAccountID));
-  EXPECT_FALSE(signin_manager_.IsAuthenticated());
+  EXPECT_FALSE(
+      identity_manager()->HasAccountWithRefreshToken(account_info.account_id));
+  EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(
+      secondary_account_info.account_id));
+  EXPECT_FALSE(identity_manager()->HasPrimaryAccount());
 }
 
 // Checks that signin in progress is canceled by a signout.
 TEST_F(DiceResponseHandlerTest, SigninSignoutSameAccount) {
   InitializeDiceResponseHandler(signin::AccountConsistencyMethod::kDice);
   DiceResponseParams dice_params = MakeDiceParams(DiceAction::SIGNOUT);
-  const auto& account_info = dice_params.signout_info->account_infos[0];
-  std::string account_id = account_tracker_service_.PickAccountIdForAccount(
-      account_info.gaia_id, account_info.email);
+  const auto& dice_account_info = dice_params.signout_info->account_infos[0];
+
   // User is signed in to Chrome.
-  signin_manager_.SignIn(account_info.gaia_id, account_info.email, "password");
-  token_service_.UpdateCredentials(account_id, "token");
-  ASSERT_TRUE(token_service_.RefreshTokenIsAvailable(account_id));
-  ASSERT_FALSE(token_service_.RefreshTokenHasError(account_id));
+  AccountInfo account_info =
+      identity_test_env_.MakePrimaryAccountAvailable(dice_account_info.email);
+  EXPECT_TRUE(
+      identity_manager()->HasAccountWithRefreshToken(account_info.account_id));
+  EXPECT_FALSE(
+      identity_manager()->HasAccountWithRefreshTokenInPersistentErrorState(
+          account_info.account_id));
   // Start Dice signin (reauth).
   DiceResponseParams dice_params_2 = MakeDiceParams(DiceAction::SIGNIN);
   dice_response_handler_->ProcessDiceHeader(
@@ -637,9 +614,17 @@ TEST_F(DiceResponseHandlerTest, SigninSignoutSameAccount) {
   // Check that the token fetcher has been canceled and the token is invalid.
   EXPECT_EQ(
       0u, dice_response_handler_->GetPendingDiceTokenFetchersCountForTesting());
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id));
-  EXPECT_EQ(MutableProfileOAuth2TokenServiceDelegate::kInvalidRefreshToken,
-            GetRefreshToken(account_id));
+  EXPECT_TRUE(
+      identity_manager()->HasAccountWithRefreshToken(account_info.account_id));
+  EXPECT_TRUE(
+      identity_manager()->HasAccountWithRefreshTokenInPersistentErrorState(
+          account_info.account_id));
+  auto error = identity_manager()->GetErrorStateOfRefreshTokenForAccount(
+      account_info.account_id);
+  EXPECT_EQ(GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS, error.state());
+  EXPECT_EQ(GoogleServiceAuthError::InvalidGaiaCredentialsReason::
+                CREDENTIALS_REJECTED_BY_CLIENT,
+            error.GetInvalidGaiaCredentialsReason());
 }
 
 // Checks that signin in progress is not canceled by a signout for a different
@@ -654,9 +639,9 @@ TEST_F(DiceResponseHandlerTest, SigninSignoutDifferentAccount) {
   signin_params_2.signin_info->account_info.gaia_id = "other_gaia_id";
   const auto& signin_account_info_1 = signin_params_1.signin_info->account_info;
   const auto& signin_account_info_2 = signin_params_2.signin_info->account_info;
-  std::string account_id_1 = account_tracker_service_.PickAccountIdForAccount(
+  std::string account_id_1 = identity_manager()->LegacyPickAccountIdForAccount(
       signin_account_info_1.gaia_id, signin_account_info_1.email);
-  std::string account_id_2 = account_tracker_service_.PickAccountIdForAccount(
+  std::string account_id_2 = identity_manager()->LegacyPickAccountIdForAccount(
       signin_account_info_2.gaia_id, signin_account_info_2.email);
   dice_response_handler_->ProcessDiceHeader(
       signin_params_1, std::make_unique<TestProcessDiceHeaderDelegate>(this));
@@ -667,10 +652,14 @@ TEST_F(DiceResponseHandlerTest, SigninSignoutDifferentAccount) {
   ASSERT_THAT(signin_client_.consumer_, testing::NotNull());
   EXPECT_EQ(
       2u, dice_response_handler_->GetPendingDiceTokenFetchersCountForTesting());
-  ASSERT_FALSE(token_service_.RefreshTokenIsAvailable(account_id_1));
-  ASSERT_FALSE(token_service_.RefreshTokenIsAvailable(account_id_2));
-  ASSERT_FALSE(token_service_.RefreshTokenHasError(account_id_1));
-  ASSERT_FALSE(token_service_.RefreshTokenHasError(account_id_2));
+  ASSERT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id_1));
+  ASSERT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id_2));
+  ASSERT_FALSE(
+      identity_manager()->HasAccountWithRefreshTokenInPersistentErrorState(
+          account_id_1));
+  ASSERT_FALSE(
+      identity_manager()->HasAccountWithRefreshTokenInPersistentErrorState(
+          account_id_2));
   // Signout from one of the accounts while signin is in flight.
   dice_response_handler_->ProcessDiceHeader(
       signout_params_1, std::make_unique<TestProcessDiceHeaderDelegate>(this));
@@ -685,115 +674,11 @@ TEST_F(DiceResponseHandlerTest, SigninSignoutDifferentAccount) {
   EXPECT_EQ(
       0u, dice_response_handler_->GetPendingDiceTokenFetchersCountForTesting());
   // Check that the right token is available.
-  EXPECT_FALSE(token_service_.RefreshTokenIsAvailable(account_id_1));
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id_2));
-  EXPECT_EQ("refresh_token", GetRefreshToken(account_id_2));
-}
-
-// Checks that no auth error fix happens if the user is signed out.
-TEST_F(DiceResponseHandlerTest, FixAuthErrorSignedOut) {
-  InitializeDiceResponseHandler(
-      signin::AccountConsistencyMethod::kDiceFixAuthErrors);
-  DiceResponseParams dice_params = MakeDiceParams(DiceAction::SIGNIN);
-  const auto& account_info = dice_params.signin_info->account_info;
-  ASSERT_FALSE(token_service_.RefreshTokenIsAvailable(
-      account_tracker_service_.PickAccountIdForAccount(account_info.gaia_id,
-                                                       account_info.email)));
-  dice_response_handler_->ProcessDiceHeader(
-      dice_params, std::make_unique<TestProcessDiceHeaderDelegate>(this));
-  // Check that a GaiaAuthFetcher has not been created.
-  ASSERT_THAT(signin_client_.consumer_, testing::IsNull());
-}
-
-// Checks that the token is not stored if the user signs out during the token
-// request.
-TEST_F(DiceResponseHandlerTest, FixAuthErrorSignOutDuringRequest) {
-  InitializeDiceResponseHandler(
-      signin::AccountConsistencyMethod::kDiceFixAuthErrors);
-  // User is signed in to Chrome.
-  DiceResponseParams dice_params = MakeDiceParams(DiceAction::SIGNIN);
-  const auto& account_info = dice_params.signin_info->account_info;
-  std::string account_id = account_tracker_service_.PickAccountIdForAccount(
-      account_info.gaia_id, account_info.email);
-  signin_manager_.SignIn(account_info.gaia_id, account_info.email, "password");
-  token_service_.UpdateCredentials(account_id, "token1");
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id));
-  EXPECT_TRUE(signin_manager_.IsAuthenticated());
-  // Start re-authentication on the web.
-  dice_response_handler_->ProcessDiceHeader(
-      dice_params, std::make_unique<TestProcessDiceHeaderDelegate>(this));
-  // Check that a GaiaAuthFetcher has been created.
-  ASSERT_THAT(signin_client_.consumer_, testing::NotNull());
-  // Sign out.
-  signin_manager_.ForceSignOut();
-  // Simulate GaiaAuthFetcher success.
-  signin_client_.consumer_->OnClientOAuthSuccess(
-      GaiaAuthConsumer::ClientOAuthResult("refresh_token", "access_token", 10,
-                                          false /* is_child_account */,
-                                          false /* is_advanced_protection*/));
-  // Check that the token has not been inserted in the token service.
-  EXPECT_FALSE(token_service_.RefreshTokenIsAvailable(account_id));
-}
-
-// Checks that the token is fixed if the Chrome account matches the web account.
-TEST_F(DiceResponseHandlerTest, FixAuthError) {
-  InitializeDiceResponseHandler(
-      signin::AccountConsistencyMethod::kDiceFixAuthErrors);
-  // User is signed in to Chrome.
-  DiceResponseParams dice_params = MakeDiceParams(DiceAction::SIGNIN);
-  const auto& account_info = dice_params.signin_info->account_info;
-  std::string account_id = account_tracker_service_.PickAccountIdForAccount(
-      account_info.gaia_id, account_info.email);
-  signin_manager_.SignIn(account_info.gaia_id, account_info.email, "password");
-  token_service_.UpdateCredentials(account_id, "token1");
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id));
-  EXPECT_TRUE(signin_manager_.IsAuthenticated());
-  // Start re-authentication on the web.
-  dice_response_handler_->ProcessDiceHeader(
-      dice_params, std::make_unique<TestProcessDiceHeaderDelegate>(this));
-  // Check that a GaiaAuthFetcher has been created.
-  ASSERT_THAT(signin_client_.consumer_, testing::NotNull());
-  // We need to listen for new token notifications, since there is no way to
-  // check the actual value of the token in the token service.
-  std::unique_ptr<DiceTestTokenServiceObserver> token_service_observer =
-      std::make_unique<DiceTestTokenServiceObserver>(account_info.gaia_id);
-  ScopedObserver<ProfileOAuth2TokenService, DiceTestTokenServiceObserver>
-      scoped_token_service_observer(token_service_observer.get());
-  scoped_token_service_observer.Add(&token_service_);
-  // Simulate GaiaAuthFetcher success.
-  signin_client_.consumer_->OnClientOAuthSuccess(
-      GaiaAuthConsumer::ClientOAuthResult("refresh_token", "access_token", 10,
-                                          false /* is_child_account */,
-                                          false /* is_advanced_protection*/));
-  // Check that the token has not been inserted in the token service.
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id));
-  EXPECT_TRUE(token_service_observer->token_received());
-  // Check that the reconcilor was blocked and unblocked.
-  EXPECT_EQ(1, reconcilor_blocked_count_);
-  EXPECT_EQ(1, reconcilor_unblocked_count_);
-}
-
-// Tests that the Dice Signout response is ignored when kDiceFixAuthErrors is
-// used.
-TEST_F(DiceResponseHandlerTest, FixAuthErroDoesNotSignout) {
-  InitializeDiceResponseHandler(
-      signin::AccountConsistencyMethod::kDiceFixAuthErrors);
-  DiceResponseParams dice_params = MakeDiceParams(DiceAction::SIGNOUT);
-  const auto& account_info = dice_params.signout_info->account_infos[0];
-  std::string account_id = account_tracker_service_.PickAccountIdForAccount(
-      account_info.gaia_id, account_info.email);
-  // User is signed in to Chrome, and has some refresh token for a secondary
-  // account.
-  signin_manager_.SignIn(account_info.gaia_id, account_info.email, "password");
-  token_service_.UpdateCredentials(account_id, "token1");
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id));
-  EXPECT_TRUE(signin_manager_.IsAuthenticated());
-  // Receive signout response for the main account.
-  dice_response_handler_->ProcessDiceHeader(
-      dice_params, std::make_unique<TestProcessDiceHeaderDelegate>(this));
-  // User is not signed out from Chrome.
-  EXPECT_TRUE(token_service_.RefreshTokenIsAvailable(account_id));
-  EXPECT_TRUE(signin_manager_.IsAuthenticated());
+  EXPECT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id_1));
+  EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(account_id_2));
+  EXPECT_FALSE(
+      identity_manager()->HasAccountWithRefreshTokenInPersistentErrorState(
+          account_id_2));
 }
 
 // Tests that the DiceResponseHandler is created for a normal profile but not

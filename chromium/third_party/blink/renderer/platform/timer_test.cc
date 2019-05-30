@@ -11,9 +11,9 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_task_queue.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/testing/testing_platform_support_with_mock_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/ref_counted.h"
@@ -617,7 +617,7 @@ TEST_F(TimerTest, RunOnHeapTimer) {
   scoped_refptr<OnHeapTimerOwner::Record> record =
       OnHeapTimerOwner::Record::Create();
   Persistent<OnHeapTimerOwner> owner =
-      new OnHeapTimerOwner(record, GetTaskRunner());
+      MakeGarbageCollected<OnHeapTimerOwner>(record, GetTaskRunner());
 
   owner->StartOneShot(TimeDelta(), FROM_HERE);
 
@@ -630,7 +630,7 @@ TEST_F(TimerTest, DestructOnHeapTimer) {
   scoped_refptr<OnHeapTimerOwner::Record> record =
       OnHeapTimerOwner::Record::Create();
   Persistent<OnHeapTimerOwner> owner =
-      new OnHeapTimerOwner(record, GetTaskRunner());
+      MakeGarbageCollected<OnHeapTimerOwner>(record, GetTaskRunner());
 
   record->Dispose();
   owner->StartOneShot(TimeDelta(), FROM_HERE);
@@ -650,7 +650,7 @@ TEST_F(TimerTest, MarkOnHeapTimerAsUnreachable) {
   scoped_refptr<OnHeapTimerOwner::Record> record =
       OnHeapTimerOwner::Record::Create();
   Persistent<OnHeapTimerOwner> owner =
-      new OnHeapTimerOwner(record, GetTaskRunner());
+      MakeGarbageCollected<OnHeapTimerOwner>(record, GetTaskRunner());
 
   record->Dispose();
   owner->StartOneShot(TimeDelta(), FROM_HERE);

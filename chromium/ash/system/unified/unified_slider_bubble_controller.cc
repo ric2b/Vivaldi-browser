@@ -7,12 +7,14 @@
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/system/brightness/unified_brightness_slider_controller.h"
 #include "ash/system/keyboard_brightness/unified_keyboard_brightness_slider_controller.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/unified/unified_system_tray.h"
+#include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/system/unified/unified_system_tray_view.h"
 
 using chromeos::CrasAudioHandler;
@@ -156,34 +158,38 @@ void UnifiedSliderBubbleController::ShowBubble(SliderType slider_type) {
   slider_type_ = slider_type;
   CreateSliderController();
 
-  views::TrayBubbleView::InitParams init_params;
+  TrayBubbleView::InitParams init_params;
 
   init_params.anchor_alignment = tray_->GetAnchorAlignment();
   init_params.min_width = kTrayMenuWidth;
   init_params.max_width = kTrayMenuWidth;
   init_params.delegate = this;
   init_params.parent_window = tray_->GetBubbleWindowContainer();
-  init_params.anchor_view =
-      tray_->shelf()->GetSystemTrayAnchor()->GetBubbleAnchor();
+  init_params.anchor_view = nullptr;
+  init_params.anchor_mode = TrayBubbleView::AnchorMode::kRect;
+  init_params.anchor_rect = tray_->shelf()->GetSystemTrayAnchorRect();
+  // Decrease bottom and right insets to compensate for the adjustment of
+  // the respective edges in Shelf::GetSystemTrayAnchorRect().
+  init_params.insets =
+      gfx::Insets(kUnifiedMenuPadding, kUnifiedMenuPadding,
+                  kUnifiedMenuPadding - 1, kUnifiedMenuPadding - 1);
   init_params.corner_radius = kUnifiedTrayCornerRadius;
   init_params.has_shadow = false;
 
-  bubble_view_ = new views::TrayBubbleView(init_params);
+  bubble_view_ = new TrayBubbleView(init_params);
   UnifiedSliderView* slider_view =
       static_cast<UnifiedSliderView*>(slider_controller_->CreateView());
   ConfigureSliderViewStyle(slider_view);
   bubble_view_->AddChildView(slider_view);
   bubble_view_->set_color(SK_ColorTRANSPARENT);
   bubble_view_->layer()->SetFillsBoundsOpaquely(false);
-  bubble_view_->set_anchor_view_insets(
-      tray_->shelf()->GetSystemTrayAnchor()->GetBubbleAnchorInsets());
 
   bubble_widget_ = views::BubbleDialogDelegateView::CreateBubble(bubble_view_);
 
   TrayBackgroundView::InitializeBubbleAnimations(bubble_widget_);
   bubble_view_->InitializeAndShowBubble();
 
-  if (app_list::features::IsBackgroundBlurEnabled()) {
+  if (app_list_features::IsBackgroundBlurEnabled()) {
     bubble_widget_->client_view()->layer()->SetBackgroundBlur(
         kUnifiedMenuBackgroundBlur);
   }

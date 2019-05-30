@@ -15,11 +15,11 @@ import android.security.KeyChainException;
 import android.support.v7.app.AlertDialog;
 import android.util.Log;
 
-import org.chromium.base.AsyncTask;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.R;
 import org.chromium.ui.base.WindowAndroid;
 
@@ -215,7 +215,7 @@ public class SSLClientCertificateRequest {
          */
         public void show() {
             final AlertDialog.Builder builder =
-                    new AlertDialog.Builder(mActivity, R.style.AlertDialogTheme);
+                    new AlertDialog.Builder(mActivity, R.style.Theme_Chromium_AlertDialog);
             builder.setTitle(R.string.client_cert_unsupported_title)
                     .setMessage(R.string.client_cert_unsupported_message)
                     .setNegativeButton(R.string.close,

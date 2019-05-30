@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
@@ -403,10 +404,6 @@ void GaiaOAuthClient::Core::SendRequestImpl() {
   // Retry is implemented internally.
   request_->SetRetryOptions(0, network::SimpleURLLoader::RETRY_NEVER);
 
-  // TODO(https://crbug.com/808498) re-add data use measurement once
-  // SimpleURLLoader supports it. Previous way of setting it was:
-  // MarkURLFetcherAsGaia(request_.get());
-
   request_->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
       url_loader_factory_.get(),
       // Unretained(this) is safe since |this| owns |request_|, and its deletion
@@ -455,7 +452,8 @@ void GaiaOAuthClient::Core::HandleResponse(std::unique_ptr<std::string> body,
   std::unique_ptr<base::DictionaryValue> response_dict;
   if (response_code == net::HTTP_OK && body) {
     std::string data = std::move(*body);
-    std::unique_ptr<base::Value> message_value = base::JSONReader::Read(data);
+    std::unique_ptr<base::Value> message_value =
+        base::JSONReader::ReadDeprecated(data);
     if (message_value.get() && message_value->is_dict()) {
       response_dict.reset(
           static_cast<base::DictionaryValue*>(message_value.release()));

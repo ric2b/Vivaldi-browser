@@ -229,20 +229,21 @@ CORE_EXPORT int NextGraphemeBoundaryOf(const Node&, int current);
 
 // |disconnected| is optional output parameter having true if specified
 // positions don't have common ancestor.
-int ComparePositionsInDOMTree(const Node* container_a,
-                              int offset_a,
-                              const Node* container_b,
-                              int offset_b,
-                              bool* disconnected = nullptr);
-int ComparePositionsInFlatTree(const Node* container_a,
-                               int offset_a,
-                               const Node* container_b,
-                               int offset_b,
-                               bool* disconnected = nullptr);
+int16_t ComparePositionsInDOMTree(const Node* container_a,
+                                  int offset_a,
+                                  const Node* container_b,
+                                  int offset_b,
+                                  bool* disconnected = nullptr);
+int16_t ComparePositionsInFlatTree(const Node* container_a,
+                                   int offset_a,
+                                   const Node* container_b,
+                                   int offset_b,
+                                   bool* disconnected = nullptr);
 // TODO(yosin): We replace |comparePositions()| by |Position::opeator<()| to
 // utilize |DCHECK_XX()|.
-int ComparePositions(const Position&, const Position&);
-int ComparePositions(const PositionWithAffinity&, const PositionWithAffinity&);
+int16_t ComparePositions(const Position&, const Position&);
+int16_t ComparePositions(const PositionWithAffinity&,
+                         const PositionWithAffinity&);
 bool IsNodeFullyContained(const EphemeralRange&, const Node&);
 
 // boolean functions on Position
@@ -260,36 +261,15 @@ PositionWithAffinity PositionRespectingEditingBoundary(
     Node* target_node);
 Position ComputePositionForNodeRemoval(const Position&, const Node&);
 
+// TODO(editing-dev): These two functions should be eliminated.
+CORE_EXPORT Position PositionBeforeNode(const Node&);
+Position PositionAfterNode(const Node&);
+
 // -------------------------------------------------------------------------
 // VisiblePosition
 // -------------------------------------------------------------------------
 
-// Functions returning VisiblePosition
-
-// TODO(yosin) We should rename
-// |firstEditableVisiblePositionAfterPositionInRoot()| to a better name which
-// describes what this function returns, since it returns a position before
-// specified position due by canonicalization.
-CORE_EXPORT VisiblePosition
-FirstEditableVisiblePositionAfterPositionInRoot(const Position&,
-                                                ContainerNode&);
-CORE_EXPORT VisiblePositionInFlatTree
-FirstEditableVisiblePositionAfterPositionInRoot(const PositionInFlatTree&,
-                                                ContainerNode&);
-// TODO(yosin) We should rename
-// |lastEditableVisiblePositionBeforePositionInRoot()| to a better name which
-// describes what this function returns, since it returns a position after
-// specified position due by canonicalization.
-CORE_EXPORT VisiblePosition
-LastEditableVisiblePositionBeforePositionInRoot(const Position&,
-                                                ContainerNode&);
-CORE_EXPORT VisiblePositionInFlatTree
-LastEditableVisiblePositionBeforePositionInRoot(const PositionInFlatTree&,
-                                                ContainerNode&);
-CORE_EXPORT VisiblePosition VisiblePositionBeforeNode(const Node&);
-VisiblePosition VisiblePositionAfterNode(const Node&);
-
-int ComparePositions(const VisiblePosition&, const VisiblePosition&);
+int16_t ComparePositions(const VisiblePosition&, const VisiblePosition&);
 
 CORE_EXPORT int IndexForVisiblePosition(const VisiblePosition&,
                                         ContainerNode*& scope);
@@ -353,11 +333,11 @@ CORE_EXPORT String RepeatString(const String&, unsigned);
 
 // If current position is at grapheme boundary, return 0; otherwise, return the
 // distance to its nearest left grapheme boundary.
-size_t ComputeDistanceToLeftGraphemeBoundary(const Position&);
+wtf_size_t ComputeDistanceToLeftGraphemeBoundary(const Position&);
 
 // If current position is at grapheme boundary, return 0; otherwise, return the
 // distance to its nearest right grapheme boundary.
-size_t ComputeDistanceToRightGraphemeBoundary(const Position&);
+wtf_size_t ComputeDistanceToRightGraphemeBoundary(const Position&);
 
 // -------------------------------------------------------------------------
 // LocalCaretRect conversions

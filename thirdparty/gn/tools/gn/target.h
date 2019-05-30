@@ -20,6 +20,7 @@
 #include "tools/gn/label_pattern.h"
 #include "tools/gn/label_ptr.h"
 #include "tools/gn/lib_file.h"
+#include "tools/gn/metadata.h"
 #include "tools/gn/ordered_set.h"
 #include "tools/gn/output_file.h"
 #include "tools/gn/source_file.h"
@@ -45,6 +46,7 @@ class Target : public Item {
     ACTION_FOREACH,
     BUNDLE_DATA,
     CREATE_BUNDLE,
+    GENERATED_FILE,
   };
 
   enum DepsIterationType {
@@ -144,6 +146,36 @@ class Target : public Item {
     complete_static_lib_ = complete;
   }
 
+  // Metadata. Target takes ownership of the resulting scope.
+  const Metadata& metadata() const { return metadata_; }
+  Metadata& metadata() { return metadata_; }
+
+  // Get metadata from this target and its dependencies. This is intended to
+  // be called after the target is resolved.
+  bool GetMetadata(const std::vector<std::string>& keys_to_extract,
+                   const std::vector<std::string>& keys_to_walk,
+                   const SourceDir& rebase_dir,
+                   bool deps_only,
+                   std::vector<Value>* result,
+                   std::set<const Target*>* targets_walked,
+                   Err* err) const;
+
+  // GeneratedFile-related methods.
+  bool GenerateFile(Err* err) const;
+
+  const Value& contents() const { return contents_; }
+  void set_contents(const Value& value) { contents_ = value; }
+  const Value& output_conversion() const { return output_conversion_; }
+  void set_output_conversion(const Value& value) { output_conversion_ = value; }
+
+  // Metadata collection methods for GeneratedFile targets.
+  const SourceDir& rebase() const { return rebase_; }
+  void set_rebase(const SourceDir& value) { rebase_ = value; }
+  const std::vector<std::string>& data_keys() const { return data_keys_; }
+  std::vector<std::string>& data_keys() { return data_keys_; }
+  const std::vector<std::string>& walk_keys() const { return walk_keys_; }
+  std::vector<std::string>& walk_keys() { return walk_keys_; }
+
   bool testonly() const { return testonly_; }
   void set_testonly(bool value) { testonly_ = value; }
 
@@ -170,7 +202,7 @@ class Target : public Item {
   bool hard_dep() const {
     return output_type_ == ACTION || output_type_ == ACTION_FOREACH ||
            output_type_ == COPY_FILES || output_type_ == CREATE_BUNDLE ||
-           output_type_ == BUNDLE_DATA;
+           output_type_ == BUNDLE_DATA || output_type_ == GENERATED_FILE;
   }
 
   // Returns the iterator range which can be used in range-based for loops
@@ -387,6 +419,17 @@ class Target : public Item {
   OutputFile link_output_file_;
   OutputFile dependency_output_file_;
   std::vector<OutputFile> runtime_outputs_;
+
+  Metadata metadata_;
+
+  // GeneratedFile values.
+  Value output_conversion_;
+  Value contents_;  // Value::NONE if metadata collection should occur.
+
+  // GeneratedFile as metadata collection values.
+  SourceDir rebase_;
+  std::vector<std::string> data_keys_;
+  std::vector<std::string> walk_keys_;
 
   DISALLOW_COPY_AND_ASSIGN(Target);
 };

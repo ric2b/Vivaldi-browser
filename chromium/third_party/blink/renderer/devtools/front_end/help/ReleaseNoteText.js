@@ -13,6 +13,141 @@ const commandMenuShortcut = Host.isMac() ? 'Command + Shift + P' : 'Control + Sh
 /** @type {!Array<!Help.ReleaseNote>} */
 Help.releaseNoteText = [
   {
+    version: 16,
+    header: 'Highlights from the Chrome 74 update',
+    highlights: [
+      {
+        title: 'Highlight all nodes affected by CSS property',
+        subtitle:
+            'Hover over a CSS property like padding or margin in the Styles pane to highlight all nodes affected by that declaration.',
+        link: 'https://developers.google.com/web/updates/2019/03/devtools#highlight',
+      },
+
+      {
+        title: 'Lighthouse v4 in the Audits panel',
+        subtitle:
+            'Featuring a new "tap targets" audit for checking that mobile links and buttons are properly sized, and a new UI for PWA reports.',
+        link: 'https://developers.google.com/web/updates/2019/03/devtools#lighthouse',
+      },
+      {
+        title: 'WebSocket binary message viewer',
+        subtitle:
+            'Click a WebSocket connection in the Network Log, go to the Messages tab, then click a binary message to view its contents.',
+        link: 'https://developers.google.com/web/updates/2019/03/devtools#binary',
+      },
+      {
+        title: 'Capture area screenshot in the Command Menu',
+        subtitle: 'Press ' + commandMenuShortcut +
+            ', run the "Capture area screenshot" command, and then drag your mouse to take a screenshot of part of the viewport.',
+        link: 'https://developers.google.com/web/updates/2019/03/devtools#screenshot',
+      },
+      {
+        title: 'Service worker filters in the Network panel',
+        subtitle:
+            'Type "is:service-worker-initiated" or "is:service-worker-intercepted" to only show service worker activity.',
+        link: 'https://developers.google.com/web/updates/2019/03/devtools#swfilters',
+      },
+    ],
+    link: 'https://developers.google.com/web/updates/2019/03/devtools',
+  },
+  {
+    version: 15,
+    header: 'Highlights from the Chrome 73 update',
+    highlights: [
+      {
+        title: 'Logpoints',
+        subtitle: 'Log messages to the Console without cluttering up your code with console.log() calls.',
+        link: 'https://developers.google.com/web/updates/2019/01/devtools#logpoints',
+      },
+      {
+        title: 'Detailed tooltips in Inspect Mode',
+        subtitle: 'When inspecting a node, DevTools now shows an expanded tooltip containing text, ' +
+            'color contrast, and box model information.',
+        link: 'https://developers.google.com/web/updates/2019/01/devtools#inspect',
+      },
+      {
+        title: 'Export code coverage data',
+        subtitle: 'The Coverage tab now supports exporting coverage data as JSON.',
+        link: 'https://developers.google.com/web/updates/2019/01/devtools#coverage',
+      },
+      {
+        title: 'Navigate the Console with the keyboard',
+        subtitle: 'Press Shift+Tab to focus the last message and then use the arrow keys to navigate.',
+        link: 'https://developers.google.com/web/updates/2019/01/devtools#keyboard',
+      },
+      {
+        title: 'Save custom geolocation overrides',
+        subtitle: 'Click Manage in the Sensors tab or open Settings > Geolocations.',
+        link: 'https://developers.google.com/web/updates/2019/01/devtools#geolocation',
+      },
+      {
+        title: 'Code folding',
+        subtitle: 'Go to Settings > Preferences > Sources and enable Code Folding to fold ' +
+            'code in the Sources panel.',
+        link: 'https://developers.google.com/web/updates/2019/01/devtools#folding',
+      },
+    ],
+    link: 'https://developers.google.com/web/updates/2019/01/devtools',
+  },
+  {
+    version: 14,
+    header: 'Highlights from the Chrome 72 update',
+    highlights: [
+      {
+        title: 'Visualize performance metrics',
+        subtitle:
+            'Performance metrics like DOMContentLoaded and First Meaningful Paint are now marked in the Timings section of the Performance panel.',
+        link: 'https://developers.google.com/web/updates/2018/11/devtools#metrics',
+      },
+      {
+        title: 'Highlight text nodes',
+        subtitle: 'Hover over a text node in the DOM Tree to highlight it in the viewport.',
+        link: 'https://developers.google.com/web/updates/2018/11/devtools#highlight',
+      },
+      {
+        title: 'Copy JS path',
+        subtitle:
+            'Right-click a DOM node and select "Copy" > "Copy JS path" to quickly get a JavaScript expression that points to that node.',
+        link: 'https://developers.google.com/web/updates/2018/11/devtools#copy',
+      },
+      {
+        title: 'Audits panel updates',
+        subtitle:
+            'A new audit that lists detected JS libraries and new keywords for accessing the Audits panel from the Command Menu.',
+        link: 'https://developers.google.com/web/updates/2018/11/devtools#audits',
+      },
+    ],
+    link: 'https://developers.google.com/web/updates/2018/11/devtools',
+  },
+  {
+    version: 13,
+    header: 'Highlights from the Chrome 71 update',
+    highlights: [
+      {
+        title: 'Hover over a Live Expression to highlight a DOM node',
+        subtitle: 'Hover over a result that evaluates to a node to highlight that node in the viewport.',
+        link: 'https://developers.google.com/web/updates/2018/10/devtools#hover',
+      },
+      {
+        title: 'Store DOM nodes as global variables',
+        subtitle: 'Right-click a node in the Elements panel or Console and select "Store as global variable".',
+        link: 'https://developers.google.com/web/updates/2018/10/devtools#store',
+      },
+      {
+        title: 'Initiator and priority information now in HAR imports and exports',
+        subtitle:
+            'Get more context around what caused a resource to be requested and what priority the browser assigned to each resource when sharing network logs.',
+        link: 'https://developers.google.com/web/updates/2018/10/devtools#HAR',
+      },
+      {
+        title: 'Access the Command Menu from the Main Menu',
+        subtitle: 'Open the Main Menu and select "Run command".',
+        link: 'https://developers.google.com/web/updates/2018/10/devtools#command-menu',
+      },
+    ],
+    link: 'https://developers.google.com/web/updates/2018/10/devtools',
+  },
+  {
     version: 12,
     header: 'Highlights from the Chrome 70 update',
     highlights: [

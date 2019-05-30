@@ -32,27 +32,27 @@ from blinkpy.web_tests.port.driver import Driver
 class BrowserTestDriver(Driver):
     """Object for running print preview test(s) using browser_tests."""
 
-    def __init__(self, port, worker_number, pixel_tests, no_timeout=False):
+    def __init__(self, port, worker_number, no_timeout=False):
         """Invokes the constructor of Driver."""
-        super(BrowserTestDriver, self).__init__(port, worker_number, pixel_tests, no_timeout)
+        super(BrowserTestDriver, self).__init__(port, worker_number, no_timeout)
 
-    def start(self, pixel_tests, per_test_args, deadline):
+    def start(self, per_test_args, deadline):
         """Same as Driver.start() however, it has an extra step. It waits for
         a path to a file to be used for stdin to be printed by the browser test.
         If a path is found by the deadline test test will open the file and
         assign it to the stdin of the process that is owned by this driver's
         server process.
         """
-        # FIXME(ivandavid): Need to handle case where the layout test doesn't
+        # FIXME(ivandavid): Need to handle case where the web test doesn't
         # get a file name.
-        new_cmd_line = self.cmd_line(pixel_tests, per_test_args)
+        new_cmd_line = self.cmd_line(per_test_args)
         if not self._server_process or new_cmd_line != self._current_cmd_line:
-            self._start(pixel_tests, per_test_args)
+            self._start(per_test_args)
             self._run_post_start_tasks()
             self._open_stdin_path(deadline)
 
     # Gets the path of the directory that the file for stdin communication is
-    # in. Since the browser test cannot clean it up, the layout test framework
+    # in. Since the browser test cannot clean it up, the web test framework
     # will. Everything the browser test uses is stored in the same directory as
     # the stdin file, so deleting that directory recursively will remove all the
     # other temp data, like the printed pdf. This function assumes the correct
@@ -73,7 +73,7 @@ class BrowserTestDriver(Driver):
             return (block.stdin_path, True)
         return (None, False)
 
-    def cmd_line(self, pixel_tests, per_test_args):
+    def cmd_line(self, per_test_args):
         """Command line arguments to run the browser test."""
         cmd = self._command_wrapper(self._port.get_option('wrapper'))
         cmd.append(self._port._path_to_driver())

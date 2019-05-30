@@ -14,6 +14,7 @@
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/animation/animation_test_api.h"
+#include "ui/views/animation/ink_drop_ripple.h"
 #include "ui/views/animation/test/ink_drop_impl_test_api.h"
 #include "ui/views/animation/test/test_ink_drop_host.h"
 #include "ui/views/test/platform_test_helper.h"
@@ -31,6 +32,10 @@ class InkDropImplTest : public testing::Test {
   TestInkDropHost* ink_drop_host() { return ink_drop_host_.get(); }
 
   InkDropImpl* ink_drop() { return ink_drop_.get(); }
+
+  InkDropRipple* ink_drop_ripple() { return ink_drop_->ink_drop_ripple_.get(); }
+
+  InkDropHighlight* ink_drop_highlight() { return ink_drop_->highlight_.get(); }
 
   test::InkDropImplTestApi* test_api() { return test_api_.get(); }
 
@@ -247,13 +252,6 @@ TEST_F(InkDropImplTest, LayersArentRemovedWhenPreemptingFadeOut) {
 
 TEST_F(InkDropImplTest,
        SettingHighlightStateDuringStateExitIsntAllowedDeathTest) {
-  // gtest death tests, such as EXPECT_DCHECK_DEATH(), can not work in the
-  // presence of fork() and other process launching. In views-mus, we have
-  // already launched additional processes for our service manager. Performing
-  // this test under mus is impossible.
-  if (PlatformTestHelper::IsMus())
-    return;
-
   ::testing::FLAGS_gtest_death_test_style = "threadsafe";
 
   test::InkDropImplTestApi::SetStateOnExitHighlightState::Install(
@@ -293,6 +291,30 @@ TEST_F(InkDropImplTest, SuccessfulAnimationEndedDuringDestruction) {
   DestroyInkDrop();
 }
 
+// Make sure the InkDropRipple and InkDropHighlight get recreated when the host
+// size changes (https:://crbug.com/899104).
+TEST_F(InkDropImplTest, RippleAndHighlightRecreatedOnSizeChange) {
+  test_api()->SetShouldHighlight(true);
+  ink_drop()->AnimateToState(InkDropState::ACTIVATED);
+  EXPECT_EQ(1, ink_drop_host()->num_ink_drop_ripples_created());
+  EXPECT_EQ(1, ink_drop_host()->num_ink_drop_highlights_created());
+  EXPECT_EQ(ink_drop_host()->last_ink_drop_ripple(), ink_drop_ripple());
+  EXPECT_EQ(ink_drop_host()->last_ink_drop_highlight(), ink_drop_highlight());
+
+  const gfx::Rect bounds(5, 6, 7, 8);
+  ink_drop_host()->SetBoundsRect(bounds);
+  // SetBoundsRect() calls HostSizeChanged(), but only when
+  // InkDropHostView::ink_drop_ is set, but it's not in testing.  So call this
+  // function manually.
+  ink_drop()->HostSizeChanged(ink_drop_host()->size());
+  EXPECT_EQ(2, ink_drop_host()->num_ink_drop_ripples_created());
+  EXPECT_EQ(2, ink_drop_host()->num_ink_drop_highlights_created());
+  EXPECT_EQ(ink_drop_host()->last_ink_drop_ripple(), ink_drop_ripple());
+  EXPECT_EQ(ink_drop_host()->last_ink_drop_highlight(), ink_drop_highlight());
+  EXPECT_EQ(bounds.size(), ink_drop_ripple()->GetRootLayer()->size());
+  EXPECT_EQ(bounds.size(), ink_drop_highlight()->layer()->size());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 //
 // Common AutoHighlightMode tests
@@ -301,7 +323,7 @@ TEST_F(InkDropImplTest, SuccessfulAnimationEndedDuringDestruction) {
 typedef InkDropImplAutoHighlightTest InkDropImplCommonAutoHighlightTest;
 // Note: First argument is optional and intentionally left blank.
 // (it's a prefix for the generated test cases)
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     ,
     InkDropImplCommonAutoHighlightTest,
     testing::Values(InkDropImpl::AutoHighlightMode::NONE,
@@ -349,9 +371,9 @@ TEST_P(InkDropImplCommonAutoHighlightTest,
 typedef InkDropImplAutoHighlightTest InkDropImplNoAutoHighlightTest;
 // Note: First argument is optional and intentionally left blank.
 // (it's a prefix for the generated test cases)
-INSTANTIATE_TEST_CASE_P(,
-                        InkDropImplNoAutoHighlightTest,
-                        testing::Values(InkDropImpl::AutoHighlightMode::NONE));
+INSTANTIATE_TEST_SUITE_P(,
+                         InkDropImplNoAutoHighlightTest,
+                         testing::Values(InkDropImpl::AutoHighlightMode::NONE));
 
 TEST_P(InkDropImplNoAutoHighlightTest, VisibleHighlightDuringRippleAnimations) {
   test_api()->SetShouldHighlight(true);
@@ -385,7 +407,7 @@ TEST_P(InkDropImplNoAutoHighlightTest, HiddenHighlightDuringRippleAnimations) {
 typedef InkDropImplAutoHighlightTest InkDropImplHideAutoHighlightTest;
 // Note: First argument is optional and intentionally left blank.
 // (it's a prefix for the generated test cases)
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     ,
     InkDropImplHideAutoHighlightTest,
     testing::Values(InkDropImpl::AutoHighlightMode::HIDE_ON_RIPPLE));
@@ -545,7 +567,7 @@ TEST_P(InkDropImplHideAutoHighlightTest, NoCrashDuringRippleTearDown) {
 typedef InkDropImplAutoHighlightTest InkDropImplShowAutoHighlightTest;
 // Note: First argument is optional and intentionally left blank.
 // (it's a prefix for the generated test cases)
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     ,
     InkDropImplShowAutoHighlightTest,
     testing::Values(InkDropImpl::AutoHighlightMode::SHOW_ON_RIPPLE));

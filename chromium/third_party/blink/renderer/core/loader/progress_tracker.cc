@@ -66,7 +66,7 @@ struct ProgressItem {
 };
 
 ProgressTracker* ProgressTracker::Create(LocalFrame* frame) {
-  return new ProgressTracker(frame);
+  return MakeGarbageCollected<ProgressTracker>(frame);
 }
 
 ProgressTracker::ProgressTracker(LocalFrame* frame)
@@ -115,9 +115,9 @@ void ProgressTracker::ProgressStarted() {
   Reset();
   progress_value_ = kInitialProgressValue;
   if (!frame_->IsLoading()) {
-    GetLocalFrameClient()->DidStartLoading(kNavigationToDifferentDocument);
+    GetLocalFrameClient()->DidStartLoading();
     frame_->SetIsLoading(true);
-    probe::frameStartedLoading(frame_);
+    probe::FrameStartedLoading(frame_);
   }
 }
 
@@ -127,7 +127,7 @@ void ProgressTracker::ProgressCompleted() {
   SendFinalProgress();
   Reset();
   GetLocalFrameClient()->DidStopLoading();
-  probe::frameStoppedLoading(frame_);
+  probe::FrameStoppedLoading(frame_);
 }
 
 void ProgressTracker::FinishedParsing() {
@@ -171,7 +171,8 @@ void ProgressTracker::IncrementProgress(unsigned long identifier,
   elementsTotal_++;
 }
 
-void ProgressTracker::IncrementProgress(unsigned long identifier, int length) {
+void ProgressTracker::IncrementProgress(unsigned long identifier,
+                                        uint64_t length) {
   ProgressItem* item = progress_items_.at(identifier);
   if (!item)
     return;

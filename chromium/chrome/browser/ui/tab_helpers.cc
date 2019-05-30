@@ -10,10 +10,12 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/time/default_tick_clock.h"
+#include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/client_hints/client_hints_observer.h"
+#include "chrome/browser/complex_tasks/task_tab_helper.h"
 #include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
 #include "chrome/browser/content_settings/sound_content_setting_observer.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
@@ -26,16 +28,16 @@
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/installable/installable_manager.h"
-#include "chrome/browser/language/chrome_language_detection_tab_helper.h"
 #include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_session_duration_observer.h"
 #include "chrome/browser/metrics/oom/out_of_memory_reporter.h"
 #include "chrome/browser/metrics/renderer_uptime_web_contents_observer.h"
 #include "chrome/browser/net/net_error_tab_helper.h"
-#include "chrome/browser/net/predictor_tab_helper.h"
 #include "chrome/browser/ntp_snippets/bookmark_last_visit_updater.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_initialize.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
+#include "chrome/browser/performance_manager/performance_manager.h"
+#include "chrome/browser/performance_manager/performance_manager_tab_helper.h"
 #include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/plugins/pdf_plugin_placeholder_observer.h"
 #include "chrome/browser/predictors/loading_predictor_factory.h"
@@ -45,6 +47,7 @@
 #include "chrome/browser/previews/resource_loading_hints/resource_loading_hints_web_contents_observer.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/tab_helper.h"
+#include "chrome/browser/safe_browsing/safe_browsing_navigation_observer.h"
 #include "chrome/browser/safe_browsing/trigger_creator.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ssl/connection_help_tab_helper.h"
@@ -62,7 +65,6 @@
 #include "chrome/browser/ui/find_bar/find_tab_helper.h"
 #include "chrome/browser/ui/javascript_dialogs/javascript_dialog_tab_helper.h"
 #include "chrome/browser/ui/navigation_correction_tab_observer.h"
-#include "chrome/browser/ui/omnibox/lookalike_url_navigation_observer.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/pdf/chrome_pdf_web_contents_helper_client.h"
 #include "chrome/browser/ui/prefs/prefs_tab_helper.h"
@@ -71,6 +73,7 @@
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tab_ui_helper.h"
+#include "chrome/browser/ui/web_applications/web_app_metrics.h"
 #include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_features.h"
@@ -96,7 +99,6 @@
 #include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/android/oom_intervention/oom_intervention_tab_helper.h"
 #include "chrome/browser/android/search_permissions/search_geolocation_disclosure_tab_helper.h"
-#include "chrome/browser/android/tasks/task_tab_helper.h"
 #include "chrome/browser/android/webapps/single_tab_mode_tab_helper.h"
 #include "chrome/browser/banners/app_banner_manager_android.h"
 #include "chrome/browser/ui/android/context_menu_helper.h"
@@ -104,9 +106,7 @@
 #else
 #include "chrome/browser/banners/app_banner_manager_desktop.h"
 #include "chrome/browser/plugins/plugin_observer.h"
-#include "chrome/browser/safe_browsing/safe_browsing_navigation_observer.h"
 #include "chrome/browser/safe_browsing/safe_browsing_tab_observer.h"
-#include "chrome/browser/thumbnails/thumbnail_tab_helper.h"
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper.h"
 #include "chrome/browser/ui/hung_plugin_tab_helper.h"
 #include "chrome/browser/ui/sad_tab_helper.h"
@@ -119,9 +119,11 @@
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
 #include "chrome/browser/ui/blocked_content/framebust_block_tab_helper.h"
+#include "chrome/browser/ui/hats/hats_helper.h"
 #endif
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+#include "chrome/browser/offline_pages/android/auto_fetch_page_load_watcher.h"
 #include "chrome/browser/offline_pages/offline_page_tab_helper.h"
 #include "chrome/browser/offline_pages/recent_tab_helper.h"
 #endif
@@ -134,6 +136,7 @@
 #include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/extensions/tab_helper.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
 #include "extensions/browser/view_type_utils.h"
 #endif
 
@@ -146,6 +149,7 @@
 #endif
 
 #include "app/vivaldi_apptools.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/api/tabs/tabs_private_api.h"
@@ -188,6 +192,12 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   // may want to register as a ZoomObserver with it.
   zoom::ZoomController::CreateForWebContents(web_contents);
 #endif
+  bool enable_autofill_download_manager = true;
+  if (vivaldi::IsVivaldiRunning()) {
+    Profile* profile = Profile::FromBrowserContext(web_contents->GetBrowserContext());
+    enable_autofill_download_manager =
+        profile->GetPrefs()->GetBoolean(vivaldiprefs::kPrivacyAutofillServerAssist);
+  }
 
   // --- Common tab helpers ---
   autofill::ChromeAutofillClient::CreateForWebContents(web_contents);
@@ -195,14 +205,14 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
       web_contents,
       autofill::ChromeAutofillClient::FromWebContents(web_contents),
       g_browser_process->GetApplicationLocale(),
-      autofill::AutofillManager::ENABLE_AUTOFILL_DOWNLOAD_MANAGER);
+      enable_autofill_download_manager ?
+        autofill::AutofillManager::ENABLE_AUTOFILL_DOWNLOAD_MANAGER :
+        autofill::AutofillManager::DISABLE_AUTOFILL_DOWNLOAD_MANAGER);
   BloatedRendererTabHelper::CreateForWebContents(web_contents);
   BookmarkLastVisitUpdater::MaybeCreateForWebContentsWithBookmarkModel(
       web_contents, BookmarkModelFactory::GetForBrowserContext(
                         web_contents->GetBrowserContext()));
   chrome_browser_net::NetErrorTabHelper::CreateForWebContents(web_contents);
-  chrome_browser_net::PredictorTabHelper::CreateForWebContents(web_contents);
-  ChromeLanguageDetectionTabHelper::CreateForWebContents(web_contents);
   ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
       web_contents,
       autofill::ChromeAutofillClient::FromWebContents(web_contents));
@@ -255,6 +265,8 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   PreviewsUITabHelper::CreateForWebContents(web_contents);
   RecentlyAudibleHelper::CreateForWebContents(web_contents);
   ResourceLoadingHintsWebContentsObserver::CreateForWebContents(web_contents);
+  safe_browsing::SafeBrowsingNavigationObserver::MaybeCreateForWebContents(
+      web_contents);
   safe_browsing::TriggerCreator::MaybeCreateTriggersForWebContents(
       profile, web_contents);
   if(!vivaldi::IsVivaldiRunning()) {
@@ -263,16 +275,14 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   SecurityStateTabHelper::CreateForWebContents(web_contents);
   if (SiteEngagementService::IsEnabled())
     SiteEngagementService::Helper::CreateForWebContents(web_contents);
-  if (base::FeatureList::IsEnabled(features::kSoundContentSetting))
-    SoundContentSettingObserver::CreateForWebContents(web_contents);
+  SoundContentSettingObserver::CreateForWebContents(web_contents);
   sync_sessions::SyncSessionsRouterTabHelper::CreateForWebContents(
       web_contents,
       sync_sessions::SyncSessionsWebContentsRouterFactory::GetForProfile(
           profile));
-  // TODO(vabr): Remove TabSpecificContentSettings from here once their function
-  // is taken over by ChromeContentSettingsClient. http://crbug.com/387075
   TabSpecificContentSettings::CreateForWebContents(web_contents);
   TabUIHelper::CreateForWebContents(web_contents);
+  tasks::TaskTabHelper::CreateForWebContents(web_contents);
   ukm::InitializeSourceUrlRecorderForWebContents(web_contents);
   vr::VrTabHelper::CreateForWebContents(web_contents);
 
@@ -282,7 +292,11 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   // --- Platform-specific tab helpers ---
 
 #if defined(OS_ANDROID)
-  banners::AppBannerManagerAndroid::CreateForWebContents(web_contents);
+  {
+    // Remove after fixing https://crbug/905919
+    TRACE_EVENT0("browser", "AppBannerManagerAndroid::CreateForWebContents");
+    banners::AppBannerManagerAndroid::CreateForWebContents(web_contents);
+  }
   ContextMenuHelper::CreateForWebContents(web_contents);
   JavaScriptDialogTabHelper::CreateForWebContents(web_contents);
   if (OomInterventionTabHelper::IsEnabled()) {
@@ -291,7 +305,6 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
 
   SearchGeolocationDisclosureTabHelper::CreateForWebContents(web_contents);
   SingleTabModeTabHelper::CreateForWebContents(web_contents);
-  tasks::TaskTabHelper::CreateForWebContents(web_contents);
   ViewAndroidHelper::CreateForWebContents(web_contents);
 #else
   BookmarkTabHelper::CreateForWebContents(web_contents);
@@ -302,30 +315,21 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   FramebustBlockTabHelper::CreateForWebContents(web_contents);
   HungPluginTabHelper::CreateForWebContents(web_contents);
   JavaScriptDialogTabHelper::CreateForWebContents(web_contents);
-  if (base::FeatureList::IsEnabled(
-          features::kLookalikeUrlNavigationSuggestions)) {
-    LookalikeUrlNavigationObserver::CreateForWebContents(web_contents);
-  }
   ManagePasswordsUIController::CreateForWebContents(web_contents);
   pdf::PDFWebContentsHelper::CreateForWebContentsWithClient(
-      web_contents, std::unique_ptr<pdf::PDFWebContentsHelperClient>(
-                        new ChromePDFWebContentsHelperClient()));
+      web_contents, std::make_unique<ChromePDFWebContentsHelperClient>());
   PluginObserver::CreateForWebContents(web_contents);
   SadTabHelper::CreateForWebContents(web_contents);
   safe_browsing::SafeBrowsingTabObserver::CreateForWebContents(web_contents);
-  safe_browsing::SafeBrowsingNavigationObserver::MaybeCreateForWebContents(
-      web_contents);
-  if (!vivaldi::IsVivaldiRunning()) {
-  // Crashes with certain extensions, see VB-37375.
   SearchTabHelper::CreateForWebContents(web_contents);
-  }
   TabDialogs::CreateForWebContents(web_contents);
-  if (!vivaldi::IsVivaldiRunning()) {
-  ThumbnailTabHelper::CreateForWebContents(web_contents);
-  }
   web_modal::WebContentsModalDialogManager::CreateForWebContents(web_contents);
 
-  extensions::VivaldiPrivateTabObserver::CreateForWebContents(web_contents);
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  if (vivaldi::IsVivaldiRunning()) {
+    extensions::VivaldiPrivateTabObserver::CreateForWebContents(web_contents);
+  }
+#endif
 
   if (banners::AppBannerManagerDesktop::IsEnabled())
     banners::AppBannerManagerDesktop::CreateForWebContents(web_contents);
@@ -336,11 +340,19 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   metrics::DesktopSessionDurationObserver::CreateForWebContents(web_contents);
 #endif
 
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+  if (base::FeatureList::IsEnabled(
+          features::kHappinessTrackingSurveysForDesktop)) {
+    HatsHelper::CreateForWebContents(web_contents);
+  }
+#endif
+
 // --- Feature tab helpers behind flags ---
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
 offline_pages::OfflinePageTabHelper::CreateForWebContents(web_contents);
 offline_pages::RecentTabHelper::CreateForWebContents(web_contents);
+offline_pages::AutoFetchPageLoadWatcher::CreateForWebContents(web_contents);
 #endif
 
 #if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
@@ -349,13 +361,16 @@ offline_pages::RecentTabHelper::CreateForWebContents(web_contents);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::TabHelper::CreateForWebContents(web_contents);
+  web_app::WebAppProvider::CreateTabHelper(web_contents);
+  if (SiteEngagementService::IsEnabled())
+    web_app::WebAppMetrics::Get(profile);
 #endif
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   SupervisedUserNavigationObserver::CreateForWebContents(web_contents);
 #endif
 
-#if BUILDFLAG(ENABLE_PRINTING) && !defined(OS_ANDROID)
+#if BUILDFLAG(ENABLE_PRINTING)
   printing::InitializePrinting(web_contents);
 #endif
 
@@ -375,6 +390,13 @@ offline_pages::RecentTabHelper::CreateForWebContents(web_contents);
   if (MediaEngagementService::IsEnabled())
     MediaEngagementService::CreateWebContentsObserver(web_contents);
 
+  if (performance_manager::PerformanceManager::GetInstance()) {
+    performance_manager::PerformanceManagerTabHelper::CreateForWebContents(
+        web_contents);
+  }
+
+  // TODO(siggi): Remove this once the Resource Coordinator refactoring is done.
+  //     See https://crbug.com/910288.
   resource_coordinator::ResourceCoordinatorTabHelper::CreateForWebContents(
       web_contents);
 }

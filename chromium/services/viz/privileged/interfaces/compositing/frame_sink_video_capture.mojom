@@ -11,6 +11,7 @@ import "mojo/public/mojom/base/shared_memory.mojom";
 import "services/viz/public/interfaces/compositing/frame_sink_id.mojom";
 import "skia/public/interfaces/bitmap.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
+import "ui/gfx/mojo/color_space.mojom";
 
 // Provided with each call to FrameSinkVideoConsumer::OnFrameCaptured() so that
 // the consumer can notify the capturer the instant it is done consuming the
@@ -37,14 +38,13 @@ interface FrameSinkVideoConsumer {
   // the service that it is Done(). |info| is used to interpret the
   // format/layout of the data, and also contains the frame timestamps and other
   // metadata (the following media::VideoFrameMetadata keys are set:
-  // CAPTURE_BEGIN_TIME, CAPTURE_END_TIME, COLOR_SPACE, FRAME_DURATION,
-  // INTERACTIVE_CONTENT, REFERENCE_TIME). |update_rect| is the region of the
-  // frame that has changed since the last frame. |content_rect| is the region
-  // of the frame that contains the captured content, with the rest of the frame
-  // having been letterboxed to adhere to resolution constraints.
+  // CAPTURE_BEGIN_TIME, CAPTURE_END_TIME, CAPTURE_COUNTER, CAPTURE_UPDATE_RECT,
+  // COLOR_SPACE, FRAME_DURATION, INTERACTIVE_CONTENT, REFERENCE_TIME).
+  // |content_rect| is the region of the frame that contains the captured
+  // content, with the rest of the frame having been letterboxed to adhere to
+  // resolution constraints.
   OnFrameCaptured(mojo_base.mojom.ReadOnlySharedMemoryRegion data,
                   media.mojom.VideoFrameInfo info,
-                  gfx.mojom.Rect update_rect,
                   gfx.mojom.Rect content_rect,
                   FrameSinkVideoConsumerFrameCallbacks callbacks);
 
@@ -73,7 +73,7 @@ interface FrameSinkVideoCapturer {
   //
   // Default, if never called: PIXEL_FORMAT_I420, COLOR_SPACE_HD_REC709
   SetFormat(media.mojom.VideoPixelFormat format,
-            media.mojom.ColorSpace color_space);
+            gfx.mojom.ColorSpace color_space);
 
   // Specifies the maximum rate of capture in terms of a minimum time period
   // (min_period = 1/max_frame_rate).

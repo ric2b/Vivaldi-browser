@@ -12,21 +12,24 @@
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "chrome/browser/supervised_user/permission_request_creator.h"
-#include "google_apis/gaia/oauth2_token_service.h"
+#include "google_apis/gaia/google_service_auth_error.h"
 
 class GURL;
 class Profile;
+
+namespace identity {
+class IdentityManager;
+struct AccessTokenInfo;
+}  // namespace identity
 
 namespace network {
 class SharedURLLoaderFactory;
 }
 
-class PermissionRequestCreatorApiary : public PermissionRequestCreator,
-                                       public OAuth2TokenService::Consumer {
+class PermissionRequestCreatorApiary : public PermissionRequestCreator {
  public:
   PermissionRequestCreatorApiary(
-      OAuth2TokenService* oauth2_token_service,
-      const std::string& account_id,
+      identity::IdentityManager* identity_manager,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
   ~PermissionRequestCreatorApiary() override;
 
@@ -48,12 +51,9 @@ class PermissionRequestCreatorApiary : public PermissionRequestCreator,
   struct Request;
   using RequestList = std::list<std::unique_ptr<Request>>;
 
-  // OAuth2TokenService::Consumer implementation:
-  void OnGetTokenSuccess(
-      const OAuth2TokenService::Request* request,
-      const OAuth2AccessTokenConsumer::TokenResponse& token_response) override;
-  void OnGetTokenFailure(const OAuth2TokenService::Request* request,
-                         const GoogleServiceAuthError& error) override;
+  void OnAccessTokenFetchComplete(Request* request,
+                                  GoogleServiceAuthError error,
+                                  identity::AccessTokenInfo token_info);
 
   void OnSimpleLoaderComplete(RequestList::iterator it,
                               std::unique_ptr<std::string> response_body);
@@ -71,8 +71,7 @@ class PermissionRequestCreatorApiary : public PermissionRequestCreator,
 
   void DispatchResult(RequestList::iterator it, bool success);
 
-  OAuth2TokenService* oauth2_token_service_;
-  std::string account_id_;
+  identity::IdentityManager* identity_manager_;
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
   bool retry_on_network_change_;
 

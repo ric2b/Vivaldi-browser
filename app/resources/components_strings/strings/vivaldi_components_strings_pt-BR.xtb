@@ -55,7 +55,6 @@
 <translation id="5675650730144413517">Esta página não está funcionando</translation>
 <translation id="5838278095973806738">Você não deve fornecer nenhuma informação confidencial neste site (como senhas importantes ou números de cartão de crédito), pois elas podem ser roubadas por qualquer invasor que interceptar os dados entre você e o site.</translation>
 <translation id="5869405914158311789">Não foi possível acessar este site</translation>
-<translation id="5920262536204764679">{NUM_COOKIES, plural, =0 {Nenhum} =1 {1 em uso} other {# em uso}}</translation>
 <translation id="5990559369517809815">Solicitações ao servidor foram bloqueadas por uma extensão.</translation>
 <translation id="6146055958333702838">Verifique todos os cabos e reinicie todos os roteadores, modens ou outros dispositivos de rede que você estiver usando.</translation>
 <translation id="614940544461990577">Tente:</translation>

@@ -37,14 +37,14 @@ std::string ComputeMethodForRedirect(const std::string& method,
 // policy that should be used for the request.
 URLRequest::ReferrerPolicy ProcessReferrerPolicyHeaderOnRedirect(
     URLRequest::ReferrerPolicy original_referrer_policy,
-    const HttpResponseHeaders* headers) {
+    const base::Optional<std::string>& referrer_policy_header) {
   URLRequest::ReferrerPolicy new_policy = original_referrer_policy;
-  std::string referrer_policy_header;
-  if (headers)
-    headers->GetNormalizedHeader("Referrer-Policy", &referrer_policy_header);
-  std::vector<std::string> policy_tokens =
-      base::SplitString(referrer_policy_header, ",", base::TRIM_WHITESPACE,
-                        base::SPLIT_WANT_NONEMPTY);
+  std::vector<base::StringPiece> policy_tokens;
+  if (referrer_policy_header) {
+    policy_tokens = base::SplitStringPiece(*referrer_policy_header, ",",
+                                           base::TRIM_WHITESPACE,
+                                           base::SPLIT_WANT_NONEMPTY);
+  }
 
   UMA_HISTOGRAM_BOOLEAN("Net.URLRequest.ReferrerPolicyHeaderPresentOnRedirect",
                         !policy_tokens.empty());
@@ -117,18 +117,15 @@ RedirectInfo RedirectInfo::ComputeRedirectInfo(
     const std::string& original_method,
     const GURL& original_url,
     const GURL& original_site_for_cookies,
+    const base::Optional<url::Origin>& original_top_frame_origin,
     URLRequest::FirstPartyURLPolicy original_first_party_url_policy,
     URLRequest::ReferrerPolicy original_referrer_policy,
     const std::string& original_referrer,
-    const HttpResponseHeaders* response_headers,
     int http_status_code,
     const GURL& new_location,
+    const base::Optional<std::string>& referrer_policy_header,
     bool insecure_scheme_was_upgraded,
-    bool token_binding_negotiated,
     bool copy_fragment) {
-  DCHECK(!response_headers ||
-         response_headers->response_code() == http_status_code);
-
   RedirectInfo redirect_info;
 
   redirect_info.status_code = http_status_code;
@@ -157,12 +154,17 @@ RedirectInfo RedirectInfo::ComputeRedirectInfo(
   if (original_first_party_url_policy ==
       URLRequest::UPDATE_FIRST_PARTY_URL_ON_REDIRECT) {
     redirect_info.new_site_for_cookies = redirect_info.new_url;
+    if (original_top_frame_origin) {
+      redirect_info.new_top_frame_origin =
+          url::Origin::Create(redirect_info.new_url);
+    }
   } else {
     redirect_info.new_site_for_cookies = original_site_for_cookies;
+    redirect_info.new_top_frame_origin = original_top_frame_origin;
   }
 
   redirect_info.new_referrer_policy = ProcessReferrerPolicyHeaderOnRedirect(
-      original_referrer_policy, response_headers);
+      original_referrer_policy, referrer_policy_header);
 
   // Alter the referrer if redirecting cross-origin (especially HTTP->HTTPS).
   redirect_info.new_referrer =
@@ -170,15 +172,6 @@ RedirectInfo RedirectInfo::ComputeRedirectInfo(
                                               GURL(original_referrer),
                                               redirect_info.new_url)
           .spec();
-
-  if (response_headers) {
-    std::string include_referer;
-    response_headers->GetNormalizedHeader("include-referred-token-binding-id",
-                                          &include_referer);
-    include_referer = base::ToLowerASCII(include_referer);
-    if (include_referer == "true" && token_binding_negotiated)
-      redirect_info.referred_token_binding_host = original_url.host();
-  }
 
   return redirect_info;
 }

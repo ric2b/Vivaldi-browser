@@ -61,6 +61,7 @@ jumbo_static_library("browser") {
     "//components/renderer_context_menu:renderer_context_menu",
     "//content/public/browser",
     "//skia",
+    "//vivaldi/prefs:prefs_files_generator",
   ]
   public_deps = [
     ":notes",

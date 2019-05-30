@@ -1,10 +1,16 @@
 # Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
 
+from __future__ import print_function
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+from builtins import range
+
 import sys, os, re, types
 import argparse
 import json
 import shutil
-import cStringIO
+import io
 import refresh_file
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
@@ -16,7 +22,7 @@ from grit.node import empty
 from grit.node import include
 from grit.node import structure
 from grit.node import message
-from grit.node import io
+from grit.node import node_io
 from grit.node import misc
 from grit import util
 
@@ -60,6 +66,7 @@ REPLACE_GOOGLE_EXCEPTIONS =[
   "IDS_CONTENT_CONTEXT_SPELLING_BUBBLE_TEXT",
   "IDS_ERRORPAGES_SUGGESTION_GOOGLE_SEARCH_SUMMARY",
   "IDS_PRINT_PREVIEW_CLOUD_PRINT_PROMOTION",
+  "IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS",
 ]
 
 sequence_number = 0
@@ -81,7 +88,7 @@ def ScanDir(scandir):
     if dirname == ".":
       dirname = None
     dirlist.extend([os.path.join(
-                        *filter(None, [dirname, f])).replace("\\", "/"
+                        *[_f for _f in [dirname, f] if _f]).replace("\\", "/"
                       ) for f in filenames
                       if os.path.splitext(f)[1][1:] in MEDIA_EXTENSIONS])
   #for x in dirlist:
@@ -95,14 +102,21 @@ def ScanDir(scandir):
 def iter_gritnode(parent, expected, verbose = False):
   for node in parent.ActiveChildren():
     if verbose:
-      print >>sys.stderr, node.name, node.attrs
+      print(node.name, node.attrs, file=sys.stderr)
     if isinstance(node, expected):
       yield node
     elif isinstance(node, misc.IfNode):
       if verbose:
-        print >>sys.stderr, node.EvaluateCondition(node.attrs['expr'])
+        print(node.EvaluateCondition(node.attrs['expr']), file=sys.stderr)
       for x in iter_gritnode(node, expected, verbose=verbose):
         yield x
+
+def recursive_iter_gritnode(parent, expected, verbose = False):
+  for node in parent.ActiveDescendants():
+    if verbose:
+      print(node.name, node.attrs, file=sys.stderr)
+    if isinstance(node, expected):
+      yield node
 
 class GritFile(dict):
 
@@ -125,8 +139,8 @@ class GritFile(dict):
             "default_200_percent",
             "default_300_percent",
           ]:
-      pf = os.path.join(*filter(None, [self.filedir,  s, f])).replace("\\", "/")
-      rpf = os.path.join(*filter(None, [s, f])).replace("\\", "/")
+      pf = os.path.join(*[_f for _f in [self.filedir,  s, f] if _f]).replace("\\", "/")
+      rpf = os.path.join(*[_f for _f in [s, f] if _f]).replace("\\", "/")
       if rpf.startswith("./"):
         raise Exception(rpf)
       if os.path.isfile(pf):
@@ -189,7 +203,7 @@ class GritFile(dict):
       _seq, old_top = self.resources["nodes"]["internals"]["outputs"][0]
       new_top.attrs = dict(old_top.attrs)
 
-      for old_node in iter_gritnode(old_top, io.OutputNode):
+      for old_node in iter_gritnode(old_top, node_io.OutputNode):
         #if (self.orig_filename_base != self.filename_base and
         #    old_node.attrs.get("type", None) == "data_package"):
         #  old_node.attrs["filename"] = old_node.attrs["filename"].replace(
@@ -207,8 +221,8 @@ class GritFile(dict):
       _seq, old_top = self.resources["nodes"]["internals"]["translations"][0]
       new_top.attrs = dict(old_top.attrs)
 
-      for old_node in iter_gritnode(old_top, io.FileNode):
-        new_node = io.FileNode()
+      for old_node in recursive_iter_gritnode(self.resources["resources"], node_io.FileNode):
+        new_node = node_io.FileNode()
         new_node.name = "file"
         new_node.attrs = dict(old_node.attrs)
         if "path" in new_node.attrs:
@@ -239,7 +253,7 @@ class GritFile(dict):
       self["include-files"] = {}
 
       for _seq, old_node in sorted([
-                  x for x in self.resources["nodes"].itervalues()
+                  x for x in self.resources["nodes"].values()
                      if isinstance(x, tuple) and
                         isinstance(x[1], include.IncludeNode)]):
         new_node = include.IncludeNode()
@@ -265,7 +279,7 @@ class GritFile(dict):
       self["message-entries"] = {}
 
       for _seq, old_node in sorted([
-                  x for x in self.resources["nodes"].itervalues()
+                  x for x in self.resources["nodes"].values()
                       if  isinstance(x, tuple) and
                           isinstance(x[1], message.MessageNode)]):
         #if old_node.GetCliques():
@@ -285,7 +299,7 @@ class GritFile(dict):
       self["structure-entries"] = {}
 
       for _seq, old_node in sorted([
-                  x for x in self.resources["nodes"].itervalues()
+                  x for x in self.resources["nodes"].values()
                       if isinstance(x, tuple) and
                          isinstance(x[1], structure.StructureNode)]):
         if self.keep_sequence:
@@ -309,11 +323,11 @@ class GritFile(dict):
     if extra_languages:
       language_list = []
       for node in iter_gritnode(resources, empty.TranslationsNode):
-        for lnode in iter_gritnode(node, io.FileNode):
+        for lnode in iter_gritnode(node, node_io.FileNode):
           language_list.append(lnode.GetLang())
       new_translate = empty.TranslationsNode()
       new_translate.name = "translations"
-      for lnode in iter_gritnode(extra_languages, io.FileNode):
+      for lnode in iter_gritnode(extra_languages, node_io.FileNode):
         if lnode.GetLang() not in language_list:
           new_translate.AddChild(lnode)
           lnode.parent = new_translate
@@ -330,7 +344,7 @@ class GritFile(dict):
     for node in resources.ActiveDescendants():
       sequence_number += 1
       if "name" in node.attrs:
-        if isinstance(node, (message.PhNode, )):
+        if isinstance(node, message.PhNode):
           continue
 
         active_resources[node.attrs["name"]]= (sequence_number, node)
@@ -347,13 +361,13 @@ class GritFile(dict):
         }
 
   def ReplaceMatches(self, matcher, replace_with, exceptions=[]):
-    for name, seq_node in self.get("message-entries", {}).iteritems():
+    for name, seq_node in self.get("message-entries", {}).items():
       if name in exceptions:
         continue
       _seq, node = seq_node
       modified_string = False
       for index, part in enumerate(node.mixed_content):
-        if not isinstance(part, types.StringTypes):
+        if not isinstance(part, (str,)):
           continue
         old_string = node.mixed_content[index]
         node.mixed_content[index] = matcher.sub(replace_with, part)
@@ -363,7 +377,7 @@ class GritFile(dict):
         #         part.encode("utf8"), "| with |",\
         #         node.mixed_content[index].encode("utf8") , "|"
       for part in node.children:
-        if isinstance(part, (str, unicode)) and matcher.search(part):
+        if isinstance(part, str) and matcher.search(part):
           raise Exception("Child of "+name+" still had Google string")
 
       clique = node.GetCliques()
@@ -372,10 +386,10 @@ class GritFile(dict):
       clique = clique[0]
       translated = clique.AllMessagesThatMatch(re.compile(".*"))
       if isinstance(translated, dict):
-        for _lang, tmessage in translated.iteritems():
+        for _lang, tmessage in translated.items():
           parts = tmessage.GetContent()
           for index, part in enumerate(parts):
-            if not isinstance(part, (str, unicode)):
+            if not isinstance(part, str):
               continue
             parts[index] = matcher.sub(replace_with, part)
             #if matcher.search(part):
@@ -383,7 +397,7 @@ class GritFile(dict):
             #        part.encode("utf8"), "| with |",\
             #        parts[index].encode("utf8"), "|"
           for part in tmessage.GetContent():
-            if isinstance(part, (str, unicode)) and matcher.search(part):
+            if isinstance(part, str) and matcher.search(part):
               raise Exception("Translation of "+name+" still had Google string")
 
   def ReplaceGoogle(self, exceptions=[]):
@@ -415,30 +429,30 @@ class GritFile(dict):
       #  print >>sys.stderr, "searching for IDS_TERMS_HTML. Number of items",\
       #        len(prnt.children)
       try:
-        for idx in reversed(range(0, len(prnt.children))):
+        for idx in reversed(list(range(0, len(prnt.children)))):
           if prnt.children[idx].attrs.get("name", None) == name:
             del prnt.children[idx]
             _deleted = True
-        for idx in reversed(range(0, len(prnt.mixed_content))):
+        for idx in reversed(list(range(0, len(prnt.mixed_content)))):
           if prnt.mixed_content[idx].attrs.get("name", None) == name:
             del prnt.mixed_content[idx]
             _deleted = True
       except:
-        print >>sys.stderr, "deleting", name, "item", idx, "from", prnt.attrs,\
-              "failed"
+        print("deleting", name, "item", idx, "from", prnt.attrs,\
+              "failed", file=sys.stderr)
         raise
 
       if not _deleted:
-        print >>sys.stderr, "unable to remove", name, "from", prnt.attrs
+        print("unable to remove", name, "from", prnt.attrs, file=sys.stderr)
         raise Exception()
 
     for cur_node in top_node:
       if cur_node.attrs.get("name", None) == name:
-        print >>sys.stderr, "found", name
+        print("found", name, file=sys.stderr)
         raise Exception("Failed delete of", name)
 
     if top_node.GetNodeById(name):
-      print >>sys.stderr, "Did not remove", name, "from", top_node.attrs
+      print("Did not remove", name, "from", top_node.attrs, file=sys.stderr)
       raise Exception()
 
     top_node.AddChild(new_node)
@@ -451,7 +465,7 @@ class GritFile(dict):
     elif "outputs" in other:
       top_node = self["outputs"]
       for node in other["outputs"].ActiveDescendants():
-        if not isinstance(node, io.OutputNode):
+        if not isinstance(node, node_io.OutputNode):
           continue
         top_node.AddChild(node)
         node.parent = top_node
@@ -463,7 +477,7 @@ class GritFile(dict):
       self["includes"] = other["includes"]
       self.setdefault("includes", {})
 
-    for name, seq_node in other.get("include-files", {}).iteritems():
+    for name, seq_node in other.get("include-files", {}).items():
       #seq_node[1].attrs["vivaldi-added"]="1"
       if self.keep_sequence:
         self.__replace_node(seq_node[1],
@@ -478,7 +492,7 @@ class GritFile(dict):
       self["messages"] = other["messages"]
       self.setdefault("message-entries", {})
 
-    for name, seq_node in other.get("message-entries", {}).iteritems():
+    for name, seq_node in other.get("message-entries", {}).items():
       #seq_node[1].attrs["vivaldi-added"]="1"
       if self.keep_sequence:
         self.__replace_node(seq_node[1],
@@ -500,7 +514,7 @@ class GritFile(dict):
       self["structures"] = other["structures"]
       self.setdefault("structure-entries", {})
 
-    for name, seq_node in other.get("structure-entries", {}).iteritems():
+    for name, seq_node in other.get("structure-entries", {}).items():
       #seq_node[1].attrs["vivaldi-added"]="1"
       if self.keep_sequence:
         self.__replace_node(seq_node[1],
@@ -511,11 +525,14 @@ class GritFile(dict):
       else:
         self["structure-entries"][name] = seq_node
 
-    translations = self.Translations() if load_translations  else None
     translations_node = None
-    for lang, translation in sorted((translations or {}).iteritems()):
-      if not translation or lang == "en" or lang == "x-P-pseudo":
+    for lnode in sorted(list(recursive_iter_gritnode(self.resources["resources"], node_io.FileNode)), key=lambda x:x.GetLang()):
+      lang = lnode.GetLang()
+      if lang == "en" or lang == "x-P-pseudo":
         continue
+      if lang in self.translation_names:
+        continue
+
       if "generated_translations" not in self:
         translations_node = empty.TranslationsNode()
         translations_node.name = "translations"
@@ -523,7 +540,7 @@ class GritFile(dict):
         translations_node.attrs = dict(old_top.attrs)
         self["generated_translations"] = translations_node
 
-      new_node = io.FileNode()
+      new_node = node_io.FileNode()
       new_node.name = "file"
       #print self.translation_dir
       filename = os.path.join(self.translation_dir,
@@ -549,28 +566,28 @@ class GritFile(dict):
 
   def GetMigrateTargetFiles(self):
     return (list(self.active_source_files | self.active_other_files) +
-            list(self.translation_names.itervalues())
+            list(self.translation_names.values())
             )
   def GetTargetFiles(self):
-    return list(self.translation_names.itervalues())
+    return list(self.translation_names.values())
 
   def RemoveSpecialUpdateSources(self, files, verbose=False):
     if verbose:
-      print >>sys.stderr, "Base Dir", self.filedir
+      print("Base Dir", self.filedir, file=sys.stderr)
     for x in files:
       x = os.path.relpath(x, self.filedir).replace("\\", "/")
       if verbose:
-        print >>sys.stderr, "Removing", x
+        print("Removing", x, file=sys.stderr)
       if x in self.active_source_files:
         self.active_source_files.remove(x)
       else:
         if verbose:
-          print >>sys.stderr, "Failed to remove", x
+          print("Failed to remove", x, file=sys.stderr)
           base = os.path.basename(x)
           matches = [y for y in self.active_source_files
                        if base == os.path.basename(y)]
           for y in matches:
-            print >>sys.stderr, "Possible match:", y
+            print("Possible match:", y, file=sys.stderr)
         pass
 
   def Translations(self):
@@ -579,18 +596,20 @@ class GritFile(dict):
 
     translations = {}
 
-    for _seq, node in sorted(self["message-entries"].itervalues()):
+    for _seq, node in sorted(self["message-entries"].values()):
       clique = node.GetCliques()
       if not clique:
         continue
       clique = clique[0]
       message_id = clique.GetId()
+      for lang in clique.clique.keys():
+        translations.setdefault(lang,{})
       translated = clique.AllMessagesThatMatch(re.compile(".*"))
       if isinstance(translated, dict):
-        for lang, tmessage in translated.iteritems():
+        for lang, tmessage in translated.items():
           parts = tmessage.GetContent()
           text = "".join([(util.EscapeHtml(x)
-                              if isinstance(x, types.StringTypes) else
+                              if isinstance(x, (str,)) else
                               """<ph name="%s" />""" % x.GetPresentation())
                               for x in parts])
           translations.setdefault(lang,{})[message_id] = text
@@ -647,7 +666,7 @@ class GritFile(dict):
         new_top = self["includes"]
 
         if not self.keep_sequence:
-          for _seq, old_node in sorted(self["include-files"].itervalues()):
+          for _seq, old_node in sorted(self["include-files"].values()):
             new_node = include.IncludeNode()
             new_node.name = "include"
             new_node.attrs = dict(old_node.attrs)
@@ -663,7 +682,7 @@ class GritFile(dict):
         new_top =  self["messages"]
 
         if not self.keep_sequence:
-          for _seq, old_node in sorted(self["message-entries"].itervalues()):
+          for _seq, old_node in sorted(self["message-entries"].values()):
             new_top.AddChild(old_node)
             old_node.parent = new_top
         else:
@@ -676,7 +695,7 @@ class GritFile(dict):
         new_top = self["structures"]
 
         if not self.keep_sequence:
-          for _seq, old_node in sorted(self["structure-entries"].itervalues()):
+          for _seq, old_node in sorted(self["structure-entries"].values()):
             new_top.AddChild(old_node)
             old_node.parent = new_top
         else:
@@ -699,21 +718,19 @@ def merge_resource(origin_file, overlay_file, target_location, params = {},
     ])
   mergeresource = GritFile(translation_dir=translation_dir)
   mergeresource.Load(overlay_file, params, output_file_name=output_file_name,
-                     load_translations = (action != SETUP_RESOURCES))
+                     load_translations = True)
 
   extra_translations = mergeresource.GetTranslationsCopy()
 
   mainresource = GritFile(translation_dir=translation_dir, keep_sequence=True)
   mainresource.Load(origin_file, params, output_file_name=output_file_name,
                     extra_languages=extra_translations,
-                    load_translations = (action != SETUP_RESOURCES))
+                    load_translations = True)
   if action in [WRITE_GRD_FILES, PRINT_ALL]:
     mainresource.ReplaceGoogle(exceptions=REPLACE_GOOGLE_EXCEPTIONS)
 
   mainresource.Update(mergeresource,
-                     load_translations = (action != SETUP_RESOURCES))
-
-  new_resource = mainresource.GritNode()
+                     load_translations = True)
 
   resource_target_file = mainresource.filename_base+".grd"
   resource_target_dir = os.path.join(target_location, translation_dir)
@@ -724,52 +741,56 @@ def merge_resource(origin_file, overlay_file, target_location, params = {},
     pass # Just ignore the errors here. Most likely the dir exists,
          # otherwise next step will fail instead
   if action in [WRITE_GRD_FILES, PRINT_ALL]:
-    for lang, extra_translation_items in mergeresource.resources["resources"].UberClique().additional_translations_.iteritems():
+    for lang, extra_translation_items in mergeresource.resources["resources"].UberClique().additional_translations_.items():
       xtb_callback = mainresource.resources["resources"].UberClique().GenerateXtbParserCallback(lang, override_exisiting=True)
-      for tid, string in extra_translation_items.iteritems():
+      for tid, string in extra_translation_items.items():
         #print "Item", tid, type(string), string
         xtb_callback(tid, string);
         #translations.setdefault(lang, {})[tid] = util.EscapeHtml(string)
-    translations = mainresource.Translations()
-    for lang, translation in translations.iteritems():
+    translations = dict(mainresource.Translations())
+    for lnode in iter_gritnode(mainresource.get("generated_translations",empty.TranslationsNode()), node_io.FileNode):
+      translations.setdefault(lnode.GetLang(), {})
+    for lang, translation in translations.items():
       if lang == "en" or lang == "x-P-pseudo":
         continue # found in the grd file
       if action == PRINT_ALL:
-        print
-        print "Writing generated language file",\
-               mainresource.GetLanguageFileName(lang)
-        print "*"*40
+        print()
+        print("Writing generated language file",\
+               mainresource.GetLanguageFileName(lang))
+        print("*"*40)
       xtb_filename = os.path.join(target_location,
                                   mainresource.GetLanguageFileName(lang))
-      xtbfile = cStringIO.StringIO()
-      xtbfile.write("""<?xml version="1.0" encoding="utf-8" ?>\n"""
+      xtbfile = io.StringIO()
+      xtbfile.write(u"""<?xml version="1.0" encoding="utf-8" ?>\n"""
                     """<!DOCTYPE translationbundle>\n"""
                     """<translationbundle lang="%s">"""
                     % (lang if lang != "nb" else "no"))
-      for msgid, text in sorted(translation.iteritems()):
+      for msgid, text in sorted(translation.items()):
         try:
-          xtbfile.write((u"""<translation id="%s">%s</translation>\n""" %
-                          (msgid, text)).encode("utf8"))
+          xtbfile.write(u"""<translation id="%s">%s</translation>\n""" %
+                          (msgid, text))
         except:
-          print >>sys.stderr, repr(msgid), "|", repr(text), "|",\
-                repr(text.encode("utf8"))
+          print(repr(msgid), "|", repr(text), "|",\
+                repr(text.encode("utf8")), file=sys.stderr)
           raise
-      xtbfile.write("</translationbundle>\n")
-      refresh_file.conditional_refresh_file(xtb_filename, xtbfile.getvalue(),
+      xtbfile.write(u"</translationbundle>\n")
+      refresh_file.conditional_refresh_file(xtb_filename, xtbfile.getvalue().encode("utf8"),
                                             translation_stamp)
       xtbfile.close()
 
 
     if action == PRINT_ALL:
-      print
-      print "Writing generated file", resource_target_file
-      print "*"*40
+      print()
+      print("Writing generated file", resource_target_file)
+      print("*"*40)
+    new_resource = mainresource.GritNode()
+
     content = new_resource.FormatXml("  ", False)
     grd_filename = os.path.join(target_location, resource_target_file)
-    grdfile = cStringIO.StringIO()
-    grdfile.write("""<?xml version="1.0" encoding="utf-8"?>\n""")
-    grdfile.write(content.encode("utf8"))
-    refresh_file.conditional_refresh_file(grd_filename, grdfile.getvalue())
+    grdfile = io.StringIO()
+    grdfile.write(unicode("""<?xml version="1.0" encoding="utf-8"?>\n"""))
+    grdfile.write(content)
+    refresh_file.conditional_refresh_file(grd_filename, grdfile.getvalue().encode("utf-8"))
     grdfile.close()
 
     special_update_sources = []
@@ -824,7 +845,7 @@ def merge_resource(origin_file, overlay_file, target_location, params = {},
       except shutil.Error:
         continue # ignore, same file
       except:
-        print >>sys.stderr, "Copying", x, "failed"
+        print("Copying", x, "failed", file=sys.stderr)
         raise
         pass
 
@@ -842,7 +863,7 @@ def merge_resource(origin_file, overlay_file, target_location, params = {},
       except shutil.Error:
         continue # ignore, same file
       except:
-        print >>sys.stderr, "Copying", x, "failed"
+        print("Copying", x, "failed", file=sys.stderr)
         raise
         pass
 
@@ -867,7 +888,7 @@ def write_targets(action, sources, main_source_location,
 
   output = []
   if action == PRINT_ALL:
-    actions = list(explain.iterkeys())
+    actions = list(explain.keys())
   else:
     actions = [action]
 
@@ -988,4 +1009,4 @@ if __name__ == '__main__':
     #cProfile.run("""output = DoMain(sys.argv[1:])""")
     output = DoMain(sys.argv[1:])
     if output:
-      print output
+      print(output)

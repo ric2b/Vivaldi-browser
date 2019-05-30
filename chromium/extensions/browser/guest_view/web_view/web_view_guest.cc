@@ -11,16 +11,20 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
+#include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/guest_view/common/guest_view_constants.h"
 #include "components/web_cache/browser/web_cache_manager.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/native_web_keyboard_event.h"
@@ -35,8 +39,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
-#include "content/public/common/browser_side_navigation_policy.h"
-#include "content/public/common/media_stream_request.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/stop_find_action.h"
@@ -53,6 +56,8 @@
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
 #include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
+#include "extensions/browser/process_manager.h"
+#include "extensions/browser/url_loader_factory_manager.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/manifest_constants.h"
@@ -62,6 +67,7 @@
 #include "net/base/net_errors.h"
 #include "net/cookies/canonical_cookie.h"
 #include "services/network/public/cpp/features.h"
+#include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "url/url_constants.h"
@@ -79,6 +85,7 @@
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/pdf_util.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -271,14 +278,10 @@ void WebViewGuest::CleanUp(content::BrowserContext* browser_context,
   }
 
   // Clean up web request event listeners for the WebView.
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(
-          &RemoveWebViewEventListenersOnIOThread,
-          browser_context,
-          embedder_process_id,
-          view_instance_id));
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
+      base::BindOnce(&RemoveWebViewEventListenersOnIOThread, browser_context,
+                     embedder_process_id, view_instance_id));
 
   // Clean up content scripts for the WebView.
   auto* csm = WebViewContentScriptManager::Get(browser_context);
@@ -331,7 +334,7 @@ GURL WebViewGuest::GetSiteForGuestPartitionConfig(
 
 // static
 std::string WebViewGuest::GetPartitionID(
-    const RenderProcessHost* render_process_host) {
+    RenderProcessHost* render_process_host) {
   WebViewRendererState* renderer_state = WebViewRendererState::GetInstance();
   int process_id = render_process_host->GetID();
   std::string partition_id;
@@ -446,7 +449,8 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
       content::WebContentsImpl* contentsimpl =
           static_cast<content::WebContentsImpl*>(new_contents);
 
-      content::BrowserPluginGuest::Create(contentsimpl, this)->Init();
+      content::BrowserPluginGuest::CreateInWebContents(contentsimpl, this);
+      contentsimpl->GetBrowserPluginGuest()->Init();
 
       // NOTE(andre@vivaldi.com) : Need to set this otherwise script injection
       // can fail. See WebViewInternalExecuteCodeFunction::Init().
@@ -487,6 +491,8 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
         ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
           tab_id, Profile::FromBrowserContext(context));
       if (inspected_contents) {
+        // NOTE(david@vivaldi.com): This returns always the |main_web_contents_|
+        // which is required when the dev tools window is undocked.
         content::WebContents* devtools_contents =
           DevToolsWindow::GetDevtoolsWebContentsForInspectedWebContents(
               inspected_contents);
@@ -497,6 +503,21 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
           devtools_contents =
               DevToolsWindow::GetDevtoolsWebContentsForInspectedWebContents(
                   inspected_contents);
+        }
+        // NOTE(david@vivaldi.com): Each docking state has it's own dedicated
+        // webview now (VB-42802). We need to make sure that we attach this
+        // guest view either to the already existing |toolbox_web_contents_|
+        // wich is required for undocked dev tools or to the
+        // |main_web_contents_| when docked. Each guest view will be reattached
+        // after docking state was changed.
+        DevToolsWindow* devWindow =
+            DevToolsWindow::GetInstanceForInspectedWebContents(
+                inspected_contents);
+        if (create_params.GetString("name", &paramstr) &&
+            !paramstr.find("vivaldi-devtools")) {
+          DevToolsContentsResizingStrategy strategy;
+          devtools_contents = DevToolsWindow::GetInTabWebContents(
+              inspected_contents, &strategy);
         }
         DCHECK(devtools_contents);
         content::WebContentsImpl* contents =
@@ -512,8 +533,11 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
                 api->GetOrCreateDevtoolsConnectorItem(tab_id));
         DCHECK(connector_item_.get());
         connector_item_->set_guest_delegate(this);
+        connector_item_->set_devtools_delegate(devWindow);
 
-        content::BrowserPluginGuest::Create(contents, this)->Init();
+        content::BrowserPluginGuest::CreateInWebContents(contents, this);
+        contents->GetBrowserPluginGuest()->Init();
+
         new_contents = contents;
         inspecting_tab_id_ = tab_id;
         web_contents_is_owned_by_this_ = false;
@@ -548,23 +572,34 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
         context = profile->GetOriginalProfile();
       }
     }
+
     WebContents::CreateParams params =
         GetWebContentsCreateParams(context, guest_site);
     // TODO(erikchen): Fix ownership semantics for guest views.
     // https://crbug.com/832879.
     new_contents = WebContents::Create(params).release();
 
-    if(IsVivaldiRunning())
+    if (IsVivaldiRunning()) {
+      std::string view_name;
+      if (create_params.GetString("vivaldi_view_type", &view_name)) {
+        if (view_name == "extension_popup") {
+          // 1. Create an ExtensionFrameHelper for the viewtype.
+          // 2. take a WebContents as parameter.
+          extension_host_.reset(new ::vivaldi::VivaldiExtensionHost(
+            context, VIEW_TYPE_EXTENSION_POPUP, new_contents));
+        }
+      }
       task_manager::WebContentsTags::CreateForTabContents(new_contents);
+    }
   }
   DCHECK(new_contents);
   if (owner_web_contents()->IsAudioMuted()) {
     // NOTE(pettern@vivaldi.com): If the owner is muted it means the webcontents
     // of the AppWindow has been muted due to thumbnail capturing, so we also
     // mute the webview webcontents.
-    chrome::SetTabAudioMuted(new_contents, true,
-                      TabMutedReason::MEDIA_CAPTURE,
-                      chrome::GetExtensionIdForMutedTab(owner_web_contents()));
+    chrome::SetTabAudioMuted(
+        new_contents, true, TabMutedReason::MEDIA_CAPTURE,
+        LastMuteMetadata::FromWebContents(owner_web_contents())->extension_id);
   }
 
   // Grant access to the origin of the embedder to the guest process. This
@@ -580,18 +615,6 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
   std::move(callback).Run(new_contents);
 }
 
-bool ReloadIfThereIsAMimeHandlerViewGuest(WebViewGuest* owner,
-                                          WebContents* in_guest_contents) {
-  auto* guest_view =
-      extensions::MimeHandlerViewGuest::FromWebContents(in_guest_contents);
-  if (guest_view) {
-    owner->Reload();
-    // Only do this for one level.
-    return true;
-  }
-  return false;
-}
-
 void WebViewGuest::DidAttachToEmbedder() {
   ApplyAttributes(*attach_params());
   if (delayed_open_url_.get()) {
@@ -599,17 +622,12 @@ void WebViewGuest::DidAttachToEmbedder() {
     delayed_open_url_.reset(nullptr);
 
   } else {
-    // NOTE(andre@vivaldi.com): Here we do a new navigation to set up the
-    // hierarchy with regards to RenderWidgetHost. See
-    // RenderWidgetHostInputEventRouter::FindEventTarget , where hittesting is
-    // now done via the compositor and surfaces. (We basically have to rebuild
-    // the RenderView-hierarchy.
-    guest_view::GuestViewManager* manager =
-        guest_view::GuestViewManager::FromBrowserContext(browser_context());
-    if (manager) {
-      manager->ForEachGuest(web_contents(),
-                            base::Bind(&ReloadIfThereIsAMimeHandlerViewGuest,
-                                       this));
+    // NOTE(andre@vivaldi.com): Temporary fix for MimeHandlerViewGuest being
+    // destroyed when being detached. The WebContents object owned by the
+    // MimeHandlerViewGuest is destroyed so we need to reload it. This is on par
+    // with the old behaviour.
+    if (web_contents()->GetContentsMimeType() == kPDFMimeType) {
+      Reload();
     }
   }
 
@@ -627,8 +645,7 @@ void WebViewGuest::DidDropLink(const GURL& url) {
 }
 
 void WebViewGuest::DidInitialize(const base::DictionaryValue& create_params) {
-  script_executor_ =
-      std::make_unique<ScriptExecutor>(web_contents(), &script_observers_);
+  script_executor_ = std::make_unique<ScriptExecutor>(web_contents());
 
   ExtensionsAPIClient::Get()->AttachWebContentsHelpers(web_contents());
   web_view_permission_helper_ = std::make_unique<WebViewPermissionHelper>(this);
@@ -657,7 +674,22 @@ void WebViewGuest::DidInitialize(const base::DictionaryValue& create_params) {
   PushWebViewStateToIOThread();
 
   ApplyAttributes(create_params);
-  InitListeners();
+}
+
+void WebViewGuest::ClearCodeCache(base::Time remove_since,
+                                  uint32_t removal_mask,
+                                  const base::Closure& callback) {
+  content::StoragePartition* partition =
+      content::BrowserContext::GetStoragePartition(
+          web_contents()->GetBrowserContext(),
+          web_contents()->GetSiteInstance());
+  DCHECK(partition);
+  base::OnceClosure code_cache_removal_done_callback = base::BindOnce(
+      &WebViewGuest::ClearDataInternal, weak_ptr_factory_.GetWeakPtr(),
+      remove_since, removal_mask, callback);
+  partition->ClearCodeCaches(remove_since, base::Time::Now(),
+                             base::RepeatingCallback<bool(const GURL&)>(),
+                             std::move(code_cache_removal_done_callback));
 }
 
 void WebViewGuest::ClearDataInternal(base::Time remove_since,
@@ -692,6 +724,8 @@ void WebViewGuest::ClearDataInternal(base::Time remove_since,
         network::mojom::CookieDeletionSessionControl::PERSISTENT_COOKIES;
   }
 
+  bool perform_cleanup = remove_since.is_null();
+
   content::StoragePartition* partition =
       content::BrowserContext::GetStoragePartition(
           web_contents()->GetBrowserContext(),
@@ -700,15 +734,14 @@ void WebViewGuest::ClearDataInternal(base::Time remove_since,
       storage_partition_removal_mask,
       content::StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
       content::StoragePartition::OriginMatcherFunction(),
-      std::move(cookie_delete_filter), remove_since, base::Time::Now(),
-      callback);
+      std::move(cookie_delete_filter), perform_cleanup, remove_since,
+      base::Time::Max(), callback);
 }
 
 void WebViewGuest::GuestViewDidStopLoading() {
   auto args = std::make_unique<base::DictionaryValue>();
   DispatchEventToView(std::make_unique<GuestViewEvent>(webview::kEventLoadStop,
                                                        std::move(args)));
-  InitListeners();
 }
 
 void WebViewGuest::EmbedderFullscreenToggled(bool entered_fullscreen) {
@@ -742,11 +775,13 @@ int WebViewGuest::GetTaskPrefix() const {
 void WebViewGuest::GuestDestroyed() {
   if (IsVivaldiRunning()) {
     if (web_contents() == nullptr) {
-      // Skip the call to RemoveWebViewStateFromIOThread.
+      // Skip the call to RemoveGuest.
       return;
     }
   }
-  RemoveWebViewStateFromIOThread(web_contents());
+  WebViewRendererState::GetInstance()->RemoveGuest(
+      web_contents()->GetRenderViewHost()->GetProcess()->GetID(),
+      web_contents()->GetRenderViewHost()->GetRoutingID());
 }
 
 void WebViewGuest::GuestReady() {
@@ -870,18 +905,19 @@ ZoomController::ZoomMode WebViewGuest::GetZoomMode() {
 }
 
 bool WebViewGuest::HandleContextMenu(
+    content::RenderFrameHost* render_frame_host,
     const content::ContextMenuParams& params) {
   return web_view_guest_delegate_ &&
          web_view_guest_delegate_->HandleContextMenu(params);
 }
 
-void WebViewGuest::HandleKeyboardEvent(
+bool WebViewGuest::HandleKeyboardEvent(
     WebContents* source,
     const content::NativeWebKeyboardEvent& event) {
   if (HandleKeyboardShortcuts(event))
-    return;
+    return true;
 
-  GuestViewBase::HandleKeyboardEvent(source, event);
+  return GuestViewBase::HandleKeyboardEvent(source, event);
 }
 
 bool WebViewGuest::PreHandleGestureEvent(WebContents* source,
@@ -944,7 +980,7 @@ void WebViewGuest::NewGuestWebViewCallback(const content::OpenURLParams& params,
   // Take ownership of |new_guest|.
   pending_new_windows_.insert(
       std::make_pair(new_guest, NewWindowInfo(params.url, std::string())));
-  // NOTE(espen@vivaldi.com): We must send along the refrerrer as well.
+  // NOTE(espen@vivaldi.com): We must send along the referrer as well.
   pending_new_windows_.at(new_guest).referrer =
       new content::Referrer(params.referrer.url, params.referrer.policy);
   pending_new_windows_.at(new_guest).params =
@@ -992,9 +1028,10 @@ void WebViewGuest::RendererUnresponsive(
 
 void WebViewGuest::StartFind(
     const base::string16& search_text,
-    const blink::WebFindOptions& options,
+    blink::mojom::FindOptionsPtr options,
     scoped_refptr<WebViewInternalFindFunction> find_function) {
-  find_helper_.Find(web_contents(), search_text, options, find_function);
+  find_helper_.Find(web_contents(), search_text, std::move(options),
+                    find_function);
 }
 
 void WebViewGuest::StopFinding(content::StopFindAction action) {
@@ -1054,8 +1091,8 @@ bool WebViewGuest::ClearData(base::Time remove_since,
     return false;
 
   if (removal_mask & webview::WEB_VIEW_REMOVE_DATA_MASK_CACHE) {
-    // First clear http cache data and then clear the rest in
-    // |ClearDataInternal|.
+    // First clear http cache data and then clear the code cache in
+    // |ClearCodeCache| and the rest is cleared in |ClearDataInternal|.
     int render_process_id =
         web_contents()->GetMainFrame()->GetProcess()->GetID();
     // We need to clear renderer cache separately for our process because
@@ -1064,7 +1101,7 @@ bool WebViewGuest::ClearData(base::Time remove_since,
         render_process_id);
 
     base::OnceClosure cache_removal_done_callback = base::BindOnce(
-        &WebViewGuest::ClearDataInternal, weak_ptr_factory_.GetWeakPtr(),
+        &WebViewGuest::ClearCodeCache, weak_ptr_factory_.GetWeakPtr(),
         remove_since, removal_mask, callback);
 
     // We cannot use |BrowsingDataRemover| here since it doesn't support
@@ -1101,6 +1138,9 @@ WebViewGuest::WebViewGuest(WebContents* owner_web_contents)
       last_fullscreen_permission_was_allowed_by_embedder_(false),
       pending_zoom_factor_(0.0),
       did_set_explicit_zoom_(false),
+      is_spatial_navigation_enabled_(
+          base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kEnableSpatialNavigation)),
 #ifdef VIVALDI_BUILD
 // Vivaldi specific member initialization
 #include "extensions/api/guest_view/vivaldi_web_view_guest_construct.inc"
@@ -1111,6 +1151,39 @@ WebViewGuest::WebViewGuest(WebContents* owner_web_contents)
 }
 
 WebViewGuest::~WebViewGuest() {
+}
+
+void WebViewGuest::ReadyToCommitNavigation(
+    content::NavigationHandle* navigation_handle) {
+  // Return early if no declarative content scripts are present.
+  //
+  // Note - more granular checks (e.g. against URL patterns) are desirable for
+  // performance (to avoid creating unnecessary URLLoaderFactory), but not
+  // necessarily for security (because there are anyway no OOPIFs inside the
+  // GuestView process - https://crbug.com/614463).  At the same time, more
+  // granular checks are difficult to achieve, because the UserScript objects
+  // are not retained (i.e. only UserScriptIDs are available) by
+  // WebViewContentScriptManager.
+  WebViewContentScriptManager* script_manager =
+      WebViewContentScriptManager::Get(browser_context());
+  int embedder_process_id =
+      owner_web_contents()->GetMainFrame()->GetProcess()->GetID();
+  std::set<int> script_ids = script_manager->GetContentScriptIDSet(
+      embedder_process_id, view_instance_id());
+  if (script_ids.empty())
+    return;
+
+  // At ReadyToCommitNavigation time there is no need to trigger an explicit
+  // push of URLLoaderFactoryBundle to the renderer - it is sufficient if the
+  // factories are pushed slightly later - during the commit.
+  constexpr bool kPushToRendererNow = false;
+
+  // |request_initiator| in fetches initiated by content scripts should use the
+  // origin of the <webview> embedder.
+  navigation_handle->GetRenderFrameHost()
+      ->MarkInitiatorsAsRequiringSeparateURLLoaderFactory(
+          {owner_web_contents()->GetMainFrame()->GetLastCommittedOrigin()},
+          kPushToRendererNow);
 }
 
 void WebViewGuest::DidFinishNavigation(
@@ -1176,6 +1249,15 @@ void WebViewGuest::DocumentOnLoadCompletedInMainFrame() {
 
 void WebViewGuest::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
+  WebViewGuest* opener = GetOpener();
+  if (opener && navigation_handle->IsInMainFrame()) {
+    auto it = opener->pending_new_windows_.find(this);
+    if (it != opener->pending_new_windows_.end()) {
+      NewWindowInfo& info = it->second;
+      info.did_start_navigating_away_from_initial_url = true;
+    }
+  }
+
   // loadStart shouldn't be sent for same document navigations.
   if (navigation_handle->IsSameDocument())
     return;
@@ -1276,24 +1358,9 @@ void WebViewGuest::PushWebViewStateToIOThread() {
   web_view_info.content_script_ids = manager->GetContentScriptIDSet(
       web_view_info.embedder_process_id, web_view_info.instance_id);
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&WebViewRendererState::AddGuest,
-                 base::Unretained(WebViewRendererState::GetInstance()),
-                 web_contents()->GetRenderViewHost()->GetProcess()->GetID(),
-                 web_contents()->GetRenderViewHost()->GetRoutingID(),
-                 web_view_info));
-}
-
-// static
-void WebViewGuest::RemoveWebViewStateFromIOThread(
-    WebContents* web_contents) {
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&WebViewRendererState::RemoveGuest,
-                 base::Unretained(WebViewRendererState::GetInstance()),
-                 web_contents->GetRenderViewHost()->GetProcess()->GetID(),
-                 web_contents->GetRenderViewHost()->GetRoutingID()));
+  WebViewRendererState::GetInstance()->AddGuest(
+      web_contents()->GetRenderViewHost()->GetProcess()->GetID(),
+      web_contents()->GetRenderViewHost()->GetRoutingID(), web_view_info);
 }
 
 void WebViewGuest::RequestMediaAccessPermission(
@@ -1307,7 +1374,7 @@ void WebViewGuest::RequestMediaAccessPermission(
 bool WebViewGuest::CheckMediaAccessPermission(
     content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
-    content::MediaStreamType type) {
+    blink::MediaStreamType type) {
   return web_view_permission_helper_->CheckMediaAccessPermission(
       render_frame_host, security_origin, type);
 }
@@ -1473,9 +1540,10 @@ void WebViewGuest::ApplyAttributes(const base::DictionaryValue& params) {
     auto it = opener->pending_new_windows_.find(this);
     if (it != opener->pending_new_windows_.end()) {
       const NewWindowInfo& new_window_info = it->second;
-      if (new_window_info.changed || !web_contents()->HasOpener()) {
-        NavigateGuest(new_window_info.url.spec(),
-                      false /* force_navigation */,
+      if (!new_window_info.did_start_navigating_away_from_initial_url &&
+          (new_window_info.url_changed_via_open_url ||
+           !web_contents()->HasOpener())) {
+        NavigateGuest(new_window_info.url.spec(), false /* force_navigation */,
                       ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
                       new_window_info.referrer,
                       new_window_info.params);
@@ -1521,6 +1589,20 @@ void WebViewGuest::SetName(const std::string& name) {
   content::RenderFrameHost* main_frame = web_contents()->GetMainFrame();
   main_frame->Send(
       new ExtensionMsg_SetFrameName(main_frame->GetRoutingID(), name_));
+}
+
+void WebViewGuest::SetSpatialNavigationEnabled(bool enabled) {
+  if (is_spatial_navigation_enabled_ == enabled)
+    return;
+  is_spatial_navigation_enabled_ = enabled;
+
+  content::RenderFrameHost* main_frame = web_contents()->GetMainFrame();
+  main_frame->Send(new ExtensionMsg_SetSpatialNavigationEnabled(
+      main_frame->GetRoutingID(), enabled));
+}
+
+bool WebViewGuest::IsSpatialNavigationEnabled() const {
+  return is_spatial_navigation_enabled_;
 }
 
 void WebViewGuest::SetZoom(double zoom_factor) {
@@ -1665,10 +1747,11 @@ WebContents* WebViewGuest::OpenURLFromTab(
         return nullptr;
       const NewWindowInfo& info = it->second;
       NewWindowInfo new_window_info(params.url, info.name);
-      new_window_info.changed = new_window_info.url != info.url;
+      new_window_info.url_changed_via_open_url =
+          new_window_info.url != info.url;
       it->second = new_window_info;
 
-      if (IsVivaldiRunning() && !new_window_info.changed) {
+      if (IsVivaldiRunning() && !new_window_info.url_changed_via_open_url) {
         // NOTE(andre@vivaldi.com) : We need to navigate new windows opened via
         // OpenURLFromTab on attaching. See VB-12256 and friends.
         delayed_open_url_.reset(new std::string(params.url.spec()));
@@ -1778,8 +1861,10 @@ void WebViewGuest::LoadURLWithParams(
     return;
   }
 
+  bool is_vivaldi_host = IsVivaldiApp(owner_host());
+
   // Handle chrome://restart and chrome://quit urls.
-  if (IsVivaldiApp(owner_host()) && HandleNonNavigationAboutURL(url)) {
+  if (is_vivaldi_host && HandleNonNavigationAboutURL(url)) {
     return;
   }
 
@@ -1789,21 +1874,29 @@ void WebViewGuest::LoadURLWithParams(
        !url.SchemeIs(url::kAboutScheme)) ||
       url.SchemeIs(url::kJavaScriptScheme);
 
-  if (IsVivaldiRunning() &&
-      scheme_is_blocked &&
-      (url.SchemeIs(url::kJavaScriptScheme) || url.SchemeIsFile() ||
-       url.SchemeIs(content::kViewSourceScheme))) {
-    // We allow some extra schemes when running as Vivaldi, but block
-    // if the src is an internal page of ours or extension and the new scheme
-    // is javascript.
-    scheme_is_blocked = url.SchemeIs(url::kJavaScriptScheme) &&
-                        src_.SchemeIs(extensions::kExtensionScheme);
+  if (scheme_is_blocked && is_vivaldi_host) {
+    if (url.SchemeIs(url::kJavaScriptScheme) || url.SchemeIsFile() ||
+        url.SchemeIs(content::kViewSourceScheme)) {
+      // We allow some extra schemes when running as Vivaldi, but block
+      // if the src is an internal page of ours or extension and the new scheme
+      // is javascript.
+      scheme_is_blocked = url.SchemeIs(url::kJavaScriptScheme) &&
+                          src_.SchemeIs(extensions::kExtensionScheme);
+    }
+    // We need to allow the chrome-devtools: scheme in webview as it reloads
+    // it when changing themes in devtools.
+    if (url.SchemeIs(content::kChromeDevToolsScheme)) {
+      scheme_is_blocked = false;
+    } else if (PageTransitionCoreTypeIs(transition_type,
+                                        ui::PAGE_TRANSITION_TYPED)) {
+      // Possibly external handler entered in the address field,
+      // which is handled later in the load process.
+      // Blocks are also applied later as if it was a normal tab loading (which
+      // it is for Vivaldi).
+      scheme_is_blocked = false;
+    }
   }
-  // We need to allow the chrome-devtools: scheme in webview as it reloads
-  // it when changing themes in devtools.
-  if (scheme_is_blocked && url.SchemeIs(content::kChromeDevToolsScheme)) {
-    scheme_is_blocked = false;
-  }
+
   // Do not allow navigating a guest to schemes other than known safe schemes.
   // This will block the embedder trying to load unwanted schemes, e.g.
   // chrome://.

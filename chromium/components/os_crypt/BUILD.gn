@@ -4,8 +4,8 @@
 
 import("//build/config/chromecast_build.gni")
 import("//build/config/features.gni")
-import("//build/config/ui.gni")
 import("//build/config/linux/pkg_config.gni")
+import("//build/config/ui.gni")
 import("//components/os_crypt/features.gni")
 
 if (use_gnome_keyring) {
@@ -32,10 +32,10 @@ if (use_gnome_keyring) {
 
 component("os_crypt") {
   sources = [
-    "ie7_password_win.cc",
-    "ie7_password_win.h",
-    "key_creation_util_mac.cc",
-    "key_creation_util_mac.h",
+    "encryption_key_creation_util_ios.cc",
+    "encryption_key_creation_util_ios.h",
+    "encryption_key_creation_util_mac.cc",
+    "encryption_key_creation_util_mac.h",
     "keychain_password_mac.h",
     "keychain_password_mac.mm",
     "os_crypt.h",
@@ -71,6 +71,11 @@ component("os_crypt") {
       "os_crypt_mac.mm",
     ]
     set_sources_assignment_filter(sources_assignment_filter)
+  }
+
+  if (is_ios || is_mac) {
+    sources += [ "encryption_key_creation_util.h" ]
+    libs = [ "CoreFoundation.framework" ]
   }
 
   if (is_win) {
@@ -154,7 +159,6 @@ static_library("test_support") {
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "ie7_password_win_unittest.cc",
     "keychain_password_mac_unittest.mm",
     "os_crypt_unittest.cc",
   ]
@@ -163,10 +167,17 @@ source_set("unit_tests") {
     ":test_support",
     "//base",
     "//base/test:test_support",
+    "//components/prefs:test_support",
     "//crypto",
     "//testing/gmock",
     "//testing/gtest",
   ]
+
+  if (is_ios) {
+    set_sources_assignment_filter([])
+    sources += [ "keychain_password_mac_unittest.mm" ]
+    set_sources_assignment_filter(sources_assignment_filter)
+  }
 
   if (is_desktop_linux && !is_chromecast) {
     sources += [

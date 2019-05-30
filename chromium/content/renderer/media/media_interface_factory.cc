@@ -51,22 +51,53 @@ void MediaInterfaceFactory::CreateVideoDecoder(
   GetMediaInterfaceFactory()->CreateVideoDecoder(std::move(request));
 }
 
-void MediaInterfaceFactory::CreateRenderer(
-    media::mojom::HostedRendererType type,
-    const std::string& type_specific_id,
+void MediaInterfaceFactory::CreateDefaultRenderer(
+    const std::string& audio_device_id,
     media::mojom::RendererRequest request) {
   if (!task_runner_->BelongsToCurrentThread()) {
     task_runner_->PostTask(
         FROM_HERE,
-        base::BindOnce(&MediaInterfaceFactory::CreateRenderer, weak_this_, type,
-                       type_specific_id, std::move(request)));
+        base::BindOnce(&MediaInterfaceFactory::CreateDefaultRenderer,
+                       weak_this_, audio_device_id, std::move(request)));
     return;
   }
 
   DVLOG(1) << __func__;
-  GetMediaInterfaceFactory()->CreateRenderer(type, type_specific_id,
-                                             std::move(request));
+  GetMediaInterfaceFactory()->CreateDefaultRenderer(audio_device_id,
+                                                    std::move(request));
 }
+
+#if defined(OS_ANDROID)
+void MediaInterfaceFactory::CreateMediaPlayerRenderer(
+    media::mojom::RendererRequest request) {
+  if (!task_runner_->BelongsToCurrentThread()) {
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&MediaInterfaceFactory::CreateMediaPlayerRenderer,
+                       weak_this_, std::move(request)));
+    return;
+  }
+
+  DVLOG(1) << __func__;
+  GetMediaInterfaceFactory()->CreateMediaPlayerRenderer(std::move(request));
+}
+
+void MediaInterfaceFactory::CreateFlingingRenderer(
+    const std::string& presentation_id,
+    media::mojom::RendererRequest request) {
+  if (!task_runner_->BelongsToCurrentThread()) {
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&MediaInterfaceFactory::CreateFlingingRenderer,
+                       weak_this_, presentation_id, std::move(request)));
+    return;
+  }
+
+  DVLOG(1) << __func__;
+  GetMediaInterfaceFactory()->CreateFlingingRenderer(presentation_id,
+                                                     std::move(request));
+}
+#endif  // defined(OS_ANDROID)
 
 void MediaInterfaceFactory::CreateCdm(
     const std::string& key_system,
@@ -97,7 +128,7 @@ void MediaInterfaceFactory::CreateDecryptor(
 }
 
 void MediaInterfaceFactory::CreateCdmProxy(
-    const std::string& cdm_guid,
+    const base::Token& cdm_guid,
     media::mojom::CdmProxyRequest request) {
   NOTREACHED() << "CdmProxy should only be connected from a library CDM";
 }

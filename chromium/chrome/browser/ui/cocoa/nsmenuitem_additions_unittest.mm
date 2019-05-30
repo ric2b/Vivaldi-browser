@@ -290,6 +290,12 @@ TEST(NSMenuItemAdditionsTest, TestFiresForKeyEvent) {
   ExpectKeyFiresItem(key, MenuItem(@"}", 0x100000), false);
   ExpectKeyDoesntFireItem(key, MenuItem(@"+", 0x100000), false);
 
+  // ctr-shift-tab should trigger correctly.
+  key = KeyEvent(0x60103, @"\x19", @"\x19", 48);
+  ExpectKeyFiresItem(key, MenuItem(@"\x9", NSShiftKeyMask | NSControlKeyMask),
+                     false);
+  ExpectKeyDoesntFireItem(key, MenuItem(@"\x9", NSControlKeyMask), false);
+
   // Change away from Dvorak-QWERTY
   SetIsInputSourceDvorakQwertyForTesting(false);
 
@@ -330,6 +336,29 @@ TEST(NSMenuItemAdditionsTest, TestFiresForKeyEvent) {
   ExpectKeyDoesntFireItem(key, MenuItem(@"t", NSCommandKeyMask),
                           /*compareCocoa=*/false);
   ExpectKeyFiresItem(key, MenuItem(@"T", NSCommandKeyMask),
+                     /*compareCocoa=*/false);
+
+  // On Czech layout, cmd + '+' should instead trigger cmd + '1'.
+  key = KeyEvent(0x100108, @"1", @"+", 18);
+  ExpectKeyFiresItem(key, MenuItem(@"1", NSCommandKeyMask),
+                     /*compareCocoa=*/false);
+
+  // On Vietnamese layout, cmd + '' [vkeycode = 18] should instead trigger cmd +
+  // '1'. Ditto for other number keys.
+  key = KeyEvent(0x100108, @"1", @"", 18);
+  ExpectKeyFiresItem(key, MenuItem(@"1", NSCommandKeyMask),
+                     /*compareCocoa=*/false);
+  key = KeyEvent(0x100108, @"4", @"", 21);
+  ExpectKeyFiresItem(key, MenuItem(@"4", NSCommandKeyMask),
+                     /*compareCocoa=*/false);
+
+  // On French AZERTY layout, cmd + '&' [vkeycode = 18] should instead trigger
+  // cmd + '1'. Ditto for other number keys.
+  key = KeyEvent(0x100108, @"&", @"&", 18);
+  ExpectKeyFiresItem(key, MenuItem(@"1", NSCommandKeyMask),
+                     /*compareCocoa=*/false);
+  key = KeyEvent(0x100108, @"é", @"é", 19);
+  ExpectKeyFiresItem(key, MenuItem(@"2", NSCommandKeyMask),
                      /*compareCocoa=*/false);
 }
 
@@ -398,7 +427,16 @@ TEST(NSMenuItemAdditionsTest, TestMOnDifferentLayouts) {
     NSString* chars = keyCodeToCharacter(keyCode, modifiers, ref);
     NSString* charsIgnoringMods = keyCodeToCharacter(keyCode, 0, ref);
     NSEvent* key = KeyEvent(0x100000, chars, charsIgnoringMods, keyCode);
-    ExpectKeyFiresItem(key, item, false);
+    if ([layoutId isEqualToString:@"com.apple.keylayout.Dvorak-Left"] ||
+        [layoutId isEqualToString:@"com.apple.keylayout.Dvorak-Right"]) {
+      // On Dvorak, we expect this comparison to fail because the cmd + <keycode
+      // for numerical key> will always trigger tab switching. This causes
+      // Chrome to match the behavior of Safari, and has been expected by users
+      // of every other keyboard layout.
+      ExpectKeyDoesntFireItem(key, item, false);
+    } else {
+      ExpectKeyFiresItem(key, item, false);
+    }
 
     if ([layoutId isEqualToString:@"com.apple.keylayout.DVORAK-QWERTYCMD"]) {
       SetIsInputSourceDvorakQwertyForTesting(false);

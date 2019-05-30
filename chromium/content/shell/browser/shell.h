@@ -26,10 +26,6 @@
 #elif defined(USE_AURA)
 #if defined(OS_CHROMEOS)
 
-namespace display {
-class Screen;
-}
-
 namespace wm {
 class WMTestHelper;
 }
@@ -175,7 +171,7 @@ class Shell : public WebContentsDelegate,
       RenderFrameHost* frame,
       const BluetoothChooser::EventHandler& event_handler) override;
 #if defined(OS_MACOSX)
-  void HandleKeyboardEvent(WebContents* source,
+  bool HandleKeyboardEvent(WebContents* source,
                            const NativeWebKeyboardEvent& event) override;
 #endif
   bool DidAddMessageToConsole(WebContents* source,
@@ -183,16 +179,23 @@ class Shell : public WebContentsDelegate,
                               const base::string16& message,
                               int32_t line_no,
                               const base::string16& source_id) override;
+  void PortalWebContentsCreated(WebContents* portal_web_contents) override;
   void RendererUnresponsive(
       WebContents* source,
       RenderWidgetHost* render_widget_host,
       base::RepeatingClosure hang_monitor_restarter) override;
   void ActivateContents(WebContents* contents) override;
+  std::unique_ptr<content::WebContents> SwapWebContents(
+      content::WebContents* old_contents,
+      std::unique_ptr<content::WebContents> new_contents,
+      bool did_start_load,
+      bool did_finish_load) override;
   bool ShouldAllowRunningInsecureContent(content::WebContents* web_contents,
                                          bool allowed_per_prefs,
                                          const url::Origin& origin,
                                          const GURL& resource_url) override;
-  gfx::Size EnterPictureInPicture(const viz::SurfaceId&,
+  gfx::Size EnterPictureInPicture(content::WebContents* web_contents,
+                                  const viz::SurfaceId&,
                                   const gfx::Size& natural_size) override;
   bool ShouldResumeRequestsForCreatedWindow() override;
 
@@ -288,7 +291,6 @@ class Shell : public WebContentsDelegate,
 #elif defined(USE_AURA)
 #if defined(OS_CHROMEOS)
   static wm::WMTestHelper* wm_test_helper_;
-  static display::Screen* test_screen_;
 #else
   static wm::WMState* wm_state_;
 #endif

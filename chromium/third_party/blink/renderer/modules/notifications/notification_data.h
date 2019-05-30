@@ -5,7 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_NOTIFICATIONS_NOTIFICATION_DATA_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_NOTIFICATIONS_NOTIFICATION_DATA_H_
 
-#include "third_party/blink/public/platform/modules/notifications/notification.mojom-blink.h"
+#include "third_party/blink/public/mojom/notifications/notification.mojom-blink.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 
 namespace WTF {
@@ -25,7 +25,7 @@ class NotificationOptions;
 MODULES_EXPORT mojom::blink::NotificationDataPtr CreateNotificationData(
     ExecutionContext* context,
     const String& title,
-    const NotificationOptions& options,
+    const NotificationOptions* options,
     ExceptionState& exception_state);
 
 }  // namespace blink

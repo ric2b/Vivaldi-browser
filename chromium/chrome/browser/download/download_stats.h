@@ -5,8 +5,9 @@
 #ifndef CHROME_BROWSER_DOWNLOAD_DOWNLOAD_STATS_H_
 #define CHROME_BROWSER_DOWNLOAD_DOWNLOAD_STATS_H_
 
-#include "chrome/browser/download/download_path_reservation_tracker.h"
+#include "build/build_config.h"
 #include "components/download/public/common/download_danger_type.h"
+#include "components/download/public/common/download_path_reservation_tracker.h"
 
 // Used for counting UMA stats. Similar to content's
 // download_stats::DownloadCountTypes but from the chrome layer.
@@ -113,7 +114,7 @@ void RecordDownloadPathGeneration(DownloadPathGenerationEvent event,
                                   bool is_transient);
 
 // Record path validation result.
-void RecordDownloadPathValidation(PathValidationResult result,
+void RecordDownloadPathValidation(download::PathValidationResult result,
                                   bool is_transient);
 
 // Records drags of completed downloads from the shelf. Used in UMA, do not
@@ -133,5 +134,72 @@ enum class DownloadShelfDragEvent {
 };
 
 void RecordDownloadShelfDragEvent(DownloadShelfDragEvent drag_event);
+
+#if defined(OS_ANDROID)
+// Tracks media parser events. Each media parser hubs IPC channels for local
+// media analysis tasks. Used in UMA, do not remove, change or reuse existing
+// entries.
+enum class MediaParserEvent {
+  // Started to initialize the media parser.
+  kInitialize = 0,
+  // The mime type is not supported by the media parser.
+  kUnsupportedMimeType = 1,
+  // Failed to read the local media file.
+  kReadFileError = 2,
+  // Utility process connection error.
+  kUtilityConnectionError = 3,
+  // GPU process connection error.
+  kGpuConnectionError = 4,
+  // Failed to parse metadata.
+  kMetadataFailed = 5,
+  // Failed to retrieve video thumbnail.
+  kVideoThumbnailFailed = 6,
+  // Failed to parse media file, aggregation of all failure reasons.
+  kFailure = 7,
+  // Media file successfully parsed.
+  kSuccess = 8,
+  // Time out and failed.
+  kTimeout = 9,
+  kCount
+};
+
+// Tracks local media metadata requests. Used in UMA, do not remove, change or
+// reuse existing entries.
+enum class MediaMetadataEvent {
+  // Started to retrieve metadata.
+  kMetadataStart = 0,
+  // Failed to retrieve metadata.
+  kMetadataFailed = 1,
+  // Completed to retrieve metadata.
+  kMetadataComplete = 2,
+  kCount
+};
+
+// Tracks video thumbnail requests. Used in UMA, do not remove, change or
+// reuse existing entries.
+enum class VideoThumbnailEvent {
+  kVideoThumbnailStart = 0,
+  // Failed to extract video frame.
+  kVideoFrameExtractionFailed = 1,
+  // Failed to decode video frame.
+  kVideoDecodeFailed = 2,
+  // Completed to retrieve video thumbnail.
+  kVideoThumbnailComplete = 3,
+  kCount
+};
+
+// Records download media parser event.
+void RecordMediaParserEvent(MediaParserEvent event);
+
+// Records the duration to finish parsing media file.
+void RecordMediaParserCompletionTime(const base::TimeDelta& duration);
+
+// Records media metadata parsing events.
+void RecordMediaMetadataEvent(MediaMetadataEvent event);
+
+// Records video thumbnail retrieval events.
+void RecordVideoThumbnailEvent(VideoThumbnailEvent event);
+
+#endif
 
 #endif  // CHROME_BROWSER_DOWNLOAD_DOWNLOAD_STATS_H_

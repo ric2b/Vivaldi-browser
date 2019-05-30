@@ -4,6 +4,7 @@
 
 #include "components/zoom/zoom_controller.h"
 
+#include "base/bind.h"
 #include "components/zoom/zoom_event_manager.h"
 #include "components/zoom/zoom_observer.h"
 #include "content/public/browser/browser_thread.h"
@@ -31,7 +32,7 @@ using content::BrowserThread;
 namespace zoom {
 
 double ZoomController::GetZoomLevelForWebContents(
-    const content::WebContents* web_contents) {
+    content::WebContents* web_contents) {
   if (!web_contents)
     return 0.0;
 
@@ -423,5 +424,7 @@ bool ZoomController::PageScaleFactorIsOne() const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return content::HostZoomMap::PageScaleFactorIsOne(web_contents());
 }
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(ZoomController)
 
 }  // namespace zoom

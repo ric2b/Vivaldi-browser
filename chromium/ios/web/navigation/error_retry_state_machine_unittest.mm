@@ -41,9 +41,9 @@ TEST_F(ErrorRetryStateMachineTest, OfflineThenReload) {
   ASSERT_EQ(ErrorRetryState::kReadyToDisplayErrorForFailedNavigation,
             machine.state());
 
-  // Presents error in native view.
-  machine.SetDisplayingNativeError();
-  ASSERT_EQ(ErrorRetryState::kDisplayingNativeErrorForFailedNavigation,
+  // Presents error.
+  machine.SetDisplayingWebError();
+  ASSERT_EQ(ErrorRetryState::kDisplayingWebErrorForFailedNavigation,
             machine.state());
 
   // Reload the failed navigation.
@@ -143,6 +143,17 @@ TEST_F(ErrorRetryStateMachineTest, WebErrorPageThenReload) {
               clone.DidFailNavigation(test_url, test_url));
     ASSERT_EQ(ErrorRetryState::kReadyToDisplayErrorForFailedNavigation,
               clone.state());
+  }
+
+  // Simulate back/forward navigation to a restored session entry that never
+  // succeeded in loading.
+  {
+    const GURL restore_session_url =
+        wk_navigation_util::CreateRedirectUrl(test_url);
+    ErrorRetryStateMachine clone(machine);
+    ASSERT_EQ(ErrorRetryCommand::kDoNothing,
+              clone.DidFinishNavigation(restore_session_url));
+    ASSERT_EQ(ErrorRetryState::kNoNavigationError, clone.state());
   }
 }
 

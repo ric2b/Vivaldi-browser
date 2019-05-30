@@ -8,6 +8,7 @@
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 
 namespace base {
 namespace internal {
@@ -18,6 +19,7 @@ namespace internal {
 // call.
 class PriorityQueue::SequenceAndSortKey {
  public:
+  SequenceAndSortKey() = default;
   SequenceAndSortKey(scoped_refptr<Sequence> sequence,
                      const SequenceSortKey& sort_key)
       : sequence_(std::move(sequence)), sort_key_(sort_key) {
@@ -25,10 +27,10 @@ class PriorityQueue::SequenceAndSortKey {
   }
 
   // Note: while |sequence_| should always be non-null post-move (i.e. we
-  // shouldn't be moving an invalid SequenceAndSortKey around), there can't be a
-  // DCHECK(sequence_) on moves as the Windows STL moves elements on pop instead
-  // of overwriting them: resulting in the move of a SequenceAndSortKey with a
-  // null |sequence_| in Transaction::Pop()'s implementation.
+  // shouldn't be moving an invalid SequenceAndSortKey around), there can't be
+  // a DCHECK(sequence_) on moves as IntrusiveHeap moves elements on pop
+  // instead of overwriting them: resulting in the move of a SequenceAndSortKey
+  // with a null |sequence_| in Transaction::Pop()'s implementation.
   SequenceAndSortKey(SequenceAndSortKey&& other) = default;
   SequenceAndSortKey& operator=(SequenceAndSortKey&& other) = default;
 
@@ -36,18 +38,32 @@ class PriorityQueue::SequenceAndSortKey {
   // call.
   scoped_refptr<Sequence> take_sequence() {
     DCHECK(sequence_);
+    sequence_->ClearHeapHandle();
     return std::move(sequence_);
   }
 
   // Compares this SequenceAndSortKey to |other| based on their respective
-  // |sort_key_|.
-  bool operator<(const SequenceAndSortKey& other) const {
-    return sort_key_ < other.sort_key_;
+  // |sort_key_|. Required by IntrusiveHeap.
+  bool operator<=(const SequenceAndSortKey& other) const {
+    return sort_key_ <= other.sort_key_;
   }
-  // Style-guide dictates to define operator> when defining operator< but it's
-  // unused in this case and this isn't a public API. Explicitly delete it so
-  // any errors point here if that ever changes.
-  bool operator>(const SequenceAndSortKey& other) const = delete;
+
+  // Required by IntrusiveHeap.
+  void SetHeapHandle(const HeapHandle& handle) {
+    DCHECK(sequence_);
+    sequence_->SetHeapHandle(handle);
+  }
+
+  // Required by IntrusiveHeap.
+  void ClearHeapHandle() {
+    // Ensure |sequence_| is not nullptr, which may be the case if
+    // take_sequence() was called before this.
+    if (sequence_) {
+      sequence_->ClearHeapHandle();
+    }
+  }
+
+  const Sequence* sequence() const { return sequence_.get(); }
 
   const SequenceSortKey& sort_key() const { return sort_key_; }
 
@@ -58,51 +74,109 @@ class PriorityQueue::SequenceAndSortKey {
   DISALLOW_COPY_AND_ASSIGN(SequenceAndSortKey);
 };
 
-PriorityQueue::Transaction::Transaction(PriorityQueue* outer_queue)
-    : auto_lock_(outer_queue->container_lock_), outer_queue_(outer_queue) {}
+PriorityQueue::PriorityQueue() = default;
 
-PriorityQueue::Transaction::~Transaction() = default;
+PriorityQueue::~PriorityQueue() {
+  if (!is_flush_sequences_on_destroy_enabled_)
+    return;
 
-void PriorityQueue::Transaction::Push(
-    scoped_refptr<Sequence> sequence,
-    const SequenceSortKey& sequence_sort_key) {
-  outer_queue_->container_.emplace(std::move(sequence), sequence_sort_key);
+  while (!container_.empty()) {
+    scoped_refptr<Sequence> sequence = PopSequence();
+    Sequence::Transaction sequence_transaction(sequence->BeginTransaction());
+    while (!sequence_transaction.IsEmpty()) {
+      sequence_transaction.TakeTask();
+      sequence_transaction.Pop();
+    }
+  }
 }
 
-const SequenceSortKey& PriorityQueue::Transaction::PeekSortKey() const {
-  DCHECK(!IsEmpty());
-  return outer_queue_->container_.top().sort_key();
+void PriorityQueue::Push(scoped_refptr<Sequence> sequence,
+                         const SequenceSortKey& sequence_sort_key) {
+  container_.insert(SequenceAndSortKey(std::move(sequence), sequence_sort_key));
+  IncrementNumSequencesForPriority(sequence_sort_key.priority());
 }
 
-scoped_refptr<Sequence> PriorityQueue::Transaction::PopSequence() {
+const SequenceSortKey& PriorityQueue::PeekSortKey() const {
+  DCHECK(!IsEmpty());
+  return container_.Min().sort_key();
+}
+
+scoped_refptr<Sequence> PriorityQueue::PopSequence() {
   DCHECK(!IsEmpty());
 
-  // The const_cast on top() is okay since the SequenceAndSortKey is
+  // The const_cast on Min() is okay since the SequenceAndSortKey is
   // transactionally being popped from |container_| right after and taking its
-  // Sequence does not alter its sort order (a requirement for the Windows STL's
-  // consistency debug-checks for std::priority_queue::top()).
-  scoped_refptr<Sequence> sequence =
-      const_cast<PriorityQueue::SequenceAndSortKey&>(
-          outer_queue_->container_.top())
-          .take_sequence();
-  outer_queue_->container_.pop();
+  // Sequence does not alter its sort order.
+  auto& sequence_and_sort_key =
+      const_cast<PriorityQueue::SequenceAndSortKey&>(container_.Min());
+  DecrementNumSequencesForPriority(sequence_and_sort_key.sort_key().priority());
+  scoped_refptr<Sequence> sequence = sequence_and_sort_key.take_sequence();
+  container_.Pop();
   return sequence;
 }
 
-bool PriorityQueue::Transaction::IsEmpty() const {
-  return outer_queue_->container_.empty();
+bool PriorityQueue::RemoveSequence(scoped_refptr<Sequence> sequence) {
+  DCHECK(sequence);
+
+  if (IsEmpty())
+    return false;
+
+  const HeapHandle heap_handle = sequence->heap_handle();
+  if (!heap_handle.IsValid())
+    return false;
+
+  const SequenceAndSortKey& sequence_and_sort_key = container_.at(heap_handle);
+  DCHECK_EQ(sequence_and_sort_key.sequence(), sequence.get());
+
+  DecrementNumSequencesForPriority(sequence_and_sort_key.sort_key().priority());
+  container_.erase(heap_handle);
+  return true;
 }
 
-size_t PriorityQueue::Transaction::Size() const {
-  return outer_queue_->container_.size();
+void PriorityQueue::UpdateSortKey(
+    SequenceAndTransaction sequence_and_transaction) {
+  DCHECK(sequence_and_transaction.sequence);
+
+  if (IsEmpty())
+    return;
+
+  const HeapHandle heap_handle =
+      sequence_and_transaction.sequence->heap_handle();
+  if (!heap_handle.IsValid())
+    return;
+
+  auto old_sort_key = container_.at(heap_handle).sort_key();
+  auto new_sort_key = sequence_and_transaction.transaction.GetSortKey();
+
+  DecrementNumSequencesForPriority(old_sort_key.priority());
+  IncrementNumSequencesForPriority(new_sort_key.priority());
+
+  container_.ChangeKey(
+      heap_handle,
+      SequenceAndSortKey(std::move(sequence_and_transaction.sequence),
+                         new_sort_key));
 }
 
-PriorityQueue::PriorityQueue() = default;
+bool PriorityQueue::IsEmpty() const {
+  return container_.empty();
+}
 
-PriorityQueue::~PriorityQueue() = default;
+size_t PriorityQueue::Size() const {
+  return container_.size();
+}
 
-std::unique_ptr<PriorityQueue::Transaction> PriorityQueue::BeginTransaction() {
-  return WrapUnique(new Transaction(this));
+void PriorityQueue::EnableFlushSequencesOnDestroyForTesting() {
+  DCHECK(!is_flush_sequences_on_destroy_enabled_);
+  is_flush_sequences_on_destroy_enabled_ = true;
+}
+
+void PriorityQueue::DecrementNumSequencesForPriority(TaskPriority priority) {
+  DCHECK_GT(num_sequences_per_priority_[static_cast<int>(priority)], 0U);
+  --num_sequences_per_priority_[static_cast<int>(priority)];
+}
+
+void PriorityQueue::IncrementNumSequencesForPriority(TaskPriority priority) {
+  ++num_sequences_per_priority_[static_cast<int>(priority)];
 }
 
 }  // namespace internal

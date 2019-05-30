@@ -60,6 +60,7 @@ static const char* kBadFlags[] = {
 #if defined(OS_WIN)
     service_manager::switches::kAllowThirdPartyModules,
 #endif
+    switches::kDisableSiteIsolation,
     switches::kDisableWebSecurity,
 #if BUILDFLAG(ENABLE_NACL)
     switches::kNaClDangerousNoSandboxNonSfi,
@@ -75,7 +76,8 @@ static const char* kBadFlags[] = {
     invalidation::switches::kSyncAllowInsecureXmppConnection,
 
     // These flags change the URLs that handle PII.
-    switches::kGaiaUrl, translate::switches::kTranslateScriptURL,
+    switches::kGaiaUrl,
+    translate::switches::kTranslateScriptURL,
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     // This flag gives extensions more powers.
@@ -90,7 +92,8 @@ static const char* kBadFlags[] = {
 
     // These flags control Blink feature state, which is not supported and is
     // intended only for use by Chromium developers.
-    switches::kDisableBlinkFeatures, switches::kEnableBlinkFeatures,
+    switches::kDisableBlinkFeatures,
+    switches::kEnableBlinkFeatures,
 
     // This flag allows people to whitelist certain origins as secure, even
     // if they are not.
@@ -110,14 +113,19 @@ static const char* kBadFlags[] = {
     // normally with this flag, it is expected that some non-visible operations
     // such as writing user data to disk, cleaning caches, reporting metrics or
     // updating components won't be performed until shutdown.
-    switches::kDisableBackgroundTasks,
+    switches::kDisableBestEffortTasks,
+
+    // The UI for Web Bluetooth scanning is not yet implemented. Without the
+    // UI websites can scan for bluetooth without user intervention. Show a
+    // warning until the UI is complete.
+    switches::kEnableWebBluetoothScanning,
 };
 #endif  // OS_ANDROID
 
 // Dangerous feature flags in about:flags for which to display a warning that
 // "stability and security will suffer".
 static const base::Feature* kBadFeatureFlagsInAboutFlags[] = {
-    &features::kSignedHTTPExchange,
+    &features::kAllowSignedHTTPExchangeCertsWithoutExtension,
 #if defined(OS_ANDROID)
     &chrome::android::kCommandLineOnNonRooted,
 #endif  // OS_ANDROID

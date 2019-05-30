@@ -16,6 +16,7 @@ namespace chromeos {
 
 class DiscoverHandler;
 class DiscoverModule;
+class JSCallsContainer;
 
 class DiscoverManager {
  public:
@@ -25,17 +26,30 @@ class DiscoverManager {
   DiscoverManager();
   ~DiscoverManager();
 
+  // Returns object instance from platform_parts.
+  static DiscoverManager* Get();
+
   // Returns true if there are no modules to be displayed.
   bool IsCompleted() const;
 
   // Returns vector of WebUI message handlers for visible modules.
-  std::vector<std::unique_ptr<DiscoverHandler>> CreateWebUIHandlers() const;
+  std::vector<std::unique_ptr<DiscoverHandler>> CreateWebUIHandlers(
+      JSCallsContainer* js_calls_container) const;
+
+  template <typename T>
+  T* GetModule() {
+    return static_cast<T*>(GetModuleByName(T::kModuleName));
+  }
 
   const ModulesMap& get_modules() const { return modules_; }
 
  private:
   // Creates all needed modules.
   void CreateModules();
+
+  // Returns module by name.
+  DiscoverModule* GetModuleByName(const std::string& module_name) const;
+
   ModulesMap modules_;
 
   DISALLOW_COPY_AND_ASSIGN(DiscoverManager);

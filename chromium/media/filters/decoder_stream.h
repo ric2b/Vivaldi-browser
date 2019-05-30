@@ -22,6 +22,7 @@
 #include "media/base/moving_average.h"
 #include "media/base/pipeline_status.h"
 #include "media/base/timestamp_constants.h"
+#include "media/base/waiting.h"
 #include "media/filters/decoder_selector.h"
 #include "media/filters/decoder_stream_traits.h"
 
@@ -78,7 +79,7 @@ class MEDIA_EXPORT DecoderStream {
                   InitCB init_cb,
                   CdmContext* cdm_context,
                   StatisticsCB statistics_cb,
-                  base::RepeatingClosure waiting_for_decryption_key_cb);
+                  WaitingCB waiting_cb);
 
   // Reads a decoded Output and returns it via the |read_cb|. Note that
   // |read_cb| is always called asynchronously. This method should only be
@@ -131,7 +132,8 @@ class MEDIA_EXPORT DecoderStream {
   // Allows callers to register for notification of config changes; this is
   // called immediately after receiving the 'kConfigChanged' status from the
   // DemuxerStream, before any action is taken to handle the config change.
-  using ConfigChangeObserverCB = base::Callback<void(const DecoderConfig&)>;
+  using ConfigChangeObserverCB =
+      base::RepeatingCallback<void(const DecoderConfig&)>;
   void set_config_change_observer(
       ConfigChangeObserverCB config_change_observer) {
     config_change_observer_cb_ = config_change_observer;
@@ -187,7 +189,10 @@ class MEDIA_EXPORT DecoderStream {
   void FlushDecoder();
 
   // Callback for Decoder::Decode().
-  void OnDecodeDone(int buffer_size, bool end_of_stream, DecodeStatus status);
+  void OnDecodeDone(int buffer_size,
+                    bool end_of_stream,
+                    std::unique_ptr<ScopedDecodeTrace> trace_event,
+                    DecodeStatus status);
 
   // Output callback passed to Decoder::Initialize().
   void OnDecodeOutputReady(const scoped_refptr<Output>& output);
@@ -212,6 +217,7 @@ class MEDIA_EXPORT DecoderStream {
   void ClearOutputs();
   void MaybePrepareAnotherOutput();
   void OnPreparedOutputReady(const scoped_refptr<Output>& frame);
+  void CompletePrepare(const Output* output);
 
   std::unique_ptr<DecoderStreamTraits<StreamType>> traits_;
 
@@ -222,7 +228,7 @@ class MEDIA_EXPORT DecoderStream {
 
   StatisticsCB statistics_cb_;
   InitCB init_cb_;
-  base::RepeatingClosure waiting_for_decryption_key_cb_;
+  WaitingCB waiting_cb_;
 
   ReadCB read_cb_;
   base::OnceClosure reset_cb_;
@@ -304,8 +310,8 @@ bool DecoderStream<DemuxerStream::AUDIO>::CanReadWithoutStalling() const;
 template <>
 int DecoderStream<DemuxerStream::AUDIO>::GetMaxDecodeRequests() const;
 
-using VideoFrameStream = DecoderStream<DemuxerStream::VIDEO>;
-using AudioBufferStream = DecoderStream<DemuxerStream::AUDIO>;
+using VideoDecoderStream = DecoderStream<DemuxerStream::VIDEO>;
+using AudioDecoderStream = DecoderStream<DemuxerStream::AUDIO>;
 
 }  // namespace media
 

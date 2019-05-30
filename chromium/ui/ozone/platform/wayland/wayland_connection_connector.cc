@@ -4,6 +4,7 @@
 
 #include "ui/ozone/platform/wayland/wayland_connection_connector.h"
 
+#include "base/bind.h"
 #include "base/task_runner_util.h"
 #include "ui/ozone/platform/wayland/wayland_connection.h"
 #include "ui/ozone/public/interfaces/wayland/wayland_connection.mojom.h"
@@ -82,6 +83,13 @@ void WaylandConnectionConnector::OnWaylandConnectionPtrBinded(
   auto request = mojo::MakeRequest(&wcp_ptr);
   BindInterfaceInGpuProcess(std::move(request), binder_);
   wcp_ptr->SetWaylandConnection(std::move(wc_ptr));
+
+#if defined(WAYLAND_GBM)
+  if (!connection_->buffer_manager()) {
+    LOG(WARNING) << "zwp_linux_dmabuf is not available.";
+    wcp_ptr->ResetGbmDevice();
+  }
+#endif
 }
 
 void WaylandConnectionConnector::OnTerminateGpuProcess(std::string message) {

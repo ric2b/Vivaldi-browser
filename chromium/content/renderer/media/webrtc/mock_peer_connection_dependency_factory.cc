@@ -9,10 +9,9 @@
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/renderer/media/webrtc/mock_peer_connection_impl.h"
-#include "content/renderer/media/webrtc/webrtc_video_capturer_adapter.h"
 #include "third_party/blink/public/platform/web_media_stream_track.h"
-#include "third_party/webrtc/api/mediastreaminterface.h"
-#include "third_party/webrtc/rtc_base/scoped_ref_ptr.h"
+#include "third_party/webrtc/api/media_stream_interface.h"
+#include "third_party/webrtc/api/scoped_refptr.h"
 
 using webrtc::AudioSourceInterface;
 using webrtc::AudioTrackInterface;
@@ -31,14 +30,14 @@ namespace content {
 template <class V>
 static typename V::iterator FindTrack(V* vector,
                                       const std::string& track_id) {
-  typename V::iterator it = vector->begin();
+  auto it = vector->begin();
   for (; it != vector->end(); ++it) {
     if ((*it)->id() == track_id) {
       break;
     }
   }
   return it;
-};
+}
 
 MockWebRtcAudioSource::MockWebRtcAudioSource(bool is_remote)
     : is_remote_(is_remote) {}
@@ -68,8 +67,7 @@ bool MockMediaStream::AddTrack(VideoTrackInterface* track) {
 }
 
 bool MockMediaStream::RemoveTrack(AudioTrackInterface* track) {
-  AudioTrackVector::iterator it = FindTrack(&audio_track_vector_,
-                                            track->id());
+  auto it = FindTrack(&audio_track_vector_, track->id());
   if (it == audio_track_vector_.end())
     return false;
   audio_track_vector_.erase(it);
@@ -78,8 +76,7 @@ bool MockMediaStream::RemoveTrack(AudioTrackInterface* track) {
 }
 
 bool MockMediaStream::RemoveTrack(VideoTrackInterface* track) {
-  VideoTrackVector::iterator it = FindTrack(&video_track_vector_,
-                                            track->id());
+  auto it = FindTrack(&video_track_vector_, track->id());
   if (it == video_track_vector_.end())
     return false;
   video_track_vector_.erase(it);
@@ -101,13 +98,13 @@ VideoTrackVector MockMediaStream::GetVideoTracks() {
 
 rtc::scoped_refptr<AudioTrackInterface> MockMediaStream::FindAudioTrack(
     const std::string& track_id) {
-  AudioTrackVector::iterator it = FindTrack(&audio_track_vector_, track_id);
+  auto it = FindTrack(&audio_track_vector_, track_id);
   return it == audio_track_vector_.end() ? nullptr : *it;
 }
 
 rtc::scoped_refptr<VideoTrackInterface> MockMediaStream::FindVideoTrack(
     const std::string& track_id) {
-  VideoTrackVector::iterator it = FindTrack(&video_track_vector_, track_id);
+  auto it = FindTrack(&video_track_vector_, track_id);
   return it == video_track_vector_.end() ? nullptr : *it;
 }
 
@@ -117,14 +114,13 @@ void MockMediaStream::RegisterObserver(ObserverInterface* observer) {
 }
 
 void MockMediaStream::UnregisterObserver(ObserverInterface* observer) {
-  ObserverSet::iterator it = observers_.find(observer);
+  auto it = observers_.find(observer);
   DCHECK(it != observers_.end());
   observers_.erase(it);
 }
 
 void MockMediaStream::NotifyObservers() {
-  for (ObserverSet::iterator it = observers_.begin(); it != observers_.end();
-       ++it) {
+  for (auto it = observers_.begin(); it != observers_.end(); ++it) {
     (*it)->OnChanged();
   }
 }

@@ -35,7 +35,7 @@
 #include "media/midi/midi_service.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/webmidi/midi_access_initializer.h"
 #include "third_party/blink/renderer/modules/webmidi/midi_accessor.h"
@@ -65,9 +65,14 @@ class MIDIAccess final : public EventTargetWithInlineData,
       bool sysex_enabled,
       const Vector<MIDIAccessInitializer::PortDescriptor>& ports,
       ExecutionContext* execution_context) {
-    return new MIDIAccess(std::move(accessor), sysex_enabled, ports,
-                          execution_context);
+    return MakeGarbageCollected<MIDIAccess>(std::move(accessor), sysex_enabled,
+                                            ports, execution_context);
   }
+
+  MIDIAccess(std::unique_ptr<MIDIAccessor>,
+             bool sysex_enabled,
+             const Vector<MIDIAccessInitializer::PortDescriptor>&,
+             ExecutionContext*);
   ~MIDIAccess() override;
 
   MIDIInputMap* inputs() const;
@@ -80,7 +85,7 @@ class MIDIAccess final : public EventTargetWithInlineData,
 
   // EventTarget
   const AtomicString& InterfaceName() const override {
-    return EventTargetNames::MIDIAccess;
+    return event_target_names::kMIDIAccess;
   }
   ExecutionContext* GetExecutionContext() const override {
     return ContextLifecycleObserver::GetExecutionContext();
@@ -114,14 +119,14 @@ class MIDIAccess final : public EventTargetWithInlineData,
   }
   void DidReceiveMIDIData(unsigned port_index,
                           const unsigned char* data,
-                          size_t length,
+                          wtf_size_t length,
                           TimeTicks time_stamp) override;
 
   // |timeStampInMilliseconds| is in the same time coordinate system as
   // performance.now().
   void SendMIDIData(unsigned port_index,
                     const unsigned char* data,
-                    size_t length,
+                    wtf_size_t length,
                     TimeTicks time_stamp);
 
   // Eager finalization needed to promptly release m_accessor. Otherwise
@@ -130,10 +135,6 @@ class MIDIAccess final : public EventTargetWithInlineData,
   void Trace(blink::Visitor*) override;
 
  private:
-  MIDIAccess(std::unique_ptr<MIDIAccessor>,
-             bool sysex_enabled,
-             const Vector<MIDIAccessInitializer::PortDescriptor>&,
-             ExecutionContext*);
   void Dispose();
 
   std::unique_ptr<MIDIAccessor> accessor_;

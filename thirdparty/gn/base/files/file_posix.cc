@@ -86,14 +86,7 @@ void File::Info::FromStat(const stat_wrapper_t& stat_info) {
   is_symbolic_link = S_ISLNK(stat_info.st_mode);
   size = stat_info.st_size;
 
-#if defined(OS_LINUX)
-  time_t last_modified_sec = stat_info.st_mtim.tv_sec;
-  int64_t last_modified_nsec = stat_info.st_mtim.tv_nsec;
-  time_t last_accessed_sec = stat_info.st_atim.tv_sec;
-  int64_t last_accessed_nsec = stat_info.st_atim.tv_nsec;
-  time_t creation_time_sec = stat_info.st_ctim.tv_sec;
-  int64_t creation_time_nsec = stat_info.st_ctim.tv_nsec;
-#elif defined(OS_MACOSX)
+#if defined(OS_MACOSX)
   time_t last_modified_sec = stat_info.st_mtimespec.tv_sec;
   int64_t last_modified_nsec = stat_info.st_mtimespec.tv_nsec;
   time_t last_accessed_sec = stat_info.st_atimespec.tv_sec;
@@ -107,6 +100,13 @@ void File::Info::FromStat(const stat_wrapper_t& stat_info) {
   int64_t last_accessed_nsec = 0;
   time_t creation_time_sec = stat_info.st_ctime;
   int64_t creation_time_nsec = 0;
+#elif defined(OS_POSIX)
+  time_t last_modified_sec = stat_info.st_mtim.tv_sec;
+  int64_t last_modified_nsec = stat_info.st_mtim.tv_nsec;
+  time_t last_accessed_sec = stat_info.st_atim.tv_sec;
+  int64_t last_accessed_nsec = stat_info.st_atim.tv_nsec;
+  time_t creation_time_sec = stat_info.st_ctim.tv_sec;
+  int64_t creation_time_nsec = stat_info.st_ctim.tv_nsec;
 #else
 #error
 #endif

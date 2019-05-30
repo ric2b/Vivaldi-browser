@@ -16,17 +16,22 @@
 #include "base/test/scoped_feature_list.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/data_driven_test.h"
+#include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/common/autofill_features.h"
 #import "components/autofill/ios/browser/autofill_agent.h"
 #include "components/autofill/ios/browser/autofill_driver_ios.h"
-#import "ios/chrome/browser/autofill/autofill_controller.h"
+#include "ios/chrome/browser/autofill/address_normalizer_factory.h"
 #import "ios/chrome/browser/autofill/form_suggestion_controller.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_paths.h"
 #include "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #include "ios/chrome/browser/ssl/ios_security_state_tab_helper.h"
+#import "ios/chrome/browser/ui/autofill/chrome_autofill_client_ios.h"
 #include "ios/chrome/browser/web/chrome_web_client.h"
 #import "ios/chrome/browser/web/chrome_web_test.h"
+#include "ios/web/public/web_state/web_frame.h"
+#include "ios/web/public/web_state/web_frame_util.h"
+#import "ios/web/public/web_state/web_frames_manager.h"
 #import "ios/web/public/web_state/web_state.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -39,10 +44,9 @@ namespace {
 
 const base::FilePath::CharType kTestName[] = FILE_PATH_LITERAL("heuristics");
 
-const base::FilePath& GetTestDataDir() {
-  CR_DEFINE_STATIC_LOCAL(base::FilePath, dir, ());
-  if (dir.empty())
-    base::PathService::Get(ios::DIR_TEST_DATA, &dir);
+base::FilePath GetTestDataDir() {
+  base::FilePath dir;
+  base::PathService::Get(ios::DIR_TEST_DATA, &dir);
   return dir;
 }
 
@@ -109,8 +113,9 @@ class FormStructureBrowserTest
   std::string FormStructuresToString(
       const AutofillManager::FormStructureMap& forms);
 
-  FormSuggestionController* suggestionController_;
-  AutofillController* autofillController_;
+  std::unique_ptr<autofill::ChromeAutofillClientIOS> autofill_client_;
+  AutofillAgent* autofill_agent_;
+  FormSuggestionController* suggestion_controller_;
 
  private:
   base::test::ScopedFeatureList feature_list_;
@@ -133,40 +138,50 @@ FormStructureBrowserTest::FormStructureBrowserTest()
 void FormStructureBrowserTest::SetUp() {
   ChromeWebTest::SetUp();
 
+  // AddressNormalizerFactory must be initialized in a blocking allowed scoped.
+  // Initialize it now as it may DCHECK if it is initialized during the test.
+  AddressNormalizerFactory::GetInstance();
+
   IOSSecurityStateTabHelper::CreateForWebState(web_state());
-  InfoBarManagerImpl::CreateForWebState(web_state());
-  AutofillAgent* autofillAgent = [[AutofillAgent alloc]
+
+  autofill_agent_ = [[AutofillAgent alloc]
       initWithPrefService:chrome_browser_state_->GetPrefs()
                  webState:web_state()];
-  suggestionController_ =
+  suggestion_controller_ =
       [[FormSuggestionController alloc] initWithWebState:web_state()
-                                               providers:@[ autofillAgent ]];
-  autofillController_ = [[AutofillController alloc]
-           initWithBrowserState:chrome_browser_state_.get()
-                       webState:web_state()
-                  autofillAgent:autofillAgent
-      passwordGenerationManager:nullptr
-                downloadEnabled:NO];
+                                               providers:@[ autofill_agent_ ]];
+
+  InfoBarManagerImpl::CreateForWebState(web_state());
+  infobars::InfoBarManager* infobar_manager =
+      InfoBarManagerImpl::FromWebState(web_state());
+  autofill_client_.reset(new autofill::ChromeAutofillClientIOS(
+      chrome_browser_state_.get(), web_state(), infobar_manager,
+      autofill_agent_,
+      /*password_generation_manager=*/nullptr));
+
+  std::string locale("en");
+  autofill::AutofillDriverIOS::PrepareForWebStateWebFrameAndDelegate(
+      web_state(), autofill_client_.get(), /*autofill_agent=*/nil, locale,
+      autofill::AutofillManager::DISABLE_AUTOFILL_DOWNLOAD_MANAGER);
 }
 
 void FormStructureBrowserTest::TearDown() {
-  [autofillController_ detachFromWebState];
-
-  // TODO(crbug.com/776330): remove this manual sync.
-  // This is a workaround to manually sync the tasks posted by
-  // |CRWCertVerificationController verifyTrust:completionHandler:|.
-  // |WaitForBackgroundTasks| currently fails to wait for completion of them.
-  base::test::ios::SpinRunLoopWithMinDelay(base::TimeDelta::FromSecondsD(0.1));
   ChromeWebTest::TearDown();
 }
 
 void FormStructureBrowserTest::GenerateResults(const std::string& input,
                                                std::string* output) {
-  ASSERT_TRUE(LoadHtml(input));
+  ASSERT_TRUE(LoadHtmlWithoutSubresources(input));
   base::TaskScheduler::GetInstance()->FlushForTesting();
+  web::WebFrame* frame = web::GetMainWebFrame(web_state());
   AutofillManager* autofill_manager =
-      AutofillDriverIOS::FromWebState(web_state())->autofill_manager();
+      AutofillDriverIOS::FromWebStateAndWebFrame(web_state(), frame)
+          ->autofill_manager();
   ASSERT_NE(nullptr, autofill_manager);
+  EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
+      base::test::ios::kWaitForActionTimeout, ^bool() {
+        return autofill_manager->NumFormsDetected() != 0;
+      }));
   *output = FormStructuresToString(autofill_manager->form_structures());
 }
 
@@ -232,8 +247,8 @@ TEST_P(FormStructureBrowserTest, DataDrivenHeuristics) {
                        is_expected_to_pass);
 }
 
-INSTANTIATE_TEST_CASE_P(AllForms,
-                        FormStructureBrowserTest,
-                        testing::ValuesIn(GetTestFiles()));
+INSTANTIATE_TEST_SUITE_P(AllForms,
+                         FormStructureBrowserTest,
+                         testing::ValuesIn(GetTestFiles()));
 
 }  // namespace autofill

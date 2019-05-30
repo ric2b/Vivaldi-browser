@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/login/ui/login_display_mojo.h"
 
+#include "ash/public/interfaces/login_user_info.mojom.h"
+#include "base/bind.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
@@ -90,7 +92,8 @@ void LoginDisplayMojo::Init(const user_manager::UserList& filtered_users,
 }
 
 void LoginDisplayMojo::OnPreferencesChanged() {
-  NOTIMPLEMENTED();
+  if (webui_handler_)
+    webui_handler_->OnPreferencesChanged();
 }
 
 void LoginDisplayMojo::SetUIEnabled(bool is_enabled) {
@@ -190,7 +193,8 @@ void LoginDisplayMojo::Signout() {
 }
 
 void LoginDisplayMojo::OnSigninScreenReady() {
-  NOTIMPLEMENTED();
+  if (delegate_)
+    delegate_->OnSigninScreenReady();
 }
 
 void LoginDisplayMojo::ShowEnterpriseEnrollmentScreen() {

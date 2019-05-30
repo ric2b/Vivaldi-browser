@@ -31,29 +31,38 @@
 #include <memory>
 
 #include "base/memory/ptr_util.h"
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_cursor.h"
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database.h"
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database_error.h"
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_key.h"
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_value.h"
+#include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/modules/indexed_db_names.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_metadata.h"
+#include "third_party/blink/renderer/modules/indexeddb/idb_name_and_version.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_request.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_value.h"
+#include "third_party/blink/renderer/modules/indexeddb/web_idb_cursor.h"
+#include "third_party/blink/renderer/modules/indexeddb/web_idb_cursor_impl.h"
+#include "third_party/blink/renderer/modules/indexeddb/web_idb_database.h"
+#include "third_party/blink/renderer/modules/indexeddb/web_idb_database_impl.h"
 #include "third_party/blink/renderer/platform/shared_buffer.h"
-
-using blink::WebIDBCursor;
-using blink::WebIDBDatabase;
-using blink::WebIDBDatabaseError;
-using blink::WebIDBKey;
-using blink::WebIDBKeyPath;
-using blink::WebIDBMetadata;
-using blink::WebIDBValue;
-using blink::WebVector;
+#include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 
 namespace blink {
+
+namespace {
+
+std::unique_ptr<IDBValue> ConvertReturnValue(
+    const mojom::blink::IDBReturnValuePtr& input) {
+  if (!input) {
+    return IDBValue::Create(scoped_refptr<SharedBuffer>(),
+                            Vector<WebBlobInfo>());
+  }
+
+  std::unique_ptr<IDBValue> output = std::move(input->value);
+  output->SetInjectedPrimaryKey(std::move(input->primary_key), input->key_path);
+  return output;
+}
+
+}  // namespace
 
 // static
 std::unique_ptr<WebIDBCallbacksImpl> WebIDBCallbacksImpl::Create(
@@ -63,11 +72,22 @@ std::unique_ptr<WebIDBCallbacksImpl> WebIDBCallbacksImpl::Create(
 
 WebIDBCallbacksImpl::WebIDBCallbacksImpl(IDBRequest* request)
     : request_(request) {
+  task_runner_ =
+      request_->GetExecutionContext()->GetTaskRunner(TaskType::kDatabaseAccess);
   probe::AsyncTaskScheduled(request_->GetExecutionContext(),
-                            IndexedDBNames::IndexedDB, this);
+                            indexed_db_names::kIndexedDB, this);
 }
 
 WebIDBCallbacksImpl::~WebIDBCallbacksImpl() {
+  Detach();
+}
+
+void WebIDBCallbacksImpl::Detach() {
+  DetachCallbackFromRequest();
+  DetachRequestFromCallback();
+}
+
+void WebIDBCallbacksImpl::DetachCallbackFromRequest() {
   if (request_) {
     probe::AsyncTaskCanceled(request_->GetExecutionContext(), this);
 #if DCHECK_IS_ON()
@@ -77,47 +97,90 @@ WebIDBCallbacksImpl::~WebIDBCallbacksImpl() {
   }
 }
 
-void WebIDBCallbacksImpl::OnError(const WebIDBDatabaseError& error) {
+void WebIDBCallbacksImpl::DetachRequestFromCallback() {
+  request_.Clear();
+}
+
+void WebIDBCallbacksImpl::SetState(base::WeakPtr<WebIDBCursorImpl> cursor,
+                                   int64_t transaction_id) {
+  cursor_ = cursor;
+  transaction_id_ = transaction_id;
+}
+
+void WebIDBCallbacksImpl::Error(int32_t code, const String& message) {
   if (!request_)
     return;
 
   probe::AsyncTask async_task(request_->GetExecutionContext(), this, "error");
-  request_->HandleResponse(DOMException::Create(
-      static_cast<DOMExceptionCode>(error.Code()), error.Message()));
+  request_->HandleResponse(
+      DOMException::Create(static_cast<DOMExceptionCode>(code), message));
+  Detach();
 }
 
-void WebIDBCallbacksImpl::OnSuccess(
-    const WebVector<WebString>& web_string_list) {
+void WebIDBCallbacksImpl::SuccessNamesAndVersionsList(
+    Vector<mojom::blink::IDBNameAndVersionPtr> name_and_version_list) {
+  // Only implemented in idb_factory.cc for the promise-based databases() call.
+  NOTREACHED();
+}
+
+void WebIDBCallbacksImpl::SuccessStringList(const Vector<String>& string_list) {
   if (!request_)
     return;
 
-  Vector<String> string_list;
-  for (size_t i = 0; i < web_string_list.size(); ++i)
-    string_list.push_back(web_string_list[i]);
   probe::AsyncTask async_task(request_->GetExecutionContext(), this, "success");
 #if DCHECK_IS_ON()
   DCHECK(!request_->TransactionHasQueuedResults());
 #endif  // DCHECK_IS_ON()
-  request_->EnqueueResponse(string_list);
+  request_->EnqueueResponse(std::move(string_list));
+  Detach();
 }
 
-void WebIDBCallbacksImpl::OnSuccess(WebIDBCursor* cursor,
-                                    WebIDBKey key,
-                                    WebIDBKey primary_key,
-                                    WebIDBValue value) {
+void WebIDBCallbacksImpl::SuccessCursor(
+    mojom::blink::IDBCursorAssociatedPtrInfo cursor_info,
+    std::unique_ptr<IDBKey> key,
+    std::unique_ptr<IDBKey> primary_key,
+    base::Optional<std::unique_ptr<IDBValue>> optional_value) {
   if (!request_)
     return;
 
+  std::unique_ptr<WebIDBCursorImpl> cursor = std::make_unique<WebIDBCursorImpl>(
+      std::move(cursor_info), transaction_id_, task_runner_);
+  std::unique_ptr<IDBValue> value;
+  if (optional_value.has_value()) {
+    value = std::move(optional_value.value());
+  } else {
+    value =
+        IDBValue::Create(scoped_refptr<SharedBuffer>(), Vector<WebBlobInfo>());
+  }
+  DCHECK(value);
+
   probe::AsyncTask async_task(request_->GetExecutionContext(), this, "success");
-  std::unique_ptr<IDBValue> idb_value = value.ReleaseIdbValue();
-  idb_value->SetIsolate(request_->GetIsolate());
-  request_->HandleResponse(base::WrapUnique(cursor), key.ReleaseIdbKey(),
-                           primary_key.ReleaseIdbKey(), std::move(idb_value));
+  value->SetIsolate(request_->GetIsolate());
+  request_->HandleResponse(std::move(cursor), std::move(key),
+                           std::move(primary_key), std::move(value));
+  Detach();
 }
 
-void WebIDBCallbacksImpl::OnSuccess(WebIDBDatabase* backend,
-                                    const WebIDBMetadata& metadata) {
-  std::unique_ptr<WebIDBDatabase> db = base::WrapUnique(backend);
+void WebIDBCallbacksImpl::SuccessCursorPrefetch(
+    Vector<std::unique_ptr<IDBKey>> keys,
+    Vector<std::unique_ptr<IDBKey>> primary_keys,
+    Vector<std::unique_ptr<IDBValue>> values) {
+  if (cursor_) {
+    cursor_->SetPrefetchData(std::move(keys), std::move(primary_keys),
+                             std::move(values));
+    cursor_->CachedContinue(this);
+  }
+  Detach();
+}
+
+void WebIDBCallbacksImpl::SuccessDatabase(
+    mojom::blink::IDBDatabaseAssociatedPtrInfo database_info,
+    const IDBDatabaseMetadata& metadata) {
+  std::unique_ptr<WebIDBDatabase> db;
+  if (database_info.is_valid()) {
+    db = std::make_unique<WebIDBDatabaseImpl>(std::move(database_info),
+                                              task_runner_);
+  }
   if (request_) {
     probe::AsyncTask async_task(request_->GetExecutionContext(), this,
                                 "success");
@@ -125,74 +188,91 @@ void WebIDBCallbacksImpl::OnSuccess(WebIDBDatabase* backend,
     DCHECK(!request_->TransactionHasQueuedResults());
 #endif  // DCHECK_IS_ON()
     request_->EnqueueResponse(std::move(db), IDBDatabaseMetadata(metadata));
+    Detach();
   } else if (db) {
     db->Close();
   }
 }
 
-void WebIDBCallbacksImpl::OnSuccess(WebIDBKey key) {
+void WebIDBCallbacksImpl::SuccessKey(std::unique_ptr<IDBKey> key) {
   if (!request_)
     return;
 
   probe::AsyncTask async_task(request_->GetExecutionContext(), this, "success");
-  request_->HandleResponse(key.ReleaseIdbKey());
+  request_->HandleResponse(std::move(key));
+  Detach();
 }
 
-void WebIDBCallbacksImpl::OnSuccess(WebIDBValue value) {
+void WebIDBCallbacksImpl::SuccessValue(
+    mojom::blink::IDBReturnValuePtr return_value) {
   if (!request_)
     return;
 
+  std::unique_ptr<IDBValue> value = ConvertReturnValue(return_value);
   probe::AsyncTask async_task(request_->GetExecutionContext(), this, "success");
-  std::unique_ptr<IDBValue> idb_value = value.ReleaseIdbValue();
-  idb_value->SetIsolate(request_->GetIsolate());
-  request_->HandleResponse(std::move(idb_value));
+  value->SetIsolate(request_->GetIsolate());
+  request_->HandleResponse(std::move(value));
+  Detach();
 }
 
-void WebIDBCallbacksImpl::OnSuccess(WebVector<WebIDBValue> values) {
+void WebIDBCallbacksImpl::SuccessArray(
+    Vector<mojom::blink::IDBReturnValuePtr> values) {
   if (!request_)
     return;
 
   probe::AsyncTask async_task(request_->GetExecutionContext(), this, "success");
   Vector<std::unique_ptr<IDBValue>> idb_values;
   idb_values.ReserveInitialCapacity(values.size());
-  for (WebIDBValue& value : values) {
-    std::unique_ptr<IDBValue> idb_value = value.ReleaseIdbValue();
+  for (const mojom::blink::IDBReturnValuePtr& value : values) {
+    std::unique_ptr<IDBValue> idb_value = ConvertReturnValue(value);
     idb_value->SetIsolate(request_->GetIsolate());
     idb_values.emplace_back(std::move(idb_value));
   }
   request_->HandleResponse(std::move(idb_values));
+  Detach();
 }
 
-void WebIDBCallbacksImpl::OnSuccess(long long value) {
+void WebIDBCallbacksImpl::SuccessInteger(int64_t value) {
   if (!request_)
     return;
 
   probe::AsyncTask async_task(request_->GetExecutionContext(), this, "success");
   request_->HandleResponse(value);
+  Detach();
 }
 
-void WebIDBCallbacksImpl::OnSuccess() {
+void WebIDBCallbacksImpl::Success() {
   if (!request_)
     return;
 
   probe::AsyncTask async_task(request_->GetExecutionContext(), this, "success");
   request_->HandleResponse();
+  Detach();
 }
 
-void WebIDBCallbacksImpl::OnSuccess(WebIDBKey key,
-                                    WebIDBKey primary_key,
-                                    WebIDBValue value) {
+void WebIDBCallbacksImpl::SuccessCursorContinue(
+    std::unique_ptr<IDBKey> key,
+    std::unique_ptr<IDBKey> primary_key,
+    base::Optional<std::unique_ptr<IDBValue>> optional_value) {
   if (!request_)
     return;
 
   probe::AsyncTask async_task(request_->GetExecutionContext(), this, "success");
-  std::unique_ptr<IDBValue> idb_value = value.ReleaseIdbValue();
-  idb_value->SetIsolate(request_->GetIsolate());
-  request_->HandleResponse(key.ReleaseIdbKey(), primary_key.ReleaseIdbKey(),
-                           std::move(idb_value));
+  std::unique_ptr<IDBValue> value;
+  if (optional_value.has_value()) {
+    value = std::move(optional_value.value());
+  } else {
+    value =
+        IDBValue::Create(scoped_refptr<SharedBuffer>(), Vector<WebBlobInfo>());
+  }
+  DCHECK(value);
+  value->SetIsolate(request_->GetIsolate());
+  request_->HandleResponse(std::move(key), std::move(primary_key),
+                           std::move(value));
+  Detach();
 }
 
-void WebIDBCallbacksImpl::OnBlocked(long long old_version) {
+void WebIDBCallbacksImpl::Blocked(int64_t old_version) {
   if (!request_)
     return;
 
@@ -201,30 +281,37 @@ void WebIDBCallbacksImpl::OnBlocked(long long old_version) {
   DCHECK(!request_->TransactionHasQueuedResults());
 #endif  // DCHECK_IS_ON()
   request_->EnqueueBlocked(old_version);
+  // Not resetting |request_|.  In this instance we will have to forward at
+  // least one other call in the set UpgradeNeeded() / Success() /
+  // Error().
 }
 
-void WebIDBCallbacksImpl::OnUpgradeNeeded(long long old_version,
-                                          WebIDBDatabase* database,
-                                          const WebIDBMetadata& metadata,
-                                          unsigned short data_loss,
-                                          WebString data_loss_message) {
-  std::unique_ptr<WebIDBDatabase> db = base::WrapUnique(database);
+void WebIDBCallbacksImpl::UpgradeNeeded(
+    mojom::blink::IDBDatabaseAssociatedPtrInfo database_info,
+    int64_t old_version,
+    mojom::IDBDataLoss data_loss,
+    const String& data_loss_message,
+    const IDBDatabaseMetadata& metadata) {
+  std::unique_ptr<WebIDBDatabase> db;
+  if (database_info.is_valid()) {
+    db = std::make_unique<WebIDBDatabaseImpl>(std::move(database_info),
+                                              task_runner_);
+  }
   if (request_) {
     probe::AsyncTask async_task(request_->GetExecutionContext(), this,
                                 "upgradeNeeded");
 #if DCHECK_IS_ON()
     DCHECK(!request_->TransactionHasQueuedResults());
 #endif  // DCHECK_IS_ON()
-    request_->EnqueueUpgradeNeeded(
-        old_version, std::move(db), IDBDatabaseMetadata(metadata),
-        static_cast<WebIDBDataLoss>(data_loss), data_loss_message);
-  } else {
+    request_->EnqueueUpgradeNeeded(old_version, std::move(db),
+                                   IDBDatabaseMetadata(metadata), data_loss,
+                                   data_loss_message);
+    // Not resetting |request_|.  In this instance we will have to forward at
+    // least one other call in the set UpgradeNeeded() / Success() /
+    // Error().
+  } else if (db) {
     db->Close();
   }
-}
-
-void WebIDBCallbacksImpl::Detach() {
-  request_.Clear();
 }
 
 }  // namespace blink

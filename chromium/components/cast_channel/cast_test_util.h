@@ -7,7 +7,9 @@
 
 #include <string>
 #include <utility>
+#include <vector>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/cast_channel/cast_message_handler.h"
@@ -147,21 +149,39 @@ class MockCastMessageHandler : public CastMessageHandler {
   explicit MockCastMessageHandler(MockCastSocketService* socket_service);
   ~MockCastMessageHandler() override;
 
-  void RequestAppAvailability(CastSocket* socket,
-                              const std::string& app_id,
-                              GetAppAvailabilityCallback callback) override {
-    DoRequestAppAvailability(socket, app_id, callback);
-  }
-
-  MOCK_METHOD3(DoRequestAppAvailability,
-               void(CastSocket*,
-                    const std::string&,
-                    GetAppAvailabilityCallback&));
-
+  MOCK_METHOD3(EnsureConnection,
+               void(int, const std::string&, const std::string&));
+  MOCK_METHOD3(RequestAppAvailability,
+               void(CastSocket* socket,
+                    const std::string& app_id,
+                    GetAppAvailabilityCallback callback));
+  MOCK_METHOD1(RequestReceiverStatus, void(int channel_id));
   MOCK_METHOD3(SendBroadcastMessage,
                void(int,
                     const std::vector<std::string>&,
                     const BroadcastRequest&));
+  MOCK_METHOD4(LaunchSession,
+               void(int,
+                    const std::string&,
+                    base::TimeDelta,
+                    LaunchSessionCallback callback));
+  MOCK_METHOD4(StopSession,
+               void(int channel_id,
+                    const std::string& session_id,
+                    const base::Optional<std::string>& client_id,
+                    ResultCallback callback));
+  MOCK_METHOD2(SendAppMessage,
+               Result(int channel_id, const CastMessage& message));
+  MOCK_METHOD4(SendMediaRequest,
+               base::Optional<int>(int channel_id,
+                                   const base::Value& body,
+                                   const std::string& source_id,
+                                   const std::string& destination_id));
+  MOCK_METHOD4(SendSetVolumeRequest,
+               Result(int channel_id,
+                      const base::Value& body,
+                      const std::string& source_id,
+                      ResultCallback callback));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockCastMessageHandler);

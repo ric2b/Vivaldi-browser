@@ -6,10 +6,11 @@
 #define CHROMEOS_NETWORK_NETWORK_DEVICE_HANDLER_H_
 
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
+#include "base/component_export.h"
 #include "base/macros.h"
-#include "chromeos/chromeos_export.h"
 #include "chromeos/network/network_handler_callbacks.h"
 
 namespace base {
@@ -35,7 +36,7 @@ namespace chromeos {
 // |error_callback| will be called with information about the error, including a
 // symbolic name for the error and often some error message that is suitable for
 // logging. None of the error message text is meant for user consumption.
-class CHROMEOS_EXPORT NetworkDeviceHandler {
+class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkDeviceHandler {
  public:
   // Constants for |error_name| from |error_callback|.
   static const char kErrorDeviceMissing[];
@@ -210,10 +211,24 @@ class CHROMEOS_EXPORT NetworkDeviceHandler {
       const base::Closure& callback,
       const network_handler::ErrorCallback& error_callback) = 0;
 
+  // Adds |types| to the list of packet types that the device should monitor to
+  // wake the system from suspend.
+  virtual void AddWifiWakeOnPacketOfTypes(
+      const std::vector<std::string>& types,
+      const base::Closure& callback,
+      const network_handler::ErrorCallback& error_callback) = 0;
+
   // Removes |ip_endpoint| from the list of tcp connections that the wifi device
   // should monitor to wake the system from suspend.
   virtual void RemoveWifiWakeOnPacketConnection(
       const net::IPEndPoint& ip_endpoint,
+      const base::Closure& callback,
+      const network_handler::ErrorCallback& error_callback) = 0;
+
+  // Removes |types| from the list of packet types that the device should
+  // monitor to wake the system from suspend.
+  virtual void RemoveWifiWakeOnPacketOfTypes(
+      const std::vector<std::string>& types,
       const base::Closure& callback,
       const network_handler::ErrorCallback& error_callback) = 0;
 

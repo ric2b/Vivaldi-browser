@@ -107,8 +107,7 @@ public class WebappDisclosureSnackbarControllerTest {
     @Feature({"Webapps"})
     public void testUnboundWebApkShowDisclosure() {
         String packageName = "unbound";
-        doReturn(packageName).when(mActivity).getNativeClientPackageName();
-        doReturn(WebappActivity.ActivityType.WEBAPK).when(mActivity).getActivityType();
+        doReturn(packageName).when(mActivity).getWebApkPackageName();
 
         verifyShownThenDismissedOnNewCreateStorage(packageName);
     }
@@ -121,26 +120,9 @@ public class WebappDisclosureSnackbarControllerTest {
 
     @Test
     @Feature({"Webapps"})
-    public void testTrustedWebActivityShowDisclosure() {
-        String packageName = "twa";
-        doReturn(packageName).when(mActivity).getNativeClientPackageName();
-        doReturn(WebappActivity.ActivityType.TWA).when(mActivity).getActivityType();
-
-        verifyShownThenDismissedOnNewCreateStorage(packageName);
-    }
-
-    @Test
-    @Feature({"Webapps"})
-    public void testTrustedWebActivityNoDisclosureOnExistingStorage() {
-        verifyNotShownOnExistingStorageWithoutShouldShowDisclosure("twa");
-    }
-
-    @Test
-    @Feature({"Webapps"})
     public void testBoundWebApkNoDisclosure() {
         String packageName = WebApkConstants.WEBAPK_PACKAGE_PREFIX + ".bound";
-        doReturn(packageName).when(mActivity).getNativeClientPackageName();
-        doReturn(WebappActivity.ActivityType.WEBAPK).when(mActivity).getActivityType();
+        doReturn(packageName).when(mActivity).getWebApkPackageName();
 
         verifyNeverShown(packageName);
     }
@@ -149,8 +131,7 @@ public class WebappDisclosureSnackbarControllerTest {
     @Feature({"Webapps"})
     public void testWebappNoDisclosure() {
         String packageName = "webapp";
-        doReturn(packageName).when(mActivity).getNativeClientPackageName();
-        doReturn(WebappActivity.ActivityType.WEBAPP).when(mActivity).getActivityType();
+        // Don't set a client package name, it should be null for Webapps.
 
         verifyNeverShown(packageName);
     }

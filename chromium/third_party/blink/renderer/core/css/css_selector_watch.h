@@ -50,6 +50,7 @@ class CORE_EXPORT CSSSelectorWatch final
  public:
   static const char kSupplementName[];
 
+  explicit CSSSelectorWatch(Document&);
   virtual ~CSSSelectorWatch() = default;
 
   static CSSSelectorWatch& From(Document&);
@@ -66,7 +67,6 @@ class CORE_EXPORT CSSSelectorWatch final
   void Trace(blink::Visitor*) override;
 
  private:
-  explicit CSSSelectorWatch(Document&);
   void CallbackSelectorChangeTimerFired(TimerBase*);
 
   HeapVector<Member<StyleRule>> watched_callback_selectors_;
@@ -74,7 +74,7 @@ class CORE_EXPORT CSSSelectorWatch final
   // Maps a CSS selector string with a -webkit-callback property to the number
   // of matching ComputedStyle objects in this document.
   HashCountedSet<String> matching_callback_selectors_;
-  // Selectors are relative to m_matchingCallbackSelectors's contents at
+  // Selectors are relative to |matching_callback_selectors_|'s contents at
   // the previous call to selectorMatchChanged.
   HashSet<String> added_selectors_;
   HashSet<String> removed_selectors_;

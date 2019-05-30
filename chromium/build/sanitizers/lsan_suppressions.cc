@@ -81,9 +81,6 @@ char kLSanDefaultSuppressions[] =
     // http://crbug.com/355641
     "leak:TrayAccessibilityTest\n"
 
-    // http://crbug.com/354644
-    "leak:CertificateViewerUITest::ShowModalCertificateViewer\n"
-
     // http://crbug.com/356306
     "leak:service_manager::SetProcessTitleFromCommandLine\n"
 
@@ -93,9 +90,6 @@ char kLSanDefaultSuppressions[] =
     // v8 leaks caused by weak ref not call
     "leak:blink::DOMWrapperWorld::Create\n"
     "leak:blink::ScriptState::Create\n"
-
-    // https://crbug.com/795148
-    "leak:third_party/fontconfig/\n"
 
     // PLEASE READ ABOVE BEFORE ADDING NEW SUPPRESSIONS.
 

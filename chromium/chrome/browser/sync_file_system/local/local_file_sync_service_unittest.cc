@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/task/post_task.h"
@@ -30,6 +29,7 @@
 #include "chrome/browser/sync_file_system/sync_status_code.h"
 #include "chrome/browser/sync_file_system/syncable_file_system_util.h"
 #include "chrome/test/base/testing_profile.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
@@ -117,7 +117,7 @@ class LocalFileSyncServiceTest
 
     file_system_.reset(new CannedSyncableFileSystem(
         GURL(kOrigin), in_memory_env_.get(),
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+        base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}),
         base::CreateSingleThreadTaskRunnerWithTraits({base::MayBlock()})));
 
     local_service_ = LocalFileSyncService::CreateForTesting(
@@ -214,7 +214,7 @@ TEST_F(LocalFileSyncServiceTest, RemoteSyncStepsSimple) {
   const FileSystemURL kFile(file_system_->URL("file"));
   const FileSystemURL kDir(file_system_->URL("dir"));
   const char kTestFileData[] = "0123456789";
-  const int kTestFileDataSize = static_cast<int>(arraysize(kTestFileData) - 1);
+  const int kTestFileDataSize = static_cast<int>(base::size(kTestFileData) - 1);
 
   base::FilePath local_path;
   ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_dir_.GetPath(), &local_path));
@@ -274,7 +274,7 @@ TEST_F(LocalFileSyncServiceTest, LocalChangeObserver) {
   const FileSystemURL kFile(file_system_->URL("file"));
   const FileSystemURL kDir(file_system_->URL("dir"));
   const char kTestFileData[] = "0123456789";
-  const int kTestFileDataSize = static_cast<int>(arraysize(kTestFileData) - 1);
+  const int kTestFileDataSize = static_cast<int>(base::size(kTestFileData) - 1);
 
   EXPECT_EQ(base::File::FILE_OK, file_system_->CreateFile(kFile));
 
@@ -300,7 +300,7 @@ TEST_F(LocalFileSyncServiceTest, MAYBE_LocalChangeObserverMultipleContexts) {
   const char kOrigin2[] = "http://foo";
   CannedSyncableFileSystem file_system2(
       GURL(kOrigin2), in_memory_env_.get(),
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+      base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}),
       base::CreateSingleThreadTaskRunnerWithTraits({base::MayBlock()}));
   file_system2.SetUp(CannedSyncableFileSystem::QUOTA_ENABLED);
 
@@ -333,7 +333,7 @@ TEST_F(LocalFileSyncServiceTest, MAYBE_LocalChangeObserverMultipleContexts) {
 TEST_F(LocalFileSyncServiceTest, ProcessLocalChange_CreateFile) {
   const FileSystemURL kFile(file_system_->URL("foo"));
   const char kTestFileData[] = "0123456789";
-  const int kTestFileDataSize = static_cast<int>(arraysize(kTestFileData) - 1);
+  const int kTestFileDataSize = static_cast<int>(base::size(kTestFileData) - 1);
 
   base::RunLoop run_loop;
 
@@ -629,7 +629,7 @@ TEST_F(OriginChangeMapTest, Basic) {
 
   const GURL kOrigins[] = { kOrigin1, kOrigin2, kOrigin3 };
   std::set<GURL> all_origins;
-  all_origins.insert(kOrigins, kOrigins + arraysize(kOrigins));
+  all_origins.insert(kOrigins, kOrigins + base::size(kOrigins));
 
   GURL origin;
   while (!all_origins.empty()) {
@@ -666,7 +666,7 @@ TEST_F(OriginChangeMapTest, Basic) {
   SetOriginChangeCount(kOrigin2, 8);
   ASSERT_EQ(1 + 4 + 8, GetTotalChangeCount());
 
-  all_origins.insert(kOrigins, kOrigins + arraysize(kOrigins));
+  all_origins.insert(kOrigins, kOrigins + base::size(kOrigins));
   while (!all_origins.empty()) {
     ASSERT_TRUE(NextOriginToProcess(&origin));
     ASSERT_TRUE(base::ContainsKey(all_origins, origin));
@@ -689,7 +689,7 @@ TEST_F(OriginChangeMapTest, WithDisabled) {
   ASSERT_EQ(1 + 2 + 4, GetTotalChangeCount());
 
   std::set<GURL> all_origins;
-  all_origins.insert(kOrigins, kOrigins + arraysize(kOrigins));
+  all_origins.insert(kOrigins, kOrigins + base::size(kOrigins));
 
   GURL origin;
   while (!all_origins.empty()) {

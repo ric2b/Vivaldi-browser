@@ -65,22 +65,27 @@ do_test 110 {
 do_test 200 {
   # Thoroughly corrupt the database file by overwriting the first
   # page with randomness.
+  sqlite3_db_config db DEFENSIVE 0
   catchsql {
     UPDATE sqlite_dbpage SET data=randomblob(4096) WHERE pgno=1;
     PRAGMA quick_check;
   }
-} {1 {unsupported file format}}
+} {1 {file is not a database}}
 do_test 201 {
   catchsql {
     PRAGMA quick_check;
   } db2
-} {1 {unsupported file format}}
+} {1 {file is not a database}}
 
 do_test 210 {
   # Reset the database file using SQLITE_DBCONFIG_RESET_DATABASE
   sqlite3_db_config db RESET_DB 1
   db eval VACUUM
   sqlite3_db_config db RESET_DB 0
+
+  # If using sqlite3_prepare() instead of _v2() or _v3(), the block
+  # below raises an SQLITE_SCHEMA error. The following fixes this.
+  if {[permutation]=="prepare"} { catchsql "SELECT * FROM sqlite_master" db2 }
 
   # Verify that the reset took, even on the separate database connection
   catchsql {
@@ -125,6 +130,7 @@ do_test 310 {
 } {210 26000 ok wal 8192 12}
 
 # Corrupt the database again
+sqlite3_db_config db DEFENSIVE 0
 do_catchsql_test 320 {
   UPDATE sqlite_dbpage SET data=randomblob(8192) WHERE pgno=1;
   PRAGMA quick_check
@@ -154,5 +160,99 @@ do_test 400 {
 } {0 {1 8192 wal ok}}
 db2 close
 
+# Reset the database yet again. This time immediately after it is closed
+# and reopened. So that the VACUUM is the first statement run.
+#
+db close
+sqlite3 db test.db
+do_test 500 {
+  sqlite3_finalize [
+    sqlite3_prepare db "SELECT 1 FROM sqlite_master LIMIT 1" -1 tail
+  ]
+  sqlite3_db_config db RESET_DB 1
+  db eval VACUUM
+  sqlite3_db_config db RESET_DB 0
+  sqlite3 db2 test.db
+  catchsql {
+     PRAGMA page_count;
+     PRAGMA page_size;
+     PRAGMA journal_mode;
+     PRAGMA quick_check;
+  } db2
+} {0 {1 8192 wal ok}}
+db2 close
+
+#-------------------------------------------------------------------------
+reset_db
+sqlite3 db2 test.db
+do_execsql_test 600 {
+  PRAGMA journal_mode = wal;
+  CREATE TABLE t1(a);
+  INSERT INTO t1 VALUES(1), (2), (3), (4);
+} {wal}
+
+do_execsql_test -db db2 610 {
+  SELECT * FROM t1
+} {1 2 3 4}
+
+do_test 620 {
+  set res [list]
+  db2 eval {SELECT a FROM t1} {
+    lappend res $a
+    if {$a==3} {
+      sqlite3_db_config db RESET_DB 1
+      db eval VACUUM
+      sqlite3_db_config db RESET_DB 0
+    }
+  }
+
+  set res
+} {1 2 3 4}
+
+do_execsql_test -db db2 630 {
+  SELECT * FROM sqlite_master
+} {}
+
+#-------------------------------------------------------------------------
+db2 close
+reset_db
+
+do_execsql_test 700 {
+  PRAGMA page_size=512;
+  PRAGMA auto_vacuum = 0;
+  CREATE TABLE t1(a,b,c);
+  CREATE INDEX t1a ON t1(a);
+  CREATE INDEX t1bc ON t1(b,c);
+  WITH RECURSIVE c(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM c WHERE x<10)
+    INSERT INTO t1(a,b,c) SELECT x, randomblob(100),randomblob(100) FROM c;
+  PRAGMA page_count;
+  PRAGMA integrity_check;
+} {19 ok}
+
+if {[nonzero_reserved_bytes]} {
+  finish_test
+  return
+}
+
+sqlite3_db_config db DEFENSIVE 0
+do_execsql_test 710 {
+  UPDATE sqlite_dbpage SET data=
+    X'53514C69746520666F726D61742033000200030100402020000000000000001300000000000000000000000300000004000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000D00000003017C0001D801AC017C00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002E03061715110145696E6465787431626374310443524541544520494E4445582074316263204F4E20743128622C63292A0206171311013F696E64657874316174310343524541544520494E44455820743161204F4E20743128612926010617111101397461626C657431743102435245415445205441424C4520743128612C622C6329' WHERE pgno=1;
+}
+
+do_execsql_test 720 {
+  PRAGMA integrity_check;
+} {ok}
+
+do_test 730 {
+  sqlite3_db_config db RESET_DB 1
+  db eval VACUUM
+  sqlite3_db_config db RESET_DB 0
+} {0}
+
+do_execsql_test 740 {
+  PRAGMA page_count;
+  PRAGMA integrity_check;
+} {1 ok}
 
 finish_test

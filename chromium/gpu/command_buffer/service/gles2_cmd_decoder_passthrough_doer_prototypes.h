@@ -305,6 +305,32 @@ error::Error DoGetProgramiv(GLuint program,
                             GLsizei* length,
                             GLint* params);
 error::Error DoGetProgramInfoLog(GLuint program, std::string* infolog);
+error::Error DoGetProgramInterfaceiv(GLuint program,
+                                     GLenum program_interface,
+                                     GLenum pname,
+                                     GLsizei bufsize,
+                                     GLsizei* length,
+                                     GLint* params);
+error::Error DoGetProgramResourceiv(GLuint program,
+                                    GLenum program_interface,
+                                    GLuint index,
+                                    GLsizei prop_count,
+                                    const GLenum* props,
+                                    GLsizei bufsize,
+                                    GLsizei* length,
+                                    GLint* params);
+error::Error DoGetProgramResourceIndex(GLuint program,
+                                       GLenum program_interface,
+                                       const char* name,
+                                       GLuint* index);
+error::Error DoGetProgramResourceLocation(GLuint program,
+                                          GLenum program_interface,
+                                          const char* name,
+                                          GLint* location);
+error::Error DoGetProgramResourceName(GLuint program,
+                                      GLenum program_interface,
+                                      GLuint index,
+                                      std::string* name);
 error::Error DoGetRenderbufferParameteriv(GLenum target,
                                           GLenum pname,
                                           GLsizei bufsize,
@@ -430,6 +456,8 @@ error::Error DoLineWidth(GLfloat width);
 error::Error DoLinkProgram(GLuint program);
 error::Error DoMemoryBarrierEXT(GLbitfield barriers);
 error::Error DoMemoryBarrierByRegion(GLbitfield barriers);
+error::Error DoMultiDrawBeginCHROMIUM(GLsizei drawcount);
+error::Error DoMultiDrawEndCHROMIUM();
 error::Error DoPauseTransformFeedback();
 error::Error DoPixelStorei(GLenum pname, GLint param);
 error::Error DoPolygonOffset(GLfloat factor, GLfloat units);
@@ -708,6 +736,12 @@ error::Error DoRenderbufferStorageMultisampleCHROMIUM(GLenum target,
                                                       GLenum internalformat,
                                                       GLsizei width,
                                                       GLsizei height);
+error::Error DoRenderbufferStorageMultisampleAdvancedAMD(GLenum target,
+                                                         GLsizei samples,
+                                                         GLsizei storageSamples,
+                                                         GLenum internalformat,
+                                                         GLsizei width,
+                                                         GLsizei height);
 error::Error DoRenderbufferStorageMultisampleEXT(GLenum target,
                                                  GLsizei samples,
                                                  GLenum internalformat,
@@ -813,7 +847,6 @@ error::Error DoCopySubTextureCHROMIUM(GLuint source_id,
                                       GLboolean unpack_flip_y,
                                       GLboolean unpack_premultiply_alpha,
                                       GLboolean unpack_unmultiply_alpha);
-error::Error DoCompressedCopyTextureCHROMIUM(GLuint source_id, GLuint dest_id);
 error::Error DoDrawArraysInstancedANGLE(GLenum mode,
                                         GLint first,
                                         GLsizei count,
@@ -875,20 +908,29 @@ error::Error DoScheduleCALayerCHROMIUM(GLuint contents_texture_id,
 error::Error DoScheduleCALayerInUseQueryCHROMIUM(
     GLuint n,
     const volatile GLuint* textures);
-error::Error DoScheduleDCLayerSharedStateCHROMIUM(GLfloat opacity,
-                                                  GLboolean is_clipped,
-                                                  const GLfloat* clip_rect,
-                                                  GLint z_order,
-                                                  const GLfloat* transform);
-error::Error DoScheduleDCLayerCHROMIUM(
-    GLsizei num_textures,
-    const volatile GLuint* contents_texture_ids,
-    const GLfloat* contents_rect,
-    GLuint background_color,
-    GLuint edge_aa_mask,
-    GLenum filter,
-    const GLfloat* bounds_rect,
-    bool is_protected_video);
+error::Error DoScheduleDCLayerCHROMIUM(GLuint y_texture_id,
+                                       GLuint uv_texture_id,
+                                       GLint z_order,
+                                       GLint content_x,
+                                       GLint content_y,
+                                       GLint content_width,
+                                       GLint content_height,
+                                       GLint quad_x,
+                                       GLint quad_y,
+                                       GLint quad_width,
+                                       GLint quad_height,
+                                       GLfloat transform_c1r1,
+                                       GLfloat transform_c2r1,
+                                       GLfloat transform_c1r2,
+                                       GLfloat transform_c2r2,
+                                       GLfloat transform_tx,
+                                       GLfloat transform_ty,
+                                       GLboolean is_clipped,
+                                       GLint clip_x,
+                                       GLint clip_y,
+                                       GLint clip_width,
+                                       GLint clip_height,
+                                       GLuint protected_video_type);
 error::Error DoCommitOverlayPlanesCHROMIUM(uint64_t swap_id, GLbitfield flags);
 error::Error DoSetColorSpaceMetadataCHROMIUM(GLuint texture_id,
                                              gfx::ColorSpace color_space);
@@ -1030,8 +1072,7 @@ error::Error DoBeginRasterCHROMIUM(GLuint texture_id,
                                    GLuint sk_color,
                                    GLuint msaa_sample_count,
                                    GLboolean can_use_lcd_text,
-                                   GLint color_type,
-                                   GLuint color_space_transfer_cache_id);
+                                   GLint color_type);
 error::Error DoRasterCHROMIUM(GLuint raster_shm_id,
                               GLuint raster_shm_offset,
                               GLsizeiptr raster_shm_size,
@@ -1066,5 +1107,17 @@ error::Error DoSetReadbackBufferShadowAllocationINTERNAL(GLuint buffer_id,
                                                          GLuint shm_id,
                                                          GLuint shm_offset,
                                                          GLuint size);
-
+error::Error DoMaxShaderCompilerThreadsKHR(GLuint count);
+error::Error DoInitializeDiscardableTextureCHROMIUM(
+    GLuint texture_id,
+    ServiceDiscardableHandle&& discardable_handle);
+error::Error DoUnlockDiscardableTextureCHROMIUM(GLuint texture_id);
+error::Error DoLockDiscardableTextureCHROMIUM(GLuint texture_id);
+error::Error DoCreateAndTexStorage2DSharedImageINTERNAL(
+    GLuint client_id,
+    const volatile GLbyte* mailbox,
+    GLenum internalformat);
+error::Error DoBeginSharedImageAccessDirectCHROMIUM(GLuint client_id,
+                                                    GLenum mode);
+error::Error DoEndSharedImageAccessDirectCHROMIUM(GLuint client_id);
 #endif  // GPU_COMMAND_BUFFER_SERVICE_GLES2_CMD_DECODER_PASSTHROUGH_DOER_PROTOTYPES_H_

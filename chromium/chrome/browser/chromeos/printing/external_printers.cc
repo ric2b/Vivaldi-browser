@@ -6,6 +6,7 @@
 
 #include <set>
 
+#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/json/json_reader.h"
 #include "base/memory/weak_ptr.h"
@@ -37,10 +38,12 @@ std::unique_ptr<PrinterCache> ParsePrinters(std::unique_ptr<std::string> data) {
   int error_line = 0;
 
   // This could be really slow.
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
-  std::unique_ptr<base::Value> json_blob = base::JSONReader::ReadAndReturnError(
-      *data, base::JSONParserOptions::JSON_PARSE_RFC, &error_code,
-      nullptr /* error_msg_out */, &error_line);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
+  std::unique_ptr<base::Value> json_blob =
+      base::JSONReader::ReadAndReturnErrorDeprecated(
+          *data, base::JSONParserOptions::JSON_PARSE_RFC, &error_code,
+          nullptr /* error_msg_out */, &error_line);
   // It's not valid JSON.  Give up.
   if (!json_blob || !json_blob->is_list()) {
     LOG(WARNING) << "Failed to parse printers policy (" << error_code
@@ -91,7 +94,7 @@ class Restrictions {
   std::unique_ptr<PrinterView> SetData(std::unique_ptr<std::string> data) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     base::ScopedBlockingCall scoped_blocking_call(
-        base::BlockingType::MAY_BLOCK);
+        FROM_HERE, base::BlockingType::MAY_BLOCK);
     printers_cache_ = ParsePrinters(std::move(data));
     return ComputePrinters();
   }

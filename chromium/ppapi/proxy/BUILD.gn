@@ -2,14 +2,21 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/jumbo.gni")
 import("//build/config/nacl/config.gni")
 
 config("proxy_implementation") {
   defines = [ "PPAPI_PROXY_IMPLEMENTATION" ]
 }
 
-component("proxy") {
+jumbo_component("proxy") {
   output_name = "ppapi_proxy"
+
+  if (is_nacl) {
+    # The nacl toolchain has template related bugs that are triggered
+    # in jumbo builds. https://crbug.com/912152
+    never_build_jumbo = true
+  }
 
   sources = [
     # Take some standalone files from the C++ wrapper allowing us to more
@@ -29,10 +36,6 @@ component("proxy") {
     "camera_capabilities_resource.h",
     "camera_device_resource.cc",
     "camera_device_resource.h",
-    "compositor_layer_resource.cc",
-    "compositor_layer_resource.h",
-    "compositor_resource.cc",
-    "compositor_resource.h",
     "connection.h",
     "dispatcher.cc",
     "dispatcher.h",
@@ -183,14 +186,10 @@ component("proxy") {
     "var_serialization_rules.h",
     "video_decoder_resource.cc",
     "video_decoder_resource.h",
-    "video_destination_resource.cc",
-    "video_destination_resource.h",
     "video_encoder_resource.cc",
     "video_encoder_resource.h",
     "video_frame_resource.cc",
     "video_frame_resource.h",
-    "video_source_resource.cc",
-    "video_source_resource.h",
     "vpn_provider_resource.cc",
     "vpn_provider_resource.h",
     "websocket_resource.cc",
@@ -369,7 +368,7 @@ source_set("ipc_sources") {
   }
 }
 
-static_library("test_support") {
+jumbo_static_library("test_support") {
   testonly = true
 
   sources = [

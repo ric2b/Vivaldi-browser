@@ -8,6 +8,7 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
+import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.support.annotation.IntDef;
 import android.support.v7.content.res.AppCompatResources;
@@ -17,16 +18,19 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
-import org.chromium.chrome.browser.widget.TintedImageButton;
+import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper.MenuItemState;
 import org.chromium.chrome.browser.widget.ViewHighlighter;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
+import org.chromium.ui.widget.ChromeImageButton;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -102,6 +106,7 @@ class AppMenuAdapter extends BaseAdapter {
     private final int mNumMenuItems;
     private final Integer mHighlightedItemId;
     private final float mDpToPx;
+    private View mHighlightedView;
 
     public AppMenuAdapter(AppMenu appMenu, List<MenuItem> menuItems, LayoutInflater inflater,
             Integer highlightedItemId) {
@@ -196,12 +201,25 @@ class AppMenuAdapter extends BaseAdapter {
                     holder = (CustomMenuItemViewHolder) convertView.getTag();
                 }
                 setupStandardMenuItemViewHolder(holder, convertView, item);
-                String summary = UpdateMenuItemHelper.getInstance().getMenuItemSummaryText(
-                        mInflater.getContext());
-                if (TextUtils.isEmpty(summary)) {
-                    holder.summary.setVisibility(View.GONE);
-                } else {
-                    holder.summary.setText(summary);
+                MenuItemState itemState = UpdateMenuItemHelper.getInstance().getUiState().itemState;
+                if (itemState != null) {
+                    Resources resources = convertView.getResources();
+
+                    holder.text.setText(itemState.title);
+                    holder.text.setContentDescription(resources.getString(itemState.title));
+                    holder.text.setTextColor(
+                            ApiCompatibilityUtils.getColor(resources, itemState.titleColor));
+
+                    if (!TextUtils.isEmpty(itemState.summary)) {
+                        holder.summary.setText(itemState.summary);
+                        holder.summary.setVisibility(View.VISIBLE);
+                    } else {
+                        holder.summary.setText("");
+                        holder.summary.setVisibility(View.GONE);
+                    }
+
+                    holder.image.setImageResource(itemState.icon);
+                    convertView.setEnabled(itemState.enabled);
                 }
                 break;
             }
@@ -227,7 +245,7 @@ class AppMenuAdapter extends BaseAdapter {
                     holder = new TitleButtonMenuItemViewHolder();
                     holder.title = (TextView) convertView.findViewById(R.id.title);
                     holder.checkbox = (AppMenuItemIcon) convertView.findViewById(R.id.checkbox);
-                    holder.button = (TintedImageButton) convertView.findViewById(R.id.button);
+                    holder.button = (ChromeImageButton) convertView.findViewById(R.id.button);
                     holder.button.setTag(
                             R.id.menu_item_original_background, holder.button.getBackground());
 
@@ -275,12 +293,19 @@ class AppMenuAdapter extends BaseAdapter {
         }
 
         if (mHighlightedItemId != null && item.getItemId() == mHighlightedItemId) {
+            mHighlightedView = convertView;
             ViewHighlighter.turnOnHighlight(convertView, false);
         } else {
+            if (mHighlightedView == convertView) mHighlightedView = null;
             ViewHighlighter.turnOffHighlight(convertView);
         }
 
         return convertView;
+    }
+
+    /** @return The view currently highlighted. */
+    public View getHighlightedView() {
+        return mHighlightedView;
     }
 
     private void setupCheckBox(AppMenuItemIcon button, final MenuItem item) {
@@ -288,13 +313,13 @@ class AppMenuAdapter extends BaseAdapter {
 
         // The checkbox must be tinted to make Android consistently style it across OS versions.
         // http://crbug.com/571445
-        button.setTint(
+        ApiCompatibilityUtils.setImageTintList(button,
                 AppCompatResources.getColorStateList(button.getContext(), R.color.checkbox_tint));
 
         setupMenuButton(button, item);
     }
 
-    private void setupImageButton(TintedImageButton button, final MenuItem item) {
+    private void setupImageButton(ImageButton button, final MenuItem item) {
         // Store and recover the level of image as button.setimageDrawable
         // resets drawable to default level.
         int currentLevel = item.getIcon().getLevel();
@@ -302,8 +327,9 @@ class AppMenuAdapter extends BaseAdapter {
         item.getIcon().setLevel(currentLevel);
 
         if (item.isChecked()) {
-            button.setTint(AppCompatResources.getColorStateList(
-                    button.getContext(), R.color.blue_mode_tint));
+            ApiCompatibilityUtils.setImageTintList(button,
+                    AppCompatResources.getColorStateList(
+                            button.getContext(), R.color.blue_mode_tint));
         }
 
         setupMenuButton(button, item);
@@ -324,8 +350,10 @@ class AppMenuAdapter extends BaseAdapter {
         button.setOnLongClickListener(v -> mAppMenu.onItemLongClick(item, v));
 
         if (mHighlightedItemId != null && item.getItemId() == mHighlightedItemId) {
+            mHighlightedView = button;
             ViewHighlighter.turnOnHighlight(button, true);
         } else {
+            if (mHighlightedView == button) mHighlightedView = null;
             ViewHighlighter.turnOffHighlight(button);
         }
 
@@ -438,8 +466,7 @@ class AppMenuAdapter extends BaseAdapter {
 
             // Save references to all the buttons.
             for (int i = 0; i < numItems; i++) {
-                TintedImageButton view =
-                        (TintedImageButton) convertView.findViewById(BUTTON_IDS[i]);
+                ImageButton view = convertView.findViewById(BUTTON_IDS[i]);
                 holder.buttons[i] = view;
                 holder.buttons[i].setTag(
                         R.id.menu_item_original_background, holder.buttons[i].getBackground());
@@ -475,16 +502,16 @@ class AppMenuAdapter extends BaseAdapter {
     }
 
     private static class RowItemViewHolder {
-        public TintedImageButton[] buttons;
+        public ImageButton[] buttons;
 
         RowItemViewHolder(int numButtons) {
-            buttons = new TintedImageButton[numButtons];
+            buttons = new ImageButton[numButtons];
         }
     }
 
     static class TitleButtonMenuItemViewHolder {
         public TextView title;
         public AppMenuItemIcon checkbox;
-        public TintedImageButton button;
+        public ImageButton button;
     }
 }

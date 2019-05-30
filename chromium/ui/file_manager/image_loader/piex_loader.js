@@ -11,15 +11,6 @@
 var PiexRequestCallbacks;
 
 /**
- * Color space.
- * @enum {string}
- */
-var ColorSpace = {
-  SRGB: 'sRgb',
-  ADOBE_RGB: 'adobeRgb'
-};
-
-/**
  * @param {{id:number, thumbnail:!ArrayBuffer, orientation:number,
  *          colorSpace: ColorSpace}}
  *     data Data directly returned from NaCl module.
@@ -67,7 +58,7 @@ function PiexLoaderResponse(data) {
  */
 function PiexLoader(opt_createModule, opt_destroyModule, opt_idleTimeout) {
   /**
-   * @private {function():!Element}
+   * @private {function():!HTMLEmbedElement}
    */
   this.createModule_ = opt_createModule || this.defaultCreateModule_.bind(this);
 
@@ -82,7 +73,7 @@ function PiexLoader(opt_createModule, opt_destroyModule, opt_idleTimeout) {
       PiexLoader.DEFAULT_IDLE_TIMEOUT_MS;
 
   /**
-   * @private {Element}
+   * @private {HTMLEmbedElement}
    */
   this.naclModule_ = null;
 
@@ -143,16 +134,17 @@ PiexLoader.DEFAULT_IDLE_TIMEOUT_MS = 3000;  // 3 seconds.
  * Do not call directly. Use this.loadModule_ instead to support
  * tests.
  *
- * @return {!Element}
+ * @return {!HTMLEmbedElement}
  * @private
  */
 PiexLoader.prototype.defaultCreateModule_ = function() {
-  var embed = document.createElement('embed');
+  var embed =
+      assertInstanceof(document.createElement('embed'), HTMLEmbedElement);
   embed.setAttribute('type', 'application/x-pnacl');
   // The extension nmf is not allowed to load. We uses .nmf.js instead.
   embed.setAttribute('src', '/piex/piex.nmf.txt');
-  embed.width = 0;
-  embed.height = 0;
+  embed.width = '0';
+  embed.height = '0';
   return embed;
 };
 
@@ -169,40 +161,48 @@ PiexLoader.prototype.loadNaclModule_ = function() {
     return this.naclPromise_;
   }
 
-  this.naclPromise_ = new Promise(function(fulfill) {
-    chrome.fileManagerPrivate.isPiexLoaderEnabled(fulfill);
-  }).then(function(enabled) {
-    if (!enabled)
-      return false;
-    return new Promise(function(fulfill, reject) {
-      this.naclPromiseFulfill_ = fulfill;
-      this.naclPromiseReject_ = reject;
-      this.naclModule_ = this.createModule_();
+  this.naclPromise_ =
+      new Promise(function(fulfill) {
+        chrome.fileManagerPrivate.isPiexLoaderEnabled(fulfill);
+      })
+          .then(function(enabled) {
+            if (!enabled) {
+              return false;
+            }
+            return new Promise(function(fulfill, reject) {
+              this.naclPromiseFulfill_ = fulfill;
+              this.naclPromiseReject_ = reject;
+              this.naclModule_ = this.createModule_();
 
-      // The <EMBED> element is wrapped inside a <DIV>, which has both a 'load'
-      // and a 'message' event listener attached.  This wrapping method is used
-      // instead of attaching the event listeners directly to the <EMBED>
-      // element to ensure that the listeners are active before the NaCl module
-      // 'load' event fires.
-      var listenerContainer = document.createElement('div');
-      listenerContainer.appendChild(this.naclModule_);
-      listenerContainer.addEventListener('load', this.onNaclLoadBound_, true);
-      listenerContainer.addEventListener(
-          'message', this.onNaclMessageBound_, true);
-      listenerContainer.addEventListener('error', this.onNaclErrorBound_, true);
-      listenerContainer.addEventListener('crash', this.onNaclCrashBound_, true);
-      listenerContainer.style.height = '0px';
-      this.containerElement_ = listenerContainer;
-      document.body.appendChild(listenerContainer);
+              // The <EMBED> element is wrapped inside a <DIV>, which has both a
+              // 'load' and a 'message' event listener attached.  This wrapping
+              // method is used instead of attaching the event listeners
+              // directly to the <EMBED> element to ensure that the listeners
+              // are active before the NaCl module 'load' event fires.
+              var listenerContainer = assertInstanceof(
+                  document.createElement('div'), HTMLDivElement);
+              listenerContainer.appendChild(this.naclModule_);
+              listenerContainer.addEventListener(
+                  'load', this.onNaclLoadBound_, true);
+              listenerContainer.addEventListener(
+                  'message', this.onNaclMessageBound_, true);
+              listenerContainer.addEventListener(
+                  'error', this.onNaclErrorBound_, true);
+              listenerContainer.addEventListener(
+                  'crash', this.onNaclCrashBound_, true);
+              listenerContainer.style.height = '0px';
+              this.containerElement_ = listenerContainer;
+              document.body.appendChild(listenerContainer);
 
-      // Force a relayout. Workaround for load event not being called on <embed>
-      // for a NaCl module. crbug.com/699930
-      /** @suppress {suspiciousCode} */ this.naclModule_.offsetTop;
-    }.bind(this));
-  }.bind(this)).catch(function (error) {
-    console.error(error);
-    return false;
-  });
+              // Force a relayout. Workaround for load event not being called on
+              // <embed> for a NaCl module. crbug.com/699930
+              /** @suppress {suspiciousCode} */ this.naclModule_.offsetTop;
+            }.bind(this));
+          }.bind(this))
+          .catch(function(error) {
+            console.error(error);
+            return false;
+          });
 
   return this.naclPromise_;
 };
@@ -236,10 +236,11 @@ PiexLoader.prototype.onNaclLoad_ = function(event) {
 };
 
 /**
- * @param {Event} event
+ * @param {Event} listener_event
  * @private
  */
-PiexLoader.prototype.onNaclMessage_ = function(event) {
+PiexLoader.prototype.onNaclMessage_ = function(listener_event) {
+  let event = /** @type{MessageEvent} */ (listener_event);
   var id = event.data.id;
   if (!event.data.error) {
     var response = new PiexLoaderResponse(event.data);
@@ -250,8 +251,9 @@ PiexLoader.prototype.onNaclMessage_ = function(event) {
     this.requests_[id].reject(event.data.error);
   }
   delete this.requests_[id];
-  if (Object.keys(this.requests_).length === 0)
+  if (Object.keys(this.requests_).length === 0) {
     this.scheduleUnloadOnIdle_();
+  }
 };
 
 /**
@@ -277,8 +279,9 @@ PiexLoader.prototype.onNaclCrash_ = function(event) {
  * @private
  */
 PiexLoader.prototype.scheduleUnloadOnIdle_ = function() {
-  if (this.unloadTimer_)
+  if (this.unloadTimer_) {
     clearTimeout(this.unloadTimer_);
+  }
   this.unloadTimer_ =
       setTimeout(this.onIdleTimeout_.bind(this), this.idleTimeoutMs_);
 };
@@ -325,8 +328,9 @@ PiexLoader.prototype.load = function(url) {
   this.requests_[requestId] = null;
 
   return this.loadNaclModule_().then(function(loaded) {
-    if (!loaded)
+    if (!loaded) {
       return Promise.reject('Piex is not loaded');
+    }
     var message = {id: requestId, name: 'loadThumbnail', url: url};
     this.naclModule_.postMessage(message);
     return new Promise(function(fulfill, reject) {

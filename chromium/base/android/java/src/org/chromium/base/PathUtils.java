@@ -16,12 +16,12 @@ import android.text.TextUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.MainDex;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.task.AsyncTask;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -206,8 +206,8 @@ public abstract class PathUtils {
             String downloadsPath =
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                             .getPath();
-            RecordHistogram.recordTimesHistogram("Android.StrictMode.DownloadsDir",
-                    SystemClock.elapsedRealtime() - time, TimeUnit.MILLISECONDS);
+            RecordHistogram.recordTimesHistogram(
+                    "Android.StrictMode.DownloadsDir", SystemClock.elapsedRealtime() - time);
             return downloadsPath;
         }
     }

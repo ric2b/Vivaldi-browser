@@ -35,9 +35,14 @@ class UI_BASE_EXPORT MenuModel {
     TYPE_BUTTON_ITEM,  // Shows a row of buttons.
     TYPE_SUBMENU,      // Presents a submenu within another menu.
     TYPE_ACTIONABLE_SUBMENU,  // A SUBMENU that is also a COMMAND.
+    TYPE_HIGHLIGHTED,  // Performs an action when selected, and has a different
+                       // colored background. When placed at the bottom, the
+                       // background matches the menu's rounded corners.
   };
 
-  virtual ~MenuModel() {}
+  MenuModel();
+
+  virtual ~MenuModel();
 
   // Returns true if any of the items within the model have icons. Not all
   // platforms support icons in menus natively and so this is a hint for
@@ -111,7 +116,7 @@ class UI_BASE_EXPORT MenuModel {
 
   // Called when the highlighted menu item changes to the item at the specified
   // index.
-  virtual void HighlightChangedTo(int index) = 0;
+  virtual void VivaldiHighlightChangedTo(int index) {}
 
   // Called when the item at the specified index has been activated.
   virtual void ActivatedAt(int index) = 0;
@@ -128,11 +133,12 @@ class UI_BASE_EXPORT MenuModel {
   // should not be deleted here.
   virtual void MenuWillClose() {}
 
-  // Set the MenuModelDelegate. Owned by the caller of this function.
-  virtual void SetMenuModelDelegate(MenuModelDelegate* delegate) = 0;
+  // Set the MenuModelDelegate, owned by the caller of this function. We allow
+  // setting a new one or clearing the current one.
+  void SetMenuModelDelegate(MenuModelDelegate* delegate);
 
   // Gets the MenuModelDelegate.
-  virtual MenuModelDelegate* GetMenuModelDelegate() const = 0;
+  MenuModelDelegate* menu_model_delegate() { return menu_model_delegate_; }
 
   // Retrieves the model and index that contains a specific command id. Returns
   // true if an item with the specified command id is found. |model| is inout,
@@ -140,6 +146,10 @@ class UI_BASE_EXPORT MenuModel {
   static bool GetModelAndIndexForCommandId(int command_id,
                                            MenuModel** model,
                                            int* index);
+
+ private:
+  // MenuModelDelegate. Weak. Could be null.
+  MenuModelDelegate* menu_model_delegate_;
 };
 
 }  // namespace ui

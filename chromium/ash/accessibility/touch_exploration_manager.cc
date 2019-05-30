@@ -15,10 +15,11 @@
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/wm/window_util.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "chromeos/audio/chromeos_sounds.h"
 #include "chromeos/audio/cras_audio_handler.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "extensions/common/constants.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/gfx/geometry/rect.h"
@@ -86,7 +87,7 @@ void TouchExplorationManager::SetOutputLevel(int volume) {
 }
 
 void TouchExplorationManager::SilenceSpokenFeedback() {
-  if (GetA11yController()->IsSpokenFeedbackEnabled())
+  if (GetA11yController()->spoken_feedback_enabled())
     GetA11yController()->SilenceSpokenFeedback();
 }
 
@@ -158,7 +159,7 @@ void TouchExplorationManager::ToggleSpokenFeedback() {
         if (!should_toggle)
           return;
         GetA11yController()->SetSpokenFeedbackEnabled(
-            !GetA11yController()->IsSpokenFeedbackEnabled(),
+            !GetA11yController()->spoken_feedback_enabled(),
             A11Y_NOTIFICATION_SHOW);
       }));
 }
@@ -193,7 +194,7 @@ void TouchExplorationManager::OnKeyboardVisibleBoundsChanged(
   UpdateTouchExplorationState();
 }
 
-void TouchExplorationManager::OnKeyboardDisabled() {
+void TouchExplorationManager::OnKeyboardEnabledChanged(bool is_enabled) {
   UpdateTouchExplorationState();
 }
 
@@ -205,7 +206,7 @@ void TouchExplorationManager::UpdateTouchExplorationState() {
           aura::client::kAccessibilityTouchExplorationPassThrough);
 
   const bool spoken_feedback_enabled =
-      GetA11yController()->IsSpokenFeedbackEnabled();
+      GetA11yController()->spoken_feedback_enabled();
 
   if (!touch_accessibility_enabler_) {
     // Always enable gesture to toggle spoken feedback.
@@ -238,7 +239,7 @@ void TouchExplorationManager::UpdateTouchExplorationState() {
 
     // Virtual keyboard.
     auto* keyboard_controller = keyboard::KeyboardController::Get();
-    if (keyboard_controller->enabled()) {
+    if (keyboard_controller->IsEnabled()) {
       touch_exploration_controller_->SetLiftActivationBounds(
           keyboard_controller->visual_bounds_in_screen());
     }

@@ -24,6 +24,7 @@ class HttpAuthHandler;
 class HttpAuthHandlerFactory;
 class HttpAuthCache;
 class HttpRequestHeaders;
+class HostResolver;
 class NetLogWithSource;
 struct HttpRequestInfo;
 class SSLInfo;
@@ -46,7 +47,8 @@ class NET_EXPORT_PRIVATE HttpAuthController
   HttpAuthController(HttpAuth::Target target,
                      const GURL& auth_url,
                      HttpAuthCache* http_auth_cache,
-                     HttpAuthHandlerFactory* http_auth_handler_factory);
+                     HttpAuthHandlerFactory* http_auth_handler_factory,
+                     HostResolver* host_resolver);
 
   // Generate an authentication token for |target| if necessary. The return
   // value is a net error code. |OK| will be returned both in the case that
@@ -119,6 +121,11 @@ class NET_EXPORT_PRIVATE HttpAuthController
   // The identity that was rejected is |identity_|.
   void InvalidateRejectedAuthFromCache();
 
+  // Allows reusing last used identity source.  If the authentication handshake
+  // breaks down halfway, then the controller needs to restart it from the
+  // beginning and resue the same identity.
+  void PrepareIdentityForReuse();
+
   // Sets |identity_| to the next identity that the transaction should try. It
   // chooses candidates by searching the auth cache and the URL for a
   // username:password. Returns true if an identity was found.
@@ -179,6 +186,7 @@ class NET_EXPORT_PRIVATE HttpAuthController
   // for the lifetime of this object.
   HttpAuthCache* const http_auth_cache_;
   HttpAuthHandlerFactory* const http_auth_handler_factory_;
+  HostResolver* const host_resolver_;
 
   std::set<HttpAuth::Scheme> disabled_schemes_;
 

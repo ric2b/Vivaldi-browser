@@ -6,25 +6,26 @@
 
 #include <string>
 
-#include "ash/frame/caption_buttons/frame_caption_button.h"
-#include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
-#include "ash/frame/default_frame_header.h"
-#include "ash/frame/frame_header.h"
-#include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/ash_constants.h"
-#include "ash/public/cpp/ash_layout_constants.h"
 #include "ash/public/cpp/ash_switches.h"
+#include "ash/public/cpp/caption_buttons/frame_caption_button_container_view.h"
+#include "ash/public/cpp/default_frame_header.h"
+#include "ash/public/cpp/frame_header.h"
 #include "ash/public/cpp/immersive/immersive_fullscreen_controller_test_api.h"
 #include "ash/public/cpp/vector_icons/vector_icons.h"
 #include "ash/public/cpp/window_properties.h"
-#include "ash/shell.h"
-#include "ash/wm/overview/window_selector_controller.h"
-#include "ash/wm/splitview/split_view_controller.h"
-#include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "base/command_line.h"
+#include "ash/public/interfaces/constants.mojom.h"
+#include "ash/public/interfaces/shelf_test_api.test-mojom-test-utils.h"
+#include "ash/public/interfaces/shelf_test_api.test-mojom.h"
+#include "ash/public/interfaces/shell_test_api.test-mojom-test-utils.h"
+#include "ash/public/interfaces/window_pin_type.mojom.h"
+#include "ash/shell.h"                                  // mash-ok
+#include "ash/wm/overview/overview_controller.h"        // mash-ok
+#include "ash/wm/splitview/split_view_controller.h"     // mash-ok
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"  // mash-ok
+#include "base/bind_helpers.h"
 #include "base/run_loop.h"
 #include "base/scoped_observer.h"
-#include "base/strings/string_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
@@ -36,15 +37,17 @@
 #include "chrome/browser/sessions/session_restore_test_helper.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/sessions/session_service_test_helper.h"
-#include "chrome/browser/ssl/cert_verifier_browser_test.h"
+#include "chrome/browser/ssl/chrome_mock_cert_verifier.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
-#include "chrome/browser/ui/ash/multi_user/test_multi_user_window_manager.h"
+#include "chrome/browser/ui/ash/multi_user/test_multi_user_window_manager_client.h"
+#include "chrome/browser/ui/ash/tablet_mode_client_test_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller_test.h"
+#include "chrome/browser/ui/passwords/passwords_client_ui_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/browser_actions_bar_browsertest.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
@@ -53,33 +56,40 @@
 #include "chrome/browser/ui/views/frame/hosted_app_menu_button.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller_ash.h"
+#include "chrome/browser/ui/views/fullscreen_control/fullscreen_control_host.h"
 #include "chrome/browser/ui/views/location_bar/content_setting_image_view.h"
+#include "chrome/browser/ui/views/location_bar/custom_tab_bar_view.h"
 #include "chrome/browser/ui/views/location_bar/zoom_bubble_view.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_container_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view_base.h"
-#include "chrome/browser/ui/views/profiles/profile_indicator_icon.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/app_menu.h"
 #include "chrome/browser/ui/views/toolbar/extension_toolbar_menu_view.h"
+#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/web_application_info.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/account_id/account_id.h"
+#include "components/autofill/core/common/password_form.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/common/service_manager_connection.h"
+#include "content/public/common/service_names.mojom.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "net/dns/mock_host_resolver.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/env_test_helper.h"
+#include "ui/aura/test/mus/change_completion_waiter.h"
 #include "ui/base/class_property.h"
 #include "ui/base/hit_test.h"
+#include "ui/base/test/material_design_controller_test_api.h"
 #include "ui/base/ui_base_features.h"
-#include "ui/base/ui_base_switches.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
@@ -88,6 +98,8 @@
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/window/caption_button_layout_constants.h"
+#include "ui/views/window/frame_caption_button.h"
 
 namespace {
 
@@ -128,6 +140,32 @@ void ExitFullscreenModeAndWait(BrowserView* browser_view) {
   waiter.Wait();
 }
 
+void ToggleOverview() {
+  if (features::IsUsingWindowService()) {
+    ash::mojom::ShellTestApiPtr shell_test_api;
+    content::ServiceManagerConnection::GetForProcess()
+        ->GetConnector()
+        ->BindInterface(ash::mojom::kServiceName, &shell_test_api);
+    base::RunLoop run_loop;
+    shell_test_api->ToggleOverviewMode(run_loop.QuitClosure());
+    run_loop.Run();
+    aura::test::WaitForAllChangesToComplete();
+  } else {
+    ash::Shell::Get()->overview_controller()->ToggleOverview();
+  }
+}
+
+bool IsShelfVisible() {
+  ash::mojom::ShelfTestApiPtr shelf_test_api;
+  content::ServiceManagerConnection::GetForProcess()
+      ->GetConnector()
+      ->BindInterface(ash::mojom::kServiceName, &shelf_test_api);
+  ash::mojom::ShelfTestApiAsyncWaiter shelf(shelf_test_api.get());
+  bool shelf_visible = true;
+  shelf.IsVisible(&shelf_visible);
+  return shelf_visible;
+}
+
 BrowserNonClientFrameViewAsh* GetFrameViewAsh(BrowserView* browser_view) {
   // We know we're using Ash, so static cast.
   auto* frame_view = static_cast<BrowserNonClientFrameViewAsh*>(
@@ -136,30 +174,98 @@ BrowserNonClientFrameViewAsh* GetFrameViewAsh(BrowserView* browser_view) {
   return frame_view;
 }
 
-// Generates the test names suffixes based on the value of the test param.
-std::string TopChromeMdParamToString(
-    const ::testing::TestParamInfo<const char*>& info) {
-  std::string result;
-  base::ReplaceChars(info.param, "-", "_", &result);
-  return result;
-}
-
 // Template to be used as a base class for touch-optimized UI parameterized test
 // fixtures.
 template <class BaseTest>
 class TopChromeMdParamTest : public BaseTest,
-                             public ::testing::WithParamInterface<const char*> {
+                             public ::testing::WithParamInterface<bool> {
  public:
-  TopChromeMdParamTest() = default;
+  TopChromeMdParamTest() : test_api_(GetParam()) {}
   ~TopChromeMdParamTest() override = default;
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitchASCII(switches::kTopChromeMD, GetParam());
-    BaseTest::SetUpCommandLine(command_line);
+ private:
+  ui::test::MaterialDesignControllerTestAPI test_api_;
+
+  DISALLOW_COPY_AND_ASSIGN(TopChromeMdParamTest);
+};
+
+// A helper class for immersive mode tests.
+class ImmersiveModeTester : public ImmersiveModeController::Observer {
+ public:
+  explicit ImmersiveModeTester(Browser* browser) : browser_(browser) {
+    scoped_observer_.Add(GetBrowserView()->immersive_mode_controller());
+  }
+  ~ImmersiveModeTester() override = default;
+
+  BrowserView* GetBrowserView() {
+    return BrowserView::GetBrowserViewForBrowser(browser_);
+  }
+
+  // Runs the given command, verifies that a reveal happens and the expected tab
+  // is active.
+  void RunCommand(int command, int expected_index) {
+    reveal_started_ = reveal_ended_ = false;
+    browser_->command_controller()->ExecuteCommand(command);
+    VerifyTabIndexAfterReveal(expected_index);
+  }
+
+  // Verifies a reveal has happened and the expected tab is active.
+  void VerifyTabIndexAfterReveal(int expected_index) {
+    if (!reveal_ended_) {
+      reveal_loop_ = std::make_unique<base::RunLoop>();
+      reveal_loop_->Run();
+    }
+    EXPECT_TRUE(reveal_ended_);
+    EXPECT_EQ(expected_index, browser_->tab_strip_model()->active_index());
+  }
+
+  // Waits for the immersive fullscreen to end (or returns immediately if
+  // immersive fullscreen already ended).
+  void WaitForFullscreenToExit() {
+    if (GetBrowserView()->immersive_mode_controller()->IsEnabled()) {
+      fullscreen_loop_ = std::make_unique<base::RunLoop>();
+      fullscreen_loop_->Run();
+    }
+    EXPECT_FALSE(GetBrowserView()->immersive_mode_controller()->IsEnabled());
+  }
+
+  // ImmersiveModeController::Observer:
+  void OnImmersiveRevealStarted() override {
+    EXPECT_FALSE(reveal_started_);
+    EXPECT_FALSE(reveal_ended_);
+    reveal_started_ = true;
+    EXPECT_TRUE(GetBrowserView()->immersive_mode_controller()->IsRevealed());
+  }
+
+  void OnImmersiveRevealEnded() override {
+    EXPECT_TRUE(reveal_started_);
+    EXPECT_FALSE(reveal_ended_);
+    reveal_started_ = false;
+    reveal_ended_ = true;
+    EXPECT_FALSE(GetBrowserView()->immersive_mode_controller()->IsRevealed());
+    if (reveal_loop_ && reveal_loop_->running())
+      reveal_loop_->Quit();
+  }
+
+  void OnImmersiveModeControllerDestroyed() override {
+    scoped_observer_.RemoveAll();
+  }
+
+  void OnImmersiveFullscreenExited() override {
+    if (fullscreen_loop_ && fullscreen_loop_->running())
+      fullscreen_loop_->Quit();
   }
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(TopChromeMdParamTest);
+  Browser* browser_ = nullptr;
+  ScopedObserver<ImmersiveModeController, ImmersiveModeController::Observer>
+      scoped_observer_{this};
+  bool reveal_started_ = false;
+  bool reveal_ended_ = false;
+  std::unique_ptr<base::RunLoop> reveal_loop_;
+  std::unique_ptr<base::RunLoop> fullscreen_loop_;
+
+  DISALLOW_COPY_AND_ASSIGN(ImmersiveModeTester);
 };
 
 }  // namespace
@@ -205,16 +311,7 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest,
 
   // No painting should occur in non-immersive fullscreen. (We enter into tab
   // fullscreen here because tab fullscreen is non-immersive even on ChromeOS).
-  {
-    // NOTIFICATION_FULLSCREEN_CHANGED is sent asynchronously.
-    std::unique_ptr<FullscreenNotificationObserver> waiter(
-        new FullscreenNotificationObserver());
-    browser()
-        ->exclusive_access_manager()
-        ->fullscreen_controller()
-        ->EnterFullscreenModeForTab(web_contents, GURL());
-    waiter->Wait();
-  }
+  EnterFullscreenModeForTabAndWait(browser(), web_contents);
   EXPECT_FALSE(browser_view->immersive_mode_controller()->IsEnabled());
   EXPECT_FALSE(frame_view->ShouldPaint());
 
@@ -227,79 +324,6 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest,
   EXPECT_TRUE(frame_view->ShouldPaint());
 }
 
-IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest, ImmersiveFullscreen) {
-  aura::test::EnvTestHelper().SetAlwaysUseLastMouseLocation(true);
-  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
-  content::WebContents* web_contents = browser_view->GetActiveWebContents();
-  BrowserNonClientFrameViewAsh* frame_view = GetFrameViewAsh(browser_view);
-
-  ImmersiveModeController* immersive_mode_controller =
-      browser_view->immersive_mode_controller();
-  ASSERT_EQ(ImmersiveModeController::Type::ASH,
-            immersive_mode_controller->type());
-
-  ash::ImmersiveFullscreenControllerTestApi(
-      static_cast<ImmersiveModeControllerAsh*>(immersive_mode_controller)
-          ->controller())
-      .SetupForTest();
-
-  // Immersive fullscreen starts disabled.
-  ASSERT_FALSE(browser_view->GetWidget()->IsFullscreen());
-  EXPECT_FALSE(immersive_mode_controller->IsEnabled());
-
-  // Frame paints by default.
-  EXPECT_TRUE(frame_view->ShouldPaint());
-  EXPECT_LT(
-      0, frame_view->GetBoundsForTabStrip(browser_view->tabstrip()).bottom());
-
-  // Enter both browser fullscreen and tab fullscreen. Entering browser
-  // fullscreen should enable immersive fullscreen.
-  ToggleFullscreenModeAndWait(browser());
-  EnterFullscreenModeForTabAndWait(browser(), web_contents);
-  EXPECT_TRUE(immersive_mode_controller->IsEnabled());
-
-  // An immersive reveal shows the buttons and the top of the frame.
-  std::unique_ptr<ImmersiveRevealedLock> revealed_lock(
-      immersive_mode_controller->GetRevealedLock(
-          ImmersiveModeController::ANIMATE_REVEAL_NO));
-  EXPECT_TRUE(immersive_mode_controller->IsRevealed());
-  EXPECT_TRUE(frame_view->ShouldPaint());
-
-  // End the reveal. When in both immersive browser fullscreen and tab
-  // fullscreen.
-  revealed_lock.reset();
-  EXPECT_FALSE(immersive_mode_controller->IsRevealed());
-  EXPECT_FALSE(frame_view->ShouldPaint());
-  EXPECT_EQ(
-      0, frame_view->GetBoundsForTabStrip(browser_view->tabstrip()).bottom());
-
-  // Repeat test but without tab fullscreen.
-  ExitFullscreenModeForTabAndWait(browser(), web_contents);
-
-  // Immersive reveal should have same behavior as before.
-  revealed_lock.reset(immersive_mode_controller->GetRevealedLock(
-      ImmersiveModeController::ANIMATE_REVEAL_NO));
-  EXPECT_TRUE(immersive_mode_controller->IsRevealed());
-  EXPECT_TRUE(frame_view->ShouldPaint());
-  EXPECT_LT(
-      0, frame_view->GetBoundsForTabStrip(browser_view->tabstrip()).bottom());
-
-  // Ending the reveal. Immersive browser should have the same behavior as full
-  // screen, i.e., having an origin of (0,0).
-  revealed_lock.reset();
-  EXPECT_FALSE(frame_view->ShouldPaint());
-  EXPECT_EQ(
-      0, frame_view->GetBoundsForTabStrip(browser_view->tabstrip()).bottom());
-
-  // Exiting immersive fullscreen should make the caption buttons and the frame
-  // visible again.
-  ExitFullscreenModeAndWait(browser_view);
-  EXPECT_FALSE(immersive_mode_controller->IsEnabled());
-  EXPECT_TRUE(frame_view->ShouldPaint());
-  EXPECT_LT(
-      0, frame_view->GetBoundsForTabStrip(browser_view->tabstrip()).bottom());
-}
-
 // Tests that Avatar icon should show on the top left corner of the teleported
 // browser window on ChromeOS.
 IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest,
@@ -308,75 +332,24 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest,
   BrowserNonClientFrameViewAsh* frame_view = GetFrameViewAsh(browser_view);
   aura::Window* window = browser()->window()->GetNativeWindow();
 
-  EXPECT_FALSE(MultiUserWindowManager::ShouldShowAvatar(window));
-  EXPECT_FALSE(frame_view->profile_indicator_icon());
+  EXPECT_FALSE(MultiUserWindowManagerClient::ShouldShowAvatar(window));
+  EXPECT_FALSE(frame_view->profile_indicator_icon_);
 
   const AccountId account_id1 =
       multi_user_util::GetAccountIdFromProfile(browser()->profile());
-  TestMultiUserWindowManager* manager =
-      new TestMultiUserWindowManager(browser(), account_id1);
+  TestMultiUserWindowManagerClient* client =
+      new TestMultiUserWindowManagerClient(browser(), account_id1);
 
   // Teleport the window to another desktop.
   const AccountId account_id2(AccountId::FromUserEmail("user2"));
-  manager->ShowWindowForUser(window, account_id2);
-  EXPECT_TRUE(MultiUserWindowManager::ShouldShowAvatar(window));
-
-  if (GetParam() != switches::kTopChromeMDMaterialRefresh) {
-    // An icon should show on the top left corner of the teleported browser
-    // window.
-    EXPECT_TRUE(frame_view->profile_indicator_icon());
-  }
+  client->ShowWindowForUser(window, account_id2);
+  EXPECT_TRUE(MultiUserWindowManagerClient::ShouldShowAvatar(window));
+  EXPECT_TRUE(frame_view->profile_indicator_icon_);
 
   // Teleport the window back to owner desktop.
-  manager->ShowWindowForUser(window, account_id1);
-  EXPECT_FALSE(MultiUserWindowManager::ShouldShowAvatar(window));
-  EXPECT_FALSE(frame_view->profile_indicator_icon());
-}
-
-// Hit Test for Avatar Menu Button on ChromeOS.
-IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest,
-                       AvatarMenuButtonHitTestOnChromeOS) {
-  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
-  BrowserNonClientFrameViewAsh* frame_view = GetFrameViewAsh(browser_view);
-
-  gfx::Point avatar_center(profiles::kAvatarIconWidth / 2,
-                           profiles::kAvatarIconHeight / 2);
-  // The increased header height in the touch-optimized UI affects the expected
-  // result.
-  int expected_value =
-      GetParam() == switches::kTopChromeMDMaterialTouchOptimized ? HTCAPTION
-                                                                 : HTCLIENT;
-  EXPECT_EQ(expected_value, frame_view->NonClientHitTest(avatar_center));
-  EXPECT_FALSE(frame_view->profile_indicator_icon());
-
-  const AccountId current_user =
-      multi_user_util::GetAccountIdFromProfile(browser()->profile());
-  TestMultiUserWindowManager* manager =
-      new TestMultiUserWindowManager(browser(), current_user);
-
-  // Teleport the window to another desktop.
-  const AccountId account_id2(AccountId::FromUserEmail("user2"));
-  manager->ShowWindowForUser(browser()->window()->GetNativeWindow(),
-                             account_id2);
-  if (GetParam() != switches::kTopChromeMDMaterialRefresh) {
-    // Clicking on the avatar icon should have same behaviour like clicking on
-    // the caption area, i.e., allow the user to drag the browser window around.
-    EXPECT_EQ(HTCAPTION, frame_view->NonClientHitTest(avatar_center));
-    EXPECT_TRUE(frame_view->profile_indicator_icon());
-  }
-}
-
-// Tests that for an incognito browser, there is an avatar icon view, unless in
-// touch-optimized mode.
-IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest, IncognitoAvatar) {
-  Browser* incognito_browser = CreateIncognitoBrowser();
-  BrowserView* browser_view =
-      BrowserView::GetBrowserViewForBrowser(incognito_browser);
-  BrowserNonClientFrameViewAsh* frame_view = GetFrameViewAsh(browser_view);
-
-  const bool should_have_avatar = GetParam() == switches::kTopChromeMDMaterial;
-  const bool has_avatar = !!frame_view->profile_indicator_icon();
-  EXPECT_EQ(should_have_avatar, has_avatar);
+  client->ShowWindowForUser(window, account_id1);
+  EXPECT_FALSE(MultiUserWindowManagerClient::ShouldShowAvatar(window));
+  EXPECT_FALSE(frame_view->profile_indicator_icon_);
 }
 
 IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest,
@@ -384,37 +357,6 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest,
   Browser* incognito_browser = CreateIncognitoBrowser();
   EXPECT_TRUE(incognito_browser->window()->GetNativeWindow()->GetProperty(
       ash::kBlockedForAssistantSnapshotKey));
-}
-
-// Tests that FrameCaptionButtonContainer has been relaid out in response to
-// tablet mode being toggled.
-IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest,
-                       ToggleTabletModeRelayout) {
-  // For mash, this test is covered by
-  // CustomFrameViewAshTest.ToggleTabletModeRelayout.
-  if (features::IsUsingWindowService())
-    return;
-
-  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
-  BrowserNonClientFrameViewAsh* frame_view = GetFrameViewAsh(browser_view);
-
-  const gfx::Rect initial = frame_view->caption_button_container_->bounds();
-  ash::TabletModeController* tablet_mode_controller =
-      ash::Shell::Get()->tablet_mode_controller();
-  tablet_mode_controller->EnableTabletModeWindowManager(true);
-  tablet_mode_controller->FlushForTesting();
-  ash::FrameCaptionButtonContainerView::TestApi test(
-      frame_view->caption_button_container_);
-  test.EndAnimations();
-  const gfx::Rect during_maximize =
-      frame_view->caption_button_container_->bounds();
-  EXPECT_GT(initial.width(), during_maximize.width());
-  tablet_mode_controller->EnableTabletModeWindowManager(false);
-  tablet_mode_controller->FlushForTesting();
-  test.EndAnimations();
-  const gfx::Rect after_restore =
-      frame_view->caption_button_container_->bounds();
-  EXPECT_EQ(initial, after_restore);
 }
 
 // Tests that browser frame minimum size constraint is updated in response to
@@ -481,93 +423,114 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest,
       static_cast<BrowserNonClientFrameViewAsh*>(
           widget->non_client_view()->frame_view());
 
-  if (!features::IsUsingWindowService()) {
-    ash::FrameCaptionButtonContainerView::TestApi test(
-        frame_view->caption_button_container_);
-    EXPECT_TRUE(test.size_button()->icon_definition_for_test());
-  } else {
-    EXPECT_NE(
-        0, widget->GetNativeWindow()->GetProperty(ash::kFrameImageYInsetKey));
-  }
+  ash::FrameCaptionButtonContainerView::TestApi test(
+      frame_view->caption_button_container_);
+  EXPECT_TRUE(test.size_button()->icon_definition_for_test());
 }
 
 namespace {
 
 class ImmersiveModeBrowserViewTest
-    : public TopChromeMdParamTest<InProcessBrowserTest>,
-      public ImmersiveModeController::Observer {
+    : public TopChromeMdParamTest<InProcessBrowserTest> {
  public:
   ImmersiveModeBrowserViewTest() = default;
   ~ImmersiveModeBrowserViewTest() override = default;
 
-  BrowserView* browser_view() {
-    return BrowserView::GetBrowserViewForBrowser(browser());
-  }
-
+  // TopChromeMdParamTest<InProcessBrowserTest>:
   void PreRunTestOnMainThread() override {
     InProcessBrowserTest::PreRunTestOnMainThread();
-    aura::test::EnvTestHelper().SetAlwaysUseLastMouseLocation(true);
+
+    BrowserView::SetDisableRevealerDelayForTesting(true);
+
     ash::ImmersiveFullscreenControllerTestApi(
         static_cast<ImmersiveModeControllerAsh*>(
-            browser_view()->immersive_mode_controller())
+            BrowserView::GetBrowserViewForBrowser(browser())
+                ->immersive_mode_controller())
             ->controller())
         .SetupForTest();
-    BrowserView::SetDisableRevealerDelayForTesting(true);
-  }
-
-  void InitializeObserver() {
-    scoped_observer_.Add(browser_view()->immersive_mode_controller());
-  }
-
-  void RunTest(int command, int expected_index) {
-    reveal_started_ = reveal_ended_ = false;
-    expected_index_ = expected_index;
-    browser()->command_controller()->ExecuteCommand(command);
-    base::RunLoop().RunUntilIdle();
-    EXPECT_TRUE(reveal_ended_);
-  }
-
-  // ImmersiveModeController::Observer:
-  void OnImmersiveRevealStarted() override {
-    EXPECT_FALSE(reveal_started_);
-    EXPECT_FALSE(reveal_ended_);
-    reveal_started_ = true;
-    EXPECT_TRUE(browser_view()->immersive_mode_controller()->IsRevealed());
-  }
-
-  void OnImmersiveRevealEnded() override {
-    EXPECT_TRUE(reveal_started_);
-    EXPECT_FALSE(reveal_ended_);
-    reveal_started_ = false;
-    reveal_ended_ = true;
-    EXPECT_FALSE(browser_view()->immersive_mode_controller()->IsRevealed());
-    EXPECT_EQ(expected_index_, browser()->tab_strip_model()->active_index());
-  }
-
-  void OnImmersiveModeControllerDestroyed() override {
-    scoped_observer_.RemoveAll();
   }
 
  private:
-  ScopedObserver<ImmersiveModeController, ImmersiveModeController::Observer>
-      scoped_observer_{this};
-  int expected_index_ = false;
-  bool reveal_started_ = false;
-  bool reveal_ended_ = false;
-
   DISALLOW_COPY_AND_ASSIGN(ImmersiveModeBrowserViewTest);
 };
 
 }  // namespace
 
+IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTest, ImmersiveFullscreen) {
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+  content::WebContents* web_contents = browser_view->GetActiveWebContents();
+  BrowserNonClientFrameViewAsh* frame_view = GetFrameViewAsh(browser_view);
+
+  ImmersiveModeController* immersive_mode_controller =
+      browser_view->immersive_mode_controller();
+  ASSERT_EQ(ImmersiveModeController::Type::ASH,
+            immersive_mode_controller->type());
+
+  // Immersive fullscreen starts disabled.
+  ASSERT_FALSE(browser_view->GetWidget()->IsFullscreen());
+  EXPECT_FALSE(immersive_mode_controller->IsEnabled());
+
+  // Frame paints by default.
+  EXPECT_TRUE(frame_view->ShouldPaint());
+  EXPECT_LT(
+      0, frame_view->GetBoundsForTabStrip(browser_view->tabstrip()).bottom());
+
+  // Enter both browser fullscreen and tab fullscreen. Entering browser
+  // fullscreen should enable immersive fullscreen.
+  ToggleFullscreenModeAndWait(browser());
+  EnterFullscreenModeForTabAndWait(browser(), web_contents);
+  EXPECT_TRUE(immersive_mode_controller->IsEnabled());
+
+  // An immersive reveal shows the buttons and the top of the frame.
+  std::unique_ptr<ImmersiveRevealedLock> revealed_lock(
+      immersive_mode_controller->GetRevealedLock(
+          ImmersiveModeController::ANIMATE_REVEAL_NO));
+  EXPECT_TRUE(immersive_mode_controller->IsRevealed());
+  EXPECT_TRUE(frame_view->ShouldPaint());
+
+  // End the reveal. When in both immersive browser fullscreen and tab
+  // fullscreen.
+  revealed_lock.reset();
+  EXPECT_FALSE(immersive_mode_controller->IsRevealed());
+  EXPECT_FALSE(frame_view->ShouldPaint());
+  EXPECT_EQ(
+      0, frame_view->GetBoundsForTabStrip(browser_view->tabstrip()).bottom());
+
+  // Repeat test but without tab fullscreen.
+  ExitFullscreenModeForTabAndWait(browser(), web_contents);
+
+  // Immersive reveal should have same behavior as before.
+  revealed_lock.reset(immersive_mode_controller->GetRevealedLock(
+      ImmersiveModeController::ANIMATE_REVEAL_NO));
+  EXPECT_TRUE(immersive_mode_controller->IsRevealed());
+  EXPECT_TRUE(frame_view->ShouldPaint());
+  EXPECT_LT(
+      0, frame_view->GetBoundsForTabStrip(browser_view->tabstrip()).bottom());
+
+  // Ending the reveal. Immersive browser should have the same behavior as full
+  // screen, i.e., having an origin of (0,0).
+  revealed_lock.reset();
+  EXPECT_FALSE(frame_view->ShouldPaint());
+  EXPECT_EQ(
+      0, frame_view->GetBoundsForTabStrip(browser_view->tabstrip()).bottom());
+
+  // Exiting immersive fullscreen should make the caption buttons and the frame
+  // visible again.
+  ExitFullscreenModeAndWait(browser_view);
+  EXPECT_FALSE(immersive_mode_controller->IsEnabled());
+  EXPECT_TRUE(frame_view->ShouldPaint());
+  EXPECT_LT(
+      0, frame_view->GetBoundsForTabStrip(browser_view->tabstrip()).bottom());
+}
+
 // Tests IDC_SELECT_TAB_0, IDC_SELECT_NEXT_TAB, IDC_SELECT_PREVIOUS_TAB and
 // IDC_SELECT_LAST_TAB when the browser is in immersive fullscreen mode.
 IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTest,
                        TabNavigationAcceleratorsFullscreenBrowser) {
-  InitializeObserver();
+  ImmersiveModeTester tester(browser());
   // Make sure that the focus is on the webcontents rather than on the omnibox,
   // because if the focus is on the omnibox, the tab strip will remain revealed
-  // in the immerisve fullscreen mode and will interfere with this test waiting
+  // in the immersive fullscreen mode and will interfere with this test waiting
   // for the revealer to be dismissed.
   browser()->tab_strip_model()->GetActiveWebContents()->Focus();
 
@@ -582,10 +545,11 @@ IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTest,
 
   // Toggle fullscreen mode.
   chrome::ToggleFullscreenMode(browser());
-  EXPECT_TRUE(browser_view()->immersive_mode_controller()->IsEnabled());
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+  EXPECT_TRUE(browser_view->immersive_mode_controller()->IsEnabled());
   // Wait for the end of the initial reveal which results from adding the new
   // tabs and changing the focused tab.
-  base::RunLoop().RunUntilIdle();
+  tester.VerifyTabIndexAfterReveal(0);
 
   // Groups the browser command ID and its corresponding active tab index that
   // will result when the command is executed in this test.
@@ -598,46 +562,49 @@ IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTest,
                                     {IDC_SELECT_NEXT_TAB, 1},
                                     {IDC_SELECT_PREVIOUS_TAB, 0}};
   for (const auto& datum : test_data)
-    RunTest(datum.command, datum.expected_index);
+    tester.RunCommand(datum.command, datum.expected_index);
 }
 
 IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTest,
                        TestCaptionButtonsReceiveEventsInBrowserImmersiveMode) {
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+
   // Make sure that the focus is on the webcontents rather than on the omnibox,
   // because if the focus is on the omnibox, the tab strip will remain revealed
-  // in the immerisve fullscreen mode and will interfere with this test waiting
+  // in the immersive fullscreen mode and will interfere with this test waiting
   // for the revealer to be dismissed.
   browser()->tab_strip_model()->GetActiveWebContents()->Focus();
 
   // Toggle fullscreen mode.
   chrome::ToggleFullscreenMode(browser());
-  EXPECT_TRUE(browser_view()->immersive_mode_controller()->IsEnabled());
+  EXPECT_TRUE(browser_view->immersive_mode_controller()->IsEnabled());
 
   EXPECT_TRUE(browser()->window()->IsFullscreen());
   EXPECT_FALSE(browser()->window()->IsMaximized());
-  EXPECT_FALSE(browser_view()->immersive_mode_controller()->IsRevealed());
+  EXPECT_FALSE(browser_view->immersive_mode_controller()->IsRevealed());
 
   std::unique_ptr<ImmersiveRevealedLock> revealed_lock(
-      browser_view()->immersive_mode_controller()->GetRevealedLock(
+      browser_view->immersive_mode_controller()->GetRevealedLock(
           ImmersiveModeController::ANIMATE_REVEAL_NO));
-  EXPECT_TRUE(browser_view()->immersive_mode_controller()->IsRevealed());
+  EXPECT_TRUE(browser_view->immersive_mode_controller()->IsRevealed());
+
+  ImmersiveModeTester tester(browser());
 
   // Clicking the "restore" caption button should exit the immersive mode.
   aura::Window* window = browser()->window()->GetNativeWindow();
-  aura::Window* root = window->GetRootWindow();
-  ui::test::EventGenerator event_generator(root, window);
-  gfx::Size button_size =
-      ash::GetAshLayoutSize(ash::AshLayoutSize::kBrowserCaptionMaximized);
-  gfx::Point point_in_restore_button(
-      window->GetBoundsInRootWindow().top_right());
+  ui::test::EventGenerator event_generator(window->GetRootWindow());
+  gfx::Size button_size = views::GetCaptionButtonLayoutSize(
+      views::CaptionButtonLayoutSize::kBrowserCaptionMaximized);
+  gfx::Point point_in_restore_button(window->GetBoundsInScreen().top_right());
   point_in_restore_button.Offset(-2 * button_size.width(),
                                  button_size.height() / 2);
 
   event_generator.MoveMouseTo(point_in_restore_button);
-  EXPECT_TRUE(browser_view()->immersive_mode_controller()->IsRevealed());
+  EXPECT_TRUE(browser_view->immersive_mode_controller()->IsRevealed());
   event_generator.ClickLeftButton();
+  tester.WaitForFullscreenToExit();
 
-  EXPECT_FALSE(browser_view()->immersive_mode_controller()->IsEnabled());
+  EXPECT_FALSE(browser_view->immersive_mode_controller()->IsEnabled());
   EXPECT_FALSE(browser()->window()->IsFullscreen());
 }
 
@@ -651,7 +618,6 @@ IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTest,
       browser()->profile(), true);
   params.initial_show_state = ui::SHOW_STATE_DEFAULT;
   Browser* browser = new Browser(params);
-  AddBlankTabAndShow(browser);
   ASSERT_TRUE(browser->is_app());
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
 
@@ -675,12 +641,14 @@ IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTest,
           ImmersiveModeController::ANIMATE_REVEAL_NO));
   EXPECT_TRUE(browser_view->immersive_mode_controller()->IsRevealed());
 
+  ImmersiveModeTester tester(browser);
+  AddBlankTabAndShow(browser);
+
   // Clicking the "restore" caption button should exit the immersive mode.
   aura::Window* window = browser->window()->GetNativeWindow();
-  aura::Window* root = window->GetRootWindow();
-  ui::test::EventGenerator event_generator(root, window);
-  gfx::Size button_size =
-      ash::GetAshLayoutSize(ash::AshLayoutSize::kBrowserCaptionMaximized);
+  ui::test::EventGenerator event_generator(window->GetRootWindow(), window);
+  gfx::Size button_size = views::GetCaptionButtonLayoutSize(
+      views::CaptionButtonLayoutSize::kBrowserCaptionMaximized);
   gfx::Point point_in_restore_button(
       window->GetBoundsInRootWindow().top_right());
   point_in_restore_button.Offset(-2 * button_size.width(),
@@ -689,9 +657,108 @@ IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTest,
   event_generator.MoveMouseTo(point_in_restore_button);
   EXPECT_TRUE(browser_view->immersive_mode_controller()->IsRevealed());
   event_generator.ClickLeftButton();
+  tester.WaitForFullscreenToExit();
 
   EXPECT_FALSE(browser_view->immersive_mode_controller()->IsEnabled());
   EXPECT_FALSE(browser->window()->IsFullscreen());
+}
+
+// Regression test for crbug.com/796171.  Make sure that going from regular
+// fullscreen to locked fullscreen does not cause a crash.
+// Also test that the immersive mode is disabled afterwards (and the shelf is
+// hidden, and the fullscreen control popup doesn't show up).
+IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTest,
+                       RegularToLockedFullscreenDisablesImmersive) {
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+
+  // Toggle fullscreen mode.
+  chrome::ToggleFullscreenMode(browser());
+  EXPECT_TRUE(browser_view->immersive_mode_controller()->IsEnabled());
+
+  // Set locked fullscreen state.
+  browser()->window()->GetNativeWindow()->SetProperty(
+      ash::kWindowPinTypeKey, ash::mojom::WindowPinType::TRUSTED_PINNED);
+
+  // We're fullscreen, immersive is disabled in locked fullscreen, and while
+  // we're at it, also make sure that the shelf is hidden.
+  EXPECT_TRUE(browser_view->GetWidget()->IsFullscreen());
+  EXPECT_FALSE(browser_view->immersive_mode_controller()->IsEnabled());
+  EXPECT_FALSE(IsShelfVisible());
+
+  // Make sure the fullscreen control popup doesn't show up.
+  ui::MouseEvent mouse_move(ui::ET_MOUSE_MOVED, gfx::Point(1, 1), gfx::Point(),
+                            base::TimeTicks(), 0, 0);
+  ASSERT_TRUE(browser_view->fullscreen_control_host_for_test());
+  browser_view->fullscreen_control_host_for_test()->OnMouseEvent(mouse_move);
+  EXPECT_FALSE(browser_view->fullscreen_control_host_for_test()->IsVisible());
+}
+
+// Regression test for crbug.com/883104.  Make sure that immersive fullscreen is
+// disabled in locked fullscreen mode (also the shelf is hidden, and the
+// fullscreen control popup doesn't show up).
+IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTest,
+                       LockedFullscreenDisablesImmersive) {
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+  EXPECT_FALSE(browser_view->GetWidget()->IsFullscreen());
+
+  // Set locked fullscreen state.
+  browser()->window()->GetNativeWindow()->SetProperty(
+      ash::kWindowPinTypeKey, ash::mojom::WindowPinType::TRUSTED_PINNED);
+  // In Mash, there may be several notifications due to ordering of the
+  // various window property (kWindowPinTypeKey, kShowStateKey) change
+  // notifications, but we should eventually land on fullscreen.
+  if (features::IsUsingWindowService()) {
+    while (!browser_view->GetWidget()->IsFullscreen())
+      FullscreenNotificationObserver().Wait();
+  }
+
+  // We're fullscreen, immersive is disabled in locked fullscreen, and while
+  // we're at it, also make sure that the shelf is hidden.
+  EXPECT_TRUE(browser_view->GetWidget()->IsFullscreen());
+  EXPECT_FALSE(browser_view->immersive_mode_controller()->IsEnabled());
+  EXPECT_FALSE(IsShelfVisible());
+
+  // Make sure the fullscreen control popup doesn't show up.
+  ui::MouseEvent mouse_move(ui::ET_MOUSE_MOVED, gfx::Point(1, 1), gfx::Point(),
+                            base::TimeTicks(), 0, 0);
+  ASSERT_TRUE(browser_view->fullscreen_control_host_for_test());
+  browser_view->fullscreen_control_host_for_test()->OnMouseEvent(mouse_move);
+  EXPECT_FALSE(browser_view->fullscreen_control_host_for_test()->IsVisible());
+}
+
+// Test the shelf visibility affected by entering and exiting tab fullscreen and
+// immersive fullscreen.
+IN_PROC_BROWSER_TEST_P(ImmersiveModeBrowserViewTest, TabAndBrowserFullscreen) {
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+
+  AddTabAtIndex(0, GURL(url::kAboutBlankURL), ui::PAGE_TRANSITION_TYPED);
+
+  // The shelf should start out as visible.
+  EXPECT_TRUE(IsShelfVisible());
+
+  // 1) Test that entering tab fullscreen from immersive fullscreen hides the
+  // shelf.
+  chrome::ToggleFullscreenMode(browser());
+  ASSERT_TRUE(browser_view->immersive_mode_controller()->IsEnabled());
+  EXPECT_FALSE(IsShelfVisible());
+
+  content::WebContents* web_contents = browser_view->GetActiveWebContents();
+  EnterFullscreenModeForTabAndWait(browser(), web_contents);
+  ASSERT_TRUE(browser_view->immersive_mode_controller()->IsEnabled());
+  EXPECT_FALSE(IsShelfVisible());
+
+  // 2) Test that exiting tab fullscreen autohides the shelf.
+  ExitFullscreenModeForTabAndWait(browser(), web_contents);
+  ASSERT_TRUE(browser_view->immersive_mode_controller()->IsEnabled());
+  EXPECT_FALSE(IsShelfVisible());
+
+  // 3) Test that exiting tab fullscreen and immersive fullscreen correctly
+  // updates the shelf visibility.
+  EnterFullscreenModeForTabAndWait(browser(), web_contents);
+  ASSERT_TRUE(browser_view->immersive_mode_controller()->IsEnabled());
+  chrome::ToggleFullscreenMode(browser());
+  ASSERT_FALSE(browser_view->immersive_mode_controller()->IsEnabled());
+  EXPECT_TRUE(IsShelfVisible());
 }
 
 namespace {
@@ -747,7 +814,11 @@ class HostedAppNonClientFrameViewAshTest
     https_server_.AddDefaultHandlers(base::FilePath(kDocRoot));
     ASSERT_TRUE(https_server_.Start());
     ASSERT_TRUE(embedded_test_server()->Start());
+  }
 
+  // |SetUpHostedApp()| must be called after |SetUpOnMainThread()| to make sure
+  // the Network Service process has been setup properly.
+  void SetUpHostedApp() {
     WebApplicationInfo web_app_info;
     web_app_info.app_url = GetAppURL();
     web_app_info.scope = GetAppURL().GetWithoutFilename();
@@ -765,7 +836,7 @@ class HostedAppNonClientFrameViewAshTest
         static_cast<ash::DefaultFrameHeader*>(frame_view->frame_header_.get());
 
     hosted_app_button_container_ =
-        frame_view->GetHostedAppButtonContainerForTesting();
+        frame_view->hosted_app_button_container_for_testing();
     DCHECK(hosted_app_button_container_);
     DCHECK(hosted_app_button_container_->visible());
 
@@ -777,8 +848,7 @@ class HostedAppNonClientFrameViewAshTest
   }
 
   AppMenu* GetAppMenu() {
-    return hosted_app_button_container_->app_menu_button_
-        ->app_menu_for_testing();
+    return hosted_app_button_container_->app_menu_button_->app_menu();
   }
 
   SkColor GetActiveColor() {
@@ -840,6 +910,7 @@ class HostedAppNonClientFrameViewAshTest
 // bubble anchor adjustment (see |BubbleDialogDelegateView::CreateBubble()|).
 IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest,
                        PageInfoBubblePosition) {
+  SetUpHostedApp();
   // Resize app window to only take up the left half of the screen.
   views::Widget* widget = browser_view_->GetWidget();
   gfx::Size screen_size =
@@ -862,6 +933,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest,
 }
 
 IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest, FocusableViews) {
+  SetUpHostedApp();
   EXPECT_TRUE(browser_view_->contents_web_view()->HasFocus());
   browser_view_->GetFocusManager()->AdvanceFocus(false);
   EXPECT_TRUE(app_menu_button_->HasFocus());
@@ -871,18 +943,21 @@ IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest, FocusableViews) {
 
 // Tests that a web app's theme color is set.
 IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest, ThemeColor) {
+  SetUpHostedApp();
   aura::Window* window = browser_view_->GetWidget()->GetNativeWindow();
   EXPECT_EQ(GetThemeColor(), window->GetProperty(ash::kFrameActiveColorKey));
   EXPECT_EQ(GetThemeColor(), window->GetProperty(ash::kFrameInactiveColorKey));
-  EXPECT_EQ(SK_ColorWHITE, GetActiveColor());
+  EXPECT_EQ(gfx::kGoogleGrey200, GetActiveColor());
 }
 
 // Make sure that for hosted apps, the height of the frame doesn't exceed the
 // height of the caption buttons.
 IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest, FrameSize) {
+  SetUpHostedApp();
   const int inset = GetFrameViewAsh(browser_view_)->GetTopInset(false);
-  EXPECT_EQ(inset,
-            GetAshLayoutSize(ash::AshLayoutSize::kNonBrowserCaption).height());
+  EXPECT_EQ(inset, views::GetCaptionButtonLayoutSize(
+                       views::CaptionButtonLayoutSize::kNonBrowserCaption)
+                       .height());
   EXPECT_GE(inset, app_menu_button_->size().height());
   EXPECT_GE(inset, hosted_app_button_container_->size().height());
 }
@@ -891,12 +966,39 @@ IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest, FrameSize) {
 // provider in this window configuration.
 IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest,
                        ToolbarButtonProvider) {
+  SetUpHostedApp();
   EXPECT_EQ(browser_view_->toolbar_button_provider(),
             hosted_app_button_container_);
 }
 
+// Test that the manage passwords icon appears in the title bar for hosted app
+// windows.
+IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest,
+                       ManagePasswordsIcon) {
+  SetUpHostedApp();
+  content::WebContents* web_contents =
+      app_browser_->tab_strip_model()->GetActiveWebContents();
+  PageActionIconView* manage_passwords_icon =
+      GetPageActionIcon(PageActionIconType::kManagePasswords);
+
+  EXPECT_TRUE(manage_passwords_icon);
+  EXPECT_FALSE(manage_passwords_icon->visible());
+
+  autofill::PasswordForm password_form;
+  password_form.username_value = base::ASCIIToUTF16("test");
+  password_form.origin = GetAppURL().GetOrigin();
+  PasswordsClientUIDelegateFromWebContents(web_contents)
+      ->OnPasswordAutofilled({{password_form.username_value, &password_form}},
+                             password_form.origin, nullptr);
+  chrome::ManagePasswordsForPage(app_browser_);
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(manage_passwords_icon->visible());
+}
+
 // Test that the zoom icon appears in the title bar for hosted app windows.
 IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest, ZoomIcon) {
+  SetUpHostedApp();
   content::WebContents* web_contents =
       app_browser_->tab_strip_model()->GetActiveWebContents();
   zoom::ZoomController* zoom_controller =
@@ -916,6 +1018,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest, ZoomIcon) {
 
 // Test that the find icon appears in the title bar for hosted app windows.
 IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest, FindIcon) {
+  SetUpHostedApp();
   PageActionIconView* find_icon = GetPageActionIcon(PageActionIconType::kFind);
 
   EXPECT_TRUE(find_icon);
@@ -926,10 +1029,29 @@ IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest, FindIcon) {
   EXPECT_TRUE(find_icon->visible());
 }
 
+// Test that the find icon appears in the title bar for hosted app windows.
+IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest, TranslateIcon) {
+  SetUpHostedApp();
+  PageActionIconView* translate_icon =
+      GetPageActionIcon(PageActionIconType::kTranslate);
+
+  ASSERT_TRUE(translate_icon);
+  EXPECT_FALSE(translate_icon->visible());
+
+  chrome::Find(app_browser_);
+  browser_view_->ShowTranslateBubble(browser_view_->GetActiveWebContents(),
+                                     translate::TRANSLATE_STEP_AFTER_TRANSLATE,
+                                     "en", "fr",
+                                     translate::TranslateErrors::NONE, true);
+
+  EXPECT_TRUE(translate_icon->visible());
+}
+
 // Tests that the focus toolbar command focuses the app menu button in web app
 // windows.
 IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest,
                        BrowserCommandFocusToolbarAppMenu) {
+  SetUpHostedApp();
   EXPECT_FALSE(app_menu_button_->HasFocus());
   chrome::ExecuteCommand(app_browser_, IDC_FOCUS_TOOLBAR);
   EXPECT_TRUE(app_menu_button_->HasFocus());
@@ -939,6 +1061,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest,
 // the app menu button when present in web app windows.
 IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest,
                        BrowserCommandFocusToolbarGeolocation) {
+  SetUpHostedApp();
   ContentSettingImageView* geolocation_icon = GrantGeolocationPermission();
 
   EXPECT_FALSE(app_menu_button_->HasFocus());
@@ -953,6 +1076,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest,
 // Tests that the show app menu command opens the app menu for web app windows.
 IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest,
                        BrowserCommandShowAppMenu) {
+  SetUpHostedApp();
   EXPECT_EQ(nullptr, GetAppMenu());
   chrome::ExecuteCommand(app_browser_, IDC_SHOW_APP_MENU);
   EXPECT_NE(nullptr, GetAppMenu());
@@ -962,15 +1086,38 @@ IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest,
 // windows.
 IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest,
                        BrowserCommandFocusNextPane) {
+  SetUpHostedApp();
   EXPECT_FALSE(app_menu_button_->HasFocus());
   chrome::ExecuteCommand(app_browser_, IDC_FOCUS_NEXT_PANE);
   EXPECT_TRUE(app_menu_button_->HasFocus());
+}
+
+// Tests that the custom tab bar is focusable from the keyboard.
+IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest,
+                       CustomTabBarIsFocusable) {
+  SetUpHostedApp();
+
+  auto* browser_view = BrowserView::GetBrowserViewForBrowser(app_browser_);
+
+  const GURL kOutOfScopeURL("http://example.org/");
+  NavigateParams nav_params(app_browser_, kOutOfScopeURL,
+                            ui::PAGE_TRANSITION_LINK);
+  ui_test_utils::NavigateToURL(&nav_params);
+  auto* custom_tab_bar = browser_view->toolbar()->custom_tab_bar();
+
+  chrome::ExecuteCommand(app_browser_, IDC_FOCUS_NEXT_PANE);
+  ASSERT_TRUE(app_menu_button_->HasFocus());
+
+  EXPECT_FALSE(custom_tab_bar->close_button_for_testing()->HasFocus());
+  chrome::ExecuteCommand(app_browser_, IDC_FOCUS_NEXT_PANE);
+  EXPECT_TRUE(custom_tab_bar->close_button_for_testing()->HasFocus());
 }
 
 // Tests that the focus previous pane command focuses the app menu for web app
 // windows.
 IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest,
                        BrowserCommandFocusPreviousPane) {
+  SetUpHostedApp();
   EXPECT_FALSE(app_menu_button_->HasFocus());
   chrome::ExecuteCommand(app_browser_, IDC_FOCUS_PREVIOUS_PANE);
   EXPECT_TRUE(app_menu_button_->HasFocus());
@@ -979,6 +1126,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest,
 // Tests that a web app's content settings icons can be interacted with.
 IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest,
                        ContentSettingIcons) {
+  SetUpHostedApp();
   for (auto* view : *content_setting_views_)
     EXPECT_FALSE(view->visible());
 
@@ -1006,6 +1154,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest,
 
 // Tests that a web app's browser action icons can be interacted with.
 IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest, BrowserActions) {
+  SetUpHostedApp();
   // Even though 2 are visible in the browser, no extension actions should show.
   ToolbarActionsBar* toolbar_actions_bar =
       browser_actions_container_->toolbar_actions_bar();
@@ -1031,21 +1180,14 @@ IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest, BrowserActions) {
 // Regression test for https://crbug.com/839955
 IN_PROC_BROWSER_TEST_P(HostedAppNonClientFrameViewAshTest,
                        ActiveStateOfButtonMatchesWidget) {
-  // The caption button part of this test is covered for mash by
-  // NonClientFrameViewAshTest::ActiveStateOfButtonMatchesWidget.
-  if (!features::IsUsingWindowService()) {
-    ash::FrameCaptionButtonContainerView::TestApi test(
-        GetFrameViewAsh(browser_view_)->caption_button_container_);
-    EXPECT_TRUE(test.size_button()->paint_as_active());
-  }
+  SetUpHostedApp();
+  ash::FrameCaptionButtonContainerView::TestApi test(
+      GetFrameViewAsh(browser_view_)->caption_button_container_);
+  EXPECT_TRUE(test.size_button()->paint_as_active());
   EXPECT_TRUE(GetPaintingAsActive());
 
   browser_view_->GetWidget()->Deactivate();
-  if (!features::IsUsingWindowService()) {
-    ash::FrameCaptionButtonContainerView::TestApi test(
-        GetFrameViewAsh(browser_view_)->caption_button_container_);
-    EXPECT_FALSE(test.size_button()->paint_as_active());
-  }
+  EXPECT_FALSE(test.size_button()->paint_as_active());
   EXPECT_FALSE(GetPaintingAsActive());
 }
 
@@ -1071,17 +1213,9 @@ class BrowserNonClientFrameViewAshBackButtonTest
 IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshBackButtonTest,
                        V1BackButton) {
   // Normal browser windows don't have a frame back button.
-  if (!features::IsUsingWindowService()) {
-    BrowserNonClientFrameViewAsh* frame_view =
-        GetFrameViewAsh(BrowserView::GetBrowserViewForBrowser(browser()));
-    EXPECT_FALSE(frame_view->back_button_);
-  } else {
-    EXPECT_EQ(ash::FrameBackButtonState::kNone,
-              BrowserView::GetBrowserViewForBrowser(browser())
-                  ->GetWidget()
-                  ->GetNativeWindow()
-                  ->GetProperty(ash::kFrameBackButtonStateKey));
-  }
+  BrowserNonClientFrameViewAsh* frame_view =
+      GetFrameViewAsh(BrowserView::GetBrowserViewForBrowser(browser()));
+  EXPECT_FALSE(frame_view->back_button_);
 
   browser()->window()->Close();
 
@@ -1090,43 +1224,26 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshBackButtonTest,
       "test_browser_app", true /* trusted_source */, gfx::Rect(),
       browser()->profile(), true);
   params.initial_show_state = ui::SHOW_STATE_DEFAULT;
-  Browser* browser = new Browser(params);
-  AddBlankTabAndShow(browser);
+  Browser* app_browser = new Browser(params);
+  AddBlankTabAndShow(app_browser);
 
-  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-  BrowserNonClientFrameViewAsh* frame_view = GetFrameViewAsh(browser_view);
-  aura::Window* app_window = frame_view->GetWidget()->GetNativeWindow();
-
-  if (!features::IsUsingWindowService()) {
-    ASSERT_TRUE(frame_view->back_button_);
-    EXPECT_TRUE(frame_view->back_button_->visible());
-    // The back button should be disabled initially.
-    EXPECT_FALSE(frame_view->back_button_->enabled());
-  } else {
-    EXPECT_EQ(ash::FrameBackButtonState::kDisabled,
-              app_window->GetProperty(ash::kFrameBackButtonStateKey));
-  }
+  BrowserNonClientFrameViewAsh* app_frame_view =
+      GetFrameViewAsh(BrowserView::GetBrowserViewForBrowser(app_browser));
+  ASSERT_TRUE(app_frame_view->back_button_);
+  EXPECT_TRUE(app_frame_view->back_button_->visible());
+  // The back button should be disabled initially.
+  EXPECT_FALSE(app_frame_view->back_button_->enabled());
 
   // Nagivate to a page. The back button should now be enabled.
   const GURL kAppStartURL("http://example.org/");
-  NavigateParams nav_params(browser, kAppStartURL, ui::PAGE_TRANSITION_LINK);
+  NavigateParams nav_params(app_browser, kAppStartURL,
+                            ui::PAGE_TRANSITION_LINK);
   ui_test_utils::NavigateToURL(&nav_params);
-
-  if (!features::IsUsingWindowService()) {
-    EXPECT_TRUE(frame_view->back_button_->enabled());
-  } else {
-    EXPECT_EQ(ash::FrameBackButtonState::kEnabled,
-              app_window->GetProperty(ash::kFrameBackButtonStateKey));
-  }
+  EXPECT_TRUE(app_frame_view->back_button_->enabled());
 
   // Go back to the blank. The back button should be disabled again.
-  chrome::GoBack(browser, WindowOpenDisposition::CURRENT_TAB);
-  if (!features::IsUsingWindowService()) {
-    EXPECT_FALSE(frame_view->back_button_->enabled());
-  } else {
-    EXPECT_EQ(ash::FrameBackButtonState::kDisabled,
-              app_window->GetProperty(ash::kFrameBackButtonStateKey));
-  }
+  chrome::GoBack(app_browser, WindowOpenDisposition::CURRENT_TAB);
+  EXPECT_FALSE(app_frame_view->back_button_->enabled());
 }
 
 // Test the normal type browser's kTopViewInset is always 0.
@@ -1158,9 +1275,8 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest, TopViewInset) {
   EXPECT_EQ(0, window->GetProperty(aura::client::kTopViewInset));
 }
 
-// Disabled due to high flake rate; https://crbug.com/818170.
 IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest,
-                       DISABLED_HeaderVisibilityInOverviewAndSplitview) {
+                       HeaderVisibilityInOverviewAndSplitview) {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
   Widget* widget = browser_view->GetWidget();
   BrowserNonClientFrameViewAsh* frame_view = GetFrameViewAsh(browser_view);
@@ -1172,10 +1288,9 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest,
 
   // Test that the header is invisible for the browser window in overview mode
   // and visible when not in overview mode.
-  ash::Shell* shell = ash::Shell::Get();
-  shell->window_selector_controller()->ToggleOverview();
+  ToggleOverview();
   EXPECT_FALSE(frame_view->caption_button_container_->visible());
-  shell->window_selector_controller()->ToggleOverview();
+  ToggleOverview();
   EXPECT_TRUE(frame_view->caption_button_container_->visible());
 
   // Create another browser window.
@@ -1187,55 +1302,96 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest,
   AddBlankTabAndShow(browser2);
   BrowserView* browser_view2 = BrowserView::GetBrowserViewForBrowser(browser2);
   Widget* widget2 = browser_view2->GetWidget();
-  BrowserNonClientFrameViewAsh* frame_view2 =
-      static_cast<BrowserNonClientFrameViewAsh*>(
-          widget2->non_client_view()->frame_view());
+  BrowserNonClientFrameViewAsh* frame_view2 = GetFrameViewAsh(browser_view2);
   widget2->GetNativeWindow()->SetProperty(
       aura::client::kResizeBehaviorKey,
       ws::mojom::kResizeBehaviorCanMaximize |
           ws::mojom::kResizeBehaviorCanResize);
 
-  // Test that when one browser window is snapped, the header is visible for the
-  // snapped browser window, but invisible for the browser window still in
-  // overview mode.
-  shell->tablet_mode_controller()->EnableTabletModeWindowManager(true);
-  ash::SplitViewController* split_view_controller =
-      shell->split_view_controller();
-  split_view_controller->BindRequest(
-      mojo::MakeRequest(&frame_view->split_view_controller_));
-  split_view_controller->BindRequest(
-      mojo::MakeRequest(&frame_view2->split_view_controller_));
-  split_view_controller->AddObserver(
-      frame_view->CreateInterfacePtrForTesting());
-  split_view_controller->AddObserver(
-      frame_view2->CreateInterfacePtrForTesting());
-  frame_view->split_view_controller_.FlushForTesting();
-  frame_view2->split_view_controller_.FlushForTesting();
+  if (features::IsUsingWindowService()) {
+    // Test that when one browser window is snapped, the header is visible for
+    // the snapped browser window, but invisible for the browser window still in
+    // overview mode.
+    ToggleOverview();
 
-  shell->window_selector_controller()->ToggleOverview();
-  split_view_controller->SnapWindow(widget->GetNativeWindow(),
-                                    ash::SplitViewController::LEFT);
-  frame_view->split_view_controller_.FlushForTesting();
-  frame_view2->split_view_controller_.FlushForTesting();
-  EXPECT_TRUE(frame_view->caption_button_container_->visible());
-  EXPECT_FALSE(frame_view2->caption_button_container_->visible());
+    ash::mojom::ShellTestApiPtr shell_test_api;
+    content::ServiceManagerConnection::GetForProcess()
+        ->GetConnector()
+        ->BindInterface(ash::mojom::kServiceName, &shell_test_api);
 
-  // When both browser windows are snapped, the headers are both visible.
-  split_view_controller->SnapWindow(widget2->GetNativeWindow(),
-                                    ash::SplitViewController::RIGHT);
-  frame_view->split_view_controller_.FlushForTesting();
-  frame_view2->split_view_controller_.FlushForTesting();
-  EXPECT_TRUE(frame_view->caption_button_container_->visible());
-  EXPECT_TRUE(frame_view2->caption_button_container_->visible());
+    {
+      base::RunLoop run_loop;
+      shell_test_api->SnapWindowInSplitView(content::mojom::kBrowserServiceName,
+                                            frame_view->GetServerWindowId(),
+                                            true, run_loop.QuitClosure());
+      run_loop.Run();
+    }
 
-  // Toggle overview mode while splitview mode is active. Test that the header
-  // is visible for the snapped browser window but not for the other browser
-  // window in overview mode.
-  shell->window_selector_controller()->ToggleOverview();
-  frame_view->split_view_controller_.FlushForTesting();
-  frame_view2->split_view_controller_.FlushForTesting();
-  EXPECT_TRUE(frame_view->caption_button_container_->visible());
-  EXPECT_FALSE(frame_view2->caption_button_container_->visible());
+    EXPECT_TRUE(frame_view->caption_button_container_->visible());
+    EXPECT_FALSE(frame_view2->caption_button_container_->visible());
+
+    // When both browser windows are snapped, the headers are both visible.
+    {
+      base::RunLoop run_loop;
+      shell_test_api->SnapWindowInSplitView(content::mojom::kBrowserServiceName,
+                                            frame_view2->GetServerWindowId(),
+                                            false, run_loop.QuitClosure());
+      run_loop.Run();
+    }
+
+    EXPECT_TRUE(frame_view->caption_button_container_->visible());
+    EXPECT_TRUE(frame_view2->caption_button_container_->visible());
+
+    // Toggle overview mode while splitview mode is active. Test that the header
+    // is visible for the snapped browser window but not for the other browser
+    // window in overview mode.
+    ToggleOverview();
+    EXPECT_TRUE(frame_view->caption_button_container_->visible());
+    EXPECT_FALSE(frame_view2->caption_button_container_->visible());
+  } else {
+    // Test that when one browser window is snapped, the header is visible for
+    // the snapped browser window, but invisible for the browser window still in
+    // overview mode.
+    ash::Shell* shell = ash::Shell::Get();
+    ash::SplitViewController* split_view_controller =
+        shell->split_view_controller();
+    split_view_controller->BindRequest(
+        mojo::MakeRequest(&frame_view->split_view_controller_));
+    split_view_controller->BindRequest(
+        mojo::MakeRequest(&frame_view2->split_view_controller_));
+    split_view_controller->AddObserver(
+        frame_view->CreateInterfacePtrForTesting());
+    split_view_controller->AddObserver(
+        frame_view2->CreateInterfacePtrForTesting());
+    frame_view->split_view_controller_.FlushForTesting();
+    frame_view2->split_view_controller_.FlushForTesting();
+
+    ToggleOverview();
+    split_view_controller->SnapWindow(widget->GetNativeWindow(),
+                                      ash::SplitViewController::LEFT);
+    frame_view->split_view_controller_.FlushForTesting();
+    frame_view2->split_view_controller_.FlushForTesting();
+    EXPECT_TRUE(frame_view->caption_button_container_->visible());
+    EXPECT_FALSE(frame_view2->caption_button_container_->visible());
+
+    // When both browser windows are snapped, the headers are both visible.
+    split_view_controller->SnapWindow(widget2->GetNativeWindow(),
+                                      ash::SplitViewController::RIGHT);
+    frame_view->split_view_controller_.FlushForTesting();
+    frame_view2->split_view_controller_.FlushForTesting();
+    EXPECT_TRUE(frame_view->caption_button_container_->visible());
+    EXPECT_TRUE(frame_view2->caption_button_container_->visible());
+
+    // Toggle overview mode while splitview mode is active. Test that the header
+    // is visible for the snapped browser window but not for the other browser
+    // window in overview mode.
+    ToggleOverview();
+    frame_view->split_view_controller_.FlushForTesting();
+    frame_view2->split_view_controller_.FlushForTesting();
+
+    EXPECT_TRUE(frame_view->caption_button_container_->visible());
+    EXPECT_FALSE(frame_view2->caption_button_container_->visible());
+  }
 }
 
 // Regression test for https://crbug.com/879851.
@@ -1298,8 +1454,7 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest,
 
   // The kTopViewInset is the same as in overview mode.
   const int inset_normal = window->GetProperty(aura::client::kTopViewInset);
-  EXPECT_TRUE(
-      ash::Shell::Get()->window_selector_controller()->ToggleOverview());
+  ToggleOverview();
   const int inset_in_overview_mode =
       window->GetProperty(aura::client::kTopViewInset);
   EXPECT_EQ(inset_normal, inset_in_overview_mode);
@@ -1320,78 +1475,32 @@ class HomeLauncherBrowserNonClientFrameViewAshTest
     command_line->AppendSwitch(ash::switches::kAshEnableTabletMode);
   }
 
-  void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(
-        app_list::features::kEnableHomeLauncher);
-    TopChromeMdParamTest<InProcessBrowserTest>::SetUp();
-  }
-
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-
   DISALLOW_COPY_AND_ASSIGN(HomeLauncherBrowserNonClientFrameViewAshTest);
-};
-
-class NonHomeLauncherBrowserNonClientFrameViewAshTest
-    : public TopChromeMdParamTest<InProcessBrowserTest> {
- public:
-  NonHomeLauncherBrowserNonClientFrameViewAshTest() = default;
-  ~NonHomeLauncherBrowserNonClientFrameViewAshTest() override = default;
-
-  void SetUpDefaultCommandLine(base::CommandLine* command_line) override {
-    TopChromeMdParamTest<InProcessBrowserTest>::SetUpDefaultCommandLine(
-        command_line);
-
-    command_line->AppendSwitch(ash::switches::kAshEnableTabletMode);
-  }
-
-  void SetUp() override {
-    scoped_feature_list_.InitAndDisableFeature(
-        app_list::features::kEnableHomeLauncher);
-    TopChromeMdParamTest<InProcessBrowserTest>::SetUp();
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(NonHomeLauncherBrowserNonClientFrameViewAshTest);
 };
 
 }  // namespace
 
 IN_PROC_BROWSER_TEST_P(HomeLauncherBrowserNonClientFrameViewAshTest,
                        TabletModeBrowserCaptionButtonVisibility) {
-  // For mash, this is tested by an ash unit test of the same name.
-  if (features::IsUsingWindowService())
-    return;
-
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
   BrowserNonClientFrameViewAsh* frame_view = GetFrameViewAsh(browser_view);
 
   EXPECT_TRUE(frame_view->caption_button_container_->visible());
-  ash::Shell* shell = ash::Shell::Get();
-  ash::TabletModeController* tablet_mode_controller =
-      shell->tablet_mode_controller();
-  tablet_mode_controller->EnableTabletModeWindowManager(true);
-  tablet_mode_controller->FlushForTesting();
+  ASSERT_NO_FATAL_FAILURE(test::SetAndWaitForTabletMode(true));
   EXPECT_FALSE(frame_view->caption_button_container_->visible());
 
-  shell->window_selector_controller()->ToggleOverview();
+  ToggleOverview();
   EXPECT_FALSE(frame_view->caption_button_container_->visible());
-  shell->window_selector_controller()->ToggleOverview();
+  ToggleOverview();
   EXPECT_FALSE(frame_view->caption_button_container_->visible());
 
-  tablet_mode_controller->EnableTabletModeWindowManager(false);
-  tablet_mode_controller->FlushForTesting();
+  ASSERT_NO_FATAL_FAILURE(test::SetAndWaitForTabletMode(false));
   EXPECT_TRUE(frame_view->caption_button_container_->visible());
 }
 
 IN_PROC_BROWSER_TEST_P(HomeLauncherBrowserNonClientFrameViewAshTest,
                        TabletModeAppCaptionButtonVisibility) {
-  // For mash, this is tested by an ash unit test of the same name.
-  if (features::IsUsingWindowService())
-    return;
-
   browser()->window()->Close();
 
   // Open a new app window.
@@ -1401,79 +1510,31 @@ IN_PROC_BROWSER_TEST_P(HomeLauncherBrowserNonClientFrameViewAshTest,
   params.initial_show_state = ui::SHOW_STATE_DEFAULT;
   Browser* browser = new Browser(params);
   ASSERT_TRUE(browser->is_app());
+  browser->window()->Show();
 
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   BrowserNonClientFrameViewAsh* frame_view = GetFrameViewAsh(browser_view);
   EXPECT_TRUE(frame_view->caption_button_container_->visible());
 
   // Tablet mode doesn't affect app's caption button's visibility.
-  ash::Shell* shell = ash::Shell::Get();
-  ash::TabletModeController* tablet_mode_controller =
-      shell->tablet_mode_controller();
-  tablet_mode_controller->EnableTabletModeWindowManager(true);
-  tablet_mode_controller->FlushForTesting();
+  ASSERT_NO_FATAL_FAILURE(test::SetAndWaitForTabletMode(true));
   EXPECT_TRUE(frame_view->caption_button_container_->visible());
 
   // However, overview mode does.
-  shell->window_selector_controller()->ToggleOverview();
+  ToggleOverview();
   EXPECT_FALSE(frame_view->caption_button_container_->visible());
-  shell->window_selector_controller()->ToggleOverview();
+  ToggleOverview();
   EXPECT_TRUE(frame_view->caption_button_container_->visible());
 
-  tablet_mode_controller->EnableTabletModeWindowManager(false);
-  tablet_mode_controller->FlushForTesting();
+  ASSERT_NO_FATAL_FAILURE(test::SetAndWaitForTabletMode(false));
   EXPECT_TRUE(frame_view->caption_button_container_->visible());
 }
 
-// Tests that the header of a snapped browser window in splitview mode uses
-// the same header height of a maximized window. The test will fail when home
-// launcher is enabled, because caption button container is made invisible
-// intentionally.
-IN_PROC_BROWSER_TEST_P(NonHomeLauncherBrowserNonClientFrameViewAshTest,
-                       HeaderHeightForSnappedBrowserInSplitView) {
-  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
-  Widget* widget = browser_view->GetWidget();
-  BrowserNonClientFrameViewAsh* frame_view = GetFrameViewAsh(browser_view);
+#define INSTANTIATE_TEST_SUITE(name) \
+  INSTANTIATE_TEST_SUITE_P(, name, ::testing::Values(false, true))
 
-  widget->GetNativeWindow()->SetProperty(
-      aura::client::kResizeBehaviorKey,
-      ws::mojom::kResizeBehaviorCanMaximize |
-          ws::mojom::kResizeBehaviorCanResize);
-
-  // Maximize the widget and store its frame header height.
-  widget->Maximize();
-  const int expected_height = frame_view->frame_header_->GetHeaderHeight();
-  widget->Restore();
-
-  ash::Shell* shell = ash::Shell::Get();
-  ash::SplitViewController* split_view_controller =
-      shell->split_view_controller();
-  split_view_controller->BindRequest(
-      mojo::MakeRequest(&frame_view->split_view_controller_));
-  split_view_controller->AddObserver(
-      frame_view->CreateInterfacePtrForTesting());
-  frame_view->split_view_controller_.FlushForTesting();
-
-  shell->tablet_mode_controller()->EnableTabletModeWindowManager(true);
-  shell->window_selector_controller()->ToggleOverview();
-  split_view_controller->SnapWindow(widget->GetNativeWindow(),
-                                    ash::SplitViewController::LEFT);
-  frame_view->split_view_controller_.FlushForTesting();
-  EXPECT_TRUE(frame_view->caption_button_container_->visible());
-  EXPECT_EQ(expected_height, frame_view->frame_header_->GetHeaderHeight());
-}
-
-#define INSTANTIATE_TEST_CASE(name)                                   \
-  INSTANTIATE_TEST_CASE_P(                                            \
-      , name,                                                         \
-      ::testing::Values(switches::kTopChromeMDMaterial,               \
-                        switches::kTopChromeMDMaterialTouchOptimized, \
-                        switches::kTopChromeMDMaterialRefresh),       \
-      &TopChromeMdParamToString)
-
-INSTANTIATE_TEST_CASE(BrowserNonClientFrameViewAshTest);
-INSTANTIATE_TEST_CASE(ImmersiveModeBrowserViewTest);
-INSTANTIATE_TEST_CASE(HostedAppNonClientFrameViewAshTest);
-INSTANTIATE_TEST_CASE(BrowserNonClientFrameViewAshBackButtonTest);
-INSTANTIATE_TEST_CASE(HomeLauncherBrowserNonClientFrameViewAshTest);
-INSTANTIATE_TEST_CASE(NonHomeLauncherBrowserNonClientFrameViewAshTest);
+INSTANTIATE_TEST_SUITE(BrowserNonClientFrameViewAshTest);
+INSTANTIATE_TEST_SUITE(ImmersiveModeBrowserViewTest);
+INSTANTIATE_TEST_SUITE(HostedAppNonClientFrameViewAshTest);
+INSTANTIATE_TEST_SUITE(BrowserNonClientFrameViewAshBackButtonTest);
+INSTANTIATE_TEST_SUITE(HomeLauncherBrowserNonClientFrameViewAshTest);

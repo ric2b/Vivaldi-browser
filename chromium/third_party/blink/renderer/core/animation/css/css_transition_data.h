@@ -9,7 +9,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "third_party/blink/renderer/core/animation/css/css_timing_data.h"
-#include "third_party/blink/renderer/core/css_property_names.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
@@ -24,7 +24,7 @@ class CORE_EXPORT CSSTransitionData final : public CSSTimingData {
 
   // FIXME: We shouldn't allow 'none' to be used alongside other properties.
   struct TransitionProperty {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+    DISALLOW_NEW();
     TransitionProperty(CSSPropertyID id)
         : property_type(kTransitionKnownProperty), unresolved_property(id) {
       DCHECK_NE(id, CSSPropertyInvalid);

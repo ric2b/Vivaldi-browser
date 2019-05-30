@@ -8,7 +8,6 @@ class TestChromeCleanupProxy extends TestBrowserProxy {
     super([
       'registerChromeCleanerObserver',
       'restartComputer',
-      'setLogsUploadPermission',
       'startCleanup',
       'startScanning',
       'notifyShowDetails',
@@ -26,11 +25,6 @@ class TestChromeCleanupProxy extends TestBrowserProxy {
   /** @override */
   restartComputer() {
     this.methodCalled('restartComputer');
-  }
-
-  /** @override */
-  setLogsUploadPermission(enabled) {
-    this.methodCalled('setLogsUploadPermission', enabled);
   }
 
   /** @override */
@@ -71,9 +65,15 @@ let chromeCleanupPage = null;
 /** @type {?TestDownloadsBrowserProxy} */
 let chromeCleanupProxy = null;
 
-const shortFileList = ['file 1', 'file 2', 'file 3'];
-const exactSizeFileList = ['file 1', 'file 2', 'file 3', 'file 4'];
-const longFileList = ['file 1', 'file 2', 'file 3', 'file 4', 'file 5'];
+const shortFileList = [
+  {'dirname': 'C:\\', 'basename': 'file 1'},
+  {'dirname': 'C:\\', 'basename': 'file 2'},
+  {'dirname': 'C:\\', 'basename': 'file 3'},
+];
+const exactSizeFileList =
+    shortFileList.concat([{'dirname': 'C:\\', 'basename': 'file 4'}]);
+const longFileList =
+    exactSizeFileList.concat([{'dirname': 'C:\\', 'basename': 'file 5'}]);
 const shortRegistryKeysList = ['key 1', 'key 2'];
 const exactSizeRegistryKeysList = ['key 1', 'key 2', 'key 3', 'key 4'];
 const longRegistryKeysList =
@@ -103,7 +103,7 @@ const defaultScannerResults = {
  */
 function validateVisibleItemsList(originalItems, visibleItems) {
   let visibleItemsList =
-      visibleItems.querySelectorAll('* /deep/ .visible-item');
+      visibleItems.shadowRoot.querySelectorAll('.visible-item');
   const moreItemsLink = visibleItems.$$('#more-items-link');
 
   if (originalItems.length <= settings.CHROME_CLEANUP_DEFAULT_ITEMS_TO_SHOW) {
@@ -119,9 +119,26 @@ function validateVisibleItemsList(originalItems, visibleItems) {
     moreItemsLink.click();
     Polymer.dom.flush();
 
-    visibleItemsList = visibleItems.querySelectorAll('* /deep/ .visible-item');
+    visibleItemsList =
+        visibleItems.shadowRoot.querySelectorAll('.visible-item');
     assertEquals(visibleItemsList.length, originalItems.length);
     assertTrue(moreItemsLink.hidden);
+  }
+}
+
+/**
+ * @param {!Array} originalItems
+ * @param {!Element} container
+ * @param {boolean} expectSuffix Whether a highlight suffix should exist.
+ */
+function validateHighlightSuffix(originalItems, container, expectSuffix) {
+  let itemList =
+      container.shadowRoot.querySelectorAll('li:not(#more-items-link)');
+  assertEquals(originalItems.length, itemList.length);
+  for (let item of itemList) {
+    let suffixes = item.querySelectorAll('.highlight-suffix');
+    assertEquals(suffixes.length, 1);
+    assertEquals(expectSuffix, !suffixes[0].hidden);
   }
 }
 
@@ -137,7 +154,7 @@ function startCleanupFromInfected(files, registryKeys, extensions) {
     'extensions': extensions
   };
 
-  cr.webUIListenerCallback('chrome-cleanup-upload-permission-change', false);
+  updateReportingEnabledPref(false);
   cr.webUIListenerCallback(
       'chrome-cleanup-on-infected', true /* isPoweredByPartner */,
       scannerResults);
@@ -150,6 +167,7 @@ function startCleanupFromInfected(files, registryKeys, extensions) {
   const filesToRemoveList = chromeCleanupPage.$$('#files-to-remove-list');
   assertTrue(!!filesToRemoveList);
   validateVisibleItemsList(files, filesToRemoveList);
+  validateHighlightSuffix(files, filesToRemoveList, true /* expectSuffix */);
 
   const registryKeysListContainer = chromeCleanupPage.$$('#registry-keys-list');
   assertTrue(!!registryKeysListContainer);
@@ -157,6 +175,8 @@ function startCleanupFromInfected(files, registryKeys, extensions) {
     assertFalse(registryKeysListContainer.hidden);
     assertTrue(!!registryKeysListContainer);
     validateVisibleItemsList(registryKeys, registryKeysListContainer);
+    validateHighlightSuffix(
+        registryKeys, registryKeysListContainer, false /* expectSuffix */);
   } else {
     assertTrue(registryKeysListContainer.hidden);
   }
@@ -167,6 +187,8 @@ function startCleanupFromInfected(files, registryKeys, extensions) {
     assertFalse(extensionsListContainer.hidden);
     assertTrue(!!extensionsListContainer);
     validateVisibleItemsList(extensions, extensionsListContainer);
+    validateHighlightSuffix(
+        extensions, extensionsListContainer, false /* expectSuffix */);
   } else {
     assertTrue(extensionsListContainer.hidden);
   }
@@ -188,6 +210,21 @@ function startCleanupFromInfected(files, registryKeys, extensions) {
 }
 
 /**
+ * @param {boolean} newValue The new value to set to
+ *     prefs.software_reporter.reporting.
+ */
+function updateReportingEnabledPref(newValue) {
+  chromeCleanupPage.prefs = {
+    software_reporter: {
+      reporting: {
+        type: chrome.settingsPrivate.PrefType.BOOLEAN,
+        value: newValue,
+      },
+    },
+  };
+}
+
+/**
  * @param {boolean} testingScanOffered Whether to test the case where scanning
  *     is offered to the user.
  */
@@ -203,23 +240,21 @@ function testLogsUploading(testingScanOffered) {
   Polymer.dom.flush();
 
   const logsControl = chromeCleanupPage.$$('#chromeCleanupLogsUploadControl');
-  assertTrue(!!logsControl);
 
-  cr.webUIListenerCallback(
-      'chrome-cleanup-upload-permission-change', false, true);
-  Polymer.dom.flush();
+  updateReportingEnabledPref(true);
+  assertTrue(!!logsControl);
   assertTrue(logsControl.checked);
 
-  cr.webUIListenerCallback(
-      'chrome-cleanup-upload-permission-change', false, false);
-  Polymer.dom.flush();
+  logsControl.$.checkbox.click();
   assertFalse(logsControl.checked);
+  assertFalse(chromeCleanupPage.prefs.software_reporter.reporting.value);
 
-  logsControl.$.control.click();
-  return chromeCleanupProxy.whenCalled('setLogsUploadPermission')
-      .then(function(logsUploadEnabled) {
-        assertTrue(logsUploadEnabled);
-      });
+  logsControl.$.checkbox.click();
+  assertTrue(logsControl.checked);
+  assertTrue(chromeCleanupPage.prefs.software_reporter.reporting.value);
+
+  updateReportingEnabledPref(false);
+  assertFalse(logsControl.checked);
 }
 
 /**
@@ -248,6 +283,11 @@ suite('ChromeCleanupHandler', function() {
     PolymerTest.clearBody();
 
     chromeCleanupPage = document.createElement('settings-chrome-cleanup-page');
+    chromeCleanupPage.prefs = {
+      software_reporter: {
+        reporting: {type: chrome.settingsPrivate.PrefType.BOOLEAN, value: true},
+      },
+    };
     document.body.appendChild(chromeCleanupPage);
   });
 
@@ -340,7 +380,7 @@ suite('ChromeCleanupHandler', function() {
   });
 
   test('startScanFromIdle', function() {
-    cr.webUIListenerCallback('chrome-cleanup-upload-permission-change', false);
+    updateReportingEnabledPref(false);
     cr.webUIListenerCallback(
         'chrome-cleanup-on-idle', settings.ChromeCleanupIdleReason.INITIAL);
     Polymer.dom.flush();
@@ -413,7 +453,7 @@ suite('ChromeCleanupHandler', function() {
   });
 
   test('cleanupFailure', function() {
-    cr.webUIListenerCallback('chrome-cleanup-upload-permission-change', false);
+    updateReportingEnabledPref(false);
     cr.webUIListenerCallback(
         'chrome-cleanup-on-cleaning', true /* isPoweredByPartner */,
         defaultScannerResults);
@@ -469,5 +509,49 @@ suite('ChromeCleanupHandler', function() {
   test('onCleaningResultsProvidedByPartner_False', function() {
     return testPartnerLogoShown(
         false /* onInfected */, false /* isPoweredByPartner */);
+  });
+
+  test('logsUploadingState_reporterPolicyDisabled', function() {
+    cr.webUIListenerCallback(
+        'chrome-cleanup-on-idle', settings.ChromeCleanupIdleReason.INITIAL);
+    // prefs.software_reporter.enabled is not a real preference as it can't be
+    // set by the user. ChromeCleanupHandler can notify the JS of changes to the
+    // policy enforcement.
+    cr.webUIListenerCallback('chrome-cleanup-enabled-change', false);
+    Polymer.dom.flush();
+
+    const actionButton = chromeCleanupPage.$$('#action-button');
+    assertTrue(!!actionButton);
+    assertTrue(actionButton.disabled);
+
+    const logsControl = chromeCleanupPage.$$('#chromeCleanupLogsUploadControl');
+    assertTrue(!!logsControl);
+    assertTrue(logsControl.disabled);
+  });
+
+  test('logsUploadingState_reporterReportingPolicyDisabled', function() {
+    cr.webUIListenerCallback(
+        'chrome-cleanup-on-idle', settings.ChromeCleanupIdleReason.INITIAL);
+    Polymer.dom.flush();
+
+    chromeCleanupPage.prefs = {
+      software_reporter: {
+        reporting: {
+          type: chrome.settingsPrivate.PrefType.BOOLEAN,
+          enforcement: chrome.settingsPrivate.Enforcement.ENFORCED,
+          controlledBy: chrome.settingsPrivate.ControlledBy.USER_POLICY,
+          value: false,
+        }
+      },
+    };
+
+    const actionButton = chromeCleanupPage.$$('#action-button');
+    assertTrue(!!actionButton);
+    assertFalse(actionButton.disabled);
+
+    const logsControl = chromeCleanupPage.$$('#chromeCleanupLogsUploadControl');
+    assertTrue(!!logsControl);
+    assertFalse(logsControl.disabled);
+    assertTrue(logsControl.$.checkbox.disabled);
   });
 });

@@ -22,6 +22,7 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(GOOGLE_CHROME_BUILD)
+#include "base/enterprise_util.h"
 #include "base/win/win_util.h"
 #include "chrome/browser/conflicts/incompatible_applications_updater_win.h"
 #include "chrome/browser/conflicts/module_blacklist_cache_updater_win.h"
@@ -37,6 +38,8 @@ constexpr char kAllowedInputMethodEditor[] = "Allowed - Input method editor";
 constexpr char kAllowedMatchingCertificate[] = "Allowed - Matching certificate";
 constexpr char kAllowedMicrosoftModule[] = "Allowed - Microsoft module";
 constexpr char kAllowedWhitelisted[] = "Allowed - Whitelisted";
+constexpr char kNotAnalyzed[] =
+    "Tolerated - Not analyzed (See https://crbug.com/892294)";
 constexpr char kAllowedSameDirectory[] =
 #if defined(OFFICIAL_BUILD)
     // In official builds, modules in the Chrome directory are blocked but they
@@ -99,6 +102,8 @@ std::string GetBlockingDecisionString(
       return kAllowedMicrosoftModule;
     case BlockingDecision::kAllowedWhitelisted:
       return kAllowedWhitelisted;
+    case BlockingDecision::kNotAnalyzed:
+      return kNotAnalyzed;
     case BlockingDecision::kTolerated:
       // This is a module explicitly allowed to load by the Module List
       // component. But it is still valid for a potential warning, and so the
@@ -142,6 +147,8 @@ std::string GetModuleWarningDecisionString(
       return kAllowedMicrosoftModule;
     case WarningDecision::kAllowedWhitelisted:
       return kAllowedWhitelisted;
+    case WarningDecision::kNotAnalyzed:
+      return kNotAnalyzed;
     case WarningDecision::kNoTiedApplication:
       return "Tolerated - Could not tie to an installed application";
     case WarningDecision::kIncompatible:
@@ -303,7 +310,7 @@ void ConflictsHandler::HandleRequestModuleList(const base::ListValue* args) {
     third_party_features_status_ = kFeatureDisabled;
   }
 
-  if (base::win::IsEnterpriseManaged())
+  if (base::IsMachineExternallyManaged())
     third_party_features_status_ = kEnterpriseManaged;
 
   // The above 3 cases are the only possible reasons why the manager wouldn't

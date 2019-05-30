@@ -62,6 +62,10 @@ class WebRuntimeFeatures {
       const std::string& name,
       bool enable);
 
+  BLINK_PLATFORM_EXPORT static bool IsBlinkGenPropertyTreesEnabled();
+
+  BLINK_PLATFORM_EXPORT static bool IsFractionalScrollOffsetsEnabled();
+
   BLINK_PLATFORM_EXPORT static void EnableCompositedSelectionUpdate(bool);
   BLINK_PLATFORM_EXPORT static bool IsCompositedSelectionUpdateEnabled();
 
@@ -70,48 +74,62 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableOriginTrials(bool);
   BLINK_PLATFORM_EXPORT static bool IsOriginTrialsEnabled();
 
+  BLINK_PLATFORM_EXPORT static bool IsCompositeAfterPaintEnabled();
+
   BLINK_PLATFORM_EXPORT static void EnableAccelerated2dCanvas(bool);
   BLINK_PLATFORM_EXPORT static void EnableAccessibilityObjectModel(bool);
   BLINK_PLATFORM_EXPORT static void EnableAdTagging(bool);
   BLINK_PLATFORM_EXPORT static void EnableAllowActivationDelegationAttr(bool);
   BLINK_PLATFORM_EXPORT static void EnableAudioOutputDevices(bool);
+  BLINK_PLATFORM_EXPORT static void EnableBackgroundFetch(bool);
   BLINK_PLATFORM_EXPORT static void EnableBlinkHeapIncrementalMarking(bool);
+  BLINK_PLATFORM_EXPORT static void EnableBlinkHeapUnifiedGarbageCollection(
+      bool);
+  BLINK_PLATFORM_EXPORT static void EnableBlinkHeapCollectLiveNonNodeWrappers(
+      bool);
   BLINK_PLATFORM_EXPORT static void EnableBloatedRendererDetection(bool);
   BLINK_PLATFORM_EXPORT static void EnableCacheInlineScriptCode(bool);
   BLINK_PLATFORM_EXPORT static void EnableIsolatedCodeCache(bool);
+  BLINK_PLATFORM_EXPORT static void EnableWasmCodeCache(bool);
   BLINK_PLATFORM_EXPORT static void EnableCanvas2dImageChromium(bool);
   BLINK_PLATFORM_EXPORT static void EnableCSSHexAlphaColor(bool);
   BLINK_PLATFORM_EXPORT static void EnableCSSFragmentIdentifiers(bool);
   BLINK_PLATFORM_EXPORT static void EnableScrollTopLeftInterop(bool);
+  BLINK_PLATFORM_EXPORT static void EnableKeyboardFocusableScrollers(bool);
   BLINK_PLATFORM_EXPORT static void EnableDatabase(bool);
   BLINK_PLATFORM_EXPORT static void EnableDecodeToYUV(bool);
   BLINK_PLATFORM_EXPORT static void EnableDisplayCutoutAPI(bool);
+  BLINK_PLATFORM_EXPORT static void EnableFallbackCursorMode(bool);
   BLINK_PLATFORM_EXPORT static void EnableFastMobileScrolling(bool);
+  BLINK_PLATFORM_EXPORT static void EnableFeaturePolicyForSandbox(bool);
   BLINK_PLATFORM_EXPORT static void EnableFileSystem(bool);
+  BLINK_PLATFORM_EXPORT static void EnableFirstContentfulPaintPlusPlus(bool);
   BLINK_PLATFORM_EXPORT static void EnableForceTallerSelectPopup(bool);
-  BLINK_PLATFORM_EXPORT static void EnableGamepadExtensions(bool);
-  BLINK_PLATFORM_EXPORT static void EnableGamepadVibration(bool);
   BLINK_PLATFORM_EXPORT static void EnableGenericSensor(bool);
   BLINK_PLATFORM_EXPORT static void EnableGenericSensorExtraClasses(bool);
   BLINK_PLATFORM_EXPORT static void EnableHeapCompaction(bool);
+  BLINK_PLATFORM_EXPORT static void EnableImplicitRootScroller(bool);
   BLINK_PLATFORM_EXPORT static void EnableInputMultipleFieldsUI(bool);
-  BLINK_PLATFORM_EXPORT static void EnableLayeredAPI(bool);
+  BLINK_PLATFORM_EXPORT static void EnableJankTrackingSweepLine(bool);
+  BLINK_PLATFORM_EXPORT static void EnableBuiltInModuleAll(bool);
+  BLINK_PLATFORM_EXPORT static void EnableBuiltInModuleInfra(bool);
+  BLINK_PLATFORM_EXPORT static void EnableBuiltInModuleKvStorage(bool);
   BLINK_PLATFORM_EXPORT static void EnableLayoutNG(bool);
   BLINK_PLATFORM_EXPORT static void EnableLazyFrameLoading(bool);
   BLINK_PLATFORM_EXPORT static void EnableLazyFrameVisibleLoadTimeMetrics(bool);
   BLINK_PLATFORM_EXPORT static void EnableLazyImageLoading(bool);
   BLINK_PLATFORM_EXPORT static void EnableLazyImageVisibleLoadTimeMetrics(bool);
-  BLINK_PLATFORM_EXPORT static void EnableLazyParseCSS(bool);
   BLINK_PLATFORM_EXPORT static void EnableMediaCapture(bool);
   BLINK_PLATFORM_EXPORT static void EnableMediaSession(bool);
   BLINK_PLATFORM_EXPORT static void EnableMiddleClickAutoscroll(bool);
+  BLINK_PLATFORM_EXPORT static void EnableMimeHandlerViewInCrossProcessFrame(
+      bool);
   BLINK_PLATFORM_EXPORT static void EnableModernMediaControls(bool);
-  BLINK_PLATFORM_EXPORT static void EnableModuleScriptsDynamicImport(bool);
-  BLINK_PLATFORM_EXPORT static void EnableModuleScriptsImportMetaUrl(bool);
   BLINK_PLATFORM_EXPORT static void EnableNavigatorContentUtils(bool);
-  BLINK_PLATFORM_EXPORT static void EnableNestedWorkers(bool);
   BLINK_PLATFORM_EXPORT static void EnableNetInfoDownlinkMax(bool);
   BLINK_PLATFORM_EXPORT static void EnableNetworkService(bool);
+  BLINK_PLATFORM_EXPORT static void EnableNoHoverAfterLayoutChange(bool);
+  BLINK_PLATFORM_EXPORT static void EnableNoHoverDuringScroll(bool);
   BLINK_PLATFORM_EXPORT static void EnableNotificationConstructor(bool);
   BLINK_PLATFORM_EXPORT static void EnableNotificationContentImage(bool);
   BLINK_PLATFORM_EXPORT static void EnableNotifications(bool);
@@ -119,7 +137,8 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableOrientationEvent(bool);
   BLINK_PLATFORM_EXPORT static void EnableOverflowIconsForMediaControls(bool);
   BLINK_PLATFORM_EXPORT static void EnableOverlayScrollbars(bool);
-  BLINK_PLATFORM_EXPORT static void EnableOutOfBlinkCORS(bool);
+  BLINK_PLATFORM_EXPORT static void EnableOverscrollCustomization(bool);
+  BLINK_PLATFORM_EXPORT static void EnableOutOfBlinkCors(bool);
   BLINK_PLATFORM_EXPORT static void EnablePageLifecycle(bool);
   BLINK_PLATFORM_EXPORT static void EnablePagePopup(bool);
   BLINK_PLATFORM_EXPORT static void EnablePassiveDocumentEventListeners(bool);
@@ -127,12 +146,15 @@ class WebRuntimeFeatures {
       bool);
   BLINK_PLATFORM_EXPORT static void EnablePaymentApp(bool);
   BLINK_PLATFORM_EXPORT static void EnablePaymentRequest(bool);
+  BLINK_PLATFORM_EXPORT static void EnablePaymentRequestHasEnrolledInstrument(
+      bool);
+  BLINK_PLATFORM_EXPORT static void EnablePerformanceManagerInstrumentation(
+      bool);
   BLINK_PLATFORM_EXPORT static void EnablePermissionsAPI(bool);
   BLINK_PLATFORM_EXPORT static void EnablePictureInPicture(bool);
   BLINK_PLATFORM_EXPORT static void EnablePictureInPictureAPI(bool);
   BLINK_PLATFORM_EXPORT static void EnablePortals(bool);
   BLINK_PLATFORM_EXPORT static void EnablePreciseMemoryInfo(bool);
-  BLINK_PLATFORM_EXPORT static void EnablePreloadDefaultIsMetadata(bool);
   BLINK_PLATFORM_EXPORT static void EnablePreloadImageSrcSetEnabled(bool);
   BLINK_PLATFORM_EXPORT static void EnablePrintBrowser(bool);
   BLINK_PLATFORM_EXPORT static void EnablePresentationAPI(bool);
@@ -141,23 +163,29 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableReducedReferrerGranularity(bool);
   BLINK_PLATFORM_EXPORT static void EnableRemotePlaybackAPI(bool);
   BLINK_PLATFORM_EXPORT static void EnableRenderingPipelineThrottling(bool);
-  BLINK_PLATFORM_EXPORT static void EnableRequireCSSExtensionForFile(bool);
   BLINK_PLATFORM_EXPORT static void EnableResourceLoadScheduler(bool);
-  BLINK_PLATFORM_EXPORT static void EnableScriptedSpeech(bool);
+  BLINK_PLATFORM_EXPORT static void
+  EnableRestrictDeviceSensorEventsToSecureContexts(bool);
+  BLINK_PLATFORM_EXPORT static void EnableRestrictLazyFrameLoadingToDataSaver(
+      bool);
+  BLINK_PLATFORM_EXPORT static void EnableRestrictLazyImageLoadingToDataSaver(
+      bool);
+  BLINK_PLATFORM_EXPORT static void EnableScriptedSpeechRecognition(bool);
+  BLINK_PLATFORM_EXPORT static void EnableScriptedSpeechSynthesis(bool);
   BLINK_PLATFORM_EXPORT static void EnableScrollAnchorSerialization(bool);
   BLINK_PLATFORM_EXPORT static void EnableSecMetadata(bool);
-  BLINK_PLATFORM_EXPORT static void EnableServiceWorkerScriptFullCodeCache(
-      bool);
+  BLINK_PLATFORM_EXPORT static void EnableSerial(bool);
   BLINK_PLATFORM_EXPORT static void EnableSharedArrayBuffer(bool);
   BLINK_PLATFORM_EXPORT static void EnableSharedWorker(bool);
-  BLINK_PLATFORM_EXPORT static void EnableSignedHTTPExchange(bool);
-  BLINK_PLATFORM_EXPORT static void EnableSlimmingPaintV2(bool);
+  BLINK_PLATFORM_EXPORT static void EnableTextFragmentAnchor(bool);
   BLINK_PLATFORM_EXPORT static void EnableTouchEventFeatureDetection(bool);
+  BLINK_PLATFORM_EXPORT static void EnableUserActivationSameOriginVisibility(
+      bool);
   BLINK_PLATFORM_EXPORT static void EnableUserActivationV2(bool);
   BLINK_PLATFORM_EXPORT static void EnableV8IdleTasks(bool);
-  BLINK_PLATFORM_EXPORT static void EnableWebAssemblyStreaming(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebAuth(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebBluetooth(bool);
+  BLINK_PLATFORM_EXPORT static void EnableWebBluetoothScanning(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebGL2ComputeContext(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebGLDraftExtensions(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebGLImageChromium(bool);
@@ -182,7 +210,6 @@ class WebRuntimeFeatures {
   EnableSendBeaconThrowForBlobWithNonSimpleType(bool);
   BLINK_PLATFORM_EXPORT static void EnableBackgroundVideoTrackOptimization(
       bool);
-  BLINK_PLATFORM_EXPORT static void EnableNewRemotePlaybackPipeline(bool);
   BLINK_PLATFORM_EXPORT static void EnableVideoFullscreenOrientationLock(bool);
   BLINK_PLATFORM_EXPORT static void EnableVideoRotateToFullscreen(bool);
   BLINK_PLATFORM_EXPORT static void EnableVideoFullscreenDetection(bool);
@@ -193,17 +220,19 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableLazyInitializeMediaControls(bool);
   BLINK_PLATFORM_EXPORT static void EnableMediaEngagementBypassAutoplayPolicies(
       bool);
-  BLINK_PLATFORM_EXPORT static void EnableV8ContextSnapshot(bool);
   BLINK_PLATFORM_EXPORT static void EnableAutomationControlled(bool);
-  BLINK_PLATFORM_EXPORT static void EnableWorkStealingInScriptRunner(bool);
-  BLINK_PLATFORM_EXPORT static void EnableScheduledScriptStreaming(bool);
-  BLINK_PLATFORM_EXPORT static void EnablePWAFullCodeCache(bool);
-  BLINK_PLATFORM_EXPORT static void EnableOffMainThreadWebSocket(bool);
+  BLINK_PLATFORM_EXPORT static void EnableScriptStreamingOnPreload(bool);
   BLINK_PLATFORM_EXPORT static void EnableExperimentalProductivityFeatures(
       bool);
   BLINK_PLATFORM_EXPORT static void EnableAutoplayIgnoresWebAudio(bool);
   BLINK_PLATFORM_EXPORT static void EnableMediaControlsExpandGesture(bool);
-  BLINK_PLATFORM_EXPORT static void EnableHrefTranslate(bool);
+  BLINK_PLATFORM_EXPORT static void EnableTranslateService(bool);
+  BLINK_PLATFORM_EXPORT static void EnableMergeBlockingNonBlockingPools(bool);
+  BLINK_PLATFORM_EXPORT static void EnableGetDisplayMedia(bool);
+  BLINK_PLATFORM_EXPORT static void EnableForbidSyncXHRInPageDismissal(bool);
+  BLINK_PLATFORM_EXPORT static void EnableShadowDOMV0(bool);
+  BLINK_PLATFORM_EXPORT static void EnableCustomElementsV0(bool);
+  BLINK_PLATFORM_EXPORT static void EnableHTMLImports(bool);
 
  private:
   WebRuntimeFeatures();

@@ -24,8 +24,6 @@
 #error "This file requires ARC support."
 #endif
 
-DEFINE_WEB_STATE_USER_DATA_KEY(IOSSSLErrorHandler);
-
 const char kSessionDetectionResultHistogram[] =
     "CaptivePortal.Session.DetectionResult";
 
@@ -162,3 +160,5 @@ void IOSSSLErrorHandler::LogCaptivePortalResult(
                             static_cast<int>(status),
                             static_cast<int>(CaptivePortalStatus::COUNT));
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(IOSSSLErrorHandler)

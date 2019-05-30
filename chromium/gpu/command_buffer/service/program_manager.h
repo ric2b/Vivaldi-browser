@@ -429,6 +429,8 @@ class GPU_GLES2_EXPORT Program : public base::RefCounted<Program> {
     return effective_transform_feedback_buffer_mode_;
   }
 
+  GLint draw_id_uniform_location() const { return draw_id_uniform_location_; }
+
   // See member declaration for details.
   // The data are only valid after a successful link.
   uint32_t fragment_output_type_mask() const {
@@ -510,6 +512,9 @@ class GPU_GLES2_EXPORT Program : public base::RefCounted<Program> {
   // Clears all the uniforms.
   void ClearUniforms(std::vector<uint8_t>* zero_buffer);
 
+  // Updates the draw id uniform location used by ANGLE_multi_draw
+  void UpdateDrawIDUniformLocation();
+
   // If long attribate names are mapped during shader translation, call
   // glBindAttribLocation() again with the mapped names.
   // This is called right before the glLink() call, but after shaders are
@@ -588,6 +593,9 @@ class GPU_GLES2_EXPORT Program : public base::RefCounted<Program> {
   // True if the uniforms have been cleared.
   bool uniforms_cleared_;
 
+  // ANGLE_multi_draw
+  GLint draw_id_uniform_location_;
+
   // Log info
   std::unique_ptr<std::string> log_info_;
 
@@ -652,7 +660,7 @@ class GPU_GLES2_EXPORT ProgramManager {
                  uint32_t max_vertex_attribs,
                  const GpuPreferences& gpu_preferences,
                  FeatureInfo* feature_info,
-                 ProgressReporter* progress_reporter);
+                 gl::ProgressReporter* progress_reporter);
   ~ProgramManager();
 
   // Must call before destruction.
@@ -681,6 +689,9 @@ class GPU_GLES2_EXPORT ProgramManager {
 
   // Clears the uniforms for this program.
   void ClearUniforms(Program* program);
+
+  // Updates the draw id location for this program for ANGLE_multi_draw
+  void UpdateDrawIDUniformLocation(Program* program);
 
   // Returns true if |name| has a prefix that is intended for GL built-in shader
   // variables.
@@ -737,7 +748,7 @@ class GPU_GLES2_EXPORT ProgramManager {
   // Used to notify the watchdog thread of progress during destruction,
   // preventing time-outs when destruction takes a long time. May be null when
   // using in-process command buffer.
-  ProgressReporter* progress_reporter_;
+  gl::ProgressReporter* progress_reporter_;
 
   DISALLOW_COPY_AND_ASSIGN(ProgramManager);
 };

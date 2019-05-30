@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/auto_reset.h"
+#include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
@@ -36,7 +37,7 @@ DisplayScheduler::DisplayScheduler(BeginFrameSource* begin_frame_source,
       wait_for_all_surfaces_before_draw_(wait_for_all_surfaces_before_draw),
       observing_begin_frame_source_(false),
       weak_ptr_factory_(this) {
-  begin_frame_deadline_closure_ = base::Bind(
+  begin_frame_deadline_closure_ = base::BindRepeating(
       &DisplayScheduler::OnBeginFrameDeadline, weak_ptr_factory_.GetWeakPtr());
 
   // The DisplayScheduler handles animate_only BeginFrames as if they were
@@ -48,6 +49,9 @@ DisplayScheduler::DisplayScheduler(BeginFrameSource* begin_frame_source,
 }
 
 DisplayScheduler::~DisplayScheduler() {
+  // It is possible for DisplayScheduler to be destroyed while there's an
+  // in-flight swap. So always mark the gpu as not busy during destruction.
+  begin_frame_source_->SetIsGpuBusy(false);
   StopObservingBeginFrames();
 }
 
@@ -179,9 +183,9 @@ bool DisplayScheduler::UpdateHasPendingSurfaces() {
       continue;
     }
 
-    // Surface is ready if there is an undrawn active CompositorFrame, because
+    // Surface is ready if there is an unacked active CompositorFrame, because
     // its producer is CompositorFrameAck throttled.
-    if (client_->SurfaceHasUndrawnFrame(entry.first))
+    if (client_->SurfaceHasUnackedFrame(entry.first))
       continue;
 
     has_pending_surfaces_ = true;
@@ -229,7 +233,7 @@ bool DisplayScheduler::OnBeginFrameDerivedImpl(const BeginFrameArgs& args) {
     // CompositorFrame for a SurfaceFactory).
     DCHECK_EQ(args.type, BeginFrameArgs::MISSED);
     DCHECK(missed_begin_frame_task_.IsCancelled());
-    missed_begin_frame_task_.Reset(base::Bind(
+    missed_begin_frame_task_.Reset(base::BindOnce(
         base::IgnoreResult(&DisplayScheduler::OnBeginFrameDerivedImpl),
         // The CancelableCallback will not run after it is destroyed, which
         // happens when |this| is destroyed.
@@ -306,8 +310,6 @@ void DisplayScheduler::OnBeginFrameSourcePausedChanged(bool paused) {
     NOTIMPLEMENTED();
 }
 
-void DisplayScheduler::OnSurfaceCreated(const SurfaceId& surface_id) {}
-
 void DisplayScheduler::OnFirstSurfaceActivation(
     const SurfaceInfo& surface_info) {}
 
@@ -329,11 +331,7 @@ bool DisplayScheduler::OnSurfaceDamaged(const SurfaceId& surface_id,
   bool damaged = client_->SurfaceDamaged(surface_id, ack);
   ProcessSurfaceDamage(surface_id, ack, damaged);
 
-  // If we are not visible, return false. We may never draw in this
-  // state, and other displays may have embedded this surface without
-  // damage. Those displays shouldn't have their frame production
-  // blocked by waiting for this ack.
-  return damaged && visible_;
+  return damaged;
 }
 
 void DisplayScheduler::OnSurfaceDiscarded(const SurfaceId& surface_id) {
@@ -488,7 +486,6 @@ bool DisplayScheduler::AttemptDrawAndSwap() {
     if (pending_swaps_ < max_pending_swaps_)
       return DrawAndSwap();
   } else {
-    ReportNotDrawReason();
     // We are going idle, so reset expectations.
     // TODO(eseckler): Should we avoid going idle if
     // |expecting_root_surface_damage_because_of_resize_| is true?
@@ -510,33 +507,26 @@ void DisplayScheduler::OnBeginFrameDeadline() {
 void DisplayScheduler::DidFinishFrame(bool did_draw) {
   DCHECK(begin_frame_source_);
   begin_frame_source_->DidFinishFrame(this);
-
   BeginFrameAck ack(current_begin_frame_args_, did_draw);
   client_->DidFinishFrame(ack);
 }
 
 void DisplayScheduler::DidSwapBuffers() {
   pending_swaps_++;
+  if (pending_swaps_ == max_pending_swaps_)
+    begin_frame_source_->SetIsGpuBusy(true);
+
   uint32_t swap_id = next_swap_id_++;
   TRACE_EVENT_ASYNC_BEGIN0("viz", "DisplayScheduler:pending_swaps", swap_id);
 }
 
 void DisplayScheduler::DidReceiveSwapBuffersAck() {
+  begin_frame_source_->SetIsGpuBusy(false);
+
   uint32_t swap_id = next_swap_id_ - pending_swaps_;
   pending_swaps_--;
   TRACE_EVENT_ASYNC_END0("viz", "DisplayScheduler:pending_swaps", swap_id);
   ScheduleBeginFrameDeadline();
-}
-
-void DisplayScheduler::ReportNotDrawReason() {
-  DCHECK(!ShouldDraw());
-  UMA_HISTOGRAM_BOOLEAN("DisplayScheduler.ShouldNotDraw.DrawNotNeeded",
-                        !needs_draw_);
-  UMA_HISTOGRAM_BOOLEAN("DisplayScheduler.ShouldNotDraw.OutputSurfaceLost",
-                        output_surface_lost_);
-  UMA_HISTOGRAM_BOOLEAN("DisplayScheduler.ShouldNotDraw.NotVisible", !visible_);
-  UMA_HISTOGRAM_BOOLEAN("DisplayScheduler.ShouldNotDraw.RootFrameMissing",
-                        root_frame_missing_);
 }
 
 }  // namespace viz

@@ -24,6 +24,7 @@
 #define png_calculate_crc cr_png_calculate_crc
 #define png_calloc cr_png_calloc
 #define png_check_IHDR cr_png_check_IHDR
+#define png_check_chunk_length cr_png_check_chunk_length
 #define png_check_chunk_name cr_png_check_chunk_name
 #define png_check_fp_number cr_png_check_fp_number
 #define png_check_fp_string cr_png_check_fp_string
@@ -73,6 +74,8 @@
 #define png_do_expand cr_png_do_expand
 #define png_do_expand_16 cr_png_do_expand_16
 #define png_do_expand_palette cr_png_do_expand_palette
+#define png_do_expand_palette_neon_rgb cr_png_do_expand_palette_neon_rgb
+#define png_do_expand_palette_neon_rgba cr_png_do_expand_palette_neon_rgba
 #define png_do_gamma cr_png_do_gamma
 #define png_do_gray_to_rgb cr_png_do_gray_to_rgb
 #define png_do_invert cr_png_do_invert
@@ -303,6 +306,7 @@
 #define png_reciprocal2 cr_png_reciprocal2
 #define png_reset_crc cr_png_reset_crc
 #define png_reset_zstream cr_png_reset_zstream
+#define png_riffle_palette_rgba cr_png_riffle_palette_rgba
 #define png_sRGB_base cr_png_sRGB_base
 #define png_sRGB_delta cr_png_sRGB_delta
 #define png_sRGB_table cr_png_sRGB_table
@@ -455,6 +459,7 @@
 #define png_write_zTXt cr_png_write_zTXt
 #define png_zalloc cr_png_zalloc
 #define png_zfree cr_png_zfree
+#define png_zlib_inflate cr_png_zlib_inflate
 #define png_zstream_error cr_png_zstream_error
 
 #endif  // PNGPREFIX_H

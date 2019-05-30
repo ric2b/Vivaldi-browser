@@ -14,8 +14,10 @@
 #include <vector>
 
 #include "base/strings/utf_offset_string_conversions.h"
+#include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
+#include "components/omnibox/browser/buildflags.h"
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "components/search_engines/template_url.h"
 #include "components/url_formatter/url_formatter.h"
@@ -23,6 +25,7 @@
 #include "url/gurl.h"
 
 class AutocompleteProvider;
+class OmniboxPedal;
 class SuggestionAnswer;
 class TemplateURL;
 class TemplateURLService;
@@ -38,6 +41,9 @@ struct VectorIcon;
 const char kACMatchPropertySuggestionText[] = "match suggestion text";
 const char kACMatchPropertyContentsPrefix[] = "match contents prefix";
 const char kACMatchPropertyContentsStartIndex[] = "match contents start index";
+// A match attribute when a default match's score has been boosted with a higher
+// scoring non-default match.
+const char kACMatchPropertyScoreBoostedFrom[] = "score_boosted_from";
 
 // AutocompleteMatch ----------------------------------------------------------
 
@@ -76,7 +82,6 @@ struct AutocompleteMatch {
       URL       = 1 << 0,  // A URL
       MATCH     = 1 << 1,  // A match for the user's search term
       DIM       = 1 << 2,  // "Helper text"
-      INVISIBLE = 1 << 3,  // "Prefix" text we don't want to see
     };
     // clang-format on
 
@@ -116,8 +121,12 @@ struct AutocompleteMatch {
   enum class DocumentType {
     NONE,
     DRIVE_DOCS,
+    DRIVE_FORMS,
     DRIVE_SHEETS,
     DRIVE_SLIDES,
+    DRIVE_IMAGE,
+    DRIVE_PDF,
+    DRIVE_VIDEO,
     DRIVE_OTHER
   };
 
@@ -132,15 +141,16 @@ struct AutocompleteMatch {
   // Converts |type| to a string representation.  Used in logging and debugging.
   AutocompleteMatch& operator=(const AutocompleteMatch& match);
 
-  // Gets the vector icon identifier for the icon to be shown for |type|. If
+#if (!defined(OS_ANDROID) || BUILDFLAG(ENABLE_VR)) && !defined(OS_IOS)
+  // Gets the vector icon identifier for the icon to be shown for this match. If
   // |is_bookmark| is true, returns a bookmark icon rather than what the type
-  // would determine.
-  static const gfx::VectorIcon& TypeToVectorIcon(Type type,
-                                                 bool is_bookmark,
-                                                 bool is_tab_match,
-                                                 DocumentType document_type);
+  // would normally determine.  Note that in addition to |type|, the icon chosen
+  // may depend on match contents (e.g. Drive |document_type| or |pedal|).
+  const gfx::VectorIcon& GetVectorIcon(bool is_bookmark) const;
+#endif
 
-  // Comparison function for determining when one match is better than another.
+  // Comparison function for determining whether the first match is better than
+  // the second.
   static bool MoreRelevant(const AutocompleteMatch& elem1,
                            const AutocompleteMatch& elem2);
 
@@ -216,34 +226,34 @@ struct AutocompleteMatch {
   // Returns |url| altered by stripping off "www.", converting https protocol
   // to http, and stripping excess query parameters.  These conversions are
   // merely to allow comparisons to remove likely duplicates; these URLs are
-  // not used as actual destination URLs.  If |template_url_service| is not
-  // NULL, it is used to get a template URL corresponding to this match.  If
-  // the match's keyword is known, it can be passed in.  Otherwise, it can be
-  // left empty and the template URL (if any) is determined from the
-  // destination's hostname.  The template URL is used to strip off query args
-  // other than the search terms themselves that would otherwise prevent doing
-  // proper deduping.  |input| is used to decide if the scheme is allowed to
-  // be altered during stripping.  If this URL, minus the scheme and separator,
-  // starts with any the terms in input.terms_prefixed_by_http_or_https(), we
-  // avoid converting an HTTPS scheme to HTTP.  This means URLs that differ
-  // only by these schemes won't be marked as dupes, since the distinction
-  // seems to matter to the user.
+  // not used as actual destination URLs.
+  // - |input| is used to decide if the scheme is allowed to be altered during
+  //   stripping.  If this URL, minus the scheme and separator, starts with any
+  //   the terms in input.terms_prefixed_by_http_or_https(), we avoid converting
+  //   an HTTPS scheme to HTTP.  This means URLs that differ only by these
+  //   schemes won't be marked as dupes, since the distinction seems to matter
+  //   to the user.
+  // - If |template_url_service| is not NULL, it is used to get a template URL
+  //   corresponding to this match, which is used to strip off query args other
+  //   than the search terms themselves that would otherwise prevent doing
+  //   proper deduping.
+  // - If the match's keyword is known, it can be provided in |keyword|.
+  //   Otherwise, it can be left empty and the template URL (if any) is
+  //   determined from the destination's hostname.
   static GURL GURLToStrippedGURL(const GURL& url,
                                  const AutocompleteInput& input,
                                  const TemplateURLService* template_url_service,
                                  const base::string16& keyword);
 
-  // Sets the |match_in_scheme|, |match_in_subdomain|, and |match_after_host|
-  // flags based on the provided |url| and list of substring |match_positions|.
-  // |match_positions| is the [begin, end) positions of a match within the
-  // unstripped URL spec.
+  // Sets the |match_in_scheme| and |match_in_subdomain| flags based on the
+  // provided |url| and list of substring |match_positions|. |match_positions|
+  // is the [begin, end) positions of a match within the unstripped URL spec.
   using MatchPosition = std::pair<size_t, size_t>;
   static void GetMatchComponents(
       const GURL& url,
       const std::vector<MatchPosition>& match_positions,
       bool* match_in_scheme,
-      bool* match_in_subdomain,
-      bool* match_after_host);
+      bool* match_in_subdomain);
 
   // Gets the formatting flags used for display of suggestions. This method
   // encapsulates the return of experimental flags too, so any URLs displayed
@@ -252,25 +262,16 @@ struct AutocompleteMatch {
   // This function returns flags that may destructively format the URL, and
   // therefore should never be used for the |fill_into_edit| field.
   //
-  // |preserve_scheme|, |preserve_subdomain|, and |preserve_after_host| indicate
-  // that these URL components are important (part of the match), and should
-  // not be trimmed or elided.
+  // |preserve_scheme| and |preserve_subdomain| indicate that these URL
+  // components are important (part of the match), and should not be trimmed.
   static url_formatter::FormatUrlTypes GetFormatTypes(bool preserve_scheme,
-                                                      bool preserve_subdomain,
-                                                      bool preserve_after_host);
+                                                      bool preserve_subdomain);
 
   // Computes the stripped destination URL (via GURLToStrippedGURL()) and
   // stores the result in |stripped_destination_url|.  |input| is used for the
   // same purpose as in GURLToStrippedGURL().
   void ComputeStrippedDestinationURL(const AutocompleteInput& input,
                                      TemplateURLService* template_url_service);
-
-  // Sets |allowed_to_be_default_match| to true if this match is effectively
-  // the URL-what-you-typed match (i.e., would be dupped against the UWYT
-  // match when AutocompleteResult merges matches).
-  void EnsureUWYTIsAllowedToBeDefault(
-      const AutocompleteInput& input,
-      TemplateURLService* template_url_service);
 
   // Gets data relevant to whether there should be any special keyword-related
   // UI shown for this match.  If this match represents a selected keyword, i.e.
@@ -309,6 +310,11 @@ struct AutocompleteMatch {
   // Gets the URL for the match image (whether it be an answer or entity). If
   // there isn't an image URL, returns an empty GURL (test with is_empty()).
   GURL ImageUrl() const;
+
+  // Returns a new Pedal match suggestion instance derived from this match,
+  // which is considered to be the triggering suggestion.  The new match
+  // will be set to use the given |pedal|.
+  AutocompleteMatch DerivePedalSuggestion(OmniboxPedal* pedal) const;
 
   // Adds optional information to the |additional_info| dictionary.
   void RecordAdditionalInfo(const std::string& property,
@@ -363,6 +369,9 @@ struct AutocompleteMatch {
   // for example, when the switch button is not shown because a keyword match
   // is taking precedence.
   bool ShouldShowTabMatch() const;
+
+  // Returns true if the suggestion should show a tab match button or pedal.
+  bool ShouldShowButton() const;
 
   // The provider of this match, used to remember which provider the user had
   // selected when the input changes. This may be NULL, in which case there is
@@ -425,6 +434,9 @@ struct AutocompleteMatch {
   // Optional override to use for types that specify an icon sub-type.
   DocumentType document_type;
 
+  // Holds the common part of tail suggestion.
+  base::string16 tail_suggest_common_prefix;
+
   // The main text displayed in the address bar dropdown.
   base::string16 contents;
   ACMatchClassifications contents_class;
@@ -437,11 +449,7 @@ struct AutocompleteMatch {
   // before displaying.
   bool swap_contents_and_description;
 
-  // TODO(jdonnelly): Remove the first two properties once the downstream
-  // clients are using the SuggestionAnswer.
   // A rich-format version of the display for the dropdown.
-  base::string16 answer_contents;
-  base::string16 answer_type;
   base::Optional<SuggestionAnswer> answer;
 
   // The transition type to use when the user opens this match.  By default
@@ -484,6 +492,13 @@ struct AutocompleteMatch {
   // it!
   base::string16 keyword;
 
+  // Set in matches originating from keyword results.
+  bool from_keyword;
+
+  // Set to a matching pedal if appropriate.  The pedal is not owned, and the
+  // owning OmniboxPedalProvider must outlive this.
+  OmniboxPedal* pedal = nullptr;
+
   // True if this match is from a previous result.
   bool from_previous;
 
@@ -496,6 +511,10 @@ struct AutocompleteMatch {
   // AutocompleteController to do no additional transformations.
   std::unique_ptr<TemplateURLRef::SearchTermsArgs> search_terms_args;
 
+  // Optional post content. If this is set, the request to load the destination
+  // url will pass this post content as well.
+  std::unique_ptr<TemplateURLRef::PostContent> post_content;
+
   // Information dictionary into which each provider can optionally record a
   // property and associated value and which is presented in chrome://omnibox.
   AdditionalInfo additional_info;
@@ -503,6 +522,9 @@ struct AutocompleteMatch {
   // A list of matches culled during de-duplication process, retained to
   // ensure if a match is deleted, the duplicates are deleted as well.
   std::vector<AutocompleteMatch> duplicate_matches;
+
+  // So users of AutocompleteMatch can use the same ellipsis that it uses.
+  static const char kEllipsis[];
 
 #if DCHECK_IS_ON()
   // Does a data integrity check on this match.

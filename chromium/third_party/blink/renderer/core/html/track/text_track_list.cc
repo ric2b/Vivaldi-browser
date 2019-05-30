@@ -157,11 +157,11 @@ void TextTrackList::InvalidateTrackIndexesAfterTrack(TextTrack* track) {
     NOTREACHED();
   }
 
-  size_t index = tracks->Find(track);
+  wtf_size_t index = tracks->Find(track);
   if (index == kNotFound)
     return;
 
-  for (size_t i = index; i < tracks->size(); ++i)
+  for (wtf_size_t i = index; i < tracks->size(); ++i)
     tracks->at(i)->InvalidateTrackIndex();
 }
 
@@ -170,7 +170,7 @@ void TextTrackList::Append(TextTrack* track) {
     add_track_tracks_.push_back(track);
   } else if (track->TrackType() == TextTrack::kTrackElement) {
     // Insert tracks added for <track> element in tree order.
-    size_t index = ToLoadableTextTrack(track)->TrackElementIndex();
+    wtf_size_t index = ToLoadableTextTrack(track)->TrackElementIndex();
     element_tracks_.insert(index, track);
   } else if (track->TrackType() == TextTrack::kInBand) {
     inband_tracks_.push_back(track);
@@ -199,7 +199,7 @@ void TextTrackList::Remove(TextTrack* track) {
     NOTREACHED();
   }
 
-  size_t index = tracks->Find(track);
+  wtf_size_t index = tracks->Find(track);
   if (index == kNotFound)
     return;
 
@@ -236,7 +236,7 @@ bool TextTrackList::Contains(TextTrack* track) const {
 }
 
 const AtomicString& TextTrackList::InterfaceName() const {
-  return EventTargetNames::TextTrackList;
+  return event_target_names::kTextTrackList;
 }
 
 ExecutionContext* TextTrackList::GetExecutionContext() const {
@@ -256,7 +256,7 @@ void TextTrackList::ScheduleAddTrackEvent(TextTrack* track) {
   // not bubble and is not cancelable, and that uses the TrackEvent interface,
   // with the track attribute initialized to the text track's TextTrack object,
   // at the media element's textTracks attribute's TextTrackList object.
-  ScheduleTrackEvent(EventTypeNames::addtrack, track);
+  ScheduleTrackEvent(event_type_names::kAddtrack, track);
 }
 
 void TextTrackList::ScheduleChangeEvent() {
@@ -267,7 +267,7 @@ void TextTrackList::ScheduleChangeEvent() {
   // ...
   // Fire a simple event named change at the media element's textTracks
   // attribute's TextTrackList object.
-  EnqueueEvent(*Event::Create(EventTypeNames::change),
+  EnqueueEvent(*Event::Create(event_type_names::kChange),
                TaskType::kMediaElementEvent);
 }
 
@@ -281,7 +281,7 @@ void TextTrackList::ScheduleRemoveTrackEvent(TextTrack* track) {
   // interface, with the track attribute initialized to the text track's
   // TextTrack object, at the media element's textTracks attribute's
   // TextTrackList object.
-  ScheduleTrackEvent(EventTypeNames::removetrack, track);
+  ScheduleTrackEvent(event_type_names::kRemovetrack, track);
 }
 
 bool TextTrackList::HasShowingTracks() {
@@ -296,7 +296,7 @@ HTMLMediaElement* TextTrackList::Owner() const {
   return owner_;
 }
 
-void TextTrackList::Trace(blink::Visitor* visitor) {
+void TextTrackList::Trace(Visitor* visitor) {
   visitor->Trace(owner_);
   visitor->Trace(add_track_tracks_);
   visitor->Trace(element_tracks_);

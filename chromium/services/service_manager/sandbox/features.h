@@ -17,12 +17,14 @@ namespace features {
 
 SERVICE_MANAGER_SANDBOX_EXPORT extern const base::Feature kAudioServiceSandbox;
 
+SERVICE_MANAGER_SANDBOX_EXPORT extern const base::Feature
+    kNetworkServiceSandbox;
+
 #if defined(OS_WIN)
 SERVICE_MANAGER_SANDBOX_EXPORT extern const base::Feature
-    kNetworkServiceWindowsSandbox;
-
-SERVICE_MANAGER_SANDBOX_EXPORT extern const base::Feature
     kWinSboxDisableExtensionPoints;
+
+SERVICE_MANAGER_SANDBOX_EXPORT extern const base::Feature kXRSandbox;
 #endif  // defined(OS_WIN)
 
 }  // namespace features

@@ -4,8 +4,8 @@
 
 #include <string.h>
 
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
 #include "third_party/blink/renderer/platform/heap/name_traits.h"
 
 namespace blink {
@@ -21,7 +21,7 @@ class ClassWithName : public NameClient {
  public:
   ClassWithName(const char* name) : name_(name) {}
 
-  const char* NameInHeapSnapshot() const final { return name_; };
+  const char* NameInHeapSnapshot() const final { return name_; }
 
  private:
   const char* name_;
@@ -29,15 +29,25 @@ class ClassWithName : public NameClient {
 
 }  // namespace
 
+TEST(NameTraitTest, InternalNamesHiddenInOfficialBuild) {
+#if defined(OFFICIAL_BUILD)
+  EXPECT_TRUE(NameTrait<ClassWithoutName>::HideInternalName());
+#endif
+}
+
 TEST(NameTraitTest, DefaultName) {
   ClassWithoutName no_name;
-  const char* name = NameTrait<ClassWithoutName>::GetName(&no_name);
-  EXPECT_EQ(0, strcmp(name, "InternalNode"));
+  const char* name = NameTrait<ClassWithoutName>::GetName(&no_name).value;
+  if (NameTrait<ClassWithoutName>::HideInternalName()) {
+    EXPECT_EQ(0, strcmp(name, "InternalNode"));
+  } else {
+    EXPECT_NE(nullptr, strstr(name, "ClassWithoutName"));
+  }
 }
 
 TEST(NameTraitTest, CustomName) {
   ClassWithName with_name("CustomName");
-  const char* name = NameTrait<ClassWithName>::GetName(&with_name);
+  const char* name = NameTrait<ClassWithName>::GetName(&with_name).value;
   EXPECT_EQ(0, strcmp(name, "CustomName"));
 }
 

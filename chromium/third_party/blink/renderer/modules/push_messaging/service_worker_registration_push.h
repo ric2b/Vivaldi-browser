@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_PUSH_MESSAGING_SERVICE_WORKER_REGISTRATION_PUSH_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_PUSH_MESSAGING_SERVICE_WORKER_REGISTRATION_PUSH_H_
 
+#include "base/macros.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_registration.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
@@ -18,11 +19,12 @@ class ServiceWorkerRegistrationPush final
     : public GarbageCollectedFinalized<ServiceWorkerRegistrationPush>,
       public Supplement<ServiceWorkerRegistration> {
   USING_GARBAGE_COLLECTED_MIXIN(ServiceWorkerRegistrationPush);
-  WTF_MAKE_NONCOPYABLE(ServiceWorkerRegistrationPush);
 
  public:
   static const char kSupplementName[];
 
+  explicit ServiceWorkerRegistrationPush(
+      ServiceWorkerRegistration* registration);
   virtual ~ServiceWorkerRegistrationPush();
   static ServiceWorkerRegistrationPush& From(
       ServiceWorkerRegistration& registration);
@@ -33,11 +35,10 @@ class ServiceWorkerRegistrationPush final
   void Trace(blink::Visitor* visitor) override;
 
  private:
-  explicit ServiceWorkerRegistrationPush(
-      ServiceWorkerRegistration* registration);
-
   Member<ServiceWorkerRegistration> registration_;
   Member<PushManager> push_manager_;
+
+  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerRegistrationPush);
 };
 
 }  // namespace blink

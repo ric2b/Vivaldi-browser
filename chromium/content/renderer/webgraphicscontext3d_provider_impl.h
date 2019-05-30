@@ -6,6 +6,7 @@
 #define CONTENT_RENDERER_WEBGRAPHICSCONTEXT3D_PROVIDER_IMPL_H_
 
 #include "base/compiler_specific.h"
+#include "base/containers/flat_map.h"
 #include "base/memory/ref_counted.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "content/common/content_export.h"
@@ -44,13 +45,17 @@ class CONTENT_EXPORT WebGraphicsContext3DProviderImpl
   gpu::gles2::GLES2Interface* ContextGL() override;
   gpu::webgpu::WebGPUInterface* WebGPUInterface() override;
   GrContext* GetGrContext() override;
+  gpu::SharedImageInterface* GetSharedImageInterface() const override;
   const gpu::Capabilities& GetCapabilities() const override;
   const gpu::GpuFeatureInfo& GetGpuFeatureInfo() const override;
   viz::GLHelper* GetGLHelper() override;
   void SetLostContextCallback(base::RepeatingClosure) override;
   void SetErrorMessageCallback(
       base::RepeatingCallback<void(const char*, int32_t)>) override;
-  cc::ImageDecodeCache* ImageDecodeCache() override;
+  cc::ImageDecodeCache* ImageDecodeCache(
+      SkColorType color_type,
+      sk_sp<SkColorSpace> color_space) override;
+  gpu::SharedImageInterface* SharedImageInterface() override;
 
   ws::ContextProviderCommandBuffer* context_provider() const {
     return provider_.get();
@@ -63,7 +68,9 @@ class CONTENT_EXPORT WebGraphicsContext3DProviderImpl
   scoped_refptr<ws::ContextProviderCommandBuffer> provider_;
   std::unique_ptr<viz::GLHelper> gl_helper_;
   base::RepeatingClosure context_lost_callback_;
-  std::unique_ptr<cc::ImageDecodeCache> image_decode_cache_;
+  base::flat_map<std::pair<SkColorType, uint64_t>,
+                 std::unique_ptr<cc::ImageDecodeCache>>
+      image_decode_cache_map_;
 
   DISALLOW_COPY_AND_ASSIGN(WebGraphicsContext3DProviderImpl);
 };

@@ -6,8 +6,6 @@
 
 #include <stdint.h>
 
-#include <utility>
-
 #include "base/feature_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/autofill/core/browser/field_types.h"
@@ -70,6 +68,21 @@ void AutofillField::set_server_type(ServerFieldType type) {
 
   server_type_ = type;
   overall_type_ = AutofillType(NO_SERVER_DATA);
+}
+
+void AutofillField::add_possible_types_validities(
+    const ServerFieldTypeValidityStateMap& possible_types_validities) {
+  for (const auto& possible_type_validity : possible_types_validities) {
+    possible_types_validities_[possible_type_validity.first].push_back(
+        possible_type_validity.second);
+  }
+}
+
+std::vector<AutofillDataModel::ValidityState>
+AutofillField::get_validities_for_possible_type(ServerFieldType type) {
+  if (possible_types_validities_.find(type) == possible_types_validities_.end())
+    return {AutofillDataModel::UNVALIDATED};
+  return possible_types_validities_[type];
 }
 
 void AutofillField::SetHtmlType(HtmlFieldType type, HtmlFieldMode mode) {
@@ -156,7 +169,7 @@ FieldSignature AutofillField::GetFieldSignature() const {
 }
 
 std::string AutofillField::FieldSignatureAsStr() const {
-  return base::UintToString(GetFieldSignature());
+  return base::NumberToString(GetFieldSignature());
 }
 
 bool AutofillField::IsFieldFillable() const {
@@ -165,6 +178,15 @@ bool AutofillField::IsFieldFillable() const {
 
 void AutofillField::SetPasswordRequirements(PasswordRequirementsSpec spec) {
   password_requirements_ = std::move(spec);
+}
+
+void AutofillField::NormalizePossibleTypesValidities() {
+  for (const auto& possible_type : possible_types_) {
+    if (possible_types_validities_[possible_type].empty()) {
+      possible_types_validities_[possible_type].push_back(
+          AutofillDataModel::UNVALIDATED);
+    }
+  }
 }
 
 bool AutofillField::IsCreditCardPrediction() const {

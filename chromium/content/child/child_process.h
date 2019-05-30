@@ -54,7 +54,6 @@ class CONTENT_EXPORT ChildProcess {
   // Takes ownership of the pointer.
   void set_main_thread(ChildThreadImpl* thread);
 
-  base::MessageLoop* io_message_loop() { return io_thread_.message_loop(); }
   base::SingleThreadTaskRunner* io_task_runner() {
     return io_thread_.task_runner().get();
   }
@@ -72,13 +71,13 @@ class CONTENT_EXPORT ChildProcess {
 
   // These are used for ref-counting the child process.  The process shuts
   // itself down when the ref count reaches 0.
-  // For example, in the renderer process, generally each tab managed by this
-  // process will hold a reference to the process, and release when closed.
-  // However for renderer processes specifically, there is also fast shutdown
-  // code path initiated by the browser process. The process refcount does
-  // not influence fast shutdown. See blink::Platform::suddenTerminationChanged.
-  void AddRefProcess();
-  void ReleaseProcess();
+  //
+  // This is not used for renderer processes. The browser process is the only
+  // one responsible for shutting them down. See mojo::KeepAliveHandle and more
+  // generally the RenderProcessHostImpl class if you want to keep the renderer
+  // process alive longer.
+  virtual void AddRefProcess();
+  virtual void ReleaseProcess();
 
   // Getter for the one ChildProcess object for this process. Can only be called
   // on the main thread.

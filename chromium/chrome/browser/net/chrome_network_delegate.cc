@@ -10,16 +10,17 @@
 #include <vector>
 
 #include "base/base_paths.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/debug/dump_without_crashing.h"
-#include "base/debug/stack_trace.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -30,10 +31,11 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/task_manager/task_manager_interface.h"
 #include "chrome/common/buildflags.h"
+#include "chrome/common/net/safe_search_util.h"
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
-#include "components/domain_reliability/monitor.h"
 #include "components/variations/net/variations_http_headers.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -60,16 +62,13 @@
 #endif
 
 #if defined(OS_CHROMEOS)
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "chrome/common/chrome_switches.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/common/constants.h"
 #endif
-
-#include "app/vivaldi_apptools.h"
-#include "browser/spoof/vivaldi_spoof_tools.h"
 
 using content::BrowserThread;
 using content::RenderViewHost;
@@ -79,8 +78,24 @@ namespace {
 
 bool g_access_to_all_files_enabled = false;
 
+// Gets called when the extensions finish work on the URL. If the extensions
+// did not do a redirect (so |new_url| is empty) then we enforce the
+// SafeSearch parameters. Otherwise we will get called again after the
+// redirect and we enforce SafeSearch then.
+void ForceGoogleSafeSearchCallbackWrapper(net::CompletionOnceCallback callback,
+                                          net::URLRequest* request,
+                                          GURL* new_url,
+                                          int rv) {
+  if (rv == net::OK && new_url->is_empty())
+    safe_search_util::ForceGoogleSafeSearch(request->url(), new_url);
+  std::move(callback).Run(rv);
+}
+
 bool IsAccessAllowedInternal(const base::FilePath& path,
                              const base::FilePath& profile_path) {
+  if (g_access_to_all_files_enabled)
+    return true;
+
 #if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
   return true;
 #else
@@ -91,6 +106,7 @@ bool IsAccessAllowedInternal(const base::FilePath& path,
   // directories below.
   static const base::FilePath::CharType* const kLocalAccessWhiteList[] = {
       "/home/chronos/user/Downloads",
+      "/home/chronos/user/MyFiles",
       "/home/chronos/user/log",
       "/home/chronos/user/WebRTC Logs",
       "/media",
@@ -112,6 +128,7 @@ bool IsAccessAllowedInternal(const base::FilePath& path,
   if (!profile_path.empty()) {
     const base::FilePath downloads = profile_path.AppendASCII("Downloads");
     whitelist.push_back(downloads);
+    whitelist.push_back(profile_path.AppendASCII("MyFiles"));
     const base::FilePath webrtc_logs = profile_path.AppendASCII("WebRTC Logs");
     whitelist.push_back(webrtc_logs);
   }
@@ -144,6 +161,20 @@ bool IsAccessAllowedInternal(const base::FilePath& path,
     }
   }
 
+#if defined(OS_CHROMEOS)
+  // Allow access to DriveFS logs. These reside in
+  // $PROFILE_PATH/GCache/v2/<opaque id>/Logs.
+  base::FilePath path_within_gcache_v2;
+  if (profile_path.Append("GCache/v2")
+          .AppendRelativePath(path, &path_within_gcache_v2)) {
+    std::vector<std::string> components;
+    path_within_gcache_v2.GetComponents(&components);
+    if (components.size() > 1 && components[1] == "Logs") {
+      return true;
+    }
+  }
+#endif  // defined(OS_CHROMEOS)
+
   DVLOG(1) << "File access denied - " << path.value().c_str();
   return false;
 #endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
@@ -155,7 +186,6 @@ ChromeNetworkDelegate::ChromeNetworkDelegate(
     extensions::EventRouterForwarder* event_router)
     : extensions_delegate_(
           ChromeExtensionsNetworkDelegate::Create(event_router)),
-      profile_(nullptr),
       experimental_web_platform_features_enabled_(
           base::CommandLine::ForCurrentProcess()->HasSwitch(
               switches::kEnableExperimentalWebPlatformFeatures)) {}
@@ -168,7 +198,6 @@ void ChromeNetworkDelegate::set_extension_info_map(
 }
 
 void ChromeNetworkDelegate::set_profile(void* profile) {
-  profile_ = profile;
   extensions_delegate_->set_profile(profile);
 }
 
@@ -182,22 +211,33 @@ int ChromeNetworkDelegate::OnBeforeURLRequest(
     net::CompletionOnceCallback callback,
     GURL* new_url) {
   extensions_delegate_->ForwardStartRequestStatus(request);
-  return extensions_delegate_->NotifyBeforeURLRequest(
-      request, std::move(callback), new_url);
+
+  // The non-redirect case is handled in GoogleURLLoaderThrottle.
+  bool force_safe_search =
+      (force_google_safe_search_ && force_google_safe_search_->GetValue() &&
+       request->is_redirecting());
+
+  net::CompletionOnceCallback wrapped_callback = std::move(callback);
+
+  if (force_safe_search) {
+    wrapped_callback = base::BindOnce(
+        &ForceGoogleSafeSearchCallbackWrapper, std::move(wrapped_callback),
+        base::Unretained(request), base::Unretained(new_url));
+  }
+
+  int rv = extensions_delegate_->NotifyBeforeURLRequest(
+      request, std::move(wrapped_callback), new_url);
+
+  if (force_safe_search && rv == net::OK && new_url->is_empty())
+    safe_search_util::ForceGoogleSafeSearch(request->url(), new_url);
+
+  return rv;
 }
 
 int ChromeNetworkDelegate::OnBeforeStartTransaction(
     net::URLRequest* request,
     net::CompletionOnceCallback callback,
     net::HttpRequestHeaders* headers) {
-
-  // NOTE(jarle@vivaldi.com): For the WhatsApp domain, provide a
-  // Vivaldi-free useragent. This is a temp. workaround until WhatsApp
-  // recognizes Vivaldi as a valid browser or the ua spoofing works for
-  // appcached content, ref. VB-2752.
-  if (vivaldi::IsVivaldiRunning())
-    vivaldi::spoof::ForceWhatsappMode(request, headers);
-
   return extensions_delegate_->NotifyBeforeStartTransaction(
       request, std::move(callback), headers);
 }
@@ -221,10 +261,8 @@ int ChromeNetworkDelegate::OnHeadersReceived(
 
 void ChromeNetworkDelegate::OnBeforeRedirect(net::URLRequest* request,
                                              const GURL& new_location) {
-  if (domain_reliability_monitor_)
-    domain_reliability_monitor_->OnBeforeRedirect(request);
   extensions_delegate_->NotifyBeforeRedirect(request, new_location);
-  variations::StripVariationHeaderIfNeeded(new_location, request);
+  variations::StripVariationsHeaderIfNeeded(new_location, request);
 }
 
 void ChromeNetworkDelegate::OnResponseStarted(net::URLRequest* request,
@@ -254,19 +292,11 @@ void ChromeNetworkDelegate::OnCompleted(net::URLRequest* request,
                                         bool started,
                                         int net_error) {
   extensions_delegate_->NotifyCompleted(request, started, net_error);
-  if (domain_reliability_monitor_)
-    domain_reliability_monitor_->OnCompleted(request, started);
-  extensions_delegate_->ForwardProxyErrors(request, net_error);
   extensions_delegate_->ForwardDoneRequestStatus(request);
 }
 
 void ChromeNetworkDelegate::OnURLRequestDestroyed(net::URLRequest* request) {
   extensions_delegate_->NotifyURLRequestDestroyed(request);
-}
-
-void ChromeNetworkDelegate::OnPACScriptError(int line_number,
-                                             const base::string16& error) {
-  extensions_delegate_->NotifyPACScriptError(line_number, error);
 }
 
 net::NetworkDelegate::AuthRequiredResponse
@@ -278,56 +308,41 @@ ChromeNetworkDelegate::OnAuthRequired(net::URLRequest* request,
       request, auth_info, std::move(callback), credentials);
 }
 
-bool ChromeNetworkDelegate::OnCanGetCookies(
-    const net::URLRequest& request,
-    const net::CookieList& cookie_list) {
-  // nullptr during tests, or when we're running in the system context.
-  if (!cookie_settings_.get())
-    return true;
-
-  bool allow = cookie_settings_->IsCookieAccessAllowed(
-      request.url(), request.site_for_cookies());
-
-  const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(&request);
+bool ChromeNetworkDelegate::OnCanGetCookies(const net::URLRequest& request,
+                                            const net::CookieList& cookie_list,
+                                            bool allowed_from_caller) {
+  ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(&request);
   if (info) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&TabSpecificContentSettings::CookiesRead,
                        info->GetWebContentsGetterForRequest(), request.url(),
-                       request.site_for_cookies(), cookie_list, !allow));
+                       request.site_for_cookies(), cookie_list,
+                       !allowed_from_caller));
   }
-
-  return allow;
+  return allowed_from_caller;
 }
 
 bool ChromeNetworkDelegate::OnCanSetCookie(const net::URLRequest& request,
                                            const net::CanonicalCookie& cookie,
-                                           net::CookieOptions* options) {
-  // nullptr during tests, or when we're running in the system context.
-  if (!cookie_settings_.get())
-    return true;
-
-  bool allow = cookie_settings_->IsCookieAccessAllowed(
-      request.url(), request.site_for_cookies());
-
-  const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(&request);
+                                           net::CookieOptions* options,
+                                           bool allowed_from_caller) {
+  ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(&request);
   if (info) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&TabSpecificContentSettings::CookieChanged,
                        info->GetWebContentsGetterForRequest(), request.url(),
-                       request.site_for_cookies(), cookie, !allow));
+                       request.site_for_cookies(), cookie,
+                       !allowed_from_caller));
   }
-
-  return allow;
+  return allowed_from_caller;
 }
 
 bool ChromeNetworkDelegate::OnCanAccessFile(
     const net::URLRequest& request,
     const base::FilePath& original_path,
     const base::FilePath& absolute_path) const {
-  if (g_access_to_all_files_enabled)
-    return true;
   return IsAccessAllowed(original_path, absolute_path, profile_path_);
 }
 
@@ -356,20 +371,6 @@ bool ChromeNetworkDelegate::IsAccessAllowed(
 // static
 void ChromeNetworkDelegate::EnableAccessToAllFilesForTesting(bool enabled) {
   g_access_to_all_files_enabled = enabled;
-}
-
-bool ChromeNetworkDelegate::OnCanEnablePrivacyMode(
-    const GURL& url,
-    const GURL& site_for_cookies) const {
-  // nullptr during tests, or when we're running in the system context.
-  if (!cookie_settings_.get())
-    return false;
-
-  return !cookie_settings_->IsCookieAccessAllowed(url, site_for_cookies);
-}
-
-bool ChromeNetworkDelegate::OnAreExperimentalCookieFeaturesEnabled() const {
-  return experimental_web_platform_features_enabled_;
 }
 
 bool ChromeNetworkDelegate::OnCancelURLRequestWithPolicyViolatingReferrerHeader(

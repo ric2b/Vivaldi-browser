@@ -84,11 +84,6 @@ class QUIC_EXPORT_PRIVATE QuicPacketWriter {
                                   const QuicSocketAddress& peer_address,
                                   PerPacketOptions* options) = 0;
 
-  // Returns true if the writer buffers and subsequently rewrites data
-  // when an attempt to write results in the underlying socket becoming
-  // write blocked.
-  virtual bool IsWriteBlockedDataBuffered() const = 0;
-
   // Returns true if the network socket is not writable.
   virtual bool IsWriteBlocked() const = 0;
 
@@ -114,7 +109,11 @@ class QUIC_EXPORT_PRIVATE QuicPacketWriter {
   // Return the starting address for the next packet's data. A minimum of
   // kMaxPacketSize is guaranteed to be available from the returned address. If
   // the internal buffer does not have enough space, nullptr is returned.
-  virtual char* GetNextWriteLocation() const = 0;
+  // All arguments should be identical to the follow-up call to |WritePacket|,
+  // they are here to allow advanced packet memory management in packet writers,
+  // e.g. one packet buffer pool per |peer_address|.
+  virtual char* GetNextWriteLocation(const QuicIpAddress& self_address,
+                                     const QuicSocketAddress& peer_address) = 0;
 
   // PassThrough mode: Return WriteResult(WRITE_STATUS_OK, 0).
   //

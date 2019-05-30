@@ -8,6 +8,8 @@
 #include "base/single_thread_task_runner.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
+#include "third_party/blink/renderer/platform/graphics/scroll_types.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
 
@@ -32,8 +34,12 @@ class CORE_EXPORT RootFrameViewport final
  public:
   static RootFrameViewport* Create(ScrollableArea& visual_viewport,
                                    ScrollableArea& layout_viewport) {
-    return new RootFrameViewport(visual_viewport, layout_viewport);
+    return MakeGarbageCollected<RootFrameViewport>(visual_viewport,
+                                                   layout_viewport);
   }
+
+  RootFrameViewport(ScrollableArea& visual_viewport,
+                    ScrollableArea& layout_viewport);
 
   void Trace(blink::Visitor*) override;
 
@@ -121,9 +127,6 @@ class CORE_EXPORT RootFrameViewport final
   ScrollbarTheme& GetPageScrollbarTheme() const override;
 
  private:
-  RootFrameViewport(ScrollableArea& visual_viewport,
-                    ScrollableArea& layout_viewport);
-
   enum ViewportToScrollFirst { kVisualViewport, kLayoutViewport };
 
   ScrollOffset ScrollOffsetFromScrollAnimators() const;
@@ -149,11 +152,12 @@ class CORE_EXPORT RootFrameViewport final
   Member<ScrollableArea> layout_viewport_;
 };
 
-DEFINE_TYPE_CASTS(RootFrameViewport,
-                  ScrollableArea,
-                  scrollableArea,
-                  scrollableArea->IsRootFrameViewport(),
-                  scrollableArea.IsRootFrameViewport());
+template <>
+struct DowncastTraits<RootFrameViewport> {
+  static bool AllowFrom(const ScrollableArea& scrollable_area) {
+    return scrollable_area.IsRootFrameViewport();
+  }
+};
 
 }  // namespace blink
 

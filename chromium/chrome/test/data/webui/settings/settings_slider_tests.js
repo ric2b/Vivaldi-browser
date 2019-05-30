@@ -8,12 +8,12 @@ suite('SettingsSlider', function() {
   let slider;
 
   /**
-   * paper-slider instance wrapped by settings-slider.
+   * cr-slider instance wrapped by settings-slider.
    * @type {!CrSliderElement}
    */
   let crSlider;
 
-  const tickValues = [2, 4, 8, 16, 32, 64, 128];
+  const ticks = [2, 4, 8, 16, 32, 64, 128];
 
   setup(function() {
     PolymerTest.clearBody();
@@ -24,7 +24,68 @@ suite('SettingsSlider', function() {
     };
     document.body.appendChild(slider);
     crSlider = slider.$$('cr-slider');
+    return PolymerTest.flushTasks();
   });
+
+  function pressArrowRight() {
+    MockInteractions.pressAndReleaseKeyOn(crSlider, 39, [], 'ArrowRight');
+  }
+
+  function pressArrowLeft() {
+    MockInteractions.pressAndReleaseKeyOn(crSlider, 37, [], 'ArrowLeft');
+  }
+
+  function pressPageUp() {
+    MockInteractions.pressAndReleaseKeyOn(crSlider, 33, [], 'PageUp');
+  }
+
+  function pressPageDown() {
+    MockInteractions.pressAndReleaseKeyOn(crSlider, 34, [], 'PageDown');
+  }
+
+  function pressArrowUp() {
+    MockInteractions.pressAndReleaseKeyOn(crSlider, 38, [], 'ArrowUp');
+  }
+
+  function pressArrowDown() {
+    MockInteractions.pressAndReleaseKeyOn(crSlider, 40, [], 'ArrowDown');
+  }
+
+  function pressHome() {
+    MockInteractions.pressAndReleaseKeyOn(crSlider, 36, [], 'Home');
+  }
+
+  function pressEnd() {
+    MockInteractions.pressAndReleaseKeyOn(crSlider, 35, [], 'End');
+  }
+
+  function pointerEvent(eventType, ratio) {
+    const rect = crSlider.$.barContainer.getBoundingClientRect();
+    crSlider.dispatchEvent(new PointerEvent(eventType, {
+      buttons: 1,
+      pointerId: 1,
+      clientX: rect.left + (ratio * rect.width),
+    }));
+  }
+
+  function pointerDown(ratio) {
+    pointerEvent('pointerdown', ratio);
+  }
+
+  function pointerMove(ratio) {
+    pointerEvent('pointermove', ratio);
+  }
+
+  function pointerUp() {
+    // Ignores clientX for pointerup event.
+    pointerEvent('pointerup', 0);
+  }
+
+  function assertCloseTo(actual, expected) {
+    assertTrue(
+        Math.abs(1 - actual / expected) <= Number.EPSILON,
+        `expected ${expected} to be close to ${actual}`);
+  }
 
   test('enforce value', function() {
     // Test that the indicator is not present until after the pref is
@@ -43,85 +104,174 @@ suite('SettingsSlider', function() {
   });
 
   test('set value', function() {
-    slider.tickValues = tickValues;
+    slider.ticks = ticks;
     slider.set('pref.value', 16);
+    Polymer.dom.flush();
     expectEquals(6, crSlider.max);
     expectEquals(3, crSlider.value);
-    expectEquals(3, crSlider.immediateValue);
 
     // settings-slider only supports snapping to a range of tick values.
     // Setting to an in-between value should snap to an indexed value.
     slider.set('pref.value', 70);
-    expectEquals(5, crSlider.value);
-    expectEquals(5, crSlider.immediateValue);
-    expectEquals(64, slider.pref.value);
+    return PolymerTest.flushTasks()
+        .then(() => {
+          expectEquals(5, crSlider.value);
+          expectEquals(64, slider.pref.value);
 
-    // Setting the value out-of-range should clamp the slider.
-    slider.set('pref.value', -100);
-    expectEquals(0, crSlider.value);
-    expectEquals(0, crSlider.immediateValue);
-    expectEquals(2, slider.pref.value);
+          // Setting the value out-of-range should clamp the slider.
+          slider.set('pref.value', -100);
+          return PolymerTest.flushTasks();
+        })
+        .then(() => {
+          expectEquals(0, crSlider.value);
+          expectEquals(2, slider.pref.value);
+        });
   });
 
   test('move slider', function() {
-    slider.tickValues = tickValues;
+    slider.ticks = ticks;
     slider.set('pref.value', 30);
     expectEquals(4, crSlider.value);
 
-    MockInteractions.pressAndReleaseKeyOn(crSlider.$.slider, 39 /* right */);
+    pressArrowRight();
     expectEquals(5, crSlider.value);
     expectEquals(64, slider.pref.value);
 
-    MockInteractions.pressAndReleaseKeyOn(crSlider.$.slider, 39 /* right */);
+    pressArrowRight();
     expectEquals(6, crSlider.value);
     expectEquals(128, slider.pref.value);
 
-    MockInteractions.pressAndReleaseKeyOn(crSlider.$.slider, 39 /* right */);
+    pressArrowRight();
     expectEquals(6, crSlider.value);
     expectEquals(128, slider.pref.value);
 
-    MockInteractions.pressAndReleaseKeyOn(crSlider.$.slider, 37 /* left */);
+    pressArrowLeft();
     expectEquals(5, crSlider.value);
     expectEquals(64, slider.pref.value);
-  });
 
-  test('findNearestIndex_', function() {
-    const slider = document.createElement('settings-slider');
-    const testArray = [80, 20, 350, 1000, 200, 100];
-    const testFindNearestIndex = function(expectedIndex, value) {
-      expectEquals(expectedIndex, slider.findNearestIndex_(testArray, value));
-    };
-    testFindNearestIndex(0, 51);
-    testFindNearestIndex(0, 80);
-    testFindNearestIndex(0, 89);
-    testFindNearestIndex(1, -100);
-    testFindNearestIndex(1, 20);
-    testFindNearestIndex(1, 49);
-    testFindNearestIndex(2, 400);
-    testFindNearestIndex(2, 350);
-    testFindNearestIndex(2, 300);
-    testFindNearestIndex(3, 200000);
-    testFindNearestIndex(3, 1000);
-    testFindNearestIndex(3, 700);
-    testFindNearestIndex(4, 220);
-    testFindNearestIndex(4, 200);
-    testFindNearestIndex(4, 151);
-    testFindNearestIndex(5, 149);
-    testFindNearestIndex(5, 100);
-    testFindNearestIndex(5, 91);
+    pressPageUp();
+    expectEquals(6, crSlider.value);
+    expectEquals(128, slider.pref.value);
+
+    pressPageDown();
+    expectEquals(5, crSlider.value);
+    expectEquals(64, slider.pref.value);
+
+    pressHome();
+    expectEquals(0, crSlider.value);
+    expectEquals(2, slider.pref.value);
+
+    pressArrowDown();
+    expectEquals(0, crSlider.value);
+    expectEquals(2, slider.pref.value);
+
+    pressArrowUp();
+    expectEquals(1, crSlider.value);
+    expectEquals(4, slider.pref.value);
+
+    pressEnd();
+    expectEquals(6, crSlider.value);
+    expectEquals(128, slider.pref.value);
   });
 
   test('scaled slider', function() {
+    slider.set('pref.value', 2);
+    expectEquals(2, crSlider.value);
+
+    slider.scale = 10;
+    slider.max = 4;
+    pressArrowRight();
+    expectEquals(3, crSlider.value);
+    expectEquals(.3, slider.pref.value);
+
+    pressArrowRight();
+    expectEquals(4, crSlider.value);
+    expectEquals(.4, slider.pref.value);
+
+    pressArrowRight();
+    expectEquals(4, crSlider.value);
+    expectEquals(.4, slider.pref.value);
+
+    pressHome();
+    expectEquals(0, crSlider.value);
+    expectEquals(0, slider.pref.value);
+
+    pressEnd();
+    expectEquals(4, crSlider.value);
+    expectEquals(.4, slider.pref.value);
+
+    slider.set('pref.value', .25);
+    expectEquals(2.5, crSlider.value);
+    expectEquals(.25, slider.pref.value);
+
+    pressPageUp();
+    expectEquals(3.5, crSlider.value);
+    expectEquals(.35, slider.pref.value);
+
+    pressPageUp();
+    expectEquals(4, crSlider.value);
+    expectEquals(.4, slider.pref.value);
+  });
+
+  test('update value instantly both off and on with ticks', () => {
+    slider.ticks = ticks;
+    slider.set('pref.value', 2);
+    slider.updateValueInstantly = false;
+    assertEquals(0, crSlider.value);
+    pointerDown(3 / crSlider.max);
+    assertEquals(3, crSlider.value);
+    assertEquals(2, slider.pref.value);
+    pointerUp();
+    assertEquals(3, crSlider.value);
+    assertEquals(16, slider.pref.value);
+
+    // Once |updateValueInstantly| is turned on, |value| should start updating
+    // again during drag.
+    pointerDown(0);
+    assertEquals(0, crSlider.value);
+    assertEquals(16, slider.pref.value);
+    slider.updateValueInstantly = true;
+    assertEquals(2, slider.pref.value);
+    pointerMove(1 / crSlider.max);
+    assertEquals(1, crSlider.value);
+    assertEquals(4, slider.pref.value);
+    slider.updateValueInstantly = false;
+    pointerMove(2 / crSlider.max);
+    assertEquals(2, crSlider.value);
+    assertEquals(4, slider.pref.value);
+    pointerUp();
+    assertEquals(2, crSlider.value);
+    assertEquals(8, slider.pref.value);
+  });
+
+  test('update value instantly both off and on', () => {
     slider.scale = 10;
     slider.set('pref.value', 2);
-    expectEquals(20, crSlider.value);
+    slider.updateValueInstantly = false;
+    assertCloseTo(20, crSlider.value);
+    pointerDown(.3);
+    assertCloseTo(30, crSlider.value);
+    assertEquals(2, slider.pref.value);
+    pointerUp();
+    assertCloseTo(30, crSlider.value);
+    assertCloseTo(3, slider.pref.value);
 
-    MockInteractions.pressAndReleaseKeyOn(crSlider.$.slider, 39 /* right */);
-    expectEquals(21, crSlider.value);
-    expectEquals(2.1, slider.pref.value);
-
-    MockInteractions.pressAndReleaseKeyOn(crSlider.$.slider, 39 /* right */);
-    expectEquals(22, crSlider.value);
-    expectEquals(2.2, slider.pref.value);
+    // Once |updateValueInstantly| is turned on, |value| should start updating
+    // again during drag.
+    pointerDown(0);
+    assertEquals(0, crSlider.value);
+    assertCloseTo(3, slider.pref.value);
+    slider.updateValueInstantly = true;
+    assertEquals(0, slider.pref.value);
+    pointerMove(.1);
+    assertCloseTo(10, crSlider.value);
+    assertCloseTo(1, slider.pref.value);
+    slider.updateValueInstantly = false;
+    pointerMove(.2);
+    assertCloseTo(20, crSlider.value);
+    assertCloseTo(1, slider.pref.value);
+    pointerUp();
+    assertCloseTo(20, crSlider.value);
+    assertCloseTo(2, slider.pref.value);
   });
 });

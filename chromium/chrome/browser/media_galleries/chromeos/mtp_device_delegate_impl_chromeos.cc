@@ -25,10 +25,11 @@
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "chrome/browser/media_galleries/chromeos/mtp_device_task_helper_map_service.h"
 #include "chrome/browser/media_galleries/chromeos/snapshot_file_details.h"
 #include "components/services/filesystem/public/interfaces/types.mojom.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "net/base/io_buffer.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
@@ -355,7 +356,8 @@ void CloseStorageAndDestroyTaskHelperOnUIThread(
 std::pair<int, base::File::Error> OpenFileDescriptor(
     const base::FilePath& file_path,
     const int flags) {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   if (base::DirectoryExists(file_path))
     return std::make_pair(-1, base::File::FILE_ERROR_NOT_A_FILE);
@@ -369,7 +371,8 @@ std::pair<int, base::File::Error> OpenFileDescriptor(
 
 // Closes |file_descriptor| on a background task runner.
 void CloseFileDescriptor(const int file_descriptor) {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   IGNORE_EINTR(close(file_descriptor));
 }
@@ -378,8 +381,8 @@ void CloseFileDescriptor(const int file_descriptor) {
 void DeleteTemporaryFile(const base::FilePath& file_path) {
   base::PostTaskWithTraits(FROM_HERE,
                            {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-                           base::Bind(base::IgnoreResult(base::DeleteFile),
-                                      file_path, false /* not recursive*/));
+                           base::BindOnce(base::IgnoreResult(base::DeleteFile),
+                                          file_path, false /* not recursive*/));
 }
 
 // A fake callback to be passed as CopyFileProgressCallback.
@@ -847,12 +850,10 @@ void MTPDeviceDelegateImplLinux::NotifyFileChange(
 void MTPDeviceDelegateImplLinux::CancelPendingTasksAndDeleteDelegate() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   // To cancel all the pending tasks, destroy the MTPDeviceTaskHelper object.
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&CloseStorageAndDestroyTaskHelperOnUIThread,
-                 storage_name_,
-                 read_only_));
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
+      base::BindOnce(&CloseStorageAndDestroyTaskHelperOnUIThread, storage_name_,
+                     read_only_));
   delete this;
 }
 
@@ -975,8 +976,7 @@ void MTPDeviceDelegateImplLinux::ReadDirectoryInternal(
       base::Bind(&GetFileInfoOnUIThread, storage_name_, read_only_, *dir_id,
                  success_callback_wrapper, error_callback_wrapper);
 
-  content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                   closure);
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI}, closure);
 }
 
 void MTPDeviceDelegateImplLinux::CreateSnapshotFileInternal(
@@ -1300,11 +1300,11 @@ void MTPDeviceDelegateImplLinux::EnsureInitAndRunTask(
   if (init_state_ == UNINITIALIZED) {
     init_state_ = PENDING_INIT;
     task_in_progress_ = true;
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&OpenStorageOnUIThread, storage_name_, read_only_,
-                   base::Bind(&MTPDeviceDelegateImplLinux::OnInitCompleted,
-                              weak_ptr_factory_.GetWeakPtr())));
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::UI},
+        base::BindOnce(&OpenStorageOnUIThread, storage_name_, read_only_,
+                       base::Bind(&MTPDeviceDelegateImplLinux::OnInitCompleted,
+                                  weak_ptr_factory_.GetWeakPtr())));
   }
 }
 
@@ -1326,9 +1326,8 @@ void MTPDeviceDelegateImplLinux::RunTask(const PendingTaskInfo& task_info) {
     }
   }
 
-  content::BrowserThread::PostTask(task_info.thread_id,
-                          task_info.location,
-                          task_info.task);
+  base::PostTaskWithTraits(task_info.location, {task_info.thread_id},
+                           task_info.task);
 }
 
 void MTPDeviceDelegateImplLinux::WriteDataIntoSnapshotFile(
@@ -1352,9 +1351,8 @@ void MTPDeviceDelegateImplLinux::WriteDataIntoSnapshotFile(
                                           read_only_,
                                           request_info,
                                           file_info);
-  content::BrowserThread::PostTask(content::BrowserThread::UI,
-                                   FROM_HERE,
-                                   task_closure);
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                           task_closure);
 }
 
 void MTPDeviceDelegateImplLinux::PendingRequestDone() {
@@ -1454,9 +1452,8 @@ void MTPDeviceDelegateImplLinux::OnDidGetFileInfoToReadDirectory(
                  weak_ptr_factory_.GetWeakPtr(), dir_id, success_callback),
       base::Bind(&MTPDeviceDelegateImplLinux::HandleDeviceFileError,
                  weak_ptr_factory_.GetWeakPtr(), error_callback, dir_id));
-  content::BrowserThread::PostTask(content::BrowserThread::UI,
-                                   FROM_HERE,
-                                   task_closure);
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                           task_closure);
 }
 
 void MTPDeviceDelegateImplLinux::OnDidGetFileInfoToCreateSnapshotFile(

@@ -15,6 +15,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "base/unguessable_token.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
@@ -23,7 +24,9 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request.h"
 #include "services/network/cross_origin_read_blocking.h"
+#include "services/network/initiator_lock_compatibility.h"
 #include "services/network/keepalive_statistics_recorder.h"
+#include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/resource_scheduler.h"
@@ -59,21 +62,20 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       mojom::URLLoaderRequest url_loader_request,
       int32_t options,
       const ResourceRequest& request,
-      bool report_raw_headers,
       mojom::URLLoaderClientPtr url_loader_client,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
       const mojom::URLLoaderFactoryParams* factory_params,
       uint32_t request_id,
       scoped_refptr<ResourceSchedulerClient> resource_scheduler_client,
       base::WeakPtr<KeepaliveStatisticsRecorder> keepalive_statistics_recorder,
-      base::WeakPtr<NetworkUsageAccumulator> network_usage_accumulator);
+      base::WeakPtr<NetworkUsageAccumulator> network_usage_accumulator,
+      mojom::TrustedURLLoaderHeaderClient* url_loader_header_client);
   ~URLLoader() override;
 
   // mojom::URLLoader implementation:
-  void FollowRedirect(const base::Optional<std::vector<std::string>>&
-                          to_be_removed_request_headers,
-                      const base::Optional<net::HttpRequestHeaders>&
-                          modified_request_headers) override;
+  void FollowRedirect(const std::vector<std::string>& removed_headers,
+                      const net::HttpRequestHeaders& modified_headers,
+                      const base::Optional<GURL>& new_url) override;
   void ProceedWithResponse() override;
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override;
@@ -94,6 +96,16 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   void OnResponseStarted(net::URLRequest* url_request, int net_error) override;
   void OnReadCompleted(net::URLRequest* url_request, int bytes_read) override;
 
+  // These methods are called by the network delegate to forward these events to
+  // the |header_client_|.
+  int OnBeforeStartTransaction(net::CompletionOnceCallback callback,
+                               net::HttpRequestHeaders* headers);
+  int OnHeadersReceived(
+      net::CompletionOnceCallback callback,
+      const net::HttpResponseHeaders* original_response_headers,
+      scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
+      GURL* allowed_unsafe_redirect_url);
+
   // mojom::AuthChallengeResponder:
   void OnAuthCredentials(
       const base::Optional<net::AuthCredentials>& credentials) override;
@@ -102,6 +114,25 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   uint32_t GetRenderFrameId() const;
   uint32_t GetProcessId() const;
+  uint32_t GetResourceType() const;
+
+  const net::HttpRequestHeaders& custom_proxy_pre_cache_headers() const {
+    return custom_proxy_pre_cache_headers_;
+  }
+
+  const net::HttpRequestHeaders& custom_proxy_post_cache_headers() const {
+    return custom_proxy_post_cache_headers_;
+  }
+
+  bool custom_proxy_use_alternate_proxy_list() const {
+    return custom_proxy_use_alternate_proxy_list_;
+  }
+
+  const base::Optional<GURL>& new_redirect_url() const {
+    return new_redirect_url_;
+  }
+
+  void SetAllowReportingRawHeaders(bool allow);
 
   // Gets the URLLoader associated with this request.
   static URLLoader* ForRequest(const net::URLRequest& request);
@@ -125,10 +156,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
     DISALLOW_COPY_AND_ASSIGN(UnownedPointer);
   };
 
-  static void OnFilesForUploadOpened(base::WeakPtr<URLLoader> self,
-                                     const ResourceRequest& request,
-                                     int error_code,
-                                     std::vector<base::File> opened_files);
+  class FileOpenerForUpload;
+  friend class FileOpenerForUpload;
+
   void OpenFilesForUpload(const ResourceRequest& request);
   void SetUpUpload(const ResourceRequest& request,
                    int error_code,
@@ -150,12 +180,28 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
                                      int net_error);
   void OnCertificateRequestedResponse(
       const scoped_refptr<net::X509Certificate>& x509_certificate,
+      const std::string& provider_name,
       const std::vector<uint16_t>& algorithm_preferences,
       mojom::SSLPrivateKeyPtr ssl_private_key,
       bool cancel_certificate_selection);
   bool HasDataPipe() const;
   void RecordBodyReadFromNetBeforePausedIfNeeded();
   void ResumeStart();
+  void OnBeforeSendHeadersComplete(
+      net::CompletionOnceCallback callback,
+      net::HttpRequestHeaders* out_headers,
+      int result,
+      const base::Optional<net::HttpRequestHeaders>& headers);
+  void OnHeadersReceivedComplete(
+      net::CompletionOnceCallback callback,
+      scoped_refptr<net::HttpResponseHeaders>* out_headers,
+      GURL* out_allowed_unsafe_redirect_url,
+      int result,
+      const base::Optional<std::string>& headers,
+      const GURL& allowed_unsafe_redirect_url);
+
+  void CompleteBlockedResponse(int error_code,
+                               bool should_report_corb_blocking);
 
   enum BlockResponseForCorbResult {
     // Returned when caller of BlockResponseForCorb doesn't need to continue,
@@ -180,7 +226,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // store a raw pointer to mojom::URLLoaderFactoryParams.
   const mojom::URLLoaderFactoryParams* const factory_params_;
 
-  uint32_t render_frame_id_;
+  int render_frame_id_;
   uint32_t request_id_;
   const bool keepalive_;
   const bool do_not_prompt_for_login_;
@@ -211,14 +257,22 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   std::unique_ptr<ResourceScheduler::ScheduledResourceRequest>
       resource_scheduler_request_handle_;
 
+  // Whether client requested raw headers.
+  const bool want_raw_headers_;
+  // Whether we actually should report them.
   bool report_raw_headers_;
   net::HttpRawRequestHeaders raw_request_headers_;
   scoped_refptr<const net::HttpResponseHeaders> raw_response_headers_;
 
   std::unique_ptr<UploadProgressTracker> upload_progress_tracker_;
 
-  // Whether a redirect is currently deferred.
-  bool deferred_redirect_ = false;
+  // Holds the URL of a redirect if it's currently deferred.
+  std::unique_ptr<GURL> deferred_redirect_url_;
+
+  // If |new_url| is given to FollowRedirect() it's saved here, so that it can
+  // be later referred to from NetworkContext::OnBeforeURLRequestInternal, which
+  // is called from NetworkDelegate::NotifyBeforeURLRequest.
+  base::Optional<GURL> new_redirect_url_;
 
   bool should_pause_reading_body_ = false;
   // The response body stream is open, but transferring data is paused.
@@ -243,6 +297,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // CORB-excluded requests must be blocked if the CORS check fails.
   bool is_nocors_corb_excluded_request_ = false;
 
+  mojom::FetchRequestMode fetch_request_mode_;
+
   scoped_refptr<ResourceSchedulerClient> resource_scheduler_client_;
 
   mojom::SSLPrivateKeyPtr ssl_private_key_;
@@ -254,6 +310,18 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   bool first_auth_attempt_;
 
   std::unique_ptr<ScopedThrottlingToken> throttling_token_;
+
+  net::HttpRequestHeaders custom_proxy_pre_cache_headers_;
+  net::HttpRequestHeaders custom_proxy_post_cache_headers_;
+  bool custom_proxy_use_alternate_proxy_list_ = false;
+
+  // Indicates the originating frame of the request, see
+  // network::ResourceRequest::fetch_window_id for details.
+  base::Optional<base::UnguessableToken> fetch_window_id_;
+
+  mojom::TrustedHeaderClientPtr header_client_;
+
+  std::unique_ptr<FileOpenerForUpload> file_opener_for_upload_;
 
   base::WeakPtrFactory<URLLoader> weak_ptr_factory_;
 

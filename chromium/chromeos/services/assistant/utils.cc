@@ -10,7 +10,7 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/path_service.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/values.h"
 #include "chromeos/assistant/internal/internal_constants.h"
 #include "chromeos/dbus/util/version_loader.h"
@@ -27,7 +27,7 @@ base::FilePath GetRootPath() {
   return home_dir;
 }
 
-std::string CreateLibAssistantConfig(bool disable_hotword) {
+std::string CreateLibAssistantConfig() {
   using Value = base::Value;
   using Type = base::Value::Type;
 
@@ -47,26 +47,30 @@ std::string CreateLibAssistantConfig(bool disable_hotword) {
   discovery.SetKey("enable_mdns", Value(false));
   config.SetKey("discovery", std::move(discovery));
 
+  Value internal(Type::DICTIONARY);
+  internal.SetKey("surface_type", Value("OPA_CROS"));
+
   if (base::SysInfo::IsRunningOnChromeOS()) {
     // Log to 'log' sub dir in user's home dir.
     Value logging(Type::DICTIONARY);
     logging.SetKey(
         "directory",
         Value(GetRootPath().Append(FILE_PATH_LITERAL("log")).value()));
+    // Maximum disk space consumed by all log files. There are 5 rotating log
+    // files on disk.
+    logging.SetKey("max_size_kb", Value(3 * 1024));
+    // Empty "output_type" disables logging to stderr.
+    logging.SetKey("output_type", Value(Type::LIST));
     config.SetKey("logging", std::move(logging));
   } else {
     // Print logs to console if running in desktop mode.
-    Value internal(Type::DICTIONARY);
     internal.SetKey("disable_log_files", Value(true));
-    config.SetKey("internal", std::move(internal));
   }
+  config.SetKey("internal", std::move(internal));
 
   Value audio_input(Type::DICTIONARY);
-  Value sources(Type::LIST);
-  Value dict(Type::DICTIONARY);
-  dict.SetKey("disable_hotword", Value(disable_hotword));
-  sources.GetList().push_back(std::move(dict));
-  audio_input.SetKey("sources", std::move(sources));
+  // Skip sending speaker ID selection info to disable user verification.
+  audio_input.SetKey("should_send_speaker_id_selection_info", Value(false));
   config.SetKey("audio_input", std::move(audio_input));
 
   std::string json;

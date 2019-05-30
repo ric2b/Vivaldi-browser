@@ -32,13 +32,13 @@ jumbo_component("aura") {
     "env_input_state_controller.h",
     "env_observer.h",
     "event_injector.h",
-    "hit_test_data_provider_aura.h",
     "input_state_lookup.h",
     "input_state_lookup_win.h",
     "layout_manager.h",
     "local/window_port_local.h",
     "mus/capture_synchronizer.h",
     "mus/capture_synchronizer_delegate.h",
+    "mus/client_side_window_move_handler.h",
     "mus/client_surface_embedder.h",
     "mus/drag_drop_controller_host.h",
     "mus/drag_drop_controller_mus.h",
@@ -47,6 +47,8 @@ jumbo_component("aura") {
     "mus/focus_synchronizer.h",
     "mus/focus_synchronizer_delegate.h",
     "mus/focus_synchronizer_observer.h",
+    "mus/gesture_recognizer_impl_mus.h",
+    "mus/gesture_synchronizer.h",
     "mus/in_flight_change.h",
     "mus/input_method_mus.h",
     "mus/input_method_mus_delegate.h",
@@ -78,6 +80,7 @@ jumbo_component("aura") {
     "window_event_dispatcher.h",
     "window_event_dispatcher_observer.h",
     "window_observer.h",
+    "window_occlusion_change_builder.h",
     "window_occlusion_tracker.h",
     "window_port.h",
     "window_targeter.h",
@@ -106,7 +109,6 @@ jumbo_component("aura") {
     "env.cc",
     "env_input_state_controller.cc",
     "event_injector.cc",
-    "hit_test_data_provider_aura.cc",
     "input_state_lookup.cc",
     "input_state_lookup_win.cc",
     "layout_manager.cc",
@@ -114,13 +116,18 @@ jumbo_component("aura") {
     "mouse_location_manager.cc",
     "mouse_location_manager.h",
     "mus/capture_synchronizer.cc",
+    "mus/client_side_window_move_handler.cc",
     "mus/client_surface_embedder.cc",
     "mus/drag_drop_controller_mus.cc",
     "mus/embed_root.cc",
     "mus/focus_synchronizer.cc",
+    "mus/gesture_recognizer_impl_mus.cc",
+    "mus/gesture_synchronizer.cc",
     "mus/in_flight_change.cc",
     "mus/input_method_mus.cc",
     "mus/mus_context_factory.cc",
+    "mus/mus_lsi_allocator.cc",
+    "mus/mus_lsi_allocator.h",
     "mus/mus_mouse_location_updater.cc",
     "mus/os_exchange_data_provider_mus.cc",
     "mus/property_converter.cc",
@@ -134,6 +141,8 @@ jumbo_component("aura") {
     "mus/window_tree_client_delegate.cc",
     "mus/window_tree_host_mus.cc",
     "mus/window_tree_host_mus_init_params.cc",
+    "native_window_occlusion_tracker_win.cc",
+    "native_window_occlusion_tracker_win.h",
     "null_window_targeter.cc",
     "scoped_keyboard_hook.cc",
     "scoped_simple_keyboard_hook.cc",
@@ -142,6 +151,7 @@ jumbo_component("aura") {
     "window_delegate.cc",
     "window_event_dispatcher.cc",
     "window_observer.cc",
+    "window_occlusion_change_builder.cc",
     "window_occlusion_tracker.cc",
     "window_port.cc",
     "window_port_for_shutdown.cc",
@@ -150,6 +160,8 @@ jumbo_component("aura") {
     "window_tree_host.cc",
     "window_tree_host_platform.cc",
   ]
+
+  friend = [ ":*" ]
 
   defines = [ "AURA_IMPLEMENTATION" ]
 
@@ -174,6 +186,7 @@ jumbo_component("aura") {
     "//services/ws/public/mojom",
     "//skia",
     "//ui/base",
+    "//ui/base/clipboard",
     "//ui/base/ime",
     "//ui/display",
     "//ui/events",
@@ -208,6 +221,10 @@ jumbo_component("aura") {
     ]
   }
 
+  if (is_win) {
+    libs = [ "wtsapi32.lib" ]
+  }
+
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
     public += [ "screen_ozone.h" ]
@@ -237,6 +254,8 @@ jumbo_static_library("test_support") {
     "test/aura_test_suite_setup.h",
     "test/aura_test_utils.cc",
     "test/aura_test_utils.h",
+    "test/default_event_generator_delegate.cc",
+    "test/default_event_generator_delegate.h",
     "test/env_test_helper.cc",
     "test/env_test_helper.h",
     "test/event_generator_delegate_aura.cc",
@@ -250,8 +269,11 @@ jumbo_static_library("test_support") {
     "test/mus/test_window_tree_client_delegate.h",
     "test/mus/test_window_tree_client_setup.cc",
     "test/mus/test_window_tree_client_setup.h",
-    "test/mus/window_tree_client_private.cc",
-    "test/mus/window_tree_client_private.h",
+    "test/mus/test_window_tree_delegate.h",
+    "test/mus/window_port_mus_test_helper.cc",
+    "test/mus/window_port_mus_test_helper.h",
+    "test/mus/window_tree_client_test_api.cc",
+    "test/mus/window_tree_client_test_api.h",
     "test/test_cursor_client.cc",
     "test/test_cursor_client.h",
     "test/test_focus_client.cc",
@@ -282,8 +304,8 @@ jumbo_static_library("test_support") {
     ":aura",
     "//services/ws/common",
 
-    # Must be public as headers include ui_features.h.
-    "//ui/base:ui_features",
+    # Must be public as headers include buildflags.h.
+    "//ui/base:buildflags",
   ]
   deps = [
     "//base/test:test_support",
@@ -353,6 +375,7 @@ executable("demo") {
     "//ui/events",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//ui/gl",
     "//ui/gl/init",
   ]
 
@@ -364,12 +387,12 @@ executable("demo") {
 test("aura_unittests") {
   sources = [
     "../compositor_extra/shadow_unittest.cc",
-    "//ui/aura_extra/window_occlusion_impl_unittest_win.cc",
     "gestures/gesture_recognizer_unittest.cc",
-    "hit_test_data_provider_aura_unittest.cc",
     "mouse_location_manager_unittest.cc",
+    "mus/client_side_window_move_handler_unittest.cc",
     "mus/drag_drop_controller_mus_unittest.cc",
     "mus/focus_synchronizer_unittest.cc",
+    "mus/gesture_synchronizer_unittest.cc",
     "mus/input_method_mus_unittest.cc",
     "mus/os_exchange_data_provider_mus_unittest.cc",
     "mus/property_converter_unittest.cc",
@@ -380,11 +403,16 @@ test("aura_unittests") {
     "test/aura_test_suite.h",
     "test/run_all_unittests.cc",
     "window_event_dispatcher_unittest.cc",
+    "window_occlusion_change_builder_unittest.cc",
     "window_occlusion_tracker_unittest.cc",
     "window_targeter_unittest.cc",
     "window_tree_host_unittest.cc",
     "window_unittest.cc",
   ]
+
+  if (is_win) {
+    sources += [ "native_window_occlusion_tracker_unittest.cc" ]
+  }
 
   deps = [
     ":test_support",
@@ -398,7 +426,9 @@ test("aura_unittests") {
     "//skia",
     "//testing/gtest",
     "//ui/aura_extra",
+    "//ui/aura_extra:tests",
     "//ui/base:test_support",
+    "//ui/base/clipboard:clipboard_types",
     "//ui/compositor:test_support",
     "//ui/compositor_extra",
     "//ui/display:test_support",
@@ -415,4 +445,30 @@ test("aura_unittests") {
   data_deps = [
     "//third_party/mesa_headers",
   ]
+}
+
+# This target is added as a dependency of browser interactive_ui_tests. It must
+# be source_set, otherwise the linker will drop the tests as dead code.
+source_set("aura_interactive_ui_tests") {
+  testonly = true
+  if (is_win) {
+    sources = [
+      "native_window_occlusion_tracker_win_interactive_test.cc",
+    ]
+
+    deps = [
+      ":aura",
+      ":test_support",
+      "//base/test:test_support",
+      "//net",
+      "//testing/gtest",
+      "//ui/base/ime:ime",
+      "//ui/display:display",
+      "//ui/gfx",
+      "//ui/gfx/geometry",
+      "//ui/gl:test_support",
+      "//ui/gl/init",
+      "//ui/views:views",
+    ]
+  }
 }

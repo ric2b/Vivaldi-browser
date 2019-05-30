@@ -10,7 +10,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "chromeos/components/proximity_auth/logging/logging.h"
+#include "chromeos/components/multidevice/logging/logging.h"
 #include "chromeos/services/secure_channel/client_connection_parameters.h"
 #include "chromeos/services/secure_channel/pending_connection_request.h"
 #include "chromeos/services/secure_channel/public/cpp/shared/connection_priority.h"
@@ -100,10 +100,11 @@ class PendingConnectionRequestBase
     DCHECK(!has_finished_without_connection_);
     has_finished_without_connection_ = true;
 
-    PA_LOG(INFO) << "Request finished without connection; notifying delegate. "
-                 << "Request type: \"" << readable_request_type_for_logging_
-                 << "\", Reason: " << reason
-                 << ", Client parameters: " << *client_connection_parameters_;
+    PA_LOG(VERBOSE)
+        << "Request finished without connection; notifying delegate. "
+        << "Request type: \"" << readable_request_type_for_logging_
+        << "\", Reason: " << reason
+        << ", Client parameters: " << *client_connection_parameters_;
     NotifyRequestFinishedWithoutConnection(reason);
   }
 

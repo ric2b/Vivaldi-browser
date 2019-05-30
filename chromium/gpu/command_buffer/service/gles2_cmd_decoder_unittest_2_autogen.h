@@ -866,11 +866,14 @@ TEST_P(GLES2DecoderTest2, ShaderSourceBucketInvalidHeader) {
   const char kSource0[] = "hello";
   const char* kSource[] = {kSource0};
   const char kValidStrEnd = 0;
-  const GLsizei kCount = static_cast<GLsizei>(arraysize(kSource));
+  const GLsizei kCount = static_cast<GLsizei>(base::size(kSource));
   const GLsizei kTests[] = {
-      kCount + 1, 0, std::numeric_limits<GLsizei>::max(), -1,
+      kCount + 1,
+      0,
+      std::numeric_limits<GLsizei>::max(),
+      -1,
   };
-  for (size_t ii = 0; ii < arraysize(kTests); ++ii) {
+  for (size_t ii = 0; ii < base::size(kTests); ++ii) {
     SetBucketAsCStrings(kBucketId, 1, kSource, kTests[ii], kValidStrEnd);
     cmds::ShaderSourceBucket cmd;
     cmd.Init(client_shader_id_, kBucketId);
@@ -1165,11 +1168,14 @@ TEST_P(GLES3DecoderTest2, TransformFeedbackVaryingsBucketInvalidHeader) {
   const char kSource0[] = "hello";
   const char* kSource[] = {kSource0};
   const char kValidStrEnd = 0;
-  const GLsizei kCount = static_cast<GLsizei>(arraysize(kSource));
+  const GLsizei kCount = static_cast<GLsizei>(base::size(kSource));
   const GLsizei kTests[] = {
-      kCount + 1, 0, std::numeric_limits<GLsizei>::max(), -1,
+      kCount + 1,
+      0,
+      std::numeric_limits<GLsizei>::max(),
+      -1,
   };
-  for (size_t ii = 0; ii < arraysize(kTests); ++ii) {
+  for (size_t ii = 0; ii < base::size(kTests); ++ii) {
     SetBucketAsCStrings(kBucketId, 1, kSource, kTests[ii], kValidStrEnd);
     cmds::TransformFeedbackVaryingsBucket cmd;
     cmd.Init(client_program_id_, kBucketId, GL_INTERLEAVED_ATTRIBS);
@@ -1320,31 +1326,6 @@ TEST_P(GLES2DecoderTest2, Uniform4iValidArgs) {
   cmds::Uniform4i cmd;
   cmd.Init(1, 2, 3, 4, 5);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());
-}
-
-TEST_P(GLES2DecoderTest2, Uniform4ivImmediateValidArgs) {
-  cmds::Uniform4ivImmediate& cmd = *GetImmediateAs<cmds::Uniform4ivImmediate>();
-  SpecializedSetup<cmds::Uniform4ivImmediate, 0>(true);
-  GLint temp[4 * 2] = {
-      0,
-  };
-  EXPECT_CALL(*gl_, Uniform4iv(1, 2, PointsToArray(temp, 4)));
-  cmd.Init(1, 2, &temp[0]);
-  EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(temp)));
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());
-}
-
-TEST_P(GLES3DecoderTest2, UniformMatrix2x3fvImmediateValidArgs) {
-  cmds::UniformMatrix2x3fvImmediate& cmd =
-      *GetImmediateAs<cmds::UniformMatrix2x3fvImmediate>();
-  SpecializedSetup<cmds::UniformMatrix2x3fvImmediate, 0>(true);
-  GLfloat temp[6 * 2] = {
-      0,
-  };
-  EXPECT_CALL(*gl_, UniformMatrix2x3fv(1, 2, true, PointsToArray(temp, 6)));
-  cmd.Init(1, 2, true, &temp[0]);
-  EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(temp)));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
 #endif  // GPU_COMMAND_BUFFER_SERVICE_GLES2_CMD_DECODER_UNITTEST_2_AUTOGEN_H_

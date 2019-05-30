@@ -9,9 +9,10 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
+#include "base/test/bind_test_util.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/sync/model/model_error.h"
 #include "components/sync/model/model_type_store_test_util.h"
 #include "components/sync/protocol/entity_metadata.pb.h"
@@ -26,6 +27,7 @@ namespace {
 
 using testing::IsEmpty;
 using testing::Not;
+using testing::Pair;
 using testing::SizeIs;
 
 sync_pb::ModelTypeState CreateModelTypeState(const std::string& value) {
@@ -174,7 +176,7 @@ class ModelTypeStoreImplTest : public testing::Test {
   }
 
  private:
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
   std::unique_ptr<ModelTypeStore> store_;
 };
 
@@ -200,6 +202,51 @@ TEST_F(ModelTypeStoreImplTest, WriteThenRead) {
                                             RecordMatches("id2", "data2")));
   VerifyMetadata(std::move(metadata_batch), CreateModelTypeState("type_state"),
                  {{"id1", CreateEntityMetadata("metadata1")}});
+}
+
+TEST_F(ModelTypeStoreImplTest, WriteThenReadWithPreprocessing) {
+  WriteTestData();
+
+  base::RunLoop loop;
+  std::map<std::string, std::string> preprocessed;
+  store()->ReadAllDataAndPreprocess(
+      base::BindLambdaForTesting(
+          [&](std::unique_ptr<ModelTypeStore::RecordList> record_list)
+              -> base::Optional<ModelError> {
+            for (const auto& record : *record_list) {
+              preprocessed[std::string("key_") + record.id] =
+                  std::string("value_") + record.value;
+            }
+            return base::nullopt;
+          }),
+      base::BindLambdaForTesting([&](const base::Optional<ModelError>& error) {
+        EXPECT_FALSE(error) << error->ToString();
+        loop.Quit();
+      }));
+  loop.Run();
+
+  // Preprocessing function above prefixes "key_" and "value_" to keys and
+  // values respectively.
+  EXPECT_THAT(preprocessed,
+              testing::ElementsAre(Pair("key_id1", "value_data1"),
+                                   Pair("key_id2", "value_data2")));
+}
+
+TEST_F(ModelTypeStoreImplTest, WriteThenReadWithPreprocessingError) {
+  WriteTestData();
+
+  base::RunLoop loop;
+  store()->ReadAllDataAndPreprocess(
+      base::BindLambdaForTesting(
+          [&](std::unique_ptr<ModelTypeStore::RecordList> record_list)
+              -> base::Optional<ModelError> {
+            return ModelError(FROM_HERE, "Preprocessing error");
+          }),
+      base::BindLambdaForTesting([&](const base::Optional<ModelError>& error) {
+        EXPECT_TRUE(error);
+        loop.Quit();
+      }));
+  loop.Run();
 }
 
 // Test that records that DeleteAllDataAndMetadata() deletes everything.
@@ -275,7 +322,7 @@ TEST_F(ModelTypeStoreImplTest, ReadMissingDataRecords) {
 // Test that stores for different types that share the same backend don't
 // interfere with each other's records.
 TEST(ModelTypeStoreImplWithTwoStoreTest, TwoStoresWithSharedBackend) {
-  base::MessageLoop message_loop;
+  base::test::ScopedTaskEnvironment task_environment;
 
   std::unique_ptr<ModelTypeStore> store_1 =
       ModelTypeStoreTestUtil::CreateInMemoryStoreForTest(AUTOFILL);
@@ -314,7 +361,7 @@ TEST(ModelTypeStoreImplWithTwoStoreTest, TwoStoresWithSharedBackend) {
 // Test that records that DeleteAllDataAndMetadata() does not delete data from
 // another store when the backend is shared.
 TEST(ModelTypeStoreImplWithTwoStoreTest, DeleteAllWithSharedBackend) {
-  base::MessageLoop message_loop;
+  base::test::ScopedTaskEnvironment task_environment;
 
   std::unique_ptr<ModelTypeStore> store_1 =
       ModelTypeStoreTestUtil::CreateInMemoryStoreForTest(AUTOFILL);

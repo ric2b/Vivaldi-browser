@@ -1,0 +1,90 @@
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved
+
+[
+  {
+    "namespace": "accessKeys",
+    "description": "Use the <code>vivaldi.accessKeys</code> API to get information about access keys on a page.",
+    "compiler_options": {
+      "implemented_in": "extensions/api/access_keys/access_keys_api.h"
+    },
+    "types": [
+      {
+        "id": "AccessKeyDefinition",
+        "type": "object",
+        "description": "Contains the access key character and all relevant attributes from the element it belongs to",
+        "properties": {
+          "access_key": {
+            "type": "string",
+            "description": "The access key itself, without modifiers"
+          },
+          "tagname": {
+            "type": "string",
+            "description": "The tagname of the access key element"
+          },
+          "title": {
+            "type": "string",
+            "description": "The title attribute of the access key element"
+          },
+          "href": {
+            "type": "string",
+            "description": "The href attribute of the access key element"
+          },
+          "value": {
+            "type": "string",
+            "description": "The value attribute of the access key element"
+          },
+          "textContent": {
+            "type": "string",
+            "description": "The textContent of the access key element"
+          },
+          "id": {
+            "type": "string",
+            "description": "The id attribute of the access key element"
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "getAccessKeysForPage",
+        "type": "function",
+        "description": "Get a list of all access keys defined on this page",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 0
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters":  [
+              {
+                "name": "accessKeyList",
+                "type": "array",
+                "items": { "$ref": "AccessKeyDefinition" }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "action",
+        "type": "function",
+        "description": "Find the element corresponding to an access key and fire the access key action",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 0
+          },
+          {
+            "type": "string",
+            "name": "id",
+            "description": "Element ID to be used for lookup"
+          }
+        ]
+      }
+    ]
+  }
+]

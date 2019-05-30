@@ -51,7 +51,7 @@ public class WebViewLayoutTest {
     private static final String EXTERNAL_PREFIX = UrlUtils.getIsolatedTestRoot() + "/";
     private static final String BASE_WEBVIEW_TEST_PATH =
             "android_webview/tools/system_webview_shell/test/data/";
-    private static final String BASE_BLINK_TEST_PATH = "third_party/WebKit/LayoutTests/";
+    private static final String BASE_BLINK_TEST_PATH = "third_party/blink/web_tests/";
     private static final String PATH_WEBVIEW_PREFIX = EXTERNAL_PREFIX + BASE_WEBVIEW_TEST_PATH;
     private static final String PATH_BLINK_PREFIX = EXTERNAL_PREFIX + BASE_BLINK_TEST_PATH;
     private static final String GLOBAL_LISTING_FILE =
@@ -243,6 +243,7 @@ public class WebViewLayoutTest {
         }
     }
 
+    @DisabledTest(message = "crbug.com/929129")
     @Test
     @MediumTest
     public void testRequestMIDIAccess() throws Exception {

@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
@@ -28,7 +29,7 @@ using content::BrowserThread;
 
 namespace {
 
-net::NetworkTrafficAnnotationTag kTrafficAnnotation =
+const net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("safe_browsing_extended_reporting",
                                         R"(
       semantics {

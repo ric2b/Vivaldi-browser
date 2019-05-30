@@ -161,7 +161,7 @@ void PepperWebSocketHost::DidStartClosingHandshake() {
 
 void PepperWebSocketHost::DidClose(unsigned long unhandled_buffered_amount,
                                    ClosingHandshakeCompletionStatus status,
-                                   unsigned short code,
+                                   uint16_t code,
                                    const blink::WebString& reason) {
   if (connecting_) {
     connecting_ = false;
@@ -216,10 +216,8 @@ int32_t PepperWebSocketHost::OnHostMsgConnect(
 
   // Validate protocols.
   std::string protocol_string;
-  for (std::vector<std::string>::const_iterator vector_it = protocols.begin();
-       vector_it != protocols.end();
+  for (auto vector_it = protocols.begin(); vector_it != protocols.end();
        ++vector_it) {
-
     // Check containing characters.
     for (std::string::const_iterator string_it = vector_it->begin();
          string_it != vector_it->end();

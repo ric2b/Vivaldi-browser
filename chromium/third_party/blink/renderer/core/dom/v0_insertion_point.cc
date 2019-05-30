@@ -36,12 +36,11 @@
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/shadow_root_v0.h"
 #include "third_party/blink/renderer/core/dom/static_node_list.h"
+#include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/dom/whitespace_attacher.h"
 #include "third_party/blink/renderer/core/html_names.h"
 
 namespace blink {
-
-using namespace HTMLNames;
 
 V0InsertionPoint::V0InsertionPoint(const QualifiedName& tag_name,
                                    Document& document)
@@ -57,8 +56,8 @@ void V0InsertionPoint::SetDistributedNodes(
   // Attempt not to reattach nodes that would be distributed to the exact same
   // location by comparing the old and new distributions.
 
-  size_t i = 0;
-  size_t j = 0;
+  wtf_size_t i = 0;
+  wtf_size_t j = 0;
 
   for (; i < distributed_nodes_.size() && j < distributed_nodes.size();
        ++i, ++j) {
@@ -107,23 +106,22 @@ void V0InsertionPoint::AttachLayoutTree(AttachContext& context) {
   // We need to attach the distribution here so that they're inserted in the
   // right order otherwise the n^2 protection inside LayoutTreeBuilder will
   // cause them to be inserted in the wrong place later. This also lets
-  // distributed nodes benefit from the n^2 protection.
-  AttachContext children_context(context);
-
-  for (size_t i = 0; i < distributed_nodes_.size(); ++i) {
-    Node* child = distributed_nodes_.at(i);
-    if (child->NeedsAttach())
-      child->AttachLayoutTree(children_context);
+  // distributed nodes benefit from the n^2 protection. If the distributed
+  // children are the direct fallback children they are attached in
+  // ContainerNodes::AttachLayoutTree() via the base class call below.
+  if (!DistributedNodesAreFallback()) {
+    AttachContext children_context(context);
+    for (wtf_size_t i = 0; i < distributed_nodes_.size(); ++i)
+      distributed_nodes_.at(i)->AttachLayoutTree(children_context);
+    if (children_context.previous_in_flow)
+      context.previous_in_flow = children_context.previous_in_flow;
   }
-  if (children_context.previous_in_flow)
-    context.previous_in_flow = children_context.previous_in_flow;
-
   HTMLElement::AttachLayoutTree(context);
 }
 
 void V0InsertionPoint::DetachLayoutTree(const AttachContext& context) {
-  for (size_t i = 0; i < distributed_nodes_.size(); ++i)
-    distributed_nodes_.at(i)->LazyReattachIfAttached();
+  for (wtf_size_t i = 0; i < distributed_nodes_.size(); ++i)
+    distributed_nodes_.at(i)->DetachLayoutTree(context);
 
   HTMLElement::DetachLayoutTree(context);
 }
@@ -132,34 +130,27 @@ void V0InsertionPoint::RebuildDistributedChildrenLayoutTrees(
     WhitespaceAttacher& whitespace_attacher) {
   // This loop traverses the nodes from right to left for the same reason as the
   // one described in ContainerNode::RebuildChildrenLayoutTrees().
-  for (size_t i = distributed_nodes_.size(); i > 0; --i) {
+  for (wtf_size_t i = distributed_nodes_.size(); i > 0; --i) {
     RebuildLayoutTreeForChild(distributed_nodes_.at(i - 1),
                               whitespace_attacher);
   }
 }
 
-void V0InsertionPoint::DidRecalcStyle(StyleRecalcChange change) {
-  if (!HasDistribution() || DistributedNodeAt(0)->parentNode() == this) {
-    // We either do not have distributed children or the distributed children
-    // are the fallback children. Fallback children have already been
-    // recalculated in ContainerNode::RecalcDescendantStyles().
+void V0InsertionPoint::DidRecalcStyle(const StyleRecalcChange change) {
+  if (DistributedNodesAreFallback()) {
+    // Fallback children have already been recalculated in
+    // ContainerNode::RecalcDescendantStyles().
     return;
   }
 
-  StyleChangeType style_change_type =
-      change == kForce ? kSubtreeStyleChange : kLocalStyleChange;
-
-  for (size_t i = 0; i < distributed_nodes_.size(); ++i) {
+  for (wtf_size_t i = 0; i < distributed_nodes_.size(); ++i) {
     Node* node = distributed_nodes_.at(i);
-    if (change == kReattach && node->IsElementNode()) {
-      if (node->ShouldCallRecalcStyle(kReattach))
-        ToElement(node)->RecalcStyle(kReattach);
+    if (!change.TraverseChild(*node))
       continue;
-    }
-    node->SetNeedsStyleRecalc(
-        style_change_type,
-        StyleChangeReasonForTracing::Create(
-            StyleChangeReason::kPropagateInheritChangeToDistributedNodes));
+    if (node->IsElementNode())
+      ToElement(node)->RecalcStyle(change);
+    else if (node->IsTextNode())
+      ToText(node)->RecalcTextStyle(change);
   }
 }
 
@@ -199,7 +190,7 @@ StaticNodeList* V0InsertionPoint::getDistributedNodes() {
 
   HeapVector<Member<Node>> nodes;
   nodes.ReserveInitialCapacity(distributed_nodes_.size());
-  for (size_t i = 0; i < distributed_nodes_.size(); ++i)
+  for (wtf_size_t i = 0; i < distributed_nodes_.size(); ++i)
     nodes.UncheckedAppend(distributed_nodes_.at(i));
 
   return StaticNodeList::Adopt(nodes);
@@ -212,8 +203,7 @@ bool V0InsertionPoint::LayoutObjectIsNeeded(const ComputedStyle& style) const {
 void V0InsertionPoint::ChildrenChanged(const ChildrenChange& change) {
   HTMLElement::ChildrenChanged(change);
   if (ShadowRoot* root = ContainingShadowRoot()) {
-    if (!(RuntimeEnabledFeatures::IncrementalShadowDOMEnabled() &&
-          root->IsV1()))
+    if (!root->IsV1())
       root->SetNeedsDistributionRecalc();
   }
 }
@@ -223,9 +213,7 @@ Node::InsertionNotificationRequest V0InsertionPoint::InsertedInto(
   HTMLElement::InsertedInto(insertion_point);
   if (ShadowRoot* root = ContainingShadowRoot()) {
     if (!root->IsV1()) {
-      if (!(RuntimeEnabledFeatures::IncrementalShadowDOMEnabled() &&
-            root->IsV1()))
-        root->SetNeedsDistributionRecalc();
+      root->SetNeedsDistributionRecalc();
       if (CanBeActive() && !registered_with_shadow_root_ &&
           insertion_point.GetTreeScope().RootNode() == root) {
         registered_with_shadow_root_ = true;
@@ -248,8 +236,7 @@ void V0InsertionPoint::RemovedFrom(ContainerNode& insertion_point) {
   if (!root)
     root = insertion_point.ContainingShadowRoot();
 
-  if (root &&
-      !(RuntimeEnabledFeatures::IncrementalShadowDOMEnabled() && root->IsV1()))
+  if (root && !root->IsV1())
     root->SetNeedsDistributionRecalc();
 
   // Since this insertion point is no longer visible from the shadow subtree, it
@@ -268,7 +255,7 @@ void V0InsertionPoint::RemovedFrom(ContainerNode& insertion_point) {
   HTMLElement::RemovedFrom(insertion_point);
 }
 
-void V0InsertionPoint::Trace(blink::Visitor* visitor) {
+void V0InsertionPoint::Trace(Visitor* visitor) {
   visitor->Trace(distributed_nodes_);
   HTMLElement::Trace(visitor);
 }
@@ -310,7 +297,7 @@ void CollectDestinationInsertionPoints(
         shadow_root->V0().DestinationInsertionPointsFor(&node);
     if (!insertion_points)
       return;
-    for (size_t i = 0; i < insertion_points->size(); ++i)
+    for (wtf_size_t i = 0; i < insertion_points->size(); ++i)
       results.push_back(insertion_points->at(i).Get());
     DCHECK_NE(current, insertion_points->back().Get());
     current = insertion_points->back().Get();

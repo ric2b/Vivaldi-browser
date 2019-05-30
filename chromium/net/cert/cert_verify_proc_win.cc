@@ -936,7 +936,7 @@ int CertVerifyProcWin::VerifyInternal(
   // and used when in cache-only mode.
   if (!ocsp_response.empty()) {
     CRYPT_DATA_BLOB ocsp_response_blob;
-    ocsp_response_blob.cbData = ocsp_response.size();
+    ocsp_response_blob.cbData = base::checked_cast<DWORD>(ocsp_response.size());
     ocsp_response_blob.pbData =
         reinterpret_cast<BYTE*>(const_cast<char*>(ocsp_response.data()));
     CertSetCertificateContextProperty(
@@ -1014,9 +1014,8 @@ int CertVerifyProcWin::VerifyInternal(
   // should have prevented invalid paths from being built, the behaviour and
   // timing of how a Revocation Provider is invoked is not well documented. This
   // is just defense in depth.
-  CRLSetResult crl_set_result = kCRLSetUnknown;
-  if (crl_set)
-    crl_set_result = CheckChainRevocationWithCRLSet(chain_context, crl_set);
+  CRLSetResult crl_set_result =
+      CheckChainRevocationWithCRLSet(chain_context, crl_set);
 
   if (crl_set_result == kCRLSetRevoked) {
     verify_result->cert_status |= CERT_STATUS_REVOKED;
@@ -1113,8 +1112,7 @@ int CertVerifyProcWin::VerifyInternal(
   // routine that has better support for RFC 6125 name matching.
   extra_policy_para.fdwChecks =
       0x00001000;  // SECURITY_FLAG_IGNORE_CERT_CN_INVALID
-  extra_policy_para.pwszServerName =
-      const_cast<base::char16*>(hostname16.c_str());
+  extra_policy_para.pwszServerName = base::as_writable_wcstr(hostname16);
 
   CERT_CHAIN_POLICY_PARA policy_para;
   memset(&policy_para, 0, sizeof(policy_para));

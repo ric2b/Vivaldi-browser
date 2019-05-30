@@ -9,6 +9,7 @@
 #include "ui/base/ime/candidate_window.h"
 #include "ui/base/ime/composition_text.h"
 #include "ui/base/ime/ime_text_span.h"
+#include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
 
@@ -86,6 +87,13 @@ struct StructTraits<ws::mojom::CompositionTextDataView, ui::CompositionText> {
 };
 
 template <>
+struct EnumTraits<ws::mojom::FocusReason, ui::TextInputClient::FocusReason> {
+  static ws::mojom::FocusReason ToMojom(ui::TextInputClient::FocusReason input);
+  static bool FromMojom(ws::mojom::FocusReason input,
+                        ui::TextInputClient::FocusReason* out);
+};
+
+template <>
 struct StructTraits<ws::mojom::ImeTextSpanDataView, ui::ImeTextSpan> {
   static ui::ImeTextSpan::Type type(const ui::ImeTextSpan& c) { return c.type; }
   static uint32_t start_offset(const ui::ImeTextSpan& c) {
@@ -103,6 +111,9 @@ struct StructTraits<ws::mojom::ImeTextSpanDataView, ui::ImeTextSpan> {
   }
   static uint32_t suggestion_highlight_color(const ui::ImeTextSpan& c) {
     return c.suggestion_highlight_color;
+  }
+  static bool remove_on_finish_composing(const ui::ImeTextSpan& c) {
+    return c.remove_on_finish_composing;
   }
   static std::vector<std::string> suggestions(const ui::ImeTextSpan& c) {
     return c.suggestions;

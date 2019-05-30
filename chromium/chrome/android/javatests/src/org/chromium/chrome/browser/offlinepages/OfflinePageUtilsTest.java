@@ -20,11 +20,14 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.Callback;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.MetricsUtils.HistogramDelta;
 import org.chromium.base.test.util.UrlUtils;
+import org.chromium.blink.mojom.MhtmlLoadResult;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.OfflinePageModelObserver;
@@ -36,8 +39,8 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.offlinepages.SavePageResult;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.net.ConnectionType;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -66,8 +69,9 @@ public class OfflinePageUtilsTest {
             new ClientId(OfflinePageBridge.SUGGESTED_ARTICLES_NAMESPACE, "90");
     private static final String SHARED_URI = "http://127.0.0.1/chrome/test/data/android/about.html";
     private static final String CONTENT_URI = "content://chromium/some-content-id";
-    private static final String CONTENT_URI_PREFIX =
-            "content://org.chromium.chrome.FileProvider/offline-cache/";
+    private static final String CONTENT_URI_PREFIX = "content://"
+            + ContextUtils.getApplicationContext().getPackageName()
+            + ".FileProvider/offline-cache/";
     private static final String FILE_URI = "file://some-dir/some-file.mhtml";
     private static final String INVALID_URI = "This is not a uri.";
     private static final String EMPTY_URI = "";
@@ -80,10 +84,14 @@ public class OfflinePageUtilsTest {
     private static final long FILE_SIZE = 65535;
     private static final String REQUEST_ORIGIN = "";
 
+    private static final String MHTML_LOAD_RESULT_UMA_BASE_NAME = "OfflinePages.MhtmlLoadResult";
+    private static final String MHTML_LOAD_RESULT_UMA_NAME_UNTRUSTED =
+            "OfflinePages.MhtmlLoadResultUntrusted";
+
     private OfflinePageBridge mOfflinePageBridge;
     private EmbeddedTestServer mTestServer;
     private String mTestPage;
-    private boolean mServerTurnedOn = false;
+    private boolean mServerTurnedOn;
 
     @Before
     public void setUp() throws Exception {
@@ -266,27 +274,6 @@ public class OfflinePageUtilsTest {
 
     @Test
     @MediumTest
-    @CommandLineFlags.Remove({"enable-features=OfflinePagesSharing"})
-    @CommandLineFlags.Add({"disable-features=OfflinePagesSharing"})
-    // This tests that the offline page can't be shared if the sharing flag turned off.
-    public void testDoNotShareOfflinePageWhenFeatureDisabled() throws Exception {
-        loadOfflinePage(ASYNC_ID);
-
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                boolean shared =
-                        OfflinePageUtils.maybeShareOfflinePage(mActivityTestRule.getActivity(),
-                                mActivityTestRule.getActivity().getActivityTab(), null);
-                // Since the sharing flag is off, we do not share the page.  This allows
-                // normal URL-as-text sharing mechanisms to proceed.
-                Assert.assertFalse(shared);
-            }
-        });
-    }
-
-    @Test
-    @MediumTest
     @CommandLineFlags.Add({"enable-features=OfflinePagesSharing"})
     @DisableIf.Build(
             message = "https://crbug.com/853255", sdk_is_less_than = Build.VERSION_CODES.LOLLIPOP)
@@ -403,10 +390,12 @@ public class OfflinePageUtilsTest {
                 fullPrivatePath, SHARED_URI, OfflinePageBridge.SUGGESTED_ARTICLES_NAMESPACE, true);
     }
 
+    /**
+     * This gets a file:// URL which should result in an untrusted offline page.
+     */
     @Test
     @SmallTest
     public void testMhtmlPropertiesFromRenderer() throws Exception {
-        // This gets a file:// URL which should result in an untrusted offline page.
         String testUrl = UrlUtils.getTestFileUrl("offline_pages/hello.mhtml");
         mActivityTestRule.loadUrl(testUrl);
 
@@ -420,11 +409,34 @@ public class OfflinePageUtilsTest {
         Assert.assertEquals(1321901946000L, offlinePageItem.get().getCreationTimeMs());
     }
 
+    /**
+     * This test saves an offline page and causes it to be loaded, checking
+     * that the correct MHTML load result histogram was updated.
+     */
+    @Test
+    @SmallTest
+    public void testMhtmlLoadResultFromRendererWithNamespace() throws Exception {
+        HistogramDelta histogramDelta = new HistogramDelta(
+                MHTML_LOAD_RESULT_UMA_BASE_NAME + "." + OfflinePageBridge.ASYNC_NAMESPACE,
+                MhtmlLoadResult.SUCCESS);
+
+        loadOfflinePage(ASYNC_ID);
+
+        // Check that our count of MhtmlLoadResult.SUCCESS increased by one.
+        Assert.assertEquals(1, histogramDelta.getDelta());
+    }
+
+    /**
+     * This gets a file:// URL for an MHTML file without a valid main resource
+     * (i.e. no resource in the archive may be used as a main resource because
+     * no resource's MIME type is suitable). The MHTML should not render in the
+     * tab.
+     */
     @Test
     @SmallTest
     public void testInvalidMhtmlMainResourceMimeType() throws Exception {
-        // This gets a file:// URL for an MHTML file with a bad content type.  The MHTML should not
-        // render in the tab.
+        HistogramDelta histogramDelta = new HistogramDelta(
+                MHTML_LOAD_RESULT_UMA_NAME_UNTRUSTED, MhtmlLoadResult.MISSING_MAIN_RESOURCE);
         String testUrl = UrlUtils.getTestFileUrl("offline_pages/invalid_main_resource.mhtml");
         mActivityTestRule.loadUrl(testUrl);
 
@@ -436,11 +448,52 @@ public class OfflinePageUtilsTest {
 
         // The Offline Page Item will be empty because no data can be extracted from the renderer.
         // Also should not crash.
-        //
-        // Default URL equals the navigated-to URL, should not be |example.com|
         Assert.assertEquals(testUrl, offlinePageItem.get().getUrl());
-        // Default creation time is 0
-        Assert.assertEquals(0, offlinePageItem.get().getCreationTimeMs());
+        Assert.assertEquals(1, histogramDelta.getDelta());
+    }
+
+    /**
+     * This test checks that the empty file count on the MhtmlLoadResult
+     * histogram increases when an empty file is loaded as an MHTML archive.
+     */
+    @Test
+    @SmallTest
+    public void testEmptyMhtml() throws Exception {
+        HistogramDelta histogramDelta = new HistogramDelta(
+                MHTML_LOAD_RESULT_UMA_NAME_UNTRUSTED, MhtmlLoadResult.EMPTY_FILE);
+        String testUrl = UrlUtils.getTestFileUrl("offline_pages/empty.mhtml");
+        mActivityTestRule.loadUrl(testUrl);
+
+        final AtomicReference<OfflinePageItem> offlinePageItem = new AtomicReference<>();
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            offlinePageItem.set(OfflinePageUtils.getOfflinePage(
+                    mActivityTestRule.getActivity().getActivityTab()));
+        });
+
+        Assert.assertEquals(testUrl, offlinePageItem.get().getUrl());
+        Assert.assertEquals(1, histogramDelta.getDelta());
+    }
+
+    /**
+     * This test checks that the "invalid archive" count on the MhtmlLoadResult
+     * histogram increases when a malformed MHTML archive is loaded.
+     */
+    @Test
+    @SmallTest
+    public void testMhtmlWithNoResources() throws Exception {
+        HistogramDelta histogramDelta = new HistogramDelta(
+                MHTML_LOAD_RESULT_UMA_NAME_UNTRUSTED, MhtmlLoadResult.INVALID_ARCHIVE);
+        String testUrl = UrlUtils.getTestFileUrl("offline_pages/no_resources.mhtml");
+        mActivityTestRule.loadUrl(testUrl);
+
+        final AtomicReference<OfflinePageItem> offlinePageItem = new AtomicReference<>();
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            offlinePageItem.set(OfflinePageUtils.getOfflinePage(
+                    mActivityTestRule.getActivity().getActivityTab()));
+        });
+
+        Assert.assertEquals(testUrl, offlinePageItem.get().getUrl());
+        Assert.assertEquals(1, histogramDelta.getDelta());
     }
 
     private void loadPageAndSave(ClientId clientId) throws Exception {

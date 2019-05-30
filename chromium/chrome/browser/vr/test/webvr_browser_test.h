@@ -32,14 +32,22 @@ class WebVrBrowserTestBase : public WebXrVrBrowserTestBase {
   using WebXrBrowserTestBase::EndSessionOrFail;
 };
 
-// Test class with standard features enabled: WebVR, OpenVR support, and the
-// Gamepad API.
+// Test class with OpenVR support disabled.
+class WebVrBrowserTestOpenVrDisabled : public WebVrBrowserTestBase {
+ public:
+  WebVrBrowserTestOpenVrDisabled() {
+    append_switches_.push_back(switches::kEnableWebVR);
+  }
+};
+
+// OpenVR feature only defined on Windows.
+#ifdef OS_WIN
+// Test class with standard features enabled: WebVR and OpenVR support.
 class WebVrBrowserTestStandard : public WebVrBrowserTestBase {
  public:
   WebVrBrowserTestStandard() {
     append_switches_.push_back(switches::kEnableWebVR);
     enable_features_.push_back(features::kOpenVR);
-    enable_features_.push_back(features::kGamepadExtensions);
   }
 };
 
@@ -48,18 +56,9 @@ class WebVrBrowserTestWebVrDisabled : public WebVrBrowserTestBase {
  public:
   WebVrBrowserTestWebVrDisabled() {
     enable_features_.push_back(features::kOpenVR);
-    enable_features_.push_back(features::kGamepadExtensions);
   }
 };
-
-// Test class with OpenVR support disabled.
-class WebVrBrowserTestOpenVrDisabled : public WebVrBrowserTestBase {
- public:
-  WebVrBrowserTestOpenVrDisabled() {
-    append_switches_.push_back(switches::kEnableWebVR);
-    enable_features_.push_back(features::kGamepadExtensions);
-  }
-};
+#endif  // OS_WIN
 
 }  // namespace vr
 

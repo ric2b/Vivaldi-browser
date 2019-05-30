@@ -7,12 +7,13 @@
 #include <stddef.h>
 
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/values.h"
 #include "net/base/escape.h"
 
 namespace {
 const char kLeader[] = "$i18n";
-const size_t kLeaderSize = arraysize(kLeader) - 1;
+const size_t kLeaderSize = base::size(kLeader) - 1;
 const char kKeyOpen = '{';
 const char kKeyClose = '}';
 
@@ -93,7 +94,7 @@ std::string ReplaceTemplateExpressions(
         source.substr(current_pos, key_end - current_pos).as_string();
     CHECK(!key.empty());
 
-    TemplateReplacements::const_iterator value = replacements.find(key);
+    auto value = replacements.find(key);
     CHECK(value != replacements.end()) << "$i18n replacement key \"" << key
                                        << "\" not found";
 

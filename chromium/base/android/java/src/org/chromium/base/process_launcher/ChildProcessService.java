@@ -28,8 +28,9 @@ import org.chromium.base.annotations.MainDex;
 import org.chromium.base.memory.MemoryPressureMonitor;
 import org.chromium.base.metrics.RecordHistogram;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.List;
-import java.util.concurrent.Semaphore;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -87,13 +88,15 @@ public abstract class ChildProcessService extends Service {
     // Only set once in bind(), does not require synchronization.
     private boolean mServiceBound;
 
-    private final Semaphore mActivitySemaphore = new Semaphore(1);
+    // Interface to send notifications to the parent process.
+    private IParentProcess mParentProcess;
 
     // These values are persisted to logs. Entries should not be renumbered and numeric values
     // should never be reused.
     @IntDef({SplitApkWorkaroundResult.NOT_RUN, SplitApkWorkaroundResult.NO_ENTRIES,
             SplitApkWorkaroundResult.ONE_ENTRY, SplitApkWorkaroundResult.MULTIPLE_ENTRIES,
             SplitApkWorkaroundResult.TOPLEVEL_EXCEPTION, SplitApkWorkaroundResult.LOOP_EXCEPTION})
+    @Retention(RetentionPolicy.SOURCE)
     public @interface SplitApkWorkaroundResult {
         int NOT_RUN = 0;
         int NO_ENTRIES = 1;
@@ -102,7 +105,7 @@ public abstract class ChildProcessService extends Service {
         int TOPLEVEL_EXCEPTION = 4;
         int LOOP_EXCEPTION = 5;
         // Keep this one at the end and increment appropriately when adding new results.
-        int SPLIT_APK_WORKAROUND_RESULT_COUNT = 6;
+        int NUM_ENTRIES = 6;
     }
 
     private static @SplitApkWorkaroundResult int sSplitApkWorkaroundResult =
@@ -137,18 +140,19 @@ public abstract class ChildProcessService extends Service {
         }
 
         @Override
-        public void setupConnection(Bundle args, ICallbackInt pidCallback, List<IBinder> callbacks)
-                throws RemoteException {
+        public void setupConnection(Bundle args, IParentProcess parentProcess,
+                List<IBinder> callbacks) throws RemoteException {
             assert mServiceBound;
             synchronized (mBinderLock) {
                 if (mBindToCallerCheck && mBoundCallingPid == 0) {
                     Log.e(TAG, "Service has not been bound with bindToCaller()");
-                    pidCallback.call(-1);
+                    parentProcess.sendPid(-1);
                     return;
                 }
             }
 
-            pidCallback.call(Process.myPid());
+            parentProcess.sendPid(Process.myPid());
+            mParentProcess = parentProcess;
             processConnectionBundle(args, callbacks);
         }
 
@@ -183,6 +187,19 @@ public abstract class ChildProcessService extends Service {
                 }
             });
         }
+
+        @Override
+        public void dumpProcessStack() {
+            assert mServiceBound;
+            synchronized (mLibraryInitializedLock) {
+                if (!mLibraryInitialized) {
+                    Log.e(TAG, "Cannot dump process stack before native is loaded");
+                    return;
+                }
+            }
+            nativeDumpProcessStack();
+        }
+
     };
 
     /**
@@ -267,13 +284,15 @@ public abstract class ChildProcessService extends Service {
                     if (ContextUtils.isIsolatedProcess()) {
                         RecordHistogram.recordEnumeratedHistogram(
                                 "Android.WebView.SplitApkWorkaroundResult",
-                                sSplitApkWorkaroundResult,
-                                SplitApkWorkaroundResult.SPLIT_APK_WORKAROUND_RESULT_COUNT);
+                                sSplitApkWorkaroundResult, SplitApkWorkaroundResult.NUM_ENTRIES);
                     }
-                    if (mActivitySemaphore.tryAcquire()) {
-                        mDelegate.runMain();
-                        nativeExitChildProcess();
+                    mDelegate.runMain();
+                    try {
+                        mParentProcess.reportCleanExit();
+                    } catch (RemoteException e) {
+                        Log.e(TAG, "Failed to call clean exit callback.", e);
                     }
+                    nativeExitChildProcess();
                 } catch (InterruptedException e) {
                     Log.w(TAG, "%s startup failed: %s", MAIN_THREAD_NAME, e);
                 }
@@ -286,26 +305,7 @@ public abstract class ChildProcessService extends Service {
     public void onDestroy() {
         super.onDestroy();
         Log.i(TAG, "Destroying ChildProcessService pid=%d", Process.myPid());
-        if (mActivitySemaphore.tryAcquire()) {
-            // TODO(crbug.com/457406): This is a bit hacky, but there is no known better solution
-            // as this service will get reused (at least if not sandboxed).
-            // In fact, we might really want to always exit() from onDestroy(), not just from
-            // the early return here.
-            System.exit(0);
-            return;
-        }
-        synchronized (mLibraryInitializedLock) {
-            try {
-                while (!mLibraryInitialized) {
-                    // Avoid a potential race in calling through to native code before the library
-                    // has loaded.
-                    mLibraryInitializedLock.wait();
-                }
-            } catch (InterruptedException e) {
-                // Ignore
-            }
-        }
-        mDelegate.onDestroy();
+        System.exit(0);
     }
 
     /*
@@ -374,4 +374,9 @@ public abstract class ChildProcessService extends Service {
      * Force the child process to exit.
      */
     private static native void nativeExitChildProcess();
+
+    /**
+     * Dumps the child process stack without crashing it.
+     */
+    private static native void nativeDumpProcessStack();
 }

@@ -191,16 +191,16 @@ void GpuVideoDecodeAcceleratorHost::OnWillDeleteImpl() {
 
   // The gpu::CommandBufferProxyImpl is going away; error out this VDA.
   media_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&GpuVideoDecodeAcceleratorHost::OnChannelError, weak_this_));
+      FROM_HERE, base::BindOnce(&GpuVideoDecodeAcceleratorHost::OnChannelError,
+                                weak_this_));
 }
 
 void GpuVideoDecodeAcceleratorHost::PostNotifyError(Error error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(2) << "PostNotifyError(): error=" << error;
   media_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&GpuVideoDecodeAcceleratorHost::OnNotifyError,
-                            weak_this_, error));
+      FROM_HERE, base::BindOnce(&GpuVideoDecodeAcceleratorHost::OnNotifyError,
+                                weak_this_, error));
 }
 
 void GpuVideoDecodeAcceleratorHost::Send(IPC::Message* message) {
@@ -262,6 +262,7 @@ void GpuVideoDecodeAcceleratorHost::OnPictureReady(
   Picture picture(params.picture_buffer_id, params.bitstream_buffer_id,
                   params.visible_rect, params.color_space,
                   params.allow_overlay);
+  picture.set_read_lock_fences_enabled(params.read_lock_fences_enabled);
   picture.set_size_changed(params.size_changed);
   picture.set_texture_owner(params.surface_texture);
   picture.set_wants_promotion_hint(params.wants_promotion_hint);

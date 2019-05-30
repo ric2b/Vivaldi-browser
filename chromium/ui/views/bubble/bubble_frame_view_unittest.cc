@@ -8,14 +8,20 @@
 
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
+#include "ui/events/base_event_utils.h"
+#include "ui/events/event.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
+#include "ui/views/bubble/footnote_container_view.h"
 #include "ui/views/controls/button/label_button.h"
+#include "ui/views/metrics.h"
 #include "ui/views/test/test_layout_provider.h"
 #include "ui/views/test/test_views.h"
 #include "ui/views/test/views_test_base.h"
@@ -84,7 +90,7 @@ class TestBubbleFrameView : public BubbleFrameView {
       : BubbleFrameView(gfx::Insets(), gfx::Insets(kMargin)),
         available_bounds_(gfx::Rect(0, 0, 1000, 1000)) {
     SetBubbleBorder(std::make_unique<BubbleBorder>(
-        kArrow, BubbleBorder::NO_SHADOW, kColor));
+        kArrow, BubbleBorder::BIG_SHADOW, kColor));
     widget_ = std::make_unique<Widget>();
     widget_delegate_ =
         std::make_unique<TestBubbleFrameViewWidgetDelegate>(widget_.get());
@@ -126,11 +132,29 @@ TEST_F(BubbleFrameViewTest, GetBoundsForClientView) {
   EXPECT_EQ(kArrow, frame.bubble_border()->arrow());
   EXPECT_EQ(kColor, frame.bubble_border()->background_color());
 
-  int margin_x = frame.content_margins().left();
-  int margin_y = frame.content_margins().top();
-  gfx::Insets insets = frame.bubble_border()->GetInsets();
-  EXPECT_EQ(insets.left() + margin_x, frame.GetBoundsForClientView().x());
-  EXPECT_EQ(insets.top() + margin_y, frame.GetBoundsForClientView().y());
+  const gfx::Insets content_margins = frame.content_margins();
+  const gfx::Insets insets = frame.GetInsets();
+  const gfx::Rect client_view_bounds = frame.GetBoundsForClientView();
+  EXPECT_EQ(insets.left() + content_margins.left(), client_view_bounds.x());
+  EXPECT_EQ(insets.top() + content_margins.top(), client_view_bounds.y());
+}
+
+TEST_F(BubbleFrameViewTest, GetBoundsForClientViewWithClose) {
+  TestBubbleFrameView frame(this);
+  frame.widget_delegate()->SetShouldShowCloseButton(true);
+  frame.ResetWindowControls();
+  EXPECT_EQ(kArrow, frame.bubble_border()->arrow());
+  EXPECT_EQ(kColor, frame.bubble_border()->background_color());
+
+  const gfx::Insets content_margins = frame.content_margins();
+  const gfx::Insets insets = frame.GetInsets();
+  const int close_margin =
+      frame.GetCloseButtonForTest()->height() +
+      LayoutProvider::Get()->GetDistanceMetric(DISTANCE_CLOSE_BUTTON_MARGIN);
+  const gfx::Rect client_view_bounds = frame.GetBoundsForClientView();
+  EXPECT_EQ(insets.left() + content_margins.left(), client_view_bounds.x());
+  EXPECT_EQ(insets.top() + content_margins.top() + close_margin,
+            client_view_bounds.y());
 }
 
 TEST_F(BubbleFrameViewTest, RemoveFootnoteView) {
@@ -144,21 +168,6 @@ TEST_F(BubbleFrameViewTest, RemoveFootnoteView) {
   footnote_dummy_view = nullptr;
   EXPECT_FALSE(container_view->visible());
   EXPECT_EQ(nullptr, frame.footnote_container_);
-}
-
-TEST_F(BubbleFrameViewTest, GetBoundsForClientViewWithClose) {
-  TestBubbleFrameView frame(this);
-  frame.widget_delegate()->SetShouldShowCloseButton(true);
-  frame.ResetWindowControls();
-  EXPECT_EQ(kArrow, frame.bubble_border()->arrow());
-  EXPECT_EQ(kColor, frame.bubble_border()->background_color());
-
-  gfx::Insets frame_insets = frame.GetInsets();
-  gfx::Insets border_insets = frame.bubble_border()->GetInsets();
-  EXPECT_EQ(border_insets.left() + frame_insets.left(),
-            frame.GetBoundsForClientView().x());
-  EXPECT_EQ(border_insets.top() + frame_insets.top(),
-            frame.GetBoundsForClientView().y());
 }
 
 TEST_F(BubbleFrameViewTest,
@@ -749,6 +758,30 @@ TEST_F(BubbleFrameViewTest, NoElideTitle) {
   EXPECT_LE(title_label->GetPreferredSize().width(),
             title_label->size().width());
   EXPECT_EQ(title, title_label->GetDisplayTextForTesting());
+}
+
+// Ensures that clicks are ignored for short time after view has been shown.
+TEST_F(BubbleFrameViewTest, IgnorePossiblyUnintendedClicks) {
+  TestBubbleDialogDelegateView delegate;
+  TestAnchor anchor(CreateParams(Widget::InitParams::TYPE_WINDOW));
+  delegate.SetAnchorView(anchor.widget().GetContentsView());
+  Widget* bubble = BubbleDialogDelegateView::CreateBubble(&delegate);
+  bubble->Show();
+
+  BubbleFrameView* frame = delegate.GetBubbleFrameView();
+  frame->ButtonPressed(
+      frame->close_,
+      ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
+                     ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE));
+  EXPECT_FALSE(bubble->IsClosed());
+
+  frame->ButtonPressed(
+      frame->close_,
+      ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
+                     ui::EventTimeForNow() + base::TimeDelta::FromMilliseconds(
+                                                 GetDoubleClickInterval()),
+                     ui::EF_NONE, ui::EF_NONE));
+  EXPECT_TRUE(bubble->IsClosed());
 }
 
 }  // namespace views

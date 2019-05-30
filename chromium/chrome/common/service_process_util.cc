@@ -13,10 +13,10 @@
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/path_service.h"
 #include "base/sha1.h"
+#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -32,6 +32,7 @@
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
 #include "google_apis/gaia/gaia_switches.h"
+#include "services/network/public/cpp/network_switches.h"
 #include "ui/base/ui_base_switches.h"
 
 #include "app/vivaldi_apptools.h"
@@ -178,6 +179,7 @@ std::unique_ptr<base::CommandLine> CreateServiceProcessCommandLine() {
                                           switches::kDisableVivaldi);
 
   static const char* const kSwitchesToCopy[] = {
+    network::switches::kIgnoreUrlFetcherCertRequests,
     switches::kCloudPrintSetupProxy,
     switches::kCloudPrintURL,
     switches::kCloudPrintXmppEndpoint,
@@ -185,7 +187,6 @@ std::unique_ptr<base::CommandLine> CreateServiceProcessCommandLine() {
     switches::kEnableCloudPrintXps,
 #endif
     switches::kEnableLogging,
-    switches::kIgnoreUrlFetcherCertRequests,
     switches::kLang,
     switches::kLoggingLevel,
     switches::kLsoUrl,
@@ -198,8 +199,7 @@ std::unique_ptr<base::CommandLine> CreateServiceProcessCommandLine() {
   };
 
   command_line->CopySwitchesFrom(*base::CommandLine::ForCurrentProcess(),
-                                 kSwitchesToCopy,
-                                 arraysize(kSwitchesToCopy));
+                                 kSwitchesToCopy, base::size(kSwitchesToCopy));
   return command_line;
 }
 

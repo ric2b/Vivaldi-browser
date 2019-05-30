@@ -10,8 +10,8 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/chromeos/policy/device_local_account_policy_service.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
@@ -51,7 +51,8 @@ class CloudExternalDataPolicyObserver
     // called at all.
     virtual void OnExternalDataFetched(const std::string& policy,
                                        const std::string& user_id,
-                                       std::unique_ptr<std::string> data);
+                                       std::unique_ptr<std::string> data,
+                                       const base::FilePath& file_path);
 
    protected:
     virtual ~Delegate();
@@ -91,7 +92,8 @@ class CloudExternalDataPolicyObserver
                                       const PolicyMap::Entry* entry);
 
   void OnExternalDataFetched(const std::string& user_id,
-                             std::unique_ptr<std::string> data);
+                             std::unique_ptr<std::string> data,
+                             const base::FilePath& file_path);
 
   // A map from each device-local account user ID to its current policy map
   // entry for |policy_|.
@@ -100,8 +102,8 @@ class CloudExternalDataPolicyObserver
 
   // A map from each logged-in user to the helper that observes |policy_| in the
   // user's PolicyService.
-  typedef std::map<std::string, linked_ptr<PolicyServiceObserver>>
-      LoggedInUserObserverMap;
+  using LoggedInUserObserverMap =
+      std::map<std::string, std::unique_ptr<PolicyServiceObserver>>;
   LoggedInUserObserverMap logged_in_user_observers_;
 
   chromeos::CrosSettings* cros_settings_;
@@ -120,7 +122,8 @@ class CloudExternalDataPolicyObserver
   // currently in progress. This allows fetches to be effectively be canceled by
   // invalidating the pointers.
   using WeakPtrFactory = base::WeakPtrFactory<CloudExternalDataPolicyObserver>;
-  using FetchWeakPtrMap = std::map<std::string, linked_ptr<WeakPtrFactory>>;
+  using FetchWeakPtrMap =
+      std::map<std::string, std::unique_ptr<WeakPtrFactory>>;
   FetchWeakPtrMap fetch_weak_ptrs_;
 
   base::WeakPtrFactory<CloudExternalDataPolicyObserver> weak_factory_;

@@ -8,18 +8,18 @@
 #include <utility>
 
 #include "base/base64.h"
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/post_task.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/attestation/attestation_ca_client.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/browser/chromeos/settings/install_attributes.h"
 #include "chrome/browser/extensions/chrome_extension_function_details.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/common/extensions/api/enterprise_platform_keys_private.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/attestation/attestation_flow.h"
@@ -30,13 +30,14 @@
 #include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/settings/cros_settings_names.h"
+#include "chromeos/tpm/install_attributes.h"
 #include "components/account_id/account_id.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/common/manifest.h"
 #include "google_apis/gaia/gaia_auth_util.h"
@@ -632,7 +633,7 @@ EnterprisePlatformKeysPrivateChallengeMachineKeyFunction::Run() {
       &EPKPChallengeMachineKey::DecodeAndRun, base::Unretained(impl_),
       scoped_refptr<UIThreadExtensionFunction>(AsUIThreadExtensionFunction()),
       callback, params->challenge, false);
-  content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE, task);
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI}, task);
   return RespondLater();
 }
 
@@ -675,7 +676,7 @@ EnterprisePlatformKeysPrivateChallengeUserKeyFunction::Run() {
       &EPKPChallengeUserKey::DecodeAndRun, base::Unretained(impl_),
       scoped_refptr<UIThreadExtensionFunction>(AsUIThreadExtensionFunction()),
       callback, params->challenge, params->register_key);
-  content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE, task);
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI}, task);
   return RespondLater();
 }
 

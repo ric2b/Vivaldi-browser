@@ -12,12 +12,12 @@
 #include "base/bind.h"
 #include "base/callback_forward.h"
 #include "base/memory/ptr_util.h"
+#include "chromeos/components/multidevice/remote_device_test_util.h"
 #include "chromeos/services/secure_channel/ble_constants.h"
 #include "chromeos/services/secure_channel/connection_role.h"
 #include "chromeos/services/secure_channel/fake_ble_scanner.h"
 #include "chromeos/services/secure_channel/fake_ble_service_data_helper.h"
 #include "chromeos/services/secure_channel/fake_ble_synchronizer.h"
-#include "components/cryptauth/remote_device_test_util.h"
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
 #include "device/bluetooth/test/mock_bluetooth_device.h"
 #include "device/bluetooth/test/mock_bluetooth_discovery_session.h"
@@ -61,7 +61,7 @@ class FakeBluetoothDevice : public device::MockBluetoothDevice {
 class FakeDiscoverySession
     : public testing::NiceMock<device::MockBluetoothDiscoverySession> {
  public:
-  FakeDiscoverySession(base::OnceClosure destructor_callback)
+  explicit FakeDiscoverySession(base::OnceClosure destructor_callback)
       : destructor_callback_(std::move(destructor_callback)) {
     ON_CALL(*this, IsActive())
         .WillByDefault(testing::Invoke(this, &FakeDiscoverySession::is_active));
@@ -101,7 +101,7 @@ class SecureChannelBleScannerImplTest : public testing::Test {
   };
 
   SecureChannelBleScannerImplTest()
-      : test_devices_(cryptauth::CreateRemoteDeviceRefListForTest(3)) {}
+      : test_devices_(multidevice::CreateRemoteDeviceRefListForTest(3)) {}
   ~SecureChannelBleScannerImplTest() override = default;
 
   // testing::Test:
@@ -141,20 +141,18 @@ class SecureChannelBleScannerImplTest : public testing::Test {
   }
 
   void ProcessScanResultAndVerifyNoDeviceIdentified(
-      const std::string& service_data,
-      bool is_new_device) {
+      const std::string& service_data) {
     const FakeBleScannerDelegate::ScannedResultList& results =
         fake_delegate_->handled_scan_results();
 
     size_t num_results_before_call = results.size();
-    SimulateScanResult(service_data, is_new_device);
+    SimulateScanResult(service_data);
     EXPECT_EQ(num_results_before_call, results.size());
   }
 
   void ProcessScanResultAndVerifyDevice(
       const std::string& service_data,
-      bool is_new_device,
-      cryptauth::RemoteDeviceRef expected_remote_device,
+      multidevice::RemoteDeviceRef expected_remote_device,
       bool is_background_advertisement) {
     const FakeBleScannerDelegate::ScannedResultList& results =
         fake_delegate_->handled_scan_results();
@@ -164,7 +162,7 @@ class SecureChannelBleScannerImplTest : public testing::Test {
 
     size_t num_results_before_call = results.size();
     FakeBluetoothDevice* fake_bluetooth_device =
-        SimulateScanResult(service_data, is_new_device);
+        SimulateScanResult(service_data);
     EXPECT_EQ(num_results_before_call + 1u, results.size());
 
     EXPECT_EQ(expected_remote_device, std::get<0>(results.back()));
@@ -211,14 +209,15 @@ class SecureChannelBleScannerImplTest : public testing::Test {
     return fake_ble_service_data_helper_.get();
   }
 
-  const cryptauth::RemoteDeviceRefList& test_devices() { return test_devices_; }
+  const multidevice::RemoteDeviceRefList& test_devices() {
+    return test_devices_;
+  }
 
  private:
-  // Scan results come in as the result of either a new device or a change on an
-  // existing device. If |is_new_device| is true, a new device change will be
-  // simulated; otherwise, an existing device change will be simulated.
-  FakeBluetoothDevice* SimulateScanResult(const std::string& service_data,
-                                          bool is_new_device) {
+  FakeBluetoothDevice* SimulateScanResult(const std::string& service_data) {
+    static const int16_t kFakeRssi = -70;
+    static const std::vector<uint8_t> kFakeEir;
+
     // Scan result should not be received if there is no active discovery
     // session.
     EXPECT_TRUE(fake_discovery_session_);
@@ -226,17 +225,12 @@ class SecureChannelBleScannerImplTest : public testing::Test {
     auto fake_bluetooth_device = std::make_unique<FakeBluetoothDevice>(
         service_data, mock_adapter_.get());
 
-    BleScannerImpl* ble_scanner_derived =
-        static_cast<BleScannerImpl*>(ble_scanner_.get());
-
     // Note: MockBluetoothAdapter provides no way to notify observers, so the
     // observer callback must be invoked directly.
-    if (is_new_device) {
-      ble_scanner_derived->DeviceAdded(mock_adapter_.get(),
-                                       fake_bluetooth_device.get());
-    } else {
-      ble_scanner_derived->DeviceChanged(mock_adapter_.get(),
-                                         fake_bluetooth_device.get());
+    for (auto& observer : mock_adapter_->GetObservers()) {
+      observer.DeviceAdvertisementReceived(mock_adapter_.get(),
+                                           fake_bluetooth_device.get(),
+                                           kFakeRssi, kFakeEir);
     }
 
     return fake_bluetooth_device.get();
@@ -244,7 +238,7 @@ class SecureChannelBleScannerImplTest : public testing::Test {
 
   void OnDiscoverySessionDeleted() { fake_discovery_session_ = nullptr; }
 
-  const cryptauth::RemoteDeviceRefList test_devices_;
+  const multidevice::RemoteDeviceRefList test_devices_;
 
   std::unique_ptr<FakeBleScannerDelegate> fake_delegate_;
   std::unique_ptr<FakeBleServiceDataHelper> fake_ble_service_data_helper_;
@@ -269,10 +263,7 @@ TEST_F(SecureChannelBleScannerImplTest, UnrelatedScanResults) {
   InvokeStartDiscoveryCallback(true /* success */, 0u /* command_index */);
   EXPECT_TRUE(fake_discovery_session());
 
-  ProcessScanResultAndVerifyNoDeviceIdentified("unrelatedServiceData",
-                                               true /* is_new_device */);
-  ProcessScanResultAndVerifyNoDeviceIdentified("unrelatedServiceData",
-                                               false /* is_new_device */);
+  ProcessScanResultAndVerifyNoDeviceIdentified("unrelatedServiceData");
 
   RemoveScanFilter(filter);
   InvokeStopDiscoveryCallback(true /* success */, 1u /* command_index */);
@@ -294,17 +285,14 @@ TEST_F(SecureChannelBleScannerImplTest, IncorrectRole) {
       "wrongRoleServiceData", test_devices()[0],
       false /* is_background_advertisement */);
 
-  ProcessScanResultAndVerifyNoDeviceIdentified("wrongRoleServiceData",
-                                               true /* is_new_device */);
-  ProcessScanResultAndVerifyNoDeviceIdentified("wrongRoleServiceData",
-                                               false /* is_new_device */);
+  ProcessScanResultAndVerifyNoDeviceIdentified("wrongRoleServiceData");
 
   RemoveScanFilter(filter);
   InvokeStopDiscoveryCallback(true /* success */, 1u /* command_index */);
   EXPECT_FALSE(fake_discovery_session());
 }
 
-TEST_F(SecureChannelBleScannerImplTest, IdentifyDevice_NewDevice_Background) {
+TEST_F(SecureChannelBleScannerImplTest, IdentifyDevice_Background) {
   BleScanner::ScanFilter filter(DeviceIdPair(test_devices()[0].GetDeviceId(),
                                              test_devices()[1].GetDeviceId()),
                                 ConnectionRole::kListenerRole);
@@ -313,9 +301,7 @@ TEST_F(SecureChannelBleScannerImplTest, IdentifyDevice_NewDevice_Background) {
   InvokeStartDiscoveryCallback(true /* success */, 0u /* command_index */);
   EXPECT_TRUE(fake_discovery_session());
 
-  // is_new_device == true, is_background_advertisement == true
-  ProcessScanResultAndVerifyDevice("device0ServiceData",
-                                   true /* is_new_device */, test_devices()[0],
+  ProcessScanResultAndVerifyDevice("device0ServiceData", test_devices()[0],
                                    true /* is_background_advertisement */);
 
   RemoveScanFilter(filter);
@@ -323,8 +309,7 @@ TEST_F(SecureChannelBleScannerImplTest, IdentifyDevice_NewDevice_Background) {
   EXPECT_FALSE(fake_discovery_session());
 }
 
-TEST_F(SecureChannelBleScannerImplTest,
-       IdentifyDevice_ExistingDevice_Foreground) {
+TEST_F(SecureChannelBleScannerImplTest, IdentifyDevice_Foreground) {
   BleScanner::ScanFilter filter(DeviceIdPair(test_devices()[0].GetDeviceId(),
                                              test_devices()[1].GetDeviceId()),
                                 ConnectionRole::kInitiatorRole);
@@ -333,9 +318,7 @@ TEST_F(SecureChannelBleScannerImplTest,
   InvokeStartDiscoveryCallback(true /* success */, 0u /* command_index */);
   EXPECT_TRUE(fake_discovery_session());
 
-  // is_new_device == false, is_background_advertisement == false
-  ProcessScanResultAndVerifyDevice("device0ServiceData",
-                                   false /* is_new_device */, test_devices()[0],
+  ProcessScanResultAndVerifyDevice("device0ServiceData", test_devices()[0],
                                    false /* is_background_advertisement */);
 
   RemoveScanFilter(filter);
@@ -357,8 +340,7 @@ TEST_F(SecureChannelBleScannerImplTest, IdentifyDevice_MultipleScans) {
   EXPECT_TRUE(fake_discovery_session());
 
   // Identify device 0.
-  ProcessScanResultAndVerifyDevice("device0ServiceData",
-                                   false /* is_new_device */, test_devices()[0],
+  ProcessScanResultAndVerifyDevice("device0ServiceData", test_devices()[0],
                                    false /* is_background_advertisement */);
 
   // Remove the identified device from the list of scan filters.
@@ -381,8 +363,7 @@ TEST_F(SecureChannelBleScannerImplTest, IdentifyDevice_MultipleScans) {
   EXPECT_TRUE(fake_discovery_session());
 
   // Identify device 2.
-  ProcessScanResultAndVerifyDevice("device2ServiceData",
-                                   false /* is_new_device */, test_devices()[2],
+  ProcessScanResultAndVerifyDevice("device2ServiceData", test_devices()[2],
                                    false /* is_background_advertisement */);
 
   // Remove the scan filter, and verify that the scan stopped.

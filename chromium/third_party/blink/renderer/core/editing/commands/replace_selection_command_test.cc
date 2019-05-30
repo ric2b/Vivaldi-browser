@@ -40,7 +40,7 @@ TEST_F(ReplaceSelectionCommandTest, pastingEmptySpan) {
       SetSelectionOptions());
 
   DocumentFragment* fragment = GetDocument().createDocumentFragment();
-  fragment->AppendChild(GetDocument().CreateRawElement(HTMLNames::spanTag));
+  fragment->AppendChild(GetDocument().CreateRawElement(html_names::kSpanTag));
 
   // |options| are taken from |Editor::replaceSelectionWithFragment()| with
   // |selectReplacement| and |smartReplace|.
@@ -86,7 +86,7 @@ TEST_F(ReplaceSelectionCommandTest, pasteSpanInText) {
 // This is a regression test for https://crbug.com/121163
 TEST_F(ReplaceSelectionCommandTest, styleTagsInPastedHeadIncludedInContent) {
   GetDocument().setDesignMode("on");
-  UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
   GetDummyPageHolder().GetFrame().Selection().SetSelection(
       SelectionInDOMTree::Builder()
           .Collapse(Position(GetDocument().body(), 0))
@@ -122,7 +122,8 @@ bool SetTextAutosizingMultiplier(Document* document, float multiplier) {
           ComputedStyle::Clone(layout_object->StyleRef());
       modified_style->SetTextAutosizingMultiplier(multiplier);
       EXPECT_EQ(multiplier, modified_style->TextAutosizingMultiplier());
-      layout_object->SetStyleInternal(std::move(modified_style));
+      layout_object->SetModifiedStyleOutsideStyleRecalc(
+          std::move(modified_style), LayoutObject::ApplyStyleChanges::kNo);
       multiplier_set = true;
     }
   }

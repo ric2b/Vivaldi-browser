@@ -30,8 +30,9 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_AUDIO_HRTF_DATABASE_LOADER_H_
 
 #include <memory>
-#include "third_party/blink/public/platform/web_thread.h"
+#include "base/synchronization/waitable_event.h"
 #include "third_party/blink/renderer/platform/audio/hrtf_database.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/ref_counted.h"
 #include "third_party/blink/renderer/platform/wtf/threading_primitives.h"
@@ -81,14 +82,14 @@ class PLATFORM_EXPORT HRTFDatabaseLoader final
 
   // Called in asynchronous loading thread.
   void LoadTask();
-  void CleanupTask(WaitableEvent*);
+  void CleanupTask(base::WaitableEvent*);
 
   // Holding a m_lock is required when accessing m_hrtfDatabase since we access
   // it from multiple threads.
   Mutex lock_;
   std::unique_ptr<HRTFDatabase> hrtf_database_;
 
-  std::unique_ptr<WebThread> thread_;
+  std::unique_ptr<Thread> thread_;
 
   float database_sample_rate_;
 };

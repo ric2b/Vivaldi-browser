@@ -33,6 +33,7 @@
 #include <memory>
 
 #include "build/build_config.h"
+#include "third_party/blink/public/platform/web_screen_info.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_regexp.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
@@ -78,7 +79,6 @@
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/text/base64.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_encoding.h"
-#include "third_party/blink/renderer/platform/wtf/time.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "v8/include/v8-inspector.h"
 
@@ -88,23 +88,23 @@ using protocol::Response;
 
 namespace {
 
-String ScheduledNavigationReasonToProtocol(ScheduledNavigation::Reason reason) {
+String ClientNavigationReasonToProtocol(ClientNavigationReason reason) {
   using ReasonEnum =
       protocol::Page::FrameScheduledNavigationNotification::ReasonEnum;
   switch (reason) {
-    case ScheduledNavigation::Reason::kFormSubmissionGet:
+    case ClientNavigationReason::kFormSubmissionGet:
       return ReasonEnum::FormSubmissionGet;
-    case ScheduledNavigation::Reason::kFormSubmissionPost:
+    case ClientNavigationReason::kFormSubmissionPost:
       return ReasonEnum::FormSubmissionPost;
-    case ScheduledNavigation::Reason::kHttpHeaderRefresh:
+    case ClientNavigationReason::kHttpHeaderRefresh:
       return ReasonEnum::HttpHeaderRefresh;
-    case ScheduledNavigation::Reason::kFrameNavigation:
+    case ClientNavigationReason::kFrameNavigation:
       return ReasonEnum::ScriptInitiated;
-    case ScheduledNavigation::Reason::kMetaTagRefresh:
+    case ClientNavigationReason::kMetaTagRefresh:
       return ReasonEnum::MetaTagRefresh;
-    case ScheduledNavigation::Reason::kPageBlock:
+    case ClientNavigationReason::kPageBlock:
       return ReasonEnum::PageBlockInterstitial;
-    case ScheduledNavigation::Reason::kReload:
+    case ClientNavigationReason::kReload:
       return ReasonEnum::Reload;
     default:
       NOTREACHED();
@@ -198,10 +198,11 @@ static bool PrepareResourceBuffer(Resource* cached_resource,
 }
 
 static bool HasTextContent(Resource* cached_resource) {
-  Resource::Type type = cached_resource->GetType();
-  return type == Resource::kCSSStyleSheet || type == Resource::kXSLStyleSheet ||
-         type == Resource::kScript || type == Resource::kRaw ||
-         type == Resource::kImportResource || type == Resource::kMainResource;
+  ResourceType type = cached_resource->GetType();
+  return type == ResourceType::kCSSStyleSheet ||
+         type == ResourceType::kXSLStyleSheet ||
+         type == ResourceType::kScript || type == ResourceType::kRaw ||
+         type == ResourceType::kImportResource;
 }
 
 static std::unique_ptr<TextResourceDecoder> CreateResourceTextDecoder(
@@ -236,7 +237,7 @@ static std::unique_ptr<TextResourceDecoder> CreateResourceTextDecoder(
 
 static void MaybeEncodeTextContent(const String& text_content,
                                    const char* buffer_data,
-                                   size_t buffer_size,
+                                   wtf_size_t buffer_size,
                                    String* result,
                                    bool* base64_encoded) {
   if (!text_content.IsNull() &&
@@ -267,7 +268,8 @@ static void MaybeEncodeTextContent(const String& text_content,
 
   const SharedBuffer::DeprecatedFlatData flat_buffer(std::move(buffer));
   return MaybeEncodeTextContent(text_content, flat_buffer.Data(),
-                                flat_buffer.size(), result, base64_encoded);
+                                SafeCast<wtf_size_t>(flat_buffer.size()),
+                                result, base64_encoded);
 }
 
 // static
@@ -297,11 +299,13 @@ bool InspectorPageAgent::SharedBufferContent(
     text_content = decoder->Decode(flat_buffer.Data(), flat_buffer.size());
     text_content = text_content + decoder->Flush();
   } else if (encoding.IsValid()) {
-    text_content = encoding.Decode(flat_buffer.Data(), flat_buffer.size());
+    text_content = encoding.Decode(flat_buffer.Data(),
+                                   SafeCast<wtf_size_t>(flat_buffer.size()));
   }
 
-  MaybeEncodeTextContent(text_content, flat_buffer.Data(), flat_buffer.size(),
-                         result, base64_encoded);
+  MaybeEncodeTextContent(text_content, flat_buffer.Data(),
+                         SafeCast<wtf_size_t>(flat_buffer.size()), result,
+                         base64_encoded);
   return true;
 }
 
@@ -321,7 +325,8 @@ bool InspectorPageAgent::CachedResourceContent(Resource* cached_resource,
       return false;
 
     const SharedBuffer::DeprecatedFlatData flat_buffer(std::move(buffer));
-    *result = Base64Encode(flat_buffer.Data(), flat_buffer.size());
+    *result = Base64Encode(flat_buffer.Data(),
+                           SafeCast<wtf_size_t>(flat_buffer.size()));
     *base64_encoded = true;
     return true;
   }
@@ -334,24 +339,22 @@ bool InspectorPageAgent::CachedResourceContent(Resource* cached_resource,
 
   DCHECK(cached_resource);
   switch (cached_resource->GetType()) {
-    case Resource::kCSSStyleSheet:
+    case blink::ResourceType::kCSSStyleSheet:
       MaybeEncodeTextContent(
           ToCSSStyleSheetResource(cached_resource)
               ->SheetText(nullptr, CSSStyleSheetResource::MIMETypeCheck::kLax),
           cached_resource->ResourceBuffer(), result, base64_encoded);
       return true;
-    case Resource::kScript:
+    case blink::ResourceType::kScript:
       MaybeEncodeTextContent(
-          cached_resource->ResourceBuffer()
-              ? ToScriptResource(cached_resource)->DecodedText()
-              : ToScriptResource(cached_resource)->SourceText().ToString(),
+          ToScriptResource(cached_resource)->TextForInspector(),
           cached_resource->ResourceBuffer(), result, base64_encoded);
       return true;
     default:
       String text_encoding_name =
           cached_resource->GetResponse().TextEncodingName();
       if (text_encoding_name.IsEmpty() &&
-          cached_resource->GetType() != Resource::kRaw)
+          cached_resource->GetType() != blink::ResourceType::kRaw)
         text_encoding_name = "WinLatin1";
       return InspectorPageAgent::SharedBufferContent(
           cached_resource->ResourceBuffer(),
@@ -365,68 +368,66 @@ InspectorPageAgent* InspectorPageAgent::Create(
     Client* client,
     InspectorResourceContentLoader* resource_content_loader,
     v8_inspector::V8InspectorSession* v8_session) {
-  return new InspectorPageAgent(inspected_frames, client,
-                                resource_content_loader, v8_session);
+  return MakeGarbageCollected<InspectorPageAgent>(
+      inspected_frames, client, resource_content_loader, v8_session);
 }
 
 String InspectorPageAgent::ResourceTypeJson(
     InspectorPageAgent::ResourceType resource_type) {
   switch (resource_type) {
     case kDocumentResource:
-      return protocol::Page::ResourceTypeEnum::Document;
+      return protocol::Network::ResourceTypeEnum::Document;
     case kFontResource:
-      return protocol::Page::ResourceTypeEnum::Font;
+      return protocol::Network::ResourceTypeEnum::Font;
     case kImageResource:
-      return protocol::Page::ResourceTypeEnum::Image;
+      return protocol::Network::ResourceTypeEnum::Image;
     case kMediaResource:
-      return protocol::Page::ResourceTypeEnum::Media;
+      return protocol::Network::ResourceTypeEnum::Media;
     case kScriptResource:
-      return protocol::Page::ResourceTypeEnum::Script;
+      return protocol::Network::ResourceTypeEnum::Script;
     case kStylesheetResource:
-      return protocol::Page::ResourceTypeEnum::Stylesheet;
+      return protocol::Network::ResourceTypeEnum::Stylesheet;
     case kTextTrackResource:
-      return protocol::Page::ResourceTypeEnum::TextTrack;
+      return protocol::Network::ResourceTypeEnum::TextTrack;
     case kXHRResource:
-      return protocol::Page::ResourceTypeEnum::XHR;
+      return protocol::Network::ResourceTypeEnum::XHR;
     case kFetchResource:
-      return protocol::Page::ResourceTypeEnum::Fetch;
+      return protocol::Network::ResourceTypeEnum::Fetch;
     case kEventSourceResource:
-      return protocol::Page::ResourceTypeEnum::EventSource;
+      return protocol::Network::ResourceTypeEnum::EventSource;
     case kWebSocketResource:
-      return protocol::Page::ResourceTypeEnum::WebSocket;
+      return protocol::Network::ResourceTypeEnum::WebSocket;
     case kManifestResource:
-      return protocol::Page::ResourceTypeEnum::Manifest;
+      return protocol::Network::ResourceTypeEnum::Manifest;
     case kSignedExchangeResource:
-      return protocol::Page::ResourceTypeEnum::SignedExchange;
+      return protocol::Network::ResourceTypeEnum::SignedExchange;
     case kOtherResource:
-      return protocol::Page::ResourceTypeEnum::Other;
+      return protocol::Network::ResourceTypeEnum::Other;
   }
-  return protocol::Page::ResourceTypeEnum::Other;
+  return protocol::Network::ResourceTypeEnum::Other;
 }
 
 InspectorPageAgent::ResourceType InspectorPageAgent::ToResourceType(
-    const Resource::Type resource_type) {
+    const blink::ResourceType resource_type) {
   switch (resource_type) {
-    case Resource::kImage:
+    case blink::ResourceType::kImage:
       return InspectorPageAgent::kImageResource;
-    case Resource::kFont:
+    case blink::ResourceType::kFont:
       return InspectorPageAgent::kFontResource;
-    case Resource::kAudio:
-    case Resource::kVideo:
+    case blink::ResourceType::kAudio:
+    case blink::ResourceType::kVideo:
       return InspectorPageAgent::kMediaResource;
-    case Resource::kManifest:
+    case blink::ResourceType::kManifest:
       return InspectorPageAgent::kManifestResource;
-    case Resource::kTextTrack:
+    case blink::ResourceType::kTextTrack:
       return InspectorPageAgent::kTextTrackResource;
-    case Resource::kCSSStyleSheet:
+    case blink::ResourceType::kCSSStyleSheet:
     // Fall through.
-    case Resource::kXSLStyleSheet:
+    case blink::ResourceType::kXSLStyleSheet:
       return InspectorPageAgent::kStylesheetResource;
-    case Resource::kScript:
+    case blink::ResourceType::kScript:
       return InspectorPageAgent::kScriptResource;
-    case Resource::kImportResource:
-    // Fall through.
-    case Resource::kMainResource:
+    case blink::ResourceType::kImportResource:
       return InspectorPageAgent::kDocumentResource;
     default:
       break;
@@ -447,7 +448,6 @@ InspectorPageAgent::InspectorPageAgent(
     : inspected_frames_(inspected_frames),
       v8_session_(v8_session),
       client_(client),
-      reloading_(false),
       inspector_resource_content_loader_(resource_content_loader),
       resource_content_loader_client_id_(
           resource_content_loader->CreateClientId()),
@@ -457,6 +457,8 @@ InspectorPageAgent::InspectorPageAgent(
       bypass_csp_enabled_(&agent_state_, /*default_value=*/false),
       scripts_to_evaluate_on_load_(&agent_state_,
                                    /*default_value=*/WTF::String()),
+      worlds_to_evaluate_on_load_(&agent_state_,
+                                  /*default_value=*/WTF::String()),
       standard_font_family_(&agent_state_, /*default_value=*/WTF::String()),
       fixed_font_family_(&agent_state_, /*default_value=*/WTF::String()),
       serif_font_family_(&agent_state_, /*default_value=*/WTF::String()),
@@ -524,7 +526,7 @@ void InspectorPageAgent::Restore() {
 
 Response InspectorPageAgent::enable() {
   enabled_.Set(true);
-  instrumenting_agents_->addInspectorPageAgent(this);
+  instrumenting_agents_->AddInspectorPageAgent(this);
   return Response::OK();
 }
 
@@ -532,49 +534,53 @@ Response InspectorPageAgent::disable() {
   agent_state_.ClearAllFields();
   script_to_evaluate_on_load_once_ = String();
   pending_script_to_evaluate_on_load_once_ = String();
-  instrumenting_agents_->removeInspectorPageAgent(this);
+  instrumenting_agents_->RemoveInspectorPageAgent(this);
   inspector_resource_content_loader_->Cancel(
       resource_content_loader_client_id_);
 
   stopScreencast();
 
-  FinishReload();
   return Response::OK();
 }
 
-Response InspectorPageAgent::addScriptToEvaluateOnLoad(const String& source,
-                                                       String* identifier) {
+Response InspectorPageAgent::addScriptToEvaluateOnNewDocument(
+    const String& source,
+    Maybe<String> world_name,
+    String* identifier) {
   std::vector<WTF::String> keys = scripts_to_evaluate_on_load_.Keys();
   auto result = std::max_element(
       keys.begin(), keys.end(), [](const WTF::String& a, const WTF::String& b) {
         return Decimal::FromString(a) < Decimal::FromString(b);
       });
   if (result == keys.end()) {
-    scripts_to_evaluate_on_load_.Set(String::Number(1), source);
+    *identifier = String::Number(1);
   } else {
-    scripts_to_evaluate_on_load_.Set(
-        String::Number(Decimal::FromString(*result).ToDouble() + 1), source);
+    *identifier = String::Number(Decimal::FromString(*result).ToDouble() + 1);
   }
-  return Response::OK();
-}
 
-Response InspectorPageAgent::removeScriptToEvaluateOnLoad(
-    const String& identifier) {
-  if (scripts_to_evaluate_on_load_.Get(identifier).IsNull())
-    return Response::Error("Script not found");
-  scripts_to_evaluate_on_load_.Clear(identifier);
+  scripts_to_evaluate_on_load_.Set(*identifier, source);
+  worlds_to_evaluate_on_load_.Set(*identifier, world_name.fromMaybe(""));
   return Response::OK();
-}
-
-Response InspectorPageAgent::addScriptToEvaluateOnNewDocument(
-    const String& source,
-    String* identifier) {
-  return addScriptToEvaluateOnLoad(source, identifier);
 }
 
 Response InspectorPageAgent::removeScriptToEvaluateOnNewDocument(
     const String& identifier) {
-  return removeScriptToEvaluateOnLoad(identifier);
+  if (scripts_to_evaluate_on_load_.Get(identifier).IsNull())
+    return Response::Error("Script not found");
+  scripts_to_evaluate_on_load_.Clear(identifier);
+  worlds_to_evaluate_on_load_.Clear(identifier);
+  return Response::OK();
+}
+
+Response InspectorPageAgent::addScriptToEvaluateOnLoad(const String& source,
+                                                       String* identifier) {
+  return addScriptToEvaluateOnNewDocument(source, Maybe<String>(""),
+                                          identifier);
+}
+
+Response InspectorPageAgent::removeScriptToEvaluateOnLoad(
+    const String& identifier) {
+  return removeScriptToEvaluateOnNewDocument(identifier);
 }
 
 Response InspectorPageAgent::setLifecycleEventsEnabled(bool enabled) {
@@ -592,19 +598,20 @@ Response InspectorPageAgent::setLifecycleEventsEnabled(bool enabled) {
     TimeTicks commit_timestamp = timing.ResponseEnd();
     if (!commit_timestamp.is_null()) {
       LifecycleEvent(frame, loader, "commit",
-                     TimeTicksInSeconds(commit_timestamp));
+                     commit_timestamp.since_origin().InSecondsF());
     }
 
     TimeTicks domcontentloaded_timestamp =
         document->GetTiming().DomContentLoadedEventEnd();
     if (!domcontentloaded_timestamp.is_null()) {
       LifecycleEvent(frame, loader, "DOMContentLoaded",
-                     TimeTicksInSeconds(domcontentloaded_timestamp));
+                     domcontentloaded_timestamp.since_origin().InSecondsF());
     }
 
     TimeTicks load_timestamp = timing.LoadEventEnd();
     if (!load_timestamp.is_null()) {
-      LifecycleEvent(frame, loader, "load", TimeTicksInSeconds(load_timestamp));
+      LifecycleEvent(frame, loader, "load",
+                     load_timestamp.since_origin().InSecondsF());
     }
 
     IdlenessDetector* idleness_detector = frame->GetIdlenessDetector();
@@ -612,12 +619,12 @@ Response InspectorPageAgent::setLifecycleEventsEnabled(bool enabled) {
         idleness_detector->GetNetworkAlmostIdleTime();
     if (!network_almost_idle_timestamp.is_null()) {
       LifecycleEvent(frame, loader, "networkAlmostIdle",
-                     TimeTicksInSeconds(network_almost_idle_timestamp));
+                     network_almost_idle_timestamp.since_origin().InSecondsF());
     }
     TimeTicks network_idle_timestamp = idleness_detector->GetNetworkIdleTime();
     if (!network_idle_timestamp.is_null()) {
       LifecycleEvent(frame, loader, "networkIdle",
-                     TimeTicksInSeconds(network_idle_timestamp));
+                     network_idle_timestamp.since_origin().InSecondsF());
     }
   }
 
@@ -634,7 +641,6 @@ Response InspectorPageAgent::reload(
   pending_script_to_evaluate_on_load_once_ =
       optional_script_to_evaluate_on_load.fromMaybe("");
   v8_session_->setSkipAllPauses(true);
-  reloading_ = true;
   return Response::OK();
 }
 
@@ -656,7 +662,7 @@ static void CachedResourcesForDocument(Document* document,
     // agent), fonts that were referenced in CSS but never used/downloaded, etc.
     if (cached_resource->StillNeedsLoad())
       continue;
-    if (cached_resource->GetType() == Resource::kRaw && skip_xhrs)
+    if (cached_resource->GetType() == ResourceType::kRaw && skip_xhrs)
       continue;
     result.push_back(cached_resource);
   }
@@ -669,7 +675,7 @@ HeapVector<Member<Document>> InspectorPageAgent::ImportsForFrame(
   Document* root_document = frame->GetDocument();
 
   if (HTMLImportsController* controller = root_document->ImportsController()) {
-    for (size_t i = 0; i < controller->LoaderCount(); ++i) {
+    for (wtf_size_t i = 0; i < controller->LoaderCount(); ++i) {
       if (Document* document = controller->LoaderAt(i)->GetDocument())
         result.push_back(document);
     }
@@ -686,7 +692,7 @@ static HeapVector<Member<Resource>> CachedResourcesForFrame(LocalFrame* frame,
       InspectorPageAgent::ImportsForFrame(frame);
 
   CachedResourcesForDocument(root_document, result, skip_xhrs);
-  for (size_t i = 0; i < loaders.size(); ++i)
+  for (wtf_size_t i = 0; i < loaders.size(); ++i)
     CachedResourcesForDocument(loaders[i], result, skip_xhrs);
 
   return result;
@@ -702,13 +708,6 @@ Response InspectorPageAgent::getFrameTree(
     std::unique_ptr<protocol::Page::FrameTree>* object) {
   *object = BuildObjectForFrameTree(inspected_frames_->Root());
   return Response::OK();
-}
-
-void InspectorPageAgent::FinishReload() {
-  if (!reloading_)
-    return;
-  reloading_ = false;
-  v8_session_->setSkipAllPauses(false);
 }
 
 void InspectorPageAgent::GetResourceContentAfterResourcesContentLoaded(
@@ -837,17 +836,52 @@ void InspectorPageAgent::DidClearDocumentOfWindowObject(LocalFrame* frame) {
               return Decimal::FromString(a) < Decimal::FromString(b);
             });
 
+  HashMap<String, int> world_id_by_name;
   for (const WTF::String& key : keys) {
-    const WTF::String& script = scripts_to_evaluate_on_load_.Get(key);
-    frame->GetScriptController().ExecuteScriptInMainWorld(script);
+    const String source = scripts_to_evaluate_on_load_.Get(key);
+    const String world_name = worlds_to_evaluate_on_load_.Get(key);
+    if (world_name.IsEmpty()) {
+      frame->GetScriptController().ExecuteScriptInMainWorld(
+          source, ScriptSourceLocationType::kUnknown,
+          ScriptController::kExecuteScriptWhenScriptsDisabled);
+      continue;
+    }
+
+    auto it = world_id_by_name.find(world_name);
+    int world_id = 0;
+    if (it != world_id_by_name.end()) {
+      world_id = it->value;
+    } else {
+      scoped_refptr<DOMWrapperWorld> world =
+          frame->GetScriptController().CreateNewInspectorIsolatedWorld(
+              world_name);
+      if (!world)
+        continue;
+      world_id = world->GetWorldId();
+      world_id_by_name.Set(world_name, world_id);
+
+      scoped_refptr<SecurityOrigin> security_origin =
+          frame->GetSecurityContext()->GetSecurityOrigin()->IsolatedCopy();
+      security_origin->GrantUniversalAccess();
+      DOMWrapperWorld::SetIsolatedWorldSecurityOrigin(world_id,
+                                                      security_origin);
+    }
+
+    // Note: An error event in an isolated world will never be dispatched to
+    // a foreign world.
+    v8::HandleScope handle_scope(V8PerIsolateData::MainThreadIsolate());
+    frame->GetScriptController().ExecuteScriptInIsolatedWorld(
+        world_id, source, KURL(), SanitizeScriptErrors::kSanitize);
   }
+
   if (!script_to_evaluate_on_load_once_.IsEmpty()) {
     frame->GetScriptController().ExecuteScriptInMainWorld(
-        script_to_evaluate_on_load_once_);
+        script_to_evaluate_on_load_once_, ScriptSourceLocationType::kUnknown,
+        ScriptController::kExecuteScriptWhenScriptsDisabled);
   }
 }
 
-void InspectorPageAgent::DOMContentLoadedEventFired(LocalFrame* frame) {
+void InspectorPageAgent::DomContentLoadedEventFired(LocalFrame* frame) {
   double timestamp = CurrentTimeTicksInSeconds();
   if (frame == inspected_frames_->Root())
     GetFrontend()->domContentEventFired(timestamp);
@@ -865,7 +899,6 @@ void InspectorPageAgent::LoadEventFired(LocalFrame* frame) {
 
 void InspectorPageAgent::WillCommitLoad(LocalFrame*, DocumentLoader* loader) {
   if (loader->GetFrame() == inspected_frames_->Root()) {
-    FinishReload();
     script_to_evaluate_on_load_once_ = pending_script_to_evaluate_on_load_once_;
     pending_script_to_evaluate_on_load_once_ = String();
   }
@@ -904,11 +937,12 @@ void InspectorPageAgent::FrameStoppedLoading(LocalFrame* frame) {
 
 void InspectorPageAgent::FrameScheduledNavigation(
     LocalFrame* frame,
-    ScheduledNavigation* scheduled_navigation) {
+    const KURL& url,
+    double delay,
+    ClientNavigationReason reason) {
   GetFrontend()->frameScheduledNavigation(
-      IdentifiersFactory::FrameId(frame), scheduled_navigation->Delay(),
-      ScheduledNavigationReasonToProtocol(scheduled_navigation->GetReason()),
-      scheduled_navigation->Url().GetString());
+      IdentifiersFactory::FrameId(frame), delay,
+      ClientNavigationReasonToProtocol(reason), url.GetString());
 }
 
 void InspectorPageAgent::FrameClearedScheduledNavigation(LocalFrame* frame) {
@@ -987,21 +1021,21 @@ void InspectorPageAgent::WindowOpen(Document* document,
 std::unique_ptr<protocol::Page::Frame> InspectorPageAgent::BuildObjectForFrame(
     LocalFrame* frame) {
   DocumentLoader* loader = frame->Loader().GetDocumentLoader();
-  KURL url = loader->GetRequest().Url();
   std::unique_ptr<protocol::Page::Frame> frame_object =
       protocol::Page::Frame::create()
           .setId(IdentifiersFactory::FrameId(frame))
           .setLoaderId(IdentifiersFactory::LoaderId(loader))
-          .setUrl(UrlWithoutFragment(url).GetString())
+          .setUrl(UrlWithoutFragment(loader->Url()).GetString())
           .setMimeType(frame->Loader().GetDocumentLoader()->MimeType())
-          .setSecurityOrigin(SecurityOrigin::Create(url)->ToRawString())
+          .setSecurityOrigin(
+              SecurityOrigin::Create(loader->Url())->ToRawString())
           .build();
   Frame* parent_frame = frame->Tree().Parent();
   if (parent_frame) {
     frame_object->setParentId(IdentifiersFactory::FrameId(parent_frame));
     AtomicString name = frame->Tree().GetName();
     if (name.IsEmpty() && frame->DeprecatedLocalOwner())
-      name = frame->DeprecatedLocalOwner()->getAttribute(HTMLNames::idAttr);
+      name = frame->DeprecatedLocalOwner()->getAttribute(html_names::kIdAttr);
     frame_object->setName(name);
   }
   if (loader && !loader->UnreachableURL().IsEmpty())
@@ -1019,11 +1053,12 @@ InspectorPageAgent::BuildObjectForFrameTree(LocalFrame* frame) {
   std::unique_ptr<protocol::Array<protocol::Page::FrameTree>> children_array;
   for (Frame* child = frame->Tree().FirstChild(); child;
        child = child->Tree().NextSibling()) {
-    if (!child->IsLocalFrame())
+    auto* child_local_frame = DynamicTo<LocalFrame>(child);
+    if (!child_local_frame)
       continue;
     if (!children_array)
       children_array = protocol::Array<protocol::Page::FrameTree>::create();
-    children_array->addItem(BuildObjectForFrameTree(ToLocalFrame(child)));
+    children_array->addItem(BuildObjectForFrameTree(child_local_frame));
   }
   result->setChildFrames(std::move(children_array));
   return result;
@@ -1078,12 +1113,13 @@ InspectorPageAgent::BuildObjectForResourceTree(LocalFrame* frame) {
       children_array;
   for (Frame* child = frame->Tree().FirstChild(); child;
        child = child->Tree().NextSibling()) {
-    if (!child->IsLocalFrame())
+    auto* child_local_frame = DynamicTo<LocalFrame>(child);
+    if (!child_local_frame)
       continue;
     if (!children_array)
       children_array =
           protocol::Array<protocol::Page::FrameResourceTree>::create();
-    children_array->addItem(BuildObjectForResourceTree(ToLocalFrame(child)));
+    children_array->addItem(BuildObjectForResourceTree(child_local_frame));
   }
   result->setChildFrames(std::move(children_array));
   return result;
@@ -1123,7 +1159,13 @@ Response InspectorPageAgent::getLayoutMetrics(
 
   LocalFrameView* frame_view = main_frame->View();
   ScrollOffset page_offset = frame_view->GetScrollableArea()->GetScrollOffset();
+  // page_zoom is either CSS-to-DP or CSS-to-DIP depending on
+  // enable-use-zoom-for-dsf flag.
   float page_zoom = main_frame->PageZoomFactor();
+  // page_zoom_factor is CSS to DIP (device independent pixels).
+  float page_zoom_factor =
+      page_zoom /
+      main_frame->GetPage()->GetChromeClient().WindowToViewportScalar(1);
   FloatRect visible_rect = visual_viewport.VisibleRect();
   float scale = visual_viewport.Scale();
 
@@ -1147,6 +1189,7 @@ Response InspectorPageAgent::getLayoutMetrics(
                              .setClientWidth(visible_rect.Width())
                              .setClientHeight(visible_rect.Height())
                              .setScale(scale)
+                             .setZoom(page_zoom_factor)
                              .build();
   return Response::OK();
 }
@@ -1167,13 +1210,12 @@ protocol::Response InspectorPageAgent::createIsolatedWorld(
   if (!world)
     return Response::Error("Could not create isolated world");
 
-  if (grant_universal_access.fromMaybe(false)) {
-    scoped_refptr<SecurityOrigin> security_origin =
-        frame->GetSecurityContext()->GetSecurityOrigin()->IsolatedCopy();
+  scoped_refptr<SecurityOrigin> security_origin =
+      frame->GetSecurityContext()->GetSecurityOrigin()->IsolatedCopy();
+  if (grant_universal_access.fromMaybe(false))
     security_origin->GrantUniversalAccess();
-    DOMWrapperWorld::SetIsolatedWorldSecurityOrigin(world->GetWorldId(),
-                                                    security_origin);
-  }
+  DOMWrapperWorld::SetIsolatedWorldSecurityOrigin(world->GetWorldId(),
+                                                  security_origin);
 
   LocalWindowProxy* isolated_world_window_proxy =
       frame->GetScriptController().WindowProxy(*world);
@@ -1253,10 +1295,9 @@ void InspectorPageAgent::ConsumeCompilationCache(
   auto it = compilation_cache_.find(source.Url().GetString());
   if (it == compilation_cache_.end())
     return;
-  const Vector<char>& data = it->value;
+  const protocol::Binary& data = it->value;
   *cached_data = new v8::ScriptCompiler::CachedData(
-      reinterpret_cast<const uint8_t*>(data.data()), data.size(),
-      v8::ScriptCompiler::CachedData::BufferNotOwned);
+      data.data(), data.size(), v8::ScriptCompiler::CachedData::BufferNotOwned);
 }
 
 void InspectorPageAgent::ProduceCompilationCache(const ScriptSourceCode& source,
@@ -1280,9 +1321,11 @@ void InspectorPageAgent::ProduceCompilationCache(const ScriptSourceCode& source,
   std::unique_ptr<v8::ScriptCompiler::CachedData> cached_data(
       v8::ScriptCompiler::CreateCodeCache(script->GetUnboundScript()));
   if (cached_data) {
-    String base64data = Base64Encode(
-        reinterpret_cast<const char*>(cached_data->data), cached_data->length);
-    GetFrontend()->compilationCacheProduced(url_string, base64data);
+    // CachedData produced by CreateCodeCache always owns its buffer.
+    CHECK_EQ(cached_data->buffer_policy,
+             v8::ScriptCompiler::CachedData::BufferOwned);
+    GetFrontend()->compilationCacheProduced(
+        url_string, protocol::Binary::fromCachedData(std::move(cached_data)));
   }
 }
 
@@ -1292,11 +1335,8 @@ Response InspectorPageAgent::setProduceCompilationCache(bool enabled) {
 }
 
 Response InspectorPageAgent::addCompilationCache(const String& url,
-                                                 const String& base64data) {
-  Vector<char> data;
-  if (!Base64Decode(base64data, data))
-    return Response::Error("data should be base64-encoded");
-  compilation_cache_.Set(url, std::move(data));
+                                                 const protocol::Binary& data) {
+  compilation_cache_.Set(url, data);
   return Response::OK();
 }
 
@@ -1305,13 +1345,19 @@ Response InspectorPageAgent::clearCompilationCache() {
   return Response::OK();
 }
 
+Response InspectorPageAgent::waitForDebugger() {
+  client_->WaitForDebugger();
+  return Response::OK();
+}
+
 protocol::Response InspectorPageAgent::generateTestReport(const String& message,
                                                           Maybe<String> group) {
   Document* document = inspected_frames_->Root()->GetDocument();
 
   // Construct the test report.
-  TestReportBody* body = new TestReportBody(message);
-  Report* report = new Report("test", document->Url().GetString(), body);
+  TestReportBody* body = MakeGarbageCollected<TestReportBody>(message);
+  Report* report =
+      MakeGarbageCollected<Report>("test", document->Url().GetString(), body);
 
   // Send the test report to any ReportingObservers.
   ReportingContext::From(document)->QueueReport(report);

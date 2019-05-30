@@ -6,9 +6,6 @@ static_library("browser") {
   sources = [
     "copying_file_stream.cc",
     "copying_file_stream.h",
-    "ruleset_service.cc",
-    "ruleset_service.h",
-    "ruleset_service_delegate.h",
     "subresource_filter_constants.cc",
     "subresource_filter_constants.h",
     "subresource_filter_features.cc",
@@ -41,7 +38,6 @@ static_library("test_support") {
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "ruleset_service_unittest.cc",
     "subresource_filter_features_unittest.cc",
   ]
   deps = [

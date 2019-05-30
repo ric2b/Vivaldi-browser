@@ -8,6 +8,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -16,9 +17,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
+#include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/search/local_ntp_test_utils.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/ntp_tiles/constants.h"
@@ -37,24 +38,24 @@ namespace {
 
 // Where the captures are stored.
 const base::FilePath& GetTestDataDir() {
-  CR_DEFINE_STATIC_LOCAL(base::FilePath, dir, ());
-  if (dir.empty()) {
+  static base::NoDestructor<base::FilePath> dir([]() {
+    base::FilePath dir;
     base::PathService::Get(base::DIR_SOURCE_ROOT, &dir);
     dir = dir.AppendASCII("components")
               .AppendASCII("test")
               .AppendASCII("data")
               .AppendASCII("ntp")
               .AppendASCII("render");
-  }
-  return dir;
+    return dir;
+  }());
+  return *dir;
 }
 
 class LocalNTPRenderTest : public InProcessBrowserTest {
  public:
   LocalNTPRenderTest() {
     // Making sure we are running with the Local NTP.
-    feature_list_.InitWithFeatures(
-        {features::kUseGoogleLocalNtp, ntp_tiles::kNtpCustomLinks}, {});
+    feature_list_.InitWithFeatures({features::kUseGoogleLocalNtp}, {});
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {

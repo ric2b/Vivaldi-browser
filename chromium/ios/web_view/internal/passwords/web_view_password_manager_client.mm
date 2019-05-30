@@ -15,11 +15,9 @@
 #include "components/password_manager/core/browser/password_manager_internals_service.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
-#include "components/signin/core/browser/signin_manager_base.h"
 #include "ios/web_view/internal/app/application_context.h"
 #import "ios/web_view/internal/passwords/web_view_password_manager_internals_service_factory.h"
 #include "ios/web_view/internal/passwords/web_view_password_store_factory.h"
-#include "ios/web_view/internal/signin/web_view_signin_manager_factory.h"
 #include "ios/web_view/internal/web_view_browser_state.h"
 #include "net/cert/cert_status_flags.h"
 #include "url/gurl.h"
@@ -139,11 +137,11 @@ void WebViewPasswordManagerClient::NotifyStorePasswordCalled() {
   helper_.NotifyStorePasswordCalled();
 }
 
-bool WebViewPasswordManagerClient::IsSavingAndFillingEnabledForCurrentPage()
-    const {
+bool WebViewPasswordManagerClient::IsSavingAndFillingEnabled(
+    const GURL& url) const {
   return *saving_passwords_enabled_ && !IsIncognito() &&
          !net::IsCertStatusError(GetMainFrameCertStatus()) &&
-         IsFillingEnabledForCurrentPage();
+         IsFillingEnabled(url);
 }
 
 const GURL& WebViewPasswordManagerClient::GetLastCommittedEntryURL() const {

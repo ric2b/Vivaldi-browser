@@ -33,8 +33,7 @@
 
 namespace blink {
 
-template <>
-const SVGEnumerationStringEntries& GetStaticStringEntries<EdgeModeType>();
+DECLARE_SVG_ENUM_MAP(EdgeModeType);
 
 class SVGFEConvolveMatrixElement final
     : public SVGFilterPrimitiveStandardAttributes {
@@ -42,6 +41,8 @@ class SVGFEConvolveMatrixElement final
 
  public:
   DECLARE_NODE_FACTORY(SVGFEConvolveMatrixElement);
+
+  explicit SVGFEConvolveMatrixElement(Document&);
 
   SVGAnimatedBoolean* preserveAlpha() { return preserve_alpha_.Get(); }
   SVGAnimatedNumber* divisor() { return divisor_.Get(); }
@@ -63,14 +64,14 @@ class SVGFEConvolveMatrixElement final
   void Trace(blink::Visitor*) override;
 
  private:
-  explicit SVGFEConvolveMatrixElement(Document&);
-
   IntSize MatrixOrder() const;
   IntPoint TargetPoint() const;
+  float ComputeDivisor() const;
 
   bool SetFilterEffectAttribute(FilterEffect*, const QualifiedName&) override;
   void SvgAttributeChanged(const QualifiedName&) override;
   FilterEffect* Build(SVGFilterBuilder*, Filter*) override;
+  bool TaintsOrigin() const override { return false; }
 
   Member<SVGAnimatedNumber> bias_;
   Member<SVGAnimatedNumber> divisor_;

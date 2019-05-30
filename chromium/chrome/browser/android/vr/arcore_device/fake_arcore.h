@@ -11,22 +11,19 @@
 #include "base/time/time.h"
 #include "chrome/browser/android/vr/arcore_device/arcore.h"
 
-namespace gl {
-class GLImageAHardwareBuffer;
-}  // namespace gl
-
 namespace device {
 
-// Minimal fake ARCore implementation for testing. It can populate
+// Minimal fake ArCore implementation for testing. It can populate
 // the camera texture with a GL_TEXTURE_OES image and do UV transform
 // calculations.
-class FakeARCore : public ARCore {
+class FakeArCore : public ArCore {
  public:
-  FakeARCore();
-  ~FakeARCore() override;
+  FakeArCore();
+  ~FakeArCore() override;
 
-  // ARCoreDriverBase implementation.
-  bool Initialize() override;
+  // ArCore implementation.
+  bool Initialize(
+      base::android::ScopedJavaLocalRef<jobject> application_context) override;
   void SetCameraTexture(GLuint texture) override;
   void SetDisplayGeometry(const gfx::Size& frame_size,
                           display::Display::Rotation display_rotation) override;
@@ -38,7 +35,6 @@ class FakeARCore : public ARCore {
   void Resume() override;
 
   bool RequestHitTest(const mojom::XRRayPtr& ray,
-                      const gfx::Size& image_size,
                       std::vector<mojom::XRHitResultPtr>* hit_results) override;
 
   void SetCameraAspect(float aspect) { camera_aspect_ = aspect; }
@@ -52,10 +48,13 @@ class FakeARCore : public ARCore {
   display::Display::Rotation display_rotation_ =
       display::Display::Rotation::ROTATE_0;
   gfx::Size frame_size_;
-  // Storage for the testing placeholder image to keep it alive.
-  scoped_refptr<gl::GLImageAHardwareBuffer> placeholder_camera_image_;
 
-  DISALLOW_COPY_AND_ASSIGN(FakeARCore);
+  DISALLOW_COPY_AND_ASSIGN(FakeArCore);
+};
+
+class FakeArCoreFactory : public ArCoreFactory {
+ public:
+  std::unique_ptr<ArCore> Create() override;
 };
 
 }  // namespace device

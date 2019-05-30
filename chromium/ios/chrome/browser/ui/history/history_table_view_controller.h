@@ -13,10 +13,11 @@ namespace ios {
 class ChromeBrowserState;
 }
 
+@class ContextMenuCoordinator;
+@protocol TableViewFaviconDataSource;
 @protocol HistoryLocalCommands;
 @protocol HistoryPresentationDelegate;
 @protocol UrlLoader;
-@protocol HistoryImageDataSource;
 
 // ChromeTableViewController for displaying history items.
 @interface HistoryTableViewController
@@ -33,7 +34,9 @@ class ChromeBrowserState;
 // Delegate used to make the Tab UI visible.
 @property(nonatomic, weak) id<HistoryPresentationDelegate> presentationDelegate;
 // Data source for favicon images.
-@property(nonatomic, weak) id<HistoryImageDataSource> imageDataSource;
+@property(nonatomic, weak) id<TableViewFaviconDataSource> imageDataSource;
+// Coordinator for displaying context menus for history entries.
+@property(nonatomic, strong) ContextMenuCoordinator* contextMenuCoordinator;
 
 // Initializers.
 - (instancetype)init NS_DESIGNATED_INITIALIZER;

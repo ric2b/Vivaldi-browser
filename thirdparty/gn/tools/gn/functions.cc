@@ -297,7 +297,24 @@ const char kConfig_Help[] =
    4. All dependent configs from a breadth-first traversal of the dependency
       tree in the order that the targets appear in "deps".
 
+More background
+
+  Configs solve a problem where the build system needs to have a higher-level
+  understanding of various compiler settings. For example, some compiler flags
+  have to appear in a certain order relative to each other, some settings like
+  defines and flags logically go together, and the build system needs to
+  de-duplicate flags even though raw command-line parameters can't always be
+  operated on in that way.
+
+  The config gives a name to a group of settings that can then be reasoned
+  about by GN. GN can know that configs with the same label are the same thing
+  so can be de-duplicated. It allows related settings to be grouped so they
+  are added or removed as a unit. And it allows targets to refer to settings
+  with conceptual names ("no_rtti", "enable_exceptions", etc.) rather than
+  having to hard-coding every compiler's flags each time they are referred to.
+
 Variables valid in a config definition
+
 )"
 
     CONFIG_VALUES_VARS_HELP
@@ -677,6 +694,7 @@ Value RunNotNeeded(Scope* scope,
 
   Value* value = nullptr;  // Value to use, may point to result_value.
   Value result_value;      // Storage for the "evaluate" case.
+  Value scope_value;       // Storage for an evaluated scope.
   const IdentifierNode* identifier = (*args_cur)->AsIdentifier();
   if (identifier) {
     // Optimize the common case where the input scope is an identifier. This
@@ -699,12 +717,29 @@ Value RunNotNeeded(Scope* scope,
   // Extract the source scope if different from current one.
   Scope* source = scope;
   if (value->type() == Value::SCOPE) {
-    source = value->scope_value();
+    if (args_cur == args_vector.end()) {
+      *err = Err(
+          function, "Wrong number of arguments.",
+          "The first argument is a scope, expecting two or three arguments.");
+      return Value();
+    }
+    // Copy the scope value if it will be overridden.
+    if (value == &result_value) {
+      scope_value = Value(nullptr, value->scope_value()->MakeClosure());
+      source = scope_value.scope_value();
+    } else {
+      source = value->scope_value();
+    }
     result_value = (*args_cur)->Execute(scope, err);
     if (err->has_error())
       return Value();
     value = &result_value;
     args_cur++;
+  } else if (args_vector.size() > 2) {
+    *err = Err(
+        function, "Wrong number of arguments.",
+        "The first argument is not a scope, expecting one or two arguments.");
+    return Value();
   }
 
   // Extract the exclusion list if defined.
@@ -1420,6 +1455,7 @@ struct FunctionInfoInitializer {
     INSERT_FUNCTION(SourceSet, true)
     INSERT_FUNCTION(StaticLibrary, true)
     INSERT_FUNCTION(Target, true)
+    INSERT_FUNCTION(GeneratedFile, true)
 
     INSERT_FUNCTION(Assert, false)
     INSERT_FUNCTION(Config, false)

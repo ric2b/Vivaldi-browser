@@ -22,10 +22,11 @@
 #include "net/base/host_port_pair.h"
 #include "net/base/proxy_server.h"
 #include "net/http/http_status_code.h"
+#include "services/network/public/cpp/features.h"
 #include "url/url_constants.h"
 
 #if defined(OS_ANDROID)
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #endif
 
 namespace {
@@ -110,6 +111,12 @@ bool IsIncludedInHoldbackFieldTrial() {
   return IsIncludedInFieldTrial("DataCompressionProxyHoldback");
 }
 
+bool IsIncludedInSecureProxyHoldbackFieldTrial() {
+  return base::StartsWith(
+      base::FieldTrialList::FindFullName("DataCompressionProxyHoldback"),
+      "SecureProxy_Disabled", base::CompareCase::SENSITIVE);
+}
+
 std::string HoldbackFieldTrialGroup() {
   return base::FieldTrialList::FindFullName("DataCompressionProxyHoldback");
 }
@@ -120,10 +127,6 @@ const char* GetLoFiFieldTrialName() {
 
 const char* GetLoFiFlagFieldTrialName() {
   return kLoFiFlagFieldTrial;
-}
-
-const char* GetWarmupCallbackParamName() {
-  return kWarmupFetchCallbackEnabledParam;
 }
 
 const char* GetMissingViaBypassParamName() {
@@ -160,6 +163,26 @@ GURL GetWarmupURL() {
       params, "warmup_url", kDefaultWarmupUrl));
 }
 
+bool IsWarmupURLFetchCallbackEnabled() {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          data_reduction_proxy::switches::
+              kDisableDataReductionProxyWarmupURLFetchCallback)) {
+    return false;
+  }
+
+  if (!GetFieldTrialParamByFeatureAsBool(
+          features::kDataReductionProxyRobustConnection,
+          kWarmupFetchCallbackEnabledParam, true)) {
+    return false;
+  }
+  return true;
+}
+
+bool IsWarmupURL(const GURL& url) {
+  GURL warmup_url = params::GetWarmupURL();
+  return url.host() == warmup_url.host() && url.path() == warmup_url.path();
+}
+
 bool IsWhitelistedHttpResponseCodeForProbes(int http_response_code) {
   // 200 and 404 are always whitelisted.
   if (http_response_code == net::HTTP_OK ||
@@ -177,31 +200,6 @@ bool IsWhitelistedHttpResponseCodeForProbes(int http_response_code) {
   if (!base::StringToInt(value, &response_code))
     return false;
   return response_code == http_response_code;
-}
-
-bool ShouldBypassMissingViaHeader(bool connection_is_cellular) {
-  return GetFieldTrialParamByFeatureAsBool(
-      data_reduction_proxy::features::kMissingViaHeaderShortDuration,
-      connection_is_cellular ? "should_bypass_missing_via_cellular"
-                             : "should_bypass_missing_via_wifi",
-      true);
-}
-
-std::pair<base::TimeDelta, base::TimeDelta>
-GetMissingViaHeaderBypassDurationRange(bool connection_is_cellular) {
-  base::TimeDelta bypass_max =
-      base::TimeDelta::FromSeconds(GetFieldTrialParamByFeatureAsInt(
-          data_reduction_proxy::features::kMissingViaHeaderShortDuration,
-          connection_is_cellular ? "missing_via_max_bypass_cellular_in_seconds"
-                                 : "missing_via_max_bypass_wifi_in_seconds",
-          300));
-  base::TimeDelta bypass_min =
-      base::TimeDelta::FromSeconds(GetFieldTrialParamByFeatureAsInt(
-          data_reduction_proxy::features::kMissingViaHeaderShortDuration,
-          connection_is_cellular ? "missing_via_min_bypass_cellular_in_seconds"
-                                 : "missing_via_min_bypass_wifi_in_seconds",
-          60));
-  return {bypass_min, bypass_max};
 }
 
 bool IsForcePingbackEnabledViaFlags() {
@@ -237,24 +235,6 @@ bool IsQuicEnabledForNonCoreProxies() {
 
 const char* GetQuicFieldTrialName() {
   return kQuicFieldTrial;
-}
-
-bool IsBrotliAcceptEncodingEnabled() {
-  // Brotli encoding is enabled by default since the data reduction proxy server
-  // controls when to serve Brotli encoded content. It can be disabled in
-  // Chromium only if Chromium belongs to a field trial group whose name starts
-  // with "Disabled".
-  return !base::StartsWith(base::FieldTrialList::FindFullName(
-                               "DataReductionProxyBrotliAcceptEncoding"),
-                           kDisabled, base::CompareCase::SENSITIVE);
-}
-
-bool IsConfigClientEnabled() {
-  // Config client is enabled by default. It can be disabled only if Chromium
-  // belongs to a field trial group whose name starts with "Disabled".
-  return !base::StartsWith(
-      base::FieldTrialList::FindFullName("DataReductionProxyConfigService"),
-      kDisabled, base::CompareCase::SENSITIVE);
 }
 
 GURL GetConfigServiceURL() {
@@ -413,6 +393,39 @@ bool IsDataSaverSiteBreakdownUsingPLMEnabled() {
           kDataSaverSiteBreakdownUsingPageLoadMetrics);
 }
 
+bool IsEnabledWithNetworkService() {
+  return base::FeatureList::IsEnabled(
+             data_reduction_proxy::features::
+                 kDataReductionProxyEnabledWithNetworkService) &&
+         base::FeatureList::IsEnabled(network::features::kNetworkService);
+}
+
+base::Optional<DataReductionProxyTypeInfo> FindConfiguredProxyInVector(
+    const std::vector<DataReductionProxyServer>& proxies,
+    const net::ProxyServer& proxy_server) {
+  if (!proxy_server.is_valid() || proxy_server.is_direct())
+    return base::nullopt;
+
+  // Only compare the host port pair of the |proxy_server| since the proxy
+  // scheme of the stored data reduction proxy may be different than the proxy
+  // scheme of |proxy_server|. This may happen even when the |proxy_server| is a
+  // valid data reduction proxy. As an example, the stored data reduction proxy
+  // may have a proxy scheme of HTTPS while |proxy_server| may have QUIC as the
+  // proxy scheme.
+  const net::HostPortPair& host_port_pair = proxy_server.host_port_pair();
+  auto it = std::find_if(
+      proxies.begin(), proxies.end(),
+      [&host_port_pair](const DataReductionProxyServer& proxy) {
+        return proxy.proxy_server().host_port_pair().Equals(host_port_pair);
+      });
+
+  if (it == proxies.end())
+    return base::nullopt;
+
+  return DataReductionProxyTypeInfo(proxies,
+                                    static_cast<size_t>(it - proxies.begin()));
+}
+
 }  // namespace params
 
 DataReductionProxyParams::DataReductionProxyParams() {
@@ -459,35 +472,12 @@ DataReductionProxyParams::proxies_for_http() const {
 base::Optional<DataReductionProxyTypeInfo>
 DataReductionProxyParams::FindConfiguredDataReductionProxy(
     const net::ProxyServer& proxy_server) const {
-  return FindConfiguredProxyInVector(proxies_for_http(), proxy_server);
+  return params::FindConfiguredProxyInVector(proxies_for_http(), proxy_server);
 }
 
-// static
-base::Optional<DataReductionProxyTypeInfo>
-DataReductionProxyParams::FindConfiguredProxyInVector(
-    const std::vector<DataReductionProxyServer>& proxies,
-    const net::ProxyServer& proxy_server) {
-  if (!proxy_server.is_valid() || proxy_server.is_direct())
-    return base::nullopt;
-
-  // Only compare the host port pair of the |proxy_server| since the proxy
-  // scheme of the stored data reduction proxy may be different than the proxy
-  // scheme of |proxy_server|. This may happen even when the |proxy_server| is a
-  // valid data reduction proxy. As an example, the stored data reduction proxy
-  // may have a proxy scheme of HTTPS while |proxy_server| may have QUIC as the
-  // proxy scheme.
-  const net::HostPortPair& host_port_pair = proxy_server.host_port_pair();
-  auto it = std::find_if(
-      proxies.begin(), proxies.end(),
-      [&host_port_pair](const DataReductionProxyServer& proxy) {
-        return proxy.proxy_server().host_port_pair().Equals(host_port_pair);
-      });
-
-  if (it == proxies.end())
-    return base::nullopt;
-
-  return DataReductionProxyTypeInfo(proxies,
-                                    static_cast<size_t>(it - proxies.begin()));
+net::ProxyList DataReductionProxyParams::GetAllConfiguredProxies() const {
+  NOTREACHED();
+  return net::ProxyList();
 }
 
 }  // namespace data_reduction_proxy

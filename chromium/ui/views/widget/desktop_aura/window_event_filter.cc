@@ -6,6 +6,7 @@
 
 #include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
+#include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_tree_host.h"
@@ -14,6 +15,7 @@
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
+#include "ui/platform_window/platform_window_handler/wm_move_resize_handler.h"
 #include "ui/views/linux_ui/linux_ui.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host.h"
 #include "ui/views/widget/native_widget_aura.h"
@@ -51,6 +53,12 @@ void WindowEventFilter::OnMouseEvent(ui::MouseEvent* event) {
       MaybeDispatchHostWindowDragMovement(component, event);
     }
   }
+}
+
+void WindowEventFilter::SetWmMoveResizeHandler(
+    ui::WmMoveResizeHandler* handler) {
+  DCHECK(!handler_);
+  handler_ = handler;
 }
 
 void WindowEventFilter::OnClickedCaption(ui::MouseEvent* event,
@@ -149,6 +157,18 @@ void WindowEventFilter::LowerWindow() {}
 
 void WindowEventFilter::MaybeDispatchHostWindowDragMovement(
     int hittest,
-    ui::MouseEvent* event) {}
+    ui::MouseEvent* event) {
+  if (handler_ && event->IsLeftMouseButton() &&
+      ui::CanPerformDragOrResize(hittest)) {
+    // Some platforms (eg X11) may require last pointer location not in the
+    // local surface coordinates, but rather in the screen coordinates for
+    // interactive move/resize.
+    const gfx::Point last_pointer_location =
+        aura::Env::GetInstance()->last_mouse_location();
+    handler_->DispatchHostWindowDragMovement(hittest, last_pointer_location);
+    event->StopPropagation();
+    return;
+  }
+}
 
 }  // namespace views

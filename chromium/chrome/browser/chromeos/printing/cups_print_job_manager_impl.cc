@@ -29,6 +29,7 @@
 #include "chrome/browser/printing/print_job.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
@@ -37,8 +38,8 @@
 
 namespace {
 
-// The rate in milliseconds at which we will poll CUPS for print job updates.
-const int kPollRate = 1000;
+// The rate at which we will poll CUPS for print job updates.
+constexpr base::TimeDelta kPollRate = base::TimeDelta::FromMilliseconds(1000);
 
 // Threshold for giving up on communicating with CUPS.
 const int kRetryMax = 6;
@@ -220,7 +221,7 @@ class CupsWrapper {
                  QueryResult* result) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     base::ScopedBlockingCall scoped_blocking_call(
-        base::BlockingType::MAY_BLOCK);
+        FROM_HERE, base::BlockingType::MAY_BLOCK);
 
     result->success = cups_connection_.GetJobs(printer_ids, &result->queues);
   }
@@ -229,7 +230,7 @@ class CupsWrapper {
   void CancelJobImpl(const std::string& printer_id, const int job_id) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     base::ScopedBlockingCall scoped_blocking_call(
-        base::BlockingType::MAY_BLOCK);
+        FROM_HERE, base::BlockingType::MAY_BLOCK);
 
     std::unique_ptr<::printing::CupsPrinter> printer =
         cups_connection_.GetPrinter(printer_id);
@@ -263,8 +264,8 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager,
         cups_wrapper_(new CupsWrapper(),
                       base::OnTaskRunnerDeleter(query_runner_)),
         weak_ptr_factory_(this) {
-    timer_.SetTaskRunner(content::BrowserThread::GetTaskRunnerForThread(
-        content::BrowserThread::UI));
+    timer_.SetTaskRunner(base::CreateSingleThreadTaskRunnerWithTraits(
+        {content::BrowserThread::UI}));
     registrar_.Add(this, chrome::NOTIFICATION_PRINT_JOB_EVENT,
                    content::NotificationService::AllSources());
   }
@@ -348,9 +349,10 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager,
     NotifyJobUpdated(job->GetWeakPtr());
 
     // Run a query now.
-    content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::UI)
-        ->PostTask(FROM_HERE, base::Bind(&CupsPrintJobManagerImpl::PostQuery,
-                                         weak_ptr_factory_.GetWeakPtr()));
+    base::CreateSingleThreadTaskRunnerWithTraits({content::BrowserThread::UI})
+        ->PostTask(FROM_HERE,
+                   base::BindOnce(&CupsPrintJobManagerImpl::PostQuery,
+                                  weak_ptr_factory_.GetWeakPtr()));
     // Start the timer for ongoing queries.
     ScheduleQuery();
 
@@ -373,8 +375,7 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager,
 
   // Schedule a query of CUPS for print job status with a delay of |delay|.
   void ScheduleQuery(int attempt_count = 1) {
-    const int delay_ms = kPollRate * attempt_count;
-    timer_.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(delay_ms),
+    timer_.Start(FROM_HERE, kPollRate * attempt_count,
                  base::Bind(&CupsPrintJobManagerImpl::PostQuery,
                             weak_ptr_factory_.GetWeakPtr()));
   }
@@ -433,7 +434,7 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager,
     std::vector<std::string> active_jobs;
     for (const auto& queue : result->queues) {
       for (auto& job : queue.jobs) {
-        std::string key = CupsPrintJob::GetUniqueId(job.printer_id, job.id);
+        std::string key = CupsPrintJob::CreateUniqueId(job.printer_id, job.id);
         const auto& entry = jobs_.find(key);
         if (entry == jobs_.end())
           continue;

@@ -3,9 +3,31 @@
 // found in the LICENSE file.
 
 // https://wicg.github.io/background-fetch/#background-fetch-registration
-enum BackgroundFetchState { "pending", "success", "failure" };
+[
+    Exposed=(Window,Worker),
+    RuntimeEnabled=BackgroundFetch,
+    ActiveScriptWrappable
+] interface BackgroundFetchRegistration : EventTarget {
+    readonly attribute DOMString id;
+    readonly attribute unsigned long long uploadTotal;
+    readonly attribute unsigned long long uploaded;
+    readonly attribute unsigned long long downloadTotal;
+    readonly attribute unsigned long long downloaded;
+    readonly attribute BackgroundFetchResult result;
+    readonly attribute BackgroundFetchFailureReason failureReason;
+    readonly attribute boolean recordsAvailable;
+
+    attribute EventHandler onprogress;
+
+    [CallWith=ScriptState, MeasureAs=BackgroundFetchRegistrationAbort] Promise<boolean> abort();
+    [CallWith=ScriptState, RaisesException, MeasureAs=BackgroundFetchRegistrationMatch] Promise<BackgroundFetchRecord> match(RequestInfo request, optional CacheQueryOptions options);
+    [CallWith=ScriptState, RaisesException, MeasureAs=BackgroundFetchRegistrationMatchAll] Promise<sequence<BackgroundFetchRecord>> matchAll(optional RequestInfo request, optional CacheQueryOptions options);
+};
+
+enum BackgroundFetchResult { "", "success", "failure" };
 
 enum BackgroundFetchFailureReason {
+  // The background fetch has not completed yet, or was successful.
   "",
   // The operation was aborted by the user, or abort() was called.
   "aborted",
@@ -17,27 +39,6 @@ enum BackgroundFetchFailureReason {
   // Storage quota was reached during the operation.
   "quota-exceeded",
   // The provided downloadTotal was exceeded.
-  "total-download-exceeded"
+  "download-total-exceeded"
 };
 
-[
-    Exposed=(Window,Worker),
-    RuntimeEnabled=BackgroundFetch
-] interface BackgroundFetchRegistration : EventTarget {
-    readonly attribute DOMString id;
-    readonly attribute unsigned long long uploadTotal;
-    readonly attribute unsigned long long uploaded;
-    readonly attribute unsigned long long downloadTotal;
-    readonly attribute unsigned long long downloaded;
-    readonly attribute BackgroundFetchState state;
-    readonly attribute BackgroundFetchFailureReason failureReason;
-
-    attribute EventHandler onprogress;
-
-    [CallWith=ScriptState] Promise<boolean> abort();
-
-    // TODO(crbug.com/875201): Change to (Window,Worker) once we support
-    // match() and matchAll() for active fetches.
-    [CallWith=ScriptState, Exposed=ServiceWorker, RaisesException] Promise<BackgroundFetchRecord> match(RequestInfo request, optional CacheQueryOptions options);
-    [CallWith=ScriptState, Exposed=ServiceWorker, RaisesException] Promise<sequence<BackgroundFetchRecord>> matchAll(optional RequestInfo request, optional CacheQueryOptions options);
-};

@@ -7,6 +7,7 @@ import os
 import sys
 
 from gpu_tests import gpu_integration_test
+from gpu_tests import gpu_test_expectations
 from gpu_tests import path_util
 from gpu_tests import webgl_conformance_expectations
 from gpu_tests import webgl2_conformance_expectations
@@ -72,6 +73,11 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
 
   _webgl_version = None
   _is_asan = False
+  _crash_count = 0
+  _gl_backend = ""
+  _angle_backend = ""
+  _command_decoder = ""
+  _verified_flags = False
 
   @classmethod
   def Name(cls):
@@ -79,6 +85,7 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
 
   @classmethod
   def AddCommandlineArgs(cls, parser):
+    super(WebGLConformanceIntegrationTest, cls).AddCommandlineArgs(parser)
     parser.add_option('--webgl-conformance-version',
         help='Version of the WebGL conformance tests to run.',
         default='1.0.4')
@@ -142,6 +149,7 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         'EXT_shader_texture_lod',
         'EXT_sRGB',
         'EXT_texture_filter_anisotropic',
+        'KHR_parallel_shader_compile',
         'OES_element_index_uint',
         'OES_standard_derivatives',
         'OES_texture_float',
@@ -160,12 +168,15 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         'WEBGL_depth_texture',
         'WEBGL_draw_buffers',
         'WEBGL_lose_context',
+        'WEBGL_multi_draw',
+        'WEBGL_multi_draw_instanced',
       ]
     else:
       return [
         'EXT_color_buffer_float',
         'EXT_disjoint_timer_query_webgl2',
         'EXT_texture_filter_anisotropic',
+        'KHR_parallel_shader_compile',
         'OES_texture_float_linear',
         'WEBGL_compressed_texture_astc',
         'WEBGL_compressed_texture_etc',
@@ -176,6 +187,8 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         'WEBGL_debug_renderer_info',
         'WEBGL_debug_shaders',
         'WEBGL_lose_context',
+        'WEBGL_multi_draw',
+        'WEBGL_multi_draw_instanced',
         'WEBGL_multiview',
       ]
 
@@ -185,14 +198,89 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     test_name = args[0]
     getattr(self, test_name)(test_path, *args[1:])
 
+  def _GetGPUInfoErrorString(self, gpu_info):
+    primary_gpu = gpu_info.devices[0]
+    error_str = 'primary gpu=' + primary_gpu.device_string
+    if gpu_info.aux_attributes:
+      gl_renderer = gpu_info.aux_attributes.get('gl_renderer')
+      if gl_renderer:
+        error_str += ', gl_renderer=' + gl_renderer
+    return error_str
+
+  def _VerifyGLBackend(self, gpu_info):
+    # Verify that Chrome's GL backend matches if a specific one was requested
+    if self._gl_backend:
+      if (self._gl_backend == 'angle' and
+          gpu_test_expectations.GpuTestExpectations. \
+          GetANGLERenderer(gpu_info) == 'no_angle'):
+        self.fail('requested GL backend (' + self._gl_backend + ')' +
+                  ' had no effect on the browser: ' +
+                  self._GetGPUInfoErrorString(gpu_info))
+        return False
+    return True
+
+  def _VerifyANGLEBackend(self, gpu_info):
+    if self._angle_backend:
+      # GPU exepections use slightly different names for the angle backends
+      # than the Chrome flags
+      known_backend_flag_map = {
+        'd3d11': 'd3d11',
+        'd3d9': 'd3d9',
+        'opengl': 'gl',
+        'opengles': 'gles',
+        'vulkan': 'vulkan',
+      }
+      current_angle_backend = gpu_test_expectations.GpuTestExpectations. \
+          GetANGLERenderer(gpu_info)
+      if (current_angle_backend not in known_backend_flag_map or
+          known_backend_flag_map[current_angle_backend] != \
+          self._angle_backend):
+        self.fail('requested ANGLE backend (' + self._angle_backend + ')' +
+                  ' had no effect on the browser: ' +
+                  self._GetGPUInfoErrorString(gpu_info))
+        return False
+    return True
+
+  def _VerifyCommandDecoder(self, gpu_info):
+    if self._command_decoder:
+      # GPU exepections use slightly different names for the command decoders
+      # than the Chrome flags
+      known_command_decoder_flag_map = {
+        'passthrough': 'passthrough',
+        'no_passthrough': 'validating',
+      }
+      current_command_decoder = gpu_test_expectations.GpuTestExpectations. \
+          GetCommandDecoder(gpu_info)
+      if (current_command_decoder not in known_command_decoder_flag_map or
+          known_command_decoder_flag_map[current_command_decoder] != \
+          self._command_decoder):
+        self.fail('requested command decoder (' + self._command_decoder + ')' +
+                  ' had no effect on the browser: ' +
+                  self._GetGPUInfoErrorString(gpu_info))
+        return False
+    return True
+
   def _NavigateTo(self, test_path, harness_script):
+    gpu_info = self.browser.GetSystemInfo().gpu
+    self._crash_count = gpu_info.aux_attributes['process_crash_count']
+    if not self._verified_flags:
+      # If the user specified any flags for ANGLE or the command decoder,
+      # verify that the browser is actually using the requested configuration
+      if (self._VerifyGLBackend(gpu_info) and
+          self._VerifyANGLEBackend(gpu_info) and
+          self._VerifyCommandDecoder(gpu_info)):
+        self._verified_flags = True
     url = self.UrlOfStaticFilePath(test_path)
     self.tab.Navigate(url, script_to_evaluate_on_commit=harness_script)
 
   def _CheckTestCompletion(self):
     self.tab.action_runner.WaitForJavaScriptCondition(
         'webglTestHarness._finished', timeout=self._GetTestTimeout())
-    if not self._DidWebGLTestSucceed(self.tab):
+    if self._crash_count != self.browser.GetSystemInfo().gpu \
+        .aux_attributes['process_crash_count']:
+      self.fail('GPU process crashed during test.\n' +
+                self._WebGLTestMessages(self.tab))
+    elif not self._DidWebGLTestSucceed(self.tab):
       self.fail(self._WebGLTestMessages(self.tab))
 
   def _RunConformanceTest(self, test_path, *args):
@@ -272,6 +360,12 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
           found_js_flags = True
           user_js_flags = o
           break
+        if o.startswith('--use-gl='):
+          cls._gl_backend = o[len('--use-gl='):]
+        if o.startswith('--use-angle='):
+          cls._angle_backend = o[len('--use-angle='):]
+        if o.startswith('--use-cmd-decoder='):
+          cls._command_decoder = o[len('--use-cmd-decoder='):]
     if found_js_flags:
       logging.warning('Overriding built-in JavaScript flags:')
       logging.warning(' Original flags: ' + builtin_js_flags)

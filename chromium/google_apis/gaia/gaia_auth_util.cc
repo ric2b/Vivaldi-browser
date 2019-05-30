@@ -127,7 +127,7 @@ bool ParseListAccountsData(const std::string& data,
     signed_out_accounts->clear();
 
   // Parse returned data and make sure we have data.
-  std::unique_ptr<base::Value> value = base::JSONReader::Read(data);
+  std::unique_ptr<base::Value> value = base::JSONReader::ReadDeprecated(data);
   if (!value)
     return false;
 
@@ -184,16 +184,6 @@ bool ParseListAccountsData(const std::string& data,
   }
 
   return true;
-}
-
-bool RequestOriginatedFromGaia(const net::URLRequest& request) {
-  return request.GetUserData(kURLRequestUserDataKey) != nullptr;
-}
-
-void MarkURLFetcherAsGaia(net::URLFetcher* fetcher) {
-  DCHECK(fetcher);
-  fetcher->SetURLRequestUserData(kURLRequestUserDataKey,
-                                 base::Bind(&GaiaURLRequestUserData::Create));
 }
 
 }  // namespace gaia

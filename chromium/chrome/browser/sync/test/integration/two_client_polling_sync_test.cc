@@ -10,6 +10,7 @@
 #include "chrome/browser/sync/test/integration/sessions_helper.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/common/webui_url_constants.h"
+#include "components/autofill/core/common/autofill_prefs.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/sync/base/sync_prefs.h"
 #include "components/sync/engine/polling_constants.h"
@@ -77,11 +78,29 @@ IN_PROC_BROWSER_TEST_F(TwoClientPollingSyncTest, ShouldPollOnStartup) {
 
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
+  // Disable syncing of AUTOFILL_WALLET_DATA: That type is special-cased to
+  // clear its data even with KEEP_DATA, which means we'd always send a regular
+  // GetUpdates request on starting Sync again, and so we'd have no need for a
+  // poll.
+  GetClient(0)->DisableSyncForDatatype(syncer::AUTOFILL);
+  GetClient(1)->DisableSyncForDatatype(syncer::AUTOFILL);
+  // TODO(crbug.com/890737): Once AUTOFILL_WALLET_DATA gets properly disabled
+  // based on the pref, we can just disable that instead of all of AUTOFILL:
+  // autofill::prefs::SetPaymentsIntegrationEnabled(GetProfile(0)->GetPrefs(),
+  //                                                false);
+  // autofill::prefs::SetPaymentsIntegrationEnabled(GetProfile(1)->GetPrefs(),
+  //                                                false);
+
   // Phase 1.
   ASSERT_TRUE(CheckInitialState(0));
   ASSERT_TRUE(CheckInitialState(1));
   ASSERT_TRUE(OpenTab(0, GURL(chrome::kChromeUIHistoryURL)));
   GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1));
+
+  ASSERT_FALSE(GetSyncService(0)->GetActiveDataTypes().Has(
+      syncer::AUTOFILL_WALLET_DATA));
+  ASSERT_FALSE(GetSyncService(1)->GetActiveDataTypes().Has(
+      syncer::AUTOFILL_WALLET_DATA));
 
   // Phase 2.
   // Disconnect client 1 from sync and write another change from client 0.
@@ -89,7 +108,10 @@ IN_PROC_BROWSER_TEST_F(TwoClientPollingSyncTest, ShouldPollOnStartup) {
   DisableNotificationsForClient(1);
   // Make sure no extra sync cycles get triggered by test infrastructure.
   StopConfigurationRefresher();
-  GetClient(1)->StopSyncService(syncer::SyncService::KEEP_DATA);
+  // Note: It's important to *not* clear data here - if we clear data, then
+  // we'll do a regular GetUpdates at the next startup, so there'd be no need
+  // for a poll.
+  GetClient(1)->StopSyncServiceWithoutClearingData();
 
   ASSERT_TRUE(OpenTab(0, GURL(kURL1)));
   SessionCountMatchChecker server_checker(4, GetSyncService(0),

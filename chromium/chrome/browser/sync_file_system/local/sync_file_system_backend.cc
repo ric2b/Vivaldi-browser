@@ -7,7 +7,9 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/sync_file_system/local/local_file_change_tracker.h"
 #include "chrome/browser/sync_file_system/local/local_file_sync_context.h"
@@ -15,6 +17,7 @@
 #include "chrome/browser/sync_file_system/sync_file_system_service.h"
 #include "chrome/browser/sync_file_system/sync_file_system_service_factory.h"
 #include "chrome/browser/sync_file_system/syncable_file_system_util.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "storage/browser/fileapi/file_stream_reader.h"
@@ -117,18 +120,18 @@ void SyncFileSystemBackend::ResolveURL(const storage::FileSystemURL& url,
   DCHECK(CanHandleType(url.type()));
 
   if (skip_initialize_syncfs_service_for_testing_) {
-    GetDelegate()->OpenFileSystem(url.origin(), url.type(), mode,
-                                  std::move(callback),
-                                  GetSyncableFileSystemRootURI(url.origin()));
+    GetDelegate()->OpenFileSystem(
+        url.origin().GetURL(), url.type(), mode, std::move(callback),
+        GetSyncableFileSystemRootURI(url.origin().GetURL()));
     return;
   }
 
   // It is safe to pass Unretained(this) since |context_| owns it.
-  SyncStatusCallback initialize_callback =
-      base::Bind(&SyncFileSystemBackend::DidInitializeSyncFileSystemService,
-                 base::Unretained(this), base::RetainedRef(context_),
-                 url.origin(), url.type(), mode, base::Passed(&callback));
-  InitializeSyncFileSystemService(url.origin(), initialize_callback);
+  SyncStatusCallback initialize_callback = base::Bind(
+      &SyncFileSystemBackend::DidInitializeSyncFileSystemService,
+      base::Unretained(this), base::RetainedRef(context_),
+      url.origin().GetURL(), url.type(), mode, base::Passed(&callback));
+  InitializeSyncFileSystemService(url.origin().GetURL(), initialize_callback);
 }
 
 storage::AsyncFileUtil* SyncFileSystemBackend::GetAsyncFileUtil(
@@ -267,8 +270,8 @@ void SyncFileSystemBackend::InitializeSyncFileSystemService(
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     // It is safe to pass Unretained(this) (see comments in OpenFileSystem()).
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&SyncFileSystemBackend::InitializeSyncFileSystemService,
                        base::Unretained(this), origin_url, callback));
     return;
@@ -297,8 +300,8 @@ void SyncFileSystemBackend::DidInitializeSyncFileSystemService(
   if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     // It is safe to pass Unretained(this) since |context| owns it.
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::IO},
         base::BindOnce(
             &SyncFileSystemBackend::DidInitializeSyncFileSystemService,
             base::Unretained(this), base::RetainedRef(context), origin_url,

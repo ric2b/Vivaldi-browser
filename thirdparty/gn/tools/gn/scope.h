@@ -238,6 +238,11 @@ class Scope {
   // scopes.
   void GetCurrentScopeValues(KeyValueMap* output) const;
 
+  // Returns true if the values in the current scope are the same as all
+  // values in the given scope, without going to the parent scopes. Returns
+  // false if not.
+  bool CheckCurrentScopeValuesEqual(const Scope* other) const;
+
   // Copies this scope's values into the destination. Values from the
   // containing scope(s) (normally shadowed into the current one) will not be
   // copied, neither will the reference to the containing scope (this is why

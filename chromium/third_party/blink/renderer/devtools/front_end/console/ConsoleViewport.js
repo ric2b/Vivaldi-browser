@@ -58,6 +58,11 @@ Console.ConsoleViewport = class {
     this.element.addEventListener('scroll', this._onScroll.bind(this), false);
     this.element.addEventListener('copy', this._onCopy.bind(this), false);
     this.element.addEventListener('dragstart', this._onDragStart.bind(this), false);
+    this._contentElement.addEventListener('focusin', this._onFocusIn.bind(this), false);
+    this._contentElement.addEventListener('focusout', this._onFocusOut.bind(this), false);
+    this._contentElement.addEventListener('keydown', this._onKeyDown.bind(this), false);
+    this._virtualSelectedIndex = -1;
+    this._contentElement.tabIndex = -1;
 
     this._firstActiveIndex = -1;
     this._lastActiveIndex = -1;
@@ -93,6 +98,13 @@ Console.ConsoleViewport = class {
       this._observer.disconnect();
   }
 
+  /**
+   * @return {boolean}
+   */
+  hasVirtualSelection() {
+    return this._virtualSelectedIndex !== -1;
+  }
+
   copyWithStyles() {
     this._muteCopyHandler = true;
     this.element.ownerDocument.execCommand('copy');
@@ -115,6 +127,45 @@ Console.ConsoleViewport = class {
   /**
    * @param {!Event} event
    */
+  _onFocusIn(event) {
+    const renderedIndex = this._renderedItems.findIndex(item => item.element().isSelfOrAncestor(event.target));
+    if (renderedIndex !== -1)
+      this._virtualSelectedIndex = this._firstActiveIndex + renderedIndex;
+    let focusLastChild = false;
+    // Make default selection when moving from external (e.g. prompt) to the container.
+    if (this._virtualSelectedIndex === -1 && this._isOutsideViewport(/** @type {?Element} */ (event.relatedTarget)) &&
+        event.target === this._contentElement && this._itemCount) {
+      focusLastChild = true;
+      this._virtualSelectedIndex = this._itemCount - 1;
+
+      // Update stick to bottom before scrolling into view.
+      this.refresh();
+      this.scrollItemIntoView(this._virtualSelectedIndex);
+    }
+    this._updateFocusedItem(focusLastChild);
+  }
+
+  /**
+   * @param {!Event} event
+   */
+  _onFocusOut(event) {
+    // Remove selection when focus moves to external location (e.g. prompt).
+    if (this._isOutsideViewport(/** @type {?Element} */ (event.relatedTarget)))
+      this._virtualSelectedIndex = -1;
+    this._updateFocusedItem();
+  }
+
+  /**
+   * @param {?Element} element
+   * @return {boolean}
+   */
+  _isOutsideViewport(element) {
+    return !!element && !element.isSelfOrDescendant(this._contentElement);
+  }
+
+  /**
+   * @param {!Event} event
+   */
   _onDragStart(event) {
     const text = this._selectedText();
     if (!text)
@@ -123,6 +174,77 @@ Console.ConsoleViewport = class {
     event.dataTransfer.setData('text/plain', text);
     event.dataTransfer.effectAllowed = 'copy';
     return true;
+  }
+
+  /**
+   * @param {!Event} event
+   */
+  _onKeyDown(event) {
+    if (UI.isEditing() || !this._itemCount || event.shiftKey)
+      return;
+    let isArrowUp = false;
+    switch (event.key) {
+      case 'ArrowUp':
+        if (this._virtualSelectedIndex > 0) {
+          isArrowUp = true;
+          this._virtualSelectedIndex--;
+        } else {
+          return;
+        }
+        break;
+      case 'ArrowDown':
+        if (this._virtualSelectedIndex < this._itemCount - 1)
+          this._virtualSelectedIndex++;
+        else
+          return;
+        break;
+      case 'Home':
+        this._virtualSelectedIndex = 0;
+        break;
+      case 'End':
+        this._virtualSelectedIndex = this._itemCount - 1;
+        break;
+      default:
+        return;
+    }
+    event.consume(true);
+    this.scrollItemIntoView(this._virtualSelectedIndex);
+    this._updateFocusedItem(isArrowUp);
+  }
+
+  /**
+   * @param {boolean=} focusLastChild
+   */
+  _updateFocusedItem(focusLastChild) {
+    const selectedElement = this.renderedElementAt(this._virtualSelectedIndex);
+    const changed = this._lastSelectedElement !== selectedElement;
+    const containerHasFocus = this._contentElement === this.element.ownerDocument.deepActiveElement();
+    if (this._lastSelectedElement && changed)
+      this._lastSelectedElement.classList.remove('console-selected');
+    if (selectedElement && (focusLastChild || changed || containerHasFocus) && this.element.hasFocus()) {
+      selectedElement.classList.add('console-selected');
+      // Do not focus the message if something within holds focus (e.g. object).
+      if (focusLastChild) {
+        this.setStickToBottom(false);
+        this._renderedItems[this._virtualSelectedIndex - this._firstActiveIndex].focusLastChildOrSelf();
+      } else if (!selectedElement.hasFocus()) {
+        focusWithoutScroll(selectedElement);
+      }
+    }
+    if (this._itemCount && !this._contentElement.hasFocus())
+      this._contentElement.tabIndex = 0;
+    else
+      this._contentElement.tabIndex = -1;
+    this._lastSelectedElement = selectedElement;
+
+    /**
+     * @suppress {checkTypes}
+     * @param {!Element} element
+     */
+    function focusWithoutScroll(element) {
+      // TODO(luoe): Closure has an outdated typedef for Element.prototype.focus.
+      element.focus({preventScroll: true});
+    }
   }
 
   /**
@@ -135,6 +257,8 @@ Console.ConsoleViewport = class {
   invalidate() {
     delete this._cachedProviderElements;
     this._itemCount = this._provider.itemCount();
+    if (this._virtualSelectedIndex > this._itemCount - 1)
+      this._virtualSelectedIndex = this._itemCount - 1;
     this._rebuildCumulativeHeights();
     this.refresh();
   }
@@ -343,6 +467,7 @@ Console.ConsoleViewport = class {
       this._bottomGapElement.style.height = '0px';
       this._firstActiveIndex = -1;
       this._lastActiveIndex = -1;
+      this._updateFocusedItem();
       return;
     }
 
@@ -404,8 +529,11 @@ Console.ConsoleViewport = class {
     for (let i = 0; i < willBeHidden.length; ++i)
       willBeHidden[i].willHide();
     prepare();
-    for (let i = 0; i < willBeHidden.length; ++i)
+    let hadFocus = false;
+    for (let i = 0; i < willBeHidden.length; ++i) {
+      hadFocus = hadFocus || willBeHidden[i].element().hasFocus();
       willBeHidden[i].element().remove();
+    }
 
     const wasShown = [];
     let anchor = this._contentElement.firstChild;
@@ -423,6 +551,10 @@ Console.ConsoleViewport = class {
     for (let i = 0; i < wasShown.length; ++i)
       wasShown[i].wasShown();
     this._renderedItems = Array.from(itemsToRender);
+
+    if (hadFocus)
+      this._contentElement.focus();
+    this._updateFocusedItem();
   }
 
   /**
@@ -530,9 +662,7 @@ Console.ConsoleViewport = class {
    * @return {?Element}
    */
   renderedElementAt(index) {
-    if (index < this._firstActiveIndex)
-      return null;
-    if (index > this._lastActiveIndex)
+    if (index === -1 || index < this._firstActiveIndex || index > this._lastActiveIndex)
       return null;
     return this._renderedItems[index - this._firstActiveIndex].element();
   }

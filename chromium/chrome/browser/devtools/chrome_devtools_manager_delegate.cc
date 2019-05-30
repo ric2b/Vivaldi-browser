@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -36,7 +37,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "base/command_line.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #endif
 
 using content::DevToolsAgentHost;
@@ -101,12 +102,17 @@ void ChromeDevToolsManagerDelegate::Inspect(
 void ChromeDevToolsManagerDelegate::HandleCommand(
     DevToolsAgentHost* agent_host,
     content::DevToolsAgentHostClient* client,
-    std::unique_ptr<base::DictionaryValue> command_dict,
+    const std::string& method,
     const std::string& message,
     NotHandledCallback callback) {
-  DCHECK(sessions_.find(client) != sessions_.end());
-  sessions_[client]->HandleCommand(std::move(command_dict), message,
-                                   std::move(callback));
+  if (sessions_.find(client) == sessions_.end()) {
+    std::move(callback).Run(message);
+    // This should not happen, but happens. NOTREACHED tries to get
+    // a repro in some test.
+    NOTREACHED();
+    return;
+  }
+  sessions_[client]->HandleCommand(method, message, std::move(callback));
 }
 
 std::string ChromeDevToolsManagerDelegate::GetTargetType(
@@ -168,7 +174,10 @@ bool ChromeDevToolsManagerDelegate::AllowInspection(
           profile->GetPrefs());
 #if defined(OS_CHROMEOS)
   // Do not create DevTools if it's disabled for primary profile.
-  if (Profile* primary_profile = ProfileManager::GetPrimaryUserProfile()) {
+  Profile* primary_profile = ProfileManager::GetPrimaryUserProfile();
+  if (primary_profile &&
+      policy::DeveloperToolsPolicyHandler::IsDevToolsAvailabilitySetByPolicy(
+          primary_profile->GetPrefs())) {
     availability =
         policy::DeveloperToolsPolicyHandler::GetMostRestrictiveAvailability(
             availability,
@@ -273,8 +282,8 @@ void ChromeDevToolsManagerDelegate::UpdateDeviceDiscovery() {
 
   bool equals = remote_locations.size() == remote_locations_.size();
   if (equals) {
-    RemoteLocations::iterator it1 = remote_locations.begin();
-    RemoteLocations::iterator it2 = remote_locations_.begin();
+    auto it1 = remote_locations.begin();
+    auto it2 = remote_locations_.begin();
     while (it1 != remote_locations.end()) {
       DCHECK(it2 != remote_locations_.end());
       if (!(*it1).Equals(*it2))
@@ -304,4 +313,12 @@ void ChromeDevToolsManagerDelegate::UpdateDeviceDiscovery() {
                    base::Unretained(this))));
   }
   remote_locations_.swap(remote_locations);
+}
+
+void ChromeDevToolsManagerDelegate::ResetAndroidDeviceManagerForTesting() {
+  device_manager_.reset();
+
+  // We also need |device_discovery_| to go away because there may be a pending
+  // task using a raw pointer to the DeviceManager we just deleted.
+  device_discovery_.reset();
 }

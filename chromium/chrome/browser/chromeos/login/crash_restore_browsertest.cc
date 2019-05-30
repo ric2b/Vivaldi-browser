@@ -24,7 +24,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -176,7 +176,7 @@ class CrashRestoreComplexTest : public CrashRestoreSimpleTest {
       auto user_dict = std::make_unique<base::DictionaryValue>();
       user_dict->SetString("account_type", "google");
       user_dict->SetString("email", user_id);
-      user_dict->SetString("gaia_id", base::IntToString(gaia_id++));
+      user_dict->SetString("gaia_id", base::NumberToString(gaia_id++));
       known_users_list->Append(std::move(user_dict));
     }
     local_state.SetList("KnownUsers", std::move(known_users_list));

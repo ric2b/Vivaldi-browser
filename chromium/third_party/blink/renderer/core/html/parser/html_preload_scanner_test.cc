@@ -20,6 +20,7 @@
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_response.h"
 #include "third_party/blink/renderer/platform/loader/fetch/client_hints_preferences.h"
+#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 
 namespace blink {
@@ -29,7 +30,7 @@ struct PreloadScannerTestCase {
   const char* input_html;
   const char* preloaded_url;  // Or nullptr if no preload is expected.
   const char* output_base_url;
-  Resource::Type type;
+  ResourceType type;
   int resource_width;
   ClientHintsPreferences preferences;
 };
@@ -46,19 +47,25 @@ struct ReferrerPolicyTestCase {
   const char* input_html;
   const char* preloaded_url;  // Or nullptr if no preload is expected.
   const char* output_base_url;
-  Resource::Type type;
+  ResourceType type;
   int resource_width;
-  ReferrerPolicy referrer_policy;
+  network::mojom::ReferrerPolicy referrer_policy;
   // Expected referrer header of the preload request, or nullptr if the header
   // shouldn't be checked (and no network request should be created).
   const char* expected_referrer;
 };
 
-struct CORSTestCase {
+struct CorsTestCase {
   const char* base_url;
   const char* input_html;
   network::mojom::FetchRequestMode request_mode;
   network::mojom::FetchCredentialsMode credentials_mode;
+};
+
+struct CSPTestCase {
+  const char* base_url;
+  const char* input_html;
+  bool should_see_csp_tag;
 };
 
 struct NonceTestCase {
@@ -79,21 +86,26 @@ struct IntegrityTestCase {
   const char* input_html;
 };
 
+struct LazyImageLoadTestCase {
+  const char* input_html;
+  bool is_lazyload_image_disabled;
+};
+
 class HTMLMockHTMLResourcePreloader : public ResourcePreloader {
  public:
-  void PreloadRequestVerification(Resource::Type type,
+  void PreloadRequestVerification(ResourceType type,
                                   const char* url,
                                   const char* base_url,
                                   int width,
                                   const ClientHintsPreferences& preferences) {
     if (!url) {
-      EXPECT_FALSE(preload_request_);
+      EXPECT_FALSE(preload_request_) << preload_request_->ResourceURL();
       return;
     }
     EXPECT_NE(nullptr, preload_request_.get());
     if (preload_request_) {
       EXPECT_FALSE(preload_request_->IsPreconnect());
-      EXPECT_EQ(type, preload_request_->ResourceType());
+      EXPECT_EQ(type, preload_request_->GetResourceType());
       EXPECT_STREQ(url, preload_request_->ResourceURL().Ascii().data());
       EXPECT_STREQ(base_url,
                    preload_request_->BaseURL().GetString().Ascii().data());
@@ -112,23 +124,25 @@ class HTMLMockHTMLResourcePreloader : public ResourcePreloader {
     }
   }
 
-  void PreloadRequestVerification(Resource::Type type,
-                                  const char* url,
-                                  const char* base_url,
-                                  int width,
-                                  ReferrerPolicy referrer_policy) {
+  void PreloadRequestVerification(
+      ResourceType type,
+      const char* url,
+      const char* base_url,
+      int width,
+      network::mojom::ReferrerPolicy referrer_policy) {
     PreloadRequestVerification(type, url, base_url, width,
                                ClientHintsPreferences());
     EXPECT_EQ(referrer_policy, preload_request_->GetReferrerPolicy());
   }
 
-  void PreloadRequestVerification(Resource::Type type,
-                                  const char* url,
-                                  const char* base_url,
-                                  int width,
-                                  ReferrerPolicy referrer_policy,
-                                  Document* document,
-                                  const char* expected_referrer) {
+  void PreloadRequestVerification(
+      ResourceType type,
+      const char* url,
+      const char* base_url,
+      int width,
+      network::mojom::ReferrerPolicy referrer_policy,
+      Document* document,
+      const char* expected_referrer) {
     PreloadRequestVerification(type, url, base_url, width, referrer_policy);
     Resource* resource = preload_request_->Start(document);
     ASSERT_TRUE(resource);
@@ -145,7 +159,7 @@ class HTMLMockHTMLResourcePreloader : public ResourcePreloader {
     }
   }
 
-  void CORSRequestVerification(
+  void CorsRequestVerification(
       Document* document,
       network::mojom::FetchRequestMode request_mode,
       network::mojom::FetchCredentialsMode credentials_mode) {
@@ -177,6 +191,12 @@ class HTMLMockHTMLResourcePreloader : public ResourcePreloader {
       actual = preload_request_->IntegrityMetadataForTestingOnly().size();
       EXPECT_EQ(expected, actual);
     }
+  }
+
+  void LazyImageLoadDisableVerification(bool is_lazyload_image_disabled) {
+    ASSERT_TRUE(preload_request_.get());
+    EXPECT_EQ(preload_request_->IsLazyloadImageDisabledForTesting(),
+              is_lazyload_image_disabled);
   }
 
  protected:
@@ -213,17 +233,17 @@ class HTMLPreloadScannerTest : public PageTestBase {
     data.primary_pointer_type = kPointerTypeFine;
     data.default_font_size = 16;
     data.three_d_enabled = true;
-    data.media_type = MediaTypeNames::screen;
+    data.media_type = media_type_names::kScreen;
     data.strict_mode = true;
     data.display_mode = kWebDisplayModeBrowser;
     return data;
   }
 
-  void RunSetUp(
-      ViewportState viewport_state,
-      PreloadState preload_state = kPreloadEnabled,
-      ReferrerPolicy document_referrer_policy = kReferrerPolicyDefault,
-      bool use_secure_document_url = false) {
+  void RunSetUp(ViewportState viewport_state,
+                PreloadState preload_state = kPreloadEnabled,
+                network::mojom::ReferrerPolicy document_referrer_policy =
+                    network::mojom::ReferrerPolicy::kDefault,
+                bool use_secure_document_url = false) {
     HTMLParserOptions options(&GetDocument());
     KURL document_url = KURL("http://whatever.test/");
     if (use_secure_document_url)
@@ -249,10 +269,12 @@ class HTMLPreloadScannerTest : public PageTestBase {
   }
 
   void Test(PreloadScannerTestCase test_case) {
+    SCOPED_TRACE(test_case.input_html);
     HTMLMockHTMLResourcePreloader preloader;
     KURL base_url(test_case.base_url);
     scanner_->AppendToEnd(String(test_case.input_html));
-    PreloadRequestStream requests = scanner_->Scan(base_url, nullptr);
+    PreloadRequestStream requests =
+        scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
     preloader.TakeAndPreload(requests);
 
     preloader.PreloadRequestVerification(
@@ -264,7 +286,8 @@ class HTMLPreloadScannerTest : public PageTestBase {
     HTMLMockHTMLResourcePreloader preloader;
     KURL base_url(test_case.base_url);
     scanner_->AppendToEnd(String(test_case.input_html));
-    PreloadRequestStream requests = scanner_->Scan(base_url, nullptr);
+    PreloadRequestStream requests =
+        scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
     preloader.TakeAndPreload(requests);
     preloader.PreconnectRequestVerification(test_case.preconnected_host,
                                             test_case.cross_origin);
@@ -274,7 +297,8 @@ class HTMLPreloadScannerTest : public PageTestBase {
     HTMLMockHTMLResourcePreloader preloader;
     KURL base_url(test_case.base_url);
     scanner_->AppendToEnd(String(test_case.input_html));
-    PreloadRequestStream requests = scanner_->Scan(base_url, nullptr);
+    PreloadRequestStream requests =
+        scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
     preloader.TakeAndPreload(requests);
 
     if (test_case.expected_referrer) {
@@ -289,24 +313,33 @@ class HTMLPreloadScannerTest : public PageTestBase {
     }
   }
 
-  void Test(CORSTestCase test_case) {
+  void Test(CorsTestCase test_case) {
     HTMLMockHTMLResourcePreloader preloader;
     KURL base_url(test_case.base_url);
     scanner_->AppendToEnd(String(test_case.input_html));
-    PreloadRequestStream requests = scanner_->Scan(base_url, nullptr);
+    PreloadRequestStream requests =
+        scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
     preloader.TakeAndPreload(requests);
-
-    preloader.CORSRequestVerification(&GetDocument(), test_case.request_mode,
+    preloader.CorsRequestVerification(&GetDocument(), test_case.request_mode,
                                       test_case.credentials_mode);
+  }
+
+  void Test(CSPTestCase test_case) {
+    HTMLMockHTMLResourcePreloader preloader;
+    KURL base_url(test_case.base_url);
+    seen_csp_meta_tag_ = false;
+    scanner_->AppendToEnd(String(test_case.input_html));
+    scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
+    EXPECT_EQ(test_case.should_see_csp_tag, seen_csp_meta_tag_);
   }
 
   void Test(NonceTestCase test_case) {
     HTMLMockHTMLResourcePreloader preloader;
     KURL base_url(test_case.base_url);
     scanner_->AppendToEnd(String(test_case.input_html));
-    PreloadRequestStream requests = scanner_->Scan(base_url, nullptr);
+    PreloadRequestStream requests =
+        scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
     preloader.TakeAndPreload(requests);
-
     preloader.NonceRequestVerification(test_case.nonce);
   }
 
@@ -314,7 +347,8 @@ class HTMLPreloadScannerTest : public PageTestBase {
     HTMLMockHTMLResourcePreloader preloader;
     KURL base_url(test_case.base_url);
     scanner_->AppendToEnd(String(test_case.input_html));
-    PreloadRequestStream requests = scanner_->Scan(base_url, nullptr);
+    PreloadRequestStream requests =
+        scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
     preloader.TakeAndPreload(requests);
 
     preloader.ContextVerification(test_case.is_image_set);
@@ -325,65 +359,79 @@ class HTMLPreloadScannerTest : public PageTestBase {
     HTMLMockHTMLResourcePreloader preloader;
     KURL base_url("http://example.test/");
     scanner_->AppendToEnd(String(test_case.input_html));
-    PreloadRequestStream requests = scanner_->Scan(base_url, nullptr);
+    PreloadRequestStream requests =
+        scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
     preloader.TakeAndPreload(requests);
 
     preloader.CheckNumberOfIntegrityConstraints(
         test_case.number_of_integrity_metadata_found);
   }
 
+  void Test(LazyImageLoadTestCase test_case) {
+    SCOPED_TRACE(test_case.input_html);
+    HTMLMockHTMLResourcePreloader preloader;
+    KURL base_url("http://example.test/");
+    scanner_->AppendToEnd(String(test_case.input_html));
+    PreloadRequestStream requests =
+        scanner_->Scan(base_url, nullptr, seen_csp_meta_tag_);
+    preloader.TakeAndPreload(requests);
+    preloader.LazyImageLoadDisableVerification(
+        test_case.is_lazyload_image_disabled);
+  }
+
  private:
   std::unique_ptr<HTMLPreloadScanner> scanner_;
+  bool seen_csp_meta_tag_ = false;
 };
 
 TEST_F(HTMLPreloadScannerTest, testImages) {
   PreloadScannerTestCase test_cases[] = {
       {"http://example.test", "<img src='bla.gif'>", "bla.gif",
-       "http://example.test/", Resource::kImage, 0},
+       "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test", "<img srcset='bla.gif 320w, blabla.gif 640w'>",
-       "blabla.gif", "http://example.test/", Resource::kImage, 0},
+       "blabla.gif", "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test", "<img sizes='50vw' src='bla.gif'>", "bla.gif",
-       "http://example.test/", Resource::kImage, 250},
+       "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 1x'>", "bla2.gif",
-       "http://example.test/", Resource::kImage, 250},
+       "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 0.5x'>", "bla.gif",
-       "http://example.test/", Resource::kImage, 250},
+       "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 100w'>", "bla2.gif",
-       "http://example.test/", Resource::kImage, 250},
+       "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 100w, bla3.gif 250w'>",
-       "bla3.gif", "http://example.test/", Resource::kImage, 250},
+       "bla3.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 100w, bla3.gif 250w, "
        "bla4.gif 500w'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 250},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img src='bla.gif' srcset='bla2.gif 100w, bla3.gif 250w, bla4.gif "
        "500w' sizes='50vw'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 250},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img src='bla.gif' sizes='50vw' srcset='bla2.gif 100w, bla3.gif 250w, "
        "bla4.gif 500w'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 250},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img sizes='50vw' srcset='bla2.gif 100w, bla3.gif 250w, bla4.gif 500w' "
        "src='bla.gif'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 250},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img srcset='bla2.gif 100w, bla3.gif 250w, bla4.gif 500w' "
        "src='bla.gif' sizes='50vw'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 250},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img srcset='bla2.gif 100w, bla3.gif 250w, bla4.gif 500w' sizes='50vw' "
        "src='bla.gif'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 250},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img src='bla.gif' srcset='bla2.gif 100w, bla3.gif 250w, bla4.gif "
        "500w'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 0},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 0},
   };
 
   for (const auto& test_case : test_cases)
@@ -395,47 +443,47 @@ TEST_F(HTMLPreloadScannerTest, testImagesWithViewport) {
       {"http://example.test",
        "<meta name=viewport content='width=160'><img srcset='bla.gif 320w, "
        "blabla.gif 640w'>",
-       "bla.gif", "http://example.test/", Resource::kImage, 0},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test", "<img src='bla.gif'>", "bla.gif",
-       "http://example.test/", Resource::kImage, 0},
+       "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test", "<img sizes='50vw' src='bla.gif'>", "bla.gif",
-       "http://example.test/", Resource::kImage, 80},
+       "http://example.test/", ResourceType::kImage, 80},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 1x'>", "bla2.gif",
-       "http://example.test/", Resource::kImage, 80},
+       "http://example.test/", ResourceType::kImage, 80},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 0.5x'>", "bla.gif",
-       "http://example.test/", Resource::kImage, 80},
+       "http://example.test/", ResourceType::kImage, 80},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 160w'>", "bla2.gif",
-       "http://example.test/", Resource::kImage, 80},
+       "http://example.test/", ResourceType::kImage, 80},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 160w, bla3.gif 250w'>",
-       "bla2.gif", "http://example.test/", Resource::kImage, 80},
+       "bla2.gif", "http://example.test/", ResourceType::kImage, 80},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 160w, bla3.gif 250w, "
        "bla4.gif 500w'>",
-       "bla2.gif", "http://example.test/", Resource::kImage, 80},
+       "bla2.gif", "http://example.test/", ResourceType::kImage, 80},
       {"http://example.test",
        "<img src='bla.gif' srcset='bla2.gif 160w, bla3.gif 250w, bla4.gif "
        "500w' sizes='50vw'>",
-       "bla2.gif", "http://example.test/", Resource::kImage, 80},
+       "bla2.gif", "http://example.test/", ResourceType::kImage, 80},
       {"http://example.test",
        "<img src='bla.gif' sizes='50vw' srcset='bla2.gif 160w, bla3.gif 250w, "
        "bla4.gif 500w'>",
-       "bla2.gif", "http://example.test/", Resource::kImage, 80},
+       "bla2.gif", "http://example.test/", ResourceType::kImage, 80},
       {"http://example.test",
        "<img sizes='50vw' srcset='bla2.gif 160w, bla3.gif 250w, bla4.gif 500w' "
        "src='bla.gif'>",
-       "bla2.gif", "http://example.test/", Resource::kImage, 80},
+       "bla2.gif", "http://example.test/", ResourceType::kImage, 80},
       {"http://example.test",
        "<img srcset='bla2.gif 160w, bla3.gif 250w, bla4.gif 500w' "
        "src='bla.gif' sizes='50vw'>",
-       "bla2.gif", "http://example.test/", Resource::kImage, 80},
+       "bla2.gif", "http://example.test/", ResourceType::kImage, 80},
       {"http://example.test",
        "<img srcset='bla2.gif 160w, bla3.gif 250w, bla4.gif 500w' sizes='50vw' "
        "src='bla.gif'>",
-       "bla2.gif", "http://example.test/", Resource::kImage, 80},
+       "bla2.gif", "http://example.test/", ResourceType::kImage, 80},
   };
 
   for (const auto& test_case : test_cases)
@@ -447,47 +495,47 @@ TEST_F(HTMLPreloadScannerTest, testImagesWithViewportDeviceWidth) {
       {"http://example.test",
        "<meta name=viewport content='width=device-width'><img srcset='bla.gif "
        "320w, blabla.gif 640w'>",
-       "blabla.gif", "http://example.test/", Resource::kImage, 0},
+       "blabla.gif", "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test", "<img src='bla.gif'>", "bla.gif",
-       "http://example.test/", Resource::kImage, 0},
+       "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test", "<img sizes='50vw' src='bla.gif'>", "bla.gif",
-       "http://example.test/", Resource::kImage, 350},
+       "http://example.test/", ResourceType::kImage, 350},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 1x'>", "bla2.gif",
-       "http://example.test/", Resource::kImage, 350},
+       "http://example.test/", ResourceType::kImage, 350},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 0.5x'>", "bla.gif",
-       "http://example.test/", Resource::kImage, 350},
+       "http://example.test/", ResourceType::kImage, 350},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 160w'>", "bla2.gif",
-       "http://example.test/", Resource::kImage, 350},
+       "http://example.test/", ResourceType::kImage, 350},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 160w, bla3.gif 250w'>",
-       "bla3.gif", "http://example.test/", Resource::kImage, 350},
+       "bla3.gif", "http://example.test/", ResourceType::kImage, 350},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 160w, bla3.gif 250w, "
        "bla4.gif 500w'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 350},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 350},
       {"http://example.test",
        "<img src='bla.gif' srcset='bla2.gif 160w, bla3.gif 250w, bla4.gif "
        "500w' sizes='50vw'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 350},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 350},
       {"http://example.test",
        "<img src='bla.gif' sizes='50vw' srcset='bla2.gif 160w, bla3.gif 250w, "
        "bla4.gif 500w'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 350},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 350},
       {"http://example.test",
        "<img sizes='50vw' srcset='bla2.gif 160w, bla3.gif 250w, bla4.gif 500w' "
        "src='bla.gif'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 350},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 350},
       {"http://example.test",
        "<img srcset='bla2.gif 160w, bla3.gif 250w, bla4.gif 500w' "
        "src='bla.gif' sizes='50vw'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 350},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 350},
       {"http://example.test",
        "<img srcset='bla2.gif 160w, bla3.gif 250w, bla4.gif 500w' sizes='50vw' "
        "src='bla.gif'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 350},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 350},
   };
 
   for (const auto& test_case : test_cases)
@@ -499,47 +547,47 @@ TEST_F(HTMLPreloadScannerTest, testImagesWithViewportDisabled) {
   PreloadScannerTestCase test_cases[] = {
       {"http://example.test",
        "<meta name=viewport content='width=160'><img src='bla.gif'>", "bla.gif",
-       "http://example.test/", Resource::kImage, 0},
+       "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test", "<img srcset='bla.gif 320w, blabla.gif 640w'>",
-       "blabla.gif", "http://example.test/", Resource::kImage, 0},
+       "blabla.gif", "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test", "<img sizes='50vw' src='bla.gif'>", "bla.gif",
-       "http://example.test/", Resource::kImage, 250},
+       "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 1x'>", "bla2.gif",
-       "http://example.test/", Resource::kImage, 250},
+       "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 0.5x'>", "bla.gif",
-       "http://example.test/", Resource::kImage, 250},
+       "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 100w'>", "bla2.gif",
-       "http://example.test/", Resource::kImage, 250},
+       "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 100w, bla3.gif 250w'>",
-       "bla3.gif", "http://example.test/", Resource::kImage, 250},
+       "bla3.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img sizes='50vw' src='bla.gif' srcset='bla2.gif 100w, bla3.gif 250w, "
        "bla4.gif 500w'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 250},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img src='bla.gif' srcset='bla2.gif 100w, bla3.gif 250w, bla4.gif "
        "500w' sizes='50vw'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 250},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img src='bla.gif' sizes='50vw' srcset='bla2.gif 100w, bla3.gif 250w, "
        "bla4.gif 500w'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 250},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img sizes='50vw' srcset='bla2.gif 100w, bla3.gif 250w, bla4.gif 500w' "
        "src='bla.gif'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 250},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img srcset='bla2.gif 100w, bla3.gif 250w, bla4.gif 500w' "
        "src='bla.gif' sizes='50vw'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 250},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<img srcset='bla2.gif 100w, bla3.gif 250w, bla4.gif 500w' sizes='50vw' "
        "src='bla.gif'>",
-       "bla4.gif", "http://example.test/", Resource::kImage, 250},
+       "bla4.gif", "http://example.test/", ResourceType::kImage, 250},
   };
 
   for (const auto& test_case : test_cases)
@@ -550,11 +598,11 @@ TEST_F(HTMLPreloadScannerTest, testViewportNoContent) {
   PreloadScannerTestCase test_cases[] = {
       {"http://example.test",
        "<meta name=viewport><img srcset='bla.gif 320w, blabla.gif 640w'>",
-       "blabla.gif", "http://example.test/", Resource::kImage, 0},
+       "blabla.gif", "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test",
        "<meta name=viewport content=sdkbsdkjnejjha><img srcset='bla.gif 320w, "
        "blabla.gif 640w'>",
-       "blabla.gif", "http://example.test/", Resource::kImage, 0},
+       "blabla.gif", "http://example.test/", ResourceType::kImage, 0},
   };
 
   for (const auto& test_case : test_cases)
@@ -578,52 +626,53 @@ TEST_F(HTMLPreloadScannerTest, testMetaAcceptCH) {
       {"http://example.test",
        "<meta http-equiv='accept-ch' content='bla'><img srcset='bla.gif 320w, "
        "blabla.gif 640w'>",
-       "blabla.gif", "http://example.test/", Resource::kImage, 0},
+       "blabla.gif", "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test",
        "<meta http-equiv='accept-ch' content='dprw'><img srcset='bla.gif 320w, "
        "blabla.gif 640w'>",
-       "blabla.gif", "http://example.test/", Resource::kImage, 0},
+       "blabla.gif", "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test",
        "<meta http-equiv='accept-ch'><img srcset='bla.gif 320w, blabla.gif "
        "640w'>",
-       "blabla.gif", "http://example.test/", Resource::kImage, 0},
+       "blabla.gif", "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test",
        "<meta http-equiv='accept-ch' content='dpr \t'><img srcset='bla.gif "
        "320w, blabla.gif 640w'>",
-       "blabla.gif", "http://example.test/", Resource::kImage, 0, dpr},
+       "blabla.gif", "http://example.test/", ResourceType::kImage, 0, dpr},
       {"http://example.test",
        "<meta http-equiv='accept-ch' content='bla,dpr \t'><img srcset='bla.gif "
        "320w, blabla.gif 640w'>",
-       "blabla.gif", "http://example.test/", Resource::kImage, 0, dpr},
+       "blabla.gif", "http://example.test/", ResourceType::kImage, 0, dpr},
       {"http://example.test",
        "<meta http-equiv='accept-ch' content='  width  '><img sizes='100vw' "
        "srcset='bla.gif 320w, blabla.gif 640w'>",
-       "blabla.gif", "http://example.test/", Resource::kImage, 500,
+       "blabla.gif", "http://example.test/", ResourceType::kImage, 500,
        resource_width},
       {"http://example.test",
        "<meta http-equiv='accept-ch' content='  width  , wutever'><img "
        "sizes='300px' srcset='bla.gif 320w, blabla.gif 640w'>",
-       "blabla.gif", "http://example.test/", Resource::kImage, 300,
+       "blabla.gif", "http://example.test/", ResourceType::kImage, 300,
        resource_width},
       {"http://example.test",
        "<meta http-equiv='accept-ch' content='  viewport-width  '><img "
        "srcset='bla.gif 320w, blabla.gif 640w'>",
-       "blabla.gif", "http://example.test/", Resource::kImage, 0,
+       "blabla.gif", "http://example.test/", ResourceType::kImage, 0,
        viewport_width},
       {"http://example.test",
        "<meta http-equiv='accept-ch' content='  viewport-width  , "
        "wutever'><img srcset='bla.gif 320w, blabla.gif 640w'>",
-       "blabla.gif", "http://example.test/", Resource::kImage, 0,
+       "blabla.gif", "http://example.test/", ResourceType::kImage, 0,
        viewport_width},
       {"http://example.test",
        "<meta http-equiv='accept-ch' content='  viewport-width  ,width, "
        "wutever, dpr \t'><img sizes='90vw' srcset='bla.gif 320w, blabla.gif "
        "640w'>",
-       "blabla.gif", "http://example.test/", Resource::kImage, 450, all},
+       "blabla.gif", "http://example.test/", ResourceType::kImage, 450, all},
   };
 
   for (const auto& test_case : test_cases) {
-    RunSetUp(kViewportDisabled, kPreloadEnabled, kReferrerPolicyDefault,
+    RunSetUp(kViewportDisabled, kPreloadEnabled,
+             network::mojom::ReferrerPolicy::kDefault,
              true /* use_secure_document_url */);
     Test(test_case);
   }
@@ -642,7 +691,7 @@ TEST_F(HTMLPreloadScannerTest, testMetaAcceptCHInsecureDocument) {
       "640w'>",
       "blabla.gif",
       "http://example.test/",
-      Resource::kImage,
+      ResourceType::kImage,
       450};
 
   const PreloadScannerTestCase expect_client_hint = {
@@ -652,17 +701,19 @@ TEST_F(HTMLPreloadScannerTest, testMetaAcceptCHInsecureDocument) {
       "640w'>",
       "blabla.gif",
       "http://example.test/",
-      Resource::kImage,
+      ResourceType::kImage,
       450,
       all};
 
   // For an insecure document, client hint should not be attached.
-  RunSetUp(kViewportDisabled, kPreloadEnabled, kReferrerPolicyDefault,
+  RunSetUp(kViewportDisabled, kPreloadEnabled,
+           network::mojom::ReferrerPolicy::kDefault,
            false /* use_secure_document_url */);
   Test(expect_no_client_hint);
 
   // For a secure document, client hint should be attached.
-  RunSetUp(kViewportDisabled, kPreloadEnabled, kReferrerPolicyDefault,
+  RunSetUp(kViewportDisabled, kPreloadEnabled,
+           network::mojom::ReferrerPolicy::kDefault,
            true /* use_secure_document_url */);
   Test(expect_client_hint);
 }
@@ -707,61 +758,61 @@ TEST_F(HTMLPreloadScannerTest, testPicture) {
   PreloadScannerTestCase test_cases[] = {
       {"http://example.test",
        "<picture><source srcset='srcset_bla.gif'><img src='bla.gif'></picture>",
-       "srcset_bla.gif", "http://example.test/", Resource::kImage, 0},
+       "srcset_bla.gif", "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test",
        "<picture><source sizes='50vw' srcset='srcset_bla.gif'><img "
        "src='bla.gif'></picture>",
-       "srcset_bla.gif", "http://example.test/", Resource::kImage, 250},
+       "srcset_bla.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<picture><source sizes='50vw' srcset='srcset_bla.gif'><img "
        "sizes='50vw' src='bla.gif'></picture>",
-       "srcset_bla.gif", "http://example.test/", Resource::kImage, 250},
+       "srcset_bla.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<picture><source srcset='srcset_bla.gif' sizes='50vw'><img "
        "sizes='50vw' src='bla.gif'></picture>",
-       "srcset_bla.gif", "http://example.test/", Resource::kImage, 250},
+       "srcset_bla.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<picture><source srcset='srcset_bla.gif'><img sizes='50vw' "
        "src='bla.gif'></picture>",
-       "srcset_bla.gif", "http://example.test/", Resource::kImage, 0},
+       "srcset_bla.gif", "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test",
        "<picture><source media='(max-width: 900px)' "
        "srcset='srcset_bla.gif'><img sizes='50vw' srcset='bla.gif "
        "500w'></picture>",
-       "srcset_bla.gif", "http://example.test/", Resource::kImage, 0},
+       "srcset_bla.gif", "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test",
        "<picture><source media='(max-width: 400px)' "
        "srcset='srcset_bla.gif'><img sizes='50vw' srcset='bla.gif "
        "500w'></picture>",
-       "bla.gif", "http://example.test/", Resource::kImage, 250},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<picture><source type='image/webp' srcset='srcset_bla.gif'><img "
        "sizes='50vw' srcset='bla.gif 500w'></picture>",
-       "srcset_bla.gif", "http://example.test/", Resource::kImage, 0},
+       "srcset_bla.gif", "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test",
        "<picture><source type='image/jp2' srcset='srcset_bla.gif'><img "
        "sizes='50vw' srcset='bla.gif 500w'></picture>",
-       "bla.gif", "http://example.test/", Resource::kImage, 250},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<picture><source media='(max-width: 900px)' type='image/jp2' "
        "srcset='srcset_bla.gif'><img sizes='50vw' srcset='bla.gif "
        "500w'></picture>",
-       "bla.gif", "http://example.test/", Resource::kImage, 250},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<picture><source type='image/webp' media='(max-width: 400px)' "
        "srcset='srcset_bla.gif'><img sizes='50vw' srcset='bla.gif "
        "500w'></picture>",
-       "bla.gif", "http://example.test/", Resource::kImage, 250},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<picture><source type='image/jp2' media='(max-width: 900px)' "
        "srcset='srcset_bla.gif'><img sizes='50vw' srcset='bla.gif "
        "500w'></picture>",
-       "bla.gif", "http://example.test/", Resource::kImage, 250},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 250},
       {"http://example.test",
        "<picture><source media='(max-width: 400px)' type='image/webp' "
        "srcset='srcset_bla.gif'><img sizes='50vw' srcset='bla.gif "
        "500w'></picture>",
-       "bla.gif", "http://example.test/", Resource::kImage, 250},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 250},
   };
 
   for (const auto& test_case : test_cases)
@@ -784,103 +835,122 @@ TEST_F(HTMLPreloadScannerTest, testContext) {
 TEST_F(HTMLPreloadScannerTest, testReferrerPolicy) {
   ReferrerPolicyTestCase test_cases[] = {
       {"http://example.test", "<img src='bla.gif'/>", "bla.gif",
-       "http://example.test/", Resource::kImage, 0, kReferrerPolicyDefault},
+       "http://example.test/", ResourceType::kImage, 0,
+       network::mojom::ReferrerPolicy::kDefault},
       {"http://example.test", "<img referrerpolicy='origin' src='bla.gif'/>",
-       "bla.gif", "http://example.test/", Resource::kImage, 0,
-       kReferrerPolicyOrigin, nullptr},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 0,
+       network::mojom::ReferrerPolicy::kOrigin, nullptr},
       {"http://example.test",
        "<meta name='referrer' content='not-a-valid-policy'><img "
        "src='bla.gif'/>",
-       "bla.gif", "http://example.test/", Resource::kImage, 0,
-       kReferrerPolicyDefault, nullptr},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 0,
+       network::mojom::ReferrerPolicy::kDefault, nullptr},
       {"http://example.test",
        "<img referrerpolicy='origin' referrerpolicy='origin-when-cross-origin' "
        "src='bla.gif'/>",
-       "bla.gif", "http://example.test/", Resource::kImage, 0,
-       kReferrerPolicyOrigin, nullptr},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 0,
+       network::mojom::ReferrerPolicy::kOrigin, nullptr},
       {"http://example.test",
        "<img referrerpolicy='not-a-valid-policy' src='bla.gif'/>", "bla.gif",
-       "http://example.test/", Resource::kImage, 0, kReferrerPolicyDefault,
-       nullptr},
+       "http://example.test/", ResourceType::kImage, 0,
+       network::mojom::ReferrerPolicy::kDefault, nullptr},
       {"http://example.test",
        "<link rel=preload as=image referrerpolicy='origin-when-cross-origin' "
        "href='bla.gif'/>",
-       "bla.gif", "http://example.test/", Resource::kImage, 0,
-       kReferrerPolicyOriginWhenCrossOrigin, nullptr},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 0,
+       network::mojom::ReferrerPolicy::kOriginWhenCrossOrigin, nullptr},
       {"http://example.test",
        "<link rel=preload as=image referrerpolicy='same-origin' "
        "href='bla.gif'/>",
-       "bla.gif", "http://example.test/", Resource::kImage, 0,
-       kReferrerPolicySameOrigin, nullptr},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 0,
+       network::mojom::ReferrerPolicy::kSameOrigin, nullptr},
       {"http://example.test",
        "<link rel=preload as=image referrerpolicy='strict-origin' "
        "href='bla.gif'/>",
-       "bla.gif", "http://example.test/", Resource::kImage, 0,
-       kReferrerPolicyStrictOrigin, nullptr},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 0,
+       network::mojom::ReferrerPolicy::kStrictOrigin, nullptr},
       {"http://example.test",
        "<link rel=preload as=image "
        "referrerpolicy='strict-origin-when-cross-origin' "
        "href='bla.gif'/>",
-       "bla.gif", "http://example.test/", Resource::kImage, 0,
-       kReferrerPolicyStrictOriginWhenCrossOrigin, nullptr},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 0,
+       network::mojom::ReferrerPolicy::
+           kNoReferrerWhenDowngradeOriginWhenCrossOrigin,
+       nullptr},
       {"http://example.test",
        "<link rel='stylesheet' href='sheet.css' type='text/css'>", "sheet.css",
-       "http://example.test/", Resource::kCSSStyleSheet, 0,
-       kReferrerPolicyDefault, nullptr},
+       "http://example.test/", ResourceType::kCSSStyleSheet, 0,
+       network::mojom::ReferrerPolicy::kDefault, nullptr},
       {"http://example.test",
        "<link rel=preload as=image referrerpolicy='origin' "
        "referrerpolicy='origin-when-cross-origin' href='bla.gif'/>",
-       "bla.gif", "http://example.test/", Resource::kImage, 0,
-       kReferrerPolicyOrigin, nullptr},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 0,
+       network::mojom::ReferrerPolicy::kOrigin, nullptr},
       {"http://example.test",
        "<meta name='referrer' content='no-referrer'><img "
        "referrerpolicy='origin' src='bla.gif'/>",
-       "bla.gif", "http://example.test/", Resource::kImage, 0,
-       kReferrerPolicyOrigin, nullptr},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 0,
+       network::mojom::ReferrerPolicy::kOrigin, nullptr},
       // The scanner's state is not reset between test cases, so all subsequent
       // test cases have a document referrer policy of no-referrer.
       {"http://example.test",
        "<link rel=preload as=image referrerpolicy='not-a-valid-policy' "
        "href='bla.gif'/>",
-       "bla.gif", "http://example.test/", Resource::kImage, 0,
-       kReferrerPolicyNever, nullptr},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 0,
+       network::mojom::ReferrerPolicy::kNever, nullptr},
       {"http://example.test",
        "<img referrerpolicy='not-a-valid-policy' src='bla.gif'/>", "bla.gif",
-       "http://example.test/", Resource::kImage, 0, kReferrerPolicyNever,
-       nullptr},
+       "http://example.test/", ResourceType::kImage, 0,
+       network::mojom::ReferrerPolicy::kNever, nullptr},
       {"http://example.test", "<img src='bla.gif'/>", "bla.gif",
-       "http://example.test/", Resource::kImage, 0, kReferrerPolicyNever,
-       nullptr}};
+       "http://example.test/", ResourceType::kImage, 0,
+       network::mojom::ReferrerPolicy::kNever, nullptr}};
 
   for (const auto& test_case : test_cases)
     Test(test_case);
 }
 
-TEST_F(HTMLPreloadScannerTest, testCORS) {
-  CORSTestCase test_cases[] = {
+TEST_F(HTMLPreloadScannerTest, testCors) {
+  CorsTestCase test_cases[] = {
       {"http://example.test", "<script src='/script'></script>",
-       network::mojom::FetchRequestMode::kNoCORS,
+       network::mojom::FetchRequestMode::kNoCors,
        network::mojom::FetchCredentialsMode::kInclude},
       {"http://example.test", "<script crossorigin src='/script'></script>",
-       network::mojom::FetchRequestMode::kCORS,
+       network::mojom::FetchRequestMode::kCors,
        network::mojom::FetchCredentialsMode::kSameOrigin},
       {"http://example.test",
        "<script crossorigin=use-credentials src='/script'></script>",
-       network::mojom::FetchRequestMode::kCORS,
+       network::mojom::FetchRequestMode::kCors,
        network::mojom::FetchCredentialsMode::kInclude},
       {"http://example.test", "<script type='module' src='/script'></script>",
-       network::mojom::FetchRequestMode::kCORS,
-       network::mojom::FetchCredentialsMode::kOmit},
+       network::mojom::FetchRequestMode::kCors,
+       network::mojom::FetchCredentialsMode::kSameOrigin},
       {"http://example.test",
        "<script type='module' crossorigin='anonymous' src='/script'></script>",
-       network::mojom::FetchRequestMode::kCORS,
+       network::mojom::FetchRequestMode::kCors,
        network::mojom::FetchCredentialsMode::kSameOrigin},
       {"http://example.test",
        "<script type='module' crossorigin='use-credentials' "
        "src='/script'></script>",
-       network::mojom::FetchRequestMode::kCORS,
+       network::mojom::FetchRequestMode::kCors,
        network::mojom::FetchCredentialsMode::kInclude},
   };
+
+  for (const auto& test_case : test_cases) {
+    SCOPED_TRACE(test_case.input_html);
+    Test(test_case);
+  }
+}
+
+TEST_F(HTMLPreloadScannerTest, testCSP) {
+  CSPTestCase test_cases[] = {
+      {"http://example.test",
+       "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src "
+       "https:\">",
+       true},
+      {"http://example.test",
+       "<meta name=\"viewport\" content=\"width=device-width\">", false},
+      {"http://example.test", "<img src=\"example.gif\">", false}};
 
   for (const auto& test_case : test_cases) {
     SCOPED_TRACE(test_case.input_html);
@@ -920,27 +990,28 @@ TEST_F(HTMLPreloadScannerTest, testNonce) {
 // Tests that a document-level referrer policy (e.g. one set by HTTP header) is
 // applied for preload requests.
 TEST_F(HTMLPreloadScannerTest, testReferrerPolicyOnDocument) {
-  RunSetUp(kViewportEnabled, kPreloadEnabled, kReferrerPolicyOrigin);
+  RunSetUp(kViewportEnabled, kPreloadEnabled,
+           network::mojom::ReferrerPolicy::kOrigin);
   ReferrerPolicyTestCase test_cases[] = {
       {"http://example.test", "<img src='blah.gif'/>", "blah.gif",
-       "http://example.test/", Resource::kImage, 0, kReferrerPolicyOrigin,
-       nullptr},
+       "http://example.test/", ResourceType::kImage, 0,
+       network::mojom::ReferrerPolicy::kOrigin, nullptr},
       {"http://example.test", "<style>@import url('blah.css');</style>",
-       "blah.css", "http://example.test/", Resource::kCSSStyleSheet, 0,
-       kReferrerPolicyOrigin, nullptr},
+       "blah.css", "http://example.test/", ResourceType::kCSSStyleSheet, 0,
+       network::mojom::ReferrerPolicy::kOrigin, nullptr},
       // Tests that a meta-delivered referrer policy with an unrecognized policy
       // value does not override the document's referrer policy.
       {"http://example.test",
        "<meta name='referrer' content='not-a-valid-policy'><img "
        "src='bla.gif'/>",
-       "bla.gif", "http://example.test/", Resource::kImage, 0,
-       kReferrerPolicyOrigin, nullptr},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 0,
+       network::mojom::ReferrerPolicy::kOrigin, nullptr},
       // Tests that a meta-delivered referrer policy with a valid policy value
       // does override the document's referrer policy.
       {"http://example.test",
        "<meta name='referrer' content='unsafe-url'><img src='bla.gif'/>",
-       "bla.gif", "http://example.test/", Resource::kImage, 0,
-       kReferrerPolicyAlways, nullptr},
+       "bla.gif", "http://example.test/", ResourceType::kImage, 0,
+       network::mojom::ReferrerPolicy::kAlways, nullptr},
   };
 
   for (const auto& test_case : test_cases)
@@ -950,48 +1021,53 @@ TEST_F(HTMLPreloadScannerTest, testReferrerPolicyOnDocument) {
 TEST_F(HTMLPreloadScannerTest, testLinkRelPreload) {
   PreloadScannerTestCase test_cases[] = {
       {"http://example.test", "<link rel=preload as=fetch href=bla>", "bla",
-       "http://example.test/", Resource::kRaw, 0},
+       "http://example.test/", ResourceType::kRaw, 0},
       {"http://example.test", "<link rel=preload href=bla as=script>", "bla",
-       "http://example.test/", Resource::kScript, 0},
+       "http://example.test/", ResourceType::kScript, 0},
       {"http://example.test",
        "<link rel=preload href=bla as=script type='script/foo'>", "bla",
-       "http://example.test/", Resource::kScript, 0},
+       "http://example.test/", ResourceType::kScript, 0},
       {"http://example.test", "<link rel=preload href=bla as=style>", "bla",
-       "http://example.test/", Resource::kCSSStyleSheet, 0},
+       "http://example.test/", ResourceType::kCSSStyleSheet, 0},
       {"http://example.test",
        "<link rel=preload href=bla as=style type='text/css'>", "bla",
-       "http://example.test/", Resource::kCSSStyleSheet, 0},
+       "http://example.test/", ResourceType::kCSSStyleSheet, 0},
       {"http://example.test",
        "<link rel=preload href=bla as=style type='text/bla'>", nullptr,
-       "http://example.test/", Resource::kCSSStyleSheet, 0},
+       "http://example.test/", ResourceType::kCSSStyleSheet, 0},
       {"http://example.test", "<link rel=preload href=bla as=image>", "bla",
-       "http://example.test/", Resource::kImage, 0},
+       "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test",
        "<link rel=preload href=bla as=image type='image/webp'>", "bla",
-       "http://example.test/", Resource::kImage, 0},
+       "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test",
        "<link rel=preload href=bla as=image type='image/bla'>", nullptr,
-       "http://example.test/", Resource::kImage, 0},
+       "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test", "<link rel=preload href=bla as=font>", "bla",
-       "http://example.test/", Resource::kFont, 0},
+       "http://example.test/", ResourceType::kFont, 0},
       {"http://example.test",
        "<link rel=preload href=bla as=font type='font/woff2'>", "bla",
-       "http://example.test/", Resource::kFont, 0},
+       "http://example.test/", ResourceType::kFont, 0},
       {"http://example.test",
        "<link rel=preload href=bla as=font type='font/bla'>", nullptr,
-       "http://example.test/", Resource::kFont, 0},
-      {"http://example.test", "<link rel=preload href=bla as=video>", "bla",
-       "http://example.test/", Resource::kVideo, 0},
+       "http://example.test/", ResourceType::kFont, 0},
+      // Until the preload cache is defined in terms of range requests and media
+      // fetches we can't reliably preload audio/video content and expect it to
+      // be served from the cache correctly. Until
+      // https://github.com/w3c/preload/issues/97 is resolved and implemented we
+      // need to disable these preloads.
+      {"http://example.test", "<link rel=preload href=bla as=video>", nullptr,
+       "http://example.test/", ResourceType::kVideo, 0},
       {"http://example.test", "<link rel=preload href=bla as=track>", "bla",
-       "http://example.test/", Resource::kTextTrack, 0},
+       "http://example.test/", ResourceType::kTextTrack, 0},
       {"http://example.test",
        "<link rel=preload href=bla as=image media=\"(max-width: 800px)\">",
-       "bla", "http://example.test/", Resource::kImage, 0},
+       "bla", "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test",
        "<link rel=preload href=bla as=image media=\"(max-width: 400px)\">",
-       nullptr, "http://example.test/", Resource::kImage, 0},
+       nullptr, "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test", "<link rel=preload href=bla>", nullptr,
-       "http://example.test/", Resource::kRaw, 0},
+       "http://example.test/", ResourceType::kRaw, 0},
   };
 
   for (const auto& test_case : test_cases)
@@ -1002,11 +1078,11 @@ TEST_F(HTMLPreloadScannerTest, testNoDataUrls) {
   PreloadScannerTestCase test_cases[] = {
       {"http://example.test",
        "<link rel=preload href='data:text/html,<p>data</data>'>", nullptr,
-       "http://example.test/", Resource::kRaw, 0},
+       "http://example.test/", ResourceType::kRaw, 0},
       {"http://example.test", "<img src='data:text/html,<p>data</data>'>",
-       nullptr, "http://example.test/", Resource::kImage, 0},
+       nullptr, "http://example.test/", ResourceType::kImage, 0},
       {"data:text/html,<a>anchor</a>", "<img src='#anchor'>", nullptr,
-       "http://example.test/", Resource::kImage, 0},
+       "http://example.test/", ResourceType::kImage, 0},
   };
 
   for (const auto& test_case : test_cases)
@@ -1019,42 +1095,42 @@ TEST_F(HTMLPreloadScannerTest, testScriptTypeAndLanguage) {
   PreloadScannerTestCase test_cases[] = {
       // Allow empty src and language attributes.
       {"http://example.test", "<script src='test.js'></script>", "test.js",
-       "http://example.test/", Resource::kScript, 0},
+       "http://example.test/", ResourceType::kScript, 0},
       {"http://example.test",
        "<script type='' language='' src='test.js'></script>", "test.js",
-       "http://example.test/", Resource::kScript, 0},
+       "http://example.test/", ResourceType::kScript, 0},
       // Allow standard language and type attributes.
       {"http://example.test",
        "<script type='text/javascript' src='test.js'></script>", "test.js",
-       "http://example.test/", Resource::kScript, 0},
+       "http://example.test/", ResourceType::kScript, 0},
       {"http://example.test",
        "<script type='text/javascript' language='javascript' "
        "src='test.js'></script>",
-       "test.js", "http://example.test/", Resource::kScript, 0},
+       "test.js", "http://example.test/", ResourceType::kScript, 0},
       // Allow legacy languages in the "language" attribute with an empty
       // type.
       {"http://example.test",
        "<script language='javascript1.1' src='test.js'></script>", "test.js",
-       "http://example.test/", Resource::kScript, 0},
+       "http://example.test/", ResourceType::kScript, 0},
       // Allow legacy languages in the "type" attribute.
       {"http://example.test",
        "<script type='javascript' src='test.js'></script>", "test.js",
-       "http://example.test/", Resource::kScript, 0},
+       "http://example.test/", ResourceType::kScript, 0},
       {"http://example.test",
        "<script type='javascript1.7' src='test.js'></script>", "test.js",
-       "http://example.test/", Resource::kScript, 0},
+       "http://example.test/", ResourceType::kScript, 0},
       // Do not allow invalid types in the "type" attribute.
       {"http://example.test", "<script type='invalid' src='test.js'></script>",
-       nullptr, "http://example.test/", Resource::kScript, 0},
+       nullptr, "http://example.test/", ResourceType::kScript, 0},
       {"http://example.test", "<script type='asdf' src='test.js'></script>",
-       nullptr, "http://example.test/", Resource::kScript, 0},
+       nullptr, "http://example.test/", ResourceType::kScript, 0},
       // Do not allow invalid languages.
       {"http://example.test",
        "<script language='french' src='test.js'></script>", nullptr,
-       "http://example.test/", Resource::kScript, 0},
+       "http://example.test/", ResourceType::kScript, 0},
       {"http://example.test",
        "<script language='python' src='test.js'></script>", nullptr,
-       "http://example.test/", Resource::kScript, 0},
+       "http://example.test/", ResourceType::kScript, 0},
   };
 
   for (const auto& test_case : test_cases)
@@ -1065,9 +1141,9 @@ TEST_F(HTMLPreloadScannerTest, testScriptTypeAndLanguage) {
 TEST_F(HTMLPreloadScannerTest, testUppercaseAsValues) {
   PreloadScannerTestCase test_cases[] = {
       {"http://example.test", "<link rel=preload href=bla as=SCRIPT>", "bla",
-       "http://example.test/", Resource::kScript, 0},
+       "http://example.test/", ResourceType::kScript, 0},
       {"http://example.test", "<link rel=preload href=bla as=fOnT>", "bla",
-       "http://example.test/", Resource::kFont, 0},
+       "http://example.test/", ResourceType::kFont, 0},
   };
 
   for (const auto& test_case : test_cases)
@@ -1075,7 +1151,8 @@ TEST_F(HTMLPreloadScannerTest, testUppercaseAsValues) {
 }
 
 TEST_F(HTMLPreloadScannerTest, ReferrerHeader) {
-  RunSetUp(kViewportEnabled, kPreloadEnabled, kReferrerPolicyAlways);
+  RunSetUp(kViewportEnabled, kPreloadEnabled,
+           network::mojom::ReferrerPolicy::kAlways);
 
   KURL preload_url("http://example.test/sheet.css");
   Platform::Current()->GetURLLoaderMockFactory()->RegisterURL(
@@ -1086,9 +1163,9 @@ TEST_F(HTMLPreloadScannerTest, ReferrerHeader) {
       "<link rel='stylesheet' href='sheet.css' type='text/css'>",
       "sheet.css",
       "http://example.test/",
-      Resource::kCSSStyleSheet,
+      ResourceType::kCSSStyleSheet,
       0,
-      kReferrerPolicyAlways,
+      network::mojom::ReferrerPolicy::kAlways,
       "http://whatever.test/"};
   Test(test_case);
 }
@@ -1111,6 +1188,40 @@ TEST_F(HTMLPreloadScannerTest, Integrity) {
       {0,
        "<script src=bla.js integrity=sha257-XXX "
        "integrity=sha256-qznLcsROx4GACP2dm0UCKCzCG+HiZ1guq6ZZDob/Tng=>"},
+  };
+
+  for (const auto& test_case : test_cases)
+    Test(test_case);
+}
+
+// Regression test for http://crbug.com/898795 where preloads after a
+// dynamically inserted meta csp tag are dispatched on subsequent calls to the
+// HTMLPreloadScanner, after they had been parsed.
+TEST_F(HTMLPreloadScannerTest, MetaCsp_NoPreloadsAfter) {
+  PreloadScannerTestCase test_cases[] = {
+      {"http://example.test",
+       "<meta http-equiv='Content-Security-Policy'><link rel=preload href=bla "
+       "as=SCRIPT>",
+       nullptr, "http://example.test/", ResourceType::kScript, 0},
+      // The buffered text referring to the preload above should be cleared, so
+      // make sure it is not preloaded on subsequent calls to Scan.
+      {"http://example.test", "", nullptr, "http://example.test/",
+       ResourceType::kScript, 0},
+  };
+
+  for (const auto& test_case : test_cases)
+    Test(test_case);
+}
+
+TEST_F(HTMLPreloadScannerTest, LazyImageLoadDisabledForSmallImages) {
+  ScopedLazyImageLoadingForTest scoped_lazy_image_loading_for_test(true);
+  LazyImageLoadTestCase test_cases[] = {
+      {"<img src='foo.jpg'>", false},
+      {"<img src='foo.jpg' style='height: 1px; width: 1px'>", true},
+      {"<img src='foo.jpg' style='height: 10px; width: 10px'>", true},
+      {"<img src='foo.jpg' style='height: 20px; width: 20px'>", false},
+      {"<img src='foo.jpg' style='height: 1px;'>", false},
+      {"<img src='foo.jpg' style='width: 1px;'>", false},
   };
 
   for (const auto& test_case : test_cases)

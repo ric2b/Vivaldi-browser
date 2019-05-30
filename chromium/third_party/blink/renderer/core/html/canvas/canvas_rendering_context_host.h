@@ -34,6 +34,12 @@ class CORE_EXPORT CanvasRenderingContextHost : public CanvasResourceHost,
  public:
   CanvasRenderingContextHost();
 
+  enum HostType {
+    kCanvasHost,
+    kOffscreenCanvasHost,
+  };
+
+  void RecordCanvasSizeToUMA(const IntSize&, HostType);
   virtual void DetachContext() = 0;
 
   virtual void DidDraw(const FloatRect& rect) = 0;
@@ -89,7 +95,7 @@ class CORE_EXPORT CanvasRenderingContextHost : public CanvasResourceHost,
   CanvasColorParams ColorParams() const;
 
   ScriptPromise convertToBlob(ScriptState*,
-                              const ImageEncodeOptions&,
+                              const ImageEncodeOptions*,
                               ExceptionState&) const;
 
  protected:
@@ -98,6 +104,7 @@ class CORE_EXPORT CanvasRenderingContextHost : public CanvasResourceHost,
   scoped_refptr<StaticBitmapImage> CreateTransparentImage(const IntSize&) const;
 
   bool did_fail_to_create_resource_provider_ = false;
+  bool did_record_canvas_size_to_uma_ = false;
 };
 
 }  // namespace blink

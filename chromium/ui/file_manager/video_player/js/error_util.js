@@ -11,7 +11,9 @@ window.JSErrorCount = 0;
 /**
  * Counts uncaught exceptions.
  */
-window.onerror = function() { window.JSErrorCount++; };
+window.onerror = function() {
+  window.JSErrorCount++;
+};
 
 /**
  * Wraps the function to use it as a callback.
@@ -43,5 +45,5 @@ Function.prototype.wrap = function(opt_thisObject, var_args) {
       window.JSErrorCount++;
       throw e;
     }
-  }
+  };
 };

@@ -5,7 +5,7 @@
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_search_button.h"
 
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
-#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_constants.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/common/ui_util/constraints_ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -48,7 +48,10 @@ const CGFloat kSpotlightHeight = 38.0f;
   spotlightView.layer.cornerRadius = kSpotlightHeight / 2;
   spotlightView.backgroundColor =
       [self.configuration locationBarBackgroundColorWithVisibility:1];
-  [self addSubview:spotlightView];
+  // Make sure that the spotlightView is below the image to avoid changing the
+  // color of the image.
+  [self insertSubview:spotlightView belowSubview:self.imageView];
+
   AddSameCenterConstraints(self, spotlightView);
   [spotlightView.heightAnchor constraintEqualToConstant:kSpotlightHeight]
       .active = YES;

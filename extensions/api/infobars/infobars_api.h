@@ -13,7 +13,7 @@ namespace extensions {
 class InfobarsSendButtonActionFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("infobars.sendButtonAction",
-                             INFOBARS_SENDBUTTONACTION);
+                             INFOBARS_SENDBUTTONACTION)
 
   InfobarsSendButtonActionFunction();
 

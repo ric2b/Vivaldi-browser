@@ -264,11 +264,11 @@ class ScopedSuspendThread {
 class NativeStackSamplerMac : public NativeStackSampler {
  public:
   NativeStackSamplerMac(mach_port_t thread_port,
+                        ModuleCache* module_cache,
                         NativeStackSamplerTestDelegate* test_delegate);
   ~NativeStackSamplerMac() override;
 
   // StackSamplingProfiler::NativeStackSampler:
-  void ProfileRecordingStarting() override;
   std::vector<Frame> RecordStackFrames(
       StackBuffer* stack_buffer,
       ProfileBuilder* profile_builder) override;
@@ -293,13 +293,13 @@ class NativeStackSamplerMac : public NativeStackSampler {
   // Weak reference: Mach port for thread being profiled.
   mach_port_t thread_port_;
 
+  // Maps a module's address range to the module.
+  ModuleCache* const module_cache_;
+
   NativeStackSamplerTestDelegate* const test_delegate_;
 
   // The stack base address corresponding to |thread_handle_|.
   const void* const thread_stack_base_address_;
-
-  // Maps a module's address range to the module.
-  ModuleCache module_cache_;
 
   // The address range of |_sigtramp|, the signal trampoline function.
   uintptr_t sigtramp_start_;
@@ -310,8 +310,10 @@ class NativeStackSamplerMac : public NativeStackSampler {
 
 NativeStackSamplerMac::NativeStackSamplerMac(
     mach_port_t thread_port,
+    ModuleCache* module_cache,
     NativeStackSamplerTestDelegate* test_delegate)
     : thread_port_(thread_port),
+      module_cache_(module_cache),
       test_delegate_(test_delegate),
       thread_stack_base_address_(
           pthread_get_stackaddr_np(pthread_from_mach_thread_np(thread_port))) {
@@ -325,10 +327,6 @@ NativeStackSamplerMac::NativeStackSamplerMac(
 }
 
 NativeStackSamplerMac::~NativeStackSamplerMac() {}
-
-void NativeStackSamplerMac::ProfileRecordingStarting() {
-  module_cache_.Clear();
-}
 
 std::vector<Frame> NativeStackSamplerMac::RecordStackFrames(
     StackBuffer* stack_buffer,
@@ -361,7 +359,7 @@ std::vector<Frame> NativeStackSamplerMac::RecordStackFrames(
     if (stack_size > stack_buffer->size())
       return empty_frames;
 
-    profile_builder->RecordAnnotations();
+    profile_builder->RecordMetadata();
 
     CopyStackAndRewritePointers(
         reinterpret_cast<uintptr_t*>(stack_buffer->buffer()),
@@ -387,7 +385,7 @@ std::vector<Frame> NativeStackSamplerMac::RecordStackFrames(
   // and bail. See MayTriggerUnwInitLocalCrash for details.
   uintptr_t rip = thread_state.__rip;
   if (MayTriggerUnwInitLocalCrash(rip)) {
-    frames.emplace_back(rip, module_cache_.GetModuleForAddress(rip));
+    frames.emplace_back(rip, module_cache_->GetModuleForAddress(rip));
     return frames;
   }
 
@@ -407,11 +405,12 @@ std::vector<Frame> NativeStackSamplerMac::RecordStackFrames(
     return HasValidRbp(unwind_cursor, new_stack_top);
   };
 
-  WalkStack(thread_state,
-            [&frames](uintptr_t frame_ip, ModuleCache::Module module) {
-              frames.emplace_back(frame_ip, std::move(module));
-            },
-            continue_predicate);
+  WalkStack(
+      thread_state,
+      [&frames](uintptr_t frame_ip, const ModuleCache::Module* module) {
+        frames.emplace_back(frame_ip, module);
+      },
+      continue_predicate);
 
   return frames;
 }
@@ -442,8 +441,8 @@ bool NativeStackSamplerMac::WalkStackFromContext(
     // libunwind adds the expected stack size, it will look for the return
     // address in the wrong place. This check should ensure that we bail before
     // trying to deref a bad IP obtained this way in the previous frame.
-    const ModuleCache::Module& module = module_cache_.GetModuleForAddress(rip);
-    if (!module.is_valid)
+    const ModuleCache::Module* module = module_cache_->GetModuleForAddress(rip);
+    if (!module)
       return false;
 
     callback(static_cast<uintptr_t>(rip), module);
@@ -512,23 +511,19 @@ void NativeStackSamplerMac::WalkStack(
 // static
 std::unique_ptr<NativeStackSampler> NativeStackSampler::Create(
     PlatformThreadId thread_id,
+    ModuleCache* module_cache,
     NativeStackSamplerTestDelegate* test_delegate) {
-  return std::make_unique<NativeStackSamplerMac>(thread_id, test_delegate);
+  return std::make_unique<NativeStackSamplerMac>(thread_id, module_cache,
+                                                 test_delegate);
 }
 
 // static
 size_t NativeStackSampler::GetStackBufferSize() {
-  // In platform_thread_mac's GetDefaultThreadStackSize(), RLIMIT_STACK is used
-  // for all stacks, not just the main thread's, so it is good for use here.
-  struct rlimit stack_rlimit;
-  if (getrlimit(RLIMIT_STACK, &stack_rlimit) == 0 &&
-      stack_rlimit.rlim_cur != RLIM_INFINITY) {
-    return stack_rlimit.rlim_cur;
-  }
+  size_t stack_size = PlatformThread::GetDefaultThreadStackSize();
 
   // If getrlimit somehow fails, return the default macOS main thread stack size
   // of 8 MB (DFLSSIZ in <i386/vmparam.h>) with extra wiggle room.
-  return 12 * 1024 * 1024;
+  return stack_size > 0 ? stack_size : 12 * 1024 * 1024;
 }
 
 }  // namespace base

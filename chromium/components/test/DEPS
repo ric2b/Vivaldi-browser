@@ -6,12 +6,14 @@ include_rules = [
   "+jni",
   "+media",
   "+net",
-  "+services/catalog",
   "+ui",
 ]
 
 specific_include_rules = {
   "components_test_suite\.cc": [
     "+mojo/core/embedder",
+  ],
+  "ios_components_test_initializer\.cc": [
+    "+services/network/test",
   ],
 }

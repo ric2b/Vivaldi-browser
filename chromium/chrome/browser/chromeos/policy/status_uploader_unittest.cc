@@ -14,8 +14,10 @@
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/policy/device_status_collector.h"
-#include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
+#include "chrome/browser/chromeos/settings/scoped_testing_cros_settings.h"
+#include "chrome/browser/chromeos/settings/stub_cros_settings_provider.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
@@ -56,6 +58,7 @@ class MockDeviceStatusCollector : public policy::DeviceStatusCollector {
             policy::DeviceStatusCollector::CPUStatisticsFetcher(),
             policy::DeviceStatusCollector::CPUTempFetcher(),
             policy::DeviceStatusCollector::AndroidStatusFetcher(),
+            policy::DeviceStatusCollector::TpmStatusFetcher(),
             base::TimeDelta(), /* Day starts at midnight */
             true /* is_enterprise_device */) {}
 
@@ -85,9 +88,9 @@ class StatusUploaderTest : public testing::Test {
 
   void SetUp() override {
     chromeos::DBusThreadManager::Initialize();
+    chromeos::PowerManagerClient::Initialize();
     client_.SetDMToken("dm_token");
     collector_.reset(new MockDeviceStatusCollector(&prefs_));
-    settings_helper_.ReplaceProvider(chromeos::kReportUploadFrequency);
 
     // Keep a pointer to the mock collector because collector_ gets cleared
     // when it is passed to the StatusUploader constructor.
@@ -96,6 +99,7 @@ class StatusUploaderTest : public testing::Test {
 
   void TearDown() override {
     content::RunAllTasksUntilIdle();
+    chromeos::PowerManagerClient::Shutdown();
     chromeos::DBusThreadManager::Shutdown();
   }
 
@@ -170,7 +174,7 @@ class StatusUploaderTest : public testing::Test {
 
   content::TestBrowserThreadBundle thread_bundle_;
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
-  chromeos::ScopedCrosSettingsTestHelper settings_helper_;
+  chromeos::ScopedTestingCrosSettings scoped_testing_cros_settings_;
   std::unique_ptr<MockDeviceStatusCollector> collector_;
   MockDeviceStatusCollector* collector_ptr_;
   ui::UserActivityDetector detector_;
@@ -194,8 +198,9 @@ TEST_F(StatusUploaderTest, BasicTest) {
 
 TEST_F(StatusUploaderTest, DifferentFrequencyAtStart) {
   const base::TimeDelta new_delay = kDefaultStatusUploadDelay * 2;
-  settings_helper_.SetInteger(chromeos::kReportUploadFrequency,
-                              new_delay.InMilliseconds());
+
+  scoped_testing_cros_settings_.device_settings()->SetInteger(
+      chromeos::kReportUploadFrequency, new_delay.InMilliseconds());
   EXPECT_FALSE(task_runner_->HasPendingTask());
   StatusUploader uploader(&client_, std::move(collector_), task_runner_,
                           kDefaultStatusUploadDelay);
@@ -298,8 +303,8 @@ TEST_F(StatusUploaderTest, ChangeFrequency) {
   // Change the frequency. The new frequency should be reflected in the timing
   // used for the next callback.
   const base::TimeDelta new_delay = kDefaultStatusUploadDelay * 2;
-  settings_helper_.SetInteger(chromeos::kReportUploadFrequency,
-                              new_delay.InMilliseconds());
+  scoped_testing_cros_settings_.device_settings()->SetInteger(
+      chromeos::kReportUploadFrequency, new_delay.InMilliseconds());
   RunPendingUploadTaskAndCheckNext(uploader, new_delay,
                                    true /* upload_success */);
 }
@@ -326,8 +331,7 @@ TEST_F(StatusUploaderTest, NoUploadAfterVideoCapture) {
 
   // Now mock video capture, and no session data should be allowed.
   MediaCaptureDevicesDispatcher::GetInstance()->OnMediaRequestStateChanged(
-      0, 0, 0, GURL("http://www.google.com"),
-      content::MEDIA_DEVICE_VIDEO_CAPTURE,
+      0, 0, 0, GURL("http://www.google.com"), blink::MEDIA_DEVICE_VIDEO_CAPTURE,
       content::MEDIA_REQUEST_STATE_OPENING);
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(uploader.IsSessionDataUploadAllowed());

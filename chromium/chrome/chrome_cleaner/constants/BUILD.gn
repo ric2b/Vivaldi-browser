@@ -2,21 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/chrome_build.gni")
-import("//build/util/lastchange.gni")
 import("//build/util/process_version.gni")
-
-declare_args() {
-  reporter_branding_path = "REPORTER_BRANDING"
-  cleaner_branding_path = "CLEANER_BRANDING"
-  version_path = "VERSION"
-  lastchange_path = lastchange_file
-}
+import("//chrome/chrome_cleaner/constants/args.gni")
 
 process_version("version_header") {
   sources = [
     cleaner_branding_path,
-    lastchange_path,
     version_path,
   ]
 
@@ -56,5 +47,12 @@ source_set("common_strings") {
 source_set("uws_id") {
   sources = [
     "uws_id.h",
+  ]
+}
+
+source_set("quarantine_constants") {
+  sources = [
+    "quarantine_constants.cc",
+    "quarantine_constants.h",
   ]
 }

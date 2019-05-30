@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "base/atomicops.h"
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
@@ -42,7 +41,8 @@ class BASE_EXPORT MemoryDumpManager {
   using RequestGlobalDumpFunction =
       RepeatingCallback<void(MemoryDumpType, MemoryDumpLevelOfDetail)>;
 
-  static const char* const kTraceCategory;
+  static constexpr const char* const kTraceCategory =
+      TRACE_DISABLED_BY_DEFAULT("memory-infra");
 
   // This value is returned as the tracing id of the child processes by
   // GetTracingProcessId() when tracing is not enabled.
@@ -136,7 +136,7 @@ class BASE_EXPORT MemoryDumpManager {
   // allocator registered (which is currently the case for Mac OS).
   const char* system_allocator_pool_name() const {
     return kSystemAllocatorPoolName;
-  };
+  }
 
   // When set to true, calling |RegisterMemoryDumpProvider| is a no-op.
   void set_dumper_registrations_ignored_for_testing(bool ignored) {

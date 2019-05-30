@@ -29,7 +29,7 @@
 #include <memory>
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_descriptor.h"
@@ -57,6 +57,12 @@ class MODULES_EXPORT MediaStreamTrack
 
  public:
   static MediaStreamTrack* Create(ExecutionContext*, MediaStreamComponent*);
+
+  MediaStreamTrack(ExecutionContext*, MediaStreamComponent*);
+  MediaStreamTrack(ExecutionContext*,
+                   MediaStreamComponent*,
+                   MediaStreamSource::ReadyState,
+                   bool stopped);
   ~MediaStreamTrack() override;
 
   String kind() const;
@@ -80,14 +86,14 @@ class MODULES_EXPORT MediaStreamTrack
   // Called from UserMediaRequest when it succeeds. It is not IDL-exposed.
   void SetConstraints(const WebMediaConstraints&);
 
-  void getCapabilities(MediaTrackCapabilities&);
-  void getConstraints(MediaTrackConstraints&);
-  void getSettings(MediaTrackSettings&);
-  ScriptPromise applyConstraints(ScriptState*, const MediaTrackConstraints&);
+  MediaTrackCapabilities* getCapabilities() const;
+  MediaTrackConstraints* getConstraints() const;
+  MediaTrackSettings* getSettings() const;
+  ScriptPromise applyConstraints(ScriptState*, const MediaTrackConstraints*);
 
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(mute);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(unmute);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(ended);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(mute, kMute)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(unmute, kUnmute)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(ended, kEnded)
 
   MediaStreamComponent* Component() { return component_; }
   bool Ended() const;
@@ -112,18 +118,12 @@ class MODULES_EXPORT MediaStreamTrack
  private:
   friend class CanvasCaptureMediaStreamTrack;
 
-  MediaStreamTrack(ExecutionContext*, MediaStreamComponent*);
-  MediaStreamTrack(ExecutionContext*,
-                   MediaStreamComponent*,
-                   MediaStreamSource::ReadyState,
-                   bool stopped);
-
   // MediaStreamSourceObserver
   void SourceChangedState() override;
 
   void PropagateTrackEnded();
   void applyConstraintsImageCapture(ScriptPromiseResolver*,
-                                    const MediaTrackConstraints&);
+                                    const MediaTrackConstraints*);
 
   MediaStreamSource::ReadyState ready_state_;
   HeapHashSet<Member<MediaStream>> registered_media_streams_;

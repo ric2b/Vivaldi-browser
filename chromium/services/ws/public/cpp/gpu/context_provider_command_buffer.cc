@@ -12,12 +12,15 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/no_destructor.h"
 #include "base/optional.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
+#include "build/build_config.h"
 #include "components/viz/common/gpu/context_cache_controller.h"
 #include "gpu/command_buffer/client/gles2_cmd_helper.h"
 #include "gpu/command_buffer/client/gles2_trace_implementation.h"
@@ -31,6 +34,7 @@
 #include "gpu/command_buffer/client/webgpu_implementation.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/command_buffer/common/skia_utils.h"
+#include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "gpu/skia_bindings/gles2_implementation_with_grcontext_support.h"
@@ -132,7 +136,7 @@ gpu::ContextResult ContextProviderCommandBuffer::BindToCurrentThread() {
   // This command buffer is a client-side proxy to the command buffer in the
   // GPU process.
   command_buffer_ = std::make_unique<gpu::CommandBufferProxyImpl>(
-      std::move(channel_), gpu_memory_buffer_manager_, stream_id_, task_runner);
+      channel_, gpu_memory_buffer_manager_, stream_id_, task_runner);
   bind_result_ = command_buffer_->Initialize(
       surface_handle_, /*shared_command_buffer=*/nullptr, stream_priority_,
       attributes_, active_url_);
@@ -142,6 +146,18 @@ gpu::ContextResult ContextProviderCommandBuffer::BindToCurrentThread() {
     return bind_result_;
   }
 
+  // TODO(enne): remove the kEnablePassthroughRasterDecoder flag and
+  // assume it is always available.
+  bool enable_passthrough_raster_decoder =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnablePassthroughRasterDecoder);
+#if defined(OS_WIN)
+  enable_passthrough_raster_decoder = true;
+#endif
+
+  bool allow_raster_decoder =
+      !command_buffer_->channel()->gpu_info().passthrough_cmd_decoder ||
+      enable_passthrough_raster_decoder;
   if (attributes_.context_type == gpu::CONTEXT_TYPE_WEBGPU) {
     DCHECK(!attributes_.enable_raster_interface);
     DCHECK(!attributes_.enable_gles2_interface);
@@ -156,10 +172,14 @@ gpu::ContextResult ContextProviderCommandBuffer::BindToCurrentThread() {
       return bind_result_;
     }
 
+    // The transfer buffer is used to serialize Dawn commands
+    transfer_buffer_ =
+        std::make_unique<gpu::TransferBuffer>(webgpu_helper.get());
+
     // The WebGPUImplementation exposes the WebGPUInterface, as well as the
     // gpu::ContextSupport interface.
     auto webgpu_impl = std::make_unique<gpu::webgpu::WebGPUImplementation>(
-        webgpu_helper.get());
+        webgpu_helper.get(), transfer_buffer_.get(), command_buffer_.get());
 
     std::string type_name =
         command_buffer_metrics::ContextTypeToString(context_type_);
@@ -169,9 +189,8 @@ gpu::ContextResult ContextProviderCommandBuffer::BindToCurrentThread() {
     impl_ = nullptr;
     webgpu_interface_ = std::move(webgpu_impl);
     helper_ = std::move(webgpu_helper);
-  } else if (attributes_.enable_oop_rasterization) {
-    DCHECK(attributes_.enable_raster_interface);
-    DCHECK(!attributes_.enable_gles2_interface);
+  } else if (allow_raster_decoder && attributes_.enable_raster_interface &&
+             !attributes_.enable_gles2_interface) {
     DCHECK(!support_grcontext_);
     // The raster helper writes the command buffer protocol.
     auto raster_helper =
@@ -190,10 +209,12 @@ gpu::ContextResult ContextProviderCommandBuffer::BindToCurrentThread() {
 
     // The RasterImplementation exposes the RasterInterface, as well as the
     // gpu::ContextSupport interface.
+    DCHECK(channel_);
     auto raster_impl = std::make_unique<gpu::raster::RasterImplementation>(
         raster_helper.get(), transfer_buffer_.get(),
         attributes_.bind_generates_resource,
-        attributes_.lose_context_when_out_of_memory, command_buffer_.get());
+        attributes_.lose_context_when_out_of_memory, command_buffer_.get(),
+        channel_->image_decode_accelerator_proxy());
     bind_result_ = raster_impl->Initialize(memory_limits_);
     if (bind_result_ != gpu::ContextResult::kSuccess) {
       DLOG(ERROR) << "Failed to initialize RasterImplementation.";
@@ -347,7 +368,7 @@ gpu::raster::RasterInterface* ContextProviderCommandBuffer::RasterInterface() {
     return nullptr;
 
   raster_interface_ = std::make_unique<gpu::raster::RasterImplementationGLES>(
-      gles2_impl_.get(), command_buffer_.get(), ContextCapabilities());
+      gles2_impl_.get());
   return raster_interface_.get();
 }
 
@@ -396,6 +417,11 @@ class GrContext* ContextProviderCommandBuffer::GrContext() {
   return gr_context_->get();
 }
 
+gpu::SharedImageInterface*
+ContextProviderCommandBuffer::SharedImageInterface() {
+  return command_buffer_->channel()->shared_image_interface();
+}
+
 viz::ContextCacheController* ContextProviderCommandBuffer::CacheController() {
   CheckValidThreadOrLockAcquired();
   return cache_controller_.get();
@@ -428,8 +454,9 @@ const gpu::GpuFeatureInfo& ContextProviderCommandBuffer::GetGpuFeatureInfo()
   DCHECK_EQ(bind_result_, gpu::ContextResult::kSuccess);
   CheckValidThreadOrLockAcquired();
   if (!command_buffer_ || !command_buffer_->channel()) {
-    static const gpu::GpuFeatureInfo default_gpu_feature_info;
-    return default_gpu_feature_info;
+    static const base::NoDestructor<gpu::GpuFeatureInfo>
+        default_gpu_feature_info;
+    return *default_gpu_feature_info;
   }
   return command_buffer_->channel()->gpu_feature_info();
 }

@@ -4,13 +4,14 @@
 
 #include "chrome/browser/media/router/mojo/media_route_provider_util_win.h"
 
+#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/task/post_task.h"
+#include "base/task/task_traits.h"
 #include "base/task_runner_util.h"
-#include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/firewall_manager_win.h"
 
 namespace media_router {
@@ -23,8 +24,7 @@ bool DoCanFirewallUseLocalPorts() {
     LOG(WARNING) << "Couldn't get path of current executable.";
     return false;
   }
-  auto firewall_manager = installer::FirewallManager::Create(
-      BrowserDistribution::GetDistribution(), exe_path);
+  auto firewall_manager = installer::FirewallManager::Create(exe_path);
   if (!firewall_manager) {
     LOG(WARNING) << "Couldn't get FirewallManager instance.";
     return false;
@@ -35,7 +35,8 @@ bool DoCanFirewallUseLocalPorts() {
 }  // namespace
 
 void CanFirewallUseLocalPorts(base::OnceCallback<void(bool)> callback) {
-  auto task_runner = base::CreateCOMSTATaskRunnerWithTraits({base::MayBlock()});
+  auto task_runner = base::CreateCOMSTATaskRunnerWithTraits(
+      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN});
   base::PostTaskAndReplyWithResult(task_runner.get(), FROM_HERE,
                                    base::BindOnce(&DoCanFirewallUseLocalPorts),
                                    std::move(callback));

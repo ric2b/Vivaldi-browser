@@ -251,6 +251,7 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
     if (this.listItemElement && !this._hintElement) {
       this._hintElement = this.listItemElement.createChild('span', 'selected-hint');
       this._hintElement.title = Common.UIString('Use $0 in the console to refer to this element.');
+      UI.ARIAUtils.markAsHidden(this._hintElement);
     }
   }
 
@@ -518,8 +519,11 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
           Common.UIString('Copy outerHTML'), treeOutline.performCopyOrCut.bind(treeOutline, false, this._node));
       menuItem.setShortcut(createShortcut('V', modifier));
     }
-    if (this._node.nodeType() === Node.ELEMENT_NODE)
+    if (this._node.nodeType() === Node.ELEMENT_NODE) {
       section.appendItem(Common.UIString('Copy selector'), this._copyCSSPath.bind(this));
+      section.appendItem(
+          Common.UIString('Copy JS path'), this._copyJSPath.bind(this), !Elements.DOMPath.canGetJSPath(this._node));
+    }
     if (!isShadowRoot)
       section.appendItem(Common.UIString('Copy XPath'), this._copyXPath.bind(this));
     if (!isShadowRoot) {
@@ -765,11 +769,6 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
     if (this._editing)
       return;
 
-    function consume(event) {
-      if (event.eventPhase === Event.AT_TARGET)
-        event.consume(true);
-    }
-
     initialValue = this._convertWhitespaceToEntities(initialValue).text;
 
     this._htmlEditElement = createElement('div');
@@ -786,7 +785,6 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
       this.childrenListElement.style.display = 'none';
     // Append editor.
     this.listItemElement.appendChild(this._htmlEditElement);
-    this.treeOutline.element.addEventListener('mousedown', consume, false);
 
     self.runtime.extension(UI.TextEditorFactory).instance().then(gotFactory.bind(this));
 
@@ -809,11 +807,11 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
       editor.widget().show(this._htmlEditElement);
       editor.setText(initialValue);
       editor.widget().focus();
-      editor.widget().element.addEventListener('blur', event => {
+      editor.widget().element.addEventListener('focusout', event => {
         // The relatedTarget is null when no element gains focus, e.g. switching windows.
-        if (event.relatedTarget)
+        if (event.relatedTarget && !event.relatedTarget.isSelfOrDescendant(editor.widget().element))
           this._editing.commit();
-      }, true);
+      }, false);
       editor.widget().element.addEventListener('keydown', keydown.bind(this), true);
 
       this.treeOutline.setMultilineEditing(this._editing);
@@ -858,7 +856,6 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
 
       if (this.treeOutline) {
         this.treeOutline.setMultilineEditing(null);
-        this.treeOutline.element.removeEventListener('mousedown', consume, false);
         this.treeOutline.focus();
       }
 
@@ -1328,7 +1325,7 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
       //     `indexOfSpace - 1` as a URL and repeat step 1).
       // 2b) Else, collect the preceding characters as a URL.
       // 3) Collect the characters from `indexOfSpace` up to the next comma as the size descriptor and repeat step 1).
-      // https://html.spec.whatwg.org/multipage/embedded-content.html#parse-a-srcset-attribute
+      // https://html.spec.whatwg.org/C/#parse-a-srcset-attribute
       const fragment = createDocumentFragment();
       let i = 0;
       while (value.length) {
@@ -1624,6 +1621,10 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
 
   _copyCSSPath() {
     InspectorFrontendHost.copyText(Elements.DOMPath.cssPath(this._node, true));
+  }
+
+  _copyJSPath() {
+    InspectorFrontendHost.copyText(Elements.DOMPath.jsPath(this._node, true));
   }
 
   _copyXPath() {

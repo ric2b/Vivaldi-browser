@@ -13,6 +13,7 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ResourceId;
 import org.chromium.chrome.browser.autofill.CardUnmaskPrompt.CardUnmaskPromptDelegate;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.modaldialog.DialogDismissalCause;
 
 /**
 * JNI call glue for CardUnmaskPrompt C++ and Java objects.
@@ -106,7 +107,9 @@ public class CardUnmaskBridge implements CardUnmaskPromptDelegate {
      */
     @CalledByNative
     private void dismiss() {
-        if (mCardUnmaskPrompt != null) mCardUnmaskPrompt.dismiss();
+        if (mCardUnmaskPrompt != null) {
+            mCardUnmaskPrompt.dismiss(DialogDismissalCause.DISMISSED_BY_NATIVE);
+        }
     }
 
     /**

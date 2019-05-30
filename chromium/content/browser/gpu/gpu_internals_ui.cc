@@ -20,7 +20,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringize_macros.h"
 #include "base/strings/stringprintf.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "content/browser/gpu/compositor_util.h"
@@ -28,6 +28,7 @@
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/grit/content_resources.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/gpu_data_manager_observer.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -75,8 +76,8 @@ WebUIDataSource* CreateGpuHTMLSource() {
 }
 
 std::unique_ptr<base::DictionaryValue> NewDescriptionValuePair(
-    const std::string& desc,
-    const std::string& value) {
+    base::StringPiece desc,
+    base::StringPiece value) {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("description", desc);
   dict->SetString("value", value);
@@ -84,7 +85,7 @@ std::unique_ptr<base::DictionaryValue> NewDescriptionValuePair(
 }
 
 std::unique_ptr<base::DictionaryValue> NewDescriptionValuePair(
-    const std::string& desc,
+    base::StringPiece desc,
     std::unique_ptr<base::Value> value) {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("description", desc);
@@ -153,7 +154,7 @@ std::unique_ptr<base::ListValue> BasicGpuInfoAsListValue(
   auto basic_info = std::make_unique<base::ListValue>();
   basic_info->Append(NewDescriptionValuePair(
       "Initialization time",
-      base::Int64ToString(gpu_info.initialization_time.InMilliseconds())));
+      base::NumberToString(gpu_info.initialization_time.InMilliseconds())));
   basic_info->Append(NewDescriptionValuePair(
       "In-process GPU",
       std::make_unique<base::Value>(gpu_info.in_process_gpu)));
@@ -181,7 +182,7 @@ std::unique_ptr<base::ListValue> BasicGpuInfoAsListValue(
       NewDescriptionValuePair("Desktop compositing", compositor));
 
   basic_info->Append(NewDescriptionValuePair(
-      "Direct Composition",
+      "Direct composition",
       std::make_unique<base::Value>(gpu_info.direct_composition)));
   basic_info->Append(NewDescriptionValuePair(
       "Supports overlays",
@@ -213,11 +214,12 @@ std::unique_ptr<base::ListValue> BasicGpuInfoAsListValue(
 
   basic_info->Append(NewDescriptionValuePair(
       "Driver D3D12 feature level",
-      D3dFeaturelevelToString(gpu_info.d3d12_feature_level)));
+      D3dFeaturelevelToString(
+          gpu_info.dx12_vulkan_version_info.d3d12_feature_level)));
 
-  basic_info->Append(
-      NewDescriptionValuePair("Driver Vulkan API version",
-                              VulkanVersionToString(gpu_info.vulkan_version)));
+  basic_info->Append(NewDescriptionValuePair(
+      "Driver Vulkan API version",
+      VulkanVersionToString(gpu_info.dx12_vulkan_version_info.vulkan_version)));
 #endif
 
   basic_info->Append(
@@ -624,7 +626,7 @@ std::unique_ptr<base::DictionaryValue> GpuMessageHandler::OnRequestClientInfo(
 
   auto dict = std::make_unique<base::DictionaryValue>();
 
-  dict->SetString("version", GetContentClient()->GetProduct());
+  dict->SetString("version", GetContentClient()->browser()->GetProduct());
   dict->SetString("command_line",
       base::CommandLine::ForCurrentProcess()->GetCommandLineString());
   dict->SetString("operating_system",

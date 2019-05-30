@@ -587,6 +587,10 @@ namespace networkingPrivate {
     long? SignalStrength;
   };
 
+  dictionary EAPStateProperties {
+    DOMString? Outer;
+  };
+
   dictionary EthernetProperties {
     boolean? AutoConnect;
     DOMString? Authentication;
@@ -677,6 +681,7 @@ namespace networkingPrivate {
 
   dictionary WiFiStateProperties {
     DOMString? BSSID;
+    EAPStateProperties? EAP;
     long? Frequency;
     DOMString? HexSSID;
     DOMString Security;
@@ -900,6 +905,9 @@ namespace networkingPrivate {
 
     // Whether or not the certificate is hardware backed.
     boolean hardwareBacked;
+
+    // Whether or not the certificate is device wide.
+    boolean deviceWide;
   };
 
   dictionary CertificateLists {
@@ -1066,18 +1074,6 @@ namespace networkingPrivate {
     [nodoc, deprecated = "Use networking.castPrivate API."]
     static void verifyDestination(VerificationProperties properties,
                                   BooleanCallback callback);
-
-    // Verifies that the device is a trusted device and retrieves encrypted
-    // network credentials.
-    // |properties|: Properties of the destination to use in verifying that it
-    //     is a trusted device.
-    // |networkGuid|: The GUID of the Cellular network to activate.
-    // |callback|: A callback function that receives base64-encoded encrypted
-    //     credential data to send to a trusted device.
-    [nodoc, deprecated = "Use networking.castPrivate API."]
-    static void verifyAndEncryptCredentials(VerificationProperties properties,
-                                            DOMString networkGuid,
-                                            StringCallback callback);
 
     // Verifies that the device is a trusted device and encrypts supplied
     // data with device public key.

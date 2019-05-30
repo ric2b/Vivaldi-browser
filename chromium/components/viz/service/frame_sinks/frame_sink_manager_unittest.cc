@@ -72,9 +72,16 @@ class FrameSinkManagerTest : public testing::Test {
     return support->begin_frame_source_;
   }
 
+  void ExpireAllTemporaryReferencesAndGarbageCollect() {
+    manager_.surface_manager()->ExpireOldTemporaryReferences();
+    manager_.surface_manager()->ExpireOldTemporaryReferences();
+    manager_.surface_manager()->GarbageCollectSurfaces();
+  }
+
   // Checks if a [Root]CompositorFrameSinkImpl exists for |frame_sink_id|.
   bool CompositorFrameSinkExists(const FrameSinkId& frame_sink_id) {
-    return base::ContainsKey(manager_.sink_map_, frame_sink_id);
+    return base::ContainsKey(manager_.sink_map_, frame_sink_id) ||
+           base::ContainsKey(manager_.root_sink_map_, frame_sink_id);
   }
 
   // testing::Test implementation.
@@ -96,7 +103,7 @@ class FrameSinkManagerTest : public testing::Test {
 };
 
 TEST_F(FrameSinkManagerTest, CreateRootCompositorFrameSink) {
-  manager_.RegisterFrameSinkId(kFrameSinkIdRoot);
+  manager_.RegisterFrameSinkId(kFrameSinkIdRoot, true /* report_activation */);
 
   // Create a RootCompositorFrameSinkImpl.
   RootCompositorFrameSinkData root_data;
@@ -110,7 +117,7 @@ TEST_F(FrameSinkManagerTest, CreateRootCompositorFrameSink) {
 }
 
 TEST_F(FrameSinkManagerTest, CreateCompositorFrameSink) {
-  manager_.RegisterFrameSinkId(kFrameSinkIdA);
+  manager_.RegisterFrameSinkId(kFrameSinkIdA, true /* report_activation */);
 
   // Create a CompositorFrameSinkImpl.
   MockCompositorFrameSinkClient compositor_frame_sink_client;
@@ -126,7 +133,7 @@ TEST_F(FrameSinkManagerTest, CreateCompositorFrameSink) {
 }
 
 TEST_F(FrameSinkManagerTest, CompositorFrameSinkConnectionLost) {
-  manager_.RegisterFrameSinkId(kFrameSinkIdA);
+  manager_.RegisterFrameSinkId(kFrameSinkIdA, true /* report_activation */);
 
   // Create a CompositorFrameSinkImpl.
   MockCompositorFrameSinkClient compositor_frame_sink_client;
@@ -413,9 +420,14 @@ TEST_F(FrameSinkManagerTest,
 // Verifies that the SurfaceIds passed to EvictSurfaces will be destroyed in the
 // next garbage collection.
 TEST_F(FrameSinkManagerTest, EvictSurfaces) {
-  ParentLocalSurfaceIdAllocator allocator;
-  LocalSurfaceId local_surface_id1 = allocator.GenerateId();
-  LocalSurfaceId local_surface_id2 = allocator.GenerateId();
+  ParentLocalSurfaceIdAllocator allocator1;
+  ParentLocalSurfaceIdAllocator allocator2;
+  allocator1.GenerateId();
+  LocalSurfaceId local_surface_id1 =
+      allocator1.GetCurrentLocalSurfaceIdAllocation().local_surface_id();
+  allocator2.GenerateId();
+  LocalSurfaceId local_surface_id2 =
+      allocator2.GetCurrentLocalSurfaceIdAllocation().local_surface_id();
   SurfaceId surface_id1(kFrameSinkIdA, local_surface_id1);
   SurfaceId surface_id2(kFrameSinkIdB, local_surface_id2);
 
@@ -427,13 +439,13 @@ TEST_F(FrameSinkManagerTest, EvictSurfaces) {
 
   // |surface_id1| and |surface_id2| should remain alive after garbage
   // collection because they're not marked for destruction.
-  manager_.surface_manager()->GarbageCollectSurfaces();
+  ExpireAllTemporaryReferencesAndGarbageCollect();
   EXPECT_TRUE(manager_.surface_manager()->GetSurfaceForId(surface_id1));
   EXPECT_TRUE(manager_.surface_manager()->GetSurfaceForId(surface_id2));
 
   // Call EvictSurfaces. Now the garbage collector can destroy the surfaces.
   manager_.EvictSurfaces({surface_id1, surface_id2});
-  manager_.surface_manager()->GarbageCollectSurfaces();
+  ExpireAllTemporaryReferencesAndGarbageCollect();
   EXPECT_FALSE(manager_.surface_manager()->GetSurfaceForId(surface_id1));
   EXPECT_FALSE(manager_.surface_manager()->GetSurfaceForId(surface_id2));
 }
@@ -443,7 +455,7 @@ TEST_F(FrameSinkManagerTest, EvictSurfaces) {
 TEST_F(FrameSinkManagerTest, DebugLabel) {
   const std::string label = "Test Label";
 
-  manager_.RegisterFrameSinkId(kFrameSinkIdA);
+  manager_.RegisterFrameSinkId(kFrameSinkIdA, true /* report_activation */);
   manager_.SetFrameSinkDebugLabel(kFrameSinkIdA, label);
   EXPECT_EQ(label, manager_.GetFrameSinkDebugLabel(kFrameSinkIdA));
 
@@ -635,7 +647,7 @@ TEST_P(FrameSinkManagerOrderingParamTest, Ordering) {
     UnregisterBFS();
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     FrameSinkManagerOrderingParamTestInstantiation,
     FrameSinkManagerOrderingParamTest,
     ::testing::Combine(::testing::ValuesIn(kRegisterOrderList),

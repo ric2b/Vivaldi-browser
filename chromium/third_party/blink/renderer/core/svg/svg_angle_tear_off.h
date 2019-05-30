@@ -43,7 +43,8 @@ class SVGAngleTearOff final : public SVGPropertyTearOff<SVGAngle> {
   static SVGAngleTearOff* Create(SVGAngle* target,
                                  SVGAnimatedPropertyBase* binding,
                                  PropertyIsAnimValType property_is_anim_val) {
-    return new SVGAngleTearOff(target, binding, property_is_anim_val);
+    return MakeGarbageCollected<SVGAngleTearOff>(target, binding,
+                                                 property_is_anim_val);
   }
   static SVGAngleTearOff* CreateDetached();
 
@@ -55,9 +56,12 @@ class SVGAngleTearOff final : public SVGPropertyTearOff<SVGAngle> {
     kSvgAngletypeGrad = SVGAngle::kSvgAngletypeGrad
   };
 
+  SVGAngleTearOff(SVGAngle*,
+                  SVGAnimatedPropertyBase* binding,
+                  PropertyIsAnimValType);
   ~SVGAngleTearOff() override;
 
-  unsigned short unitType() {
+  uint16_t unitType() {
     return HasExposedAngleUnit() ? Target()->UnitType()
                                  : SVGAngle::kSvgAngletypeUnknown;
   }
@@ -68,10 +72,10 @@ class SVGAngleTearOff final : public SVGPropertyTearOff<SVGAngle> {
   void setValueInSpecifiedUnits(float, ExceptionState&);
   float valueInSpecifiedUnits() { return Target()->ValueInSpecifiedUnits(); }
 
-  void newValueSpecifiedUnits(unsigned short unit_type,
+  void newValueSpecifiedUnits(uint16_t unit_type,
                               float value_in_specified_units,
                               ExceptionState&);
-  void convertToSpecifiedUnits(unsigned short unit_type, ExceptionState&);
+  void convertToSpecifiedUnits(uint16_t unit_type, ExceptionState&);
 
   String valueAsString() {
     return HasExposedAngleUnit() ? Target()->ValueAsString()
@@ -80,10 +84,6 @@ class SVGAngleTearOff final : public SVGPropertyTearOff<SVGAngle> {
   void setValueAsString(const String&, ExceptionState&);
 
  private:
-  SVGAngleTearOff(SVGAngle*,
-                  SVGAnimatedPropertyBase* binding,
-                  PropertyIsAnimValType);
-
   bool HasExposedAngleUnit() {
     return Target()->UnitType() <= SVGAngle::kSvgAngletypeGrad;
   }

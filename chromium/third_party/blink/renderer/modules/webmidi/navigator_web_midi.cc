@@ -68,7 +68,7 @@ NavigatorWebMIDI& NavigatorWebMIDI::From(Navigator& navigator) {
   NavigatorWebMIDI* supplement =
       Supplement<Navigator>::From<NavigatorWebMIDI>(navigator);
   if (!supplement) {
-    supplement = new NavigatorWebMIDI(navigator);
+    supplement = MakeGarbageCollected<NavigatorWebMIDI>(navigator);
     ProvideTo(navigator, supplement);
   }
   return *supplement;
@@ -76,21 +76,21 @@ NavigatorWebMIDI& NavigatorWebMIDI::From(Navigator& navigator) {
 
 ScriptPromise NavigatorWebMIDI::requestMIDIAccess(ScriptState* script_state,
                                                   Navigator& navigator,
-                                                  const MIDIOptions& options) {
+                                                  const MIDIOptions* options) {
   return NavigatorWebMIDI::From(navigator).requestMIDIAccess(script_state,
                                                              options);
 }
 
 ScriptPromise NavigatorWebMIDI::requestMIDIAccess(ScriptState* script_state,
-                                                  const MIDIOptions& options) {
+                                                  const MIDIOptions* options) {
   if (!script_state->ContextIsValid()) {
     return ScriptPromise::RejectWithDOMException(
         script_state, DOMException::Create(DOMExceptionCode::kAbortError,
                                            "The frame is not working."));
   }
 
-  Document& document = *ToDocument(ExecutionContext::From(script_state));
-  if (options.hasSysex() && options.sysex()) {
+  Document& document = *To<Document>(ExecutionContext::From(script_state));
+  if (options->hasSysex() && options->sysex()) {
     UseCounter::Count(
         document,
         WebFeature::kRequestMIDIAccessWithSysExOption_ObscuredByFootprinting);
@@ -98,16 +98,23 @@ ScriptPromise NavigatorWebMIDI::requestMIDIAccess(ScriptState* script_state,
         document,
         WebFeature::
             kRequestMIDIAccessIframeWithSysExOption_ObscuredByFootprinting);
+  } else {
+    // In the recent spec, the step 7 below allows user-agents to prompt the
+    // user for permission regardless of sysex option.
+    // https://webaudio.github.io/web-midi-api/#dom-navigator-requestmidiaccess
+    // https://crbug.com/662000.
+    Deprecation::CountDeprecation(
+        document, document.IsSecureContext()
+                      ? WebFeature::kNoSysexWebMIDIWithoutPermission
+                      : WebFeature::kNoSysexWebMIDIOnInsecureOrigin);
   }
   UseCounter::CountCrossOriginIframe(
       document, WebFeature::kRequestMIDIAccessIframe_ObscuredByFootprinting);
 
-  if (!document.GetFrame()->IsFeatureEnabled(
-          mojom::FeaturePolicyFeature::kMidiFeature,
-          ReportOptions::kReportOnFailure)) {
+  if (!document.IsFeatureEnabled(mojom::FeaturePolicyFeature::kMidiFeature,
+                                 ReportOptions::kReportOnFailure,
+                                 kFeaturePolicyConsoleWarning)) {
     UseCounter::Count(document, WebFeature::kMidiDisabledByFeaturePolicy);
-    document.AddConsoleMessage(ConsoleMessage::Create(
-        kJSMessageSource, kWarningMessageLevel, kFeaturePolicyConsoleWarning));
     return ScriptPromise::RejectWithDOMException(
         script_state, DOMException::Create(DOMExceptionCode::kSecurityError,
                                            kFeaturePolicyErrorMessage));

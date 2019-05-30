@@ -4,6 +4,9 @@
 
 #include "ui/views/widget/native_widget_aura.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
@@ -57,8 +60,7 @@
 
 #if defined(OS_WIN)
 #include "base/win/scoped_gdi_object.h"
-#include "base/win/win_client_metrics.h"
-#include "ui/base/l10n/l10n_util_win.h"
+#include "ui/gfx/platform_font_win.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_win.h"
 #endif
 
@@ -79,8 +81,8 @@ namespace views {
 namespace {
 
 DEFINE_UI_CLASS_PROPERTY_KEY(internal::NativeWidgetPrivate*,
-                           kNativeWidgetPrivateKey,
-                           nullptr);
+                             kNativeWidgetPrivateKey,
+                             nullptr)
 
 void SetRestoreBounds(aura::Window* window, const gfx::Rect& bounds) {
   window->SetProperty(aura::client::kRestoreBoundsKey, new gfx::Rect(bounds));
@@ -173,11 +175,11 @@ void NativeWidgetAura::InitNativeWidget(const Widget::InitParams& params) {
 
   window_->Init(params.layer_type);
   // Set name after layer init so it propagates to layer.
-  window_->SetName(params.name);
+  window_->SetName(params.name.empty() ? "NativeWidgetAura" : params.name);
   if (params.type == Widget::InitParams::TYPE_CONTROL)
     window_->Show();
 
-  delegate_->OnNativeWidgetCreated(false);
+  delegate_->OnNativeWidgetCreated();
 
   gfx::Rect window_bounds = params.bounds;
   gfx::NativeView parent = params.parent;
@@ -226,7 +228,6 @@ void NativeWidgetAura::InitNativeWidget(const Widget::InitParams& params) {
         window_, context->GetRootWindow(), window_bounds);
   }
 
-  // Start observing property changes.
   window_->AddObserver(this);
 
   // Wait to set the bounds until we have a parent. That way we can know our
@@ -592,9 +593,8 @@ void NativeWidgetAura::Activate() {
 
   // We don't necessarily have a root window yet. This can happen with
   // constrained windows.
-  if (window_->GetRootWindow()) {
+  if (window_->GetRootWindow())
     wm::GetActivationClient(window_->GetRootWindow())->ActivateWindow(window_);
-  }
   if (window_->GetProperty(aura::client::kDrawAttentionKey))
     window_->SetProperty(aura::client::kDrawAttentionKey, false);
 }
@@ -662,6 +662,9 @@ bool NativeWidgetAura::IsFullscreen() const {
   return window_ && window_->GetProperty(aura::client::kShowStateKey) ==
       ui::SHOW_STATE_FULLSCREEN;
 }
+
+void NativeWidgetAura::SetCanAppearInExistingFullscreenSpaces(
+    bool can_appear_in_existing_fullscreen_spaces) {}
 
 void NativeWidgetAura::SetOpacity(float opacity) {
   if (window_)
@@ -813,10 +816,6 @@ void NativeWidgetAura::OnSizeConstraintsChanged() {
   window_->SetProperty(aura::client::kResizeBehaviorKey, behavior);
 }
 
-void NativeWidgetAura::RepostNativeEvent(gfx::NativeEvent native_event) {
-  OnEvent(native_event);
-}
-
 std::string NativeWidgetAura::GetName() const {
   return window_ ? window_->GetName() : std::string();
 }
@@ -912,7 +911,7 @@ bool NativeWidgetAura::HasHitTestMask() const {
   return delegate_->HasHitTestMask();
 }
 
-void NativeWidgetAura::GetHitTestMask(gfx::Path* mask) const {
+void NativeWidgetAura::GetHitTestMask(SkPath* mask) const {
   DCHECK(mask);
   delegate_->GetHitTestMask(mask);
 }
@@ -925,6 +924,14 @@ void NativeWidgetAura::OnWindowPropertyChanged(aura::Window* window,
                                                intptr_t old) {
   if (key == aura::client::kShowStateKey)
     delegate_->OnNativeWidgetWindowShowStateChanged();
+}
+
+void NativeWidgetAura::OnResizeLoopStarted(aura::Window* window) {
+  delegate_->OnNativeWidgetBeginUserBoundsChange();
+}
+
+void NativeWidgetAura::OnResizeLoopEnded(aura::Window* window) {
+  delegate_->OnNativeWidgetEndUserBoundsChange();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1155,8 +1162,7 @@ void NativeWidgetPrivate::GetAllChildWidgets(gfx::NativeView native_view,
   }
 
   const aura::Window::Windows& child_windows = native_view->children();
-  for (aura::Window::Windows::const_iterator i = child_windows.begin();
-       i != child_windows.end(); ++i) {
+  for (auto i = child_windows.begin(); i != child_windows.end(); ++i) {
     GetAllChildWidgets((*i), children);
   }
 }
@@ -1192,8 +1198,7 @@ void NativeWidgetPrivate::ReparentNativeView(gfx::NativeView native_view,
 
   // First notify all the widgets that they are being disassociated
   // from their previous parent.
-  for (Widget::Widgets::iterator it = widgets.begin();
-      it != widgets.end(); ++it) {
+  for (auto it = widgets.begin(); it != widgets.end(); ++it) {
     (*it)->NotifyNativeViewHierarchyWillChange();
   }
 
@@ -1217,8 +1222,7 @@ void NativeWidgetPrivate::ReparentNativeView(gfx::NativeView native_view,
   }
 
   // And now, notify them that they have a brand new parent.
-  for (Widget::Widgets::iterator it = widgets.begin();
-      it != widgets.end(); ++it) {
+  for (auto it = widgets.begin(); it != widgets.end(); ++it) {
     (*it)->NotifyNativeViewHierarchyChanged();
   }
 }
@@ -1226,11 +1230,8 @@ void NativeWidgetPrivate::ReparentNativeView(gfx::NativeView native_view,
 // static
 gfx::FontList NativeWidgetPrivate::GetWindowTitleFontList() {
 #if defined(OS_WIN)
-  NONCLIENTMETRICS_XP ncm;
-  base::win::GetNonClientMetrics(&ncm);
-  l10n_util::AdjustUIFont(&(ncm.lfCaptionFont));
-  base::win::ScopedHFONT caption_font(CreateFontIndirect(&(ncm.lfCaptionFont)));
-  return gfx::FontList(gfx::Font(caption_font.get()));
+  return gfx::FontList(gfx::PlatformFontWin::GetSystemFont(
+      gfx::PlatformFontWin::SystemFont::kCaption));
 #else
   return gfx::FontList();
 #endif

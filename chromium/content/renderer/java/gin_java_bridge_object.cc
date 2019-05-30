@@ -4,6 +4,7 @@
 
 #include "content/renderer/java/gin_java_bridge_object.h"
 
+#include "base/bind.h"
 #include "content/common/gin_java_bridge_messages.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/renderer/java/gin_java_function_invocation_helper.h"
@@ -89,10 +90,13 @@ v8::Local<v8::Value> GinJavaBridgeObject::GetNamedProperty(
     }
     known_methods_[property] = dispatcher_->HasJavaMethod(object_id_, property);
   }
-  if (known_methods_[property])
-    return GetFunctionTemplate(isolate, property)->GetFunction();
-  else
+  if (known_methods_[property]) {
+    return GetFunctionTemplate(isolate, property)
+        ->GetFunction(isolate->GetCurrentContext())
+        .FromMaybe(v8::Local<v8::Value>());
+  } else {
     return v8::Local<v8::Value>();
+  }
 }
 
 std::vector<std::string> GinJavaBridgeObject::EnumerateNamedProperties(

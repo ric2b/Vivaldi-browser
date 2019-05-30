@@ -57,17 +57,13 @@ class TabCloseButton : public views::ImageButton,
  private:
   // views::MaskedTargeterDelegate:
   views::View* TargetForRect(views::View* root, const gfx::Rect& rect) override;
-  bool GetHitTestMask(gfx::Path* mask) const override;
+  bool GetHitTestMask(SkPath* mask) const override;
 
   // Draw the highlight circle.
   void DrawHighlight(gfx::Canvas* canvas, ButtonState state);
 
   // Draw the close "X" glyph.
   void DrawCloseGlyph(gfx::Canvas* canvas, ButtonState state);
-
-  // In material refresh mode, calculates opacity based on the current state of
-  // the hover animation on the parent tab.
-  SkAlpha GetOpacity();
 
   MouseEventCallback mouse_event_callback_;
 

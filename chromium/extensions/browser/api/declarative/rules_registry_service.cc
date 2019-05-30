@@ -11,6 +11,8 @@
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/task/post_task.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "extensions/browser/api/declarative_content/content_rules_registry.h"
@@ -71,14 +73,13 @@ void RulesRegistryService::Shutdown() {
   // be the last to reference the WebRequestRulesRegistry objects, so that
   // the posted task below causes their destruction on the IO thread, not on UI
   // where the destruction of |*this| takes place.
-  // TODO(vabr): Remove once http://crbug.com/218451#c6 gets addressed.
   rule_registries_.clear();
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&RegisterToExtensionWebRequestEventRouterOnIO,
-                 browser_context_,
-                 RulesRegistryService::kDefaultRulesRegistryID,
-                 scoped_refptr<WebRequestRulesRegistry>(NULL)));
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
+      base::BindOnce(&RegisterToExtensionWebRequestEventRouterOnIO,
+                     browser_context_,
+                     RulesRegistryService::kDefaultRulesRegistryID,
+                     scoped_refptr<WebRequestRulesRegistry>(NULL)));
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<RulesRegistryService>>::
@@ -135,8 +136,7 @@ scoped_refptr<RulesRegistry> RulesRegistryService::GetRulesRegistry(
 
 void RulesRegistryService::RemoveRulesRegistriesByID(int rules_registry_id) {
   std::set<RulesRegistryKey> registries_to_delete;
-  for (RulesRegistryMap::iterator it = rule_registries_.begin();
-       it != rule_registries_.end(); ++it) {
+  for (auto it = rule_registries_.begin(); it != rule_registries_.end(); ++it) {
     const RulesRegistryKey& key = it->first;
     if (key.rules_registry_id != rules_registry_id)
       continue;
@@ -145,8 +145,8 @@ void RulesRegistryService::RemoveRulesRegistriesByID(int rules_registry_id) {
     registries_to_delete.insert(key);
   }
 
-  for (std::set<RulesRegistryKey>::iterator it = registries_to_delete.begin();
-       it != registries_to_delete.end(); ++it) {
+  for (auto it = registries_to_delete.begin(); it != registries_to_delete.end();
+       ++it) {
     rule_registries_.erase(*it);
   }
 }
@@ -198,11 +198,11 @@ RulesRegistryService::RegisterWebRequestRulesRegistry(
   web_request_cache_delegate->AddObserver(this);
   cache_delegates_.push_back(std::move(web_request_cache_delegate));
   RegisterRulesRegistry(web_request_rules_registry);
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&RegisterToExtensionWebRequestEventRouterOnIO,
-                 browser_context_, rules_registry_id,
-                 web_request_rules_registry));
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
+      base::BindOnce(&RegisterToExtensionWebRequestEventRouterOnIO,
+                     browser_context_, rules_registry_id,
+                     web_request_rules_registry));
   return web_request_rules_registry;
 }
 
@@ -250,10 +250,10 @@ void RulesRegistryService::NotifyRegistriesHelper(
     if (content::BrowserThread::CurrentlyOn(registry->owner_thread())) {
       (registry.get()->*notification_callback)(extension);
     } else {
-      content::BrowserThread::PostTask(
-          registry->owner_thread(), FROM_HERE,
-          base::Bind(&NotifyWithExtensionSafe, base::WrapRefCounted(extension),
-                     notification_callback, registry));
+      base::PostTaskWithTraits(FROM_HERE, {registry->owner_thread()},
+                               base::BindOnce(&NotifyWithExtensionSafe,
+                                              base::WrapRefCounted(extension),
+                                              notification_callback, registry));
     }
   }
 }

@@ -4,6 +4,9 @@
 
 #include "content/renderer/loader/tracked_child_url_loader_factory_bundle.h"
 
+#include <utility>
+
+#include "base/bind.h"
 #include "content/public/renderer/render_thread.h"
 
 namespace content {
@@ -13,15 +16,21 @@ TrackedChildURLLoaderFactoryBundleInfo::
 
 TrackedChildURLLoaderFactoryBundleInfo::TrackedChildURLLoaderFactoryBundleInfo(
     network::mojom::URLLoaderFactoryPtrInfo default_factory_info,
-    std::map<std::string, network::mojom::URLLoaderFactoryPtrInfo>
-        factories_info,
+    network::mojom::URLLoaderFactoryPtrInfo appcache_factory_info,
+    SchemeMap scheme_specific_factory_infos,
+    OriginMap initiator_specific_factory_infos,
     PossiblyAssociatedURLLoaderFactoryPtrInfo direct_network_factory_info,
+    network::mojom::URLLoaderFactoryPtrInfo prefetch_loader_factory_info,
     std::unique_ptr<HostPtrAndTaskRunner> main_thread_host_bundle,
     bool bypass_redirect_checks)
-    : ChildURLLoaderFactoryBundleInfo(std::move(default_factory_info),
-                                      std::move(factories_info),
-                                      std::move(direct_network_factory_info),
-                                      bypass_redirect_checks),
+    : ChildURLLoaderFactoryBundleInfo(
+          std::move(default_factory_info),
+          std::move(appcache_factory_info),
+          std::move(scheme_specific_factory_infos),
+          std::move(initiator_specific_factory_infos),
+          std::move(direct_network_factory_info),
+          std::move(prefetch_loader_factory_info),
+          bypass_redirect_checks),
       main_thread_host_bundle_(std::move(main_thread_host_bundle)) {}
 
 TrackedChildURLLoaderFactoryBundleInfo::
@@ -31,8 +40,14 @@ scoped_refptr<network::SharedURLLoaderFactory>
 TrackedChildURLLoaderFactoryBundleInfo::CreateFactory() {
   auto other = std::make_unique<TrackedChildURLLoaderFactoryBundleInfo>();
   other->default_factory_info_ = std::move(default_factory_info_);
-  other->factories_info_ = std::move(factories_info_);
+  other->appcache_factory_info_ = std::move(appcache_factory_info_);
+  other->scheme_specific_factory_infos_ =
+      std::move(scheme_specific_factory_infos_);
+  other->initiator_specific_factory_infos_ =
+      std::move(initiator_specific_factory_infos_);
   other->direct_network_factory_info_ = std::move(direct_network_factory_info_);
+  other->prefetch_loader_factory_info_ =
+      std::move(prefetch_loader_factory_info_);
   other->main_thread_host_bundle_ = std::move(main_thread_host_bundle_);
   other->bypass_redirect_checks_ = bypass_redirect_checks_;
 
@@ -46,13 +61,13 @@ TrackedChildURLLoaderFactoryBundle::TrackedChildURLLoaderFactoryBundle(
     std::unique_ptr<TrackedChildURLLoaderFactoryBundleInfo> info) {
   DCHECK(info->main_thread_host_bundle());
   main_thread_host_bundle_ = std::move(info->main_thread_host_bundle());
-  Update(std::move(info), base::nullopt);
+  Update(std::move(info));
   AddObserverOnMainThread();
 }
 
 TrackedChildURLLoaderFactoryBundle::~TrackedChildURLLoaderFactoryBundle() {
   RemoveObserverOnMainThread();
-};
+}
 
 std::unique_ptr<network::SharedURLLoaderFactoryInfo>
 TrackedChildURLLoaderFactoryBundle::Clone() {
@@ -66,16 +81,18 @@ TrackedChildURLLoaderFactoryBundle::Clone() {
 
   return std::make_unique<TrackedChildURLLoaderFactoryBundleInfo>(
       std::move(info->default_factory_info()),
-      std::move(info->factories_info()),
+      std::move(info->appcache_factory_info()),
+      std::move(info->scheme_specific_factory_infos()),
+      std::move(info->initiator_specific_factory_infos()),
       std::move(info->direct_network_factory_info()),
+      std::move(info->prefetch_loader_factory_info()),
       std::move(main_thread_host_bundle_clone), info->bypass_redirect_checks());
 }
 
 void TrackedChildURLLoaderFactoryBundle::AddObserverOnMainThread() {
   DCHECK(main_thread_host_bundle_);
 
-  // TODO(chongz): Change this to a DCHECK once all call sites have a
-  // SequencedTaskRunnerHandle.
+  // Required by |SequencedTaskRunnerHandle::Get()| below.
   if (!base::SequencedTaskRunnerHandle::IsSet())
     return;
 
@@ -101,8 +118,7 @@ void TrackedChildURLLoaderFactoryBundle::RemoveObserverOnMainThread() {
 void TrackedChildURLLoaderFactoryBundle::OnUpdate(
     std::unique_ptr<network::SharedURLLoaderFactoryInfo> info) {
   Update(base::WrapUnique(
-             static_cast<ChildURLLoaderFactoryBundleInfo*>(info.release())),
-         base::nullopt);
+      static_cast<ChildURLLoaderFactoryBundleInfo*>(info.release())));
 }
 
 // -----------------------------------------------------------------------------
@@ -129,15 +145,18 @@ HostChildURLLoaderFactoryBundle::Clone() {
 
   return std::make_unique<TrackedChildURLLoaderFactoryBundleInfo>(
       std::move(info->default_factory_info()),
-      std::move(info->factories_info()),
+      std::move(info->appcache_factory_info()),
+      std::move(info->scheme_specific_factory_infos()),
+      std::move(info->initiator_specific_factory_infos()),
       std::move(info->direct_network_factory_info()),
+      std::move(info->prefetch_loader_factory_info()),
       std::move(main_thread_host_bundle_clone), info->bypass_redirect_checks());
 }
 
 std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-HostChildURLLoaderFactoryBundle::CloneWithoutDefaultFactory() {
+HostChildURLLoaderFactoryBundle::CloneWithoutAppCacheFactory() {
   auto info = base::WrapUnique(static_cast<ChildURLLoaderFactoryBundleInfo*>(
-      ChildURLLoaderFactoryBundle::CloneWithoutDefaultFactory().release()));
+      ChildURLLoaderFactoryBundle::CloneWithoutAppCacheFactory().release()));
 
   DCHECK(base::SequencedTaskRunnerHandle::IsSet());
   auto main_thread_host_bundle_clone = std::make_unique<
@@ -146,18 +165,21 @@ HostChildURLLoaderFactoryBundle::CloneWithoutDefaultFactory() {
 
   return std::make_unique<TrackedChildURLLoaderFactoryBundleInfo>(
       std::move(info->default_factory_info()),
-      std::move(info->factories_info()),
+      std::move(info->appcache_factory_info()),
+      std::move(info->scheme_specific_factory_infos()),
+      std::move(info->initiator_specific_factory_infos()),
       std::move(info->direct_network_factory_info()),
+      std::move(info->prefetch_loader_factory_info()),
       std::move(main_thread_host_bundle_clone), info->bypass_redirect_checks());
 }
 
 void HostChildURLLoaderFactoryBundle::UpdateThisAndAllClones(
-    std::unique_ptr<URLLoaderFactoryBundleInfo> info) {
+    std::unique_ptr<blink::URLLoaderFactoryBundleInfo> info) {
   DCHECK(RenderThread::Get()) << "Should run on the main renderer thread";
   DCHECK(observer_list_);
 
   auto partial_bundle = base::MakeRefCounted<ChildURLLoaderFactoryBundle>();
-  static_cast<URLLoaderFactoryBundle*>(partial_bundle.get())
+  static_cast<blink::URLLoaderFactoryBundle*>(partial_bundle.get())
       ->Update(std::move(info));
 
   for (const auto& iter : *observer_list_) {
@@ -165,7 +187,7 @@ void HostChildURLLoaderFactoryBundle::UpdateThisAndAllClones(
                                      partial_bundle->Clone());
   }
 
-  Update(partial_bundle->PassInterface(), base::nullopt);
+  Update(partial_bundle->PassInterface());
 }
 
 bool HostChildURLLoaderFactoryBundle::IsHostChildURLLoaderFactoryBundle()

@@ -65,10 +65,17 @@ class ArcIntentHelperBridge
       std::vector<IntentFilter> intent_filters) override;
   void OnOpenDownloads() override;
   void OnOpenUrl(const std::string& url) override;
+  void OnOpenCustomTab(const std::string& url,
+                       int32_t task_id,
+                       int32_t surface_id,
+                       int32_t top_margin,
+                       OnOpenCustomTabCallback callback) override;
   void OnOpenChromePage(mojom::ChromePage page) override;
   void OpenWallpaperPicker() override;
   void SetWallpaperDeprecated(const std::vector<uint8_t>& jpeg_data) override;
   void OpenVolumeControl() override;
+  void OnOpenWebApp(const std::string& url) override;
+  void RecordShareFilesMetrics(mojom::ShareFiles flag) override;
 
   // Retrieves icons for the |activities| and calls |callback|.
   // See ActivityIconLoader::GetActivityIcons() for more details.

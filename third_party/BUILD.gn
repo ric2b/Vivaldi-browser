@@ -1,0 +1,7 @@
+if (is_win) {
+  group("sparkle") {}
+}
+
+if (is_mac) {
+  group("copy_sparkle_framework") {}
+}

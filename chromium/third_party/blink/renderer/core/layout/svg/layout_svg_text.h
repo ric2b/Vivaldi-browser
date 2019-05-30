@@ -48,7 +48,7 @@ class LayoutSVGText final : public LayoutSVGBlock {
 
   void AddOutlineRects(Vector<LayoutRect>&,
                        const LayoutPoint& additional_offset,
-                       IncludeBlockVisualOverflowOrNot) const override;
+                       NGOutlineType) const override;
 
   static LayoutSVGText* LocateLayoutSVGTextAncestor(LayoutObject*);
   static const LayoutSVGText* LocateLayoutSVGTextAncestor(const LayoutObject*);
@@ -62,6 +62,8 @@ class LayoutSVGText final : public LayoutSVGBlock {
   void SubtreeChildWillBeRemoved();
   void SubtreeTextDidChange();
 
+  void RecalcVisualOverflow() override;
+
   const char* GetName() const override { return "LayoutSVGText"; }
 
  private:
@@ -72,9 +74,10 @@ class LayoutSVGText final : public LayoutSVGBlock {
   }
 
   void Paint(const PaintInfo&) const override;
-  bool NodeAtFloatPoint(HitTestResult&,
-                        const FloatPoint& point_in_parent,
-                        HitTestAction) override;
+  bool NodeAtPoint(HitTestResult&,
+                   const HitTestLocation& location_in_parent,
+                   const LayoutPoint& accumulated_offset,
+                   HitTestAction) override;
   PositionWithAffinity PositionForPoint(const LayoutPoint&) const override;
 
   void UpdateLayout() override;

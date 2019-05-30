@@ -23,9 +23,9 @@ import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.CardType;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
-import org.chromium.chrome.browser.modaldialog.ModalDialogView;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.ui.modaldialog.ModalDialogProperties;
 
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
@@ -34,7 +34,8 @@ import java.util.concurrent.TimeoutException;
  * A payment integration test for supported payment methods.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
+        "enable-features=PaymentRequestHasEnrolledInstrument"})
 public class PaymentRequestPaymentMethodIdentifierTest implements MainActivityStartCallback {
     @Rule
     public PaymentRequestTestRule mPaymentRequestTestRule =
@@ -91,7 +92,7 @@ public class PaymentRequestPaymentMethodIdentifierTest implements MainActivitySt
             throws InterruptedException, ExecutionException, TimeoutException {
         mPaymentRequestTestRule.openPageAndClickNodeAndWait(
                 "checkBasicMasterCard", mPaymentRequestTestRule.getCanMakePaymentQueryResponded());
-        mPaymentRequestTestRule.expectResultContains(new String[] {"false"});
+        mPaymentRequestTestRule.expectResultContains(new String[] {"true"});
 
         mPaymentRequestTestRule.reTriggerUIAndWait(
                 "buyBasicMasterCard", mPaymentRequestTestRule.getReadyForInput());
@@ -108,8 +109,7 @@ public class PaymentRequestPaymentMethodIdentifierTest implements MainActivitySt
 
         mPaymentRequestTestRule.clickNodeAndWait(
                 "checkBasicMasterCard", mPaymentRequestTestRule.getCanMakePaymentQueryResponded());
-        mPaymentRequestTestRule.expectResultContains(
-                new String[] {"Not allowed to check whether can make payment"});
+        mPaymentRequestTestRule.expectResultContains(new String[] {"true"});
 
         mPaymentRequestTestRule.clickNodeAndWait(
                 "checkBasicVisa", mPaymentRequestTestRule.getCanMakePaymentQueryResponded());
@@ -127,8 +127,7 @@ public class PaymentRequestPaymentMethodIdentifierTest implements MainActivitySt
 
         mPaymentRequestTestRule.clickNodeAndWait(
                 "checkBasicDebit", mPaymentRequestTestRule.getCanMakePaymentQueryResponded());
-        mPaymentRequestTestRule.expectResultContains(
-                new String[] {"Not allowed to check whether can make payment"});
+        mPaymentRequestTestRule.expectResultContains(new String[] {"true"});
 
         mPaymentRequestTestRule.clickNodeAndWait(
                 "checkBasicVisa", mPaymentRequestTestRule.getCanMakePaymentQueryResponded());
@@ -155,7 +154,7 @@ public class PaymentRequestPaymentMethodIdentifierTest implements MainActivitySt
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogProperties.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
         mPaymentRequestTestRule.expectResultContains(
                 new String[] {"Jon Doe", "4111111111111111", "12", "2050", "basic-card", "123"});
     }
@@ -188,7 +187,7 @@ public class PaymentRequestPaymentMethodIdentifierTest implements MainActivitySt
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogProperties.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
         mPaymentRequestTestRule.expectResultContains(
                 new String[] {"5555555555554444", "12", "Jane Jones", "123", "mastercard"});
     }
@@ -221,7 +220,7 @@ public class PaymentRequestPaymentMethodIdentifierTest implements MainActivitySt
         mPaymentRequestTestRule.setTextInCardUnmaskDialogAndWait(
                 R.id.card_unmask_input, "123", mPaymentRequestTestRule.getReadyToUnmask());
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
-                ModalDialogView.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
+                ModalDialogProperties.ButtonType.POSITIVE, mPaymentRequestTestRule.getDismissed());
         mPaymentRequestTestRule.expectResultContains(
                 new String[] {"4242424242424242", "12", "Jane Jones", "123", "basic-card"});
     }

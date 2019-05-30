@@ -11,7 +11,7 @@
 #include "components/offline_pages/core/prefetch/prefetch_request_fetcher.h"
 #include "components/offline_pages/core/prefetch/prefetch_server_urls.h"
 #include "components/offline_pages/core/prefetch/proto/offline_pages.pb.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "url/gurl.h"
 
 namespace offline_pages {
@@ -22,7 +22,8 @@ GeneratePageBundleRequest::GeneratePageBundleRequest(
     int max_bundle_size_bytes,
     const std::vector<std::string>& page_urls,
     version_info::Channel channel,
-    net::URLRequestContextGetter* request_context_getter,
+    const std::string& testing_header_value,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     PrefetchRequestFinishedCallback callback)
     : callback_(std::move(callback)), requested_urls_(page_urls) {
   proto::GeneratePageBundleRequest request;
@@ -41,8 +42,8 @@ GeneratePageBundleRequest::GeneratePageBundleRequest(
   request.SerializeToString(&upload_data);
 
   fetcher_ = PrefetchRequestFetcher::CreateForPost(
-      GeneratePageBundleRequestURL(channel), upload_data,
-      request_context_getter,
+      GeneratePageBundleRequestURL(channel), upload_data, testing_header_value,
+      url_loader_factory,
       base::BindOnce(&GeneratePageBundleRequest::OnCompleted,
                      // Fetcher is owned by this instance.
                      base::Unretained(this)));
@@ -52,7 +53,7 @@ GeneratePageBundleRequest::~GeneratePageBundleRequest() {}
 
 void GeneratePageBundleRequest::OnCompleted(PrefetchRequestStatus status,
                                             const std::string& data) {
-  if (status != PrefetchRequestStatus::SUCCESS) {
+  if (status != PrefetchRequestStatus::kSuccess) {
     std::move(callback_).Run(status, std::string(),
                              std::vector<RenderPageInfo>());
     return;
@@ -61,12 +62,12 @@ void GeneratePageBundleRequest::OnCompleted(PrefetchRequestStatus status,
   std::vector<RenderPageInfo> pages;
   std::string operation_name = ParseOperationResponse(data, &pages);
   if (operation_name.empty()) {
-    std::move(callback_).Run(PrefetchRequestStatus::SHOULD_RETRY_WITH_BACKOFF,
+    std::move(callback_).Run(PrefetchRequestStatus::kShouldRetryWithBackoff,
                              std::string(), std::vector<RenderPageInfo>());
     return;
   }
 
-  std::move(callback_).Run(PrefetchRequestStatus::SUCCESS, operation_name,
+  std::move(callback_).Run(PrefetchRequestStatus::kSuccess, operation_name,
                            pages);
 }
 

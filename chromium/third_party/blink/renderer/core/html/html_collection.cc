@@ -42,7 +42,7 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 static bool ShouldTypeOnlyIncludeDirectChildren(CollectionType type) {
   switch (type) {
@@ -193,7 +193,8 @@ HTMLCollection::HTMLCollection(ContainerNode& owner_node,
 
 HTMLCollection* HTMLCollection::Create(ContainerNode& base,
                                        CollectionType type) {
-  return new HTMLCollection(base, type, kDoesNotOverrideItemAfter);
+  return MakeGarbageCollected<HTMLCollection>(base, type,
+                                              kDoesNotOverrideItemAfter);
 }
 
 HTMLCollection::~HTMLCollection() = default;
@@ -220,22 +221,22 @@ static inline bool IsMatchingHTMLElement(const HTMLCollection& html_collection,
                                          const HTMLElement& element) {
   switch (html_collection.GetType()) {
     case kDocImages:
-      return element.HasTagName(imgTag);
+      return element.HasTagName(kImgTag);
     case kDocScripts:
-      return element.HasTagName(scriptTag);
+      return element.HasTagName(kScriptTag);
     case kDocForms:
-      return element.HasTagName(formTag);
+      return element.HasTagName(kFormTag);
     case kDocumentNamedItems:
       return ToDocumentNameCollection(html_collection).ElementMatches(element);
     case kDocumentAllNamedItems:
       return ToDocumentAllNameCollection(html_collection)
           .ElementMatches(element);
     case kTableTBodies:
-      return element.HasTagName(tbodyTag);
+      return element.HasTagName(kTbodyTag);
     case kTRCells:
-      return element.HasTagName(tdTag) || element.HasTagName(thTag);
+      return element.HasTagName(kTdTag) || element.HasTagName(kThTag);
     case kTSectionRows:
-      return element.HasTagName(trTag);
+      return element.HasTagName(kTrTag);
     case kSelectOptions:
       return ToHTMLOptionsCollection(html_collection).ElementMatches(element);
     case kSelectedOptions:
@@ -245,20 +246,22 @@ static inline bool IsMatchingHTMLElement(const HTMLCollection& html_collection,
       return ToHTMLDataListOptionsCollection(html_collection)
           .ElementMatches(element);
     case kMapAreas:
-      return element.HasTagName(areaTag);
+      return element.HasTagName(kAreaTag);
     case kDocApplets:
       return IsHTMLObjectElement(element) &&
              ToHTMLObjectElement(element).ContainsJavaApplet();
     case kDocEmbeds:
-      return element.HasTagName(embedTag);
+      return element.HasTagName(kEmbedTag);
     case kDocLinks:
-      return (element.HasTagName(aTag) || element.HasTagName(areaTag)) &&
-             element.FastHasAttribute(hrefAttr);
+      return (element.HasTagName(kATag) || element.HasTagName(kAreaTag)) &&
+             element.FastHasAttribute(kHrefAttr);
     case kDocAnchors:
-      return element.HasTagName(aTag) && element.FastHasAttribute(nameAttr);
+      return element.HasTagName(kATag) && element.FastHasAttribute(kNameAttr);
     case kFormControls:
       DCHECK(IsHTMLFieldSetElement(html_collection.ownerNode()));
-      return IsHTMLObjectElement(element) || IsHTMLFormControlElement(element);
+      return IsHTMLObjectElement(element) ||
+             IsHTMLFormControlElement(element) ||
+             element.IsFormAssociatedCustomElement();
     case kClassCollectionType:
     case kTagCollectionType:
     case kTagCollectionNSType:
@@ -333,18 +336,18 @@ Element* HTMLCollection::VirtualItemAfter(Element*) const {
   return nullptr;
 }
 
-// https://html.spec.whatwg.org/multipage/infrastructure.html#all-named-elements
+// https://html.spec.whatwg.org/C/#all-named-elements
 // The document.all collection returns only certain types of elements by name,
 // although it returns any type of element by id.
 static inline bool NameShouldBeVisibleInDocumentAll(
     const HTMLElement& element) {
-  return element.HasTagName(aTag) || element.HasTagName(buttonTag) ||
-         element.HasTagName(embedTag) || element.HasTagName(formTag) ||
-         element.HasTagName(frameTag) || element.HasTagName(framesetTag) ||
-         element.HasTagName(iframeTag) || element.HasTagName(imgTag) ||
-         element.HasTagName(inputTag) || element.HasTagName(mapTag) ||
-         element.HasTagName(metaTag) || element.HasTagName(objectTag) ||
-         element.HasTagName(selectTag) || element.HasTagName(textareaTag);
+  return element.HasTagName(kATag) || element.HasTagName(kButtonTag) ||
+         element.HasTagName(kEmbedTag) || element.HasTagName(kFormTag) ||
+         element.HasTagName(kFrameTag) || element.HasTagName(kFramesetTag) ||
+         element.HasTagName(kIFrameTag) || element.HasTagName(kImgTag) ||
+         element.HasTagName(kInputTag) || element.HasTagName(kMapTag) ||
+         element.HasTagName(kMetaTag) || element.HasTagName(kObjectTag) ||
+         element.HasTagName(kSelectTag) || element.HasTagName(kTextareaTag);
 }
 
 Element* HTMLCollection::TraverseToFirst() const {
@@ -540,7 +543,7 @@ void HTMLCollection::NamedItems(const AtomicString& name,
 
 HTMLCollection::NamedItemCache::NamedItemCache() = default;
 
-void HTMLCollection::Trace(blink::Visitor* visitor) {
+void HTMLCollection::Trace(Visitor* visitor) {
   visitor->Trace(named_item_cache_);
   visitor->Trace(collection_items_cache_);
   ScriptWrappable::Trace(visitor);

@@ -12,7 +12,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/run_loop.h"
-#include "content/browser/background_sync/background_sync_context.h"
+#include "content/browser/background_sync/background_sync_context_impl.h"
 #include "content/browser/background_sync/background_sync_network_observer.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -25,7 +25,6 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/test/test_background_sync_context.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
-#include "net/base/network_change_notifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 
@@ -35,7 +34,7 @@ namespace {
 
 using ::testing::_;
 
-const char kServiceWorkerPattern[] = "https://example.com/a";
+const char kServiceWorkerScope[] = "https://example.com/a";
 const char kServiceWorkerScript[] = "https://example.com/a/script.js";
 
 // Callbacks from SetUp methods
@@ -64,9 +63,9 @@ void FindServiceWorkerRegistrationCallback(
 void ErrorAndRegistrationCallback(
     bool* called,
     blink::mojom::BackgroundSyncError* out_error,
-    blink::mojom::SyncRegistrationPtr* out_registration,
+    blink::mojom::SyncRegistrationOptionsPtr* out_registration,
     blink::mojom::BackgroundSyncError error,
-    blink::mojom::SyncRegistrationPtr registration) {
+    blink::mojom::SyncRegistrationOptionsPtr registration) {
   *called = true;
   *out_error = error;
   *out_registration = registration.Clone();
@@ -77,7 +76,7 @@ void ErrorAndRegistrationListCallback(
     blink::mojom::BackgroundSyncError* out_error,
     unsigned long* out_array_size,
     blink::mojom::BackgroundSyncError error,
-    std::vector<blink::mojom::SyncRegistrationPtr> registrations) {
+    std::vector<blink::mojom::SyncRegistrationOptionsPtr> registrations) {
   *called = true;
   *out_error = error;
   if (error == blink::mojom::BackgroundSyncError::NONE)
@@ -90,14 +89,13 @@ class BackgroundSyncServiceImplTest : public testing::Test {
  public:
   BackgroundSyncServiceImplTest()
       : thread_bundle_(
-            new TestBrowserThreadBundle(TestBrowserThreadBundle::IO_MAINLOOP)),
-        network_change_notifier_(net::NetworkChangeNotifier::CreateMock()) {
-    default_sync_registration_ = blink::mojom::SyncRegistration::New();
+            new TestBrowserThreadBundle(TestBrowserThreadBundle::IO_MAINLOOP)) {
+    default_sync_registration_ = blink::mojom::SyncRegistrationOptions::New();
   }
 
   void SetUp() override {
     // Don't let the tests be confused by the real-world device connectivity
-    background_sync_test_util::SetIgnoreNetworkChangeNotifier(true);
+    background_sync_test_util::SetIgnoreNetworkChanges(true);
 
     CreateTestHelper();
     CreateStoragePartition();
@@ -108,14 +106,14 @@ class BackgroundSyncServiceImplTest : public testing::Test {
 
   void TearDown() override {
     // This must be explicitly destroyed here to ensure that destruction
-    // of both the BackgroundSyncContext and the BackgroundSyncManager occurs on
-    // the correct thread.
+    // of both the BackgroundSyncContextImpl and the BackgroundSyncManager
+    // occurs on the correct thread.
     background_sync_context_->Shutdown();
     base::RunLoop().RunUntilIdle();
     background_sync_context_ = nullptr;
 
     // Restore the network observer functionality for subsequent tests
-    background_sync_test_util::SetIgnoreNetworkChangeNotifier(false);
+    background_sync_test_util::SetIgnoreNetworkChanges(false);
   }
 
   // SetUp helper methods
@@ -158,15 +156,15 @@ class BackgroundSyncServiceImplTest : public testing::Test {
     BackgroundSyncNetworkObserver* network_observer =
         background_sync_context_->background_sync_manager()
             ->GetNetworkObserverForTesting();
-    network_observer->NotifyManagerIfNetworkChangedForTesting(
-        net::NetworkChangeNotifier::CONNECTION_NONE);
+    network_observer->NotifyManagerIfConnectionChangedForTesting(
+        network::mojom::ConnectionType::CONNECTION_NONE);
     base::RunLoop().RunUntilIdle();
   }
 
   void CreateServiceWorkerRegistration() {
     bool called = false;
     blink::mojom::ServiceWorkerRegistrationOptions options;
-    options.scope = GURL(kServiceWorkerPattern);
+    options.scope = GURL(kServiceWorkerScope);
     embedded_worker_helper_->context()->RegisterServiceWorker(
         GURL(kServiceWorkerScript), options,
         base::BindOnce(&RegisterServiceWorkerCallback, &called,
@@ -175,7 +173,7 @@ class BackgroundSyncServiceImplTest : public testing::Test {
     EXPECT_TRUE(called);
 
     embedded_worker_helper_->context_wrapper()->FindReadyRegistrationForId(
-        sw_registration_id_, GURL(kServiceWorkerPattern).GetOrigin(),
+        sw_registration_id_, GURL(kServiceWorkerScope).GetOrigin(),
         base::BindOnce(FindServiceWorkerRegistrationCallback,
                        &sw_registration_));
     base::RunLoop().RunUntilIdle();
@@ -197,7 +195,7 @@ class BackgroundSyncServiceImplTest : public testing::Test {
 
   // Helpers for testing BackgroundSyncServiceImpl methods
   void Register(
-      blink::mojom::SyncRegistrationPtr sync,
+      blink::mojom::SyncRegistrationOptionsPtr sync,
       blink::mojom::BackgroundSyncService::RegisterCallback callback) {
     service_impl_->Register(std::move(sync), sw_registration_id_,
                             std::move(callback));
@@ -211,16 +209,15 @@ class BackgroundSyncServiceImplTest : public testing::Test {
   }
 
   std::unique_ptr<TestBrowserThreadBundle> thread_bundle_;
-  std::unique_ptr<net::NetworkChangeNotifier> network_change_notifier_;
   std::unique_ptr<EmbeddedWorkerTestHelper> embedded_worker_helper_;
   std::unique_ptr<StoragePartitionImpl> storage_partition_impl_;
-  scoped_refptr<BackgroundSyncContext> background_sync_context_;
+  scoped_refptr<BackgroundSyncContextImpl> background_sync_context_;
   int64_t sw_registration_id_;
   scoped_refptr<ServiceWorkerRegistration> sw_registration_;
   blink::mojom::BackgroundSyncServicePtr service_ptr_;
   BackgroundSyncServiceImpl*
       service_impl_;  // Owned by background_sync_context_
-  blink::mojom::SyncRegistrationPtr default_sync_registration_;
+  blink::mojom::SyncRegistrationOptionsPtr default_sync_registration_;
 };
 
 // Tests
@@ -228,7 +225,7 @@ class BackgroundSyncServiceImplTest : public testing::Test {
 TEST_F(BackgroundSyncServiceImplTest, Register) {
   bool called = false;
   blink::mojom::BackgroundSyncError error;
-  blink::mojom::SyncRegistrationPtr reg;
+  blink::mojom::SyncRegistrationOptionsPtr reg;
   Register(
       default_sync_registration_.Clone(),
       base::BindOnce(&ErrorAndRegistrationCallback, &called, &error, &reg));
@@ -253,7 +250,7 @@ TEST_F(BackgroundSyncServiceImplTest, GetRegistrationsWithRegisteredSync) {
   bool get_registrations_called = false;
   blink::mojom::BackgroundSyncError register_error;
   blink::mojom::BackgroundSyncError getregistrations_error;
-  blink::mojom::SyncRegistrationPtr register_reg;
+  blink::mojom::SyncRegistrationOptionsPtr register_reg;
   unsigned long array_size = 0UL;
   Register(default_sync_registration_.Clone(),
            base::BindOnce(&ErrorAndRegistrationCallback, &register_called,

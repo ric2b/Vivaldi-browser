@@ -32,6 +32,7 @@
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/linked_hash_set.h"
 
 namespace blink {
@@ -70,6 +71,15 @@ class CORE_EXPORT LayoutFlowThread : public LayoutBlockFlow {
   bool IsLayoutFlowThread() const final { return true; }
   virtual bool IsLayoutMultiColumnFlowThread() const { return false; }
   virtual bool IsLayoutPagedFlowThread() const { return false; }
+
+  bool CreatesNewFormattingContext() const final {
+    // The spec requires multicol containers to establish new formatting
+    // contexts. Blink uses an anonymous flow thread child of the multicol
+    // container to actually perform layout inside. Therefore we need to
+    // propagate the BFCness down to the flow thread, so that floats are fully
+    // contained by the flow thread, and thereby the multicol container.
+    return true;
+  }
 
   // Search mode when looking for an enclosing fragmentation context.
   enum AncestorSearchConstraint {
@@ -113,7 +123,7 @@ class CORE_EXPORT LayoutFlowThread : public LayoutBlockFlow {
 
   void AddOutlineRects(Vector<LayoutRect>&,
                        const LayoutPoint& additional_offset,
-                       IncludeBlockVisualOverflowOrNot) const override;
+                       NGOutlineType) const override;
 
   bool NodeAtPoint(HitTestResult&,
                    const HitTestLocation& location_in_container,
@@ -191,11 +201,14 @@ class CORE_EXPORT LayoutFlowThread : public LayoutBlockFlow {
 
   LayoutMultiColumnSetList multi_column_set_list_;
 
-  typedef PODInterval<LayoutUnit, LayoutMultiColumnSet*> MultiColumnSetInterval;
-  typedef PODIntervalTree<LayoutUnit, LayoutMultiColumnSet*>
+  typedef WTF::PODInterval<LayoutUnit, LayoutMultiColumnSet*>
+      MultiColumnSetInterval;
+  typedef WTF::PODIntervalTree<LayoutUnit, LayoutMultiColumnSet*>
       MultiColumnSetIntervalTree;
 
   class MultiColumnSetSearchAdapter {
+    STACK_ALLOCATED();
+
    public:
     MultiColumnSetSearchAdapter(LayoutUnit offset)
         : offset_(offset), result_(nullptr) {}
@@ -219,16 +232,18 @@ class CORE_EXPORT LayoutFlowThread : public LayoutBlockFlow {
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutFlowThread, IsLayoutFlowThread());
 
+}  // namespace blink
+
+namespace WTF {
 // These structures are used by PODIntervalTree for debugging.
 #ifndef NDEBUG
 template <>
-struct ValueToString<LayoutMultiColumnSet*> {
-  static String ToString(const LayoutMultiColumnSet* value) {
+struct ValueToString<blink::LayoutMultiColumnSet*> {
+  static String ToString(const blink::LayoutMultiColumnSet* value) {
     return String::Format("%p", value);
   }
 };
 #endif
-
-}  // namespace blink
+}  // namespace WTF
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_FLOW_THREAD_H_

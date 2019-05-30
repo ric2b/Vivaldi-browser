@@ -80,7 +80,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItem : public base::SupportsUserData {
   };
 
   // How download item is created. Used for trace event.
-  enum DownloadType {
+  enum DownloadCreationType {
     TYPE_ACTIVE_DOWNLOAD,
     TYPE_HISTORY_IMPORT,
     TYPE_SAVE_PAGE_AS
@@ -161,7 +161,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItem : public base::SupportsUserData {
   // Resume a download that has been paused or interrupted. Will have no effect
   // if the download is neither. Only does something if CanResume() returns
   // true.
-  virtual void Resume() = 0;
+  virtual void Resume(bool user_resume) = 0;
 
   // Cancel the download operation.
   //
@@ -205,9 +205,14 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItem : public base::SupportsUserData {
   // reason.
   virtual DownloadInterruptReason GetLastReason() const = 0;
 
-  // The download is currently paused. Calling Resume() will transition out of
-  // this paused state.
+  // Returns whether download is currently paused explicitly by the user. The
+  // download state should be checked in conjunction with this method to
+  // determine whether the download was truly paused. Calling Resume() will
+  // transition out of this paused state.
   virtual bool IsPaused() const = 0;
+
+  // Whether the download should be allowed to proceed in a metered network.
+  virtual bool AllowMetered() const = 0;
 
   // DEPRECATED. True if this is a temporary download and should not be
   // persisted.
@@ -225,6 +230,10 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItem : public base::SupportsUserData {
 
   // Returns the calculated number of bytes wasted (if any).
   virtual int64_t GetBytesWasted() const = 0;
+
+  // Returns the number of times the download has been auto-resumed since last
+  // user triggered resumption.
+  virtual int32_t GetAutoResumeCount() const = 0;
 
   //    Origin State accessors -------------------------------------------------
 
@@ -347,7 +356,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItem : public base::SupportsUserData {
   // If the file is successfully deleted, then GetFileExternallyRemoved() will
   // become true, GetFullPath() will become empty, and
   // DownloadItem::OnDownloadUpdated() will be called. Does nothing if
-  // GetState() == COMPLETE or GetFileExternallyRemoved() is already true or
+  // GetState() != COMPLETE or GetFileExternallyRemoved() is already true or
   // GetFullPath() is already empty. The callback is always run, and it is
   // always run asynchronously. It will be passed true if the file is
   // successfully deleted or if GetFilePath() was already empty or if
@@ -441,6 +450,9 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItem : public base::SupportsUserData {
   // usually means parallel download has been enabled and the download job is
   // parallelizable.
   virtual bool IsParallelDownload() const = 0;
+
+  // Gets the DownloadCreationType of this item.
+  virtual DownloadCreationType GetDownloadCreationType() const = 0;
 
   // External state transitions/setters ----------------------------------------
 

@@ -6,7 +6,10 @@
 
 #include <utility>
 
+#include "base/bind.h"
+#include "base/task/post_task.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -48,8 +51,8 @@ FilterRendererExposedInterfaces(
   service_manager::mojom::InterfaceProviderPtr provider;
   auto filtered_request = mojo::MakeRequest(&provider);
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&FilterInterfacesImpl, spec, process_id,
                        std::move(request), std::move(provider)));
   } else {

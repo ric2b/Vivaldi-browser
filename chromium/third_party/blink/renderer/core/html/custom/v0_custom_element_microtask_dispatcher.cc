@@ -9,6 +9,7 @@
 #include "third_party/blink/renderer/core/html/custom/v0_custom_element_processing_stack.h"
 #include "third_party/blink/renderer/core/html/custom/v0_custom_element_scheduler.h"
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 
 namespace blink {
 
@@ -19,9 +20,10 @@ V0CustomElementMicrotaskDispatcher::V0CustomElementMicrotaskDispatcher()
 
 V0CustomElementMicrotaskDispatcher&
 V0CustomElementMicrotaskDispatcher::Instance() {
-  DEFINE_STATIC_LOCAL(V0CustomElementMicrotaskDispatcher, instance,
-                      (new V0CustomElementMicrotaskDispatcher));
-  return instance;
+  DEFINE_STATIC_LOCAL(
+      Persistent<V0CustomElementMicrotaskDispatcher>, instance,
+      (MakeGarbageCollected<V0CustomElementMicrotaskDispatcher>()));
+  return *instance;
 }
 
 void V0CustomElementMicrotaskDispatcher::Enqueue(
@@ -74,7 +76,7 @@ void V0CustomElementMicrotaskDispatcher::DoDispatch() {
   phase_ = kQuiescent;
 }
 
-void V0CustomElementMicrotaskDispatcher::Trace(blink::Visitor* visitor) {
+void V0CustomElementMicrotaskDispatcher::Trace(Visitor* visitor) {
   visitor->Trace(elements_);
 }
 

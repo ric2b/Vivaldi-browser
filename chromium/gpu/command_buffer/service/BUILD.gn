@@ -2,8 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
+import("//gpu/vulkan/features.gni")
 import("//third_party/protobuf/proto_library.gni")
+import("//ui/gl/features.gni")
 
 group("service") {
   if (is_component_build) {
@@ -30,9 +33,9 @@ group("gles2") {
 }
 
 if (is_component_build) {
-  link_target_type = "source_set"
+  link_target_type = "jumbo_source_set"
 } else {
-  link_target_type = "static_library"
+  link_target_type = "jumbo_static_library"
 }
 target(link_target_type, "service_sources") {
   # External code should depend on this via //gpu/command_buffer/service above
@@ -125,6 +128,7 @@ target(link_target_type, "gles2_sources") {
     "framebuffer_manager.h",
     "gl_context_virtual.cc",
     "gl_context_virtual.h",
+    "gl_context_virtual_delegate.h",
     "gl_state_restorer_impl.cc",
     "gl_state_restorer_impl.h",
     "gl_utils.cc",
@@ -154,6 +158,8 @@ target(link_target_type, "gles2_sources") {
     "gles2_cmd_validation_implementation_autogen.h",
     "gles2_query_manager.cc",
     "gles2_query_manager.h",
+    "gpu_command_buffer_memory_tracker.cc",
+    "gpu_command_buffer_memory_tracker.h",
     "gpu_fence_manager.cc",
     "gpu_fence_manager.h",
     "gpu_state_tracer.cc",
@@ -178,8 +184,12 @@ target(link_target_type, "gles2_sources") {
     "mailbox_manager_sync.h",
     "memory_program_cache.cc",
     "memory_program_cache.h",
+    "multi_draw_manager.cc",
+    "multi_draw_manager.h",
     "passthrough_abstract_texture_impl.cc",
     "passthrough_abstract_texture_impl.h",
+    "passthrough_discardable_manager.cc",
+    "passthrough_discardable_manager.h",
     "passthrough_program_cache.cc",
     "passthrough_program_cache.h",
     "path_manager.cc",
@@ -196,8 +206,6 @@ target(link_target_type, "gles2_sources") {
     "raster_cmd_validation_implementation_autogen.h",
     "raster_decoder.cc",
     "raster_decoder.h",
-    "raster_decoder_context_state.cc",
-    "raster_decoder_context_state.h",
     "renderbuffer_manager.cc",
     "renderbuffer_manager.h",
     "sampler_manager.cc",
@@ -216,8 +224,21 @@ target(link_target_type, "gles2_sources") {
     "shader_translator.h",
     "shader_translator_cache.cc",
     "shader_translator_cache.h",
+    "shared_context_state.cc",
+    "shared_context_state.h",
+    "shared_image_backing.cc",
+    "shared_image_backing.h",
+    "shared_image_backing_factory.h",
+    "shared_image_backing_factory_gl_texture.cc",
+    "shared_image_backing_factory_gl_texture.h",
     "shared_image_factory.cc",
     "shared_image_factory.h",
+    "shared_image_manager.cc",
+    "shared_image_manager.h",
+    "shared_image_representation.cc",
+    "shared_image_representation.h",
+    "skia_utils.cc",
+    "skia_utils.h",
     "texture_definition.cc",
     "texture_definition.h",
     "texture_manager.cc",
@@ -236,6 +257,10 @@ target(link_target_type, "gles2_sources") {
     "webgpu_cmd_validation_implementation_autogen.h",
     "webgpu_decoder.cc",
     "webgpu_decoder.h",
+    "webgpu_decoder_impl.cc",
+    "webgpu_decoder_impl.h",
+    "wrapped_sk_image.cc",
+    "wrapped_sk_image.h",
   ]
 
   configs += [
@@ -250,22 +275,24 @@ target(link_target_type, "gles2_sources") {
   include_dirs = [ "//third_party/mesa_headers" ]
 
   public_deps = [
+    "//cc/paint",
     "//gpu/command_buffer/common",
     "//gpu/command_buffer/common:gles2_sources",
     "//gpu/command_buffer/common:raster_sources",
     "//gpu/command_buffer/common:webgpu_sources",
+    "//skia",
   ]
   deps = [
     ":disk_cache_proto",
     ":service",
     "//base",
     "//base/third_party/dynamic_annotations",
-    "//cc/paint",
     "//components/viz/common:resource_format_utils",
     "//gpu/command_buffer/client",
     "//gpu/command_buffer/common:gles2_utils",
     "//gpu/config",
     "//gpu/ipc/common:surface_handle_type",
+    "//gpu/vulkan:buildflags",
     "//third_party/angle:angle_image_util",
     "//third_party/angle:commit_id",
     "//third_party/angle:translator",
@@ -280,18 +307,69 @@ target(link_target_type, "gles2_sources") {
     "//ui/gl/init",
   ]
 
+  if (enable_vulkan) {
+    deps += [
+      "//components/viz/common:vulkan_context_provider",
+      "//gpu/vulkan",
+    ]
+
+    if (is_linux) {
+      sources += [
+        "external_vk_image_backing.cc",
+        "external_vk_image_backing.h",
+        "external_vk_image_factory.cc",
+        "external_vk_image_factory.h",
+        "external_vk_image_gl_representation.cc",
+        "external_vk_image_gl_representation.h",
+        "external_vk_image_skia_representation.cc",
+        "external_vk_image_skia_representation.h",
+      ]
+    }
+  }
+
+  if (use_dawn) {
+    deps += [ "//third_party/dawn:libdawn_native" ]
+  }
+
   if (is_mac) {
+    sources += [
+      "shared_image_backing_factory_iosurface.h",
+      "shared_image_backing_factory_iosurface.mm",
+    ]
+
     # Required by gles2_cmd_decoder.cc on Mac.
     libs = [
+      "Cocoa.framework",
       "IOSurface.framework",
       "OpenGL.framework",
     ]
   }
 
-  if (is_android && !is_debug) {
-    # On Android optimize more since this component can be a bottleneck.
-    configs -= [ "//build/config/compiler:default_optimization" ]
-    configs += [ "//build/config/compiler:optimize_max" ]
+  if (is_android) {
+    if (!is_debug) {
+      # On Android optimize more since this component can be a bottleneck.
+      configs -= [ "//build/config/compiler:default_optimization" ]
+      configs += [ "//build/config/compiler:optimize_max" ]
+    }
+    sources += [
+      "ahardwarebuffer_utils.cc",
+      "ahardwarebuffer_utils.h",
+      "shared_image_backing_factory_ahardwarebuffer.cc",
+      "shared_image_backing_factory_ahardwarebuffer.h",
+    ]
+
+    # TODO(cblume): http://crbug.com/911313
+    # Abstract out the platform specific defines. Right now we need the android
+    # platform specific define here to be able to include android specific
+    # functions.
+    defines = [ "VK_USE_PLATFORM_ANDROID_KHR" ]
+    deps += [ "//third_party/libsync" ]
+    if (enable_vulkan) {
+      deps += [
+        "//gpu/ipc/common:android_image_reader_utils",
+        "//gpu/vulkan:vulkan",
+      ]
+    }
   }
 }
 

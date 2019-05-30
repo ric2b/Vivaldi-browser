@@ -6,9 +6,9 @@
 
 #include <algorithm>
 #include <memory>
+#include <utility>
 
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
@@ -29,7 +29,7 @@ struct HistogramValue {
 // content settings type name instead.
 //
 // The array size must be explicit for the static_asserts below.
-constexpr size_t kNumHistogramValues = 38;
+constexpr size_t kNumHistogramValues = 43;
 constexpr HistogramValue kHistogramValue[kNumHistogramValues] = {
     {CONTENT_SETTINGS_TYPE_COOKIES, 0},
     {CONTENT_SETTINGS_TYPE_IMAGES, 1},
@@ -69,6 +69,11 @@ constexpr HistogramValue kHistogramValue[kNumHistogramValues] = {
     {CONTENT_SETTINGS_TYPE_PLUGINS_DATA, 42},
     {CONTENT_SETTINGS_TYPE_PAYMENT_HANDLER, 43},
     {CONTENT_SETTINGS_TYPE_USB_GUARD, 44},
+    {CONTENT_SETTINGS_TYPE_BACKGROUND_FETCH, 45},
+    {CONTENT_SETTINGS_TYPE_INTENT_PICKER_DISPLAY, 46},
+    {CONTENT_SETTINGS_TYPE_IDLE_DETECTION, 47},
+    {CONTENT_SETTINGS_TYPE_SERIAL_GUARD, 48},
+    {CONTENT_SETTINGS_TYPE_SERIAL_CHOOSER_DATA, 49},
 };
 
 }  // namespace
@@ -82,7 +87,7 @@ ContentSetting IntToContentSetting(int content_setting) {
 
 int ContentSettingTypeToHistogramValue(ContentSettingsType content_setting,
                                        size_t* num_values) {
-  *num_values = arraysize(kHistogramValue);
+  *num_values = base::size(kHistogramValue);
 
   // Verify the array is sorted by enum type and contains all values.
   DCHECK(std::is_sorted(std::begin(kHistogramValue), std::end(kHistogramValue),

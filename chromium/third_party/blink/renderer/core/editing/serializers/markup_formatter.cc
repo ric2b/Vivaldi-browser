@@ -27,6 +27,7 @@
 
 #include "third_party/blink/renderer/core/editing/serializers/markup_formatter.h"
 
+#include "base/stl_util.h"
 #include "third_party/blink/renderer/core/dom/cdata_section.h"
 #include "third_party/blink/renderer/core/dom/comment.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -46,7 +47,7 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 struct EntityDescription {
   UChar entity;
@@ -114,15 +115,15 @@ void MarkupFormatter::AppendCharactersReplacingEntities(
   if (source.Is8Bit()) {
     AppendCharactersReplacingEntitiesInternal(
         result, source.Characters8() + offset, length, kEntityMaps,
-        arraysize(kEntityMaps), entity_mask);
+        base::size(kEntityMaps), entity_mask);
   } else {
     AppendCharactersReplacingEntitiesInternal(
         result, source.Characters16() + offset, length, kEntityMaps,
-        arraysize(kEntityMaps), entity_mask);
+        base::size(kEntityMaps), entity_mask);
   }
 }
 
-MarkupFormatter::MarkupFormatter(EAbsoluteURLs resolve_urls_method,
+MarkupFormatter::MarkupFormatter(AbsoluteURLs resolve_urls_method,
                                  SerializationType serialization_type)
     : resolve_urls_method_(resolve_urls_method),
       serialization_type_(serialization_type) {}
@@ -130,25 +131,28 @@ MarkupFormatter::MarkupFormatter(EAbsoluteURLs resolve_urls_method,
 MarkupFormatter::~MarkupFormatter() = default;
 
 String MarkupFormatter::ResolveURLIfNeeded(const Element& element,
-                                           const String& url_string) const {
+                                           const Attribute& attribute) const {
+  String value = attribute.Value();
   switch (resolve_urls_method_) {
     case kResolveAllURLs:
-      return element.GetDocument().CompleteURL(url_string).GetString();
+      if (element.IsURLAttribute(attribute))
+        return element.GetDocument().CompleteURL(value).GetString();
+      break;
 
     case kResolveNonLocalURLs:
-      if (!element.GetDocument().Url().IsLocalFile())
-        return element.GetDocument().CompleteURL(url_string).GetString();
+      if (element.IsURLAttribute(attribute) &&
+          !element.GetDocument().Url().IsLocalFile())
+        return element.GetDocument().CompleteURL(value).GetString();
       break;
 
     case kDoNotResolveURLs:
       break;
   }
-  return url_string;
+  return value;
 }
 
 void MarkupFormatter::AppendStartMarkup(StringBuilder& result,
-                                        const Node& node,
-                                        Namespaces* namespaces) {
+                                        const Node& node) {
   switch (node.getNodeType()) {
     case Node::kTextNode:
       NOTREACHED();
@@ -157,7 +161,7 @@ void MarkupFormatter::AppendStartMarkup(StringBuilder& result,
       AppendComment(result, ToComment(node).data());
       break;
     case Node::kDocumentNode:
-      AppendXMLDeclaration(result, ToDocument(node));
+      AppendXMLDeclaration(result, To<Document>(node));
       break;
     case Node::kDocumentFragmentNode:
       break;
@@ -183,12 +187,23 @@ void MarkupFormatter::AppendStartMarkup(StringBuilder& result,
 
 void MarkupFormatter::AppendEndMarkup(StringBuilder& result,
                                       const Element& element) {
+  AppendEndMarkup(result, element, element.prefix(), element.localName());
+}
+
+void MarkupFormatter::AppendEndMarkup(StringBuilder& result,
+                                      const Element& element,
+                                      const AtomicString& prefix,
+                                      const AtomicString& local_name) {
   if (ShouldSelfClose(element) ||
       (!element.HasChildren() && ElementCannotHaveEndTag(element)))
     return;
 
   result.Append("</");
-  result.Append(element.TagQName().ToString());
+  if (!prefix.IsEmpty()) {
+    result.Append(prefix);
+    result.Append(":");
+  }
+  result.Append(local_name);
   result.Append('>');
 }
 
@@ -201,59 +216,23 @@ void MarkupFormatter::AppendAttributeValue(StringBuilder& result,
                                         : kEntityMaskInAttributeValue);
 }
 
-void MarkupFormatter::AppendQuotedURLAttributeValue(
-    StringBuilder& result,
-    const Element& element,
-    const Attribute& attribute) {
-  DCHECK(element.IsURLAttribute(attribute)) << element;
-  String resolved_url_string = ResolveURLIfNeeded(element, attribute.Value());
-  UChar quote_char = '"';
-  if (ProtocolIsJavaScript(resolved_url_string)) {
-    // minimal escaping for javascript urls
-    if (resolved_url_string.Contains('&'))
-      resolved_url_string.Replace('&', "&amp;");
-
-    if (resolved_url_string.Contains('"')) {
-      if (resolved_url_string.Contains('\''))
-        resolved_url_string.Replace('"', "&quot;");
-      else
-        quote_char = '\'';
-    }
-    result.Append(quote_char);
-    result.Append(resolved_url_string);
-    result.Append(quote_char);
-    return;
-  }
-
-  // FIXME: This does not fully match other browsers. Firefox percent-escapes
-  // non-ASCII characters for innerHTML.
-  result.Append(quote_char);
-  AppendAttributeValue(result, resolved_url_string, false);
-  result.Append(quote_char);
-}
-
-void MarkupFormatter::AppendNamespace(StringBuilder& result,
+void MarkupFormatter::AppendAttribute(StringBuilder& result,
                                       const AtomicString& prefix,
-                                      const AtomicString& namespace_uri,
-                                      Namespaces& namespaces) {
-  const AtomicString& lookup_key = (!prefix) ? g_empty_atom : prefix;
-  AtomicString found_uri = namespaces.at(lookup_key);
-  if (!EqualIgnoringNullity(found_uri, namespace_uri)) {
-    namespaces.Set(lookup_key, namespace_uri);
-    result.Append(' ');
-    result.Append(g_xmlns_atom.GetString());
-    if (!prefix.IsEmpty()) {
-      result.Append(':');
-      result.Append(prefix);
-    }
-
-    result.Append("=\"");
-    AppendAttributeValue(result, namespace_uri, false);
-    result.Append('"');
+                                      const AtomicString& local_name,
+                                      const String& value,
+                                      bool document_is_html) {
+  result.Append(' ');
+  if (!prefix.IsEmpty()) {
+    result.Append(prefix);
+    result.Append(':');
   }
+  result.Append(local_name);
+  result.Append("=\"");
+  AppendAttributeValue(result, value, document_is_html);
+  result.Append('"');
 }
 
-void MarkupFormatter::AppendText(StringBuilder& result, Text& text) {
+void MarkupFormatter::AppendText(StringBuilder& result, const Text& text) {
   const String& str = text.data();
   AppendCharactersReplacingEntities(result, str, 0, str.length(),
                                     EntityMaskForText(text));
@@ -327,19 +306,24 @@ void MarkupFormatter::AppendProcessingInstruction(StringBuilder& result,
   result.Append("?>");
 }
 
-void MarkupFormatter::AppendOpenTag(StringBuilder& result,
-                                    const Element& element,
-                                    Namespaces* namespaces) {
-  result.Append('<');
-  result.Append(element.TagQName().ToString());
-  if (!SerializeAsHTMLDocument(element) && namespaces &&
-      ShouldAddNamespaceElement(element, *namespaces))
-    AppendNamespace(result, element.prefix(), element.namespaceURI(),
-                    *namespaces);
+void MarkupFormatter::AppendStartTagOpen(StringBuilder& result,
+                                         const Element& element) {
+  AppendStartTagOpen(result, element.prefix(), element.localName());
 }
 
-void MarkupFormatter::AppendCloseTag(StringBuilder& result,
-                                     const Element& element) {
+void MarkupFormatter::AppendStartTagOpen(StringBuilder& result,
+                                         const AtomicString& prefix,
+                                         const AtomicString& local_name) {
+  result.Append('<');
+  if (!prefix.IsEmpty()) {
+    result.Append(prefix);
+    result.Append(":");
+  }
+  result.Append(local_name);
+}
+
+void MarkupFormatter::AppendStartTagClose(StringBuilder& result,
+                                          const Element& element) {
   if (ShouldSelfClose(element)) {
     if (element.IsHTMLElement())
       result.Append(' ');  // XHTML 1.0 <-> HTML compatibility.
@@ -348,79 +332,41 @@ void MarkupFormatter::AppendCloseTag(StringBuilder& result,
   result.Append('>');
 }
 
-void MarkupFormatter::AppendAttribute(StringBuilder& result,
-                                      const Element& element,
-                                      const Attribute& attribute,
-                                      Namespaces* namespaces) {
-  bool document_is_html = SerializeAsHTMLDocument(element);
-
+void MarkupFormatter::AppendAttributeAsHTML(StringBuilder& result,
+                                            const Attribute& attribute,
+                                            const String& value) {
+  // https://html.spec.whatwg.org/C/#attribute's-serialised-name
   QualifiedName prefixed_name = attribute.GetName();
-  if (document_is_html) {
-    if (attribute.NamespaceURI() == XMLNSNames::xmlnsNamespaceURI) {
-      if (!attribute.Prefix() && attribute.LocalName() != g_xmlns_atom)
-        prefixed_name.SetPrefix(g_xmlns_atom);
-    } else if (attribute.NamespaceURI() == XMLNames::xmlNamespaceURI) {
-      prefixed_name.SetPrefix(g_xml_atom);
-    } else if (attribute.NamespaceURI() == XLinkNames::xlinkNamespaceURI) {
-      prefixed_name.SetPrefix(g_xlink_atom);
-    }
-    result.Append(' ');
-    result.Append(prefixed_name.ToString());
-  } else {
-    if (attribute.NamespaceURI() == XMLNSNames::xmlnsNamespaceURI) {
-      if (!attribute.Prefix() && attribute.LocalName() != g_xmlns_atom)
-        prefixed_name.SetPrefix(g_xmlns_atom);
-      // Account for the namespace attribute we're about to append.
-      if (namespaces) {
-        const AtomicString& lookup_key =
-            (!attribute.Prefix()) ? g_empty_atom : attribute.LocalName();
-        namespaces->Set(lookup_key, attribute.Value());
-      }
-    } else if (attribute.NamespaceURI() == XMLNames::xmlNamespaceURI) {
-      if (!attribute.Prefix())
-        prefixed_name.SetPrefix(g_xml_atom);
-    } else {
-      if (attribute.NamespaceURI() == XLinkNames::xlinkNamespaceURI) {
-        if (!attribute.Prefix())
-          prefixed_name.SetPrefix(g_xlink_atom);
-      }
-
-      if (namespaces && ShouldAddNamespaceAttribute(attribute, element)) {
-        if (!prefixed_name.Prefix()) {
-          // This behavior is in process of being standardized. See
-          // crbug.com/248044 and
-          // https://www.w3.org/Bugs/Public/show_bug.cgi?id=24208
-          String prefix_prefix("ns", 2u);
-          for (unsigned i = attribute.NamespaceURI().Impl()->ExistingHash();;
-               ++i) {
-            AtomicString new_prefix(String(prefix_prefix + String::Number(i)));
-            AtomicString found_uri = namespaces->at(new_prefix);
-            if (found_uri == attribute.NamespaceURI() ||
-                found_uri == g_null_atom) {
-              // We already generated a prefix for this namespace.
-              prefixed_name.SetPrefix(new_prefix);
-              break;
-            }
-          }
-        }
-        DCHECK(prefixed_name.Prefix());
-        AppendNamespace(result, prefixed_name.Prefix(),
-                        attribute.NamespaceURI(), *namespaces);
-      }
-    }
-    result.Append(' ');
-    result.Append(prefixed_name.ToString());
+  if (attribute.NamespaceURI() == xmlns_names::kNamespaceURI) {
+    if (!attribute.Prefix() && attribute.LocalName() != g_xmlns_atom)
+      prefixed_name.SetPrefix(g_xmlns_atom);
+  } else if (attribute.NamespaceURI() == xml_names::kNamespaceURI) {
+    prefixed_name.SetPrefix(g_xml_atom);
+  } else if (attribute.NamespaceURI() == xlink_names::kNamespaceURI) {
+    prefixed_name.SetPrefix(g_xlink_atom);
   }
+  AppendAttribute(result, prefixed_name.Prefix(), prefixed_name.LocalName(),
+                  value, true);
+}
 
-  result.Append('=');
-
-  if (element.IsURLAttribute(attribute)) {
-    AppendQuotedURLAttributeValue(result, element, attribute);
-  } else {
-    result.Append('"');
-    AppendAttributeValue(result, attribute.Value(), document_is_html);
-    result.Append('"');
+void MarkupFormatter::AppendAttributeAsXMLWithoutNamespace(
+    StringBuilder& result,
+    const Attribute& attribute,
+    const String& value) {
+  const AtomicString& attribute_namespace = attribute.NamespaceURI();
+  AtomicString candidate_prefix = attribute.Prefix();
+  if (attribute_namespace == xmlns_names::kNamespaceURI) {
+    if (!attribute.Prefix() && attribute.LocalName() != g_xmlns_atom)
+      candidate_prefix = g_xmlns_atom;
+  } else if (attribute_namespace == xml_names::kNamespaceURI) {
+    if (!candidate_prefix)
+      candidate_prefix = g_xml_atom;
+  } else if (attribute_namespace == xlink_names::kNamespaceURI) {
+    if (!candidate_prefix)
+      candidate_prefix = g_xlink_atom;
   }
+  AppendAttribute(result, candidate_prefix, attribute.LocalName(), value,
+                  false);
 }
 
 void MarkupFormatter::AppendCDATASection(StringBuilder& result,
@@ -430,40 +376,6 @@ void MarkupFormatter::AppendCDATASection(StringBuilder& result,
   result.Append("<![CDATA[");
   result.Append(section);
   result.Append("]]>");
-}
-
-bool MarkupFormatter::ShouldAddNamespaceElement(const Element& element,
-                                                Namespaces& namespaces) const {
-  // Don't add namespace attribute if it is already defined for this elem.
-  const AtomicString& prefix = element.prefix();
-  if (prefix.IsEmpty()) {
-    if (element.hasAttribute(g_xmlns_atom)) {
-      namespaces.Set(g_empty_atom, element.namespaceURI());
-      return false;
-    }
-    return true;
-  }
-
-  return !element.hasAttribute(WTF::g_xmlns_with_colon + prefix);
-}
-
-bool MarkupFormatter::ShouldAddNamespaceAttribute(
-    const Attribute& attribute,
-    const Element& element) const {
-  // xmlns and xmlns:prefix attributes should be handled by another branch in
-  // appendAttribute.
-  DCHECK_NE(attribute.NamespaceURI(), XMLNSNames::xmlnsNamespaceURI);
-
-  // Attributes are in the null namespace by default.
-  if (!attribute.NamespaceURI())
-    return false;
-
-  // Attributes without a prefix will need one generated for them, and an xmlns
-  // attribute for that prefix.
-  if (!attribute.Prefix())
-    return true;
-
-  return !element.hasAttribute(WTF::g_xmlns_with_colon + attribute.Prefix());
 }
 
 EntityMask MarkupFormatter::EntityMaskForText(const Text& text) const {
@@ -476,11 +388,11 @@ EntityMask MarkupFormatter::EntityMaskForText(const Text& text) const {
     parent_name = &(text.parentElement())->TagQName();
 
   if (parent_name &&
-      (*parent_name == scriptTag || *parent_name == styleTag ||
-       *parent_name == xmpTag || *parent_name == iframeTag ||
-       *parent_name == plaintextTag || *parent_name == noembedTag ||
-       *parent_name == noframesTag ||
-       (*parent_name == noscriptTag && text.GetDocument().GetFrame() &&
+      (*parent_name == kScriptTag || *parent_name == kStyleTag ||
+       *parent_name == kXmpTag || *parent_name == kIFrameTag ||
+       *parent_name == kPlaintextTag || *parent_name == kNoembedTag ||
+       *parent_name == kNoframesTag ||
+       (*parent_name == kNoscriptTag && text.GetDocument().GetFrame() &&
         text.GetDocument().CanExecuteScripts(kNotAboutToExecuteScript))))
     return kEntityMaskInCDATA;
   return kEntityMaskInHTMLPCDATA;

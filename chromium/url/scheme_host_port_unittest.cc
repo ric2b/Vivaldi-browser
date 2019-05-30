@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
@@ -53,7 +53,7 @@ TEST_F(SchemeHostPortTest, Invalid) {
   EXPECT_EQ("", invalid.host());
   EXPECT_EQ(0, invalid.port());
   EXPECT_TRUE(invalid.IsInvalid());
-  EXPECT_TRUE(invalid.Equals(invalid));
+  EXPECT_EQ(invalid, invalid);
 
   const char* urls[] = {
       "data:text/html,Hello!", "javascript:alert(1)",
@@ -77,9 +77,9 @@ TEST_F(SchemeHostPortTest, Invalid) {
     EXPECT_EQ("", tuple.host());
     EXPECT_EQ(0, tuple.port());
     EXPECT_TRUE(tuple.IsInvalid());
-    EXPECT_TRUE(tuple.Equals(tuple));
-    EXPECT_TRUE(tuple.Equals(invalid));
-    EXPECT_TRUE(invalid.Equals(tuple));
+    EXPECT_EQ(tuple, tuple);
+    EXPECT_EQ(tuple, invalid);
+    EXPECT_EQ(invalid, tuple);
     ExpectParsedUrlsEqual(GURL(tuple.Serialize()), tuple.GetURL());
   }
 }
@@ -106,7 +106,7 @@ TEST_F(SchemeHostPortTest, ExplicitConstruction) {
     EXPECT_EQ(test.host, tuple.host());
     EXPECT_EQ(test.port, tuple.port());
     EXPECT_FALSE(tuple.IsInvalid());
-    EXPECT_TRUE(tuple.Equals(tuple));
+    EXPECT_EQ(tuple, tuple);
     ExpectParsedUrlsEqual(GURL(tuple.Serialize()), tuple.GetURL());
   }
 }
@@ -142,7 +142,7 @@ TEST_F(SchemeHostPortTest, InvalidConstruction) {
     EXPECT_EQ("", tuple.host());
     EXPECT_EQ(0, tuple.port());
     EXPECT_TRUE(tuple.IsInvalid());
-    EXPECT_TRUE(tuple.Equals(tuple));
+    EXPECT_EQ(tuple, tuple);
     ExpectParsedUrlsEqual(GURL(tuple.Serialize()), tuple.GetURL());
   }
 }
@@ -206,7 +206,7 @@ TEST_F(SchemeHostPortTest, GURLConstruction) {
     EXPECT_EQ(test.host, tuple.host());
     EXPECT_EQ(test.port, tuple.port());
     EXPECT_FALSE(tuple.IsInvalid());
-    EXPECT_TRUE(tuple.Equals(tuple));
+    EXPECT_EQ(tuple, tuple);
     ExpectParsedUrlsEqual(GURL(tuple.Serialize()), tuple.GetURL());
   }
 }
@@ -253,10 +253,10 @@ TEST_F(SchemeHostPortTest, Comparison) {
       {"https", "b", 81},
   };
 
-  for (size_t i = 0; i < arraysize(tuples); i++) {
+  for (size_t i = 0; i < base::size(tuples); i++) {
     url::SchemeHostPort current(tuples[i].scheme, tuples[i].host,
                                 tuples[i].port);
-    for (size_t j = i; j < arraysize(tuples); j++) {
+    for (size_t j = i; j < base::size(tuples); j++) {
       url::SchemeHostPort to_compare(tuples[j].scheme, tuples[j].host,
                                      tuples[j].port);
       EXPECT_EQ(i < j, current < to_compare) << i << " < " << j;

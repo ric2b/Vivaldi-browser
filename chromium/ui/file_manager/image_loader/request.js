@@ -3,31 +3,19 @@
 // found in the LICENSE file.
 
 /**
- * @typedef {{
- *   cache: (boolean|undefined),
- *   priority: (number|undefined),
- *   taskId: number,
- *   timestamp: (number|undefined),
- *   url: string,
- *   orientation: !ImageOrientation,
- *   colorSpace: ?ColorSpace
- * }}
- */
-var LoadImageRequest;
-
-/**
  * Creates and starts downloading and then resizing of the image. Finally,
  * returns the image using the callback.
  *
  * @param {string} id Request ID.
  * @param {ImageCache} cache Cache object.
  * @param {!PiexLoader} piexLoader Piex loader for RAW file.
- * @param {LoadImageRequest} request Request message as a hash array.
- * @param {function(Object)} callback Callback used to send the response.
+ * @param {!LoadImageRequest} request Request message as a hash array.
+ * @param {function(!LoadImageResponse)} callback Response handler.
  * @constructor
  */
 function ImageRequest(id, cache, piexLoader, request, callback) {
   /**
+   * Global ID (concatenated client ID and client request ID).
    * @type {string}
    * @private
    */
@@ -46,13 +34,13 @@ function ImageRequest(id, cache, piexLoader, request, callback) {
   this.piexLoader_ = piexLoader;
 
   /**
-   * @type {LoadImageRequest}
+   * @type {!LoadImageRequest}
    * @private
    */
   this.request_ = request;
 
   /**
-   * @type {function(Object)}
+   * @type {function(!LoadImageResponse)}
    * @private
    */
   this.sendResponse_ = callback;
@@ -128,6 +116,16 @@ ImageRequest.prototype.getId = function() {
 };
 
 /**
+ * Returns the client's task ID for the request.
+ * @return {number}
+ */
+ImageRequest.prototype.getClientTaskId = function() {
+  // Every incoming request should have been given a taskId.
+  assert(this.request_.taskId);
+  return this.request_.taskId;
+};
+
+/**
  * Returns priority of the request. The higher priority, the faster it will
  * be handled. The highest priority is 0. The default one is 2.
  *
@@ -158,8 +156,9 @@ ImageRequest.prototype.loadFromCacheAndProcess = function(
  * @param {function()} callback Completion callback.
  */
 ImageRequest.prototype.downloadAndProcess = function(callback) {
-  if (this.downloadCallback_)
+  if (this.downloadCallback_) {
     throw new Error('Downloading already started.');
+  }
 
   this.downloadCallback_ = callback;
   this.downloadOriginal_(this.onImageLoad_.bind(this),
@@ -174,7 +173,7 @@ ImageRequest.prototype.downloadAndProcess = function(callback) {
  * @private
  */
 ImageRequest.prototype.loadFromCache_ = function(onSuccess, onFailure) {
-  var cacheKey = ImageCache.createKey(this.request_);
+  let cacheKey = LoadImageRequest.cacheKey(this.request_);
 
   if (!cacheKey) {
     // Cache key is not provided for the request.
@@ -216,7 +215,7 @@ ImageRequest.prototype.saveToCache_ = function(data, width, height) {
     return;
   }
 
-  var cacheKey = ImageCache.createKey(this.request_);
+  let cacheKey = LoadImageRequest.cacheKey(this.request_);
   if (!cacheKey) {
     // Cache key is not provided for the request.
     return;
@@ -253,17 +252,32 @@ ImageRequest.prototype.downloadOriginal_ = function(onSuccess, onFailure) {
     this.contentType_ = dataUrlMatches[1];
     return;
   }
+  var drivefsUrlMatches = this.request_.url.match(/^drivefs:(.*)/);
+  if (drivefsUrlMatches) {
+    window.webkitResolveLocalFileSystemURL(
+        drivefsUrlMatches[1],
+        entry => {
+          chrome.fileManagerPrivate.getThumbnail(
+              entry, !!this.request_.crop, thumbnail => {
+                if (!thumbnail) {
+                  onFailure();
+                  return;
+                }
+                this.image_.src = thumbnail;
+                this.contentType_ = 'image/png';
+              });
+        },
+        error => {
+          onFailure();
+        });
+    return;
+  }
 
   var fileType = FileType.getTypeForName(this.request_.url);
 
   // Load RAW images by using Piex loader instead of XHR.
   if (fileType.type === 'raw') {
-    var timer = metrics.getTracker().startTiming(
-        metrics.Categories.INTERNALS,
-        metrics.timing.Variables.EXTRACT_THUMBNAIL_FROM_RAW,
-        fileType.subtype);
     this.piexLoader_.load(this.request_.url).then(function(data) {
-      timer.send();
       var blob = new Blob([data.thumbnail], {type: 'image/jpeg'});
       var url = URL.createObjectURL(blob);
       this.image_.src = url;
@@ -289,8 +303,9 @@ ImageRequest.prototype.downloadOriginal_ = function(onSuccess, onFailure) {
 
   // Fetch the image via authorized XHR and parse it.
   var parseImage = function(contentType, blob) {
-    if (contentType)
+    if (contentType) {
       this.contentType_ = contentType;
+    }
     this.image_.src = URL.createObjectURL(blob);
   }.bind(this);
 
@@ -307,7 +322,8 @@ ImageRequest.prototype.downloadOriginal_ = function(onSuccess, onFailure) {
  * @private
  */
 ImageRequest.prototype.createVideoThumbnailUrl_ = function(url) {
-  const video = document.createElement('video');
+  const video =
+      assertInstanceof(document.createElement('video'), HTMLVideoElement);
   return Promise
       .race([
         new Promise((resolve, reject) => {
@@ -316,6 +332,7 @@ ImageRequest.prototype.createVideoThumbnailUrl_ = function(url) {
           video.currentTime = ImageRequest.VIDEO_THUMBNAIL_POSITION;
           video.preload = 'auto';
           video.src = url;
+          video.load();
         }),
         new Promise((resolve) => {
           setTimeout(resolve, ImageRequest.MAX_MILLISECONDS_TO_LOAD_VIDEO);
@@ -329,10 +346,12 @@ ImageRequest.prototype.createVideoThumbnailUrl_ = function(url) {
         })
       ])
       .then(() => {
-        const canvas = document.createElement('canvas');
+        const canvas = assertInstanceof(
+            document.createElement('canvas'), HTMLCanvasElement);
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0);
+        assertInstanceof(canvas.getContext('2d'), CanvasRenderingContext2D)
+            .drawImage(video, 0, 0);
         return canvas.toDataURL();
       });
 };
@@ -364,8 +383,9 @@ AuthorizedXHR.ExtensionContentTypeMap = {
  */
 AuthorizedXHR.prototype.abort = function() {
   this.aborted_ = true;
-  if (this.xhr_)
+  if (this.xhr_) {
     this.xhr_.abort();
+  }
 };
 
 /**
@@ -389,22 +409,24 @@ AuthorizedXHR.prototype.load = function(url, onSuccess, onFailure) {
               this.extractExtension_(url)];
         }
 
-        if (!this.aborted_)
+        if (!this.aborted_) {
           onSuccess(contentType, response);
+        }
       }.bind(this));
 
-  var onMaybeFailure = /** @type {function(number=)} */ (
-      function(opt_code) {
-        if (!this.aborted_)
-          onFailure();
-      }.bind(this));
+  var onMaybeFailure = /** @type {function(number=)} */ (function(opt_code) {
+    if (!this.aborted_) {
+      onFailure();
+    }
+  }.bind(this));
 
   // Fetches the access token and makes an authorized call. If refresh is true,
   // then forces refreshing the access token.
   var requestTokenAndCall = function(refresh, onInnerSuccess, onInnerFailure) {
     chrome.fileManagerPrivate.requestAccessToken(refresh, function(token) {
-      if (this.aborted_)
+      if (this.aborted_) {
         return;
+      }
       if (!token) {
         onInnerFailure();
         return;
@@ -416,8 +438,9 @@ AuthorizedXHR.prototype.load = function(url, onSuccess, onFailure) {
 
   // Refreshes the access token and retries the request.
   var maybeRetryCall = function(code) {
-    if (this.aborted_)
+    if (this.aborted_) {
       return;
+    }
     requestTokenAndCall(true, onMaybeSuccess, onMaybeFailure);
   }.bind(this);
 
@@ -463,26 +486,28 @@ AuthorizedXHR.prototype.extractExtension_ = function(url) {
  * @private
  */
 AuthorizedXHR.load_ = function(token, url, onSuccess, onFailure) {
-  var xhr = new XMLHttpRequest();
+  let xhr = new XMLHttpRequest();
   xhr.responseType = 'blob';
 
   xhr.onreadystatechange = function() {
-    if (xhr.readyState != 4)
+    if (xhr.readyState != 4) {
       return;
+    }
     if (xhr.status != 200) {
       onFailure(xhr.status);
       return;
     }
-    var contentType = xhr.getResponseHeader('Content-Type') ||
-      xhr.response.type;
-    onSuccess(contentType, /** @type {Blob} */ (xhr.response));
+    let response = /** @type {Blob} */ (xhr.response);
+    let contentType = xhr.getResponseHeader('Content-Type') || response.type;
+    onSuccess(contentType, response);
   }.bind(this);
 
   // Perform a xhr request.
   try {
     xhr.open('GET', url, true);
-    if (token)
+    if (token) {
       xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+    }
     xhr.send();
   } catch (e) {
     onFailure();
@@ -540,10 +565,9 @@ ImageRequest.prototype.sendImage_ = function(imageChanged) {
  * @private
  */
 ImageRequest.prototype.sendImageData_ = function(data, width, height) {
-  this.sendResponse_({
-    status: 'success', data: data, width: width, height: height,
-    taskId: this.request_.taskId
-  });
+  this.sendResponse_(new LoadImageResponse(
+      LoadImageResponseStatus.SUCCESS, this.getClientTaskId(),
+      {width: width, height: height, data: data}));
 };
 
 /**
@@ -554,10 +578,10 @@ ImageRequest.prototype.sendImageData_ = function(data, width, height) {
 ImageRequest.prototype.onImageLoad_ = function() {
   // Perform processing if the url is not a data url, or if there are some
   // operations requested.
-  if (!this.request_.url.match(/^data/) ||
-      ImageLoaderUtil.shouldProcess(this.image_.width,
-                                    this.image_.height,
-                                    this.request_)) {
+  if (!(this.request_.url.match(/^data/) ||
+        this.request_.url.match(/^drivefs:/)) ||
+      ImageLoaderUtil.shouldProcess(
+          this.image_.width, this.image_.height, this.request_)) {
     ImageLoaderUtil.resizeAndCrop(this.image_, this.canvas_, this.request_);
     ImageLoaderUtil.convertColorSpace(
         this.canvas_, this.request_.colorSpace || ColorSpace.SRGB);
@@ -575,8 +599,8 @@ ImageRequest.prototype.onImageLoad_ = function() {
  * @private
  */
 ImageRequest.prototype.onImageError_ = function() {
-  this.sendResponse_(
-      {status: 'error', taskId: this.request_.taskId});
+  this.sendResponse_(new LoadImageResponse(
+      LoadImageResponseStatus.ERROR, this.getClientTaskId()));
   this.cleanup_();
   this.downloadCallback_();
 };
@@ -588,8 +612,9 @@ ImageRequest.prototype.cancel = function() {
   this.cleanup_();
 
   // If downloading has started, then call the callback.
-  if (this.downloadCallback_)
+  if (this.downloadCallback_) {
     this.downloadCallback_();
+  }
 };
 
 /**
@@ -604,7 +629,6 @@ ImageRequest.prototype.cleanup_ = function() {
   this.image_.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAA' +
       'ABAAEAAAICTAEAOw==';
 
-  this.xhr_.onload = function() {};
   this.xhr_.abort();
 
   // Dispose memory allocated by Canvas.

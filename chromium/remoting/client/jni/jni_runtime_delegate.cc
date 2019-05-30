@@ -9,6 +9,7 @@
 #include "base/android/jni_string.h"
 #include "base/android/library_loader/library_loader_hooks.h"
 #include "base/android/scoped_java_ref.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
@@ -32,8 +33,7 @@ namespace remoting {
 // Implementation of stubs defined in JniInterface_jni.h. These are the entry
 // points for JNI calls from Java into C++.
 
-static void JNI_JniInterface_LoadNative(JNIEnv* env,
-                                        const JavaParamRef<jclass>& clazz) {
+static void JNI_JniInterface_LoadNative(JNIEnv* env) {
   base::CommandLine::Init(0, nullptr);
 
   // Create the singleton now so that the Chromoting threads will be set up.
@@ -66,12 +66,12 @@ void JniRuntimeDelegate::RuntimeWillShutdown() {
       base::WaitableEvent::ResetPolicy::AUTOMATIC,
       base::WaitableEvent::InitialState::NOT_SIGNALED);
   runtime_->network_task_runner()->PostTask(
-      FROM_HERE, base::Bind(&JniRuntimeDelegate::DetachFromVmAndSignal,
-                            base::Unretained(this), &done_event));
+      FROM_HERE, base::BindOnce(&JniRuntimeDelegate::DetachFromVmAndSignal,
+                                base::Unretained(this), &done_event));
   done_event.Wait();
   runtime_->display_task_runner()->PostTask(
-      FROM_HERE, base::Bind(&JniRuntimeDelegate::DetachFromVmAndSignal,
-                            base::Unretained(this), &done_event));
+      FROM_HERE, base::BindOnce(&JniRuntimeDelegate::DetachFromVmAndSignal,
+                                base::Unretained(this), &done_event));
   done_event.Wait();
 }
 

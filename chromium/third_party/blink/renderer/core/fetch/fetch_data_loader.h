@@ -21,12 +21,12 @@ class FormData;
 // FetchDataLoader subclasses
 // 1. take a BytesConsumer,
 // 2. read all data, and
-// 3. call either didFetchDataLoaded...() on success or
-//    difFetchDataLoadFailed() otherwise
+// 3. call either DidFetchDataLoaded...() on success or
+//    DidFetchDataLoadFailed() otherwise
 //    on the thread where FetchDataLoader is created.
 //
-// - Client's methods can be called synchronously in start().
-// - If FetchDataLoader::cancel() is called, Client's methods will not be
+// - Client's methods can be called synchronously in Start().
+// - If FetchDataLoader::Cancel() is called, Client's methods will not be
 //   called anymore.
 class CORE_EXPORT FetchDataLoader
     : public GarbageCollectedFinalized<FetchDataLoader> {
@@ -44,8 +44,17 @@ class CORE_EXPORT FetchDataLoader
     }
     virtual void DidFetchDataLoadedFormData(FormData*) { NOTREACHED(); }
     virtual void DidFetchDataLoadedString(const String&) { NOTREACHED(); }
+    // This is called synchronously from FetchDataLoader::Start() to provide
+    // the target data pipe.  This may be a pipe extracted from the consumer
+    // or a new pipe that data will be copied into.
+    virtual void DidFetchDataStartedDataPipe(
+        mojo::ScopedDataPipeConsumerHandle handle) {
+      NOTREACHED();
+    }
     // This is called after all data are read from |handle| and written
     // to |out_data_pipe|, and |out_data_pipe| is closed or aborted.
+    // This may be called synchronously from FetchDataLoader::Start() or
+    // delayed to a later task.
     virtual void DidFetchDataLoadedDataPipe() { NOTREACHED(); }
 
     // This function is called when a "custom" FetchDataLoader (none of the
@@ -66,8 +75,9 @@ class CORE_EXPORT FetchDataLoader
   static FetchDataLoader* CreateLoaderAsFormData(
       const String& multipart_boundary);
   static FetchDataLoader* CreateLoaderAsString();
+  // The mojo::DataPipe consumer handle is provided via the
+  // Client::DidFetchStartedDataPipe() callback.
   static FetchDataLoader* CreateLoaderAsDataPipe(
-      mojo::ScopedDataPipeProducerHandle out_data_pipe,
       scoped_refptr<base::SingleThreadTaskRunner>);
 
   virtual ~FetchDataLoader() {}

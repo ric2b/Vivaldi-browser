@@ -8,6 +8,10 @@ include_rules = [
   "+components/safe_browsing/features.h",
   "+components/sync/base",
   "+components/sync/driver",
+  "+components/sync/engine",
+  "+components/sync/model_impl",
+  "+components/sync/test",
+  "+components/sync_preferences",
   "+components/url_formatter",
   "+components/variations",
   "+components/webdata/common",
@@ -26,6 +30,9 @@ specific_include_rules = {
   "hsts_query_unittest\.cc": [
     "+services/network",
   ],
+  "new_password_form_manager_unittest\.cc": [
+    "+components/ukm",
+  ],
   "password_autofill_manager_unittest\.cc": [
     "+components/ukm",
   ],
@@ -41,7 +48,13 @@ specific_include_rules = {
   "password_manager_unittest\.cc": [
     "+components/ukm",
   ],
-  "password_manager_util_unittest\.cc": [
+  "http_credentials_cleaner_unittest\.cc": [
     "+services/network",
+  ],
+  "password_sync_util\.cc": [
+    "+services/identity/public/cpp",
+  ],
+  "sync_username_test_base\.h": [
+    "+services/identity/public/cpp",
   ],
 }

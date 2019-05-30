@@ -15,12 +15,12 @@
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/browser/notification_database_data.h"
-#include "content/public/common/notification_resources.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/test/mock_platform_notification_service.h"
 #include "content/test/test_content_browser_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/notifications/notification_resources.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 #include "url/gurl.h"
 
@@ -45,8 +45,7 @@ class NotificationBrowserClient : public TestContentBrowserClient {
 
 class PlatformNotificationContextTest : public ::testing::Test {
  public:
-  PlatformNotificationContextTest()
-      : thread_bundle_(TestBrowserThreadBundle::IO_MAINLOOP), success_(false) {}
+  PlatformNotificationContextTest() : success_(false) {}
 
   // Callback to provide when reading a single notification from the database.
   void DidReadNotificationData(bool success,
@@ -105,9 +104,8 @@ class PlatformNotificationContextTest : public ::testing::Test {
   CreatePlatformNotificationContext() {
     auto context = base::MakeRefCounted<PlatformNotificationContextImpl>(
         base::FilePath(), &browser_context_, nullptr);
-    context->Initialize();
-
     OverrideTaskRunnerForTesting(context.get());
+    context->Initialize();
     return context;
   }
 
@@ -329,9 +327,8 @@ TEST_F(PlatformNotificationContextTest, ServiceWorkerUnregistered) {
       new PlatformNotificationContextImpl(
           base::FilePath(), browser_context(),
           embedded_worker_test_helper->context_wrapper()));
-  notification_context->Initialize();
-
   OverrideTaskRunnerForTesting(notification_context.get());
+  notification_context->Initialize();
 
   GURL origin("https://example.com");
   GURL script_url("https://example.com/worker.js");
@@ -525,13 +522,15 @@ TEST_F(PlatformNotificationContextTest, SynchronizeNotifications) {
 
   scoped_refptr<PlatformNotificationContextImpl> context =
       CreatePlatformNotificationContext();
+  // Let PlatformNotificationContext synchronize displayed notifications.
+  base::RunLoop().RunUntilIdle();
 
   GURL origin("https://example.com");
   NotificationDatabaseData notification_database_data;
   notification_database_data.service_worker_registration_id =
       kFakeServiceWorkerRegistrationId;
-  PlatformNotificationData notification_data;
-  content::NotificationResources notification_resources;
+  blink::PlatformNotificationData notification_data;
+  blink::NotificationResources notification_resources;
 
   context->WriteNotificationData(
       next_persistent_notification_id(), kFakeServiceWorkerRegistrationId,

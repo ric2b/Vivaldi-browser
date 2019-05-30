@@ -4,8 +4,9 @@
 //
 // Sync protocol for communication between sync client and server.
 
-// Update proto_value_conversions{.h,.cc,_unittest.cc} if you change
-// any fields in this file.
+// If you change or add any fields in this file, update proto_visitors.h and
+// potentially proto_enum_conversions.{h, cc}. If you add new Specifics proto,
+// also update proto_value_conversions.{h, cc}.
 
 syntax = "proto2";
 
@@ -45,6 +46,8 @@ import "printer_specifics.proto";
 import "priority_preference_specifics.proto";
 import "reading_list_specifics.proto";
 import "search_engine_specifics.proto";
+import "security_event_specifics.proto";
+import "send_tab_to_self_specifics.proto";
 import "session_specifics.proto";
 import "sync_enums.proto";
 import "synced_notification_app_info_specifics.proto";
@@ -146,6 +149,8 @@ message EntitySpecifics {
     UserEventSpecifics user_event = 455206;
     UserConsentSpecifics user_consent = 556014;
     MountainShareSpecifics mountain_share = 545005;
+    SendTabToSelfSpecifics send_tab_to_self = 601980;
+    SecurityEventSpecifics security_event = 600372;
   }
 }
 
@@ -668,8 +673,9 @@ message GetUpdatesMessage {
   optional bool need_encryption_key = 8 [default = false];
 
   // Whether to create the mobile bookmarks folder if it's not
-  // already created.  Should be set to true only by mobile clients.
-  optional bool create_mobile_bookmarks_folder = 1000 [default = false];
+  // already created.  Set to true by all modern clients.
+  optional bool create_mobile_bookmarks_folder = 1000
+      [default = false, deprecated = true];
 
   // This value is an updated version of the GetUpdatesCallerInfo's
   // GetUpdatesSource.  It describes the reason for the GetUpdate request.

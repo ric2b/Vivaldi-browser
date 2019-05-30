@@ -34,12 +34,13 @@ class FirstPartyOrigin;
 // Note: Logged to UMA, keep in sync with SubresourceFilterVerifyStatus in
 // enums.xml.  Add new entries to the end and do not renumber.
 enum class VerifyStatus {
-  kPass = 0,
+  kPassValidChecksum = 0,
   kChecksumFailVerifierPass = 1,
   kChecksumFailVerifierFail = 2,
   kVerifierFailChecksumPass = 3,
   kVerifierFailChecksumZero = 4,
-  kMaxValue = kVerifierFailChecksumZero,
+  kPassChecksumZero = 5,
+  kMaxValue = kPassChecksumZero
 };
 
 // The class used to construct flat data structures representing the set of URL
@@ -83,6 +84,10 @@ class RulesetIndexer {
   url_pattern_index::UrlPatternIndexBuilder blacklist_;
   url_pattern_index::UrlPatternIndexBuilder whitelist_;
   url_pattern_index::UrlPatternIndexBuilder deactivation_;
+
+  // Maintains a map of domain vectors to their existing offsets, to avoid
+  // storing a particular vector more than once.
+  url_pattern_index::FlatDomainMap domain_map_;
 
   DISALLOW_COPY_AND_ASSIGN(RulesetIndexer);
 };

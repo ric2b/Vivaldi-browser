@@ -9,8 +9,9 @@
 
 namespace chromeos {
 
-UserBoardScreenHandler::UserBoardScreenHandler()
-    : BaseScreenHandler(kScreenId), weak_factory_(this) {}
+UserBoardScreenHandler::UserBoardScreenHandler(
+    JSCallsContainer* js_calls_container)
+    : BaseScreenHandler(kScreenId, js_calls_container), weak_factory_(this) {}
 
 UserBoardScreenHandler::~UserBoardScreenHandler() {
 }
@@ -22,8 +23,6 @@ void UserBoardScreenHandler::DeclareLocalizedValues(
 void UserBoardScreenHandler::RegisterMessages() {
   AddCallback("attemptUnlock", &UserBoardScreenHandler::HandleAttemptUnlock);
   AddCallback("hardlockPod", &UserBoardScreenHandler::HandleHardlockPod);
-  AddCallback("recordClickOnLockIcon",
-              &UserBoardScreenHandler::HandleRecordClickOnLockIcon);
 }
 
 void UserBoardScreenHandler::Initialize() {
@@ -39,12 +38,6 @@ void UserBoardScreenHandler::HandleHardlockPod(const AccountId& account_id) {
 void UserBoardScreenHandler::HandleAttemptUnlock(const AccountId& account_id) {
   CHECK(screen_);
   screen_->AttemptEasyUnlock(account_id);
-}
-
-void UserBoardScreenHandler::HandleRecordClickOnLockIcon(
-    const AccountId& account_id) {
-  CHECK(screen_);
-  screen_->RecordClickOnLockIcon(account_id);
 }
 
 //----------------- API
@@ -63,6 +56,11 @@ void UserBoardScreenHandler::SetPublicSessionLocales(
     bool multiple_recommended_locales) {
   CallJS("login.AccountPickerScreen.setPublicSessionLocales", account_id,
          *locales, default_locale, multiple_recommended_locales);
+}
+
+void UserBoardScreenHandler::SetPublicSessionShowFullManagementDisclosure(
+    bool show_full_management_disclosure) {
+  // This method is only called from browser_tests and shouldn't do anything.
 }
 
 void UserBoardScreenHandler::ShowBannerMessage(const base::string16& message,

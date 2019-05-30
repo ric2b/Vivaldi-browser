@@ -16,16 +16,19 @@
 #include "third_party/blink/public/platform/modules/permissions/permission_status.mojom.h"
 #include "url/origin.h"
 
+namespace blink {
+struct PlatformNotificationData;
+}
+
 namespace content {
 
 struct NotificationDatabaseData;
 class PlatformNotificationContextImpl;
-struct PlatformNotificationData;
 
 // Implementation of the NotificationService used for Web Notifications. Is
 // responsible for displaying, updating and reading of both non-persistent
 // and persistent notifications. Primarily lives on the UI thread, but jumps to
-// the IO thread when needing to interact with the PlatformNotificationContext.
+// the IO thread when needing to interact with the ServiceWorkerContextWrapper.
 class CONTENT_EXPORT BlinkNotificationServiceImpl
     : public blink::mojom::NotificationService {
  public:
@@ -41,18 +44,19 @@ class CONTENT_EXPORT BlinkNotificationServiceImpl
   void GetPermissionStatus(GetPermissionStatusCallback callback) override;
   void DisplayNonPersistentNotification(
       const std::string& token,
-      const PlatformNotificationData& platform_notification_data,
-      const NotificationResources& notification_resources,
+      const blink::PlatformNotificationData& platform_notification_data,
+      const blink::NotificationResources& notification_resources,
       blink::mojom::NonPersistentNotificationListenerPtr listener_ptr) override;
   void CloseNonPersistentNotification(const std::string& token) override;
   void DisplayPersistentNotification(
       int64_t service_worker_registration_id,
-      const PlatformNotificationData& platform_notification_data,
-      const NotificationResources& notification_resources,
+      const blink::PlatformNotificationData& platform_notification_data,
+      const blink::NotificationResources& notification_resources,
       DisplayPersistentNotificationCallback) override;
   void ClosePersistentNotification(const std::string& notification_id) override;
   void GetNotifications(int64_t service_worker_registration_id,
                         const std::string& filter_tag,
+                        bool include_triggered,
                         GetNotificationsCallback callback) override;
 
  private:
@@ -62,31 +66,32 @@ class CONTENT_EXPORT BlinkNotificationServiceImpl
   // Check the permission status for the current |origin_|.
   blink::mojom::PermissionStatus CheckPermissionStatus();
 
-  void DisplayPersistentNotificationOnIOThread(
-      int64_t service_worker_registration_id,
-      int64_t persistent_notification_id,
-      const PlatformNotificationData& platform_notification_data,
-      const NotificationResources& notification_resources,
-      DisplayPersistentNotificationCallback callback);
+  // Validate |notification_resources| received in a Mojo IPC message.
+  // If the validation failed, we'd close the Mojo connection |binding_| and
+  // destroy |this| by calling OnConnectionError() directly, then return false.
+  // So, please do not touch |this| again after you got a false return value.
+  bool ValidateNotificationResources(
+      const blink::NotificationResources& notification_resources);
 
-  void DisplayPersistentNotificationWithIdOnIOThread(
+  void DisplayPersistentNotificationWithId(
       int64_t service_worker_registration_id,
-      const PlatformNotificationData& platform_notification_data,
-      const NotificationResources& notification_resources,
+      const blink::PlatformNotificationData& platform_notification_data,
+      const blink::NotificationResources& notification_resources,
       DisplayPersistentNotificationCallback callback,
       bool success,
       const std::string& notification_id);
 
   void DisplayPersistentNotificationWithServiceWorkerOnIOThread(
       const std::string& notification_id,
-      const PlatformNotificationData& platform_notification_data,
-      const NotificationResources& notification_resources,
+      const blink::PlatformNotificationData& platform_notification_data,
+      const blink::NotificationResources& notification_resources,
       DisplayPersistentNotificationCallback callback,
       blink::ServiceWorkerStatusCode service_worker_status,
       scoped_refptr<ServiceWorkerRegistration> registration);
 
-  void DidGetNotificationsOnIOThread(
+  void DidGetNotifications(
       const std::string& filter_tag,
+      bool include_triggered,
       GetNotificationsCallback callback,
       bool success,
       const std::vector<NotificationDatabaseData>& notifications);

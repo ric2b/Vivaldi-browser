@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 
 namespace tracing {
@@ -29,6 +30,10 @@ void PerfettoTaskRunner::PostDelayedTask(std::function<void()> task,
       FROM_HERE,
       base::BindOnce([](std::function<void()> task) { task(); }, task),
       base::TimeDelta::FromMilliseconds(delay_ms));
+}
+
+bool PerfettoTaskRunner::RunsTasksOnCurrentThread() const {
+  return task_runner_->RunsTasksInCurrentSequence();
 }
 
 void PerfettoTaskRunner::AddFileDescriptorWatch(int fd, std::function<void()>) {

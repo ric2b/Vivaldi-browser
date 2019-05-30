@@ -2,8 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//services/service_manager/public/cpp/service.gni")
-import("//services/service_manager/public/service_manifest.gni")
 import("//testing/test.gni")
 
 source_set("lib") {
@@ -55,6 +53,8 @@ source_set("lib") {
       "text_detection_impl.cc",
     ]
   }
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   deps = [
     "//mojo/public/cpp/bindings",
@@ -111,11 +111,6 @@ if (is_android) {
       "//ui/gfx/geometry/mojo:mojo_java",
     ]
   }
-}
-
-service_manifest("manifest") {
-  name = "shape_detection"
-  source = "manifest.json"
 }
 
 source_set("tests") {

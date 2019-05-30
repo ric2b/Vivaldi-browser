@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "components/prefs/pref_registry_simple.h"
-#include "components/signin/core/browser/profile_management_switches.h"
+#include "components/signin/core/browser/account_consistency_method.h"
 #include "components/signin/core/browser/signin_pref_names.h"
 #include "components/signin/core/browser/test_signin_client.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
@@ -64,15 +64,6 @@ TEST(DiceAccountReconcilorDelegateTest, OnReconcileFinished) {
       prefs::kTokenServiceDiceCompatible, false);
 
   DiceTestSigninClient client(&pref_service);
-
-  {
-    // Dice migration not enabled.
-    testing::InSequence mock_sequence;
-    EXPECT_CALL(client, SetReadyForDiceMigration(testing::_)).Times(0);
-    DiceAccountReconcilorDelegate delegate(
-        &client, AccountConsistencyMethod::kDiceFixAuthErrors);
-    delegate.OnReconcileFinished("account", true /* is_reconcile_noop */);
-  }
 
   {
     // Dice migration enabled, but token service is not ready.

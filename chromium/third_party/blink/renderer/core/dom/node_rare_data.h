@@ -32,6 +32,7 @@ namespace blink {
 class ComputedStyle;
 enum class DynamicRestyleFlags;
 enum class ElementFlags;
+class FlatTreeNodeData;
 class LayoutObject;
 class MutationObserverRegistration;
 class NodeListsNodeData;
@@ -40,6 +41,8 @@ class NodeMutationObserverData final
     : public GarbageCollected<NodeMutationObserverData> {
  public:
   static NodeMutationObserverData* Create();
+
+  NodeMutationObserverData() = default;
 
   const HeapVector<TraceWrapperMember<MutationObserverRegistration>>&
   Registry() {
@@ -56,11 +59,9 @@ class NodeMutationObserverData final
   void AddRegistration(MutationObserverRegistration* registration);
   void RemoveRegistration(MutationObserverRegistration* registration);
 
-  void Trace(blink::Visitor* visitor);
+  void Trace(Visitor* visitor);
 
  private:
-  NodeMutationObserverData() = default;
-
   HeapVector<TraceWrapperMember<MutationObserverRegistration>> registry_;
   HeapHashSet<TraceWrapperMember<MutationObserverRegistration>>
       transient_registry_;
@@ -68,9 +69,11 @@ class NodeMutationObserverData final
 };
 
 class NodeRenderingData {
+  USING_FAST_MALLOC(NodeRenderingData);
+
  public:
   explicit NodeRenderingData(LayoutObject*,
-                             scoped_refptr<ComputedStyle> non_attached_style);
+                             scoped_refptr<ComputedStyle> computed_style);
   ~NodeRenderingData();
 
   LayoutObject* GetLayoutObject() const { return layout_object_; }
@@ -79,17 +82,15 @@ class NodeRenderingData {
     layout_object_ = layout_object;
   }
 
-  ComputedStyle* GetNonAttachedStyle() const {
-    return non_attached_style_.get();
-  }
-  void SetNonAttachedStyle(scoped_refptr<ComputedStyle> non_attached_style);
+  ComputedStyle* GetComputedStyle() const { return computed_style_.get(); }
+  void SetComputedStyle(scoped_refptr<ComputedStyle> computed_style);
 
   static NodeRenderingData& SharedEmptyData();
   bool IsSharedEmptyData() { return this == &SharedEmptyData(); }
 
  private:
   LayoutObject* layout_object_;
-  scoped_refptr<ComputedStyle> non_attached_style_;
+  scoped_refptr<ComputedStyle> computed_style_;
   DISALLOW_COPY_AND_ASSIGN(NodeRenderingData);
 };
 
@@ -117,20 +118,32 @@ class NodeRareData : public GarbageCollectedFinalized<NodeRareData>,
                      public NodeRareDataBase {
  public:
   static NodeRareData* Create(NodeRenderingData* node_layout_data) {
-    return new NodeRareData(node_layout_data);
+    return MakeGarbageCollected<NodeRareData>(node_layout_data);
+  }
+
+  explicit NodeRareData(NodeRenderingData* node_layout_data)
+      : NodeRareDataBase(node_layout_data),
+        connected_frame_count_(0),
+        element_flags_(0),
+        restyle_flags_(0),
+        is_element_rare_data_(false) {
+    CHECK_NE(node_layout_data, nullptr);
   }
 
   void ClearNodeLists() { node_lists_.Clear(); }
   NodeListsNodeData* NodeLists() const { return node_lists_.Get(); }
-  // ensureNodeLists() and a following NodeListsNodeData functions must be
+  // EnsureNodeLists() and a following NodeListsNodeData functions must be
   // wrapped with a ThreadState::GCForbiddenScope in order to avoid an
-  // initialized m_nodeLists is cleared by NodeRareData::traceAfterDispatch().
+  // initialized node_lists_ is cleared by NodeRareData::TraceAfterDispatch().
   NodeListsNodeData& EnsureNodeLists() {
     DCHECK(ThreadState::Current()->IsGCForbidden());
     if (!node_lists_)
       return CreateNodeLists();
     return *node_lists_;
   }
+
+  FlatTreeNodeData* GetFlatTreeNodeData() const { return flat_tree_node_data_; }
+  FlatTreeNodeData& EnsureFlatTreeNodeData();
 
   NodeMutationObserverData* MutationObserverData() {
     return mutation_observer_data_.Get();
@@ -176,25 +189,16 @@ class NodeRareData : public GarbageCollectedFinalized<NodeRareData>,
     kNumberOfDynamicRestyleFlags = 14
   };
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
   void TraceAfterDispatch(blink::Visitor*);
   void FinalizeGarbageCollectedObject();
-
- protected:
-  explicit NodeRareData(NodeRenderingData* node_layout_data)
-      : NodeRareDataBase(node_layout_data),
-        connected_frame_count_(0),
-        element_flags_(0),
-        restyle_flags_(0),
-        is_element_rare_data_(false) {
-    CHECK_NE(node_layout_data, nullptr);
-  }
 
  private:
   NodeListsNodeData& CreateNodeLists();
 
   TraceWrapperMember<NodeListsNodeData> node_lists_;
   TraceWrapperMember<NodeMutationObserverData> mutation_observer_data_;
+  Member<FlatTreeNodeData> flat_tree_node_data_;
 
   unsigned connected_frame_count_ : kConnectedFrameCountBits;
   unsigned element_flags_ : kNumberOfElementFlags;

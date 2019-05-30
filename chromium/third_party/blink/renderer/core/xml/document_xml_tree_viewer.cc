@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/xml/document_xml_tree_viewer.h"
 
+#include "third_party/blink/renderer/bindings/core/v8/sanitize_script_errors.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -24,7 +25,8 @@ void TransformDocumentToXMLTreeView(Document& document) {
 
   document.GetFrame()->GetScriptController().ExecuteScriptInIsolatedWorld(
       IsolatedWorldId::kDocumentXMLTreeViewerWorldId,
-      ScriptSourceCode(script_string, ScriptSourceLocationType::kInternal));
+      ScriptSourceCode(script_string, ScriptSourceLocationType::kInternal),
+      KURL(), SanitizeScriptErrors::kSanitize);
 
   Element* element = document.getElementById("xml-viewer-style");
   if (element) {

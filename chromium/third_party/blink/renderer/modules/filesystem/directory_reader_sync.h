@@ -49,9 +49,10 @@ class DirectoryReaderSync : public DirectoryReaderBase {
  public:
   static DirectoryReaderSync* Create(DOMFileSystemBase* file_system,
                                      const String& full_path) {
-    return new DirectoryReaderSync(file_system, full_path);
+    return MakeGarbageCollected<DirectoryReaderSync>(file_system, full_path);
   }
 
+  DirectoryReaderSync(DOMFileSystemBase*, const String& full_path);
   ~DirectoryReaderSync() override = default;
 
   EntrySyncHeapVector readEntries(ExceptionState&);
@@ -62,11 +63,9 @@ class DirectoryReaderSync : public DirectoryReaderBase {
   class EntriesCallbackHelper;
   class ErrorCallbackHelper;
 
-  DirectoryReaderSync(DOMFileSystemBase*, const String& full_path);
-
-  int callbacks_id_ = 0;
+  bool has_called_read_directory_ = false;
   EntrySyncHeapVector entries_;
-  FileError::ErrorCode error_code_ = FileError::kOK;
+  base::File::Error error_code_ = base::File::FILE_OK;
 };
 
 }  // namespace blink

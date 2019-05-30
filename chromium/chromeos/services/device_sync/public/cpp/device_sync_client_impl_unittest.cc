@@ -8,6 +8,7 @@
 #include <tuple>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
 #include "base/optional.h"
@@ -16,13 +17,13 @@
 #include "base/test/null_task_runner.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/test/test_simple_task_runner.h"
+#include "chromeos/components/multidevice/remote_device_test_util.h"
 #include "chromeos/services/device_sync/device_sync_impl.h"
 #include "chromeos/services/device_sync/device_sync_service.h"
 #include "chromeos/services/device_sync/fake_device_sync.h"
+#include "chromeos/services/device_sync/public/cpp/fake_gcm_device_info_provider.h"
 #include "chromeos/services/device_sync/public/mojom/constants.mojom.h"
 #include "chromeos/services/device_sync/public/mojom/device_sync.mojom.h"
-#include "components/cryptauth/fake_gcm_device_info_provider.h"
-#include "components/cryptauth/remote_device_test_util.h"
 #include "components/gcm_driver/fake_gcm_driver.h"
 #include "services/identity/public/cpp/identity_test_environment.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
@@ -62,9 +63,9 @@ class FakeDeviceSyncImplFactory : public DeviceSyncImpl::Factory {
       identity::IdentityManager* identity_manager,
       gcm::GCMDriver* gcm_driver,
       service_manager::Connector* connector,
-      const cryptauth::GcmDeviceInfoProvider* gcm_device_info_provider,
-      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
-      override {
+      const GcmDeviceInfoProvider* gcm_device_info_provider,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      std::unique_ptr<base::OneShotTimer> timer) override {
     EXPECT_TRUE(fake_device_sync_);
     return std::move(fake_device_sync_);
   }
@@ -136,16 +137,15 @@ class DeviceSyncClientImplTest : public testing::Test {
  protected:
   DeviceSyncClientImplTest()
       : test_remote_device_list_(
-            cryptauth::CreateRemoteDeviceListForTest(kNumTestDevices)),
+            multidevice::CreateRemoteDeviceListForTest(kNumTestDevices)),
         test_remote_device_ref_list_(
-            cryptauth::CreateRemoteDeviceRefListForTest(kNumTestDevices)) {}
+            multidevice::CreateRemoteDeviceRefListForTest(kNumTestDevices)) {}
 
   // testing::Test:
   void SetUp() override {
     fake_gcm_driver_ = std::make_unique<gcm::FakeGCMDriver>();
     fake_gcm_device_info_provider_ =
-        std::make_unique<cryptauth::FakeGcmDeviceInfoProvider>(
-            GetTestGcmDeviceInfo());
+        std::make_unique<FakeGcmDeviceInfoProvider>(GetTestGcmDeviceInfo());
 
     identity_test_environment_ =
         std::make_unique<identity::IdentityTestEnvironment>();
@@ -166,13 +166,10 @@ class DeviceSyncClientImplTest : public testing::Test {
               return nullptr;
             }));
 
-    auto device_sync_service = std::make_unique<DeviceSyncService>(
+    service_ = std::make_unique<DeviceSyncService>(
         identity_test_environment_->identity_manager(), fake_gcm_driver_.get(),
-        fake_gcm_device_info_provider_.get(), shared_url_loader_factory);
-
-    connector_factory_ =
-        service_manager::TestConnectorFactory::CreateForUniqueService(
-            std::move(device_sync_service));
+        fake_gcm_device_info_provider_.get(), shared_url_loader_factory,
+        connector_factory_.RegisterInstance(mojom::kServiceName));
 
     test_observer_ = std::make_unique<TestDeviceSyncClientObserver>();
 
@@ -180,14 +177,11 @@ class DeviceSyncClientImplTest : public testing::Test {
   }
 
   void CreateClient() {
-    std::unique_ptr<service_manager::Connector> connector =
-        connector_factory_->CreateConnector();
-
     // DeviceSyncClient's constructor posts two tasks to the TaskRunner. Idle
     // the TaskRunner so that the tasks can be run via a RunLoop later on.
     auto test_task_runner = base::MakeRefCounted<base::TestSimpleTaskRunner>();
-    client_ = base::WrapUnique(
-        new DeviceSyncClientImpl(connector.get(), test_task_runner));
+    client_ = base::WrapUnique(new DeviceSyncClientImpl(
+        connector_factory_.GetDefaultConnector(), test_task_runner));
     test_task_runner->RunUntilIdle();
   }
 
@@ -332,7 +326,7 @@ class DeviceSyncClientImplTest : public testing::Test {
 
     client_->SetSoftwareFeatureState(
         test_remote_device_ref_list_[0].public_key(),
-        cryptauth::SoftwareFeature::BETTER_TOGETHER_HOST, true /* enabled */,
+        multidevice::SoftwareFeature::kBetterTogetherHost, true /* enabled */,
         true /* enabled */,
         base::BindOnce(
             &DeviceSyncClientImplTest::OnSetSoftwareFeatureStateCompleted,
@@ -349,12 +343,12 @@ class DeviceSyncClientImplTest : public testing::Test {
 
   void CallFindEligibleDevices(
       mojom::NetworkRequestResult expected_result_code,
-      cryptauth::RemoteDeviceList expected_eligible_devices,
-      cryptauth::RemoteDeviceList expected_ineligible_devices) {
+      multidevice::RemoteDeviceList expected_eligible_devices,
+      multidevice::RemoteDeviceList expected_ineligible_devices) {
     base::RunLoop run_loop;
 
     client_->FindEligibleDevices(
-        cryptauth::SoftwareFeature::BETTER_TOGETHER_HOST,
+        multidevice::SoftwareFeature::kBetterTogetherHost,
         base::BindOnce(
             &DeviceSyncClientImplTest::OnFindEligibleDevicesCompleted,
             base::Unretained(this), run_loop.QuitClosure()));
@@ -399,8 +393,8 @@ class DeviceSyncClientImplTest : public testing::Test {
   // stores devices in an unordered_map -- retrieved devices thus need to be
   // sorted before comparison.
   void VerifyRemoteDeviceRefListAndRemoteDeviceListAreEqual(
-      cryptauth::RemoteDeviceRefList remote_device_ref_list,
-      cryptauth::RemoteDeviceList remote_device_list) {
+      multidevice::RemoteDeviceRefList remote_device_ref_list,
+      multidevice::RemoteDeviceList remote_device_list) {
     std::vector<std::string> ref_public_keys;
     for (auto device : remote_device_ref_list)
       ref_public_keys.push_back(device.public_key());
@@ -426,25 +420,25 @@ class DeviceSyncClientImplTest : public testing::Test {
 
   std::unique_ptr<identity::IdentityTestEnvironment> identity_test_environment_;
   std::unique_ptr<gcm::FakeGCMDriver> fake_gcm_driver_;
-  std::unique_ptr<cryptauth::FakeGcmDeviceInfoProvider>
-      fake_gcm_device_info_provider_;
+  std::unique_ptr<FakeGcmDeviceInfoProvider> fake_gcm_device_info_provider_;
   FakeDeviceSync* fake_device_sync_;
   std::unique_ptr<FakeDeviceSyncImplFactory> fake_device_sync_impl_factory_;
-  std::unique_ptr<service_manager::TestConnectorFactory> connector_factory_;
+  service_manager::TestConnectorFactory connector_factory_;
+  std::unique_ptr<DeviceSyncService> service_;
   std::unique_ptr<TestDeviceSyncClientObserver> test_observer_;
 
   std::unique_ptr<DeviceSyncClientImpl> client_;
 
-  cryptauth::RemoteDeviceList test_remote_device_list_;
-  const cryptauth::RemoteDeviceRefList test_remote_device_ref_list_;
+  multidevice::RemoteDeviceList test_remote_device_list_;
+  const multidevice::RemoteDeviceRefList test_remote_device_ref_list_;
 
   base::Optional<bool> force_enrollment_now_completed_success_;
   base::Optional<bool> force_sync_now_completed_success_;
   base::Optional<mojom::NetworkRequestResult>
       set_software_feature_state_result_code_;
   std::tuple<mojom::NetworkRequestResult,
-             cryptauth::RemoteDeviceRefList,
-             cryptauth::RemoteDeviceRefList>
+             multidevice::RemoteDeviceRefList,
+             multidevice::RemoteDeviceRefList>
       find_eligible_devices_error_code_and_response_;
   bool debug_info_received_ = false;
 
@@ -470,8 +464,8 @@ class DeviceSyncClientImplTest : public testing::Test {
   void OnFindEligibleDevicesCompleted(
       base::OnceClosure callback,
       mojom::NetworkRequestResult result_code,
-      cryptauth::RemoteDeviceRefList eligible_devices,
-      cryptauth::RemoteDeviceRefList ineligible_devices) {
+      multidevice::RemoteDeviceRefList eligible_devices,
+      multidevice::RemoteDeviceRefList ineligible_devices) {
     find_eligible_devices_error_code_and_response_ =
         std::make_tuple(result_code, eligible_devices, ineligible_devices);
     std::move(callback).Run();
@@ -496,7 +490,7 @@ TEST_F(
     TestCompleteInitialEnrollmentBeforeInitialSync_WaitForLocalDeviceMetadata) {
   client_->AddObserver(test_observer_.get());
 
-  SendPendingMojoMessages();
+  base::RunLoop().RunUntilIdle();
 
   EXPECT_FALSE(client_->is_ready());
   EXPECT_EQ(0u, test_observer_->ready_count());
@@ -515,7 +509,7 @@ TEST_F(
   EXPECT_EQ(0u, test_observer_->enrollment_finished_count());
   EXPECT_EQ(0u, test_observer_->new_devices_synced_count());
 
-  SendPendingMojoMessages();
+  base::RunLoop().RunUntilIdle();
 
   base::RunLoop run_loop;
 
@@ -556,7 +550,7 @@ TEST_F(DeviceSyncClientImplTest, TestOnEnrollmentFinished) {
   // finish before notifying observers that enrollment has finished.
   EXPECT_EQ(1u, test_observer_->enrollment_finished_count());
 
-  SendPendingMojoMessages();
+  base::RunLoop().RunUntilIdle();
 
   // Update the local device metadata. The last update time must also be later
   // than the previous version, otherwise the update will be ignored by the
@@ -591,10 +585,10 @@ TEST_F(DeviceSyncClientImplTest, TestOnNewDevicesSynced) {
   // finish before notifying observers that enrollment has finished.
   EXPECT_EQ(1u, test_observer_->new_devices_synced_count());
 
-  SendPendingMojoMessages();
+  base::RunLoop().RunUntilIdle();
 
   // Change the synced device list.
-  cryptauth::RemoteDeviceList new_device_list(
+  multidevice::RemoteDeviceList new_device_list(
       {test_remote_device_list_[0], test_remote_device_list_[1]});
 
   base::RunLoop run_loop;
@@ -639,7 +633,7 @@ TEST_F(DeviceSyncClientImplTest, TestGetSyncedDevices_DeviceRemovedFromCache) {
       client_->GetSyncedDevices(), test_remote_device_list_);
 
   // Remove a device from the test list, and inform |client_|.
-  cryptauth::RemoteDeviceList new_list(
+  multidevice::RemoteDeviceList new_list(
       {test_remote_device_list_[0], test_remote_device_list_[1],
        test_remote_device_list_[2], test_remote_device_list_[3]});
   client_->OnNewDevicesSynced();
@@ -664,9 +658,9 @@ TEST_F(DeviceSyncClientImplTest, TestSetSoftwareFeatureState) {
 TEST_F(DeviceSyncClientImplTest, TestFindEligibleDevices_NoErrorCode) {
   InitializeClient();
 
-  cryptauth::RemoteDeviceList expected_eligible_devices(
+  multidevice::RemoteDeviceList expected_eligible_devices(
       {test_remote_device_list_[0], test_remote_device_list_[1]});
-  cryptauth::RemoteDeviceList expected_ineligible_devices(
+  multidevice::RemoteDeviceList expected_ineligible_devices(
       {test_remote_device_list_[2], test_remote_device_list_[3],
        test_remote_device_list_[4]});
 
@@ -679,8 +673,8 @@ TEST_F(DeviceSyncClientImplTest, TestFindEligibleDevices_ErrorCode) {
   InitializeClient();
 
   CallFindEligibleDevices(mojom::NetworkRequestResult::kEndpointNotFound,
-                          cryptauth::RemoteDeviceList(),
-                          cryptauth::RemoteDeviceList());
+                          multidevice::RemoteDeviceList(),
+                          multidevice::RemoteDeviceList());
 }
 
 TEST_F(DeviceSyncClientImplTest, TestGetDebugInfo) {

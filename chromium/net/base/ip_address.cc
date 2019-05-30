@@ -254,6 +254,35 @@ bool IPAddress::IsIPv4MappedIPv6() const {
   return IsIPv6() && IPAddressStartsWith(*this, kIPv4MappedPrefix);
 }
 
+bool IPAddress::IsLoopback() const {
+  // 127.0.0.1/8
+  if (IsIPv4())
+    return ip_address_[0] == 127;
+
+  // ::1
+  if (IsIPv6()) {
+    for (size_t i = 0; i + 1 < ip_address_.size(); ++i) {
+      if (ip_address_[i] != 0)
+        return false;
+    }
+    return ip_address_.back() == 1;
+  }
+
+  return false;
+}
+
+bool IPAddress::IsLinkLocal() const {
+  // 169.254.0.0/16
+  if (IsIPv4())
+    return (ip_address_[0] == 169) && (ip_address_[1] == 254);
+
+  // [fe80::]/10
+  if (IsIPv6())
+    return (ip_address_[0] == 0xFE) && ((ip_address_[1] & 0xC0) == 0x80);
+
+  return false;
+}
+
 bool IPAddress::AssignFromIPLiteral(const base::StringPiece& ip_literal) {
   bool success = ParseIPLiteralToBytes(ip_literal, &ip_address_);
   if (!success)
@@ -434,7 +463,7 @@ bool ParseURLHostnameToAddress(const base::StringPiece& hostname,
   return ip_address->AssignFromIPLiteral(hostname) && ip_address->IsIPv4();
 }
 
-unsigned CommonPrefixLength(const IPAddress& a1, const IPAddress& a2) {
+size_t CommonPrefixLength(const IPAddress& a1, const IPAddress& a2) {
   DCHECK_EQ(a1.size(), a2.size());
   for (size_t i = 0; i < a1.size(); ++i) {
     unsigned diff = a1.bytes()[i] ^ a2.bytes()[i];
@@ -450,7 +479,7 @@ unsigned CommonPrefixLength(const IPAddress& a1, const IPAddress& a2) {
   return a1.size() * CHAR_BIT;
 }
 
-unsigned MaskPrefixLength(const IPAddress& mask) {
+size_t MaskPrefixLength(const IPAddress& mask) {
   base::StackVector<uint8_t, 16> all_ones;
   all_ones->resize(mask.size(), 0xFF);
   return CommonPrefixLength(mask,

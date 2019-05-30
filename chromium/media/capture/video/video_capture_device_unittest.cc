@@ -52,48 +52,76 @@
 #include "media/capture/video/chromeos/camera_buffer_factory.h"
 #include "media/capture/video/chromeos/camera_hal_dispatcher_impl.h"
 #include "media/capture/video/chromeos/local_gpu_memory_buffer_manager.h"
+#include "media/capture/video/chromeos/public/cros_features.h"
 #include "media/capture/video/chromeos/video_capture_device_chromeos_halv3.h"
 #include "media/capture/video/chromeos/video_capture_device_factory_chromeos.h"
 #endif
 
 #if defined(OS_MACOSX)
 // Mac will always give you the size you ask for and this case will fail.
-#define MAYBE_AllocateBadSize DISABLED_AllocateBadSize
+#define MAYBE_UsingRealWebcam_AllocateBadSize \
+  DISABLED_UsingRealWebcam_AllocateBadSize
 // We will always get YUYV from the Mac AVFoundation implementations.
-#define MAYBE_CaptureMjpeg DISABLED_CaptureMjpeg
-#define MAYBE_TakePhoto TakePhoto
-#define MAYBE_GetPhotoState GetPhotoState
+#define MAYBE_UsingRealWebcam_CaptureMjpeg DISABLED_UsingRealWebcam_CaptureMjpeg
+// TODO(crbug.com/923874).
+#define MAYBE_UsingRealWebcam_TakePhoto DISABLED_UsingRealWebcam_TakePhoto
+  // TODO(crbug.com/923874).
+#define MAYBE_UsingRealWebcam_GetPhotoState DISABLED_UsingRealWebcam_GetPhotoState
+  // TODO(crbug.com/923874).
+#define MAYBE_UsingRealWebcam_CaptureWithSize DISABLED_UsingRealWebcam_CaptureWithSize
+#define MAYBE_UsingRealWebcam_CheckPhotoCallbackRelease \
+  UsingRealWebcam_CheckPhotoCallbackRelease
 #elif defined(OS_WIN)
-#define MAYBE_AllocateBadSize AllocateBadSize
-#define MAYBE_CaptureMjpeg CaptureMjpeg
-#define MAYBE_TakePhoto TakePhoto
-#define MAYBE_GetPhotoState GetPhotoState
+// TODO(crbug.com/893494): Fails on win: error: Value of: device_descriptor.
+#define MAYBE_UsingRealWebcam_AllocateBadSize \
+  DISABLED_UsingRealWebcam_AllocateBadSize
+#define MAYBE_UsingRealWebcam_CaptureMjpeg DISABLED_UsingRealWebcam_CaptureMjpeg
+#define MAYBE_UsingRealWebcam_TakePhoto DISABLED_UsingRealWebcam_TakePhoto
+#define MAYBE_UsingRealWebcam_GetPhotoState \
+  DISABLED_UsingRealWebcam_GetPhotoState
+#define MAYBE_UsingRealWebcam_CaptureWithSize \
+  DISABLED_UsingRealWebcam_CaptureWithSize
+#define MAYBE_UsingRealWebcam_CheckPhotoCallbackRelease \
+  DISABLED_UsingRealWebcam_CheckPhotoCallbackRelease
 #elif defined(OS_ANDROID)
-#define MAYBE_AllocateBadSize AllocateBadSize
-#define MAYBE_CaptureMjpeg CaptureMjpeg
-#define MAYBE_TakePhoto TakePhoto
-#define MAYBE_GetPhotoState GetPhotoState
-#define MAYBE_CaptureWithSize CaptureWithSize
+#define MAYBE_UsingRealWebcam_AllocateBadSize UsingRealWebcam_AllocateBadSize
+#define MAYBE_UsingRealWebcam_CaptureMjpeg UsingRealWebcam_CaptureMjpeg
+#define MAYBE_UsingRealWebcam_TakePhoto UsingRealWebcam_TakePhoto
+#define MAYBE_UsingRealWebcam_GetPhotoState UsingRealWebcam_GetPhotoState
+#define MAYBE_UsingRealWebcam_CaptureWithSize UsingRealWebcam_CaptureWithSize
+#define MAYBE_UsingRealWebcam_CheckPhotoCallbackRelease \
+  UsingRealWebcam_CheckPhotoCallbackRelease
 #elif defined(OS_CHROMEOS)
-#define MAYBE_AllocateBadSize DISABLED_AllocateBadSize
-#define MAYBE_CaptureMjpeg CaptureMjpeg
-#define MAYBE_TakePhoto TakePhoto
-#define MAYBE_GetPhotoState GetPhotoState
-#define MAYBE_CaptureWithSize CaptureWithSize
+#define MAYBE_UsingRealWebcam_AllocateBadSize \
+  DISABLED_UsingRealWebcam_AllocateBadSize
+#define MAYBE_UsingRealWebcam_CaptureMjpeg UsingRealWebcam_CaptureMjpeg
+#define MAYBE_UsingRealWebcam_TakePhoto UsingRealWebcam_TakePhoto
+#define MAYBE_UsingRealWebcam_GetPhotoState UsingRealWebcam_GetPhotoState
+#define MAYBE_UsingRealWebcam_CaptureWithSize UsingRealWebcam_CaptureWithSize
+#define MAYBE_UsingRealWebcam_CheckPhotoCallbackRelease \
+  UsingRealWebcam_CheckPhotoCallbackRelease
 #elif defined(OS_LINUX)
-// AllocateBadSize will hang when a real camera is attached and if more than one
-// test is trying to use the camera (even across processes). Do NOT renable
-// this test without fixing the many bugs associated with it:
+// UsingRealWebcam_AllocateBadSize will hang when a real camera is attached and
+// if more than one test is trying to use the camera (even across processes). Do
+// NOT renable this test without fixing the many bugs associated with it:
 // http://crbug.com/94134 http://crbug.com/137260 http://crbug.com/417824
-#define MAYBE_AllocateBadSize DISABLED_AllocateBadSize
-#define MAYBE_CaptureMjpeg CaptureMjpeg
-#define MAYBE_TakePhoto TakePhoto
-#define MAYBE_GetPhotoState GetPhotoState
+#define MAYBE_UsingRealWebcam_AllocateBadSize \
+  DISABLED_UsingRealWebcam_AllocateBadSize
+#define MAYBE_UsingRealWebcam_CaptureMjpeg UsingRealWebcam_CaptureMjpeg
+#define MAYBE_UsingRealWebcam_TakePhoto UsingRealWebcam_TakePhoto
+#define MAYBE_UsingRealWebcam_GetPhotoState UsingRealWebcam_GetPhotoState
+#define MAYBE_UsingRealWebcam_CaptureWithSize UsingRealWebcam_CaptureWithSize
+#define MAYBE_UsingRealWebcam_CheckPhotoCallbackRelease \
+  UsingRealWebcam_CheckPhotoCallbackRelease
 #else
-#define MAYBE_AllocateBadSize AllocateBadSize
-#define MAYBE_CaptureMjpeg CaptureMjpeg
-#define MAYBE_TakePhoto DISABLED_TakePhoto
-#define MAYBE_GetPhotoState DISABLED_GetPhotoState
+#define MAYBE_UsingRealWebcam_AllocateBadSize UsingRealWebcam_AllocateBadSize
+#define MAYBE_UsingRealWebcam_CaptureMjpeg UsingRealWebcam_CaptureMjpeg
+#define MAYBE_UsingRealWebcam_TakePhoto DISABLED_UsingRealWebcam_TakePhoto
+#define MAYBE_UsingRealWebcam_GetPhotoState \
+  DISABLED_UsingRealWebcam_GetPhotoState
+#define MAYBE_UsingRealWebcam_CaptureWithSize UsingRealWebcam_CaptureWithSize
+#define MAYBE_UsingRealWebcam_CheckPhotoCallbackRelease \
+  UsingRealWebcam_CheckPhotoCallbackRelease
 #endif
 
 // Wrap the TEST_P macro into another one to allow to preprocess |test_name|
@@ -157,11 +185,12 @@ class MockImageCaptureClient
     if (strcmp("image/jpeg", blob->mime_type.c_str()) == 0) {
       ASSERT_GT(blob->data.size(), 4u);
       // Check some bytes that univocally identify |data| as a JPEG File.
-      // https://en.wikipedia.org/wiki/JPEG_File_Interchange_Format#File_format_structure
+      // The first two bytes must be the SOI marker.
+      // The next two bytes must be a marker, such as APPn, DTH etc.
+      // cf. Section B.2 at https://www.w3.org/Graphics/JPEG/itu-t81.pdf
       EXPECT_EQ(0xFF, blob->data[0]);         // First SOI byte
       EXPECT_EQ(0xD8, blob->data[1]);         // Second SOI byte
-      EXPECT_EQ(0xFF, blob->data[2]);         // First JFIF-APP0 byte
-      EXPECT_EQ(0xE0, blob->data[3] & 0xF0);  // Second JFIF-APP0 byte
+      EXPECT_EQ(0xFF, blob->data[2]);         // First byte of the next marker
       OnCorrectPhotoTaken();
     } else if (strcmp("image/png", blob->mime_type.c_str()) == 0) {
       ASSERT_GT(blob->data.size(), 4u);
@@ -206,11 +235,27 @@ class VideoCaptureDeviceTest
   }
 #endif
 
+  void RunOpenInvalidDeviceTestCase();
+  void RunCaptureWithSizeTestCase();
+  void RunAllocateBadSizeTestCase();
+  void RunReAllocateCameraTestCase();
+  void RunCaptureMjpegTestCase();
+  void RunNoCameraSupportsPixelFormatMaxTestCase();
+  void RunTakePhotoTestCase();
+  void RunGetPhotoStateTestCase();
+
  protected:
   typedef VideoCaptureDevice::Client Client;
 
   VideoCaptureDeviceTest()
-      : device_descriptors_(new VideoCaptureDeviceDescriptors()),
+      :
+#if defined(OS_MACOSX)
+        // Video capture code on MacOSX must run on a CFRunLoop enabled thread
+        // for interaction with AVFoundation.
+        scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::UI),
+#endif
+        device_descriptors_(new VideoCaptureDeviceDescriptors()),
         main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
         video_capture_client_(CreateDeviceClient()),
         image_capture_client_(new MockImageCaptureClient()) {
@@ -234,8 +279,7 @@ class VideoCaptureDeviceTest
 
   void SetUp() override {
 #if defined(OS_CHROMEOS)
-    dbus_setter_->SetPowerManagerClient(
-        std::make_unique<chromeos::FakePowerManagerClient>());
+    chromeos::PowerManagerClient::Initialize();
 #endif
 #if defined(OS_ANDROID)
     static_cast<VideoCaptureDeviceFactoryAndroid*>(
@@ -248,6 +292,12 @@ class VideoCaptureDeviceTest
 #endif
   }
 
+  void TearDown() override {
+#if defined(OS_CHROMEOS)
+    chromeos::PowerManagerClient::Shutdown();
+#endif
+  }
+
 #if defined(OS_WIN)
   bool UseWinMediaFoundation() {
     return std::get<1>(GetParam()) == WIN_MEDIA_FOUNDATION;
@@ -257,8 +307,7 @@ class VideoCaptureDeviceTest
   std::unique_ptr<MockVideoCaptureDeviceClient> CreateDeviceClient() {
     auto result = std::make_unique<MockVideoCaptureDeviceClient>();
     ON_CALL(*result, OnError(_, _, _)).WillByDefault(Invoke(DumpError));
-    EXPECT_CALL(*result, ReserveOutputBuffer(_, _, _)).Times(0);
-    EXPECT_CALL(*result, ResurrectLastOutputBuffer(_, _, _)).Times(0);
+    EXPECT_CALL(*result, ReserveOutputBuffer(_, _, _, _)).Times(0);
     EXPECT_CALL(*result, DoOnIncomingCapturedBuffer(_, _, _, _)).Times(0);
     EXPECT_CALL(*result, DoOnIncomingCapturedBufferExt(_, _, _, _, _, _))
         .Times(0);
@@ -296,7 +345,8 @@ class VideoCaptureDeviceTest
   }
 
   void WaitForCapturedFrame() {
-    run_loop_.reset(new base::RunLoop());
+    run_loop_.reset(
+        new base::RunLoop(base::RunLoop::Type::kNestableTasksAllowed));
     run_loop_->Run();
   }
 
@@ -378,6 +428,38 @@ class VideoCaptureDeviceTest
     return true;
   }
 
+  gfx::Size GetSupportedCaptureSize(
+      const VideoCaptureDeviceDescriptor& device) {
+    VideoCaptureFormats supported_formats;
+    video_capture_device_factory_->GetSupportedFormats(device,
+                                                       &supported_formats);
+    if (supported_formats.size() == 0)
+      return gfx::Size(0, 0);
+
+    return supported_formats.begin()->frame_size;
+  }
+
+  void RunTestCase(base::OnceClosure test_case) {
+#if defined(OS_MACOSX)
+    // In order to make the test case run on the actual message loop that has
+    // been created for this thread, we need to run it inside a RunLoop. This is
+    // required, because on MacOS the capture code must run on a CFRunLoop
+    // enabled message loop.
+    base::RunLoop run_loop;
+    main_thread_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            [](base::RunLoop* run_loop, base::OnceClosure* test_case) {
+              std::move(*test_case).Run();
+              run_loop->Quit();
+            },
+            &run_loop, &test_case));
+    run_loop.Run();
+#else
+    std::move(test_case).Run();
+#endif
+  }
+
 #if defined(OS_WIN)
   base::win::ScopedCOMInitializer initialize_com_;
 #endif
@@ -403,6 +485,11 @@ class VideoCaptureDeviceTest
 #endif
 // Tries to allocate an invalid device and verifies it doesn't work.
 WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_OpenInvalidDevice) {
+  RunTestCase(
+      base::BindOnce(&VideoCaptureDeviceTest::RunOpenInvalidDeviceTestCase,
+                     base::Unretained(this)));
+}
+void VideoCaptureDeviceTest::RunOpenInvalidDeviceTestCase() {
   VideoCaptureDeviceDescriptor invalid_descriptor;
   invalid_descriptor.device_id = "jibberish";
   invalid_descriptor.set_display_name("jibberish");
@@ -441,10 +528,14 @@ TEST(VideoCaptureDeviceDescriptor, RemoveTrailingWhitespaceFromDisplayName) {
 }
 
 // Allocates the first enumerated device, and expects a frame.
-WRAPPED_TEST_P(VideoCaptureDeviceTest, CaptureWithSize) {
+WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_UsingRealWebcam_CaptureWithSize) {
+  RunTestCase(
+      base::BindOnce(&VideoCaptureDeviceTest::RunCaptureWithSizeTestCase,
+                     base::Unretained(this)));
+}
+void VideoCaptureDeviceTest::RunCaptureWithSizeTestCase() {
   const auto descriptor = FindUsableDeviceDescriptor();
-  if (!descriptor)
-    return;
+  ASSERT_TRUE(descriptor);
 
   const gfx::Size& size = std::get<0>(GetParam());
   if (!IsCaptureSizeSupported(*descriptor, size))
@@ -483,7 +574,7 @@ const VideoCaptureImplementationTweak kCaptureImplementationTweaks[] = {
 #endif
 };
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     VideoCaptureDeviceTests,
     VideoCaptureDeviceTest,
     testing::Combine(testing::ValuesIn(kCaptureSizes),
@@ -491,10 +582,14 @@ INSTANTIATE_TEST_CASE_P(
 
 // Allocates a device with an uncommon resolution and verifies frames are
 // captured in a close, much more typical one.
-WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_AllocateBadSize) {
+WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_UsingRealWebcam_AllocateBadSize) {
+  RunTestCase(
+      base::BindOnce(&VideoCaptureDeviceTest::RunAllocateBadSizeTestCase,
+                     base::Unretained(this)));
+}
+void VideoCaptureDeviceTest::RunAllocateBadSizeTestCase() {
   const auto descriptor = FindUsableDeviceDescriptor();
-  if (!descriptor)
-    return;
+  ASSERT_TRUE(descriptor);
 
   std::unique_ptr<VideoCaptureDevice> device(
       video_capture_device_factory_->CreateDevice(*descriptor));
@@ -518,10 +613,15 @@ WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_AllocateBadSize) {
 }
 
 // Cause hangs on Windows, Linux. Fails Android. https://crbug.com/417824
-WRAPPED_TEST_P(VideoCaptureDeviceTest, DISABLED_ReAllocateCamera) {
+WRAPPED_TEST_P(VideoCaptureDeviceTest,
+               DISABLED_UsingRealWebcam_ReAllocateCamera) {
+  RunTestCase(
+      base::BindOnce(&VideoCaptureDeviceTest::RunReAllocateCameraTestCase,
+                     base::Unretained(this)));
+}
+void VideoCaptureDeviceTest::RunReAllocateCameraTestCase() {
   const auto descriptor = FindUsableDeviceDescriptor();
-  if (!descriptor)
-    return;
+  ASSERT_TRUE(descriptor);
 
   // First, do a number of very fast device start/stops.
   for (int i = 0; i <= 5; i++) {
@@ -562,13 +662,22 @@ WRAPPED_TEST_P(VideoCaptureDeviceTest, DISABLED_ReAllocateCamera) {
 }
 
 // Starts the camera in 720p to try and capture MJPEG format.
-WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_CaptureMjpeg) {
-  std::unique_ptr<VideoCaptureDeviceDescriptor> device_descriptor =
-      GetFirstDeviceDescriptorSupportingPixelFormat(PIXEL_FORMAT_MJPEG);
-  if (!device_descriptor) {
-    DVLOG(1) << "No camera supports MJPEG format. Exiting test.";
+WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_UsingRealWebcam_CaptureMjpeg) {
+  RunTestCase(base::BindOnce(&VideoCaptureDeviceTest::RunCaptureMjpegTestCase,
+                             base::Unretained(this)));
+}
+void VideoCaptureDeviceTest::RunCaptureMjpegTestCase() {
+#if defined(OS_CHROMEOS)
+  if (media::ShouldUseCrosCameraService()) {
+    VLOG(1)
+        << "Skipped on Chrome OS device where HAL v3 camera service is used";
     return;
   }
+#endif
+  std::unique_ptr<VideoCaptureDeviceDescriptor> device_descriptor =
+      GetFirstDeviceDescriptorSupportingPixelFormat(PIXEL_FORMAT_MJPEG);
+  ASSERT_TRUE(device_descriptor);
+
 #if defined(OS_WIN)
   base::win::Version version = base::win::GetVersion();
   if (version >= base::win::VERSION_WIN10) {
@@ -600,6 +709,11 @@ WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_CaptureMjpeg) {
 }
 
 WRAPPED_TEST_P(VideoCaptureDeviceTest, NoCameraSupportsPixelFormatMax) {
+  RunTestCase(base::BindOnce(
+      &VideoCaptureDeviceTest::RunNoCameraSupportsPixelFormatMaxTestCase,
+      base::Unretained(this)));
+}
+void VideoCaptureDeviceTest::RunNoCameraSupportsPixelFormatMaxTestCase() {
   // Use PIXEL_FORMAT_MAX to iterate all device names for testing
   // GetDeviceSupportedFormats().
   std::unique_ptr<VideoCaptureDeviceDescriptor> device_descriptor =
@@ -611,9 +725,16 @@ WRAPPED_TEST_P(VideoCaptureDeviceTest, NoCameraSupportsPixelFormatMax) {
 
 // Starts the camera and verifies that a photo can be taken. The correctness of
 // the photo is enforced by MockImageCaptureClient.
-WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_TakePhoto) {
+WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_UsingRealWebcam_TakePhoto) {
+  RunTestCase(base::BindOnce(&VideoCaptureDeviceTest::RunTakePhotoTestCase,
+                             base::Unretained(this)));
+}
+void VideoCaptureDeviceTest::RunTakePhotoTestCase() {
   const auto descriptor = FindUsableDeviceDescriptor();
-  if (!descriptor)
+  ASSERT_TRUE(descriptor);
+
+  const gfx::Size frame_size = GetSupportedCaptureSize(*descriptor);
+  if (frame_size == gfx::Size(0, 0))
     return;
 
 #if defined(OS_ANDROID)
@@ -629,10 +750,10 @@ WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_TakePhoto) {
   ASSERT_TRUE(device);
 
   EXPECT_CALL(*video_capture_client_, OnError(_, _, _)).Times(0);
-  EXPECT_CALL(*video_capture_client_, OnStarted());
+  EXPECT_CALL(*video_capture_client_, OnStarted()).Times(testing::AtLeast(1));
 
   VideoCaptureParams capture_params;
-  capture_params.requested_format.frame_size.SetSize(320, 240);
+  capture_params.requested_format.frame_size = frame_size;
   capture_params.requested_format.frame_rate = 30;
   capture_params.requested_format.pixel_format = PIXEL_FORMAT_I420;
   device->AllocateAndStart(capture_params, std::move(video_capture_client_));
@@ -640,7 +761,7 @@ WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_TakePhoto) {
   VideoCaptureDevice::TakePhotoCallback scoped_callback = base::BindOnce(
       &MockImageCaptureClient::DoOnPhotoTaken, image_capture_client_);
 
-  base::RunLoop run_loop;
+  base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
   base::Closure quit_closure = BindToCurrentLoop(run_loop.QuitClosure());
   EXPECT_CALL(*image_capture_client_.get(), OnCorrectPhotoTaken())
       .Times(1)
@@ -653,9 +774,16 @@ WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_TakePhoto) {
 }
 
 // Starts the camera and verifies that the photo capabilities can be retrieved.
-WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_GetPhotoState) {
+WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_UsingRealWebcam_GetPhotoState) {
+  RunTestCase(base::BindOnce(&VideoCaptureDeviceTest::RunGetPhotoStateTestCase,
+                             base::Unretained(this)));
+}
+void VideoCaptureDeviceTest::RunGetPhotoStateTestCase() {
   const auto descriptor = FindUsableDeviceDescriptor();
-  if (!descriptor)
+  ASSERT_TRUE(descriptor);
+
+  const gfx::Size frame_size = GetSupportedCaptureSize(*descriptor);
+  if (frame_size == gfx::Size(0, 0))
     return;
 
 #if defined(OS_ANDROID)
@@ -674,7 +802,7 @@ WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_GetPhotoState) {
   EXPECT_CALL(*video_capture_client_, OnStarted());
 
   VideoCaptureParams capture_params;
-  capture_params.requested_format.frame_size.SetSize(320, 240);
+  capture_params.requested_format.frame_size = frame_size;
   capture_params.requested_format.frame_rate = 30;
   capture_params.requested_format.pixel_format = PIXEL_FORMAT_I420;
   device->AllocateAndStart(capture_params, std::move(video_capture_client_));
@@ -686,7 +814,7 @@ WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_GetPhotoState) {
   // On Chrome OS AllocateAndStart() is asynchronous, so wait until we get the
   // first frame.
   WaitForCapturedFrame();
-  base::RunLoop run_loop;
+  base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
   base::Closure quit_closure = BindToCurrentLoop(run_loop.QuitClosure());
   EXPECT_CALL(*image_capture_client_.get(), OnCorrectGetPhotoState())
       .Times(1)
@@ -702,16 +830,14 @@ WRAPPED_TEST_P(VideoCaptureDeviceTest, MAYBE_GetPhotoState) {
 
 #if defined(OS_WIN)
 // Verifies that the photo callback is correctly released by MediaFoundation
-WRAPPED_TEST_P(VideoCaptureDeviceTest, CheckPhotoCallbackRelease) {
+WRAPPED_TEST_P(VideoCaptureDeviceTest,
+               MAYBE_UsingRealWebcam_CheckPhotoCallbackRelease) {
   if (!UseWinMediaFoundation())
     return;
 
   std::unique_ptr<VideoCaptureDeviceDescriptor> descriptor =
       GetFirstDeviceDescriptorSupportingPixelFormat(PIXEL_FORMAT_MJPEG);
-  if (!descriptor) {
-    DVLOG(1) << "No usable media foundation device descriptor. Exiting test.";
-    return;
-  }
+  ASSERT_TRUE(descriptor);
 
   EXPECT_CALL(*video_capture_client_, OnError(_, _, _)).Times(0);
   EXPECT_CALL(*video_capture_client_, OnStarted());
@@ -747,7 +873,7 @@ WRAPPED_TEST_P(VideoCaptureDeviceTest, CheckPhotoCallbackRelease) {
   VideoCaptureDevice::TakePhotoCallback scoped_callback = base::BindOnce(
       &MockImageCaptureClient::DoOnPhotoTaken, image_capture_client_);
 
-  base::RunLoop run_loop;
+  base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
   base::RepeatingClosure quit_closure =
       BindToCurrentLoop(run_loop.QuitClosure());
   EXPECT_CALL(*image_capture_client_.get(), OnCorrectPhotoTaken())
@@ -760,4 +886,4 @@ WRAPPED_TEST_P(VideoCaptureDeviceTest, CheckPhotoCallbackRelease) {
 }
 #endif
 
-};  // namespace media
+}  // namespace media

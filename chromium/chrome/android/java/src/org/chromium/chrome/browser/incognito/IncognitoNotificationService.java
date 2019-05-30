@@ -26,12 +26,11 @@ import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.document.DocumentUtils;
+import org.chromium.chrome.browser.notifications.PendingIntentProvider;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.content_public.browser.BrowserStartupController;
 
-import java.lang.ref.WeakReference;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -45,10 +44,11 @@ public class IncognitoNotificationService extends IntentService {
             "com.google.android.apps.chrome.incognito.CLOSE_ALL_INCOGNITO";
 
     @VisibleForTesting
-    public static PendingIntent getRemoveAllIncognitoTabsIntent(Context context) {
+    public static PendingIntentProvider getRemoveAllIncognitoTabsIntent(Context context) {
         Intent intent = new Intent(context, IncognitoNotificationService.class);
         intent.setAction(ACTION_CLOSE_ALL_INCOGNITO);
-        return PendingIntent.getService(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+        return PendingIntentProvider.getService(
+                context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
     /** Empty public constructor needed by Android. */
@@ -95,12 +95,7 @@ public class IncognitoNotificationService extends IntentService {
         Set<Integer> visibleTaskIds = getTaskIdsForVisibleActivities();
         int tabbedTaskId = -1;
 
-        List<WeakReference<Activity>> runningActivities =
-                ApplicationStatus.getRunningActivities();
-        for (int i = 0; i < runningActivities.size(); i++) {
-            Activity activity = runningActivities.get(i).get();
-            if (activity == null) continue;
-
+        for (Activity activity : ApplicationStatus.getRunningActivities()) {
             if (activity instanceof ChromeTabbedActivity) {
                 tabbedTaskId = activity.getTaskId();
                 break;
@@ -130,13 +125,13 @@ public class IncognitoNotificationService extends IntentService {
         for (AppTask task : manager.getAppTasks()) {
             RecentTaskInfo info = DocumentUtils.getTaskInfoFromTask(task);
             if (info == null) continue;
-            String className = DocumentUtils.getTaskClassName(task, pm);
+            String componentName = DocumentUtils.getTaskComponentName(task, pm);
 
             // It is not easily possible to distinguish between tasks sitting on top of
             // ChromeLauncherActivity, so we treat them all as likely ChromeTabbedActivities and
             // close them to be on the cautious side of things.
-            if ((ChromeTabbedActivity.isTabbedModeClassName(className)
-                    || TextUtils.equals(className, ChromeLauncherActivity.class.getName()))
+            if ((ChromeTabbedActivity.isTabbedModeComponentName(componentName)
+                        || TextUtils.equals(componentName, ChromeLauncherActivity.class.getName()))
                     && !visibleTaskIds.contains(info.id)) {
                 task.finishAndRemoveTask();
             }
@@ -144,13 +139,8 @@ public class IncognitoNotificationService extends IntentService {
     }
 
     private Set<Integer> getTaskIdsForVisibleActivities() {
-        List<WeakReference<Activity>> runningActivities =
-                ApplicationStatus.getRunningActivities();
         Set<Integer> visibleTaskIds = new HashSet<>();
-        for (int i = 0; i < runningActivities.size(); i++) {
-            Activity activity = runningActivities.get(i).get();
-            if (activity == null) continue;
-
+        for (Activity activity : ApplicationStatus.getRunningActivities()) {
             int activityState = ApplicationStatus.getStateForActivity(activity);
             if (activityState != ActivityState.STOPPED
                     && activityState != ActivityState.DESTROYED) {

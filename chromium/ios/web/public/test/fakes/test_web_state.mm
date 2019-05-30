@@ -9,12 +9,15 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#import "base/strings/sys_string_conversions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #import "ios/web/public/crw_navigation_item_storage.h"
 #import "ios/web/public/crw_session_storage.h"
 #import "ios/web/public/serializable_user_data_manager.h"
 #import "ios/web/public/web_state/ui/crw_content_view.h"
+#include "ios/web/public/web_state/web_frame.h"
 #import "ios/web/public/web_state/web_state_policy_decider.h"
+#include "ios/web/web_state/web_frames_manager_impl.h"
 #include "ui/gfx/image/image.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -50,7 +53,7 @@ TestWebState::~TestWebState() {
     observer.WebStateDestroyed();
   for (auto& observer : policy_deciders_)
     observer.ResetWebState();
-};
+}
 
 WebStateDelegate* TestWebState::GetDelegate() {
   return nil;
@@ -71,12 +74,6 @@ void TestWebState::SetWebUsageEnabled(bool enabled) {
   if (!web_usage_enabled_)
     SetIsEvicted(true);
 }
-
-bool TestWebState::ShouldSuppressDialogs() const {
-  return false;
-}
-
-void TestWebState::SetShouldSuppressDialogs(bool should_suppress) {}
 
 UIView* TestWebState::GetView() {
   return view_;
@@ -149,6 +146,16 @@ CRWJSInjectionReceiver* TestWebState::GetJSInjectionReceiver() const {
   return injection_receiver_;
 }
 
+void TestWebState::LoadData(NSData* data,
+                            NSString* mime_type,
+                            const GURL& url) {
+  SetCurrentURL(url);
+  mime_type_ = base::SysNSStringToUTF8(mime_type);
+  last_loaded_data_ = data;
+  // Load Data is always a success. Send the event accordingly.
+  OnPageLoaded(web::PageLoadCompletionStatus::SUCCESS);
+}
+
 void TestWebState::ExecuteJavaScript(const base::string16& javascript) {
   last_executed_javascript_ = javascript;
 }
@@ -201,6 +208,10 @@ void TestWebState::SetJSInjectionReceiver(
 
 void TestWebState::SetContentIsHTML(bool content_is_html) {
   content_is_html_ = content_is_html;
+}
+
+void TestWebState::SetTitle(const base::string16& title) {
+  title_ = title;
 }
 
 const base::string16& TestWebState::GetTitle() const {
@@ -279,20 +290,6 @@ void TestWebState::OnVisibleSecurityStateChanged() {
   }
 }
 
-void TestWebState::ShowTransientContentView(CRWContentView* content_view) {
-  if (content_view) {
-    transient_content_view_ = content_view;
-  }
-}
-
-void TestWebState::ClearTransientContentView() {
-  transient_content_view_ = nil;
-}
-
-CRWContentView* TestWebState::GetTransientContentView() {
-  return transient_content_view_;
-}
-
 bool TestWebState::ShouldAllowRequest(
     NSURLRequest* request,
     const WebStatePolicyDecider::RequestInfo& request_info) {
@@ -316,6 +313,10 @@ base::string16 TestWebState::GetLastExecutedJavascript() const {
   return last_executed_javascript_;
 }
 
+NSData* TestWebState::GetLastLoadedData() const {
+  return last_loaded_data_;
+}
+
 void TestWebState::SetCurrentURL(const GURL& url) {
   url_ = url;
 }
@@ -330,6 +331,37 @@ void TestWebState::SetTrustLevel(URLVerificationTrustLevel trust_level) {
 
 void TestWebState::ClearLastExecutedJavascript() {
   last_executed_javascript_.clear();
+}
+
+void TestWebState::CreateWebFramesManager() {
+  DCHECK(!web::WebFramesManagerImpl::FromWebState(this));
+  web::WebFramesManagerImpl::CreateForWebState(this);
+}
+
+void TestWebState::AddWebFrame(std::unique_ptr<web::WebFrame> frame) {
+  DCHECK(frame);
+  web::WebFramesManagerImpl* manager =
+      web::WebFramesManagerImpl::FromWebState(this);
+  DCHECK(manager) << "Create a frame manager before adding a frame.";
+  std::string frame_id = frame->GetFrameId();
+  DCHECK(!manager->GetFrameWithId(frame_id));
+  manager->AddFrame(std::move(frame));
+  WebFrame* frame_ptr = manager->GetFrameWithId(frame_id);
+  for (auto& observer : observers_) {
+    observer.WebFrameDidBecomeAvailable(this, frame_ptr);
+  }
+}
+
+void TestWebState::RemoveWebFrame(std::string frame_id) {
+  web::WebFramesManagerImpl* manager =
+      web::WebFramesManagerImpl::FromWebState(this);
+  DCHECK(manager) << "Create a frame manager before adding a frame.";
+  DCHECK(manager->GetFrameWithId(frame_id));
+  WebFrame* frame_ptr = manager->GetFrameWithId(frame_id);
+  for (auto& observer : observers_) {
+    observer.WebFrameWillBecomeUnavailable(this, frame_ptr);
+  }
+  manager->RemoveFrameWithId(frame_id);
 }
 
 CRWWebViewProxyType TestWebState::GetWebViewProxy() const {
@@ -356,8 +388,8 @@ void TestWebState::SetHasOpener(bool has_opener) {
   has_opener_ = has_opener;
 }
 
-void TestWebState::TakeSnapshot(SnapshotCallback callback,
-                                CGSize target_size) const {
+void TestWebState::TakeSnapshot(const gfx::RectF& rect,
+                                SnapshotCallback callback) {
   std::move(callback).Run(gfx::Image([[UIImage alloc] init]));
 }
 

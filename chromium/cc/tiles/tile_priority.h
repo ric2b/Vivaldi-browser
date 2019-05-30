@@ -12,7 +12,7 @@
 #include <memory>
 #include <string>
 
-#include "base/trace_event/trace_event_argument.h"
+#include "base/trace_event/traced_value.h"
 #include "cc/cc_export.h"
 
 namespace base {
@@ -70,7 +70,7 @@ std::string TilePriorityBinToString(TilePriority::PriorityBin bin);
 
 enum TileMemoryLimitPolicy {
   // Nothing. This mode is used when visible is set to false.
-  ALLOW_NOTHING = 0,
+  ALLOW_NOTHING = 0,  // Decaf.
 
   // You might be made visible, but you're not being interacted with.
   ALLOW_ABSOLUTE_MINIMUM = 1,  // Tall.

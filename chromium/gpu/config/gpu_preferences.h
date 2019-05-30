@@ -56,12 +56,6 @@ struct GPU_EXPORT GpuPreferences {
   // ===================================
   // Settings from //content/public/common/content_switches.h
 
-  // Runs the renderer and plugins in the same process as the browser.
-  bool single_process = false;
-
-  // Run the GPU process as a thread in the browser process.
-  bool in_process_gpu = false;
-
   // Disables hardware acceleration of video decode, where available.
   bool disable_accelerated_video_decode = false;
 
@@ -162,6 +156,9 @@ struct GPU_EXPORT GpuPreferences {
   // uses the defaults, which are encoded in the GPU process's code.
   uint32_t max_active_webgl_contexts = 0;
 
+  // Enables the use of SurfaceControl for overlays on Android.
+  bool enable_android_surface_control = false;
+
   // ===================================
   // Settings from //ui/gl/gl_switches.h
 
@@ -196,6 +193,10 @@ struct GPU_EXPORT GpuPreferences {
   // enable, and neither means use defaults from GpuFeatureInfo.
   bool enable_oop_rasterization = false;
   bool disable_oop_rasterization = false;
+
+  bool enable_oop_rasterization_ddl = false;
+  bool enable_raster_to_sk_image = false;
+  bool enable_passthrough_raster_decoder = false;
 
   // Start the watchdog suspended, as the app is already backgrounded and won't
   // send a background/suspend signal.

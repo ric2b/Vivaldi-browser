@@ -13,6 +13,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "services/data_decoder/public/cpp/test_data_decoder_service.h"
+#include "services/data_decoder/public/mojom/constants.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace extensions {
@@ -21,8 +22,7 @@ namespace {
 
 class JsonFileSanitizerTest : public testing::Test {
  public:
-  JsonFileSanitizerTest()
-      : thread_bundle_(content::TestBrowserThreadBundle::DEFAULT) {}
+  JsonFileSanitizerTest() {}
 
  protected:
   base::FilePath CreateFilePath(const base::FilePath::StringType& file_name) {
@@ -52,7 +52,9 @@ class JsonFileSanitizerTest : public testing::Test {
 
   void CreateAndStartSanitizer(const std::set<base::FilePath>& file_paths) {
     sanitizer_ = JsonFileSanitizer::CreateAndStart(
-        test_data_decoder_service_.connector(), service_manager::Identity(),
+        test_data_decoder_service_.connector(),
+        service_manager::ServiceFilter::ByName(
+            data_decoder::mojom::kServiceName),
         file_paths,
         base::BindOnce(&JsonFileSanitizerTest::SanitizationDone,
                        base::Unretained(this)));

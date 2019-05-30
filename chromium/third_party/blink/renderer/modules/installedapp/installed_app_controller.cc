@@ -63,7 +63,8 @@ void InstalledAppController::ProvideTo(
     LocalFrame& frame,
     WebRelatedAppsFetcher* related_apps_fetcher) {
   Supplement<LocalFrame>::ProvideTo(
-      frame, new InstalledAppController(frame, related_apps_fetcher));
+      frame, MakeGarbageCollected<InstalledAppController>(
+                 frame, related_apps_fetcher));
 }
 
 InstalledAppController* InstalledAppController::From(LocalFrame& frame) {
@@ -102,8 +103,10 @@ void InstalledAppController::FilterByInstalledApps(
   }
 
   if (!provider_) {
+    // See https://bit.ly/2S0zRAS for task types.
     GetSupplementable()->GetInterfaceProvider().GetInterface(
-        mojo::MakeRequest(&provider_));
+        mojo::MakeRequest(&provider_, GetExecutionContext()->GetTaskRunner(
+                                          blink::TaskType::kMiscPlatformAPI)));
     // TODO(mgiuca): Set a connection error handler. This requires a refactor to
     // work like NavigatorShare.cpp (retain a persistent list of clients to
     // reject all of their promises).

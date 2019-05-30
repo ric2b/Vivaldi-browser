@@ -4,14 +4,20 @@
 
 #include "components/mirroring/service/mirroring_service.h"
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "components/mirroring/service/session.h"
-#include "services/service_manager/public/cpp/service_context.h"
-#include "services/service_manager/public/cpp/service_context_ref.h"
+#include "services/ws/public/cpp/gpu/gpu.h"
+#include "ui/base/ui_base_features.h"
 
 namespace mirroring {
 
-MirroringService::MirroringService() {
+MirroringService::MirroringService(
+    service_manager::mojom::ServiceRequest request,
+    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner)
+    : service_binding_(this, std::move(request)),
+      service_keepalive_(&service_binding_, base::TimeDelta()),
+      io_task_runner_(std::move(io_task_runner)) {
   registry_.AddInterface<mojom::MirroringService>(
       base::BindRepeating(&MirroringService::Create, base::Unretained(this)));
 }
@@ -19,11 +25,6 @@ MirroringService::MirroringService() {
 MirroringService::~MirroringService() {
   session_.reset();
   registry_.RemoveInterface<mojom::MirroringService>();
-}
-
-void MirroringService::OnStart() {
-  ref_factory_.reset(new service_manager::ServiceContextRefFactory(
-      context()->CreateQuitClosure()));
 }
 
 void MirroringService::OnBindInterface(
@@ -55,10 +56,17 @@ void MirroringService::Start(mojom::SessionParametersPtr params,
                              mojom::CastMessageChannelPtr outbound_channel,
                              mojom::CastMessageChannelRequest inbound_channel) {
   session_.reset();  // Stops the current session if active.
+  std::unique_ptr<ws::Gpu> gpu = nullptr;
+  if (params->type != mojom::SessionType::AUDIO_ONLY) {
+    gpu = ws::Gpu::Create(
+        service_binding_.GetConnector(),
+        features::IsUsingWindowService() ? "ui" : "content_browser",
+        io_task_runner_);
+  }
   session_ = std::make_unique<Session>(
       std::move(params), max_resolution, std::move(observer),
       std::move(resource_provider), std::move(outbound_channel),
-      std::move(inbound_channel));
+      std::move(inbound_channel), std::move(gpu));
 }
 
 }  // namespace mirroring

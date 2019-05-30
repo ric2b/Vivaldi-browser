@@ -20,12 +20,7 @@ bool SVGMaskPainter::PrepareEffect(const LayoutObject& object,
   SECURITY_DCHECK(!mask_.NeedsLayout());
 
   mask_.ClearInvalidationMask();
-
-  FloatRect visual_rect = object.VisualRectInLocalSVGCoordinates();
-  if (visual_rect.IsEmpty() || !mask_.GetElement()->HasChildren())
-    return false;
-
-  return true;
+  return mask_.GetElement()->HasChildren();
 }
 
 void SVGMaskPainter::FinishEffect(const LayoutObject& object,
@@ -40,7 +35,7 @@ void SVGMaskPainter::FinishEffect(const LayoutObject& object,
   // properties are ready.
   if (properties && properties->Mask()) {
     scoped_paint_chunk_properties.emplace(context.GetPaintController(),
-                                          properties->Mask(), object,
+                                          *properties->Mask(), object,
                                           DisplayItem::kSVGMask);
   }
 

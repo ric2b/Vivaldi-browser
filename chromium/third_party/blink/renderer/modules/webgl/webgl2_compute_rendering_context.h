@@ -6,6 +6,8 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_WEBGL_WEBGL2_COMPUTE_RENDERING_CONTEXT_H_
 
 #include <memory>
+
+#include "base/macros.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_factory.h"
 #include "third_party/blink/renderer/modules/webgl/webgl2_compute_rendering_context_base.h"
 
@@ -23,8 +25,6 @@ class WebGL2ComputeRenderingContext : public WebGL2ComputeRenderingContextBase {
 
  public:
   class Factory : public CanvasRenderingContextFactory {
-    WTF_MAKE_NONCOPYABLE(Factory);
-
    public:
     Factory() = default;
     ~Factory() override = default;
@@ -36,7 +36,16 @@ class WebGL2ComputeRenderingContext : public WebGL2ComputeRenderingContextBase {
       return CanvasRenderingContext::kContextWebgl2Compute;
     }
     void OnError(HTMLCanvasElement*, const String& error) override;
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(Factory);
   };
+
+  WebGL2ComputeRenderingContext(
+      CanvasRenderingContextHost*,
+      std::unique_ptr<WebGraphicsContext3DProvider>,
+      bool using_gpu_compositing,
+      const CanvasContextCreationAttributesCore& requested_attributes);
 
   CanvasRenderingContext::ContextType GetContextType() const override {
     return CanvasRenderingContext::kContextWebgl2Compute;
@@ -52,12 +61,6 @@ class WebGL2ComputeRenderingContext : public WebGL2ComputeRenderingContextBase {
   void Trace(blink::Visitor*) override;
 
  protected:
-  WebGL2ComputeRenderingContext(
-      CanvasRenderingContextHost*,
-      std::unique_ptr<WebGraphicsContext3DProvider>,
-      bool using_gpu_compositing,
-      const CanvasContextCreationAttributesCore& requested_attributes);
-
   Member<EXTColorBufferFloat> ext_color_buffer_float_;
   Member<EXTDisjointTimerQueryWebGL2> ext_disjoint_timer_query_web_gl2_;
   Member<EXTTextureFilterAnisotropic> ext_texture_filter_anisotropic_;

@@ -15,7 +15,7 @@
 #include "components/feature_engagement/internal/proto/availability.pb.h"
 #include "components/feature_engagement/internal/stats.h"
 #include "components/feature_engagement/public/feature_list.h"
-#include "components/leveldb_proto/proto_database.h"
+#include "components/leveldb_proto/public/proto_database.h"
 
 namespace feature_engagement {
 
@@ -121,7 +121,8 @@ void OnDBInitComplete(
     FeatureVector feature_filter,
     PersistentAvailabilityStore::OnLoadedCallback on_loaded_callback,
     uint32_t current_day,
-    bool success) {
+    leveldb_proto::Enums::InitStatus status) {
+  bool success = status == leveldb_proto::Enums::InitStatus::kOK;
   stats::RecordDbInitEvent(success, stats::StoreType::AVAILABILITY_STORE);
 
   if (!success) {
@@ -146,8 +147,7 @@ void PersistentAvailabilityStore::LoadAndUpdateStore(
     PersistentAvailabilityStore::OnLoadedCallback on_loaded_callback,
     uint32_t current_day) {
   auto* db_ptr = db.get();
-  db_ptr->Init(kDatabaseUMAName, storage_dir,
-               leveldb_proto::CreateSimpleOptions(),
+  db_ptr->Init(kDatabaseUMAName,
                base::BindOnce(&OnDBInitComplete, std::move(db),
                               std::move(feature_filter),
                               std::move(on_loaded_callback), current_day));

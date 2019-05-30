@@ -7,14 +7,14 @@ update_template_instance("//base:base") {
     "//vivaldi/base/vivaldi_running.cpp",
   ]
 
-  if (is_android) {
-    if (!defined(jumbo_excluded_sources)) {
-      jumbo_excluded_sources = []
-    }
-    jumbo_excluded_sources += [
-      "android/android_image_reader_compat.cc",
-    ]
-  }
+ # if (is_android) {
+ #   if (!defined(jumbo_excluded_sources)) {
+ #     jumbo_excluded_sources = []
+ #   }
+ #   jumbo_excluded_sources += [
+ #     "android/android_image_reader_compat.cc",
+ #   ]
+ # }
 }
 
 update_target("//base:base_static") {

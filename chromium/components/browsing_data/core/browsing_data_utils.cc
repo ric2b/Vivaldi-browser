@@ -7,6 +7,7 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/no_destructor.h"
 #include "components/browsing_data/core/counters/autofill_counter.h"
 #include "components/browsing_data/core/counters/history_counter.h"
 #include "components/browsing_data/core/counters/passwords_counter.h"
@@ -248,7 +249,6 @@ bool GetDeletionPreferenceFromDataType(
       case BrowsingDataType::BOOKMARKS:
       case BrowsingDataType::SITE_SETTINGS:
       case BrowsingDataType::DOWNLOADS:
-      case BrowsingDataType::MEDIA_LICENSES:
       case BrowsingDataType::HOSTED_APPS_DATA:
         return false;  // No corresponding preference on basic tab.
       case BrowsingDataType::NUM_TYPES:
@@ -283,9 +283,6 @@ bool GetDeletionPreferenceFromDataType(
     case BrowsingDataType::DOWNLOADS:
       *out_pref = prefs::kDeleteDownloadHistory;
       return true;
-    case BrowsingDataType::MEDIA_LICENSES:
-      *out_pref = prefs::kDeleteMediaLicenses;
-      return true;
     case BrowsingDataType::HOSTED_APPS_DATA:
       *out_pref = prefs::kDeleteHostedAppsData;
       return true;
@@ -300,28 +297,24 @@ bool GetDeletionPreferenceFromDataType(
 BrowsingDataType GetDataTypeFromDeletionPreference(
     const std::string& pref_name) {
   using DataTypeMap = base::flat_map<std::string, BrowsingDataType>;
-  CR_DEFINE_STATIC_LOCAL(
-      DataTypeMap, preference_to_datatype,
-      (
-          {
-              {prefs::kDeleteBrowsingHistory, BrowsingDataType::HISTORY},
-              {prefs::kDeleteBrowsingHistoryBasic, BrowsingDataType::HISTORY},
-              {prefs::kDeleteCache, BrowsingDataType::CACHE},
-              {prefs::kDeleteCacheBasic, BrowsingDataType::CACHE},
-              {prefs::kDeleteCookies, BrowsingDataType::COOKIES},
-              {prefs::kDeleteCookiesBasic, BrowsingDataType::COOKIES},
-              {prefs::kDeletePasswords, BrowsingDataType::PASSWORDS},
-              {prefs::kDeleteFormData, BrowsingDataType::FORM_DATA},
-              {prefs::kDeleteSiteSettings, BrowsingDataType::SITE_SETTINGS},
-              {prefs::kDeleteDownloadHistory, BrowsingDataType::DOWNLOADS},
-              {prefs::kDeleteMediaLicenses, BrowsingDataType::MEDIA_LICENSES},
-              {prefs::kDeleteHostedAppsData,
-               BrowsingDataType::HOSTED_APPS_DATA},
-          },
-          base::KEEP_FIRST_OF_DUPES));
+  static base::NoDestructor<DataTypeMap> preference_to_datatype(
+      std::initializer_list<DataTypeMap::value_type>{
+          {prefs::kDeleteBrowsingHistory, BrowsingDataType::HISTORY},
+          {prefs::kDeleteBrowsingHistoryBasic, BrowsingDataType::HISTORY},
+          {prefs::kDeleteCache, BrowsingDataType::CACHE},
+          {prefs::kDeleteCacheBasic, BrowsingDataType::CACHE},
+          {prefs::kDeleteCookies, BrowsingDataType::COOKIES},
+          {prefs::kDeleteCookiesBasic, BrowsingDataType::COOKIES},
+          {prefs::kDeletePasswords, BrowsingDataType::PASSWORDS},
+          {prefs::kDeleteFormData, BrowsingDataType::FORM_DATA},
+          {prefs::kDeleteSiteSettings, BrowsingDataType::SITE_SETTINGS},
+          {prefs::kDeleteDownloadHistory, BrowsingDataType::DOWNLOADS},
+          {prefs::kDeleteHostedAppsData, BrowsingDataType::HOSTED_APPS_DATA},
+      },
+      base::KEEP_FIRST_OF_DUPES);
 
-  auto iter = preference_to_datatype.find(pref_name);
-  DCHECK(iter != preference_to_datatype.end());
+  auto iter = preference_to_datatype->find(pref_name);
+  DCHECK(iter != preference_to_datatype->end());
   return iter->second;
 }
 

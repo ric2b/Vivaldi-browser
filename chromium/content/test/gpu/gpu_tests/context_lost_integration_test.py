@@ -25,7 +25,7 @@ harness_script = r"""
   domAutomationController._finished = false;
 
   domAutomationController.send = function(msg) {
-    msg = msg.toLowerCase()
+    msg = msg.toLowerCase();
     if (msg == "loaded") {
       domAutomationController._loaded = true;
     } else if (msg == "success") {
@@ -60,6 +60,7 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
 
   @classmethod
   def AddCommandlineArgs(cls, parser):
+    super(ContextLostIntegrationTest, cls).AddCommandlineArgs(parser)
     parser.add_option('--is-asan',
         help='Indicates whether currently running an ASAN build',
         action='store_true')
@@ -90,7 +91,13 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
              ('ContextLost_WebGLBlockedAfterJSNavigation',
               'webgl-domain-blocking-page1.html'),
              ('ContextLost_WebGLUnblockedAfterUserInitiatedReload',
-              'webgl-domain-unblocking.html'))
+              'webgl-domain-unblocking.html'),
+             ('ContextLost_WorkerRAFAfterGPUCrash',
+              'worker-raf-after-gpu-crash.html'),
+             ('ContextLost_WorkerRAFAfterGPUCrash_OOPD',
+              'worker-raf-after-gpu-crash.html'),
+             ('ContextLost_WebGL2Blocked',
+              'webgl2-context-blocked.html'))
     for t in tests:
       yield (t[0], t[1], ('_' + t[0]))
 
@@ -175,18 +182,19 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
       self.fail('Test failed (didn\'t render content properly?)')
 
     number_of_crashes = -1
-    # To allow time for a gpucrash to complete, wait up to 20s,
-    # polling repeatedly.
-    start_time = time.time()
-    current_time = time.time()
-    while current_time - start_time < 20:
-      system_info = tab.browser.GetSystemInfo()
-      number_of_crashes = \
-          system_info.gpu.aux_attributes[u'process_crash_count']
-      if number_of_crashes >= expected_kills:
-        break
-      time.sleep(1)
+    if expected_kills > 0:
+      # To allow time for a gpucrash to complete, wait up to 20s,
+      # polling repeatedly.
+      start_time = time.time()
       current_time = time.time()
+      while current_time - start_time < 20:
+        system_info = tab.browser.GetSystemInfo()
+        number_of_crashes = \
+            system_info.gpu.aux_attributes[u'process_crash_count']
+        if number_of_crashes >= expected_kills:
+          break
+        time.sleep(1)
+        current_time = time.time()
 
     # Wait 5 more seconds and re-read process_crash_count, in
     # attempt to catch latent process crashes.
@@ -323,6 +331,37 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
       self.fail(
         'WebGL should have been unblocked after a user-initiated navigation')
     self._RestartBrowser('must restart after tests that kill the GPU process')
+
+  def _ContextLost_WorkerRAFAfterGPUCrash(self, test_path):
+    self.RestartBrowserIfNecessaryWithArgs(self._AddDefaultArgs([
+      '--enable-experimental-web-platform-features'
+    ]))
+    self.RestartBrowserIfNecessaryWithArgs(self._AddDefaultArgs([]))
+    self._NavigateAndWaitForLoad(test_path)
+    self._KillGPUProcess(1, False)
+    self._WaitForTabAndCheckCompletion()
+    self._RestartBrowser('must restart after tests that kill the GPU process')
+
+  def _ContextLost_WorkerRAFAfterGPUCrash_OOPD(self, test_path):
+    self.RestartBrowserIfNecessaryWithArgs(self._AddDefaultArgs([
+      '--enable-viz-display-compositor',
+      '--enable-experimental-web-platform-features'
+    ]))
+    self._NavigateAndWaitForLoad(test_path)
+    self._KillGPUProcess(1, False)
+    self._WaitForTabAndCheckCompletion()
+    self._RestartBrowser('must restart after tests that kill the GPU process')
+
+  def _ContextLost_WebGL2Blocked(self, test_path):
+    self.RestartBrowserIfNecessaryWithArgs(self._AddDefaultArgs([
+      '--gpu-driver-bug-list-test-group=3']))
+    self._NavigateAndWaitForLoad(test_path)
+    tab = self.tab
+    tab.EvaluateJavaScript('runTest()')
+    self._WaitForTabAndCheckCompletion()
+    # Attempting to create a WebGL 2.0 context when ES 3.0 is
+    # blacklisted should not cause the GPU process to crash.
+    self._CheckCrashCount(tab, 0)
 
 def load_tests(loader, tests, pattern):
   del loader, tests, pattern  # Unused.

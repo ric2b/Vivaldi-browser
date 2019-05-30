@@ -5,6 +5,8 @@
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 
 #include "ash/public/cpp/ash_pref_names.h"
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
@@ -20,7 +22,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/prefs/pref_service.h"
@@ -714,7 +716,7 @@ class AccessibilityManagerUserTypeTest : public AccessibilityManagerTest,
 };
 
 // TODO(yoshiki): Enable a test for retail mode (i.e. RetailAccountId).
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     UserTypeInstantiation,
     AccessibilityManagerUserTypeTest,
     ::testing::Values(AccountId::FromUserEmailGaiaId(kTestUserName,

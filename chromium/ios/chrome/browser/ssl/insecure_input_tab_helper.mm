@@ -9,14 +9,16 @@
 #include <memory>
 
 #include "base/logging.h"
+#include "components/autofill/ios/form_util/form_activity_params.h"
 #include "components/autofill/ios/form_util/form_activity_tab_helper.h"
 #include "components/security_state/ios/ssl_status_input_event_data.h"
 #import "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
 #import "ios/web/public/origin_util.h"
-#include "ios/web/public/web_state/form_activity_params.h"
+#import "ios/web/public/web_state/navigation_context.h"
 #import "ios/web/public/web_state/web_state.h"
 #import "ios/web/public/web_state/web_state_user_data.h"
+#include "ui/base/page_transition_types.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -49,8 +51,6 @@ security_state::SSLStatusInputEventData* GetOrCreateSSLStatusInputEventData(
 
 }  // namespace
 
-DEFINE_WEB_STATE_USER_DATA_KEY(InsecureInputTabHelper);
-
 InsecureInputTabHelper::~InsecureInputTabHelper() = default;
 
 // static
@@ -63,38 +63,6 @@ InsecureInputTabHelper* InsecureInputTabHelper::GetOrCreateForWebState(
     DCHECK(helper);
   }
   return helper;
-}
-
-void InsecureInputTabHelper::DidShowPasswordFieldInInsecureContext() {
-  DCHECK(!web::IsOriginSecure(web_state_->GetLastCommittedURL()));
-
-  security_state::SSLStatusInputEventData* input_events =
-      GetOrCreateSSLStatusInputEventData(web_state_);
-  if (!input_events)
-    return;
-
-  // If the first password field for the web contents was just
-  // shown, update the SSLStatusInputEventData.
-  if (!input_events->input_events()->password_field_shown) {
-    input_events->input_events()->password_field_shown = true;
-    web_state_->DidChangeVisibleSecurityState();
-  }
-}
-
-void InsecureInputTabHelper::DidInteractWithNonsecureCreditCardInput() {
-  DCHECK(!web::IsOriginSecure(web_state_->GetLastCommittedURL()));
-
-  security_state::SSLStatusInputEventData* input_events =
-      GetOrCreateSSLStatusInputEventData(web_state_);
-  if (!input_events)
-    return;
-
-  // If the first credit card field for the web contents was just
-  // shown, update the SSLStatusInputEventData.
-  if (!input_events->input_events()->credit_card_field_edited) {
-    input_events->input_events()->credit_card_field_edited = true;
-    web_state_->DidChangeVisibleSecurityState();
-  }
 }
 
 void InsecureInputTabHelper::DidEditFieldInInsecureContext() {
@@ -120,13 +88,32 @@ InsecureInputTabHelper::InsecureInputTabHelper(web::WebState* web_state)
       ->AddObserver(this);
 }
 
-void InsecureInputTabHelper::OnFormActivity(
+void InsecureInputTabHelper::FormActivityRegistered(
     web::WebState* web_state,
-    const web::FormActivityParams& params) {
+    web::WebFrame* sender_frame,
+    const autofill::FormActivityParams& params) {
   DCHECK_EQ(web_state_, web_state);
   if (params.type == "input" &&
       !web::IsOriginSecure(web_state->GetLastCommittedURL())) {
     DidEditFieldInInsecureContext();
+  }
+}
+
+void InsecureInputTabHelper::DidFinishNavigation(
+    web::WebState* web_state,
+    web::NavigationContext* navigation_context) {
+  DCHECK_EQ(web_state_, web_state);
+  // Check if the navigation should clear insecure input event data (i.e., not a
+  // same-document navigation).
+  if (!web::IsOriginSecure(web_state->GetLastCommittedURL()) &&
+      navigation_context->HasCommitted() &&
+      !navigation_context->IsSameDocument()) {
+    security_state::SSLStatusInputEventData* input_events =
+        GetOrCreateSSLStatusInputEventData(web_state_);
+    if (!input_events)
+      return;
+    input_events->input_events()->insecure_field_edited = false;
+    web_state_->DidChangeVisibleSecurityState();
   }
 }
 
@@ -137,3 +124,5 @@ void InsecureInputTabHelper::WebStateDestroyed(web::WebState* web_state) {
   web_state_->RemoveObserver(this);
   web_state_ = nullptr;
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(InsecureInputTabHelper)

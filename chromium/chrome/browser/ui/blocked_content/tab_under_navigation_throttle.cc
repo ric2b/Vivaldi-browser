@@ -18,7 +18,6 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/blocked_content/list_item_position.h"
 #include "chrome/browser/ui/blocked_content/popup_opener_tab_helper.h"
@@ -66,17 +65,19 @@ void LogAction(TabUnderNavigationThrottle::Action action, bool off_the_record) {
 #if defined(OS_ANDROID)
 typedef FramebustBlockMessageDelegate::InterventionOutcome InterventionOutcome;
 
-void LogOutcome(bool off_the_record, InterventionOutcome outcome) {
-  TabUnderNavigationThrottle::Action action;
+TabUnderNavigationThrottle::Action GetActionForOutcome(
+    InterventionOutcome outcome) {
   switch (outcome) {
     case InterventionOutcome::kAccepted:
-      action = TabUnderNavigationThrottle::Action::kAcceptedIntervention;
-      break;
+      return TabUnderNavigationThrottle::Action::kAcceptedIntervention;
     case InterventionOutcome::kDeclinedAndNavigated:
-      action = TabUnderNavigationThrottle::Action::kClickedThrough;
-      break;
+      return TabUnderNavigationThrottle::Action::kClickedThrough;
   }
-  LogAction(action, off_the_record);
+  NOTREACHED();
+}
+
+void LogOutcome(bool off_the_record, InterventionOutcome outcome) {
+  LogAction(GetActionForOutcome(outcome), off_the_record);
 }
 #else
 void OnListItemClicked(bool off_the_record,
@@ -86,8 +87,7 @@ void OnListItemClicked(bool off_the_record,
   LogAction(TabUnderNavigationThrottle::Action::kClickedThrough,
             off_the_record);
   UMA_HISTOGRAM_ENUMERATION("Tab.TabUnder.ClickThroughPosition",
-                            GetListItemPositionFromDistance(index, total_size),
-                            ListItemPosition::kLast);
+                            GetListItemPositionFromDistance(index, total_size));
 }
 #endif
 
@@ -102,7 +102,7 @@ void LogTabUnderAttempt(content::NavigationHandle* handle,
   ukm::SourceId opener_source_id =
       ukm::GetSourceIdForWebContentsDocument(handle->GetWebContents());
   if (opener_source_id != ukm::kInvalidSourceId && ukm_recorder) {
-    ukm::builders::AbusiveExperienceHeuristic(opener_source_id)
+    ukm::builders::AbusiveExperienceHeuristic_TabUnder(opener_source_id)
         .SetDidTabUnder(true)
         .Record(ukm_recorder);
   }
@@ -210,11 +210,11 @@ void TabUnderNavigationThrottle::ShowUI() {
       std::make_unique<FramebustBlockMessageDelegate>(
           web_contents, url, base::BindOnce(&LogOutcome, off_the_record)));
 #else
-  TabSpecificContentSettings* content_settings =
-      TabSpecificContentSettings::FromWebContents(web_contents);
-  DCHECK(content_settings);
-  content_settings->OnFramebustBlocked(
-      url, base::BindOnce(&OnListItemClicked, off_the_record));
+  if (auto* tab_helper =
+          FramebustBlockTabHelper::FromWebContents(web_contents)) {
+    tab_helper->AddBlockedUrl(
+        url, base::BindOnce(&OnListItemClicked, off_the_record));
+  }
 #endif
 }
 

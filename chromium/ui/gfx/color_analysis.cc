@@ -137,16 +137,6 @@ class KMeanCluster {
   uint32_t weight_;
 };
 
-// Un-premultiplies each pixel in |bitmap| into an output |buffer|. Requires
-// approximately 10 microseconds for a 16x16 icon on an Intel Core i5.
-void UnPreMultiply(const SkBitmap& bitmap, uint32_t* buffer, int buffer_size) {
-  uint32_t* in = static_cast<uint32_t*>(bitmap.getPixels());
-  uint32_t* out = buffer;
-  int pixel_count = std::min(bitmap.width() * bitmap.height(), buffer_size);
-  for (int i = 0; i < pixel_count; ++i)
-    *out++ = SkUnPreMultiply::PMColorToColor(*in++);
-}
-
 // Prominent color utilities ---------------------------------------------------
 
 // A color value with an associated weight.
@@ -551,8 +541,8 @@ SkColor CalculateKMeanColorOfBuffer(uint8_t* decoded_data,
     clusters.resize(kNumberOfClusters, KMeanCluster());
 
     // Pick a starting point for each cluster
-    std::vector<KMeanCluster>::iterator cluster = clusters.begin();
-    while (cluster != clusters.end()) {
+    auto new_cluster = clusters.begin();
+    while (new_cluster != clusters.end()) {
       // Try up to 10 times to find a unique color. If no unique color can be
       // found, destroy this cluster.
       bool color_unique = false;
@@ -572,10 +562,9 @@ SkColor CalculateKMeanColorOfBuffer(uint8_t* decoded_data,
         // Loop through the previous clusters and check to see if we have seen
         // this color before.
         color_unique = true;
-        for (std::vector<KMeanCluster>::iterator
-            cluster_check = clusters.begin();
-            cluster_check != cluster; ++cluster_check) {
-          if (cluster_check->IsAtCentroid(r, g, b)) {
+        for (auto cluster = clusters.begin(); cluster != new_cluster;
+             ++cluster) {
+          if (cluster->IsAtCentroid(r, g, b)) {
             color_unique = false;
             break;
           }
@@ -584,19 +573,19 @@ SkColor CalculateKMeanColorOfBuffer(uint8_t* decoded_data,
         // If we have a unique color set the center of the cluster to
         // that color.
         if (color_unique) {
-          cluster->SetCentroid(r, g, b);
+          new_cluster->SetCentroid(r, g, b);
           break;
         }
       }
 
       // If we don't have a unique color erase this cluster.
       if (!color_unique) {
-        cluster = clusters.erase(cluster);
+        new_cluster = clusters.erase(new_cluster);
       } else {
         // Have to increment the iterator here, otherwise the increment in the
         // for loop will skip a cluster due to the erase if the color wasn't
         // unique.
-        ++cluster;
+        ++new_cluster;
       }
     }
 
@@ -622,11 +611,11 @@ SkColor CalculateKMeanColorOfBuffer(uint8_t* decoded_data,
           continue;
 
         uint32_t distance_sqr_to_closest_cluster = UINT_MAX;
-        std::vector<KMeanCluster>::iterator closest_cluster = clusters.begin();
+        auto closest_cluster = clusters.begin();
 
         // Figure out which cluster this color is closest to in RGB space.
-        for (std::vector<KMeanCluster>::iterator cluster = clusters.begin();
-            cluster != clusters.end(); ++cluster) {
+        for (auto cluster = clusters.begin(); cluster != clusters.end();
+             ++cluster) {
           uint32_t distance_sqr = cluster->GetDistanceSqr(r, g, b);
 
           if (distance_sqr < distance_sqr_to_closest_cluster) {
@@ -640,8 +629,8 @@ SkColor CalculateKMeanColorOfBuffer(uint8_t* decoded_data,
 
       // Calculate the new cluster centers and see if we've converged or not.
       convergence = true;
-      for (std::vector<KMeanCluster>::iterator cluster = clusters.begin();
-          cluster != clusters.end(); ++cluster) {
+      for (auto cluster = clusters.begin(); cluster != clusters.end();
+           ++cluster) {
         convergence &= cluster->CompareCentroidWithAggregate();
 
         cluster->RecomputeCentroid();
@@ -655,8 +644,8 @@ SkColor CalculateKMeanColorOfBuffer(uint8_t* decoded_data,
 
     // Loop through the clusters to figure out which cluster has an appropriate
     // color. Skip any that are too bright/dark and go in order of weight.
-    for (std::vector<KMeanCluster>::iterator cluster = clusters.begin();
-        cluster != clusters.end(); ++cluster) {
+    for (auto cluster = clusters.begin(); cluster != clusters.end();
+         ++cluster) {
       uint8_t r, g, b;
       cluster->GetCentroid(&r, &g, &b);
 
@@ -713,12 +702,24 @@ SkColor CalculateKMeanColorOfBitmap(const SkBitmap& bitmap,
                                     const HSL& lower_bound,
                                     const HSL& upper_bound,
                                     bool find_closest) {
+  // Clamp the height being used to the height of the provided image (otherwise,
+  // we can end up creating a larger buffer than we have data for, and the end
+  // of the buffer will remain uninitialized after we copy/UnPreMultiply the
+  // image data into it).
+  height = std::min(height, bitmap.height());
+
   // SkBitmap uses pre-multiplied alpha but the KMean clustering function
   // above uses non-pre-multiplied alpha. Transform the bitmap before we
   // analyze it because the function reads each pixel multiple times.
   int pixel_count = bitmap.width() * height;
   std::unique_ptr<uint32_t[]> image(new uint32_t[pixel_count]);
-  UnPreMultiply(bitmap, image.get(), pixel_count);
+
+  // Un-premultiplies each pixel in bitmap into the buffer. Requires
+  // approximately 10 microseconds for a 16x16 icon on an Intel Core i5.
+  uint32_t* in = static_cast<uint32_t*>(bitmap.getPixels());
+  uint32_t* out = image.get();
+  for (int i = 0; i < pixel_count; ++i)
+    *out++ = SkUnPreMultiply::PMColorToColor(*in++);
 
   GridSampler sampler;
   return CalculateKMeanColorOfBuffer(reinterpret_cast<uint8_t*>(image.get()),

@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/reading_list/reading_list_table_view_controller.h"
 
+#include "base/ios/ios_util.h"
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -22,6 +23,7 @@
 #import "ios/chrome/browser/ui/reading_list/reading_list_toolbar_button_commands.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_toolbar_button_manager.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_header_footer_item.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
@@ -136,7 +138,6 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   if (!editing) {
     self.editingWithToolbarButtons = NO;
     if (self.needsSectionCleanupAfterEditing) {
-      [self removeEmptySections];
       self.needsSectionCleanupAfterEditing = NO;
     }
   }
@@ -222,6 +223,15 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
            (id<UIViewControllerTransitionCoordinator>)coordinator {
   if (self.editingWithSwipe)
     [self exitEditingModeAnimated:YES];
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
+  [super traitCollectionDidChange:previousTraitCollection];
+  if (!self.dataSource.hasElements &&
+      self.traitCollection.preferredContentSizeCategory !=
+          previousTraitCollection.preferredContentSizeCategory) {
+    [self tableIsEmpty];
+  }
 }
 
 #pragma mark - UITableViewDataSource
@@ -850,10 +860,12 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   [self removeEmptySections];
 }
 
-// Removes the empty sections from the table and the model.
-- (void)removeEmptySections {
+// Removes the empty sections from the table and the model.  Returns the number
+// of removed sections.
+- (NSUInteger)removeEmptySections {
   UITableView* tableView = self.tableView;
   TableViewModel* model = self.tableViewModel;
+  __block NSUInteger removedSectionCount = 0;
   void (^updates)(void) = ^{
     SectionIdentifier sections[] = {SectionIdentifierRead,
                                     SectionIdentifierUnread};
@@ -868,6 +880,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
         [tableView deleteSections:[NSIndexSet indexSetWithIndex:sectionIndex]
                  withRowAnimation:UITableViewRowAnimationFade];
         [model removeSectionWithIdentifier:section];
+        ++removedSectionCount;
       }
     }
   };
@@ -877,6 +890,8 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
     [self tableIsEmpty];
   else
     [self updateToolbarItems];
+
+  return removedSectionCount;
 }
 
 // Resets self.editing to NO, optionally with animation.

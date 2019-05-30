@@ -8,27 +8,16 @@
 #include "base/mac/scoped_nsobject.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "chrome/browser/ui/autofill/autofill_popup_controller.h"
-#import "chrome/browser/ui/cocoa/browser_window_controller.h"
-#import "chrome/browser/ui/cocoa/tab_contents/tab_contents_controller.h"
 #import "chrome/browser/ui/cocoa/touchbar/browser_window_touch_bar_controller.h"
 #import "chrome/browser/ui/cocoa/touchbar/credit_card_autofill_touch_bar_controller.h"
-#import "chrome/browser/ui/cocoa/touchbar/text_suggestions_touch_bar_controller.h"
 #include "chrome/browser/ui/views/frame/browser_frame_mac.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/common/chrome_features.h"
 #include "content/public/browser/web_contents.h"
 #import "ui/base/cocoa/touch_bar_util.h"
-#include "ui/base/ui_base_features.h"
 
 @implementation WebTextfieldTouchBarController
 
 + (WebTextfieldTouchBarController*)controllerForWindow:(NSWindow*)window {
-  if (features::IsViewsBrowserCocoa()) {
-    BrowserWindowController* bwc =
-        [BrowserWindowController browserWindowControllerForWindow:window];
-    return [[bwc browserWindowTouchBarController] webTextfieldTouchBar];
-  }
-
   BrowserView* browser_view =
       BrowserView::GetBrowserViewForNativeWindow(window);
   if (!browser_view)
@@ -43,14 +32,6 @@
     (BrowserWindowTouchBarController*)controller {
   if ((self = [super init])) {
     controller_ = controller;
-
-    if (base::FeatureList::IsEnabled(features::kTextSuggestionsTouchBar) ||
-        base::FeatureList::IsEnabled(features::kExperimentalUi)) {
-      textSuggestionsTouchBarController_.reset(
-          [[TextSuggestionsTouchBarController alloc]
-              initWithWebContents:[controller_ webContents]
-                       controller:self]);
-    }
   }
 
   return self;
@@ -74,10 +55,6 @@
   [self invalidateTouchBar];
 }
 
-- (void)updateWebContents:(content::WebContents*)contents {
-  [textSuggestionsTouchBarController_ setWebContents:contents];
-}
-
 - (void)invalidateTouchBar {
   [controller_ invalidateTouchBar];
 }
@@ -85,10 +62,6 @@
 - (NSTouchBar*)makeTouchBar {
   if (autofillTouchBarController_)
     return [autofillTouchBarController_ makeTouchBar];
-
-  if (textSuggestionsTouchBarController_)
-    return [textSuggestionsTouchBarController_ makeTouchBar];
-
   return nil;
 }
 

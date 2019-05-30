@@ -25,6 +25,7 @@
 #include "third_party/blink/renderer/core/css/style_rule.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_client.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
 
@@ -38,6 +39,7 @@ class StyleRuleImport : public StyleRuleBase {
   static StyleRuleImport* Create(const String& href,
                                  scoped_refptr<MediaQuerySet>);
 
+  StyleRuleImport(const String& href, scoped_refptr<MediaQuerySet>);
   ~StyleRuleImport();
 
   StyleSheetContents* ParentStyleSheet() const { return parent_style_sheet_; }
@@ -89,8 +91,6 @@ class StyleRuleImport : public StyleRuleBase {
 
   void NotifyFinished(Resource*);
 
-  StyleRuleImport(const String& href, scoped_refptr<MediaQuerySet>);
-
   void Dispose();
 
   Member<StyleSheetContents> parent_style_sheet_;
@@ -102,7 +102,12 @@ class StyleRuleImport : public StyleRuleBase {
   bool loading_;
 };
 
-DEFINE_STYLE_RULE_TYPE_CASTS(Import);
+template <>
+struct DowncastTraits<StyleRuleImport> {
+  static bool AllowFrom(const StyleRuleBase& rule) {
+    return rule.IsImportRule();
+  }
+};
 
 }  // namespace blink
 

@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "extensions/renderer/script_context.h"
@@ -22,7 +23,7 @@ FileBrowserHandlerCustomBindings::FileBrowserHandlerCustomBindings(
 void FileBrowserHandlerCustomBindings::AddRoutes() {
   RouteHandlerFunction(
       "GetExternalFileEntry", "fileBrowserHandler",
-      base::Bind(
+      base::BindRepeating(
           &FileBrowserHandlerCustomBindings::GetExternalFileEntryCallback,
           base::Unretained(this)));
 }
@@ -39,17 +40,25 @@ void FileBrowserHandlerCustomBindings::GetExternalFileEntry(
     v8::Isolate* isolate = args.GetIsolate();
     std::string file_system_name(*v8::String::Utf8Value(
         isolate,
-        file_def->Get(v8::String::NewFromUtf8(isolate, "fileSystemName"))));
+        file_def->Get(v8::String::NewFromUtf8(isolate, "fileSystemName",
+                                              v8::NewStringType::kInternalized)
+                          .ToLocalChecked())));
     GURL file_system_root(*v8::String::Utf8Value(
         isolate,
-        file_def->Get(v8::String::NewFromUtf8(isolate, "fileSystemRoot"))));
+        file_def->Get(v8::String::NewFromUtf8(isolate, "fileSystemRoot",
+                                              v8::NewStringType::kInternalized)
+                          .ToLocalChecked())));
     std::string file_full_path(*v8::String::Utf8Value(
         isolate,
-        file_def->Get(v8::String::NewFromUtf8(isolate, "fileFullPath"))));
+        file_def->Get(v8::String::NewFromUtf8(isolate, "fileFullPath",
+                                              v8::NewStringType::kInternalized)
+                          .ToLocalChecked())));
     bool is_directory =
-        file_def->Get(v8::String::NewFromUtf8(isolate, "fileIsDirectory"))
-            ->BooleanValue(context->v8_context())
-            .FromMaybe(false);
+        file_def
+            ->Get(v8::String::NewFromUtf8(isolate, "fileIsDirectory",
+                                          v8::NewStringType::kInternalized)
+                      .ToLocalChecked())
+            ->BooleanValue(isolate);
     blink::WebDOMFileSystem::EntryType entry_type =
         is_directory ? blink::WebDOMFileSystem::kEntryTypeDirectory
                      : blink::WebDOMFileSystem::kEntryTypeFile;

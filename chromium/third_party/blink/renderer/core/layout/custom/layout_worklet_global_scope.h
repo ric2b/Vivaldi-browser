@@ -5,20 +5,19 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_CUSTOM_LAYOUT_WORKLET_GLOBAL_SCOPE_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_CUSTOM_LAYOUT_WORKLET_GLOBAL_SCOPE_H_
 
-#include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/layout/custom/pending_layout_registry.h"
-#include "third_party/blink/renderer/core/workers/main_thread_worklet_global_scope.h"
-#include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
+#include "third_party/blink/renderer/core/workers/worklet_global_scope.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
 
 class CSSLayoutDefinition;
+class V8NoArgumentConstructor;
 class WorkerReportingProxy;
 
-class CORE_EXPORT LayoutWorkletGlobalScope final
-    : public MainThreadWorkletGlobalScope {
+class CORE_EXPORT LayoutWorkletGlobalScope final : public WorkletGlobalScope {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(LayoutWorkletGlobalScope);
 
@@ -27,8 +26,12 @@ class CORE_EXPORT LayoutWorkletGlobalScope final
       LocalFrame*,
       std::unique_ptr<GlobalScopeCreationParams>,
       WorkerReportingProxy&,
-      PendingLayoutRegistry*,
-      size_t global_scope_number);
+      PendingLayoutRegistry*);
+
+  LayoutWorkletGlobalScope(LocalFrame*,
+                           std::unique_ptr<GlobalScopeCreationParams>,
+                           WorkerReportingProxy&,
+                           PendingLayoutRegistry*);
   ~LayoutWorkletGlobalScope() override;
   void Dispose() final;
 
@@ -36,7 +39,7 @@ class CORE_EXPORT LayoutWorkletGlobalScope final
 
   // Implements LayoutWorkletGlobalScope.idl
   void registerLayout(const AtomicString& name,
-                      const ScriptValue& constructor_value,
+                      V8NoArgumentConstructor* layout_ctor,
                       ExceptionState&);
 
   CSSLayoutDefinition* FindDefinition(const AtomicString& name);
@@ -44,11 +47,6 @@ class CORE_EXPORT LayoutWorkletGlobalScope final
   void Trace(blink::Visitor*) override;
 
  private:
-  LayoutWorkletGlobalScope(LocalFrame*,
-                           std::unique_ptr<GlobalScopeCreationParams>,
-                           WorkerReportingProxy&,
-                           PendingLayoutRegistry*);
-
   // https://drafts.css-houdini.org/css-layout-api/#layout-definitions
   typedef HeapHashMap<String, TraceWrapperMember<CSSLayoutDefinition>>
       DefinitionMap;
@@ -56,11 +54,12 @@ class CORE_EXPORT LayoutWorkletGlobalScope final
   Member<PendingLayoutRegistry> pending_layout_registry_;
 };
 
-DEFINE_TYPE_CASTS(LayoutWorkletGlobalScope,
-                  ExecutionContext,
-                  context,
-                  context->IsLayoutWorkletGlobalScope(),
-                  context.IsLayoutWorkletGlobalScope());
+template <>
+struct DowncastTraits<LayoutWorkletGlobalScope> {
+  static bool AllowFrom(const ExecutionContext& context) {
+    return context.IsLayoutWorkletGlobalScope();
+  }
+};
 
 }  // namespace blink
 

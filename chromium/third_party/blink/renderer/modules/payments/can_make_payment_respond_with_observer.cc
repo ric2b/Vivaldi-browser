@@ -27,7 +27,7 @@ void CanMakePaymentRespondWithObserver::OnResponseRejected(
                                            "CanMakePaymentEvent", error);
 
   ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
-      ->RespondToCanMakePaymentEvent(event_id_, false, event_dispatch_time_);
+      ->RespondToCanMakePaymentEvent(event_id_, false);
 }
 
 void CanMakePaymentRespondWithObserver::OnResponseFulfilled(
@@ -38,8 +38,8 @@ void CanMakePaymentRespondWithObserver::OnResponseFulfilled(
   DCHECK(GetExecutionContext());
   ExceptionState exception_state(value.GetIsolate(), context_type,
                                  interface_name, property_name);
-  bool response = ToBoolean(ToIsolate(GetExecutionContext()), value.V8Value(),
-                            exception_state);
+  bool response =
+      ToBoolean(value.GetIsolate(), value.V8Value(), exception_state);
   if (exception_state.HadException()) {
     exception_state.ClearException();
     OnResponseRejected(blink::mojom::ServiceWorkerResponseError::kNoV8Instance);
@@ -47,13 +47,13 @@ void CanMakePaymentRespondWithObserver::OnResponseFulfilled(
   }
 
   ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
-      ->RespondToCanMakePaymentEvent(event_id_, response, event_dispatch_time_);
+      ->RespondToCanMakePaymentEvent(event_id_, response);
 }
 
 void CanMakePaymentRespondWithObserver::OnNoResponse() {
   DCHECK(GetExecutionContext());
   ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
-      ->RespondToCanMakePaymentEvent(event_id_, true, event_dispatch_time_);
+      ->RespondToCanMakePaymentEvent(event_id_, true);
 }
 
 void CanMakePaymentRespondWithObserver::Trace(blink::Visitor* visitor) {

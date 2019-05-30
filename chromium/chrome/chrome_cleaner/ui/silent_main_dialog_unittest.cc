@@ -11,10 +11,10 @@
 
 #include "base/files/file_path.h"
 #include "chrome/chrome_cleaner/constants/uws_id.h"
-#include "chrome/chrome_cleaner/test/test_name_helper.h"
 #include "chrome/chrome_cleaner/test/test_pup_data.h"
 #include "chrome/chrome_cleaner/test/test_settings_util.h"
 #include "chrome/chrome_cleaner/ui/mock_main_dialog_delegate.h"
+#include "components/chrome_cleaner/test/test_name_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -108,11 +108,11 @@ TEST_P(ConfirmCleanupSilentMainDialogTest, ConfirmCleanup) {
   dialog_->ConfirmCleanupIfNeeded(found_pups);
 }
 
-INSTANTIATE_TEST_CASE_P(All,
-                        ConfirmCleanupSilentMainDialogTest,
-                        ::testing::Values(FileTypeToTest::kActive,
-                                          FileTypeToTest::kInactive),
-                        GetParamNameForTest());
+INSTANTIATE_TEST_SUITE_P(All,
+                         ConfirmCleanupSilentMainDialogTest,
+                         ::testing::Values(FileTypeToTest::kActive,
+                                           FileTypeToTest::kInactive),
+                         GetParamNameForTest());
 
 }  // namespace
 }  // namespace chrome_cleaner

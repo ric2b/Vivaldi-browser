@@ -4,6 +4,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "content/browser/payments/payment_app_content_unittest_base.h"
@@ -18,7 +19,7 @@ using ::payments::mojom::PaymentHandlerStatus;
 using ::payments::mojom::PaymentInstrument;
 using ::payments::mojom::PaymentInstrumentPtr;
 
-const char kServiceWorkerPattern[] = "https://example.com/a";
+const char kServiceWorkerScope[] = "https://example.com/a";
 const char kServiceWorkerScript[] = "https://example.com/a/script.js";
 
 void DeletePaymentInstrumentCallback(PaymentHandlerStatus* out_status,
@@ -62,7 +63,7 @@ void ClearPaymentInstrumentsCallback(PaymentHandlerStatus* out_status,
 class PaymentManagerTest : public PaymentAppContentUnitTestBase {
  public:
   PaymentManagerTest() {
-    manager_ = CreatePaymentManager(GURL(kServiceWorkerPattern),
+    manager_ = CreatePaymentManager(GURL(kServiceWorkerScope),
                                     GURL(kServiceWorkerScript));
     EXPECT_NE(nullptr, manager_);
   }

@@ -23,12 +23,22 @@ id<GREYAction> LongPressElementForContextMenu(
     web::test::ElementSelector selector,
     bool triggers_context_menu);
 
-// Action to turn the switch of a SettingsSwitchCell to the given |on|
-// state.
+// Action to turn the switch of a SettingsSwitchCell to the given |on| state.
 id<GREYAction> TurnSettingsSwitchOn(BOOL on);
 
 // Action to turn the switch of a SyncSwitchCell to the given |on| state.
 id<GREYAction> TurnSyncSwitchOn(BOOL on);
+
+// Action to tap a web element with id equal to |element_id| on the current web
+// state.
+id<GREYAction> TapWebElement(const std::string& element_id);
+
+// Action to tap a web element in iframe with the given |element_id| on the
+// current web state. iframe is an immediate child of the main frame with the
+// given index. The action fails if target iframe has a different origin from
+// the main frame.
+id<GREYAction> TapWebElementInFrame(const std::string& element_id,
+                                    const int frame_index);
 
 }  // namespace chrome_test_util
 

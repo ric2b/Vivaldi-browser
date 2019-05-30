@@ -8,16 +8,17 @@ import android.app.Activity;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Rect;
+import android.support.annotation.Nullable;
 
-import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.WindowAndroid;
-
-import javax.annotation.Nullable;
 
 /**
  * A utility class to take a feedback-formatted screenshot of an {@link Activity}.
@@ -54,7 +55,7 @@ final class ScreenshotTask implements ScreenshotSource {
 
         // If neither the compositor nor the Android view screenshot tasks were kicked off, admit
         // defeat and return a {@code null} screenshot.
-        ThreadUtils.postOnUiThread(new Runnable() {
+        PostTask.postTask(UiThreadTaskTraits.DEFAULT, new Runnable() {
             @Override
             public void run() {
                 onBitmapReceived(null);
@@ -101,7 +102,7 @@ final class ScreenshotTask implements ScreenshotSource {
     private boolean takeAndroidViewScreenshot(@Nullable final Activity activity) {
         if (activity == null) return false;
 
-        ThreadUtils.postOnUiThread(new Runnable() {
+        PostTask.postTask(UiThreadTaskTraits.DEFAULT, new Runnable() {
             @Override
             public void run() {
                 Bitmap bitmap = UiUtils.generateScaledScreenshot(
@@ -136,7 +137,7 @@ final class ScreenshotTask implements ScreenshotSource {
         if (!currentTab.isUserInteractable()) return true;
         // If the tab focused and not showing Android widget based content, then use the Compositor
         // based screenshot.
-        if (currentTab.getNativePage() == null && !currentTab.isShowingSadTab()) return true;
+        if (currentTab.getNativePage() == null && !SadTab.isShowing(currentTab)) return true;
 
         // Assume the UI is drawn primarily by Android widgets, so do not use the Compositor
         // screenshot.

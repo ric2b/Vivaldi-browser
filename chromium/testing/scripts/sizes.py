@@ -8,9 +8,7 @@ import json
 import os
 import sys
 
-
 import common
-
 
 PERF_DASHBOARD_URL = 'https://chromeperf.appspot.com'
 
@@ -28,66 +26,31 @@ def main_run(script_args):
   parser.add_argument('prefix')
   args = parser.parse_args(script_args.args)
 
-  with common.temporary_file() as tempfile_path:
-    runtest_args = [
-      '--test-type', 'sizes',
+  runtest_args = [
+      '--test-type',
+      'sizes',
       '--run-python-script',
-    ]
-    if args.perf_id:
-      runtest_args.extend([
-          '--perf-id', args.perf_id,
-          '--results-url=%s' % args.results_url,
-          '--perf-dashboard-id=sizes',
-          '--annotate=graphing',
-      ])
-    sizes_cmd = [
-        os.path.join(
-            common.SRC_DIR, 'infra', 'scripts', 'legacy', 'scripts', 'slave',
-            'chromium', 'sizes.py'),
-        '--json', tempfile_path
-    ]
-    if args.platform:
-      sizes_cmd.extend(['--platform', args.platform])
-    rc = common.run_runtest(script_args, runtest_args + sizes_cmd)
-    with open(tempfile_path) as f:
-      results = json.load(f)
-
-  with open(os.path.join(common.SRC_DIR, 'tools', 'perf_expectations',
-                         'perf_expectations.json')) as f:
-    perf_expectations = json.load(f)
-
-  valid = (rc == 0)
-  failures = []
-
-  for name, result in results.iteritems():
-    fqtn = '%s/%s/%s' % (args.prefix, name, result['identifier'])
-    if fqtn not in perf_expectations:
-      continue
-
-    if perf_expectations[fqtn]['type'] != 'absolute':
-      print 'ERROR: perf expectation %r is not yet supported' % fqtn
-      valid = False
-      continue
-
-    actual = result['value']
-    expected = perf_expectations[fqtn]['regress']
-    better = perf_expectations[fqtn]['better']
-    check_result = ((actual <= expected) if better == 'lower'
-                    else (actual >= expected))
-
-    if not check_result:
-      failures.append(fqtn)
-      print 'FAILED %s: actual %s, expected %s, better %s' % (
-          fqtn, actual, expected, better)
+  ]
+  if args.perf_id:
+    runtest_args.extend([
+        '--perf-id',
+        args.perf_id,
+        '--results-url=%s' % args.results_url,
+        '--perf-dashboard-id=sizes',
+        '--annotate=graphing',
+    ])
+  sizes_cmd = [
+      os.path.join(common.SRC_DIR, 'infra', 'scripts', 'legacy', 'scripts',
+                   'slave', 'chromium', 'sizes.py')
+  ]
+  if args.platform:
+    sizes_cmd.extend(['--platform', args.platform])
+  rc = common.run_runtest(script_args, runtest_args + sizes_cmd)
 
   json.dump({
-      'valid': valid,
-      'failures': failures,
+      'valid': rc == 0,
+      'failures': [],
   }, script_args.output)
-
-  # sizes.py itself doesn't fail on regressions.
-  if failures and rc == 0:
-    rc = 1
 
   return rc
 
@@ -97,17 +60,16 @@ def main_compile_targets(script_args):
   args = parser.parse_args(script_args.args)
 
   _COMPILE_TARGETS = {
-    'android-cronet': ['cronet'],
-    'android-webview': ['libwebviewchromium'],
+      'android-cronet': ['cronet'],
+      'android-webview': ['libwebviewchromium'],
   }
 
-  json.dump(_COMPILE_TARGETS.get(args.platform, ['chrome']),
-            script_args.output)
+  json.dump(_COMPILE_TARGETS.get(args.platform, ['chrome']), script_args.output)
 
 
 if __name__ == '__main__':
   funcs = {
-    'run': main_run,
-    'compile_targets': main_compile_targets,
+      'run': main_run,
+      'compile_targets': main_compile_targets,
   }
   sys.exit(common.run_script(sys.argv[1:], funcs))

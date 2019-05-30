@@ -7,14 +7,15 @@
 
 #include <memory>
 
-#include "content/renderer/media/stream/media_stream_audio_source.h"
+#include "content/common/content_export.h"
+#include "third_party/blink/public/platform/modules/mediastream/media_stream_audio_source.h"
 #include "third_party/blink/public/platform/web_media_constraints.h"
 #include "third_party/blink/public/platform/web_media_stream_source.h"
 #include "third_party/blink/public/platform/web_media_stream_track.h"
 #include "third_party/blink/public/platform/web_rtc_dtmf_sender_handler.h"
-#include "third_party/blink/public/platform/web_rtc_rtp_contributing_source.h"
 #include "third_party/blink/public/platform/web_rtc_rtp_receiver.h"
 #include "third_party/blink/public/platform/web_rtc_rtp_sender.h"
+#include "third_party/blink/public/platform/web_rtc_rtp_source.h"
 #include "third_party/blink/public/platform/web_rtc_rtp_transceiver.h"
 
 namespace content {
@@ -33,6 +34,8 @@ class CONTENT_EXPORT FakeRTCRtpSender : public blink::WebRTCRtpSender {
 
   std::unique_ptr<blink::WebRTCRtpSender> ShallowCopy() const override;
   uintptr_t Id() const override;
+  rtc::scoped_refptr<webrtc::DtlsTransportInterface> DtlsTransport() override;
+  webrtc::DtlsTransportInformation DtlsTransportInformation() override;
   blink::WebMediaStreamTrack Track() const override;
   blink::WebVector<blink::WebString> StreamIds() const override;
   void ReplaceTrack(blink::WebMediaStreamTrack with_track,
@@ -43,7 +46,8 @@ class CONTENT_EXPORT FakeRTCRtpSender : public blink::WebRTCRtpSender {
   void SetParameters(blink::WebVector<webrtc::RtpEncodingParameters>,
                      webrtc::DegradationPreference,
                      blink::WebRTCVoidRequest) override;
-  void GetStats(std::unique_ptr<blink::WebRTCStatsReportCallback>) override;
+  void GetStats(std::unique_ptr<blink::WebRTCStatsReportCallback>,
+                blink::RTCStatsFilter) override;
 
  private:
   base::Optional<std::string> track_id_;
@@ -60,11 +64,15 @@ class CONTENT_EXPORT FakeRTCRtpReceiver : public blink::WebRTCRtpReceiver {
 
   std::unique_ptr<blink::WebRTCRtpReceiver> ShallowCopy() const override;
   uintptr_t Id() const override;
+  rtc::scoped_refptr<webrtc::DtlsTransportInterface> DtlsTransport() override;
+  webrtc::DtlsTransportInformation DtlsTransportInformation() override;
   const blink::WebMediaStreamTrack& Track() const override;
   blink::WebVector<blink::WebString> StreamIds() const override;
-  blink::WebVector<std::unique_ptr<blink::WebRTCRtpContributingSource>>
-  GetSources() override;
-  void GetStats(std::unique_ptr<blink::WebRTCStatsReportCallback>) override;
+  blink::WebVector<std::unique_ptr<blink::WebRTCRtpSource>> GetSources()
+      override;
+  void GetStats(std::unique_ptr<blink::WebRTCStatsReportCallback>,
+                blink::RTCStatsFilter) override;
+  std::unique_ptr<webrtc::RtpParameters> GetParameters() const override;
 
  private:
   blink::WebMediaStreamTrack track_;

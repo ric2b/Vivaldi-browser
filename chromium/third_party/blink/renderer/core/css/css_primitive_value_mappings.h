@@ -31,6 +31,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_CSS_CSS_PRIMITIVE_VALUE_MAPPINGS_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_CSS_PRIMITIVE_VALUE_MAPPINGS_H_
 
+#include "cc/input/scroll_snap_data.h"
 #include "third_party/blink/renderer/core/css/css_calculation_value.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
@@ -44,9 +45,9 @@
 #include "third_party/blink/renderer/platform/fonts/font_description.h"
 #include "third_party/blink/renderer/platform/fonts/font_smoothing_mode.h"
 #include "third_party/blink/renderer/platform/fonts/text_rendering_mode.h"
+#include "third_party/blink/renderer/platform/geometry/length.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 #include "third_party/blink/renderer/platform/graphics/touch_action.h"
-#include "third_party/blink/renderer/platform/length.h"
 #include "third_party/blink/renderer/platform/text/text_run.h"
 #include "third_party/blink/renderer/platform/text/writing_mode.h"
 #include "third_party/blink/renderer/platform/theme_types.h"
@@ -56,15 +57,15 @@ namespace blink {
 
 // TODO(sashab): Move these to CSSPrimitiveValue.h.
 template <>
-inline short CSSPrimitiveValue::ConvertTo() const {
+inline int16_t CSSPrimitiveValue::ConvertTo() const {
   DCHECK(IsNumber());
-  return clampTo<short>(GetDoubleValue());
+  return clampTo<int16_t>(GetDoubleValue());
 }
 
 template <>
-inline unsigned short CSSPrimitiveValue::ConvertTo() const {
+inline uint16_t CSSPrimitiveValue::ConvertTo() const {
   DCHECK(IsNumber());
-  return clampTo<unsigned short>(GetDoubleValue());
+  return clampTo<uint16_t>(GetDoubleValue());
 }
 
 template <>
@@ -271,12 +272,6 @@ inline CSSIdentifierValue::CSSIdentifierValue(ControlPart e)
     case kMediaToggleClosedCaptionsButtonPart:
       value_id_ = CSSValueMediaToggleClosedCaptionsButton;
       break;
-    case kMediaCastOffButtonPart:
-      value_id_ = CSSValueInternalMediaCastOffButton;
-      break;
-    case kMediaOverlayCastOffButtonPart:
-      value_id_ = CSSValueInternalMediaOverlayCastOffButton;
-      break;
     case kMediaSliderPart:
       value_id_ = CSSValueMediaSlider;
       break;
@@ -303,21 +298,6 @@ inline CSSIdentifierValue::CSSIdentifierValue(ControlPart e)
       break;
     case kMediaTimeRemainingPart:
       value_id_ = CSSValueMediaTimeRemainingDisplay;
-      break;
-    case kMediaTrackSelectionCheckmarkPart:
-      value_id_ = CSSValueInternalMediaTrackSelectionCheckmark;
-      break;
-    case kMediaClosedCaptionsIconPart:
-      value_id_ = CSSValueInternalMediaClosedCaptionsIcon;
-      break;
-    case kMediaSubtitlesIconPart:
-      value_id_ = CSSValueInternalMediaSubtitlesIcon;
-      break;
-    case kMediaOverflowMenuButtonPart:
-      value_id_ = CSSValueInternalMediaOverflowButton;
-      break;
-    case kMediaDownloadIconPart:
-      value_id_ = CSSValueInternalMediaDownloadButton;
       break;
     case kMediaControlPart:
       value_id_ = CSSValueInternalMediaControl;
@@ -369,12 +349,6 @@ inline CSSIdentifierValue::CSSIdentifierValue(ControlPart e)
       break;
     case kTextAreaPart:
       value_id_ = CSSValueTextarea;
-      break;
-    case kCapsLockIndicatorPart:
-      value_id_ = CSSValueCapsLockIndicator;
-      break;
-    case kMediaRemotingCastIconPart:
-      value_id_ = CSSValueInternalMediaRemotingCastIcon;
       break;
   }
 }
@@ -549,6 +523,12 @@ inline CSSIdentifierValue::CSSIdentifierValue(EFloat e)
     case EFloat::kRight:
       value_id_ = CSSValueRight;
       break;
+    case EFloat::kInlineStart:
+      value_id_ = CSSValueInlineStart;
+      break;
+    case EFloat::kInlineEnd:
+      value_id_ = CSSValueInlineEnd;
+      break;
   }
 }
 
@@ -559,6 +539,10 @@ inline EFloat CSSIdentifierValue::ConvertTo() const {
       return EFloat::kLeft;
     case CSSValueRight:
       return EFloat::kRight;
+    case CSSValueInlineStart:
+      return EFloat::kInlineStart;
+    case CSSValueInlineEnd:
+      return EFloat::kInlineEnd;
     case CSSValueNone:
       return EFloat::kNone;
     default:
@@ -831,8 +815,6 @@ inline CSSIdentifierValue::CSSIdentifierValue(EFillSizeType fill_size)
       value_id_ = CSSValueCover;
       break;
     case EFillSizeType::kSizeNone:
-      value_id_ = CSSValueNone;
-      break;
     case EFillSizeType::kSizeLength:
     default:
       NOTREACHED();
@@ -1162,7 +1144,7 @@ inline CSSIdentifierValue::CSSIdentifierValue(EColorInterpolation e)
       value_id_ = CSSValueSRGB;
       break;
     case CI_LINEARRGB:
-      value_id_ = CSSValueLinearRGB;
+      value_id_ = CSSValueLinearrgb;
       break;
   }
 }
@@ -1172,7 +1154,7 @@ inline EColorInterpolation CSSIdentifierValue::ConvertTo() const {
   switch (value_id_) {
     case CSSValueSRGB:
       return CI_SRGB;
-    case CSSValueLinearRGB:
+    case CSSValueLinearrgb:
       return CI_LINEARRGB;
     case CSSValueAuto:
       return CI_AUTO;
@@ -1491,31 +1473,31 @@ inline TouchAction CSSIdentifierValue::ConvertTo() const {
 }
 
 template <>
-inline ScrollCustomization::ScrollDirection CSSIdentifierValue::ConvertTo()
+inline scroll_customization::ScrollDirection CSSIdentifierValue::ConvertTo()
     const {
   switch (value_id_) {
     case CSSValueNone:
-      return ScrollCustomization::kScrollDirectionNone;
+      return scroll_customization::kScrollDirectionNone;
     case CSSValueAuto:
-      return ScrollCustomization::kScrollDirectionAuto;
+      return scroll_customization::kScrollDirectionAuto;
     case CSSValuePanLeft:
-      return ScrollCustomization::kScrollDirectionPanLeft;
+      return scroll_customization::kScrollDirectionPanLeft;
     case CSSValuePanRight:
-      return ScrollCustomization::kScrollDirectionPanRight;
+      return scroll_customization::kScrollDirectionPanRight;
     case CSSValuePanX:
-      return ScrollCustomization::kScrollDirectionPanX;
+      return scroll_customization::kScrollDirectionPanX;
     case CSSValuePanUp:
-      return ScrollCustomization::kScrollDirectionPanUp;
+      return scroll_customization::kScrollDirectionPanUp;
     case CSSValuePanDown:
-      return ScrollCustomization::kScrollDirectionPanDown;
+      return scroll_customization::kScrollDirectionPanDown;
     case CSSValuePanY:
-      return ScrollCustomization::kScrollDirectionPanY;
+      return scroll_customization::kScrollDirectionPanY;
     default:
       break;
   }
 
   NOTREACHED();
-  return ScrollCustomization::kScrollDirectionNone;
+  return scroll_customization::kScrollDirectionNone;
 }
 
 template <>
@@ -1825,109 +1807,109 @@ inline ScrollBehavior CSSIdentifierValue::ConvertTo() const {
 }
 
 template <>
-inline CSSIdentifierValue::CSSIdentifierValue(SnapAxis axis)
+inline CSSIdentifierValue::CSSIdentifierValue(cc::SnapAxis axis)
     : CSSValue(kIdentifierClass) {
   switch (axis) {
-    case SnapAxis::kX:
+    case cc::SnapAxis::kX:
       value_id_ = CSSValueX;
       break;
-    case SnapAxis::kY:
+    case cc::SnapAxis::kY:
       value_id_ = CSSValueY;
       break;
-    case SnapAxis::kBlock:
+    case cc::SnapAxis::kBlock:
       value_id_ = CSSValueBlock;
       break;
-    case SnapAxis::kInline:
+    case cc::SnapAxis::kInline:
       value_id_ = CSSValueInline;
       break;
-    case SnapAxis::kBoth:
+    case cc::SnapAxis::kBoth:
       value_id_ = CSSValueBoth;
       break;
   }
 }
 
 template <>
-inline SnapAxis CSSIdentifierValue::ConvertTo() const {
+inline cc::SnapAxis CSSIdentifierValue::ConvertTo() const {
   switch (GetValueID()) {
     case CSSValueX:
-      return SnapAxis::kX;
+      return cc::SnapAxis::kX;
     case CSSValueY:
-      return SnapAxis::kY;
+      return cc::SnapAxis::kY;
     case CSSValueBlock:
-      return SnapAxis::kBlock;
+      return cc::SnapAxis::kBlock;
     case CSSValueInline:
-      return SnapAxis::kInline;
+      return cc::SnapAxis::kInline;
     case CSSValueBoth:
-      return SnapAxis::kBoth;
+      return cc::SnapAxis::kBoth;
     default:
       break;
   }
   NOTREACHED();
-  return SnapAxis::kBoth;
+  return cc::SnapAxis::kBoth;
 }
 
 template <>
-inline CSSIdentifierValue::CSSIdentifierValue(SnapStrictness strictness)
+inline CSSIdentifierValue::CSSIdentifierValue(cc::SnapStrictness strictness)
     : CSSValue(kIdentifierClass) {
   switch (strictness) {
-    case SnapStrictness::kProximity:
+    case cc::SnapStrictness::kProximity:
       value_id_ = CSSValueProximity;
       break;
-    case SnapStrictness::kMandatory:
+    case cc::SnapStrictness::kMandatory:
       value_id_ = CSSValueMandatory;
       break;
   }
 }
 
 template <>
-inline SnapStrictness CSSIdentifierValue::ConvertTo() const {
+inline cc::SnapStrictness CSSIdentifierValue::ConvertTo() const {
   switch (GetValueID()) {
     case CSSValueProximity:
-      return SnapStrictness::kProximity;
+      return cc::SnapStrictness::kProximity;
     case CSSValueMandatory:
-      return SnapStrictness::kMandatory;
+      return cc::SnapStrictness::kMandatory;
     default:
       break;
   }
   NOTREACHED();
-  return SnapStrictness::kProximity;
+  return cc::SnapStrictness::kProximity;
 }
 
 template <>
-inline CSSIdentifierValue::CSSIdentifierValue(SnapAlignment alignment)
+inline CSSIdentifierValue::CSSIdentifierValue(cc::SnapAlignment alignment)
     : CSSValue(kIdentifierClass) {
   switch (alignment) {
-    case SnapAlignment::kNone:
+    case cc::SnapAlignment::kNone:
       value_id_ = CSSValueNone;
       break;
-    case SnapAlignment::kStart:
+    case cc::SnapAlignment::kStart:
       value_id_ = CSSValueStart;
       break;
-    case SnapAlignment::kEnd:
+    case cc::SnapAlignment::kEnd:
       value_id_ = CSSValueEnd;
       break;
-    case SnapAlignment::kCenter:
+    case cc::SnapAlignment::kCenter:
       value_id_ = CSSValueCenter;
       break;
   }
 }
 
 template <>
-inline SnapAlignment CSSIdentifierValue::ConvertTo() const {
+inline cc::SnapAlignment CSSIdentifierValue::ConvertTo() const {
   switch (GetValueID()) {
     case CSSValueNone:
-      return SnapAlignment::kNone;
+      return cc::SnapAlignment::kNone;
     case CSSValueStart:
-      return SnapAlignment::kStart;
+      return cc::SnapAlignment::kStart;
     case CSSValueEnd:
-      return SnapAlignment::kEnd;
+      return cc::SnapAlignment::kEnd;
     case CSSValueCenter:
-      return SnapAlignment::kCenter;
+      return cc::SnapAlignment::kCenter;
     default:
       break;
   }
   NOTREACHED();
-  return SnapAlignment::kNone;
+  return cc::SnapAlignment::kNone;
 }
 
 template <>

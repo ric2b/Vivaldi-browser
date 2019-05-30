@@ -35,14 +35,6 @@ class AlternateNavInfoBarDelegate : public infobars::InfoBarDelegate {
                                          const AutocompleteMatch& match,
                                          const GURL& search_url);
 
-  // Creates the delegate for navigations involving lookalike URLs
-  // (e.g. googlé.com).
-  static void CreateForLookalikeUrlNavigation(
-      content::WebContents* web_contents,
-      const base::string16& text,
-      const GURL& suggested_url,
-      const GURL& original_url,
-      base::OnceClosure link_clicked_callback);
   base::string16 GetMessageTextWithOffset(size_t* link_offset) const;
   base::string16 GetLinkText() const;
   GURL GetLinkURL() const;
@@ -53,18 +45,11 @@ class AlternateNavInfoBarDelegate : public infobars::InfoBarDelegate {
                               const base::string16& text,
                               std::unique_ptr<AutocompleteMatch> match,
                               const GURL& destination_url,
-                              const GURL& original_url,
-                              base::OnceClosure link_clicked_callback);
+                              const GURL& original_url);
 
   // Returns an alternate nav infobar that owns |delegate|.
   static std::unique_ptr<infobars::InfoBar> CreateInfoBar(
       std::unique_ptr<AlternateNavInfoBarDelegate> delegate);
-#if defined(OS_MACOSX)
-  // Temporary shim for Polychrome. See bottom of first comment in
-  // https://crbug.com/804950 for details
-  static std::unique_ptr<infobars::InfoBar> CreateInfoBarCocoa(
-      std::unique_ptr<AlternateNavInfoBarDelegate> delegate);
-#endif
 
   // InfoBarDelegate:
   infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
@@ -83,12 +68,8 @@ class AlternateNavInfoBarDelegate : public infobars::InfoBarDelegate {
 
   // Original URL of the navigation. When the user clicks the suggested
   // navigation link, this will be removed from history.
-  // For search navigations this is the search URL. For lookalike URL
-  // navigations, this is the URL that visually matches a top domain or a domain
-  // with a site engagement score.
+  // For search navigations this is the search URL.
   const GURL original_url_;
-
-  base::OnceClosure link_clicked_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(AlternateNavInfoBarDelegate);
 };

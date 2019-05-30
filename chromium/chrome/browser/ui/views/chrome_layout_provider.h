@@ -32,6 +32,11 @@ enum ChromeDistanceMetric {
   DISTANCE_CONTENT_LIST_VERTICAL_MULTI,
   // Vertical spacing between a list of multiple controls in one column.
   DISTANCE_CONTROL_LIST_VERTICAL,
+  // Width of the space in a dropdown button between its label and down arrow.
+  DISTANCE_DROPDOWN_BUTTON_LABEL_ARROW_SPACING,
+  // Width of the horizontal padding in a dropdown button between the down arrow
+  // and the button's border.
+  DISTANCE_DROPDOWN_BUTTON_RIGHT_MARGIN,
   // Smaller horizontal spacing between other controls that are logically
   // related.
   DISTANCE_RELATED_CONTROL_HORIZONTAL_SMALL,
@@ -85,10 +90,6 @@ class ChromeLayoutProvider : public views::LayoutProvider {
   //   ---------------------------
   // This value controls the alignment used for "Label 1" and "Label 2".
   virtual views::GridLayout::Alignment GetControlLabelGridAlignment() const;
-
-  // Returns whether to use extra padding on dialogs. If this is false, content
-  // Views for dialogs should not insert extra padding at their own edges.
-  virtual bool UseExtraDialogPadding() const;
 
   // Returns whether to show the icon next to the title text on a dialog.
   virtual bool ShouldShowWindowIcon() const;

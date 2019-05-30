@@ -5,20 +5,28 @@
 #ifndef SERVICES_TRACING_PUBLIC_CPP_PERFETTO_TRACE_EVENT_DATA_SOURCE_H_
 #define SERVICES_TRACING_PUBLIC_CPP_PERFETTO_TRACE_EVENT_DATA_SOURCE_H_
 
+#include <atomic>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "base/component_export.h"
 #include "base/macros.h"
+#include "base/metrics/histogram_base.h"
 #include "base/threading/thread_local.h"
+#include "base/time/time.h"
+#include "base/trace_event/trace_config.h"
 #include "services/tracing/public/cpp/perfetto/producer_client.h"
 
 namespace perfetto {
+class StartupTraceWriter;
+class StartupTraceWriterRegistry;
 class TraceWriter;
 }
 
 namespace tracing {
+
+class ThreadLocalEventSink;
 
 // This class is a data source that clients can use to provide
 // global metadata in dictionary form, by registering callbacks.
@@ -35,8 +43,9 @@ class COMPONENT_EXPORT(TRACING_CPP) TraceEventMetadataSource
 
   // ProducerClient::DataSourceBase implementation, called by
   // ProducerClent.
-  void StartTracing(ProducerClient* producer_client,
-                    const mojom::DataSourceConfig& data_source_config) override;
+  void StartTracing(
+      ProducerClient* producer_client,
+      const perfetto::DataSourceConfig& data_source_config) override;
   void StopTracing(base::OnceClosure stop_complete_callback) override;
   void Flush(base::RepeatingClosure flush_complete_callback) override;
 
@@ -45,7 +54,7 @@ class COMPONENT_EXPORT(TRACING_CPP) TraceEventMetadataSource
 
   std::vector<MetadataGeneratorFunction> generator_functions_;
   scoped_refptr<base::SequencedTaskRunner> origin_task_runner_;
-  base::Lock lock_;
+  std::unique_ptr<perfetto::TraceWriter> trace_writer_;
 
   DISALLOW_COPY_AND_ASSIGN(TraceEventMetadataSource);
 };
@@ -57,23 +66,40 @@ class COMPONENT_EXPORT(TRACING_CPP) TraceEventMetadataSource
 class COMPONENT_EXPORT(TRACING_CPP) TraceEventDataSource
     : public ProducerClient::DataSourceBase {
  public:
-  class ThreadLocalEventSink;
-
   static TraceEventDataSource* GetInstance();
+
+  // Destroys and recreates the global instance for testing.
+  static void ResetForTesting();
 
   // Flushes and deletes the TraceWriter for the current thread, if any.
   static void FlushCurrentThread();
+
+  // Installs TraceLog overrides for tracing during Chrome startup. Trace data
+  // is locally buffered until connection to the perfetto service is
+  // established. Expects a later call to StartTracing() to bind to the perfetto
+  // service. Should only be called once.
+  void SetupStartupTracing();
 
   // The ProducerClient is responsible for calling StopTracing
   // which will clear the stored pointer to it, before it
   // gets destroyed. ProducerClient::CreateTraceWriter can be
   // called by the TraceEventDataSource on any thread.
-  void StartTracing(ProducerClient* producer_client,
-                    const mojom::DataSourceConfig& data_source_config) override;
+  void StartTracing(
+      ProducerClient* producer_client,
+      const perfetto::DataSourceConfig& data_source_config) override;
 
   // Called from the ProducerClient.
   void StopTracing(base::OnceClosure stop_complete_callback) override;
   void Flush(base::RepeatingClosure flush_complete_callback) override;
+
+  // Resets emitted incremental state on the current thread and causes
+  // incremental data (e.g. interning index entries and a ThreadDescriptor) to
+  // be emitted again.
+  void ResetIncrementalStateForTesting();
+
+  // Deletes TraceWriter safely on behalf of a ThreadLocalEventSink.
+  void ReturnTraceWriter(
+      std::unique_ptr<perfetto::StartupTraceWriter> trace_writer);
 
  private:
   friend class base::NoDestructor<TraceEventDataSource>;
@@ -81,15 +107,46 @@ class COMPONENT_EXPORT(TRACING_CPP) TraceEventDataSource
   TraceEventDataSource();
   ~TraceEventDataSource() override;
 
-  ThreadLocalEventSink* CreateThreadLocalEventSink();
+  void RegisterWithTraceLog();
+  void UnregisterFromTraceLog();
+
+  ThreadLocalEventSink* CreateThreadLocalEventSink(bool thread_will_flush);
 
   // Callback from TraceLog, can be called from any thread.
-  static void OnAddTraceEvent(const base::trace_event::TraceEvent& trace_event);
+  static void OnAddTraceEvent(base::trace_event::TraceEvent* trace_event,
+                              bool thread_will_flush,
+                              base::trace_event::TraceEventHandle* handle);
+  static void OnUpdateDuration(base::trace_event::TraceEventHandle handle,
+                               const base::TimeTicks& now,
+                               const base::ThreadTicks& thread_now);
 
-  base::Lock lock_;
+  // Extracts UMA histogram names that should be logged in traces and logs their
+  // starting values.
+  void ResetHistograms(const base::trace_event::TraceConfig& trace_config);
+  // Logs selected UMA histogram.
+  void LogHistograms();
+  // Logs a given histogram in traces.
+  void LogHistogram(base::HistogramBase* histogram);
+
+  bool use_chrome_proto_;
+  bool disable_interning_;
+  base::OnceClosure stop_complete_callback_;
+
+  // Incremented and accessed atomically but without memory order guarantees.
+  // This ID is incremented whenever a new tracing session is started.
+  static constexpr uint32_t kInvalidSessionID = 0;
+  static constexpr uint32_t kFirstSessionID = 1;
+  std::atomic<uint32_t> session_id_{kInvalidSessionID};
+
+  base::Lock lock_;  // Protects subsequent members.
   uint32_t target_buffer_ = 0;
   ProducerClient* producer_client_ = nullptr;
-  base::OnceClosure stop_complete_callback_;
+  // We own the registry during startup, but transfer its ownership to the
+  // ProducerClient once the perfetto service is available. Only set if
+  // SetupStartupTracing() is called.
+  std::unique_ptr<perfetto::StartupTraceWriterRegistry>
+      startup_writer_registry_;
+  std::vector<std::string> histograms_;
 
   DISALLOW_COPY_AND_ASSIGN(TraceEventDataSource);
 };

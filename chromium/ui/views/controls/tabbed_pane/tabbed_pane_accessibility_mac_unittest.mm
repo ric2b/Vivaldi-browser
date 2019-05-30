@@ -13,6 +13,11 @@
 #include "ui/views/widget/widget.h"
 #import "testing/gtest_mac.h"
 
+// This file uses the deprecated NSObject accessibility API - see
+// https://crbug.com/921109.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
 namespace views {
 namespace test {
 
@@ -56,7 +61,8 @@ class TabbedPaneAccessibilityMacTest : public WidgetTest {
   id A11yElementAtPoint(const gfx::Point& point) {
     // Accessibility hit tests come in Cocoa screen coordinates.
     NSPoint ns_point = gfx::ScreenPointToNSPoint(point);
-    return [widget_->GetNativeWindow() accessibilityHitTest:ns_point];
+    return [widget_->GetNativeWindow().GetNativeNSWindow()
+        accessibilityHitTest:ns_point];
   }
 
   gfx::Point TabCenterPoint(int index) {
@@ -162,3 +168,5 @@ TEST_F(TabbedPaneAccessibilityMacTest, WritableValue) {
 
 }  // namespace test
 }  // namespace views
+
+#pragma clang diagnostic pop

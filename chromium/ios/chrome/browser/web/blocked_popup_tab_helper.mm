@@ -30,8 +30,6 @@
 #error "This file requires ARC support."
 #endif
 
-DEFINE_WEB_STATE_USER_DATA_KEY(BlockedPopupTabHelper);
-
 namespace {
 // The infobar to display when a popup is blocked.
 class BlockPopupInfoBarDelegate : public ConfirmInfoBarDelegate {
@@ -165,3 +163,5 @@ void BlockedPopupTabHelper::RegisterAsInfoBarManagerObserverIfNeeded(
   DCHECK(!scoped_observer_.IsObservingSources());
   scoped_observer_.Add(infobar_manager);
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(BlockedPopupTabHelper)

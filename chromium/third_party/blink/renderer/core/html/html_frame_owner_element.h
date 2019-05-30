@@ -21,16 +21,18 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_HTML_HTML_FRAME_OWNER_ELEMENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_HTML_HTML_FRAME_OWNER_ELEMENT_H_
 
+#include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/feature_policy/feature_policy.h"
 #include "third_party/blink/renderer/core/frame/dom_window.h"
 #include "third_party/blink/renderer/core/frame/embedded_content_view.h"
 #include "third_party/blink/renderer/core/frame/frame_owner.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
-#include "third_party/blink/renderer/platform/feature_policy/feature_policy.h"
+#include "third_party/blink/renderer/core/scroll/scroll_types.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_types.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "third_party/blink/renderer/platform/wtf/hash_counted_set.h"
 
 namespace blink {
@@ -61,6 +63,8 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   // Whether to collapse the frame owner element in the embedder document. That
   // is, to remove it from the layout as if it did not exist.
   virtual void SetCollapsed(bool) {}
+
+  virtual FrameOwnerElementType OwnerType() const = 0;
 
   Document* getSVGDocument(ExceptionState&) const;
 
@@ -98,10 +102,11 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   void DispatchLoad() final;
   SandboxFlags GetSandboxFlags() const final { return sandbox_flags_; }
   bool CanRenderFallbackContent() const override { return false; }
-  void RenderFallbackContent() override {}
+  void RenderFallbackContent(Frame*) override {}
   void IntrinsicSizingInfoChanged() override {}
+  void SetNeedsOcclusionTracking(bool) override {}
   AtomicString BrowsingContextContainerName() const override {
-    return getAttribute(HTMLNames::nameAttr);
+    return getAttribute(html_names::kNameAttr);
   }
   ScrollbarMode ScrollingMode() const override { return kScrollbarAuto; }
   int MarginWidth() const override { return -1; }
@@ -116,14 +121,19 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   // For unit tests, manually trigger the UpdateContainerPolicy method.
   void UpdateContainerPolicyForTests() { UpdateContainerPolicy(); }
 
+  // This function is to notify ChildFrameCompositor of pointer-events changes
+  // of an OOPIF.
+  void PointerEventsChanged();
+
   void CancelPendingLazyLoad();
 
   void ParseAttribute(const AttributeModificationParams&) override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  protected:
   HTMLFrameOwnerElement(const QualifiedName& tag_name, Document&);
+
   void SetSandboxFlags(SandboxFlags);
 
   bool LoadOrRedirectSubframe(const KURL&,
@@ -161,8 +171,8 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
 
   bool IsFrameOwnerElement() const final { return true; }
 
-  virtual ReferrerPolicy ReferrerPolicyAttribute() {
-    return kReferrerPolicyDefault;
+  virtual network::mojom::ReferrerPolicy ReferrerPolicyAttribute() {
+    return network::mojom::ReferrerPolicy::kDefault;
   }
 
   Member<Frame> content_frame_;
@@ -174,8 +184,6 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   Member<LazyLoadFrameObserver> lazy_load_frame_observer_;
   bool should_lazy_load_children_;
 };
-
-DEFINE_ELEMENT_TYPE_CASTS(HTMLFrameOwnerElement, IsFrameOwnerElement());
 
 class SubframeLoadingDisabler {
   STACK_ALLOCATED();
@@ -215,11 +223,11 @@ class SubframeLoadingDisabler {
   Member<Node> root_;
 };
 
-DEFINE_TYPE_CASTS(HTMLFrameOwnerElement,
-                  FrameOwner,
-                  owner,
-                  owner->IsLocal(),
-                  owner.IsLocal());
+template <>
+struct DowncastTraits<HTMLFrameOwnerElement> {
+  static bool AllowFrom(const FrameOwner& owner) { return owner.IsLocal(); }
+  static bool AllowFrom(const Node& node) { return node.IsFrameOwnerElement(); }
+};
 
 }  // namespace blink
 

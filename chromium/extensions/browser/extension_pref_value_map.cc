@@ -4,6 +4,8 @@
 
 #include "extensions/browser/extension_pref_value_map.h"
 
+#include <utility>
+
 #include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "components/prefs/pref_value_map.h"
@@ -48,10 +50,9 @@ void ExtensionPrefValueMap::Shutdown() {
 void ExtensionPrefValueMap::SetExtensionPref(const std::string& ext_id,
                                              const std::string& key,
                                              ExtensionPrefsScope scope,
-                                             base::Value* value) {
+                                             base::Value value) {
   PrefValueMap* prefs = GetExtensionPrefValueMap(ext_id, scope);
-
-  if (prefs->SetValue(key, base::WrapUnique(value)))
+  if (prefs->SetValue(key, std::move(value)))
     NotifyPrefValueChanged(key);
 }
 
@@ -68,7 +69,7 @@ bool ExtensionPrefValueMap::CanExtensionControlPref(
     const std::string& extension_id,
     const std::string& pref_key,
     bool incognito) const {
-  ExtensionEntryMap::const_iterator ext = entries_.find(extension_id);
+  auto ext = entries_.find(extension_id);
   if (ext == entries_.end()) {
     NOTREACHED() << "Extension " << extension_id
                  << " is not registered but accesses pref " << pref_key
@@ -80,8 +81,7 @@ bool ExtensionPrefValueMap::CanExtensionControlPref(
   if (incognito && !ext->second->incognito_enabled)
     return false;
 
-  ExtensionEntryMap::const_iterator winner =
-      GetEffectivePrefValueController(pref_key, incognito, NULL);
+  auto winner = GetEffectivePrefValueController(pref_key, incognito, NULL);
   if (winner == entries_.end())
     return true;
 
@@ -109,7 +109,7 @@ bool ExtensionPrefValueMap::DoesExtensionControlPref(
     const std::string& pref_key,
     bool* from_incognito) const {
   bool incognito = (from_incognito != NULL);
-  ExtensionEntryMap::const_iterator winner =
+  auto winner =
       GetEffectivePrefValueController(pref_key, incognito, from_incognito);
   if (winner == entries_.end())
     return false;
@@ -132,7 +132,7 @@ void ExtensionPrefValueMap::RegisterExtension(const std::string& ext_id,
 }
 
 void ExtensionPrefValueMap::UnregisterExtension(const std::string& ext_id) {
-  ExtensionEntryMap::iterator i = entries_.find(ext_id);
+  auto i = entries_.find(ext_id);
   if (i == entries_.end())
     return;
   std::set<std::string> keys;  // keys set by this extension
@@ -196,7 +196,7 @@ PrefValueMap* ExtensionPrefValueMap::GetExtensionPrefValueMap(
 const PrefValueMap* ExtensionPrefValueMap::GetExtensionPrefValueMap(
     const std::string& ext_id,
     ExtensionPrefsScope scope) const {
-  ExtensionEntryMap::const_iterator i = entries_.find(ext_id);
+  auto i = entries_.find(ext_id);
   CHECK(i != entries_.end());
   switch (scope) {
     case extensions::kExtensionPrefsScopeRegular:
@@ -241,8 +241,7 @@ const base::Value* ExtensionPrefValueMap::GetEffectivePrefValue(
     const std::string& key,
     bool incognito,
     bool* from_incognito) const {
-  ExtensionEntryMap::const_iterator winner =
-      GetEffectivePrefValueController(key, incognito, from_incognito);
+  auto winner = GetEffectivePrefValueController(key, incognito, from_incognito);
   if (winner == entries_.end())
     return NULL;
 
@@ -287,11 +286,10 @@ ExtensionPrefValueMap::GetEffectivePrefValueController(
     const std::string& key,
     bool incognito,
     bool* from_incognito) const {
-  ExtensionEntryMap::const_iterator winner = entries_.end();
+  auto winner = entries_.cend();
   base::Time winners_install_time;
 
-  ExtensionEntryMap::const_iterator i;
-  for (i = entries_.begin(); i != entries_.end(); ++i) {
+  for (auto i = entries_.cbegin(); i != entries_.cend(); ++i) {
     const std::string& ext_id = i->first;
     const base::Time& install_time = i->second->install_time;
     const bool enabled = i->second->enabled;
@@ -370,8 +368,7 @@ void ExtensionPrefValueMap::RemoveObserver(
 
 std::string ExtensionPrefValueMap::GetExtensionControllingPref(
     const std::string& pref_key) const {
-  ExtensionEntryMap::const_iterator winner =
-      GetEffectivePrefValueController(pref_key, false, NULL);
+  auto winner = GetEffectivePrefValueController(pref_key, false, NULL);
   if (winner == entries_.end())
     return std::string();
   return winner->first;

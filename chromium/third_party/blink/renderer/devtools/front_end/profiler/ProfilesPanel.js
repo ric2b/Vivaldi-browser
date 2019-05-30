@@ -98,6 +98,8 @@ Profiler.ProfilesPanel = class extends UI.PanelWithSidebar {
     this.contentElement.addEventListener('keydown', this._onKeyDown.bind(this), false);
 
     SDK.targetManager.addEventListener(SDK.TargetManager.Events.SuspendStateChanged, this._onSuspendStateChanged, this);
+    UI.context.addFlavorChangeListener(SDK.CPUProfilerModel, this._updateProfileTypeSpecificUI, this);
+    UI.context.addFlavorChangeListener(SDK.HeapProfilerModel, this._updateProfileTypeSpecificUI, this);
   }
 
   /**
@@ -189,7 +191,8 @@ Profiler.ProfilesPanel = class extends UI.PanelWithSidebar {
    * @param {boolean} toggled
    */
   _updateToggleRecordAction(toggled) {
-    const enable = toggled || !SDK.targetManager.allTargetsSuspended();
+    const hasSelectedTarget = !!(UI.context.flavor(SDK.CPUProfilerModel) || UI.context.flavor(SDK.HeapProfilerModel));
+    const enable = toggled || (!SDK.targetManager.allTargetsSuspended() && hasSelectedTarget);
     this._toggleRecordAction.setEnabled(enable);
     this._toggleRecordAction.setToggled(toggled);
     if (enable)
@@ -328,8 +331,7 @@ Profiler.ProfilesPanel = class extends UI.PanelWithSidebar {
     if (i !== -1)
       this._profileToView.splice(i, 1);
 
-    const profileType = profile.profileType();
-    const typeId = profileType.id;
+    const typeId = profile.profileType().id;
     const sectionIsEmpty = this._typeIdToSidebarSection[typeId].removeProfileHeader(profile);
 
     // No other item will be selected if there aren't any other profiles, so
@@ -410,11 +412,7 @@ Profiler.ProfilesPanel = class extends UI.PanelWithSidebar {
    * @return {number}
    */
   _indexOfViewForProfile(profile) {
-    for (let i = 0; i < this._profileToView.length; i++) {
-      if (this._profileToView[i].profile === profile)
-        return i;
-    }
-    return -1;
+    return this._profileToView.findIndex(item => item.profile === profile);
   }
 
   closeVisibleView() {

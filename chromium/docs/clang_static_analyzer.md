@@ -26,9 +26,13 @@ before running your own analysis builds. You will probably need to Ctrl-F the
 logs to find any issues for the specific files you're interested in.
 
 You can find the analysis logs in the `compile stdout` step.
-* [Linux buildbot logs](https://ci.chromium.org/buildbot/chromium.fyi/Linux%20Clang%20Analyzer/)
+* [Linux buildbot logs](https://ci.chromium.org/p/chromium/builders/luci.chromium.ci/Linux%20Clang%20Analyzer)
 
 ## Enabling static analysis
+
+*Warning:* `use_clang_static_analyzer` is deprecated, but the static analyzer can
+still be invoked with [clang-tidy](clang_tidy.md).
+
 To get static analysis running for your build, add the following flag to your GN
 args.
 

@@ -8,16 +8,16 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "chrome/browser/signin/fake_signin_manager_builder.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/sync/bubble_sync_promo_delegate.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
-#include "components/signin/core/browser/signin_manager.h"
+#include "services/identity/public/cpp/identity_test_utils.h"
 
 using bookmarks::BookmarkModel;
 
@@ -49,11 +49,6 @@ class BookmarkBubbleViewTest : public BrowserWithTestWindowTest {
     BrowserWithTestWindowTest::TearDown();
   }
 
-  // BrowserWithTestWindowTest:
-  TestingProfile::TestingFactories GetTestingFactories() override {
-    return {{SigninManagerFactory::GetInstance(), BuildFakeSigninManagerBase}};
-  }
-
  protected:
   // Creates a bookmark bubble view.
   void CreateBubbleView() {
@@ -68,16 +63,6 @@ class BookmarkBubbleViewTest : public BrowserWithTestWindowTest {
     return base::WrapUnique(bubble_->CreateFootnoteView());
   }
 
-  void SetUpSigninManager(const std::string& username) {
-    if (username.empty())
-      return;
-
-    SigninManagerBase* signin_manager =
-        SigninManagerFactory::GetForProfile(profile());
-    ASSERT_TRUE(signin_manager);
-    signin_manager->SetAuthenticatedAccountInfo(username, username);
-  }
-
   std::unique_ptr<BookmarkBubbleView> bubble_;
 
  private:
@@ -86,7 +71,8 @@ class BookmarkBubbleViewTest : public BrowserWithTestWindowTest {
 
 // Verifies that the sync promo is not displayed for a signed in user.
 TEST_F(BookmarkBubbleViewTest, SyncPromoSignedIn) {
-  SetUpSigninManager("fake_username");
+  identity::MakePrimaryAccountAvailable(
+      IdentityManagerFactory::GetForProfile(profile()), "fake_username");
   CreateBubbleView();
   std::unique_ptr<views::View> footnote = CreateFootnoteView();
   EXPECT_FALSE(footnote);

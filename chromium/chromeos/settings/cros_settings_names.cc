@@ -94,6 +94,11 @@ const char kReportDeviceVersionInfo[] =
 const char kReportDeviceActivityTimes[] =
     "cros.device_status.report_activity_times";
 
+// A boolean pref that determines whether the board status should be
+// included in status reports to the device management server.
+const char kReportDeviceBoardStatus[] =
+    "cros.device_status.report_board_status";
+
 // A boolean pref that indicates whether the state of the dev mode switch at
 // boot should be reported along with device policy requests.
 const char kReportDeviceBootMode[] = "cros.device_status.report_boot_mode";
@@ -106,6 +111,16 @@ const char kReportDeviceLocation[] = "cros.device_status.report_location";
 // in device status reports to the device management server.
 const char kReportDeviceNetworkInterfaces[] =
     "cros.device_status.report_network_interfaces";
+
+// A boolean pref that determines whether the device power status should be
+// included in status reports to the device management server.
+const char kReportDevicePowerStatus[] =
+    "cros.device_status.report_power_status";
+
+// A boolean pref that determines whether the storage status should be
+// included in status reports to the device management server.
+const char kReportDeviceStorageStatus[] =
+    "cros.device_status.report_storage_status";
 
 // Determines whether the device reports recently logged in users in device
 // status reports to the device management server.
@@ -197,6 +212,27 @@ const char kRebootOnShutdown[] = "cros.device.reboot_on_shutdown";
 // size in bytes.
 const char kExtensionCacheSize[] = "cros.device.extension_cache_size";
 
+// A dictionary pref that sets the display resolution.
+// Pref format:
+// {
+//   "external_width": int,
+//   "external_height": int,
+//   "external_use_native": bool,
+//   "external_scale_percentage": int,
+//   "internal_scale_percentage": int,
+//   "recommended": bool
+// }
+const char kDeviceDisplayResolution[] = "cros.device_display_resolution";
+const char kDeviceDisplayResolutionKeyExternalWidth[] = "external_width";
+const char kDeviceDisplayResolutionKeyExternalHeight[] = "external_height";
+const char kDeviceDisplayResolutionKeyExternalScale[] =
+    "external_scale_percentage";
+const char kDeviceDisplayResolutionKeyExternalUseNative[] =
+    "external_use_native";
+const char kDeviceDisplayResolutionKeyInternalScale[] =
+    "internal_scale_percentage";
+const char kDeviceDisplayResolutionKeyRecommended[] = "recommended";
+
 // An integer pref that sets the display rotation at startup to a certain
 // value, overriding the user value:
 // 0 = 0 degrees rotation
@@ -232,10 +268,6 @@ const char kLoginVideoCaptureAllowedUrls[] =
 const char kDeviceLoginScreenAppInstallList[] =
     "cros.device.login_screen_app_install_list";
 
-// A string pref storing the url and cryptographic hash of the image in JSON
-// format allowed to set a device-level wallpaper before any user logs in.
-const char kDeviceWallpaperImage[] = "cros.device_wallpaper_image";
-
 // A list pref specifying the locales allowed on the login screen. Currently
 // only the first value is used, as the single locale allowed on the login
 // screen.
@@ -269,17 +301,17 @@ const char kFineGrainedTimeZoneResolveEnabled[] =
 // }
 const char kDeviceOffHours[] = "cros.device_off_hours";
 
-// An external data pref for the printer configurations download.
-const char kDevicePrintersConfigurations[] =
-    "cros.device.printer_configurations";
 // An enum specifying the access policy device printers should observe.
-const char kDevicePrintersAccessMode[] = "cros.device.printers_access_mode";
+const char kDeviceNativePrintersAccessMode[] =
+    "cros.device.native_printers_access_mode";
 // A list of strings representing device printer ids for which access is
 // restricted.
-const char kDevicePrintersBlacklist[] = "cros.device.printers_blacklist";
+const char kDeviceNativePrintersBlacklist[] =
+    "cros.device.native_printers_blacklist";
 // A list of strings representing the list of device printer ids which are
 // accessible.
-const char kDevicePrintersWhitelist[] = "cros.device.printers_whitelist";
+const char kDeviceNativePrintersWhitelist[] =
+    "cros.device.native_printers_whitelist";
 
 // A dictionary containing parameters controlling the TPM firmware update
 // functionality.
@@ -325,5 +357,19 @@ const char kDeviceAutoUpdateTimeRestrictions[] =
 // allowed for unaffiliated user.
 const char kDeviceUnaffiliatedCrostiniAllowed[] =
     "cros.device.unaffiliated_crostini_allowed";
+
+// A boolean pref that indicates whether PluginVm is allowed to run on this
+// device.
+const char kPluginVmAllowed[] = "cros.device.plugin_vm_allowed";
+// A string pref that specifies PluginVm license key for this device.
+const char kPluginVmLicenseKey[] = "cros.device.plugin_vm_license_key";
+
+// An enum pref specifying the case when device needs to reboot on user sign
+// out.
+const char kDeviceRebootOnUserSignout[] = "cros.device.reboot_on_user_signout";
+
+// A boolean pref that indicates whether running wilco diagnostics and telemetry
+// controller on Chrome OS is allowed.
+const char kDeviceWilcoDtcAllowed[] = "cros.device.wilco_dtc_allowed";
 
 }  // namespace chromeos

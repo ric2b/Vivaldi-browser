@@ -6,7 +6,8 @@
 
 namespace viz {
 
-FakeCompositorFrameSinkClient::FakeCompositorFrameSinkClient() = default;
+FakeCompositorFrameSinkClient::FakeCompositorFrameSinkClient()
+    : binding_(this) {}
 FakeCompositorFrameSinkClient::~FakeCompositorFrameSinkClient() = default;
 
 void FakeCompositorFrameSinkClient::DidReceiveCompositorFrameAck(
@@ -14,11 +15,9 @@ void FakeCompositorFrameSinkClient::DidReceiveCompositorFrameAck(
   InsertResources(resources);
 }
 
-void FakeCompositorFrameSinkClient::DidPresentCompositorFrame(
-    uint32_t presentation_token,
-    const gfx::PresentationFeedback& feedback) {}
-
-void FakeCompositorFrameSinkClient::OnBeginFrame(const BeginFrameArgs& args) {}
+void FakeCompositorFrameSinkClient::OnBeginFrame(
+    const BeginFrameArgs& args,
+    const base::flat_map<uint32_t, gfx::PresentationFeedback>& feedbacks) {}
 
 void FakeCompositorFrameSinkClient::ReclaimResources(
     const std::vector<ReturnedResource>& resources) {
@@ -33,4 +32,11 @@ void FakeCompositorFrameSinkClient::InsertResources(
                              resources.end());
 }
 
-};  // namespace viz
+mojom::CompositorFrameSinkClientPtr
+FakeCompositorFrameSinkClient::BindInterfacePtr() {
+  mojom::CompositorFrameSinkClientPtr ptr;
+  binding_.Bind(MakeRequest(&ptr));
+  return ptr;
+}
+
+}  // namespace viz

@@ -1,6 +1,7 @@
 // Copyright 2014 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
 #ifndef IOS_WEB_VIEW_PUBLIC_CWV_WEB_VIEW_H_
 #define IOS_WEB_VIEW_PUBLIC_CWV_WEB_VIEW_H_
 
@@ -17,6 +18,7 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol CWVNavigationDelegate;
 @protocol CWVScriptCommandHandler;
 @protocol CWVUIDelegate;
+@class CWVSSLStatus;
 
 // A web view component (like WKWebView) which uses iOS Chromium's web view
 // implementation.
@@ -74,6 +76,10 @@ CWV_EXPORT
 // and |lastCommittedURL|.
 @property(nonatomic, readonly) NSURL* lastCommittedURL;
 
+// The SSL status displayed in the URL bar. KVO compliant.
+// It is nil when no page is loaded on the web view.
+@property(nonatomic, readonly, nullable) CWVSSLStatus* visibleSSLStatus;
+
 // The current page title. KVO compliant.
 @property(nonatomic, readonly, copy) NSString* title;
 
@@ -86,6 +92,10 @@ CWV_EXPORT
 
 // The scroll view associated with the web view.
 @property(nonatomic, readonly) CWVScrollView* scrollView;
+
+// A Boolean value indicating whether horizontal swipe gestures will trigger
+// back-forward list navigations.
+@property(nonatomic) BOOL allowsBackForwardNavigationGestures;
 
 // The User Agent product string used to build the full User Agent.
 + (NSString*)userAgentProduct;
@@ -135,6 +145,32 @@ CWV_EXPORT
 
 // Evaluates a JavaScript string.
 // The completion handler is invoked when script evaluation completes.
+//
+// Note that |javaScriptString| is wrapped with:
+//   if (<implementation defined>) { ... }
+// before evaluation, which causes some tricky side effect when you use |let| or
+// |const| in the script.
+//
+//   1. Variables defined with |let| or |const| at the top level of the script
+//      do NOT become a global variable. i.e., It is accessible neither from
+//      scripts in the page nor another call to
+//      -evaluateJavaScript:completionHandler:. Variables defined with |var|
+//      DOES become a global variable.
+//
+//   2. Variables defined with |let| or |const| at the top level are not
+//      accessible from top level functions, even in the same script. Variable
+//      defined with |var| doesn't have this issue either. e.g., evaluation of
+//      this script causes an error:
+//
+//        let a =  3;
+//        function f() {
+//          console.log(a);  // ReferenceError: Can't find variable: a
+//        }
+//        f();
+//
+// To workaround the issue, you can use |var| instead, or an explicit reference
+// to window.xxx. This is because |let| and |const| are scoped by braces while
+// |var| isn't, and due to tricky behavior of WebKit in non-strict mode.
 - (void)evaluateJavaScript:(NSString*)javaScriptString
          completionHandler:(void (^)(id, NSError*))completionHandler;
 

@@ -55,15 +55,14 @@ class DocumentXPathEvaluator final
                                const String& expression,
                                Node* context_node,
                                XPathNSResolver*,
-                               unsigned short type,
+                               uint16_t type,
                                const ScriptValue&,
                                ExceptionState&);
 
+  explicit DocumentXPathEvaluator(Document&);
   void Trace(blink::Visitor*) override;
 
  private:
-  explicit DocumentXPathEvaluator(Document&);
-
   Member<XPathEvaluator> xpath_evaluator_;
 };
 

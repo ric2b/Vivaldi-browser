@@ -38,7 +38,8 @@ namespace {
 
 #if defined(OS_WIN)
 void DetectIEProfiles(std::vector<importer::SourceProfile>* profiles) {
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   // IE always exists and doesn't have multiple profiles.
   importer::SourceProfile ie;
@@ -71,7 +72,8 @@ void DetectBuiltinWindowsProfiles(
 
 #if defined(OS_MACOSX)
 void DetectSafariProfiles(std::vector<importer::SourceProfile>* profiles) {
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   uint16_t items = importer::NONE;
   if (!SafariImporterCanImport(base::mac::GetUserLibraryPath(), &items))
@@ -90,7 +92,8 @@ void DetectSafariProfiles(std::vector<importer::SourceProfile>* profiles) {
 // details).
 void DetectFirefoxProfiles(const std::string locale,
                            std::vector<importer::SourceProfile>* profiles) {
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   base::FilePath profile_path = GetFirefoxProfilePath();
   if (profile_path.empty())
@@ -132,7 +135,8 @@ void DetectFirefoxProfiles(const std::string locale,
 std::vector<importer::SourceProfile> DetectSourceProfilesWorker(
     const std::string& locale,
     bool include_interactive_profiles) {
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   std::vector<importer::SourceProfile> profiles;
 

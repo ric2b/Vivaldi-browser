@@ -6,13 +6,16 @@
 
 #include <string>
 
+#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/post_task.h"
 #include "chromecast/browser/extensions/api/tts/tts_extension_api.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
@@ -21,7 +24,6 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/info_map.h"
-#include "extensions/browser/lazy_background_task_queue.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/browser/null_app_sorting.h"
 #include "extensions/browser/process_manager.h"
@@ -128,8 +130,8 @@ const Extension* CastExtensionSystem::LoadExtension(
       LOG(WARNING) << warning.message;
   }
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
       base::BindOnce(&CastExtensionSystem::PostLoadExtension,
                      base::Unretained(this), extension));
 
@@ -248,8 +250,8 @@ AppSorting* CastExtensionSystem::app_sorting() {
 void CastExtensionSystem::RegisterExtensionWithRequestContexts(
     const Extension* extension,
     const base::Closure& callback) {
-  BrowserThread::PostTaskAndReply(
-      BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraitsAndReply(
+      FROM_HERE, {BrowserThread::IO},
       base::BindOnce(&InfoMap::AddExtension, info_map(),
                      base::RetainedRef(extension), base::Time::Now(), false,
                      false),

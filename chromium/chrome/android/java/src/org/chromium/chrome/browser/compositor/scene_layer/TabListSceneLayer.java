@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.compositor.scene_layer;
 
 import android.content.Context;
 import android.content.res.Resources;
+import android.graphics.Color;
 import android.graphics.RectF;
 
 import org.chromium.base.ApiCompatibilityUtils;
@@ -14,6 +15,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
+import org.chromium.chrome.browser.compositor.layouts.components.CompositorButton;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
@@ -30,6 +32,8 @@ import org.chromium.ui.resources.ResourceManager;
 public class TabListSceneLayer extends SceneLayer {
     private long mNativePtr;
     private TabModelSelector mTabModelSelector;
+    private int[] mAdditionalIds = new int[4];
+    private boolean mUseAdditionalIds;
 
     public void setTabModelSelector(TabModelSelector tabModelSelector) {
         mTabModelSelector = tabModelSelector;
@@ -66,6 +70,17 @@ public class TabListSceneLayer extends SceneLayer {
                 viewport.top, viewport.width(), viewport.height(), layerTitleCache,
                 tabContentManager, resourceManager);
 
+        boolean isTabGroupEnabled = FeatureUtilities.isTabGroupsAndroidEnabled();
+
+        if (isTabGroupEnabled && layerTitleCache.getLayoutTabGroupCreationButton() != null) {
+            CompositorButton createGroupButton =
+                    layerTitleCache.getLayoutTabGroupCreationButton().getCreateGroupButton();
+            nativePutCreateGroupTextButtonLayer(mNativePtr,
+                    layerTitleCache.getLayoutTabGroupCreationButton().getButtonResourceId(),
+                    createGroupButton.getX() * dpToPx, createGroupButton.getY() * dpToPx,
+                    createGroupButton.isVisible());
+        }
+
         boolean isHTSEnabled =
                 ChromeFeatureList.isEnabled(ChromeFeatureList.HORIZONTAL_TAB_SWITCHER_ANDROID);
 
@@ -74,33 +89,34 @@ public class TabListSceneLayer extends SceneLayer {
             assert t.isVisible() : "LayoutTab in that list should be visible";
             final float decoration = t.getDecorationAlpha();
 
-            boolean useModernDesign = FeatureUtilities.isChromeModernDesignEnabled();
-
-            float shadowAlpha = decoration;
-            int urlBarBackgroundId = R.drawable.card_single;
-            if (useModernDesign) {
-                urlBarBackgroundId = R.drawable.modern_location_bar;
-                shadowAlpha /= 2;
-            }
-
+            float shadowAlpha = decoration / 2;
+            int urlBarBackgroundId = R.drawable.modern_location_bar;
             boolean useLightIcon = t.isIncognito() && !isHTSEnabled;
-            int defaultThemeColor =
-                    ColorUtils.getDefaultThemeColor(res, useModernDesign, useLightIcon);
+
+            int defaultThemeColor = ColorUtils.getDefaultThemeColor(res, useLightIcon);
 
             // In the modern design, the text box is always drawn opaque in the compositor.
-            float textBoxAlpha = useModernDesign ? 1.f : t.getTextBoxAlpha();
+            float textBoxAlpha = 1.f;
 
-            int closeButtonColor = ColorUtils.getThemedAssetColor(defaultThemeColor, useLightIcon);
+            int closeButtonColor = useLightIcon
+                    ? Color.WHITE
+                    : ApiCompatibilityUtils.getColor(res, R.color.light_icon_color);
+            float closeButtonSizePx =
+                    res.getDimensionPixelSize(R.dimen.tab_switcher_close_button_size);
 
             int borderColorResource =
                     t.isIncognito() ? R.color.tab_back_incognito : R.color.tab_back;
+
+            int[] relatedTabIds = getRelatedTabIds(t.getId());
+
             // TODO(dtrainor, clholgat): remove "* dpToPx" once the native part fully supports dp.
-            nativePutTabLayer(mNativePtr, t.getId(), R.id.control_container, getCloseButtonIconId(),
+            nativePutTabLayer(mNativePtr, t.getId(), relatedTabIds, mUseAdditionalIds,
+                    R.id.control_container, R.drawable.btn_delete_24dp,
                     R.drawable.tabswitcher_border_frame_shadow,
                     R.drawable.tabswitcher_border_frame_decoration, R.drawable.logo_card_back,
                     R.drawable.tabswitcher_border_frame,
                     R.drawable.tabswitcher_border_frame_inner_shadow, t.canUseLiveTexture(),
-                    FeatureUtilities.isChromeModernDesignEnabled(), t.getBackgroundColor(),
+                    t.getBackgroundColor(),
                     ApiCompatibilityUtils.getColor(res, borderColorResource), t.isIncognito(),
                     t.isCloseButtonOnRight(), t.getRenderX() * dpToPx, t.getRenderY() * dpToPx,
                     t.getScaledContentWidth() * dpToPx, t.getScaledContentHeight() * dpToPx,
@@ -112,32 +128,22 @@ public class TabListSceneLayer extends SceneLayer {
                     t.getTiltX(), t.getTiltY(), t.getAlpha(), t.getBorderAlpha() * decoration,
                     t.getBorderInnerShadowAlpha() * decoration, decoration, shadowAlpha,
                     t.getBorderCloseButtonAlpha() * decoration,
-                    LayoutTab.CLOSE_BUTTON_WIDTH_DP * dpToPx, t.getStaticToViewBlend(),
-                    t.getBorderScale(), t.getSaturation(), t.getBrightness(), t.showToolbar(),
-                    defaultThemeColor, t.getToolbarBackgroundColor(), closeButtonColor,
-                    t.anonymizeToolbar(), t.isTitleNeeded(), urlBarBackgroundId,
-                    t.getTextBoxBackgroundColor(), textBoxAlpha, t.getToolbarAlpha(),
-                    t.getToolbarYOffset() * dpToPx, t.getSideBorderScale(),
-                    t.insetBorderVertical());
+                    LayoutTab.CLOSE_BUTTON_WIDTH_DP * dpToPx, closeButtonSizePx,
+                    t.getStaticToViewBlend(), t.getBorderScale(), t.getSaturation(),
+                    t.getBrightness(), t.showToolbar(), defaultThemeColor,
+                    t.getToolbarBackgroundColor(), closeButtonColor, t.anonymizeToolbar(),
+                    t.isTitleNeeded(), urlBarBackgroundId, t.getTextBoxBackgroundColor(),
+                    textBoxAlpha, t.getToolbarAlpha(), t.getToolbarYOffset() * dpToPx,
+                    t.getSideBorderScale(), t.insetBorderVertical());
         }
         nativeFinishBuildingFrame(mNativePtr);
-    }
-
-    /**
-     * @return The close button resource ID.
-     */
-    private int getCloseButtonIconId() {
-        if (FeatureUtilities.isChromeModernDesignEnabled()) return R.drawable.btn_close_white;
-
-        return R.drawable.btn_tab_close;
     }
 
     /**
      * @return The background color of the scene layer.
      */
     protected int getTabListBackgroundColor(Context context) {
-        int colorId = R.color.tab_switcher_background;
-        if (FeatureUtilities.isChromeModernDesignEnabled()) colorId = R.color.modern_primary_color;
+        int colorId = R.color.modern_primary_color;
 
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.HORIZONTAL_TAB_SWITCHER_ANDROID)) {
             if (mTabModelSelector != null && mTabModelSelector.isIncognitoSelected()) {
@@ -167,6 +173,14 @@ public class TabListSceneLayer extends SceneLayer {
         mNativePtr = 0;
     }
 
+    private int[] getRelatedTabIds(int id) {
+        // TODO(meiliang): return four tab ids, include the provided id and id of three other
+        // closest tabs. These ids comes from TabModelFilter#getUnimodifiableRelatedTabList(int) and
+        // update the mAdditionalIds, and mUseAdditionalIds is false when there's no such id.
+        mUseAdditionalIds = false;
+        return mAdditionalIds;
+    }
+
     private native long nativeInit();
 
     private native void nativeBeginBuildingFrame(long nativeTabListSceneLayer);
@@ -178,20 +192,24 @@ public class TabListSceneLayer extends SceneLayer {
             LayerTitleCache layerTitleCache, TabContentManager tabContentManager,
             ResourceManager resourceManager);
 
-    private native void nativePutTabLayer(long nativeTabListSceneLayer, int id,
-            int toolbarResourceId, int closeButtonResourceId, int shadowResourceId,
-            int contourResourceId, int backLogoResourceId, int borderResourceId,
-            int borderInnerShadowResourceId, boolean canUseLiveLayer,
-            boolean modernDesignEnabled, int tabBackgroundColor,
-            int backLogoColor, boolean incognito, boolean isPortrait, float x, float y, float width,
-            float height, float contentWidth, float contentHeight, float visibleContentHeight,
-            float shadowX, float shadowY, float shadowWidth, float shadowHeight, float pivotX,
-            float pivotY, float rotationX, float rotationY, float alpha, float borderAlpha,
-            float borderInnerShadowAlpha, float contourAlpha, float shadowAlpha, float closeAlpha,
-            float closeBtnWidth, float staticToViewBlend, float borderScale, float saturation,
-            float brightness, boolean showToolbar, int defaultThemeColor,
-            int toolbarBackgroundColor, int closeButtonColor, boolean anonymizeToolbar,
-            boolean showTabTitle, int toolbarTextBoxResource, int toolbarTextBoxBackgroundColor,
+    // TODO(meiliang): Need to provide a resource that indicates the selected tab on the layer.
+    private native void nativePutTabLayer(long nativeTabListSceneLayer, int selectedId, int[] ids,
+            boolean useAdditionalIds, int toolbarResourceId, int closeButtonResourceId,
+            int shadowResourceId, int contourResourceId, int backLogoResourceId,
+            int borderResourceId, int borderInnerShadowResourceId, boolean canUseLiveLayer,
+            int tabBackgroundColor, int backLogoColor, boolean incognito, boolean isPortrait,
+            float x, float y, float width, float height, float contentWidth, float contentHeight,
+            float visibleContentHeight, float shadowX, float shadowY, float shadowWidth,
+            float shadowHeight, float pivotX, float pivotY, float rotationX, float rotationY,
+            float alpha, float borderAlpha, float borderInnerShadowAlpha, float contourAlpha,
+            float shadowAlpha, float closeAlpha, float closeBtnWidth, float closeBtnAssetSize,
+            float staticToViewBlend, float borderScale, float saturation, float brightness,
+            boolean showToolbar, int defaultThemeColor, int toolbarBackgroundColor,
+            int closeButtonColor, boolean anonymizeToolbar, boolean showTabTitle,
+            int toolbarTextBoxResource, int toolbarTextBoxBackgroundColor,
             float toolbarTextBoxAlpha, float toolbarAlpha, float toolbarYOffset,
             float sideBorderScale, boolean insetVerticalBorder);
+
+    private native void nativePutCreateGroupTextButtonLayer(long nativeTabListSceneLayer,
+            int buttonResourceId, float x, float y, boolean isVisible);
 }

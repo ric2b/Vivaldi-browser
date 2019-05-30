@@ -77,17 +77,17 @@ void OffscreenTabsOwner::RequestMediaAccessPermission(
   // If verified, allow any tab capture audio/video devices that were requested.
   extensions::TabCaptureRegistry* const tab_capture_registry =
       extensions::TabCaptureRegistry::Get(extension_browser_context);
-  content::MediaStreamDevices devices;
+  blink::MediaStreamDevices devices;
   if (tab_capture_registry &&
       tab_capture_registry->VerifyRequest(
           request.render_process_id, request.render_frame_id, extension_id)) {
-    if (request.audio_type == content::MEDIA_GUM_TAB_AUDIO_CAPTURE) {
-      devices.push_back(content::MediaStreamDevice(
-          content::MEDIA_GUM_TAB_AUDIO_CAPTURE, std::string(), std::string()));
+    if (request.audio_type == blink::MEDIA_GUM_TAB_AUDIO_CAPTURE) {
+      devices.push_back(blink::MediaStreamDevice(
+          blink::MEDIA_GUM_TAB_AUDIO_CAPTURE, std::string(), std::string()));
     }
-    if (request.video_type == content::MEDIA_GUM_TAB_VIDEO_CAPTURE) {
-      devices.push_back(content::MediaStreamDevice(
-          content::MEDIA_GUM_TAB_VIDEO_CAPTURE, std::string(), std::string()));
+    if (request.video_type == blink::MEDIA_GUM_TAB_VIDEO_CAPTURE) {
+      devices.push_back(blink::MediaStreamDevice(
+          blink::MEDIA_GUM_TAB_VIDEO_CAPTURE, std::string(), std::string()));
     }
   }
 
@@ -95,20 +95,20 @@ void OffscreenTabsOwner::RequestMediaAccessPermission(
            << " capture devices for OffscreenTab content.";
 
   std::move(callback).Run(devices,
-                          devices.empty() ? content::MEDIA_DEVICE_INVALID_STATE
-                                          : content::MEDIA_DEVICE_OK,
+                          devices.empty() ? blink::MEDIA_DEVICE_INVALID_STATE
+                                          : blink::MEDIA_DEVICE_OK,
                           nullptr);
 }
 
 void OffscreenTabsOwner::DestroyTab(OffscreenTab* tab) {
-  for (std::vector<std::unique_ptr<OffscreenTab>>::iterator iter =
-           tabs_.begin();
-       iter != tabs_.end(); ++iter) {
+  for (auto iter = tabs_.begin(); iter != tabs_.end(); ++iter) {
     if (iter->get() == tab) {
       tabs_.erase(iter);
       break;
     }
   }
 }
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(OffscreenTabsOwner)
 
 }  // namespace extensions

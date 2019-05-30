@@ -52,27 +52,27 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
-// FIXME: Share more code with PluginDocumentParser.
 class MediaDocumentParser : public RawDataDocumentParser {
  public:
-  static MediaDocumentParser* Create(MediaDocument* document) {
-    return new MediaDocumentParser(document);
-  }
+  explicit MediaDocumentParser(Document* document)
+      : RawDataDocumentParser(document) {}
 
  private:
-  explicit MediaDocumentParser(Document* document)
-      : RawDataDocumentParser(document), did_build_document_structure_(false) {}
-
-  void AppendBytes(const char*, size_t) override;
+  void AppendBytes(const char*, size_t) override {}
+  void Finish() override;
 
   void CreateDocumentStructure();
 
-  bool did_build_document_structure_;
+  bool did_build_document_structure_ = false;
 };
 
 void MediaDocumentParser::CreateDocumentStructure() {
+  if (did_build_document_structure_)
+    return;
+  did_build_document_structure_ = true;
+
   DCHECK(GetDocument());
   HTMLHtmlElement* root_element = HTMLHtmlElement::Create(*GetDocument());
   GetDocument()->AppendChild(root_element);
@@ -83,14 +83,14 @@ void MediaDocumentParser::CreateDocumentStructure() {
 
   HTMLHeadElement* head = HTMLHeadElement::Create(*GetDocument());
   HTMLMetaElement* meta = HTMLMetaElement::Create(*GetDocument());
-  meta->setAttribute(nameAttr, "viewport");
-  meta->setAttribute(contentAttr, "width=device-width");
+  meta->setAttribute(kNameAttr, "viewport");
+  meta->setAttribute(kContentAttr, "width=device-width");
   head->AppendChild(meta);
 
   HTMLVideoElement* media = HTMLVideoElement::Create(*GetDocument());
-  media->setAttribute(controlsAttr, "");
-  media->setAttribute(autoplayAttr, "");
-  media->setAttribute(nameAttr, "media");
+  media->setAttribute(kControlsAttr, "");
+  media->setAttribute(kAutoplayAttr, "");
+  media->setAttribute(kNameAttr, "media");
 
   HTMLSourceElement* source = HTMLSourceElement::Create(*GetDocument());
   source->SetSrc(GetDocument()->Url());
@@ -109,16 +109,11 @@ void MediaDocumentParser::CreateDocumentStructure() {
   if (IsDetached())
     return;  // DOM insertion events can detach the frame.
   root_element->AppendChild(body);
-
-  did_build_document_structure_ = true;
 }
 
-void MediaDocumentParser::AppendBytes(const char*, size_t) {
-  if (did_build_document_structure_)
-    return;
-
+void MediaDocumentParser::Finish() {
   CreateDocumentStructure();
-  Finish();
+  RawDataDocumentParser::Finish();
 }
 
 MediaDocument::MediaDocument(const DocumentInit& initializer)
@@ -134,7 +129,7 @@ MediaDocument::MediaDocument(const DocumentInit& initializer)
 }
 
 DocumentParser* MediaDocument::CreateParser() {
-  return MediaDocumentParser::Create(this);
+  return MakeGarbageCollected<MediaDocumentParser>(this);
 }
 
 void MediaDocument::DefaultEventHandler(Event& event) {
@@ -142,7 +137,7 @@ void MediaDocument::DefaultEventHandler(Event& event) {
   if (!target_node)
     return;
 
-  if (event.type() == EventTypeNames::keydown && event.IsKeyboardEvent()) {
+  if (event.type() == event_type_names::kKeydown && event.IsKeyboardEvent()) {
     HTMLVideoElement* video =
         Traversal<HTMLVideoElement>::FirstWithin(*target_node);
     if (!video)

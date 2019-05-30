@@ -8,17 +8,18 @@
 #include "ui/views/vivaldi_context_menu_views.h"
 
 #include "base/command_line.h"
-#include "base/message_loop/message_loop.h"
+#include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/ui/views/renderer_context_menu/render_view_context_menu_views.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/renderer_context_menu/views/toolkit_delegate_views.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/tools/vivaldi_tools.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/window.h"
 #include "ui/views/controls/menu/menu_controller.h"
-#include "ui/views/controls/menu/menu_item_view.h"
+#include "ui/views/vivaldi_bookmark_menu_views.h"
 #include "ui/views/widget/widget.h"
 
 namespace vivaldi {
@@ -27,6 +28,27 @@ VivaldiContextMenu* CreateVivaldiContextMenu(
     ui::SimpleMenuModel* menu_model,
     const content::ContextMenuParams& params) {
   return new VivaldiContextMenuViews(web_contents, menu_model, params);
+}
+
+VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
+    content::WebContents* web_contents,
+    const vivaldi::BookmarkMenuParams& params,
+    const gfx::Rect& button_rect) {
+
+  // Convert local origin (wrt view) to a screen coordinate
+  gfx::Point screen_point(button_rect.x(), button_rect.y());
+  aura::Window* target_window =
+    VivaldiBookmarkMenuViews::GetActiveNativeViewFromWebContents(
+        web_contents);
+  aura::Window* root_window = target_window->GetRootWindow();
+  aura::client::ScreenPositionClient* screen_position_client =
+      aura::client::GetScreenPositionClient(root_window);
+  if (screen_position_client) {
+    screen_position_client->ConvertPointToScreen(target_window, &screen_point);
+  }
+  gfx::Rect rect(screen_point, button_rect.size());
+
+  return new VivaldiBookmarkMenuViews(web_contents, params, rect);
 }
 }  // vivialdi
 
@@ -75,7 +97,7 @@ void VivaldiContextMenuViews::Show() {
   }
   // Enable recursive tasks on the message loop so we can get updates while
   // the context menu is being displayed.
-  base::MessageLoop::ScopedNestableTaskAllower allow;
+  base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
   RunMenuAt(top_level_widget, screen_point, params_.source_type);
 }
 

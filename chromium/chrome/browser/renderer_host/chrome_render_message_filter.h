@@ -19,10 +19,6 @@
 class GURL;
 class Profile;
 
-namespace chrome_browser_net {
-class Predictor;
-}
-
 namespace predictors {
 class PreconnectManager;
 }
@@ -58,8 +54,6 @@ class ChromeRenderMessageFilter : public content::BrowserMessageFilter {
   void OnAllowDatabase(int render_frame_id,
                        const GURL& origin_url,
                        const GURL& top_origin_url,
-                       const base::string16& name,
-                       const base::string16& display_name,
                        bool* allowed);
   void OnAllowDOMStorage(int render_frame_id,
                          const GURL& origin_url,
@@ -98,7 +92,6 @@ class ChromeRenderMessageFilter : public content::BrowserMessageFilter {
   void OnAllowIndexedDB(int render_frame_id,
                         const GURL& origin_url,
                         const GURL& top_origin_url,
-                        const base::string16& name,
                         bool* allowed);
 #if BUILDFLAG(ENABLE_PLUGINS)
   void OnIsCrashReportingEnabled(bool* enabled);
@@ -106,12 +99,6 @@ class ChromeRenderMessageFilter : public content::BrowserMessageFilter {
 
   const int render_process_id_;
 
-  // The Profile associated with our renderer process. This must only be
-  // accessed on the UI thread!
-  Profile* profile_;
-  // The Predictor for the associated Profile. It is stored so that it can be
-  // used on the IO thread.
-  chrome_browser_net::Predictor* predictor_;
   // The PreconnectManager for the associated Profile. This must only be
   // accessed on the UI thread.
   base::WeakPtr<predictors::PreconnectManager> preconnect_manager_;

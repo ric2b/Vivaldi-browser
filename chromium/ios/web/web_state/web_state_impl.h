@@ -22,6 +22,7 @@
 #import "ios/web/navigation/navigation_manager_impl.h"
 #import "ios/web/public/java_script_dialog_callback.h"
 #include "ios/web/public/java_script_dialog_type.h"
+#include "ios/web/public/web_state/web_frame.h"
 #import "ios/web/public/web_state/web_state.h"
 #import "ios/web/public/web_state/web_state_delegate.h"
 #import "ios/web/public/web_state/web_state_policy_decider.h"
@@ -44,8 +45,7 @@ namespace web {
 class BrowserState;
 struct ContextMenuParams;
 struct FaviconURL;
-struct LoadCommittedDetails;
-class NavigationContext;
+class NavigationContextImpl;
 class NavigationManager;
 class SessionCertificatePolicyCacheImpl;
 class WebInterstitialImpl;
@@ -77,21 +77,18 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   void SetWebController(CRWWebController* web_controller);
 
   // Notifies the observers that a navigation has started.
-  void OnNavigationStarted(web::NavigationContext* context);
+  void OnNavigationStarted(web::NavigationContextImpl* context);
 
   // Notifies the observers that a navigation has finished. For same-document
   // navigations notifies the observers about favicon URLs update using
   // candidates received in OnFaviconUrlUpdated.
-  void OnNavigationFinished(web::NavigationContext* context);
+  void OnNavigationFinished(web::NavigationContextImpl* context);
 
   // Called when current window's canGoBack / canGoForward state was changed.
   void OnBackForwardStateChanged();
 
   // Called when page title was changed.
   void OnTitleChanged();
-
-  // Called when a dialog or child window open request was suppressed.
-  void OnDialogSuppressed();
 
   // Notifies the observers that the render process was terminated.
   void OnRenderProcessGone();
@@ -102,7 +99,8 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
                                const base::DictionaryValue& value,
                                const GURL& url,
                                bool user_is_interacting,
-                               bool is_main_frame);
+                               bool is_main_frame,
+                               web::WebFrame* sender_frame);
 
   void SetIsLoading(bool is_loading);
 
@@ -177,13 +175,16 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   void CommitPreviewingViewController(
       UIViewController* previewing_view_controller);
 
+  // Called when a new frame is available in the web_state.
+  void OnWebFrameAvailable(web::WebFrame* frame);
+  // Called when a frame is removed  in the web_state
+  void OnWebFrameUnavailable(web::WebFrame* frame);
+
   // WebState:
   WebStateDelegate* GetDelegate() override;
   void SetDelegate(WebStateDelegate* delegate) override;
   bool IsWebUsageEnabled() const override;
   void SetWebUsageEnabled(bool enabled) override;
-  bool ShouldSuppressDialogs() const override;
-  void SetShouldSuppressDialogs(bool should_suppress) override;
   UIView* GetView() override;
   void WasShown() override;
   void WasHidden() override;
@@ -197,6 +198,7 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   SessionCertificatePolicyCache* GetSessionCertificatePolicyCache() override;
   CRWSessionStorage* BuildSessionStorage() override;
   CRWJSInjectionReceiver* GetJSInjectionReceiver() const override;
+  void LoadData(NSData* data, NSString* mime_type, const GURL& url) override;
   void ExecuteJavaScript(const base::string16& javascript) override;
   void ExecuteJavaScript(const base::string16& javascript,
                          JavaScriptResultCallback callback) override;
@@ -213,7 +215,6 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   const GURL& GetVisibleURL() const override;
   const GURL& GetLastCommittedURL() const override;
   GURL GetCurrentURL(URLVerificationTrustLevel* trust_level) const override;
-  void ShowTransientContentView(CRWContentView* content_view) override;
   bool IsShowingWebInterstitial() const override;
   WebInterstitial* GetWebInterstitial() const override;
   void AddScriptCommandCallback(const ScriptCommandCallback& callback,
@@ -227,8 +228,7 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
       mojo::ScopedMessagePipeHandle interface_pipe) override;
   bool HasOpener() const override;
   void SetHasOpener(bool has_opener) override;
-  void TakeSnapshot(SnapshotCallback callback,
-                    CGSize target_size) const override;
+  void TakeSnapshot(const gfx::RectF& rect, SnapshotCallback callback) override;
   void AddObserver(WebStateObserver* observer) override;
   void RemoveObserver(WebStateObserver* observer) override;
 
@@ -277,13 +277,11 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   void OnGoToIndexSameDocumentNavigation(NavigationInitiationType type,
                                          bool has_user_gesture) override;
   void WillChangeUserAgentType() override;
-  void LoadCurrentItem() override;
+  void LoadCurrentItem(NavigationInitiationType type) override;
   void LoadIfNecessary() override;
   void Reload() override;
   void OnNavigationItemsPruned(size_t pruned_item_count) override;
-  void OnNavigationItemChanged() override;
-  void OnNavigationItemCommitted(
-      const LoadCommittedDetails& load_details) override;
+  void OnNavigationItemCommitted(NavigationItem* item) override;
 
   // Updates the HTTP response headers for the main page using the headers
   // passed to the OnHttpResponseHeadersReceived() function below.
@@ -292,6 +290,10 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
 
   WebState* GetWebState() override;
   id<CRWWebViewNavigationProxy> GetWebViewNavigationProxy() const override;
+  void GoToBackForwardListItem(WKBackForwardListItem* wk_item,
+                               NavigationItem* item,
+                               NavigationInitiationType type,
+                               bool has_user_gesture) override;
   void RemoveWebView() override;
 
  protected:
@@ -369,10 +371,6 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
 
   // Mojo interface registry for this WebState.
   std::unique_ptr<WebStateInterfaceProvider> web_state_interface_provider_;
-
-  // Cached session history when web usage is disabled. It is used to restore
-  // history into WKWebView when web usage is re-enabled.
-  CRWSessionStorage* cached_session_storage_;
 
   // The most recently restored session history that has not yet committed in
   // the WKWebView. This is reset in OnNavigationItemCommitted().

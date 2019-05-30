@@ -47,6 +47,7 @@ from pylib.results import report_results
 from pylib.results.presentation import test_results_presentation
 from pylib.utils import logdog_helper
 from pylib.utils import logging_utils
+from pylib.utils import test_filter
 
 from py_utils import contextlib_ext
 
@@ -73,6 +74,7 @@ def AddTestLauncherOptions(parser):
       '--test-launcher-retry-limit',
       '--test_launcher_retry_limit',
       '--num_retries', '--num-retries',
+      '--isolated-script-test-launcher-retry-limit',
       dest='num_retries', type=int, default=2,
       help='Number of retries for a test before '
            'giving up (default: %(default)s).')
@@ -92,6 +94,8 @@ def AddTestLauncherOptions(parser):
       type=int, default=os.environ.get('GTEST_TOTAL_SHARDS', 1),
       help='Total number of external shards.')
 
+  test_filter.AddFilterOptions(parser)
+
   return parser
 
 
@@ -102,6 +106,11 @@ def AddCommandLineOptions(parser):
       type=os.path.realpath,
       help='The relative filepath to a file containing '
            'command-line flags to set on the device')
+  parser.add_argument(
+      '--use-apk-under-test-flags-file',
+      action='store_true',
+      help='Wether to use the flags file for the apk under test. If set, '
+           "the filename will be looked up in the APK's PackageInfo.")
   parser.set_defaults(allow_unknown=True)
   parser.set_defaults(command_line_flags=None)
 
@@ -190,7 +199,6 @@ def AddCommonOptions(parser):
       '--gs-results-bucket',
       help='Google Storage bucket to upload results to.')
 
-
   parser.add_argument(
       '--output-directory',
       dest='output_directory', type=os.path.realpath,
@@ -198,13 +206,21 @@ def AddCommonOptions(parser):
            ' located (must include build type). This will take'
            ' precedence over --debug and --release')
   parser.add_argument(
-      '--repeat', '--gtest_repeat', '--gtest-repeat',
-      dest='repeat', type=int, default=0,
-      help='Number of times to repeat the specified set of tests.')
-  parser.add_argument(
       '-v', '--verbose',
       dest='verbose_count', default=0, action='count',
       help='Verbose level (multiple times for more)')
+
+  parser.add_argument(
+      '--repeat', '--gtest_repeat', '--gtest-repeat',
+      '--isolated-script-test-repeat',
+      dest='repeat', type=int, default=0,
+      help='Number of times to repeat the specified set of tests.')
+  # This is currently only implemented for gtests and instrumentation tests.
+  parser.add_argument(
+      '--gtest_also_run_disabled_tests', '--gtest-also-run-disabled-tests',
+      '--isolated-script-test-also-run-disabled-tests',
+      dest='run_disabled', action='store_true',
+      help='Also run disabled tests if applicable.')
 
   AddTestLauncherOptions(parser)
 
@@ -329,10 +345,6 @@ def AddGTestOptions(parser):
       help=('If present, test artifacts will be uploaded to this Google '
             'Storage bucket.'))
   parser.add_argument(
-      '--gtest_also_run_disabled_tests', '--gtest-also-run-disabled-tests',
-      dest='run_disabled', action='store_true',
-      help='Also run disabled tests if applicable.')
-  parser.add_argument(
       '--runtime-deps-path',
       dest='runtime_deps_path', type=os.path.realpath,
       help='Runtime data dependency file from GN.')
@@ -356,21 +368,6 @@ def AddGTestOptions(parser):
       '-w', '--wait-for-java-debugger', action='store_true',
       help='Wait for java debugger to attach before running any application '
            'code. Also disables test timeouts and sets retries=0.')
-
-  filter_group = parser.add_mutually_exclusive_group()
-  filter_group.add_argument(
-      '-f', '--gtest_filter', '--gtest-filter',
-      dest='test_filter',
-      help='googletest-style filter string.',
-      default=os.environ.get('GTEST_FILTER'))
-  filter_group.add_argument(
-      # Deprecated argument.
-      '--gtest-filter-file',
-      # New argument.
-      '--test-launcher-filter-file',
-      dest='test_filter_file', type=os.path.realpath,
-      help='Path to file that contains googletest-style filter strings. '
-           'See also //testing/buildbot/filters/README.md.')
 
 
 def AddInstrumentationTestOptions(parser):
@@ -418,15 +415,6 @@ def AddInstrumentationTestOptions(parser):
       dest='exclude_annotation_str',
       help='Comma-separated list of annotations. Exclude tests with these '
            'annotations.')
-  parser.add_argument(
-      '-f', '--test-filter', '--gtest_filter', '--gtest-filter',
-      dest='test_filter',
-      help='Test filter (if not fully qualified, will run all matches).',
-      default=os.environ.get('GTEST_FILTER'))
-  parser.add_argument(
-      '--gtest_also_run_disabled_tests', '--gtest-also-run-disabled-tests',
-      dest='run_disabled', action='store_true',
-      help='Also run disabled tests if applicable.')
   def package_replacement(arg):
     split_arg = arg.split(',')
     if len(split_arg) != 2:
@@ -446,6 +434,14 @@ def AddInstrumentationTestOptions(parser):
            'the first element being the package and the second the path to the '
            'replacement APK. Only supports replacing one package. Example: '
            '--replace-system-package com.example.app,path/to/some.apk')
+
+  parser.add_argument(
+      '--use-webview-provider',
+      type=_RealPath, default=None,
+      help='Use this apk as the webview provider during test. '
+           'The original provider will be restored if possible, '
+           "on Nougat the provider can't be determined and so "
+           'the system will choose the default provider.')
   parser.add_argument(
       '--runtime-deps-path',
       dest='runtime_deps_path', type=os.path.realpath,
@@ -513,6 +509,9 @@ def AddJUnitTestOptions(parser):
   parser = parser.add_argument_group('junit arguments')
 
   parser.add_argument(
+      '--jacoco', action='store_true',
+      help='Generate jacoco report.')
+  parser.add_argument(
       '--coverage-dir', type=os.path.realpath,
       help='Directory to store coverage info.')
   parser.add_argument(
@@ -521,9 +520,6 @@ def AddJUnitTestOptions(parser):
   parser.add_argument(
       '--runner-filter',
       help='Filters tests by runner class. Must be fully qualified.')
-  parser.add_argument(
-      '-f', '--test-filter',
-      help='Filters tests googletest-style.')
   parser.add_argument(
       '-s', '--test-suite', required=True,
       help='JUnit test suite to run.')
@@ -557,11 +553,6 @@ def AddLinkerTestOptions(parser):
 
   parser.add_argument_group('linker arguments')
 
-  parser.add_argument(
-      '-f', '--gtest-filter',
-      dest='test_filter',
-      help='googletest-style filter string.',
-      default=os.environ.get('GTEST_FILTER'))
   parser.add_argument(
       '--test-apk',
       type=os.path.realpath,
@@ -677,9 +668,6 @@ def AddPerfTestOptions(parser):
            'file. Information includes runtime and device affinity for each '
            '--steps.')
   parser.add_argument(
-      '-f', '--test-filter',
-      help='Test filter (will match against the names listed in --steps).')
-  parser.add_argument(
       '--write-buildbot-json',
       action='store_true',
       help='Whether to output buildbot json.')
@@ -770,6 +758,7 @@ def RunTestsInPlatformMode(args):
 
   ### Set up sigterm handler.
 
+  contexts_to_notify_on_sigterm = []
   def unexpected_sigterm(_signum, _frame):
     msg = [
       'Received SIGTERM. Shutting down.',
@@ -782,6 +771,9 @@ def RunTestsInPlatformMode(args):
         'Thread "%s" (ident: %s) is currently running:' % (
             live_thread.name, live_thread.ident),
         thread_stack])
+
+    for context in contexts_to_notify_on_sigterm:
+      context.ReceivedSigterm()
 
     infra_error('\n'.join(msg))
 
@@ -862,6 +854,9 @@ def RunTestsInPlatformMode(args):
   test_run = test_run_factory.CreateTestRun(
       args, env, test_instance, infra_error)
 
+  contexts_to_notify_on_sigterm.append(env)
+  contexts_to_notify_on_sigterm.append(test_run)
+
   ### Run.
   with out_manager, json_finalizer():
     with json_writer(), logcats_uploader, env, test_instance, test_run:
@@ -872,11 +867,17 @@ def RunTestsInPlatformMode(args):
           lambda: collections.defaultdict(int))
       iteration_count = 0
       for _ in repetitions:
-        raw_results = test_run.RunTests()
-        if not raw_results:
-          continue
-
+        # raw_results will be populated with base_test_result.TestRunResults by
+        # test_run.RunTests(). It is immediately added to all_raw_results so
+        # that in the event of an exception, all_raw_results will already have
+        # the up-to-date results and those can be written to disk.
+        raw_results = []
         all_raw_results.append(raw_results)
+
+        test_run.RunTests(raw_results)
+        if not raw_results:
+          all_raw_results.pop()
+          continue
 
         iteration_results = base_test_result.TestRunResults()
         for r in reversed(raw_results):
@@ -1030,6 +1031,18 @@ def main():
       args.enable_concurrent_adb):
     parser.error('--replace-system-package and --enable-concurrent-adb cannot '
                  'be used together')
+
+  # --use-webview-provider has the potential to cause issues if
+  # --enable-concurrent-adb is set, so disallow that combination
+  if (hasattr(args, 'use_webview_provider') and
+      hasattr(args, 'enable_concurrent_adb') and args.use_webview_provider and
+      args.enable_concurrent_adb):
+    parser.error('--use-webview-provider and --enable-concurrent-adb cannot '
+                 'be used together')
+
+  if (getattr(args, 'jacoco', False) and
+      not getattr(args, 'coverage_dir', '')):
+    parser.error('--jacoco requires --coverage-dir')
 
   if (hasattr(args, 'debug_socket') or
       (hasattr(args, 'wait_for_java_debugger') and

@@ -4,6 +4,7 @@
 
 import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
+import("//third_party/webrtc/webrtc.gni")
 
 # See //content/BUILD.gn for how this works.
 group("browser") {
@@ -23,14 +24,15 @@ jumbo_source_set("browser_sources") {
   visibility = [ "//content/*" ]
   sources = [
     "android/android_overlay_provider.h",
-    "android/browser_media_player_manager_register.cc",
-    "android/browser_media_player_manager_register.h",
     "android/child_process_importance.h",
     "android/compositor.h",
     "android/compositor_client.h",
     "android/content_protocol_handler.h",
     "android/devtools_auth.h",
+    "android/gpu_video_accelerator_factories_provider.h",
     "android/java_interfaces.h",
+    "android/media_url_interceptor_register.cc",
+    "android/media_url_interceptor_register.h",
     "android/motion_event_action.h",
     "android/synchronous_compositor.cc",
     "android/synchronous_compositor.h",
@@ -50,6 +52,7 @@ jumbo_source_set("browser_sources") {
     "background_fetch_description.h",
     "background_fetch_response.cc",
     "background_fetch_response.h",
+    "background_sync_context.h",
     "background_sync_controller.h",
     "background_sync_parameters.cc",
     "background_sync_parameters.h",
@@ -74,6 +77,7 @@ jumbo_source_set("browser_sources") {
     "browser_main_runner.h",
     "browser_message_filter.cc",
     "browser_message_filter.h",
+    "browser_or_resource_context.h",
     "browser_plugin_guest_delegate.cc",
     "browser_plugin_guest_delegate.h",
     "browser_plugin_guest_manager.cc",
@@ -88,7 +92,6 @@ jumbo_source_set("browser_sources") {
     "browsing_data_remover.h",
     "browsing_data_remover_delegate.h",
     "cache_storage_context.h",
-    "cache_storage_usage_info.h",
     "cdm_registry.h",
     "certificate_request_result_type.h",
     "child_process_data.cc",
@@ -96,12 +99,17 @@ jumbo_source_set("browser_sources") {
     "child_process_launcher_utils.h",
     "child_process_security_policy.h",
     "child_process_termination_info.h",
+    "clear_site_data_utils.h",
     "client_certificate_delegate.h",
+    "client_hints_controller_delegate.h",
     "color_chooser.h",
+    "console_message.h",
     "content_browser_client.cc",
     "content_browser_client.h",
-    "context_factory.h",
     "cookie_store_factory.h",
+    "cors_origin_pattern_setter.cc",
+    "cors_origin_pattern_setter.h",
+    "delegate_to_browser_gpu_service_accelerator_factory.h",
     "desktop_capture.cc",
     "desktop_capture.h",
     "desktop_media_id.cc",
@@ -130,10 +138,12 @@ jumbo_source_set("browser_sources") {
     "download_utils.h",
     "favicon_status.cc",
     "favicon_status.h",
+    "file_select_listener.h",
     "file_url_loader.h",
     "focused_node_details.h",
     "font_list_async.h",
     "frame_service_base.h",
+    "generated_code_cache_settings.h",
     "global_request_id.h",
     "global_routing_id.h",
     "gpu_client.h",
@@ -150,7 +160,6 @@ jumbo_source_set("browser_sources") {
     "guest_mode.h",
     "histogram_fetcher.h",
     "indexed_db_context.h",
-    "indexed_db_info.h",
     "interstitial_page.h",
     "interstitial_page_delegate.cc",
     "interstitial_page_delegate.h",
@@ -159,18 +168,17 @@ jumbo_source_set("browser_sources") {
     "javascript_dialog_manager.h",
     "keyboard_event_processing_result.h",
     "load_notification_details.h",
-    "local_storage_usage_info.h",
     "login_delegate.h",
     "manifest_icon_downloader.h",
     "media_capture_devices.h",
     "media_device_id.cc",
     "media_device_id.h",
+    "media_keys_listener_manager.cc",
+    "media_keys_listener_manager.h",
     "media_request_state.h",
     "media_session.h",
-    "media_session_observer.cc",
-    "media_session_observer.h",
-    "memory_coordinator.h",
-    "memory_coordinator_delegate.h",
+    "media_stream_request.cc",
+    "media_stream_request.h",
     "message_port_provider.h",
     "mhtml_extra_parts.h",
     "native_event_processor_mac.h",
@@ -201,10 +209,13 @@ jumbo_source_set("browser_sources") {
     "notification_service.h",
     "notification_source.h",
     "notification_types.h",
+    "origin_policy_commands.h",
+    "origin_policy_error_reason.h",
     "overlay_window.h",
     "overscroll_configuration.h",
     "page_navigator.cc",
     "page_navigator.h",
+    "page_visibility_state.h",
     "payment_app_provider.h",
     "pepper_flash_settings_helper.h",
     "pepper_vpn_provider_resource_host_proxy.h",
@@ -238,28 +249,32 @@ jumbo_source_set("browser_sources") {
     "render_widget_host_iterator.h",
     "render_widget_host_view.h",
     "render_widget_host_view_mac_delegate.h",
+    "renderer_preferences_util.cc",
+    "renderer_preferences_util.h",
     "replaced_navigation_entry_data.h",
     "resource_context.h",
     "resource_dispatcher_host.h",
     "resource_dispatcher_host_delegate.cc",
     "resource_dispatcher_host_delegate.h",
-    "resource_hints.h",
     "resource_request_info.h",
     "resource_throttle.cc",
     "resource_throttle.h",
     "restore_type.h",
     "save_page_type.h",
     "screen_orientation_delegate.h",
+    "screenlock_observer.h",
     "security_style_explanation.cc",
     "security_style_explanation.h",
     "security_style_explanations.cc",
     "security_style_explanations.h",
+    "serial_chooser.cc",
+    "serial_chooser.h",
+    "serial_delegate.h",
     "service_worker_context.h",
     "service_worker_context_observer.h",
-    "service_worker_usage_info.cc",
-    "service_worker_usage_info.h",
     "session_storage_namespace.h",
     "session_storage_usage_info.h",
+    "shared_cors_origin_access_list.h",
     "shared_worker_service.h",
     "site_instance.h",
     "site_isolation_policy.cc",
@@ -278,6 +293,7 @@ jumbo_source_set("browser_sources") {
     "ssl_status.h",
     "startup_data.h",
     "storage_partition.h",
+    "storage_usage_info.h",
     "stored_payment_app.cc",
     "stored_payment_app.h",
     "stream_handle.h",
@@ -289,6 +305,10 @@ jumbo_source_set("browser_sources") {
     "tracing_controller.h",
     "tracing_delegate.cc",
     "tracing_delegate.h",
+    "tts_controller.h",
+    "tts_controller_delegate.h",
+    "tts_platform.h",
+    "tts_utterance.h",
     "url_data_source.cc",
     "url_data_source.h",
     "url_loader_request_interceptor.h",
@@ -310,7 +330,6 @@ jumbo_source_set("browser_sources") {
     "web_contents_view_delegate.cc",
     "web_contents_view_delegate.h",
     "web_drag_dest_delegate.h",
-    "web_package_context.h",
     "web_ui.h",
     "web_ui_controller.cc",
     "web_ui_controller.h",
@@ -331,6 +350,11 @@ jumbo_source_set("browser_sources") {
     "//build/config/compiler:wexit_time_destructors",
     "//content:content_implementation",
   ]
+
+  if (rtc_use_pipewire) {
+    configs +=
+        [ "//third_party/webrtc/modules/desktop_capture:pipewire_config" ]
+  }
 
   public_deps = [
     "//components/download/public/common:public",
@@ -391,14 +415,27 @@ jumbo_source_set("browser_sources") {
     deps += [ "//ui/android" ]
   }
 
+  if (use_aura || is_mac) {
+    sources += [ "context_factory.h" ]
+  }
+
   if (use_aura) {
-    sources -= [ "context_factory.h" ]
-    deps += [ "//ui/aura" ]
+    sources += [ "gpu_interface_provider_factory.h" ]
+    deps += [
+      "//services/ws/public/cpp/host",
+      "//ui/aura",
+    ]
+  }
+
+  if (is_mac) {
+    sources += [
+      "ns_view_bridge_factory_host.h",
+      "ns_view_bridge_factory_impl.h",
+    ]
   }
 
   if (!is_android) {
     sources += [
-      "devtools_frontend_host.h",
       "host_zoom_map.h",
       "zoom_level_delegate.h",
     ]

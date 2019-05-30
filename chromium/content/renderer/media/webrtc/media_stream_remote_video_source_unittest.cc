@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -86,7 +87,7 @@ class MediaStreamRemoteVideoSourceTest
                               blink::WebMediaStreamSource::kTypeVideo,
                               blink::WebString::FromASCII("dummy_source_name"),
                               true /* remote */);
-    webkit_source_.SetExtraData(remote_source_);
+    webkit_source_.SetPlatformSource(base::WrapUnique(remote_source_));
   }
 
   void TearDown() override {
@@ -138,11 +139,11 @@ class MediaStreamRemoteVideoSourceTest
   }
 
  private:
-  void OnTrackStarted(MediaStreamSource* source,
-                      MediaStreamRequestResult result,
+  void OnTrackStarted(blink::WebPlatformMediaStreamSource* source,
+                      blink::MediaStreamRequestResult result,
                       const blink::WebString& result_name) {
     ASSERT_EQ(source, remote_source_);
-    if (result == MEDIA_DEVICE_OK)
+    if (result == blink::MEDIA_DEVICE_OK)
       ++number_of_successful_track_starts_;
     else
       ++number_of_failed_track_starts_;

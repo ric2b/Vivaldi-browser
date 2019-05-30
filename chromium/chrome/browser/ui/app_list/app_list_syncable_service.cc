@@ -5,23 +5,25 @@
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
 
 #include <algorithm>
-#include <set>
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
-#include "base/strings/string_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/browser/ui/app_list/app_list_model_updater.h"
+#include "chrome/browser/ui/app_list/app_service_app_model_builder.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_item.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_model_builder.h"
@@ -32,6 +34,10 @@
 #include "chrome/browser/ui/app_list/extension_app_item.h"
 #include "chrome/browser/ui/app_list/extension_app_model_builder.h"
 #include "chrome/browser/ui/app_list/internal_app/internal_app_model_builder.h"
+#include "chrome/browser/ui/app_list/page_break_app_item.h"
+#include "chrome/browser/ui/app_list/page_break_constants.h"
+#include "chrome/browser/ui/app_list/plugin_vm/plugin_vm_app_model_builder.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
@@ -59,44 +65,6 @@ constexpr char kParentIdKey[] = "parent_id";
 constexpr char kPositionKey[] = "position";
 constexpr char kPinPositionKey[] = "pin_position";
 constexpr char kTypeKey[] = "type";
-
-void UpdateSyncItemFromSync(const sync_pb::AppListSpecifics& specifics,
-                            AppListSyncableService::SyncItem* item) {
-  DCHECK_EQ(item->item_id, specifics.item_id());
-  item->item_type = specifics.item_type();
-  item->item_name = specifics.item_name();
-  item->parent_id = specifics.parent_id();
-  if (specifics.has_item_ordinal())
-    item->item_ordinal = syncer::StringOrdinal(specifics.item_ordinal());
-  if (specifics.has_item_pin_ordinal()) {
-    item->item_pin_ordinal =
-        syncer::StringOrdinal(specifics.item_pin_ordinal());
-  }
-}
-
-bool UpdateSyncItemFromAppItem(const ChromeAppListItem* app_item,
-                               AppListSyncableService::SyncItem* sync_item) {
-  DCHECK_EQ(sync_item->item_id, app_item->id());
-
-  // Page breaker should not be added in a folder.
-  DCHECK(!app_item->is_page_break() || app_item->folder_id().empty());
-
-  bool changed = false;
-  if (sync_item->parent_id != app_item->folder_id()) {
-    sync_item->parent_id = app_item->folder_id();
-    changed = true;
-  }
-  if (sync_item->item_name != app_item->name()) {
-    sync_item->item_name = app_item->name();
-    changed = true;
-  }
-  if (!sync_item->item_ordinal.IsValid() ||
-      !app_item->position().Equals(sync_item->item_ordinal)) {
-    sync_item->item_ordinal = app_item->position();
-    changed = true;
-  }
-  return changed;
-}
 
 void GetSyncSpecificsFromSyncItem(const AppListSyncableService::SyncItem* item,
                                   sync_pb::AppListSpecifics* specifics) {
@@ -150,19 +118,6 @@ sync_pb::AppListSpecifics::AppListItemType GetAppListItemType(
     return sync_pb::AppListSpecifics::TYPE_PAGE_BREAK;
   else
     return sync_pb::AppListSpecifics::TYPE_APP;
-}
-
-// TODO(http://crbug.com/794724): Remove after M65 goes stable.
-bool IsDriveAppSyncId(const std::string& sync_id) {
-  // Prefix for a sync id of a Drive app. Drive app ids are in a different
-  // format and have to be used because a Drive app could have only an URL
-  // without a matching Chrome app. To differentiate the Drive app id from
-  // Chrome app ids, this prefix will be added to create the sync item id
-  // for a Drive app item.
-  constexpr char kDriveAppSyncIdPrefix[] = "drive-app-";
-
-  return base::StartsWith(sync_id, kDriveAppSyncIdPrefix,
-                          base::CompareCase::SENSITIVE);
 }
 
 void RemoveSyncItemFromLocalStorage(Profile* profile,
@@ -238,23 +193,23 @@ AppListSyncableService::SyncItem::SyncItem(
 
 AppListSyncableService::SyncItem::~SyncItem() = default;
 
-// AppListSyncableService::ModelUpdaterDelegate
+// AppListSyncableService::ModelUpdaterObserver
 
-class AppListSyncableService::ModelUpdaterDelegate
-    : public AppListModelUpdaterDelegate {
+class AppListSyncableService::ModelUpdaterObserver
+    : public AppListModelUpdaterObserver {
  public:
-  explicit ModelUpdaterDelegate(AppListSyncableService* owner) : owner_(owner) {
-    DVLOG(2) << owner_ << ": ModelUpdaterDelegate Added";
-    owner_->GetModelUpdater()->SetDelegate(this);
+  explicit ModelUpdaterObserver(AppListSyncableService* owner) : owner_(owner) {
+    DVLOG(2) << owner_ << ": ModelUpdaterObserver Added";
+    owner_->GetModelUpdater()->AddObserver(this);
   }
 
-  ~ModelUpdaterDelegate() override {
-    owner_->GetModelUpdater()->SetDelegate(nullptr);
-    DVLOG(2) << owner_ << ": ModelUpdaterDelegate Removed";
+  ~ModelUpdaterObserver() override {
+    owner_->GetModelUpdater()->RemoveObserver(this);
+    DVLOG(2) << owner_ << ": ModelUpdaterObserver Removed";
   }
 
  private:
-  // ChromeAppListModelUpdaterDelegate
+  // ChromeAppListModelUpdaterObserver
   void OnAppListItemAdded(ChromeAppListItem* item) override {
     DCHECK(adding_item_id_.empty());
     adding_item_id_ = item->id();  // Ignore updates while adding an item.
@@ -301,7 +256,7 @@ class AppListSyncableService::ModelUpdaterDelegate
   AppListSyncableService* owner_;
   std::string adding_item_id_;
 
-  DISALLOW_COPY_AND_ASSIGN(ModelUpdaterDelegate);
+  DISALLOW_COPY_AND_ASSIGN(ModelUpdaterObserver);
 };
 
 // AppListSyncableService
@@ -319,6 +274,8 @@ AppListSyncableService::AppListSyncableService(
       extension_system_(extension_system),
       initial_sync_data_processed_(false),
       first_app_list_sync_(true),
+      is_app_service_enabled_(
+          base::FeatureList::IsEnabled(features::kAppServiceAsh)),
       weak_ptr_factory_(this) {
   if (g_model_updater_factory_callback_for_test_)
     model_updater_ = g_model_updater_factory_callback_for_test_->Run();
@@ -344,7 +301,7 @@ AppListSyncableService::AppListSyncableService(
 
 AppListSyncableService::~AppListSyncableService() {
   // Remove observers.
-  model_updater_delegate_.reset();
+  model_updater_observer_.reset();
 }
 
 bool AppListSyncableService::IsExtensionServiceReady() const {
@@ -396,34 +353,52 @@ void AppListSyncableService::InitFromLocalStorage() {
 }
 
 bool AppListSyncableService::IsInitialized() const {
-  return apps_builder_.get();
+  if (is_app_service_enabled_)
+    return app_service_apps_builder_.get();
+  return ext_apps_builder_.get();
 }
 
 void AppListSyncableService::BuildModel() {
   InitFromLocalStorage();
 
-  // TODO(calamity): make this a DCHECK after a dev channel release.
-  CHECK(IsExtensionServiceReady());
+  DCHECK(IsExtensionServiceReady());
   AppListClientImpl* client = AppListClientImpl::GetInstance();
   AppListControllerDelegate* controller = client;
-  apps_builder_ = std::make_unique<ExtensionAppModelBuilder>(controller);
-  if (arc::IsArcAllowedForProfile(profile_))
-    arc_apps_builder_ = std::make_unique<ArcAppModelBuilder>(controller);
-  if (IsCrostiniUIAllowedForProfile(profile_)) {
-    crostini_apps_builder_ =
-        std::make_unique<CrostiniAppModelBuilder>(controller);
+
+  if (is_app_service_enabled_) {
+    app_service_apps_builder_ =
+        std::make_unique<AppServiceAppModelBuilder>(controller);
+  } else {
+    ext_apps_builder_ = std::make_unique<ExtensionAppModelBuilder>(controller);
+    if (arc::IsArcAllowedForProfile(profile_))
+      arc_apps_builder_ = std::make_unique<ArcAppModelBuilder>(controller);
+    if (crostini::IsCrostiniUIAllowedForProfile(profile_)) {
+      crostini_apps_builder_ =
+          std::make_unique<CrostiniAppModelBuilder>(controller);
+    }
+    if (plugin_vm::IsPluginVmAllowedForProfile(profile_)) {
+      plugin_vm_apps_builder_ =
+          std::make_unique<PluginVmAppModelBuilder>(controller);
+    }
+    internal_apps_builder_ =
+        std::make_unique<InternalAppModelBuilder>(controller);
   }
-  internal_apps_builder_ =
-      std::make_unique<InternalAppModelBuilder>(controller);
 
   DCHECK(profile_);
   SyncStarted();
-  apps_builder_->Initialize(this, profile_, model_updater_.get());
-  if (arc_apps_builder_.get())
-    arc_apps_builder_->Initialize(this, profile_, model_updater_.get());
-  if (crostini_apps_builder_.get())
-    crostini_apps_builder_->Initialize(this, profile_, model_updater_.get());
-  internal_apps_builder_->Initialize(this, profile_, model_updater_.get());
+
+  if (is_app_service_enabled_) {
+    app_service_apps_builder_->Initialize(this, profile_, model_updater_.get());
+  } else {
+    ext_apps_builder_->Initialize(this, profile_, model_updater_.get());
+    if (arc_apps_builder_.get())
+      arc_apps_builder_->Initialize(this, profile_, model_updater_.get());
+    if (crostini_apps_builder_.get())
+      crostini_apps_builder_->Initialize(this, profile_, model_updater_.get());
+    if (plugin_vm_apps_builder_.get())
+      plugin_vm_apps_builder_->Initialize(this, profile_, model_updater_.get());
+    internal_apps_builder_->Initialize(this, profile_, model_updater_.get());
+  }
 
   HandleUpdateFinished();
 }
@@ -455,6 +430,56 @@ const AppListSyncableService::SyncItem* AppListSyncableService::GetSyncItem(
   return NULL;
 }
 
+bool AppListSyncableService::TransferItemAttributes(
+    const std::string& from_app_id,
+    const std::string& to_app_id) {
+  const SyncItem* from_item = FindSyncItem(from_app_id);
+  if (!from_item ||
+      from_item->item_type != sync_pb::AppListSpecifics::TYPE_APP) {
+    return false;
+  }
+
+  auto attributes = std::make_unique<SyncItem>(
+      from_app_id, sync_pb::AppListSpecifics::TYPE_APP);
+  attributes->parent_id = from_item->parent_id;
+  attributes->item_ordinal = from_item->item_ordinal;
+  attributes->item_pin_ordinal = from_item->item_pin_ordinal;
+
+  SyncItem* to_item = FindSyncItem(to_app_id);
+  if (to_item) {
+    // |to_app_id| already exists. Can apply attributes right now.
+    ApplyAppAttributes(to_app_id, std::move(attributes));
+  } else {
+    // |to_app_id| does not exist at this moment. Store attributes to apply it
+    // later once app appears on this device.
+    pending_transfer_map_[to_app_id] = std::move(attributes);
+  }
+
+  return true;
+}
+
+void AppListSyncableService::ApplyAppAttributes(
+    const std::string& app_id,
+    std::unique_ptr<SyncItem> attributes) {
+  SyncItem* item = FindSyncItem(app_id);
+  if (!item || item->item_type != sync_pb::AppListSpecifics::TYPE_APP) {
+    LOG(ERROR) << "Failed to apply app attributes, app " << app_id
+               << " does not exist.";
+    return;
+  }
+
+  HandleUpdateStarted();
+
+  item->parent_id = attributes->parent_id;
+  item->item_ordinal = attributes->item_ordinal;
+  item->item_pin_ordinal = attributes->item_pin_ordinal;
+  UpdateSyncItemInLocalStorage(profile_, item);
+  SendSyncChange(item, SyncChange::ACTION_UPDATE);
+  ProcessExistingSyncItem(item);
+
+  HandleUpdateFinished();
+}
+
 void AppListSyncableService::SetOemFolderName(const std::string& name) {
   oem_folder_name_ = name;
   // Update OEM folder item if it was already created. If it is not created yet
@@ -471,7 +496,7 @@ AppListModelUpdater* AppListSyncableService::GetModelUpdater() {
 
 void AppListSyncableService::HandleUpdateStarted() {
   // Don't observe the model while processing update changes.
-  model_updater_delegate_.reset();
+  model_updater_observer_.reset();
 }
 
 void AppListSyncableService::HandleUpdateFinished() {
@@ -479,10 +504,8 @@ void AppListSyncableService::HandleUpdateFinished() {
   // Resolve them now.
   ResolveFolderPositions();
 
-  RemoveDriveAppItems();
-
   // Resume or start observing app list model changes.
-  model_updater_delegate_ = std::make_unique<ModelUpdaterDelegate>(this);
+  model_updater_observer_ = std::make_unique<ModelUpdaterObserver>(this);
 
   NotifyObserversSyncUpdated();
 }
@@ -760,6 +783,10 @@ void AppListSyncableService::PruneEmptySyncFolders() {
 
 // AppListSyncableService syncer::SyncableService
 
+void AppListSyncableService::InstallDefaultPageBreaksForTest() {
+  InstallDefaultPageBreaks();
+}
+
 syncer::SyncMergeResult AppListSyncableService::MergeDataAndStartSyncing(
     syncer::ModelType type,
     const syncer::SyncDataList& initial_sync_data,
@@ -768,6 +795,16 @@ syncer::SyncMergeResult AppListSyncableService::MergeDataAndStartSyncing(
   DCHECK(!sync_processor_.get());
   DCHECK(sync_processor.get());
   DCHECK(error_handler.get());
+
+  const bool first_time_user = initial_sync_data.empty();
+  if (first_time_user) {
+    // Post a task to avoid adding the default page break items which can cause
+    // sync changes during sync startup.
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&AppListSyncableService::InstallDefaultPageBreaks,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
 
   HandleUpdateStarted();
 
@@ -922,10 +959,15 @@ syncer::SyncError AppListSyncableService::ProcessSyncChanges(
 }
 
 void AppListSyncableService::Shutdown() {
+  if (is_app_service_enabled_) {
+    app_service_apps_builder_.reset();
+    return;
+  }
   internal_apps_builder_.reset();
   crostini_apps_builder_.reset();
   arc_apps_builder_.reset();
-  apps_builder_.reset();
+  ext_apps_builder_.reset();
+  plugin_vm_apps_builder_.reset();
 }
 
 // AppListSyncableService private
@@ -981,10 +1023,8 @@ void AppListSyncableService::ProcessNewSyncItem(SyncItem* sync_item) {
     }
     case sync_pb::AppListSpecifics::TYPE_REMOVE_DEFAULT_APP: {
       VLOG(1) << this << ": Uninstall: " << sync_item->ToString();
-      if (!IsDriveAppSyncId(sync_item->item_id)) {
-        UninstallExtension(extension_system_->extension_service(),
-                           sync_item->item_id);
-      }
+      UninstallExtension(extension_system_->extension_service(),
+                         sync_item->item_id);
       return;
     }
     case sync_pb::AppListSpecifics::TYPE_FOLDER: {
@@ -1002,12 +1042,12 @@ void AppListSyncableService::ProcessNewSyncItem(SyncItem* sync_item) {
       return;
     }
     case sync_pb::AppListSpecifics::TYPE_PAGE_BREAK: {
-      std::unique_ptr<ChromeAppListItem> page_break_item =
-          std::make_unique<ChromeAppListItem>(profile_, sync_item->item_id,
-                                              model_updater_.get());
-      page_break_item->SetPosition(sync_item->item_ordinal);
-      page_break_item->SetIsPageBreak(true);
-      model_updater_->AddItem(std::move(page_break_item));
+      // This is can be either a default page break item that was installed by
+      // default for new users, or a non-default page-break item that was added
+      // by the user. the ctor of PageBreakAppItem will update the newly-created
+      // item from its |sync_item|.
+      model_updater_->AddItem(std::make_unique<PageBreakAppItem>(
+          profile_, model_updater_.get(), sync_item, sync_item->item_id));
       return;
     }
   }
@@ -1021,10 +1061,13 @@ void AppListSyncableService::ProcessExistingSyncItem(SyncItem* sync_item) {
   }
   VLOG(2) << "ProcessExistingSyncItem: " << sync_item->ToString();
 
+  // The only place where sync can change an item's folder. Prevent moving OEM
+  // item to the folder, other than OEM folder.
+  const bool update_folder = !AppIsOem(sync_item->item_id);
   model_updater_->UpdateAppItemFromSyncItem(
       sync_item,
       sync_item->item_id != ash::kOemFolderId,  // Don't sync oem folder's name.
-      true);  // The only place where sync can change an item's folder.
+      update_folder);
 }
 
 bool AppListSyncableService::SyncStarted() {
@@ -1079,6 +1122,16 @@ AppListSyncableService::SyncItem* AppListSyncableService::CreateSyncItem(
     sync_pb::AppListSpecifics::AppListItemType item_type) {
   DCHECK(!base::ContainsKey(sync_items_, item_id));
   sync_items_[item_id] = std::make_unique<SyncItem>(item_id, item_type);
+
+  // In case we have pending attributes to apply, process it asynchronously.
+  if (base::ContainsKey(pending_transfer_map_, item_id)) {
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(&AppListSyncableService::ApplyAppAttributes,
+                                  weak_ptr_factory_.GetWeakPtr(), item_id,
+                                  std::move(pending_transfer_map_[item_id])));
+    pending_transfer_map_.erase(item_id);
+  }
+
   return sync_items_[item_id].get();
 }
 
@@ -1153,17 +1206,6 @@ std::string AppListSyncableService::SyncItem::ToString() const {
   return res;
 }
 
-void AppListSyncableService::RemoveDriveAppItems() {
-  std::set<std::string> drive_app_item_ids;
-  for (const auto& sync_pair : sync_items_) {
-    if (IsDriveAppSyncId(sync_pair.first))
-      drive_app_item_ids.insert(sync_pair.first);
-  }
-
-  for (const auto& item_id : drive_app_item_ids)
-    DeleteSyncItem(item_id);
-}
-
 std::vector<AppListSyncableService::SyncItem*>
 AppListSyncableService::GetSortedTopLevelSyncItems() const {
   // Filter out items in folder.
@@ -1220,6 +1262,72 @@ void AppListSyncableService::PruneRedundantPageBreakItems() {
     LOG(ERROR) << "Delete a page break item in folder: " << sync_item->item_id;
     DeleteSyncItem(sync_item->item_id);
   }
+}
+
+void AppListSyncableService::InstallDefaultPageBreaks() {
+  for (size_t i = 0; i < app_list::kDefaultPageBreakAppIdsLength; ++i) {
+    auto* const id = app_list::kDefaultPageBreakAppIds[i];
+    auto* sync_item = GetSyncItem(id);
+    if (sync_item) {
+      // The user may have cleared their sync from
+      // https://chrome.google.com/sync, so it may appear here that it's a new
+      // user, while in fact on this device, it's not. We don't want to recreate
+      // and re-add an already existing default page break item.
+      continue;
+    }
+
+    auto page_break_item = std::make_unique<PageBreakAppItem>(
+        profile(), model_updater_.get(), nullptr /* sync_item */, id);
+    page_break_item->SetName("__default_page_break__");
+    AddItem(std::move(page_break_item));
+  }
+}
+
+void AppListSyncableService::UpdateSyncItemFromSync(
+    const sync_pb::AppListSpecifics& specifics,
+    AppListSyncableService::SyncItem* item) {
+  DCHECK_EQ(item->item_id, specifics.item_id());
+  item->item_type = specifics.item_type();
+  item->item_name = specifics.item_name();
+
+  // Ignore update to put item into the OEM folder in case app is not OEM. This
+  // can happen when app is installed on several devices where app is OEM on one
+  // device and not on another devices.
+  if (specifics.parent_id() != ash::kOemFolderId || AppIsOem(item->item_id))
+    item->parent_id = specifics.parent_id();
+  if (specifics.has_item_ordinal())
+    item->item_ordinal = syncer::StringOrdinal(specifics.item_ordinal());
+  if (specifics.has_item_pin_ordinal()) {
+    item->item_pin_ordinal =
+        syncer::StringOrdinal(specifics.item_pin_ordinal());
+  }
+}
+
+bool AppListSyncableService::UpdateSyncItemFromAppItem(
+    const ChromeAppListItem* app_item,
+    AppListSyncableService::SyncItem* sync_item) {
+  DCHECK_EQ(sync_item->item_id, app_item->id());
+
+  // Page breaker should not be added in a folder.
+  DCHECK(!app_item->is_page_break() || app_item->folder_id().empty());
+
+  bool changed = false;
+  // Allow sync changes for parent only for non OEM app.
+  if (sync_item->parent_id != app_item->folder_id() &&
+      !AppIsOem(app_item->id())) {
+    sync_item->parent_id = app_item->folder_id();
+    changed = true;
+  }
+  if (sync_item->item_name != app_item->name()) {
+    sync_item->item_name = app_item->name();
+    changed = true;
+  }
+  if (!sync_item->item_ordinal.IsValid() ||
+      !app_item->position().Equals(sync_item->item_ordinal)) {
+    sync_item->item_ordinal = app_item->position();
+    changed = true;
+  }
+  return changed;
 }
 
 }  // namespace app_list

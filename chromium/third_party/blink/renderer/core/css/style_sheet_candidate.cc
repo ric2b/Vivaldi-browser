@@ -37,10 +37,10 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 AtomicString StyleSheetCandidate::Title() const {
-  return IsElement() ? ToElement(GetNode()).FastGetAttribute(titleAttr)
+  return IsElement() ? ToElement(GetNode()).FastGetAttribute(kTitleAttr)
                      : g_null_atom;
 }
 
@@ -74,9 +74,10 @@ bool StyleSheetCandidate::IsEnabledAndLoading() const {
 bool StyleSheetCandidate::CanBeActivated(
     const String& current_preferrable_name) const {
   StyleSheet* sheet = this->Sheet();
-  if (!sheet || sheet->disabled() || !sheet->IsCSSStyleSheet())
+  auto* css_style_sheet = DynamicTo<CSSStyleSheet>(sheet);
+  if (!css_style_sheet || sheet->disabled())
     return false;
-  return ToCSSStyleSheet(Sheet())->CanBeActivated(current_preferrable_name);
+  return css_style_sheet->CanBeActivated(current_preferrable_name);
 }
 
 StyleSheetCandidate::Type StyleSheetCandidate::TypeOf(Node& node) {

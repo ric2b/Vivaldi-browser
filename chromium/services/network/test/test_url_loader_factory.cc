@@ -10,6 +10,8 @@
 #include "net/http/http_status_code.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/resource_request_body.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/test/test_utils.h"
 
 namespace network {
@@ -26,9 +28,14 @@ TestURLLoaderFactory::Response::Response() = default;
 TestURLLoaderFactory::Response::~Response() = default;
 TestURLLoaderFactory::Response::Response(const Response&) = default;
 
-TestURLLoaderFactory::TestURLLoaderFactory() {}
+TestURLLoaderFactory::TestURLLoaderFactory()
+    : weak_wrapper_(
+          base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+              this)) {}
 
-TestURLLoaderFactory::~TestURLLoaderFactory() {}
+TestURLLoaderFactory::~TestURLLoaderFactory() {
+  weak_wrapper_->Detach();
+}
 
 void TestURLLoaderFactory::AddResponse(const GURL& url,
                                        const ResourceResponseHead& head,
@@ -87,6 +94,15 @@ int TestURLLoaderFactory::NumPending() {
   return pending;
 }
 
+TestURLLoaderFactory::PendingRequest* TestURLLoaderFactory::GetPendingRequest(
+    size_t index) {
+  if (index >= pending_requests_.size())
+    return nullptr;
+  auto* request = &(pending_requests_[index]);
+  DCHECK(request);
+  return request;
+}
+
 void TestURLLoaderFactory::ClearResponses() {
   responses_.clear();
 }
@@ -117,6 +133,11 @@ void TestURLLoaderFactory::CreateLoaderAndStart(
 
 void TestURLLoaderFactory::Clone(mojom::URLLoaderFactoryRequest request) {
   bindings_.AddBinding(this, std::move(request));
+}
+
+scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
+TestURLLoaderFactory::GetSafeWeakWrapper() {
+  return weak_wrapper_;
 }
 
 bool TestURLLoaderFactory::CreateLoaderAndStartInternal(
@@ -228,8 +249,12 @@ void TestURLLoaderFactory::SimulateResponse(
   if (response_flags & kResponseOnlyRedirectsNoDestination)
     return;
 
-  if (status.error_code == net::OK) {
+  if ((response_flags & kSendHeadersOnNetworkError) ||
+      status.error_code == net::OK) {
     client->OnReceiveResponse(head);
+  }
+
+  if (status.error_code == net::OK) {
     mojo::DataPipe data_pipe(content.size());
     uint32_t bytes_written = content.size();
     CHECK_EQ(MOJO_RESULT_OK, data_pipe.producer_handle->WriteData(

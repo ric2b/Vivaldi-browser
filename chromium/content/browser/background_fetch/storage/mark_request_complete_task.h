@@ -21,11 +21,14 @@ namespace background_fetch {
 // download response in cache storage.
 class MarkRequestCompleteTask : public DatabaseTask {
  public:
+  using MarkRequestCompleteCallback =
+      base::OnceCallback<void(blink::mojom::BackgroundFetchError)>;
+
   MarkRequestCompleteTask(
       DatabaseTaskHost* host,
-      BackgroundFetchRegistrationId registration_id,
+      const BackgroundFetchRegistrationId& registration_id,
       scoped_refptr<BackgroundFetchRequestInfo> request_info,
-      base::OnceClosure closure);
+      MarkRequestCompleteCallback callback);
 
   ~MarkRequestCompleteTask() override;
 
@@ -37,12 +40,10 @@ class MarkRequestCompleteTask : public DatabaseTask {
 
   void PopulateResponseBody(blink::mojom::FetchAPIResponse* response);
 
-  void DidGetIsQuotaAvailable(blink::mojom::FetchAPIResponsePtr response,
-                              base::OnceClosure done_closure,
+  void DidGetIsQuotaAvailable(base::OnceClosure done_closure,
                               bool is_available);
 
-  void DidOpenCache(blink::mojom::FetchAPIResponsePtr response,
-                    base::OnceClosure done_closure,
+  void DidOpenCache(base::OnceClosure done_closure,
                     CacheStorageCacheHandle handle,
                     blink::mojom::CacheStorageError error);
 
@@ -73,10 +74,12 @@ class MarkRequestCompleteTask : public DatabaseTask {
 
   BackgroundFetchRegistrationId registration_id_;
   scoped_refptr<BackgroundFetchRequestInfo> request_info_;
-  base::OnceClosure closure_;
+  blink::mojom::FetchAPIResponsePtr response_;
+  MarkRequestCompleteCallback callback_;
 
   proto::BackgroundFetchCompletedRequest completed_request_;
-  bool is_response_successful_ = true;
+  proto::BackgroundFetchRegistration::BackgroundFetchFailureReason
+      failure_reason_ = proto::BackgroundFetchRegistration::NONE;
 
   base::WeakPtrFactory<MarkRequestCompleteTask> weak_factory_;  // Keep as last.
 

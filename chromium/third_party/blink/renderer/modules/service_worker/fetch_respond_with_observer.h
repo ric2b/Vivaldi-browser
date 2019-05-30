@@ -22,6 +22,14 @@ class WaitUntilObserver;
 // notifies the client.
 class MODULES_EXPORT FetchRespondWithObserver : public RespondWithObserver {
  public:
+  FetchRespondWithObserver(ExecutionContext*,
+                           int fetch_event_id,
+                           const KURL& request_url,
+                           network::mojom::FetchRequestMode,
+                           network::mojom::FetchRedirectMode,
+                           network::mojom::RequestContextFrameType,
+                           mojom::RequestContextType,
+                           WaitUntilObserver*);
   ~FetchRespondWithObserver() override = default;
 
   static FetchRespondWithObserver* Create(
@@ -31,7 +39,7 @@ class MODULES_EXPORT FetchRespondWithObserver : public RespondWithObserver {
       network::mojom::FetchRequestMode,
       network::mojom::FetchRedirectMode,
       network::mojom::RequestContextFrameType,
-      WebURLRequest::RequestContext,
+      mojom::RequestContextType,
       WaitUntilObserver*);
 
   void OnResponseRejected(mojom::ServiceWorkerResponseError) override;
@@ -43,22 +51,12 @@ class MODULES_EXPORT FetchRespondWithObserver : public RespondWithObserver {
 
   void Trace(blink::Visitor*) override;
 
- protected:
-  FetchRespondWithObserver(ExecutionContext*,
-                           int fetch_event_id,
-                           const KURL& request_url,
-                           network::mojom::FetchRequestMode,
-                           network::mojom::FetchRedirectMode,
-                           network::mojom::RequestContextFrameType,
-                           WebURLRequest::RequestContext,
-                           WaitUntilObserver*);
-
  private:
   const KURL request_url_;
   const network::mojom::FetchRequestMode request_mode_;
   const network::mojom::FetchRedirectMode redirect_mode_;
   const network::mojom::RequestContextFrameType frame_type_;
-  const WebURLRequest::RequestContext request_context_;
+  const mojom::RequestContextType request_context_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 };
 

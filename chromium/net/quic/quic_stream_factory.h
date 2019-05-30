@@ -18,6 +18,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "net/base/address_list.h"
 #include "net/base/completion_once_callback.h"
@@ -59,7 +60,6 @@ namespace net {
 
 class CTPolicyEnforcer;
 class CertVerifier;
-class ChannelIDService;
 class ClientSocketFactory;
 class CTVerifier;
 class HostResolver;
@@ -79,6 +79,15 @@ class QuicStreamFactoryPeer;
 
 // When a connection is idle for 30 seconds it will be closed.
 const int kIdleConnectionTimeoutSeconds = 30;
+
+// Sessions can migrate if they have been idle for less than this period.
+const int kDefaultIdleSessionMigrationPeriodSeconds = 30;
+
+// The maximum time allowed to have no retransmittable packets on the wire
+// (after sending the first retransmittable packet) if
+// |migrate_session_early_v2_| is true. PING frames will be sent as needed to
+// enforce this.
+const int64_t kDefaultRetransmittableOnWireTimeoutMillisecs = 100;
 
 // The default maximum time QUIC session could be on non-default network before
 // migrate back to default network.
@@ -123,6 +132,7 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
               const GURL& url,
               const NetLogWithSource& net_log,
               NetErrorDetails* net_error_details,
+              CompletionOnceCallback failed_on_default_network_callback,
               CompletionOnceCallback callback);
 
   // This function must be called after Request() returns ERR_IO_PENDING.
@@ -144,9 +154,18 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
 
   void OnRequestComplete(int rv);
 
+  // Called when the original connection created on the default network for
+  // |this| fails and a new connection has been created on the alternate
+  // network.
+  void OnConnectionFailedOnDefaultNetwork();
+
   // Helper method that calls |factory_|'s GetTimeDelayForWaitingJob(). It
   // returns the amount of time waiting job should be delayed.
   base::TimeDelta GetTimeDelayForWaitingJob() const;
+
+  // If host resolution is underway, changes the priority of the host resolver
+  // request.
+  void SetPriority(RequestPriority priority);
 
   // Releases the handle to the QUIC session retrieved as a result of Request().
   std::unique_ptr<QuicChromiumClientSession::Handle> ReleaseSessionHandle();
@@ -165,6 +184,7 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
   QuicSessionKey session_key_;
   NetLogWithSource net_log_;
   CompletionOnceCallback callback_;
+  CompletionOnceCallback failed_on_default_network_callback_;
   NetErrorDetails* net_error_details_;  // Unowned.
   std::unique_ptr<QuicChromiumClientSession::Handle> session_;
 
@@ -181,7 +201,6 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
 class NET_EXPORT_PRIVATE QuicStreamFactory
     : public NetworkChangeNotifier::IPAddressObserver,
       public NetworkChangeNotifier::NetworkObserver,
-      public SSLConfigService::Observer,
       public CertDatabase::Observer {
  public:
   // This class encompasses |destination| and |server_id|.
@@ -223,7 +242,6 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
       HttpServerProperties* http_server_properties,
       CertVerifier* cert_verifier,
       CTPolicyEnforcer* ct_policy_enforcer,
-      ChannelIDService* channel_id_service,
       TransportSecurityState* transport_security_state,
       CTVerifier* cert_transparency_verifier,
       SocketPerformanceWatcherFactory* socket_performance_watcher_factory,
@@ -238,23 +256,25 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
       bool mark_quic_broken_when_network_blackholes,
       int idle_connection_timeout_seconds,
       int reduced_ping_timeout_seconds,
+      int retransmittable_on_wire_timeout_milliseconds_,
       int max_time_before_crypto_handshake_seconds,
       int max_idle_time_before_crypto_handshake_seconds,
       bool migrate_sessions_on_network_change_v2,
       bool migrate_sessions_early_v2,
       bool retry_on_alternate_network_before_handshake,
-      bool go_away_on_path_degrading,
+      bool migrate_idle_sessions,
+      base::TimeDelta idle_session_migration_period,
       base::TimeDelta max_time_on_non_default_network,
       int max_migrations_to_non_default_network_on_write_error,
       int max_migrations_to_non_default_network_on_path_degrading,
       bool allow_server_migration,
+      bool race_stale_dns_on_connection,
+      bool go_away_on_path_degrading,
       bool race_cert_verification,
       bool estimate_initial_rtt,
       bool headers_include_h2_stream_dependency,
       const quic::QuicTagVector& connection_options,
       const quic::QuicTagVector& client_connection_options,
-      bool enable_token_binding,
-      bool enable_channel_id,
       bool enable_socket_recv_optimization);
   ~QuicStreamFactory() override;
 
@@ -291,7 +311,11 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // Cancels a pending request.
   void CancelRequest(QuicStreamRequest* request);
 
-  // Closes all current sessions with specified network and QUIC error codes.
+  // Sets priority of a request.
+  void SetRequestPriority(QuicStreamRequest* request, RequestPriority priority);
+
+  // Closes all current sessions with specified network, QUIC error codes.
+  // It sends connection close packet when closing connections.
   void CloseAllSessions(int error, quic::QuicErrorCode quic_error);
 
   std::unique_ptr<base::Value> QuicStreamFactoryInfoToValue() const;
@@ -337,11 +361,6 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
       NetworkChangeNotifier::NetworkHandle network) override;
   void OnNetworkMadeDefault(
       NetworkChangeNotifier::NetworkHandle network) override;
-
-  // SSLConfigService::Observer methods:
-
-  // We perform the same flushing as described above when SSL settings change.
-  void OnSSLConfigChanged() override;
 
   // CertDatabase::Observer methods:
 
@@ -516,6 +535,9 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   quic::QuicTime::Delta ping_timeout_;
   quic::QuicTime::Delta reduced_ping_timeout_;
 
+  // Timeout for how long the wire can have no retransmittable packets.
+  quic::QuicTime::Delta retransmittable_on_wire_timeout_;
+
   // If more than |yield_after_packets_| packets have been read or more than
   // |yield_after_duration_| time has passed, then
   // QuicChromiumPacketReader::StartReading() yields by doing a PostTask().
@@ -540,14 +562,17 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // connection fails on the default network before handshake is confirmed.
   const bool retry_on_alternate_network_before_handshake_;
 
-  // Set if client should mark the session as GOAWAY when the connection
-  // experiences poor connectivity
-  const bool go_away_on_path_degrading_;
-
   // If |migrate_sessions_early_v2_| is true, tracks the current default
   // network, and is updated OnNetworkMadeDefault.
   // Otherwise, always set to NetworkChangeNotifier::kInvalidNetwork.
   NetworkChangeNotifier::NetworkHandle default_network_;
+
+  // Set if idle sessions can be migrated within
+  // |idle_session_migration_period_| when connection migration is triggered.
+  const bool migrate_idle_sessions_;
+
+  // Sessions can migrate if they have been idle for less than this period.
+  const base::TimeDelta idle_session_migration_period_;
 
   // Maximum time sessions could use on non-default network before try to
   // migrate back to default network.
@@ -562,6 +587,14 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // If set, allows migration of connection to server-specified alternate
   // server address.
   const bool allow_server_migration_;
+
+  // Set if stale DNS result may be speculatively used to connect and then
+  // compared with the original DNS result.
+  const bool race_stale_dns_on_connection_;
+
+  // Set if client should mark the session as GOAWAY when the connection
+  // experiences poor connectivity
+  const bool go_away_on_path_degrading_;
 
   // Set if cert verification is to be raced with host resolution.
   bool race_cert_verification_;
@@ -584,6 +617,8 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   int num_push_streams_created_;
 
   quic::QuicClientPushPromiseIndex push_promise_index_;
+
+  const base::TickClock* tick_clock_;
 
   base::SequencedTaskRunner* task_runner_;
 

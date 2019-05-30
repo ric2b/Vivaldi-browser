@@ -9,7 +9,7 @@
 
 #include <memory>
 
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "media/cast/logging/log_deserializer.h"
 #include "media/cast/logging/log_serializer.h"
 #include "media/cast/logging/logging_defines.h"
@@ -64,23 +64,24 @@ class SerializeDeserializeTest : public ::testing::Test {
     for (int i = 0; i < metadata_.num_frame_events(); i++) {
       auto frame_event = std::make_unique<AggregatedFrameEvent>();
       frame_event->set_relative_rtp_timestamp(i * 90);
-      for (uint32_t event_index = 0; event_index < arraysize(kVideoFrameEvents);
-           ++event_index) {
+      for (uint32_t event_index = 0;
+           event_index < base::size(kVideoFrameEvents); ++event_index) {
         frame_event->add_event_type(
             ToProtoEventType(kVideoFrameEvents[event_index]));
         frame_event->add_event_timestamp_ms(event_time_ms);
         event_time_ms += 1024;
       }
-      frame_event->set_width(kWidth[i % arraysize(kWidth)]);
-      frame_event->set_height(kHeight[i % arraysize(kHeight)]);
+      frame_event->set_width(kWidth[i % base::size(kWidth)]);
+      frame_event->set_height(kHeight[i % base::size(kHeight)]);
       frame_event->set_encoded_frame_size(
-          kEncodedFrameSize[i % arraysize(kEncodedFrameSize)]);
-      frame_event->set_delay_millis(kDelayMillis[i % arraysize(kDelayMillis)]);
-      frame_event->set_encoder_cpu_percent_utilized(kEncoderCPUPercentUtilized[
-              i % arraysize(kEncoderCPUPercentUtilized)]);
+          kEncodedFrameSize[i % base::size(kEncodedFrameSize)]);
+      frame_event->set_delay_millis(kDelayMillis[i % base::size(kDelayMillis)]);
+      frame_event->set_encoder_cpu_percent_utilized(
+          kEncoderCPUPercentUtilized[i %
+                                     base::size(kEncoderCPUPercentUtilized)]);
       frame_event->set_idealized_bitrate_percent_utilized(
-          kIdealizedBitratePercentUtilized[
-              i % arraysize(kIdealizedBitratePercentUtilized)]);
+          kIdealizedBitratePercentUtilized
+              [i % base::size(kIdealizedBitratePercentUtilized)]);
 
       frame_event_list_.push_back(std::move(frame_event));
     }
@@ -95,7 +96,7 @@ class SerializeDeserializeTest : public ::testing::Test {
         base_event->set_packet_id(packet_id);
         packet_id++;
         for (uint32_t event_index = 0;
-             event_index < arraysize(kVideoPacketEvents); ++event_index) {
+             event_index < base::size(kVideoPacketEvents); ++event_index) {
           base_event->add_event_type(
               ToProtoEventType(kVideoPacketEvents[event_index]));
           base_event->add_event_timestamp_ms(event_time_ms);
@@ -116,10 +117,9 @@ class SerializeDeserializeTest : public ::testing::Test {
 
     // Check that the returned map is equal to the original map.
     EXPECT_EQ(frame_event_list_.size(), returned_frame_events.size());
-    for (FrameEventMap::const_iterator frame_it = returned_frame_events.begin();
-         frame_it != returned_frame_events.end();
-         ++frame_it) {
-      FrameEventList::iterator original_it = frame_event_list_.begin();
+    for (auto frame_it = returned_frame_events.begin();
+         frame_it != returned_frame_events.end(); ++frame_it) {
+      auto original_it = frame_event_list_.begin();
       ASSERT_NE(frame_event_list_.end(), original_it);
       // Compare protos by serializing and checking the bytes.
       EXPECT_EQ((*original_it)->SerializeAsString(),
@@ -129,11 +129,9 @@ class SerializeDeserializeTest : public ::testing::Test {
     EXPECT_TRUE(frame_event_list_.empty());
 
     EXPECT_EQ(packet_event_list_.size(), returned_packet_events.size());
-    for (PacketEventMap::const_iterator packet_it =
-             returned_packet_events.begin();
-         packet_it != returned_packet_events.end();
-         ++packet_it) {
-      PacketEventList::iterator original_it = packet_event_list_.begin();
+    for (auto packet_it = returned_packet_events.begin();
+         packet_it != returned_packet_events.end(); ++packet_it) {
+      auto original_it = packet_event_list_.begin();
       ASSERT_NE(packet_event_list_.end(), original_it);
       // Compare protos by serializing and checking the bytes.
       EXPECT_EQ((*original_it)->SerializeAsString(),

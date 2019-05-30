@@ -31,7 +31,7 @@
 #include "third_party/blink/public/platform/web_encrypted_media_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_property.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_piece.h"
 #include "third_party/blink/renderer/modules/encryptedmedia/media_key_status_map.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
@@ -75,14 +75,15 @@ class MediaKeySession final
                                  MediaKeys*,
                                  WebEncryptedMediaSessionType);
 
+  MediaKeySession(ScriptState*, MediaKeys*, WebEncryptedMediaSessionType);
   ~MediaKeySession() override;
 
   String sessionId() const;
   double expiration() const { return expiration_; }
   ScriptPromise closed(ScriptState*);
   MediaKeyStatusMap* keyStatuses();
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(keystatuseschange);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(message);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(keystatuseschange, kKeystatuseschange)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(message, kMessage)
 
   ScriptPromise generateRequest(ScriptState*,
                                 const String& init_data_type,
@@ -109,7 +110,6 @@ class MediaKeySession final
   friend class NewSessionResultPromise;
   friend class LoadSessionResultPromise;
 
-  MediaKeySession(ScriptState*, MediaKeys*, WebEncryptedMediaSessionType);
   void Dispose();
 
   void ActionTimerFired(TimerBase*);
@@ -142,6 +142,7 @@ class MediaKeySession final
   WeakMember<MediaKeys> media_keys_;
 
   // Session properties.
+  String session_id_;
   WebEncryptedMediaSessionType session_type_;
   double expiration_;
   Member<MediaKeyStatusMap> key_statuses_map_;
@@ -149,7 +150,7 @@ class MediaKeySession final
   // Session states.
   bool is_uninitialized_;
   bool is_callable_;
-  bool is_closed_;  // Is the CDM finished with this session?
+  bool is_closing_or_closed_;
 
   // Keep track of the closed promise.
   typedef ScriptPromiseProperty<Member<MediaKeySession>,

@@ -7,16 +7,18 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/omnibox/omnibox_theme.h"
-#include "chrome/browser/ui/views/location_bar/background_with_1_px_border.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_result_view.h"
+#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/strings/grit/components_strings.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop_mask.h"
 
 bool OmniboxTabSwitchButton::calculated_widths_ = false;
@@ -24,30 +26,35 @@ size_t OmniboxTabSwitchButton::icon_only_width_;
 size_t OmniboxTabSwitchButton::short_text_width_;
 size_t OmniboxTabSwitchButton::full_text_width_;
 
-OmniboxTabSwitchButton::OmniboxTabSwitchButton(OmniboxPopupContentsView* model,
-                                               OmniboxResultView* result_view)
+OmniboxTabSwitchButton::OmniboxTabSwitchButton(
+    OmniboxPopupContentsView* popup_contents_view,
+    OmniboxResultView* result_view,
+    const base::string16& hint,
+    const base::string16& hint_short,
+    const gfx::VectorIcon& icon)
     : MdTextButton(result_view, views::style::CONTEXT_BUTTON_MD),
-      model_(model),
+      popup_contents_view_(popup_contents_view),
       result_view_(result_view),
       initialized_(false),
-      animation_(new gfx::SlideAnimation(this)) {
+      animation_(new gfx::SlideAnimation(this)),
+      hint_(hint),
+      hint_short_(hint_short) {
   SetBgColorOverride(GetBackgroundColor());
-  SetImage(STATE_NORMAL,
-           gfx::CreateVectorIcon(omnibox::kSwitchIcon,
-                                 GetLayoutConstant(LOCATION_BAR_ICON_SIZE),
-                                 gfx::kChromeIconGrey));
+  SetImage(STATE_NORMAL, gfx::CreateVectorIcon(
+                             icon, GetLayoutConstant(LOCATION_BAR_ICON_SIZE),
+                             gfx::kChromeIconGrey));
   SetImageLabelSpacing(8);
   if (!calculated_widths_) {
     icon_only_width_ = MdTextButton::CalculatePreferredSize().width();
-    SetText(l10n_util::GetStringUTF16(IDS_OMNIBOX_TAB_SUGGEST_SHORT_HINT));
+    SetText(hint_short_);
     short_text_width_ = MdTextButton::CalculatePreferredSize().width();
-    SetText(l10n_util::GetStringUTF16(IDS_OMNIBOX_TAB_SUGGEST_HINT));
+    SetText(hint_);
     full_text_width_ = MdTextButton::CalculatePreferredSize().width();
     calculated_widths_ = true;
   } else {
-    SetText(l10n_util::GetStringUTF16(IDS_OMNIBOX_TAB_SUGGEST_HINT));
+    SetText(hint_);
   }
-  SetTooltipText(l10n_util::GetStringUTF16(IDS_OMNIBOX_TAB_SUGGEST_HINT));
+  SetTooltipText(hint_);
   set_corner_radius(CalculatePreferredSize().height() / 2.f);
   animation_->SetSlideDuration(500);
   SetElideBehavior(gfx::FADE_TAIL);
@@ -101,10 +108,10 @@ void OmniboxTabSwitchButton::StateChanged(ButtonState old_state) {
     if (old_state == STATE_PRESSED) {
       SetBgColorOverride(GetBackgroundColor());
       SetMouseHandler(parent());
-      if (model_->IsButtonSelected())
-        model_->UnselectButton();
-    // Otherwise was hovered. Update color if not selected.
-    } else if (!model_->IsButtonSelected()) {
+      if (popup_contents_view_->IsButtonSelected())
+        popup_contents_view_->UnselectButton();
+    } else if (!popup_contents_view_->IsButtonSelected()) {
+      // Otherwise, the button was hovered. Update color if not selected.
       SetBgColorOverride(GetBackgroundColor());
     }
   }
@@ -144,11 +151,26 @@ void OmniboxTabSwitchButton::ProvideWidthHint(size_t parent_width) {
 }
 
 void OmniboxTabSwitchButton::ProvideFocusHint() {
-  NotifyAccessibilityEvent(ax::mojom::Event::kHover, true);
+  NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
+}
+
+void OmniboxTabSwitchButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  if (!OmniboxFieldTrial::IsTabSwitchLogicReversed())
+    node_data->SetName(l10n_util::GetStringUTF8(IDS_ACC_TAB_SWITCH_BUTTON));
+  else
+    // TODO(krb): Internationalize when feature is final.
+    node_data->SetName(base::ASCIIToUTF16(
+        AutocompleteMatchType::kAlternateTabSwitchButtonMessage));
+  // Although this appears visually as a button, expose as a list box option so
+  // that it matches the other options within its list box container.
+  node_data->role = ax::mojom::Role::kListBoxOption;
+  node_data->AddBoolAttribute(ax::mojom::BoolAttribute::kSelected,
+                              IsSelected());
 }
 
 bool OmniboxTabSwitchButton::IsSelected() const {
-  return model_->IsButtonSelected();
+  // Is this result selected and is button selected?
+  return result_view_->IsSelected() && popup_contents_view_->IsButtonSelected();
 }
 
 SkPath OmniboxTabSwitchButton::GetFocusRingPath() const {
@@ -169,17 +191,17 @@ void OmniboxTabSwitchButton::SetPressed() {
   SetBgColorOverride(color_utils::AlphaBlend(
       GetOmniboxColor(OmniboxPart::RESULTS_BACKGROUND, result_view_->GetTint(),
                       OmniboxPartState::SELECTED),
-      SK_ColorBLACK, 0.8 * 255));
+      SK_ColorBLACK, 0.8f));
 }
 
 size_t OmniboxTabSwitchButton::CalculateGoalWidth(size_t parent_width,
                                                   base::string16* goal_text) {
   if (full_text_width_ * 5 <= parent_width) {
-    *goal_text = l10n_util::GetStringUTF16(IDS_OMNIBOX_TAB_SUGGEST_HINT);
+    *goal_text = hint_;
     return full_text_width_;
   }
   if (short_text_width_ * 5 <= parent_width) {
-    *goal_text = l10n_util::GetStringUTF16(IDS_OMNIBOX_TAB_SUGGEST_SHORT_HINT);
+    *goal_text = hint_short_;
     return short_text_width_;
   }
   *goal_text = base::string16();

@@ -23,6 +23,42 @@ Polymer({
     keyboards: {
       type: Array,
     },
+
+    /**
+     * List of countries for country selector dropdown.
+     * @type {!Array<!OobeTypes.DemoCountryDsc>}
+     */
+    countries: {
+      type: Array,
+    },
+  },
+
+  /**
+   * Flag that ensures that OOBE configuration is applied only once.
+   * @private {boolean}
+   */
+  configuration_applied_: false,
+
+  /** Called when dialog is shown */
+  onBeforeShow: function() {
+    this.behaviors.forEach((behavior) => {
+      if (behavior.onBeforeShow)
+        behavior.onBeforeShow.call(this);
+    });
+    window.setTimeout(this.applyOobeConfiguration_.bind(this), 0);
+  },
+
+  /** Called when dialog is shown for the first time */
+  applyOobeConfiguration_: function() {
+    if (this.configuration_applied_)
+      return;
+    var configuration = Oobe.getInstance().getOobeConfiguration();
+    if (!configuration)
+      return;
+    if (configuration.demoPreferencesNext) {
+      this.onNextClicked_();
+    }
+    this.configuration_applied_ = true;
   },
 
   /** Called after resources are updated. */
@@ -33,6 +69,9 @@ Polymer({
 
     var inputMethodsList = loadTimeData.getValue('inputMethodsList');
     this.setInputMethods_(inputMethodsList);
+
+    var countryList = loadTimeData.getValue('demoModeCountryList');
+    this.setCountryList_(countryList);
 
     this.i18nUpdateLocale();
   },
@@ -77,8 +116,18 @@ Polymer({
   },
 
   /**
+   * Sets country list.
+   * @param {!Array<!OobeTypes.DemoCountryDsc>} countries
+   * @private
+   */
+  setCountryList_: function(countries) {
+    this.countries = countries;
+    this.$.countryDropdownContainer.hidden = countries.length == 0;
+  },
+
+  /**
    * Handle language selection.
-   * @param {!{detail: {!OobeTypes.LanguageDsc}}} event
+   * @param {!CustomEvent<!{!OobeTypes.LanguageDsc}>} event
    * @private
    */
   onLanguageSelected_: function(event) {
@@ -89,13 +138,22 @@ Polymer({
 
   /**
    * Handle keyboard layout selection.
-   * @param {!{detail: {!OobeTypes.IMEDsc}}} event
+   * @param {!CustomEvent<!{!OobeTypes.IMEDsc}>} event
    * @private
    */
   onKeyboardSelected_: function(event) {
     var item = event.detail;
     var inputMethodId = item.value;
     this.screen.onKeyboardSelected_(inputMethodId);
+  },
+
+  /**
+   * Handle country selection.
+   * @param {!CustomEvent<!{!OobeTypes.DemoCountryDsc}>} event
+   * @private
+   */
+  onCountrySelected_: function(event) {
+    this.screen.onCountrySelected_(event.detail.value);
   },
 
   /**

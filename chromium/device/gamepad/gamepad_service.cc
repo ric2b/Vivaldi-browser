@@ -15,6 +15,7 @@
 #include "device/gamepad/gamepad_consumer.h"
 #include "device/gamepad/gamepad_data_fetcher.h"
 #include "device/gamepad/gamepad_provider.h"
+#include "services/service_manager/public/cpp/connector.h"
 
 namespace device {
 
@@ -54,6 +55,15 @@ GamepadService* GamepadService::GetInstance() {
   if (!g_gamepad_service)
     g_gamepad_service = new GamepadService;
   return g_gamepad_service;
+}
+
+void GamepadService::StartUp(
+    std::unique_ptr<service_manager::Connector> service_manager_connector) {
+  service_manager_connector_ = std::move(service_manager_connector);
+}
+
+service_manager::Connector* GamepadService::GetConnector() {
+  return service_manager_connector_.get();
 }
 
 void GamepadService::ConsumerBecameActive(device::GamepadConsumer* consumer) {
@@ -118,7 +128,7 @@ void GamepadService::ConsumerBecameInactive(device::GamepadConsumer* consumer) {
 void GamepadService::RemoveConsumer(device::GamepadConsumer* consumer) {
   DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
 
-  ConsumerSet::iterator it = consumers_.find(consumer);
+  auto it = consumers_.find(consumer);
   if (it->is_active && --num_active_consumers_ == 0)
     provider_->Pause();
   consumers_.erase(it);
@@ -152,8 +162,7 @@ void GamepadService::OnGamepadConnectionChange(bool connected,
 void GamepadService::OnGamepadConnected(uint32_t index, const Gamepad& pad) {
   DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
 
-  for (ConsumerSet::iterator it = consumers_.begin(); it != consumers_.end();
-       ++it) {
+  for (auto it = consumers_.begin(); it != consumers_.end(); ++it) {
     if (it->did_observe_user_gesture && it->is_active)
       it->consumer->OnGamepadConnected(index, pad);
   }
@@ -162,8 +171,7 @@ void GamepadService::OnGamepadConnected(uint32_t index, const Gamepad& pad) {
 void GamepadService::OnGamepadDisconnected(uint32_t index, const Gamepad& pad) {
   DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
 
-  for (ConsumerSet::iterator it = consumers_.begin(); it != consumers_.end();
-       ++it) {
+  for (auto it = consumers_.begin(); it != consumers_.end(); ++it) {
     if (it->did_observe_user_gesture && it->is_active)
       it->consumer->OnGamepadDisconnected(index, pad);
   }
@@ -174,8 +182,6 @@ void GamepadService::PlayVibrationEffectOnce(
     mojom::GamepadHapticEffectType type,
     mojom::GamepadEffectParametersPtr params,
     mojom::GamepadHapticsManager::PlayVibrationEffectOnceCallback callback) {
-  DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
-
   if (!provider_) {
     std::move(callback).Run(
         mojom::GamepadHapticsResult::GamepadHapticsResultError);
@@ -189,8 +195,6 @@ void GamepadService::PlayVibrationEffectOnce(
 void GamepadService::ResetVibrationActuator(
     uint32_t pad_index,
     mojom::GamepadHapticsManager::ResetVibrationActuatorCallback callback) {
-  DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
-
   if (!provider_) {
     std::move(callback).Run(
         mojom::GamepadHapticsResult::GamepadHapticsResultError);
@@ -213,8 +217,7 @@ void GamepadService::OnUserGesture() {
   if (!provider_ || num_active_consumers_ == 0)
     return;
 
-  for (ConsumerSet::iterator it = consumers_.begin(); it != consumers_.end();
-       ++it) {
+  for (auto it = consumers_.begin(); it != consumers_.end(); ++it) {
     if (!it->did_observe_user_gesture && it->is_active) {
       const ConsumerInfo& info = *it;
       info.did_observe_user_gesture = true;

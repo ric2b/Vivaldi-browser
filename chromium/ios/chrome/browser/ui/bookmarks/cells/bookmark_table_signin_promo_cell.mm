@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/bookmarks/cells/bookmark_table_signin_promo_cell.h"
 
-#import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
+#import "ios/chrome/browser/ui/authentication/cells/signin_promo_view.h"
 #import "ios/chrome/common/ui_util/constraints_ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -35,9 +35,7 @@ const NSInteger kSigninPromoMargin = 8;
   self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
   if (self) {
     UIView* contentView = self.contentView;
-    _signinPromoView =
-        [[SigninPromoView alloc] initWithFrame:self.bounds
-                                         style:SigninPromoViewUIRefresh];
+    _signinPromoView = [[SigninPromoView alloc] initWithFrame:self.bounds];
     _signinPromoView.translatesAutoresizingMaskIntoConstraints = NO;
     [contentView addSubview:_signinPromoView];
     NSArray* visualConstraints = @[

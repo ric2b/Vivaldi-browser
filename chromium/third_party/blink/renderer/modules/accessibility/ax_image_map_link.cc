@@ -37,8 +37,6 @@
 
 namespace blink {
 
-using namespace HTMLNames;
-
 AXImageMapLink::AXImageMapLink(HTMLAreaElement* area,
                                AXObjectCacheImpl& ax_object_cache)
     : AXNodeObject(area, ax_object_cache) {}
@@ -47,7 +45,7 @@ AXImageMapLink::~AXImageMapLink() = default;
 
 AXImageMapLink* AXImageMapLink::Create(HTMLAreaElement* area,
                                        AXObjectCacheImpl& ax_object_cache) {
-  return new AXImageMapLink(area, ax_object_cache);
+  return MakeGarbageCollected<AXImageMapLink>(area, ax_object_cache);
 }
 
 HTMLMapElement* AXImageMapLink::MapElement() const {
@@ -68,13 +66,13 @@ AXObject* AXImageMapLink::ComputeParent() const {
   return AXObjectCache().GetOrCreate(MapElement()->GetLayoutObject());
 }
 
-AccessibilityRole AXImageMapLink::RoleValue() const {
+ax::mojom::Role AXImageMapLink::RoleValue() const {
   const AtomicString& aria_role =
       GetAOMPropertyOrARIAAttribute(AOMStringProperty::kRole);
   if (!aria_role.IsEmpty())
     return AXObject::AriaRoleToWebCoreRole(aria_role);
 
-  return kLinkRole;
+  return ax::mojom::Role::kLink;
 }
 
 bool AXImageMapLink::ComputeAccessibilityIsIgnored(

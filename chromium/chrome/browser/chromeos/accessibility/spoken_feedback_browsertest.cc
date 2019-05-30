@@ -2,49 +2,48 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/chromeos/accessibility/spoken_feedback_browsertest.h"
+
 #include <queue>
 
 #include "ash/accelerators/accelerator_controller.h"
-#include "ash/public/cpp/accelerators.h"
-#include "ash/public/cpp/app_list/app_list_features.h"
-#include "ash/public/cpp/app_list/app_list_switches.h"
-#include "ash/public/cpp/ash_features.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
-#include "ash/system/tray/system_tray.h"
 #include "ash/system/unified/unified_system_tray.h"
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_util.h"
+#include "base/task/post_task.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
-#include "chrome/browser/chromeos/accessibility/speech_monitor.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
+#include "chrome/browser/chromeos/login/test/js_checker.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/api/automation_internal/automation_event_router.h"
-#include "chrome/browser/extensions/api/braille_display_private/stub_braille_controller.h"
-#include "chrome/browser/speech/tts_controller.h"
-#include "chrome/browser/speech/tts_platform.h"
 #include "chrome/browser/ui/ash/ksv/keyboard_shortcut_viewer_util.h"
+#include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
-#include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/user_names.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/tts_controller.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
@@ -52,116 +51,106 @@
 #include "extensions/browser/process_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/test/ui_controls.h"
-#include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/views/mus/ax_remote_host.h"
 #include "ui/views/widget/widget.h"
 
-using extensions::api::braille_display_private::StubBrailleController;
-
 namespace chromeos {
 
-//
-// Spoken feedback tests only in a logged in user's window.
-//
+LoggedInSpokenFeedbackTest::LoggedInSpokenFeedbackTest()
+    : animation_mode_(ui::ScopedAnimationDurationScaleMode::ZERO_DURATION) {}
+LoggedInSpokenFeedbackTest::~LoggedInSpokenFeedbackTest() = default;
 
-class LoggedInSpokenFeedbackTest : public InProcessBrowserTest {
- public:
-  LoggedInSpokenFeedbackTest()
-      : animation_mode_(ui::ScopedAnimationDurationScaleMode::ZERO_DURATION) {}
-  ~LoggedInSpokenFeedbackTest() override {}
+void LoggedInSpokenFeedbackTest::SetUpInProcessBrowserTestFixture() {
+  AccessibilityManager::SetBrailleControllerForTest(&braille_controller_);
+}
 
-  void SetUpInProcessBrowserTestFixture() override {
-    AccessibilityManager::SetBrailleControllerForTest(&braille_controller_);
+void LoggedInSpokenFeedbackTest::TearDownOnMainThread() {
+  AccessibilityManager::SetBrailleControllerForTest(nullptr);
+  // Unload the ChromeVox extension so the browser doesn't try to respond to
+  // in-flight requests during test shutdown. https://crbug.com/923090
+  AccessibilityManager::Get()->EnableSpokenFeedback(false);
+  AutomationManagerAura::GetInstance()->Disable();
+}
+
+void LoggedInSpokenFeedbackTest::SendKeyPress(ui::KeyboardCode key) {
+  ASSERT_NO_FATAL_FAILURE(ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
+      nullptr, key, false, false, false, false)));
+}
+
+void LoggedInSpokenFeedbackTest::SendKeyPressWithControl(ui::KeyboardCode key) {
+  ASSERT_NO_FATAL_FAILURE(ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
+      nullptr, key, true, false, false, false)));
+}
+
+void LoggedInSpokenFeedbackTest::SendKeyPressWithSearchAndShift(
+    ui::KeyboardCode key) {
+  ASSERT_NO_FATAL_FAILURE(ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
+      nullptr, key, false, true, false, true)));
+}
+
+void LoggedInSpokenFeedbackTest::SendKeyPressWithSearch(ui::KeyboardCode key) {
+  ASSERT_NO_FATAL_FAILURE(ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
+      nullptr, key, false, false, false, true)));
+}
+
+void LoggedInSpokenFeedbackTest::RunJavaScriptInChromeVoxBackgroundPage(
+    const std::string& script) {
+  extensions::ExtensionHost* host =
+      extensions::ProcessManager::Get(browser()->profile())
+          ->GetBackgroundHostForExtension(
+              extension_misc::kChromeVoxExtensionId);
+  CHECK(content::ExecuteScript(host->host_contents(), script));
+}
+
+void LoggedInSpokenFeedbackTest::SimulateTouchScreenInChromeVox() {
+  // ChromeVox looks at whether 'ontouchstart' exists to know whether
+  // or not it should respond to hover events. Fake it so that touch
+  // exploration events get spoken.
+  RunJavaScriptInChromeVoxBackgroundPage(
+      "window.ontouchstart = function() {};");
+}
+
+bool LoggedInSpokenFeedbackTest::PerformAcceleratorAction(
+    ash::AcceleratorAction action) {
+  ash::AcceleratorController* controller =
+      ash::Shell::Get()->accelerator_controller();
+  return controller->PerformActionIfEnabled(action);
+}
+
+void LoggedInSpokenFeedbackTest::DisableEarcons() {
+  // Playing earcons from within a test is not only annoying if you're
+  // running the test locally, but seems to cause crashes
+  // (http://crbug.com/396507). Work around this by just telling
+  // ChromeVox to not ever play earcons (prerecorded sound effects).
+  RunJavaScriptInChromeVoxBackgroundPage(
+      "cvox.ChromeVox.earcons.playEarcon = function() {};");
+}
+
+void LoggedInSpokenFeedbackTest::EnableChromeVox() {
+  // Test setup.
+  // Enable ChromeVox, skip welcome message/notification, and disable earcons.
+  ASSERT_FALSE(AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
+
+  AccessibilityManager::Get()->EnableSpokenFeedback(true);
+  EXPECT_TRUE(speech_monitor_.SkipChromeVoxEnabledMessage());
+  DisableEarcons();
+}
+
+void LoggedInSpokenFeedbackTest::PressRepeatedlyUntilUtterance(
+    ui::KeyboardCode key,
+    const std::string& expected_utterance) {
+  // This helper function is needed when you want to poll for something
+  // that happens asynchronously. Keep pressing |key|, until
+  // the speech feedback that follows is |expected_utterance|.
+  // Note that this doesn't work if pressing that key doesn't speak anything
+  // at all before the asynchronous event occurred.
+  while (true) {
+    SendKeyPress(key);
+    const std::string& utterance = speech_monitor_.GetNextUtterance();
+    if (utterance == expected_utterance)
+      break;
   }
-
-  void TearDownOnMainThread() override {
-    AccessibilityManager::SetBrailleControllerForTest(nullptr);
-  }
-
-  void SendKeyPress(ui::KeyboardCode key) {
-    ASSERT_NO_FATAL_FAILURE(ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
-        nullptr, key, false, false, false, false)));
-  }
-
-  void SendKeyPressWithControl(ui::KeyboardCode key) {
-    ASSERT_NO_FATAL_FAILURE(ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
-        nullptr, key, true, false, false, false)));
-  }
-
-  void SendKeyPressWithSearchAndShift(ui::KeyboardCode key) {
-    ASSERT_NO_FATAL_FAILURE(ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
-        nullptr, key, false, true, false, true)));
-  }
-
-  void SendKeyPressWithSearch(ui::KeyboardCode key) {
-    ASSERT_NO_FATAL_FAILURE(ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
-        nullptr, key, false, false, false, true)));
-  }
-
-  void RunJavaScriptInChromeVoxBackgroundPage(const std::string& script) {
-    extensions::ExtensionHost* host =
-        extensions::ProcessManager::Get(browser()->profile())
-            ->GetBackgroundHostForExtension(
-                extension_misc::kChromeVoxExtensionId);
-    CHECK(content::ExecuteScript(host->host_contents(), script));
-  }
-
-  void SimulateTouchScreenInChromeVox() {
-    // ChromeVox looks at whether 'ontouchstart' exists to know whether
-    // or not it should respond to hover events. Fake it so that touch
-    // exploration events get spoken.
-    RunJavaScriptInChromeVoxBackgroundPage(
-        "window.ontouchstart = function() {};");
-  }
-
-  bool PerformAcceleratorAction(ash::AcceleratorAction action) {
-    ash::AcceleratorController* controller =
-        ash::Shell::Get()->accelerator_controller();
-    return controller->PerformActionIfEnabled(action);
-  }
-
-  void DisableEarcons() {
-    // Playing earcons from within a test is not only annoying if you're
-    // running the test locally, but seems to cause crashes
-    // (http://crbug.com/396507). Work around this by just telling
-    // ChromeVox to not ever play earcons (prerecorded sound effects).
-    RunJavaScriptInChromeVoxBackgroundPage(
-        "cvox.ChromeVox.earcons.playEarcon = function() {};");
-  }
-
-  void EnableChromeVox() {
-    // Test setup.
-    // Enable ChromeVox, skip welcome message/notification, and disable earcons.
-    ASSERT_FALSE(AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
-
-    AccessibilityManager::Get()->EnableSpokenFeedback(true);
-    EXPECT_TRUE(speech_monitor_.SkipChromeVoxEnabledMessage());
-    DisableEarcons();
-  }
-
-  void PressRepeatedlyUntilUtterance(ui::KeyboardCode key,
-                                     const std::string& expected_utterance) {
-    // This helper function is needed when you want to poll for something
-    // that happens asynchronously. Keep pressing |key|, until
-    // the speech feedback that follows is |expected_utterance|.
-    // Note that this doesn't work if pressing that key doesn't speak anything
-    // at all before the asynchronous event occurred.
-    while (true) {
-      SendKeyPress(key);
-      const std::string& utterance = speech_monitor_.GetNextUtterance();
-      if (utterance == expected_utterance)
-        break;
-    }
-  }
-
-  SpeechMonitor speech_monitor_;
-
- private:
-  StubBrailleController braille_controller_;
-  ui::ScopedAnimationDurationScaleMode animation_mode_;
-
-  DISALLOW_COPY_AND_ASSIGN(LoggedInSpokenFeedbackTest);
-};
+}
 
 // This test is very flakey with ChromeVox Next since we generate a lot more
 // utterances for text fields.
@@ -258,10 +247,11 @@ IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, KeyboardShortcutViewer) {
 
   // Capture the destroyed AX tree id when the remote host disconnects.
   base::RunLoop run_loop;
-  int destroyed_tree_id = -1;
+  ui::AXTreeID destroyed_tree_id = ui::AXTreeIDUnknown();
   extensions::AutomationEventRouter::GetInstance()
       ->SetTreeDestroyedCallbackForTest(base::BindRepeating(
-          [](base::RunLoop* run_loop, int* destroyed_tree_id, int tree_id) {
+          [](base::RunLoop* run_loop, ui::AXTreeID* destroyed_tree_id,
+             ui::AXTreeID tree_id) {
             *destroyed_tree_id = tree_id;
             run_loop->Quit();
           },
@@ -273,8 +263,11 @@ IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, KeyboardShortcutViewer) {
   // Wait for the AX tree to be destroyed.
   run_loop.Run();
 
-  // Verify the correct AX tree was destroyed.
-  EXPECT_EQ(views::AXRemoteHost::kRemoteAXTreeID, destroyed_tree_id);
+  // Verify an AX tree was destroyed. It's awkward to get the remote app's
+  // actual tree ID, so just ensure it's a valid ID and not the desktop.
+  EXPECT_NE(ui::AXTreeIDUnknown(), destroyed_tree_id);
+  EXPECT_NE(AutomationManagerAura::GetInstance()->ax_tree_id(),
+            destroyed_tree_id);
 
   extensions::AutomationEventRouter::GetInstance()
       ->SetTreeDestroyedCallbackForTest(base::DoNothing());
@@ -305,9 +298,10 @@ class SpokenFeedbackTest
   }
 };
 
-INSTANTIATE_TEST_CASE_P(TestAsNormalAndGuestUser,
-                        SpokenFeedbackTest,
-                        ::testing::Values(kTestAsNormalUser, kTestAsGuestUser));
+INSTANTIATE_TEST_SUITE_P(TestAsNormalAndGuestUser,
+                         SpokenFeedbackTest,
+                         ::testing::Values(kTestAsNormalUser,
+                                           kTestAsGuestUser));
 
 // TODO(tommi): Flakily hitting HasOneRef DCHECK in
 // AudioOutputResampler::Shutdown, see crbug.com/630031.
@@ -360,62 +354,6 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, FocusShelf) {
   SendKeyPress(ui::VKEY_TAB);
   EXPECT_TRUE(base::MatchPattern(speech_monitor_.GetNextUtterance(), "*"));
   EXPECT_TRUE(base::MatchPattern(speech_monitor_.GetNextUtterance(), "Button"));
-}
-
-// TODO(newcomer): reimplement this test once the AppListFocus changes are
-// complete (http://crbug.com/784942).
-IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_NavigateAppLauncher) {
-  EnableChromeVox();
-
-  EXPECT_TRUE(PerformAcceleratorAction(ash::FOCUS_SHELF));
-
-  // Wait for it to say "Launcher", "Button", "Shelf", "Tool bar".
-  while (true) {
-    std::string utterance = speech_monitor_.GetNextUtterance();
-    if (base::MatchPattern(utterance, "Launcher"))
-      break;
-  }
-  EXPECT_EQ("Button", speech_monitor_.GetNextUtterance());
-  EXPECT_EQ("Shelf", speech_monitor_.GetNextUtterance());
-  EXPECT_EQ("Tool bar", speech_monitor_.GetNextUtterance());
-
-  // Click on the launcher, it brings up the app list UI.
-  SendKeyPress(ui::VKEY_SPACE);
-  while ("Search or type URL" != speech_monitor_.GetNextUtterance()) {
-  }
-  while ("Edit text" != speech_monitor_.GetNextUtterance()) {
-  }
-
-  // Close it and open it again.
-  SendKeyPress(ui::VKEY_ESCAPE);
-  while (true) {
-    std::string utterance = speech_monitor_.GetNextUtterance();
-    if (base::MatchPattern(utterance, "*window*"))
-      break;
-  }
-
-  EXPECT_TRUE(PerformAcceleratorAction(ash::FOCUS_SHELF));
-  while (true) {
-    std::string utterance = speech_monitor_.GetNextUtterance();
-    if (base::MatchPattern(utterance, "Button"))
-      break;
-  }
-  SendKeyPress(ui::VKEY_SPACE);
-
-  // Now type a space into the text field and wait until we hear "space".
-  // This makes the test more robust as it allows us to skip over other
-  // speech along the way.
-  SendKeyPress(ui::VKEY_SPACE);
-  while (true) {
-    if ("space" == speech_monitor_.GetNextUtterance())
-      break;
-  }
-
-  // Now press the down arrow and we should be focused on an app button
-  // in a dialog.
-  SendKeyPress(ui::VKEY_DOWN);
-  while ("Button" != speech_monitor_.GetNextUtterance()) {
-  }
 }
 
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, OpenStatusTray) {
@@ -528,12 +466,6 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, OverviewMode) {
   EXPECT_TRUE(PerformAcceleratorAction(ash::TOGGLE_OVERVIEW));
   while (true) {
     std::string utterance = speech_monitor_.GetNextUtterance();
-    if (base::MatchPattern(utterance, "Edit text"))
-      break;
-  }
-
-  while (true) {
-    std::string utterance = speech_monitor_.GetNextUtterance();
     if (utterance == "Entered window overview mode")
       break;
   }
@@ -549,8 +481,9 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, OverviewMode) {
   EXPECT_EQ("Button", speech_monitor_.GetNextUtterance());
 }
 
-#if defined(MEMORY_SANITIZER)
+#if defined(MEMORY_SANITIZER) || defined(OS_CHROMEOS)
 // Fails under MemorySanitizer: http://crbug.com/472125
+// Test is flaky under ChromeOS: http://crbug.com/897249
 #define MAYBE_ChromeVoxShiftSearch DISABLED_ChromeVoxShiftSearch
 #else
 #define MAYBE_ChromeVoxShiftSearch ChromeVoxShiftSearch
@@ -628,10 +561,10 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_ChromeVoxNextStickyMode) {
 
   // Sticky key has a minimum 100 ms check to prevent key repeat from toggling
   // it.
-  content::BrowserThread::PostDelayedTask(
-      content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&LoggedInSpokenFeedbackTest::SendKeyPress,
-                 base::Unretained(this), ui::VKEY_LWIN),
+  base::PostDelayedTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
+      base::BindOnce(&LoggedInSpokenFeedbackTest::SendKeyPress,
+                     base::Unretained(this), ui::VKEY_LWIN),
       base::TimeDelta::FromMilliseconds(200));
 
   EXPECT_EQ("Sticky mode enabled", speech_monitor_.GetNextUtterance());
@@ -644,10 +577,10 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_ChromeVoxNextStickyMode) {
 
   // Sticky key has a minimum 100 ms check to prevent key repeat from toggling
   // it.
-  content::BrowserThread::PostDelayedTask(
-      content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&LoggedInSpokenFeedbackTest::SendKeyPress,
-                 base::Unretained(this), ui::VKEY_LWIN),
+  base::PostDelayedTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
+      base::BindOnce(&LoggedInSpokenFeedbackTest::SendKeyPress,
+                     base::Unretained(this), ui::VKEY_LWIN),
       base::TimeDelta::FromMilliseconds(200));
 
   while ("Sticky mode disabled" != speech_monitor_.GetNextUtterance()) {
@@ -661,15 +594,10 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_TouchExploreStatusTray) {
 
   // Send an accessibility hover event on the system tray, which is
   // what we get when you tap it on a touch screen when ChromeVox is on.
-  ash::TrayBackgroundView* tray =
-      ash::features::IsSystemTrayUnifiedEnabled()
-          ? static_cast<ash::TrayBackgroundView*>(
-                ash::Shell::Get()
-                    ->GetPrimaryRootWindowController()
-                    ->GetStatusAreaWidget()
-                    ->unified_system_tray())
-          : static_cast<ash::TrayBackgroundView*>(
-                ash::Shell::Get()->GetPrimarySystemTray());
+  ash::TrayBackgroundView* tray = ash::Shell::Get()
+                                      ->GetPrimaryRootWindowController()
+                                      ->GetStatusAreaWidget()
+                                      ->unified_system_tray();
   tray->NotifyAccessibilityEvent(ax::mojom::Event::kHover, true);
 
   EXPECT_EQ("Status tray,", speech_monitor_.GetNextUtterance());
@@ -756,7 +684,8 @@ IN_PROC_BROWSER_TEST_F(GuestSpokenFeedbackTest, FocusToolbar) {
 
 class OobeSpokenFeedbackTest : public LoginManagerTest {
  protected:
-  OobeSpokenFeedbackTest() : LoginManagerTest(false) {}
+  OobeSpokenFeedbackTest()
+      : LoginManagerTest(false, true /* should_initialize_webui */) {}
   ~OobeSpokenFeedbackTest() override {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -784,7 +713,7 @@ IN_PROC_BROWSER_TEST_F(OobeSpokenFeedbackTest, DISABLED_SpokenFeedbackInOobe) {
 
   // We expect to be in the language select dropdown for this test to work,
   // so make sure that's the case.
-  js_checker().ExecuteAsync("$('language-select').focus()");
+  test::OobeJS().ExecuteAsync("$('language-select').focus()");
   AccessibilityManager::Get()->EnableSpokenFeedback(true);
   ASSERT_TRUE(speech_monitor_.SkipChromeVoxEnabledMessage());
   // There's no guarantee that ChromeVox speaks anything when injected after

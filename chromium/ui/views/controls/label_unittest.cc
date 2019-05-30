@@ -6,6 +6,9 @@
 
 #include <stddef.h>
 
+#include <string>
+#include <vector>
+
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
 #include "base/strings/utf_string_conversions.h"
@@ -20,7 +23,6 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/render_text.h"
-#include "ui/gfx/switches.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/border.h"
@@ -28,6 +30,7 @@
 #include "ui/views/test/focus_manager_test.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_utils.h"
 
 using base::ASCIIToUTF16;
 using base::WideToUTF16;
@@ -163,17 +166,9 @@ class LabelSelectionTest : public LabelTest {
 
   // LabelTest overrides:
   void SetUp() override {
-#if defined(OS_MACOSX)
-    // On Mac, by default RenderTextMac is used for labels which does not
-    // support text selection. Instead use RenderTextHarfBuzz for selection
-    // related tests. TODO(crbug.com/661394): Remove this once Mac also uses
-    // RenderTextHarfBuzz for Labels.
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kEnableHarfBuzzRenderText);
-#endif
     LabelTest::SetUp();
     event_generator_ =
-        std::make_unique<ui::test::EventGenerator>(widget()->GetNativeWindow());
+        std::make_unique<ui::test::EventGenerator>(GetRootWindow(widget()));
   }
 
  protected:
@@ -899,84 +894,15 @@ TEST_F(LabelTest, NoSchedulePaintInOnPaint) {
   EXPECT_EQ(count, label.schedule_paint_count());  // Unchanged.
 }
 
-TEST_F(LabelTest, FocusBounds) {
-  label()->SetText(ASCIIToUTF16("Example"));
-  Link concrete_link(ASCIIToUTF16("Example"));
-  Label* link = &concrete_link;  // Allow LabelTest to call methods as friend.
-  link->SetFocusBehavior(View::FocusBehavior::NEVER);
-
-  label()->SizeToPreferredSize();
-  link->SizeToPreferredSize();
-
-  // A regular label never draws a focus ring, so it should exactly match the
-  // font height (assuming no glyphs came from fallback fonts).
-  EXPECT_EQ(label()->font_list().GetHeight(),
-            label()->GetFocusRingBounds().height());
-
-  // The test starts by setting the link unfocusable, so it should also match.
-  EXPECT_EQ(link->font_list().GetHeight(), link->GetFocusRingBounds().height());
-
-  // Labels are not focusable unless they are links, so don't change size when
-  // the focus behavior changes.
-  gfx::Size normal_label_size = label()->GetPreferredSize();
-  label()->SetFocusBehavior(View::FocusBehavior::ALWAYS);
-  EXPECT_EQ(normal_label_size, label()->GetPreferredSize());
-
-  gfx::Size normal_link_size = link->GetPreferredSize();
-  link->SetFocusBehavior(View::FocusBehavior::ALWAYS);
-  gfx::Size focusable_link_size = link->GetPreferredSize();
-
-  // Everything should match since underlines indicates focus.
-  EXPECT_EQ(normal_label_size, normal_link_size);
-  EXPECT_EQ(normal_link_size, focusable_link_size);
-
-  // Requesting focus doesn't change the preferred size since that would mess up
-  // layout.
-  label()->RequestFocus();
-  EXPECT_EQ(focusable_link_size, link->GetPreferredSize());
-
-  label()->SizeToPreferredSize();
-  gfx::Rect focus_bounds = label()->GetFocusRingBounds();
-  EXPECT_EQ(label()->GetLocalBounds(), focus_bounds);
-
-  gfx::Size focusable_size = normal_label_size;
-  label()->SetBounds(
-      0, 0, focusable_size.width() * 2, focusable_size.height() * 2);
-  label()->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  focus_bounds = label()->GetFocusRingBounds();
-  EXPECT_EQ(0, focus_bounds.x());
-  EXPECT_LT(0, focus_bounds.y());
-  EXPECT_GT(label()->bounds().bottom(), focus_bounds.bottom());
-  EXPECT_EQ(focusable_size, focus_bounds.size());
-
-  label()->SetHorizontalAlignment(gfx::ALIGN_RIGHT);
-  focus_bounds = label()->GetFocusRingBounds();
-  EXPECT_LT(0, focus_bounds.x());
-  EXPECT_EQ(label()->bounds().right(), focus_bounds.right());
-  EXPECT_LT(0, focus_bounds.y());
-  EXPECT_GT(label()->bounds().bottom(), focus_bounds.bottom());
-  EXPECT_EQ(focusable_size, focus_bounds.size());
-
-  label()->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  label()->SetElideBehavior(gfx::FADE_TAIL);
-  label()->SetBounds(0, 0, focusable_size.width() / 2, focusable_size.height());
-  focus_bounds = label()->GetFocusRingBounds();
-  EXPECT_EQ(0, focus_bounds.x());
-  EXPECT_EQ(focusable_size.width() / 2, focus_bounds.width());
-}
-
 TEST_F(LabelTest, EmptyLabel) {
   label()->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   label()->RequestFocus();
   label()->SizeToPreferredSize();
+  EXPECT_TRUE(label()->size().IsEmpty());
 
+  // With no text, neither links nor labels have a size in any dimension.
   Link concrete_link((base::string16()));
-  Label* link = &concrete_link;  // Allow LabelTest to call methods as friend.
-
-  // With no text, neither links nor labels are focusable, and have no size in
-  // any dimension.
-  EXPECT_EQ(gfx::Rect(), label()->GetFocusRingBounds());
-  EXPECT_EQ(gfx::Rect(), link->GetFocusRingBounds());
+  EXPECT_TRUE(concrete_link.GetPreferredSize().IsEmpty());
 }
 
 TEST_F(LabelSelectionTest, Selectable) {

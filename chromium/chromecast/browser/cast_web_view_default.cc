@@ -13,9 +13,7 @@
 #include "chromecast/base/metrics/cast_metrics_helper.h"
 #include "chromecast/browser/cast_browser_process.h"
 #include "chromecast/browser/cast_web_contents_manager.h"
-#include "chromecast/browser/devtools/remote_debugging_server.h"
 #include "chromecast/chromecast_buildflags.h"
-#include "chromecast/public/cast_media_shlib.h"
 #include "content/public/browser/media_capture_devices.h"
 #include "content/public/browser/media_session.h"
 #include "content/public/browser/navigation_handle.h"
@@ -60,16 +58,16 @@ CastWebViewDefault::CastWebViewDefault(
     scoped_refptr<content::SiteInstance> site_instance)
     : web_contents_manager_(web_contents_manager),
       browser_context_(browser_context),
-      remote_debugging_server_(
-          shell::CastBrowserProcess::GetInstance()->remote_debugging_server()),
       site_instance_(std::move(site_instance)),
       delegate_(params.delegate),
       transparent_(params.transparent),
       allow_media_access_(params.allow_media_access),
-      enabled_for_dev_(params.enabled_for_dev),
       web_contents_(CreateWebContents(browser_context_, site_instance_)),
+      cast_web_contents_(
+          web_contents_.get(),
+          {delegate_, params.enabled_for_dev, params.use_cma_renderer}),
       window_(shell::CastContentWindow::Create(params.window_params)),
-      did_start_navigation_(false) {
+      resize_window_when_navigation_starts_(true) {
   DCHECK(delegate_);
   DCHECK(web_contents_manager_);
   DCHECK(browser_context_);
@@ -97,13 +95,6 @@ CastWebViewDefault::CastWebViewDefault(
   content::MediaSession::Get(web_contents_.get())
       ->SetDuckingVolumeMultiplier(kDuckingMultiplier);
 #endif
-
-  // If this CastWebView is enabled for development, start the remote debugger.
-  if (enabled_for_dev_) {
-    LOG(INFO) << "Enabling dev console for " << web_contents_->GetVisibleURL();
-    remote_debugging_server_->EnableWebContentsForDebugging(
-        web_contents_.get());
-  }
 }
 
 CastWebViewDefault::~CastWebViewDefault() {}
@@ -116,36 +107,38 @@ content::WebContents* CastWebViewDefault::web_contents() const {
   return web_contents_.get();
 }
 
+CastWebContents* CastWebViewDefault::cast_web_contents() {
+  return &cast_web_contents_;
+}
+
 void CastWebViewDefault::LoadUrl(GURL url) {
-  web_contents_->GetController().LoadURL(url, content::Referrer(),
-                                         ui::PAGE_TRANSITION_TYPED, "");
+  cast_web_contents_.LoadUrl(url);
 }
 
 void CastWebViewDefault::ClosePage(const base::TimeDelta& shutdown_delay) {
   shutdown_delay_ = shutdown_delay;
   content::WebContentsObserver::Observe(nullptr);
-  web_contents_->DispatchBeforeUnload();
-  web_contents_->ClosePage();
+  cast_web_contents_.ClosePage();
 }
 
 void CastWebViewDefault::CloseContents(content::WebContents* source) {
   DCHECK_EQ(source, web_contents_.get());
   window_.reset();  // Window destructor requires live web_contents on Android.
-  // We need to delay the deletion of web_contents_ to give (and guarantee) the
-  // renderer enough time to finish 'onunload' handler (but we don't want to
-  // wait any longer than that to delay the starting of next app).
-  web_contents_manager_->DelayWebContentsDeletion(std::move(web_contents_),
-                                                  shutdown_delay_);
-  delegate_->OnPageStopped(net::OK);
+  if (!shutdown_delay_.is_zero()) {
+    // We need to delay the deletion of web_contents_ to give (and guarantee)
+    // the renderer enough time to finish 'onunload' handler (but we don't want
+    // to wait any longer than that to delay the starting of next app).
+    web_contents_manager_->DelayWebContentsDeletion(std::move(web_contents_),
+                                                    shutdown_delay_);
+  }
+  // This will signal to the owner that |web_contents_| is no longer in use,
+  // permitting the owner to tear down.
+  cast_web_contents_.Stop(net::OK);
 }
 
 void CastWebViewDefault::InitializeWindow(CastWindowManager* window_manager,
                                           CastWindowManager::WindowId z_order,
                                           VisibilityPriority initial_priority) {
-  if (media::CastMediaShlib::ClearVideoPlaneImage) {
-    media::CastMediaShlib::ClearVideoPlaneImage();
-  }
-
   DCHECK(window_manager);
   window_->CreateWindowForWebContents(web_contents_.get(), window_manager,
                                       z_order, initial_priority);
@@ -157,6 +150,7 @@ void CastWebViewDefault::GrantScreenAccess() {
 }
 
 void CastWebViewDefault::RevokeScreenAccess() {
+  resize_window_when_navigation_starts_ = false;
   window_->RevokeScreenAccess();
 }
 
@@ -175,11 +169,6 @@ content::WebContents* CastWebViewDefault::OpenURLFromTab(
   return source;
 }
 
-void CastWebViewDefault::LoadingStateChanged(content::WebContents* source,
-                                             bool to_different_document) {
-  delegate_->OnLoadingStateChanged(source->IsLoading());
-}
-
 void CastWebViewDefault::ActivateContents(content::WebContents* contents) {
   DCHECK_EQ(contents, web_contents_.get());
   contents->GetRenderViewHost()->GetWidget()->Focus();
@@ -188,7 +177,7 @@ void CastWebViewDefault::ActivateContents(content::WebContents* contents) {
 bool CastWebViewDefault::CheckMediaAccessPermission(
     content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
-    content::MediaStreamType type) {
+    blink::MediaStreamType type) {
   if (!chromecast::IsFeatureEnabled(kAllowUserMediaAccess) &&
       !allow_media_access_) {
     LOG(WARNING) << __func__ << ": media access is disabled.";
@@ -203,17 +192,17 @@ bool CastWebViewDefault::DidAddMessageToConsole(
     const base::string16& message,
     int32_t line_no,
     const base::string16& source_id) {
-  return delegate_->OnAddMessageToConsoleReceived(source, level, message,
-                                                  line_no, source_id);
+  return delegate_->OnAddMessageToConsoleReceived(level, message, line_no,
+                                                  source_id);
 }
 
-const content::MediaStreamDevice* GetRequestedDeviceOrDefault(
-    const content::MediaStreamDevices& devices,
+const blink::MediaStreamDevice* GetRequestedDeviceOrDefault(
+    const blink::MediaStreamDevices& devices,
     const std::string& requested_device_id) {
   if (!requested_device_id.empty()) {
     auto it = std::find_if(
         devices.begin(), devices.end(),
-        [requested_device_id](const content::MediaStreamDevice& device) {
+        [requested_device_id](const blink::MediaStreamDevice& device) {
           return device.id == requested_device_id;
         });
     return it != devices.end() ? &(*it) : nullptr;
@@ -232,8 +221,8 @@ void CastWebViewDefault::RequestMediaAccessPermission(
   if (!chromecast::IsFeatureEnabled(kAllowUserMediaAccess) &&
       !allow_media_access_) {
     LOG(WARNING) << __func__ << ": media access is disabled.";
-    std::move(callback).Run(content::MediaStreamDevices(),
-                            content::MEDIA_DEVICE_NOT_SUPPORTED,
+    std::move(callback).Run(blink::MediaStreamDevices(),
+                            blink::MEDIA_DEVICE_NOT_SUPPORTED,
                             std::unique_ptr<content::MediaStreamUI>());
     return;
   }
@@ -245,9 +234,9 @@ void CastWebViewDefault::RequestMediaAccessPermission(
   VLOG(2) << __func__ << " audio_devices=" << audio_devices.size()
           << " video_devices=" << video_devices.size();
 
-  content::MediaStreamDevices devices;
-  if (request.audio_type == content::MEDIA_DEVICE_AUDIO_CAPTURE) {
-    const content::MediaStreamDevice* device = GetRequestedDeviceOrDefault(
+  blink::MediaStreamDevices devices;
+  if (request.audio_type == blink::MEDIA_DEVICE_AUDIO_CAPTURE) {
+    const blink::MediaStreamDevice* device = GetRequestedDeviceOrDefault(
         audio_devices, request.requested_audio_device_id);
     if (device) {
       VLOG(1) << __func__ << "Using audio device: id=" << device->id
@@ -256,8 +245,8 @@ void CastWebViewDefault::RequestMediaAccessPermission(
     }
   }
 
-  if (request.video_type == content::MEDIA_DEVICE_VIDEO_CAPTURE) {
-    const content::MediaStreamDevice* device = GetRequestedDeviceOrDefault(
+  if (request.video_type == blink::MEDIA_DEVICE_VIDEO_CAPTURE) {
+    const blink::MediaStreamDevice* device = GetRequestedDeviceOrDefault(
         video_devices, request.requested_video_device_id);
     if (device) {
       VLOG(1) << __func__ << "Using video device: id=" << device->id
@@ -266,7 +255,7 @@ void CastWebViewDefault::RequestMediaAccessPermission(
     }
   }
 
-  std::move(callback).Run(devices, content::MEDIA_DEVICE_OK,
+  std::move(callback).Run(devices, blink::MEDIA_DEVICE_OK,
                           std::unique_ptr<content::MediaStreamUI>());
 }
 
@@ -278,11 +267,6 @@ CastWebViewDefault::RunBluetoothChooser(
   return chooser
              ? std::move(chooser)
              : WebContentsDelegate::RunBluetoothChooser(frame, event_handler);
-}
-
-void CastWebViewDefault::RenderProcessGone(base::TerminationStatus status) {
-  LOG(INFO) << "APP_ERROR_CHILD_PROCESS_CRASHED";
-  delegate_->OnPageStopped(net::ERR_UNEXPECTED);
 }
 
 void CastWebViewDefault::RenderViewCreated(
@@ -297,69 +281,16 @@ void CastWebViewDefault::RenderViewCreated(
   }
 }
 
-void CastWebViewDefault::DidFinishNavigation(
-    content::NavigationHandle* navigation_handle) {
-  // If the navigation was not committed, it means either the page was a
-  // download or error 204/205, or the navigation never left the previous
-  // URL. Ignore these navigations.
-  if (!navigation_handle->HasCommitted()) {
-    LOG(WARNING) << "Navigation did not commit: url="
-                 << navigation_handle->GetURL();
-    return;
-  }
-
-  net::Error error_code = navigation_handle->GetNetErrorCode();
-  if (!navigation_handle->IsErrorPage())
-    return;
-
-  // If we abort errors in an iframe, it can create a really confusing
-  // and fragile user experience.  Rather than create a list of errors
-  // that are most likely to occur, we ignore all of them for now.
-  if (!navigation_handle->IsInMainFrame()) {
-    LOG(ERROR) << "Got error on sub-iframe: url=" << navigation_handle->GetURL()
-               << ", error=" << error_code
-               << ", description=" << net::ErrorToShortString(error_code);
-    return;
-  }
-
-  LOG(ERROR) << "Got error on navigation: url=" << navigation_handle->GetURL()
-             << ", error_code=" << error_code
-             << ", description= " << net::ErrorToShortString(error_code);
-  delegate_->OnPageStopped(error_code);
-}
-
-void CastWebViewDefault::DidFailLoad(
-    content::RenderFrameHost* render_frame_host,
-    const GURL& validated_url,
-    int error_code,
-    const base::string16& error_description) {
-  // Only report an error if we are the main frame.  See b/8433611.
-  if (render_frame_host->GetParent()) {
-    LOG(ERROR) << "Got error on sub-iframe: url=" << validated_url.spec()
-               << ", error=" << error_code;
-  } else if (error_code == net::ERR_ABORTED) {
-    // ERR_ABORTED means download was aborted by the app, typically this happens
-    // when flinging URL for direct playback, the initial URLRequest gets
-    // cancelled/aborted and then the same URL is requested via the buffered
-    // data source for media::Pipeline playback.
-    LOG(INFO) << "Load canceled: url=" << validated_url.spec();
-  } else {
-    LOG(ERROR) << "Got error on load: url=" << validated_url.spec()
-               << ", error_code=" << error_code;
-    delegate_->OnPageStopped(error_code);
-  }
-}
-
 void CastWebViewDefault::DidFirstVisuallyNonEmptyPaint() {
   metrics::CastMetricsHelper::GetInstance()->LogTimeToFirstPaint();
 }
 
 void CastWebViewDefault::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (did_start_navigation_) {
+  if (!resize_window_when_navigation_starts_) {
     return;
   }
-  did_start_navigation_ = true;
+  resize_window_when_navigation_starts_ = false;
 
 #if defined(USE_AURA)
   // Resize window

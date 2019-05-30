@@ -25,13 +25,14 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_HTML_HTML_IFRAME_ELEMENT_H_
 
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
+#include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
 #include "third_party/blink/renderer/core/html/html_iframe_element_sandbox.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 
 namespace blink {
-class Policy;
+class DOMFeaturePolicy;
 
 class CORE_EXPORT HTMLIFrameElement final
     : public HTMLFrameElementBase,
@@ -41,18 +42,26 @@ class CORE_EXPORT HTMLIFrameElement final
 
  public:
   DECLARE_NODE_FACTORY(HTMLIFrameElement);
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
+
+  explicit HTMLIFrameElement(Document&);
   ~HTMLIFrameElement() override;
+
   DOMTokenList* sandbox() const;
   // Support JS introspection of frame policy (e.g. feature policy)
-  Policy* policy();
+  DOMFeaturePolicy* featurePolicy();
+
+  // Returns attributes that should be checked against Trusted Types
+  const AttrNameToTrustedType& GetCheckedAttributeTypes() const override;
 
   ParsedFeaturePolicy ConstructContainerPolicy(
       Vector<String>* /* messages */) const override;
 
- private:
-  explicit HTMLIFrameElement(Document&);
+  FrameOwnerElementType OwnerType() const final {
+    return FrameOwnerElementType::kIframe;
+  }
 
+ private:
   void SetCollapsed(bool) override;
 
   void ParseAttribute(const AttributeModificationParams&) override;
@@ -70,7 +79,7 @@ class CORE_EXPORT HTMLIFrameElement final
 
   bool IsInteractiveContent() const override;
 
-  ReferrerPolicy ReferrerPolicyAttribute() override;
+  network::mojom::ReferrerPolicy ReferrerPolicyAttribute() override;
 
   // FrameOwner overrides:
   bool AllowFullscreen() const override { return allow_fullscreen_; }
@@ -83,10 +92,10 @@ class CORE_EXPORT HTMLIFrameElement final
   bool allow_fullscreen_;
   bool allow_payment_request_;
   bool collapsed_by_client_;
-  Member<HTMLIFrameElementSandbox> sandbox_;
-  Member<Policy> policy_;
+  TraceWrapperMember<HTMLIFrameElementSandbox> sandbox_;
+  Member<DOMFeaturePolicy> policy_;
 
-  ReferrerPolicy referrer_policy_;
+  network::mojom::ReferrerPolicy referrer_policy_;
 };
 
 }  // namespace blink

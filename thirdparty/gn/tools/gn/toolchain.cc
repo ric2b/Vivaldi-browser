@@ -180,6 +180,7 @@ Toolchain::ToolType Toolchain::GetToolTypeForTargetFinalOutput(
     const Target* target) {
   // The contents of this list might be suprising (i.e. stamp tool for copy
   // rules). See the header for why.
+  // TODO(crbug.com/gn/39): Don't emit stamp files for single-output targets.
   switch (target->output_type()) {
     case Target::GROUP:
       return TYPE_STAMP;
@@ -198,6 +199,7 @@ Toolchain::ToolType Toolchain::GetToolTypeForTargetFinalOutput(
     case Target::BUNDLE_DATA:
     case Target::CREATE_BUNDLE:
     case Target::COPY_FILES:
+    case Target::GENERATED_FILE:
       return TYPE_STAMP;
     default:
       NOTREACHED();

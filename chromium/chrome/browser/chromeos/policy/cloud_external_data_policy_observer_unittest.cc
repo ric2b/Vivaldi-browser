@@ -59,7 +59,6 @@ namespace em = enterprise_management;
 
 using ::testing::Mock;
 using ::testing::Return;
-using ::testing::SaveArg;
 using ::testing::_;
 
 namespace policy {
@@ -108,9 +107,11 @@ class CloudExternalDataPolicyObserverTest
                              const std::string& user_id) override;
   void OnExternalDataFetched(const std::string& policy,
                              const std::string& user_id,
-                             std::unique_ptr<std::string> data) override;
+                             std::unique_ptr<std::string> data,
+                             const base::FilePath& file_path) override;
 
   void CreateObserver();
+  void RemoveObserver();
 
   void ClearObservations();
 
@@ -183,11 +184,12 @@ void CloudExternalDataPolicyObserverTest::SetUp() {
   shared_url_loader_factory_ =
       base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
           &url_loader_factory_);
-  cros_settings_ =
-      std::make_unique<chromeos::CrosSettings>(&device_settings_service_);
+  cros_settings_ = std::make_unique<chromeos::CrosSettings>(
+      device_settings_service_.get(),
+      TestingBrowserProcess::GetGlobal()->local_state());
   device_local_account_policy_service_.reset(
       new DeviceLocalAccountPolicyService(
-          &session_manager_client_, &device_settings_service_,
+          &session_manager_client_, device_settings_service_.get(),
           cros_settings_.get(), &affiliated_invalidation_service_provider_,
           base::ThreadTaskRunnerHandle::Get(),
           base::ThreadTaskRunnerHandle::Get(),
@@ -239,7 +241,8 @@ void CloudExternalDataPolicyObserverTest::OnExternalDataCleared(
 void CloudExternalDataPolicyObserverTest::OnExternalDataFetched(
     const std::string& policy,
     const std::string& user_id,
-    std::unique_ptr<std::string> data) {
+    std::unique_ptr<std::string> data,
+    const base::FilePath& file_path) {
   EXPECT_EQ(key::kUserAvatarImage, policy);
   fetched_calls_.push_back(make_pair(user_id, std::string()));
   fetched_calls_.back().second.swap(*data);
@@ -250,6 +253,10 @@ void CloudExternalDataPolicyObserverTest::CreateObserver() {
       cros_settings_.get(), device_local_account_policy_service_.get(),
       key::kUserAvatarImage, this));
   observer_->Init();
+}
+
+void CloudExternalDataPolicyObserverTest::RemoveObserver() {
+  observer_.reset();
 }
 
 void CloudExternalDataPolicyObserverTest::ClearObservations() {
@@ -276,19 +283,19 @@ void CloudExternalDataPolicyObserverTest::SetDeviceLocalAccountAvatarPolicy(
 void CloudExternalDataPolicyObserverTest::AddDeviceLocalAccount(
     const std::string& account_id) {
   em::DeviceLocalAccountInfoProto* account =
-      device_policy_.payload().mutable_device_local_accounts()->add_account();
+      device_policy_->payload().mutable_device_local_accounts()->add_account();
   account->set_account_id(account_id);
   account->set_type(
       em::DeviceLocalAccountInfoProto::ACCOUNT_TYPE_PUBLIC_SESSION);
-  device_policy_.Build();
-  session_manager_client_.set_device_policy(device_policy_.GetBlob());
+  device_policy_->Build();
+  session_manager_client_.set_device_policy(device_policy_->GetBlob());
   ReloadDeviceSettings();
 }
 
 void CloudExternalDataPolicyObserverTest::RemoveDeviceLocalAccount(
     const std::string& account_id) {
   em::DeviceLocalAccountsProto* accounts =
-      device_policy_.payload().mutable_device_local_accounts();
+      device_policy_->payload().mutable_device_local_accounts();
   std::vector<std::string> account_ids;
   for (int i = 0; i < accounts->account_size(); ++i) {
     if (accounts->account(i).account_id() != account_id)
@@ -302,8 +309,8 @@ void CloudExternalDataPolicyObserverTest::RemoveDeviceLocalAccount(
     account->set_type(
         em::DeviceLocalAccountInfoProto::ACCOUNT_TYPE_PUBLIC_SESSION);
   }
-  device_policy_.Build();
-  session_manager_client_.set_device_policy(device_policy_.GetBlob());
+  device_policy_->Build();
+  session_manager_client_.set_device_policy(device_policy_->GetBlob());
   ReloadDeviceSettings();
 }
 
@@ -400,7 +407,7 @@ TEST_F(CloudExternalDataPolicyObserverTest,
 
   EXPECT_TRUE(cleared_calls_.empty());
   EXPECT_TRUE(fetched_calls_.empty());
-  ASSERT_EQ(1u, set_calls_.size());
+  EXPECT_EQ(1u, set_calls_.size());
   EXPECT_EQ(device_local_account_user_id_, set_calls_.front());
   ClearObservations();
 
@@ -410,7 +417,7 @@ TEST_F(CloudExternalDataPolicyObserverTest,
 
   EXPECT_TRUE(set_calls_.empty());
   EXPECT_TRUE(cleared_calls_.empty());
-  ASSERT_EQ(1u, fetched_calls_.size());
+  EXPECT_EQ(1u, fetched_calls_.size());
   EXPECT_EQ(device_local_account_user_id_, fetched_calls_.front().first);
   EXPECT_EQ(avatar_policy_1_data_, fetched_calls_.front().second);
   ClearObservations();
@@ -435,7 +442,7 @@ TEST_F(CloudExternalDataPolicyObserverTest,
 
   EXPECT_TRUE(cleared_calls_.empty());
   EXPECT_TRUE(fetched_calls_.empty());
-  ASSERT_EQ(1u, set_calls_.size());
+  EXPECT_EQ(1u, set_calls_.size());
   EXPECT_EQ(device_local_account_user_id_, set_calls_.front());
   ClearObservations();
 
@@ -503,7 +510,7 @@ TEST_F(CloudExternalDataPolicyObserverTest,
 
   EXPECT_TRUE(cleared_calls_.empty());
   EXPECT_TRUE(fetched_calls_.empty());
-  ASSERT_EQ(1u, set_calls_.size());
+  EXPECT_EQ(1u, set_calls_.size());
   EXPECT_EQ(device_local_account_user_id_, set_calls_.front());
   ClearObservations();
 
@@ -514,7 +521,7 @@ TEST_F(CloudExternalDataPolicyObserverTest,
 
   EXPECT_TRUE(set_calls_.empty());
   EXPECT_TRUE(fetched_calls_.empty());
-  ASSERT_EQ(1u, cleared_calls_.size());
+  EXPECT_EQ(1u, cleared_calls_.size());
   EXPECT_EQ(device_local_account_user_id_, cleared_calls_.front());
   ClearObservations();
 
@@ -547,7 +554,7 @@ TEST_F(CloudExternalDataPolicyObserverTest,
 
   EXPECT_TRUE(cleared_calls_.empty());
   EXPECT_TRUE(fetched_calls_.empty());
-  ASSERT_EQ(1u, set_calls_.size());
+  EXPECT_EQ(1u, set_calls_.size());
   EXPECT_EQ(device_local_account_user_id_, set_calls_.front());
   ClearObservations();
 
@@ -557,7 +564,7 @@ TEST_F(CloudExternalDataPolicyObserverTest,
 
   EXPECT_TRUE(set_calls_.empty());
   EXPECT_TRUE(cleared_calls_.empty());
-  ASSERT_EQ(1u, fetched_calls_.size());
+  EXPECT_EQ(1u, fetched_calls_.size());
   EXPECT_EQ(device_local_account_user_id_, fetched_calls_.front().first);
   EXPECT_EQ(avatar_policy_1_data_, fetched_calls_.front().second);
   ClearObservations();
@@ -584,7 +591,7 @@ TEST_F(CloudExternalDataPolicyObserverTest, ExistingDeviceLocalAccountSetSet) {
 
   EXPECT_TRUE(cleared_calls_.empty());
   EXPECT_TRUE(fetched_calls_.empty());
-  ASSERT_EQ(1u, set_calls_.size());
+  EXPECT_EQ(1u, set_calls_.size());
   EXPECT_EQ(device_local_account_user_id_, set_calls_.front());
   ClearObservations();
 
@@ -595,7 +602,7 @@ TEST_F(CloudExternalDataPolicyObserverTest, ExistingDeviceLocalAccountSetSet) {
 
   EXPECT_TRUE(cleared_calls_.empty());
   EXPECT_TRUE(fetched_calls_.empty());
-  ASSERT_EQ(1u, set_calls_.size());
+  EXPECT_EQ(1u, set_calls_.size());
   EXPECT_EQ(device_local_account_user_id_, set_calls_.front());
   ClearObservations();
 
@@ -606,7 +613,7 @@ TEST_F(CloudExternalDataPolicyObserverTest, ExistingDeviceLocalAccountSetSet) {
 
   EXPECT_TRUE(set_calls_.empty());
   EXPECT_TRUE(cleared_calls_.empty());
-  ASSERT_EQ(1u, fetched_calls_.size());
+  EXPECT_EQ(1u, fetched_calls_.size());
   EXPECT_EQ(device_local_account_user_id_, fetched_calls_.front().first);
   EXPECT_EQ(avatar_policy_2_data_, fetched_calls_.front().second);
   ClearObservations();
@@ -615,7 +622,7 @@ TEST_F(CloudExternalDataPolicyObserverTest, ExistingDeviceLocalAccountSetSet) {
 }
 
 // Verifies that when the external data reference for a device-local account is
-// initially not set, no notifications are emitted during login into the
+// initially not set, a 'cleared' notification is emitted during login into the
 // account. Further verifies that when the external data reference is then set,
 // a corresponding notification is emitted only once and a fetch is started.
 // Also verifies that when the fetch eventually succeeds, a notification
@@ -634,7 +641,7 @@ TEST_F(CloudExternalDataPolicyObserverTest,
   LogInAsDeviceLocalAccount(AccountId::FromUserEmail(kDeviceLocalAccount));
 
   EXPECT_TRUE(set_calls_.empty());
-  EXPECT_TRUE(cleared_calls_.empty());
+  EXPECT_EQ(1u, cleared_calls_.size());
   EXPECT_TRUE(fetched_calls_.empty());
   ClearObservations();
 
@@ -643,7 +650,7 @@ TEST_F(CloudExternalDataPolicyObserverTest,
 
   EXPECT_TRUE(cleared_calls_.empty());
   EXPECT_TRUE(fetched_calls_.empty());
-  ASSERT_EQ(1u, set_calls_.size());
+  EXPECT_EQ(1u, set_calls_.size());
   EXPECT_EQ(device_local_account_user_id_, set_calls_.front());
   ClearObservations();
 
@@ -653,7 +660,7 @@ TEST_F(CloudExternalDataPolicyObserverTest,
 
   EXPECT_TRUE(set_calls_.empty());
   EXPECT_TRUE(cleared_calls_.empty());
-  ASSERT_EQ(1u, fetched_calls_.size());
+  EXPECT_EQ(1u, fetched_calls_.size());
   EXPECT_EQ(device_local_account_user_id_, fetched_calls_.front().first);
   EXPECT_EQ(avatar_policy_1_data_, fetched_calls_.front().second);
   ClearObservations();
@@ -711,7 +718,7 @@ TEST_F(CloudExternalDataPolicyObserverTest,
 
   EXPECT_TRUE(cleared_calls_.empty());
   EXPECT_TRUE(fetched_calls_.empty());
-  ASSERT_EQ(1u, set_calls_.size());
+  EXPECT_EQ(1u, set_calls_.size());
   EXPECT_EQ(device_local_account_user_id_, set_calls_.front());
   ClearObservations();
 
@@ -721,7 +728,7 @@ TEST_F(CloudExternalDataPolicyObserverTest,
 
   EXPECT_TRUE(set_calls_.empty());
   EXPECT_TRUE(fetched_calls_.empty());
-  ASSERT_EQ(1u, cleared_calls_.size());
+  EXPECT_EQ(1u, cleared_calls_.size());
   EXPECT_EQ(device_local_account_user_id_, cleared_calls_.front());
   ClearObservations();
 
@@ -739,33 +746,38 @@ TEST_F(CloudExternalDataPolicyObserverTest, RegularUserFetchSuccess) {
 
   EXPECT_CALL(external_data_manager_, Fetch(key::kUserAvatarImage, _))
       .Times(1)
-      .WillOnce(SaveArg<1>(&fetch_callback_));
+      .WillOnce([&](const std::string& policy,
+                    ExternalDataFetcher::FetchCallback callback) {
+        fetch_callback_ = std::move(callback);
+      });
 
   LogInAsRegularUser();
 
   EXPECT_TRUE(cleared_calls_.empty());
   EXPECT_TRUE(fetched_calls_.empty());
-  ASSERT_EQ(1u, set_calls_.size());
+  EXPECT_EQ(1u, set_calls_.size());
   EXPECT_EQ(kRegularUserID, set_calls_.front());
   ClearObservations();
 
   Mock::VerifyAndClear(&external_data_manager_);
   EXPECT_CALL(external_data_manager_, Fetch(key::kUserAvatarImage, _)).Times(0);
 
-  fetch_callback_.Run(base::WrapUnique(new std::string(avatar_policy_1_data_)));
+  std::move(fetch_callback_)
+      .Run(std::make_unique<std::string>(avatar_policy_1_data_),
+           base::FilePath());
 
   EXPECT_TRUE(set_calls_.empty());
   EXPECT_TRUE(cleared_calls_.empty());
-  ASSERT_EQ(1u, fetched_calls_.size());
+  EXPECT_EQ(1u, fetched_calls_.size());
   EXPECT_EQ(kRegularUserID, fetched_calls_.front().first);
   EXPECT_EQ(avatar_policy_1_data_, fetched_calls_.front().second);
   ClearObservations();
 }
 
 // Verifies that when the external data reference for a regular user is not set
-// while the user is logging in, no notifications are emitted. Further verifies
-// that when the external data reference is then cleared (which is a no-op),
-// again, no notifications are emitted.
+// while the user is logging in, a 'cleared' notifications is emitted. Further
+// verifies that when the external data reference is then cleared (which is a
+// no-op), no notifications are emitted.
 TEST_F(CloudExternalDataPolicyObserverTest, RegularUserClearUnset) {
   CreateObserver();
 
@@ -774,7 +786,7 @@ TEST_F(CloudExternalDataPolicyObserverTest, RegularUserClearUnset) {
   LogInAsRegularUser();
 
   EXPECT_TRUE(set_calls_.empty());
-  EXPECT_TRUE(cleared_calls_.empty());
+  EXPECT_EQ(1u, cleared_calls_.size());
   EXPECT_TRUE(fetched_calls_.empty());
   ClearObservations();
 
@@ -799,15 +811,13 @@ TEST_F(CloudExternalDataPolicyObserverTest, RegularUserClearSet) {
 
   CreateObserver();
 
-  EXPECT_CALL(external_data_manager_, Fetch(key::kUserAvatarImage, _))
-      .Times(1)
-      .WillOnce(SaveArg<1>(&fetch_callback_));
+  EXPECT_CALL(external_data_manager_, Fetch(key::kUserAvatarImage, _)).Times(1);
 
   LogInAsRegularUser();
 
   EXPECT_TRUE(cleared_calls_.empty());
   EXPECT_TRUE(fetched_calls_.empty());
-  ASSERT_EQ(1u, set_calls_.size());
+  EXPECT_EQ(1u, set_calls_.size());
   EXPECT_EQ(kRegularUserID, set_calls_.front());
   ClearObservations();
 
@@ -818,15 +828,14 @@ TEST_F(CloudExternalDataPolicyObserverTest, RegularUserClearSet) {
 
   EXPECT_TRUE(set_calls_.empty());
   EXPECT_TRUE(fetched_calls_.empty());
-  ASSERT_EQ(1u, cleared_calls_.size());
+  EXPECT_EQ(1u, cleared_calls_.size());
   EXPECT_EQ(kRegularUserID, cleared_calls_.front());
   ClearObservations();
 }
 
-
 // Verifies that when the external data reference for a regular user is not set
-// while the user is logging in, no notifications are emitted. Further verifies
-// that when the external data reference is then set, a corresponding
+// while the user is logging in, a 'cleared' notifications is emitted. Further
+// verifies that when the external data reference is then set, a corresponding
 // notification is emitted and a fetch is started. Also verifies that when the
 // fetch eventually succeeds, a notification containing the external data is
 // emitted.
@@ -838,31 +847,36 @@ TEST_F(CloudExternalDataPolicyObserverTest, RegularUserSetUnset) {
   LogInAsRegularUser();
 
   EXPECT_TRUE(set_calls_.empty());
-  EXPECT_TRUE(cleared_calls_.empty());
+  EXPECT_EQ(1u, cleared_calls_.size());
   EXPECT_TRUE(fetched_calls_.empty());
   ClearObservations();
 
   Mock::VerifyAndClear(&external_data_manager_);
   EXPECT_CALL(external_data_manager_, Fetch(key::kUserAvatarImage, _))
       .Times(1)
-      .WillOnce(SaveArg<1>(&fetch_callback_));
+      .WillOnce([&](const std::string& policy,
+                    ExternalDataFetcher::FetchCallback callback) {
+        fetch_callback_ = std::move(callback);
+      });
 
   SetRegularUserAvatarPolicy(avatar_policy_1_);
 
   EXPECT_TRUE(cleared_calls_.empty());
   EXPECT_TRUE(fetched_calls_.empty());
-  ASSERT_EQ(1u, set_calls_.size());
+  EXPECT_EQ(1u, set_calls_.size());
   EXPECT_EQ(kRegularUserID, set_calls_.front());
   ClearObservations();
 
   Mock::VerifyAndClear(&external_data_manager_);
   EXPECT_CALL(external_data_manager_, Fetch(key::kUserAvatarImage, _)).Times(0);
 
-  fetch_callback_.Run(base::WrapUnique(new std::string(avatar_policy_1_data_)));
+  std::move(fetch_callback_)
+      .Run(std::make_unique<std::string>(avatar_policy_1_data_),
+           base::FilePath());
 
   EXPECT_TRUE(set_calls_.empty());
   EXPECT_TRUE(cleared_calls_.empty());
-  ASSERT_EQ(1u, fetched_calls_.size());
+  EXPECT_EQ(1u, fetched_calls_.size());
   EXPECT_EQ(kRegularUserID, fetched_calls_.front().first);
   EXPECT_EQ(avatar_policy_1_data_, fetched_calls_.front().second);
   ClearObservations();
@@ -879,41 +893,85 @@ TEST_F(CloudExternalDataPolicyObserverTest, RegularUserSetSet) {
 
   CreateObserver();
 
-  EXPECT_CALL(external_data_manager_, Fetch(key::kUserAvatarImage, _))
-      .Times(1)
-      .WillOnce(SaveArg<1>(&fetch_callback_));
+  EXPECT_CALL(external_data_manager_, Fetch(key::kUserAvatarImage, _)).Times(1);
 
   LogInAsRegularUser();
 
   EXPECT_TRUE(cleared_calls_.empty());
   EXPECT_TRUE(fetched_calls_.empty());
-  ASSERT_EQ(1u, set_calls_.size());
+  EXPECT_EQ(1u, set_calls_.size());
   EXPECT_EQ(kRegularUserID, set_calls_.front());
   ClearObservations();
 
   Mock::VerifyAndClear(&external_data_manager_);
   EXPECT_CALL(external_data_manager_, Fetch(key::kUserAvatarImage, _))
       .Times(1)
-      .WillOnce(SaveArg<1>(&fetch_callback_));
+      .WillOnce([&](const std::string& policy,
+                    ExternalDataFetcher::FetchCallback callback) {
+        fetch_callback_ = std::move(callback);
+      });
 
   SetRegularUserAvatarPolicy(avatar_policy_2_);
 
   EXPECT_TRUE(cleared_calls_.empty());
   EXPECT_TRUE(fetched_calls_.empty());
-  ASSERT_EQ(1u, set_calls_.size());
+  EXPECT_EQ(1u, set_calls_.size());
   EXPECT_EQ(kRegularUserID, set_calls_.front());
   ClearObservations();
 
   Mock::VerifyAndClear(&external_data_manager_);
   EXPECT_CALL(external_data_manager_, Fetch(key::kUserAvatarImage, _)).Times(0);
 
-  fetch_callback_.Run(base::WrapUnique(new std::string(avatar_policy_2_data_)));
+  std::move(fetch_callback_)
+      .Run(std::make_unique<std::string>(avatar_policy_2_data_),
+           base::FilePath());
 
   EXPECT_TRUE(set_calls_.empty());
   EXPECT_TRUE(cleared_calls_.empty());
-  ASSERT_EQ(1u, fetched_calls_.size());
+  EXPECT_EQ(1u, fetched_calls_.size());
   EXPECT_EQ(kRegularUserID, fetched_calls_.front().first);
   EXPECT_EQ(avatar_policy_2_data_, fetched_calls_.front().second);
+  ClearObservations();
+}
+
+// Tests that if external data reference for a regular user was cleared when
+// the user logged out, the notification will still be emitted when the user
+// logs back in.
+TEST_F(CloudExternalDataPolicyObserverTest, RegularUserLogoutTest) {
+  SetRegularUserAvatarPolicy(avatar_policy_1_);
+  CreateObserver();
+
+  EXPECT_CALL(external_data_manager_, Fetch(key::kUserAvatarImage, _)).Times(1);
+
+  LogInAsRegularUser();
+
+  EXPECT_TRUE(cleared_calls_.empty());
+  EXPECT_TRUE(fetched_calls_.empty());
+  EXPECT_EQ(1u, set_calls_.size());
+  EXPECT_EQ(kRegularUserID, set_calls_.front());
+  ClearObservations();
+
+  // Now simulate log out the user. Simply reset the external data policy
+  // observer.
+  RemoveObserver();
+
+  Mock::VerifyAndClear(&external_data_manager_);
+  EXPECT_CALL(external_data_manager_, Fetch(key::kUserAvatarImage, _)).Times(0);
+
+  SetRegularUserAvatarPolicy("");
+
+  // Now simulate log back the user.
+  CreateObserver();
+  content::NotificationService::current()->Notify(
+      chrome::NOTIFICATION_LOGIN_USER_PROFILE_PREPARED,
+      content::NotificationService::AllSources(),
+      content::Details<Profile>(profile_.get()));
+
+  // Test that clear notification is emitted.
+  EXPECT_TRUE(set_calls_.empty());
+  EXPECT_TRUE(fetched_calls_.empty());
+  EXPECT_EQ(1u, cleared_calls_.size());
+  EXPECT_EQ(kRegularUserID, cleared_calls_.front());
   ClearObservations();
 }
 

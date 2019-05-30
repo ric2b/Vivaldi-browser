@@ -47,9 +47,10 @@ class GCMProfileService::IdentityObserver
   ~IdentityObserver() override;
 
   // identity::IdentityManager::Observer:
-  void OnPrimaryAccountSet(const AccountInfo& primary_account_info) override;
+  void OnPrimaryAccountSet(
+      const CoreAccountInfo& primary_account_info) override;
   void OnPrimaryAccountCleared(
-      const AccountInfo& previous_primary_account_info) override;
+      const CoreAccountInfo& previous_primary_account_info) override;
 
  private:
   void StartAccountTracker(
@@ -88,7 +89,7 @@ GCMProfileService::IdentityObserver::~IdentityObserver() {
 }
 
 void GCMProfileService::IdentityObserver::OnPrimaryAccountSet(
-    const AccountInfo& primary_account_info) {
+    const CoreAccountInfo& primary_account_info) {
   // This might be called multiple times when the password changes.
   if (primary_account_info.account_id == account_id_)
     return;
@@ -99,7 +100,7 @@ void GCMProfileService::IdentityObserver::OnPrimaryAccountSet(
 }
 
 void GCMProfileService::IdentityObserver::OnPrimaryAccountCleared(
-    const AccountInfo& previous_primary_account_info) {
+    const CoreAccountInfo& previous_primary_account_info) {
   account_id_.clear();
 
   // Still need to notify GCMDriver for UMA purpose.
@@ -147,6 +148,7 @@ GCMProfileService::GCMProfileService(
              network::mojom::ProxyResolvingSocketFactoryRequest)>
         get_socket_factory_callback,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    network::NetworkConnectionTracker* network_connection_tracker,
     version_info::Channel channel,
     const std::string& product_category_for_subtypes,
     identity::IdentityManager* identity_manager,
@@ -161,8 +163,9 @@ GCMProfileService::GCMProfileService(
       path.Append(gcm_driver::kGCMStoreDirname),
       base::BindRepeating(get_socket_factory_callback,
                           weak_ptr_factory_.GetWeakPtr()),
-      url_loader_factory, channel, product_category_for_subtypes,
-      ui_task_runner, io_task_runner, blocking_task_runner);
+      url_loader_factory, network_connection_tracker, channel,
+      product_category_for_subtypes, ui_task_runner, io_task_runner,
+      blocking_task_runner);
 
   identity_observer_.reset(new IdentityObserver(
       identity_manager_, url_loader_factory, driver_.get()));

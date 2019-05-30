@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model.h"
 #include "chrome/browser/ui/content_settings/content_setting_image_model.h"
@@ -46,13 +45,14 @@ void ContentSettingImageView::Update() {
       delegate_->GetContentSettingWebContents();
   // Note: We explicitly want to call this even if |web_contents| is NULL, so we
   // get hidden properly while the user is editing the omnibox.
-  content_setting_image_model_->UpdateFromWebContents(web_contents);
+  content_setting_image_model_->Update(web_contents);
+  SetTooltipText(content_setting_image_model_->get_tooltip());
 
   if (!content_setting_image_model_->is_visible()) {
     SetVisible(false);
     return;
   }
-
+  DCHECK(web_contents);
   UpdateImage();
   SetVisible(true);
 
@@ -67,7 +67,6 @@ void ContentSettingImageView::Update() {
   // the user.  If this becomes a problem, we could design some sort of queueing
   // mechanism to show one after the other, but it doesn't seem important now.
   int string_id = content_setting_image_model_->explanatory_string_id();
-  AnimateInkDrop(views::InkDropState::HIDDEN, nullptr);
   if (string_id)
     AnimateIn(string_id);
 
@@ -91,10 +90,19 @@ void ContentSettingImageView::OnBoundsChanged(
   IconLabelBubbleView::OnBoundsChanged(previous_bounds);
 }
 
-bool ContentSettingImageView::GetTooltipText(const gfx::Point& p,
-                                             base::string16* tooltip) const {
-  *tooltip = content_setting_image_model_->get_tooltip();
-  return !tooltip->empty();
+bool ContentSettingImageView::OnMousePressed(const ui::MouseEvent& event) {
+  // Pause animation so that the icon does not shrink and deselect while the
+  // user is attempting to press it.
+  PauseAnimation();
+  return IconLabelBubbleView::OnMousePressed(event);
+}
+
+bool ContentSettingImageView::OnKeyPressed(const ui::KeyEvent& event) {
+  // Pause animation so that the icon does not shrink and deselect while the
+  // user is attempting to press it using key commands.
+  if (GetKeyClickActionForEvent(event) == KeyClickAction::CLICK_ON_KEY_RELEASE)
+    PauseAnimation();
+  return Button::OnKeyPressed(event);
 }
 
 void ContentSettingImageView::OnNativeThemeChanged(
@@ -120,21 +128,12 @@ bool ContentSettingImageView::ShowBubble(const ui::Event& event) {
     views::View* const anchor = parent();
     bubble_view_ = new ContentSettingBubbleContents(
         content_setting_image_model_->CreateBubbleModel(
-            delegate_->GetContentSettingBubbleModelDelegate(), web_contents,
-            Profile::FromBrowserContext(web_contents->GetBrowserContext())),
+            delegate_->GetContentSettingBubbleModelDelegate(), web_contents),
         web_contents, anchor, views::BubbleBorder::TOP_RIGHT);
+    bubble_view_->SetHighlightedButton(this);
     views::Widget* bubble_widget =
         views::BubbleDialogDelegateView::CreateBubble(bubble_view_);
     bubble_widget->AddObserver(this);
-    // This is triggered by an input event. If the user clicks the icon while
-    // it's not animating, the icon will be placed in an active state, so the
-    // bubble doesn't need an arrow. If the user clicks during an animation,
-    // the animation simply pauses and no other visible state change occurs, so
-    // show the arrow in this case.
-    if (!is_animation_paused()) {
-      AnimateInkDrop(views::InkDropState::ACTIVATED,
-                     ui::LocatedEvent::FromIfValid(&event));
-    }
     bubble_widget->Show();
     delegate_->OnContentSettingImageBubbleShown(
         content_setting_image_model_->image_type());
@@ -147,14 +146,13 @@ bool ContentSettingImageView::IsBubbleShowing() const {
   return bubble_view_ != nullptr;
 }
 
+SkColor ContentSettingImageView::GetInkDropBaseColor() const {
+  return delegate_->GetContentSettingInkDropColor();
+}
+
 ContentSettingImageModel::ImageType ContentSettingImageView::GetTypeForTesting()
     const {
   return content_setting_image_model_->image_type();
-}
-
-SkColor ContentSettingImageView::GetInkDropBaseColor() const {
-  return icon_color_ ? icon_color_.value()
-                     : IconLabelBubbleView::GetInkDropBaseColor();
 }
 
 void ContentSettingImageView::OnWidgetDestroying(views::Widget* widget) {
@@ -163,13 +161,6 @@ void ContentSettingImageView::OnWidgetDestroying(views::Widget* widget) {
   widget->RemoveObserver(this);
   bubble_view_ = nullptr;
   UnpauseAnimation();
-}
-
-void ContentSettingImageView::OnWidgetVisibilityChanged(views::Widget* widget,
-                                                        bool visible) {
-  // |widget| is a bubble that has just got shown / hidden.
-  if (!visible)
-    AnimateInkDrop(views::InkDropState::DEACTIVATED, nullptr /* event */);
 }
 
 void ContentSettingImageView::UpdateImage() {

@@ -4,6 +4,7 @@
 
 #include "gpu/ipc/service/gpu_memory_buffer_factory_native_pixmap.h"
 
+#include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/client_native_pixmap.h"
 #include "ui/gfx/linux/native_pixmap_dmabuf.h"
@@ -82,10 +83,10 @@ GpuMemoryBufferFactoryNativePixmap::CreateImageForGpuMemoryBuffer(
     gfx::GpuMemoryBufferHandle handle,
     const gfx::Size& size,
     gfx::BufferFormat format,
-    unsigned internalformat,
     int client_id,
     SurfaceHandle surface_handle) {
-  DCHECK_EQ(handle.type, gfx::NATIVE_PIXMAP);
+  if (handle.type != gfx::NATIVE_PIXMAP)
+    return nullptr;
 
   scoped_refptr<gfx::NativePixmap> pixmap;
 
@@ -123,12 +124,10 @@ GpuMemoryBufferFactoryNativePixmap::CreateImageForGpuMemoryBuffer(
     }
   }
 
-  scoped_refptr<gl::GLImageNativePixmap> image(
-      new gl::GLImageNativePixmap(size, internalformat));
-  if (!image->Initialize(pixmap.get(), format)) {
+  auto image = base::MakeRefCounted<gl::GLImageNativePixmap>(size, format);
+  if (!image->Initialize(std::move(pixmap))) {
     LOG(ERROR) << "Failed to create GLImage " << size.ToString() << ", "
-               << gfx::BufferFormatToString(format) << ", |internalformat|: "
-               << gl::GLEnums::GetStringEnum(internalformat);
+               << gfx::BufferFormatToString(format);
     return nullptr;
   }
   return image;
@@ -147,7 +146,6 @@ GpuMemoryBufferFactoryNativePixmap::CreateAnonymousImage(
     const gfx::Size& size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
-    unsigned internalformat,
     bool* is_cleared) {
   scoped_refptr<gfx::NativePixmap> pixmap;
 #if defined(USE_OZONE)
@@ -163,12 +161,10 @@ GpuMemoryBufferFactoryNativePixmap::CreateAnonymousImage(
                << gfx::BufferFormatToString(format);
     return nullptr;
   }
-  scoped_refptr<gl::GLImageNativePixmap> image(
-      new gl::GLImageNativePixmap(size, internalformat));
-  if (!image->Initialize(pixmap.get(), format)) {
+  auto image = base::MakeRefCounted<gl::GLImageNativePixmap>(size, format);
+  if (!image->Initialize(std::move(pixmap))) {
     LOG(ERROR) << "Failed to create GLImage " << size.ToString() << ", "
-               << gfx::BufferFormatToString(format) << ", |internalformat|: "
-               << gl::GLEnums::GetStringEnum(internalformat);
+               << gfx::BufferFormatToString(format);
     return nullptr;
   }
   *is_cleared = true;

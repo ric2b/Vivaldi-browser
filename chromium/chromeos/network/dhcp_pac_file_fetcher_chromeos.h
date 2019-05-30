@@ -7,10 +7,10 @@
 
 #include <memory>
 
+#include "base/component_export.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "chromeos/chromeos_export.h"
 #include "net/base/completion_once_callback.h"
 #include "net/proxy_resolution/dhcp_pac_file_fetcher.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -31,7 +31,7 @@ namespace chromeos {
 // ChromeOS specific implementation of DhcpPacFileFetcher.
 // This looks up Service.WebProxyAutoDiscoveryUrl for the default network
 // from Shill and uses that to fetch the PAC file if available.
-class CHROMEOS_EXPORT DhcpPacFileFetcherChromeos
+class COMPONENT_EXPORT(CHROMEOS_NETWORK) DhcpPacFileFetcherChromeos
     : public net::DhcpPacFileFetcher {
  public:
   explicit DhcpPacFileFetcherChromeos(
@@ -39,10 +39,6 @@ class CHROMEOS_EXPORT DhcpPacFileFetcherChromeos
   ~DhcpPacFileFetcherChromeos() override;
 
   // net::DhcpPacFileFetcher implementation
-
-  // TODO(https://crbug.com/882996)  Even though it is documented at
-  // DhcpPacFileFetcher::Fetch() that only one fetch is allowed to be
-  // outstanding at any given time, crashes show that this is not obeyed.
   int Fetch(base::string16* utf16_text,
             net::CompletionOnceCallback callback,
             const net::NetLogWithSource& net_log,
@@ -54,10 +50,12 @@ class CHROMEOS_EXPORT DhcpPacFileFetcherChromeos
 
  private:
   void ContinueFetch(base::string16* utf16_text,
-                     net::CompletionOnceCallback callback,
                      const net::NetworkTrafficAnnotationTag traffic_annotation,
                      std::string pac_url);
 
+  void OnFetchCompleted(int result);
+
+  net::CompletionOnceCallback callback_;
   std::unique_ptr<net::PacFileFetcher> pac_file_fetcher_;
   scoped_refptr<base::SingleThreadTaskRunner> network_handler_task_runner_;
 

@@ -7,13 +7,14 @@
 #include <dispatch/dispatch.h>
 #import <Foundation/NSPathUtilities.h>
 
+#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
 #import "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "base/threading/scoped_blocking_call.h"
 #import "ios/chrome/browser/crash_report/breakpad_helper.h"
@@ -29,7 +30,8 @@ const int64_t kMemoryMonitorDelayInSeconds = 30;
 // Checks the values of free RAM and free disk space and updates breakpad with
 // these values.
 void UpdateBreakpadMemoryValues() {
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::WILL_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::WILL_BLOCK);
   const int free_memory =
       static_cast<int>(base::SysInfo::AmountOfAvailablePhysicalMemory() / 1024);
   breakpad_helper::SetCurrentFreeMemoryInKB(free_memory);

@@ -40,7 +40,7 @@ namespace variations {
 // ChromeContentBrowserClient::CreateURLLoaderThrottles() by also adding a
 // GoogleURLLoaderThrottle to a content::URLLoaderThrottle vector.
 // 3. SimpleURLLoader in browser, it is implemented in a SimpleURLLoader wrapper
-// function variations::CreateSimpleURLLoaderWithVariationsHeaders().
+// function variations::CreateSimpleURLLoaderWithVariationsHeader().
 
 // static
 VariationsHttpHeaderProvider* VariationsHttpHeaderProvider::GetInstance() {
@@ -74,12 +74,34 @@ std::string VariationsHttpHeaderProvider::GetVariationsString() {
     base::AutoLock scoped_lock(lock_);
     for (const VariationIDEntry& entry : GetAllVariationIds()) {
       if (entry.second == GOOGLE_WEB_PROPERTIES) {
-        ids_string.append(base::IntToString(entry.first));
+        ids_string.append(base::NumberToString(entry.first));
         ids_string.push_back(' ');
       }
     }
   }
   return ids_string;
+}
+
+std::vector<VariationID> VariationsHttpHeaderProvider::GetVariationsVector(
+    IDCollectionKey key) {
+  InitVariationIDsCacheIfNeeded();
+
+  // Get all the active variation ids while holding the lock.
+  std::set<VariationIDEntry> all_variation_ids;
+  {
+    base::AutoLock scoped_lock(lock_);
+    all_variation_ids = GetAllVariationIds();
+  }
+
+  // Copy the requested variations to the output vector. Note that the ids will
+  // be in sorted order because they're coming from a std::set.
+  std::vector<VariationID> result;
+  result.reserve(all_variation_ids.size());
+  for (const VariationIDEntry& entry : all_variation_ids) {
+    if (entry.second == key)
+      result.push_back(entry.first);
+  }
+  return result;
 }
 
 VariationsHttpHeaderProvider::ForceIdsResult
@@ -116,6 +138,11 @@ void VariationsHttpHeaderProvider::ResetForTesting() {
   // re-inited. Note: This is a no-op if this is not currently observing.
   base::FieldTrialList::RemoveObserver(this);
   variation_ids_cache_initialized_ = false;
+  variation_ids_set_.clear();
+  default_variation_ids_set_.clear();
+  synthetic_variation_ids_set_.clear();
+  cached_variation_ids_header_.clear();
+  cached_variation_ids_header_signed_in_.clear();
 }
 
 VariationsHttpHeaderProvider::VariationsHttpHeaderProvider()

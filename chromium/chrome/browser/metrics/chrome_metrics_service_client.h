@@ -60,9 +60,6 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
   // Registers local state prefs used by this class.
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
-  // Checks if the user has forced metrics collection on via the override flag.
-  static bool IsMetricsReportingForceEnabled();
-
   // metrics::MetricsServiceClient:
   metrics::MetricsService* GetMetricsService() override;
   ukm::UkmService* GetUkmService() override;
@@ -76,8 +73,8 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
   void OnLogCleanShutdown() override;
   void CollectFinalMetricsForLog(const base::Closure& done_callback) override;
   std::unique_ptr<metrics::MetricsLogUploader> CreateUploader(
-      base::StringPiece server_url,
-      base::StringPiece insecure_server_url,
+      const GURL& server_url,
+      const GURL& insecure_server_url,
       base::StringPiece mime_type,
       metrics::MetricsLogUploader::MetricServiceType service_type,
       const metrics::MetricsLogUploader::UploadCallback& on_upload_complete)
@@ -91,6 +88,7 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
   bool SyncStateAllowsExtensionUkm() override;
   bool AreNotificationListenersEnabledOnAllProfiles() override;
   std::string GetAppPackageName() override;
+  std::string GetUploadSigningKey() override;
   static void SetNotificationListenerSetupFailedForTesting(
       bool simulate_failure);
 
@@ -105,12 +103,6 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
   static metrics::FileMetricsProvider::FilterAction FilterBrowserMetricsFiles(
       const base::FilePath& path);
   static void SetIsProcessRunningForTesting(IsProcessRunningFunction func);
-
-  // Persistent browser metrics need to be persisted somewhere. This constant
-  // provides a known string to be used for both the allocator's internal name
-  // and for a file on disk (relative to chrome::DIR_USER_DATA) to which they
-  // can be saved.
-  static const char kBrowserMetricsName[];
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ChromeMetricsServiceClientTest, IsWebstoreExtension);
@@ -193,10 +185,6 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
 
   // Whether we registered all notification listeners successfully.
   bool notification_listeners_active_;
-
-  // A queue of tasks for initial metrics gathering. These may be asynchronous
-  // or synchronous.
-  base::circular_deque<base::Closure> initialize_task_queue_;
 
   // Saved callback received from CollectFinalMetricsForLog().
   base::Closure collect_final_metrics_done_callback_;

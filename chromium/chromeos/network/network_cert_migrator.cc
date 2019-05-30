@@ -6,6 +6,7 @@
 
 #include <cert.h>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -37,10 +38,9 @@ namespace chromeos {
 class NetworkCertMigrator::MigrationTask
     : public base::RefCounted<MigrationTask> {
  public:
-  MigrationTask(const net::ScopedCERTCertificateList& certs,
+  MigrationTask(net::ScopedCERTCertificateList certs,
                 const base::WeakPtr<NetworkCertMigrator>& cert_migrator)
-      : certs_(net::x509_util::DupCERTCertificateList(certs)),
-        cert_migrator_(cert_migrator) {}
+      : certs_(std::move(certs)), cert_migrator_(cert_migrator) {}
 
   void Run(const NetworkStateHandler::NetworkStateList& networks) {
     // Request properties for each network that could be configured with a
@@ -133,7 +133,8 @@ class NetworkCertMigrator::MigrationTask
     for (const net::ScopedCERTCertificate& cert : certs_) {
       int current_slot_id = -1;
       std::string current_pkcs11_id =
-          CertLoader::GetPkcs11IdAndSlotForCert(cert.get(), &current_slot_id);
+          NetworkCertLoader::GetPkcs11IdAndSlotForCert(cert.get(),
+                                                       &current_slot_id);
       if (current_pkcs11_id == pkcs11_id) {
         *slot_id = current_slot_id;
         return cert.get();
@@ -166,8 +167,8 @@ class NetworkCertMigrator::MigrationTask
 
   bool CorrespondingCertificateDatabaseLoaded(const NetworkState* network) {
     if (network->IsPrivate())
-      return CertLoader::Get()->user_cert_database_load_finished();
-    return CertLoader::Get()->initial_load_finished();
+      return NetworkCertLoader::Get()->user_cert_database_load_finished();
+    return NetworkCertLoader::Get()->initial_load_finished();
   }
 
   net::ScopedCERTCertificateList certs_;
@@ -181,8 +182,8 @@ NetworkCertMigrator::NetworkCertMigrator()
 
 NetworkCertMigrator::~NetworkCertMigrator() {
   network_state_handler_->RemoveObserver(this, FROM_HERE);
-  if (CertLoader::IsInitialized())
-    CertLoader::Get()->RemoveObserver(this);
+  if (NetworkCertLoader::IsInitialized())
+    NetworkCertLoader::Get()->RemoveObserver(this);
 }
 
 void NetworkCertMigrator::Init(NetworkStateHandler* network_state_handler) {
@@ -190,20 +191,22 @@ void NetworkCertMigrator::Init(NetworkStateHandler* network_state_handler) {
   network_state_handler_ = network_state_handler;
   network_state_handler_->AddObserver(this, FROM_HERE);
 
-  DCHECK(CertLoader::IsInitialized());
-  CertLoader::Get()->AddObserver(this);
+  DCHECK(NetworkCertLoader::IsInitialized());
+  NetworkCertLoader::Get()->AddObserver(this);
 }
 
 void NetworkCertMigrator::NetworkListChanged() {
-  if (!CertLoader::Get()->initial_load_finished()) {
+  if (!NetworkCertLoader::Get()->initial_load_finished()) {
     VLOG(2) << "Certs not loaded yet.";
     return;
   }
   // Run the migration process to fix missing or incorrect slot ids of client
   // certificates.
   VLOG(2) << "Start certificate migration of network configurations.";
-  scoped_refptr<MigrationTask> helper(new MigrationTask(
-      CertLoader::Get()->all_certs(), weak_ptr_factory_.GetWeakPtr()));
+  scoped_refptr<MigrationTask> helper(base::MakeRefCounted<MigrationTask>(
+      NetworkCertLoader::GetAllCertsFromNetworkCertList(
+          NetworkCertLoader::Get()->client_certs()),
+      weak_ptr_factory_.GetWeakPtr()));
   NetworkStateHandler::NetworkStateList networks;
   network_state_handler_->GetNetworkListByType(
       NetworkTypePattern::Default(),
@@ -214,8 +217,7 @@ void NetworkCertMigrator::NetworkListChanged() {
   helper->Run(networks);
 }
 
-void NetworkCertMigrator::OnCertificatesLoaded(
-    const net::ScopedCERTCertificateList& cert_list) {
+void NetworkCertMigrator::OnCertificatesLoaded() {
   NetworkListChanged();
 }
 

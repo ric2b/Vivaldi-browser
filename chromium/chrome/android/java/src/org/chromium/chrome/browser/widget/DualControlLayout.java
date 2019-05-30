@@ -64,22 +64,20 @@ public final class DualControlLayout extends ViewGroup {
      */
     public static Button createButtonForLayout(
             Context context, boolean isPrimary, String text, OnClickListener listener) {
-        int buttonColor =
-                ApiCompatibilityUtils.getColor(context.getResources(), R.color.light_active_color);
-
         if (isPrimary) {
-            ButtonCompat primaryButton = new ButtonCompat(context, buttonColor, false);
+            ButtonCompat primaryButton =
+                    new ButtonCompat(context, R.style.FilledButtonThemeOverlay_Flat);
             primaryButton.setId(R.id.button_primary);
             primaryButton.setOnClickListener(listener);
             primaryButton.setText(text);
-            ApiCompatibilityUtils.setTextAppearance(primaryButton, R.style.WhiteButtonText);
             return primaryButton;
         } else {
-            Button secondaryButton = ButtonCompat.createBorderlessButton(context);
+            Button secondaryButton = new ButtonCompat(context, R.style.TextButtonThemeOverlay);
             secondaryButton.setId(R.id.button_secondary);
             secondaryButton.setOnClickListener(listener);
             secondaryButton.setText(text);
-            ApiCompatibilityUtils.setTextAppearance(secondaryButton, R.style.BlueButtonText2);
+            ApiCompatibilityUtils.setTextAppearance(
+                    secondaryButton, R.style.TextAppearance_BlueButtonText2);
             return secondaryButton;
         }
     }
@@ -204,7 +202,7 @@ public final class DualControlLayout extends ViewGroup {
         int rightPadding = getPaddingRight();
 
         int width = right - left;
-        boolean isRtl = ApiCompatibilityUtils.isLayoutRtl(this);
+        boolean isRtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
         boolean isPrimaryOnRight = (isRtl && mAlignment == DualControlLayoutAlignment.START)
                 || (!isRtl
                            && (mAlignment == DualControlLayoutAlignment.APART

@@ -240,7 +240,7 @@ public class PopularUrlsTest {
 
         tab.addObserver(new EmptyTabObserver() {
             @Override
-            public void onPageLoadFinished(Tab tab) {
+            public void onPageLoadFinished(Tab tab, String url) {
                 loadedCallback.notifyCalled();
             }
 
@@ -250,7 +250,7 @@ public class PopularUrlsTest {
             }
 
             @Override
-            public void onCrash(Tab tab, boolean sadTabShown) {
+            public void onCrash(Tab tab) {
                 crashedCallback.notifyCalled();
             }
         });

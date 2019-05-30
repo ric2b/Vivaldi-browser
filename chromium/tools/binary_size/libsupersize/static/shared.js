@@ -18,6 +18,8 @@
  * arrays indicate this is a leaf node.
  * @prop {TreeNode | null} parent Parent tree node. null if this is a root node.
  * @prop {string} idPath Full path to this node.
+ * @prop {string} srcPath Path to the source containing this symbol.
+ * @prop {string} component OWNERS Component for this symbol.
  * @prop {number} shortNameIndex The name of the node is include in the idPath.
  * This index indicates where to start to slice the idPath to read the name.
  * @prop {number} size Byte size of this node and its children.
@@ -57,16 +59,20 @@
  * @typedef {(node: TreeNode, unit: string) => GetSizeResult} GetSize
  */
 
-/** Abberivated keys used by FileEntrys in the JSON data file. */
+/**
+ * Abberivated keys used by FileEntrys in the JSON data file. These must match
+ * _COMPACT_*_KEY variables in html_report.py.
+ */
 const _KEYS = Object.freeze({
-  SOURCE_PATH: /** @type {'p'} */ ('p'),
   COMPONENT_INDEX: /** @type {'c'} */ ('c'),
+  SOURCE_PATH: /** @type {'p'} */ ('p'),
   FILE_SYMBOLS: /** @type {'s'} */ ('s'),
-  SYMBOL_NAME: /** @type {'n'} */ ('n'),
   SIZE: /** @type {'b'} */ ('b'),
-  TYPE: /** @type {'t'} */ ('t'),
   COUNT: /** @type {'u'} */ ('u'),
   FLAGS: /** @type {'f'} */ ('f'),
+  SYMBOL_NAME: /** @type {'n'} */ ('n'),
+  NUM_ALIASES: /** @type {'a'} */ ('a'),
+  TYPE: /** @type {'t'} */ ('t'),
 });
 
 /** Abberivated keys used by FileEntrys in the JSON data file. */
@@ -80,6 +86,7 @@ const _FLAGS = Object.freeze({
   CLONE: 2 ** 6,
   HOT: 2 ** 7,
   COVERAGE: 2 ** 8,
+  UNCOMPRESSED: 2 ** 9,
 });
 
 /**
@@ -108,6 +115,8 @@ const _CONTAINER_TYPE_SET = new Set(Object.values(_CONTAINER_TYPES));
 const _CODE_SYMBOL_TYPE = 't';
 /** Type for a dex method symbol */
 const _DEX_METHOD_SYMBOL_TYPE = 'm';
+/** Type for a non-method dex symbol */
+const _DEX_SYMBOL_TYPE = 'x';
 /** Type for an 'other' symbol */
 const _OTHER_SYMBOL_TYPE = 'o';
 

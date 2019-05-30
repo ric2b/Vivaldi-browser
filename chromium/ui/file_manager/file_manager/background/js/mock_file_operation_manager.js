@@ -5,15 +5,16 @@
 'use strict';
 
 /**
- * Mock class of FileOperationManager.
+ * Mock implementation of {FileOperationManager} for tests.
  * @constructor
+ * @struct
+ * @implements {FileOperationManager}
  * @extends {cr.EventTarget}
  */
 function MockFileOperationManager() {
-  cr.EventTarget.call(this);
-
   /**
-   * Event to be dispatched when requestTaskCancel is called.
+   * Event to be dispatched when requestTaskCancel is called. Note: the
+   * unittest writes this value before calling requestTaskCancel().
    * @type {Event}
    */
   this.cancelEvent = null;
@@ -25,20 +26,23 @@ function MockFileOperationManager() {
   this.pasteResolver = null;
 }
 
-MockFileOperationManager.prototype = {
-  __proto__: cr.EventTarget.prototype
+MockFileOperationManager.prototype = /** @struct */ {
+  __proto__: cr.EventTarget.prototype,
 };
 
 /**
- * Dispatches a pre-specified cancel event.
+ * Dispatches a cancel event that has been specified by the unittest.
  */
 MockFileOperationManager.prototype.requestTaskCancel = function() {
+  assert(this.cancelEvent);
   this.dispatchEvent(this.cancelEvent);
 };
 
 /**
- * @param {!Array<!Entry>} sourceEntries Entries of the source files.
- * @param {!DirectoryEntry} targetEntry The destination entry of the target
+ * Kick off pasting.
+ *
+ * @param {Array<Entry>} sourceEntries Entries of the source files.
+ * @param {DirectoryEntry} targetEntry The destination entry of the target
  *     directory.
  * @param {boolean} isMove True if the operation is "move", otherwise (i.e.
  *     if the operation is "copy") false.
@@ -69,9 +73,9 @@ MockFileOperationManager.prototype.whenPasteCalled = function() {
     throw new Error('Only one paste call can be waited on at a time.');
   }
 
-  return new Promise(function(resolve, reject) {
+  return new Promise((resolve, reject) => {
     this.pasteResolver = resolve;
-  }.bind(this));
+  });
 };
 
 /**
@@ -79,7 +83,7 @@ MockFileOperationManager.prototype.whenPasteCalled = function() {
  * @return {string}
  */
 MockFileOperationManager.prototype.generateTaskId = function() {
-  var newTaskId = 'task' + this.generatedTaskIds.length;
+  const newTaskId = 'task' + this.generatedTaskIds.length;
   this.generatedTaskIds.push(newTaskId);
   return newTaskId;
 };
@@ -91,3 +95,11 @@ MockFileOperationManager.prototype.generateTaskId = function() {
 MockFileOperationManager.prototype.isKnownTaskId = function(id) {
   return this.generatedTaskIds.indexOf(id) !== -1;
 };
+
+MockFileOperationManager.prototype.hasQueuedTasks = () => {};
+
+MockFileOperationManager.prototype.filterSameDirectoryEntry = () => {};
+
+MockFileOperationManager.prototype.deleteEntries = () => {};
+
+MockFileOperationManager.prototype.zipSelection = () => {};

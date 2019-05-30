@@ -607,11 +607,12 @@ TEST(optionalTest, CopyAssignment) {
   opt2_to_empty = empty;
   EXPECT_FALSE(opt2_to_empty);
 
-  EXPECT_FALSE(std::is_copy_assignable<absl::optional<const int>>::value);
-  EXPECT_TRUE(std::is_copy_assignable<absl::optional<Copyable>>::value);
-  EXPECT_FALSE(std::is_copy_assignable<absl::optional<MoveableThrow>>::value);
-  EXPECT_FALSE(std::is_copy_assignable<absl::optional<MoveableNoThrow>>::value);
-  EXPECT_FALSE(std::is_copy_assignable<absl::optional<NonMovable>>::value);
+  EXPECT_FALSE(absl::is_copy_assignable<absl::optional<const int>>::value);
+  EXPECT_TRUE(absl::is_copy_assignable<absl::optional<Copyable>>::value);
+  EXPECT_FALSE(absl::is_copy_assignable<absl::optional<MoveableThrow>>::value);
+  EXPECT_FALSE(
+      absl::is_copy_assignable<absl::optional<MoveableNoThrow>>::value);
+  EXPECT_FALSE(absl::is_copy_assignable<absl::optional<NonMovable>>::value);
 
   EXPECT_TRUE(absl::is_trivially_copy_assignable<int>::value);
   EXPECT_TRUE(absl::is_trivially_copy_assignable<volatile int>::value);
@@ -625,9 +626,9 @@ TEST(optionalTest, CopyAssignment) {
   };
 
   EXPECT_TRUE(absl::is_trivially_copy_assignable<Trivial>::value);
-  EXPECT_FALSE(std::is_copy_assignable<const Trivial>::value);
-  EXPECT_FALSE(std::is_copy_assignable<volatile Trivial>::value);
-  EXPECT_TRUE(std::is_copy_assignable<NonTrivial>::value);
+  EXPECT_FALSE(absl::is_copy_assignable<const Trivial>::value);
+  EXPECT_FALSE(absl::is_copy_assignable<volatile Trivial>::value);
+  EXPECT_TRUE(absl::is_copy_assignable<NonTrivial>::value);
   EXPECT_FALSE(absl::is_trivially_copy_assignable<NonTrivial>::value);
 
   // std::optional doesn't support volatile nontrivial types.
@@ -695,11 +696,11 @@ TEST(optionalTest, MoveAssignment) {
     EXPECT_EQ(1, listener.volatile_move_assign);
   }
 #endif  // ABSL_HAVE_STD_OPTIONAL
-  EXPECT_FALSE(std::is_move_assignable<absl::optional<const int>>::value);
-  EXPECT_TRUE(std::is_move_assignable<absl::optional<Copyable>>::value);
-  EXPECT_TRUE(std::is_move_assignable<absl::optional<MoveableThrow>>::value);
-  EXPECT_TRUE(std::is_move_assignable<absl::optional<MoveableNoThrow>>::value);
-  EXPECT_FALSE(std::is_move_assignable<absl::optional<NonMovable>>::value);
+  EXPECT_FALSE(absl::is_move_assignable<absl::optional<const int>>::value);
+  EXPECT_TRUE(absl::is_move_assignable<absl::optional<Copyable>>::value);
+  EXPECT_TRUE(absl::is_move_assignable<absl::optional<MoveableThrow>>::value);
+  EXPECT_TRUE(absl::is_move_assignable<absl::optional<MoveableNoThrow>>::value);
+  EXPECT_FALSE(absl::is_move_assignable<absl::optional<NonMovable>>::value);
 
   EXPECT_FALSE(
       std::is_nothrow_move_assignable<absl::optional<MoveableThrow>>::value);
@@ -1041,9 +1042,9 @@ TEST(optionalTest, Value) {
   // test exception throw on value()
   absl::optional<int> empty;
 #ifdef ABSL_HAVE_EXCEPTIONS
-  EXPECT_THROW(empty.value(), absl::bad_optional_access);
+  EXPECT_THROW((void)empty.value(), absl::bad_optional_access);
 #else
-  EXPECT_DEATH(empty.value(), "Bad optional access");
+  EXPECT_DEATH((void)empty.value(), "Bad optional access");
 #endif
 
   // test constexpr value()
@@ -1503,18 +1504,19 @@ TEST(optionalTest, Hash) {
 
   static_assert(is_hash_enabled_for<absl::optional<int>>::value, "");
   static_assert(is_hash_enabled_for<absl::optional<Hashable>>::value, "");
+  static_assert(
+      absl::type_traits_internal::IsHashable<absl::optional<int>>::value, "");
+  static_assert(
+      absl::type_traits_internal::IsHashable<absl::optional<Hashable>>::value,
+      "");
+  absl::type_traits_internal::AssertHashEnabled<absl::optional<int>>();
+  absl::type_traits_internal::AssertHashEnabled<absl::optional<Hashable>>();
 
-#if defined(_MSC_VER) || (defined(_LIBCPP_VERSION) && \
-                          _LIBCPP_VERSION < 4000 && _LIBCPP_STD_VER > 11)
-  // For MSVC and libc++ (< 4.0 and c++14), std::hash primary template has a
-  // static_assert to catch any user-defined type that doesn't provide a hash
-  // specialization. So instantiating std::hash<absl::optional<T>> will result
-  // in a hard error which is not SFINAE friendly.
-#define ABSL_STD_HASH_NOT_SFINAE_FRIENDLY 1
-#endif
-
-#ifndef ABSL_STD_HASH_NOT_SFINAE_FRIENDLY
+#if ABSL_META_INTERNAL_STD_HASH_SFINAE_FRIENDLY_
   static_assert(!is_hash_enabled_for<absl::optional<NonHashable>>::value, "");
+  static_assert(!absl::type_traits_internal::IsHashable<
+                    absl::optional<NonHashable>>::value,
+                "");
 #endif
 
   // libstdc++ std::optional is missing remove_const_t, i.e. it's using
@@ -1619,7 +1621,7 @@ TEST(optionalTest, AssignmentConstraints) {
   EXPECT_TRUE(
       (std::is_assignable<absl::optional<AnyLike>&, const AnyLike&>::value));
   EXPECT_TRUE(std::is_move_assignable<absl::optional<AnyLike>>::value);
-  EXPECT_TRUE(std::is_copy_assignable<absl::optional<AnyLike>>::value);
+  EXPECT_TRUE(absl::is_copy_assignable<absl::optional<AnyLike>>::value);
 }
 
 }  // namespace

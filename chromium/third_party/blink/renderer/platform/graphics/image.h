@@ -30,13 +30,16 @@
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "third_party/blink/renderer/platform/geometry/float_size.h"
 #include "third_party/blink/renderer/platform/geometry/int_rect.h"
+#include "third_party/blink/renderer/platform/graphics/canvas_color_params.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 #include "third_party/blink/renderer/platform/graphics/image_animation_policy.h"
 #include "third_party/blink/renderer/platform/graphics/image_observer.h"
 #include "third_party/blink/renderer/platform/graphics/image_orientation.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_image.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_record.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/shared_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
@@ -56,7 +59,6 @@ namespace blink {
 
 class FloatPoint;
 class FloatRect;
-class FloatSize;
 class GraphicsContext;
 class Image;
 class KURL;
@@ -72,9 +74,18 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
  public:
   virtual ~Image();
 
-  static cc::ImageDecodeCache& SharedCCDecodeCache();
+  static cc::ImageDecodeCache* SharedCCDecodeCache(
+      CanvasColorSpace color_space,
+      CanvasPixelFormat pixel_format);
 
   static scoped_refptr<Image> LoadPlatformResource(const char* name);
+
+  static PaintImage ResizeAndOrientImage(
+      const PaintImage&,
+      ImageOrientation,
+      FloatSize image_scale = FloatSize(1, 1),
+      float opacity = 1.0,
+      InterpolationQuality = kInterpolationNone);
 
   virtual bool IsSVGImage() const { return false; }
   virtual bool IsBitmapImage() const { return false; }
@@ -95,8 +106,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
   static Image* NullImage();
   bool IsNull() const { return Size().IsEmpty(); }
 
-  virtual bool UsesContainerSize() const { return false; }
-  virtual bool HasRelativeSize() const { return false; }
+  virtual bool HasIntrinsicSize() const { return true; }
 
   virtual IntSize Size() const = 0;
   IntRect Rect() const { return IntRect(IntPoint(), Size()); }
@@ -161,8 +171,6 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
     image_observer_disabled_ = disabled;
   }
 
-  enum TileRule { kStretchTile, kRoundTile, kSpaceTile, kRepeatTile };
-
   virtual scoped_refptr<Image> ImageForDefaultFrame();
 
   enum ImageDecodingMode {
@@ -219,33 +227,6 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
     return nullptr;
   }
 
-  // Given the |size| that the whole image should draw at, and the
-  // input phase requested by the content, and the space between repeated tiles,
-  // return a rectangle with |size| and a location that respects
-  // the phase but is no more than one size + space in magnitude. In practice,
-  // this means that if there is no repeating the returned rect would contain
-  // the destination_offset location. The destination_offset passed here must
-  // exactly match the location of the subset in a following call to
-  // ComputeSubsetForBackground.
-  static FloatRect ComputePhaseForBackground(
-      const FloatPoint& destination_offset,
-      const FloatSize& size,
-      const FloatPoint& phase,
-      const FloatSize& spacing);
-
-  // Compute the image subset, in intrinsic image coordinates, that gets mapped
-  // onto the |subset|, when the whole image would be drawn with phase
-  // and size given by |phase_and_size|. Assumes
-  // |phase_and_size| contains |subset|. The location
-  // of the requested subset should be the painting snapped location, or
-  // whatever was used as a destination_offset in ComputePhaseForBackground.
-  // It is used to undo the offset added in ComputePhaseForBackground. The size
-  // of requested subset should be the unsnapped size so that the computed
-  // scale and location in the source image can be correctly determined.
-  static FloatRect ComputeSubsetForBackground(const FloatRect& phase_and_size,
-                                              const FloatRect& subset,
-                                              const FloatSize& intrinsic_size);
-
   virtual sk_sp<PaintRecord> PaintRecordForContainer(
       const KURL& url,
       const IntSize& container_size,
@@ -255,15 +236,15 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
     return nullptr;
   }
 
-  HighContrastClassification GetHighContrastClassification() {
-    return high_contrast_classification_;
+  DarkModeClassification GetDarkModeClassification() {
+    return dark_mode_classification_;
   }
 
-  // High contrast classification result is cached to be consistent and have
+  // Dark mode classification result is cached to be consistent and have
   // higher performance for future paints.
-  void SetHighContrastClassification(
-      const HighContrastClassification high_contrast_classification) {
-    high_contrast_classification_ = high_contrast_classification;
+  void SetDarkModeClassification(
+      const DarkModeClassification dark_mode_classification) {
+    dark_mode_classification_ = dark_mode_classification;
   }
 
   PaintImage::Id paint_image_id() const { return stable_image_id_; }
@@ -273,30 +254,6 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
 
  protected:
   Image(ImageObserver* = nullptr, bool is_multipart = false);
-
-  // The unsnapped_subset_size should be the target painting area implied by the
-  //   content, without any snapping applied. It is necessary to correctly
-  //   compute the subset of the source image to paint into the destination.
-  // The snapped_paint_rect should be the target destination for painting into.
-  // The phase is never snapped.
-  // The tile_size is the total image size. The mapping from this size
-  //   to the unsnapped_dest_rect size defines the scaling of the image for
-  //   sprite computation.
-  void DrawTiledBackground(GraphicsContext&,
-                           const FloatSize& unsnapped_subset_size,
-                           const FloatRect& snapped_paint_rect,
-                           const FloatPoint& phase,
-                           const FloatSize& tile_size,
-                           SkBlendMode,
-                           const FloatSize& repeat_spacing);
-
-  void DrawTiledBorder(GraphicsContext&,
-                       const FloatRect& dst_rect,
-                       const FloatRect& src_rect,
-                       const FloatSize& tile_scale_factor,
-                       TileRule h_rule,
-                       TileRule v_rule,
-                       SkBlendMode);
 
   virtual void DrawPattern(GraphicsContext&,
                            const FloatRect&,
@@ -326,7 +283,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
   WeakPersistent<ImageObserver> image_observer_;
   PaintImage::Id stable_image_id_;
   const bool is_multipart_;
-  HighContrastClassification high_contrast_classification_;
+  DarkModeClassification dark_mode_classification_;
 
   DISALLOW_COPY_AND_ASSIGN(Image);
 };

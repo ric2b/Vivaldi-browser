@@ -74,12 +74,12 @@ class SafeBrowsingBlockingPage : public BaseBlockingPage {
   }
 
   // InterstitialPageDelegate method:
-  void OverrideRendererPrefs(content::RendererPreferences* prefs) override;
+  void OverrideRendererPrefs(blink::mojom::RendererPreferences* prefs) override;
   content::InterstitialPageDelegate::TypeID GetTypeForTesting() const override;
 
  protected:
   friend class SafeBrowsingBlockingPageFactoryImpl;
-  friend class SafeBrowsingBlockingPageTest;
+  friend class SafeBrowsingBlockingPageTestBase;
   friend class SafeBrowsingBlockingPageBrowserTest;
   friend class SafeBrowsingBlockingQuietPageFactoryImpl;
   friend class SafeBrowsingBlockingQuietPageTest;
@@ -93,7 +93,7 @@ class SafeBrowsingBlockingPage : public BaseBlockingPage {
                            ExtendedReportingNotShownOnSecurePage);
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingBlockingPageTest,
                            MalwareReportsTransitionDisabled);
-  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingBlockingPageTest,
+  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingBlockingPageIncognitoTest,
                            ExtendedReportingNotShownInIncognito);
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingBlockingPageTest,
                            ExtendedReportingNotShownNotAllowExtendedReporting);

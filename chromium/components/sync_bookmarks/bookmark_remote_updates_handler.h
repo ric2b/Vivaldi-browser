@@ -33,8 +33,12 @@ class BookmarkRemoteUpdatesHandler {
                                favicon::FaviconService* favicon_service,
                                SyncedBookmarkTracker* bookmark_tracker);
   // Processes the updates received from the sync server in |updates| and
-  // updates the |bookmark_model_| and |bookmark_tracker_| accordingly.
-  void Process(const syncer::UpdateResponseDataList& updates);
+  // updates the |bookmark_model_| and |bookmark_tracker_| accordingly. If
+  // |got_new_encryption_requirements| is true, it recommits all tracked
+  // entities except those in |updates| which should use the latest encryption
+  // key and hence don't need recommitting.
+  void Process(const syncer::UpdateResponseDataList& updates,
+               bool got_new_encryption_requirements);
 
   // Public for testing.
   static std::vector<const syncer::UpdateResponseData*> ReorderUpdatesForTest(
@@ -59,31 +63,33 @@ class BookmarkRemoteUpdatesHandler {
   //    ignored.
   // 3. Otherwise, a new node is created in the local bookmark model and
   //    registered in |bookmark_tracker_|.
-  void ProcessRemoteCreate(const syncer::UpdateResponseData& update);
+  // Returns true if a new bookmark has been registered in the
+  // |bookmark_tracker_|, false otherwise.
+  bool ProcessCreate(const syncer::UpdateResponseData& update);
 
   // Processes a remote update of a bookmark node. |update| must not be a
   // deletion, and the server_id must be already tracked, otherwise, it is a
-  // creation that gets handeled in ProcessRemoteCreate(). |tracked_entity| is
+  // creation that gets handled in ProcessCreate(). |tracked_entity| is
   // the tracked entity for that server_id. It is passed as a dependency instead
-  // of performing a lookup inside ProcessRemoteUpdate() to avoid wasting CPU
+  // of performing a lookup inside ProcessUpdate() to avoid wasting CPU
   // cycles for doing another lookup (this code runs on the UI thread).
-  void ProcessRemoteUpdate(const syncer::UpdateResponseData& update,
-                           const SyncedBookmarkTracker::Entity* tracked_entity);
+  void ProcessUpdate(const syncer::UpdateResponseData& update,
+                     const SyncedBookmarkTracker::Entity* tracked_entity);
 
   // Processes a remote delete of a bookmark node. |update_entity| must not be a
   // deletion. |tracked_entity| is the tracked entity for that server_id. It is
   // passed as a dependency instead of performing a lookup inside
-  // ProcessRemoteDelete() to avoid wasting CPU cycles for doing another lookup
+  // ProcessDelete() to avoid wasting CPU cycles for doing another lookup
   // (this code runs on the UI thread).
-  void ProcessRemoteDelete(const syncer::EntityData& update_entity,
-                           const SyncedBookmarkTracker::Entity* tracked_entity);
+  void ProcessDelete(const syncer::EntityData& update_entity,
+                     const SyncedBookmarkTracker::Entity* tracked_entity);
 
   // Processes a conflict where the bookmark has been changed both locally and
-  // remotely. It applies the general policy the server wins expcet in the case
+  // remotely. It applies the general policy the server wins except in the case
   // of remote deletions in which local wins. |tracked_entity| is the tracked
   // entity for that server_id. It is passed as a dependency instead of
-  // performing a lookup inside ProcessRemoteDelete() to avoid wasting CPU
-  // cycles for doing another lookup (this code runs on the UI thread).
+  // performing a lookup inside ProcessDelete() to avoid wasting CPU cycles for
+  // doing another lookup (this code runs on the UI thread).
   void ProcessConflict(const syncer::UpdateResponseData& update,
                        const SyncedBookmarkTracker::Entity* tracked_entity);
 

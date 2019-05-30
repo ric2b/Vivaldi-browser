@@ -29,8 +29,9 @@ int GetNumberOfUserSelectedApps() {
 
 namespace chromeos {
 
-AppDownloadingScreenHandler::AppDownloadingScreenHandler()
-    : BaseScreenHandler(kScreenId) {
+AppDownloadingScreenHandler::AppDownloadingScreenHandler(
+    JSCallsContainer* js_calls_container)
+    : BaseScreenHandler(kScreenId, js_calls_container) {
   set_call_js_prefix(kJsScreenPath);
 }
 
@@ -59,7 +60,7 @@ void AppDownloadingScreenHandler::Bind(AppDownloadingScreen* screen) {
 
 void AppDownloadingScreenHandler::Show() {
   ShowScreen(kScreenId);
-  CallJS("updateNumberOfSelectedApps",
+  CallJS("login.AppDownloadingScreen.updateNumberOfSelectedApps",
          base::Value(GetNumberOfUserSelectedApps()));
 }
 

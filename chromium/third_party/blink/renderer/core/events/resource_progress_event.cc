@@ -26,14 +26,14 @@
 
 #include "third_party/blink/renderer/core/events/resource_progress_event.h"
 
-#include "third_party/blink/renderer/core/event_names.h"
+#include "third_party/blink/renderer/core/event_interface_names.h"
 
 namespace blink {
 
 ResourceProgressEvent::ResourceProgressEvent(const AtomicString& type,
                                              bool length_computable,
-                                             unsigned long long loaded,
-                                             unsigned long long total,
+                                             uint64_t loaded,
+                                             uint64_t total,
                                              const String& url)
     : ProgressEvent(type, length_computable, loaded, total), url_(url) {}
 
@@ -42,7 +42,7 @@ const String& ResourceProgressEvent::url() const {
 }
 
 const AtomicString& ResourceProgressEvent::InterfaceName() const {
-  return EventNames::ResourceProgressEvent;
+  return event_interface_names::kResourceProgressEvent;
 }
 
 void ResourceProgressEvent::Trace(blink::Visitor* visitor) {

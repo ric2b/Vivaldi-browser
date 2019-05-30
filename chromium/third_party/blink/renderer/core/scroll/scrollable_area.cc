@@ -32,9 +32,13 @@
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 
 #include "build/build_config.h"
+#include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/layers/picture_layer.h"
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
+#include "third_party/blink/renderer/core/paint/paint_timing_detector.h"
 #include "third_party/blink/renderer/core/scroll/programmatic_scroll_animator.h"
 #include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
@@ -42,7 +46,6 @@
 #include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
-#include "third_party/blink/renderer/platform/scroll/main_thread_scrolling_reason.h"
 
 static const int kPixelsPerLineStep = 40;
 static const float kMinFractionToStepWhenPaging = 0.875f;
@@ -187,10 +190,9 @@ ScrollResult ScrollableArea::UserScroll(ScrollGranularity granularity,
 void ScrollableArea::SetScrollOffset(const ScrollOffset& offset,
                                      ScrollType scroll_type,
                                      ScrollBehavior behavior) {
-  if (scroll_type != kSequencedScroll && scroll_type != kClampingScroll &&
-      scroll_type != kAnchoringScroll) {
-    if (SmoothScrollSequencer* sequencer = GetSmoothScrollSequencer())
-      sequencer->AbortAnimations();
+  if (SmoothScrollSequencer* sequencer = GetSmoothScrollSequencer()) {
+    if (sequencer->FilterNewScrollOrAbortCurrent(scroll_type))
+      return;
   }
 
   ScrollOffset clamped_offset = ClampScrollOffset(offset);
@@ -324,6 +326,18 @@ void ScrollableArea::ScrollOffsetChanged(const ScrollOffset& offset,
         GetScrollOffset() - old_offset, scroll_type);
   }
 
+  if (RuntimeEnabledFeatures::FirstContentfulPaintPlusPlusEnabled()) {
+    if (GetScrollOffset() != old_offset && GetLayoutBox() &&
+        GetLayoutBox()->GetFrameView() &&
+        GetLayoutBox()
+            ->GetFrameView()
+            ->GetPaintTimingDetector()
+            .NeedToNotifyInputOrScroll()) {
+      GetLayoutBox()->GetFrameView()->GetPaintTimingDetector().NotifyScroll(
+          scroll_type);
+    }
+  }
+
   GetScrollAnimator().SetCurrentOffset(offset);
 }
 
@@ -358,7 +372,7 @@ void ScrollableArea::MouseEnteredContentArea() const {
 
 void ScrollableArea::MouseExitedContentArea() const {
   if (ScrollAnimatorBase* scroll_animator = ExistingScrollAnimator())
-    scroll_animator->MouseEnteredContentArea();
+    scroll_animator->MouseExitedContentArea();
 }
 
 void ScrollableArea::MouseMovedInContentArea() const {
@@ -568,7 +582,7 @@ void ScrollableArea::CancelProgrammaticScrollAnimation() {
 
 bool ScrollableArea::ShouldScrollOnMainThread() const {
   if (GraphicsLayer* layer = LayerForScrolling()) {
-    uint32_t reasons = layer->CcLayer()->main_thread_scrolling_reasons();
+    uint32_t reasons = layer->CcLayer()->GetMainThreadScrollingReasons();
     // Should scroll on main thread unless the reason is the one that is set
     // by the ScrollAnimator, in which case, the animation can still be
     // scheduled on the compositor.
@@ -576,7 +590,7 @@ bool ScrollableArea::ShouldScrollOnMainThread() const {
     // that doesn't actually cause shouldScrollOnMainThread() to be true.
     // This is confusing and should be cleaned up.
     return !!(reasons &
-              ~MainThreadScrollingReason::kHandlingScrollFromMainThread);
+              ~cc::MainThreadScrollingReason::kHandlingScrollFromMainThread);
   }
   return true;
 }
@@ -627,8 +641,8 @@ void ScrollableArea::ShowOverlayScrollbars() {
 
   if (!fade_overlay_scrollbars_timer_) {
     fade_overlay_scrollbars_timer_.reset(new TaskRunnerTimer<ScrollableArea>(
-        Platform::Current()->MainThread()->Scheduler()->CompositorTaskRunner(),
-        this, &ScrollableArea::FadeOverlayScrollbarsTimerFired));
+        ThreadScheduler::Current()->CompositorTaskRunner(), this,
+        &ScrollableArea::FadeOverlayScrollbarsTimerFired));
   }
 
   if (!scrollbar_captured_ && !mouse_over_scrollbar_) {

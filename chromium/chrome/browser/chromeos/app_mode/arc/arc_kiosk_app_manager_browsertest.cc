@@ -86,12 +86,14 @@ class ArcKioskAppManagerTest : public InProcessBrowserTest {
   }
 
   void SetUpOnMainThread() override {
-    settings_helper_.ReplaceProvider(kAccountsPrefDeviceLocalAccounts);
+    settings_helper_.ReplaceDeviceSettingsProviderWithStub();
     owner_settings_service_ =
         settings_helper_.CreateOwnerSettingsService(browser()->profile());
   }
 
-  void TearDownOnMainThread() override { settings_helper_.RestoreProvider(); }
+  void TearDownOnMainThread() override {
+    settings_helper_.RestoreRealDeviceSettingsProvider();
+  }
 
   void SetApps(const std::vector<policy::ArcKioskAppBasicInfo>& apps,
                const std::string& auto_login_account) {
@@ -161,6 +163,7 @@ IN_PROC_BROWSER_TEST_F(ArcKioskAppManagerTest, Basic) {
     ASSERT_EQ(app2.display_name(), apps[1]->name());
     EXPECT_FALSE(manager()->GetAutoLaunchAccountId().is_valid());
     EXPECT_FALSE(manager()->current_app_was_auto_launched_with_zero_delay());
+    CleanApps();
   }
 
   // Set auto-launch app.

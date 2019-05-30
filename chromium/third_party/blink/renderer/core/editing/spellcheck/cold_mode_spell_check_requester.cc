@@ -30,10 +30,10 @@ const int kInvalidChunkIndex = -1;
 // static
 ColdModeSpellCheckRequester* ColdModeSpellCheckRequester::Create(
     LocalFrame& frame) {
-  return new ColdModeSpellCheckRequester(frame);
+  return MakeGarbageCollected<ColdModeSpellCheckRequester>(frame);
 }
 
-void ColdModeSpellCheckRequester::Trace(blink::Visitor* visitor) {
+void ColdModeSpellCheckRequester::Trace(Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(root_editable_);
   visitor->Trace(remaining_check_range_);
@@ -153,8 +153,7 @@ void ColdModeSpellCheckRequester::RequestCheckingForNextChunk() {
   // Chromium spellchecker requires complete sentences to be checked. However,
   // EndOfSentence() sometimes returns null or out-of-editable positions, which
   // are corrected here.
-  const Position extended_end =
-      EndOfSentence(CreateVisiblePosition(chunk_end)).DeepEquivalent();
+  const Position extended_end = EndOfSentence(chunk_end).GetPosition();
   const Position check_end =
       extended_end.IsNull() || extended_end < chunk_end
           ? chunk_end

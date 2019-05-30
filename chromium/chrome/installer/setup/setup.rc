@@ -162,7 +162,7 @@ BEGIN
     PUSHBUTTON      "Cancel", IDCANCEL, 25, 233, 70, 14, WS_TABSTOP
     PUSHBUTTON      "Simple", IDC_BTN_MODE, 107, 233, 70, 14, WS_TABSTOP
     DEFPUSHBUTTON   "<>", IDOK, 189, 233, 150, 14, WS_TABSTOP
-    LTEXT           "Copyright 2018 (C) Vivaldi Technologies AS. All rights reserved.", IDC_STATIC_COPYRIGHT, 25, 263, 312, 12, SS_CENTER
+    LTEXT           "Copyright 2019 (C) Vivaldi Technologies AS. All rights reserved.", IDC_STATIC_COPYRIGHT, 25, 263, 312, 12, SS_CENTER
     CONTROL         "<a>Privacy Policy</a>", IDC_SYSLINK_PRIVACY_POLICY, "SysLink", WS_TABSTOP, 158, 273, 80, 15
 END
 

@@ -5,139 +5,147 @@
 ## Contents
 
 *   [Commands](#commands)
-    *   [analyze: Analyze which targets are affected by a list of files.](#analyze)
-    *   [args: Display or configure arguments declared by the build.](#args)
-    *   [check: Check header dependencies.](#check)
-    *   [clean: Cleans the output directory.](#clean)
-    *   [desc: Show lots of insightful information about a target or config.](#desc)
-    *   [format: Format .gn file.](#format)
-    *   [gen: Generate ninja files.](#gen)
-    *   [help: Does what you think.](#help)
-    *   [ls: List matching targets.](#ls)
-    *   [path: Find paths between two targets.](#path)
-    *   [refs: Find stuff referencing a target or file.](#refs)
+    *   [analyze: Analyze which targets are affected by a list of files.](#cmd_analyze)
+    *   [args: Display or configure arguments declared by the build.](#cmd_args)
+    *   [check: Check header dependencies.](#cmd_check)
+    *   [clean: Cleans the output directory.](#cmd_clean)
+    *   [desc: Show lots of insightful information about a target or config.](#cmd_desc)
+    *   [format: Format .gn files.](#cmd_format)
+    *   [gen: Generate ninja files.](#cmd_gen)
+    *   [help: Does what you think.](#cmd_help)
+    *   [ls: List matching targets.](#cmd_ls)
+    *   [meta: List target metadata collection results.](#cmd_meta)
+    *   [path: Find paths between two targets.](#cmd_path)
+    *   [refs: Find stuff referencing a target or file.](#cmd_refs)
 *   [Target declarations](#targets)
-    *   [action: Declare a target that runs a script a single time.](#action)
-    *   [action_foreach: Declare a target that runs a script over a set of files.](#action_foreach)
-    *   [bundle_data: [iOS/macOS] Declare a target without output.](#bundle_data)
-    *   [copy: Declare a target that copies files.](#copy)
-    *   [create_bundle: [iOS/macOS] Build an iOS or macOS bundle.](#create_bundle)
-    *   [executable: Declare an executable target.](#executable)
-    *   [group: Declare a named group of targets.](#group)
-    *   [loadable_module: Declare a loadable module target.](#loadable_module)
-    *   [shared_library: Declare a shared library target.](#shared_library)
-    *   [source_set: Declare a source set target.](#source_set)
-    *   [static_library: Declare a static library target.](#static_library)
-    *   [target: Declare an target with the given programmatic type.](#target)
+    *   [action: Declare a target that runs a script a single time.](#func_action)
+    *   [action_foreach: Declare a target that runs a script over a set of files.](#func_action_foreach)
+    *   [bundle_data: [iOS/macOS] Declare a target without output.](#func_bundle_data)
+    *   [copy: Declare a target that copies files.](#func_copy)
+    *   [create_bundle: [iOS/macOS] Build an iOS or macOS bundle.](#func_create_bundle)
+    *   [executable: Declare an executable target.](#func_executable)
+    *   [generated_file: Declare a generated_file target.](#func_generated_file)
+    *   [group: Declare a named group of targets.](#func_group)
+    *   [loadable_module: Declare a loadable module target.](#func_loadable_module)
+    *   [shared_library: Declare a shared library target.](#func_shared_library)
+    *   [source_set: Declare a source set target.](#func_source_set)
+    *   [static_library: Declare a static library target.](#func_static_library)
+    *   [target: Declare an target with the given programmatic type.](#func_target)
 *   [Buildfile functions](#functions)
-    *   [assert: Assert an expression is true at generation time.](#assert)
-    *   [config: Defines a configuration object.](#config)
-    *   [declare_args: Declare build arguments.](#declare_args)
+    *   [assert: Assert an expression is true at generation time.](#func_assert)
+    *   [config: Defines a configuration object.](#func_config)
+    *   [declare_args: Declare build arguments.](#func_declare_args)
     *   [declare_overrides: Declare override build arguments.](#declare_overrides)
-    *   [defined: Returns whether an identifier is defined.](#defined)
-    *   [exec_script: Synchronously run a script and return the output.](#exec_script)
-    *   [foreach: Iterate over a list.](#foreach)
-    *   [forward_variables_from: Copies variables from a different scope.](#forward_variables_from)
-    *   [get_label_info: Get an attribute from a target's label.](#get_label_info)
-    *   [get_path_info: Extract parts of a file or directory name.](#get_path_info)
-    *   [get_target_outputs: [file list] Get the list of outputs from a target.](#get_target_outputs)
-    *   [getenv: Get an environment variable.](#getenv)
-    *   [import: Import a file into the current scope.](#import)
-    *   [not_needed: Mark variables from scope as not needed.](#not_needed)
-    *   [pool: Defines a pool object.](#pool)
-    *   [print: Prints to the console.](#print)
-    *   [process_file_template: Do template expansion over a list of files.](#process_file_template)
-    *   [read_file: Read a file into a variable.](#read_file)
-    *   [rebase_path: Rebase a file or directory to another location.](#rebase_path)
-    *   [set_default_toolchain: Sets the default toolchain name.](#set_default_toolchain)
-    *   [set_defaults: Set default values for a target type.](#set_defaults)
+    *   [defined: Returns whether an identifier is defined.](#func_defined)
+    *   [exec_script: Synchronously run a script and return the output.](#func_exec_script)
+    *   [foreach: Iterate over a list.](#func_foreach)
+    *   [forward_variables_from: Copies variables from a different scope.](#func_forward_variables_from)
+    *   [get_label_info: Get an attribute from a target's label.](#func_get_label_info)
+    *   [get_path_info: Extract parts of a file or directory name.](#func_get_path_info)
+    *   [get_target_outputs: [file list] Get the list of outputs from a target.](#func_get_target_outputs)
+    *   [getenv: Get an environment variable.](#func_getenv)
+    *   [import: Import a file into the current scope.](#func_import)
+    *   [not_needed: Mark variables from scope as not needed.](#func_not_needed)
+    *   [pool: Defines a pool object.](#func_pool)
+    *   [print: Prints to the console.](#func_print)
+    *   [process_file_template: Do template expansion over a list of files.](#func_process_file_template)
+    *   [read_file: Read a file into a variable.](#func_read_file)
+    *   [rebase_path: Rebase a file or directory to another location.](#func_rebase_path)
+    *   [set_default_toolchain: Sets the default toolchain name.](#func_set_default_toolchain)
+    *   [set_defaults: Set default values for a target type.](#func_set_defaults)
     *   [set_path_map: Set a path override map.](#set_path_map)
-    *   [set_sources_assignment_filter: Set a pattern to filter source files.](#set_sources_assignment_filter)
-    *   [split_list: Splits a list into N different sub-lists.](#split_list)
-    *   [string_replace: Replaces substring in the given string.](#string_replace)
-    *   [template: Define a template rule.](#template)
-    *   [tool: Specify arguments to a toolchain tool.](#tool)
-    *   [toolchain: Defines a toolchain.](#toolchain)
+    *   [set_sources_assignment_filter: Set a pattern to filter source files.](#func_set_sources_assignment_filter)
+    *   [split_list: Splits a list into N different sub-lists.](#func_split_list)
+    *   [string_replace: Replaces substring in the given string.](#func_string_replace)
+    *   [template: Define a template rule.](#func_template)
+    *   [tool: Specify arguments to a toolchain tool.](#func_tool)
+    *   [toolchain: Defines a toolchain.](#func_toolchain)
     *   [update_target: Add code to be run after setting up a target.](#update_target)
     *   [update_template_instance: Add code to be run after setting up a template instance.](#update_template_instance)
-    *   [write_file: Write a file to disk.](#write_file)
+    *   [write_file: Write a file to disk.](#func_write_file)
 *   [Built-in predefined variables](#predefined_variables)
-    *   [current_cpu: [string] The processor architecture of the current toolchain.](#current_cpu)
-    *   [current_os: [string] The operating system of the current toolchain.](#current_os)
-    *   [current_toolchain: [string] Label of the current toolchain.](#current_toolchain)
-    *   [default_toolchain: [string] Label of the default toolchain.](#default_toolchain)
-    *   [host_cpu: [string] The processor architecture that GN is running on.](#host_cpu)
-    *   [host_os: [string] The operating system that GN is running on.](#host_os)
-    *   [invoker: [string] The invoking scope inside a template.](#invoker)
-    *   [python_path: [string] Absolute path of Python.](#python_path)
-    *   [root_build_dir: [string] Directory where build commands are run.](#root_build_dir)
-    *   [root_gen_dir: [string] Directory for the toolchain's generated files.](#root_gen_dir)
-    *   [root_out_dir: [string] Root directory for toolchain output files.](#root_out_dir)
-    *   [target_cpu: [string] The desired cpu architecture for the build.](#target_cpu)
-    *   [target_gen_dir: [string] Directory for a target's generated files.](#target_gen_dir)
-    *   [target_name: [string] The name of the current target.](#target_name)
-    *   [target_os: [string] The desired operating system for the build.](#target_os)
-    *   [target_out_dir: [string] Directory for target output files.](#target_out_dir)
+    *   [current_cpu: [string] The processor architecture of the current toolchain.](#var_current_cpu)
+    *   [current_os: [string] The operating system of the current toolchain.](#var_current_os)
+    *   [current_toolchain: [string] Label of the current toolchain.](#var_current_toolchain)
+    *   [default_toolchain: [string] Label of the default toolchain.](#var_default_toolchain)
+    *   [host_cpu: [string] The processor architecture that GN is running on.](#var_host_cpu)
+    *   [host_os: [string] The operating system that GN is running on.](#var_host_os)
+    *   [invoker: [string] The invoking scope inside a template.](#var_invoker)
+    *   [python_path: [string] Absolute path of Python.](#var_python_path)
+    *   [root_build_dir: [string] Directory where build commands are run.](#var_root_build_dir)
+    *   [root_gen_dir: [string] Directory for the toolchain's generated files.](#var_root_gen_dir)
+    *   [root_out_dir: [string] Root directory for toolchain output files.](#var_root_out_dir)
+    *   [target_cpu: [string] The desired cpu architecture for the build.](#var_target_cpu)
+    *   [target_gen_dir: [string] Directory for a target's generated files.](#var_target_gen_dir)
+    *   [target_name: [string] The name of the current target.](#var_target_name)
+    *   [target_os: [string] The desired operating system for the build.](#var_target_os)
+    *   [target_out_dir: [string] Directory for target output files.](#var_target_out_dir)
 *   [Variables you set in targets](#target_variables)
-    *   [all_dependent_configs: [label list] Configs to be forced on dependents.](#all_dependent_configs)
-    *   [allow_circular_includes_from: [label list] Permit includes from deps.](#allow_circular_includes_from)
-    *   [arflags: [string list] Arguments passed to static_library archiver.](#arflags)
-    *   [args: [string list] Arguments passed to an action.](#args)
-    *   [asmflags: [string list] Flags passed to the assembler.](#asmflags)
-    *   [assert_no_deps: [label pattern list] Ensure no deps on these targets.](#assert_no_deps)
-    *   [bundle_contents_dir: Expansion of {{bundle_contents_dir}} in create_bundle.](#bundle_contents_dir)
-    *   [bundle_deps_filter: [label list] A list of labels that are filtered out.](#bundle_deps_filter)
-    *   [bundle_executable_dir: Expansion of {{bundle_executable_dir}} in create_bundle](#bundle_executable_dir)
-    *   [bundle_plugins_dir: Expansion of {{bundle_plugins_dir}} in create_bundle.](#bundle_plugins_dir)
-    *   [bundle_resources_dir: Expansion of {{bundle_resources_dir}} in create_bundle.](#bundle_resources_dir)
-    *   [bundle_root_dir: Expansion of {{bundle_root_dir}} in create_bundle.](#bundle_root_dir)
-    *   [cflags: [string list] Flags passed to all C compiler variants.](#cflags)
-    *   [cflags_c: [string list] Flags passed to the C compiler.](#cflags_c)
-    *   [cflags_cc: [string list] Flags passed to the C++ compiler.](#cflags_cc)
-    *   [cflags_objc: [string list] Flags passed to the Objective C compiler.](#cflags_objc)
-    *   [cflags_objcc: [string list] Flags passed to the Objective C++ compiler.](#cflags_objcc)
-    *   [check_includes: [boolean] Controls whether a target's files are checked.](#check_includes)
-    *   [code_signing_args: [string list] Arguments passed to code signing script.](#code_signing_args)
-    *   [code_signing_outputs: [file list] Output files for code signing step.](#code_signing_outputs)
-    *   [code_signing_script: [file name] Script for code signing.](#code_signing_script)
-    *   [code_signing_sources: [file list] Sources for code signing step.](#code_signing_sources)
-    *   [complete_static_lib: [boolean] Links all deps into a static library.](#complete_static_lib)
-    *   [configs: [label list] Configs applying to this target or config.](#configs)
-    *   [data: [file list] Runtime data file dependencies.](#data)
-    *   [data_deps: [label list] Non-linked dependencies.](#data_deps)
-    *   [defines: [string list] C preprocessor defines.](#defines)
-    *   [depfile: [string] File name for input dependencies for actions.](#depfile)
-    *   [deps: [label list] Private linked dependencies.](#deps)
-    *   [friend: [label pattern list] Allow targets to include private headers.](#friend)
-    *   [include_dirs: [directory list] Additional include directories.](#include_dirs)
-    *   [inputs: [file list] Additional compile-time dependencies.](#inputs)
-    *   [ldflags: [string list] Flags passed to the linker.](#ldflags)
-    *   [lib_dirs: [directory list] Additional library directories.](#lib_dirs)
-    *   [libs: [string list] Additional libraries to link.](#libs)
-    *   [output_dir: [directory] Directory to put output file in.](#output_dir)
-    *   [output_extension: [string] Value to use for the output's file extension.](#output_extension)
-    *   [output_name: [string] Name for the output file other than the default.](#output_name)
-    *   [output_prefix_override: [boolean] Don't use prefix for output name.](#output_prefix_override)
-    *   [outputs: [file list] Output files for actions and copy targets.](#outputs)
-    *   [partial_info_plist: [filename] Path plist from asset catalog compiler.](#partial_info_plist)
-    *   [pool: [string] Label of the pool used by the action.](#pool)
-    *   [precompiled_header: [string] Header file to precompile.](#precompiled_header)
-    *   [precompiled_header_type: [string] "gcc" or "msvc".](#precompiled_header_type)
-    *   [precompiled_source: [file name] Source file to precompile.](#precompiled_source)
-    *   [product_type: [string] Product type for Xcode projects.](#product_type)
-    *   [public: [file list] Declare public header files for a target.](#public)
-    *   [public_configs: [label list] Configs applied to dependents.](#public_configs)
-    *   [public_deps: [label list] Declare public dependencies.](#public_deps)
-    *   [response_file_contents: [string list] Contents of .rsp file for actions.](#response_file_contents)
-    *   [script: [file name] Script file for actions.](#script)
-    *   [sources: [file list] Source files for a target.](#sources)
-    *   [testonly: [boolean] Declares a target must only be used for testing.](#testonly)
-    *   [visibility: [label list] A list of labels that can depend on a target.](#visibility)
-    *   [write_runtime_deps: Writes the target's runtime_deps to the given path.](#write_runtime_deps)
-    *   [xcode_extra_attributes: [scope] Extra attributes for Xcode projects.](#xcode_extra_attributes)
-    *   [test_application_name: [string] Test application name for unit or ui test target.](#test_application_name)
+    *   [all_dependent_configs: [label list] Configs to be forced on dependents.](#var_all_dependent_configs)
+    *   [allow_circular_includes_from: [label list] Permit includes from deps.](#var_allow_circular_includes_from)
+    *   [arflags: [string list] Arguments passed to static_library archiver.](#var_arflags)
+    *   [args: [string list] Arguments passed to an action.](#var_args)
+    *   [asmflags: [string list] Flags passed to the assembler.](#var_asmflags)
+    *   [assert_no_deps: [label pattern list] Ensure no deps on these targets.](#var_assert_no_deps)
+    *   [bundle_contents_dir: Expansion of {{bundle_contents_dir}} in create_bundle.](#var_bundle_contents_dir)
+    *   [bundle_deps_filter: [label list] A list of labels that are filtered out.](#var_bundle_deps_filter)
+    *   [bundle_executable_dir: Expansion of {{bundle_executable_dir}} in create_bundle](#var_bundle_executable_dir)
+    *   [bundle_plugins_dir: Expansion of {{bundle_plugins_dir}} in create_bundle.](#var_bundle_plugins_dir)
+    *   [bundle_resources_dir: Expansion of {{bundle_resources_dir}} in create_bundle.](#var_bundle_resources_dir)
+    *   [bundle_root_dir: Expansion of {{bundle_root_dir}} in create_bundle.](#var_bundle_root_dir)
+    *   [cflags: [string list] Flags passed to all C compiler variants.](#var_cflags)
+    *   [cflags_c: [string list] Flags passed to the C compiler.](#var_cflags_c)
+    *   [cflags_cc: [string list] Flags passed to the C++ compiler.](#var_cflags_cc)
+    *   [cflags_objc: [string list] Flags passed to the Objective C compiler.](#var_cflags_objc)
+    *   [cflags_objcc: [string list] Flags passed to the Objective C++ compiler.](#var_cflags_objcc)
+    *   [check_includes: [boolean] Controls whether a target's files are checked.](#var_check_includes)
+    *   [code_signing_args: [string list] Arguments passed to code signing script.](#var_code_signing_args)
+    *   [code_signing_outputs: [file list] Output files for code signing step.](#var_code_signing_outputs)
+    *   [code_signing_script: [file name] Script for code signing.](#var_code_signing_script)
+    *   [code_signing_sources: [file list] Sources for code signing step.](#var_code_signing_sources)
+    *   [complete_static_lib: [boolean] Links all deps into a static library.](#var_complete_static_lib)
+    *   [configs: [label list] Configs applying to this target or config.](#var_configs)
+    *   [contents: Contents to write to file.](#var_contents)
+    *   [data: [file list] Runtime data file dependencies.](#var_data)
+    *   [data_deps: [label list] Non-linked dependencies.](#var_data_deps)
+    *   [data_keys: [string list] Keys from which to collect metadata.](#var_data_keys)
+    *   [defines: [string list] C preprocessor defines.](#var_defines)
+    *   [depfile: [string] File name for input dependencies for actions.](#var_depfile)
+    *   [deps: [label list] Private linked dependencies.](#var_deps)
+    *   [friend: [label pattern list] Allow targets to include private headers.](#var_friend)
+    *   [include_dirs: [directory list] Additional include directories.](#var_include_dirs)
+    *   [inputs: [file list] Additional compile-time dependencies.](#var_inputs)
+    *   [ldflags: [string list] Flags passed to the linker.](#var_ldflags)
+    *   [lib_dirs: [directory list] Additional library directories.](#var_lib_dirs)
+    *   [libs: [string list] Additional libraries to link.](#var_libs)
+    *   [metadata: [scope] Metadata of this target.](#var_metadata)
+    *   [output_conversion: Data format for generated_file targets.](#var_output_conversion)
+    *   [output_dir: [directory] Directory to put output file in.](#var_output_dir)
+    *   [output_extension: [string] Value to use for the output's file extension.](#var_output_extension)
+    *   [output_name: [string] Name for the output file other than the default.](#var_output_name)
+    *   [output_prefix_override: [boolean] Don't use prefix for output name.](#var_output_prefix_override)
+    *   [outputs: [file list] Output files for actions and copy targets.](#var_outputs)
+    *   [partial_info_plist: [filename] Path plist from asset catalog compiler.](#var_partial_info_plist)
+    *   [pool: [string] Label of the pool used by the action.](#var_pool)
+    *   [precompiled_header: [string] Header file to precompile.](#var_precompiled_header)
+    *   [precompiled_header_type: [string] "gcc" or "msvc".](#var_precompiled_header_type)
+    *   [precompiled_source: [file name] Source file to precompile.](#var_precompiled_source)
+    *   [product_type: [string] Product type for Xcode projects.](#var_product_type)
+    *   [public: [file list] Declare public header files for a target.](#var_public)
+    *   [public_configs: [label list] Configs applied to dependents.](#var_public_configs)
+    *   [public_deps: [label list] Declare public dependencies.](#var_public_deps)
+    *   [rebase: [boolean] Rebase collected metadata as files.](#var_rebase)
+    *   [response_file_contents: [string list] Contents of .rsp file for actions.](#var_response_file_contents)
+    *   [script: [file name] Script file for actions.](#var_script)
+    *   [sources: [file list] Source files for a target.](#var_sources)
+    *   [testonly: [boolean] Declares a target must only be used for testing.](#var_testonly)
+    *   [visibility: [label list] A list of labels that can depend on a target.](#var_visibility)
+    *   [walk_keys: [string list] Key(s) for managing the metadata collection walk.](#var_walk_keys)
+    *   [write_runtime_deps: Writes the target's runtime_deps to the given path.](#var_write_runtime_deps)
+    *   [xcode_extra_attributes: [scope] Extra attributes for Xcode projects.](#var_xcode_extra_attributes)
+    *   [xcode_test_application_name: [string] Name for Xcode test target.](#var_xcode_test_application_name)
 *   [Other help topics](#other)
-    *   [all: Print all the help at once](#all)
+    *   all: Print all the help at once
     *   [buildargs: How build arguments work.](#buildargs)
     *   [dotfile: Info about the toplevel .gn file.](#dotfile)
     *   [execution: Build graph and execution overview.](#execution)
@@ -150,11 +158,11 @@
     *   [output_conversion: Specifies how to transform a value to output.](#output_conversion)
     *   [runtime_deps: How runtime dependency computation works.](#runtime_deps)
     *   [source_expansion: Map sources to outputs for scripts.](#source_expansion)
-    *   [switches: Show available command-line switches.](#switches)
+    *   [switches: Show available command-line switches.](#switch_list)
 
 ## <a name="commands"></a>Commands
 
-### <a name="analyze"></a>**gn analyze &lt;out_dir&gt; &lt;input_path&gt; &lt;output_path&gt;**
+### <a name="cmd_analyze"></a>**gn analyze &lt;out_dir&gt; &lt;input_path&gt; &lt;output_path&gt;**
 
 ```
   Analyze which targets are affected by a list of files.
@@ -224,9 +232,13 @@
   tries really hard to always write something to the output JSON and convey
   errors that way rather than via return codes.
 ```
-### <a name="args"></a>**gn args &lt;out_dir&gt; [\--list] [\--short] [\--args] [\--overrides-only]**
+### <a name="cmd_args"></a>**gn args**: (command-line tool)
 
 ```
+  Display or configure arguments declared by the build.
+
+    gn args <out_dir> [--list] [--short] [--args] [--overrides-only]
+
   See also "gn help buildargs" for a more high-level overview of how
   build arguments work.
 ```
@@ -309,7 +321,7 @@
     given arguments set (which may affect the values of other
     arguments).
 ```
-### <a name="check"></a>**gn check &lt;out_dir&gt; [&lt;label_pattern&gt;] [\--force]**
+### <a name="cmd_check"></a>**gn check &lt;out_dir&gt; [&lt;label_pattern&gt;] [\--force]**
 
 ```
   GN's include header checker validates that the includes for C-like source
@@ -335,9 +347,9 @@
 #### **What gets checked**
 
 ```
-  The .gn file may specify a list of targets to be checked. Only these targets
-  will be checked if no label_pattern is specified on the command line.
-  Otherwise, the command-line list is used instead. See "gn help dotfile".
+  The .gn file may specify a list of targets to be checked in the list
+  check_targets (see "gn help dotfile"). If a label pattern is specified
+  on the command line, check_targets is not used.
 
   Targets can opt-out from checking with "check_includes = false" (see
   "gn help check_includes").
@@ -424,13 +436,13 @@
   gn check out/Default "//foo/*
       Check only the files in targets in the //foo directory tree.
 ```
-### <a name="clean"></a>**gn clean &lt;out_dir&gt;**
+### <a name="cmd_clean"></a>**gn clean &lt;out_dir&gt;**
 
 ```
   Deletes the contents of the output directory except for args.gn and
   creates a Ninja build environment sufficient to regenerate the build.
 ```
-### <a name="desc"></a>**gn desc &lt;out_dir&gt; &lt;label or pattern&gt; [&lt;what to show&gt;] [\--blame] "**
+### <a name="cmd_desc"></a>**gn desc &lt;out_dir&gt; &lt;label or pattern&gt; [&lt;what to show&gt;] [\--blame] "**
 #### **[\--format=json]**
 
 ```
@@ -456,6 +468,7 @@
   cflags_cc [--blame]
   check_includes
   configs [--tree] (see below)
+  data_keys
   defines [--blame]
   depfile
   deps [--all] [--tree] (see below)
@@ -464,13 +477,17 @@
   ldflags [--blame]
   lib_dirs
   libs
+  metadata
+  output_conversion
   outputs
   public_configs
   public
+  rebase
   script
   sources
   testonly
   visibility
+  walk_keys
 
   runtime_deps
       Compute all runtime deps for the given target. This is a computed list
@@ -589,7 +606,7 @@
       Shows defines set for the //base:base target, annotated by where
       each one was set from.
 ```
-### <a name="format"></a>**gn format [\--dump-tree] (\--stdin | &lt;build_file&gt;)**
+### <a name="cmd_format"></a>**gn format [\--dump-tree] (\--stdin | &lt;list of build_files...&gt;)**
 
 ```
   Formats .gn file to a standard format.
@@ -616,9 +633,9 @@
       - Exit code 1: general failure (parse error, etc.)
       - Exit code 2: successful format, but differs from on disk.
 
-  --dump-tree
-      For debugging, dumps the parse tree to stdout and does not update the
-      file or print formatted output.
+  --dump-tree[=( text | json )]
+      Dumps the parse tree to stdout and does not update the file or print
+      formatted output. If no format is specified, text format will be used.
 
   --stdin
       Read input from stdin and write to stdout rather than update a file
@@ -627,12 +644,12 @@
 
 #### **Examples**
 ```
-  gn format //some/BUILD.gn
+  gn format //some/BUILD.gn //some/other/BUILD.gn //and/another/BUILD.gn
   gn format some\\BUILD.gn
   gn format /abspath/some/BUILD.gn
   gn format --stdin
 ```
-### <a name="gen"></a>**gn gen [\--check] [&lt;ide options&gt;] &lt;out_dir&gt;**
+### <a name="cmd_gen"></a>**gn gen [\--check] [&lt;ide options&gt;] &lt;out_dir&gt;**
 
 ```
   Generates ninja files from the current tree and puts them in the given output
@@ -757,12 +774,12 @@
 ```
   --export-compile-commands
       Produces a compile_commands.json file in the root of the build directory
-      containing an array of “command objects”, where each command object
+      containing an array of “command objects�?, where each command object
       specifies one way a translation unit is compiled in the project. This is
       used for various Clang-based tooling, allowing for the replay of individual
       compilations independent of the build system.
 ```
-### <a name="help"></a>**gn help &lt;anything&gt;**
+### <a name="cmd_help"></a>**gn help &lt;anything&gt;**
 
 ```
   Yo dawg, I heard you like help on your help so I put help on the help in the
@@ -784,7 +801,7 @@
   gn help --markdown all
       Dump all help to stdout in markdown format.
 ```
-### <a name="ls"></a>**gn ls &lt;out_dir&gt; [&lt;label_pattern&gt;] [\--all-toolchains] [\--as=...]**
+### <a name="cmd_ls"></a>**gn ls &lt;out_dir&gt; [&lt;label_pattern&gt;] [\--all-toolchains] [\--as=...]**
 ```
       [--type=...] [--testonly=...]
 
@@ -857,7 +874,62 @@
       Lists all variants of the target //base:base (it may be referenced
       in multiple toolchains).
 ```
-### <a name="path"></a>**gn path &lt;out_dir&gt; &lt;target_one&gt; &lt;target_two&gt;**
+### <a name="cmd_meta"></a>**gn meta &lt;out_dir&gt; &lt;target&gt;* \--data=&lt;key&gt;[,&lt;key&gt;*]* [\--walk=&lt;key&gt;[,&lt;key&gt;*]*]**
+```
+       [--rebase=<dest dir>]
+
+  Lists collected metaresults of all given targets for the given data key(s),
+  collecting metadata dependencies as specified by the given walk key(s).
+
+  See `gn help generated_file` for more information on the walk.
+```
+
+#### **Arguments**
+
+```
+  <target(s)>
+    A list of target labels from which to initiate the walk.
+
+  --data
+    A list of keys from which to extract data. In each target walked, its metadata
+    scope is checked for the presence of these keys. If present, the contents of
+    those variable in the scope are appended to the results list.
+
+  --walk (optional)
+    A list of keys from which to control the walk. In each target walked, its
+    metadata scope is checked for the presence of any of these keys. If present,
+    the contents of those variables is checked to ensure that it is a label of
+    a valid dependency of the target and then added to the set of targets to walk.
+    If the empty string ("") is present in any of these keys, all deps and data_deps
+    are added to the walk set.
+
+  --rebase (optional)
+    A destination directory onto which to rebase any paths found. If set, all
+    collected metadata will be rebased onto this path. This option will throw errors
+    if collected metadata is not a list of strings.
+```
+
+#### **Examples**
+
+```
+  gn meta out/Debug "//base/foo" --data=files
+      Lists collected metaresults for the `files` key in the //base/foo:foo
+      target and all of its dependency tree.
+
+  gn meta out/Debug "//base/foo" --data=files --data=other
+      Lists collected metaresults for the `files` and `other` keys in the
+      //base/foo:foo target and all of its dependency tree.
+
+  gn meta out/Debug "//base/foo" --data=files --walk=stop
+      Lists collected metaresults for the `files` key in the //base/foo:foo
+      target and all of the dependencies listed in the `stop` key (and so on).
+
+  gn meta out/Debug "//base/foo" --data=files --rebase="/"
+      Lists collected metaresults for the `files` key in the //base/foo:foo
+      target and all of its dependency tree, rebasing the strings in the `files`
+      key onto the source directory of the target's declaration relative to "/".
+```
+### <a name="cmd_path"></a>**gn path &lt;out_dir&gt; &lt;target_one&gt; &lt;target_two&gt;**
 
 ```
   Finds paths of dependencies between two targets. Each unique path will be
@@ -902,7 +974,7 @@
 ```
   gn path out/Default //base //tools/gn
 ```
-### <a name="refs"></a>**gn refs &lt;out_dir&gt; (&lt;label_pattern&gt;|&lt;label&gt;|&lt;file&gt;|@&lt;response_file&gt;)***
+### <a name="cmd_refs"></a>**gn refs &lt;out_dir&gt; (&lt;label_pattern&gt;|&lt;label&gt;|&lt;file&gt;|@&lt;response_file&gt;)***
 ```
         [--all] [--all-toolchains] [--as=...] [--testonly=...] [--type=...]
 
@@ -1027,7 +1099,7 @@
 ```
 ## <a name="targets"></a>Target declarations
 
-### <a name="action"></a>**action**: Declare a target that runs a script a single time.
+### <a name="func_action"></a>**action**: Declare a target that runs a script a single time.
 
 ```
   This target type allows you to run a script a single time to produce one or
@@ -1091,7 +1163,7 @@
 #### **Variables**
 
 ```
-  args, data, data_deps, depfile, deps, inputs, outputs*, pool,
+  args, data, data_deps, depfile, deps, inputs, metadata, outputs*, pool,
   response_file_contents, script*, sources
   * = required
 ```
@@ -1113,7 +1185,7 @@
            rebase_path(sources, root_build_dir)
   }
 ```
-### <a name="action_foreach"></a>**action_foreach**: Declare a target that runs a script over a set of files.
+### <a name="func_action_foreach"></a>**action_foreach**: Declare a target that runs a script over a set of files.
 
 ```
   This target type allows you to run a script once-per-file over a set of
@@ -1172,7 +1244,7 @@
 #### **Variables**
 
 ```
-  args, data, data_deps, depfile, deps, inputs, outputs*, pool,
+  args, data, data_deps, depfile, deps, inputs, metadata, outputs*, pool,
   response_file_contents, script*, sources*
   * = required
 ```
@@ -1204,7 +1276,7 @@
         "/{{source_name_part}}.h" ]
   }
 ```
-### <a name="bundle_data"></a>**bundle_data**: [iOS/macOS] Declare a target without output.
+### <a name="func_bundle_data"></a>**bundle_data**: [iOS/macOS] Declare a target without output.
 
 ```
   This target type allows to declare data that is required at runtime. It is
@@ -1225,7 +1297,7 @@
 #### **Variables**
 
 ```
-  sources*, outputs*, deps, data_deps, public_deps, visibility
+  sources*, outputs*, deps, data_deps, metadata, public_deps, visibility
   * = required
 ```
 
@@ -1258,7 +1330,7 @@
     ]
   }
 ```
-### <a name="copy"></a>**copy**: Declare a target that copies files.
+### <a name="func_copy"></a>**copy**: Declare a target that copies files.
 
 #### **File name handling**
 
@@ -1295,7 +1367,7 @@
     outputs = [ "$target_gen_dir/{{source_file_part}}" ]
   }
 ```
-### <a name="create_bundle"></a>**create_bundle**: [ios/macOS] Build an iOS or macOS bundle.
+### <a name="func_create_bundle"></a>**create_bundle**: [ios/macOS] Build an iOS or macOS bundle.
 
 ```
   This target generates an iOS or macOS bundle (which is a directory with a
@@ -1342,7 +1414,8 @@
   bundle_executable_dir*, bundle_plugins_dir*, bundle_deps_filter, deps,
   data_deps, public_deps, visibility, product_type, code_signing_args,
   code_signing_script, code_signing_sources, code_signing_outputs,
-  xcode_extra_attributes, xcode_test_application_name, partial_info_plist
+  xcode_extra_attributes, xcode_test_application_name, partial_info_plist,
+  metadata
   * = required
 ```
 
@@ -1447,7 +1520,7 @@
     }
   }
 ```
-### <a name="executable"></a>**executable**: Declare an executable target.
+### <a name="func_executable"></a>**executable**: Declare an executable target.
 
 #### **Variables**
 
@@ -1457,10 +1530,144 @@
          libs, precompiled_header, precompiled_source
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
-  General: check_includes, configs, data, friend, inputs, output_name,
-           output_extension, public, sources, testonly, visibility
+  General: check_includes, configs, data, friend, inputs, metadata,
+           output_name, output_extension, public, sources, testonly,
+           visibility
 ```
-### <a name="group"></a>**group**: Declare a named group of targets.
+### <a name="func_generated_file"></a>**generated_file**: Declare a generated_file target.
+
+```
+  Writes data value(s) to disk on resolution. This target type mirrors some
+  functionality of the write_file() function, but also provides the ability to
+  collect metadata from its dependencies on resolution rather than writing out
+  parse time.
+
+  The `outputs` variable is required to be a list with a single element,
+  specifying the intended location of the output file.
+
+  The `output_conversion` variable specified the format to write the
+  value. See `gn help output_conversion`.
+
+  One of `contents` or `data_keys` must be specified; use of `data` will write
+  the contents of that value to file, while use of `data_keys` will trigger a
+  metadata collection walk based on the dependencies of the target and the
+  optional values of the `rebase` and `walk_keys` variables. See
+  `gn help metadata`.
+
+  Collected metadata, if specified, will be returned in postorder of
+  dependencies. See the example for details.
+```
+
+#### **Example (metadata collection)**
+
+```
+  Given the following targets defined in //base/BUILD.gn, where A depends on B
+  and B depends on C and D:
+
+    group("a") {
+      metadata = {
+        doom_melon = [ "enable" ]
+        my_files = [ "foo.cpp" ]
+
+        // Note: this is functionally equivalent to not defining `my_barrier`
+        // at all in this target's metadata.
+        my_barrier = [ "" ]
+      }
+
+      deps = [ ":b" ]
+    }
+
+    group("b") {
+      metadata = {
+        my_files = [ "bar.cpp" ]
+        my_barrier = [ ":c" ]
+      }
+
+      deps = [ ":c", ":d" ]
+    }
+
+    group("c") {
+      metadata = {
+        doom_melon = [ "disable" ]
+        my_files = [ "baz.cpp" ]
+      }
+    }
+
+    group("d") {
+      metadata = {
+        my_files = [ "missing.cpp" ]
+      }
+    }
+
+  If the following generated_file target is defined:
+
+    generated_file("my_files_metadata") {
+      outputs = [ "$root_build_dir/my_files.json" ]
+      data_keys = [ "my_files" ]
+
+      deps = [ "//base:a" ]
+    }
+
+  The following will be written to "$root_build_dir/my_files.json" (less the
+  comments):
+    [
+      "baz.cpp",  // from //base:c via //base:b
+      "missing.cpp"  // from //base:d via //base:b
+      "bar.cpp",  // from //base:b via //base:a
+      "foo.cpp",  // from //base:a
+    ]
+
+  Alternatively, as an example of using walk_keys, if the following
+  generated_file target is defined:
+
+  generated_file("my_files_metadata") {
+    outputs = [ "$root_build_dir/my_files.json" ]
+    data_keys = [ "my_files" ]
+    walk_keys = [ "my_barrier" ]
+
+    deps = [ "//base:a" ]
+  }
+
+  The following will be written to "$root_build_dir/my_files.json" (again less
+  the comments):
+    [
+      "baz.cpp",  // from //base:c via //base:b
+      "bar.cpp",  // from //base:b via //base:a
+      "foo.cpp",  // from //base:a
+    ]
+
+  If `rebase` is used in the following generated_file target:
+
+  generated_file("my_files_metadata") {
+    outputs = [ "$root_build_dir/my_files.json" ]
+    data_keys = [ "my_files" ]
+    walk_keys = [ "my_barrier" ]
+    rebase = root_build_dir
+
+    deps = [ "//base:a" ]
+  }
+
+  The following will be written to "$root_build_dir/my_files.json" (again less
+  the comments) (assuming root_build_dir = "//out"):
+    [
+      "../base/baz.cpp",  // from //base:c via //base:b
+      "../base/bar.cpp",  // from //base:b via //base:a
+      "../base/foo.cpp",  // from //base:a
+    ]
+```
+
+#### **Variables**
+
+```
+  contents
+  data_keys
+  rebase
+  walk_keys
+  output_conversion
+  Deps: data_deps, deps, public_deps
+  Dependent configs: all_dependent_configs, public_configs
+```
+### <a name="func_group"></a>**group**: Declare a named group of targets.
 
 ```
   This target type allows you to create meta-targets that just collect a set of
@@ -1485,7 +1692,7 @@
     ]
   }
 ```
-### <a name="loadable_module"></a>**loadable_module**: Declare a loadable module target.
+### <a name="func_loadable_module"></a>**loadable_module**: Declare a loadable module target.
 
 ```
   This target type allows you to create an object file that is (and can only
@@ -1505,10 +1712,11 @@
          libs, precompiled_header, precompiled_source
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
-  General: check_includes, configs, data, friend, inputs, output_name,
-           output_extension, public, sources, testonly, visibility
+  General: check_includes, configs, data, friend, inputs, metadata,
+           output_name, output_extension, public, sources, testonly,
+           visibility
 ```
-### <a name="shared_library"></a>**shared_library**: Declare a shared library target.
+### <a name="func_shared_library"></a>**shared_library**: Declare a shared library target.
 
 ```
   A shared library will be specified on the linker line for targets listing the
@@ -1526,10 +1734,11 @@
          libs, precompiled_header, precompiled_source
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
-  General: check_includes, configs, data, friend, inputs, output_name,
-           output_extension, public, sources, testonly, visibility
+  General: check_includes, configs, data, friend, inputs, metadata,
+           output_name, output_extension, public, sources, testonly,
+           visibility
 ```
-### <a name="source_set"></a>**source_set**: Declare a source set target.
+### <a name="func_source_set"></a>**source_set**: Declare a source set target.
 
 ```
   A source set is a collection of sources that get compiled, but are not linked
@@ -1562,10 +1771,11 @@
          libs, precompiled_header, precompiled_source
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
-  General: check_includes, configs, data, friend, inputs, output_name,
-           output_extension, public, sources, testonly, visibility
+  General: check_includes, configs, data, friend, inputs, metadata,
+           output_name, output_extension, public, sources, testonly,
+           visibility
 ```
-### <a name="static_library"></a>**static_library**: Declare a static library target.
+### <a name="func_static_library"></a>**static_library**: Declare a static library target.
 
 ```
   Make a ".a" / ".lib" file.
@@ -1584,10 +1794,11 @@
          libs, precompiled_header, precompiled_source
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
-  General: check_includes, configs, data, friend, inputs, output_name,
-           output_extension, public, sources, testonly, visibility
+  General: check_includes, configs, data, friend, inputs, metadata,
+           output_name, output_extension, public, sources, testonly,
+           visibility
 ```
-### <a name="target"></a>**target**: Declare an target with the given programmatic type.
+### <a name="func_target"></a>**target**: Declare an target with the given programmatic type.
 
 ```
   target(target_type_string, target_name_string) { ... }
@@ -1621,7 +1832,7 @@
 ```
 ## <a name="functions"></a>Buildfile functions
 
-### <a name="assert"></a>**assert**: Assert an expression is true at generation time.
+### <a name="func_assert"></a>**assert**: Assert an expression is true at generation time.
 
 ```
   assert(<condition> [, <error string>])
@@ -1637,7 +1848,7 @@
   assert(is_win)
   assert(defined(sources), "Sources must be defined");
 ```
-### <a name="config"></a>**config**: Defines a configuration object.
+### <a name="func_config"></a>**config**: Defines a configuration object.
 
 ```
   Configuration objects can be applied to targets and specify sets of compiler
@@ -1684,7 +1895,7 @@
     configs = [ ":myconfig" ]
   }
 ```
-### <a name="declare_args"></a>**declare_args**: Declare build arguments.
+### <a name="func_declare_args"></a>**declare_args**: Declare build arguments.
 
 ```
   Introduces the given arguments into the current scope. If they are not
@@ -1811,7 +2022,7 @@
 
   This also disables the teleporter (default enabled by the override).
 ```
-### <a name="defined"></a>**defined**: Returns whether an identifier is defined.
+### <a name="func_defined"></a>**defined**: Returns whether an identifier is defined.
 
 ```
   Returns true if the given argument is defined. This is most useful in
@@ -1845,7 +2056,7 @@
     }
   }
 ```
-### <a name="exec_script"></a>**exec_script**: Synchronously run a script and return the output.
+### <a name="func_exec_script"></a>**exec_script**: Synchronously run a script and return the output.
 
 ```
   exec_script(filename,
@@ -1861,14 +2072,18 @@
   directory. If you are passing file names, you will want to use the
   rebase_path() function to make file names relative to this path (see "gn help
   rebase_path").
+
+  The default script interpreter is Python ("python" on POSIX, "python.exe" or
+  "python.bat" on Windows). This can be configured by the script_executable
+  variable, see "gn help dotfile".
 ```
 
 #### **Arguments**:
 
 ```
   filename:
-      File name of python script to execute. Non-absolute names will be treated
-      as relative to the current build file.
+      File name of script to execute. Non-absolute names will be treated as
+      relative to the current build file.
 
   arguments:
       A list of strings to be passed to the script as arguments. May be
@@ -1901,7 +2116,7 @@
   # result.
   exec_script("//foo/bar/myscript.py")
 ```
-### <a name="foreach"></a>**foreach**: Iterate over a list.
+### <a name="func_foreach"></a>**foreach**: Iterate over a list.
 
 ```
     foreach(<loop_var>, <list>) {
@@ -1935,7 +2150,7 @@
   b
   c
 ```
-### <a name="forward_variables_from"></a>**forward_variables_from**: Copies variables from a different scope.
+### <a name="func_forward_variables_from"></a>**forward_variables_from**: Copies variables from a different scope.
 
 ```
   forward_variables_from(from_scope, variable_list_or_star,
@@ -1972,6 +2187,13 @@
 #### **Examples**
 
 ```
+  # forward_variables_from(invoker, ["foo"])
+  # is equivalent to:
+  assert(!defined(foo))
+  if (defined(invoker.foo)) {
+    foo = invoker.foo
+  }
+
   # This is a common action template. It would invoke a script with some given
   # parameters, and wants to use the various types of deps and the visibility
   # from the invoker if it's defined. It also injects an additional dependency
@@ -2010,7 +2232,7 @@
     }
   }
 ```
-### <a name="get_label_info"></a>**get_label_info**: Get an attribute from a target's label.
+### <a name="func_get_label_info"></a>**get_label_info**: Get an attribute from a target's label.
 
 ```
   get_label_info(target_label, what)
@@ -2074,7 +2296,7 @@
   get_label_info("//foo/bar:baz", "target_gen_dir")
   # Returns string "//out/Debug/gen/foo/bar".
 ```
-### <a name="get_path_info"></a>**get_path_info**: Extract parts of a file or directory name.
+### <a name="func_get_path_info"></a>**get_path_info**: Extract parts of a file or directory name.
 
 ```
   get_path_info(input, what)
@@ -2154,7 +2376,7 @@
   # Extract the source-absolute directory name,
   result = get_path_info(get_path_info(path, "dir"), "abspath"
 ```
-### <a name="get_target_outputs"></a>**get_target_outputs**: [file list] Get the list of outputs from a target.
+### <a name="func_get_target_outputs"></a>**get_target_outputs**: [file list] Get the list of outputs from a target.
 
 ```
   get_target_outputs(target_label)
@@ -2211,7 +2433,7 @@
     sources = get_target_outputs(":my_action")
   }
 ```
-### <a name="getenv"></a>**getenv**: Get an environment variable.
+### <a name="func_getenv"></a>**getenv**: Get an environment variable.
 
 ```
   value = getenv(env_var_name)
@@ -2231,7 +2453,7 @@
 ```
   home_dir = getenv("HOME")
 ```
-### <a name="import"></a>**import**: Import a file into the current scope.
+### <a name="func_import"></a>**import**: Import a file into the current scope.
 
 ```
   The import command loads the rules and variables resulting from executing the
@@ -2266,7 +2488,7 @@
   # Looks in the current directory.
   import("my_vars.gni")
 ```
-### <a name="not_needed"></a>**not_needed**: Mark variables from scope as not needed.
+### <a name="func_not_needed"></a>**not_needed**: Mark variables from scope as not needed.
 
 ```
   not_needed(variable_list_or_star, variable_to_ignore_list = [])
@@ -2287,7 +2509,7 @@
   not_needed(invoker, "*", [ "config" ])
   not_needed(invoker, [ "data_deps", "deps" ])
 ```
-### <a name="pool"></a>**pool**: Defines a pool object.
+### <a name="func_pool"></a>**pool**: Defines a pool object.
 
 ```
   Pool objects can be applied to a tool to limit the parallelism of the
@@ -2331,7 +2553,7 @@
     }
   }
 ```
-### <a name="print"></a>**print**: Prints to the console.
+### <a name="func_print"></a>**print**: Prints to the console.
 
 ```
   Prints all arguments to the console separated by spaces. A newline is
@@ -2351,7 +2573,7 @@
 
   print(sources, deps)
 ```
-### <a name="process_file_template"></a>**process_file_template**: Do template expansion over a list of files.
+### <a name="func_process_file_template"></a>**process_file_template**: Do template expansion over a list of files.
 
 ```
   process_file_template(source_list, template)
@@ -2396,7 +2618,7 @@
       "//out/Debug/bar.cc"
       "//out/Debug/bar.h" ]
 ```
-### <a name="read_file"></a>**read_file**: Read a file into a variable.
+### <a name="func_read_file"></a>**read_file**: Read a file into a variable.
 
 ```
   read_file(filename, input_conversion)
@@ -2420,7 +2642,7 @@
 ```
   lines = read_file("foo.txt", "list lines")
 ```
-### <a name="rebase_path"></a>**rebase_path**: Rebase a file or directory to another location.
+### <a name="func_rebase_path"></a>**rebase_path**: Rebase a file or directory to another location.
 
 ```
   converted = rebase_path(input,
@@ -2516,7 +2738,7 @@
     ] + rebase_path(sources, root_build_dir)
   }
 ```
-### <a name="set_default_toolchain"></a>**set_default_toolchain**: Sets the default toolchain name.
+### <a name="func_set_default_toolchain"></a>**set_default_toolchain**: Sets the default toolchain name.
 
 ```
   set_default_toolchain(toolchain_label)
@@ -2556,7 +2778,7 @@
     set_default_toolchain("//toolchains:32")
   }
 ```
-### <a name="set_defaults"></a>**set_defaults**: Set default values for a target type.
+### <a name="func_set_defaults"></a>**set_defaults**: Set default values for a target type.
 
 ```
   set_defaults(<target_type_name>) { <values...> }
@@ -2629,7 +2851,7 @@
     //beta/d/e/f      //beta/d/e/f
     //foo/g/h/i       //gamma/foo/g/h/i
 ```
-### <a name="set_sources_assignment_filter"></a>**set_sources_assignment_filter**: Set a pattern to filter source files.
+### <a name="func_set_sources_assignment_filter"></a>**set_sources_assignment_filter**: Set a pattern to filter source files.
 
 ```
   The sources assignment filter is a list of patterns that remove files from
@@ -2693,7 +2915,7 @@
   print(sources)
   # Will print [ "a.cc" ]. b_win one was filtered out.
 ```
-### <a name="split_list"></a>**split_list**: Splits a list into N different sub-lists.
+### <a name="func_split_list"></a>**split_list**: Splits a list into N different sub-lists.
 
 ```
   result = split_list(input, n)
@@ -2716,7 +2938,7 @@
   Will print:
     [[1, 2], [3, 4], [5, 6]
 ```
-### <a name="string_replace"></a>**string_replace**: Replaces substring in the given string.
+### <a name="func_string_replace"></a>**string_replace**: Replaces substring in the given string.
 
 ```
   result = string_replace(str, old, new[, max])
@@ -2737,7 +2959,7 @@
   Will print:
     Hello, GN!
 ```
-### <a name="template"></a>**template**: Define a template rule.
+### <a name="func_template"></a>**template**: Define a template rule.
 
 ```
   A template defines a custom name that acts like a function. It provides a way
@@ -2900,7 +3122,7 @@
     deps = [ ":foo_idl_files" ]
   }
 ```
-### <a name="tool"></a>**tool**: Specify arguments to a toolchain tool.
+### <a name="func_tool"></a>**tool**: Specify arguments to a toolchain tool.
 
 #### **Usage**
 
@@ -3367,7 +3589,7 @@
     }
   };
 ```
-### <a name="toolchain"></a>**toolchain**: Defines a toolchain.
+### <a name="func_toolchain"></a>**toolchain**: Defines a toolchain.
 
 ```
   A toolchain is a set of commands and build flags used to compile the source
@@ -3642,7 +3864,7 @@
         ]
       }
 ```
-### <a name="write_file"></a>**write_file**: Write a file to disk.
+### <a name="func_write_file"></a>**write_file**: Write a file to disk.
 
 ```
   write_file(filename, data, output_conversion = "")
@@ -3673,7 +3895,7 @@
 ```
 ## <a name="predefined_variables"></a>Built-in predefined variables
 
-### <a name="current_cpu"></a>**current_cpu**: The processor architecture of the current toolchain.
+### <a name="var_current_cpu"></a>**current_cpu**: The processor architecture of the current toolchain.
 
 ```
   The build configuration usually sets this value based on the value of
@@ -3687,7 +3909,7 @@
 
   See "gn help target_cpu" for a list of common values returned.
 ```
-### <a name="current_os"></a>**current_os**: The operating system of the current toolchain.
+### <a name="var_current_os"></a>**current_os**: The operating system of the current toolchain.
 
 ```
   The build configuration usually sets this value based on the value of
@@ -3701,7 +3923,7 @@
 
   See "gn help target_os" for a list of common values returned.
 ```
-### <a name="current_toolchain"></a>**current_toolchain**: Label of the current toolchain.
+### <a name="var_current_toolchain"></a>**current_toolchain**: Label of the current toolchain.
 
 ```
   A fully-qualified label representing the current toolchain. You can use this
@@ -3716,13 +3938,13 @@
     executable("output_thats_64_bit_only") {
       ...
 ```
-### <a name="default_toolchain"></a>**default_toolchain**: [string] Label of the default toolchain.
+### <a name="var_default_toolchain"></a>**default_toolchain**: [string] Label of the default toolchain.
 
 ```
   A fully-qualified label representing the default toolchain, which may not
   necessarily be the current one (see "current_toolchain").
 ```
-### <a name="host_cpu"></a>**host_cpu**: The processor architecture that GN is running on.
+### <a name="var_host_cpu"></a>**host_cpu**: The processor architecture that GN is running on.
 
 ```
   This is value is exposed so that cross-compile toolchains can access the host
@@ -3740,7 +3962,7 @@
   - "x64"
   - "x86"
 ```
-### <a name="host_os"></a>**host_os**: [string] The operating system that GN is running on.
+### <a name="var_host_os"></a>**host_os**: [string] The operating system that GN is running on.
 
 ```
   This value is exposed so that cross-compiles can access the host build
@@ -3757,7 +3979,7 @@
   - "mac"
   - "win"
 ```
-### <a name="invoker"></a>**invoker**: [string] The invoking scope inside a template.
+### <a name="var_invoker"></a>**invoker**: [string] The invoking scope inside a template.
 
 ```
   Inside a template invocation, this variable refers to the scope of the
@@ -3788,14 +4010,14 @@
     bar = 123
   }
 ```
-### <a name="python_path"></a>**python_path**: Absolute path of Python.
+### <a name="var_python_path"></a>**python_path**: Absolute path of Python.
 
 ```
   Normally used in toolchain definitions if running some command requires
   Python. You will normally not need this when invoking scripts since GN
   automatically finds it for you.
 ```
-### <a name="root_build_dir"></a>**root_build_dir**: [string] Directory where build commands are run.
+### <a name="var_root_build_dir"></a>**root_build_dir**: [string] Directory where build commands are run.
 
 ```
   This is the root build output directory which will be the current directory
@@ -3804,7 +4026,7 @@
   Most often this is used with rebase_path (see "gn help rebase_path") to
   convert arguments to be relative to a script's current directory.
 ```
-### <a name="root_gen_dir"></a>**root_gen_dir**: Directory for the toolchain's generated files.
+### <a name="var_root_gen_dir"></a>**root_gen_dir**: Directory for the toolchain's generated files.
 
 ```
   Absolute path to the root of the generated output directory tree for the
@@ -3819,7 +4041,7 @@
   See also "target_gen_dir" which is usually a better location for generated
   files. It will be inside the root generated dir.
 ```
-### <a name="root_out_dir"></a>**root_out_dir**: [string] Root directory for toolchain output files.
+### <a name="var_root_out_dir"></a>**root_out_dir**: [string] Root directory for toolchain output files.
 
 ```
   Absolute path to the root of the output directory tree for the current
@@ -3845,7 +4067,7 @@
     args = [ "-o", rebase_path(root_out_dir, root_build_dir) ]
   }
 ```
-### <a name="target_cpu"></a>**target_cpu**: The desired cpu architecture for the build.
+### <a name="var_target_cpu"></a>**target_cpu**: The desired cpu architecture for the build.
 
 ```
   This value should be used to indicate the desired architecture for the
@@ -3874,7 +4096,7 @@
   - "arm64"
   - "mipsel"
 ```
-### <a name="target_gen_dir"></a>**target_gen_dir**: Directory for a target's generated files.
+### <a name="var_target_gen_dir"></a>**target_gen_dir**: Directory for a target's generated files.
 
 ```
   Absolute path to the target's generated file directory. This will be the
@@ -3898,7 +4120,7 @@
     args = [ "-o", rebase_path(target_gen_dir, root_build_dir) ]"
   }
 ```
-### <a name="target_name"></a>**target_name**: [string] The name of the current target.
+### <a name="var_target_name"></a>**target_name**: [string] The name of the current target.
 
 ```
   Inside a target or template invocation, this variable refers to the name
@@ -3937,7 +4159,7 @@
   my_template("space_ray") {
   }
 ```
-### <a name="target_os"></a>**target_os**: The desired operating system for the build.
+### <a name="var_target_os"></a>**target_os**: The desired operating system for the build.
 
 ```
   This value should be used to indicate the desired operating system for the
@@ -3978,7 +4200,7 @@
   - "mac"
   - "win"
 ```
-### <a name="target_out_dir"></a>**target_out_dir**: [string] Directory for target output files.
+### <a name="var_target_out_dir"></a>**target_out_dir**: [string] Directory for target output files.
 
 ```
   Absolute path to the target's generated file directory. If your current
@@ -4003,7 +4225,7 @@
 ```
 ## <a name="target_variables"></a>Variables you set in targets
 
-### <a name="all_dependent_configs"></a>**all_dependent_configs**: Configs to be forced on dependents.
+### <a name="var_all_dependent_configs"></a>**all_dependent_configs**: Configs to be forced on dependents.
 
 ```
   A list of config labels.
@@ -4039,7 +4261,7 @@
      "deps" list. If a dependency is public, they will be applied
      recursively.
 ```
-### <a name="allow_circular_includes_from"></a>**allow_circular_includes_from**: Permit includes from deps.
+### <a name="var_allow_circular_includes_from"></a>**allow_circular_includes_from**: Permit includes from deps.
 
 ```
   A list of target labels. Must be a subset of the target's "deps". These
@@ -4112,7 +4334,7 @@
     public_deps = [ ":c" ]
   }
 ```
-### <a name="arflags"></a>**arflags**: Arguments passed to static_library archiver.
+### <a name="var_arflags"></a>**arflags**: Arguments passed to static_library archiver.
 
 ```
   A list of flags passed to the archive/lib command that creates static
@@ -4145,7 +4367,7 @@
      "deps" list. If a dependency is public, they will be applied
      recursively.
 ```
-### <a name="args"></a>**args**: Arguments passed to an action.
+### <a name="var_args"></a>**args**: (target variable) Arguments passed to an action.
 
 ```
   For action and action_foreach targets, args is the list of arguments to pass
@@ -4154,7 +4376,7 @@
 
   See also "gn help action" and "gn help action_foreach".
 ```
-### <a name="asmflags"></a>**asmflags**: Flags passed to the assembler.
+### <a name="var_asmflags"></a>**asmflags**: Flags passed to the assembler.
 
 ```
   A list of strings.
@@ -4180,7 +4402,7 @@
      "deps" list. If a dependency is public, they will be applied
      recursively.
 ```
-### <a name="assert_no_deps"></a>**assert_no_deps**: Ensure no deps on these targets.
+### <a name="var_assert_no_deps"></a>**assert_no_deps**: Ensure no deps on these targets.
 
 ```
   A list of label patterns.
@@ -4220,7 +4442,7 @@
     ]
   }
 ```
-### <a name="bundle_contents_dir"></a>**bundle_contents_dir**: Expansion of {{bundle_contents_dir}} in
+### <a name="var_bundle_contents_dir"></a>**bundle_contents_dir**: Expansion of {{bundle_contents_dir}} in
 ```
                              create_bundle.
 
@@ -4232,7 +4454,7 @@
 
   See "gn help bundle_root_dir" for examples.
 ```
-### <a name="bundle_deps_filter"></a>**bundle_deps_filter**: [label list] A list of labels that are filtered out.
+### <a name="var_bundle_deps_filter"></a>**bundle_deps_filter**: [label list] A list of labels that are filtered out.
 
 ```
   A list of target labels.
@@ -4263,7 +4485,7 @@
     ]
   }
 ```
-### <a name="bundle_executable_dir"></a>**bundle_executable_dir**: Expansion of {{bundle_executable_dir}} in
+### <a name="var_bundle_executable_dir"></a>**bundle_executable_dir**: Expansion of {{bundle_executable_dir}} in
 ```
                               create_bundle.
 
@@ -4275,7 +4497,7 @@
 
   See "gn help bundle_root_dir" for examples.
 ```
-### <a name="bundle_plugins_dir"></a>**bundle_plugins_dir**: Expansion of {{bundle_plugins_dir}} in create_bundle.
+### <a name="var_bundle_plugins_dir"></a>**bundle_plugins_dir**: Expansion of {{bundle_plugins_dir}} in create_bundle.
 
 ```
   A string corresponding to a path in $root_build_dir.
@@ -4286,7 +4508,7 @@
 
   See "gn help bundle_root_dir" for examples.
 ```
-### <a name="bundle_resources_dir"></a>**bundle_resources_dir**: Expansion of {{bundle_resources_dir}} in
+### <a name="var_bundle_resources_dir"></a>**bundle_resources_dir**: Expansion of {{bundle_resources_dir}} in
 ```
                              create_bundle.
 
@@ -4298,7 +4520,7 @@
 
   See "gn help bundle_root_dir" for examples.
 ```
-### <a name="bundle_root_dir"></a>**bundle_root_dir**: Expansion of {{bundle_root_dir}} in create_bundle.
+### <a name="var_bundle_root_dir"></a>**bundle_root_dir**: Expansion of {{bundle_root_dir}} in create_bundle.
 
 ```
   A string corresponding to a path in root_build_dir.
@@ -4325,7 +4547,7 @@
     bundle_plugins_dir = "${bundle_contents_dir}/PlugIns"
   }
 ```
-### <a name="cflags*"></a>**cflags***: Flags passed to the C compiler.
+### <a name="var_cflags"></a>**cflags***: Flags passed to the C compiler.
 
 ```
   A list of strings.
@@ -4358,7 +4580,7 @@
      "deps" list. If a dependency is public, they will be applied
      recursively.
 ```
-### <a name="cflags*"></a>**cflags***: Flags passed to the C compiler.
+### <a name="var_cflags_c"></a>**cflags***: Flags passed to the C compiler.
 
 ```
   A list of strings.
@@ -4391,7 +4613,7 @@
      "deps" list. If a dependency is public, they will be applied
      recursively.
 ```
-### <a name="cflags*"></a>**cflags***: Flags passed to the C compiler.
+### <a name="var_cflags_cc"></a>**cflags***: Flags passed to the C compiler.
 
 ```
   A list of strings.
@@ -4424,7 +4646,7 @@
      "deps" list. If a dependency is public, they will be applied
      recursively.
 ```
-### <a name="cflags*"></a>**cflags***: Flags passed to the C compiler.
+### <a name="var_cflags_objc"></a>**cflags***: Flags passed to the C compiler.
 
 ```
   A list of strings.
@@ -4457,7 +4679,7 @@
      "deps" list. If a dependency is public, they will be applied
      recursively.
 ```
-### <a name="cflags*"></a>**cflags***: Flags passed to the C compiler.
+### <a name="var_cflags_objcc"></a>**cflags***: Flags passed to the C compiler.
 
 ```
   A list of strings.
@@ -4490,7 +4712,7 @@
      "deps" list. If a dependency is public, they will be applied
      recursively.
 ```
-### <a name="check_includes"></a>**check_includes**: [boolean] Controls whether a target's files are checked.
+### <a name="var_check_includes"></a>**check_includes**: [boolean] Controls whether a target's files are checked.
 
 ```
   When true (the default), the "gn check" command (as well as "gn gen" with the
@@ -4518,7 +4740,7 @@
     ...
   }
 ```
-### <a name="code_signing_args"></a>**code_signing_args**: [string list] Arguments passed to code signing script.
+### <a name="var_code_signing_args"></a>**code_signing_args**: [string list] Arguments passed to code signing script.
 
 ```
   For create_bundle targets, code_signing_args is the list of arguments to pass
@@ -4527,7 +4749,7 @@
 
   See also "gn help create_bundle".
 ```
-### <a name="code_signing_outputs"></a>**code_signing_outputs**: [file list] Output files for code signing step.
+### <a name="var_code_signing_outputs"></a>**code_signing_outputs**: [file list] Output files for code signing step.
 
 ```
   Outputs from the code signing step of a create_bundle target. Must refer to
@@ -4535,7 +4757,7 @@
 
   See also "gn help create_bundle".
 ```
-### <a name="code_signing_script"></a>**code_signing_script**: [file name] Script for code signing."
+### <a name="var_code_signing_script"></a>**code_signing_script**: [file name] Script for code signing."
 
 ```
   An absolute or buildfile-relative file name of a Python script to run for a
@@ -4543,7 +4765,7 @@
 
   See also "gn help create_bundle".
 ```
-### <a name="code_signing_sources"></a>**code_signing_sources**: [file list] Sources for code signing step.
+### <a name="var_code_signing_sources"></a>**code_signing_sources**: [file list] Sources for code signing step.
 
 ```
   A list of files used as input for code signing script step of a create_bundle
@@ -4552,7 +4774,7 @@
 
   See also "gn help create_bundle".
 ```
-### <a name="complete_static_lib"></a>**complete_static_lib**: [boolean] Links all deps into a static library.
+### <a name="var_complete_static_lib"></a>**complete_static_lib**: [boolean] Links all deps into a static library.
 
 ```
   A static library normally doesn't include code from dependencies, but instead
@@ -4587,7 +4809,7 @@
     deps = [ "bar" ]
   }
 ```
-### <a name="configs"></a>**configs**: Configs applying to this target or config.
+### <a name="var_configs"></a>**configs**: Configs applying to this target or config.
 
 ```
   A list of config labels.
@@ -4680,7 +4902,13 @@
     }
   }
 ```
-### <a name="data"></a>**data**: Runtime data file dependencies.
+### <a name="var_contents"></a>**contents**: Contents to write to file.
+
+```
+  The contents of the file for a generated_file target.
+  See "gn help generated_file".
+```
+### <a name="var_data"></a>**data**: Runtime data file dependencies.
 
 ```
   Lists files or directories required to run the given target. These are
@@ -4709,7 +4937,7 @@
 
   See "gn help runtime_deps" for how these are used.
 ```
-### <a name="data_deps"></a>**data_deps**: Non-linked dependencies.
+### <a name="var_data_deps"></a>**data_deps**: Non-linked dependencies.
 
 ```
   A list of target labels.
@@ -4735,7 +4963,16 @@
     data_deps = [ "//plugins:my_runtime_plugin" ]
   }
 ```
-### <a name="defines"></a>**defines**: C preprocessor defines.
+### <a name="var_data_keys"></a>**data_keys**: Keys from which to collect metadata.
+
+```
+  These keys are used to identify metadata to collect. If a walked target
+  defines this key in its metadata, its value will be appended to the resulting
+  collection.
+
+  See "gn help generated_file".
+```
+### <a name="var_defines"></a>**defines**: C preprocessor defines.
 
 ```
   A list of strings
@@ -4767,7 +5004,7 @@
 ```
   defines = [ "AWESOME_FEATURE", "LOG_LEVEL=3" ]
 ```
-### <a name="depfile"></a>**depfile**: [string] File name for input dependencies for actions.
+### <a name="var_depfile"></a>**depfile**: [string] File name for input dependencies for actions.
 
 ```
   If nonempty, this string specifies that the current action or action_foreach
@@ -4806,7 +5043,7 @@
     args = [ "{{source}}", "-o", depfile ]
   }
 ```
-### <a name="deps"></a>**deps**: Private linked dependencies.
+### <a name="var_deps"></a>**deps**: Private linked dependencies.
 
 ```
   A list of target labels.
@@ -4839,7 +5076,7 @@
 
   See also "public_deps".
 ```
-### <a name="friend"></a>**friend**: Allow targets to include private headers.
+### <a name="var_friend"></a>**friend**: Allow targets to include private headers.
 
 ```
   A list of label patterns (see "gn help label_pattern") that allow dependent
@@ -4900,7 +5137,7 @@
     ]
   }
 ```
-### <a name="include_dirs"></a>**include_dirs**: Additional include directories.
+### <a name="var_include_dirs"></a>**include_dirs**: Additional include directories.
 
 ```
   A list of source directories.
@@ -4932,7 +5169,7 @@
 ```
   include_dirs = [ "src/include", "//third_party/foo" ]
 ```
-### <a name="inputs"></a>**inputs**: Additional compile-time dependencies.
+### <a name="var_inputs"></a>**inputs**: Additional compile-time dependencies.
 
 ```
   Inputs are compile-time dependencies of the current target. This means that
@@ -5002,7 +5239,7 @@
     inputs = [ "input.data" ]
   }
 ```
-### <a name="ldflags"></a>**ldflags**: Flags passed to the linker.
+### <a name="var_ldflags"></a>**ldflags**: Flags passed to the linker.
 
 ```
   A list of strings.
@@ -5034,7 +5271,7 @@
      "deps" list. If a dependency is public, they will be applied
      recursively.
 ```
-### <a name="lib_dirs"></a>**lib_dirs**: Additional library directories.
+### <a name="var_lib_dirs"></a>**lib_dirs**: Additional library directories.
 
 ```
   A list of directories.
@@ -5077,7 +5314,7 @@
 ```
   lib_dirs = [ "/usr/lib/foo", "lib/doom_melon" ]
 ```
-### <a name="libs"></a>**libs**: Additional libraries to link.
+### <a name="var_libs"></a>**libs**: Additional libraries to link.
 
 ```
   A list of library names or library paths.
@@ -5150,7 +5387,38 @@
   On Linux:
     libs = [ "ld" ]
 ```
-### <a name="output_dir"></a>**output_dir**: [directory] Directory to put output file in.
+### <a name="var_metadata"></a>**metadata**: Metadata of this target.
+
+```
+  Metadata is a collection of keys and values relating to a particular target.
+  Values must be lists, allowing for sane and predictable collection behavior.
+  Generally, these keys will include three types of lists: lists of ordinary
+  strings, lists of filenames intended to be rebased according to their
+  particular source directory, and lists of target labels intended to be used
+  as barriers to the walk. Verfication of these categories occurs at walk time,
+  not creation time (since it is not clear until the walk which values are
+  intended for which purpose).
+```
+
+#### **Example**
+
+```
+  group("doom_melon") {
+    metadata = {
+      # These keys are not built in to GN but are interpreted when consuming
+      # metadata.
+      my_barrier = []
+      my_files = [ "a.txt", "b.txt" ]
+    }
+  }
+```
+### <a name="var_output_conversion"></a>**"output_conversion**: Data format for generated_file targets.
+
+```
+  Controls how the "contents" of a generated_file target is formatted.
+  See "gn help output_conversion".
+```
+### <a name="var_output_dir"></a>**output_dir**: [directory] Directory to put output file in.
 
 ```
   For library and executable targets, overrides the directory for the final
@@ -5177,7 +5445,7 @@
     ...
   }
 ```
-### <a name="output_extension"></a>**output_extension**: Value to use for the output's file extension.
+### <a name="var_output_extension"></a>**output_extension**: Value to use for the output's file extension.
 
 ```
   Normally the file extension for a target is based on the target type and the
@@ -5213,7 +5481,7 @@
     }
   }
 ```
-### <a name="output_name"></a>**output_name**: Define a name for the output file other than the default.
+### <a name="var_output_name"></a>**output_name**: Define a name for the output file other than the default.
 
 ```
   Normally the output name of a target will be based on the target name, so the
@@ -5239,7 +5507,7 @@
     output_name = "fluffy_bunny"
   }
 ```
-### <a name="output_prefix_override"></a>**output_prefix_override**: Don't use prefix for output name.
+### <a name="var_output_prefix_override"></a>**output_prefix_override**: Don't use prefix for output name.
 
 ```
   A boolean that overrides the output prefix for a target. Defaults to false.
@@ -5263,7 +5531,7 @@
     ...
   }
 ```
-### <a name="outputs"></a>**outputs**: Output files for actions and copy targets.
+### <a name="var_outputs"></a>**outputs**: Output files for actions and copy targets.
 
 ```
   Outputs is valid for "copy", "action", and "action_foreach" target types and
@@ -5286,7 +5554,7 @@
     Action targets (excluding action_foreach) must list literal output file(s)
     with no source expansions. See "gn help action".
 ```
-### <a name="partial_info_plist"></a>**partial_info_plist**: [filename] Path plist from asset catalog compiler.
+### <a name="var_partial_info_plist"></a>**partial_info_plist**: [filename] Path plist from asset catalog compiler.
 
 ```
   Valid for create_bundle target, corresponds to the path for the partial
@@ -5296,7 +5564,7 @@
   The file will be generated regardless of whether the asset compiler has
   been invoked or not. See "gn help create_bundle".
 ```
-### <a name="pool"></a>**pool**: Label of the pool used by the action.
+### <a name="var_pool"></a>**pool**: Label of the pool used by the action.
 
 ```
   A fully-qualified label representing the pool that will be used for the
@@ -5311,7 +5579,7 @@
     ...
   }
 ```
-### <a name="precompiled_header"></a>**precompiled_header**: [string] Header file to precompile.
+### <a name="var_precompiled_header"></a>**precompiled_header**: [string] Header file to precompile.
 
 ```
   Precompiled headers will be used when a target specifies this value, or a
@@ -5379,19 +5647,19 @@
       configs += [ ":use_precompiled_headers" ]
       ...
 ```
-### <a name="precompiled_header_type"></a>**precompiled_header_type**: [string] "gcc" or "msvc".
+### <a name="var_precompiled_header_type"></a>**precompiled_header_type**: [string] "gcc" or "msvc".
 
 ```
   See "gn help precompiled_header".
 ```
-### <a name="precompiled_source"></a>**precompiled_source**: [file name] Source file to precompile.
+### <a name="var_precompiled_source"></a>**precompiled_source**: [file name] Source file to precompile.
 
 ```
   The source file that goes along with the precompiled_header when using
   "msvc"-style precompiled headers. It will be implicitly added to the sources
   of the target. See "gn help precompiled_header".
 ```
-### <a name="product_type"></a>**product_type**: Product type for Xcode projects.
+### <a name="var_product_type"></a>**product_type**: Product type for Xcode projects.
 
 ```
   Correspond to the type of the product of a create_bundle target. Only
@@ -5400,7 +5668,7 @@
   When generating Xcode project files, only create_bundle target with a
   non-empty product_type will have a corresponding target in Xcode project.
 ```
-### <a name="public"></a>**public**: Declare public header files for a target.
+### <a name="var_public"></a>**public**: Declare public header files for a target.
 
 ```
   A list of files that other targets can include. These permissions are checked
@@ -5453,7 +5721,7 @@
     # This allows starting compilation in dependent targets earlier.
     public = []
 ```
-### <a name="public_configs"></a>**public_configs**: Configs to be applied on dependents.
+### <a name="var_public_configs"></a>**public_configs**: Configs to be applied on dependents.
 
 ```
   A list of config labels.
@@ -5544,7 +5812,7 @@
      "deps" list. If a dependency is public, they will be applied
      recursively.
 ```
-### <a name="public_deps"></a>**public_deps**: Declare public dependencies.
+### <a name="var_public_deps"></a>**public_deps**: Declare public dependencies.
 
 ```
   Public dependencies are like private dependencies (see "gn help deps") but
@@ -5595,7 +5863,23 @@
     public_deps = [ ":c" ]
   }
 ```
-### <a name="response_file_contents"></a>**response_file_contents**: Contents of a response file for actions.
+### <a name="var_rebase"></a>**rebase**: Rebase collected metadata as files.
+
+```
+  A boolean that triggers a rebase of collected metadata strings based on their
+  declared file. Defaults to false.
+
+  Metadata generally declares files as strings relative to the local build file.
+  However, this data is often used in other contexts, and so setting this flag
+  will force the metadata collection to be rebased according to the local build
+  file's location and thus allow the filename to be used anywhere.
+
+  Setting this flag will raise an error if any target's specified metadata is
+  not a string value.
+
+  See also "gn help generated_file".
+```
+### <a name="var_response_file_contents"></a>**response_file_contents**: Contents of a response file for actions.
 
 ```
   Sometimes the arguments passed to a script can be too long for the system's
@@ -5633,14 +5917,14 @@
     ]
   }
 ```
-### <a name="script"></a>**script**: Script file for actions.
+### <a name="var_script"></a>**script**: Script file for actions.
 
 ```
   An absolute or buildfile-relative file name of a Python script to run for a
   action and action_foreach targets (see "gn help action" and "gn help
   action_foreach").
 ```
-### <a name="sources"></a>**sources**: Source files for a target
+### <a name="var_sources"></a>**sources**: Source files for a target
 
 ```
   A list of files. Non-absolute paths will be resolved relative to the current
@@ -5678,7 +5962,7 @@
   copy
     The source are the source files to copy.
 ```
-### <a name="testonly"></a>**testonly**: Declares a target must only be used for testing.
+### <a name="var_testonly"></a>**testonly**: Declares a target must only be used for testing.
 
 ```
   Boolean. Defaults to false.
@@ -5699,7 +5983,7 @@
     ...
   }
 ```
-### <a name="visibility"></a>**visibility**: A list of labels that can depend on a target.
+### <a name="var_visibility"></a>**visibility**: A list of labels that can depend on a target.
 
 ```
   A list of labels and label patterns that define which targets can depend on
@@ -5754,7 +6038,21 @@
   any targets in "//bar/" and any subdirectory thereof.
     visibility = [ "./*", "//bar/*" ]
 ```
-### <a name="write_runtime_deps"></a>**write_runtime_deps**: Writes the target's runtime_deps to the given path.
+### <a name="var_walk_keys"></a>**walk_keys**: Key(s) for managing the metadata collection walk.
+
+```
+  Defaults to [].
+
+  These keys are used to control the next step in a collection walk, acting as
+  barriers. If a specified key is defined in a target's metadata, the walk will
+  use the targets listed in that value to determine which targets are walked.
+
+  If no walk_keys are specified for a generated_file target (i.e. "[]"), the
+  walk will touch all deps and data_deps of the specified target recursively.
+
+  See "gn help generated_file".
+```
+### <a name="var_write_runtime_deps"></a>**write_runtime_deps**: Writes the target's runtime_deps to the given path.
 
 ```
   Does not synchronously write the file, but rather schedules it to be written
@@ -5774,7 +6072,7 @@
   same as requesting the runtime deps be written on the command line (see "gn
   help --runtime-deps-list-file").
 ```
-### <a name="xcode_extra_attributes"></a>**xcode_extra_attributes**: [scope] Extra attributes for Xcode projects.
+### <a name="var_xcode_extra_attributes"></a>**xcode_extra_attributes**: [scope] Extra attributes for Xcode projects.
 
 ```
   The value defined in this scope will be copied to the EXTRA_ATTRIBUTES
@@ -5783,7 +6081,7 @@
 
   See "gn help create_bundle" for more information.
 ```
-### <a name="test_application_name"></a>**test_application_name**: Test application name for unit or ui test target.
+### <a name="var_xcode_test_application_name"></a>**xcode_test_application_name**: Name for Xcode test target.
 
 ```
   Each unit and ui test target must have a test application target, and this
@@ -5898,7 +6196,8 @@
   check_targets [optional]
       A list of labels and label patterns that should be checked when running
       "gn check" or "gn gen --check". If unspecified, all targets will be
-      checked. If it is the empty list, no targets will be checked.
+      checked. If it is the empty list, no targets will be checked. To
+      bypass this list, request an explicit check of targets, like "//*".
 
       The format of this list is identical to that of "visibility" so see "gn
       help visibility" for examples.
@@ -6284,12 +6583,19 @@
 
     myvalues.foo += 2
     empty_scope.new_thing = [ 1, 2, 3 ]
+
+  Scope equality is defined as single-level scopes identical within the current
+  scope. That is, all values in the first scope must be present and identical
+  within the second, and vice versa. Note that this means inherited scopes are
+  always unequal by definition.
 ```
-### <a name="input_conversion"></a>**Input and output conversions are arguments to file and process functions**
-#### **that specify how to convert data to or from external formats. The possible**
-#### **values for parameters specifying conversions are**:
+### <a name="io_conversion"></a>**Input and output conversion**
 
 ```
+  Input and output conversions are arguments to file and process functions
+  that specify how to convert data to or from external formats. The possible
+  values for parameters specifying conversions are:
+
   "" (the default)
       input: Discard the result and return None.
 
@@ -6298,21 +6604,21 @@
   "list lines"
       input:
         Return the file contents as a list, with a string for each line. The
-        newlines will not be present in the result. The last line may or may not
-        end in a newline.
+        newlines will not be present in the result. The last line may or may
+        not end in a newline.
 
         After splitting, each individual line will be trimmed of whitespace on
         both ends.
 
       output:
         Renders the value contents as a list, with a string for each line. The
-        newlines will not be present in the result. The last line will end in with
-        a newline.
+        newlines will not be present in the result. The last line will end in
+        with a newline.
 
   "scope"
       input:
-        Execute the block as GN code and return a scope with the resulting values
-        in it. If the input was:
+        Execute the block as GN code and return a scope with the resulting
+        values in it. If the input was:
           a = [ "hello.cc", "world.cc" ]
           b = 26
         and you read the result into a variable named "val", then you could
@@ -6357,8 +6663,8 @@
         will produce an error if assigned to a variable.
 
       output:
-        Render the value contents as a literal rvalue. Strings render with escaped
-        quotes.
+        Render the value contents as a literal rvalue. Strings render with
+        escaped quotes.
 
   "json"
       input: Parse the input as a JSON and convert it to equivalent GN rvalue.
@@ -6569,108 +6875,6 @@
   advice on fixing problems. Targets can also opt-out of checking, see
   "gn help check_includes".
 ```
-### <a name="output_conversion"></a>**Input and output conversions are arguments to file and process functions**
-#### **that specify how to convert data to or from external formats. The possible**
-#### **values for parameters specifying conversions are**:
-
-```
-  "" (the default)
-      input: Discard the result and return None.
-
-      output: If value is a list, then "list lines"; otherwise "value".
-
-  "list lines"
-      input:
-        Return the file contents as a list, with a string for each line. The
-        newlines will not be present in the result. The last line may or may not
-        end in a newline.
-
-        After splitting, each individual line will be trimmed of whitespace on
-        both ends.
-
-      output:
-        Renders the value contents as a list, with a string for each line. The
-        newlines will not be present in the result. The last line will end in with
-        a newline.
-
-  "scope"
-      input:
-        Execute the block as GN code and return a scope with the resulting values
-        in it. If the input was:
-          a = [ "hello.cc", "world.cc" ]
-          b = 26
-        and you read the result into a variable named "val", then you could
-        access contents the "." operator on "val":
-          sources = val.a
-          some_count = val.b
-
-      output:
-        Renders the value contents as a GN code block, reversing the input
-        result above.
-
-  "string"
-      input: Return the file contents into a single string.
-
-      output:
-        Render the value contents into a single string. The output is:
-        a string renders with quotes, e.g. "str"
-        an integer renders as a stringified integer, e.g. "6"
-        a boolean renders as the associated string, e.g. "true"
-        a list renders as a representation of its contents, e.g. "[\"str\", 6]"
-        a scope renders as a GN code block of its values. If the Value was:
-            Value val;
-            val.a = [ "hello.cc", "world.cc" ];
-            val.b = 26
-          the resulting output would be:
-            "{
-                a = [ \"hello.cc\", \"world.cc\" ]
-                b = 26
-            }"
-
-  "value"
-      input:
-        Parse the input as if it was a literal rvalue in a buildfile. Examples of
-        typical program output using this mode:
-          [ "foo", "bar" ]     (result will be a list)
-        or
-          "foo bar"            (result will be a string)
-        or
-          5                    (result will be an integer)
-
-        Note that if the input is empty, the result will be a null value which
-        will produce an error if assigned to a variable.
-
-      output:
-        Render the value contents as a literal rvalue. Strings render with escaped
-        quotes.
-
-  "json"
-      input: Parse the input as a JSON and convert it to equivalent GN rvalue.
-
-      output: Convert the Value to equivalent JSON value.
-
-      The data type mapping is:
-        a string in JSON maps to string in GN
-        an integer in JSON maps to integer in GN
-        a float in JSON is unsupported and will result in an error
-        an object in JSON maps to scope in GN
-        an array in JSON maps to list in GN
-        a boolean in JSON maps to boolean in GN
-        a null in JSON is unsupported and will result in an error
-
-      Nota that the input dictionary keys have to be valid GN identifiers
-      otherwise they will produce an error.
-
-  "trim ..." (input only)
-      Prefixing any of the other transformations with the word "trim" will
-      result in whitespace being trimmed from the beginning and end of the
-      result before processing.
-
-      Examples: "trim string" or "trim list lines"
-
-      Note that "trim value" is useless because the value parser skips
-      whitespace anyway.
-```
 ### <a name="runtime_deps"></a>**Runtime dependencies**
 
 ```
@@ -6861,28 +7065,28 @@
     //out/Debug/obj/mydirectory/input2.h
     //out/Debug/obj/mydirectory/input2.cc
 ```
-## <a name="switches"></a>Command Line Switches
-
-**Available global switches
-**  Do "gn help --the_switch_you_want_help_on" for more. Individual
-  commands may take command-specific switches not listed here. See the
-  help on your specific command for more.
+### <a name="switch_list"></a>**Available global switches**
 
 ```
-    *   [--args: Specifies build arguments overrides.](#--args)
-    *   [--color: Force colored output.](#--color)
-    *   [--dotfile: Override the name of the ".gn" file.](#--dotfile)
-    *   [--fail-on-unused-args: Treat unused build args as fatal errors.](#--fail-on-unused-args)
-    *   [--markdown: Write help output in the Markdown format.](#--markdown)
-    *   [--nocolor: Force non-colored output.](#--nocolor)
-    *   [-q: Quiet mode. Don't print output on success.](#-q)
-    *   [--root: Explicitly specify source root.](#--root)
-    *   [--runtime-deps-list-file: Save runtime dependencies for targets in file.](#--runtime-deps-list-file)
-    *   [--script-executable: Set the executable used to execute scripts.](#--script-executable)
-    *   [--threads: Specify number of worker threads.](#--threads)
-    *   [--time: Outputs a summary of how long everything took.](#--time)
-    *   [--tracelog: Writes a Chrome-compatible trace log to the given file.](#--tracelog)
-    *   [-v: Verbose logging.](#-v)
-    *   [--version: Prints the GN version number and exits.](#--version)
+  Do "gn help --the_switch_you_want_help_on" for more. Individual commands may
+  take command-specific switches not listed here. See the help on your specific
+  command for more.
+```
+```
+    *   --args: Specifies build arguments overrides.
+    *   --color: Force colored output.
+    *   --dotfile: Override the name of the ".gn" file.
+    *   --fail-on-unused-args: Treat unused build args as fatal errors.
+    *   --markdown: Write help output in the Markdown format.
+    *   --nocolor: Force non-colored output.
+    *   -q: Quiet mode. Don't print output on success.
+    *   --root: Explicitly specify source root.
+    *   --runtime-deps-list-file: Save runtime dependencies for targets in file.
+    *   --script-executable: Set the executable used to execute scripts.
+    *   --threads: Specify number of worker threads.
+    *   --time: Outputs a summary of how long everything took.
+    *   --tracelog: Writes a Chrome-compatible trace log to the given file.
+    *   -v: Verbose logging.
+    *   --version: Prints the GN version number and exits.
 ```
 

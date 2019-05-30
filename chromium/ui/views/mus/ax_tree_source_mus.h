@@ -16,25 +16,20 @@ class AXAuraObjWrapper;
 // This class exposes the views hierarchy as an accessibility tree permitting
 // use with other accessibility classes. Only used for out-of-process views
 // apps (e.g. Chrome OS shortcut_viewer app). The browser process uses
-// AXTreeSourceAura.
+// AXTreeSourceViews directly.
 class VIEWS_MUS_EXPORT AXTreeSourceMus : public AXTreeSourceViews {
  public:
   // |root| must outlive this object.
-  explicit AXTreeSourceMus(AXAuraObjWrapper* root);
+  AXTreeSourceMus(AXAuraObjWrapper* root, const ui::AXTreeID& tree_id);
   ~AXTreeSourceMus() override;
 
   void set_device_scale_factor(float scale) { device_scale_factor_ = scale; }
 
   // AXTreeSource:
-  bool GetTreeData(ui::AXTreeData* data) const override;
-  AXAuraObjWrapper* GetRoot() const override;
   void SerializeNode(AXAuraObjWrapper* node,
                      ui::AXNodeData* out_data) const override;
 
  private:
-  // The top-level object to use for the AX tree.
-  AXAuraObjWrapper* root_;
-
   // The display device scale factor to use while serializing this update.
   float device_scale_factor_ = 1.f;
 

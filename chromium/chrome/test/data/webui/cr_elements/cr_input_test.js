@@ -23,7 +23,6 @@ suite('cr-input', function() {
       // [externalName, internalName, defaultValue, testValue]
       ['autofocus', 'autofocus', false, true],
       ['disabled', 'disabled', false, true],
-      ['incremental', 'incremental', false, true],
       ['max', 'max', '', '100'],
       ['min', 'min', '', '1'],
       ['maxlength', 'maxLength', -1, 5],
@@ -74,11 +73,13 @@ suite('cr-input', function() {
     input = crInput.$.input;
     Polymer.dom.flush();
 
-    assertEquals(null, crInput.getAttribute('tabindex'));
-    assertEquals(true, input.disabled);
-    crInput.disabled = false;
-    assertEquals('14', crInput.getAttribute('tabindex'));
-    assertEquals(14, input.tabIndex);
+    return test_util.whenAttributeIs(input, 'tabindex', null).then(() => {
+      assertEquals(null, crInput.getAttribute('tabindex'));
+      assertEquals(true, input.disabled);
+      crInput.disabled = false;
+      assertEquals('14', crInput.getAttribute('tabindex'));
+      assertEquals(14, input.tabIndex);
+    });
   });
 
   test('pointerDownAndTabIndex', function() {
@@ -181,8 +182,22 @@ suite('cr-input', function() {
         })
         .then(() => {
           input.blur();
+          whenTransitionEnd =
+              test_util.eventToPromise('transitionend', underline);
+          // Wait for underline to fade out.
+          return whenTransitionEnd;
+        })
+        .then(() => {
+          whenTransitionEnd =
+              test_util.eventToPromise('transitionend', underline);
           assertFalse(crInput.hasAttribute('focused_'));
           assertEquals('0', getComputedStyle(underline).opacity);
+          // The width transition has a delay larger than the opacity transition
+          // duration so that the width can be reset to 0 after the underline is
+          // no longer visible.
+          return whenTransitionEnd;
+        })
+        .then(() => {
           assertEquals(0, underline.offsetWidth);
         });
   });

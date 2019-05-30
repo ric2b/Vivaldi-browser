@@ -42,8 +42,10 @@ class CORE_EXPORT ExternalDateTimeChooser final : public DateTimeChooser {
                                          WebViewClient*,
                                          DateTimeChooserClient*,
                                          const DateTimeChooserParameters&);
+
+  ExternalDateTimeChooser(DateTimeChooserClient*);
   ~ExternalDateTimeChooser() override;
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   // The following functions are for DateTimeChooserCompletion.
   void DidChooseValue(const WebString&);
@@ -51,7 +53,6 @@ class CORE_EXPORT ExternalDateTimeChooser final : public DateTimeChooser {
   void DidCancelChooser();
 
  private:
-  ExternalDateTimeChooser(DateTimeChooserClient*);
   bool OpenDateTimeChooser(ChromeClient*,
                            WebViewClient*,
                            const DateTimeChooserParameters&);

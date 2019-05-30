@@ -38,6 +38,18 @@
                 "description": "Extensions and packaged applications a user has installed (be _really_ careful!)."
               }
             }
+          },
+          "origins": {
+            "type": "array",
+            "items": {"type": "string"},
+            "optional": true,
+            "description": "When present, only data for origins in this list is deleted. Only supported for cookies, storage and cache. Cookies are cleared for the whole registrable domain."
+          },
+          "excludeOrigins": {
+            "type": "array",
+            "items": {"type": "string"},
+            "optional": true,
+            "description": "When present, data for origins in this list is excluded from deletion. Can't be used together with <code>origins</code>. Only supported for cookies, storage and cache.  Cookies are excluded for the whole registrable domain."
           }
         }
       },
@@ -54,7 +66,12 @@
           "cache": {
             "type": "boolean",
             "optional": true,
-            "description": "The browser's cache. Note: when removing data, this clears the <em>entire</em> cache: it is not limited to the range you specify."
+            "description": "The browser's cache."
+          },
+          "cacheStorage": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Cache storage"
           },
           "cacheStorage": {
             "type": "boolean",
@@ -221,6 +238,24 @@
         ]
       },
       {
+        "name": "removeCacheStorage",
+        "description": "Clears websites' cache storage data.",
+        "type": "function",
+        "parameters": [
+          {
+            "$ref": "RemovalOptions",
+            "name": "options"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "description": "Called when websites' cache storage has been cleared.",
+            "optional": true,
+            "parameters": []
+          }
+        ]
+      },
+      {
         "name": "removeCookies",
         "description": "Clears the browser's cookies and server-bound certificates modified within a particular timeframe.",
         "type": "function",
@@ -377,6 +412,24 @@
             "name": "callback",
             "type": "function",
             "description": "Called when the browser's passwords have been cleared.",
+            "optional": true,
+            "parameters": []
+          }
+        ]
+      },
+      {
+        "name": "removeServiceWorkers",
+        "description": "Clears websites' service workers.",
+        "type": "function",
+        "parameters": [
+          {
+            "$ref": "RemovalOptions",
+            "name": "options"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "description": "Called when websites' service workers have been cleared.",
             "optional": true,
             "parameters": []
           }

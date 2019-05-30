@@ -35,11 +35,11 @@
 namespace blink {
 
 InputType* ButtonInputType::Create(HTMLInputElement& element) {
-  return new ButtonInputType(element);
+  return MakeGarbageCollected<ButtonInputType>(element);
 }
 
 const AtomicString& ButtonInputType::FormControlType() const {
-  return InputTypeNames::button;
+  return input_type_names::kButton;
 }
 
 bool ButtonInputType::SupportsValidation() const {

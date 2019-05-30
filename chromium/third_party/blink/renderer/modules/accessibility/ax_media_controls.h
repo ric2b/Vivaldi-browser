@@ -40,27 +40,26 @@ class AXObjectCacheImpl;
 class AccessibilityMediaControl : public AXLayoutObject {
  public:
   static AXObject* Create(LayoutObject*, AXObjectCacheImpl&);
+
+  AccessibilityMediaControl(LayoutObject*, AXObjectCacheImpl&);
   ~AccessibilityMediaControl() override = default;
 
-  AccessibilityRole RoleValue() const override;
+  ax::mojom::Role RoleValue() const override;
 
   String TextAlternative(bool recursive,
                          bool in_aria_labelled_by_traversal,
                          AXObjectSet& visited,
-                         AXNameFrom&,
+                         ax::mojom::NameFrom&,
                          AXRelatedObjectVector*,
                          NameSources*) const override;
-  String Description(AXNameFrom,
-                     AXDescriptionFrom&,
+  String Description(ax::mojom::NameFrom,
+                     ax::mojom::DescriptionFrom&,
                      AXObjectVector* description_objects) const override;
 
-  bool OnNativeScrollToGlobalPointAction(const IntPoint&) const override;
-  bool OnNativeScrollToMakeVisibleAction() const override;
-  bool OnNativeScrollToMakeVisibleWithSubFocusAction(
-      const IntRect&) const override;
+  bool InternalSetAccessibilityFocusAction() override;
+  bool InternalClearAccessibilityFocusAction() override;
 
  protected:
-  AccessibilityMediaControl(LayoutObject*, AXObjectCacheImpl&);
   MediaControlElementType ControlType() const;
   bool ComputeAccessibilityIsIgnored(IgnoredReasons* = nullptr) const override;
 
@@ -70,59 +69,38 @@ class AccessibilityMediaControl : public AXLayoutObject {
 class AccessibilityMediaTimeline final : public AXSlider {
  public:
   static AXObject* Create(LayoutObject*, AXObjectCacheImpl&);
+
+  AccessibilityMediaTimeline(LayoutObject*, AXObjectCacheImpl&);
   ~AccessibilityMediaTimeline() override = default;
 
-  String Description(AXNameFrom,
-                     AXDescriptionFrom&,
+  String Description(ax::mojom::NameFrom,
+                     ax::mojom::DescriptionFrom&,
                      AXObjectVector* description_objects) const override;
 
  private:
-  AccessibilityMediaTimeline(LayoutObject*, AXObjectCacheImpl&);
-
   DISALLOW_COPY_AND_ASSIGN(AccessibilityMediaTimeline);
-};
-
-class AXMediaControlsContainer final : public AccessibilityMediaControl {
- public:
-  static AXObject* Create(LayoutObject*, AXObjectCacheImpl&);
-  ~AXMediaControlsContainer() override = default;
-
-  AccessibilityRole RoleValue() const override { return kToolbarRole; }
-
-  String TextAlternative(bool recursive,
-                         bool in_aria_labelled_by_traversal,
-                         AXObjectSet& visited,
-                         AXNameFrom&,
-                         AXRelatedObjectVector*,
-                         NameSources*) const override;
-  String Description(AXNameFrom,
-                     AXDescriptionFrom&,
-                     AXObjectVector* description_objects) const override;
-
- private:
-  AXMediaControlsContainer(LayoutObject*, AXObjectCacheImpl&);
-  bool ComputeAccessibilityIsIgnored(IgnoredReasons* = nullptr) const override;
-
-  DISALLOW_COPY_AND_ASSIGN(AXMediaControlsContainer);
 };
 
 class AccessibilityMediaTimeDisplay final : public AccessibilityMediaControl {
  public:
   static AXObject* Create(LayoutObject*, AXObjectCacheImpl&);
+
+  AccessibilityMediaTimeDisplay(LayoutObject*, AXObjectCacheImpl&);
   ~AccessibilityMediaTimeDisplay() override = default;
 
-  AccessibilityRole RoleValue() const override { return kStaticTextRole; }
+  ax::mojom::Role RoleValue() const override {
+    return ax::mojom::Role::kStaticText;
+  }
 
   String StringValue() const override;
   String TextAlternative(bool recursive,
                          bool in_aria_labelled_by_traversal,
                          AXObjectSet& visited,
-                         AXNameFrom&,
+                         ax::mojom::NameFrom&,
                          AXRelatedObjectVector*,
                          NameSources*) const override;
 
  private:
-  AccessibilityMediaTimeDisplay(LayoutObject*, AXObjectCacheImpl&);
   bool ComputeAccessibilityIsIgnored(IgnoredReasons* = nullptr) const override;
 
   DISALLOW_COPY_AND_ASSIGN(AccessibilityMediaTimeDisplay);

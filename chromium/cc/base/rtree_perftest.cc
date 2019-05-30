@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "cc/base/lap_timer.h"
+#include "base/timer/lap_timer.h"
 #include "cc/base/rtree.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
@@ -58,7 +58,9 @@ class RTreePerfTest : public testing::Test {
 
     timer_.Reset();
     do {
-      Accumulate(rtree.Search(queries[query_index]));
+      std::vector<size_t> results;
+      rtree.Search(queries[query_index], &results);
+      Accumulate(results);
       query_index = (query_index + 1) % queries.size();
       timer_.NextLap();
     } while (!timer_.HasTimeLimitExpired());
@@ -83,7 +85,7 @@ class RTreePerfTest : public testing::Test {
   }
 
  protected:
-  LapTimer timer_;
+  base::LapTimer timer_;
 };
 
 TEST_F(RTreePerfTest, Construct) {

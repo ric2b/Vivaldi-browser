@@ -24,25 +24,23 @@ template <typename T>
 struct LabelPtrPair {
   typedef T DestType;
 
-  LabelPtrPair() : label(), ptr(nullptr), origin(nullptr) {}
+  LabelPtrPair() = default;
 
-  explicit LabelPtrPair(const Label& l)
-      : label(l), ptr(nullptr), origin(nullptr) {}
+  explicit LabelPtrPair(const Label& l) : label(l) {}
 
   // This contructor is typically used in unit tests, it extracts the label
   // automatically from a given pointer.
-  explicit LabelPtrPair(const T* p)
-      : label(p->label()), ptr(p), origin(nullptr) {}
+  explicit LabelPtrPair(const T* p) : label(p->label()), ptr(p) {}
 
-  ~LabelPtrPair() {}
+  ~LabelPtrPair() = default;
 
   Label label;
-  const T* ptr;  // May be NULL.
+  const T* ptr = nullptr;
 
   // The origin of this dependency. This will be null for internally generated
   // dependencies. This happens when a group is automatically expanded and that
   // group's members are added to the target that depends on that group.
-  const ParseNode* origin;
+  const ParseNode* origin = nullptr;
 };
 
 typedef LabelPtrPair<Config> LabelConfigPair;
@@ -50,41 +48,6 @@ typedef LabelPtrPair<Target> LabelTargetPair;
 
 typedef std::vector<LabelConfigPair> LabelConfigVector;
 typedef std::vector<LabelTargetPair> LabelTargetVector;
-
-// Comparison and search functions ---------------------------------------------
-
-// To do a brute-force search by label:
-// std::find_if(vect.begin(), vect.end(), LabelPtrLabelEquals<Config>(label));
-template <typename T>
-struct LabelPtrLabelEquals {
-  explicit LabelPtrLabelEquals(const Label& l) : label(l) {}
-
-  bool operator()(const LabelPtrPair<T>& arg) const {
-    return arg.label == label;
-  }
-
-  const Label& label;
-};
-
-// To do a brute-force search by object pointer:
-// std::find_if(vect.begin(), vect.end(), LabelPtrPtrEquals<Config>(config));
-template <typename T>
-struct LabelPtrPtrEquals {
-  explicit LabelPtrPtrEquals(const T* p) : ptr(p) {}
-
-  bool operator()(const LabelPtrPair<T>& arg) const { return arg.ptr == ptr; }
-
-  const T* ptr;
-};
-
-// To sort by label:
-// std::sort(vect.begin(), vect.end(), LabelPtrLabelLess<Config>());
-template <typename T>
-struct LabelPtrLabelLess {
-  bool operator()(const LabelPtrPair<T>& a, const LabelPtrPair<T>& b) const {
-    return a.label < b.label;
-  }
-};
 
 // Default comparison operators -----------------------------------------------
 //

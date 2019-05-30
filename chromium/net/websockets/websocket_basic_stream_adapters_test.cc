@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
@@ -18,13 +19,16 @@
 #include "net/base/test_completion_callback.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_network_session.h"
+#include "net/http/http_proxy_connect_job.h"
 #include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/client_socket_pool_manager_impl.h"
 #include "net/socket/socket_tag.h"
 #include "net/socket/socket_test_util.h"
-#include "net/socket/ssl_client_socket_pool.h"
+#include "net/socket/socks_connect_job.h"
+#include "net/socket/ssl_connect_job.h"
 #include "net/socket/transport_client_socket_pool.h"
+#include "net/socket/transport_connect_job.h"
 #include "net/socket/websocket_endpoint_lock_manager.h"
 #include "net/spdy/spdy_session.h"
 #include "net/spdy/spdy_session_key.h"
@@ -66,31 +70,35 @@ class WebSocketClientSocketHandleAdapterTest
             nullptr,
             nullptr,
             nullptr,
-            "test_shard",
+            nullptr,
+            nullptr,
             nullptr,
             &websocket_endpoint_lock_manager_,
+            nullptr,
             HttpNetworkSession::NORMAL_SOCKET_POOL)),
         transport_params_(base::MakeRefCounted<TransportSocketParams>(
             host_port_pair_,
             false,
-            OnHostResolutionCallback(),
-            TransportSocketParams::COMBINE_CONNECT_AND_WRITE_DEFAULT)),
-        ssl_params_(base::MakeRefCounted<SSLSocketParams>(transport_params_,
-                                                          nullptr,
-                                                          nullptr,
-                                                          host_port_pair_,
-                                                          SSLConfig(),
-                                                          PRIVACY_MODE_DISABLED,
-                                                          0)) {}
+            OnHostResolutionCallback())),
+        ssl_params_(
+            base::MakeRefCounted<SSLSocketParams>(transport_params_,
+                                                  nullptr,
+                                                  nullptr,
+                                                  host_port_pair_,
+                                                  SSLConfig(),
+                                                  PRIVACY_MODE_DISABLED)) {}
 
   ~WebSocketClientSocketHandleAdapterTest() override = default;
 
   bool InitClientSocketHandle(ClientSocketHandle* connection) {
     TestCompletionCallback callback;
     int rv = connection->Init(
-        kGroupName, ssl_params_, MEDIUM, SocketTag(),
-        ClientSocketPool::RespectLimits::ENABLED, callback.callback(),
-        socket_pool_manager_->GetSSLSocketPool(), net_log_);
+        kGroupName,
+        TransportClientSocketPool::SocketParams::CreateFromSSLSocketParams(
+            ssl_params_),
+        MEDIUM, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+        callback.callback(), ClientSocketPool::ProxyAuthCallback(),
+        socket_pool_manager_->GetSocketPool(ProxyServer::Direct()), net_log_);
     rv = callback.GetResult(rv);
     return rv == OK;
   }
@@ -302,6 +310,7 @@ class WebSocketSpdyStreamAdapterTest : public TestWithScopedTaskEnvironment {
         key_(HostPortPair::FromURL(url_),
              ProxyServer::Direct(),
              PRIVACY_MODE_DISABLED,
+             SpdySessionKey::IsProxySession::kFalse,
              SocketTag()),
         session_(SpdySessionDependencies::SpdyCreateSession(&session_deps_)),
         ssl_(SYNCHRONOUS, OK) {}

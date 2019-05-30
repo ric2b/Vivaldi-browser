@@ -10,6 +10,7 @@
 
 #include "base/macros.h"
 #include "google_apis/gaia/gaia_auth_fetcher.h"
+#include "ios/chrome/browser/signin/gaia_auth_fetcher_ios_bridge.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
 class GaiaAuthFetcherIOSBridge;
@@ -17,24 +18,24 @@ class GURL;
 
 namespace net {
 class URLRequestStatus;
-}
+}  // namespace net
 
 namespace network {
 class SharedURLLoaderFactory;
-}
+}  // namespace network
 
 namespace web {
 class BrowserState;
-}
+}  // namespace web
 
 // Specialization of GaiaAuthFetcher on iOS.
 //
 // Authenticate a user against the Google Accounts ClientLogin API
 // with various capabilities and return results to a GaiaAuthConsumer.
-//
-// If necessary (cookies needed and WKWebView enabled), the queries will
-// be fetched via a WKWebView instead of a net::URLFetcher.
-class GaiaAuthFetcherIOS : public GaiaAuthFetcher {
+// The queries are fetched using native APIs.
+class GaiaAuthFetcherIOS
+    : public GaiaAuthFetcher,
+      public GaiaAuthFetcherIOSBridge::GaiaAuthFetcherIOSBridgeDelegate {
  public:
   // Sets whether the iOS specialization of the GaiaAuthFetcher should be used.
   // Mainly used for testing.
@@ -49,7 +50,7 @@ class GaiaAuthFetcherIOS : public GaiaAuthFetcher {
 
   GaiaAuthFetcherIOS(
       GaiaAuthConsumer* consumer,
-      const std::string& source,
+      gaia::GaiaSource source,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       web::BrowserState* browser_state);
   ~GaiaAuthFetcherIOS() override;
@@ -60,17 +61,18 @@ class GaiaAuthFetcherIOS : public GaiaAuthFetcher {
   friend class GaiaAuthFetcherIOSBridge;
   friend class GaiaAuthFetcherIOSTest;
 
+  // GaiaAuthFetcher.
   void CreateAndStartGaiaFetcher(
       const std::string& body,
       const std::string& headers,
       const GURL& gaia_gurl,
       int load_flags,
       const net::NetworkTrafficAnnotationTag& traffic_annotation) override;
-  void FetchComplete(const GURL& url,
-                     const std::string& data,
-                     const net::ResponseCookies& cookies,
-                     const net::URLRequestStatus& status,
-                     int response_code);
+  // GaiaAuthFetcherIOSBridge::GaiaAuthFetcherIOSBridgeDelegate.
+  void OnFetchComplete(const GURL& url,
+                       const std::string& data,
+                       const net::URLRequestStatus& status,
+                       int response_code) override;
 
   std::unique_ptr<GaiaAuthFetcherIOSBridge> bridge_;
   web::BrowserState* browser_state_;

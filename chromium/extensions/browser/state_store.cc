@@ -181,13 +181,12 @@ void StateStore::InitAfterDelay() {
     return;
 
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&StateStore::Init, AsWeakPtr()),
+      FROM_HERE, base::BindOnce(&StateStore::Init, AsWeakPtr()),
       base::TimeDelta::FromSeconds(kInitDelaySeconds));
 }
 
 void StateStore::RemoveKeysForExtension(const std::string& extension_id) {
-  for (std::set<std::string>::iterator key = registered_keys_.begin();
-       key != registered_keys_.end();
+  for (auto key = registered_keys_.begin(); key != registered_keys_.end();
        ++key) {
     task_queue_->InvokeWhenReady(base::Bind(&ValueStoreFrontend::Remove,
                                             base::Unretained(store_.get()),

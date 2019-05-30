@@ -15,8 +15,10 @@ namespace {
 void GetBlobUuid(const v8::FunctionCallbackInfo<v8::Value>& args) {
   CHECK_EQ(1, args.Length());
   blink::WebBlob blob = blink::WebBlob::FromV8Value(args[0]);
-  args.GetReturnValue().Set(
-      v8::String::NewFromUtf8(args.GetIsolate(), blob.Uuid().Utf8().data()));
+  args.GetReturnValue().Set(v8::String::NewFromUtf8(args.GetIsolate(),
+                                                    blob.Uuid().Utf8().data(),
+                                                    v8::NewStringType::kNormal)
+                                .ToLocalChecked());
 }
 
 }  // namespace
@@ -27,10 +29,11 @@ BlobNativeHandler::BlobNativeHandler(ScriptContext* context)
     : ObjectBackedNativeHandler(context) {}
 
 void BlobNativeHandler::AddRoutes() {
-  RouteHandlerFunction("GetBlobUuid", base::Bind(&GetBlobUuid));
-  RouteHandlerFunction("TakeBrowserProcessBlob",
-                       base::Bind(&BlobNativeHandler::TakeBrowserProcessBlob,
-                                  base::Unretained(this)));
+  RouteHandlerFunction("GetBlobUuid", base::BindRepeating(&GetBlobUuid));
+  RouteHandlerFunction(
+      "TakeBrowserProcessBlob",
+      base::BindRepeating(&BlobNativeHandler::TakeBrowserProcessBlob,
+                          base::Unretained(this)));
 }
 
 // Take ownership of a Blob created on the browser process. Expects the Blob's

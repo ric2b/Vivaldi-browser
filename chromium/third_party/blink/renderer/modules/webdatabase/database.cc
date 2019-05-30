@@ -27,6 +27,7 @@
 
 #include <memory>
 
+#include "base/synchronization/waitable_event.h"
 #include "base/thread_annotations.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -51,9 +52,8 @@
 #include "third_party/blink/renderer/modules/webdatabase/sqlite/sqlite_transaction.h"
 #include "third_party/blink/renderer/modules/webdatabase/storage_log.h"
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
-#include "third_party/blink/renderer/platform/waitable_event.h"
-#include "third_party/blink/renderer/platform/web_task_runner.h"
-#include "third_party/blink/renderer/platform/wtf/atomics.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 
 // Registering "opened" databases with the DatabaseTracker
 // =======================================================
@@ -91,6 +91,8 @@ namespace {
 // Stores a cached version of each database, keyed by a unique integer obtained
 // by providing an origin-name pair.
 class DatabaseVersionCache {
+  USING_FAST_MALLOC(DatabaseVersionCache);
+
  public:
   Mutex& GetMutex() const LOCK_RETURNED(mutex_) { return mutex_; }
 
@@ -225,7 +227,7 @@ Database::Database(DatabaseContext* database_context,
       display_name_(display_name.IsolatedCopy()),
       estimated_size_(estimated_size),
       guid_(0),
-      opened_(0),
+      opened_(false),
       new_(false),
       transaction_in_progress_(false),
       is_transaction_queue_enabled_(true) {
@@ -266,7 +268,7 @@ Database::~Database() {
   // DatabaseContext::stopDatabases()). By the time we get here, the SQLite
   // database should have already been closed.
 
-  DCHECK(!opened_);
+  DCHECK(!Opened());
 }
 
 void Database::Trace(blink::Visitor* visitor) {
@@ -280,7 +282,7 @@ bool Database::OpenAndVerifyVersion(bool set_version_in_new_database,
                                     DatabaseError& error,
                                     String& error_message,
                                     V8DatabaseCallback* creation_callback) {
-  WaitableEvent event;
+  base::WaitableEvent event;
   if (!GetDatabaseContext()->DatabaseThreadAvailable())
     return false;
 
@@ -411,10 +413,10 @@ const char* Database::DatabaseInfoTableName() {
 }
 
 void Database::CloseDatabase() {
-  if (!opened_)
+  if (!opened_.load(std::memory_order_relaxed))
     return;
 
-  ReleaseStore(&opened_, 0);
+  opened_.store(false, std::memory_order_release);
   sqlite_database_.Close();
   // See comment at the top this file regarding calling removeOpenDatabase().
   DatabaseTracker::Tracker().RemoveOpenDatabase(this);
@@ -454,7 +456,6 @@ class DoneCreatingDatabaseOnExitCaller {
 bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
                                     DatabaseError& error,
                                     String& error_message) {
-  TimeTicks call_start_time = WTF::CurrentTimeTicks();
   DoneCreatingDatabaseOnExitCaller on_exit_caller(this);
   DCHECK(error_message.IsEmpty());
   DCHECK_EQ(error,
@@ -465,10 +466,7 @@ bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
   const int kMaxSqliteBusyWaitTime = 30000;
 
   if (!sqlite_database_.Open(filename_)) {
-    ReportOpenDatabaseResult(
-        1, static_cast<int>(DOMExceptionCode::kInvalidStateError),
-        sqlite_database_.LastError(),
-        WTF::CurrentTimeTicks() - call_start_time);
+    ReportSqliteError(sqlite_database_.LastError());
     error_message = FormatErrorMessage("unable to open database",
                                        sqlite_database_.LastError(),
                                        sqlite_database_.LastErrorMsg());
@@ -512,10 +510,7 @@ bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
       SQLiteTransaction transaction(sqlite_database_);
       transaction.begin();
       if (!transaction.InProgress()) {
-        ReportOpenDatabaseResult(
-            2, static_cast<int>(DOMExceptionCode::kInvalidStateError),
-            sqlite_database_.LastError(),
-            WTF::CurrentTimeTicks() - call_start_time);
+        ReportSqliteError(sqlite_database_.LastError());
         error_message = FormatErrorMessage(
             "unable to open database, failed to start transaction",
             sqlite_database_.LastError(), sqlite_database_.LastErrorMsg());
@@ -531,10 +526,7 @@ bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
                 "CREATE TABLE " + table_name +
                 " (key TEXT NOT NULL ON CONFLICT FAIL UNIQUE ON CONFLICT "
                 "REPLACE,value TEXT NOT NULL ON CONFLICT FAIL);")) {
-          ReportOpenDatabaseResult(
-              3, static_cast<int>(DOMExceptionCode::kInvalidStateError),
-              sqlite_database_.LastError(),
-              WTF::CurrentTimeTicks() - call_start_time);
+          ReportSqliteError(sqlite_database_.LastError());
           error_message = FormatErrorMessage(
               "unable to open database, failed to create 'info' table",
               sqlite_database_.LastError(), sqlite_database_.LastErrorMsg());
@@ -543,10 +535,7 @@ bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
           return false;
         }
       } else if (!GetVersionFromDatabase(current_version, false)) {
-        ReportOpenDatabaseResult(
-            4, static_cast<int>(DOMExceptionCode::kInvalidStateError),
-            sqlite_database_.LastError(),
-            WTF::CurrentTimeTicks() - call_start_time);
+        ReportSqliteError(sqlite_database_.LastError());
         error_message = FormatErrorMessage(
             "unable to open database, failed to read current version",
             sqlite_database_.LastError(), sqlite_database_.LastErrorMsg());
@@ -563,10 +552,7 @@ bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
                          << " in database " << DatabaseDebugName()
                          << " that was just created";
         if (!SetVersionInDatabase(expected_version_, false)) {
-          ReportOpenDatabaseResult(
-              5, static_cast<int>(DOMExceptionCode::kInvalidStateError),
-              sqlite_database_.LastError(),
-              WTF::CurrentTimeTicks() - call_start_time);
+          ReportSqliteError(sqlite_database_.LastError());
           error_message = FormatErrorMessage(
               "unable to open database, failed to write current version",
               sqlite_database_.LastError(), sqlite_database_.LastErrorMsg());
@@ -594,9 +580,6 @@ bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
   // whatever version of the database we have.
   if ((!new_ || should_set_version_in_new_database) &&
       expected_version_.length() && expected_version_ != current_version) {
-    ReportOpenDatabaseResult(
-        6, static_cast<int>(DOMExceptionCode::kInvalidStateError), 0,
-        WTF::CurrentTimeTicks() - call_start_time);
     error_message =
         "unable to open database, version mismatch, '" + expected_version_ +
         "' does not match the currentVersion of '" + current_version + "'";
@@ -609,7 +592,7 @@ bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
 
   // See comment at the top this file regarding calling addOpenDatabase().
   DatabaseTracker::Tracker().AddOpenDatabase(this);
-  opened_ = 1;
+  opened_.store(true, std::memory_order_release);
 
   // Declare success:
   error = DatabaseError::kNone;  // Clear the presumed error from above.
@@ -620,9 +603,6 @@ bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
     // version.
     expected_version_ = "";
   }
-
-  ReportOpenDatabaseResult(0, -1, 0,
-                           WTF::CurrentTimeTicks() - call_start_time);  // OK
 
   if (GetDatabaseContext()->GetDatabaseThread())
     GetDatabaseContext()->GetDatabaseThread()->RecordDatabaseOpen(this);
@@ -757,7 +737,7 @@ void Database::ResetAuthorizer() {
     database_authorizer_->Reset();
 }
 
-unsigned long long Database::MaximumSize() const {
+uint64_t Database::MaximumSize() const {
   return DatabaseTracker::Tracker().GetMaxSizeForDatabase(this);
 }
 
@@ -766,69 +746,17 @@ void Database::IncrementalVacuumIfNeeded() {
   int64_t total_size = sqlite_database_.TotalSize();
   if (total_size <= 10 * free_space_size) {
     int result = sqlite_database_.RunIncrementalVacuumCommand();
-    ReportVacuumDatabaseResult(result);
-    if (result != kSQLResultOk)
+    if (result != kSQLResultOk) {
+      ReportSqliteError(result);
       LogErrorMessage(FormatErrorMessage("error vacuuming database", result,
                                          sqlite_database_.LastErrorMsg()));
+    }
   }
 }
 
-// These are used to generate histograms of errors seen with websql.
-// See about:histograms in chromium.
-void Database::ReportOpenDatabaseResult(int error_site,
-                                        int web_sql_error_code,
-                                        int sqlite_error_code,
-                                        TimeDelta duration) {
+void Database::ReportSqliteError(int sqlite_error_code) {
   if (Platform::Current()->DatabaseObserver()) {
-    Platform::Current()->DatabaseObserver()->ReportOpenDatabaseResult(
-        WebSecurityOrigin(GetSecurityOrigin()), StringIdentifier(), error_site,
-        web_sql_error_code, sqlite_error_code, duration);
-  }
-}
-
-void Database::ReportChangeVersionResult(int error_site,
-                                         int web_sql_error_code,
-                                         int sqlite_error_code) {
-  if (Platform::Current()->DatabaseObserver()) {
-    Platform::Current()->DatabaseObserver()->ReportChangeVersionResult(
-        WebSecurityOrigin(GetSecurityOrigin()), StringIdentifier(), error_site,
-        web_sql_error_code, sqlite_error_code);
-  }
-}
-
-void Database::ReportStartTransactionResult(int error_site,
-                                            int web_sql_error_code,
-                                            int sqlite_error_code) {
-  if (Platform::Current()->DatabaseObserver()) {
-    Platform::Current()->DatabaseObserver()->ReportStartTransactionResult(
-        WebSecurityOrigin(GetSecurityOrigin()), StringIdentifier(), error_site,
-        web_sql_error_code, sqlite_error_code);
-  }
-}
-
-void Database::ReportCommitTransactionResult(int error_site,
-                                             int web_sql_error_code,
-                                             int sqlite_error_code) {
-  if (Platform::Current()->DatabaseObserver()) {
-    Platform::Current()->DatabaseObserver()->ReportCommitTransactionResult(
-        WebSecurityOrigin(GetSecurityOrigin()), StringIdentifier(), error_site,
-        web_sql_error_code, sqlite_error_code);
-  }
-}
-
-void Database::ReportExecuteStatementResult(int error_site,
-                                            int web_sql_error_code,
-                                            int sqlite_error_code) {
-  if (Platform::Current()->DatabaseObserver()) {
-    Platform::Current()->DatabaseObserver()->ReportExecuteStatementResult(
-        WebSecurityOrigin(GetSecurityOrigin()), StringIdentifier(), error_site,
-        web_sql_error_code, sqlite_error_code);
-  }
-}
-
-void Database::ReportVacuumDatabaseResult(int sqlite_error_code) {
-  if (Platform::Current()->DatabaseObserver()) {
-    Platform::Current()->DatabaseObserver()->ReportVacuumDatabaseResult(
+    Platform::Current()->DatabaseObserver()->ReportSqliteError(
         WebSecurityOrigin(GetSecurityOrigin()), StringIdentifier(),
         sqlite_error_code);
   }
@@ -836,7 +764,7 @@ void Database::ReportVacuumDatabaseResult(int sqlite_error_code) {
 
 void Database::LogErrorMessage(const String& message) {
   GetExecutionContext()->AddConsoleMessage(ConsoleMessage::Create(
-      kStorageMessageSource, kErrorMessageLevel, message));
+      kStorageMessageSource, mojom::ConsoleMessageLevel::kError, message));
 }
 
 ExecutionContext* Database::GetExecutionContext() const {
@@ -917,18 +845,18 @@ void Database::RunTransaction(
   SQLTransactionBackend* transaction_backend =
       RunTransaction(transaction, read_only, change_version_data);
   if (!transaction_backend) {
-    SQLTransaction::OnErrorCallback* callback =
+    SQLTransaction::OnErrorCallback* transaction_error_callback =
         transaction->ReleaseErrorCallback();
 #if DCHECK_IS_ON()
-    DCHECK_EQ(callback, original_error_callback);
+    DCHECK_EQ(transaction_error_callback, original_error_callback);
 #endif
-    if (callback) {
+    if (transaction_error_callback) {
       std::unique_ptr<SQLErrorData> error = SQLErrorData::Create(
           SQLError::kUnknownErr, "database has been closed");
       GetDatabaseTaskRunner()->PostTask(
-          FROM_HERE,
-          WTF::Bind(&CallTransactionErrorCallback, WrapPersistent(callback),
-                    WTF::Passed(std::move(error))));
+          FROM_HERE, WTF::Bind(&CallTransactionErrorCallback,
+                               WrapPersistent(transaction_error_callback),
+                               WTF::Passed(std::move(error))));
     }
   }
 }
@@ -976,7 +904,7 @@ Vector<String> Database::TableNames() {
   // take strict turns in dealing with them. However, if the code changes,
   // this may not be true anymore.
   Vector<String> result;
-  WaitableEvent event;
+  base::WaitableEvent event;
   if (!GetDatabaseContext()->DatabaseThreadAvailable())
     return result;
 
@@ -996,10 +924,6 @@ const SecurityOrigin* Database::GetSecurityOrigin() const {
   if (GetDatabaseContext()->GetDatabaseThread()->IsDatabaseThread())
     return database_thread_security_origin_.get();
   return nullptr;
-}
-
-bool Database::Opened() {
-  return static_cast<bool>(AcquireLoad(&opened_));
 }
 
 base::SingleThreadTaskRunner* Database::GetDatabaseTaskRunner() const {

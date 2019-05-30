@@ -83,6 +83,7 @@ struct StructTraits<viz::mojom::CompositorFrameMetadataDataView,
   }
 
   static uint32_t frame_token(const viz::CompositorFrameMetadata& metadata) {
+    DCHECK_GT(metadata.frame_token, 0u);
     return metadata.frame_token;
   }
 
@@ -91,14 +92,25 @@ struct StructTraits<viz::mojom::CompositorFrameMetadataDataView,
     return metadata.send_frame_token_to_embedder;
   }
 
-  static bool request_presentation_feedback(
-      const viz::CompositorFrameMetadata& metadata) {
-    return metadata.request_presentation_feedback;
-  }
-
   static float min_page_scale_factor(
       const viz::CompositorFrameMetadata& metadata) {
     return metadata.min_page_scale_factor;
+  }
+
+  static float top_controls_height(
+      const viz::CompositorFrameMetadata& metadata) {
+    return metadata.top_controls_height;
+  }
+
+  static float top_controls_shown_ratio(
+      const viz::CompositorFrameMetadata& metadata) {
+    return metadata.top_controls_shown_ratio;
+  }
+
+  static base::TimeTicks local_surface_id_allocation_time(
+      const viz::CompositorFrameMetadata& metadata) {
+    DCHECK(!metadata.local_surface_id_allocation_time.is_null());
+    return metadata.local_surface_id_allocation_time;
   }
 
 #if defined(OS_ANDROID)
@@ -115,16 +127,6 @@ struct StructTraits<viz::mojom::CompositorFrameMetadataDataView,
   static bool root_overflow_y_hidden(
       const viz::CompositorFrameMetadata& metadata) {
     return metadata.root_overflow_y_hidden;
-  }
-
-  static float top_controls_height(
-      const viz::CompositorFrameMetadata& metadata) {
-    return metadata.top_controls_height;
-  }
-
-  static float top_controls_shown_ratio(
-      const viz::CompositorFrameMetadata& metadata) {
-    return metadata.top_controls_shown_ratio;
   }
 
   static float bottom_controls_height(

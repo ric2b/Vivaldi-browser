@@ -37,8 +37,6 @@ class HtmlInlineUnittest(unittest.TestCase):
           <include src='test.html'>
           <include
               src="really-long-long-long-long-long-test-file-omg-so-long.html">
-          <iron-icon src="[[icon]]"></iron-icon><!-- Should be ignored. -->
-          <iron-icon src="{{src}}"></iron-icon><!-- Also ignored. -->
         </body>
       </html>
       ''',
@@ -184,6 +182,86 @@ class HtmlInlineUnittest(unittest.TestCase):
 
     tmp_dir.CleanUp()
 
+  def testInlineIgnoresPolymerBindings(self):
+    '''Tests that polymer bindings are ignored when inlining.
+    '''
+
+    files = {
+      'index.html': '''
+      <html>
+      <head>
+      <link rel="stylesheet" href="test.css">
+      </head>
+      <body>
+        <iron-icon src="[[icon]]"></iron-icon><!-- Should be ignored. -->
+        <iron-icon src="{{src}}"></iron-icon><!-- Also ignored. -->
+        <!-- [[image]] should be ignored. -->
+        <div style="background: url([[image]]),
+                                url('test.png');">
+        </div>
+        <div style="background: url('test.png'),
+                                url([[image]]);">
+        </div>
+      </body>
+      </html>
+      ''',
+
+      'test.css': '''
+      .image {
+        background: url('test.png');
+        background-image: url([[ignoreMe]]);
+        background-image: image-set(url({{alsoMe}}), 1x);
+        background-image: image-set(
+            url({{ignore}}) 1x,
+            url('test.png') 2x);
+      }
+      ''',
+
+      'test.png': 'PNG DATA'
+    }
+
+    expected_inlined = '''
+      <html>
+      <head>
+      <style>
+      .image {
+        background: url('data:image/png;base64,UE5HIERBVEE=');
+        background-image: url([[ignoreMe]]);
+        background-image: image-set(url({{alsoMe}}), 1x);
+        background-image: image-set(
+            url({{ignore}}) 1x,
+            url('data:image/png;base64,UE5HIERBVEE=') 2x);
+      }
+      </style>
+      </head>
+      <body>
+        <iron-icon src="[[icon]]"></iron-icon><!-- Should be ignored. -->
+        <iron-icon src="{{src}}"></iron-icon><!-- Also ignored. -->
+        <!-- [[image]] should be ignored. -->
+        <div style="background: url([[image]]),
+                                url('data:image/png;base64,UE5HIERBVEE=');">
+        </div>
+        <div style="background: url('data:image/png;base64,UE5HIERBVEE='),
+                                url([[image]]);">
+        </div>
+      </body>
+      </html>
+      '''
+
+    source_resources = set()
+    tmp_dir = util.TempDir(files)
+    for filename in files:
+      source_resources.add(tmp_dir.GetPath(util.normpath(filename)))
+
+    result = html_inline.DoInline(tmp_dir.GetPath('index.html'), None)
+    resources = result.inlined_files
+    resources.add(tmp_dir.GetPath('index.html'))
+    self.failUnlessEqual(resources, source_resources)
+    self.failUnlessEqual(expected_inlined,
+                         util.FixLineEnd(result.inlined_data, '\n'))
+
+    tmp_dir.CleanUp()
+
   def testInlineCSSWithIncludeDirective(self):
     '''Tests that include directive in external css files also inlined'''
 
@@ -231,6 +309,7 @@ class HtmlInlineUnittest(unittest.TestCase):
     self.failUnlessEqual(resources, source_resources)
     self.failUnlessEqual(expected_inlined,
                          util.FixLineEnd(result.inlined_data, '\n'))
+    tmp_dir.CleanUp()
 
   def testCssIncludedFileNames(self):
     '''Tests that all included files from css are returned'''
@@ -320,6 +399,7 @@ class HtmlInlineUnittest(unittest.TestCase):
     self.failUnlessEqual(resources, source_resources)
     self.failUnlessEqual(expected_inlined,
                          util.FixLineEnd(result.inlined_data, '\n'))
+    tmp_dir.CleanUp()
 
   def testFilenameVariableExpansion(self):
     '''Tests that variables are expanded in filenames before inlining.'''
@@ -380,6 +460,7 @@ class HtmlInlineUnittest(unittest.TestCase):
     resources = result.inlined_files
     resources.add(tmp_dir.GetPath('index.html'))
     self.failUnlessEqual(resources, source_resources)
+    tmp_dir.CleanUp()
 
   def testWithCloseTags(self):
     '''Tests that close tags are removed.'''
@@ -446,6 +527,7 @@ class HtmlInlineUnittest(unittest.TestCase):
     self.failUnlessEqual(resources, source_resources)
     self.failUnlessEqual(expected_inlined,
                          util.FixLineEnd(result.inlined_data, '\n'))
+    tmp_dir.CleanUp()
 
   def testCommentedJsInclude(self):
     '''Tests that <include> works inside a comment.'''
@@ -468,6 +550,7 @@ class HtmlInlineUnittest(unittest.TestCase):
     self.failUnlessEqual(resources, source_resources)
     self.failUnlessEqual(expected_inlined,
                          util.FixLineEnd(result.inlined_data, '\n'))
+    tmp_dir.CleanUp()
 
   def testCommentedJsIf(self):
     '''Tests that <if> works inside a comment.'''
@@ -508,6 +591,7 @@ class HtmlInlineUnittest(unittest.TestCase):
     self.failUnlessEqual(resources, source_resources)
     self.failUnlessEqual(expected_inlined,
                          util.FixLineEnd(result.inlined_data, '\n'))
+    tmp_dir.CleanUp()
 
   def testImgSrcset(self):
     '''Tests that img srcset="" attributes are converted.'''
@@ -562,6 +646,7 @@ class HtmlInlineUnittest(unittest.TestCase):
     self.failUnlessEqual(resources, source_resources)
     self.failUnlessEqual(expected_inlined,
                          util.FixLineEnd(result.inlined_data, '\n'))
+    tmp_dir.CleanUp()
 
   def testConditionalInclude(self):
     '''Tests that output and dependency generation includes only files not'''\
@@ -639,6 +724,8 @@ class HtmlInlineUnittest(unittest.TestCase):
     actually_inlined = re.sub(r'\s+', ' ',
                               util.FixLineEnd(result.inlined_data, '\n'))
     self.failUnlessEqual(expected_inlined, actually_inlined);
+    tmp_dir.CleanUp()
+
 
 if __name__ == '__main__':
   unittest.main()

@@ -11,7 +11,6 @@
 #include "base/macros.h"
 
 namespace assist_ranker {
-class ExamplePreprocessor;
 class ExamplePreprocessorConfig;
 }  // namespace assist_ranker
 
@@ -21,9 +20,7 @@ namespace tfnative_model {
 struct FixedAllocations;
 }  // namespace tfnative_model
 
-struct MRUFeatures;
 struct TabFeatures;
-struct WindowFeatures;
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
@@ -44,12 +41,7 @@ class TabScorePredictor {
   // Scores the tab using the tab reactivation model. A higher score indicates
   // the tab is more likely to be reactivated than a lower score. A lower score
   // indicates the tab is more likely to be closed.
-  // |mru_index|: Index of the tab in most-recently used order.
-  // |total_tab_count|: Number of tabs used when calculating mru_index, ie
-  // number of non-incognito tabs.
   TabRankerResult ScoreTab(const TabFeatures& tab,
-                           const WindowFeatures& window,
-                           const MRUFeatures& mru,
                            float* score) WARN_UNUSED_RESULT;
 
  private:
@@ -58,7 +50,6 @@ class TabScorePredictor {
 
   std::unique_ptr<assist_ranker::ExamplePreprocessorConfig>
       preprocessor_config_;
-  std::unique_ptr<assist_ranker::ExamplePreprocessor> preprocessor_;
 
   // Fixed-size working memory provided to the inferencing function. Lazy
   // initialized once so it isn't reallocated for every inference.

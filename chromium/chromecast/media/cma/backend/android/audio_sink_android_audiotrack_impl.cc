@@ -13,6 +13,7 @@
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "chromecast/media/cma/base/decoder_buffer_base.h"
 #include "jni/AudioSinkAudioTrackImpl_jni.h"
 #include "media/base/audio_bus.h"
@@ -284,17 +285,15 @@ void AudioSinkAndroidAudioTrackImpl::ReformatData() {
 void AudioSinkAndroidAudioTrackImpl::TrackRawMonotonicClockDeviation() {
   timespec now = {0, 0};
   clock_gettime(CLOCK_MONOTONIC, &now);
-  int64_t now_usec =
-      static_cast<int64_t>(now.tv_sec) * 1000000 + now.tv_nsec / 1000;
+  int64_t now_usec = base::TimeDelta::FromTimeSpec(now).InMicroseconds();
 
   clock_gettime(CLOCK_MONOTONIC_RAW, &now);
-  int64_t now_raw_usec =
-      static_cast<int64_t>(now.tv_sec) * 1000000 + now.tv_nsec / 1000;
+  int64_t now_raw_usec = base::TimeDelta::FromTimeSpec(now).InMicroseconds();
 
   // TODO(ckuiper): Eventually we want to use this to convert from non-RAW to
   // RAW timestamps to improve accuracy.
-  VLOG(3) << __func__ << "(" << this << "):"
-          << " now - now_raw=" << (now_usec - now_raw_usec);
+  DVLOG(3) << __func__ << "(" << this << "):"
+           << " now - now_raw=" << (now_usec - now_raw_usec);
 }
 
 void AudioSinkAndroidAudioTrackImpl::FeedDataContinue() {
@@ -318,6 +317,13 @@ void AudioSinkAndroidAudioTrackImpl::FeedDataContinue() {
 
   DCHECK(written == left_to_send);
 
+  // RenderingDelay was returned through JNI via direct buffers.
+  sink_rendering_delay_.delay_microseconds = direct_rendering_delay_address_[0];
+  sink_rendering_delay_.timestamp_microseconds =
+      direct_rendering_delay_address_[1];
+
+  TrackRawMonotonicClockDeviation();
+
   PostPcmCallback(sink_rendering_delay_);
 }
 
@@ -325,9 +331,9 @@ void AudioSinkAndroidAudioTrackImpl::PostPcmCallback(
     const MediaPipelineBackendAndroid::RenderingDelay& delay) {
   RUN_ON_CALLER_THREAD(PostPcmCallback, delay);
   DCHECK(pending_data_);
-  VLOG(3) << __func__ << "(" << this << "): "
-          << " delay=" << delay.delay_microseconds
-          << " ts=" << delay.timestamp_microseconds;
+  DVLOG(3) << __func__ << "(" << this << "): "
+           << " delay=" << delay.delay_microseconds
+           << " ts=" << delay.timestamp_microseconds;
   pending_data_ = nullptr;
   pending_data_bytes_already_fed_ = 0;
   delegate_->OnWritePcmCompletion(MediaPipelineBackendAndroid::kBufferSuccess,
@@ -360,7 +366,7 @@ void AudioSinkAndroidAudioTrackImpl::SetPaused(bool paused) {
     state_ = kStateNormalPlayback;
     Java_AudioSinkAudioTrackImpl_play(base::android::AttachCurrentThread(),
                                       j_audio_sink_audiotrack_impl_);
-    if (pending_data_bytes_already_fed_) {
+    if (pending_data_ && pending_data_bytes_already_fed_) {
       // The last data buffer was partially fed, complete it now.
       FeedDataContinue();
     }

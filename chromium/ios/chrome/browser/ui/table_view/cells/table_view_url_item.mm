@@ -9,8 +9,8 @@
 #import "ios/chrome/browser/ui/table_view/cells/table_view_cells_constants.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_url_cell_favicon_badge_view.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
-#include "ios/chrome/browser/ui/ui_util.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/favicon/favicon_view.h"
 #import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #include "url/gurl.h"
@@ -24,8 +24,6 @@ namespace {
 const CGFloat kFaviconWidth = 16;
 // The width and height of the favicon container view.
 const CGFloat kFaviconContainerWidth = 28;
-// The text color of the URL and metadata labels.
-const CGFloat kSecondaryLabelLightGrayTextColor = 0x8E8E93;
 // Default delimiter to use between the hostname and the supplemental URL text
 // if text is specified but not the delimiter.
 const char kDefaultSupplementalURLTextDelimiter[] = "•";
@@ -53,7 +51,7 @@ const char kDefaultSupplementalURLTextDelimiter[] = "•";
   return self;
 }
 
-- (void)configureCell:(UITableViewCell*)tableCell
+- (void)configureCell:(TableViewCell*)tableCell
            withStyler:(ChromeTableViewStyler*)styler {
   [super configureCell:tableCell withStyler:styler];
 
@@ -152,7 +150,7 @@ const char kDefaultSupplementalURLTextDelimiter[] = "•";
     _faviconContainerView = [[UIImageView alloc]
         initWithImage:[UIImage
                           imageNamed:@"table_view_cell_favicon_background"]];
-    _faviconView = [[FaviconViewNew alloc] init];
+    _faviconView = [[FaviconView alloc] init];
     _faviconView.contentMode = UIViewContentModeScaleAspectFit;
     _faviconView.clipsToBounds = YES;
     [_faviconContainerView addSubview:_faviconView];
@@ -164,14 +162,15 @@ const char kDefaultSupplementalURLTextDelimiter[] = "•";
     // Set font sizes using dynamic type.
     _titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
     _titleLabel.adjustsFontForContentSizeCategory = YES;
-    _URLLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
+    _URLLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
     _URLLabel.adjustsFontForContentSizeCategory = YES;
-    _URLLabel.textColor = UIColorFromRGB(kSecondaryLabelLightGrayTextColor);
+    _URLLabel.textColor =
+        UIColorFromRGB(kTableViewSecondaryLabelLightGrayTextColor);
     _URLLabel.hidden = YES;
     _metadataLabel.font =
-        [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
+        [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
     _metadataLabel.textColor =
-        UIColorFromRGB(kSecondaryLabelLightGrayTextColor);
+        UIColorFromRGB(kTableViewSecondaryLabelLightGrayTextColor);
     _metadataLabel.adjustsFontForContentSizeCategory = YES;
     _metadataLabel.hidden = YES;
 
@@ -202,6 +201,22 @@ const char kDefaultSupplementalURLTextDelimiter[] = "•";
     [contentView addSubview:_faviconContainerView];
     [contentView addSubview:_faviconBadgeView];
     [contentView addSubview:self.horizontalStack];
+
+    NSLayoutConstraint* heightConstraint = [self.contentView.heightAnchor
+        constraintGreaterThanOrEqualToConstant:kChromeTableViewCellHeight];
+    // Don't set the priority to required to avoid clashing with the estimated
+    // height.
+    heightConstraint.priority = UILayoutPriorityRequired - 1;
+
+    NSLayoutConstraint* topConstraint = [self.horizontalStack.topAnchor
+        constraintGreaterThanOrEqualToAnchor:self.contentView.topAnchor
+                                    constant:
+                                        kTableViewTwoLabelsCellVerticalSpacing];
+    NSLayoutConstraint* bottomConstraint = [self.horizontalStack.bottomAnchor
+        constraintGreaterThanOrEqualToAnchor:self.contentView.bottomAnchor
+                                    constant:
+                                        -
+                                        kTableViewTwoLabelsCellVerticalSpacing];
 
     [NSLayoutConstraint activateConstraints:@[
       // The favicon view is a fixed size, is pinned to the leading edge of the
@@ -237,12 +252,9 @@ const char kDefaultSupplementalURLTextDelimiter[] = "•";
       [self.horizontalStack.trailingAnchor
           constraintEqualToAnchor:self.contentView.trailingAnchor
                          constant:-kTableViewHorizontalSpacing],
-      [self.horizontalStack.topAnchor
-          constraintEqualToAnchor:self.contentView.topAnchor
-                         constant:kTableViewVerticalSpacing],
-      [self.horizontalStack.bottomAnchor
-          constraintEqualToAnchor:self.contentView.bottomAnchor
-                         constant:-kTableViewVerticalSpacing]
+      [self.horizontalStack.centerYAnchor
+          constraintEqualToAnchor:self.contentView.centerYAnchor],
+      topConstraint, bottomConstraint, heightConstraint
     ]];
   }
   return self;

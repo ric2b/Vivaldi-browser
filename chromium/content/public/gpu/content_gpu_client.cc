@@ -14,9 +14,13 @@ gpu::SyncPointManager* ContentGpuClient::GetSyncPointManager() {
   return nullptr;
 }
 
+gpu::SharedImageManager* ContentGpuClient::GetSharedImageManager() {
+  return nullptr;
+}
+
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 std::unique_ptr<media::CdmProxy> ContentGpuClient::CreateCdmProxy(
-    const std::string& cdm_guid) {
+    const base::Token& cdm_guid) {
   return nullptr;
 }
 #endif

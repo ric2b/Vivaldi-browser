@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <limits>
 
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "net/http/http_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -47,7 +48,7 @@ TEST(HttpUtilTest, IsSafeHeader) {
     "user-agent",
     "via",
   };
-  for (size_t i = 0; i < arraysize(unsafe_headers); ++i) {
+  for (size_t i = 0; i < base::size(unsafe_headers); ++i) {
     EXPECT_FALSE(HttpUtil::IsSafeHeader(unsafe_headers[i]))
       << unsafe_headers[i];
     EXPECT_FALSE(HttpUtil::IsSafeHeader(base::ToUpperASCII(unsafe_headers[i])))
@@ -93,7 +94,7 @@ TEST(HttpUtilTest, IsSafeHeader) {
     "user_agent",
     "viaa",
   };
-  for (size_t i = 0; i < arraysize(safe_headers); ++i) {
+  for (size_t i = 0; i < base::size(safe_headers); ++i) {
     EXPECT_TRUE(HttpUtil::IsSafeHeader(safe_headers[i])) << safe_headers[i];
     EXPECT_TRUE(HttpUtil::IsSafeHeader(base::ToUpperASCII(safe_headers[i])))
         << safe_headers[i];
@@ -184,7 +185,8 @@ TEST(HttpUtilTest, HeadersIterator_Reset) {
 TEST(HttpUtilTest, ValuesIterator) {
   std::string values = " must-revalidate,   no-cache=\"foo, bar\"\t, private ";
 
-  HttpUtil::ValuesIterator it(values.begin(), values.end(), ',');
+  HttpUtil::ValuesIterator it(values.begin(), values.end(), ',',
+                              true /* ignore_empty_values */);
 
   ASSERT_TRUE(it.GetNext());
   EXPECT_EQ(std::string("must-revalidate"), it.value());
@@ -198,12 +200,50 @@ TEST(HttpUtilTest, ValuesIterator) {
   EXPECT_FALSE(it.GetNext());
 }
 
+TEST(HttpUtilTest, ValuesIterator_EmptyValues) {
+  std::string values = ", foopy , \t ,,,";
+
+  HttpUtil::ValuesIterator it(values.begin(), values.end(), ',',
+                              true /* ignore_empty_values */);
+  ASSERT_TRUE(it.GetNext());
+  EXPECT_EQ(std::string("foopy"), it.value());
+  EXPECT_FALSE(it.GetNext());
+
+  HttpUtil::ValuesIterator it_with_empty_values(
+      values.begin(), values.end(), ',', false /* ignore_empty_values */);
+  ASSERT_TRUE(it_with_empty_values.GetNext());
+  EXPECT_EQ(std::string(""), it_with_empty_values.value());
+
+  ASSERT_TRUE(it_with_empty_values.GetNext());
+  EXPECT_EQ(std::string("foopy"), it_with_empty_values.value());
+
+  ASSERT_TRUE(it_with_empty_values.GetNext());
+  EXPECT_EQ(std::string(""), it_with_empty_values.value());
+
+  ASSERT_TRUE(it_with_empty_values.GetNext());
+  EXPECT_EQ(std::string(""), it_with_empty_values.value());
+
+  ASSERT_TRUE(it_with_empty_values.GetNext());
+  EXPECT_EQ(std::string(""), it_with_empty_values.value());
+
+  ASSERT_TRUE(it_with_empty_values.GetNext());
+  EXPECT_EQ(std::string(""), it_with_empty_values.value());
+
+  EXPECT_FALSE(it_with_empty_values.GetNext());
+}
+
 TEST(HttpUtilTest, ValuesIterator_Blanks) {
   std::string values = " \t ";
 
-  HttpUtil::ValuesIterator it(values.begin(), values.end(), ',');
-
+  HttpUtil::ValuesIterator it(values.begin(), values.end(), ',',
+                              true /* ignore_empty_values */);
   EXPECT_FALSE(it.GetNext());
+
+  HttpUtil::ValuesIterator it_with_empty_values(
+      values.begin(), values.end(), ',', false /* ignore_empty_values */);
+  ASSERT_TRUE(it_with_empty_values.GetNext());
+  EXPECT_EQ(std::string(""), it_with_empty_values.value());
+  EXPECT_FALSE(it_with_empty_values.GetNext());
 }
 
 TEST(HttpUtilTest, Unquote) {
@@ -221,10 +261,6 @@ TEST(HttpUtilTest, Unquote) {
   // Act as identity function on unquoted inputs.
   EXPECT_STREQ("X", HttpUtil::Unquote("X").c_str());
   EXPECT_STREQ("\"", HttpUtil::Unquote("\"").c_str());
-
-  // Allow single quotes to act as quote marks.
-  // Not part of RFC 2616.
-  EXPECT_STREQ("x\"", HttpUtil::Unquote("'x\"'").c_str());
 
   // Allow quotes in the middle of the input.
   EXPECT_STREQ("foo\"bar", HttpUtil::Unquote("\"foo\"bar\"").c_str());
@@ -291,12 +327,12 @@ TEST(HttpUtilTest, Quote) {
 TEST(HttpUtilTest, LocateEndOfHeaders) {
   struct {
     const char* const input;
-    int expected_result;
+    size_t expected_result;
   } tests[] = {
-      {"\r\n", -1},
-      {"\n", -1},
-      {"\r", -1},
-      {"foo", -1},
+      {"\r\n", std::string::npos},
+      {"\n", std::string::npos},
+      {"\r", std::string::npos},
+      {"foo", std::string::npos},
       {"\r\n\r\n", 4},
       {"foo\r\nbar\r\n\r\n", 12},
       {"foo\nbar\n\n", 9},
@@ -305,9 +341,9 @@ TEST(HttpUtilTest, LocateEndOfHeaders) {
       {"foo\nbar\n\r\njunk", 10},
       {"foo\nbar\r\n\njunk", 10},
   };
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    int input_len = static_cast<int>(strlen(tests[i].input));
-    int eoh = HttpUtil::LocateEndOfHeaders(tests[i].input, input_len);
+  for (size_t i = 0; i < base::size(tests); ++i) {
+    size_t input_len = strlen(tests[i].input);
+    size_t eoh = HttpUtil::LocateEndOfHeaders(tests[i].input, input_len);
     EXPECT_EQ(tests[i].expected_result, eoh);
   }
 }
@@ -315,12 +351,12 @@ TEST(HttpUtilTest, LocateEndOfHeaders) {
 TEST(HttpUtilTest, LocateEndOfAdditionalHeaders) {
   struct {
     const char* const input;
-    int expected_result;
+    size_t expected_result;
   } tests[] = {
       {"\r\n", 2},
       {"\n", 1},
-      {"\r", -1},
-      {"foo", -1},
+      {"\r", std::string::npos},
+      {"foo", std::string::npos},
       {"\r\n\r\n", 2},
       {"foo\r\nbar\r\n\r\n", 12},
       {"foo\nbar\n\n", 9},
@@ -329,9 +365,10 @@ TEST(HttpUtilTest, LocateEndOfAdditionalHeaders) {
       {"foo\nbar\n\r\njunk", 10},
       {"foo\nbar\r\n\njunk", 10},
   };
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    int input_len = static_cast<int>(strlen(tests[i].input));
-    int eoh = HttpUtil::LocateEndOfAdditionalHeaders(tests[i].input, input_len);
+  for (size_t i = 0; i < base::size(tests); ++i) {
+    size_t input_len = strlen(tests[i].input);
+    size_t eoh =
+        HttpUtil::LocateEndOfAdditionalHeaders(tests[i].input, input_len);
     EXPECT_EQ(tests[i].expected_result, eoh);
   }
 }
@@ -651,7 +688,7 @@ TEST(HttpUtilTest, AssembleRawHeaders) {
     },
   };
   // clang-format on
-  for (size_t i = 0; i < arraysize(tests); ++i) {
+  for (size_t i = 0; i < base::size(tests); ++i) {
     std::string input = tests[i].input;
     std::replace(input.begin(), input.end(), '|', '\0');
     std::string raw = HttpUtil::AssembleRawHeaders(input.data(), input.size());
@@ -691,7 +728,7 @@ TEST(HttpUtilTest, RequestUrlSanitize) {
       "wss://www.google.com:78/foobar?query=1",
     }
   };
-  for (size_t i = 0; i < arraysize(tests); ++i) {
+  for (size_t i = 0; i < base::size(tests); ++i) {
     SCOPED_TRACE(i);
 
     GURL url(GURL(tests[i].url));
@@ -771,6 +808,7 @@ TEST(HttpUtilTest, ParseContentType) {
       true,
       ""
     },
+
     { "text/html; boundary=\"WebKit-ada-df-dsf-adsfadsfs\"",
       "text/html",
       "",
@@ -803,7 +841,7 @@ TEST(HttpUtilTest, ParseContentType) {
       "text/html",
       "",
       false,
-      "WebKit-ada-df-dsf-adsfadsfs  "
+      "WebKit-ada-df-dsf-adsfadsfs"
     },
     { "text/html; boundary=WebKit-ada-df-dsf-adsfadsfs",
       "text/html",
@@ -835,15 +873,32 @@ TEST(HttpUtilTest, ParseContentType) {
       false,
       ""
     },
+    // Empty quoted strings are allowed.
     { "text/html; charset=\"\"",
       "text/html",
       "",
-      false,
+      true,
       ""
     },
+
+    // Leading and trailing whitespace in quotes is trimmed.
     { "text/html; charset=\" \"",
       "text/html",
-      " ",
+      "",
+      true,
+      ""
+    },
+    { "text/html; charset=\" foo \"",
+      "text/html",
+      "foo",
+      true,
+      ""
+    },
+
+    // With multiple values, should use the first one.
+    { "text/html; charset=foo; charset=utf-8",
+      "text/html",
+      "foo",
       true,
       ""
     },
@@ -853,12 +908,19 @@ TEST(HttpUtilTest, ParseContentType) {
       true,
       ""
     },
-    { "text/html; charset=utf-8; charset=; charset;",
+    { "text/html; charset=utf-8; charset=; charset",
       "text/html",
       "utf-8",
       true,
       ""
     },
+    { "text/html; boundary=foo; boundary=bar",
+      "text/html",
+      "",
+      false,
+      "foo"
+    },
+
     // Stray quotes ignored.
     { "text/html; \"; \"\"; charset=utf-8",
       "text/html",
@@ -926,7 +988,7 @@ TEST(HttpUtilTest, ParseContentType) {
     // TODO(abarth): Add more interesting test cases.
   };
   // clang-format on
-  for (size_t i = 0; i < arraysize(tests); ++i) {
+  for (size_t i = 0; i < base::size(tests); ++i) {
     std::string mime_type;
     std::string charset;
     bool had_charset = false;
@@ -1034,7 +1096,7 @@ TEST(HttpUtilTest, ParseRetryAfterHeader) {
     { "Mon, 1 Jan 1900 12:34:56 GMT", false, base::TimeDelta() }
   };
 
-  for (size_t i = 0; i < arraysize(tests); ++i) {
+  for (size_t i = 0; i < base::size(tests); ++i) {
     base::TimeDelta retry_after;
     bool return_value = HttpUtil::ParseRetryAfterHeader(
         tests[i].retry_after_string, now, &retry_after);
@@ -1131,25 +1193,26 @@ void CheckInvalidNameValuePair(std::string valid_part,
 }  // namespace
 
 TEST(HttpUtilTest, NameValuePairsIteratorCopyAndAssign) {
-  std::string data = "alpha='\\'a\\''; beta=\" b \"; cappa='c;'; delta=\"d\"";
+  std::string data =
+      "alpha=\"\\\"a\\\"\"; beta=\" b \"; cappa=\"c;\"; delta=\"d\"";
   HttpUtil::NameValuePairsIterator parser_a(data.begin(), data.end(), ';');
 
   EXPECT_TRUE(parser_a.valid());
   ASSERT_NO_FATAL_FAILURE(
-      CheckNextNameValuePair(&parser_a, true, true, "alpha", "'a'"));
+      CheckNextNameValuePair(&parser_a, true, true, "alpha", "\"a\""));
 
   HttpUtil::NameValuePairsIterator parser_b(parser_a);
   // a and b now point to same location
   ASSERT_NO_FATAL_FAILURE(
-      CheckCurrentNameValuePair(&parser_b, true, "alpha", "'a'"));
+      CheckCurrentNameValuePair(&parser_b, true, "alpha", "\"a\""));
   ASSERT_NO_FATAL_FAILURE(
-      CheckCurrentNameValuePair(&parser_a, true, "alpha", "'a'"));
+      CheckCurrentNameValuePair(&parser_a, true, "alpha", "\"a\""));
 
   // advance a, no effect on b
   ASSERT_NO_FATAL_FAILURE(
       CheckNextNameValuePair(&parser_a, true, true, "beta", " b "));
   ASSERT_NO_FATAL_FAILURE(
-      CheckCurrentNameValuePair(&parser_b, true, "alpha", "'a'"));
+      CheckCurrentNameValuePair(&parser_b, true, "alpha", "\"a\""));
 
   // assign b the current state of a, no effect on a
   parser_b = parser_a;
@@ -1175,10 +1238,13 @@ TEST(HttpUtilTest, NameValuePairsIteratorEmptyInput) {
 }
 
 TEST(HttpUtilTest, NameValuePairsIterator) {
-  std::string data = "alpha=1; beta= 2 ;cappa =' 3; ';"
-                     "delta= \" \\\"4\\\" \"; e= \" '5'\"; e=6;"
-                     "f='\\'\\h\\e\\l\\l\\o\\ \\w\\o\\r\\l\\d\\'';"
-                     "g=''; h='hello'";
+  std::string data =
+      "alpha=1; beta= 2 ;"
+      "cappa =' 3; foo=';"
+      "cappa =\" 3; foo=\";"
+      "delta= \" \\\"4\\\" \"; e= \" '5'\"; e=6;"
+      "f=\"\\\"\\h\\e\\l\\l\\o\\ \\w\\o\\r\\l\\d\\\"\";"
+      "g=\"\"; h=\"hello\"";
   HttpUtil::NameValuePairsIterator parser(data.begin(), data.end(), ';');
   EXPECT_TRUE(parser.valid());
 
@@ -1186,8 +1252,17 @@ TEST(HttpUtilTest, NameValuePairsIterator) {
       CheckNextNameValuePair(&parser, true, true, "alpha", "1"));
   ASSERT_NO_FATAL_FAILURE(
       CheckNextNameValuePair(&parser, true, true, "beta", "2"));
+
+  // Single quotes shouldn't be treated as quotes.
   ASSERT_NO_FATAL_FAILURE(
-      CheckNextNameValuePair(&parser, true, true, "cappa", " 3; "));
+      CheckNextNameValuePair(&parser, true, true, "cappa", "' 3"));
+  ASSERT_NO_FATAL_FAILURE(
+      CheckNextNameValuePair(&parser, true, true, "foo", "'"));
+
+  // But double quotes should be, and can contain semi-colons and equal signs.
+  ASSERT_NO_FATAL_FAILURE(
+      CheckNextNameValuePair(&parser, true, true, "cappa", " 3; foo="));
+
   ASSERT_NO_FATAL_FAILURE(
       CheckNextNameValuePair(&parser, true, true, "delta", " \"4\" "));
   ASSERT_NO_FATAL_FAILURE(
@@ -1195,7 +1270,7 @@ TEST(HttpUtilTest, NameValuePairsIterator) {
   ASSERT_NO_FATAL_FAILURE(
       CheckNextNameValuePair(&parser, true, true, "e", "6"));
   ASSERT_NO_FATAL_FAILURE(
-      CheckNextNameValuePair(&parser, true, true, "f", "'hello world'"));
+      CheckNextNameValuePair(&parser, true, true, "f", "\"hello world\""));
   ASSERT_NO_FATAL_FAILURE(
       CheckNextNameValuePair(&parser, true, true, "g", std::string()));
   ASSERT_NO_FATAL_FAILURE(
@@ -1252,8 +1327,9 @@ TEST(HttpUtilTest, NameValuePairsIteratorIllegalInputs) {
   ASSERT_NO_FATAL_FAILURE(CheckInvalidNameValuePair("alpha=1", "; beta"));
   ASSERT_NO_FATAL_FAILURE(CheckInvalidNameValuePair(std::string(), "beta"));
 
-  ASSERT_NO_FATAL_FAILURE(CheckInvalidNameValuePair("alpha=1", "; 'beta'=2"));
-  ASSERT_NO_FATAL_FAILURE(CheckInvalidNameValuePair(std::string(), "'beta'=2"));
+  ASSERT_NO_FATAL_FAILURE(CheckInvalidNameValuePair("alpha=1", "; \"beta\"=2"));
+  ASSERT_NO_FATAL_FAILURE(
+      CheckInvalidNameValuePair(std::string(), "\"beta\"=2"));
   ASSERT_NO_FATAL_FAILURE(CheckInvalidNameValuePair("alpha=1", ";beta="));
   ASSERT_NO_FATAL_FAILURE(CheckInvalidNameValuePair("alpha=1",
                                                     ";beta=;cappa=2"));
@@ -1284,7 +1360,7 @@ TEST(HttpUtilTest, NameValuePairsIteratorExtraSeparators) {
 // See comments on the implementation of NameValuePairsIterator::GetNext
 // regarding this derogation from the spec.
 TEST(HttpUtilTest, NameValuePairsIteratorMissingEndQuote) {
-  std::string data = "name='value";
+  std::string data = "name=\"value";
   HttpUtil::NameValuePairsIterator parser(data.begin(), data.end(), ';');
   EXPECT_TRUE(parser.valid());
 
@@ -1498,7 +1574,7 @@ TEST(HttpUtilTest, ParseAcceptEncoding) {
       {"foo,\"bar\"", "INVALID"},
   };
 
-  for (size_t i = 0; i < arraysize(tests); ++i) {
+  for (size_t i = 0; i < base::size(tests); ++i) {
     std::string value(tests[i].value);
     std::string reformatted;
     std::set<std::string> allowed_encodings;
@@ -1528,7 +1604,7 @@ TEST(HttpUtilTest, ParseContentEncoding) {
       {"foo,\"bar\"", "INVALID"},
   };
 
-  for (size_t i = 0; i < arraysize(tests); ++i) {
+  for (size_t i = 0; i < base::size(tests); ++i) {
     std::string value(tests[i].value);
     std::string reformatted;
     std::set<std::string> used_encodings;
@@ -1543,6 +1619,30 @@ TEST(HttpUtilTest, ParseContentEncoding) {
     EXPECT_STREQ(tests[i].expected, reformatted.c_str())
         << "value=\"" << value << "\"";
   }
+}
+
+// Test the expansion of the Language List.
+TEST(HttpUtilTest, ExpandLanguageList) {
+  EXPECT_EQ("", HttpUtil::ExpandLanguageList(""));
+  EXPECT_EQ("en-US,en", HttpUtil::ExpandLanguageList("en-US"));
+  EXPECT_EQ("fr", HttpUtil::ExpandLanguageList("fr"));
+
+  // The base language is added after all regional codes...
+  EXPECT_EQ("en-US,en-CA,en", HttpUtil::ExpandLanguageList("en-US,en-CA"));
+
+  // ... but before other language families.
+  EXPECT_EQ("en-US,en-CA,en,fr",
+            HttpUtil::ExpandLanguageList("en-US,en-CA,fr"));
+  EXPECT_EQ("en-US,en-CA,en,fr,en-AU",
+            HttpUtil::ExpandLanguageList("en-US,en-CA,fr,en-AU"));
+  EXPECT_EQ("en-US,en-CA,en,fr-CA,fr",
+            HttpUtil::ExpandLanguageList("en-US,en-CA,fr-CA"));
+
+  // Add a base language even if it's already in the list.
+  EXPECT_EQ("en-US,en,fr-CA,fr,it,es-AR,es,it-IT",
+            HttpUtil::ExpandLanguageList("en-US,fr-CA,it,fr,es-AR,it-IT"));
+  // Trims a whitespace.
+  EXPECT_EQ("en-US,en,fr", HttpUtil::ExpandLanguageList("en-US, fr"));
 }
 
 }  // namespace net

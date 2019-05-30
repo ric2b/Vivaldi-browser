@@ -165,7 +165,7 @@ bool MatrixInvert(DOMFloat32Array* out_array) {
   out[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
 
   return true;
-};
+}
 
 VRFrameData::VRFrameData() {
   left_projection_matrix_ = DOMFloat32Array::Create(16);
@@ -187,7 +187,7 @@ bool VRFrameData::Update(const device::mojom::blink::VRPosePtr& pose,
     fov_right = right_eye->FieldOfView();
   } else {
     DCHECK(!left_eye && !right_eye);
-    fov_left = fov_right = new VRFieldOfView(45, 45, 45, 45);
+    fov_left = fov_right = MakeGarbageCollected<VRFieldOfView>(45, 45, 45, 45);
   }
 
   // Build the projection matrices

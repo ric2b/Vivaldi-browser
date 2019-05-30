@@ -11,7 +11,9 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/sequenced_task_runner.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "storage/browser/fileapi/file_system_quota_util.h"
@@ -31,7 +33,7 @@ class BrowsingDataMediaLicenseHelperImpl
   // BrowsingDataMediaLicenseHelper implementation
   explicit BrowsingDataMediaLicenseHelperImpl(
       storage::FileSystemContext* filesystem_context);
-  void StartFetching(const FetchCallback& callback) final;
+  void StartFetching(FetchCallback callback) final;
   void DeleteMediaLicenseOrigin(const GURL& origin) final;
 
  private:
@@ -40,7 +42,7 @@ class BrowsingDataMediaLicenseHelperImpl
   // Enumerates all filesystem files, storing the resulting list into
   // file_system_file_ for later use. This must be called on the file
   // task runner.
-  void FetchMediaLicenseInfoOnFileTaskRunner(const FetchCallback& callback);
+  void FetchMediaLicenseInfoOnFileTaskRunner(FetchCallback callback);
 
   // Deletes all file systems associated with |origin|. This must be called on
   // the file task runner.
@@ -66,14 +68,13 @@ BrowsingDataMediaLicenseHelperImpl::BrowsingDataMediaLicenseHelperImpl(
 
 BrowsingDataMediaLicenseHelperImpl::~BrowsingDataMediaLicenseHelperImpl() {}
 
-void BrowsingDataMediaLicenseHelperImpl::StartFetching(
-    const FetchCallback& callback) {
+void BrowsingDataMediaLicenseHelperImpl::StartFetching(FetchCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!callback.is_null());
   file_task_runner()->PostTask(
       FROM_HERE, base::BindOnce(&BrowsingDataMediaLicenseHelperImpl::
                                     FetchMediaLicenseInfoOnFileTaskRunner,
-                                this, callback));
+                                this, std::move(callback)));
 }
 
 void BrowsingDataMediaLicenseHelperImpl::DeleteMediaLicenseOrigin(
@@ -86,7 +87,7 @@ void BrowsingDataMediaLicenseHelperImpl::DeleteMediaLicenseOrigin(
 }
 
 void BrowsingDataMediaLicenseHelperImpl::FetchMediaLicenseInfoOnFileTaskRunner(
-    const FetchCallback& callback) {
+    FetchCallback callback) {
   DCHECK(file_task_runner()->RunsTasksInCurrentSequence());
   DCHECK(!callback.is_null());
 
@@ -111,8 +112,8 @@ void BrowsingDataMediaLicenseHelperImpl::FetchMediaLicenseInfoOnFileTaskRunner(
     result.push_back(MediaLicenseInfo(origin, size, last_modified_time));
   }
 
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::BindOnce(callback, result));
+  base::PostTaskWithTraits(FROM_HERE, {BrowserThread::UI},
+                           base::BindOnce(std::move(callback), result));
 }
 
 void BrowsingDataMediaLicenseHelperImpl::

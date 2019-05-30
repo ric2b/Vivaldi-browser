@@ -29,9 +29,7 @@ class PpapiBlinkPlatformImpl : public BlinkPlatformImpl {
   void Shutdown();
 
   // BlinkPlatformImpl methods:
-  blink::WebThread* CurrentThread() override;
   blink::WebSandboxSupport* GetSandboxSupport() override;
-  virtual bool sandboxEnabled();
   unsigned long long VisitedLinkHash(const char* canonical_url,
                                      size_t length) override;
   bool IsLinkVisited(unsigned long long link_hash) override;
@@ -44,9 +42,8 @@ class PpapiBlinkPlatformImpl : public BlinkPlatformImpl {
                          bool sync_dir) override;
 
  private:
-#if !defined(OS_ANDROID) && !defined(OS_WIN)
-  class SandboxSupport;
-  std::unique_ptr<SandboxSupport> sandbox_support_;
+#if defined(OS_LINUX) || defined(OS_MACOSX)
+  std::unique_ptr<blink::WebSandboxSupport> sandbox_support_;
 #endif
 
 #if defined(OS_LINUX)

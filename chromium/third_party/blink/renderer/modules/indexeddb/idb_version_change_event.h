@@ -28,6 +28,7 @@
 
 #include "base/optional.h"
 #include "third_party/blink/public/common/indexeddb/web_idb_types.h"
+#include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
 #include "third_party/blink/renderer/modules/event_modules.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_any.h"
@@ -41,24 +42,35 @@ class IDBVersionChangeEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static IDBVersionChangeEvent* Create() { return new IDBVersionChangeEvent(); }
-  static IDBVersionChangeEvent* Create(
-      const AtomicString& event_type,
-      unsigned long long old_version,
-      const base::Optional<unsigned long long>& new_version,
-      WebIDBDataLoss data_loss = kWebIDBDataLossNone,
-      const String& data_loss_message = String()) {
-    return new IDBVersionChangeEvent(event_type, old_version, new_version,
-                                     data_loss, data_loss_message);
+  static IDBVersionChangeEvent* Create() {
+    return MakeGarbageCollected<IDBVersionChangeEvent>();
   }
   static IDBVersionChangeEvent* Create(
       const AtomicString& event_type,
-      const IDBVersionChangeEventInit& initializer) {
-    return new IDBVersionChangeEvent(event_type, initializer);
+      uint64_t old_version,
+      const base::Optional<uint64_t>& new_version,
+      mojom::IDBDataLoss data_loss = mojom::IDBDataLoss::None,
+      const String& data_loss_message = String()) {
+    return MakeGarbageCollected<IDBVersionChangeEvent>(
+        event_type, old_version, new_version, data_loss, data_loss_message);
+  }
+  static IDBVersionChangeEvent* Create(
+      const AtomicString& event_type,
+      const IDBVersionChangeEventInit* initializer) {
+    return MakeGarbageCollected<IDBVersionChangeEvent>(event_type, initializer);
   }
 
-  unsigned long long oldVersion() const { return old_version_; }
-  unsigned long long newVersion(bool& is_null) const;
+  IDBVersionChangeEvent();
+  IDBVersionChangeEvent(const AtomicString& event_type,
+                        uint64_t old_version,
+                        const base::Optional<uint64_t>& new_version,
+                        mojom::IDBDataLoss,
+                        const String& data_loss);
+  IDBVersionChangeEvent(const AtomicString& event_type,
+                        const IDBVersionChangeEventInit*);
+
+  uint64_t oldVersion() const { return old_version_; }
+  uint64_t newVersion(bool& is_null) const;
 
   const AtomicString& dataLoss() const;
   const String& dataLossMessage() const { return data_loss_message_; }
@@ -68,18 +80,9 @@ class IDBVersionChangeEvent final : public Event {
   void Trace(blink::Visitor*) override;
 
  private:
-  IDBVersionChangeEvent();
-  IDBVersionChangeEvent(const AtomicString& event_type,
-                        unsigned long long old_version,
-                        const base::Optional<unsigned long long>& new_version,
-                        WebIDBDataLoss,
-                        const String& data_loss);
-  IDBVersionChangeEvent(const AtomicString& event_type,
-                        const IDBVersionChangeEventInit&);
-
-  unsigned long long old_version_;
-  base::Optional<unsigned long long> new_version_;
-  WebIDBDataLoss data_loss_;
+  uint64_t old_version_;
+  base::Optional<uint64_t> new_version_;
+  mojom::IDBDataLoss data_loss_;
   String data_loss_message_;
 };
 

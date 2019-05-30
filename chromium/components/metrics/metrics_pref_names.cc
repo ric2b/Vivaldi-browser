@@ -28,10 +28,16 @@ const char kMetricsDefaultOptIn[] = "user_experience_metrics.default_opt_in";
 // count info, etc.
 const char kMetricsInitialLogs[] = "user_experience_metrics.initial_logs2";
 
-// The metrics entropy source.
-// Note: The name low_entropy_source2 is a result of creating
-// new prefs to do a one-time reset of the previous values.
+// Low entropy source values. The new source (with suffix "3") was created
+// because the old source (with suffix "2") is biased in the wild. Clients which
+// have an old source still incorporate it into the high entropy source, to
+// avoid reshuffling experiments using high entropy, but use the new source for
+// experiments requiring low entropy. Newer clients only have the new source,
+// and use it both for low entropy experiments to to incorporate into the high
+// entropy source for high entropy experiments.
 const char kMetricsLowEntropySource[] =
+    "user_experience_metrics.low_entropy_source3";
+const char kMetricsOldLowEntropySource[] =
     "user_experience_metrics.low_entropy_source2";
 
 // A machine ID used to detect when underlying hardware changes. It is only
@@ -88,12 +94,19 @@ const char kStabilityChildProcessCrashCount[] =
     "user_experience_metrics.stability.child_process_crash_count";
 
 // Number of times the application exited uncleanly since the last report.
+// On Android this does not count the ones due to Gms Core updates (below).
 const char kStabilityCrashCount[] =
     "user_experience_metrics.stability.crash_count";
 
 // Number of times the application exited uncleanly since the last report
-// without gms core update.
-const char kStabilityCrashCountWithoutGmsCoreUpdate[] =
+// due to a gms core update.
+const char kStabilityCrashCountDueToGmsCoreUpdate[] =
+    "user_experience_metrics.stability.crash_count_due_to_gms_core_update";
+
+// Number of times the application exited uncleanly since the last report
+// without gms core update (Deprecated 2018-09).
+// TODO(wnwen): Remove this after 2019-09.
+const char kStabilityCrashCountWithoutGmsCoreUpdateObsolete[] =
     "user_experience_metrics.stability.crash_count_without_gms_core_update";
 
 // Number of times the initial stability log upload was deferred to the next
@@ -115,6 +128,7 @@ const char kStabilityDebuggerNotPresent[] =
     "user_experience_metrics.stability.debugger_not_present";
 
 // An enum value to indicate the execution phase the browser was in.
+// TODO(asvitkine): Remove this after 2019-12.
 const char kStabilityExecutionPhase[] =
     "user_experience_metrics.stability.execution_phase";
 
@@ -139,6 +153,11 @@ const char kStabilityExtensionRendererLaunchCount[] =
 // The GMS core version used in Chrome.
 const char kStabilityGmsCoreVersion[] =
     "user_experience_metrics.stability.gms_core_version";
+
+// Number of times a gpu process crashed since the last report. Currently only
+// recorded on Android.
+const char kStabilityGpuCrashCount[] =
+    "user_experience_metrics.stability.gpu_crash_count";
 
 // Number of times the session end did not complete.
 const char kStabilityIncompleteSessionEndCount[] =

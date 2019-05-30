@@ -7,6 +7,7 @@
 #include <cmath>
 #include <string>
 
+#include "base/bind.h"
 #include "base/metrics/user_metrics.h"
 #include "base/task/post_task.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
@@ -41,14 +42,14 @@ using FileSupportedCallback =
     base::OnceCallback<void(const GURL& url, bool supported)>;
 
 // Get the MIME type of the file pointed to by the url, based on the file's
-// extension. Must be called on a thread that allows IO.
+// extension. Must be called in a context that allows blocking.
 std::string FindURLMimeType(const GURL& url) {
-  base::AssertBlockingAllowed();
   base::FilePath full_path;
   net::FileURLToFilePath(url, &full_path);
 
   // Get the MIME type based on the filename.
   std::string mime_type;
+  // This call may block on some platforms.
   net::GetMimeTypeFromFile(full_path, &mime_type);
 
   return mime_type;
@@ -113,7 +114,7 @@ BrowserRootView::~BrowserRootView() = default;
 
 bool BrowserRootView::GetDropFormats(
     int* formats,
-    std::set<ui::Clipboard::FormatType>* format_types) {
+    std::set<ui::ClipboardFormatType>* format_types) {
   if (tabstrip()->visible() || toolbar()->visible()) {
     *formats = ui::OSExchangeData::URL | ui::OSExchangeData::STRING;
     return true;
@@ -275,14 +276,16 @@ bool BrowserRootView::OnMouseWheel(const ui::MouseWheelEvent& event) {
       // Switch to the next tab only if not at the end of the tab-strip.
       if (whole_scroll_offset < 0 &&
           model->active_index() + 1 < model->count()) {
-        chrome::SelectNextTab(browser);
+        chrome::SelectNextTab(
+            browser, {TabStripModel::GestureType::kWheel, event.time_stamp()});
         return true;
       }
 
       // Switch to the previous tab only if not at the beginning of the
       // tab-strip.
       if (whole_scroll_offset > 0 && model->active_index() > 0) {
-        chrome::SelectPreviousTab(browser);
+        chrome::SelectPreviousTab(
+            browser, {TabStripModel::GestureType::kWheel, event.time_stamp()});
         return true;
       }
     }
@@ -308,8 +311,7 @@ void BrowserRootView::PaintChildren(const views::PaintInfo& paint_info) {
   // offset from the widget by a few DIPs, which is toublesome for computing a
   // subpixel offset when using fractional scale factors.  So we're forced to
   // put this drawing in the BrowserRootView.
-  if (tabstrip()->controller()->ShouldDrawStrokes() &&
-      browser_view_->IsToolbarVisible()) {
+  if (tabstrip()->ShouldDrawStrokes() && browser_view_->IsToolbarVisible()) {
     ui::PaintRecorder recorder(paint_info.context(),
                                paint_info.paint_recording_size(),
                                paint_info.paint_recording_scale_x(),
@@ -318,7 +320,7 @@ void BrowserRootView::PaintChildren(const views::PaintInfo& paint_info) {
 
     const float scale = canvas->image_scale();
 
-    gfx::RectF toolbar_bounds(browser_view_->GetToolbarBounds());
+    gfx::RectF toolbar_bounds(browser_view_->toolbar()->bounds());
     ConvertRectToTarget(browser_view_, this, &toolbar_bounds);
     const int bottom = std::round(toolbar_bounds.y() * scale);
     const int x = std::round(toolbar_bounds.x() * scale);

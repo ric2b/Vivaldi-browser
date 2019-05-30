@@ -12,13 +12,25 @@ class SourceFile;
 
 namespace commands {
 
+enum class TreeDumpMode {
+  // Normal operation mode. Format the input file.
+  kInactive,
+
+  // Output the token tree with indented plain text. For debugging.
+  kPlainText,
+
+  // Output the token tree in JSON format. Used for exporting a tree to another
+  // program.
+  kJSON
+};
+
 bool FormatFileToString(Setup* setup,
                         const SourceFile& file,
-                        bool dump_tree,
+                        TreeDumpMode dump_tree,
                         std::string* output);
 
 bool FormatStringToString(const std::string& input,
-                          bool dump_tree,
+                          TreeDumpMode dump_tree,
                           std::string* output);
 
 }  // namespace commands

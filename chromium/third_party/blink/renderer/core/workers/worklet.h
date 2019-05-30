@@ -8,7 +8,7 @@
 #include "base/macros.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/workers/worklet_global_scope_proxy.h"
 #include "third_party/blink/renderer/core/workers/worklet_module_responses_map.h"
 #include "third_party/blink/renderer/core/workers/worklet_options.h"
@@ -38,7 +38,7 @@ class CORE_EXPORT Worklet : public ScriptWrappable,
   // addModule() imports ES6 module scripts.
   ScriptPromise addModule(ScriptState*,
                           const String& module_url,
-                          const WorkletOptions&);
+                          const WorkletOptions*);
 
   // ContextLifecycleObserver
   void ContextDestroyed(ExecutionContext*) override;
@@ -58,11 +58,17 @@ class CORE_EXPORT Worklet : public ScriptWrappable,
   // Returns one of available global scopes.
   WorkletGlobalScopeProxy* FindAvailableGlobalScope();
 
-  size_t GetNumberOfGlobalScopes() const { return proxies_.size(); }
+  wtf_size_t GetNumberOfGlobalScopes() const { return proxies_.size(); }
 
   WorkletModuleResponsesMap* ModuleResponsesMap() const {
     return module_responses_map_.Get();
   }
+
+  // "A Worklet has a list of the worklet's WorkletGlobalScopes. Initially this
+  // list is empty; it is populated when the user agent chooses to create its
+  // WorkletGlobalScope."
+  // https://drafts.css-houdini.org/worklets/#worklet-section
+  HeapVector<Member<WorkletGlobalScopeProxy>> proxies_;
 
  private:
   virtual void FetchAndInvokeScript(const KURL& module_url_record,
@@ -79,14 +85,7 @@ class CORE_EXPORT Worklet : public ScriptWrappable,
   // there are multiple global scopes, this function MUST be overriden. The
   // default behavior is to return the global scope at index 0, which is for the
   // case where there is only one global scope.
-  virtual size_t SelectGlobalScope();
-
-  // "A Worklet has a list of the worklet's WorkletGlobalScopes. Initially this
-  // list is empty; it is populated when the user agent chooses to create its
-  // WorkletGlobalScope."
-  // https://drafts.css-houdini.org/worklets/#worklet-section
-  HeapVector<Member<WorkletGlobalScopeProxy>> proxies_;
-
+  virtual wtf_size_t SelectGlobalScope();
   // "A Worklet has a module responses map. This is a ordered map of module URLs
   // to values that are a fetch responses. The map's entries are ordered based
   // on their insertion order. Access to this map should be thread-safe."

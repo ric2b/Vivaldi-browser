@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/ios/block_types.h"
@@ -48,6 +49,7 @@
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
 #import "ios/web/test/fakes/crw_fake_back_forward_list.h"
+#import "ios/web/web_state/navigation_context_impl.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #import "ios/web/web_state/web_state_impl.h"
 #import "net/base/mac/url_conversions.h"
@@ -200,6 +202,7 @@ class TabTest : public BlockCleanupTest,
       OCMStub([mock_web_controller_ webViewNavigationProxy])
           .andReturn(mock_web_view_);
     }
+    OCMStub([mock_web_controller_ isViewAlive]).andReturn(YES);
 
     web::WebState::CreateParams create_params(browser_state);
     web_state_impl_ = std::make_unique<web::WebStateImpl>(create_params);
@@ -217,7 +220,7 @@ class TabTest : public BlockCleanupTest,
     tab_ = LegacyTabHelper::GetTabForWebState(web_state_impl_.get());
     web::NavigationManager::WebLoadParams load_params(
         GURL("chrome://version/"));
-    [tab_ navigationManager]->LoadURLWithParams(load_params);
+    web_state_impl_->GetNavigationManager()->LoadURLWithParams(load_params);
 
     // There should be no entries in the history at this point.
     history::QueryResults results;
@@ -236,33 +239,42 @@ class TabTest : public BlockCleanupTest,
                 NSString* title) {
     DCHECK_EQ(tab_.webState, web_state_impl_.get());
 
-    web::FakeNavigationContext context1;
-    context1.SetUrl(user_url);
-    web_state_impl_->OnNavigationStarted(&context1);
+    std::unique_ptr<web::NavigationContextImpl> context1 =
+        web::NavigationContextImpl::CreateNavigationContext(
+            web_state_impl_.get(), user_url,
+            /*has_user_gesture=*/true,
+            ui::PageTransition::PAGE_TRANSITION_AUTO_BOOKMARK,
+            /*is_renderer_initiated=*/true);
+    web_state_impl_->OnNavigationStarted(context1.get());
 
     web::Referrer empty_referrer;
-    [tab_ navigationManagerImpl]->AddPendingItem(
+    web_state_impl_->GetNavigationManagerImpl().AddPendingItem(
         redirect_url, empty_referrer, ui::PAGE_TRANSITION_CLIENT_REDIRECT,
         web::NavigationInitiationType::RENDERER_INITIATED,
         web::NavigationManager::UserAgentOverrideOption::INHERIT);
 
-    web::FakeNavigationContext context2;
-    context2.SetUrl(redirect_url);
-    web_state_impl_->OnNavigationStarted(&context2);
+    std::unique_ptr<web::NavigationContextImpl> context2 =
+        web::NavigationContextImpl::CreateNavigationContext(
+            web_state_impl_.get(), redirect_url,
+            /*has_user_gesture=*/true,
+            ui::PageTransition::PAGE_TRANSITION_AUTO_BOOKMARK,
+            /*is_renderer_initiated=*/true);
+    web_state_impl_->OnNavigationStarted(context2.get());
 
     if (GetParam() == NavigationManagerChoice::WK_BASED) {
       [fake_wk_list_
           setCurrentURL:base::SysUTF8ToNSString(redirect_url.spec())];
     }
-    [tab_ navigationManagerImpl]->CommitPendingItem();
+    web_state_impl_->GetNavigationManagerImpl().CommitPendingItem();
 
-    context2.SetHasCommitted(true);
+    context2->SetHasCommitted(true);
     web_state_impl_->UpdateHttpResponseHeaders(redirect_url);
-    web_state_impl_->OnNavigationFinished(&context2);
+    web_state_impl_->OnNavigationFinished(context2.get());
     web_state_impl_->SetIsLoading(true);
 
     base::string16 new_title = base::SysNSStringToUTF16(title);
-    [tab_ navigationManager]->GetLastCommittedItem()->SetTitle(new_title);
+    web_state_impl_->GetNavigationManager()->GetLastCommittedItem()->SetTitle(
+        new_title);
 
     web_state_impl_->OnTitleChanged();
     web_state_impl_->SetIsLoading(false);
@@ -276,7 +288,7 @@ class TabTest : public BlockCleanupTest,
     // The only test that uses it is currently disabled.
     web::NavigationManager::WebLoadParams params(url);
     params.transition_type = ui::PAGE_TRANSITION_TYPED;
-    [tab_ navigationManager]->LoadURLWithParams(params);
+    web_state_impl_->GetNavigationManager()->LoadURLWithParams(params);
     web_state_impl_->SetIsLoading(true);
     web_state_impl_->SetIsLoading(false);
     web_state_impl_->OnPageLoaded(url, true);
@@ -307,13 +319,15 @@ class TabTest : public BlockCleanupTest,
   }
 
   void CheckCurrentItem(const GURL& expectedUrl, NSString* expectedTitle) {
-    web::NavigationItem* item = [tab_ navigationManager]->GetVisibleItem();
+    web::NavigationItem* item =
+        web_state_impl_->GetNavigationManager()->GetVisibleItem();
     EXPECT_EQ(expectedUrl, item->GetURL());
     EXPECT_EQ(base::SysNSStringToUTF16(expectedTitle), item->GetTitle());
   }
 
   void CheckCurrentItem(const history::URLResult& historyResult) {
-    web::NavigationItem* item = [tab_ navigationManager]->GetVisibleItem();
+    web::NavigationItem* item =
+        web_state_impl_->GetNavigationManager()->GetVisibleItem();
     CheckHistoryResult(historyResult, item->GetURL(),
                        base::SysUTF16ToNSString(item->GetTitle()));
   }
@@ -429,9 +443,10 @@ TEST_P(TabTest, GetSuggestedFilenameFromDefaultName) {
 
 TEST_P(TabTest, ClosingWebStateDoesNotRemoveSnapshot) {
   id partialMock = OCMPartialMock(
-      SnapshotCacheFactory::GetForBrowserState(tab_.browserState));
-  SnapshotTabHelper::CreateForWebState(tab_.webState, tab_.tabId);
-  [[partialMock reject] removeImageWithSessionID:tab_.tabId];
+      SnapshotCacheFactory::GetForBrowserState(chrome_browser_state_.get()));
+  NSString* tab_id = TabIdTabHelper::FromWebState(tab_.webState)->tab_id();
+  SnapshotTabHelper::CreateForWebState(tab_.webState, tab_id);
+  [[partialMock reject] removeImageWithSessionID:tab_id];
 
   // Use @try/@catch as -reject raises an exception.
   @try {
@@ -446,17 +461,19 @@ TEST_P(TabTest, ClosingWebStateDoesNotRemoveSnapshot) {
 
 TEST_P(TabTest, CallingRemoveSnapshotRemovesSnapshot) {
   id partialMock = OCMPartialMock(
-      SnapshotCacheFactory::GetForBrowserState(tab_.browserState));
-  SnapshotTabHelper::CreateForWebState(tab_.webState, tab_.tabId);
-  OCMExpect([partialMock removeImageWithSessionID:tab_.tabId]);
+      SnapshotCacheFactory::GetForBrowserState(chrome_browser_state_.get()));
+  NSString* tab_id = TabIdTabHelper::FromWebState(tab_.webState)->tab_id();
+
+  SnapshotTabHelper::CreateForWebState(tab_.webState, tab_id);
+  OCMExpect([partialMock removeImageWithSessionID:tab_id]);
 
   SnapshotTabHelper::FromWebState(tab_.webState)->RemoveSnapshot();
   EXPECT_OCMOCK_VERIFY(partialMock);
 }
 
-INSTANTIATE_TEST_CASE_P(ProgrammaticTabTest,
-                        TabTest,
-                        ::testing::Values(NavigationManagerChoice::LEGACY,
-                                          NavigationManagerChoice::WK_BASED));
+INSTANTIATE_TEST_SUITE_P(ProgrammaticTabTest,
+                         TabTest,
+                         ::testing::Values(NavigationManagerChoice::LEGACY,
+                                           NavigationManagerChoice::WK_BASED));
 
 }  // namespace

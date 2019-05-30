@@ -42,10 +42,15 @@
 #include "net/third_party/quic/core/quic_packets.h"
 #include "net/url_request/url_request_job_factory.h"
 
+namespace base {
+namespace android {
+class ApplicationStatusListener;
+}
+}  // namespace base
+
 namespace net {
 
 class CertVerifier;
-class ChannelIDService;
 class CookieStore;
 class CTPolicyEnforcer;
 class CTVerifier;
@@ -119,6 +124,12 @@ class NET_EXPORT URLRequestContextBuilder {
 
     // The cache path (when type is DISK).
     base::FilePath path;
+
+#if defined(OS_ANDROID)
+    // If this is set, will override the default ApplicationStatusListener. This
+    // is useful if the cache will not be in the main process.
+    base::android::ApplicationStatusListener* app_status_listener = nullptr;
+#endif
   };
 
   URLRequestContextBuilder();
@@ -325,18 +336,9 @@ class NET_EXPORT URLRequestContextBuilder {
   void set_create_intercepting_job_factory(
       CreateInterceptingJobFactory create_intercepting_job_factory);
 
-  // Override the default in-memory cookie store and channel id service.
-  // If both |cookie_store| and |channel_id_service| are NULL, CookieStore and
-  // ChannelIDService will be disabled for this context.
-  // If |cookie_store| is not NULL and |channel_id_service| is NULL,
-  // only ChannelIdService is disabled for this context.
-  // Note that a persistent cookie store should not be used with an in-memory
-  // channel id service, and one cookie store should not be shared between
-  // multiple channel-id stores (or used both with and without a channel id
-  // store).
-  void SetCookieAndChannelIdStores(
-      std::unique_ptr<CookieStore> cookie_store,
-      std::unique_ptr<ChannelIDService> channel_id_service);
+  // Override the default in-memory cookie store. If |cookie_store| is NULL,
+  // CookieStore will be disabled for this context.
+  void SetCookieStore(std::unique_ptr<CookieStore> cookie_store);
 
   // Sets a specific HttpServerProperties for use in the
   // URLRequestContext rather than creating a default HttpServerPropertiesImpl.
@@ -370,54 +372,54 @@ class NET_EXPORT URLRequestContextBuilder {
 
  private:
   std::string name_;
-  bool enable_brotli_;
-  NetworkQualityEstimator* network_quality_estimator_;
+  bool enable_brotli_ = false;
+  NetworkQualityEstimator* network_quality_estimator_ = nullptr;
 
   std::string accept_language_;
   std::string user_agent_;
   std::unique_ptr<HttpUserAgentSettings> http_user_agent_settings_;
 
   // Include support for data:// requests.
-  bool data_enabled_;
+  bool data_enabled_ = false;
 #if !BUILDFLAG(DISABLE_FILE_SUPPORT)
   // Include support for file:// requests.
-  bool file_enabled_;
+  bool file_enabled_ = false;
 #endif
 #if !BUILDFLAG(DISABLE_FTP_SUPPORT)
   // Include support for ftp:// requests.
-  bool ftp_enabled_;
+  bool ftp_enabled_ = false;
 #endif
-  bool http_cache_enabled_;
-  bool throttling_enabled_;
-  bool cookie_store_set_by_client_;
+  bool http_cache_enabled_ = true;
+  bool throttling_enabled_ = false;
+  bool cookie_store_set_by_client_ = false;
 
   HttpCacheParams http_cache_params_;
   HttpNetworkSession::Params http_network_session_params_;
   CreateHttpTransactionFactoryCallback create_http_network_transaction_factory_;
   base::FilePath transport_security_persister_path_;
-  NetLog* net_log_;
+  NetLog* net_log_ = nullptr;
   std::unique_ptr<HostResolver> host_resolver_;
-  HostResolver* shared_host_resolver_;
-  std::unique_ptr<ChannelIDService> channel_id_service_;
+  HostResolver* shared_host_resolver_ = nullptr;
   std::unique_ptr<ProxyConfigService> proxy_config_service_;
-  bool pac_quick_check_enabled_;
-  ProxyResolutionService::SanitizeUrlPolicy pac_sanitize_url_policy_;
+  bool pac_quick_check_enabled_ = true;
+  ProxyResolutionService::SanitizeUrlPolicy pac_sanitize_url_policy_ =
+      ProxyResolutionService::SanitizeUrlPolicy::SAFE;
   std::unique_ptr<ProxyResolutionService> proxy_resolution_service_;
   std::unique_ptr<SSLConfigService> ssl_config_service_;
   std::unique_ptr<NetworkDelegate> network_delegate_;
   CreateLayeredNetworkDelegate create_layered_network_delegate_callback_;
   std::unique_ptr<ProxyDelegate> proxy_delegate_;
-  ProxyDelegate* shared_proxy_delegate_;
+  ProxyDelegate* shared_proxy_delegate_ = nullptr;
   std::unique_ptr<CookieStore> cookie_store_;
   std::unique_ptr<HttpAuthHandlerFactory> http_auth_handler_factory_;
-  HttpAuthHandlerFactory* shared_http_auth_handler_factory_;
+  HttpAuthHandlerFactory* shared_http_auth_handler_factory_ = nullptr;
   std::unique_ptr<CertVerifier> cert_verifier_;
-  CertVerifier* shared_cert_verifier_;
+  CertVerifier* shared_cert_verifier_ = nullptr;
   std::unique_ptr<CTVerifier> ct_verifier_;
   std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer_;
 #if BUILDFLAG(ENABLE_REPORTING)
   std::unique_ptr<ReportingPolicy> reporting_policy_;
-  bool network_error_logging_enabled_;
+  bool network_error_logging_enabled_ = false;
 #endif  // BUILDFLAG(ENABLE_REPORTING)
   std::vector<std::unique_ptr<URLRequestInterceptor>> url_request_interceptors_;
   CreateInterceptingJobFactory create_intercepting_job_factory_;

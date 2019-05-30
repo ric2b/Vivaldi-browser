@@ -29,7 +29,10 @@
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/switches.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/blink/public/platform/autoplay.mojom.h"
+#include "third_party/blink/public/mojom/autoplay/autoplay.mojom.h"
+
+#include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 
 using content::BrowserContext;
 
@@ -89,6 +92,18 @@ void ChromeExtensionWebContentsObserver::RenderFrameCreated(
     policy->GrantRequestOrigin(
         process_id,
         url::Origin::Create(GURL(chrome::kChromeUIExtensionIconURL)));
+  }
+
+  // Also make sure ExtensionService::PostActivateExtension and
+  // OffTheRecordProfileImpl::Init adds permissions to any newly added
+  // resources.
+  if (vivaldi::IsVivaldiApp(extension->id())) {
+    policy->GrantRequestOrigin(
+        process_id, url::Origin::Create(GURL(vivaldi::kVivaldiUIDataHost)));
+    policy->GrantRequestOrigin(
+        process_id, url::Origin::Create(GURL(chrome::kChromeUIFaviconHost)));
+    policy->GrantRequestOrigin(
+        process_id, url::Origin::Create(GURL(chrome::kChromeUIThumbnailHost)));
   }
 }
 
@@ -198,5 +213,7 @@ void ChromeExtensionWebContentsObserver::ReadyToCommitNavigation(
                              blink::mojom::kAutoplayFlagForceAllow);
   }
 }
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(ChromeExtensionWebContentsObserver)
 
 }  // namespace extensions

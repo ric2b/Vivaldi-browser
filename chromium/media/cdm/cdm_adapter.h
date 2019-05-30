@@ -93,8 +93,7 @@ class MEDIA_EXPORT CdmAdapter : public ContentDecryptionModule,
   CdmContext* GetCdmContext() final;
 
   // CdmContext implementation.
-  std::unique_ptr<CallbackRegistration> RegisterNewKeyCB(
-      base::RepeatingClosure new_key_cb) final;
+  std::unique_ptr<CallbackRegistration> RegisterEventCB(EventCB event_cb) final;
   Decryptor* GetDecryptor() final;
   int GetCdmId() const final;
 
@@ -251,6 +250,9 @@ class MEDIA_EXPORT CdmAdapter : public ContentDecryptionModule,
 
   // Keep track of aspect ratio from the latest configuration.
   double pixel_aspect_ratio_ = 0.0;
+
+  // Whether the current video config is encrypted.
+  bool is_video_encrypted_ = false;
 
   // Tracks whether an output protection query and a positive query result (no
   // unprotected external link) have been reported to UMA.

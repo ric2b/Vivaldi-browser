@@ -54,8 +54,8 @@ static IntRect ConvertToContentCoordinatesWithoutCollapsingToZero(
 }
 
 static Node* NodeInsideFrame(Node* node) {
-  if (node->IsFrameOwnerElement())
-    return ToHTMLFrameOwnerElement(node)->contentDocument();
+  if (auto* frame_owner_element = DynamicTo<HTMLFrameOwnerElement>(node))
+    return frame_owner_element->contentDocument();
   return nullptr;
 }
 
@@ -86,7 +86,7 @@ SmartClipData SmartClip::DataForRect(const IntRect& crop_rect_in_viewport) {
   // Unite won't work with the empty rect, so we initialize to the first rect.
   IntRect united_rects = hit_nodes[0]->PixelSnappedBoundingBox();
   StringBuilder collected_text;
-  for (size_t i = 0; i < hit_nodes.size(); ++i) {
+  for (wtf_size_t i = 0; i < hit_nodes.size(); ++i) {
     collected_text.Append(ExtractTextFromNode(hit_nodes[i]));
     united_rects.Unite(hit_nodes[i]->PixelSnappedBoundingBox());
   }
@@ -163,7 +163,7 @@ Node* SmartClip::FindBestOverlappingNode(Node* root_node,
 
     if (node->IsElementNode() &&
         DeprecatedEqualIgnoringCase(
-            ToElement(node)->FastGetAttribute(HTMLNames::aria_hiddenAttr),
+            ToElement(node)->FastGetAttribute(html_names::kAriaHiddenAttr),
             "true")) {
       node = NodeTraversal::NextSkippingChildren(*node, root_node);
       continue;

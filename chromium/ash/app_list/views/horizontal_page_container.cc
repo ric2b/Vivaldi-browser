@@ -10,7 +10,7 @@
 #include "ash/app_list/views/contents_view.h"
 #include "ash/app_list/views/search_box_view.h"
 #include "ash/app_list/views/search_result_page_view.h"
-#include "ash/public/cpp/app_list/app_list_constants.h"
+#include "ash/public/cpp/app_list/app_list_config.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/chromeos/search_box/search_box_constants.h"
 #include "ui/views/controls/label.h"
@@ -20,8 +20,9 @@ namespace app_list {
 HorizontalPageContainer::HorizontalPageContainer(ContentsView* contents_view,
                                                  AppListModel* model)
     : contents_view_(contents_view) {
-  pagination_model_.SetTransitionDurations(kPageTransitionDurationInMs,
-                                           kOverscrollPageTransitionDurationMs);
+  pagination_model_.SetTransitionDurations(
+      AppListConfig::instance().page_transition_duration_ms(),
+      AppListConfig::instance().overscroll_page_transition_duration_ms());
   pagination_model_.AddObserver(this);
   pagination_controller_ = std::make_unique<PaginationController>(
       &pagination_model_, PaginationController::SCROLL_AXIS_HORIZONTAL);
@@ -43,7 +44,7 @@ gfx::Size HorizontalPageContainer::CalculatePreferredSize() const {
   if (!GetWidget())
     return gfx::Size();
 
-  return contents_view_->GetPreferredSize();
+  return contents_view_->GetContentsBounds().size();
 }
 
 void HorizontalPageContainer::Layout() {
@@ -55,7 +56,6 @@ void HorizontalPageContainer::Layout() {
     gfx::Rect page_bounds(
         page->GetPageBoundsForState(contents_view_->GetActiveState()));
     page_bounds.Offset(GetOffsetForPageIndex(i));
-    page->InvalidateLayout();
     page->SetBoundsRect(page_bounds);
   }
 }
@@ -77,11 +77,15 @@ void HorizontalPageContainer::OnAnimationUpdated(double progress,
     gfx::Rect to_rect = page->GetPageBoundsForState(to_state);
     gfx::Rect from_rect = page->GetPageBoundsForState(from_state);
 
+    // Invalidate layout when the state changes to ensure that SetBoundsRect
+    // below also triggers a layout.
+    if (from_state != to_state)
+      page->InvalidateLayout();
+
     // Animate linearly (the PaginationModel handles easing).
     gfx::Rect bounds(
         gfx::Tween::RectValueBetween(progress, from_rect, to_rect));
     bounds.Offset(GetOffsetForPageIndex(i));
-    page->InvalidateLayout();
     page->SetBoundsRect(bounds);
   }
 }

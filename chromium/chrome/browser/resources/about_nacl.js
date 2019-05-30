@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-var nacl = nacl || {};
-
 (function() {
 /**
  * Takes the |moduleListData| input argument which represents data about
@@ -13,30 +11,24 @@ var nacl = nacl || {};
  */
 function renderTemplate(moduleListData) {
   // Process the template.
-  var input = new JsEvalContext(moduleListData);
-  var output = $('naclInfoTemplate');
+  const input = new JsEvalContext(moduleListData);
+  const output = $('naclInfoTemplate');
   jstProcess(input, output);
 }
 
 /**
- * Asks the C++ NaClUIDOMHandler to get details about the NaCl and return
- * the data in returnNaClInfo() (below).
+ * Asks the C++ NaClUIDOMHandler to get details about the NaCl and
+ * re-populates the page with the data.
  */
 function requestNaClInfo() {
-  chrome.send('requestNaClInfo');
+  cr.sendWithPromise('requestNaClInfo').then((moduleListData) => {
+    $('loading-message').hidden = 'hidden';
+    $('body-container').hidden = '';
+    renderTemplate(moduleListData);
+  });
 }
-
-/**
- * Called by the WebUI to re-populate the page with data representing the
- * current state of NaCl.
- * @param {Object} moduleListData Information about available modules
- */
-nacl.returnNaClInfo = function(moduleListData) {
-  $('loading-message').hidden = 'hidden';
-  $('body-container').hidden = '';
-  renderTemplate(moduleListData);
-};
 
 // Get data and have it displayed upon loading.
 document.addEventListener('DOMContentLoaded', requestNaClInfo);
+
 })();

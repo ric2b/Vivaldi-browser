@@ -11,6 +11,7 @@
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/views/controls/menu/menu_types.h"
@@ -98,6 +99,11 @@ class VIEWS_EXPORT MenuRunner {
 
     // Whether to use the touchable layout for this context menu.
     USE_TOUCHABLE_LAYOUT = 1 << 8,
+
+    // Similar to COMBOBOX, but does not capture the mouse and lets some keys
+    // propagate back to the parent so the combobox content can be edited even
+    // while the menu is open.
+    EDITABLE_COMBOBOX = 1 << 9,
   };
 
   // Creates a new MenuRunner, which may use a native menu if available.
@@ -105,6 +111,7 @@ class VIEWS_EXPORT MenuRunner {
   // |on_menu_closed_callback| is invoked when the menu is closed.
   // Note that with a native menu (e.g. on Mac), the ASYNC flag in |run_types|
   // may be ignored. See http://crbug.com/682544.
+  // The MenuModelDelegate of |menu_model| will be overwritten by this call.
   MenuRunner(ui::MenuModel* menu_model,
              int32_t run_types,
              const base::Closure& on_menu_closed_callback = base::Closure());

@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/task/post_task.h"
 #include "components/browsing_data/core/pref_names.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/prefs/pref_member.h"
@@ -20,9 +21,7 @@
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "ios/chrome/browser/pref_names.h"
-#import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
-#import "ios/chrome/browser/ui/browser_view_controller.h"
-#include "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
+#import "ios/chrome/browser/ui/authentication/cells/signin_promo_view.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
@@ -39,9 +38,8 @@
 #include "ios/web/public/test/http_server/http_server_util.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
 #import "ios/web/public/web_state/web_state.h"
+#include "ios/web/public/web_task_traits.h"
 #include "ios/web/public/web_thread.h"
-#include "net/ssl/channel_id_service.h"
-#include "net/ssl/channel_id_store.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -65,8 +63,6 @@ using chrome_test_util::SettingsMenuPrivacyButton;
 using chrome_test_util::VoiceSearchButton;
 
 namespace {
-
-const char kTestOrigin1[] = "http://host1:1/";
 
 const char kUrl[] = "http://foo/browsing";
 const char kUrlWithSetCookie[] = "http://foo/set_cookie";
@@ -132,79 +128,6 @@ id<GREYMatcher> BandwidthSettingsButton() {
   return ButtonWithAccessibilityLabelId(IDS_IOS_BANDWIDTH_MANAGEMENT_SETTINGS);
 }
 
-// Run as a task to check if a certificate has been added to the ChannelIDStore.
-// Signals the given |semaphore| if the cert was added, or reposts itself
-// otherwise.
-void CheckCertificate(scoped_refptr<net::URLRequestContextGetter> getter,
-                      dispatch_semaphore_t semaphore) {
-  net::ChannelIDService* channel_id_service =
-      getter->GetURLRequestContext()->channel_id_service();
-  if (channel_id_service->channel_id_count() == 0) {
-    // If the channel_id_count is still 0, no certs have been added yet.
-    // Re-post this task and check again later.
-    web::WebThread::PostTask(web::WebThread::IO, FROM_HERE,
-                             base::Bind(&CheckCertificate, getter, semaphore));
-  } else {
-    // If certs have been added, signal the calling thread.
-    dispatch_semaphore_signal(semaphore);
-  }
-}
-
-// Set certificate for host |kTestOrigin1| for testing.
-void SetCertificate() {
-  ios::ChromeBrowserState* browserState =
-      chrome_test_util::GetOriginalBrowserState();
-  dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
-  scoped_refptr<net::URLRequestContextGetter> getter =
-      browserState->GetRequestContext();
-  web::WebThread::PostTask(
-      web::WebThread::IO, FROM_HERE, base::BindOnce(^{
-        net::ChannelIDService* channel_id_service =
-            getter->GetURLRequestContext()->channel_id_service();
-        net::ChannelIDStore* channel_id_store =
-            channel_id_service->GetChannelIDStore();
-        base::Time now = base::Time::Now();
-        channel_id_store->SetChannelID(
-            std::make_unique<net::ChannelIDStore::ChannelID>(
-                kTestOrigin1, now, crypto::ECPrivateKey::Create()));
-      }));
-
-  // The ChannelIDStore may not be loaded, so adding the new cert may not happen
-  // immediately.  This posted task signals the semaphore if the cert was added,
-  // or re-posts itself to check again later otherwise.
-  web::WebThread::PostTask(web::WebThread::IO, FROM_HERE,
-                           base::Bind(&CheckCertificate, getter, semaphore));
-
-  dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
-}
-
-// Fetching channel id is expected to complete immediately in this test, so a
-// dummy callback function is set for testing.
-void CertCallback(int err,
-                  const std::string& server_identifier,
-                  std::unique_ptr<crypto::ECPrivateKey> key) {}
-
-// Check if certificate is empty for host |kTestOrigin1|.
-bool IsCertificateCleared() {
-  ios::ChromeBrowserState* browserState =
-      chrome_test_util::GetOriginalBrowserState();
-  __block int result;
-  dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
-  scoped_refptr<net::URLRequestContextGetter> getter =
-      browserState->GetRequestContext();
-  web::WebThread::PostTask(
-      web::WebThread::IO, FROM_HERE, base::BindOnce(^{
-        net::ChannelIDService* channel_id_service =
-            getter->GetURLRequestContext()->channel_id_service();
-        std::unique_ptr<crypto::ECPrivateKey> dummy_key;
-        result = channel_id_service->GetChannelIDStore()->GetChannelID(
-            kTestOrigin1, &dummy_key, base::Bind(CertCallback));
-        dispatch_semaphore_signal(semaphore);
-      }));
-  dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
-  return result == net::ERR_FILE_NOT_FOUND;
-}
-
 }  // namespace
 
 // Settings tests for Chrome.
@@ -236,6 +159,8 @@ bool IsCertificateCleared() {
     [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
         performAction:grey_tap()];
   }
+
+  [super tearDown];
 }
 
 // Closes a sub-settings menu, and then the general Settings menu.
@@ -587,34 +512,17 @@ bool IsCertificateCleared() {
   [self assertsMetricsPrefsForService:kBreakpadFirstLaunch];
 }
 
-// Set a server bound certificate, clears the site data through the UI and
-// checks that the certificate is deleted.
-- (void)testClearCertificates {
-  SetCertificate();
-  // Restore the Clear Browsing Data checkmarks prefs to their default state in
-  // Teardown.
-  __weak SettingsTestCase* weakSelf = self;
-  [self setTearDownHandler:^{
-    [weakSelf restoreClearBrowsingDataCheckmarksToDefault];
-  }];
-  GREYAssertFalse(IsCertificateCleared(), @"Failed to set certificate.");
-  [self clearCookiesAndSiteData];
-  GREYAssertTrue(IsCertificateCleared(),
-                 @"Certificate is expected to be deleted.");
-}
-
 // Verifies that Settings opens when signed-out and in Incognito mode.
 // This tests that crbug.com/607335 has not regressed.
 - (void)testSettingsSignedOutIncognito {
-  chrome_test_util::OpenNewIncognitoTab();
-
+  [ChromeEarlGrey openNewIncognitoTab];
   [ChromeEarlGreyUI openSettingsMenu];
   [[EarlGrey selectElementWithMatcher:SettingsCollectionView()]
       assertWithMatcher:grey_notNil()];
 
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
-  GREYAssert(chrome_test_util::CloseAllIncognitoTabs(), @"Tabs did not close");
+  [ChromeEarlGrey closeAllIncognitoTabs];
 }
 
 // Verifies the UI elements are accessible on the Settings page.
@@ -753,10 +661,10 @@ bool IsCertificateCleared() {
       assertWithMatcher:grey_notNil()];
 
   // Verify that the Settings register keyboard commands.
-  MainController* mainController = chrome_test_util::GetMainController();
-  BrowserViewController* bvc =
-      [[mainController browserViewInformation] currentBVC];
-  UIViewController* settings = bvc.presentedViewController;
+  UIViewController* viewController =
+      chrome_test_util::GetMainController()
+          .interfaceProvider.mainInterface.viewController;
+  UIViewController* settings = viewController.presentedViewController;
   GREYAssertNotNil(settings.keyCommands,
                    @"Settings should register key commands when presented.");
 

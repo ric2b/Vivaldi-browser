@@ -16,16 +16,16 @@
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/url_test_helpers.h"
 
-using blink::FrameTestHelpers::LoadFrame;
+using blink::frame_test_helpers::LoadFrame;
 using blink::test::RunPendingTasks;
-using blink::URLTestHelpers::RegisterMockedURLLoadFromBase;
+using blink::url_test_helpers::RegisterMockedURLLoadFromBase;
 
 namespace blink {
 
-class ImeRequestTrackingWebViewClient
-    : public FrameTestHelpers::TestWebWidgetClient {
+class ImeRequestTrackingWebWidgetClient
+    : public frame_test_helpers::TestWebWidgetClient {
  public:
-  ImeRequestTrackingWebViewClient() : virtual_keyboard_request_count_(0) {}
+  ImeRequestTrackingWebWidgetClient() : virtual_keyboard_request_count_(0) {}
 
   // WebWidgetClient methods
   void ShowVirtualKeyboardOnElementFocus() override {
@@ -61,7 +61,7 @@ class ImeOnFocusTest : public testing::Test {
                          std::string frame = "");
 
   std::string base_url_;
-  FrameTestHelpers::WebViewHelper web_view_helper_;
+  frame_test_helpers::WebViewHelper web_view_helper_;
   Persistent<Document> document_;
 };
 
@@ -77,7 +77,8 @@ void ImeOnFocusTest::SendGestureTap(WebView* web_view, IntPoint client_point) {
   web_gesture_event.data.tap.width = 10;
   web_gesture_event.data.tap.height = 10;
 
-  web_view->HandleInputEvent(WebCoalescedInputEvent(web_gesture_event));
+  web_view->MainFrameWidget()->HandleInputEvent(
+      WebCoalescedInputEvent(web_gesture_event));
   RunPendingTasks();
 }
 
@@ -91,13 +92,13 @@ void ImeOnFocusTest::RunImeOnFocusTest(
     IntPoint tap_point,
     const AtomicString& focus_element,
     std::string frame) {
-  ImeRequestTrackingWebViewClient client;
+  ImeRequestTrackingWebWidgetClient client;
   RegisterMockedURLLoadFromBase(WebString::FromUTF8(base_url_),
                                 test::CoreTestDataPath(),
                                 WebString::FromUTF8(file_name));
   WebViewImpl* web_view =
       web_view_helper_.Initialize(nullptr, nullptr, &client);
-  web_view->Resize(WebSize(800, 1200));
+  web_view->MainFrameWidget()->Resize(WebSize(800, 1200));
   LoadFrame(web_view->MainFrameImpl(), base_url_ + file_name);
   document_ = web_view_helper_.GetWebView()
                   ->MainFrameImpl()

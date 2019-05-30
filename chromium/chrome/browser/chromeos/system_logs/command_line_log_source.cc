@@ -15,7 +15,7 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/process/launch.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -72,7 +72,7 @@ void ExecuteCommandLines(system_logs::SystemLogsResponse* response) {
     command.AppendArg("-c");
     command.AppendArg(
         "/usr/bin/du -h --max-depth=5 /home/ /mnt/stateful_partition/ | "
-        "grep -v -e Downloads");
+        "grep -v -e Downloads -e IndexedDB -e databases");
     commands.emplace_back("system_files", command);
   }
 

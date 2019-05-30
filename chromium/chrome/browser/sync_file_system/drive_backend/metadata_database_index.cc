@@ -5,6 +5,7 @@
 #include "chrome/browser/sync_file_system/drive_backend/metadata_database_index.h"
 
 #include <tuple>
+#include <unordered_set>
 #include <utility>
 
 #include "base/memory/ptr_util.h"
@@ -27,7 +28,7 @@
 //
 // NOTE
 // - Entries are sorted by keys.
-// - int64_t value is serialized as a string by base::Int64ToString().
+// - int64_t value is serialized as a string by base::NumberToString().
 // - ServiceMetadata, FileMetadata, and FileTracker values are serialized
 //   as a string by SerializeToString() of protocol buffers.
 //
@@ -74,7 +75,7 @@ template <typename Container>
 typename Container::mapped_type FindItem(
     const Container& container,
     const typename Container::key_type& key) {
-  typename Container::const_iterator found = container.find(key);
+  auto found = container.find(key);
   if (found == container.end())
     return typename Container::mapped_type();
   return found->second;
@@ -180,7 +181,7 @@ void RemoveUnreachableItemsFromDB(DatabaseContents* contents,
   contents->file_trackers = std::move(reachable_trackers);
 
   // List all |file_id| referred by a tracker.
-  base::hash_set<std::string> referred_file_ids;
+  std::unordered_set<std::string> referred_file_ids;
   for (size_t i = 0; i < contents->file_trackers.size(); ++i)
     referred_file_ids.insert(contents->file_trackers[i]->file_id());
 
@@ -243,8 +244,10 @@ void MetadataDatabaseIndex::Initialize(
     StoreFileTracker(std::move(contents->file_trackers[i]));
   contents->file_trackers.clear();
 
-  UMA_HISTOGRAM_COUNTS("SyncFileSystem.MetadataNumber", metadata_by_id_.size());
-  UMA_HISTOGRAM_COUNTS("SyncFileSystem.TrackerNumber", tracker_by_id_.size());
+  UMA_HISTOGRAM_COUNTS_1M("SyncFileSystem.MetadataNumber",
+                          metadata_by_id_.size());
+  UMA_HISTOGRAM_COUNTS_1M("SyncFileSystem.TrackerNumber",
+                          tracker_by_id_.size());
   UMA_HISTOGRAM_COUNTS_100("SyncFileSystem.RegisteredAppNumber",
                            app_root_by_app_id_.size());
 }
@@ -364,8 +367,7 @@ int64_t MetadataDatabaseIndex::GetAppRootTracker(
 TrackerIDSet MetadataDatabaseIndex::GetFileTrackerIDsByParentAndTitle(
     int64_t parent_tracker_id,
     const std::string& title) const {
-  TrackerIDsByParentAndTitle::const_iterator found =
-      trackers_by_parent_and_title_.find(parent_tracker_id);
+  auto found = trackers_by_parent_and_title_.find(parent_tracker_id);
   if (found == trackers_by_parent_and_title_.end())
     return TrackerIDSet();
   return FindItem(found->second, title);
@@ -374,13 +376,11 @@ TrackerIDSet MetadataDatabaseIndex::GetFileTrackerIDsByParentAndTitle(
 std::vector<int64_t> MetadataDatabaseIndex::GetFileTrackerIDsByParent(
     int64_t parent_tracker_id) const {
   std::vector<int64_t> result;
-  TrackerIDsByParentAndTitle::const_iterator found =
-      trackers_by_parent_and_title_.find(parent_tracker_id);
+  auto found = trackers_by_parent_and_title_.find(parent_tracker_id);
   if (found == trackers_by_parent_and_title_.end())
     return result;
 
-  for (TrackerIDsByTitle::const_iterator itr = found->second.begin();
-       itr != found->second.end(); ++itr) {
+  for (auto itr = found->second.begin(); itr != found->second.end(); ++itr) {
     result.insert(result.end(), itr->second.begin(), itr->second.end());
   }
 
@@ -591,8 +591,7 @@ void MetadataDatabaseIndex::UpdateInFileIDIndexes(
 
 void MetadataDatabaseIndex::RemoveFromFileIDIndexes(
     const FileTracker& tracker) {
-  TrackerIDsByFileID::iterator found =
-      trackers_by_file_id_.find(tracker.file_id());
+  auto found = trackers_by_file_id_.find(tracker.file_id());
   if (found == trackers_by_file_id_.end()) {
     NOTREACHED();
     return;
@@ -647,7 +646,7 @@ void MetadataDatabaseIndex::UpdateInPathIndexes(
   TrackerIDsByTitle* trackers_by_title = &trackers_by_parent_and_title_[parent];
 
   if (old_title != title) {
-    TrackerIDsByTitle::iterator found = trackers_by_title->find(old_title);
+    auto found = trackers_by_title->find(old_title);
     if (found != trackers_by_title->end()) {
       DVLOG(3) << "  Remove from trackers_by_parent_and_title_: "
              << parent << " " << old_title;

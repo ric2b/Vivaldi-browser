@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/platform/network/http_parsers.h"
 
+#include "base/stl_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
@@ -304,11 +305,12 @@ TEST(HTTPParsersTest, ParseMultipartHeadersResult) {
       {"Foo: bar\r\nBaz:\n", false, 0},
       {"\r\n", true, 2},
   };
-  for (size_t i = 0; i < arraysize(tests); ++i) {
+  for (size_t i = 0; i < base::size(tests); ++i) {
     ResourceResponse response;
-    size_t end = 0;
+    wtf_size_t end = 0;
     bool result = ParseMultipartHeadersFromBody(
-        tests[i].data, strlen(tests[i].data), &response, &end);
+        tests[i].data, static_cast<wtf_size_t>(strlen(tests[i].data)),
+        &response, &end);
     EXPECT_EQ(tests[i].result, result);
     EXPECT_EQ(tests[i].end, end);
   }
@@ -321,7 +323,7 @@ TEST(HTTPParsersTest, ParseMultipartHeaders) {
   response.AddHTTPHeaderField("content-length", "999");
 
   const char kData[] = "content-type: image/png\ncontent-length: 10\n\n";
-  size_t end = 0;
+  wtf_size_t end = 0;
   bool result =
       ParseMultipartHeadersFromBody(kData, strlen(kData), &response, &end);
 
@@ -336,7 +338,7 @@ TEST(HTTPParsersTest, ParseMultipartHeaders) {
 TEST(HTTPParsersTest, ParseMultipartHeadersContentCharset) {
   ResourceResponse response;
   const char kData[] = "content-type: text/html; charset=utf-8\n\n";
-  size_t end = 0;
+  wtf_size_t end = 0;
   bool result =
       ParseMultipartHeadersFromBody(kData, strlen(kData), &response, &end);
 
@@ -598,6 +600,7 @@ TEST(HTTPParsersTest, ParseContentTypeOptionsTest) {
                {"nosniff , not-nosniff", kContentTypeOptionsNosniff},
                {" nosniff , none", kContentTypeOptionsNosniff},
                {"", kContentTypeOptionsNone},
+               {",", kContentTypeOptionsNone},
                {"none", kContentTypeOptionsNone},
                {"none, nosniff", kContentTypeOptionsNone}};
   for (const auto& test : cases) {

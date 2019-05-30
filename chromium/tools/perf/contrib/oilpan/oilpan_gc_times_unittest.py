@@ -34,6 +34,9 @@ class OilpanGCTimesTestData(object):
     self._renderer_thread = self._renderer_process.GetOrCreateThread(2)
     self._renderer_thread.name = thread_name
     self._results = page_test_results.PageTestResults()
+    self._results.telemetry_info.benchmark_name = 'benchmark'
+    self._results.telemetry_info.benchmark_start_epoch = 123
+    self._results.telemetry_info.benchmark_descriptions = 'foo'
 
   @property
   def results(self):
@@ -92,7 +95,7 @@ class OilpanGCTimesTest(page_test_test_case.PageTestTestCase):
     def getMetric(results, name):
       metrics = results.FindAllPageSpecificValuesNamed(name)
       self.assertEquals(1, len(metrics))
-      return metrics[0].GetBuildbotValue()
+      return metrics[0].values
 
     data = self._GenerateDataForParsingOldFormat()
 
@@ -125,7 +128,7 @@ class OilpanGCTimesTest(page_test_test_case.PageTestTestCase):
     def getMetric(results, name):
       metrics = results.FindAllPageSpecificValuesNamed(name)
       self.assertEquals(1, len(metrics))
-      return metrics[0].GetBuildbotValue()
+      return metrics[0].values
 
     data = self._GenerateDataForParsing()
 

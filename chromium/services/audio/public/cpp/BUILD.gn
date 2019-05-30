@@ -20,9 +20,23 @@ source_set("cpp") {
     "output_device.h",
   ]
 
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
   public_deps = [
     "//base",
     "//media",
+    "//services/audio/public/mojom",
+    "//services/service_manager/public/cpp",
+  ]
+}
+
+source_set("manifest") {
+  sources = [
+    "manifest.cc",
+    "manifest.h",
+  ]
+  deps = [
+    "//base",
     "//services/audio/public/mojom",
     "//services/service_manager/public/cpp",
   ]

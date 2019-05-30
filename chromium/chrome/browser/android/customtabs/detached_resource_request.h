@@ -39,18 +39,20 @@ namespace customtabs {
 // This is a UI thread class.
 class DetachedResourceRequest {
  public:
+  static constexpr int kMaxResponseSize = 100 * 1024;
+
   // The motivation of the resource request, used for histograms reporting.
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.customtabs
   // GENERATED_JAVA_CLASS_NAME_OVERRIDE: DetachedResourceRequestMotivation
   enum class Motivation { kParallelRequest, kResourcePrefetch };
 
-  using OnResultCallback = base::OnceCallback<void(bool success)>;
+  using OnResultCallback = base::OnceCallback<void(int net_error)>;
 
   ~DetachedResourceRequest();
 
   // Creates a detached request to a |url|, with a given initiating URL,
   // |first_party_for_cookies|. Called on the UI thread.
-  // Optional |cb| to get notified about the fetch result, for testing.
+  // Optional |cb| to get notified about the fetch result.
   static void CreateAndStart(content::BrowserContext* browser_context,
                              const GURL& url,
                              const GURL& first_party_for_cookies,

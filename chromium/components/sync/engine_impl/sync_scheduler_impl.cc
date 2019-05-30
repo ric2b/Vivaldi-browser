@@ -84,14 +84,6 @@ bool IsActionableError(const SyncProtocolError& error) {
   return (error.action != UNKNOWN_ACTION);
 }
 
-void RunAndReset(base::Closure* task) {
-  DCHECK(task);
-  if (task->is_null())
-    return;
-  task->Run();
-  task->Reset();
-}
-
 #define ENUM_CASE(x) \
   case x:            \
     return #x;       \
@@ -104,29 +96,18 @@ ConfigurationParams::ConfigurationParams()
 ConfigurationParams::ConfigurationParams(
     sync_pb::SyncEnums::GetUpdatesOrigin origin,
     ModelTypeSet types_to_download,
-    const base::Closure& ready_task,
-    const base::Closure& retry_task)
+    const base::Closure& ready_task)
     : origin(origin),
       types_to_download(types_to_download),
-      ready_task(ready_task),
-      retry_task(retry_task) {
+      ready_task(ready_task) {
   DCHECK(!ready_task.is_null());
 }
 ConfigurationParams::ConfigurationParams(const ConfigurationParams& other) =
     default;
 ConfigurationParams::~ConfigurationParams() {}
 
-ClearParams::ClearParams(const base::Closure& report_success_task)
-    : report_success_task(report_success_task) {
-  DCHECK(!report_success_task.is_null());
-}
-ClearParams::ClearParams(const ClearParams& other) = default;
-ClearParams::~ClearParams() {}
-
 // Helper macros to log with the syncer thread name; useful when there
 // are multiple syncer threads involved.
-
-#define SLOG(severity) LOG(severity) << name_ << ": "
 
 #define SDVLOG(verbose_level) DVLOG(verbose_level) << name_ << ": "
 
@@ -166,10 +147,10 @@ void SyncSchedulerImpl::OnCredentialsUpdated() {
 }
 
 void SyncSchedulerImpl::OnConnectionStatusChange(
-    net::NetworkChangeNotifier::ConnectionType type) {
+    network::mojom::ConnectionType type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (type != net::NetworkChangeNotifier::CONNECTION_NONE &&
+  if (type != network::mojom::ConnectionType::CONNECTION_NONE &&
       HttpResponse::CONNECTION_UNAVAILABLE ==
           cycle_context_->connection_manager()->server_status()) {
     // Optimistically assume that the connection is fixed and try
@@ -208,9 +189,6 @@ void SyncSchedulerImpl::Start(Mode mode, base::Time last_poll_time) {
 
   DCHECK(syncer_);
 
-  if (mode == CLEAR_SERVER_DATA_MODE) {
-    DCHECK_EQ(mode_, CONFIGURATION_MODE);
-  }
   Mode old_mode = mode_;
   mode_ = mode;
   base::Time now = base::Time::Now();
@@ -236,7 +214,8 @@ void SyncSchedulerImpl::Start(Mode mode, base::Time last_poll_time) {
 
     // Update our current time before checking IsRetryRequired().
     nudge_tracker_.SetSyncCycleStartTime(TimeTicks::Now());
-    if (nudge_tracker_.IsSyncRequired() && CanRunNudgeJobNow(NORMAL_PRIORITY)) {
+    if (nudge_tracker_.IsSyncRequired(GetEnabledAndUnblockedTypes()) &&
+        CanRunNudgeJobNow(NORMAL_PRIORITY)) {
       TrySyncCycleJob();
     }
   }
@@ -302,17 +281,6 @@ void SyncSchedulerImpl::ScheduleConfiguration(
     SDVLOG(2) << "No change in routing info, calling ready task directly.";
     params.ready_task.Run();
   }
-}
-
-void SyncSchedulerImpl::ScheduleClearServerData(const ClearParams& params) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK_EQ(CLEAR_SERVER_DATA_MODE, mode_);
-  DCHECK(!pending_configure_params_);
-  DCHECK(!params.report_success_task.is_null());
-  DCHECK(started_) << "Scheduler must be running to clear.";
-
-  pending_clear_params_ = std::make_unique<ClearParams>(params);
-  TryCanaryJob();
 }
 
 bool SyncSchedulerImpl::CanRunJobNow(JobPriority priority) {
@@ -448,32 +416,48 @@ void SyncSchedulerImpl::ScheduleNudgeImpl(
 const char* SyncSchedulerImpl::GetModeString(SyncScheduler::Mode mode) {
   switch (mode) {
     ENUM_CASE(CONFIGURATION_MODE);
-    ENUM_CASE(CLEAR_SERVER_DATA_MODE);
     ENUM_CASE(NORMAL_MODE);
   }
   return "";
 }
 
-void SyncSchedulerImpl::SetDefaultNudgeDelay(TimeDelta delay_ms) {
+void SyncSchedulerImpl::ForceShortNudgeDelayForTest() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  nudge_tracker_.SetDefaultNudgeDelay(delay_ms);
+  // Set the default nudge delay to 0 because the default is used as a floor
+  // for override values, and we don't want the below override to be ignored.
+  nudge_tracker_.SetDefaultNudgeDelay(TimeDelta::FromMilliseconds(0));
+  // Only protocol types can have their delay customized.
+  const ModelTypeSet protocol_types = syncer::ProtocolTypes();
+  const base::TimeDelta short_nudge_delay = TimeDelta::FromMilliseconds(1);
+  std::map<ModelType, base::TimeDelta> nudge_delays;
+  for (ModelType type : protocol_types) {
+    nudge_delays[type] = short_nudge_delay;
+  }
+  nudge_tracker_.OnReceivedCustomNudgeDelays(nudge_delays);
+  // We should prevent further changing of nudge delays so if we use real server
+  // for integration test then server is not able to increase delays.
+  force_short_nudge_delay_for_test_ = true;
 }
 
 void SyncSchedulerImpl::DoNudgeSyncCycleJob(JobPriority priority) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(CanRunNudgeJobNow(priority));
 
+  ModelTypeSet types = GetEnabledAndUnblockedTypes();
   DVLOG(2) << "Will run normal mode sync cycle with types "
-           << ModelTypeSetToString(GetEnabledAndUnblockedTypes());
+           << ModelTypeSetToString(types);
   SyncCycle cycle(cycle_context_, this);
-  bool success = syncer_->NormalSyncShare(GetEnabledAndUnblockedTypes(),
-                                          &nudge_tracker_, &cycle);
+  bool success = syncer_->NormalSyncShare(types, &nudge_tracker_, &cycle);
 
   if (success) {
     // That cycle took care of any outstanding work we had.
     SDVLOG(2) << "Nudge succeeded.";
-    nudge_tracker_.RecordSuccessfulSyncCycle();
+    // Note that some types might have become blocked (throttled) during the
+    // cycle. NudgeTracker knows of that, and won't clear any "outstanding work"
+    // flags for these types.
+    // TODO(crbug.com/930074): Consider renaming this method to
+    // RecordSuccessfulSyncCycleIfNotBlocked.
+    nudge_tracker_.RecordSuccessfulSyncCycle(types);
     HandleSuccess();
 
     // If this was a canary, we may need to restart the poll timer (the poll
@@ -495,7 +479,6 @@ void SyncSchedulerImpl::DoConfigurationSyncCycleJob(JobPriority priority) {
 
   if (!CanRunJobNow(priority)) {
     SDVLOG(2) << "Unable to run configure job right now.";
-    RunAndReset(&pending_configure_params_->retry_task);
     return;
   }
 
@@ -509,6 +492,11 @@ void SyncSchedulerImpl::DoConfigurationSyncCycleJob(JobPriority priority) {
 
   if (success) {
     SDVLOG(2) << "Configure succeeded.";
+    // At this point, the initial sync for the affected types has been
+    // completed. Let the nudge tracker know to avoid any spurious extra
+    // requests; see also crbug.com/926184.
+    nudge_tracker_.RecordInitialSyncDone(
+        pending_configure_params_->types_to_download);
     pending_configure_params_->ready_task.Run();
     pending_configure_params_.reset();
     HandleSuccess();
@@ -516,31 +504,7 @@ void SyncSchedulerImpl::DoConfigurationSyncCycleJob(JobPriority priority) {
     HandleFailure(cycle.status_controller().model_neutral_state());
     // Sync cycle might receive response from server that causes scheduler to
     // stop and draws pending_configure_params_ invalid.
-    if (started_)
-      RunAndReset(&pending_configure_params_->retry_task);
   }
-}
-
-void SyncSchedulerImpl::DoClearServerDataSyncCycleJob(JobPriority priority) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK_EQ(mode_, CLEAR_SERVER_DATA_MODE);
-
-  if (!CanRunJobNow(priority)) {
-    SDVLOG(2) << "Unable to run clear server data job right now.";
-    return;
-  }
-
-  SyncCycle cycle(cycle_context_, this);
-  const bool success = syncer_->PostClearServerData(&cycle);
-  if (!success) {
-    HandleFailure(cycle.status_controller().model_neutral_state());
-    return;
-  }
-
-  SDVLOG(2) << "Clear succeeded.";
-  pending_clear_params_->report_success_task.Run();
-  pending_clear_params_.reset();
-  HandleSuccess();
 }
 
 void SyncSchedulerImpl::HandleSuccess() {
@@ -691,7 +655,6 @@ void SyncSchedulerImpl::Stop() {
   poll_timer_.Stop();
   pending_wakeup_timer_.Stop();
   pending_configure_params_.reset();
-  pending_clear_params_.reset();
   if (started_)
     started_ = false;
 }
@@ -732,12 +695,8 @@ void SyncSchedulerImpl::TrySyncCycleJobImpl() {
       SDVLOG(2) << "Found pending configure job";
       DoConfigurationSyncCycleJob(priority);
     }
-  } else if (mode_ == CLEAR_SERVER_DATA_MODE) {
-    if (pending_clear_params_) {
-      DoClearServerDataSyncCycleJob(priority);
-    }
   } else if (CanRunNudgeJobNow(priority)) {
-    if (nudge_tracker_.IsSyncRequired()) {
+    if (nudge_tracker_.IsSyncRequired(GetEnabledAndUnblockedTypes())) {
       SDVLOG(2) << "Found pending nudge job";
       DoNudgeSyncCycleJob(priority);
     } else if (((TimeTicks::Now() - last_poll_reset_) >= GetPollInterval())) {
@@ -787,10 +746,12 @@ void SyncSchedulerImpl::OnTypesUnblocked() {
 
   // Maybe this is a good time to run a nudge job.  Let's try it.
   // If not a good time, reschedule a new run.
-  if (nudge_tracker_.IsSyncRequired() && CanRunNudgeJobNow(NORMAL_PRIORITY))
+  if (nudge_tracker_.IsSyncRequired(GetEnabledAndUnblockedTypes()) &&
+      CanRunNudgeJobNow(NORMAL_PRIORITY)) {
     TrySyncCycleJob();
-  else
+  } else {
     RestartWaiting();
+  }
 }
 
 void SyncSchedulerImpl::PerformDelayedNudge() {
@@ -919,6 +880,9 @@ void SyncSchedulerImpl::OnReceivedCustomNudgeDelays(
     const std::map<ModelType, TimeDelta>& nudge_delays) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  if (force_short_nudge_delay_for_test_)
+    return;
+
   nudge_tracker_.OnReceivedCustomNudgeDelays(nudge_delays);
 }
 
@@ -983,7 +947,6 @@ bool SyncSchedulerImpl::IsEarlierThanCurrentPendingJob(const TimeDelta& delay) {
 
 #undef SDVLOG_LOC
 #undef SDVLOG
-#undef SLOG
 #undef ENUM_CASE
 
 }  // namespace syncer

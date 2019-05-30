@@ -36,8 +36,6 @@ bindings_core_generated_union_type_files = [
   "$bindings_core_v8_output_dir/double_or_double_or_null_sequence.h",
   "$bindings_core_v8_output_dir/double_or_internal_enum.cc",
   "$bindings_core_v8_output_dir/double_or_internal_enum.h",
-  "$bindings_core_v8_output_dir/double_or_performance_mark_options.cc",
-  "$bindings_core_v8_output_dir/double_or_performance_mark_options.h",
   "$bindings_core_v8_output_dir/double_or_scroll_timeline_auto_keyword.cc",
   "$bindings_core_v8_output_dir/double_or_scroll_timeline_auto_keyword.h",
   "$bindings_core_v8_output_dir/double_or_string.cc",
@@ -80,22 +78,26 @@ bindings_core_generated_union_type_files = [
   "$bindings_core_v8_output_dir/string_or_array_buffer_or_array_buffer_view.h",
   "$bindings_core_v8_output_dir/string_or_css_variable_reference_value.cc",
   "$bindings_core_v8_output_dir/string_or_css_variable_reference_value.h",
-  "$bindings_core_v8_output_dir/string_or_dictionary.cc",
-  "$bindings_core_v8_output_dir/string_or_dictionary.h",
   "$bindings_core_v8_output_dir/string_or_double.cc",
   "$bindings_core_v8_output_dir/string_or_double.h",
-  "$bindings_core_v8_output_dir/string_or_double_or_performance_measure_options.cc",
-  "$bindings_core_v8_output_dir/string_or_double_or_performance_measure_options.h",
+  "$bindings_core_v8_output_dir/string_or_element_creation_options.cc",
+  "$bindings_core_v8_output_dir/string_or_element_creation_options.h",
+  "$bindings_core_v8_output_dir/string_or_performance_measure_options.cc",
+  "$bindings_core_v8_output_dir/string_or_performance_measure_options.h",
   "$bindings_core_v8_output_dir/string_or_string_sequence.cc",
   "$bindings_core_v8_output_dir/string_or_string_sequence.h",
   "$bindings_core_v8_output_dir/string_or_trusted_html.cc",
   "$bindings_core_v8_output_dir/string_or_trusted_html.h",
+  "$bindings_core_v8_output_dir/string_or_trusted_html_or_trusted_script_or_trusted_script_url_or_trusted_url.cc",
+  "$bindings_core_v8_output_dir/string_or_trusted_html_or_trusted_script_or_trusted_script_url_or_trusted_url.h",
   "$bindings_core_v8_output_dir/string_or_trusted_script.cc",
   "$bindings_core_v8_output_dir/string_or_trusted_script.h",
   "$bindings_core_v8_output_dir/string_or_trusted_script_url.cc",
   "$bindings_core_v8_output_dir/string_or_trusted_script_url.h",
   "$bindings_core_v8_output_dir/string_or_unrestricted_double_sequence.cc",
   "$bindings_core_v8_output_dir/string_or_unrestricted_double_sequence.h",
+  "$bindings_core_v8_output_dir/string_treat_null_as_empty_string_or_trusted_script.cc",
+  "$bindings_core_v8_output_dir/string_treat_null_as_empty_string_or_trusted_script.h",
   "$bindings_core_v8_output_dir/usv_string_or_trusted_url.cc",
   "$bindings_core_v8_output_dir/usv_string_or_trusted_url.h",
   "$bindings_core_v8_output_dir/usv_string_sequence_sequence_or_usv_string_usv_string_record_or_usv_string.cc",
@@ -128,6 +130,26 @@ generated_core_testing_callback_function_files = [
 generated_core_callback_function_files = [
   "$bindings_core_v8_output_dir/v8_blob_callback.cc",
   "$bindings_core_v8_output_dir/v8_blob_callback.h",
+  "$bindings_core_v8_output_dir/v8_create_html_callback.cc",
+  "$bindings_core_v8_output_dir/v8_create_html_callback.h",
+  "$bindings_core_v8_output_dir/v8_create_script_callback.cc",
+  "$bindings_core_v8_output_dir/v8_create_script_callback.h",
+  "$bindings_core_v8_output_dir/v8_create_url_callback.cc",
+  "$bindings_core_v8_output_dir/v8_create_url_callback.h",
+  "$bindings_core_v8_output_dir/v8_custom_element_adopted_callback.cc",
+  "$bindings_core_v8_output_dir/v8_custom_element_adopted_callback.h",
+  "$bindings_core_v8_output_dir/v8_custom_element_attribute_changed_callback.cc",
+  "$bindings_core_v8_output_dir/v8_custom_element_attribute_changed_callback.h",
+  "$bindings_core_v8_output_dir/v8_custom_element_constructor.cc",
+  "$bindings_core_v8_output_dir/v8_custom_element_constructor.h",
+  "$bindings_core_v8_output_dir/v8_custom_element_disabled_state_changed_callback.cc",
+  "$bindings_core_v8_output_dir/v8_custom_element_disabled_state_changed_callback.h",
+  "$bindings_core_v8_output_dir/v8_custom_element_form_associated_callback.cc",
+  "$bindings_core_v8_output_dir/v8_custom_element_form_associated_callback.h",
+  "$bindings_core_v8_output_dir/v8_custom_element_restore_value_callback.cc",
+  "$bindings_core_v8_output_dir/v8_custom_element_restore_value_callback.h",
+  "$bindings_core_v8_output_dir/v8_event_handler_non_null.cc",
+  "$bindings_core_v8_output_dir/v8_event_handler_non_null.h",
   "$bindings_core_v8_output_dir/v8_frame_request_callback.cc",
   "$bindings_core_v8_output_dir/v8_frame_request_callback.h",
   "$bindings_core_v8_output_dir/v8_function.cc",
@@ -138,10 +160,14 @@ generated_core_callback_function_files = [
   "$bindings_core_v8_output_dir/v8_idle_request_callback.h",
   "$bindings_core_v8_output_dir/v8_intersection_observer_callback.cc",
   "$bindings_core_v8_output_dir/v8_intersection_observer_callback.h",
+  "$bindings_core_v8_output_dir/v8_layout_callback.cc",
+  "$bindings_core_v8_output_dir/v8_layout_callback.h",
   "$bindings_core_v8_output_dir/v8_mojo_watch_callback.cc",
   "$bindings_core_v8_output_dir/v8_mojo_watch_callback.h",
   "$bindings_core_v8_output_dir/v8_mutation_callback.cc",
   "$bindings_core_v8_output_dir/v8_mutation_callback.h",
+  "$bindings_core_v8_output_dir/v8_no_argument_constructor.cc",
+  "$bindings_core_v8_output_dir/v8_no_argument_constructor.h",
   "$bindings_core_v8_output_dir/v8_performance_observer_callback.cc",
   "$bindings_core_v8_output_dir/v8_performance_observer_callback.h",
   "$bindings_core_v8_output_dir/v8_reporting_observer_callback.cc",
@@ -150,19 +176,16 @@ generated_core_callback_function_files = [
   "$bindings_core_v8_output_dir/v8_resize_observer_callback.h",
   "$bindings_core_v8_output_dir/v8_scroll_state_callback.cc",
   "$bindings_core_v8_output_dir/v8_scroll_state_callback.h",
-  "$bindings_core_v8_output_dir/v8_create_html_callback.cc",
-  "$bindings_core_v8_output_dir/v8_create_html_callback.h",
-  "$bindings_core_v8_output_dir/v8_create_script_callback.cc",
-  "$bindings_core_v8_output_dir/v8_create_script_callback.h",
-  "$bindings_core_v8_output_dir/v8_create_url_callback.cc",
-  "$bindings_core_v8_output_dir/v8_create_url_callback.h",
+  "$bindings_core_v8_output_dir/v8_task_queue_post_callback.cc",
+  "$bindings_core_v8_output_dir/v8_task_queue_post_callback.h",
   "$bindings_core_v8_output_dir/v8_void_function.cc",
   "$bindings_core_v8_output_dir/v8_void_function.h",
 ]
 
 generate_origin_trial_features("bindings_core_origin_trial_features") {
-  sources = core_idl_files + core_idl_with_modules_dependency_files +
-            core_global_constructors_generated_idl_files
+  sources =
+      core_idl_files + core_idl_with_modules_dependency_files +
+      core_global_constructors_generated_idl_files + core_dependency_idl_files
   component = "core"
   output_dir = bindings_core_output_dir + "/v8"
   deps = [
@@ -171,7 +194,7 @@ generate_origin_trial_features("bindings_core_origin_trial_features") {
   ]
 }
 
-if ((is_win && is_official_build) || use_jumbo_build) {
+if (is_win && is_official_build) {
   # On Windows Official release builds, we try to preserve symbol space.
   # is_official_build adds /GL option and /LTCG is automatically enabled in
   # link.exe. But link.exe cannot make binary smaller than its size limit from
@@ -192,7 +215,7 @@ group("bindings_core_v8_generated") {
   public_deps = [
     ":bindings_core_impl_generated",
   ]
-  if ((is_win && is_official_build) || use_jumbo_build) {
+  if (is_win && is_official_build) {
     public_deps += [ ":generate_bindings_core_v8_all_interfaces" ]
   } else {
     public_deps += [ ":generate_bindings_core_v8_interfaces" ]
@@ -258,7 +281,7 @@ blink_core_sources("bindings_core_impl") {
 # Compile the test sources generated above. This test target doesn't count
 # as part of the "core" component so shouldn't use the blink_core_sources for
 # linking on Windows.
-source_set("testing") {
+jumbo_source_set("testing") {
   sources = generated_core_testing_dictionary_files +
             generated_core_testing_callback_function_files
 

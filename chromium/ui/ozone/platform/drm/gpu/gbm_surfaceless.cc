@@ -15,7 +15,6 @@
 #include "ui/ozone/common/egl_util.h"
 #include "ui/ozone/platform/drm/gpu/drm_device.h"
 #include "ui/ozone/platform/drm/gpu/drm_framebuffer.h"
-#include "ui/ozone/platform/drm/gpu/drm_vsync_provider.h"
 #include "ui/ozone/platform/drm/gpu/drm_window_proxy.h"
 #include "ui/ozone/platform/drm/gpu/gbm_surface_factory.h"
 
@@ -54,14 +53,10 @@ void GbmSurfaceless::QueueOverlayPlane(DrmOverlayPlane plane) {
 bool GbmSurfaceless::Initialize(gl::GLSurfaceFormat format) {
   if (!SurfacelessEGL::Initialize(format))
     return false;
-  vsync_provider_ = std::make_unique<DrmVSyncProvider>(window_.get());
-  if (!vsync_provider_)
-    return false;
   return true;
 }
 
-gfx::SwapResult GbmSurfaceless::SwapBuffers(
-    const PresentationCallback& callback) {
+gfx::SwapResult GbmSurfaceless::SwapBuffers(PresentationCallback callback) {
   NOTREACHED();
   return gfx::SwapResult::SWAP_FAILED;
 }
@@ -84,10 +79,6 @@ bool GbmSurfaceless::IsOffscreen() {
   return false;
 }
 
-gfx::VSyncProvider* GbmSurfaceless::GetVSyncProvider() {
-  return vsync_provider_.get();
-}
-
 bool GbmSurfaceless::SupportsPresentationCallback() {
   return true;
 }
@@ -104,26 +95,25 @@ bool GbmSurfaceless::SupportsPlaneGpuFences() const {
   return supports_plane_gpu_fences_;
 }
 
-gfx::SwapResult GbmSurfaceless::PostSubBuffer(
-    int x,
-    int y,
-    int width,
-    int height,
-    const PresentationCallback& callback) {
+gfx::SwapResult GbmSurfaceless::PostSubBuffer(int x,
+                                              int y,
+                                              int width,
+                                              int height,
+                                              PresentationCallback callback) {
   // The actual sub buffer handling is handled at higher layers.
   NOTREACHED();
   return gfx::SwapResult::SWAP_FAILED;
 }
 
 void GbmSurfaceless::SwapBuffersAsync(
-    const SwapCompletionCallback& completion_callback,
-    const PresentationCallback& presentation_callback) {
+    SwapCompletionCallback completion_callback,
+    PresentationCallback presentation_callback) {
   TRACE_EVENT0("drm", "GbmSurfaceless::SwapBuffersAsync");
   // If last swap failed, don't try to schedule new ones.
   if (!last_swap_buffers_result_) {
-    completion_callback.Run(gfx::SwapResult::SWAP_FAILED, nullptr);
+    std::move(completion_callback).Run(gfx::SwapResult::SWAP_FAILED, nullptr);
     // Notify the caller, the buffer is never presented on a screen.
-    presentation_callback.Run(gfx::PresentationFeedback::Failure());
+    std::move(presentation_callback).Run(gfx::PresentationFeedback::Failure());
     return;
   }
 
@@ -133,8 +123,8 @@ void GbmSurfaceless::SwapBuffersAsync(
   unsubmitted_frames_.back()->Flush();
 
   PendingFrame* frame = unsubmitted_frames_.back().get();
-  frame->completion_callback = completion_callback;
-  frame->presentation_callback = presentation_callback;
+  frame->completion_callback = std::move(completion_callback);
+  frame->presentation_callback = std::move(presentation_callback);
   unsubmitted_frames_.push_back(std::make_unique<PendingFrame>());
 
   // TODO(dcastagna): Remove the following workaround once we get explicit sync
@@ -156,12 +146,7 @@ void GbmSurfaceless::SwapBuffersAsync(
   // TODO: the following should be replaced by a per surface flush as it gets
   // implemented in GL drivers.
   EGLSyncKHR fence = InsertFence(has_implicit_external_sync_);
-  if (!fence) {
-    completion_callback.Run(gfx::SwapResult::SWAP_FAILED, nullptr);
-    // Notify the caller, the buffer is never presented on a screen.
-    presentation_callback.Run(gfx::PresentationFeedback::Failure());
-    return;
-  }
+  CHECK_NE(fence, EGL_NO_SYNC_KHR) << "eglCreateSyncKHR failed";
 
   base::OnceClosure fence_wait_task =
       base::BindOnce(&WaitForFence, GetDisplay(), fence);
@@ -180,10 +165,11 @@ void GbmSurfaceless::PostSubBufferAsync(
     int y,
     int width,
     int height,
-    const SwapCompletionCallback& completion_callback,
-    const PresentationCallback& presentation_callback) {
+    SwapCompletionCallback completion_callback,
+    PresentationCallback presentation_callback) {
   // The actual sub buffer handling is handled at higher layers.
-  SwapBuffersAsync(completion_callback, presentation_callback);
+  SwapBuffersAsync(std::move(completion_callback),
+                   std::move(presentation_callback));
 }
 
 EGLConfig GbmSurfaceless::GetConfig() {

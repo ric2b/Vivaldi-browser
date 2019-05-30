@@ -4,56 +4,65 @@
 
 /**
  * Class to handle keyboard input.
- *
- * @constructor
- * @param {SwitchAccessInterface} switchAccess
  */
-function KeyboardHandler(switchAccess) {
+class KeyboardHandler {
   /**
-   * SwitchAccess reference.
-   *
-   * @private {SwitchAccessInterface}
+   * @param {!SwitchAccessInterface} switchAccess
    */
-  this.switchAccess_ = switchAccess;
+  constructor(switchAccess) {
+    /**
+     * Switch Access reference.
+     * @private {!SwitchAccessInterface}
+     */
+    this.switchAccess_ = switchAccess;
 
-  this.init_();
-}
+    /** @private {function(number)|undefined} */
+    this.keycodeCallback_;
 
-KeyboardHandler.prototype = {
+    this.init_();
+  }
+
   /**
-   * Set up key listener.
-   *
-   * @private
+   * Listens for keycodes. When they're received, they are passed to |callback|.
+   * @param {function(number)} callback
    */
-  init_: function() {
-    this.updateSwitchAccessKeys();
-    document.addEventListener('keyup', this.handleKeyEvent_.bind(this));
-  },
+  listenForKeycodes(callback) {
+    this.keycodeCallback_ = callback;
+    chrome.accessibilityPrivate.forwardKeyEventsToSwitchAccess(true);
+  }
+
+  /**
+   * Stop listening for keycodes.
+   */
+  stopListeningForKeycodes() {
+    this.keycodeCallback_ = undefined;
+    chrome.accessibilityPrivate.forwardKeyEventsToSwitchAccess(false);
+  }
 
   /**
    * Update the keyboard keys captured by Switch Access to those stored in
    * prefs.
    */
-  updateSwitchAccessKeys: function() {
+  updateSwitchAccessKeys() {
     let keyCodes = [];
-    for (let command of this.switchAccess_.getCommands()) {
-      let keyCode = this.keyCodeFor_(command);
+    for (const command of this.switchAccess_.getCommands()) {
+      const keyCode = this.keyCodeFor_(command);
       if ((keyCode >= '0'.charCodeAt(0) && keyCode <= '9'.charCodeAt(0)) ||
           (keyCode >= 'A'.charCodeAt(0) && keyCode <= 'Z'.charCodeAt(0)))
         keyCodes.push(keyCode);
     }
     chrome.accessibilityPrivate.setSwitchAccessKeys(keyCodes);
-  },
+  }
 
   /**
-   * Return the key code that |command| maps to.
-   *
-   * @param {string} command
-   * @return {number}
+   * Forwards the current key code to the callback.
+   * @param {!Event} event
+   * @private
    */
-  keyCodeFor_: function(command) {
-    return this.switchAccess_.getNumberPref(command);
-  },
+  forwardKeyCode_(event) {
+    if (this.keycodeCallback_)
+      this.keycodeCallback_(event.keyCode);
+  }
 
   /**
    * Run the command associated with the passed keyboard event.
@@ -61,14 +70,33 @@ KeyboardHandler.prototype = {
    * @param {!Event} event
    * @private
    */
-  handleKeyEvent_: function(event) {
-    for (let command of this.switchAccess_.getCommands()) {
+  handleSwitchActivated_(event) {
+    for (const command of this.switchAccess_.getCommands()) {
       if (this.keyCodeFor_(command) === event.keyCode) {
-        let key = event.key.toUpperCase();
         this.switchAccess_.runCommand(command);
         this.switchAccess_.performedUserAction();
         return;
       }
     }
-  },
-};
+  }
+
+  /**
+   * Set up key listener.
+   * @private
+   */
+  init_() {
+    this.updateSwitchAccessKeys();
+    document.addEventListener('keyup', this.handleSwitchActivated_.bind(this));
+    document.addEventListener('keydown', this.forwardKeyCode_.bind(this));
+  }
+
+  /**
+   * Return the key code that |command| maps to.
+   *
+   * @param {string} command
+   * @return {number}
+   */
+  keyCodeFor_(command) {
+    return this.switchAccess_.getNumberPref(command);
+  }
+}

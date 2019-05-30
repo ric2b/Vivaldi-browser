@@ -18,10 +18,10 @@
 #import "ios/chrome/browser/ui/bubble/bubble_util.h"
 #import "ios/chrome/browser/ui/bubble/bubble_view_controller_presenter.h"
 #import "ios/chrome/browser/ui/commands/toolbar_commands.h"
-#include "ios/chrome/browser/ui/ui_util.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
 #import "ios/chrome/browser/ui/util/named_guide_util.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/web_state/ui/crw_web_view_proxy.h"
@@ -99,16 +99,12 @@ const CGFloat kBubblePresentationDelay = 1;
   void (^onInitializedBlock)(bool) = ^(bool successfullyLoaded) {
     if (!successfullyLoaded)
       return;
-    if (IsUIRefreshPhase1Enabled()) {
-      dispatch_after(
-          dispatch_time(DISPATCH_TIME_NOW,
-                        (int64_t)(kBubblePresentationDelay * NSEC_PER_SEC)),
-          dispatch_get_main_queue(), ^{
-            [weakSelf presentBubbles];
-          });
-    } else {
-      [weakSelf presentBubbles];
-    }
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW,
+                      (int64_t)(kBubblePresentationDelay * NSEC_PER_SEC)),
+        dispatch_get_main_queue(), ^{
+          [weakSelf presentBubbles];
+        });
   };
 
   // Because the new tab tip occurs on startup, the feature engagement
@@ -170,14 +166,13 @@ const CGFloat kBubblePresentationDelay = 1;
     [self presentNewTabTipBubble];
   if (!self.incognitoTabTipBubblePresenter.isUserEngaged)
     [self presentNewIncognitoTabTipBubble];
-  if (!self.bottomToolbarTipBubblePresenter.isUserEngaged)
-    [self presentBottomToolbarTipBubble];
+
+  // The bottom toolbar doesn't use the isUserEngaged, so don't check if the
+  // user is engaged here.
+  [self presentBottomToolbarTipBubble];
 }
 
 - (void)presentLongPressBubble {
-  if (!IsUIRefreshPhase1Enabled())
-    return;
-
   if (self.longPressToolbarTipBubblePresenter.isUserEngaged)
     return;
 
@@ -240,7 +235,7 @@ presentBubbleForFeature:(const base::Feature&)feature
 // Presents a bubble associated with the bottom toolbar tip in-product help
 // promotion. This method requires that |self.browserState| is not NULL.
 - (void)presentBottomToolbarTipBubble {
-  if (!IsUIRefreshPhase1Enabled() || !IsSplitToolbarMode())
+  if (!IsSplitToolbarMode())
     return;
 
   if (![self canPresentBubble])
@@ -289,9 +284,7 @@ presentBubbleForFeature:(const base::Feature&)feature
     return;
 
   BubbleArrowDirection arrowDirection =
-      (IsUIRefreshPhase1Enabled() && IsSplitToolbarMode())
-          ? BubbleArrowDirectionDown
-          : BubbleArrowDirectionUp;
+      IsSplitToolbarMode() ? BubbleArrowDirectionDown : BubbleArrowDirectionUp;
   NSString* text =
       l10n_util::GetNSStringWithFixup(IDS_IOS_NEW_TAB_IPH_PROMOTION_TEXT);
   CGPoint tabSwitcherAnchor;
@@ -326,9 +319,7 @@ presentBubbleForFeature:(const base::Feature&)feature
     return;
 
   BubbleArrowDirection arrowDirection =
-      (IsUIRefreshPhase1Enabled() && IsSplitToolbarMode())
-          ? BubbleArrowDirectionDown
-          : BubbleArrowDirectionUp;
+      IsSplitToolbarMode() ? BubbleArrowDirectionDown : BubbleArrowDirectionUp;
   NSString* text = l10n_util::GetNSStringWithFixup(
       IDS_IOS_NEW_INCOGNITO_TAB_IPH_PROMOTION_TEXT);
 

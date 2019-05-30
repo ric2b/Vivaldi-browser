@@ -3,8 +3,8 @@
 #include "app/vivaldi_apptools.h"
 
 #include "app/vivaldi_constants.h"
+#include "base/stl_util.h"
 #include "base/lazy_instance.h"
-#include "base/macros.h"
 
 namespace vivaldi {
 
@@ -48,7 +48,7 @@ const std::set<std::string> &GetVivaldiExtraLocales() {
   DCHECK(extra_locales);
 
   if (extra_locales->empty()) {
-    for (size_t i = 0; i < arraysize(vivaldi_extra_locales_array); i++)
+    for (size_t i = 0; i < base::size(vivaldi_extra_locales_array); i++)
       extra_locales->insert(vivaldi_extra_locales_array[i]);
   }
   return *extra_locales;

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
@@ -61,7 +62,8 @@ class ProxyAuthDialogWaiter : public content::WindowedNotificationObserver {
 class ProxyAuthOnUserBoardScreenTest : public LoginManagerTest {
  public:
   ProxyAuthOnUserBoardScreenTest()
-      : LoginManagerTest(true /* should_launch_browser */),
+      : LoginManagerTest(true /* should_launch_browser */,
+                         true /* should_initialize_webui */),
         proxy_server_(net::SpawnedTestServer::TYPE_BASIC_AUTH_PROXY,
                       base::FilePath()) {}
 

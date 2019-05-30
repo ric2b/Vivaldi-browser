@@ -50,6 +50,7 @@ function ListPicker(element, config) {
   this._selectElement.addEventListener('change', this._handleChange.bind(this), false);
   window.addEventListener('message', this._handleWindowMessage.bind(this), false);
   window.addEventListener('mousemove', this._handleWindowMouseMove.bind(this), false);
+  window.addEventListener('mouseover', this._handleWindowMouseOver.bind(this), false);
   this._handleWindowTouchMoveBound = this._handleWindowTouchMove.bind(this);
   this._handleWindowTouchEndBound = this._handleWindowTouchEnd.bind(this);
   this._handleTouchSelectModeScrollBound = this._handleTouchSelectModeScroll.bind(this);
@@ -115,10 +116,13 @@ ListPicker.prototype._handleWindowMouseMove = function(event) {
   }
   this.lastMousePositionX = event.clientX;
   this.lastMousePositionY = event.clientY;
-  this._highlightOption(event.target);
   this._selectionSetByMouseHover = true;
   // Prevent the select element from firing change events for mouse input.
   event.preventDefault();
+};
+
+ListPicker.prototype._handleWindowMouseOver = function(event) {
+  this._highlightOption(event.target);
 };
 
 ListPicker.prototype._handleMouseUp = function(event) {
@@ -426,11 +430,11 @@ ListPicker.prototype._configureItem = function(element, config, inGroup) {
     if (config.ariaLabel)
     element.setAttribute('aria-label', config.ariaLabel);
     else element.removeAttribute('aria-label');
-    element.style.webkitPaddingStart = this._config.paddingStart + 'px';
+    element.style.paddingInlineStart = this._config.paddingStart + 'px';
     if (inGroup) {
-      element.style.webkitMarginStart = (-this._config.paddingStart) + 'px';
+      element.style.marginInlineStart = (-this._config.paddingStart) + 'px';
       // Should be synchronized with padding-end in listPicker.css.
-      element.style.webkitMarginEnd = '-2px';
+      element.style.marginInlineEnd = '-2px';
     }
   } else if (config.type === 'optgroup') {
     element.label = config.label;
@@ -438,15 +442,15 @@ ListPicker.prototype._configureItem = function(element, config, inGroup) {
     element.disabled = config.disabled;
     element.setAttribute('aria-label', config.ariaLabel);
     this._updateChildren(element, config);
-    element.style.webkitPaddingStart = this._config.paddingStart + 'px';
+    element.style.paddingInlineStart = this._config.paddingStart + 'px';
   } else if (config.type === 'separator') {
     element.title = config.title;
     element.disabled = config.disabled;
     element.setAttribute('aria-label', config.ariaLabel);
     if (inGroup) {
-      element.style.webkitMarginStart = (-this._config.paddingStart) + 'px';
+      element.style.marginInlineStart = (-this._config.paddingStart) + 'px';
       // Should be synchronized with padding-end in listPicker.css.
-      element.style.webkitMarginEnd = '-2px';
+      element.style.marginInlineEnd = '-2px';
     }
   }
   this._applyItemStyle(element, config.style);

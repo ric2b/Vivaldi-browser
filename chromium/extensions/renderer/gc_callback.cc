@@ -42,8 +42,8 @@ GCCallback::GCCallback(ScriptContext* context,
   if (!v8_callback.IsEmpty())
     v8_callback_.Reset(context->isolate(), v8_callback);
   object_.SetWeak(this, OnObjectGC, v8::WeakCallbackType::kParameter);
-  context->AddInvalidationObserver(base::Bind(&GCCallback::OnContextInvalidated,
-                                              weak_ptr_factory_.GetWeakPtr()));
+  context->AddInvalidationObserver(base::BindOnce(
+      &GCCallback::OnContextInvalidated, weak_ptr_factory_.GetWeakPtr()));
 }
 
 GCCallback::~GCCallback() {}
@@ -58,8 +58,8 @@ void GCCallback::OnObjectGC(const v8::WeakCallbackInfo<GCCallback>& data) {
   GCCallback* self = data.GetParameter();
   self->object_.Reset();
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&GCCallback::RunCallback,
-                            self->weak_ptr_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&GCCallback::RunCallback,
+                                self->weak_ptr_factory_.GetWeakPtr()));
 }
 
 void GCCallback::RunCallback() {

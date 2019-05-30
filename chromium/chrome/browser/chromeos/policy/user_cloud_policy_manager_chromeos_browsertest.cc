@@ -5,11 +5,13 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/chromeos/child_accounts/child_account_test_utils.h"
 #include "chrome/browser/chromeos/login/screens/gaia_view.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
@@ -22,6 +24,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
+#include "chrome/common/chrome_features.h"
 #include "components/arc/arc_features.h"
 #include "components/arc/arc_prefs.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
@@ -38,15 +41,6 @@
 namespace {
 // The Gaia ID supplied by FakeGaia for our mocked-out signin.
 const char kTestGaiaId[] = "12345";
-
-const char kIdTokenChildAccount[] =
-    "dummy-header."
-    // base64 encoded: { "services": ["uca"] }
-    "eyAic2VydmljZXMiOiBbInVjYSJdIH0="
-    ".dummy-signature";
-
-// Services list for the child user. (This must be a correct JSON array.)
-const char kChildServices[] = "[\"uca\"]";
 
 // Helper class that counts the number of notifications of the specified
 // type that have been received.
@@ -79,9 +73,17 @@ class CountNotificationObserver : public content::NotificationObserver {
 
 namespace policy {
 
-class UserCloudPolicyManagerTest : public LoginPolicyTestBase {
+class UserCloudPolicyManagerTest
+    : public LoginPolicyTestBase,
+      public testing::WithParamInterface<std::vector<base::Feature>> {
  protected:
-  UserCloudPolicyManagerTest() {}
+  UserCloudPolicyManagerTest() {
+    scoped_feature_list_.InitWithFeatures(
+        GetParam() /* enabled_features */,
+        std::vector<base::Feature>() /* disabled_features */);
+  }
+
+  ~UserCloudPolicyManagerTest() override = default;
 
   void GetMandatoryPoliciesValue(base::DictionaryValue* policy) const override {
     std::unique_ptr<base::ListValue> list(new base::ListValue);
@@ -94,10 +96,21 @@ class UserCloudPolicyManagerTest : public LoginPolicyTestBase {
   }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
   DISALLOW_COPY_AND_ASSIGN(UserCloudPolicyManagerTest);
 };
 
-IN_PROC_BROWSER_TEST_F(UserCloudPolicyManagerTest, StartSession) {
+// TODO(agawronska): Remove test instantiation with kDMServerOAuthForChildUser
+// once it is enabled by default.
+INSTANTIATE_TEST_SUITE_P(
+    /* no prefix */,
+    UserCloudPolicyManagerTest,
+    testing::Values(std::vector<base::Feature>(),
+                    std::vector<base::Feature>{
+                        features::kDMServerOAuthForChildUser}));
+
+IN_PROC_BROWSER_TEST_P(UserCloudPolicyManagerTest, StartSession) {
   const char* const kStartupURLs[] = {"chrome://policy", "chrome://about"};
   // User hasn't signed in yet, so shouldn't know if the user requires policy.
   AccountId account_id =
@@ -122,13 +135,12 @@ IN_PROC_BROWSER_TEST_F(UserCloudPolicyManagerTest, StartSession) {
 
   TabStripModel* tabs = browser->tab_strip_model();
   ASSERT_TRUE(tabs);
-  const int expected_tab_count = static_cast<int>(arraysize(kStartupURLs));
+  const int expected_tab_count = static_cast<int>(base::size(kStartupURLs));
   EXPECT_EQ(expected_tab_count, tabs->count());
   for (int i = 0; i < expected_tab_count && i < tabs->count(); ++i) {
     EXPECT_EQ(GURL(kStartupURLs[i]),
               tabs->GetWebContentsAt(i)->GetVisibleURL());
   }
-  EXPECT_TRUE(user_manager->GetActiveUser()->profile_ever_initialized());
 
   // User should be marked as requiring policy.
   EXPECT_EQ(user_manager::known_user::ProfileRequiresPolicy::kPolicyRequired,
@@ -141,7 +153,7 @@ IN_PROC_BROWSER_TEST_F(UserCloudPolicyManagerTest, StartSession) {
           arc::prefs::kArcEnabled));
 }
 
-IN_PROC_BROWSER_TEST_F(UserCloudPolicyManagerTest, ErrorLoadingPolicy) {
+IN_PROC_BROWSER_TEST_P(UserCloudPolicyManagerTest, ErrorLoadingPolicy) {
   // Delete the policy file - this will cause a 500 error on policy requests.
   user_policy_helper()->DeletePolicyFile();
   SkipToLoginScreen();
@@ -156,10 +168,6 @@ IN_PROC_BROWSER_TEST_F(UserCloudPolicyManagerTest, ErrorLoadingPolicy) {
   // Should not receive a SESSION_STARTED notification.
   ASSERT_EQ(0, observer.notification_count());
 
-  // User should not be marked as having completed profile initialization.
-  const user_manager::UserManager* user_manager =
-      user_manager::UserManager::Get();
-  EXPECT_FALSE(user_manager->GetActiveUser()->profile_ever_initialized());
   // User should be marked as not knowing if policy is required yet.
   AccountId account_id =
       AccountId::FromUserEmailGaiaId(kAccountId, kTestGaiaId);
@@ -167,7 +175,7 @@ IN_PROC_BROWSER_TEST_F(UserCloudPolicyManagerTest, ErrorLoadingPolicy) {
             user_manager::known_user::GetProfileRequiresPolicy(account_id));
 }
 
-IN_PROC_BROWSER_TEST_F(UserCloudPolicyManagerTest,
+IN_PROC_BROWSER_TEST_P(UserCloudPolicyManagerTest,
                        ErrorLoadingPolicyForUnmanagedUser) {
   // Mark user as not needing policy - errors loading policy should be
   // ignored (unlike previous ErrorLoadingPolicy test).
@@ -188,49 +196,8 @@ IN_PROC_BROWSER_TEST_F(UserCloudPolicyManagerTest,
   EXPECT_EQ(user_manager::User::OAUTH2_TOKEN_STATUS_VALID,
             user_manager->GetActiveUser()->oauth_token_status());
 
-  // User should be marked as having completed profile initialization.
-  EXPECT_TRUE(user_manager->GetActiveUser()->profile_ever_initialized());
-
   // User should still be marked as not needing policy
   EXPECT_EQ(user_manager::known_user::ProfileRequiresPolicy::kNoPolicyRequired,
-            user_manager::known_user::GetProfileRequiresPolicy(account_id));
-}
-
-IN_PROC_BROWSER_TEST_F(UserCloudPolicyManagerTest, MigrateForExistingUser) {
-  // Mark user as already having initialized the profile - this should allow
-  // the policy code to ignore errors (because we presume we already have a
-  // valid cache). We can remove this test when we fix crbug.com/731726 and
-  // remove the associated migration code from UserPolicyManagerFactoryChromeOS.
-  AccountId account_id =
-      AccountId::FromUserEmailGaiaId(kAccountId, kTestGaiaId);
-  chromeos::ChromeUserManager* user_manager =
-      chromeos::ChromeUserManager::Get();
-  user_manager::User* user =
-      user_manager::User::CreateRegularUserForTesting(account_id);
-  user->set_profile_ever_initialized(true);
-  user_manager->AddUserRecordForTesting(user);
-
-  EXPECT_EQ(user_manager::known_user::ProfileRequiresPolicy::kUnknown,
-            user_manager::known_user::GetProfileRequiresPolicy(account_id));
-
-  user_manager::known_user::SetProfileEverInitialized(account_id, true);
-  EXPECT_TRUE(user_manager::known_user::WasProfileEverInitialized(account_id));
-
-  // Delete the policy file - this will cause a 500 error on policy requests.
-  user_policy_helper()->DeletePolicyFile();
-  SkipToLoginScreen();
-  LogIn(kAccountId, kAccountPassword, kEmptyServices);
-
-  // User should be marked as having a valid OAuth token.
-  EXPECT_EQ(user_manager::User::OAUTH2_TOKEN_STATUS_VALID,
-            user_manager->GetActiveUser()->oauth_token_status());
-
-  // User should still be marked as having completed profile initialization.
-  EXPECT_TRUE(user_manager->GetActiveUser()->profile_ever_initialized());
-
-  // Policy status should still be unknown since we haven't managed to load
-  // policy from disk nor have we been able to talk to the server.
-  EXPECT_EQ(user_manager::known_user::ProfileRequiresPolicy::kUnknown,
             user_manager::known_user::GetProfileRequiresPolicy(account_id));
 }
 
@@ -259,7 +226,16 @@ class UserCloudPolicyManagerNonEnterpriseTest
   DISALLOW_COPY_AND_ASSIGN(UserCloudPolicyManagerNonEnterpriseTest);
 };
 
-IN_PROC_BROWSER_TEST_F(UserCloudPolicyManagerNonEnterpriseTest,
+// TODO(agawronska): Remove test instantiation with kDMServerOAuthForChildUser
+// once it is enabled by default.
+INSTANTIATE_TEST_SUITE_P(
+    /* no prefix */,
+    UserCloudPolicyManagerNonEnterpriseTest,
+    testing::Values(std::vector<base::Feature>(),
+                    std::vector<base::Feature>{
+                        features::kDMServerOAuthForChildUser}));
+
+IN_PROC_BROWSER_TEST_P(UserCloudPolicyManagerNonEnterpriseTest,
                        NoPolicyForConsumer) {
   EXPECT_TRUE(
       policy::BrowserPolicyConnector::IsNonEnterpriseUser(GetAccount()));
@@ -279,8 +255,6 @@ IN_PROC_BROWSER_TEST_F(UserCloudPolicyManagerNonEnterpriseTest,
   EXPECT_EQ(user_manager::User::OAUTH2_TOKEN_STATUS_VALID,
             user_manager->GetActiveUser()->oauth_token_status());
 
-  EXPECT_TRUE(user_manager->GetActiveUser()->profile_ever_initialized());
-
   // User should be marked as not requiring policy.
   EXPECT_EQ(user_manager::known_user::ProfileRequiresPolicy::kNoPolicyRequired,
             user_manager::known_user::GetProfileRequiresPolicy(account_id));
@@ -293,22 +267,25 @@ class UserCloudPolicyManagerChildTest
   ~UserCloudPolicyManagerChildTest() override = default;
 
   // LoginPolicyTestBase:
-  std::string GetIdToken() const override { return kIdTokenChildAccount; }
-
-  // UserCloudPolicyManagerNonEnterpriseTest:
-  void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(
-        arc::kAvailableForChildAccountFeature);
-    UserCloudPolicyManagerNonEnterpriseTest::SetUp();
+  std::string GetIdToken() const override {
+    return chromeos::test::GetChildAccountOAuthIdToken();
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-
   DISALLOW_COPY_AND_ASSIGN(UserCloudPolicyManagerChildTest);
 };
 
-IN_PROC_BROWSER_TEST_F(UserCloudPolicyManagerChildTest, PolicyForChildUser) {
+// TODO(agawronska): Remove test instantiation with kDMServerOAuthForChildUser
+// once it is enabled by default.
+INSTANTIATE_TEST_SUITE_P(
+    /* no prefix */,
+    UserCloudPolicyManagerChildTest,
+    testing::Values(
+        std::vector<base::Feature>{arc::kAvailableForChildAccountFeature},
+        std::vector<base::Feature>{arc::kAvailableForChildAccountFeature,
+                                   features::kDMServerOAuthForChildUser}));
+
+IN_PROC_BROWSER_TEST_P(UserCloudPolicyManagerChildTest, PolicyForChildUser) {
   EXPECT_TRUE(
       policy::BrowserPolicyConnector::IsNonEnterpriseUser(GetAccount()));
   // If a user signs in with a known non-enterprise account there should be no
@@ -319,15 +296,14 @@ IN_PROC_BROWSER_TEST_F(UserCloudPolicyManagerChildTest, PolicyForChildUser) {
             user_manager::known_user::GetProfileRequiresPolicy(account_id));
 
   SkipToLoginScreen();
-  LogIn(GetAccount(), kAccountPassword, kChildServices);
+  LogIn(GetAccount(), kAccountPassword,
+        chromeos::test::kChildAccountServiceFlags);
 
   // User should be marked as having a valid OAuth token.
   const user_manager::UserManager* const user_manager =
       user_manager::UserManager::Get();
   EXPECT_EQ(user_manager::User::OAUTH2_TOKEN_STATUS_VALID,
             user_manager->GetActiveUser()->oauth_token_status());
-
-  EXPECT_TRUE(user_manager->GetActiveUser()->profile_ever_initialized());
 
   // User of CHILD type should be marked as requiring policy.
   EXPECT_EQ(user_manager::known_user::ProfileRequiresPolicy::kPolicyRequired,

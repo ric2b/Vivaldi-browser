@@ -35,7 +35,7 @@ namespace blink {
 
 AnalyserHandler::AnalyserHandler(AudioNode& node, float sample_rate)
     : AudioBasicInspectorHandler(kNodeTypeAnalyser, node, sample_rate, 1) {
-  channel_count_ = 1;
+  channel_count_ = 2;
   Initialize();
 }
 
@@ -48,7 +48,7 @@ AnalyserHandler::~AnalyserHandler() {
   Uninitialize();
 }
 
-void AnalyserHandler::Process(size_t frames_to_process) {
+void AnalyserHandler::Process(uint32_t frames_to_process) {
   AudioBus* output_bus = Output(0).Bus();
 
   if (!IsInitialized()) {
@@ -184,7 +184,7 @@ bool AnalyserHandler::RequiresTailProcessing() const {
 double AnalyserHandler::TailTime() const {
   return RealtimeAnalyser::kMaxFFTSize /
          static_cast<double>(Context()->sampleRate());
-};
+}
 // ----------------------------------------------------------------
 
 AnalyserNode::AnalyserNode(BaseAudioContext& context)
@@ -196,16 +196,11 @@ AnalyserNode* AnalyserNode::Create(BaseAudioContext& context,
                                    ExceptionState& exception_state) {
   DCHECK(IsMainThread());
 
-  if (context.IsContextClosed()) {
-    context.ThrowExceptionForClosedState(exception_state);
-    return nullptr;
-  }
-
-  return new AnalyserNode(context);
+  return MakeGarbageCollected<AnalyserNode>(context);
 }
 
 AnalyserNode* AnalyserNode::Create(BaseAudioContext* context,
-                                   const AnalyserOptions& options,
+                                   const AnalyserOptions* options,
                                    ExceptionState& exception_state) {
   DCHECK(IsMainThread());
 
@@ -216,13 +211,13 @@ AnalyserNode* AnalyserNode::Create(BaseAudioContext* context,
 
   node->HandleChannelOptions(options, exception_state);
 
-  node->setFftSize(options.fftSize(), exception_state);
-  node->setSmoothingTimeConstant(options.smoothingTimeConstant(),
+  node->setFftSize(options->fftSize(), exception_state);
+  node->setSmoothingTimeConstant(options->smoothingTimeConstant(),
                                  exception_state);
 
   // minDecibels and maxDecibels have default values.  Set both of the values
   // at once.
-  node->SetMinMaxDecibels(options.minDecibels(), options.maxDecibels(),
+  node->SetMinMaxDecibels(options->minDecibels(), options->maxDecibels(),
                           exception_state);
 
   return node;

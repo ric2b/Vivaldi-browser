@@ -7,6 +7,8 @@
 #include <array>
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/renderer/core/css/style_engine.h"
+#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 
@@ -156,15 +158,16 @@ TEST_F(HTMLSlotElementReattachTest, RecalcAssignedNodeStyleForReattach) {
       R"HTML(<span><slot /></span>)HTML");
 
   Element& shadow_span = *ToElement(shadow_root.firstChild());
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  GetDocument().View()->UpdateAllLifecyclePhases(
+      DocumentLifecycle::LifecycleUpdateReason::kTest);
 
-  shadow_span.setAttribute(HTMLNames::styleAttr, "display:block");
+  shadow_span.setAttribute(html_names::kStyleAttr, "display:block");
 
   GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
-  GetDocument().documentElement()->RecalcStyle(kNoChange);
+  GetDocument().GetStyleEngine().RecalcStyle({});
 
-  EXPECT_TRUE(shadow_span.GetNonAttachedStyle());
-  EXPECT_TRUE(span.GetNonAttachedStyle());
+  EXPECT_TRUE(shadow_span.GetComputedStyle());
+  EXPECT_TRUE(span.GetComputedStyle());
 }
 
 }  // namespace blink

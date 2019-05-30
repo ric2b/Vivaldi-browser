@@ -46,6 +46,7 @@ cr.define('settings', function() {
     UNAVAILABLE_NO_VERIFIED_HOST: 5,
     UNAVAILABLE_INSUFFICIENT_SECURITY: 6,
     UNAVAILABLE_SUITE_DISABLED: 7,
+    FURTHER_SETUP_REQUIRED: 8,
   };
 
   return {
@@ -75,6 +76,7 @@ cr.define('settings', function() {
  *   instantTetheringState: !settings.MultiDeviceFeatureState,
  *   messagesState: !settings.MultiDeviceFeatureState,
  *   smartLockState: !settings.MultiDeviceFeatureState,
+ *   isAndroidSmsPairingComplete: boolean
  * }}
  */
 let MultiDevicePageContentData;

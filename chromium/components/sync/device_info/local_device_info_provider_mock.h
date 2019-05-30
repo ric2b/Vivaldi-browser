@@ -10,6 +10,7 @@
 
 #include "components/sync/device_info/device_info.h"
 #include "components/sync/device_info/local_device_info_provider.h"
+#include "components/version_info/version_info.h"
 
 namespace syncer {
 
@@ -26,17 +27,18 @@ class LocalDeviceInfoProviderMock : public LocalDeviceInfoProvider {
                               const std::string& signin_scoped_device_id);
   ~LocalDeviceInfoProviderMock() override;
 
-  const DeviceInfo* GetLocalDeviceInfo() const override;
-  std::string GetSyncUserAgent() const override;
-  std::string GetLocalSyncCacheGUID() const override;
   void Initialize(const std::string& cache_guid,
-                  const std::string& signin_scoped_device_id) override;
-  std::unique_ptr<Subscription> RegisterOnInitializedCallback(
-      const base::Closure& callback) override;
-  void Clear() override;
-
+                  const std::string& session_name);
   void Initialize(std::unique_ptr<DeviceInfo> local_device_info);
   void SetInitialized(bool is_initialized);
+  void Clear();
+
+  // LocalDeviceInfoProvider override.
+  version_info::Channel GetChannel() const override;
+  const DeviceInfo* GetLocalDeviceInfo() const override;
+  std::string GetSyncUserAgent() const override;
+  std::unique_ptr<Subscription> RegisterOnInitializedCallback(
+      const base::Closure& callback) override;
 
  private:
   bool is_initialized_;

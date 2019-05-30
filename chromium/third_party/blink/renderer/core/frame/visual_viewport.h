@@ -38,16 +38,19 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/page/scrolling/scrolling_coordinator.h"
+#include "third_party/blink/renderer/core/scroll/scroll_types.h"
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/platform/geometry/float_rect.h"
 #include "third_party/blink/renderer/platform/geometry/float_size.h"
 #include "third_party/blink/renderer/platform/geometry/int_size.h"
 #include "third_party/blink/renderer/platform/graphics/compositor_element_id.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_layer_client.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_types.h"
+
+namespace cc {
+class AnimationHost;
+}
 
 namespace blink {
-
 class EffectPaintPropertyNode;
 class GraphicsContext;
 class GraphicsLayer;
@@ -92,7 +95,11 @@ class CORE_EXPORT VisualViewport final
   USING_GARBAGE_COLLECTED_MIXIN(VisualViewport);
 
  public:
-  static VisualViewport* Create(Page& host) { return new VisualViewport(host); }
+  static VisualViewport* Create(Page& host) {
+    return MakeGarbageCollected<VisualViewport>(host);
+  }
+
+  explicit VisualViewport(Page&);
   ~VisualViewport() override;
 
   void Trace(blink::Visitor*) override;
@@ -186,7 +193,6 @@ class CORE_EXPORT VisualViewport final
 
   // ScrollableArea implementation
   ChromeClient* GetChromeClient() const override;
-  bool ShouldUseIntegerScrollOffset() const override;
   void SetScrollOffset(const ScrollOffset&,
                        ScrollType,
                        ScrollBehavior = kScrollBehaviorInstant) override;
@@ -221,7 +227,7 @@ class CORE_EXPORT VisualViewport final
   GraphicsLayer* LayerForHorizontalScrollbar() const override;
   GraphicsLayer* LayerForVerticalScrollbar() const override;
   bool ScheduleAnimation() override;
-  CompositorAnimationHost* GetCompositorAnimationHost() const override;
+  cc::AnimationHost* GetCompositorAnimationHost() const override;
   CompositorAnimationTimeline* GetCompositorAnimationTimeline() const override;
   IntRect VisibleContentRect(
       IncludeScrollbarsInRect = kExcludeScrollbars) const override;
@@ -255,6 +261,7 @@ class CORE_EXPORT VisualViewport final
   ScrollbarTheme& GetPageScrollbarTheme() const override;
   bool VisualViewportSuppliesScrollbars() const override;
 
+  TransformPaintPropertyNode* GetDeviceEmulationTransformNode() const;
   TransformPaintPropertyNode* GetOverscrollElasticityTransformNode() const;
   TransformPaintPropertyNode* GetPageScaleNode() const;
   TransformPaintPropertyNode* GetScrollTranslationNode() const;
@@ -269,11 +276,10 @@ class CORE_EXPORT VisualViewport final
 
   CompositorElementId GetCompositorOverscrollElasticityElementId() const;
 
-  void SetNeedsPaintPropertiesUpdate();
+  void SetNeedsPaintPropertyUpdate() { needs_paint_property_update_ = true; }
+  bool NeedsPaintPropertyUpdate() const { return needs_paint_property_update_; }
 
  private:
-  explicit VisualViewport(Page&);
-
   bool DidSetScaleOrLocation(float scale, const FloatPoint& location);
 
 
@@ -294,10 +300,15 @@ class CORE_EXPORT VisualViewport final
                      GraphicsLayerPaintingPhase,
                      const IntRect&) const override;
   void SetOverlayScrollbarsHidden(bool) override;
+  void SetPaintArtifactCompositorNeedsUpdate() const override;
   String DebugName(const GraphicsLayer*) const override;
 
   const ScrollableArea* GetScrollableAreaForTesting(
       const GraphicsLayer*) const override;
+
+  int ScrollbarThickness() const;
+  IntSize ScrollbarSize(ScrollbarOrientation) const;
+  IntPoint ScrollbarOffset(ScrollbarOrientation) const;
 
   void SetupScrollbar(ScrollbarOrientation);
 
@@ -335,6 +346,7 @@ class CORE_EXPORT VisualViewport final
   std::unique_ptr<GraphicsLayer> overlay_scrollbar_horizontal_;
   std::unique_ptr<GraphicsLayer> overlay_scrollbar_vertical_;
 
+  scoped_refptr<TransformPaintPropertyNode> device_emulation_transform_node_;
   scoped_refptr<TransformPaintPropertyNode>
       overscroll_elasticity_transform_node_;
   scoped_refptr<TransformPaintPropertyNode> scale_transform_node_;

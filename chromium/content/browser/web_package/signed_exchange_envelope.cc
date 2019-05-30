@@ -12,7 +12,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
-#include "components/cbor/cbor_reader.h"
+#include "components/cbor/reader.h"
 #include "content/browser/web_package/signed_exchange_consts.h"
 #include "content/browser/web_package/signed_exchange_utils.h"
 #include "net/http/http_response_headers.h"
@@ -23,134 +23,112 @@ namespace content {
 
 namespace {
 
-// IsStateful{Request,Response}Header return true if |name| is a stateful
-// header field. Stateful header fields will cause validation failure of
-// signed exchanges.
-// Note that |name| must be lower-cased.
-// https://wicg.github.io/webpackage/draft-yasskin-httpbis-origin-signed-exchanges-impl.html#stateful-headers
-bool IsStatefulRequestHeader(base::StringPiece name) {
+bool IsUncachedHeader(base::StringPiece name) {
   DCHECK_EQ(name, base::ToLowerASCII(name));
 
-  const char* const kStatefulRequestHeaders[] = {
-      "authorization", "cookie", "cookie2", "proxy-authorization",
-      "sec-webSocket-key"};
+  const char* const kUncachedHeaders[] = {
+      // "Hop-by-hop header fields listed in the Connection header field
+      // (Section 6.1 of {{!RFC7230}})." [spec text]
+      // Note: The Connection header field itself is banned as uncached headers,
+      // so no-op.
 
-  for (const char* field : kStatefulRequestHeaders) {
-    if (name == field)
-      return true;
-  }
-  return false;
-}
-
-bool IsStatefulResponseHeader(base::StringPiece name) {
-  DCHECK_EQ(name, base::ToLowerASCII(name));
-
-  const char* const kStatefulResponseHeaders[] = {
+      // https://wicg.github.io/webpackage/draft-yasskin-httpbis-origin-signed-exchanges-impl.html#stateful-headers
+      // TODO(kouhei): Dedupe the list with net/http/http_response_headers.cc
+      //               kChallengeResponseHeaders and kCookieResponseHeaders.
       "authentication-control",
       "authentication-info",
+      "clear-site-data",
       "optional-www-authenticate",
       "proxy-authenticate",
       "proxy-authentication-info",
+      "public-key-pins",
       "sec-websocket-accept",
       "set-cookie",
       "set-cookie2",
       "setprofile",
+      "strict-transport-security",
       "www-authenticate",
+
+      // Other uncached header fields:
+      // https://wicg.github.io/webpackage/draft-yasskin-httpbis-origin-signed-exchanges-impl.html#uncached-headers
+      // TODO(kouhei): Dedupe the list with net/http/http_response_headers.cc
+      //               kHopByHopResponseHeaders.
+      "connection",
+      "keep-alive",
+      "proxy-connection",
+      "trailer",
+      "transfer-encoding",
+      "upgrade",
   };
 
-  for (const char* field : kStatefulResponseHeaders) {
+  for (const char* field : kUncachedHeaders) {
     if (name == field)
       return true;
   }
   return false;
 }
 
-bool IsMethodCacheable(base::StringPiece method) {
-  return method == "GET" || method == "HEAD" || method == "POST";
-}
-
-bool ParseRequestMap(const cbor::CBORValue& value,
-                     SignedExchangeEnvelope* out,
-                     SignedExchangeDevToolsProxy* devtools_proxy) {
-  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("loading"), "ParseRequestMap");
-  if (!value.is_map()) {
-    signed_exchange_utils::ReportErrorAndTraceEvent(
-        devtools_proxy,
-        base::StringPrintf(
-            "Expected request map, got non-map type. Actual type: %d",
-            static_cast<int>(value.type())));
-    return false;
-  }
-
-  const cbor::CBORValue::MapValue& request_map = value.GetMap();
-
-  auto method_iter = request_map.find(
-      cbor::CBORValue(kMethodKey, cbor::CBORValue::Type::BYTE_STRING));
-  if (method_iter == request_map.end() ||
-      !method_iter->second.is_bytestring()) {
-    signed_exchange_utils::ReportErrorAndTraceEvent(
-        devtools_proxy, ":method is not found or not a bytestring.");
-    return false;
-  }
-  base::StringPiece method_str = method_iter->second.GetBytestringAsString();
-  // 3. If exchange’s request method is not safe (Section 4.2.1 of [RFC7231])
-  // or not cacheable (Section 4.2.3 of [RFC7231]), return “invalid”.
-  // [spec text]
-  if (!net::HttpUtil::IsMethodSafe(method_str.as_string()) ||
-      !IsMethodCacheable(method_str)) {
-    signed_exchange_utils::ReportErrorAndTraceEvent(
-        devtools_proxy,
-        base::StringPrintf(
-            "Request method is not safe or not cacheable. method: %s",
-            method_str.as_string().c_str()));
-    return false;
-  }
-  out->set_request_method(method_str);
-
-  for (const auto& it : request_map) {
-    if (!it.first.is_bytestring() || !it.second.is_bytestring()) {
-      signed_exchange_utils::ReportErrorAndTraceEvent(
-          devtools_proxy, "Non-bytestring value in the request map.");
-      return false;
-    }
-    base::StringPiece name_str = it.first.GetBytestringAsString();
-
-    if (name_str == kUrlKey) {
-      signed_exchange_utils::ReportErrorAndTraceEvent(
-          devtools_proxy,
-          ":url key in request map is obsolete in this version of the format.");
-      return false;
-    }
-
-    if (name_str == kMethodKey)
-      continue;
-
-    // TODO(kouhei): Add spec ref here once
-    // https://github.com/WICG/webpackage/issues/161 is resolved.
-    if (name_str != base::ToLowerASCII(name_str)) {
+// Returns if the response is cacheble by a shared cache, as per Section 3 of
+// [RFC7234].
+bool IsCacheableBySharedCache(const SignedExchangeEnvelope::HeaderMap& headers,
+                              SignedExchangeDevToolsProxy* devtools_proxy) {
+  // As we require response code 200 which is cacheable by default, these two
+  // are trivially true:
+  // > o  the response status code is understood by the cache, and
+  // > o  the response either:
+  // >    ...
+  // >    *  has a status code that is defined as cacheable by default (see
+  // >       Section 4.2.2), or
+  // >    ...
+  //
+  // Also, SXG version >= b3 do not have request method and headers, so these
+  // are not applicable:
+  // > o  The request method is understood by the cache and defined as being
+  // >    cacheable, and
+  // > o  the Authorization header field (see Section 4.2 of [RFC7235]) does
+  // >    not appear in the request, if the cache is shared, unless the
+  // >    response explicitly allows it (see Section 3.2), and
+  //
+  // Hence, we have to check the two remaining clauses:
+  // > o  the "no-store" cache directive (see Section 5.2) does not appear
+  // >    in request or response header fields, and
+  // > o  the "private" response directive (see Section 5.2.2.6) does not
+  // >    appear in the response, if the cache is shared, and
+  //
+  // Note that this implementation does not recognize any cache control
+  // extensions.
+  auto found = headers.find("cache-control");
+  if (found == headers.end())
+    return true;
+  net::HttpUtil::NameValuePairsIterator it(
+      found->second.begin(), found->second.end(), ',',
+      net::HttpUtil::NameValuePairsIterator::Values::NOT_REQUIRED,
+      net::HttpUtil::NameValuePairsIterator::Quotes::STRICT_QUOTES);
+  while (it.GetNext()) {
+    auto name = it.name();
+    if (name == "no-store" || name == "private") {
       signed_exchange_utils::ReportErrorAndTraceEvent(
           devtools_proxy,
           base::StringPrintf(
-              "Request header name should be lower-cased. header name: %s",
-              name_str.as_string().c_str()));
+              "Exchange's response must be cacheable by a shared cache, but "
+              "has cache-control: %s",
+              found->second.c_str()));
       return false;
     }
-
-    // 4. If exchange’s headers contain a stateful header field, as defined in
-    // Section 4.1, return “invalid”. [spec text]
-    if (IsStatefulRequestHeader(name_str)) {
-      signed_exchange_utils::ReportErrorAndTraceEvent(
-          devtools_proxy,
-          base::StringPrintf(
-              "Exchange contains stateful request header. header name: %s",
-              name_str.as_string().c_str()));
-      return false;
-    }
+  }
+  if (!it.valid()) {
+    signed_exchange_utils::ReportErrorAndTraceEvent(
+        devtools_proxy,
+        base::StringPrintf(
+            "Failed to parse cache-control header of the exchange. "
+            "cache-control: %s",
+            found->second.c_str()));
+    return false;
   }
   return true;
 }
 
-bool ParseResponseMap(const cbor::CBORValue& value,
+bool ParseResponseMap(const cbor::Value& value,
                       SignedExchangeEnvelope* out,
                       SignedExchangeDevToolsProxy* devtools_proxy) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("loading"), "ParseResponseMap");
@@ -158,14 +136,14 @@ bool ParseResponseMap(const cbor::CBORValue& value,
     signed_exchange_utils::ReportErrorAndTraceEvent(
         devtools_proxy,
         base::StringPrintf(
-            "Expected request map, got non-map type. Actual type: %d",
+            "Expected response map, got non-map type. Actual type: %d",
             static_cast<int>(value.type())));
     return false;
   }
 
-  const cbor::CBORValue::MapValue& response_map = value.GetMap();
+  const cbor::Value::MapValue& response_map = value.GetMap();
   auto status_iter = response_map.find(
-      cbor::CBORValue(kStatusKey, cbor::CBORValue::Type::BYTE_STRING));
+      cbor::Value(kStatusKey, cbor::Value::Type::BYTE_STRING));
   if (status_iter == response_map.end() ||
       !status_iter->second.is_bytestring()) {
     signed_exchange_utils::ReportErrorAndTraceEvent(
@@ -180,18 +158,12 @@ bool ParseResponseMap(const cbor::CBORValue& value,
         devtools_proxy, "Failed to parse status code to integer.");
     return false;
   }
-  // https://wicg.github.io/webpackage/loading.html#parsing-b1
-  // Step 26. If parsedExchange’s response's status is a redirect status or the
-  //          signed exchange version of parsedExchange’s response is not
-  //          undefined, return a failure. [spec text]
-  // TODO(crbug.com/803774): Reject if inner response is a signed exchange.
-  if (net::HttpResponseHeaders::IsRedirectResponseCode(response_code)) {
-    signed_exchange_utils::ReportErrorAndTraceEvent(
-        devtools_proxy,
-        base::StringPrintf(
-            "Exchange's response status must not be a redirect status. "
-            "status: %d",
-            response_code));
+
+  // TODO(kouhei): Add spec ref here once
+  // https://github.com/WICG/webpackage/issues/326 is resolved.
+  if (response_code != 200) {
+    signed_exchange_utils::ReportErrorAndTraceEvent(devtools_proxy,
+                                                    "Status code is not 200.");
     return false;
   }
   out->set_response_code(static_cast<net::HttpStatusCode>(response_code));
@@ -213,8 +185,11 @@ bool ParseResponseMap(const cbor::CBORValue& value,
       return false;
     }
 
-    // TODO(kouhei): Add spec ref here once
-    // https://github.com/WICG/webpackage/issues/161 is resolved.
+    // https://tools.ietf.org/html/draft-yasskin-httpbis-origin-signed-exchanges-impl-02
+    // Section 3.2:
+    // "For each response header field in `exchange`, the header field's
+    // lowercase name as a byte string to the header field's value as a byte
+    // string."
     if (name_str != base::ToLowerASCII(name_str)) {
       signed_exchange_utils::ReportErrorAndTraceEvent(
           devtools_proxy,
@@ -224,9 +199,9 @@ bool ParseResponseMap(const cbor::CBORValue& value,
       return false;
     }
 
-    // 4. If exchange’s headers contain a stateful header field, as defined in
-    // Section 4.1, return “invalid”. [spec text]
-    if (IsStatefulResponseHeader(name_str)) {
+    // 4. If exchange's headers contains an uncached header field, as defined in
+    // Section 4.1, return "invalid". [spec text]
+    if (IsUncachedHeader(name_str)) {
       signed_exchange_utils::ReportErrorAndTraceEvent(
           devtools_proxy,
           base::StringPrintf(
@@ -249,6 +224,44 @@ bool ParseResponseMap(const cbor::CBORValue& value,
       return false;
     }
   }
+
+  // https://wicg.github.io/webpackage/draft-yasskin-http-origin-signed-responses.html#cross-origin-trust
+  // Step 5. If Section 3 of [RFC7234] forbids a shared cache from storing
+  // response,
+  //         return “invalid”. [spec text]
+  if (!IsCacheableBySharedCache(out->response_headers(), devtools_proxy))
+    return false;
+
+  // https://wicg.github.io/webpackage/loading.html#parsing-a-signed-exchange
+  // Step 26. If parsedExchange’s response's status is a redirect status or the
+  //          signed exchange version of parsedExchange’s response is not
+  //          undefined, return a failure. [spec text]
+  if (net::HttpResponseHeaders::IsRedirectResponseCode(out->response_code())) {
+    signed_exchange_utils::ReportErrorAndTraceEvent(
+        devtools_proxy,
+        base::StringPrintf(
+            "Exchange's response status must not be a redirect status. "
+            "status: %d",
+            response_code));
+    return false;
+  }
+  // Note: This does not reject content-type like "application/signed-exchange"
+  // (no "v=" parameter). In that case, SignedExchangeRequestHandler does not
+  // handle the inner response and UA just downloads it.
+  // See https://github.com/WICG/webpackage/issues/299 for details.
+  auto found = out->response_headers().find("content-type");
+  if (found != out->response_headers().end() &&
+      signed_exchange_utils::GetSignedExchangeVersion(found->second)
+          .has_value()) {
+    signed_exchange_utils::ReportErrorAndTraceEvent(
+        devtools_proxy,
+        base::StringPrintf(
+            "Exchange's inner response must not be a signed-exchange. "
+            "conetent-type: %s",
+            found->second.c_str()));
+    return false;
+  }
+
   return true;
 }
 
@@ -256,42 +269,23 @@ bool ParseResponseMap(const cbor::CBORValue& value,
 
 // static
 base::Optional<SignedExchangeEnvelope> SignedExchangeEnvelope::Parse(
-    const GURL& fallback_url,
+    SignedExchangeVersion version,
+    const signed_exchange_utils::URLWithRawString& fallback_url,
     base::StringPiece signature_header_field,
     base::span<const uint8_t> cbor_header,
     SignedExchangeDevToolsProxy* devtools_proxy) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("loading"),
                "SignedExchangeEnvelope::Parse");
 
-  const GURL& request_url = fallback_url;
+  const auto& request_url = fallback_url;
 
-  cbor::CBORReader::DecoderError error;
-  base::Optional<cbor::CBORValue> value =
-      cbor::CBORReader::Read(cbor_header, &error);
+  cbor::Reader::DecoderError error;
+  base::Optional<cbor::Value> value = cbor::Reader::Read(cbor_header, &error);
   if (!value.has_value()) {
     signed_exchange_utils::ReportErrorAndTraceEvent(
         devtools_proxy,
-        base::StringPrintf("Failed to decode CBORValue. CBOR error: %s",
-                           cbor::CBORReader::ErrorCodeToString(error)));
-    return base::nullopt;
-  }
-  if (!value->is_array()) {
-    signed_exchange_utils::ReportErrorAndTraceEvent(
-        devtools_proxy,
-        base::StringPrintf(
-            "Expected top-level CBORValue to be an array. Actual type : %d",
-            static_cast<int>(value->type())));
-    return base::nullopt;
-  }
-
-  const cbor::CBORValue::ArrayValue& top_level_array = value->GetArray();
-  constexpr size_t kTopLevelArraySize = 2;
-  if (top_level_array.size() != kTopLevelArraySize) {
-    signed_exchange_utils::ReportErrorAndTraceEvent(
-        devtools_proxy,
-        base::StringPrintf("Expected top-level array to have 2 elements. "
-                           "Actual element count: %" PRIuS,
-                           top_level_array.size()));
+        base::StringPrintf("Failed to decode Value. CBOR error: %s",
+                           cbor::Reader::ErrorCodeToString(error)));
     return base::nullopt;
   }
 
@@ -299,12 +293,7 @@ base::Optional<SignedExchangeEnvelope> SignedExchangeEnvelope::Parse(
   ret.set_cbor_header(cbor_header);
   ret.set_request_url(request_url);
 
-  if (!ParseRequestMap(top_level_array[0], &ret, devtools_proxy)) {
-    signed_exchange_utils::ReportErrorAndTraceEvent(
-        devtools_proxy, "Failed to parse request map.");
-    return base::nullopt;
-  }
-  if (!ParseResponseMap(top_level_array[1], &ret, devtools_proxy)) {
+  if (!ParseResponseMap(*value, &ret, devtools_proxy)) {
     signed_exchange_utils::ReportErrorAndTraceEvent(
         devtools_proxy, "Failed to parse response map.");
     return base::nullopt;
@@ -326,8 +315,8 @@ base::Optional<SignedExchangeEnvelope> SignedExchangeEnvelope::Parse(
   // If the signature’s “validity-url” parameter is not same-origin with
   // exchange’s effective request URI (Section 5.5 of [RFC7230]), return
   // “invalid” [spec text]
-  const GURL validity_url = ret.signature().validity_url;
-  if (!url::IsSameOriginWith(request_url, validity_url)) {
+  const GURL validity_url = ret.signature().validity_url.url;
+  if (!url::IsSameOriginWith(request_url.url, validity_url)) {
     signed_exchange_utils::ReportErrorAndTraceEvent(
         devtools_proxy, "Validity URL must be same-origin with request URL.");
     return base::nullopt;

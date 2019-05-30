@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
 #include "base/run_loop.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/chromeos/arc/arc_service_launcher.h"
 #include "chrome/browser/chromeos/arc/enterprise/arc_cert_store_bridge.h"
 #include "chrome/browser/chromeos/platform_keys/key_permissions.h"
@@ -25,7 +26,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_profile.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_service_manager.h"
@@ -270,6 +271,7 @@ class ArcCertStoreBridgeTest : public InProcessBrowserTest {
 
   void SetUpTestClientCerts(const base::Closure& done_callback,
                             net::NSSCertDatabase* cert_db) {
+    base::ScopedAllowBlockingForTesting allow_io;
     net::ImportSensitiveKeyFromFile(net::GetTestCertsDirectory(),
                                     "client_1.pk8",
                                     cert_db->GetPrivateSlot().get());

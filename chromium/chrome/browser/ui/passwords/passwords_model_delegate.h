@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
+#include "components/password_manager/core/browser/manage_passwords_referrer.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "components/password_manager/core/common/password_manager_ui.h"
 
@@ -100,13 +101,12 @@ class PasswordsModelDelegate {
       const autofill::PasswordForm& form,
       password_manager::CredentialType credential_type) = 0;
 
-  // Open a new tab, pointing to the Smart Lock help article.
-  // TODO(crbug.com/862269): remove when "Smart Lock" is gone.
-  virtual void NavigateToSmartLockHelpPage() = 0;
   // Open a new tab, pointing to passwords.google.com.
-  virtual void NavigateToPasswordManagerAccountDashboard() = 0;
+  virtual void NavigateToPasswordManagerAccountDashboard(
+      password_manager::ManagePasswordsReferrer referrer) = 0;
   // Open a new tab, pointing to the password manager settings page.
-  virtual void NavigateToPasswordManagerSettingsPage() = 0;
+  virtual void NavigateToPasswordManagerSettingsPage(
+      password_manager::ManagePasswordsReferrer referrer) = 0;
   // Called by the view when the "Sign in to Chrome" button or the "Sync to"
   // button in the promo bubble are clicked.
   virtual void EnableSync(const AccountInfo& account,

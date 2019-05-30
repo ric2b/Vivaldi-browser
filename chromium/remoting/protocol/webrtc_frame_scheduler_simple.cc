@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "base/bind.h"
 #include "base/time/default_tick_clock.h"
 #include "remoting/base/constants.h"
 #include "remoting/protocol/frame_stats.h"
@@ -191,9 +192,11 @@ bool WebrtcFrameSchedulerSimple::OnFrameCaptured(
   if (updated_area - updated_region_area_.Max() > kBigFrameThresholdPixels) {
     int expected_frame_size =
         updated_area * kEstimatedBytesPerMegapixel / kPixelsPerMegapixel;
-    base::TimeDelta expected_send_delay = base::TimeDelta::FromMicroseconds(
-        base::Time::kMicrosecondsPerSecond * expected_frame_size /
-        pacing_bucket_.rate());
+    base::TimeDelta expected_send_delay =
+        pacing_bucket_.rate() ? base::TimeDelta::FromMicroseconds(
+                                    base::Time::kMicrosecondsPerSecond *
+                                    expected_frame_size / pacing_bucket_.rate())
+                              : base::TimeDelta::Max();
     if (expected_send_delay > kTargetFrameInterval) {
       params_out->vpx_min_quantizer = kMaxQuantizer;
     }

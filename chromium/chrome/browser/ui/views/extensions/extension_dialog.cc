@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/views/extensions/extension_dialog.h"
 
+#include <memory>
+#include <utility>
+
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_view_host.h"
 #include "chrome/browser/extensions/extension_view_host_factory.h"
@@ -25,26 +28,29 @@
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/ui/ash/tablet_mode_client.h"
+#endif
+
 using content::BrowserContext;
 using content::WebContents;
 
-ExtensionDialog::ExtensionDialog(extensions::ExtensionViewHost* host,
-                                 ExtensionDialogObserver* observer)
-    : host_(host),
-      observer_(observer) {
+ExtensionDialog::ExtensionDialog(
+    std::unique_ptr<extensions::ExtensionViewHost> host,
+    ExtensionDialogObserver* observer)
+    : host_(std::move(host)), observer_(observer) {
   AddRef();  // Balanced in DeleteDelegate();
 
   registrar_.Add(this,
                  extensions::NOTIFICATION_EXTENSION_HOST_DID_STOP_FIRST_LOAD,
-                 content::Source<BrowserContext>(host->browser_context()));
+                 content::Source<BrowserContext>(host_->browser_context()));
   // Listen for the containing view calling window.close();
   registrar_.Add(this,
                  extensions::NOTIFICATION_EXTENSION_HOST_VIEW_SHOULD_CLOSE,
-                 content::Source<BrowserContext>(host->browser_context()));
+                 content::Source<BrowserContext>(host_->browser_context()));
   // Listen for a crash or other termination of the extension process.
-  registrar_.Add(this,
-                 extensions::NOTIFICATION_EXTENSION_PROCESS_TERMINATED,
-                 content::Source<BrowserContext>(host->browser_context()));
+  registrar_.Add(this, extensions::NOTIFICATION_EXTENSION_PROCESS_TERMINATED,
+                 content::Source<BrowserContext>(host_->browser_context()));
   chrome::RecordDialogCreation(chrome::DialogIdentifier::EXTENSION);
 }
 
@@ -52,32 +58,33 @@ ExtensionDialog::~ExtensionDialog() {
 }
 
 // static
-ExtensionDialog* ExtensionDialog::Show(
-    const GURL& url,
-    gfx::NativeWindow parent_window,
-    Profile* profile,
-    WebContents* web_contents,
-    int width,
-    int height,
-    int min_width,
-    int min_height,
-    const base::string16& title,
-    ExtensionDialogObserver* observer) {
-  extensions::ExtensionViewHost* host =
+ExtensionDialog* ExtensionDialog::Show(const GURL& url,
+                                       gfx::NativeWindow parent_window,
+                                       Profile* profile,
+                                       WebContents* web_contents,
+                                       bool is_modal,
+                                       int width,
+                                       int height,
+                                       int min_width,
+                                       int min_height,
+                                       const base::string16& title,
+                                       ExtensionDialogObserver* observer) {
+  std::unique_ptr<extensions::ExtensionViewHost> host =
       extensions::ExtensionViewHostFactory::CreateDialogHost(url, profile);
   if (!host)
     return NULL;
   // Preferred size must be set before views::Widget::CreateWindowWithParent
   // is called because CreateWindowWithParent refers the result of CanResize().
-  ExtensionViewViews* view = GetExtensionView(host);
+  ExtensionViewViews* view = GetExtensionView(host.get());
   view->SetPreferredSize(gfx::Size(width, height));
   view->set_minimum_size(gfx::Size(min_width, min_height));
   host->SetAssociatedWebContents(web_contents);
 
   DCHECK(parent_window);
-  ExtensionDialog* dialog = new ExtensionDialog(host, observer);
+  extensions::ExtensionViewHost* host_ptr = host.get();
+  ExtensionDialog* dialog = new ExtensionDialog(std::move(host), observer);
   dialog->set_title(title);
-  dialog->InitWindow(parent_window, width, height);
+  dialog->InitWindow(parent_window, is_modal, width, height);
 
   // Show a white background while the extension loads.  This is prettier than
   // flashing a black unfilled window frame.
@@ -85,27 +92,32 @@ ExtensionDialog* ExtensionDialog::Show(
   view->SetVisible(true);
 
   // Ensure the DOM JavaScript can respond immediately to keyboard shortcuts.
-  host->host_contents()->Focus();
+  host_ptr->host_contents()->Focus();
   return dialog;
 }
 
 void ExtensionDialog::InitWindow(gfx::NativeWindow parent,
+                                 bool is_modal,
                                  int width,
                                  int height) {
   views::Widget* window =
-      constrained_window::CreateBrowserModalDialogViews(this, parent);
+      is_modal ? constrained_window::CreateBrowserModalDialogViews(this, parent)
+               : views::DialogDelegate::CreateDialogWidget(
+                     this, nullptr /* context */, nullptr /* parent */);
 
-  // Center the window over the browser.
-  views::Widget* parent_widget =
-      views::Widget::GetWidgetForNativeWindow(parent);
-  gfx::Point center = parent_widget->GetWindowBoundsInScreen().CenterPoint();
-  int x = center.x() - width / 2;
-  int y = center.y() - height / 2;
-  // Ensure the top left and top right of the window are on screen, with
-  // priority given to the top left.
+  // Center the window over the parent browser window or the screen.
   gfx::Rect screen_rect =
-      display::Screen::GetScreen()->GetDisplayNearestPoint(center).bounds();
-  gfx::Rect bounds_rect = gfx::Rect(x, y, width, height);
+      display::Screen::GetScreen()->GetDisplayNearestWindow(parent).work_area();
+  gfx::Rect bounds_rect = parent
+                              ? views::Widget::GetWidgetForNativeWindow(parent)
+                                    ->GetWindowBoundsInScreen()
+                              : screen_rect;
+  bounds_rect.ClampToCenteredSize({width, height});
+
+  // Ensure the top left and top right of the window are on screen, with
+  // priority given to the top left. Use the display's work_area() rather than
+  // bounds(), since the work_area() may be smaller e.g. when the docked
+  // magnifier is enabled.
   bounds_rect.AdjustToFit(screen_rect);
   window->SetBounds(bounds_rect);
 
@@ -152,6 +164,12 @@ int ExtensionDialog::GetDialogButtons() const {
 }
 
 bool ExtensionDialog::CanResize() const {
+#if defined(OS_CHROMEOS)
+  // Prevent dialog resize mouse cursor in tablet mode, crbug.com/453634.
+  const auto* client = TabletModeClient::Get();
+  if (client && client->tablet_mode_enabled())
+    return false;
+#endif
   // Can resize only if minimum contents size set.
   return GetExtensionView()->GetPreferredSize() != gfx::Size();
 }

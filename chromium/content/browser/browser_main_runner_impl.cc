@@ -49,12 +49,15 @@ base::LazyInstance<base::AtomicFlag>::Leaky g_exited_main_message_loop;
 }  // namespace
 
 // static
-BrowserMainRunnerImpl* BrowserMainRunnerImpl::Create() {
-  return new BrowserMainRunnerImpl();
+std::unique_ptr<BrowserMainRunnerImpl> BrowserMainRunnerImpl::Create() {
+  return std::make_unique<BrowserMainRunnerImpl>();
 }
 
 BrowserMainRunnerImpl::BrowserMainRunnerImpl()
-    : initialization_started_(false), is_shutdown_(false) {}
+    : initialization_started_(false),
+      is_shutdown_(false),
+      scoped_execution_fence_(
+          std::make_unique<base::TaskScheduler::ScopedExecutionFence>()) {}
 
 BrowserMainRunnerImpl::~BrowserMainRunnerImpl() {
   if (initialization_started_ && !is_shutdown_)
@@ -107,7 +110,8 @@ int BrowserMainRunnerImpl::Initialize(const MainFunctionParams& parameters) {
     gfx::win::MaybeInitializeDirectWrite();
 #endif  // OS_WIN
 
-    main_loop_.reset(new BrowserMainLoop(parameters));
+    main_loop_.reset(
+        new BrowserMainLoop(parameters, std::move(scoped_execution_fence_)));
 
     main_loop_->Init();
 
@@ -236,7 +240,7 @@ void BrowserMainRunnerImpl::Shutdown() {
 }
 
 // static
-BrowserMainRunner* BrowserMainRunner::Create() {
+std::unique_ptr<BrowserMainRunner> BrowserMainRunner::Create() {
   return BrowserMainRunnerImpl::Create();
 }
 

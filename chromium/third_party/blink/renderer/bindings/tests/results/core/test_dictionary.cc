@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 // This file has been auto-generated from the Jinja2 template
-// third_party/blink/renderer/bindings/templates/dictionary_impl.cpp.tmpl
+// third_party/blink/renderer/bindings/templates/dictionary_impl.cc.tmpl
 // by the script code_generator_v8.py.
 // DO NOT MODIFY!
 
@@ -22,6 +22,7 @@ TestDictionary::TestDictionary() {
   setDoubleOrStringMember(DoubleOrString::FromDouble(3.14));
   setEnumMember("foo");
   setLongMember(1);
+  setMemberWithHyphenInName(false);
   setOtherDoubleOrStringMember(DoubleOrString::FromString("default string value"));
   setRestrictedDoubleMember(3.14);
   setStringOrNullMember("default string value");
@@ -32,11 +33,7 @@ TestDictionary::TestDictionary() {
   setUnrestrictedDoubleMember(3.14);
 }
 
-TestDictionary::~TestDictionary() {}
-
-TestDictionary::TestDictionary(const TestDictionary&) = default;
-
-TestDictionary& TestDictionary::operator=(const TestDictionary&) = default;
+TestDictionary::~TestDictionary() = default;
 
 void TestDictionary::setAnyInRecordMember(const Vector<std::pair<String, ScriptValue>>& value) {
   any_in_record_member_ = value;
@@ -98,7 +95,7 @@ void TestDictionary::setGarbageCollectedRecordMember(const HeapVector<std::pair<
   has_garbage_collected_record_member_ = true;
 }
 
-void TestDictionary::setInternalDictionarySequenceMember(const HeapVector<InternalDictionary>& value) {
+void TestDictionary::setInternalDictionarySequenceMember(const HeapVector<Member<InternalDictionary>>& value) {
   internal_dictionary_sequence_member_ = value;
   has_internal_dictionary_sequence_member_ = true;
 }
@@ -169,6 +166,10 @@ void TestDictionary::setTestObjectSequenceMember(const HeapVector<Member<TestObj
   has_test_object_sequence_member_ = true;
 }
 
+void TestDictionary::setTreatNonNullObjMember(V8TreatNonObjectAsNullVoidFunction* value) {
+  treat_non_null_obj_member_ = value;
+}
+
 void TestDictionary::setTreatNullAsStringSequenceMember(const Vector<String>& value) {
   treat_null_as_string_sequence_member_ = value;
   has_treat_null_as_string_sequence_member_ = true;
@@ -191,6 +192,10 @@ void TestDictionary::setUnionOrNullRecordMember(const HeapVector<std::pair<Strin
 void TestDictionary::setUnionOrNullSequenceMember(const HeapVector<DoubleOrString>& value) {
   union_or_null_sequence_member_ = value;
   has_union_or_null_sequence_member_ = true;
+}
+
+void TestDictionary::setUnionWithAnnotatedTypeMember(const StringTreatNullAsEmptyStringOrLong& value) {
+  union_with_annotated_type_member_ = value;
 }
 
 void TestDictionary::setUnionWithTypedefs(const FloatOrBoolean& value) {
@@ -218,11 +223,13 @@ void TestDictionary::Trace(blink::Visitor* visitor) {
   visitor->Trace(test_interface_or_null_member_);
   visitor->Trace(test_interface_sequence_member_);
   visitor->Trace(test_object_sequence_member_);
+  visitor->Trace(treat_non_null_obj_member_);
   visitor->Trace(uint8_array_member_);
   visitor->Trace(union_in_record_member_);
   visitor->Trace(union_member_with_sequence_default_);
   visitor->Trace(union_or_null_record_member_);
   visitor->Trace(union_or_null_sequence_member_);
+  visitor->Trace(union_with_annotated_type_member_);
   visitor->Trace(union_with_typedefs_);
   IDLDictionaryBase::Trace(visitor);
 }

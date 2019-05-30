@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/time/time.h"
 #include "third_party/webrtc/api/stats/rtcstats_objects.h"
 
@@ -65,22 +66,22 @@ std::vector<const webrtc::RTCStatsMemberInterface*> StandardizedMembers(
   // Note that using "is_standarized" avoids having to maintain a whitelist of
   // every single standardized member, as we do at the "stats object" level
   // with "RTCStatsWhitelist".
-  stats_members.erase(
-      std::remove_if(stats_members.begin(), stats_members.end(),
-                     [](const webrtc::RTCStatsMemberInterface* member) {
-                       return !member->is_standardized();
-                     }),
-      stats_members.end());
+  base::EraseIf(stats_members,
+                [](const webrtc::RTCStatsMemberInterface* member) {
+                  return !member->is_standardized();
+                });
   return stats_members;
 }
 
 }  // namespace
 
 RTCStatsReport::RTCStatsReport(
-    const scoped_refptr<const webrtc::RTCStatsReport>& stats_report)
+    const scoped_refptr<const webrtc::RTCStatsReport>& stats_report,
+    blink::RTCStatsFilter filter)
     : stats_report_(stats_report),
       it_(stats_report_->begin()),
-      end_(stats_report_->end()) {
+      end_(stats_report_->end()),
+      filter_(filter) {
   DCHECK(stats_report_);
 }
 
@@ -89,7 +90,7 @@ RTCStatsReport::~RTCStatsReport() {
 
 std::unique_ptr<blink::WebRTCStatsReport> RTCStatsReport::CopyHandle() const {
   return std::unique_ptr<blink::WebRTCStatsReport>(
-      new RTCStatsReport(stats_report_));
+      new RTCStatsReport(stats_report_, filter_));
 }
 
 std::unique_ptr<blink::WebRTCStats> RTCStatsReport::GetStats(
@@ -98,7 +99,7 @@ std::unique_ptr<blink::WebRTCStats> RTCStatsReport::GetStats(
   if (!stats || !IsWhitelistedStats(*stats))
     return std::unique_ptr<blink::WebRTCStats>();
   return std::unique_ptr<blink::WebRTCStats>(
-      new RTCStats(stats_report_, stats));
+      new RTCStats(stats_report_, stats, filter_));
 }
 
 std::unique_ptr<blink::WebRTCStats> RTCStatsReport::Next() {
@@ -107,22 +108,28 @@ std::unique_ptr<blink::WebRTCStats> RTCStatsReport::Next() {
     ++it_;
     if (IsWhitelistedStats(next)) {
       return std::unique_ptr<blink::WebRTCStats>(
-          new RTCStats(stats_report_, &next));
+          new RTCStats(stats_report_, &next, filter_));
     }
   }
   return std::unique_ptr<blink::WebRTCStats>();
 }
 
 size_t RTCStatsReport::Size() const {
+  // TODO(crbug.com/908072): If there are non-whitelisted stats objects in the
+  // report, this would return the wrong thing; DCHECK that all objects are
+  // whitelisted or make this method return the whitelisted count
   return stats_report_->size();
 }
 
 RTCStats::RTCStats(
     const scoped_refptr<const webrtc::RTCStatsReport>& stats_owner,
-    const webrtc::RTCStats* stats)
+    const webrtc::RTCStats* stats,
+    blink::RTCStatsFilter filter)
     : stats_owner_(stats_owner),
       stats_(stats),
-      stats_members_(StandardizedMembers(stats->Members())) {
+      stats_members_(filter == blink::RTCStatsFilter::kIncludeNonStandardMembers
+                         ? stats->Members()
+                         : StandardizedMembers(stats->Members())) {
   DCHECK(stats_owner_);
   DCHECK(stats_);
   DCHECK(stats_owner_->Get(stats_->id()));
@@ -302,16 +309,20 @@ blink::WebVector<blink::WebString> RTCStatsMember::ValueSequenceString() const {
 rtc::scoped_refptr<RTCStatsCollectorCallbackImpl>
 RTCStatsCollectorCallbackImpl::Create(
     scoped_refptr<base::SingleThreadTaskRunner> main_thread,
-    std::unique_ptr<blink::WebRTCStatsReportCallback> callback) {
+    std::unique_ptr<blink::WebRTCStatsReportCallback> callback,
+    blink::RTCStatsFilter filter) {
   return rtc::scoped_refptr<RTCStatsCollectorCallbackImpl>(
       new rtc::RefCountedObject<RTCStatsCollectorCallbackImpl>(
-          std::move(main_thread), callback.release()));
+          std::move(main_thread), callback.release(), filter));
 }
 
 RTCStatsCollectorCallbackImpl::RTCStatsCollectorCallbackImpl(
     scoped_refptr<base::SingleThreadTaskRunner> main_thread,
-    blink::WebRTCStatsReportCallback* callback)
-    : main_thread_(std::move(main_thread)), callback_(callback) {}
+    blink::WebRTCStatsReportCallback* callback,
+    blink::RTCStatsFilter filter)
+    : main_thread_(std::move(main_thread)),
+      callback_(callback),
+      filter_(filter) {}
 
 RTCStatsCollectorCallbackImpl::~RTCStatsCollectorCallbackImpl() {
   DCHECK(!callback_);
@@ -331,8 +342,8 @@ void RTCStatsCollectorCallbackImpl::OnStatsDeliveredOnMainThread(
   DCHECK(main_thread_->BelongsToCurrentThread());
   DCHECK(report);
   DCHECK(callback_);
-  callback_->OnStatsDelivered(std::unique_ptr<blink::WebRTCStatsReport>(
-      new RTCStatsReport(base::WrapRefCounted(report.get()))));
+  callback_->OnStatsDelivered(std::make_unique<RTCStatsReport>(
+      base::WrapRefCounted(report.get()), filter_));
   // Make sure the callback is destroyed in the main thread as well.
   callback_.reset();
 }

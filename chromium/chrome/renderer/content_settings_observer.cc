@@ -4,8 +4,10 @@
 
 #include "chrome/renderer/content_settings_observer.h"
 
+#include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/common/client_hints.mojom.h"
@@ -27,7 +29,6 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/platform/url_conversion.h"
 #include "third_party/blink/public/platform/web_client_hints_type.h"
-#include "third_party/blink/public/platform/web_content_setting_callbacks.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/web/web_document.h"
@@ -47,7 +48,6 @@
 #include "extensions/renderer/renderer_extension_registry.h"
 #endif
 
-using blink::WebContentSettingCallbacks;
 using blink::WebDocument;
 using blink::WebFrame;
 using blink::WebSecurityOrigin;
@@ -55,7 +55,6 @@ using blink::WebString;
 using blink::WebURL;
 using blink::WebView;
 using content::DocumentState;
-using content::NavigationState;
 
 namespace {
 
@@ -66,7 +65,7 @@ GURL GetOriginOrURL(const WebFrame* frame) {
   // TODO(alexmos): This is broken for --site-per-process, since top() can be a
   // WebRemoteFrame which does not have a document(), and the WebRemoteFrame's
   // URL is not replicated.  See https://crbug.com/628759.
-  if (top_origin.unique() && frame->Top()->IsWebLocalFrame())
+  if (top_origin.opaque() && frame->Top()->IsWebLocalFrame())
     return frame->Top()->ToWebLocalFrame()->GetDocument().Url();
   return top_origin.GetURL();
 }
@@ -97,7 +96,7 @@ ContentSetting GetContentSettingFromRules(
   return CONTENT_SETTING_DEFAULT;
 }
 
-bool IsScriptDisabledForPreview(const content::RenderFrame* render_frame) {
+bool IsScriptDisabledForPreview(content::RenderFrame* render_frame) {
   return render_frame->GetPreviewsState() & content::NOSCRIPT_ON;
 }
 
@@ -110,19 +109,11 @@ bool IsUniqueFrame(WebFrame* frame) {
 
 ContentSettingsObserver::ContentSettingsObserver(
     content::RenderFrame* render_frame,
-    extensions::Dispatcher* extension_dispatcher,
     bool should_whitelist,
     service_manager::BinderRegistry* registry)
     : content::RenderFrameObserver(render_frame),
       content::RenderFrameObserverTracker<ContentSettingsObserver>(
           render_frame),
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-      extension_dispatcher_(extension_dispatcher),
-#endif
-      allow_running_insecure_content_(false),
-      content_setting_rules_(nullptr),
-      is_interstitial_page_(false),
-      current_request_id_(0),
       should_whitelist_(should_whitelist) {
   ClearBlockedContentSettings();
   render_frame->GetWebFrame()->SetContentSettingsClient(this);
@@ -149,11 +140,20 @@ ContentSettingsObserver::ContentSettingsObserver(
 ContentSettingsObserver::~ContentSettingsObserver() {
 }
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+void ContentSettingsObserver::SetExtensionDispatcher(
+    extensions::Dispatcher* extension_dispatcher) {
+  DCHECK(!extension_dispatcher_)
+      << "SetExtensionDispatcher() should only be called once.";
+  extension_dispatcher_ = extension_dispatcher;
+}
+#endif
+
 void ContentSettingsObserver::SetContentSettingRules(
     const RendererContentSettingRules* content_setting_rules) {
   content_setting_rules_ = content_setting_rules;
-  UMA_HISTOGRAM_COUNTS("ClientHints.CountRulesReceived",
-                       content_setting_rules_->client_hints_rules.size());
+  UMA_HISTOGRAM_COUNTS_1M("ClientHints.CountRulesReceived",
+                          content_setting_rules_->client_hints_rules.size());
 }
 
 const RendererContentSettingRules*
@@ -205,8 +205,8 @@ bool ContentSettingsObserver::OnMessageReceived(const IPC::Message& message) {
 }
 
 void ContentSettingsObserver::DidCommitProvisionalLoad(
-    bool is_new_navigation,
-    bool is_same_document_navigation) {
+    bool is_same_document_navigation,
+    ui::PageTransition transition) {
   blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   if (frame->Parent())
     return;  // Not a top-level navigation.
@@ -250,9 +250,7 @@ void ContentSettingsObserver::OnContentSettingsRendererRequest(
   bindings_.AddBinding(this, std::move(request));
 }
 
-bool ContentSettingsObserver::AllowDatabase(const WebString& name,
-                                            const WebString& display_name,
-                                            unsigned estimated_size) {
+bool ContentSettingsObserver::AllowDatabase() {
   WebFrame* frame = render_frame()->GetWebFrame();
   if (IsUniqueFrame(frame))
     return false;
@@ -260,23 +258,22 @@ bool ContentSettingsObserver::AllowDatabase(const WebString& name,
   bool result = false;
   Send(new ChromeViewHostMsg_AllowDatabase(
       routing_id(), url::Origin(frame->GetSecurityOrigin()).GetURL(),
-      url::Origin(frame->Top()->GetSecurityOrigin()).GetURL(), name.Utf16(),
-      display_name.Utf16(), &result));
+      url::Origin(frame->Top()->GetSecurityOrigin()).GetURL(), &result));
   return result;
 }
 
 void ContentSettingsObserver::RequestFileSystemAccessAsync(
-    const WebContentSettingCallbacks& callbacks) {
+    base::OnceCallback<void(bool)> callback) {
   WebFrame* frame = render_frame()->GetWebFrame();
   if (IsUniqueFrame(frame)) {
-    WebContentSettingCallbacks permissionCallbacks(callbacks);
-    permissionCallbacks.DoDeny();
+    std::move(callback).Run(false);
     return;
   }
   ++current_request_id_;
-  bool inserted = permission_requests_
-                      .insert(std::make_pair(current_request_id_, callbacks))
-                      .second;
+  bool inserted =
+      permission_requests_
+          .insert(std::make_pair(current_request_id_, std::move(callback)))
+          .second;
 
   // Verify there are no duplicate insertions.
   DCHECK(inserted);
@@ -308,8 +305,7 @@ bool ContentSettingsObserver::AllowImage(bool enabled_per_settings,
   return allow;
 }
 
-bool ContentSettingsObserver::AllowIndexedDB(const WebString& name,
-                                             const WebSecurityOrigin& origin) {
+bool ContentSettingsObserver::AllowIndexedDB(const WebSecurityOrigin& origin) {
   WebFrame* frame = render_frame()->GetWebFrame();
   if (IsUniqueFrame(frame))
     return false;
@@ -317,8 +313,7 @@ bool ContentSettingsObserver::AllowIndexedDB(const WebString& name,
   bool result = false;
   Send(new ChromeViewHostMsg_AllowIndexedDB(
       routing_id(), url::Origin(frame->GetSecurityOrigin()).GetURL(),
-      url::Origin(frame->Top()->GetSecurityOrigin()).GetURL(), name.Utf16(),
-      &result));
+      url::Origin(frame->Top()->GetSecurityOrigin()).GetURL(), &result));
   return result;
 }
 
@@ -550,14 +545,10 @@ void ContentSettingsObserver::OnRequestFileSystemAccessAsyncResponse(
   if (it == permission_requests_.end())
     return;
 
-  WebContentSettingCallbacks callbacks = it->second;
+  base::OnceCallback<void(bool)> callback = std::move(it->second);
   permission_requests_.erase(it);
 
-  if (allowed) {
-    callbacks.DoAllow();
-    return;
-  }
-  callbacks.DoDeny();
+  std::move(callback).Run(allowed);
 }
 
 void ContentSettingsObserver::ClearBlockedContentSettings() {

@@ -1,15 +1,24 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
- * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+ * @license
+ * Copyright 2018 Google Inc. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS-IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 'use strict';
 
 /* globals self, Util, CategoryRenderer */
 
 /** @typedef {import('./dom.js')} DOM */
-/** @typedef {import('./details-renderer.js').FilmstripDetails} FilmstripDetails */
-/** @typedef {LH.Result.Audit.OpportunityDetails} OpportunityDetails */
 
 class PerformanceCategoryRenderer extends CategoryRenderer {
   /**
@@ -56,8 +65,7 @@ class PerformanceCategoryRenderer extends CategoryRenderer {
     if (!audit.result.details || audit.result.scoreDisplayMode === 'error') {
       return element;
     }
-    // TODO(bckenny): remove cast when details is fully discriminated based on `type`.
-    const details = /** @type {OpportunityDetails} */ (audit.result.details);
+    const details = audit.result.details;
     if (details.type !== 'opportunity') {
       return element;
     }
@@ -87,8 +95,7 @@ class PerformanceCategoryRenderer extends CategoryRenderer {
    */
   _getWastedMs(audit) {
     if (audit.result.details && audit.result.details.type === 'opportunity') {
-      // TODO(bckenny): remove cast when details is fully discriminated based on `type`.
-      const details = /** @type {OpportunityDetails} */ (audit.result.details);
+      const details = audit.result.details;
       if (typeof details.overallSavingsMs !== 'number') {
         throw new Error('non-opportunity details passed to _getWastedMs');
       }
@@ -101,24 +108,31 @@ class PerformanceCategoryRenderer extends CategoryRenderer {
   /**
    * @param {LH.ReportResult.Category} category
    * @param {Object<string, LH.Result.ReportGroup>} groups
+   * @param {'PSI'=} environment 'PSI' and undefined are the only valid values
    * @return {Element}
    * @override
    */
-  render(category, groups) {
+  render(category, groups, environment) {
     const element = this.dom.createElement('div', 'lh-category');
-    this.createPermalinkSpan(element, category.id);
-    element.appendChild(this.renderCategoryHeader(category));
+    if (environment === 'PSI') {
+      const gaugeEl = this.dom.createElement('div', 'lh-score__gauge');
+      gaugeEl.appendChild(this.renderScoreGauge(category, groups));
+      element.appendChild(gaugeEl);
+    } else {
+      this.createPermalinkSpan(element, category.id);
+      element.appendChild(this.renderCategoryHeader(category, groups));
+    }
 
     // Metrics
     const metricAudits = category.auditRefs.filter(audit => audit.group === 'metrics');
-    const metricAuditsEl = this.renderAuditGroup(groups['metrics'], {expandable: false});
+    const metricAuditsEl = this.renderAuditGroup(groups.metrics);
 
     const keyMetrics = metricAudits.filter(a => a.weight >= 3);
     const otherMetrics = metricAudits.filter(a => a.weight < 3);
 
-    const metricsBoxesEl = this.dom.createChildOf(metricAuditsEl, 'div', 'lh-metric-container');
-    const metricsColumn1El = this.dom.createChildOf(metricsBoxesEl, 'div', 'lh-metric-column');
-    const metricsColumn2El = this.dom.createChildOf(metricsBoxesEl, 'div', 'lh-metric-column');
+    const metricsBoxesEl = this.dom.createChildOf(metricAuditsEl, 'div', 'lh-columns');
+    const metricsColumn1El = this.dom.createChildOf(metricsBoxesEl, 'div', 'lh-column');
+    const metricsColumn2El = this.dom.createChildOf(metricsBoxesEl, 'div', 'lh-column');
 
     keyMetrics.forEach(item => {
       metricsColumn1El.appendChild(this._renderMetric(item));
@@ -126,9 +140,13 @@ class PerformanceCategoryRenderer extends CategoryRenderer {
     otherMetrics.forEach(item => {
       metricsColumn2El.appendChild(this._renderMetric(item));
     });
-    const estValuesEl = this.dom.createChildOf(metricsColumn2El, 'div',
-        'lh-metrics__disclaimer lh-metrics__disclaimer');
-    estValuesEl.textContent = 'Values are estimated and may vary.';
+
+    // 'Values are estimated and may vary' is used as the category description for PSI
+    if (environment !== 'PSI') {
+      const estValuesEl = this.dom.createChildOf(metricsColumn2El, 'div',
+          'lh-metrics__disclaimer lh-metrics__disclaimer');
+      estValuesEl.textContent = Util.UIStrings.varianceDisclaimer;
+    }
 
     metricAuditsEl.classList.add('lh-audit-group--metrics');
     element.appendChild(metricAuditsEl);
@@ -140,7 +158,7 @@ class PerformanceCategoryRenderer extends CategoryRenderer {
     if (thumbnailResult && thumbnailResult.details) {
       timelineEl.id = thumbnailResult.id;
       const filmstripEl = this.detailsRenderer.render(thumbnailResult.details);
-      timelineEl.appendChild(filmstripEl);
+      filmstripEl && timelineEl.appendChild(filmstripEl);
     }
 
     // Opportunities
@@ -154,13 +172,19 @@ class PerformanceCategoryRenderer extends CategoryRenderer {
       const wastedMsValues = opportunityAudits.map(audit => this._getWastedMs(audit));
       const maxWaste = Math.max(...wastedMsValues);
       const scale = Math.max(Math.ceil(maxWaste / 1000) * 1000, minimumScale);
-      const groupEl = this.renderAuditGroup(groups['load-opportunities'], {expandable: false});
+      const groupEl = this.renderAuditGroup(groups['load-opportunities']);
       const tmpl = this.dom.cloneTemplate('#tmpl-lh-opportunity-header', this.templateContext);
+
+      this.dom.find('.lh-load-opportunity__col--one', tmpl).textContent =
+        Util.UIStrings.opportunityResourceColumnLabel;
+      this.dom.find('.lh-load-opportunity__col--two', tmpl).textContent =
+        Util.UIStrings.opportunitySavingsColumnLabel;
+
       const headerEl = this.dom.find('.lh-load-opportunity__header', tmpl);
       groupEl.appendChild(headerEl);
       opportunityAudits.forEach((item, i) =>
           groupEl.appendChild(this._renderOpportunity(item, i, scale)));
-      groupEl.classList.add('lh-audit-group--opportunities');
+      groupEl.classList.add('lh-audit-group--load-opportunities');
       element.appendChild(groupEl);
     }
 
@@ -174,21 +198,24 @@ class PerformanceCategoryRenderer extends CategoryRenderer {
         });
 
     if (diagnosticAudits.length) {
-      const groupEl = this.renderAuditGroup(groups['diagnostics'], {expandable: false});
+      const groupEl = this.renderAuditGroup(groups['diagnostics']);
       diagnosticAudits.forEach((item, i) => groupEl.appendChild(this.renderAudit(item, i)));
       groupEl.classList.add('lh-audit-group--diagnostics');
       element.appendChild(groupEl);
     }
 
     // Passed audits
-    const passedElements = category.auditRefs
+    const passedAudits = category.auditRefs
         .filter(audit => (audit.group === 'load-opportunities' || audit.group === 'diagnostics') &&
-            Util.showAsPassed(audit.result))
-        .map((audit, i) => this.renderAudit(audit, i));
+            Util.showAsPassed(audit.result));
 
-    if (!passedElements.length) return element;
+    if (!passedAudits.length) return element;
 
-    const passedElem = this.renderPassedAuditsSection(passedElements);
+    const clumpOpts = {
+      auditRefs: passedAudits,
+      groupDefinitions: groups,
+    };
+    const passedElem = this.renderClump('passed', clumpOpts);
     element.appendChild(passedElem);
     return element;
   }

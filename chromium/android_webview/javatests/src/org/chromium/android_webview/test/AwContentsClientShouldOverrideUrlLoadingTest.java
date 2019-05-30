@@ -26,15 +26,14 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.DOMUtils;
-import org.chromium.content.browser.test.util.TestCallbackHelperContainer
-        .OnEvaluateJavaScriptResultHelper;
-import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnPageStartedHelper;
-import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnReceivedErrorHelper;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationHistory;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.DOMUtils;
+import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer.OnEvaluateJavaScriptResultHelper;
+import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer.OnPageStartedHelper;
+import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer.OnReceivedErrorHelper;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.net.test.util.TestWebServer;
 
@@ -303,8 +302,11 @@ public class AwContentsClientShouldOverrideUrlLoadingTest {
                 CommonResources.makeHtmlPageWithSimpleLinkTo(anchorLinkUrl + "#anchor"));
 
         if (useLoadData) {
+            final String html =
+                    CommonResources.makeHtmlPageWithSimpleLinkTo("#anchor").replace("#", "%23");
+            // Loading the html via a data URI requires us to encode '#' symbols as '%23'.
             mActivityTestRule.loadDataSync(mAwContents, mContentsClient.getOnPageFinishedHelper(),
-                    CommonResources.makeHtmlPageWithSimpleLinkTo("#anchor"), "text/html", false);
+                    html, "text/html", false);
         } else {
             mActivityTestRule.loadUrlSync(
                     mAwContents, mContentsClient.getOnPageFinishedHelper(), anchorLinkUrl);

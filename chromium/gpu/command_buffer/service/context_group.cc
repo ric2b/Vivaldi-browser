@@ -15,18 +15,19 @@
 #include "gpu/command_buffer/service/decoder_context.h"
 #include "gpu/command_buffer/service/framebuffer_manager.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
+#include "gpu/command_buffer/service/passthrough_discardable_manager.h"
 #include "gpu/command_buffer/service/path_manager.h"
 #include "gpu/command_buffer/service/program_manager.h"
-#include "gpu/command_buffer/service/progress_reporter.h"
 #include "gpu/command_buffer/service/renderbuffer_manager.h"
 #include "gpu/command_buffer/service/sampler_manager.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
 #include "gpu/command_buffer/service/shader_manager.h"
+#include "gpu/command_buffer/service/shared_image_factory.h"
 #include "gpu/command_buffer/service/texture_manager.h"
-#include "gpu/command_buffer/service/transfer_buffer_manager.h"
 #include "gpu/config/gpu_preferences.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_version_info.h"
+#include "ui/gl/progress_reporter.h"
 
 namespace gpu {
 namespace gles2 {
@@ -55,6 +56,7 @@ DisallowedFeatures AdjustDisallowedFeatures(
     adjusted_disallowed_features.oes_texture_float_linear = true;
     adjusted_disallowed_features.ext_color_buffer_half_float = true;
     adjusted_disallowed_features.oes_texture_half_float_linear = true;
+    adjusted_disallowed_features.ext_float_blend = true;
   }
   return adjusted_disallowed_features;
 }
@@ -70,9 +72,11 @@ ContextGroup::ContextGroup(
     bool bind_generates_resource,
     ImageManager* image_manager,
     gpu::ImageFactory* image_factory,
-    ProgressReporter* progress_reporter,
+    gl::ProgressReporter* progress_reporter,
     const GpuFeatureInfo& gpu_feature_info,
-    ServiceDiscardableManager* discardable_manager)
+    ServiceDiscardableManager* discardable_manager,
+    PassthroughDiscardableManager* passthrough_discardable_manager,
+    SharedImageManager* shared_image_manager)
     : gpu_preferences_(gpu_preferences),
       mailbox_manager_(mailbox_manager),
       memory_tracker_(std::move(memory_tracker)),
@@ -113,14 +117,17 @@ ContextGroup::ContextGroup(
       image_factory_(image_factory),
       use_passthrough_cmd_decoder_(false),
       passthrough_resources_(new PassthroughResources),
+      passthrough_discardable_manager_(passthrough_discardable_manager),
       progress_reporter_(progress_reporter),
       gpu_feature_info_(gpu_feature_info),
-      discardable_manager_(discardable_manager) {
+      discardable_manager_(discardable_manager),
+      shared_image_representation_factory_(
+          std::make_unique<SharedImageRepresentationFactory>(
+              shared_image_manager,
+              memory_tracker.get())) {
   DCHECK(discardable_manager);
   DCHECK(feature_info_);
   DCHECK(mailbox_manager_);
-  transfer_buffer_manager_ =
-      std::make_unique<TransferBufferManager>(memory_tracker_.get());
   use_passthrough_cmd_decoder_ = supports_passthrough_command_decoders &&
                                  gpu_preferences_.use_passthrough_cmd_decoder;
 }
@@ -164,6 +171,15 @@ gpu::ContextResult ContextGroup::Initialize(
 
   feature_info_->Initialize(context_type, use_passthrough_cmd_decoder_,
                             adjusted_disallowed_features);
+
+  // Fail early if ES3 is requested and driver does not support it.
+  if ((context_type == CONTEXT_TYPE_WEBGL2 ||
+       context_type == CONTEXT_TYPE_OPENGLES3) &&
+      !feature_info_->IsES3Capable()) {
+    LOG(ERROR) << "ContextResult::kFatalFailure: "
+               << "ES3 is blacklisted/disabled/unsupported by driver.";
+    return gpu::ContextResult::kFatalFailure;
+  }
 
   const GLint kMinRenderbufferSize = 512;  // GL says 1 pixel!
   GLint max_renderbuffer_size = 0;
@@ -592,6 +608,10 @@ void ContextGroup::Destroy(DecoderContext* decoder, bool have_context) {
   }
 
   memory_tracker_ = nullptr;
+
+  if (passthrough_discardable_manager_) {
+    passthrough_discardable_manager_->DeleteContextGroup(this);
+  }
 
   if (passthrough_resources_) {
     gl::GLApi* api = have_context ? gl::g_current_gl_context : nullptr;

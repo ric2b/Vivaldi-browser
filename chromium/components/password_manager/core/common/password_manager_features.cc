@@ -6,6 +6,8 @@
 
 namespace password_manager {
 
+// NOTE: It is strongly recommended to use UpperCamelCase style for feature
+//       names, e.g. "MyGreatFeature".
 namespace features {
 
 // Enable affiliation based matching, so that credentials stored for an Android
@@ -14,28 +16,19 @@ namespace features {
 const base::Feature kAffiliationBasedMatching = {
     "AffiliationBasedMatching", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables links to the setting pages from the Chrome profile menu for Passwords
-// and Autofill.
-const base::Feature kAutofillHome = {"AutofillHome",
-                                     base::FEATURE_ENABLED_BY_DEFAULT};
+// Enables the editing of passwords in chrome://settings/passwords, i.e. the
+// Desktop passwords settings page.
+const base::Feature kEditPasswordsInDesktopSettings = {
+    "EditPasswordsInDesktopSettings", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Deletes entries from local database on Mac which cannot be decrypted when
-// merging data with Sync.
-const base::Feature kDeleteUndecryptableLogins = {
-    "DeleteUndecryptableLogins", base::FEATURE_ENABLED_BY_DEFAULT};
+// Recovers lost passwords on Mac by deleting the ones that cannot be decrypted
+// with the present encryption key from the Keychain.
+const base::Feature kDeleteCorruptedPasswords = {
+    "DeleteCorruptedPasswords", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Use HTML based username detector.
 const base::Feature kHtmlBasedUsernameDetector = {
     "HtmlBaseUsernameDetector", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enable a context menu item in the password field that allows the user
-// to manually enforce saving of their password.
-const base::Feature kPasswordForceSaving = {
-    "PasswordForceSaving", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Controls the ability to generate passwords that fit sites' requirements.
-const base::Feature kPasswordGenerationRequirements = {
-    "PasswordGenerationRequirements", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls whether password requirements can be overridden for domains
 // (as opposed to only relying on the autofill server).
@@ -43,39 +36,32 @@ const base::Feature kPasswordGenerationRequirementsDomainOverrides = {
     "PasswordGenerationRequirementsDomainOverrides",
     base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables the "Show all saved passwords" option in Context Menu.
-const base::Feature kShowAllSavedPasswordsContextMenu{
-    "ShowAllSavedPasswordsContextMenu", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Disallow autofilling of the sync credential.
-const base::Feature kProtectSyncCredential = {
-    "protect-sync-credential", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Disallow autofilling of the sync credential only for transactional reauth
-// pages.
-const base::Feature kProtectSyncCredentialOnReauth = {
-    "ProtectSyncCredentialOnReauth", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Controls the ability to export passwords from Chrome's settings page.
-const base::Feature kPasswordExport = {"PasswordExport",
-                                       base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Controls the ability to import passwords from Chrome's settings page.
 const base::Feature kPasswordImport = {"PasswordImport",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Allows searching for saved passwords in the settings page on mobile devices.
-const base::Feature kPasswordSearchMobile = {"PasswordSearchMobile",
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Adds password-related features to the keyboard accessory on mobile devices.
 const base::Feature kPasswordsKeyboardAccessory = {
     "PasswordsKeyboardAccessory", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Deletes entries from local database on Mac which cannot be decrypted when
+// merging data with Sync.
+const base::Feature kRecoverPasswordsForSyncUsers = {
+    "RecoverPasswordsForSyncUsers", base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Enables the experiment for the password manager to only fill on account
 // selection, rather than autofilling on page load, with highlighting of fields.
 const base::Feature kFillOnAccountSelect = {"fill-on-account-select",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables the experiment for the password manager to only fill on account
+// selection when the password form was served over HTTP.
+const base::Feature kFillOnAccountSelectHttp = {
+    "FillOnAccountSelectHttp", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Integration with Google's Password Manager for signed-in and sync users.
+const base::Feature kGooglePasswordManager = {
+    "google-password-manager", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables new password form parsing mechanism for filling passwords, details in
 // https://goo.gl/QodPH1
@@ -86,6 +72,16 @@ const base::Feature kNewPasswordFormParsing = {
 // https://goo.gl/QodPH1
 const base::Feature kNewPasswordFormParsingForSaving = {
     "new-password-form-parsing-for-saving", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables new password form parsing mechanism for saving passwords and disables
+// the old parser, details in https://goo.gl/QodPH1
+const base::Feature kOnlyNewParser = {"only-new-password-form-parsing",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls whether to offer manual password generation in the accessory sheet
+// on Android.
+const base::Feature kManualPasswordGenerationAndroid{
+    "ManualPasswordGenerationAndroid", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Performs a one-off migration (with retries) from a native backend into
 // logindb. Passwords are served from the new location.

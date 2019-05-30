@@ -4,6 +4,7 @@
 
 #include "media/base/silent_sink_suspender.h"
 
+#include "base/bind.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 
@@ -88,7 +89,8 @@ int SilentSinkSuspender::Render(base::TimeDelta delay,
     if (is_using_fake_sink_) {
       is_transition_pending_ = true;
       task_runner_->PostTask(
-          FROM_HERE, base::Bind(sink_transition_callback_.callback(), false));
+          FROM_HERE,
+          base::BindOnce(sink_transition_callback_.callback(), false));
       return dest->frames();
     }
   } else if (!is_using_fake_sink_) {
@@ -101,7 +103,8 @@ int SilentSinkSuspender::Render(base::TimeDelta delay,
       latest_output_delay_timestamp_ = delay_timestamp;
       fake_sink_transition_time_ = now;
       task_runner_->PostTask(
-          FROM_HERE, base::Bind(sink_transition_callback_.callback(), true));
+          FROM_HERE,
+          base::BindOnce(sink_transition_callback_.callback(), true));
     }
   }
 
@@ -112,13 +115,21 @@ void SilentSinkSuspender::OnRenderError() {
   callback_->OnRenderError();
 }
 
+bool SilentSinkSuspender::IsUsingFakeSinkForTesting() {
+  base::AutoLock al(transition_lock_);
+  return is_using_fake_sink_;
+}
+
 void SilentSinkSuspender::TransitionSinks(bool use_fake_sink) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   // Ignore duplicate requests which can occur if the transition takes too long
   // and multiple Render() events occur.
-  if (use_fake_sink == is_using_fake_sink_)
-    return;
+  {
+    base::AutoLock al(transition_lock_);
+    if (use_fake_sink == is_using_fake_sink_)
+      return;
+  }
 
   if (use_fake_sink) {
     sink_->Pause();
@@ -132,10 +143,17 @@ void SilentSinkSuspender::TransitionSinks(bool use_fake_sink) {
       is_transition_pending_ = false;
       is_using_fake_sink_ = true;
     }
-    fake_sink_.Start(
-        base::Bind(base::IgnoreResult(&SilentSinkSuspender::Render),
-                   base::Unretained(this), latest_output_delay_,
-                   latest_output_delay_timestamp_, 0, nullptr));
+    fake_sink_.Start(base::BindRepeating(
+        [](SilentSinkSuspender* suspender, base::TimeDelta frozen_delay,
+           base::TimeTicks frozen_delay_timestamp, base::TimeTicks ideal_time,
+           base::TimeTicks now) {
+          // TODO: Seems that the code in Render() might benefit from the two
+          // new timestamps being provided by FakeAudioWorker, in that it's call
+          // to base::TimeTicks::Now() can be eliminated (use |now| instead),
+          // along with its custom delay timestamp calculations.
+          suspender->Render(frozen_delay, frozen_delay_timestamp, 0, nullptr);
+        },
+        this, latest_output_delay_, latest_output_delay_timestamp_));
   } else {
     fake_sink_.Stop();
 

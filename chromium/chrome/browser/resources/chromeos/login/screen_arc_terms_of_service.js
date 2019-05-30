@@ -11,7 +11,7 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
     EXTERNAL_API: [
       'setMetricsMode', 'setBackupAndRestoreMode', 'setLocationServicesMode',
       'loadPlayStoreToS', 'setArcManaged', 'hideSkipButton', 'setupForDemoMode',
-      'setTosForTesting'
+      'clearDemoMode', 'setTosForTesting'
     ],
 
     /** @override */
@@ -207,7 +207,8 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
 
       if (this.language_ && this.language_ == language && this.countryCode_ &&
           this.countryCode_ == countryCode &&
-          !this.classList.contains('error')) {
+          !this.classList.contains('error') && !this.usingOfflineTerms_ &&
+          this.tosContent_) {
         this.enableButtons_(true);
         return;
       }
@@ -252,6 +253,8 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
      */
     setTosForTesting: function(terms) {
       this.tosContent_ = terms;
+      this.usingOfflineTerms_ = true;
+      this.setTermsViewContentLoadedState_();
     },
 
     /**
@@ -312,9 +315,13 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
      * Handles Next button click.
      */
     onNext: function() {
+      var isDemoModeSetup = this.isDemoModeSetup_();
       this.getElement_('arc-location-service').hidden = false;
       this.getElement_('arc-pai-service').hidden = false;
       this.getElement_('arc-google-service-confirmation').hidden = false;
+      if (!isDemoModeSetup) {
+        this.getElement_('arc-review-settings').hidden = false;
+      }
       this.getElement_('arc-tos-container').style.overflowY = 'auto';
       this.getElement_('arc-tos-container').scrollTop =
           this.getElement_('arc-tos-container').scrollHeight;
@@ -333,10 +340,12 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
           this.getElement_('arc-enable-backup-restore').checked;
       var isLocationServiceEnabled =
           this.getElement_('arc-enable-location-service').checked;
-
-      chrome.send(
-          'arcTermsOfServiceAccept',
-          [isBackupRestoreEnabled, isLocationServiceEnabled, this.tosContent_]);
+      var reviewArcSettings =
+          this.getElement_('arc-review-settings-checkbox').checked;
+      chrome.send('arcTermsOfServiceAccept', [
+        isBackupRestoreEnabled, isLocationServiceEnabled, reviewArcSettings,
+        this.tosContent_
+      ]);
     },
 
     /**
@@ -390,7 +399,14 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
      * @param {string} targetUrl URL to open.
      */
     showUrlOverlay: function(targetUrl) {
-      $('arc-tos-overlay-webview').src = targetUrl;
+      var webView = $('arc-tos-overlay-webview');
+      if (this.usingOfflineTerms_) {
+        const TERMS_URL = 'chrome://terms/arc/privacy_policy';
+        WebViewHelper.loadUrlContentToWebView(
+            webView, TERMS_URL, WebViewHelper.ContentType.PDF);
+      } else {
+        webView.src = targetUrl;
+      }
       $('arc-tos-overlay-webview-container').classList.add('overlay-loading');
       this.showOverlay('arc-overlay-url');
     },
@@ -411,6 +427,7 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
      */
     reloadPlayStoreToS: function() {
       this.termsError = false;
+      this.usingOfflineTerms_ = false;
       var termsView = this.getElement_('arc-tos-view');
       termsView.src = 'https://play.google.com/about/play-terms.html';
       this.removeClass_('arc-tos-loaded');
@@ -424,6 +441,13 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
      */
     setupForDemoMode: function() {
       this.addClass_('arc-tos-for-demo-mode');
+    },
+
+    /**
+     * Sets up the variant of the screen dedicated for demo mode.
+     */
+    clearDemoMode: function() {
+      this.removeClass_('arc-tos-for-demo-mode');
     },
 
     /**
@@ -468,9 +492,22 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
         return;
       }
 
-      var getToSContent = {code: 'getToSContent();'};
       var termsView = this.getElement_('arc-tos-view');
-      termsView.executeScript(getToSContent, this.onGetToSContent_.bind(this));
+      if (this.usingOfflineTerms_) {
+        // Process offline ToS. Scripts added to web view by addContentScripts()
+        // are not executed when using data url.
+        this.tosContent_ = termsView.src;
+        var setParameters =
+            `document.body.classList.add('large-view', 'offline-terms');`;
+        termsView.executeScript({code: setParameters});
+        termsView.insertCSS({file: 'playstore.css'});
+        this.setTermsViewContentLoadedState_();
+      } else {
+        // Process online ToS.
+        var getToSContent = {code: 'getToSContent();'};
+        termsView.executeScript(
+            getToSContent, this.onGetToSContent_.bind(this));
+      }
     },
 
     /**
@@ -483,6 +520,15 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
       }
 
       this.tosContent_ = results[0];
+      this.setTermsViewContentLoadedState_();
+    },
+
+    /**
+     * Sets the screen in the loaded state. Should be called after arc terms
+     * were loaded.
+     * @private
+     */
+    setTermsViewContentLoadedState_: function() {
       this.removeClass_('arc-tos-loading');
       this.removeClass_('error');
       this.addClass_('arc-tos-loaded');
@@ -491,6 +537,7 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
       this.getElement_('arc-location-service').hidden = true;
       this.getElement_('arc-pai-service').hidden = true;
       this.getElement_('arc-google-service-confirmation').hidden = true;
+      this.getElement_('arc-review-settings').hidden = true;
       this.getElement_('arc-tos-container').style.overflow = 'hidden';
       this.getElement_('arc-tos-accept-button').hidden = true;
       this.getElement_('arc-tos-next-button').hidden = false;
@@ -522,6 +569,15 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
      * Handles event when terms view cannot be loaded.
      */
     onTermsViewErrorOccurred: function(details) {
+      // If in demo mode fallback to offline Terms of Service copy.
+      if (this.isDemoModeSetup_()) {
+        this.usingOfflineTerms_ = true;
+        const TERMS_URL = 'chrome://terms/arc/terms';
+        var webView = this.getElement_('arc-tos-view');
+        WebViewHelper.loadUrlContentToWebView(
+            webView, TERMS_URL, WebViewHelper.ContentType.HTML);
+        return;
+      }
       this.showError_();
     },
 
@@ -557,13 +613,13 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
 
       $('arc-tos-root').onBeforeShow();
 
-      isDemoModeSetup = this.hasClass_('arc-tos-for-demo-mode');
+      var isDemoModeSetup = this.isDemoModeSetup_();
       if (isDemoModeSetup) {
         this.hideSkipButton();
         this.setMetricsMode(
             loadTimeData.getString('arcTextMetricsManagedEnabled'), true);
       }
-      this.getElement_('arc-tos-accept-button').textContent =
+      this.getElement_('arc-tos-accept-button-content').textContent =
           loadTimeData.getString(
               isDemoModeSetup ? 'arcTermsOfServiceAcceptAndContinueButton' :
                                 'arcTermsOfServiceAcceptButton');
@@ -576,7 +632,6 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
 
     /** @override */
     onBeforeHide: function() {
-      this.removeClass_('arc-tos-for-demo-mode');
       this.reset_();
     },
 
@@ -588,6 +643,7 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
       this.getElement_('arc-location-service').hidden = true;
       this.getElement_('arc-pai-service').hidden = true;
       this.getElement_('arc-google-service-confirmation').hidden = true;
+      this.getElement_('arc-review-settings').hidden = true;
       this.getElement_('arc-tos-container').style.overflowY = 'auto';
       this.getElement_('arc-tos-container').scrollTop =
           this.getElement_('arc-tos-container').scrollHeight;
@@ -678,6 +734,15 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
         event.stopPropagation();
         self.showLearnMoreOverlay(learnMorePaiServiceText);
       };
+    },
+
+    /**
+     * Returns whether arc terms are shown as a part of demo mode setup.
+     * @return {boolean}
+     * @private
+     */
+    isDemoModeSetup_: function() {
+      return this.hasClass_('arc-tos-for-demo-mode');
     }
   };
 });

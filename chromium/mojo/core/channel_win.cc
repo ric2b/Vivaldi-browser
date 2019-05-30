@@ -35,8 +35,11 @@ class ChannelWin : public Channel,
  public:
   ChannelWin(Delegate* delegate,
              ConnectionParams connection_params,
+             HandlePolicy handle_policy,
              scoped_refptr<base::TaskRunner> io_task_runner)
-      : Channel(delegate), self_(this), io_task_runner_(io_task_runner) {
+      : Channel(delegate, handle_policy),
+        self_(this),
+        io_task_runner_(io_task_runner) {
     if (connection_params.server_endpoint().is_valid()) {
       handle_ = connection_params.TakeServerEndpoint()
                     .TakePlatformHandle()
@@ -81,7 +84,7 @@ class ChannelWin : public Channel,
 
       bool write_now = !delay_writes_ && outgoing_messages_.empty();
       outgoing_messages_.emplace_back(std::move(message));
-      if (write_now && !WriteNoLock(outgoing_messages_.front()))
+      if (write_now && !WriteNoLock(outgoing_messages_.front().get()))
         reject_writes_ = write_error = true;
     }
     if (write_error) {
@@ -118,6 +121,8 @@ class ChannelWin : public Channel,
     for (size_t i = 0; i < num_handles; i++) {
       HANDLE handle_value =
           base::win::Uint32ToHandle(extra_header_handles[i].handle);
+      if (PlatformHandleInTransit::IsPseudoHandle(handle_value))
+        return false;
       if (remote_process().is_valid()) {
         // If we know the remote process's handle, we assume it doesn't know
         // ours; that means any handle values still belong to that process, and
@@ -265,11 +270,6 @@ class ChannelWin : public Channel,
       Channel::MessagePtr message = std::move(outgoing_messages_.front());
       outgoing_messages_.pop_front();
 
-      // Invalidate all the scoped handles so we don't attempt to close them.
-      std::vector<PlatformHandleInTransit> handles = message->TakeHandles();
-      for (auto& handle : handles)
-        handle.CompleteTransit();
-
       // Overlapped WriteFile() to a pipe should always fully complete.
       if (message->data_num_bytes() != bytes_written)
         reject_writes_ = write_error = true;
@@ -298,10 +298,24 @@ class ChannelWin : public Channel,
     }
   }
 
-  // Attempts to write a message directly to the channel. If the full message
-  // cannot be written, it's queued and a wait is initiated to write the message
-  // ASAP on the I/O thread.
-  bool WriteNoLock(const Channel::MessagePtr& message) {
+  bool WriteNoLock(Channel::Message* message) {
+    // We can release all the handles immediately now that we're attempting an
+    // actual write to the remote process.
+    //
+    // If the HANDLE values are locally owned, that means we're sending them
+    // to a broker who will duplicate-and-close them. If the broker never
+    // receives that message (and thus we effectively leak these handles),
+    // either it died (and our total dysfunction is imminent) or we died; in
+    // either case the handle leak doesn't matter.
+    //
+    // If the handles have already been transferred and are therefore remotely
+    // owned, the only way they won't eventually be managed by the remote
+    // process is if the remote process dies before receiving this message. At
+    // that point, again, potential handle leaks don't matter.
+    std::vector<PlatformHandleInTransit> handles = message->TakeHandles();
+    for (auto& handle : handles)
+      handle.CompleteTransit();
+
     BOOL ok = WriteFile(handle_.Get(), message->data(),
                         static_cast<DWORD>(message->data_num_bytes()), NULL,
                         &write_context_.overlapped);
@@ -316,7 +330,7 @@ class ChannelWin : public Channel,
   bool WriteNextNoLock() {
     if (outgoing_messages_.empty())
       return true;
-    return WriteNoLock(outgoing_messages_.front());
+    return WriteNoLock(outgoing_messages_.front().get());
   }
 
   void OnWriteError(Error error) {
@@ -369,8 +383,10 @@ class ChannelWin : public Channel,
 scoped_refptr<Channel> Channel::Create(
     Delegate* delegate,
     ConnectionParams connection_params,
+    HandlePolicy handle_policy,
     scoped_refptr<base::TaskRunner> io_task_runner) {
-  return new ChannelWin(delegate, std::move(connection_params), io_task_runner);
+  return new ChannelWin(delegate, std::move(connection_params), handle_policy,
+                        io_task_runner);
 }
 
 }  // namespace core

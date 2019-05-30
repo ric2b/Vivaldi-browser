@@ -4,7 +4,10 @@
 
 #include "components/viz/host/gpu_client.h"
 
+#include "base/bind.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/numerics/checked_math.h"
+#include "components/viz/host/gpu_host_impl.h"
 #include "components/viz/host/host_gpu_memory_buffer_manager.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "gpu/ipc/common/gpu_memory_buffer_impl.h"
@@ -75,18 +78,22 @@ void GpuClient::SetConnectionErrorHandler(
   connection_error_handler_ = std::move(connection_error_handler);
 }
 
+base::WeakPtr<GpuClient> GpuClient::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
 void GpuClient::OnEstablishGpuChannel(
     mojo::ScopedMessagePipeHandle channel_handle,
     const gpu::GPUInfo& gpu_info,
     const gpu::GpuFeatureInfo& gpu_feature_info,
-    GpuClientDelegate::EstablishGpuChannelStatus status) {
+    GpuHostImpl::EstablishChannelStatus status) {
   DCHECK_EQ(channel_handle.is_valid(),
-            status == GpuClientDelegate::EstablishGpuChannelStatus::kSuccess);
+            status == GpuHostImpl::EstablishChannelStatus::kSuccess);
   gpu_channel_requested_ = false;
   EstablishGpuChannelCallback callback = std::move(callback_);
   DCHECK(!callback_);
 
-  if (status == GpuClientDelegate::EstablishGpuChannelStatus::kGpuHostInvalid) {
+  if (status == GpuHostImpl::EstablishChannelStatus::kGpuHostInvalid) {
     // GPU process may have crashed or been killed. Try again.
     EstablishGpuChannel(std::move(callback));
     return;
@@ -97,7 +104,7 @@ void GpuClient::OnEstablishGpuChannel(
                             gpu_feature_info);
     return;
   }
-  if (status == GpuClientDelegate::EstablishGpuChannelStatus::kSuccess) {
+  if (status == GpuHostImpl::EstablishChannelStatus::kSuccess) {
     // This is the case we pre-establish a channel before a request arrives.
     // Cache the channel for a future request.
     channel_handle_ = std::move(channel_handle);
@@ -124,6 +131,39 @@ void GpuClient::EstablishGpuChannel(EstablishGpuChannelCallback callback) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   // At most one channel should be requested. So clear previous request first.
   ClearCallback();
+
+  // TODO(crbug.com/874797): Gpu::EstablishGpuChannelSync() is blocking long
+  // enough that hung renderer detection code is killing the renderer. This
+  // UMA measures how long the request to establish a GPU channel takes after it
+  // arrives in the browser process. Remove this UMA after investigating.
+  if (callback) {
+    callback = base::BindOnce(
+        [](base::TimeTicks start_time, EstablishGpuChannelCallback callback,
+           int32_t client_id, mojo::ScopedMessagePipeHandle handle,
+           const gpu::GPUInfo& gpu_info,
+           const gpu::GpuFeatureInfo& gpu_feature_info) {
+          constexpr base::TimeDelta kMinTime =
+              base::TimeDelta::FromMilliseconds(1);
+          constexpr base::TimeDelta kMaxTime = base::TimeDelta::FromMinutes(10);
+          constexpr int kBuckets = 100;
+
+          base::TimeDelta delta = base::TimeTicks::Now() - start_time;
+          if (handle.is_valid()) {
+            UMA_HISTOGRAM_CUSTOM_TIMES(
+                "GPU.EstablishGpuChannelDuration.Success", delta, kMinTime,
+                kMaxTime, kBuckets);
+          } else {
+            UMA_HISTOGRAM_CUSTOM_TIMES(
+                "GPU.EstablishGpuChannelDuration.Failure", delta, kMinTime,
+                kMaxTime, kBuckets);
+          }
+
+          std::move(callback).Run(client_id, std::move(handle), gpu_info,
+                                  gpu_feature_info);
+        },
+        base::TimeTicks::Now(), std::move(callback));
+  }
+
   if (channel_handle_.is_valid()) {
     // If a channel has been pre-established and cached,
     //   1) if callback is valid, return it right away.
@@ -136,26 +176,39 @@ void GpuClient::EstablishGpuChannel(EstablishGpuChannelCallback callback) {
     }
     return;
   }
+
+  GpuHostImpl* gpu_host = delegate_->EnsureGpuHost();
+  if (!gpu_host) {
+    if (callback) {
+      std::move(callback).Run(client_id_, mojo::ScopedMessagePipeHandle(),
+                              gpu::GPUInfo(), gpu::GpuFeatureInfo());
+    }
+    return;
+  }
+
   callback_ = std::move(callback);
   if (gpu_channel_requested_)
     return;
   gpu_channel_requested_ = true;
-  delegate_->EstablishGpuChannel(
-      client_id_, client_tracing_id_,
+  const bool is_gpu_host = false;
+  gpu_host->EstablishGpuChannel(
+      client_id_, client_tracing_id_, is_gpu_host,
       base::BindOnce(&GpuClient::OnEstablishGpuChannel,
                      weak_factory_.GetWeakPtr()));
 }
 
 void GpuClient::CreateJpegDecodeAccelerator(
     media::mojom::JpegDecodeAcceleratorRequest jda_request) {
-  if (auto* gpu_service = delegate_->EnsureGpuService())
-    gpu_service->CreateJpegDecodeAccelerator(std::move(jda_request));
+  if (auto* gpu_host = delegate_->EnsureGpuHost()) {
+    gpu_host->gpu_service()->CreateJpegDecodeAccelerator(
+        std::move(jda_request));
+  }
 }
 
 void GpuClient::CreateVideoEncodeAcceleratorProvider(
     media::mojom::VideoEncodeAcceleratorProviderRequest vea_provider_request) {
-  if (auto* gpu_service = delegate_->EnsureGpuService()) {
-    gpu_service->CreateVideoEncodeAcceleratorProvider(
+  if (auto* gpu_host = delegate_->EnsureGpuHost()) {
+    gpu_host->gpu_service()->CreateVideoEncodeAcceleratorProvider(
         std::move(vea_provider_request));
   }
 }

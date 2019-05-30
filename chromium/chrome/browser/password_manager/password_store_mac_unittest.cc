@@ -281,7 +281,7 @@ TEST_P(PasswordStoreMacTest, OperationsOnABadDatabaseSilentlyFail) {
   EXPECT_THAT(mock_consumer.forms(), IsEmpty());
 
   // Report metrics.
-  store()->ReportMetrics("Test Username", true);
+  store()->ReportMetrics("Test Username", true, false);
   FinishAsyncProcessing();
 
   // Change the login.
@@ -300,14 +300,14 @@ TEST_P(PasswordStoreMacTest, OperationsOnABadDatabaseSilentlyFail) {
   ClosePasswordStore();
 }
 
-INSTANTIATE_TEST_CASE_P(,
-                        PasswordStoreMacTest,
-                        testing::Values(MigrationStatus::NOT_STARTED,
-                                        MigrationStatus::MIGRATED,
-                                        MigrationStatus::FAILED_ONCE,
-                                        MigrationStatus::FAILED_TWICE,
-                                        MigrationStatus::MIGRATED_DELETED,
-                                        MigrationStatus::MIGRATED_PARTIALLY,
-                                        MigrationStatus::MIGRATION_STOPPED));
+INSTANTIATE_TEST_SUITE_P(,
+                         PasswordStoreMacTest,
+                         testing::Values(MigrationStatus::NOT_STARTED,
+                                         MigrationStatus::MIGRATED,
+                                         MigrationStatus::FAILED_ONCE,
+                                         MigrationStatus::FAILED_TWICE,
+                                         MigrationStatus::MIGRATED_DELETED,
+                                         MigrationStatus::MIGRATED_PARTIALLY,
+                                         MigrationStatus::MIGRATION_STOPPED));
 
 }  // namespace

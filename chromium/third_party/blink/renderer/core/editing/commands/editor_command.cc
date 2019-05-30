@@ -29,8 +29,8 @@
 
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_editing_command_type.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
-#include "third_party/blink/renderer/core/css_property_names.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/tag_collection.h"
@@ -60,6 +60,7 @@
 #include "third_party/blink/renderer/core/editing/visible_position.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/html/html_br_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
@@ -73,7 +74,7 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 namespace {
 
@@ -89,7 +90,7 @@ const CommandNameEntry kCommandNameEntries[] = {
 };
 // Handles all commands except WebEditingCommandType::Invalid.
 static_assert(
-    arraysize(kCommandNameEntries) + 1 ==
+    base::size(kCommandNameEntries) + 1 ==
         static_cast<size_t>(WebEditingCommandType::kNumberOfCommandTypes),
     "must handle all valid WebEditingCommandType");
 
@@ -158,7 +159,7 @@ InputEvent::InputType InputTypeFromCommandType(
       return InputType::kDeleteHardLineBackward;
     case CommandType::kDeleteToEndOfParagraph:
       return InputType::kDeleteHardLineForward;
-    // TODO(chongz): Find appreciate InputType for following commands.
+    // TODO(editing-dev): Find appreciate InputType for following commands.
     case CommandType::kDeleteToMark:
       return InputType::kNone;
 
@@ -202,7 +203,7 @@ StaticRangeVector* RangesFromCurrentSelectionOrExtendCaret(
   if (selection_modifier.Selection().IsCaret())
     selection_modifier.Modify(SelectionModifyAlteration::kExtend, direction,
                               granularity);
-  StaticRangeVector* ranges = new StaticRangeVector;
+  StaticRangeVector* ranges = MakeGarbageCollected<StaticRangeVector>();
   // We only supports single selections.
   if (selection_modifier.Selection().IsNone())
     return ranges;
@@ -312,7 +313,8 @@ static EditingTriState SelectionListState(const FrameSelection& selection,
       // If the selected list has the different type of list as child, return
       // |FalseTriState|.
       // See http://crbug.com/385374
-      if (HasChildTags(*start_element, tag_name.Matches(ulTag) ? olTag : ulTag))
+      if (HasChildTags(*start_element,
+                       tag_name.Matches(kUlTag) ? kOlTag : kUlTag))
         return EditingTriState::kFalse;
       return EditingTriState::kTrue;
     }
@@ -377,7 +379,7 @@ static void PerformDelete(LocalFrame& frame) {
   frame.GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
   frame.GetEditor().AddToKillRing(frame.GetEditor().SelectedRange());
-  // TODO(chongz): |Editor::performDelete()| has no direction.
+  // TODO(editing-dev): |Editor::performDelete()| has no direction.
   // https://github.com/w3c/editing/issues/130
   frame.GetEditor().DeleteSelectionWithSmartDelete(
       CanSmartCopyOrDelete(frame) ? DeleteMode::kSmart : DeleteMode::kSimple,
@@ -898,10 +900,11 @@ static bool ExecuteTranspose(LocalFrame& frame,
     return false;
   const String& transposed = text.Right(1) + text.Left(1);
 
-  if (DispatchBeforeInputInsertText(
-          EventTargetNodeForDocument(document), transposed,
-          InputEvent::InputType::kInsertTranspose,
-          new StaticRangeVector(1, StaticRange::Create(range))) !=
+  if (DispatchBeforeInputInsertText(EventTargetNodeForDocument(document),
+                                    transposed,
+                                    InputEvent::InputType::kInsertTranspose,
+                                    MakeGarbageCollected<StaticRangeVector>(
+                                        1, StaticRange::Create(range))) !=
       DispatchEventResult::kNotCanceled)
     return false;
 
@@ -1183,6 +1186,13 @@ static bool EnabledSelectAll(LocalFrame& frame,
   if (Node* root = HighestEditableRoot(selection.Start())) {
     if (!root->hasChildren())
       return false;
+
+    // When the editable contains a BR only, it appears as an empty line, in
+    // which case allowing select-all confuses users.
+    if (root->firstChild() == root->lastChild() &&
+        IsHTMLBRElement(root->firstChild()))
+      return false;
+
     // TODO(amaralp): Return false if already fully selected.
   }
   // TODO(amaralp): Address user-select handling.
@@ -1196,11 +1206,11 @@ static EditingTriState StateNone(LocalFrame&, Event*) {
 }
 
 EditingTriState StateOrderedList(LocalFrame& frame, Event*) {
-  return SelectionListState(frame.Selection(), olTag);
+  return SelectionListState(frame.Selection(), kOlTag);
 }
 
 static EditingTriState StateUnorderedList(LocalFrame& frame, Event*) {
-  return SelectionListState(frame.Selection(), ulTag);
+  return SelectionListState(frame.Selection(), kUlTag);
 }
 
 static EditingTriState StateJustifyCenter(LocalFrame& frame, Event*) {
@@ -1243,9 +1253,9 @@ static String ValueDefaultParagraphSeparator(const EditorInternalCommand&,
                                              Event*) {
   switch (frame.GetEditor().DefaultParagraphSeparator()) {
     case EditorParagraphSeparator::kIsDiv:
-      return divTag.LocalName();
+      return kDivTag.LocalName();
     case EditorParagraphSeparator::kIsP:
-      return pTag.LocalName();
+      return kPTag.LocalName();
   }
 
   NOTREACHED();
@@ -1281,7 +1291,7 @@ static const EditorInternalCommand* InternalCommand(
   static const EditorInternalCommand kEditorCommands[] = {
       // Lists all commands in blink::WebEditingCommandType.
       // Must be ordered by |commandType| for index lookup.
-      // Covered by unit tests in EditingCommandTest.cpp
+      // Covered by unit tests in editing_command_test.cc
       {WebEditingCommandType::kAlignJustified, ExecuteJustifyFull,
        SupportedFromMenuOrKeyBinding, EnabledInRichlyEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
@@ -1777,7 +1787,7 @@ static const EditorInternalCommand* InternalCommand(
   };
   // Handles all commands except WebEditingCommandType::Invalid.
   static_assert(
-      arraysize(kEditorCommands) + 1 ==
+      base::size(kEditorCommands) + 1 ==
           static_cast<size_t>(WebEditingCommandType::kNumberOfCommandTypes),
       "must handle all valid WebEditingCommandType");
 
@@ -1788,7 +1798,7 @@ static const EditorInternalCommand* InternalCommand(
 
   int command_index = static_cast<int>(command_type) - 1;
   DCHECK(command_index >= 0 &&
-         command_index < static_cast<int>(arraysize(kEditorCommands)));
+         command_index < static_cast<int>(base::size(kEditorCommands)));
   return &kEditorCommands[command_index];
 }
 

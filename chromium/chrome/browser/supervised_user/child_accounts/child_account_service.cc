@@ -13,10 +13,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/account_tracker_service_factory.h"
-#include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
-#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/supervised_user/child_accounts/permission_request_creator_apiary.h"
 #include "chrome/browser/supervised_user/experimental/safe_search_url_reporter.h"
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
@@ -27,21 +24,18 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
-#include "components/browser_sync/profile_sync_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/gaia_cookie_manager_service.h"
-#include "components/signin/core/browser/profile_oauth2_token_service.h"
-#include "components/signin/core/browser/signin_manager.h"
-#include "components/signin/core/browser/signin_pref_names.h"
+#include "components/sync/driver/sync_service.h"
+#include "components/sync/driver/sync_user_settings.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#else
+#include "chrome/browser/signin/signin_util.h"
 #endif
-
-const char kGaiaCookieManagerSource[] = "child_account_service";
 
 // Normally, re-check the family info once per day.
 const int kUpdateIntervalSeconds = 60 * 60 * 24;
@@ -78,15 +72,10 @@ ChildAccountService::ChildAccountService(Profile* profile)
     : profile_(profile),
       active_(false),
       family_fetch_backoff_(&kFamilyFetchBackoffPolicy),
-      gaia_cookie_manager_(
-          GaiaCookieManagerServiceFactory::GetForProfile(profile)),
-      weak_ptr_factory_(this) {
-  gaia_cookie_manager_->AddObserver(this);
-}
+      identity_manager_(IdentityManagerFactory::GetForProfile(profile)),
+      weak_ptr_factory_(this) {}
 
-ChildAccountService::~ChildAccountService() {
-  gaia_cookie_manager_->RemoveObserver(this);
-}
+ChildAccountService::~ChildAccountService() {}
 
 // static
 bool ChildAccountService::IsChildAccountDetectionEnabled() {
@@ -106,18 +95,18 @@ void ChildAccountService::RegisterProfilePrefs(
 
 void ChildAccountService::Init() {
   SupervisedUserServiceFactory::GetForProfile(profile_)->SetDelegate(this);
-  AccountTrackerServiceFactory::GetForProfile(profile_)->AddObserver(this);
+  identity_manager_->AddObserver(this);
 
   PropagateChildStatusToUser(profile_->IsChild());
 
   // If we're already signed in, check the account immediately just to be sure.
   // (We might have missed an update before registering as an observer.)
-  SigninManagerBase* signin = SigninManagerFactory::GetForProfile(profile_);
-  if (signin->IsAuthenticated()) {
-    OnAccountUpdated(
-        AccountTrackerServiceFactory::GetForProfile(profile_)->GetAccountInfo(
-            signin->GetAuthenticatedAccountId()));
-  }
+  base::Optional<AccountInfo> primary_account_info =
+      identity_manager_->FindExtendedAccountInfoForAccount(
+          identity_manager_->GetPrimaryAccountInfo());
+
+  if (primary_account_info.has_value())
+    OnExtendedAccountInfoUpdated(primary_account_info.value());
 }
 
 bool ChildAccountService::IsChildAccountStatusKnown() {
@@ -126,7 +115,7 @@ bool ChildAccountService::IsChildAccountStatusKnown() {
 
 void ChildAccountService::Shutdown() {
   family_fetcher_.reset();
-  AccountTrackerServiceFactory::GetForProfile(profile_)->RemoveObserver(this);
+  identity_manager_->RemoveObserver(this);
   SupervisedUserServiceFactory::GetForProfile(profile_)->SetDelegate(nullptr);
   DCHECK(!active_);
 }
@@ -140,14 +129,17 @@ void ChildAccountService::AddChildStatusReceivedCallback(
 }
 
 ChildAccountService::AuthState ChildAccountService::GetGoogleAuthState() {
-  std::vector<gaia::ListedAccount> accounts;
-  std::vector<gaia::ListedAccount> signed_out_accounts;
-  if (!gaia_cookie_manager_->ListAccounts(&accounts, &signed_out_accounts,
-                                          kGaiaCookieManagerSource)) {
+  identity::AccountsInCookieJarInfo accounts_in_cookie_jar_info =
+      identity_manager_->GetAccountsInCookieJar();
+  if (!accounts_in_cookie_jar_info.accounts_are_fresh)
     return AuthState::PENDING;
-  }
-  return (accounts.empty() || !accounts[0].valid) ? AuthState::NOT_AUTHENTICATED
-                                                  : AuthState::AUTHENTICATED;
+
+  bool first_account_authenticated =
+      !accounts_in_cookie_jar_info.signed_in_accounts.empty() &&
+      accounts_in_cookie_jar_info.signed_in_accounts[0].valid;
+
+  return first_account_authenticated ? AuthState::AUTHENTICATED
+                                     : AuthState::NOT_AUTHENTICATED;
 }
 
 std::unique_ptr<base::CallbackList<void()>::Subscription>
@@ -166,10 +158,6 @@ bool ChildAccountService::SetActive(bool active) {
   if (active_) {
     SupervisedUserSettingsService* settings_service =
         SupervisedUserSettingsServiceFactory::GetForProfile(profile_);
-
-    settings_service->SetLocalSetting(
-        supervised_users::kRecordHistoryIncludesSessionSync,
-        std::make_unique<base::Value>(false));
 
     // In contrast to legacy SUs, child account SUs must sign in.
     settings_service->SetLocalSetting(supervised_users::kSigninAllowed,
@@ -195,7 +183,7 @@ bool ChildAccountService::SetActive(bool active) {
     // This is also used by user policies (UserPolicySigninService), but since
     // child accounts can not also be Dasher accounts, there shouldn't be any
     // problems.
-    SigninManagerFactory::GetForProfile(profile_)->ProhibitSignout(true);
+    signin_util::SetUserSignoutAllowedForProfile(profile_, false);
 #endif
 
     // TODO(treib): Maybe store the last update time in a pref, so we don't
@@ -213,8 +201,6 @@ bool ChildAccountService::SetActive(bool active) {
   } else {
     SupervisedUserSettingsService* settings_service =
         SupervisedUserSettingsServiceFactory::GetForProfile(profile_);
-    settings_service->SetLocalSetting(
-        supervised_users::kRecordHistoryIncludesSessionSync, nullptr);
     settings_service->SetLocalSetting(supervised_users::kSigninAllowed,
                                       nullptr);
     settings_service->SetLocalSetting(supervised_users::kCookiesAlwaysAllowed,
@@ -227,7 +213,7 @@ bool ChildAccountService::SetActive(bool active) {
 #endif
 
 #if !defined(OS_CHROMEOS)
-    SigninManagerFactory::GetForProfile(profile_)->ProhibitSignout(false);
+    signin_util::SetUserSignoutAllowedForProfile(profile_, true);
 #endif
 
     CancelFetchingFamilyInfo();
@@ -235,10 +221,13 @@ bool ChildAccountService::SetActive(bool active) {
 
   // Trigger a sync reconfig to enable/disable the right SU data types.
   // The logic to do this lives in the SupervisedUserSyncDataTypeController.
-  browser_sync::ProfileSyncService* sync_service =
+  syncer::SyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
-  if (sync_service->IsFirstSetupComplete())
-    sync_service->ReconfigureDatatypeManager();
+  if (sync_service->GetUserSettings()->IsFirstSetupComplete()) {
+    // Trigger a reconfig by grabbing a SyncSetupInProgressHandle and
+    // immediately releasing it again (via the temporary unique_ptr going away).
+    sync_service->GetSetupInProgressHandle();
+  }
 
   return true;
 }
@@ -262,7 +251,8 @@ void ChildAccountService::SetIsChildAccount(bool is_child_account) {
   status_received_callback_list_.clear();
 }
 
-void ChildAccountService::OnAccountUpdated(const AccountInfo& info) {
+void ChildAccountService::OnExtendedAccountInfoUpdated(
+    const AccountInfo& info) {
   // This method may get called when the account info isn't complete yet.
   // We deliberately don't check for that, as we are only interested in the
   // child account status.
@@ -272,15 +262,15 @@ void ChildAccountService::OnAccountUpdated(const AccountInfo& info) {
     return;
   }
 
-  std::string auth_account_id = SigninManagerFactory::GetForProfile(profile_)
-      ->GetAuthenticatedAccountId();
+  std::string auth_account_id = identity_manager_->GetPrimaryAccountId();
   if (info.account_id != auth_account_id)
     return;
 
   SetIsChildAccount(info.is_child_account);
 }
 
-void ChildAccountService::OnAccountRemoved(const AccountInfo& info) {
+void ChildAccountService::OnExtendedAccountInfoRemoved(
+    const AccountInfo& info) {
   SetIsChildAccount(false);
 }
 
@@ -319,19 +309,15 @@ void ChildAccountService::OnFailure(FamilyInfoFetcher::ErrorCode error) {
   ScheduleNextFamilyInfoUpdate(family_fetch_backoff_.GetTimeUntilRelease());
 }
 
-void ChildAccountService::OnGaiaAccountsInCookieUpdated(
-    const std::vector<gaia::ListedAccount>& accounts,
-    const std::vector<gaia::ListedAccount>& signed_out_accounts,
+void ChildAccountService::OnAccountsInCookieUpdated(
+    const identity::AccountsInCookieJarInfo& accounts_in_cookie_jar_info,
     const GoogleServiceAuthError& error) {
   google_auth_state_observers_.Notify();
 }
 
 void ChildAccountService::StartFetchingFamilyInfo() {
   family_fetcher_.reset(new FamilyInfoFetcher(
-      this,
-      SigninManagerFactory::GetForProfile(profile_)
-          ->GetAuthenticatedAccountId(),
-      ProfileOAuth2TokenServiceFactory::GetForProfile(profile_),
+      this, identity_manager_,
       content::BrowserContext::GetDefaultStoragePartition(profile_)
           ->GetURLLoaderFactoryForBrowserProcess()));
   family_fetcher_->StartGetFamilyMembers();

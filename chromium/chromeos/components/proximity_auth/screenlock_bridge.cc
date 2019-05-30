@@ -10,7 +10,7 @@
 
 #include "base/strings/string16.h"
 #include "build/build_config.h"
-#include "chromeos/components/proximity_auth/logging/logging.h"
+#include "chromeos/components/multidevice/logging/logging.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 
@@ -54,9 +54,7 @@ std::string GetIdForIcon(ScreenlockBridge::UserPodCustomIcon icon) {
 }  // namespace
 
 ScreenlockBridge::UserPodCustomIconOptions::UserPodCustomIconOptions()
-    : autoshow_tooltip_(false),
-      hardlock_on_click_(false),
-      is_trial_run_(false) {}
+    : autoshow_tooltip_(false), hardlock_on_click_(false) {}
 
 ScreenlockBridge::UserPodCustomIconOptions::~UserPodCustomIconOptions() {}
 
@@ -77,9 +75,6 @@ ScreenlockBridge::UserPodCustomIconOptions::ToDictionaryValue() const {
 
   if (hardlock_on_click_)
     result->SetBoolean("hardlockOnClick", true);
-
-  if (is_trial_run_)
-    result->SetBoolean("isTrialRun", true);
 
   return result;
 }
@@ -103,10 +98,6 @@ void ScreenlockBridge::UserPodCustomIconOptions::SetAriaLabel(
 
 void ScreenlockBridge::UserPodCustomIconOptions::SetHardlockOnClick() {
   hardlock_on_click_ = true;
-}
-
-void ScreenlockBridge::UserPodCustomIconOptions::SetTrialRun() {
-  is_trial_run_ = true;
 }
 
 std::string ScreenlockBridge::UserPodCustomIconOptions::GetIDString() const {

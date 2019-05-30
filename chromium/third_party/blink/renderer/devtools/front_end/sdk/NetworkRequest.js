@@ -150,6 +150,13 @@ SDK.NetworkRequest = class extends Common.Object {
   }
 
   /**
+   * @return {boolean}
+   */
+  isBlobRequest() {
+    return this._url.startsWith('blob:');
+  }
+
+  /**
    * @param {string} x
    */
   setUrl(x) {
@@ -462,10 +469,12 @@ SDK.NetworkRequest = class extends Common.Object {
   }
 
   /**
+   * Returns true if the request was intercepted by a service worker and it
+   * provided its own response.
    * @return {boolean}
    */
   get fetchedViaServiceWorker() {
-    return this._fetchedViaServiceWorker;
+    return !!this._fetchedViaServiceWorker;
   }
 
   /**
@@ -473,6 +482,18 @@ SDK.NetworkRequest = class extends Common.Object {
    */
   set fetchedViaServiceWorker(x) {
     this._fetchedViaServiceWorker = x;
+  }
+
+  /**
+   * Returns true if the request was sent by a service worker.
+   * @return {boolean}
+   */
+  initiatedByServiceWorker() {
+    const networkManager = SDK.NetworkManager.forRequest(this);
+    if (!networkManager)
+      return false;
+    return networkManager.target().type() === SDK.Target.Type.Worker && !!networkManager.target().parentTarget() &&
+        networkManager.target().parentTarget().type() === SDK.Target.Type.ServiceWorker;
   }
 
   /**
@@ -545,6 +566,9 @@ SDK.NetworkRequest = class extends Common.Object {
   _parseNameAndPathFromURL() {
     if (this._parsedURL.isDataURL()) {
       this._name = this._parsedURL.dataURLDisplayName();
+      this._path = '';
+    } else if (this._parsedURL.isBlobURL()) {
+      this._name = this._parsedURL.url;
       this._path = '';
     } else if (this._parsedURL.isAboutBlank()) {
       this._name = this._parsedURL.url;
@@ -1066,9 +1090,12 @@ SDK.NetworkRequest = class extends Common.Object {
     if (!this._contentDataProvider)
       return SDK.NetworkManager.searchInRequest(this, query, caseSensitive, isRegex);
 
-    const content = await this.requestContent();
+    const contentData = await this.contentData();
+    let content = contentData.content;
     if (!content)
       return [];
+    if (contentData.encoded)
+      content = window.atob(content);
     return Common.ContentProvider.performSearchInContent(content, query, caseSensitive, isRegex);
   }
 
@@ -1138,19 +1165,16 @@ SDK.NetworkRequest = class extends Common.Object {
   /**
    * @param {!Element} image
    */
-  populateImageSource(image) {
-    /**
-     * @param {?string} content
-     * @this {SDK.NetworkRequest}
-     */
-    function onResourceContent(content) {
-      let imageSrc = Common.ContentProvider.contentAsDataURL(content, this._mimeType, true);
-      const cacheControl = this.responseHeaderValue('cache-control');
-      if (imageSrc === null && (!cacheControl || !cacheControl.includes('no-cache')))
+  async populateImageSource(image) {
+    const {content, encoded} = await this.contentData();
+    let imageSrc = Common.ContentProvider.contentAsDataURL(content, this._mimeType, encoded);
+    if (imageSrc === null && !this._failed) {
+      const cacheControl = this.responseHeaderValue('cache-control') || '';
+      if (!cacheControl.includes('no-cache'))
         imageSrc = this._url;
-      image.src = imageSrc;
     }
-    this.requestContent().then(onResourceContent.bind(this));
+    if (imageSrc !== null)
+      image.src = imageSrc;
   }
 
   /**
@@ -1237,6 +1261,24 @@ SDK.NetworkRequest = class extends Common.Object {
   setRequestIdForTest(requestId) {
     this._backendRequestId = requestId;
     this._requestId = requestId;
+  }
+
+  /**
+   * @return {?string}
+   */
+  charset() {
+    const contentTypeHeader = this.responseHeaderValue('content-type');
+    if (!contentTypeHeader)
+      return null;
+
+    const responseCharsets = contentTypeHeader.replace(/ /g, '')
+                                 .split(';')
+                                 .filter(parameter => parameter.toLowerCase().startsWith('charset='))
+                                 .map(parameter => parameter.slice('charset='.length));
+    if (responseCharsets.length)
+      return responseCharsets[0];
+
+    return null;
   }
 };
 

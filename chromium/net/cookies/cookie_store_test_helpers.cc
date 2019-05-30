@@ -68,17 +68,20 @@ DelayedCookieMonster::DelayedCookieMonster()
                                         nullptr /* channel_id_service */,
                                         nullptr /* netlog */)),
       did_run_(false),
-      result_(false) {}
+      result_(
+          CanonicalCookie::CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE) {}
 
 DelayedCookieMonster::~DelayedCookieMonster() = default;
 
-void DelayedCookieMonster::SetCookiesInternalCallback(bool result) {
+void DelayedCookieMonster::SetCookiesInternalCallback(
+    CanonicalCookie::CookieInclusionStatus result) {
   result_ = result;
   did_run_ = true;
 }
 
 void DelayedCookieMonster::GetCookieListWithOptionsInternalCallback(
-    const CookieList& cookie_list) {
+    const CookieList& cookie_list,
+    const CookieStatusList& excluded_cookies) {
   cookie_list_ = cookie_list;
   did_run_ = true;
 }
@@ -103,12 +106,12 @@ void DelayedCookieMonster::SetCookieWithOptionsAsync(
 
 void DelayedCookieMonster::SetCanonicalCookieAsync(
     std::unique_ptr<CanonicalCookie> cookie,
-    bool secure_source,
+    std::string source_scheme,
     bool modify_http_only,
     SetCookiesCallback callback) {
   did_run_ = false;
   cookie_monster_->SetCanonicalCookieAsync(
-      std::move(cookie), secure_source, modify_http_only,
+      std::move(cookie), std::move(source_scheme), modify_http_only,
       base::Bind(&DelayedCookieMonster::SetCookiesInternalCallback,
                  base::Unretained(this)));
   DCHECK_EQ(did_run_, true);
@@ -150,7 +153,7 @@ void DelayedCookieMonster::InvokeSetCookiesCallback(
 void DelayedCookieMonster::InvokeGetCookieListCallback(
     CookieMonster::GetCookieListCallback callback) {
   if (!callback.is_null())
-    std::move(callback).Run(cookie_list_);
+    std::move(callback).Run(cookie_list_, CookieStatusList());
 }
 
 bool DelayedCookieMonster::SetCookieWithOptions(
@@ -159,17 +162,6 @@ bool DelayedCookieMonster::SetCookieWithOptions(
     const CookieOptions& options) {
   ADD_FAILURE();
   return false;
-}
-
-void DelayedCookieMonster::DeleteCookie(const GURL& url,
-                                        const std::string& cookie_name) {
-  ADD_FAILURE();
-}
-
-void DelayedCookieMonster::DeleteCookieAsync(const GURL& url,
-                                             const std::string& cookie_name,
-                                             base::OnceClosure callback) {
-  ADD_FAILURE();
 }
 
 void DelayedCookieMonster::DeleteCanonicalCookieAsync(

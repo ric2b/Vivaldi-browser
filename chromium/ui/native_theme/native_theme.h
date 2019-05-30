@@ -14,6 +14,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/native_theme/caption_style.h"
 #include "ui/native_theme/native_theme_export.h"
 
 namespace gfx {
@@ -303,13 +304,11 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kColorId_ButtonDisabledColor,
     kColorId_ButtonHoverColor,
     kColorId_ButtonPressedShade,
-    kColorId_BlueButtonEnabledColor,
-    kColorId_BlueButtonDisabledColor,
-    kColorId_BlueButtonPressedColor,
-    kColorId_BlueButtonHoverColor,
-    kColorId_BlueButtonShadowColor,
     kColorId_ProminentButtonColor,
+    kColorId_ProminentButtonFocusedColor,
+    kColorId_ProminentButtonDisabledColor,
     kColorId_TextOnProminentButtonColor,
+    kColorId_ButtonBorderColor,
     // MenuItem
     kColorId_TouchableMenuItemLabelColor,
     kColorId_ActionableSubmenuVerticalSeparatorColor,
@@ -321,6 +320,13 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kColorId_MenuSeparatorColor,
     kColorId_MenuBackgroundColor,
     kColorId_MenuBorderColor,
+    kColorId_HighlightedMenuItemBackgroundColor,
+    kColorId_HighlightedMenuItemForegroundColor,
+    kColorId_FocusedHighlightedMenuItemBackgroundColor,
+    kColorId_MenuItemAlertBackgroundColorMax,  // Animation color at max
+                                               // intensity
+    kColorId_MenuItemAlertBackgroundColorMin,  // Animation color at min
+                                               // intensity
     // Label
     kColorId_LabelEnabledColor,
     kColorId_LabelDisabledColor,
@@ -368,26 +374,8 @@ class NATIVE_THEME_EXPORT NativeTheme {
     // Results Tables, such as the omnibox.
     kColorId_ResultsTableNormalBackground,
     kColorId_ResultsTableHoveredBackground,
-    kColorId_ResultsTableSelectedBackground,
     kColorId_ResultsTableNormalText,
-    kColorId_ResultsTableHoveredText,
-    kColorId_ResultsTableSelectedText,
-    kColorId_ResultsTableNormalDimmedText,
-    kColorId_ResultsTableHoveredDimmedText,
-    kColorId_ResultsTableSelectedDimmedText,
-    kColorId_ResultsTableNormalUrl,
-    kColorId_ResultsTableHoveredUrl,
-    kColorId_ResultsTableSelectedUrl,
-    // Positive text refers to good (often rendered in green) text, such as the
-    // stock value went up.
-    kColorId_ResultsTablePositiveText,
-    kColorId_ResultsTablePositiveHoveredText,
-    kColorId_ResultsTablePositiveSelectedText,
-    // Negative text refers to something alarming (often rendered in red), such
-    // as the stock value went down.
-    kColorId_ResultsTableNegativeText,
-    kColorId_ResultsTableNegativeHoveredText,
-    kColorId_ResultsTableNegativeSelectedText,
+    kColorId_ResultsTableDimmedText,
     // Colors for the material spinner (aka throbber).
     kColorId_ThrobberSpinningColor,
     kColorId_ThrobberWaitingColor,
@@ -396,6 +384,8 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kColorId_AlertSeverityLow,
     kColorId_AlertSeverityMedium,
     kColorId_AlertSeverityHigh,
+    // Colors for icons in secondary UI (content settings, help button, etc).
+    kColorId_DefaultIconColor,
     // TODO(benrg): move other hardcoded colors here.
 
     kColorId_NumColors,
@@ -425,6 +415,12 @@ class NATIVE_THEME_EXPORT NativeTheme {
   // Returns whether this NativeTheme uses higher-contrast colors, controlled by
   // system accessibility settings and the system theme.
   virtual bool UsesHighContrastColors() const = 0;
+
+  // Whether OS-level dark mode (as in macOS Mojave or Windows 10) is enabled.
+  virtual bool SystemDarkModeEnabled() const;
+
+  // Returns the system's caption style.
+  virtual CaptionStyle GetSystemCaptionStyle() const;
 
  protected:
   NativeTheme();

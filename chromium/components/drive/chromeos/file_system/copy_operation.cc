@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/task_runner_util.h"
 #include "components/drive/chromeos/file_cache.h"
 #include "components/drive/chromeos/file_system/create_file_operation.h"
@@ -178,9 +179,10 @@ FileError UpdateLocalStateForServerSideOperation(
   DCHECK(file_resource);
 
   std::string parent_resource_id;
-  if (!ConvertFileResourceToResourceEntry(
-          *file_resource, entry, &parent_resource_id) ||
-      parent_resource_id.empty())
+  ConvertFileResourceToResourceEntry(*file_resource, entry,
+                                     &parent_resource_id);
+
+  if (parent_resource_id.empty())
     return FILE_ERROR_NOT_A_FILE;
 
   std::string parent_local_id;

@@ -8,7 +8,6 @@
 #include "base/macros.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token_range.h"
 #include "third_party/blink/renderer/core/css/parser/css_tokenizer.h"
-#include "third_party/blink/renderer/platform/wtf/noncopyable.h"
 
 namespace blink {
 
@@ -122,10 +121,10 @@ class CORE_EXPORT CSSParserTokenStream {
   }
 
   // Get the index of the character in the original string to be consumed next.
-  size_t Offset() const { return offset_; }
+  wtf_size_t Offset() const { return offset_; }
 
   // Get the index of the starting character of the look-ahead token.
-  size_t LookAheadOffset() const {
+  wtf_size_t LookAheadOffset() const {
     DCHECK(HasLookAhead());
     return tokenizer_.PreviousOffset();
   }
@@ -191,7 +190,7 @@ class CORE_EXPORT CSSParserTokenStream {
   Vector<CSSParserToken, 32> buffer_;
   CSSTokenizer& tokenizer_;
   CSSParserToken next_;
-  size_t offset_ = 0;
+  wtf_size_t offset_ = 0;
   bool has_look_ahead_ = false;
   DISALLOW_COPY_AND_ASSIGN(CSSParserTokenStream);
 };

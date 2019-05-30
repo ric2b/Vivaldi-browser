@@ -11,15 +11,18 @@
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
+#include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
-#include "third_party/blink/renderer/platform/layout_test_support.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
+#include "third_party/blink/renderer/platform/web_test_support.h"
 
 namespace blink {
 
 SimTest::SimTest()
-    : web_view_client_(compositor_.layer_tree_view()),
-      web_frame_client_(*this) {
+    :  // SimCompositor overrides the LayerTreeViewDelegate to respond to
+       // BeginMainFrame(), which will update and paint the main frame of the
+       // WebViewImpl given to SetWebView().
+      web_widget_client_(&compositor_) {
   Document::SetThreadedParsingEnabledForTesting(false);
   // Use the mock theme to get more predictable code paths, this also avoids
   // the OS callbacks in ScrollAnimatorMac which can schedule frames
@@ -27,7 +30,7 @@ SimTest::SimTest()
   // updateScrollerStyleForNewRecommendedScrollerStyle which then does
   // FrameView::scrollbarStyleChanged and will adjust the scrollbar existence
   // in the middle of a test.
-  LayoutTestSupport::SetMockThemeEnabledForTest(true);
+  WebTestSupport::SetMockThemeEnabledForTest(true);
   ScrollbarTheme::SetMockScrollbarsEnabled(true);
   // Threaded animations are usually enabled for blink. However these tests use
   // synchronous compositing, which can not run threaded animations.
@@ -43,7 +46,7 @@ SimTest::~SimTest() {
   test::RunPendingTasks();
 
   Document::SetThreadedParsingEnabledForTesting(true);
-  LayoutTestSupport::SetMockThemeEnabledForTest(false);
+  WebTestSupport::SetMockThemeEnabledForTest(false);
   ScrollbarTheme::SetMockScrollbarsEnabled(false);
   content::TestBlinkWebUnitTestSupport::SetThreadedAnimationEnabled(true);
   WebCache::Clear();
@@ -52,17 +55,22 @@ SimTest::~SimTest() {
 void SimTest::SetUp() {
   Test::SetUp();
 
-  web_view_helper_.Initialize(&web_frame_client_, &web_view_client_);
-  compositor_.SetWebView(WebView());
+  web_view_helper_.Initialize(&web_frame_client_, &web_view_client_,
+                              &web_widget_client_);
+  compositor_.SetWebView(WebView(), *web_widget_client_.layer_tree_view(),
+                         web_view_client_, web_widget_client_);
   page_.SetPage(WebView().GetPage());
 }
 
-void SimTest::LoadURL(const String& url) {
-  WebURLRequest request{KURL(url)};
-  WebView().MainFrameImpl()->CommitNavigation(
-      request, WebFrameLoadType::kStandard, WebHistoryItem(), false,
-      base::UnguessableToken::Create(), nullptr /* navigation_params */,
-      nullptr /* extra_data */);
+void SimTest::LoadURL(const String& url_string) {
+  KURL url(url_string);
+  frame_test_helpers::LoadFrameDontWait(WebView().MainFrameImpl(), url);
+  if (DocumentLoader::WillLoadUrlAsEmpty(url) || url.ProtocolIsData()) {
+    // Empty documents and data urls are not using mocked out SimRequests,
+    // but instead load data directly.
+    frame_test_helpers::PumpPendingRequestsForFrameToLoad(
+        WebView().MainFrameImpl());
+  }
 }
 
 LocalDOMWindow& SimTest::Window() {
@@ -85,22 +93,24 @@ WebLocalFrameImpl& SimTest::MainFrame() {
   return *WebView().MainFrameImpl();
 }
 
-const SimWebViewClient& SimTest::WebViewClient() const {
+frame_test_helpers::TestWebViewClient& SimTest::WebViewClient() {
   return web_view_client_;
+}
+
+frame_test_helpers::TestWebWidgetClient& SimTest::WebWidgetClient() {
+  return web_widget_client_;
+}
+
+frame_test_helpers::TestWebFrameClient& SimTest::WebFrameClient() {
+  return web_frame_client_;
 }
 
 SimCompositor& SimTest::Compositor() {
   return compositor_;
 }
 
-void SimTest::SetEffectiveConnectionTypeForTesting(
-    WebEffectiveConnectionType effective_connection_type) {
-  web_frame_client_.SetEffectiveConnectionTypeForTesting(
-      effective_connection_type);
-}
-
-void SimTest::AddConsoleMessage(const String& message) {
-  console_messages_.push_back(message);
+Vector<String>& SimTest::ConsoleMessages() {
+  return web_frame_client_.ConsoleMessages();
 }
 
 }  // namespace blink

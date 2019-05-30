@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
@@ -22,8 +23,7 @@
 #include "media/base/channel_layout.h"
 #include "media/base/sample_rates.h"
 #include "media/webrtc/webrtc_switches.h"
-#include "third_party/webrtc/api/mediaconstraintsinterface.h"
-#include "third_party/webrtc/media/base/mediachannel.h"
+#include "third_party/webrtc/media/base/media_channel.h"
 
 namespace content {
 
@@ -41,19 +41,59 @@ bool ApmInAudioServiceEnabled() {
   return false;
 #endif
 }
+
+void LogAudioProcesingProperties(const AudioProcessingProperties& properties) {
+  auto aec_to_string =
+      [](AudioProcessingProperties::EchoCancellationType type) {
+        using AEC = AudioProcessingProperties::EchoCancellationType;
+        switch (type) {
+          case AEC::kEchoCancellationDisabled:
+            return "disabled";
+          case AEC::kEchoCancellationAec3:
+            return "aec3";
+          case AEC::kEchoCancellationSystem:
+            return "system";
+        }
+      };
+  auto bool_to_string = [](bool value) { return value ? "true" : "false"; };
+  auto str = base::StringPrintf(
+      "AudioProcessingProperties: "
+      "aec=%s, "
+      "disable_hw_ns=%s, "
+      "goog_audio_mirroring=%s, "
+      "goog_auto_gain_control=%s, "
+      "goog_experimental_echo_cancellation=%s, "
+      "goog_typing_noise_detection=%s, "
+      "goog_noise_suppression=%s, "
+      "goog_experimental_noise_suppression=%s, "
+      "goog_highpass_filter=%s, "
+      "goog_experimental_agc=%s, "
+      "hybrid_agc=%s",
+      aec_to_string(properties.echo_cancellation_type),
+      bool_to_string(properties.disable_hw_noise_suppression),
+      bool_to_string(properties.goog_audio_mirroring),
+      bool_to_string(properties.goog_auto_gain_control),
+      bool_to_string(properties.goog_experimental_echo_cancellation),
+      bool_to_string(properties.goog_typing_noise_detection),
+      bool_to_string(properties.goog_noise_suppression),
+      bool_to_string(properties.goog_experimental_noise_suppression),
+      bool_to_string(properties.goog_highpass_filter),
+      bool_to_string(properties.goog_experimental_auto_gain_control),
+      bool_to_string(base::FeatureList::IsEnabled(features::kWebRtcHybridAgc)));
+
+  WebRtcLogMessage(str);
+}
 }  // namespace
 
 ProcessedLocalAudioSource::ProcessedLocalAudioSource(
     int consumer_render_frame_id,
-    const MediaStreamDevice& device,
-    bool hotword_enabled,
+    const blink::MediaStreamDevice& device,
     bool disable_local_echo,
     const AudioProcessingProperties& audio_processing_properties,
     const ConstraintsCallback& started_callback,
     PeerConnectionDependencyFactory* factory)
-    : MediaStreamAudioSource(true /* is_local_source */,
-                             hotword_enabled,
-                             disable_local_echo),
+    : blink::MediaStreamAudioSource(true /* is_local_source */,
+                                    disable_local_echo),
       consumer_render_frame_id_(consumer_render_frame_id),
       pc_factory_(factory),
       audio_processing_properties_(audio_processing_properties),
@@ -73,7 +113,7 @@ ProcessedLocalAudioSource::~ProcessedLocalAudioSource() {
 
 // static
 ProcessedLocalAudioSource* ProcessedLocalAudioSource::From(
-    MediaStreamAudioSource* source) {
+    blink::MediaStreamAudioSource* source) {
   if (source &&
       source->GetClassIdentifier() == kProcessedLocalAudioSourceIdentifier)
     return static_cast<ProcessedLocalAudioSource*>(source);
@@ -99,15 +139,19 @@ bool ProcessedLocalAudioSource::EnsureSourceIsStarted() {
     return false;
   }
 
-  WebRtcLogMessage(base::StringPrintf(
+  std::string str = base::StringPrintf(
       "ProcessedLocalAudioSource::EnsureSourceIsStarted. render_frame_id=%d"
       ", channel_layout=%d, sample_rate=%d, buffer_size=%d"
       ", session_id=%d, effects=%d. ",
       consumer_render_frame_id_, device().input.channel_layout(),
       device().input.sample_rate(), device().input.frames_per_buffer(),
-      device().session_id, device().input.effects()));
+      device().session_id, device().input.effects());
+  WebRtcLogMessage(str);
+  DVLOG(1) << str;
 
-  MediaStreamDevice modified_device(device());
+  LogAudioProcesingProperties(audio_processing_properties_);
+
+  blink::MediaStreamDevice modified_device(device());
   bool device_is_modified = false;
 
   // Disable system echo cancellation if specified by
@@ -177,7 +221,8 @@ bool ProcessedLocalAudioSource::EnsureSourceIsStarted() {
   // Verify that the reported input channel configuration is supported.
   if (channel_layout != media::CHANNEL_LAYOUT_MONO &&
       channel_layout != media::CHANNEL_LAYOUT_STEREO &&
-      channel_layout != media::CHANNEL_LAYOUT_STEREO_AND_KEYBOARD_MIC) {
+      channel_layout != media::CHANNEL_LAYOUT_STEREO_AND_KEYBOARD_MIC &&
+      channel_layout != media::CHANNEL_LAYOUT_DISCRETE) {
     WebRtcLogMessage(base::StringPrintf(
         "ProcessedLocalAudioSource::EnsureSourceIsStarted() fails "
         " because the input channel layout (%d) is not supported.",
@@ -192,8 +237,8 @@ bool ProcessedLocalAudioSource::EnsureSourceIsStarted() {
     UMA_HISTOGRAM_ENUMERATION(
         "WebRTC.AudioInputSampleRate", asr, media::kAudioSampleRateMax + 1);
   } else {
-    UMA_HISTOGRAM_COUNTS("WebRTC.AudioInputSampleRateUnexpected",
-                         device().input.sample_rate());
+    UMA_HISTOGRAM_COUNTS_1M("WebRTC.AudioInputSampleRateUnexpected",
+                            device().input.sample_rate());
   }
 
   // Determine the audio format required of the AudioCapturerSource. Then, pass
@@ -203,6 +248,11 @@ bool ProcessedLocalAudioSource::EnsureSourceIsStarted() {
                                 channel_layout, device().input.sample_rate(),
                                 device().input.sample_rate() / 100);
   params.set_effects(device().input.effects());
+  if (channel_layout == media::CHANNEL_LAYOUT_DISCRETE) {
+    DCHECK_LE(device().input.channels(), 2);
+    params.set_channels_for_discrete(device().input.channels());
+  }
+  DVLOG(1) << params.AsHumanReadableString();
   DCHECK(params.IsValid());
   media::AudioSourceParameters source_params(device().session_id);
   const bool use_remote_apm =
@@ -217,7 +267,18 @@ bool ProcessedLocalAudioSource::EnsureSourceIsStarted() {
     source_params.processing = media::AudioSourceParameters::ProcessingConfig(
         rtc_audio_device->GetAudioProcessingId(),
         audio_processing_properties_.ToAudioProcessingSettings());
+    if (source_params.processing->settings.automatic_gain_control !=
+            media::AutomaticGainControlType::kDisabled &&
+        base::FeatureList::IsEnabled(features::kWebRtcHybridAgc)) {
+      source_params.processing->settings.automatic_gain_control =
+          media::AutomaticGainControlType::kHybridExperimental;
+    }
+    WebRtcLogMessage(base::StringPrintf(
+        "Using APM in audio process; settings: %s",
+        source_params.processing->settings.ToString().c_str()));
+
   } else {
+    WebRtcLogMessage("Using APM in renderer process.");
     audio_processor_ = new rtc::RefCountedObject<MediaStreamAudioProcessor>(
         audio_processing_properties_, rtc_audio_device);
     params.set_frames_per_buffer(GetBufferSize(device().input.sample_rate()));
@@ -292,7 +353,7 @@ int ProcessedLocalAudioSource::MaxVolume() const {
 }
 
 void ProcessedLocalAudioSource::OnCaptureStarted() {
-  started_callback_.Run(this, MEDIA_DEVICE_OK, "");
+  started_callback_.Run(this, blink::MEDIA_DEVICE_OK, "");
 }
 
 void ProcessedLocalAudioSource::Capture(const media::AudioBus* audio_bus,
@@ -352,7 +413,7 @@ void ProcessedLocalAudioSource::CaptureUsingProcessor(
 
   // TODO(miu): Plumbing is needed to determine the actual capture timestamp
   // of the audio, instead of just snapshotting TimeTicks::Now(), for proper
-  // audio/video sync.  http://crbug.com/335335
+  // audio/video sync.  https://crbug.com/335335
   const base::TimeTicks reference_clock_snapshot = base::TimeTicks::Now();
   TRACE_EVENT2("audio", "ProcessedLocalAudioSource::Capture", "now (ms)",
                (reference_clock_snapshot - base::TimeTicks()).InMillisecondsF(),
@@ -417,7 +478,7 @@ int ProcessedLocalAudioSource::GetBufferSize(int sample_rate) const {
   DCHECK(GetTaskRunner()->BelongsToCurrentThread());
 #if defined(OS_ANDROID)
   // TODO(henrika): Re-evaluate whether to use same logic as other platforms.
-  // http://crbug.com/638081
+  // https://crbug.com/638081
   return (2 * sample_rate / 100);
 #endif
 
@@ -427,7 +488,7 @@ int ProcessedLocalAudioSource::GetBufferSize(int sample_rate) const {
 
   // If audio processing is off and the native hardware buffer size was
   // provided, use it. It can be harmful, in terms of CPU/power consumption, to
-  // use smaller buffer sizes than the native size (http://crbug.com/362261).
+  // use smaller buffer sizes than the native size (https://crbug.com/362261).
   if (int hardware_buffer_size = device().input.frames_per_buffer())
     return hardware_buffer_size;
 
@@ -435,7 +496,7 @@ int ProcessedLocalAudioSource::GetBufferSize(int sample_rate) const {
   // fall-back.
   //
   // TODO(miu): Identify where/why the buffer size might be missing, fix the
-  // code, and then require it here. http://crbug.com/638081
+  // code, and then require it here. https://crbug.com/638081
   return (sample_rate / 100);
 }
 

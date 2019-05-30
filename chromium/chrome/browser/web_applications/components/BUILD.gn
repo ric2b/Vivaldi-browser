@@ -4,12 +4,22 @@
 
 source_set("components") {
   sources = [
+    "app_registrar.h",
+    "install_finalizer.h",
+    "install_manager.h",
     "pending_app_manager.cc",
     "pending_app_manager.h",
+    "web_app_audio_focus_id_map.cc",
+    "web_app_audio_focus_id_map.h",
+    "web_app_constants.h",
+    "web_app_data_retriever.cc",
+    "web_app_data_retriever.h",
     "web_app_helpers.cc",
     "web_app_helpers.h",
     "web_app_icon_generator.cc",
     "web_app_icon_generator.h",
+    "web_app_install_utils.cc",
+    "web_app_install_utils.h",
     "web_app_shortcut.cc",
     "web_app_shortcut.h",
     "web_app_shortcut_chromeos.cc",
@@ -17,6 +27,8 @@ source_set("components") {
     "web_app_shortcut_mac.mm",
     "web_app_shortcut_win.cc",
     "web_app_shortcut_win.h",
+    "web_app_tab_helper_base.cc",
+    "web_app_tab_helper_base.h",
 
     # TODO(nigeltao): move these two files from
     # //chrome/browser/web_applications/components to a stand-alone
@@ -69,9 +81,12 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
+    "pending_app_manager_unittest.cc",
+    "web_app_data_retriever_unittest.cc",
     "web_app_helpers_unittest.cc",
     "web_app_icon_downloader_unittest.cc",
     "web_app_icon_generator_unittest.cc",
+    "web_app_install_utils_unittest.cc",
     "web_app_shortcut_mac_unittest.mm",
     "web_app_shortcut_unittest.cc",
   ]
@@ -83,6 +98,7 @@ source_set("unit_tests") {
 
   deps = [
     ":components",
+    ":test_support",
     "//base/test:test_support",
     "//chrome/app/theme:theme_resources",
     "//chrome/browser/web_applications:web_app_group",

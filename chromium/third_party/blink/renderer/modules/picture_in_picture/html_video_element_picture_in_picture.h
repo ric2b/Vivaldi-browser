@@ -7,25 +7,18 @@
 
 #include "third_party/blink/renderer/core/dom/qualified_name.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
-#include "third_party/blink/renderer/platform/heap/handle.h"
 
 namespace blink {
 
 class HTMLVideoElement;
 class ScriptPromise;
 class ScriptState;
-class PictureInPictureControl;
-struct PictureInPictureControlInfo;
 
-class MODULES_EXPORT HTMLVideoElementPictureInPicture {
+class HTMLVideoElementPictureInPicture {
   STATIC_ONLY(HTMLVideoElementPictureInPicture);
 
  public:
   static ScriptPromise requestPictureInPicture(ScriptState*, HTMLVideoElement&);
-
-  static void setPictureInPictureControls(
-      HTMLVideoElement&,
-      const HeapVector<PictureInPictureControl>&);
 
   static bool FastHasAttribute(const QualifiedName&, const HTMLVideoElement&);
 
@@ -33,13 +26,10 @@ class MODULES_EXPORT HTMLVideoElementPictureInPicture {
                                   HTMLVideoElement&,
                                   bool);
 
-  DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(enterpictureinpicture);
-  DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(leavepictureinpicture);
-  DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(pictureinpicturecontrolclick);
-
-  static std::vector<PictureInPictureControlInfo>
-  ToPictureInPictureControlInfoVector(
-      const HeapVector<PictureInPictureControl>&);
+  DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(enterpictureinpicture,
+                                         kEnterpictureinpicture)
+  DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(leavepictureinpicture,
+                                         kLeavepictureinpicture)
 };
 
 }  // namespace blink

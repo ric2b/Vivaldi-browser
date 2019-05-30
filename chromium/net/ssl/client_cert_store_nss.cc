@@ -153,7 +153,8 @@ ClientCertIdentityList ClientCertStoreNSS::GetAndFilterCertsOnWorkerThread(
   // hooks (such as smart card UI). To ensure threads are not starved or
   // deadlocked, the base::ScopedBlockingCall below increments the thread pool
   // capacity if this method takes too much time to run.
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   ClientCertIdentityList selected_identities;
   GetPlatformCertsOnWorkerThread(std::move(password_delegate), CertFilter(),
                                  &selected_identities);
@@ -169,9 +170,9 @@ void ClientCertStoreNSS::GetPlatformCertsOnWorkerThread(
     ClientCertIdentityList* identities) {
   crypto::EnsureNSSInit();
 
-  CERTCertList* found_certs =
-      CERT_FindUserCertsByUsage(CERT_GetDefaultCertDB(), certUsageSSLClient,
-                                PR_FALSE, PR_FALSE, password_delegate.get());
+  CERTCertList* found_certs = CERT_FindUserCertsByUsage(
+      CERT_GetDefaultCertDB(), certUsageSSLClient, PR_FALSE, PR_FALSE,
+      password_delegate ? password_delegate->wincx() : nullptr);
   if (!found_certs) {
     DVLOG(2) << "No client certs found.";
     return;

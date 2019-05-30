@@ -34,13 +34,16 @@ import org.chromium.chrome.browser.payments.ui.PaymentRequestUI.PaymentRequestOb
 import org.chromium.chrome.browser.widget.prefeditor.EditorObserverForTest;
 import org.chromium.chrome.browser.widget.prefeditor.EditorTextField;
 import org.chromium.chrome.test.ChromeActivityTestRule;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.DOMUtils;
+import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.payments.mojom.PaymentDetailsModifier;
 import org.chromium.payments.mojom.PaymentItem;
 import org.chromium.payments.mojom.PaymentMethodData;
+import org.chromium.ui.modaldialog.ModalDialogProperties;
+import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -110,7 +113,9 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
     final CallbackHelper mBillingAddressChangeProcessed;
     final CallbackHelper mShowFailed;
     final CallbackHelper mCanMakePaymentQueryResponded;
+    final CallbackHelper mHasEnrolledInstrumentQueryResponded;
     final CallbackHelper mExpirationMonthChange;
+    final CallbackHelper mPaymentResponseReady;
     PaymentRequestUI mUI;
 
     private final AtomicReference<WebContents> mWebContentsRef;
@@ -137,8 +142,10 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
         mUnableToAbort = new CallbackHelper();
         mBillingAddressChangeProcessed = new CallbackHelper();
         mExpirationMonthChange = new CallbackHelper();
+        mPaymentResponseReady = new CallbackHelper();
         mShowFailed = new CallbackHelper();
         mCanMakePaymentQueryResponded = new CallbackHelper();
+        mHasEnrolledInstrumentQueryResponded = new CallbackHelper();
         mWebContentsRef = new AtomicReference<>();
         mTestFilePath = testFileName.startsWith("data:")
                 ? testFileName
@@ -212,8 +219,14 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
     public CallbackHelper getCanMakePaymentQueryResponded() {
         return mCanMakePaymentQueryResponded;
     }
+    public CallbackHelper getHasEnrolledInstrumentQueryResponded() {
+        return mHasEnrolledInstrumentQueryResponded;
+    }
     public CallbackHelper getExpirationMonthChange() {
         return mExpirationMonthChange;
+    }
+    public CallbackHelper getPaymentResponseReady() {
+        return mPaymentResponseReady;
     }
     public PaymentRequestUI getPaymentRequestUI() {
         return mUI;
@@ -255,6 +268,14 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
         mUI = helper.getTarget();
     }
 
+    protected void retryPaymentRequest(String validationErrors, CallbackHelper helper)
+            throws InterruptedException, TimeoutException {
+        int callCount = helper.getCallCount();
+        JavaScriptUtils.executeJavaScriptAndWaitForResult(
+                mWebContentsRef.get(), "retry(" + validationErrors + ");");
+        helper.waitForCallback(callCount);
+    }
+
     /** Clicks on an HTML node. */
     protected void clickNodeAndWait(String nodeId, CallbackHelper helper)
             throws InterruptedException, TimeoutException {
@@ -269,6 +290,17 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(
                 (Runnable) () -> mUI.getDialogForTest().findViewById(resourceId).performClick());
+        helper.waitForCallback(callCount);
+    }
+
+    /** Clicks on an element in the "Order summary" section of the payments UI. */
+    protected void clickInOrderSummaryAndWait(CallbackHelper helper)
+            throws InterruptedException, TimeoutException {
+        int callCount = helper.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking((Runnable) ()
+                                                  -> mUI.getOrderSummarySectionForTest()
+                                                             .findViewById(R.id.payments_section)
+                                                             .performClick());
         helper.waitForCallback(callCount);
     }
 
@@ -336,9 +368,10 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
     protected void clickCardUnmaskButtonAndWait(final int dialogButtonId, CallbackHelper helper)
             throws InterruptedException, TimeoutException {
         int callCount = helper.getCallCount();
-        ThreadUtils.runOnUiThreadBlocking(
-                (Runnable) () -> mCardUnmaskPrompt.getDialogForTest().getButton(
-                        dialogButtonId).performClick());
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            PropertyModel model = mCardUnmaskPrompt.getDialogForTest();
+            model.get(ModalDialogProperties.CONTROLLER).onClick(model, dialogButtonId);
+        });
         helper.waitForCallback(callCount);
     }
 
@@ -381,6 +414,15 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
     protected String getOrderSummaryTotal() throws ExecutionException {
         return ThreadUtils.runOnUiThreadBlocking(
                 () -> mUI.getOrderSummaryTotalTextViewForTest().getText().toString());
+    }
+
+    /** Returns the amount text corresponding to the line item at the specified |index|. */
+    protected String getLineItemAmount(int index) throws ExecutionException {
+        return ThreadUtils.runOnUiThreadBlocking(() -> mUI.getOrderSummarySectionForTest()
+                .getLineItemAmountForTest(index)
+                .getText()
+                .toString()
+                .trim());
     }
 
     /**
@@ -664,9 +706,9 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
             CallbackHelper helper) throws InterruptedException, TimeoutException {
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(() -> {
-            EditText editText =
-                    ((EditText) mCardUnmaskPrompt.getDialogForTest().getView().findViewById(
-                            resourceId));
+            EditText editText = mCardUnmaskPrompt.getDialogForTest()
+                                        .get(ModalDialogProperties.CUSTOM_VIEW)
+                                        .findViewById(resourceId);
             editText.setText(input);
             editText.getOnFocusChangeListener().onFocusChange(null, false);
         });
@@ -681,9 +723,9 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(() -> {
             for (int i = 0; i < resourceIds.length; ++i) {
-                EditText editText =
-                        ((EditText) mCardUnmaskPrompt.getDialogForTest().getView().findViewById(
-                                resourceIds[i]));
+                EditText editText = mCardUnmaskPrompt.getDialogForTest()
+                                            .get(ModalDialogProperties.CUSTOM_VIEW)
+                                            .findViewById(resourceIds[i]);
                 editText.setText(values[i]);
                 editText.getOnFocusChangeListener().onFocusChange(null, false);
             }
@@ -696,9 +738,9 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
             CallbackHelper helper) throws InterruptedException, TimeoutException {
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(() -> {
-            EditText editText =
-                    (EditText) mCardUnmaskPrompt.getDialogForTest().getView().findViewById(
-                            resourceId);
+            EditText editText = mCardUnmaskPrompt.getDialogForTest()
+                                        .get(ModalDialogProperties.CUSTOM_VIEW)
+                                        .findViewById(resourceId);
             editText.requestFocus();
             editText.onEditorAction(EditorInfo.IME_ACTION_DONE);
         });
@@ -810,8 +852,9 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
     /* package */ View getCardUnmaskView() throws Throwable {
         return ThreadUtils.runOnUiThreadBlocking(
                 ()
-                        -> mCardUnmaskPrompt.getDialogForTest().getView().findViewById(
-                                R.id.autofill_card_unmask_prompt));
+                        -> mCardUnmaskPrompt.getDialogForTest()
+                                   .get(ModalDialogProperties.CUSTOM_VIEW)
+                                   .findViewById(R.id.autofill_card_unmask_prompt));
     }
 
     @Override
@@ -893,6 +936,12 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
     }
 
     @Override
+    public void onPaymentRequestServiceHasEnrolledInstrumentQueryResponded() {
+        ThreadUtils.assertOnUiThread();
+        mHasEnrolledInstrumentQueryResponded.notifyCalled();
+    }
+
+    @Override
     public void onCardUnmaskPromptReadyForInput(CardUnmaskPrompt prompt) {
         ThreadUtils.assertOnUiThread();
         mReadyForUnmaskInput.notifyCalled(prompt);
@@ -909,6 +958,12 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
     public void onCardUnmaskPromptValidationDone(CardUnmaskPrompt prompt) {
         ThreadUtils.assertOnUiThread();
         mUnmaskValidationDone.notifyCalled(prompt);
+    }
+
+    @Override
+    public void onPaymentResponseReady() {
+        ThreadUtils.assertOnUiThread();
+        mPaymentResponseReady.notifyCalled();
     }
 
     /**

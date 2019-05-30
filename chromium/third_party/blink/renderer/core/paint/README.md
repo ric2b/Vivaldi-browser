@@ -26,7 +26,7 @@ are treated in different ways during painting:
     *   Stacking contexts: elements with non-auto z-indices or other properties
         that affect stacking e.g. transform, opacity, blend-mode.
 
-    *   Replaced normal-flow stacking elements: [replaced elements](https://html.spec.whatwg.org/multipage/rendering.html#replaced-elements)
+    *   Replaced normal-flow stacking elements: [replaced elements](https://html.spec.whatwg.org/C/#replaced-elements)
         that do not have non-auto z-index but are stacking contexts for
         elements below them. Right now the only example is SVG <foreignObject>.
         The difference between these elements and regular stacking contexts is
@@ -98,11 +98,20 @@ are treated in different ways during painting:
     container.
 
 *   Paint invalidation container: the nearest object on the compositing
-    container chain which is composited. Slimming paint V2 doesn't have this
+    container chain which is composited. CompositeAfterPaint doesn't have this
     concept.
 
 *   Visual rect: the bounding box of all pixels that will be painted by a
-    display item client.
+    [display item client](../../platform/graphics/paint/README.md#display-items).
+    It's in the space of the containing transform property node (see [Building
+    paint property trees](#building-paint-property-trees)).
+
+*   Isolation nodes/boundary: In certain situations, it is possible to put in
+    place a barrier that isolates a subtree from being affected by its
+    ancestors. This barrier is called an isolation boundary and is implemented
+    in the property trees as isolation nodes that serve as roots for any
+    descendant property nodes. Currently, the `contain: paint` css property
+    establishes an isolation boundary.
 
 ## Overview
 
@@ -116,9 +125,9 @@ At the time of writing, there are three operation modes that are switched by
 
 ### SlimmingPaintV175 (a.k.a. SPv1.75)
 
-This mode is for incrementally shipping completed features from SPv2. SPv1.75
+This mode is for incrementally shipping completed features from CAP. SPv1.75
 reuses layerization from SPv1, but will cherrypick property-tree-based paint
-from SPv2. Meta display items are abandoned in favor of property tree. Each
+from CAP. Meta display items are abandoned in favor of property tree. Each
 drawable GraphicsLayer's layer state will be computed by the property tree
 builder. During paint, each display item will be associated with a property
 tree state. At the end of paint, meta display items will be generated from
@@ -242,10 +251,10 @@ lifecycle update.
 
 ### BlinkGenPropertyTrees
 
-This mode is for incrementally shipping completed features from SPv2. It is
+This mode is for incrementally shipping completed features from CAP. It is
 based on SPv1.75 and starts sending a layer list and property trees directly to
 the compositor. BlinkGenPropertyTrees still uses the GraphicsLayers from SPv1.75
-and plugs them in as foreign layers to the SPv2 compositor
+and plugs them in as foreign layers to the CAP compositor
 (PaintArtifactCompositor).
 
 ```
@@ -299,7 +308,7 @@ from layout
   v
 ```
 
-### SlimmingPaintV2 (a.k.a. SPv2)
+### CompositeAfterPaint (a.k.a. CAP)
 
 This is a new mode under development. In this mode, layerization runs after
 pre-paint and paint, and meta display items are abandoned in favor of property
@@ -361,141 +370,23 @@ from layout
 ### Comparison of the three modes
 
 ```
-                                 | SPv175             | BlinkGenPropertyTrees | SPv2
+                                 | SPv175             | BlinkGenPropertyTrees | CompositeAfterPaint
 ---------------------------------+--------------------+-----------------------+-------
 REF::BlinkGenPropertyTreesEnabled| false              | true                  | false
-REF::SPv2Enabled                 | false              | false                 | true
+REF::CompositeAfterPaintEnabled  | false              | false                 | true
 Layerization                     | PLC/CLM            | PLC/CLM               | PAC
 cc property tree builder         | on                 | off                   | off
 ```
 
-## PaintInvalidation (Deprecated by [PrePaint](#PrePaint))
-
-Paint invalidation marks anything that need to be painted differently from the
-original cached painting.
-
-Paint invalidation is a document cycle stage after compositing update and before
-paint. During the previous stages, objects are marked for needing paint
-invalidation checking if needed by style change, layout change, compositing
-change, etc. In paint invalidation stage, we traverse the layout tree in
-pre-order, crossing frame boundaries, for marked subtrees and objects and send
-the following information to `GraphicsLayer`s and `PaintController`s:
-
-*   invalidated display item clients: must invalidate all display item clients
-    that will generate different display items.
-
-*   paint invalidation rects: must cover all areas that will generate different
-    pixels. They are generated based on visual rects of invalidated display item
-    clients.
-
-### `PaintInvalidationState`
-
-`PaintInvalidationState` is an optimization used during the paint invalidation
-phase. Before the paint invalidation tree walk, a root `PaintInvalidationState`
-is created for the root `LayoutView`. During the tree walk, one
-`PaintInvalidationState` is created for each visited object based on the
-`PaintInvalidationState` passed from the parent object. It tracks the following
-information to provide O(1) complexity access to them if possible:
-
-*   Paint invalidation container: Since as indicated by the definitions in
-    [Glossaries](#other-glossaries), the paint invalidation container for
-    stacked objects can differ from normal objects, we have to track both
-    separately. Here is an example:
-
-        <div style="overflow: scroll">
-            <div id=A style="position: absolute"></div>
-            <div id=B></div>
-        </div>
-
-    If the scroller is composited (for high-DPI screens for example), it is the
-    paint invalidation container for div B, but not A.
-
-*   Paint offset and clip rect: if possible, `PaintInvalidationState`
-    accumulates paint offsets and overflow clipping rects from the paint
-    invalidation container to provide O(1) complexity to map a point or a rect
-    in current object's local space to paint invalidation container's space.
-    Because locations of objects are determined by their containing blocks, and
-    the containing block for absolute-position objects differs from
-    non-absolute, we track paint offsets and overflow clipping rects for
-    absolute-position objects separately.
-
-In cases that accurate accumulation of paint offsets and clipping rects is
-impossible, we will fall back to slow-path using
-`LayoutObject::localToAncestorPoint()` or
-`LayoutObject::mapToVisualRectInAncestorSpace()`. This includes the following
-cases:
-
-*   An object has transform related property, is multi-column or has flipped
-    blocks writing-mode, causing we can't simply accumulate paint offset for
-    mapping a local rect to paint invalidation container;
-
-*   An object has has filter (including filter induced by reflection), which
-    needs to expand visual rect for descendants, because currently we don't
-    include and filter extents into visual overflow;
-
-*   For a fixed-position object we calculate its offset using
-    `LayoutObject::localToAncestorPoint()`, but map for its descendants in
-    fast-path if no other things prevent us from doing this;
-
-*   Because we track paint offset from the normal paint invalidation container
-    only, if we are going to use
-    `m_paintInvalidationContainerForStackedContents` and it's different from the
-    normal paint invalidation container, we have to force slow-path because the
-    accumulated paint offset is not usable;
-
-*   We also stop to track paint offset and clipping rect for absolute-position
-    objects when `m_paintInvalidationContainerForStackedContents` becomes
-    different from `m_paintInvalidationContainer`.
-
-### Paint invalidation of texts
-
-Texts are painted by `InlineTextBoxPainter` using `InlineTextBox` as display
-item client. Text backgrounds and masks are painted by `InlineTextFlowPainter`
-using `InlineFlowBox` as display item client. We should invalidate these display
-item clients when their painting will change.
-
-`LayoutInline`s and `LayoutText`s are marked for full paint invalidation if
-needed when new style is set on them. During paint invalidation, we invalidate
-the `InlineFlowBox`s directly contained by the `LayoutInline` in
-`LayoutInline::InvalidateDisplayItemClients()` and `InlineTextBox`s contained by
-the `LayoutText` in `LayoutText::InvalidateDisplayItemClients()`. We don't need
-to traverse into the subtree of `InlineFlowBox`s in
-`LayoutInline::InvalidateDisplayItemClients()` because the descendant
-`InlineFlowBox`s and `InlineTextBox`s will be handled by their owning
-`LayoutInline`s and `LayoutText`s, respectively, when changed style is propagated.
-
-### Specialty of `::first-line`
-
-`::first-line` pseudo style dynamically applies to all `InlineBox`'s in the
-first line in the block having `::first-line` style. The actual applied style is
-computed from the `::first-line` style and other applicable styles.
-
-If the first line contains any `LayoutInline`, we compute the style from the
-`::first-line` style and the style of the `LayoutInline` and apply the computed
-style to the first line part of the `LayoutInline`. In Blink's style
-implementation, the combined first line style of `LayoutInline` is identified
-with `FIRST_LINE_INHERITED` pseudo ID.
-
-The normal paint invalidation of texts doesn't work for first line because
-*   `ComputedStyle::VisualInvalidationDiff()` can't detect first line style
-    changes;
-*   The normal paint invalidation is based on whole LayoutObject's, not aware of
-    the first line.
-
-We have a special path for first line style change: the style system informs the
-layout system when the computed first-line style changes through
-`LayoutObject::FirstLineStyleDidChange()`. When this happens, we invalidate all
-`InlineBox`es in the first line.
-
-## PrePaint (Slimming paint invalidation/v2 only)
-[`PrePaintTreeWalk`](PrePaintTreeWalk.h)
+## PrePaint
+[`PrePaintTreeWalk`](pre_paint_tree_walk.h)
 
 During `InPrePaint` document lifecycle state, this class is called to walk the
 whole layout tree, beginning from the root FrameView, across frame boundaries.
 We do the following during the tree walk:
 
 ### Building paint property trees
-[`PaintPropertyTreeBuilder`](PaintPropertyTreeBuilder.h)
+[`PaintPropertyTreeBuilder`](paint_property_tree_builder.h)
 
 This class is responsible for building property trees
 (see [the platform paint README file](../../platform/graphics/paint/README.md)).
@@ -509,6 +400,92 @@ field points at the `TransformPaintPropertyNode` representing that transform.
 The `NeedsPaintPropertyUpdate`, `SubtreeNeedsPaintPropertyUpdate` and
 `DescendantNeedsPaintPropertyUpdate` dirty bits on `LayoutObject` control how
 much of the layout tree is traversed during each `PrePaintTreeWalk`.
+
+Additionally, some dirty bits are cleared at an isolation boundary. For example
+if the paint property tree topology has changed by adding or removing nodes
+for an element, we typically force a subtree walk for all descendants since
+the descendant nodes may now refer to new parent nodes. However, at an
+isolation boundary, we can reason that none of the descendants of an isolation
+element would be affected, since the highest node that the paint property nodes
+of an isolation element's subtree can reference are the isolation
+nodes established at this element itself.
+
+Implementation note: the isolation boundary is achieved using alias nodes, which
+are nodes that are put in place on an isolated element for clip, transform, and
+effect trees. These nodes do not themselves contribute to any painted output,
+but serve as parents to the subtree nodes. The alias nodes and isolation nodes
+are synonymous and are used interchangeably. Also note that these nodes are
+placed as children of the regular nodes of the element. This means that the
+element itself is not isolated against ancestor mutations; it only isolates the
+element's subtree.
+
+Example tree:
++----------------------+
+| 1. Root LayoutObject |
++----------------------+
+      |       |
+      |       +-----------------+
+      |                         |
+      v                         v
++-----------------+       +-----------------+
+| 2. LayoutObject |       | 3. LayoutObject |
++-----------------+       +-----------------+
+      |                         |
+      v                         |
++-----------------+             |
+| 4. LayoutObject |             |
++-----------------+             |
+                                |
+      +-------------------------+
+      |                         |
++-----------------+       +-----------------+
+| 5. LayoutObject |       | 6. LayoutObject |
++-----------------+       +-----------------+
+      |   |
+      |   +---------------------+
+      |                         |
+      v                         v
++-----------------+       +-----------------+
+| 7. LayoutObject |       | 8. LayoutObject |
++-----------------+       +-----------------+
+
+Suppose that element 3's style changes to include a transform (e.g.
+"transform: translateX(10px);").
+
+Typically, here is the order of the walk (depth first) and updates:
+*    Root element 1 is visited since some descendant needs updates
+*    Element 2 is visited since it is one of the descendants, but it doesn't
+     need updates.
+*    Element 4 is skipped since the above step didn't need to recurse.
+*    Element 3 is visited since it's a descendant of the root element, and its
+     property trees are updated to include a new transform. This causes a flag
+     to be flipped that all subtree nodes need an update.
+*    Elements are then visited in the depth order: 5, 7, 8, 6. Elements 5 and 6
+     reparent their transform nodes to point to the transform node of element 3.
+     Elements 7 and 8 are visited and updated but no changes occur.
+
+Now suppose that element 5 has "contain: paint" style, which establishes an
+isolation boundary. The walk changes in the following way:
+
+*    Root element 1 is visited since some descendant needs updates
+*    Element 2 is visited since it is one of the descendants, but it doesn't
+     need updates.
+*    Element 4 is skipped since the above step didn't need to recurse.
+*    Element 3 is visited since it's a descendant of the root element, and its
+     property trees are updated to include a new transform. This causes a flag
+     to be flipped that all subtree nodes need an update.
+*    Element 5 is visited and updated by reparenting the transform nodes.
+     However, now the element is an isolation boundary so elements 7 and 8 are
+     not visited (i.e. the forced subtree update flag is ignored).
+*    Element 6 is visited as before and is updated to reparent the transform
+     node.
+
+Note that there are subtleties when deciding whether we can skip the subtree
+walk. Specifically, not all subtree walks can be stopped at an isolation
+boundary. For more information, see
+[`PaintPropertyTreeBuilder`](paint_property_tree_builder.h) and its use of
+IsolationPiercing vs IsolationBlocked subtree update reasons.
+
 
 #### Fragments
 
@@ -527,18 +504,88 @@ Each `FragmentData` receives its own `ClipPaintPropertyNode`. They
 also store a unique `PaintOffset, `PaginationOffset and
 `LocalBordreBoxProperties` object.
 
-See [`LayoutMultiColumnFlowThread.h`](../layout/LayoutMultiColumnFlowThread.h)
+See [`LayoutMultiColumnFlowThread.h`](../layout/layout_multi_column_flow_thread.h)
 for a much more detail about multicolumn/pagination.
 
 ### Paint invalidation
-[`PaintInvalidator`](PaintInvalidator.h)
+[`PaintInvalidator`](paint_invalidator.h)
 
-This class replaces [`PaintInvalidationState`] for SlimmingPaintInvalidation.
-The main difference is that in PaintInvalidator, visual rects and locations
-are computed by `GeometryMapper`(../../platform/graphics/paint/GeometryMapper.h),
-based on paint properties produced by `PaintPropertyTreeBuilder`.
+Paint invalidator marks anything that need to be painted differently from the
+original cached painting.
 
-TODO(wangxianzhu): Combine documentation of PaintInvalidation phase into here.
+During the document lifecycle stages prior to PrePaint, objects are marked for
+needing paint invalidation checking if needed by style change, layout change,
+compositing change, etc. In PrePaint stage, we traverse the layout tree in
+pre-order, crossing frame boundaries, for marked subtrees and objects and
+invalidate display item clients that will generate different display items.
+
+At the beginning of the PrePaint tree walk, a root `PaintInvalidatorContext`
+is created for the root `LayoutView`. During the tree walk, one
+`PaintInvalidatorContext` is created for each visited object based on the
+`PaintInvalidatorContext` passed from the parent object. It tracks the following
+information to provide O(1) complexity access to them if possible:
+
+*   Paint invalidation container (Slimming Paint v1 only): Since as indicated by
+    the definitions in [Glossaries](#other-glossaries), the paint invalidation
+    container for stacked objects can differ from normal objects, we have to
+    track both separately. Here is an example:
+
+        <div style="overflow: scroll">
+            <div id=A style="position: absolute"></div>
+            <div id=B></div>
+        </div>
+
+    If the scroller is composited (for high-DPI screens for example), it is the
+    paint invalidation container for div B, but not A.
+
+*   Painting layer: the layer which will initiate painting of the current
+    object. It's the same value as `LayoutObject::PaintingLayer()`.
+
+`PaintInvalidator`[PaintInvalidator.h] initializes `PaintInvalidatorContext`
+for the current object, then calls `LayoutObject::InvalidatePaint()` which
+calls the object's paint invalidator (e.g. `BoxPaintInvalidator`) to complete
+paint invalidation of the object.
+
+#### Paint invalidation of text
+
+Text is painted by `InlineTextBoxPainter` using `InlineTextBox` as display
+item client. Text backgrounds and masks are painted by `InlineTextFlowPainter`
+using `InlineFlowBox` as display item client. We should invalidate these display
+item clients when their painting will change.
+
+`LayoutInline`s and `LayoutText`s are marked for full paint invalidation if
+needed when new style is set on them. During paint invalidation, we invalidate
+the `InlineFlowBox`s directly contained by the `LayoutInline` in
+`LayoutInline::InvalidateDisplayItemClients()` and `InlineTextBox`s contained by
+the `LayoutText` in `LayoutText::InvalidateDisplayItemClients()`. We don't need
+to traverse into the subtree of `InlineFlowBox`s in
+`LayoutInline::InvalidateDisplayItemClients()` because the descendant
+`InlineFlowBox`s and `InlineTextBox`s will be handled by their owning
+`LayoutInline`s and `LayoutText`s, respectively, when changed style is
+propagated.
+
+#### Specialty of `::first-line`
+
+`::first-line` pseudo style dynamically applies to all `InlineBox`'s in the
+first line in the block having `::first-line` style. The actual applied style is
+computed from the `::first-line` style and other applicable styles.
+
+If the first line contains any `LayoutInline`, we compute the style from the
+`::first-line` style and the style of the `LayoutInline` and apply the computed
+style to the first line part of the `LayoutInline`. In Blink's style
+implementation, the combined first line style of `LayoutInline` is identified
+with `kPseudoIdFirstLineInherited`.
+
+The normal paint invalidation of texts doesn't work for first line because
+*   `ComputedStyle::VisualInvalidationDiff()` can't detect first line style
+    changes;
+*   The normal paint invalidation is based on whole LayoutObject's, not aware of
+    the first line.
+
+We have a special path for first line style change: the style system informs the
+layout system when the computed first-line style changes through
+`LayoutObject::FirstLineStyleDidChange()`. When this happens, we invalidate all
+`InlineBox`es in the first line.
 
 ## Paint
 
@@ -583,19 +630,6 @@ the paint phase.
 During painting, we check the flag before painting a paint phase and skip the
 tree walk if the flag is not set.
 
-It's hard to clear a `NeedsPaintPhaseXXX` flag when a layer no longer needs the
-paint phase, so we never clear the flags. Instead, we use another set of flags
-(`PreviousPaintPhaseXXXWasEmpty`) to record if a painting of a phase actually
-produced nothing. We'll skip the next painting of the phase if the flag is set,
-regardless of the corresponding `NeedsPaintPhaseXXX` flag. We will clear the
-`PreviousPaintPhaseXXXWasEmpty` flags when we paint with different clipping,
-scroll offset or interest rect from the previous paint.
-
-We don't clear the `PreviousPaintPhaseXXXWasEmpty` flags when the layer is
-marked `NeedsRepaint`. Instead we clear the flag when the corresponding
-`NeedsPaintPhaseXXX` is set. This ensures that we won't clear
-`PreviousPaintPhaseXXXWasEmpty` flags when unrelated things changed which won't
-
 When layer structure changes, and we are not invalidate paint of the changed
 subtree, we need to manually update the `NeedsPaintPhaseXXX` flags. For example,
 if an object changes style and creates a self-painting-layer, we copy the flags
@@ -603,15 +637,14 @@ from its containing self-painting layer to this layer, assuming that this layer
 needs all paint phases that its container self-painting layer needs.
 
 We could update the `NeedsPaintPhaseXXX` flags in a separate tree walk, but that
-would regress performance of the first paint. For slimming paint v2, we can
+would regress performance of the first paint. For CompositeAfterPaint, we can
 update the flags during the pre-painting tree walk to simplify the logics.
 
 ### Hit test painting
 
-Hit testing is done in paint-order. The |PaintTouchActionRects| flag enables a
-mode where hit test display items are emitted in the background phase of
-painting. Hit test display items are produced even if there is no painted
-content.
+Hit testing is done in paint-order. Hit test display items are emitted in the
+background phase of painting. Hit test display items are produced even if there
+is no painted content.
 
 ### PaintNG
 

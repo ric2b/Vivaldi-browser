@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "cc/cc_export.h"
+#include "cc/input/browser_controls_state.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_collections.h"
 #include "cc/layers/layer_impl.h"
@@ -134,9 +135,7 @@ class CC_EXPORT LayerTreeHostCommon {
 
   struct CC_EXPORT ScrollUpdateInfo {
     ElementId element_id;
-    // TODO(miletus): Use ScrollOffset once LayerTreeHost/Blink fully supports
-    // fractional scroll offset.
-    gfx::Vector2d scroll_delta;
+    gfx::ScrollOffset scroll_delta;
 
     bool operator==(const ScrollUpdateInfo& other) const;
   };
@@ -169,12 +168,30 @@ struct CC_EXPORT ScrollAndScaleSet {
 
   std::vector<LayerTreeHostCommon::ScrollUpdateInfo> scrolls;
   float page_scale_delta;
+
+  // Elastic overscroll effect offset delta. This is used only on Mac and shows
+  // the pixels that the page is rubber-banned/stretched by.
   gfx::Vector2dF elastic_overscroll_delta;
+
+  // Unconsumed scroll delta used to send overscroll events to the latched
+  // element on the main thread;
+  gfx::Vector2dF overscroll_delta;
+
+  // The element id of the node to which scrolling is latched. This is used to
+  // send overscroll/scrollend DOM events to proper targets whenever needed.
+  ElementId scroll_latched_element_id;
+
   float top_controls_delta;
   std::vector<LayerTreeHostCommon::ScrollbarsUpdateInfo> scrollbars;
   std::vector<std::unique_ptr<SwapPromise>> swap_promises;
+  BrowserControlsState browser_controls_constraint;
+  bool browser_controls_constraint_changed;
   bool has_scrolled_by_wheel;
   bool has_scrolled_by_touch;
+
+  // Set to true when a scroll gesture being handled on the compositor has
+  // ended.
+  bool scroll_gesture_did_end;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ScrollAndScaleSet);

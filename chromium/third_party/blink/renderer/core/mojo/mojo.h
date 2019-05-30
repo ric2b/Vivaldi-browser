@@ -46,16 +46,18 @@ class Mojo final : public ScriptWrappable {
   static const MojoResult kResultBusy = MOJO_RESULT_BUSY;
   static const MojoResult kResultShouldWait = MOJO_RESULT_SHOULD_WAIT;
 
-  static void createMessagePipe(MojoCreateMessagePipeResult&);
-  static void createDataPipe(const MojoCreateDataPipeOptions&,
-                             MojoCreateDataPipeResult&);
-  static void createSharedBuffer(unsigned num_bytes,
-                                 MojoCreateSharedBufferResult&);
+  static MojoCreateMessagePipeResult* createMessagePipe();
+  static MojoCreateDataPipeResult* createDataPipe(
+      const MojoCreateDataPipeOptions*);
+  static MojoCreateSharedBufferResult* createSharedBuffer(unsigned num_bytes);
 
   static void bindInterface(ScriptState*,
                             const String& interface_name,
                             MojoHandle*,
                             const String& scope);
+  static MojoHandle* getDocumentInterfaceBrokerHandle(ScriptState*);
+  static MojoHandle* replaceDocumentInterfaceBrokerForTesting(ScriptState*,
+                                                              MojoHandle*);
 };
 
 }  // namespace blink

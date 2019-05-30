@@ -34,7 +34,7 @@ import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.infobar.InfoBar;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.notifications.NotificationTestRule;
-import org.chromium.chrome.browser.preferences.website.ContentSetting;
+import org.chromium.chrome.browser.preferences.website.ContentSettingValues;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.InfoBarUtil;
@@ -43,9 +43,9 @@ import org.chromium.chrome.test.util.browser.notifications.MockNotificationManag
 import org.chromium.components.gcm_driver.GCMDriver;
 import org.chromium.components.gcm_driver.GCMMessage;
 import org.chromium.components.gcm_driver.instance_id.FakeInstanceIDWithSubtype;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.JavaScriptUtils;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.net.test.EmbeddedTestServerRule;
 
 import java.util.List;
@@ -117,7 +117,7 @@ public class PushMessagingTest implements PushMessagingServiceObserver.Listener 
     public void testNotificationsPermissionDenied() throws InterruptedException, TimeoutException {
         // Deny Notifications permission before trying to subscribe Push.
         mNotificationTestRule.setNotificationContentSettingForOrigin(
-                ContentSetting.BLOCK, mEmbeddedTestServerRule.getOrigin());
+                ContentSettingValues.BLOCK, mEmbeddedTestServerRule.getOrigin());
         Assert.assertEquals("\"denied\"", runScriptBlocking("Notification.permission"));
 
         // Reload page to ensure the block is persisted.
@@ -220,7 +220,7 @@ public class PushMessagingTest implements PushMessagingServiceObserver.Listener 
     @RetryOnFailure
     public void testPushAndShowNotification() throws InterruptedException, TimeoutException {
         mNotificationTestRule.setNotificationContentSettingForOrigin(
-                ContentSetting.ALLOW, mEmbeddedTestServerRule.getOrigin());
+                ContentSettingValues.ALLOW, mEmbeddedTestServerRule.getOrigin());
         runScriptAndWaitForTitle("subscribePush()", "subscribe ok");
 
         Pair<String, String> appIdAndSenderId =
@@ -248,7 +248,7 @@ public class PushMessagingTest implements PushMessagingServiceObserver.Listener 
 
         // Set up the push subscription and capture its details.
         mNotificationTestRule.setNotificationContentSettingForOrigin(
-                ContentSetting.ALLOW, mEmbeddedTestServerRule.getOrigin());
+                ContentSettingValues.ALLOW, mEmbeddedTestServerRule.getOrigin());
         runScriptAndWaitForTitle("subscribePush()", "subscribe ok");
         Pair<String, String> appIdAndSenderId =
                 FakeInstanceIDWithSubtype.getSubtypeAndAuthorizedEntityOfOnlyToken();

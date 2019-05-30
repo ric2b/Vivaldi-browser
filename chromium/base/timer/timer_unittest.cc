@@ -17,10 +17,13 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
+#include "base/stl_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/post_task.h"
+#include "base/test/bind_test_util.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/test/test_mock_time_task_runner.h"
+#include "base/test/test_simple_task_runner.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread.h"
@@ -33,15 +36,14 @@ namespace base {
 
 namespace {
 
-// The message loops on which each timer should be tested.
-const MessageLoop::Type testing_message_loops[] = {
-    MessageLoop::TYPE_DEFAULT, MessageLoop::TYPE_IO,
+// The main thread types on which each timer should be tested.
+const test::ScopedTaskEnvironment::MainThreadType testing_main_threads[] = {
+    test::ScopedTaskEnvironment::MainThreadType::DEFAULT,
+    test::ScopedTaskEnvironment::MainThreadType::IO,
 #if !defined(OS_IOS)  // iOS does not allow direct running of the UI loop.
-    MessageLoop::TYPE_UI,
+    test::ScopedTaskEnvironment::MainThreadType::UI,
 #endif
 };
-
-const int kNumTestingMessageLoops = arraysize(testing_message_loops);
 
 class Receiver {
  public:
@@ -111,7 +113,7 @@ class OneShotTimerTester : public OneShotTimerTesterBase {
     timer_->SetTaskRunner(std::move(task_runner));
 
     // Run() will be invoked on |task_runner| but |run_loop_|'s QuitClosure
-    // needs to run on this thread (where the MessageLoop lives).
+    // needs to run on this thread (where the task environment lives).
     quit_closure_ = BindOnce(IgnoreResult(&SequencedTaskRunner::PostTask),
                              SequencedTaskRunnerHandle::Get(), FROM_HERE,
                              run_loop_.QuitClosure());
@@ -199,8 +201,9 @@ class RepeatingTimerTester {
 // Basic test with same setup as RunTest_OneShotTimers_Cancel below to confirm
 // that |did_run_a| would be signaled in that test if it wasn't for the
 // deletion.
-void RunTest_OneShotTimers(MessageLoop::Type message_loop_type) {
-  MessageLoop loop(message_loop_type);
+void RunTest_OneShotTimers(
+    test::ScopedTaskEnvironment::MainThreadType main_thread_type) {
+  test::ScopedTaskEnvironment scoped_task_environment(main_thread_type);
 
   WaitableEvent did_run_a(WaitableEvent::ResetPolicy::MANUAL,
                           WaitableEvent::InitialState::NOT_SIGNALED);
@@ -215,8 +218,9 @@ void RunTest_OneShotTimers(MessageLoop::Type message_loop_type) {
   EXPECT_TRUE(did_run_a.IsSignaled());
 }
 
-void RunTest_OneShotTimers_Cancel(MessageLoop::Type message_loop_type) {
-  MessageLoop loop(message_loop_type);
+void RunTest_OneShotTimers_Cancel(
+    test::ScopedTaskEnvironment::MainThreadType main_thread_type) {
+  test::ScopedTaskEnvironment scoped_task_environment(main_thread_type);
 
   WaitableEvent did_run_a(WaitableEvent::ResetPolicy::MANUAL,
                           WaitableEvent::InitialState::NOT_SIGNALED);
@@ -236,26 +240,29 @@ void RunTest_OneShotTimers_Cancel(MessageLoop::Type message_loop_type) {
   EXPECT_FALSE(did_run_a.IsSignaled());
 }
 
-void RunTest_OneShotSelfDeletingTimer(MessageLoop::Type message_loop_type) {
-  MessageLoop loop(message_loop_type);
+void RunTest_OneShotSelfDeletingTimer(
+    test::ScopedTaskEnvironment::MainThreadType main_thread_type) {
+  test::ScopedTaskEnvironment scoped_task_environment(main_thread_type);
 
   OneShotSelfDeletingTimerTester f;
   f.Start();
   f.WaitAndConfirmTimerFiredAfterDelay();
 }
 
-void RunTest_RepeatingTimer(MessageLoop::Type message_loop_type,
-                            const TimeDelta& delay) {
-  MessageLoop loop(message_loop_type);
+void RunTest_RepeatingTimer(
+    test::ScopedTaskEnvironment::MainThreadType main_thread_type,
+    const TimeDelta& delay) {
+  test::ScopedTaskEnvironment scoped_task_environment(main_thread_type);
 
   RepeatingTimerTester f(nullptr, delay);
   f.Start();
   f.WaitAndConfirmTimerFiredRepeatedlyAfterDelay();
 }
 
-void RunTest_RepeatingTimer_Cancel(MessageLoop::Type message_loop_type,
-                                   const TimeDelta& delay) {
-  MessageLoop loop(message_loop_type);
+void RunTest_RepeatingTimer_Cancel(
+    test::ScopedTaskEnvironment::MainThreadType main_thread_type,
+    const TimeDelta& delay) {
+  test::ScopedTaskEnvironment scoped_task_environment(main_thread_type);
 
   WaitableEvent did_run_a(WaitableEvent::ResetPolicy::MANUAL,
                           WaitableEvent::InitialState::NOT_SIGNALED);
@@ -290,8 +297,9 @@ class DelayTimerTarget {
   bool signaled_ = false;
 };
 
-void RunTest_DelayTimer_NoCall(MessageLoop::Type message_loop_type) {
-  MessageLoop loop(message_loop_type);
+void RunTest_DelayTimer_NoCall(
+    test::ScopedTaskEnvironment::MainThreadType main_thread_type) {
+  test::ScopedTaskEnvironment scoped_task_environment(main_thread_type);
 
   // If Delay is never called, the timer shouldn't go off.
   DelayTimerTarget target;
@@ -305,8 +313,9 @@ void RunTest_DelayTimer_NoCall(MessageLoop::Type message_loop_type) {
   ASSERT_FALSE(target.signaled());
 }
 
-void RunTest_DelayTimer_OneCall(MessageLoop::Type message_loop_type) {
-  MessageLoop loop(message_loop_type);
+void RunTest_DelayTimer_OneCall(
+    test::ScopedTaskEnvironment::MainThreadType main_thread_type) {
+  test::ScopedTaskEnvironment scoped_task_environment(main_thread_type);
 
   DelayTimerTarget target;
   DelayTimer timer(FROM_HERE, TimeDelta::FromMilliseconds(1), &target,
@@ -334,8 +343,9 @@ struct ResetHelper {
   DelayTimerTarget* const target_;
 };
 
-void RunTest_DelayTimer_Reset(MessageLoop::Type message_loop_type) {
-  MessageLoop loop(message_loop_type);
+void RunTest_DelayTimer_Reset(
+    test::ScopedTaskEnvironment::MainThreadType main_thread_type) {
+  test::ScopedTaskEnvironment scoped_task_environment(main_thread_type);
 
   // If Delay is never called, the timer shouldn't go off.
   DelayTimerTarget target;
@@ -346,7 +356,7 @@ void RunTest_DelayTimer_Reset(MessageLoop::Type message_loop_type) {
   ResetHelper reset_helper(&timer, &target);
 
   OneShotTimer timers[20];
-  for (size_t i = 0; i < arraysize(timers); ++i) {
+  for (size_t i = 0; i < base::size(timers); ++i) {
     timers[i].Start(FROM_HERE, TimeDelta::FromMilliseconds(i * 10),
                     &reset_helper, &ResetHelper::Reset);
   }
@@ -365,8 +375,9 @@ class DelayTimerFatalTarget {
   }
 };
 
-void RunTest_DelayTimer_Deleted(MessageLoop::Type message_loop_type) {
-  MessageLoop loop(message_loop_type);
+void RunTest_DelayTimer_Deleted(
+    test::ScopedTaskEnvironment::MainThreadType main_thread_type) {
+  test::ScopedTaskEnvironment scoped_task_environment(main_thread_type);
 
   DelayTimerFatalTarget target;
 
@@ -384,154 +395,123 @@ void RunTest_DelayTimer_Deleted(MessageLoop::Type message_loop_type) {
 }  // namespace
 
 //-----------------------------------------------------------------------------
-// Each test is run against each type of MessageLoop.  That way we are sure
+// Each test is run against each type of main thread.  That way we are sure
 // that timers work properly in all configurations.
 
-TEST(TimerTest, OneShotTimers) {
-  for (int i = 0; i < kNumTestingMessageLoops; i++) {
-    RunTest_OneShotTimers(testing_message_loops[i]);
-  }
+class TimerTestWithThreadType
+    : public testing::TestWithParam<
+          test::ScopedTaskEnvironment::MainThreadType> {};
+
+TEST_P(TimerTestWithThreadType, OneShotTimers) {
+  RunTest_OneShotTimers(GetParam());
 }
 
-TEST(TimerTest, OneShotTimers_Cancel) {
-  for (int i = 0; i < kNumTestingMessageLoops; i++) {
-    RunTest_OneShotTimers_Cancel(testing_message_loops[i]);
-  }
+TEST_P(TimerTestWithThreadType, OneShotTimers_Cancel) {
+  RunTest_OneShotTimers_Cancel(GetParam());
 }
 
 // If underline timer does not handle properly, we will crash or fail
 // in full page heap environment.
-TEST(TimerTest, OneShotSelfDeletingTimer) {
-  for (int i = 0; i < kNumTestingMessageLoops; i++) {
-    RunTest_OneShotSelfDeletingTimer(testing_message_loops[i]);
-  }
+TEST_P(TimerTestWithThreadType, OneShotSelfDeletingTimer) {
+  RunTest_OneShotSelfDeletingTimer(GetParam());
 }
 
 TEST(TimerTest, OneShotTimer_CustomTaskRunner) {
-  // A MessageLoop is required for the timer events on the other thread to
-  // communicate back to the Timer under test.
-  MessageLoop loop;
+  auto task_runner = base::MakeRefCounted<TestSimpleTaskRunner>();
 
-  Thread other_thread("OneShotTimer_CustomTaskRunner");
-  other_thread.Start();
+  OneShotTimer timer;
 
-  WaitableEvent did_run(WaitableEvent::ResetPolicy::MANUAL,
-                        WaitableEvent::InitialState::NOT_SIGNALED);
-  OneShotTimerTester f(&did_run);
-  f.SetTaskRunner(other_thread.task_runner());
-  f.Start();
-  EXPECT_TRUE(f.IsRunning() || did_run.IsSignaled());
+  bool task_ran = false;
 
-  f.WaitAndConfirmTimerFiredAfterDelay();
-  EXPECT_TRUE(did_run.IsSignaled());
+  // The timer will use the TestSimpleTaskRunner to schedule its delays.
+  timer.SetTaskRunner(task_runner);
+  timer.Start(FROM_HERE, TimeDelta::FromDays(1),
+              BindLambdaForTesting([&]() { task_ran = true; }));
 
-  // |f| should already have communicated back to this |loop| before invoking
-  // Run() and as such this thread should already be aware that |f| is no longer
-  // running.
-  EXPECT_TRUE(loop.IsIdleForTesting());
-  EXPECT_FALSE(f.IsRunning());
+  EXPECT_FALSE(task_ran);
+  EXPECT_TRUE(task_runner->HasPendingTask());
+
+  task_runner->RunPendingTasks();
+
+  EXPECT_TRUE(task_ran);
 }
 
 TEST(TimerTest, OneShotTimerWithTickClock) {
-  scoped_refptr<TestMockTimeTaskRunner> task_runner(
-      new TestMockTimeTaskRunner(Time::Now(), TimeTicks::Now()));
-  MessageLoop message_loop;
-  message_loop.SetTaskRunner(task_runner);
+  test::ScopedTaskEnvironment scoped_task_environment(
+      test::ScopedTaskEnvironment::MainThreadType::MOCK_TIME);
   Receiver receiver;
-  OneShotTimer timer(task_runner->GetMockTickClock());
+  OneShotTimer timer(scoped_task_environment.GetMockTickClock());
   timer.Start(FROM_HERE, TimeDelta::FromSeconds(1),
               BindOnce(&Receiver::OnCalled, Unretained(&receiver)));
-  task_runner->FastForwardBy(TimeDelta::FromSeconds(1));
+  scoped_task_environment.FastForwardBy(TimeDelta::FromSeconds(1));
   EXPECT_TRUE(receiver.WasCalled());
 }
 
-TEST(TimerTest, RepeatingTimer) {
-  for (int i = 0; i < kNumTestingMessageLoops; i++) {
-    RunTest_RepeatingTimer(testing_message_loops[i],
-                           TimeDelta::FromMilliseconds(10));
-  }
+TEST_P(TimerTestWithThreadType, RepeatingTimer) {
+  RunTest_RepeatingTimer(GetParam(), TimeDelta::FromMilliseconds(10));
 }
 
-TEST(TimerTest, RepeatingTimer_Cancel) {
-  for (int i = 0; i < kNumTestingMessageLoops; i++) {
-    RunTest_RepeatingTimer_Cancel(testing_message_loops[i],
-                                  TimeDelta::FromMilliseconds(10));
-  }
+TEST_P(TimerTestWithThreadType, RepeatingTimer_Cancel) {
+  RunTest_RepeatingTimer_Cancel(GetParam(), TimeDelta::FromMilliseconds(10));
 }
 
-TEST(TimerTest, RepeatingTimerZeroDelay) {
-  for (int i = 0; i < kNumTestingMessageLoops; i++) {
-    RunTest_RepeatingTimer(testing_message_loops[i],
-                           TimeDelta::FromMilliseconds(0));
-  }
+TEST_P(TimerTestWithThreadType, RepeatingTimerZeroDelay) {
+  RunTest_RepeatingTimer(GetParam(), TimeDelta::FromMilliseconds(0));
 }
 
-TEST(TimerTest, RepeatingTimerZeroDelay_Cancel) {
-  for (int i = 0; i < kNumTestingMessageLoops; i++) {
-    RunTest_RepeatingTimer_Cancel(testing_message_loops[i],
-                                  TimeDelta::FromMilliseconds(0));
-  }
+TEST_P(TimerTestWithThreadType, RepeatingTimerZeroDelay_Cancel) {
+  RunTest_RepeatingTimer_Cancel(GetParam(), TimeDelta::FromMilliseconds(0));
 }
 
 TEST(TimerTest, RepeatingTimerWithTickClock) {
-  scoped_refptr<TestMockTimeTaskRunner> task_runner(
-      new TestMockTimeTaskRunner(Time::Now(), TimeTicks::Now()));
-  MessageLoop message_loop;
-  message_loop.SetTaskRunner(task_runner);
+  test::ScopedTaskEnvironment scoped_task_environment(
+      test::ScopedTaskEnvironment::MainThreadType::MOCK_TIME);
   Receiver receiver;
   const int expected_times_called = 10;
-  RepeatingTimer timer(task_runner->GetMockTickClock());
+  RepeatingTimer timer(scoped_task_environment.GetMockTickClock());
   timer.Start(FROM_HERE, TimeDelta::FromSeconds(1),
               BindRepeating(&Receiver::OnCalled, Unretained(&receiver)));
-  task_runner->FastForwardBy(TimeDelta::FromSeconds(expected_times_called));
+  scoped_task_environment.FastForwardBy(
+      TimeDelta::FromSeconds(expected_times_called));
   timer.Stop();
   EXPECT_EQ(expected_times_called, receiver.TimesCalled());
 }
 
-TEST(TimerTest, DelayTimer_NoCall) {
-  for (int i = 0; i < kNumTestingMessageLoops; i++) {
-    RunTest_DelayTimer_NoCall(testing_message_loops[i]);
-  }
+TEST_P(TimerTestWithThreadType, DelayTimer_NoCall) {
+  RunTest_DelayTimer_NoCall(GetParam());
 }
 
-TEST(TimerTest, DelayTimer_OneCall) {
-  for (int i = 0; i < kNumTestingMessageLoops; i++) {
-    RunTest_DelayTimer_OneCall(testing_message_loops[i]);
-  }
+TEST_P(TimerTestWithThreadType, DelayTimer_OneCall) {
+  RunTest_DelayTimer_OneCall(GetParam());
 }
 
 // It's flaky on the buildbot, http://crbug.com/25038.
-TEST(TimerTest, DISABLED_DelayTimer_Reset) {
-  for (int i = 0; i < kNumTestingMessageLoops; i++) {
-    RunTest_DelayTimer_Reset(testing_message_loops[i]);
-  }
+TEST_P(TimerTestWithThreadType, DISABLED_DelayTimer_Reset) {
+  RunTest_DelayTimer_Reset(GetParam());
 }
 
-TEST(TimerTest, DelayTimer_Deleted) {
-  for (int i = 0; i < kNumTestingMessageLoops; i++) {
-    RunTest_DelayTimer_Deleted(testing_message_loops[i]);
-  }
+TEST_P(TimerTestWithThreadType, DelayTimer_Deleted) {
+  RunTest_DelayTimer_Deleted(GetParam());
 }
 
 TEST(TimerTest, DelayTimerWithTickClock) {
-  scoped_refptr<TestMockTimeTaskRunner> task_runner(
-      new TestMockTimeTaskRunner(Time::Now(), TimeTicks::Now()));
-  MessageLoop message_loop;
-  message_loop.SetTaskRunner(task_runner);
+  test::ScopedTaskEnvironment scoped_task_environment(
+      test::ScopedTaskEnvironment::MainThreadType::MOCK_TIME);
   Receiver receiver;
   DelayTimer timer(FROM_HERE, TimeDelta::FromSeconds(1), &receiver,
-                   &Receiver::OnCalled, task_runner->GetMockTickClock());
-  task_runner->FastForwardBy(TimeDelta::FromMilliseconds(999));
+                   &Receiver::OnCalled,
+                   scoped_task_environment.GetMockTickClock());
+  scoped_task_environment.FastForwardBy(TimeDelta::FromMilliseconds(999));
   EXPECT_FALSE(receiver.WasCalled());
   timer.Reset();
-  task_runner->FastForwardBy(TimeDelta::FromMilliseconds(999));
+  scoped_task_environment.FastForwardBy(TimeDelta::FromMilliseconds(999));
   EXPECT_FALSE(receiver.WasCalled());
   timer.Reset();
-  task_runner->FastForwardBy(TimeDelta::FromSeconds(1));
+  scoped_task_environment.FastForwardBy(TimeDelta::FromSeconds(1));
   EXPECT_TRUE(receiver.WasCalled());
 }
 
-TEST(TimerTest, MessageLoopShutdown) {
+TEST(TimerTest, TaskEnvironmentShutdown) {
   // This test is designed to verify that shutdown of the
   // message loop does not cause crashes if there were pending
   // timers not yet fired.  It may only trigger exceptions
@@ -544,10 +524,10 @@ TEST(TimerTest, MessageLoopShutdown) {
     OneShotTimerTesterBase c(&did_run);
     OneShotTimerTesterBase d(&did_run);
     {
-      MessageLoop loop;
+      test::ScopedTaskEnvironment scoped_task_environment;
       a.Start();
       b.Start();
-    }  // MessageLoop destructs by falling out of scope.
+    }  // Task environment destructs by falling out of scope.
   }  // OneShotTimers destruct.  SHOULD NOT CRASH, of course.
 
   EXPECT_FALSE(did_run.IsSignaled());
@@ -581,20 +561,20 @@ class OneShotSelfOwningTimerTester
   DISALLOW_COPY_AND_ASSIGN(OneShotSelfOwningTimerTester);
 };
 
-TEST(TimerTest, MessageLoopShutdownSelfOwningTimer) {
-  // This test verifies that shutdown of the message loop does not cause crashes
-  // if there is a pending timer not yet fired and |Timer::user_task_| owns the
-  // timer. The test may only trigger exceptions if debug heap checking is
-  // enabled.
+TEST(TimerTest, TaskEnvironmentShutdownSelfOwningTimer) {
+  // This test verifies that shutdown of the task environment does not cause
+  // crashes if there is a pending timer not yet fired and |Timer::user_task_|
+  // owns the timer. The test may only trigger exceptions if debug heap checking
+  // is enabled.
 
-  MessageLoop loop;
+  test::ScopedTaskEnvironment scoped_task_environment;
   scoped_refptr<OneShotSelfOwningTimerTester> tester =
       new OneShotSelfOwningTimerTester();
 
   std::move(tester)->StartTimer();
   // |Timer::user_task_| owns sole reference to |tester|.
 
-  // MessageLoop destructs by falling out of scope. SHOULD NOT CRASH.
+  // Task environment destructs by falling out of scope. SHOULD NOT CRASH.
 }
 
 void TimerTestCallback() {
@@ -602,7 +582,7 @@ void TimerTestCallback() {
 
 TEST(TimerTest, NonRepeatIsRunning) {
   {
-    MessageLoop loop;
+    test::ScopedTaskEnvironment scoped_task_environment;
     OneShotTimer timer;
     EXPECT_FALSE(timer.IsRunning());
     timer.Start(FROM_HERE, TimeDelta::FromDays(1),
@@ -614,7 +594,7 @@ TEST(TimerTest, NonRepeatIsRunning) {
 
   {
     RetainingOneShotTimer timer;
-    MessageLoop loop;
+    test::ScopedTaskEnvironment scoped_task_environment;
     EXPECT_FALSE(timer.IsRunning());
     timer.Start(FROM_HERE, TimeDelta::FromDays(1),
                 BindRepeating(&TimerTestCallback));
@@ -627,10 +607,10 @@ TEST(TimerTest, NonRepeatIsRunning) {
   }
 }
 
-TEST(TimerTest, NonRepeatMessageLoopDeath) {
+TEST(TimerTest, NonRepeatTaskEnvironmentDeath) {
   OneShotTimer timer;
   {
-    MessageLoop loop;
+    test::ScopedTaskEnvironment scoped_task_environment;
     EXPECT_FALSE(timer.IsRunning());
     timer.Start(FROM_HERE, TimeDelta::FromDays(1),
                 BindOnce(&TimerTestCallback));
@@ -640,7 +620,7 @@ TEST(TimerTest, NonRepeatMessageLoopDeath) {
 }
 
 TEST(TimerTest, RetainRepeatIsRunning) {
-  MessageLoop loop;
+  test::ScopedTaskEnvironment scoped_task_environment;
   RepeatingTimer timer(FROM_HERE, TimeDelta::FromDays(1),
                        BindRepeating(&TimerTestCallback));
   EXPECT_FALSE(timer.IsRunning());
@@ -653,7 +633,7 @@ TEST(TimerTest, RetainRepeatIsRunning) {
 }
 
 TEST(TimerTest, RetainNonRepeatIsRunning) {
-  MessageLoop loop;
+  test::ScopedTaskEnvironment scoped_task_environment;
   RetainingOneShotTimer timer(FROM_HERE, TimeDelta::FromDays(1),
                               BindRepeating(&TimerTestCallback));
   EXPECT_FALSE(timer.IsRunning());
@@ -692,7 +672,7 @@ void SetCallbackHappened2() {
 TEST(TimerTest, ContinuationStopStart) {
   {
     ClearAllCallbackHappened();
-    MessageLoop loop;
+    test::ScopedTaskEnvironment scoped_task_environment;
     OneShotTimer timer;
     timer.Start(FROM_HERE, TimeDelta::FromMilliseconds(10),
                 BindOnce(&SetCallbackHappened1));
@@ -708,7 +688,7 @@ TEST(TimerTest, ContinuationStopStart) {
 TEST(TimerTest, ContinuationReset) {
   {
     ClearAllCallbackHappened();
-    MessageLoop loop;
+    test::ScopedTaskEnvironment scoped_task_environment;
     OneShotTimer timer;
     timer.Start(FROM_HERE, TimeDelta::FromMilliseconds(10),
                 BindOnce(&SetCallbackHappened1));
@@ -720,190 +700,8 @@ TEST(TimerTest, ContinuationReset) {
   }
 }
 
-namespace {
-
-// Fixture for tests requiring ScopedTaskEnvironment. Includes a WaitableEvent
-// so that cases may Wait() on one thread and Signal() (explicitly, or
-// implicitly via helper methods) on another.
-class TimerSequenceTest : public testing::Test {
- public:
-  TimerSequenceTest()
-      : event_(WaitableEvent::ResetPolicy::AUTOMATIC,
-               WaitableEvent::InitialState::NOT_SIGNALED) {}
-
-  // Block until Signal() is called on another thread.
-  void Wait() { event_.Wait(); }
-
-  void Signal() { event_.Signal(); }
-
-  // Helper to augment a task with a subsequent call to Signal().
-  OnceClosure TaskWithSignal(OnceClosure task) {
-    return BindOnce(&TimerSequenceTest::RunTaskAndSignal, Unretained(this),
-                    std::move(task));
-  }
-
-  // Create the timer.
-  void CreateTimer() { timer_.reset(new OneShotTimer); }
-
-  // Schedule an event on the timer.
-  void StartTimer(TimeDelta delay, OnceClosure task) {
-    timer_->Start(FROM_HERE, delay, std::move(task));
-  }
-
-  void SetTaskRunnerForTimer(scoped_refptr<SequencedTaskRunner> task_runner) {
-    timer_->SetTaskRunner(std::move(task_runner));
-  }
-
-  // Tell the timer to abandon the task.
-  void AbandonTask() {
-    EXPECT_TRUE(timer_->IsRunning());
-    // Reset() to call Timer::AbandonScheduledTask()
-    timer_->Reset();
-    EXPECT_TRUE(timer_->IsRunning());
-    timer_->Stop();
-    EXPECT_FALSE(timer_->IsRunning());
-  }
-
-  static void VerifyAffinity(const SequencedTaskRunner* task_runner) {
-    EXPECT_TRUE(task_runner->RunsTasksInCurrentSequence());
-  }
-
-  // Delete the timer.
-  void DeleteTimer() { timer_.reset(); }
-
- private:
-  void RunTaskAndSignal(OnceClosure task) {
-    std::move(task).Run();
-    Signal();
-  }
-
-  base::test::ScopedTaskEnvironment scoped_task_environment_;
-  WaitableEvent event_;
-  std::unique_ptr<OneShotTimer> timer_;
-
-  DISALLOW_COPY_AND_ASSIGN(TimerSequenceTest);
-};
-
-}  // namespace
-
-TEST_F(TimerSequenceTest, OneShotTimerTaskOnPoolSequence) {
-  scoped_refptr<SequencedTaskRunner> task_runner =
-      base::CreateSequencedTaskRunnerWithTraits({});
-
-  base::RunLoop run_loop_;
-
-  // Timer is created on this thread.
-  CreateTimer();
-
-  // Task will execute on a pool thread.
-  SetTaskRunnerForTimer(task_runner);
-  StartTimer(TimeDelta::FromMilliseconds(1),
-             BindOnce(IgnoreResult(&SequencedTaskRunner::PostTask),
-                      SequencedTaskRunnerHandle::Get(), FROM_HERE,
-                      run_loop_.QuitClosure()));
-
-  // Spin the loop so that the delayed task fires on it, which will forward it
-  // to |task_runner|. And since the Timer's task is one that posts back to this
-  // MessageLoop to quit, we finally unblock.
-  run_loop_.Run();
-
-  // Timer will be destroyed on this thread.
-  DeleteTimer();
-}
-
-TEST_F(TimerSequenceTest, OneShotTimerUsedOnPoolSequence) {
-  scoped_refptr<SequencedTaskRunner> task_runner =
-      base::CreateSequencedTaskRunnerWithTraits({});
-
-  // Timer is created on this thread.
-  CreateTimer();
-
-  // Task will be scheduled from a pool thread.
-  task_runner->PostTask(
-      FROM_HERE,
-      BindOnce(&TimerSequenceTest::StartTimer, Unretained(this),
-               TimeDelta::FromMilliseconds(1),
-               BindOnce(&TimerSequenceTest::Signal, Unretained(this))));
-  Wait();
-
-  // Timer must be destroyed on pool thread, too.
-  task_runner->PostTask(FROM_HERE,
-                        TaskWithSignal(BindOnce(&TimerSequenceTest::DeleteTimer,
-                                                Unretained(this))));
-  Wait();
-}
-
-TEST_F(TimerSequenceTest, OneShotTimerTwoSequencesAbandonTask) {
-  scoped_refptr<SequencedTaskRunner> task_runner1 =
-      base::CreateSequencedTaskRunnerWithTraits({});
-  scoped_refptr<SequencedTaskRunner> task_runner2 =
-      base::CreateSequencedTaskRunnerWithTraits({});
-
-  // Create timer on sequence #1.
-  task_runner1->PostTask(
-      FROM_HERE, TaskWithSignal(BindOnce(&TimerSequenceTest::CreateTimer,
-                                         Unretained(this))));
-  Wait();
-
-  // And tell it to execute on a different sequence (#2).
-  task_runner1->PostTask(
-      FROM_HERE,
-      TaskWithSignal(BindOnce(&TimerSequenceTest::SetTaskRunnerForTimer,
-                              Unretained(this), task_runner2)));
-  Wait();
-
-  // Task will be scheduled from sequence #1.
-  task_runner1->PostTask(
-      FROM_HERE, BindOnce(&TimerSequenceTest::StartTimer, Unretained(this),
-                          TimeDelta::FromHours(1), DoNothing().Once()));
-
-  // Abandon task - must be called from scheduling sequence (#1).
-  task_runner1->PostTask(
-      FROM_HERE, TaskWithSignal(BindOnce(&TimerSequenceTest::AbandonTask,
-                                         Unretained(this))));
-  Wait();
-
-  // Timer must be destroyed on the sequence it was scheduled from (#1).
-  task_runner1->PostTask(
-      FROM_HERE, TaskWithSignal(BindOnce(&TimerSequenceTest::DeleteTimer,
-                                         Unretained(this))));
-  Wait();
-}
-
-TEST_F(TimerSequenceTest, OneShotTimerUsedAndTaskedOnDifferentSequences) {
-  scoped_refptr<SequencedTaskRunner> task_runner1 =
-      base::CreateSequencedTaskRunnerWithTraits({});
-  scoped_refptr<SequencedTaskRunner> task_runner2 =
-      base::CreateSequencedTaskRunnerWithTraits({});
-
-  // Create timer on sequence #1.
-  task_runner1->PostTask(
-      FROM_HERE, TaskWithSignal(BindOnce(&TimerSequenceTest::CreateTimer,
-                                         Unretained(this))));
-  Wait();
-
-  // And tell it to execute on a different sequence (#2).
-  task_runner1->PostTask(
-      FROM_HERE,
-      TaskWithSignal(BindOnce(&TimerSequenceTest::SetTaskRunnerForTimer,
-                              Unretained(this), task_runner2)));
-  Wait();
-
-  // Task will be scheduled from sequence #1.
-  task_runner1->PostTask(
-      FROM_HERE,
-      BindOnce(&TimerSequenceTest::StartTimer, Unretained(this),
-               TimeDelta::FromMilliseconds(1),
-               TaskWithSignal(BindOnce(&TimerSequenceTest::VerifyAffinity,
-                                       Unretained(task_runner2.get())))));
-
-  Wait();
-
-  // Timer must be destroyed on the sequence it was scheduled from (#1).
-  task_runner1->PostTask(
-      FROM_HERE, TaskWithSignal(BindOnce(&TimerSequenceTest::DeleteTimer,
-                                         Unretained(this))));
-  Wait();
-}
+INSTANTIATE_TEST_SUITE_P(,
+                         TimerTestWithThreadType,
+                         testing::ValuesIn(testing_main_threads));
 
 }  // namespace base

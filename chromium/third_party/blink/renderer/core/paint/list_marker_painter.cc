@@ -9,7 +9,7 @@
 #include "third_party/blink/renderer/core/layout/list_marker_text.h"
 #include "third_party/blink/renderer/core/paint/box_model_object_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
-#include "third_party/blink/renderer/core/paint/paint_info_with_offset.h"
+#include "third_party/blink/renderer/core/paint/scoped_paint_state.h"
 #include "third_party/blink/renderer/core/paint/selection_painting_utils.h"
 #include "third_party/blink/renderer/core/paint/text_painter.h"
 #include "third_party/blink/renderer/platform/fonts/text_run_paint_info.h"
@@ -61,13 +61,13 @@ void ListMarkerPainter::Paint(const PaintInfo& paint_info) {
           paint_info.context, layout_list_marker_, paint_info.phase))
     return;
 
-  PaintInfoWithOffset paint_info_with_offset(layout_list_marker_, paint_info);
-  if (!paint_info_with_offset.LocalRectIntersectsCullRect(
+  ScopedPaintState paint_state(layout_list_marker_, paint_info);
+  if (!paint_state.LocalRectIntersectsCullRect(
           layout_list_marker_.PhysicalVisualOverflowRect()))
     return;
 
-  const auto& local_paint_info = paint_info_with_offset.GetPaintInfo();
-  auto box_origin = paint_info_with_offset.PaintOffset();
+  const auto& local_paint_info = paint_state.GetPaintInfo();
+  auto box_origin = paint_state.PaintOffset();
 
   DrawingRecorder recorder(local_paint_info.context, layout_list_marker_,
                            local_paint_info.phase);
@@ -133,7 +133,6 @@ void ListMarkerPainter::Paint(const PaintInfo& paint_info) {
   }
 
   TextRunPaintInfo text_run_paint_info(text_run);
-  text_run_paint_info.bounds = FloatRect(EnclosingIntRect(marker));
   const SimpleFontData* font_data =
       layout_list_marker_.StyleRef().GetFont().PrimaryFont();
   FloatPoint text_origin =
@@ -144,8 +143,8 @@ void ListMarkerPainter::Paint(const PaintInfo& paint_info) {
   // Text is not arbitrary. We can judge whether it's RTL from the first
   // character, and we only need to handle the direction RightToLeft for now.
   bool text_needs_reversing =
-      WTF::Unicode::Direction(layout_list_marker_.GetText()[0]) ==
-      WTF::Unicode::kRightToLeft;
+      WTF::unicode::Direction(layout_list_marker_.GetText()[0]) ==
+      WTF::unicode::kRightToLeft;
   StringBuilder reversed_text;
   if (text_needs_reversing) {
     unsigned length = layout_list_marker_.GetText().length();
@@ -157,25 +156,28 @@ void ListMarkerPainter::Paint(const PaintInfo& paint_info) {
   }
 
   const UChar suffix =
-      ListMarkerText::Suffix(layout_list_marker_.StyleRef().ListStyleType(),
-                             layout_list_marker_.ListItem()->Value());
+      list_marker_text::Suffix(layout_list_marker_.StyleRef().ListStyleType(),
+                               layout_list_marker_.ListItem()->Value());
   UChar suffix_str[2] = {suffix, static_cast<UChar>(' ')};
   TextRun suffix_run =
       ConstructTextRun(font, suffix_str, 2, layout_list_marker_.StyleRef(),
                        layout_list_marker_.StyleRef().Direction());
   TextRunPaintInfo suffix_run_info(suffix_run);
-  suffix_run_info.bounds = FloatRect(EnclosingIntRect(marker));
 
   if (layout_list_marker_.StyleRef().IsLeftToRightDirection()) {
-    context.DrawText(font, text_run_paint_info, text_origin);
+    context.DrawText(font, text_run_paint_info, text_origin,
+                     NodeHolder::EmptyNodeHolder());
     context.DrawText(font, suffix_run_info,
-                     text_origin + FloatSize(IntSize(font.Width(text_run), 0)));
+                     text_origin + FloatSize(IntSize(font.Width(text_run), 0)),
+                     NodeHolder::EmptyNodeHolder());
   } else {
-    context.DrawText(font, suffix_run_info, text_origin);
+    context.DrawText(font, suffix_run_info, text_origin,
+                     NodeHolder::EmptyNodeHolder());
     // Is the truncation to IntSize below meaningful or a bug?
     context.DrawText(
         font, text_run_paint_info,
-        text_origin + FloatSize(IntSize(font.Width(suffix_run), 0)));
+        text_origin + FloatSize(IntSize(font.Width(suffix_run), 0)),
+        NodeHolder::EmptyNodeHolder());
   }
   // TODO(npm): Check that there are non-whitespace characters. See
   // crbug.com/788444.

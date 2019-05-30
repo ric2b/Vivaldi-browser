@@ -12,23 +12,51 @@ SDK.Target = class extends Protocol.TargetBase {
    * @param {!SDK.TargetManager} targetManager
    * @param {string} id
    * @param {string} name
-   * @param {number} capabilitiesMask
-   * @param {!Protocol.InspectorBackend.Connection.Factory} connectionFactory
+   * @param {!SDK.Target.Type} type
    * @param {?SDK.Target} parentTarget
+   * @param {string} sessionId
    * @param {boolean} suspended
-   * @param {boolean} isNodeJS
+   * @param {?Protocol.Connection} connection
    */
-  constructor(targetManager, id, name, capabilitiesMask, connectionFactory, parentTarget, suspended, isNodeJS) {
-    super(connectionFactory);
+  constructor(targetManager, id, name, type, parentTarget, sessionId, suspended, connection) {
+    const needsNodeJSPatching = type === SDK.Target.Type.Node;
+    super(needsNodeJSPatching, parentTarget, sessionId, connection);
     this._targetManager = targetManager;
     this._name = name;
     this._inspectedURL = '';
-    this._capabilitiesMask = capabilitiesMask;
+    this._capabilitiesMask = 0;
+    switch (type) {
+      case SDK.Target.Type.Frame:
+        this._capabilitiesMask = SDK.Target.Capability.Browser | SDK.Target.Capability.DOM | SDK.Target.Capability.JS |
+            SDK.Target.Capability.Log | SDK.Target.Capability.Network | SDK.Target.Capability.Target |
+            SDK.Target.Capability.Tracing | SDK.Target.Capability.Emulation | SDK.Target.Capability.Input;
+        if (!parentTarget) {
+          this._capabilitiesMask |= SDK.Target.Capability.DeviceEmulation | SDK.Target.Capability.ScreenCapture |
+              SDK.Target.Capability.Security | SDK.Target.Capability.Inspector;
+        }
+        break;
+      case SDK.Target.Type.ServiceWorker:
+        this._capabilitiesMask =
+            SDK.Target.Capability.Log | SDK.Target.Capability.Network | SDK.Target.Capability.Target;
+        if (!parentTarget)
+          this._capabilitiesMask |= SDK.Target.Capability.Browser | SDK.Target.Capability.Inspector;
+        break;
+      case SDK.Target.Type.Worker:
+        this._capabilitiesMask = SDK.Target.Capability.JS | SDK.Target.Capability.Log | SDK.Target.Capability.Network |
+            SDK.Target.Capability.Target;
+        break;
+      case SDK.Target.Type.Node:
+        this._capabilitiesMask = SDK.Target.Capability.JS;
+        break;
+      case SDK.Target.Type.Browser:
+        this._capabilitiesMask = SDK.Target.Capability.Target;
+        break;
+    }
+    this._type = type;
     this._parentTarget = parentTarget;
     this._id = id;
     this._modelByConstructor = new Map();
     this._isSuspended = suspended;
-    this._isNodeJS = isNodeJS;
   }
 
   createModels(required) {
@@ -42,17 +70,6 @@ SDK.Target = class extends Protocol.TargetBase {
         this.model(modelClass);
     }
     this._creatingModels = false;
-  }
-
-  /**
-   * @return {boolean}
-   */
-  isNodeJS() {
-    return this._isNodeJS;
-  }
-
-  markAsNodeJSForTest() {
-    this._isNodeJS = true;
   }
 
   /**
@@ -70,6 +87,21 @@ SDK.Target = class extends Protocol.TargetBase {
   }
 
   /**
+   * @return {!SDK.Target.Type}
+   */
+  type() {
+    return this._type;
+  }
+
+  /**
+   * @override
+   */
+  markAsNodeJSForTest() {
+    super.markAsNodeJSForTest();
+    this._type = SDK.Target.Type.Node;
+  }
+
+  /**
    * @return {!SDK.TargetManager}
    */
   targetManager() {
@@ -81,6 +113,8 @@ SDK.Target = class extends Protocol.TargetBase {
    * @return {boolean}
    */
   hasAllCapabilities(capabilitiesMask) {
+    // TODO(dgozman): get rid of this method, once we never observe targets with
+    // capability mask.
     return (this._capabilitiesMask & capabilitiesMask) === capabilitiesMask;
   }
 
@@ -89,49 +123,8 @@ SDK.Target = class extends Protocol.TargetBase {
    * @return {string}
    */
   decorateLabel(label) {
-    return !this.hasBrowserCapability() ? '\u2699 ' + label : label;
-  }
-
-  /**
-   * @return {boolean}
-   */
-  hasBrowserCapability() {
-    return this.hasAllCapabilities(SDK.Target.Capability.Browser);
-  }
-
-  /**
-   * @return {boolean}
-   */
-  hasJSCapability() {
-    return this.hasAllCapabilities(SDK.Target.Capability.JS);
-  }
-
-  /**
-   * @return {boolean}
-   */
-  hasLogCapability() {
-    return this.hasAllCapabilities(SDK.Target.Capability.Log);
-  }
-
-  /**
-   * @return {boolean}
-   */
-  hasNetworkCapability() {
-    return this.hasAllCapabilities(SDK.Target.Capability.Network);
-  }
-
-  /**
-   * @return {boolean}
-   */
-  hasTargetCapability() {
-    return this.hasAllCapabilities(SDK.Target.Capability.Target);
-  }
-
-  /**
-   * @return {boolean}
-   */
-  hasDOMCapability() {
-    return this.hasAllCapabilities(SDK.Target.Capability.DOM);
+    return (this._type === SDK.Target.Type.Worker || this._type === SDK.Target.Type.ServiceWorker) ? '\u2699 ' + label :
+                                                                                                     label;
   }
 
   /**
@@ -143,8 +136,10 @@ SDK.Target = class extends Protocol.TargetBase {
 
   /**
    * @override
+   * @param {string} reason
    */
-  dispose() {
+  dispose(reason) {
+    super.dispose(reason);
     this._targetManager.removeTarget(this);
     for (const model of this._modelByConstructor.valuesArray())
       model.dispose();
@@ -253,8 +248,17 @@ SDK.Target.Capability = {
   DeviceEmulation: 1 << 12,
 
   None: 0,
+};
 
-  AllForTests: (1 << 13) - 1
+/**
+ * @enum {string}
+ */
+SDK.Target.Type = {
+  Frame: 'frame',
+  ServiceWorker: 'service-worker',
+  Worker: 'worker',
+  Node: 'node',
+  Browser: 'browser',
 };
 
 /**

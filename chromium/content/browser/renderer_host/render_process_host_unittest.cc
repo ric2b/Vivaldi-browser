@@ -17,7 +17,6 @@
 #include "content/common/frame_owner_properties.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/mock_render_process_host.h"
@@ -28,6 +27,7 @@
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
 
 namespace content {
@@ -45,11 +45,11 @@ TEST_F(RenderProcessHostUnitTest, GuestsAreNotSuitableHosts) {
   scoped_refptr<SiteInstanceImpl> site_instance =
       SiteInstanceImpl::CreateForURL(browser_context(), test_url);
   EXPECT_FALSE(RenderProcessHostImpl::IsSuitableHost(
-      &guest_host, browser_context(), site_instance->GetSiteURL(),
-      site_instance->lock_url()));
+      &guest_host, browser_context(), site_instance->GetIsolationContext(),
+      site_instance->GetSiteURL(), site_instance->lock_url()));
   EXPECT_TRUE(RenderProcessHostImpl::IsSuitableHost(
-      process(), browser_context(), site_instance->GetSiteURL(),
-      site_instance->lock_url()));
+      process(), browser_context(), site_instance->GetIsolationContext(),
+      site_instance->GetSiteURL(), site_instance->lock_url()));
   EXPECT_EQ(process(),
             RenderProcessHostImpl::GetExistingProcessHost(site_instance.get()));
 }
@@ -61,15 +61,18 @@ TEST_F(RenderProcessHostUnitTest, RendererProcessLimit) {
   if (AreAllSitesIsolatedForTesting())
     return;
 
-  // Verify that the limit is between 1 and kMaxRendererProcessCount.
+  const size_t max_renderer_process_count =
+      RenderProcessHostImpl::GetPlatformMaxRendererProcessCount();
+
+  // Verify that the limit is between 1 and |max_renderer_process_count|.
   EXPECT_GT(RenderProcessHostImpl::GetMaxRendererProcessCount(), 0u);
   EXPECT_LE(RenderProcessHostImpl::GetMaxRendererProcessCount(),
-      kMaxRendererProcessCount);
+            max_renderer_process_count);
 
   // Add dummy process hosts to saturate the limit.
-  ASSERT_NE(0u, kMaxRendererProcessCount);
+  ASSERT_NE(0u, max_renderer_process_count);
   std::vector<std::unique_ptr<MockRenderProcessHost>> hosts;
-  for (size_t i = 0; i < kMaxRendererProcessCount; ++i) {
+  for (size_t i = 0; i < max_renderer_process_count; ++i) {
     hosts.push_back(std::make_unique<MockRenderProcessHost>(browser_context()));
   }
 
@@ -83,9 +86,9 @@ TEST_F(RenderProcessHostUnitTest, RendererProcessLimit) {
 #if defined(OS_ANDROID) || defined(OS_CHROMEOS)
 TEST_F(RenderProcessHostUnitTest, NoRendererProcessLimitOnAndroidOrChromeOS) {
   // Add a few dummy process hosts.
-  ASSERT_NE(0u, kMaxRendererProcessCount);
+  static constexpr size_t kMaxRendererProcessCountForTesting = 82;
   std::vector<std::unique_ptr<MockRenderProcessHost>> hosts;
-  for (size_t i = 0; i < kMaxRendererProcessCount; ++i) {
+  for (size_t i = 0; i < kMaxRendererProcessCountForTesting; ++i) {
     hosts.push_back(std::make_unique<MockRenderProcessHost>(browser_context()));
   }
 
@@ -132,9 +135,11 @@ TEST_F(RenderProcessHostUnitTest, ReuseCommittedSite) {
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(),
       TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+      TestRenderFrameHost::CreateStubDocumentInterfaceBrokerRequest(),
+      TestRenderFrameHost::CreateStubDocumentInterfaceBrokerRequest(),
       blink::WebTreeScopeType::kDocument, std::string(), unique_name, false,
       base::UnguessableToken::Create(), blink::FramePolicy(),
-      FrameOwnerProperties());
+      FrameOwnerProperties(), blink::FrameOwnerElementType::kIframe);
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   subframe = static_cast<TestRenderFrameHost*>(
@@ -456,9 +461,8 @@ TEST_F(RenderProcessHostUnitTest, DISABLED_ReuseNavigationProcess) {
   // RenderProcessHost with the REUSE_PENDING_OR_COMMITTED_SITE policy should
   // return the process of the speculative RenderFrameHost.
   navigation->Commit();
-  contents()->GetController().LoadURL(kUrl2, Referrer(),
-                                      ui::PAGE_TRANSITION_TYPED, std::string());
-  main_test_rfh()->SendBeforeUnloadACK(true);
+  navigation = NavigationSimulator::CreateBrowserInitiated(kUrl2, contents());
+  navigation->Start();
   site_instance = SiteInstanceImpl::CreateForURL(browser_context(), kUrl2);
   site_instance->set_process_reuse_policy(
       SiteInstanceImpl::ProcessReusePolicy::REUSE_PENDING_OR_COMMITTED_SITE);
@@ -470,8 +474,7 @@ TEST_F(RenderProcessHostUnitTest, DISABLED_ReuseNavigationProcess) {
   // no longer return the process of the speculative RenderFrameHost.
   int speculative_process_host_id =
       contents()->GetPendingMainFrame()->GetProcess()->GetID();
-  contents()->GetPendingMainFrame()->SimulateNavigationError(kUrl2,
-                                                             net::ERR_ABORTED);
+  navigation->Fail(net::ERR_ABORTED);
   site_instance = SiteInstanceImpl::CreateForURL(browser_context(), kUrl2);
   site_instance->set_process_reuse_policy(
       SiteInstanceImpl::ProcessReusePolicy::REUSE_PENDING_OR_COMMITTED_SITE);

@@ -22,6 +22,8 @@
 #include "extensions/common/extension.h"
 
 #include "app/vivaldi_apptools.h"
+#include "base/task/post_task.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/tools/vivaldi_tools.h"
 
@@ -107,8 +109,7 @@ void AppLoadService::Observe(int type,
   // It is possible for an extension to be unloaded before it stops loading.
   if (!extension)
     return;
-  std::map<std::string, PostReloadAction>::iterator it =
-      post_reload_actions_.find(extension->id());
+  auto it = post_reload_actions_.find(extension->id());
   if (it == post_reload_actions_.end())
     return;
 
@@ -145,13 +146,11 @@ void AppLoadService::OnExtensionUnloaded(
       attempts--;
 
       const int kRestartAppDelaySec = 4; // wait until app unloading done
-      content::BrowserThread::PostDelayedTask(
-        content::BrowserThread::UI,
-        FROM_HERE,
-        base::Bind(&AppLoadService::RestartApplication,
-                   base::Unretained(this),
-                   extension->id()),
-        base::TimeDelta::FromSeconds(kRestartAppDelaySec));
+      base::PostDelayedTaskWithTraits(
+          FROM_HERE, {content::BrowserThread::UI},
+          base::Bind(&AppLoadService::RestartApplication,
+                     base::Unretained(this), extension->id()),
+          base::TimeDelta::FromSeconds(kRestartAppDelaySec));
 
       return;
     }

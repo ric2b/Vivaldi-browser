@@ -22,12 +22,13 @@ namespace fuchsia {
 
 class ServiceDirectoryTest : public ServiceDirectoryTestBase {};
 
-// Verifies that ComponentContext can consume a public service in
+// Verifies that ServiceDirectoryClient can consume a public service in
 // ServiceDirectory and that connection is disconnected when the client stub is
 // destroyed.
 TEST_F(ServiceDirectoryTest, ConnectDisconnect) {
-  auto stub = client_context_->ConnectToService<testfidl::TestInterface>();
-  VerifyTestInterface(&stub, false);
+  auto stub = public_service_directory_client_
+                  ->ConnectToService<testfidl::TestInterface>();
+  VerifyTestInterface(&stub, ZX_OK);
 
   base::RunLoop run_loop;
   service_binding_->SetOnLastClientCallback(run_loop.QuitClosure());
@@ -48,38 +49,41 @@ TEST_F(ServiceDirectoryTest, ConnectDisconnect) {
 
 // Verifies that we can connect to the service service more than once.
 TEST_F(ServiceDirectoryTest, ConnectMulti) {
-  auto stub = client_context_->ConnectToService<testfidl::TestInterface>();
-  auto stub2 = client_context_->ConnectToService<testfidl::TestInterface>();
-  VerifyTestInterface(&stub, false);
-  VerifyTestInterface(&stub2, false);
+  auto stub = public_service_directory_client_
+                  ->ConnectToService<testfidl::TestInterface>();
+  auto stub2 = public_service_directory_client_
+                   ->ConnectToService<testfidl::TestInterface>();
+  VerifyTestInterface(&stub, ZX_OK);
+  VerifyTestInterface(&stub2, ZX_OK);
 }
 
 // Verify that services are also exported to the legacy flat service namespace.
 TEST_F(ServiceDirectoryTest, ConnectLegacy) {
-  ConnectClientContextToDirectory(".");
-  auto stub = client_context_->ConnectToService<testfidl::TestInterface>();
-  VerifyTestInterface(&stub, false);
+  auto stub = root_service_directory_client_
+                  ->ConnectToService<testfidl::TestInterface>();
+  VerifyTestInterface(&stub, ZX_OK);
 }
 
-// Verify that ComponentContext can handle the case when the service directory
-// connection is disconnected.
+// Verify that ServiceDirectoryClient can handle the case when the service
+// directory connection is disconnected.
 TEST_F(ServiceDirectoryTest, DirectoryGone) {
   service_binding_.reset();
   service_directory_.reset();
 
   fidl::InterfacePtr<testfidl::TestInterface> stub;
   zx_status_t status =
-      client_context_->ConnectToService(FidlInterfaceRequest(&stub));
+      public_service_directory_client_->ConnectToService(stub.NewRequest());
   EXPECT_EQ(status, ZX_ERR_PEER_CLOSED);
 
-  VerifyTestInterface(&stub, true);
+  VerifyTestInterface(&stub, ZX_ERR_PEER_CLOSED);
 }
 
 // Verify that the case when the service doesn't exist is handled properly.
 TEST_F(ServiceDirectoryTest, NoService) {
   service_binding_.reset();
-  auto stub = client_context_->ConnectToService<testfidl::TestInterface>();
-  VerifyTestInterface(&stub, true);
+  auto stub = public_service_directory_client_
+                  ->ConnectToService<testfidl::TestInterface>();
+  VerifyTestInterface(&stub, ZX_ERR_PEER_CLOSED);
 }
 
 }  // namespace fuchsia

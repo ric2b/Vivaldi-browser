@@ -16,7 +16,7 @@
 #include "chromeos/dbus/auth_policy_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/login_manager/policy_descriptor.pb.h"
-#include "chromeos/tools/variable_expander.h"
+#include "chromeos/network/onc/variable_expander.h"
 #include "components/policy/core/common/cloud/cloud_external_data_manager.h"
 #include "components/policy/core/common/cloud/component_cloud_policy_store.h"
 #include "components/policy/core/common/policy_bundle.h"
@@ -30,7 +30,7 @@ namespace em = enterprise_management;
 namespace policy {
 namespace {
 
-// List of policies where variables like ${machine_name} should be expanded.
+// List of policies where variables like ${MACHINE_NAME} should be expanded.
 constexpr const char* kPoliciesToExpand[] = {key::kNativePrinters};
 
 // Fetch policy every 90 minutes which matches the Windows default:
@@ -173,7 +173,7 @@ void ActiveDirectoryPolicyManager::PublishPolicy() {
   policy_map.SetSourceForAll(POLICY_SOURCE_ACTIVE_DIRECTORY);
   SetEnterpriseUsersDefaults(&policy_map);
 
-  // Expand e.g. ${machine_name} for a selected set of policies.
+  // Expand e.g. ${MACHINE_NAME} for a selected set of policies.
   ExpandVariables(&policy_map);
 
   // Policy is ready, send it off.
@@ -225,7 +225,7 @@ void ActiveDirectoryPolicyManager::ExpandVariables(PolicyMap* policy_map) {
   }
 
   chromeos::VariableExpander expander(
-      {{"machine_name", policy->machine_name()}});
+      {{"MACHINE_NAME", policy->machine_name()}});
   for (const char* policy_name : kPoliciesToExpand) {
     base::Value* value = policy_map->GetMutableValue(policy_name);
     if (value) {

@@ -9,19 +9,23 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/path_service.h"
+#include "base/stl_util.h"
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
 #include "build/build_config.h"
+#include "build/buildflag.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "mojo/core/embedder/embedder.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/buildflags.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
 #include "url/url_util.h"
 
-#if !defined(OS_IOS)
+#if defined(OS_IOS)
+#include "components/test/ios_components_test_initializer.h"
+#else
 #include "content/public/common/content_client.h"
 #include "content/public/test/content_test_suite_base.h"
 #include "content/public/test/test_content_client_initializer.h"
@@ -31,6 +35,10 @@
 
 #if defined(OS_WIN)
 #include "base/win/scoped_com_initializer.h"
+#endif
+
+#if BUILDFLAG(ENABLE_MUS)
+#include "ui/aura/test/aura_test_suite_setup.h"  // nogncheck
 #endif
 
 namespace {
@@ -89,7 +97,7 @@ class ComponentsTestSuite : public base::TestSuite {
 
     ContentSettingsPattern::SetNonWildcardDomainNonPortSchemes(
         kNonWildcardDomainNonPortSchemes,
-        arraysize(kNonWildcardDomainNonPortSchemes));
+        base::size(kNonWildcardDomainNonPortSchemes));
   }
 
   void Shutdown() override {
@@ -110,19 +118,25 @@ class ComponentsUnitTestEventListener : public testing::EmptyTestEventListener {
   ~ComponentsUnitTestEventListener() override {}
 
   void OnTestStart(const testing::TestInfo& test_info) override {
-#if !defined(OS_IOS)
+#if defined(OS_IOS)
+    ios_initializer_.reset(new IosComponentsTestInitializer());
+#else
     content_initializer_.reset(new content::TestContentClientInitializer());
 #endif
   }
 
   void OnTestEnd(const testing::TestInfo& test_info) override {
-#if !defined(OS_IOS)
+#if defined(OS_IOS)
+    ios_initializer_.reset();
+#else
     content_initializer_.reset();
 #endif
   }
 
  private:
-#if !defined(OS_IOS)
+#if defined(OS_IOS)
+  std::unique_ptr<IosComponentsTestInitializer> ios_initializer_;
+#else
   std::unique_ptr<content::TestContentClientInitializer> content_initializer_;
 #endif
 
@@ -144,6 +158,10 @@ base::RunTestSuiteCallback GetLaunchCallback(int argc, char** argv) {
   testing::TestEventListeners& listeners =
       testing::UnitTest::GetInstance()->listeners();
   listeners.Append(new ComponentsUnitTestEventListener());
+#if BUILDFLAG(ENABLE_MUS)
+  // Components unit tests do not use mus window service client code.
+  aura::AuraTestSuiteSetup::DisableMusFeatures();
+#endif
 
 #if !defined(OS_IOS)
   return base::BindOnce(&content::UnitTestTestSuite::Run,

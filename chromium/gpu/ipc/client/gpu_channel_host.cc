@@ -24,12 +24,6 @@
 using base::AutoLock;
 
 namespace gpu {
-namespace {
-
-// Global atomic to generate unique transfer buffer IDs.
-base::AtomicSequenceNumber g_next_transfer_buffer_id;
-
-}  // namespace
 
 GpuChannelHost::GpuChannelHost(int channel_id,
                                const gpu::GPUInfo& gpu_info,
@@ -40,7 +34,15 @@ GpuChannelHost::GpuChannelHost(int channel_id,
       gpu_info_(gpu_info),
       gpu_feature_info_(gpu_feature_info),
       listener_(new Listener(std::move(handle), io_thread_),
-                base::OnTaskRunnerDeleter(io_thread_)) {
+                base::OnTaskRunnerDeleter(io_thread_)),
+      shared_image_interface_(
+          this,
+          static_cast<int32_t>(
+              GpuChannelReservedRoutes::kSharedImageInterface)),
+      image_decode_accelerator_proxy_(
+          this,
+          static_cast<int32_t>(
+              GpuChannelReservedRoutes::kImageDecodeAccelerator)) {
   next_image_id_.GetNext();
   for (int32_t i = 0;
        i <= static_cast<int32_t>(GpuChannelReservedRoutes::kMaxValue); ++i)
@@ -82,7 +84,7 @@ bool GpuChannelHost::Send(IPC::Message* msg) {
                      std::move(message), &pending_sync));
 
   // http://crbug.com/125264
-  base::ThreadRestrictions::ScopedAllowWait allow_wait;
+  base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope allow_wait;
   pending_sync.done_event->Wait();
 
   return pending_sync.send_result;
@@ -152,7 +154,8 @@ void GpuChannelHost::EnqueuePendingOrderingBarrier() {
   deferred_message.message = GpuCommandBufferMsg_AsyncFlush(
       pending_ordering_barrier_->route_id,
       pending_ordering_barrier_->put_offset,
-      pending_ordering_barrier_->deferred_message_id);
+      pending_ordering_barrier_->deferred_message_id,
+      pending_ordering_barrier_->sync_token_fences);
   deferred_message.sync_token_fences =
       std::move(pending_ordering_barrier_->sync_token_fences);
   deferred_messages_.push_back(std::move(deferred_message));
@@ -191,16 +194,16 @@ void GpuChannelHost::AddRouteWithTaskRunner(
     int route_id,
     base::WeakPtr<IPC::Listener> listener,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  io_thread_->PostTask(FROM_HERE,
-                       base::Bind(&GpuChannelHost::Listener::AddRoute,
-                                  base::Unretained(listener_.get()), route_id,
-                                  listener, task_runner));
+  io_thread_->PostTask(
+      FROM_HERE, base::BindOnce(&GpuChannelHost::Listener::AddRoute,
+                                base::Unretained(listener_.get()), route_id,
+                                listener, task_runner));
 }
 
 void GpuChannelHost::RemoveRoute(int route_id) {
-  io_thread_->PostTask(FROM_HERE,
-                       base::Bind(&GpuChannelHost::Listener::RemoveRoute,
-                                  base::Unretained(listener_.get()), route_id));
+  io_thread_->PostTask(
+      FROM_HERE, base::BindOnce(&GpuChannelHost::Listener::RemoveRoute,
+                                base::Unretained(listener_.get()), route_id));
 }
 
 base::SharedMemoryHandle GpuChannelHost::ShareToGpuProcess(
@@ -217,14 +220,6 @@ base::UnsafeSharedMemoryRegion GpuChannelHost::ShareToGpuProcess(
     return base::UnsafeSharedMemoryRegion();
 
   return source_region.Duplicate();
-}
-
-int32_t GpuChannelHost::ReserveTransferBufferId() {
-  // 0 is a reserved value.
-  int32_t id = g_next_transfer_buffer_id.GetNext();
-  if (id)
-    return id;
-  return g_next_transfer_buffer_id.GetNext();
 }
 
 int32_t GpuChannelHost::ReserveImageId() {
@@ -299,7 +294,8 @@ void GpuChannelHost::Listener::AddRoute(
 
   if (lost_) {
     info.task_runner->PostTask(
-        FROM_HERE, base::Bind(&IPC::Listener::OnChannelError, info.listener));
+        FROM_HERE,
+        base::BindOnce(&IPC::Listener::OnChannelError, info.listener));
   }
 }
 
@@ -330,8 +326,8 @@ bool GpuChannelHost::Listener::OnMessageReceived(const IPC::Message& message) {
   const RouteInfo& info = it->second;
   info.task_runner->PostTask(
       FROM_HERE,
-      base::Bind(base::IgnoreResult(&IPC::Listener::OnMessageReceived),
-                 info.listener, message));
+      base::BindOnce(base::IgnoreResult(&IPC::Listener::OnMessageReceived),
+                     info.listener, message));
   return true;
 }
 
@@ -356,7 +352,8 @@ void GpuChannelHost::Listener::OnChannelError() {
   for (const auto& kv : routes_) {
     const RouteInfo& info = kv.second;
     info.task_runner->PostTask(
-        FROM_HERE, base::Bind(&IPC::Listener::OnChannelError, info.listener));
+        FROM_HERE,
+        base::BindOnce(&IPC::Listener::OnChannelError, info.listener));
   }
 
   routes_.clear();

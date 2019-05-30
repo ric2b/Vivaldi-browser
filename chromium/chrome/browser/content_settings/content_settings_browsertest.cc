@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
@@ -29,6 +31,7 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/nacl/common/buildflags.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_observer.h"
@@ -52,6 +55,7 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "ppapi/shared_impl/ppapi_switches.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/widevine/cdm/buildflags.h"
 
 #if defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
@@ -94,8 +98,8 @@ class ContentSettingsTest : public InProcessBrowserTest {
   }
 
   void SetUpOnMainThread() override {
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::IO},
         base::BindOnce(&chrome_browser_net::SetUrlRequestMocksEnabled, true));
   }
 
@@ -322,7 +326,7 @@ IN_PROC_BROWSER_TEST_P(CookieSettingsTest, BlockCookiesUsingExceptions) {
   ASSERT_FALSE(GetCookies(browser()->profile(), unblocked_url).empty());
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     /* no prefix */,
     CookieSettingsTest,
     ::testing::Values(CookieMode::kJSReadJSWrite,
@@ -421,7 +425,7 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsStrictSecureCookiesBrowserTest, Cookies) {
   ui_test_utils::NavigateToURL(browser(),
                                https_server.GetURL("/setsecurecookie.html"));
   EXPECT_FALSE(GetSiteSettingsCookieContainer(browser())->cookies()->empty());
-};
+}
 
 IN_PROC_BROWSER_TEST_F(ContentSettingsTest, ContentSettingsBlockDataURLs) {
   GURL url("data:text/html,<title>Data URL</title><script>alert(1)</script>");
@@ -631,7 +635,7 @@ class PepperContentSettingsSpecialCasesTest : public ContentSettingsTest {
 #endif
   }
 
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS) && defined(WIDEVINE_CDM_AVAILABLE)
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS) && BUILDFLAG(ENABLE_WIDEVINE)
   // Since the CDM is bundled and registered through the component updater,
   // we must re-enable the component updater.
   void SetUpDefaultCommandLine(base::CommandLine* command_line) override {
@@ -640,7 +644,7 @@ class PepperContentSettingsSpecialCasesTest : public ContentSettingsTest {
     test_launcher_utils::RemoveCommandLineSwitch(
         default_command_line, switches::kDisableComponentUpdate, command_line);
   }
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS) && defined(WIDEVINE_CDM_AVAILABLE)
+#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS) && BUILDFLAG(ENABLE_WIDEVINE)
 
   void RunLoadPepperPluginTest(const char* mime_type, bool expect_loaded) {
     const char* expected_result = expect_loaded ? "Loaded" : "Not Loaded";

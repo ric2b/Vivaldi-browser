@@ -4,7 +4,12 @@
 
 #include "ui/base/ime/dummy_text_input_client.h"
 
+#if defined(OS_WIN)
+#include <vector>
+#endif
+
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -92,11 +97,12 @@ bool DummyTextInputClient::GetCompositionTextRange(gfx::Range* range) const {
   return false;
 }
 
-bool DummyTextInputClient::GetSelectionRange(gfx::Range* range) const {
+bool DummyTextInputClient::GetEditableSelectionRange(gfx::Range* range) const {
   return false;
 }
 
-bool DummyTextInputClient::SetSelectionRange(const gfx::Range& range) {
+bool DummyTextInputClient::SetEditableSelectionRange(const gfx::Range& range) {
+  selection_history_.push_back(range);
   return false;
 }
 
@@ -138,5 +144,11 @@ ukm::SourceId DummyTextInputClient::GetClientSourceForMetrics() const {
 bool DummyTextInputClient::ShouldDoLearning() {
   return false;
 }
+
+#if defined(OS_WIN)
+void DummyTextInputClient::SetCompositionFromExistingText(
+    const gfx::Range& range,
+    const std::vector<ui::ImeTextSpan>& ui_ime_text_spans) {}
+#endif
 
 }  // namespace ui

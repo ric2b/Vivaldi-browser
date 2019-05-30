@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/language/ios/browser/ios_language_detection_tab_helper.h"
@@ -86,7 +87,8 @@ TEST_F(LanguageDetectionControllerTest, OnTextCaptured) {
   command.SetString("htmlLang", kRootLanguage);
   command.SetString("httpContentLanguage", kContentLanguage);
   controller()->OnTextCaptured(command, GURL("http://google.com"),
-                               /*interacting=*/false, /*is_main_frame=*/true);
+                               /*interacting=*/false, /*is_main_frame=*/true,
+                               /*sender_frame=*/nullptr);
 
   const LanguageDetectionDetails* const details = this->details();
   EXPECT_NE(nullptr, details);
@@ -114,7 +116,8 @@ TEST_F(LanguageDetectionControllerTest, MissingHttpContentLanguage) {
   command.SetString("htmlLang", "");
   command.SetString("httpContentLanguage", "");
   controller()->OnTextCaptured(command, GURL("http://google.com"),
-                               /*interacting=*/false, /*is_main_frame=*/true);
+                               /*interacting=*/false, /*is_main_frame=*/true,
+                               /*sender_frame=*/nullptr);
 
   const LanguageDetectionDetails* const details = this->details();
   EXPECT_NE(nullptr, details);

@@ -11,15 +11,15 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 
 namespace blink {
-namespace CSSLonghand {
+namespace css_longhand {
 
 const CSSValue* TransitionProperty::ParseSingleValue(
     CSSParserTokenRange& range,
-    const CSSParserContext&,
+    const CSSParserContext& context,
     const CSSParserLocalContext&) const {
-  CSSValueList* list = CSSPropertyParserHelpers::ConsumeCommaSeparatedList(
-      CSSParsingUtils::ConsumeTransitionProperty, range);
-  if (!list || !CSSParsingUtils::IsValidPropertyList(*list))
+  CSSValueList* list = css_property_parser_helpers::ConsumeCommaSeparatedList(
+      css_parsing_utils::ConsumeTransitionProperty, range, context);
+  if (!list || !css_parsing_utils::IsValidPropertyList(*list))
     return nullptr;
   return list;
 }
@@ -34,10 +34,10 @@ const CSSValue* TransitionProperty::CSSValueFromComputedStyleInternal(
 }
 
 const CSSValue* TransitionProperty::InitialValue() const {
-  DEFINE_STATIC_LOCAL(CSSValue, value,
+  DEFINE_STATIC_LOCAL(Persistent<CSSValue>, value,
                       (CSSIdentifierValue::Create(CSSValueAll)));
-  return &value;
+  return value;
 }
 
-}  // namespace CSSLonghand
+}  // namespace css_longhand
 }  // namespace blink

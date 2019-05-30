@@ -5,59 +5,114 @@
 package org.chromium.chrome.browser.contacts_picker;
 
 import android.content.ContentResolver;
-import android.database.Cursor;
-import android.provider.ContactsContract;
+import android.support.annotation.IntDef;
+import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.Adapter;
-import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
 
+import org.chromium.base.VisibleForTesting;
+import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.R;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.Locale;
 
 /**
  * A data adapter for the Contacts Picker.
  */
-public class PickerAdapter extends Adapter<ViewHolder> {
+public class PickerAdapter extends Adapter<RecyclerView.ViewHolder>
+        implements ContactsFetcherWorkerTask.ContactsRetrievedCallback {
+    /**
+     * A ViewHolder for the top-most view in the RecyclerView. The view it contains has a
+     * checkbox and some multi-line text that goes with it, so clicks on either text line
+     * should be treated as clicks for the checkbox (hence the onclick forwarding).
+     */
+    class TopViewHolder extends RecyclerView.ViewHolder implements View.OnClickListener {
+        TopView mItemView;
+
+        public TopViewHolder(TopView itemView) {
+            super(itemView);
+            mItemView = itemView;
+            mItemView.setOnClickListener(this);
+        }
+
+        @Override
+        public void onClick(View view) {
+            // TODO(finnur): Make the explanation text non-clickable.
+            mItemView.toggle();
+        }
+    }
+
+    /**
+     * The types of views supported.
+     */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({ViewType.SELECT_ALL_CHECKBOX, ViewType.CONTACT_DETAILS})
+    private @interface ViewType {
+        int SELECT_ALL_CHECKBOX = 0;
+        int CONTACT_DETAILS = 1;
+    }
+
     // The category view to use to show the contacts.
     private PickerCategoryView mCategoryView;
+
+    // The view at the top of the RecyclerView (disclaimer and select all functionality).
+    private TopView mTopView;
+
+    // The origin the data will be shared with, formatted for display with the scheme omitted.
+    private final String mFormattedOrigin;
 
     // The content resolver to query data from.
     private ContentResolver mContentResolver;
 
-    // A cursor containing the raw contacts data.
-    private Cursor mContactsCursor;
+    // The full list of all registered contacts on the device.
+    private ArrayList<ContactDetails> mContactDetails;
 
-    /**
-     * Holds on to a {@link ContactView} that displays information about a contact.
-     */
-    public class ContactViewHolder extends ViewHolder {
-        /**
-         * The ContactViewHolder.
-         * @param itemView The {@link ContactView} view for showing the contact details.
-         */
-        public ContactViewHolder(ContactView itemView) {
-            super(itemView);
-        }
-    }
+    // The async worker task to use for fetching the contact details.
+    private ContactsFetcherWorkerTask mWorkerTask;
 
-    private static final String[] PROJECTION = {
-            ContactsContract.Contacts._ID, ContactsContract.Contacts.LOOKUP_KEY,
-            ContactsContract.Contacts.DISPLAY_NAME_PRIMARY,
-    };
+    // Whether the user has switched to search mode.
+    private boolean mSearchMode;
+
+    // A list of search result indices into the larger data set.
+    private ArrayList<Integer> mSearchResults;
+
+    // A list of contacts to use for testing (instead of querying Android).
+    private static ArrayList<ContactDetails> sTestContacts;
 
     /**
      * The PickerAdapter constructor.
      * @param categoryView The category view to use to show the contacts.
+     * @param contentResolver The content resolver to use to fetch the data.
+     * @param formattedOrigin The origin the data will be shared with.
      */
-    public PickerAdapter(PickerCategoryView categoryView, ContentResolver contentResolver) {
+    public PickerAdapter(PickerCategoryView categoryView, ContentResolver contentResolver,
+            String formattedOrigin) {
         mCategoryView = categoryView;
         mContentResolver = contentResolver;
-        mContactsCursor = contentResolver.query(ContactsContract.Contacts.CONTENT_URI, PROJECTION,
-                null, null, ContactsContract.Contacts.DISPLAY_NAME_PRIMARY + " ASC");
+        mFormattedOrigin = formattedOrigin;
+
+        if (getAllContacts() == null && sTestContacts == null) {
+            mWorkerTask = new ContactsFetcherWorkerTask(mContentResolver, this,
+                    mCategoryView.includeNames, mCategoryView.includeEmails,
+                    mCategoryView.includeTel);
+            mWorkerTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+        } else {
+            mContactDetails = sTestContacts;
+            notifyDataSetChanged();
+        }
+    }
+
+    /**
+     * Set whether the user has switched to search mode.
+     * @param searchMode True when we are in search mode.
+     */
+    public void setSearchMode(boolean searchMode) {
+        mSearchMode = searchMode;
     }
 
     /**
@@ -65,83 +120,109 @@ public class PickerAdapter extends Adapter<ViewHolder> {
      * @param query The search term to use.
      */
     public void setSearchString(String query) {
-        String searchString = "%" + query + "%";
-        String[] selectionArgs = {searchString};
-        mContactsCursor.close();
-
-        mContactsCursor = mContentResolver.query(ContactsContract.Contacts.CONTENT_URI, PROJECTION,
-                ContactsContract.Contacts.DISPLAY_NAME_PRIMARY + " LIKE ?", selectionArgs,
-                ContactsContract.Contacts.DISPLAY_NAME_PRIMARY + " ASC");
+        if (query.equals("")) {
+            if (mSearchResults == null) return;
+            mSearchResults.clear();
+            mSearchResults = null;
+        } else {
+            mSearchResults = new ArrayList<Integer>();
+            Integer count = 0;
+            String query_lower = query.toLowerCase(Locale.getDefault());
+            for (ContactDetails contact : mContactDetails) {
+                if (contact.getDisplayName().toLowerCase(Locale.getDefault()).contains(query_lower)
+                        || contact.getContactDetailsAsString(
+                                          /*longVersion=*/true, /*resources=*/null)
+                                   .toLowerCase(Locale.getDefault())
+                                   .contains(query_lower)) {
+                    mSearchResults.add(count);
+                }
+                count++;
+            }
+        }
         notifyDataSetChanged();
     }
 
     /**
-     * Fetches all known contacts and their emails.
-     * @return The contact list as a set.
+     * Fetches all known contacts.
+     * @return The contact list as an array.
      */
-    public Set<ContactDetails> getAllContacts() {
-        Set<ContactDetails> contacts = new HashSet<>();
-        if (!mContactsCursor.moveToFirst()) return contacts;
-        do {
-            String id = mContactsCursor.getString(
-                    mContactsCursor.getColumnIndex(ContactsContract.Contacts._ID));
-            String name = mContactsCursor.getString(
-                    mContactsCursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY));
-            contacts.add(new ContactDetails(id, name, getEmails()));
-        } while (mContactsCursor.moveToNext());
+    public ArrayList<ContactDetails> getAllContacts() {
+        return mContactDetails;
+    }
 
-        return contacts;
+    // ContactsFetcherWorkerTask.ContactsRetrievedCallback:
+
+    @Override
+    public void contactsRetrieved(ArrayList<ContactDetails> contacts) {
+        mContactDetails = contacts;
+        if (mTopView != null) mTopView.updateContactCount(mContactDetails.size());
+        notifyDataSetChanged();
     }
 
     // RecyclerView.Adapter:
 
     @Override
-    public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-        ContactView itemView = (ContactView) LayoutInflater.from(parent.getContext())
-                                       .inflate(R.layout.contact_view, parent, false);
-        itemView.setCategoryView(mCategoryView);
-        return new ContactViewHolder(itemView);
+    public int getItemViewType(int position) {
+        if (position == 0 && !mSearchMode) return ViewType.SELECT_ALL_CHECKBOX;
+        return ViewType.CONTACT_DETAILS;
     }
 
     @Override
-    public void onBindViewHolder(ViewHolder holder, int position) {
-        String id = "";
-        String name = "";
-        if (mContactsCursor.moveToPosition(position)) {
-            id = mContactsCursor.getString(
-                    mContactsCursor.getColumnIndex(ContactsContract.Contacts._ID));
-            name = mContactsCursor.getString(
-                    mContactsCursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY));
+    public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        switch (viewType) {
+            case ViewType.SELECT_ALL_CHECKBOX: {
+                mTopView = (TopView) LayoutInflater.from(parent.getContext())
+                                   .inflate(R.layout.top_view, parent, false);
+                mTopView.setSiteString(mFormattedOrigin);
+                mTopView.registerSelectAllCallback(mCategoryView);
+                mTopView.updateCheckboxVisibility(mCategoryView.multiSelectionAllowed());
+                mCategoryView.setTopView(mTopView);
+                if (mContactDetails != null) mTopView.updateContactCount(mContactDetails.size());
+                return new TopViewHolder(mTopView);
+            }
+            case ViewType.CONTACT_DETAILS: {
+                ContactView itemView = (ContactView) LayoutInflater.from(parent.getContext())
+                                               .inflate(R.layout.contact_view, parent, false);
+                itemView.setCategoryView(mCategoryView);
+                return new ContactViewHolder(itemView, mCategoryView, mContentResolver);
+            }
         }
-
-        ((ContactView) holder.itemView).initialize(new ContactDetails(id, name, getEmails()));
+        return null;
     }
 
-    private Cursor getEmailCursor(String id) {
-        Cursor emailCursor =
-                mContentResolver.query(ContactsContract.CommonDataKinds.Email.CONTENT_URI, null,
-                        ContactsContract.CommonDataKinds.Email.CONTACT_ID + " = " + id, null,
-                        ContactsContract.CommonDataKinds.Email.DATA + " ASC");
-        return emailCursor;
-    }
+    @Override
+    public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
+        switch (holder.getItemViewType()) {
+            case ViewType.SELECT_ALL_CHECKBOX:
+                // There's no need to bind the Select All view.
+                return;
+            case ViewType.CONTACT_DETAILS:
+                ContactViewHolder contactHolder = (ContactViewHolder) holder;
+                ContactDetails contact;
+                if (!mSearchMode || mSearchResults == null) {
+                    // Subtract one because the first view is the Select All checkbox when not in
+                    // search mode.
+                    contact = mContactDetails.get(position - (mSearchMode ? 0 : 1));
+                } else {
+                    Integer index = mSearchResults.get(position);
+                    contact = mContactDetails.get(index);
+                }
 
-    private ArrayList<String> getEmails() {
-        // Look up all associated emails for this contact.
-        // TODO(finnur): Investigate whether we can do this in one go with the original cursor...
-        String id = mContactsCursor.getString(
-                mContactsCursor.getColumnIndex(ContactsContract.Contacts._ID));
-        Cursor emailCursor = getEmailCursor(id);
-        ArrayList<String> emails = new ArrayList<String>();
-        while (emailCursor.moveToNext()) {
-            emails.add(emailCursor.getString(
-                    emailCursor.getColumnIndex(ContactsContract.CommonDataKinds.Email.DATA)));
+                contactHolder.setContactDetails(contact);
         }
-        emailCursor.close();
-        return emails;
     }
 
     @Override
     public int getItemCount() {
-        return mContactsCursor.getCount();
+        if (mSearchResults != null) return mSearchResults.size();
+        if (mContactDetails == null || mContactDetails.size() == 0) return 0;
+        // Add one entry to account for the Select All checkbox, when not searching.
+        return mContactDetails.size() + (mSearchMode ? 0 : 1);
+    }
+
+    /** Sets a list of contacts to use as data for the dialog. For testing use only. */
+    @VisibleForTesting
+    public static void setTestContacts(ArrayList<ContactDetails> contacts) {
+        sTestContacts = contacts;
     }
 }

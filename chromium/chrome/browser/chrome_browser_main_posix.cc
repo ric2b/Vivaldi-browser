@@ -16,10 +16,12 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/app/shutdown_signal_handlers_posix.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/sessions/session_restore.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/result_codes.h"
 
@@ -38,7 +40,7 @@ void SIGCHLDHandler(int signal) {
 class ExitHandler {
  public:
   // Invokes exit when appropriate.
-  static void ExitWhenPossibleOnUIThread();
+  static void ExitWhenPossibleOnUIThread(int signal);
 
  private:
   ExitHandler();
@@ -62,13 +64,38 @@ class ExitHandler {
 };
 
 // static
-void ExitHandler::ExitWhenPossibleOnUIThread() {
+void ExitHandler::ExitWhenPossibleOnUIThread(int signal) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (SessionRestore::IsRestoringSynchronously()) {
     // ExitHandler takes care of deleting itself.
     new ExitHandler();
   } else {
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+    switch (signal) {
+      case SIGINT:
+      case SIGHUP:
+        // SIGINT gets sent when the user types Ctrl+C, but the session is
+        // likely not going away, so try to exit gracefully.  SIGHUP is sent on
+        // most systems as a first warning of shutdown.  If the process takes
+        // too long to quit, the next signal is usually SIGTERM.
+        Exit();
+        break;
+      case SIGTERM:
+        // SIGTERM is usually sent instead of SIGKILL to gracefully shutdown
+        // processes.  But most systems use it as a shutdown warning, so
+        // conservatively assume that the session is ending.  If the process
+        // still doesn't quit within a bounded time, most systems will finally
+        // send SIGKILL, which we're unable to install a signal handler for.
+        // TODO(thomasanderson): Try to distinguish if the session is really
+        // ending or not.  Maybe there's a systemd or DBus API to query.
+        chrome::SessionEnding();
+        break;
+      default:
+        NOTREACHED();
+    }
+#else
     Exit();
+#endif
   }
 }
 
@@ -87,8 +114,8 @@ void ExitHandler::OnSessionRestoreDone(int /* num_tabs */) {
     // At this point the message loop may not be running (meaning we haven't
     // gotten through browser startup, but are close). Post the task to at which
     // point the message loop is running.
-    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            base::BindOnce(&ExitHandler::Exit));
+    base::PostTaskWithTraits(FROM_HERE, {BrowserThread::UI},
+                             base::BindOnce(&ExitHandler::Exit));
     delete this;
   }
 }
@@ -97,7 +124,7 @@ void ExitHandler::OnSessionRestoreDone(int /* num_tabs */) {
 void ExitHandler::Exit() {
 #if defined(OS_CHROMEOS)
   // On ChromeOS, exiting on signal should be always clean.
-  chrome::ExitCleanly();
+  chrome::ExitIgnoreUnloadHandlers();
 #else
   chrome::AttemptExit();
 #endif
@@ -109,10 +136,8 @@ void ExitHandler::Exit() {
 
 ChromeBrowserMainPartsPosix::ChromeBrowserMainPartsPosix(
     const content::MainFunctionParams& parameters,
-    std::unique_ptr<ui::DataPack> data_pack,
     ChromeFeatureListCreator* chrome_feature_list_creator)
     : ChromeBrowserMainParts(parameters,
-                             std::move(data_pack),
                              chrome_feature_list_creator) {}
 
 int ChromeBrowserMainPartsPosix::PreEarlyInitialization() {
@@ -125,7 +150,7 @@ int ChromeBrowserMainPartsPosix::PreEarlyInitialization() {
   struct sigaction action;
   memset(&action, 0, sizeof(action));
   action.sa_handler = SIGCHLDHandler;
-  CHECK(sigaction(SIGCHLD, &action, NULL) == 0);
+  CHECK_EQ(0, sigaction(SIGCHLD, &action, NULL));
 
   return service_manager::RESULT_CODE_NORMAL_EXIT;
 }
@@ -135,8 +160,8 @@ void ChromeBrowserMainPartsPosix::PostMainMessageLoopStart() {
 
   // Exit in response to SIGINT, SIGTERM, etc.
   InstallShutdownSignalHandlers(
-      base::Bind(&ExitHandler::ExitWhenPossibleOnUIThread),
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::UI));
+      base::BindOnce(&ExitHandler::ExitWhenPossibleOnUIThread),
+      base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::UI}));
 }
 
 void ChromeBrowserMainPartsPosix::ShowMissingLocaleMessageBox() {

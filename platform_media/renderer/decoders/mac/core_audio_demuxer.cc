@@ -11,6 +11,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/task_runner_util.h"
 #include "media/base/bind_to_current_loop.h"
@@ -387,7 +388,7 @@ bool CoreAudioDemuxer::IsSupported(const std::string& content_type,
     if (!net::GetMimeTypeFromFile(file, &mime_type))
       return false;
   }
-  for (size_t i = 0; i < arraysize(kSupportedMimeTypes); i++) {
+  for (size_t i = 0; i < base::size(kSupportedMimeTypes); i++) {
     if (!mime_type.compare(kSupportedMimeTypes[i]))
       return true;
   }

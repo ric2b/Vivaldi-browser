@@ -27,10 +27,10 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_SCROLL_SCROLLBAR_H_
 
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/scroll/scroll_types.h"
 #include "third_party/blink/renderer/platform/graphics/compositor_element_id.h"
 #include "third_party/blink/renderer/platform/graphics/paint/display_item.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_types.h"
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 
@@ -52,7 +52,8 @@ class CORE_EXPORT Scrollbar : public GarbageCollectedFinalized<Scrollbar>,
                            ScrollbarOrientation orientation,
                            ScrollbarControlSize size,
                            ChromeClient* chrome_client) {
-    return new Scrollbar(scrollable_area, orientation, size, chrome_client);
+    return MakeGarbageCollected<Scrollbar>(scrollable_area, orientation, size,
+                                           chrome_client);
   }
 
   // Theme object ownership remains with the caller and it must outlive the
@@ -61,9 +62,15 @@ class CORE_EXPORT Scrollbar : public GarbageCollectedFinalized<Scrollbar>,
                                      ScrollbarOrientation orientation,
                                      ScrollbarControlSize size,
                                      ScrollbarTheme* theme) {
-    return new Scrollbar(scrollable_area, orientation, size, nullptr, theme);
+    return MakeGarbageCollected<Scrollbar>(scrollable_area, orientation, size,
+                                           nullptr, theme);
   }
 
+  Scrollbar(ScrollableArea*,
+            ScrollbarOrientation,
+            ScrollbarControlSize,
+            ChromeClient* = nullptr,
+            ScrollbarTheme* = nullptr);
   ~Scrollbar() override;
 
   int X() const { return frame_rect_.X(); }
@@ -86,11 +93,11 @@ class CORE_EXPORT Scrollbar : public GarbageCollectedFinalized<Scrollbar>,
   ScrollbarOrientation Orientation() const { return orientation_; }
   bool IsLeftSideVerticalScrollbar() const;
 
-  int Value() const { return lroundf(current_pos_); }
+  int Value() const { return static_cast<int>(lroundf(current_pos_)); }
   float CurrentPos() const { return current_pos_; }
   int VisibleSize() const { return visible_size_; }
   int TotalSize() const { return total_size_; }
-  int Maximum() const { return total_size_ - visible_size_; }
+  int Maximum() const;
   ScrollbarControlSize GetControlSize() const { return control_size_; }
 
   ScrollbarPart PressedPart() const { return pressed_part_; }
@@ -193,16 +200,10 @@ class CORE_EXPORT Scrollbar : public GarbageCollectedFinalized<Scrollbar>,
   // Promptly unregister from the theme manager + run finalizers of derived
   // Scrollbars.
   EAGERLY_FINALIZE();
-  DECLARE_EAGER_FINALIZATION_OPERATOR_NEW();
+  DEFINE_INLINE_EAGER_FINALIZATION_OPERATOR_NEW()
   virtual void Trace(blink::Visitor*);
 
  protected:
-  Scrollbar(ScrollableArea*,
-            ScrollbarOrientation,
-            ScrollbarControlSize,
-            ChromeClient* = nullptr,
-            ScrollbarTheme* = nullptr);
-
   void AutoscrollTimerFired(TimerBase*);
   void StartTimerIfNeeded(TimeDelta delay);
   void StopTimerIfNeeded();

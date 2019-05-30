@@ -29,8 +29,8 @@
 #include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/modules/webaudio/audio_context.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_node_output.h"
-#include "third_party/blink/renderer/modules/webaudio/base_audio_context.h"
 #include "third_party/blink/renderer/modules/webaudio/media_element_audio_source_options.h"
 #include "third_party/blink/renderer/platform/audio/audio_utilities.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -79,23 +79,23 @@ HTMLMediaElement* MediaElementAudioSourceHandler::MediaElement() const {
 }
 
 void MediaElementAudioSourceHandler::Dispose() {
-  media_element_->SetAudioSourceNode(nullptr);
   AudioHandler::Dispose();
 }
 
-void MediaElementAudioSourceHandler::SetFormat(size_t number_of_channels,
+void MediaElementAudioSourceHandler::SetFormat(uint32_t number_of_channels,
                                                float source_sample_rate) {
+  DCHECK(MediaElement());
   bool is_tainted = WouldTaintOrigin();
 
   if (is_tainted) {
-    PrintCORSMessage(MediaElement()->currentSrc().GetString());
+    PrintCorsMessage(MediaElement()->currentSrc().GetString());
   }
 
   if (number_of_channels != source_number_of_channels_ ||
       source_sample_rate != source_sample_rate_) {
     if (!number_of_channels ||
         number_of_channels > BaseAudioContext::MaxNumberOfChannels() ||
-        !AudioUtilities::IsValidAudioBufferSampleRate(source_sample_rate)) {
+        !audio_utilities::IsValidAudioBufferSampleRate(source_sample_rate)) {
       // process() will generate silence for these uninitialized values.
       DLOG(ERROR) << "setFormat(" << number_of_channels << ", "
                   << source_sample_rate << ") - unhandled format change";
@@ -136,32 +136,21 @@ void MediaElementAudioSourceHandler::SetFormat(size_t number_of_channels,
 }
 
 bool MediaElementAudioSourceHandler::WouldTaintOrigin() {
-  // If we're cross-origin and allowed access vie CORS, we're not tainted.
-  if (MediaElement()->GetWebMediaPlayer()->DidPassCORSAccessCheck()) {
-    return false;
-  }
-
-  // Handles the case where the url is a redirect to another site that we're not
-  // allowed to access.
-  if (!MediaElement()->HasSingleSecurityOrigin()) {
-    return true;
-  }
-
-  // Test to see if the current media URL taint the origin of the audio context?
-  return Context()->WouldTaintOrigin(MediaElement()->currentSrc());
+  DCHECK(MediaElement());
+  return MediaElement()->GetWebMediaPlayer()->WouldTaintOrigin();
 }
 
-void MediaElementAudioSourceHandler::PrintCORSMessage(const String& message) {
+void MediaElementAudioSourceHandler::PrintCorsMessage(const String& message) {
   if (Context()->GetExecutionContext()) {
-    Context()->GetExecutionContext()->AddConsoleMessage(
-        ConsoleMessage::Create(kSecurityMessageSource, kInfoMessageLevel,
-                               "MediaElementAudioSource outputs zeroes due to "
-                               "CORS access restrictions for " +
-                                   message));
+    Context()->GetExecutionContext()->AddConsoleMessage(ConsoleMessage::Create(
+        kSecurityMessageSource, mojom::ConsoleMessageLevel::kInfo,
+        "MediaElementAudioSource outputs zeroes due to "
+        "CORS access restrictions for " +
+            message));
   }
 }
 
-void MediaElementAudioSourceHandler::Process(size_t number_of_frames) {
+void MediaElementAudioSourceHandler::Process(uint32_t number_of_frames) {
   AudioBus* output_bus = Output(0).Bus();
 
   // Use a tryLock() to avoid contention in the real-time audio thread.
@@ -217,22 +206,17 @@ void MediaElementAudioSourceHandler::unlock() {
 // ----------------------------------------------------------------
 
 MediaElementAudioSourceNode::MediaElementAudioSourceNode(
-    BaseAudioContext& context,
+    AudioContext& context,
     HTMLMediaElement& media_element)
-    : AudioNode(context) {
+    : AudioNode(context), media_element_(&media_element) {
   SetHandler(MediaElementAudioSourceHandler::Create(*this, media_element));
 }
 
 MediaElementAudioSourceNode* MediaElementAudioSourceNode::Create(
-    BaseAudioContext& context,
+    AudioContext& context,
     HTMLMediaElement& media_element,
     ExceptionState& exception_state) {
   DCHECK(IsMainThread());
-
-  if (context.IsContextClosed()) {
-    context.ThrowExceptionForClosedState(exception_state);
-    return nullptr;
-  }
 
   // First check if this media element already has a source node.
   if (media_element.AudioSourceNode()) {
@@ -244,7 +228,7 @@ MediaElementAudioSourceNode* MediaElementAudioSourceNode::Create(
   }
 
   MediaElementAudioSourceNode* node =
-      new MediaElementAudioSourceNode(context, media_element);
+      MakeGarbageCollected<MediaElementAudioSourceNode>(context, media_element);
 
   if (node) {
     media_element.SetAudioSourceNode(node);
@@ -261,13 +245,14 @@ MediaElementAudioSourceNode* MediaElementAudioSourceNode::Create(
 }
 
 MediaElementAudioSourceNode* MediaElementAudioSourceNode::Create(
-    BaseAudioContext* context,
-    const MediaElementAudioSourceOptions& options,
+    AudioContext* context,
+    const MediaElementAudioSourceOptions* options,
     ExceptionState& exception_state) {
-  return Create(*context, *options.mediaElement(), exception_state);
+  return Create(*context, *options->mediaElement(), exception_state);
 }
 
 void MediaElementAudioSourceNode::Trace(blink::Visitor* visitor) {
+  visitor->Trace(media_element_);
   AudioSourceProviderClient::Trace(visitor);
   AudioNode::Trace(visitor);
 }
@@ -278,10 +263,10 @@ MediaElementAudioSourceNode::GetMediaElementAudioSourceHandler() const {
 }
 
 HTMLMediaElement* MediaElementAudioSourceNode::mediaElement() const {
-  return GetMediaElementAudioSourceHandler().MediaElement();
+  return media_element_;
 }
 
-void MediaElementAudioSourceNode::SetFormat(size_t number_of_channels,
+void MediaElementAudioSourceNode::SetFormat(uint32_t number_of_channels,
                                             float sample_rate) {
   GetMediaElementAudioSourceHandler().SetFormat(number_of_channels,
                                                 sample_rate);

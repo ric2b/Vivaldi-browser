@@ -16,7 +16,7 @@
 #include "third_party/blink/renderer/platform/animation/compositor_animation.h"
 #include "third_party/blink/renderer/platform/animation/compositor_animation_client.h"
 #include "third_party/blink/renderer/platform/animation/compositor_animation_delegate.h"
-#include "third_party/blink/renderer/platform/graphics/compositor_animators_state.h"
+#include "third_party/blink/renderer/platform/graphics/animation_worklet_mutators_state.h"
 
 namespace blink {
 
@@ -62,11 +62,24 @@ class MODULES_EXPORT WorkletAnimation : public WorkletAnimationBase,
       scoped_refptr<SerializedScriptValue>,
       ExceptionState&);
 
+  WorkletAnimation(WorkletAnimationId id,
+                   const String& animator_name,
+                   Document&,
+                   const HeapVector<Member<KeyframeEffect>>&,
+                   AnimationTimeline*,
+                   scoped_refptr<SerializedScriptValue>);
   ~WorkletAnimation() override = default;
 
+  AnimationEffect* effect() { return GetEffect(); }
   AnimationTimeline* timeline() { return timeline_; }
   String playState();
-  void play();
+  double currentTime(bool& is_null);
+  double startTime(bool& is_null);
+
+  double playbackRate(ScriptState* script_state) const;
+  void setPlaybackRate(ScriptState* script_state, double playback_rate);
+  void play(ExceptionState& exception_state);
+  void pause(ExceptionState& exception_state);
   void cancel();
 
   // AnimationEffectOwner implementation:
@@ -87,7 +100,8 @@ class MODULES_EXPORT WorkletAnimation : public WorkletAnimationBase,
 
   // WorkletAnimationBase implementation.
   void Update(TimingUpdateReason) override;
-  bool UpdateCompositingState() override;
+  void UpdateCompositingState() override;
+  void InvalidateCompositingState() override;
 
   // CompositorAnimationClient implementation.
   CompositorAnimation* GetCompositorAnimation() const override {
@@ -99,32 +113,81 @@ class MODULES_EXPORT WorkletAnimation : public WorkletAnimationBase,
   void NotifyAnimationFinished(double monotonic_time, int group) override {}
   void NotifyAnimationAborted(double monotonic_time, int group) override {}
 
-  void Dispose();
-
   Document* GetDocument() const override { return document_.Get(); }
   AnimationTimeline* GetTimeline() const override { return timeline_; }
   const String& Name() { return animator_name_; }
 
   KeyframeEffect* GetEffect() const override;
+  const WorkletAnimationId& GetWorkletAnimationId() const override {
+    return id_;
+  }
+  bool IsActiveAnimation() const override;
+
+  bool NeedsPeek(base::TimeDelta current_time);
+
+  void UpdateInputState(AnimationWorkletDispatcherInput* input_state) override;
+  void SetOutputState(
+      const AnimationWorkletOutput::AnimationState& state) override;
+
+  base::Optional<base::TimeDelta> CurrentTime() const;
+
+  void SetRunningOnMainThreadForTesting(bool running_on_main_thread) {
+    running_on_main_thread_ = running_on_main_thread;
+  }
 
   void Trace(blink::Visitor*) override;
+  void Dispose();
 
  private:
-  WorkletAnimation(WorkletAnimationId id,
-                   const String& animator_name,
-                   Document&,
-                   const HeapVector<Member<KeyframeEffect>>&,
-                   AnimationTimeline*,
-                   scoped_refptr<SerializedScriptValue>);
   void DestroyCompositorAnimation();
 
   // Attempts to start the animation on the compositor side, returning true if
-  // it succeeds or false otherwise. If false is returned and failure_message
-  // was non-null, failure_message may be filled with an error description.
-  bool StartOnCompositor(String* failure_message);
+  // it succeeds or false otherwise. If false is returned and the animation
+  // cannot be started on main.
+  bool StartOnCompositor();
+  void StartOnMain();
+  bool CheckCanStart(String* failure_message);
+
+  // Sets the current time for the animation.
+  //
+  // Note that the current time of the animation is a computed value that
+  // depends on either the start time (for playing animations) or the hold time
+  // (for pending, paused, or idle animations). So this procedure updates either
+  // the start time or the hold time so that the computed current time is
+  // matched.
+  //
+  // The exception to this are scroll-linked animations whose start time is not
+  // modifiable (always zero) in which case the post setting the current time,
+  // the computed current time may not match it.
+  //
+  // Generally, when an animation play state transitions, we expect to see the
+  // current time is set. Here are some interesting examples of this:
+  //  - when transitioning to play, the current time is either set to
+  //  zero (first time) or the last current time (when resuming from pause).
+  //  - when transitioning to idle or cancel, the current time is set to
+  //  "null".
+  //  - when transitioning to pause, the current time is set to the last
+  //  current time for holding.
+  void SetCurrentTime(base::Optional<base::TimeDelta> current_time);
+
+  // For DocumentTimeline animations, adjusts start_time_ according to playback
+  // rate change to preserve current time and avoid the animation output from
+  // jumping.
+  // Setting playback rate is currently not supported for scroll-linked
+  // animations.
+  void SetPlaybackRateInternal(double);
 
   // Updates a running animation on the compositor side.
   void UpdateOnCompositor();
+
+  std::unique_ptr<cc::AnimationOptions> CloneOptions() const {
+    return options_ ? options_->Clone() : nullptr;
+  }
+
+  Animation::AnimationPlayState PlayState() const { return play_state_; }
+  void SetPlayState(const Animation::AnimationPlayState& state) {
+    play_state_ = state;
+  }
 
   unsigned sequence_number_;
 
@@ -132,8 +195,20 @@ class MODULES_EXPORT WorkletAnimation : public WorkletAnimationBase,
 
   const String animator_name_;
   Animation::AnimationPlayState play_state_;
-  // Start time in ms.
-  base::Optional<double> start_time_;
+  Animation::AnimationPlayState last_play_state_;
+  // Controls speed of the animation.
+  // https://drafts.csswg.org/web-animations-2/#animation-effect-playback-rate
+  double playback_rate_;
+  base::Optional<base::TimeDelta> start_time_;
+  Vector<base::Optional<base::TimeDelta>> local_times_;
+  // Hold time is used when animation is paused.
+  // TODO(majidvp): Replace base::TimeDelta usage with AnimationTimeDelta.
+  base::Optional<base::TimeDelta> hold_time_;
+  // We use this to skip updating if current time has not changed since last
+  // update.
+  base::Optional<base::TimeDelta> last_current_time_;
+  // Time the main thread sends a peek request.
+  base::Optional<base::TimeDelta> last_peek_request_time_;
 
   Member<Document> document_;
 
@@ -142,12 +217,15 @@ class MODULES_EXPORT WorkletAnimation : public WorkletAnimationBase,
   std::unique_ptr<WorkletAnimationOptions> options_;
 
   std::unique_ptr<CompositorAnimation> compositor_animation_;
-
+  bool running_on_main_thread_;
+  bool has_started_;
   // Tracks whether any KeyframeEffect associated with this WorkletAnimation has
   // been invalidated and needs to be restarted. Used to avoid unnecessarily
   // restarting the effect on the compositor. When true, a call to
   // |UpdateOnCompositor| will update the effect on the compositor.
   bool effect_needs_restart_;
+
+  FRIEND_TEST_ALL_PREFIXES(WorkletAnimationTest, PausePlay);
 };
 
 }  // namespace blink

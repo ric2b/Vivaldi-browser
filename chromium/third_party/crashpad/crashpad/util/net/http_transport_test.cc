@@ -364,20 +364,21 @@ TEST_P(HTTPTransport, Upload33k_LengthUnknown) {
   RunUpload33k(GetParam(), false);
 }
 
-#if defined(CRASHPAD_USE_BORINGSSL)
+// This should be on for Fuchsia, but DX-382. Debug and re-enabled.
+#if defined(CRASHPAD_USE_BORINGSSL) && !defined(OS_FUCHSIA)
 // The test server requires BoringSSL or OpenSSL, so https in tests can only be
 // enabled where that's readily available. Additionally on Linux, the bots fail
 // lacking libcrypto.so.1.1, so disabled there for now. On Mac, they could also
 // likely be enabled relatively easily, if HTTPTransportMac learned to respect
 // the user-supplied cert.
-INSTANTIATE_TEST_CASE_P(HTTPTransport,
-                        HTTPTransport,
-                        testing::Values(FILE_PATH_LITERAL("http"),
-                                        FILE_PATH_LITERAL("https")));
+INSTANTIATE_TEST_SUITE_P(HTTPTransport,
+                         HTTPTransport,
+                         testing::Values(FILE_PATH_LITERAL("http"),
+                                         FILE_PATH_LITERAL("https")));
 #else
-INSTANTIATE_TEST_CASE_P(HTTPTransport,
-                        HTTPTransport,
-                        testing::Values(FILE_PATH_LITERAL("http")));
+INSTANTIATE_TEST_SUITE_P(HTTPTransport,
+                         HTTPTransport,
+                         testing::Values(FILE_PATH_LITERAL("http")));
 #endif
 
 }  // namespace

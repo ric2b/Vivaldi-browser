@@ -17,6 +17,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/resource_type.h"
+#include "net/base/ip_endpoint.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/web_input_event.h"
 #include "url/gurl.h"
@@ -67,29 +68,59 @@ PageLoadMetricsObserverTester::~PageLoadMetricsObserverTester() {}
 
 void PageLoadMetricsObserverTester::SimulateTimingUpdate(
     const mojom::PageLoadTiming& timing) {
-  SimulatePageLoadTimingUpdate(timing, mojom::PageLoadMetadata(),
-                               mojom::PageLoadFeatures());
+  SimulateTimingUpdate(timing, web_contents()->GetMainFrame());
+}
+
+void PageLoadMetricsObserverTester::SimulateTimingUpdate(
+    const mojom::PageLoadTiming& timing,
+    content::RenderFrameHost* rfh) {
+  SimulatePageLoadTimingUpdate(
+      timing, mojom::PageLoadMetadata(), mojom::PageLoadFeatures(),
+      mojom::PageRenderData(), mojom::CpuTiming(), rfh);
 }
 
 void PageLoadMetricsObserverTester::SimulateTimingAndMetadataUpdate(
     const mojom::PageLoadTiming& timing,
     const mojom::PageLoadMetadata& metadata) {
-  SimulatePageLoadTimingUpdate(timing, metadata, mojom::PageLoadFeatures());
+  SimulatePageLoadTimingUpdate(timing, metadata, mojom::PageLoadFeatures(),
+                               mojom::PageRenderData(), mojom::CpuTiming(),
+                               web_contents()->GetMainFrame());
 }
 
 void PageLoadMetricsObserverTester::SimulateFeaturesUpdate(
     const mojom::PageLoadFeatures& new_features) {
   SimulatePageLoadTimingUpdate(mojom::PageLoadTiming(),
-                               mojom::PageLoadMetadata(), new_features);
+                               mojom::PageLoadMetadata(), new_features,
+                               mojom::PageRenderData(), mojom::CpuTiming(),
+                               web_contents()->GetMainFrame());
+}
+
+void PageLoadMetricsObserverTester::SimulateRenderDataUpdate(
+    const mojom::PageRenderData& render_data) {
+  SimulateRenderDataUpdate(render_data, web_contents()->GetMainFrame());
+}
+
+void PageLoadMetricsObserverTester::SimulateRenderDataUpdate(
+    const mojom::PageRenderData& render_data,
+    content::RenderFrameHost* rfh) {
+  mojom::PageLoadTiming timing;
+  InitPageLoadTimingForTest(&timing);
+  SimulatePageLoadTimingUpdate(timing, mojom::PageLoadMetadata(),
+                               mojom::PageLoadFeatures(), render_data,
+                               mojom::CpuTiming(), rfh);
 }
 
 void PageLoadMetricsObserverTester::SimulatePageLoadTimingUpdate(
     const mojom::PageLoadTiming& timing,
     const mojom::PageLoadMetadata& metadata,
-    const mojom::PageLoadFeatures& new_features) {
-  observer_->OnTimingUpdated(web_contents()->GetMainFrame(), timing, metadata,
-                             new_features,
-                             std::vector<mojom::ResourceDataUpdatePtr>());
+    const mojom::PageLoadFeatures& new_features,
+    const mojom::PageRenderData& render_data,
+    const mojom::CpuTiming& cpu_timing,
+    content::RenderFrameHost* rfh) {
+  observer_->OnTimingUpdated(rfh, timing.Clone(), metadata.Clone(),
+                             new_features.Clone(),
+                             std::vector<mojom::ResourceDataUpdatePtr>(),
+                             render_data.Clone(), cpu_timing.Clone());
   // If sending the timing update caused the PageLoadMetricsUpdateDispatcher to
   // schedule a buffering timer, then fire it now so metrics are dispatched to
   // observers.
@@ -100,9 +131,20 @@ void PageLoadMetricsObserverTester::SimulatePageLoadTimingUpdate(
 
 void PageLoadMetricsObserverTester::SimulateResourceDataUseUpdate(
     const std::vector<mojom::ResourceDataUpdatePtr>& resources) {
-  observer_->OnTimingUpdated(web_contents()->GetMainFrame(),
-                             mojom::PageLoadTiming(), mojom::PageLoadMetadata(),
-                             mojom::PageLoadFeatures(), resources);
+  SimulateResourceDataUseUpdate(resources, web_contents()->GetMainFrame());
+}
+
+void PageLoadMetricsObserverTester::SimulateResourceDataUseUpdate(
+    const std::vector<mojom::ResourceDataUpdatePtr>& resources,
+    content::RenderFrameHost* render_frame_host) {
+  auto timing = mojom::PageLoadTimingPtr(base::in_place);
+  InitPageLoadTimingForTest(timing.get());
+  observer_->OnTimingUpdated(render_frame_host, std::move(timing),
+                             mojom::PageLoadMetadataPtr(base::in_place),
+                             mojom::PageLoadFeaturesPtr(base::in_place),
+                             resources,
+                             mojom::PageRenderDataPtr(base::in_place),
+                             mojom::CpuTimingPtr(base::in_place));
 }
 
 void PageLoadMetricsObserverTester::SimulateLoadedResource(
@@ -127,7 +169,7 @@ void PageLoadMetricsObserverTester::SimulateLoadedResource(
           : web_contents()->GetMainFrame();
 
   observer_->OnRequestComplete(
-      info.url, info.host_port_pair, info.frame_tree_node_id, request_id,
+      info.url, info.remote_endpoint, info.frame_tree_node_id, request_id,
       render_frame_host_or_null, info.resource_type, info.was_cached,
       info.data_reduction_proxy_data
           ? info.data_reduction_proxy_data->DeepCopy()

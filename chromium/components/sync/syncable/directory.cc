@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "base/base64.h"
+#include "base/bind.h"
 #include "base/files/file_enumerator.h"
 #include "base/guid.h"
 #include "base/logging.h"
@@ -135,7 +136,7 @@ DirOpenResult Directory::Open(
 
   const DirOpenResult result = OpenImpl(name, delegate, transaction_observer);
 
-  if (OPENED != result)
+  if (OPENED_NEW != result && OPENED_EXISTING != result)
     Close();
   return result;
 }
@@ -190,7 +191,7 @@ DirOpenResult Directory::OpenImpl(
 
   DirOpenResult result = store_->Load(&tmp_handles_map, delete_journals.get(),
                                       &metahandles_to_purge, &info);
-  if (OPENED != result)
+  if (OPENED_NEW != result && OPENED_EXISTING != result)
     return result;
 
   DCHECK(!kernel_);
@@ -210,7 +211,7 @@ DirOpenResult Directory::OpenImpl(
   store_->SetCatastrophicErrorHandler(base::Bind(
       &Directory::OnCatastrophicError, weak_ptr_factory_.GetWeakPtr()));
 
-  return OPENED;
+  return result;
 }
 
 DeleteJournal* Directory::delete_journal() {
@@ -242,7 +243,7 @@ EntryKernel* Directory::GetEntryById(const ScopedKernelLock& lock,
                                      const Id& id) {
   DCHECK(kernel_);
   // Find it in the in memory ID index.
-  IdsMap::iterator id_found = kernel_->ids_map.find(id.value());
+  auto id_found = kernel_->ids_map.find(id.value());
   if (id_found != kernel_->ids_map.end()) {
     return id_found->second;
   }
@@ -253,7 +254,7 @@ EntryKernel* Directory::GetEntryByClientTag(const string& tag) {
   ScopedKernelLock lock(this);
   DCHECK(kernel_);
 
-  TagsMap::iterator it = kernel_->client_tags_map.find(tag);
+  auto it = kernel_->client_tags_map.find(tag);
   if (it != kernel_->client_tags_map.end()) {
     return it->second;
   }
@@ -263,7 +264,7 @@ EntryKernel* Directory::GetEntryByClientTag(const string& tag) {
 EntryKernel* Directory::GetEntryByServerTag(const string& tag) {
   ScopedKernelLock lock(this);
   DCHECK(kernel_);
-  TagsMap::iterator it = kernel_->server_tags_map.find(tag);
+  auto it = kernel_->server_tags_map.find(tag);
   if (it != kernel_->server_tags_map.end()) {
     return it->second;
   }
@@ -278,7 +279,7 @@ EntryKernel* Directory::GetEntryByHandle(int64_t metahandle) {
 EntryKernel* Directory::GetEntryByHandle(const ScopedKernelLock& lock,
                                          int64_t metahandle) {
   // Look up in memory
-  MetahandlesMap::iterator found = kernel_->metahandles_map.find(metahandle);
+  auto found = kernel_->metahandles_map.find(metahandle);
   if (found != kernel_->metahandles_map.end()) {
     // Found it in memory.  Easy.
     return found->second.get();
@@ -312,8 +313,7 @@ int Directory::GetTotalNodeCount(BaseTransaction* trans,
   while (!child_sets.empty()) {
     const OrderedChildSet* set = child_sets.front();
     child_sets.pop_front();
-    for (OrderedChildSet::const_iterator it = set->begin(); it != set->end();
-         ++it) {
+    for (auto it = set->begin(); it != set->end(); ++it) {
       count++;
       GetChildSetForKernel(trans, *it, &child_sets);
     }
@@ -343,7 +343,7 @@ int Directory::GetPositionIndex(BaseTransaction* trans,
   const OrderedChildSet* siblings =
       kernel_->parent_child_index.GetSiblings(kernel);
 
-  OrderedChildSet::const_iterator it = siblings->find(kernel);
+  auto it = siblings->find(kernel);
   return std::distance(siblings->begin(), it);
 }
 
@@ -493,7 +493,7 @@ void Directory::TakeSnapshotForSaveChanges(SaveChangesSnapshot* snapshot) {
 
   // Deep copy dirty entries from kernel_->metahandles_index into snapshot and
   // clear dirty flags.
-  for (MetahandleSet::const_iterator i = kernel_->dirty_metahandles.begin();
+  for (auto i = kernel_->dirty_metahandles.begin();
        i != kernel_->dirty_metahandles.end(); ++i) {
     EntryKernel* entry = GetEntryByHandle(lock, *i);
     if (!entry)
@@ -552,8 +552,7 @@ bool Directory::VacuumAfterSaveChanges(const SaveChangesSnapshot& snapshot) {
   // Now drop everything we can out of memory.
   for (auto i = snapshot.dirty_metas.begin(); i != snapshot.dirty_metas.end();
        ++i) {
-    MetahandlesMap::iterator found =
-        kernel_->metahandles_map.find((*i)->ref(META_HANDLE));
+    auto found = kernel_->metahandles_map.find((*i)->ref(META_HANDLE));
     if (found != kernel_->metahandles_map.end() &&
         SafeToPurgeFromMemoryForTransaction(&trans, found->second.get())) {
       // We now drop deleted metahandles that are up to date on both the client
@@ -705,7 +704,7 @@ void Directory::PurgeEntriesWithTypeIn(ModelTypeSet disabled_types,
     if (!found_progress)
       return;
 
-    for (MetahandlesMap::iterator it = kernel_->metahandles_map.begin();
+    for (auto it = kernel_->metahandles_map.begin();
          it != kernel_->metahandles_map.end();) {
       EntryKernel* entry = it->second.get();
       const sync_pb::EntitySpecifics& local_specifics = entry->ref(SPECIFICS);
@@ -767,8 +766,7 @@ bool Directory::ResetVersionsForType(BaseWriteTransaction* trans,
   Directory::Metahandles children;
   AppendChildHandles(lock, type_root_id, &children);
 
-  for (Metahandles::iterator it = children.begin(); it != children.end();
-       ++it) {
+  for (auto it = children.begin(); it != children.end(); ++it) {
     EntryKernel* entry = GetEntryByHandle(lock, *it);
     if (!entry)
       continue;
@@ -798,8 +796,7 @@ void Directory::HandleSaveChangesFailure(const SaveChangesSnapshot& snapshot) {
   // that SaveChanges will at least try again later.
   for (auto i = snapshot.dirty_metas.begin(); i != snapshot.dirty_metas.end();
        ++i) {
-    MetahandlesMap::iterator found =
-        kernel_->metahandles_map.find((*i)->ref(META_HANDLE));
+    auto found = kernel_->metahandles_map.find((*i)->ref(META_HANDLE));
     if (found != kernel_->metahandles_map.end()) {
       found->second->mark_dirty(&kernel_->dirty_metahandles);
     }
@@ -1089,7 +1086,7 @@ void Directory::GetAllMetaHandles(BaseTransaction* trans,
                                   MetahandleSet* result) {
   result->clear();
   ScopedKernelLock lock(this);
-  for (MetahandlesMap::iterator i = kernel_->metahandles_map.begin();
+  for (auto i = kernel_->metahandles_map.begin();
        i != kernel_->metahandles_map.end(); ++i) {
     result->insert(i->first);
   }
@@ -1155,7 +1152,7 @@ void Directory::CollectMetaHandleCounts(
   syncable::ReadTransaction trans(FROM_HERE, this);
   ScopedKernelLock lock(this);
 
-  for (MetahandlesMap::iterator it = kernel_->metahandles_map.begin();
+  for (auto it = kernel_->metahandles_map.begin();
        it != kernel_->metahandles_map.end(); ++it) {
     EntryKernel* entry = it->second.get();
     const ModelType type = GetModelTypeFromSpecifics(entry->ref(SPECIFICS));
@@ -1171,7 +1168,7 @@ std::unique_ptr<base::ListValue> Directory::GetNodeDetailsForType(
   std::unique_ptr<base::ListValue> nodes(new base::ListValue());
 
   ScopedKernelLock lock(this);
-  for (MetahandlesMap::iterator it = kernel_->metahandles_map.begin();
+  for (auto it = kernel_->metahandles_map.begin();
        it != kernel_->metahandles_map.end(); ++it) {
     if (GetModelTypeFromSpecifics(it->second->ref(SPECIFICS)) != type) {
       continue;
@@ -1403,7 +1400,7 @@ syncable::Id Directory::GetPredecessorId(EntryKernel* e) {
 
   DCHECK(ParentChildIndex::ShouldInclude(e));
   const OrderedChildSet* siblings = kernel_->parent_child_index.GetSiblings(e);
-  OrderedChildSet::const_iterator i = siblings->find(e);
+  auto i = siblings->find(e);
   DCHECK(i != siblings->end());
 
   if (i == siblings->begin()) {
@@ -1419,7 +1416,7 @@ syncable::Id Directory::GetSuccessorId(EntryKernel* e) {
 
   DCHECK(ParentChildIndex::ShouldInclude(e));
   const OrderedChildSet* siblings = kernel_->parent_child_index.GetSiblings(e);
-  OrderedChildSet::const_iterator i = siblings->find(e);
+  auto i = siblings->find(e);
   DCHECK(i != siblings->end());
 
   i++;
@@ -1487,7 +1484,7 @@ void Directory::PutPredecessor(EntryKernel* e, EntryKernel* predecessor) {
   // siblings with invalid positions at all.  See TODO above.
   DCHECK(predecessor->ref(UNIQUE_POSITION).IsValid());
 
-  OrderedChildSet::const_iterator neighbour = siblings->find(predecessor);
+  auto neighbour = siblings->find(predecessor);
   DCHECK(neighbour != siblings->end());
 
   ++neighbour;

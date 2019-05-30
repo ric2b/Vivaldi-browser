@@ -12,8 +12,6 @@
 #error "This file requires ARC support."
 #endif
 
-DEFINE_WEB_STATE_USER_DATA_KEY(NetExportTabHelper);
-
 // static
 void NetExportTabHelper::CreateForWebState(
     web::WebState* web_state,
@@ -35,3 +33,5 @@ NetExportTabHelper::~NetExportTabHelper() = default;
 void NetExportTabHelper::ShowMailComposer(ShowMailComposerContext* context) {
   [delegate_ netExportTabHelper:this showMailComposerWithContext:context];
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(NetExportTabHelper)

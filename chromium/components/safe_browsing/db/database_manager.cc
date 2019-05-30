@@ -7,9 +7,12 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/task/post_task.h"
 #include "components/safe_browsing/db/v4_get_hash_protocol_manager.h"
 #include "components/safe_browsing/db/v4_protocol_manager_util.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "url/gurl.h"
@@ -20,8 +23,8 @@ namespace safe_browsing {
 
 SafeBrowsingDatabaseManager::SafeBrowsingDatabaseManager()
     : base::RefCountedDeleteOnSequence<SafeBrowsingDatabaseManager>(
-          content::BrowserThread::GetTaskRunnerForThread(
-              content::BrowserThread::IO)),
+          base::CreateSingleThreadTaskRunnerWithTraits(
+              {content::BrowserThread::IO})),
       enabled_(false) {}
 
 SafeBrowsingDatabaseManager::~SafeBrowsingDatabaseManager() {
@@ -30,7 +33,7 @@ SafeBrowsingDatabaseManager::~SafeBrowsingDatabaseManager() {
 
 bool SafeBrowsingDatabaseManager::CancelApiCheck(Client* client) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  ApiCheckSet::iterator it = FindClientApiCheck(client);
+  auto it = FindClientApiCheck(client);
   if (it != api_checks_.end()) {
     api_checks_.erase(it);
     return true;
@@ -72,8 +75,7 @@ bool SafeBrowsingDatabaseManager::CheckApiBlacklistUrl(const GURL& url,
 SafeBrowsingDatabaseManager::ApiCheckSet::iterator
 SafeBrowsingDatabaseManager::FindClientApiCheck(Client* client) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  for (ApiCheckSet::iterator it = api_checks_.begin(); it != api_checks_.end();
-       ++it) {
+  for (auto it = api_checks_.begin(); it != api_checks_.end(); ++it) {
     if ((*it)->client() == client) {
       return it;
     }
@@ -105,7 +107,7 @@ void SafeBrowsingDatabaseManager::OnThreatMetadataResponse(
 
   // If the check is not in |api_checks_| then the request was cancelled by the
   // client.
-  ApiCheckSet::iterator it = api_checks_.find(check.get());
+  auto it = api_checks_.find(check.get());
   if (it == api_checks_.end())
     return;
 
@@ -149,6 +151,11 @@ SafeBrowsingDatabaseManager::RegisterDatabaseUpdatedCallback(
 void SafeBrowsingDatabaseManager::NotifyDatabaseUpdateFinished() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   update_complete_callback_list_.Notify();
+}
+
+std::string SafeBrowsingDatabaseManager::GetSafetyNetId() const {
+  NOTREACHED() << "Only implemented on Android";
+  return "";
 }
 
 SafeBrowsingDatabaseManager::SafeBrowsingApiCheck::SafeBrowsingApiCheck(

@@ -41,16 +41,15 @@ class HTMLInputElement;
 class AXSlider : public AXLayoutObject {
  public:
   static AXSlider* Create(LayoutObject*, AXObjectCacheImpl&);
-  ~AXSlider() override = default;
 
- protected:
   AXSlider(LayoutObject*, AXObjectCacheImpl&);
+  ~AXSlider() override = default;
 
  private:
   HTMLInputElement* GetInputElement() const;
   AXObject* ElementAccessibilityHitTest(const IntPoint&) const final;
 
-  AccessibilityRole DetermineAccessibilityRole() final;
+  ax::mojom::Role DetermineAccessibilityRole() final;
   bool IsSlider() const final { return true; }
   bool IsControl() const final { return true; }
 
@@ -65,13 +64,15 @@ class AXSlider : public AXLayoutObject {
 class AXSliderThumb final : public AXMockObject {
  public:
   static AXSliderThumb* Create(AXObjectCacheImpl&);
+
+  explicit AXSliderThumb(AXObjectCacheImpl&);
   ~AXSliderThumb() override = default;
 
-  AccessibilityRole RoleValue() const override { return kSliderThumbRole; }
+  ax::mojom::Role RoleValue() const override {
+    return ax::mojom::Role::kSliderThumb;
+  }
 
  private:
-  explicit AXSliderThumb(AXObjectCacheImpl&);
-
   bool ComputeAccessibilityIsIgnored(IgnoredReasons* = nullptr) const override;
   LayoutObject* LayoutObjectForRelativeBounds() const override;
 

@@ -8,8 +8,8 @@
 #include "content/browser/android/render_widget_host_connector.h"
 #include "content/browser/renderer_host/input/timeout_monitor.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "third_party/blink/public/platform/input_host.mojom.h"
-#include "third_party/blink/public/platform/input_messages.mojom.h"
+#include "third_party/blink/public/mojom/input/input_host.mojom.h"
+#include "third_party/blink/public/mojom/input/input_messages.mojom.h"
 
 namespace content {
 
@@ -18,13 +18,13 @@ namespace content {
 // misspelled word. This class creates the Android implementation of
 // mojom::TextSuggestionHost, which is used to communicate back-and-forth with
 // Blink side code (these are separate classes due to lifecycle considerations;
-// this class needs to be constructed from Java code, but Mojo code wants to
-// take ownership of mojom::TextSuggestionHost).
+// this class is created by ImeAdapterAndroid ctor and destroyed together with
+// WebContents. Mojo code takes ownership of mojom::TextSuggestionHost).
 class TextSuggestionHostAndroid : public RenderWidgetHostConnector,
                                   public WebContentsObserver {
  public:
+  static void Create(JNIEnv* env, WebContents* web_contents);
   TextSuggestionHostAndroid(JNIEnv* env,
-                            const base::android::JavaParamRef<jobject>& obj,
                             WebContents* web_contents);
   ~TextSuggestionHostAndroid() override;
 
@@ -95,6 +95,7 @@ class TextSuggestionHostAndroid : public RenderWidgetHostConnector,
 
  private:
   RenderFrameHost* GetFocusedFrame();
+  base::android::ScopedJavaLocalRef<jobject> GetJavaTextSuggestionHost();
   const blink::mojom::TextSuggestionBackendPtr& GetTextSuggestionBackend();
   // Used by the spell check menu timer to notify Blink that the timer has
   // expired.

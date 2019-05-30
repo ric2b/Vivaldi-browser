@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <queue>
 
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
@@ -24,27 +25,28 @@
 namespace wm {
 namespace {
 
-bool HasAncestor(aura::Window* window, aura::Window* ancestor) {
+bool HasAncestor(const aura::Window* window, const aura::Window* ancestor) {
   return ancestor && ancestor->Contains(window);
 }
 
-bool TransientChildIsWindowModal(aura::Window* window) {
+bool TransientChildIsWindowModal(const aura::Window* window) {
   return window->GetProperty(aura::client::kModalKey) == ui::MODAL_TYPE_WINDOW;
 }
 
-bool TransientChildIsSystemModal(aura::Window* window) {
+bool TransientChildIsSystemModal(const aura::Window* window) {
   return window->GetProperty(aura::client::kModalKey) == ui::MODAL_TYPE_SYSTEM;
 }
 
-bool TransientChildIsChildModal(aura::Window* window) {
+bool TransientChildIsChildModal(const aura::Window* window) {
   return window->GetProperty(aura::client::kModalKey) == ui::MODAL_TYPE_CHILD;
 }
 
-aura::Window* GetModalParent(aura::Window* window) {
+aura::Window* GetModalParent(const aura::Window* window) {
   return window->GetProperty(aura::client::kChildModalParentKey);
 }
 
-bool IsModalTransientChild(aura::Window* transient, aura::Window* original) {
+bool IsModalTransientChild(const aura::Window* transient,
+                           const aura::Window* original) {
   return transient->IsVisible() &&
          (TransientChildIsWindowModal(transient) ||
           TransientChildIsSystemModal(transient) ||
@@ -52,15 +54,15 @@ bool IsModalTransientChild(aura::Window* transient, aura::Window* original) {
            HasAncestor(original, GetModalParent(transient))));
 }
 
-aura::Window* GetModalTransientChild(
-    aura::Window* activatable,
-    aura::Window* original) {
-  for (aura::Window* transient : GetTransientChildren(activatable)) {
+const aura::Window* GetModalTransientChild(const aura::Window* activatable,
+                                           const aura::Window* original) {
+  for (const aura::Window* transient : GetTransientChildren(activatable)) {
     if (IsModalTransientChild(transient, original)) {
       if (GetTransientChildren(transient).empty())
         return transient;
 
-      aura::Window* modal_child = GetModalTransientChild(transient, original);
+      const aura::Window* modal_child =
+          GetModalTransientChild(transient, original);
       return modal_child ? modal_child : transient;
     }
   }
@@ -74,11 +76,16 @@ void SetModalParent(aura::Window* child, aura::Window* parent) {
 }
 
 aura::Window* GetModalTransient(aura::Window* window) {
+  return const_cast<aura::Window*>(
+      GetModalTransient(const_cast<const aura::Window*>(window)));
+}
+
+const aura::Window* GetModalTransient(const aura::Window* window) {
   if (!window)
     return nullptr;
 
   // We always want to check for the transient child of the toplevel window.
-  aura::Window* toplevel = GetToplevelWindow(window);
+  const aura::Window* toplevel = GetToplevelWindow(window);
   if (!toplevel)
     return nullptr;
 
@@ -116,7 +123,7 @@ void WindowModalityController::OnKeyEvent(ui::KeyEvent* event) {
 void WindowModalityController::OnMouseEvent(ui::MouseEvent* event) {
   aura::Window* target = static_cast<aura::Window*>(event->target());
   if (ProcessLocatedEvent(target, event))
-   event->SetHandled();
+    event->SetHandled();
 }
 
 void WindowModalityController::OnTouchEvent(ui::TouchEvent* event) {
@@ -145,16 +152,16 @@ void WindowModalityController::OnWindowPropertyChanged(aura::Window* window,
       window->GetProperty(aura::client::kModalKey) != ui::MODAL_TYPE_NONE &&
       window->IsVisible()) {
     ActivateWindow(window);
-    env_->gesture_recognizer()->CancelActiveTouchesExcept(nullptr);
+    CancelTouchesOnTransientWindowTree(window);
   }
 }
 
-void WindowModalityController::OnWindowVisibilityChanged(
-    aura::Window* window,
-    bool visible) {
+void WindowModalityController::OnWindowVisibilityChanged(aura::Window* window,
+                                                         bool visible) {
   if (visible &&
       window->GetProperty(aura::client::kModalKey) != ui::MODAL_TYPE_NONE) {
-    env_->gesture_recognizer()->CancelActiveTouchesExcept(nullptr);
+    CancelTouchesOnTransientWindowTree(window);
+
     // Make sure no other window has capture, otherwise |window| won't get mouse
     // events.
     aura::Window* capture_window = aura::client::GetCaptureWindow(window);
@@ -199,6 +206,30 @@ bool WindowModalityController::ProcessLocatedEvent(aura::Window* target,
   if (event->type() == ui::ET_TOUCH_CANCELLED)
     return false;
   return !!modal_transient_child;
+}
+
+void WindowModalityController::CancelTouchesOnTransientWindowTree(
+    aura::Window* window) {
+  // Find the top level transient window.
+  aura::Window* top_level_window = window;
+  while (wm::GetTransientParent(top_level_window))
+    top_level_window = wm::GetTransientParent(top_level_window);
+
+  // BFS to get all transient windows in the tree rooted to the top level
+  // transient window.
+  std::vector<ui::GestureConsumer*> blocked_consumers;
+  std::queue<aura::Window*> que;
+  que.emplace(top_level_window);
+  while (!que.empty()) {
+    aura::Window* parent = que.front();
+    que.pop();
+    blocked_consumers.emplace_back(parent);
+    for (auto* w : wm::GetTransientChildren(parent))
+      que.emplace(w);
+  }
+
+  // Cancel touches on all the transient windows.
+  env_->gesture_recognizer()->CancelActiveTouchesOn(blocked_consumers);
 }
 
 }  // namespace wm

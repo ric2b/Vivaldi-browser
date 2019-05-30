@@ -8,45 +8,32 @@
 
 #include "base/bind.h"
 #include "content/public/common/content_client.h"
-#include "services/service_manager/embedder/embedded_service_runner.h"
 
 namespace content {
 
-ServiceFactory::ServiceFactory() {}
-ServiceFactory::~ServiceFactory() {}
+ServiceFactory::ServiceFactory() = default;
+
+ServiceFactory::~ServiceFactory() = default;
+
+bool ServiceFactory::HandleServiceRequest(
+    const std::string& name,
+    service_manager::mojom::ServiceRequest request) {
+  return false;
+}
 
 void ServiceFactory::CreateService(
     service_manager::mojom::ServiceRequest request,
     const std::string& name,
     service_manager::mojom::PIDReceiverPtr pid_receiver) {
-  // Only register services on first run.
-  if (!has_registered_services_) {
-    DCHECK(services_.empty());
-    ServiceMap services;
-    RegisterServices(&services);
-    for (const auto& service : services) {
-      std::unique_ptr<service_manager::EmbeddedServiceRunner> runner(
-          new service_manager::EmbeddedServiceRunner(service.first,
-                                                     service.second));
-      runner->SetQuitClosure(base::Bind(&ServiceFactory::OnServiceQuit,
-                                        base::Unretained(this)));
-      services_.insert(std::make_pair(service.first, std::move(runner)));
-    }
-    has_registered_services_ = true;
-  }
-
-  auto it = services_.find(name);
-  if (it == services_.end()) {
-    // DCHECK in developer builds to make these errors easier to identify.
-    // Otherwise they result only in cryptic browser error messages.
-    NOTREACHED() << "Unable to start service \"" << name << "\". Did you "
-                 << "forget to register the service in the utility process's"
-                 << "ServiceFactory?";
-    OnLoadFailed();
+  if (HandleServiceRequest(name, std::move(request)))
     return;
-  }
 
-  it->second->BindServiceRequest(std::move(request));
+  // DCHECK in developer builds to make these errors easier to identify.
+  // Otherwise they result only in cryptic browser error messages.
+  NOTREACHED() << "Unable to start service \"" << name << "\". Did you "
+               << "forget to register the service in the utility process's"
+               << "ServiceFactory?";
+  OnLoadFailed();
 }
 
 }  // namespace content

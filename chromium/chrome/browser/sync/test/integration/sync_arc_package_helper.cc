@@ -15,7 +15,7 @@
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_package_syncable_service.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "components/arc/connection_holder.h"
 #include "components/arc/test/connection_holder_util.h"
 #include "components/arc/test/fake_app_instance.h"
@@ -122,7 +122,7 @@ void SyncArcPackageHelper::SetupArcService(Profile* profile) {
   DCHECK(arc_app_list_prefs);
 
   base::RunLoop run_loop;
-  arc_app_list_prefs->SetDefaltAppsReadyCallback(run_loop.QuitClosure());
+  arc_app_list_prefs->SetDefaultAppsReadyCallback(run_loop.QuitClosure());
   run_loop.Run();
 
   instance_map_[profile] =
@@ -134,8 +134,7 @@ void SyncArcPackageHelper::SetupArcService(Profile* profile) {
   // OnPackageListRefreshed will be called when AppInstance is ready.
   // For fakeAppInstance we use SendRefreshPackageList to make sure that
   // OnPackageListRefreshed will be called.
-  instance_map_[profile]->SendRefreshPackageList(
-      std::vector<arc::mojom::ArcPackageInfo>());
+  instance_map_[profile]->SendRefreshPackageList({});
 }
 
 void SyncArcPackageHelper::InstallPackage(

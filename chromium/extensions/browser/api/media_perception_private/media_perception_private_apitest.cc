@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/auto_reset.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -49,7 +50,18 @@ class TestMediaPerceptionAPIDelegate : public MediaPerceptionAPIDelegate {
 
   void BindDeviceFactoryProviderToVideoCaptureService(
       video_capture::mojom::DeviceFactoryProviderPtr* provider) override {
-    LOG(ERROR) << "Not implemented.";
+    NOTIMPLEMENTED();
+  }
+
+  void SetMediaPerceptionRequestHandler(
+      MediaPerceptionRequestHandler handler) override {
+    NOTIMPLEMENTED();
+  }
+
+  void ForwardMediaPerceptionRequest(
+      chromeos::media_perception::mojom::MediaPerceptionRequest request,
+      content::RenderFrameHost* render_frame_host) override {
+    NOTIMPLEMENTED();
   }
 };
 

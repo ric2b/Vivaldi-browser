@@ -4,7 +4,5 @@
 
 // https://immersive-web.github.io/webxr/#xrsessioncreationoptions-interface
 dictionary XRSessionCreationOptions {
-  [RuntimeEnabled=WebXRHitTest] boolean environmentIntegration = false;
-  boolean immersive = false;
-  XRPresentationContext outputContext;
+  XRSessionMode mode = "inline";
 };

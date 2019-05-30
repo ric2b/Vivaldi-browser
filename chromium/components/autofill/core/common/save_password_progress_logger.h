@@ -28,11 +28,6 @@ struct PasswordForm;
 //
 // To use this class, the method SendLog needs to be overriden to send the logs
 // for display as appropriate.
-//
-// TODO(vabr): Logically, this class belongs to the password_manager component.
-// But the PasswordAutofillAgent needs to use it, so until that agent is in a
-// third component, shared by autofill and password_manager, this helper needs
-// to stay in autofill as well.
 class SavePasswordProgressLogger {
  public:
   // IDs of strings allowed in the logs: for security reasons, we only pass the
@@ -55,7 +50,9 @@ class SavePasswordProgressLogger {
     STRING_PASSWORD_ELEMENT,
     STRING_PASSWORD_ELEMENT_RENDERER_ID,
     STRING_NEW_PASSWORD_ELEMENT,
+    STRING_NEW_PASSWORD_ELEMENT_RENDERER_ID,
     STRING_CONFIRMATION_PASSWORD_ELEMENT,
+    STRING_CONFIRMATION_PASSWORD_ELEMENT_RENDERER_ID,
     STRING_PASSWORD_GENERATED,
     STRING_TIMES_USED,
     STRING_PSL_MATCH,
@@ -171,6 +168,10 @@ class SavePasswordProgressLogger {
     STRING_IS_FORM_TAG,
     STRING_FORM_PARSING_INPUT,
     STRING_FORM_PARSING_OUTPUT,
+    STRING_FAILED_TO_FILL_INTO_IFRAME,
+    STRING_FAILED_TO_FILL_NO_AUTOCOMPLETEABLE_ELEMENT,
+    STRING_FAILED_TO_FILL_PREFILLED_USERNAME,
+    STRING_FAILED_TO_FILL_FOUND_NO_PASSWORD_FOR_USERNAME,
     STRING_INVALID,  // Represents a string returned in a case of an error.
     STRING_MAX = STRING_INVALID
   };

@@ -4,12 +4,14 @@
 
 #include "extensions/browser/extension_message_filter.h"
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/crx_file/id_util.h"
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
 #include "content/public/browser/render_process_host.h"
 #include "extensions/browser/api/messaging/message_service.h"
+#include "extensions/browser/bad_message.h"
 #include "extensions/browser/blob_holder.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/event_router_factory.h"
@@ -18,6 +20,8 @@
 #include "extensions/browser/process_manager_factory.h"
 #include "extensions/browser/process_map.h"
 #include "extensions/common/api/messaging/message.h"
+#include "extensions/common/api/messaging/messaging_endpoint.h"
+#include "extensions/common/api/messaging/port_context.h"
 #include "extensions/common/api/messaging/port_id.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_messages.h"
@@ -359,8 +363,8 @@ void ExtensionMessageFilter::OnExtensionWakeEventPage(
     if (process_manager->IsEventPageSuspended(extension_id)) {
       process_manager->WakeEventPage(
           extension_id,
-          base::Bind(&ExtensionMessageFilter::SendWakeEventPageResponse, this,
-                     request_id));
+          base::BindOnce(&ExtensionMessageFilter::SendWakeEventPageResponse,
+                         this, request_id));
     } else {
       SendWakeEventPageResponse(request_id, true);
     }
@@ -381,70 +385,82 @@ void ExtensionMessageFilter::OnExtensionWakeEventPage(
 }
 
 void ExtensionMessageFilter::OnOpenChannelToExtension(
-    int routing_id,
+    const PortContext& source_context,
     const ExtensionMsg_ExternalConnectionInfo& info,
     const std::string& channel_name,
-    bool include_tls_channel_id,
     const PortId& port_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (info.source_endpoint.type == MessagingEndpoint::Type::kNativeApp) {
+    // Requests for channels initiated by native applications don't originate
+    // from renderer processes.
+    bad_message::ReceivedBadMessage(
+        this, bad_message::EMF_INVALID_CHANNEL_SOURCE_TYPE);
+    return;
+  }
+  // TODO(crbug.com/925918): Support messages from Service Worker.
+  DCHECK(source_context.is_for_render_frame());
   if (browser_context_) {
     MessageService::Get(browser_context_)
-        ->OpenChannelToExtension(render_process_id_, routing_id, port_id,
-                                 info.source_id, info.target_id,
-                                 info.source_url, channel_name,
-                                 include_tls_channel_id);
+        ->OpenChannelToExtension(
+            render_process_id_, source_context.frame->routing_id, port_id,
+            info.source_endpoint, nullptr /* opener_port */, info.target_id,
+            info.source_url, channel_name);
   }
 }
 
 void ExtensionMessageFilter::OnOpenChannelToNativeApp(
-    int routing_id,
+    const PortContext& source_context,
     const std::string& native_app_name,
     const PortId& port_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  // TODO(crbug.com/925918): Support messages from Service Worker.
+  DCHECK(source_context.is_for_render_frame());
   if (!browser_context_)
     return;
 
   MessageService::Get(browser_context_)
-      ->OpenChannelToNativeApp(render_process_id_, routing_id, port_id,
+      ->OpenChannelToNativeApp(render_process_id_,
+                               source_context.frame->routing_id, port_id,
                                native_app_name);
 }
 
 void ExtensionMessageFilter::OnOpenChannelToTab(
-    int routing_id,
+    const PortContext& source_context,
     const ExtensionMsg_TabTargetConnectionInfo& info,
     const std::string& extension_id,
     const std::string& channel_name,
     const PortId& port_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  // TODO(crbug.com/925918): Support messages from Service Worker.
+  DCHECK(source_context.is_for_render_frame());
   if (!browser_context_)
     return;
 
   MessageService::Get(browser_context_)
-      ->OpenChannelToTab(render_process_id_, routing_id, port_id, info.tab_id,
-                         info.frame_id, extension_id, channel_name);
+      ->OpenChannelToTab(render_process_id_, source_context.frame->routing_id,
+                         port_id, info.tab_id, info.frame_id, extension_id,
+                         channel_name);
 }
 
-void ExtensionMessageFilter::OnOpenMessagePort(
-    int routing_id,
-    const PortId& port_id) {
+void ExtensionMessageFilter::OnOpenMessagePort(const PortContext& source,
+                                               const PortId& port_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!browser_context_)
     return;
 
   MessageService::Get(browser_context_)
-      ->OpenPort(port_id, render_process_id_, routing_id);
+      ->OpenPort(port_id, render_process_id_, source);
 }
 
-void ExtensionMessageFilter::OnCloseMessagePort(
-    int routing_id,
-    const PortId& port_id,
-    bool force_close) {
+void ExtensionMessageFilter::OnCloseMessagePort(const PortContext& port_context,
+                                                const PortId& port_id,
+                                                bool force_close) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!browser_context_)
     return;
 
   MessageService::Get(browser_context_)
-      ->ClosePort(port_id, render_process_id_, routing_id, force_close);
+      ->ClosePort(port_id, render_process_id_, port_context, force_close);
 }
 
 void ExtensionMessageFilter::OnPostMessage(const PortId& port_id,

@@ -25,12 +25,6 @@ struct StatusIconMenuModel::ItemState {
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// StatusIconMenuModel::Delegate, public:
-
-void StatusIconMenuModel::Delegate::CommandIdHighlighted(int command_id) {
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // StatusIconMenuModel, public:
 
 StatusIconMenuModel::StatusIconMenuModel(Delegate* delegate)
@@ -91,21 +85,21 @@ void StatusIconMenuModel::RemoveObserver(Observer* observer) {
 }
 
 bool StatusIconMenuModel::IsCommandIdChecked(int command_id) const {
-  ItemStateMap::const_iterator iter = item_states_.find(command_id);
+  auto iter = item_states_.find(command_id);
   if (iter != item_states_.end())
     return iter->second.checked;
   return false;
 }
 
 bool StatusIconMenuModel::IsCommandIdEnabled(int command_id) const {
-  ItemStateMap::const_iterator iter = item_states_.find(command_id);
+  auto iter = item_states_.find(command_id);
   if (iter != item_states_.end())
     return iter->second.enabled;
   return true;
 }
 
 bool StatusIconMenuModel::IsCommandIdVisible(int command_id) const {
-  ItemStateMap::const_iterator iter = item_states_.find(command_id);
+  auto iter = item_states_.find(command_id);
   if (iter != item_states_.end())
     return iter->second.visible;
   return true;
@@ -113,7 +107,7 @@ bool StatusIconMenuModel::IsCommandIdVisible(int command_id) const {
 
 bool StatusIconMenuModel::GetAcceleratorForCommandId(
     int command_id, ui::Accelerator* accelerator) const {
-  ItemStateMap::const_iterator iter = item_states_.find(command_id);
+  auto iter = item_states_.find(command_id);
   if (iter != item_states_.end() &&
       iter->second.accelerator.key_code() != ui::VKEY_UNKNOWN) {
     *accelerator = iter->second.accelerator;
@@ -123,14 +117,14 @@ bool StatusIconMenuModel::GetAcceleratorForCommandId(
 }
 
 bool StatusIconMenuModel::IsItemForCommandIdDynamic(int command_id) const {
-  ItemStateMap::const_iterator iter = item_states_.find(command_id);
+  auto iter = item_states_.find(command_id);
   if (iter != item_states_.end())
     return iter->second.is_dynamic;
   return false;
 }
 
 base::string16 StatusIconMenuModel::GetLabelForCommandId(int command_id) const {
-  ItemStateMap::const_iterator iter = item_states_.find(command_id);
+  auto iter = item_states_.find(command_id);
   if (iter != item_states_.end())
     return iter->second.label;
   return base::string16();
@@ -138,7 +132,7 @@ base::string16 StatusIconMenuModel::GetLabelForCommandId(int command_id) const {
 
 base::string16 StatusIconMenuModel::GetSublabelForCommandId(
     int command_id) const {
-  ItemStateMap::const_iterator iter = item_states_.find(command_id);
+  auto iter = item_states_.find(command_id);
   if (iter != item_states_.end())
     return iter->second.sublabel;
   return base::string16();
@@ -146,7 +140,7 @@ base::string16 StatusIconMenuModel::GetSublabelForCommandId(
 
 bool StatusIconMenuModel::GetIconForCommandId(int command_id,
                                               gfx::Image* image_skia) const {
-  ItemStateMap::const_iterator iter = item_states_.find(command_id);
+  auto iter = item_states_.find(command_id);
   if (iter != item_states_.end() && !iter->second.icon.IsEmpty()) {
     *image_skia = iter->second.icon;
     return true;
@@ -168,11 +162,6 @@ void StatusIconMenuModel::NotifyMenuStateChanged() {
 
 ////////////////////////////////////////////////////////////////////////////////
 // StatusIconMenuModel, private:
-
-void StatusIconMenuModel::CommandIdHighlighted(int command_id) {
-  if (delegate_)
-    delegate_->CommandIdHighlighted(command_id);
-}
 
 void StatusIconMenuModel::ExecuteCommand(int command_id, int event_flags) {
   if (delegate_)

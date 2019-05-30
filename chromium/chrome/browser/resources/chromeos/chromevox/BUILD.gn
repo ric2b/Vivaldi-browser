@@ -4,9 +4,9 @@
 
 import("//build/config/features.gni")
 import("//chrome/common/features.gni")
+import("//chrome/test/base/js2gtest.gni")
 import("//components/nacl/features.gni")
 import("//testing/test.gni")
-import("//chrome/test/base/js2gtest.gni")
 import("//third_party/closure_compiler/compile_js.gni")
 import("run_jsbundler.gni")
 
@@ -30,6 +30,8 @@ chromevox_modules = [
   "braille/braille_key_types.js",
   "braille/braille_table.js",
   "braille/braille_translator_manager.js",
+  "braille/bluetooth_braille_display_manager.js",
+  "braille/bluetooth_braille_display_ui.js",
   "braille/expanding_braille_translator.js",
   "braille/liblouis.js",
   "braille/nav_braille.js",
@@ -45,7 +47,6 @@ chromevox_modules = [
   "chromevox/background/tabs_api_handler.js",
   "chromevox/injected/active_indicator.js",
   "chromevox/injected/api_implementation.js",
-  "chromevox/injected/console_tts.js",
   "chromevox/injected/event_suspender.js",
   "chromevox/injected/event_watcher.js",
   "chromevox/injected/history.js",
@@ -123,8 +124,10 @@ chromevox_modules = [
   "cvox2/background/base_automation_handler.js",
   "cvox2/background/braille_command_data.js",
   "cvox2/background/braille_command_handler.js",
+  "cvox2/background/color.js",
   "cvox2/background/chromevox_state.js",
   "cvox2/background/command_handler.js",
+  "cvox2/background/console_tts.js",
   "cvox2/background/constants.js",
   "cvox2/background/cursors.js",
   "cvox2/background/custom_automation_event.js",
@@ -138,19 +141,23 @@ chromevox_modules = [
   "cvox2/background/gesture_command_handler.js",
   "cvox2/background/i_search.js",
   "cvox2/background/keyboard_handler.js",
+  "cvox2/background/language_switching.js",
   "cvox2/background/live_regions.js",
   "cvox2/background/log.js",
   "cvox2/background/log_store.js",
   "cvox2/background/math_handler.js",
   "cvox2/background/media_automation_handler.js",
+  "cvox2/background/mouse_handler.js",
   "cvox2/background/next_earcons.js",
   "cvox2/background/notifications.js",
   "cvox2/background/output.js",
+  "cvox2/background/output_logger.js",
   "cvox2/background/panel.js",
   "cvox2/background/panel_command.js",
   "cvox2/background/panel_menu.js",
   "cvox2/background/panel_menu_item.js",
   "cvox2/background/recovery_strategy.js",
+  "cvox2/background/tree_dumper.js",
   "cvox2/background/tree_walker.js",
   "cvox2/background/tutorial.js",
   "cvox2/injected/keyboard_handler.js",
@@ -482,46 +489,16 @@ if (chromevox_compress_js) {
   }
 }
 
-test("chromevox_tests") {
-  sources = [
-    "//chrome/browser/extensions/browsertest_util.cc",
-    "//chrome/browser/extensions/browsertest_util.h",
-    "//chrome/browser/ui/webui/web_ui_test_handler.cc",
-    "//chrome/browser/ui/webui/web_ui_test_handler.h",
-    "//chrome/test/base/extension_js_browser_test.cc",
-    "//chrome/test/base/extension_js_browser_test.h",
-    "//chrome/test/base/extension_load_waiter_one_shot.cc",
-    "//chrome/test/base/extension_load_waiter_one_shot.h",
-    "//chrome/test/base/javascript_browser_test.cc",
-    "//chrome/test/base/javascript_browser_test.h",
-    "//chrome/test/base/test_chrome_web_ui_controller_factory.cc",
-    "//chrome/test/base/test_chrome_web_ui_controller_factory.h",
-    "//chrome/test/base/web_ui_browser_test.cc",
-    "//chrome/test/base/web_ui_browser_test.h",
-  ]
+source_set("browser_tests") {
+  testonly = true
+  assert(enable_extensions)
 
   deps = [
     ":chromevox_extjs_tests",
     ":chromevox_unitjs_tests",
-    "//base",
-    "//base:i18n",
-    "//base/test:test_support",
-    "//chrome:browser_tests_pak",
-    "//chrome:packed_resources",
-    "//chrome:resources",
-    "//chrome:strings",
-    "//chrome/browser",
-    "//chrome/renderer",
-    "//chrome/test:browser_tests_runner",
-    "//chrome/test:test_support",
-    "//chrome/test:test_support_ui",
-    "//content/test:test_support",
-    "//services/service_manager/background:lib",
-    "//testing/gmock",
-    "//testing/gtest",
-    "//ui/keyboard:resources",
   ]
 
+  # TODO(jamescook): Figure out which of these are really necessary.
   data = [
     "$root_out_dir/chrome_100_percent.pak",
     "$root_out_dir/chrome_200_percent.pak",
@@ -584,6 +561,8 @@ generate_deps_js("chromevox_test_deps_js") {
 js2gtest("chromevox_unitjs_tests") {
   test_type = "webui"
   sources = [
+    "braille/bluetooth_braille_display_manager_test.unitjs",
+    "braille/bluetooth_braille_display_ui_test.unitjs",
     "braille/braille_display_manager_test.unitjs",
     "braille/braille_input_handler_test.unitjs",
     "braille/expanding_braille_translator_test.unitjs",
@@ -640,9 +619,11 @@ js2gtest("chromevox_extjs_tests") {
     "braille/liblouis_test.extjs",
     "cvox2/background/automation_util_test.extjs",
     "cvox2/background/background_test.extjs",
+    "cvox2/background/color_test.extjs",
     "cvox2/background/cursors_test.extjs",
     "cvox2/background/editing_test.extjs",
     "cvox2/background/i_search_test.extjs",
+    "cvox2/background/language_switching_test.extjs",
     "cvox2/background/live_regions_test.extjs",
     "cvox2/background/log_store_test.extjs",
     "cvox2/background/output_test.extjs",
@@ -657,6 +638,14 @@ js2gtest("chromevox_extjs_tests") {
     "testing/chromevox_e2e_test_base.js",
     "testing/chromevox_next_e2e_test_base.js",
     "testing/mock_feedback.js",
+  ]
+
+  # The test base classes generate C++ code with these deps.
+  deps = [
+    "//ash",
+    "//base",
+    "//chrome/browser/chromeos",
+    "//chrome/common",
   ]
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
 }

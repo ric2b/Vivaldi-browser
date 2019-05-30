@@ -72,7 +72,7 @@ class CORE_EXPORT LayoutSVGRoot final : public LayoutReplaced {
     // the layout may be incorrectly using the old size.
     if (container_size_ != container_size) {
       SetNeedsLayoutAndFullPaintInvalidation(
-          LayoutInvalidationReason::kSizeChanged);
+          layout_invalidation_reason::kSizeChanged);
     }
     container_size_ = container_size;
   }
@@ -85,18 +85,17 @@ class CORE_EXPORT LayoutSVGRoot final : public LayoutReplaced {
 
   bool ShouldApplyViewportClip() const;
 
-  LayoutRect VisualOverflowRect() const override;
+  void RecalcVisualOverflow() override;
 
   bool HasNonIsolatedBlendingDescendants() const final;
 
   const char* GetName() const override { return "LayoutSVGRoot"; }
 
-  bool PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const final;
-
  private:
   bool ComputeShouldClipOverflow() const override {
     return LayoutBox::ComputeShouldClipOverflow() || ShouldApplyViewportClip();
   }
+  LayoutRect ComputeContentsVisualOverflow() const;
 
   const LayoutObjectChildList* Children() const { return &children_; }
   LayoutObjectChildList* Children() { return &children_; }
@@ -142,8 +141,6 @@ class CORE_EXPORT LayoutSVGRoot final : public LayoutReplaced {
                    const HitTestLocation& location_in_container,
                    const LayoutPoint& accumulated_offset,
                    HitTestAction) override;
-
-  LayoutRect LocalVisualRectIgnoringVisibility() const override;
 
   void MapLocalToAncestor(
       const LayoutBoxModelObject* ancestor,

@@ -6,10 +6,11 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/metrics/user_metrics.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
@@ -20,7 +21,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/component_updater/supervised_user_whitelist_installer.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/supervised_user/experimental/supervised_user_filtering_switches.h"
 #include "chrome/browser/supervised_user/permission_request_creator.h"
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
@@ -37,15 +38,17 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/profile_sync_service.h"
 #include "components/policy/core/browser/url_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/profile_oauth2_token_service.h"
+#include "components/sync/driver/sync_service.h"
+#include "components/sync/driver/sync_user_settings.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "extensions/buildflags/buildflags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/identity/public/cpp/accounts_mutator.h"
+#include "services/identity/public/cpp/identity_manager.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -75,10 +78,6 @@ using extensions::Extension;
 using extensions::ExtensionPrefs;
 using extensions::ExtensionRegistry;
 using extensions::ExtensionSystem;
-#endif
-
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-using extensions::ExtensionPrefs;
 #endif
 
 namespace {
@@ -151,7 +150,6 @@ void SupervisedUserService::RegisterProfilePrefs(
   registry->RegisterDictionaryPref(prefs::kSupervisedUserManualURLs);
   registry->RegisterIntegerPref(prefs::kDefaultSupervisedUserFilteringBehavior,
                                 SupervisedUserURLFilter::ALLOW);
-  registry->RegisterBooleanPref(prefs::kSupervisedUserCreationAllowed, true);
   registry->RegisterBooleanPref(prefs::kSupervisedUserSafeSites, true);
   for (const char* pref : kCustodianInfoPrefs) {
     registry->RegisterStringPref(pref, std::string());
@@ -168,12 +166,8 @@ void SupervisedUserService::Init() {
       prefs::kSupervisedUserId,
       base::Bind(&SupervisedUserService::OnSupervisedUserIdChanged,
           base::Unretained(this)));
-  pref_change_registrar_.Add(
-      prefs::kForceSessionSync,
-      base::Bind(&SupervisedUserService::OnForceSessionSyncChanged,
-                 base::Unretained(this)));
 
-  browser_sync::ProfileSyncService* sync_service =
+  syncer::SyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
   // Can be null in tests.
   if (sync_service)
@@ -331,23 +325,11 @@ base::string16 SupervisedUserService::GetExtensionsLockedMessage() const {
 
 #if !defined(OS_ANDROID)
 void SupervisedUserService::InitSync(const std::string& refresh_token) {
-  ProfileOAuth2TokenService* token_service =
-      ProfileOAuth2TokenServiceFactory::GetForProfile(profile_);
-  token_service->UpdateCredentials(supervised_users::kSupervisedUserPseudoEmail,
-                                   refresh_token);
+  IdentityManagerFactory::GetForProfile(profile_)
+      ->GetAccountsMutator()
+      ->LegacySetRefreshTokenForSupervisedUser(refresh_token);
 }
 #endif  // !defined(OS_ANDROID)
-
-void SupervisedUserService::AddNavigationBlockedCallback(
-    const NavigationBlockedCallback& callback) {
-  navigation_blocked_callbacks_.push_back(callback);
-}
-
-void SupervisedUserService::DidBlockNavigation(
-    content::WebContents* web_contents) {
-  for (const auto& callback : navigation_blocked_callbacks_)
-    callback.Run(web_contents);
-}
 
 void SupervisedUserService::AddObserver(
     SupervisedUserServiceObserver* observer) {
@@ -369,13 +351,8 @@ void SupervisedUserService::SetSafeSearchURLReporter(
   url_reporter_ = std::move(reporter);
 }
 
-bool SupervisedUserService::IncludesSyncSessionsType() const {
-  return includes_sync_sessions_type_;
-}
-
 SupervisedUserService::SupervisedUserService(Profile* profile)
-    : includes_sync_sessions_type_(true),
-      profile_(profile),
+    : profile_(profile),
       active_(false),
       delegate_(NULL),
       is_profile_active_(false),
@@ -400,10 +377,9 @@ void SupervisedUserService::SetActive(bool active) {
   if (!delegate_ || !delegate_->SetActive(active_)) {
     if (active_) {
 #if !defined(OS_ANDROID)
-      ProfileOAuth2TokenService* token_service =
-          ProfileOAuth2TokenServiceFactory::GetForProfile(profile_);
-      token_service->LoadCredentials(
-          supervised_users::kSupervisedUserPseudoEmail);
+      IdentityManagerFactory::GetForProfile(profile_)
+          ->LegacyLoadCredentialsForSupervisedUser(
+              supervised_users::kSupervisedUserPseudoEmail);
 #else
       NOTREACHED();
 #endif
@@ -419,9 +395,9 @@ void SupervisedUserService::SetActive(bool active) {
     theme_service->UseDefaultTheme();
 #endif
 
-  browser_sync::ProfileSyncService* sync_service =
+  syncer::SyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
-  sync_service->SetEncryptEverythingAllowed(!active_);
+  sync_service->GetUserSettings()->SetEncryptEverythingAllowed(!active_);
 
   GetSettingsService()->SetActive(active_);
 
@@ -735,27 +711,6 @@ void SupervisedUserService::UpdateManualURLs() {
     observer.OnURLFilterChanged();
 }
 
-std::string SupervisedUserService::GetSupervisedUserName() const {
-#if defined(OS_CHROMEOS)
-  // The active user can be NULL in unit tests.
-  if (user_manager::UserManager::Get()->GetActiveUser()) {
-    return base::UTF16ToUTF8(
-        user_manager::UserManager::Get()->GetUserDisplayName(
-            user_manager::UserManager::Get()->GetActiveUser()->GetAccountId()));
-  }
-  return std::string();
-#else
-  return profile_->GetPrefs()->GetString(prefs::kProfileName);
-#endif
-}
-
-void SupervisedUserService::OnForceSessionSyncChanged() {
-  includes_sync_sessions_type_ =
-      profile_->GetPrefs()->GetBoolean(prefs::kForceSessionSync);
-  ProfileSyncServiceFactory::GetForProfile(profile_)
-      ->ReconfigureDatatypeManager();
-}
-
 void SupervisedUserService::Shutdown() {
   if (!did_init_)
     return;
@@ -766,7 +721,7 @@ void SupervisedUserService::Shutdown() {
   }
   SetActive(false);
 
-  browser_sync::ProfileSyncService* sync_service =
+  syncer::SyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
   // Can be null in tests.
   if (sync_service)
@@ -1029,18 +984,15 @@ void SupervisedUserService::SetExtensionsActive() {
 }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
-syncer::ModelTypeSet SupervisedUserService::GetPreferredDataTypes() const {
+syncer::ModelTypeSet SupervisedUserService::GetForcedDataTypes() const {
   if (!ProfileIsSupervised())
     return syncer::ModelTypeSet();
 
   syncer::ModelTypeSet result;
-  if (IncludesSyncSessionsType())
-    result.Put(syncer::SESSIONS);
   result.Put(syncer::EXTENSIONS);
   result.Put(syncer::EXTENSION_SETTINGS);
   result.Put(syncer::APPS);
   result.Put(syncer::APP_SETTINGS);
-  result.Put(syncer::APP_NOTIFICATIONS);
   result.Put(syncer::APP_LIST);
   return result;
 }

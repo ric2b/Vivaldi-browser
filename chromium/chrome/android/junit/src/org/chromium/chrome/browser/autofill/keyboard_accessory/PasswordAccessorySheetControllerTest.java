@@ -11,6 +11,12 @@ import static org.junit.Assert.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
+
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetTabModel.AccessorySheetDataPiece.Type.FOOTER_COMMAND;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetTabModel.AccessorySheetDataPiece.Type.PASSWORD_INFO;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetTabModel.AccessorySheetDataPiece.Type.TITLE;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetTabModel.AccessorySheetDataPiece.getType;
 
 import android.support.v7.widget.RecyclerView;
 
@@ -24,11 +30,16 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.test.ShadowRecordHistogram;
+import org.chromium.base.task.test.CustomShadowAsyncTask;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.asynctask.CustomShadowAsyncTask;
-import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryData.Item;
-import org.chromium.chrome.browser.modelutil.ListModel;
-import org.chromium.chrome.browser.modelutil.ListObservable;
+import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryData.AccessorySheetData;
+import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryData.FooterCommand;
+import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryData.PropertyProvider;
+import org.chromium.chrome.browser.autofill.keyboard_accessory.KeyboardAccessoryData.UserInfo;
+import org.chromium.ui.modelutil.ListObservable;
+
+import java.util.HashMap;
 
 /**
  * Controller tests for the password accessory sheet.
@@ -43,15 +54,15 @@ public class PasswordAccessorySheetControllerTest {
     private ListObservable.ListObserver<Void> mMockItemListObserver;
 
     private PasswordAccessorySheetCoordinator mCoordinator;
-    private ListModel<Item> mModel;
+    private AccessorySheetTabModel mSheetDataPieces;
 
     @Before
     public void setUp() {
         ShadowRecordHistogram.reset();
         MockitoAnnotations.initMocks(this);
-        mCoordinator = new PasswordAccessorySheetCoordinator(RuntimeEnvironment.application);
+        mCoordinator = new PasswordAccessorySheetCoordinator(RuntimeEnvironment.application, null);
         assertNotNull(mCoordinator);
-        mModel = mCoordinator.getModelForTesting();
+        mSheetDataPieces = mCoordinator.getSheetDataPiecesForTesting();
     }
 
     @Test
@@ -64,6 +75,7 @@ public class PasswordAccessorySheetControllerTest {
 
     @Test
     public void testSetsViewAdapterOnTabCreation() {
+        when(mMockView.getParent()).thenReturn(mMockView);
         KeyboardAccessoryData.Tab tab = mCoordinator.getTab();
         assertNotNull(tab);
         assertNotNull(tab.getListener());
@@ -72,34 +84,85 @@ public class PasswordAccessorySheetControllerTest {
     }
 
     @Test
-    public void testModelNotifiesAboutActionsChangedByProvider() {
-        final KeyboardAccessoryData.PropertyProvider<Item> testProvider =
-                new KeyboardAccessoryData.PropertyProvider<>();
-        final Item testItem = Item.createLabel("Test Item", null);
+    public void testModelNotifiesAboutTabDataChangedByProvider() {
+        final PropertyProvider<AccessorySheetData> testProvider = new PropertyProvider<>();
 
-        mModel.addObserver(mMockItemListObserver);
-        mCoordinator.registerItemProvider(testProvider);
+        mSheetDataPieces.addObserver(mMockItemListObserver);
+        mCoordinator.registerDataProvider(testProvider);
 
-        // If the coordinator receives an initial items, the model should report an insertion.
-        testProvider.notifyObservers(new Item[] {testItem});
-        verify(mMockItemListObserver).onItemRangeInserted(mModel, 0, 1);
-        assertThat(mModel.size(), is(1));
-        assertThat(mModel.get(0), is(equalTo(testItem)));
+        // If the coordinator receives a set of initial items, the model should report an insertion.
+        testProvider.notifyObservers(
+                new AccessorySheetData(FallbackSheetType.PASSWORD, "Passwords"));
+        verify(mMockItemListObserver).onItemRangeInserted(mSheetDataPieces, 0, 1);
+        assertThat(mSheetDataPieces.size(), is(1));
 
         // If the coordinator receives a new set of items, the model should report a change.
-        testProvider.notifyObservers(new Item[] {testItem});
-        verify(mMockItemListObserver).onItemRangeChanged(mModel, 0, 1, null);
-        assertThat(mModel.size(), is(1));
-        assertThat(mModel.get(0), is(equalTo(testItem)));
+        testProvider.notifyObservers(
+                new AccessorySheetData(FallbackSheetType.PASSWORD, "Other Passwords"));
+        verify(mMockItemListObserver).onItemRangeChanged(mSheetDataPieces, 0, 1, null);
+        assertThat(mSheetDataPieces.size(), is(1));
 
         // If the coordinator receives an empty set of items, the model should report a deletion.
-        testProvider.notifyObservers(new Item[] {});
-        verify(mMockItemListObserver).onItemRangeRemoved(mModel, 0, 1);
-        assertThat(mModel.size(), is(0));
+        testProvider.notifyObservers(null);
+        verify(mMockItemListObserver).onItemRangeRemoved(mSheetDataPieces, 0, 1);
+        assertThat(mSheetDataPieces.size(), is(0));
 
         // There should be no notification if no item are reported repeatedly.
-        testProvider.notifyObservers(new Item[] {});
+        testProvider.notifyObservers(null);
         verifyNoMoreInteractions(mMockItemListObserver);
+    }
+
+    @Test
+    public void testSplitsTabDataToList() {
+        setAutofillFeature(false);
+        final PropertyProvider<AccessorySheetData> testProvider = new PropertyProvider<>();
+        final AccessorySheetData testData =
+                new AccessorySheetData(FallbackSheetType.PASSWORD, "Passwords for this site");
+        testData.getUserInfoList().add(new UserInfo(null));
+        testData.getUserInfoList().get(0).addField(new UserInfo.Field("Name", "Name", false, null));
+        testData.getUserInfoList().get(0).addField(
+                new UserInfo.Field("Password", "Password for Name", true, field -> {}));
+        testData.getFooterCommands().add(new FooterCommand("Manage passwords", result -> {}));
+
+        mCoordinator.registerDataProvider(testProvider);
+        testProvider.notifyObservers(testData);
+
+        assertThat(mSheetDataPieces.size(), is(3));
+        assertThat(getType(mSheetDataPieces.get(0)), is(TITLE));
+        assertThat(getType(mSheetDataPieces.get(1)), is(PASSWORD_INFO));
+        assertThat(getType(mSheetDataPieces.get(2)), is(FOOTER_COMMAND));
+        assertThat(mSheetDataPieces.get(0).getDataPiece(), is(equalTo("Passwords for this site")));
+        assertThat(mSheetDataPieces.get(1).getDataPiece(), is(testData.getUserInfoList().get(0)));
+        assertThat(mSheetDataPieces.get(2).getDataPiece(), is(testData.getFooterCommands().get(0)));
+    }
+
+    @Test
+    public void testUsesTabTitleOnlyForEmptyListsForModernDesign() {
+        setAutofillFeature(true);
+        final PropertyProvider<AccessorySheetData> testProvider = new PropertyProvider<>();
+        final AccessorySheetData testData =
+                new AccessorySheetData(FallbackSheetType.PASSWORD, "No passwords for this");
+        mCoordinator.registerDataProvider(testProvider);
+
+        // Providing only FooterCommands and no User Info shows the title as empty state:
+        testData.getFooterCommands().add(new FooterCommand("Manage passwords", result -> {}));
+        testProvider.notifyObservers(testData);
+
+        assertThat(mSheetDataPieces.size(), is(2));
+        assertThat(getType(mSheetDataPieces.get(0)), is(TITLE));
+        assertThat(getType(mSheetDataPieces.get(1)), is(FOOTER_COMMAND));
+        assertThat(mSheetDataPieces.get(0).getDataPiece(), is(equalTo("No passwords for this")));
+
+        // As soon UserInfo is available, discard the title.
+        testData.getUserInfoList().add(new UserInfo(null));
+        testData.getUserInfoList().get(0).addField(new UserInfo.Field("Name", "Name", false, null));
+        testData.getUserInfoList().get(0).addField(
+                new UserInfo.Field("Password", "Password for Name", true, field -> {}));
+        testProvider.notifyObservers(testData);
+
+        assertThat(mSheetDataPieces.size(), is(2));
+        assertThat(getType(mSheetDataPieces.get(0)), is(PASSWORD_INFO));
+        assertThat(getType(mSheetDataPieces.get(1)), is(FOOTER_COMMAND));
     }
 
     @Test
@@ -114,6 +177,8 @@ public class PasswordAccessorySheetControllerTest {
 
     @Test
     public void testRecordsSuggestionsImpressionsWhenShown() {
+        final PropertyProvider<AccessorySheetData> testProvider = new PropertyProvider<>();
+        mCoordinator.registerDataProvider(testProvider);
         assertThat(
                 RecordHistogram.getHistogramTotalCountForTesting(
                         KeyboardAccessoryMetricsRecorder.UMA_KEYBOARD_ACCESSORY_SHEET_SUGGESTIONS),
@@ -122,24 +187,30 @@ public class PasswordAccessorySheetControllerTest {
         assertThat(getSuggestionsImpressions(AccessoryTabType.ALL, 0), is(0));
 
         // If the tab is shown without interactive item, log "0" samples.
-        mModel.set(new Item[] {Item.createLabel("No passwords!", ""), Item.createDivider(),
-                Item.createOption("Manage all passwords", "", null),
-                Item.createOption("Generate password", "", null)});
+        AccessorySheetData accessorySheetData =
+                new AccessorySheetData(FallbackSheetType.PASSWORD, "No passwords!");
+        accessorySheetData.getFooterCommands().add(new FooterCommand("Manage all passwords", null));
+        accessorySheetData.getFooterCommands().add(new FooterCommand("Generate password", null));
+        testProvider.notifyObservers(accessorySheetData);
         mCoordinator.onTabShown();
 
         assertThat(getSuggestionsImpressions(AccessoryTabType.PASSWORDS, 0), is(1));
         assertThat(getSuggestionsImpressions(AccessoryTabType.ALL, 0), is(1));
 
         // If the tab is shown with X interactive item, record "X" samples.
-        mModel.set(new Item[] {Item.createLabel("Your passwords", ""),
-                Item.createSuggestion("Interactive 1", "", false, (v) -> {}, null),
-                Item.createSuggestion("Non-interactive 1", "", true, null, null),
-                Item.createSuggestion("Interactive 2", "", false, (v) -> {}, null),
-                Item.createSuggestion("Non-interactive 2", "", true, null, null),
-                Item.createSuggestion("Interactive 3", "", false, (v) -> {}, null),
-                Item.createSuggestion("Non-interactive 3", "", true, null, null),
-                Item.createDivider(), Item.createOption("Manage all passwords", "", null),
-                Item.createOption("Generate password", "", null)});
+        UserInfo userInfo1 = new UserInfo(null);
+        userInfo1.addField(new UserInfo.Field("Interactive 1", "", false, (v) -> {}));
+        userInfo1.addField(new UserInfo.Field("Non-Interactive 1", "", true, null));
+        accessorySheetData.getUserInfoList().add(userInfo1);
+        UserInfo userInfo2 = new UserInfo(null);
+        userInfo2.addField(new UserInfo.Field("Interactive 2", "", false, (v) -> {}));
+        userInfo2.addField(new UserInfo.Field("Non-Interactive 2", "", true, null));
+        accessorySheetData.getUserInfoList().add(userInfo2);
+        UserInfo userInfo3 = new UserInfo(null);
+        userInfo3.addField(new UserInfo.Field("Interactive 3", "", false, (v) -> {}));
+        userInfo3.addField(new UserInfo.Field("Non-Interactive 3", "", true, null));
+        accessorySheetData.getUserInfoList().add(userInfo3);
+        testProvider.notifyObservers(accessorySheetData);
         mCoordinator.onTabShown();
 
         assertThat(getSuggestionsImpressions(AccessoryTabType.PASSWORDS, 3), is(1));
@@ -157,5 +228,11 @@ public class PasswordAccessorySheetControllerTest {
                         KeyboardAccessoryMetricsRecorder.UMA_KEYBOARD_ACCESSORY_SHEET_SUGGESTIONS,
                         type),
                 sample);
+    }
+
+    private void setAutofillFeature(boolean enabled) {
+        HashMap<String, Boolean> features = new HashMap<>();
+        features.put(ChromeFeatureList.AUTOFILL_KEYBOARD_ACCESSORY, enabled);
+        ChromeFeatureList.setTestFeatures(features);
     }
 }

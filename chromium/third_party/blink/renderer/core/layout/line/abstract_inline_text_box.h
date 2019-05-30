@@ -49,7 +49,7 @@ class CORE_EXPORT AbstractInlineTextBox
     : public RefCounted<AbstractInlineTextBox> {
  public:
   struct WordBoundaries {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+    DISALLOW_NEW();
     WordBoundaries(int start_index, int end_index)
         : start_index(start_index), end_index(end_index) {}
     int start_index;
@@ -78,6 +78,8 @@ class CORE_EXPORT AbstractInlineTextBox
 
  protected:
   explicit AbstractInlineTextBox(LineLayoutText line_layout_item);
+
+  LayoutText* GetFirstLetterPseudoLayoutText() const;
 
  private:
   // Weak ptrs; these are nulled when InlineTextBox::destroy() calls

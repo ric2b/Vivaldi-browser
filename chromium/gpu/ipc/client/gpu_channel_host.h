@@ -10,6 +10,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "base/atomic_sequence_num.h"
@@ -24,6 +25,8 @@
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/gpu_export.h"
+#include "gpu/ipc/client/image_decode_accelerator_proxy.h"
+#include "gpu/ipc/client/shared_image_interface_proxy.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/message_filter.h"
 #include "ipc/message_router.h"
@@ -134,9 +137,6 @@ class GPU_EXPORT GpuChannelHost
   base::UnsafeSharedMemoryRegion ShareToGpuProcess(
       const base::UnsafeSharedMemoryRegion& source_region);
 
-  // Reserve one unused transfer buffer ID.
-  int32_t ReserveTransferBufferId();
-
   // Reserve one unused image ID.
   int32_t ReserveImageId();
 
@@ -149,6 +149,14 @@ class GPU_EXPORT GpuChannelHost
   // otherwise ignored.
   void CrashGpuProcessForTesting();
 
+  SharedImageInterface* shared_image_interface() {
+    return &shared_image_interface_;
+  }
+
+  ImageDecodeAcceleratorProxy* image_decode_accelerator_proxy() {
+    return &image_decode_accelerator_proxy_;
+  }
+
  protected:
   friend class base::RefCountedThreadSafe<GpuChannelHost>;
   ~GpuChannelHost() override;
@@ -157,7 +165,7 @@ class GPU_EXPORT GpuChannelHost
   // A filter used internally to route incoming messages from the IO thread
   // to the correct message loop. It also maintains some shared state between
   // all the contexts.
-  class Listener : public IPC::Listener {
+  class GPU_EXPORT Listener : public IPC::Listener {
    public:
     Listener(mojo::ScopedMessagePipeHandle handle,
              scoped_refptr<base::SingleThreadTaskRunner> io_task_runner);
@@ -202,7 +210,7 @@ class GPU_EXPORT GpuChannelHost
 
     // Threading notes: most fields are only accessed on the IO thread, except
     // for lost_ which is protected by |lock_|.
-    base::hash_map<int32_t, RouteInfo> routes_;
+    std::unordered_map<int32_t, RouteInfo> routes_;
     std::unique_ptr<IPC::ChannelMojo> channel_;
     base::flat_map<int, IPC::PendingSyncMsg*> pending_syncs_;
 
@@ -249,6 +257,11 @@ class GPU_EXPORT GpuChannelHost
   // outlives |this|. It is therefore safe to PostTask calls to the IO thread
   // with base::Unretained(listener_).
   std::unique_ptr<Listener, base::OnTaskRunnerDeleter> listener_;
+
+  SharedImageInterfaceProxy shared_image_interface_;
+
+  // A client-side helper to send image decode requests to the GPU process.
+  ImageDecodeAcceleratorProxy image_decode_accelerator_proxy_;
 
   // Image IDs are allocated in sequence.
   base::AtomicSequenceNumber next_image_id_;

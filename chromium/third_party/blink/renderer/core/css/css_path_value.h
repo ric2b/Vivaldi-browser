@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/core/css/css_value.h"
 #include "third_party/blink/renderer/core/style/style_path.h"
 #include "third_party/blink/renderer/core/svg/svg_path_byte_stream.h"
+#include "third_party/blink/renderer/core/svg/svg_path_utilities.h"
 
 namespace blink {
 
@@ -19,10 +20,14 @@ namespace cssvalue {
 
 class CSSPathValue : public CSSValue {
  public:
-  static CSSPathValue* Create(scoped_refptr<StylePath>);
-  static CSSPathValue* Create(std::unique_ptr<SVGPathByteStream>);
+  static CSSPathValue* Create(scoped_refptr<StylePath>,
+                              PathSerializationFormat = kNoTransformation);
+  static CSSPathValue* Create(std::unique_ptr<SVGPathByteStream>,
+                              PathSerializationFormat = kNoTransformation);
 
   static CSSPathValue& EmptyPathValue();
+
+  CSSPathValue(scoped_refptr<StylePath>, PathSerializationFormat);
 
   StylePath* GetStylePath() const { return style_path_.get(); }
   String CustomCSSText() const;
@@ -36,9 +41,8 @@ class CSSPathValue : public CSSValue {
   }
 
  private:
-  CSSPathValue(scoped_refptr<StylePath>);
-
   scoped_refptr<StylePath> style_path_;
+  const PathSerializationFormat serialization_format_;
 };
 
 DEFINE_CSS_VALUE_TYPE_CASTS(CSSPathValue, IsPathValue());

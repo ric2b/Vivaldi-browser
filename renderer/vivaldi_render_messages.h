@@ -22,6 +22,16 @@ IPC_STRUCT_BEGIN(VivaldiViewMsg_RequestThumbnailForFrame_Params)
   IPC_STRUCT_MEMBER(int, callback_id)
 IPC_STRUCT_END()
 
+IPC_STRUCT_BEGIN(VivaldiViewMsg_AccessKeyDefinition)
+  IPC_STRUCT_MEMBER(std::string, access_key)
+  IPC_STRUCT_MEMBER(std::string, tagname)
+  IPC_STRUCT_MEMBER(std::string, title)
+  IPC_STRUCT_MEMBER(std::string, href)
+  IPC_STRUCT_MEMBER(std::string, value)
+  IPC_STRUCT_MEMBER(std::string, id)
+  IPC_STRUCT_MEMBER(std::string, textContent)
+IPC_STRUCT_END()
+
 IPC_MESSAGE_ROUTED1(VivaldiMsg_InsertText, base::string16)
 
 IPC_MESSAGE_ROUTED4(VivaldiMsg_DidUpdateFocusedElementInfo,
@@ -48,5 +58,14 @@ IPC_MESSAGE_ROUTED4(VivaldiViewHostMsg_RequestThumbnailForFrame_ACK,
                     bool /* true if success */)
 
 IPC_MESSAGE_ROUTED0(VivaldiFrameHostMsg_ResumeParser)
+
+IPC_MESSAGE_ROUTED0(VivaldiViewMsg_GetAccessKeysForPage)
+
+IPC_MESSAGE_ROUTED1(VivaldiViewHostMsg_GetAccessKeysForPage_ACK,
+                    std::vector<VivaldiViewMsg_AccessKeyDefinition>)
+
+IPC_MESSAGE_ROUTED1(VivaldiViewMsg_AccessKeyAction, std::string)
+
+IPC_MESSAGE_ROUTED1(VivaldiViewMsg_ScrollPage, std::string)
 
 #endif // RENDER_VIVALDI_RENDER_MESSAGES_H_

@@ -20,9 +20,11 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.components.download.DownloadCollectionBridge;
 import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.AndroidPermissionDelegate;
@@ -70,7 +72,9 @@ public class DownloadController {
     private static DownloadNotificationService sDownloadNotificationService;
 
     public static void setDownloadNotificationService(DownloadNotificationService service) {
-        sDownloadNotificationService = service;
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOAD_OFFLINE_CONTENT_PROVIDER)) {
+            sDownloadNotificationService = service;
+        }
     }
 
     /**
@@ -122,6 +126,7 @@ public class DownloadController {
      */
     @CalledByNative
     private static boolean hasFileAccess() {
+        if (DownloadCollectionBridge.supportsDownloadCollection()) return true;
         Activity activity = ApplicationStatus.getLastTrackedFocusedActivity();
         if (activity instanceof ChromeActivity) {
             return ((ChromeActivity) activity)
@@ -204,7 +209,7 @@ public class DownloadController {
                         null));
 
         AlertDialog.Builder builder =
-                new AlertDialog.Builder(activity, R.style.AlertDialogTheme)
+                new AlertDialog.Builder(activity, R.style.Theme_Chromium_AlertDialog)
                         .setView(view)
                         .setPositiveButton(R.string.infobar_update_permissions_button_text,
                                 (DialogInterface.OnClickListener) (dialog, id)
@@ -245,7 +250,7 @@ public class DownloadController {
      * @param info Download information about the download.
      */
     static void enqueueDownloadManagerRequest(final DownloadInfo info) {
-        DownloadManagerService.getDownloadManagerService().enqueueDownloadManagerRequest(
+        DownloadManagerService.getDownloadManagerService().enqueueNewDownload(
                 new DownloadItem(true, info), true);
     }
 

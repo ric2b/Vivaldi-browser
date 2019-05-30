@@ -18,8 +18,11 @@ void FakePageTimingSender::SendTiming(
     const mojom::PageLoadTimingPtr& timing,
     const mojom::PageLoadMetadataPtr& metadata,
     mojom::PageLoadFeaturesPtr new_features,
-    std::vector<mojom::ResourceDataUpdatePtr> resources) {
-  validator_->UpdateTiming(timing, metadata, new_features, resources);
+    std::vector<mojom::ResourceDataUpdatePtr> resources,
+    const mojom::PageRenderData& render_data,
+    const mojom::CpuTimingPtr& cpu_timing) {
+  validator_->UpdateTiming(timing, metadata, new_features, resources,
+                           render_data, cpu_timing);
 }
 
 FakePageTimingSender::PageTimingValidator::PageTimingValidator() {}
@@ -34,6 +37,12 @@ void FakePageTimingSender::PageTimingValidator::ExpectPageLoadTiming(
   expected_timings_.push_back(timing.Clone());
 }
 
+void FakePageTimingSender::PageTimingValidator::ExpectCpuTiming(
+    const base::TimeDelta& timing) {
+  VerifyExpectedCpuTimings();
+  expected_cpu_timings_.push_back(mojom::CpuTiming(timing).Clone());
+}
+
 void FakePageTimingSender::PageTimingValidator::VerifyExpectedTimings() const {
   // Ideally we'd just call ASSERT_EQ(actual_timings_, expected_timings_) here,
   // but this causes the generated gtest code to fail to build on Windows. See
@@ -43,6 +52,17 @@ void FakePageTimingSender::PageTimingValidator::VerifyExpectedTimings() const {
     if (actual_timings_.at(i)->Equals(*expected_timings_.at(i)))
       continue;
     ADD_FAILURE() << "Actual timing != expected timing at index " << i;
+  }
+}
+
+void FakePageTimingSender::PageTimingValidator::VerifyExpectedCpuTimings()
+    const {
+  ASSERT_EQ(actual_cpu_timings_.size(), expected_cpu_timings_.size());
+  for (size_t i = 0; i < actual_cpu_timings_.size(); ++i) {
+    if (actual_cpu_timings_.at(i)->task_time ==
+        expected_cpu_timings_.at(i)->task_time)
+      continue;
+    ADD_FAILURE() << "Actual cpu timing != expected cpu timing at index " << i;
   }
 }
 
@@ -91,12 +111,23 @@ void FakePageTimingSender::PageTimingValidator::VerifyExpectedCssProperties()
       << "More CSS Properties are actually observed than expected";
 }
 
+void FakePageTimingSender::PageTimingValidator::VerifyExpectedRenderData()
+    const {
+  EXPECT_FLOAT_EQ(expected_render_data_.layout_jank_score,
+                  actual_render_data_.layout_jank_score);
+}
+
 void FakePageTimingSender::PageTimingValidator::UpdateTiming(
     const mojom::PageLoadTimingPtr& timing,
     const mojom::PageLoadMetadataPtr& metadata,
     const mojom::PageLoadFeaturesPtr& new_features,
-    const std::vector<mojom::ResourceDataUpdatePtr>& resources) {
+    const std::vector<mojom::ResourceDataUpdatePtr>& resources,
+    const mojom::PageRenderData& render_data,
+    const mojom::CpuTimingPtr& cpu_timing) {
   actual_timings_.push_back(timing.Clone());
+  if (!cpu_timing->task_time.is_zero()) {
+    actual_cpu_timings_.push_back(cpu_timing.Clone());
+  }
   for (const auto feature : new_features->features) {
     EXPECT_EQ(actual_features_.find(feature), actual_features_.end())
         << "Feature " << feature << "has been sent more than once";
@@ -109,9 +140,12 @@ void FakePageTimingSender::PageTimingValidator::UpdateTiming(
         << "has been sent more than once";
     actual_css_properties_.insert(css_property_id);
   }
+  actual_render_data_.layout_jank_score = render_data.layout_jank_score;
   VerifyExpectedTimings();
+  VerifyExpectedCpuTimings();
   VerifyExpectedFeatures();
   VerifyExpectedCssProperties();
+  VerifyExpectedRenderData();
 }
 
 }  // namespace page_load_metrics

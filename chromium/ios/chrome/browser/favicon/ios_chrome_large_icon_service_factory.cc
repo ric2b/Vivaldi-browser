@@ -4,8 +4,9 @@
 
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 
-#include "base/memory/singleton.h"
-#include "components/favicon/core/large_icon_service.h"
+#include "base/bind.h"
+#include "base/no_destructor.h"
+#include "components/favicon/core/large_icon_service_impl.h"
 #include "components/image_fetcher/core/image_fetcher_impl.h"
 #include "components/image_fetcher/ios/ios_image_decoder_impl.h"
 #include "components/keyed_service/core/service_access_type.h"
@@ -20,7 +21,7 @@ std::unique_ptr<KeyedService> BuildLargeIconService(
     web::BrowserState* context) {
   ios::ChromeBrowserState* browser_state =
       ios::ChromeBrowserState::FromBrowserState(context);
-  return std::make_unique<favicon::LargeIconService>(
+  return std::make_unique<favicon::LargeIconServiceImpl>(
       ios::FaviconServiceFactory::GetForBrowserState(
           browser_state, ServiceAccessType::EXPLICIT_ACCESS),
       std::make_unique<image_fetcher::ImageFetcherImpl>(
@@ -39,13 +40,14 @@ favicon::LargeIconService* IOSChromeLargeIconServiceFactory::GetForBrowserState(
 // static
 IOSChromeLargeIconServiceFactory*
 IOSChromeLargeIconServiceFactory::GetInstance() {
-  return base::Singleton<IOSChromeLargeIconServiceFactory>::get();
+  static base::NoDestructor<IOSChromeLargeIconServiceFactory> instance;
+  return instance.get();
 }
 
 // static
-BrowserStateKeyedServiceFactory::TestingFactoryFunction
+BrowserStateKeyedServiceFactory::TestingFactory
 IOSChromeLargeIconServiceFactory::GetDefaultFactory() {
-  return &BuildLargeIconService;
+  return base::BindRepeating(&BuildLargeIconService);
 }
 
 IOSChromeLargeIconServiceFactory::IOSChromeLargeIconServiceFactory()

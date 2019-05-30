@@ -13,14 +13,15 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/prefs/pref_service.h"
-#include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/notification_promo.h"
 #include "ios/chrome/browser/pref_names.h"
+#include "ios/chrome/browser/system_flags.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -33,26 +34,37 @@ namespace {
 
 struct PromoStringToIdsMapEntry {
   const char* promo_text_str;
+  // Use |nonlocalized_message| instead of |message_id| if non-NULL.
+  const char* nonlocalized_message;
   int message_id;
 };
 
 // A mapping from a string to a l10n message id.
 const PromoStringToIdsMapEntry kPromoStringToIdsMap[] = {
-    {"appRatingPromo", IDS_IOS_APP_RATING_PROMO_STRING},
-    {"moveToDockTip", IDS_IOS_MOVE_TO_DOCK_TIP},
+    {"testWhatsNewCommand", kTestWhatsNewMessage, 0},
+    {"moveToDockTip", NULL, IDS_IOS_MOVE_TO_DOCK_TIP},
 };
 
 // Returns a localized version of |promo_text| if it has an entry in the
 // |kPromoStringToIdsMap|. If there is no entry, an empty string is returned.
 std::string GetLocalizedPromoText(const std::string& promo_text) {
-  for (size_t i = 0; i < arraysize(kPromoStringToIdsMap); ++i) {
-    if (kPromoStringToIdsMap[i].promo_text_str == promo_text)
-      return l10n_util::GetStringUTF8(kPromoStringToIdsMap[i].message_id);
+  for (size_t i = 0; i < base::size(kPromoStringToIdsMap); ++i) {
+    auto& entry = kPromoStringToIdsMap[i];
+    if (entry.promo_text_str == promo_text) {
+      return entry.nonlocalized_message
+                 ? std::string(entry.nonlocalized_message)
+                 : l10n_util::GetStringUTF8(entry.message_id);
+    }
   }
   return std::string();
 }
 
 }  // namespace
+
+// The What's New promo command for testing.
+const char kTestWhatsNewCommand[] = "testwhatsnew";
+const char kTestWhatsNewMessage[] =
+    "What's New? BEGIN_LINKFind out hereEND_LINK";
 
 NotificationPromoWhatsNew::NotificationPromoWhatsNew(PrefService* local_state)
     : local_state_(local_state),
@@ -65,36 +77,33 @@ bool NotificationPromoWhatsNew::Init() {
   notification_promo_.InitFromVariations();
 
   // Force enable a particular promo if experimental flag is set.
-  experimental_flags::WhatsNewPromoStatus forceEnabled =
-      experimental_flags::GetWhatsNewPromoStatus();
-  if (forceEnabled != experimental_flags::WHATS_NEW_DEFAULT) {
-    switch (forceEnabled) {
-      case experimental_flags::WHATS_NEW_APP_RATING:
-        InjectFakePromo("1", "appRatingPromo", "chrome_command", "ratethisapp",
-                        "", "RateThisAppPromo", "logo");
-        break;
-      case experimental_flags::WHATS_NEW_MOVE_TO_DOCK_TIP:
-        InjectFakePromo(
-            "2", "moveToDockTip", "url", "",
-            "https://support.google.com/chrome/?p=iphone_dock&ios=1",
-            "MoveToDockTipPromo", "logoWithRoundedRectangle");
-        break;
-      default:
-        NOTREACHED();
-        break;
-    }
+  switch (experimental_flags::GetWhatsNewPromoStatus()) {
+    case experimental_flags::WHATS_NEW_DEFAULT:
+      // Do nothing. Use default experiment.
+      break;
+    case experimental_flags::WHATS_NEW_TEST_COMMAND_TIP:
+      InjectFakePromo("1", "testWhatsNewCommand", "chrome_command",
+                      kTestWhatsNewCommand, "", "TestWhatsNewCommand", "logo");
+      break;
+    case experimental_flags::WHATS_NEW_MOVE_TO_DOCK_TIP:
+      InjectFakePromo("2", "moveToDockTip", "url", "",
+                      "https://support.google.com/chrome/?p=iphone_dock&ios=1",
+                      "MoveToDockTipPromo", "logoWithRoundedRectangle");
+      break;
+    default:
+      NOTREACHED();
+      break;
   }
 
   notification_promo_.InitFromPrefs();
   return InitFromNotificationPromo();
 }
 
-bool NotificationPromoWhatsNew::ClearAndInitFromJson(
-    const base::DictionaryValue& json) {
+bool NotificationPromoWhatsNew::ClearAndInitFromJson(base::Value json) {
   // This clears away old promos.
   notification_promo_.MigrateUserPrefs(local_state_);
 
-  notification_promo_.InitFromJson(json);
+  notification_promo_.InitFromJson(std::move(json));
   return InitFromNotificationPromo();
 }
 
@@ -181,21 +190,34 @@ bool NotificationPromoWhatsNew::InitFromNotificationPromo() {
   if (promo_text_.empty())
     return valid_;
 
-  notification_promo_.promo_payload()->GetString("metric_name", &metric_name_);
-  if (metric_name_.empty())
+  const std::string* metric_name =
+      notification_promo_.promo_payload().FindStringKey("metric_name");
+  if (!metric_name || metric_name->empty()) {
     return valid_;
+  }
+  metric_name_ = *metric_name;
 
-  notification_promo_.promo_payload()->GetString("promo_type", &promo_type_);
+  const std::string* promo_type =
+      notification_promo_.promo_payload().FindStringKey("promo_type");
+  if (promo_type)
+    promo_type_ = *promo_type;
+
   if (IsURLPromo()) {
-    std::string url_text;
-    notification_promo_.promo_payload()->GetString("url", &url_text);
-    url_ = GURL(url_text);
+    const std::string* url_text =
+        notification_promo_.promo_payload().FindStringKey("url");
+    url_ = GURL(url_text ? *url_text : std::string());
     if (url_.is_empty() || !url_.is_valid()) {
       return valid_;
     }
   } else if (IsChromeCommandPromo()) {
-    notification_promo_.promo_payload()->GetString("command", &command_);
-    if ((command_ != "bookmark") && (command_ != "ratethisapp")) {
+    const std::string* command =
+        notification_promo_.promo_payload().FindStringKey("command");
+    if (command)
+      command_ = *command;
+
+    // There is only one valid command for NTP Promotions, and that is the
+    // test command itself.
+    if (command_ != kTestWhatsNewCommand) {
       return valid_;
     }
   } else {  // If |promo_type_| is not set to URL or Command, return early.
@@ -205,16 +227,17 @@ bool NotificationPromoWhatsNew::InitFromNotificationPromo() {
   valid_ = true;
 
   // Optional values don't need validation.
-  std::string icon_name;
-  notification_promo_.promo_payload()->GetString("icon", &icon_name);
-  icon_ = ParseIconName(icon_name);
+  const std::string* icon_name =
+      notification_promo_.promo_payload().FindStringKey("icon");
+  icon_ = ParseIconName(icon_name ? *icon_name : std::string());
 
-  seconds_since_install_ = 0;
-  notification_promo_.promo_payload()->GetInteger("seconds_since_install",
-                                                  &seconds_since_install_);
-  max_seconds_since_install_ = 0;
-  notification_promo_.promo_payload()->GetInteger("max_seconds_since_install",
-                                                  &max_seconds_since_install_);
+  seconds_since_install_ = notification_promo_.promo_payload()
+                               .FindIntKey("seconds_since_install")
+                               .value_or(0);
+  max_seconds_since_install_ = notification_promo_.promo_payload()
+                                   .FindIntKey("max_seconds_since_install")
+                                   .value_or(0);
+
   return valid_;
 }
 
@@ -235,30 +258,28 @@ void NotificationPromoWhatsNew::InjectFakePromo(const std::string& promo_id,
   replacements.push_back(icon);
   replacements.push_back(promo_id);
 
-  std::string promo_json =
-      "{"
-      "  \"start\":\"1 Jan 1999 0:26:06 GMT\","
-      "  \"end\":\"1 Jan 2199 0:26:06 GMT\","
-      "  \"promo_text\":\"$1\","
-      "  \"max_views\":20,"
-      "  \"payload\":"
-      "     {"
-      "       \"promo_type\":\"$2\","
-      "       \"metric_name\":\"$3\","
-      "       \"command\":\"$4\","
-      "       \"url\":\"$5\","
-      "       \"icon\":\"$6\""
-      "     },"
-      "  \"max_seconds\":259200,"
-      "  \"promo_id\":$7"
-      "}";
+  const char promo_json[] = "{"
+                            "  \"start\":\"1 Jan 1999 0:26:06 GMT\","
+                            "  \"end\":\"1 Jan 2199 0:26:06 GMT\","
+                            "  \"promo_text\":\"$1\","
+                            "  \"max_views\":20,"
+                            "  \"payload\":"
+                            "     {"
+                            "       \"promo_type\":\"$2\","
+                            "       \"metric_name\":\"$3\","
+                            "       \"command\":\"$4\","
+                            "       \"url\":\"$5\","
+                            "       \"icon\":\"$6\""
+                            "     },"
+                            "  \"max_seconds\":259200,"
+                            "  \"promo_id\":$7"
+                            "}";
   std::string promo_json_filled_in =
       base::ReplaceStringPlaceholders(promo_json, replacements, NULL);
 
-  std::unique_ptr<base::Value> value(
-      base::JSONReader::Read(promo_json_filled_in));
-  base::DictionaryValue* dict = NULL;
-  if (value->GetAsDictionary(&dict)) {
-    notification_promo_.InitFromJson(*dict);
-  }
+  base::Optional<base::Value> value =
+      base::JSONReader::Read(promo_json_filled_in);
+  DCHECK(value.has_value());
+  DCHECK(value.value().is_dict());
+  notification_promo_.InitFromJson(std::move(value).value());
 }

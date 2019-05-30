@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <set>
 #include <utility>
 
 #include "base/callback.h"
@@ -20,6 +21,7 @@
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_filter.h"
 #include "components/sync/model/sync_change.h"
+#include "components/sync/model/sync_change_processor.h"
 #include "components/sync/model/sync_error_factory.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "content/public/browser/browser_thread.h"
@@ -240,7 +242,7 @@ SyncMergeResult SupervisedUserSettingsService::MergeDataAndStartSyncing(
     const ::sync_pb::ManagedUserSettingSpecifics& supervised_user_setting =
         sync_data.GetSpecifics().managed_user_setting();
     std::unique_ptr<base::Value> value =
-        JSONReader::Read(supervised_user_setting.value());
+        JSONReader::ReadDeprecated(supervised_user_setting.value());
     // Wrongly formatted input will cause null values.
     // SetWithoutPathExpansion below requires non-null values.
     if (!value) {
@@ -291,7 +293,7 @@ SyncMergeResult SupervisedUserSettingsService::MergeDataAndStartSyncing(
 
   SyncMergeResult result(SUPERVISED_USER_SETTINGS);
   // Process all the accumulated changes from the queued items.
-  if (change_list.size() > 0) {
+  if (!change_list.empty()) {
     store_->ReportValueChanged(kQueuedItems,
                                WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
     result.set_error(
@@ -364,7 +366,7 @@ SyncError SupervisedUserSettingsService::ProcessSyncChanges(
       case SyncChange::ACTION_ADD:
       case SyncChange::ACTION_UPDATE: {
         std::unique_ptr<base::Value> value =
-            JSONReader::Read(supervised_user_setting.value());
+            JSONReader::ReadDeprecated(supervised_user_setting.value());
         if (dict->HasKey(key)) {
           DLOG_IF(WARNING, change_type == SyncChange::ACTION_ADD)
               << "Value for key " << key << " already exists";
@@ -416,16 +418,15 @@ void SupervisedUserSettingsService::OnInitializationCompleted(bool success) {
 base::DictionaryValue* SupervisedUserSettingsService::GetOrCreateDictionary(
     const std::string& key) const {
   base::Value* value = nullptr;
-  base::DictionaryValue* dict = nullptr;
-  if (store_->GetMutableValue(key, &value)) {
-    bool success = value->GetAsDictionary(&dict);
-    DCHECK(success);
-  } else {
-    dict = new base::DictionaryValue;
-    store_->SetValue(key, base::WrapUnique(dict),
-                     WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
+  if (!store_->GetMutableValue(key, &value)) {
+    store_->SetValue(
+        key, std::make_unique<base::Value>(base::Value::Type::DICTIONARY),
+        WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
+    store_->GetMutableValue(key, &value);
   }
-
+  base::DictionaryValue* dict = nullptr;
+  bool success = value->GetAsDictionary(&dict);
+  DCHECK(success);
   return dict;
 }
 

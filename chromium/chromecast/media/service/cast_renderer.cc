@@ -18,7 +18,6 @@
 #include "chromecast/media/base/video_resolution_policy.h"
 #include "chromecast/media/cdm/cast_cdm_context.h"
 #include "chromecast/media/cma/base/balanced_media_task_runner_factory.h"
-#include "chromecast/media/cma/base/cma_logging.h"
 #include "chromecast/media/cma/base/demuxer_stream_adapter.h"
 #include "chromecast/media/cma/pipeline/media_pipeline_impl.h"
 #include "chromecast/media/cma/pipeline/video_pipeline_client.h"
@@ -51,7 +50,7 @@ void VideoModeSwitchCompletionCb(const ::media::PipelineStatusCB& init_cb,
     init_cb.Run(::media::PIPELINE_ERROR_INITIALIZATION_FAILED);
     return;
   }
-  VLOG(1) << "Video mode switched successfully.";
+  LOG(INFO) << "Video mode switched successfully.";
   init_cb.Run(::media::PIPELINE_OK);
 }
 }  // namespace
@@ -81,14 +80,14 @@ CastRenderer::CastRenderer(
           new BalancedMediaTaskRunnerFactory(kMaxDeltaFetcher)),
       weak_factory_(this) {
   DCHECK(backend_factory_);
-  CMALOG(kLogControl) << __FUNCTION__ << ": " << this;
+  LOG(INFO) << __FUNCTION__ << ": " << this;
 
   if (video_resolution_policy_)
     video_resolution_policy_->AddObserver(this);
 }
 
 CastRenderer::~CastRenderer() {
-  CMALOG(kLogControl) << __FUNCTION__ << ": " << this;
+  LOG(INFO) << __FUNCTION__ << ": " << this;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   if (video_resolution_policy_)
@@ -98,7 +97,7 @@ CastRenderer::~CastRenderer() {
 void CastRenderer::Initialize(::media::MediaResource* media_resource,
                               ::media::RendererClient* client,
                               const ::media::PipelineStatusCB& init_cb) {
-  CMALOG(kLogControl) << __FUNCTION__ << ": " << this;
+  LOG(INFO) << __FUNCTION__ << ": " << this;
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(!application_session_id_manager_ptr_);
 
@@ -155,10 +154,10 @@ void CastRenderer::OnGetMultiroomInfo(
     chromecast::mojom::MultiroomInfoPtr multiroom_info) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(multiroom_info);
-  CMALOG(kLogControl) << __FUNCTION__ << ": " << this
-                      << " session_id=" << application_session_id
-                      << ", multiroom=" << multiroom_info->multiroom
-                      << ", audio_channel=" << multiroom_info->audio_channel;
+  LOG(INFO) << __FUNCTION__ << ": " << this
+            << " session_id=" << application_session_id
+            << ", multiroom=" << multiroom_info->multiroom
+            << ", audio_channel=" << multiroom_info->audio_channel;
   // Close the MultiroomManager message pipe so that a connection error does not
   // trigger a second call to this function.
   multiroom_manager_.reset();
@@ -221,8 +220,8 @@ void CastRenderer::OnGetMultiroomInfo(
   // Initialize audio.
   if (audio_stream) {
     AvPipelineClient audio_client;
-    audio_client.wait_for_key_cb = base::Bind(
-        &CastRenderer::OnWaitingForDecryptionKey, weak_factory_.GetWeakPtr());
+    audio_client.waiting_cb =
+        base::Bind(&CastRenderer::OnWaiting, weak_factory_.GetWeakPtr());
     audio_client.eos_cb = base::Bind(&CastRenderer::OnEnded,
                                      weak_factory_.GetWeakPtr(), STREAM_AUDIO);
     audio_client.playback_error_cb =
@@ -245,8 +244,8 @@ void CastRenderer::OnGetMultiroomInfo(
   // Initialize video.
   if (video_stream) {
     VideoPipelineClient video_client;
-    video_client.av_pipeline_client.wait_for_key_cb = base::Bind(
-        &CastRenderer::OnWaitingForDecryptionKey, weak_factory_.GetWeakPtr());
+    video_client.av_pipeline_client.waiting_cb =
+        base::Bind(&CastRenderer::OnWaiting, weak_factory_.GetWeakPtr());
     video_client.av_pipeline_client.eos_cb = base::Bind(
         &CastRenderer::OnEnded, weak_factory_.GetWeakPtr(), STREAM_VIDEO);
     video_client.av_pipeline_client.playback_error_cb =
@@ -369,8 +368,8 @@ void CastRenderer::OnEnded(Stream stream) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(!eos_[stream]);
   eos_[stream] = true;
-  CMALOG(kLogControl) << __FUNCTION__ << ": eos_audio=" << eos_[STREAM_AUDIO]
-                      << " eos_video=" << eos_[STREAM_VIDEO];
+  LOG(INFO) << __FUNCTION__ << ": eos_audio=" << eos_[STREAM_AUDIO]
+            << " eos_video=" << eos_[STREAM_VIDEO];
   if (eos_[STREAM_AUDIO] && eos_[STREAM_VIDEO])
     client_->OnEnded();
 }
@@ -390,9 +389,9 @@ void CastRenderer::OnBufferingStateChange(::media::BufferingState state) {
     client_->OnBufferingStateChange(state);
 }
 
-void CastRenderer::OnWaitingForDecryptionKey() {
+void CastRenderer::OnWaiting(::media::WaitingReason reason) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-  client_->OnWaitingForDecryptionKey();
+  client_->OnWaiting(reason);
 }
 
 void CastRenderer::OnVideoNaturalSizeChange(const gfx::Size& size) {

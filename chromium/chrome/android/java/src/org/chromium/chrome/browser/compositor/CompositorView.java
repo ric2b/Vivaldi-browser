@@ -44,7 +44,6 @@ import java.util.List;
 public class CompositorView
         extends FrameLayout implements CompositorSurfaceManager.SurfaceManagerCallbackTarget {
     private static final String TAG = "CompositorView";
-    private static final long NANOSECONDS_PER_MILLISECOND = 1000000;
 
     // Cache objects that should not be created every frame
     private final Rect mCacheAppRect = new Rect();
@@ -74,6 +73,8 @@ public class CompositorView
     private View mRootView;
     private boolean mPreloadedResources;
     private List<Runnable> mDrawingFinishedCallbacks;
+
+    private boolean mIsInVr;
 
     /**
      * Creates a {@link CompositorView}. This can be called only after the native library is
@@ -272,7 +273,9 @@ public class CompositorView
     public void surfaceChanged(Surface surface, int format, int width, int height) {
         if (mNativeCompositorView == 0) return;
 
-        nativeSurfaceChanged(mNativeCompositorView, format, width, height, surface);
+        boolean backedBySurfaceTexture = mIsInVr;
+        nativeSurfaceChanged(
+                mNativeCompositorView, format, width, height, backedBySurfaceTexture, surface);
         mRenderHost.onSurfaceResized(width, height);
     }
 
@@ -317,15 +320,9 @@ public class CompositorView
         mRenderHost.onCompositorLayout();
     }
 
-    /*
-     * On JellyBean there is a known bug where a crashed producer process
-     * (i.e. GPU process) does not properly disconnect from the BufferQueue,
-     * which means we won't be able to reconnect to it ever again.
-     * This workaround forces the creation of a new Surface.
-     */
     @CalledByNative
-    private void onJellyBeanSurfaceDisconnectWorkaround(boolean inOverlayMode) {
-        mCompositorSurfaceManager.recreateSurfaceForJellyBean();
+    private void recreateSurface() {
+        mCompositorSurfaceManager.recreateSurface();
     }
 
     /**
@@ -360,6 +357,12 @@ public class CompositorView
         if (swappedCurrentSize) {
             runDrawFinishedCallbacks();
         }
+    }
+
+    @CalledByNative
+    private void notifyWillUseSurfaceControl() {
+        mAlwaysTranslucent = true;
+        mCompositorSurfaceManager.requestSurface(getSurfacePixelFormat());
     }
 
     /**
@@ -445,6 +448,8 @@ public class CompositorView
      */
     public void replaceSurfaceManagerForVr(
             CompositorSurfaceManager vrCompositorSurfaceManager, WindowAndroid window) {
+        mIsInVr = true;
+
         mCompositorSurfaceManager.shutDown();
         nativeSetCompositorWindow(mNativeCompositorView, window);
         mCompositorSurfaceManager = vrCompositorSurfaceManager;
@@ -460,6 +465,8 @@ public class CompositorView
      * @param windowToRestore The non-VR WindowAndroid to restore.
      */
     public void onExitVr(WindowAndroid windowToRestore) {
+        mIsInVr = false;
+
         if (mNativeCompositorView == 0) return;
         setWindowAndroid(windowToRestore);
         mCompositorSurfaceManager.shutDown();
@@ -476,8 +483,8 @@ public class CompositorView
     private native ResourceManager nativeGetResourceManager(long nativeCompositorView);
     private native void nativeSurfaceCreated(long nativeCompositorView);
     private native void nativeSurfaceDestroyed(long nativeCompositorView);
-    private native void nativeSurfaceChanged(
-            long nativeCompositorView, int format, int width, int height, Surface surface);
+    private native void nativeSurfaceChanged(long nativeCompositorView, int format, int width,
+            int height, boolean backedBySurfaceTexture, Surface surface);
     private native void nativeOnPhysicalBackingSizeChanged(
             long nativeCompositorView, WebContents webContents, int width, int height);
     private native void nativeFinalizeLayers(long nativeCompositorView);

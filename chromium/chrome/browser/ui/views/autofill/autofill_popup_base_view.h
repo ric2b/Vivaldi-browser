@@ -15,10 +15,6 @@
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/widget/widget_observer.h"
 
-#if defined(OS_MACOSX)
-#include "ui/base/cocoa/bubble_closer.h"
-#endif
-
 namespace gfx {
 class Point;
 }
@@ -31,12 +27,6 @@ class AutofillPopupBaseView : public views::WidgetDelegateView,
                               public views::WidgetFocusChangeListener,
                               public views::WidgetObserver {
  public:
-  static const SkColor kBackgroundColor;
-  static const SkColor kSelectedBackgroundColor;
-  static const SkColor kFooterBackgroundColor;
-  static const SkColor kSeparatorColor;
-  static const SkColor kWarningColor;
-
   // Consider the input element is |kElementBorderPadding| pixels larger at the
   // top and at the bottom in order to reposition the dropdown, so that it
   // doesn't look too close to the element.
@@ -47,6 +37,14 @@ class AutofillPopupBaseView : public views::WidgetDelegateView,
   static const int kValueLabelPadding = 24;
 
   static int GetCornerRadius();
+
+  // Get colors used throughout various popup UIs, based on the current native
+  // theme.
+  SkColor GetBackgroundColor();
+  SkColor GetSelectedBackgroundColor();
+  SkColor GetFooterBackgroundColor();
+  SkColor GetSeparatorColor();
+  SkColor GetWarningColor();
 
  protected:
   explicit AutofillPopupBaseView(AutofillPopupViewDelegate* delegate,
@@ -59,27 +57,12 @@ class AutofillPopupBaseView : public views::WidgetDelegateView,
   // Hide the widget and delete |this|.
   void DoHide();
 
-  // TODO(crbug.com/831603): make the methods private and non-virtual when
-  // AutofillPopupViewViews is gone.
-  virtual void AddExtraInitParams(views::Widget::InitParams* params);
-
-  // Returns the widget's contents view.
-  // TODO(crbug.com/831603): remove.
-  virtual std::unique_ptr<views::View> CreateWrapperView();
-
-  // Returns the border to be applied to the popup.
-  virtual std::unique_ptr<views::Border> CreateBorder();
-
   // Ensure the child views are not rendered beyond the bubble border
   // boundaries. Should be overridden together with CreateBorder.
-  virtual void SetClipPath();
+  void SetClipPath();
 
   // Update size of popup and paint (virtual for testing).
   virtual void DoUpdateBoundsAndRedrawPopup();
-
-  // Compute the space available for the popup. It's the space between its top
-  // and the bottom of its parent view, minus some margin space.
-  gfx::Rect CalculateClippingBounds() const;
 
   const AutofillPopupViewDelegate* delegate() { return delegate_; }
 
@@ -116,6 +99,9 @@ class AutofillPopupBaseView : public views::WidgetDelegateView,
   // eventually hide this view in the process.
   void HideController();
 
+  // Returns the border to be applied to the popup.
+  std::unique_ptr<views::Border> CreateBorder();
+
   // Must return the container view for this popup.
   gfx::NativeView container_view();
 
@@ -127,13 +113,6 @@ class AutofillPopupBaseView : public views::WidgetDelegateView,
 
   // The time when the popup was shown.
   base::Time show_time_;
-
-#if defined(OS_MACOSX)
-  // Special handler to close the popup on the Mac Cocoa browser.
-  // |parent_widget_| is null on that browser so we can't observe it for
-  // window changes.
-  std::unique_ptr<ui::BubbleCloser> mac_bubble_closer_;
-#endif
 
   base::WeakPtrFactory<AutofillPopupBaseView> weak_ptr_factory_;
 

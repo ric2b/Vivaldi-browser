@@ -31,10 +31,8 @@ namespace mac {
 
 // static
 bool TouchIdAuthenticator::IsAvailable() {
-  if (base::FeatureList::IsEnabled(device::kWebAuthTouchId)) {
-    if (__builtin_available(macOS 10.12.2, *)) {
-      return TouchIdContext::TouchIdAvailable();
-    }
+  if (__builtin_available(macOS 10.12.2, *)) {
+    return TouchIdContext::TouchIdAvailable();
   }
   return false;
 }
@@ -132,7 +130,12 @@ std::string TouchIdAuthenticator::GetId() const {
   return "TouchIdAuthenticator";
 }
 
-FidoTransportProtocol TouchIdAuthenticator::AuthenticatorTransport() const {
+base::string16 TouchIdAuthenticator::GetDisplayName() const {
+  return base::string16();
+}
+
+base::Optional<FidoTransportProtocol>
+TouchIdAuthenticator::AuthenticatorTransport() const {
   return FidoTransportProtocol::kInternal;
 }
 
@@ -140,21 +143,29 @@ namespace {
 
 AuthenticatorSupportedOptions TouchIdAuthenticatorOptions() {
   AuthenticatorSupportedOptions options;
-  options.SetIsPlatformDevice(true);
-  options.SetSupportsResidentKey(true);
-  options.SetUserVerificationAvailability(
-      AuthenticatorSupportedOptions::UserVerificationAvailability::
-          kSupportedAndConfigured);
-  options.SetUserPresenceRequired(true);
+  options.is_platform_device = true;
+  options.supports_resident_key = true;
+  options.user_verification_availability = AuthenticatorSupportedOptions::
+      UserVerificationAvailability::kSupportedAndConfigured;
+  options.supports_user_presence = true;
   return options;
 }
 
 }  // namespace
 
-const AuthenticatorSupportedOptions& TouchIdAuthenticator::Options() const {
-  static const AuthenticatorSupportedOptions options =
+const base::Optional<AuthenticatorSupportedOptions>&
+TouchIdAuthenticator::Options() const {
+  static const base::Optional<AuthenticatorSupportedOptions> options =
       TouchIdAuthenticatorOptions();
   return options;
+}
+
+bool TouchIdAuthenticator::IsInPairingMode() const {
+  return false;
+}
+
+bool TouchIdAuthenticator::IsPaired() const {
+  return false;
 }
 
 base::WeakPtr<FidoAuthenticator> TouchIdAuthenticator::GetWeakPtr() {

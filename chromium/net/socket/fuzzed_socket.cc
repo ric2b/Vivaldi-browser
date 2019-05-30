@@ -119,7 +119,8 @@ int FuzzedSocket::Write(
 
     num_async_reads_and_writes_ += static_cast<int>(!sync);
 
-    result = data_provider_->ConsumeUint8();
+    // Intentionally using smaller |result| size here.
+    result = data_provider_->ConsumeIntegralInRange<int>(0, 0xFF);
     if (result > buf_len)
       result = buf_len;
     if (result == 0) {
@@ -230,8 +231,6 @@ const NetLogWithSource& FuzzedSocket::NetLog() const {
 bool FuzzedSocket::WasEverUsed() const {
   return total_bytes_written_ != 0 || total_bytes_read_ != 0;
 }
-
-void FuzzedSocket::EnableTCPFastOpenIfSupported() {}
 
 bool FuzzedSocket::WasAlpnNegotiated() const {
   return false;

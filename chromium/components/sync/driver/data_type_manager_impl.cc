@@ -22,7 +22,6 @@
 #include "components/sync/driver/data_type_encryption_handler.h"
 #include "components/sync/driver/data_type_manager_observer.h"
 #include "components/sync/driver/data_type_status_table.h"
-#include "components/sync/driver/sync_client.h"
 #include "components/sync/engine/data_type_debug_info_listener.h"
 
 namespace syncer {
@@ -47,7 +46,6 @@ DataTypeManagerImpl::AssociationTypesInfo::AssociationTypesInfo(
 DataTypeManagerImpl::AssociationTypesInfo::~AssociationTypesInfo() {}
 
 DataTypeManagerImpl::DataTypeManagerImpl(
-    SyncClient* sync_client,
     ModelTypeSet initial_types,
     const WeakHandle<DataTypeDebugInfoListener>& debug_info_listener,
     const DataTypeController::TypeMap* controllers,
@@ -55,7 +53,6 @@ DataTypeManagerImpl::DataTypeManagerImpl(
     ModelTypeConfigurer* configurer,
     DataTypeManagerObserver* observer)
     : downloaded_types_(initial_types),
-      sync_client_(sync_client),
       configurer_(configurer),
       controllers_(controllers),
       state_(DataTypeManager::STOPPED),
@@ -64,7 +61,6 @@ DataTypeManagerImpl::DataTypeManagerImpl(
       model_association_manager_(controllers, this),
       observer_(observer),
       encryption_handler_(encryption_handler),
-      catch_up_in_progress_(false),
       download_started_(false),
       weak_ptr_factory_(this) {
   DCHECK(configurer_);
@@ -75,25 +71,13 @@ DataTypeManagerImpl::~DataTypeManagerImpl() {}
 
 void DataTypeManagerImpl::Configure(ModelTypeSet desired_types,
                                     const ConfigureContext& context) {
-  // Once requested, we will remain in "catch up" mode until we notify the
-  // caller (see NotifyDone). We do this to ensure that once started, subsequent
-  // calls to Configure won't take us out of "catch up" mode.
-  if (context.reason == CONFIGURE_REASON_CATCH_UP)
-    catch_up_in_progress_ = true;
-
-  desired_types.PutAll(CoreTypes());
+  desired_types.PutAll(ControlTypes());
 
   ModelTypeSet allowed_types = ControlTypes();
   // Add types with controllers.
   for (const auto& kv : *controllers_) {
     allowed_types.Put(kv.first);
   }
-
-  // Remove types we cannot sync.
-  if (!sync_client_->HasPasswordStore())
-    allowed_types.Remove(PASSWORDS);
-  if (!sync_client_->GetHistoryService())
-    allowed_types.Remove(TYPED_URLS);
 
   ConfigureImpl(Intersection(desired_types, allowed_types), context);
 }
@@ -112,6 +96,27 @@ void DataTypeManagerImpl::ReenableType(ModelType type) {
     return;
 
   DVLOG(1) << "Reenabling " << ModelTypeToString(type);
+  ForceReconfiguration();
+}
+
+void DataTypeManagerImpl::ReadyForStartChanged(ModelType type) {
+  if (!UpdateUnreadyTypeError(type)) {
+    // Nothing changed.
+    return;
+  }
+
+  if (data_type_status_table_.GetUnreadyErrorTypes().Has(type)) {
+    model_association_manager_.StopDatatype(
+        type, DISABLE_SYNC,
+        SyncError(FROM_HERE, syncer::SyncError::UNREADY_ERROR,
+                  "Data type is unready.", type));
+  } else if (last_requested_types_.Has(type)) {
+    // Only reconfigure if the type is both ready and desired.
+    ForceReconfiguration();
+  }
+}
+
+void DataTypeManagerImpl::ForceReconfiguration() {
   needs_reconfigure_ = true;
   last_requested_context_.reason = CONFIGURE_REASON_PROGRAMMATIC;
   ProcessReconfigure();
@@ -225,11 +230,6 @@ DataTypeManagerImpl::BuildDataTypeConfigStateMap(
 
   ModelTypeSet enabled_types = GetEnabledTypes();
 
-  // If we're catching up, add all enabled (non-error) types to the clean set to
-  // ensure we download and apply them to the model types.
-  if (catch_up_in_progress_)
-    clean_types.PutAll(enabled_types);
-
   ModelTypeSet disabled_types =
       Difference(Union(UserTypes(), ControlTypes()), enabled_types);
   ModelTypeSet to_configure =
@@ -300,10 +300,6 @@ void DataTypeManagerImpl::Restart() {
   download_types_queue_ = PrioritizeTypes(last_enabled_types_);
   association_types_queue_ = base::queue<AssociationTypesInfo>();
 
-  // If we're performing a "catch up", first stop the model types to ensure the
-  // call to Initialize triggers model association.
-  if (catch_up_in_progress_)
-    model_association_manager_.Stop(KEEP_METADATA);
   download_started_ = false;
   model_association_manager_.Initialize(
       /*desired_types=*/last_enabled_types_,
@@ -324,7 +320,7 @@ void DataTypeManagerImpl::OnAllDataTypesReadyForConfigure() {
 
 ModelTypeSet DataTypeManagerImpl::GetPriorityTypes() const {
   ModelTypeSet high_priority_types;
-  high_priority_types.PutAll(PriorityCoreTypes());
+  high_priority_types.PutAll(ControlTypes());
   high_priority_types.PutAll(PriorityUserTypes());
   return high_priority_types;
 }
@@ -353,26 +349,34 @@ TypeSetPriorityList DataTypeManagerImpl::PrioritizeTypes(
 void DataTypeManagerImpl::UpdateUnreadyTypeErrors(
     const ModelTypeSet& desired_types) {
   for (ModelType type : desired_types) {
-    const auto& iter = controllers_->find(type);
-    if (iter == controllers_->end())
-      continue;
-    const DataTypeController* dtc = iter->second.get();
-    bool unready_status =
-        data_type_status_table_.GetUnreadyErrorTypes().Has(type);
-    if (dtc->ReadyForStart() != (unready_status == false)) {
-      // Adjust data_type_status_table_ if unready state in it doesn't match
-      // DataTypeController::ReadyForStart().
-      if (dtc->ReadyForStart()) {
-        data_type_status_table_.ResetUnreadyErrorFor(type);
-      } else {
-        SyncError error(FROM_HERE, SyncError::UNREADY_ERROR,
-                        "Datatype not ready at config time.", type);
-        std::map<ModelType, SyncError> errors;
-        errors[type] = error;
-        data_type_status_table_.UpdateFailedDataTypes(errors);
-      }
-    }
+    UpdateUnreadyTypeError(type);
   }
+}
+
+bool DataTypeManagerImpl::UpdateUnreadyTypeError(ModelType type) {
+  const auto& iter = controllers_->find(type);
+  if (iter == controllers_->end())
+    return false;
+
+  const DataTypeController* dtc = iter->second.get();
+  bool unready_status =
+      data_type_status_table_.GetUnreadyErrorTypes().Has(type);
+  if (dtc->ReadyForStart() == (unready_status == false))
+    return false;
+
+  // Adjust data_type_status_table_ if unready state in it doesn't match
+  // DataTypeController::ReadyForStart().
+  if (dtc->ReadyForStart()) {
+    data_type_status_table_.ResetUnreadyErrorFor(type);
+  } else {
+    SyncError error(FROM_HERE, SyncError::UNREADY_ERROR,
+                    "Datatype not ready at config time.", type);
+    std::map<ModelType, SyncError> errors;
+    errors[type] = error;
+    data_type_status_table_.UpdateFailedDataTypes(errors);
+  }
+
+  return true;
 }
 
 void DataTypeManagerImpl::ProcessReconfigure() {
@@ -407,10 +411,6 @@ void DataTypeManagerImpl::ProcessReconfigure() {
   state_ = RETRYING;
   needs_reconfigure_ = false;
   ConfigureImpl(last_requested_types_, last_requested_context_);
-}
-
-void DataTypeManagerImpl::OnDownloadRetry() {
-  DCHECK_EQ(CONFIGURING, state_);
 }
 
 void DataTypeManagerImpl::DownloadReady(
@@ -571,14 +571,20 @@ ModelTypeSet DataTypeManagerImpl::PrepareConfigureParams(
   // non-nigori type in the request requires migration, a MIGRATION_DONE
   // response will be sent.
 
-  ModelTypeSet types_to_purge =
-      Difference(ModelTypeSet::All(), downloaded_types_);
-  // Include clean_types in types_to_purge, they are part of
-  // |downloaded_types_|, but still need to be cleared.
-  DCHECK(downloaded_types_.HasAll(clean_types));
-  types_to_purge.PutAll(clean_types);
-  types_to_purge.RemoveAll(inactive_types);
-  types_to_purge.RemoveAll(unready_types);
+  ModelTypeSet types_to_purge;
+  // If we're using in-memory storage, don't clear any old data. The reason is
+  // that if a user temporarily disables Sync, we don't want to wipe (and later
+  // redownload) all their data, just because Sync restarted in transport-only
+  // mode.
+  if (last_requested_context_.storage_option == STORAGE_ON_DISK) {
+    types_to_purge = Difference(ModelTypeSet::All(), downloaded_types_);
+    // Include clean_types in types_to_purge, they are part of
+    // |downloaded_types_|, but still need to be cleared.
+    DCHECK(downloaded_types_.HasAll(clean_types));
+    types_to_purge.PutAll(clean_types);
+    types_to_purge.RemoveAll(inactive_types);
+    types_to_purge.RemoveAll(unready_types);
+  }
 
   // If a type has already been disabled and unapplied or journaled, it will
   // not be part of the |types_to_purge| set, and therefore does not need
@@ -605,10 +611,8 @@ ModelTypeSet DataTypeManagerImpl::PrepareConfigureParams(
   params->ready_task =
       base::Bind(&DataTypeManagerImpl::DownloadReady,
                  weak_ptr_factory_.GetWeakPtr(), download_types_queue_.front());
-  params->retry_callback = base::Bind(&DataTypeManagerImpl::OnDownloadRetry,
-                                      weak_ptr_factory_.GetWeakPtr());
-  params->is_sync_feature_enabled = last_requested_context_.storage_option ==
-                                    ConfigureContext::STORAGE_ON_DISK;
+  params->is_sync_feature_enabled =
+      last_requested_context_.storage_option == STORAGE_ON_DISK;
 
   DCHECK(Intersection(active_types, types_to_purge).Empty());
   DCHECK(Intersection(active_types, fatal_types).Empty());
@@ -659,7 +663,7 @@ void DataTypeManagerImpl::OnSingleDataTypeWillStart(ModelType type) {
 
 void DataTypeManagerImpl::OnSingleDataTypeWillStop(ModelType type,
                                                    const SyncError& error) {
-  DataTypeController::TypeMap::const_iterator c_it = controllers_->find(type);
+  auto c_it = controllers_->find(type);
   DCHECK(c_it != controllers_->end());
   // Delegate deactivation to the controller.
   c_it->second->DeactivateDataType(configurer_);
@@ -688,7 +692,7 @@ void DataTypeManagerImpl::OnSingleDataTypeAssociationDone(
     ModelType type,
     const DataTypeAssociationStats& association_stats) {
   DCHECK(!association_types_queue_.empty());
-  DataTypeController::TypeMap::const_iterator c_it = controllers_->find(type);
+  auto c_it = controllers_->find(type);
   DCHECK(c_it != controllers_->end());
   if (c_it->second->state() == DataTypeController::RUNNING) {
     // Delegate activation to the controller.
@@ -794,21 +798,9 @@ void DataTypeManagerImpl::StopImpl(ShutdownReason reason) {
   // Invalidate weak pointer to drop download callbacks.
   weak_ptr_factory_.InvalidateWeakPtrs();
 
-  // Leave metadata If we do not disable sync completely.
-  SyncStopMetadataFate metadata_fate = KEEP_METADATA;
-  switch (reason) {
-    case STOP_SYNC:
-      break;
-    case DISABLE_SYNC:
-      metadata_fate = CLEAR_METADATA;
-      break;
-    case BROWSER_SHUTDOWN:
-      break;
-  }
-
   // Stop all data types. This may trigger association callback but the
   // callback will do nothing because state is set to STOPPING above.
-  model_association_manager_.Stop(metadata_fate);
+  model_association_manager_.Stop(reason);
 
   // Individual data type controllers might still be STOPPING, but we don't
   // reflect that in |state_| because, for all practical matters, the manager is
@@ -828,9 +820,6 @@ void DataTypeManagerImpl::NotifyDone(const ConfigureResult& raw_result) {
 
   ConfigureResult result = raw_result;
   result.data_type_status_table = data_type_status_table_;
-  result.was_catch_up_configure = catch_up_in_progress_;
-
-  catch_up_in_progress_ = false;
 
   DVLOG(1) << "Total time spent configuring: " << configure_time.InSecondsF()
            << "s";

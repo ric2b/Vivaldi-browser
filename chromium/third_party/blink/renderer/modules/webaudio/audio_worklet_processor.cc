@@ -13,7 +13,7 @@ namespace blink {
 
 AudioWorkletProcessor* AudioWorkletProcessor::Create(
     ExecutionContext* context) {
-  AudioWorkletGlobalScope* global_scope = ToAudioWorkletGlobalScope(context);
+  AudioWorkletGlobalScope* global_scope = To<AudioWorkletGlobalScope>(context);
   DCHECK(global_scope);
   DCHECK(global_scope->IsContextThread());
 
@@ -23,7 +23,8 @@ AudioWorkletProcessor* AudioWorkletProcessor::Create(
 
   MessagePort* port = MessagePort::Create(*global_scope);
   port->Entangle(std::move(params->PortChannel()));
-  return new AudioWorkletProcessor(global_scope, params->Name(), port);
+  return MakeGarbageCollected<AudioWorkletProcessor>(global_scope,
+                                                     params->Name(), port);
 }
 
 AudioWorkletProcessor::AudioWorkletProcessor(

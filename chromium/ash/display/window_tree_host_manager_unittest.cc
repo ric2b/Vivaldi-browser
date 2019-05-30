@@ -18,8 +18,11 @@
 #include "ash/wm/cursor_manager_test_api.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/wm_event.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
+#include "services/ws/test_window_tree_client.h"
 #include "ui/aura/client/focus_change_observer.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/env.h"
@@ -102,8 +105,6 @@ class TestObserver : public WindowTreeHostManager::Observer,
     if (metrics & DISPLAY_METRIC_PRIMARY)
       ++primary_changed_count_;
   }
-  void OnDisplayAdded(const display::Display& new_display) override {}
-  void OnDisplayRemoved(const display::Display& old_display) override {}
 
   // Overridden from aura::client::FocusChangeObserver
   void OnWindowFocused(aura::Window* gained_focus,
@@ -795,7 +796,7 @@ TEST_F(WindowTreeHostManagerTest, SwapPrimaryById) {
 
   // Deleting 2nd display should move the primary to original primary display.
   UpdateDisplay("200x200");
-  RunAllPendingInMessageLoop();  // RootWindow is deleted in a posted task.
+  base::RunLoop().RunUntilIdle();  // RootWindow is deleted in a posted task.
   EXPECT_EQ(1, display::Screen::GetScreen()->GetNumDisplays());
   EXPECT_EQ(primary_display.id(),
             display::Screen::GetScreen()->GetPrimaryDisplay().id());
@@ -1086,6 +1087,59 @@ TEST_F(WindowTreeHostManagerTest, SetPrimaryWithFourDisplays) {
   }
 }
 
+// Tests that SetPrimaryDisplayId updates the Window Service client.
+TEST_F(WindowTreeHostManagerTest, SetPrimaryDisplayIdUpdateWSClient) {
+  // Create two displays.
+  UpdateDisplay("200x200,300x300");
+  ASSERT_EQ(2200000000, display::Screen::GetScreen()->GetPrimaryDisplay().id());
+  int64_t non_primary_display_id =
+      display_manager()->GetSecondaryDisplay().id();
+  ASSERT_EQ(2200000001, non_primary_display_id);
+
+  std::vector<ws::Change>* ws_client_changes =
+      GetTestWindowTreeClient()->tracker()->changes();
+
+  // Create the first window (0,1) on primary display 2200000000.
+  ws_client_changes->clear();
+  std::unique_ptr<aura::Window> window_in_primary =
+      CreateTestWindow(gfx::Rect(0, 0, 30, 40));
+  auto iter = FirstChangeOfType(*ws_client_changes,
+                                ws::CHANGE_TYPE_ON_TOP_LEVEL_CREATED);
+  ASSERT_NE(iter, ws_client_changes->end());
+  ASSERT_EQ(1, static_cast<int>(iter->window_id));
+  ASSERT_EQ(2200000000, iter->display_id);
+
+  // Create the second window (0,2) on non-primary display 2200000001.
+  ws_client_changes->clear();
+  std::unique_ptr<aura::Window> window_in_non_primary =
+      CreateTestWindow(gfx::Rect(300, 0, 50, 60));
+  iter = FirstChangeOfType(*ws_client_changes,
+                           ws::CHANGE_TYPE_ON_TOP_LEVEL_CREATED);
+  ASSERT_NE(iter, ws_client_changes->end());
+  ASSERT_EQ(2, static_cast<int>(iter->window_id));
+  ASSERT_EQ(2200000001, iter->display_id);
+
+  // Set primary display id to the non-primary 2200000001. This triggers
+  // swapping of WindowTreeHosts and client should receive updates about the
+  // display id change and bounds change if their screen bounds is changed..
+  ws_client_changes->clear();
+  Shell::Get()->window_tree_host_manager()->SetPrimaryDisplayId(
+      non_primary_display_id);
+  EXPECT_TRUE(
+      ContainsChange(*ws_client_changes,
+                     "DisplayChanged window_id=0,1 display_id=2200000001"));
+  EXPECT_TRUE(
+      ContainsChange(*ws_client_changes,
+                     "DisplayChanged window_id=0,2 display_id=2200000000"));
+
+  // Window (0,2) on non-primary display changes its screen bounds. But
+  // window (0,1) on the primary display does not because the primary display
+  // origin is always (0,0).
+  EXPECT_TRUE(ContainsChange(
+      *ws_client_changes,
+      "BoundsChanged window=0,2 bounds=-100,0 50x60 local_surface_id=*"));
+}
+
 TEST_F(WindowTreeHostManagerTest, OverscanInsets) {
   WindowTreeHostManager* window_tree_host_manager =
       Shell::Get()->window_tree_host_manager();
@@ -1289,13 +1343,14 @@ TEST_F(WindowTreeHostManagerTest, ConvertHostToRootCoords) {
 
   ui::test::EventGenerator generator(root_windows[0]);
   generator.MoveMouseToInHost(0, 0);
-  EXPECT_EQ("0,375", event_handler.GetLocationAndReset());
+  // The mouse location must be inside the root bounds in dp.
+  EXPECT_EQ("0,374", event_handler.GetLocationAndReset());
   generator.MoveMouseToInHost(599, 0);
   EXPECT_EQ("0,0", event_handler.GetLocationAndReset());
   generator.MoveMouseToInHost(599, 399);
   EXPECT_EQ("249,0", event_handler.GetLocationAndReset());
   generator.MoveMouseToInHost(0, 399);
-  EXPECT_EQ("249,375", event_handler.GetLocationAndReset());
+  EXPECT_EQ("249,374", event_handler.GetLocationAndReset());
 
   UpdateDisplay("600x400*2/u@0.8");
   display1 = display::Screen::GetScreen()->GetPrimaryDisplay();
@@ -1305,13 +1360,13 @@ TEST_F(WindowTreeHostManagerTest, ConvertHostToRootCoords) {
   EXPECT_EQ(0.8f, GetStoredZoomScale(display1.id()));
 
   generator.MoveMouseToInHost(0, 0);
-  EXPECT_EQ("375,250", event_handler.GetLocationAndReset());
+  EXPECT_EQ("374,249", event_handler.GetLocationAndReset());
   generator.MoveMouseToInHost(599, 0);
-  EXPECT_EQ("0,250", event_handler.GetLocationAndReset());
+  EXPECT_EQ("0,249", event_handler.GetLocationAndReset());
   generator.MoveMouseToInHost(599, 399);
   EXPECT_EQ("0,0", event_handler.GetLocationAndReset());
   generator.MoveMouseToInHost(0, 399);
-  EXPECT_EQ("375,0", event_handler.GetLocationAndReset());
+  EXPECT_EQ("374,0", event_handler.GetLocationAndReset());
 
   UpdateDisplay("600x400*2/l@0.8");
   display1 = display::Screen::GetScreen()->GetPrimaryDisplay();
@@ -1321,9 +1376,9 @@ TEST_F(WindowTreeHostManagerTest, ConvertHostToRootCoords) {
   EXPECT_EQ(0.8f, GetStoredZoomScale(display1.id()));
 
   generator.MoveMouseToInHost(0, 0);
-  EXPECT_EQ("250,0", event_handler.GetLocationAndReset());
+  EXPECT_EQ("249,0", event_handler.GetLocationAndReset());
   generator.MoveMouseToInHost(599, 0);
-  EXPECT_EQ("250,374", event_handler.GetLocationAndReset());
+  EXPECT_EQ("249,374", event_handler.GetLocationAndReset());
   generator.MoveMouseToInHost(599, 399);
   EXPECT_EQ("0,374", event_handler.GetLocationAndReset());
   generator.MoveMouseToInHost(0, 399);
@@ -1470,10 +1525,10 @@ TEST_F(WindowTreeHostManagerTest, UpdateMouseLocationAfterDisplayChange) {
 
   aura::Env* env = Shell::Get()->aura_env();
 
-  ui::test::EventGenerator generator(root_windows[0]);
+  ui::test::EventGenerator generator_on_2nd(root_windows[1]);
 
   // Set the initial position.
-  generator.MoveMouseToInHost(350, 150);
+  generator_on_2nd.MoveMouseToInHost(150, 150);
   EXPECT_EQ("350,150", env->last_mouse_location().ToString());
 
   // A mouse pointer will stay in the 2nd display.
@@ -1496,7 +1551,8 @@ TEST_F(WindowTreeHostManagerTest, UpdateMouseLocationAfterDisplayChange) {
   EXPECT_EQ("150,150", env->last_mouse_location().ToString());
 
   // Move the mouse pointer to the bottom of 1st display.
-  generator.MoveMouseToInHost(150, 290);
+  ui::test::EventGenerator generator_on_1st(root_windows[0]);
+  generator_on_1st.MoveMouseToInHost(150, 290);
   EXPECT_EQ("150,290", env->last_mouse_location().ToString());
 
   // The mouse pointer is now on 2nd display.
@@ -1706,7 +1762,8 @@ TEST_F(WindowTreeHostManagerTest, KeyEventFromSecondaryDisplay) {
   dispatcher_api.set_target(
       Shell::Get()->window_tree_host_manager()->GetRootWindowForDisplayId(
           GetSecondaryDisplay().id()));
-  Shell::Get()->window_tree_host_manager()->DispatchKeyEventPostIME(&key_event);
+  Shell::Get()->window_tree_host_manager()->DispatchKeyEventPostIME(
+      &key_event, base::NullCallback());
   // As long as nothing crashes, we're good.
 }
 

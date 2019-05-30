@@ -5,7 +5,6 @@
 #include "chromeos/cryptohome/async_method_caller.h"
 
 #include "base/bind.h"
-#include "base/containers/hash_tables.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/optional.h"
@@ -163,8 +162,8 @@ class AsyncMethodCallerImpl : public AsyncMethodCaller,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner;
   };
 
-  typedef base::hash_map<int, CallbackElement> CallbackMap;
-  typedef base::hash_map<int, DataCallbackElement> DataCallbackMap;
+  typedef std::unordered_map<int, CallbackElement> CallbackMap;
+  typedef std::unordered_map<int, DataCallbackElement> DataCallbackMap;
 
   // Handles the response for async calls.
   // Below is described how async calls work.

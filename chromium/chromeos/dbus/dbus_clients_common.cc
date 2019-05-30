@@ -7,15 +7,14 @@
 #include "base/command_line.h"
 #include "chromeos/dbus/biod/biod_client.h"
 #include "chromeos/dbus/cec_service_client.h"
+#include "chromeos/dbus/constants/dbus_switches.h"
 #include "chromeos/dbus/cras_audio_client.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_client_implementation_type.h"
-#include "chromeos/dbus/dbus_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_cras_audio_client.h"
 #include "chromeos/dbus/fake_cryptohome_client.h"
 #include "chromeos/dbus/fake_gsm_sms_client.h"
-#include "chromeos/dbus/fake_hammerd_client.h"
 #include "chromeos/dbus/fake_modem_messaging_client.h"
 #include "chromeos/dbus/fake_permission_broker_client.h"
 #include "chromeos/dbus/fake_shill_device_client.h"
@@ -25,15 +24,11 @@
 #include "chromeos/dbus/fake_shill_service_client.h"
 #include "chromeos/dbus/fake_shill_third_party_vpn_driver_client.h"
 #include "chromeos/dbus/fake_sms_client.h"
-#include "chromeos/dbus/fake_system_clock_client.h"
 #include "chromeos/dbus/fake_upstart_client.h"
 #include "chromeos/dbus/gsm_sms_client.h"
-#include "chromeos/dbus/hammerd_client.h"
 #include "chromeos/dbus/machine_learning_client.h"
 #include "chromeos/dbus/modem_messaging_client.h"
 #include "chromeos/dbus/permission_broker_client.h"
-#include "chromeos/dbus/power_manager_client.h"
-#include "chromeos/dbus/power_policy_controller.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/dbus/shill_device_client.h"
 #include "chromeos/dbus/shill_ipconfig_client.h"
@@ -42,7 +37,6 @@
 #include "chromeos/dbus/shill_service_client.h"
 #include "chromeos/dbus/shill_third_party_vpn_driver_client.h"
 #include "chromeos/dbus/sms_client.h"
-#include "chromeos/dbus/system_clock_client.h"
 #include "chromeos/dbus/update_engine_client.h"
 #include "chromeos/dbus/upstart_client.h"
 
@@ -95,12 +89,6 @@ DBusClientsCommon::DBusClientsCommon(bool use_real_clients) {
     gsm_sms_client_.reset(gsm_sms_client);
   }
 
-  if (use_real_clients) {
-    hammerd_client_ = HammerdClient::Create();
-  } else {
-    hammerd_client_ = std::make_unique<FakeHammerdClient>();
-  }
-
   machine_learning_client_ = MachineLearningClient::Create(client_impl_type);
 
   if (use_real_clients)
@@ -113,19 +101,12 @@ DBusClientsCommon::DBusClientsCommon(bool use_real_clients) {
   else
     permission_broker_client_.reset(new FakePermissionBrokerClient);
 
-  power_manager_client_.reset(PowerManagerClient::Create(client_impl_type));
-
   session_manager_client_.reset(SessionManagerClient::Create(client_impl_type));
 
   if (use_real_clients)
     sms_client_.reset(SMSClient::Create());
   else
     sms_client_.reset(new FakeSMSClient);
-
-  if (use_real_clients)
-    system_clock_client_.reset(SystemClockClient::Create());
-  else
-    system_clock_client_.reset(new FakeSystemClockClient);
 
   update_engine_client_.reset(UpdateEngineClient::Create(client_impl_type));
 
@@ -145,11 +126,9 @@ void DBusClientsCommon::Initialize(dbus::Bus* system_bus) {
   cras_audio_client_->Init(system_bus);
   cryptohome_client_->Init(system_bus);
   gsm_sms_client_->Init(system_bus);
-  hammerd_client_->Init(system_bus);
   machine_learning_client_->Init(system_bus);
   modem_messaging_client_->Init(system_bus);
   permission_broker_client_->Init(system_bus);
-  power_manager_client_->Init(system_bus);
   session_manager_client_->Init(system_bus);
   shill_device_client_->Init(system_bus);
   shill_ipconfig_client_->Init(system_bus);
@@ -158,7 +137,6 @@ void DBusClientsCommon::Initialize(dbus::Bus* system_bus) {
   shill_profile_client_->Init(system_bus);
   shill_third_party_vpn_driver_client_->Init(system_bus);
   sms_client_->Init(system_bus);
-  system_clock_client_->Init(system_bus);
   update_engine_client_->Init(system_bus);
   upstart_client_->Init(system_bus);
 

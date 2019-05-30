@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
+#include "base/macros.h"
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
@@ -76,8 +77,11 @@ AlarmManager::AlarmList AlarmsFromValue(const std::string extension_id,
     if (list->GetDictionary(i, &alarm_dict) &&
         alarms::Alarm::Populate(*alarm_dict, alarm->js_alarm.get())) {
       const base::Value* time_value = nullptr;
-      if (alarm_dict->Get(kAlarmGranularity, &time_value))
-        base::GetValueAsTimeDelta(*time_value, &alarm->granularity);
+      if (alarm_dict->Get(kAlarmGranularity, &time_value)) {
+        // It's okay to ignore the failure since we have minimum granularity.
+        ignore_result(
+            base::GetValueAsTimeDelta(*time_value, &alarm->granularity));
+      }
       alarm->minimum_granularity = base::TimeDelta::FromSecondsD(
           (is_unpacked ? alarms_api_constants::kDevDelayMinimum
                        : alarms_api_constants::kReleaseDelayMinimum) *
@@ -179,7 +183,7 @@ void AlarmManager::GetAlarmWhenReady(const std::string& name,
 
 void AlarmManager::GetAllAlarmsWhenReady(GetAllAlarmsCallback callback,
                                          const std::string& extension_id) {
-  AlarmMap::iterator list = alarms_.find(extension_id);
+  auto list = alarms_.find(extension_id);
   std::move(callback).Run(list != alarms_.end() ? &list->second : NULL);
 }
 
@@ -199,7 +203,7 @@ void AlarmManager::RemoveAlarmWhenReady(const std::string& name,
 
 void AlarmManager::RemoveAllAlarmsWhenReady(RemoveAllAlarmsCallback callback,
                                             const std::string& extension_id) {
-  AlarmMap::iterator list = alarms_.find(extension_id);
+  auto list = alarms_.find(extension_id);
   if (list != alarms_.end()) {
     // Note: I'm using indices rather than iterators here because
     // RemoveAlarmIterator will delete the list when it becomes empty.
@@ -215,12 +219,11 @@ void AlarmManager::RemoveAllAlarmsWhenReady(RemoveAllAlarmsCallback callback,
 AlarmManager::AlarmIterator AlarmManager::GetAlarmIterator(
     const std::string& extension_id,
     const std::string& name) {
-  AlarmMap::iterator list = alarms_.find(extension_id);
+  auto list = alarms_.find(extension_id);
   if (list == alarms_.end())
     return make_pair(alarms_.end(), AlarmList::iterator());
 
-  for (AlarmList::iterator it = list->second.begin(); it != list->second.end();
-       ++it) {
+  for (auto it = list->second.begin(); it != list->second.end(); ++it) {
     if (it->get()->js_alarm->name == name)
       return make_pair(list, it);
   }
@@ -316,7 +319,7 @@ void AlarmManager::WriteToStorage(const std::string& extension_id) {
     return;
 
   std::unique_ptr<base::Value> alarms;
-  AlarmMap::iterator list = alarms_.find(extension_id);
+  auto list = alarms_.find(extension_id);
   if (list != alarms_.end())
     alarms = AlarmsToValue(list->second);
   else
@@ -366,8 +369,8 @@ void AlarmManager::ScheduleNextPoll() {
   base::TimeDelta min_granularity = kDefaultMinPollPeriod();
   for (AlarmMap::const_iterator m_it = alarms_.begin(), m_end = alarms_.end();
        m_it != m_end; ++m_it) {
-    for (AlarmList::const_iterator l_it = m_it->second.begin();
-         l_it != m_it->second.end(); ++l_it) {
+    for (auto l_it = m_it->second.cbegin(); l_it != m_it->second.cend();
+         ++l_it) {
       base::Time cur_alarm_time =
           base::Time::FromJsTime(l_it->get()->js_alarm->scheduled_time);
       if (cur_alarm_time < soonest_alarm_time)
@@ -400,16 +403,15 @@ void AlarmManager::PollAlarms() {
   // Run any alarms scheduled in the past. OnAlarm uses vector::erase to remove
   // elements from the AlarmList, and map::erase to remove AlarmLists from the
   // AlarmMap.
-  for (AlarmMap::iterator m_it = alarms_.begin(), m_end = alarms_.end();
-       m_it != m_end;) {
-    AlarmMap::iterator cur_extension = m_it++;
+  for (auto m_it = alarms_.begin(), m_end = alarms_.end(); m_it != m_end;) {
+    auto cur_extension = m_it++;
 
     // Iterate (a) backwards so that removing elements doesn't affect
     // upcoming iterations, and (b) with indices so that if the last
     // iteration destroys the AlarmList, I'm not about to use the end
     // iterator that the destruction invalidates.
     for (size_t i = cur_extension->second.size(); i > 0; --i) {
-      AlarmList::iterator cur_alarm = cur_extension->second.begin() + i - 1;
+      auto cur_alarm = cur_extension->second.begin() + i - 1;
       if (base::Time::FromJsTime(cur_alarm->get()->js_alarm->scheduled_time) <=
           last_poll_time_) {
         OnAlarm(make_pair(cur_extension, cur_alarm));
@@ -425,7 +427,7 @@ static void RemoveAllOnUninstallCallback() {
 
 void AlarmManager::RunWhenReady(const std::string& extension_id,
                                 ReadyAction action) {
-  ReadyMap::iterator it = ready_actions_.find(extension_id);
+  auto it = ready_actions_.find(extension_id);
 
   if (it == ready_actions_.end())
     std::move(action).Run(extension_id);

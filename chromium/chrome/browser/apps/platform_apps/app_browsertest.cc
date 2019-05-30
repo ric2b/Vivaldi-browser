@@ -32,7 +32,6 @@
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/views_mode_controller.h"
 #include "chrome/browser/ui/webui/print_preview/print_preview_ui.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "chrome/common/chrome_switches.h"
@@ -124,14 +123,14 @@ class TabsAddedNotificationObserver
 };
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-class ScopedPreviewTestingDelegate : PrintPreviewUI::TestingDelegate {
+class ScopedPreviewTestingDelegate : printing::PrintPreviewUI::TestingDelegate {
  public:
   ScopedPreviewTestingDelegate() {
-    PrintPreviewUI::SetDelegateForTesting(this);
+    printing::PrintPreviewUI::SetDelegateForTesting(this);
   }
 
   ~ScopedPreviewTestingDelegate() {
-    PrintPreviewUI::SetDelegateForTesting(NULL);
+    printing::PrintPreviewUI::SetDelegateForTesting(NULL);
   }
 
   // PrintPreviewUI::TestingDelegate implementation.
@@ -1158,35 +1157,6 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
   GetFirstAppWindow()->GetBaseWindow()->Close();
 }
 
-// This test currently only passes on OS X (on other platforms the print preview
-// dialog's size is limited by the size of the window being printed). It also
-// doesn't pass in Views mode on OS X.
-#if !defined(OS_MACOSX)
-#define MAYBE_PrintPreviewShouldNotBeTooSmall \
-  DISABLED_PrintPreviewShouldNotBeTooSmall
-#else
-#define MAYBE_PrintPreviewShouldNotBeTooSmall PrintPreviewShouldNotBeTooSmall
-#endif
-
-IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
-                       MAYBE_PrintPreviewShouldNotBeTooSmall) {
-#if defined(OS_MACOSX)
-  if (!views_mode_controller::IsViewsBrowserCocoa())
-    return;
-#endif
-  // Print preview dialogs with widths less than 410 pixels will have preview
-  // areas that are too small, and ones with heights less than 191 pixels will
-  // have vertical scrollers for their controls that are too small.
-  gfx::Size minimum_dialog_size(410, 191);
-  ScopedPreviewTestingDelegate preview_delegate;
-  ASSERT_TRUE(RunPlatformAppTest("platform_apps/print_api")) << message_;
-  preview_delegate.WaitUntilPreviewIsReady();
-  EXPECT_GE(preview_delegate.dialog_size().width(),
-            minimum_dialog_size.width());
-  EXPECT_GE(preview_delegate.dialog_size().height(),
-            minimum_dialog_size.height());
-  GetFirstAppWindow()->GetBaseWindow()->Close();
-}
 #endif  // ENABLE_PRINT_PREVIEW
 
 #if defined(OS_CHROMEOS)
@@ -1256,16 +1226,12 @@ IN_PROC_BROWSER_TEST_F(PlatformAppIncognitoBrowserTest,
 
 class RestartDeviceTest : public PlatformAppBrowserTest {
  public:
-  RestartDeviceTest() : power_manager_client_(NULL), mock_user_manager_(NULL) {}
-  ~RestartDeviceTest() override {}
+  RestartDeviceTest() = default;
+  ~RestartDeviceTest() override = default;
 
   // PlatformAppBrowserTest overrides
   void SetUpInProcessBrowserTestFixture() override {
     PlatformAppBrowserTest::SetUpInProcessBrowserTestFixture();
-
-    power_manager_client_ = new chromeos::FakePowerManagerClient;
-    chromeos::DBusThreadManager::GetSetterForTesting()->SetPowerManagerClient(
-        std::unique_ptr<chromeos::PowerManagerClient>(power_manager_client_));
   }
 
   void SetUpOnMainThread() override {
@@ -1294,12 +1260,11 @@ class RestartDeviceTest : public PlatformAppBrowserTest {
   }
 
   int num_request_restart_calls() const {
-    return power_manager_client_->num_request_restart_calls();
+    return chromeos::FakePowerManagerClient::Get()->num_request_restart_calls();
   }
 
  private:
-  chromeos::FakePowerManagerClient* power_manager_client_;
-  chromeos::MockUserManager* mock_user_manager_;
+  chromeos::MockUserManager* mock_user_manager_ = nullptr;
   std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
 
   DISALLOW_COPY_AND_ASSIGN(RestartDeviceTest);
@@ -1411,6 +1376,11 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
 
   WebContents* web_contents = GetFirstAppWindowWebContents();
   ASSERT_TRUE(web_contents);
+
+  // Ensure the compositor thread is aware of the wheel listener.
+  content::MainThreadFrameObserver synchronize_threads(
+      web_contents->GetRenderWidgetHostView()->GetRenderWidgetHost());
+  synchronize_threads.Wait();
 
   ExtensionTestMessageListener synthetic_wheel_listener("Seen wheel event",
                                                         false);

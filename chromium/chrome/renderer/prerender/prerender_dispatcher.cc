@@ -8,6 +8,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/common/prerender_messages.h"
@@ -54,7 +55,7 @@ void PrerenderDispatcher::DecrementPrefetchCount() {
 }
 
 void PrerenderDispatcher::PrerenderStart(int prerender_id) {
-  std::map<int, WebPrerender>::iterator it = prerenders_.find(prerender_id);
+  auto it = prerenders_.find(prerender_id);
   if (it == prerenders_.end())
     return;
 
@@ -68,7 +69,7 @@ void PrerenderDispatcher::PrerenderStart(int prerender_id) {
 }
 
 void PrerenderDispatcher::PrerenderStopLoading(int prerender_id) {
-  std::map<int, WebPrerender>::iterator it = prerenders_.find(prerender_id);
+  auto it = prerenders_.find(prerender_id);
   if (it == prerenders_.end())
     return;
 
@@ -81,7 +82,7 @@ void PrerenderDispatcher::PrerenderStopLoading(int prerender_id) {
 }
 
 void PrerenderDispatcher::PrerenderDomContentLoaded(int prerender_id) {
-  std::map<int, WebPrerender>::iterator it = prerenders_.find(prerender_id);
+  auto it = prerenders_.find(prerender_id);
   if (it == prerenders_.end())
     return;
 
@@ -101,7 +102,7 @@ void PrerenderDispatcher::PrerenderAddAlias(const GURL& alias) {
 void PrerenderDispatcher::PrerenderRemoveAliases(
     const std::vector<GURL>& aliases) {
   for (size_t i = 0; i < aliases.size(); ++i) {
-    std::multiset<GURL>::iterator it = running_prerender_urls_.find(aliases[i]);
+    auto it = running_prerender_urls_.find(aliases[i]);
     if (it != running_prerender_urls_.end()) {
       running_prerender_urls_.erase(it);
     }
@@ -109,7 +110,7 @@ void PrerenderDispatcher::PrerenderRemoveAliases(
 }
 
 void PrerenderDispatcher::PrerenderStop(int prerender_id) {
-  std::map<int, WebPrerender>::iterator it = prerenders_.find(prerender_id);
+  auto it = prerenders_.find(prerender_id);
   if (it == prerenders_.end())
     return;
   WebPrerender& prerender = it->second;

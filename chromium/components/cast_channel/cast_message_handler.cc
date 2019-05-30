@@ -5,17 +5,27 @@
 #include "components/cast_channel/cast_message_handler.h"
 
 #include <tuple>
+#include <utility>
+#include <vector>
 
+#include "base/bind.h"
 #include "base/rand_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/default_tick_clock.h"
 #include "components/cast_channel/cast_socket_service.h"
+#include "services/data_decoder/public/cpp/safe_json_parser.h"
+#include "services/service_manager/public/cpp/connector.h"
 
 namespace cast_channel {
 
 namespace {
 
-constexpr base::TimeDelta kRequestTimeout = base::TimeDelta::FromSeconds(5);
+// The max launch timeout amount for session launch requests.
+constexpr base::TimeDelta kLaunchMaxTimeout = base::TimeDelta::FromMinutes(2);
+
+void ReportParseError(const std::string& error) {
+  DVLOG(2) << "Error parsing JSON message: " << error;
+}
 
 }  // namespace
 
@@ -45,11 +55,16 @@ InternalMessage::InternalMessage(CastMessageType type, base::Value message)
     : type(type), message(std::move(message)) {}
 InternalMessage::~InternalMessage() = default;
 
-CastMessageHandler::CastMessageHandler(CastSocketService* socket_service,
-                                       const std::string& user_agent,
-                                       const std::string& browser_version,
-                                       const std::string& locale)
+CastMessageHandler::CastMessageHandler(
+    CastSocketService* socket_service,
+    std::unique_ptr<service_manager::Connector> connector,
+    const base::Token& data_decoder_batch_id,
+    const std::string& user_agent,
+    const std::string& browser_version,
+    const std::string& locale)
     : sender_id_(base::StringPrintf("sender-%d", base::RandInt(0, 1000000))),
+      connector_(std::move(connector)),
+      data_decoder_batch_id_(data_decoder_batch_id),
       user_agent_(user_agent),
       browser_version_(browser_version),
       locale_(locale),
@@ -74,7 +89,7 @@ void CastMessageHandler::EnsureConnection(int channel_id,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CastSocket* socket = socket_service_->GetSocket(channel_id);
   if (!socket) {
-    DVLOG(2) << __func__ << ": socket not found: " << channel_id;
+    DVLOG(2) << "Socket not found: " << channel_id;
     return;
   }
 
@@ -115,6 +130,19 @@ void CastMessageHandler::RequestAppAvailability(
   }
 }
 
+void CastMessageHandler::RequestReceiverStatus(int channel_id) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  CastSocket* socket = socket_service_->GetSocket(channel_id);
+  if (!socket) {
+    DVLOG(2) << __func__ << ": socket not found: " << channel_id;
+    return;
+  }
+
+  int request_id = NextRequestId();
+  SendCastMessage(socket, CreateReceiverStatusRequest(sender_id_, request_id));
+}
+
 void CastMessageHandler::SendBroadcastMessage(
     int channel_id,
     const std::vector<std::string>& app_ids,
@@ -152,9 +180,10 @@ void CastMessageHandler::LaunchSession(int channel_id,
 
   auto* requests = GetOrCreatePendingRequests(channel_id);
   int request_id = NextRequestId();
+  // Cap the max launch timeout to avoid long-living pending requests.
+  launch_timeout = std::min(launch_timeout, kLaunchMaxTimeout);
   DVLOG(2) << __func__ << ", channel_id: " << channel_id
            << ", request_id: " << request_id;
-
   if (requests->AddLaunchRequest(std::make_unique<LaunchSessionRequest>(
                                      request_id, std::move(callback), clock_),
                                  launch_timeout)) {
@@ -163,8 +192,31 @@ void CastMessageHandler::LaunchSession(int channel_id,
   }
 }
 
-void CastMessageHandler::SendAppMessage(int channel_id,
-                                        const CastMessage& message) {
+void CastMessageHandler::StopSession(
+    int channel_id,
+    const std::string& session_id,
+    const base::Optional<std::string>& client_id,
+    ResultCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CastSocket* socket = socket_service_->GetSocket(channel_id);
+  if (!socket) {
+    DVLOG(2) << __func__ << ": socket not found: " << channel_id;
+    return;
+  }
+
+  auto* requests = GetOrCreatePendingRequests(channel_id);
+  int request_id = NextRequestId();
+  DVLOG(2) << __func__ << ", channel_id: " << channel_id
+           << ", request_id: " << request_id;
+  if (requests->AddStopRequest(std::make_unique<StopSessionRequest>(
+          request_id, std::move(callback), clock_))) {
+    SendCastMessage(socket, CreateStopRequest(client_id.value_or(sender_id_),
+                                              request_id, session_id));
+  }
+}
+
+Result CastMessageHandler::SendAppMessage(int channel_id,
+                                          const CastMessage& message) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!IsCastInternalNamespace(message.namespace_()))
       << ": unexpected app message namespace: " << message.namespace_();
@@ -172,10 +224,51 @@ void CastMessageHandler::SendAppMessage(int channel_id,
   CastSocket* socket = socket_service_->GetSocket(channel_id);
   if (!socket) {
     DVLOG(2) << __func__ << ": socket not found: " << channel_id;
-    return;
+    return Result::kFailed;
   }
 
   SendCastMessage(socket, message);
+  return Result::kOk;
+}
+
+base::Optional<int> CastMessageHandler::SendMediaRequest(
+    int channel_id,
+    const base::Value& body,
+    const std::string& source_id,
+    const std::string& destination_id) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  CastSocket* socket = socket_service_->GetSocket(channel_id);
+  if (!socket) {
+    DVLOG(2) << __func__ << ": socket not found: " << channel_id;
+    return base::nullopt;
+  }
+
+  int request_id = NextRequestId();
+  SendCastMessage(
+      socket, CreateMediaRequest(body, request_id, source_id, destination_id));
+  return request_id;
+}
+
+Result CastMessageHandler::SendSetVolumeRequest(int channel_id,
+                                                const base::Value& body,
+                                                const std::string& source_id,
+                                                ResultCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  CastSocket* socket = socket_service_->GetSocket(channel_id);
+  if (!socket) {
+    DVLOG(2) << __func__ << ": socket not found: " << channel_id;
+    return Result::kFailed;
+  }
+
+  auto* requests = GetOrCreatePendingRequests(channel_id);
+  int request_id = NextRequestId();
+
+  requests->AddVolumeRequest(std::make_unique<SetVolumeRequest>(
+      request_id, std::move(callback), clock_));
+  SendCastMessage(socket, CreateSetVolumeRequest(body, request_id, source_id));
+  return Result::kOk;
 }
 
 void CastMessageHandler::AddObserver(Observer* observer) {
@@ -205,7 +298,18 @@ void CastMessageHandler::OnMessage(const CastSocket& socket,
   DVLOG(2) << __func__ << ", channel_id: " << socket.id()
            << ", message: " << CastMessageToString(message);
   if (IsCastInternalNamespace(message.namespace_())) {
-    HandleCastInternalMessage(socket, message);
+    if (message.payload_type() ==
+        cast_channel::CastMessage_PayloadType_STRING) {
+      data_decoder::SafeJsonParser::ParseBatch(
+          connector_.get(), message.payload_utf8(),
+          base::BindRepeating(&CastMessageHandler::HandleCastInternalMessage,
+                              weak_ptr_factory_.GetWeakPtr(), socket.id(),
+                              message.source_id(), message.destination_id()),
+          base::BindRepeating(&ReportParseError), data_decoder_batch_id_);
+    } else {
+      DLOG(ERROR) << "Dropping internal message with binary payload: "
+                  << message.namespace_();
+    }
   } else {
     DVLOG(2) << "Got app message from cast channel with namespace: "
              << message.namespace_();
@@ -214,37 +318,51 @@ void CastMessageHandler::OnMessage(const CastSocket& socket,
   }
 }
 
-void CastMessageHandler::HandleCastInternalMessage(const CastSocket& socket,
-                                                   const CastMessage& message) {
-  // TODO(https://crbug.com/809249): Parse message with data_decoder service.
-  std::unique_ptr<base::DictionaryValue> payload =
-      GetDictionaryFromCastMessage(message);
-  if (!payload)
-    return;
+void CastMessageHandler::OnReadyStateChanged(const CastSocket& socket) {
+  if (socket.ready_state() == ReadyState::CLOSED)
+    pending_requests_.erase(socket.id());
+}
 
-  int request_id = 0;
-  if (GetRequestIdFromResponse(*payload, &request_id) && request_id > 0) {
-    auto requests_it = pending_requests_.find(socket.id());
+void CastMessageHandler::HandleCastInternalMessage(
+    int channel_id,
+    const std::string& source_id,
+    const std::string& destination_id,
+    std::unique_ptr<base::Value> payload) {
+  if (!payload->is_dict()) {
+    ReportParseError("Parsed message not a dictionary");
+    return;
+  }
+
+  // Check if the socket still exists as it might have been removed during
+  // message parsing.
+  if (!socket_service_->GetSocket(channel_id)) {
+    DVLOG(2) << __func__ << ": socket not found: " << channel_id;
+    return;
+  }
+
+  base::Optional<int> request_id = GetRequestIdFromResponse(*payload);
+  if (request_id) {
+    auto requests_it = pending_requests_.find(channel_id);
     if (requests_it != pending_requests_.end())
-      requests_it->second->HandlePendingRequest(request_id, *payload);
+      requests_it->second->HandlePendingRequest(*request_id, *payload);
   }
 
   CastMessageType type = ParseMessageTypeFromPayload(*payload);
   if (type == CastMessageType::kOther) {
-    DVLOG(2) << "Unknown message type: " << CastMessageToString(message);
+    DVLOG(2) << "Unknown message type: " << *payload;
     return;
   }
 
   if (type == CastMessageType::kCloseConnection) {
     // Source / destination is flipped.
-    virtual_connections_.erase(VirtualConnection(
-        socket.id(), message.destination_id(), message.source_id()));
+    virtual_connections_.erase(
+        VirtualConnection(channel_id, destination_id, source_id));
     return;
   }
 
   InternalMessage internal_message(type, std::move(*payload));
   for (auto& observer : observers_)
-    observer.OnInternalMessage(socket.id(), internal_message);
+    observer.OnInternalMessage(channel_id, internal_message);
 }
 
 void CastMessageHandler::SendCastMessage(CastSocket* socket,
@@ -253,8 +371,8 @@ void CastMessageHandler::SendCastMessage(CastSocket* socket,
   // can be sent.
   DoEnsureConnection(socket, message.source_id(), message.destination_id());
   socket->transport()->SendMessage(
-      message, base::Bind(&CastMessageHandler::OnMessageSent,
-                          weak_ptr_factory_.GetWeakPtr()));
+      message, base::BindRepeating(&CastMessageHandler::OnMessageSent,
+                                   weak_ptr_factory_.GetWeakPtr()));
 }
 
 void CastMessageHandler::DoEnsureConnection(CastSocket* socket,
@@ -274,8 +392,9 @@ void CastMessageHandler::DoEnsureConnection(CastSocket* socket,
           : VirtualConnectionType::kInvisible,
       user_agent_, browser_version_);
   socket->transport()->SendMessage(
-      virtual_connection_request, base::Bind(&CastMessageHandler::OnMessageSent,
-                                             weak_ptr_factory_.GetWeakPtr()));
+      virtual_connection_request,
+      base::BindRepeating(&CastMessageHandler::OnMessageSent,
+                          weak_ptr_factory_.GetWeakPtr()));
 
   // We assume the virtual connection request will succeed; otherwise this
   // will eventually self-correct.
@@ -289,39 +408,49 @@ void CastMessageHandler::OnMessageSent(int result) {
 
 CastMessageHandler::PendingRequests::PendingRequests() {}
 CastMessageHandler::PendingRequests::~PendingRequests() {
-  for (auto& request : pending_app_availability_requests) {
-    std::move(request.second->callback)
-        .Run(request.second->app_id, GetAppAvailabilityResult::kUnknown);
+  for (auto& request : pending_app_availability_requests_) {
+    std::move(request->callback)
+        .Run(request->app_id, GetAppAvailabilityResult::kUnknown);
   }
 
-  if (pending_launch_session_request) {
+  if (pending_launch_session_request_) {
     LaunchSessionResponse response;
     response.result = LaunchSessionResponse::kError;
-    std::move(pending_launch_session_request->callback)
+    std::move(pending_launch_session_request_->callback)
         .Run(std::move(response));
   }
+
+  if (pending_stop_session_request_)
+    std::move(pending_stop_session_request_->callback).Run(Result::kFailed);
+
+  for (auto& request : pending_volume_requests_by_id_)
+    std::move(request.second->callback).Run(Result::kFailed);
 }
 
 bool CastMessageHandler::PendingRequests::AddAppAvailabilityRequest(
     std::unique_ptr<GetAppAvailabilityRequest> request) {
-  std::string app_id = request->app_id;
-  if (base::ContainsKey(pending_app_availability_requests, request->app_id))
-    return false;
-
+  const std::string& app_id = request->app_id;
   int request_id = request->request_id;
   request->timeout_timer.Start(
       FROM_HERE, kRequestTimeout,
       base::BindOnce(
           &CastMessageHandler::PendingRequests::AppAvailabilityTimedOut,
           base::Unretained(this), request_id));
-  pending_app_availability_requests.emplace(app_id, std::move(request));
-  return true;
+
+  // Look for a request with the given app ID.
+  bool found = std::find_if(pending_app_availability_requests_.begin(),
+                            pending_app_availability_requests_.end(),
+                            [&app_id](const auto& old_request) {
+                              return old_request->app_id == app_id;
+                            }) != pending_app_availability_requests_.end();
+  pending_app_availability_requests_.emplace_back(std::move(request));
+  return !found;
 }
 
 bool CastMessageHandler::PendingRequests::AddLaunchRequest(
     std::unique_ptr<LaunchSessionRequest> request,
     base::TimeDelta timeout) {
-  if (pending_launch_session_request)
+  if (pending_launch_session_request_)
     return false;
 
   int request_id = request->request_id;
@@ -330,33 +459,80 @@ bool CastMessageHandler::PendingRequests::AddLaunchRequest(
       base::BindOnce(
           &CastMessageHandler::PendingRequests::LaunchSessionTimedOut,
           base::Unretained(this), request_id));
-  pending_launch_session_request = std::move(request);
+  pending_launch_session_request_ = std::move(request);
   return true;
+}
+
+bool CastMessageHandler::PendingRequests::AddStopRequest(
+    std::unique_ptr<StopSessionRequest> request) {
+  if (pending_stop_session_request_)
+    return false;
+
+  int request_id = request->request_id;
+  request->timeout_timer.Start(
+      FROM_HERE, kRequestTimeout,
+      base::BindOnce(&CastMessageHandler::PendingRequests::StopSessionTimedOut,
+                     base::Unretained(this), request_id));
+  pending_stop_session_request_ = std::move(request);
+  return true;
+}
+
+void CastMessageHandler::PendingRequests::AddVolumeRequest(
+    std::unique_ptr<SetVolumeRequest> request) {
+  int request_id = request->request_id;
+  request->timeout_timer.Start(
+      FROM_HERE, kRequestTimeout,
+      base::BindOnce(&CastMessageHandler::PendingRequests::SetVolumeTimedOut,
+                     base::Unretained(this), request_id));
+  pending_volume_requests_by_id_.emplace(request_id, std::move(request));
 }
 
 void CastMessageHandler::PendingRequests::HandlePendingRequest(
     int request_id,
-    const base::DictionaryValue& response) {
+    const base::Value& response) {
+  // Look up an app availability request by its |request_id|.
   auto app_availability_it =
-      std::find_if(pending_app_availability_requests.begin(),
-                   pending_app_availability_requests.end(),
-                   [&request_id](const auto& entry) {
-                     return entry.second->request_id == request_id;
+      std::find_if(pending_app_availability_requests_.begin(),
+                   pending_app_availability_requests_.end(),
+                   [request_id](const auto& request_ptr) {
+                     return request_ptr->request_id == request_id;
                    });
-  if (app_availability_it != pending_app_availability_requests.end()) {
-    GetAppAvailabilityResult result = GetAppAvailabilityResultFromResponse(
-        response, app_availability_it->second->app_id);
-    std::move(app_availability_it->second->callback)
-        .Run(app_availability_it->second->app_id, result);
-    pending_app_availability_requests.erase(app_availability_it);
+  // If we found a request, process and remove all requests with the same
+  // |app_id|, which will of course include the one we just found.
+  if (app_availability_it != pending_app_availability_requests_.end()) {
+    std::string app_id = (*app_availability_it)->app_id;
+    GetAppAvailabilityResult result =
+        GetAppAvailabilityResultFromResponse(response, app_id);
+    base::EraseIf(pending_app_availability_requests_,
+                  [&app_id, result](const auto& request_ptr) {
+                    if (request_ptr->app_id == app_id) {
+                      std::move(request_ptr->callback).Run(app_id, result);
+                      return true;
+                    }
+                    return false;
+                  });
     return;
   }
 
-  if (pending_launch_session_request &&
-      pending_launch_session_request->request_id == request_id) {
-    std::move(pending_launch_session_request->callback)
+  if (pending_launch_session_request_ &&
+      pending_launch_session_request_->request_id == request_id) {
+    std::move(pending_launch_session_request_->callback)
         .Run(GetLaunchSessionResponse(response));
-    pending_launch_session_request.reset();
+    pending_launch_session_request_.reset();
+    return;
+  }
+
+  if (pending_stop_session_request_ &&
+      pending_stop_session_request_->request_id == request_id) {
+    std::move(pending_stop_session_request_->callback).Run(Result::kOk);
+    pending_stop_session_request_.reset();
+    return;
+  }
+
+  auto volume_it = pending_volume_requests_by_id_.find(request_id);
+  if (volume_it != pending_volume_requests_by_id_.end()) {
+    std::move(volume_it->second->callback).Run(Result::kOk);
+    pending_volume_requests_by_id_.erase(volume_it);
     return;
   }
 }
@@ -365,28 +541,45 @@ void CastMessageHandler::PendingRequests::AppAvailabilityTimedOut(
     int request_id) {
   DVLOG(1) << __func__ << ", request_id: " << request_id;
 
-  auto it = std::find_if(pending_app_availability_requests.begin(),
-                         pending_app_availability_requests.end(),
-                         [&request_id](const auto& entry) {
-                           return entry.second->request_id == request_id;
+  auto it = std::find_if(pending_app_availability_requests_.begin(),
+                         pending_app_availability_requests_.end(),
+                         [&request_id](const auto& request) {
+                           return request->request_id == request_id;
                          });
 
-  CHECK(it != pending_app_availability_requests.end());
-  std::move(it->second->callback)
-      .Run(it->second->app_id, GetAppAvailabilityResult::kUnknown);
-  pending_app_availability_requests.erase(it);
+  CHECK(it != pending_app_availability_requests_.end());
+  std::move((*it)->callback)
+      .Run((*it)->app_id, GetAppAvailabilityResult::kUnknown);
+  pending_app_availability_requests_.erase(it);
 }
 
 void CastMessageHandler::PendingRequests::LaunchSessionTimedOut(
     int request_id) {
   DVLOG(1) << __func__ << ", request_id: " << request_id;
-  CHECK(pending_launch_session_request);
-  CHECK(pending_launch_session_request->request_id == request_id);
+  CHECK(pending_launch_session_request_);
+  CHECK(pending_launch_session_request_->request_id == request_id);
 
   LaunchSessionResponse response;
   response.result = LaunchSessionResponse::kTimedOut;
-  std::move(pending_launch_session_request->callback).Run(std::move(response));
-  pending_launch_session_request.reset();
+  std::move(pending_launch_session_request_->callback).Run(std::move(response));
+  pending_launch_session_request_.reset();
+}
+
+void CastMessageHandler::PendingRequests::StopSessionTimedOut(int request_id) {
+  DVLOG(1) << __func__ << ", request_id: " << request_id;
+  CHECK(pending_stop_session_request_);
+  CHECK(pending_stop_session_request_->request_id == request_id);
+
+  std::move(pending_stop_session_request_->callback).Run(Result::kFailed);
+  pending_stop_session_request_.reset();
+}
+
+void CastMessageHandler::PendingRequests::SetVolumeTimedOut(int request_id) {
+  DVLOG(1) << __func__ << ", request_id: " << request_id;
+  auto it = pending_volume_requests_by_id_.find(request_id);
+  DCHECK(it != pending_volume_requests_by_id_.end());
+  std::move(it->second->callback).Run(Result::kFailed);
+  pending_volume_requests_by_id_.erase(it);
 }
 
 }  // namespace cast_channel

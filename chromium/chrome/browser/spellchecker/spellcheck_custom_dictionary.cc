@@ -6,13 +6,16 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <functional>
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
 #include "base/md5.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -23,8 +26,10 @@
 #include "components/spellcheck/browser/spellcheck_host_metrics.h"
 #include "components/spellcheck/common/spellcheck_common.h"
 #include "components/sync/model/sync_change.h"
+#include "components/sync/model/sync_change_processor.h"
 #include "components/sync/model/sync_error_factory.h"
 #include "components/sync/protocol/sync.pb.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
 using content::BrowserThread;
@@ -68,7 +73,7 @@ ChecksumStatus LoadFile(const base::FilePath& file_path,
   std::string contents;
   {
     base::ScopedBlockingCall scoped_blocking_call(
-        base::BlockingType::MAY_BLOCK);
+        FROM_HERE, base::BlockingType::MAY_BLOCK);
     base::ReadFileToString(file_path, &contents);
   }
   size_t pos = contents.rfind(CHECKSUM_PREFIX);
@@ -154,7 +159,7 @@ void SaveDictionaryFileReliably(const base::FilePath& path,
   content << CHECKSUM_PREFIX << checksum;
   {
     base::ScopedBlockingCall scoped_blocking_call(
-        base::BlockingType::MAY_BLOCK);
+        FROM_HERE, base::BlockingType::MAY_BLOCK);
     base::CopyFile(path, path.AddExtension(BACKUP_EXTENSION));
     base::ImportantFileWriter::WriteFileAtomically(path, content.str());
   }
@@ -257,7 +262,7 @@ bool SpellcheckCustomDictionary::RemoveWord(const std::string& word) {
 }
 
 bool SpellcheckCustomDictionary::HasWord(const std::string& word) const {
-  return !!words_.count(word);
+  return base::ContainsKey(words_, word);
 }
 
 void SpellcheckCustomDictionary::AddObserver(Observer* observer) {
@@ -439,7 +444,8 @@ void SpellcheckCustomDictionary::OnLoaded(
         base::BindOnce(&SpellcheckCustomDictionary::FixInvalidFile,
                        weak_ptr_factory_.GetWeakPtr(), std::move(result)));
     BrowserThread::PostAfterStartupTask(
-        FROM_HERE, BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
+        FROM_HERE,
+        base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::UI}),
         fix_invalid_file_.callback());
   }
 }

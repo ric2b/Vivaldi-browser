@@ -8,10 +8,17 @@
 #include <string>
 
 #include "base/android/scoped_java_ref.h"
+#include "base/file_descriptor_posix.h"
 #include "base/macros.h"
 #include "printing/printing_context.h"
 
+namespace ui {
+class WindowAndroid;
+}
+
 namespace printing {
+
+class MetafilePlayer;
 
 // Android subclass of PrintingContext. This class communicates with the
 // Java side through JNI.
@@ -22,9 +29,15 @@ class PRINTING_EXPORT PrintingContextAndroid : public PrintingContext {
 
   // Called when the page is successfully written to a PDF using the file
   // descriptor specified, or when the printing operation failed. On success,
-  // the PDF written to |fd| has |page_count| pages. Non-positive |page_count|
-  // indicates failure.
-  static void PdfWritingDone(int fd, int page_count);
+  // the PDF has |page_count| pages. Non-positive |page_count| indicates
+  // failure.
+  static void PdfWritingDone(int page_count);
+
+  static void SetPendingPrint(
+      ui::WindowAndroid* window,
+      const base::android::ScopedJavaLocalRef<jobject>& printable,
+      int render_process_id,
+      int render_frame_id);
 
   // Called from Java, when printing settings from the user are ready or the
   // printing operation is canceled.
@@ -35,6 +48,9 @@ class PRINTING_EXPORT PrintingContextAndroid : public PrintingContext {
   // Called from Java, when a printing process initiated by a script finishes.
   void ShowSystemDialogDone(JNIEnv* env,
                             const base::android::JavaParamRef<jobject>& obj);
+
+  // Prints the document contained in |metafile|.
+  void PrintDocument(const MetafilePlayer& metafile);
 
   // PrintingContext implementation.
   void AskUserForSettings(int max_pages,
@@ -55,11 +71,15 @@ class PRINTING_EXPORT PrintingContextAndroid : public PrintingContext {
   printing::NativeDrawingContext context() const override;
 
  private:
+  bool is_file_descriptor_valid() const { return fd_ > base::kInvalidFd; }
+
   base::android::ScopedJavaGlobalRef<jobject> j_printing_context_;
 
   // The callback from AskUserForSettings to be called when the settings are
   // ready on the Java side
   PrintSettingsCallback callback_;
+
+  int fd_ = base::kInvalidFd;
 
   DISALLOW_COPY_AND_ASSIGN(PrintingContextAndroid);
 };

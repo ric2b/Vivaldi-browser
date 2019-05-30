@@ -3,8 +3,10 @@
 // found in the LICENSE file.
 
 #include "ui/gl/init/create_gr_gl_interface.h"
+#include "build/build_config.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_version_info.h"
+#include "ui/gl/progress_reporter.h"
 
 namespace gl {
 namespace init {
@@ -12,9 +14,45 @@ namespace init {
 namespace {
 
 template <typename R, typename... Args>
-GrGLFunction<R (*)(Args...)> bind(R (gl::GLApi::*func)(Args...),
-                                  gl::GLApi* api) {
+GrGLFunction<R GR_GL_FUNCTION_TYPE(Args...)> bind(R (gl::GLApi::*func)(Args...),
+                                                  gl::GLApi* api) {
   return [func, api](Args... args) { return (api->*func)(args...); };
+}
+
+class ScopedProgressReporter {
+ public:
+  ScopedProgressReporter(gl::ProgressReporter* progress_reporter)
+      : progress_reporter_(progress_reporter) {}
+  ~ScopedProgressReporter() { progress_reporter_->ReportProgress(); }
+
+ private:
+  gl::ProgressReporter* progress_reporter_;
+};
+
+template <typename R, typename... Args>
+GrGLFunction<R GR_GL_FUNCTION_TYPE(Args...)> bind_slow(
+    R(GL_BINDING_CALL* func)(Args...),
+    gl::ProgressReporter* progress_reporter) {
+  if (!progress_reporter)
+    return func;
+  return [func, progress_reporter](Args... args) {
+    ScopedProgressReporter scoped_reporter(progress_reporter);
+    return func(args...);
+  };
+}
+
+template <typename R, typename... Args>
+GrGLFunction<R GR_GL_FUNCTION_TYPE(Args...)> bind_with_flush_on_mac(
+    R(GL_BINDING_CALL* func)(Args...)) {
+#if defined(OS_MACOSX)
+  return [func](Args... args) {
+    glFlush();
+    func(args...);
+    glFlush();
+  };
+#else
+  return func;
+#endif
 }
 
 const GLubyte* GetStringHook(const char* version_string, GLenum name) {
@@ -47,7 +85,8 @@ const char* kBlacklistExtensions[] = {
 
 sk_sp<GrGLInterface> CreateGrGLInterface(
     const gl::GLVersionInfo& version_info,
-    bool use_version_es2) {
+    bool use_version_es2,
+    gl::ProgressReporter* progress_reporter) {
   // Can't fake ES with desktop GL.
   use_version_es2 &= version_info.is_es;
 
@@ -63,7 +102,7 @@ sk_sp<GrGLInterface> CreateGrGLInterface(
   // by the bindings (GL 4.1 or ES 3.0), and blacklist extensions that skia
   // handles but bindings don't.
   // TODO(piman): add bindings for missing entrypoints.
-  GrGLFunction<GrGLGetStringProc> get_string;
+  GrGLFunction<GrGLGetStringFn> get_string;
   const bool apply_version_override = use_version_es2 ||
                                       version_info.IsAtLeastGL(4, 2) ||
                                       version_info.IsAtLeastGLES(3, 1);
@@ -101,6 +140,7 @@ sk_sp<GrGLInterface> CreateGrGLInterface(
   functions->fBindFragDataLocation = gl->glBindFragDataLocationFn;
   functions->fBindUniformLocation = gl->glBindUniformLocationCHROMIUMFn;
   functions->fBeginQuery = gl->glBeginQueryFn;
+  functions->fBindSampler = gl->glBindSamplerFn;
   functions->fBindTexture = gl->glBindTextureFn;
 
   functions->fBlendBarrier = gl->glBlendBarrierKHRFn;
@@ -119,17 +159,24 @@ sk_sp<GrGLInterface> CreateGrGLInterface(
   // functions->fClearTexSubImage = nullptr;
 
   functions->fColorMask = gl->glColorMaskFn;
-  functions->fCompileShader = gl->glCompileShaderFn;
-  functions->fCompressedTexImage2D = gl->glCompressedTexImage2DFn;
-  functions->fCompressedTexSubImage2D = gl->glCompressedTexSubImage2DFn;
-  functions->fCopyTexSubImage2D = gl->glCopyTexSubImage2DFn;
+  functions->fCompileShader =
+      bind_slow(gl->glCompileShaderFn, progress_reporter);
+  functions->fCompressedTexImage2D =
+      bind_slow(gl->glCompressedTexImage2DFn, progress_reporter);
+  functions->fCompressedTexSubImage2D =
+      bind_slow(gl->glCompressedTexSubImage2DFn, progress_reporter);
+  functions->fCopyTexSubImage2D =
+      bind_slow(gl->glCopyTexSubImage2DFn, progress_reporter);
   functions->fCreateProgram = gl->glCreateProgramFn;
   functions->fCreateShader = gl->glCreateShaderFn;
   functions->fCullFace = gl->glCullFaceFn;
-  functions->fDeleteBuffers = gl->glDeleteBuffersARBFn;
-  functions->fDeleteProgram = gl->glDeleteProgramFn;
+  functions->fDeleteBuffers =
+      bind_slow(gl->glDeleteBuffersARBFn, progress_reporter);
+  functions->fDeleteProgram =
+      bind_slow(gl->glDeleteProgramFn, progress_reporter);
   functions->fDeleteQueries = gl->glDeleteQueriesFn;
-  functions->fDeleteShader = gl->glDeleteShaderFn;
+  functions->fDeleteSamplers = gl->glDeleteSamplersFn;
+  functions->fDeleteShader = bind_slow(gl->glDeleteShaderFn, progress_reporter);
   functions->fDeleteTextures = gl->glDeleteTexturesFn;
   functions->fDepthMask = gl->glDepthMaskFn;
   functions->fDisable = gl->glDisableFn;
@@ -151,8 +198,8 @@ sk_sp<GrGLInterface> CreateGrGLInterface(
   functions->fEnable = gl->glEnableFn;
   functions->fEnableVertexAttribArray = gl->glEnableVertexAttribArrayFn;
   functions->fEndQuery = gl->glEndQueryFn;
-  functions->fFinish = gl->glFinishFn;
-  functions->fFlush = gl->glFlushFn;
+  functions->fFinish = bind_slow(gl->glFinishFn, progress_reporter);
+  functions->fFlush = bind_slow(gl->glFlushFn, progress_reporter);
   functions->fFrontFace = gl->glFrontFaceFn;
   functions->fGenBuffers = gl->glGenBuffersARBFn;
   functions->fGetBufferParameteriv = gl->glGetBufferParameterivFn;
@@ -175,11 +222,12 @@ sk_sp<GrGLInterface> CreateGrGLInterface(
   functions->fGetShaderPrecisionFormat = gl->glGetShaderPrecisionFormatFn;
   functions->fGetTexLevelParameteriv = gl->glGetTexLevelParameterivFn;
   functions->fGenQueries = gl->glGenQueriesFn;
+  functions->fGenSamplers = gl->glGenSamplersFn;
   functions->fGenTextures = gl->glGenTexturesFn;
   functions->fGetUniformLocation = gl->glGetUniformLocationFn;
   functions->fIsTexture = gl->glIsTextureFn;
   functions->fLineWidth = gl->glLineWidthFn;
-  functions->fLinkProgram = gl->glLinkProgramFn;
+  functions->fLinkProgram = bind_slow(gl->glLinkProgramFn, progress_reporter);
   functions->fMapBuffer = gl->glMapBufferFn;
 
   // GL 4.3 or GL_ARB_multi_draw_indirect or ES+GL_EXT_multi_draw_indirect
@@ -196,6 +244,8 @@ sk_sp<GrGLInterface> CreateGrGLInterface(
 
   functions->fReadBuffer = gl->glReadBufferFn;
   functions->fReadPixels = gl->glReadPixelsFn;
+  functions->fSamplerParameteri = gl->glSamplerParameteriFn;
+  functions->fSamplerParameteriv = gl->glSamplerParameterivFn;
   functions->fScissor = gl->glScissorFn;
   functions->fShaderSource = gl->glShaderSourceFn;
   functions->fStencilFunc = gl->glStencilFuncFn;
@@ -206,7 +256,9 @@ sk_sp<GrGLInterface> CreateGrGLInterface(
   functions->fStencilOpSeparate = gl->glStencilOpSeparateFn;
   functions->fTexBuffer = gl->glTexBufferFn;
   functions->fTexBufferRange = gl->glTexBufferRangeFn;
-  functions->fTexImage2D = gl->glTexImage2DFn;
+  functions->fTexImage2D = bind_slow(gl->glTexImage2DFn, progress_reporter);
+  functions->fTexParameterf = gl->glTexParameterfFn;
+  functions->fTexParameterfv = gl->glTexParameterfvFn;
   functions->fTexParameteri = gl->glTexParameteriFn;
   functions->fTexParameteriv = gl->glTexParameterivFn;
   functions->fTexStorage2D = gl->glTexStorage2DEXTFn;
@@ -263,10 +315,12 @@ sk_sp<GrGLInterface> CreateGrGLInterface(
       gl->glGetFramebufferAttachmentParameterivEXTFn;
   functions->fGetRenderbufferParameteriv =
       gl->glGetRenderbufferParameterivEXTFn;
-  functions->fBindFramebuffer = gl->glBindFramebufferEXTFn;
+  functions->fBindFramebuffer =
+      bind_with_flush_on_mac(gl->glBindFramebufferEXTFn);
   functions->fFramebufferTexture2D = gl->glFramebufferTexture2DEXTFn;
   functions->fCheckFramebufferStatus = gl->glCheckFramebufferStatusEXTFn;
-  functions->fDeleteFramebuffers = gl->glDeleteFramebuffersEXTFn;
+  functions->fDeleteFramebuffers =
+      bind_slow(gl->glDeleteFramebuffersEXTFn, progress_reporter);
   functions->fRenderbufferStorage = gl->glRenderbufferStorageEXTFn;
   functions->fGenRenderbuffers = gl->glGenRenderbuffersEXTFn;
   functions->fDeleteRenderbuffers = gl->glDeleteRenderbuffersEXTFn;
@@ -486,9 +540,6 @@ sk_sp<GrGLInterface> CreateGrGLInterface(
   // EGL_KHR_image / EGL_KHR_image_base
   // functions->fCreateImage = nullptr;
   // functions->fDestroyImage = nullptr;
-
-  // GL 4.0 or GL_ARB_sample_shading or ES+GL_OES_sample_shading
-  functions->fMinSampleShading = gl->glMinSampleShadingFn;
 
   functions->fFenceSync = gl->glFenceSyncFn;
   functions->fIsSync = gl->glIsSyncFn;

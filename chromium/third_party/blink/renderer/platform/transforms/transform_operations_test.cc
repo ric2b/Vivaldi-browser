@@ -24,6 +24,7 @@
 
 #include "third_party/blink/renderer/platform/transforms/transform_operations.h"
 
+#include "base/stl_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/platform/geometry/float_box.h"
 #include "third_party/blink/renderer/platform/geometry/float_box_test_helpers.h"
@@ -69,42 +70,42 @@ static void EmpiricallyTestBounds(const TransformOperations& from,
     first_time = false;
   }
 
-  ASSERT_PRED_FORMAT2(FloatBoxTest::AssertContains, bounds, empirical_bounds);
+  ASSERT_PRED_FORMAT2(float_box_test::AssertContains, bounds, empirical_bounds);
 }
 
 TEST(TransformOperationsTest, AbsoluteAnimatedTranslatedBoundsTest) {
   TransformOperations from_ops;
   TransformOperations to_ops;
   from_ops.Operations().push_back(TranslateTransformOperation::Create(
-      Length(-30, blink::kFixed), Length(20, blink::kFixed), 15,
+      Length::Fixed(-30), Length::Fixed(20), 15,
       TransformOperation::kTranslate3D));
   to_ops.Operations().push_back(TranslateTransformOperation::Create(
-      Length(10, blink::kFixed), Length(10, blink::kFixed), 200,
+      Length::Fixed(10), Length::Fixed(10), 200,
       TransformOperation::kTranslate3D));
   FloatBox box(0, 0, 0, 10, 10, 10);
   FloatBox bounds;
 
   EXPECT_TRUE(
       to_ops.BlendedBoundsForBox(box, kIdentityOperations, 0, 1, &bounds));
-  EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(0, 0, 0, 20, 20, 210), bounds);
 
   EXPECT_TRUE(
       kIdentityOperations.BlendedBoundsForBox(box, to_ops, 0, 1, &bounds));
-  EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(0, 0, 0, 20, 20, 210), bounds);
 
   EXPECT_TRUE(
       kIdentityOperations.BlendedBoundsForBox(box, from_ops, 0, 1, &bounds));
-  EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(-30, 0, 0, 40, 30, 25), bounds);
 
   EXPECT_TRUE(to_ops.BlendedBoundsForBox(box, from_ops, 0, 1, &bounds));
-  EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(-30, 10, 15, 50, 20, 195), bounds);
 
   EXPECT_TRUE(to_ops.BlendedBoundsForBox(box, from_ops, -0.5, 1.25, &bounds));
-  EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(-50, 7.5, -77.5, 80, 27.5, 333.75), bounds);
 }
 
@@ -118,18 +119,18 @@ TEST(TransformOperationsTest, EmpiricalAnimatedTranslatedBoundsTest) {
   // [0,1].
   float progress[][2] = {{0, 1}, {-.25, 1.25}};
 
-  for (size_t i = 0; i < arraysize(test_transforms); ++i) {
-    for (size_t j = 0; j < arraysize(progress); ++j) {
+  for (size_t i = 0; i < base::size(test_transforms); ++i) {
+    for (size_t j = 0; j < base::size(progress); ++j) {
       TransformOperations from_ops;
       TransformOperations to_ops;
       from_ops.Operations().push_back(TranslateTransformOperation::Create(
-          Length(test_transforms[i][0][0], blink::kFixed),
-          Length(test_transforms[i][0][1], blink::kFixed),
-          test_transforms[i][0][2], TransformOperation::kTranslate3D));
+          Length::Fixed(test_transforms[i][0][0]),
+          Length::Fixed(test_transforms[i][0][1]), test_transforms[i][0][2],
+          TransformOperation::kTranslate3D));
       to_ops.Operations().push_back(TranslateTransformOperation::Create(
-          Length(test_transforms[i][1][0], blink::kFixed),
-          Length(test_transforms[i][1][1], blink::kFixed),
-          test_transforms[i][1][2], TransformOperation::kTranslate3D));
+          Length::Fixed(test_transforms[i][1][0]),
+          Length::Fixed(test_transforms[i][1][1]), test_transforms[i][1][2],
+          TransformOperation::kTranslate3D));
       EmpiricallyTestBounds(from_ops, to_ops, progress[j][0], progress[j][1]);
     }
   }
@@ -148,25 +149,25 @@ TEST(TransformOperationsTest, AbsoluteAnimatedScaleBoundsTest) {
 
   EXPECT_TRUE(
       to_ops.BlendedBoundsForBox(box, kIdentityOperations, 0, 1, &bounds));
-  EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(0, 0, 0, 50, 20, 10), bounds);
 
   EXPECT_TRUE(
       kIdentityOperations.BlendedBoundsForBox(box, to_ops, 0, 1, &bounds));
-  EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(0, 0, 0, 50, 20, 10), bounds);
 
   EXPECT_TRUE(
       kIdentityOperations.BlendedBoundsForBox(box, from_ops, 0, 1, &bounds));
-  EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(0, -30, 0, 40, 40, 10), bounds);
 
   EXPECT_TRUE(to_ops.BlendedBoundsForBox(box, from_ops, 0, 1, &bounds));
-  EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(0, -30, 0, 50, 50, 10), bounds);
 
   EXPECT_TRUE(to_ops.BlendedBoundsForBox(box, from_ops, -0.5, 1.25, &bounds));
-  EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(0, -55, 0, 52.5, 87.5, 10), bounds);
 }
 
@@ -181,18 +182,18 @@ TEST(TransformOperationsTest, EmpiricalAnimatedScaleBoundsTest) {
   // [0,1].
   float progress[][2] = {{0, 1}, {-.25f, 1.25f}};
 
-  for (size_t i = 0; i < arraysize(test_transforms); ++i) {
-    for (size_t j = 0; j < arraysize(progress); ++j) {
+  for (size_t i = 0; i < base::size(test_transforms); ++i) {
+    for (size_t j = 0; j < base::size(progress); ++j) {
       TransformOperations from_ops;
       TransformOperations to_ops;
       from_ops.Operations().push_back(TranslateTransformOperation::Create(
-          Length(test_transforms[i][0][0], blink::kFixed),
-          Length(test_transforms[i][0][1], blink::kFixed),
-          test_transforms[i][0][2], TransformOperation::kTranslate3D));
+          Length::Fixed(test_transforms[i][0][0]),
+          Length::Fixed(test_transforms[i][0][1]), test_transforms[i][0][2],
+          TransformOperation::kTranslate3D));
       to_ops.Operations().push_back(TranslateTransformOperation::Create(
-          Length(test_transforms[i][1][0], blink::kFixed),
-          Length(test_transforms[i][1][1], blink::kFixed),
-          test_transforms[i][1][2], TransformOperation::kTranslate3D));
+          Length::Fixed(test_transforms[i][1][0]),
+          Length::Fixed(test_transforms[i][1][1]), test_transforms[i][1][2],
+          TransformOperation::kTranslate3D));
       EmpiricallyTestBounds(from_ops, to_ops, progress[j][0], progress[j][1]);
     }
   }
@@ -213,11 +214,11 @@ TEST(TransformOperationsTest, AbsoluteAnimatedRotationBounds) {
   // 2 * sqrt(2) should give the same result.
   float sizes[] = {0, 0.1f, sqrt2, 2 * sqrt2};
   to_ops.BlendedBoundsForBox(box, from_ops, 0, 1, &bounds);
-  for (size_t i = 0; i < arraysize(sizes); ++i) {
+  for (size_t i = 0; i < base::size(sizes); ++i) {
     box.SetSize(FloatPoint3D(sizes[i], sizes[i], 0));
 
     EXPECT_TRUE(to_ops.BlendedBoundsForBox(box, from_ops, 0, 1, &bounds));
-    EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+    EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                         FloatBox(-2, -2, 0, 4, 4, 0), bounds);
   }
 }
@@ -239,7 +240,7 @@ TEST(TransformOperationsTest, AbsoluteAnimatedExtremeRotationBounds) {
   float max = 1;
   float size = max - min;
   EXPECT_TRUE(to_ops.BlendedBoundsForBox(box, from_ops, 0, 1, &bounds));
-  EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(min, min, min, size, size, size), bounds);
 }
 
@@ -281,12 +282,12 @@ TEST(TransformOperationsTest, AbsoluteAnimatedOnAxisRotationBounds) {
   FloatBox bounds;
 
   EXPECT_TRUE(to_ops.BlendedBoundsForBox(box, from_ops, 0, 1, &bounds));
-  EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual, box, bounds);
+  EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual, box, bounds);
 }
 
-// This would have been best as anonymous structs, but |arraysize|
+// This would have been best as anonymous structs, but |base::size|
 // does not get along with anonymous structs once we support C++11
-// arraysize will automatically support anonymous structs.
+// base::size will automatically support anonymous structs.
 
 struct ProblematicAxisTest {
   double x;
@@ -296,7 +297,7 @@ struct ProblematicAxisTest {
 };
 
 TEST(TransformOperationsTest, AbsoluteAnimatedProblematicAxisRotationBounds) {
-  // Zeros in the components of the axis osf rotation turned out to be tricky to
+  // Zeros in the components of the axis of rotation turned out to be tricky to
   // deal with in practice. This function tests some potentially problematic
   // axes to ensure sane behavior.
 
@@ -314,7 +315,7 @@ TEST(TransformOperationsTest, AbsoluteAnimatedProblematicAxisRotationBounds) {
       {0, 1, 1, FloatBox(-1, dim1, dim1, 2, dim2, dim2)},
       {1, 0, 1, FloatBox(dim1, -1, dim1, dim2, 2, dim2)}};
 
-  for (size_t i = 0; i < arraysize(tests); ++i) {
+  for (size_t i = 0; i < base::size(tests); ++i) {
     float x = tests[i].x;
     float y = tests[i].y;
     float z = tests[i].z;
@@ -328,7 +329,7 @@ TEST(TransformOperationsTest, AbsoluteAnimatedProblematicAxisRotationBounds) {
     FloatBox bounds;
 
     EXPECT_TRUE(to_ops.BlendedBoundsForBox(box, from_ops, 0, 1, &bounds));
-    EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual, tests[i].expected,
+    EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual, tests[i].expected,
                         bounds);
   }
 }
@@ -346,9 +347,9 @@ TEST(TransformOperationsTest, BlendedBoundsForRotationEmpiricalTests) {
 
   float progress[][2] = {{0, 1}, {-0.25f, 1.25f}};
 
-  for (size_t i = 0; i < arraysize(axes); ++i) {
-    for (size_t j = 0; j < arraysize(angles); ++j) {
-      for (size_t k = 0; k < arraysize(progress); ++k) {
+  for (size_t i = 0; i < base::size(axes); ++i) {
+    for (size_t j = 0; j < base::size(angles); ++j) {
+      for (size_t k = 0; k < base::size(progress); ++k) {
         float x = axes[i][0];
         float y = axes[i][1];
         float z = axes[i][2];
@@ -374,7 +375,7 @@ TEST(TransformOperationsTest, AbsoluteAnimatedPerspectiveBoundsTest) {
   FloatBox box(0, 0, 0, 10, 10, 10);
   FloatBox bounds;
   to_ops.BlendedBoundsForBox(box, from_ops, 0, 1, &bounds);
-  EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(0, 0, 0, 20, 20, 20), bounds);
 
   from_ops.BlendedBoundsForBox(box, to_ops, -0.25, 1.25, &bounds);
@@ -383,7 +384,7 @@ TEST(TransformOperationsTest, AbsoluteAnimatedPerspectiveBoundsTest) {
   // closest the observer is 17-10=7.
   double projected_size = 10.0 / 7.0 * 17.0;
   EXPECT_PRED_FORMAT2(
-      FloatBoxTest::AssertAlmostEqual,
+      float_box_test::AssertAlmostEqual,
       FloatBox(0, 0, 0, projected_size, projected_size, projected_size),
       bounds);
 }
@@ -394,8 +395,8 @@ TEST(TransformOperationsTest, EmpiricalAnimatedPerspectiveBoundsTest) {
 
   float progress[][2] = {{0, 1}, {-0.1f, 1.1f}};
 
-  for (size_t i = 0; i < arraysize(depths); ++i) {
-    for (size_t j = 0; j < arraysize(progress); ++j) {
+  for (size_t i = 0; i < base::size(depths); ++i) {
+    for (size_t j = 0; j < base::size(progress); ++j) {
       TransformOperations from_ops;
       TransformOperations to_ops;
 
@@ -420,19 +421,19 @@ TEST(TransformOperationsTest, AnimatedSkewBoundsTest) {
   FloatBox bounds;
 
   to_ops.BlendedBoundsForBox(box, kIdentityOperations, 0, 1, &bounds);
-  ASSERT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  ASSERT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(0, 0, 0, 10, 20, 10), bounds);
 
   kIdentityOperations.BlendedBoundsForBox(box, from_ops, 0, 1, &bounds);
-  ASSERT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  ASSERT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(-10, 0, 0, 20, 10, 10), bounds);
 
   to_ops.BlendedBoundsForBox(box, from_ops, 0, 1, &bounds);
-  ASSERT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  ASSERT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(-10, 0, 0, 20, 20, 10), bounds);
 
   from_ops.BlendedBoundsForBox(box, to_ops, 0, 1, &bounds);
-  ASSERT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  ASSERT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(-10, 0, 0, 20, 20, 10), bounds);
 }
 
@@ -465,7 +466,8 @@ TEST(TransformOperationsTest, NonCommutativeRotations) {
   FloatBox expanded_bounds = bounds;
   expanded_bounds.ExpandTo(blended_point);
 
-  ASSERT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual, bounds, expanded_bounds);
+  ASSERT_PRED_FORMAT2(float_box_test::AssertAlmostEqual, bounds,
+                      expanded_bounds);
 }
 
 TEST(TransformOperationsTest, AbsoluteSequenceBoundsTest) {
@@ -473,42 +475,42 @@ TEST(TransformOperationsTest, AbsoluteSequenceBoundsTest) {
   TransformOperations to_ops;
 
   from_ops.Operations().push_back(
-      TranslateTransformOperation::Create(Length(1, kFixed), Length(-5, kFixed),
+      TranslateTransformOperation::Create(Length::Fixed(1), Length::Fixed(-5),
                                           1, TransformOperation::kTranslate3D));
   from_ops.Operations().push_back(
       ScaleTransformOperation::Create(-1, 2, 3, TransformOperation::kScale3D));
   from_ops.Operations().push_back(TranslateTransformOperation::Create(
-      Length(2, kFixed), Length(4, kFixed), -1,
+      Length::Fixed(2), Length::Fixed(4), -1,
       TransformOperation::kTranslate3D));
 
-  to_ops.Operations().push_back(TranslateTransformOperation::Create(
-      Length(13, kFixed), Length(-1, kFixed), 5,
-      TransformOperation::kTranslate3D));
+  to_ops.Operations().push_back(
+      TranslateTransformOperation::Create(Length::Fixed(13), Length::Fixed(-1),
+                                          5, TransformOperation::kTranslate3D));
   to_ops.Operations().push_back(
       ScaleTransformOperation::Create(-3, -2, 5, TransformOperation::kScale3D));
   to_ops.Operations().push_back(
-      TranslateTransformOperation::Create(Length(6, kFixed), Length(-2, kFixed),
+      TranslateTransformOperation::Create(Length::Fixed(6), Length::Fixed(-2),
                                           3, TransformOperation::kTranslate3D));
 
   FloatBox box(1, 2, 3, 4, 4, 4);
   FloatBox bounds;
 
   EXPECT_TRUE(to_ops.BlendedBoundsForBox(box, from_ops, -0.5, 1.5, &bounds));
-  EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(-57, -59, -1, 76, 112, 80), bounds);
 
   EXPECT_TRUE(to_ops.BlendedBoundsForBox(box, from_ops, 0, 1, &bounds));
-  EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(-32, -25, 7, 42, 44, 48), bounds);
 
   EXPECT_TRUE(
       to_ops.BlendedBoundsForBox(box, kIdentityOperations, 0, 1, &bounds));
-  EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(-33, -13, 3, 57, 19, 52), bounds);
 
   EXPECT_TRUE(
       kIdentityOperations.BlendedBoundsForBox(box, from_ops, 0, 1, &bounds));
-  EXPECT_PRED_FORMAT2(FloatBoxTest::AssertAlmostEqual,
+  EXPECT_PRED_FORMAT2(float_box_test::AssertAlmostEqual,
                       FloatBox(-7, -3, 2, 15, 23, 20), bounds);
 }
 
@@ -518,9 +520,8 @@ TEST(TransformOperationsTest, ZoomTest) {
   FloatPoint3D original_point(2, 3, 4);
 
   TransformOperations ops;
-  ops.Operations().push_back(
-      TranslateTransformOperation::Create(Length(1, kFixed), Length(2, kFixed),
-                                          3, TransformOperation::kTranslate3D));
+  ops.Operations().push_back(TranslateTransformOperation::Create(
+      Length::Fixed(1), Length::Fixed(2), 3, TransformOperation::kTranslate3D));
   ops.Operations().push_back(PerspectiveTransformOperation::Create(1234));
   ops.Operations().push_back(
       Matrix3DTransformOperation::Create(TransformationMatrix(

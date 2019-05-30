@@ -33,6 +33,7 @@
 
 #include <type_traits>
 
+#include "base/macros.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/dictionary.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -103,8 +104,6 @@ bool RequestUsesDiscreteConstraint(
 }
 
 class FeatureCounter {
-  WTF_MAKE_NONCOPYABLE(FeatureCounter);
-
  public:
   explicit FeatureCounter(ExecutionContext* context)
       : context_(context), is_unconstrained_(true) {}
@@ -117,6 +116,8 @@ class FeatureCounter {
  private:
   Persistent<ExecutionContext> context_;
   bool is_unconstrained_;
+
+  DISALLOW_COPY_AND_ASSIGN(FeatureCounter);
 };
 
 void CountAudioConstraintUses(ExecutionContext* context,
@@ -162,10 +163,6 @@ void CountAudioConstraintUses(ExecutionContext* context,
           constraints,
           &WebMediaTrackConstraintSet::render_to_associated_sink)) {
     counter.Count(WebFeature::kMediaStreamConstraintsRenderToAssociatedSink);
-  }
-  if (RequestUsesDiscreteConstraint(
-          constraints, &WebMediaTrackConstraintSet::hotword_enabled)) {
-    counter.Count(WebFeature::kMediaStreamConstraintsHotwordEnabled);
   }
   if (RequestUsesDiscreteConstraint(
           constraints, &WebMediaTrackConstraintSet::goog_echo_cancellation)) {
@@ -282,11 +279,6 @@ void CountVideoConstraintUses(ExecutionContext* context,
           constraints, &WebMediaTrackConstraintSet::goog_noise_reduction)) {
     counter.Count(WebFeature::kMediaStreamConstraintsGoogNoiseReduction);
   }
-  if (RequestUsesNumericConstraint(
-          constraints,
-          &WebMediaTrackConstraintSet::goog_power_line_frequency)) {
-    counter.Count(WebFeature::kMediaStreamConstraintsGoogPowerLineFrequency);
-  }
 
   UseCounter::Count(context, WebFeature::kMediaStreamConstraintsVideo);
   if (counter.IsUnconstrained()) {
@@ -303,12 +295,12 @@ WebMediaConstraints ParseOptions(ExecutionContext* context,
   if (options.IsNull()) {
     // Do nothing.
   } else if (options.IsMediaTrackConstraints()) {
-    constraints = MediaConstraintsImpl::Create(
+    constraints = media_constraints_impl::Create(
         context, options.GetAsMediaTrackConstraints(), error_state);
   } else {
     DCHECK(options.IsBoolean());
     if (options.GetAsBoolean()) {
-      constraints = MediaConstraintsImpl::Create();
+      constraints = media_constraints_impl::Create();
     }
   }
 
@@ -322,9 +314,13 @@ class UserMediaRequest::V8Callbacks final : public UserMediaRequest::Callbacks {
   static V8Callbacks* Create(
       V8NavigatorUserMediaSuccessCallback* success_callback,
       V8NavigatorUserMediaErrorCallback* error_callback) {
-    return new V8Callbacks(success_callback, error_callback);
+    return MakeGarbageCollected<V8Callbacks>(success_callback, error_callback);
   }
 
+  V8Callbacks(V8NavigatorUserMediaSuccessCallback* success_callback,
+              V8NavigatorUserMediaErrorCallback* error_callback)
+      : success_callback_(ToV8PersistentCallbackFunction(success_callback)),
+        error_callback_(ToV8PersistentCallbackFunction(error_callback)) {}
   ~V8Callbacks() override = default;
 
   void Trace(blink::Visitor* visitor) override {
@@ -343,11 +339,6 @@ class UserMediaRequest::V8Callbacks final : public UserMediaRequest::Callbacks {
   }
 
  private:
-  V8Callbacks(V8NavigatorUserMediaSuccessCallback* success_callback,
-              V8NavigatorUserMediaErrorCallback* error_callback)
-      : success_callback_(ToV8PersistentCallbackFunction(success_callback)),
-        error_callback_(ToV8PersistentCallbackFunction(error_callback)) {}
-
   // As Blink does not hold a UserMediaRequest and lets content/ hold it,
   // we cannot use wrapper-tracing to keep the underlying callback functions.
   // Plus, it's guaranteed that the callbacks are one-shot type (not repeated
@@ -363,40 +354,61 @@ UserMediaRequest* UserMediaRequest::Create(
     ExecutionContext* context,
     UserMediaController* controller,
     WebUserMediaRequest::MediaType media_type,
-    const MediaStreamConstraints& options,
+    const MediaStreamConstraints* options,
     Callbacks* callbacks,
     MediaErrorState& error_state) {
   WebMediaConstraints audio =
-      ParseOptions(context, options.audio(), error_state);
+      ParseOptions(context, options->audio(), error_state);
   if (error_state.HadException())
     return nullptr;
 
   WebMediaConstraints video =
-      ParseOptions(context, options.video(), error_state);
+      ParseOptions(context, options->video(), error_state);
   if (error_state.HadException())
     return nullptr;
 
   if (media_type == WebUserMediaRequest::MediaType::kDisplayMedia) {
-    // TODO(emircan): Support constraints after the spec change.
-    // https://w3c.github.io/mediacapture-screen-share/#constraints
-    // 5.2 Constraining Display Surface Selection
-    // The getDisplayMedia function does not permit the use of constraints for
-    // selection of a source as described in the getUserMedia() algorithm.
-    // Prior to invoking the getUserMedia() algorithm, if either of the video
-    // and audio attributes are set to a MediaTrackConstraints value (as
-    // opposed to being absent or set to a Boolean value), reject the promise
-    // with a InvalidAccessError and abort.
-    if (options.audio().IsMediaTrackConstraints() ||
-        options.video().IsMediaTrackConstraints()) {
-      error_state.ThrowDOMException(
-          DOMExceptionCode::kInvalidAccessError,
-          "getDisplayMedia() does not permit the use of constraints.");
+    // https://w3c.github.io/mediacapture-screen-share/#mediadevices-additions
+    // MediaDevices Additions
+    // The user agent MUST reject audio-only requests.
+    // 1. Let constraints be the method's first argument.
+    // 2. For each member present in constraints whose value, value, is a
+    // dictionary, run the following steps:
+    //   1. If value contains a member named advanced, return a promise rejected
+    //   with a newly created TypeError.
+    //   2. If value contains a member which in turn is a dictionary containing
+    //   a member named either min or exact, return a promise rejected with a
+    //   newly created TypeError.
+    // 3. Let requestedMediaTypes be the set of media types in constraints with
+    // either a dictionary value or a value of true.
+    // 4. If requestedMediaTypes is the empty set, set requestedMediaTypes to a
+    // set containing "video".
+    if ((!audio.IsNull() && !audio.Advanced().empty()) ||
+        (!video.IsNull() && !video.Advanced().empty())) {
+      error_state.ThrowTypeError("Advanced constraints are not supported");
       return nullptr;
     }
-    // TODO(emircan): Enable when audio capture is supported.
-    if (!options.audio().IsNull() && options.audio().GetAsBoolean()) {
-      error_state.ThrowTypeError("Audio is not supported");
+    if ((!audio.IsNull() && audio.Basic().HasMin()) ||
+        (!video.IsNull() && video.Basic().HasMin())) {
+      error_state.ThrowTypeError("min constraints are not supported");
       return nullptr;
+    }
+    if ((!audio.IsNull() && audio.Basic().HasExact()) ||
+        (!video.IsNull() && video.Basic().HasExact())) {
+      error_state.ThrowTypeError("exact constraints are not supported");
+      return nullptr;
+    }
+    if (!options->audio().IsNull() && options->audio().GetAsBoolean() &&
+        (options->video().IsNull() || !options->video().GetAsBoolean())) {
+      error_state.ThrowTypeError("Audio only requests are not supported");
+      return nullptr;
+    }
+    if (audio.IsNull() && video.IsNull()) {
+      video = ParseOptions(context,
+                           BooleanOrMediaTrackConstraints::FromBoolean(true),
+                           error_state);
+      if (error_state.HadException())
+        return nullptr;
     }
   }
 
@@ -411,14 +423,14 @@ UserMediaRequest* UserMediaRequest::Create(
   if (!video.IsNull())
     CountVideoConstraintUses(context, video);
 
-  return new UserMediaRequest(context, controller, media_type, audio, video,
-                              callbacks);
+  return MakeGarbageCollected<UserMediaRequest>(context, controller, media_type,
+                                                audio, video, callbacks);
 }
 
 UserMediaRequest* UserMediaRequest::Create(
     ExecutionContext* context,
     UserMediaController* controller,
-    const MediaStreamConstraints& options,
+    const MediaStreamConstraints* options,
     V8NavigatorUserMediaSuccessCallback* success_callback,
     V8NavigatorUserMediaErrorCallback* error_callback,
     MediaErrorState& error_state) {
@@ -430,9 +442,9 @@ UserMediaRequest* UserMediaRequest::Create(
 UserMediaRequest* UserMediaRequest::CreateForTesting(
     const WebMediaConstraints& audio,
     const WebMediaConstraints& video) {
-  return new UserMediaRequest(nullptr, nullptr,
-                              WebUserMediaRequest::MediaType::kUserMedia, audio,
-                              video, nullptr);
+  return MakeGarbageCollected<UserMediaRequest>(
+      nullptr, nullptr, WebUserMediaRequest::MediaType::kUserMedia, audio,
+      video, nullptr);
 }
 
 UserMediaRequest::UserMediaRequest(ExecutionContext* context,
@@ -446,14 +458,14 @@ UserMediaRequest::UserMediaRequest(ExecutionContext* context,
       audio_(audio),
       video_(video),
       should_disable_hardware_noise_suppression_(
-          OriginTrials::DisableHardwareNoiseSuppressionEnabled(context)),
+          origin_trials::DisableHardwareNoiseSuppressionEnabled(context)),
       controller_(controller),
       callbacks_(callbacks) {
   if (should_disable_hardware_noise_suppression_) {
     UseCounter::Count(context,
                       WebFeature::kUserMediaDisableHardwareNoiseSuppression);
   }
-  if (OriginTrials::ExperimentalHardwareEchoCancellationEnabled(context)) {
+  if (origin_trials::ExperimentalHardwareEchoCancellationEnabled(context)) {
     UseCounter::Count(
         context,
         WebFeature::kUserMediaEnableExperimentalHardwareEchoCancellation);
@@ -490,24 +502,21 @@ bool UserMediaRequest::IsSecureContextUse(String& error_message) {
   Document* document = OwnerDocument();
 
   if (document->IsSecureContext(error_message)) {
-    UseCounter::Count(document->GetFrame(),
-                      WebFeature::kGetUserMediaSecureOrigin);
+    UseCounter::Count(document, WebFeature::kGetUserMediaSecureOrigin);
     UseCounter::CountCrossOriginIframe(
         *document, WebFeature::kGetUserMediaSecureOriginIframe);
 
     // Feature policy deprecation messages.
     if (Audio()) {
-      if (!document->GetFrame()->IsFeatureEnabled(
-              mojom::FeaturePolicyFeature::kMicrophone,
-              ReportOptions::kReportOnFailure)) {
+      if (!document->IsFeatureEnabled(mojom::FeaturePolicyFeature::kMicrophone,
+                                      ReportOptions::kReportOnFailure)) {
         UseCounter::Count(
             document, WebFeature::kMicrophoneDisabledByFeaturePolicyEstimate);
       }
     }
     if (Video()) {
-      if (!document->GetFrame()->IsFeatureEnabled(
-              mojom::FeaturePolicyFeature::kCamera,
-              ReportOptions::kReportOnFailure)) {
+      if (!document->IsFeatureEnabled(mojom::FeaturePolicyFeature::kCamera,
+                                      ReportOptions::kReportOnFailure)) {
         UseCounter::Count(document,
                           WebFeature::kCameraDisabledByFeaturePolicyEstimate);
       }
@@ -530,11 +539,7 @@ bool UserMediaRequest::IsSecureContextUse(String& error_message) {
 }
 
 Document* UserMediaRequest::OwnerDocument() {
-  if (ExecutionContext* context = GetExecutionContext()) {
-    return ToDocument(context);
-  }
-
-  return nullptr;
+  return To<Document>(GetExecutionContext());
 }
 
 void UserMediaRequest::Start() {
@@ -586,6 +591,7 @@ void UserMediaRequest::Fail(WebUserMediaRequest::Error name,
     case WebUserMediaRequest::Error::kInvalidState:
     case WebUserMediaRequest::Error::kFailedDueToShutdown:
     case WebUserMediaRequest::Error::kKillSwitchOn:
+    case WebUserMediaRequest::Error::kSystemPermissionDenied:
       exception_code = DOMExceptionCode::kNotAllowedError;
       break;
     case WebUserMediaRequest::Error::kDevicesNotFound:

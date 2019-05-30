@@ -8,14 +8,13 @@
 #include <string>
 #include <vector>
 
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/dom_distiller/core/article_entry.h"
 #include "components/dom_distiller/core/dom_distiller_model.h"
 #include "components/dom_distiller/core/dom_distiller_observer.h"
-#include "components/leveldb_proto/proto_database.h"
+#include "components/leveldb_proto/public/proto_database.h"
 #include "components/sync/model/sync_change.h"
 #include "components/sync/model/sync_data.h"
 #include "components/sync/model/sync_error.h"

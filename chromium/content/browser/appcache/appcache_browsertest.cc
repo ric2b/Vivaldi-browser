@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <stdint.h>
+#include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
@@ -68,8 +69,8 @@ IN_PROC_BROWSER_TEST_F(AppCacheNetworkServiceBrowserTest,
       new net::EmbeddedTestServer());
 
   embedded_test_server->RegisterRequestHandler(
-      base::Bind(&AppCacheNetworkServiceBrowserTest::HandleRequest,
-                 base::Unretained(this)));
+      base::BindRepeating(&AppCacheNetworkServiceBrowserTest::HandleRequest,
+                          base::Unretained(this)));
 
   base::FilePath content_test_data(FILE_PATH_LITERAL("content/test/data"));
   embedded_test_server->AddDefaultHandlers(content_test_data);

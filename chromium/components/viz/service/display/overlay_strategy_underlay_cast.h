@@ -23,13 +23,13 @@ class VIZ_SERVICE_EXPORT OverlayStrategyUnderlayCast
       OverlayCandidateValidator* capability_checker);
   ~OverlayStrategyUnderlayCast() override;
 
-  bool Attempt(const SkMatrix44& output_color_matrix,
-               const OverlayProcessor::FilterOperationsMap&
-                   render_pass_background_filters,
-               DisplayResourceProvider* resource_provider,
-               RenderPass* render_pass,
-               OverlayCandidateList* candidate_list,
-               std::vector<gfx::Rect>* content_bounds) override;
+  bool Attempt(
+      const SkMatrix44& output_color_matrix,
+      const OverlayProcessor::FilterOperationsMap& render_pass_backdrop_filters,
+      DisplayResourceProvider* resource_provider,
+      RenderPassList* render_pass,
+      OverlayCandidateList* candidate_list,
+      std::vector<gfx::Rect>* content_bounds) override;
 
   // Callback that's made whenever an overlay quad is processed in the
   // compositor. Used to allow hardware video plane to be positioned to match
@@ -38,7 +38,7 @@ class VIZ_SERVICE_EXPORT OverlayStrategyUnderlayCast
       base::RepeatingCallback<void(const gfx::RectF&, gfx::OverlayTransform)>;
   static void SetOverlayCompositedCallback(const OverlayCompositedCallback& cb);
 
-  OverlayProcessor::StrategyType GetUMAEnum() const override;
+  OverlayStrategy GetUMAEnum() const override;
 
  private:
   // Keep track if an overlay is being used on the previous frame.

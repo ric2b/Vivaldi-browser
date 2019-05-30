@@ -17,6 +17,10 @@ CommitResponseEvent::CommitResponseEvent(
 
 CommitResponseEvent::~CommitResponseEvent() {}
 
+std::unique_ptr<ProtocolEvent> CommitResponseEvent::Clone() const {
+  return std::make_unique<CommitResponseEvent>(timestamp_, result_, response_);
+}
+
 base::Time CommitResponseEvent::GetTimestamp() const {
   return timestamp_;
 }
@@ -26,18 +30,13 @@ std::string CommitResponseEvent::GetType() const {
 }
 
 std::string CommitResponseEvent::GetDetails() const {
-  return base::StringPrintf("Result: %s", GetSyncerErrorString(result_));
+  return "Result: " + result_.ToString();
 }
 
 std::unique_ptr<base::DictionaryValue> CommitResponseEvent::GetProtoMessage(
     bool include_specifics) const {
-  return std::unique_ptr<base::DictionaryValue>(
-      ClientToServerResponseToValue(response_, include_specifics));
+  return ClientToServerResponseToValue(response_, include_specifics);
 }
 
-std::unique_ptr<ProtocolEvent> CommitResponseEvent::Clone() const {
-  return std::unique_ptr<ProtocolEvent>(
-      new CommitResponseEvent(timestamp_, result_, response_));
-}
 
 }  // namespace syncer

@@ -15,10 +15,11 @@
 #include "handler/linux/exception_handler_server.h"
 
 #include <errno.h>
-#include <sys/capability.h>
+#include <linux/capability.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/socket.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -95,7 +96,7 @@ bool HaveCapSysPtrace() {
 
   cap_header.pid = getpid();
 
-  if (capget(&cap_header, &cap_data) != 0) {
+  if (syscall(SYS_capget, &cap_header, &cap_data) != 0) {
     PLOG(ERROR) << "capget";
     return false;
   }
@@ -307,11 +308,24 @@ void ExceptionHandlerServer::HandleEvent(Event* event, uint32_t event_type) {
 }
 
 bool ExceptionHandlerServer::InstallClientSocket(ScopedFileHandle socket) {
-  int optval = 1;
+  // The handler may not have permission to set SO_PASSCRED on the socket, but
+  // it doesn't need to if the client has already set it.
+  // https://bugs.chromium.org/p/crashpad/issues/detail?id=252
+  int optval;
   socklen_t optlen = sizeof(optval);
-  if (setsockopt(socket.get(), SOL_SOCKET, SO_PASSCRED, &optval, optlen) != 0) {
-    PLOG(ERROR) << "setsockopt";
+  if (getsockopt(socket.get(), SOL_SOCKET, SO_PASSCRED, &optval, &optlen) !=
+      0) {
+    PLOG(ERROR) << "getsockopt";
     return false;
+  }
+  if (!optval) {
+    optval = 1;
+    optlen = sizeof(optval);
+    if (setsockopt(socket.get(), SOL_SOCKET, SO_PASSCRED, &optval, optlen) !=
+        0) {
+      PLOG(ERROR) << "setsockopt";
+      return false;
+    }
   }
 
   auto event = std::make_unique<Event>();

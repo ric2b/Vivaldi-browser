@@ -5,13 +5,13 @@
 /**
  * UMA exporter for navigation in the Files app.
  *
- * @param {!VolumeManagerWrapper} volumeManager
+ * @param {!VolumeManager} volumeManager
  *
  * @constructor
  */
 function NavigationUma(volumeManager) {
   /**
-   * @type {!VolumeManagerWrapper}
+   * @type {!VolumeManager}
    * @private
    */
   this.volumeManager_ = volumeManager;
@@ -26,10 +26,11 @@ function NavigationUma(volumeManager) {
  * @private
  */
 NavigationUma.prototype.exportRootType_ = function(entry, name) {
-  var locationInfo = this.volumeManager_.getLocationInfo(entry);
-  if (locationInfo)
+  const locationInfo = this.volumeManager_.getLocationInfo(entry);
+  if (locationInfo) {
     metrics.recordEnum(
         name, locationInfo.rootType, VolumeManagerCommon.RootTypesForUMA);
+  }
 };
 
 /**

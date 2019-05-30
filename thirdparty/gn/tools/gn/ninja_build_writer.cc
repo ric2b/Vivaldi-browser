@@ -47,7 +47,10 @@ struct Counts {
   const Target* last_seen;
 };
 
-std::string GetSelfInvocationCommand(const BuildSettings* build_settings) {
+} // namespace
+
+base::CommandLine GetSelfInvocationCommandLine(
+    const BuildSettings* build_settings) {
   const base::FilePath build_path =
       build_settings->build_dir().Resolve(build_settings->root_path(), true);
 
@@ -81,6 +84,18 @@ std::string GetSelfInvocationCommand(const BuildSettings* build_settings) {
   escape_shell.inhibit_quoting = true;
 #endif
 
+  // If both --root and --dotfile are passed, make sure the --dotfile is
+  // made relative to the build dir here.
+  base::FilePath dotfile_path = build_settings->dotfile_name();
+  if (!dotfile_path.empty()) {
+    if (build_path.IsAbsolute()) {
+      dotfile_path =
+          MakeAbsoluteFilePathRelativeIfPossible(build_path, dotfile_path);
+    }
+    cmdline.AppendSwitchPath(std::string("--") + switches::kDotfile,
+                             dotfile_path.NormalizePathSeparatorsTo('/'));
+  }
+
   const base::CommandLine& our_cmdline =
       *base::CommandLine::ForCurrentProcess();
   const base::CommandLine::SwitchMap& switches = our_cmdline.GetSwitches();
@@ -91,13 +106,21 @@ std::string GetSelfInvocationCommand(const BuildSettings* build_settings) {
     // implicitly in the future. Keeping --args would mean changes to the file
     // would be ignored.
     if (i->first != switches::kQuiet && i->first != switches::kRoot &&
-        i->first != switches::kArgs) {
+        i->first != switches::kDotfile && i->first != switches::kArgs) {
       std::string escaped_value =
           EscapeString(FilePathToUTF8(i->second), escape_shell, nullptr);
       cmdline.AppendSwitchASCII(i->first, escaped_value);
     }
   }
 
+  return cmdline;
+}
+
+namespace {
+
+std::string GetSelfInvocationCommand(const BuildSettings* build_settings) {
+  base::CommandLine cmdline = GetSelfInvocationCommandLine(
+      build_settings);
 #if defined(OS_WIN)
   return base::WideToUTF8(cmdline.GetCommandLineString());
 #else

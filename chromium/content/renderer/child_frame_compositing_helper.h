@@ -12,9 +12,14 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "cc/layers/content_layer_client.h"
 #include "cc/layers/surface_layer.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "content/common/content_export.h"
+
+namespace cc {
+class PictureLayer;
+}
 
 namespace gfx {
 class Size;
@@ -28,35 +33,36 @@ namespace content {
 
 class ChildFrameCompositor;
 
-class CONTENT_EXPORT ChildFrameCompositingHelper {
+class CONTENT_EXPORT ChildFrameCompositingHelper
+    : public cc::ContentLayerClient {
  public:
   explicit ChildFrameCompositingHelper(
       ChildFrameCompositor* child_frame_compositor);
+  ~ChildFrameCompositingHelper() override;
 
-  virtual ~ChildFrameCompositingHelper();
-
-  void SetPrimarySurfaceId(const viz::SurfaceId& surface_id,
-                           const gfx::Size& frame_size_in_dip,
-                           const cc::DeadlinePolicy& deadline);
-  void SetFallbackSurfaceId(const viz::SurfaceId& surface_id,
-                            const gfx::Size& frame_size_in_dip);
+  void SetSurfaceId(const viz::SurfaceId& surface_id,
+                    const gfx::Size& frame_size_in_dip,
+                    const cc::DeadlinePolicy& deadline);
   void UpdateVisibility(bool visible);
   void ChildFrameGone(const gfx::Size& frame_size_in_dip,
                       float device_scale_factor);
 
-  const viz::SurfaceId& primary_surface_id() const {
-    return primary_surface_id_;
-  }
-
-  const viz::SurfaceId& fallback_surface_id() const {
-    return fallback_surface_id_;
-  }
+  const viz::SurfaceId& surface_id() const { return surface_id_; }
 
  private:
+  // cc::ContentLayerClient implementation. Called from the cc::PictureLayer
+  // created for the crashed child frame to display the sad image.
+  gfx::Rect PaintableRegion() override;
+  scoped_refptr<cc::DisplayItemList> PaintContentsToDisplayList(
+      PaintingControlSetting) override;
+  bool FillsBoundsCompletely() const override;
+  size_t GetApproximateUnsharedMemoryUsage() const override;
+
   ChildFrameCompositor* const child_frame_compositor_;
-  viz::SurfaceId primary_surface_id_;
-  viz::SurfaceId fallback_surface_id_;
+  viz::SurfaceId surface_id_;
   scoped_refptr<cc::SurfaceLayer> surface_layer_;
+  scoped_refptr<cc::PictureLayer> crash_ui_layer_;
+  float device_scale_factor_ = 1.f;
 
   DISALLOW_COPY_AND_ASSIGN(ChildFrameCompositingHelper);
 };

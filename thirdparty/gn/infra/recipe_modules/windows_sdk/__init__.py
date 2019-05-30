@@ -17,11 +17,15 @@ from recipe_engine.config import ConfigGroup, Single
 PROPERTIES = {
     '$gn/windows_sdk':
         Property(
-            help='Properties specifically for the infra windows_sdk module.',
+            help='Properties specifically for the windows_sdk module.',
             param_name='sdk_properties',
             kind=ConfigGroup(
-                # CIPD instance ID, tag or ref for the Windows SDK version.
-                version=Single(str),),
-            default={'version': 'uploaded:2018-06-13'},
+                # The CIPD package and version.
+                sdk_package=Single(str),
+                sdk_version=Single(str)),
+            default={
+                'sdk_package': 'chrome_internal/third_party/sdk/windows',
+                'sdk_version': 'uploaded:2018-06-13'
+            },
         )
 }

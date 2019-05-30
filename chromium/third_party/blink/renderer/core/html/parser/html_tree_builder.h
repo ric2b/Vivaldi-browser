@@ -56,19 +56,29 @@ class HTMLTreeBuilder final
                                  Document& document,
                                  ParserContentPolicy parser_content_policy,
                                  const HTMLParserOptions& options) {
-    return new HTMLTreeBuilder(parser, document, parser_content_policy,
-                               options);
+    return MakeGarbageCollected<HTMLTreeBuilder>(
+        parser, document, parser_content_policy, options);
   }
   static HTMLTreeBuilder* Create(HTMLDocumentParser* parser,
                                  DocumentFragment* fragment,
                                  Element* context_element,
                                  ParserContentPolicy parser_content_policy,
                                  const HTMLParserOptions& options) {
-    return new HTMLTreeBuilder(parser, fragment, context_element,
-                               parser_content_policy, options);
+    return MakeGarbageCollected<HTMLTreeBuilder>(
+        parser, fragment, context_element, parser_content_policy, options);
   }
+
+  HTMLTreeBuilder(HTMLDocumentParser*,
+                  Document&,
+                  ParserContentPolicy,
+                  const HTMLParserOptions&);
+  HTMLTreeBuilder(HTMLDocumentParser*,
+                  DocumentFragment*,
+                  Element* context_element,
+                  ParserContentPolicy,
+                  const HTMLParserOptions&);
   ~HTMLTreeBuilder();
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
   const HTMLElementStack* OpenElements() const { return tree_.OpenElements(); }
 
@@ -132,16 +142,6 @@ class HTMLTreeBuilder final
 #ifndef DEBUG
   static const char* ToString(InsertionMode);
 #endif
-
-  HTMLTreeBuilder(HTMLDocumentParser*,
-                  Document&,
-                  ParserContentPolicy,
-                  const HTMLParserOptions&);
-  HTMLTreeBuilder(HTMLDocumentParser*,
-                  DocumentFragment*,
-                  Element* context_element,
-                  ParserContentPolicy,
-                  const HTMLParserOptions&);
 
   void ProcessToken(AtomicHTMLToken*);
 
@@ -233,7 +233,7 @@ class HTMLTreeBuilder final
       return context_element_stack_item_.Get();
     }
 
-    void Trace(blink::Visitor*);
+    void Trace(Visitor*);
 
    private:
     Member<DocumentFragment> fragment_;
@@ -242,7 +242,7 @@ class HTMLTreeBuilder final
     DISALLOW_COPY_AND_ASSIGN(FragmentParsingContext);
   };
 
-  // https://html.spec.whatwg.org/#frameset-ok-flag
+  // https://html.spec.whatwg.org/C/#frameset-ok-flag
   bool frameset_ok_;
 #if DCHECK_IS_ON()
   bool is_attached_ = true;

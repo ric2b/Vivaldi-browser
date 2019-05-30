@@ -17,6 +17,7 @@
 #include "base/feature_list.h"
 #include "base/format_macros.h"
 #include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -305,7 +306,7 @@ TEST_F(VariationsSeedProcessorTest, OverrideUIStrings) {
   Study study;
   study.set_name("Study1");
   study.set_default_experiment_name("B");
-  study.set_activation_type(Study_ActivationType_ACTIVATION_AUTO);
+  study.set_activation_type(Study_ActivationType_ACTIVATE_ON_STARTUP);
 
   Study_Experiment* experiment1 = AddExperiment("A", 0, &study);
   Study_Experiment_OverrideUIString* override =
@@ -330,8 +331,7 @@ TEST_F(VariationsSeedProcessorTest, OverrideUIStrings) {
   EXPECT_TRUE(CreateTrialFromStudy(study));
 
   EXPECT_EQ(1u, overrides.size());
-  TestOverrideStringCallback::OverrideMap::const_iterator it =
-      overrides.find(1234);
+  auto it = overrides.find(1234);
   EXPECT_EQ(base::ASCIIToUTF16("test"), it->second);
 }
 
@@ -339,7 +339,7 @@ TEST_F(VariationsSeedProcessorTest, OverrideUIStringsWithForcingFlag) {
   Study study = CreateStudyWithFlagGroups(100, 0, 0);
   ASSERT_EQ(kForcingFlag1, study.experiment(1).forcing_flag());
 
-  study.set_activation_type(Study_ActivationType_ACTIVATION_AUTO);
+  study.set_activation_type(Study_ActivationType_ACTIVATE_ON_STARTUP);
   Study_Experiment_OverrideUIString* override =
       study.mutable_experiment(1)->add_override_ui_string();
   override->set_name_hash(1234);
@@ -353,8 +353,7 @@ TEST_F(VariationsSeedProcessorTest, OverrideUIStringsWithForcingFlag) {
   const TestOverrideStringCallback::OverrideMap& overrides =
       override_callback_.overrides();
   EXPECT_EQ(1u, overrides.size());
-  TestOverrideStringCallback::OverrideMap::const_iterator it =
-      overrides.find(1234);
+  auto it = overrides.find(1234);
   EXPECT_EQ(base::ASCIIToUTF16("test"), it->second);
 }
 
@@ -452,7 +451,7 @@ TEST_F(VariationsSeedProcessorTest, ValidateStudyWithAssociatedFeatures) {
 
   // Setting a different activation type should result in empty
   // |associated_features|.
-  study.set_activation_type(Study_ActivationType_ACTIVATION_AUTO);
+  study.set_activation_type(Study_ActivationType_ACTIVATE_ON_STARTUP);
   EXPECT_TRUE(processed_study.Init(&study, false));
   EXPECT_THAT(processed_study.associated_features(), IsEmpty());
 }
@@ -540,14 +539,14 @@ TEST_F(VariationsSeedProcessorTest, StartsActive) {
   study2->set_default_experiment_name("Default");
   AddExperiment("BB", 100, study2);
   AddExperiment("Default", 0, study2);
-  study2->set_activation_type(Study_ActivationType_ACTIVATION_AUTO);
+  study2->set_activation_type(Study_ActivationType_ACTIVATE_ON_STARTUP);
 
   Study* study3 = seed.add_study();
   study3->set_name("C");
   study3->set_default_experiment_name("Default");
   AddExperiment("CC", 100, study3);
   AddExperiment("Default", 0, study3);
-  study3->set_activation_type(Study_ActivationType_ACTIVATION_EXPLICIT);
+  study3->set_activation_type(Study_ActivationType_ACTIVATE_ON_QUERY);
 
   ClientFilterableState client_state;
   client_state.locale = "en-CA";
@@ -562,8 +561,8 @@ TEST_F(VariationsSeedProcessorTest, StartsActive) {
                                       override_callback_.callback(), nullptr,
                                       &feature_list_);
 
-  // Non-specified and ACTIVATION_EXPLICIT should not start active, but
-  // ACTIVATION_AUTO should.
+  // Non-specified and ACTIVATE_ON_QUERY should not start active, but
+  // ACTIVATE_ON_STARTUP should.
   EXPECT_FALSE(base::FieldTrialList::IsTrialActive("A"));
   EXPECT_TRUE(base::FieldTrialList::IsTrialActive("B"));
   EXPECT_FALSE(base::FieldTrialList::IsTrialActive("C"));
@@ -584,7 +583,7 @@ TEST_F(VariationsSeedProcessorTest, StartsActiveWithFlag) {
   base::FieldTrialList field_trial_list(nullptr);
 
   Study study = CreateStudyWithFlagGroups(100, 0, 0);
-  study.set_activation_type(Study_ActivationType_ACTIVATION_AUTO);
+  study.set_activation_type(Study_ActivationType_ACTIVATE_ON_STARTUP);
 
   EXPECT_TRUE(CreateTrialFromStudy(study));
   EXPECT_TRUE(base::FieldTrialList::IsTrialActive(kFlagStudyName));
@@ -641,7 +640,7 @@ TEST_F(VariationsSeedProcessorTest, FeatureEnabledOrDisableByTrial) {
       {nullptr, kFeatureOffByDefault.name, false, true},
   };
 
-  for (size_t i = 0; i < arraysize(test_cases); i++) {
+  for (size_t i = 0; i < base::size(test_cases); i++) {
     const auto& test_case = test_cases[i];
     SCOPED_TRACE(base::StringPrintf("Test[%" PRIuS "]", i));
 
@@ -760,7 +759,7 @@ TEST_F(VariationsSeedProcessorTest, FeatureAssociationAndForcing) {
        kForcedOffGroup, false, true},
   };
 
-  for (size_t i = 0; i < arraysize(test_cases); i++) {
+  for (size_t i = 0; i < base::size(test_cases); i++) {
     const auto& test_case = test_cases[i];
     const int group = test_case.one_hundred_percent_group;
     SCOPED_TRACE(base::StringPrintf(
@@ -833,7 +832,7 @@ TEST_F(VariationsSeedProcessorTest, FeaturesInExpiredStudies) {
       {kEnabledFeature, false, year_later, false},
   };
 
-  for (size_t i = 0; i < arraysize(test_cases); i++) {
+  for (size_t i = 0; i < base::size(test_cases); i++) {
     const auto& test_case = test_cases[i];
     SCOPED_TRACE(
         base::StringPrintf("Test[%" PRIuS "]: %s", i, test_case.feature.name));

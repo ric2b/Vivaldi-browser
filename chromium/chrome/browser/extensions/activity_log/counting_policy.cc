@@ -36,12 +36,13 @@
 #include <string>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_string_value_serializer.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task_runner_util.h"
@@ -170,7 +171,7 @@ CountingPolicy::CountingPolicy(Profile* profile)
       string_table_("string_ids"),
       url_table_("url_ids"),
       retention_time_(base::TimeDelta::FromHours(60)) {
-  for (size_t i = 0; i < arraysize(kAlwaysLog); i++) {
+  for (size_t i = 0; i < base::size(kAlwaysLog); i++) {
     api_arg_whitelist_.insert(
         std::make_pair(kAlwaysLog[i].type, kAlwaysLog[i].name));
   }
@@ -185,11 +186,9 @@ bool CountingPolicy::InitDatabase(sql::Database* db) {
     return false;
 
   // Create the unified activity log entry table.
-  if (!ActivityDatabase::InitializeTable(db,
-                                         kTableName,
-                                         kTableContentFields,
+  if (!ActivityDatabase::InitializeTable(db, kTableName, kTableContentFields,
                                          kTableFieldTypes,
-                                         arraysize(kTableContentFields)))
+                                         base::size(kTableContentFields)))
     return false;
 
   // Create a view for easily accessing the uncompressed form of the data, and
@@ -215,7 +214,7 @@ void CountingPolicy::QueueAction(scoped_refptr<Action> action) {
       activity_database()->AdviseFlush(ActivityDatabase::kFlushImmediately);
     queued_actions_date_ = new_date;
 
-    ActionQueue::iterator queued_entry = queued_actions_.find(action);
+    auto queued_entry = queued_actions_.find(action);
     if (queued_entry == queued_actions_.end()) {
       queued_actions_[action] = 1;
     } else {
@@ -271,20 +270,20 @@ bool CountingPolicy::FlushDatabase(sql::Database* db) {
       " SET count = count + ?, time = max(?, time)"
       " WHERE rowid = ?";
 
-  for (size_t i = 0; i < arraysize(matched_columns); i++) {
+  for (size_t i = 0; i < base::size(matched_columns); i++) {
     locate_str = base::StringPrintf(
         "%s AND %s IS ?", locate_str.c_str(), matched_columns[i]);
     insert_str =
         base::StringPrintf("%s, %s", insert_str.c_str(), matched_columns[i]);
   }
   insert_str += ") VALUES (?, ?";
-  for (size_t i = 0; i < arraysize(matched_columns); i++) {
+  for (size_t i = 0; i < base::size(matched_columns); i++) {
     insert_str += ", ?";
   }
   locate_str += " ORDER BY time DESC LIMIT 1";
   insert_str += ")";
 
-  for (ActionQueue::iterator i = queue.begin(); i != queue.end(); ++i) {
+  for (auto i = queue.begin(); i != queue.end(); ++i) {
     const Action& action = *i->first;
     int count = i->second;
 
@@ -443,7 +442,7 @@ std::unique_ptr<Action::ActionVector> CountingPolicy::DoReadFilteredData(
     where_next = " AND ";
   }
   if (!api_name.empty()) {
-    where_str += where_next + "api_name=?";
+    where_str += where_next + "api_name LIKE ?";
     where_next = " AND ";
   }
   if (type != Action::ACTION_ANY) {
@@ -473,7 +472,7 @@ std::unique_ptr<Action::ActionVector> CountingPolicy::DoReadFilteredData(
   if (!extension_id.empty())
     query.BindString(++i, extension_id);
   if (!api_name.empty())
-    query.BindString(++i, api_name);
+    query.BindString(++i, api_name + "%");
   if (type != Action::ACTION_ANY)
     query.BindInt(++i, static_cast<int>(type));
   if (!page_url.empty())
@@ -498,7 +497,7 @@ std::unique_ptr<Action::ActionVector> CountingPolicy::DoReadFilteredData(
 
     if (query.ColumnType(4) != sql::COLUMN_TYPE_NULL) {
       std::unique_ptr<base::Value> parsed_value =
-          base::JSONReader::Read(query.ColumnString(4));
+          base::JSONReader::ReadDeprecated(query.ColumnString(4));
       if (parsed_value && parsed_value->is_list()) {
         action->set_args(base::WrapUnique(
             static_cast<base::ListValue*>(parsed_value.release())));
@@ -511,7 +510,7 @@ std::unique_ptr<Action::ActionVector> CountingPolicy::DoReadFilteredData(
 
     if (query.ColumnType(8) != sql::COLUMN_TYPE_NULL) {
       std::unique_ptr<base::Value> parsed_value =
-          base::JSONReader::Read(query.ColumnString(8));
+          base::JSONReader::ReadDeprecated(query.ColumnString(8));
       if (parsed_value && parsed_value->is_dict()) {
         action->set_other(base::WrapUnique(
             static_cast<base::DictionaryValue*>(parsed_value.release())));

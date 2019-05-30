@@ -13,9 +13,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.test.params.ParameterAnnotations;
-import org.chromium.base.test.params.ParameterSet;
-import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -30,51 +27,33 @@ import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestRule;
-import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
+import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.browser.Features;
-
-import java.util.Arrays;
-import java.util.List;
 
 /**
  * Misc. Content Suggestions instrumentation tests.
  */
-@RunWith(ParameterizedRunner.class)
-@ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
+// TODO(https://crbug.com/894334): Remove format suppression once formatting bug is fixed.
+// clang-format off
+@RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@Features.DisableFeatures(ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS)
 public class ContentSuggestionsTest {
+    // clang-format on
+
     @Rule
     public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
             new ChromeActivityTestRule<>(ChromeActivity.class);
 
-    @ParameterAnnotations.ClassParameter
-    private static List<ParameterSet> sClassParams =
-            Arrays.asList(new ParameterSet().value(false).name("DisableExpandableHeader"),
-                    new ParameterSet().value(true).name("EnableExpandableHeader"));
-
-    private final boolean mEnableExpandableHeader;
-
-    public ContentSuggestionsTest(boolean enableExpandableHeader) {
-        mEnableExpandableHeader = enableExpandableHeader;
-    }
-
     @Before
     public void setUp() throws InterruptedException {
-        if (mEnableExpandableHeader) {
-            Features.getInstance().enable(
-                    ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER);
-        } else {
-            Features.getInstance().disable(
-                    ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER);
-        }
         mActivityTestRule.startMainActivityOnBlankPage();
     }
 
     @Test
     @SmallTest
     @Feature("Suggestions")
-    @CommandLineFlags.Add("enable-features=ContentSuggestionsSettings")
     public void testRemoteSuggestionsEnabled() throws InterruptedException {
         NewTabPage ntp = loadNTPWithSearchSuggestState(true);
         SuggestionsUiDelegate uiDelegate = ntp.getManagerForTesting();
@@ -85,12 +64,11 @@ public class ContentSuggestionsTest {
     @Test
     @SmallTest
     @Feature("Suggestions")
-    @CommandLineFlags.Add("enable-features=ContentSuggestionsSettings")
     public void testRemoteSuggestionsDisabled() throws InterruptedException {
         NewTabPage ntp = loadNTPWithSearchSuggestState(false);
         SuggestionsUiDelegate uiDelegate = ntp.getManagerForTesting();
-        // If header is expandable, category should still be enabled.
-        Assert.assertEquals(mEnableExpandableHeader,
+        // Since header is expandable, category should still be enabled.
+        Assert.assertEquals(true,
                 isCategoryEnabled(uiDelegate.getSuggestionsSource(), KnownCategories.ARTICLES));
     }
 

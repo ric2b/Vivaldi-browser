@@ -107,12 +107,6 @@ void SharedChangeProcessor::StartAssociation(
       return;
     }
 
-    std::string datatype_context;
-    if (GetDataTypeContext(&datatype_context)) {
-      local_service_->UpdateDataTypeContext(
-          type_, SyncChangeProcessor::NO_REFRESH, datatype_context);
-    }
-
     syncer_merge_result.set_num_items_before_association(
         initial_sync_data.size());
     // Passes a reference to |shared_change_processor|.
@@ -151,7 +145,8 @@ base::WeakPtr<SyncableService> SharedChangeProcessor::Connect(
   base::WeakPtr<SyncableService> local_service =
       sync_client->GetSyncableServiceForType(type_);
   if (!local_service) {
-    LOG(WARNING) << "SyncableService destroyed before DTC was stopped.";
+    DLOG(WARNING) << "SyncableService destroyed before DTC was stopped for "
+                  << ModelTypeToString(type_);
     disconnected_ = true;
     return base::WeakPtr<SyncableService>();
   }
@@ -159,7 +154,7 @@ base::WeakPtr<SyncableService> SharedChangeProcessor::Connect(
   generic_change_processor_ = processor_factory
                                   ->CreateGenericChangeProcessor(
                                       type_, user_share, error_handler_->Copy(),
-                                      local_service, merge_result, sync_client)
+                                      local_service, merge_result)
                                   .release();
   return local_service;
 }

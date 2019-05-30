@@ -7,22 +7,23 @@
 
 #include <stdint.h>
 
-#include <list>
 #include <set>
 #include <string>
 
 #include "base/callback.h"
-#include "storage/browser/storage_browser_export.h"
-#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
+#include "base/component_export.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom-forward.h"
 #include "url/origin.h"
 
 namespace storage {
 
-// An abstract interface for quota manager clients.
-// Each storage API must provide an implementation of this interface and
-// register it to the quota manager.
-// All the methods are assumed to be called on the IO thread in the browser.
-class STORAGE_EXPORT QuotaClient {
+// Interface between each storage API and the quota manager.
+//
+// Each storage API must register an implementation of this interface with
+// the quota manager, by calling QuotaManager::RegisterClient().
+//
+// All the methods will be called on the IO thread in the browser.
+class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaClient {
  public:
   using GetUsageCallback = base::OnceCallback<void(int64_t usage)>;
   using GetOriginsCallback =
@@ -30,7 +31,7 @@ class STORAGE_EXPORT QuotaClient {
   using DeletionCallback =
       base::OnceCallback<void(blink::mojom::QuotaStatusCode status)>;
 
-  virtual ~QuotaClient() {}
+  virtual ~QuotaClient() = default;
 
   enum ID {
     kUnknown = 1 << 0,
@@ -46,7 +47,7 @@ class STORAGE_EXPORT QuotaClient {
 
   virtual ID id() const = 0;
 
-  // Called when the quota manager is destroyed.
+  // Called when the QuotaManager is destroyed.
   virtual void OnQuotaManagerDestroyed() = 0;
 
   // Called by the QuotaManager.
@@ -76,11 +77,14 @@ class STORAGE_EXPORT QuotaClient {
                                 blink::mojom::StorageType type,
                                 DeletionCallback callback) = 0;
 
+  // Called by the QuotaManager.
+  // This can be implemented if a QuotaClient would like to perform a cleanup
+  // step after major deletions.
+  virtual void PerformStorageCleanup(blink::mojom::StorageType type,
+                                     base::OnceClosure callback);
+
   virtual bool DoesSupport(blink::mojom::StorageType type) const = 0;
 };
-
-// TODO(dmikurube): Replace it to std::vector for efficiency.
-using QuotaClientList = std::list<QuotaClient*>;
 
 }  // namespace storage
 

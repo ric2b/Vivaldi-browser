@@ -13,7 +13,7 @@ source_set("public") {
   ]
 
   deps = [
-    "//services/service_manager/embedder",
+    "//services/service_manager/public/cpp",
     "//ui/base",
   ]
 
@@ -21,6 +21,7 @@ source_set("public") {
     "block_types.h",
     "browser_state.h",
     "browser_url_rewriter.h",
+    "browsing_data_removing_util.h",
     "cert_policy.h",
     "certificate_policy_cache.h",
     "crw_navigation_item_storage.h",
@@ -38,7 +39,6 @@ source_set("public") {
     "java_script_dialog_callback.h",
     "java_script_dialog_presenter.h",
     "java_script_dialog_type.h",
-    "load_committed_details.h",
     "navigation_item.h",
     "navigation_item_list.h",
     "navigation_item_list.mm",
@@ -60,12 +60,8 @@ source_set("public") {
     "url_schemes.h",
     "url_schemes.mm",
     "url_util.h",
-    "web_capabilities.cc",
-    "web_capabilities.h",
     "web_client.h",
-    "web_kit_constants.h",
     "web_state/context_menu_params.h",
-    "web_state/form_activity_params.h",
     "web_state/global_web_state_observer.h",
     "web_state/js/crw_js_injection_evaluator.h",
     "web_state/js/crw_js_injection_manager.h",
@@ -76,7 +72,6 @@ source_set("public") {
     "web_state/session_certificate_policy_cache.h",
     "web_state/ui/crw_content_view.h",
     "web_state/ui/crw_context_menu_delegate.h",
-    "web_state/ui/crw_generic_content_view.h",
     "web_state/ui/crw_native_content.h",
     "web_state/ui/crw_native_content_provider.h",
     "web_state/ui/crw_web_view_content_view.h",
@@ -85,6 +80,7 @@ source_set("public") {
     "web_state/url_verification_constants.h",
     "web_state/web_frame.h",
     "web_state/web_frame_user_data.h",
+    "web_state/web_frame_util.h",
     "web_state/web_frames_manager.h",
     "web_state/web_state.h",
     "web_state/web_state_delegate.h",

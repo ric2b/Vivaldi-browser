@@ -29,7 +29,7 @@
 #include "services/network/public/mojom/url_loader_factory.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/core/dom/document_parser_client.h"
-#include "third_party/blink/renderer/core/dom/pausable_object.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/loader/threadable_loader_client.h"
 #include "third_party/blink/renderer/core/xmlhttprequest/xml_http_request_event_target.h"
 #include "third_party/blink/renderer/core/xmlhttprequest/xml_http_request_progress_event_throttle.h"
@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 #include "third_party/blink/renderer/platform/network/encoded_form_data.h"
 #include "third_party/blink/renderer/platform/network/http_header_map.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
@@ -65,26 +66,24 @@ class SharedBuffer;
 class TextResourceDecoder;
 class ThreadableLoader;
 class URLSearchParams;
-class WebDataConsumerHandle;
 class XMLHttpRequestUpload;
 
 class XMLHttpRequest final : public XMLHttpRequestEventTarget,
-                             private ThreadableLoaderClient,
+                             public ThreadableLoaderClient,
                              public DocumentParserClient,
                              public ActiveScriptWrappable<XMLHttpRequest>,
-                             public PausableObject {
+                             public ContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(XMLHttpRequest);
-
-  // In some cases hasPendingActivity doesn't work correctly, i.e.,
-  // doesn't keep |this| alive. We need to cancel the loader in such cases,
-  // which is why we need this pre-finalizer.
-  // TODO(yhirano): Remove this pre-finalizer when the bug is fixed.
-  USING_PRE_FINALIZER(XMLHttpRequest, Dispose);
 
  public:
   static XMLHttpRequest* Create(ScriptState*);
   static XMLHttpRequest* Create(ExecutionContext*);
+
+  XMLHttpRequest(ExecutionContext*,
+                 v8::Isolate*,
+                 bool is_isolated_world,
+                 scoped_refptr<SecurityOrigin>);
   ~XMLHttpRequest() override;
 
   // These exact numeric values are important because JS expects them.
@@ -105,11 +104,9 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
     kResponseTypeArrayBuffer,
   };
 
-  // PausableObject
+  // ContextLifecycleObserver
   void ContextDestroyed(ExecutionContext*) override;
   ExecutionContext* GetExecutionContext() const override;
-  void Pause() override;
-  void Unpause() override;
 
   // ScriptWrappable
   bool HasPendingActivity() const final;
@@ -151,7 +148,9 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
   Document* responseXML(ExceptionState&);
   Blob* ResponseBlob();
   DOMArrayBuffer* ResponseArrayBuffer();
-  unsigned timeout() const { return timeout_.InMilliseconds(); }
+  unsigned timeout() const {
+    return static_cast<unsigned>(timeout_.InMilliseconds());
+  }
   void setTimeout(unsigned timeout, ExceptionState&);
   ResponseTypeCode GetResponseTypeCode() const { return response_type_code_; }
   String responseType();
@@ -165,17 +164,13 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
   XMLHttpRequestUpload* upload();
   bool IsAsync() { return async_; }
 
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(readystatechange);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(readystatechange, kReadystatechange)
 
   void Trace(blink::Visitor*) override;
   const char* NameInHeapSnapshot() const override { return "XMLHttpRequest"; }
 
  private:
   class BlobLoader;
-  XMLHttpRequest(ExecutionContext*,
-                 v8::Isolate*,
-                 bool is_isolated_world,
-                 scoped_refptr<SecurityOrigin>);
 
   Document* GetDocument() const;
 
@@ -185,15 +180,14 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
   const SecurityOrigin* GetSecurityOrigin() const;
   SecurityOrigin* GetMutableSecurityOrigin();
 
-  void DidSendData(unsigned long long bytes_sent,
-                   unsigned long long total_bytes_to_be_sent) override;
+  void DidSendData(uint64_t bytes_sent,
+                   uint64_t total_bytes_to_be_sent) override;
   void DidReceiveResponse(unsigned long identifier,
-                          const ResourceResponse&,
-                          std::unique_ptr<WebDataConsumerHandle>) override;
+                          const ResourceResponse&) override;
   void DidReceiveData(const char* data, unsigned data_length) override;
   // When responseType is set to "blob", didDownloadData() is called instead
   // of didReceiveData().
-  void DidDownloadData(int data_length) override;
+  void DidDownloadData(uint64_t data_length) override;
   void DidDownloadToBlob(scoped_refptr<BlobDataHandle>) override;
   void DidFinishLoading(unsigned long identifier) override;
   void DidFail(const ResourceError&) override;
@@ -223,7 +217,7 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
   AtomicString FinalResponseMIMETypeWithFallback() const;
   // Returns the "final charset" defined in
   // https://xhr.spec.whatwg.org/#final-charset.
-  String FinalResponseCharset() const;
+  WTF::TextEncoding FinalResponseCharset() const;
   bool ResponseIsXML() const;
   bool ResponseIsHTML() const;
 
@@ -313,6 +307,8 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
   AtomicString mime_type_override_;
   TimeDelta timeout_;
   TraceWrapperMember<Blob> response_blob_;
+
+  TaskHandle pending_abort_event_;
 
   Member<ThreadableLoader> loader_;
   State state_ = kUnsent;

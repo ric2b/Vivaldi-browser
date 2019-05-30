@@ -61,51 +61,87 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoader
 
  private:
   class StreamWaiter;
+  enum class Status {
+    kNotStarted,
+    // |binding_| is bound and the fetch event is being dispatched to the
+    // service worker.
+    kStarted,
+    // A redirect happened, waiting for FollowRedirect().
+    kSentRedirect,
+    // The response head has been sent to |url_loader_client_|.
+    kSentHeader,
+    // The data pipe for the response body has been sent to
+    // |url_loader_client_|. The body is being written to the pipe.
+    kSentBody,
+    // OnComplete() was called on |url_loader_client_|, or fallback to network
+    // occurred so the request was not handled.
+    kCompleted,
+  };
 
   void OnConnectionError();
 
   void StartRequest(const network::ResourceRequest& resource_request);
   void DispatchFetchEvent();
-  void OnFetchEventFinished(base::Time request_dispatch_time,
-                            blink::mojom::ServiceWorkerEventStatus status,
-                            base::Time dispatch_event_time);
+  void OnFetchEventFinished(blink::mojom::ServiceWorkerEventStatus status);
   // Called when this loader no longer needs to restart dispatching the fetch
   // event on failure. Null |status| means the event dispatch was not attempted.
   void SettleFetchEventDispatch(
       base::Optional<blink::ServiceWorkerStatusCode> status);
 
   // blink::mojom::ServiceWorkerFetchResponseCallback overrides:
-  void OnResponse(blink::mojom::FetchAPIResponsePtr response,
-                  base::Time dispatch_event_time) override;
+  void OnResponse(
+      blink::mojom::FetchAPIResponsePtr response,
+      blink::mojom::ServiceWorkerFetchEventTimingPtr timing) override;
   void OnResponseStream(
       blink::mojom::FetchAPIResponsePtr response,
       blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
-      base::Time dispatch_event_time) override;
-  void OnFallback(base::Time dispatch_event_time) override;
+      blink::mojom::ServiceWorkerFetchEventTimingPtr timing) override;
+  void OnFallback(
+      blink::mojom::ServiceWorkerFetchEventTimingPtr timing) override;
+
+  void UpdateResponseTiming(
+      blink::mojom::ServiceWorkerFetchEventTimingPtr timing);
 
   void StartResponse(blink::mojom::FetchAPIResponsePtr response,
                      blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream);
 
   // network::mojom::URLLoader overrides:
-  void FollowRedirect(const base::Optional<std::vector<std::string>>&
-                          to_be_removed_request_headers,
-                      const base::Optional<net::HttpRequestHeaders>&
-                          modified_request_headers) override;
+  void FollowRedirect(const std::vector<std::string>& removed_headers,
+                      const net::HttpRequestHeaders& modified_headers,
+                      const base::Optional<GURL>& new_url) override;
   void ProceedWithResponse() override;
   void SetPriority(net::RequestPriority priority,
                    int intra_priority_value) override;
   void PauseReadingBodyFromNet() override;
   void ResumeReadingBodyFromNet() override;
 
+  int StartBlobReading(mojo::ScopedDataPipeConsumerHandle* body_pipe);
   void OnBlobSideDataReadingComplete(
+      mojo::ScopedDataPipeConsumerHandle data_pipe,
       const base::Optional<std::vector<uint8_t>>& metadata);
   void OnBlobReadingComplete(int net_error);
 
   // Calls url_loader_client_->OnReceiveResponse() with |response_head_|.
   void CommitResponseHeaders();
+
+  // Calls url_loader_client_->OnStartLoadingResponseBody() with
+  // |response_body|.
+  void CommitResponseBody(mojo::ScopedDataPipeConsumerHandle response_body);
+
+  // Creates and sends an empty response's body with the net::OK status.
+  // Sends net::ERR_INSUFFICIENT_RESOURCES when it can't be created.
+  void CommitEmptyResponseAndComplete();
+
   // Calls url_loader_client_->OnComplete(). Expected to be called after
   // CommitResponseHeaders (i.e. status_ == kSentHeader).
   void CommitCompleted(int error_code);
+
+  // Record loading milestones. Called after a response is completed or
+  // a request is fall back to network. Never called when an error is
+  // occurred. |handled| is true when a fetch handler handled a request.
+  void RecordTimingMetrics(bool handled);
+
+  void TransitionToStatus(Status new_status);
 
   network::ResourceResponseHead response_head_;
   base::Optional<net::RedirectInfo> redirect_info_;
@@ -119,6 +155,7 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoader
       response_callback_binding_;
   // The blob needs to be held while it's read to keep it alive.
   blink::mojom::BlobPtr body_as_blob_;
+  uint64_t body_as_blob_size_;
 
   scoped_refptr<ControllerServiceWorkerConnector> controller_connector_;
 
@@ -129,6 +166,8 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoader
                  ServiceWorkerSubresourceLoader>
       controller_connector_observer_;
   bool fetch_request_restarted_;
+  bool blob_reading_complete_;
+  bool side_data_reading_complete_;
 
   // These are given by the constructor (as the params for
   // URLLoaderFactory::CreateLoaderAndStart).
@@ -146,16 +185,13 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoader
   // For network fallback.
   scoped_refptr<network::SharedURLLoaderFactory> fallback_factory_;
 
-  enum class Status {
-    kNotStarted,
-    kStarted,
-    kSentHeader,
-    kCompleted,
-  };
   Status status_ = Status::kNotStarted;
 
   // The task runner where this loader is running.
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
+
+  blink::mojom::ServiceWorkerFetchEventTimingPtr fetch_event_timing_;
+  network::mojom::FetchResponseSource response_source_;
 
   base::WeakPtrFactory<ServiceWorkerSubresourceLoader> weak_factory_;
 
@@ -175,9 +211,8 @@ class CONTENT_EXPORT ServiceWorkerSubresourceLoaderFactory
   // default URLLoaderFactory for network fallback. This should be the
   // URLLoaderFactory that directly goes to network without going through
   // any custom URLLoader factories.
-  // |task_runner| is the runner where this loader runs. (We need to pass
-  // this around because calling base::SequencedTaskRunnerHandle is
-  // prohibited in the renderer :()
+  // |task_runner| is the runner where this loader runs. In production it runs,
+  // on a background thread.
   static void Create(
       scoped_refptr<ControllerServiceWorkerConnector> controller_connector,
       scoped_refptr<network::SharedURLLoaderFactory> fallback_factory,

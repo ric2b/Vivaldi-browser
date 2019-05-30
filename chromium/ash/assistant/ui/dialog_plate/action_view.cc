@@ -6,11 +6,9 @@
 
 #include <memory>
 
-#include "ash/assistant/assistant_controller.h"
-#include "ash/assistant/assistant_interaction_controller.h"
+#include "ash/assistant/model/assistant_ui_model.h"
+#include "ash/assistant/ui/assistant_view_delegate.h"
 #include "ash/assistant/ui/logo_view/base_logo_view.h"
-#include "ash/assistant/util/views_util.h"
-#include "ui/views/controls/button/image_button.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 
@@ -19,25 +17,31 @@ namespace ash {
 namespace {
 
 // Appearance.
-constexpr int kIconSizeDip = 22;
+// The desired height for the action view icon is 24dip in mic state to match
+// the static mic button in DialogPlate. The |kMicIcon| resource used for the
+// static button has different internal padding than does that of the icon drawn
+// by LogoView, so we add 2dip for visual consistency.
+constexpr int kIconSizeDip = 26;
 constexpr int kPreferredSizeDip = 32;
 
 }  // namespace
 
 ActionView::ActionView(views::ButtonListener* listener,
-                       AssistantController* assistant_controller)
-    : views::Button(/*listener=*/nullptr),
-      assistant_controller_(assistant_controller),
-      listener_(listener) {
+                       AssistantViewDelegate* delegate,
+                       AssistantButtonId button_id)
+    : AssistantButton(listener, button_id), delegate_(delegate) {
   InitLayout();
 
-  // The Assistant controller indirectly owns the view hierarchy to which
-  // ActionView belongs so is guaranteed to outlive it.
-  assistant_controller_->interaction_controller()->AddModelObserver(this);
+  // The AssistantViewDelegate should outlive ActionView.
+  delegate_->AddInteractionModelObserver(this);
 }
 
 ActionView::~ActionView() {
-  assistant_controller_->interaction_controller()->RemoveModelObserver(this);
+  delegate_->RemoveInteractionModelObserver(this);
+}
+
+const char* ActionView::GetClassName() const {
+  return "ActionView";
 }
 
 gfx::Size ActionView::CalculatePreferredSize() const {
@@ -48,21 +52,8 @@ int ActionView::GetHeightForWidth(int width) const {
   return kPreferredSizeDip;
 }
 
-void ActionView::RequestFocus() {
-  button_->RequestFocus();
-}
-
-void ActionView::ButtonPressed(views::Button* sender, const ui::Event& event) {
-  if (listener_)
-    listener_->ButtonPressed(this, event);
-}
-
 void ActionView::InitLayout() {
   SetLayoutManager(std::make_unique<views::FillLayout>());
-
-  // Button.
-  button_ = assistant::util::CreateButton(this, kPreferredSizeDip);
-  AddChildView(button_);
 
   // Voice action container.
   views::View* voice_action_container_ = new views::View();
@@ -108,12 +99,12 @@ void ActionView::OnSpeechLevelChanged(float speech_level_db) {
 
 void ActionView::UpdateState(bool animate) {
   const AssistantInteractionModel* interaction_model =
-      assistant_controller_->interaction_controller()->model();
+      delegate_->GetInteractionModel();
 
   BaseLogoView::State mic_state;
   switch (interaction_model->mic_state()) {
     case MicState::kClosed:
-      mic_state = BaseLogoView::State::kMicFab;
+      mic_state = BaseLogoView::State::kMic;
       break;
     case MicState::kOpen:
       mic_state = is_user_speaking_ ? BaseLogoView::State::kUserSpeaks
@@ -121,14 +112,6 @@ void ActionView::UpdateState(bool animate) {
       break;
   }
   voice_action_view_->SetState(mic_state, animate);
-}
-
-void ActionView::SetAccessibleName(const base::string16& accessible_name) {
-  button_->SetAccessibleName(accessible_name);
-}
-
-void ActionView::SetFocusBehavior(FocusBehavior focus_behavior) {
-  button_->SetFocusBehavior(focus_behavior);
 }
 
 }  // namespace ash

@@ -384,7 +384,7 @@
   <message name="IDS_PAYMENTS_CARD_AND_ADDRESS_SETTINGS_SIGNED_OUT" desc="Label of the section containing the origin description and the link to go to the settings page for card and address options. This label is used when the user is not signed in." formatter_data="android_java">
     Cards and addresses are from Chrome. You can manage them in <ph name="BEGIN_LINK">BEGIN_LINK</ph>Settings<ph name="END_LINK">END_LINK</ph>.
   </message>
-  <message name="IDS_SETTINGS_CAN_MAKE_PAYMENT_TOGGLE_LABEL" desc="Label of the toggle which disables canMakePayment" formatter_data="android_java">
+  <message name="IDS_SETTINGS_CAN_MAKE_PAYMENT_TOGGLE_LABEL" desc="Label of the toggle which disables canMakePayment and hasEnrolledInstrument" formatter_data="android_java">
     Allow sites to check if you have payment methods saved
   </message>
 
@@ -468,9 +468,6 @@
   </message>
   <message name="IDS_PAYMENTS_VALIDATION_UNSUPPORTED_CREDIT_CARD_TYPE" desc="Message displayed to user when the credit card type (e.g visa, mastercard) is not supported for this transaction.">
     This type of card isn’t supported
-  </message>
-  <message name="IDS_PAYMENTS_VALIDATION_ALREADY_USED_CREDIT_CARD_NUMBER" desc="Message displayed to user when the credit card number they have entered corresponds to an existing credit card number in their user profile.">
-    This card number is already used
   </message>
   <message name="IDS_PAYMENTS_PHONE_INVALID_VALIDATION_MESSAGE" desc="The text that informs the user that the phone number they have entered is not valid." formatter_data="android_java">
     Enter a valid phone number

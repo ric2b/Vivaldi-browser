@@ -14,7 +14,7 @@
 #include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "chromecast/media/cma/backend/audio_fader.h"
-#include "chromecast/media/cma/backend/audio_output_redirector.h"
+#include "chromecast/media/cma/backend/audio_output_redirector_input.h"
 #include "chromecast/media/cma/backend/filter_group.h"
 #include "media/base/audio_bus.h"
 #include "media/base/audio_timestamp_helper.h"
@@ -81,6 +81,11 @@ MixerInput::MixerInput(Source* source,
                              input_samples_per_second_);
   }
 
+  if (output_samples_per_second_ != 0) {
+    // If output_samples_per_second_ is 0, this stream will be unusable.
+    // OnError() will be called shortly.
+    slew_volume_.SetSampleRate(output_samples_per_second_);
+  }
   source_->InitializeAudioPlayback(source_read_size, initial_rendering_delay);
 
   SetFilterGroup(filter_group);
@@ -169,11 +174,11 @@ int MixerInput::FillAudioData(int num_frames,
       filled = 0;
     } else {
       // Smoothly fade in from previous silence.
-      AudioFader::FadeInHelper(dest, filled, filled, filled);
+      AudioFader::FadeInHelper(dest, filled, 0, filled, filled);
     }
   } else if (redirected) {
     // Smoothly fade out to silence, since output is now being redirected.
-    AudioFader::FadeOutHelper(dest, filled, filled, filled);
+    AudioFader::FadeOutHelper(dest, filled, 0, filled, filled);
   }
   previous_ended_in_silence_ = redirected;
   first_buffer_ = false;
@@ -232,7 +237,8 @@ void MixerInput::VolumeScaleAccumulate(const float* src,
                                        int frames,
                                        float* dest) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  slew_volume_.ProcessFMAC(!volume_applied_, src, frames, 1, dest);
+  slew_volume_.ProcessFMAC(volume_applied_ /* repeat_transition */, src, frames,
+                           1, dest);
   volume_applied_ = true;
 }
 

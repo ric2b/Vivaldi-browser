@@ -43,7 +43,7 @@ class BlobUrlBrowserTest : public ContentBrowserTest,
   DISALLOW_COPY_AND_ASSIGN(BlobUrlBrowserTest);
 };
 
-INSTANTIATE_TEST_CASE_P(_, BlobUrlBrowserTest, ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(_, BlobUrlBrowserTest, ::testing::Bool());
 
 IN_PROC_BROWSER_TEST_P(BlobUrlBrowserTest, LinkToUniqueOriginBlob) {
   // Use a data URL to obtain a test page in a unique origin. The page
@@ -74,7 +74,7 @@ IN_PROC_BROWSER_TEST_P(BlobUrlBrowserTest, LinkToUniqueOriginBlob) {
   EXPECT_TRUE(ExecuteScriptAndExtractString(
       new_contents,
       "domAutomationController.send("
-      "    document.origin + ' ' + document.body.innerText);",
+      "    self.origin + ' ' + document.body.innerText);",
       &page_content));
   EXPECT_EQ("null potato", page_content);
 }
@@ -105,7 +105,7 @@ IN_PROC_BROWSER_TEST_P(BlobUrlBrowserTest, LinkToSameOriginBlob) {
   EXPECT_TRUE(ExecuteScriptAndExtractString(
       new_contents,
       "domAutomationController.send("
-      "    document.origin + ' ' + document.body.innerText);",
+      "    self.origin + ' ' + document.body.innerText);",
       &page_content));
   EXPECT_EQ(origin.Serialize() + " potato", page_content);
 }
@@ -137,13 +137,13 @@ IN_PROC_BROWSER_TEST_P(BlobUrlBrowserTest, LinkToSameOriginBlobWithAuthority) {
   EXPECT_FALSE(
       base::MatchPattern(new_contents->GetVisibleURL().spec(), "*spoof*"));
   // The currently implemented behavior is that the URL gets rewritten to
-  // about:blank.
-  EXPECT_EQ("about:blank", new_contents->GetVisibleURL().spec());
+  // about:blank#blocked.
+  EXPECT_EQ(kBlockedURL, new_contents->GetVisibleURL().spec());
   std::string page_content;
   EXPECT_TRUE(ExecuteScriptAndExtractString(
       new_contents,
       "domAutomationController.send("
-      "    document.origin + ' ' + document.body.innerText);",
+      "    self.origin + ' ' + document.body.innerText);",
       &page_content));
   EXPECT_EQ(origin.Serialize() + " ", page_content);  // no potato
 }
@@ -160,7 +160,7 @@ IN_PROC_BROWSER_TEST_P(BlobUrlBrowserTest, ReplaceStateToAddAuthorityToBlob) {
   EXPECT_TRUE(ExecuteScript(
       shell(),
       "var spoof_fn = function () {\n"
-      "  host_port = document.origin.split('://')[1];\n"
+      "  host_port = self.origin.split('://')[1];\n"
       "  spoof_url = 'blob:http://spoof.com@' + host_port + '/abcd';\n"
       "  window.history.replaceState({}, '', spoof_url);\n"
       "};\n"
@@ -177,13 +177,13 @@ IN_PROC_BROWSER_TEST_P(BlobUrlBrowserTest, ReplaceStateToAddAuthorityToBlob) {
       base::MatchPattern(new_contents->GetVisibleURL().spec(), "*spoof*"));
 
   // The currently implemented behavior is that the URL gets rewritten to
-  // about:blank. The content of the page stays the same.
-  EXPECT_EQ("about:blank", new_contents->GetVisibleURL().spec());
+  // about:blank#blocked. The content of the page stays the same.
+  EXPECT_EQ(kBlockedURL, new_contents->GetVisibleURL().spec());
   std::string page_content;
   EXPECT_TRUE(ExecuteScriptAndExtractString(
       new_contents,
       "domAutomationController.send("
-      "    document.origin + ' ' + document.body.innerText);",
+      "    self.origin + ' ' + document.body.innerText);",
       &page_content));
   EXPECT_EQ(origin.Serialize() + " potato", page_content);
 

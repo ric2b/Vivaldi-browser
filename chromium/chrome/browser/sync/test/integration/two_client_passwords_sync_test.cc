@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include <limits>
+#include <tuple>
 
 #include "base/guid.h"
 #include "base/hash.h"
@@ -16,6 +17,8 @@
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sync_integration_test_util.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
+#include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
+#include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/engine/cycle/sync_cycle_snapshot.h"
 #include "components/sync/engine/model_safe_worker.h"
 
@@ -23,6 +26,7 @@ using passwords_helper::AddLogin;
 using passwords_helper::AllProfilesContainSamePasswordForms;
 using passwords_helper::AllProfilesContainSamePasswordFormsAsVerifier;
 using passwords_helper::CreateTestPasswordForm;
+using passwords_helper::GetLogins;
 using passwords_helper::GetPasswordCount;
 using passwords_helper::GetPasswordStore;
 using passwords_helper::GetVerifierPasswordCount;
@@ -35,18 +39,62 @@ using autofill::PasswordForm;
 
 static const char* kValidPassphrase = "passphrase!";
 
-class TwoClientPasswordsSyncTest : public SyncTest {
+class TwoClientPasswordsSyncTest
+    : public testing::WithParamInterface<std::tuple<bool, bool>>,
+      public SyncTest {
  public:
   TwoClientPasswordsSyncTest() : SyncTest(TWO_CLIENT) {}
+
   ~TwoClientPasswordsSyncTest() override {}
 
   bool TestUsesSelfNotifications() override { return false; }
 
+ protected:
+  // TODO(crbug.com/915219): This leads to a data race and thus all tests here
+  // are disabled on TSan. It is hard to avoid as overriding g_feature_list
+  // after it has been used is needed for this test (by setting up each client
+  // with a different ScopedFeatureList).
+  void BeforeSetupClient(int index) override {
+    const bool should_enable_uss =
+        index == 0 ? std::get<0>(GetParam()) : std::get<1>(GetParam());
+
+    // In order to avoid test flakiness, for any client other than the first, we
+    // need to make sure the feature toggle has been fully read by PasswordStore
+    // before overriding it again. The way to achieve that, for the current
+    // implementation of PasswordStore, is to make a round trip to the backend
+    // sequence, which guarantees that initialization has completed.
+    if (index != 0) {
+      // We ignore the returned value since all we want is to wait for the
+      // round trip to be completed.
+      GetPasswordCount(index - 1);
+    }
+
+    // The value of the feature kSyncUSSPasswords only matters during the
+    // setup of each client, when the profile is created, ProfileSyncService
+    // instantiated as well as the datatype controllers. By overriding the
+    // feature, we can influence whether client |index| is running with the new
+    // codepath or the legacy one.
+    override_features_ = std::make_unique<base::test::ScopedFeatureList>();
+    if (should_enable_uss) {
+      override_features_->InitAndEnableFeature(switches::kSyncUSSPasswords);
+    } else {
+      override_features_->InitAndDisableFeature(switches::kSyncUSSPasswords);
+    }
+  }
+
  private:
+  std::unique_ptr<base::test::ScopedFeatureList> override_features_;
+
   DISALLOW_COPY_AND_ASSIGN(TwoClientPasswordsSyncTest);
 };
 
-IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, E2E_ENABLED(Add)) {
+// Flaky on TSAN: crbug.com/915219
+#if defined(THREAD_SANITIZER)
+#define MAYBE_Add DISABLED_Add
+#else
+#define MAYBE_Add Add
+#endif
+IN_PROC_BROWSER_TEST_P(TwoClientPasswordsSyncTest, E2E_ENABLED(MAYBE_Add)) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(SamePasswordFormsChecker().Wait());
 
@@ -58,7 +106,13 @@ IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, E2E_ENABLED(Add)) {
   ASSERT_EQ(1, GetPasswordCount(1));
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, E2E_ENABLED(Race)) {
+// Flaky on TSAN: crbug.com/915219
+#if defined(THREAD_SANITIZER)
+#define MAYBE_Race DISABLED_Race
+#else
+#define MAYBE_Race Race
+#endif
+IN_PROC_BROWSER_TEST_P(TwoClientPasswordsSyncTest, E2E_ENABLED(MAYBE_Race)) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllProfilesContainSamePasswordForms());
 
@@ -72,22 +126,74 @@ IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, E2E_ENABLED(Race)) {
   ASSERT_TRUE(SamePasswordFormsChecker().Wait());
 }
 
-// Disabled due to flakiness on Chrome OS: https://crbug.com/873494.
-#if defined(OS_CHROMEOS)
+// Flaky on TSAN: crbug.com/915219
+#if defined(THREAD_SANITIZER)
+#define MAYBE_MergeWithTheMostRecent DISABLED_MergeWithTheMostRecent
+#else
+#define MAYBE_MergeWithTheMostRecent MergeWithTheMostRecent
+#endif
+IN_PROC_BROWSER_TEST_P(TwoClientPasswordsSyncTest,
+                       E2E_ENABLED(MAYBE_MergeWithTheMostRecent)) {
+  // Setup the test to have Form 0 and Form 1 added on both clients. Form 0 is
+  // more recent on Client 0, and Form 1 is more recent on Client 1. They should
+  // be merged such that recent passwords are chosen.
+
+  base::Time now = base::Time::Now();
+  base::Time yesterday = now - base::TimeDelta::FromDays(1);
+
+  PasswordForm form0_recent = CreateTestPasswordForm(0);
+  form0_recent.date_created = now;
+  PasswordForm form0_old = CreateTestPasswordForm(0);
+  form0_old.date_created = yesterday;
+
+  PasswordForm form1_recent = CreateTestPasswordForm(1);
+  form1_recent.date_created = now;
+  PasswordForm form1_old = CreateTestPasswordForm(1);
+  form1_old.date_created = yesterday;
+
+  ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
+
+  // Add the passwords to Client 0.
+  AddLogin(GetPasswordStore(0), form0_recent);
+  AddLogin(GetPasswordStore(0), form1_old);
+  // Enable sync on Client 0 and wait until they are committed.
+  ASSERT_TRUE(GetClient(0)->SetupSync()) << "GetClient(0)->SetupSync() failed.";
+  ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
+
+  // Add the passwords to Client 1.
+  AddLogin(GetPasswordStore(1), form0_old);
+  AddLogin(GetPasswordStore(1), form1_recent);
+
+  // Enable sync on Client 1 and wait until all passwords are merged.
+  ASSERT_TRUE(GetClient(1)->SetupSync()) << "GetClient(1)->SetupSync() failed.";
+  ASSERT_TRUE(SamePasswordFormsChecker().Wait());
+
+  // There should be only 2 passwords.
+  EXPECT_EQ(2, GetPasswordCount(0));
+  // All passwords should be the recent ones.
+  for (const std::unique_ptr<PasswordForm>& form :
+       GetLogins(GetPasswordStore(0))) {
+    EXPECT_EQ(now, form->date_created);
+  }
+}
+
+// Flaky on TSAN: crbug.com/915219
+#if defined(THREAD_SANITIZER)
 #define MAYBE_SetPassphraseAndAddPassword DISABLED_SetPassphraseAndAddPassword
 #else
 #define MAYBE_SetPassphraseAndAddPassword SetPassphraseAndAddPassword
 #endif
-IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest,
+IN_PROC_BROWSER_TEST_P(TwoClientPasswordsSyncTest,
                        E2E_ENABLED(MAYBE_SetPassphraseAndAddPassword)) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
-  GetSyncService(0)->SetEncryptionPassphrase(
-      kValidPassphrase, browser_sync::ProfileSyncService::EXPLICIT);
+  GetSyncService(0)->GetUserSettings()->SetEncryptionPassphrase(
+      kValidPassphrase);
   ASSERT_TRUE(PassphraseAcceptedChecker(GetSyncService(0)).Wait());
 
   ASSERT_TRUE(PassphraseRequiredChecker(GetSyncService(1)).Wait());
-  ASSERT_TRUE(GetSyncService(1)->SetDecryptionPassphrase(kValidPassphrase));
+  ASSERT_TRUE(GetSyncService(1)->GetUserSettings()->SetDecryptionPassphrase(
+      kValidPassphrase));
   ASSERT_TRUE(PassphraseAcceptedChecker(GetSyncService(1)).Wait());
 
   PasswordForm form = CreateTestPasswordForm(0);
@@ -97,7 +203,13 @@ IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest,
   ASSERT_TRUE(SamePasswordFormsChecker().Wait());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, Update) {
+// Flaky on TSAN: crbug.com/915219
+#if defined(THREAD_SANITIZER)
+#define MAYBE_Update DISABLED_Update
+#else
+#define MAYBE_Update Update
+#endif
+IN_PROC_BROWSER_TEST_P(TwoClientPasswordsSyncTest, MAYBE_Update) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllProfilesContainSamePasswordFormsAsVerifier());
 
@@ -118,7 +230,13 @@ IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, Update) {
   ASSERT_TRUE(AllProfilesContainSamePasswordFormsAsVerifier());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, Delete) {
+// Flaky on TSAN: crbug.com/915219
+#if defined(THREAD_SANITIZER)
+#define MAYBE_Delete DISABLED_Delete
+#else
+#define MAYBE_Delete Delete
+#endif
+IN_PROC_BROWSER_TEST_P(TwoClientPasswordsSyncTest, MAYBE_Delete) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllProfilesContainSamePasswordFormsAsVerifier());
 
@@ -141,23 +259,31 @@ IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, Delete) {
   ASSERT_TRUE(AllProfilesContainSamePasswordFormsAsVerifier());
 }
 
-// https://crbug.com/874929, flaky on all platform.
-IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest,
-                       DISABLED_SetPassphraseAndThenSetupSync) {
+// Flaky on TSAN: crbug.com/915219
+#if defined(THREAD_SANITIZER)
+#define MAYBE_SetPassphraseAndThenSetupSync \
+  DISABLED_SetPassphraseAndThenSetupSync
+#else
+#define MAYBE_SetPassphraseAndThenSetupSync SetPassphraseAndThenSetupSync
+#endif
+IN_PROC_BROWSER_TEST_P(TwoClientPasswordsSyncTest,
+                       MAYBE_SetPassphraseAndThenSetupSync) {
   ASSERT_TRUE(SetupClients());
 
   ASSERT_TRUE(GetClient(0)->SetupSync());
-  GetSyncService(0)->SetEncryptionPassphrase(
-      kValidPassphrase, browser_sync::ProfileSyncService::EXPLICIT);
+  GetSyncService(0)->GetUserSettings()->SetEncryptionPassphrase(
+      kValidPassphrase);
   ASSERT_TRUE(PassphraseAcceptedChecker(GetSyncService(0)).Wait());
 
   // When client 1 hits a passphrase required state, we can infer that
   // client 0's passphrase has been committed. to the server.
-  ASSERT_FALSE(GetClient(1)->SetupSync());
+  ASSERT_TRUE(GetClient(1)->SetupSyncNoWaitForCompletion(
+      syncer::UserSelectableTypes()));
   ASSERT_TRUE(PassphraseRequiredChecker(GetSyncService(1)).Wait());
 
   // Get client 1 out of the passphrase required state.
-  ASSERT_TRUE(GetSyncService(1)->SetDecryptionPassphrase(kValidPassphrase));
+  ASSERT_TRUE(GetSyncService(1)->GetUserSettings()->SetDecryptionPassphrase(
+      kValidPassphrase));
   ASSERT_TRUE(PassphraseAcceptedChecker(GetSyncService(1)).Wait());
 
   // We must mark the setup complete now, since we just entered the passphrase
@@ -171,7 +297,13 @@ IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest,
   ASSERT_TRUE(SamePasswordFormsChecker().Wait());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, E2E_ONLY(Delete)) {
+// Flaky on TSAN: crbug.com/915219
+#if defined(THREAD_SANITIZER)
+#define MAYBE_DeleteTwo DISABLED_DeleteTwo
+#else
+#define MAYBE_DeleteTwo DeleteTwo
+#endif
+IN_PROC_BROWSER_TEST_P(TwoClientPasswordsSyncTest, E2E_ONLY(MAYBE_DeleteTwo)) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllProfilesContainSamePasswordForms());
 
@@ -199,7 +331,13 @@ IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, E2E_ONLY(Delete)) {
   ASSERT_EQ(init_password_count - 2, GetPasswordCount(0));
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, DeleteAll) {
+// Flaky on TSAN: crbug.com/915219
+#if defined(THREAD_SANITIZER)
+#define MAYBE_DeleteAll DISABLED_DeleteAll
+#else
+#define MAYBE_DeleteAll DeleteAll
+#endif
+IN_PROC_BROWSER_TEST_P(TwoClientPasswordsSyncTest, MAYBE_DeleteAll) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllProfilesContainSamePasswordFormsAsVerifier());
 
@@ -219,7 +357,13 @@ IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, DeleteAll) {
   ASSERT_EQ(0, GetVerifierPasswordCount());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, E2E_ENABLED(Merge)) {
+// Flaky on TSAN: crbug.com/915219
+#if defined(THREAD_SANITIZER)
+#define MAYBE_Merge DISABLED_Merge
+#else
+#define MAYBE_Merge Merge
+#endif
+IN_PROC_BROWSER_TEST_P(TwoClientPasswordsSyncTest, E2E_ENABLED(MAYBE_Merge)) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllProfilesContainSamePasswordForms());
 
@@ -234,7 +378,14 @@ IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, E2E_ENABLED(Merge)) {
   ASSERT_EQ(3, GetPasswordCount(0));
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, E2E_ONLY(TwoClientAddPass)) {
+// Flaky on TSAN: crbug.com/915219
+#if defined(THREAD_SANITIZER)
+#define MAYBE_TwoClientAddPass DISABLED_TwoClientAddPass
+#else
+#define MAYBE_TwoClientAddPass TwoClientAddPass
+#endif
+IN_PROC_BROWSER_TEST_P(TwoClientPasswordsSyncTest,
+                       E2E_ONLY(MAYBE_TwoClientAddPass)) {
   ASSERT_TRUE(SetupSync()) <<  "SetupSync() failed.";
   // All profiles should sync same passwords.
   ASSERT_TRUE(SamePasswordFormsChecker().Wait())
@@ -257,3 +408,11 @@ IN_PROC_BROWSER_TEST_F(TwoClientPasswordsSyncTest, E2E_ONLY(TwoClientAddPass)) {
         "Total password count is wrong.";
   }
 }
+
+// We instantiate every test 4 times, for every combination of USS being enabled
+// in individual clients. This verifies backward-compatibility between the two
+// implementations.
+INSTANTIATE_TEST_SUITE_P(USS,
+                         TwoClientPasswordsSyncTest,
+                         ::testing::Combine(::testing::Values(false, true),
+                                            ::testing::Values(false, true)));

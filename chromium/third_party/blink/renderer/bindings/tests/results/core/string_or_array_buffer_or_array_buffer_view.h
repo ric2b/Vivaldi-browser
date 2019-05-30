@@ -8,8 +8,8 @@
 // DO NOT MODIFY!
 
 // clang-format off
-#ifndef StringOrArrayBufferOrArrayBufferView_h
-#define StringOrArrayBufferOrArrayBufferView_h
+#ifndef THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_CORE_STRING_OR_ARRAY_BUFFER_OR_ARRAY_BUFFER_VIEW_H_
+#define THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_CORE_STRING_OR_ARRAY_BUFFER_OR_ARRAY_BUFFER_VIEW_H_
 
 #include "base/optional.h"
 #include "third_party/blink/renderer/bindings/core/v8/dictionary.h"
@@ -27,7 +27,7 @@ namespace blink {
 class TestArrayBuffer;
 
 class CORE_EXPORT StringOrArrayBufferOrArrayBufferView final {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
  public:
   StringOrArrayBufferOrArrayBufferView();
   bool IsNull() const { return type_ == SpecificType::kNone; }
@@ -102,6 +102,6 @@ struct V8TypeOf<StringOrArrayBufferOrArrayBufferView> {
 // items that can initialize with memset or have a vtable. It is safe to
 // set canInitializeWithMemset=true for a union type object in practice.
 // See https://codereview.chromium.org/1118993002/#msg5 for more details.
-WTF_ALLOW_MOVE_AND_INIT_WITH_MEM_FUNCTIONS(blink::StringOrArrayBufferOrArrayBufferView);
+WTF_ALLOW_MOVE_AND_INIT_WITH_MEM_FUNCTIONS(blink::StringOrArrayBufferOrArrayBufferView)
 
-#endif  // StringOrArrayBufferOrArrayBufferView_h
+#endif  // THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_CORE_STRING_OR_ARRAY_BUFFER_OR_ARRAY_BUFFER_VIEW_H_

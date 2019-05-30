@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/values.h"
 #include "tools/gn/err.h"
 #include "tools/gn/token.h"
 #include "tools/gn/value.h"
@@ -28,6 +29,14 @@ class ListNode;
 class LiteralNode;
 class Scope;
 class UnaryOpNode;
+
+// Dictionary keys used for JSON-formatted tree dump.
+extern const char kJsonNodeChild[];
+extern const char kJsonNodeType[];
+extern const char kJsonNodeValue[];
+extern const char kJsonBeforeComment[];
+extern const char kJsonSuffixComment[];
+extern const char kJsonAfterComment[];
 
 class Comments {
  public:
@@ -92,15 +101,24 @@ class ParseNode {
       const std::string& msg,
       const std::string& help = std::string()) const = 0;
 
-  // Prints a representation of this node to the given string, indenting
-  // by the given number of spaces.
-  virtual void Print(std::ostream& out, int indent) const = 0;
+  // Generates a representation of this node in base::Value, to be used for
+  // exporting the tree as a JSON or formatted text with indents.
+  virtual base::Value GetJSONNode() const = 0;
 
   const Comments* comments() const { return comments_.get(); }
   Comments* comments_mutable();
-  void PrintComments(std::ostream& out, int indent) const;
+
+ protected:
+  // Helper functions for GetJSONNode. Creates and fills a Value object with
+  // given type (and value).
+  base::Value CreateJSONNode(const char* type) const;
+  base::Value CreateJSONNode(const char* type, const base::StringPiece& value)
+      const;
 
  private:
+  // Helper function for CreateJSONNode.
+  void AddCommentsJSONNodes(base::Value* out_value) const;
+
   std::unique_ptr<Comments> comments_;
 
   DISALLOW_COPY_AND_ASSIGN(ParseNode);
@@ -142,7 +160,7 @@ class AccessorNode : public ParseNode {
   Err MakeErrorDescribing(
       const std::string& msg,
       const std::string& help = std::string()) const override;
-  void Print(std::ostream& out, int indent) const override;
+  base::Value GetJSONNode() const override;
 
   // Base is the thing on the left of the [] or dot, currently always required
   // to be an identifier token.
@@ -196,7 +214,7 @@ class BinaryOpNode : public ParseNode {
   Err MakeErrorDescribing(
       const std::string& msg,
       const std::string& help = std::string()) const override;
-  void Print(std::ostream& out, int indent) const override;
+  base::Value GetJSONNode() const override;
 
   const Token& op() const { return op_; }
   void set_op(const Token& t) { op_ = t; }
@@ -241,7 +259,7 @@ class BlockNode : public ParseNode {
   Err MakeErrorDescribing(
       const std::string& msg,
       const std::string& help = std::string()) const override;
-  void Print(std::ostream& out, int indent) const override;
+  base::Value GetJSONNode() const override;
 
   void set_begin_token(const Token& t) { begin_token_ = t; }
   void set_end(std::unique_ptr<EndNode> e) { end_ = std::move(e); }
@@ -282,7 +300,7 @@ class ConditionNode : public ParseNode {
   Err MakeErrorDescribing(
       const std::string& msg,
       const std::string& help = std::string()) const override;
-  void Print(std::ostream& out, int indent) const override;
+  base::Value GetJSONNode() const override;
 
   void set_if_token(const Token& token) { if_token_ = token; }
 
@@ -323,7 +341,7 @@ class FunctionCallNode : public ParseNode {
   Err MakeErrorDescribing(
       const std::string& msg,
       const std::string& help = std::string()) const override;
-  void Print(std::ostream& out, int indent) const override;
+  base::Value GetJSONNode() const override;
 
   const Token& function() const { return function_; }
   void set_function(Token t) { function_ = t; }
@@ -333,6 +351,8 @@ class FunctionCallNode : public ParseNode {
 
   const BlockNode* block() const { return block_.get(); }
   void set_block(std::unique_ptr<BlockNode> b) { block_ = std::move(b); }
+
+  void SetNewLocation(int line_number);
 
  private:
   Token function_;
@@ -356,7 +376,7 @@ class IdentifierNode : public ParseNode {
   Err MakeErrorDescribing(
       const std::string& msg,
       const std::string& help = std::string()) const override;
-  void Print(std::ostream& out, int indent) const override;
+  base::Value GetJSONNode() const override;
 
   const Token& value() const { return value_; }
   void set_value(const Token& t) { value_ = t; }
@@ -382,9 +402,10 @@ class ListNode : public ParseNode {
   Err MakeErrorDescribing(
       const std::string& msg,
       const std::string& help = std::string()) const override;
-  void Print(std::ostream& out, int indent) const override;
+  base::Value GetJSONNode() const override;
 
   void set_begin_token(const Token& t) { begin_token_ = t; }
+  const Token& Begin() const { return begin_token_; }
   void set_end(std::unique_ptr<EndNode> e) { end_ = std::move(e); }
   const EndNode* End() const { return end_.get(); }
 
@@ -443,7 +464,7 @@ class LiteralNode : public ParseNode {
   Err MakeErrorDescribing(
       const std::string& msg,
       const std::string& help = std::string()) const override;
-  void Print(std::ostream& out, int indent) const override;
+  base::Value GetJSONNode() const override;
 
   const Token& value() const { return value_; }
   void set_value(const Token& t) { value_ = t; }
@@ -469,7 +490,7 @@ class UnaryOpNode : public ParseNode {
   Err MakeErrorDescribing(
       const std::string& msg,
       const std::string& help = std::string()) const override;
-  void Print(std::ostream& out, int indent) const override;
+  base::Value GetJSONNode() const override;
 
   const Token& op() const { return op_; }
   void set_op(const Token& t) { op_ = t; }
@@ -504,7 +525,7 @@ class BlockCommentNode : public ParseNode {
   Err MakeErrorDescribing(
       const std::string& msg,
       const std::string& help = std::string()) const override;
-  void Print(std::ostream& out, int indent) const override;
+  base::Value GetJSONNode() const override;
 
   const Token& comment() const { return comment_; }
   void set_comment(const Token& t) { comment_ = t; }
@@ -532,7 +553,7 @@ class EndNode : public ParseNode {
   Err MakeErrorDescribing(
       const std::string& msg,
       const std::string& help = std::string()) const override;
-  void Print(std::ostream& out, int indent) const override;
+  base::Value GetJSONNode() const override;
 
   const Token& value() const { return value_; }
   void set_value(const Token& t) { value_ = t; }

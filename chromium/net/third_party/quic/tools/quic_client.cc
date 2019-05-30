@@ -9,9 +9,7 @@
 #include <string.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
-#include <unistd.h>
 
-#include "base/run_loop.h"
 #include "net/third_party/quic/core/crypto/quic_random.h"
 #include "net/third_party/quic/core/http/spdy_utils.h"
 #include "net/third_party/quic/core/quic_connection.h"
@@ -30,16 +28,12 @@
 #define SO_RXQ_OVFL 40
 #endif
 
-// TODO(rtenneti): Add support for MMSG_MORE.
-#define MMSG_MORE 0
-using std::string;
-
 namespace quic {
 
 QuicClient::QuicClient(QuicSocketAddress server_address,
                        const QuicServerId& server_id,
                        const ParsedQuicVersionVector& supported_versions,
-                       net::EpollServer* epoll_server,
+                       QuicEpollServer* epoll_server,
                        std::unique_ptr<ProofVerifier> proof_verifier)
     : QuicClient(
           server_address,
@@ -54,7 +48,7 @@ QuicClient::QuicClient(
     QuicSocketAddress server_address,
     const QuicServerId& server_id,
     const ParsedQuicVersionVector& supported_versions,
-    net::EpollServer* epoll_server,
+    QuicEpollServer* epoll_server,
     std::unique_ptr<QuicClientEpollNetworkHelper> network_helper,
     std::unique_ptr<ProofVerifier> proof_verifier)
     : QuicClient(server_address,
@@ -70,7 +64,7 @@ QuicClient::QuicClient(
     const QuicServerId& server_id,
     const ParsedQuicVersionVector& supported_versions,
     const QuicConfig& config,
-    net::EpollServer* epoll_server,
+    QuicEpollServer* epoll_server,
     std::unique_ptr<QuicClientEpollNetworkHelper> network_helper,
     std::unique_ptr<ProofVerifier> proof_verifier)
     : QuicSpdyClientBase(
@@ -87,10 +81,11 @@ QuicClient::QuicClient(
 QuicClient::~QuicClient() = default;
 
 std::unique_ptr<QuicSession> QuicClient::CreateQuicClientSession(
+    const ParsedQuicVersionVector& supported_versions,
     QuicConnection* connection) {
   return QuicMakeUnique<QuicSimpleClientSession>(
-      *config(), connection, server_id(), crypto_config(), push_promise_index(),
-      drop_response_body_);
+      *config(), supported_versions, connection, server_id(), crypto_config(),
+      push_promise_index(), drop_response_body_);
 }
 
 QuicClientEpollNetworkHelper* QuicClient::epoll_network_helper() {

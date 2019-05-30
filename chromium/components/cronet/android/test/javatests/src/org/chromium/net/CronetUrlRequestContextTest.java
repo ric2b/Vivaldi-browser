@@ -921,7 +921,7 @@ public class CronetUrlRequestContextTest {
     }
 
     private boolean hasBytesInNetLog(File logFile) throws Exception {
-        return containsStringInNetLog(logFile, "\"hex_encoded_bytes\"");
+        return containsStringInNetLog(logFile, "\"bytes\"");
     }
 
     private boolean containsStringInNetLog(File logFile, String content) throws Exception {
@@ -1252,7 +1252,7 @@ public class CronetUrlRequestContextTest {
     private static native void nativeVerifyUrlRequestContextConfig(long config, String storagePath);
 
     private static class TestBadLibraryLoader extends CronetEngine.Builder.LibraryLoader {
-        private boolean mWasCalled = false;
+        private boolean mWasCalled;
 
         @Override
         public void loadLibrary(String libName) {

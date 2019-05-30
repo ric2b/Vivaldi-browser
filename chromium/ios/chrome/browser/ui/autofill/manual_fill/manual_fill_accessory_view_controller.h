@@ -7,26 +7,51 @@
 
 #import <UIKit/UIKit.h>
 
+namespace manual_fill {
+
+// Accessibility identifier of the keyboard button.
+extern NSString* const AccessoryKeyboardAccessibilityIdentifier;
+// Accessibility identifier of the password button.
+extern NSString* const AccessoryPasswordAccessibilityIdentifier;
+// Accessibility identifier of the address button.
+extern NSString* const AccessoryAddressAccessibilityIdentifier;
+// Accessibility identifier of the credit card button.
+extern NSString* const AccessoryCreditCardAccessibilityIdentifier;
+
+}  // namespace manual_fill
+
 // Protocol to handle user interactions in a ManualFillAccessoryViewController.
 @protocol ManualFillAccessoryViewControllerDelegate
 
 // Invoked after the user touches the `accounts` button.
-- (void)accountButtonPressed;
+- (void)accountButtonPressed:(UIButton*)sender;
 
 // Invoked after the user touches the `credit cards` button.
-- (void)cardButtonPressed;
+- (void)cardButtonPressed:(UIButton*)sender;
 
 // Invoked after the user touches the `keyboard` button.
 - (void)keyboardButtonPressed;
 
 // Invoked after the user touches the `passwords` button.
-- (void)passwordButtonPressed;
+- (void)passwordButtonPressed:(UIButton*)sender;
 
 @end
 
 // This view contains the icons to activate "Manual Fill". It is meant to be
 // shown above the keyboard on iPhone and above the manual fill view.
 @interface ManualFillAccessoryViewController : UIViewController
+
+// Changing this property hides and shows the address button.
+@property(nonatomic, assign, getter=isAddressButtonHidden)
+    BOOL addressButtonHidden;
+
+// Changing this property hides and shows the credit card button.
+@property(nonatomic, assign, getter=isCreditCardButtonHidden)
+    BOOL creditCardButtonHidden;
+
+// Changing this property hides and shows the password button.
+@property(nonatomic, assign, getter=isPasswordButtonHidden)
+    BOOL passwordButtonHidden;
 
 // Instances an object with the desired delegate.
 //
@@ -44,7 +69,7 @@
 
 // Resets to the original state, with the keyboard icon hidden and no icon
 // selected.
-- (void)reset;
+- (void)resetAnimated:(BOOL)animated;
 
 @end
 

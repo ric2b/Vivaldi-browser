@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/location.h"
 #include "base/metrics/user_metrics.h"
 #include "base/single_thread_task_runner.h"
@@ -24,6 +25,7 @@
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/api/tab_capture/tab_capture_registry.h"
+#include "chrome/browser/plugins/flash_temporary_permission_tracker.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -31,6 +33,7 @@
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 
+#include "app/vivaldi_apptools.h"
 #include "extensions/helper/vivaldi_app_helper.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 
@@ -63,6 +66,12 @@ static std::string PermissionTypeToString(WebViewPermissionType type) {
       return webview::kPermissionTypeNewWindow;
     case WEB_VIEW_PERMISSION_TYPE_POINTER_LOCK:
       return webview::kPermissionTypePointerLock;
+    case WEB_VIEW_PERMISSION_TYPE_CAMERA:
+      return "camera";
+    case WEB_VIEW_PERMISSION_TYPE_MICROPHONE:
+      return "microphone";
+    case WEB_VIEW_PERMISSION_TYPE_MICROPHONE_AND_CAMERA:
+      return "microphone_and_camera";
     default:
       NOTREACHED();
       return std::string();
@@ -231,12 +240,12 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
     content::MediaResponseCallback callback) {
   // Vivaldi
   // If this is a TabCast request.
-  if (request.video_type == content::MEDIA_GUM_TAB_VIDEO_CAPTURE ||
-      request.audio_type == content::MEDIA_GUM_TAB_AUDIO_CAPTURE) {
+  if (request.video_type == blink::MEDIA_GUM_TAB_VIDEO_CAPTURE ||
+      request.audio_type == blink::MEDIA_GUM_TAB_AUDIO_CAPTURE) {
     // Only allow the stable Google cast component extension...
     std::string extension_id = request.security_origin.host();
     if (extension_id == extension_misc::kMediaRouterStableExtensionId) {
-      content::MediaStreamDevices devices;
+      blink::MediaStreamDevices devices;
       extensions::TabCaptureRegistry* const tab_capture_registry =
           extensions::TabCaptureRegistry::Get(source->GetBrowserContext());
       // and doublecheck that this came from the correct renderer.
@@ -244,23 +253,23 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
           tab_capture_registry->VerifyRequest(request.render_process_id,
                                               request.render_frame_id,
                                               extension_id)) {
-        if (request.audio_type == content::MEDIA_GUM_TAB_AUDIO_CAPTURE) {
+        if (request.audio_type == blink::MEDIA_GUM_TAB_AUDIO_CAPTURE) {
           devices.push_back(
-              content::MediaStreamDevice(content::MEDIA_GUM_TAB_AUDIO_CAPTURE,
-                                         std::string(), std::string()));
+              blink::MediaStreamDevice(blink::MEDIA_GUM_TAB_AUDIO_CAPTURE,
+                                       std::string(), std::string()));
         }
-        if (request.video_type == content::MEDIA_GUM_TAB_VIDEO_CAPTURE) {
+        if (request.video_type == blink::MEDIA_GUM_TAB_VIDEO_CAPTURE) {
           devices.push_back(
-              content::MediaStreamDevice(content::MEDIA_GUM_TAB_VIDEO_CAPTURE,
-                                         std::string(), std::string()));
+              blink::MediaStreamDevice(blink::MEDIA_GUM_TAB_VIDEO_CAPTURE,
+                                       std::string(), std::string()));
         }
       }
-      content::MediaStreamRequestResult result =
-          content::MEDIA_DEVICE_INVALID_STATE;
+      blink::MediaStreamRequestResult result =
+          blink::MEDIA_DEVICE_INVALID_STATE;
 
       std::unique_ptr<content::MediaStreamUI> ui;
       if (!devices.empty()) {
-        result = content::MEDIA_DEVICE_OK;
+        result = blink::MEDIA_DEVICE_OK;
         ui = MediaCaptureDevicesDispatcher::GetInstance()
           ->GetMediaStreamCaptureIndicator()
           ->RegisterMediaStream(source, devices);
@@ -280,7 +289,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
     ContentSetting audio_setting = CONTENT_SETTING_DEFAULT;
     ContentSetting camera_setting = CONTENT_SETTING_DEFAULT;
 
-    if (request.audio_type != content::MEDIA_NO_SERVICE) {
+    if (request.audio_type != blink::MEDIA_NO_SERVICE) {
       audio_setting = HostContentSettingsMapFactory::GetForProfile(profile)->
         GetContentSetting(
             request.security_origin, GURL(),
@@ -289,7 +298,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
           audio_setting != CONTENT_SETTING_BLOCK)
         break;
     }
-    if (request.video_type  != content::MEDIA_NO_SERVICE) {
+    if (request.video_type  != blink::MEDIA_NO_SERVICE) {
       camera_setting = HostContentSettingsMapFactory::GetForProfile(profile)->
         GetContentSetting(
             request.security_origin, GURL(),
@@ -299,28 +308,13 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
         break;
     }
 
-    extensions::VivaldiPrivateTabObserver* private_tab =
-        extensions::VivaldiPrivateTabObserver::FromWebContents(source);
-    if (private_tab) {
-      // Since webview uses a combined permission called "media" we block this
-      // if any of CAMERA or MICROPHONE is denied.
-      ContentSetting setting_access = (audio_setting == CONTENT_SETTING_BLOCK ||
-                                       camera_setting == CONTENT_SETTING_BLOCK)
-                                          ? CONTENT_SETTING_BLOCK
-                                          : CONTENT_SETTING_ALLOW;
-
-      private_tab->OnPermissionAccessed(
-          CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
-          request.security_origin.spec(), setting_access);
-    }
-
     // Only default (not requested), allow and block allowed.
     // Others are "always ask".
     if (audio_setting == CONTENT_SETTING_BLOCK ||
         camera_setting == CONTENT_SETTING_BLOCK) {
-      std::move(callback).Run(content::MediaStreamDevices(),
-                   content::MEDIA_DEVICE_PERMISSION_DENIED,
-                   std::unique_ptr<content::MediaStreamUI>());
+      std::move(callback).Run(blink::MediaStreamDevices(),
+                              blink::MEDIA_DEVICE_PERMISSION_DENIED,
+                              std::unique_ptr<content::MediaStreamUI>());
       return;
     }
     if (audio_setting == CONTENT_SETTING_ALLOW ||
@@ -333,13 +327,27 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
               std::move(callback));
       return;
     }
-  } while(false);
+  } while (false);
+
+  WebViewPermissionType request_type = WEB_VIEW_PERMISSION_TYPE_MEDIA;
+
+  if (::vivaldi::IsVivaldiRunning()) {
+    // camera , microphone and microphone_and_camera
+    if (request.audio_type == blink::MEDIA_DEVICE_AUDIO_CAPTURE &&
+        request.video_type == blink::MEDIA_DEVICE_VIDEO_CAPTURE) {
+      request_type = WEB_VIEW_PERMISSION_TYPE_MICROPHONE_AND_CAMERA;
+    } else if (request.video_type == blink::MEDIA_DEVICE_VIDEO_CAPTURE) {
+      request_type = WEB_VIEW_PERMISSION_TYPE_CAMERA;
+    } else if (request.audio_type == blink::MEDIA_DEVICE_AUDIO_CAPTURE) {
+      request_type = WEB_VIEW_PERMISSION_TYPE_MICROPHONE;
+    }
+  }
   // End Vivaldi
 
   base::DictionaryValue request_info;
   request_info.SetString(guest_view::kUrl, request.security_origin.spec());
   RequestPermission(
-      WEB_VIEW_PERMISSION_TYPE_MEDIA, request_info,
+      request_type, request_info,
       base::BindOnce(&WebViewPermissionHelper::OnMediaPermissionResponse,
                      weak_factory_.GetWeakPtr(), request, std::move(callback)),
       default_media_access_permission_);
@@ -348,7 +356,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
 bool WebViewPermissionHelper::CheckMediaAccessPermission(
     content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
-    content::MediaStreamType type) {
+    blink::MediaStreamType type) {
   if (!web_view_guest()->attached() ||
       !web_view_guest()->embedder_web_contents()->GetDelegate()) {
     return false;
@@ -375,14 +383,14 @@ void WebViewPermissionHelper::OnMediaPermissionResponse(
     DCHECK(browser);
     Profile* profile = browser->profile();
 
-    if (request.audio_type != content::MEDIA_NO_SERVICE) {
+    if (request.audio_type != blink::MEDIA_NO_SERVICE) {
       HostContentSettingsMapFactory::GetForProfile(profile)
           ->SetContentSettingCustomScope(
               primary_pattern, ContentSettingsPattern::Wildcard(),
               CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, std::string(),
               allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
     }
-    if (request.video_type  != content::MEDIA_NO_SERVICE) {
+    if (request.video_type  != blink::MEDIA_NO_SERVICE) {
       HostContentSettingsMapFactory::GetForProfile(profile)
           ->SetContentSettingCustomScope(
               primary_pattern, ContentSettingsPattern::Wildcard(),
@@ -392,15 +400,15 @@ void WebViewPermissionHelper::OnMediaPermissionResponse(
   }
 
   if (!allow) {
-    std::move(callback).Run(content::MediaStreamDevices(),
-                            content::MEDIA_DEVICE_PERMISSION_DENIED,
+    std::move(callback).Run(blink::MediaStreamDevices(),
+                            blink::MEDIA_DEVICE_PERMISSION_DENIED,
                             std::unique_ptr<content::MediaStreamUI>());
     return;
   }
   if (!web_view_guest()->attached() ||
       !web_view_guest()->embedder_web_contents()->GetDelegate()) {
-    std::move(callback).Run(content::MediaStreamDevices(),
-                            content::MEDIA_DEVICE_INVALID_STATE,
+    std::move(callback).Run(blink::MediaStreamDevices(),
+                            blink::MEDIA_DEVICE_INVALID_STATE,
                             std::unique_ptr<content::MediaStreamUI>());
     return;
   }
@@ -535,6 +543,17 @@ WebViewPermissionHelper::SetPermission(
   PermissionResponseInfo& info = request_itr->second;
   bool allow = (action == ALLOW) ||
       ((action == DEFAULT) && info.allowed_by_default);
+
+  // Will temporary enable Flash for this site.
+  if (allow && info.permission_type == WEB_VIEW_PERMISSION_TYPE_LOAD_PLUGIN) {
+
+    Browser* browser = ::vivaldi::FindBrowserWithWebContents(web_contents());
+    DCHECK(browser);
+    Profile* profile = browser->profile();
+
+    FlashTemporaryPermissionTracker::Get(profile)->FlashEnabledForWebContents(
+      web_contents());
+  }
 
   std::move(info.callback).Run(allow, user_input);
 

@@ -19,6 +19,17 @@
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/web/web_presentation_receiver_flags.h"
 
+#if defined(USE_AURA)
+#include "base/threading/thread_task_runner_handle.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_window.h"
+#include "ui/aura/window.h"
+#include "ui/aura/window_observer.h"
+#endif  // defined(USE_AURA)
+
+#include "app/vivaldi_apptools.h"
+
 using content::WebContents;
 
 namespace {
@@ -29,6 +40,93 @@ constexpr base::TimeDelta kMaxWaitForCapture = base::TimeDelta::FromMinutes(1);
 constexpr base::TimeDelta kPollInterval = base::TimeDelta::FromSeconds(1);
 
 }  // namespace
+
+#if defined(USE_AURA)
+// A WindowObserver that automatically finds a root Window to adopt the
+// WebContents native view containing the tab content being streamed, when the
+// native view is offscreen, or gets detached from the aura window tree. This is
+// a workaround for Aura, which requires the WebContents native view be attached
+// somewhere in the window tree in order to gain access to the compositing and
+// capture functionality. The WebContents native view, although attached to the
+// window tree, does not become visible on-screen (until it is properly made
+// visible by the user, for example by switching to the tab).
+class OffscreenTab::WindowAdoptionAgent : protected aura::WindowObserver {
+ public:
+  explicit WindowAdoptionAgent(aura::Window* content_window)
+      : content_window_(content_window), weak_ptr_factory_(this) {
+    if (content_window_) {
+      content_window->AddObserver(this);
+      ScheduleFindNewParentIfDetached(content_window_->GetRootWindow());
+    }
+  }
+
+  ~WindowAdoptionAgent() final {
+    if (content_window_)
+      content_window_->RemoveObserver(this);
+  }
+
+ protected:
+  void ScheduleFindNewParentIfDetached(aura::Window* root_window) {
+    if (root_window)
+      return;
+    // Post a task to return to the event loop before finding a new parent, to
+    // avoid clashing with the currently-in-progress window tree hierarchy
+    // changes.
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(&WindowAdoptionAgent::FindNewParent,
+                                  weak_ptr_factory_.GetWeakPtr()));
+  }
+
+  // aura::WindowObserver implementation.
+  void OnWindowDestroyed(aura::Window* window) final {
+    DCHECK_EQ(content_window_, window);
+    content_window_ = nullptr;
+  }
+
+  void OnWindowRemovingFromRootWindow(aura::Window* window,
+                                      aura::Window* new_root) final {
+    ScheduleFindNewParentIfDetached(new_root);
+  }
+
+ private:
+  void FindNewParent() {
+    // The window may have been destroyed by the time this is reached.
+    if (!content_window_)
+      return;
+    // If the window has already been attached to a root window, then it's not
+    // necessary to find a new parent.
+    if (content_window_->GetRootWindow())
+      return;
+    BrowserList* const browsers = BrowserList::GetInstance();
+    Browser* const active_browser =
+        browsers ? browsers->GetLastActive() : nullptr;
+    BrowserWindow* const active_window =
+        active_browser ? active_browser->window() : nullptr;
+    aura::Window* const native_window =
+        active_window ? active_window->GetNativeWindow() : nullptr;
+    // NOTE(andre@vivaldi.com): Vivaldi can correctly return a null here when
+    // closing the app-window. This is only to avoid the LOG(DFATAL) below.
+    if (vivaldi::IsVivaldiRunning() && !native_window) {
+      return;
+    }
+    aura::Window* const root_window =
+        native_window ? native_window->GetRootWindow() : nullptr;
+    if (root_window) {
+      DVLOG(2) << "Root window " << root_window << " adopts the content window "
+               << content_window_ << '.';
+      root_window->AddChild(content_window_);
+    } else {
+      LOG(WARNING) << "Unable to find an aura root window.  "
+                      "Compositing of the content may be halted!";
+    }
+  }
+
+  aura::Window* content_window_;
+  base::WeakPtrFactory<WindowAdoptionAgent> weak_ptr_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(WindowAdoptionAgent);
+};
+#endif  // defined(USE_AURA)
 
 OffscreenTab::OffscreenTab(Owner* owner, content::BrowserContext* context)
     : owner_(owner),
@@ -66,10 +164,16 @@ void OffscreenTab::Start(const GURL& start_url,
   offscreen_tab_web_contents_->SetDelegate(this);
   WebContentsObserver::Observe(offscreen_tab_web_contents_.get());
 
+#if defined(USE_AURA)
+  window_agent_ = std::make_unique<WindowAdoptionAgent>(
+      offscreen_tab_web_contents_->GetNativeView());
+#endif
+
   // Set initial size, if specified.
-  if (!initial_size.IsEmpty())
+  if (!initial_size.IsEmpty()) {
     ResizeWebContents(offscreen_tab_web_contents_.get(),
                       gfx::Rect(initial_size));
+  }
 
   // Mute audio output.  When tab capture starts, the audio will be
   // automatically unmuted, but will be captured into the MediaStream.
@@ -148,7 +252,9 @@ void OffscreenTab::CanDownload(
   callback.Run(false);
 }
 
-bool OffscreenTab::HandleContextMenu(const content::ContextMenuParams& params) {
+bool OffscreenTab::HandleContextMenu(
+    content::RenderFrameHost* render_frame_host,
+    const content::ContextMenuParams& params) {
   // Context menus should never be shown.  Do nothing, but indicate the context
   // menu was shown so that default implementation in libcontent does not
   // attempt to do so on its own.
@@ -256,11 +362,11 @@ void OffscreenTab::RequestMediaAccessPermission(
 bool OffscreenTab::CheckMediaAccessPermission(
     content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
-    content::MediaStreamType type) {
+    blink::MediaStreamType type) {
   DCHECK_EQ(offscreen_tab_web_contents_.get(),
             content::WebContents::FromRenderFrameHost(render_frame_host));
-  return type == content::MEDIA_GUM_TAB_AUDIO_CAPTURE ||
-         type == content::MEDIA_GUM_TAB_VIDEO_CAPTURE;
+  return type == blink::MEDIA_GUM_TAB_AUDIO_CAPTURE ||
+         type == blink::MEDIA_GUM_TAB_VIDEO_CAPTURE;
 }
 
 void OffscreenTab::DidShowFullscreenWidget() {

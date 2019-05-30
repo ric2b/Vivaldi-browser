@@ -22,12 +22,12 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
-import org.chromium.content.browser.test.ContentJUnit4ClassRunner;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.MediaSession;
 import org.chromium.content_public.browser.MediaSessionObserver;
+import org.chromium.content_public.browser.test.ContentJUnit4ClassRunner;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_shell_apk.ContentShellActivityTestRule;
 import org.chromium.media.MediaSwitches;
 
@@ -54,6 +54,9 @@ public class MediaSessionTest {
     private static final String LONG_VIDEO = "long-video";
     private static final String LONG_VIDEO_SILENT = "long-video-silent";
     private static final int AUDIO_FOCUS_CHANGE_TIMEOUT = 500;  // ms
+
+    // The MediaSessionObserver will always flush the default state first.
+    private static final StateRecord DEFAULT_STATE = new StateRecord(false, true);
 
     private AudioManager getAudioManager() {
         return (AudioManager) mActivityTestRule.getActivity()
@@ -127,6 +130,11 @@ public class MediaSessionTest {
         public int hashCode() {
             return (isControllable ? 2 : 0) + (isSuspended ? 1 : 0);
         }
+
+        @Override
+        public String toString() {
+            return String.format("isControllable=%b isSuspended=%b", isControllable, isSuspended);
+        }
     }
 
     @Before
@@ -189,6 +197,7 @@ public class MediaSessionTest {
     @Test
     @MediumTest
     @Feature({"MediaSession"})
+    @DisabledTest(message = "crbug.com/916535")
     public void testShortAudioIsTransient() throws Exception {
         Assert.assertEquals(
                 AudioManager.AUDIOFOCUS_LOSS, mAudioFocusChangeListener.getAudioFocusState());
@@ -490,6 +499,7 @@ public class MediaSessionTest {
     @RetryOnFailure
     public void testSessionSuspendedAfterFocusLossWhenPlaying() throws Exception {
         ArrayList<StateRecord> expectedStates = new ArrayList<StateRecord>();
+        expectedStates.add(DEFAULT_STATE);
         expectedStates.add(new StateRecord(true, false));
         expectedStates.add(new StateRecord(true, true));
 
@@ -520,6 +530,7 @@ public class MediaSessionTest {
     @RetryOnFailure
     public void testSessionSuspendedAfterFocusLossWhenPaused() throws Exception {
         ArrayList<StateRecord> expectedStates = new ArrayList<StateRecord>();
+        expectedStates.add(DEFAULT_STATE);
         expectedStates.add(new StateRecord(true, false));
         expectedStates.add(new StateRecord(true, true));
 

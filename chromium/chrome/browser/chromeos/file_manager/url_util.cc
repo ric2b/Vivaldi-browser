@@ -7,10 +7,12 @@
 #include <stddef.h>
 
 #include <memory>
+#include <utility>
 
 #include "base/json/json_writer.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "net/base/escape.h"
 
 namespace file_manager {
@@ -21,6 +23,7 @@ const char kAllowedPaths[] = "allowedPaths";
 const char kNativePath[] = "nativePath";
 const char kNativeOrDrivePath[] = "nativeOrDrivePath";
 const char kAnyPath[] = "anyPath";
+const char kAnyPathOrUrl[] = "anyPathOrUrl";
 
 // Returns a file manager URL for the given |path|.
 GURL GetFileManagerUrl(const char* path) {
@@ -116,7 +119,10 @@ GURL GetFileManagerMainPageUrlWithParams(
   if (file_types) {
     switch (file_types->allowed_paths) {
       case ui::SelectFileDialog::FileTypeInfo::NATIVE_PATH:
-        arg_value.SetString(kAllowedPaths, kNativePath);
+        if (base::FeatureList::IsEnabled(chromeos::features::kDriveFs))
+          arg_value.SetString(kAllowedPaths, kNativeOrDrivePath);
+        else
+          arg_value.SetString(kAllowedPaths, kNativePath);
         break;
       case ui::SelectFileDialog::FileTypeInfo::NATIVE_OR_DRIVE_PATH:
         arg_value.SetString(kAllowedPaths, kNativeOrDrivePath);
@@ -124,7 +130,12 @@ GURL GetFileManagerMainPageUrlWithParams(
       case ui::SelectFileDialog::FileTypeInfo::ANY_PATH:
         arg_value.SetString(kAllowedPaths, kAnyPath);
         break;
+      case ui::SelectFileDialog::FileTypeInfo::ANY_PATH_OR_URL:
+        arg_value.SetString(kAllowedPaths, kAnyPathOrUrl);
+        break;
     }
+  } else if (base::FeatureList::IsEnabled(chromeos::features::kDriveFs)) {
+    arg_value.SetString(kAllowedPaths, kNativeOrDrivePath);
   } else {
     arg_value.SetString(kAllowedPaths, kNativePath);
   }

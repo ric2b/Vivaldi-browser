@@ -11,7 +11,6 @@
 #include "build/build_config.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/bubble/bubble_border.h"
@@ -97,6 +96,35 @@ Widget::InitParams DialogDelegate::GetDialogWidgetInitParams(
   return params;
 }
 
+int DialogDelegate::GetDialogButtons() const {
+  return ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL;
+}
+
+int DialogDelegate::GetDefaultDialogButton() const {
+  if (GetDialogButtons() & ui::DIALOG_BUTTON_OK)
+    return ui::DIALOG_BUTTON_OK;
+  if (GetDialogButtons() & ui::DIALOG_BUTTON_CANCEL)
+    return ui::DIALOG_BUTTON_CANCEL;
+  return ui::DIALOG_BUTTON_NONE;
+}
+
+base::string16 DialogDelegate::GetDialogButtonLabel(
+    ui::DialogButton button) const {
+  if (button == ui::DIALOG_BUTTON_OK)
+    return l10n_util::GetStringUTF16(IDS_APP_OK);
+  if (button == ui::DIALOG_BUTTON_CANCEL) {
+    if (GetDialogButtons() & ui::DIALOG_BUTTON_OK)
+      return l10n_util::GetStringUTF16(IDS_APP_CANCEL);
+    return l10n_util::GetStringUTF16(IDS_APP_CLOSE);
+  }
+  NOTREACHED();
+  return base::string16();
+}
+
+bool DialogDelegate::IsDialogButtonEnabled(ui::DialogButton button) const {
+  return true;
+}
+
 View* DialogDelegate::CreateExtraView() {
   return NULL;
 }
@@ -141,32 +169,7 @@ bool DialogDelegate::ShouldSnapFrameWidth() const {
   return GetDialogButtons() != ui::DIALOG_BUTTON_NONE;
 }
 
-int DialogDelegate::GetDialogButtons() const {
-  return ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL;
-}
-
-int DialogDelegate::GetDefaultDialogButton() const {
-  if (GetDialogButtons() & ui::DIALOG_BUTTON_OK)
-    return ui::DIALOG_BUTTON_OK;
-  if (GetDialogButtons() & ui::DIALOG_BUTTON_CANCEL)
-    return ui::DIALOG_BUTTON_CANCEL;
-  return ui::DIALOG_BUTTON_NONE;
-}
-
-base::string16 DialogDelegate::GetDialogButtonLabel(
-    ui::DialogButton button) const {
-  if (button == ui::DIALOG_BUTTON_OK)
-    return l10n_util::GetStringUTF16(IDS_APP_OK);
-  if (button == ui::DIALOG_BUTTON_CANCEL) {
-    if (GetDialogButtons() & ui::DIALOG_BUTTON_OK)
-      return l10n_util::GetStringUTF16(IDS_APP_CANCEL);
-    return l10n_util::GetStringUTF16(IDS_APP_CLOSE);
-  }
-  NOTREACHED();
-  return base::string16();
-}
-
-bool DialogDelegate::IsDialogButtonEnabled(ui::DialogButton button) const {
+bool DialogDelegate::ShouldHaveRoundCorners() const {
   return true;
 }
 
@@ -209,14 +212,22 @@ NonClientFrameView* DialogDelegate::CreateDialogFrameView(Widget* widget) {
   LayoutProvider* provider = LayoutProvider::Get();
   BubbleFrameView* frame = new BubbleFrameView(
       provider->GetInsetsMetric(INSETS_DIALOG_TITLE), gfx::Insets());
+
   const BubbleBorder::Shadow kShadow = BubbleBorder::DIALOG_SHADOW;
   std::unique_ptr<BubbleBorder> border = std::make_unique<BubbleBorder>(
       BubbleBorder::FLOAT, kShadow, gfx::kPlaceholderColor);
   border->set_use_theme_background_color(true);
-  frame->SetBubbleBorder(std::move(border));
   DialogDelegate* delegate = widget->widget_delegate()->AsDialogDelegate();
-  if (delegate)
+  if (delegate) {
+    if (delegate->ShouldHaveRoundCorners()) {
+      // TODO(sajadm): Remove when fixing https://crbug.com/822075 and use
+      // EMPHASIS_HIGH metric values from the LayoutProvider to get the
+      // corner radius.
+      border->SetCornerRadius(2);
+    }
     frame->SetFootnoteView(delegate->CreateFootnoteView());
+  }
+  frame->SetBubbleBorder(std::move(border));
   return frame;
 }
 
@@ -242,7 +253,7 @@ void DialogDelegate::RemoveObserver(DialogObserver* observer) {
 
 void DialogDelegate::DialogModelChanged() {
   for (DialogObserver& observer : observer_list_)
-    observer.OnDialogModelChanged();
+    observer.OnDialogChanged();
 }
 
 DialogDelegate::~DialogDelegate() {

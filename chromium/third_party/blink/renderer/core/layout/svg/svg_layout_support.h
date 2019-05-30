@@ -40,7 +40,6 @@ class LayoutGeometryMap;
 class LayoutBoxModelObject;
 class LayoutObject;
 class ComputedStyle;
-class LayoutSVGRoot;
 class SVGLengthContext;
 class StrokeData;
 class TransformState;
@@ -65,22 +64,28 @@ class CORE_EXPORT SVGLayoutSupport {
 
   // Adjusts the visualRect in combination with filter, clipper and masker
   // in local coordinates.
-  static void AdjustVisualRectWithResources(const LayoutObject&, FloatRect&);
+  static void AdjustVisualRectWithResources(
+      const LayoutObject&,
+      const FloatRect& object_bounding_box,
+      FloatRect&);
 
   // Determine if the LayoutObject references a filter resource object.
   static bool HasFilterResource(const LayoutObject&);
 
-  // Determines whether the passed point lies in a clipping area
-  static bool PointInClippingArea(const LayoutObject&, const FloatPoint&);
+  // Determine whether the passed location intersects a clip path referenced by
+  // the passed LayoutObject.
+  // |reference_box| is used to resolve 'objectBoundingBox' units/percentages,
+  // and can differ from the reference box of the passed LayoutObject.
+  static bool IntersectsClipPath(const LayoutObject&,
+                                 const FloatRect& reference_box,
+                                 const HitTestLocation&);
 
-  // Transform |pointInParent| to |object|'s user-space and check if it is
-  // within the clipping area. Returns false if the transform is singular or
-  // the point is outside the clipping area.
-  static bool TransformToUserSpaceAndCheckClipping(
-      const LayoutObject&,
-      const AffineTransform& local_transform,
-      const FloatPoint& point_in_parent,
-      FloatPoint& local_point);
+  // Shared child hit-testing code between LayoutSVGRoot/LayoutSVGContainer.
+  static bool HitTestChildren(LayoutObject* last_child,
+                              HitTestResult&,
+                              const HitTestLocation&,
+                              const LayoutPoint& accumulated_offset,
+                              HitTestAction);
 
   static void ComputeContainerBoundingBoxes(const LayoutObject* container,
                                             FloatRect& object_bounding_box,
@@ -131,9 +136,6 @@ class CORE_EXPORT SVGLayoutSupport {
 
   // Determines if any ancestor's layout size has changed.
   static bool LayoutSizeOfNearestViewportChanged(const LayoutObject*);
-
-  // FIXME: These methods do not belong here.
-  static const LayoutSVGRoot* FindTreeRootObject(const LayoutObject*);
 
   // Helper method for determining if a LayoutObject marked as text (isText()==
   // true) can/will be laid out as part of a <text>.

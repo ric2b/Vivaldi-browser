@@ -9,6 +9,7 @@
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
+#include "extensions/browser/event_router.h"
 
 using extensions::BrowserContextKeyedAPI;
 using extensions::BrowserContextKeyedAPIFactory;
@@ -17,8 +18,23 @@ using bookmarks::BookmarkNode;
 
 namespace extensions {
 
+class VivaldiBookmarksEventRouter {
+ public:
+  explicit VivaldiBookmarksEventRouter(Profile* profile);
+  ~VivaldiBookmarksEventRouter();
+
+  // Helper to actually dispatch an event to extension listeners.
+  void DispatchEvent(const std::string& event_name,
+                     std::unique_ptr<base::ListValue> event_args);
+
+ private:
+  content::BrowserContext* browser_context_;
+  DISALLOW_COPY_AND_ASSIGN(VivaldiBookmarksEventRouter);
+};
+
 class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
-                            public BrowserContextKeyedAPI {
+                            public BrowserContextKeyedAPI,
+                            public EventRouter::Observer {
  public:
   explicit VivaldiBookmarksAPI(content::BrowserContext* context);
   ~VivaldiBookmarksAPI() override;
@@ -29,6 +45,9 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
   // BrowserContextKeyedAPI implementation.
   static BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI>*
   GetFactoryInstance();
+
+  // EventRouter::Observer implementation.
+  void OnListenerAdded(const EventListenerInfo& details) override;
 
   // bookmarks::BookmarkModelObserver
   void BookmarkNodeMoved(BookmarkModel* model,
@@ -51,8 +70,10 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
   // Invoked when the title or url of a node changes.
   void BookmarkNodeChanged(BookmarkModel* model,
                            const BookmarkNode* node) override {}
+  void BookmarkMetaInfoChanged(BookmarkModel* model,
+                               const BookmarkNode* node) override;
   void BookmarkNodeFaviconChanged(BookmarkModel* model,
-                                  const BookmarkNode* node) override {}
+                                  const BookmarkNode* node) override;
   void BookmarkNodeChildrenReordered(BookmarkModel* model,
                                      const BookmarkNode* node) override {}
   void BookmarkAllUserNodesRemoved(
@@ -66,6 +87,8 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
 
   bookmarks::BookmarkModel* bookmark_model_;
 
+  std::unique_ptr<VivaldiBookmarksEventRouter> event_router_;
+
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "VivaldiBookmarksAPI"; }
   static const bool kServiceIsNULLWhileTesting = true;
@@ -77,7 +100,7 @@ class BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction
  public:
   DECLARE_EXTENSION_FUNCTION(
       "bookmarksPrivate.updateSpeedDialsForWindowsJumplist",
-      BOOKMARKSPRIVATE_UPDATESPEEDDIALSFORWINDOWSJUMPLIST);
+      BOOKMARKSPRIVATE_UPDATESPEEDDIALSFORWINDOWSJUMPLIST)
 
   BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction();
 
@@ -95,7 +118,7 @@ class BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction
 class BookmarksPrivateEmptyTrashFunction : public BookmarksFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("bookmarksPrivate.emptyTrash",
-                             BOOKMARKSPRIVATE_EMPTYTRASH);
+                             BOOKMARKSPRIVATE_EMPTYTRASH)
 
   BookmarksPrivateEmptyTrashFunction();
 

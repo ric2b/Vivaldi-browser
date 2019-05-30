@@ -14,6 +14,7 @@
 #include "ash/system/tray/hover_highlight_view.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/voice_interaction/voice_interaction_controller.h"
+#include "base/bind.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/event.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -36,18 +37,15 @@ const int kMaxStrokeGapWhenWritingMs = 1000;
 
 MetalayerMode::MetalayerMode(Delegate* delegate)
     : CommonPaletteTool(delegate),
-      voice_interaction_binding_(this),
       weak_factory_(this) {
   Shell::Get()->AddPreTargetHandler(this);
-
-  mojom::VoiceInteractionObserverPtr ptr;
-  voice_interaction_binding_.Bind(mojo::MakeRequest(&ptr));
-  Shell::Get()->voice_interaction_controller()->AddObserver(std::move(ptr));
+  Shell::Get()->voice_interaction_controller()->AddLocalObserver(this);
   Shell::Get()->highlighter_controller()->AddObserver(this);
 }
 
 MetalayerMode::~MetalayerMode() {
   Shell::Get()->highlighter_controller()->RemoveObserver(this);
+  Shell::Get()->voice_interaction_controller()->RemoveLocalObserver(this);
   Shell::Get()->RemovePreTargetHandler(this);
 }
 

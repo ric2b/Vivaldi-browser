@@ -21,7 +21,6 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
  */
 public class ChromeTabbedActivityVrTestRule
         extends ChromeTabbedActivityTestRule implements VrTestRule {
-    private boolean mTrackerDirty;
     private boolean mDonEnabled;
 
     @Override
@@ -39,18 +38,8 @@ public class ChromeTabbedActivityVrTestRule
     }
 
     @Override
-    public SupportedActivity getRestriction() {
+    public @SupportedActivity int getRestriction() {
         return SupportedActivity.CTA;
-    }
-
-    @Override
-    public boolean isTrackerDirty() {
-        return mTrackerDirty;
-    }
-
-    @Override
-    public void setTrackerDirty() {
-        mTrackerDirty = true;
     }
 
     @Override

@@ -17,7 +17,6 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.animation.DecelerateInterpolator;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 
 /**
@@ -202,6 +201,8 @@ public class TranslateTabLayout extends TabLayout {
     /**
      * Perform the scrolling animation if this tablayout has any scrollable distance.
      */
+    // TODO(crbug.com/900912): Figure out whether setScrollX is actually available.
+    @SuppressLint("ObjectAnimatorBinding")
     public void startScrollingAnimationIfNeeded() {
         int maxScrollDistance = maxScrollDistance();
         if (maxScrollDistance == 0) {
@@ -210,8 +211,8 @@ public class TranslateTabLayout extends TabLayout {
         // The steps of the scrolling animation:
         //   1. wait for START_POSITION_WAIT_DURATION_MS.
         //   2. scroll to the end in SCROLL_DURATION_MS.
-        mScrollToEndAnimator = ObjectAnimator.ofInt(
-                this, "scrollX", ApiCompatibilityUtils.isLayoutRtl(this) ? 0 : maxScrollDistance);
+        mScrollToEndAnimator = ObjectAnimator.ofInt(this, "scrollX",
+                getLayoutDirection() == LAYOUT_DIRECTION_RTL ? 0 : maxScrollDistance);
         mScrollToEndAnimator.setStartDelay(START_POSITION_WAIT_DURATION_MS);
         mScrollToEndAnimator.setDuration(SCROLL_DURATION_MS);
         mScrollToEndAnimator.setInterpolator(new DecelerateInterpolator());

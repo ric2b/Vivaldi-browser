@@ -39,7 +39,7 @@ ConsoleCounters.WarningErrorCounter = class {
    */
   _createItem(shadowRoot, iconType) {
     const item = createElementWithClass('span', 'counter-item');
-    const icon = item.createChild('label', '', 'dt-icon-label');
+    const icon = item.createChild('span', '', 'dt-icon-label');
     icon.type = iconType;
     const text = icon.createChild('span');
     shadowRoot.appendChild(item);
@@ -78,9 +78,19 @@ ConsoleCounters.WarningErrorCounter = class {
 
     this._titles = [];
     this._toolbarItem.setVisible(!!(errors || warnings));
-    this._updateItem(this._errors, errors, false, Common.UIString(errors === 1 ? '%d error' : '%d errors', errors));
-    this._updateItem(
-        this._warnings, warnings, !errors, Common.UIString(warnings === 1 ? '%d warning' : '%d warnings', warnings));
+    let errorCountTitle = '';
+    if (errors === 1)
+      errorCountTitle = ls`${errors} error`;
+    else
+      errorCountTitle = ls`${errors} errors`;
+    this._updateItem(this._errors, errors, false, errorCountTitle);
+
+    let warningCountTitle = '';
+    if (warnings === 1)
+      warningCountTitle = ls`${warnings} warning`;
+    else
+      warningCountTitle = ls`${warnings} warnings`;
+    this._updateItem(this._warnings, warnings, !errors, warningCountTitle);
     this._counter.title = this._titles.join(', ');
     UI.inspectorView.toolbarItemResized();
     this._updatingForTest = false;

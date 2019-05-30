@@ -14,6 +14,7 @@
 
 namespace blink {
 
+struct WebNavigationParams;
 class WebURL;
 class WebURLLoader;
 class WebURLResponse;
@@ -70,12 +71,15 @@ class WebURLLoaderMockFactory {
   // asynchronously from different threads (e.g. when HTML parser thread
   // is being involved).
   // DO NOT USE THIS for Frame loading; always use methods defined in
-  // FrameTestHelpers instead.
+  // frame_test_helpers instead.
   virtual void ServeAsynchronousRequests() = 0;
 
   // Set a delegate that allows callbacks for all WebURLLoaderClients to be
   // intercepted.
   virtual void SetLoaderDelegate(WebURLLoaderTestDelegate*) = 0;
+
+  // Fills navigation params by loading a mocked response.
+  virtual void FillNavigationParamsResponse(WebNavigationParams*) = 0;
 };
 
 }  // namespace blink

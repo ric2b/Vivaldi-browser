@@ -4,6 +4,7 @@
 
 #include "components/mirroring/browser/single_client_video_capture_host.h"
 
+#include "base/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
@@ -54,7 +55,7 @@ class FakeDeviceLauncher final : public content::VideoCaptureDeviceLauncher {
 
   // content::VideoCaptureDeviceLauncher implementation.
   void LaunchDeviceAsync(const std::string& device_id,
-                         content::MediaStreamType stream_type,
+                         blink::MediaStreamType stream_type,
                          const VideoCaptureParams& params,
                          base::WeakPtr<VideoFrameReceiver> receiver,
                          base::OnceClosure connection_lost_cb,
@@ -157,7 +158,8 @@ class MockVideoCaptureObserver final
 media::mojom::VideoFrameInfoPtr GetVideoFrameInfo() {
   return media::mojom::VideoFrameInfo::New(
       base::TimeDelta(), base::Value(base::Value::Type::DICTIONARY),
-      media::PIXEL_FORMAT_I420, gfx::Size(320, 180), gfx::Rect(320, 180));
+      media::PIXEL_FORMAT_I420, gfx::Size(320, 180), gfx::Rect(320, 180),
+      gfx::ColorSpace::CreateREC709(), nullptr);
 }
 
 }  // namespace
@@ -166,7 +168,7 @@ class SingleClientVideoCaptureHostTest : public ::testing::Test {
  public:
   SingleClientVideoCaptureHostTest() : weak_factory_(this) {
     auto host_impl = std::make_unique<SingleClientVideoCaptureHost>(
-        std::string(), content::MediaStreamType::MEDIA_GUM_TAB_VIDEO_CAPTURE,
+        std::string(), blink::MediaStreamType::MEDIA_GUM_TAB_VIDEO_CAPTURE,
         base::BindRepeating(
             &SingleClientVideoCaptureHostTest::CreateDeviceLauncher,
             base::Unretained(this)));

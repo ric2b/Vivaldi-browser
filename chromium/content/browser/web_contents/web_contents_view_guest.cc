@@ -17,6 +17,7 @@
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/drag_messages.h"
+#include "content/public/browser/guest_mode.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/context_menu_params.h"
 #include "content/public/common/drop_data.h"
@@ -47,6 +48,7 @@ WebContentsViewGuest::WebContentsViewGuest(
       platform_view_(std::move(platform_view)),
       platform_view_delegate_view_(*delegate_view) {
   *delegate_view = this;
+  DCHECK(!GuestMode::IsCrossProcessFrameGuest(web_contents));
 }
 
 WebContentsViewGuest::~WebContentsViewGuest() {
@@ -79,7 +81,7 @@ void WebContentsViewGuest::OnGuestAttached(WebContentsView* parent_view) {
   // access embedder_web_contents(). Therefore, we do it here.
   // NOTE(jarle@vivaldi.com): Check for null pointer here as the GetNativeView()
   // method(s) can very well return null. Ref. VB-41021.
-  if (!features::IsUsingWindowService() &&
+  if (!features::IsMultiProcessMash() &&
       parent_view->GetNativeView() && platform_view_->GetNativeView())
     parent_view->GetNativeView()->AddChild(platform_view_->GetNativeView());
 #endif  // defined(USE_AURA)
@@ -87,7 +89,7 @@ void WebContentsViewGuest::OnGuestAttached(WebContentsView* parent_view) {
 
 void WebContentsViewGuest::OnGuestDetached(WebContentsView* old_parent_view) {
 #if defined(USE_AURA)
-  if (!features::IsUsingWindowService()) {
+  if (!features::IsMultiProcessMash()) {
     old_parent_view->GetNativeView()->RemoveChild(
         platform_view_->GetNativeView());
   }
@@ -122,16 +124,6 @@ void WebContentsViewGuest::SetInitialFocus() {
 gfx::Rect WebContentsViewGuest::GetViewBounds() const {
   return gfx::Rect(size_);
 }
-
-#if defined(OS_MACOSX)
-void WebContentsViewGuest::SetAllowOtherViews(bool allow) {
-  platform_view_->SetAllowOtherViews(allow);
-}
-
-bool WebContentsViewGuest::GetAllowOtherViews() const {
-  return platform_view_->GetAllowOtherViews();
-}
-#endif
 
 void WebContentsViewGuest::CreateView(const gfx::Size& initial_size,
                                       gfx::NativeView context) {
@@ -168,9 +160,9 @@ RenderWidgetHostViewBase* WebContentsViewGuest::CreateViewForWidget(
                                            platform_widget->GetWeakPtr());
 }
 
-RenderWidgetHostViewBase* WebContentsViewGuest::CreateViewForPopupWidget(
+RenderWidgetHostViewBase* WebContentsViewGuest::CreateViewForChildWidget(
     RenderWidgetHost* render_widget_host) {
-  return platform_view_->CreateViewForPopupWidget(render_widget_host);
+  return platform_view_->CreateViewForChildWidget(render_widget_host);
 }
 
 void WebContentsViewGuest::SetPageTitle(const base::string16& title) {
@@ -194,11 +186,8 @@ void WebContentsViewGuest::SetOverscrollControllerEnabled(bool enabled) {
 }
 
 #if defined(OS_MACOSX)
-bool WebContentsViewGuest::IsEventTracking() const {
+bool WebContentsViewGuest::CloseTabAfterEventTrackingIfNeeded() {
   return false;
-}
-
-void WebContentsViewGuest::CloseTabAfterEventTracking() {
 }
 #endif
 

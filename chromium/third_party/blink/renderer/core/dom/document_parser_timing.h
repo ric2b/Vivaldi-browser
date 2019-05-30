@@ -22,6 +22,7 @@ class DocumentParserTiming final
  public:
   static const char kSupplementName[];
 
+  explicit DocumentParserTiming(Document&);
   virtual ~DocumentParserTiming() = default;
 
   static DocumentParserTiming& From(Document&);
@@ -63,7 +64,7 @@ class DocumentParserTiming final
 
   // The getters below return monotonically-increasing time, or zero if the
   // given parser event has not yet occurred.  See the comments for
-  // monotonicallyIncreasingTime in wtf/Time.h for additional details.
+  // MonotonicallyIncreasingTime in platform/wtf/time.h for additional details.
 
   TimeTicks ParserStart() const { return parser_start_; }
   TimeTicks ParserStop() const { return parser_stop_; }
@@ -96,10 +97,9 @@ class DocumentParserTiming final
     return parser_blocked_on_script_execution_from_document_write_duration_;
   }
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
-  explicit DocumentParserTiming(Document&);
   void NotifyDocumentParserTimingChanged();
 
   TimeTicks parser_start_;

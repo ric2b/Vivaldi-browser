@@ -12,6 +12,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -32,7 +34,6 @@
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_user_media_request.h"
 
-using webrtc::MediaConstraintsInterface;
 using webrtc::StatsReport;
 using webrtc::StatsReports;
 using blink::WebRTCPeerConnectionHandlerClient;
@@ -284,11 +285,6 @@ static std::string SerializeConfiguration(
   return oss.str();
 }
 
-#define GET_STRING_OF_STATE(state)                  \
-  case WebRTCPeerConnectionHandlerClient::k##state: \
-    result = #state;                                \
-    break;
-
 // Note: All of these strings need to be kept in sync with
 // peer_connection_update_table.js, in order to be displayed as friendly
 // strings on chrome://webrtc-internals.
@@ -317,35 +313,41 @@ static const char* GetSignalingStateString(
 }
 
 static const char* GetIceConnectionStateString(
-    WebRTCPeerConnectionHandlerClient::ICEConnectionState state) {
-  const char* result = "";
+    webrtc::PeerConnectionInterface::IceConnectionState state) {
   switch (state) {
-    GET_STRING_OF_STATE(ICEConnectionStateStarting)
-    GET_STRING_OF_STATE(ICEConnectionStateChecking)
-    GET_STRING_OF_STATE(ICEConnectionStateConnected)
-    GET_STRING_OF_STATE(ICEConnectionStateCompleted)
-    GET_STRING_OF_STATE(ICEConnectionStateFailed)
-    GET_STRING_OF_STATE(ICEConnectionStateDisconnected)
-    GET_STRING_OF_STATE(ICEConnectionStateClosed)
+    case webrtc::PeerConnectionInterface::kIceConnectionNew:
+      return "new";
+    case webrtc::PeerConnectionInterface::kIceConnectionChecking:
+      return "checking";
+    case webrtc::PeerConnectionInterface::kIceConnectionConnected:
+      return "connected";
+    case webrtc::PeerConnectionInterface::kIceConnectionCompleted:
+      return "completed";
+    case webrtc::PeerConnectionInterface::kIceConnectionFailed:
+      return "failed";
+    case webrtc::PeerConnectionInterface::kIceConnectionDisconnected:
+      return "disconnected";
+    case webrtc::PeerConnectionInterface::kIceConnectionClosed:
+      return "closed";
     default:
       NOTREACHED();
-      break;
+      return "";
   }
-  return result;
 }
 
 static const char* GetIceGatheringStateString(
-    WebRTCPeerConnectionHandlerClient::ICEGatheringState state) {
-  const char* result = "";
+    webrtc::PeerConnectionInterface::IceGatheringState state) {
   switch (state) {
-    GET_STRING_OF_STATE(ICEGatheringStateNew)
-    GET_STRING_OF_STATE(ICEGatheringStateGathering)
-    GET_STRING_OF_STATE(ICEGatheringStateComplete)
+    case webrtc::PeerConnectionInterface::kIceGatheringNew:
+      return "new";
+    case webrtc::PeerConnectionInterface::kIceGatheringGathering:
+      return "gathering";
+    case webrtc::PeerConnectionInterface::kIceGatheringComplete:
+      return "complete";
     default:
       NOTREACHED();
-      break;
+      return "";
   }
-  return result;
 }
 
 static const char* GetTransceiverUpdatedReasonString(
@@ -433,8 +435,9 @@ static std::unique_ptr<base::DictionaryValue> GetDictValue(
 
 class InternalStatsObserver : public webrtc::StatsObserver {
  public:
-  explicit InternalStatsObserver(int lid)
-      : lid_(lid), main_thread_(base::ThreadTaskRunnerHandle::Get()) {}
+  InternalStatsObserver(int lid,
+                        scoped_refptr<base::SingleThreadTaskRunner> main_thread)
+      : lid_(lid), main_thread_(std::move(main_thread)) {}
 
   void OnComplete(const StatsReports& reports) override {
     std::unique_ptr<base::ListValue> list(new base::ListValue());
@@ -473,14 +476,19 @@ class InternalStatsObserver : public webrtc::StatsObserver {
   const scoped_refptr<base::SingleThreadTaskRunner> main_thread_;
 };
 
-PeerConnectionTracker::PeerConnectionTracker()
-    : next_local_id_(1), send_target_for_test_(nullptr) {}
-
 PeerConnectionTracker::PeerConnectionTracker(
-    mojom::PeerConnectionTrackerHostAssociatedPtr host)
+    scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner)
     : next_local_id_(1),
       send_target_for_test_(nullptr),
-      peer_connection_tracker_host_ptr_(std::move(host)) {}
+      main_thread_task_runner_(std::move(main_thread_task_runner)) {}
+
+PeerConnectionTracker::PeerConnectionTracker(
+    mojom::PeerConnectionTrackerHostAssociatedPtr host,
+    scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner)
+    : next_local_id_(1),
+      send_target_for_test_(nullptr),
+      peer_connection_tracker_host_ptr_(std::move(host)),
+      main_thread_task_runner_(std::move(main_thread_task_runner)) {}
 
 PeerConnectionTracker::~PeerConnectionTracker() {
 }
@@ -491,10 +499,7 @@ bool PeerConnectionTracker::OnControlMessageReceived(
   IPC_BEGIN_MESSAGE_MAP(PeerConnectionTracker, message)
     IPC_MESSAGE_HANDLER(PeerConnectionTracker_GetAllStats, OnGetAllStats)
     IPC_MESSAGE_HANDLER(PeerConnectionTracker_OnSuspend, OnSuspend)
-    IPC_MESSAGE_HANDLER(PeerConnectionTracker_StartEventLogFile,
-                        OnStartEventLogFile)
-    IPC_MESSAGE_HANDLER(PeerConnectionTracker_StartEventLogOutput,
-                        OnStartEventLogOutput)
+    IPC_MESSAGE_HANDLER(PeerConnectionTracker_StartEventLog, OnStartEventLog)
     IPC_MESSAGE_HANDLER(PeerConnectionTracker_StopEventLog, OnStopEventLog)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
@@ -502,13 +507,14 @@ bool PeerConnectionTracker::OnControlMessageReceived(
 }
 
 void PeerConnectionTracker::OnGetAllStats() {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
 
   const std::string empty_track_id;
-  for (PeerConnectionIdMap::iterator it = peer_connection_id_map_.begin();
-       it != peer_connection_id_map_.end(); ++it) {
+  for (auto it = peer_connection_local_id_map_.begin();
+       it != peer_connection_local_id_map_.end(); ++it) {
     rtc::scoped_refptr<InternalStatsObserver> observer(
-        new rtc::RefCountedObject<InternalStatsObserver>(it->second));
+        new rtc::RefCountedObject<InternalStatsObserver>(
+            it->second, main_thread_task_runner_));
 
     it->first->GetStats(observer,
                         webrtc::PeerConnectionInterface::kStatsOutputLevelDebug,
@@ -524,48 +530,28 @@ RenderThread* PeerConnectionTracker::SendTarget() {
 }
 
 void PeerConnectionTracker::OnSuspend() {
-  DCHECK(main_thread_.CalledOnValidThread());
-  for (PeerConnectionIdMap::iterator it = peer_connection_id_map_.begin();
-       it != peer_connection_id_map_.end(); ++it) {
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
+  for (auto it = peer_connection_local_id_map_.begin();
+       it != peer_connection_local_id_map_.end(); ++it) {
     it->first->CloseClientPeerConnection();
   }
 }
 
-void PeerConnectionTracker::OnStartEventLogFile(
-    int peer_connection_id,
-    IPC::PlatformFileForTransit file) {
-  DCHECK(main_thread_.CalledOnValidThread());
-  for (auto& it : peer_connection_id_map_) {
-    if (it.second == peer_connection_id) {
-#if defined(OS_ANDROID)
-      // A lower maximum filesize is used on Android because storage space is
-      // more scarce on mobile. This upper limit applies to each peer connection
-      // individually, so the total amount of used storage can be a multiple of
-      // this.
-      const int64_t kMaxFilesizeBytes = 10000000;
-#else
-      const int64_t kMaxFilesizeBytes = 60000000;
-#endif
-      it.first->StartEventLog(file, kMaxFilesizeBytes);
+void PeerConnectionTracker::OnStartEventLog(int peer_connection_local_id,
+                                            int output_period_ms) {
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
+  for (auto& it : peer_connection_local_id_map_) {
+    if (it.second == peer_connection_local_id) {
+      it.first->StartEventLog(output_period_ms);
       return;
     }
   }
 }
 
-void PeerConnectionTracker::OnStartEventLogOutput(int peer_connection_id) {
-  DCHECK(main_thread_.CalledOnValidThread());
-  for (auto& it : peer_connection_id_map_) {
-    if (it.second == peer_connection_id) {
-      it.first->StartEventLog();
-      return;
-    }
-  }
-}
-
-void PeerConnectionTracker::OnStopEventLog(int peer_connection_id) {
-  DCHECK(main_thread_.CalledOnValidThread());
-  for (auto& it : peer_connection_id_map_) {
-    if (it.second == peer_connection_id) {
+void PeerConnectionTracker::OnStopEventLog(int peer_connection_local_id) {
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
+  for (auto& it : peer_connection_local_id_map_) {
+    if (it.second == peer_connection_local_id) {
       it.first->StopEventLog();
       return;
     }
@@ -577,16 +563,13 @@ void PeerConnectionTracker::RegisterPeerConnection(
     const webrtc::PeerConnectionInterface::RTCConfiguration& config,
     const blink::WebMediaConstraints& constraints,
     const blink::WebLocalFrame* frame) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   DCHECK(pc_handler);
   DCHECK_EQ(GetLocalIDForHandler(pc_handler), -1);
   DVLOG(1) << "PeerConnectionTracker::RegisterPeerConnection()";
   PeerConnectionInfo info;
 
   info.lid = GetNextLocalID();
-  // RTCPeerConnection.id is guaranteed to be an ASCII string. The ID's origin
-  // is local, so this conversion is safe.
-  info.peer_connection_id = pc_handler->Id().Ascii();
   info.rtc_configuration = SerializeConfiguration(config);
 
   info.constraints = SerializeMediaConstraints(constraints);
@@ -596,18 +579,17 @@ void PeerConnectionTracker::RegisterPeerConnection(
     info.url = "test:testing";
   SendTarget()->Send(new PeerConnectionTrackerHost_AddPeerConnection(info));
 
-  peer_connection_id_map_.insert(std::make_pair(pc_handler, info.lid));
+  peer_connection_local_id_map_.insert(std::make_pair(pc_handler, info.lid));
 }
 
 void PeerConnectionTracker::UnregisterPeerConnection(
     RTCPeerConnectionHandler* pc_handler) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   DVLOG(1) << "PeerConnectionTracker::UnregisterPeerConnection()";
 
-  std::map<RTCPeerConnectionHandler*, int>::iterator it =
-      peer_connection_id_map_.find(pc_handler);
+  auto it = peer_connection_local_id_map_.find(pc_handler);
 
-  if (it == peer_connection_id_map_.end()) {
+  if (it == peer_connection_local_id_map_.end()) {
     // The PeerConnection might not have been registered if its initilization
     // failed.
     return;
@@ -615,13 +597,13 @@ void PeerConnectionTracker::UnregisterPeerConnection(
 
   GetPeerConnectionTrackerHost()->RemovePeerConnection(it->second);
 
-  peer_connection_id_map_.erase(it);
+  peer_connection_local_id_map_.erase(it);
 }
 
 void PeerConnectionTracker::TrackCreateOffer(
     RTCPeerConnectionHandler* pc_handler,
     const blink::WebRTCOfferOptions& options) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
@@ -632,7 +614,7 @@ void PeerConnectionTracker::TrackCreateOffer(
 void PeerConnectionTracker::TrackCreateOffer(
     RTCPeerConnectionHandler* pc_handler,
     const blink::WebMediaConstraints& constraints) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
@@ -644,7 +626,7 @@ void PeerConnectionTracker::TrackCreateOffer(
 void PeerConnectionTracker::TrackCreateAnswer(
     RTCPeerConnectionHandler* pc_handler,
     const blink::WebRTCAnswerOptions& options) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
@@ -655,7 +637,7 @@ void PeerConnectionTracker::TrackCreateAnswer(
 void PeerConnectionTracker::TrackCreateAnswer(
     RTCPeerConnectionHandler* pc_handler,
     const blink::WebMediaConstraints& constraints) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
@@ -667,7 +649,7 @@ void PeerConnectionTracker::TrackCreateAnswer(
 void PeerConnectionTracker::TrackSetSessionDescription(
     RTCPeerConnectionHandler* pc_handler,
     const std::string& sdp, const std::string& type, Source source) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
@@ -681,7 +663,7 @@ void PeerConnectionTracker::TrackSetSessionDescription(
 void PeerConnectionTracker::TrackSetConfiguration(
     RTCPeerConnectionHandler* pc_handler,
     const webrtc::PeerConnectionInterface::RTCConfiguration& config) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
@@ -695,13 +677,13 @@ void PeerConnectionTracker::TrackAddIceCandidate(
     scoped_refptr<blink::WebRTCICECandidate> candidate,
     Source source,
     bool succeeded) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
   std::string value =
       "sdpMid: " + candidate->SdpMid().Utf8() + ", " +
-      "sdpMLineIndex: " + base::UintToString(candidate->SdpMLineIndex()) +
+      "sdpMLineIndex: " + base::NumberToString(candidate->SdpMLineIndex()) +
       ", " + "candidate: " + candidate->Candidate().Utf8();
 
   // OnIceCandidate always succeeds as it's a callback from the browser.
@@ -747,7 +729,7 @@ void PeerConnectionTracker::TrackTransceiver(
     PeerConnectionTracker::TransceiverUpdatedReason reason,
     const blink::WebRTCRtpTransceiver& transceiver,
     size_t transceiver_index) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
@@ -779,7 +761,7 @@ void PeerConnectionTracker::TrackTransceiver(
         blink::WebRTCRtpTransceiverImplementationType::kPlanBReceiverOnly);
     result += "getReceivers()";
   }
-  result += "[" + base::UintToString(transceiver_index) + "]:";
+  result += "[" + base::NumberToString(transceiver_index) + "]:";
   result += SerializeTransceiver(transceiver);
   SendPeerConnectionUpdate(id, callback_type, result);
 }
@@ -788,7 +770,7 @@ void PeerConnectionTracker::TrackCreateDataChannel(
     RTCPeerConnectionHandler* pc_handler,
     const webrtc::DataChannelInterface* data_channel,
     Source source) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
@@ -801,7 +783,7 @@ void PeerConnectionTracker::TrackCreateDataChannel(
 }
 
 void PeerConnectionTracker::TrackStop(RTCPeerConnectionHandler* pc_handler) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
@@ -811,7 +793,7 @@ void PeerConnectionTracker::TrackStop(RTCPeerConnectionHandler* pc_handler) {
 void PeerConnectionTracker::TrackSignalingStateChange(
     RTCPeerConnectionHandler* pc_handler,
     webrtc::PeerConnectionInterface::SignalingState state) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
@@ -820,9 +802,9 @@ void PeerConnectionTracker::TrackSignalingStateChange(
 }
 
 void PeerConnectionTracker::TrackIceConnectionStateChange(
-      RTCPeerConnectionHandler* pc_handler,
-      WebRTCPeerConnectionHandlerClient::ICEConnectionState state) {
-  DCHECK(main_thread_.CalledOnValidThread());
+    RTCPeerConnectionHandler* pc_handler,
+    webrtc::PeerConnectionInterface::IceConnectionState state) {
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
@@ -832,9 +814,9 @@ void PeerConnectionTracker::TrackIceConnectionStateChange(
 }
 
 void PeerConnectionTracker::TrackIceGatheringStateChange(
-      RTCPeerConnectionHandler* pc_handler,
-      WebRTCPeerConnectionHandlerClient::ICEGatheringState state) {
-  DCHECK(main_thread_.CalledOnValidThread());
+    RTCPeerConnectionHandler* pc_handler,
+    webrtc::PeerConnectionInterface::IceGatheringState state) {
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
@@ -848,7 +830,7 @@ void PeerConnectionTracker::TrackSessionDescriptionCallback(
     Action action,
     const std::string& callback_type,
     const std::string& value) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
@@ -875,9 +857,22 @@ void PeerConnectionTracker::TrackSessionDescriptionCallback(
   SendPeerConnectionUpdate(id, update_type.c_str(), value);
 }
 
+void PeerConnectionTracker::TrackSessionId(RTCPeerConnectionHandler* pc_handler,
+                                           const std::string& session_id) {
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
+  DCHECK(pc_handler);
+  DCHECK(!session_id.empty());
+  const int local_id = GetLocalIDForHandler(pc_handler);
+  if (local_id == -1) {
+    return;
+  }
+  GetPeerConnectionTrackerHost().get()->OnPeerConnectionSessionIdSet(
+      local_id, session_id);
+}
+
 void PeerConnectionTracker::TrackOnRenegotiationNeeded(
     RTCPeerConnectionHandler* pc_handler) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
@@ -886,7 +881,7 @@ void PeerConnectionTracker::TrackOnRenegotiationNeeded(
 
 void PeerConnectionTracker::TrackGetUserMedia(
     const blink::WebUserMediaRequest& user_media_request) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
 
   GetPeerConnectionTrackerHost()->GetUserMedia(
       user_media_request.GetSecurityOrigin().ToString().Utf8(),
@@ -898,7 +893,7 @@ void PeerConnectionTracker::TrackGetUserMedia(
 void PeerConnectionTracker::TrackRtcEventLogWrite(
     RTCPeerConnectionHandler* pc_handler,
     const std::string& output) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
@@ -906,7 +901,7 @@ void PeerConnectionTracker::TrackRtcEventLogWrite(
 }
 
 int PeerConnectionTracker::GetNextLocalID() {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   if (next_local_id_< 0)
     next_local_id_ = 1;
   return next_local_id_++;
@@ -914,9 +909,9 @@ int PeerConnectionTracker::GetNextLocalID() {
 
 int PeerConnectionTracker::GetLocalIDForHandler(
     RTCPeerConnectionHandler* handler) const {
-  DCHECK(main_thread_.CalledOnValidThread());
-  const auto found = peer_connection_id_map_.find(handler);
-  if (found == peer_connection_id_map_.end())
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
+  const auto found = peer_connection_local_id_map_.find(handler);
+  if (found == peer_connection_local_id_map_.end())
     return -1;
   DCHECK_NE(found->second, -1);
   return found->second;
@@ -926,7 +921,7 @@ void PeerConnectionTracker::SendPeerConnectionUpdate(
     int local_id,
     const std::string& callback_type,
     const std::string& value) {
-  DCHECK(main_thread_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
   GetPeerConnectionTrackerHost().get()->UpdatePeerConnection(
       local_id, callback_type, value);
 }

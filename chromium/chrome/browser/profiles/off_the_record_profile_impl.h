@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_PROFILES_OFF_THE_RECORD_PROFILE_IMPL_H_
 #define CHROME_BROWSER_PROFILES_OFF_THE_RECORD_PROFILE_IMPL_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
@@ -51,12 +52,14 @@ class OffTheRecordProfileImpl : public Profile {
   bool IsSupervised() const override;
   bool IsChild() const override;
   bool IsLegacySupervised() const override;
+  bool AllowsBrowserWindows() const override;
   ExtensionSpecialStoragePolicy* GetExtensionSpecialStoragePolicy() override;
   PrefService* GetPrefs() override;
   const PrefService* GetPrefs() const override;
   PrefService* GetOffTheRecordPrefs() override;
   net::URLRequestContextGetter* GetRequestContext() override;
-  net::URLRequestContextGetter* GetRequestContextForExtensions() override;
+  base::OnceCallback<net::CookieStore*()> GetExtensionsCookieStoreGetter()
+      override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   net::URLRequestContextGetter* CreateRequestContext(
       content::ProtocolHandlerMap* protocol_handlers,
@@ -70,9 +73,12 @@ class OffTheRecordProfileImpl : public Profile {
   net::URLRequestContextGetter* CreateMediaRequestContextForStoragePartition(
       const base::FilePath& partition_path,
       bool in_memory) override;
-  void RegisterInProcessServices(StaticServiceMap* services) override;
+  std::unique_ptr<service_manager::Service> HandleServiceRequest(
+      const std::string& service_name,
+      service_manager::mojom::ServiceRequest request) override;
   bool IsSameProfile(Profile* profile) override;
   base::Time GetStartTime() const override;
+  SimpleFactoryKey* GetSimpleFactoryKey() const override;
   base::FilePath last_selected_directory() override;
   void set_last_selected_directory(const base::FilePath& path) override;
   bool WasCreatedByVersionOrLater(const std::string& version) override;
@@ -85,12 +91,10 @@ class OffTheRecordProfileImpl : public Profile {
   void InitChromeOSPreferences() override;
 #endif  // defined(OS_CHROMEOS)
 
-  chrome_browser_net::Predictor* GetNetworkPredictor() override;
   GURL GetHomePage() override;
 
   // content::BrowserContext implementation:
   base::FilePath GetPath() const override;
-  base::FilePath GetCachePath() const override;
 #if !defined(OS_ANDROID)
   std::unique_ptr<content::ZoomLevelDelegate> CreateZoomLevelDelegate(
       const base::FilePath& partition_path) override;
@@ -105,11 +109,20 @@ class OffTheRecordProfileImpl : public Profile {
   content::SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   content::PermissionControllerDelegate* GetPermissionControllerDelegate()
       override;
+  content::ClientHintsControllerDelegate* GetClientHintsControllerDelegate()
+      override;
   content::BackgroundFetchDelegate* GetBackgroundFetchDelegate() override;
   content::BackgroundSyncController* GetBackgroundSyncController() override;
   content::BrowsingDataRemoverDelegate* GetBrowsingDataRemoverDelegate()
       override;
   media::VideoDecodePerfHistory* GetVideoDecodePerfHistory() override;
+  void SetCorsOriginAccessListForOrigin(
+      const url::Origin& source_origin,
+      std::vector<network::mojom::CorsOriginPatternPtr> allow_patterns,
+      std::vector<network::mojom::CorsOriginPatternPtr> block_patterns,
+      base::OnceClosure closure) override;
+  const content::SharedCorsOriginAccessList* GetSharedCorsOriginAccessList()
+      const override;
 
  private:
   void InitIoData();
@@ -140,6 +153,10 @@ class OffTheRecordProfileImpl : public Profile {
 
   // Time we were started.
   base::Time start_time_;
+
+  // The key to index KeyedService instances created by
+  // SimpleKeyedServiceFactory.
+  std::unique_ptr<SimpleFactoryKey> key_;
 
   base::FilePath last_selected_directory_;
 

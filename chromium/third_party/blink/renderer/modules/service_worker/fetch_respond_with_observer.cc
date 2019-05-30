@@ -7,6 +7,9 @@
 #include <memory>
 #include <utility>
 
+#include "base/feature_list.h"
+#include "base/macros.h"
+#include "base/metrics/histogram_macros.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink.h"
 #include "services/network/public/mojom/request_context_frame_type.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_response.h"
@@ -16,12 +19,12 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_response.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/fetch/body_stream_buffer.h"
-#include "third_party/blink/renderer/core/fetch/bytes_consumer.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/inspector/console_types.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_global_scope_client.h"
 #include "third_party/blink/renderer/modules/service_worker/wait_until_observer.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/loader/fetch/bytes_consumer.h"
 #include "v8/include/v8.h"
 
 using blink::mojom::ServiceWorkerResponseError;
@@ -77,7 +80,7 @@ const String GetMessageForResponseError(ServiceWorkerResponseError error,
                       "an \"opaqueredirect\" type response was used for a "
                       "request whose redirect mode is not \"manual\".";
       break;
-    case ServiceWorkerResponseError::kResponseTypeCORSForRequestModeSameOrigin:
+    case ServiceWorkerResponseError::kResponseTypeCorsForRequestModeSameOrigin:
       error_message = error_message +
                       "a \"cors\" type response was used for a request whose "
                       "mode is \"same-origin\".";
@@ -112,10 +115,10 @@ bool IsNavigationRequest(network::mojom::RequestContextFrameType frame_type) {
 }
 
 bool IsClientRequest(network::mojom::RequestContextFrameType frame_type,
-                     WebURLRequest::RequestContext request_context) {
+                     mojom::RequestContextType request_context) {
   return IsNavigationRequest(frame_type) ||
-         request_context == WebURLRequest::kRequestContextSharedWorker ||
-         request_context == WebURLRequest::kRequestContextWorker;
+         request_context == mojom::RequestContextType::SHARED_WORKER ||
+         request_context == mojom::RequestContextType::WORKER;
 }
 
 // Notifies the result of FetchDataLoader to |handle_|. |handle_| pass through
@@ -123,22 +126,60 @@ bool IsClientRequest(network::mojom::RequestContextFrameType frame_type,
 class FetchLoaderClient final
     : public GarbageCollectedFinalized<FetchLoaderClient>,
       public FetchDataLoader::Client {
-  WTF_MAKE_NONCOPYABLE(FetchLoaderClient);
   USING_GARBAGE_COLLECTED_MIXIN(FetchLoaderClient);
 
  public:
-  explicit FetchLoaderClient(
-      std::unique_ptr<WebServiceWorkerStreamHandle> handle)
-      : handle_(std::move(handle)) {}
+  FetchLoaderClient() {}
 
-  void DidFetchDataLoadedDataPipe() override { handle_->Completed(); }
-  void DidFetchDataLoadFailed() override { handle_->Aborted(); }
+  void DidFetchDataStartedDataPipe(
+      mojo::ScopedDataPipeConsumerHandle pipe) override {
+    DCHECK(!handle_);
+    handle_ = std::make_unique<WebServiceWorkerStreamHandle>(std::move(pipe));
+  }
+  void DidFetchDataLoadedDataPipe() override {
+    DCHECK(handle_);
+    // If this method is called synchronously from StartLoading() then we need
+    // to delay notifying the handle until after
+    // RespondToFetchEventWithResponseStream() is called.
+    if (!started_) {
+      pending_complete_ = true;
+      return;
+    }
+    pending_complete_ = false;
+    handle_->Completed();
+  }
+  void DidFetchDataLoadFailed() override {
+    // If this method is called synchronously from StartLoading() then we need
+    // to delay notifying the handle until after
+    // RespondToFetchEventWithResponseStream() is called.
+    if (!started_) {
+      pending_failure_ = true;
+      return;
+    }
+    pending_failure_ = false;
+    if (handle_)
+      handle_->Aborted();
+  }
   void Abort() override {
     // A fetch() aborted via AbortSignal in the ServiceWorker will just look
     // like an ordinary failure to the page.
     // TODO(ricea): Should a fetch() on the page get an AbortError instead?
-    handle_->Aborted();
+    if (handle_)
+      handle_->Aborted();
   }
+
+  void SetStarted() {
+    DCHECK(!started_);
+    // Note that RespondToFetchEventWithResponseStream() has been called and
+    // flush any pending operation.
+    started_ = true;
+    if (pending_complete_)
+      DidFetchDataLoadedDataPipe();
+    else if (pending_failure_)
+      DidFetchDataLoadFailed();
+  }
+
+  WebServiceWorkerStreamHandle* Handle() const { return handle_.get(); }
 
   void Trace(blink::Visitor* visitor) override {
     FetchDataLoader::Client::Trace(visitor);
@@ -146,6 +187,11 @@ class FetchLoaderClient final
 
  private:
   std::unique_ptr<WebServiceWorkerStreamHandle> handle_;
+  bool started_ = false;
+  bool pending_complete_ = false;
+  bool pending_failure_ = false;
+
+  DISALLOW_COPY_AND_ASSIGN(FetchLoaderClient);
 };
 
 }  // namespace
@@ -157,11 +203,11 @@ FetchRespondWithObserver* FetchRespondWithObserver::Create(
     network::mojom::FetchRequestMode request_mode,
     network::mojom::FetchRedirectMode redirect_mode,
     network::mojom::RequestContextFrameType frame_type,
-    WebURLRequest::RequestContext request_context,
+    mojom::RequestContextType request_context,
     WaitUntilObserver* observer) {
-  return new FetchRespondWithObserver(context, fetch_event_id, request_url,
-                                      request_mode, redirect_mode, frame_type,
-                                      request_context, observer);
+  return MakeGarbageCollected<FetchRespondWithObserver>(
+      context, fetch_event_id, request_url, request_mode, redirect_mode,
+      frame_type, request_context, observer);
 }
 
 // This function may be called when an exception is scheduled. Thus, it must
@@ -170,16 +216,17 @@ FetchRespondWithObserver* FetchRespondWithObserver::Create(
 void FetchRespondWithObserver::OnResponseRejected(
     ServiceWorkerResponseError error) {
   DCHECK(GetExecutionContext());
-  GetExecutionContext()->AddConsoleMessage(
-      ConsoleMessage::Create(kJSMessageSource, kWarningMessageLevel,
-                             GetMessageForResponseError(error, request_url_)));
+  GetExecutionContext()->AddConsoleMessage(ConsoleMessage::Create(
+      kJSMessageSource, mojom::ConsoleMessageLevel::kWarning,
+      GetMessageForResponseError(error, request_url_)));
 
   // The default value of WebServiceWorkerResponse's status is 0, which maps
   // to a network error.
   WebServiceWorkerResponse web_response;
   web_response.SetError(error);
   ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
-      ->RespondToFetchEvent(event_id_, web_response, event_dispatch_time_);
+      ->RespondToFetchEvent(event_id_, web_response, event_dispatch_time_,
+                            base::TimeTicks::Now());
 }
 
 void FetchRespondWithObserver::OnResponseFulfilled(
@@ -188,13 +235,12 @@ void FetchRespondWithObserver::OnResponseFulfilled(
     const char* interface_name,
     const char* property_name) {
   DCHECK(GetExecutionContext());
-  if (!V8Response::hasInstance(value.V8Value(),
-                               ToIsolate(GetExecutionContext()))) {
+  if (!V8Response::HasInstance(value.V8Value(), value.GetIsolate())) {
     OnResponseRejected(ServiceWorkerResponseError::kNoV8Instance);
     return;
   }
-  Response* response = V8Response::ToImplWithTypeCheck(
-      ToIsolate(GetExecutionContext()), value.V8Value());
+  Response* response =
+      V8Response::ToImplWithTypeCheck(value.GetIsolate(), value.V8Value());
   // "If one of the following conditions is true, return a network error:
   //   - |response|'s type is |error|.
   //   - |request|'s mode is |same-origin| and |response|'s type is |cors|.
@@ -207,14 +253,14 @@ void FetchRespondWithObserver::OnResponseFulfilled(
     OnResponseRejected(ServiceWorkerResponseError::kResponseTypeError);
     return;
   }
-  if (response_type == network::mojom::FetchResponseType::kCORS &&
+  if (response_type == network::mojom::FetchResponseType::kCors &&
       request_mode_ == network::mojom::FetchRequestMode::kSameOrigin) {
     OnResponseRejected(
-        ServiceWorkerResponseError::kResponseTypeCORSForRequestModeSameOrigin);
+        ServiceWorkerResponseError::kResponseTypeCorsForRequestModeSameOrigin);
     return;
   }
   if (response_type == network::mojom::FetchResponseType::kOpaque) {
-    if (request_mode_ != network::mojom::FetchRequestMode::kNoCORS) {
+    if (request_mode_ != network::mojom::FetchRequestMode::kNoCors) {
       OnResponseRejected(ServiceWorkerResponseError::kResponseTypeOpaque);
       return;
     }
@@ -283,44 +329,46 @@ void FetchRespondWithObserver::OnResponseFulfilled(
       // Handle the blob response body.
       web_response.SetBlobDataHandle(blob_data_handle);
       ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
-          ->RespondToFetchEvent(event_id_, web_response, event_dispatch_time_);
+          ->RespondToFetchEvent(event_id_, web_response, event_dispatch_time_,
+                                base::TimeTicks::Now());
       return;
     }
-    // Handle the stream response body.
-    mojo::ScopedDataPipeProducerHandle producer;
-    mojo::ScopedDataPipeConsumerHandle consumer;
-    MojoResult result = mojo::CreateDataPipe(nullptr, &producer, &consumer);
-    if (result != MOJO_RESULT_OK) {
-      OnResponseRejected(ServiceWorkerResponseError::kDataPipeCreationFailed);
-      return;
-    }
-    DCHECK(producer.is_valid());
-    DCHECK(consumer.is_valid());
 
-    std::unique_ptr<WebServiceWorkerStreamHandle> body_stream_handle =
-        std::make_unique<WebServiceWorkerStreamHandle>(std::move(consumer));
-    ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
-        ->RespondToFetchEventWithResponseStream(event_id_, web_response,
-                                                body_stream_handle.get(),
-                                                event_dispatch_time_);
-
-    buffer->StartLoading(FetchDataLoader::CreateLoaderAsDataPipe(
-                             std::move(producer), task_runner_),
-                         new FetchLoaderClient(std::move(body_stream_handle)),
-                         exception_state);
+    // Load the Response as a mojo::DataPipe.  The resulting pipe consumer
+    // handle will be passed to the FetchLoaderClient on start.
+    FetchLoaderClient* fetch_loader_client =
+        MakeGarbageCollected<FetchLoaderClient>();
+    buffer->StartLoading(FetchDataLoader::CreateLoaderAsDataPipe(task_runner_),
+                         fetch_loader_client, exception_state);
     if (exception_state.HadException()) {
       OnResponseRejected(ServiceWorkerResponseError::kResponseBodyBroken);
       return;
     }
+
+    // If we failed to create the WebServiceWorkerStreamHandle then we must
+    // have failed to allocate the mojo::DataPipe.
+    if (!fetch_loader_client->Handle()) {
+      OnResponseRejected(ServiceWorkerResponseError::kDataPipeCreationFailed);
+      return;
+    }
+
+    ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
+        ->RespondToFetchEventWithResponseStream(
+            event_id_, web_response, fetch_loader_client->Handle(),
+            event_dispatch_time_, base::TimeTicks::Now());
+
+    fetch_loader_client->SetStarted();
     return;
   }
   ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
-      ->RespondToFetchEvent(event_id_, web_response, event_dispatch_time_);
+      ->RespondToFetchEvent(event_id_, web_response, event_dispatch_time_,
+                            base::TimeTicks::Now());
 }
 
 void FetchRespondWithObserver::OnNoResponse() {
   ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
-      ->RespondToFetchEventWithNoResponse(event_id_, event_dispatch_time_);
+      ->RespondToFetchEventWithNoResponse(event_id_, event_dispatch_time_,
+                                          base::TimeTicks::Now());
 }
 
 FetchRespondWithObserver::FetchRespondWithObserver(
@@ -330,7 +378,7 @@ FetchRespondWithObserver::FetchRespondWithObserver(
     network::mojom::FetchRequestMode request_mode,
     network::mojom::FetchRedirectMode redirect_mode,
     network::mojom::RequestContextFrameType frame_type,
-    WebURLRequest::RequestContext request_context,
+    mojom::RequestContextType request_context,
     WaitUntilObserver* observer)
     : RespondWithObserver(context, fetch_event_id, observer),
       request_url_(request_url),

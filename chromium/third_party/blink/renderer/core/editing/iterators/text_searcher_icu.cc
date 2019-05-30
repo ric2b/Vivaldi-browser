@@ -29,7 +29,10 @@
 
 #include <unicode/usearch.h>
 #include "base/macros.h"
+#include "third_party/blink/renderer/platform/text/character.h"
+#include "third_party/blink/renderer/platform/text/text_boundaries.h"
 #include "third_party/blink/renderer/platform/text/text_break_iterator_internal_icu.h"
+#include "third_party/blink/renderer/platform/text/unicode_utilities.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_names.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
@@ -95,6 +98,30 @@ class ICULockableSearcher {
 
 }  // namespace
 
+static bool IsWholeWordMatch(const UChar* text,
+                             int text_length,
+                             MatchResultICU& result) {
+  DCHECK_LE((int)(result.start + result.length), text_length);
+  UChar32 first_character;
+  U16_GET(text, 0, result.start, result.length, first_character);
+
+  // Chinese and Japanese lack word boundary marks, and there is no clear
+  // agreement on what constitutes a word, so treat the position before any CJK
+  // character as a word start.
+  if (Character::IsCJKIdeographOrSymbol(first_character))
+    return true;
+
+  wtf_size_t word_break_search_start = result.start + result.length;
+  while (word_break_search_start > result.start) {
+    word_break_search_start =
+        FindNextWordBackward(text, text_length, word_break_search_start);
+  }
+  if (word_break_search_start != result.start)
+    return false;
+  return static_cast<int>(result.start + result.length) ==
+         FindWordEndBoundary(text, text_length, word_break_search_start);
+}
+
 // Grab the single global searcher.
 // If we ever have a reason to do more than once search buffer at once, we'll
 // have to move to multiple searchers.
@@ -111,44 +138,89 @@ TextSearcherICU::~TextSearcherICU() {
 }
 
 void TextSearcherICU::SetPattern(const StringView& pattern,
-                                 bool case_sensitive) {
-  SetCaseSensitivity(case_sensitive);
+                                 FindOptions options) {
+  DCHECK_GT(pattern.length(), 0u);
+  options_ = options;
+  SetCaseSensitivity(!(options & kCaseInsensitive));
   SetPattern(pattern.Characters16(), pattern.length());
+  if (ContainsKanaLetters(pattern.ToString())) {
+    NormalizeCharactersIntoNFCForm(pattern.Characters16(), pattern.length(),
+                                   normalized_search_text_);
+  }
 }
 
-void TextSearcherICU::SetText(const UChar* text, size_t length) {
+void TextSearcherICU::SetText(const UChar* text, wtf_size_t length) {
   UErrorCode status = U_ZERO_ERROR;
   usearch_setText(searcher_, text, length, &status);
   DCHECK_EQ(status, U_ZERO_ERROR);
   text_length_ = length;
 }
 
-void TextSearcherICU::SetOffset(size_t offset) {
+void TextSearcherICU::SetOffset(wtf_size_t offset) {
   UErrorCode status = U_ZERO_ERROR;
   usearch_setOffset(searcher_, offset, &status);
   DCHECK_EQ(status, U_ZERO_ERROR);
 }
 
 bool TextSearcherICU::NextMatchResult(MatchResultICU& result) {
+  while (NextMatchResultInternal(result)) {
+    if (!ShouldSkipCurrentMatch(result))
+      return true;
+  }
+  return false;
+}
+
+bool TextSearcherICU::NextMatchResultInternal(MatchResultICU& result) {
   UErrorCode status = U_ZERO_ERROR;
   const int match_start = usearch_next(searcher_, &status);
   DCHECK_EQ(status, U_ZERO_ERROR);
 
   // TODO(iceman): It is possible to use |usearch_getText| function
   // to retrieve text length and not store it explicitly.
-  if (!(match_start >= 0 && static_cast<size_t>(match_start) < text_length_)) {
+  if (!(match_start >= 0 &&
+        static_cast<wtf_size_t>(match_start) < text_length_)) {
     DCHECK_EQ(match_start, USEARCH_DONE);
     result.start = 0;
     result.length = 0;
     return false;
   }
 
-  result.start = static_cast<size_t>(match_start);
+  result.start = static_cast<wtf_size_t>(match_start);
   result.length = usearch_getMatchedLength(searcher_);
+  // Might be possible to get zero-length result with some Unicode characters
+  // that shouldn't actually match but is matched by ICU such as \u0080.
+  if (result.length == 0u) {
+    result.start = 0;
+    return false;
+  }
   return true;
 }
 
-void TextSearcherICU::SetPattern(const UChar* pattern, size_t length) {
+bool TextSearcherICU::ShouldSkipCurrentMatch(MatchResultICU& result) const {
+  int32_t text_length;
+  const UChar* text = usearch_getText(searcher_, &text_length);
+  DCHECK_LE((int32_t)(result.start + result.length), text_length);
+  DCHECK_GT(result.length, 0u);
+
+  if (!normalized_search_text_.IsEmpty() && !IsCorrectKanaMatch(text, result))
+    return true;
+
+  if ((options_ & kWholeWord) && !IsWholeWordMatch(text, text_length, result))
+    return true;
+  return false;
+}
+
+bool TextSearcherICU::IsCorrectKanaMatch(const UChar* text,
+                                         MatchResultICU& result) const {
+  Vector<UChar> normalized_match;
+  NormalizeCharactersIntoNFCForm(text + result.start, result.length,
+                                 normalized_match);
+  return CheckOnlyKanaLettersInStrings(
+      normalized_search_text_.data(), normalized_search_text_.size(),
+      normalized_match.begin(), normalized_match.size());
+}
+
+void TextSearcherICU::SetPattern(const UChar* pattern, wtf_size_t length) {
   UErrorCode status = U_ZERO_ERROR;
   usearch_setPattern(searcher_, pattern, length, &status);
   DCHECK_EQ(status, U_ZERO_ERROR);

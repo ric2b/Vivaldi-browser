@@ -25,12 +25,13 @@
 #include "media/base/video_decoder.h"
 #include "media/video/picture.h"
 #include "media/video/video_decode_accelerator.h"
+#include "third_party/webrtc/api/video_codecs/sdp_video_format.h"
 #include "third_party/webrtc/modules/video_coding/include/video_codec_interface.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace base {
 class WaitableEvent;
-};  // namespace base
+}  // namespace base
 
 namespace media {
 class GpuVideoAcceleratorFactories;
@@ -57,7 +58,7 @@ class CONTENT_EXPORT RTCVideoDecoder
   // Creates a RTCVideoDecoder on the message loop of |factories|. Returns NULL
   // if failed. The video decoder will run on the message loop of |factories|.
   static std::unique_ptr<RTCVideoDecoder> Create(
-      webrtc::VideoCodecType type,
+      const webrtc::SdpVideoFormat& format,
       media::GpuVideoAcceleratorFactories* factories);
   // Destroys |decoder| on the loop of |factories|
   static void Destroy(webrtc::VideoDecoder* decoder,
@@ -114,6 +115,9 @@ class CONTENT_EXPORT RTCVideoDecoder
                            GetVDAErrorCounterForNotifyError);
   FRIEND_TEST_ALL_PREFIXES(RTCVideoDecoderTest,
                            GetVDAErrorCounterForRunningOutOfPendingBuffers);
+  FRIEND_TEST_ALL_PREFIXES(RTCVideoDecoderTest,
+                           GetVDAErrorCounterForSendingFramesWithoutSize);
+  FRIEND_TEST_ALL_PREFIXES(RTCVideoDecoderTest, ParsesVP9CodecProfile);
 
   RTCVideoDecoder(webrtc::VideoCodecType type,
                   media::GpuVideoAcceleratorFactories* factories);
@@ -246,14 +250,20 @@ class CONTENT_EXPORT RTCVideoDecoder
 
   // A map from picture buffer IDs to texture-backed picture buffers.
   std::map<int32_t, media::PictureBuffer> assigned_picture_buffers_;
-
+  // The texture ids that should be destroyed but the buffer is still in
+  // |picture_buffers_at_display_|. It will be destroyed when the buffer is
+  // returned from display via ReusePictureBuffer().
+  std::map<int32_t /* picture_buffer_id */,
+           media::PictureBuffer::TextureIds /* texture_ids */>
+      textures_to_be_deleted_;
   // PictureBuffers given to us by VDA via PictureReady, which we sent forward
   // as VideoFrames to be rendered via read_cb_, and which will be returned
-  // to us via ReusePictureBuffer.
-  typedef std::map<int32_t /* picture_buffer_id */,
-                   media::PictureBuffer::TextureIds /* texture ids */>
-      PictureBufferTextureMap;
-  PictureBufferTextureMap picture_buffers_at_display_;
+  // to us via ReusePictureBuffer. Note that a picture buffer might be sent from
+  // VDA multiple times. Therefore we use map to track the number of times we
+  // passed the picture buffer for display.
+  std::map<int32_t /* picture_buffer_id */,
+           size_t /* num_times_sent_to_client */>
+      picture_buffers_at_display_;
 
   // The id that will be given to the next picture buffer.
   int32_t next_picture_buffer_id_;

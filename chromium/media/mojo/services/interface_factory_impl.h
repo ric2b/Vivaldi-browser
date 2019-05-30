@@ -8,39 +8,49 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "build/build_config.h"
+#include "media/base/media_util.h"
 #include "media/mojo/buildflags.h"
+#include "media/mojo/interfaces/audio_decoder.mojom.h"
+#include "media/mojo/interfaces/cdm_proxy.mojom.h"
+#include "media/mojo/interfaces/content_decryption_module.mojom.h"
+#include "media/mojo/interfaces/decryptor.mojom.h"
 #include "media/mojo/interfaces/interface_factory.mojom.h"
+#include "media/mojo/interfaces/renderer.mojom.h"
+#include "media/mojo/interfaces/video_decoder.mojom.h"
 #include "media/mojo/services/deferred_destroy_strong_binding_set.h"
 #include "media/mojo/services/mojo_cdm_service_context.h"
 #include "mojo/public/cpp/bindings/strong_binding_set.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/cpp/service_context_ref.h"
+#include "services/service_manager/public/cpp/service_keepalive.h"
 
 namespace media {
 
 class CdmFactory;
-class MediaLog;
 class MojoMediaClient;
 
 class InterfaceFactoryImpl : public DeferredDestroy<mojom::InterfaceFactory> {
  public:
   InterfaceFactoryImpl(
       service_manager::mojom::InterfaceProviderPtr interfaces,
-      MediaLog* media_log,
-      std::unique_ptr<service_manager::ServiceContextRef> connection_ref,
+      std::unique_ptr<service_manager::ServiceKeepaliveRef> keepalive_ref,
       MojoMediaClient* mojo_media_client);
   ~InterfaceFactoryImpl() final;
 
   // mojom::InterfaceFactory implementation.
   void CreateAudioDecoder(mojom::AudioDecoderRequest request) final;
   void CreateVideoDecoder(mojom::VideoDecoderRequest request) final;
-  void CreateRenderer(media::mojom::HostedRendererType type,
-                      const std::string& type_specific_id,
-                      mojom::RendererRequest request) final;
+  void CreateDefaultRenderer(const std::string& audio_device_id,
+                             mojom::RendererRequest request) final;
+#if defined(OS_ANDROID)
+  void CreateMediaPlayerRenderer(mojom::RendererRequest request) final;
+  void CreateFlingingRenderer(const std::string& presentation_id,
+                              mojom::RendererRequest request) final;
+#endif  // defined(OS_ANDROID)
   void CreateCdm(const std::string& key_system,
                  mojom::ContentDecryptionModuleRequest request) final;
   void CreateDecryptor(int cdm_id, mojom::DecryptorRequest request) final;
-  void CreateCdmProxy(const std::string& cdm_guid,
+  void CreateCdmProxy(const base::Token& cdm_guid,
                       mojom::CdmProxyRequest request) final;
 
   // DeferredDestroy<mojom::InterfaceFactory> implemenation.
@@ -72,7 +82,8 @@ class InterfaceFactoryImpl : public DeferredDestroy<mojom::InterfaceFactory> {
 #endif  // BUILDFLAG(ENABLE_MOJO_VIDEO_DECODER)
 
 #if BUILDFLAG(ENABLE_MOJO_RENDERER)
-  MediaLog* media_log_;
+  // TODO(xhwang): Use MojoMediaLog for Renderer.
+  NullMediaLog media_log_;
   mojo::StrongBindingSet<mojom::Renderer> renderer_bindings_;
 #endif  // BUILDFLAG(ENABLE_MOJO_RENDERER)
 
@@ -88,7 +99,7 @@ class InterfaceFactoryImpl : public DeferredDestroy<mojom::InterfaceFactory> {
 
   mojo::StrongBindingSet<mojom::Decryptor> decryptor_bindings_;
 
-  std::unique_ptr<service_manager::ServiceContextRef> connection_ref_;
+  std::unique_ptr<service_manager::ServiceKeepaliveRef> keepalive_ref_;
   MojoMediaClient* mojo_media_client_;
   base::OnceClosure destroy_cb_;
 

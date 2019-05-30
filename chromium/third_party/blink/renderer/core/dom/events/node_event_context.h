@@ -38,14 +38,14 @@ class Node;
 class TouchEventContext;
 
 class CORE_EXPORT NodeEventContext {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
 
  public:
   // FIXME: Use ContainerNode instead of Node.
-  NodeEventContext(Node*, EventTarget* current_target);
-  void Trace(blink::Visitor*);
+  NodeEventContext(Node&, EventTarget& current_target);
+  void Trace(Visitor*);
 
-  Node* GetNode() const { return node_.Get(); }
+  Node& GetNode() const { return *node_; }
 
   void SetTreeScopeEventContext(
       TreeScopeEventContext* tree_scope_event_context) {
@@ -77,6 +77,6 @@ class CORE_EXPORT NodeEventContext {
 
 }  // namespace blink
 
-WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(blink::NodeEventContext);
+WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(blink::NodeEventContext)
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_DOM_EVENTS_NODE_EVENT_CONTEXT_H_

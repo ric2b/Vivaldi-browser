@@ -7,22 +7,21 @@ package org.chromium.chrome.browser.browserservices;
 import android.os.SystemClock;
 import android.support.annotation.IntDef;
 
+import org.chromium.base.metrics.CachedMetrics;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.base.metrics.RecordUserAction;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Class to contain metrics recording constants and behaviour for Browser Services.
  */
 public class BrowserServicesMetrics {
-    @Retention(RetentionPolicy.SOURCE)
     @IntDef({VerificationResult.ONLINE_SUCCESS, VerificationResult.ONLINE_FAILURE,
             VerificationResult.OFFLINE_SUCCESS, VerificationResult.OFFLINE_FAILURE,
             VerificationResult.HTTPS_FAILURE, VerificationResult.REQUEST_FAILURE,
             VerificationResult.CACHED_SUCCESS})
+    @Retention(RetentionPolicy.SOURCE)
     public @interface VerificationResult {
         // Don't reuse values or reorder values. If you add something new, change NUM_ENTRIES as
         // well.
@@ -45,26 +44,20 @@ public class BrowserServicesMetrics {
     }
 
     /**
-     * Records that a Trusted Web Activity has been opened.
-     */
-    public static void recordTwaOpened() {
-        RecordUserAction.record("BrowserServices.TwaOpened");
-    }
-
-    /**
-     * Records the time that a Trusted Web Activity has been open for.
-     */
-    public static void recordTwaOpenTime(long duration, TimeUnit unit) {
-        RecordHistogram.recordTimesHistogram("BrowserServices.TwaOpenTime", duration, unit);
-    }
-
-    /**
      * Returns a {@link TimingMetric} that records the amount of time spent querying the Android
      * system for ResolveInfos that will deal with a given URL when launching from a background
      * service.
      */
     public static TimingMetric getServiceTabResolveInfoTimingContext() {
         return new TimingMetric("BrowserServices.ServiceTabResolveInfoQuery");
+    }
+
+    /**
+     * Returns a {@link TimingMetric} that records the amount of time spent opening the
+     * {@link ClientAppDataRegister}.
+     */
+    public static TimingMetric getClientAppDataLoadTimingContext() {
+        return new TimingMetric("BrowserServices.ClientAppDataLoad");
     }
 
     /**
@@ -85,8 +78,8 @@ public class BrowserServicesMetrics {
 
         @Override
         public void close() {
-            RecordHistogram.recordMediumTimesHistogram(
-                    mMetric, now() - mStart, TimeUnit.MILLISECONDS);
+            // Use {@link CachedMetrics} so this can be called before native is loaded.
+            new CachedMetrics.MediumTimesHistogramSample(mMetric).record(now() - mStart);
         }
     }
 

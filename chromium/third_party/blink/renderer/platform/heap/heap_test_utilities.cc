@@ -16,15 +16,16 @@ void PreciselyCollectGarbage() {
       BlinkGC::kEagerSweeping, BlinkGC::GCReason::kForcedGC);
 }
 
-void ConservativelyCollectGarbage() {
-  ThreadState::Current()->CollectGarbage(
-      BlinkGC::kHeapPointersOnStack, BlinkGC::kAtomicMarking,
-      BlinkGC::kEagerSweeping, BlinkGC::GCReason::kForcedGC);
+void ConservativelyCollectGarbage(BlinkGC::SweepingType sweeping_type) {
+  ThreadState::Current()->CollectGarbage(BlinkGC::kHeapPointersOnStack,
+                                         BlinkGC::kAtomicMarking, sweeping_type,
+                                         BlinkGC::GCReason::kForcedGC);
 }
 
 // Do several GCs to make sure that later GCs don't free up old memory from
 // previously run tests in this process.
 void ClearOutOldGarbage() {
+  PreciselyCollectGarbage();
   ThreadHeap& heap = ThreadState::Current()->Heap();
   while (true) {
     size_t used = heap.ObjectPayloadSizeForTesting();

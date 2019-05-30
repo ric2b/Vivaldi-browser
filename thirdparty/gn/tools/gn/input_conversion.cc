@@ -241,9 +241,11 @@ Value DoConvertInputToValue(const Settings* settings,
 }  // namespace
 
 const char kInputOutputConversion_Help[] =
-    R"(Input and output conversions are arguments to file and process functions
-that specify how to convert data to or from external formats. The possible
-values for parameters specifying conversions are:
+    R"(Input and output conversion
+
+  Input and output conversions are arguments to file and process functions
+  that specify how to convert data to or from external formats. The possible
+  values for parameters specifying conversions are:
 
   "" (the default)
       input: Discard the result and return None.
@@ -253,21 +255,21 @@ values for parameters specifying conversions are:
   "list lines"
       input:
         Return the file contents as a list, with a string for each line. The
-        newlines will not be present in the result. The last line may or may not
-        end in a newline.
+        newlines will not be present in the result. The last line may or may
+        not end in a newline.
 
         After splitting, each individual line will be trimmed of whitespace on
         both ends.
 
       output:
         Renders the value contents as a list, with a string for each line. The
-        newlines will not be present in the result. The last line will end in with
-        a newline.
+        newlines will not be present in the result. The last line will end in
+        with a newline.
 
   "scope"
       input:
-        Execute the block as GN code and return a scope with the resulting values
-        in it. If the input was:
+        Execute the block as GN code and return a scope with the resulting
+        values in it. If the input was:
           a = [ "hello.cc", "world.cc" ]
           b = 26
         and you read the result into a variable named "val", then you could
@@ -312,8 +314,8 @@ values for parameters specifying conversions are:
         will produce an error if assigned to a variable.
 
       output:
-        Render the value contents as a literal rvalue. Strings render with escaped
-        quotes.
+        Render the value contents as a literal rvalue. Strings render with
+        escaped quotes.
 
   "json"
       input: Parse the input as a JSON and convert it to equivalent GN rvalue.

@@ -46,8 +46,9 @@ Polymer({
    *     and |enforcement|.
    */
   getIndicatorTypeForPref_: function(controlledBy, enforcement) {
-    if (enforcement == chrome.settingsPrivate.Enforcement.RECOMMENDED)
+    if (enforcement == chrome.settingsPrivate.Enforcement.RECOMMENDED) {
       return CrPolicyIndicatorType.RECOMMENDED;
+    }
     if (enforcement == chrome.settingsPrivate.Enforcement.ENFORCED) {
       switch (controlledBy) {
         case chrome.settingsPrivate.ControlledBy.EXTENSION:
@@ -71,11 +72,17 @@ Polymer({
    * @private
    */
   getIndicatorTooltipForPref_: function(indicatorType) {
-    if (this.pref === undefined)
+    if (!this.pref) {
       return '';
+    }
 
-    var matches = this.pref && this.pref.value == this.pref.recommendedValue;
+    const matches = this.pref && this.pref.value == this.pref.recommendedValue;
     return this.getIndicatorTooltip(
         indicatorType, this.pref.controlledByName || '', matches);
+  },
+
+  /** @return {!Element} */
+  getFocusableElement: function() {
+    return this.$$('cr-tooltip-icon').getFocusableElement();
   },
 });

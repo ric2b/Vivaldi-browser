@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_RESOURCE_COORDINATOR_LOCAL_SITE_CHARACTERISTICS_DATA_IMPL_H_
 #define CHROME_BROWSER_RESOURCE_COORDINATOR_LOCAL_SITE_CHARACTERISTICS_DATA_IMPL_H_
 
+#include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -28,7 +29,11 @@ class LocalSiteCharacteristicsDataReaderTest;
 class LocalSiteCharacteristicsDataWriterTest;
 
 FORWARD_DECLARE_TEST(LocalSiteCharacteristicsDataReaderTest,
+                     DestroyingReaderCancelsPendingCallbacks);
+FORWARD_DECLARE_TEST(LocalSiteCharacteristicsDataReaderTest,
                      FreeingReaderDoesntCauseWriteOperation);
+FORWARD_DECLARE_TEST(LocalSiteCharacteristicsDataReaderTest,
+                     OnDataLoadedCallbackInvoked);
 
 namespace internal {
 
@@ -83,8 +88,19 @@ class LocalSiteCharacteristicsDataImpl
   SiteFeatureUsage UsesAudioInBackground() const;
   SiteFeatureUsage UsesNotificationsInBackground() const;
 
+  // Returns true if the most authoritative data has been loaded from the
+  // backing store.
+  bool DataLoaded() const;
+
+  // Registers a callback to be invoked when the data backing this object is
+  // loaded from disk, or otherwise authoritatively initialized.
+  void RegisterDataLoadedCallback(base::OnceClosure&& callback);
+
   // Accessors for load-time performance measurement estimates.
   // If |num_datum| is zero, there's no estimate available.
+  const ExponentialMovingAverage& load_duration() const {
+    return load_duration_;
+  }
   const ExponentialMovingAverage& cpu_usage_estimate() const {
     return cpu_usage_estimate_;
   }
@@ -101,6 +117,7 @@ class LocalSiteCharacteristicsDataImpl
 
   // Call when a load-time performance measurement becomes available.
   void NotifyLoadTimePerformanceMeasurement(
+      base::TimeDelta load_duration,
       base::TimeDelta cpu_usage_estimate,
       uint64_t private_footprint_kb_estimate);
 
@@ -124,12 +141,15 @@ class LocalSiteCharacteristicsDataImpl
   }
 
   const url::Origin& origin() const { return origin_; }
+  bool is_dirty() const { return is_dirty_; }
 
   void ExpireAllObservationWindowsForTesting();
 
   void ClearObservationsAndInvalidateReadOperationForTesting() {
     ClearObservationsAndInvalidateReadOperation();
   }
+
+  bool fully_initialized_for_testing() const { return fully_initialized_; }
 
  protected:
   friend class base::RefCounted<LocalSiteCharacteristicsDataImpl>;
@@ -166,29 +186,24 @@ class LocalSiteCharacteristicsDataImpl
 
  private:
   FRIEND_TEST_ALL_PREFIXES(LocalSiteCharacteristicsDataImplTest,
+                           FlushingStateToProtoDoesntAffectData);
+  FRIEND_TEST_ALL_PREFIXES(LocalSiteCharacteristicsDataImplTest,
                            LateAsyncReadDoesntBypassClearEvent);
   FRIEND_TEST_ALL_PREFIXES(
       resource_coordinator::LocalSiteCharacteristicsDataReaderTest,
+      DestroyingReaderCancelsPendingCallbacks);
+  FRIEND_TEST_ALL_PREFIXES(
+      resource_coordinator::LocalSiteCharacteristicsDataReaderTest,
       FreeingReaderDoesntCauseWriteOperation);
+  FRIEND_TEST_ALL_PREFIXES(
+      resource_coordinator::LocalSiteCharacteristicsDataReaderTest,
+      OnDataLoadedCallbackInvoked);
 
   // Add |extra_observation_duration| to the observation window of a given
   // feature if it hasn't been used yet, do nothing otherwise.
   static void IncrementFeatureObservationDuration(
       SiteCharacteristicsFeatureProto* feature_proto,
       base::TimeDelta extra_observation_duration);
-
-  // Initialize a SiteCharacteristicsFeatureProto object with its default
-  // values.
-  static void InitSiteCharacteristicsFeatureProtoWithDefaultValues(
-      SiteCharacteristicsFeatureProto* proto);
-
-  // Initialize this object with default values. If
-  // |only_init_uninitialized_fields| is set to true then only the fields that
-  // haven't yet been initialized will be initialized, otherwise everything will
-  // be overriden with default values.
-  // NOTE: Do not call this directly while the site is loaded as this will not
-  // properly update the last_loaded time, instead call |ClearObservations|.
-  void InitWithDefaultValues(bool only_init_uninitialized_fields);
 
   // Clear all the past observations about this site and invalidate the pending
   // read observations from the database.
@@ -218,12 +233,19 @@ class LocalSiteCharacteristicsDataImpl
   // Flush any state that's maintained in member variables to the proto.
   const SiteCharacteristicsProto& FlushStateToProto();
 
+  // Updates the proto with the current total observation duration and updates
+  // |background_session_begin_| to NowTicks().
+  void FlushFeaturesObservationDurationToProto();
+
+  void TransitionToFullyInitialized();
+
   // This site's characteristics, contains the features and other values are
   // measured.
   SiteCharacteristicsProto site_characteristics_;
 
   // The in-memory storage for the moving performance averages.
-  ExponentialMovingAverage cpu_usage_estimate_;
+  ExponentialMovingAverage load_duration_;       // microseconds.
+  ExponentialMovingAverage cpu_usage_estimate_;  // microseconds.
   ExponentialMovingAverage private_footprint_kb_estimate_;
 
   // This site's origin.
@@ -259,6 +281,10 @@ class LocalSiteCharacteristicsDataImpl
   // Dirty bit, indicates if any of the fields in |site_characteristics_| has
   // changed since it has been initialized.
   bool is_dirty_;
+
+  // A collection of callbacks to be invoked when this object becomes fully
+  // initialized.
+  std::vector<base::OnceClosure> data_loaded_callbacks_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

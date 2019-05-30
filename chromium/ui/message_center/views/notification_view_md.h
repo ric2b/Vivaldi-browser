@@ -99,9 +99,12 @@ class NotificationButtonMD : public views::LabelButton {
   const base::Optional<base::string16>& placeholder() const {
     return placeholder_;
   }
+  void set_placeholder(const base::Optional<base::string16>& placeholder) {
+    placeholder_ = placeholder;
+  }
 
  private:
-  const base::Optional<base::string16> placeholder_;
+  base::Optional<base::string16> placeholder_;
 
   DISALLOW_COPY_AND_ASSIGN(NotificationButtonMD);
 };
@@ -136,8 +139,8 @@ class NotificationInputContainerMD : public views::InkDropHostView,
   // Overridden from views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
-  views::Textfield* textfield() const { return textfield_; };
-  views::ImageButton* button() const { return button_; };
+  views::Textfield* textfield() const { return textfield_; }
+  views::ImageButton* button() const { return button_; }
 
  private:
   NotificationInputDelegate* const delegate_;
@@ -170,8 +173,8 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
 
   // Overridden from views::View:
   void Layout() override;
+  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   void OnFocus() override;
-  void ScrollRectToVisible(const gfx::Rect& rect) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   bool OnMouseDragged(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
@@ -182,12 +185,13 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
   void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
   void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
   std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
+  std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override;
   SkColor GetInkDropBaseColor() const override;
 
   // Overridden from MessageView:
   void UpdateWithNotification(const Notification& notification) override;
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-  void UpdateControlButtonsVisibility() override;
+  void UpdateCornerRadius(int top_radius, int bottom_radius) override;
   NotificationControlButtonsView* GetControlButtonsView() const override;
   bool IsExpanded() const override;
   void SetExpanded(bool expanded) override;
@@ -212,11 +216,17 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
   FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, TestClickExpanded);
   FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, TestActionButtonClick);
   FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, TestInlineReply);
+  FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest,
+                           TestInlineReplyRemovedByUpdate);
   FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, ExpandLongMessage);
   FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, TestAccentColor);
   FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, UseImageAsIcon);
   FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, NotificationWithoutIcon);
   FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, InlineSettings);
+  FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, UpdateViewsOrderingTest);
+  FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest, TestDeleteOnToggleExpanded);
+  FRIEND_TEST_ALL_PREFIXES(NotificationViewMDTest,
+                           TestDeleteOnDisableNotification);
 
   friend class NotificationViewMDTest;
 
@@ -243,6 +253,9 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
   void UpdateViewForExpandedState(bool expanded);
   void ToggleInlineSettings(const ui::Event& event);
 
+  // Initializes |ink_drop_mask_| and sets the mask on |ink_drop_layer_|.
+  void InstallNotificationInkDropMask();
+
   views::InkDropContainerView* const ink_drop_container_;
 
   // View containing close and settings buttons
@@ -263,6 +276,15 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
 
   // Describes whether the view should display a hand pointer or not.
   bool clickable_;
+
+  // Corner radii for the InkDropMask.
+  int top_radius_ = 0;
+  int bottom_radius_ = 0;
+
+  // The InkDrop layer and InkDropMask used to update their bounds on
+  // OnBoundsChanged(). See crbug.com/915222.
+  ui::Layer* ink_drop_layer_ = nullptr;
+  std::unique_ptr<views::InkDropMask> ink_drop_mask_;
 
   // Container views directly attached to this view.
   NotificationHeaderView* header_row_ = nullptr;
@@ -287,6 +309,10 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
   views::View* action_buttons_row_ = nullptr;
   NotificationInputContainerMD* inline_reply_ = nullptr;
 
+  // Counter for view layouting, which is used during the CreateOrUpdate*
+  // phases to keep track of the view ordering. See crbug.com/901045
+  int left_content_count_;
+
   // Views for inline settings.
   views::RadioButton* block_all_button_ = nullptr;
   views::RadioButton* dont_block_button_ = nullptr;
@@ -295,6 +321,8 @@ class MESSAGE_CENTER_EXPORT NotificationViewMD
   std::unique_ptr<ui::EventHandler> click_activator_;
 
   base::TimeTicks last_mouse_pressed_timestamp_;
+
+  base::WeakPtrFactory<NotificationViewMD> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(NotificationViewMD);
 };

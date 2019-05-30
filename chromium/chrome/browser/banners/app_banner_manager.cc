@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/banners/app_banner_manager_desktop.h"
@@ -18,6 +19,7 @@
 #include "chrome/browser/banners/app_banner_settings_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
+#include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -50,6 +52,16 @@ InstallableParams ParamsToGetManifest() {
 }  // anonymous namespace
 
 namespace banners {
+
+AppBannerManager::Observer::Observer() = default;
+AppBannerManager::Observer::~Observer() = default;
+
+void AppBannerManager::Observer::ObserveAppBannerManager(
+    AppBannerManager* manager) {
+  scoped_observer_.RemoveAll();
+  if (manager)
+    scoped_observer_.Add(manager);
+}
 
 // static
 base::Time AppBannerManager::GetCurrentTime() {
@@ -214,6 +226,14 @@ base::WeakPtr<AppBannerManager> AppBannerManager::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
+void AppBannerManager::AddObserver(Observer* observer) {
+  observer_list_.AddObserver(observer);
+}
+
+void AppBannerManager::RemoveObserver(Observer* observer) {
+  observer_list_.RemoveObserver(observer);
+}
+
 AppBannerManager::AppBannerManager(content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
       SiteEngagementObserver(SiteEngagementService::Get(
@@ -225,6 +245,7 @@ AppBannerManager::AppBannerManager(content::WebContents* web_contents)
       load_finished_(false),
       triggered_by_devtools_(false),
       status_reporter_(std::make_unique<NullStatusReporter>()),
+      install_animation_pending_(false),
       installable_(Installable::UNKNOWN),
       weak_factory_(this) {
   DCHECK(manager_);
@@ -338,9 +359,9 @@ void AppBannerManager::OnDidPerformInstallableCheck(
   if (data.has_worker && data.valid_manifest)
     TrackDisplayEvent(DISPLAY_EVENT_WEB_APP_BANNER_REQUESTED);
 
-  installable_ = data.error_code == NO_ERROR_DETECTED
+  SetInstallable(data.error_code == NO_ERROR_DETECTED
                      ? Installable::INSTALLABLE_YES
-                     : Installable::INSTALLABLE_NO;
+                     : Installable::INSTALLABLE_NO);
 
   if (data.error_code != NO_ERROR_DETECTED) {
     if (data.error_code == NO_MATCHING_SERVICE_WORKER)
@@ -403,8 +424,7 @@ void AppBannerManager::ResetCurrentPageData() {
   manifest_ = blink::Manifest();
   manifest_url_ = GURL();
   validated_url_ = GURL();
-  referrer_.erase();
-  installable_ = Installable::UNKNOWN;
+  SetInstallable(Installable::UNKNOWN);
 }
 
 void AppBannerManager::Terminate() {
@@ -439,6 +459,27 @@ InstallableStatusCode AppBannerManager::TerminationCode() const {
       break;
   }
   return NO_ERROR_DETECTED;
+}
+
+void AppBannerManager::SetInstallable(Installable installable) {
+  if (installable_ == installable)
+    return;
+
+  installable_ = installable;
+  install_animation_pending_ = IsInstallable();
+
+  for (Observer& observer : observer_list_)
+    observer.OnInstallabilityUpdated();
+}
+
+void AppBannerManager::MigrateObserverListForTesting(
+    content::WebContents* web_contents) {
+  AppBannerManager* existing_manager = FromWebContents(web_contents);
+  for (Observer& observer : existing_manager->observer_list_)
+    observer.ObserveAppBannerManager(this);
+  DCHECK(existing_manager->observer_list_.begin() ==
+         existing_manager->observer_list_.end())
+      << "Old observer list must be empty after transfer to test instance.";
 }
 
 void AppBannerManager::Stop(InstallableStatusCode code) {
@@ -535,9 +576,7 @@ void AppBannerManager::MediaStoppedPlaying(
     const MediaPlayerInfo& media_info,
     const MediaPlayerId& id,
     WebContentsObserver::MediaStoppedReason reason) {
-  active_media_players_.erase(std::remove(active_media_players_.begin(),
-                                          active_media_players_.end(), id),
-                              active_media_players_.end());
+  base::Erase(active_media_players_, id);
 }
 
 void AppBannerManager::WebContentsDestroyed() {
@@ -599,9 +638,21 @@ bool AppBannerManager::IsExperimentalAppBannersEnabled() {
 base::string16 AppBannerManager::GetInstallableAppName(
     content::WebContents* web_contents) {
   AppBannerManager* manager = FromWebContents(web_contents);
-  if (!manager || manager->installable_ != Installable::INSTALLABLE_YES)
+  if (!manager || !manager->IsInstallable())
     return base::string16();
   return manager->GetAppName();
+}
+
+bool AppBannerManager::IsInstallable() const {
+  return installable_ == Installable::INSTALLABLE_YES;
+}
+
+bool AppBannerManager::MaybeConsumeInstallAnimation() {
+  DCHECK(IsInstallable());
+  if (!install_animation_pending_)
+    return false;
+  install_animation_pending_ = false;
+  return true;
 }
 
 void AppBannerManager::RecordCouldShowBanner() {
@@ -640,8 +691,7 @@ InstallableStatusCode AppBannerManager::ShouldShowBannerCode() {
 
 void AppBannerManager::OnBannerPromptReply(
     blink::mojom::AppBannerControllerPtr controller,
-    blink::mojom::AppBannerPromptReply reply,
-    const std::string& referrer) {
+    blink::mojom::AppBannerPromptReply reply) {
   // The renderer might have requested the prompt to be canceled. They may
   // request that it is redisplayed later, so don't Terminate() here. However,
   // log that the cancelation was requested, so Terminate() can be called if a
@@ -652,7 +702,6 @@ void AppBannerManager::OnBannerPromptReply(
   // already been received before cancel was sent (e.g. if redisplay was
   // requested in the beforeinstallprompt event handler), we keep going and show
   // the banner immediately.
-  referrer_ = referrer;
   if (reply == blink::mojom::AppBannerPromptReply::CANCEL) {
     TrackBeforeInstallEvent(BEFORE_INSTALL_EVENT_PREVENT_DEFAULT_CALLED);
     if (IsDebugMode()) {

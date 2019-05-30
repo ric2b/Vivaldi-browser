@@ -9,6 +9,10 @@
 
 #include "ash/ash_export.h"
 #include "base/macros.h"
+#include "base/scoped_observer.h"
+#include "ui/aura/env.h"
+#include "ui/aura/env_observer.h"
+#include "ui/aura/window_occlusion_tracker.h"
 #include "ui/views/view.h"
 
 namespace aura {
@@ -19,18 +23,22 @@ namespace ui {
 class LayerTreeOwner;
 }
 
-namespace ash {
+namespace ws {
+class ScopedForceVisible;
+}
 
+namespace ash {
 namespace wm {
 
-// A view that mirrors the client area of a single window.
-class WindowMirrorView : public views::View {
+// A view that mirrors the client area of a single (source) window.
+class ASH_EXPORT WindowMirrorView : public views::View,
+                                    public aura::EnvObserver {
  public:
-  WindowMirrorView(aura::Window* window, bool trilinear_filtering_on_init);
+  WindowMirrorView(aura::Window* source, bool trilinear_filtering_on_init);
   ~WindowMirrorView() override;
 
-  // Returns the |target_| window.
-  aura::Window* target() { return target_; }
+  // Returns the source of the mirror.
+  aura::Window* source() { return source_; }
 
   // Recreates |layer_owner_|.
   void RecreateMirrorLayers();
@@ -40,11 +48,19 @@ class WindowMirrorView : public views::View {
   void Layout() override;
   bool GetNeedsNotificationWhenVisibleBoundsChange() const override;
   void OnVisibleBoundsChanged() override;
+  void NativeViewHierarchyChanged() override;
+  void AddedToWidget() override;
+  void RemovedFromWidget() override;
 
  private:
   void InitLayerOwner();
 
-  // Gets the root of the layer tree that was lifted from |target_| (and is now
+  // Ensures that the |target_| window is in the list of mirror windows that is
+  // set as a property on the |source_| window. This method triggers the
+  // OnWindowPropertyChanged() on WindowObservers.
+  void UpdateSourceWindowProperty();
+
+  // Gets the root of the layer tree that was lifted from |source_| (and is now
   // a child of |this->layer()|).
   ui::Layer* GetMirrorLayer();
 
@@ -52,8 +68,16 @@ class WindowMirrorView : public views::View {
   // coordinate space.
   gfx::Rect GetClientAreaBounds() const;
 
+  void ForceVisibilityAndOcclusionForProxyWindow();
+
+  // aura::EnvObserver:
+  void OnWindowOcclusionTrackingResumed() override;
+
   // The original window that is being represented by |this|.
-  aura::Window* target_;
+  aura::Window* source_;
+
+  // The window which contains this mirror view.
+  aura::Window* target_ = nullptr;
 
   // Retains ownership of the mirror layer tree. This is lazily initialized
   // the first time the view becomes visible.
@@ -62,6 +86,14 @@ class WindowMirrorView : public views::View {
   // True if trilinear filtering should be performed on the layer in
   // InitLayerOwner().
   bool trilinear_filtering_on_init_;
+
+  // These are used when mirroring a window from a remote client (a proxy
+  // window from the window-service).
+  std::unique_ptr<aura::WindowOcclusionTracker::ScopedForceVisible>
+      force_occlusion_tracker_visible_;
+  std::unique_ptr<ws::ScopedForceVisible> force_proxy_window_visible_;
+
+  ScopedObserver<aura::Env, aura::EnvObserver> env_observer_{this};
 
   DISALLOW_COPY_AND_ASSIGN(WindowMirrorView);
 };

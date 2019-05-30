@@ -9,6 +9,7 @@
 #include <tuple>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
@@ -774,7 +775,7 @@ void MenuManager::SanitizeRadioListsInMenu(
     // Uncheck any checked radio items in the run, and at the end reset
     // the appropriate one to checked. If no check radio items were found,
     // then check the first radio item in the run.
-    MenuItem::OwnedList::const_iterator last_checked = item_list.end();
+    auto last_checked = item_list.end();
     MenuItem::OwnedList::const_iterator radio_run_iter;
     for (radio_run_iter = i; radio_run_iter != item_list.end();
         ++radio_run_iter) {

@@ -12,7 +12,6 @@
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/public/web/blink.h"
 
 #if defined(OS_ANDROID)
@@ -40,56 +39,71 @@ class BlinkPlatformWithTaskEnvironment : public blink::Platform {
  public:
   BlinkPlatformWithTaskEnvironment()
       : main_thread_scheduler_(
-            blink::scheduler::CreateWebMainThreadSchedulerForTests()),
-        main_thread_(main_thread_scheduler_->CreateMainThread()) {}
+            blink::scheduler::WebThreadScheduler::CreateMainThreadScheduler()) {
+  }
 
   ~BlinkPlatformWithTaskEnvironment() override {
     main_thread_scheduler_->Shutdown();
   }
 
-  blink::WebThread* CurrentThread() override {
-    CHECK(main_thread_->IsCurrentThread());
-    return main_thread_.get();
+  blink::scheduler::WebThreadScheduler* GetMainThreadScheduler() {
+    return main_thread_scheduler_.get();
   }
 
  private:
   base::test::ScopedTaskEnvironment scoped_task_environment_;
   std::unique_ptr<blink::scheduler::WebThreadScheduler> main_thread_scheduler_;
-  std::unique_ptr<blink::WebThread> main_thread_;
 
   DISALLOW_COPY_AND_ASSIGN(BlinkPlatformWithTaskEnvironment);
 };
 
-static int RunTests(base::TestSuite* test_suite) {
+class MediaBlinkTestSuite : public base::TestSuite {
+ public:
+  MediaBlinkTestSuite(int argc, char** argv) : base::TestSuite(argc, argv) {}
+
+ private:
+  void Initialize() override {
+    base::TestSuite::Initialize();
+
 #if defined(OS_ANDROID)
-  if (media::MediaCodecUtil::IsMediaCodecAvailable())
-    media::EnablePlatformDecoderSupport();
+    if (media::MediaCodecUtil::IsMediaCodecAvailable())
+      media::EnablePlatformDecoderSupport();
 #endif
 
-  // Run this here instead of main() to ensure an AtExitManager is already
-  // present.
-  media::InitializeMediaLibrary();
+    // Run this here instead of main() to ensure an AtExitManager is already
+    // present.
+    media::InitializeMediaLibrary();
 
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
-  gin::V8Initializer::LoadV8Snapshot(kSnapshotType);
-  gin::V8Initializer::LoadV8Natives();
+    gin::V8Initializer::LoadV8Snapshot(kSnapshotType);
+    gin::V8Initializer::LoadV8Natives();
 #endif
 
 #if !defined(OS_IOS)
-  // Initialize mojo firstly to enable Blink initialization to use it.
-  mojo::core::Init();
+    // Initialize mojo firstly to enable Blink initialization to use it.
+    mojo::core::Init();
 #endif
 
-  BlinkPlatformWithTaskEnvironment platform_;
-  service_manager::BinderRegistry empty_registry;
-  blink::Initialize(&platform_, &empty_registry, platform_.CurrentThread());
+    platform_ = std::make_unique<BlinkPlatformWithTaskEnvironment>();
+    blink::Initialize(platform_.get(), &empty_registry_,
+                      platform_->GetMainThreadScheduler());
+  }
 
-  return test_suite->Run();
-}
+  void Shutdown() override {
+    platform_.reset();
+    base::TestSuite::Shutdown();
+  }
+
+  std::unique_ptr<BlinkPlatformWithTaskEnvironment> platform_;
+  service_manager::BinderRegistry empty_registry_;
+
+  DISALLOW_COPY_AND_ASSIGN(MediaBlinkTestSuite);
+};
 
 int main(int argc, char** argv) {
-  base::TestSuite test_suite(argc, argv);
+  MediaBlinkTestSuite test_suite(argc, argv);
   return base::LaunchUnitTests(
       argc, argv,
-      base::BindRepeating(&RunTests, base::Unretained(&test_suite)));
+      base::BindRepeating(&MediaBlinkTestSuite::Run,
+                          base::Unretained(&test_suite)));
 }

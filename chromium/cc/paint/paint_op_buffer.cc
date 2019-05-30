@@ -65,6 +65,7 @@ SkRect AdjustSrcRectForScale(SkRect original, SkSize scale_adjustment) {
   M(DrawRecordOp)     \
   M(DrawRectOp)       \
   M(DrawRRectOp)      \
+  M(DrawSkottieOp)    \
   M(DrawTextBlobOp)   \
   M(NoopOp)           \
   M(RestoreOp)        \
@@ -205,13 +206,13 @@ static bool g_has_paint_flags[kNumOpTypes] = {TYPES(M)};
 #define M(T)                                         \
   static_assert(sizeof(T) <= sizeof(LargestPaintOp), \
                 #T " must be no bigger than LargestPaintOp");
-TYPES(M);
+TYPES(M)
 #undef M
 
 #define M(T)                                               \
   static_assert(alignof(T) <= PaintOpBuffer::PaintOpAlign, \
                 #T " must have alignment no bigger than PaintOpAlign");
-TYPES(M);
+TYPES(M)
 #undef M
 
 using AnalyzeOpFunc = void (*)(PaintOpBuffer*, const PaintOp*);
@@ -263,6 +264,8 @@ std::string PaintOpTypeToString(PaintOpType type) {
       return "DrawRect";
     case PaintOpType::DrawRRect:
       return "DrawRRect";
+    case PaintOpType::DrawSkottie:
+      return "DrawSkottie";
     case PaintOpType::DrawTextBlob:
       return "DrawTextBlob";
     case PaintOpType::Noop:
@@ -323,9 +326,10 @@ PlaybackParams& PlaybackParams::operator=(const PlaybackParams& other) =
 PaintOp::SerializeOptions::SerializeOptions(
     ImageProvider* image_provider,
     TransferCacheSerializeHelper* transfer_cache,
+    ClientPaintCache* paint_cache,
     SkCanvas* canvas,
     SkStrikeServer* strike_server,
-    SkColorSpace* color_space,
+    sk_sp<SkColorSpace> color_space,
     bool can_use_lcd_text,
     bool context_supports_distance_field_text,
     int max_texture_size,
@@ -333,9 +337,10 @@ PaintOp::SerializeOptions::SerializeOptions(
     const SkMatrix& original_ctm)
     : image_provider(image_provider),
       transfer_cache(transfer_cache),
+      paint_cache(paint_cache),
       canvas(canvas),
       strike_server(strike_server),
-      color_space(color_space),
+      color_space(std::move(color_space)),
       can_use_lcd_text(can_use_lcd_text),
       context_supports_distance_field_text(
           context_supports_distance_field_text),
@@ -346,11 +351,19 @@ PaintOp::SerializeOptions::SerializeOptions(
 PaintOp::SerializeOptions::SerializeOptions(const SerializeOptions&) = default;
 PaintOp::SerializeOptions& PaintOp::SerializeOptions::operator=(
     const SerializeOptions&) = default;
+PaintOp::SerializeOptions::~SerializeOptions() = default;
 
 PaintOp::DeserializeOptions::DeserializeOptions(
     TransferCacheDeserializeHelper* transfer_cache,
-    SkStrikeClient* strike_client)
-    : transfer_cache(transfer_cache), strike_client(strike_client) {}
+    ServicePaintCache* paint_cache,
+    SkStrikeClient* strike_client,
+    std::vector<uint8_t>* scratch_buffer)
+    : transfer_cache(transfer_cache),
+      paint_cache(paint_cache),
+      strike_client(strike_client),
+      scratch_buffer(scratch_buffer) {
+  DCHECK(scratch_buffer);
+}
 
 size_t AnnotateOp::Serialize(const PaintOp* base_op,
                              void* memory,
@@ -576,6 +589,16 @@ size_t DrawRRectOp::Serialize(const PaintOp* base_op,
   helper.Write(*serialized_flags);
   helper.Write(op->rrect);
   return helper.size();
+}
+
+size_t DrawSkottieOp::Serialize(const PaintOp* op,
+                                void* memory,
+                                size_t size,
+                                const SerializeOptions& options) {
+  // TODO(malaykeshav): these must be flattened.  Serializing this will not do
+  // anything. See https://crbug.com/894635
+  NOTREACHED();
+  return 0u;
 }
 
 size_t DrawTextBlobOp::Serialize(const PaintOp* base_op,
@@ -987,12 +1010,22 @@ PaintOp* DrawRRectOp::Deserialize(const volatile void* input,
   return op;
 }
 
+PaintOp* DrawSkottieOp::Deserialize(const volatile void* input,
+                                    size_t input_size,
+                                    void* output,
+                                    size_t output_size,
+                                    const DeserializeOptions& options) {
+  // TODO(malaykeshav): these must be flattened and not sent directly.
+  // See https://crbug.com/894635
+  return nullptr;
+}
+
 PaintOp* DrawTextBlobOp::Deserialize(const volatile void* input,
                                      size_t input_size,
                                      void* output,
                                      size_t output_size,
                                      const DeserializeOptions& options) {
-  DCHECK_GE(output_size, sizeof(DrawTextBlobOp));
+  DCHECK_GE(output_size, sizeof(DrawTextBlobOp) - sizeof(NodeHolder));
   DrawTextBlobOp* op = new (output) DrawTextBlobOp;
 
   PaintOpReader helper(input, input_size, options);
@@ -1173,7 +1206,21 @@ void DrawImageOp::RasterWithFlags(const DrawImageOp* op,
                                   const PaintFlags* flags,
                                   SkCanvas* canvas,
                                   const PlaybackParams& params) {
+  // TODO(crbug.com/931704): make sure to support the case where paint worklet
+  // generated images are used in other raster work such as canvas2d.
   SkPaint paint = flags ? flags->ToSkPaint() : SkPaint();
+
+  if (op->image.IsPaintWorklet()) {
+    DCHECK(params.image_provider);
+    ImageProvider::ScopedResult result =
+        params.image_provider->GetRasterContent(DrawImage(op->image));
+
+    DCHECK(IsScaleAdjustmentIdentity(op->scale_adjustment));
+    SkAutoCanvasRestore save_restore(canvas, true);
+    canvas->translate(op->left, op->top);
+    result.paint_record()->Playback(canvas, params);
+    return;
+  }
 
   if (!params.image_provider) {
     const bool needs_scale = !IsScaleAdjustmentIdentity(op->scale_adjustment);
@@ -1190,12 +1237,11 @@ void DrawImageOp::RasterWithFlags(const DrawImageOp* op,
       op->image, SkIRect::MakeWH(op->image.width(), op->image.height()),
       flags ? flags->getFilterQuality() : kNone_SkFilterQuality,
       canvas->getTotalMatrix());
-  auto scoped_decoded_draw_image =
-      params.image_provider->GetDecodedDrawImage(draw_image);
-  if (!scoped_decoded_draw_image)
+  auto scoped_result = params.image_provider->GetRasterContent(draw_image);
+  if (!scoped_result)
     return;
 
-  const auto& decoded_image = scoped_decoded_draw_image.decoded_image();
+  const auto& decoded_image = scoped_result.decoded_image();
   DCHECK(decoded_image.image());
 
   DCHECK_EQ(0, static_cast<int>(decoded_image.src_rect_offset().width()));
@@ -1214,6 +1260,7 @@ void DrawImageOp::RasterWithFlags(const DrawImageOp* op,
   canvas->drawImage(decoded_image.image().get(), op->left, op->top, &paint);
 }
 
+// TODO(xidachen): ensure paint worklet generated images are correctly handled.
 void DrawImageRectOp::RasterWithFlags(const DrawImageRectOp* op,
                                       const PaintFlags* flags,
                                       SkCanvas* canvas,
@@ -1240,12 +1287,11 @@ void DrawImageRectOp::RasterWithFlags(const DrawImageRectOp* op,
   DrawImage draw_image(
       op->image, int_src_rect,
       flags ? flags->getFilterQuality() : kNone_SkFilterQuality, matrix);
-  auto scoped_decoded_draw_image =
-      params.image_provider->GetDecodedDrawImage(draw_image);
-  if (!scoped_decoded_draw_image)
+  auto scoped_result = params.image_provider->GetRasterContent(draw_image);
+  if (!scoped_result)
     return;
 
-  const auto& decoded_image = scoped_decoded_draw_image.decoded_image();
+  const auto& decoded_image = scoped_result.decoded_image();
   DCHECK(decoded_image.image());
 
   SkSize scale_adjustment = SkSize::Make(
@@ -1318,12 +1364,18 @@ void DrawRRectOp::RasterWithFlags(const DrawRRectOp* op,
   canvas->drawRRect(op->rrect, paint);
 }
 
+void DrawSkottieOp::Raster(const DrawSkottieOp* op,
+                           SkCanvas* canvas,
+                           const PlaybackParams& params) {
+  op->skottie->Draw(canvas, op->t, op->dst);
+}
+
 void DrawTextBlobOp::RasterWithFlags(const DrawTextBlobOp* op,
                                      const PaintFlags* flags,
                                      SkCanvas* canvas,
                                      const PlaybackParams& params) {
   SkPaint paint = flags->ToSkPaint();
-  canvas->drawTextBlob(op->blob->ToSkTextBlob().get(), op->x, op->y, paint);
+  canvas->drawTextBlob(op->blob.get(), op->x, op->y, paint);
 }
 
 void RestoreOp::Raster(const RestoreOp* op,
@@ -1359,14 +1411,7 @@ void SaveLayerAlphaOp::Raster(const SaveLayerAlphaOp* op,
                               const PlaybackParams& params) {
   // See PaintOp::kUnsetRect
   bool unset = op->bounds.left() == SK_ScalarInfinity;
-  if (op->preserve_lcd_text_requests) {
-    SkPaint paint;
-    paint.setAlpha(op->alpha);
-    canvas->saveLayerPreserveLCDTextRequests(unset ? nullptr : &op->bounds,
-                                             &paint);
-  } else {
-    canvas->saveLayerAlpha(unset ? nullptr : &op->bounds, op->alpha);
-  }
+  canvas->saveLayerAlpha(unset ? nullptr : &op->bounds, op->alpha);
 }
 
 void ScaleOp::Raster(const ScaleOp* op,
@@ -1702,6 +1747,21 @@ bool DrawRRectOp::AreEqual(const PaintOp* base_left,
   return true;
 }
 
+bool DrawSkottieOp::AreEqual(const PaintOp* base_left,
+                             const PaintOp* base_right) {
+  auto* left = static_cast<const DrawSkottieOp*>(base_left);
+  auto* right = static_cast<const DrawSkottieOp*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  // TODO(malaykeshav): Verify the skottie objects of each PaintOb are equal
+  // based on the serialized bytes.
+  if (left->t != right->t)
+    return false;
+  if (!AreSkRectsEqual(left->dst, right->dst))
+    return false;
+  return true;
+}
+
 bool DrawTextBlobOp::AreEqual(const PaintOp* base_left,
                               const PaintOp* base_right) {
   auto* left = static_cast<const DrawTextBlobOp*>(base_left);
@@ -1714,14 +1774,12 @@ bool DrawTextBlobOp::AreEqual(const PaintOp* base_left,
     return false;
   if (!AreEqualEvenIfNaN(left->y, right->y))
     return false;
-
-  DCHECK(*left->blob);
-  DCHECK(*right->blob);
+  if (left->node_holder != right->node_holder)
+    return false;
 
   SkSerialProcs default_procs;
-  return left->blob->ToSkTextBlob()
-      ->serialize(default_procs)
-      ->equals(right->blob->ToSkTextBlob()->serialize(default_procs).get());
+  return left->blob->serialize(default_procs)
+      ->equals(right->blob->serialize(default_procs).get());
 }
 
 bool NoopOp::AreEqual(const PaintOp* base_left, const PaintOp* base_right) {
@@ -1768,8 +1826,6 @@ bool SaveLayerAlphaOp::AreEqual(const PaintOp* base_left,
   if (!AreSkRectsEqual(left->bounds, right->bounds))
     return false;
   if (left->alpha != right->alpha)
-    return false;
-  if (left->preserve_lcd_text_requests != right->preserve_lcd_text_requests)
     return false;
   return true;
 }
@@ -1947,10 +2003,15 @@ bool PaintOp::GetBounds(const PaintOp* op, SkRect* rect) {
     }
     case PaintOpType::DrawRecord:
       return false;
+    case PaintOpType::DrawSkottie: {
+      auto* skottie_op = static_cast<const DrawSkottieOp*>(op);
+      *rect = skottie_op->dst;
+      rect->sort();
+      return true;
+    }
     case PaintOpType::DrawTextBlob: {
       auto* text_op = static_cast<const DrawTextBlobOp*>(op);
-      *rect = text_op->blob->ToSkTextBlob()->bounds().makeOffset(text_op->x,
-                                                                 text_op->y);
+      *rect = text_op->blob->bounds().makeOffset(text_op->x, text_op->y);
       rect->sort();
       return true;
     }
@@ -2087,9 +2148,7 @@ DrawImageOp::DrawImageOp(const PaintImage& image,
       top(top) {}
 
 bool DrawImageOp::HasDiscardableImages() const {
-  // TODO(khushalsagar): Callers should not be able to change the lazy generated
-  // state for a PaintImage.
-  return image && image.IsLazyGenerated();
+  return image && !image.IsTextureBacked();
 }
 
 DrawImageOp::~DrawImageOp() = default;
@@ -2108,7 +2167,7 @@ DrawImageRectOp::DrawImageRectOp(const PaintImage& image,
       constraint(constraint) {}
 
 bool DrawImageRectOp::HasDiscardableImages() const {
-  return image && image.IsLazyGenerated();
+  return image && !image.IsTextureBacked();
 }
 
 DrawImageRectOp::~DrawImageRectOp() = default;
@@ -2126,17 +2185,37 @@ size_t DrawRecordOp::AdditionalOpCount() const {
   return record->total_op_count();
 }
 
+DrawSkottieOp::DrawSkottieOp(scoped_refptr<SkottieWrapper> skottie,
+                             SkRect dst,
+                             float t)
+    : PaintOp(kType), skottie(std::move(skottie)), dst(dst), t(t) {}
+
+DrawSkottieOp::DrawSkottieOp() : PaintOp(kType) {}
+
+DrawSkottieOp::~DrawSkottieOp() = default;
+
 bool DrawRecordOp::HasDiscardableImages() const {
   return record->HasDiscardableImages();
 }
 
 DrawTextBlobOp::DrawTextBlobOp() : PaintOpWithFlags(kType) {}
 
-DrawTextBlobOp::DrawTextBlobOp(scoped_refptr<PaintTextBlob> paint_blob,
+DrawTextBlobOp::DrawTextBlobOp(sk_sp<SkTextBlob> blob,
                                SkScalar x,
                                SkScalar y,
                                const PaintFlags& flags)
-    : PaintOpWithFlags(kType, flags), blob(std::move(paint_blob)), x(x), y(y) {}
+    : PaintOpWithFlags(kType, flags), blob(std::move(blob)), x(x), y(y) {}
+
+DrawTextBlobOp::DrawTextBlobOp(sk_sp<SkTextBlob> blob,
+                               SkScalar x,
+                               SkScalar y,
+                               const PaintFlags& flags,
+                               const NodeHolder& holder)
+    : PaintOpWithFlags(kType, flags),
+      blob(std::move(blob)),
+      x(x),
+      y(y),
+      node_holder(holder) {}
 
 DrawTextBlobOp::~DrawTextBlobOp() = default;
 

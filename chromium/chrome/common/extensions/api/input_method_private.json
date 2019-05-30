@@ -63,7 +63,8 @@
           "autoCapitalize": {"$ref": "AutoCapitalizeType", "description": "The auto-capitalize type of the text field."},
           "spellCheck": {"type": "boolean", "description": "Whether the text field wants spell-check."},
           "shouldDoLearning": {"type": "boolean", "description": "Whether text entered into the text field should be used to improve typing suggestions for the user."},
-          "focusReason": {"$ref": "FocusReason", "description": "How the text field was focused"}
+          "focusReason": {"$ref": "FocusReason", "description": "How the text field was focused"},
+	  "hasBeenPassword": {"type": "boolean", "description": "Whether the text field has ever been a password field."}
         }
       }
     ],
@@ -335,6 +336,63 @@
             ]
           }
         ]
+      }, {
+        "name": "getSetting",
+        "type": "function",
+        "description": "Gets the current value of a setting for a particular input method",
+        "parameters": [
+          {
+            "name": "engineID",
+            "type": "string",
+            "description": "The ID of the engine (e.g. 'zh-t-i0-pinyin', 'xkb:us::eng')"
+          },
+          {
+            "name": "key",
+            "type": "string",
+            "description": "The setting to get"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "description": "Callback to receive the setting",
+            "parameters": [
+              {
+                "name": "setting",
+                "type": "any",
+                "optional": true,
+                "description": "The value for the requested setting, or null if there's no value"
+              }
+            ]
+          }
+        ]
+      }, {
+        "name": "setSetting",
+        "type": "function",
+        "description": "Sets the value of a setting for a particular input method",
+        "parameters": [
+          {
+            "name": "engineID",
+            "type": "string",
+            "description": "The ID of the engine (e.g. 'zh-t-i0-pinyin', 'xkb:us::eng')"
+          },
+          {
+            "name": "key",
+            "type": "string",
+            "description": "The setting to set"
+          },
+          {
+            "name": "value",
+            "type": "any",
+            "description": "The new value of the setting"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "description": "Callback to notify that the new value has been set",
+            "parameters": []
+          }
+        ]
       }
     ],
     "events": [
@@ -449,6 +507,38 @@
             "$ref": "InputContext",
             "name": "context",
             "description": "Describes the text field that has acquired focus."
+          }
+        ]
+      }, {
+        "name": "onSettingsChanged",
+        "type": "function",
+        "description": "This event is sent when the settings for any input method changed. It is sent to all extensions that are listening to this event, and enabled by the user.",
+        "parameters": [
+          {
+            "name": "engineID",
+            "type": "string",
+            "description": "ID of the engine that changed"
+          },
+          {
+            "name": "key",
+            "type": "string",
+            "description": "The setting that changed"
+          },
+          {
+            "name": "value",
+            "type": "any",
+            "description": "The new value of the setting"
+	  }
+	]
+      }, {
+        "name": "onScreenProjectionChanged",
+        "type": "function",
+        "description": "This event is sent when the screen is being mirrored or the desktop is being cast.",
+        "parameters": [
+          {
+            "name": "isProjected",
+	    "type": "boolean",
+            "description": "Whether the screen is projected."
           }
         ]
       }

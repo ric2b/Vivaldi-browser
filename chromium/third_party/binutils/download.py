@@ -9,6 +9,7 @@
 TODO(mithro): Replace with generic download_and_extract tool.
 """
 
+from __future__ import print_function
 import argparse
 import os
 import platform
@@ -23,8 +24,10 @@ BINUTILS_FILE = 'binutils.tar.bz2'
 BINUTILS_TOOLS = ['bin/ld.gold', 'bin/objcopy', 'bin/objdump']
 BINUTILS_OUT = 'Release'
 
-DETECT_HOST_ARCH = os.path.abspath(os.path.join(
-    BINUTILS_DIR, '../../build/detect_host_arch.py'))
+# Modify sys path so we can import detect_host_arch.py
+sys.path.append(os.path.abspath(os.path.join(
+    BINUTILS_DIR, '../../build/')))
+import detect_host_arch
 
 
 def ReadFile(filename):
@@ -39,19 +42,6 @@ def WriteFile(filename, content):
     f.write('\n')
 
 
-def GetArch():
-  gyp_host_arch = re.search(
-      'host_arch=(\S*)', os.environ.get('GYP_DEFINES', ''))
-  if gyp_host_arch:
-    arch = gyp_host_arch.group(1)
-    # This matches detect_host_arch.py.
-    if arch == 'x86_64':
-      return 'x64'
-    return arch
-
-  return subprocess.check_output(['python', DETECT_HOST_ARCH]).strip()
-
-
 def FetchAndExtract(arch):
   archdir = os.path.join(BINUTILS_DIR, 'Linux_' + arch)
   tarball = os.path.join(archdir, BINUTILS_FILE)
@@ -59,7 +49,7 @@ def FetchAndExtract(arch):
 
   sha1file = tarball + '.sha1'
   if not os.path.exists(sha1file):
-    print "WARNING: No binutils found for your architecture (%s)!" % arch
+    print("WARNING: No binutils found for your architecture (%s)!" % arch)
     return 0
 
   checksum = ReadFile(sha1file)
@@ -73,7 +63,7 @@ def FetchAndExtract(arch):
     else:
       os.unlink(stampfile)
 
-  print "Downloading", tarball
+  print("Downloading", tarball)
   subprocess.check_call([
       'download_from_google_storage',
       '--no_resume',
@@ -88,7 +78,7 @@ def FetchAndExtract(arch):
   os.makedirs(outdir)
   assert os.path.exists(outdir)
 
-  print "Extracting", tarball
+  print("Extracting", tarball)
   subprocess.check_call(['tar', 'axf', tarball], cwd=outdir)
 
   for tool in BINUTILS_TOOLS:
@@ -109,7 +99,7 @@ def main(args):
   if not sys.platform.startswith('linux'):
     return 0
 
-  arch = GetArch()
+  arch = detect_host_arch.HostArch()
   if arch in options.ignore_if_arch:
     return 0
 
@@ -122,7 +112,7 @@ def main(args):
     # Fetch the x64 toolchain as well for official bots with 64-bit kernels.
     return FetchAndExtract('x64')
 
-  print "Host architecture %s is not supported." % arch
+  print("Host architecture %s is not supported." % arch)
   return 1
 
 

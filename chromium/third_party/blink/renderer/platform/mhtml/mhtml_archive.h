@@ -31,6 +31,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_MHTML_MHTML_ARCHIVE_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_MHTML_MHTML_ARCHIVE_H_
 
+#include "third_party/blink/public/mojom/loader/mhtml_load_result.mojom-shared.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
@@ -54,6 +55,8 @@ class PLATFORM_EXPORT MHTMLArchive final
     : public GarbageCollected<MHTMLArchive> {
  public:
   static MHTMLArchive* Create(const KURL&, scoped_refptr<const SharedBuffer>);
+
+  MHTMLArchive();
 
   // Binary encoding results in smaller MHTML files but they might not work in
   // other browsers.
@@ -104,9 +107,12 @@ class PLATFORM_EXPORT MHTMLArchive final
   WTF::Time Date() const { return date_; }
 
   void Trace(blink::Visitor*);
+  blink::mojom::MHTMLLoadResult LoadResult() const { return load_result_; }
 
  private:
-  MHTMLArchive();
+  static MHTMLArchive* CreateArchive(const KURL&,
+                                     scoped_refptr<const SharedBuffer>);
+  static void ReportLoadResult(blink::mojom::MHTMLLoadResult result);
 
   void SetMainResource(ArchiveResource*);
   void AddSubresource(ArchiveResource*);
@@ -115,8 +121,8 @@ class PLATFORM_EXPORT MHTMLArchive final
   WTF::Time date_;
   Member<ArchiveResource> main_resource_;
   SubArchiveResources subresources_;
+  blink::mojom::MHTMLLoadResult load_result_;
 };
-
 }  // namespace blink
 
 #endif

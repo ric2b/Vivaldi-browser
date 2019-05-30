@@ -27,20 +27,23 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_SPEECH_SPEECH_SYNTHESIS_EVENT_H_
 
 #include "third_party/blink/renderer/modules/event_modules.h"
+#include "third_party/blink/renderer/modules/speech/speech_synthesis_event_init.h"
 #include "third_party/blink/renderer/modules/speech/speech_synthesis_utterance.h"
 
 namespace blink {
 
-class SpeechSynthesisEvent final : public Event {
+class SpeechSynthesisEvent : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static SpeechSynthesisEvent* Create();
   static SpeechSynthesisEvent* Create(const AtomicString& type,
-                                      SpeechSynthesisUtterance*,
-                                      unsigned char_index,
-                                      float elapsed_time,
-                                      const String& name);
+                                      const SpeechSynthesisEventInit* init);
+
+  SpeechSynthesisEvent(const AtomicString& type,
+                       SpeechSynthesisUtterance*,
+                       unsigned char_index,
+                       float elapsed_time,
+                       const String& name);
 
   SpeechSynthesisUtterance* utterance() const { return utterance_; }
   unsigned charIndex() const { return char_index_; }
@@ -48,19 +51,12 @@ class SpeechSynthesisEvent final : public Event {
   const String& name() const { return name_; }
 
   const AtomicString& InterfaceName() const override {
-    return EventNames::SpeechSynthesisEvent;
+    return event_interface_names::kSpeechSynthesisEvent;
   }
 
   void Trace(blink::Visitor*) override;
 
  private:
-  SpeechSynthesisEvent();
-  SpeechSynthesisEvent(const AtomicString& type,
-                       SpeechSynthesisUtterance*,
-                       unsigned char_index,
-                       float elapsed_time,
-                       const String& name);
-
   Member<SpeechSynthesisUtterance> utterance_;
   unsigned char_index_;
   float elapsed_time_;

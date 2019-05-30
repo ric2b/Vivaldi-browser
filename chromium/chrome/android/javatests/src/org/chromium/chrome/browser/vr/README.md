@@ -1,5 +1,15 @@
 # XR Instrumentation Tests
 
+## TL;DR For Most Local Repros
+
+1. Get a rooted Pixel device of some sort.
+2. Make sure "VR Services" is up to date in the Playstore.
+3. Run `ninja -C out/Debug chrome_public_test_vr_apk
+        && out/Debug/bin/run_chrome_public_test_vr_apk
+        --num-retries=0
+        --shared-prefs-file=//chrome/android/shared_preference_files/test/vr_ddview_skipdon_setupcomplete.json
+        --test-filter=<failing test case>`
+
 ## Introduction
 
 This directory contains all the Java-side infrastructure for running
@@ -151,11 +161,12 @@ headset. The two most common files used are:
   emulation.
 * `//chrome/android/shared_preference_files/test/vr_ddview_skipdon_setupcomplete.json`
   This will pair the device with a Daydream View headset, set the DON flow to be
-  skipped, and enable controller emulation. **NOTE** This will prevent you from
-  using a real controller outside of tests. To fix this, you can either
-  reinstall VrCore or apply the Cardboard settings file (there isn't currently a
-  way to manually re-enable real controller use from within the VrCore developer
-  settings)
+  skipped, and enable controller emulation.
+
+The test runner will automatically revert any changed settings back to their
+pre-test values after the test suite has completed. If for whatever reason you
+want to manually apply settings outside of a test, you can do so with
+`//build/android/apply_shared_preference_file.py`.
 
 #### vr-settings-service-enabled
 

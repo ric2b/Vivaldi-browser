@@ -61,7 +61,6 @@ sync_pb::SyncEnums::GetUpdatesOrigin GetOriginFromReason(
       return sync_pb::SyncEnums::NEW_CLIENT;
     case CONFIGURE_REASON_NEWLY_ENABLED_DATA_TYPE:
     case CONFIGURE_REASON_CRYPTO:
-    case CONFIGURE_REASON_CATCH_UP:
       return sync_pb::SyncEnums::NEWLY_SUPPORTED_DATATYPE;
     case CONFIGURE_REASON_PROGRAMMATIC:
       return sync_pb::SyncEnums::PROGRAMMATIC;
@@ -71,10 +70,80 @@ sync_pb::SyncEnums::GetUpdatesOrigin GetOriginFromReason(
   return sync_pb::SyncEnums::UNKNOWN_ORIGIN;
 }
 
+// Relevant for UMA, do not change.
+enum class StringConsistency {
+  kBothEqual = 0,
+  kOnlyLhsEmpty = 1,
+  kOnlyRhsEmpty = 2,
+  kBothNonEmptyAndDifferent = 3,
+  kMaxValue = kBothNonEmptyAndDifferent
+};
+
+StringConsistency CompareStringsForConsistency(const std::string& lhs,
+                                               const std::string& rhs) {
+  if (lhs == rhs) {
+    return StringConsistency::kBothEqual;
+  }
+  if (lhs.empty()) {
+    return StringConsistency::kOnlyLhsEmpty;
+  }
+  if (rhs.empty()) {
+    return StringConsistency::kOnlyRhsEmpty;
+  }
+  return StringConsistency::kBothNonEmptyAndDifferent;
+}
+
+constexpr int GetStringConsistencyUmaBucket(
+    StringConsistency cache_guid_consistency,
+    StringConsistency birthday_consistency) {
+  return static_cast<int>(cache_guid_consistency) *
+             (static_cast<int>(StringConsistency::kMaxValue) + 1) +
+         static_cast<int>(birthday_consistency);
+}
+
+// Logs information to UMA to understand whether prefs are populated with
+// information identical to the Directory's value, for the fields that are
+// stored in both. We mostly care about cache GUID and store birthday.
+void RecordConsistencyBetweenDirectoryAndPrefs(
+    syncable::DirOpenResult open_result,
+    const syncable::Directory* directory,
+    const SyncManager::InitArgs* args) {
+  DCHECK(directory);
+
+  std::string directory_cache_guid;
+  std::string directory_birthday;
+
+  // We mimic the directory being empty if it was just opened (OPENED_NEW),
+  // because that means a random cache GUID was just generated and it's not
+  // possible to match empty prefs.
+  DCHECK(open_result == syncable::OPENED_EXISTING ||
+         open_result == syncable::OPENED_NEW);
+  if (open_result == syncable::OPENED_EXISTING) {
+    directory_cache_guid = directory->cache_guid();
+    directory_birthday = directory->store_birthday();
+  }
+
+  const StringConsistency cache_guid_consistency =
+      CompareStringsForConsistency(args->cache_guid, directory_cache_guid);
+  const StringConsistency birthday_consistency =
+      CompareStringsForConsistency(args->birthday, directory_birthday);
+
+  UMA_HISTOGRAM_ENUMERATION(
+      "Sync.DirectoryVsPrefsConsistency",
+      GetStringConsistencyUmaBucket(cache_guid_consistency,
+                                    birthday_consistency),
+      GetStringConsistencyUmaBucket(StringConsistency::kMaxValue,
+                                    StringConsistency::kMaxValue) +
+          1);
+}
+
 }  // namespace
 
-SyncManagerImpl::SyncManagerImpl(const std::string& name)
+SyncManagerImpl::SyncManagerImpl(
+    const std::string& name,
+    network::NetworkConnectionTracker* network_connection_tracker)
     : name_(name),
+      network_connection_tracker_(network_connection_tracker),
       change_delegate_(nullptr),
       initialized_(false),
       observing_network_connectivity_changes_(false),
@@ -166,8 +235,7 @@ ModelTypeSet SyncManagerImpl::GetTypesWithEmptyProgressMarkerToken(
 void SyncManagerImpl::ConfigureSyncer(ConfigureReason reason,
                                       ModelTypeSet to_download,
                                       SyncFeatureState sync_feature_state,
-                                      const base::Closure& ready_task,
-                                      const base::Closure& retry_task) {
+                                      const base::Closure& ready_task) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!ready_task.is_null());
   DCHECK(initialized_);
@@ -180,7 +248,7 @@ void SyncManagerImpl::ConfigureSyncer(ConfigureReason reason,
            << "\n\t"
            << "types to download: " << ModelTypeSetToString(to_download);
   ConfigurationParams params(GetOriginFromReason(reason), to_download,
-                             ready_task, retry_task);
+                             ready_task);
 
   scheduler_->Start(SyncScheduler::CONFIGURATION_MODE, base::Time());
   scheduler_->ScheduleConfiguration(params);
@@ -198,7 +266,6 @@ void SyncManagerImpl::Init(InitArgs* args) {
   DCHECK(!args->long_poll_interval.is_zero());
   if (!args->enable_local_sync_backend) {
     DCHECK(!args->credentials.account_id.empty());
-    DCHECK(!args->credentials.scope_set.empty());
   }
   DCHECK(args->cancelation_signal);
   DVLOG(1) << "SyncManager starting Init...";
@@ -248,7 +315,7 @@ void SyncManagerImpl::Init(InitArgs* args) {
 
   DVLOG(1) << "Username: " << args->credentials.email;
   DVLOG(1) << "AccountId: " << args->credentials.account_id;
-  if (!OpenDirectory(args->credentials.account_id)) {
+  if (!OpenDirectory(args)) {
     NotifyInitializationFailure();
     LOG(ERROR) << "Sync manager initialization failed!";
     return;
@@ -308,7 +375,7 @@ void SyncManagerImpl::Init(InitArgs* args) {
   initialized_ = true;
 
   if (!args->enable_local_sync_backend) {
-    net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
+    network_connection_tracker_->AddNetworkConnectionObserver(this);
     observing_network_connectivity_changes_ = true;
 
     UpdateCredentials(args->credentials);
@@ -380,9 +447,6 @@ void SyncManagerImpl::OnPassphraseTypeChanged(
       sync_encryption_handler_->migration_time());
 }
 
-void SyncManagerImpl::OnLocalSetPassphraseEncryption(
-    const SyncEncryptionHandler::NigoriState& nigori_state) {}
-
 void SyncManagerImpl::StartSyncingNormally(
     base::Time last_poll_time) {
   // Start the sync scheduler.
@@ -407,8 +471,10 @@ bool SyncManagerImpl::GetHasInvalidAuthTokenForTest() const {
   return connection_manager_->HasInvalidAuthToken();
 }
 
-bool SyncManagerImpl::OpenDirectory(const std::string& username) {
+bool SyncManagerImpl::OpenDirectory(const InitArgs* args) {
   DCHECK(!initialized_) << "Should only happen once";
+
+  const std::string& account_id = args->credentials.account_id;
 
   // Set before Open().
   change_observer_ = MakeWeakHandle(js_mutation_event_observer_.AsWeakPtr());
@@ -416,11 +482,14 @@ bool SyncManagerImpl::OpenDirectory(const std::string& username) {
       MakeWeakHandle(js_mutation_event_observer_.AsWeakPtr()));
 
   syncable::DirOpenResult open_result = syncable::NOT_INITIALIZED;
-  open_result = directory()->Open(username, this, transaction_observer);
-  if (open_result != syncable::OPENED) {
-    LOG(ERROR) << "Could not open share for:" << username;
+  open_result = directory()->Open(account_id, this, transaction_observer);
+  if (open_result != syncable::OPENED_NEW &&
+      open_result != syncable::OPENED_EXISTING) {
+    LOG(ERROR) << "Could not open share for:" << account_id;
     return false;
   }
+
+  RecordConsistencyBetweenDirectoryAndPrefs(open_result, directory(), args);
 
   // Unapplied datatypes (those that do not have initial sync ended set) get
   // re-downloaded during any configuration. But, it's possible for a datatype
@@ -445,8 +514,8 @@ void SyncManagerImpl::PurgePartiallySyncedTypes() {
 
   DVLOG(1) << "Purging partially synced types "
            << ModelTypeSetToString(partially_synced_types);
-  UMA_HISTOGRAM_COUNTS("Sync.PartiallySyncedTypes",
-                       partially_synced_types.Size());
+  UMA_HISTOGRAM_COUNTS_1M("Sync.PartiallySyncedTypes",
+                          partially_synced_types.Size());
   directory()->PurgeEntriesWithTypeIn(partially_synced_types, ModelTypeSet(),
                                       ModelTypeSet());
 }
@@ -469,7 +538,6 @@ void SyncManagerImpl::UpdateCredentials(const SyncCredentials& credentials) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(initialized_);
   DCHECK(!credentials.account_id.empty());
-  DCHECK(!credentials.scope_set.empty());
   cycle_context_->set_account_name(credentials.email);
 
   observing_network_connectivity_changes_ = true;
@@ -530,7 +598,7 @@ void SyncManagerImpl::ShutdownOnSyncThread() {
     connection_manager_->RemoveListener(this);
   connection_manager_.reset();
 
-  net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
+  network_connection_tracker_->RemoveNetworkConnectionObserver(this);
   observing_network_connectivity_changes_ = false;
 
   if (initialized_ && directory()) {
@@ -549,8 +617,7 @@ void SyncManagerImpl::ShutdownOnSyncThread() {
   weak_handle_this_.Reset();
 }
 
-void SyncManagerImpl::OnNetworkChanged(
-    net::NetworkChangeNotifier::ConnectionType type) {
+void SyncManagerImpl::OnConnectionChanged(network::mojom::ConnectionType type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!observing_network_connectivity_changes_) {
     DVLOG(1) << "Network change dropped.";
@@ -644,9 +711,7 @@ void SyncManagerImpl::HandleCalculateChangesChangeEventFromSyncApi(
 
   const syncable::ImmutableEntryKernelMutationMap& mutations =
       write_transaction_info.Get().mutations;
-  for (syncable::EntryKernelMutationMap::const_iterator it =
-           mutations.Get().begin();
-       it != mutations.Get().end(); ++it) {
+  for (auto it = mutations.Get().begin(); it != mutations.Get().end(); ++it) {
     if (!it->second.mutated.ref(syncable::IS_UNSYNCED)) {
       continue;
     }
@@ -691,13 +756,14 @@ void SyncManagerImpl::SetExtraChangeRecordData(
     sync_pb::EntitySpecifics original_specifics(original.ref(SPECIFICS));
     if (type == PASSWORDS) {
       // Passwords must use their own legacy ExtraPasswordChangeRecordData.
-      std::unique_ptr<sync_pb::PasswordSpecificsData> data(
-          DecryptPasswordSpecifics(original_specifics, cryptographer));
+      std::unique_ptr<sync_pb::PasswordSpecificsData> data =
+          DecryptPasswordSpecifics(original_specifics, cryptographer);
       if (!data) {
         NOTREACHED();
         return;
       }
-      buffer->SetExtraDataForId(id, new ExtraPasswordChangeRecordData(*data));
+      buffer->SetExtraDataForId(
+          id, std::make_unique<ExtraPasswordChangeRecordData>(*data));
     } else if (original_specifics.has_encrypted()) {
       // All other datatypes can just create a new unencrypted specifics and
       // attach it.
@@ -725,9 +791,7 @@ void SyncManagerImpl::HandleCalculateChangesChangeEventFromSyncer(
   Cryptographer* crypto = directory()->GetCryptographer(trans);
   const syncable::ImmutableEntryKernelMutationMap& mutations =
       write_transaction_info.Get().mutations;
-  for (syncable::EntryKernelMutationMap::const_iterator it =
-           mutations.Get().begin();
-       it != mutations.Get().end(); ++it) {
+  for (auto it = mutations.Get().begin(); it != mutations.Get().end(); ++it) {
     bool existed_before = !it->second.original.ref(syncable::IS_DEL);
     bool exists_now = !it->second.mutated.ref(syncable::IS_DEL);
 
@@ -930,17 +994,6 @@ bool SyncManagerImpl::ReceivedExperiment(Experiments* experiments) {
     // know about this.
   }
 
-  ReadNode gcm_invalidations_node(&trans);
-  if (gcm_invalidations_node.InitByClientTagLookup(
-          EXPERIMENTS, kGCMInvalidationsTag) == BaseNode::INIT_OK) {
-    const sync_pb::GcmInvalidationsFlags& gcm_invalidations =
-        gcm_invalidations_node.GetExperimentsSpecifics().gcm_invalidations();
-    if (gcm_invalidations.has_enabled()) {
-      experiments->gcm_invalidations_enabled = gcm_invalidations.enabled();
-      found_experiment = true;
-    }
-  }
-
   return found_experiment;
 }
 
@@ -976,13 +1029,6 @@ void SyncManagerImpl::RequestEmitDebugInfo() {
   model_type_registry_->RequestEmitDebugInfo();
 }
 
-void SyncManagerImpl::ClearServerData(const base::Closure& callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  scheduler_->Start(SyncScheduler::CLEAR_SERVER_DATA_MODE, base::Time());
-  ClearParams params(callback);
-  scheduler_->ScheduleClearServerData(params);
-}
-
 void SyncManagerImpl::OnCookieJarChanged(bool account_mismatch,
                                          bool empty_jar) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -992,6 +1038,12 @@ void SyncManagerImpl::OnCookieJarChanged(bool account_mismatch,
 
 void SyncManagerImpl::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd) {
   directory()->OnMemoryDump(pmd);
+}
+
+void SyncManagerImpl::UpdateInvalidationClientId(const std::string& client_id) {
+  DVLOG(1) << "Setting invalidator client ID: " << client_id;
+  allstatus_.SetInvalidatorClientId(client_id);
+  cycle_context_->set_invalidator_client_id(client_id);
 }
 
 }  // namespace syncer

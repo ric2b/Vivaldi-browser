@@ -8,14 +8,14 @@
 #include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
-#include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "components/download/public/background_service/download_params.h"
 #include "components/download/public/background_service/download_service.h"
+#include "components/offline_pages/core/offline_clock.h"
 #include "components/offline_pages/core/offline_event_logger.h"
-#include "components/offline_pages/core/offline_page_feature.h"
 #include "components/offline_pages/core/prefetch/prefetch_dispatcher.h"
+#include "components/offline_pages/core/prefetch/prefetch_prefs.h"
 #include "components/offline_pages/core/prefetch/prefetch_server_urls.h"
 #include "components/offline_pages/core/prefetch/prefetch_service.h"
 #include "net/http/http_util.h"
@@ -37,10 +37,11 @@ void NotifyDispatcher(PrefetchService* service, PrefetchDownloadResult result) {
 
 PrefetchDownloaderImpl::PrefetchDownloaderImpl(
     download::DownloadService* download_service,
-    version_info::Channel channel)
-    : clock_(base::DefaultClock::GetInstance()),
-      download_service_(download_service),
+    version_info::Channel channel,
+    PrefService* prefs)
+    : download_service_(download_service),
       channel_(channel),
+      prefs_(prefs),
       weak_ptr_factory_(this) {
   DCHECK(download_service);
 }
@@ -96,10 +97,9 @@ void PrefetchDownloaderImpl::StartDownload(const std::string& download_id,
         policy {
           cookies_allowed: NO
           setting:
-            "Users can enable or disable the offline prefetch on desktop by "
-            "toggling 'Use a prediction service to load pages more quickly' in "
-            "settings under Privacy and security, or on Android by toggling "
-            "chrome://flags#offline-prefetch."
+            "Users can enable or disable offline prefetch by toggling "
+            "'Download articles for you' in settings under Downloads or "
+            "by toggling chrome://flags#offline-prefetch."
           chrome_policy {
             NetworkPredictionOptions {
               NetworkPredictionOptions: 2
@@ -118,7 +118,7 @@ void PrefetchDownloaderImpl::StartDownload(const std::string& download_id,
   params.scheduling_params.battery_requirements =
       download::SchedulingParams::BatteryRequirements::BATTERY_SENSITIVE;
   params.scheduling_params.cancel_time =
-      clock_->Now() + kPrefetchDownloadLifetime;
+      OfflineTimeNow() + kPrefetchDownloadLifetime;
   params.request_params.url = PrefetchDownloadURL(download_location, channel_);
 
   std::string experiment_header = PrefetchExperimentHeader();
@@ -138,7 +138,7 @@ void PrefetchDownloaderImpl::StartDownload(const std::string& download_id,
   }
 
   // Lessen download restrictions if limitless prefetching is enabled.
-  if (IsLimitlessPrefetchingEnabled()) {
+  if (prefetch_prefs::IsLimitlessPrefetchingEnabled(prefs_)) {
     params.scheduling_params.network_requirements =
         download::SchedulingParams::NetworkRequirements::NONE;
     params.scheduling_params.battery_requirements =
@@ -215,10 +215,6 @@ void PrefetchDownloaderImpl::OnDownloadFailed(const std::string& download_id) {
   prefetch_service_->GetLogger()->RecordActivity(
       "Downloader: Download failed, download_id=" + download_id);
   NotifyDispatcher(prefetch_service_, result);
-}
-
-void PrefetchDownloaderImpl::SetClockForTesting(base::Clock* clock) {
-  clock_ = clock;
 }
 
 void PrefetchDownloaderImpl::OnStartDownload(

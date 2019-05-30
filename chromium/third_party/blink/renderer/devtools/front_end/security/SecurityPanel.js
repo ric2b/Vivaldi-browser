@@ -15,6 +15,7 @@ Security.SecurityPanel = class extends UI.PanelWithSidebar {
     title.textContent = Common.UIString('Overview');
     this._sidebarMainViewElement = new Security.SecurityPanelSidebarTreeElement(
         title, this._setVisibleView.bind(this, this._mainView), 'security-main-view-sidebar-tree-item', 'lock-icon');
+    this._sidebarMainViewElement.tooltip = title.textContent;
     this._sidebarTree = new Security.SecurityPanelSidebarTree(this._sidebarMainViewElement, this.showOrigin.bind(this));
     this.panelSidebarElement().appendChild(this._sidebarTree.element);
 
@@ -78,7 +79,7 @@ Security.SecurityPanel = class extends UI.PanelWithSidebar {
       return text;
     }
 
-    const highlightedUrl = createElement('span', 'url-text');
+    const highlightedUrl = createElement('span');
 
     const scheme = url.substr(0, index);
     const content = url.substr(index + schemeSeparator.length);
@@ -375,7 +376,6 @@ Security.SecurityPanel.Origin;
  * @typedef {Object}
  * @property {!Protocol.Security.SecurityState} securityState
  * @property {?Protocol.Network.SecurityDetails} securityDetails
- * @property {?Promise<>} certificateDetailsPromise
  * @property {?bool} loadedFromCache
  * @property {?Security.SecurityOriginView} originView
  */
@@ -445,6 +445,7 @@ Security.SecurityPanelSidebarTree = class extends UI.TreeOutlineInShadow {
     const originElement = new Security.SecurityPanelSidebarTreeElement(
         Security.SecurityPanel.createHighlightedUrl(origin, securityState), this._showOriginInPanel.bind(this, origin),
         'security-sidebar-tree-item', 'security-property');
+    originElement.tooltip = origin;
     this._elementsByOrigin.set(origin, originElement);
     this.updateOrigin(origin, securityState);
   }
@@ -648,6 +649,12 @@ Security.SecurityMainView = class extends UI.VBox {
     if (explanation.certificate.length) {
       text.appendChild(Security.SecurityPanel.createCertificateViewerButtonForCert(
           Common.UIString('View certificate'), explanation.certificate));
+    }
+
+    if (explanation.recommendations && explanation.recommendations.length) {
+      const recommendationList = text.createChild('ul', 'security-explanation-recommendations');
+      for (const recommendation of explanation.recommendations)
+        recommendationList.createChild('li').textContent = recommendation;
     }
     return text;
   }

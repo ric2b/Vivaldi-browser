@@ -102,7 +102,7 @@ public class EarlyTraceEvent {
     @VisibleForTesting static final int STATE_FINISHED = 3;
 
     private static final String BACKGROUND_STARTUP_TRACING_ENABLED_KEY = "bg_startup_tracing";
-    private static boolean sCachedBackgroundStartupTracingFlag = false;
+    private static boolean sCachedBackgroundStartupTracingFlag;
 
     // Locks the fields below.
     private static final Object sLock = new Object();
@@ -227,7 +227,7 @@ public class EarlyTraceEvent {
         }
         if (conflictingEvent != null) {
             throw new IllegalArgumentException(
-                    "Multiple pending trace events can't have the same name");
+                    "Multiple pending trace events can't have the same name: " + name);
         }
     }
 

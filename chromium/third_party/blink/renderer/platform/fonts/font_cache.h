@@ -31,7 +31,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_FONTS_FONT_CACHE_H_
 
 #include <limits.h>
-
 #include <memory>
 
 #include "base/memory/scoped_refptr.h"
@@ -45,6 +44,7 @@
 #include "third_party/blink/renderer/platform/fonts/font_platform_data.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_cache.h"
 #include "third_party/blink/renderer/platform/heap/heap_allocator.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
@@ -98,7 +98,6 @@ typedef HashMap<FallbackListCompositeKey,
 class PLATFORM_EXPORT FontCache {
   friend class FontCachePurgePreventer;
 
-  WTF_MAKE_NONCOPYABLE(FontCache);
   USING_FAST_MALLOC(FontCache);
 
  public:
@@ -150,7 +149,7 @@ class PLATFORM_EXPORT FontCache {
 
   void AddClient(FontCacheClient*);
 
-  unsigned short Generation();
+  uint16_t Generation();
   void Invalidate();
 
   sk_sp<SkFontMgr> FontManager() { return font_manager_; }
@@ -252,6 +251,9 @@ class PLATFORM_EXPORT FontCache {
       UChar32,
       const SimpleFontData* font_data_to_substitute,
       FontFallbackPriority = FontFallbackPriority::kText);
+  sk_sp<SkTypeface> CreateTypefaceFromUniqueName(
+      const FontFaceCreationParams& creation_params,
+      CString& name);
 
   friend class FontGlobalContext;
   FontCache();
@@ -286,10 +288,9 @@ class PLATFORM_EXPORT FontCache {
       const FontFaceCreationParams&,
       float font_size);
 
-  // Implemented on skia platforms.
-  PaintTypeface CreateTypeface(const FontDescription&,
-                               const FontFaceCreationParams&,
-                               CString& name);
+  sk_sp<SkTypeface> CreateTypeface(const FontDescription&,
+                                   const FontFaceCreationParams&,
+                                   CString& name);
 
 #if defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_FUCHSIA)
   static AtomicString GetFamilyNameForCharacter(SkFontMgr*,
@@ -312,7 +313,7 @@ class PLATFORM_EXPORT FontCache {
 #if defined(OS_WIN)
   static bool antialiased_text_enabled_;
   static bool lcd_text_enabled_;
-  static HashMap<String, sk_sp<SkTypeface>>* sideloaded_fonts_;
+  static HashMap<String, sk_sp<SkTypeface>, CaseFoldingHash>* sideloaded_fonts_;
   // The system font metrics cache.
   static AtomicString* menu_font_family_name_;
   static int32_t menu_font_height_;
@@ -331,7 +332,7 @@ class PLATFORM_EXPORT FontCache {
   static float device_scale_factor_;
 #endif
 
-  unsigned short generation_ = 0;
+  uint16_t generation_ = 0;
   bool platform_init_ = false;
   Persistent<HeapHashSet<WeakMember<FontCacheClient>>> font_cache_clients_;
   FontPlatformDataCache font_platform_data_cache_;
@@ -343,15 +344,19 @@ class PLATFORM_EXPORT FontCache {
 
   friend class SimpleFontData;  // For fontDataFromFontPlatformData
   friend class FontFallbackList;
+
+  DISALLOW_COPY_AND_ASSIGN(FontCache);
 };
 
 class PLATFORM_EXPORT FontCachePurgePreventer {
   USING_FAST_MALLOC(FontCachePurgePreventer);
-  WTF_MAKE_NONCOPYABLE(FontCachePurgePreventer);
 
  public:
   FontCachePurgePreventer() { FontCache::GetFontCache()->DisablePurging(); }
   ~FontCachePurgePreventer() { FontCache::GetFontCache()->EnablePurging(); }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(FontCachePurgePreventer);
 };
 
 AtomicString ToAtomicString(const SkString&);

@@ -7,7 +7,7 @@
 #include <stddef.h>
 
 #include "base/command_line.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "content/public/browser/context_factory.h"
@@ -20,7 +20,6 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/md_text_button.h"
@@ -35,7 +34,6 @@
 #include "ui/views/widget/widget_delegate.h"
 
 #if defined(OS_CHROMEOS)
-#include "ui/aura/test/test_screen.h"
 #include "ui/wm/test/wm_test_helper.h"
 #else  // !defined(OS_CHROMEOS)
 #include "ui/views/widget/desktop_aura/desktop_screen.h"
@@ -211,7 +209,7 @@ class ShellWindowDelegateView : public views::WidgetDelegateView,
     static const ui::KeyboardCode keys[] = { ui::VKEY_F5,
                                              ui::VKEY_BROWSER_BACK,
                                              ui::VKEY_BROWSER_FORWARD };
-    for (size_t i = 0; i < arraysize(keys); ++i) {
+    for (size_t i = 0; i < base::size(keys); ++i) {
       GetFocusManager()->RegisterAccelerator(
         ui::Accelerator(keys[i], ui::EF_NONE),
         ui::AcceleratorManager::kNormalPriority,
@@ -318,8 +316,6 @@ class ShellWindowDelegateView : public views::WidgetDelegateView,
 #if defined(OS_CHROMEOS)
 // static
 wm::WMTestHelper* Shell::wm_test_helper_ = nullptr;
-// static
-display::Screen* Shell::test_screen_ = nullptr;
 #elif defined(USE_AURA)
 // static
 wm::WMState* Shell::wm_state_ = nullptr;
@@ -334,8 +330,6 @@ void Shell::PlatformInitialize(const gfx::Size& default_window_size) {
   _setmode(_fileno(stderr), _O_BINARY);
 #endif
 #if defined(OS_CHROMEOS)
-  test_screen_ = aura::TestScreen::Create(gfx::Size());
-  display::Screen::SetScreenInstance(test_screen_);
   ui::ContextFactory* ui_context_factory =
       aura::Env::GetInstance()->mode() == aura::Env::Mode::LOCAL
           ? GetContextFactory()
@@ -355,9 +349,6 @@ void Shell::PlatformExit() {
 #if defined(OS_CHROMEOS)
   delete wm_test_helper_;
   wm_test_helper_ = nullptr;
-
-  delete test_screen_;
-  test_screen_ = nullptr;
 #endif
   delete views_delegate_;
   views_delegate_ = nullptr;

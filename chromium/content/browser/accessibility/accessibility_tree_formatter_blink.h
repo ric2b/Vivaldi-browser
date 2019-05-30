@@ -6,6 +6,8 @@
 #define CONTENT_BROWSER_ACCESSIBILITY_ACCESSIBILITY_TREE_FORMATTER_BLINK_H_
 
 #include <stdint.h>
+#include <string>
+#include <vector>
 
 #include "content/browser/accessibility/accessibility_tree_formatter_browser.h"
 
@@ -17,19 +19,21 @@ class CONTENT_EXPORT AccessibilityTreeFormatterBlink
   explicit AccessibilityTreeFormatterBlink();
   ~AccessibilityTreeFormatterBlink() override;
 
+  void AddDefaultFilters(
+      std::vector<PropertyFilter>* property_filters) override;
+  static std::unique_ptr<AccessibilityTreeFormatter> CreateBlink();
+
  private:
   const base::FilePath::StringType GetExpectedFileSuffix() override;
   const std::string GetAllowEmptyString() override;
   const std::string GetAllowString() override;
   const std::string GetDenyString() override;
+  const std::string GetDenyNodeString() override;
   uint32_t ChildCount(const BrowserAccessibility& node) const override;
   BrowserAccessibility* GetChild(const BrowserAccessibility& node,
                                  uint32_t i) const override;
   void AddProperties(const BrowserAccessibility& node,
                      base::DictionaryValue* dict) override;
-  std::string IntAttrToString(const BrowserAccessibility& node,
-                              ax::mojom::IntAttribute attr,
-                              int value) const;
   base::string16 ProcessTreeForOutput(
       const base::DictionaryValue& node,
       base::DictionaryValue* filtered_dict_result = nullptr) override;

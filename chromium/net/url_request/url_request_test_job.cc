@@ -13,6 +13,7 @@
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/io_buffer.h"
@@ -93,7 +94,7 @@ std::string URLRequestTestJob::test_headers() {
       "HTTP/1.1 200 OK\n"
       "Content-type: text/html\n"
       "\n";
-  return std::string(kHeaders, arraysize(kHeaders));
+  return std::string(kHeaders, base::size(kHeaders));
 }
 
 // static getter for redirect response headers
@@ -102,7 +103,7 @@ std::string URLRequestTestJob::test_redirect_headers() {
       "HTTP/1.1 302 MOVED\n"
       "Location: somewhere\n"
       "\n";
-  return std::string(kHeaders, arraysize(kHeaders));
+  return std::string(kHeaders, base::size(kHeaders));
 }
 
 // static getter for redirect response headers
@@ -132,7 +133,7 @@ std::string URLRequestTestJob::test_error_headers() {
   static const char kHeaders[] =
       "HTTP/1.1 500 BOO HOO\n"
       "\n";
-  return std::string(kHeaders, arraysize(kHeaders));
+  return std::string(kHeaders, base::size(kHeaders));
 }
 
 // static
@@ -180,10 +181,7 @@ URLRequestTestJob::URLRequestTestJob(URLRequest* request,
       weak_factory_(this) {}
 
 URLRequestTestJob::~URLRequestTestJob() {
-  g_pending_jobs.Get().erase(
-      std::remove(
-          g_pending_jobs.Get().begin(), g_pending_jobs.Get().end(), this),
-      g_pending_jobs.Get().end());
+  base::Erase(g_pending_jobs.Get(), this);
 }
 
 bool URLRequestTestJob::GetMimeType(std::string* mime_type) const {
@@ -201,8 +199,8 @@ void URLRequestTestJob::Start() {
   // Start reading asynchronously so that all error reporting and data
   // callbacks happen as they would for network requests.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(&URLRequestTestJob::StartAsync, weak_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&URLRequestTestJob::StartAsync,
+                                weak_factory_.GetWeakPtr()));
 }
 
 void URLRequestTestJob::StartAsync() {
@@ -271,8 +269,8 @@ int URLRequestTestJob::ReadRawData(IOBuffer* buf, int buf_size) {
     if (stage_ != WAITING) {
       stage_ = WAITING;
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(&URLRequestTestJob::ProcessNextOperation,
-                                weak_factory_.GetWeakPtr()));
+          FROM_HERE, base::BindOnce(&URLRequestTestJob::ProcessNextOperation,
+                                    weak_factory_.GetWeakPtr()));
     }
     return ERR_IO_PENDING;
   }
@@ -320,10 +318,7 @@ void URLRequestTestJob::Kill() {
   stage_ = DONE;
   URLRequestJob::Kill();
   weak_factory_.InvalidateWeakPtrs();
-  g_pending_jobs.Get().erase(
-      std::remove(
-          g_pending_jobs.Get().begin(), g_pending_jobs.Get().end(), this),
-      g_pending_jobs.Get().end());
+  base::Erase(g_pending_jobs.Get(), this);
 }
 
 void URLRequestTestJob::ProcessNextOperation() {
@@ -368,8 +363,8 @@ bool URLRequestTestJob::NextReadAsync() {
 void URLRequestTestJob::AdvanceJob() {
   if (auto_advance_) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&URLRequestTestJob::ProcessNextOperation,
-                              weak_factory_.GetWeakPtr()));
+        FROM_HERE, base::BindOnce(&URLRequestTestJob::ProcessNextOperation,
+                                  weak_factory_.GetWeakPtr()));
     return;
   }
   g_pending_jobs.Get().push_back(this);

@@ -10,10 +10,12 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <type_traits>
 
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -92,14 +94,14 @@ TEST(StringUtilTest, TruncateUTF8ToByteSize) {
 
   {
     const char array[] = "\x00\x00\xc2\x81\xc2\x81";
-    const std::string array_string(array, arraysize(array));
+    const std::string array_string(array, base::size(array));
     EXPECT_TRUE(Truncated(array_string, 4, &output));
     EXPECT_EQ(output.compare(std::string("\x00\x00\xc2\x81", 4)), 0);
   }
 
   {
     const char array[] = "\x00\xc2\x81\xc2\x81";
-    const std::string array_string(array, arraysize(array));
+    const std::string array_string(array, base::size(array));
     EXPECT_TRUE(Truncated(array_string, 4, &output));
     EXPECT_EQ(output.compare(std::string("\x00\xc2\x81", 3)), 0);
   }
@@ -166,7 +168,7 @@ TEST(StringUtilTest, TruncateUTF8ToByteSize) {
 
   {
     const char array[] = "\x00\x00\xfe\xff";
-    const std::string array_string(array, arraysize(array));
+    const std::string array_string(array, base::size(array));
     EXPECT_TRUE(Truncated(array_string, 4, &output));
     EXPECT_EQ(output.compare(std::string("\x00\x00", 2)), 0);
   }
@@ -180,7 +182,7 @@ TEST(StringUtilTest, TruncateUTF8ToByteSize) {
   }
   {
     const char array[] = "\xff\x00\x00\xfe";
-    const std::string array_string(array, arraysize(array));
+    const std::string array_string(array, base::size(array));
     EXPECT_TRUE(Truncated(array_string, 4, &output));
     EXPECT_EQ(output.compare(std::string("\xff\x00\x00", 3)), 0);
   }
@@ -228,10 +230,68 @@ TEST(StringUtilTest, TruncateUTF8ToByteSize) {
   EXPECT_EQ(output.compare(""), 0);
 }
 
+#if defined(WCHAR_T_IS_UTF16)
+TEST(StringUtilTest, as_wcstr) {
+  char16 rw_buffer[10] = {};
+  static_assert(
+      std::is_same<wchar_t*, decltype(as_writable_wcstr(rw_buffer))>::value,
+      "");
+  EXPECT_EQ(static_cast<void*>(rw_buffer), as_writable_wcstr(rw_buffer));
+
+  string16 rw_str(10, '\0');
+  static_assert(
+      std::is_same<wchar_t*, decltype(as_writable_wcstr(rw_str))>::value, "");
+  EXPECT_EQ(static_cast<const void*>(rw_str.data()), as_writable_wcstr(rw_str));
+
+  const char16 ro_buffer[10] = {};
+  static_assert(
+      std::is_same<const wchar_t*, decltype(as_wcstr(ro_buffer))>::value, "");
+  EXPECT_EQ(static_cast<const void*>(ro_buffer), as_wcstr(ro_buffer));
+
+  const string16 ro_str(10, '\0');
+  static_assert(std::is_same<const wchar_t*, decltype(as_wcstr(ro_str))>::value,
+                "");
+  EXPECT_EQ(static_cast<const void*>(ro_str.data()), as_wcstr(ro_str));
+
+  StringPiece16 piece = ro_buffer;
+  static_assert(std::is_same<const wchar_t*, decltype(as_wcstr(piece))>::value,
+                "");
+  EXPECT_EQ(static_cast<const void*>(piece.data()), as_wcstr(piece));
+}
+
+TEST(StringUtilTest, as_u16cstr) {
+  wchar_t rw_buffer[10] = {};
+  static_assert(
+      std::is_same<char16*, decltype(as_writable_u16cstr(rw_buffer))>::value,
+      "");
+  EXPECT_EQ(static_cast<void*>(rw_buffer), as_writable_u16cstr(rw_buffer));
+
+  std::wstring rw_str(10, '\0');
+  static_assert(
+      std::is_same<char16*, decltype(as_writable_u16cstr(rw_str))>::value, "");
+  EXPECT_EQ(static_cast<const void*>(rw_str.data()),
+            as_writable_u16cstr(rw_str));
+
+  const wchar_t ro_buffer[10] = {};
+  static_assert(
+      std::is_same<const char16*, decltype(as_u16cstr(ro_buffer))>::value, "");
+  EXPECT_EQ(static_cast<const void*>(ro_buffer), as_u16cstr(ro_buffer));
+
+  const std::wstring ro_str(10, '\0');
+  static_assert(
+      std::is_same<const char16*, decltype(as_u16cstr(ro_str))>::value, "");
+  EXPECT_EQ(static_cast<const void*>(ro_str.data()), as_u16cstr(ro_str));
+
+  WStringPiece piece = ro_buffer;
+  static_assert(std::is_same<const char16*, decltype(as_u16cstr(piece))>::value,
+                "");
+  EXPECT_EQ(static_cast<const void*>(piece.data()), as_u16cstr(piece));
+}
+#endif  // defined(WCHAR_T_IS_UTF16)
+
 TEST(StringUtilTest, TrimWhitespace) {
   string16 output;  // Allow contents to carry over to next testcase
-  for (size_t i = 0; i < arraysize(trim_cases); ++i) {
-    const trim_case& value = trim_cases[i];
+  for (const auto& value : trim_cases) {
     EXPECT_EQ(value.return_value,
               TrimWhitespace(WideToUTF16(value.input), value.positions,
                              &output));
@@ -249,8 +309,7 @@ TEST(StringUtilTest, TrimWhitespace) {
   EXPECT_EQ(string16(), output);
 
   std::string output_ascii;
-  for (size_t i = 0; i < arraysize(trim_cases_ascii); ++i) {
-    const trim_case_ascii& value = trim_cases_ascii[i];
+  for (const auto& value : trim_cases_ascii) {
     EXPECT_EQ(value.return_value,
               TrimWhitespaceASCII(value.input, value.positions, &output_ascii));
     EXPECT_EQ(value.output, output_ascii);
@@ -284,8 +343,7 @@ static const struct collapse_case {
 };
 
 TEST(StringUtilTest, CollapseWhitespace) {
-  for (size_t i = 0; i < arraysize(collapse_cases); ++i) {
-    const collapse_case& value = collapse_cases[i];
+  for (const auto& value : collapse_cases) {
     EXPECT_EQ(WideToUTF16(value.output),
               CollapseWhitespace(WideToUTF16(value.input), value.trim));
   }
@@ -316,8 +374,7 @@ static const struct collapse_case_ascii {
 };
 
 TEST(StringUtilTest, CollapseWhitespaceASCII) {
-  for (size_t i = 0; i < arraysize(collapse_cases_ascii); ++i) {
-    const collapse_case_ascii& value = collapse_cases_ascii[i];
+  for (const auto& value : collapse_cases_ascii) {
     EXPECT_EQ(value.output, CollapseWhitespaceASCII(value.input, value.trim));
   }
 }
@@ -403,7 +460,7 @@ TEST(StringUtilTest, IsStringASCII) {
   // Also, test that a non-ASCII character will be detected regardless of its
   // position inside the string.
   {
-    const size_t string_length = arraysize(char_ascii) - 1;
+    const size_t string_length = base::size(char_ascii) - 1;
     for (size_t offset = 0; offset < 8; ++offset) {
       for (size_t len = 0, max_len = string_length - offset; len < max_len;
            ++len) {
@@ -418,7 +475,7 @@ TEST(StringUtilTest, IsStringASCII) {
   }
 
   {
-    const size_t string_length = arraysize(char16_ascii) - 1;
+    const size_t string_length = base::size(char16_ascii) - 1;
     for (size_t offset = 0; offset < 4; ++offset) {
       for (size_t len = 0, max_len = string_length - offset; len < max_len;
            ++len) {
@@ -438,28 +495,25 @@ TEST(StringUtilTest, IsStringASCII) {
     }
   }
 
+#if defined(WCHAR_T_IS_UTF32)
   {
     const size_t string_length = wchar_ascii.length();
     for (size_t len = 0; len < string_length; ++len) {
       EXPECT_TRUE(IsStringASCII(wchar_ascii.substr(0, len)));
       for (size_t char_pos = 0; char_pos < len; ++char_pos) {
         wchar_ascii[char_pos] |= 0x80;
-        EXPECT_FALSE(
-            IsStringASCII(wchar_ascii.substr(0, len)));
+        EXPECT_FALSE(IsStringASCII(wchar_ascii.substr(0, len)));
         wchar_ascii[char_pos] &= ~0x80;
         wchar_ascii[char_pos] |= 0x100;
-        EXPECT_FALSE(
-            IsStringASCII(wchar_ascii.substr(0, len)));
+        EXPECT_FALSE(IsStringASCII(wchar_ascii.substr(0, len)));
         wchar_ascii[char_pos] &= ~0x100;
-#if defined(WCHAR_T_IS_UTF32)
         wchar_ascii[char_pos] |= 0x10000;
-        EXPECT_FALSE(
-            IsStringASCII(wchar_ascii.substr(0, len)));
+        EXPECT_FALSE(IsStringASCII(wchar_ascii.substr(0, len)));
         wchar_ascii[char_pos] &= ~0x10000;
-#endif  // WCHAR_T_IS_UTF32
       }
     }
   }
+#endif  // WCHAR_T_IS_UTF32
 }
 
 TEST(StringUtilTest, ConvertASCII) {
@@ -475,7 +529,7 @@ TEST(StringUtilTest, ConvertASCII) {
     L"0123ABCDwxyz \a\b\t\r\n!+,.~"
   };
 
-  for (size_t i = 0; i < arraysize(char_cases); ++i) {
+  for (size_t i = 0; i < base::size(char_cases); ++i) {
     EXPECT_TRUE(IsStringASCII(char_cases[i]));
     string16 utf16 = ASCIIToUTF16(char_cases[i]);
     EXPECT_EQ(WideToUTF16(wchar_cases[i]), utf16);
@@ -494,7 +548,7 @@ TEST(StringUtilTest, ConvertASCII) {
 
   // Convert strings with an embedded NUL character.
   const char chars_with_nul[] = "test\0string";
-  const int length_with_nul = arraysize(chars_with_nul) - 1;
+  const int length_with_nul = base::size(chars_with_nul) - 1;
   std::string string_with_nul(chars_with_nul, length_with_nul);
   string16 string16_with_nul = ASCIIToUTF16(string_with_nul);
   EXPECT_EQ(static_cast<string16::size_type>(length_with_nul),
@@ -541,11 +595,9 @@ TEST(StringUtilTest, LowerCaseEqualsASCII) {
     { "FOO", "foo" },
   };
 
-  for (size_t i = 0; i < arraysize(lowercase_cases); ++i) {
-    EXPECT_TRUE(LowerCaseEqualsASCII(ASCIIToUTF16(lowercase_cases[i].src_a),
-                                     lowercase_cases[i].dst));
-    EXPECT_TRUE(LowerCaseEqualsASCII(lowercase_cases[i].src_a,
-                                     lowercase_cases[i].dst));
+  for (const auto& i : lowercase_cases) {
+    EXPECT_TRUE(LowerCaseEqualsASCII(ASCIIToUTF16(i.src_a), i.dst));
+    EXPECT_TRUE(LowerCaseEqualsASCII(i.src_a, i.dst));
   }
 }
 
@@ -578,9 +630,8 @@ TEST(StringUtilTest, FormatBytesUnlocalized) {
     {100LL*1024*1024*1024, "100 GB"},
   };
 
-  for (size_t i = 0; i < arraysize(cases); ++i) {
-    EXPECT_EQ(ASCIIToUTF16(cases[i].expected),
-              FormatBytesUnlocalized(cases[i].bytes));
+  for (const auto& i : cases) {
+    EXPECT_EQ(ASCIIToUTF16(i.expected), FormatBytesUnlocalized(i.bytes));
   }
 }
 TEST(StringUtilTest, ReplaceSubstringsAfterOffset) {
@@ -673,12 +724,12 @@ TEST(StringUtilTest, ReplaceFirstSubstringAfterOffset) {
     {"abababab", 2, "ab", "c", "abcabab"},
   };
 
-  for (size_t i = 0; i < arraysize(cases); i++) {
-    string16 str = ASCIIToUTF16(cases[i].str);
-    ReplaceFirstSubstringAfterOffset(&str, cases[i].start_offset,
-                                     ASCIIToUTF16(cases[i].find_this),
-                                     ASCIIToUTF16(cases[i].replace_with));
-    EXPECT_EQ(ASCIIToUTF16(cases[i].expected), str);
+  for (const auto& i : cases) {
+    string16 str = ASCIIToUTF16(i.str);
+    ReplaceFirstSubstringAfterOffset(&str, i.start_offset,
+                                     ASCIIToUTF16(i.find_this),
+                                     ASCIIToUTF16(i.replace_with));
+    EXPECT_EQ(ASCIIToUTF16(i.expected), str);
   }
 }
 
@@ -1105,9 +1156,9 @@ TEST(StringUtilTest, LcpyTest) {
   {
     char dst[10];
     wchar_t wdst[10];
-    EXPECT_EQ(7U, strlcpy(dst, "abcdefg", arraysize(dst)));
+    EXPECT_EQ(7U, strlcpy(dst, "abcdefg", base::size(dst)));
     EXPECT_EQ(0, memcmp(dst, "abcdefg", 8));
-    EXPECT_EQ(7U, wcslcpy(wdst, L"abcdefg", arraysize(wdst)));
+    EXPECT_EQ(7U, wcslcpy(wdst, L"abcdefg", base::size(wdst)));
     EXPECT_EQ(0, memcmp(wdst, L"abcdefg", sizeof(wchar_t) * 8));
   }
 
@@ -1128,9 +1179,9 @@ TEST(StringUtilTest, LcpyTest) {
   {
     char dst[8];
     wchar_t wdst[8];
-    EXPECT_EQ(7U, strlcpy(dst, "abcdefg", arraysize(dst)));
+    EXPECT_EQ(7U, strlcpy(dst, "abcdefg", base::size(dst)));
     EXPECT_EQ(0, memcmp(dst, "abcdefg", 8));
-    EXPECT_EQ(7U, wcslcpy(wdst, L"abcdefg", arraysize(wdst)));
+    EXPECT_EQ(7U, wcslcpy(wdst, L"abcdefg", base::size(wdst)));
     EXPECT_EQ(0, memcmp(wdst, L"abcdefg", sizeof(wchar_t) * 8));
   }
 
@@ -1138,9 +1189,9 @@ TEST(StringUtilTest, LcpyTest) {
   {
     char dst[7];
     wchar_t wdst[7];
-    EXPECT_EQ(7U, strlcpy(dst, "abcdefg", arraysize(dst)));
+    EXPECT_EQ(7U, strlcpy(dst, "abcdefg", base::size(dst)));
     EXPECT_EQ(0, memcmp(dst, "abcdef", 7));
-    EXPECT_EQ(7U, wcslcpy(wdst, L"abcdefg", arraysize(wdst)));
+    EXPECT_EQ(7U, wcslcpy(wdst, L"abcdefg", base::size(wdst)));
     EXPECT_EQ(0, memcmp(wdst, L"abcdef", sizeof(wchar_t) * 7));
   }
 
@@ -1148,9 +1199,9 @@ TEST(StringUtilTest, LcpyTest) {
   {
     char dst[3];
     wchar_t wdst[3];
-    EXPECT_EQ(7U, strlcpy(dst, "abcdefg", arraysize(dst)));
+    EXPECT_EQ(7U, strlcpy(dst, "abcdefg", base::size(dst)));
     EXPECT_EQ(0, memcmp(dst, "ab", 3));
-    EXPECT_EQ(7U, wcslcpy(wdst, L"abcdefg", arraysize(wdst)));
+    EXPECT_EQ(7U, wcslcpy(wdst, L"abcdefg", base::size(wdst)));
     EXPECT_EQ(0, memcmp(wdst, L"ab", sizeof(wchar_t) * 3));
   }
 }
@@ -1182,8 +1233,8 @@ TEST(StringUtilTest, WprintfFormatPortabilityTest) {
     { L"% 10s", false },
     { L"% 10ls", true }
   };
-  for (size_t i = 0; i < arraysize(cases); ++i)
-    EXPECT_EQ(cases[i].portable, IsWprintfFormatPortable(cases[i].input));
+  for (const auto& i : cases)
+    EXPECT_EQ(i.portable, IsWprintfFormatPortable(i.input));
 }
 
 TEST(StringUtilTest, RemoveChars) {
@@ -1349,9 +1400,9 @@ class WriteIntoTest : public testing::Test {
     strncpy(WriteInto(&buffer, num_chars + 1), kOriginal, num_chars);
     // Using std::string(buffer.c_str()) instead of |buffer| truncates the
     // string at the first \0.
-    EXPECT_EQ(std::string(kOriginal,
-                          std::min(num_chars, arraysize(kOriginal) - 1)),
-              std::string(buffer.c_str()));
+    EXPECT_EQ(
+        std::string(kOriginal, std::min(num_chars, base::size(kOriginal) - 1)),
+        std::string(buffer.c_str()));
     EXPECT_EQ(num_chars, buffer.size());
   }
 };

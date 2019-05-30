@@ -20,9 +20,11 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "third_party/skia/include/core/SkPath.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/class_property.h"
+#include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/drop_target_event.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
@@ -37,7 +39,6 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/native_widget_types.h"
-#include "ui/gfx/path.h"
 #include "ui/views/paint_info.h"
 #include "ui/views/view_targeter.h"
 #include "ui/views/views_export.h"
@@ -51,7 +52,6 @@ using ui::OSExchangeData;
 namespace gfx {
 class Canvas;
 class Insets;
-class Path;
 class Transform;
 }  // namespace gfx
 
@@ -273,8 +273,37 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   virtual Widget* GetWidget();
 
   // Adds |view| as a child of this view, optionally at |index|.
-  void AddChildView(View* view);
-  void AddChildViewAt(View* view, int index);
+  // Returns the raw pointer for callers which want to hold a pointer to the
+  // added view. This requires declaring the function as a template in order to
+  // return the actual passed-in type.
+  template <typename T>
+  T* AddChildView(std::unique_ptr<T> view) {
+    DCHECK(!view->owned_by_client())
+        << "This should only be called if the client is passing ownership of "
+           "|view| to the parent View.";
+    return AddChildView<T>(view.release());
+  }
+  template <typename T>
+  T* AddChildViewAt(std::unique_ptr<T> view, int index) {
+    DCHECK(!view->owned_by_client())
+        << "This should only be called if the client is passing ownership of "
+           "|view| to the parent View.";
+    return AddChildViewAt<T>(view.release(), index);
+  }
+
+  // Prefer using the AddChildView(std::unique_ptr) overloads over raw pointers
+  // for new code.
+  template <typename T>
+  T* AddChildView(T* view) {
+    if (static_cast<View*>(view)->parent_ != this)
+      AddChildViewAtImpl(view, child_count());
+    return view;
+  }
+  template <typename T>
+  T* AddChildViewAt(T* view, int index) {
+    AddChildViewAtImpl(view, index);
+    return view;
+  }
 
   // Moves |view| to the specified |index|. A negative value for |index| moves
   // the view at the end.
@@ -434,7 +463,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   gfx::Transform GetTransform() const;
 
   // Clipping is done relative to the view's local bounds.
-  void set_clip_path(const gfx::Path& path) { clip_path_ = path; }
+  void set_clip_path(const SkPath& path) { clip_path_ = path; }
 
   // Sets the transform to the supplied transform.
   void SetTransform(const gfx::Transform& transform);
@@ -514,7 +543,6 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // specific to the current Layout Manager)
   virtual void Layout();
 
-  // TODO(beng): I think we should remove this.
   // Mark this view and all parents to require a relayout. This ensures the
   // next call to Layout() will propagate to this view, even if the bounds of
   // parent views do not change.
@@ -886,8 +914,9 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   ui::EventTarget* GetParentTarget() override;
   std::unique_ptr<ui::EventTargetIterator> GetChildIterator() const override;
   ui::EventTargeter* GetEventTargeter() override;
-  void ConvertEventToTarget(ui::EventTarget* target,
-                            ui::LocatedEvent* event) override;
+  void ConvertEventToTarget(const ui::EventTarget* target,
+                            ui::LocatedEvent* event) const override;
+  gfx::PointF GetScreenLocationF(const ui::LocatedEvent& event) const override;
 
   // Overridden from ui::EventHandler:
   void OnKeyEvent(ui::KeyEvent* event) override;
@@ -1063,9 +1092,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // |formats| is a bitmask of the formats defined bye OSExchangeData::Format.
   // The default implementation returns false, which means the view doesn't
   // support dropping.
-  virtual bool GetDropFormats(
-      int* formats,
-      std::set<ui::Clipboard::FormatType>* format_types);
+  virtual bool GetDropFormats(int* formats,
+                              std::set<ui::ClipboardFormatType>* format_types);
 
   // Override and return true if the data must be available before any drop
   // methods should be invoked. The default is false.
@@ -1460,6 +1488,9 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // Tree operations -----------------------------------------------------------
 
+  // Adds |view| as a child of this view at |index|.
+  void AddChildViewAtImpl(View* view, int index);
+
   // Removes |view| from the hierarchy tree.  If |update_focus_cycle| is true,
   // the next and previous focusable views of views pointing to this view are
   // updated.  If |update_tool_tip| is true, the tooltip is updated.  If
@@ -1619,7 +1650,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Input ---------------------------------------------------------------------
 
   bool ProcessMousePressed(const ui::MouseEvent& event);
-  bool ProcessMouseDragged(const ui::MouseEvent& event);
+  void ProcessMouseDragged(ui::MouseEvent* event);
   void ProcessMouseReleased(const ui::MouseEvent& event);
 
   // Accelerators --------------------------------------------------------------
@@ -1680,22 +1711,22 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // False if this View is owned by its parent - i.e. it will be deleted by its
   // parent during its parents destruction. False is the default.
-  bool owned_by_client_;
+  bool owned_by_client_ = false;
 
   // Attributes ----------------------------------------------------------------
 
   // The id of this View. Used to find this View.
-  int id_;
+  int id_ = 0;
 
   // The group of this view. Some view subclasses use this id to find other
   // views of the same group. For example radio button uses this information
   // to find other radio buttons.
-  int group_;
+  int group_ = -1;
 
   // Tree operations -----------------------------------------------------------
 
   // This view's parent.
-  View* parent_;
+  View* parent_ = nullptr;
 
   // This view's children.
   Views children_;
@@ -1703,10 +1734,10 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 #if DCHECK_IS_ON()
   // True while iterating over |children_|. Used to detect and DCHECK when
   // |children_| is mutated during iteration.
-  mutable bool iterating_;
+  mutable bool iterating_ = false;
 #endif
 
-  bool can_process_events_within_subtree_;
+  bool can_process_events_within_subtree_ = true;
 
   // Size and disposition ------------------------------------------------------
 
@@ -1716,10 +1747,10 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   gfx::Rect bounds_;
 
   // Whether this view is visible.
-  bool visible_;
+  bool visible_ = true;
 
   // Whether this view is enabled.
-  bool enabled_;
+  bool enabled_ = true;
 
   // When this flag is on, a View receives a mouse-enter and mouse-leave event
   // even if a descendant View is the event-recipient for the real mouse
@@ -1734,11 +1765,11 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // still into this view, this view receives a mouse-enter event if this flag
   // is turned off, but doesn't if this flag is turned on.
   // This flag is initialized to false.
-  bool notify_enter_exit_on_child_;
+  bool notify_enter_exit_on_child_ = false;
 
   // Whether or not RegisterViewForVisibleBoundsNotification on the RootView
   // has been invoked.
-  bool registered_for_visible_bounds_notification_;
+  bool registered_for_visible_bounds_notification_ = false;
 
   // List of descendants wanting notification when their visible bounds change.
   std::unique_ptr<Views> descendants_to_notify_;
@@ -1747,19 +1778,19 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // Painting will be clipped to this path. TODO(estade): this doesn't work for
   // layers.
-  gfx::Path clip_path_;
+  SkPath clip_path_;
 
   // Layout --------------------------------------------------------------------
 
   // Whether the view needs to be laid out.
-  bool needs_layout_;
+  bool needs_layout_ = true;
 
   // The View's LayoutManager defines the sizing heuristics applied to child
   // Views. The default is absolute positioning according to bounds_.
   std::unique_ptr<LayoutManager> layout_manager_;
 
   // Whether this View's layer should be snapped to the pixel boundary.
-  bool snap_layer_to_pixel_boundary_;
+  bool snap_layer_to_pixel_boundary_ = false;
 
   // Painting ------------------------------------------------------------------
 
@@ -1784,42 +1815,42 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Indicates whether or not the gfx::Canvas object passed to View::Paint()
   // is going to be flipped horizontally (using the appropriate transform) on
   // right-to-left locales for this View.
-  bool flip_canvas_on_paint_for_rtl_ui_;
+  bool flip_canvas_on_paint_for_rtl_ui_ = false;
 
   // Accelerated painting ------------------------------------------------------
 
-  bool paint_to_layer_;
+  bool paint_to_layer_ = false;
 
   // Accelerators --------------------------------------------------------------
 
   // Focus manager accelerators registered on.
-  FocusManager* accelerator_focus_manager_;
+  FocusManager* accelerator_focus_manager_ = nullptr;
 
   // The list of accelerators. List elements in the range
   // [0, registered_accelerator_count_) are already registered to FocusManager,
   // and the rest are not yet.
   std::unique_ptr<std::vector<ui::Accelerator>> accelerators_;
-  size_t registered_accelerator_count_;
+  size_t registered_accelerator_count_ = 0;
 
   // Focus ---------------------------------------------------------------------
 
   // Next view to be focused when the Tab key is pressed.
-  View* next_focusable_view_;
+  View* next_focusable_view_ = nullptr;
 
   // Next view to be focused when the Shift-Tab key combination is pressed.
-  View* previous_focusable_view_;
+  View* previous_focusable_view_ = nullptr;
 
   // The focus behavior of the view in regular and accessibility mode.
-  FocusBehavior focus_behavior_;
+  FocusBehavior focus_behavior_ = FocusBehavior::NEVER;
 
   // Context menus -------------------------------------------------------------
 
   // The menu controller.
-  ContextMenuController* context_menu_controller_;
+  ContextMenuController* context_menu_controller_ = nullptr;
 
   // Drag and drop -------------------------------------------------------------
 
-  DragController* drag_controller_;
+  DragController* drag_controller_ = nullptr;
 
   // Input  --------------------------------------------------------------------
 

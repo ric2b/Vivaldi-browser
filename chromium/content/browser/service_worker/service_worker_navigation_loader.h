@@ -28,6 +28,7 @@
 namespace content {
 
 class ServiceWorkerVersion;
+class ServiceWorkerProviderHost;
 
 // S13nServiceWorker:
 // ServiceWorkerNavigationLoader is the URLLoader used for main resource
@@ -80,6 +81,7 @@ class CONTENT_EXPORT ServiceWorkerNavigationLoader
       NavigationLoaderInterceptor::FallbackCallback fallback_callback,
       Delegate* delegate,
       const network::ResourceRequest& tentative_resource_request,
+      base::WeakPtr<ServiceWorkerProviderHost> provider_host,
       scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter);
 
   ~ServiceWorkerNavigationLoader() override;
@@ -89,7 +91,6 @@ class CONTENT_EXPORT ServiceWorkerNavigationLoader
   void ForwardToServiceWorker();
   bool ShouldFallbackToNetwork();
   bool ShouldForwardToServiceWorker();
-  bool WasCanceled() const;
 
   // The navigation request that was holding this job is
   // going away. Calling this internally calls |DeleteIfNeeded()|
@@ -102,6 +103,20 @@ class CONTENT_EXPORT ServiceWorkerNavigationLoader
 
  private:
   class StreamWaiter;
+  enum class Status {
+    kNotStarted,
+    // |binding_| is bound and the fetch event is being dispatched to the
+    // service worker.
+    kStarted,
+    // The response head has been sent to |url_loader_client_|.
+    kSentHeader,
+    // The data pipe for the response body has been sent to
+    // |url_loader_client_|. The body is being written to the pipe.
+    kSentBody,
+    // OnComplete() was called on |url_loader_client_|, or fallback to network
+    // occurred so the request was not handled.
+    kCompleted,
+  };
 
   // For FORWARD_TO_SERVICE_WORKER case.
   void StartRequest(const network::ResourceRequest& resource_request,
@@ -114,6 +129,7 @@ class CONTENT_EXPORT ServiceWorkerNavigationLoader
       ServiceWorkerFetchDispatcher::FetchEventResult fetch_result,
       blink::mojom::FetchAPIResponsePtr response,
       blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
+      blink::mojom::ServiceWorkerFetchEventTimingPtr timing,
       scoped_refptr<ServiceWorkerVersion> version);
 
   void StartResponse(blink::mojom::FetchAPIResponsePtr response,
@@ -122,14 +138,23 @@ class CONTENT_EXPORT ServiceWorkerNavigationLoader
 
   // Calls url_loader_client_->OnReceiveResponse() with |response_head_|.
   void CommitResponseHeaders();
-  // Calls url_loader_client_->OnComplete().
-  void CommitCompleted(int error_code);
+
+  // Calls url_loader_client_->OnStartLoadingResponseBody() with
+  // |response_body|.
+  void CommitResponseBody(mojo::ScopedDataPipeConsumerHandle response_body);
+
+  // Creates and sends an empty response's body with the net::OK status.
+  // Sends net::ERR_INSUFFICIENT_RESOURCES when it can't be created.
+  void CommitEmptyResponseAndComplete();
+
+  // Calls url_loader_client_->OnComplete(). |reason| will be recorded as an
+  // argument of TRACE_EVENT.
+  void CommitCompleted(int error_code, const char* reason);
 
   // network::mojom::URLLoader:
-  void FollowRedirect(const base::Optional<std::vector<std::string>>&
-                          to_be_removed_request_headers,
-                      const base::Optional<net::HttpRequestHeaders>&
-                          modified_request_headers) override;
+  void FollowRedirect(const std::vector<std::string>& removed_headers,
+                      const net::HttpRequestHeaders& modified_headers,
+                      const base::Optional<GURL>& new_url) override;
   void ProceedWithResponse() override;
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override;
@@ -141,8 +166,12 @@ class CONTENT_EXPORT ServiceWorkerNavigationLoader
   void OnConnectionClosed();
   void DeleteIfNeeded();
 
-  void ReportDestination(
-      ServiceWorkerMetrics::MainResourceRequestDestination destination);
+  // Records loading milestones. Called only after ForwardToServiceWorker() is
+  // called and there was no error. |handled| is true when a fetch handler
+  // handled the request (i.e. non network fallback case).
+  void RecordTimingMetrics(bool handled);
+
+  void TransitionToStatus(Status new_status);
 
   ResponseType response_type_ = ResponseType::NOT_DETERMINED;
   NavigationLoaderInterceptor::LoaderCallback loader_callback_;
@@ -158,6 +187,7 @@ class CONTENT_EXPORT ServiceWorkerNavigationLoader
   Delegate* delegate_ = nullptr;
 
   network::ResourceRequest resource_request_;
+  base::WeakPtr<ServiceWorkerProviderHost> provider_host_;
   scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter_;
   std::unique_ptr<ServiceWorkerFetchDispatcher> fetch_dispatcher_;
   std::unique_ptr<StreamWaiter> stream_waiter_;
@@ -167,17 +197,16 @@ class CONTENT_EXPORT ServiceWorkerNavigationLoader
   bool did_navigation_preload_ = false;
   network::ResourceResponseHead response_head_;
 
+  bool devtools_attached_ = false;
+  blink::mojom::ServiceWorkerFetchEventTimingPtr fetch_event_timing_;
+  base::TimeTicks completion_time_;
+  network::mojom::FetchResponseSource response_source_ =
+      network::mojom::FetchResponseSource::kUnspecified;
+
   // Pointer to the URLLoaderClient (i.e. NavigationURLLoader).
   network::mojom::URLLoaderClientPtr url_loader_client_;
   mojo::Binding<network::mojom::URLLoader> binding_;
 
-  enum class Status {
-    kNotStarted,
-    kStarted,
-    kSentHeader,
-    kCompleted,
-    kCancelled
-  };
   Status status_ = Status::kNotStarted;
 
   base::WeakPtrFactory<ServiceWorkerNavigationLoader> weak_factory_;

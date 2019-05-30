@@ -202,6 +202,8 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
   virtual void Restore() = 0;
   virtual void SetFullscreen(bool fullscreen) = 0;
   virtual bool IsFullscreen() const = 0;
+  virtual void SetCanAppearInExistingFullscreenSpaces(
+      bool can_appear_in_existing_fullscreen_spaces) = 0;
   virtual void SetOpacity(float opacity) = 0;
   virtual void SetAspectRatio(const gfx::SizeF& aspect_ratio) = 0;
   virtual void FlashFrame(bool flash) = 0;
@@ -212,6 +214,7 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
                             ui::DragDropTypes::DragEventSource source) = 0;
   virtual void SchedulePaintInRect(const gfx::Rect& rect) = 0;
   virtual void SetCursor(gfx::NativeCursor cursor) = 0;
+  virtual void ShowEmojiPanel();
   virtual bool IsMouseEventsEnabled() const = 0;
   // Returns true if any mouse button is currently down.
   virtual bool IsMouseButtonDown() const = 0;
@@ -230,9 +233,7 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
   virtual bool IsTranslucentWindowOpacitySupported() const = 0;
   virtual ui::GestureRecognizer* GetGestureRecognizer() = 0;
   virtual void OnSizeConstraintsChanged() = 0;
-
-  // Repost an unhandled event to the native widget for default OS processing.
-  virtual void RepostNativeEvent(gfx::NativeEvent native_event) = 0;
+  virtual void OnCanActivateChanged();
 
   // Returns an internal name that matches the name of the associated Widget.
   virtual std::string GetName() const = 0;

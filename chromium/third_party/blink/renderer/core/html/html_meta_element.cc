@@ -22,6 +22,7 @@
 
 #include "third_party/blink/renderer/core/html/html_meta_element.h"
 
+#include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -35,14 +36,15 @@
 #include "third_party/blink/renderer/core/loader/http_equiv.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/platform/graphics/color_scheme.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_to_number.h"
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 inline HTMLMetaElement::HTMLMetaElement(Document& document)
-    : HTMLElement(metaTag, document) {}
+    : HTMLElement(kMetaTag, document) {}
 
 DEFINE_NODE_FACTORY(HTMLMetaElement)
 
@@ -58,7 +60,7 @@ static bool IsSeparator(UChar c) {
 
 void HTMLMetaElement::ParseContentAttribute(
     const String& content,
-    void* data,
+    ViewportDescription& viewport_description,
     Document* document,
     bool viewport_meta_zero_values_quirk) {
   bool has_invalid_separator = false;
@@ -121,14 +123,15 @@ void HTMLMetaElement::ParseContentAttribute(
         buffer.Substring(value_begin, value_end - value_begin);
     ProcessViewportKeyValuePair(document, !has_invalid_separator, key_string,
                                 value_string, viewport_meta_zero_values_quirk,
-                                data);
+                                viewport_description);
   }
   if (has_invalid_separator && document) {
     String message =
         "Error parsing a meta element's content: ';' is not a valid key-value "
         "pair separator. Please use ',' instead.";
-    document->AddConsoleMessage(ConsoleMessage::Create(
-        kRenderingMessageSource, kWarningMessageLevel, message));
+    document->AddConsoleMessage(
+        ConsoleMessage::Create(kRenderingMessageSource,
+                               mojom::ConsoleMessageLevel::kWarning, message));
   }
 }
 
@@ -185,9 +188,9 @@ Length HTMLMetaElement::ParseViewportValueAsLength(Document* document,
   // 4) Other keywords and unknown values translate to auto.
 
   if (DeprecatedEqualIgnoringCase(value_string, "device-width"))
-    return Length(kDeviceWidth);
+    return Length::DeviceWidth();
   if (DeprecatedEqualIgnoringCase(value_string, "device-height"))
-    return Length(kDeviceHeight);
+    return Length::DeviceHeight();
 
   bool ok;
 
@@ -204,7 +207,7 @@ Length HTMLMetaElement::ParseViewportValueAsLength(Document* document,
     value =
         document->GetPage()->GetChromeClient().WindowToViewportScalar(value);
   }
-  return Length(ClampLengthValue(value), kFixed);
+  return Length::Fixed(ClampLengthValue(value));
 }
 
 float HTMLMetaElement::ParseViewportValueAsZoom(
@@ -325,41 +328,39 @@ void HTMLMetaElement::ProcessViewportKeyValuePair(
     const String& key_string,
     const String& value_string,
     bool viewport_meta_zero_values_quirk,
-    void* data) {
-  ViewportDescription* description = static_cast<ViewportDescription*>(data);
-
+    ViewportDescription& description) {
   if (key_string == "width") {
     const Length& width = ParseViewportValueAsLength(document, report_warnings,
                                                      key_string, value_string);
     if (!width.IsAuto()) {
-      description->min_width = Length(kExtendToZoom);
-      description->max_width = width;
+      description.min_width = Length::ExtendToZoom();
+      description.max_width = width;
     }
   } else if (key_string == "height") {
     const Length& height = ParseViewportValueAsLength(document, report_warnings,
                                                       key_string, value_string);
     if (!height.IsAuto()) {
-      description->min_height = Length(kExtendToZoom);
-      description->max_height = height;
+      description.min_height = Length::ExtendToZoom();
+      description.max_height = height;
     }
   } else if (key_string == "initial-scale") {
-    description->zoom = ParseViewportValueAsZoom(
+    description.zoom = ParseViewportValueAsZoom(
         document, report_warnings, key_string, value_string,
-        description->zoom_is_explicit, viewport_meta_zero_values_quirk);
+        description.zoom_is_explicit, viewport_meta_zero_values_quirk);
   } else if (key_string == "minimum-scale") {
-    description->min_zoom = ParseViewportValueAsZoom(
+    description.min_zoom = ParseViewportValueAsZoom(
         document, report_warnings, key_string, value_string,
-        description->min_zoom_is_explicit, viewport_meta_zero_values_quirk);
+        description.min_zoom_is_explicit, viewport_meta_zero_values_quirk);
   } else if (key_string == "maximum-scale") {
-    description->max_zoom = ParseViewportValueAsZoom(
+    description.max_zoom = ParseViewportValueAsZoom(
         document, report_warnings, key_string, value_string,
-        description->max_zoom_is_explicit, viewport_meta_zero_values_quirk);
+        description.max_zoom_is_explicit, viewport_meta_zero_values_quirk);
   } else if (key_string == "user-scalable") {
-    description->user_zoom = ParseViewportValueAsUserZoom(
+    description.user_zoom = ParseViewportValueAsUserZoom(
         document, report_warnings, key_string, value_string,
-        description->user_zoom_is_explicit);
+        description.user_zoom_is_explicit);
   } else if (key_string == "target-densitydpi") {
-    description->deprecated_target_density_dpi = ParseViewportValueAsDPI(
+    description.deprecated_target_density_dpi = ParseViewportValueAsDPI(
         document, report_warnings, key_string, value_string);
     if (report_warnings)
       ReportViewportWarning(document, kTargetDensityDpiUnsupported, String(),
@@ -369,7 +370,7 @@ void HTMLMetaElement::ProcessViewportKeyValuePair(
   } else if (key_string == "viewport-fit") {
     if (RuntimeEnabledFeatures::DisplayCutoutAPIEnabled()) {
       bool unknown_value = false;
-      description->SetViewportFit(
+      description.SetViewportFit(
           ParseViewportFitValueAsEnum(unknown_value, value_string));
 
       // If we got an unknown value then report a warning.
@@ -402,7 +403,8 @@ static const char* ViewportErrorMessageTemplate(ViewportErrorCode error_code) {
   return kErrors[error_code];
 }
 
-static MessageLevel ViewportErrorMessageLevel(ViewportErrorCode error_code) {
+static mojom::ConsoleMessageLevel ViewportErrorMessageLevel(
+    ViewportErrorCode error_code) {
   switch (error_code) {
     case kTruncatedViewportArgumentValueError:
     case kTargetDensityDpiUnsupported:
@@ -410,11 +412,11 @@ static MessageLevel ViewportErrorMessageLevel(ViewportErrorCode error_code) {
     case kUnrecognizedViewportArgumentValueError:
     case kMaximumScaleTooLargeError:
     case kViewportFitUnsupported:
-      return kWarningMessageLevel;
+      return mojom::ConsoleMessageLevel::kWarning;
   }
 
   NOTREACHED();
-  return kErrorMessageLevel;
+  return mojom::ConsoleMessageLevel::kError;
 }
 
 void HTMLMetaElement::ReportViewportWarning(Document* document,
@@ -441,7 +443,7 @@ void HTMLMetaElement::GetViewportDescriptionFromContentAttribute(
     ViewportDescription& description,
     Document* document,
     bool viewport_meta_zero_values_quirk) {
-  ParseContentAttribute(content, (void*)&description, document,
+  ParseContentAttribute(content, description, document,
                         viewport_meta_zero_values_quirk);
 
   if (description.min_zoom == ViewportDescription::kValueAuto)
@@ -474,14 +476,30 @@ void HTMLMetaElement::ProcessViewportContentAttribute(
   viewport_data.SetViewportDescription(description_from_legacy_tag);
 }
 
+void HTMLMetaElement::ProcessSupportedColorSchemes(
+    const AtomicString& content) {
+  SpaceSplitString supported_schemes_strings(content.LowerASCII());
+  size_t count = supported_schemes_strings.size();
+  ColorSchemeSet supported_schemes;
+  for (size_t i = 0; i < count; i++) {
+    auto color_scheme = supported_schemes_strings[i];
+    if (color_scheme == "light") {
+      supported_schemes.Set(ColorScheme::kLight);
+    } else if (color_scheme == "dark") {
+      supported_schemes.Set(ColorScheme::kDark);
+    }
+  }
+  GetDocument().GetStyleEngine().SetSupportedColorSchemes(supported_schemes);
+}
+
 void HTMLMetaElement::ParseAttribute(
     const AttributeModificationParams& params) {
-  if (params.name == http_equivAttr || params.name == contentAttr) {
+  if (params.name == kHttpEquivAttr || params.name == kContentAttr) {
     Process();
     return;
   }
 
-  if (params.name != nameAttr)
+  if (params.name != kNameAttr)
     HTMLElement::ParseAttribute(params);
 }
 
@@ -508,11 +526,11 @@ void HTMLMetaElement::Process() {
 
   // All below situations require a content attribute (which can be the empty
   // string).
-  const AtomicString& content_value = FastGetAttribute(contentAttr);
+  const AtomicString& content_value = FastGetAttribute(kContentAttr);
   if (content_value.IsNull())
     return;
 
-  const AtomicString& name_value = FastGetAttribute(nameAttr);
+  const AtomicString& name_value = FastGetAttribute(kNameAttr);
   if (!name_value.IsEmpty()) {
     if (DeprecatedEqualIgnoringCase(name_value, "viewport"))
       ProcessViewportContentAttribute(content_value,
@@ -531,13 +549,15 @@ void HTMLMetaElement::Process() {
     else if (DeprecatedEqualIgnoringCase(name_value, "theme-color") &&
              GetDocument().GetFrame())
       GetDocument().GetFrame()->Client()->DispatchDidChangeThemeColor();
+    else if (EqualIgnoringASCIICase(name_value, "supported-color-schemes"))
+      ProcessSupportedColorSchemes(content_value);
   }
 
   // Get the document to process the tag, but only if we're actually part of DOM
   // tree (changing a meta tag while it's not in the tree shouldn't have any
   // effect on the document).
 
-  const AtomicString& http_equiv_value = FastGetAttribute(http_equivAttr);
+  const AtomicString& http_equiv_value = FastGetAttribute(kHttpEquivAttr);
   if (http_equiv_value.IsEmpty())
     return;
 
@@ -554,11 +574,11 @@ WTF::TextEncoding HTMLMetaElement::ComputeEncoding() const {
 }
 
 const AtomicString& HTMLMetaElement::Content() const {
-  return getAttribute(contentAttr);
+  return getAttribute(kContentAttr);
 }
 
 const AtomicString& HTMLMetaElement::HttpEquiv() const {
-  return getAttribute(http_equivAttr);
+  return getAttribute(kHttpEquivAttr);
 }
 
 const AtomicString& HTMLMetaElement::GetName() const {

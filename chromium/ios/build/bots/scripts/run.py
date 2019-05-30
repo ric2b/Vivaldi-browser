@@ -19,14 +19,19 @@ Sample usage:
 
 import argparse
 import json
+import logging
 import os
 import sys
 import traceback
 
 import test_runner
+import xcodebuild_runner
 
 
 def main():
+  logging.basicConfig(format='[%(asctime)s:%(levelname)s] %(message)s',
+    level=logging.DEBUG, datefmt='%I:%M:%S')
+
   args, test_args = parse_args()
 
   summary = {}
@@ -36,36 +41,73 @@ def main():
     os.makedirs(args.out_dir)
 
   try:
-    if args.iossim and args.platform and args.version:
+    if args.xcode_parallelization:
+      tr = xcodebuild_runner.SimulatorParallelTestRunner(
+          args.app,
+          args.iossim,
+          args.xcode_build_version,
+          args.version,
+          args.platform,
+          out_dir=args.out_dir,
+          mac_toolchain=args.mac_toolchain_cmd,
+          retries=args.retries,
+          shards=args.shards,
+          xcode_path=args.xcode_path,
+          test_cases=args.test_cases,
+          test_args=test_args,
+          env_vars=args.env_var
+      )
+    elif args.replay_path != 'NO_PATH':
+      tr = test_runner.WprProxySimulatorTestRunner(
+          args.app,
+          args.iossim,
+          args.replay_path,
+          args.platform,
+          args.version,
+          args.wpr_tools_path,
+          args.xcode_build_version,
+          args.out_dir,
+          env_vars=args.env_var,
+          mac_toolchain=args.mac_toolchain_cmd,
+          retries=args.retries,
+          shards=args.shards,
+          test_args=test_args,
+          test_cases=args.test_cases,
+          xcode_path=args.xcode_path,
+          xctest=args.xctest,
+      )
+    elif args.iossim and args.platform and args.version:
       tr = test_runner.SimulatorTestRunner(
-        args.app,
-        args.iossim,
-        args.platform,
-        args.version,
-        args.xcode_build_version,
-        args.out_dir,
-        env_vars=args.env_var,
-        mac_toolchain=args.mac_toolchain_cmd,
-        retries=args.retries,
-        shards=args.shards,
-        test_args=test_args,
-        test_cases=args.test_cases,
-        xcode_path=args.xcode_path,
-        xctest=args.xctest,
+          args.app,
+          args.iossim,
+          args.platform,
+          args.version,
+          args.xcode_build_version,
+          args.out_dir,
+          env_vars=args.env_var,
+          mac_toolchain=args.mac_toolchain_cmd,
+          retries=args.retries,
+          shards=args.shards,
+          test_args=test_args,
+          test_cases=args.test_cases,
+          use_trusted_cert=args.use_trusted_cert,
+          wpr_tools_path=args.wpr_tools_path,
+          xcode_path=args.xcode_path,
+          xctest=args.xctest,
       )
     else:
       tr = test_runner.DeviceTestRunner(
-        args.app,
-        args.xcode_build_version,
-        args.out_dir,
-        env_vars=args.env_var,
-        mac_toolchain=args.mac_toolchain_cmd,
-        restart=args.restart,
-        retries=args.retries,
-        test_args=test_args,
-        test_cases=args.test_cases,
-        xcode_path=args.xcode_path,
-        xctest=args.xctest,
+          args.app,
+          args.xcode_build_version,
+          args.out_dir,
+          env_vars=args.env_var,
+          mac_toolchain=args.mac_toolchain_cmd,
+          restart=args.restart,
+          retries=args.retries,
+          test_args=test_args,
+          test_cases=args.test_cases,
+          xcode_path=args.xcode_path,
+          xctest=args.xctest,
       )
 
     return 0 if tr.launch() else 1
@@ -93,11 +135,24 @@ def parse_args():
   parser = argparse.ArgumentParser()
 
   parser.add_argument(
+      '-x',
+      '--xcode-parallelization',
+      help='Run tests using xcodebuild\'s parallelization.',
+      action='store_true',
+  )
+  parser.add_argument(
     '-a',
     '--app',
     help='Compiled .app to run.',
     metavar='app',
+    required='-x' not in sys.argv and '--xcode-parallelization' not in sys.argv,
+  )
+  parser.add_argument(
+    '-b',
+    '--xcode-build-version',
+    help='Xcode build version to install.',
     required=True,
+    metavar='build_id',
   )
   parser.add_argument(
     '-e',
@@ -120,6 +175,12 @@ def parse_args():
     metavar='{}',
   )
   parser.add_argument(
+    '--mac-toolchain-cmd',
+    help='Command to run mac_toolchain tool. Default: %(default)s.',
+    default='mac_toolchain',
+    metavar='mac_toolchain',
+  )
+  parser.add_argument(
     '-o',
     '--out-dir',
     help='Directory to store all test data in.',
@@ -131,6 +192,14 @@ def parse_args():
     '--platform',
     help='Platform to simulate.',
     metavar='sim',
+  )
+  parser.add_argument(
+    '--replay-path',
+    help=('Path to a directory containing WPR replay and recipe files, for '
+          'use with WprProxySimulatorTestRunner to replay a test suite'
+          ' against multiple saved website interactions. Default: %(default)s'),
+    default='NO_PATH',
+    metavar='replay-path',
   )
   parser.add_argument(
     '--restart',
@@ -160,17 +229,23 @@ def parse_args():
     metavar='testcase',
   )
   parser.add_argument(
+    '--use-trusted-cert',
+    action='store_true',
+    help=('Whether to install a cert to the simulator to allow for local HTTPS'
+         'testing.'),
+  )
+  parser.add_argument(
     '-v',
     '--version',
     help='Version of iOS the simulator should run.',
     metavar='ver',
   )
   parser.add_argument(
-    '-b',
-    '--xcode-build-version',
-    help='Xcode build version to install.',
-    required=True,
-    metavar='build_id',
+    '--wpr-tools-path',
+    help=('Location of WPR test tools (should be preinstalled, e.g. as part of '
+         'a swarming task requirement). Default: %(default)s.'),
+    default='NO_PATH',
+    metavar='wpr-tools-path',
   )
   parser.add_argument(
     '--xcode-path',
@@ -182,24 +257,23 @@ def parse_args():
     default='Xcode.app',
   )
   parser.add_argument(
-    '--mac-toolchain-cmd',
-    help='Command to run mac_toolchain tool. Default: %(default)s.',
-    default='mac_toolchain',
-    metavar='mac_toolchain',
-  )
-  parser.add_argument(
     '--xctest',
     action='store_true',
     help='Whether or not the given app should be run as an XCTest.',
   )
 
   args, test_args = parser.parse_known_args()
-  if args.iossim or args.platform or args.version:
+  if not args.xcode_parallelization and (
+      args.iossim or args.platform or args.version):
     # If any of --iossim, --platform, or --version
     # are specified then they must all be specified.
     if not (args.iossim and args.platform and args.version):
       parser.error(
         'must specify all or none of -i/--iossim, -p/--platform, -v/--version')
+
+  if args.xcode_parallelization and not (args.platform and args.version):
+    parser.error(''.join(['--xcode-parallezation also requires',
+                          'both -p/--platform and -v/--version']))
 
   args_json = json.loads(args.args_json)
   args.env_var = args.env_var or []
@@ -208,6 +282,8 @@ def parse_args():
   args.test_cases = args.test_cases or []
   args.test_cases.extend(args_json.get('test_cases', []))
   args.xctest = args_json.get('xctest', args.xctest)
+  args.xcode_parallelization = args_json.get('xcode_parallelization',
+                                             args.xcode_parallelization)
   test_args.extend(args_json.get('test_args', []))
 
   return args, test_args

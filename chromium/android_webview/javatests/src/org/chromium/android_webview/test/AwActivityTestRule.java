@@ -21,7 +21,7 @@ import org.chromium.android_webview.AwBrowserProcess;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwContents.DependencyFactory;
 import org.chromium.android_webview.AwContents.InternalAccessDelegate;
-import org.chromium.android_webview.AwContents.NativeDrawGLFunctorFactory;
+import org.chromium.android_webview.AwContents.NativeDrawFunctorFactory;
 import org.chromium.android_webview.AwContentsClient;
 import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.test.util.GraphicsTestUtils;
@@ -30,10 +30,10 @@ import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.InMemorySharedPreferences;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnPageFinishedHelper;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer.OnPageFinishedHelper;
 import org.chromium.net.test.util.TestWebServer;
 
 import java.lang.annotation.Annotation;
@@ -360,7 +360,7 @@ public class AwActivityTestRule extends ActivityTestRule<AwTestRunnerActivity> {
         AwContents awContents = testDependencyFactory.createAwContents(mBrowserContext,
                 testContainerView, testContainerView.getContext(),
                 testContainerView.getInternalAccessDelegate(),
-                testContainerView.getNativeDrawGLFunctorFactory(), awContentsClient, awSettings,
+                testContainerView.getNativeDrawFunctorFactory(), awContentsClient, awSettings,
                 testDependencyFactory);
         testContainerView.initialize(awContents);
         return testContainerView;
@@ -526,7 +526,8 @@ public class AwActivityTestRule extends ActivityTestRule<AwTestRunnerActivity> {
         TestAwContentsClient.OnCreateWindowHelper onCreateWindowHelper =
                 parentAwContentsClient.getOnCreateWindowHelper();
         int currentCallCount = onCreateWindowHelper.getCallCount();
-        parentAwContents.evaluateJavaScriptForTests(triggerScript, null);
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> parentAwContents.evaluateJavaScriptForTests(triggerScript, null));
         onCreateWindowHelper.waitForCallback(
                 currentCallCount, 1, WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     }
@@ -608,11 +609,10 @@ public class AwActivityTestRule extends ActivityTestRule<AwTestRunnerActivity> {
 
         public AwContents createAwContents(AwBrowserContext browserContext, ViewGroup containerView,
                 Context context, InternalAccessDelegate internalAccessAdapter,
-                NativeDrawGLFunctorFactory nativeDrawGLFunctorFactory,
-                AwContentsClient contentsClient, AwSettings settings,
-                DependencyFactory dependencyFactory) {
+                NativeDrawFunctorFactory nativeDrawFunctorFactory, AwContentsClient contentsClient,
+                AwSettings settings, DependencyFactory dependencyFactory) {
             return new AwContents(browserContext, containerView, context, internalAccessAdapter,
-                    nativeDrawGLFunctorFactory, contentsClient, settings, dependencyFactory);
+                    nativeDrawFunctorFactory, contentsClient, settings, dependencyFactory);
         }
     }
 

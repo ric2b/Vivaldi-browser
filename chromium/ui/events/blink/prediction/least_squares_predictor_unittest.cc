@@ -4,7 +4,7 @@
 
 #include "ui/events/blink/prediction/least_squares_predictor.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/events/blink/prediction/input_predictor_unittest.cc"
+#include "ui/events/blink/prediction/input_predictor_unittest_helpers.h"
 
 namespace ui {
 namespace test {
@@ -73,7 +73,8 @@ TEST_F(LSQPredictorTest, ConstantTimeStampNotCrash) {
     predictor_->Update(data);
   }
   ui::InputPredictor::InputData result;
-  EXPECT_FALSE(predictor_->GeneratePrediction(FromMilliseconds(42), &result));
+  EXPECT_FALSE(predictor_->GeneratePrediction(
+      FromMilliseconds(42), false /* is_resampling */, &result));
 
   x = {100, 100, 100};
   y = {100, 100, 100};
@@ -83,7 +84,8 @@ TEST_F(LSQPredictorTest, ConstantTimeStampNotCrash) {
                                       FromMilliseconds(t[i])};
     predictor_->Update(data);
   }
-  EXPECT_FALSE(predictor_->GeneratePrediction(FromMilliseconds(42), &result));
+  EXPECT_FALSE(predictor_->GeneratePrediction(
+      FromMilliseconds(42), false /* is_resampling */, &result));
 }
 
 }  // namespace test

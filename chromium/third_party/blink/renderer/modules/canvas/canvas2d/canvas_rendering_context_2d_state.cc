@@ -155,8 +155,8 @@ void CanvasRenderingContext2DState::SetLineDash(const Vector<double>& dash) {
 }
 
 static bool HasANonZeroElement(const Vector<double>& line_dash) {
-  for (size_t i = 0; i < line_dash.size(); i++) {
-    if (line_dash[i] != 0.0)
+  for (double dash : line_dash) {
+    if (dash != 0.0)
       return true;
   }
   return false;
@@ -308,7 +308,7 @@ sk_sp<PaintFilter> CanvasRenderingContext2DState::GetFilterForOffscreenCanvas(
   if (last_effect) {
     // TODO(chrishtr): Taint the origin if needed. crbug.com/792506.
     resolved_filter_ =
-        PaintFilterBuilder::Build(last_effect, kInterpolationSpaceSRGB);
+        paint_filter_builder::Build(last_effect, kInterpolationSpaceSRGB);
   }
 
   return resolved_filter_;
@@ -359,10 +359,11 @@ sk_sp<PaintFilter> CanvasRenderingContext2DState::GetFilter(
         1.0f,  // Deliberately ignore zoom on the canvas element.
         &fill_flags_for_filter, &stroke_flags_for_filter);
 
-    if (FilterEffect* last_effect = filter_effect_builder.BuildFilterEffect(
-            filter_style->Filter(), !context->OriginClean())) {
+    FilterEffect* last_effect = filter_effect_builder.BuildFilterEffect(
+        filter_style->Filter(), !context->OriginClean());
+    if (last_effect) {
       resolved_filter_ =
-          PaintFilterBuilder::Build(last_effect, kInterpolationSpaceSRGB);
+          paint_filter_builder::Build(last_effect, kInterpolationSpaceSRGB);
       if (resolved_filter_) {
         context->UpdateFilterReferences(filter_style->Filter());
         if (last_effect->OriginTainted())
@@ -431,7 +432,7 @@ SkDrawLooper* CanvasRenderingContext2DState::ShadowAndForegroundDrawLooper()
 sk_sp<PaintFilter> CanvasRenderingContext2DState::ShadowOnlyImageFilter()
     const {
   if (!shadow_only_image_filter_) {
-    double sigma = SkBlurRadiusToSigma(shadow_blur_);
+    const auto sigma = BlurRadiusToStdDev(shadow_blur_);
     shadow_only_image_filter_ = sk_make_sp<DropShadowPaintFilter>(
         shadow_offset_.Width(), shadow_offset_.Height(), sigma, sigma,
         shadow_color_, SkDropShadowImageFilter::kDrawShadowOnly_ShadowMode,
@@ -443,7 +444,7 @@ sk_sp<PaintFilter> CanvasRenderingContext2DState::ShadowOnlyImageFilter()
 sk_sp<PaintFilter>
 CanvasRenderingContext2DState::ShadowAndForegroundImageFilter() const {
   if (!shadow_and_foreground_image_filter_) {
-    double sigma = SkBlurRadiusToSigma(shadow_blur_);
+    const auto sigma = BlurRadiusToStdDev(shadow_blur_);
     shadow_and_foreground_image_filter_ = sk_make_sp<DropShadowPaintFilter>(
         shadow_offset_.Width(), shadow_offset_.Height(), sigma, sigma,
         shadow_color_,

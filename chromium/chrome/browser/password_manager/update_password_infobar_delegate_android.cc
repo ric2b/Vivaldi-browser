@@ -14,11 +14,11 @@
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/profile_sync_service.h"
 #include "components/infobars/core/infobar.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_form_metrics_recorder.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/sync/driver/sync_service.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -70,13 +70,10 @@ UpdatePasswordInfoBarDelegate::UpdatePasswordInfoBarDelegate(
     : infobar_response_(password_manager::metrics_util::NO_DIRECT_INTERACTION),
       is_smartlock_branding_enabled_(is_smartlock_branding_enabled) {
   base::string16 message;
-  gfx::Range message_link_range = gfx::Range();
   GetSavePasswordDialogTitleTextAndLinkRange(
       web_contents->GetVisibleURL(), form_to_update->GetOrigin(),
-      is_smartlock_branding_enabled, PasswordTitleType::UPDATE_PASSWORD,
-      &message, &message_link_range);
+      PasswordTitleType::UPDATE_PASSWORD, &message);
   SetMessage(message);
-  SetMessageLinkRange(message_link_range);
   if (is_smartlock_branding_enabled)
     SetDetailsMessage(l10n_util::GetStringUTF16(IDS_SAVE_PASSWORD_FOOTER));
 

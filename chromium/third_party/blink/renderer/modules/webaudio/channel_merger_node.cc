@@ -64,7 +64,7 @@ scoped_refptr<ChannelMergerHandler> ChannelMergerHandler::Create(
       new ChannelMergerHandler(node, sample_rate, number_of_inputs));
 }
 
-void ChannelMergerHandler::Process(size_t frames_to_process) {
+void ChannelMergerHandler::Process(uint32_t frames_to_process) {
   AudioNodeOutput& output = this->Output(0);
   DCHECK_EQ(frames_to_process, output.Bus()->length());
 
@@ -94,7 +94,7 @@ void ChannelMergerHandler::Process(size_t frames_to_process) {
   }
 }
 
-void ChannelMergerHandler::SetChannelCount(unsigned long channel_count,
+void ChannelMergerHandler::SetChannelCount(unsigned channel_count,
                                            ExceptionState& exception_state) {
   DCHECK(IsMainThread());
   BaseAudioContext::GraphAutoLocker locker(Context());
@@ -143,11 +143,6 @@ ChannelMergerNode* ChannelMergerNode::Create(BaseAudioContext& context,
                                              ExceptionState& exception_state) {
   DCHECK(IsMainThread());
 
-  if (context.IsContextClosed()) {
-    context.ThrowExceptionForClosedState(exception_state);
-    return nullptr;
-  }
-
   if (!number_of_inputs ||
       number_of_inputs > BaseAudioContext::MaxNumberOfChannels()) {
     exception_state.ThrowDOMException(
@@ -160,15 +155,15 @@ ChannelMergerNode* ChannelMergerNode::Create(BaseAudioContext& context,
     return nullptr;
   }
 
-  return new ChannelMergerNode(context, number_of_inputs);
+  return MakeGarbageCollected<ChannelMergerNode>(context, number_of_inputs);
 }
 
 ChannelMergerNode* ChannelMergerNode::Create(
     BaseAudioContext* context,
-    const ChannelMergerOptions& options,
+    const ChannelMergerOptions* options,
     ExceptionState& exception_state) {
   ChannelMergerNode* node =
-      Create(*context, options.numberOfInputs(), exception_state);
+      Create(*context, options->numberOfInputs(), exception_state);
 
   if (!node)
     return nullptr;

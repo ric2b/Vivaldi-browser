@@ -15,6 +15,8 @@
 #include "content/public/browser/storage_partition.h"
 #include "media/audio/sounds/sounds_manager.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "ui/base/ime/chromeos/extension_ime_util.h"
+#include "ui/base/ime/chromeos/input_method_util.h"
 #include "ui/base/ime/composition_text.h"
 #include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/ime_input_context_handler_interface.h"
@@ -23,13 +25,28 @@ namespace chromeos {
 
 namespace {
 
-const char kDefaultProfileLocale[] = "en-US";
+const char kDefaultProfileLanguage[] = "en-US";
 
-std::string GetUserLocale(Profile* profile) {
-  const std::string user_locale =
-      profile->GetPrefs()->GetString(language::prefs::kApplicationLocale);
+std::string GetUserLanguage(Profile* profile) {
+  // Convert from the ID used in the pref to a language identifier.
+  std::vector<std::string> input_method_ids;
+  input_method_ids.push_back(
+      profile->GetPrefs()->GetString(prefs::kLanguageCurrentInputMethod));
+  std::vector<std::string> languages;
+  input_method::InputMethodManager::Get()
+      ->GetInputMethodUtil()
+      ->GetLanguageCodesFromInputMethodIds(input_method_ids, &languages);
 
-  return user_locale.empty() ? kDefaultProfileLocale : user_locale;
+  std::string user_language;
+  if (!languages.empty())
+    user_language = languages[0];
+
+  // If we don't find a language, fall back to using the locale.
+  if (user_language.empty())
+    user_language =
+        profile->GetPrefs()->GetString(language::prefs::kApplicationLocale);
+
+  return user_language.empty() ? kDefaultProfileLanguage : user_language;
 }
 
 // Returns the current input context. This may change during the session, even
@@ -44,9 +61,15 @@ ui::IMEInputContextHandlerInterface* GetInputContext() {
 DictationChromeos::DictationChromeos(Profile* profile)
     : composition_(std::make_unique<ui::CompositionText>()),
       profile_(profile),
-      weak_ptr_factory_(this) {}
+      weak_ptr_factory_(this) {
+  if (GetInputContext() && GetInputContext()->GetInputMethod())
+    GetInputContext()->GetInputMethod()->AddObserver(this);
+}
 
-DictationChromeos::~DictationChromeos() = default;
+DictationChromeos::~DictationChromeos() {
+  if (GetInputContext() && GetInputContext()->GetInputMethod())
+    GetInputContext()->GetInputMethod()->RemoveObserver(this);
+}
 
 bool DictationChromeos::OnToggleDictation() {
   if (speech_recognizer_) {
@@ -58,8 +81,8 @@ bool DictationChromeos::OnToggleDictation() {
       weak_ptr_factory_.GetWeakPtr(),
       content::BrowserContext::GetDefaultStoragePartition(profile_)
           ->GetURLLoaderFactoryForBrowserProcessIOThread(),
-      profile_->GetPrefs()->GetString(prefs::kAcceptLanguages),
-      GetUserLocale(profile_));
+      profile_->GetPrefs()->GetString(language::prefs::kAcceptLanguages),
+      GetUserLanguage(profile_));
   speech_recognizer_->Start(nullptr /* preamble */);
   return true;
 }
@@ -95,6 +118,18 @@ void DictationChromeos::OnSpeechRecognitionStateChanged(
 
 void DictationChromeos::GetSpeechAuthParameters(std::string* auth_scope,
                                                 std::string* auth_token) {}
+
+void DictationChromeos::OnTextInputStateChanged(
+    const ui::TextInputClient* client) {
+  if (!client)
+    return;
+
+  if (client->GetFocusReason() ==
+      ui::TextInputClient::FocusReason::FOCUS_REASON_NONE)
+    return;
+
+  DictationOff();
+}
 
 void DictationChromeos::DictationOff() {
   if (!speech_recognizer_)

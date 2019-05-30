@@ -24,6 +24,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/scoped_generic.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "util/file/file_io.h"
@@ -57,8 +58,7 @@ struct ScopedAddrinfoTraits {
   static addrinfo* InvalidValue() { return nullptr; }
   static void Free(addrinfo* ai) { freeaddrinfo(ai); }
 };
-using ScopedAddrinfo =
-    base::ScopedGeneric<addrinfo*, ScopedAddrinfoTraits>;
+using ScopedAddrinfo = base::ScopedGeneric<addrinfo*, ScopedAddrinfoTraits>;
 
 class Stream {
  public:
@@ -81,7 +81,7 @@ class FdStream : public Stream {
     return LoggingReadFileExactly(fd_, data, size);
   }
 
-  bool LoggingReadToEOF(std::string* result) override{
+  bool LoggingReadToEOF(std::string* result) override {
     return crashpad::LoggingReadToEOF(fd_, result);
   }
 
@@ -366,7 +366,7 @@ bool WriteRequest(Stream* stream,
 
   FileOperationResult data_bytes;
   do {
-    constexpr size_t kCRLFSize = arraysize(kCRLFTerminator) - 1;
+    constexpr size_t kCRLFSize = base::size(kCRLFTerminator) - 1;
     struct __attribute__((packed)) {
       char size[8];
       char crlf[2];
@@ -545,7 +545,8 @@ bool HTTPTransportSocket::ExecuteSynchronously(std::string* response_body) {
   }
 
 #if !defined(CRASHPAD_USE_BORINGSSL)
-  CHECK(scheme == "http");
+  CHECK(scheme == "http") << "Got " << scheme << " for scheme in '" << url()
+                          << "'";
 #endif
 
   base::ScopedFD sock(CreateSocket(hostname, port));

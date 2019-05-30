@@ -20,6 +20,9 @@
 namespace chromeos {
 
 namespace {
+
+FakePowerManagerClient* g_instance = nullptr;
+
 // Minimum power for a USB power source to be classified as AC.
 constexpr double kUsbMinAcWatts = 24;
 
@@ -38,14 +41,25 @@ void ArcTimerExpirationCallback(int expiration_fd) {
   }
 }
 
+power_manager::BacklightBrightnessChange_Cause RequestCauseToChangeCause(
+    power_manager::SetBacklightBrightnessRequest_Cause cause) {
+  switch (cause) {
+    case power_manager::SetBacklightBrightnessRequest_Cause_USER_REQUEST:
+      return power_manager::BacklightBrightnessChange_Cause_USER_REQUEST;
+    case power_manager::SetBacklightBrightnessRequest_Cause_MODEL:
+      return power_manager::BacklightBrightnessChange_Cause_MODEL;
+  }
+  NOTREACHED() << "Unhandled brightness request cause " << cause;
+  return power_manager::BacklightBrightnessChange_Cause_USER_REQUEST;
+}
+
 }  // namespace
 
 FakePowerManagerClient::FakePowerManagerClient()
-    : props_(power_manager::PowerSupplyProperties()), weak_ptr_factory_(this) {}
+    : props_(power_manager::PowerSupplyProperties()) {
+  DCHECK(!g_instance);
+  g_instance = this;
 
-FakePowerManagerClient::~FakePowerManagerClient() = default;
-
-void FakePowerManagerClient::Init(dbus::Bus* bus) {
   props_->set_battery_percent(50);
   props_->set_is_calculating_battery_time(false);
   props_->set_battery_state(
@@ -54,6 +68,11 @@ void FakePowerManagerClient::Init(dbus::Bus* bus) {
       power_manager::PowerSupplyProperties_ExternalPower_DISCONNECTED);
   props_->set_battery_time_to_full_sec(0);
   props_->set_battery_time_to_empty_sec(18000);
+}
+
+FakePowerManagerClient::~FakePowerManagerClient() {
+  DCHECK_EQ(g_instance, this);
+  g_instance = nullptr;
 }
 
 void FakePowerManagerClient::AddObserver(Observer* observer) {
@@ -68,6 +87,12 @@ bool FakePowerManagerClient::HasObserver(const Observer* observer) const {
   return observers_.HasObserver(observer);
 }
 
+void FakePowerManagerClient::WaitForServiceToBeAvailable(
+    WaitForServiceToBeAvailableCallback callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), true));
+}
+
 void FakePowerManagerClient::SetRenderProcessManagerDelegate(
     base::WeakPtr<RenderProcessManagerDelegate> delegate) {
   render_process_manager_delegate_ = delegate;
@@ -77,14 +102,14 @@ void FakePowerManagerClient::DecreaseScreenBrightness(bool allow_off) {}
 
 void FakePowerManagerClient::IncreaseScreenBrightness() {}
 
-void FakePowerManagerClient::SetScreenBrightnessPercent(double percent,
-                                                        bool gradual) {
-  screen_brightness_percent_ = percent;
-  requested_screen_brightness_percent_ = percent;
+void FakePowerManagerClient::SetScreenBrightness(
+    const power_manager::SetBacklightBrightnessRequest& request) {
+  screen_brightness_percent_ = request.percent();
+  requested_screen_brightness_percent_ = request.percent();
 
   power_manager::BacklightBrightnessChange change;
-  change.set_percent(percent);
-  change.set_cause(power_manager::BacklightBrightnessChange_Cause_USER_REQUEST);
+  change.set_percent(request.percent());
+  change.set_cause(RequestCauseToChangeCause(request.cause()));
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::BindOnce(&FakePowerManagerClient::SendScreenBrightnessChanged,
@@ -145,6 +170,10 @@ void FakePowerManagerClient::NotifyUserActivity(
 
 void FakePowerManagerClient::NotifyVideoActivity(bool is_fullscreen) {
   video_activity_reports_.push_back(is_fullscreen);
+}
+
+void FakePowerManagerClient::NotifyWakeNotification() {
+  ++num_wake_notification_calls_;
 }
 
 void FakePowerManagerClient::SetPolicy(
@@ -234,12 +263,16 @@ void FakePowerManagerClient::CreateArcTimers(
     const std::string& tag,
     std::vector<std::pair<clockid_t, base::ScopedFD>> arc_timer_requests,
     DBusMethodCallback<std::vector<TimerId>> callback) {
-  // Check if client tag already exists. Return error iff it does.
-  if (base::ContainsKey(client_timer_ids_, tag)) {
+  // Return error if tag is empty.
+  if (tag.empty()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), std::vector<TimerId>()));
     return;
   }
+
+  // Just like the real implementation, delete any old timers associated with
+  // |tag|.
+  DeleteArcTimersInternal(tag);
 
   // First, ensure that there are no duplicate clocks in the arguments. Return
   // error if there are.
@@ -294,19 +327,7 @@ void FakePowerManagerClient::StartArcTimer(
 
 void FakePowerManagerClient::DeleteArcTimers(const std::string& tag,
                                              VoidDBusMethodCallback callback) {
-  // Retrieve all timer ids associated with |tag|. Delete all timers associated
-  // with these timer ids. Return true even if |tag| isn't found.
-  auto it = client_timer_ids_.find(tag);
-  if (it == client_timer_ids_.end()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback), true));
-    return;
-  }
-
-  for (auto timer_id : it->second)
-    timer_expiration_fds_.erase(timer_id);
-
-  client_timer_ids_.erase(it);
+  DeleteArcTimersInternal(tag);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), true));
 }
@@ -405,10 +426,28 @@ void FakePowerManagerClient::NotifyObservers() {
     observer.PowerChanged(*props_);
 }
 
+FakePowerManagerClient* FakePowerManagerClient::Get() {
+  DCHECK(g_instance);
+  return g_instance;
+}
+
 void FakePowerManagerClient::HandleSuspendReadiness() {
   CHECK_GT(num_pending_suspend_readiness_callbacks_, 0);
 
   --num_pending_suspend_readiness_callbacks_;
+}
+
+void FakePowerManagerClient::DeleteArcTimersInternal(const std::string& tag) {
+  // Retrieve all timer ids associated with |tag|. Delete all timers associated
+  // with these timer ids.
+  auto it = client_timer_ids_.find(tag);
+  if (it == client_timer_ids_.end())
+    return;
+
+  for (auto timer_id : it->second)
+    timer_expiration_fds_.erase(timer_id);
+
+  client_timer_ids_.erase(it);
 }
 
 void FakePowerManagerClient::SetPowerPolicyQuitClosure(

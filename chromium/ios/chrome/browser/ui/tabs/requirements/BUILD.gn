@@ -7,12 +7,11 @@ source_set("requirements") {
   sources = [
     "tab_strip_constants.h",
     "tab_strip_constants.mm",
-    "tab_strip_fold_animation.h",
     "tab_strip_highlighting.h",
     "tab_strip_presentation.h",
   ]
   deps = [
     "//base",
-    "//ios/chrome/browser/ui:ui_util",
+    "//ios/chrome/browser/ui/util",
   ]
 }

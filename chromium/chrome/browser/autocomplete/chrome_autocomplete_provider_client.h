@@ -40,6 +40,7 @@ class ChromeAutocompleteProviderClient : public AutocompleteProviderClient {
       bool create_if_necessary) const override;
   DocumentSuggestionsService* GetDocumentSuggestionsService(
       bool create_if_necessary) const override;
+  OmniboxPedalProvider* GetPedalProvider() const override;
   scoped_refptr<ShortcutsBackend> GetShortcutsBackend() override;
   scoped_refptr<ShortcutsBackend> GetShortcutsBackendIfExists() override;
   std::unique_ptr<KeywordExtensionsDelegate> GetKeywordExtensionsDelegate(
@@ -55,7 +56,6 @@ class ChromeAutocompleteProviderClient : public AutocompleteProviderClient {
   bool SearchSuggestEnabled() const override;
   bool IsPersonalizedUrlDataCollectionActive() const override;
   bool IsAuthenticated() const override;
-  bool IsUnifiedConsentGiven() const override;
   bool IsSyncActive() const override;
   void Classify(
       const base::string16& text,
@@ -73,6 +73,7 @@ class ChromeAutocompleteProviderClient : public AutocompleteProviderClient {
       AutocompleteController* controller) override;
   bool IsTabOpenWithURL(const GURL& url,
                         const AutocompleteInput* input) override;
+  bool IsBrowserUpdateAvailable() const override;
 
   // For testing.
   void set_storage_partition(content::StoragePartition* storage_partition) {
@@ -86,6 +87,7 @@ class ChromeAutocompleteProviderClient : public AutocompleteProviderClient {
  private:
   Profile* profile_;
   ChromeAutocompleteSchemeClassifier scheme_classifier_;
+  std::unique_ptr<OmniboxPedalProvider> pedal_provider_;
   std::unique_ptr<unified_consent::UrlKeyedDataCollectionConsentHelper>
       url_consent_helper_;
 

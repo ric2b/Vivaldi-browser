@@ -4,6 +4,8 @@
 
 #include "ash/public/cpp/ash_switches.h"
 #include "base/command_line.h"
+#include "base/test/scoped_feature_list.h"
+#include "chrome/browser/browser_features.h"
 #include "chrome/browser/ui/ash/tablet_mode_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -24,6 +26,12 @@ class TabletModePageBehaviorTest : public InProcessBrowserTest {
   ~TabletModePageBehaviorTest() override = default;
 
   // InProcessBrowserTest:
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kDoubleTapToZoomInTabletMode);
+    InProcessBrowserTest::SetUp();
+  }
+
   void SetUpDefaultCommandLine(base::CommandLine* command_line) override {
     InProcessBrowserTest::SetUpDefaultCommandLine(command_line);
 
@@ -45,11 +53,11 @@ class TabletModePageBehaviorTest : public InProcessBrowserTest {
   }
 
   content::WebPreferences GetWebKitPreferences(
-      const content::WebContents* web_contents) const {
+      content::WebContents* web_contents) const {
     return web_contents->GetRenderViewHost()->GetWebkitPreferences();
   }
 
-  void ValidateWebPrefs(const content::WebContents* web_contents,
+  void ValidateWebPrefs(content::WebContents* web_contents,
                         bool tablet_mode_enabled) const {
     const content::WebPreferences web_prefs =
         GetWebKitPreferences(web_contents);
@@ -71,6 +79,8 @@ class TabletModePageBehaviorTest : public InProcessBrowserTest {
   }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
   DISALLOW_COPY_AND_ASSIGN(TabletModePageBehaviorTest);
 };
 

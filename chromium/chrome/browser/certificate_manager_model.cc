@@ -14,12 +14,14 @@
 #include "base/sequence_checker.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/net/nss_context.h"
 #include "chrome/browser/ui/crypto_module_password_dialog_nss.h"
 #include "chrome/common/net/x509_certificate_model_nss.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_context.h"
 #include "crypto/nss_util.h"
@@ -34,7 +36,7 @@
 #include "chrome/browser/chromeos/certificate_provider/certificate_provider_service_factory.h"
 #include "chrome/browser/chromeos/policy/user_network_configuration_updater.h"
 #include "chrome/browser/chromeos/policy/user_network_configuration_updater_factory.h"
-#include "chromeos/policy_certificate_provider.h"
+#include "chromeos/network/policy_certificate_provider.h"
 #endif
 
 using content::BrowserThread;
@@ -195,9 +197,8 @@ class CertsSourcePlatformNSS : public CertificateManagerModel::CertsSource {
         std::move(modules), kCryptoModulePasswordListCerts,
         net::HostPortPair(),  // unused.
         nullptr,              // TODO(mattm): supply parent window.
-        base::AdaptCallbackForRepeating(
-            base::BindOnce(&CertsSourcePlatformNSS::RefreshSlotsUnlocked,
-                           weak_ptr_factory_.GetWeakPtr())));
+        base::BindOnce(&CertsSourcePlatformNSS::RefreshSlotsUnlocked,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   bool SetCertTrust(CERTCertificate* cert,
@@ -219,8 +220,8 @@ class CertsSourcePlatformNSS : public CertificateManagerModel::CertsSource {
   void RefreshSlotsUnlocked() {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     DVLOG(1) << "refresh listing certs...";
-    cert_db_->ListCerts(base::AdaptCallbackForRepeating(base::BindOnce(
-        &CertsSourcePlatformNSS::DidGetCerts, weak_ptr_factory_.GetWeakPtr())));
+    cert_db_->ListCerts(base::BindOnce(&CertsSourcePlatformNSS::DidGetCerts,
+                                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   void DidGetCerts(net::ScopedCERTCertificateList certs) {
@@ -235,11 +236,15 @@ class CertsSourcePlatformNSS : public CertificateManagerModel::CertsSource {
       bool untrusted = cert_db_->IsUntrusted(cert.get());
       bool hardware_backed = cert_db_->IsHardwareBacked(cert.get());
       bool web_trust_anchor = cert_db_->IsWebTrustAnchor(cert.get());
+      bool device_wide = false;
+#if defined(OS_CHROMEOS)
+      device_wide = cert_db_->IsCertificateOnSystemSlot(cert.get());
+#endif
       base::string16 name = GetName(cert.get(), hardware_backed);
       cert_infos.push_back(std::make_unique<CertificateManagerModel::CertInfo>(
           std::move(cert), type, name, read_only, untrusted,
           CertificateManagerModel::CertInfo::Source::kPlatform,
-          web_trust_anchor, hardware_backed));
+          web_trust_anchor, hardware_backed, device_wide));
     }
 
     SetCertInfos(std::move(cert_infos));
@@ -353,7 +358,7 @@ class CertsSourcePolicy : public CertificateManagerModel::CertsSource,
           false /* untrusted */,
           CertificateManagerModel::CertInfo::Source::kPolicy,
           policy_web_trusted /* web_trust_anchor */,
-          false /* hardware_backed */));
+          false /* hardware_backed */, false /* device_wide */));
     }
 
     SetCertInfos(std::move(cert_infos));
@@ -421,7 +426,8 @@ class CertsSourceExtensions : public CertificateManagerModel::CertsSource {
           std::move(nss_cert), net::CertType::USER_CERT /* type */,
           display_name, true /* read_only */, false /* untrusted */,
           CertificateManagerModel::CertInfo::Source::kExtension,
-          false /* web_trust_anchor */, false /* hardware_backed */));
+          false /* web_trust_anchor */, false /* hardware_backed */,
+          false /* device_wide */));
     }
 
     SetCertInfos(std::move(cert_infos));
@@ -445,7 +451,8 @@ CertificateManagerModel::CertInfo::CertInfo(net::ScopedCERTCertificate cert,
                                             bool untrusted,
                                             Source source,
                                             bool web_trust_anchor,
-                                            bool hardware_backed)
+                                            bool hardware_backed,
+                                            bool device_wide)
     : cert_(std::move(cert)),
       type_(type),
       name_(std::move(name)),
@@ -453,7 +460,8 @@ CertificateManagerModel::CertInfo::CertInfo(net::ScopedCERTCertificate cert,
       untrusted_(untrusted),
       source_(source),
       web_trust_anchor_(web_trust_anchor),
-      hardware_backed_(hardware_backed) {}
+      hardware_backed_(hardware_backed),
+      device_wide_(device_wide) {}
 
 CertificateManagerModel::CertInfo::~CertInfo() {}
 
@@ -464,7 +472,7 @@ CertificateManagerModel::CertInfo::Clone(const CertInfo* cert_info) {
       net::x509_util::DupCERTCertificate(cert_info->cert()), cert_info->type(),
       cert_info->name(), cert_info->read_only(), cert_info->untrusted(),
       cert_info->source(), cert_info->web_trust_anchor(),
-      cert_info->hardware_backed());
+      cert_info->hardware_backed(), cert_info->device_wide());
 }
 
 CertificateManagerModel::Params::Params() = default;
@@ -492,8 +500,8 @@ void CertificateManagerModel::Create(
       certificate_provider_service->CreateCertificateProvider();
 #endif
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
       base::BindOnce(&CertificateManagerModel::GetCertDBOnIOThread,
                      std::move(params), browser_context->GetResourceContext(),
                      observer, callback));
@@ -694,8 +702,8 @@ void CertificateManagerModel::DidGetCertDBOnIOThread(
 #if defined(OS_CHROMEOS)
   is_tpm_available = crypto::IsTPMTokenEnabledForNSS();
 #endif
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&CertificateManagerModel::DidGetCertDBOnUIThread,
                      std::move(params), observer, callback, cert_db,
                      is_user_db_available, is_tpm_available));

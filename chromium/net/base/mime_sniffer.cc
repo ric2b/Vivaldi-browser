@@ -101,11 +101,11 @@ namespace net {
 static const size_t kBytesRequiredForMagic = 42;
 
 struct MagicNumber {
-  const char* mime_type;
-  const char* magic;
+  const char* const mime_type;
+  const char* const magic;
   size_t magic_len;
   bool is_string;
-  const char* mask;  // if set, must have same length as |magic|
+  const char* const mask;  // if set, must have same length as |magic|
 };
 
 #define MAGIC_NUMBER(mime_type, magic) \
@@ -152,7 +152,7 @@ static const MagicNumber kMagicNumbers[] = {
   MAGIC_NUMBER("image/tiff", "II*"),
   MAGIC_NUMBER("image/tiff", "MM\x00*"),
   MAGIC_NUMBER("audio/mpeg", "ID3"),
-  MAGIC_NUMBER("image/webp", "RIFF....WEBPVP8 "),
+  MAGIC_NUMBER("image/webp", "RIFF....WEBPVP"),
   MAGIC_NUMBER("video/webm", "\x1A\x45\xDF\xA3"),
   MAGIC_NUMBER("application/zip", "PK\x03\x04"),
   MAGIC_NUMBER("application/x-rar-compressed", "Rar!\x1A\x07\x00"),
@@ -196,7 +196,7 @@ enum OfficeDocType {
 
 struct OfficeExtensionType {
   OfficeDocType doc_type;
-  const char* extension;
+  const char* const extension;
   size_t extension_len;
 };
 
@@ -229,6 +229,8 @@ static const MagicNumber kExtraMagicNumbers[] = {
   MAGIC_NUMBER("application/x-shockwave-flash", "FWS"),
   MAGIC_NUMBER("video/x-flv", "FLV"),
   MAGIC_NUMBER("audio/x-flac", "fLaC"),
+  // Per https://tools.ietf.org/html/rfc3267#section-8.1
+  MAGIC_NUMBER("audio/amr", "#!AMR\n"),
 
   // RAW image types.
   MAGIC_NUMBER("image/x-canon-cr2", "II\x2a\x00\x10\x00\x00\x00CR"),
@@ -696,7 +698,6 @@ static bool SniffCRX(const char* content,
 bool ShouldSniffMimeType(const GURL& url, const std::string& mime_type) {
   bool sniffable_scheme = url.is_empty() ||
                           url.SchemeIsHTTPOrHTTPS() ||
-                          url.SchemeIs("ftp") ||
 #if defined(OS_ANDROID)
                           url.SchemeIs("content") ||
 #endif

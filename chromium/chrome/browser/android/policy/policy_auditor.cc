@@ -13,11 +13,10 @@ using base::android::JavaParamRef;
 
 int JNI_PolicyAuditor_GetCertificateFailure(
     JNIEnv* env,
-    const JavaParamRef<jclass>& obj,
     const JavaParamRef<jobject>& java_web_contents) {
   // This function is similar to
-  // ToolbarModelImpl::GetSecurityLevelForWebContents, but has a custom mapping
-  // for policy auditing
+  // LocationBarModelImpl::GetSecurityLevelForWebContents, but has a custom
+  // mapping for policy auditing.
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.policy
   // GENERATED_JAVA_PREFIX_TO_STRIP: CERTIFICATE_FAIL_
   enum CertificateFailure {

@@ -10,7 +10,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/suggestions/image_decoder_impl.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/search_provider_logos/logo_service.h"
 #include "components/search_provider_logos/logo_service_impl.h"
@@ -30,11 +30,7 @@ constexpr base::FilePath::CharType kCachedLogoDirectory[] =
     FILE_PATH_LITERAL("Search Logos");
 
 bool UseGrayLogo() {
-#if defined(OS_ANDROID)
-  return !chrome::android::GetIsChromeModernDesignEnabled();
-#else
   return false;
-#endif
 }
 
 }  // namespace
@@ -54,7 +50,7 @@ LogoServiceFactory::LogoServiceFactory()
     : BrowserContextKeyedServiceFactory(
           "LogoService",
           BrowserContextDependencyManager::GetInstance()) {
-  DependsOn(GaiaCookieManagerServiceFactory::GetInstance());
+  DependsOn(IdentityManagerFactory::GetInstance());
   DependsOn(TemplateURLServiceFactory::GetInstance());
 }
 
@@ -66,7 +62,7 @@ KeyedService* LogoServiceFactory::BuildServiceInstanceFor(
   DCHECK(!profile->IsOffTheRecord());
   return new LogoServiceImpl(
       profile->GetPath().Append(kCachedLogoDirectory),
-      GaiaCookieManagerServiceFactory::GetForProfile(profile),
+      IdentityManagerFactory::GetForProfile(profile),
       TemplateURLServiceFactory::GetForProfile(profile),
       std::make_unique<suggestions::ImageDecoderImpl>(),
       content::BrowserContext::GetDefaultStoragePartition(profile)

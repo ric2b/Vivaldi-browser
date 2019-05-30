@@ -5,14 +5,14 @@
 #ifndef IOS_CHROME_BROWSER_INFOBARS_INFOBAR_H_
 #define IOS_CHROME_BROWSER_INFOBARS_INFOBAR_H_
 
+#import <UIKit/UIKit.h>
 #include <memory>
 
 #include "base/macros.h"
 #include "components/infobars/core/infobar.h"
 #import "ios/chrome/browser/infobars/infobar_controller_delegate.h"
-#import "ios/chrome/browser/ui/infobars/infobar_view_sizing.h"
 
-@class InfoBarController;
+@protocol InfobarUIDelegate;
 namespace infobars {
 class InfoBarDelegate;
 }
@@ -20,28 +20,25 @@ class InfoBarDelegate;
 // The iOS version of infobars::InfoBar.
 class InfoBarIOS : public infobars::InfoBar, public InfoBarControllerDelegate {
  public:
-  InfoBarIOS(InfoBarController* controller,
+  InfoBarIOS(id<InfobarUIDelegate> controller,
              std::unique_ptr<infobars::InfoBarDelegate> delegate);
   ~InfoBarIOS() override;
 
-  // Lays out the infobar view using data from the delegate to add to superview.
-  void Layout(CGRect container_bounds);
-
   // Returns the infobar view holding contents of this infobar.
-  UIView<InfoBarViewSizing>* view();
+  UIView* View();
+
+  // Returns the InfobarUIDelegate associated to this Infobar.
+  id<InfobarUIDelegate> InfobarUIDelegate();
 
   // Remove the infobar view from infobar container view.
   void RemoveView();
 
  private:
-  // infobars::InfoBar overrides:
-  void PlatformSpecificOnHeightRecalculated() override;
-
   // InfoBarControllerDelegate overrides:
-  void SetInfoBarTargetHeight(int height) override;
+  bool IsOwned() override;
   void RemoveInfoBar() override;
 
-  InfoBarController* controller_;
+  id<InfobarUIDelegate> controller_;
   DISALLOW_COPY_AND_ASSIGN(InfoBarIOS);
 };
 

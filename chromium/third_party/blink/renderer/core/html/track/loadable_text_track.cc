@@ -43,7 +43,7 @@ LoadableTextTrack::LoadableTextTrack(HTMLTrackElement* track)
 LoadableTextTrack::~LoadableTextTrack() = default;
 
 bool LoadableTextTrack::IsDefault() const {
-  return track_element_->FastHasAttribute(HTMLNames::defaultAttr);
+  return track_element_->FastHasAttribute(html_names::kDefaultAttr);
 }
 
 void LoadableTextTrack::setMode(const AtomicString& mode) {
@@ -52,9 +52,9 @@ void LoadableTextTrack::setMode(const AtomicString& mode) {
     track_element_->ScheduleLoad();
 }
 
-size_t LoadableTextTrack::TrackElementIndex() const {
+wtf_size_t LoadableTextTrack::TrackElementIndex() const {
   // Count the number of preceding <track> elements (== the index.)
-  size_t index = 0;
+  wtf_size_t index = 0;
   for (const HTMLTrackElement* track =
            Traversal<HTMLTrackElement>::PreviousSibling(*track_element_);
        track; track = Traversal<HTMLTrackElement>::PreviousSibling(*track))
@@ -63,7 +63,7 @@ size_t LoadableTextTrack::TrackElementIndex() const {
   return index;
 }
 
-void LoadableTextTrack::Trace(blink::Visitor* visitor) {
+void LoadableTextTrack::Trace(Visitor* visitor) {
   visitor->Trace(track_element_);
   TextTrack::Trace(visitor);
 }

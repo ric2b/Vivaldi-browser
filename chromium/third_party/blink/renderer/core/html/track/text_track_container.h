@@ -40,6 +40,8 @@ class TextTrackContainer final : public HTMLDivElement {
  public:
   static TextTrackContainer* Create(HTMLMediaElement&);
 
+  TextTrackContainer(Document&);
+
   // Runs the "rules for updating the text track rendering". The
   // ExposingControls enum is used in the WebVTT processing model to reset the
   // layout when the media controls become visible, to avoid overlapping them.
@@ -50,11 +52,9 @@ class TextTrackContainer final : public HTMLDivElement {
   void UpdateDisplay(HTMLMediaElement&, ExposingControls);
   void UpdateDefaultFontSize(LayoutObject*);
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
-  TextTrackContainer(Document&);
-
   bool IsTextTrackContainer() const override { return true; }
   void ObserveSizeChanges(Element&);
 

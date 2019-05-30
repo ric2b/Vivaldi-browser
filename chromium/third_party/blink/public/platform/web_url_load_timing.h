@@ -45,7 +45,7 @@ class ResourceLoadTiming;
 
 // The browser-side equivalent to this struct is content::ResourceLoadTiming.
 // TODO(dcheng): Migrate this struct over to Mojo so it doesn't need to be
-// duplicated in //content and //third_party/WebKit.
+// duplicated in //content and //third_party/blink.
 class WebURLLoadTiming {
  public:
   ~WebURLLoadTiming() { Reset(); }
@@ -95,6 +95,9 @@ class WebURLLoadTiming {
 
   BLINK_PLATFORM_EXPORT base::TimeTicks SendEnd() const;
   BLINK_PLATFORM_EXPORT void SetSendEnd(base::TimeTicks);
+
+  BLINK_PLATFORM_EXPORT base::TimeTicks ReceiveHeadersStart() const;
+  BLINK_PLATFORM_EXPORT void SetReceiveHeadersStart(base::TimeTicks);
 
   BLINK_PLATFORM_EXPORT base::TimeTicks ReceiveHeadersEnd() const;
   BLINK_PLATFORM_EXPORT void SetReceiveHeadersEnd(base::TimeTicks);

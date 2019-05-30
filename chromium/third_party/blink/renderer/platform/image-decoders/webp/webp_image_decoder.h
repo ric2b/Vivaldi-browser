@@ -40,7 +40,7 @@ class SkData;
 namespace blink {
 
 class PLATFORM_EXPORT WEBPImageDecoder final : public ImageDecoder {
-  WTF_MAKE_NONCOPYABLE(WEBPImageDecoder);
+  DISALLOW_COPY_AND_ASSIGN(WEBPImageDecoder);
 
  public:
   WEBPImageDecoder(AlphaOption, const ColorBehavior&, size_t max_decoded_bytes);
@@ -70,7 +70,7 @@ class PLATFORM_EXPORT WEBPImageDecoder final : public ImageDecoder {
   //
   // Before calling this, verify that frame |index| exists by checking that
   // |index| is smaller than |frame_buffer_cache_|.size().
-  bool FrameStatusSufficientForSuccessors(size_t index) override {
+  bool FrameStatusSufficientForSuccessors(wtf_size_t index) override {
     DCHECK(index < frame_buffer_cache_.size());
     return frame_buffer_cache_[index].GetStatus() == ImageFrame::kFrameComplete;
   }

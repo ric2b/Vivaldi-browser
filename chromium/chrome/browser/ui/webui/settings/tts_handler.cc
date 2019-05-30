@@ -11,10 +11,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/speech/extension_api/tts_engine_extension_api.h"
 #include "chrome/browser/speech/extension_api/tts_engine_extension_observer.h"
-#include "chrome/browser/speech/tts_controller.h"
-#include "chrome/browser/speech/tts_controller_impl.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "content/public/browser/tts_controller.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_registry.h"
@@ -28,7 +27,7 @@ namespace settings {
 TtsHandler::TtsHandler() : weak_factory_(this) {}
 
 TtsHandler::~TtsHandler() {
-  TtsController::GetInstance()->RemoveVoicesChangedDelegate(this);
+  content::TtsController::GetInstance()->RemoveVoicesChangedDelegate(this);
 }
 
 void TtsHandler::HandleGetAllTtsVoiceData(const base::ListValue* args) {
@@ -53,7 +52,7 @@ void TtsHandler::HandleGetTtsExtensions(const base::ListValue* args) {
         registry->GetInstalledExtension(extension_id);
     if (!extension) {
       // The extension is still loading from OnVoicesChange call to
-      // TtsControllerImpl::GetVoices(). Don't do any work, voices will
+      // TtsController::GetVoices(). Don't do any work, voices will
       // be updated again after extension load.
       continue;
     }
@@ -73,9 +72,10 @@ void TtsHandler::HandleGetTtsExtensions(const base::ListValue* args) {
 }
 
 void TtsHandler::OnVoicesChanged() {
-  TtsControllerImpl* impl = TtsControllerImpl::GetInstance();
-  std::vector<VoiceData> voices;
-  impl->GetVoices(Profile::FromWebUI(web_ui()), &voices);
+  content::TtsController* tts_controller =
+      content::TtsController::GetInstance();
+  std::vector<content::VoiceData> voices;
+  tts_controller->GetVoices(Profile::FromWebUI(web_ui()), &voices);
   const std::string& app_locale = g_browser_process->GetApplicationLocale();
   base::ListValue responses;
   for (const auto& voice : voices) {
@@ -98,7 +98,7 @@ void TtsHandler::OnVoicesChanged() {
     response.SetString("languageCode", language_code);
     response.SetString("fullLanguageCode", voice.lang);
     response.SetInteger("languageScore", language_score);
-    response.SetString("extensionId", voice.extension_id);
+    response.SetString("extensionId", voice.engine_id);
     responses.GetList().push_back(std::move(response));
   }
   AllowJavascript();
@@ -106,6 +106,19 @@ void TtsHandler::OnVoicesChanged() {
 
   // Also refresh the TTS extensions in case they have changed.
   HandleGetTtsExtensions(nullptr);
+}
+
+void TtsHandler::OnTtsEvent(content::TtsUtterance* utterance,
+                            content::TtsEventType event_type,
+                            int char_index,
+                            int length,
+                            const std::string& error_message) {
+  if (event_type == content::TTS_EVENT_END ||
+      event_type == content::TTS_EVENT_INTERRUPTED ||
+      event_type == content::TTS_EVENT_ERROR) {
+    base::Value result(false /* preview stopped */);
+    FireWebUIListener("tts-preview-state-changed", result);
+  }
 }
 
 void TtsHandler::HandlePreviewTtsVoice(const base::ListValue* args) {
@@ -119,20 +132,24 @@ void TtsHandler::HandlePreviewTtsVoice(const base::ListValue* args) {
     return;
 
   std::unique_ptr<base::DictionaryValue> json =
-      base::DictionaryValue::From(base::JSONReader::Read(voice_id));
+      base::DictionaryValue::From(base::JSONReader::ReadDeprecated(voice_id));
   std::string name;
   std::string extension_id;
   json->GetString("name", &name);
   json->GetString("extension", &extension_id);
 
-  Utterance* utterance = new Utterance(Profile::FromWebUI(web_ui()));
-  utterance->set_text(text);
-  utterance->set_voice_name(name);
-  utterance->set_extension_id(extension_id);
-  utterance->set_src_url(GURL("chrome://settings/manageAccessibility/tts"));
-  utterance->set_event_delegate(nullptr);
-  TtsController::GetInstance()->Stop();
-  TtsController::GetInstance()->SpeakOrEnqueue(utterance);
+  content::TtsUtterance* utterance =
+      content::TtsUtterance::Create((Profile::FromWebUI(web_ui())));
+  utterance->SetText(text);
+  utterance->SetVoiceName(name);
+  utterance->SetEngineId(extension_id);
+  utterance->SetSrcUrl(GURL("chrome://settings/manageAccessibility/tts"));
+  utterance->SetEventDelegate(this);
+  content::TtsController::GetInstance()->Stop();
+
+  base::Value result(true /* preview started */);
+  FireWebUIListener("tts-preview-state-changed", result);
+  content::TtsController::GetInstance()->SpeakOrEnqueue(utterance);
 }
 
 void TtsHandler::RegisterMessages() {
@@ -153,14 +170,15 @@ void TtsHandler::RegisterMessages() {
 }
 
 void TtsHandler::OnJavascriptAllowed() {
-  TtsController::GetInstance()->AddVoicesChangedDelegate(this);
+  content::TtsController::GetInstance()->AddVoicesChangedDelegate(this);
 }
 
 void TtsHandler::OnJavascriptDisallowed() {
-  TtsController::GetInstance()->RemoveVoicesChangedDelegate(this);
+  content::TtsController::GetInstance()->RemoveVoicesChangedDelegate(this);
+  content::TtsController::GetInstance()->RemoveUtteranceEventDelegate(this);
 }
 
-int TtsHandler::GetVoiceLangMatchScore(const VoiceData* voice,
+int TtsHandler::GetVoiceLangMatchScore(const content::VoiceData* voice,
                                        const std::string& app_locale) {
   if (voice->lang.empty() || app_locale.empty())
     return 0;
@@ -174,11 +192,11 @@ int TtsHandler::GetVoiceLangMatchScore(const VoiceData* voice,
 
 void TtsHandler::WakeTtsEngine(const base::ListValue* args) {
   Profile* profile = Profile::FromWebUI(web_ui());
-  TtsExtensionEngine::GetInstance()->LoadBuiltInTtsExtension(profile);
+  TtsExtensionEngine::GetInstance()->LoadBuiltInTtsEngine(profile);
   extensions::ProcessManager::Get(profile)->WakeEventPage(
-      extension_misc::kSpeechSynthesisExtensionId,
-      base::BindRepeating(&TtsHandler::OnTtsEngineAwake,
-                          weak_factory_.GetWeakPtr()));
+      extension_misc::kGoogleSpeechSynthesisExtensionId,
+      base::BindOnce(&TtsHandler::OnTtsEngineAwake,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void TtsHandler::OnTtsEngineAwake(bool success) {

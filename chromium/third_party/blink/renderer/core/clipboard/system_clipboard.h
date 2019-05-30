@@ -7,6 +7,7 @@
 
 #include "third_party/blink/public/mojom/clipboard/clipboard.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
@@ -19,6 +20,8 @@ class KURL;
 // This singleton provides read/write access to the system clipboard,
 // mediating between core classes and mojom::ClipboardHost.
 class CORE_EXPORT SystemClipboard {
+  USING_FAST_MALLOC(SystemClipboard);
+
  public:
   static SystemClipboard& GetInstance();
 
@@ -50,7 +53,10 @@ class CORE_EXPORT SystemClipboard {
   String ReadRTF();
 
   SkBitmap ReadImage(mojom::ClipboardBuffer);
-  void WriteImage(Image*, const KURL&, const String& title);
+  // Write the image and its associated tag (bookmark/HTML types).
+  void WriteImageWithTag(Image*, const KURL&, const String& title);
+  // Write the image only.
+  void WriteImage(const SkBitmap&);
 
   String ReadCustomData(const String& type);
   void WriteDataObject(DataObject*);

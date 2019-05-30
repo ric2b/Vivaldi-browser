@@ -22,21 +22,22 @@ class MockWebDocumentSubresourceFilter
     : public blink::WebDocumentSubresourceFilter {
  public:
   explicit MockWebDocumentSubresourceFilter(
-      const std::vector<std::string>& disallowed_path_suffixes);
+      const std::vector<std::string>& disallowed_path_suffixes,
+      bool block_resources);
   ~MockWebDocumentSubresourceFilter() override;
 
   // blink::WebDocumentSubresourceFilter:
   LoadPolicy GetLoadPolicy(const blink::WebURL& resource_url,
-                           blink::WebURLRequest::RequestContext) override;
+                           blink::mojom::RequestContextType) override;
   LoadPolicy GetLoadPolicyForWebSocketConnect(
       const blink::WebURL& url) override;
   void ReportDisallowedLoad() override;
   bool ShouldLogToConsole() override;
-  bool GetIsAssociatedWithAdSubframe() const override;
 
  private:
   LoadPolicy getLoadPolicyImpl(const blink::WebURL& url);
   std::vector<std::string> disallowed_path_suffixes_;
+  bool block_subresources_;
 
   DISALLOW_COPY_AND_ASSIGN(MockWebDocumentSubresourceFilter);
 };

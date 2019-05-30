@@ -13,10 +13,10 @@ import android.text.TextUtils;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.modelutil.PropertyKey;
-import org.chromium.chrome.browser.modelutil.PropertyModel;
 import org.chromium.chrome.browser.omnibox.UrlBarProperties.AutocompleteText;
 import org.chromium.chrome.browser.omnibox.UrlBarProperties.UrlBarTextState;
+import org.chromium.ui.modelutil.PropertyKey;
+import org.chromium.ui.modelutil.PropertyModel;
 
 /**
  * Handles translating the UrlBar model data to the view state.
@@ -24,36 +24,35 @@ import org.chromium.chrome.browser.omnibox.UrlBarProperties.UrlBarTextState;
 class UrlBarViewBinder {
     /**
      * @see
-     * org.chromium.chrome.browser.modelutil.PropertyModelChangeProcessor.ViewBinder#bind(Object,
+     * PropertyModelChangeProcessor.ViewBinder#bind(Object,
      * Object, Object)
      */
     public static void bind(PropertyModel model, UrlBar view, PropertyKey propertyKey) {
         if (UrlBarProperties.ACTION_MODE_CALLBACK.equals(propertyKey)) {
             view.setCustomSelectionActionModeCallback(
-                    model.getValue(UrlBarProperties.ACTION_MODE_CALLBACK));
+                    model.get(UrlBarProperties.ACTION_MODE_CALLBACK));
         } else if (UrlBarProperties.ALLOW_FOCUS.equals(propertyKey)) {
-            view.setAllowFocus(model.getValue(UrlBarProperties.ALLOW_FOCUS));
+            view.setAllowFocus(model.get(UrlBarProperties.ALLOW_FOCUS));
         } else if (UrlBarProperties.AUTOCOMPLETE_TEXT.equals(propertyKey)) {
-            AutocompleteText autocomplete = model.getValue(UrlBarProperties.AUTOCOMPLETE_TEXT);
+            AutocompleteText autocomplete = model.get(UrlBarProperties.AUTOCOMPLETE_TEXT);
             if (view.shouldAutocomplete()) {
                 view.setAutocompleteText(autocomplete.userText, autocomplete.autocompleteText);
             }
         } else if (UrlBarProperties.DELEGATE.equals(propertyKey)) {
-            view.setDelegate(model.getValue(UrlBarProperties.DELEGATE));
+            view.setDelegate(model.get(UrlBarProperties.DELEGATE));
         } else if (UrlBarProperties.FOCUS_CHANGE_CALLBACK.equals(propertyKey)) {
             final Callback<Boolean> focusChangeCallback =
-                    model.getValue(UrlBarProperties.FOCUS_CHANGE_CALLBACK);
+                    model.get(UrlBarProperties.FOCUS_CHANGE_CALLBACK);
             view.setOnFocusChangeListener((v, focused) -> {
                 if (focused) view.setIgnoreTextChangesForAutocomplete(false);
                 focusChangeCallback.onResult(focused);
             });
         } else if (UrlBarProperties.SHOW_CURSOR.equals(propertyKey)) {
-            view.setCursorVisible(model.getValue(UrlBarProperties.SHOW_CURSOR));
+            view.setCursorVisible(model.get(UrlBarProperties.SHOW_CURSOR));
         } else if (UrlBarProperties.TEXT_CONTEXT_MENU_DELEGATE.equals(propertyKey)) {
-            view.setTextContextMenuDelegate(
-                    model.getValue(UrlBarProperties.TEXT_CONTEXT_MENU_DELEGATE));
+            view.setTextContextMenuDelegate(model.get(UrlBarProperties.TEXT_CONTEXT_MENU_DELEGATE));
         } else if (UrlBarProperties.TEXT_STATE.equals(propertyKey)) {
-            UrlBarTextState state = model.getValue(UrlBarProperties.TEXT_STATE);
+            UrlBarTextState state = model.get(UrlBarProperties.TEXT_STATE);
             view.setIgnoreTextChangesForAutocomplete(true);
             view.setText(state.text);
             view.setScrollState(state.scrollType, state.scrollToIndex);
@@ -67,11 +66,13 @@ class UrlBarViewBinder {
                 }
             }
         } else if (UrlBarProperties.USE_DARK_TEXT_COLORS.equals(propertyKey)) {
-            updateTextColors(view, model.getValue(UrlBarProperties.USE_DARK_TEXT_COLORS));
+            updateTextColors(view, model.get(UrlBarProperties.USE_DARK_TEXT_COLORS));
         } else if (UrlBarProperties.URL_DIRECTION_LISTENER.equals(propertyKey)) {
-            view.setUrlDirectionListener(model.getValue(UrlBarProperties.URL_DIRECTION_LISTENER));
+            view.setUrlDirectionListener(model.get(UrlBarProperties.URL_DIRECTION_LISTENER));
+        } else if (UrlBarProperties.URL_TEXT_CHANGE_LISTENER.equals(propertyKey)) {
+            view.setUrlTextChangeListener(model.get(UrlBarProperties.URL_TEXT_CHANGE_LISTENER));
         } else if (UrlBarProperties.WINDOW_DELEGATE.equals(propertyKey)) {
-            view.setWindowDelegate(model.getValue(UrlBarProperties.WINDOW_DELEGATE));
+            view.setWindowDelegate(model.get(UrlBarProperties.WINDOW_DELEGATE));
         }
     }
 
@@ -90,8 +91,7 @@ class UrlBarViewBinder {
         int hintColor;
         int highlightColor;
         if (useDarkTextColors) {
-            textColor =
-                    ApiCompatibilityUtils.getColor(resources, R.color.url_emphasis_default_text);
+            textColor = ApiCompatibilityUtils.getColor(resources, R.color.default_text_color_dark);
             hintColor =
                     ApiCompatibilityUtils.getColor(resources, R.color.locationbar_dark_hint_text);
             highlightColor = originalHighlightColor;

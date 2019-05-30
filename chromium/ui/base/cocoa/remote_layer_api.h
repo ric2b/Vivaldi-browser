@@ -19,7 +19,7 @@
 extern "C" {
 typedef uint32_t CGSConnectionID;
 CGSConnectionID CGSMainConnectionID(void);
-};
+}
 
 // The CAContextID type identifies a CAContext across processes. This is the
 // token that is passed from the process that is sharing the CALayer that it is
@@ -33,8 +33,8 @@ typedef uint32_t CAContextID;
 // content displayed by that CALayerHost will be the content of the CALayer
 // that is set as the |layer| property on the CAContext.
 @interface CAContext : NSObject
-+ (id)contextWithCGSConnection:(CAContextID)contextId
-                       options:(NSDictionary*)optionsDict;
++ (instancetype)contextWithCGSConnection:(CAContextID)contextId
+                                 options:(NSDictionary*)optionsDict;
 @property(readonly) CAContextID contextId;
 @property(retain) CALayer *layer;
 @end

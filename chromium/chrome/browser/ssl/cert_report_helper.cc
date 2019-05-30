@@ -29,7 +29,7 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_WIN)
-#include "base/win/win_util.h"
+#include "base/enterprise_util.h"
 #elif defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #endif
@@ -103,10 +103,7 @@ void CertReportHelper::PopulateExtendedReportingOption(
 
   load_time_data->SetString(
       security_interstitials::kOptInLink,
-      l10n_util::GetStringFUTF16(safe_browsing::ChooseOptInTextResource(
-                                     *GetProfile(web_contents_)->GetPrefs(),
-                                     IDS_SAFE_BROWSING_MALWARE_REPORTING_AGREE,
-                                     IDS_SAFE_BROWSING_SCOUT_REPORTING_AGREE),
+      l10n_util::GetStringFUTF16(IDS_SAFE_BROWSING_SCOUT_REPORTING_AGREE,
                                  base::UTF8ToUTF16(privacy_link)));
 }
 
@@ -165,7 +162,7 @@ void CertReportHelper::FinishCertCollection() {
   report.AddChromeChannel(chrome::GetChannel());
 
 #if defined(OS_WIN)
-  report.SetIsEnterpriseManaged(base::win::IsEnterpriseManaged());
+  report.SetIsEnterpriseManaged(base::IsMachineExternallyManaged());
 #elif defined(OS_CHROMEOS)
   report.SetIsEnterpriseManaged(g_browser_process->platform_part()
                                     ->browser_policy_connector_chromeos()

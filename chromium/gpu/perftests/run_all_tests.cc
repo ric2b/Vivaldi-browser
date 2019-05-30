@@ -12,13 +12,12 @@
 #include "ui/gl/init/gl_factory.h"
 
 static int RunHelper(base::TestSuite* test_suite) {
+  base::FeatureList::InitializeInstance(std::string(), std::string());
 #if defined(USE_OZONE)
   base::MessageLoopForUI main_loop;
 #else
   base::MessageLoopForIO message_loop;
 #endif
-  base::FeatureList::InitializeInstance(std::string(), std::string());
-
   CHECK(gl::init::InitializeGLOneOff());
   return test_suite->Run();
 }
@@ -30,7 +29,6 @@ int main(int argc, char** argv) {
   // Always run the perf tests serially, to avoid distorting
   // perf measurements with randomness resulting from running
   // in parallel.
-  const auto& run_test_suite =
-      base::Bind(&RunHelper, base::Unretained(&test_suite));
-  return base::LaunchUnitTestsSerially(argc, argv, run_test_suite);
+  return base::LaunchUnitTestsSerially(
+      argc, argv, base::BindOnce(&RunHelper, base::Unretained(&test_suite)));
 }

@@ -429,13 +429,6 @@ void BookmarkModel::SetNodeMetaInfo(const BookmarkNode* node,
 
   for (BookmarkModelObserver& observer : observers_)
     observer.BookmarkMetaInfoChanged(this, node);
-
-  // At least one unit test expects only one of these calls.
-  // We need it for a speed dial update in
-  // BookmarkEventRouter::BookmarkNodeChanged
-  if (vivaldi::IsVivaldiRunning())
-    for (BookmarkModelObserver& observer : observers_)
-      observer.BookmarkNodeChanged(this, node);
 }
 
 void BookmarkModel::SetNodeMetaInfoMap(
@@ -585,9 +578,12 @@ const BookmarkNode* BookmarkModel::AddFolder(const BookmarkNode* parent,
                                              const base::string16& title,
                                              const base::string16& nickname,
                                              const base::string16& description,
-                                             bool speeddial) {
+                                             const base::string16& partner,
+                                             bool speeddial,
+                                             bool bookmarkbar) {
   return AddFolderWithMetaInfo(parent, index, title, nullptr,
-                               nickname, description, speeddial);
+                               nickname, description, partner, speeddial,
+                               bookmarkbar);
 }
 
 const BookmarkNode* BookmarkModel::AddFolderWithMetaInfo(
@@ -597,7 +593,9 @@ const BookmarkNode* BookmarkModel::AddFolderWithMetaInfo(
     const BookmarkNode::MetaInfoMap* meta_info,
     const base::string16& nickname,
     const base::string16& description,
-    const bool speeddial) {
+    const base::string16& partner,
+    const bool speeddial,
+    const bool bookmarkbar) {
   if (!loaded_ || is_root_node(parent) || !IsValidIndex(parent, index, true)) {
     // Can't add to the root.
     NOTREACHED();
@@ -614,11 +612,15 @@ const BookmarkNode* BookmarkModel::AddFolderWithMetaInfo(
   }
   if (speeddial)
     new_node->set_speeddial(speeddial);
+  if (bookmarkbar)
+    new_node->set_bookmarkbar(bookmarkbar);
   new_node->set_type(BookmarkNode::FOLDER);
   if (!nickname.empty())
     new_node->set_nickname(nickname);
   if (!description.empty())
     new_node->set_description(description);
+  if (!partner.empty())
+    new_node->set_partner(partner);
   if (meta_info)
     new_node->SetMetaInfoMap(*meta_info);
 
@@ -632,6 +634,7 @@ const BookmarkNode* BookmarkModel::AddURL(const BookmarkNode* parent,
                                           const base::string16& nickname,
                                           const base::string16& description,
                                           const base::string16& thumbnail,
+                                          const base::string16& partner,
                                           const bool speeddial
                                        ) {
   return AddURLWithCreationTimeAndMetaInfo(parent, index,
@@ -641,6 +644,7 @@ const BookmarkNode* BookmarkModel::AddURL(const BookmarkNode* parent,
                                 nickname,
                                 description,
                                 thumbnail,
+                                partner,
                                 speeddial
                                );
 }
@@ -655,6 +659,7 @@ const BookmarkNode* BookmarkModel::AddURLWithCreationTimeAndMetaInfo(
     const base::string16 &nickname,
     const base::string16 &description,
     const base::string16 &thumbnail,
+    const base::string16& partner,
     const bool speeddial,
     const base::Time *visited_time) {
   if (!loaded_ || !url.is_valid() || is_root_node(parent) ||
@@ -681,6 +686,8 @@ const BookmarkNode* BookmarkModel::AddURLWithCreationTimeAndMetaInfo(
     new_node->set_description(description);
   if (!thumbnail.empty())
     new_node->set_thumbnail(thumbnail);
+  if (!partner.empty())
+    new_node->set_partner(partner);
   if (speeddial)
     new_node->set_speeddial(speeddial);
   if (visited_time && !visited_time->is_null())

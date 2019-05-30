@@ -5,9 +5,10 @@
 #ifndef CHROMEOS_SERVICES_DEVICE_SYNC_DEVICE_SYNC_BASE_H_
 #define CHROMEOS_SERVICES_DEVICE_SYNC_DEVICE_SYNC_BASE_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "chromeos/services/device_sync/public/mojom/device_sync.mojom.h"
-#include "components/signin/core/browser/account_info.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/interface_ptr_set.h"
 
@@ -28,13 +29,21 @@ class DeviceSyncBase : public mojom::DeviceSync {
   // service receives a request.
   void BindRequest(mojom::DeviceSyncRequest request);
 
+  void CloseAllBindings();
+
  protected:
   DeviceSyncBase();
+
+  // Derived types should override this function to remove references to any
+  // dependencies.
+  virtual void Shutdown() {}
 
   void NotifyOnEnrollmentFinished();
   void NotifyOnNewDevicesSynced();
 
  private:
+  void OnDisconnection();
+
   mojo::InterfacePtrSet<mojom::DeviceSyncObserver> observers_;
   mojo::BindingSet<mojom::DeviceSync> bindings_;
 

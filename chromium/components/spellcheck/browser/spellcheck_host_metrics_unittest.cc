@@ -8,11 +8,11 @@
 
 #include <memory>
 
-#include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_samples.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_task_environment.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -27,7 +27,7 @@ class SpellcheckHostMetricsTest : public testing::Test {
   void RecordWordCountsForTesting() { metrics_->RecordWordCounts(); }
 
  private:
-  base::MessageLoop loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
   std::unique_ptr<SpellCheckHostMetrics> metrics_;
 };
 
@@ -83,7 +83,7 @@ TEST_F(SpellcheckHostMetricsTest, RecordWordCountsDiscardsDuplicates) {
   RecordWordCountsForTesting();
 
   // Get samples for all affected histograms.
-  for (size_t i = 0; i < arraysize(histogram_names); ++i)
+  for (size_t i = 0; i < base::size(histogram_names); ++i)
     histogram_tester.ExpectTotalCount(histogram_names[i], 0);
 }
 

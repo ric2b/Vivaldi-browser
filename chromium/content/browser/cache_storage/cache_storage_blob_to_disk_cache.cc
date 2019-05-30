@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "net/base/io_buffer.h"
 #include "net/url_request/url_request_context.h"
@@ -13,6 +14,7 @@
 #include "storage/browser/blob/blob_data_handle.h"
 #include "storage/browser/blob/blob_url_request_job_factory.h"
 #include "storage/common/storage_histograms.h"
+#include "third_party/blink/public/common/blob/blob_utils.h"
 
 namespace content {
 
@@ -31,6 +33,7 @@ void CacheStorageBlobToDiskCache::StreamBlobToCache(
     disk_cache::ScopedEntryPtr entry,
     int disk_cache_body_index,
     blink::mojom::BlobPtr blob,
+    uint64_t blob_size,
     EntryAndBoolCallback callback) {
   DCHECK(entry);
   DCHECK_LE(0, disk_cache_body_index);
@@ -38,10 +41,16 @@ void CacheStorageBlobToDiskCache::StreamBlobToCache(
   DCHECK(!consumer_handle_.is_valid());
   DCHECK(!pending_read_);
 
+  MojoCreateDataPipeOptions options;
+  options.struct_size = sizeof(MojoCreateDataPipeOptions);
+  options.flags = MOJO_CREATE_DATA_PIPE_FLAG_NONE;
+  options.element_num_bytes = 1;
+  options.capacity_num_bytes = blink::BlobUtils::GetDataPipeCapacity(blob_size);
+
   mojo::ScopedDataPipeProducerHandle producer_handle;
-  MojoResult result =
-      CreateDataPipe(nullptr, &producer_handle, &consumer_handle_);
-  if (result != MOJO_RESULT_OK) {
+  MojoResult rv =
+      mojo::CreateDataPipe(&options, &producer_handle, &consumer_handle_);
+  if (rv != MOJO_RESULT_OK) {
     std::move(callback).Run(std::move(entry), false /* success */);
     return;
   }

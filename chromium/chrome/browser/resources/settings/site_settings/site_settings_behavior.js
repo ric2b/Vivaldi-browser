@@ -68,8 +68,9 @@ const SiteSettingsBehaviorImpl = {
    * @return {string} The URL with a scheme, or an empty string.
    */
   ensureUrlHasScheme: function(url) {
-    if (url.length == 0)
+    if (url.length == 0) {
       return url;
+    }
     return url.includes('://') ? url : 'http://' + url;
   },
 
@@ -91,33 +92,6 @@ const SiteSettingsBehaviorImpl = {
   },
 
   /**
-   * Removes the wildcard prefix from a pattern string.
-   * @param {string} pattern The pattern to remove the wildcard from.
-   * @return {string} The resulting pattern.
-   * @private
-   */
-  removePatternWildcard: function(pattern) {
-    if (pattern.startsWith('http://[*.]'))
-      return pattern.replace('http://[*.]', 'http://');
-    else if (pattern.startsWith('https://[*.]'))
-      return pattern.replace('https://[*.]', 'https://');
-    else if (pattern.startsWith('[*.]'))
-      return pattern.substring(4, pattern.length);
-    return pattern;
-  },
-
-  /**
-   * Returns the icon to use for a given site.
-   * @param {string} site The url of the site to fetch the icon for.
-   * @return {string} The background-image style with the favicon.
-   */
-  computeSiteIcon: function(site) {
-    site = this.removePatternWildcard(site);
-    const url = this.ensureUrlHasScheme(site);
-    return 'background-image: ' + cr.icon.getFavicon(url);
-  },
-
-  /**
    * Returns true if the passed content setting is considered 'enabled'.
    * @param {string} setting
    * @return {boolean}
@@ -134,8 +108,9 @@ const SiteSettingsBehaviorImpl = {
    * @protected
    */
   toUrl: function(originOrPattern) {
-    if (originOrPattern.length == 0)
+    if (originOrPattern.length == 0) {
       return null;
+    }
     // TODO(finnur): Hmm, it would probably be better to ensure scheme on the
     //     JS/C++ boundary.
     // TODO(dschuyler): I agree. This filtering should be done in one go, rather
@@ -188,11 +163,12 @@ const SiteSettingsBehaviorImpl = {
    */
   getCategoryList: function() {
     if (this.contentTypes_.length == 0) {
-      for (let typeName in settings.ContentSettingsTypes) {
+      for (const typeName in settings.ContentSettingsTypes) {
         const contentType = settings.ContentSettingsTypes[typeName];
         // <if expr="not chromeos">
-        if (contentType == settings.ContentSettingsTypes.PROTECTED_CONTENT)
+        if (contentType == settings.ContentSettingsTypes.PROTECTED_CONTENT) {
           continue;
+        }
         // </if>
         // Some categories store their data in a custom way.
         if (contentType == settings.ContentSettingsTypes.COOKIES ||
@@ -206,11 +182,13 @@ const SiteSettingsBehaviorImpl = {
 
     const addOrRemoveSettingWithFlag = (type, flag) => {
       if (loadTimeData.getBoolean(flag)) {
-        if (!this.contentTypes_.includes(type))
+        if (!this.contentTypes_.includes(type)) {
           this.contentTypes_.push(type);
+        }
       } else {
-        if (this.contentTypes_.includes(type))
+        if (this.contentTypes_.includes(type)) {
           this.contentTypes_.splice(this.contentTypes_.indexOf(type), 1);
+        }
       }
     };
     // These categories are gated behind flags.
@@ -219,8 +197,6 @@ const SiteSettingsBehaviorImpl = {
     addOrRemoveSettingWithFlag(
         settings.ContentSettingsTypes.ADS,
         'enableSafeBrowsingSubresourceFilter');
-    addOrRemoveSettingWithFlag(
-        settings.ContentSettingsTypes.SOUND, 'enableSoundContentSetting');
     addOrRemoveSettingWithFlag(
         settings.ContentSettingsTypes.CLIPBOARD,
         'enableClipboardContentSetting');

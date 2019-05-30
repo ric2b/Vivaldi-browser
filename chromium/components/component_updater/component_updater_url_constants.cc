@@ -20,4 +20,10 @@ const char kUpdaterDefaultUrl[] =
 const char kUpdaterFallbackUrl[] =
     "http://update.googleapis.com/service/update2";
 
+const char kUpdaterJSONDefaultUrl[] =
+    "https://update.googleapis.com/service/update2/json";
+
+const char kUpdaterJSONFallbackUrl[] =
+    "http://update.googleapis.com/service/update2/json";
+
 }  // namespace component_updater

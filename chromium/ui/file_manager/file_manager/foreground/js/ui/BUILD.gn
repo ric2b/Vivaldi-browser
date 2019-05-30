@@ -3,8 +3,20 @@
 # found in the LICENSE file.
 
 import("//third_party/closure_compiler/compile_js.gni")
+import("//third_party/closure_compiler/js_unit_tests.gni")
 
-js_type_check("closure_compile") {
+visibility = [ "//ui/file_manager/file_manager/foreground/*" ]
+
+group("closure_compile") {
+  testonly = true
+  visibility += [ "//ui/file_manager:closure_compile" ]
+  deps = [
+    ":closure_compile_module",
+    ":unit_tests_type_check",
+  ]
+}
+
+js_type_check("closure_compile_module") {
   deps = [
     ":actions_submenu",
     ":banners",
@@ -32,11 +44,11 @@ js_type_check("closure_compile") {
     ":install_linux_package_dialog",
     ":list_container",
     ":location_line",
+    ":multi_menu",
     ":multi_profile_share_dialog",
     ":progress_center_panel",
     ":providers_menu",
     ":search_box",
-    ":share_dialog",
     ":suggest_apps_dialog",
   ]
 }
@@ -44,28 +56,23 @@ js_type_check("closure_compile") {
 js_library("closure_compile_externs") {
   sources = []
   externs_list = [
-    "$externs_path/command_line_private.js",
     "$externs_path/metrics_private.js",
     "$externs_path/web_animations.js",
-    "../../../../externs/app_window_common.js",
     "../../../../externs/background/drive_sync_handler.js",
     "../../../../externs/background/file_browser_background.js",
     "../../../../externs/background/file_operation_manager.js",
     "../../../../externs/background/import_history.js",
-    "../../../../externs/background/import_history_enum.js",
     "../../../../externs/background_window.js",
     "../../../../externs/chrome_echo_private.js",
     "../../../../externs/chrome_webstore_widget_private.js",
     "../../../../externs/css_rule.js",
     "../../../../externs/drag_target.js",
     "../../../../externs/entries_changed_event.js",
-    "../../../../externs/entry_location.js",
     "../../../../externs/gallery_foreground.js",
     "../../../../externs/menu_item_update_event.js",
     "../../../../externs/paper_elements.js",
     "../../../../externs/platform.js",
     "../../../../externs/search_item.js",
-    "//third_party/analytics/externs.js",
   ]
 }
 
@@ -78,15 +85,23 @@ js_library("actions_submenu") {
   ]
 }
 
+js_unittest("actions_submenu_unittest") {
+  deps = [
+    ":actions_submenu",
+    "..:mock_actions_model",
+    "//ui/webui/resources/js:webui_resource_test",
+  ]
+}
+
 js_library("banners") {
   deps = [
     "..:directory_model",
-    "..:volume_manager_wrapper",
     "../../../common/js:util",
-    "../../../common/js:volume_manager_common",
+    "//ui/file_manager/base/js:volume_manager_types",
     "//ui/webui/resources/js:assert",
     "//ui/webui/resources/js/cr:event_target",
   ]
+  externs_list = [ "../../../../externs/chrome_echo_private.js" ]
 }
 
 js_library("combobutton") {
@@ -95,6 +110,7 @@ js_library("combobutton") {
     "../../elements:files_toggle_ripple",
     "//ui/webui/resources/js/cr/ui:menu_button",
   ]
+  externs_list = [ "../../../../externs/paper_elements.js" ]
 }
 
 js_library("commandbutton") {
@@ -128,14 +144,25 @@ js_library("directory_tree") {
   deps = [
     "..:directory_model",
     "..:navigation_list_model",
-    "..:volume_manager_wrapper",
     "../../../common/js:util",
-    "../../../common/js:volume_manager_common",
     "../metadata:metadata_model",
+    "//ui/file_manager/base/js:volume_manager_types",
     "//ui/webui/resources/js/cr/ui:context_menu_button",
     "//ui/webui/resources/js/cr/ui:context_menu_handler",
     "//ui/webui/resources/js/cr/ui:menu",
     "//ui/webui/resources/js/cr/ui:tree",
+  ]
+}
+
+js_unittest("directory_tree_unittest") {
+  deps = [
+    ":directory_tree",
+    "//ui/file_manager/base/js:mock_chrome",
+    "//ui/file_manager/base/js:test_error_reporting",
+    "//ui/file_manager/file_manager/background/js:mock_volume_manager",
+    "//ui/file_manager/file_manager/foreground/js:mock_directory_model",
+    "//ui/file_manager/file_manager/foreground/js:mock_folder_shortcut_data_model",
+    "//ui/file_manager/file_manager/foreground/js:mock_navigation_list_model",
   ]
 }
 
@@ -144,6 +171,7 @@ js_library("drag_selector") {
     "//ui/webui/resources/js/cr:ui",
     "//ui/webui/resources/js/cr/ui:list",
   ]
+  externs_list = [ "../../../../externs/drag_target.js" ]
 }
 
 js_library("empty_folder") {
@@ -170,12 +198,20 @@ js_library("file_grid") {
     "../metadata:metadata_model",
     "//ui/webui/resources/js/cr/ui:grid",
   ]
+  externs_list = [ "../../../../externs/background/import_history.js" ]
 }
 
 js_library("file_list_selection_model") {
   deps = [
     "//ui/webui/resources/js/cr/ui:list_selection_model",
     "//ui/webui/resources/js/cr/ui:list_single_selection_model",
+  ]
+}
+
+js_unittest("file_list_selection_model_unittest") {
+  deps = [
+    ":file_list_selection_model",
+    "//ui/webui/resources/js:webui_resource_test",
   ]
 }
 
@@ -205,18 +241,18 @@ js_library("file_manager_ui") {
     ":install_linux_package_dialog",
     ":list_container",
     ":location_line",
+    ":multi_menu",
     ":multi_profile_share_dialog",
     ":progress_center_panel",
     ":providers_menu",
     ":search_box",
-    ":share_dialog",
     ":suggest_apps_dialog",
-    "..:launch_param",
-    "..:providers_model",
-    "../../../common/js:util",
-    "../../elements:files_toggle_ripple",
-    "../../elements:files_tooltip",
-    "//ui/webui/resources/js:i18n_template_no_process",
+    "//ui/file_manager/file_manager/common/js:util",
+    "//ui/file_manager/file_manager/foreground/elements:files_toast",
+    "//ui/file_manager/file_manager/foreground/elements:files_toggle_ripple",
+    "//ui/file_manager/file_manager/foreground/elements:files_tooltip",
+    "//ui/file_manager/file_manager/foreground/js:launch_param",
+    "//ui/file_manager/file_manager/foreground/js:providers_model",
     "//ui/webui/resources/js:util",
     "//ui/webui/resources/js/cr/ui:context_menu_button",
     "//ui/webui/resources/js/cr/ui:dialogs",
@@ -241,6 +277,14 @@ js_library("file_table") {
     "//ui/webui/resources/js:cr",
     "//ui/webui/resources/js/cr/ui:table",
   ]
+  externs_list = [ "../../../../externs/background/import_history.js" ]
+}
+
+js_unittest("file_table_unittest") {
+  deps = [
+    ":file_table",
+    "//ui/webui/resources/js:webui_resource_test",
+  ]
 }
 
 js_library("file_table_list") {
@@ -255,19 +299,43 @@ js_library("file_table_list") {
   ]
 }
 
+js_unittest("file_table_list_unittest") {
+  deps = [
+    ":file_table_list",
+    ":file_table",
+    "../../../common/js:util",
+    "//ui/file_manager/base/js:test_error_reporting",
+    "//ui/webui/resources/js:webui_resource_test",
+    "//ui/file_manager/file_manager/background/js:mock_volume_manager",
+    "//ui/file_manager/file_manager/foreground/js/metadata:mock_metadata",
+  ]
+}
+
 js_library("file_tap_handler") {
   deps = [
     "../../../common/js:util",
   ]
 }
 
+js_unittest("file_tap_handler_unittest") {
+  deps = [
+    ":file_tap_handler",
+    "//ui/file_manager/base/js:test_error_reporting",
+    "//ui/webui/resources/js:webui_resource_test",
+  ]
+}
+
+# TODO(tapted): Move this into //ui/file_manager/base.
 js_library("files_alert_dialog") {
+  visibility += [ "//ui/file_manager/gallery/*" ]
   deps = [
     "//ui/webui/resources/js/cr/ui:dialogs",
   ]
 }
 
+# TODO(tapted): Move this into //ui/file_manager/base.
 js_library("files_confirm_dialog") {
+  visibility += [ "//ui/file_manager/gallery/*" ]
   deps = [
     "//ui/webui/resources/js/cr/ui:dialogs",
   ]
@@ -279,6 +347,7 @@ js_library("files_menu") {
     "//ui/webui/resources/js/cr/ui:menu",
     "//ui/webui/resources/js/cr/ui:menu_item",
   ]
+  externs_list = [ "../../../../externs/paper_elements.js" ]
 }
 
 js_library("install_linux_package_dialog") {
@@ -301,13 +370,43 @@ js_library("list_container") {
   ]
 }
 
+js_unittest("list_container_unittest") {
+  deps = [
+    ":list_container",
+    "../../../common/js:util",
+    "//ui/file_manager/base/js:test_error_reporting",
+    "//ui/webui/resources/js:webui_resource_test",
+    "//ui/webui/resources/js/cr/ui:context_menu_handler",
+    "//ui/webui/resources/js/cr/ui:menu",
+  ]
+}
+
 js_library("location_line") {
   deps = [
-    "..:volume_manager_wrapper",
     "../../../common/js:files_app_entry_types",
     "../../../common/js:metrics",
     "../../../common/js:util",
-    "../../../common/js:volume_manager_common",
+    "//ui/file_manager/base/js:volume_manager_types",
+    "//ui/file_manager/externs:volume_manager",
+  ]
+}
+
+js_library("multi_menu") {
+  deps = [
+    "//ui/webui/resources/js:event_tracker",
+    "//ui/webui/resources/js/cr/ui:menu",
+    "//ui/webui/resources/js/cr/ui:menu_button",
+    "//ui/webui/resources/js/cr/ui:menu_item",
+    "//ui/webui/resources/js/cr/ui:position_util",
+  ]
+}
+
+js_unittest("multi_menu_unittest") {
+  deps = [
+    ":multi_menu",
+    "../../../common/js:util",
+    "//ui/file_manager/base/js:test_error_reporting",
+    "//ui/webui/resources/js:webui_resource_test",
   ]
 }
 
@@ -319,6 +418,9 @@ js_library("multi_profile_share_dialog") {
 }
 
 js_library("progress_center_panel") {
+  # The progress_center on the background page maintains a list of panels.
+  visibility += [ "//ui/file_manager/file_manager/background/*" ]
+
   deps = [
     "..:progress_center_item_group",
     "../../../common/js:progress_center_common",
@@ -333,6 +435,7 @@ js_library("providers_menu") {
     "//ui/webui/resources/js/cr/ui:menu",
     "//ui/webui/resources/js/cr/ui:position_util",
   ]
+  externs_list = [ "../../../../externs/menu_item_update_event.js" ]
 }
 
 js_library("search_box") {
@@ -347,15 +450,7 @@ js_library("search_box") {
     "//ui/webui/resources/js/cr:ui",
     "//ui/webui/resources/js/cr/ui:autocomplete_list",
   ]
-}
-
-js_library("share_dialog") {
-  deps = [
-    ":file_manager_dialog_base",
-    "..:share_client",
-    "../../../common/js:async_util",
-    "../../../common/js:util",
-  ]
+  externs_list = [ "../../../../externs/search_item.js" ]
 }
 
 js_library("suggest_apps_dialog") {
@@ -367,7 +462,21 @@ js_library("suggest_apps_dialog") {
     "..:web_store_utils",
     "../../../common/js:metrics",
     "../../../common/js:util",
-    "../../../common/js:volume_manager_common",
-    "//components/chrome_apps/webstore_widget/cws_widget:cws_widget_container",
+    "../../../cws_widget:cws_widget_container",
+    "//ui/file_manager/base/js:volume_manager_types",
+  ]
+  externs_list = [ "../../../../externs/chrome_webstore_widget_private.js" ]
+}
+
+js_unit_tests("unit_tests") {
+  deps = [
+    ":actions_submenu_unittest",
+    ":directory_tree_unittest",
+    ":file_list_selection_model_unittest",
+    ":file_table_unittest",
+    ":file_tap_handler_unittest",
+    ":list_container_unittest",
+    ":file_table_list_unittest",
+    ":multi_menu_unittest",
   ]
 }

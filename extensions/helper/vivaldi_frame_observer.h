@@ -49,6 +49,8 @@ class VivaldiFrameObserver
   void RenderFrameHostChanged(content::RenderFrameHost* old_host,
                               content::RenderFrameHost* new_host) override;
 
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
+
   DISALLOW_COPY_AND_ASSIGN(VivaldiFrameObserver);
 };
 }  // namespace vivaldi

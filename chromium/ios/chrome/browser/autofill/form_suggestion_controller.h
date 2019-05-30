@@ -10,21 +10,25 @@
 #include <string>
 
 #import "components/autofill/ios/browser/js_suggestion_manager.h"
+#import "ios/chrome/browser/autofill/form_input_suggestions_provider.h"
+#import "ios/chrome/browser/autofill/form_suggestion_client.h"
 #import "ios/chrome/browser/autofill/form_suggestion_view.h"
-#import "ios/chrome/browser/autofill/form_suggestion_view_client.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
 
-namespace web {
-class WebState;
+namespace autofill {
 struct FormActivityParams;
 }
 
+namespace web {
+class WebState;
+}
+
 @protocol CRWWebViewProxy;
-@protocol FormInputAccessoryViewProvider;
 
 // Handles form focus events and presents input suggestions.
-@interface FormSuggestionController
-    : NSObject<CRWWebStateObserver, FormSuggestionViewClient>
+@interface FormSuggestionController : NSObject<CRWWebStateObserver,
+                                               FormSuggestionClient,
+                                               FormInputSuggestionsProvider>
 
 // Initializes a new FormSuggestionController with the specified WebState and a
 // list of FormSuggestionProviders.
@@ -38,15 +42,11 @@ struct FormActivityParams;
 
 // Finds a FormSuggestionProvider that can supply suggestions for the specified
 // form, requests them, and updates the view accordingly.
-- (void)retrieveSuggestionsForForm:(const web::FormActivityParams&)params
+- (void)retrieveSuggestionsForForm:(const autofill::FormActivityParams&)params
                           webState:(web::WebState*)webState;
 
 // Instructs the controller to detach itself from the WebState.
 - (void)detachFromWebState;
-
-// Provides an input accessory view for form suggestions.
-@property(nonatomic, readonly) id<FormInputAccessoryViewProvider>
-    accessoryViewProvider;
 
 @end
 

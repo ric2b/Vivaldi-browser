@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -39,6 +40,7 @@
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/window_container_type.mojom-shared.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension.h"
@@ -202,8 +204,8 @@ void DriveWebContentsManager::OnOfflineInit(
     // of a call stack for some routine of the contained WebContents.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&DriveWebContentsManager::RunCompletionCallback,
-                   weak_ptr_factory_.GetWeakPtr(), success, outcome));
+        base::BindOnce(&DriveWebContentsManager::RunCompletionCallback,
+                       weak_ptr_factory_.GetWeakPtr(), success, outcome));
     StopLoad();
   }
 }
@@ -452,7 +454,7 @@ void DriveFirstRunController::ShowNotification() {
       l10n_util::GetStringUTF16(IDS_DRIVE_OFFLINE_NOTIFICATION_MESSAGE),
       resource_bundle.GetImageNamed(IDR_NOTIFICATION_DRIVE),
       base::UTF8ToUTF16(extension->name()), GURL(),
-      message_center::NotifierId(message_center::NotifierId::APPLICATION,
+      message_center::NotifierId(message_center::NotifierType::APPLICATION,
                                  kDriveHostedAppId),
       data, std::move(delegate));
   notification.set_priority(message_center::LOW_PRIORITY);

@@ -16,16 +16,22 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/chrome_cleaner/constants/version.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace chrome_cleaner {
 
+namespace {
+
+constexpr char kDummyBuildVersion[] = "DUMMY_BUILD_VERSION";
+
+}  // namespace
+
 class InterfaceLogServiceTest : public testing::Test {
  public:
   void SetUp() override {
-    log_service_ = InterfaceLogService::Create(kLogFileName);
+    log_service_ = InterfaceLogService::Create(
+        kLogFileName, base::UTF8ToUTF16(kDummyBuildVersion));
     expected_file_size_ = 0LL;
   }
 
@@ -78,7 +84,6 @@ class InterfaceLogServiceTest : public testing::Test {
   std::unique_ptr<InterfaceLogService> log_service_;
   const base::string16 kLogFileName = L"interface_log_service_test";
   const std::string kFileName = __FILE__;
-  base::string16 build_version_ = LASTCHANGE_STRING;
 };
 
 class TestClass1 {
@@ -90,7 +95,7 @@ class TestClass1 {
   void function1(std::string parameter1, int32_t parameter2) {
     std::map<std::string, std::string> params;
     params["parameter1"] = parameter1;
-    std::string s_parameter2 = base::IntToString(parameter2);
+    std::string s_parameter2 = base::NumberToString(parameter2);
     params["parameter2"] = s_parameter2;
     log_service_->AddCall(CURRENT_FILE_AND_METHOD, params);
   }
@@ -210,11 +215,8 @@ TEST_F(InterfaceLogServiceTest, LogAndRecoverTest) {
   EXPECT_EQ(state, kReadingCalls);
 
   // Make sure the file contents and the data held in log_service_ are equal.
-  std::string build_version_utf8;
-  ASSERT_TRUE(base::UTF16ToUTF8(build_version_.c_str(), build_version_.size(),
-                                &build_version_utf8));
-  EXPECT_EQ(log_service_->GetBuildVersion(), build_version_utf8);
-  EXPECT_EQ(call_history_from_file.build_version(), build_version_utf8);
+  EXPECT_EQ(log_service_->GetBuildVersion(), kDummyBuildVersion);
+  EXPECT_EQ(call_history_from_file.build_version(), kDummyBuildVersion);
 
   std::vector<APICall> call_record = log_service_->GetCallHistory();
   EXPECT_EQ(call_record.size(), 5UL);
@@ -237,7 +239,7 @@ TEST_F(InterfaceLogServiceTest, LogAndRecoverTest) {
   EXPECT_EQ(call_record[0].file_name(), kFileName);
   EXPECT_EQ(2U, call_record[0].parameters().size());
   EXPECT_EQ(kString1, call_record[0].parameters().at("parameter1"));
-  EXPECT_EQ(base::IntToString(kInt1),
+  EXPECT_EQ(base::NumberToString(kInt1),
             call_record[0].parameters().at("parameter2"));
 
   EXPECT_EQ(call_record[1].function_name(), "function3");
@@ -246,7 +248,7 @@ TEST_F(InterfaceLogServiceTest, LogAndRecoverTest) {
   EXPECT_EQ(call_record[2].function_name(), "function1");
   EXPECT_EQ(call_record[2].file_name(), kFileName);
   EXPECT_EQ(kString2, call_record[2].parameters().at("parameter1"));
-  EXPECT_EQ(base::IntToString(kInt2),
+  EXPECT_EQ(base::NumberToString(kInt2),
             call_record[2].parameters().at("parameter2"));
 
   EXPECT_EQ(call_record[3].function_name(), "function2");
@@ -272,17 +274,18 @@ TEST_F(InterfaceLogServiceTest, LogAndRecoverTest) {
   parameters1.insert(call_record[0].parameters().begin(),
                      call_record[0].parameters().end());
   EXPECT_EQ(parameters1["parameter1"], kString1);
-  EXPECT_EQ(parameters1["parameter2"], base::IntToString(kInt1));
+  EXPECT_EQ(parameters1["parameter2"], base::NumberToString(kInt1));
 
   std::map<std::string, std::string> parameters2;
   parameters2.insert(call_record[2].parameters().begin(),
                      call_record[2].parameters().end());
   EXPECT_EQ(parameters2["parameter1"], kString2);
-  EXPECT_EQ(parameters2["parameter2"], base::IntToString(kInt2));
+  EXPECT_EQ(parameters2["parameter2"], base::NumberToString(kInt2));
 }
 
 TEST_F(InterfaceLogServiceTest, EmptyLogFileTest) {
-  EXPECT_FALSE(InterfaceLogService::Create(L""));
+  EXPECT_FALSE(
+      InterfaceLogService::Create(L"", base::UTF8ToUTF16(kDummyBuildVersion)));
 }
 
 }  // namespace chrome_cleaner

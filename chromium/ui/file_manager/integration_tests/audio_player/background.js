@@ -28,8 +28,9 @@ var remoteCallAudioPlayer = new RemoteCall(AUDIO_PLAYER_APP_ID);
 function launch(testVolumeName, volumeType, entries, opt_selected) {
   var entriesPromise = addEntries([testVolumeName], entries).then(function() {
     var selectedEntries = opt_selected || entries;
-    var selectedEntryNames =
-        selectedEntries.map(function(entry) { return entry.nameText; });
+    var selectedEntryNames = selectedEntries.map(function(entry) {
+      return entry.nameText;
+    });
     return remoteCallAudioPlayer.getFilesUnderVolume(
         volumeType, selectedEntryNames);
   });
@@ -66,30 +67,28 @@ window.addEventListener('load', function() {
   var steps = [
     // Request the guest mode state.
     function() {
-      chrome.test.sendMessage(
-          JSON.stringify({name: 'isInGuestMode'}), steps.shift());
+      sendBrowserTestCommand({name: 'isInGuestMode'}, steps.shift());
     },
     // Request the root entry paths.
     function(mode) {
-      if (JSON.parse(mode) != chrome.extension.inIncognitoContext)
+      if (JSON.parse(mode) != chrome.extension.inIncognitoContext) {
         return;
-      chrome.test.sendMessage(
-          JSON.stringify({name: 'getRootPaths'}), steps.shift());
+      }
+      sendBrowserTestCommand({name: 'getRootPaths'}, steps.shift());
     },
     // Request the test case name.
     function(paths) {
       var roots = JSON.parse(paths);
       RootPath.DOWNLOADS = roots.downloads;
       RootPath.DRIVE = roots.drive;
-      chrome.test.sendMessage(
-          JSON.stringify({name: 'getTestName'}), steps.shift());
+      sendBrowserTestCommand({name: 'getTestName'}, steps.shift());
     },
     // Run the test case.
     function(testCaseName) {
       // Get the test function from testcase namespace testCaseName.
       var test = testcase[testCaseName];
       // Verify test is an unnamed (aka 'anonymous') Function.
-      if (!test instanceof Function || test.name) {
+      if (!(test instanceof Function) || test.name) {
         chrome.test.fail('[' + testCaseName + '] not found.');
         return;
       }

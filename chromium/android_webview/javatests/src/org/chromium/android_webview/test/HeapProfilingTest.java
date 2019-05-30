@@ -31,31 +31,40 @@ public class HeapProfilingTest {
 
     @Test
     @MediumTest
-    @CommandLineFlags.Add({"memlog=browser", "memlog-stack-mode=native-include-thread-names"})
-    public void testModeBrowser() throws Exception {
+    @CommandLineFlags.Add({"memlog=browser", "memlog-stack-mode=native-include-thread-names",
+            "memlog-sampling-rate=1"})
+    public void
+    testModeBrowser() throws Exception {
         HeapProfilingTestShim shim = new HeapProfilingTestShim();
-        Assert.assertTrue(
-                shim.runTestForMode("browser", false, "native-include-thread-names", false, false));
+        Assert.assertTrue(shim.runTestForMode(
+                "browser", false, "native-include-thread-names", true, false, false));
     }
 
     @Test
     @MediumTest
     public void testModeBrowserDynamicPseudo() throws Exception {
         HeapProfilingTestShim shim = new HeapProfilingTestShim();
-        Assert.assertTrue(shim.runTestForMode("browser", true, "pseudo", false, false));
+        Assert.assertTrue(shim.runTestForMode("browser", true, "pseudo", true, false, false));
     }
 
     @Test
     @MediumTest
     public void testModeBrowserDynamicPseudoSampleEverything() throws Exception {
         HeapProfilingTestShim shim = new HeapProfilingTestShim();
-        Assert.assertTrue(shim.runTestForMode("browser", true, "pseudo", true, true));
+        Assert.assertTrue(shim.runTestForMode("browser", true, "pseudo", true, true, true));
     }
 
     @Test
     @MediumTest
     public void testModeBrowserDynamicPseudoSamplePartial() throws Exception {
         HeapProfilingTestShim shim = new HeapProfilingTestShim();
-        Assert.assertTrue(shim.runTestForMode("browser", true, "pseudo", true, false));
+        Assert.assertTrue(shim.runTestForMode("browser", true, "pseudo", true, true, false));
+    }
+
+    @Test
+    @MediumTest
+    public void testModeBrowserDynamicPseudoSamplePartialNonStreaming() throws Exception {
+        HeapProfilingTestShim shim = new HeapProfilingTestShim();
+        Assert.assertTrue(shim.runTestForMode("browser", true, "pseudo", false, true, false));
     }
 }

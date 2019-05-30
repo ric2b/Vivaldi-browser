@@ -26,6 +26,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_WEBAUDIO_DEFERRED_TASK_HANDLER_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_WEBAUDIO_DEFERRED_TASK_HANDLER_H_
 
+#include <atomic>
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -34,6 +35,10 @@
 #include "third_party/blink/renderer/platform/wtf/threading.h"
 #include "third_party/blink/renderer/platform/wtf/threading_primitives.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
+
+namespace base {
+class SingleThreadTaskRunner;
+}
 
 namespace blink {
 
@@ -59,7 +64,8 @@ class AudioSummingJunction;
 class MODULES_EXPORT DeferredTaskHandler final
     : public ThreadSafeRefCounted<DeferredTaskHandler> {
  public:
-  static scoped_refptr<DeferredTaskHandler> Create();
+  static scoped_refptr<DeferredTaskHandler> Create(
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   ~DeferredTaskHandler();
 
   void HandleDeferredTasks();
@@ -69,11 +75,12 @@ class MODULES_EXPORT DeferredTaskHandler final
   // when they are not connected to any downstream nodes.  These two methods are
   // called by the nodes who want to add/remove themselves into/from the
   // automatic pull lists.
-  void AddAutomaticPullNode(AudioHandler*);
+  void AddAutomaticPullNode(scoped_refptr<AudioHandler>);
   void RemoveAutomaticPullNode(AudioHandler*);
+
   // Called right before handlePostRenderTasks() to handle nodes which need to
   // be pulled even when they are not connected to anything.
-  void ProcessAutomaticPullNodes(size_t frames_to_process);
+  void ProcessAutomaticPullNodes(uint32_t frames_to_process);
 
   // Keep track of AudioNode's that have their channel count mode changed. We
   // process the changes in the post rendering phase.
@@ -103,6 +110,9 @@ class MODULES_EXPORT DeferredTaskHandler final
   void RequestToDeleteHandlersOnMainThread();
   void ClearHandlersToBeDeleted();
 
+  bool AcceptsTailProcessing() const { return accepts_tail_processing_; }
+  void StopAcceptingTailProcessing() { accepts_tail_processing_ = false; }
+
   // If |node| requires tail processing, add it to the list of tail
   // nodes so the tail is processed.
   void AddTailProcessingHandler(scoped_refptr<AudioHandler>);
@@ -111,8 +121,7 @@ class MODULES_EXPORT DeferredTaskHandler final
   // complete).  Set |disable_outputs| to true if the outputs of the handler
   // should also be disabled.  This should be true if the tail is done.  But if
   // we're reconnected or re-enabled, then |disable_outputs| should be false.
-  void RemoveTailProcessingHandler(scoped_refptr<AudioHandler> node,
-                                   bool disable_outputs);
+  void RemoveTailProcessingHandler(AudioHandler*, bool disable_outputs);
 
   // Remove all tail processing nodes.  Should be called only when the
   // context is done.
@@ -126,15 +135,12 @@ class MODULES_EXPORT DeferredTaskHandler final
   // Thread Safety and Graph Locking:
   //
   void SetAudioThreadToCurrentThread();
-  ThreadIdentifier AudioThread() const { return AcquireLoad(&audio_thread_); }
 
-  // TODO(hongchan): Use no-barrier load here. (crbug.com/247328)
-  //
   // It is okay to use a relaxed (no-barrier) load here. Because the data
   // referenced by m_audioThread is not actually being used, thus we do not
   // need a barrier between the load of m_audioThread and of that data.
   bool IsAudioThread() const {
-    return CurrentThread() == AcquireLoad(&audio_thread_);
+    return CurrentThread() == audio_thread_.load(std::memory_order_relaxed);
   }
 
   void lock();
@@ -155,7 +161,7 @@ class MODULES_EXPORT DeferredTaskHandler final
     explicit GraphAutoLocker(DeferredTaskHandler& handler) : handler_(handler) {
       handler_.lock();
     }
-    explicit GraphAutoLocker(BaseAudioContext*);
+    explicit GraphAutoLocker(const BaseAudioContext*);
 
     ~GraphAutoLocker() { handler_.unlock(); }
 
@@ -179,8 +185,16 @@ class MODULES_EXPORT DeferredTaskHandler final
     DeferredTaskHandler& handler_;
   };
 
+  HashSet<scoped_refptr<AudioHandler>>* GetActiveSourceHandlers() {
+    return &active_source_handlers_;
+  }
+
+  Vector<AudioHandler*>* GetFinishedSourceHandlers() {
+    return &finished_source_handlers_;
+  }
+
  private:
-  DeferredTaskHandler();
+  explicit DeferredTaskHandler(scoped_refptr<base::SingleThreadTaskRunner>);
   void UpdateAutomaticPullNodes();
   void UpdateChangedChannelCountMode();
   void UpdateChangedChannelInterpretation();
@@ -192,15 +206,16 @@ class MODULES_EXPORT DeferredTaskHandler final
   // has been processed.
   void UpdateTailProcessingHandlers();
 
-  // For the sake of thread safety, we maintain a seperate Vector of automatic
-  // pull nodes for rendering in m_renderingAutomaticPullNodes.  It will be
-  // copied from m_automaticPullNodes by updateAutomaticPullNodes() at the
-  // very start or end of the rendering quantum.
-  HashSet<AudioHandler*> automatic_pull_nodes_;
-  Vector<AudioHandler*> rendering_automatic_pull_nodes_;
-  // m_automaticPullNodesNeedUpdating keeps track if m_automaticPullNodes is
-  // modified.
-  bool automatic_pull_nodes_need_updating_;
+  // For the sake of thread safety, we maintain a seperate Vector of
+  // AudioHandlers for "automatic-pull nodes":
+  // |rendering_automatic_pull_handlers|. This storage will be copied from
+  // |automatic_pull_handlers| by |UpdateAutomaticPullNodes()| at the beginning
+  // or end of the render quantum.
+  HashSet<scoped_refptr<AudioHandler>> automatic_pull_handlers_;
+  Vector<scoped_refptr<AudioHandler>> rendering_automatic_pull_handlers_;
+
+  // Keeps track if the |automatic_pull_handlers| storage is touched.
+  bool automatic_pull_handlers_need_updating_;
 
   // Collection of nodes where the channel count mode has changed. We want the
   // channel count mode to change in the pre- or post-rendering phase so as
@@ -222,14 +237,37 @@ class MODULES_EXPORT DeferredTaskHandler final
 
   // Nodes that are processing its tail.
   Vector<scoped_refptr<AudioHandler>> tail_processing_handlers_;
+
   // Tail processing nodes that are now finished and want the output to be
   // disabled.  This is updated in the audio thread (with the graph lock).  The
   // main thread will disable the outputs.
   Vector<scoped_refptr<AudioHandler>> finished_tail_processing_handlers_;
 
+  // Once the associated context closes, new tail processing handlers are not
+  // accepted.
+  bool accepts_tail_processing_ = true;
+
+  // When source nodes are started, we place the handlers here to keep track of
+  // these active sources.  We must call AudioHandler::makeConnection() when we
+  // add an AudioNode to this, and must call AudioHandler::breakConnection()
+  // when we remove an AudioNode from this.
+  //
+  // This can be accessed from either the main thread or the audio thread, so it
+  // must be protected by the graph lock.
+  HashSet<scoped_refptr<AudioHandler>> active_source_handlers_;
+
+  // When source nodes are finished, the handler is placed here to make a note
+  // of it.  At a render quantum boundary, these are used to break the
+  // connection and elements here are removed from |active_source_handlers_|.
+  //
+  // This must be accessed only from the audio thread.
+  Vector<AudioHandler*> finished_source_handlers_;
+
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+
   // Graph locking.
   RecursiveMutex context_graph_mutex_;
-  volatile ThreadIdentifier audio_thread_;
+  std::atomic<base::PlatformThreadId> audio_thread_;
 };
 
 }  // namespace blink

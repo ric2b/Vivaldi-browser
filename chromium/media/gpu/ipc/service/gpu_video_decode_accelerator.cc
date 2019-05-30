@@ -81,7 +81,26 @@ static gpu::gles2::ContextGroup* GetContextGroup(
     return nullptr;
   }
 
-  return stub->context_group().get();
+  return stub->decoder_context()->GetContextGroup();
+}
+
+static std::unique_ptr<gpu::gles2::AbstractTexture> CreateAbstractTexture(
+    const base::WeakPtr<gpu::CommandBufferStub>& stub,
+    GLenum target,
+    GLenum internal_format,
+    GLsizei width,
+    GLsizei height,
+    GLsizei depth,
+    GLint border,
+    GLenum format,
+    GLenum type) {
+  if (!stub) {
+    DLOG(ERROR) << "Stub is gone; no DecoderContext.";
+    return nullptr;
+  }
+
+  return stub->decoder_context()->CreateAbstractTexture(
+      target, internal_format, width, height, depth, border, format, type);
 }
 
 }  // anonymous namespace
@@ -168,6 +187,8 @@ GpuVideoDecodeAccelerator::GpuVideoDecodeAccelerator(
   bind_image_cb_ = base::BindRepeating(&BindImage, stub_->AsWeakPtr());
   get_context_group_cb_ =
       base::BindRepeating(&GetContextGroup, stub_->AsWeakPtr());
+  create_abstract_texture_cb_ =
+      base::BindRepeating(&CreateAbstractTexture, stub_->AsWeakPtr());
 }
 
 GpuVideoDecodeAccelerator::~GpuVideoDecodeAccelerator() {
@@ -267,6 +288,7 @@ void GpuVideoDecodeAccelerator::PictureReady(const Picture& picture) {
   params.visible_rect = picture.visible_rect();
   params.color_space = picture.color_space();
   params.allow_overlay = picture.allow_overlay();
+  params.read_lock_fences_enabled = picture.read_lock_fences_enabled();
   params.size_changed = picture.size_changed();
   params.surface_texture = picture.texture_owner();
   params.wants_promotion_hint = picture.wants_promotion_hint();
@@ -352,7 +374,8 @@ bool GpuVideoDecodeAccelerator::Initialize(
   std::unique_ptr<GpuVideoDecodeAcceleratorFactory> vda_factory =
       GpuVideoDecodeAcceleratorFactory::CreateWithGLES2Decoder(
           get_gl_context_cb_, make_context_current_cb_, bind_image_cb_,
-          get_context_group_cb_, overlay_factory_cb_);
+          get_context_group_cb_, overlay_factory_cb_,
+          create_abstract_texture_cb_);
 
   if (!vda_factory) {
     LOG(ERROR) << "Failed creating the VDA factory";
@@ -401,7 +424,7 @@ void GpuVideoDecodeAccelerator::OnAssignPictureBuffers(
 
   gpu::DecoderContext* decoder_context = stub_->decoder_context();
   gpu::gles2::TextureManager* texture_manager =
-      stub_->context_group()->texture_manager();
+      stub_->decoder_context()->GetContextGroup()->texture_manager();
 
   std::vector<PictureBuffer> buffers;
   std::vector<std::vector<scoped_refptr<gpu::gles2::TextureRef>>> textures;
@@ -532,7 +555,7 @@ void GpuVideoDecodeAccelerator::SetTextureCleared(const Picture& picture) {
   for (auto texture_ref : it->second) {
     GLenum target = texture_ref->texture()->target();
     gpu::gles2::TextureManager* texture_manager =
-        stub_->context_group()->texture_manager();
+        stub_->decoder_context()->GetContextGroup()->texture_manager();
     texture_manager->SetLevelCleared(texture_ref.get(), target, 0, true);
   }
   uncleared_textures_.erase(it);

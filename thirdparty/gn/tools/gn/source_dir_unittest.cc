@@ -187,6 +187,27 @@ TEST(SourceDir, ResolveRelativeDir) {
 #endif
 }
 
+TEST(SourceDir, SourceWithNoTrailingSlash) {
+  Err err;
+  SourceDir base("//base/");
+  SourceDir base_no_slash("//base/");
+  EXPECT_EQ(base.SourceWithNoTrailingSlash(), "//base");
+  EXPECT_EQ(base_no_slash.SourceWithNoTrailingSlash(), "//base");
+
+  SourceDir relative_root("//");
+  EXPECT_EQ(relative_root.SourceWithNoTrailingSlash(), "//");
+
+#if defined(OS_WIN)
+  SourceDir root("C:/");
+  SourceDir root_no_slash("C:");
+  EXPECT_EQ(root.SourceWithNoTrailingSlash(), "C:");
+  EXPECT_EQ(root_no_slash.SourceWithNoTrailingSlash(), "C:");
+#else
+  SourceDir root("/");
+  EXPECT_EQ(root.SourceWithNoTrailingSlash(), "/");
+#endif
+}
+
 class TestWithAlias : public TestWithScope {
  public:
   TestWithAlias() {

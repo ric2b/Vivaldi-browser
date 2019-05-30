@@ -32,7 +32,7 @@
 namespace blink {
 
 class CursorData {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
 
  public:
   CursorData(StyleImage* image,
@@ -66,6 +66,6 @@ class CursorData {
 
 }  // namespace blink
 
-WTF_ALLOW_CLEAR_UNUSED_SLOTS_WITH_MEM_FUNCTIONS(blink::CursorData);
+WTF_ALLOW_CLEAR_UNUSED_SLOTS_WITH_MEM_FUNCTIONS(blink::CursorData)
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_STYLE_CURSOR_DATA_H_

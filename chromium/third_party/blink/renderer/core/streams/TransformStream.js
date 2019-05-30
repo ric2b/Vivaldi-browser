@@ -35,7 +35,6 @@
   // the global object may have been overwritten. See "V8 Extras Design Doc",
   // section "Security Considerations".
   // https://docs.google.com/document/d/1AT5-T0aHGp7Lt29vPWFr2-qG8r3l9CByyvKwEuA8Ec0/edit#heading=h.9yixony1a18r
-  const defineProperty = global.Object.defineProperty;
   const ObjectCreate = global.Object.create;
 
   const TypeError = global.TypeError;
@@ -43,11 +42,12 @@
 
   const Promise = global.Promise;
   const thenPromise = v8.uncurryThis(Promise.prototype.then);
-  const Promise_resolve = Promise.resolve.bind(Promise);
-  const Promise_reject = Promise.reject.bind(Promise);
 
   // From CommonOperations.js
   const {
+    createPromise,
+    createRejectedPromise,
+    createResolvedPromise,
     hasOwnPropertyNoThrow,
     resolvePromise,
     CreateAlgorithmFromUnderlyingMethod,
@@ -104,7 +104,7 @@
       readableHighWaterMark =
           ValidateAndNormalizeHighWaterMark(readableHighWaterMark);
 
-      const startPromise = v8.createPromise();
+      const startPromise = createPromise();
       InitializeTransformStream(
           this, startPromise, writableHighWaterMark, writableSizeAlgorithm,
           readableHighWaterMark, readableSizeAlgorithm);
@@ -160,7 +160,7 @@
     //     readableHighWaterMark >= 0,
     //     '! IsNonNegativeNumber(_readableHighWaterMark_) is true');
     const stream = ObjectCreate(TransformStream_prototype);
-    const startPromise = v8.createPromise();
+    const startPromise = createPromise();
     InitializeTransformStream(
         stream, startPromise, writableHighWaterMark, writableSizeAlgorithm,
         readableHighWaterMark, readableSizeAlgorithm);
@@ -189,7 +189,7 @@
           TransformStreamDefaultSourcePullAlgorithm(stream);
     const cancelAlgorithm = reason => {
       TransformStreamErrorWritableAndUnblockWrite(stream, reason);
-      return Promise_resolve(undefined);
+      return createResolvedPromise(undefined);
     };
     stream[_readable] = binding.CreateReadableStream(
         startAlgorithm, pullAlgorithm, cancelAlgorithm, readableHighWaterMark,
@@ -235,7 +235,7 @@
       resolvePromise(stream[_backpressureChangePromise], undefined);
     }
 
-    stream[_backpressureChangePromise] = v8.createPromise();
+    stream[_backpressureChangePromise] = createPromise();
     stream[_backpressure] = backpressure;
   }
 
@@ -317,9 +317,9 @@
       transformAlgorithm = chunk => {
         try {
           TransformStreamDefaultControllerEnqueue(controller, chunk);
-          return Promise_resolve();
+          return createResolvedPromise();
         } catch (resultValue) {
-          return Promise_reject(resultValue);
+          return createRejectedPromise(resultValue);
         }
       };
     }
@@ -416,7 +416,7 @@
 
   function TransformStreamDefaultSinkAbortAlgorithm(stream, reason) {
     TransformStreamError(stream, reason);
-    return Promise_resolve();
+    return createResolvedPromise();
   }
 
   function TransformStreamDefaultSinkCloseAlgorithm(stream) {
@@ -459,8 +459,21 @@
   // blink::TransformStream needs. |transformAlgorithm| and |flushAlgorithm| are
   // passed the controller, unlike in the standard.
   function createTransformStreamSimple(transformAlgorithm, flushAlgorithm) {
-    return CreateTransformStream(() => Promise_resolve(),
+    return CreateTransformStream(() => createResolvedPromise(),
                                  transformAlgorithm, flushAlgorithm);
+  }
+  function createTransformStream(
+      transformer, writableStrategy, readableStrategy) {
+    if (transformer === undefined) {
+      transformer = ObjectCreate(null);
+    }
+    if (writableStrategy === undefined) {
+      writableStrategy = ObjectCreate(null);
+    }
+    if (readableStrategy === undefined) {
+      readableStrategy = ObjectCreate(null);
+    }
+    return new TransformStream(transformer, writableStrategy, readableStrategy);
   }
 
   function getTransformStreamReadable(stream) {
@@ -472,21 +485,11 @@
   }
 
   //
-  // Additions to the global object
-  //
-
-  defineProperty(global, 'TransformStream', {
-    value: TransformStream,
-    enumerable: false,
-    configurable: true,
-    writable: true
-  });
-
-  //
   // Exports to Blink
   //
   Object.assign(binding, {
     createTransformStreamSimple,
+    createTransformStream,
     TransformStreamDefaultControllerEnqueue,
     getTransformStreamReadable,
     getTransformStreamWritable

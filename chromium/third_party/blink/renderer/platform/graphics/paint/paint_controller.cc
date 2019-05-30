@@ -6,6 +6,7 @@
 
 #include <memory>
 #include "base/auto_reset.h"
+#include "base/metrics/histogram_macros.h"
 #include "third_party/blink/renderer/platform/graphics/logging_canvas.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_display_item.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
@@ -25,15 +26,13 @@ PaintController::PaintController(Usage usage)
 }
 
 PaintController::~PaintController() {
-  // New display items should be committed before PaintController is destroyed.
-  DCHECK(new_display_item_list_.IsEmpty());
+  // New display items should be committed before PaintController is destroyed,
+  // except for transient paint controllers.
+  DCHECK(usage_ == kTransient || new_display_item_list_.IsEmpty());
 }
 
-bool PaintController::UseCachedDrawingIfPossible(
-    const DisplayItemClient& client,
-    DisplayItem::Type type) {
-  DCHECK(DisplayItem::IsDrawingType(type));
-
+bool PaintController::UseCachedItemIfPossible(const DisplayItemClient& client,
+                                              DisplayItem::Type type) {
   if (usage_ == kTransient)
     return false;
 
@@ -133,6 +132,7 @@ bool PaintController::UseCachedSubsequenceIfPossible(
   }
 
   num_cached_new_items_ += markers->end - markers->start;
+  ++num_cached_new_subsequences_;
 
   if (RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled()) {
     DCHECK(!IsCheckingUnderInvalidation());
@@ -202,38 +202,24 @@ void PaintController::EndSubsequence(const DisplayItemClient& client,
   new_cached_subsequences_.insert(&client, SubsequenceMarkers(start, end));
 }
 
-const DisplayItem* PaintController::LastDisplayItem(unsigned offset) {
-  if (offset < new_display_item_list_.size())
-    return &new_display_item_list_[new_display_item_list_.size() - offset - 1];
-  return nullptr;
-}
-
 void PaintController::ProcessNewItem(DisplayItem& display_item) {
   DCHECK(!construction_disabled_);
 
-  if (IsSkippingCache() && usage_ == kMultiplePaints)
+  if (IsSkippingCache() && usage_ == kMultiplePaints) {
     display_item.Client().Invalidate(PaintInvalidationReason::kUncacheable);
+    display_item.SetUncacheable();
+  }
+
+  bool chunk_added = new_paint_chunks_.IncrementDisplayItemIndex(display_item);
 
 #if DCHECK_IS_ON()
-  bool chunk_added =
-#endif
-      new_paint_chunks_.IncrementDisplayItemIndex(display_item);
-  auto& last_chunk = new_paint_chunks_.LastChunk();
-
-#if DCHECK_IS_ON()
-  if (chunk_added && last_chunk.is_cacheable) {
-    AddToIndicesByClientMap(last_chunk.id.client,
+  if (chunk_added && CurrentPaintChunk().is_cacheable) {
+    AddToIndicesByClientMap(CurrentPaintChunk().id.client,
                             new_paint_chunks_.LastChunkIndex(),
                             new_paint_chunk_indices_by_client_);
   }
-#endif
 
-  last_chunk.outset_for_raster_effects =
-      std::max(last_chunk.outset_for_raster_effects,
-               display_item.OutsetForRasterEffects());
-
-#if DCHECK_IS_ON()
-  if (usage_ == kMultiplePaints && !IsSkippingCache()) {
+  if (usage_ == kMultiplePaints && display_item.IsCacheable()) {
     size_t index = FindMatchingItemFromIndex(
         display_item.GetId(), new_display_item_indices_by_client_,
         new_display_item_list_);
@@ -249,7 +235,9 @@ void PaintController::ProcessNewItem(DisplayItem& display_item) {
                             new_display_item_list_.size() - 1,
                             new_display_item_indices_by_client_);
   }
-#endif  // DCHECK_IS_ON()
+#else  // DCHECK_IS_ON()
+  std::ignore = chunk_added;
+#endif
 
   if (usage_ == kMultiplePaints &&
       RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled())
@@ -272,12 +260,12 @@ DisplayItem& PaintController::MoveItemFromCurrentListToNewList(size_t index) {
 }
 
 void PaintController::InvalidateAll() {
-  DCHECK(!RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
+  DCHECK(!RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
   InvalidateAllInternal();
 }
 
 void PaintController::InvalidateAllInternal() {
-  // TODO(wangxianzhu): Rename this to InvalidateAllForTesting() for SPv2.
+  // TODO(wangxianzhu): Rename this to InvalidateAllForTesting() for CAP.
   // Can only be called during layout/paintInvalidation, not during painting.
   DCHECK(new_display_item_list_.IsEmpty());
   current_paint_artifact_ = PaintArtifact::Empty();
@@ -286,7 +274,7 @@ void PaintController::InvalidateAllInternal() {
 }
 
 bool PaintController::CacheIsAllInvalid() const {
-  DCHECK(!RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
+  DCHECK(!RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
   DCHECK(!cache_is_all_invalid_ || current_paint_artifact_->IsEmpty());
   return cache_is_all_invalid_;
 }
@@ -383,9 +371,7 @@ size_t PaintController::FindOutOfOrderCachedItemForward(
       return i;
     }
     if (item.IsCacheable()) {
-#if DCHECK_IS_ON()
       ++num_indexed_items_;
-#endif
       AddToIndicesByClientMap(item.Client(), i, out_of_order_item_indices_);
       next_item_to_index_ = i + 1;
     }
@@ -457,9 +443,8 @@ void PaintController::CopyCachedSubsequence(size_t begin_index,
 #endif
 
     ProcessNewItem(MoveItemFromCurrentListToNewList(current_index));
-    DCHECK((!new_paint_chunks_.LastChunk().is_cacheable &&
-            !cached_chunk->is_cacheable) ||
-           new_paint_chunks_.LastChunk().Matches(*cached_chunk));
+    DCHECK((!CurrentPaintChunk().is_cacheable && !cached_chunk->is_cacheable) ||
+           CurrentPaintChunk().Matches(*cached_chunk));
   }
 
   if (RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled()) {
@@ -489,7 +474,11 @@ void PaintController::CommitNewDisplayItems() {
                "num_non_cached_new_items",
                (int)new_display_item_list_.size() - num_cached_new_items_);
 
+  if (usage_ == kMultiplePaints)
+    UpdateUMACounts();
+
   num_cached_new_items_ = 0;
+  num_cached_new_subsequences_ = 0;
 #if DCHECK_IS_ON()
   new_display_item_indices_by_client_.clear();
   new_paint_chunk_indices_by_client_.clear();
@@ -514,10 +503,10 @@ void PaintController::CommitNewDisplayItems() {
   // We'll allocate the initial buffer when we start the next paint.
   new_display_item_list_ = DisplayItemList(0);
 
+  num_indexed_items_ = 0;
 #if DCHECK_IS_ON()
   num_sequential_matches_ = 0;
   num_out_of_order_matches_ = 0;
-  num_indexed_items_ = 0;
 #endif
 }
 
@@ -525,8 +514,10 @@ void PaintController::FinishCycle() {
   if (usage_ == kTransient)
     return;
 
+#if DCHECK_IS_ON()
   DCHECK(new_display_item_list_.IsEmpty());
   DCHECK(new_paint_chunks_.IsInInitialState());
+#endif
 
   if (committed_) {
     committed_ = false;
@@ -562,6 +553,19 @@ void PaintController::FinishCycle() {
 #endif
 }
 
+void PaintController::ClearPropertyTreeChangedStateTo(
+    const PropertyTreeState& to) {
+  DCHECK(RuntimeEnabledFeatures::BlinkGenPropertyTreesEnabled());
+
+  // Calling |ClearChangedTo| for every chunk is O(|property nodes|^2) and
+  // could be optimized by caching which nodes that have already been cleared.
+  for (const auto& chunk : current_paint_artifact_->PaintChunks()) {
+    chunk.properties.Transform().ClearChangedTo(&to.Transform());
+    chunk.properties.Clip().ClearChangedTo(&to.Clip());
+    chunk.properties.Effect().ClearChangedTo(&to.Effect());
+  }
+}
+
 size_t PaintController::ApproximateUnsharedMemoryUsage() const {
   size_t memory_usage = sizeof(*this);
 
@@ -587,35 +591,12 @@ size_t PaintController::ApproximateUnsharedMemoryUsage() const {
   return memory_usage;
 }
 
-namespace {
-
-class DebugDrawingClient final : public DisplayItemClient {
- public:
-  DebugDrawingClient() { Invalidate(PaintInvalidationReason::kUncacheable); }
-  String DebugName() const final { return "DebugDrawing"; }
-  LayoutRect VisualRect() const final {
-    return LayoutRect(LayoutRect::InfiniteIntRect());
-  }
-};
-
-}  // anonymous namespace
-
 void PaintController::AppendDebugDrawingAfterCommit(
     sk_sp<const PaintRecord> record,
     const PropertyTreeState& property_tree_state) {
-  DEFINE_STATIC_LOCAL(DebugDrawingClient, debug_drawing_client, ());
-
-  DCHECK(!RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
+  DCHECK(!RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
   DCHECK(new_display_item_list_.IsEmpty());
-  auto& display_item_list = current_paint_artifact_->GetDisplayItemList();
-  auto& display_item =
-      display_item_list.AllocateAndConstruct<DrawingDisplayItem>(
-          debug_drawing_client, DisplayItem::kDebugDrawing, std::move(record));
-
-  // Create a PaintChunk for the debug drawing.
-  current_paint_artifact_->PaintChunks().emplace_back(
-      display_item_list.size() - 1, display_item_list.size(),
-      display_item.GetId(), property_tree_state);
+  current_paint_artifact_->AppendDebugDrawing(record, property_tree_state);
 }
 
 void PaintController::ShowUnderInvalidationError(
@@ -743,6 +724,9 @@ void PaintController::CheckDuplicatePaintChunkId(const PaintChunk::Id& id) {
   if (IsSkippingCache())
     return;
 
+  if (DisplayItem::IsForeignLayerType(id.type))
+    return;
+
   auto it = new_paint_chunk_indices_by_client_.find(&id.client);
   if (it != new_paint_chunk_indices_by_client_.end()) {
     const auto& indices = it->value;
@@ -758,5 +742,53 @@ void PaintController::CheckDuplicatePaintChunkId(const PaintChunk::Id& id) {
   }
 }
 #endif
+
+size_t PaintController::sum_num_items_ = 0;
+size_t PaintController::sum_num_cached_items_ = 0;
+size_t PaintController::sum_num_indexed_items_ = 0;
+size_t PaintController::sum_num_subsequences_ = 0;
+size_t PaintController::sum_num_cached_subsequences_ = 0;
+
+void PaintController::UpdateUMACounts() {
+  DCHECK_EQ(usage_, kMultiplePaints);
+  sum_num_items_ += new_display_item_list_.size();
+  sum_num_cached_items_ += num_cached_new_items_;
+  sum_num_indexed_items_ += num_indexed_items_;
+  sum_num_subsequences_ += new_cached_subsequences_.size();
+  sum_num_cached_subsequences_ += num_cached_new_subsequences_;
+}
+
+void PaintController::UpdateUMACountsOnFullyCached() {
+  DCHECK_EQ(usage_, kMultiplePaints);
+  int num_items = GetDisplayItemList().size();
+  sum_num_items_ += num_items;
+  sum_num_cached_items_ += num_items;
+  // Don't change sum_num_indexed_items_.
+
+  int num_subsequences = current_cached_subsequences_.size();
+  sum_num_subsequences_ += num_subsequences;
+  sum_num_cached_subsequences_ += num_subsequences;
+}
+
+void PaintController::ReportUMACounts() {
+  static const int kReportThreshold = 1000;
+  if (sum_num_items_ < kReportThreshold)
+    return;
+
+  UMA_HISTOGRAM_PERCENTAGE("Blink.Paint.CachedItemPercentage",
+                           sum_num_cached_items_ * 100 / sum_num_items_);
+  UMA_HISTOGRAM_PERCENTAGE("Blink.Paint.IndexedItemPercentage",
+                           sum_num_indexed_items_ * 100 / sum_num_items_);
+  if (sum_num_subsequences_) {
+    UMA_HISTOGRAM_PERCENTAGE(
+        "Blink.Paint.CachedSubsequencePercentage",
+        sum_num_cached_subsequences_ * 100 / sum_num_subsequences_);
+  }
+  sum_num_items_ = 0;
+  sum_num_cached_items_ = 0;
+  sum_num_indexed_items_ = 0;
+  sum_num_subsequences_ = 0;
+  sum_num_cached_subsequences_ = 0;
+}
 
 }  // namespace blink

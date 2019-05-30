@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include "base/stl_util.h"
 #include "chromeos/network/network_event_log.h"
 #include "chromeos/network/tether_constants.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
@@ -45,7 +46,7 @@ struct ShillToBitFlagEntry {
                           {kTypeTether, kNetworkTypeTether}};
 
 NetworkTypeBitFlag ShillNetworkTypeToFlag(const std::string& shill_type) {
-  for (size_t i = 0; i < arraysize(shill_type_to_flag); ++i) {
+  for (size_t i = 0; i < base::size(shill_type_to_flag); ++i) {
     if (shill_type_to_flag[i].shill_network_type == shill_type)
       return shill_type_to_flag[i].bit_flag;
   }
@@ -131,8 +132,8 @@ bool NetworkTypePattern::Equals(const NetworkTypePattern& other) const {
 bool NetworkTypePattern::MatchesType(
     const std::string& shill_network_type) const {
   if (shill_network_type.empty()) {
-    LOG(ERROR) << "NetworkTypePattern: " << ToDebugString()
-               << ": Can not match empty type.";
+    NOTREACHED() << "NetworkTypePattern: " << ToDebugString()
+                 << ": Can not match empty type.";
     return false;
   }
   return MatchesPattern(Primitive(shill_network_type));
@@ -165,7 +166,7 @@ std::string NetworkTypePattern::ToDebugString() const {
 
   // Note: shill_type_to_flag includes kTypeTether.
   std::string str;
-  for (size_t i = 0; i < arraysize(shill_type_to_flag); ++i) {
+  for (size_t i = 0; i < base::size(shill_type_to_flag); ++i) {
     if (!(pattern_ & shill_type_to_flag[i].bit_flag))
       continue;
     if (!str.empty())

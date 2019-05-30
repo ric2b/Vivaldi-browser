@@ -9,7 +9,7 @@
  * @return {Event} A key event.
  */
 function DeserializeKeyEvent(dict) {
-  var e = document.createEvent('Event');
+  const e = document.createEvent('Event');
   e.initEvent('keydown', true, true);
   e.keyCode = dict.keyCode;
   e.code = dict.code;
@@ -43,7 +43,11 @@ function SerializeKeyEvent(event) {
  * has finished loading or failed to load.
  * @enum {string}
  */
-var LoadState = {LOADING: 'loading', SUCCESS: 'success', FAILED: 'failed'};
+const LoadState = {
+  LOADING: 'loading',
+  SUCCESS: 'success',
+  FAILED: 'failed'
+};
 
 /**
  * Create a new PDFScriptingAPI. This provides a scripting interface to
@@ -76,28 +80,33 @@ function PDFScriptingAPI(window, plugin) {
          *   viewportHeight: number
          * }}
          */
-        var viewportData = event.data;
-        if (this.viewportChangedCallback_)
+        const viewportData = event.data;
+        if (this.viewportChangedCallback_) {
           this.viewportChangedCallback_(
               viewportData.pageX, viewportData.pageY, viewportData.pageWidth,
               viewportData.viewportWidth, viewportData.viewportHeight);
+        }
         break;
-      case 'documentLoaded':
-        var data = /** @type {{load_state: LoadState}} */ (event.data);
+      case 'documentLoaded': {
+        const data = /** @type {{load_state: LoadState}} */ (event.data);
         this.loadState_ = data.load_state;
-        if (this.loadCallback_)
+        if (this.loadCallback_) {
           this.loadCallback_(this.loadState_ == LoadState.SUCCESS);
+        }
         break;
-      case 'getSelectedTextReply':
-        var data = /** @type {{selectedText: string}} */ (event.data);
+      }
+      case 'getSelectedTextReply': {
+        const data = /** @type {{selectedText: string}} */ (event.data);
         if (this.selectedTextCallback_) {
           this.selectedTextCallback_(data.selectedText);
           this.selectedTextCallback_ = null;
         }
         break;
+      }
       case 'sendKeyEvent':
-        if (this.keyEventCallback_)
+        if (this.keyEventCallback_) {
           this.keyEventCallback_(DeserializeKeyEvent(event.data.keyEvent));
+        }
         break;
     }
   }, false);
@@ -113,10 +122,11 @@ PDFScriptingAPI.prototype = {
    * @private
    */
   sendMessage_: function(message) {
-    if (this.plugin_)
+    if (this.plugin_) {
       this.plugin_.postMessage(message, '*');
-    else
+    } else {
       this.pendingScriptingMessages_.push(message);
+    }
   },
 
   /**
@@ -133,8 +143,9 @@ PDFScriptingAPI.prototype = {
       // allows us to receive messages.
       this.sendMessage_({type: 'initialize'});
       // Flush pending messages.
-      while (this.pendingScriptingMessages_.length > 0)
+      while (this.pendingScriptingMessages_.length > 0) {
         this.sendMessage_(this.pendingScriptingMessages_.shift());
+      }
     }
   },
 
@@ -155,8 +166,9 @@ PDFScriptingAPI.prototype = {
    */
   setLoadCallback: function(callback) {
     this.loadCallback_ = callback;
-    if (this.loadState_ != LoadState.LOADING && this.loadCallback_)
+    if (this.loadState_ != LoadState.LOADING && this.loadCallback_) {
       this.loadCallback_(this.loadState_ == LoadState.SUCCESS);
+    }
   },
 
   /**
@@ -213,8 +225,9 @@ PDFScriptingAPI.prototype = {
    *     outstanding request for selected text that has not been answered.
    */
   getSelectedText: function(callback) {
-    if (this.selectedTextCallback_)
+    if (this.selectedTextCallback_) {
       return false;
+    }
     this.selectedTextCallback_ = callback;
     this.sendMessage_({type: 'getSelectedText'});
     return true;
@@ -236,6 +249,14 @@ PDFScriptingAPI.prototype = {
     this.sendMessage_(
         {type: 'sendKeyEvent', keyEvent: SerializeKeyEvent(keyEvent)});
   },
+
+  /**
+   * @param {number} scrollX The amount to horizontally scroll in pixels.
+   * @param {number} scrollY The amount to vertically scroll in pixels.
+   */
+  scrollPosition: function(scrollX, scrollY) {
+    this.sendMessage_({type: 'scrollPosition', x: scrollX, y: scrollY});
+  },
 };
 
 /**
@@ -249,8 +270,8 @@ PDFScriptingAPI.prototype = {
  * @return {HTMLIFrameElement} the iframe element containing the PDF viewer.
  */
 function PDFCreateOutOfProcessPlugin(src, baseUrl) {
-  var client = new PDFScriptingAPI(window, null);
-  var iframe = assertInstanceof(
+  const client = new PDFScriptingAPI(window, null);
+  const iframe = assertInstanceof(
       window.document.createElement('iframe'), HTMLIFrameElement);
   iframe.setAttribute('src', baseUrl + '/index.html?' + src);
   // Prevent the frame from being tab-focusable.
@@ -268,5 +289,6 @@ function PDFCreateOutOfProcessPlugin(src, baseUrl) {
   iframe.resetPrintPreviewMode = client.resetPrintPreviewMode.bind(client);
   iframe.loadPreviewPage = client.loadPreviewPage.bind(client);
   iframe.sendKeyEvent = client.sendKeyEvent.bind(client);
+  iframe.scrollPosition = client.scrollPosition.bind(client);
   return iframe;
 }

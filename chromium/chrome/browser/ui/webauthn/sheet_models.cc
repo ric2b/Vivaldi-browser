@@ -4,17 +4,22 @@
 
 #include "chrome/browser/ui/webauthn/sheet_models.h"
 
-#include <vector>
+#include <memory>
+#include <utility>
 
 #include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/webauthn/other_transports_menu_model.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/url_formatter/elide_url.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/text_utils.h"
+#include "url/gurl.h"
 
 // AuthenticatorSheetModelBase ------------------------------------------------
 
@@ -86,8 +91,18 @@ void AuthenticatorSheetModelBase::OnCancel() {
 }
 
 base::string16 AuthenticatorSheetModelBase::GetRelyingPartyIdString() const {
-  DCHECK(!dialog_model()->transport_availability()->rp_id.empty());
-  return base::UTF8ToUTF16(dialog_model()->transport_availability()->rp_id);
+  static constexpr char kRpIdUrlPrefix[] = "https://";
+  // The preferred width of medium snap point modal dialog view is 448 dp, but
+  // we leave some room for padding between the text and the modal views.
+  static constexpr int kDialogWidth = 300;
+  const auto& rp_id = dialog_model()->transport_availability()->rp_id;
+  DCHECK(!rp_id.empty());
+  GURL rp_id_url(kRpIdUrlPrefix + rp_id);
+  auto max_static_string_length = gfx::GetStringWidthF(
+      l10n_util::GetStringUTF16(IDS_WEBAUTHN_GENERIC_TITLE), gfx::FontList(),
+      gfx::Typesetter::DEFAULT);
+  return url_formatter::ElideHost(rp_id_url, gfx::FontList(),
+                                  kDialogWidth - max_static_string_length);
 }
 
 void AuthenticatorSheetModelBase::OnModelDestroyed() {
@@ -258,7 +273,7 @@ gfx::ImageSkia* AuthenticatorNotRegisteredErrorModel::GetStepIllustration()
 }
 
 base::string16 AuthenticatorNotRegisteredErrorModel::GetStepTitle() const {
-  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_ERROR_WRONG_KEY_SIGN_TITLE);
+  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_ERROR_WRONG_KEY_TITLE);
 }
 
 base::string16 AuthenticatorNotRegisteredErrorModel::GetStepDescription()
@@ -284,7 +299,7 @@ gfx::ImageSkia* AuthenticatorAlreadyRegisteredErrorModel::GetStepIllustration()
 }
 
 base::string16 AuthenticatorAlreadyRegisteredErrorModel::GetStepTitle() const {
-  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_ERROR_WRONG_KEY_REGISTER_TITLE);
+  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_ERROR_WRONG_KEY_TITLE);
 }
 
 base::string16 AuthenticatorAlreadyRegisteredErrorModel::GetStepDescription()
@@ -424,6 +439,11 @@ base::string16 AuthenticatorBlePairingBeginSheetModel::GetAcceptButtonLabel()
   return l10n_util::GetStringUTF16(IDS_WEBAUTHN_BLE_PAIRING_BEGIN_NEXT);
 }
 
+void AuthenticatorBlePairingBeginSheetModel::OnAccept() {
+  dialog_model()->SetCurrentStep(
+      AuthenticatorRequestDialogModel::Step::kBleDeviceSelection);
+}
+
 // AuthenticatorBleEnterPairingModeSheetModel ---------------------------------
 
 gfx::ImageSkia*
@@ -466,14 +486,25 @@ base::string16 AuthenticatorBleDeviceSelectionSheetModel::GetStepDescription()
 
 // AuthenticatorBlePinEntrySheetModel -----------------------------------------
 
+void AuthenticatorBlePinEntrySheetModel::SetPinCode(base::string16 pin_code) {
+  pin_code_ = std::move(pin_code);
+}
+
 gfx::ImageSkia* AuthenticatorBlePinEntrySheetModel::GetStepIllustration()
     const {
   return GetImage(IDR_WEBAUTHN_ILLUSTRATION_BLE_PIN);
 }
 
 base::string16 AuthenticatorBlePinEntrySheetModel::GetStepTitle() const {
-  return l10n_util::GetStringFUTF16(IDS_WEBAUTHN_BLE_PIN_ENTRY_TITLE,
-                                    GetRelyingPartyIdString());
+  const auto& authenticator_id = dialog_model()->selected_authenticator_id();
+  DCHECK(authenticator_id);
+  const auto* ble_authenticator =
+      dialog_model()->saved_authenticators().GetAuthenticator(
+          *authenticator_id);
+  DCHECK(ble_authenticator);
+  return l10n_util::GetStringFUTF16(
+      IDS_WEBAUTHN_BLE_PIN_ENTRY_TITLE,
+      ble_authenticator->authenticator_display_name());
 }
 
 base::string16 AuthenticatorBlePinEntrySheetModel::GetStepDescription() const {
@@ -491,6 +522,10 @@ bool AuthenticatorBlePinEntrySheetModel::IsAcceptButtonEnabled() const {
 base::string16 AuthenticatorBlePinEntrySheetModel::GetAcceptButtonLabel()
     const {
   return l10n_util::GetStringUTF16(IDS_WEBAUTHN_BLE_PIN_ENTRY_NEXT);
+}
+
+void AuthenticatorBlePinEntrySheetModel::OnAccept() {
+  dialog_model()->FinishPairingWithPin(pin_code_);
 }
 
 // AuthenticatorBleVerifyingSheetModel ----------------------------------------
@@ -627,4 +662,104 @@ base::string16 AuthenticatorPaaskSheetModel::GetStepDescription() const {
 
 ui::MenuModel* AuthenticatorPaaskSheetModel::GetOtherTransportsMenuModel() {
   return other_transports_menu_model_.get();
+}
+
+// AuthenticatorClientPinEntrySheetModel
+// -----------------------------------------
+
+AuthenticatorClientPinEntrySheetModel::AuthenticatorClientPinEntrySheetModel(
+    AuthenticatorRequestDialogModel* dialog_model,
+    Mode mode)
+    : AuthenticatorSheetModelBase(dialog_model), mode_(mode) {}
+
+AuthenticatorClientPinEntrySheetModel::
+    ~AuthenticatorClientPinEntrySheetModel() = default;
+
+void AuthenticatorClientPinEntrySheetModel::SetDelegate(Delegate* delegate) {
+  DCHECK(!delegate_);
+  delegate_ = delegate;
+}
+
+void AuthenticatorClientPinEntrySheetModel::SetPinCode(
+    base::string16 pin_code) {
+  pin_code_ = std::move(pin_code);
+}
+
+void AuthenticatorClientPinEntrySheetModel::SetPinConfirmation(
+    base::string16 pin_confirmation) {
+  DCHECK(mode_ == AuthenticatorClientPinEntrySheetModel::Mode::kPinSetup);
+  pin_confirmation_ = std::move(pin_confirmation);
+}
+
+gfx::ImageSkia* AuthenticatorClientPinEntrySheetModel::GetStepIllustration()
+    const {
+  return GetImage(IDR_WEBAUTHN_ILLUSTRATION_PIN);
+}
+
+base::string16 AuthenticatorClientPinEntrySheetModel::GetStepTitle() const {
+  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_PIN_ENTRY_TITLE);
+}
+
+base::string16 AuthenticatorClientPinEntrySheetModel::GetStepDescription()
+    const {
+  return l10n_util::GetStringUTF16(
+      mode_ == AuthenticatorClientPinEntrySheetModel::Mode::kPinEntry
+          ? IDS_WEBAUTHN_PIN_ENTRY_DESCRIPTION
+          : IDS_WEBAUTHN_PIN_SETUP_DESCRIPTION);
+}
+
+bool AuthenticatorClientPinEntrySheetModel::IsAcceptButtonVisible() const {
+  return true;
+}
+
+bool AuthenticatorClientPinEntrySheetModel::IsAcceptButtonEnabled() const {
+  return true;
+}
+
+base::string16 AuthenticatorClientPinEntrySheetModel::GetAcceptButtonLabel()
+    const {
+  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_PIN_ENTRY_NEXT);
+}
+
+static bool IsValidUTF16(const base::string16& str16) {
+  std::string unused_str8;
+  return base::UTF16ToUTF8(str16.c_str(), str16.size(), &unused_str8);
+}
+
+void AuthenticatorClientPinEntrySheetModel::OnAccept() {
+  // TODO(martinkr): use device::pin::kMinLength once landed.
+  constexpr size_t kMinPinLength = 4;
+  if (!delegate_) {
+    NOTREACHED();
+    return;
+  }
+  if (mode_ == AuthenticatorClientPinEntrySheetModel::Mode::kPinSetup) {
+    // Validate a new PIN.
+    base::Optional<base::string16> error;
+    if (!pin_code_.empty() && !IsValidUTF16(pin_code_)) {
+      error = l10n_util::GetStringUTF16(
+          IDS_WEBAUTHN_PIN_ENTRY_ERROR_INVALID_CHARACTERS);
+    } else if (pin_code_.size() < kMinPinLength) {
+      error = l10n_util::GetStringUTF16(IDS_WEBAUTHN_PIN_ENTRY_ERROR_TOO_SHORT);
+    } else if (pin_code_ != pin_confirmation_) {
+      error = l10n_util::GetStringUTF16(IDS_WEBAUTHN_PIN_ENTRY_ERROR_MISMATCH);
+    }
+    if (error) {
+      delegate_->ShowPinError(*error);
+      return;
+    }
+  } else {
+    // Submit PIN to authenticator for verification.
+    DCHECK(mode_ == AuthenticatorClientPinEntrySheetModel::Mode::kPinEntry);
+    // TODO: use device::pin::IsValid instead.
+    if (pin_code_.size() < kMinPinLength) {
+      delegate_->ShowPinError(
+          l10n_util::GetStringUTF16(IDS_WEBAUTHN_PIN_ENTRY_ERROR_TOO_SHORT));
+      return;
+    }
+  }
+
+  if (dialog_model()) {
+    dialog_model()->OnHavePIN(base::UTF16ToUTF8(pin_code_));
+  }
 }

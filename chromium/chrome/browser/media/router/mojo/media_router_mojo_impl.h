@@ -14,7 +14,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "base/containers/hash_tables.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -70,11 +69,9 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
   void TerminateRoute(const MediaRoute::Id& route_id) final;
   void DetachRoute(const MediaRoute::Id& route_id) final;
   void SendRouteMessage(const MediaRoute::Id& route_id,
-                        const std::string& message,
-                        SendRouteMessageCallback callback) final;
+                        const std::string& message) final;
   void SendRouteBinaryMessage(const MediaRoute::Id& route_id,
-                              std::unique_ptr<std::vector<uint8_t>> data,
-                              SendRouteMessageCallback callback) final;
+                              std::unique_ptr<std::vector<uint8_t>> data) final;
   void OnUserGesture() override;
   void SearchSinks(const MediaSink::Id& sink_id,
                    const MediaSource::Id& source_id,
@@ -364,6 +361,10 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
   void GetMirroringServiceHostForDesktop(
       int32_t initiator_tab_id,
       const std::string& desktop_stream_id,
+      mirroring::mojom::MirroringServiceHostRequest request) override;
+  void GetMirroringServiceHostForOffscreenTab(
+      const GURL& presentation_url,
+      const std::string& presentation_id,
       mirroring::mojom::MirroringServiceHostRequest request) override;
 
   // Result callback when Mojo TerminateRoute is invoked.

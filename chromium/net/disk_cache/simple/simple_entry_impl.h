@@ -79,14 +79,20 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
 
   // Adds another reader/writer to this entry, if possible, returning |this| to
   // |entry|.
-  int OpenEntry(Entry** entry, CompletionOnceCallback callback);
+  net::Error OpenEntry(Entry** entry, CompletionOnceCallback callback);
 
   // Creates this entry, if possible. Returns |this| to |entry|.
-  int CreateEntry(Entry** entry, CompletionOnceCallback callback);
+  net::Error CreateEntry(Entry** entry, CompletionOnceCallback callback);
+
+  // Opens an existing entry or creates a new one. Returns |this| to
+  // |entry_struct->entry|, and sets |entry_struct->opened| based on what op was
+  // actually performed.
+  net::Error OpenOrCreateEntry(EntryWithOpened* entry_struct,
+                               CompletionOnceCallback callback);
 
   // Identical to Backend::Doom() except that it accepts a
   // CompletionOnceCallback.
-  int DoomEntry(CompletionOnceCallback callback);
+  net::Error DoomEntry(CompletionOnceCallback callback);
 
   const std::string& key() const { return key_; }
   uint64_t entry_hash() const { return entry_hash_; }
@@ -107,6 +113,8 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
   void Doom() override;
   void Close() override;
   std::string GetKey() const override;
+  // GetLastUsed() should not be called in net::APP_CACHE mode since the times
+  // are not updated.
   base::Time GetLastUsed() const override;
   base::Time GetLastModified() const override;
   int32_t GetDataSize(int index) const override;
@@ -135,7 +143,7 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
                         CompletionOnceCallback callback) override;
   bool CouldBeSparse() const override;
   void CancelSparseIO() override;
-  int ReadyForSparseIO(CompletionOnceCallback callback) override;
+  net::Error ReadyForSparseIO(CompletionOnceCallback callback) override;
   void SetLastUsedTimeForTest(base::Time time) override;
 
   // Returns the estimate of dynamically allocated memory in bytes.
@@ -226,6 +234,10 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
                            CompletionOnceCallback callback,
                            Entry** out_entry);
 
+  void OpenOrCreateEntryInternal(OpenEntryIndexEnum index_state,
+                                 CompletionOnceCallback callback,
+                                 EntryWithOpened* entry_struct);
+
   void CloseInternal();
 
   int ReadDataInternal(bool sync_possible,
@@ -266,14 +278,17 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
   void CreationOperationComplete(
       CompletionOnceCallback completion_callback,
       const base::TimeTicks& start_time,
+      const base::Time index_last_used_time,
       std::unique_ptr<SimpleEntryCreationResults> in_results,
       Entry** out_entry,
+      bool* out_opened,
       net::NetLogEventType end_event_type);
 
   // Called after we've closed and written the EOF record to our entry. Until
   // this point it hasn't been safe to OpenEntry() the same entry, but from this
   // point it is.
-  void CloseOperationComplete();
+  void CloseOperationComplete(
+      std::unique_ptr<SimpleEntryCloseResults> in_results);
 
   // Internal utility method used by other completion methods. Calls
   // |completion_callback| after updating state and dooming on errors.
@@ -361,7 +376,7 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
   const base::FilePath path_;
   const uint64_t entry_hash_;
   const bool use_optimistic_operations_;
-  bool is_initial_stream1_read_;  // used for metrics only.
+  bool is_initial_stream1_read_ = true;  // used for metrics only.
   std::string key_;
 
   // |last_used_|, |last_modified_| and |data_size_| are copied from the
@@ -370,22 +385,22 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
   base::Time last_used_;
   base::Time last_modified_;
   int32_t data_size_[kSimpleEntryStreamCount];
-  int32_t sparse_data_size_;
+  int32_t sparse_data_size_ = 0;
 
   // Number of times this object has been returned from Backend::OpenEntry() and
   // Backend::CreateEntry() without subsequent Entry::Close() calls. Used to
   // notify the backend when this entry not used by any callers.
-  int open_count_;
+  int open_count_ = 0;
 
-  DoomState doom_state_;
+  DoomState doom_state_ = DOOM_NONE;
 
   enum {
     CREATE_NORMAL,
     CREATE_OPTIMISTIC_PENDING_DOOM,
     CREATE_OPTIMISTIC_PENDING_DOOM_FOLLOWED_BY_DOOM,
-  } optimistic_create_pending_doom_state_;
+  } optimistic_create_pending_doom_state_ = CREATE_NORMAL;
 
-  State state_;
+  State state_ = STATE_UNINITIALIZED;
 
   // When possible, we compute a crc32, for the data in each entry as we read or
   // write. For each stream, |crc32s_[index]| is the crc32 of that stream from
@@ -412,7 +427,7 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
   // an operation is being executed no one owns the synchronous entry. Therefore
   // SimpleEntryImpl should not be deleted while an operation is running as that
   // would leak the SimpleSynchronousEntry.
-  SimpleSynchronousEntry* synchronous_entry_;
+  SimpleSynchronousEntry* synchronous_entry_ = nullptr;
 
   scoped_refptr<net::PrioritizedTaskRunner> prioritized_task_runner_;
 

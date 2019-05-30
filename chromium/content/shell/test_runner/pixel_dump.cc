@@ -16,8 +16,8 @@
 #include "base/trace_event/trace_event.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/skia_paint_canvas.h"
-#include "content/shell/common/layout_test/layout_test_utils.h"
-#include "content/shell/test_runner/layout_test_runtime_flags.h"
+#include "content/shell/common/web_test/web_test_utils.h"
+#include "content/shell/test_runner/web_test_runtime_flags.h"
 #include "services/service_manager/public/cpp/connector.h"
 // FIXME: Including platform_canvas.h here is a layering violation.
 #include "skia/ext/platform_canvas.h"
@@ -30,6 +30,8 @@
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_page_popup.h"
 #include "third_party/blink/public/web/web_print_params.h"
+#include "third_party/blink/public/web/web_view.h"
+#include "third_party/blink/public/web/web_widget.h"
 #include "ui/gfx/geometry/point.h"
 
 namespace test_runner {
@@ -61,7 +63,7 @@ void DrawSelectionRect(
     const blink::WebRect& wr,
     base::OnceCallback<void(const SkBitmap&)> original_callback,
     const SkBitmap& bitmap) {
-  content::layout_test_utils::DrawSelectionRect(bitmap, wr);
+  content::web_test_utils::DrawSelectionRect(bitmap, wr);
   std::move(original_callback).Run(bitmap);
 }
 
@@ -69,7 +71,8 @@ void CapturePixelsForPrinting(
     blink::WebLocalFrame* web_frame,
     base::OnceCallback<void(const SkBitmap&)> callback) {
   auto* frame_widget = web_frame->LocalRoot()->FrameWidget();
-  frame_widget->UpdateAllLifecyclePhases();
+  frame_widget->UpdateAllLifecyclePhases(
+      blink::WebWidget::LifecycleUpdateReason::kTest);
 
   blink::WebSize page_size_in_pixels = frame_widget->Size();
 
@@ -134,13 +137,16 @@ void DumpPixelsAsync(blink::WebLocalFrame* web_frame,
   auto did_readback = base::BindRepeating(
       &CaptureCallback::DidCompositeAndReadback, capture_callback);
   web_widget->CompositeAndReadbackAsync(did_readback);
-  if (blink::WebPagePopup* popup = web_widget->GetPagePopup()) {
-    capture_callback->set_wait_for_popup(true);
-    blink::WebPoint position = popup->PositionRelativeToOwner();
-    position.x *= device_scale_factor_for_test;
-    position.y *= device_scale_factor_for_test;
-    capture_callback->set_popup_position(position);
-    popup->CompositeAndReadbackAsync(did_readback);
+  // The current PagePopup is composited together with the main frame.
+  if (!web_frame->Parent()) {
+    if (blink::WebPagePopup* popup = web_frame->View()->GetPagePopup()) {
+      capture_callback->set_wait_for_popup(true);
+      blink::WebPoint position = popup->PositionRelativeToOwner();
+      position.x *= device_scale_factor_for_test;
+      position.y *= device_scale_factor_for_test;
+      capture_callback->set_popup_position(position);
+      popup->CompositeAndReadbackAsync(did_readback);
+    }
   }
 }
 

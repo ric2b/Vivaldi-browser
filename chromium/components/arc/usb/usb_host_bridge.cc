@@ -166,6 +166,14 @@ void ArcUsbHostBridge::OpenDevice(const std::string& guid,
                    base::Bind(&OnDeviceOpenError, repeating_callback));
 }
 
+void ArcUsbHostBridge::OpenDeviceDeprecated(
+    const std::string& guid,
+    const base::Optional<std::string>& package,
+    OpenDeviceCallback callback) {
+  LOG(ERROR) << "ArcUsbHostBridge::OpenDeviceDeprecated is deprecated";
+  OpenDevice(guid, package, std::move(callback));
+}
+
 void ArcUsbHostBridge::GetDeviceInfo(const std::string& guid,
                                      GetDeviceInfoCallback callback) {
   if (!usb_service_) {
@@ -211,7 +219,7 @@ void ArcUsbHostBridge::OnDeviceAdded(scoped_refptr<device::UsbDevice> device) {
 void ArcUsbHostBridge::OnDeviceRemoved(
     scoped_refptr<device::UsbDevice> device) {
   mojom::UsbHostInstance* usb_host_instance = ARC_GET_INSTANCE_FOR_METHOD(
-      arc_bridge_service_->usb_host(), OnDeviceAdded);
+      arc_bridge_service_->usb_host(), OnDeviceRemoved);
 
   if (!usb_host_instance) {
     VLOG(2) << "UsbInstance not ready yet";

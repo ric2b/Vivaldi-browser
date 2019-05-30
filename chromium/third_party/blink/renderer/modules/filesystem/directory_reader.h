@@ -46,9 +46,10 @@ class DirectoryReader : public DirectoryReaderBase {
  public:
   static DirectoryReader* Create(DOMFileSystemBase* file_system,
                                  const String& full_path) {
-    return new DirectoryReader(file_system, full_path);
+    return MakeGarbageCollected<DirectoryReader>(file_system, full_path);
   }
 
+  DirectoryReader(DOMFileSystemBase*, const String& full_path);
   ~DirectoryReader() override = default;
 
   void readEntries(V8EntriesCallback*, V8ErrorCallback* = nullptr);
@@ -63,15 +64,13 @@ class DirectoryReader : public DirectoryReaderBase {
   class EntriesCallbackHelper;
   class ErrorCallbackHelper;
 
-  DirectoryReader(DOMFileSystemBase*, const String& full_path);
-
   void AddEntries(const EntryHeapVector& entries);
 
-  void OnError(FileError::ErrorCode);
+  void OnError(base::File::Error error);
 
   bool is_reading_;
   EntryHeapVector entries_;
-  FileError::ErrorCode error_ = FileError::ErrorCode::kOK;
+  base::File::Error error_ = base::File::FILE_OK;
   Member<V8PersistentCallbackInterface<V8EntriesCallback>> entries_callback_;
   Member<V8PersistentCallbackInterface<V8ErrorCallback>> error_callback_;
 };

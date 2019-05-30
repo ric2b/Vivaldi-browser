@@ -5,7 +5,7 @@
 #ifndef IOS_CHROME_BROWSER_UI_OMNIBOX_OMNIBOX_TEXT_FIELD_IOS_H_
 #define IOS_CHROME_BROWSER_UI_OMNIBOX_OMNIBOX_TEXT_FIELD_IOS_H_
 
-#import "ios/chrome/browser/ui/omnibox/clipping_textfield.h"
+#import <UIKit/UIKit.h>
 
 #include "base/strings/string16.h"
 #import "ios/chrome/browser/ui/commands/omnibox_suggestion_commands.h"
@@ -18,22 +18,12 @@ typedef enum {
 } OmniboxTextFieldFadeStyle;
 
 // UITextField subclass to allow for adjusting borders.
-@interface OmniboxTextFieldIOS : ClippingTextField
+@interface OmniboxTextFieldIOS : UITextField
 
-// Initialize the omnibox with the given frame, font, text color, and tint
-// color.
+// Initialize the omnibox with the given frame, text color, and tint color.
 - (instancetype)initWithFrame:(CGRect)frame
-                         font:(UIFont*)font
                     textColor:(UIColor*)textColor
                     tintColor:(UIColor*)tintColor NS_DESIGNATED_INITIALIZER;
-
-// Initializer that allows specifying a larger font to use in Regular x Regular
-// size class.
-- (instancetype)initWithFrame:(CGRect)frame
-                         font:(UIFont*)font
-                   largerFont:(UIFont*)largerFont
-                    textColor:(UIColor*)textColor
-                    tintColor:(UIColor*)tintColor;
 
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 
@@ -89,12 +79,6 @@ typedef enum {
 // Called when animations added by |-animateFadeWithStyle:| can be removed.
 - (void)cleanUpFadeAnimations;
 
-// New animations API, currently behind clean-toolbar flag.
-// They replace all animations above.
-- (void)addExpandOmniboxAnimations:(UIViewPropertyAnimator*)animator
-                completionAnimator:(UIViewPropertyAnimator*)completionAnimator;
-- (void)addContractOmniboxAnimations:(UIViewPropertyAnimator*)animator;
-
 // Returns an x offset for a given string. If no such string is found, returns
 // some default offset.
 // Used for focus/defocus animation.
@@ -121,7 +105,7 @@ typedef enum {
 @property(nonatomic, strong) NSString* preEditText;
 
 @property(nonatomic) BOOL clearingPreEditText;
-@property(nonatomic, strong) UIColor* selectedTextBackgroundColor;
+@property(nonatomic, readonly, strong) UIColor* selectedTextBackgroundColor;
 @property(nonatomic, strong) UIColor* placeholderTextColor;
 @property(nonatomic, assign) BOOL incognito;
 

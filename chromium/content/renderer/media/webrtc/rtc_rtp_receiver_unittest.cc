@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
@@ -22,8 +23,8 @@
 #include "third_party/blink/public/platform/web_rtc_stats.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/web_heap.h"
+#include "third_party/webrtc/api/stats/rtc_stats_report.h"
 #include "third_party/webrtc/api/stats/rtcstats_objects.h"
-#include "third_party/webrtc/api/stats/rtcstatsreport.h"
 #include "third_party/webrtc/api/test/mock_rtpreceiver.h"
 
 namespace content {
@@ -82,7 +83,8 @@ class RTCRtpReceiverTest : public ::testing::Test {
   scoped_refptr<WebRTCStatsReportObtainer> GetStats() {
     scoped_refptr<WebRTCStatsReportObtainer> obtainer =
         new WebRTCStatsReportObtainer();
-    receiver_->GetStats(obtainer->GetStatsCallbackWrapper());
+    receiver_->GetStats(obtainer->GetStatsCallbackWrapper(),
+                        blink::RTCStatsFilter::kIncludeOnlyStandardMembers);
     return obtainer;
   }
 

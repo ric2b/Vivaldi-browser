@@ -39,7 +39,6 @@
 .gdb_history
 .gdbinit
 .landmines
-.linux-sysroot/
 .metadata
 .project
 .pydevproject

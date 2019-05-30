@@ -5,12 +5,17 @@
 #include "chrome/browser/engagement/site_engagement_service.h"
 
 #include <algorithm>
+#include <map>
+#include <string>
 #include <utility>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
+#include "base/task/post_task.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
 #include "base/values.h"
@@ -19,6 +24,7 @@
 #include "chrome/browser/engagement/site_engagement_metrics.h"
 #include "chrome/browser/engagement/site_engagement_observer.h"
 #include "chrome/browser/engagement/site_engagement_score.h"
+#include "chrome/browser/engagement/site_engagement_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
@@ -33,11 +39,13 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/test/test_history_database.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/navigation_simulator.h"
+#include "content/public/test/test_utils.h"
 #include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -163,8 +171,14 @@ class SiteEngagementServiceTest : public ChromeRenderViewHostTestHarness {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     g_temp_history_dir = temp_dir_.GetPath();
     HistoryServiceFactory::GetInstance()->SetTestingFactory(
-        profile(), &BuildTestHistoryService);
+        profile(), base::BindRepeating(&BuildTestHistoryService));
     SiteEngagementScore::SetParamValuesForTesting();
+
+    // Ensure that we have just one SiteEngagementService: no service created
+    // with TestingProfile.
+    // (See KeyedServiceBaseFactory::ServiceIsCreatedWithContext).
+    DCHECK(!SiteEngagementServiceFactory::GetForProfileIfExists(profile()));
+
     service_ = base::WrapUnique(new SiteEngagementService(profile(), &clock_));
   }
 
@@ -212,12 +226,13 @@ class SiteEngagementServiceTest : public ChromeRenderViewHostTestHarness {
       const GURL& url) {
     double score = 0;
     base::RunLoop run_loop;
-    content::BrowserThread::GetTaskRunnerForThread(thread_id)->PostTaskAndReply(
-        FROM_HERE,
-        base::BindOnce(&SiteEngagementServiceTest::CheckScoreFromSettings,
-                       base::Unretained(this), base::RetainedRef(settings_map),
-                       url, &score),
-        run_loop.QuitClosure());
+    base::CreateSingleThreadTaskRunnerWithTraits({thread_id})
+        ->PostTaskAndReply(
+            FROM_HERE,
+            base::BindOnce(&SiteEngagementServiceTest::CheckScoreFromSettings,
+                           base::Unretained(this),
+                           base::RetainedRef(settings_map), url, &score),
+            run_loop.QuitClosure());
     run_loop.Run();
     return score;
   }
@@ -251,7 +266,7 @@ class SiteEngagementServiceTest : public ChromeRenderViewHostTestHarness {
  protected:
   void CheckScoreFromSettings(HostContentSettingsMap* settings_map,
                               const GURL& url,
-                              double *score) {
+                              double* score) {
     *score = SiteEngagementService::GetScoreFromSettings(settings_map, url);
   }
 
@@ -567,7 +582,7 @@ TEST_F(SiteEngagementServiceTest, CheckHistograms) {
                               0);
 
   // Record metrics for an empty engagement system.
-  service_->RecordMetrics();
+  service_->RecordMetrics(service_->GetAllDetails());
 
   histograms.ExpectUniqueSample(
       SiteEngagementMetrics::kTotalEngagementHistogram, 0, 1);
@@ -607,6 +622,9 @@ TEST_F(SiteEngagementServiceTest, CheckHistograms) {
                             SiteEngagementService::ENGAGEMENT_MOUSE);
   NavigateAndCommit(url2);
   service_->HandleMediaPlaying(web_contents(), true);
+
+  // Wait until the background metrics recording happens.
+  content::RunAllTasksUntilIdle();
 
   histograms.ExpectTotalCount(SiteEngagementMetrics::kTotalEngagementHistogram,
                               2);
@@ -674,6 +692,9 @@ TEST_F(SiteEngagementServiceTest, CheckHistograms) {
   NavigateAndCommit(url2);
   service_->HandleUserInput(web_contents(),
                             SiteEngagementService::ENGAGEMENT_TOUCH_GESTURE);
+
+  // Wait until the background metrics recording happens.
+  content::RunAllTasksUntilIdle();
 
   histograms.ExpectTotalCount(SiteEngagementMetrics::kTotalEngagementHistogram,
                               3);
@@ -755,6 +776,9 @@ TEST_F(SiteEngagementServiceTest, CheckHistograms) {
 
   clock_.SetNow(clock_.Now() + base::TimeDelta::FromMinutes(60));
   service_->HandleNavigation(web_contents(), ui::PAGE_TRANSITION_TYPED);
+
+  // Wait until the background metrics recording happens.
+  content::RunAllTasksUntilIdle();
 
   histograms.ExpectTotalCount(SiteEngagementMetrics::kTotalEngagementHistogram,
                               4);
@@ -1143,7 +1167,8 @@ TEST_F(SiteEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
     base::CancelableTaskTracker task_tracker;
     // Expire origin1, origin2, origin2a, and origin4's most recent visit.
     history->ExpireHistoryBetween(std::set<GURL>(), yesterday, today,
-                                  base::DoNothing(), &task_tracker);
+                                  /*user_initiated*/ true, base::DoNothing(),
+                                  &task_tracker);
     waiter.Wait();
 
     // origin2 is cleaned up because all its urls are deleted. origin1a and

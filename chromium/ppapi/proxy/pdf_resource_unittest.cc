@@ -32,7 +32,7 @@ TEST_F(PDFResourceTest, SearchString) {
   // Instantiate a resource explicitly so we can specify the locale.
   auto pdf_resource = base::MakeRefCounted<PDFResource>(
       Connection(&sink(), &sink(), 0), pp_instance());
-  pdf_resource->SetLocaleForTest("en-US");
+  pdf_resource->SetLocaleForTest("en-US@collation=search");
 
   base::string16 input;
   base::string16 term;
@@ -136,6 +136,17 @@ TEST_F(PDFResourceTest, SelectionChanged) {
   IPC::Message msg;
   ASSERT_TRUE(sink().GetFirstResourceCallMatching(
       PpapiHostMsg_PDF_SelectionChanged::ID, &params, &msg));
+}
+
+TEST_F(PDFResourceTest, SetPluginCanSave) {
+  const PPB_PDF* pdf_iface = thunk::GetPPB_PDF_Thunk();
+
+  pdf_iface->SetPluginCanSave(pp_instance(), true);
+
+  ResourceMessageCallParams params;
+  IPC::Message msg;
+  ASSERT_TRUE(sink().GetFirstResourceCallMatching(
+      PpapiHostMsg_PDF_SetPluginCanSave::ID, &params, &msg));
 }
 
 }  // namespace proxy

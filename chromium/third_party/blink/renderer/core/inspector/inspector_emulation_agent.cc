@@ -6,7 +6,6 @@
 
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_float_point.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/public/platform/web_touch_event.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -14,12 +13,15 @@
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/inspector/dev_tools_emulator.h"
 #include "third_party/blink/renderer/core/inspector/protocol/DOM.h"
+#include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/geometry/double_rect.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
 #include "third_party/blink/renderer/platform/network/network_utils.h"
-#include "third_party/blink/renderer/platform/scheduler/util/thread_cpu_throttler.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread_cpu_throttler.h"
 #include "third_party/blink/renderer/platform/wtf/time.h"
 
 namespace blink {
@@ -48,7 +50,8 @@ InspectorEmulationAgent::InspectorEmulationAgent(
       virtual_time_offset_(&agent_state_, /*default_value=*/0.0),
       virtual_time_policy_(&agent_state_, /*default_value=*/WTF::String()),
       virtual_time_task_starvation_count_(&agent_state_, /*default_value=*/0),
-      wait_for_navigation_(&agent_state_, /*default_value=*/false) {}
+      wait_for_navigation_(&agent_state_, /*default_value=*/false),
+      emulate_focus_(&agent_state_, /*default_value=*/false) {}
 
 InspectorEmulationAgent::~InspectorEmulationAgent() = default;
 
@@ -85,6 +88,7 @@ void InspectorEmulationAgent::Restore() {
       }
     }
   }
+  setFocusEmulationEnabled(emulate_focus_.Get());
 
   if (virtual_time_policy_.Get().IsNull())
     return;
@@ -124,21 +128,19 @@ void InspectorEmulationAgent::Restore() {
 
 Response InspectorEmulationAgent::disable() {
   if (enabled_)
-    instrumenting_agents_->removeInspectorEmulationAgent(this);
+    instrumenting_agents_->RemoveInspectorEmulationAgent(this);
+  setUserAgentOverride(String(), protocol::Maybe<String>(),
+                       protocol::Maybe<String>());
+  if (!web_local_frame_)
+    return Response::OK();
   setScriptExecutionDisabled(false);
   setScrollbarsHidden(false);
   setDocumentCookieDisabled(false);
   setTouchEmulationEnabled(false, Maybe<int>());
   setEmulatedMedia(String());
   setCPUThrottlingRate(1);
+  setFocusEmulationEnabled(false);
   setDefaultBackgroundColorOverride(Maybe<protocol::DOM::RGBA>());
-  if (virtual_time_setup_) {
-    DCHECK(web_local_frame_);
-    web_local_frame_->View()->Scheduler()->RemoveVirtualTimeObserver(this);
-    virtual_time_setup_ = false;
-  }
-  setUserAgentOverride(String(), protocol::Maybe<String>(),
-                       protocol::Maybe<String>());
   return Response::OK();
 }
 
@@ -227,6 +229,16 @@ Response InspectorEmulationAgent::setCPUThrottlingRate(double rate) {
   return response;
 }
 
+Response InspectorEmulationAgent::setFocusEmulationEnabled(bool enabled) {
+  Response response = AssertPage();
+  if (!response.isSuccess())
+    return response;
+  emulate_focus_.Set(enabled);
+  GetWebViewImpl()->GetPage()->GetFocusController().SetFocusEmulationEnabled(
+      enabled);
+  return response;
+}
+
 Response InspectorEmulationAgent::setVirtualTimePolicy(
     const String& policy,
     Maybe<double> virtual_time_budget_ms,
@@ -282,10 +294,6 @@ Response InspectorEmulationAgent::setVirtualTimePolicy(
   }
 
   InnerEnable();
-  if (!virtual_time_setup_) {
-    web_local_frame_->View()->Scheduler()->AddVirtualTimeObserver(this);
-    virtual_time_setup_ = true;
-  }
 
   // This needs to happen before we apply virtual time.
   if (initial_virtual_time.isJust()) {
@@ -342,19 +350,16 @@ void InspectorEmulationAgent::FrameStartedLoading(LocalFrame*) {
   }
 }
 
-void InspectorEmulationAgent::WillSendRequest(
-    ExecutionContext* execution_context,
-    unsigned long identifier,
+void InspectorEmulationAgent::PrepareRequest(
     DocumentLoader* loader,
     ResourceRequest& request,
-    const ResourceResponse& redirect_response,
     const FetchInitiatorInfo& initiator_info,
-    Resource::Type resource_type) {
+    ResourceType resource_type) {
   if (!accept_language_override_.Get().IsEmpty() &&
       request.HttpHeaderField("Accept-Language").IsEmpty()) {
     request.SetHTTPHeaderField(
         "Accept-Language",
-        AtomicString(NetworkUtils::GenerateAcceptLanguageHeader(
+        AtomicString(network_utils::GenerateAcceptLanguageHeader(
             accept_language_override_.Get())));
   }
 }
@@ -372,23 +377,14 @@ Response InspectorEmulationAgent::setNavigatorOverrides(
 
 void InspectorEmulationAgent::VirtualTimeBudgetExpired() {
   TRACE_EVENT_ASYNC_END0("renderer.scheduler", "VirtualTimeBudget", this);
-  DCHECK(web_local_frame_);
-  web_local_frame_->View()->Scheduler()->SetVirtualTimePolicy(
+  WebView* view = web_local_frame_->View();
+  if (!view)
+    return;
+
+  view->Scheduler()->SetVirtualTimePolicy(
       PageScheduler::VirtualTimePolicy::kPause);
   virtual_time_policy_.Set(protocol::Emulation::VirtualTimePolicyEnum::Pause);
   GetFrontend()->virtualTimeBudgetExpired();
-}
-
-void InspectorEmulationAgent::OnVirtualTimeAdvanced(
-    WTF::TimeDelta virtual_time_offset) {
-  virtual_time_offset_.Set(virtual_time_offset.InMillisecondsF());
-  GetFrontend()->virtualTimeAdvanced(virtual_time_offset.InMillisecondsF());
-}
-
-void InspectorEmulationAgent::OnVirtualTimePaused(
-    WTF::TimeDelta virtual_time_offset) {
-  virtual_time_offset_.Set(virtual_time_offset.InMillisecondsF());
-  GetFrontend()->virtualTimePaused(virtual_time_offset.InMillisecondsF());
 }
 
 Response InspectorEmulationAgent::setDefaultBackgroundColorOverride(
@@ -404,10 +400,9 @@ Response InspectorEmulationAgent::setDefaultBackgroundColorOverride(
   }
 
   blink::protocol::DOM::RGBA* rgba = color.fromJust();
-  default_background_color_override_rgba_.Set(
-      rgba->toValue()->serialize());
+  default_background_color_override_rgba_.Set(rgba->toJSON());
   // Clamping of values is done by Color() constructor.
-  int alpha = lroundf(255.0f * rgba->getA(1.0f));
+  int alpha = static_cast<int>(lroundf(255.0f * rgba->getA(1.0f)));
   GetWebViewImpl()->SetBaseBackgroundColorOverride(
       Color(rgba->getR(), rgba->getG(), rgba->getB(), alpha).Rgb());
   return Response::OK();
@@ -428,14 +423,14 @@ Response InspectorEmulationAgent::setDeviceMetricsOverride(
     Maybe<protocol::Page::Viewport>) {
   // We don't have to do anything other than reply to the client, as the
   // emulation parameters should have already been updated by the handling of
-  // ViewMsg_EnableDeviceEmulation.
+  // WidgetMsg_EnableDeviceEmulation.
   return AssertPage();
 }
 
 Response InspectorEmulationAgent::clearDeviceMetricsOverride() {
   // We don't have to do anything other than reply to the client, as the
   // emulation parameters should have already been cleared by the handling of
-  // ViewMsg_DisableDeviceEmulation.
+  // WidgetMsg_DisableDeviceEmulation.
   return AssertPage();
 }
 
@@ -469,7 +464,7 @@ void InspectorEmulationAgent::InnerEnable() {
   if (enabled_)
     return;
   enabled_ = true;
-  instrumenting_agents_->addInspectorEmulationAgent(this);
+  instrumenting_agents_->AddInspectorEmulationAgent(this);
 }
 
 Response InspectorEmulationAgent::AssertPage() {

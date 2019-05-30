@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
@@ -19,26 +20,27 @@ namespace syncer {
 
 class LocalDeviceInfoProviderImpl : public LocalDeviceInfoProvider {
  public:
-  LocalDeviceInfoProviderImpl(version_info::Channel channel,
-                              const std::string& version,
-                              bool is_tablet);
+  using SigninScopedDeviceIdCallback = base::RepeatingCallback<std::string()>;
+
+  LocalDeviceInfoProviderImpl(
+      version_info::Channel channel,
+      const std::string& version,
+      bool is_tablet,
+      const SigninScopedDeviceIdCallback& signin_scoped_device_id_callback);
   ~LocalDeviceInfoProviderImpl() override;
 
   // LocalDeviceInfoProvider implementation.
+  version_info::Channel GetChannel() const override;
   const DeviceInfo* GetLocalDeviceInfo() const override;
   std::string GetSyncUserAgent() const override;
-  std::string GetLocalSyncCacheGUID() const override;
-  void Initialize(const std::string& cache_guid,
-                  const std::string& signin_scoped_device_id) override;
   std::unique_ptr<Subscription> RegisterOnInitializedCallback(
-      const base::Closure& callback) override;
-  void Clear() override;
+      const base::RepeatingClosure& callback) override;
+
+  void Initialize(const std::string& cache_guid,
+                  const std::string& session_name);
+  void Clear();
 
  private:
-  void InitializeContinuation(const std::string& guid,
-                              const std::string& signin_scoped_device_id,
-                              const std::string& session_name);
-
   // The channel (CANARY, DEV, BETA, etc.) of the current client.
   const version_info::Channel channel_;
 
@@ -49,7 +51,8 @@ class LocalDeviceInfoProviderImpl : public LocalDeviceInfoProvider {
   // devices).
   const bool is_tablet_;
 
-  std::string cache_guid_;
+  const SigninScopedDeviceIdCallback signin_scoped_device_id_callback_;
+
   std::unique_ptr<DeviceInfo> local_device_info_;
   base::CallbackList<void(void)> callback_list_;
 

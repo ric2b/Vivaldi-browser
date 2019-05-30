@@ -12,33 +12,31 @@ import android.support.v7.widget.RecyclerView.AdapterDataObserver;
 import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
-import android.widget.FrameLayout;
 
 import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.compositor.layouts.content.InvalidationAwareThumbnailProvider;
+import org.chromium.chrome.browser.gesturenav.HistoryNavigationLayout;
+import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.ntp.NewTabPage.FakeboxDelegate;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageAdapter;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.suggestions.SuggestionsConfig;
 import org.chromium.chrome.browser.suggestions.SuggestionsDependencyFactory;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
 import org.chromium.chrome.browser.suggestions.TileGroup;
-import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.ViewUtils;
 import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
+import org.chromium.chrome.browser.widget.displaystyle.ViewResizer;
 
 /**
  * The native new tab page, represented by some basic data such as title and url, and an Android
  * View that displays the page.
  */
-public class NewTabPageView extends FrameLayout {
+public class NewTabPageView extends HistoryNavigationLayout {
     private static final String TAG = "NewTabPageView";
 
     private NewTabPageRecyclerView mRecyclerView;
@@ -49,7 +47,7 @@ public class NewTabPageView extends FrameLayout {
     private Tab mTab;
     private SnapScrollHelper mSnapScrollHelper;
     private UiConfig mUiConfig;
-    private Runnable mUpdateSearchBoxOnScrollRunnable;
+    private ViewResizer mRecyclerViewResizer;
 
     private boolean mNewTabPageRecyclerViewChanged;
     private int mSnapshotWidth;
@@ -110,9 +108,11 @@ public class NewTabPageView extends FrameLayout {
      * @param searchProviderHasLogo Whether the search provider has a logo.
      * @param searchProviderIsGoogle Whether the search provider is Google.
      * @param scrollPosition The adapter scroll position to initialize to.
+     * @param constructedTimeNs The timestamp at which the new tab page's construction started.
      */
     public void initialize(NewTabPageManager manager, Tab tab, TileGroup.Delegate tileGroupDelegate,
-            boolean searchProviderHasLogo, boolean searchProviderIsGoogle, int scrollPosition) {
+            boolean searchProviderHasLogo, boolean searchProviderIsGoogle, int scrollPosition,
+            long constructedTimeNs) {
         TraceEvent.begin(TAG + ".initialize()");
         mTab = tab;
         mManager = manager;
@@ -124,13 +124,17 @@ public class NewTabPageView extends FrameLayout {
         // is reparented.
         Runnable closeContextMenuCallback = () -> mTab.getActivity().closeContextMenu();
         mContextMenuManager = new ContextMenuManager(mManager.getNavigationDelegate(),
-                mRecyclerView::setTouchEnabled, closeContextMenuCallback, false);
+                mRecyclerView::setTouchEnabled, closeContextMenuCallback,
+                NewTabPage.CONTEXT_MENU_USER_ACTION_PREFIX);
         mTab.getWindowAndroid().addContextMenuCloseListener(mContextMenuManager);
 
         mNewTabPageLayout.initialize(manager, tab, tileGroupDelegate, searchProviderHasLogo,
                 searchProviderIsGoogle, mRecyclerView, mContextMenuManager, mUiConfig);
 
-        mSnapScrollHelper = new SnapScrollHelper(mManager, mNewTabPageLayout, mRecyclerView);
+        NewTabPageUma.trackTimeToFirstDraw(this, constructedTimeNs);
+
+        mSnapScrollHelper = new SnapScrollHelper(mManager, mNewTabPageLayout);
+        mSnapScrollHelper.setView(mRecyclerView);
         mRecyclerView.setSnapScrollHelper(mSnapScrollHelper);
         addView(mRecyclerView);
 
@@ -145,7 +149,7 @@ public class NewTabPageView extends FrameLayout {
 
                 // Cancel any pending scroll update handling, a new one will be scheduled in
                 // onAnimationFinished().
-                mRecyclerView.removeCallbacks(mUpdateSearchBoxOnScrollRunnable);
+                mSnapScrollHelper.resetSearchBoxOnScroll(false);
 
                 return super.animateMove(holder, fromX, fromY, toX, toY);
             }
@@ -164,16 +168,13 @@ public class NewTabPageView extends FrameLayout {
                 if (viewHolder.itemView == mNewTabPageLayout) {
                     mNewTabPageLayout.setIsViewMoving(false);
                 }
-                mRecyclerView.removeCallbacks(mUpdateSearchBoxOnScrollRunnable);
-                mRecyclerView.post(mUpdateSearchBoxOnScrollRunnable);
+                mSnapScrollHelper.resetSearchBoxOnScroll(true);
             }
         });
 
         Profile profile = Profile.getLastUsedProfile();
         OfflinePageBridge offlinePageBridge =
                 SuggestionsDependencyFactory.getInstance().getOfflinePageBridge(profile);
-
-        mUpdateSearchBoxOnScrollRunnable = mNewTabPageLayout::updateSearchBoxOnScroll;
 
         initializeLayoutChangeListener();
         mNewTabPageLayout.setSearchProviderInfo(searchProviderHasLogo, searchProviderIsGoogle);
@@ -186,6 +187,12 @@ public class NewTabPageView extends FrameLayout {
         newTabPageAdapter.refreshSuggestions();
         mRecyclerView.setAdapter(newTabPageAdapter);
         mRecyclerView.getLinearLayoutManager().scrollToPosition(scrollPosition);
+
+        mRecyclerViewResizer = ViewResizer.createAndAttach(mRecyclerView, mUiConfig,
+                mRecyclerView.getResources().getDimensionPixelSize(
+                        R.dimen.content_suggestions_card_modern_margin),
+                mRecyclerView.getResources().getDimensionPixelSize(
+                        R.dimen.ntp_wide_card_lateral_margins));
 
         setupScrollHandling();
 
@@ -228,6 +235,11 @@ public class NewTabPageView extends FrameLayout {
      */
     NewTabPageLayout getNewTabPageLayout() {
         return mNewTabPageLayout;
+    }
+
+    @Override
+    public boolean wasLastSideSwipeGestureConsumed() {
+        return mRecyclerView.isCardBeingSwiped();
     }
 
     /**
@@ -281,11 +293,6 @@ public class NewTabPageView extends FrameLayout {
         // immediately attached to the window if the RecyclerView is scrolled when the NTP
         // is refocused.
         if (mManager.isLocationBarShownInNTP()) mNewTabPageLayout.updateSearchBoxOnScroll();
-
-        if (FeatureUtilities.isBottomToolbarEnabled()) {
-            ((MarginLayoutParams) getLayoutParams()).bottomMargin =
-                    getResources().getDimensionPixelSize(R.dimen.bottom_toolbar_height);
-        }
     }
 
     /**
@@ -309,82 +316,6 @@ public class NewTabPageView extends FrameLayout {
         mSnapshotHeight = getHeight();
         mSnapshotScrollY = mRecyclerView.computeVerticalScrollOffset();
         mNewTabPageRecyclerViewChanged = false;
-    }
-
-    /**
-     * Scrolls to the top of content suggestions header if one exists. If not, scrolls to the top
-     * of the first article suggestion. Uses scrollToPositionWithOffset to position the suggestions
-     * below the toolbar and not below the status bar.
-     */
-    void scrollToSuggestions() {
-        int scrollPosition = getSuggestionsScrollPosition();
-        // Nothing to scroll to; return early.
-        if (scrollPosition == RecyclerView.NO_POSITION) return;
-
-        // Scrolling doesn't occur if it's called too soon i.e. the ntp hasn't finished loading.
-        if (mTab.isLoading()) {
-            mTab.addObserver(new EmptyTabObserver() {
-                @Override
-                public void onPageLoadFinished(Tab tab) {
-                    mRecyclerView.getLinearLayoutManager().scrollToPositionWithOffset(
-                            scrollPosition, getScrollToSuggestionsOffset());
-                    mTab.removeObserver(this);
-                }
-            });
-            return;
-        }
-
-        mRecyclerView.getLinearLayoutManager().scrollToPositionWithOffset(
-                scrollPosition, getScrollToSuggestionsOffset());
-    }
-
-    /**
-     * Retrieves the position of articles or of their header in the NTP adapter to scroll to.
-     * @return The header's position if a header is present. Otherwise, the first
-     *         suggestion card's position.
-     */
-    private int getSuggestionsScrollPosition() {
-        // Header always exists.
-        if (ChromeFeatureList.isEnabled(
-                    ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER)) {
-            return mRecyclerView.getNewTabPageAdapter().getArticleHeaderPosition();
-        }
-
-        // Only articles are visible. Headers are not present.
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SIMPLIFIED_NTP)) {
-            return mRecyclerView.getNewTabPageAdapter().getFirstSnippetPosition();
-        }
-
-        // With Simplified NTP not enabled, bookmarks/downloads and their headers are added to the
-        // NTP if they're not empty.
-        int scrollPosition = mRecyclerView.getNewTabPageAdapter().getArticleHeaderPosition();
-        return scrollPosition == RecyclerView.NO_POSITION
-                ? mRecyclerView.getNewTabPageAdapter().getFirstSnippetPosition()
-                : scrollPosition;
-    }
-
-    private int getScrollToSuggestionsOffset() {
-        int offset = getResources().getDimensionPixelSize(R.dimen.toolbar_height_no_shadow);
-
-        if (needsExtraOffset()) {
-            offset += getResources().getDimensionPixelSize(
-                              R.dimen.content_suggestions_card_modern_margin)
-                    / 2;
-        }
-        return offset;
-    }
-
-    /**
-     * Checks if extra offset needs to be added for aesthetic reasons.
-     * @return True if modern is enabled (and space exists between each suggestion card) and no
-     *         header is showing.
-     */
-    private boolean needsExtraOffset() {
-        return SuggestionsConfig.useModernLayout()
-                && !ChromeFeatureList.isEnabled(
-                           ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER)
-                && mRecyclerView.getNewTabPageAdapter().getArticleHeaderPosition()
-                == RecyclerView.NO_POSITION;
     }
 
     /**

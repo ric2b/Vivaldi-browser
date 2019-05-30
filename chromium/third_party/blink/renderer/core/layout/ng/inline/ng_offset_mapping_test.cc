@@ -13,8 +13,14 @@
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_test.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 
 namespace blink {
+
+// The spec turned into a discussion that may change. Put this logic on hold
+// until CSSWG resolves the issue.
+// https://github.com/w3c/csswg-drafts/issues/337
+#define SEGMENT_BREAK_TRANSFORMATION_FOR_EAST_ASIAN_WIDTH 0
 
 class NGOffsetMappingTest : public NGLayoutTest {
  protected:
@@ -292,7 +298,7 @@ TEST_F(NGOffsetMappingTest, CollapseZeroWidthSpaces) {
 
   EXPECT_EQ("{4, 5}{}", TestCollapsing(u"text \n", u"\u200Btext"))
       << "Collapsible space before newline does not affect the result.";
-  EXPECT_EQ("{5}{0}", TestCollapsing(u"text\u200B\n", u" text"))
+  EXPECT_EQ("{5}{}", TestCollapsing(u"text\u200B\n", u" text"))
       << "Collapsible space after newline is removed even when the "
          "newline was removed.";
   EXPECT_EQ("{5}{0}", TestCollapsing(u"text\u200B ", u"\ntext"))
@@ -300,6 +306,7 @@ TEST_F(NGOffsetMappingTest, CollapseZeroWidthSpaces) {
          "a zero width space is collapsed to a zero width space.";
 }
 
+#if SEGMENT_BREAK_TRANSFORMATION_FOR_EAST_ASIAN_WIDTH
 TEST_F(NGOffsetMappingTest, CollapseEastAsianWidth) {
   EXPECT_EQ("{1}", TestCollapsing(u"\u4E00\n\u4E00"))
       << "Newline is removed when both sides are Wide.";
@@ -315,6 +322,7 @@ TEST_F(NGOffsetMappingTest, CollapseEastAsianWidth) {
       << "Newline at the beginning of elements is removed "
          "when both sides are Wide.";
 }
+#endif
 
 #define TEST_UNIT(unit, type, owner, dom_start, dom_end, text_content_start, \
                   text_content_end)                                          \
@@ -943,8 +951,7 @@ TEST_F(NGOffsetMappingTest, OneContainerWithLeadingAndTrailingSpaces) {
 
   auto unit_range = result.GetMappingUnitsForDOMRange(
       EphemeralRange(Position::BeforeNode(*span), Position::AfterNode(*span)));
-  EXPECT_EQ(result.GetUnits().begin(), unit_range.begin());
-  EXPECT_EQ(result.GetUnits().end(), unit_range.end());
+  EXPECT_EQ(result.GetUnits().size(), unit_range.size());
 
   EXPECT_EQ(0u, *GetTextContentOffset(Position::BeforeNode(*span)));
   EXPECT_EQ(3u, *GetTextContentOffset(Position::AfterNode(*span)));
@@ -964,8 +971,7 @@ TEST_F(NGOffsetMappingTest, ContainerWithGeneratedContent) {
 
   auto unit_range = result.GetMappingUnitsForDOMRange(
       EphemeralRange(Position::BeforeNode(*span), Position::AfterNode(*span)));
-  EXPECT_EQ(result.GetUnits().begin(), unit_range.begin());
-  EXPECT_EQ(result.GetUnits().end(), unit_range.end());
+  EXPECT_EQ(result.GetUnits().size(), unit_range.size());
 
   // Offset mapping for inline containers skips generated content.
   EXPECT_EQ(3u, *GetTextContentOffset(Position::BeforeNode(*span)));
@@ -1147,6 +1153,40 @@ TEST_F(NGOffsetMappingTest, TextOverflowEllipsis) {
   TEST_UNIT(mapping.GetUnits()[0], NGOffsetMappingUnitType::kIdentity, text, 0u,
             6u, 0u, 6u);
   TEST_RANGE(mapping.GetRanges(), text, 0u, 1u);
+}
+
+// Test |GetOffsetMapping| which is available both for LayoutNG and for legacy.
+class NGOffsetMappingGetterTest : public RenderingTest,
+                                  public testing::WithParamInterface<bool>,
+                                  private ScopedLayoutNGForTest {
+ public:
+  NGOffsetMappingGetterTest() : ScopedLayoutNGForTest(GetParam()) {}
+};
+
+INSTANTIATE_TEST_SUITE_P(NGOffsetMappingTest,
+                         NGOffsetMappingGetterTest,
+                         testing::Bool());
+
+TEST_P(NGOffsetMappingGetterTest, Get) {
+  SetBodyInnerHTML(R"HTML(
+    <div id=container>
+      Whitespaces   in this text   should be   collapsed.
+    </div>
+  )HTML");
+  LayoutBlockFlow* layout_block_flow =
+      ToLayoutBlockFlow(GetLayoutObjectByElementId("container"));
+  DCHECK(layout_block_flow->ChildrenInline());
+
+  // For the purpose of this test, ensure this is laid out by each layout
+  // engine.
+  DCHECK_EQ(layout_block_flow->IsLayoutNGMixin(), GetParam());
+
+  const NGOffsetMapping* mapping =
+      NGInlineNode::GetOffsetMapping(layout_block_flow);
+  EXPECT_TRUE(mapping);
+
+  const String& text_content = mapping->GetText();
+  EXPECT_EQ(text_content, "Whitespaces in this text should be collapsed.");
 }
 
 }  // namespace blink

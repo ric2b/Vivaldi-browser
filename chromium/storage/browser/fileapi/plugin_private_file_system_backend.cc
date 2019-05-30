@@ -10,6 +10,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/stl_util.h"
@@ -38,7 +39,7 @@ class PluginPrivateFileSystemBackend::FileSystemIDToPluginMap {
 
   std::string GetPluginIDForURL(const FileSystemURL& url) {
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
-    Map::iterator found = map_.find(url.filesystem_id());
+    auto found = map_.find(url.filesystem_id());
     if (url.type() != kFileSystemTypePluginPrivate || found == map_.end()) {
       NOTREACHED() << "Unsupported url is given: " << url.DebugString();
       return std::string();
@@ -102,11 +103,11 @@ PluginPrivateFileSystemBackend::PluginPrivateFileSystemBackend(
                      .Append(kPluginPrivateDirectory)),
       plugin_map_(new FileSystemIDToPluginMap(file_task_runner)),
       weak_factory_(this) {
-  file_util_.reset(new AsyncFileUtilAdapter(new ObfuscatedFileUtil(
+  file_util_ = std::make_unique<AsyncFileUtilAdapter>(new ObfuscatedFileUtil(
       special_storage_policy, base_path_, env_override,
-      base::Bind(&FileSystemIDToPluginMap::GetPluginIDForURL,
-                 base::Owned(plugin_map_)),
-      std::set<std::string>(), nullptr)));
+      base::BindRepeating(&FileSystemIDToPluginMap::GetPluginIDForURL,
+                          base::Owned(plugin_map_)),
+      std::set<std::string>(), nullptr, file_system_options.is_incognito()));
 }
 
 PluginPrivateFileSystemBackend::~PluginPrivateFileSystemBackend() {
@@ -230,6 +231,15 @@ PluginPrivateFileSystemBackend::DeleteOriginDataOnFileTaskRunner(
   if (result)
     return base::File::FILE_OK;
   return base::File::FILE_ERROR_FAILED;
+}
+
+void PluginPrivateFileSystemBackend::PerformStorageCleanupOnFileTaskRunner(
+    FileSystemContext* context,
+    storage::QuotaManagerProxy* proxy,
+    FileSystemType type) {
+  if (!CanHandleType(type))
+    return;
+  obfuscated_file_util()->RewriteDatabases();
 }
 
 void PluginPrivateFileSystemBackend::GetOriginsForTypeOnFileTaskRunner(

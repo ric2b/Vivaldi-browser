@@ -10,6 +10,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -94,9 +95,6 @@ bool SetNonBlockingAndGetError(int fd, int* os_error) {
 }  // namespace
 
 //-----------------------------------------------------------------------------
-
-// Nothing to do for Windows since it doesn't support TCP FastOpen.
-bool IsTCPFastOpenSupported() { return false; }
 
 // This class encapsulates all the state that has to be preserved as long as
 // there is a network IO operation in progress. If the owner TCPSocketWin is
@@ -760,6 +758,10 @@ SocketDescriptor TCPSocketWin::ReleaseSocketDescriptorForTesting() {
   socket_ = INVALID_SOCKET;
   Close();
   return socket_descriptor;
+}
+
+SocketDescriptor TCPSocketWin::SocketDescriptorForTesting() const {
+  return socket_;
 }
 
 int TCPSocketWin::AcceptInternal(std::unique_ptr<TCPSocketWin>* socket,

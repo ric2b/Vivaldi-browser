@@ -15,7 +15,23 @@
 // chrome/test/data/extensions/api_test/stubs_app/manifest.json
 
 {
+  "accessKeys": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
+    ]
+  },
   "autoUpdate": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
+    ]
+  },
+  "bookmarkContextMenu": {
     "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
@@ -184,6 +200,14 @@
     ]
   },
   "utilities": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
+    ]
+  },
+  "vivaldiAccount": {
     "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],

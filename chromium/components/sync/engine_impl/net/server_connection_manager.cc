@@ -29,7 +29,7 @@ using std::vector;
 static const char kSyncServerSyncPath[] = "/command/";
 
 HttpResponse::HttpResponse()
-    : response_code(kUnsetResponseCode),
+    : http_status_code(kUnsetResponseCode),
       content_length(kUnsetContentLength),
       payload_length(kUnsetPayloadLength),
       server_status(NONE) {}
@@ -48,7 +48,6 @@ const char* HttpResponse::GetServerConnectionCodeString(
     ENUM_CASE(SYNC_SERVER_ERROR);
     ENUM_CASE(SYNC_AUTH_ERROR);
     ENUM_CASE(SERVER_CONNECTION_OK);
-    ENUM_CASE(RETRY);
   }
   NOTREACHED();
   return "";
@@ -65,7 +64,7 @@ bool ServerConnectionManager::Connection::ReadBufferResponse(
     string* buffer_out,
     HttpResponse* response,
     bool require_response) {
-  if (net::HTTP_OK != response->response_code) {
+  if (net::HTTP_OK != response->http_status_code) {
     response->server_status = HttpResponse::SYNC_SERVER_ERROR;
     return false;
   }
@@ -156,14 +155,12 @@ ServerConnectionManager::MakeActiveConnection() {
 bool ServerConnectionManager::SetAuthToken(const std::string& auth_token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (!auth_token.empty() && (previously_invalidated_token != auth_token)) {
+  if (!auth_token.empty()) {
     auth_token_.assign(auth_token);
-    previously_invalidated_token = std::string();
     return true;
   }
 
-  if (auth_token.empty())
-    InvalidateAndClearAuthToken();
+  auth_token_.clear();
 
   // The auth token could be non-empty in cases like server outage/bug. E.g.
   // token returned by first request is considered invalid by sync server and
@@ -175,13 +172,8 @@ bool ServerConnectionManager::SetAuthToken(const std::string& auth_token) {
   return false;
 }
 
-void ServerConnectionManager::InvalidateAndClearAuthToken() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  // Copy over the token to previous invalid token.
-  if (!auth_token_.empty()) {
-    previously_invalidated_token.assign(auth_token_);
-    auth_token_.clear();
-  }
+void ServerConnectionManager::ClearAuthToken() {
+  auth_token_.clear();
 }
 
 void ServerConnectionManager::SetServerStatus(
@@ -209,6 +201,7 @@ bool ServerConnectionManager::PostBufferWithCachedAuth(
       MakeSyncServerPath(proto_sync_path(), MakeSyncQueryString(client_id_));
   bool result = PostBufferToPath(params, path, auth_token());
   SetServerStatus(params->response.server_status);
+  net_error_code_ = params->response.net_error_code;
   return result;
 }
 
@@ -237,10 +230,10 @@ bool ServerConnectionManager::PostBufferToPath(PostBufferParams* params,
                              &params->response);
 
   if (params->response.server_status == HttpResponse::SYNC_AUTH_ERROR) {
-    InvalidateAndClearAuthToken();
+    auth_token_.clear();
   }
 
-  if (!ok || net::HTTP_OK != params->response.response_code)
+  if (!ok || net::HTTP_OK != params->response.http_status_code)
     return false;
 
   if (connection->ReadBufferResponse(&params->buffer_out, &params->response,
@@ -269,7 +262,7 @@ ServerConnectionManager::MakeConnection() {
 }
 
 std::ostream& operator<<(std::ostream& s, const struct HttpResponse& hr) {
-  s << " Response Code (bogus on error): " << hr.response_code;
+  s << " Response Code (bogus on error): " << hr.http_status_code;
   s << " Content-Length (bogus on error): " << hr.content_length;
   s << " Server Status: "
     << HttpResponse::GetServerConnectionCodeString(hr.server_status);

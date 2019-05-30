@@ -34,6 +34,9 @@
 #include "content/public/browser/page_navigator.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#include "app/vivaldi_apptools.h"
+#include "browser/menus/vivaldi_bookmark_context_menu.h"
+
 using base::UserMetricsAction;
 using bookmarks::BookmarkNode;
 using content::PageNavigator;
@@ -69,6 +72,10 @@ BookmarkContextMenuController::~BookmarkContextMenuController() {
 }
 
 void BookmarkContextMenuController::BuildMenu() {
+  if (vivaldi::IsVivaldiRunning()) {
+    vivaldi::BuildBookmarkContextMenu(menu_model_.get());
+    return;
+  }
   if (selection_.size() == 1 && selection_[0]->is_url()) {
     AddItem(IDC_BOOKMARK_BAR_OPEN_ALL,
             IDS_BOOKMARK_BAR_OPEN_IN_NEW_TAB);
@@ -151,6 +158,15 @@ void BookmarkContextMenuController::ExecuteCommand(int id, int event_flags) {
 
   base::WeakPtr<BookmarkContextMenuController> ref(weak_factory_.GetWeakPtr());
 
+  if (vivaldi::IsVivaldiRunning()) {
+    if (selection_.size() > 0) {
+      vivaldi::ExecuteBookmarkContextMenuCommand(browser_, model_,
+                                                 selection_.at(0)->id(), id);
+      if (id == IDC_BOOKMARK_BAR_REMOVE) {
+        selection_.clear();
+      }
+    }
+  } else {
   switch (id) {
     case IDC_BOOKMARK_BAR_OPEN_ALL:
     case IDC_BOOKMARK_BAR_OPEN_ALL_INCOGNITO:
@@ -306,6 +322,7 @@ void BookmarkContextMenuController::ExecuteCommand(int id, int event_flags) {
     default:
       NOTREACHED();
   }
+  }  // !vivaldi
 
   // It's possible executing the command resulted in deleting |this|.
   if (!ref)

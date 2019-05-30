@@ -6,11 +6,15 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/test_mock_time_task_runner.h"
+#include "base/test/scoped_task_environment.h"
+#include "base/test/simple_test_tick_clock.h"
+#include "components/feed/feed_feature_list.h"
+#include "components/variations/variations_params_manager.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
@@ -24,12 +28,17 @@
 
 namespace feed {
 
+using base::TimeDelta;
 using testing::ElementsAre;
 using network::SharedURLLoaderFactory;
 using network::SharedURLLoaderFactoryInfo;
 using network::TestURLLoaderFactory;
 
 namespace {
+
+const char kHistogramNetworkRequestStatusCode[] =
+    "ContentSuggestions.Feed.Network.RequestStatusCode";
+
 class MockResponseDoneCallback {
  public:
   MockResponseDoneCallback() : has_run(false), code(0) {}
@@ -50,9 +59,7 @@ class MockResponseDoneCallback {
 
 class FeedNetworkingHostTest : public testing::Test {
  protected:
-  FeedNetworkingHostTest()
-      : mock_task_runner_(new base::TestMockTimeTaskRunner(
-            base::TestMockTimeTaskRunner::Type::kBoundToThread)) {
+  FeedNetworkingHostTest() {
     identity_test_env_.MakePrimaryAccountAvailable("example@gmail.com");
     identity_test_env_.SetAutomaticIssueOfAccessTokens(true);
   }
@@ -65,7 +72,8 @@ class FeedNetworkingHostTest : public testing::Test {
             &test_factory_);
     net_service_ = std::make_unique<FeedNetworkingHost>(
         identity_test_env_.identity_manager(), "dummy_api_key",
-        shared_url_loader_factory_);
+        shared_url_loader_factory_,
+        scoped_task_environment_.GetMockTickClock());
   }
 
   FeedNetworkingHost* service() { return net_service_.get(); }
@@ -73,8 +81,6 @@ class FeedNetworkingHostTest : public testing::Test {
   identity::IdentityTestEnvironment* identity_env() {
     return &identity_test_env_;
   }
-
-  void RunUntilEmpty() { mock_task_runner_->FastForwardUntilNoTasksRemain(); }
 
   void Respond(const GURL& url,
                const std::string& response_string,
@@ -90,7 +96,7 @@ class FeedNetworkingHostTest : public testing::Test {
 
     test_factory_.AddResponse(url, head, response_string, status);
 
-    RunUntilEmpty();
+    scoped_task_environment_.FastForwardUntilNoTasksRemain();
   }
 
   void SendRequestAndRespond(const std::string& url_string,
@@ -128,16 +134,17 @@ class FeedNetworkingHostTest : public testing::Test {
               response_string);
   }
 
-  network::TestURLLoaderFactory* test_factory() {
-    return &test_factory_;
-  }
+  network::TestURLLoaderFactory* test_factory() { return &test_factory_; }
+
+  base::test::ScopedTaskEnvironment scoped_task_environment_{
+      base::test::ScopedTaskEnvironment::MainThreadType::MOCK_TIME};
 
  private:
-  scoped_refptr<base::TestMockTimeTaskRunner> mock_task_runner_;
   identity::IdentityTestEnvironment identity_test_env_;
   std::unique_ptr<FeedNetworkingHost> net_service_;
   network::TestURLLoaderFactory test_factory_;
   scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory_;
+  base::SimpleTestTickClock test_tick_clock_;
 
   DISALLOW_COPY_AND_ASSIGN(FeedNetworkingHostTest);
 };
@@ -165,15 +172,15 @@ TEST_F(FeedNetworkingHostTest, ShouldSendSuccessfullyMultipleInflight) {
                         &done_callback2);
   SendRequestAndRespond("http://foobar.com/other", "POST", "", "", net::HTTP_OK,
                         network::URLLoaderCompletionStatus(), &done_callback3);
-  RunUntilEmpty();
+  scoped_task_environment_.FastForwardUntilNoTasksRemain();
 
   EXPECT_TRUE(done_callback1.has_run);
   EXPECT_TRUE(done_callback2.has_run);
   EXPECT_TRUE(done_callback3.has_run);
 
-  EXPECT_THAT(histogram_tester.GetAllSamples(
-                  "ContentSuggestions.Feed.NetworkRequestStatusCode"),
-              ElementsAre(base::Bucket(/*min=*/200, /*count=*/3)));
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples(kHistogramNetworkRequestStatusCode),
+      ElementsAre(base::Bucket(/*min=*/200, /*count=*/3)));
 }
 
 TEST_F(FeedNetworkingHostTest, ShouldSendSuccessfullyDifferentRequestMethods) {
@@ -185,7 +192,7 @@ TEST_F(FeedNetworkingHostTest, ShouldSendSuccessfullyDifferentRequestMethods) {
                           net::HTTP_OK, network::URLLoaderCompletionStatus(),
                           &done_callback);
 
-    RunUntilEmpty();
+    scoped_task_environment_.FastForwardUntilNoTasksRemain();
     EXPECT_TRUE(done_callback.has_run);
     EXPECT_EQ(done_callback.code, 200);
   }
@@ -201,9 +208,9 @@ TEST_F(FeedNetworkingHostTest, ShouldReportProtocolErrorCodes) {
     base::HistogramTester histogram_tester;
     SendRequestAndValidateResponse("http://foobar.com/feed", "?bar=baz&foo=1",
                                    "error_response_data", code);
-    EXPECT_THAT(histogram_tester.GetAllSamples(
-                    "ContentSuggestions.Feed.NetworkRequestStatusCode"),
-                ElementsAre(base::Bucket(/*min=*/code, /*count=*/1)));
+    EXPECT_THAT(
+        histogram_tester.GetAllSamples(kHistogramNetworkRequestStatusCode),
+        ElementsAre(base::Bucket(/*min=*/code, /*count=*/1)));
   }
 }
 
@@ -221,9 +228,9 @@ TEST_F(FeedNetworkingHostTest, ShouldReportNonProtocolErrorCodes) {
 
     EXPECT_TRUE(done_callback.has_run);
     EXPECT_EQ(done_callback.code, code);
-    EXPECT_THAT(histogram_tester.GetAllSamples(
-                    "ContentSuggestions.Feed.NetworkRequestStatusCode"),
-                ElementsAre(base::Bucket(/*min=*/code, /*count=*/1)));
+    EXPECT_THAT(
+        histogram_tester.GetAllSamples(kHistogramNetworkRequestStatusCode),
+        ElementsAre(base::Bucket(/*min=*/code, /*count=*/1)));
   }
 }
 
@@ -261,13 +268,13 @@ TEST_F(FeedNetworkingHostTest, ShouldReportSizeHistograms) {
                                  uncompressed_request_string, response_string,
                                  net::HTTP_OK);
 
-  EXPECT_THAT(
-      histogram_tester.GetAllSamples("ContentSuggestions.Feed.ResponseSizeKB"),
-      ElementsAre(base::Bucket(/*min=*/1, /*count=*/1)));
+  EXPECT_THAT(histogram_tester.GetAllSamples(
+                  "ContentSuggestions.Feed.Network.ResponseSizeKB"),
+              ElementsAre(base::Bucket(/*min=*/1, /*count=*/1)));
 
   // A single character repeated 2048 times compresses to well under 1kb.
   EXPECT_THAT(histogram_tester.GetAllSamples(
-                  "ContentSuggestions.Feed.RequestSizeKB.Compressed"),
+                  "ContentSuggestions.Feed.Network.RequestSizeKB.Compressed"),
               ElementsAre(base::Bucket(/*min=*/0, /*count=*/1)));
 }
 
@@ -284,7 +291,7 @@ TEST_F(FeedNetworkingHostTest, CancellationIsSafe) {
   service()->Send(GURL("http://foobar.com/feed2"), "POST", request_body,
                   base::BindOnce(&MockResponseDoneCallback::Done,
                                  base::Unretained(&done_callback2)));
-  RunUntilEmpty();
+  scoped_task_environment_.FastForwardUntilNoTasksRemain();
   service()->CancelRequests();
 }
 
@@ -306,7 +313,7 @@ TEST_F(FeedNetworkingHostTest, ShouldIncludeAPIKeyForAuthError) {
 
   EXPECT_THAT(
       histogram_tester.GetAllSamples(
-          "ContentSuggestions.Feed.TokenFetchStatus"),
+          "ContentSuggestions.Feed.Network.TokenFetchStatus"),
       ElementsAre(base::Bucket(
           /*min=*/GoogleServiceAuthError::State::INVALID_GAIA_CREDENTIALS,
           /*count=*/1)));
@@ -328,5 +335,61 @@ TEST_F(FeedNetworkingHostTest, ShouldIncludeAPIKeyForNoSignedInUser) {
   EXPECT_TRUE(done_callback.has_run);
 }
 #endif
+
+TEST_F(FeedNetworkingHostTest, TestDurationHistogram) {
+  base::HistogramTester histogram_tester;
+  MockResponseDoneCallback done_callback;
+  GURL url = GURL("http://foobar.com/feed");
+  std::vector<uint8_t> request_body;
+  TimeDelta duration = TimeDelta::FromMilliseconds(12345);
+
+  service()->Send(url, "POST", request_body,
+                  base::BindOnce(&MockResponseDoneCallback::Done,
+                                 base::Unretained(&done_callback)));
+  scoped_task_environment_.FastForwardBy(duration);
+  Respond(url, "", net::HTTP_OK, network::URLLoaderCompletionStatus());
+
+  EXPECT_TRUE(done_callback.has_run);
+  histogram_tester.ExpectTimeBucketCount(
+      "ContentSuggestions.Feed.Network.Duration", duration, 1);
+}
+
+TEST_F(FeedNetworkingHostTest, TestDefaultTimeout) {
+  base::HistogramTester histogram_tester;
+  MockResponseDoneCallback done_callback;
+  GURL url = GURL("http://foobar.com/feed");
+  std::vector<uint8_t> request_body;
+
+  service()->Send(url, "POST", request_body,
+                  base::BindOnce(&MockResponseDoneCallback::Done,
+                                 base::Unretained(&done_callback)));
+  scoped_task_environment_.FastForwardBy(TimeDelta::FromSeconds(29));
+  EXPECT_FALSE(done_callback.has_run);
+
+  scoped_task_environment_.FastForwardBy(TimeDelta::FromSeconds(29));
+  EXPECT_TRUE(done_callback.has_run);
+  histogram_tester.ExpectTimeBucketCount(
+      "ContentSuggestions.Feed.Network.Duration", TimeDelta::FromSeconds(30),
+      1);
+}
+
+TEST_F(FeedNetworkingHostTest, TestParamTimeout) {
+  variations::testing::VariationParamsManager variation_params(
+      kInterestFeedContentSuggestions.name,
+      {{kTimeoutDurationSeconds.name, "2"}},
+      {kInterestFeedContentSuggestions.name});
+  MockResponseDoneCallback done_callback;
+  GURL url = GURL("http://foobar.com/feed");
+  std::vector<uint8_t> request_body;
+
+  service()->Send(url, "POST", request_body,
+                  base::BindOnce(&MockResponseDoneCallback::Done,
+                                 base::Unretained(&done_callback)));
+  scoped_task_environment_.FastForwardBy(TimeDelta::FromSeconds(1));
+  EXPECT_FALSE(done_callback.has_run);
+
+  scoped_task_environment_.FastForwardBy(TimeDelta::FromSeconds(1));
+  EXPECT_TRUE(done_callback.has_run);
+}
 
 }  // namespace feed

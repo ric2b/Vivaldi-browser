@@ -6,72 +6,75 @@
 #define CONTENT_BROWSER_DEVTOOLS_DEVTOOLS_SESSION_H_
 
 #include <map>
+#include <string>
+#include <vector>
 
 #include "base/containers/flat_map.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/values.h"
-#include "content/browser/devtools/devtools_agent_host_impl.h"
-#include "content/browser/devtools/protocol/devtools_domain_handler.h"
+#include "content/browser/devtools/protocol/forward.h"
+#include "content/public/browser/devtools_external_agent_proxy.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
-#include "third_party/blink/public/web/devtools_agent.mojom.h"
+#include "third_party/blink/public/mojom/devtools/devtools_agent.mojom.h"
 
 namespace content {
 
 class DevToolsAgentHostClient;
-class RenderFrameHostImpl;
+class DevToolsAgentHostImpl;
+class DevToolsExternalAgentProxyDelegate;
+
+namespace protocol {
+class DevToolsDomainHandler;
+}
 
 class DevToolsSession : public protocol::FrontendChannel,
-                        public blink::mojom::DevToolsSessionHost {
+                        public blink::mojom::DevToolsSessionHost,
+                        public DevToolsExternalAgentProxy {
  public:
-  DevToolsSession(DevToolsAgentHostImpl* agent_host,
-                  DevToolsAgentHostClient* client,
-                  bool restricted);
+  explicit DevToolsSession(DevToolsAgentHostClient* client);
   ~DevToolsSession() override;
+
+  void SetAgentHost(DevToolsAgentHostImpl* agent_host);
+  void SetRuntimeResumeCallback(base::OnceClosure runtime_resume);
   void Dispose();
 
-  bool restricted() { return restricted_; }
-  DevToolsAgentHost* agent_host() { return agent_host_; };
-  DevToolsAgentHostClient* client() { return client_; };
+  DevToolsAgentHostClient* client() { return client_; }
+  DevToolsSession* GetRootSession();
 
   // Browser-only sessions do not talk to mojom::DevToolsAgent, but instead
   // handle all protocol messages locally in the browser process.
   void SetBrowserOnly(bool browser_only);
-
   void AddHandler(std::unique_ptr<protocol::DevToolsDomainHandler> handler);
-  // TODO(dgozman): maybe combine this with AttachToAgent?
-  void SetRenderer(int process_host_id, RenderFrameHostImpl* frame_host);
+  void TurnIntoExternalProxy(DevToolsExternalAgentProxyDelegate* delegate);
 
-  void AttachToAgent(const blink::mojom::DevToolsAgentAssociatedPtr& agent);
-  void DispatchProtocolMessage(
-      const std::string& message,
-      std::unique_ptr<base::DictionaryValue> parsed_message);
+  void AttachToAgent(blink::mojom::DevToolsAgent* agent);
+  bool DispatchProtocolMessage(const std::string& message);
   void SuspendSendingMessagesToAgent();
   void ResumeSendingMessagesToAgent();
 
-  template <typename Handler>
-  static std::vector<Handler*> HandlersForAgentHost(
-      DevToolsAgentHostImpl* agent_host,
-      const std::string& name) {
-    std::vector<Handler*> result;
-    if (agent_host->sessions().empty())
-      return result;
-    for (DevToolsSession* session : agent_host->sessions()) {
-      auto it = session->handlers_.find(name);
-      if (it != session->handlers_.end())
-        result.push_back(static_cast<Handler*>(it->second.get()));
-    }
-    return result;
-  }
+  using HandlersMap =
+      base::flat_map<std::string,
+                     std::unique_ptr<protocol::DevToolsDomainHandler>>;
+  HandlersMap& handlers() { return handlers_; }
+
+  DevToolsSession* AttachChildSession(const std::string& session_id,
+                                      DevToolsAgentHostImpl* agent_host,
+                                      DevToolsAgentHostClient* client);
+  void DetachChildSession(const std::string& session_id);
+  void SendMessageFromChildSession(const std::string& session_id,
+                                   const std::string& message);
 
  private:
-  void SendResponse(std::unique_ptr<base::DictionaryValue> response);
   void MojoConnectionDestroyed();
   void DispatchProtocolMessageToAgent(int call_id,
                                       const std::string& method,
                                       const std::string& message);
-  void HandleCommand(std::unique_ptr<base::DictionaryValue> parsed_message,
+  void HandleCommand(std::unique_ptr<protocol::DictionaryValue> value,
                      const std::string& message);
+  bool DispatchProtocolMessageInternal(
+      const std::string& message,
+      std::unique_ptr<protocol::DictionaryValue> value);
 
   // protocol::FrontendChannel implementation.
   void sendProtocolResponse(
@@ -86,12 +89,16 @@ class DevToolsSession : public protocol::FrontendChannel,
 
   // blink::mojom::DevToolsSessionHost implementation.
   void DispatchProtocolResponse(
-      const std::string& message,
+      blink::mojom::DevToolsMessagePtr message,
       int call_id,
       blink::mojom::DevToolsSessionStatePtr updates) override;
   void DispatchProtocolNotification(
-      const std::string& message,
+      blink::mojom::DevToolsMessagePtr message,
       blink::mojom::DevToolsSessionStatePtr updates) override;
+
+  // DevToolsExternalAgentProxy implementation.
+  void DispatchOnClientHost(const std::string& message) override;
+  void ConnectionClosed() override;
 
   // Merges the |updates| received from the renderer into session_state_cookie_.
   void ApplySessionStateUpdates(blink::mojom::DevToolsSessionStatePtr updates);
@@ -99,14 +106,10 @@ class DevToolsSession : public protocol::FrontendChannel,
   mojo::AssociatedBinding<blink::mojom::DevToolsSessionHost> binding_;
   blink::mojom::DevToolsSessionAssociatedPtr session_ptr_;
   blink::mojom::DevToolsSessionPtr io_session_ptr_;
-  DevToolsAgentHostImpl* agent_host_;
+  DevToolsAgentHostImpl* agent_host_ = nullptr;
   DevToolsAgentHostClient* client_;
-  bool restricted_;
   bool browser_only_ = false;
-  base::flat_map<std::string, std::unique_ptr<protocol::DevToolsDomainHandler>>
-      handlers_;
-  int process_host_id_;
-  RenderFrameHostImpl* host_;
+  HandlersMap handlers_;
   std::unique_ptr<protocol::UberDispatcher> dispatcher_;
 
   // These messages were queued after suspending, not sent to the agent,
@@ -130,6 +133,11 @@ class DevToolsSession : public protocol::FrontendChannel,
   // any of the waiting for response messages have been handled.
   // |session_state_cookie_| is nullptr before first attach.
   blink::mojom::DevToolsSessionStatePtr session_state_cookie_;
+
+  DevToolsSession* root_session_ = nullptr;
+  base::flat_map<std::string, DevToolsSession*> child_sessions_;
+  base::OnceClosure runtime_resume_;
+  DevToolsExternalAgentProxyDelegate* proxy_delegate_ = nullptr;
 
   base::WeakPtrFactory<DevToolsSession> weak_factory_;
 };

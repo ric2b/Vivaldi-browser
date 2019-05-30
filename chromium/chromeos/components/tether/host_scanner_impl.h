@@ -14,11 +14,12 @@
 #include "base/observer_list.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
+#include "chromeos/components/multidevice/remote_device_ref.h"
 #include "chromeos/components/tether/host_scanner.h"
 #include "chromeos/components/tether/host_scanner_operation.h"
 #include "chromeos/components/tether/notification_presenter.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/network/network_state_handler.h"
-#include "components/cryptauth/remote_device_ref.h"
 #include "components/session_manager/core/session_manager_observer.h"
 
 namespace session_manager {
@@ -37,7 +38,6 @@ class SecureChannelClient;
 
 namespace tether {
 
-class BleConnectionManager;
 class ConnectionPreserver;
 class DeviceIdTetherNetworkGuidMap;
 class GmsCoreNotificationsStateTrackerImpl;
@@ -66,7 +66,6 @@ class HostScannerImpl : public HostScanner,
       NetworkStateHandler* network_state_handler,
       session_manager::SessionManager* session_manager,
       TetherHostFetcher* tether_host_fetcher,
-      BleConnectionManager* connection_manager,
       HostScanDevicePrioritizer* host_scan_device_prioritizer,
       TetherHostResponseRecorder* tether_host_response_recorder,
       GmsCoreNotificationsStateTrackerImpl*
@@ -88,7 +87,7 @@ class HostScannerImpl : public HostScanner,
   void OnTetherAvailabilityResponse(
       const std::vector<HostScannerOperation::ScannedDeviceInfo>&
           scanned_device_list_so_far,
-      const cryptauth::RemoteDeviceRefList&
+      const multidevice::RemoteDeviceRefList&
           gms_core_notifications_disabled_devices,
       bool is_final_scan_result) override;
 
@@ -107,7 +106,8 @@ class HostScannerImpl : public HostScanner,
     HOST_SCAN_RESULT_MAX
   };
 
-  void OnTetherHostsFetched(const cryptauth::RemoteDeviceRefList& tether_hosts);
+  void OnTetherHostsFetched(
+      const multidevice::RemoteDeviceRefList& tether_hosts);
   void SetCacheEntry(
       const HostScannerOperation::ScannedDeviceInfo& scanned_device_info);
   void OnFinalScanResultReceived(
@@ -122,7 +122,6 @@ class HostScannerImpl : public HostScanner,
   NetworkStateHandler* network_state_handler_;
   session_manager::SessionManager* session_manager_;
   TetherHostFetcher* tether_host_fetcher_;
-  BleConnectionManager* connection_manager_;
   HostScanDevicePrioritizer* host_scan_device_prioritizer_;
   TetherHostResponseRecorder* tether_host_response_recorder_;
   GmsCoreNotificationsStateTrackerImpl* gms_core_notifications_state_tracker_;

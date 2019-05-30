@@ -14,6 +14,7 @@
 #include "services/service_manager/public/mojom/interface_provider.mojom.h"
 #include "services/ws/public/mojom/screen_provider_observer.mojom.h"
 #include "services/ws/public/mojom/window_tree.mojom.h"
+#include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/aura_export.h"
 
 namespace aura {
@@ -55,13 +56,6 @@ class AURA_EXPORT WindowTreeClientDelegate {
   // have no real effect. Generally when this is called clients should delete
   // the corresponding WindowTreeClient.
   virtual void OnLostConnection(WindowTreeClient* client) = 0;
-
-  // Called when the WindowTreeClient receives an input event observed via
-  // StartPointerWatcher(). |target| may be null for events that were sent to
-  // windows owned by other processes.
-  virtual void OnPointerEventObserved(const ui::PointerEvent& event,
-                                      const gfx::Point& location_in_screen,
-                                      Window* target) = 0;
 
   virtual PropertyConverter* GetPropertyConverter() = 0;
 

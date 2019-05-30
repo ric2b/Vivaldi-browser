@@ -3,15 +3,21 @@ Created on 27. sep. 2013
 
 @author: yngve
 '''
+from __future__ import print_function
+from __future__ import absolute_import
+
+from future import standard_library
+standard_library.install_aliases()
+from builtins import object
 
 import subprocess
 import os.path
 import copy
-import deps_utils
+from . import deps_utils
 import re
 import sys
 
-class Git:
+class Git(object):
   def __init__(self,source_dir=None, url=None, base_url=None, base_branch=None,
                source_branch=None, target_branch=None, dryrun=None,
                inherit=None, submodule=None):
@@ -23,13 +29,13 @@ class Git:
       self.target_branch = target_branch or inherit.target_branch
       self.dryrun = (dryrun == True) if dryrun != None else inherit.dryrun
       if submodule:
+        self.path = submodule
         self.root = os.path.join(self.root, submodule)
-        for origin in self.GitCommand("remote", ["-v"]):
-          name, url = origin.split()[0:2]
-          if name == "origin":
-            self.url = url
+        for origin in self.GitCommand("remote", ["get-url", "origin"]):
+          self.url = origin
       else:
         self.url=url or inherit.url
+        self.path = ""
     else:
       self.root = source_dir
       self.url=url
@@ -38,6 +44,10 @@ class Git:
       self.source_branch = source_branch
       self.target_branch = target_branch
       self.dryrun = (dryrun == True)
+      self.path = ""
+    if not self.url:
+      for origin in self.GitCommand("remote", ["get-url", "origin"]):
+        self.url = origin
 
     assert(self.root)
 
@@ -65,6 +75,9 @@ class Git:
 
   def getroot(self):
     return self.root
+  
+  def getpath(self):
+    return self.path
 
   def GitCommand(self, command, args, module=None, cwd= None, no_cwd=False,
                  raw = False, dryrun_response="", verbose = True):
@@ -73,7 +86,7 @@ class Git:
 
     cwd = self.__get_wd(module, cwd, no_cwd)
 
-    print cwd, " (",module,"): ", " ".join(command)
+    print(cwd, " (",module,"): ", " ".join(command))
     sys.stdout.flush()
     try:
       if not self.dryrun:
@@ -82,12 +95,12 @@ class Git:
         output = dryrun_response
 
     except:
-      print 'Exception for "%s"' %(" ".join(command))
+      print('Exception for "%s"' %(" ".join(command)))
       sys.stdout.flush()
       raise
 
     if verbose:
-      print output
+      print(output)
     sys.stdout.flush()
     return output if raw else [x.strip() for x in output.splitlines()]
 
@@ -97,7 +110,7 @@ class Git:
 
     cwd = self.__get_wd(module, cwd, no_cwd)
 
-    print cwd," (",module,"): ", " ".join(command)
+    print(cwd," (",module,"): ", " ".join(command))
     sys.stdout.flush()
     try:
       if not self.dryrun:
@@ -108,7 +121,7 @@ class Git:
         pipe = None
 
     except:
-      print 'Exception for "%s"' %(" ".join(command))
+      print('Exception for "%s"' %(" ".join(command)))
       sys.stdout.flush()
       raise
 
@@ -122,12 +135,12 @@ class Git:
 
     # TODO: implement timeout handling
     if not pipe and not self.dryrun:
-      print 'Exception for "%s"' %(" ".join(command))
+      print('Exception for "%s"' %(" ".join(command)))
       sys.stdout.flush()
       raise Exception("starting command failed")
 
     ret = pipe.wait() if not self.dryrun else 0
-    print "Command returned", ret
+    print("Command returned", ret)
     sys.stdout.flush()
     return ret
 
@@ -144,6 +157,10 @@ class Git:
       checked_out = False
 
     if not checked_out:
+      try:
+        os.makedirs(self.parent);
+      except:
+        pass # ignore errors, most are "dir already exists"
       if self.GitCommandStdout("clone", ["--recursive", self.url,
                                self.checkout_dir], cwd=self.parent) != 0:
         raise Exception("Cloning %s into %s failed" %(self.url, self.root))
@@ -250,9 +267,9 @@ class Git:
                            module=module, cwd=cwd) # return conflicts
 
   def GetModified(self,module= None, cwd=None):
-    return filter(None, self.GitCommand("diff",
+    return [_f for _f in self.GitCommand("diff",
                   ["--name-only", "--diff-filter=ACDMRTU"],
-                  module=module, cwd=cwd)) # return modified files
+                  module=module, cwd=cwd) if _f] # return modified files
 
   def GetUnCommitedItems(self,module= None, cwd=None):
     return self.GitCommand("diff", ["--name-only", "--cached"], module=module,
@@ -418,6 +435,12 @@ class Git:
     elif url.startswith('https://webrtc.googlesource.com/'):
       url = url.replace('https://webrtc.googlesource.com',
                          self.base_url+"/webrtc",1)
+    elif url.startswith('https://dawn.googlesource.com/'):
+      url = url.replace('https://dawn.googlesource.com',
+                         self.base_url+"/dawn",1)
+    elif url.startswith('https://aomedia.googlesource.com/'):
+      url = url.replace('https://aomedia.googlesource.com',
+                         self.base_url+"/aomedia",1)
     elif re.search(r'^https://\w+.googlesource.com/', url):
       url = re.sub('^https://\w+.googlesource.com',
                          self.base_url+"/googlesource",1)
@@ -429,10 +452,10 @@ class Git:
     if absolute:
       return url
 
-    print "Resolve", url
-    print "Current url", self.url
+    print("Resolve", url)
+    print("Current url", self.url)
     url = os.path.relpath(url, self.url).replace("\\", "/")
-    print "Relative URL", url
+    print("Relative URL", url)
     return url
 
   def AddSubmodule(self, module, url, revision, cwd=None):
@@ -532,7 +555,7 @@ class Git:
     filename = os.path.join(local_cwd, name)
 
     if self.dryrun:
-      print "Dryrun: Writing file", filename
+      print("Dryrun: Writing file", filename)
       sys.stdout.flush()
     else:
       outfile = open(filename, "wb")
@@ -569,10 +592,10 @@ class Git:
                                              if not y.startswith("..") ]])
 
     if recursive:
-      for mod in list(modules.iterkeys()):
+      for mod in list(modules.keys()):
         subgit = Git(inherit=self, submodule=mod)
         submod = subgit.GetSubmoduleInfo(True)
-        for k, d in submod.iteritems():
+        for k, d in submod.items():
           parent = d.get("submodule_of", None)
           d["submodule_of"]= (mod + "/" + parent) if parent else mod
           modules[mod+"/"+k]=d
@@ -595,11 +618,11 @@ class Git:
     cwd = self.__get_wd()
     filename = os.path.join(cwd, name)
     if self.dryrun:
-      print "Dryrun: Writing file", filename
+      print("Dryrun: Writing file", filename)
       sys.stdout.flush()
     else:
       deps2 = copy.deepcopy(deps)
-      for dep_cat in [deps2["deps"]]+list(deps2["deps_os"].itervalues()):
+      for dep_cat in [deps2["deps"]]+list(deps2["deps_os"].values()):
         for mod, token, var in [
             ('vivaldi/third_party/WebKit','VAR_WEBKIT_REV', 'webkit_rev'),
             ('vivaldi/third_party/ffmpeg', 'VAR_FFMPEG_HASH', 'ffmpeg_hash'),
@@ -638,13 +661,13 @@ class Git:
       "submit":"Force Build"
     }
 
-    import urllib
-    querystring = urllib.urlencode(query, True)
+    import urllib.request, urllib.parse, urllib.error
+    querystring = urllib.parse.urlencode(query, True)
 
-    print "Sending query to %s : %s" % (autobuild_url, querystring)
+    print("Sending query to %s : %s" % (autobuild_url, querystring))
     sys.stdout.flush()
     if not self.dryrun:
-      urllib.urlopen(autobuild_url, querystring)
+      urllib.request.urlopen(autobuild_url, querystring)
 
   def EndUseOfMirror(self):
     if self.url.startswith("ssh://mirror.viv.osl/"):

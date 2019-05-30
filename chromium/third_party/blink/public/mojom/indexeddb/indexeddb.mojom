@@ -32,13 +32,18 @@ enum IDBDataLoss {
   Total,
 };
 
-// Represents key types that hold no data and so cannot be options in the
-// IDBKeyData union.
-// TODO(jsbell): These types should be cleaned up end-to-end, leaving only the
-// dataful options.
-enum IDBDatalessKeyType {
+// In order of the least to the highest precedent in terms of sort order.
+// These values are written to logs. New enum values can be added, but
+// existing enums must never be renumbered or deleted and reused.
+enum IDBKeyType {
   Invalid,
+  Array,
+  Binary,
+  String,
+  Date,
+  Number,
   Null,
+  Min,
 };
 
 union IDBKeyData {
@@ -47,12 +52,24 @@ union IDBKeyData {
   mojo_base.mojom.String16 string;
   double date;
   double number;
-  IDBDatalessKeyType other;
+  // TODO(jsbell): These types should be cleaned up end-to-end, leaving only the
+  // dataful options above.
+  bool other_invalid;
+  bool other_null;
 };
 
 // Defined as a structure so that it can by typemapped with StructTraits.
 struct IDBKey {
   IDBKeyData data;
+};
+
+// In order of the least to the highest precedent in terms of sort order.
+// These values are written to logs. New enum values can be added, but
+// existing enums must never be renumbered or deleted and reused.
+enum IDBKeyPathType {
+  Null,
+  String,
+  Array,
 };
 
 // Represents WebIDBKeyPathTypeString and WebIDBKeyPathTypeArray in a key path.
@@ -120,7 +137,7 @@ struct IDBObjectStoreMetadata {
   IDBKeyPath key_path;
   bool auto_increment;
   int64 max_index_id;
-  array<IDBIndexMetadata> indexes;
+  map<int64, IDBIndexMetadata> indexes;
 };
 
 struct IDBDatabaseMetadata {
@@ -128,7 +145,12 @@ struct IDBDatabaseMetadata {
   mojo_base.mojom.String16 name;
   int64 version;
   int64 max_object_store_id;
-  array<IDBObjectStoreMetadata> object_stores;
+  map<int64, IDBObjectStoreMetadata> object_stores;
+};
+
+struct IDBNameAndVersion {
+  mojo_base.mojom.String16 name;
+  int64 version;
 };
 
 struct IDBIndexKeys {
@@ -151,7 +173,7 @@ struct IDBBlobInfo {
 };
 
 struct IDBValue {
-  string bits;
+  array<uint8> bits;
   array<IDBBlobInfo> blob_or_file_info;
 };
 
@@ -187,6 +209,9 @@ struct IDBObserverChanges {
 // replies associated with particular messages.
 interface IDBCallbacks {
   Error(int32 code, mojo_base.mojom.String16 message);
+
+  // Factory::GetDatabaseInfo
+  SuccessNamesAndVersionsList(array<IDBNameAndVersion> value);
 
   // Factory::GetDatabaseNames
   SuccessStringList(array<mojo_base.mojom.String16> value);
@@ -244,14 +269,33 @@ interface IDBDatabaseCallbacks {
   Changes(IDBObserverChanges changes);
 };
 
+struct IDBError {
+  int32 error_code;
+  mojo_base.mojom.String16 error_message;
+};
+
+struct IDBCursorValue {
+  IDBKey key;
+  IDBKey primary_key;
+  IDBValue value;
+};
+
 interface IDBCursor {
-  Advance(uint32 count, associated IDBCallbacks callbacks);
-  // Avoid calling the following function "Continue" since the Mojo
-  // Java bindings generate incorrect Java as a result.  We've named
-  // the following funciton "CursorContinue" as a workaround.
-  CursorContinue(IDBKey key,
-                 IDBKey primary_key,
-                 associated IDBCallbacks callbacks);
+  // Advance() can call its return callback in one of 3 ways:
+  // * with |error| set and |value| unset, if an error occurs
+  // * with |error| unset and |value| set, under normal operation
+  // * with |error| unset and |value| unset, under normal operation when the end
+  //   of the source being iterated is reached
+  Advance(uint32 count) => (IDBError? error, IDBCursorValue? value);
+
+  // CursorContinue() can call its return callback in one of 3 ways:
+  // * with |error| set and |value| unset, if an error occurs
+  // * with |error| unset and |value| set, under normal operation
+  // * with |error| unset and |value| unset, under normal operation when the end
+  //   of the source being iterated is reached
+  CursorContinue(IDBKey key, IDBKey primary_key)
+    => (IDBError? error, IDBCursorValue? value);
+
   Prefetch(int32 count, associated IDBCallbacks callbacks);
   PrefetchReset(int32 used_prefetches, int32 unused_prefetches);
 };
@@ -277,7 +321,7 @@ interface IDBDatabase {
               bool include_transaction,
               bool no_records,
               bool values,
-              uint16 operation_types);
+              uint32 operation_types);
   RemoveObservers(array<int32> observers);
   Get(int64 transaction_id,
       int64 object_store_id,
@@ -323,6 +367,12 @@ interface IDBDatabase {
               int64 object_store_id,
               IDBKeyRange key_range,
               associated IDBCallbacks callbacks);
+  // Gets the current number of an IndexedDB ObjectStore's key generator. It
+  // is implemented in the browser (more priviledged) and handles requests in
+  // the renderer process: WebIDBDatabaseImpl::GetKeyGeneratorCurrentNumber()
+  GetKeyGeneratorCurrentNumber(int64 transaction_id,
+                               int64 object_store_id,
+                               associated IDBCallbacks callbacks);
   Clear(int64 transaction_id,
         int64 object_store_id,
         associated IDBCallbacks callbacks);
@@ -341,20 +391,20 @@ interface IDBDatabase {
               int64 index_id,
               mojo_base.mojom.String16 new_name);
   Abort(int64 transaction_id);
-  Commit(int64 transaction_id);
+  Commit(int64 transaction_id,
+         int64 num_errors_handled);
 };
 
 interface IDBFactory {
-  GetDatabaseNames(associated IDBCallbacks callbacks, url.mojom.Origin origin);
+  GetDatabaseInfo(associated IDBCallbacks callbacks);
+  GetDatabaseNames(associated IDBCallbacks callbacks);
   Open(associated IDBCallbacks callbacks,
        associated IDBDatabaseCallbacks database_callbacks,
-       url.mojom.Origin origin,
        mojo_base.mojom.String16 name,
        int64 version,
        int64 transaction_id);
-  DeleteDatabase(associated IDBCallbacks callbacks, url.mojom.Origin origin,
+  DeleteDatabase(associated IDBCallbacks callbacks,
                  mojo_base.mojom.String16 name, bool force_close);
-  AbortTransactionsAndCompactDatabase(url.mojom.Origin origin) =>
-                                     (IDBStatus status);
-  AbortTransactionsForDatabase(url.mojom.Origin origin) => (IDBStatus status);
+  AbortTransactionsAndCompactDatabase() => (IDBStatus status);
+  AbortTransactionsForDatabase() => (IDBStatus status);
 };

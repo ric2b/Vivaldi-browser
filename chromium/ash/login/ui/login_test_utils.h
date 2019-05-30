@@ -34,6 +34,10 @@ LoginPasswordView::TestApi MakeLoginPasswordTestApi(LockContentsView* view,
 // for regular user.
 mojom::LoginUserInfoPtr CreateUser(const std::string& email);
 
+// Utility method to create a new |mojom::LoginUserInfoPtr| instance for child
+// user.
+mojom::LoginUserInfoPtr CreateChildUser(const std::string& email);
+
 // Utility method to create a new |mojom::LoginUserInfoPtr| instance for
 // public account user.
 mojom::LoginUserInfoPtr CreatePublicAccountUser(const std::string& email);
@@ -47,6 +51,9 @@ bool HasFocusInAnyChildView(views::View* view);
 bool TabThroughView(ui::test::EventGenerator* event_generator,
                     views::View* view,
                     bool reverse);
+
+// Find the first button in the z layer stack of the given view
+views::View* FindTopButton(views::View* current_view);
 
 }  // namespace ash
 

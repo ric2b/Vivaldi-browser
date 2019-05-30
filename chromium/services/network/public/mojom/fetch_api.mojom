@@ -11,9 +11,9 @@ module network.mojom;
 // See the "FetchRequestMode" enum in enums.xml.
 enum FetchRequestMode {
   kSameOrigin,
-  kNoCORS,
-  kCORS,
-  kCORSWithForcedPreflight,
+  kNoCors,
+  kCors,
+  kCorsWithForcedPreflight,
   kNavigate,
   // Add a new type here, then update enums.xml.
 };
@@ -41,10 +41,27 @@ enum FetchCredentialsMode {
 // See the "FetchResponseType" enum in enums.xml.
 enum FetchResponseType {
   kBasic,
-  kCORS,
+  kCors,
   kDefault,
   kError,
   kOpaque,
   kOpaqueRedirect,
   // Add a new type here, then update enums.xml.
+};
+
+// Indicates the source of a response.
+// This represents the source of the outmost response of a request.
+// This is used only for histograms and isn't web-exposed.
+enum FetchResponseSource {
+  // The source is unspecified: e.g. "new Response('hi')" or a response from
+  // a service worker.
+  kUnspecified,
+  // The response came from network: e.g. "fetch(req)".
+  kNetwork,
+  // The response came from HttpCache: e.g. "fetch(req)" and there is an entry
+  // in HttpCache.
+  kHttpCache,
+  // The response came from CacheStorage: e.g. "cache.match(req)" in a fetch
+  // event handler.
+  kCacheStorage,
 };

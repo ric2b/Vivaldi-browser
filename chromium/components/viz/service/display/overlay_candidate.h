@@ -29,6 +29,7 @@ class DisplayResourceProvider;
 class StreamVideoDrawQuad;
 class TextureDrawQuad;
 class TileDrawQuad;
+class VideoHoleDrawQuad;
 
 class VIZ_SERVICE_EXPORT OverlayCandidate {
  public:
@@ -55,7 +56,12 @@ class VIZ_SERVICE_EXPORT OverlayCandidate {
       QuadList::ConstIterator quad_list_begin,
       QuadList::ConstIterator quad_list_end,
       const base::flat_map<RenderPassId, cc::FilterOperations*>&
-          render_pass_background_filters);
+          render_pass_backdrop_filters);
+
+  // Returns true if the |quad| cannot be displayed on the main plane. This is
+  // used in conjuction with protected content that can't be GPU composited and
+  // will be shown via an overlay.
+  static bool RequiresOverlay(const DrawQuad* quad);
 
   OverlayCandidate();
   OverlayCandidate(const OverlayCandidate& other);
@@ -65,6 +71,8 @@ class VIZ_SERVICE_EXPORT OverlayCandidate {
   gfx::OverlayTransform transform;
   // Format of the buffer to scanout.
   gfx::BufferFormat format;
+  // ColorSpace of the buffer for scanout.
+  gfx::ColorSpace color_space;
   // Size of the resource, in pixels.
   gfx::Size resource_size_in_pixels;
   // Rect on the display to position the overlay to. Implementer must convert
@@ -125,6 +133,9 @@ class VIZ_SERVICE_EXPORT OverlayCandidate {
   static bool FromStreamVideoQuad(DisplayResourceProvider* resource_provider,
                                   const StreamVideoDrawQuad* quad,
                                   OverlayCandidate* candidate);
+  static bool FromVideoHoleQuad(DisplayResourceProvider* resource_provider,
+                                const VideoHoleDrawQuad* quad,
+                                OverlayCandidate* candidate);
 };
 
 class VIZ_SERVICE_EXPORT OverlayCandidateList
@@ -145,8 +156,17 @@ class VIZ_SERVICE_EXPORT OverlayCandidateList
   // overlay, if one backs them with a SurfaceView.
   PromotionHintInfoMap promotion_hint_info_map_;
 
+  // Set of resources that have requested a promotion hint that also have quads
+  // that use them.
+  ResourceIdSet promotion_hint_requestor_set_;
+
   // Helper to insert |candidate| into |promotion_hint_info_|.
   void AddPromotionHint(const OverlayCandidate& candidate);
+
+  // Add |quad| to |promotion_hint_requestors_| if it is requesting a hint.
+  void AddToPromotionHintRequestorSetIfNeeded(
+      const DisplayResourceProvider* resource_provider,
+      const DrawQuad* quad);
 };
 
 }  // namespace viz

@@ -39,13 +39,6 @@ const CGFloat kCancelEventVerticalLowerThreshold = 0.01;
 // callbacks.
 BOOL forceMagicMouse = NO;
 
-// NOTE(espen@vivaldi.com) Guard to ensure that the magic mouse can not start
-// a history swipe if the document has been scrolled a certain amount after a
-// GestureScrollBegin.
-CGFloat vivaldiFullScrollingDeltaX = 0;
-CGFloat vivaldiFullScrollingDeltaY = 0;
-const CGFloat kVivaldiScrollDeltaLimit = 5;
-
 }  // namespace
 
 @interface HistorySwiper ()
@@ -164,9 +157,10 @@ const CGFloat kVivaldiScrollDeltaLimit = 5;
 }
 
 - (void)onOverscrolled:(const ui::DidOverscrollParams&)params {
-  rendererDisabledOverscroll_ = params.overscroll_behavior.x !=
-                                cc::OverscrollBehavior::OverscrollBehaviorType::
-                                    kOverscrollBehaviorTypeAuto;
+  overscrollTriggeredByRenderer_ =
+      params.overscroll_behavior.x ==
+      cc::OverscrollBehavior::OverscrollBehaviorType::
+          kOverscrollBehaviorTypeAuto;
 }
 
 - (void)beginGestureWithEvent:(NSEvent*)event {
@@ -176,7 +170,6 @@ const CGFloat kVivaldiScrollDeltaLimit = 5;
     // Added with Ch61 because rendererHandledWheelEvent is not called anymore.
     waitingForFirstGestureScroll_ = YES;
     recognitionState_ = history_swiper::kPending;
-    vivaldiFullScrollingDeltaX = vivaldiFullScrollingDeltaY = 0;
   }
 
   // Reset state pertaining to Magic Mouse swipe gestures.
@@ -242,7 +235,7 @@ const CGFloat kVivaldiScrollDeltaLimit = 5;
   gestureStartPointValid_ = NO;
   gestureTotalY_ = 0;
   firstScrollUnconsumed_ = NO;
-  rendererDisabledOverscroll_ = NO;
+  overscrollTriggeredByRenderer_ = NO;
   waitingForFirstGestureScroll_ = NO;
   recognitionState_ = history_swiper::kPending;
 }
@@ -444,15 +437,6 @@ const CGFloat kVivaldiScrollDeltaLimit = 5;
   if ([theEvent phase] == NSEventPhaseNone)
     return NO;
 
-  if (vivaldi::IsVivaldiRunning() && !forceMagicMouse) {
-    // Prevent navigation if we have already scrolled the page in this event
-    // sequence.
-    if (vivaldiFullScrollingDeltaX > kVivaldiScrollDeltaLimit ||
-        vivaldiFullScrollingDeltaY > kVivaldiScrollDeltaLimit) {
-      return NO;
-    }
-  }
-
   mouseScrollDelta_.width += [theEvent scrollingDeltaX];
   mouseScrollDelta_.height += [theEvent scrollingDeltaY];
 
@@ -578,12 +562,6 @@ const CGFloat kVivaldiScrollDeltaLimit = 5;
     return NO;
   }
 
-  if (vivaldi::IsVivaldiRunning() && !firstScrollUnconsumed_) {
-    // Collect full scrolling distance as long as the render consumes it.
-    vivaldiFullScrollingDeltaX += fabs([theEvent scrollingDeltaX]);
-    vivaldiFullScrollingDeltaY += fabs([theEvent scrollingDeltaY]);
-  }
-
   // We've already processed this gesture.
   if (recognitionState_ != history_swiper::kPending) {
     return [self shouldConsumeWheelEvent:theEvent];
@@ -605,9 +583,14 @@ const CGFloat kVivaldiScrollDeltaLimit = 5;
   if (!firstScrollUnconsumed_)
     return NO;
 
-  // History swiping should be prevented if the renderer disables it.
-  if (rendererDisabledOverscroll_)
+  // NOTE(espen@vivaldi.com): From ch74 logic has changed when handling
+  // onOverscrolled. We do not (and never had) receive onOverscrolled and after
+  // testing I can not see we need it. See chromium issue 906765
+  if (!vivaldi::IsVivaldiRunning()) {
+  // History swiping should be prevented if the renderer hasn't triggered it.
+  if (!overscrollTriggeredByRenderer_)
     return NO;
+  }
 
   // Magic mouse and touchpad swipe events are identical except magic mouse
   // events do not generate NSTouch callbacks. Since we rely on NSTouch

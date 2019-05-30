@@ -5,6 +5,7 @@
 #include "chromecast/media/cma/backend/alsa/mixer_output_stream_alsa.h"
 
 #include "base/command_line.h"
+#include "base/stl_util.h"
 #include "base/time/time.h"
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/media/cma/backend/alsa/alsa_wrapper.h"
@@ -126,15 +127,7 @@ MixerOutputStreamAlsa::MixerOutputStreamAlsa() {
 }
 
 MixerOutputStreamAlsa::~MixerOutputStreamAlsa() {
-  if (pcm_) {
-    LOG(INFO) << "snd_pcm_close: handle=" << pcm_;
-    int err = alsa_->PcmClose(pcm_);
-    if (err < 0) {
-      LOG(ERROR) << "snd_pcm_close error, leaking handle: "
-                 << alsa_->StrError(err);
-    }
-    pcm_ = nullptr;
-  }
+  Stop();
 }
 
 void MixerOutputStreamAlsa::SetAlsaWrapperForTest(
@@ -270,6 +263,14 @@ void MixerOutputStreamAlsa::Stop() {
       LOG(ERROR) << "snd_pcm_drop error: " << alsa_->StrError(err);
     }
   }
+
+  LOG(INFO) << "snd_pcm_close: handle=" << pcm_;
+  int err = alsa_->PcmClose(pcm_);
+  if (err < 0) {
+   LOG(ERROR) << "snd_pcm_close error, leaking handle: "
+              << alsa_->StrError(err);
+  }
+  pcm_ = nullptr;
 }
 
 int MixerOutputStreamAlsa::SetAlsaPlaybackParams(int requested_sample_rate) {
@@ -439,7 +440,7 @@ int MixerOutputStreamAlsa::DetermineOutputRate(int requested_sample_rate) {
   // doesn't always choose a rate that's actually near the given input sample
   // rate when the input sample rate is not supported.
   const int* kSupportedSampleRatesEnd =
-      kSupportedSampleRates + arraysize(kSupportedSampleRates);
+      kSupportedSampleRates + base::size(kSupportedSampleRates);
   auto* nearest_sample_rate =
       std::min_element(kSupportedSampleRates, kSupportedSampleRatesEnd,
                        [requested_sample_rate](int r1, int r2) -> bool {

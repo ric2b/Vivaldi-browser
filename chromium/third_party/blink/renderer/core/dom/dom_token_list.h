@@ -44,10 +44,12 @@ class CORE_EXPORT DOMTokenList : public ScriptWrappable {
 
  public:
   static DOMTokenList* Create(Element& element, const QualifiedName& attr) {
-    return new DOMTokenList(element, attr);
+    return MakeGarbageCollected<DOMTokenList>(element, attr);
   }
+  DOMTokenList(Element& element, const QualifiedName& attr)
+      : element_(element), attribute_name_(attr) {}
   ~DOMTokenList() override = default;
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   unsigned length() const { return token_set_.size(); }
   const AtomicString item(unsigned index) const;
@@ -75,8 +77,6 @@ class CORE_EXPORT DOMTokenList : public ScriptWrappable {
   void Remove(const AtomicString&);
 
  protected:
-  DOMTokenList(Element& element, const QualifiedName& attr)
-      : element_(element), attribute_name_(attr) {}
   Element& GetElement() const { return *element_; }
 
   virtual bool ValidateTokenValue(const AtomicString&, ExceptionState&) const;

@@ -30,10 +30,10 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/style/shadow_data.h"
 #include "third_party/blink/renderer/platform/geometry/float_rect.h"
+#include "third_party/blink/renderer/platform/geometry/length.h"
 #include "third_party/blink/renderer/platform/graphics/box_reflection.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/length.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
@@ -126,20 +126,22 @@ class CORE_EXPORT FilterOperation
 #define DEFINE_FILTER_OPERATION_TYPE_CASTS(thisType, operationType)  \
   DEFINE_TYPE_CASTS(thisType, FilterOperation, op,                   \
                     op->GetType() == FilterOperation::operationType, \
-                    op.GetType() == FilterOperation::operationType);
+                    op.GetType() == FilterOperation::operationType)
 
 class CORE_EXPORT ReferenceFilterOperation : public FilterOperation {
  public:
-  static ReferenceFilterOperation* Create(const String& url,
+  static ReferenceFilterOperation* Create(const AtomicString& url,
                                           SVGResource* resource) {
-    return new ReferenceFilterOperation(url, resource);
+    return MakeGarbageCollected<ReferenceFilterOperation>(url, resource);
   }
+
+  ReferenceFilterOperation(const AtomicString& url, SVGResource*);
 
   bool AffectsOpacity() const override { return true; }
   bool MovesPixels() const override { return true; }
   FloatRect MapRect(const FloatRect&) const override;
 
-  const String& Url() const { return url_; }
+  const AtomicString& Url() const { return url_; }
 
   Filter* GetFilter() const { return filter_.Get(); }
   void SetFilter(Filter* filter) { filter_ = filter; }
@@ -152,8 +154,6 @@ class CORE_EXPORT ReferenceFilterOperation : public FilterOperation {
   void Trace(blink::Visitor*) override;
 
  private:
-  ReferenceFilterOperation(const String& url, SVGResource*);
-
   FilterOperation* Blend(const FilterOperation* from,
                          double progress) const override {
     NOTREACHED();
@@ -162,7 +162,7 @@ class CORE_EXPORT ReferenceFilterOperation : public FilterOperation {
 
   bool operator==(const FilterOperation&) const override;
 
-  String url_;
+  AtomicString url_;
   Member<SVGResource> resource_;
   Member<Filter> filter_;
 };
@@ -175,8 +175,11 @@ class CORE_EXPORT BasicColorMatrixFilterOperation : public FilterOperation {
  public:
   static BasicColorMatrixFilterOperation* Create(double amount,
                                                  OperationType type) {
-    return new BasicColorMatrixFilterOperation(amount, type);
+    return MakeGarbageCollected<BasicColorMatrixFilterOperation>(amount, type);
   }
+
+  BasicColorMatrixFilterOperation(double amount, OperationType type)
+      : FilterOperation(type), amount_(amount) {}
 
   double Amount() const { return amount_; }
 
@@ -190,9 +193,6 @@ class CORE_EXPORT BasicColorMatrixFilterOperation : public FilterOperation {
         static_cast<const BasicColorMatrixFilterOperation*>(&o);
     return amount_ == other->amount_;
   }
-
-  BasicColorMatrixFilterOperation(double amount, OperationType type)
-      : FilterOperation(type), amount_(amount) {}
 
   double amount_;
 };
@@ -218,8 +218,12 @@ class CORE_EXPORT BasicComponentTransferFilterOperation
  public:
   static BasicComponentTransferFilterOperation* Create(double amount,
                                                        OperationType type) {
-    return new BasicComponentTransferFilterOperation(amount, type);
+    return MakeGarbageCollected<BasicComponentTransferFilterOperation>(amount,
+                                                                       type);
   }
+
+  BasicComponentTransferFilterOperation(double amount, OperationType type)
+      : FilterOperation(type), amount_(amount) {}
 
   double Amount() const { return amount_; }
 
@@ -235,9 +239,6 @@ class CORE_EXPORT BasicComponentTransferFilterOperation
         static_cast<const BasicComponentTransferFilterOperation*>(&o);
     return amount_ == other->amount_;
   }
-
-  BasicComponentTransferFilterOperation(double amount, OperationType type)
-      : FilterOperation(type), amount_(amount) {}
 
   double amount_;
 };
@@ -259,8 +260,11 @@ DEFINE_TYPE_CASTS(BasicComponentTransferFilterOperation,
 class CORE_EXPORT BlurFilterOperation : public FilterOperation {
  public:
   static BlurFilterOperation* Create(const Length& std_deviation) {
-    return new BlurFilterOperation(std_deviation);
+    return MakeGarbageCollected<BlurFilterOperation>(std_deviation);
   }
+
+  BlurFilterOperation(const Length& std_deviation)
+      : FilterOperation(BLUR), std_deviation_(std_deviation) {}
 
   const Length& StdDeviation() const { return std_deviation_; }
 
@@ -279,9 +283,6 @@ class CORE_EXPORT BlurFilterOperation : public FilterOperation {
     return std_deviation_ == other->std_deviation_;
   }
 
-  BlurFilterOperation(const Length& std_deviation)
-      : FilterOperation(BLUR), std_deviation_(std_deviation) {}
-
   Length std_deviation_;
 };
 
@@ -290,8 +291,11 @@ DEFINE_FILTER_OPERATION_TYPE_CASTS(BlurFilterOperation, BLUR);
 class CORE_EXPORT DropShadowFilterOperation : public FilterOperation {
  public:
   static DropShadowFilterOperation* Create(const ShadowData& shadow) {
-    return new DropShadowFilterOperation(shadow);
+    return MakeGarbageCollected<DropShadowFilterOperation>(shadow);
   }
+
+  DropShadowFilterOperation(const ShadowData& shadow)
+      : FilterOperation(DROP_SHADOW), shadow_(shadow) {}
 
   const ShadowData& Shadow() const { return shadow_; }
 
@@ -310,9 +314,6 @@ class CORE_EXPORT DropShadowFilterOperation : public FilterOperation {
     return shadow_ == other->shadow_;
   }
 
-  DropShadowFilterOperation(const ShadowData& shadow)
-      : FilterOperation(DROP_SHADOW), shadow_(shadow) {}
-
   ShadowData shadow_;
 };
 
@@ -321,8 +322,11 @@ DEFINE_FILTER_OPERATION_TYPE_CASTS(DropShadowFilterOperation, DROP_SHADOW);
 class CORE_EXPORT BoxReflectFilterOperation : public FilterOperation {
  public:
   static BoxReflectFilterOperation* Create(const BoxReflection& reflection) {
-    return new BoxReflectFilterOperation(reflection);
+    return MakeGarbageCollected<BoxReflectFilterOperation>(reflection);
   }
+
+  BoxReflectFilterOperation(const BoxReflection& reflection)
+      : FilterOperation(BOX_REFLECT), reflection_(reflection) {}
 
   const BoxReflection& Reflection() const { return reflection_; }
 
@@ -335,12 +339,11 @@ class CORE_EXPORT BoxReflectFilterOperation : public FilterOperation {
                          double progress) const override;
   bool operator==(const FilterOperation&) const override;
 
-  BoxReflectFilterOperation(const BoxReflection& reflection)
-      : FilterOperation(BOX_REFLECT), reflection_(reflection) {}
-
   BoxReflection reflection_;
 };
 DEFINE_FILTER_OPERATION_TYPE_CASTS(BoxReflectFilterOperation, BOX_REFLECT);
+
+#undef DEFINE_FILTER_OPERATION_TYPE_CASTS
 
 }  // namespace blink
 

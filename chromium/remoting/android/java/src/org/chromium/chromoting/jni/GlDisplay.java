@@ -34,7 +34,7 @@ public class GlDisplay implements SurfaceHolder.Callback, RenderStub {
 
     private long mNativeJniGlDisplay;
     private InputFeedbackRadiusMapper mFeedbackRadiusMapper;
-    private float mScaleFactor = 0;
+    private float mScaleFactor;
 
     private GlDisplay(long nativeJniGlDisplay) {
         mNativeJniGlDisplay = nativeJniGlDisplay;
@@ -126,8 +126,8 @@ public class GlDisplay implements SurfaceHolder.Callback, RenderStub {
      * location.
      */
     @Override
-    public void showInputFeedback(InputFeedbackType feedbackToShow, PointF pos) {
-        if (mNativeJniGlDisplay == 0 || feedbackToShow.equals(InputFeedbackType.NONE)) {
+    public void showInputFeedback(@InputFeedbackType int feedbackToShow, PointF pos) {
+        if (mNativeJniGlDisplay == 0 || feedbackToShow == InputFeedbackType.NONE) {
             return;
         }
         float diameter = mFeedbackRadiusMapper

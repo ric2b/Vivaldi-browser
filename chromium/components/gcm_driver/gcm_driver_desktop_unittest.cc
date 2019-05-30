@@ -11,10 +11,10 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -35,6 +35,7 @@
 #include "net/url_request/url_request_test_util.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_network_connection_tracker.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -166,7 +167,8 @@ class GCMDriverTest : public testing::Test {
  private:
   base::ScopedTempDir temp_dir_;
   TestingPrefServiceSimple prefs_;
-  base::MessageLoopForUI message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_{
+      base::test::ScopedTaskEnvironment::MainThreadType::UI};
   base::Thread io_thread_;
   network::TestURLLoaderFactory test_url_loader_factory_;
 
@@ -250,8 +252,9 @@ void GCMDriverTest::CreateDriver() {
       &prefs_, temp_dir_.GetPath(), base::DoNothing(),
       base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
           &test_url_loader_factory_),
+      network::TestNetworkConnectionTracker::GetInstance(),
       base::ThreadTaskRunnerHandle::Get(), io_thread_.task_runner(),
-      message_loop_.task_runner());
+      task_environment_.GetMainThreadTaskRunner());
 
   gcm_app_handler_.reset(new FakeGCMAppHandler);
   gcm_connection_observer_.reset(new FakeGCMConnectionObserver);

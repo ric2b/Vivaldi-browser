@@ -172,7 +172,7 @@ void TextTrack::RemoveAllCues() {
   if (GetCueTimeline())
     GetCueTimeline()->RemoveCues(this, cues_.Get());
 
-  for (size_t i = 0; i < cues_->length(); ++i)
+  for (wtf_size_t i = 0; i < cues_->length(); ++i)
     cues_->AnonymousIndexedGetter(i)->SetTrack(nullptr);
 
   cues_->RemoveAll();
@@ -217,7 +217,7 @@ void TextTrack::addCue(TextTrackCue* cue) {
   if (std::isnan(cue->startTime()) || std::isnan(cue->endTime()))
     return;
 
-  // https://html.spec.whatwg.org/multipage/embedded-content.html#dom-texttrack-addcue
+  // https://html.spec.whatwg.org/C/#dom-texttrack-addcue
 
   // The addCue(cue) method of TextTrack objects, when invoked, must run the
   // following steps:
@@ -242,7 +242,7 @@ void TextTrack::addCue(TextTrackCue* cue) {
 void TextTrack::removeCue(TextTrackCue* cue, ExceptionState& exception_state) {
   DCHECK(cue);
 
-  // https://html.spec.whatwg.org/multipage/embedded-content.html#dom-texttrack-removecue
+  // https://html.spec.whatwg.org/C/#dom-texttrack-removecue
 
   // The removeCue(cue) method of TextTrack objects, when invoked, must run the
   // following steps:
@@ -348,7 +348,7 @@ int TextTrack::TrackIndexRelativeToRenderedTracks() {
 }
 
 const AtomicString& TextTrack::InterfaceName() const {
-  return EventTargetNames::TextTrack;
+  return event_target_names::kTextTrack;
 }
 
 ExecutionContext* TextTrack::GetExecutionContext() const {
@@ -368,7 +368,7 @@ Node* TextTrack::Owner() const {
   return MediaElement();
 }
 
-void TextTrack::Trace(blink::Visitor* visitor) {
+void TextTrack::Trace(Visitor* visitor) {
   visitor->Trace(cues_);
   visitor->Trace(active_cues_);
   visitor->Trace(track_list_);

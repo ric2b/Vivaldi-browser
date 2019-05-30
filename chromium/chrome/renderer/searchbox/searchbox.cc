@@ -16,6 +16,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
+#include "chrome/common/webui_url_constants.h"
 #include "chrome/renderer/searchbox/searchbox_extension.h"
 #include "components/favicon_base/favicon_types.h"
 #include "components/favicon_base/favicon_url_parser.h"
@@ -43,44 +44,12 @@ bool AreMostVisitedItemsEqual(
 
   for (size_t i = 0; i < new_items.size(); ++i) {
     if (new_items[i].url != old_item_id_pairs[i].second.url ||
-        new_items[i].title != old_item_id_pairs[i].second.title) {
+        new_items[i].title != old_item_id_pairs[i].second.title ||
+        new_items[i].source != old_item_id_pairs[i].second.source) {
       return false;
     }
   }
   return true;
-}
-
-const char* GetIconTypeUrlHost(SearchBox::ImageSourceType type) {
-  switch (type) {
-    case SearchBox::FAVICON:
-      return "favicon";
-    case SearchBox::THUMB:
-      return "thumb";
-    default:
-      NOTREACHED();
-  }
-  return nullptr;
-}
-
-// Given |path| from an image URL, returns starting index of the page URL,
-// depending on |type| of image URL. Returns -1 if parse fails.
-int GetImagePathStartOfPageURL(SearchBox::ImageSourceType type,
-                               const std::string& path) {
-  // TODO(huangs): Refactor this: http://crbug.com/468320.
-  switch (type) {
-    case SearchBox::FAVICON: {
-      chrome::ParsedFaviconPath parsed;
-      return chrome::ParseFaviconPath(path, &parsed) ? parsed.path_index : -1;
-    }
-    case SearchBox::THUMB: {
-      return 0;
-    }
-    default: {
-      NOTREACHED();
-      break;
-    }
-  }
-  return -1;
 }
 
 // Helper for SearchBox::GenerateImageURLFromTransientURL().
@@ -144,7 +113,7 @@ bool ParseViewIdAndRestrictedId(const std::string& id_part,
   return true;
 }
 
-// Takes icon |url| of given |type|, e.g., FAVICON looking like
+// Takes a favicon |url| that looks like:
 //
 //   chrome-search://favicon/<view_id>/<restricted_id>
 //   chrome-search://favicon/<parameters>/<view_id>/<restricted_id>
@@ -152,7 +121,6 @@ bool ParseViewIdAndRestrictedId(const std::string& id_part,
 // If successful, assigns |*param_part| := "" or "<parameters>/" (note trailing
 // slash), |*view_id| := "<view_id>", |*rid| := "rid", and returns true.
 bool ParseIconRestrictedUrl(const GURL& url,
-                            SearchBox::ImageSourceType type,
                             std::string* param_part,
                             int* view_id,
                             InstantRestrictedID* rid) {
@@ -165,9 +133,11 @@ bool ParseIconRestrictedUrl(const GURL& url,
   DCHECK_EQ(raw_path[0], '/');
   raw_path = raw_path.substr(1);
 
-  int path_index = GetImagePathStartOfPageURL(type, raw_path);
-  if (path_index < 0)
+  // Get the starting index of the page URL.
+  chrome::ParsedFaviconPath parsed;
+  if (!chrome::ParseFaviconPath(raw_path, &parsed))
     return false;
+  int path_index = parsed.path_index;
 
   std::string id_part = raw_path.substr(path_index);
   if (!ParseViewIdAndRestrictedId(id_part, view_id, rid))
@@ -177,31 +147,24 @@ bool ParseIconRestrictedUrl(const GURL& url,
   return true;
 }
 
-bool TranslateIconRestrictedUrl(const GURL& transient_url,
-                                SearchBox::ImageSourceType type,
+void TranslateIconRestrictedUrl(const GURL& transient_url,
                                 const SearchBox::IconURLHelper& helper,
                                 GURL* url) {
   std::string params;
   int view_id = -1;
   InstantRestrictedID rid = -1;
 
-  if (!internal::ParseIconRestrictedUrl(
-          transient_url, type, &params, &view_id, &rid) ||
+  if (!internal::ParseIconRestrictedUrl(transient_url, &params, &view_id,
+                                        &rid) ||
       view_id != helper.GetViewID()) {
-    if (type == SearchBox::FAVICON) {
-      *url = GURL(base::StringPrintf("chrome-search://%s/",
-                                     GetIconTypeUrlHost(SearchBox::FAVICON)));
-      return true;
-    }
-    return false;
+    *url = GURL(base::StringPrintf("chrome-search://%s/",
+                                   chrome::kChromeUIFaviconHost));
+  } else {
+    std::string item_url = helper.GetURLStringFromRestrictedID(rid);
+    *url = GURL(base::StringPrintf("chrome-search://%s/%s%s",
+                                   chrome::kChromeUIFaviconHost, params.c_str(),
+                                   item_url.c_str()));
   }
-
-  std::string item_url = helper.GetURLStringFromRestrictedID(rid);
-  *url = GURL(base::StringPrintf("chrome-search://%s/%s%s",
-                                 GetIconTypeUrlHost(type),
-                                 params.c_str(),
-                                 item_url.c_str()));
-  return true;
 }
 
 std::string FixupAndValidateUrl(const std::string& url) {
@@ -289,11 +252,10 @@ void SearchBox::DeleteMostVisitedItem(
   embedded_search_service_->DeleteMostVisitedItem(page_seq_no_, url);
 }
 
-bool SearchBox::GenerateImageURLFromTransientURL(const GURL& transient_url,
-                                                 ImageSourceType type,
+void SearchBox::GenerateImageURLFromTransientURL(const GURL& transient_url,
                                                  GURL* url) const {
   SearchBoxIconURLHelper helper(this);
-  return internal::TranslateIconRestrictedUrl(transient_url, type, helper, url);
+  internal::TranslateIconRestrictedUrl(transient_url, helper, url);
 }
 
 void SearchBox::GetMostVisitedItems(
@@ -369,6 +331,13 @@ void SearchBox::UpdateCustomLink(InstantRestrictedID link_id,
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
+void SearchBox::ReorderCustomLink(InstantRestrictedID link_id, int new_pos) {
+  GURL url = GetURLForMostVisitedItem(link_id);
+  if (!url.is_valid())
+    return;
+  embedded_search_service_->ReorderCustomLink(page_seq_no_, url, new_pos);
+}
+
 void SearchBox::DeleteCustomLink(InstantRestrictedID most_visited_item_id) {
   GURL url = GetURLForMostVisitedItem(most_visited_item_id);
   if (!url.is_valid()) {
@@ -408,6 +377,29 @@ void SearchBox::SetCustomBackgroundURLWithAttributions(
 
 void SearchBox::SelectLocalBackgroundImage() {
   embedded_search_service_->SelectLocalBackgroundImage();
+}
+
+void SearchBox::BlocklistSearchSuggestion(int task_version, long task_id) {
+  embedded_search_service_->BlocklistSearchSuggestion(task_version, task_id);
+}
+
+void SearchBox::BlocklistSearchSuggestionWithHash(
+    int task_version,
+    long task_id,
+    const std::vector<uint8_t>& hash) {
+  embedded_search_service_->BlocklistSearchSuggestionWithHash(task_version,
+                                                              task_id, hash);
+}
+
+void SearchBox::SearchSuggestionSelected(int task_version,
+                                         long task_id,
+                                         const std::vector<uint8_t>& hash) {
+  embedded_search_service_->SearchSuggestionSelected(task_version, task_id,
+                                                     hash);
+}
+
+void SearchBox::OptOutOfSearchSuggestions() {
+  embedded_search_service_->OptOutOfSearchSuggestions();
 }
 
 void SearchBox::SetPageSequenceNumber(int page_seq_no) {
@@ -529,8 +521,8 @@ GURL SearchBox::GetURLForMostVisitedItem(InstantRestrictedID item_id) const {
   return GetMostVisitedItemWithID(item_id, &item) ? item.url : GURL();
 }
 
-void SearchBox::DidCommitProvisionalLoad(bool is_new_navigation,
-                                         bool is_same_document_navigation) {
+void SearchBox::DidCommitProvisionalLoad(bool is_same_document_navigation,
+                                         ui::PageTransition transition) {
   can_run_js_in_renderframe_ = true;
 }
 

@@ -17,6 +17,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "base/version.h"
@@ -26,6 +27,7 @@
 #include "chrome/browser/extensions/convert_web_app.h"
 #include "chrome/browser/extensions/extension_assets_manager.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/forced_extensions/installation_reporter.h"
 #include "chrome/browser/extensions/install_tracker.h"
 #include "chrome/browser/extensions/install_tracker_factory.h"
 #include "chrome/browser/extensions/load_error_reporter.h"
@@ -36,6 +38,8 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/web_application_info.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/crx_file/crx_verifier.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/resource_dispatcher_host.h"
@@ -61,6 +65,7 @@
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/user_script.h"
+#include "extensions/common/verifier_formats.h"
 #include "extensions/strings/grit/extensions_strings.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -112,7 +117,6 @@ CrxInstaller::CrxInstaller(base::WeakPtr<ExtensionService> service_weak,
       fail_install_if_unexpected_version_(false),
       extensions_enabled_(service_weak->extensions_enabled()),
       delete_source_(false),
-      create_app_shortcut_(false),
       service_weak_(service_weak),
       // See header file comment on |client_| for why we use a raw pointer here.
       client_(client.release()),
@@ -165,7 +169,11 @@ CrxInstaller::~CrxInstaller() {
 }
 
 void CrxInstaller::InstallCrx(const base::FilePath& source_file) {
-  InstallCrxFile(CRXFileInfo(source_file));
+  crx_file::VerifierFormat format =
+      off_store_install_allow_reason_ == OffStoreInstallDisallowed
+          ? GetWebstoreVerifierFormat()
+          : GetExternalVerifierFormat();
+  InstallCrxFile(CRXFileInfo(source_file, format));
 }
 
 void CrxInstaller::InstallCrxFile(const CRXFileInfo& source_file) {
@@ -453,8 +461,7 @@ base::Optional<CrxInstallError> CrxInstaller::AllowInstall(
       pattern.SetMatchSubdomains(true);
 
       const URLPatternSet& patterns = extension_->web_extent();
-      for (URLPatternSet::const_iterator i = patterns.begin();
-           i != patterns.end(); ++i) {
+      for (auto i = patterns.begin(); i != patterns.end(); ++i) {
         if (!pattern.MatchesHost(i->host())) {
           return CrxInstallError(
               CrxInstallErrorType::OTHER,
@@ -478,7 +485,6 @@ void CrxInstaller::OnUnpackFailure(const CrxInstallError& error) {
   UMA_HISTOGRAM_ENUMERATION("Extensions.UnpackFailureInstallCause",
                             install_cause(),
                             extension_misc::NUM_INSTALL_CAUSES);
-
   ReportFailureFromFileThread(error);
 }
 
@@ -522,8 +528,8 @@ void CrxInstaller::OnUnpackSuccess(
     return;
   }
 
-  if (!BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE,
+  if (!base::PostTaskWithTraits(
+          FROM_HERE, {BrowserThread::UI},
           base::BindOnce(&CrxInstaller::CheckInstall, this)))
     NOTREACHED();
 }
@@ -868,8 +874,8 @@ void CrxInstaller::ReloadExtensionAfterInstall(
 
 void CrxInstaller::ReportFailureFromFileThread(const CrxInstallError& error) {
   DCHECK(installer_task_runner_->RunsTasksInCurrentSequence());
-  if (!BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE,
+  if (!base::PostTaskWithTraits(
+          FROM_HERE, {BrowserThread::UI},
           base::BindOnce(&CrxInstaller::ReportFailureFromUIThread, this,
                          error))) {
     NOTREACHED();
@@ -913,8 +919,8 @@ void CrxInstaller::ReportSuccessFromFileThread() {
   if (install_cause() == extension_misc::INSTALL_CAUSE_USER_DOWNLOAD)
     UMA_HISTOGRAM_ENUMERATION("Extensions.ExtensionInstalled", 1, 2);
 
-  if (!BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE,
+  if (!base::PostTaskWithTraits(
+          FROM_HERE, {BrowserThread::UI},
           base::BindOnce(&CrxInstaller::ReportSuccessFromUIThread, this)))
     NOTREACHED();
 
@@ -933,7 +939,7 @@ void CrxInstaller::ReportSuccessFromUIThread() {
   if (!update_from_settings_page_) {
     // If there is a client, tell the client about installation.
     if (client_)
-      client_->OnInstallSuccess(extension(), install_icon_.get());
+      client_->OnInstallSuccess(extension_, install_icon_.get());
 
     // We update the extension's granted permissions if the user already
     // approved the install (client_ is non NULL), or we are allowed to install
@@ -959,7 +965,37 @@ void CrxInstaller::NotifyCrxInstallBegin() {
 
 void CrxInstaller::NotifyCrxInstallComplete(
     const base::Optional<CrxInstallError>& error) {
+  const std::string extension_id =
+      expected_id_.empty() && extension() ? extension()->id() : expected_id_;
+  InstallationReporter::ReportInstallationStage(
+      profile_, extension_id, InstallationReporter::Stage::COMPLETE);
   const bool success = !error.has_value();
+
+  if (!success && (!expected_id_.empty() || extension())) {
+    switch (error->type()) {
+      case CrxInstallErrorType::DECLINED:
+        InstallationReporter::ReportCrxInstallError(
+            profile_, extension_id,
+            InstallationReporter::FailureReason::CRX_INSTALL_ERROR_DECLINED,
+            error->detail());
+        break;
+      case CrxInstallErrorType::SANDBOXED_UNPACKER_FAILURE:
+        InstallationReporter::ReportFailure(
+            profile_, extension_id,
+            InstallationReporter::FailureReason::
+                CRX_INSTALL_ERROR_SANDBOXED_UNPACKER_FAILURE);
+        break;
+      case CrxInstallErrorType::OTHER:
+        InstallationReporter::ReportCrxInstallError(
+            profile_, extension_id,
+            InstallationReporter::FailureReason::CRX_INSTALL_ERROR_OTHER,
+            error->detail());
+        break;
+      case CrxInstallErrorType::NONE:
+        NOTREACHED();
+        break;
+    }
+  }
 
   // Some users (such as the download shelf) need to know when a
   // CRXInstaller is done.  Listening for the EXTENSION_* events
@@ -977,7 +1013,7 @@ void CrxInstaller::NotifyCrxInstallComplete(
     ConfirmReEnable();
 
   if (!installer_callback_.is_null() &&
-      !BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)
+      !base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::UI})
            ->PostTask(FROM_HERE,
                       base::BindOnce(std::move(installer_callback_), error))) {
     NOTREACHED();

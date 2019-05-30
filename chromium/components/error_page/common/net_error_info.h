@@ -7,7 +7,8 @@
 
 namespace error_page {
 
-// Network error page events.  Used for UMA statistics.
+// Network error page events.  Used for UMA statistics and its values must be
+// mirrored in NetErrorPageEvents in enums.xml.
 enum NetworkErrorPageEvent {
   NETWORK_ERROR_PAGE_SHOWN = 0,  // Error pages shown.
 
@@ -16,19 +17,21 @@ enum NetworkErrorPageEvent {
   NETWORK_ERROR_PAGE_RELOAD_BUTTON_ERROR = 3,    // Reload button clicked
                                                  // -> error.
 
-  // Same for the "Show saved copy" button.
-  NETWORK_ERROR_PAGE_SHOW_SAVED_COPY_BUTTON_SHOWN = 4,
-  NETWORK_ERROR_PAGE_SHOW_SAVED_COPY_BUTTON_CLICKED = 5,
-  NETWORK_ERROR_PAGE_SHOW_SAVED_COPY_BUTTON_ERROR = 6,
+  // Obsolete values used for the "Show saved copy" button.
+  // NETWORK_ERROR_PAGE_SHOW_SAVED_COPY_BUTTON_SHOWN = 4,
+  // NETWORK_ERROR_PAGE_SHOW_SAVED_COPY_BUTTON_CLICKED = 5,
+  // NETWORK_ERROR_PAGE_SHOW_SAVED_COPY_BUTTON_ERROR = 6,
 
   NETWORK_ERROR_PAGE_MORE_BUTTON_CLICKED = 7,  // More button clicked.
 
   NETWORK_ERROR_PAGE_BROWSER_INITIATED_RELOAD = 8,  // Reload from browser.
 
-  // Keep track of which button the user chooses when both are shown.
-  NETWORK_ERROR_PAGE_BOTH_BUTTONS_SHOWN = 9,
-  NETWORK_ERROR_PAGE_BOTH_BUTTONS_RELOAD_CLICKED = 10,
-  NETWORK_ERROR_PAGE_BOTH_BUTTONS_SHOWN_SAVED_COPY_CLICKED = 11,
+  // Obsolete values used for when "Show saved copy" and "Reload" buttons were
+  // both shown.
+  //
+  // NETWORK_ERROR_PAGE_BOTH_BUTTONS_SHOWN = 9,
+  // NETWORK_ERROR_PAGE_BOTH_BUTTONS_RELOAD_CLICKED = 10,
+  // NETWORK_ERROR_PAGE_BOTH_BUTTONS_SHOWN_SAVED_COPY_CLICKED = 11,
 
   NETWORK_ERROR_EASTER_EGG_ACTIVATED = 12,  // Easter egg activated.
 
@@ -56,14 +59,18 @@ enum NetworkErrorPageEvent {
 
   // Values for suggested content on the net-error page:
 
-  // At least one offline content suggestion was shown.
+  // A list containing at least one item of offline content suggestions was
+  // shown in the expanded/shown state.
   NETWORK_ERROR_PAGE_OFFLINE_SUGGESTIONS_SHOWN = 24,
-  // An offline content suggestion was clicked.
+  // An item from the offline content suggestions list was clicked.
   NETWORK_ERROR_PAGE_OFFLINE_SUGGESTION_CLICKED = 25,
   // A link that opens the downloads page was clicked.
   NETWORK_ERROR_PAGE_OFFLINE_DOWNLOADS_PAGE_CLICKED = 26,
   // A summary of available offline content was shown.
   NETWORK_ERROR_PAGE_OFFLINE_CONTENT_SUMMARY_SHOWN = 27,
+  // A list containing at least one item of offline content suggestions was
+  // shown in the collapsed/hidden state.
+  NETWORK_ERROR_PAGE_OFFLINE_SUGGESTIONS_SHOWN_COLLAPSED = 28,
 
   NETWORK_ERROR_PAGE_EVENT_MAX,
 };

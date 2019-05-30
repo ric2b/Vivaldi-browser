@@ -9,12 +9,11 @@
 #include "base/containers/flat_map.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/no_destructor.h"
 #include "base/observer_list.h"
 #include "base/process/kill.h"
 #include "base/sequence_checker.h"
 #include "base/strings/string16.h"
-#include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom.h"
+#include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom-shared.h"
 
 namespace content {
 class WebContents;
@@ -22,6 +21,7 @@ class WebContents;
 
 namespace resource_coordinator {
 
+class ResourceCoordinatorParts;
 class ResourceCoordinatorTabHelper;
 class TabManagerResourceCoordinatorSignalObserverHelper;
 
@@ -111,14 +111,13 @@ class TabLoadTracker {
   void TransitionStateForTesting(content::WebContents* web_contents,
                                  LoadingState loading_state);
 
-  // Called from CoreTabHelperDelegates when |new_contents| is replacing
+  // Called from WebContentsDelegates when |new_contents| is replacing
   // |old_contents| in a tab.
   void SwapTabContents(content::WebContents* old_contents,
                        content::WebContents* new_contents);
 
  protected:
-  // This allows the singleton constructor access to the protected constructor.
-  friend class base::NoDestructor<TabLoadTracker>;
+  friend class ResourceCoordinatorParts;
 
   // For unittesting.
   friend class LocalSiteCharacteristicsWebContentsObserverTest;

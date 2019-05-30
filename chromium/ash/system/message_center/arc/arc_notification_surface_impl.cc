@@ -55,7 +55,7 @@ class CustomWindowDelegate : public aura::WindowDelegate {
   void OnWindowDestroyed(aura::Window* window) override { delete this; }
   void OnWindowTargetVisibilityChanged(bool visible) override {}
   bool HasHitTestMask() const override { return true; }
-  void GetHitTestMask(gfx::Path* mask) const override {
+  void GetHitTestMask(SkPath* mask) const override {
     notification_surface_->GetHitTestMask(mask);
   }
   void OnKeyEvent(ui::KeyEvent* event) override {
@@ -143,11 +143,11 @@ void ArcNotificationSurfaceImpl::FocusSurfaceWindow() {
   return surface_->root_surface()->window()->Focus();
 }
 
-void ArcNotificationSurfaceImpl::SetAXTreeId(int32_t ax_tree_id) {
+void ArcNotificationSurfaceImpl::SetAXTreeId(ui::AXTreeID ax_tree_id) {
   ax_tree_id_ = ax_tree_id;
 }
 
-int32_t ArcNotificationSurfaceImpl::GetAXTreeId() const {
+ui::AXTreeID ArcNotificationSurfaceImpl::GetAXTreeId() const {
   return ax_tree_id_;
 }
 

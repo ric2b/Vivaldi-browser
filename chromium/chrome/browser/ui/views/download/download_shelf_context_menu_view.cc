@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/download/download_shelf_context_menu_view.h"
 
+#include "base/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
 #include "chrome/browser/download/download_item_model.h"
@@ -14,7 +15,7 @@
 
 DownloadShelfContextMenuView::DownloadShelfContextMenuView(
     DownloadItemView* download_item_view)
-    : DownloadShelfContextMenu(download_item_view->download()),
+    : DownloadShelfContextMenu(download_item_view->model()),
       download_item_view_(download_item_view) {}
 
 DownloadShelfContextMenuView::~DownloadShelfContextMenuView() {}

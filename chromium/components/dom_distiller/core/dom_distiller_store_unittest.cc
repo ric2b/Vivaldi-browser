@@ -13,8 +13,8 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/time/time.h"
 #include "components/dom_distiller/core/article_entry.h"
 #include "components/dom_distiller/core/dom_distiller_test_util.h"
@@ -69,8 +69,7 @@ class FakeSyncChangeProcessor : public syncer::SyncChangeProcessor {
 
   SyncError ProcessSyncChanges(const base::Location&,
                                const syncer::SyncChangeList& changes) override {
-    for (SyncChangeList::const_iterator it = changes.begin();
-         it != changes.end(); ++it) {
+    for (auto it = changes.begin(); it != changes.end(); ++it) {
       AddEntry(GetEntryFromChange(*it), model_);
     }
     return SyncError();
@@ -149,19 +148,18 @@ class DomDistillerStoreTest : public testing::Test {
  protected:
   SyncData CreateSyncData(const ArticleEntry& entry) {
     EntitySpecifics specifics = SpecificsFromEntry(entry);
-    return SyncData::CreateRemoteData(next_sync_id_++, specifics,
-                                      Time::UnixEpoch());
+    return SyncData::CreateRemoteData(next_sync_id_++, specifics);
   }
 
   SyncDataList SyncDataFromEntryMap(const EntryMap& model) {
     SyncDataList data;
-    for (EntryMap::const_iterator it = model.begin(); it != model.end(); ++it) {
+    for (auto it = model.begin(); it != model.end(); ++it) {
       data.push_back(CreateSyncData(it->second));
     }
     return data;
   }
 
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
 
   EntryMap db_model_;
   EntryMap sync_model_;
@@ -181,9 +179,8 @@ AssertionResult AreEntriesEqual(const DomDistillerStore::EntryVector& entries,
     return AssertionFailure() << "Expected " << expected_entries.size()
                               << " entries but found " << entries.size();
 
-  for (DomDistillerStore::EntryVector::const_iterator it = entries.begin();
-       it != entries.end(); ++it) {
-    EntryMap::iterator expected_it = expected_entries.find(it->entry_id());
+  for (auto it = entries.begin(); it != entries.end(); ++it) {
+    auto expected_it = expected_entries.find(it->entry_id());
     if (expected_it == expected_entries.end()) {
       return AssertionFailure() << "Found unexpected entry with id <"
                                 << it->entry_id() << ">";
@@ -199,7 +196,7 @@ AssertionResult AreEntriesEqual(const DomDistillerStore::EntryVector& entries,
 
 AssertionResult AreEntryMapsEqual(const EntryMap& left, const EntryMap& right) {
   DomDistillerStore::EntryVector entries;
-  for (EntryMap::const_iterator it = left.begin(); it != left.end(); ++it) {
+  for (auto it = left.begin(); it != left.end(); ++it) {
     entries.push_back(it->second);
   }
   return AreEntriesEqual(entries, right);

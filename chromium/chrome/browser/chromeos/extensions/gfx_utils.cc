@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/extensions/gfx_utils.h"
 
 #include "base/lazy_instance.h"
+#include "base/stl_util.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
@@ -108,7 +109,7 @@ class AppDualBadgeMap {
   using ExtensionToArcAppMap = std::unordered_map<std::string, std::string>;
 
   AppDualBadgeMap() {
-    for (size_t i = 0; i < arraysize(kDualBadgeMap); ++i) {
+    for (size_t i = 0; i < base::size(kDualBadgeMap); ++i) {
       arc_app_to_extensions_map_[kDualBadgeMap[i].arc_package_name].push_back(
           kDualBadgeMap[i].extension_id);
       extension_to_arc_app_map_[kDualBadgeMap[i].extension_id] =
@@ -182,20 +183,15 @@ const std::vector<std::string> GetEquivalentInstalledExtensions(
   if (extension_ids.empty())
     return std::vector<std::string>();
 
-  extension_ids.erase(
-      std::remove_if(extension_ids.begin(), extension_ids.end(),
-                     [registry](std::string extension_id) {
-                       return !registry->GetInstalledExtension(extension_id);
-                     }),
-      extension_ids.end());
+  base::EraseIf(extension_ids, [registry](std::string extension_id) {
+    return !registry->GetInstalledExtension(extension_id);
+  });
   return extension_ids;
 }
 
-bool MaybeApplyChromeBadge(content::BrowserContext* context,
-                           const std::string& extension_id,
-                           gfx::ImageSkia* icon_out) {
+bool ShouldApplyChromeBadge(content::BrowserContext* context,
+                            const std::string& extension_id) {
   DCHECK(context);
-  DCHECK(icon_out);
 
   Profile* profile = Profile::FromBrowserContext(context);
   // Only apply Chrome badge for the primary profile.
@@ -211,6 +207,12 @@ bool MaybeApplyChromeBadge(content::BrowserContext* context,
   if (!HasEquivalentInstalledArcApp(context, extension_id))
     return false;
 
+  return true;
+}
+
+void ApplyChromeBadge(gfx::ImageSkia* icon_out) {
+  DCHECK(icon_out);
+
   const gfx::ImageSkia* badge_image =
       ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
           IDR_ARC_DUAL_ICON_BADGE);
@@ -223,7 +225,6 @@ bool MaybeApplyChromeBadge(content::BrowserContext* context,
   }
   *icon_out = gfx::ImageSkiaOperations::CreateSuperimposedImage(
       *icon_out, resized_badge_image);
-  return true;
 }
 
 }  // namespace util

@@ -1092,3 +1092,211 @@ TEST_F(TargetTest, PullRecursiveBundleData) {
   ASSERT_TRUE(e.bundle_data().assets_catalog_sources().empty());
   ASSERT_EQ(e.bundle_data().bundle_deps().size(), 2u);
 }
+
+TEST(TargetTest, CollectMetadataNoRecurse) {
+  TestWithScope setup;
+
+  TestTarget one(setup, "//foo:one", Target::SOURCE_SET);
+  Value a_expected(nullptr, Value::LIST);
+  a_expected.list_value().push_back(Value(nullptr, "foo"));
+  one.metadata().contents().insert(
+      std::pair<base::StringPiece, Value>("a", a_expected));
+
+  Value b_expected(nullptr, Value::LIST);
+  b_expected.list_value().push_back(Value(nullptr, true));
+  one.metadata().contents().insert(
+      std::pair<base::StringPiece, Value>("b", b_expected));
+
+  one.metadata().set_source_dir(SourceDir("/usr/home/files/"));
+
+  std::vector<std::string> data_keys;
+  data_keys.push_back("a");
+  data_keys.push_back("b");
+
+  std::vector<std::string> walk_keys;
+
+  Err err;
+  std::vector<Value> result;
+  std::set<const Target*> targets;
+  one.GetMetadata(data_keys, walk_keys, SourceDir(), false, &result, &targets,
+                  &err);
+  EXPECT_FALSE(err.has_error());
+
+  std::vector<Value> expected;
+  expected.push_back(Value(nullptr, "foo"));
+  expected.push_back(Value(nullptr, true));
+  EXPECT_EQ(result, expected);
+}
+
+TEST(TargetTest, CollectMetadataWithRecurse) {
+  TestWithScope setup;
+
+  TestTarget one(setup, "//foo:one", Target::SOURCE_SET);
+  Value a_expected(nullptr, Value::LIST);
+  a_expected.list_value().push_back(Value(nullptr, "foo"));
+  one.metadata().contents().insert(
+      std::pair<base::StringPiece, Value>("a", a_expected));
+
+  Value b_expected(nullptr, Value::LIST);
+  b_expected.list_value().push_back(Value(nullptr, true));
+  one.metadata().contents().insert(
+      std::pair<base::StringPiece, Value>("b", b_expected));
+
+  TestTarget two(setup, "//foo:two", Target::SOURCE_SET);
+  Value a_2_expected(nullptr, Value::LIST);
+  a_2_expected.list_value().push_back(Value(nullptr, "bar"));
+  two.metadata().contents().insert(
+      std::pair<base::StringPiece, Value>("a", a_2_expected));
+
+  one.public_deps().push_back(LabelTargetPair(&two));
+
+  std::vector<std::string> data_keys;
+  data_keys.push_back("a");
+  data_keys.push_back("b");
+
+  std::vector<std::string> walk_keys;
+
+  Err err;
+  std::vector<Value> result;
+  std::set<const Target*> targets;
+  one.GetMetadata(data_keys, walk_keys, SourceDir(), false, &result, &targets,
+                  &err);
+  EXPECT_FALSE(err.has_error());
+
+  std::vector<Value> expected;
+  expected.push_back(Value(nullptr, "bar"));
+  expected.push_back(Value(nullptr, "foo"));
+  expected.push_back(Value(nullptr, true));
+  EXPECT_EQ(result, expected);
+}
+
+TEST(TargetTest, CollectMetadataWithBarrier) {
+  TestWithScope setup;
+
+  TestTarget one(setup, "//foo:one", Target::SOURCE_SET);
+  Value a_expected(nullptr, Value::LIST);
+  a_expected.list_value().push_back(Value(nullptr, "foo"));
+  one.metadata().contents().insert(
+      std::pair<base::StringPiece, Value>("a", a_expected));
+
+  Value walk_expected(nullptr, Value::LIST);
+  walk_expected.list_value().push_back(
+      Value(nullptr, "//foo:two(//toolchain:default)"));
+  one.metadata().contents().insert(
+      std::pair<base::StringPiece, Value>("walk", walk_expected));
+
+  TestTarget two(setup, "//foo:two", Target::SOURCE_SET);
+  Value a_2_expected(nullptr, Value::LIST);
+  a_2_expected.list_value().push_back(Value(nullptr, "bar"));
+  two.metadata().contents().insert(
+      std::pair<base::StringPiece, Value>("a", a_2_expected));
+
+  TestTarget three(setup, "//foo:three", Target::SOURCE_SET);
+  Value a_3_expected(nullptr, Value::LIST);
+  a_3_expected.list_value().push_back(Value(nullptr, "baz"));
+  three.metadata().contents().insert(
+      std::pair<base::StringPiece, Value>("a", a_3_expected));
+
+  one.public_deps().push_back(LabelTargetPair(&two));
+  one.public_deps().push_back(LabelTargetPair(&three));
+
+  std::vector<std::string> data_keys;
+  data_keys.push_back("a");
+
+  std::vector<std::string> walk_keys;
+  walk_keys.push_back("walk");
+
+  Err err;
+  std::vector<Value> result;
+  std::set<const Target*> targets;
+  one.GetMetadata(data_keys, walk_keys, SourceDir(), false, &result, &targets,
+                  &err);
+  EXPECT_FALSE(err.has_error()) << err.message();
+
+  std::vector<Value> expected;
+  expected.push_back(Value(nullptr, "bar"));
+  expected.push_back(Value(nullptr, "foo"));
+  EXPECT_EQ(result, expected) << result.size();
+}
+
+TEST(TargetTest, CollectMetadataWithError) {
+  TestWithScope setup;
+
+  TestTarget one(setup, "//foo:one", Target::SOURCE_SET);
+  Value a_expected(nullptr, Value::LIST);
+  a_expected.list_value().push_back(Value(nullptr, "foo"));
+  one.metadata().contents().insert(
+      std::pair<base::StringPiece, Value>("a", a_expected));
+
+  Value walk_expected(nullptr, Value::LIST);
+  walk_expected.list_value().push_back(Value(nullptr, "//foo:missing"));
+  one.metadata().contents().insert(
+      std::pair<base::StringPiece, Value>("walk", walk_expected));
+
+  std::vector<std::string> data_keys;
+  data_keys.push_back("a");
+
+  std::vector<std::string> walk_keys;
+  walk_keys.push_back("walk");
+
+  Err err;
+  std::vector<Value> result;
+  std::set<const Target*> targets;
+  one.GetMetadata(data_keys, walk_keys, SourceDir(), false, &result, &targets,
+                  &err);
+  EXPECT_TRUE(err.has_error());
+  EXPECT_EQ(err.message(),
+            "I was expecting //foo:missing to be a dependency of "
+            "//foo:one(//toolchain:default). "
+            "Make sure it's included in the deps or data_deps, and that you've "
+            "specified the appropriate toolchain.")
+      << err.message();
+}
+
+TEST_F(TargetTest, WriteMetadataCollection) {
+  TestWithScope setup;
+  Err err;
+
+  SourceFile source_file("//out/Debug/metadata.json");
+  OutputFile output_file(setup.build_settings(), source_file);
+
+  TestTarget generator(setup, "//foo:write", Target::GENERATED_FILE);
+  generator.action_values().outputs() =
+      SubstitutionList::MakeForTest("//out/Debug/metadata.json");
+  EXPECT_TRUE(generator.OnResolved(&err));
+
+  TestTarget middle_data_dep(setup, "//foo:middle", Target::EXECUTABLE);
+  middle_data_dep.data_deps().push_back(LabelTargetPair(&generator));
+  EXPECT_TRUE(middle_data_dep.OnResolved(&err));
+
+  // This target has a generated metadata input and no dependency makes it.
+  TestTarget dep_missing(setup, "//foo:no_dep", Target::EXECUTABLE);
+  dep_missing.sources().push_back(source_file);
+  EXPECT_TRUE(dep_missing.OnResolved(&err));
+  AssertSchedulerHasOneUnknownFileMatching(&dep_missing, source_file);
+  scheduler().ClearUnknownGeneratedInputsAndWrittenFiles();
+
+  // This target has a generated file and we've directly dependended on it.
+  TestTarget dep_present(setup, "//foo:with_dep", Target::EXECUTABLE);
+  dep_present.sources().push_back(source_file);
+  dep_present.private_deps().push_back(LabelTargetPair(&generator));
+  EXPECT_TRUE(dep_present.OnResolved(&err));
+  EXPECT_TRUE(scheduler().GetUnknownGeneratedInputs().empty());
+
+  // This target has a generated file and we've indirectly dependended on it
+  // via data_deps.
+  TestTarget dep_indirect(setup, "//foo:indirect_dep", Target::EXECUTABLE);
+  dep_indirect.sources().push_back(source_file);
+  dep_indirect.data_deps().push_back(LabelTargetPair(&middle_data_dep));
+  EXPECT_TRUE(dep_indirect.OnResolved(&err));
+  AssertSchedulerHasOneUnknownFileMatching(&dep_indirect, source_file);
+  scheduler().ClearUnknownGeneratedInputsAndWrittenFiles();
+
+  // This target has a generated file and we've directly dependended on it
+  // via data_deps.
+  TestTarget data_dep_present(setup, "//foo:with_data_dep", Target::EXECUTABLE);
+  data_dep_present.sources().push_back(source_file);
+  data_dep_present.data_deps().push_back(LabelTargetPair(&generator));
+  EXPECT_TRUE(data_dep_present.OnResolved(&err));
+  EXPECT_TRUE(scheduler().GetUnknownGeneratedInputs().empty());
+}

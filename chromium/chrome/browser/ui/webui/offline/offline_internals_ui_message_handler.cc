@@ -34,6 +34,7 @@
 #include "components/offline_pages/core/prefetch/prefetch_background_task_handler.h"
 #include "components/offline_pages/core/prefetch/prefetch_dispatcher.h"
 #include "components/offline_pages/core/prefetch/prefetch_downloader.h"
+#include "components/offline_pages/core/prefetch/prefetch_prefs.h"
 #include "components/offline_pages/core/prefetch/prefetch_service.h"
 #include "components/offline_pages/core/prefetch/prefetch_types.h"
 #include "content/public/browser/web_ui.h"
@@ -54,10 +55,8 @@ std::string GetStringFromDeletePageResult(
       return "Store failure";
     case offline_pages::DeletePageResult::DEVICE_FAILURE:
       return "Device failure";
-    case offline_pages::DeletePageResult::NOT_FOUND:
+    case offline_pages::DeletePageResult::DEPRECATED_NOT_FOUND:
       return "Not found";
-    case offline_pages::DeletePageResult::RESULT_COUNT:
-      break;
   }
   NOTREACHED();
   return "Unknown";
@@ -167,7 +166,8 @@ void OfflineInternalsUIMessageHandler::HandleStoredPagesCallback(
     offline_page->SetDouble("creationTime", page.creation_time.ToJsTime());
     offline_page->SetDouble("lastAccessTime", page.last_access_time.ToJsTime());
     offline_page->SetInteger("accessCount", page.access_count);
-    offline_page->SetString("originalUrl", page.original_url.spec());
+    offline_page->SetString("originalUrl",
+                            page.original_url_if_different.spec());
     offline_page->SetString("requestOrigin", page.request_origin);
     results.Append(std::move(offline_page));
   }
@@ -183,26 +183,21 @@ void OfflineInternalsUIMessageHandler::HandleStoredPagesCallback(
 
 void OfflineInternalsUIMessageHandler::HandleRequestQueueCallback(
     std::string callback_id,
-    offline_pages::GetRequestsResult result,
     std::vector<std::unique_ptr<offline_pages::SavePageRequest>> requests) {
   base::ListValue save_page_requests;
-  if (result == offline_pages::GetRequestsResult::SUCCESS) {
-    for (const auto& request : requests) {
-      auto save_page_request = std::make_unique<base::DictionaryValue>();
-      save_page_request->SetString("onlineUrl", request->url().spec());
-      save_page_request->SetDouble("creationTime",
-                                   request->creation_time().ToJsTime());
-      save_page_request->SetString("status", GetStringFromSavePageStatus());
-      save_page_request->SetString("namespace",
-                                   request->client_id().name_space);
-      save_page_request->SetDouble("lastAttemptTime",
-                                   request->last_attempt_time().ToJsTime());
-      save_page_request->SetString("id", std::to_string(request->request_id()));
-      save_page_request->SetString("originalUrl",
-                                   request->original_url().spec());
-      save_page_request->SetString("requestOrigin", request->request_origin());
-      save_page_requests.Append(std::move(save_page_request));
-    }
+  for (const auto& request : requests) {
+    auto save_page_request = std::make_unique<base::DictionaryValue>();
+    save_page_request->SetString("onlineUrl", request->url().spec());
+    save_page_request->SetDouble("creationTime",
+                                 request->creation_time().ToJsTime());
+    save_page_request->SetString("status", GetStringFromSavePageStatus());
+    save_page_request->SetString("namespace", request->client_id().name_space);
+    save_page_request->SetDouble("lastAttemptTime",
+                                 request->last_attempt_time().ToJsTime());
+    save_page_request->SetString("id", std::to_string(request->request_id()));
+    save_page_request->SetString("originalUrl", request->original_url().spec());
+    save_page_request->SetString("requestOrigin", request->request_origin());
+    save_page_requests.Append(std::move(save_page_request));
   }
   ResolveJavascriptCallback(base::Value(callback_id), save_page_requests);
 }
@@ -214,7 +209,7 @@ void OfflineInternalsUIMessageHandler::HandleGetRequestQueue(
   CHECK(args->GetString(0, &callback_id));
 
   if (request_coordinator_) {
-    request_coordinator_->queue()->GetRequests(base::Bind(
+    request_coordinator_->GetAllRequests(base::BindOnce(
         &OfflineInternalsUIMessageHandler::HandleRequestQueueCallback,
         weak_ptr_factory_.GetWeakPtr(), callback_id));
   } else {
@@ -409,6 +404,71 @@ void OfflineInternalsUIMessageHandler::HandleSetRecordPrefetchService(
     prefetch_service_->GetLogger()->SetIsLogging(should_record);
 }
 
+void OfflineInternalsUIMessageHandler::HandleSetLimitlessPrefetchingEnabled(
+    const base::ListValue* args) {
+  AllowJavascript();
+  PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
+  DCHECK(!args->GetList().empty());
+  bool enabled = args->GetList()[0].GetBool();
+  offline_pages::prefetch_prefs::SetLimitlessPrefetchingEnabled(prefs, enabled);
+}
+
+void OfflineInternalsUIMessageHandler::HandleGetLimitlessPrefetchingEnabled(
+    const base::ListValue* args) {
+  AllowJavascript();
+  const base::Value* callback_id;
+  bool got_callback_id = args->Get(0, &callback_id);
+  DCHECK(got_callback_id);
+
+  PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
+  bool enabled =
+      offline_pages::prefetch_prefs::IsLimitlessPrefetchingEnabled(prefs);
+
+  ResolveJavascriptCallback(*callback_id, base::Value(enabled));
+}
+
+void OfflineInternalsUIMessageHandler::HandleSetPrefetchTestingHeader(
+    const base::ListValue* args) {
+  AllowJavascript();
+  PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
+
+  if (args->GetList().size() != 1) {
+    DLOG(ERROR) << "Expected 1 argument to setPrefetchTesting header but got "
+                << args->GetList().size();
+    return;
+  }
+  if (!args->GetList()[0].is_string()) {
+    DLOG(ERROR) << "Expected argument to be string but got "
+                << base::Value::GetTypeName(args->GetList()[0].type());
+    return;
+  }
+
+  offline_pages::prefetch_prefs::SetPrefetchTestingHeader(
+      prefs, args->GetList()[0].GetString());
+}
+
+void OfflineInternalsUIMessageHandler::HandleGetPrefetchTestingHeader(
+    const base::ListValue* args) {
+  AllowJavascript();
+  if (args->GetList().size() != 1) {
+    DLOG(ERROR) << "Expected 1 argument to getPrefetchTestingHeader but got "
+                << args->GetList().size();
+    return;
+  }
+  if (!args->GetList()[0].is_string()) {
+    DLOG(ERROR) << "Expected callback_id to be a string but got "
+                << base::Value::GetTypeName(args->GetList()[0].type());
+    return;
+  }
+
+  PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
+  ResolveJavascriptCallback(
+      args->GetList()[0],
+      base::Value(offline_pages::prefetch_prefs::GetPrefetchTestingHeader(prefs)
+
+                      ));
+}
+
 void OfflineInternalsUIMessageHandler::HandleGetLoggingState(
     const base::ListValue* args) {
   AllowJavascript();
@@ -528,6 +588,26 @@ void OfflineInternalsUIMessageHandler::RegisterMessages() {
       "setRecordPrefetchService",
       base::BindRepeating(
           &OfflineInternalsUIMessageHandler::HandleSetRecordPrefetchService,
+          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "setLimitlessPrefetchingEnabled",
+      base::BindRepeating(&OfflineInternalsUIMessageHandler::
+                              HandleSetLimitlessPrefetchingEnabled,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getLimitlessPrefetchingEnabled",
+      base::BindRepeating(&OfflineInternalsUIMessageHandler::
+                              HandleGetLimitlessPrefetchingEnabled,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "setPrefetchTestingHeader",
+      base::BindRepeating(
+          &OfflineInternalsUIMessageHandler::HandleSetPrefetchTestingHeader,
+          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getPrefetchTestingHeader",
+      base::BindRepeating(
+          &OfflineInternalsUIMessageHandler::HandleGetPrefetchTestingHeader,
           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "getLoggingState",

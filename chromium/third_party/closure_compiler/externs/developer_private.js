@@ -270,9 +270,25 @@ chrome.developerPrivate.Permission;
 
 /**
  * @typedef {{
+ *   host: string,
+ *   granted: boolean
+ * }}
+ */
+chrome.developerPrivate.SiteControl;
+
+/**
+ * @typedef {{
+ *   hasAllHosts: boolean,
+ *   hostAccess: !chrome.developerPrivate.HostAccess,
+ *   hosts: !Array<!chrome.developerPrivate.SiteControl>
+ * }}
+ */
+chrome.developerPrivate.RuntimeHostPermissions;
+
+/**
+ * @typedef {{
  *   simplePermissions: !Array<!chrome.developerPrivate.Permission>,
- *   hostAccess: (!chrome.developerPrivate.HostAccess|undefined),
- *   runtimeHostPermissions: (!Array<string>|undefined)
+ *   runtimeHostPermissions: (!chrome.developerPrivate.RuntimeHostPermissions|undefined)
  * }}
  */
 chrome.developerPrivate.Permissions;
@@ -377,7 +393,6 @@ chrome.developerPrivate.GetExtensionsInfoOptions;
  *   incognitoAccess: (boolean|undefined),
  *   errorCollection: (boolean|undefined),
  *   hostAccess: (!chrome.developerPrivate.HostAccess|undefined)
- *   showActionButton: (boolean|undefined)
  * }}
  */
 chrome.developerPrivate.ExtensionConfigurationUpdate;

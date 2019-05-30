@@ -11,6 +11,7 @@
 
 #include "base/command_line.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
 #include "platform_media/gpu/pipeline/platform_media_pipeline_create.h"
 #include "platform_media/gpu/data_source/ipc_data_source_impl.h"
@@ -29,7 +30,7 @@ namespace {
 
 const char* const kDecodedDataReadTraceEventNames[] = {"GPU ReadAudioData",
                                                        "GPU ReadVideoData"};
-static_assert(arraysize(kDecodedDataReadTraceEventNames) == static_cast<size_t>(
+static_assert(base::size(kDecodedDataReadTraceEventNames) == static_cast<size_t>(
   PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT),
               "Incorrect number of defined tracing event names.");
 }  // namespace
@@ -110,6 +111,8 @@ void IPCMediaPipeline::OnBufferForDecodedDataReady(
     PlatformMediaDataType type,
     size_t buffer_size,
     base::SharedMemoryHandle handle) {
+  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__;
+
   if (!pending_output_buffers_[type]) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << " Unexpected call to " << __FUNCTION__;
@@ -282,6 +285,7 @@ bool IPCMediaPipeline::OnMessageReceived(const IPC::Message& msg) {
 void IPCMediaPipeline::OnReadDecodedData(PlatformMediaDataType type) {
   DCHECK(thread_checker_.CalledOnValidThread());
   TRACE_EVENT0("IPC_MEDIA", "IPCMediaPipeline::OnReadDecodedData");
+  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__;
 
   if (state_ != DECODING) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__

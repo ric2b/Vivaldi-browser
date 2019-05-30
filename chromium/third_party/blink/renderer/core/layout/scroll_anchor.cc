@@ -99,9 +99,7 @@ static LayoutRect RelativeBounds(const LayoutObject* layout_object,
       local_bounds.ShiftMaxYEdgeTo(max_y);
     }
   } else if (layout_object->IsText()) {
-    // TODO(skobes): Use first and last InlineTextBox only?
-    for (InlineTextBox* box : ToLayoutText(layout_object)->TextBoxes())
-      local_bounds.Unite(box->FrameRect());
+    local_bounds.Unite(ToLayoutText(layout_object)->LinesBoundingBox());
   } else {
     // Only LayoutBox and LayoutText are supported.
     NOTREACHED();
@@ -145,24 +143,23 @@ static const AtomicString UniqueClassnameAmongSiblings(Element* element) {
 
   auto classname_filter = std::make_unique<ClassnameFilter>();
 
-  Element* parent_element = ElementTraversal::FirstAncestor(*element->ToNode());
+  Element* parent_element = ElementTraversal::FirstAncestor(*element);
   Element* sibling_element =
-      parent_element ? ElementTraversal::FirstChild(*parent_element->ToNode())
-                     : element;
+      parent_element ? ElementTraversal::FirstChild(*parent_element) : element;
   // Add every classname of every sibling to our bloom filter, starting from the
   // leftmost sibling, but skipping |element|.
-  for (; sibling_element; sibling_element = ElementTraversal::NextSibling(
-                              *sibling_element->ToNode())) {
+  for (; sibling_element;
+       sibling_element = ElementTraversal::NextSibling(*sibling_element)) {
     if (sibling_element->HasClass() && sibling_element != element) {
       const SpaceSplitString& class_names = sibling_element->ClassNames();
-      for (size_t i = 0; i < class_names.size(); ++i) {
+      for (wtf_size_t i = 0; i < class_names.size(); ++i) {
         classname_filter->Add(class_names[i]);
       }
     }
   }
 
   const SpaceSplitString& class_names = element->ClassNames();
-  for (size_t i = 0; i < class_names.size(); ++i) {
+  for (wtf_size_t i = 0; i < class_names.size(); ++i) {
     // MayContain allows for false positives, but a false positive is relatively
     // harmless; it just means we have to choose a different classname, or in
     // the worst case a different selector.
@@ -233,7 +230,7 @@ static const String ComputeUniqueSelector(Node* anchor_node) {
 
   std::vector<String> selector_list;
   for (Element* element = ElementTraversal::FirstAncestorOrSelf(*anchor_node);
-       element; element = ElementTraversal::FirstAncestor(*element->ToNode())) {
+       element; element = ElementTraversal::FirstAncestor(*element)) {
     selector_list.push_back(UniqueSimpleSelectorAmongSiblings(element));
     if (element->HasID() &&
         !element->GetDocument().ContainsMultipleElementsWithId(
@@ -271,6 +268,9 @@ ScrollAnchor::ExamineResult ScrollAnchor::Examine(
   if (candidate == ScrollerLayoutBox(scroller_))
     return ExamineResult(kContinue);
 
+  if (candidate->StyleRef().OverflowAnchor() == EOverflowAnchor::kNone)
+    return ExamineResult(kSkip);
+
   if (candidate->IsLayoutInline())
     return ExamineResult(kContinue);
 
@@ -283,9 +283,6 @@ ScrollAnchor::ExamineResult ScrollAnchor::Examine(
     return ExamineResult(kSkip);
 
   if (!CandidateMayMoveWithScroller(candidate, scroller_))
-    return ExamineResult(kSkip);
-
-  if (candidate->StyleRef().OverflowAnchor() == EOverflowAnchor::kNone)
     return ExamineResult(kSkip);
 
   LayoutRect candidate_rect = RelativeBounds(candidate, scroller_);
@@ -401,10 +398,10 @@ void ScrollAnchor::NotifyBeforeLayout() {
       ComputeScrollAnchorDisablingStyleChanged();
 
   LocalFrameView* frame_view = ScrollerLayoutBox(scroller_)->GetFrameView();
-  ScrollableArea* owning_scroller =
-      scroller_->IsRootFrameViewport()
-          ? &ToRootFrameViewport(scroller_)->LayoutViewport()
-          : scroller_.Get();
+  auto* root_frame_viewport = DynamicTo<RootFrameViewport>(scroller_.Get());
+  ScrollableArea* owning_scroller = root_frame_viewport
+                                        ? &root_frame_viewport->LayoutViewport()
+                                        : scroller_.Get();
   frame_view->EnqueueScrollAnchoringAdjustment(owning_scroller);
   queued_ = true;
 }
@@ -465,13 +462,21 @@ void ScrollAnchor::Adjust() {
 }
 
 bool ScrollAnchor::RestoreAnchor(const SerializedAnchor& serialized_anchor) {
-  if (!scroller_ || anchor_object_ || !serialized_anchor.IsValid()) {
+  if (!scroller_ || !serialized_anchor.IsValid()) {
     return false;
   }
 
   SCOPED_BLINK_UMA_HISTOGRAM_TIMER("Layout.ScrollAnchor.TimeToRestoreAnchor");
   DEFINE_STATIC_LOCAL(EnumerationHistogram, restoration_status_histogram,
                       ("Layout.ScrollAnchor.RestorationStatus", kStatusCount));
+
+  if (anchor_object_ && serialized_anchor.selector == saved_selector_) {
+    return true;
+  }
+
+  if (anchor_object_) {
+    return false;
+  }
 
   Document* document = &(ScrollerLayoutBox(scroller_)->GetDocument());
 
@@ -499,7 +504,7 @@ bool ScrollAnchor::RestoreAnchor(const SerializedAnchor& serialized_anchor) {
 
   for (unsigned index = 0; index < found_elements->length(); index++) {
     Element* anchor_element = found_elements->item(index);
-    LayoutObject* anchor_object = anchor_element->ToNode()->GetLayoutObject();
+    LayoutObject* anchor_object = anchor_element->GetLayoutObject();
 
     if (!anchor_object) {
       continue;
@@ -533,6 +538,7 @@ bool ScrollAnchor::RestoreAnchor(const SerializedAnchor& serialized_anchor) {
 
     saved_selector_ = serialized_anchor.selector;
     restoration_status_histogram.Count(kSuccess);
+
     return true;
   }
 
@@ -579,10 +585,10 @@ void ScrollAnchor::ClearSelf() {
 void ScrollAnchor::Dispose() {
   if (scroller_) {
     LocalFrameView* frame_view = ScrollerLayoutBox(scroller_)->GetFrameView();
+    auto* root_frame_viewport = DynamicTo<RootFrameViewport>(scroller_.Get());
     ScrollableArea* owning_scroller =
-        scroller_->IsRootFrameViewport()
-            ? &ToRootFrameViewport(scroller_)->LayoutViewport()
-            : scroller_.Get();
+        root_frame_viewport ? &root_frame_viewport->LayoutViewport()
+                            : scroller_.Get();
     frame_view->DequeueScrollAnchoringAdjustment(owning_scroller);
     scroller_.Clear();
   }

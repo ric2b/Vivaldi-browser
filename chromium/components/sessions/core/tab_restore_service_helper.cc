@@ -46,11 +46,10 @@ void TabRestoreServiceHelper::Observer::OnAddEntry() {}
 
 TabRestoreServiceHelper::TabRestoreServiceHelper(
     TabRestoreService* tab_restore_service,
-    Observer* observer,
     TabRestoreServiceClient* client,
     TabRestoreService::TimeFactory* time_factory)
     : tab_restore_service_(tab_restore_service),
-      observer_(observer),
+      observer_(nullptr),
       client_(client),
       restoring_(false),
       time_factory_(time_factory) {
@@ -59,6 +58,10 @@ TabRestoreServiceHelper::TabRestoreServiceHelper(
       this,
       "TabRestoreServiceHelper",
       base::ThreadTaskRunnerHandle::Get());
+}
+
+void TabRestoreServiceHelper::SetHelperObserver(Observer* observer) {
+  observer_ = observer;
 }
 
 TabRestoreServiceHelper::~TabRestoreServiceHelper() {
@@ -253,6 +256,7 @@ TabRestoreServiceHelper::RemoveTabEntryById(SessionID id) {
 
   auto tab = std::unique_ptr<Tab>(static_cast<Tab*>(it->release()));
   entries_.erase(it);
+  NotifyTabsChanged();
   return tab;
 }
 
@@ -260,7 +264,7 @@ std::vector<LiveTab*> TabRestoreServiceHelper::RestoreEntryById(
     LiveTabContext* context,
     SessionID id,
     WindowOpenDisposition disposition) {
-  Entries::iterator entry_iterator = GetEntryIteratorById(id);
+  auto entry_iterator = GetEntryIteratorById(id);
   if (entry_iterator == entries_.end()) {
     // Don't hoark here, we allow an invalid id.
     return std::vector<LiveTab*>();
@@ -425,7 +429,7 @@ void TabRestoreServiceHelper::PruneEntries() {
 
 TabRestoreService::Entries::iterator
 TabRestoreServiceHelper::GetEntryIteratorById(SessionID id) {
-  for (Entries::iterator i = entries_.begin(); i != entries_.end(); ++i) {
+  for (auto i = entries_.begin(); i != entries_.end(); ++i) {
     if ((*i)->id == id)
       return i;
 

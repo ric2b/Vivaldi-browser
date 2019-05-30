@@ -36,8 +36,6 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event_listener.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
-#include "third_party/blink/renderer/core/dom/pausable_object.h"
-#include "third_party/blink/renderer/platform/async_method_runner.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 
@@ -52,13 +50,12 @@ class CORE_EXPORT FontFaceSetDocument final : public FontFaceSet,
  public:
   static const char kSupplementName[];
 
+  explicit FontFaceSetDocument(Document&);
   ~FontFaceSetDocument() override;
 
   ScriptPromise ready(ScriptState*) override;
 
   AtomicString status() const override;
-
-  Document* GetDocument() const;
 
   void DidLayout();
   void BeginFontLoading(FontFace*);
@@ -85,10 +82,8 @@ class CORE_EXPORT FontFaceSetDocument final : public FontFaceSet,
 
  private:
   static FontFaceSetDocument* Create(Document& document) {
-    return new FontFaceSetDocument(document);
+    return MakeGarbageCollected<FontFaceSetDocument>(document);
   }
-
-  explicit FontFaceSetDocument(Document&);
 
   void FireDoneEventIfPossible() override;
   const HeapLinkedHashSet<Member<FontFace>>& CSSConnectedFontFaceList()

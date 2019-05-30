@@ -11,16 +11,14 @@
 
 #include "ash/login_status.h"
 #include "ash/public/interfaces/session_controller.mojom.h"
-#include "ash/session/session_controller.h"
 #include "ash/session/session_observer.h"
 #include "ash/session/test_session_controller_client.h"
 #include "ash/shell.h"
-#include "ash/system/message_center/notification_tray.h"
-#include "ash/system/screen_security/screen_tray_item.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/wm/overview/window_selector_controller.h"
+#include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/window_util.h"
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
@@ -593,14 +591,8 @@ class CanSwitchUserTest : public AshTestBase {
   CanSwitchUserTest() = default;
   ~CanSwitchUserTest() override = default;
 
-  void SetUp() override {
-    AshTestBase::SetUp();
-    NotificationTray::DisableAnimationsForTest(true);
-  }
-
   void TearDown() override {
-    RunAllPendingInMessageLoop();
-    NotificationTray::DisableAnimationsForTest(false);
+    base::RunLoop().RunUntilIdle();
     AshTestBase::TearDown();
   }
 
@@ -610,7 +602,7 @@ class CanSwitchUserTest : public AshTestBase {
     Shell::Get()->system_tray_notifier()->NotifyScreenCaptureStart(
         base::BindRepeating(&CanSwitchUserTest::StopCaptureCallback,
                             base::Unretained(this)),
-        base::EmptyString16());
+        base::RepeatingClosure(), base::string16());
   }
 
   // The callback which gets called when the screen capture gets stopped.
@@ -627,7 +619,7 @@ class CanSwitchUserTest : public AshTestBase {
     Shell::Get()->system_tray_notifier()->NotifyScreenShareStart(
         base::BindRepeating(&CanSwitchUserTest::StopShareCallback,
                             base::Unretained(this)),
-        base::EmptyString16());
+        base::string16());
   }
 
   // Simulates a screen share session stop.
@@ -657,10 +649,10 @@ class CanSwitchUserTest : public AshTestBase {
 
   // Methods needed to test with overview mode.
   bool ToggleOverview() {
-    return Shell::Get()->window_selector_controller()->ToggleOverview();
+    return Shell::Get()->overview_controller()->ToggleOverview();
   }
   bool IsSelecting() const {
-    return Shell::Get()->window_selector_controller()->IsSelecting();
+    return Shell::Get()->overview_controller()->IsSelecting();
   }
 
   // Various counter accessors.
@@ -819,6 +811,21 @@ TEST_F(CanSwitchUserTest, OverviewModeDismissed) {
   SwitchUser(CanSwitchUserTest::NO_DIALOG);
   ASSERT_FALSE(IsSelecting());
   EXPECT_EQ(1, switch_callback_hit_count());
+}
+
+using SessionControllerUnblockTest = NoSessionAshTestBase;
+
+TEST_F(SessionControllerUnblockTest, ActiveWindowAfterUnblocking) {
+  EXPECT_TRUE(Shell::Get()->session_controller()->IsUserSessionBlocked());
+  auto widget = CreateTestWidget();
+  // |widget| should not be active as it is blocked by SessionController.
+  EXPECT_FALSE(widget->IsActive());
+  SimulateUserLogin("user@test.com");
+  EXPECT_FALSE(Shell::Get()->session_controller()->IsUserSessionBlocked());
+
+  // |widget| should now be active as SessionController no longer is blocking
+  // windows from becoming active.
+  EXPECT_TRUE(widget->IsActive());
 }
 
 }  // namespace

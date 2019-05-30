@@ -8,8 +8,10 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/no_destructor.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
@@ -36,11 +38,11 @@ BrowsingDataCookieHelper::BrowsingDataCookieHelper(
 BrowsingDataCookieHelper::~BrowsingDataCookieHelper() {
 }
 
-void BrowsingDataCookieHelper::StartFetching(const FetchCallback& callback) {
+void BrowsingDataCookieHelper::StartFetching(FetchCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!callback.is_null());
   storage_partition_->GetCookieManagerForBrowserProcess()->GetAllCookies(
-      callback);
+      std::move(callback));
 }
 
 void BrowsingDataCookieHelper::DeleteCookie(
@@ -93,15 +95,14 @@ size_t CannedBrowsingDataCookieHelper::GetCookieCount() const {
   return count;
 }
 
-void CannedBrowsingDataCookieHelper::StartFetching(
-    const FetchCallback& callback) {
+void CannedBrowsingDataCookieHelper::StartFetching(FetchCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   net::CookieList cookie_list;
   for (const auto& pair : origin_cookie_set_map_) {
     cookie_list.insert(cookie_list.begin(), pair.second->begin(),
                        pair.second->end());
   }
-  callback.Run(cookie_list);
+  std::move(callback).Run(cookie_list);
 }
 
 void CannedBrowsingDataCookieHelper::DeleteCookie(
@@ -146,9 +147,9 @@ void CannedBrowsingDataCookieHelper::AddCookie(
   // counting cookies multiple times if they are stored in multiple cookie
   // sets.  B) Replace the GetCookieFor method call below with:
   // "GetCookiesFor(frame_url.GetOrigin());"
-  CR_DEFINE_STATIC_LOCAL(const GURL, origin_cookie_url, (kGlobalCookieSetURL));
+  static const base::NoDestructor<GURL> origin_cookie_url(kGlobalCookieSetURL);
   canonical_cookie::CookieHashSet* cookie_set =
-      GetCookiesFor(origin_cookie_url);
+      GetCookiesFor(*origin_cookie_url);
   DeleteMatchingCookie(cookie, cookie_set);
   cookie_set->insert(cookie);
 }

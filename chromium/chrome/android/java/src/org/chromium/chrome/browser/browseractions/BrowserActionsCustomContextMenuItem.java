@@ -13,9 +13,9 @@ import android.support.annotation.IdRes;
 import android.support.customtabs.browseractions.BrowserActionItem;
 import android.support.customtabs.browseractions.BrowserServiceImageReadTask;
 
-import org.chromium.base.AsyncTask;
 import org.chromium.base.Callback;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.browser.contextmenu.ContextMenuItem;
 
 /**
@@ -48,7 +48,7 @@ public class BrowserActionsCustomContextMenuItem implements ContextMenuItem {
     }
 
     @Override
-    public String getTitle(Context context) {
+    public CharSequence getTitle(Context context) {
         return mTitle;
     }
 

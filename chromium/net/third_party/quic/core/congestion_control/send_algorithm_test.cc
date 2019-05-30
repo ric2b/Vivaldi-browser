@@ -157,12 +157,12 @@ class SendAlgorithmTest : public QuicTestWithParam<TestParams> {
                      "QUIC sender",
                      "Receiver",
                      Perspective::IS_CLIENT,
-                     42),
+                     TestConnectionId()),
         receiver_(&simulator_,
                   "Receiver",
                   "QUIC sender",
                   Perspective::IS_SERVER,
-                  42) {
+                  TestConnectionId()) {
     rtt_stats_ = quic_sender_.connection()->sent_packet_manager().GetRttStats();
     sender_ = SendAlgorithmInterface::Create(
         simulator_.GetClock(), rtt_stats_,
@@ -171,6 +171,7 @@ class SendAlgorithmTest : public QuicTestWithParam<TestParams> {
                 quic_sender_.connection())),
         GetParam().congestion_control_type, &random_, &stats_,
         kInitialCongestionWindowPackets);
+    quic_sender_.RecordTrace();
 
     QuicConnectionPeer::SetSendAlgorithm(quic_sender_.connection(), sender_);
     clock_ = simulator_.GetClock();
@@ -267,10 +268,10 @@ class SendAlgorithmTest : public QuicTestWithParam<TestParams> {
   SendAlgorithmInterface* sender_;
 };
 
-INSTANTIATE_TEST_CASE_P(SendAlgorithmTests,
-                        SendAlgorithmTest,
-                        ::testing::ValuesIn(GetTestParams()),
-                        TestParamToString);
+INSTANTIATE_TEST_SUITE_P(SendAlgorithmTests,
+                         SendAlgorithmTest,
+                         ::testing::ValuesIn(GetTestParams()),
+                         TestParamToString);
 
 // Test a simple long data transfer in the default setup.
 TEST_P(SendAlgorithmTest, SimpleWiredNetworkTransfer) {

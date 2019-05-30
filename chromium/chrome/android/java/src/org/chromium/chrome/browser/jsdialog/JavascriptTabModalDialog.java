@@ -4,64 +4,42 @@
 
 package org.chromium.chrome.browser.jsdialog;
 
-import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.modaldialog.ModalDialogManager;
-import org.chromium.chrome.browser.modaldialog.ModalDialogView;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.modaldialog.DialogDismissalCause;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 
 /**
  * The controller to communicate with native JavaScriptDialogAndroid for a tab modal JavaScript
  * dialog. This can be an alert dialog, a prompt dialog or a confirm dialog.
  */
-public class JavascriptTabModalDialog implements ModalDialogView.Controller {
-    private static final String TAG = "JsTabModalDialog";
-
-    private final String mTitle;
-    private final String mMessage;
-    private final int mPositiveButtonTextId;
-    private final int mNegativeButtonTextId;
-
-    private ModalDialogManager mModalDialogManager;
-    private String mDefaultPromptText;
+public class JavascriptTabModalDialog extends JavascriptModalDialog {
     private long mNativeDialogPointer;
-    private JavascriptModalDialogView mDialogView;
 
     /**
      * Constructor for initializing contents to be shown on the dialog.
      */
     private JavascriptTabModalDialog(
-            String title, String message, int positiveButtonTextId, int negativeButtonTextId) {
-        mTitle = title;
-        mMessage = message;
-        mPositiveButtonTextId = positiveButtonTextId;
-        mNegativeButtonTextId = negativeButtonTextId;
-    }
-
-    /**
-     * Constructor for creating prompt dialog only.
-     */
-    private JavascriptTabModalDialog(String title, String message, String defaultPromptText) {
-        this(title, message, R.string.ok, R.string.cancel);
-        mDefaultPromptText = defaultPromptText;
+            String title, String message, String promptText, int negativeButtonTextId) {
+        super(title, message, promptText, false, R.string.ok, negativeButtonTextId);
     }
 
     @CalledByNative
     private static JavascriptTabModalDialog createAlertDialog(String title, String message) {
-        return new JavascriptTabModalDialog(title, message, R.string.ok, 0);
+        return new JavascriptTabModalDialog(title, message, null, 0);
     }
 
     @CalledByNative
     private static JavascriptTabModalDialog createConfirmDialog(String title, String message) {
-        return new JavascriptTabModalDialog(title, message, R.string.ok, R.string.cancel);
+        return new JavascriptTabModalDialog(title, message, null, R.string.cancel);
     }
 
     @CalledByNative
     private static JavascriptTabModalDialog createPromptDialog(
             String title, String message, String defaultPromptText) {
-        return new JavascriptTabModalDialog(title, message, defaultPromptText);
+        return new JavascriptTabModalDialog(title, message, defaultPromptText, R.string.cancel);
     }
 
     @CalledByNative
@@ -70,73 +48,45 @@ public class JavascriptTabModalDialog implements ModalDialogView.Controller {
         ChromeActivity activity = (ChromeActivity) window.getActivity().get();
         // If the activity has gone away, then just clean up the native pointer.
         if (activity == null) {
-            nativeCancel(nativeDialogPointer);
+            nativeCancel(nativeDialogPointer, false);
             return;
         }
 
         // Cache the native dialog pointer so that we can use it to return the response.
         mNativeDialogPointer = nativeDialogPointer;
-
-        mModalDialogManager = activity.getModalDialogManager();
-        mDialogView = JavascriptModalDialogView.create(this, mTitle, mMessage, mDefaultPromptText,
-                false, mPositiveButtonTextId, mNegativeButtonTextId);
-        mModalDialogManager.showDialog(mDialogView, ModalDialogManager.ModalDialogType.TAB);
+        show(activity, ModalDialogManager.ModalDialogType.TAB);
     }
 
     @CalledByNative
     private String getUserInput() {
-        return mDialogView.getPromptText();
+        return mDialogCustomView.getPromptText();
     }
 
     @CalledByNative
     private void dismiss() {
-        mModalDialogManager.dismissDialog(mDialogView);
+        dismiss(DialogDismissalCause.DISMISSED_BY_NATIVE);
         mNativeDialogPointer = 0;
     }
-
-    @Override
-    public void onClick(@ModalDialogView.ButtonType int buttonType) {
-        switch (buttonType) {
-            case ModalDialogView.ButtonType.POSITIVE:
-                accept(mDialogView.getPromptText());
-                mModalDialogManager.dismissDialog(mDialogView);
-                break;
-            case ModalDialogView.ButtonType.NEGATIVE:
-                cancel();
-                mModalDialogManager.dismissDialog(mDialogView);
-                break;
-            default:
-                Log.e(TAG, "Unexpected button pressed in dialog: " + buttonType);
-        }
-    }
-
-    @Override
-    public void onCancel() {
-        cancel();
-    }
-
-    @Override
-    public void onDismiss() {}
 
     /**
      * Sends notification to native that the user accepts the dialog.
      * @param promptResult The text edited by user.
      */
-    private void accept(String promptResult) {
-        if (mNativeDialogPointer != 0) {
-            nativeAccept(mNativeDialogPointer, promptResult);
-        }
+    @Override
+    protected void accept(String promptResult, boolean suppressDialogs) {
+        if (mNativeDialogPointer == 0) return;
+        nativeAccept(mNativeDialogPointer, promptResult);
     }
 
     /**
      * Sends notification to native that the user cancels the dialog.
      */
-    private void cancel() {
-        if (mNativeDialogPointer != 0) {
-            nativeCancel(mNativeDialogPointer);
-        }
+    @Override
+    protected void cancel(boolean buttonClicked, boolean suppressDialogs) {
+        if (mNativeDialogPointer == 0) return;
+        nativeCancel(mNativeDialogPointer, buttonClicked);
     }
 
     private native void nativeAccept(long nativeJavaScriptDialogAndroid, String prompt);
-    private native void nativeCancel(long nativeJavaScriptDialogAndroid);
+    private native void nativeCancel(long nativeJavaScriptDialogAndroid, boolean buttonClicked);
 }

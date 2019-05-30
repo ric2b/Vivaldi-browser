@@ -38,6 +38,20 @@ var WebViewConstants = {
       'The permission request for "%1" has been denied.'
 };
 
+var WebViewAttributeNames = [
+  WebViewConstants.ATTRIBUTE_ALLOWTRANSPARENCY,
+  WebViewConstants.ATTRIBUTE_ALLOWSCALING, WebViewConstants.ATTRIBUTE_AUTOSIZE,
+  WebViewConstants.ATTRIBUTE_MAXHEIGHT, WebViewConstants.ATTRIBUTE_MAXWIDTH,
+  WebViewConstants.ATTRIBUTE_MINHEIGHT, WebViewConstants.ATTRIBUTE_MINWIDTH,
+  WebViewConstants.ATTRIBUTE_NAME, WebViewConstants.ATTRIBUTE_PARTITION,
+  WebViewConstants.ATTRIBUTE_SRC
+];
+
 WebViewConstantsPrivate.addPrivateConstants(WebViewConstants);
 
+// This is needed for dynamic attributes. (Set after the element has been
+// created.)
+WebViewConstantsPrivate.addPrivateAttributeNames(WebViewAttributeNames);
+
 exports.$set('WebViewConstants', $Object.freeze(WebViewConstants));
+exports.$set('WebViewAttributeNames', $Object.freeze(WebViewAttributeNames));

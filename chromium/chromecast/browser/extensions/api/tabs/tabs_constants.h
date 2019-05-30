@@ -102,12 +102,11 @@ extern const char kSupportedInWindowsOnlyError[];
 extern const char kInvalidWindowTypeError[];
 extern const char kInvalidWindowStateError[];
 extern const char kScreenshotsDisabled[];
-extern const char kCannotUpdateMuteDisabled[];
 extern const char kCannotUpdateMuteCaptured[];
 extern const char kCannotDetermineLanguageOfUnloadedTab[];
 extern const char kMissingLockWindowFullscreenPrivatePermission[];
 
-};  // namespace tabs_constants
-};  // namespace extensions
+}  // namespace tabs_constants
+}  // namespace extensions
 
 #endif  // CHROMECAST_BROWSER_EXTENSIONS_API_TABS_TABS_CONSTANTS_H_

@@ -103,11 +103,11 @@ void VerifyIconsMatch(const gfx::Image& bar_rendering,
   icon_portion.ClampToCenteredSize(model_icon.Size());
 
   EXPECT_TRUE(gfx::test::AreBitmapsEqual(
-      model_icon.AsImageSkia().GetRepresentation(1.0f).sk_bitmap(),
+      model_icon.AsImageSkia().GetRepresentation(1.0f).GetBitmap(),
       gfx::ImageSkiaOperations::ExtractSubset(bar_rendering.AsImageSkia(),
                                               icon_portion)
           .GetRepresentation(1.0f)
-          .sk_bitmap()));
+          .GetBitmap()));
 }
 
 class BrowserActionApiTest : public ExtensionApiTest {
@@ -396,6 +396,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, InvisibleIconBrowserAction) {
 
   const std::string histogram_name =
       "Extensions.DynamicExtensionActionIconWasVisible";
+  const std::string new_histogram_name =
+      "Extensions.DynamicExtensionActionIconWasVisibleRendered";
   {
     base::HistogramTester histogram_tester;
     std::string result;
@@ -407,6 +409,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, InvisibleIconBrowserAction) {
     EXPECT_TRUE(gfx::test::AreImagesEqual(initial_bar_icon,
                                           GetBrowserActionsBar()->GetIcon(0)));
     EXPECT_THAT(histogram_tester.GetAllSamples(histogram_name),
+                testing::ElementsAre(base::Bucket(0, 1)));
+    EXPECT_THAT(histogram_tester.GetAllSamples(new_histogram_name),
                 testing::ElementsAre(base::Bucket(0, 1)));
   }
 
@@ -421,6 +425,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, InvisibleIconBrowserAction) {
     EXPECT_FALSE(gfx::test::AreImagesEqual(initial_bar_icon,
                                            GetBrowserActionsBar()->GetIcon(0)));
     EXPECT_THAT(histogram_tester.GetAllSamples(histogram_name),
+                testing::ElementsAre(base::Bucket(1, 1)));
+    EXPECT_THAT(histogram_tester.GetAllSamples(new_histogram_name),
                 testing::ElementsAre(base::Bucket(1, 1)));
   }
 }
@@ -446,7 +452,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, TabSpecificBrowserActionState) {
   EXPECT_EQ("hi!", GetBrowserActionsBar()->GetTooltip(0));
 
   // Go back to first tab, changed title should reappear.
-  browser()->tab_strip_model()->ActivateTabAt(0, true);
+  browser()->tab_strip_model()->ActivateTabAt(
+      0, {TabStripModel::GestureType::kOther});
   EXPECT_EQ("Showing icon 2", GetBrowserActionsBar()->GetTooltip(0));
 
   // Reload that tab, default title should come back.
@@ -1051,8 +1058,9 @@ IN_PROC_BROWSER_TEST_F(NavigatingExtensionPopupBrowserTest, Webpage) {
 
 // Tests that an extension pop-up can be navigated to another page
 // in the same extension.
+// Times out on all platforms: https://crbug.com/882200
 IN_PROC_BROWSER_TEST_F(NavigatingExtensionPopupBrowserTest,
-                       PageInSameExtension) {
+                       DISABLED_PageInSameExtension) {
   GURL other_page_in_same_extension =
       popup_extension().GetResourceURL("other_page.html");
   TestPopupNavigationViaGet(other_page_in_same_extension,

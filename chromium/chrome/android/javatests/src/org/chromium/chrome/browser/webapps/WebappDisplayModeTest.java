@@ -44,7 +44,7 @@ public class WebappDisplayModeTest {
     public void testStandalone() throws Exception {
         WebappActivity activity = startActivity(WebDisplayMode.STANDALONE);
 
-        Assert.assertFalse(activity.getToolbarManager().getToolbarLayout().isShown());
+        Assert.assertFalse(activity.getToolbarManager().getToolbarLayoutForTesting().isShown());
         Assert.assertFalse(isFullscreen(activity));
     }
 
@@ -55,18 +55,19 @@ public class WebappDisplayModeTest {
     public void testFullScreen() throws Exception {
         WebappActivity activity = startActivity(WebDisplayMode.FULLSCREEN);
 
-        Assert.assertFalse(activity.getToolbarManager().getToolbarLayout().isShown());
+        Assert.assertFalse(activity.getToolbarManager().getToolbarLayoutForTesting().isShown());
         Assert.assertTrue(isFullscreen(activity));
     }
 
     @Test
-    @SmallTest
-    @Feature({"Webapps"})
+    //@SmallTest
+    //@Feature({"Webapps"})
+    @DisabledTest(message = "crbug.com/793133")
     public void testMinimalUi() throws Exception {
         WebappActivity activity = startActivity(WebDisplayMode.MINIMAL_UI);
 
         Assert.assertFalse(isFullscreen(activity));
-        Assert.assertTrue(activity.getToolbarManager().getToolbarLayout().isShown());
+        Assert.assertTrue(activity.getToolbarManager().getToolbarLayoutForTesting().isShown());
 
         Assert.assertEquals(Color.CYAN, activity.getToolbarManager().getPrimaryColor());
         Assert.assertEquals("Web App title should be displayed on the title bar",

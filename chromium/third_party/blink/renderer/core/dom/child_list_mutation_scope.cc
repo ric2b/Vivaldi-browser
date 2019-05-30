@@ -46,8 +46,9 @@ typedef HeapHashMap<Member<Node>, Member<ChildListMutationAccumulator>>
     AccumulatorMap;
 
 static AccumulatorMap& GetAccumulatorMap() {
-  DEFINE_STATIC_LOCAL(AccumulatorMap, map, (new AccumulatorMap));
-  return map;
+  DEFINE_STATIC_LOCAL(Persistent<AccumulatorMap>, map,
+                      (MakeGarbageCollected<AccumulatorMap>()));
+  return *map;
 }
 
 ChildListMutationAccumulator::ChildListMutationAccumulator(
@@ -75,7 +76,7 @@ ChildListMutationAccumulator* ChildListMutationAccumulator::GetOrCreate(
   if (!result.is_new_entry) {
     accumulator = result.stored_value->value;
   } else {
-    accumulator = new ChildListMutationAccumulator(
+    accumulator = MakeGarbageCollected<ChildListMutationAccumulator>(
         &target,
         MutationObserverInterestGroup::CreateForChildListMutation(target));
     result.stored_value->value = accumulator;
@@ -150,7 +151,7 @@ bool ChildListMutationAccumulator::IsEmpty() {
   return result;
 }
 
-void ChildListMutationAccumulator::Trace(blink::Visitor* visitor) {
+void ChildListMutationAccumulator::Trace(Visitor* visitor) {
   visitor->Trace(target_);
   visitor->Trace(removed_nodes_);
   visitor->Trace(added_nodes_);

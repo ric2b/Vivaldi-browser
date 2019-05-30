@@ -6,9 +6,12 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/task/post_task.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/network_session_configurator/common/network_switches.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/browser/extension_protocols.h"
@@ -64,19 +67,25 @@ net::URLRequestContextGetter* ShellBrowserContext::CreateRequestContext(
 
   set_url_request_context_getter(new ShellURLRequestContextGetter(
       this, IgnoreCertificateErrors(), GetPath(),
-      content::BrowserThread::GetTaskRunnerForThread(
-          content::BrowserThread::IO),
+      base::CreateSingleThreadTaskRunnerWithTraits(
+          {content::BrowserThread::IO}),
       protocol_handlers, std::move(request_interceptors), nullptr /* net_log */,
       extension_info_map));
-  resource_context_->set_url_request_context_getter(
-      url_request_context_getter());
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(
-          &ShellBrowserContext::InitURLRequestContextOnIOThread,
-          base::Unretained(this)));
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
+      base::BindOnce(&ShellBrowserContext::InitURLRequestContextOnIOThread,
+                     base::Unretained(this)));
   return url_request_context_getter();
+}
+
+void ShellBrowserContext::SetCorsOriginAccessListForOrigin(
+    const url::Origin& source_origin,
+    std::vector<network::mojom::CorsOriginPatternPtr> allow_patterns,
+    std::vector<network::mojom::CorsOriginPatternPtr> block_patterns,
+    base::OnceClosure closure) {
+  // This method is called for Extension supports, but tests do not need to
+  // support exceptional CORS handling.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, std::move(closure));
 }
 
 void ShellBrowserContext::InitURLRequestContextOnIOThread() {

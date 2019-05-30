@@ -45,7 +45,7 @@ class FakeCommandBufferServiceBase : public CommandBufferServiceBase {
 
   void FlushHelper(int32_t put_offset);
   void SetGetBufferHelper(int transfer_buffer_id, int32_t token);
-  scoped_refptr<gpu::Buffer> CreateTransferBufferHelper(size_t size,
+  scoped_refptr<gpu::Buffer> CreateTransferBufferHelper(uint32_t size,
                                                         int32_t* id);
   void DestroyTransferBufferHelper(int32_t id);
 
@@ -66,7 +66,7 @@ class MockClientCommandBuffer : public CommandBuffer,
                                 int32_t start,
                                 int32_t end) override;
   void SetGetBuffer(int transfer_buffer_id) override;
-  scoped_refptr<gpu::Buffer> CreateTransferBuffer(size_t size,
+  scoped_refptr<gpu::Buffer> CreateTransferBuffer(uint32_t size,
                                                   int32_t* id) override;
 
   // This is so we can use all the gmock functions when Flush is called.
@@ -106,11 +106,8 @@ class MockClientGpuControl : public GpuControl {
 
   MOCK_METHOD1(SetGpuControlClient, void(GpuControlClient*));
   MOCK_CONST_METHOD0(GetCapabilities, const Capabilities&());
-  MOCK_METHOD4(CreateImage,
-               int32_t(ClientBuffer buffer,
-                       size_t width,
-                       size_t height,
-                       unsigned internalformat));
+  MOCK_METHOD3(CreateImage,
+               int32_t(ClientBuffer buffer, size_t width, size_t height));
   MOCK_METHOD1(DestroyImage, void(int32_t id));
 
   // Workaround for move-only args in GMock.
@@ -137,7 +134,7 @@ class MockClientGpuControl : public GpuControl {
     DoSignalSyncToken(sync_token, &callback);
   }
 
-  MOCK_METHOD1(WaitSyncTokenHint, void(const SyncToken&));
+  MOCK_METHOD1(WaitSyncToken, void(const SyncToken&));
   MOCK_METHOD1(CanWaitUnverifiedSyncToken, bool(const SyncToken&));
   MOCK_METHOD2(CreateGpuFence,
                void(uint32_t gpu_fence_id, ClientGpuFence source));

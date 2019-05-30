@@ -40,7 +40,7 @@ class LayoutTextTest : public RenderingTest {
   void SetSelectionAndUpdateLayoutSelection(const std::string& selection_text) {
     const SelectionInDOMTree selection =
         SelectionSample::SetSelectionText(GetDocument().body(), selection_text);
-    UpdateAllLifecyclePhases();
+    UpdateAllLifecyclePhasesForTest();
     Selection().SetSelectionAndEndTyping(selection);
     Selection().CommitAppearanceIfNeeded();
   }
@@ -80,7 +80,7 @@ class ParameterizedLayoutTextTest : public testing::WithParamInterface<bool>,
   bool LayoutNGEnabled() const { return GetParam(); }
 };
 
-INSTANTIATE_TEST_CASE_P(All, ParameterizedLayoutTextTest, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, ParameterizedLayoutTextTest, testing::Bool());
 
 }  // namespace
 
@@ -212,9 +212,9 @@ class MapDOMOffsetToTextContentOffset
   MapDOMOffsetToTextContentOffset() : ScopedLayoutNGForTest(true) {}
 };
 
-INSTANTIATE_TEST_CASE_P(LayoutTextTest,
-                        MapDOMOffsetToTextContentOffset,
-                        testing::ValuesIn(offset_mapping_test_data));
+INSTANTIATE_TEST_SUITE_P(LayoutTextTest,
+                         MapDOMOffsetToTextContentOffset,
+                         testing::ValuesIn(offset_mapping_test_data));
 
 TEST_P(MapDOMOffsetToTextContentOffset, Basic) {
   const auto data = GetParam();
@@ -233,9 +233,7 @@ TEST_P(MapDOMOffsetToTextContentOffset, Basic) {
   }
 }
 
-// TODO(kojii): Include LayoutNG tests by switching to
-// ParameterizedLayoutTextTest when these functions support LayoutNG.
-TEST_F(LayoutTextTest, CharacterAfterWhitespaceCollapsing) {
+TEST_P(ParameterizedLayoutTextTest, CharacterAfterWhitespaceCollapsing) {
   SetBodyInnerHTML("a<span id=target> b </span>");
   LayoutText* layout_text = GetLayoutTextById("target");
   EXPECT_EQ(' ', layout_text->FirstCharacterAfterWhitespaceCollapsing());
@@ -272,6 +270,11 @@ TEST_F(LayoutTextTest, CharacterAfterWhitespaceCollapsing) {
   DCHECK(!layout_text->HasTextBoxes());
   EXPECT_EQ(0, layout_text->FirstCharacterAfterWhitespaceCollapsing());
   EXPECT_EQ(0, layout_text->LastCharacterAfterWhitespaceCollapsing());
+
+  SetBodyInnerHTML("<b id=target>&#x1F34C;_&#x1F34D;</b>");
+  layout_text = GetLayoutTextById("target");
+  EXPECT_EQ(0x1F34C, layout_text->FirstCharacterAfterWhitespaceCollapsing());
+  EXPECT_EQ(0x1F34D, layout_text->LastCharacterAfterWhitespaceCollapsing());
 }
 
 TEST_P(ParameterizedLayoutTextTest, CaretMinMaxOffset) {
@@ -673,21 +676,21 @@ TEST_P(ParameterizedLayoutTextTest, LocalSelectionRectVertical) {
       LayoutRect(0, 0, 20, 40),
       GetSelectionRectFor("<div style='writing-mode: vertical-lr; height: 2em'>"
                           "f^oo ba|r baz</div>"));
-  // TODO(yoichio): This is caused by mixing lrt between vertical and logical.
   EXPECT_EQ(
-      LayoutNGEnabled() ? LayoutRect(10, 0, 20, 40) : LayoutRect(0, 0, 20, 40),
+      LayoutRect(0, 0, 20, 40),
       GetSelectionRectFor("<div style='writing-mode: vertical-rl; height: 2em'>"
                           "f^oo ba|r baz</div>"));
 }
 
 TEST_P(ParameterizedLayoutTextTest, LocalSelectionRectVerticalRTL) {
   LoadAhem();
+  // TODO(yoichio): Investigate diff (maybe soft line break treatment).
   EXPECT_EQ(LayoutNGEnabled() ? LayoutRect(0, -10, 20, 30)
                               : LayoutRect(0, -10, 20, 40),
             GetSelectionRectFor(
                 "<div style='writing-mode: vertical-lr; height: 2em' dir=rtl>"
                 "f^oo ba|r baz</div>"));
-  EXPECT_EQ(LayoutNGEnabled() ? LayoutRect(10, -10, 20, 30)
+  EXPECT_EQ(LayoutNGEnabled() ? LayoutRect(0, -10, 20, 30)
                               : LayoutRect(0, -10, 20, 40),
             GetSelectionRectFor(
                 "<div style='writing-mode: vertical-rl; height: 2em' dir=rtl>"

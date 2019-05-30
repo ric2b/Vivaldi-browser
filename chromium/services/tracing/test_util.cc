@@ -5,6 +5,7 @@
 #include "services/tracing/test_util.h"
 
 #include <string>
+#include <utility>
 
 #include "services/tracing/public/mojom/tracing.mojom.h"
 
@@ -36,21 +37,15 @@ void MockAgent::StopAndFlush(mojom::RecorderPtr recorder) {
   }
 }
 
-void MockAgent::RequestClockSyncMarker(const std::string& sync_id,
-                                       RequestClockSyncMarkerCallback cb) {
-  call_stat_.push_back("RequestClockSyncMarker");
-  std::move(cb).Run(base::TimeTicks(), base::TimeTicks());
-}
-
-void MockAgent::GetCategories(GetCategoriesCallback cb) {
-  call_stat_.push_back("GetCategories");
-  std::move(cb).Run(categories_);
-}
-
 void MockAgent::RequestBufferStatus(RequestBufferStatusCallback cb) {
   call_stat_.push_back("RequestBufferStatus");
   std::move(cb).Run(trace_log_status_.event_capacity,
                     trace_log_status_.event_count);
+}
+
+void MockAgent::WaitForTracingEnabled(
+    Agent::WaitForTracingEnabledCallback callback) {
+  std::move(callback).Run();
 }
 
 }  // namespace tracing

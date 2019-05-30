@@ -8,10 +8,11 @@
 #include "base/task/post_task.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/histogram.h"
-#include "third_party/blink/renderer/platform/web_task_runner.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
@@ -22,6 +23,8 @@ namespace {
 // a mojo data pipe. Instances will delete themselves when all data has been
 // written, or when the data pipe is disconnected.
 class BlobBytesStreamer {
+  USING_FAST_MALLOC(BlobBytesStreamer);
+
  public:
   BlobBytesStreamer(Vector<scoped_refptr<RawData>> data,
                     mojo::ScopedDataPipeProducerHandle pipe,
@@ -32,11 +35,12 @@ class BlobBytesStreamer {
                  mojo::SimpleWatcher::ArmingPolicy::AUTOMATIC,
                  std::move(task_runner)) {
     watcher_.Watch(pipe_.get(), MOJO_HANDLE_SIGNAL_WRITABLE,
+                   MOJO_WATCH_CONDITION_SATISFIED,
                    WTF::BindRepeating(&BlobBytesStreamer::OnWritable,
                                       WTF::Unretained(this)));
   }
 
-  void OnWritable(MojoResult result) {
+  void OnWritable(MojoResult result, const mojo::HandleSignalsState& state) {
     if (result == MOJO_RESULT_CANCELLED ||
         result == MOJO_RESULT_FAILED_PRECONDITION) {
       delete this;
@@ -89,25 +93,21 @@ class BlobBytesStreamer {
 
 // This keeps the process alive while blobs are being transferred.
 void IncreaseChildProcessRefCount() {
-  if (!Platform::Current()->MainThread()->IsCurrentThread()) {
-    PostCrossThreadTask(*Platform::Current()->MainThread()->GetTaskRunner(),
-                        FROM_HERE,
+  if (!WTF::IsMainThread()) {
+    PostCrossThreadTask(*Thread::MainThread()->GetTaskRunner(), FROM_HERE,
                         CrossThreadBind(&IncreaseChildProcessRefCount));
     return;
   }
   Platform::Current()->SuddenTerminationChanged(false);
-  Platform::Current()->AddRefProcess();
 }
 
 void DecreaseChildProcessRefCount() {
-  if (!Platform::Current()->MainThread()->IsCurrentThread()) {
-    PostCrossThreadTask(*Platform::Current()->MainThread()->GetTaskRunner(),
-                        FROM_HERE,
+  if (!WTF::IsMainThread()) {
+    PostCrossThreadTask(*Thread::MainThread()->GetTaskRunner(), FROM_HERE,
                         CrossThreadBind(&DecreaseChildProcessRefCount));
     return;
   }
   Platform::Current()->SuddenTerminationChanged(true);
-  Platform::Current()->ReleaseRefProcess();
 }
 
 }  // namespace

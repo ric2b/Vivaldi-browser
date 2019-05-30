@@ -4,36 +4,38 @@
 
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_request.h"
 
+#include "base/unguessable_token.h"
 #include "third_party/blink/public/platform/web_http_body.h"
 #include "third_party/blink/public/platform/web_http_header_visitor.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url_request.h"
-#include "third_party/blink/renderer/platform/blob/blob_data.h"
 #include "third_party/blink/renderer/platform/network/encoded_form_data.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/ref_counted.h"
 
 namespace blink {
 
 class WebServiceWorkerRequestPrivate
     : public RefCounted<WebServiceWorkerRequestPrivate> {
+  USING_FAST_MALLOC(WebServiceWorkerRequestPrivate);
+
  public:
   WebURL url_;
   WebString method_;
   HTTPHeaderMap headers_;
   scoped_refptr<EncodedFormData> http_body;
-  scoped_refptr<BlobDataHandle> blob_data_handle;
   Referrer referrer_;
   network::mojom::FetchRequestMode mode_ =
-      network::mojom::FetchRequestMode::kNoCORS;
+      network::mojom::FetchRequestMode::kNoCors;
   bool is_main_resource_load_ = false;
   network::mojom::FetchCredentialsMode credentials_mode_ =
       network::mojom::FetchCredentialsMode::kOmit;
   mojom::FetchCacheMode cache_mode_ = mojom::FetchCacheMode::kDefault;
   network::mojom::FetchRedirectMode redirect_mode_ =
       network::mojom::FetchRedirectMode::kFollow;
-  WebURLRequest::RequestContext request_context_ =
-      WebURLRequest::kRequestContextUnspecified;
+  mojom::RequestContextType request_context_ =
+      mojom::RequestContextType::UNSPECIFIED;
   network::mojom::RequestContextFrameType frame_type_ =
       network::mojom::RequestContextFrameType::kNone;
   WebString integrity_;
@@ -42,6 +44,7 @@ class WebServiceWorkerRequestPrivate
   WebString client_id_;
   bool is_reload_ = false;
   bool is_history_navigation_ = false;
+  base::UnguessableToken window_id_;
 };
 
 WebServiceWorkerRequest::WebServiceWorkerRequest()
@@ -120,48 +123,24 @@ WebHTTPBody WebServiceWorkerRequest::Body() const {
   return private_->http_body;
 }
 
-void WebServiceWorkerRequest::SetBlob(const WebString& uuid,
-                                      long long size,
-                                      mojo::ScopedMessagePipeHandle blob_pipe) {
-  SetBlob(uuid, size,
-          mojom::blink::BlobPtrInfo(std::move(blob_pipe),
-                                    mojom::blink::Blob::Version_));
-}
-
-void WebServiceWorkerRequest::SetBlob(const WebString& uuid,
-                                      long long size,
-                                      mojom::blink::BlobPtrInfo blob_info) {
-  private_->blob_data_handle =
-      BlobDataHandle::Create(uuid, String(), size, std::move(blob_info));
-}
-
-void WebServiceWorkerRequest::SetBlobDataHandle(
-    scoped_refptr<BlobDataHandle> blob_data_handle) {
-  private_->blob_data_handle = std::move(blob_data_handle);
-}
-
-scoped_refptr<BlobDataHandle> WebServiceWorkerRequest::GetBlobDataHandle()
-    const {
-  return private_->blob_data_handle;
-}
-
-void WebServiceWorkerRequest::SetReferrer(const WebString& web_referrer,
-                                          WebReferrerPolicy referrer_policy) {
+void WebServiceWorkerRequest::SetReferrer(
+    const WebString& web_referrer,
+    network::mojom::ReferrerPolicy referrer_policy) {
   // WebString doesn't have the distinction between empty and null. We use
   // the null WTFString for referrer.
   DCHECK_EQ(Referrer::NoReferrer(), String());
   String referrer =
       web_referrer.IsEmpty() ? Referrer::NoReferrer() : String(web_referrer);
-  private_->referrer_ =
-      Referrer(referrer, static_cast<ReferrerPolicy>(referrer_policy));
+  private_->referrer_ = Referrer(referrer, referrer_policy);
 }
 
 WebURL WebServiceWorkerRequest::ReferrerUrl() const {
   return KURL(private_->referrer_.referrer);
 }
 
-WebReferrerPolicy WebServiceWorkerRequest::GetReferrerPolicy() const {
-  return static_cast<WebReferrerPolicy>(private_->referrer_.referrer_policy);
+network::mojom::ReferrerPolicy WebServiceWorkerRequest::GetReferrerPolicy()
+    const {
+  return private_->referrer_.referrer_policy;
 }
 
 const Referrer& WebServiceWorkerRequest::GetReferrer() const {
@@ -226,12 +205,11 @@ network::mojom::FetchRedirectMode WebServiceWorkerRequest::RedirectMode()
 }
 
 void WebServiceWorkerRequest::SetRequestContext(
-    WebURLRequest::RequestContext request_context) {
+    mojom::RequestContextType request_context) {
   private_->request_context_ = request_context;
 }
 
-WebURLRequest::RequestContext WebServiceWorkerRequest::GetRequestContext()
-    const {
+mojom::RequestContextType WebServiceWorkerRequest::GetRequestContext() const {
   return private_->request_context_;
 }
 
@@ -267,6 +245,14 @@ void WebServiceWorkerRequest::SetIsHistoryNavigation(bool b) {
 
 bool WebServiceWorkerRequest::IsHistoryNavigation() const {
   return private_->is_history_navigation_;
+}
+
+void WebServiceWorkerRequest::SetWindowId(const base::UnguessableToken& id) {
+  private_->window_id_ = id;
+}
+
+const base::UnguessableToken& WebServiceWorkerRequest::GetWindowId() const {
+  return private_->window_id_;
 }
 
 }  // namespace blink

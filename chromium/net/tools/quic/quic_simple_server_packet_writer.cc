@@ -4,6 +4,7 @@
 
 #include "net/tools/quic/quic_simple_server_packet_writer.h"
 
+#include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -25,23 +26,6 @@ QuicSimpleServerPacketWriter::QuicSimpleServerPacketWriter(
 
 QuicSimpleServerPacketWriter::~QuicSimpleServerPacketWriter() = default;
 
-quic::WriteResult QuicSimpleServerPacketWriter::WritePacketWithCallback(
-    const char* buffer,
-    size_t buf_len,
-    const quic::QuicIpAddress& self_address,
-    const quic::QuicSocketAddress& peer_address,
-    quic::PerPacketOptions* options,
-    WriteCallback callback) {
-  DCHECK(callback_.is_null());
-  callback_ = callback;
-  quic::WriteResult result =
-      WritePacket(buffer, buf_len, self_address, peer_address, options);
-  if (result.status != quic::WRITE_STATUS_BLOCKED) {
-    callback_.Reset();
-  }
-  return result;
-}
-
 void QuicSimpleServerPacketWriter::OnWriteComplete(int rv) {
   DCHECK_NE(rv, ERR_IO_PENDING);
   write_blocked_ = false;
@@ -51,11 +35,6 @@ void QuicSimpleServerPacketWriter::OnWriteComplete(int rv) {
     base::ResetAndReturn(&callback_).Run(result);
   }
   dispatcher_->OnCanWrite();
-}
-
-bool QuicSimpleServerPacketWriter::IsWriteBlockedDataBuffered() const {
-  // UDPServerSocket::SendTo buffers the data until the Write is permitted.
-  return true;
 }
 
 bool QuicSimpleServerPacketWriter::IsWriteBlocked() const {
@@ -91,7 +70,7 @@ quic::WriteResult QuicSimpleServerPacketWriter::WritePacket(
       base::UmaHistogramSparse("Net.quic::QuicSession.WriteError", -rv);
       status = quic::WRITE_STATUS_ERROR;
     } else {
-      status = quic::WRITE_STATUS_BLOCKED;
+      status = quic::WRITE_STATUS_BLOCKED_DATA_BUFFERED;
       write_blocked_ = true;
     }
   }
@@ -111,7 +90,9 @@ bool QuicSimpleServerPacketWriter::IsBatchMode() const {
   return false;
 }
 
-char* QuicSimpleServerPacketWriter::GetNextWriteLocation() const {
+char* QuicSimpleServerPacketWriter::GetNextWriteLocation(
+    const quic::QuicIpAddress& self_address,
+    const quic::QuicSocketAddress& peer_address) {
   return nullptr;
 }
 

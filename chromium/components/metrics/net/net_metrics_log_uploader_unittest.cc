@@ -41,28 +41,29 @@ class NetMetricsLogUploaderTest : public testing::Test {
     ReportingInfo reporting_info;
     reporting_info.set_attempt_count(10);
     uploader_.reset(new NetMetricsLogUploader(
-        test_shared_url_loader_factory_, "https://dummy_server", "dummy_mime",
-        MetricsLogUploader::UMA,
+        test_shared_url_loader_factory_, GURL("https://dummy_server"),
+        "dummy_mime", MetricsLogUploader::UMA,
         base::Bind(&NetMetricsLogUploaderTest::OnUploadCompleteReuseUploader,
                    base::Unretained(this))));
     uploader_->UploadLog("initial_dummy_data", "initial_dummy_hash",
-                         reporting_info);
+                         "initial_dummy_signature", reporting_info);
   }
 
   void CreateUploaderAndUploadToSecureURL(const std::string& url) {
     ReportingInfo dummy_reporting_info;
     uploader_.reset(new NetMetricsLogUploader(
-        test_shared_url_loader_factory_, url, "dummy_mime",
+        test_shared_url_loader_factory_, GURL(url), "dummy_mime",
         MetricsLogUploader::UMA,
         base::Bind(&NetMetricsLogUploaderTest::DummyOnUploadComplete,
                    base::Unretained(this))));
-    uploader_->UploadLog("dummy_data", "dummy_hash", dummy_reporting_info);
+    uploader_->UploadLog("dummy_data", "dummy_hash", "dummy_signature",
+                         dummy_reporting_info);
   }
 
   void CreateUploaderAndUploadToInsecureURL() {
     ReportingInfo dummy_reporting_info;
     uploader_.reset(new NetMetricsLogUploader(
-        test_shared_url_loader_factory_, "http://dummy_insecure_server",
+        test_shared_url_loader_factory_, GURL("http://dummy_insecure_server"),
         "dummy_mime", MetricsLogUploader::UMA,
         base::Bind(&NetMetricsLogUploaderTest::DummyOnUploadComplete,
                    base::Unretained(this))));
@@ -70,7 +71,7 @@ class NetMetricsLogUploaderTest : public testing::Test {
     // Compress the data since the encryption code expects a compressed log,
     // and tries to decompress it before encrypting it.
     compression::GzipCompress("dummy_data", &compressed_message);
-    uploader_->UploadLog(compressed_message, "dummy_hash",
+    uploader_->UploadLog(compressed_message, "dummy_hash", "dummy_signature",
                          dummy_reporting_info);
   }
 
@@ -85,17 +86,9 @@ class NetMetricsLogUploaderTest : public testing::Test {
     if (on_upload_complete_count_ == 1) {
       ReportingInfo reporting_info;
       reporting_info.set_attempt_count(20);
-      uploader_->UploadLog("dummy_data", "dummy_hash", reporting_info);
+      uploader_->UploadLog("dummy_data", "dummy_hash", "dummy_signature",
+                           reporting_info);
     }
-  }
-
-  network::TestURLLoaderFactory::PendingRequest* GetPendingRequest(
-      size_t index) {
-    if (index >= test_url_loader_factory_.pending_requests()->size())
-      return nullptr;
-    auto* request = &(*test_url_loader_factory_.pending_requests())[index];
-    DCHECK(request);
-    return request;
   }
 
   int on_upload_complete_count() const {
@@ -148,13 +141,15 @@ TEST_F(NetMetricsLogUploaderTest, OnUploadCompleteReuseUploader) {
 
   // Mimic the initial fetcher callback.
   CheckReportingInfoHeader(last_request_headers(), 10);
+  auto* pending_request_0 = test_url_loader_factory()->GetPendingRequest(0);
   test_url_loader_factory()->SimulateResponseWithoutRemovingFromPendingList(
-      GetPendingRequest(0), "");
+      pending_request_0, "");
 
   // Mimic the second fetcher callback.
   CheckReportingInfoHeader(last_request_headers(), 20);
+  auto* pending_request_1 = test_url_loader_factory()->GetPendingRequest(1);
   test_url_loader_factory()->SimulateResponseWithoutRemovingFromPendingList(
-      GetPendingRequest(1), "");
+      pending_request_1, "");
 
   EXPECT_EQ(on_upload_complete_count(), 2);
 }

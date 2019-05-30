@@ -31,7 +31,9 @@
 #ifndef THIRD_PARTY_BLINK_PUBLIC_PLATFORM_WEB_MEDIA_PLAYER_H_
 #define THIRD_PARTY_BLINK_PUBLIC_PLATFORM_WEB_MEDIA_PLAYER_H_
 
+#include "base/optional.h"
 #include "base/time/time.h"
+#include "components/viz/common/surfaces/surface_id.h"
 #include "third_party/blink/public/platform/web_callbacks.h"
 #include "third_party/blink/public/platform/web_content_decryption_module.h"
 #include "third_party/blink/public/platform/web_media_source.h"
@@ -60,7 +62,6 @@ class WebURL;
 enum class WebFullscreenVideoStatus;
 struct WebRect;
 struct WebSize;
-struct PictureInPictureControlInfo;
 
 class WebMediaPlayer {
  public:
@@ -88,10 +89,10 @@ class WebMediaPlayer {
     kPreloadAuto,
   };
 
-  enum CORSMode {
-    kCORSModeUnspecified,
-    kCORSModeAnonymous,
-    kCORSModeUseCredentials,
+  enum CorsMode {
+    kCorsModeUnspecified,
+    kCorsModeAnonymous,
+    kCorsModeUseCredentials,
   };
 
   // Reported to UMA. Do not change existing values.
@@ -125,17 +126,21 @@ class WebMediaPlayer {
     bool skipped = false;
   };
 
-  // Callback to get notified when the Picture-in-Picture window is opened.
-  using PipWindowOpenedCallback = base::OnceCallback<void(const WebSize&)>;
-  // Callback to get notified when Picture-in-Picture window is closed.
-  using PipWindowClosedCallback = base::OnceClosure;
-  // Callback to get notified when the Picture-in-Picture window is resized.
-  using PipWindowResizedCallback =
-      base::RepeatingCallback<void(const WebSize&)>;
+  // Describes when we use SurfaceLayer for video instead of VideoLayer.
+  enum class SurfaceLayerMode {
+    // Always use VideoLayer
+    kNever,
+
+    // Use SurfaceLayer only when we switch to Picture-in-Picture.
+    kOnDemand,
+
+    // Always use SurfaceLayer for video.
+    kAlways,
+  };
 
   virtual ~WebMediaPlayer() = default;
 
-  virtual LoadTiming Load(LoadType, const WebMediaPlayerSource&, CORSMode) = 0;
+  virtual LoadTiming Load(LoadType, const WebMediaPlayerSource&, CorsMode) = 0;
 
   // Playback controls.
   virtual void Play() = 0;
@@ -144,18 +149,10 @@ class WebMediaPlayer {
   virtual void SetRate(double) = 0;
   virtual void SetVolume(double) = 0;
 
-  // Enter Picture-in-Picture and notifies Blink with window size
-  // when video successfully enters Picture-in-Picture.
-  virtual void EnterPictureInPicture(PipWindowOpenedCallback) = 0;
-  // Exit Picture-in-Picture and notifies Blink when it's done.
-  virtual void ExitPictureInPicture(PipWindowClosedCallback) = 0;
-  // Assign custom controls to the Picture-in-Picture window.
-  virtual void SetPictureInPictureCustomControls(
-      const std::vector<PictureInPictureControlInfo>&) = 0;
-  // Register a callback that will be run when the Picture-in-Picture window
-  // is resized.
-  virtual void RegisterPictureInPictureWindowResizeCallback(
-      PipWindowResizedCallback) = 0;
+  // The associated media element is going to enter Picture-in-Picture. This
+  // method should make sure the player is set up for this and has a SurfaceId
+  // as it will be needed.
+  virtual void OnRequestPictureInPicture() = 0;
 
   virtual void RequestRemotePlayback() {}
   virtual void RequestRemotePlaybackControl() {}
@@ -168,14 +165,8 @@ class WebMediaPlayer {
   virtual WebTimeRanges Seekable() const = 0;
 
   // Attempts to switch the audio output device.
-  // Implementations of SetSinkId take ownership of the WebSetSinkCallbacks
-  // object.
-  // Note also that SetSinkId implementations must make sure that all
-  // methods of the WebSetSinkCallbacks object, including constructors and
-  // destructors, run in the same thread where the object is created
-  // (i.e., the blink thread).
   virtual void SetSinkId(const WebString& sink_id,
-                         WebSetSinkIdCallbacks*) = 0;
+                         std::unique_ptr<WebSetSinkIdCallbacks>) = 0;
 
   // True if the loaded media has a playable video/audio track.
   virtual bool HasVideo() const = 0;
@@ -195,9 +186,13 @@ class WebMediaPlayer {
   virtual double Duration() const = 0;
   virtual double CurrentTime() const = 0;
 
+  virtual bool PausedWhenHidden() const { return false; }
+
   // Internal states of loading and network.
   virtual NetworkState GetNetworkState() const = 0;
   virtual ReadyState GetReadyState() const = 0;
+
+  virtual SurfaceLayerMode GetVideoSurfaceLayerMode() const = 0;
 
   // Returns an implementation-specific human readable error message, or an
   // empty string if no message is available. The message should begin with a
@@ -207,9 +202,10 @@ class WebMediaPlayer {
 
   virtual bool DidLoadingProgress() = 0;
 
-  virtual bool DidGetOpaqueResponseFromServiceWorker() const = 0;
-  virtual bool HasSingleSecurityOrigin() const = 0;
-  virtual bool DidPassCORSAccessCheck() const = 0;
+  // Returns true if the response is CORS-cross-origin and so we shouldn't be
+  // allowing media to play through webaudio.
+  // This should be called after the response has arrived.
+  virtual bool WouldTaintOrigin() const = 0;
 
   virtual double MediaTimeForTimeValue(double time_value) const = 0;
 
@@ -395,6 +391,23 @@ class WebMediaPlayer {
   // Test helper methods for exercising media suspension.
   virtual void ForceStaleStateForTesting(ReadyState target_state) {}
   virtual bool IsSuspendedForTesting() { return false; }
+
+  virtual bool DidLazyLoad() const { return false; }
+  virtual void OnBecameVisible() {}
+
+  virtual bool IsOpaque() const { return false; }
+
+  // Returns the id given by the WebMediaPlayerDelegate. This is used by the
+  // Blink code to pass a player id to mojo services.
+  // TODO(mlamouri): remove this and move the id handling to Blink.
+  virtual int GetDelegateId() { return -1; }
+
+  // Returns the SurfaceId the video element is currently using.
+  // Returns base::nullopt if the element isn't a video or doesn't have a
+  // SurfaceId associated to it.
+  virtual base::Optional<viz::SurfaceId> GetSurfaceId() {
+    return base::nullopt;
+  }
 };
 
 }  // namespace blink

@@ -55,9 +55,8 @@ class GLImageNativePixmapTestDelegate : public GLImageTestDelegateBase {
       client_pixmap->Unmap();
     }
 
-    scoped_refptr<gl::GLImageNativePixmap> image(new gl::GLImageNativePixmap(
-        size, gl::GLImageNativePixmap::GetInternalFormatForTesting(format)));
-    EXPECT_TRUE(image->Initialize(pixmap.get(), pixmap->GetBufferFormat()));
+    auto image = base::MakeRefCounted<gl::GLImageNativePixmap>(size, format);
+    EXPECT_TRUE(image->Initialize(pixmap.get()));
     return image;
   }
 
@@ -84,9 +83,9 @@ using GLImageScanoutType = testing::Types<
     GLImageNativePixmapTestDelegate<gfx::BufferUsage::SCANOUT,
                                     gfx::BufferFormat::BGRA_8888>>;
 
-INSTANTIATE_TYPED_TEST_CASE_P(GLImageNativePixmapScanout,
-                              GLImageTest,
-                              GLImageScanoutType);
+INSTANTIATE_TYPED_TEST_SUITE_P(GLImageNativePixmapScanout,
+                               GLImageTest,
+                               GLImageScanoutType);
 
 using GLImageScanoutTypeDisabled = testing::Types<
     GLImageNativePixmapTestDelegate<gfx::BufferUsage::SCANOUT,
@@ -94,9 +93,9 @@ using GLImageScanoutTypeDisabled = testing::Types<
 
 // This test is disabled since we need mesa support for XR30/XB30 that is not
 // available on many boards yet.
-INSTANTIATE_TYPED_TEST_CASE_P(DISABLED_GLImageNativePixmapScanout,
-                              GLImageTest,
-                              GLImageScanoutTypeDisabled);
+INSTANTIATE_TYPED_TEST_SUITE_P(DISABLED_GLImageNativePixmapScanout,
+                               GLImageTest,
+                               GLImageScanoutTypeDisabled);
 
 using GLImageReadWriteType = testing::Types<
     GLImageNativePixmapTestDelegate<gfx::BufferUsage::GPU_READ_CPU_READ_WRITE,
@@ -121,13 +120,13 @@ using GLImageBindTestTypes = testing::Types<
 // These tests are disabled since the trybots are running with Ozone X11
 // implementation that doesn't support creating ClientNativePixmap.
 // TODO(dcastagna): Implement ClientNativePixmapFactory on Ozone X11.
-INSTANTIATE_TYPED_TEST_CASE_P(DISABLED_GLImageNativePixmapReadWrite,
-                              GLImageTest,
-                              GLImageReadWriteType);
+INSTANTIATE_TYPED_TEST_SUITE_P(DISABLED_GLImageNativePixmapReadWrite,
+                               GLImageTest,
+                               GLImageReadWriteType);
 
-INSTANTIATE_TYPED_TEST_CASE_P(DISABLED_GLImageNativePixmap,
-                              GLImageBindTest,
-                              GLImageBindTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(DISABLED_GLImageNativePixmap,
+                               GLImageBindTest,
+                               GLImageBindTestTypes);
 
 }  // namespace
 }  // namespace gl

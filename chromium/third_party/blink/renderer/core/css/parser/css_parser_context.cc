@@ -4,9 +4,14 @@
 
 #include "third_party/blink/renderer/core/css/parser/css_parser_context.h"
 
+#include "third_party/blink/renderer/core/css/css_custom_ident_value.h"
 #include "third_party/blink/renderer/core/css/css_style_sheet.h"
+#include "third_party/blink/renderer/core/css/css_value_list.h"
+#include "third_party/blink/renderer/core/css/style_rule_keyframe.h"
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/feature_policy/feature_policy.h"
+#include "third_party/blink/renderer/core/feature_policy/layout_animations_policy.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
@@ -27,11 +32,11 @@ CSSParserContext* CSSParserContext::Create(const ExecutionContext& context) {
   else
     policy_disposition = kCheckContentSecurityPolicy;
 
-  return new CSSParserContext(
-      context.Url(), false /* is_opaque_response_from_service_worker */,
-      WTF::TextEncoding(), kHTMLStandardMode, kHTMLStandardMode, kLiveProfile,
-      referrer, true, false, context.GetSecureContextMode(), policy_disposition,
-      context.IsDocument() ? &ToDocument(context) : nullptr);
+  return MakeGarbageCollected<CSSParserContext>(
+      context.Url(), true /* origin_clean */, WTF::TextEncoding(),
+      kHTMLStandardMode, kHTMLStandardMode, kLiveProfile, referrer, true, false,
+      context.GetSecureContextMode(), policy_disposition,
+      DynamicTo<Document>(context));
 }
 
 // static
@@ -54,10 +59,10 @@ CSSParserContext* CSSParserContext::CreateWithStyleSheetContents(
 CSSParserContext* CSSParserContext::Create(
     const CSSParserContext* other,
     const Document* use_counter_document) {
-  return new CSSParserContext(
-      other->base_url_, other->is_opaque_response_from_service_worker_,
-      other->charset_, other->mode_, other->match_mode_, other->profile_,
-      other->referrer_, other->is_html_document_,
+  return MakeGarbageCollected<CSSParserContext>(
+      other->base_url_, other->origin_clean_, other->charset_, other->mode_,
+      other->match_mode_, other->profile_, other->referrer_,
+      other->is_html_document_,
       other->use_legacy_background_size_shorthand_behavior_,
       other->secure_context_mode_, other->should_check_content_security_policy_,
       use_counter_document);
@@ -67,13 +72,13 @@ CSSParserContext* CSSParserContext::Create(
 CSSParserContext* CSSParserContext::Create(
     const CSSParserContext* other,
     const KURL& base_url,
-    bool is_opaque_response_from_service_worker,
-    ReferrerPolicy referrer_policy,
+    bool origin_clean,
+    network::mojom::ReferrerPolicy referrer_policy,
     const WTF::TextEncoding& charset,
     const Document* use_counter_document) {
-  return new CSSParserContext(
-      base_url, is_opaque_response_from_service_worker, charset, other->mode_,
-      other->match_mode_, other->profile_,
+  return MakeGarbageCollected<CSSParserContext>(
+      base_url, origin_clean, charset, other->mode_, other->match_mode_,
+      other->profile_,
       Referrer(base_url.StrippedForUseAsReferrer(), referrer_policy),
       other->is_html_document_,
       other->use_legacy_background_size_shorthand_behavior_,
@@ -87,18 +92,16 @@ CSSParserContext* CSSParserContext::Create(
     SecureContextMode secure_context_mode,
     SelectorProfile profile,
     const Document* use_counter_document) {
-  return new CSSParserContext(
-      KURL(), false /* is_opaque_response_from_service_worker */,
-      WTF::TextEncoding(), mode, mode, profile, Referrer(), false, false,
-      secure_context_mode, kDoNotCheckContentSecurityPolicy,
-      use_counter_document);
+  return MakeGarbageCollected<CSSParserContext>(
+      KURL(), true /* origin_clean */, WTF::TextEncoding(), mode, mode, profile,
+      Referrer(), false, false, secure_context_mode,
+      kDoNotCheckContentSecurityPolicy, use_counter_document);
 }
 
 // static
 CSSParserContext* CSSParserContext::Create(const Document& document) {
   return CSSParserContext::Create(
-      document, document.BaseURL(),
-      false /* is_opaque_response_from_service_worker */,
+      document, document.BaseURL(), true /* origin_clean */,
       document.GetReferrerPolicy(), WTF::TextEncoding(), kLiveProfile);
 }
 
@@ -106,8 +109,8 @@ CSSParserContext* CSSParserContext::Create(const Document& document) {
 CSSParserContext* CSSParserContext::Create(
     const Document& document,
     const KURL& base_url_override,
-    bool is_opaque_response_from_service_worker,
-    ReferrerPolicy referrer_policy_override,
+    bool origin_clean,
+    network::mojom::ReferrerPolicy referrer_policy_override,
     const WTF::TextEncoding& charset,
     SelectorProfile profile) {
   CSSParserMode mode =
@@ -137,16 +140,16 @@ CSSParserContext* CSSParserContext::Create(
   else
     policy_disposition = kCheckContentSecurityPolicy;
 
-  return new CSSParserContext(
-      base_url_override, is_opaque_response_from_service_worker, charset, mode,
-      match_mode, profile, referrer, document.IsHTMLDocument(),
+  return MakeGarbageCollected<CSSParserContext>(
+      base_url_override, origin_clean, charset, mode, match_mode, profile,
+      referrer, document.IsHTMLDocument(),
       use_legacy_background_size_shorthand_behavior,
       document.GetSecureContextMode(), policy_disposition, &document);
 }
 
 CSSParserContext::CSSParserContext(
     const KURL& base_url,
-    bool is_opaque_response_from_service_worker,
+    bool origin_clean,
     const WTF::TextEncoding& charset,
     CSSParserMode mode,
     CSSParserMode match_mode,
@@ -158,8 +161,7 @@ CSSParserContext::CSSParserContext(
     ContentSecurityPolicyDisposition policy_disposition,
     const Document* use_counter_document)
     : base_url_(base_url),
-      is_opaque_response_from_service_worker_(
-          is_opaque_response_from_service_worker),
+      origin_clean_(origin_clean),
       charset_(charset),
       mode_(mode),
       match_mode_(match_mode),
@@ -173,9 +175,9 @@ CSSParserContext::CSSParserContext(
       document_(use_counter_document) {}
 
 bool CSSParserContext::operator==(const CSSParserContext& other) const {
-  return base_url_ == other.base_url_ && charset_ == other.charset_ &&
-         mode_ == other.mode_ && match_mode_ == other.match_mode_ &&
-         profile_ == other.profile_ &&
+  return base_url_ == other.base_url_ && origin_clean_ == other.origin_clean_ &&
+         charset_ == other.charset_ && mode_ == other.mode_ &&
+         match_mode_ == other.match_mode_ && profile_ == other.profile_ &&
          is_html_document_ == other.is_html_document_ &&
          use_legacy_background_size_shorthand_behavior_ ==
              other.use_legacy_background_size_shorthand_behavior_ &&
@@ -201,8 +203,8 @@ const CSSParserContext* StrictCSSParserContext(
   return context;
 }
 
-bool CSSParserContext::IsOpaqueResponseFromServiceWorker() const {
-  return is_opaque_response_from_service_worker_;
+bool CSSParserContext::IsOriginClean() const {
+  return origin_clean_;
 }
 
 bool CSSParserContext::IsSecureContext() const {
@@ -237,6 +239,18 @@ void CSSParserContext::Count(CSSParserMode mode, CSSPropertyID property) const {
 
 bool CSSParserContext::IsDocumentHandleEqual(const Document* other) const {
   return document_.Get() == other;
+}
+
+void CSSParserContext::ReportLayoutAnimationsViolationIfNeeded(
+    const StyleRuleKeyframe& rule) const {
+  if (!document_)
+    return;
+  for (size_t i = 0; i < rule.Properties().PropertyCount(); ++i) {
+    const CSSProperty& property = rule.Properties().PropertyAt(i).Property();
+    if (!LayoutAnimationsPolicy::AffectedCSSProperties().Contains(&property))
+      continue;
+    LayoutAnimationsPolicy::ReportViolation(property, *document_);
+  }
 }
 
 void CSSParserContext::Trace(blink::Visitor* visitor) {

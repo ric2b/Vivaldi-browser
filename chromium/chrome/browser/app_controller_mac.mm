@@ -26,7 +26,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_shim/extension_app_shim_handler_mac.h"
 #include "chrome/browser/apps/platform_apps/app_window_registry_util.h"
@@ -53,7 +53,6 @@
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/signin/signin_ui_util.h"
 #include "chrome/browser/sync/sync_ui_util.h"
@@ -69,13 +68,13 @@
 #import "chrome/browser/ui/cocoa/apps/app_shim_menu_controller_mac.h"
 #include "chrome/browser/ui/cocoa/apps/quit_with_apps_controller_mac.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_menu_bridge.h"
+#import "chrome/browser/ui/cocoa/confirm_quit.h"
 #import "chrome/browser/ui/cocoa/confirm_quit_panel_controller.h"
 #include "chrome/browser/ui/cocoa/handoff_active_url_observer_bridge.h"
 #import "chrome/browser/ui/cocoa/history_menu_bridge.h"
 #include "chrome/browser/ui/cocoa/last_active_browser_cocoa.h"
 #import "chrome/browser/ui/cocoa/profiles/profile_menu_controller.h"
 #import "chrome/browser/ui/cocoa/share_menu_controller.h"
-#import "chrome/browser/ui/confirm_quit.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
@@ -93,14 +92,12 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/browser_sync/profile_sync_service.h"
 #include "components/handoff/handoff_manager.h"
 #include "components/handoff/handoff_utility.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
@@ -117,11 +114,12 @@
 #include "app/vivaldi_commands.h"
 #include "app/vivaldi_command_controller.h"
 #include "app/vivaldi_constants.h"
+#include "app/vivaldi_resources.h"
 #include "browser/vivaldi_app_observer.h"
 #include "extensions/api/show_menu/show_menu_api.h"
 #include "prefs/vivaldi_gen_prefs.h"
 #import  "third_party/sparkle_lib/Sparkle.framework/Headers/SUUpdater.h"
-#include "ui/cocoa/vivaldi_bookmark_menu_mac.h"
+#include "ui/vivaldi_bookmark_menu_mac.h"
 
 using apps::AppShimHandler;
 using apps::ExtensionAppShimHandler;
@@ -190,7 +188,8 @@ void RecordLastRunAppBundlePath() {
   // real, user-visible app bundle directory. (The alternatives give either the
   // framework's path or the initial app's path, which may be an app mode shim
   // or a unit test.)
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   base::FilePath app_bundle_path =
       chrome::GetVersionedDirectory().DirName().DirName().DirName();
@@ -389,6 +388,12 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
              name:NSWorkspaceWillPowerOffNotification
            object:nil];
 
+  NSMenu* fileMenu = [[[NSApp mainMenu] itemWithTag:IDC_FILE_MENU] submenu];
+  closeTabMenuItem_ = [fileMenu itemWithTag:IDC_CLOSE_TAB];
+  DCHECK(closeTabMenuItem_);
+  closeWindowMenuItem_ = [fileMenu itemWithTag:IDC_CLOSE_WINDOW];
+  DCHECK(closeWindowMenuItem_);
+
   // Set up the command updater for when there are no windows open
   [self initMenuState];
 
@@ -422,11 +427,9 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 
   // If the OSX version supports this method, the system will automatically
   // hide the item if there's no touch bar. However, for unsupported versions,
-  // we'll have to manually remove the item from the menu. The item also has
-  // to be removed if the feature is disabled.
+  // we'll have to manually remove the item from the menu.
   if (![NSApp
-          respondsToSelector:@selector(toggleTouchBarCustomizationPalette:)] ||
-      !base::FeatureList::IsEnabled(features::kBrowserTouchBar)) {
+          respondsToSelector:@selector(toggleTouchBarCustomizationPalette:)]) {
     NSMenu* mainMenu = [NSApp mainMenu];
     NSMenu* viewMenu = [[mainMenu itemWithTag:IDC_VIEW_MENU] submenu];
     NSMenuItem* customizeItem = [viewMenu itemWithTag:IDC_CUSTOMIZE_TOUCH_BAR];
@@ -454,7 +457,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 - (void)applicationWillHide:(NSNotification*)notification {
   if (![self isProfileReady])
     return;
-  apps::ExtensionAppShimHandler::OnChromeWillHide();
+  apps::ExtensionAppShimHandler::Get()->OnChromeWillHide();
 }
 
 - (BOOL)tryToTerminateApplication:(NSApplication*)app {
@@ -473,12 +476,6 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   // TODO(viettrungluu): Remove Apple Event handlers here? (It's safe to leave
   // them in, but I'm not sure about UX; we'd also want to disable other things
   // though.) http://crbug.com/40861
-
-  // Check if the user really wants to quit by employing the confirm-to-quit
-  // mechanism.
-  if (!browser_shutdown::IsTryingToQuit() &&
-      [self applicationShouldTerminate:app] != NSTerminateNow)
-    return NO;
 
   // Check for active apps. If quitting is prevented, only close browsers and
   // sessions.
@@ -530,30 +527,26 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   }
 }
 
-- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication*)app {
+- (BOOL)runConfirmQuitPanel {
   // If there are no windows, quit immediately.
   if (BrowserList::GetInstance()->empty() &&
       !AppWindowRegistryUtil::IsAppWindowVisibleInAnyProfile(0)) {
-    return NSTerminateNow;
+    return YES;
   }
 
   // Check if the preference is turned on.
   const PrefService* prefs = g_browser_process->local_state();
   if (!prefs->GetBoolean(prefs::kConfirmToQuitEnabled)) {
     confirm_quit::RecordHistogram(confirm_quit::kNoConfirm);
-    return NSTerminateNow;
+    return YES;
   }
 
-  // If the application is going to terminate as the result of a Cmd+Q
-  // invocation, use the special sauce to prevent accidental quitting.
-  // http://dev.chromium.org/developers/design-documents/confirm-to-quit-experiment
-
-  // This logic is only for keyboard-initiated quits.
-  if (![ConfirmQuitPanelController eventTriggersFeature:[app currentEvent]])
+  // Run only for keyboard-initiated quits.
+  if ([[NSApp currentEvent] type] != NSKeyDown)
     return NSTerminateNow;
 
   return [[ConfirmQuitPanelController sharedController]
-      runModalLoopForApplication:app];
+      runModalLoopForApplication:NSApp];
 }
 
 // Called when the app is shutting down. Clean-up as appropriate.
@@ -656,12 +649,11 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   // happened during a space change. Now that the change has
   // completed, raise browser windows.
   reopenTime_ = base::TimeTicks();
-  std::set<NSWindow*> browserWindows;
+  std::set<gfx::NativeWindow> browserWindows;
   for (auto* browser : *BrowserList::GetInstance())
     browserWindows.insert(browser->window()->GetNativeWindow());
-  if (!browserWindows.empty()) {
+  if (!browserWindows.empty())
     ui::FocusWindowSetOnCurrentSpace(browserWindows);
-  }
 }
 
 // Called when shutting down or logging out.
@@ -798,7 +790,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   base::PostTaskWithTraits(FROM_HERE,
                            {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
                             base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-                           base::Bind(&RecordLastRunAppBundlePath));
+                           base::BindOnce(&RecordLastRunAppBundlePath));
 
   // Makes "Services" menu items available.
   [self registerServicesMenuTypesTo:[notify object]];
@@ -856,10 +848,15 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   waitTitle =
       l10n_util::GetNSString(IDS_ABANDON_DOWNLOAD_DIALOG_CONTINUE_BUTTON);
 
+  base::scoped_nsobject<NSAlert> alert([[NSAlert alloc] init]);
+  [alert setMessageText:titleText];
+  [alert setInformativeText:explanationText];
+  [alert addButtonWithTitle:waitTitle];
+  [alert addButtonWithTitle:exitTitle];
+
   // 'waitButton' is the default choice.
-  int choice = NSRunAlertPanel(titleText, @"%@",
-                               waitTitle, exitTitle, nil, explanationText);
-  return choice == NSAlertDefaultReturn ? YES : NO;
+  int choice = [alert runModal];
+  return choice == NSAlertFirstButtonReturn ? YES : NO;
 }
 
 // Check all profiles for in progress downloads, and if we find any, prompt the
@@ -948,9 +945,8 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
     return YES;
 
   Browser* browser = chrome::GetLastActiveBrowser();
-  return browser &&
-         [[browser->window()->GetNativeWindow() attachedSheet]
-             isKindOfClass:[NSWindow class]];
+  return browser && [[browser->window()->GetNativeWindow().GetNativeNSWindow()
+                            attachedSheet] isKindOfClass:[NSWindow class]];
 }
 
 // Called to validate menu items when there are no key windows. All the
@@ -1034,12 +1030,14 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 
 // Called from menu when user wants to manually check for updates
 - (void)checkForUpdates:(id)sender {
+#ifndef VIVALDI_SPARKLE_DISABLED
   LOG(INFO) << "checkForUpdates";
   if ([[SUUpdater sharedUpdater] updateInProgress]) {
     LOG(INFO) << "update in progress";
     return;
   }
   [[SUUpdater sharedUpdater] checkForUpdates:nil];
+#endif
 }
 
 - (void)commandDispatch:(id)sender {
@@ -1098,9 +1096,12 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   }
 
   SEL action = [sender action];
-  if (action == @selector(commandFromDock:)) {
+  if (action == @selector(commandFromDock:) || tag == IDC_VIV_EXIT) {
     // Do nothing, but make it clear. The dock menu is not controlled from
     // Vivaldi and actions from that must not be subject to those we use below.
+
+    // IDC_VIV_EXIT keyb shortcut needs to be handled on this side to show the
+    // confirmation dialog before quitting
   } else {
     // Vivaldi executes its own shortcuts from the javascript side. Mac will in
     // addition execute shortcuts that are displayed in the menu so we must stop
@@ -1184,6 +1185,11 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   }
 
   switch (tag) {
+    case IDC_VIV_EXIT:
+      if ([self runConfirmQuitPanel]) {
+          [self tryToTerminateApplication:NSApp];
+      }
+      break;
     case IDC_NEW_TAB:
       // Create a new tab in an existing browser window (which we activate) if
       // possible.
@@ -1276,8 +1282,8 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
         // modifying several layers of chrome code.
         std::string parameter =
             base::SysNSStringToUTF8([sender representedObject]);
-        extensions::ShowMenuAPI::GetFactoryInstance()
-            ->Get(browser->profile())->CommandExecuted(tag, parameter);
+        extensions::ShowMenuAPI::SendCommandExecuted(
+            browser->profile(), browser->session_id().id(), tag, parameter);
       }
       break;
 
@@ -1335,7 +1341,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   // If there are any, return here. Otherwise, the windows are panels or
   // notifications so we still need to open a new window.
   if (hasVisibleWindows  || vivaldi::IsVivaldiRunning()) {
-    std::set<NSWindow*> browserWindows;
+    std::set<gfx::NativeWindow> browserWindows;
     for (auto* browser : *BrowserList::GetInstance()) {
       // When focusing Chrome, don't focus any browser windows associated with
       // a currently running app shim, so ignore them.
@@ -1566,7 +1572,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 - (void)registerServicesMenuTypesTo:(NSApplication*)app {
   // Note that RenderWidgetHostViewCocoa implements NSServicesRequests which
   // handles requests from services.
-  NSArray* types = [NSArray arrayWithObjects:NSStringPboardType, nil];
+  NSArray* types = @[ base::mac::CFToNSCast(kUTTypeUTF8PlainText) ];
   [app registerServicesMenuSendTypes:types returnTypes:types];
 }
 
@@ -1757,6 +1763,8 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
                             keyEquivalent:@""]);
     [item setTarget:self];
     if (vivaldi::IsVivaldiRunning()) {
+      titleStr = l10n_util::GetNSStringWithFixup(IDS_VIV_NEW_PRIVATE_WINDOW);
+      [item setTitle:titleStr];
       [item setTag:IDC_VIV_NEW_PRIVATE_WINDOW];
     } else
     [item setTag:IDC_NEW_INCOGNITO_WINDOW];
@@ -1876,6 +1884,9 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 }
 
 - (void)updateMenuItemKeyEquivalents {
+  if (vivaldi::IsVivaldiRunning()) {
+    return;
+  }
   BOOL enableCloseTabShortcut = NO;
   id target = [NSApp targetForAction:@selector(performClose:)];
 
@@ -1900,15 +1911,20 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 }
 
 - (BOOL)application:(NSApplication*)application
-    willContinueUserActivityWithType:(NSString*)userActivityType
-    API_AVAILABLE(macos(10.10)) {
+    willContinueUserActivityWithType:(NSString*)userActivityType {
   return [userActivityType isEqualToString:NSUserActivityTypeBrowsingWeb];
 }
 
 - (BOOL)application:(NSApplication*)application
     continueUserActivity:(NSUserActivity*)userActivity
+#if !defined(MAC_OS_X_VERSION_10_14) || \
+    MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_14
       restorationHandler:(void (^)(NSArray*))restorationHandler
-    API_AVAILABLE(macos(10.10)) {
+#else
+      restorationHandler:
+          (void (^)(NSArray<id<NSUserActivityRestoring>>*))restorationHandler
+#endif
+{
   if (![userActivity.activityType
           isEqualToString:NSUserActivityTypeBrowsingWeb]) {
     return NO;
@@ -1944,14 +1960,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 }
 
 - (void)passURLToHandoffManager:(const GURL&)handoffURL {
-  if (@available(macOS 10.10, *)) {
-    [handoffManager_ updateActiveURL:handoffURL];
-  } else {
-    // Only ends up being called in 10.10+, i.e. if shouldUseHandoff returns
-    // true. Some tests override shouldUseHandoff to always return true, but
-    // then they also override this function to do something else.
-    NOTREACHED();
-  }
+  [handoffManager_ updateActiveURL:handoffURL];
 }
 
 - (void)updateHandoffManager:(content::WebContents*)webContents {

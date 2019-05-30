@@ -27,7 +27,7 @@
 class OperaBookmarkReader : public OperaAdrFileReader {
  public:
   OperaBookmarkReader() {}
-  ~OperaBookmarkReader() override{};
+  ~OperaBookmarkReader() override {}
 
   void AddBookmark(const std::vector<base::string16>& current_folder,
                    const base::DictionaryValue& entries,

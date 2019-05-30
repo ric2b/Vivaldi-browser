@@ -19,15 +19,14 @@ class VideoResourceUpdater;
 
 namespace viz {
 class RenderPass;
+class RasterContextProvider;
 }
 
 namespace blink {
 
 // VideoFrameResourceProvider obtains required GPU resources for the video
 // frame.
-// VideoFrameResourceProvider methods are currently called on the media thread.
-// TODO(lethalantidote): Move the usage of this class off media thread
-// https://crbug.com/753605
+// This class is called from the thread to which |context_provider_| is bound.
 class PLATFORM_EXPORT VideoFrameResourceProvider {
  public:
   // |use_sync_primitives| controls whether we ScopedAllowBaseSyncPrimitives
@@ -39,7 +38,8 @@ class PLATFORM_EXPORT VideoFrameResourceProvider {
 
   virtual ~VideoFrameResourceProvider();
 
-  virtual void Initialize(viz::ContextProvider*, viz::SharedBitmapReporter*);
+  virtual void Initialize(viz::RasterContextProvider* media_context_provider,
+                          viz::SharedBitmapReporter* shared_bitmap_reporter);
   virtual void AppendQuads(viz::RenderPass*,
                            scoped_refptr<media::VideoFrame>,
                            media::VideoRotation,
@@ -61,7 +61,7 @@ class PLATFORM_EXPORT VideoFrameResourceProvider {
  private:
   const cc::LayerTreeSettings settings_;
 
-  viz::ContextProvider* context_provider_;
+  viz::RasterContextProvider* context_provider_;
   std::unique_ptr<viz::ClientResourceProvider> resource_provider_;
   std::unique_ptr<media::VideoResourceUpdater> resource_updater_;
   bool use_sync_primitives_ = false;

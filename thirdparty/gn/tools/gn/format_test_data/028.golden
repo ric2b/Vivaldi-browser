@@ -1,6 +1,6 @@
 # Don't separate these.
-import("wee.gni")
 import("waa.gni")
+import("wee.gni")
 
 import("woo.gni")
 

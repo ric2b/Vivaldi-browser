@@ -5,9 +5,10 @@
 #include "third_party/blink/renderer/core/fetch/fetch_data_loader.h"
 
 #include <memory>
+
+#include "base/stl_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/renderer/core/fetch/bytes_consumer_for_data_consumer_handle.h"
 #include "third_party/blink/renderer/core/fetch/bytes_consumer_test_util.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
 #include "third_party/blink/renderer/core/html/forms/form_data.h"
@@ -55,7 +56,7 @@ constexpr char kQuickBrownFoxFormData[] =
     "Quick brown fox\r\n"
     "--boundary--\r\n";
 constexpr size_t kQuickBrownFoxFormDataLength =
-    arraysize(kQuickBrownFoxFormData) - 1u;
+    base::size(kQuickBrownFoxFormData) - 1u;
 
 TEST(FetchDataLoaderTest, LoadAsBlob) {
   Checkpoint checkpoint;

@@ -20,10 +20,6 @@ type:*SkBlockComRef*
 type:*RemoveIUnknown*
 src:*atlcomcli.h
 
-# invalid downcasts for IPC messages
-# https://crbug.com/520760
-src:*nacl_message_scanner.cc*
-
 # src/base/win/event_trace_provider_unittest.cc
 type:*EtwTraceProvider*
 
@@ -141,11 +137,17 @@ fun:*BrokerProcessDispatcher*
 # Blacklist base::Callback due to https://crbug.com/845855
 fun:*FunctorTraits*
 
+# PipeWire due to https://crbug.com/926115
+src:*/include/spa/*
+src:*third_party/webrtc/modules/desktop_capture/linux/pipewire_stubs.cc
+src:*third_party/webrtc/modules/desktop_capture/linux/base_capturer_pipewire.cc
+
 # Calls to auto-generated stubs by generate_stubs.py
 src:*audio/pulse/pulse_stubs.cc
+src:*media/gpu/vaapi/va_stubs.cc
 
 # Calls to auto-generated stubs by generate_library_loader.py
-src:*chrome/browser/speech/tts_linux.cc
+src:*content/browser/speech/tts_linux.cc
 src:*device/udev_linux/udev0_loader.cc
 src:*device/udev_linux/udev1_loader.cc
 
@@ -161,7 +163,7 @@ src:*ui/accessibility/platform/ax_platform_node_auralinux.cc
 src:*ui/accessibility/platform/ax_platform_atk_hyperlink.cc
 
 src:*chrome/browser/ui/zoom/chrome_zoom_level_prefs.cc
-src:*third_party/webrtc/modules/desktop_capture/x11/x_server_pixel_buffer.cc
+src:*third_party/webrtc/modules/desktop_capture/linux/x_server_pixel_buffer.cc
 src:*media/cdm/*
 src:*third_party/swiftshader/*
 src:*base/native_library_unittest.cc
@@ -198,10 +200,6 @@ src:*third_party/icu/source/common/*
 src:*third_party/blink/renderer/platform/wtf/*
 # v8/src/intl.cc
 fun:*LocaleConvertCase*
-
-# Casts away const qualifier
-# third_party/boringssl/src/crypto/pem/pem_lib.c
-fun:*PEM_ASN1_write*
 
 # PropertyCallbackArguments::Call methods cast function pointers
 src:*v8/src/api-arguments-inl.h

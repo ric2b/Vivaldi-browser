@@ -91,6 +91,7 @@
     void alwaysExposedMethod();
     [Exposed=Worker] void workerExposedMethod();
     [Exposed=Window] void windowExposedMethod();
+    [Exposed=Window,OriginTrialEnabled=TestFeature] void originTrialWindowExposedMethod();
 
     static void alwaysExposedStaticMethod();
     [Exposed=Worker] static void workerExposedStaticMethod();
@@ -114,9 +115,12 @@
     void voidMethodPartialOverload(double doubleArg);
     static void staticVoidMethodPartialOverload();
 
-    Promise promiseMethodPartialOverload();
-    Promise promiseMethodPartialOverload(Window window);
-    static Promise staticPromiseMethodPartialOverload();
+    Promise<any> promiseMethodPartialOverload();
+    Promise<any> promiseMethodPartialOverload(Window window);
+    static Promise<any> staticPromiseMethodPartialOverload();
+
+    void overloadMethodWithUnionTypeWithStringMember((double or DOMString) unionArg);
+    void overloadMethodWithUnionTypeWithStringMember(boolean boolArg);
 
     iterable<ByteString, long>;
 

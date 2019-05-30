@@ -179,7 +179,7 @@ class PLATFORM_EXPORT FontDescription {
   // family is "monospace"
   bool IsMonospace() const {
     return GenericFamily() == kMonospaceFamily && !Family().Next() &&
-           Family().Family() == FontFamilyNames::webkit_monospace;
+           Family().Family() == font_family_names::kWebkitMonospace;
   }
   Kerning GetKerning() const { return static_cast<Kerning>(fields_.kerning_); }
   FontVariantEastAsian VariantEastAsian() const {
@@ -189,7 +189,7 @@ class PLATFORM_EXPORT FontDescription {
   VariantLigatures GetVariantLigatures() const;
   FontVariantNumeric VariantNumeric() const {
     return FontVariantNumeric::InitializeFromUnsigned(fields_.variant_numeric_);
-  };
+  }
   LigaturesState CommonLigaturesState() const {
     return static_cast<LigaturesState>(fields_.common_ligatures_state_);
   }
@@ -252,6 +252,7 @@ class PLATFORM_EXPORT FontDescription {
       const;  // Returns either the computedSize or the computedPixelSize
   FontCacheKey CacheKey(
       const FontFaceCreationParams&,
+      bool is_unique_match,
       const FontSelectionRequest& = FontSelectionRequest()) const;
 
   void SetFamily(const FontFamily& family) { family_list_ = family; }

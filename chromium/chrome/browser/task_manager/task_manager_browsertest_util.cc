@@ -4,6 +4,7 @@
 
 #include "chrome/browser/task_manager/task_manager_browsertest_util.h"
 
+#include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/location.h"
@@ -118,8 +119,6 @@ class ResourceChangeObserver {
         return "SQLite Memory Used";
       case ColumnSpecifier::IDLE_WAKEUPS:
         return "Idle wake ups";
-      case ColumnSpecifier::MEMORY_STATE:
-        return "Memory State";
       case ColumnSpecifier::NETWORK_USE:
         return "Network";
       case ColumnSpecifier::TOTAL_NETWORK_USE:

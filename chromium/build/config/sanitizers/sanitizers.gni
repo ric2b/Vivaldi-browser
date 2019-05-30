@@ -11,6 +11,11 @@ declare_args() {
   # Compile for Address Sanitizer to find memory bugs.
   is_asan = false
 
+  # Compile for Hardware-Assisted Address Sanitizer to find memory bugs
+  # (android/arm64 only).
+  # See http://clang.llvm.org/docs/HardwareAssistedAddressSanitizerDesign.html
+  is_hwasan = false
+
   # Compile for Leak Sanitizer to find leaks.
   is_lsan = false
 
@@ -32,9 +37,6 @@ declare_args() {
 
   # Compile for Undefined Behaviour Sanitizer's vptr checks.
   is_ubsan_vptr = false
-
-  # Compile with SafeStack shadow stack support.
-  is_safestack = false
 
   # Track where uninitialized memory originates from. From fastest to slowest:
   # 0 - no tracking, 1 - track only the initial allocation site, 2 - track the
@@ -102,17 +104,21 @@ declare_args() {
   # use_sanitizer_coverage to be enabled.
   # This flag is not used for libFuzzer (use_libfuzzer=true). Instead, we use:
   #     -fsanitize=fuzzer-no-link
-  # Default value when unset and use_afl=true:
+  # Default value when unset and use_fuzzing_engine=true:
   #     trace-pc-guard
   # Default value when unset and use_sanitizer_coverage=true:
   #     trace-pc-guard,indirect-calls
   sanitizer_coverage_flags = ""
+
+  # Use blacklists from tools/memory/asan when compiling with asan.
+  asan_use_blacklist = true
 }
 
 # Disable sanitizers for non-default toolchains.
 if (current_toolchain != default_toolchain) {
   is_asan = false
   is_cfi = false
+  is_hwasan = false
   is_lsan = false
   is_msan = false
   is_tsan = false
@@ -158,21 +164,18 @@ if (use_fuzzing_engine && sanitizer_coverage_flags == "") {
   sanitizer_coverage_flags = "trace-pc-guard,indirect-calls"
 }
 
-# Whether we are linking against a debugging sanitizer runtime library. Among
-# other things, this changes the default symbol level and other settings in
-# order to prepare to create stack traces "live" using the sanitizer runtime.
-using_sanitizer =
-    is_asan || is_lsan || is_tsan || is_msan || is_ubsan || is_ubsan_null ||
-    is_ubsan_vptr || is_ubsan_security || use_sanitizer_coverage || use_cfi_diag
+# Whether we are linking against a sanitizer runtime library. Among other
+# things, this changes the default symbol level and other settings in order to
+# prepare to create stack traces "live" using the sanitizer runtime.
+using_sanitizer = is_asan || is_hwasan || is_lsan || is_tsan || is_msan ||
+                  is_ubsan || is_ubsan_null || is_ubsan_vptr ||
+                  is_ubsan_security || use_sanitizer_coverage || use_cfi_diag
 
 assert(!using_sanitizer || is_clang,
        "Sanitizers (is_*san) require setting is_clang = true in 'gn args'")
 
 assert(!is_cfi || is_clang,
        "is_cfi requires setting is_clang = true in 'gn args'")
-
-assert(!is_safestack || is_clang,
-       "is_safestack requires setting is_clang = true in 'gn args'")
 
 prebuilt_instrumented_libraries_available =
     is_msan && (msan_track_origins == 0 || msan_track_origins == 2)
@@ -204,6 +207,9 @@ if (use_libfuzzer && is_linux) {
 assert(!is_debug || !(is_msan || is_ubsan || is_ubsan_null || is_ubsan_vptr),
        "Sanitizers should generally be used in release (set is_debug=false).")
 
+assert(!is_hwasan || (is_android && current_cpu == "arm64"),
+       "HWASan only supported on Android ARM64 builds.")
+
 assert(!is_msan || (is_linux && current_cpu == "x64"),
        "MSan currently only works on 64-bit Linux and ChromeOS builds.")
 
@@ -213,6 +219,11 @@ assert(!is_lsan || is_asan, "is_lsan = true requires is_asan = true also.")
 # allocation functions is hard on Windows and not yet implemented in LLVM.
 assert(!is_win || !is_debug || !is_asan,
        "ASan on Windows doesn't work in debug (set is_debug=false).")
+
+# libFuzzer targets can fail to build or behave incorrectly when built without
+# ASAN on Windows.
+assert(!is_win || !use_libfuzzer || is_asan,
+       "use_libfuzzer on Windows requires setting is_asan = true")
 
 # Make sure that if we recover on detection (i.e. not crash), diagnostics are
 # printed.

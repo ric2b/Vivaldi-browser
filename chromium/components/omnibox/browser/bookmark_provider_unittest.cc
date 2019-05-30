@@ -11,8 +11,8 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -90,8 +90,7 @@ typedef std::vector<TestBookmarkPosition> TestBookmarkPositions;
 std::string TestBookmarkPositionsAsString(
     const TestBookmarkPositions& positions) {
   std::string position_string("{");
-  for (TestBookmarkPositions::const_iterator i = positions.begin();
-       i != positions.end(); ++i) {
+  for (auto i = positions.begin(); i != positions.end(); ++i) {
     if (i != positions.begin())
       position_string += ", ";
     position_string += "{" + base::NumberToString(i->begin) + ", " +
@@ -105,7 +104,7 @@ std::string TestBookmarkPositionsAsString(
 // diagnostic output.
 base::string16 MatchesAsString16(const ACMatches& matches) {
   base::string16 matches_string;
-  for (ACMatches::const_iterator i = matches.begin(); i != matches.end(); ++i) {
+  for (auto i = matches.begin(); i != matches.end(); ++i) {
     matches_string.append(base::ASCIIToUTF16("    '"));
     matches_string.append(i->description);
     matches_string.append(base::ASCIIToUTF16("'\n"));
@@ -126,8 +125,7 @@ TestBookmarkPositions PositionsFromAutocompleteMatch(
   TestBookmarkPositions positions;
   bool started = false;
   size_t start = 0;
-  for (AutocompleteMatch::ACMatchClassifications::const_iterator
-       i = match.description_class.begin();
+  for (auto i = match.description_class.begin();
        i != match.description_class.end(); ++i) {
     if (i->style & AutocompleteMatch::ACMatchClassification::MATCH) {
       // We have found the start of a match.
@@ -194,7 +192,7 @@ void BookmarkProviderTest::SetUp() {
 
   provider_ = new BookmarkProvider(provider_client_.get());
   const BookmarkNode* other_node = model_->other_node();
-  for (size_t i = 0; i < arraysize(bookmark_provider_test_data); ++i) {
+  for (size_t i = 0; i < base::size(bookmark_provider_test_data); ++i) {
     const BookmarksTestInfo& cur(bookmark_provider_test_data[i]);
     const GURL url(cur.url);
     model_->AddURL(other_node, other_node->child_count(),
@@ -273,7 +271,7 @@ TEST_F(BookmarkProviderTest, Positions) {
     {"emptytitle",            1, {}},
   };
 
-  for (size_t i = 0; i < arraysize(query_data); ++i) {
+  for (size_t i = 0; i < base::size(query_data); ++i) {
     AutocompleteInput input(base::ASCIIToUTF16(query_data[i].query),
                             metrics::OmniboxEventProto::OTHER,
                             TestSchemeClassifier());
@@ -352,7 +350,7 @@ TEST_F(BookmarkProviderTest, Rankings) {
                       "burning worms #2"}},  // not boosted
   };
 
-  for (size_t i = 0; i < arraysize(query_data); ++i) {
+  for (size_t i = 0; i < base::size(query_data); ++i) {
     AutocompleteInput input(base::ASCIIToUTF16(query_data[i].query),
                             metrics::OmniboxEventProto::OTHER,
                             TestSchemeClassifier());
@@ -405,7 +403,7 @@ TEST_F(BookmarkProviderTest, InlineAutocompletion) {
     // actually bookmarked.
   };
 
-  for (size_t i = 0; i < arraysize(query_data); ++i) {
+  for (size_t i = 0; i < base::size(query_data); ++i) {
     const std::string description = "for query=" + query_data[i].query +
         " and url=" + query_data[i].url;
     AutocompleteInput input(base::ASCIIToUTF16(query_data[i].query),
@@ -450,7 +448,7 @@ TEST_F(BookmarkProviderTest, StripHttpAndAdjustOffsets) {
       // clang-format on
   };
 
-  for (size_t i = 0; i < arraysize(query_data); ++i) {
+  for (size_t i = 0; i < base::size(query_data); ++i) {
     std::string description = "for query=" + query_data[i].query;
     AutocompleteInput input(base::ASCIIToUTF16(query_data[i].query),
                             metrics::OmniboxEventProto::OTHER,

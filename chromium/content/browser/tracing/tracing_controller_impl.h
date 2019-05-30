@@ -8,6 +8,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "base/callback_forward.h"
 #include "base/memory/ref_counted.h"
@@ -27,11 +28,12 @@ class RefCountedString;
 }  // namespace base
 
 namespace tracing {
-class TraceEventAgent;
+class BaseAgent;
 }  // namespace tracing
 
 namespace content {
 
+class PerfettoFileTracer;
 class TracingDelegate;
 class TracingUI;
 
@@ -50,29 +52,32 @@ class TracingControllerImpl : public TracingController,
   CONTENT_EXPORT static TracingControllerImpl* GetInstance();
 
   // Should be called on the UI thread.
-  TracingControllerImpl();
+  CONTENT_EXPORT TracingControllerImpl();
 
   // TracingController implementation.
-  bool GetCategories(const GetCategoriesDoneCallback& callback) override;
+  bool GetCategories(GetCategoriesDoneCallback callback) override;
   bool StartTracing(const base::trace_event::TraceConfig& trace_config,
-                    const StartTracingDoneCallback& callback) override;
+                    StartTracingDoneCallback callback) override;
   bool StopTracing(const scoped_refptr<TraceDataEndpoint>& endpoint) override;
   bool StopTracing(const scoped_refptr<TraceDataEndpoint>& endpoint,
                    const std::string& agent_label) override;
-  bool GetTraceBufferUsage(
-      const GetTraceBufferUsageCallback& callback) override;
+  bool GetTraceBufferUsage(GetTraceBufferUsageCallback callback) override;
   bool IsTracing() const override;
 
   void RegisterTracingUI(TracingUI* tracing_ui);
   void UnregisterTracingUI(TracingUI* tracing_ui);
 
-  CONTENT_EXPORT tracing::TraceEventAgent* GetTraceEventAgent() const;
+  // For unittests.
+  CONTENT_EXPORT void SetTracingDelegateForTesting(
+      std::unique_ptr<TracingDelegate> delegate);
 
  private:
   friend std::default_delete<TracingControllerImpl>;
 
   ~TracingControllerImpl() override;
   void AddAgents();
+  void ConnectToServiceIfNeeded();
+  void DisconnectFromService();
   std::unique_ptr<base::DictionaryValue> GenerateMetadataDict() const;
 
   // mojo::DataPipeDrainer::Client
@@ -83,10 +88,9 @@ class TracingControllerImpl : public TracingController,
 
   void CompleteFlush();
 
-  tracing::mojom::AgentRegistryPtr agent_registry_;
+  std::unique_ptr<PerfettoFileTracer> perfetto_file_tracer_;
   tracing::mojom::CoordinatorPtr coordinator_;
-  std::vector<std::unique_ptr<tracing::mojom::Agent>> agents_;
-  std::unique_ptr<tracing::TraceEventAgent> trace_event_agent_;
+  std::vector<std::unique_ptr<tracing::BaseAgent>> agents_;
   std::unique_ptr<TracingDelegate> delegate_;
   std::unique_ptr<base::trace_event::TraceConfig> trace_config_;
   std::unique_ptr<mojo::DataPipeDrainer> drainer_;

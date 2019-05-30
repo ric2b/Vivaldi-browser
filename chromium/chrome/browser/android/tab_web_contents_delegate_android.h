@@ -10,6 +10,7 @@
 #include "content/public/browser/bluetooth_chooser.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "printing/buildflags/buildflags.h"
 
 class FindNotificationDetails;
 
@@ -36,7 +37,8 @@ class TabWebContentsDelegateAndroid
   ~TabWebContentsDelegateAndroid() override;
 
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
-                      const content::FileChooserParams& params) override;
+                      std::unique_ptr<content::FileSelectListener> listener,
+                      const blink::mojom::FileChooserParams& params) override;
   std::unique_ptr<content::BluetoothChooser> RunBluetoothChooser(
       content::RenderFrameHost* frame,
       const content::BluetoothChooser::EventHandler& event_handler) override;
@@ -65,7 +67,7 @@ class TabWebContentsDelegateAndroid
       content::MediaResponseCallback callback) override;
   bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
                                   const GURL& security_origin,
-                                  content::MediaStreamType type) override;
+                                  blink::MediaStreamType type) override;
   void SetOverlayMode(bool use_overlay_mode) override;
   bool RequestPpapiBrokerPermission(
       content::WebContents* web_contents,
@@ -85,10 +87,23 @@ class TabWebContentsDelegateAndroid
   blink::WebSecurityStyle GetSecurityStyle(
       content::WebContents* web_contents,
       content::SecurityStyleExplanations* security_style_explanations) override;
-  void RequestAppBannerFromDevTools(
-      content::WebContents* web_contents) override;
   void OnDidBlockFramebust(content::WebContents* web_contents,
                            const GURL& url) override;
+  void UpdateUserGestureCarryoverInfo(
+      content::WebContents* web_contents) override;
+  std::unique_ptr<content::WebContents> SwapWebContents(
+      content::WebContents* old_contents,
+      std::unique_ptr<content::WebContents> new_contents,
+      bool did_start_load,
+      bool did_finish_load) override;
+
+#if BUILDFLAG(ENABLE_PRINTING)
+  void PrintCrossProcessSubframe(
+      content::WebContents* web_contents,
+      const gfx::Rect& rect,
+      int document_cookie,
+      content::RenderFrameHost* subframe_host) const override;
+#endif
 
  private:
   // NotificationObserver implementation.

@@ -12,20 +12,21 @@
 #include <set>
 
 #include "base/callback.h"
-#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/pending_task.h"
+#include "base/task/common/intrusive_heap.h"
+#include "base/task/common/operations_controller.h"
 #include "base/task/sequence_manager/associated_thread_id.h"
+#include "base/task/sequence_manager/atomic_flag_set.h"
 #include "base/task/sequence_manager/enqueue_order.h"
-#include "base/task/sequence_manager/intrusive_heap.h"
 #include "base/task/sequence_manager/lazily_deallocated_deque.h"
 #include "base/task/sequence_manager/sequenced_task_source.h"
 #include "base/task/sequence_manager/task_queue.h"
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/trace_event.h"
-#include "base/trace_event/trace_event_argument.h"
+#include "base/trace_event/traced_value.h"
 
 namespace base {
 namespace sequence_manager {
@@ -38,12 +39,6 @@ namespace internal {
 class SequenceManagerImpl;
 class WorkQueue;
 class WorkQueueSets;
-
-struct IncomingImmediateWorkList {
-  IncomingImmediateWorkList* next = nullptr;
-  TaskQueueImpl* queue = nullptr;
-  internal::EnqueueOrder order;
-};
 
 // TaskQueueImpl has four main queues:
 //
@@ -79,116 +74,33 @@ class BASE_EXPORT TaskQueueImpl {
 
   ~TaskQueueImpl();
 
-  // Represents a time at which a task wants to run. Tasks scheduled for the
-  // same point in time will be ordered by their sequence numbers.
-  struct DelayedWakeUp {
-    TimeTicks time;
-    int sequence_num;
-
-    bool operator!=(const DelayedWakeUp& other) const {
-      return time != other.time || other.sequence_num != sequence_num;
-    }
-
-    bool operator==(const DelayedWakeUp& other) const {
-      return !(*this != other);
-    }
-
-    bool operator<=(const DelayedWakeUp& other) const {
-      if (time == other.time) {
-        // Debug gcc builds can compare an element against itself.
-        DCHECK(sequence_num != other.sequence_num || this == &other);
-        // |PostedTask::sequence_num| is int and might wrap around to
-        // a negative number when casted from EnqueueOrder.
-        // This way of comparison handles that properly.
-        return (sequence_num - other.sequence_num) <= 0;
-      }
-      return time < other.time;
-    }
-  };
-
-  class BASE_EXPORT Task : public TaskQueue::Task {
-   public:
-    Task(TaskQueue::PostedTask task,
-         TimeTicks desired_run_time,
-         EnqueueOrder sequence_number);
-
-    Task(TaskQueue::PostedTask task,
-         TimeTicks desired_run_time,
-         EnqueueOrder sequence_number,
-         EnqueueOrder enqueue_order);
-
-    DelayedWakeUp delayed_wake_up() const {
-      // Since we use |sequence_num| in DelayedWakeUp for ordering purposes
-      // and integer overflow handling is type-sensitive it's worth to protect
-      // it from an unnoticed potential change in the PendingTask base class.
-      static_assert(std::is_same<decltype(sequence_num), int>::value, "");
-      return DelayedWakeUp{delayed_run_time, sequence_num};
-    }
-
-    EnqueueOrder enqueue_order() const {
-      DCHECK(enqueue_order_);
-      return enqueue_order_;
-    }
-
-    void set_enqueue_order(EnqueueOrder enqueue_order) {
-      DCHECK(!enqueue_order_);
-      enqueue_order_ = enqueue_order;
-    }
-
-    bool enqueue_order_set() const { return enqueue_order_; }
-
-   private:
-    // Similar to sequence number, but ultimately the |enqueue_order_| is what
-    // the scheduler uses for task ordering. For immediate tasks |enqueue_order|
-    // is set when posted, but for delayed tasks it's not defined until they are
-    // enqueued on the |delayed_work_queue_|. This is because otherwise delayed
-    // tasks could run before an immediate task posted after the delayed task.
-    EnqueueOrder enqueue_order_;
-  };
-
-  // A result retuned by PostDelayedTask. When scheduler failed to post a task
-  // due to being shutdown a task is returned to be destroyed outside the lock.
-  struct PostTaskResult {
-    PostTaskResult();
-    PostTaskResult(bool success, TaskQueue::PostedTask task);
-    PostTaskResult(PostTaskResult&& move_from);
-    PostTaskResult(const PostTaskResult& copy_from) = delete;
-    ~PostTaskResult();
-
-    static PostTaskResult Success();
-    static PostTaskResult Fail(TaskQueue::PostedTask task);
-
-    bool success;
-    TaskQueue::PostedTask task;
-  };
-
   // Types of queues TaskQueueImpl is maintaining internally.
   enum class WorkQueueType { kImmediate, kDelayed };
+
+  // Some methods have fast paths when on the main thread.
+  enum class CurrentThread { kMainThread, kNotMainThread };
 
   // Non-nestable tasks may get deferred but such queue is being maintained on
   // SequenceManager side, so we need to keep information how to requeue it.
   struct DeferredNonNestableTask {
-    internal::TaskQueueImpl::Task task;
+    Task task;
     internal::TaskQueueImpl* task_queue;
     WorkQueueType work_queue_type;
   };
 
   using OnNextWakeUpChangedCallback = RepeatingCallback<void(TimeTicks)>;
   using OnTaskStartedHandler =
-      RepeatingCallback<void(const TaskQueue::Task&,
-                             const TaskQueue::TaskTiming&)>;
+      RepeatingCallback<void(const Task&, const TaskQueue::TaskTiming&)>;
   using OnTaskCompletedHandler =
-      RepeatingCallback<void(const TaskQueue::Task&,
-                             const TaskQueue::TaskTiming&)>;
+      RepeatingCallback<void(const Task&, const TaskQueue::TaskTiming&)>;
+
+  // May be called from any thread.
+  scoped_refptr<SingleThreadTaskRunner> CreateTaskRunner(int task_type) const;
 
   // TaskQueue implementation.
   const char* GetName() const;
-  bool RunsTasksInCurrentSequence() const;
-  PostTaskResult PostDelayedTask(TaskQueue::PostedTask task);
-  // Require a reference to enclosing task queue for lifetime control.
-  std::unique_ptr<TaskQueue::QueueEnabledVoter> CreateQueueEnabledVoter(
-      scoped_refptr<TaskQueue> owning_task_queue);
   bool IsQueueEnabled() const;
+  void SetQueueEnabled(bool enabled);
   bool IsEmpty() const;
   size_t GetNumberOfPendingTasks() const;
   bool HasTaskToRunImmediately() const;
@@ -206,6 +118,7 @@ class BASE_EXPORT TaskQueueImpl {
   void RemoveFence();
   bool HasActiveFence();
   bool BlockedByFence() const;
+
   // Implementation of TaskQueue::SetObserver.
   void SetOnNextWakeUpChangedCallback(OnNextWakeUpChangedCallback callback);
 
@@ -217,9 +130,11 @@ class BASE_EXPORT TaskQueueImpl {
   bool CouldTaskRun(EnqueueOrder enqueue_order) const;
 
   // Must only be called from the thread this task queue was created on.
-  void ReloadImmediateWorkQueueIfEmpty();
+  void ReloadEmptyImmediateWorkQueue();
 
-  void AsValueInto(TimeTicks now, trace_event::TracedValue* state) const;
+  void AsValueInto(TimeTicks now,
+                   trace_event::TracedValue* state,
+                   bool force_verbose) const;
 
   bool GetQuiescenceMonitored() const { return should_monitor_quiescence_; }
   bool GetShouldNotifyObservers() const { return should_notify_observers_; }
@@ -230,6 +145,13 @@ class BASE_EXPORT TaskQueueImpl {
   // Check for available tasks in immediate work queues.
   // Used to check if we need to generate notifications about delayed work.
   bool HasPendingImmediateWork();
+  bool HasPendingImmediateWorkLocked()
+      EXCLUSIVE_LOCKS_REQUIRED(any_thread_lock_);
+
+  bool has_pending_high_resolution_tasks() const {
+    return main_thread_only()
+        .delayed_incoming_queue.has_pending_high_resolution_tasks();
+  }
 
   WorkQueue* delayed_work_queue() {
     return main_thread_only().delayed_work_queue.get();
@@ -247,19 +169,16 @@ class BASE_EXPORT TaskQueueImpl {
     return main_thread_only().immediate_work_queue.get();
   }
 
-  // Protected by SequenceManagerImpl's AnyThread lock.
-  IncomingImmediateWorkList* immediate_work_list_storage() {
-    return &immediate_work_list_storage_;
-  }
-
   // Enqueues any delayed tasks which should be run now on the
   // |delayed_work_queue|.
   // Must be called from the main thread.
   void WakeUpForDelayedWork(LazyNow* lazy_now);
 
-  HeapHandle heap_handle() const { return main_thread_only().heap_handle; }
+  base::internal::HeapHandle heap_handle() const {
+    return main_thread_only().heap_handle;
+  }
 
-  void set_heap_handle(HeapHandle heap_handle) {
+  void set_heap_handle(base::internal::HeapHandle heap_handle) {
     main_thread_only().heap_handle = heap_handle;
   }
 
@@ -268,54 +187,36 @@ class BASE_EXPORT TaskQueueImpl {
   // TODO(kraynov): Simplify non-nestable task logic https://crbug.com/845437.
   void RequeueDeferredNonNestableTask(DeferredNonNestableTask task);
 
-  void PushImmediateIncomingTaskForTest(TaskQueueImpl::Task&& task);
+  void PushImmediateIncomingTaskForTest(Task&& task);
 
-  class QueueEnabledVoterImpl : public TaskQueue::QueueEnabledVoter {
-   public:
-    explicit QueueEnabledVoterImpl(scoped_refptr<TaskQueue> task_queue);
-    ~QueueEnabledVoterImpl() override;
-
-    // QueueEnabledVoter implementation.
-    void SetQueueEnabled(bool enabled) override;
-
-    TaskQueueImpl* GetTaskQueueForTest() const {
-      return task_queue_->GetTaskQueueImpl();
-    }
-
-   private:
-    friend class TaskQueueImpl;
-
-    scoped_refptr<TaskQueue> task_queue_;
-    bool enabled_;
-  };
-
-  // Iterates over |delayed_incoming_queue| removing canceled tasks.
-  void SweepCanceledDelayedTasks(TimeTicks now);
+  // Iterates over |delayed_incoming_queue| removing canceled tasks. In
+  // addition MaybeShrinkQueue is called on all internal queues.
+  void ReclaimMemory(TimeTicks now);
 
   // Allows wrapping TaskQueue to set a handler to subscribe for notifications
   // about started and completed tasks.
   void SetOnTaskStartedHandler(OnTaskStartedHandler handler);
-  void OnTaskStarted(const TaskQueue::Task& task,
+  void OnTaskStarted(const Task& task,
                      const TaskQueue::TaskTiming& task_timing);
   void SetOnTaskCompletedHandler(OnTaskCompletedHandler handler);
-  void OnTaskCompleted(const TaskQueue::Task& task,
+  void OnTaskCompleted(const Task& task,
                        const TaskQueue::TaskTiming& task_timing);
   bool RequiresTaskTiming() const;
 
   WeakPtr<SequenceManagerImpl> GetSequenceManagerWeakPtr();
-  SequenceManagerImpl* sequence_manager() {
-    return main_thread_only().sequence_manager;
-  }
 
-  scoped_refptr<GracefulQueueShutdownHelper> GetGracefulQueueShutdownHelper();
+  SequenceManagerImpl* sequence_manager() const { return sequence_manager_; }
 
   // Returns true if this queue is unregistered or task queue manager is deleted
   // and this queue can be safely deleted on any thread.
   bool IsUnregistered() const;
 
-  // Disables queue for testing purposes, when a QueueEnabledVoter can't be
-  // constructed due to not having TaskQueue.
-  void SetQueueEnabledForTest(bool enabled);
+  // Delete all tasks within this TaskQueue.
+  void DeletePendingTasks();
+
+  // Whether this task queue owns any tasks. Task queue being disabled doesn't
+  // affect this.
+  bool HasTasks() const;
 
  protected:
   void SetDelayedWakeUpForTesting(Optional<DelayedWakeUp> wake_up);
@@ -324,42 +225,116 @@ class BASE_EXPORT TaskQueueImpl {
   friend class WorkQueue;
   friend class WorkQueueTest;
 
-  struct AnyThread {
-    AnyThread(SequenceManagerImpl* sequence_manager, TimeDomain* time_domain);
-    ~AnyThread();
+  // A TaskQueueImpl instance can be destroyed or unregistered before all its
+  // associated TaskRunner instances are (they are refcounted). Thus we need a
+  // way to prevent TaskRunner instances from posting further tasks. This class
+  // guards PostTask calls using an OperationsController.
+  // This class is ref-counted as both the TaskQueueImpl instance and all
+  // associated TaskRunner instances share the same GuardedTaskPoster instance.
+  // When TaskQueueImpl shuts down it calls ShutdownAndWaitForZeroOperations(),
+  // preventing further PostTask calls being made to the underlying
+  // TaskQueueImpl.
+  class GuardedTaskPoster : public RefCountedThreadSafe<GuardedTaskPoster> {
+   public:
+    explicit GuardedTaskPoster(TaskQueueImpl* outer);
 
-    // SequenceManagerImpl, TimeDomain and Observer are maintained in two
-    // copies: inside AnyThread and inside MainThreadOnly. They can be changed
-    // only from main thread, so it should be locked before accessing from other
-    // threads.
-    SequenceManagerImpl* sequence_manager;
-    TimeDomain* time_domain;
-    // Callback corresponding to TaskQueue::Observer::OnQueueNextChanged.
-    OnNextWakeUpChangedCallback on_next_wake_up_changed_callback;
+    bool PostTask(PostedTask task);
+
+    void StartAcceptingOperations() {
+      operations_controller_.StartAcceptingOperations();
+    }
+
+    void ShutdownAndWaitForZeroOperations() {
+      operations_controller_.ShutdownAndWaitForZeroOperations();
+    }
+
+   private:
+    friend class RefCountedThreadSafe<GuardedTaskPoster>;
+
+    ~GuardedTaskPoster();
+
+    base::internal::OperationsController operations_controller_;
+    // Pointer might be stale, access guarded by |operations_controller_|
+    TaskQueueImpl* const outer_;
+  };
+
+  class TaskRunner : public SingleThreadTaskRunner {
+   public:
+    explicit TaskRunner(scoped_refptr<GuardedTaskPoster> task_poster,
+                        scoped_refptr<AssociatedThreadId> associated_thread,
+                        int task_type);
+
+    bool PostDelayedTask(const Location& location,
+                         OnceClosure callback,
+                         TimeDelta delay) final;
+    bool PostNonNestableDelayedTask(const Location& location,
+                                    OnceClosure callback,
+                                    TimeDelta delay) final;
+    bool RunsTasksInCurrentSequence() const final;
+
+   private:
+    ~TaskRunner() final;
+
+    bool PostTask(PostedTask task) const;
+
+    const scoped_refptr<GuardedTaskPoster> task_poster_;
+    const scoped_refptr<AssociatedThreadId> associated_thread_;
+    const int task_type_;
+  };
+
+  // A queue for holding delayed tasks before their delay has expired.
+  struct DelayedIncomingQueue {
+   public:
+    DelayedIncomingQueue();
+    ~DelayedIncomingQueue();
+
+    void push(Task&& task);
+    void pop();
+    bool empty() const { return queue_.empty(); }
+    size_t size() const { return queue_.size(); }
+    const Task& top() const { return queue_.top(); }
+    void swap(DelayedIncomingQueue* other);
+
+    bool has_pending_high_resolution_tasks() const {
+      return pending_high_res_tasks_;
+    }
+
+    void SweepCancelledTasks();
+    std::priority_queue<Task> TakeTasks() { return std::move(queue_); }
+    void AsValueInto(TimeTicks now, trace_event::TracedValue* state) const;
+
+   private:
+    struct PQueue : public std::priority_queue<Task> {
+      // Expose the container and comparator.
+      using std::priority_queue<Task>::c;
+      using std::priority_queue<Task>::comp;
+    };
+
+    PQueue queue_;
+
+    // Number of pending tasks in the queue that need high resolution timing.
+    int pending_high_res_tasks_ = 0;
+
+    DISALLOW_COPY_AND_ASSIGN(DelayedIncomingQueue);
   };
 
   struct MainThreadOnly {
-    MainThreadOnly(SequenceManagerImpl* sequence_manager,
-                   TaskQueueImpl* task_queue,
-                   TimeDomain* time_domain);
+    MainThreadOnly(TaskQueueImpl* task_queue, TimeDomain* time_domain);
     ~MainThreadOnly();
 
-    // Another copy of SequenceManagerImpl, TimeDomain and Observer
-    // for lock-free access from the main thread.
+    // Another copy of TimeDomain for lock-free access from the main thread.
     // See description inside struct AnyThread for details.
-    SequenceManagerImpl* sequence_manager;
     TimeDomain* time_domain;
+
     // Callback corresponding to TaskQueue::Observer::OnQueueNextChanged.
     OnNextWakeUpChangedCallback on_next_wake_up_changed_callback;
 
     std::unique_ptr<WorkQueue> delayed_work_queue;
     std::unique_ptr<WorkQueue> immediate_work_queue;
-    std::priority_queue<TaskQueueImpl::Task> delayed_incoming_queue;
+    DelayedIncomingQueue delayed_incoming_queue;
     ObserverList<MessageLoop::TaskObserver>::Unchecked task_observers;
-    size_t set_index;
-    HeapHandle heap_handle;
-    int is_enabled_refcount;
-    int voter_refcount;
+    base::internal::HeapHandle heap_handle;
+    bool is_enabled;
     trace_event::BlameContext* blame_context;  // Not owned.
     EnqueueOrder current_fence;
     Optional<TimeTicks> delayed_fence;
@@ -372,33 +347,35 @@ class BASE_EXPORT TaskQueueImpl {
     bool is_enabled_for_test;
   };
 
-  PostTaskResult PostImmediateTaskImpl(TaskQueue::PostedTask task);
-  PostTaskResult PostDelayedTaskImpl(TaskQueue::PostedTask task);
+  void PostTask(PostedTask task);
+
+  void PostImmediateTaskImpl(PostedTask task, CurrentThread current_thread);
+  void PostDelayedTaskImpl(PostedTask task, CurrentThread current_thread);
 
   // Push the task onto the |delayed_incoming_queue|. Lock-free main thread
   // only fast path.
   void PushOntoDelayedIncomingQueueFromMainThread(Task pending_task,
-                                                  TimeTicks now);
+                                                  TimeTicks now,
+                                                  bool notify_task_annotator);
 
   // Push the task onto the |delayed_incoming_queue|.  Slow path from other
   // threads.
-  void PushOntoDelayedIncomingQueueLocked(Task pending_task);
+  void PushOntoDelayedIncomingQueue(Task pending_task);
 
   void ScheduleDelayedWorkTask(Task pending_task);
 
-  void MoveReadyImmediateTasksToImmediateWorkQueueLocked();
+  void MoveReadyImmediateTasksToImmediateWorkQueueLocked()
+      EXCLUSIVE_LOCKS_REQUIRED(any_thread_lock_);
 
-  // Push the task onto the |immediate_incoming_queue| and for auto pumped
-  // queues it calls MaybePostDoWorkOnMainRunner if the Incoming queue was
-  // empty.
-  void PushOntoImmediateIncomingQueueLocked(Task task);
-
-  using TaskDeque = circular_deque<Task>;
+  // LazilyDeallocatedDeque use TimeTicks to figure out when to resize.  We
+  // should use real time here always.
+  using TaskDeque =
+      LazilyDeallocatedDeque<Task, subtle::TimeTicksNowIgnoringOverride>;
 
   // Extracts all the tasks from the immediate incoming queue and swaps it with
   // |queue| which must be empty.
   // Can be called from any thread.
-  void ReloadEmptyImmediateQueue(TaskDeque* queue);
+  void TakeImmediateIncomingQueueTasks(TaskDeque* queue);
 
   void TraceQueueSize() const;
   static void QueueAsValueInto(const TaskDeque& queue,
@@ -411,8 +388,6 @@ class BASE_EXPORT TaskQueueImpl {
                               TimeTicks now,
                               trace_event::TracedValue* state);
 
-  void RemoveQueueEnabledVoter(const QueueEnabledVoterImpl* voter);
-  void OnQueueEnabledVoteChanged(bool enabled);
   void EnableOrDisableWithSelector(bool enable);
 
   // Schedules delayed work on time domain and calls the observer.
@@ -423,20 +398,39 @@ class BASE_EXPORT TaskQueueImpl {
   // Activate a delayed fence if a time has come.
   void ActivateDelayedFenceIfNeeded(TimeTicks now);
 
+  // Updates state protected by any_thread_lock_.
+  void UpdateCrossThreadQueueStateLocked()
+      EXCLUSIVE_LOCKS_REQUIRED(any_thread_lock_);
+
   const char* name_;
+  SequenceManagerImpl* const sequence_manager_;
 
   scoped_refptr<AssociatedThreadId> associated_thread_;
 
+  const scoped_refptr<GuardedTaskPoster> task_poster_;
+
   mutable Lock any_thread_lock_;
-  AnyThread any_thread_;
-  struct AnyThread& any_thread() {
-    any_thread_lock_.AssertAcquired();
-    return any_thread_;
-  }
-  const struct AnyThread& any_thread() const {
-    any_thread_lock_.AssertAcquired();
-    return any_thread_;
-  }
+
+  struct AnyThread {
+    explicit AnyThread(TimeDomain* time_domain);
+    ~AnyThread();
+
+    // TimeDomain is maintained in two copies: inside AnyThread and inside
+    // MainThreadOnly. It can be changed only from main thread, so it should be
+    // locked before accessing from other threads.
+    TimeDomain* time_domain;
+
+    TaskDeque immediate_incoming_queue;
+
+    // True if main_thread_only().immediate_work_queue is empty.
+    bool immediate_work_queue_empty = true;
+
+    bool post_immediate_task_should_schedule_work = true;
+
+    bool unregistered = false;
+  };
+
+  AnyThread any_thread_ GUARDED_BY(any_thread_lock_);
 
   MainThreadOnly main_thread_only_;
   MainThreadOnly& main_thread_only() {
@@ -448,22 +442,13 @@ class BASE_EXPORT TaskQueueImpl {
     return main_thread_only_;
   }
 
-  mutable Lock immediate_incoming_queue_lock_;
-  TaskDeque immediate_incoming_queue_;
-  TaskDeque& immediate_incoming_queue() {
-    immediate_incoming_queue_lock_.AssertAcquired();
-    return immediate_incoming_queue_;
-  }
-  const TaskDeque& immediate_incoming_queue() const {
-    immediate_incoming_queue_lock_.AssertAcquired();
-    return immediate_incoming_queue_;
-  }
-
-  // Protected by SequenceManagerImpl's AnyThread lock.
-  IncomingImmediateWorkList immediate_work_list_storage_;
+  // Handle to our entry within the SequenceManagers |empty_queues_to_reload_|
+  // atomic flag set. Used to signal that this queue needs to be reloaded.
+  AtomicFlagSet::AtomicFlag empty_queues_to_reload_handle_;
 
   const bool should_monitor_quiescence_;
   const bool should_notify_observers_;
+  const bool delayed_fence_allowed_;
 
   DISALLOW_COPY_AND_ASSIGN(TaskQueueImpl);
 };

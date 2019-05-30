@@ -28,7 +28,7 @@ extern const char kGenText[];
 extern const char kGenUrl[];
 
 // Parameters/properties on events.
-extern const char kInitialHeight[];
+extern const char kInitialTop[];
 extern const char kInitialLeft[];
 
 }  // namespace webview

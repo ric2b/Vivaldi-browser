@@ -7,11 +7,11 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
-#include "base/json/json_reader.h"
 #include "base/mac/bundle_locations.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/dom_distiller/core/url_constants.h"
-#include "components/payments/core/features.h"
+#include "components/services/unzip/public/interfaces/constants.mojom.h"
+#include "components/services/unzip/unzip_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/version_info/version_info.h"
 #include "ios/chrome/browser/application_context.h"
@@ -19,14 +19,14 @@
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_switches.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
-#include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/ios_chrome_main_parts.h"
-#include "ios/chrome/browser/passwords/credential_manager_features.h"
+#include "ios/chrome/browser/passwords/password_manager_features.h"
+#include "ios/chrome/browser/reading_list/features.h"
+#import "ios/chrome/browser/reading_list/offline_page_tab_helper.h"
 #include "ios/chrome/browser/ssl/ios_ssl_error_handler.h"
-#import "ios/chrome/browser/ui/chrome_web_view_factory.h"
-#include "ios/chrome/browser/unzip/unzip_service_creator.h"
+#include "ios/chrome/browser/web/chrome_overlay_manifests.h"
 #import "ios/chrome/browser/web/error_page_util.h"
-#include "ios/chrome/grit/ios_resources.h"
+#include "ios/public/provider/chrome/browser/browser_url_rewriter_provider.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/voice/audio_session_controller.h"
 #include "ios/public/provider/chrome/browser/voice/voice_search_provider.h"
@@ -62,6 +62,12 @@ NSString* GetPageScript(NSString* script_file_name) {
   return content;
 }
 }  // namespace
+
+const char kDesktopUserAgent[] =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_5) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+    "Version/11.1.1 "
+    "Safari/605.1.15";
 
 ChromeWebClient::ChromeWebClient() {}
 
@@ -104,12 +110,6 @@ base::string16 ChromeWebClient::GetPluginNotSupportedText() const {
   return l10n_util::GetStringUTF16(IDS_PLUGIN_NOT_SUPPORTED);
 }
 
-std::string ChromeWebClient::GetProduct() const {
-  std::string product("CriOS/");
-  product += version_info::GetVersionNumber();
-  return product;
-}
-
 std::string ChromeWebClient::GetUserAgent(web::UserAgentType type) const {
   // The user agent should not be requested for app-specific URLs.
   DCHECK_NE(type, web::UserAgentType::NONE);
@@ -117,7 +117,7 @@ std::string ChromeWebClient::GetUserAgent(web::UserAgentType type) const {
   // Using desktop user agent overrides a command-line user agent, so that
   // request desktop site can still work when using an overridden UA.
   if (type == web::UserAgentType::DESKTOP)
-    return base::SysNSStringToUTF8(ChromeWebView::kDesktopUserAgent);
+    return kDesktopUserAgent;
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kUserAgent)) {
@@ -148,19 +148,13 @@ base::RefCountedMemory* ChromeWebClient::GetDataResourceBytes(
       resource_id);
 }
 
-std::unique_ptr<base::Value> ChromeWebClient::GetServiceManifestOverlay(
-    base::StringPiece name) {
-  int identifier = -1;
+base::Optional<service_manager::Manifest>
+ChromeWebClient::GetServiceManifestOverlay(base::StringPiece name) {
   if (name == web::mojom::kBrowserServiceName)
-    identifier = IDR_CHROME_BROWSER_MANIFEST_OVERLAY;
-
-  if (identifier == -1)
-    return nullptr;
-
-  base::StringPiece manifest_contents =
-      ui::ResourceBundle::GetSharedInstance().GetRawDataResourceForScale(
-          identifier, ui::ScaleFactor::SCALE_FACTOR_NONE);
-  return base::JSONReader::Read(manifest_contents);
+    return GetChromeWebBrowserOverlayManifest();
+  if (name == web::mojom::kPackagedServicesServiceName)
+    return GetChromeWebPackagedServicesOverlayManifest();
+  return base::nullopt;
 }
 
 void ChromeWebClient::GetAdditionalWebUISchemes(
@@ -171,6 +165,10 @@ void ChromeWebClient::GetAdditionalWebUISchemes(
 void ChromeWebClient::PostBrowserURLRewriterCreation(
     web::BrowserURLRewriter* rewriter) {
   rewriter->AddURLRewriter(&WillHandleWebBrowserAboutURL);
+  BrowserURLRewriterProvider* provider =
+      ios::GetChromeBrowserProvider()->GetBrowserURLRewriterProvider();
+  if (provider)
+    provider->AddProviderRewriters(rewriter);
 }
 
 NSString* ChromeWebClient::GetDocumentStartScriptForAllFrames(
@@ -187,9 +185,7 @@ NSString* ChromeWebClient::GetDocumentStartScriptForMainFrame(
     [scripts addObject:GetPageScript(@"credential_manager")];
   }
 
-  if (base::FeatureList::IsEnabled(payments::features::kWebPayments)) {
-    [scripts addObject:GetPageScript(@"payment_request")];
-  }
+  [scripts addObject:GetPageScript(@"payment_request")];
 
   return [scripts componentsJoinedByString:@";"];
 }
@@ -209,15 +205,43 @@ void ChromeWebClient::AllowCertificateError(
                                      overridable, callback);
 }
 
-void ChromeWebClient::PrepareErrorPage(NSError* error,
+void ChromeWebClient::PrepareErrorPage(web::WebState* web_state,
+                                       const GURL& url,
+                                       NSError* error,
                                        bool is_post,
                                        bool is_off_the_record,
                                        NSString** error_html) {
+  if (reading_list::IsOfflinePageWithoutNativeContentEnabled()) {
+    OfflinePageTabHelper* offline_page_tab_helper =
+        OfflinePageTabHelper::FromWebState(web_state);
+    // WebState that are not attached to a tab may not have a
+    // OfflinePageTabHelper.
+    if (offline_page_tab_helper &&
+        offline_page_tab_helper->HasDistilledVersionForOnlineUrl(url)) {
+      // An offline version of the page will be displayed to replace this error
+      // page. Return an empty error page to avoid having the error page
+      // flash vefore the offline version is loaded.
+      *error_html = @"";
+      return;
+    }
+  }
   DCHECK(error);
-  *error_html = GetErrorPage(error, is_post, is_off_the_record);
+  *error_html = GetErrorPage(url, error, is_post, is_off_the_record);
 }
 
-void ChromeWebClient::RegisterServices(StaticServiceMap* services) {
-  // The Unzip service is used by the component updater.
-  RegisterUnzipService(services);
+std::unique_ptr<service_manager::Service> ChromeWebClient::HandleServiceRequest(
+    const std::string& service_name,
+    service_manager::mojom::ServiceRequest request) {
+  if (service_name == unzip::mojom::kServiceName) {
+    // The Unzip service is used by the component updater.
+    return std::make_unique<unzip::UnzipService>(std::move(request));
+  }
+
+  return nullptr;
+}
+
+std::string ChromeWebClient::GetProduct() const {
+  std::string product("CriOS/");
+  product += version_info::GetVersionNumber();
+  return product;
 }

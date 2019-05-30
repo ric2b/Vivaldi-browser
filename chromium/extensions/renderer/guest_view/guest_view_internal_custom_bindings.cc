@@ -24,6 +24,7 @@
 #include "extensions/common/guest_view/extensions_guest_view_messages.h"
 #include "extensions/renderer/guest_view/extensions_guest_view_container.h"
 #include "extensions/renderer/script_context.h"
+#include "third_party/blink/public/web/web_custom_element.h"
 #include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_remote_frame.h"
@@ -83,48 +84,57 @@ GuestViewInternalCustomBindings::GuestViewInternalCustomBindings(
 GuestViewInternalCustomBindings::~GuestViewInternalCustomBindings() {}
 
 void GuestViewInternalCustomBindings::AddRoutes() {
-  RouteHandlerFunction("AttachGuest",
-                       base::Bind(&GuestViewInternalCustomBindings::AttachGuest,
-                                  base::Unretained(this)));
-  RouteHandlerFunction("DetachGuest",
-                       base::Bind(&GuestViewInternalCustomBindings::DetachGuest,
-                                  base::Unretained(this)));
+  RouteHandlerFunction(
+      "AttachGuest",
+      base::BindRepeating(&GuestViewInternalCustomBindings::AttachGuest,
+                          base::Unretained(this)));
+  RouteHandlerFunction(
+      "DetachGuest",
+      base::BindRepeating(&GuestViewInternalCustomBindings::DetachGuest,
+                          base::Unretained(this)));
   RouteHandlerFunction(
       "AttachIframeGuest",
-      base::Bind(&GuestViewInternalCustomBindings::AttachIframeGuest,
-                 base::Unretained(this)));
+      base::BindRepeating(&GuestViewInternalCustomBindings::AttachIframeGuest,
+                          base::Unretained(this)));
   RouteHandlerFunction(
       "DestroyContainer",
-      base::Bind(&GuestViewInternalCustomBindings::DestroyContainer,
-                 base::Unretained(this)));
+      base::BindRepeating(&GuestViewInternalCustomBindings::DestroyContainer,
+                          base::Unretained(this)));
   RouteHandlerFunction(
       "GetContentWindow",
-      base::Bind(&GuestViewInternalCustomBindings::GetContentWindow,
-                 base::Unretained(this)));
+      base::BindRepeating(&GuestViewInternalCustomBindings::GetContentWindow,
+                          base::Unretained(this)));
   RouteHandlerFunction(
       "GetViewFromID",
-      base::Bind(&GuestViewInternalCustomBindings::GetViewFromID,
-                 base::Unretained(this)));
+      base::BindRepeating(&GuestViewInternalCustomBindings::GetViewFromID,
+                          base::Unretained(this)));
   RouteHandlerFunction(
       "RegisterDestructionCallback",
-      base::Bind(&GuestViewInternalCustomBindings::RegisterDestructionCallback,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &GuestViewInternalCustomBindings::RegisterDestructionCallback,
+          base::Unretained(this)));
   RouteHandlerFunction(
      "IsVivaldi",
       base::Bind(&GuestViewInternalCustomBindings::IsVivaldi,
                  base::Unretained(this)));
   RouteHandlerFunction(
       "RegisterElementResizeCallback",
-      base::Bind(
+      base::BindRepeating(
           &GuestViewInternalCustomBindings::RegisterElementResizeCallback,
           base::Unretained(this)));
   RouteHandlerFunction(
-      "RegisterView", base::Bind(&GuestViewInternalCustomBindings::RegisterView,
-                                 base::Unretained(this)));
+      "RegisterView",
+      base::BindRepeating(&GuestViewInternalCustomBindings::RegisterView,
+                          base::Unretained(this)));
   RouteHandlerFunction(
       "RunWithGesture",
-      base::Bind(&GuestViewInternalCustomBindings::RunWithGesture,
-                 base::Unretained(this)));
+      base::BindRepeating(&GuestViewInternalCustomBindings::RunWithGesture,
+                          base::Unretained(this)));
+  RouteHandlerFunction(
+      "AllowGuestViewElementDefinition",
+      base::BindRepeating(
+          &GuestViewInternalCustomBindings::AllowGuestViewElementDefinition,
+          base::Unretained(this)));
 }
 
 // static
@@ -469,6 +479,15 @@ void GuestViewInternalCustomBindings::RunWithGesture(
   CHECK(args[0]->IsFunction());
   context()->SafeCallFunction(
       v8::Local<v8::Function>::Cast(args[0]), 0, nullptr);
+}
+
+void GuestViewInternalCustomBindings::AllowGuestViewElementDefinition(
+    const v8::FunctionCallbackInfo<v8::Value>& args) {
+  blink::WebCustomElement::EmbedderNamesAllowedScope embedder_names_scope;
+  CHECK_EQ(args.Length(), 1);
+  CHECK(args[0]->IsFunction());
+  context()->SafeCallFunction(v8::Local<v8::Function>::Cast(args[0]), 0,
+                              nullptr);
 }
 
 }  // namespace extensions

@@ -26,9 +26,13 @@ const char kNetworkSandbox[] = "network";
 const char kPpapiSandbox[] = "ppapi";
 const char kUtilitySandbox[] = "utility";
 const char kCdmSandbox[] = "cdm";
+const char kXrCompositingSandbox[] = "xr_compositing";
 const char kPdfCompositorSandbox[] = "pdf_compositor";
 const char kProfilingSandbox[] = "profiling";
 const char kAudioSandbox[] = "audio";
+#if defined(OS_CHROMEOS)
+const char kImeSandbox[] = "ime";
+#endif  // OS_CHROMEOS
 
 // Flags owned by the service manager sandbox.
 
@@ -92,6 +96,10 @@ const char kEnableGpuAppContainer[] = "enable-gpu-appcontainer";
 
 // Disables the sandbox and gives the process elevated privileges.
 const char kNoSandboxAndElevatedPrivileges[] = "no-sandbox-and-elevated";
+
+// Add additional capabilities to the AppContainer sandbox used for XR
+// compositing.
+const char kAddXrAppContainerCaps[] = "add-xr-appcontainer-caps";
 #endif
 
 #if defined(OS_MACOSX)
@@ -102,6 +110,7 @@ const char kEnableSandboxLogging[] = "enable-sandbox-logging";
 
 // Flags spied upon from other layers.
 const char kGpuProcess[] = "gpu-process";
+const char kNaClLoaderProcess[] = "nacl-loader";
 const char kPpapiBrokerProcess[] = "ppapi-broker";
 const char kPpapiPluginProcess[] = "ppapi";
 const char kRendererProcess[] = "renderer";

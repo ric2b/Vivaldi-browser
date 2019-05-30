@@ -13,9 +13,10 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/system/user/button_from_view.h"
+#include "base/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/timer/timer.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -56,9 +57,6 @@ constexpr int kSubmitButtonSizeDp = 20;
 
 // Size (width/height) of the caps lock hint icon.
 constexpr int kCapsLockIconSizeDp = 20;
-
-// Color of the password field text.
-constexpr SkColor kTextColor = SkColorSetARGB(0xAB, 0xFF, 0xFF, 0xFF);
 
 // Width and height of the easy unlock icon.
 constexpr const int kEasyUnlockIconSizeDp = 20;
@@ -308,6 +306,12 @@ LoginPasswordView::TestApi::TestApi(LoginPasswordView* view) : view_(view) {}
 
 LoginPasswordView::TestApi::~TestApi() = default;
 
+void LoginPasswordView::TestApi::SubmitPassword(const std::string& password) {
+  view_->textfield_->SetText(base::ASCIIToUTF16(password));
+  view_->UpdateUiState();
+  view_->SubmitPassword();
+}
+
 views::Textfield* LoginPasswordView::TestApi::textfield() const {
   return view_->textfield_;
 }
@@ -327,11 +331,10 @@ void LoginPasswordView::TestApi::set_immediately_hover_easy_unlock_icon() {
 LoginPasswordView::LoginPasswordView() {
   Shell::Get()->ime_controller()->AddObserver(this);
 
-  auto root_layout =
-      std::make_unique<views::BoxLayout>(views::BoxLayout::kVertical);
+  auto* root_layout = SetLayoutManager(
+      std::make_unique<views::BoxLayout>(views::BoxLayout::kVertical));
   root_layout->set_main_axis_alignment(
       views::BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);
-  SetLayoutManager(std::move(root_layout));
 
   password_row_ = new NonAccessibleView();
 
@@ -365,11 +368,12 @@ LoginPasswordView::LoginPasswordView() {
   textfield_ = new LoginTextfield();
   textfield_->set_controller(this);
   textfield_->SetTextInputType(ui::TEXT_INPUT_TYPE_PASSWORD);
-  textfield_->SetTextColor(kTextColor);
+  textfield_->SetTextColor(login_constants::kAuthMethodsTextColor);
   textfield_->SetFontList(views::Textfield::GetDefaultFontList().Derive(
       5, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::NORMAL));
   textfield_->set_placeholder_font_list(views::Textfield::GetDefaultFontList());
-  textfield_->set_placeholder_text_color(kTextColor);
+  textfield_->set_placeholder_text_color(
+      login_constants::kAuthMethodsTextColor);
   textfield_->SetGlyphSpacing(6);
   textfield_->SetBorder(nullptr);
   textfield_->SetBackgroundColor(SK_ColorTRANSPARENT);
@@ -400,8 +404,8 @@ LoginPasswordView::LoginPasswordView() {
           kLockScreenArrowIcon, kSubmitButtonSizeDp,
           SkColorSetA(login_constants::kButtonEnabledColor,
                       login_constants::kButtonDisabledAlpha)));
-  submit_button_->SetAccessibleName(l10n_util::GetStringUTF16(
-      IDS_ASH_LOGIN_POD_SUBMIT_BUTTON_ACCESSIBLE_NAME));
+  submit_button_->SetAccessibleName(
+      l10n_util::GetStringUTF16(IDS_ASH_LOGIN_SUBMIT_BUTTON_ACCESSIBLE_NAME));
   password_row_->AddChildView(submit_button_);
 
   // Separator on bottom.
@@ -472,7 +476,7 @@ void LoginPasswordView::Clear() {
 }
 
 void LoginPasswordView::InsertNumber(int value) {
-  textfield_->InsertOrReplaceText(base::IntToString16(value));
+  textfield_->InsertOrReplaceText(base::NumberToString16(value));
 }
 
 void LoginPasswordView::Backspace() {

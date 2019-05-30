@@ -4,18 +4,22 @@
 #include "components/viz/common/skia_helper.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/math_util.h"
+#include "third_party/skia/include/effects/SkOverdrawColorFilter.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
+#include "third_party/skia/include/gpu/GrContext.h"
 #include "ui/gfx/skia_util.h"
 
 namespace viz {
-sk_sp<SkImage> SkiaHelper::ApplyImageFilter(sk_sp<SkImage> src_image,
+sk_sp<SkImage> SkiaHelper::ApplyImageFilter(GrContext* context,
+                                            sk_sp<SkImage> src_image,
                                             const gfx::RectF& src_rect,
                                             const gfx::RectF& dst_rect,
                                             const gfx::Vector2dF& scale,
                                             sk_sp<SkImageFilter> filter,
                                             SkIPoint* offset,
                                             SkIRect* subset,
-                                            const gfx::PointF& origin) {
+                                            const gfx::PointF& origin,
+                                            bool flush) {
   if (!filter)
     return nullptr;
 
@@ -40,17 +44,26 @@ sk_sp<SkImage> SkiaHelper::ApplyImageFilter(sk_sp<SkImage> src_image,
   filter = filter->makeWithLocalMatrix(local_matrix);
   SkIRect in_subset = SkIRect::MakeWH(src_rect.width(), src_rect.height());
 
-  sk_sp<SkImage> image = src_image->makeWithFilter(filter.get(), in_subset,
-                                                   clip_bounds, subset, offset);
+  sk_sp<SkImage> image = src_image->makeWithFilter(
+      context, filter.get(), in_subset, clip_bounds, subset, offset);
   if (!image || !image->isTextureBacked()) {
     return nullptr;
   }
 
   // Force a flush of the Skia pipeline before we switch back to the compositor
   // context.
-  image->getBackendTexture(true);
+  image->getBackendTexture(flush);
   CHECK(image->isTextureBacked());
   return image;
+}
+
+sk_sp<SkColorFilter> SkiaHelper::MakeOverdrawColorFilter() {
+  // TODO(xing.xu) : handle this in CPU mode, the R and B should be
+  // switched in CPU mode. (http://crbug.com/896969)
+  static const SkPMColor colors[SkOverdrawColorFilter::kNumColors] = {
+      0x00000000, 0x00000000, 0x2fff0000, 0x2f00ff00, 0x3f0000ff, 0x7f0000ff,
+  };
+  return SkOverdrawColorFilter::Make(colors);
 }
 
 }  // namespace viz

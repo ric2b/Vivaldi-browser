@@ -10,7 +10,6 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #include "ios/chrome/test/app/navigation_test_util.h"
@@ -216,10 +215,12 @@ class ScopedBlockPopupsException {
   [[EarlGrey selectElementWithMatcher:grey_text(base::SysUTF8ToNSString(
                                           allowedPattern))]
       assertWithMatcher:grey_notVisible()];
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityLabel(l10n_util::GetNSString(
-                                   IDS_IOS_NAVIGATION_BAR_EDIT_BUTTON))]
-      assertWithMatcher:grey_notVisible()];
+  [[EarlGrey selectElementWithMatcher:
+                 grey_allOf(chrome_test_util::ButtonWithAccessibilityLabelId(
+                                IDS_IOS_NAVIGATION_BAR_EDIT_BUTTON),
+                            grey_not(grey_accessibilityTrait(
+                                UIAccessibilityTraitNotEnabled)),
+                            nil)] assertWithMatcher:grey_notVisible()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       assertWithMatcher:grey_sufficientlyVisible()];
 
@@ -231,10 +232,12 @@ class ScopedBlockPopupsException {
   [[EarlGrey selectElementWithMatcher:grey_text(base::SysUTF8ToNSString(
                                           allowedPattern))]
       assertWithMatcher:grey_sufficientlyVisible()];
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityLabel(l10n_util::GetNSString(
-                                   IDS_IOS_NAVIGATION_BAR_EDIT_BUTTON))]
-      assertWithMatcher:grey_sufficientlyVisible()];
+  [[EarlGrey selectElementWithMatcher:
+                 grey_allOf(chrome_test_util::ButtonWithAccessibilityLabelId(
+                                IDS_IOS_NAVIGATION_BAR_EDIT_BUTTON),
+                            grey_not(grey_accessibilityTrait(
+                                UIAccessibilityTraitNotEnabled)),
+                            nil)] assertWithMatcher:grey_sufficientlyVisible()];
 
   // Close the settings menu.
   [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]

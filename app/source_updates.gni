@@ -1,5 +1,7 @@
+import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/gn/config/product.gni")
 import("//vivaldi/gn/config/version.gni")
+import("//vivaldi/app/resources/untranslated.gni")
 
 update_target("//base:base") {
   if (!defined(sources)) {
@@ -77,6 +79,7 @@ foreach(
         "//chrome/app:generated_resources",
         "//vivaldi/app/resources/generated/vivaldi_generated_resources.grd",
         {
+          pak_file_prefix="generated_resources_"
         },
       ],
       [
@@ -84,12 +87,15 @@ foreach(
         "//vivaldi/app/resources/strings/vivaldi_strings.grd",
         {
           have_strings_flag = false
+          merge_extra_grit_defines = ["-D", "vivaldi_chromium_file"]
         },
       ],
       [
         "//chrome/app:google_chrome_strings",
         "//vivaldi/app/resources/strings/vivaldi_strings.grd",
         {
+          translation_dir_setting = "resources"
+          pak_file_prefix="google_chrome_strings_"
         },
       ],
       [
@@ -97,6 +103,7 @@ foreach(
         "//vivaldi/app/resources/ui_strings/vivaldi_ui_strings.grd",
         {
           translation_dir_setting = "strings"
+          pak_file_prefix="ui_strings_"
         },
       ],
       [
@@ -118,6 +125,14 @@ foreach(
         "//vivaldi/app/resources/renderer/vivaldi_renderer_resources.grd",
         {
           have_strings_flag = false
+        },
+      ],
+      [
+        "//chrome/app/resources:platform_locale_settings",
+        "//vivaldi/app/resources/platform_locale_settings/vivaldi_platform_locale_settings.grd",
+        {
+          have_strings_flag = false
+          pak_file_prefix="platform_locale_settings_"
         },
       ],
       [
@@ -153,6 +168,7 @@ foreach(
         "//vivaldi/app/resources/components_strings/vivaldi_components_strings.grd",
         {
           translation_dir_setting = "strings"
+          pak_file_prefix="components_strings_"
         },
       ],
       [
@@ -160,13 +176,15 @@ foreach(
         "//vivaldi/app/resources/components/vivaldi_components.grd",
         {
           have_strings_flag = false
+          merge_extra_grit_defines = ["-D", "vivaldi_chromium_file"]
         },
       ],
       [
         "//components/strings:components_google_chrome_strings",
         "//vivaldi/app/resources/components/vivaldi_components.grd",
         {
-          have_strings_flag = false
+          translation_dir_setting = "strings"
+          pak_file_prefix="components_google_chrome_strings_"
         },
       ],
       [
@@ -183,6 +201,14 @@ foreach(
           have_strings_flag = false
         },
       ],
+      [
+        "//content/app/strings:strings",
+        "//vivaldi/app/resources/content/vivaldi_content_strings.grd",
+        {
+          translation_dir_setting = "strings"
+          pak_file_prefix="content_strings_"
+        },
+      ],
     ]) {
   _target = _target_config[0]
   vivaldi_source = _target_config[1]
@@ -195,6 +221,16 @@ foreach(
   have_translation = defined(_flags.translation_dir_setting)
   if (have_translation) {
     translation_dir_setting = _flags.translation_dir_setting
+  }
+  extra_outputs = []
+  if (defined(_flags.pak_file_prefix)) {
+    foreach (locale, vivaldi_pending_locales) {
+      extra_outputs += [ _flags.pak_file_prefix+"$locale.pak" ]
+    }
+  }
+  merge_extra_grit_defines = []
+  if (defined(_flags.merge_extra_grit_defines)) {
+    merge_extra_grit_defines = _flags.merge_extra_grit_defines
   }
 
   update_template_instance(_target) {
@@ -215,6 +251,13 @@ foreach(
     if (!defined(grit_flags)) {
       grit_flags = []
     }
-    grit_flags += extra_grit_defines
+    grit_flags += extra_grit_defines + merge_extra_grit_defines
+    outputs += extra_outputs
+  }
+  if (generate_untranslated && have_strings_flag) {
+    untranslated_target = get_label_info(_target, "dir") + ":Extract_strings_merge_"+ get_label_info(_target, "name")
+    update_target("//vivaldi/app:generate_untranslated") {
+      deps += [untranslated_target]
+    }
   }
 }

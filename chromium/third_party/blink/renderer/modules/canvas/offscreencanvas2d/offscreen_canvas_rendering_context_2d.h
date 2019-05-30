@@ -33,7 +33,7 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
         CanvasRenderingContextHost* host,
         const CanvasContextCreationAttributesCore& attrs) override {
       DCHECK(host->IsOffscreenCanvas());
-      return new OffscreenCanvasRenderingContext2D(
+      return MakeGarbageCollected<OffscreenCanvasRenderingContext2D>(
           static_cast<OffscreenCanvas*>(host), attrs);
     }
 
@@ -41,6 +41,10 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
       return CanvasRenderingContext::kContext2d;
     }
   };
+
+  OffscreenCanvasRenderingContext2D(
+      OffscreenCanvas*,
+      const CanvasContextCreationAttributesCore& attrs);
 
   OffscreenCanvas* offscreenCanvasForBinding() const {
     DCHECK(!Host() || Host()->IsOffscreenCanvas());
@@ -83,7 +87,7 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   // BaseRenderingContext2D implementation
   bool OriginClean() const final;
   void SetOriginTainted() final;
-  bool WouldTaintOrigin(CanvasImageSource*, ExecutionContext*) final;
+  bool WouldTaintOrigin(CanvasImageSource*) final;
 
   int Width() const final;
   int Height() const final;
@@ -116,10 +120,6 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   void PushFrame() override;
 
  protected:
-  OffscreenCanvasRenderingContext2D(
-      OffscreenCanvas*,
-      const CanvasContextCreationAttributesCore& attrs);
-
   void NeedsFinalizeFrame() override {
     CanvasRenderingContext::NeedsFinalizeFrame();
   }
@@ -142,7 +142,7 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
                         double* max_width = nullptr);
   const Font& AccessFont();
 
-  scoped_refptr<CanvasResource> ProduceFrame();
+  scoped_refptr<CanvasResource> ProduceCanvasResource();
 
   String ColorSpaceAsString() const override;
   CanvasPixelFormat PixelFormat() const override;

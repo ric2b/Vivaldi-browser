@@ -13,11 +13,11 @@ GEN_INCLUDE(['../../testing/mock_feedback.js']);
  * @constructor
  * @extends {ChromeVoxNextE2ETest}
  */
-function LiveRegionsTest() {
+function ChromeVoxLiveRegionsTest() {
   ChromeVoxNextE2ETest.call(this);
 }
 
-LiveRegionsTest.prototype = {
+ChromeVoxLiveRegionsTest.prototype = {
   __proto__: ChromeVoxNextE2ETest.prototype,
 
   /** @override */
@@ -46,9 +46,17 @@ LiveRegionsTest.prototype = {
       CommandHandler.onCommand(cmd);
     };
   },
+
+  /**
+   * Simulates work done when users interact using keyboard, braille, or
+   * touch.
+ */
+  simulateUserInteraction: function() {
+    Output.forceModeForNextSpeechUtterance(cvox.QueueMode.FLUSH);
+  },
 };
 
-TEST_F('LiveRegionsTest', 'LiveRegionAddElement', function() {
+TEST_F('ChromeVoxLiveRegionsTest', 'LiveRegionAddElement', function() {
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(
     function() {/*!
@@ -69,7 +77,7 @@ TEST_F('LiveRegionsTest', 'LiveRegionAddElement', function() {
     });
 });
 
-TEST_F('LiveRegionsTest', 'LiveRegionRemoveElement', function() {
+TEST_F('ChromeVoxLiveRegionsTest', 'LiveRegionRemoveElement', function() {
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(
     function() {/*!
@@ -91,7 +99,7 @@ TEST_F('LiveRegionsTest', 'LiveRegionRemoveElement', function() {
     });
 });
 
-TEST_F('LiveRegionsTest', 'LiveRegionChangeAtomic', function() {
+TEST_F('ChromeVoxLiveRegionsTest', 'LiveRegionChangeAtomic', function() {
   LiveRegions.LIVE_REGION_QUEUE_TIME_MS = 0;
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(
@@ -115,8 +123,7 @@ TEST_F('LiveRegionsTest', 'LiveRegionChangeAtomic', function() {
     });
 });
 
-// Flaky test: https://crbug.com/819696
-TEST_F('LiveRegionsTest', 'DISABLED_LiveRegionChangeAtomicText', function() {
+TEST_F('ChromeVoxLiveRegionsTest', 'LiveRegionChangeAtomicText', function() {
   LiveRegions.LIVE_REGION_QUEUE_TIME_MS = 0;
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(
@@ -137,8 +144,7 @@ TEST_F('LiveRegionsTest', 'DISABLED_LiveRegionChangeAtomicText', function() {
     });
 });
 
-// Flaky. See https://crbug.com/847028.
-TEST_F('LiveRegionsTest', 'DISABLED_LiveRegionChangeImageAlt', function() {
+TEST_F('ChromeVoxLiveRegionsTest', 'LiveRegionChangeImageAlt', function() {
   // Note that there is a live region outputted as a result of page load; the
   // test expects a live region announcement after a click on the button, but
   // the LiveRegions module has a half second filter for live region
@@ -161,13 +167,12 @@ TEST_F('LiveRegionsTest', 'DISABLED_LiveRegionChangeImageAlt', function() {
     function(rootNode) {
       var go = rootNode.find({ role: RoleType.BUTTON });
       mockFeedback.call(go.doDefault.bind(go))
-          .expectCategoryFlushSpeech('After')
-          .expectQueuedSpeech('Image');
+          .expectCategoryFlushSpeech('After');
       mockFeedback.replay();
     });
 });
 
-TEST_F('LiveRegionsTest', 'LiveRegionThenFocus', function() {
+TEST_F('ChromeVoxLiveRegionsTest', 'LiveRegionThenFocus', function() {
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(
     function() {/*!
@@ -184,15 +189,32 @@ TEST_F('LiveRegionsTest', 'LiveRegionThenFocus', function() {
       </script>
     */},
     function(rootNode) {
+      // Due to the above timing component, the live region can come either
+      // before or after the focus output. This depends on the EventBundle to
+      // which we get the live region. It can either be in its own bundle or
+      // be part of the bundle with the focus change. In either case, the
+      // first event should be flushed; the second should either be queued (in
+      // the case of the focus) or category flushed for the live region.
+      var sawFocus = false;
+      var sawLive = false;
+      var focusOrLive = function(candidate) {
+        sawFocus = candidate.text == 'Focus' || sawFocus;
+        sawLive = candidate.text == 'Live' || sawLive;
+        if (sawFocus && sawLive)
+          return candidate.queueMode != cvox.QueueMode.FLUSH;
+        else if (sawFocus || sawLive)
+          return candidate.queueMode == cvox.QueueMode.FLUSH;
+      };
       var go = rootNode.find({ role: RoleType.BUTTON });
-      mockFeedback.call(go.doDefault.bind(go))
-          .expectCategoryFlushSpeech('Live')
-          .expectCategoryFlushSpeech('Focus');
+      mockFeedback.call(this.simulateUserInteraction.bind(this))
+          .call(go.doDefault.bind(go))
+          .expectSpeech(focusOrLive)
+          .expectSpeech(focusOrLive);
       mockFeedback.replay();
     });
 });
 
-TEST_F('LiveRegionsTest', 'FocusThenLiveRegion', function() {
+TEST_F('ChromeVoxLiveRegionsTest', 'FocusThenLiveRegion', function() {
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(
     function() {/*!
@@ -210,14 +232,15 @@ TEST_F('LiveRegionsTest', 'FocusThenLiveRegion', function() {
     */},
     function(rootNode) {
       var go = rootNode.find({ role: RoleType.BUTTON });
-      mockFeedback.call(go.doDefault.bind(go))
-          .expectCategoryFlushSpeech('Focus')
+      mockFeedback.call(this.simulateUserInteraction.bind(this))
+          .call(go.doDefault.bind(go))
+          .expectFlushingSpeech('Focus')
           .expectCategoryFlushSpeech('Live');
       mockFeedback.replay();
     });
 });
 
-TEST_F('LiveRegionsTest', 'LiveRegionCategoryFlush', function() {
+TEST_F('ChromeVoxLiveRegionsTest', 'LiveRegionCategoryFlush', function() {
   // Adjust the live region queue time to be shorter (i.e. flushes happen for
   // live regions coming 1 ms in time). Also, can help with flakeyness.
   LiveRegions.LIVE_REGION_QUEUE_TIME_MS = 1;
@@ -246,7 +269,7 @@ TEST_F('LiveRegionsTest', 'LiveRegionCategoryFlush', function() {
     });
 });
 
-TEST_F('LiveRegionsTest', 'SilentOnNodeChange', function() {
+TEST_F('ChromeVoxLiveRegionsTest', 'SilentOnNodeChange', function() {
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(function() {/*!
     <p>start</p>
@@ -275,7 +298,7 @@ TEST_F('LiveRegionsTest', 'SilentOnNodeChange', function() {
   });
 });
 
-TEST_F('LiveRegionsTest', 'SimulateTreeChanges', function() {
+TEST_F('ChromeVoxLiveRegionsTest', 'SimulateTreeChanges', function() {
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(function() {/*!
     <button></button>
@@ -287,7 +310,9 @@ TEST_F('LiveRegionsTest', 'SimulateTreeChanges', function() {
     var live = new LiveRegions(ChromeVoxState.instance);
     var t1, t2;
     [t1, t2] = root.findAll({role: RoleType.STATIC_TEXT});
-    mockFeedback.call(function() {
+    mockFeedback.expectSpeech('hello there')
+        .clearPendingOutput()
+        .call(function() {
           live.onTreeChange({type: TreeChangeType.TEXT_CHANGED, target: t2});
           live.onTreeChange({type: TreeChangeType.SUBTREE_UPDATE_END, target: t2});
         })
@@ -302,5 +327,47 @@ TEST_F('LiveRegionsTest', 'SimulateTreeChanges', function() {
         .expectSpeech('hello')
         .expectSpeech('there');
     mockFeedback.replay();
+  });
+});
+
+TEST_F_WITH_PREAMBLE(`
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_LiveStatusOff DISABLED_LiveStatusOff
+#else
+#define MAYBE_LiveStatusOff LiveStatusOff
+#endif
+`, 'ChromeVoxLiveRegionsTest', 'MAYBE_LiveStatusOff', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function() {/*!
+    <div><input aria-live="off" type="text"></input></div>
+    <script>
+      var input = document.querySelector('input');
+      var div = document.querySelector('div');
+      var clicks = 0;
+      div.addEventListener('click', () => {
+        clicks++;
+        if (clicks == 1) {
+          input.value = 'bb';
+          input.selectionStart = 2;
+          input.selectionEnd = 2;
+        } else if (clicks == 2) {
+          input.value = 'bba';
+          input.selectionStart = 3;
+          input.selectionEnd = 3;
+        }
+      });
+    </script>
+  */},
+  function(root) {
+    var input = root.find({role: RoleType.TEXT_FIELD});
+    var clickInput = input.parent.doDefault.bind(input.parent);
+    mockFeedback.call(input.focus.bind(input))
+        .call(clickInput)
+        .expectSpeech('bb')
+        .clearPendingOutput()
+        .call(clickInput)
+        .expectNextSpeechUtteranceIsNot('bba')
+        .expectSpeech('a')
+        .replay();
   });
 });

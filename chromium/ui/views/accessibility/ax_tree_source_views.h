@@ -6,13 +6,14 @@
 #define UI_VIEWS_ACCESSIBILITY_AX_TREE_SOURCE_VIEWS_H_
 
 #include "base/macros.h"
-#include "ui/accessibility/ax_node_data.h"
-#include "ui/accessibility/ax_tree_data.h"
+#include "ui/accessibility/ax_tree_id.h"
 #include "ui/accessibility/ax_tree_source.h"
 #include "ui/views/views_export.h"
 
 namespace ui {
 struct AXActionData;
+struct AXNodeData;
+struct AXTreeData;
 }
 
 namespace views {
@@ -28,12 +29,15 @@ class VIEWS_EXPORT AXTreeSourceViews
     : public ui::
           AXTreeSource<AXAuraObjWrapper*, ui::AXNodeData, ui::AXTreeData> {
  public:
+  AXTreeSourceViews(AXAuraObjWrapper* root, const ui::AXTreeID& tree_id);
+  ~AXTreeSourceViews() override;
+
   // Invokes an action on an Aura object.
   void HandleAccessibleAction(const ui::AXActionData& action);
 
   // AXTreeSource:
   bool GetTreeData(ui::AXTreeData* data) const override;
-  // GetRoot() must be implemented by subclasses.
+  AXAuraObjWrapper* GetRoot() const override;
   AXAuraObjWrapper* GetFromId(int32_t id) const override;
   int32_t GetId(AXAuraObjWrapper* node) const override;
   void GetChildren(AXAuraObjWrapper* node,
@@ -48,11 +52,13 @@ class VIEWS_EXPORT AXTreeSourceViews
   // Useful for debugging.
   std::string ToString(views::AXAuraObjWrapper* root, std::string prefix);
 
- protected:
-  AXTreeSourceViews();
-  ~AXTreeSourceViews() override;
-
  private:
+  // The top-level object to use for the AX tree. See class comment.
+  AXAuraObjWrapper* const root_ = nullptr;
+
+  // ID to use for the AX tree.
+  const ui::AXTreeID tree_id_;
+
   DISALLOW_COPY_AND_ASSIGN(AXTreeSourceViews);
 };
 

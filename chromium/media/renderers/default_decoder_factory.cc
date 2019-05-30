@@ -16,15 +16,23 @@
 #include "media/filters/gpu_video_decoder.h"
 #include "media/media_buildflags.h"
 #include "media/video/gpu_video_accelerator_factories.h"
-#include "third_party/libaom/av1_buildflags.h"
+#include "third_party/libaom/libaom_buildflags.h"
 
 #if !defined(OS_ANDROID)
 #include "media/filters/decrypting_audio_decoder.h"
 #include "media/filters/decrypting_video_decoder.h"
 #endif
 
-#if BUILDFLAG(ENABLE_AV1_DECODER)
+#if defined(OS_FUCHSIA)
+#include "media/filters/fuchsia/fuchsia_video_decoder.h"
+#endif
+
+#if BUILDFLAG(ENABLE_LIBAOM_DECODER)
 #include "media/filters/aom_video_decoder.h"
+#endif
+
+#if BUILDFLAG(ENABLE_DAV1D_DECODER)
+#include "media/filters/dav1d_video_decoder.h"
 #endif
 
 #if BUILDFLAG(ENABLE_FFMPEG)
@@ -54,7 +62,7 @@ void DefaultDecoderFactory::CreateAudioDecoders(
 #if !defined(OS_ANDROID)
   // DecryptingAudioDecoder is only needed in External Clear Key testing to
   // cover the audio decrypt-and-decode path.
-  if (base::FeatureList::IsEnabled(media::kExternalClearKeyForTesting)) {
+  if (base::FeatureList::IsEnabled(kExternalClearKeyForTesting)) {
     audio_decoders->push_back(
         std::make_unique<DecryptingAudioDecoder>(task_runner, media_log));
   }
@@ -85,42 +93,37 @@ void DefaultDecoderFactory::CreateVideoDecoders(
 
   // Perfer an external decoder since one will only exist if it is hardware
   // accelerated.
-  // Remember that |gpu_factories| will be null if HW video decode is turned
-  // off in chrome://flags.
-  if (gpu_factories) {
+  if (gpu_factories && gpu_factories->IsGpuVideoAcceleratorEnabled()) {
     // |gpu_factories_| requires that its entry points be called on its
     // |GetTaskRunner()|. Since |pipeline_| will own decoders created from the
     // factories, require that their message loops are identical.
     DCHECK_EQ(gpu_factories->GetTaskRunner(), task_runner);
 
-    if (external_decoder_factory_) {
+    // MojoVideoDecoder replaces any VDA for this platform when it's enabled.
+    if (external_decoder_factory_ &&
+        base::FeatureList::IsEnabled(kMojoVideoDecoder)) {
       external_decoder_factory_->CreateVideoDecoders(
           task_runner, gpu_factories, media_log, request_overlay_info_cb,
           target_color_space, video_decoders);
-    }
-    // MojoVideoDecoder replaces any VDA for this platform when it's enabled.
-    bool enable_vda = !base::FeatureList::IsEnabled(media::kMojoVideoDecoder);
-#if defined(OS_WIN)
-    // D3D11VideoDecoder doesn't support as many cases as dxva yet, so don't
-    // turn off hw decode just because it's enabled.
-    // TODO(crbug.com/832171): Move the check for the most common unsupported
-    // cases for D3D11VideoDecoder to the renderer, to save an IPC hop.
-    enable_vda = true;
-#endif
-    if (enable_vda) {
+    } else {
       video_decoders->push_back(std::make_unique<GpuVideoDecoder>(
           gpu_factories, request_overlay_info_cb, target_color_space,
           media_log));
     }
   }
 
+#if defined(OS_FUCHSIA)
+  video_decoders->push_back(CreateFuchsiaVideoDecoder());
+#endif
+
 #if BUILDFLAG(ENABLE_LIBVPX)
   video_decoders->push_back(std::make_unique<OffloadingVpxVideoDecoder>());
 #endif
 
-#if BUILDFLAG(ENABLE_AV1_DECODER)
-  if (base::FeatureList::IsEnabled(kAv1Decoder))
-    video_decoders->push_back(std::make_unique<AomVideoDecoder>(media_log));
+#if BUILDFLAG(ENABLE_DAV1D_DECODER)
+  video_decoders->push_back(std::make_unique<Dav1dVideoDecoder>(media_log));
+#elif BUILDFLAG(ENABLE_LIBAOM_DECODER)
+  video_decoders->push_back(std::make_unique<AomVideoDecoder>(media_log));
 #endif
 
 #if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)

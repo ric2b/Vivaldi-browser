@@ -18,7 +18,7 @@
 #include "content/shell/browser/shell.h"
 #include "content/test/accessibility_browser_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/accessibility/ax_modes.h"
+#include "ui/accessibility/ax_mode.h"
 
 namespace content {
 
@@ -54,8 +54,8 @@ class AccessibilityModeTest : public ContentBrowserTest {
         node.GetStringAttribute(ax::mojom::StringAttribute::kName) == name)
       return &node;
     for (unsigned int i = 0; i < node.PlatformChildCount(); ++i) {
-      const BrowserAccessibility* result = FindNodeInSubtree(
-          *node.PlatformGetChild(i), role, name);
+      const BrowserAccessibility* result =
+          FindNodeInSubtree(*node.PlatformGetChild(i), role, name);
       if (result)
         return result;
     }

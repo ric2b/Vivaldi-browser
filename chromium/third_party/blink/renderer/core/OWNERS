@@ -9,11 +9,11 @@ alexis.menard@intel.com
 bokan@chromium.org
 cbiesinger@chromium.org
 chrishtr@chromium.org
+clamy@chromium.org
 dcheng@chromium.org
 # dtapuska reviews input-related changes
 dtapuska@chromium.org
 dgozman@chromium.org
-dominicc@chromium.org
 # drott reviews font specific changes.
 drott@chromium.org
 dsinclair@chromium.org
@@ -26,6 +26,7 @@ fmalita@chromium.org
 # foolip reviews <video>, <track>, WebVTT and Fullscreen.
 foolip@chromium.org
 fs@opera.com
+fserb@chromium.org
 futhark@chromium.org
 haraken@chromium.org
 hayato@chromium.org
@@ -37,7 +38,6 @@ jbroman@chromium.org
 jfernandez@igalia.com
 jianli@chromium.org
 jochen@chromium.org
-junov@chromium.org
 kbr@chromium.org
 keishi@chromium.org
 kenneth.r.christiansen@intel.com
@@ -56,7 +56,7 @@ pfeldman@chromium.org
 pkasting@chromium.org
 rego@igalia.com
 rbyers@chromium.org
-rob.buis@samsung.com
+rbuis@igalia.com
 robhogan@gmail.com
 schenney@chromium.org
 senorblanco@chromium.org
@@ -70,7 +70,8 @@ tonyg@chromium.org
 # vollick reviews compositor integration, accelerated transitions, animations and scrolling, scrolling coordinator, CSS transforms
 vollick@chromium.org
 wangxianzhu@chromium.org
-yoav@yoav.ws
+yhirano@chromium.org
+yoavweiss@chromium.org
 yutak@chromium.org
 
 # TEAM: blink-dev@chromium.org

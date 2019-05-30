@@ -33,14 +33,14 @@
 #include <algorithm>
 #include <cfloat>
 
+#include "base/macros.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
-#include "third_party/blink/renderer/platform/wtf/noncopyable.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
 namespace blink {
 
-namespace DecimalPrivate {
+namespace decimal_private {
 
 static int const kExponentMax = 1023;
 static int const kExponentMin = -1023;
@@ -52,7 +52,6 @@ static const uint64_t kMaxCoefficient =
 // This class handles Decimal special values.
 class SpecialValueHandler {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(SpecialValueHandler);
 
  public:
   enum HandleResult {
@@ -77,6 +76,8 @@ class SpecialValueHandler {
   const Decimal& lhs_;
   const Decimal& rhs_;
   Result result_;
+
+  DISALLOW_COPY_AND_ASSIGN(SpecialValueHandler);
 };
 
 SpecialValueHandler::SpecialValueHandler(const Decimal& lhs, const Decimal& rhs)
@@ -229,9 +230,9 @@ static uint64_t ScaleUp(uint64_t x, int n) {
   }
 }
 
-}  // namespace DecimalPrivate
+}  // namespace decimal_private
 
-using namespace DecimalPrivate;
+using namespace decimal_private;
 
 Decimal::EncodedData::EncodedData(Sign sign, FormatClass format_class)
     : coefficient_(0), exponent_(0), format_class_(format_class), sign_(sign) {}

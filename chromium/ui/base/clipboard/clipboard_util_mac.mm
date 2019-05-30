@@ -10,10 +10,11 @@
 
 namespace ui {
 
+NSString* const kUTTypeURLName = @"public.url-name";
+
 namespace {
+
 NSString* const kWebURLsWithTitlesPboardType = @"WebURLsWithTitlesPboardType";
-NSString* const kPublicUrl = @"public.url";
-NSString* const kPublicUrlName = @"public.url-name";
 
 // It's much more convenient to return an NSString than a
 // base::ScopedCFTypeRef<CFStringRef>, since the methods on NSPasteboardItem
@@ -23,6 +24,72 @@ NSString* UTIFromPboardType(NSString* type) {
       kUTTagClassNSPboardType, base::mac::NSToCFCast(type), kUTTypeData))
       autorelease];
 }
+
+bool ReadWebURLsWithTitlesPboardType(NSPasteboard* pboard,
+                                     NSArray** urls,
+                                     NSArray** titles) {
+  NSArray* bookmarkPairs = base::mac::ObjCCast<NSArray>([pboard
+      propertyListForType:UTIFromPboardType(kWebURLsWithTitlesPboardType)]);
+  if (!bookmarkPairs)
+    return false;
+
+  if ([bookmarkPairs count] != 2)
+    return false;
+
+  NSArray* urlsArr = base::mac::ObjCCast<NSArray>(bookmarkPairs[0]);
+  NSArray* titlesArr = base::mac::ObjCCast<NSArray>(bookmarkPairs[1]);
+
+  if (!urlsArr || !titlesArr)
+    return false;
+  if ([urlsArr count] < 1)
+    return false;
+  if ([urlsArr count] != [titlesArr count])
+    return false;
+
+  for (id obj in urlsArr) {
+    if (![obj isKindOfClass:[NSString class]])
+      return false;
+  }
+
+  for (id obj in titlesArr) {
+    if (![obj isKindOfClass:[NSString class]])
+      return false;
+  }
+
+  *urls = urlsArr;
+  *titles = titlesArr;
+  return true;
+}
+
+bool ReadURLItemsWithTitles(NSPasteboard* pboard,
+                            NSArray** urls,
+                            NSArray** titles) {
+  NSMutableArray* urlsArr = [NSMutableArray array];
+  NSMutableArray* titlesArr = [NSMutableArray array];
+
+  NSArray* items = [pboard pasteboardItems];
+  for (NSPasteboardItem* item : items) {
+    NSString* url = [item stringForType:base::mac::CFToNSCast(kUTTypeURL)];
+    NSString* title = [item stringForType:kUTTypeURLName];
+
+    if (url) {
+      [urlsArr addObject:url];
+      if (title)
+        [titlesArr addObject:title];
+      else
+        [titlesArr addObject:@""];
+    }
+  }
+
+  if ([urlsArr count]) {
+    *urls = urlsArr;
+    *titles = titlesArr;
+    return true;
+  } else {
+    return false;
+  }
+}
+
 }  // namespace
 
 UniquePasteboard::UniquePasteboard()
@@ -75,8 +142,8 @@ base::scoped_nsobject<NSPasteboardItem> ClipboardUtil::PasteboardItemFromUrl(
   }
 
   [item setString:urlString forType:NSPasteboardTypeString];
-  [item setString:urlString forType:kPublicUrl];
-  [item setString:title forType:kPublicUrlName];
+  [item setString:urlString forType:base::mac::CFToNSCast(kUTTypeURL)];
+  [item setString:title forType:kUTTypeURLName];
   return item;
 }
 
@@ -104,12 +171,12 @@ base::scoped_nsobject<NSPasteboardItem> ClipboardUtil::PasteboardItemFromString(
 
 //static
 NSString* ClipboardUtil::GetTitleFromPasteboardURL(NSPasteboard* pboard) {
-  return [pboard stringForType:kPublicUrlName];
+  return [pboard stringForType:kUTTypeURLName];
 }
 
 //static
 NSString* ClipboardUtil::GetURLFromPasteboardURL(NSPasteboard* pboard) {
-  return [pboard stringForType:kPublicUrl];
+  return [pboard stringForType:base::mac::CFToNSCast(kUTTypeURL)];
 }
 
 // static
@@ -142,39 +209,47 @@ void ClipboardUtil::AddDataToPasteboard(NSPasteboard* pboard,
 bool ClipboardUtil::URLsAndTitlesFromPasteboard(NSPasteboard* pboard,
                                                 NSArray** urls,
                                                 NSArray** titles) {
-  NSArray* bookmarkPairs = base::mac::ObjCCast<NSArray>([pboard
-      propertyListForType:UTIFromPboardType(kWebURLsWithTitlesPboardType)]);
-  if (!bookmarkPairs)
-    return false;
+  return ReadWebURLsWithTitlesPboardType(pboard, urls, titles) ||
+         ReadURLItemsWithTitles(pboard, urls, titles);
+}
 
-  if ([bookmarkPairs count] != 2)
-    return false;
-
-  NSArray* urlsArr =
-      base::mac::ObjCCast<NSArray>([bookmarkPairs objectAtIndex:0]);
-  NSArray* titlesArr =
-      base::mac::ObjCCast<NSArray>([bookmarkPairs objectAtIndex:1]);
-
-  if (!urlsArr || !titlesArr)
-    return false;
-  if ([urlsArr count] < 1)
-    return false;
-  if ([urlsArr count] != [titlesArr count])
-    return false;
-
-  for (id obj in urlsArr) {
-    if (![obj isKindOfClass:[NSString class]])
-      return false;
+// static
+NSPasteboard* ClipboardUtil::PasteboardFromType(ui::ClipboardType type) {
+  NSString* type_string = nil;
+  switch (type) {
+    case ui::CLIPBOARD_TYPE_COPY_PASTE:
+      type_string = NSGeneralPboard;
+      break;
+    case ui::CLIPBOARD_TYPE_DRAG:
+      type_string = NSDragPboard;
+      break;
+    case ui::CLIPBOARD_TYPE_SELECTION:
+      NOTREACHED();
+      break;
   }
 
-  for (id obj in titlesArr) {
-    if (![obj isKindOfClass:[NSString class]])
-      return false;
-  }
+  return [NSPasteboard pasteboardWithName:type_string];
+}
 
-  *urls = urlsArr;
-  *titles = titlesArr;
-  return true;
+// static
+NSString* ClipboardUtil::GetHTMLFromRTFOnPasteboard(NSPasteboard* pboard) {
+  NSData* rtfData = [pboard dataForType:NSRTFPboardType];
+  if (!rtfData)
+    return nil;
+
+  NSAttributedString* attributed =
+      [[[NSAttributedString alloc] initWithRTF:rtfData
+                            documentAttributes:nil] autorelease];
+  NSData* htmlData =
+      [attributed dataFromRange:NSMakeRange(0, [attributed length])
+             documentAttributes:@{
+               NSDocumentTypeDocumentAttribute : NSHTMLTextDocumentType
+             }
+                          error:nil];
+
+  // According to the docs, NSHTMLTextDocumentType is UTF8.
+  return [[[NSString alloc] initWithData:htmlData
+                                encoding:NSUTF8StringEncoding] autorelease];
 }
 
 }  // namespace ui

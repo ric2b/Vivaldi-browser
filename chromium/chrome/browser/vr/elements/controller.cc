@@ -5,6 +5,7 @@
 #include "chrome/browser/vr/elements/controller.h"
 
 #include "base/numerics/math_constants.h"
+#include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/animation/keyframed_animation_curve.h"
 #include "chrome/browser/vr/ui_element_renderer.h"
@@ -278,9 +279,9 @@ Controller::Renderer::Renderer()
   opacity_handle_ = glGetUniformLocation(program_handle_, "u_Opacity");
 
   auto body_alpha_curve =
-      CreateAlphaCurve(kBodyAlphaStops, arraysize(kBodyAlphaStops));
+      CreateAlphaCurve(kBodyAlphaStops, base::size(kBodyAlphaStops));
   auto top_alpha_curve =
-      CreateAlphaCurve(kTopAlphaStops, arraysize(kTopAlphaStops));
+      CreateAlphaCurve(kTopAlphaStops, base::size(kTopAlphaStops));
 
   gfx::Transform transform;
   transform.Translate3d(0.0, 0.0, (kControllerLength - kControllerWidth) / 2);
@@ -326,19 +327,19 @@ Controller::Renderer::Renderer()
   AddSquare(kTopNumRings, kSquareNumSectors, transform, *top_alpha_curve,
             &vertices_, &colors_, &indices_);
 
-  glGenBuffersARB(1, &vertex_buffer_);
+  glGenBuffers(1, &vertex_buffer_);
   glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
   glBufferData(GL_ARRAY_BUFFER, vertices_.size() * sizeof(float),
                vertices_.data(), GL_STATIC_DRAW);
   glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-  glGenBuffersARB(1, &color_buffer_);
+  glGenBuffers(1, &color_buffer_);
   glBindBuffer(GL_ARRAY_BUFFER, color_buffer_);
   glBufferData(GL_ARRAY_BUFFER, colors_.size() * sizeof(float), colors_.data(),
                GL_STATIC_DRAW);
   glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-  glGenBuffersARB(1, &index_buffer_);
+  glGenBuffers(1, &index_buffer_);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffer_);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_.size() * sizeof(GLushort),
                indices_.data(), GL_STATIC_DRAW);

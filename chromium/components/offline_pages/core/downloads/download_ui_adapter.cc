@@ -11,6 +11,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
+#include "components/offline_items_collection/core/fail_state.h"
 #include "components/offline_pages/core/background/request_coordinator.h"
 #include "components/offline_pages/core/background/request_notifier.h"
 #include "components/offline_pages/core/background/save_page_request.h"
@@ -30,17 +31,22 @@ namespace offline_pages {
 
 namespace {
 
+bool RequestsMatchesGuid(const std::string& guid,
+                         ClientPolicyController* policy_controller,
+                         const SavePageRequest& request) {
+  return request.client_id().id == guid &&
+         policy_controller->IsSupportedByDownload(
+             request.client_id().name_space);
+}
+
 std::vector<int64_t> FilterRequestsByGuid(
     std::vector<std::unique_ptr<SavePageRequest>> requests,
     const std::string& guid,
     ClientPolicyController* policy_controller) {
   std::vector<int64_t> request_ids;
   for (const auto& request : requests) {
-    if (request->client_id().id == guid &&
-        policy_controller->IsSupportedByDownload(
-            request->client_id().name_space)) {
+    if (RequestsMatchesGuid(guid, policy_controller, *request))
       request_ids.push_back(request->request_id());
-    }
   }
   return request_ids;
 }
@@ -195,6 +201,9 @@ void DownloadUIAdapter::OnCompleted(
       observer.OnItemRemoved(item.id);
   } else {
     item.state = offline_items_collection::OfflineItemState::FAILED;
+    // Actual cause could be server or network related, but we need to pick
+    // a fail_state.
+    item.fail_state = offline_items_collection::FailState::SERVER_FAILED;
     for (auto& observer : observers_)
       observer.OnItemUpdated(item);
   }
@@ -389,19 +398,12 @@ void DownloadUIAdapter::RemoveItem(const ContentId& id) {
 }
 
 void DownloadUIAdapter::CancelDownload(const ContentId& id) {
-  // TODO(fgorski): Clean this up in a way where 2 round trips + GetAllRequests
-  // is not necessary. E.g. CancelByGuid(guid) might do the trick.
-  request_coordinator_->GetAllRequests(
-      base::BindOnce(&DownloadUIAdapter::CancelDownloadContinuation,
-                     weak_ptr_factory_.GetWeakPtr(), id.id));
-}
-
-void DownloadUIAdapter::CancelDownloadContinuation(
-    const std::string& guid,
-    std::vector<std::unique_ptr<SavePageRequest>> requests) {
-  std::vector<int64_t> request_ids = FilterRequestsByGuid(
-      std::move(requests), guid, request_coordinator_->GetPolicyController());
-  request_coordinator_->RemoveRequests(request_ids, base::DoNothing());
+  auto predicate =
+      base::BindRepeating(&RequestsMatchesGuid, id.id,
+                          // Since RequestCoordinator is calling us back,
+                          // binding its policy controller is safe.
+                          request_coordinator_->GetPolicyController());
+  request_coordinator_->RemoveRequestsIf(predicate, base::DoNothing());
 }
 
 void DownloadUIAdapter::PauseDownload(const ContentId& id) {

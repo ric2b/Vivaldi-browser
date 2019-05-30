@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/login/ui/lock_window.h"
-
 #include "ash/login/ui/lock_contents_view.h"
 #include "ash/login/ui/lock_screen.h"
 #include "ash/login/ui/login_big_user_view.h"
@@ -21,7 +19,7 @@ TEST_F(LockWindowVirtualKeyboardTest, VirtualKeyboardDoesNotCoverAuthView) {
       LockScreen::TestApi(LockScreen::Get()).contents_view();
   ASSERT_NE(nullptr, lock_contents);
 
-  LoadUsers(1);
+  SetUserCount(1);
 
   LoginBigUserView* auth_view =
       MakeLockContentsViewTestApi(lock_contents).primary_big_view();

@@ -10,6 +10,7 @@
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/win/windows_version.h"
@@ -349,7 +350,8 @@ LRESULT InputMethodWinBase::OnDocumentFeed(RECONVERTSTRING* reconv) {
     result = client->GetCompositionTextRange(&target_range);
 
   if (!result || target_range.is_empty()) {
-    if (!client->GetSelectionRange(&target_range) || !target_range.IsValid()) {
+    if (!client->GetEditableSelectionRange(&target_range) ||
+        !target_range.IsValid()) {
       return 0;
     }
   }
@@ -410,7 +412,7 @@ LRESULT InputMethodWinBase::OnReconvertString(RECONVERTSTRING* reconv) {
     return 0;
 
   gfx::Range selection_range;
-  if (!client->GetSelectionRange(&selection_range) ||
+  if (!client->GetEditableSelectionRange(&selection_range) ||
       selection_range.is_empty()) {
     return 0;
   }
@@ -498,7 +500,8 @@ ui::EventDispatchDetails InputMethodWinBase::ProcessUnhandledKeyEvent(
     ui::KeyEvent* event,
     const std::vector<MSG>* char_msgs) {
   DCHECK(event);
-  ui::EventDispatchDetails details = DispatchKeyEventPostIME(event);
+  ui::EventDispatchDetails details =
+      DispatchKeyEventPostIME(event, base::NullCallback());
   if (details.dispatcher_destroyed || details.target_destroyed ||
       event->stopped_propagation()) {
     return details;
@@ -512,6 +515,50 @@ ui::EventDispatchDetails InputMethodWinBase::ProcessUnhandledKeyEvent(
       return DispatcherDestroyedDetails();
   }
   return details;
+}
+
+void InputMethodWinBase::UpdateCompositionBoundsForEngine(
+    const TextInputClient* client) {
+  TextInputType text_input_type = GetTextInputType();
+  if (client == GetTextInputClient() &&
+      text_input_type != TEXT_INPUT_TYPE_NONE &&
+      text_input_type != TEXT_INPUT_TYPE_PASSWORD && GetEngine()) {
+    GetEngine()->SetCompositionBounds(GetCompositionBounds(client));
+  }
+}
+
+void InputMethodWinBase::ResetEngine() {
+  if (GetEngine())
+    GetEngine()->Reset();
+}
+
+void InputMethodWinBase::CancelCompositionForEngine() {
+  TextInputType text_input_type = GetTextInputType();
+  if (text_input_type != TEXT_INPUT_TYPE_NONE &&
+      text_input_type != TEXT_INPUT_TYPE_PASSWORD) {
+    InputMethodWinBase::ResetEngine();
+  }
+}
+
+void InputMethodWinBase::UpdateEngineFocusAndInputContext() {
+  if (!ui::IMEBridge::Get())  // IMEBridge could be null for tests.
+    return;
+
+  const TextInputType old_text_input_type =
+      ui::IMEBridge::Get()->GetCurrentInputContext().type;
+  ui::IMEEngineHandlerInterface::InputContext context(
+      GetTextInputType(), GetTextInputMode(), GetTextInputFlags(),
+      ui::TextInputClient::FOCUS_REASON_OTHER, GetClientShouldDoLearning());
+  ui::IMEBridge::Get()->SetCurrentInputContext(context);
+
+  // Update IME Engine state.
+  ui::IMEEngineHandlerInterface* engine = GetEngine();
+  if (engine) {
+    if (old_text_input_type != ui::TEXT_INPUT_TYPE_NONE)
+      engine->FocusOut();
+    if (GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE)
+      engine->FocusIn(context);
+  }
 }
 
 }  // namespace ui

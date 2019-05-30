@@ -5,16 +5,20 @@
 #ifndef MEDIA_GPU_ANDROID_MEDIA_CODEC_VIDEO_DECODER_H_
 #define MEDIA_GPU_ANDROID_MEDIA_CODEC_VIDEO_DECODER_H_
 
+#include <vector>
+
 #include "base/containers/circular_deque.h"
 #include "base/optional.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/elapsed_timer.h"
+#include "base/timer/timer.h"
+#include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_preferences.h"
 #include "media/base/android_overlay_mojo_factory.h"
 #include "media/base/overlay_info.h"
 #include "media/base/video_decoder.h"
 #include "media/gpu/android/android_video_surface_chooser.h"
-#include "media/gpu/android/avda_codec_allocator.h"
+#include "media/gpu/android/codec_allocator.h"
 #include "media/gpu/android/codec_wrapper.h"
 #include "media/gpu/android/device_info.h"
 #include "media/gpu/android/surface_chooser_helper.h"
@@ -22,6 +26,9 @@
 #include "media/gpu/media_gpu_export.h"
 
 namespace media {
+
+class ScopedAsyncTrace;
+struct SupportedVideoDecoderConfig;
 
 struct PendingDecode {
   static PendingDecode CreateEos();
@@ -48,14 +55,16 @@ struct PendingDecode {
 // playbacks that need them.
 // TODO: Lazy initialization should be handled at a higher layer of the media
 // stack for both simplicity and cross platform support.
-class MEDIA_GPU_EXPORT MediaCodecVideoDecoder
-    : public VideoDecoder,
-      public AVDACodecAllocatorClient {
+class MEDIA_GPU_EXPORT MediaCodecVideoDecoder : public VideoDecoder,
+                                                public CodecAllocatorClient {
  public:
+  static std::vector<SupportedVideoDecoderConfig> GetSupportedConfigs();
+
   MediaCodecVideoDecoder(
       const gpu::GpuPreferences& gpu_preferences,
+      const gpu::GpuFeatureInfo& gpu_feature_info,
       DeviceInfo* device_info,
-      AVDACodecAllocator* codec_allocator,
+      CodecAllocator* codec_allocator,
       std::unique_ptr<AndroidVideoSurfaceChooser> surface_chooser,
       AndroidOverlayMojoFactoryCB overlay_factory_cb,
       RequestOverlayInfoCB request_overlay_info_cb,
@@ -63,13 +72,12 @@ class MEDIA_GPU_EXPORT MediaCodecVideoDecoder
 
   // VideoDecoder implementation:
   std::string GetDisplayName() const override;
-  void Initialize(
-      const VideoDecoderConfig& config,
-      bool low_delay,
-      CdmContext* cdm_context,
-      const InitCB& init_cb,
-      const OutputCB& output_cb,
-      const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) override;
+  void Initialize(const VideoDecoderConfig& config,
+                  bool low_delay,
+                  CdmContext* cdm_context,
+                  const InitCB& init_cb,
+                  const OutputCB& output_cb,
+                  const WaitingCB& waiting_cb) override;
   void Decode(scoped_refptr<DecoderBuffer> buffer,
               const DecodeCB& decode_cb) override;
   void Reset(const base::Closure& closure) override;
@@ -141,7 +149,7 @@ class MEDIA_GPU_EXPORT MediaCodecVideoDecoder
   // Creates a codec asynchronously.
   void CreateCodec();
 
-  // AVDACodecAllocatorClient implementation.
+  // CodecAllocatorClient implementation.
   void OnCodecConfigured(
       std::unique_ptr<MediaCodecBridge> media_codec,
       scoped_refptr<AVDASurfaceBundle> surface_bundle) override;
@@ -165,8 +173,10 @@ class MEDIA_GPU_EXPORT MediaCodecVideoDecoder
   void RunEosDecodeCb(int reset_generation);
 
   // Forwards |frame| via |output_cb_| if |reset_generation| matches
-  // |reset_generation_|.
+  // |reset_generation_|.  |async_trace| is the (optional) scoped trace that
+  // started when we dequeued the corresponding output buffer.
   void ForwardVideoFrame(int reset_generation,
+                         std::unique_ptr<ScopedAsyncTrace> async_trace,
                          const scoped_refptr<VideoFrame>& frame);
 
   // Starts draining the codec by queuing an EOS if required. It skips the drain
@@ -221,9 +231,10 @@ class MEDIA_GPU_EXPORT MediaCodecVideoDecoder
 
   // The EOS decode cb for an EOS currently being processed by the codec. Called
   // when the EOS is output.
-  VideoDecoder::DecodeCB eos_decode_cb_;
+  DecodeCB eos_decode_cb_;
 
-  VideoDecoder::OutputCB output_cb_;
+  OutputCB output_cb_;
+  WaitingCB waiting_cb_;
   VideoDecoderConfig decoder_config_;
 
   // Codec specific data (SPS and PPS for H264). Some MediaCodecs initialize
@@ -234,7 +245,7 @@ class MEDIA_GPU_EXPORT MediaCodecVideoDecoder
   std::unique_ptr<CodecWrapper> codec_;
   base::ElapsedTimer idle_timer_;
   base::RepeatingTimer pump_codec_timer_;
-  AVDACodecAllocator* codec_allocator_;
+  CodecAllocator* codec_allocator_;
 
   // The current target surface that |codec_| should be rendering to. It
   // reflects the latest surface choice by |surface_chooser_|. If the codec is
@@ -251,6 +262,9 @@ class MEDIA_GPU_EXPORT MediaCodecVideoDecoder
 
   // The current overlay info, which possibly specifies an overlay to render to.
   OverlayInfo overlay_info_;
+
+  // Set to true if the display compositor swap is done using SurfaceControl.
+  const bool is_surface_control_enabled_;
 
   // The helper which manages our surface chooser for us.
   SurfaceChooserHelper surface_chooser_helper_;

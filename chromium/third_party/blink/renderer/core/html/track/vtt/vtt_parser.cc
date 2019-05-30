@@ -45,7 +45,7 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 const unsigned kFileIdentifierLength = 6;
 const unsigned kRegionIdentifierLength = 6;
@@ -437,7 +437,7 @@ static String SerializeTimeStamp(double time_stamp) {
   unsigned seconds = value % 60;
   value /= 60;
   unsigned minutes = value % 60;
-  unsigned hours = value / 60;
+  unsigned hours = static_cast<unsigned>(value / 60);
   return String::Format("%02u:%02u:%02u.%03u", hours, minutes, seconds,
                         milliseconds);
 }
@@ -542,7 +542,7 @@ void VTTTreeBuilder::ConstructTreeFromToken(Document& document) {
 
       VTTElement* child = VTTElement::Create(node_type, &document);
       if (!token_.Classes().IsEmpty())
-        child->setAttribute(classAttr, token_.Classes());
+        child->setAttribute(kClassAttr, token_.Classes());
 
       if (node_type == kVTTNodeTypeVoice) {
         child->setAttribute(VTTElement::VoiceAttributeName(),
@@ -564,7 +564,7 @@ void VTTTreeBuilder::ConstructTreeFromToken(Document& document) {
         break;
 
       // The only non-VTTElement would be the DocumentFragment root. (Text
-      // nodes and PIs will never appear as m_currentNode.)
+      // nodes and PIs will never appear as current_node_.)
       if (!current_node_->IsVTTElement())
         break;
 
@@ -600,7 +600,7 @@ void VTTTreeBuilder::ConstructTreeFromToken(Document& document) {
   }
 }
 
-void VTTParser::Trace(blink::Visitor* visitor) {
+void VTTParser::Trace(Visitor* visitor) {
   visitor->Trace(document_);
   visitor->Trace(current_region_);
   visitor->Trace(client_);

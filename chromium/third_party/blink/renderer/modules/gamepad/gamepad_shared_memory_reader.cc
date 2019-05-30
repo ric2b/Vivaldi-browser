@@ -15,7 +15,10 @@ GamepadSharedMemoryReader::GamepadSharedMemoryReader(LocalFrame& frame)
   frame.GetInterfaceProvider().GetInterface(
       mojo::MakeRequest(&gamepad_monitor_));
   device::mojom::blink::GamepadObserverPtr observer;
-  binding_.Bind(mojo::MakeRequest(&observer));
+  // See https://bit.ly/2S0zRAS for task types
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+      frame.GetTaskRunner(TaskType::kMiscPlatformAPI);
+  binding_.Bind(mojo::MakeRequest(&observer, task_runner), task_runner);
   gamepad_monitor_->SetObserver(std::move(observer));
 }
 
@@ -93,7 +96,7 @@ void GamepadSharedMemoryReader::SampleGamepads(device::Gamepads& gamepads) {
     if (contention_count == kMaximumContentionCount)
       break;
   } while (gamepad_hardware_buffer_->seqlock.ReadRetry(version));
-  UMA_HISTOGRAM_COUNTS("Gamepad.ReadContentionCount", contention_count);
+  UMA_HISTOGRAM_COUNTS_1M("Gamepad.ReadContentionCount", contention_count);
 
   if (contention_count >= kMaximumContentionCount) {
     // We failed to successfully read, presumably because the hardware

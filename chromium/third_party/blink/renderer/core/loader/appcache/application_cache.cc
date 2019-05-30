@@ -25,6 +25,8 @@
 
 #include "third_party/blink/renderer/core/loader/appcache/application_cache.h"
 
+#include "third_party/blink/public/mojom/appcache/appcache.mojom-blink.h"
+#include "third_party/blink/public/mojom/appcache/appcache_info.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event_listener.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
@@ -54,12 +56,34 @@ ApplicationCacheHost* ApplicationCache::GetApplicationCacheHost() const {
   return GetFrame()->Loader().GetDocumentLoader()->GetApplicationCacheHost();
 }
 
-unsigned short ApplicationCache::status() const {
+uint16_t ApplicationCache::status() const {
+  // Application Cache status numeric values are specified in the HTML5 spec.
+  static_assert(static_cast<uint16_t>(
+                    mojom::AppCacheStatus::APPCACHE_STATUS_UNCACHED) == 0,
+                "");
+  static_assert(
+      static_cast<uint16_t>(mojom::AppCacheStatus::APPCACHE_STATUS_IDLE) == 1,
+      "");
+  static_assert(static_cast<uint16_t>(
+                    mojom::AppCacheStatus::APPCACHE_STATUS_CHECKING) == 2,
+                "");
+  static_assert(static_cast<uint16_t>(
+                    mojom::AppCacheStatus::APPCACHE_STATUS_DOWNLOADING) == 3,
+                "");
+  static_assert(static_cast<uint16_t>(
+                    mojom::AppCacheStatus::APPCACHE_STATUS_UPDATE_READY) == 4,
+                "");
+  static_assert(static_cast<uint16_t>(
+                    mojom::AppCacheStatus::APPCACHE_STATUS_OBSOLETE) == 5,
+                "");
+
   RecordAPIUseType();
   ApplicationCacheHost* cache_host = GetApplicationCacheHost();
-  if (!cache_host)
-    return ApplicationCacheHost::kUncached;
-  return cache_host->GetStatus();
+  if (!cache_host) {
+    return static_cast<uint16_t>(
+        mojom::AppCacheStatus::APPCACHE_STATUS_UNCACHED);
+  }
+  return static_cast<uint16_t>(cache_host->GetStatus());
 }
 
 void ApplicationCache::update(ExceptionState& exception_state) {
@@ -89,35 +113,34 @@ void ApplicationCache::abort() {
 }
 
 const AtomicString& ApplicationCache::InterfaceName() const {
-  return EventTargetNames::ApplicationCache;
+  return event_target_names::kApplicationCache;
 }
 
 ExecutionContext* ApplicationCache::GetExecutionContext() const {
   return GetFrame() ? GetFrame()->GetDocument() : nullptr;
 }
 
-const AtomicString& ApplicationCache::ToEventType(
-    ApplicationCacheHost::EventID id) {
+const AtomicString& ApplicationCache::ToEventType(mojom::AppCacheEventID id) {
   switch (id) {
-    case ApplicationCacheHost::kCheckingEvent:
-      return EventTypeNames::checking;
-    case ApplicationCacheHost::kErrorEvent:
-      return EventTypeNames::error;
-    case ApplicationCacheHost::kNoupdateEvent:
-      return EventTypeNames::noupdate;
-    case ApplicationCacheHost::kDownloadingEvent:
-      return EventTypeNames::downloading;
-    case ApplicationCacheHost::kProgressEvent:
-      return EventTypeNames::progress;
-    case ApplicationCacheHost::kUpdatereadyEvent:
-      return EventTypeNames::updateready;
-    case ApplicationCacheHost::kCachedEvent:
-      return EventTypeNames::cached;
-    case ApplicationCacheHost::kObsoleteEvent:
-      return EventTypeNames::obsolete;
+    case mojom::AppCacheEventID::APPCACHE_CHECKING_EVENT:
+      return event_type_names::kChecking;
+    case mojom::AppCacheEventID::APPCACHE_ERROR_EVENT:
+      return event_type_names::kError;
+    case mojom::AppCacheEventID::APPCACHE_NO_UPDATE_EVENT:
+      return event_type_names::kNoupdate;
+    case mojom::AppCacheEventID::APPCACHE_DOWNLOADING_EVENT:
+      return event_type_names::kDownloading;
+    case mojom::AppCacheEventID::APPCACHE_PROGRESS_EVENT:
+      return event_type_names::kProgress;
+    case mojom::AppCacheEventID::APPCACHE_UPDATE_READY_EVENT:
+      return event_type_names::kUpdateready;
+    case mojom::AppCacheEventID::APPCACHE_CACHED_EVENT:
+      return event_type_names::kCached;
+    case mojom::AppCacheEventID::APPCACHE_OBSOLETE_EVENT:
+      return event_type_names::kObsolete;
   }
   NOTREACHED();
-  return EventTypeNames::error;
+  return event_type_names::kError;
 }
 
 void ApplicationCache::RecordAPIUseType() const {

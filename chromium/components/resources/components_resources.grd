@@ -16,10 +16,6 @@
       <part file="net_log_resources.grdp" />
       <part file="neterror_resources.grdp" />
       <part file="ntp_tiles_resources.grdp" />
-      <if expr="is_win">
-        <part file="nux_email.grdp" />
-        <part file="nux_google_apps.grdp" />
-      </if>
       <part file="offline_pages_resources.grdp" />
       <part file="password_manager_internals_resources.grdp" />
       <part file="printing_resources.grdp" />
@@ -29,6 +25,7 @@
       <part file="supervised_user_error_page_resources.grdp" />
       <part file="sync_driver_resources.grdp" />
       <part file="translate_resources.grdp" />
+      <part file="user_actions_ui_resources.grdp" />
       <part file="version_ui_resources.grdp" />
     </includes>
   </release>

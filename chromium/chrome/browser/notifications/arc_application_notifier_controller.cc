@@ -6,6 +6,7 @@
 
 #include <set>
 
+#include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs_factory.h"
@@ -94,7 +95,7 @@ ArcApplicationNotifierController::GetNotifierList(Profile* profile) {
     // Add notifiers.
     package_to_app_ids_.insert(std::make_pair(app->package_name, app_id));
     message_center::NotifierId notifier_id(
-        message_center::NotifierId::ARC_APPLICATION, app_id);
+        message_center::NotifierType::ARC_APPLICATION, app_id);
     auto ui_data = ash::mojom::NotifierUiData::New(
         notifier_id, base::UTF8ToUTF16(app->name), app->notifications_enabled,
         false /* enforced */, icon->image_skia());
@@ -116,7 +117,7 @@ void ArcApplicationNotifierController::SetNotifierEnabled(
 
 void ArcApplicationNotifierController::OnIconUpdated(ArcAppIcon* icon) {
   observer_->OnIconImageUpdated(
-      message_center::NotifierId(message_center::NotifierId::ARC_APPLICATION,
+      message_center::NotifierId(message_center::NotifierType::ARC_APPLICATION,
                                  icon->app_id()),
       icon->image_skia());
 }
@@ -128,7 +129,7 @@ void ArcApplicationNotifierController::OnNotificationsEnabledChanged(
   if (it == package_to_app_ids_.end())
     return;
   observer_->OnNotifierEnabledChanged(
-      message_center::NotifierId(message_center::NotifierId::ARC_APPLICATION,
+      message_center::NotifierId(message_center::NotifierType::ARC_APPLICATION,
                                  it->second),
       enabled);
 }

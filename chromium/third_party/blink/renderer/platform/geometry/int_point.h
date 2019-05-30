@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/saturated_arithmetic.h"
 #include "third_party/blink/renderer/platform/wtf/vector_traits.h"
+#include "ui/gfx/geometry/point.h"
 
 #if defined(OS_MACOSX)
 typedef struct CGPoint CGPoint;
@@ -44,7 +45,6 @@ typedef struct CGPoint CGPoint;
 #endif
 
 namespace gfx {
-class Point;
 class Vector2d;
 }
 
@@ -58,6 +58,7 @@ class PLATFORM_EXPORT IntPoint {
   constexpr IntPoint(int x, int y) : x_(x), y_(y) {}
   explicit IntPoint(const IntSize& size)
       : x_(size.Width()), y_(size.Height()) {}
+  explicit IntPoint(const gfx::Point& point) : x_(point.x()), y_(point.y()) {}
 
   static IntPoint Zero() { return IntPoint(); }
 
@@ -79,8 +80,8 @@ class PLATFORM_EXPORT IntPoint {
   }
 
   void Scale(float sx, float sy) {
-    x_ = lroundf(static_cast<float>(x_ * sx));
-    y_ = lroundf(static_cast<float>(y_ * sy));
+    x_ = static_cast<int>(lroundf(static_cast<float>(x_ * sx)));
+    y_ = static_cast<int>(lroundf(static_cast<float>(y_ * sy)));
   }
 
   IntPoint ExpandedTo(const IntPoint& other) const {
@@ -167,6 +168,6 @@ PLATFORM_EXPORT WTF::TextStream& operator<<(WTF::TextStream&, const IntPoint&);
 
 }  // namespace blink
 
-WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(blink::IntPoint);
+WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(blink::IntPoint)
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_GEOMETRY_INT_POINT_H_

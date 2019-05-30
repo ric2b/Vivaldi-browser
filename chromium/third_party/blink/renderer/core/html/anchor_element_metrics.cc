@@ -34,8 +34,12 @@ Document* GetRootDocument(const HTMLAnchorElement& anchor) {
 int AccumulatedScrollOffset(const HTMLAnchorElement& anchor_element) {
   IntSize offset;
   Frame* frame = anchor_element.GetDocument().GetFrame();
-  while (frame && frame->View() && frame->IsLocalFrame()) {
-    offset += ToLocalFrame(frame)->View()->LayoutViewport()->ScrollOffsetInt();
+  while (frame && frame->View()) {
+    auto* local_frame = DynamicTo<LocalFrame>(frame);
+    if (!local_frame)
+      break;
+
+    offset += local_frame->View()->LayoutViewport()->ScrollOffsetInt();
     frame = frame->Tree().Parent();
   }
   return offset.Height();
@@ -44,9 +48,8 @@ int AccumulatedScrollOffset(const HTMLAnchorElement& anchor_element) {
 // Whether the element is inside an iframe.
 bool IsInIFrame(const HTMLAnchorElement& anchor_element) {
   Frame* frame = anchor_element.GetDocument().GetFrame();
-  while (frame && frame->IsLocalFrame()) {
-    HTMLFrameOwnerElement* owner =
-        ToLocalFrame(frame)->GetDocument()->LocalOwner();
+  while (auto* local_frame = DynamicTo<LocalFrame>(frame)) {
+    HTMLFrameOwnerElement* owner = local_frame->GetDocument()->LocalOwner();
     if (owner && IsHTMLIFrameElement(owner))
       return true;
     frame = frame->Tree().Parent();
@@ -126,8 +129,8 @@ bool IsUrlIncrementedByOne(const HTMLAnchorElement& anchor_element) {
 // overflows.
 IntRect AbsoluteElementBoundingBoxRect(const LayoutObject* layout_object) {
   Vector<LayoutRect> rects;
-  layout_object->AddElementVisualOverflowRects(rects, LayoutPoint());
-
+  layout_object->AddOutlineRects(rects, LayoutPoint(),
+                                 NGOutlineType::kIncludeBlockVisualOverflow);
   return layout_object
       ->LocalToAbsoluteQuad(FloatQuad(FloatRect(UnionRect(rects))))
       .EnclosingBoundingBox();
@@ -167,6 +170,7 @@ base::Optional<AnchorElementMetrics> AnchorElementMetrics::Create(
   // Limit the element size to the viewport size.
   float ratio_area = std::min(1.0f, target.Height() / base_height) *
                      std::min(1.0f, target.Width() / base_width);
+  DCHECK_GE(1.0, ratio_area);
   float ratio_distance_top_to_visible_top = target.Y() / base_height;
   float ratio_distance_center_to_visible_top =
       (target.Y() + target.Height() / 2.0) / base_height;
@@ -197,6 +201,7 @@ base::Optional<AnchorElementMetrics> AnchorElementMetrics::Create(
   // It guarantees to be less or equal to 1.
   float ratio_visible_area = (target_visible.Height() / base_height) *
                              (target_visible.Width() / base_width);
+  DCHECK_GE(1.0, ratio_visible_area);
 
   return AnchorElementMetrics(
       anchor_element, ratio_area, ratio_visible_area,
@@ -210,8 +215,9 @@ base::Optional<AnchorElementMetrics> AnchorElementMetrics::Create(
 base::Optional<AnchorElementMetrics>
 AnchorElementMetrics::MaybeReportClickedMetricsOnClick(
     const HTMLAnchorElement* anchor_element) {
-  if (!base::FeatureList::IsEnabled(features::kRecordAnchorMetricsClicked) ||
+  if (!base::FeatureList::IsEnabled(features::kNavigationPredictor) ||
       !anchor_element->Href().ProtocolIsInHTTPFamily() ||
+      !GetRootDocument(*anchor_element)->Url().ProtocolIsInHTTPFamily() ||
       !anchor_element->GetDocument().BaseURL().ProtocolIsInHTTPFamily()) {
     return base::nullopt;
   }
@@ -233,8 +239,9 @@ AnchorElementMetrics::MaybeReportClickedMetricsOnClick(
 void AnchorElementMetrics::MaybeReportViewportMetricsOnLoad(
     Document& document) {
   DCHECK(document.GetFrame());
-  if (!base::FeatureList::IsEnabled(features::kRecordAnchorMetricsVisible) ||
+  if (!base::FeatureList::IsEnabled(features::kNavigationPredictor) ||
       document.ParentDocument() || !document.View() ||
+      !document.Url().ProtocolIsInHTTPFamily() ||
       !document.BaseURL().ProtocolIsInHTTPFamily()) {
     return;
   }
@@ -245,9 +252,13 @@ void AnchorElementMetrics::MaybeReportViewportMetricsOnLoad(
   for (const auto& member_element : sender->GetAnchorElements()) {
     const HTMLAnchorElement& anchor_element = *member_element;
 
-    // We ignore anchor elements that are not in the visual viewport.
-    if (!anchor_element.Href().ProtocolIsInHTTPFamily() ||
-        anchor_element.VisibleBoundsInVisualViewport().IsEmpty()) {
+    if (!anchor_element.Href().ProtocolIsInHTTPFamily())
+      continue;
+
+    if (anchor_element.VisibleBoundsInVisualViewport().IsEmpty() &&
+        (!anchor_element.GetDocument().GetFrame() ||
+         !GetRootDocument(anchor_element) ||
+         !IsUrlIncrementedByOne(anchor_element))) {
       continue;
     }
 
@@ -272,7 +283,9 @@ mojom::blink::AnchorElementMetricsPtr AnchorElementMetrics::CreateMetricsPtr()
     const {
   auto metrics = mojom::blink::AnchorElementMetrics::New();
   metrics->ratio_area = ratio_area_;
+  DCHECK_GE(1.0, metrics->ratio_area);
   metrics->ratio_visible_area = ratio_visible_area_;
+  DCHECK_GE(1.0, metrics->ratio_visible_area);
   metrics->ratio_distance_top_to_visible_top =
       ratio_distance_top_to_visible_top_;
   metrics->ratio_distance_center_to_visible_top =

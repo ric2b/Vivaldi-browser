@@ -10,6 +10,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/browser/storage_usage_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 MockBrowsingDataIndexedDBHelper::MockBrowsingDataIndexedDBHelper(
@@ -22,16 +23,14 @@ MockBrowsingDataIndexedDBHelper::MockBrowsingDataIndexedDBHelper(
 MockBrowsingDataIndexedDBHelper::~MockBrowsingDataIndexedDBHelper() {
 }
 
-void MockBrowsingDataIndexedDBHelper::StartFetching(
-    const FetchCallback& callback) {
+void MockBrowsingDataIndexedDBHelper::StartFetching(FetchCallback callback) {
   ASSERT_FALSE(callback.is_null());
   ASSERT_TRUE(callback_.is_null());
-  callback_ = callback;
+  callback_ = std::move(callback);
 }
 
 void MockBrowsingDataIndexedDBHelper::DeleteIndexedDB(
     const GURL& origin) {
-  ASSERT_FALSE(callback_.is_null());
   ASSERT_TRUE(base::ContainsKey(origins_, origin));
   origins_[origin] = false;
 }
@@ -39,16 +38,18 @@ void MockBrowsingDataIndexedDBHelper::DeleteIndexedDB(
 void MockBrowsingDataIndexedDBHelper::AddIndexedDBSamples() {
   const GURL kOrigin1("http://idbhost1:1/");
   const GURL kOrigin2("http://idbhost2:2/");
-  content::IndexedDBInfo info1(kOrigin1, 1, base::Time(), 0);
+  content::StorageUsageInfo info1(url::Origin::Create(kOrigin1), 1,
+                                  base::Time());
   response_.push_back(info1);
   origins_[kOrigin1] = true;
-  content::IndexedDBInfo info2(kOrigin2, 2, base::Time(), 0);
+  content::StorageUsageInfo info2(url::Origin::Create(kOrigin2), 2,
+                                  base::Time());
   response_.push_back(info2);
   origins_[kOrigin2] = true;
 }
 
 void MockBrowsingDataIndexedDBHelper::Notify() {
-  callback_.Run(response_);
+  std::move(callback_).Run(response_);
 }
 
 void MockBrowsingDataIndexedDBHelper::Reset() {

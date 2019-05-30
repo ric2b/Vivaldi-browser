@@ -12,11 +12,11 @@
 #include "third_party/blink/renderer/core/script/script.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/core/workers/global_scope_creation_params.h"
-#include "third_party/blink/renderer/core/workers/threaded_worklet_global_scope.h"
 #include "third_party/blink/renderer/core/workers/threaded_worklet_messaging_proxy.h"
 #include "third_party/blink/renderer/core/workers/threaded_worklet_object_proxy.h"
 #include "third_party/blink/renderer/core/workers/worker_thread.h"
 #include "third_party/blink/renderer/core/workers/worker_thread_test_helper.h"
+#include "third_party/blink/renderer/core/workers/worklet_global_scope.h"
 #include "third_party/blink/renderer/core/workers/worklet_module_responses_map.h"
 #include "third_party/blink/renderer/core/workers/worklet_thread_holder.h"
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
@@ -72,8 +72,8 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
 
   static void EnsureSharedBackingThread() {
     DCHECK(IsMainThread());
-    WorkletThreadHolder<ThreadedWorkletThreadForTest>::CreateForTest(
-        WebThreadCreationParams(WebThreadType::kTestThread)
+    WorkletThreadHolder<ThreadedWorkletThreadForTest>::EnsureInstance(
+        ThreadCreationParams(WebThreadType::kTestThread)
             .SetThreadNameForTest("ThreadedWorkletThreadForTest"));
   }
 
@@ -83,7 +83,7 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
   }
 
   void TestSecurityOrigin() {
-    WorkletGlobalScope* global_scope = ToWorkletGlobalScope(GlobalScope());
+    WorkletGlobalScope* global_scope = To<WorkletGlobalScope>(GlobalScope());
     // The SecurityOrigin for a worklet should be a unique opaque origin, while
     // the owner Document's SecurityOrigin shouldn't.
     EXPECT_TRUE(global_scope->GetSecurityOrigin()->IsOpaque());
@@ -133,7 +133,7 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
         FROM_HERE, CrossThreadBind(&test::ExitRunLoop));
   }
 
-  // Emulates API use on ThreadedWorkletGlobalScope.
+  // Emulates API use on threaded WorkletGlobalScope.
   void CountFeature(WebFeature feature) {
     EXPECT_TRUE(IsCurrentThread());
     GlobalScope()->CountFeature(feature);
@@ -142,7 +142,7 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
         FROM_HERE, CrossThreadBind(&test::ExitRunLoop));
   }
 
-  // Emulates deprecated API use on ThreadedWorkletGlobalScope.
+  // Emulates deprecated API use on threaded WorkletGlobalScope.
   void CountDeprecation(WebFeature feature) {
     EXPECT_TRUE(IsCurrentThread());
     GlobalScope()->CountDeprecation(feature);
@@ -170,8 +170,11 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
  private:
   WorkerOrWorkletGlobalScope* CreateWorkerGlobalScope(
       std::unique_ptr<GlobalScopeCreationParams> creation_params) final {
-    return new ThreadedWorkletGlobalScope(std::move(creation_params),
-                                          GetIsolate(), this);
+    auto* global_scope = MakeGarbageCollected<WorkletGlobalScope>(
+        std::move(creation_params), GetWorkerReportingProxy(), this);
+    EXPECT_FALSE(global_scope->IsMainThreadWorkletGlobalScope());
+    EXPECT_TRUE(global_scope->IsThreadedWorkletGlobalScope());
+    return global_scope;
   }
 
   bool IsOwningBackingThread() const final { return false; }
@@ -194,20 +197,23 @@ class ThreadedWorkletMessagingProxyForTest
   ~ThreadedWorkletMessagingProxyForTest() override = default;
 
   void Start() {
-    Document* document = ToDocument(GetExecutionContext());
+    Document* document = To<Document>(GetExecutionContext());
     std::unique_ptr<Vector<char>> cached_meta_data = nullptr;
     WorkerClients* worker_clients = nullptr;
     std::unique_ptr<WorkerSettings> worker_settings = nullptr;
     InitializeWorkerThread(
         std::make_unique<GlobalScopeCreationParams>(
-            document->Url(), ScriptType::kModule, document->UserAgent(),
+            document->Url(), mojom::ScriptType::kModule,
+            OffMainThreadWorkerScriptFetchOption::kEnabled, "threaded_worklet",
+            document->UserAgent(), nullptr /* web_worker_fetch_context */,
             document->GetContentSecurityPolicy()->Headers(),
             document->GetReferrerPolicy(), document->GetSecurityOrigin(),
             document->IsSecureContext(), document->GetHttpsState(),
             worker_clients, document->AddressSpace(),
             OriginTrialContext::GetTokens(document).get(),
             base::UnguessableToken::Create(), std::move(worker_settings),
-            kV8CacheOptionsDefault, new WorkletModuleResponsesMap),
+            kV8CacheOptionsDefault,
+            MakeGarbageCollected<WorkletModuleResponsesMap>()),
         base::nullopt);
   }
 
@@ -227,7 +233,8 @@ class ThreadedWorkletTest : public testing::Test {
     document->SetURL(KURL("https://example.com/"));
     document->UpdateSecurityOrigin(SecurityOrigin::Create(document->Url()));
     messaging_proxy_ =
-        new ThreadedWorkletMessagingProxyForTest(&page_->GetDocument());
+        MakeGarbageCollected<ThreadedWorkletMessagingProxyForTest>(
+            &page_->GetDocument());
     ThreadedWorkletThreadForTest::EnsureSharedBackingThread();
   }
 
@@ -306,7 +313,7 @@ TEST_F(ThreadedWorkletTest, UseCounter) {
   // This feature is randomly selected.
   const WebFeature kFeature1 = WebFeature::kRequestFileSystem;
 
-  // API use on the ThreadedWorkletGlobalScope should be recorded in UseCounter
+  // API use on the threaded WorkletGlobalScope should be recorded in UseCounter
   // on the Document.
   EXPECT_FALSE(UseCounter::IsCounted(GetDocument(), kFeature1));
   PostCrossThreadTask(
@@ -317,7 +324,7 @@ TEST_F(ThreadedWorkletTest, UseCounter) {
   EXPECT_TRUE(UseCounter::IsCounted(GetDocument(), kFeature1));
 
   // API use should be reported to the Document only one time. See comments in
-  // ThreadedWorkletGlobalScopeForTest::CountFeature.
+  // ThreadedWorkletObjectProxyForTest::CountFeature.
   PostCrossThreadTask(
       *GetWorkerThread()->GetTaskRunner(TaskType::kInternalTest), FROM_HERE,
       CrossThreadBind(&ThreadedWorkletThreadForTest::CountFeature,
@@ -327,7 +334,7 @@ TEST_F(ThreadedWorkletTest, UseCounter) {
   // This feature is randomly selected from Deprecation::deprecationMessage().
   const WebFeature kFeature2 = WebFeature::kPrefixedStorageInfo;
 
-  // Deprecated API use on the ThreadedWorkletGlobalScope should be recorded in
+  // Deprecated API use on the threaded WorkletGlobalScope should be recorded in
   // UseCounter on the Document.
   EXPECT_FALSE(UseCounter::IsCounted(GetDocument(), kFeature2));
   PostCrossThreadTask(
@@ -338,7 +345,7 @@ TEST_F(ThreadedWorkletTest, UseCounter) {
   EXPECT_TRUE(UseCounter::IsCounted(GetDocument(), kFeature2));
 
   // API use should be reported to the Document only one time. See comments in
-  // ThreadedWorkletGlobalScopeForTest::CountDeprecation.
+  // ThreadedWorkletObjectProxyForTest::CountDeprecation.
   PostCrossThreadTask(
       *GetWorkerThread()->GetTaskRunner(TaskType::kInternalTest), FROM_HERE,
       CrossThreadBind(&ThreadedWorkletThreadForTest::CountDeprecation,

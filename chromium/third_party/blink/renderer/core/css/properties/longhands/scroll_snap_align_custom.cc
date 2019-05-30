@@ -10,26 +10,24 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 
 namespace blink {
-namespace CSSLonghand {
+namespace css_longhand {
 
 const CSSValue* ScrollSnapAlign::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
     const CSSParserLocalContext&) const {
-  CSSValueID x_id = range.Peek().Id();
-  if (x_id != CSSValueNone && x_id != CSSValueStart && x_id != CSSValueEnd &&
-      x_id != CSSValueCenter)
+  CSSValue* block_value = css_property_parser_helpers::ConsumeIdent<
+      CSSValueNone, CSSValueStart, CSSValueEnd, CSSValueCenter>(range);
+  if (!block_value)
     return nullptr;
-  CSSValue* x_value = CSSPropertyParserHelpers::ConsumeIdent(range);
   if (range.AtEnd())
-    return x_value;
+    return block_value;
 
-  CSSValueID y_id = range.Peek().Id();
-  if (y_id != CSSValueNone && y_id != CSSValueStart && y_id != CSSValueEnd &&
-      y_id != CSSValueCenter)
-    return x_value;
-  CSSValue* y_value = CSSPropertyParserHelpers::ConsumeIdent(range);
-  CSSValuePair* pair = CSSValuePair::Create(x_value, y_value,
+  CSSValue* inline_value = css_property_parser_helpers::ConsumeIdent<
+      CSSValueNone, CSSValueStart, CSSValueEnd, CSSValueCenter>(range);
+  if (!inline_value)
+    return block_value;
+  CSSValuePair* pair = CSSValuePair::Create(block_value, inline_value,
                                             CSSValuePair::kDropIdenticalValues);
   return pair;
 }
@@ -44,5 +42,5 @@ const CSSValue* ScrollSnapAlign::CSSValueFromComputedStyleInternal(
                                                      style);
 }
 
-}  // namespace CSSLonghand
+}  // namespace css_longhand
 }  // namespace blink

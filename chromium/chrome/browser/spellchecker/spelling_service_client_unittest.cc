@@ -12,7 +12,7 @@
 
 #include "base/bind.h"
 #include "base/json/json_reader.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
@@ -61,8 +61,7 @@ class TestingSpellingServiceClient : public SpellingServiceClient {
                       const std::vector<SpellCheckResult>& results) {
     EXPECT_EQ(success_, success);
     base::string16 text(base::UTF8ToUTF16(sanitized_request_text_));
-    for (std::vector<SpellCheckResult>::const_iterator it = results.begin();
-         it != results.end(); ++it) {
+    for (auto it = results.begin(); it != results.end(); ++it) {
       text.replace(it->location, it->length, it->replacements[0]);
     }
     EXPECT_EQ(corrected_text_, text);
@@ -105,7 +104,7 @@ class SpellingServiceClientTest : public testing::Test {
     } kCountries[] = {
         {"af", "ZAF"}, {"en", "USA"},
     };
-    for (size_t i = 0; i < arraysize(kCountries); ++i) {
+    for (size_t i = 0; i < base::size(kCountries); ++i) {
       if (!language.compare(kCountries[i].language)) {
         country->assign(kCountries[i].country);
         return true;
@@ -219,7 +218,7 @@ TEST_F(SpellingServiceClientTest, RequestTextCheck) {
   pref->SetBoolean(spellcheck::prefs::kSpellCheckEnable, true);
   pref->SetBoolean(spellcheck::prefs::kSpellCheckUseSpellingService, true);
 
-  for (size_t i = 0; i < arraysize(kTests); ++i) {
+  for (size_t i = 0; i < base::size(kTests); ++i) {
     client_.test_url_loader_factory()->ClearResponses();
     net::HttpStatusCode http_status = kTests[i].response_status;
     network::ResourceResponseHead head;
@@ -265,8 +264,8 @@ TEST_F(SpellingServiceClientTest, RequestTextCheck) {
     // Parse the JSON sent to the service, and verify its parameters.
     std::unique_ptr<base::DictionaryValue> value(
         static_cast<base::DictionaryValue*>(
-            base::JSONReader::Read(intercepted_body,
-                                   base::JSON_ALLOW_TRAILING_COMMAS)
+            base::JSONReader::ReadDeprecated(intercepted_body,
+                                             base::JSON_ALLOW_TRAILING_COMMAS)
                 .release()));
     ASSERT_TRUE(value.get());
     std::string method;
@@ -325,7 +324,7 @@ TEST_F(SpellingServiceClientTest, AvailableServices) {
   };
   // If spellcheck is allowed, then suggest is not since spellcheck is a
   // superset of suggest.
-  for (size_t i = 0; i < arraysize(kSupported); ++i) {
+  for (size_t i = 0; i < base::size(kSupported); ++i) {
     base::ListValue dictionary;
     dictionary.AppendString(kSupported[i]);
     pref->Set(spellcheck::prefs::kSpellCheckDictionaries, dictionary);
@@ -342,7 +341,7 @@ TEST_F(SpellingServiceClientTest, AvailableServices) {
       "lv-LV", "nb-NO", "nl-NL", "pl-PL", "pt-BR", "pt-PT", "ro-RO", "ru-RU",
       "sk-SK", "sl-SI", "sh",    "sr",    "sv-SE", "tr-TR", "uk-UA", "vi-VN",
   };
-  for (size_t i = 0; i < arraysize(kUnsupported); ++i) {
+  for (size_t i = 0; i < base::size(kUnsupported); ++i) {
     SCOPED_TRACE(std::string("Expected language ") + kUnsupported[i]);
     base::ListValue dictionary;
     dictionary.AppendString(kUnsupported[i]);

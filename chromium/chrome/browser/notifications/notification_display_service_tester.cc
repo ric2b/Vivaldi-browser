@@ -6,16 +6,18 @@
 
 #include <set>
 
+#include "base/bind.h"
 #include "build/buildflag.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/notifications/notification_platform_bridge.h"
 #include "chrome/browser/notifications/stub_notification_display_service.h"
+#include "chrome/browser/notifications/system_notification_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "ui/base/ui_features.h"
+#include "ui/base/buildflags.h"
 #include "ui/message_center/public/cpp/notification.h"
 
 namespace {
@@ -41,13 +43,14 @@ class MockNotificationPlatformBridge : public NotificationPlatformBridge {
   void Close(Profile* profile, const std::string& notification_id) override {}
   void GetDisplayed(Profile* profile,
                     GetDisplayedNotificationsCallback callback) const override {
-    auto displayed_notifications = std::make_unique<std::set<std::string>>();
+    std::set<std::string> displayed_notifications;
     std::move(callback).Run(std::move(displayed_notifications),
                             false /* supports_synchronization */);
   }
   void SetReadyCallback(NotificationBridgeReadyCallback callback) override {
     std::move(callback).Run(true /* ready */);
   }
+  void DisplayServiceShutDown(Profile* profile) override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockNotificationPlatformBridge);
@@ -82,8 +85,6 @@ class NotificationDisplayServiceShutdownNotifierFactory
 NotificationDisplayServiceTester::NotificationDisplayServiceTester(
     Profile* profile)
     : profile_(profile) {
-  DCHECK(profile_);
-
 #if !BUILDFLAG(ENABLE_MESSAGE_CENTER)
   TestingBrowserProcess* browser_process = TestingBrowserProcess::GetGlobal();
   if (browser_process) {
@@ -94,16 +95,27 @@ NotificationDisplayServiceTester::NotificationDisplayServiceTester(
 
   // TODO(peter): Remove the StubNotificationDisplayService in favor of having
   // a fully functional MockNotificationPlatformBridge.
-  display_service_ = static_cast<StubNotificationDisplayService*>(
-      NotificationDisplayServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-          profile_, &StubNotificationDisplayService::FactoryForTests));
+  if (profile_) {
+    display_service_ = static_cast<StubNotificationDisplayService*>(
+        NotificationDisplayServiceFactory::GetInstance()
+            ->SetTestingFactoryAndUse(
+                profile_,
+                base::BindRepeating(
+                    &StubNotificationDisplayService::FactoryForTests)));
 
-  profile_shutdown_subscription_ =
-      NotificationDisplayServiceShutdownNotifierFactory::GetInstance()
-          ->Get(profile)
-          ->Subscribe(base::BindRepeating(
-              &NotificationDisplayServiceTester::OnProfileShutdown,
-              base::Unretained(this)));
+    profile_shutdown_subscription_ =
+        NotificationDisplayServiceShutdownNotifierFactory::GetInstance()
+            ->Get(profile)
+            ->Subscribe(base::BindRepeating(
+                &NotificationDisplayServiceTester::OnProfileShutdown,
+                base::Unretained(this)));
+  } else {
+    auto system_display_service =
+        std::make_unique<StubNotificationDisplayService>(nullptr);
+    display_service_ = system_display_service.get();
+    SystemNotificationHelper::GetInstance()->SetSystemServiceForTesting(
+        std::move(system_display_service));
+  }
 
   g_tester = this;
 }
@@ -112,7 +124,7 @@ NotificationDisplayServiceTester::~NotificationDisplayServiceTester() {
   g_tester = nullptr;
   if (profile_) {
     NotificationDisplayServiceFactory::GetInstance()->SetTestingFactory(
-        profile_, nullptr);
+        profile_, BrowserContextKeyedServiceFactory::TestingFactory());
   }
 }
 

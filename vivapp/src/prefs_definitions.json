@@ -19,6 +19,20 @@
           "syncable": true
         }
       },
+      "extensions": {
+        "show_toggle": {
+          "description": "Whether to display a toggle to show/hide extension buttons on the address bar.",
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        },
+        "visible": {
+          "description": "Whether extension buttons are shown on the address bar.",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
+      },
       "omnibox": {
         "cutcopy_encoded": {
           "description": "URL encode the string passed to the clipboard from the url field",
@@ -40,6 +54,11 @@
           "type": "boolean",
           "default": true,
           "syncable": true
+        },
+        "show_top_sites": {
+          "type": "boolean",
+          "default": false,
+          "syncable": false
         }
       },
       "position": {
@@ -51,13 +70,51 @@
         "default": "top",
         "syncable": true
       },
+      "search": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "keep_selected": {
+          "type": "boolean",
+          "description": "Keep last search engine selected in search field",
+          "default": false,
+          "syncable": true
+        },
+        "suggest_enabled": {
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        },
+        "typed_history_enabled": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
+      },
       "select_on_click": {
         "description": "Select the content of the URL field when it gets activated",
         "type": "boolean",
         "default": true,
         "syncable": true
       },
+      "show_full_url": {
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "show_profile": {
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
       "show_progress": {
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "typed_history_enabled": {
         "type": "boolean",
         "default": true,
         "syncable": true
@@ -70,6 +127,11 @@
           "shift": 1
         },
         "default": "alt",
+        "syncable": true
+      },
+      "visible": {
+        "type": "boolean",
+        "default": true,
         "syncable": true
       }
     },
@@ -111,6 +173,34 @@
           "syncable": true
         }
       },
+      "can_initialize": {
+        "description": "Test if initializing can be made possible if false",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "confirm_opening": {
+        "description": "Ask before opening a number of bookmarks >= to  kBookmarksConfirmOpeningThreshold",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "confirm_opening_threshold": {
+        "type": "integer",
+        "default": 20,
+        "syncable": true
+      },
+      "deleted_partners": {
+        "type": "list",
+        "default": [],
+        "syncable": true
+      },
+      "language": {
+        "description": "Set on first run. Upgrades will use this language when needed",
+        "type": "string",
+        "default": "",
+        "syncable": false
+      },
       "manager": {
         "sorting": {
           "type": "dictionary",
@@ -121,6 +211,27 @@
       "open_in_new_tab": {
         "type": "boolean",
         "default": false,
+        "syncable": true
+      },
+      "save_folder": {
+        "description": "Last Folder a bookmark was added to in url field",
+        "type": "string",
+        "default": "",
+        "syncable": false
+      },
+      "single_click_opens": {
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "underline_menu_letter": {
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "version": {
+        "type": "string",
+        "default": "",
         "syncable": true
       },
       "panel": {
@@ -138,6 +249,34 @@
         "syncable": false
       }
     },
+    "clear_private_data": {
+      "entries": {
+        "type": "dictionary",
+        "default": {},
+        "syncable": true
+      },
+      "range": {
+        "type": "enum",
+        "enum_values": {
+          "past_hour": 0,
+          "past_day": 1,
+          "past_week": 2,
+          "past_4_weeks": 3,
+          "everything": 4
+        },
+        "default": "past_hour",
+        "syncable": true
+      }
+    },
+    "contact": {
+      "panel": {
+        "sorting": {
+          "type": "dictionary",
+          "default": {"sortOrder": 1, "sortField": "manually"},
+          "syncable": true
+        }
+      }
+    },
     "dot_net": {
       "username": {
         "type": "string",
@@ -145,9 +284,52 @@
         "syncable": false
       }
     },
+    "downloads": {
+      "notify_on_complete": {
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "open_panel_on_new": {
+        "description": "Opens the download panel when starting a new download",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "panel": {
+        "editor_height": {
+          "type": "integer",
+          "default": 180,
+          "syncable": true
+        },
+        "sorting": {
+          "type": "dictionary",
+          "default": {"sortOrder": 2, "sortField": "startTime"},
+          "syncable": true
+        }
+      },
+      "start_automatically": {
+        "description": "Automatically download files to the default download folder without asking the user",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "update_default_download_when_saving_as": {
+        "description": "Update default download directory when setting download target via 'Save as...'",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      }
+    },
     "homepage": {
       "type": "string",
-      "default": "https://vivaldi.com",
+      "default": "https://vivaldi.com/",
+      "syncable": true
+    },
+    "homepage_cache": {
+      "type": "string",
+      "description": "Cached custom homepage URL",
+      "default": "https://vivaldi.com/",
       "syncable": true
     },
     "history": {
@@ -157,10 +339,95 @@
         "syncable": true
       }
     },
+    "hue": {
+      "bridge_ip": {
+        "description": "Hue Bridge IP",
+        "type": "string",
+        "default": "",
+        "syncable": false
+      },
+      "enabled": {
+        "description": "Enable Hue Light integration",
+        "type": "boolean",
+        "default": false,
+        "syncable": false
+      },
+      "lights": {
+        "description": "List of selected light MAC addresses",
+        "type": "list",
+        "default": [],
+        "syncable": false
+      },
+      "username": {
+        "description": "Hue access token, called username in the API",
+        "type": "string",
+        "default": "",
+        "syncable": false
+      }
+    },
+
+    "razer_chroma": {
+      "enabled": {
+        "description": "Enable Razer Chroma integration",
+        "type": "boolean",
+        "default": false,
+        "syncable": false
+      },
+      "devices": {
+        "description": "The devices we want to integrate with. Valid options: keyboard, mouse, mousemat, chromalink",
+        "type": "list",
+        "default": ["keyboard", "mouse", "mousemat", "chromalink"],
+        "syncable": false
+      },
+      "has_shown_promotion": {
+        "description": "Has shown Razer Chroma promotion dialog.",
+        "type": "boolean",
+        "default": false,
+        "syncable": false
+      }
+    },
     "incognito": {
       "show_intro": {
         "type": "boolean",
         "default": true,
+        "syncable": true
+      }
+    },
+    "keyboard": {
+      "shortcuts": {
+        "alt_opens_menu": {
+          "description": "Pressing Alt opens the main menu",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "enable": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "enable_single_key": {
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        },
+        "space_fast_forwards": {
+          "description": "Pressing space when a page is scrolled to the bottom will trigger fast-forward",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
+      },
+      "tab_to_all": {
+        "description": "Whether the tab key allows reaching all controls or only text inputs and lists",
+        "type": "integer",
+        "default": -1,
+        "syncable": true
+      },
+      "tab_to_all_uses_system_default": {
+        "description": "Set tab_to_all based on the operating system configuration",
+        "type": "boolean",
+        "default": false,
         "syncable": true
       }
     },
@@ -176,6 +443,12 @@
         "default": true,
         "syncable": true
       },
+      "stroke_tolerance": {
+        "description": "How many logical pixels the mouse has to travel before the mouse gesture move is detected. This is not syncable as it is a device-specific.",
+        "type": "double",
+        "default": 20.0,
+        "syncable": false
+      },
       "rocker_gestures": {
         "enabled": {
           "type": "boolean",
@@ -184,9 +457,117 @@
         }
       }
     },
+    "mouse_wheel": {
+      "page_zoom": {
+        "description": "Zoom pages with a mouse wheel or touchpad",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "tab_switch": {
+        "description": "Switch tabs with a mouse wheel or touchpad",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      }
+    },
+    "notes": {
+      "creation": {
+        "add_screenshot": {
+          "description": "Automatically fetch a screenshot for new notes",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "notify": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "show_panel": {
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        }
+      },
+      "panel": {
+        "editor_height": {
+          "type": "integer",
+          "default": 300,
+          "syncable": true
+        },
+        "show_markdown": {
+          "description": "Display the notes text formattedusing mmarkdown",
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        },
+        "sorting": {
+          "type": "dictionary",
+          "default": {"sortOrder": 1, "sortField": "manually"},
+          "syncable": true
+        }
+      }
+    },
+    "page": {
+      "search": {
+        "in_background": {
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        }
+      }
+    },
+    "panels": {
+      "as_overlay" : {
+        "auto_close": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "enabled": {
+          "description": "Enable floating panel",
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        }
+      },
+      "position": {
+        "type": "enum",
+        "enum_values": {
+          "left": 0,
+          "right": 1
+        },
+        "default": "left",
+        "syncable": true
+      },
+      "show_toggle": {
+        "description": "Show toggle button along the edge of the panel",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      }
+    },
+    "popups": {
+      "show_in_tab": {
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      }
+    },
     "plugins": {
       "widevine": {
         "enabled": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
+      }
+    },
+    "privacy": {
+      "autofill": {
+        "server_assist": {
+          "description": "Use Google server-side assisted autofill.",
           "type": "boolean",
           "default": true,
           "syncable": true
@@ -235,6 +616,12 @@
         "type": "boolean",
         "default": true,
         "syncable": true
+      },
+      "search_english": {
+        "description": "Search in English translation term of command",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
       }
     },
     "settings": {
@@ -262,18 +649,135 @@
       }
     },
     "startpage": {
+      "background": {
+        "color": {
+          "description": "Background color or 'user_defined' reference",
+          "type": "string",
+          "default": "#cccccc",
+          "syncable": true
+        },
+        "color_custom": {
+          "description": "User-defined background color",
+          "type": "string",
+          "default": "#bfb8b0",
+          "syncable": true
+        }
+      },
       "image": {
-        "type": "file_path",
-        "default": "./../resources/bg.jpg",
-        "syncable": false
+        "enable": {
+          "type": "boolean",
+          "default": true,
+          "syncable": false
+        },
+        "path": {
+          "description": "Start page image path, 'user_defined', or 'desktop_image' reference",
+          "type": "file_path",
+          "default": "./../resources/bg.jpg",
+          "syncable": false
+        },
+        "path_custom": {
+          "description": "User-defined start page image path",
+          "type": "file_path",
+          "default": "./../resources/bg.jpg",
+          "syncable": false
+        },
+        "repeat": {
+          "type": "boolean",
+          "default": false,
+          "syncable": false
+        },
+        "stretch": {
+          "type": "boolean",
+          "default": true,
+          "syncable": false
+        }
       },
       "speed_dial": {
-        "display_navigation": {
-          "description": "Controls Speed Dial navigation display on manager pages",
+        "add_button_visible": {
           "type": "boolean",
           "default": true,
           "syncable": true
+        },
+        "allow_dnd": {
+          "description": "Allow Speed Dial entries reordering by drag & drop",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "columns": {
+          "type": "integer",
+          "default": 6,
+          "syncable": true
+        },
+        "controls_visible": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "delete_visible": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "display_navigation": {
+          "description": "Controls Speed Dial navigation display in other Start Page components",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "display_search": {
+          "description": "Display search field on Speed Dial page",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "titles_visible": {
+          "type": "enum",
+          "enum_values": {
+            "always": 0,
+            "hover": 1,
+            "never": 2
+          },
+          "default": "always",
+          "syncable": true
+        },
+        "width": {
+          "type": "integer",
+          "default": 220,
+          "syncable": true
         }
+      }
+    },
+    "startup": {
+      "check_is_default": {
+        "description": "Check if vivaldi is default on startup (not synced to allow people to have different default browser on different computers)",
+        "type": "boolean",
+        "default": false,
+        "syncable": false
+      },
+      "last_seen_version": {
+        "description": "Most recent version number seen on startup",
+        "type": "string",
+        "default": "",
+        "syncable": false
+      },
+      "remember_full_screen": {
+        "description": "Re-open vivaldi in full-screen if it was closed in full-screen. Unofficial setting, not exposed in the UI for now.",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      }
+    },
+    "status_bar": {
+      "display": {
+        "type": "enum",
+        "enum_values": {
+          "on": 0,
+          "off": 1,
+          "overlay": 2
+        },
+        "default": "on",
+        "syncable": true
       }
     },
     "sync": {
@@ -292,6 +796,11 @@
         "default": "unknown",
         "syncable": false
       },
+      "session_name": {
+        "type": "string",
+        "default": "",
+        "syncable": false
+      },
       "username": {
         "type": "string",
         "default": "",
@@ -299,7 +808,113 @@
       }
     },
     "tabs": {
+      "activation": {
+        "on_clone": {
+          "description": "Tab activation after clonning a tab",
+          "type": "enum",
+          "enum_values": {
+            "rightofcurrent": 0,
+            "alwayslast": 1
+          },
+          "default": "rightofcurrent",
+          "syncable": true
+        },
+        "on_close": {
+          "description": "Tab activation after closing a tab",
+          "type": "enum",
+          "enum_values": {
+            "activation_order": 0,
+            "left": 1,
+            "right": 2
+          },
+          "default": "activation_order",
+          "syncable": true
+        },
+        "prefer_related": {
+          "description": "Always activate related tab",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
+      },
+      "active_min_size": {
+        "description": "Enforced minimum size of active tab",
+        "type": "integer",
+        "default": 30,
+        "syncable": true
+      },
+      "align_next": {
+        "description": "Align close buttons with closed tab by freezing tab size for duration of hover",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
       "always_load_pinned_after_restore": {
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "at_edge": {
+        "description": "Remove vertical space around tab bar in fullscreen mode",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "auto_muting": {
+        "description": "Rules for muting tabs",
+        "type": "enum",
+        "enum_values": {
+          "off": 0,
+          "onlyActive": 1,
+          "prioritizeActive": 2
+        },
+        "default": "off",
+        "syncable": true
+      },
+      "bar": {
+        "width": {
+          "description": "Vertical Tab Bar width",
+          "type": "integer",
+          "default": 180,
+          "syncable": true
+        },
+        "height": {
+          "description": "Horizontal Tab Bar height",
+          "type": "integer",
+          "default": 30,
+          "syncable": true
+        },
+        "position": {
+          "type": "enum",
+          "enum_values": {
+            "top": 0,
+            "left": 1,
+            "right": 2,
+            "bottom": 3
+          },
+          "default": "top",
+          "syncable": true
+        }
+      },
+      "close_pinned": {
+        "description": "Whether pinned tabs can be closed or buried",
+        "type": "enum",
+        "enum_values": {
+          "on": 0,
+          "off": 1,
+          "bury": 2
+        },
+        "default": "off",
+        "syncable": true
+      },
+      "counter_detection": {
+        "description": "Detect counter in webpage titles",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "cycle_by_recent_order": {
+        "description": "Whether to cycle tabs by recently seen or linear order",
         "type": "boolean",
         "default": true,
         "syncable": true
@@ -308,9 +923,203 @@
         "type": "boolean",
         "default": true,
         "syncable": true
+      },
+      "dim_hibernated": {
+        "description": "Dim favicon of hibernated pages",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "double_click_close": {
+        "description": "Close tab on double-click",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "favicon_spinner": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        }
+      },
+      "focus_webview": {
+        "description": "Focus webpage instead of address bar on new tab",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "minimize": {
+        "description": "Click active tab to switch to previously active one",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "never_close_last": {
+        "description": "Display tab popup tooltip preview",
+        "type": "boolean",
+        "default": true,
+        "default_mac": false,
+        "syncable": true
+      },
+      "new_page": {
+        "link": {
+          "description": "New tab link type, one of NEW_PAGE_TYPE constant",
+          "type": "enum",
+          "enum_values": {
+            "startpage": 0,
+            "homepage": 1,
+            "blankpage": 2,
+            "extension": 3,
+            "custom": 4
+          },
+          "default": "startpage",
+          "syncable": true
+        },
+        "url": {
+          "description": "[DEPRECATED 2018-11] The actual URL for new tabs",
+          "type": "string",
+          "default": "",
+          "syncable": true
+        },
+        "custom_url": {
+          "description": "The URL set to be used when choosing a custom URL for new tabs",
+          "type": "string",
+          "default": "",
+          "syncable": true
+        }
+      },
+      "new_placement": {
+        "description": "Placement of a new tab",
+        "type": "enum",
+        "enum_values": {
+          "rightofcurrent": 0,
+          "directrightofcurrent": 1,
+          "alwayslast": 2,
+          "openintabstackwithrelated": 3
+        },
+        "default": "rightofcurrent",
+        "syncable": true
+      },
+      "selection": {
+        "enabled": {
+          "description": "Enable tab selection",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "include_active": {
+          "description": "Include current tab in new selection",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
+      },
+      "show_close_button": {
+        "description": "Show tab close button",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "stacking": {
+        "allow_dnd": {
+          "description": "Allow tab stacking by drag & drop",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "allow_rename": {
+          "description": "Allow tab stack renaming",
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        },
+        "dnd_delay": {
+          "description": "Delay before triggering tab stacking by drag & drop",
+          "type": "integer",
+          "default": 250,
+          "syncable": true
+        },
+        "mode": {
+          "description": "Enable tab stacking",
+          "type": "enum",
+          "enum_values": {
+            "off": 0,
+            "on": 1
+          },
+          "default": "on",
+          "syncable": true
+        },
+        "name_map": {
+          "description": "Keeps local track of tab stack name changes",
+          "type": "dictionary",
+          "default": {},
+          "syncable": false
+        },
+        "open_in_current": {
+          "description": "Open links within current tab stack",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
+      },
+      "thumbnails": {
+        "description": "Show page preview thumbnail within a tab",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "tooltip": {
+        "description": "Display tab popup tooltip preview",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "unread": {
+        "description": "Show unread page tab indicator",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "visible": {
+        "description": "Whether to show the tab bar",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "visual_switch": {
+        "enable": {
+          "description": "Enable tab preview overlay when switching tabs",
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        },
+        "list_layout": {
+          "description": "Show tab preview overlay as list",
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        }
       }
     },
     "theme": {
+      "color_accent_saturation_limit": {
+        "type": "double",
+        "default": 1.0,
+        "syncable": true
+      },
+      "contrast_minimum": {
+        "type": "double",
+        "default": 0.0,
+        "syncable": true
+      },
+      "dim_blurred": {
+        "description": "Fade the colors of content that's not focused",
+        "type": "boolean",
+        "default": false,
+        "default_mac": true,
+        "syncable": true
+      },
       "window_background_accent_color_blend": {
         "type": "boolean",
         "default": true,
@@ -333,6 +1142,61 @@
       "window_background_image_enabled": {
         "type": "boolean",
         "default": false,
+        "syncable": false
+      },
+      "use_animation": {
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      }
+    },
+    "toolbars": {
+      "navigation": {
+        "type": "list",
+        "default": [
+          "Back",
+          "Forward",
+          "Rewind",
+          "FastForward",
+          "Reload",
+          "Home"
+        ],
+        "syncable": true
+      },
+      "status": {
+        "type": "list",
+        "default": [
+          "PanelToggle",
+          "SyncStatus",
+          "StatusInfo",
+          "TaskList",
+          "VersionInfo",
+          "CaptureImages",
+          "TilingToggle",
+          "ImagesToggle",
+          "PageActions",
+          "Zoom"
+        ],
+        "syncable": true
+      }
+    },
+    "vivaldi_account": {
+      "id": {
+        "description": "The actual username obtained from the server",
+        "type": "string",
+        "default": "",
+        "syncable": false
+      },
+      "refresh_token": {
+        "description": "Encrypted OAuth2 refresh token",
+        "type": "string",
+        "default": "",
+        "syncable": false
+      },
+      "username": {
+        "description": "The username as entered by the user",
+        "type": "string",
+        "default": "",
         "syncable": false
       }
     },
@@ -376,20 +1240,32 @@
           },
           "default": "file",
           "syncable": true
+        },
+        "save_file_pattern": {
+          "description": "The file pattern used to contruct the filename.",
+          "type": "string",
+          "default": "$timestamp $host $shortid",
+          "syncable": true
         }
       },
       "focus_trap": {
         "type": "boolean",
-        "default": true,
-        "description": "true if the focus trap disabling tab cycling from web pages into the UI is enabled, otherwise false to allow it.",
+        "default": false,
+        "description": "Controls keyboard TAB focus trapping within individual UI toolbars and/or a webpage.",
         "syncable": true
       },
       "full_screen": {
         "hide_mouse": {
           "type": "boolean",
           "default": null,
-          "default_win": true,
-          "default_linux": true,
+          "default_win": false,
+          "default_linux": false,
+          "syncable": true
+        },
+        "show_bubble": {
+          "description": "Show an info bubble telling the user to use Esc to exit full screen.",
+          "type": "boolean",
+          "default": true,
           "syncable": true
         }
       },
@@ -400,6 +1276,16 @@
           "default_mac": false,
           "syncable": true
         }
+      },
+      "spatial_navigation_method": {
+        "type": "enum",
+        "enum_values": {
+          "none": 0,
+          "vivaldi": 1,
+          "blink": 2
+        },
+        "default": "none",
+        "syncable": true
       },
       "tab_focuses_links": {
         "type": "boolean",
@@ -434,9 +1320,20 @@
         "default": [],
         "description": "List of settings for RSS feeds",
         "syncable": false
+      },
+      "show_notifications": {
+        "type": "boolean",
+        "default": true,
+        "description": "Should new feeds notifications be shown",
+        "syncable": false
       }
     },
     "windows": {
+      "linux_alt_controls": {
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
       "use_native_decoration": {
         "type": "boolean",
         "default": false,
@@ -449,6 +1346,11 @@
           "height": 700
         },
         "syncable": false
+      },
+      "show_window_close_confirmation_dialog": {
+        "type": "boolean",
+        "default": true,
+        "syncable": false
       }
     },
 
@@ -458,6 +1360,22 @@
         "default": null,
         "default_linux": false,
         "default_mac": false,
+        "syncable": false
+      },
+      "desktop_theme_color": {
+        "type": "enum",
+        "enum_values": {
+          "light": 0,
+          "dark": 1
+        },
+        "default": "light",
+        "default_linux": "light",
+        "default_mac": "light",
+        "syncable": false
+      },
+      "show_exit_confirmation_dialog": {
+        "type": "boolean",
+        "default": true,
         "syncable": false
       },
       "mac": {
@@ -491,25 +1409,84 @@
   },
 
   "chromium": {
-    "kAllowJavascriptAppleEvents": "browser.allow_javascript_apple_events",
-    "kCredentialsEnableService": "credentials_enable_service",
-    "kDownloadDefaultDirectory": "download.default_directory",
-    "kEnableDoNotTrack": "enable_do_not_track",
-    "kExtensionURLOverrides": "extensions.chrome_url_overrides",
-    "kPluginsAlwaysOpenPdfExternally": "plugins.always_open_pdf_externally",
-    "kSafeBrowsingEnabled": "safebrowsing.enabled",
-    "kURLsToRestoreOnStartup": "session.startup_urls",
-    "kWebKitCursiveFontFamily": "webkit.webprefs.fonts.cursive.Zyyy",
-    "kWebKitFantasyFontFamily": "webkit.webprefs.fonts.fantasy.Zyyy",
-    "kWebKitFixedFontFamily": "webkit.webprefs.fonts.fixed.Zyyy",
-    "kWebKitMinimumFontSize": "webkit.webprefs.minimum_font_size",
-    "kWebKitSansSerifFontFamily": "webkit.webprefs.fonts.sansserif.Zyyy",
-    "kWebKitSerifFontFamily": "webkit.webprefs.fonts.serif.Zyyy",
-    "kWebKitStandardFontFamily": "webkit.webprefs.fonts.standard.Zyyy",
-    "kWebRTCIPHandlingPolicy": "webrtc.ip_handling_policy"
+    "kAlternateErrorPagesEnabled": {
+      "path": "alternate_error_pages.enabled",
+      "type": "boolean"
+    },
+    "kAllowJavascriptAppleEvents": {
+      "path": "browser.allow_javascript_apple_events",
+      "type": "boolean"
+    },
+    "kCredentialsEnableService": {
+      "path": "credentials_enable_service",
+      "type": "boolean"
+    },
+    "kDownloadDefaultDirectory": {
+      "path": "download.default_directory",
+      "type": "file_path"
+    },
+    "kEnableDoNotTrack": {
+      "path": "enable_do_not_track",
+      "type": "boolean"
+    },
+    "kExtensionURLOverrides": {
+      "path": "extensions.chrome_url_overrides",
+      "type": "dictionary"
+    },
+    "kPluginsAlwaysOpenPdfExternally": {
+      "path": "plugins.always_open_pdf_externally",
+      "type": "boolean"
+    },
+    "kSafeBrowsingEnabled": {
+      "path": "safebrowsing.enabled",
+      "type": "boolean"
+    },
+    "kURLsToRestoreOnStartup": {
+      "path": "session.startup_urls",
+      "type": "list"
+    },
+    "kWebKitCursiveFontFamily": {
+      "path": "webkit.webprefs.fonts.cursive.Zyyy",
+      "type": "string"
+    },
+    "kWebKitFantasyFontFamily": {
+      "path": "webkit.webprefs.fonts.fantasy.Zyyy",
+      "type": "string"
+    },
+    "kWebKitFixedFontFamily": {
+      "path": "webkit.webprefs.fonts.fixed.Zyyy",
+      "type": "string"
+    },
+    "kWebKitMinimumFontSize": {
+      "path": "webkit.webprefs.minimum_font_size",
+      "type": "string"
+    },
+    "kWebKitSansSerifFontFamily": {
+      "path": "webkit.webprefs.fonts.sansserif.Zyyy",
+      "type": "string"
+    },
+    "kWebKitSerifFontFamily": {
+      "path": "webkit.webprefs.fonts.serif.Zyyy",
+      "type": "string"
+    },
+    "kWebKitStandardFontFamily": {
+      "path": "webkit.webprefs.fonts.standard.Zyyy",
+      "type": "string"
+    },
+    "kWebRTCIPHandlingPolicy": {
+      "path": "webrtc.ip_handling_policy",
+      "type": "string"
+    }
   },
 
   "chromium_local": {
-    "kHardwareAccelerationModeEnabled": "hardware_acceleration_mode.enabled"
+    "kConfirmToQuitEnabled": {
+      "path": "browser.confirm_to_quit",
+      "type": "boolean"
+    },
+    "kHardwareAccelerationModeEnabled": {
+      "path": "hardware_acceleration_mode.enabled",
+      "type": "boolean"
+    }
   }
 }

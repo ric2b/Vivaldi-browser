@@ -147,8 +147,8 @@ bool GenerateRawDelta(ConstBufferView old_image,
         int num_bytes = reference_bytes_mixer->NumBytes(type_tag.value());
         if (num_bytes) {
           ConstBufferView mixed_ref_bytes = reference_bytes_mixer->Mix(
-              type_tag.value(), old_image.begin(), equivalence.src_offset + i,
-              new_image.begin(), equivalence.dst_offset + i);
+              type_tag.value(), old_image, equivalence.src_offset + i,
+              new_image, equivalence.dst_offset + i);
           for (int j = 0; j < num_bytes; ++j) {
             int8_t diff =
                 mixed_ref_bytes[j] - old_image[equivalence.src_offset + i + j];
@@ -287,7 +287,9 @@ bool GenerateExecutableElement(ExecutableType exe_type,
   EquivalenceMap equivalences =
       CreateEquivalenceMap(old_image_index, new_image_index,
                            new_disasm->num_equivalence_iterations());
-  OffsetMapper offset_mapper(equivalences, old_image.size(), new_image.size());
+  OffsetMapper offset_mapper(equivalences,
+                             base::checked_cast<offset_t>(old_image.size()),
+                             base::checked_cast<offset_t>(new_image.size()));
 
   ReferenceDeltaSink reference_delta_sink;
   for (const auto& old_targets : old_image_index.target_pools()) {

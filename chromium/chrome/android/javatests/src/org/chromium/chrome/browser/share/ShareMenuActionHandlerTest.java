@@ -13,11 +13,12 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
-import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.test.ChromeBrowserTestRule;
-import org.chromium.content.browser.test.mock.MockRenderFrameHost;
-import org.chromium.content.browser.test.mock.MockWebContents;
+import org.chromium.chrome.test.util.SadTabRule;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.test.mock.MockRenderFrameHost;
+import org.chromium.content_public.browser.test.mock.MockWebContents;
 
 import java.util.concurrent.ExecutionException;
 
@@ -29,12 +30,16 @@ public class ShareMenuActionHandlerTest {
     @Rule
     public final ChromeBrowserTestRule mBrowserTestRule = new ChromeBrowserTestRule();
 
+    @Rule
+    public final SadTabRule mSadTabRule = new SadTabRule();
+
     @Test
     @SmallTest
     public void testShouldFetchCanonicalUrl() throws ExecutionException {
-        MockTab mockTab = ThreadUtils.runOnUiThreadBlocking(() -> { return new MockTab(); });
+        MockUrlTab mockTab = ThreadUtils.runOnUiThreadBlocking(() -> { return new MockUrlTab(); });
         MockWebContents mockWebContents = new MockWebContents();
         MockRenderFrameHost mockRenderFrameHost = new MockRenderFrameHost();
+        mSadTabRule.setTab(mockTab);
 
         // Null webContents:
         Assert.assertFalse(ShareMenuActionHandler.shouldFetchCanonicalUrl(mockTab));
@@ -58,9 +63,9 @@ public class ShareMenuActionHandlerTest {
         mockTab.isShowingInterstitialPage = false;
 
         // Disabled if showing sad tab page.
-        mockTab.isShowingSadTab = true;
+        mSadTabRule.show(true);
         Assert.assertFalse(ShareMenuActionHandler.shouldFetchCanonicalUrl(mockTab));
-        mockTab.isShowingSadTab = false;
+        mSadTabRule.show(false);
     }
 
     @Test
@@ -94,15 +99,14 @@ public class ShareMenuActionHandlerTest {
         Assert.assertEquals(httpsUrl, ShareMenuActionHandler.getUrlToShare(httpsUrl, contentUrl));
     }
 
-    private static class MockTab extends Tab {
+    private static class MockUrlTab extends MockTab {
         public WebContents webContents;
         public String url;
         public boolean isShowingErrorPage;
         public boolean isShowingInterstitialPage;
-        public boolean isShowingSadTab;
 
-        public MockTab() {
-            super(INVALID_TAB_ID, false, null);
+        public MockUrlTab() {
+            super(INVALID_TAB_ID, false);
         }
 
         @Override
@@ -123,11 +127,6 @@ public class ShareMenuActionHandlerTest {
         @Override
         public boolean isShowingInterstitialPage() {
             return isShowingInterstitialPage;
-        }
-
-        @Override
-        public boolean isShowingSadTab() {
-            return isShowingSadTab;
         }
     }
 }

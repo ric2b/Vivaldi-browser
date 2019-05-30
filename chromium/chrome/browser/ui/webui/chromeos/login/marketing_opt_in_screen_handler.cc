@@ -16,8 +16,9 @@ const char kJsScreenPath[] = "login.MarketingOptInScreen";
 
 namespace chromeos {
 
-MarketingOptInScreenHandler::MarketingOptInScreenHandler()
-    : BaseScreenHandler(kScreenId) {
+MarketingOptInScreenHandler::MarketingOptInScreenHandler(
+    JSCallsContainer* js_calls_container)
+    : BaseScreenHandler(kScreenId, js_calls_container) {
   set_call_js_prefix(kJsScreenPath);
 }
 
@@ -51,7 +52,8 @@ void MarketingOptInScreenHandler::Hide() {}
 void MarketingOptInScreenHandler::Initialize() {}
 
 void MarketingOptInScreenHandler::RegisterMessages() {
-  AddPrefixedCallback("allSet", &MarketingOptInScreenHandler::HandleAllSet);
+  AddCallback("login.MarketingOptInScreen.allSet",
+              &MarketingOptInScreenHandler::HandleAllSet);
 }
 
 void MarketingOptInScreenHandler::HandleAllSet(

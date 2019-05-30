@@ -18,6 +18,7 @@
 namespace file_manager {
 namespace file_manager_private = extensions::api::file_manager_private;
 
+using file_manager_private::DriveSyncErrorEvent;
 using file_manager_private::FileTransferStatus;
 using file_manager_private::FileWatchEvent;
 using testing::_;
@@ -67,7 +68,9 @@ testing::Matcher<const base::ListValue&> MatchFileWatchEvent(
 
 class TestDriveFsEventRouter : public DriveFsEventRouter {
  public:
-  TestDriveFsEventRouter() = default;
+  TestDriveFsEventRouter() {
+    ON_CALL(*this, IsPathWatched).WillByDefault(testing::Return(true));
+  }
 
   void DispatchEventToExtension(
       const std::string& extension_id,
@@ -81,6 +84,7 @@ class TestDriveFsEventRouter : public DriveFsEventRouter {
                void(const std::string& extension_id,
                     const std::string& name,
                     const base::ListValue& event));
+  MOCK_METHOD1(IsPathWatched, bool(const base::FilePath&));
 
   GURL ConvertDrivePathToFileSystemUrl(
       const base::FilePath& file_path,
@@ -528,6 +532,10 @@ TEST_F(DriveFsEventRouterTest, OnFilesChanged_Basic) {
         file_manager_private::CHANGE_TYPE_ADD_OR_UPDATE);
   }
 
+  EXPECT_CALL(mock(), IsPathWatched(base::FilePath("/root")))
+      .WillOnce(testing::Return(true));
+  EXPECT_CALL(mock(), IsPathWatched(base::FilePath("/other")))
+      .WillOnce(testing::Return(false));
   EXPECT_CALL(mock(),
               DispatchEventToExtensionImpl(
                   "ext", file_manager_private::OnDirectoryChanged::kEventName,
@@ -539,6 +547,8 @@ TEST_F(DriveFsEventRouterTest, OnFilesChanged_Basic) {
   changes.emplace_back(base::FilePath("/root/b"),
                        drivefs::mojom::FileChange::Type::kCreate);
   changes.emplace_back(base::FilePath("/root/c"),
+                       drivefs::mojom::FileChange::Type::kModify);
+  changes.emplace_back(base::FilePath("/other/a"),
                        drivefs::mojom::FileChange::Type::kModify);
   observer().OnFilesChanged(changes);
 }
@@ -588,6 +598,21 @@ TEST_F(DriveFsEventRouterTest, OnFilesChanged_MultipleDirectories) {
   changes.emplace_back(base::FilePath("/root/b/file"),
                        drivefs::mojom::FileChange::Type::kCreate);
   observer().OnFilesChanged(changes);
+}
+
+TEST_F(DriveFsEventRouterTest, OnError_CantUploadStorageFull) {
+  DriveSyncErrorEvent event;
+  event.type = file_manager_private::DRIVE_SYNC_ERROR_TYPE_NO_SERVER_SPACE;
+  event.file_url = "ext:/a";
+  EXPECT_CALL(
+      mock(),
+      DispatchEventToExtensionImpl(
+          "ext", file_manager_private::OnDriveSyncError::kEventName,
+          testing::MakeMatcher(new ListValueMatcher(std::move(
+              *file_manager_private::OnDriveSyncError::Create(event))))));
+
+  observer().OnError({drivefs::mojom::DriveError::Type::kCantUploadStorageFull,
+                      base::FilePath("/a")});
 }
 
 }  // namespace

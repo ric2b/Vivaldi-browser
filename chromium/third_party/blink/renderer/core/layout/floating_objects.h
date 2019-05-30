@@ -28,9 +28,10 @@
 #include <memory>
 #include "base/macros.h"
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
-#include "third_party/blink/renderer/platform/pod_free_list_arena.h"
-#include "third_party/blink/renderer/platform/pod_interval_tree.h"
+#include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/list_hash_set.h"
+#include "third_party/blink/renderer/platform/wtf/pod_free_list_arena.h"
+#include "third_party/blink/renderer/platform/wtf/pod_interval_tree.h"
 
 namespace blink {
 
@@ -45,14 +46,14 @@ class FloatingObject {
 #ifndef NDEBUG
   // Used by the PODIntervalTree for debugging the FloatingObject.
   template <class>
-  friend struct ValueToString;
+  friend struct WTF::ValueToString;
 #endif
 
   // Note that Type uses bits so you can use FloatLeftRight as a mask to query
   // for both left and right.
   enum Type { kFloatLeft = 1, kFloatRight = 2, kFloatLeftRight = 3 };
 
-  static std::unique_ptr<FloatingObject> Create(LayoutBox*);
+  static std::unique_ptr<FloatingObject> Create(LayoutBox*, Type);
 
   std::unique_ptr<FloatingObject> CopyToNewContainer(
       LayoutSize,
@@ -65,22 +66,39 @@ class FloatingObject {
   LayoutBox* GetLayoutObject() const { return layout_object_; }
 
   bool IsPlaced() const { return is_placed_; }
-  void SetIsPlaced(bool placed = true) { is_placed_ = placed; }
+  void SetIsPlaced(bool placed = true) {
+    is_placed_ = placed;
+#if DCHECK_IS_ON()
+    has_geometry_ = placed;
+#endif
+  }
+
+#if DCHECK_IS_ON()
+  void SetHasGeometry() { has_geometry_ = true; }
+#endif
+
+  bool HasGeometry() const {
+#if DCHECK_IS_ON()
+    return has_geometry_;
+#else
+    return true;
+#endif
+  }
 
   LayoutUnit X() const {
-    DCHECK(IsPlaced());
+    DCHECK(HasGeometry());
     return frame_rect_.X();
   }
   LayoutUnit MaxX() const {
-    DCHECK(IsPlaced());
+    DCHECK(HasGeometry());
     return frame_rect_.MaxX();
   }
   LayoutUnit Y() const {
-    DCHECK(IsPlaced());
+    DCHECK(HasGeometry());
     return frame_rect_.Y();
   }
   LayoutUnit MaxY() const {
-    DCHECK(IsPlaced());
+    DCHECK(HasGeometry());
     return frame_rect_.MaxY();
   }
   LayoutUnit Width() const { return frame_rect_.Width(); }
@@ -104,7 +122,7 @@ class FloatingObject {
   }
 
   const LayoutRect& FrameRect() const {
-    DCHECK(IsPlaced());
+    DCHECK(HasGeometry());
     return frame_rect_;
   }
 
@@ -130,7 +148,7 @@ class FloatingObject {
   void SetOriginatingLine(RootInlineBox* line) { originating_line_ = line; }
 
  private:
-  explicit FloatingObject(LayoutBox*);
+  FloatingObject(LayoutBox*, Type);
   FloatingObject(LayoutBox*,
                  Type,
                  const LayoutRect&,
@@ -148,6 +166,14 @@ class FloatingObject {
   unsigned is_placed_ : 1;
   unsigned is_lowest_non_overhanging_float_in_child_ : 1;
   unsigned is_in_placed_tree_ : 1;
+
+#if DCHECK_IS_ON()
+  // If set, it's safe to read out position data for this float. For LayoutNG
+  // this will always be true, while for legacy layout, it depends on whether
+  // the float IsPlaced() or not.
+  unsigned has_geometry_ : 1;
+#endif
+
   DISALLOW_COPY_AND_ASSIGN(FloatingObject);
 };
 
@@ -186,9 +212,10 @@ typedef ListHashSet<std::unique_ptr<FloatingObject>,
                     FloatingObjectHashFunctions>
     FloatingObjectSet;
 typedef FloatingObjectSet::const_iterator FloatingObjectSetIterator;
-typedef PODInterval<LayoutUnit, FloatingObject*> FloatingObjectInterval;
-typedef PODIntervalTree<LayoutUnit, FloatingObject*> FloatingObjectTree;
-typedef PODFreeListArena<PODRedBlackTree<FloatingObjectInterval>::Node>
+typedef WTF::PODInterval<LayoutUnit, FloatingObject*> FloatingObjectInterval;
+typedef WTF::PODIntervalTree<LayoutUnit, FloatingObject*> FloatingObjectTree;
+typedef WTF::PODFreeListArena<
+    WTF::PODRedBlackTree<FloatingObjectInterval>::Node>
     IntervalArena;
 typedef HashMap<LayoutBox*, std::unique_ptr<FloatingObject>>
     LayoutBoxToFloatInfoMap;
@@ -279,18 +306,20 @@ class FloatingObjects {
   DISALLOW_COPY_AND_ASSIGN(FloatingObjects);
 };
 
+}  // namespace blink
+
+namespace WTF {
 #ifndef NDEBUG
 // These structures are used by PODIntervalTree for debugging purposes.
 template <>
-struct ValueToString<LayoutUnit> {
-  static String ToString(const LayoutUnit value);
+struct ValueToString<blink::LayoutUnit> {
+  static String ToString(const blink::LayoutUnit value);
 };
 template <>
-struct ValueToString<FloatingObject*> {
-  static String ToString(const FloatingObject*);
+struct ValueToString<blink::FloatingObject*> {
+  static String ToString(const blink::FloatingObject*);
 };
 #endif
-
-}  // namespace blink
+}  // namespace WTF
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_FLOATING_OBJECTS_H_

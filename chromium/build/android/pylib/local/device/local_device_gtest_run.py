@@ -69,19 +69,12 @@ class _NullContextManager(object):
     pass
 
 
-# TODO(jbudorick): Move this inside _ApkDelegate once TestPackageApk is gone.
-def PullAppFilesImpl(device, package, files, directory):
-  device_dir = device.GetApplicationDataDirectory(package)
-  host_dir = os.path.join(directory, str(device))
-  for f in files:
-    device_file = posixpath.join(device_dir, f)
-    host_file = os.path.join(host_dir, *f.split(posixpath.sep))
-    host_file_base, ext = os.path.splitext(host_file)
-    for i in itertools.count():
-      host_file = '%s_%d%s' % (host_file_base, i, ext)
-      if not os.path.exists(host_file):
-        break
-    device.PullFile(device_file, host_file)
+def _GenerateSequentialFileNames(filename):
+  """Infinite generator of names: 'name.ext', 'name_1.ext', 'name_2.ext', ..."""
+  yield filename
+  base, ext = os.path.splitext(filename)
+  for i in itertools.count(1):
+    yield '%s_%d%s' % (base, i, ext)
 
 
 def _ExtractTestsFromFilter(gtest_filter):
@@ -134,8 +127,11 @@ class _ApkDelegate(object):
       installer.Install(device, self._test_apk_incremental_install_json,
                         apk=self._apk_helper, permissions=self._permissions)
     else:
-      device.Install(self._apk_helper, reinstall=True,
-                     permissions=self._permissions)
+      device.Install(
+          self._apk_helper,
+          allow_downgrade=True,
+          reinstall=True,
+          permissions=self._permissions)
 
   def ResultsDirectory(self, device):
     return device.GetApplicationDataDirectory(self._package)
@@ -204,7 +200,15 @@ class _ApkDelegate(object):
       return device.ReadFile(stdout_file.name).splitlines()
 
   def PullAppFiles(self, device, files, directory):
-    PullAppFilesImpl(device, self._package, files, directory)
+    device_dir = device.GetApplicationDataDirectory(self._package)
+    host_dir = os.path.join(directory, str(device))
+    for f in files:
+      device_file = posixpath.join(device_dir, f)
+      host_file = os.path.join(host_dir, *f.split(posixpath.sep))
+      for host_file in _GenerateSequentialFileNames(host_file):
+        if not os.path.exists(host_file):
+          break
+      device.PullFile(device_file, host_file)
 
   def Clear(self, device):
     device.ClearApplicationState(self._package, permissions=self._permissions)
@@ -291,6 +295,11 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
     elif self._test_instance.exe_dist_dir:
       self._delegate = _ExeDelegate(self, self._test_instance.exe_dist_dir,
                                     self._env.tool)
+    if self._test_instance.isolated_script_test_perf_output:
+      self._test_perf_output_filenames = _GenerateSequentialFileNames(
+          self._test_instance.isolated_script_test_perf_output)
+    else:
+      self._test_perf_output_filenames = itertools.repeat(None)
     # pylint: enable=redefined-variable-type
     self._crashes = set()
     self._servers = collections.defaultdict(list)
@@ -317,7 +326,11 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
             for h, d in host_device_tuples]
         dev.PushChangedFiles(
             host_device_tuples_substituted,
-            delete_device_stale=True)
+            delete_device_stale=True,
+            # Some gtest suites, e.g. unit_tests, have data dependencies that
+            # can take longer than the default timeout to push. See
+            # crbug.com/791632 for context.
+            timeout=600)
         if not host_device_tuples:
           dev.RemovePath(device_root, force=True, recursive=True, rename=True)
           dev.RunShellCommand(['mkdir', '-p', device_root], check_return=True)
@@ -398,7 +411,10 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
       if self._test_instance.wait_for_java_debugger:
         timeout = None
 
-      flags = list(self._test_instance.flags)
+      flags = [
+          f for f in self._test_instance.flags
+          if f not in ['--wait-for-debugger', '--wait-for-java-debugger']
+      ]
       flags.append('--gtest_list_tests')
 
       # TODO(crbug.com/726880): Remove retries when no longer necessary.
@@ -470,6 +486,8 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
       timeout = None
     if self._test_instance.store_tombstones:
       tombstones.ClearAllTombstones(device)
+    test_perf_output_filename = next(self._test_perf_output_filenames)
+
     with device_temp_file.DeviceTempFile(
         adb=device.adb,
         dir=self._delegate.ResultsDirectory(device),
@@ -481,8 +499,7 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
         with (contextlib_ext.Optional(
             device_temp_file.DeviceTempFile(
                 adb=device.adb, dir=self._delegate.ResultsDirectory(device)),
-            self._test_instance.isolated_script_test_perf_output)
-            ) as isolated_script_test_perf_output:
+            test_perf_output_filename)) as isolated_script_test_perf_output:
 
           flags = list(self._test_instance.flags)
           if self._test_instance.enable_xml_result_parsing:
@@ -491,7 +508,7 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
           if self._test_instance.gs_test_artifacts_bucket:
             flags.append('--test_artifacts_dir=%s' % test_artifacts_dir.name)
 
-          if self._test_instance.isolated_script_test_perf_output:
+          if test_perf_output_filename:
             flags.append('--isolated_script_test_perf_output=%s'
                          % isolated_script_test_perf_output.name)
 
@@ -533,11 +550,10 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
                   str(e))
               gtest_xml = None
 
-          if self._test_instance.isolated_script_test_perf_output:
+          if test_perf_output_filename:
             try:
-              device.PullFile(
-                  isolated_script_test_perf_output.name,
-                  self._test_instance.isolated_script_test_perf_output)
+              device.PullFile(isolated_script_test_perf_output.name,
+                              test_perf_output_filename)
             except device_errors.CommandFailedError as e:
               logging.warning(
                   'Failed to pull chartjson results %s: %s',
@@ -599,6 +615,14 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
 
   #override
   def TearDown(self):
+    # By default, teardown will invoke ADB. When receiving SIGTERM due to a
+    # timeout, there's a high probability that ADB is non-responsive. In these
+    # cases, sending an ADB command will potentially take a long time to time
+    # out. Before this happens, the process will be hard-killed for not
+    # responding to SIGTERM fast enough.
+    if self._received_sigterm:
+      return
+
     @local_device_environment.handle_shard_failures
     @trace_event.traced
     def individual_device_tear_down(dev):

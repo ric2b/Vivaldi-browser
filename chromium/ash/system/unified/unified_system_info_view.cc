@@ -9,9 +9,9 @@
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/system/date/clock_observer.h"
 #include "ash/system/enterprise/enterprise_domain_observer.h"
 #include "ash/system/model/clock_model.h"
+#include "ash/system/model/clock_observer.h"
 #include "ash/system/model/enterprise_domain_model.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/power/power_status.h"
@@ -22,6 +22,7 @@
 #include "base/i18n/time_formatting.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "chromeos/strings/grit/chromeos_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/animation/ink_drop_highlight.h"
@@ -62,6 +63,7 @@ class DateView : public views::Button,
   void Update();
 
   // views::Button:
+  gfx::Insets GetInsets() const override;
   std::unique_ptr<views::InkDrop> CreateInkDrop() override;
   std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
   std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
@@ -111,7 +113,13 @@ void DateView::Update() {
   label_->SetText(l10n_util::GetStringFUTF16(
       IDS_ASH_STATUS_TRAY_DATE, FormatDayOfWeek(now), FormatDate(now)));
   SetAccessibleName(TimeFormatFriendlyDateAndTime(now));
+  label_->NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged, true);
   NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged, true);
+}
+
+gfx::Insets DateView::GetInsets() const {
+  // This padding provides room to render the focus ring around this button.
+  return kUnifiedSystemInfoDateViewPadding;
 }
 
 std::unique_ptr<views::InkDrop> DateView::CreateInkDrop() {
@@ -218,6 +226,9 @@ void BatteryView::Update() {
   percentage_->SetVisible(!percentage_text.empty());
   separator_->SetVisible(!percentage_text.empty() && !status_text.empty());
   status_->SetVisible(!status_text.empty());
+
+  percentage_->NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged, true);
+  status_->NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged, true);
 }
 
 void BatteryView::ConfigureLabel(views::Label* label) {

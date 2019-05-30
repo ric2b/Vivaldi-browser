@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -24,6 +25,7 @@
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/psl_matching_helper.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
 using autofill::PasswordForm;
@@ -310,17 +312,17 @@ void GKRMethod::AddLogin(const PasswordForm& form, const char* app_string) {
       "submit_element", UTF16ToUTF8(form.submit_element).c_str(),
       "signon_realm", form.signon_realm.c_str(),
       "preferred", form.preferred,
-      "date_created", base::Int64ToString(date_created).c_str(),
+      "date_created", base::NumberToString(date_created).c_str(),
       "blacklisted_by_user", form.blacklisted_by_user,
       "type", form.type,
       "times_used", form.times_used,
       "scheme", form.scheme,
-      "date_synced", base::Int64ToString(date_synced).c_str(),
+      "date_synced", base::NumberToString(date_synced).c_str(),
       "display_name", UTF16ToUTF8(form.display_name).c_str(),
       "avatar_url", form.icon_url.spec().c_str(),
       // We serialize unique origins as "", in order to make other systems that
       // read from the login database happy. https://crbug.com/591310
-      "federation_url", form.federation_origin.unique()
+      "federation_url", form.federation_origin.opaque()
           ? ""
           : form.federation_origin.Serialize().c_str(),
       "should_skip_zero_click", form.skip_zero_click,
@@ -483,8 +485,8 @@ void GKRMethod::OnOperationGetList(GnomeKeyringResult result, GList* list,
 // deprecated.
 NativeBackendGnome::NativeBackendGnome(LocalProfileId id)
     : app_string_(GetProfileSpecificAppString(id)),
-      main_task_runner_(content::BrowserThread::GetTaskRunnerForThread(
-          content::BrowserThread::UI)),
+      main_task_runner_(base::CreateSingleThreadTaskRunnerWithTraits(
+          {content::BrowserThread::UI})),
       background_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
           {base::MayBlock(), base::WithBaseSyncPrimitives(),
            base::TaskPriority::USER_VISIBLE})) {}

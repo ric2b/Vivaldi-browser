@@ -23,6 +23,8 @@
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #include "ui/views/win/hwnd_util.h"
 
+#include "app/vivaldi_apptools.h"
+
 ChromeNativeAppWindowViewsWin::ChromeNativeAppWindowViewsWin()
     : glass_frame_view_(NULL), is_translucent_(false), weak_ptr_factory_(this) {
 }
@@ -81,6 +83,7 @@ void ChromeNativeAppWindowViewsWin::InitializeDefaultWindow(
 views::NonClientFrameView*
 ChromeNativeAppWindowViewsWin::CreateStandardDesktopAppFrame() {
   glass_frame_view_ = NULL;
+  if (!vivaldi::IsVivaldiRunning())
   if (ui::win::IsAeroGlassEnabled()) {
     glass_frame_view_ = new GlassAppWindowFrameViewWin(widget());
     return glass_frame_view_;

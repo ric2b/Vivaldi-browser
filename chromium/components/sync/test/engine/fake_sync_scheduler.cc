@@ -32,10 +32,6 @@ void FakeSyncScheduler::ScheduleConfiguration(
   params.ready_task.Run();
 }
 
-void FakeSyncScheduler::ScheduleClearServerData(const ClearParams& params) {
-  params.report_success_task.Run();
-}
-
 void FakeSyncScheduler::ScheduleInitialSyncNudge(ModelType model_type) {}
 
 void FakeSyncScheduler::SetNotificationsEnabled(bool notifications_enabled) {}
@@ -43,7 +39,7 @@ void FakeSyncScheduler::SetNotificationsEnabled(bool notifications_enabled) {}
 void FakeSyncScheduler::OnCredentialsUpdated() {}
 
 void FakeSyncScheduler::OnConnectionStatusChange(
-    net::NetworkChangeNotifier::ConnectionType type) {}
+    network::mojom::ConnectionType type) {}
 
 void FakeSyncScheduler::OnThrottled(const base::TimeDelta& throttle_duration) {}
 

@@ -2,13 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/bind.h"
 #include "base/ios/weak_nsobject.h"
+#include "base/bind.h"
 #include "base/mac/scoped_nsobject.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -111,24 +112,24 @@ void CopyWeakNSObjectAndPost(const WeakNSObject<NSMutableData>& weak_object,
                              scoped_refptr<SingleThreadTaskRunner> runner) {
   // Copy using constructor.
   WeakNSObject<NSMutableData> weak_copy1(weak_object);
-  runner->PostTask(FROM_HERE, Bind(&TouchWeakData, weak_copy1));
+  runner->PostTask(FROM_HERE, BindOnce(&TouchWeakData, weak_copy1));
   // Copy using assignment operator.
   WeakNSObject<NSMutableData> weak_copy2 = weak_object;
-  runner->PostTask(FROM_HERE, Bind(&TouchWeakData, weak_copy2));
+  runner->PostTask(FROM_HERE, BindOnce(&TouchWeakData, weak_copy2));
 }
 
 // Tests that the weak object can be copied on a different thread.
 TEST(WeakNSObjectTest, WeakNSObjectCopyOnOtherThread) {
-  MessageLoop loop;
+  test::ScopedTaskEnvironment scoped_task_environment;
   Thread other_thread("WeakNSObjectCopyOnOtherThread");
   other_thread.Start();
 
   scoped_nsobject<NSMutableData> data([[NSMutableData alloc] init]);
   WeakNSObject<NSMutableData> weak(data);
 
-  scoped_refptr<SingleThreadTaskRunner> runner = loop.task_runner();
+  scoped_refptr<SingleThreadTaskRunner> runner = ThreadTaskRunnerHandle::Get();
   other_thread.task_runner()->PostTask(
-      FROM_HERE, Bind(&CopyWeakNSObjectAndPost, weak, runner));
+      FROM_HERE, BindOnce(&CopyWeakNSObjectAndPost, weak, runner));
   other_thread.Stop();
   RunLoop().RunUntilIdle();
 

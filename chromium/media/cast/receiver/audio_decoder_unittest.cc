@@ -7,7 +7,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
 #include "base/sys_byteorder.h"
@@ -213,7 +213,7 @@ TEST_P(AudioDecoderTest, DecodesFramesWithVaryingDuration) {
   const int kFrameDurationMs[] = { 5, 10, 20, 40, 60 };
 
   const int kNumFrames = 10;
-  for (size_t i = 0; i < arraysize(kFrameDurationMs); ++i)
+  for (size_t i = 0; i < base::size(kFrameDurationMs); ++i)
     for (int j = 0; j < kNumFrames; ++j)
       FeedMoreAudio(base::TimeDelta::FromMilliseconds(kFrameDurationMs[i]), 0);
   WaitForAllAudioToBeDecoded();
@@ -239,14 +239,13 @@ TEST_P(AudioDecoderTest, RecoversFromDroppedFrames) {
 }
 
 #if !defined(OS_ANDROID)  // https://crbug.com/831999
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     AudioDecoderTestScenarios,
     AudioDecoderTest,
-    ::testing::Values(
-         TestScenario(CODEC_AUDIO_PCM16, 1, 8000),
-         TestScenario(CODEC_AUDIO_PCM16, 2, 48000),
-         TestScenario(CODEC_AUDIO_OPUS, 1, 8000),
-         TestScenario(CODEC_AUDIO_OPUS, 2, 48000)));
+    ::testing::Values(TestScenario(CODEC_AUDIO_PCM16, 1, 8000),
+                      TestScenario(CODEC_AUDIO_PCM16, 2, 48000),
+                      TestScenario(CODEC_AUDIO_OPUS, 1, 8000),
+                      TestScenario(CODEC_AUDIO_OPUS, 2, 48000)));
 #endif
 
 }  // namespace cast

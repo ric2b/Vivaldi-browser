@@ -6,9 +6,10 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -21,11 +22,13 @@
 #include "chrome/browser/chromeos/child_accounts/screen_time_controller_factory.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
+#include "chrome/browser/chromeos/login/demo_mode/demo_resources.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
-#include "chrome/browser/chromeos/login/lock/webui_screen_locker.h"
 #include "chrome/browser/chromeos/login/login_wizard.h"
+#include "chrome/browser/chromeos/login/screens/arc_terms_of_service_screen.h"
 #include "chrome/browser/chromeos/login/screens/sync_consent_screen.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
+#include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/app_install_event_log_manager_wrapper.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -37,7 +40,7 @@
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
@@ -63,7 +66,11 @@ bool ShouldAutoLaunchKioskApp(const base::CommandLine& command_line) {
   return command_line.HasSwitch(switches::kLoginManager) &&
          !command_line.HasSwitch(switches::kForceLoginManagerInTests) &&
          app_manager->IsAutoLaunchEnabled() &&
-         KioskAppLaunchError::Get() == KioskAppLaunchError::NONE;
+         KioskAppLaunchError::Get() == KioskAppLaunchError::NONE &&
+         // IsOobeCompleted() is needed to prevent kiosk session start in case
+         // of enterprise rollback, when keeping the enrollment, policy, not
+         // clearing TPM, but wiping stateful partition.
+         StartupUtils::IsOobeCompleted();
 }
 
 // Starts kiosk app auto launch and shows the splash screen.
@@ -119,7 +126,7 @@ void StartUserSession(Profile* user_profile, const std::string& login_user_id) {
     // In demo session, delay starting user session until the offline demo
     // session resources have been loaded.
     if (demo_session && demo_session->started() &&
-        !demo_session->offline_resources_loaded()) {
+        !demo_session->resources()->loaded()) {
       demo_session->EnsureOfflineResourcesLoaded(
           base::BindOnce(&StartUserSession, user_profile, login_user_id));
       LOG(WARNING) << "Delay demo user session start until offline demo "
@@ -134,8 +141,7 @@ void StartUserSession(Profile* user_profile, const std::string& login_user_id) {
 
     ProfileHelper::Get()->ProfileStartup(user_profile);
 
-    if (lock_screen_apps::StateController::IsEnabled())
-      lock_screen_apps::StateController::Get()->SetPrimaryProfile(user_profile);
+    lock_screen_apps::StateController::Get()->SetPrimaryProfile(user_profile);
 
     if (user->GetType() == user_manager::USER_TYPE_REGULAR) {
       // App install logs are uploaded via the user's communication channel with
@@ -145,8 +151,11 @@ void StartUserSession(Profile* user_profile, const std::string& login_user_id) {
       policy::AppInstallEventLogManagerWrapper::CreateForProfile(user_profile);
     }
     arc::ArcServiceLauncher::Get()->OnPrimaryUserProfilePrepared(user_profile);
-    crostini::CrostiniManager::GetInstance()->MaybeUpgradeCrostini(
-        user_profile);
+
+    crostini::CrostiniManager* crostini_manager =
+        crostini::CrostiniManager::GetForProfile(user_profile);
+    if (crostini_manager)
+      crostini_manager->MaybeUpgradeCrostini();
 
     if (user->GetType() == user_manager::USER_TYPE_CHILD) {
       ScreenTimeControllerFactory::GetForBrowserContext(user_profile);
@@ -187,7 +196,9 @@ void StartUserSession(Profile* user_profile, const std::string& login_user_id) {
 
   UserSessionManager::GetInstance()->CheckEolStatus(user_profile);
   tpm_firmware_update::ShowNotificationIfNeeded(user_profile);
-  SyncConsentScreen::MaybeLaunchSyncConstentSettings(user_profile);
+  ArcTermsOfServiceScreen::MaybeLaunchArcSettings(user_profile);
+  SyncConsentScreen::MaybeLaunchSyncConsentSettings(user_profile);
+  UserSessionManager::GetInstance()->StartAccountManagerMigration(user_profile);
 }
 
 }  // namespace
@@ -267,8 +278,6 @@ void ChromeSessionManager::SessionStarted() {
       content::Source<session_manager::SessionManager>(this),
       content::Details<const user_manager::User>(
           user_manager->GetActiveUser()));
-
-  chromeos::WebUIScreenLocker::RequestPreload();
 }
 
 void ChromeSessionManager::NotifyUserLoggedIn(const AccountId& user_account_id,

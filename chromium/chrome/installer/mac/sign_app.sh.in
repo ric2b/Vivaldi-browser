@@ -24,25 +24,33 @@ export -n SHELLOPTS
 ME="$(basename "${0}")"
 readonly ME
 
-if [[ ${#} -ne 5 && ${#} -ne 6  && ${#} -ne 3 ]]; then
-  echo "usage: ${ME} app_path codesign_keychain codesign_id \
-provisioning_profile entitlements_plist [--development]" >& 2
-  exit 1
-fi
-
-app_path="${1}"
-codesign_keychain="${2}"
-codesign_id="${3}"
-provisioning_profile=
-entitlements_plist=
-if [[ ${#} -ne 3 ]]; then
-provisioning_profile="${4}"
-entitlements_plist="${5}"
-fi
+# Note that |is_development| is tested for string length, not value.
 is_development=
 
-if [[ ${#} == 6 && "${6}" == "--development" ]]; then
+if [[ ${#} -eq 4 || ${#} -eq 6 ]]; then
+  app_path="${1}"
+  codesign_keychain="${2}"
+  codesign_id="${3}"
+  if [[ "${4}" == "--development" || "${6}" == "--development" ]]; then
+    is_development=1
+  fi
+elif [[ ${#} -eq 3 ]]; then
+  app_path="${1}"
+  codesign_keychain="${2}"
+  codesign_id="${3}"
+  # Vivaldi does not use entitlements_plist or provisioning_profile
+  # so using this flag to disable that part of the code
   is_development=1
+elif [[ ${#} -ne 5 ]]; then
+  echo "usage: ${ME} app_path codesign_keychain codesign_id \
+provisioning_profile entitlements_plist" >& 2
+  exit 1
+else
+  app_path="${1}"
+  codesign_keychain="${2}"
+  codesign_id="${3}"
+  provisioning_profile="${4}"
+  entitlements_plist="${5}"
 fi
 
 script_dir="$(dirname "${0}")"
@@ -57,15 +65,24 @@ versioned_dir="${contents_dir}/Versions/@VERSION@"
 browser_app="${app_path}"
 framework="${versioned_dir}/@MAC_PRODUCT_NAME@ Framework.framework"
 notification_service="${framework}/XPCServices/AlertNotificationService.xpc"
-crashpad_handler="${framework}/Helpers/crashpad_handler"
+crashpad_handler="${framework}/Helpers/chrome_crashpad_handler"
 helper_app="${versioned_dir}/@MAC_PRODUCT_NAME@ Helper.app"
 app_mode_loader_app="${framework}/Resources/app_mode_loader.app"
 app_mode_loader="${app_mode_loader_app}/Contents/MacOS/app_mode_loader"
 sparkle_framework="${browser_app}/Contents/Frameworks/Sparkle.framework"
 
+libraries_dir="${framework}/Libraries"
+libraries=(
+  "${libraries_dir}/libEGL.dylib"
+  "${libraries_dir}/libGLESv2.dylib"
+  "${libraries_dir}/libswiftshader_libEGL.dylib"
+  "${libraries_dir}/libswiftshader_libGLESv2.dylib"
+  "${libraries_dir}/WidevineCdm/_platform_specific/mac_x64/libwidevinecdm.dylib"
+)
+
 # Embed the supplied provisioning profile.
-if [[ -n "$provisioning_profile" ]]; then
-cp "${provisioning_profile}" "${contents_dir}/embedded.provisionprofile"
+if [[ -z "${is_development}" ]]; then
+  cp "${provisioning_profile}" "${contents_dir}/embedded.provisionprofile"
 fi
 
 requirement="\
@@ -81,14 +98,9 @@ codesign_cmd=(
   "${browser_app}"
   --options "${enforcement_flags_app}"
   # --resource-rules "${browser_app_rules}"
-  # --entitlements "${entitlements_plist}"
 )
-
-if [[ -n "$entitlements_plist" ]]; then
-  codesign_cmd+=( --entitlements "${entitlements_plist}" )
-fi
-
 if [[ -z "${is_development}" ]]; then
+  codesign_cmd+=(--entitlements="${entitlements_plist}")
   codesign_cmd+=( -r="${requirement}" )
 fi
 "${codesign_cmd[@]}"
@@ -113,6 +125,12 @@ codesign --verify --verbose=6 --deep --no-strict "${framework}"
 codesign --verify --verbose=6 "${framework}" #--strict
 codesign --verify --verbose=6 --deep "${helper_app}"
 codesign --verify --verbose=6 --deep "${sparkle_framework}"
+
+for library in "${libraries[@]}"; do
+  if [ -f "${library}" ]; then
+    codesign --verify --verbose=6 --deep "${library}"
+  fi
+done
 
 # Verify with spctl, which uses the same rules that Gatekeeper does for
 # validation. This is unreliable on 10.11 where syspolicyd caches assessments

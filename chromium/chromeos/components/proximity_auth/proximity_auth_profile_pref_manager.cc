@@ -10,9 +10,9 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/values.h"
-#include "chromeos/chromeos_features.h"
-#include "chromeos/components/proximity_auth/logging/logging.h"
+#include "chromeos/components/multidevice/logging/logging.h"
 #include "chromeos/components/proximity_auth/proximity_auth_pref_names.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/services/multidevice_setup/public/cpp/prefs.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -27,21 +27,15 @@ ProximityAuthProfilePrefManager::ProximityAuthProfilePrefManager(
     : pref_service_(pref_service),
       multidevice_setup_client_(multidevice_setup_client),
       weak_ptr_factory_(this) {
-  if (base::FeatureList::IsEnabled(
-          chromeos::features::kEnableUnifiedMultiDeviceSetup)) {
-    OnFeatureStatesChanged(multidevice_setup_client_->GetFeatureStates());
+  OnFeatureStatesChanged(multidevice_setup_client_->GetFeatureStates());
 
-    multidevice_setup_client_->AddObserver(this);
-  }
+  multidevice_setup_client_->AddObserver(this);
 }
 
 ProximityAuthProfilePrefManager::~ProximityAuthProfilePrefManager() {
   registrar_.RemoveAll();
 
-  if (base::FeatureList::IsEnabled(
-          chromeos::features::kEnableUnifiedMultiDeviceSetup)) {
-    multidevice_setup_client_->RemoveObserver(this);
-  }
+  multidevice_setup_client_->RemoveObserver(this);
 }
 
 // static
@@ -85,6 +79,8 @@ void ProximityAuthProfilePrefManager::StartSyncingToLocalState(
                  on_pref_changed_callback);
   registrar_.Add(proximity_auth::prefs::kProximityAuthIsChromeOSLoginEnabled,
                  on_pref_changed_callback);
+  registrar_.Add(chromeos::multidevice_setup::kSmartLockSigninAllowedPrefName,
+                 on_pref_changed_callback);
 
   SyncPrefsToLocalState();
 }
@@ -103,6 +99,9 @@ void ProximityAuthProfilePrefManager::SyncPrefsToLocalState() {
                           base::Value(GetProximityThreshold()));
   user_prefs_dict->SetKey(prefs::kProximityAuthIsChromeOSLoginEnabled,
                           base::Value(IsChromeOSLoginEnabled()));
+  user_prefs_dict->SetKey(
+      chromeos::multidevice_setup::kSmartLockSigninAllowedPrefName,
+      base::Value(IsChromeOSLoginAllowed()));
 
   DictionaryPrefUpdate update(local_state_,
                               prefs::kEasyUnlockLocalStateUserPrefs);
@@ -123,14 +122,8 @@ void ProximityAuthProfilePrefManager::SetIsEasyUnlockEnabled(
 }
 
 bool ProximityAuthProfilePrefManager::IsEasyUnlockEnabled() const {
-  if (base::FeatureList::IsEnabled(
-          chromeos::features::kEnableUnifiedMultiDeviceSetup)) {
-    return feature_state_ ==
-           chromeos::multidevice_setup::mojom::FeatureState::kEnabledByUser;
-  }
-
-  return pref_service_->GetBoolean(
-      chromeos::multidevice_setup::kSmartLockEnabledDeprecatedPrefName);
+  return feature_state_ ==
+         chromeos::multidevice_setup::mojom::FeatureState::kEnabledByUser;
 }
 
 void ProximityAuthProfilePrefManager::SetEasyUnlockEnabledStateSet() const {
@@ -173,13 +166,18 @@ ProximityAuthProfilePrefManager::GetProximityThreshold() const {
   return static_cast<ProximityThreshold>(pref_value);
 }
 
+bool ProximityAuthProfilePrefManager::IsChromeOSLoginAllowed() const {
+  return pref_service_->GetBoolean(
+      chromeos::multidevice_setup::kSmartLockSigninAllowedPrefName);
+}
+
 void ProximityAuthProfilePrefManager::SetIsChromeOSLoginEnabled(
     bool is_enabled) {
   return pref_service_->SetBoolean(prefs::kProximityAuthIsChromeOSLoginEnabled,
                                    is_enabled);
 }
 
-bool ProximityAuthProfilePrefManager::IsChromeOSLoginEnabled() {
+bool ProximityAuthProfilePrefManager::IsChromeOSLoginEnabled() const {
   return pref_service_->GetBoolean(prefs::kProximityAuthIsChromeOSLoginEnabled);
 }
 

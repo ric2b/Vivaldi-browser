@@ -11,10 +11,11 @@ import android.os.Handler;
 import android.util.Log;
 
 import org.chromium.base.Callback;
-import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.CalledByNativeUnchecked;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.base.task.PostTask;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.net.NetError;
 
 import java.security.Principal;
@@ -77,15 +78,16 @@ public class AwContentsClientBridge {
         }
 
         public void proceed(final PrivateKey privateKey, final X509Certificate[] chain) {
-            ThreadUtils.runOnUiThread(() -> proceedOnUiThread(privateKey, chain));
+            PostTask.runOrPostTask(
+                    UiThreadTaskTraits.DEFAULT, () -> proceedOnUiThread(privateKey, chain));
         }
 
         public void ignore() {
-            ThreadUtils.runOnUiThread(() -> ignoreOnUiThread());
+            PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> ignoreOnUiThread());
         }
 
         public void cancel() {
-            ThreadUtils.runOnUiThread(() -> cancelOnUiThread());
+            PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> cancelOnUiThread());
         }
 
         private void proceedOnUiThread(PrivateKey privateKey, X509Certificate[] chain) {
@@ -157,8 +159,9 @@ public class AwContentsClientBridge {
             return false;
         }
         final SslError sslError = SslUtil.sslErrorFromNetErrorCode(certError, cert, url);
-        final Callback<Boolean> callback =
-                value -> ThreadUtils.runOnUiThread(() -> proceedSslError(value.booleanValue(), id));
+        final Callback<Boolean> callback = value
+                -> PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT,
+                        () -> proceedSslError(value.booleanValue(), id));
         // Post the application callback back to the current thread to ensure the application
         // callback is executed without any native code on the stack. This so that any exception
         // thrown by the application callback won't have to be propagated through a native call
@@ -274,19 +277,12 @@ public class AwContentsClientBridge {
     @CalledByNative
     private void onReceivedError(
             // WebResourceRequest
-            String url, boolean isMainFrame, boolean hasUserGesture, String method,
-            String[] requestHeaderNames, String[] requestHeaderValues,
+            String url, boolean isMainFrame, boolean hasUserGesture, boolean isRendererInitiated,
+            String method, String[] requestHeaderNames, String[] requestHeaderValues,
             // WebResourceError
             int errorCode, String description, boolean safebrowsingHit) {
-        AwContentsClient.AwWebResourceRequest request = new AwContentsClient.AwWebResourceRequest();
-        request.url = url;
-        request.isMainFrame = isMainFrame;
-        request.hasUserGesture = hasUserGesture;
-        request.method = method;
-        request.requestHeaders = new HashMap<String, String>(requestHeaderNames.length);
-        for (int i = 0; i < requestHeaderNames.length; ++i) {
-            request.requestHeaders.put(requestHeaderNames[i], requestHeaderValues[i]);
-        }
+        AwContentsClient.AwWebResourceRequest request = new AwContentsClient.AwWebResourceRequest(
+                url, isMainFrame, hasUserGesture, method, requestHeaderNames, requestHeaderValues);
         AwContentsClient.AwWebResourceError error = new AwContentsClient.AwWebResourceError();
         error.errorCode = errorCode;
         error.description = description;
@@ -308,6 +304,10 @@ public class AwContentsClientBridge {
             } else {
                 error.errorCode = ErrorCodeConversionHelper.convertErrorCode(error.errorCode);
             }
+            if (request.isMainFrame
+                    && AwFeatureList.pageStartedOnCommitEnabled(isRendererInitiated)) {
+                mClient.getCallbackHelper().postOnPageStarted(request.url);
+            }
             mClient.getCallbackHelper().postOnReceivedError(request, error);
             if (request.isMainFrame) {
                 // Need to call onPageFinished after onReceivedError for backwards compatibility
@@ -324,20 +324,13 @@ public class AwContentsClientBridge {
             String url, boolean isMainFrame, boolean hasUserGesture, String method,
             String[] requestHeaderNames, String[] requestHeaderValues, int threatType,
             final int requestId) {
-        AwContentsClient.AwWebResourceRequest request = new AwContentsClient.AwWebResourceRequest();
-        request.url = url;
-        request.isMainFrame = isMainFrame;
-        request.hasUserGesture = hasUserGesture;
-        request.method = method;
-        request.requestHeaders = new HashMap<String, String>(requestHeaderNames.length);
-        for (int i = 0; i < requestHeaderNames.length; ++i) {
-            request.requestHeaders.put(requestHeaderNames[i], requestHeaderValues[i]);
-        }
+        AwContentsClient.AwWebResourceRequest request = new AwContentsClient.AwWebResourceRequest(
+                url, isMainFrame, hasUserGesture, method, requestHeaderNames, requestHeaderValues);
 
         // TODO(ntfschr): remove clang-format directives once crbug/764582 is resolved
         // clang-format off
         Callback<AwSafeBrowsingResponse> callback =
-                response -> ThreadUtils.runOnUiThread(
+                response -> PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT,
                         () -> nativeTakeSafeBrowsingAction(mNativeContentsClientBridge,
                                 response.action(), response.reporting(), requestId));
         // clang-format on
@@ -354,15 +347,8 @@ public class AwContentsClientBridge {
             // WebResourceResponse
             String mimeType, String encoding, int statusCode, String reasonPhrase,
             String[] responseHeaderNames, String[] responseHeaderValues) {
-        AwContentsClient.AwWebResourceRequest request = new AwContentsClient.AwWebResourceRequest();
-        request.url = url;
-        request.isMainFrame = isMainFrame;
-        request.hasUserGesture = hasUserGesture;
-        request.method = method;
-        request.requestHeaders = new HashMap<String, String>(requestHeaderNames.length);
-        for (int i = 0; i < requestHeaderNames.length; ++i) {
-            request.requestHeaders.put(requestHeaderNames[i], requestHeaderValues[i]);
-        }
+        AwContentsClient.AwWebResourceRequest request = new AwContentsClient.AwWebResourceRequest(
+                url, isMainFrame, hasUserGesture, method, requestHeaderNames, requestHeaderValues);
         Map<String, String> responseHeaders =
                 new HashMap<String, String>(responseHeaderNames.length);
         // Note that we receive un-coalesced response header lines, thus we need to combine

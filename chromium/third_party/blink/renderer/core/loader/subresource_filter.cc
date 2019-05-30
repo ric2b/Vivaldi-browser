@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
 namespace blink {
@@ -26,7 +27,7 @@ String GetErrorStringForDisallowedLoad(const KURL& url) {
   builder.Append(url.GetString());
   builder.Append(
       " on this site because this site tends to show ads that interrupt, "
-      "distract, or prevent user control. Learn more at "
+      "distract, mislead, or prevent user control. Learn more at "
       "https://www.chromestatus.com/feature/5738264052891648");
   return builder.ToString();
 }
@@ -37,20 +38,31 @@ String GetErrorStringForDisallowedLoad(const KURL& url) {
 SubresourceFilter* SubresourceFilter::Create(
     ExecutionContext& execution_context,
     std::unique_ptr<WebDocumentSubresourceFilter> filter) {
-  return new SubresourceFilter(&execution_context, std::move(filter));
+  return MakeGarbageCollected<SubresourceFilter>(&execution_context,
+                                                 std::move(filter));
 }
 
 SubresourceFilter::SubresourceFilter(
     ExecutionContext* execution_context,
     std::unique_ptr<WebDocumentSubresourceFilter> subresource_filter)
     : execution_context_(execution_context),
-      subresource_filter_(std::move(subresource_filter)) {}
+      subresource_filter_(std::move(subresource_filter)) {
+  DCHECK(subresource_filter_);
+  // Report the main resource as an ad if the subresource filter is
+  // associated with an ad subframe.
+  if (auto* document = DynamicTo<Document>(execution_context_.Get())) {
+    auto* loader = document->Loader();
+    if (document->GetFrame()->IsAdSubframe()) {
+      ReportAdRequestId(loader->GetResponse().RequestId());
+    }
+  }
+}
 
 SubresourceFilter::~SubresourceFilter() = default;
 
 bool SubresourceFilter::AllowLoad(
     const KURL& resource_url,
-    WebURLRequest::RequestContext request_context,
+    mojom::RequestContextType request_context,
     SecurityViolationReportingPolicy reporting_policy) {
   // TODO(csharrison): Implement a caching layer here which is a HashMap of
   // Pair<url string, context> -> LoadPolicy.
@@ -85,10 +97,7 @@ bool SubresourceFilter::AllowWebSocketConnection(const KURL& url) {
 
 bool SubresourceFilter::IsAdResource(
     const KURL& resource_url,
-    WebURLRequest::RequestContext request_context) {
-  if (subresource_filter_->GetIsAssociatedWithAdSubframe())
-    return true;
-
+    mojom::RequestContextType request_context) {
   WebDocumentSubresourceFilter::LoadPolicy load_policy;
   if (last_resource_check_result_.first ==
       std::make_pair(resource_url, request_context)) {
@@ -99,6 +108,10 @@ bool SubresourceFilter::IsAdResource(
   }
 
   return load_policy != WebDocumentSubresourceFilter::kAllow;
+}
+
+void SubresourceFilter::ReportAdRequestId(int request_id) {
+  subresource_filter_->ReportAdRequestId(request_id);
 }
 
 void SubresourceFilter::ReportLoad(
@@ -117,7 +130,7 @@ void SubresourceFilter::ReportLoad(
       // warning in Lighthouse.
       if (subresource_filter_->ShouldLogToConsole()) {
         execution_context_->AddConsoleMessage(ConsoleMessage::Create(
-            kOtherMessageSource, kErrorMessageLevel,
+            kOtherMessageSource, mojom::ConsoleMessageLevel::kError,
             GetErrorStringForDisallowedLoad(resource_url)));
       }
       FALLTHROUGH;
@@ -125,8 +138,8 @@ void SubresourceFilter::ReportLoad(
       // TODO(csharrison): Consider posting a task to the main thread from
       // worker thread, or adding support for DidObserveLoadingBehavior to
       // ExecutionContext.
-      if (execution_context_->IsDocument()) {
-        if (DocumentLoader* loader = ToDocument(execution_context_)->Loader()) {
+      if (auto* document = DynamicTo<Document>(execution_context_.Get())) {
+        if (DocumentLoader* loader = document->Loader()) {
           loader->DidObserveLoadingBehavior(
               kWebLoadingBehaviorSubresourceFilterMatch);
         }

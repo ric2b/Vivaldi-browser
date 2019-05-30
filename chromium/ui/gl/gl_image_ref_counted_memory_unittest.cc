@@ -28,8 +28,7 @@ class GLImageRefCountedMemoryTestDelegate : public GLImageTestDelegateBase {
         size.width(), size.height(),
         static_cast<int>(RowSizeForBufferFormat(size.width(), format, 0)), 0,
         format, color, &bytes->data().front());
-    scoped_refptr<GLImageRefCountedMemory> image(new GLImageRefCountedMemory(
-        size, GLImageMemory::GetInternalFormatForTesting(format)));
+    auto image = base::MakeRefCounted<GLImageRefCountedMemory>(size);
     bool rv = image->Initialize(bytes.get(), format);
     EXPECT_TRUE(rv);
     return image;
@@ -46,13 +45,13 @@ using GLImageTestTypes = testing::Types<
     GLImageRefCountedMemoryTestDelegate<gfx::BufferFormat::BGRX_8888>,
     GLImageRefCountedMemoryTestDelegate<gfx::BufferFormat::BGRA_8888>>;
 
-INSTANTIATE_TYPED_TEST_CASE_P(GLImageRefCountedMemory,
-                              GLImageTest,
-                              GLImageTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(GLImageRefCountedMemory,
+                               GLImageTest,
+                               GLImageTestTypes);
 
-INSTANTIATE_TYPED_TEST_CASE_P(GLImageRefCountedMemory,
-                              GLImageCopyTest,
-                              GLImageTestTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P(GLImageRefCountedMemory,
+                               GLImageCopyTest,
+                               GLImageTestTypes);
 
 }  // namespace
 }  // namespace gl

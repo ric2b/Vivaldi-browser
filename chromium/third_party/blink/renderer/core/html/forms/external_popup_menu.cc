@@ -73,7 +73,7 @@ ExternalPopupMenu::ExternalPopupMenu(LocalFrame& frame,
 
 ExternalPopupMenu::~ExternalPopupMenu() = default;
 
-void ExternalPopupMenu::Trace(blink::Visitor* visitor) {
+void ExternalPopupMenu::Trace(Visitor* visitor) {
   visitor->Trace(owner_element_);
   visitor->Trace(local_frame_);
   PopupMenu::Trace(visitor);
@@ -133,7 +133,8 @@ void ExternalPopupMenu::Show() {
 }
 
 void ExternalPopupMenu::DispatchEvent(TimerBase*) {
-  web_view_.HandleInputEvent(blink::WebCoalescedInputEvent(*synthetic_event_));
+  web_view_.MainFrameWidget()->HandleInputEvent(
+      blink::WebCoalescedInputEvent(*synthetic_event_));
   synthetic_event_.reset();
 }
 
@@ -212,15 +213,16 @@ void ExternalPopupMenu::DidAcceptIndices(const WebVector<int>& indices) {
   HTMLSelectElement* owner_element = owner_element_;
   owner_element->PopupDidHide();
 
-  if (indices.size() == 0) {
+  if (indices.empty()) {
     owner_element->SelectOptionByPopup(-1);
   } else if (!owner_element->IsMultiple()) {
     owner_element->SelectOptionByPopup(
         ToPopupMenuItemIndex(indices[indices.size() - 1], *owner_element));
   } else {
     Vector<int> list_indices;
-    list_indices.ReserveCapacity(indices.size());
-    for (size_t i = 0; i < indices.size(); ++i)
+    wtf_size_t list_count = SafeCast<wtf_size_t>(indices.size());
+    list_indices.ReserveCapacity(list_count);
+    for (wtf_size_t i = 0; i < list_count; ++i)
       list_indices.push_back(ToPopupMenuItemIndex(indices[i], *owner_element));
     owner_element->SelectMultipleOptionsByPopup(list_indices);
   }
@@ -238,10 +240,10 @@ void ExternalPopupMenu::GetPopupMenuInfo(WebPopupMenuInfo& info,
                                          HTMLSelectElement& owner_element) {
   const HeapVector<Member<HTMLElement>>& list_items =
       owner_element.GetListItems();
-  size_t item_count = list_items.size();
-  size_t count = 0;
+  wtf_size_t item_count = list_items.size();
+  wtf_size_t count = 0;
   Vector<WebMenuItemInfo> items(item_count);
-  for (size_t i = 0; i < item_count; ++i) {
+  for (wtf_size_t i = 0; i < item_count; ++i) {
     if (owner_element.ItemIsDisplayNone(*list_items[i]))
       continue;
 
@@ -288,7 +290,7 @@ int ExternalPopupMenu::ToPopupMenuItemIndex(int external_popup_menu_item_index,
 
   int index_tracker = 0;
   const HeapVector<Member<HTMLElement>>& items = owner_element.GetListItems();
-  for (int i = 0; i < static_cast<int>(items.size()); ++i) {
+  for (wtf_size_t i = 0; i < items.size(); ++i) {
     if (owner_element.ItemIsDisplayNone(*items[i]))
       continue;
     if (index_tracker++ == external_popup_menu_item_index)
@@ -303,12 +305,12 @@ int ExternalPopupMenu::ToExternalPopupMenuItemIndex(
   if (popup_menu_item_index < 0)
     return popup_menu_item_index;
 
-  size_t index_tracker = 0;
+  int index_tracker = 0;
   const HeapVector<Member<HTMLElement>>& items = owner_element.GetListItems();
-  for (int i = 0; i < static_cast<int>(items.size()); ++i) {
+  for (wtf_size_t i = 0; i < items.size(); ++i) {
     if (owner_element.ItemIsDisplayNone(*items[i]))
       continue;
-    if (popup_menu_item_index == i)
+    if (popup_menu_item_index == static_cast<int>(i))
       return index_tracker;
     ++index_tracker;
   }

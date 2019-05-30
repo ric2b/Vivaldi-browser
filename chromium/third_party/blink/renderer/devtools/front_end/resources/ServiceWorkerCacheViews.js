@@ -55,10 +55,30 @@ Resources.ServiceWorkerCacheView = class extends UI.SimpleView {
     this._deleteSelectedButton.addEventListener(UI.ToolbarButton.Events.Click, () => this._deleteButtonClicked(null));
     editorToolbar.appendToolbarItem(this._deleteSelectedButton);
 
+    const entryPathFilterBox = new UI.ToolbarInput(ls`Filter by Path`, 1);
+    editorToolbar.appendToolbarItem(entryPathFilterBox);
+    const entryPathFilterThrottler = new Common.Throttler(300);
+    this._entryPathFilter = '';
+    entryPathFilterBox.addEventListener(UI.ToolbarInput.Event.TextChanged, () => {
+      entryPathFilterThrottler.schedule(() => {
+        this._entryPathFilter = entryPathFilterBox.value();
+        this._skipCount = 0;
+        return this._updateData(true);
+      });
+    });
+
     this._pageSize = 50;
     this._skipCount = 0;
 
     this.update(cache);
+  }
+
+  _resetDataGrid() {
+    if (this._dataGrid)
+      this._dataGrid.asWidget().detach();
+    this._dataGrid = this._createDataGrid();
+    this._splitWidget.setSidebarWidget(this._dataGrid.asWidget());
+    this._skipCount = 0;
   }
 
   /**
@@ -98,6 +118,7 @@ Resources.ServiceWorkerCacheView = class extends UI.SimpleView {
   _createDataGrid() {
     const columns = /** @type {!Array<!DataGrid.DataGrid.ColumnDescriptor>} */ ([
       {id: 'path', title: Common.UIString('Path'), weight: 4, sortable: true},
+      {id: 'responseType', title: ls`Response-Type`, weight: 1, align: DataGrid.DataGrid.Align.Right, sortable: true},
       {id: 'contentType', title: Common.UIString('Content-Type'), weight: 1, sortable: true}, {
         id: 'contentLength',
         title: Common.UIString('Content-Length'),
@@ -184,12 +205,7 @@ Resources.ServiceWorkerCacheView = class extends UI.SimpleView {
    */
   update(cache) {
     this._cache = cache;
-
-    if (this._dataGrid)
-      this._dataGrid.asWidget().detach();
-    this._dataGrid = this._createDataGrid();
-    this._splitWidget.setSidebarWidget(this._dataGrid.asWidget());
-    this._skipCount = 0;
+    this._resetDataGrid();
     this._updateData(true);
   }
 
@@ -214,7 +230,7 @@ Resources.ServiceWorkerCacheView = class extends UI.SimpleView {
     for (const entry of entries) {
       let node = oldEntries.get(entry.requestURL);
       if (!node || node.data.responseTime !== entry.responseTime) {
-        node = new Resources.ServiceWorkerCacheView.DataGridNode(this._createRequest(entry));
+        node = new Resources.ServiceWorkerCacheView.DataGridNode(this._createRequest(entry), entry.responseType);
         node.selectable = true;
       }
       rootNode.appendChild(node);
@@ -246,7 +262,13 @@ Resources.ServiceWorkerCacheView = class extends UI.SimpleView {
     }
     this._lastPageSize = pageSize;
     this._lastSkipCount = skipCount;
-    this._model.loadCacheData(this._cache, skipCount, pageSize, this._updateDataCallback.bind(this, skipCount));
+
+    return new Promise(resolve => {
+      this._model.loadCacheData(this._cache, skipCount, pageSize, this._entryPathFilter, (entries, hasMore) => {
+        this._updateDataCallback(skipCount, entries, hasMore);
+        resolve();
+      });
+    });
   }
 
   /**
@@ -318,7 +340,7 @@ Resources.ServiceWorkerCacheView = class extends UI.SimpleView {
   async _requestContent(request) {
     const isText = request.resourceType().isTextType();
     const contentData = {error: null, content: null, encoded: !isText};
-    const response = await this._cache.requestCachedResponse(request.url());
+    const response = await this._cache.requestCachedResponse(request.url(), request.requestHeaders());
     if (response)
       contentData.content = isText ? window.atob(response.body) : response.body;
     return contentData;
@@ -335,13 +357,15 @@ Resources.ServiceWorkerCacheView._RESPONSE_CACHE_SIZE = 10;
 Resources.ServiceWorkerCacheView.DataGridNode = class extends DataGrid.DataGridNode {
   /**
    * @param {!SDK.NetworkRequest} request
+   * @param {!Protocol.CacheStorage.CachedResponseType} responseType
    */
-  constructor(request) {
+  constructor(request, responseType) {
     super(request);
     this._path = Common.ParsedURL.extractPath(request.url());
     if (!this._path)
       this._path = request.url();
     this._request = request;
+    this._responseType = responseType;
   }
 
   /**
@@ -352,14 +376,22 @@ Resources.ServiceWorkerCacheView.DataGridNode = class extends DataGrid.DataGridN
   createCell(columnId) {
     const cell = this.createTD(columnId);
     let value;
-    if (columnId === 'path')
+    if (columnId === 'path') {
       value = this._path;
-    else if (columnId === 'contentType')
+    } else if (columnId === 'responseType') {
+      if (this._responseType === 'opaqueResponse')
+        value = 'opaque';
+      else if (this._responseType === 'opaqueRedirect')
+        value = 'opaqueredirect';
+      else
+        value = this._responseType;
+    } else if (columnId === 'contentType') {
       value = this._request.mimeType;
-    else if (columnId === 'contentLength')
+    } else if (columnId === 'contentLength') {
       value = (this._request.resourceSize | 0).toLocaleString('en-US');
-    else if (columnId === 'responseTime')
+    } else if (columnId === 'responseTime') {
       value = new Date(this._request.endTime * 1000).toLocaleString();
+    }
     DataGrid.DataGrid.setElementText(cell, value || '', true);
     return cell;
   }

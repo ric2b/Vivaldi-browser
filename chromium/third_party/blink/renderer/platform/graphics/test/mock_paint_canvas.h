@@ -9,22 +9,20 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_flags.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_image.h"
-#include "third_party/blink/renderer/platform/graphics/paint/paint_text_blob.h"
-#include "third_party/skia/include/core/SkMetaData.h"
+
+namespace cc {
+class SkottieWrapper;
+}  // namespace cc
 
 namespace blink {
 
 class MockPaintCanvas : public cc::PaintCanvas {
  public:
-  MOCK_METHOD0(getMetaData, SkMetaData&());
   MOCK_CONST_METHOD0(imageInfo, SkImageInfo());
   MOCK_METHOD0(flush, void());
   MOCK_METHOD0(save, int());
   MOCK_METHOD2(saveLayer, int(const SkRect* bounds, const PaintFlags* flags));
-  MOCK_METHOD3(saveLayerAlpha,
-               int(const SkRect* bounds,
-                   uint8_t alpha,
-                   bool preserve_lcd_text_requests));
+  MOCK_METHOD2(saveLayerAlpha, int(const SkRect* bounds, uint8_t alpha));
   MOCK_METHOD0(restore, void());
   MOCK_CONST_METHOD0(getSaveCount, int());
   MOCK_METHOD1(restoreToCount, void(int save_count));
@@ -76,16 +74,24 @@ class MockPaintCanvas : public cc::PaintCanvas {
                     const SkRect& dst,
                     const PaintFlags* flags,
                     SrcRectConstraint constraint));
+  MOCK_METHOD3(drawSkottie,
+               void(scoped_refptr<cc::SkottieWrapper> skottie,
+                    const SkRect& dst,
+                    float t));
   MOCK_METHOD4(drawBitmap,
                void(const SkBitmap& bitmap,
                     SkScalar left,
                     SkScalar top,
                     const PaintFlags* flags));
-  MOCK_METHOD4(drawTextBlob,
-               void(scoped_refptr<PaintTextBlob>,
+  MOCK_METHOD4(
+      drawTextBlob,
+      void(sk_sp<SkTextBlob>, SkScalar x, SkScalar y, const PaintFlags& flags));
+  MOCK_METHOD5(drawTextBlob,
+               void(sk_sp<SkTextBlob>,
                     SkScalar x,
                     SkScalar y,
-                    const PaintFlags& flags));
+                    const PaintFlags& flags,
+                    const cc::NodeHolder& holder));
   MOCK_METHOD1(drawPicture, void(sk_sp<const PaintRecord> record));
   MOCK_CONST_METHOD0(isClipEmpty, bool());
   MOCK_CONST_METHOD0(isClipRect, bool());
@@ -95,6 +101,8 @@ class MockPaintCanvas : public cc::PaintCanvas {
                void(AnnotationType type,
                     const SkRect& rect,
                     sk_sp<SkData> data));
+  MOCK_METHOD0(GetPrintingMetafile, printing::MetafileSkia*());
+  MOCK_METHOD1(SetPrintingMetafile, void(printing::MetafileSkia*));
 };
 
 }  // namespace blink

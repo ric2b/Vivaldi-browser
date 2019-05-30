@@ -9,12 +9,14 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/single_thread_task_runner.h"
 #include "cc/trees/layer_tree_frame_sink_client.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/service/display/direct_renderer.h"
 #include "components/viz/service/display/output_surface.h"
+#include "components/viz/service/display/skia_output_surface.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 
@@ -45,6 +47,7 @@ TestLayerTreeFrameSink::TestLayerTreeFrameSink(
       client_provided_begin_frame_source_(begin_frame_source),
       external_begin_frame_source_(this),
       weak_ptr_factory_(this) {
+  parent_local_surface_id_allocator_->GenerateId();
 }
 
 TestLayerTreeFrameSink::~TestLayerTreeFrameSink() {
@@ -74,8 +77,16 @@ bool TestLayerTreeFrameSink::BindToClient(
   frame_sink_manager_ =
       std::make_unique<FrameSinkManagerImpl>(shared_bitmap_manager_.get());
 
-  std::unique_ptr<OutputSurface> display_output_surface =
-      test_client_->CreateDisplayOutputSurface(context_provider());
+  std::unique_ptr<OutputSurface> display_output_surface;
+  SkiaOutputSurface* display_skia_output_surface = nullptr;
+  if (renderer_settings_.use_skia_renderer) {
+    auto output_surface = test_client_->CreateDisplaySkiaOutputSurface();
+    display_skia_output_surface = output_surface.get();
+    display_output_surface = std::move(output_surface);
+  } else {
+    display_output_surface =
+        test_client_->CreateDisplayOutputSurface(context_provider());
+  }
 
   std::unique_ptr<DisplayScheduler> scheduler;
   if (!synchronous_composite_) {
@@ -90,7 +101,8 @@ bool TestLayerTreeFrameSink::BindToClient(
       begin_frame_source_ = std::make_unique<DelayBasedBeginFrameSource>(
           std::make_unique<DelayBasedTimeSource>(compositor_task_runner_.get()),
           BeginFrameSource::kNotRestartableId);
-      begin_frame_source_->SetAuthoritativeVSyncInterval(
+      begin_frame_source_->OnUpdateVSyncParameters(
+          base::TimeTicks::Now(),
           base::TimeDelta::FromMilliseconds(1000.f / refresh_rate_));
       display_begin_frame_source_ = begin_frame_source_.get();
     }
@@ -102,7 +114,7 @@ bool TestLayerTreeFrameSink::BindToClient(
   display_ = std::make_unique<Display>(
       shared_bitmap_manager_.get(), renderer_settings_, frame_sink_id_,
       std::move(display_output_surface), std::move(scheduler),
-      compositor_task_runner_);
+      compositor_task_runner_, display_skia_output_surface);
 
   constexpr bool is_root = true;
   constexpr bool needs_sync_points = true;
@@ -154,7 +166,9 @@ void TestLayerTreeFrameSink::SetLocalSurfaceId(
   test_client_->DisplayReceivedLocalSurfaceId(local_surface_id);
 }
 
-void TestLayerTreeFrameSink::SubmitCompositorFrame(CompositorFrame frame) {
+void TestLayerTreeFrameSink::SubmitCompositorFrame(CompositorFrame frame,
+                                                   bool hit_test_data_changed,
+                                                   bool show_hit_test_borders) {
   DCHECK(frame.metadata.begin_frame_ack.has_damage);
   DCHECK_LE(BeginFrameArgs::kStartingFrameNumber,
             frame.metadata.begin_frame_ack.sequence_number);
@@ -163,11 +177,15 @@ void TestLayerTreeFrameSink::SubmitCompositorFrame(CompositorFrame frame) {
   gfx::Size frame_size = frame.size_in_pixels();
   float device_scale_factor = frame.device_scale_factor();
   LocalSurfaceId local_surface_id =
-      parent_local_surface_id_allocator_->GetCurrentLocalSurfaceId();
+      parent_local_surface_id_allocator_->GetCurrentLocalSurfaceIdAllocation()
+          .local_surface_id();
 
   if (frame_size != display_size_ ||
       device_scale_factor != device_scale_factor_) {
-    local_surface_id = parent_local_surface_id_allocator_->GenerateId();
+    parent_local_surface_id_allocator_->GenerateId();
+    local_surface_id =
+        parent_local_surface_id_allocator_->GetCurrentLocalSurfaceIdAllocation()
+            .local_surface_id();
     display_->SetLocalSurfaceId(local_surface_id, device_scale_factor);
     display_->Resize(frame_size);
     display_size_ = frame_size;
@@ -233,13 +251,11 @@ void TestLayerTreeFrameSink::DidReceiveCompositorFrameAck(
   client_->DidReceiveCompositorFrameAck();
 }
 
-void TestLayerTreeFrameSink::DidPresentCompositorFrame(
-    uint32_t presentation_token,
-    const gfx::PresentationFeedback& feedback) {
-  client_->DidPresentCompositorFrame(presentation_token, feedback);
-}
-
-void TestLayerTreeFrameSink::OnBeginFrame(const BeginFrameArgs& args) {
+void TestLayerTreeFrameSink::OnBeginFrame(
+    const BeginFrameArgs& args,
+    const base::flat_map<uint32_t, gfx::PresentationFeedback>& feedbacks) {
+  for (const auto& pair : feedbacks)
+    client_->DidPresentCompositorFrame(pair.first, pair.second);
   external_begin_frame_source_.OnBeginFrame(args);
 }
 
@@ -256,7 +272,7 @@ void TestLayerTreeFrameSink::DisplayOutputSurfaceLost() {
 
 void TestLayerTreeFrameSink::DisplayWillDrawAndSwap(
     bool will_draw_and_swap,
-    const RenderPassList& render_passes) {
+    RenderPassList* render_passes) {
   test_client_->DisplayWillDrawAndSwap(will_draw_and_swap, render_passes);
 }
 

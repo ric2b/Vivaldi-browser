@@ -8,9 +8,6 @@
 // other declarations
 
  public:
-  void InitListeners();
-  bool OnMouseEvent(const blink::WebMouseEvent& mouse_event);
-
   void ShowPageInfo(gfx::Point pos);
 
   void ExtendedLoadProgressChanged(content::WebContents* source,
@@ -32,7 +29,7 @@
   void BeforeUnloadFired(content::WebContents* web_contents, bool proceed,
                          bool* proceed_to_fire_unload) override;
   // From WebContentsObserver, avoid compile error on the above override.
-  void BeforeUnloadFired(const base::TimeTicks& proceed_time) override {}
+  void BeforeUnloadFired(bool proceed, const base::TimeTicks& proceed_time) override {}
 
   // Vivaldi customs below
   bool IsVivaldiMail();
@@ -68,7 +65,8 @@
   // WebContentsDelegate
   void ShowRepostFormWarningDialog(content::WebContents* source) override;
   bool HasOwnerShipOfContents() override;
-  gfx::Size EnterPictureInPicture(const viz::SurfaceId&,
+  gfx::Size EnterPictureInPicture(content::WebContents* web_contents,
+                                  const viz::SurfaceId&,
                                   const gfx::Size& natural_size) override;
   void ExitPictureInPicture() override;
 
@@ -98,20 +96,6 @@
 
   // vivaldi addition:
   bool IsMouseGesturesEnabled() const;
-  bool IsRockerGesturesEnabled() const;
-
-  // Store mouse down actions until up is registered.
-  bool has_left_mousebutton_down_;
-  bool has_right_mousebutton_down_;
-  bool eat_next_right_mouseup_;
-
-  // Stores the current RenderViewHost, to ensure only one mouse event callback
-  // per RenderViewHost
-  content::RenderViewHost* current_host_;
-
-  int mousedown_x_;
-  int mousedown_y_;
-  static bool gesture_recording_;
 
   bool is_visible_;
   bool is_fullscreen_;
@@ -163,7 +147,5 @@
   content::RenderWidgetHost::MouseEventCallback mouseevent_callback_;
 
   int inspecting_tab_id_ = 0;
-
-  scoped_refptr<extensions::DevtoolsConnectorItem> connector_item_;
 
 // };

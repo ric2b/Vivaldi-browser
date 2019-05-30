@@ -3,7 +3,10 @@
 // found in the LICENSE file.
 
 #include "base/android/application_status_listener.h"
+#include "base/android/build_info.h"
 #include "base/base_switches.h"
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/viz/common/features.h"
 #include "content/browser/browser_main_loop.h"
@@ -11,8 +14,8 @@
 #include "content/browser/renderer_host/compositor_impl_android.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/common/gpu_stream_constants.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/gpu_stream_constants.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -20,6 +23,7 @@
 #include "content/test/content_browser_test_utils_internal.h"
 #include "content/test/gpu_browsertest_helpers.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/config/gpu_finch_features.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/android/window_android.h"
@@ -51,8 +55,8 @@ class CompositorImplBrowserTest
         break;
       case CompositorImplMode::kVizSkDDL:
         scoped_feature_list_.InitWithFeatures(
-            {features::kVizDisplayCompositor,
-             features::kUseSkiaDeferredDisplayList, features::kUseSkiaRenderer},
+            {features::kVizDisplayCompositor, features::kUseSkiaRenderer,
+             features::kDefaultEnableOopRasterization},
             {});
         break;
     }
@@ -93,11 +97,11 @@ class CompositorImplBrowserTest
   DISALLOW_COPY_AND_ASSIGN(CompositorImplBrowserTest);
 };
 
-INSTANTIATE_TEST_CASE_P(P,
-                        CompositorImplBrowserTest,
-                        ::testing::Values(CompositorImplMode::kNormal,
-                                          CompositorImplMode::kViz,
-                                          CompositorImplMode::kVizSkDDL));
+INSTANTIATE_TEST_SUITE_P(P,
+                         CompositorImplBrowserTest,
+                         ::testing::Values(CompositorImplMode::kNormal,
+                                           CompositorImplMode::kViz,
+                                           CompositorImplMode::kVizSkDDL));
 
 class CompositorImplLowEndBrowserTest : public CompositorImplBrowserTest {
  public:
@@ -111,9 +115,9 @@ class CompositorImplLowEndBrowserTest : public CompositorImplBrowserTest {
 // Viz on android is not yet compatible with in-process GPU. Only run in
 // kNormal mode.
 // TODO(ericrk): Make this work everywhere. https://crbug.com/851643
-INSTANTIATE_TEST_CASE_P(P,
-                        CompositorImplLowEndBrowserTest,
-                        ::testing::Values(CompositorImplMode::kNormal));
+INSTANTIATE_TEST_SUITE_P(P,
+                         CompositorImplLowEndBrowserTest,
+                         ::testing::Values(CompositorImplMode::kNormal));
 
 // RunLoop implementation that calls glFlush() every second until it observes
 // OnContextLost().
@@ -253,6 +257,13 @@ class CompositorSwapRunLoop {
 
 IN_PROC_BROWSER_TEST_P(CompositorImplBrowserTest,
                        CompositorImplReceivesSwapCallbacks) {
+  // OOP-R is required for this test to succeed with SkDDL, but is disabled on
+  // Android L and lower.
+  if (GetParam() == CompositorImplMode::kVizSkDDL &&
+      base::android::BuildInfo::GetInstance()->sdk_int() <
+          base::android::SDK_VERSION_MARSHMALLOW) {
+    return;
+  }
   CompositorSwapRunLoop(compositor_impl()).RunUntilSwap();
 }
 

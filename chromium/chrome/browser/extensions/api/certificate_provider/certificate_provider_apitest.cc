@@ -102,7 +102,7 @@ bool RsaSign(const std::vector<uint8_t>& digest,
 std::string JsUint8Array(const std::vector<uint8_t>& bytes) {
   std::string res = "new Uint8Array([";
   for (const uint8_t byte : bytes) {
-    res += base::UintToString(byte);
+    res += base::NumberToString(byte);
     res += ", ";
   }
   res += "])";
@@ -255,7 +255,10 @@ IN_PROC_BROWSER_TEST_F(CertificateProviderApiTest, Basic) {
 
   VLOG(1) << "Sign the digest using the private key.";
   std::string key_pk8;
-  base::ReadFileToString(extension_path.AppendASCII("l1_leaf.pk8"), &key_pk8);
+  {
+    base::ScopedAllowBlockingForTesting allow_io;
+    base::ReadFileToString(extension_path.AppendASCII("l1_leaf.pk8"), &key_pk8);
+  }
 
   const uint8_t* const key_pk8_begin =
       reinterpret_cast<const uint8_t*>(key_pk8.data());

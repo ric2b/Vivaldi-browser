@@ -8,6 +8,7 @@
 #include <stdio.h>
 
 #include "base/at_exit.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -97,7 +98,7 @@ std::string ReadString(bool no_echo) {
 void OnDone(HostStarter::Result result) {
   if (!g_message_loop->task_runner()->BelongsToCurrentThread()) {
     g_message_loop->task_runner()->PostTask(FROM_HERE,
-                                            base::Bind(&OnDone, result));
+                                            base::BindOnce(&OnDone, result));
     return;
   }
   switch (result) {
@@ -116,10 +117,6 @@ void OnDone(HostStarter::Result result) {
   }
 
   g_active_run_loop->Quit();
-}
-
-std::string GetAuthorizationCodeUri() {
-  return remoting::GetOauthStartUrl(remoting::GetDefaultOauthRedirectUrl());
 }
 
 }  // namespace
@@ -174,6 +171,14 @@ int StartHostMain(int argc, char** argv) {
     return 1;
   }
 
+  if (auth_code.empty() || redirect_url.empty()) {
+    fprintf(stdout,
+            "You need a web browser to use this command. Please visit\n");
+    fprintf(stdout,
+            "https://remotedesktop.google.com/headless for instructions.\n");
+    return 1;
+  }
+
   if (host_name.empty()) {
     fprintf(stdout, "Enter a name for this computer: ");
     fflush(stdout);
@@ -209,14 +214,6 @@ int StartHostMain(int argc, char** argv) {
     }
   }
 
-  if (auth_code.empty()) {
-    fprintf(stdout, "\nAuthorization URL for Production services:\n");
-    fprintf(stdout, "%s\n\n", GetAuthorizationCodeUri().c_str());
-    fprintf(stdout, "Enter an authorization code: ");
-    fflush(stdout);
-    auth_code = ReadString(true);
-  }
-
   // Provide message loops and threads for the URLRequestContextGetter.
   base::MessageLoop message_loop;
   g_message_loop = &message_loop;
@@ -234,11 +231,7 @@ int StartHostMain(int argc, char** argv) {
   // Start the host.
   std::unique_ptr<HostStarter> host_starter(HostStarter::Create(
       remoting::ServiceUrls::GetInstance()->directory_hosts_url(),
-      url_loader_factory_owner.GetURLLoaderFactory(),
-      url_request_context_getter.get()));
-  if (redirect_url.empty()) {
-    redirect_url = remoting::GetDefaultOauthRedirectUrl();
-  }
+      url_loader_factory_owner.GetURLLoaderFactory()));
   host_starter->StartHost(host_name, host_pin,
                           /*consent_to_data_collection=*/true, auth_code,
                           redirect_url, base::Bind(&OnDone));

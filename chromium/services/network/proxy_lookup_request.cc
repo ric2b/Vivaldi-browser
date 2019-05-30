@@ -31,17 +31,13 @@ ProxyLookupRequest::~ProxyLookupRequest() {
   // |request_| should be non-null only when the network service is being torn
   // down.
   if (request_)
-    proxy_lookup_client_->OnProxyLookupComplete(base::nullopt);
+    proxy_lookup_client_->OnProxyLookupComplete(net::ERR_ABORTED,
+                                                base::nullopt);
 }
 
 void ProxyLookupRequest::Start(const GURL& url) {
   proxy_lookup_client_.set_connection_error_handler(
       base::BindOnce(&ProxyLookupRequest::DestroySelf, base::Unretained(this)));
-  net::ProxyDelegate* proxy_delegate = network_context_->url_request_context()
-                                           ->http_transaction_factory()
-                                           ->GetSession()
-                                           ->context()
-                                           .proxy_delegate;
   // TODO(mmenke): The NetLogWithSource() means nothing is logged. Fix that.
   int result =
       network_context_->url_request_context()
@@ -49,15 +45,18 @@ void ProxyLookupRequest::Start(const GURL& url) {
           ->ResolveProxy(url, std::string(), &proxy_info_,
                          base::BindOnce(&ProxyLookupRequest::OnResolveComplete,
                                         base::Unretained(this)),
-                         &request_, proxy_delegate, net::NetLogWithSource());
+                         &request_, net::NetLogWithSource());
   if (result != net::ERR_IO_PENDING)
     OnResolveComplete(result);
 }
 
 void ProxyLookupRequest::OnResolveComplete(int result) {
-  proxy_lookup_client_->OnProxyLookupComplete(
-      result == net::OK ? base::Optional<net::ProxyInfo>(std::move(proxy_info_))
-                        : base::nullopt);
+  if (result == net::OK) {
+    proxy_lookup_client_->OnProxyLookupComplete(
+        net::OK, base::Optional<net::ProxyInfo>(std::move(proxy_info_)));
+  } else {
+    proxy_lookup_client_->OnProxyLookupComplete(result, base::nullopt);
+  }
   DestroySelf();
 }
 

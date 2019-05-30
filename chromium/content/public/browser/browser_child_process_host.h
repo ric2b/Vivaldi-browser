@@ -8,7 +8,7 @@
 #include "base/environment.h"
 #include "base/memory/shared_memory.h"
 #include "base/process/kill.h"
-#include "base/process/process_handle.h"
+#include "base/process/process.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
@@ -23,7 +23,7 @@
 
 namespace base {
 class CommandLine;
-class SharedPersistentMemoryAllocator;
+class PersistentMemoryAllocator;
 }
 
 namespace content {
@@ -77,7 +77,7 @@ class CONTENT_EXPORT BrowserChildProcessHost : public IPC::Sender {
   virtual ChildProcessTerminationInfo GetTerminationInfo(bool known_dead) = 0;
 
   // Take ownership of a "shared" metrics allocator (if one exists).
-  virtual std::unique_ptr<base::SharedPersistentMemoryAllocator>
+  virtual std::unique_ptr<base::PersistentMemoryAllocator>
   TakeMetricsAllocator() = 0;
 
   // Sets the user-visible name of the process.
@@ -86,12 +86,11 @@ class CONTENT_EXPORT BrowserChildProcessHost : public IPC::Sender {
   // Sets the name of the process used for metrics reporting.
   virtual void SetMetricsName(const std::string& metrics_name) = 0;
 
-  // Set the handle of the process. BrowserChildProcessHost will do this when
-  // the Launch method is used to start the process. However if the owner
-  // of this object doesn't call Launch and starts the process in another way,
-  // they need to call this method so that the process handle is associated with
-  // this object.
-  virtual void SetHandle(base::ProcessHandle handle) = 0;
+  // Set the process. BrowserChildProcessHost will do this when the Launch
+  // method is used to start the process. However if the owner of this object
+  // doesn't call Launch and starts the process in another way, they need to
+  // call this method so that the process is associated with this object.
+  virtual void SetProcess(base::Process process) = 0;
 
   // Takes the ServiceRequest pipe away from this host. Use this only if you
   // intend to forego process launch and use the ServiceRequest in-process
@@ -106,6 +105,6 @@ class CONTENT_EXPORT BrowserChildProcessHost : public IPC::Sender {
 #endif
 };
 
-};  // namespace content
+}  // namespace content
 
 #endif  // CONTENT_PUBLIC_BROWSER_BROWSER_CHILD_PROCESS_HOST_H_

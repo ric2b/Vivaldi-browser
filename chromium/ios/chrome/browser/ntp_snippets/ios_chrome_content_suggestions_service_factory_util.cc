@@ -7,13 +7,14 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/json/json_reader.h"
-#include "base/memory/singleton.h"
 #include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
+#include "base/timer/timer.h"
 #include "base/values.h"
 #include "components/image_fetcher/core/image_decoder.h"
 #include "components/image_fetcher/core/image_fetcher.h"
@@ -29,7 +30,6 @@
 #include "components/ntp_snippets/features.h"
 #include "components/ntp_snippets/logger.h"
 #include "components/ntp_snippets/ntp_snippets_constants.h"
-#include "components/ntp_snippets/reading_list/reading_list_suggestions_provider.h"
 #include "components/ntp_snippets/remote/persistent_scheduler.h"
 #include "components/ntp_snippets/remote/remote_suggestions_database.h"
 #include "components/ntp_snippets/remote/remote_suggestions_fetcher_impl.h"
@@ -37,7 +37,6 @@
 #include "components/ntp_snippets/remote/remote_suggestions_scheduler_impl.h"
 #include "components/ntp_snippets/remote/remote_suggestions_status_service_impl.h"
 #include "components/ntp_snippets/user_classifier.h"
-#include "components/reading_list/core/reading_list_model.h"
 #include "components/version_info/version_info.h"
 #include "google_apis/google_api_keys.h"
 #include "ios/chrome/browser/application_context.h"
@@ -45,9 +44,8 @@
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
 #include "ios/chrome/browser/pref_names.h"
-#include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
-#include "ios/chrome/browser/ui/ui_util.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
 #include "ios/chrome/common/channel_info.h"
 #include "ios/web/public/browser_state.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -73,13 +71,14 @@ void ParseJson(const std::string& json,
                const ntp_snippets::SuccessCallback& success_callback,
                const ntp_snippets::ErrorCallback& error_callback) {
   base::JSONReader json_reader;
-  std::unique_ptr<base::Value> value = json_reader.ReadToValue(json);
+  std::unique_ptr<base::Value> value = json_reader.ReadToValueDeprecated(json);
   if (value) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(success_callback, base::Passed(&value)));
+        FROM_HERE, base::BindOnce(success_callback, std::move(value)));
   } else {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(error_callback, json_reader.GetErrorMessage()));
+        FROM_HERE,
+        base::BindOnce(error_callback, json_reader.GetErrorMessage()));
   }
 }
 
@@ -95,7 +94,6 @@ CreateChromeContentSuggestionsServiceWithProviders(
   ContentSuggestionsService* suggestions_service =
       static_cast<ContentSuggestionsService*>(service.get());
 
-  ntp_snippets::RegisterReadingListProvider(suggestions_service, browser_state);
   if (base::FeatureList::IsEnabled(ntp_snippets::kArticleSuggestionsFeature)) {
     ntp_snippets::RegisterRemoteSuggestionsProvider(suggestions_service,
                                                     browser_state);
@@ -140,24 +138,6 @@ std::unique_ptr<KeyedService> CreateChromeContentSuggestionsService(
       State::ENABLED, identity_manager, history_service, large_icon_service,
       prefs, std::move(category_ranker), std::move(user_classifier),
       std::move(scheduler), std::move(debug_logger));
-}
-
-void RegisterReadingListProvider(ContentSuggestionsService* service,
-                                 web::BrowserState* browser_state) {
-  // Prevent loading any reading list items for refresh.
-  if (IsUIRefreshPhase1Enabled())
-    return;
-
-  ios::ChromeBrowserState* chrome_browser_state =
-      ios::ChromeBrowserState::FromBrowserState(browser_state);
-
-  ReadingListModel* reading_list_model =
-      ReadingListModelFactory::GetForBrowserState(chrome_browser_state);
-  std::unique_ptr<ntp_snippets::ReadingListSuggestionsProvider>
-      reading_list_suggestions_provider =
-          std::make_unique<ntp_snippets::ReadingListSuggestionsProvider>(
-              service, reading_list_model);
-  service->RegisterProvider(std::move(reading_list_suggestions_provider));
 }
 
 void RegisterRemoteSuggestionsProvider(ContentSuggestionsService* service,

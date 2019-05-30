@@ -9,14 +9,17 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/observer_list.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "components/invalidation/impl/channels_states.h"
 #include "components/invalidation/impl/per_user_topic_registration_request.h"
 #include "components/invalidation/public/identity_provider.h"
 #include "components/invalidation/public/invalidation_export.h"
 #include "components/invalidation/public/invalidation_object_id.h"
 #include "components/invalidation/public/invalidation_util.h"
+#include "components/invalidation/public/invalidator_state.h"
 #include "net/base/backoff_entry.h"
 #include "net/url_request/url_request_context_getter.h"
 
@@ -41,11 +44,18 @@ namespace syncer {
 // names in this class.
 class INVALIDATION_EXPORT PerUserTopicRegistrationManager {
  public:
+  class Observer {
+   public:
+    virtual void OnSubscriptionChannelStateChanged(
+        SubscriptionChannelState state) = 0;
+  };
+
   PerUserTopicRegistrationManager(
       invalidation::IdentityProvider* identity_provider,
       PrefService* local_state,
       network::mojom::URLLoaderFactory* url_loader_factory,
-      const ParseJSONCallback& parse_json);
+      const ParseJSONCallback& parse_json,
+      const std::string& project_id);
 
   virtual ~PerUserTopicRegistrationManager();
 
@@ -57,6 +67,17 @@ class INVALIDATION_EXPORT PerUserTopicRegistrationManager {
   virtual void Init();
   TopicSet GetRegisteredIds() const;
 
+  // Classes interested in subscription channel state changes should implement
+  // PerUserTopicRegistrationManager::Observer and register here.
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
+
+  base::DictionaryValue CollectDebugData() const;
+
+  bool HaveAllRequestsFinishedForTest() const {
+    return registration_statuses_.empty();
+  }
+
  private:
   struct RegistrationEntry;
 
@@ -65,6 +86,11 @@ class INVALIDATION_EXPORT PerUserTopicRegistrationManager {
   // Tries to register |id|. No retry in case of failure.
   void StartRegistrationRequest(const Topic& id);
 
+  void ActOnSuccesfullRegistration(
+      const Topic& topic,
+      const std::string& private_topic_name,
+      PerUserTopicRegistrationRequest::RequestType type);
+  void ScheduleRequestForRepetition(const Topic& topic);
   void RegistrationFinishedForTopic(
       Topic topic,
       Status code,
@@ -77,6 +103,11 @@ class INVALIDATION_EXPORT PerUserTopicRegistrationManager {
                                      std::string access_token);
   void OnAccessTokenRequestSucceeded(std::string access_token);
   void OnAccessTokenRequestFailed(GoogleServiceAuthError error);
+
+  void DropAllSavedRegistrationsOnTokenChange(
+      const std::string& instance_id_token);
+  void NotifySubscriptionChannelStateChange(
+      SubscriptionChannelState invalidator_state);
 
   std::map<Topic, std::unique_ptr<RegistrationEntry>> registration_statuses_;
 
@@ -98,6 +129,12 @@ class INVALIDATION_EXPORT PerUserTopicRegistrationManager {
   // The callback for Parsing JSON.
   ParseJSONCallback parse_json_;
   network::mojom::URLLoaderFactory* url_loader_factory_;
+
+  const std::string project_id_;
+
+  base::ObserverList<Observer>::Unchecked observers_;
+  SubscriptionChannelState last_issued_state_ =
+      SubscriptionChannelState::NOT_STARTED;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

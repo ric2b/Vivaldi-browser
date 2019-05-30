@@ -19,9 +19,8 @@ FakeSyncEncryptionHandler::~FakeSyncEncryptionHandler() {}
 
 void FakeSyncEncryptionHandler::Init() {
   // Set up a basic cryptographer.
-  KeyParams keystore_params = {
-      KeyDerivationParams::CreateForPbkdf2("localhost", "dummy"),
-      "keystore_key"};
+  KeyParams keystore_params = {KeyDerivationParams::CreateForPbkdf2(),
+                               "keystore_key"};
   cryptographer_.AddKey(keystore_params);
 }
 
@@ -43,18 +42,16 @@ void FakeSyncEncryptionHandler::ApplyNigoriUpdate(
     DVLOG(1) << "OnPassPhraseRequired Sent";
     sync_pb::EncryptedData pending_keys = cryptographer_.GetPendingKeys();
     for (auto& observer : observers_)
-      observer.OnPassphraseRequired(
-          REASON_DECRYPTION,
-          KeyDerivationParams::CreateForPbkdf2("localhost", "dummy"),
-          pending_keys);
+      observer.OnPassphraseRequired(REASON_DECRYPTION,
+                                    KeyDerivationParams::CreateForPbkdf2(),
+                                    pending_keys);
   } else if (!cryptographer_.is_ready()) {
     DVLOG(1) << "OnPassphraseRequired sent because cryptographer is not "
              << "ready";
     for (auto& observer : observers_) {
-      observer.OnPassphraseRequired(
-          REASON_ENCRYPTION,
-          KeyDerivationParams::CreateForPbkdf2("localhost", "dummy"),
-          sync_pb::EncryptedData());
+      observer.OnPassphraseRequired(REASON_ENCRYPTION,
+                                    KeyDerivationParams::CreateForPbkdf2(),
+                                    sync_pb::EncryptedData());
     }
   }
 }
@@ -102,10 +99,8 @@ void FakeSyncEncryptionHandler::RemoveObserver(Observer* observer) {
 }
 
 void FakeSyncEncryptionHandler::SetEncryptionPassphrase(
-    const std::string& passphrase,
-    bool is_explicit) {
-  if (is_explicit)
-    passphrase_type_ = PassphraseType::CUSTOM_PASSPHRASE;
+    const std::string& passphrase) {
+  passphrase_type_ = PassphraseType::CUSTOM_PASSPHRASE;
 }
 
 void FakeSyncEncryptionHandler::SetDecryptionPassphrase(

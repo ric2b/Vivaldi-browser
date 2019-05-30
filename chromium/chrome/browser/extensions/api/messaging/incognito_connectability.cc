@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/api/messaging/incognito_connectability.h"
 
+#include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/strings/string16.h"
@@ -192,7 +193,7 @@ bool IncognitoConnectability::IsInMap(const Extension* extension,
                                       const GURL& origin,
                                       const ExtensionToOriginsMap& map) {
   DCHECK_EQ(origin, origin.GetOrigin());
-  ExtensionToOriginsMap::const_iterator it = map.find(extension->id());
+  auto it = map.find(extension->id());
   return it != map.end() && it->second.count(origin) > 0;
 }
 

@@ -4,8 +4,11 @@
 
 #include "extensions/browser/guest_view/web_view/web_view_content_script_manager.h"
 
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/task/post_task.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/render_frame_host.h"
@@ -55,11 +58,11 @@ void WebViewContentScriptManager::AddContentScripts(
           ->GetDeclarativeUserScriptMasterByID(host_id);
   DCHECK(master);
 
-  // We need to update WebViewRenderState in the IO thread if the guest exists.
+  // We need to update WebViewRenderState.
   std::set<int> ids_to_add;
 
   GuestMapKey key = std::pair<int, int>(embedder_process_id, view_instance_id);
-  GuestContentScriptMap::iterator iter = guest_content_script_map_.find(key);
+  auto iter = guest_content_script_map_.find(key);
 
   // Step 1: finds the entry in guest_content_script_map_ by the given |key|.
   // If there isn't any content script added for the given guest yet, insert an
@@ -106,16 +109,10 @@ void WebViewContentScriptManager::AddContentScripts(
   if (host_it == webview_host_id_map_.end())
     webview_host_id_map_.insert(std::make_pair(key, host_id));
 
-  // Step 6: updates WebViewRenderState in the IO thread.
-  // It is safe to use base::Unretained(WebViewRendererState::GetInstance())
-  // since WebViewRendererState::GetInstance() always returns a Singleton of
-  // WebViewRendererState.
+  // Step 6: updates WebViewRenderState.
   if (!ids_to_add.empty()) {
-    content::BrowserThread::PostTask(
-        content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&WebViewRendererState::AddContentScriptIDs,
-                   base::Unretained(WebViewRendererState::GetInstance()),
-                   embedder_process_id, view_instance_id, ids_to_add));
+    WebViewRendererState::GetInstance()->AddContentScriptIDs(
+        embedder_process_id, view_instance_id, ids_to_add);
   }
 }
 
@@ -145,8 +142,7 @@ void WebViewContentScriptManager::RemoveContentScripts(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   GuestMapKey key = std::pair<int, int>(embedder_process_id, view_instance_id);
-  GuestContentScriptMap::iterator script_map_iter =
-      guest_content_script_map_.find(key);
+  auto script_map_iter = guest_content_script_map_.find(key);
   if (script_map_iter == guest_content_script_map_.end())
     return;
 
@@ -155,7 +151,7 @@ void WebViewContentScriptManager::RemoveContentScripts(
           ->GetDeclarativeUserScriptMasterByID(host_id);
   CHECK(master);
 
-  // We need to update WebViewRenderState in the IO thread if the guest exists.
+  // We need to update WebViewRenderState.
   std::set<int> ids_to_delete;
   std::set<UserScriptIDPair> scripts_to_delete;
 
@@ -174,7 +170,7 @@ void WebViewContentScriptManager::RemoveContentScripts(
     }
   } else {
     for (const std::string& name : script_name_list) {
-      ContentScriptMap::iterator iter = map.find(name);
+      auto iter = map.find(name);
       if (iter == map.end())
         continue;
       const UserScriptIDPair& id_pair = iter->second;
@@ -194,13 +190,10 @@ void WebViewContentScriptManager::RemoveContentScripts(
   // Step 3: removes content scripts from master.
   master->RemoveScripts(scripts_to_delete);
 
-  // Step 4: updates WebViewRenderState in the IO thread.
+  // Step 4: updates WebViewRenderState.
   if (!ids_to_delete.empty()) {
-    content::BrowserThread::PostTask(
-        content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&WebViewRendererState::RemoveContentScriptIDs,
-                   base::Unretained(WebViewRendererState::GetInstance()),
-                   embedder_process_id, view_instance_id, ids_to_delete));
+    WebViewRendererState::GetInstance()->RemoveContentScriptIDs(
+        embedder_process_id, view_instance_id, ids_to_delete);
   }
 }
 

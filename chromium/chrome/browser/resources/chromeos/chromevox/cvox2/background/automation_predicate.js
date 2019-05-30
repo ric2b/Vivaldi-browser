@@ -179,13 +179,24 @@ AutomationPredicate.focused = function(node) {
 };
 
 /**
+ * Returns true if this node should be considered a leaf for touch
+ * exploration.
+ * @param {!AutomationNode} node
+ * @return {boolean}
+ */
+AutomationPredicate.touchLeaf = function(node) {
+  return !node.firstChild || node.role == Role.BUTTON ||
+      node.role == Role.POP_UP_BUTTON || node.role == Role.SLIDER ||
+      node.role == Role.TEXT_FIELD ||
+      (node.role == Role.MENU_ITEM && !hasActionableDescendant(node));
+};
+
+/**
  * @param {!AutomationNode} node
  * @return {boolean}
  */
 AutomationPredicate.leaf = function(node) {
-  return !node.firstChild || node.role == Role.BUTTON ||
-      node.role == Role.POP_UP_BUTTON || node.role == Role.SLIDER ||
-      node.role == Role.TEXT_FIELD ||
+  return AutomationPredicate.touchLeaf(node) ||
       // A node acting as a label should be a leaf if it has no actionable
       // controls.
       (!!node.labelFor && node.labelFor.length > 0 &&
@@ -193,11 +204,11 @@ AutomationPredicate.leaf = function(node) {
       (!!node.descriptionFor && node.descriptionFor.length > 0 &&
        !hasActionableDescendant(node)) ||
       (node.activeDescendantFor && node.activeDescendantFor.length > 0) ||
-      (node.role == Role.MENU_ITEM && !hasActionableDescendant(node)) ||
       node.state[State.INVISIBLE] || node.children.every(function(n) {
         return n.state[State.INVISIBLE];
       }) ||
-      !!AutomationPredicate.math(node);
+      // Explicitly only check the clickable attribute here (for Android).
+      node.clickable || !!AutomationPredicate.math(node);
 };
 
 /**
@@ -326,6 +337,10 @@ AutomationPredicate.container = function(node) {
   if (AutomationPredicate.math(node))
     return false;
 
+  // Clickables (on Android) are not containers.
+  if (node.clickable)
+    return false;
+
   return AutomationPredicate.match({
     anyRole: [
       Role.GENERIC_CONTAINER, Role.DOCUMENT, Role.GROUP, Role.LIST,
@@ -425,12 +440,12 @@ AutomationPredicate.shouldIgnoreNode = function(node) {
 
   // Ignore nodes acting as labels for another control, that don't
   // have actionable descendants.
-  if (!!node.labelFor && node.labelFor.length > 0 &&
+  if (node.labelFor && node.labelFor.length > 0 &&
       !hasActionableDescendant(node))
     return true;
 
   // Similarly, ignore nodes acting as descriptions.
-  if (!!node.descriptionFor && node.descriptionFor.length > 0 &&
+  if (node.descriptionFor && node.descriptionFor.length > 0 &&
       !hasActionableDescendant(node))
     return true;
 
@@ -455,10 +470,9 @@ AutomationPredicate.shouldIgnoreNode = function(node) {
  * @param {!AutomationNode} node
  * @return {boolean}
  */
-AutomationPredicate.checkable = AutomationPredicate.roles([
-  Role.CHECK_BOX, Role.RADIO_BUTTON, Role.MENU_ITEM_CHECK_BOX,
-  Role.MENU_ITEM_RADIO, Role.SWITCH, Role.TOGGLE_BUTTON, Role.TREE_ITEM
-]);
+AutomationPredicate.checkable = function(node) {
+  return !!node.checked;
+};
 
 /**
  * Returns if the node is clickable.
@@ -466,7 +480,13 @@ AutomationPredicate.checkable = AutomationPredicate.roles([
  * @return {boolean}
  */
 AutomationPredicate.clickable = AutomationPredicate.match({
-  anyPredicate: [AutomationPredicate.button, AutomationPredicate.link],
+  anyPredicate: [
+    AutomationPredicate.button, AutomationPredicate.link,
+    (node) => {
+      return node.defaultActionVerb ==
+          chrome.automation.DefaultActionVerb.CLICK;
+    }
+  ],
   anyAttribute: {clickable: true}
 });
 
@@ -596,7 +616,7 @@ AutomationPredicate.multiline = function(node) {
  * @return {boolean}
  */
 AutomationPredicate.autoScrollable = function(node) {
-  return node.scrollable &&
+  return !!node.scrollable &&
       (node.role == Role.GRID || node.role == Role.LIST ||
        node.role == Role.POP_UP_BUTTON || node.role == Role.SCROLL_VIEW);
 };
@@ -620,5 +640,14 @@ AutomationPredicate.shouldOnlyOutputSelectionChangeInBraille = function(node) {
   return node.state[State.RICHLY_EDITABLE] && node.state[State.FOCUSED] &&
       node.role == Role.LOG;
 };
+
+
+/**
+ * Matches against menu item like nodes.
+ * @param {!AutomationNode} node
+ * @return {boolean}
+ */
+AutomationPredicate.menuItem = AutomationPredicate.roles(
+    [Role.MENU_ITEM, Role.MENU_ITEM_CHECK_BOX, Role.MENU_ITEM_RADIO]);
 
 });  // goog.scope

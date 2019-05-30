@@ -31,7 +31,7 @@ namespace blink {
 // need more columns than what a group has room for, we'll create another group
 // and put them there (and make them appear in the next outer fragmentainer).
 class CORE_EXPORT MultiColumnFragmentainerGroup {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
 
  public:
   MultiColumnFragmentainerGroup(const LayoutMultiColumnSet&);
@@ -194,8 +194,6 @@ class CORE_EXPORT MultiColumnFragmentainerGroup {
   // Maximum logical height allowed.
   LayoutUnit max_logical_height_;
 
-  unsigned actual_column_count_allowance_ = 0;
-
   bool is_logical_height_known_ = false;
 };
 
@@ -231,16 +229,18 @@ class CORE_EXPORT MultiColumnFragmentainerGroupList {
   iterator end() { return groups_.end(); }
   const_iterator end() const { return groups_.end(); }
 
-  size_t size() const { return groups_.size(); }
-  MultiColumnFragmentainerGroup& operator[](size_t i) { return groups_.at(i); }
-  const MultiColumnFragmentainerGroup& operator[](size_t i) const {
+  wtf_size_t size() const { return groups_.size(); }
+  MultiColumnFragmentainerGroup& operator[](wtf_size_t i) {
+    return groups_.at(i);
+  }
+  const MultiColumnFragmentainerGroup& operator[](wtf_size_t i) const {
     return groups_.at(i);
   }
 
   void Append(const MultiColumnFragmentainerGroup& group) {
     groups_.push_back(group);
   }
-  void Shrink(size_t size) { groups_.Shrink(size); }
+  void Shrink(wtf_size_t size) { groups_.Shrink(size); }
 
  private:
   LayoutMultiColumnSet& column_set_;

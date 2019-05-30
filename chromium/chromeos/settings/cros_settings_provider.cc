@@ -8,7 +8,7 @@
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 
 namespace chromeos {
 
@@ -43,4 +43,4 @@ void CrosSettingsProvider::SetNotifyObserversCallback(
   notify_cb_ = notify_cb;
 }
 
-};  // namespace chromeos
+}  // namespace chromeos

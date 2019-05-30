@@ -27,7 +27,7 @@ import zipfile
 # Do NOT CHANGE this if you don't know what you're doing -- see
 # https://chromium.googlesource.com/chromium/src/+/master/docs/updating_clang.md
 # Reverting problematic clang rolls is safe, though.
-CLANG_REVISION = '340925'
+CLANG_REVISION = '354873'
 
 use_head_revision = bool(os.environ.get('LLVM_FORCE_HEAD_REVISION', '0')
                          in ('1', 'YES'))
@@ -68,9 +68,11 @@ LLVM_BUILD_TOOLS_DIR = os.path.abspath(
     os.path.join(LLVM_DIR, '..', 'llvm-build-tools'))
 STAMP_FILE = os.path.normpath(
     os.path.join(LLVM_DIR, '..', 'llvm-build', 'cr_build_revision'))
-VERSION = '8.0.0'
+VERSION = '9.0.0'
 ANDROID_NDK_DIR = os.path.join(
     CHROMIUM_DIR, 'third_party', 'android_ndk')
+FUCHSIA_SDK_DIR = os.path.join(CHROMIUM_DIR, 'third_party', 'fuchsia-sdk',
+                               'sdk')
 
 # URL for pre-built binaries.
 CDS_URL = os.environ.get('CDS_CLANG_BUCKET_OVERRIDE',
@@ -345,7 +347,7 @@ def AddGnuWinToPath():
     return
 
   gnuwin_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, 'gnuwin')
-  GNUWIN_VERSION = '8'
+  GNUWIN_VERSION = '9'
   GNUWIN_STAMP = os.path.join(gnuwin_dir, 'stamp')
   if ReadStampFile(GNUWIN_STAMP) == GNUWIN_VERSION:
     print 'GNU Win tools already up to date.'
@@ -355,6 +357,27 @@ def AddGnuWinToPath():
     WriteStampFile(GNUWIN_VERSION, GNUWIN_STAMP)
 
   os.environ['PATH'] = gnuwin_dir + os.pathsep + os.environ.get('PATH', '')
+
+  # find.exe, mv.exe and rm.exe are from MSYS (see crrev.com/389632). MSYS uses
+  # Cygwin under the hood, and initializing Cygwin has a race-condition when
+  # getting group and user data from the Active Directory is slow. To work
+  # around this, use a horrible hack telling it not to do that.
+  # See https://crbug.com/905289
+  etc = os.path.join(gnuwin_dir, '..', '..', 'etc')
+  EnsureDirExists(etc)
+  with open(os.path.join(etc, 'nsswitch.conf'), 'w') as f:
+    f.write('passwd: files\n')
+    f.write('group: files\n')
+
+
+def SetMacXcodePath():
+  """Set DEVELOPER_DIR to the path to hermetic Xcode.app on Mac OS X."""
+  if sys.platform != 'darwin':
+    return
+
+  xcode_path = os.path.join(CHROMIUM_DIR, 'build', 'mac_files', 'Xcode.app')
+  if os.path.exists(xcode_path):
+    os.environ['DEVELOPER_DIR'] = xcode_path
 
 
 win_sdk_dir = None
@@ -371,6 +394,7 @@ def GetWinSDKDir():
     '2013': 'msdia120.dll',
     '2015': 'msdia140.dll',
     '2017': 'msdia140.dll',
+    '2019': 'msdia140.dll',
   }
 
   # Don't let vs_toolchain overwrite our environment.
@@ -483,6 +507,16 @@ def UpdateClang(args):
     print 'for how to install the NDK, or pass --without-android.'
     return 1
 
+  if args.with_fuchsia and not os.path.exists(FUCHSIA_SDK_DIR):
+    print 'Fuchsia SDK not found at ' + FUCHSIA_SDK_DIR
+    print 'The Fuchsia SDK is needed to build libclang_rt for Fuchsia.'
+    print 'Install the Fuchsia SDK by adding fuchsia to the '
+    print 'target_os section in your .gclient and running hooks, '
+    print 'or pass --without-fuchsia.'
+    print 'https://chromium.googlesource.com/chromium/src/+/master/docs/fuchsia_build_instructions.md'
+    print 'for general Fuchsia build instructions.'
+    return 1
+
   print 'Locally building Clang %s...' % PACKAGE_VERSION
 
   AddCMakeToPath(args)
@@ -502,12 +536,20 @@ def UpdateClang(args):
   cxxflags = []
   ldflags = []
 
+  targets = 'AArch64;ARM;Mips;PowerPC;SystemZ;WebAssembly;X86'
   base_cmake_args = ['-GNinja',
                      '-DCMAKE_BUILD_TYPE=Release',
                      '-DLLVM_ENABLE_ASSERTIONS=ON',
+                     '-DLLVM_ENABLE_PIC=OFF',
                      '-DLLVM_ENABLE_TERMINFO=OFF',
+                     '-DLLVM_TARGETS_TO_BUILD=' + targets,
                      # Statically link MSVCRT to avoid DLL dependencies.
                      '-DLLVM_USE_CRT_RELEASE=MT',
+                     '-DCLANG_PLUGIN_SUPPORT=OFF',
+                     '-DCLANG_ENABLE_STATIC_ANALYZER=OFF',
+                     '-DCLANG_ENABLE_ARCMT=OFF',
+                     # TODO(crbug.com/929645): Use newer toolchain to host.
+                     '-DLLVM_TEMPORARILY_ALLOW_OLD_TOOLCHAIN=ON',
                      ]
 
   if sys.platform != 'win32':
@@ -769,6 +811,14 @@ def UpdateClang(args):
               'i686': 'x86',
           }[target_arch]])
 
+      # NDK r16 "helpfully" installs libc++ as libstdc++ "so the compiler will
+      # pick it up by default". Only these days, the compiler tries to find
+      # libc++ instead. See https://crbug.com/902270.
+      shutil.copy(os.path.join(toolchain_dir, 'sysroot/usr/lib/libstdc++.a'),
+                  os.path.join(toolchain_dir, 'sysroot/usr/lib/libc++.a'))
+      shutil.copy(os.path.join(toolchain_dir, 'sysroot/usr/lib/libstdc++.so'),
+                  os.path.join(toolchain_dir, 'sysroot/usr/lib/libc++.so'))
+
       # Build compiler-rt runtimes needed for Android in a separate build tree.
       build_dir = os.path.join(LLVM_BUILD_DIR, 'android-' + target_arch)
       if not os.path.exists(build_dir):
@@ -790,31 +840,80 @@ def UpdateClang(args):
         '-DLLVM_CONFIG_PATH=' + os.path.join(LLVM_BUILD_DIR, 'bin/llvm-config'),
         '-DCMAKE_C_FLAGS=' + ' '.join(cflags),
         '-DCMAKE_CXX_FLAGS=' + ' '.join(cflags),
+        '-DCMAKE_ASM_FLAGS=' + ' '.join(cflags),
         '-DSANITIZER_CXX_ABI=none',
         '-DSANITIZER_CXX_ABI_LIBRARY=' + abi_libs,
         '-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-u__cxa_demangle',
         '-DANDROID=1']
       RmCmakeCache('.')
       RunCommand(['cmake'] + android_args + [COMPILER_RT_DIR])
-      RunCommand(['ninja', 'asan', 'ubsan', 'profile'])
+
+      # We use ASan i686 build for fuzzing.
+      libs_want = ['lib/linux/libclang_rt.asan-{0}-android.so']
+      if target_arch in ['aarch64', 'arm']:
+        libs_want += [
+            'lib/linux/libclang_rt.ubsan_standalone-{0}-android.so',
+            'lib/linux/libclang_rt.profile-{0}-android.a',
+        ]
+      if target_arch == 'aarch64':
+        libs_want += ['lib/linux/libclang_rt.hwasan-{0}-android.so']
+      libs_want = [lib.format(target_arch) for lib in libs_want]
+      RunCommand(['ninja'] + libs_want)
 
       # And copy them into the main build tree.
-      asan_lib_path_format = 'lib/linux/libclang_rt.asan-{0}-android.so'
-      libs_want = [
-          asan_lib_path_format,
-          'lib/linux/libclang_rt.ubsan_standalone-{0}-android.so',
-          'lib/linux/libclang_rt.profile-{0}-android.a',
-      ]
-      for arch in ['aarch64', 'arm']:
-        for p in libs_want:
-          lib_path = os.path.join(build_dir, p.format(arch))
-          if os.path.exists(lib_path):
-            shutil.copy(lib_path, rt_lib_dst_dir)
+      for p in libs_want:
+        shutil.copy(p, rt_lib_dst_dir)
 
-      # We also use ASan i686 build for fuzzing.
-      lib_path = os.path.join(build_dir, asan_lib_path_format.format('i686'))
-      if os.path.exists(lib_path):
-        shutil.copy(lib_path, rt_lib_dst_dir)
+  if args.with_fuchsia:
+    # Fuchsia links against libclang_rt.builtins-<arch>.a instead of libgcc.a.
+    for target_arch in ['aarch64', 'x86_64']:
+      fuchsia_arch_name = {'aarch64': 'arm64', 'x86_64': 'x64'}[target_arch]
+      toolchain_dir = os.path.join(
+          FUCHSIA_SDK_DIR, 'arch', fuchsia_arch_name, 'sysroot')
+      # Build clang_rt runtime for Fuchsia in a separate build tree.
+      build_dir = os.path.join(LLVM_BUILD_DIR, 'fuchsia-' + target_arch)
+      if not os.path.exists(build_dir):
+        os.mkdir(os.path.join(build_dir))
+      os.chdir(build_dir)
+      target_spec = target_arch + '-fuchsia'
+      # TODO(thakis): Might have to pass -B here once sysroot contains
+      # binaries (e.g. gas for arm64?)
+      fuchsia_args = base_cmake_args + [
+        '-DLLVM_ENABLE_THREADS=OFF',
+        '-DCMAKE_C_COMPILER=' + os.path.join(LLVM_BUILD_DIR, 'bin/clang'),
+        '-DCMAKE_CXX_COMPILER=' + os.path.join(LLVM_BUILD_DIR, 'bin/clang++'),
+        '-DCMAKE_LINKER=' + os.path.join(LLVM_BUILD_DIR, 'bin/clang'),
+        '-DCMAKE_AR=' + os.path.join(LLVM_BUILD_DIR, 'bin/llvm-ar'),
+        '-DLLVM_CONFIG_PATH=' + os.path.join(LLVM_BUILD_DIR, 'bin/llvm-config'),
+        '-DCMAKE_SYSTEM_NAME=Fuchsia',
+        '-DCMAKE_C_COMPILER_TARGET=%s-fuchsia' % target_arch,
+        '-DCMAKE_ASM_COMPILER_TARGET=%s-fuchsia' % target_arch,
+        '-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON',
+        '-DCMAKE_SYSROOT=%s' % toolchain_dir,
+        # TODO(thakis|scottmg): Use PER_TARGET_RUNTIME_DIR for all platforms.
+        # https://crbug.com/882485.
+        '-DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=ON',
+
+        # These are necessary because otherwise CMake tries to build an
+        # executable to test to see if the compiler is working, but in doing so,
+        # it links against the builtins.a that we're about to build.
+        '-DCMAKE_C_COMPILER_WORKS=ON',
+        '-DCMAKE_ASM_COMPILER_WORKS=ON',
+        ]
+      RmCmakeCache('.')
+      RunCommand(['cmake'] +
+                 fuchsia_args +
+                 [os.path.join(COMPILER_RT_DIR, 'lib', 'builtins')])
+      builtins_a = 'libclang_rt.builtins.a'
+      RunCommand(['ninja', builtins_a])
+
+      # And copy it into the main build tree.
+      fuchsia_lib_dst_dir = os.path.join(LLVM_BUILD_DIR, 'lib', 'clang',
+                                         VERSION, target_spec, 'lib')
+      if not os.path.exists(fuchsia_lib_dst_dir):
+        os.makedirs(fuchsia_lib_dst_dir)
+      CopyFile(os.path.join(build_dir, target_spec, 'lib', builtins_a),
+               fuchsia_lib_dst_dir)
 
   # Run tests.
   if args.run_tests or use_head_revision:
@@ -831,13 +930,19 @@ def UpdateClang(args):
   return 0
 
 
+def gn_arg(v):
+  if v == 'True':
+    return True
+  if v == 'False':
+    return False
+  raise argparse.ArgumentTypeError('Expected one of %r or %r' % (
+      'True', 'False'))
+
+
 def main():
   parser = argparse.ArgumentParser(description='Build Clang.')
   parser.add_argument('--bootstrap', action='store_true',
                       help='first build clang with CC, then with itself.')
-  # TODO(phajdan.jr): remove --if-needed after fixing callers. It's no-op.
-  parser.add_argument('--if-needed', action='store_true',
-                      help="run only if the script thinks clang is needed")
   parser.add_argument('--force-local-build', action='store_true',
                       help="don't try to download prebuild binaries")
   parser.add_argument('--gcc-toolchain', help='set the version for which gcc '
@@ -865,10 +970,16 @@ def main():
                       'and using prebuilt cmake binaries')
   parser.add_argument('--verify-version',
                       help='verify that clang has the passed-in version')
+  parser.add_argument('--with-android', type=gn_arg, nargs='?', const=True,
+                      help='build the Android ASan runtime (linux only)',
+                      default=sys.platform.startswith('linux'))
   parser.add_argument('--without-android', action='store_false',
                       help='don\'t build Android ASan runtime (linux only)',
-                      dest='with_android',
-                      default=sys.platform.startswith('linux'))
+                      dest='with_android')
+  parser.add_argument('--without-fuchsia', action='store_false',
+                      help='don\'t build Fuchsia clang_rt runtime (linux/mac)',
+                      dest='with_fuchsia',
+                      default=sys.platform in ('linux2', 'darwin'))
   args = parser.parse_args()
 
   if args.lto_lld and not args.bootstrap:
@@ -883,16 +994,17 @@ def main():
       args.force_local_build):
     AddSvnToPathOnWin()
 
-  if use_head_revision:
-    # TODO(hans): Trunk version was updated; remove after the next roll.
-    global VERSION
-    VERSION = '8.0.0'
-
   if args.verify_version and args.verify_version != VERSION:
     print 'VERSION is %s but --verify-version argument was %s, exiting.' % (
         VERSION, args.verify_version)
     print 'clang_version in build/toolchain/toolchain.gni is likely outdated.'
     return 1
+
+  # DEVELOPER_DIR needs to be set when Xcode isn't in a standard location
+  # and xcode-select wasn't run.  This is needed for running clang and ld
+  # for the build done by this script, but it's also needed for running
+  # macOS system svn, so this needs to happen before calling functions using svn.
+  SetMacXcodePath()
 
   global CLANG_REVISION, PACKAGE_VERSION
   if args.print_revision:
@@ -918,9 +1030,8 @@ def main():
     PACKAGE_VERSION = CLANG_REVISION + '-0'
 
     args.force_local_build = True
-    if 'OS=android' not in os.environ.get('GYP_DEFINES', ''):
-      # Only build the Android ASan rt on ToT bots when targetting Android.
-      args.with_android = False
+    # Don't build fuchsia runtime on ToT bots at all.
+    args.with_fuchsia = False
 
   return UpdateClang(args)
 

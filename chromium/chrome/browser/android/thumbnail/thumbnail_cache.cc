@@ -11,8 +11,8 @@
 #include "base/android/application_status_listener.h"
 #include "base/android/path_utils.h"
 #include "base/big_endian.h"
+#include "base/command_line.h"
 #include "base/files/file.h"
-#include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/stl_util.h"
@@ -20,7 +20,9 @@
 #include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "gpu/command_buffer/service/gpu_switches.h"
 #include "third_party/android_opengl/etc1/etc1.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -186,6 +188,14 @@ void ThumbnailCache::Put(TabId tab_id,
   MakeSpaceForNewItemIfNecessary(tab_id);
   cache_.Put(tab_id, std::move(thumbnail));
 
+  // Vulkan does not yet support compressed texture uploads. Disable compression
+  // and approximation when in experimental Vulkan mode.
+  // TODO(ericrk): Remove this restriction. https://crbug.com/906794
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableVulkan)) {
+    return;
+  }
+
   if (use_approximation_thumbnail_) {
     std::pair<SkBitmap, float> approximation =
         CreateApproximation(bitmap, thumbnail_scale);
@@ -251,7 +261,7 @@ base::FilePath ThumbnailCache::GetCacheDirectory() {
 
 base::FilePath ThumbnailCache::GetFilePath(TabId tab_id) {
   base::FilePath path = GetCacheDirectory();
-  return path.Append(base::IntToString(tab_id));
+  return path.Append(base::NumberToString(tab_id));
 }
 
 bool ThumbnailCache::CheckAndUpdateThumbnailMetaData(TabId tab_id,
@@ -385,11 +395,12 @@ void ThumbnailCache::CompressThumbnailIfNecessary(
   gfx::Size encoded_size = GetEncodedSize(
       raw_data_size, ui_resource_provider_->SupportsETC1NonPowerOfTwo());
 
-  base::PostTaskWithTraits(FROM_HERE,
-                           {base::TaskPriority::BEST_EFFORT,
-                            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-                           base::Bind(&ThumbnailCache::CompressionTask, bitmap,
-                                      encoded_size, post_compression_task));
+  base::PostTaskWithTraits(
+      FROM_HERE,
+      {base::TaskPriority::BEST_EFFORT,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      base::BindOnce(&ThumbnailCache::CompressionTask, bitmap, encoded_size,
+                     post_compression_task));
 }
 
 void ThumbnailCache::ReadNextThumbnail() {
@@ -435,8 +446,8 @@ void ThumbnailCache::MakeSpaceForNewItemIfNecessary(TabId tab_id) {
          riter++) {
       if (cache_.Get(*riter)) {
         key_to_remove = *riter;
-        break;
         found_key_to_remove = true;
+        break;
       }
     }
   }
@@ -555,8 +566,8 @@ void ThumbnailCache::WriteTask(TabId tab_id,
   if (!success)
     base::DeleteFile(file_path, false);
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE, post_write_task);
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                           post_write_task);
 }
 
 void ThumbnailCache::PostWriteTask() {
@@ -603,11 +614,10 @@ void ThumbnailCache::CompressionTask(
     }
   }
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(post_compression_task, std::move(compressed_data),
-                 content_size));
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
+      base::BindOnce(post_compression_task, std::move(compressed_data),
+                     content_size));
 }
 
 void ThumbnailCache::PostCompressionTask(
@@ -769,15 +779,14 @@ void ThumbnailCache::ReadTask(
 
   if (decompress) {
     base::PostTaskWithTraits(
-        FROM_HERE, {base::TaskPriority::BEST_EFFORT},
-        base::Bind(post_read_task, std::move(compressed_data), scale,
-                   content_size));
+        FROM_HERE, {base::TaskPriority::USER_VISIBLE},
+        base::BindOnce(post_read_task, std::move(compressed_data), scale,
+                       content_size));
   } else {
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI,
-        FROM_HERE,
-        base::Bind(post_read_task, std::move(compressed_data), scale,
-                   content_size));
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::UI},
+        base::BindOnce(post_read_task, std::move(compressed_data), scale,
+                       content_size));
   }
 }
 
@@ -880,10 +889,9 @@ void ThumbnailCache::DecompressionTask(
     }
   }
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(post_decompression_callback, success, raw_data_small));
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
+      base::BindOnce(post_decompression_callback, success, raw_data_small));
 }
 
 ThumbnailCache::ThumbnailMetaData::ThumbnailMetaData() {

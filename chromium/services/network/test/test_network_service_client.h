@@ -5,6 +5,7 @@
 #ifndef SERVICES_NETWORK_TEST_TEST_NETWORK_SERVICE_CLIENT_H_
 #define SERVICES_NETWORK_TEST_TEST_NETWORK_SERVICE_CLIENT_H_
 
+#include "build/build_config.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 
@@ -35,6 +36,7 @@ class TestNetworkServiceClient : public network::mojom::NetworkServiceClient {
       const base::Optional<ResourceResponseHead>& head,
       mojom::AuthChallengeResponderPtr auth_challenge_responder) override;
   void OnCertificateRequested(
+      const base::Optional<base::UnguessableToken>& window_id,
       uint32_t process_id,
       uint32_t routing_id,
       uint32_t request_id,
@@ -61,6 +63,9 @@ class TestNetworkServiceClient : public network::mojom::NetworkServiceClient {
                       const GURL& first_party_url,
                       const net::CanonicalCookie& cookie,
                       bool blocked_by_policy) override;
+#if defined(OS_CHROMEOS)
+  void OnTrustAnchorUsed(const std::string& username_hash) override;
+#endif
   void OnFileUploadRequested(uint32_t process_id,
                              bool async,
                              const std::vector<base::FilePath>& file_paths,
@@ -73,6 +78,17 @@ class TestNetworkServiceClient : public network::mojom::NetworkServiceClient {
                        const std::string& header_value,
                        int load_flags,
                        OnClearSiteDataCallback callback) override;
+  void OnDataUseUpdate(int32_t network_traffic_annotation_id_hash,
+                       int64_t recv_bytes,
+                       int64_t sent_bytes) override;
+#if defined(OS_ANDROID)
+  void OnGenerateHttpNegotiateAuthToken(
+      const std::string& server_auth_token,
+      bool can_delegate,
+      const std::string& auth_negotiate_android_account_type,
+      const std::string& spn,
+      OnGenerateHttpNegotiateAuthTokenCallback callback) override;
+#endif
 
  private:
   bool enable_uploads_;

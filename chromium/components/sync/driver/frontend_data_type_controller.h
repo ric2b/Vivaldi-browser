@@ -21,8 +21,8 @@ namespace syncer {
 
 class AssociatorInterface;
 class ChangeProcessor;
-class SyncClient;
 class SyncError;
+class SyncService;
 
 // Implementation for datatypes that reside on the frontend thread
 // (UI thread). This is the same thread we perform initialization on, so we
@@ -39,14 +39,14 @@ class FrontendDataTypeController : public DirectoryDataTypeController {
   // |dump_stack| is called when an unrecoverable error occurs.
   FrontendDataTypeController(ModelType type,
                              const base::Closure& dump_stack,
-                             SyncClient* sync_client);
+                             SyncService* sync_service);
   ~FrontendDataTypeController() override;
 
   // DataTypeController interface.
   void LoadModels(const ConfigureContext& configure_context,
                   const ModelLoadCallback& model_load_callback) override;
-  void StartAssociating(const StartCallback& start_callback) override;
-  void Stop(SyncStopMetadataFate metadata_fate) override;
+  void StartAssociating(StartCallback start_callback) override;
+  void Stop(ShutdownReason shutdown_reason) override;
   State state() const override;
 
  protected:

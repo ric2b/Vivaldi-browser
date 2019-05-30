@@ -18,7 +18,10 @@
 
 class Profile;
 class Browser;
-class SigninManagerBase;
+
+namespace identity {
+class IdentityManager;
+}
 
 // Utility functions to gather status information from the various signed in
 // services and construct messages suitable for showing in UI.
@@ -29,7 +32,8 @@ const int kUpgradeWelcomeTutorialShowMax = 1;
 
 // Returns the username of the authenticated user or an empty string if there is
 // no authenticated user.
-base::string16 GetAuthenticatedUsername(const SigninManagerBase* signin);
+base::string16 GetAuthenticatedUsername(
+    const identity::IdentityManager* identity_manager);
 
 // Initializes signin-related preferences.
 void InitializePrefsForProfile(Profile* profile);
@@ -70,6 +74,7 @@ std::vector<AccountInfo> GetAccountsForDicePromos(Profile* profile);
 // Also, the parser does not validate the policy value.
 std::string GetAllowedDomain(std::string signin_pattern);
 
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
 namespace internal {
 // Same as |EnableSyncFromPromo| but with a callback that creates a
 // DiceTurnSyncOnHelper so that it can be unit tested.
@@ -88,6 +93,7 @@ void EnableSyncFromPromo(
              DiceTurnSyncOnHelper::SigninAbortedMode signin_aborted_mode)>
         create_dice_turn_sync_on_helper_callback);
 }  // namespace internal
+#endif
 
 }  // namespace signin_ui_util
 

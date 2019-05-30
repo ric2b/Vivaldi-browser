@@ -8,12 +8,11 @@
 
 #include <memory>
 
-#include "ash/public/cpp/config.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
-#include "ash/test/ash_test_environment.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/ash_test_views_delegate.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/message_loop/message_loop.h"
@@ -23,6 +22,7 @@
 #include "components/exo/file_helper.h"
 #include "components/exo/wayland/server.h"
 #include "components/exo/wm_helper.h"
+#include "components/exo/wm_helper_chromeos.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
@@ -31,23 +31,9 @@
 
 namespace exo {
 
-class AshTestEnvironmentWayland : public ash::AshTestEnvironment {
- public:
-  AshTestEnvironmentWayland() = default;
-  ~AshTestEnvironmentWayland() override = default;
-
-  // Overriden from ash::AshTestEnvironment:
-  std::unique_ptr<ash::AshTestViewsDelegate> CreateViewsDelegate() override {
-    return std::make_unique<ash::AshTestViewsDelegate>();
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(AshTestEnvironmentWayland);
-};
-
 // The ui message loop for running the wayland server. If it is not provided, we
 // will use external wayland server.
-base::MessageLoop* ui_message_loop_ = nullptr;
+scoped_refptr<base::SingleThreadTaskRunner> ui_thread_task_runner_ = nullptr;
 
 class WaylandClientTest::WaylandWatcher
     : public base::MessagePumpLibevent::FdWatcher {
@@ -79,35 +65,36 @@ WaylandClientTest::WaylandClientTest() = default;
 WaylandClientTest::~WaylandClientTest() = default;
 
 // static
-void WaylandClientTest::SetUIMessageLoop(base::MessageLoop* message_loop) {
-  DCHECK_NE(!!message_loop, !!ui_message_loop_);
-  ui_message_loop_ = message_loop;
+void WaylandClientTest::SetUIThreadTaskRunner(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+  DCHECK_NE(!!task_runner, !!ui_thread_task_runner_);
+  ui_thread_task_runner_ = std::move(task_runner);
 }
 
 void WaylandClientTest::SetUp() {
-  if (!ui_message_loop_)
+  if (!ui_thread_task_runner_)
     return;
 
-  DCHECK_NE(base::MessageLoopCurrent::Get(), ui_message_loop_);
+  DCHECK(!ui_thread_task_runner_->BelongsToCurrentThread());
 
   base::WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
                             base::WaitableEvent::InitialState::NOT_SIGNALED);
-  ui_message_loop_->task_runner()->PostTask(
+  ui_thread_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&WaylandClientTest::SetUpOnUIThread,
                                 base::Unretained(this), &event));
   event.Wait();
 }
 
 void WaylandClientTest::TearDown() {
-  if (!ui_message_loop_)
+  if (!ui_thread_task_runner_)
     return;
 
-  DCHECK(ui_message_loop_);
-  DCHECK_NE(base::MessageLoopCurrent::Get(), ui_message_loop_);
+  DCHECK(ui_thread_task_runner_);
+  DCHECK(!ui_thread_task_runner_->BelongsToCurrentThread());
 
   base::WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
                             base::WaitableEvent::InitialState::NOT_SIGNALED);
-  ui_message_loop_->task_runner()->PostTask(
+  ui_thread_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&WaylandClientTest::TearDownOnUIThread,
                                 base::Unretained(this), &event));
   event.Wait();
@@ -123,18 +110,14 @@ void WaylandClientTest::SetUpOnUIThread(base::WaitableEvent* event) {
   // Disable window animation when running tests.
   command_line->AppendSwitch(wm::switches::kWindowAnimationsDisabled);
 
-  ash_test_environment_ = std::make_unique<AshTestEnvironmentWayland>();
-  ash_test_helper_ =
-      std::make_unique<ash::AshTestHelper>(ash_test_environment_.get());
+  ash_test_helper_ = std::make_unique<ash::AshTestHelper>();
 
   ash_test_helper_->SetUp(false /* start_session */,
                           true /* provide_local_state */);
   ash::Shell::GetPrimaryRootWindow()->Show();
   ash::Shell::GetPrimaryRootWindow()->GetHost()->Show();
   ash::Shell::GetPrimaryRootWindow()->MoveCursorTo(gfx::Point(-1000, -1000));
-
-  if (ash::Shell::GetAshConfig() == ash::Config::CLASSIC)
-    ash::Shell::Get()->cursor_manager()->EnableMouseEvents();
+  ash::Shell::Get()->cursor_manager()->EnableMouseEvents();
 
   // Changing GestureConfiguration shouldn't make tests fail. These values
   // prevent unexpected events from being generated during tests. Such as
@@ -145,7 +128,8 @@ void WaylandClientTest::SetUpOnUIThread(base::WaitableEvent* event) {
   gesture_config->set_long_press_time_in_ms(1000);
   gesture_config->set_max_touch_move_in_pixels_for_click(5);
 
-  wm_helper_ = std::make_unique<WMHelper>(ash::Shell::Get()->aura_env());
+  wm_helper_ =
+      std::make_unique<WMHelperChromeOS>(ash::Shell::Get()->aura_env());
   WMHelper::SetInstance(wm_helper_.get());
   display_ = std::make_unique<Display>(nullptr, nullptr, nullptr);
   wayland_server_ = exo::wayland::Server::Create(display_.get());
@@ -164,7 +148,6 @@ void WaylandClientTest::TearDownOnUIThread(base::WaitableEvent* event) {
   ash::Shell::Get()->session_controller()->NotifyChromeTerminating();
   ash_test_helper_->TearDown();
   ash_test_helper_ = nullptr;
-  ash_test_environment_ = nullptr;
   xdg_temp_dir_ = nullptr;
   event->Signal();
 }

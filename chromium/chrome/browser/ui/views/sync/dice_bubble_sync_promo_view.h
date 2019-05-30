@@ -52,6 +52,9 @@ class DiceBubbleSyncPromoView : public views::View,
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
+  // Returns the sign-in button.
+  views::View* GetSigninButtonForTesting();
+
  private:
   // Used to enable sync in the DiceAccountsMenu and when |signin_button_| is
   // pressed.
@@ -70,7 +73,6 @@ class DiceBubbleSyncPromoView : public views::View,
   std::unique_ptr<DiceAccountsMenu> dice_accounts_menu_;
 
   std::vector<AccountInfo> accounts_for_submenu_;
-  std::vector<gfx::Image> images_for_submenu_;
 
   DISALLOW_COPY_AND_ASSIGN(DiceBubbleSyncPromoView);
 };

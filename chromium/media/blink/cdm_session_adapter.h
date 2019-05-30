@@ -10,9 +10,9 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -112,8 +112,9 @@ class CdmSessionAdapter : public base::RefCounted<CdmSessionAdapter> {
   friend class base::RefCounted<CdmSessionAdapter>;
 
   // Session ID to WebContentDecryptionModuleSessionImpl mapping.
-  typedef base::hash_map<std::string,
-                         base::WeakPtr<WebContentDecryptionModuleSessionImpl> >
+  typedef std::unordered_map<
+      std::string,
+      base::WeakPtr<WebContentDecryptionModuleSessionImpl>>
       SessionMap;
 
   ~CdmSessionAdapter();

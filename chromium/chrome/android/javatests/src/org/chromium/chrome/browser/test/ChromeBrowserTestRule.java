@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.test;
 
-import android.app.Instrumentation;
 import android.support.test.InstrumentationRegistry;
 
 import org.junit.runner.Description;
@@ -12,16 +11,16 @@ import org.junit.runners.model.Statement;
 
 import org.chromium.chrome.test.util.ApplicationData;
 import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
-import org.chromium.content.browser.test.NativeLibraryTestRule;
+import org.chromium.content_public.browser.test.NativeLibraryTestRule;
 
 /**
  * JUnit test rule that takes care of important initialization for Chrome-specific tests, such as
  * initializing the AccountManagerFacade.
  */
 public class ChromeBrowserTestRule extends NativeLibraryTestRule {
-    private void setUp(Instrumentation instrumentation) {
+    private void setUp() {
         ApplicationData.clearAppData(InstrumentationRegistry.getTargetContext());
-        SigninTestUtil.setUpAuthForTest(instrumentation);
+        SigninTestUtil.setUpAuthForTest();
         loadNativeLibraryAndInitBrowserProcess();
     }
 
@@ -35,7 +34,7 @@ public class ChromeBrowserTestRule extends NativeLibraryTestRule {
                  * UI thread).  After loading the library, this will initialize the browser process
                  * if necessary.
                  */
-                setUp(InstrumentationRegistry.getInstrumentation());
+                setUp();
                 try {
                     base.evaluate();
                 } finally {
@@ -46,7 +45,6 @@ public class ChromeBrowserTestRule extends NativeLibraryTestRule {
     }
 
     private void tearDown() {
-        SigninTestUtil.resetSigninState();
         SigninTestUtil.tearDownAuthForTest();
     }
 }

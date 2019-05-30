@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/ptr_util.h"
@@ -15,6 +16,7 @@
 #include "base/task/post_task.h"
 #include "chrome/browser/safe_browsing/download_protection/two_phase_uploader.h"
 #include "components/safe_browsing/proto/csd.pb.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
@@ -97,8 +99,8 @@ class DownloadFeedbackTest : public testing::Test {
   DownloadFeedbackTest()
       : file_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
             {base::MayBlock(), base::TaskPriority::BEST_EFFORT})),
-        io_task_runner_(content::BrowserThread::GetTaskRunnerForThread(
-            content::BrowserThread::IO)),
+        io_task_runner_(base::CreateSingleThreadTaskRunnerWithTraits(
+            {content::BrowserThread::IO})),
         feedback_finish_called_(false) {
     EXPECT_NE(io_task_runner_, file_task_runner_);
     shared_url_loader_factory_ =

@@ -10,15 +10,18 @@
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
 #include "third_party/blink/renderer/modules/media_controls/media_controls_impl.h"
+#include "third_party/blink/renderer/platform/text/platform_locale.h"
 
 namespace blink {
 
 MediaControlDisplayCutoutFullscreenButtonElement::
     MediaControlDisplayCutoutFullscreenButtonElement(
         MediaControlsImpl& media_controls)
-    : MediaControlInputElement(media_controls,
-                               kMediaDisplayCutoutFullscreenButton) {
-  setType(InputTypeNames::button);
+    : MediaControlInputElement(media_controls, kMediaIgnore) {
+  setType(input_type_names::kButton);
+  setAttribute(html_names::kAriaLabelAttr,
+               WTF::AtomicString(GetLocale().QueryString(
+                   WebLocalizedString::kAXMediaDisplayCutoutFullscreenButton)));
   SetShadowPseudoId(AtomicString(
       "-internal-media-controls-display-cutout-fullscreen-button"));
   SetIsWanted(false);
@@ -31,7 +34,8 @@ bool MediaControlDisplayCutoutFullscreenButtonElement::
 
 void MediaControlDisplayCutoutFullscreenButtonElement::DefaultEventHandler(
     Event& event) {
-  if (event.type() == EventTypeNames::click) {
+  if (event.type() == event_type_names::kClick ||
+      event.type() == event_type_names::kGesturetap) {
     // The button shouldn't be visible if not in fullscreen.
     DCHECK(MediaElement().IsFullscreen());
 

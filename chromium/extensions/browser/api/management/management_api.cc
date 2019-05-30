@@ -17,7 +17,6 @@
 #include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -48,7 +47,6 @@
 
 #include "app/vivaldi_apptools.h"
 
-using base::IntToString;
 using content::BrowserThread;
 
 namespace keys = extension_management_api_constants;
@@ -192,8 +190,7 @@ management::ExtensionInfo CreateExtensionInfo(
     const URLPatternSet& host_perms =
         extension.permissions_data()->active_permissions().explicit_hosts();
     if (!host_perms.is_empty()) {
-      for (URLPatternSet::const_iterator iter = host_perms.begin();
-           iter != host_perms.end(); ++iter) {
+      for (auto iter = host_perms.begin(); iter != host_perms.end(); ++iter) {
         info.host_permissions.push_back(iter->GetAsString());
       }
     }
@@ -569,7 +566,8 @@ ExtensionFunction::ResponseAction ManagementUninstallFunctionBase::Uninstall(
   } else {  // No confirm dialog.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&ManagementUninstallFunctionBase::UninstallExtension, this));
+        base::BindOnce(&ManagementUninstallFunctionBase::UninstallExtension,
+                       this));
   }
 
   return RespondLater();

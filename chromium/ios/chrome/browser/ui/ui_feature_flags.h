@@ -7,35 +7,29 @@
 
 #include "base/feature_list.h"
 
-// Used to enable the UI Refresh omnibox popup presentation. This flag should
-// not be used directly. Instead use
-// ui_util::IsRefreshPopupPresentationEnabled().
-extern const base::Feature kRefreshPopupPresentation;
-
-// Used to enable the UI Refresh location bar/omnibox. This flag should
-// not be used directly. Instead use
-// ui_util::IsRefreshLocationBarEnabled().
-extern const base::Feature kUIRefreshLocationBar;
-
-// Used to enable the first phase of the UI refresh. This flag should not be
-// used directly. Instead use ui_util::IsUIRefreshPhase1Enabled().
-extern const base::Feature kUIRefreshPhase1;
-
-// Feature to choose whether to use the new UI Reboot Infobar UX, or the legacy
-// one. This flag should not be used directly. Instead, use
-// IsRefreshInfobarEnabled().
-extern const base::Feature kInfobarsUIReboot;
-
-// Avoid the crash in https://crbug.com/816427 by getting the first responder by
-// navigating the key window, rather than using -sendAction to find the first
-// responder.
-extern const base::Feature kFirstResponderKeyWindow;
-
 // Feature to automatically switch to the regular tabs panel in tab grid after
 // closing the last incognito tab.
 extern const base::Feature kClosingLastIncognitoTab;
 
-// Feature to copy image to system pasteboard via context menu.
-extern const base::Feature kCopyImage;
+// Feature to contain the NTP directly from browser container.
+extern const base::Feature kBrowserContainerContainsNTP;
+
+// Feature to retain the contentView in the browser container.
+extern const base::Feature kBrowserContainerKeepsContentView;
+
+// Feature to show most visited sites and collection shortcuts in the omnibox
+// popup instead of ZeroSuggest.
+extern const base::Feature kOmniboxPopupShortcutIconsInZeroState;
+
+// Feature to take snapshots using |-drawViewHierarchy:|.
+extern const base::Feature kSnapshotDrawView;
+
+// Feature to rework handling of copied content (url/string/image) in the ui.
+// This feature is used in extensions. If you modify it significantly, you may
+// want to update the version in |app_group_field_trial_version|.
+extern const base::Feature kCopiedContentBehavior;
+
+// Feature to apply UI Refresh theme to the settings.
+extern const base::Feature kSettingsRefresh;
 
 #endif  // IOS_CHROME_BROWSER_UI_UI_FEATURE_FLAGS_H_

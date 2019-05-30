@@ -13,6 +13,7 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/metrics/user_action_tester.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -30,10 +31,9 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/user_manager.h"
-#include "chrome/browser/ui/views/profiles/profile_indicator_icon.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/profiles/user_manager_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/browser/ui/views_mode_controller.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -42,14 +42,9 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/events/event_utils.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/webview/webview.h"
-
-#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
-#include "chrome/browser/ui/views/frame/browser_view.h"
-#endif
 
 namespace {
 
@@ -121,6 +116,10 @@ class ProfileChooserViewExtensionsTest
 
   // SupportsTestUi:
   void ShowUi(const std::string& name) override {
+    // Bubble dialogs' bounds may exceed the display's work area.
+    // https://crbug.com/893292.
+    set_should_verify_dialog_bounds(false);
+
     constexpr char kSignedIn[] = "SignedIn";
     constexpr char kMultiProfile[] = "MultiProfile";
     constexpr char kGuest[] = "Guest";
@@ -169,16 +168,7 @@ class ProfileChooserViewExtensionsTest
  protected:
   void OpenProfileChooserView(Browser* browser) {
     ProfileChooserView::close_on_deactivate_for_testing_ = false;
-#if defined(OS_MACOSX) && BUILDFLAG(MAC_VIEWS_BROWSER)
-    if (views_mode_controller::IsViewsBrowserCocoa())
-      OpenProfileChooserCocoa(browser);
-    else
-      OpenProfileChooserViews(browser);
-#elif defined(OS_MACOSX)
-    OpenProfileChooserCocoa(browser);
-#else
     OpenProfileChooserViews(browser);
-#endif
 
     base::RunLoop().RunUntilIdle();
     ASSERT_TRUE(ProfileChooserView::IsShowing());
@@ -189,33 +179,15 @@ class ProfileChooserViewExtensionsTest
         content::Source<Browser>(browser)));
   }
 
-#if defined(OS_MACOSX)
-  void OpenProfileChooserCocoa(Browser* browser) {
-    // Show the avatar bubble via API on macOS until |mac_views_browser| is
-    // enabled.
-    browser->window()->ShowAvatarBubbleFromAvatarButton(
-        BrowserWindow::AVATAR_BUBBLE_MODE_DEFAULT,
-        signin::ManageAccountsParams(),
-        signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN, true);
-  }
-#endif
-
-#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
   void OpenProfileChooserViews(Browser* browser) {
     BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-    views::View* button;
-    if (ui::MaterialDesignController::IsRefreshUi())
-      button = browser_view->toolbar()->avatar_button();
-    else
-      button = browser_view->frame()->GetNewAvatarMenuButton();
-    if (!button)
-      NOTREACHED() << "Avatar button not found.";
+    views::View* button = browser_view->toolbar()->avatar_button();
+    DCHECK(button);
 
     ui::MouseEvent e(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                      ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0);
     button->OnMousePressed(e);
   }
-#endif
 
   AvatarMenu* GetProfileChooserViewAvatarMenu() {
     return ProfileChooserView::profile_bubble_->avatar_menu_.get();
@@ -250,7 +222,7 @@ class ProfileChooserViewExtensionsTest
     return ProfileChooserView::profile_bubble_;
   }
 
-  views::View* signin_current_profile_button() {
+  views::LabelButton* signin_current_profile_button() {
     return ProfileChooserView::profile_bubble_->signin_current_profile_button_;
   }
 
@@ -264,6 +236,7 @@ class ProfileChooserViewExtensionsTest
   DISALLOW_COPY_AND_ASSIGN(ProfileChooserViewExtensionsTest);
 };
 
+// TODO(https://crbug.com/855867): This test is flaky on Windows.
 #if defined(OS_WIN)
 #define MAYBE_SigninButtonHasFocus DISABLED_SigninButtonHasFocus
 #else
@@ -275,6 +248,17 @@ IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
   ASSERT_NO_FATAL_FAILURE(OpenProfileChooserView(browser()));
 
   EXPECT_TRUE(signin_current_profile_button()->HasFocus());
+}
+
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, ClickSigninButton) {
+  ASSERT_NO_FATAL_FAILURE(OpenProfileChooserView(browser()));
+
+  views::ButtonListener* bubble = current_profile_bubble();
+  const ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
+                             ui::EventTimeForNow(), 0, 0);
+  base::UserActionTester tester;
+  bubble->ButtonPressed(signin_current_profile_button(), event);
+  EXPECT_EQ(1, tester.GetActionCount("Signin_Signin_FromAvatarBubbleSignin"));
 }
 
 // Make sure nothing bad happens when the browser theme changes while the
@@ -428,7 +412,7 @@ IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
   ASSERT_EQ(1, tab_strip->active_index());
 
   ASSERT_NO_FATAL_FAILURE(OpenProfileChooserView(browser()));
-  tab_strip->ActivateTabAt(0, false);
+  tab_strip->ActivateTabAt(0);
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(ProfileChooserView::IsShowing());
 }
@@ -487,8 +471,7 @@ IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, InvokeUi_Guest) {
 // TODO: Flaking test crbug.com/802374
 // Shows the |ProfileChooserView| during a Guest browsing session when the DICE
 // flag is enabled.
-IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
-                       DISABLED_InvokeUi_DiceGuest) {
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, InvokeUi_DiceGuest) {
   ScopedAccountConsistencyDice scoped_dice;
   ShowAndVerifyUi();
 }
@@ -511,7 +494,6 @@ IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
 // Shows the |ProfileChooserView| when a supervised user is the active profile.
 IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
                        DISABLED_InvokeUi_SupervisedUser) {
-  ScopedAccountConsistencyDiceFixAuthErrors scoped_account_consistency;
   ShowAndVerifyUi();
 }
 

@@ -8,7 +8,6 @@
 #include "base/command_line.h"
 #include "calendar/calendar_model_loaded_observer.h"
 #include "calendar/calendar_service_factory.h"
-#include "chrome/browser/net/url_info.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_switches.h"
@@ -26,8 +25,10 @@
 #include "notes/notesnode.h"
 #include "ui/lazy_load_service_factory.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
+#include "vivaldi/prefs/vivaldi_gen_pref_enums.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/api/bookmark_context_menu/bookmark_context_menu_api.h"
 #include "extensions/api/bookmarks/bookmarks_private_api.h"
 #include "extensions/api/calendar/calendar_api.h"
 #include "extensions/api/contacts/contacts_api.h"
@@ -38,9 +39,9 @@
 #include "extensions/api/prefs/prefs_api.h"
 #include "extensions/api/runtime/runtime_api.h"
 #include "extensions/api/settings/settings_api.h"
-#include "extensions/api/show_menu/show_menu_api.h"
 #include "extensions/api/sync/sync_api.h"
 #include "extensions/api/tabs/tabs_private_api.h"
+#include "extensions/api/vivaldi_account/vivaldi_account_api.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/api/window/window_private_api.h"
 #include "extensions/api/zoom/zoom_api.h"
@@ -64,6 +65,7 @@ void VivaldiBrowserMainExtraParts::
     EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   translate::TranslateLanguageList::DisableUpdate();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+  extensions::BookmarkContextMenuAPI::GetFactoryInstance();
   extensions::CalendarAPI::GetFactoryInstance();
   extensions::ContactsAPI::GetFactoryInstance();
   extensions::VivaldiBookmarksAPI::GetFactoryInstance();
@@ -72,8 +74,8 @@ void VivaldiBrowserMainExtraParts::
   extensions::ImportDataAPI::GetFactoryInstance();
   extensions::NotesAPI::GetFactoryInstance();
   extensions::TabsPrivateAPI::GetFactoryInstance();
-  extensions::ShowMenuAPI::GetFactoryInstance();
   extensions::SyncAPI::GetFactoryInstance();
+  extensions::VivaldiAccountAPI::GetFactoryInstance();
   extensions::VivaldiDataSourcesAPI::GetFactoryInstance();
   extensions::VivaldiExtensionInit::GetFactoryInstance();
   extensions::VivaldiPrefsApiNotificationFactory::GetInstance();
@@ -89,10 +91,9 @@ void VivaldiBrowserMainExtraParts::PreProfileInit() {
   EnsureBrowserContextKeyedServiceFactoriesBuilt();
 }
 
-void VivaldiBrowserMainExtraParts::PostProfileInit() {
+// static
+void VivaldiBrowserMainExtraParts::PostProfileInit(Profile* profile) {
 #if !defined(OS_ANDROID)
-  Profile* profile = ProfileManager::GetActiveUserProfile();
-
   vivaldi::Notes_Model* notes_model =
       vivaldi::NotesModelFactory::GetForBrowserContext(profile);
   notes_model->AddObserver(new vivaldi::NotesModelLoadedObserver(profile));
@@ -119,5 +120,15 @@ void VivaldiBrowserMainExtraParts::PostProfileInit() {
         base::CommandLine::ForCurrentProcess(),
         switches::kDisableSmoothScrolling);
   }
+  int spatnav = pref_service->GetInteger(vivaldiprefs::kWebpagesSpatialNavigationMethod);
+  if (spatnav ==
+      static_cast<int>(
+          vivaldiprefs::WebpagesSpatialNavigationMethodValues::BLINK)) {
+    vivaldi::CommandLineAppendSwitchNoDup(
+        base::CommandLine::ForCurrentProcess(),
+        switches::kEnableSpatialNavigation);
+  }
+  vivaldi::CommandLineAppendSwitchNoDup(base::CommandLine::ForCurrentProcess(),
+                                        switches::kSavePageAsMHTML);
 #endif
 }

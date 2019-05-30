@@ -115,8 +115,7 @@ class MockSyncChangeProcessor : public syncer::SyncChangeProcessor {
           "MockSyncChangeProcessor: configured to fail",
           change_list[0].sync_data().GetDataType());
     }
-    for (syncer::SyncChangeList::const_iterator it = change_list.begin();
-        it != change_list.end(); ++it) {
+    for (auto it = change_list.cbegin(); it != change_list.cend(); ++it) {
       changes_.push_back(std::make_unique<SettingSyncData>(*it));
     }
     return syncer::SyncError();
@@ -193,11 +192,12 @@ class ExtensionSettingsSyncTest : public testing::Test {
 
     ExtensionsBrowserClient::Get()
         ->GetExtensionSystemFactory()
-        ->SetTestingFactoryAndUse(profile_.get(),
-                                  &MockExtensionSystemFactoryFunction);
+        ->SetTestingFactoryAndUse(
+            profile_.get(),
+            base::BindRepeating(&MockExtensionSystemFactoryFunction));
 
-    EventRouterFactory::GetInstance()->SetTestingFactory(profile_.get(),
-                                                         &BuildEventRouter);
+    EventRouterFactory::GetInstance()->SetTestingFactory(
+        profile_.get(), base::BindRepeating(&BuildEventRouter));
   }
 
   void TearDown() override {
@@ -230,8 +230,7 @@ class ExtensionSettingsSyncTest : public testing::Test {
     syncer::SyncDataList as_list =
         GetSyncableService(model_type)->GetAllSyncData(model_type);
     SettingSyncDataMultimap as_map;
-    for (syncer::SyncDataList::iterator it = as_list.begin();
-        it != as_list.end(); ++it) {
+    for (auto it = as_list.begin(); it != as_list.end(); ++it) {
       std::unique_ptr<SettingSyncData> sync_data(new SettingSyncData(*it));
       std::unique_ptr<SettingSyncDataList>& list_for_extension =
           as_map[sync_data->extension_id()];
@@ -1428,7 +1427,7 @@ static void UnlimitedSyncStorageTestCallback(ValueStore* sync_storage) {
   // permission can't apply to sync.
   std::unique_ptr<base::Value> kilobyte = util::CreateKilobyte();
   for (int i = 0; i < 100; ++i) {
-    sync_storage->Set(ValueStore::DEFAULTS, base::IntToString(i), *kilobyte);
+    sync_storage->Set(ValueStore::DEFAULTS, base::NumberToString(i), *kilobyte);
   }
 
   EXPECT_FALSE(sync_storage->Set(ValueStore::DEFAULTS, "WillError", *kilobyte)
@@ -1440,7 +1439,8 @@ static void UnlimitedLocalStorageTestCallback(ValueStore* local_storage) {
   // Local storage should never run out.
   std::unique_ptr<base::Value> megabyte = util::CreateMegabyte();
   for (int i = 0; i < 7; ++i) {
-    local_storage->Set(ValueStore::DEFAULTS, base::IntToString(i), *megabyte);
+    local_storage->Set(ValueStore::DEFAULTS, base::NumberToString(i),
+                       *megabyte);
   }
 
   EXPECT_TRUE(local_storage->Set(ValueStore::DEFAULTS, "WontError", *megabyte)

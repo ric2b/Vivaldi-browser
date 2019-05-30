@@ -69,7 +69,7 @@ class BackgroundTracingManagerImpl : public BackgroundTracingManager {
 
   void OnRuleTriggered(const BackgroundTracingRule* triggered_rule,
                        StartedFinalizingCallback callback);
-  void AbortScenario();
+  CONTENT_EXPORT void AbortScenario() override;
   bool HasActiveScenario() override;
 
   void OnStartTracingDone(BackgroundTracingConfigImpl::CategoryPreset preset);
@@ -124,6 +124,10 @@ class BackgroundTracingManagerImpl : public BackgroundTracingManager {
   base::trace_event::TraceConfig GetConfigForCategoryPreset(
       BackgroundTracingConfigImpl::CategoryPreset,
       base::trace_event::TraceRecordMode) const;
+
+  void OnAbortScenarioReceived(
+      std::unique_ptr<const base::DictionaryValue> metadata,
+      base::RefCountedString* trace_str);
 
   class TracingTimer {
    public:

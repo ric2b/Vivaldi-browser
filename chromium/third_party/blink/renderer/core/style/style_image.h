@@ -49,9 +49,7 @@ class CORE_EXPORT StyleImage : public GarbageCollectedFinalized<StyleImage> {
  public:
   virtual ~StyleImage() = default;
 
-  bool operator==(const StyleImage& other) const {
-    return Data() == other.Data();
-  }
+  bool operator==(const StyleImage& other) const { return IsEqual(other); }
 
   // Returns a CSSValue representing the origin <image> value. May not be the
   // actual CSSValue from which this StyleImage was originally created if the
@@ -91,12 +89,11 @@ class CORE_EXPORT StyleImage : public GarbageCollectedFinalized<StyleImage> {
                               float multiplier,
                               const LayoutSize& default_object_size) const = 0;
 
-  // The <image> does not have any intrinsic dimensions.
-  virtual bool ImageHasRelativeSize() const = 0;
-
-  // The <image> may depend on dimensions from the context the image is used in
-  // (the "container".)
-  virtual bool UsesImageContainerSize() const = 0;
+  // The <image> has intrinsic dimensions.
+  //
+  // If this returns false, then a call to ImageSize() is expected to return
+  // the |default_object_size| argument that it was passed unmodified.
+  virtual bool HasIntrinsicSize() const = 0;
 
   virtual void AddClient(ImageResourceObserver*) = 0;
   virtual void RemoveClient(ImageResourceObserver*) = 0;
@@ -142,9 +139,6 @@ class CORE_EXPORT StyleImage : public GarbageCollectedFinalized<StyleImage> {
   bool IsLazyloadPossiblyDeferred() const {
     return is_lazyload_possibly_deferred_;
   }
-  void SetIsLazyloadPossiblyDeferred(bool is_lazyload_possibly_deferred) {
-    is_lazyload_possibly_deferred_ = is_lazyload_possibly_deferred;
-  }
 
   virtual void Trace(blink::Visitor* visitor) {}
 
@@ -162,6 +156,8 @@ class CORE_EXPORT StyleImage : public GarbageCollectedFinalized<StyleImage> {
   bool is_image_resource_set_ : 1;
   bool is_paint_image_ : 1;
   bool is_lazyload_possibly_deferred_ : 1;
+
+  virtual bool IsEqual(const StyleImage&) const = 0;
 
   FloatSize ApplyZoom(const FloatSize&, float multiplier) const;
   FloatSize ImageSizeForSVGImage(SVGImage*,

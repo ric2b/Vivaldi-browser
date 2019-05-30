@@ -192,10 +192,12 @@ scoped_refptr<FontDataForRangeSet> FontFallbackIterator::Next(
   }
 
   if (RangeSetContributesForHint(hint_list, current_segmented_face.get())) {
-    const SimpleFontData* font_data = current_segmented_face->FontData();
-    if (const CustomFontData* custom_font_data = font_data->GetCustomFontData())
-      custom_font_data->BeginLoadIfNeeded();
-    if (!font_data->IsLoading())
+    const SimpleFontData* current_segmented_face_font_data =
+        current_segmented_face->FontData();
+    if (const CustomFontData* current_segmented_face_custom_font_data =
+            current_segmented_face_font_data->GetCustomFontData())
+      current_segmented_face_custom_font_data->BeginLoadIfNeeded();
+    if (!current_segmented_face_font_data->IsLoading())
       return UniqueOrNext(current_segmented_face, hint_list);
     tracked_loading_range_sets_.push_back(current_segmented_face);
   }
@@ -224,7 +226,7 @@ static inline unsigned ChooseHintIndex(const Vector<UChar32>& hint_list) {
   if (hint_list.size() <= 1)
     return 0;
 
-  for (size_t i = 1; i < hint_list.size(); ++i) {
+  for (wtf_size_t i = 1; i < hint_list.size(); ++i) {
     if (Character::HasDefiniteScript(hint_list[i]))
       return i;
   }

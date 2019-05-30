@@ -61,16 +61,49 @@ class RoundedCornersImageSource : public gfx::CanvasImageSource {
 
 }  // namespace
 
+// static
+void ChromeAppIcon::ApplyEffects(int resource_size_in_dip,
+                                 const ResizeFunction& resize_function,
+                                 bool apply_chrome_badge,
+                                 bool app_launchable,
+                                 bool from_bookmark,
+                                 gfx::ImageSkia* image_skia) {
+  if (!resize_function.is_null()) {
+    resize_function.Run(gfx::Size(resource_size_in_dip, resource_size_in_dip),
+                        image_skia);
+  }
+
+#if defined(OS_CHROMEOS)
+  if (apply_chrome_badge) {
+    util::ApplyChromeBadge(image_skia);
+  }
+#endif
+
+  if (!app_launchable) {
+    constexpr color_utils::HSL shift = {-1, 0, 0.6};
+    *image_skia =
+        gfx::ImageSkiaOperations::CreateHSLShiftedImage(*image_skia, shift);
+  }
+
+  if (from_bookmark) {
+    *image_skia =
+        gfx::ImageSkia(std::make_unique<RoundedCornersImageSource>(*image_skia),
+                       image_skia->size());
+  }
+}
+
 ChromeAppIcon::ChromeAppIcon(ChromeAppIconDelegate* delegate,
                              content::BrowserContext* browser_context,
                              DestroyedCallback destroyed_callback,
                              const std::string& app_id,
-                             int resource_size_in_dip)
+                             int resource_size_in_dip,
+                             const ResizeFunction& resize_function)
     : delegate_(delegate),
       browser_context_(browser_context),
       destroyed_callback_(std::move(destroyed_callback)),
       app_id_(app_id),
-      resource_size_in_dip_(resource_size_in_dip) {
+      resource_size_in_dip_(resource_size_in_dip),
+      resize_function_(resize_function) {
   DCHECK(delegate_);
   DCHECK(browser_context_);
   DCHECK(!destroyed_callback_.is_null());
@@ -95,7 +128,7 @@ void ChromeAppIcon::Reload() {
   icon_ = std::make_unique<IconImage>(
       browser_context_, extension,
       extension ? IconsInfo::GetIcons(extension) : ExtensionIconSet(),
-      resource_size_in_dip_, default_icon, this);
+      resource_size_in_dip_, !resize_function_.is_null(), default_icon, this);
   UpdateIcon();
 }
 
@@ -108,23 +141,21 @@ void ChromeAppIcon::UpdateIcon() {
   DCHECK(icon_);
 
   image_skia_ = icon_->image_skia();
+
+  bool apply_chrome_badge = false;
 #if defined(OS_CHROMEOS)
-  icon_is_badged_ =
-      util::MaybeApplyChromeBadge(browser_context_, app_id_, &image_skia_);
+  icon_is_badged_ = util::ShouldApplyChromeBadge(browser_context_, app_id_);
+  apply_chrome_badge = icon_is_badged_;
 #endif
 
-  if (!util::IsAppLaunchable(app_id_, browser_context_)) {
-    const color_utils::HSL shift = {-1, 0, 0.6};
-    image_skia_ =
-        gfx::ImageSkiaOperations::CreateHSLShiftedImage(image_skia_, shift);
-  }
+  bool app_launchable = util::IsAppLaunchable(app_id_, browser_context_);
 
-  const Extension* extension = GetExtension();
-  if (extension && extension->from_bookmark()) {
-    image_skia_ =
-        gfx::ImageSkia(std::make_unique<RoundedCornersImageSource>(image_skia_),
-                       image_skia_.size());
-  }
+  const Extension* extension =
+      ExtensionRegistry::Get(browser_context_)->GetInstalledExtension(app_id_);
+  bool from_bookmark = extension && extension->from_bookmark();
+
+  ApplyEffects(resource_size_in_dip_, resize_function_, apply_chrome_badge,
+               app_launchable, from_bookmark, &image_skia_);
 
   delegate_->OnIconUpdated(this);
 }

@@ -12,8 +12,8 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
-#include "components/cbor/cbor_reader.h"
-#include "components/cbor/cbor_writer.h"
+#include "components/cbor/reader.h"
+#include "components/cbor/writer.h"
 #include "device/fido/authenticator_data.h"
 #include "device/fido/authenticator_supported_options.h"
 #include "device/fido/fido_constants.h"
@@ -36,7 +36,7 @@ ProtocolVersion ConvertStringToProtocolVersion(base::StringPiece version) {
 
 }  // namespace
 
-using CBOR = cbor::CBORValue;
+using CBOR = cbor::Value;
 
 CtapDeviceResponseCode GetResponseCode(base::span<const uint8_t> buffer) {
   if (buffer.empty())
@@ -51,12 +51,12 @@ CtapDeviceResponseCode GetResponseCode(base::span<const uint8_t> buffer) {
 // Decodes byte array response from authenticator to CBOR value object and
 // checks for correct encoding format.
 base::Optional<AuthenticatorMakeCredentialResponse>
-ReadCTAPMakeCredentialResponse(base::span<const uint8_t> buffer) {
+ReadCTAPMakeCredentialResponse(FidoTransportProtocol transport_used,
+                               base::span<const uint8_t> buffer) {
   if (buffer.size() <= kResponseCodeLength)
     return base::nullopt;
 
-  base::Optional<CBOR> decoded_response =
-      cbor::CBORReader::Read(buffer.subspan(1));
+  base::Optional<CBOR> decoded_response = cbor::Reader::Read(buffer.subspan(1));
   if (!decoded_response || !decoded_response->is_map())
     return base::nullopt;
 
@@ -80,6 +80,7 @@ ReadCTAPMakeCredentialResponse(base::span<const uint8_t> buffer) {
     return base::nullopt;
 
   return AuthenticatorMakeCredentialResponse(
+      transport_used,
       AttestationObject(std::move(*authenticator_data),
                         std::make_unique<OpaqueAttestationStatement>(
                             format, it->second.Clone())));
@@ -90,8 +91,7 @@ base::Optional<AuthenticatorGetAssertionResponse> ReadCTAPGetAssertionResponse(
   if (buffer.size() <= kResponseCodeLength)
     return base::nullopt;
 
-  base::Optional<CBOR> decoded_response =
-      cbor::CBORReader::Read(buffer.subspan(1));
+  base::Optional<CBOR> decoded_response = cbor::Reader::Read(buffer.subspan(1));
 
   if (!decoded_response || !decoded_response->is_map())
     return base::nullopt;
@@ -149,8 +149,7 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
       GetResponseCode(buffer) != CtapDeviceResponseCode::kSuccess)
     return base::nullopt;
 
-  base::Optional<CBOR> decoded_response =
-      cbor::CBORReader::Read(buffer.subspan(1));
+  base::Optional<CBOR> decoded_response = cbor::Reader::Read(buffer.subspan(1));
 
   if (!decoded_response || !decoded_response->is_map())
     return base::nullopt;
@@ -158,24 +157,34 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
   const auto& response_map = decoded_response->GetMap();
 
   auto it = response_map.find(CBOR(1));
-  if (it == response_map.end() || !it->second.is_array() ||
-      it->second.GetArray().size() > 2) {
+  if (it == response_map.end() || !it->second.is_array()) {
     return base::nullopt;
   }
 
   base::flat_set<ProtocolVersion> protocol_versions;
+  base::flat_set<base::StringPiece> advertised_protocols;
   for (const auto& version : it->second.GetArray()) {
     if (!version.is_string())
       return base::nullopt;
+    const std::string& version_string = version.GetString();
 
-    auto protocol = ConvertStringToProtocolVersion(version.GetString());
+    if (!advertised_protocols.insert(version_string).second) {
+      // Duplicate versions are not allowed.
+      return base::nullopt;
+    }
+
+    auto protocol = ConvertStringToProtocolVersion(version_string);
     if (protocol == ProtocolVersion::kUnknown) {
       VLOG(2) << "Unexpected protocol version received.";
       continue;
     }
 
-    if (!protocol_versions.insert(protocol).second)
+    if (!protocol_versions.insert(protocol).second) {
+      // A duplicate value will have already caused an error therefore hitting
+      // this suggests that |ConvertStringToProtocolVersion| is non-injective.
+      NOTREACHED();
       return base::nullopt;
+    }
   }
 
   if (protocol_versions.empty())
@@ -218,7 +227,7 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
       if (!option_map_it->second.is_bool())
         return base::nullopt;
 
-      options.SetIsPlatformDevice(option_map_it->second.GetBool());
+      options.is_platform_device = option_map_it->second.GetBool();
     }
 
     option_map_it = option_map.find(CBOR(kResidentKeyMapKey));
@@ -226,7 +235,7 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
       if (!option_map_it->second.is_bool())
         return base::nullopt;
 
-      options.SetSupportsResidentKey(option_map_it->second.GetBool());
+      options.supports_resident_key = option_map_it->second.GetBool();
     }
 
     option_map_it = option_map.find(CBOR(kUserPresenceMapKey));
@@ -234,7 +243,7 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
       if (!option_map_it->second.is_bool())
         return base::nullopt;
 
-      options.SetUserPresenceRequired(option_map_it->second.GetBool());
+      options.supports_user_presence = option_map_it->second.GetBool();
     }
 
     option_map_it = option_map.find(CBOR(kUserVerificationMapKey));
@@ -243,13 +252,11 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
         return base::nullopt;
 
       if (option_map_it->second.GetBool()) {
-        options.SetUserVerificationAvailability(
-            AuthenticatorSupportedOptions::UserVerificationAvailability::
-                kSupportedAndConfigured);
+        options.user_verification_availability = AuthenticatorSupportedOptions::
+            UserVerificationAvailability::kSupportedAndConfigured;
       } else {
-        options.SetUserVerificationAvailability(
-            AuthenticatorSupportedOptions::UserVerificationAvailability::
-                kSupportedButNotConfigured);
+        options.user_verification_availability = AuthenticatorSupportedOptions::
+            UserVerificationAvailability::kSupportedButNotConfigured;
       }
     }
 
@@ -259,13 +266,11 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
         return base::nullopt;
 
       if (option_map_it->second.GetBool()) {
-        options.SetClientPinAvailability(
-            AuthenticatorSupportedOptions::ClientPinAvailability::
-                kSupportedAndPinSet);
+        options.client_pin_availability = AuthenticatorSupportedOptions::
+            ClientPinAvailability::kSupportedAndPinSet;
       } else {
-        options.SetClientPinAvailability(
-            AuthenticatorSupportedOptions::ClientPinAvailability::
-                kSupportedButPinNotSet);
+        options.client_pin_availability = AuthenticatorSupportedOptions::
+            ClientPinAvailability::kSupportedButPinNotSet;
       }
     }
     response.SetOptions(std::move(options));

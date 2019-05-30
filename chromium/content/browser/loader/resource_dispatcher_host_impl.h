@@ -37,13 +37,13 @@
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/stream_handle.h"
 #include "content/public/common/previews_state.h"
-#include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
 #include "net/base/load_states.h"
 #include "net/base/request_priority.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/keepalive_statistics_recorder.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -146,18 +146,13 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   static const int kAvgBytesPerOutstandingRequest = 4400;
 
   // Called when a RenderViewHost is created.
-  void OnRenderViewHostCreated(
+  static void OnRenderViewHostCreated(
       int child_id,
       int route_id,
       net::URLRequestContextGetter* url_request_context_getter);
 
   // Called when a RenderViewHost is deleted.
-  void OnRenderViewHostDeleted(int child_id, int route_id);
-
-  // Called when a RenderViewHost starts or stops loading.
-  void OnRenderViewHostSetIsLoading(int child_id,
-                                    int route_id,
-                                    bool is_loading);
+  static void OnRenderViewHostDeleted(int child_id, int route_id);
 
   // Force cancels any pending requests for the given process.
   void CancelRequestsForProcess(int child_id);
@@ -243,6 +238,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       ServiceWorkerNavigationHandleCore* service_worker_handle_core,
       AppCacheNavigationHandleCore* appcache_handle_core,
       uint32_t url_loader_options,
+      net::RequestPriority net_priority,
       const GlobalRequestID& global_request_id);
 
   int num_in_flight_requests_for_testing() const {
@@ -277,6 +273,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
                             int render_process_host_id,
                             int render_view_routing_id,
                             int render_frame_routing_id,
+                            int frame_tree_node_id,
                             PreviewsState previews_state,
                             ResourceContext* context);
 
@@ -396,7 +393,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   typedef std::map<std::string, HeaderInterceptorInfo> HeaderInterceptorMap;
 
   // ResourceLoaderDelegate implementation:
-  scoped_refptr<LoginDelegate> CreateLoginDelegate(
+  std::unique_ptr<LoginDelegate> CreateLoginDelegate(
       ResourceLoader* loader,
       net::AuthChallengeInfo* auth_info) override;
   bool HandleExternalProtocol(ResourceLoader* loader, const GURL& url) override;
@@ -435,18 +432,18 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // Returns the OustandingRequestsStats for |info|'s renderer, or an empty
   // struct if that renderer has no outstanding requests.
   OustandingRequestsStats GetOutstandingRequestsStats(
-      const ResourceRequestInfoImpl& info);
+      ResourceRequestInfoImpl* info);
 
   // Updates |outstanding_requests_stats_map_| with the specified |stats| for
   // the renderer that made the request in |info|.
-  void UpdateOutstandingRequestsStats(const ResourceRequestInfoImpl& info,
+  void UpdateOutstandingRequestsStats(ResourceRequestInfoImpl* info,
                                       const OustandingRequestsStats& stats);
 
   // Called every time an outstanding request is created or deleted. |count|
   // indicates whether the request is new or deleted. |count| must be 1 or -1.
   OustandingRequestsStats IncrementOutstandingRequestsMemory(
       int count,
-      const ResourceRequestInfoImpl& info);
+      ResourceRequestInfoImpl* info);
 
   // Called when an in flight request allocates or releases a shared memory
   // buffer. |count| indicates whether the request is issuing or finishing.
@@ -596,7 +593,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       ResourceType resource_type,
       ResourceContext* resource_context,
       network::mojom::FetchRequestMode fetch_request_mode,
-      RequestContextType fetch_request_context_type,
+      blink::mojom::RequestContextType fetch_request_context_type,
       uint32_t url_loader_options,
       AppCacheService* appcache_service,
       int child_id,
@@ -605,13 +602,13 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
 
   // Creates ResourceRequestInfoImpl for a download or page save.
   // |download| should be true if the request is a file download.
-  ResourceRequestInfoImpl* CreateRequestInfo(
-      int child_id,
-      int render_view_route_id,
-      int render_frame_route_id,
-      PreviewsState previews_state,
-      bool download,
-      ResourceContext* context);
+  ResourceRequestInfoImpl* CreateRequestInfo(int child_id,
+                                             int render_view_route_id,
+                                             int render_frame_route_id,
+                                             int frame_tree_node_id,
+                                             PreviewsState previews_state,
+                                             bool download,
+                                             ResourceContext* context);
 
   // Relationship of resource being authenticated with the top level page.
   enum HttpAuthRelationType {

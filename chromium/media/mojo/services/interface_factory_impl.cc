@@ -5,12 +5,12 @@
 #include "media/mojo/services/interface_factory_impl.h"
 
 #include <memory>
+#include "base/bind.h"
 #include "base/guid.h"
 
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "media/base/media_log.h"
 #include "media/mojo/services/mojo_decryptor_service.h"
 #include "media/mojo/services/mojo_media_client.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
@@ -43,17 +43,13 @@ namespace media {
 
 InterfaceFactoryImpl::InterfaceFactoryImpl(
     service_manager::mojom::InterfaceProviderPtr interfaces,
-    MediaLog* media_log,
-    std::unique_ptr<service_manager::ServiceContextRef> connection_ref,
+    std::unique_ptr<service_manager::ServiceKeepaliveRef> keepalive_ref,
     MojoMediaClient* mojo_media_client)
     :
-#if BUILDFLAG(ENABLE_MOJO_RENDERER)
-      media_log_(media_log),
-#endif
 #if BUILDFLAG(ENABLE_MOJO_CDM)
       interfaces_(std::move(interfaces)),
 #endif
-      connection_ref_(std::move(connection_ref)),
+      keepalive_ref_(std::move(keepalive_ref)),
       mojo_media_client_(mojo_media_client) {
   DVLOG(1) << __func__;
   DCHECK(mojo_media_client_);
@@ -99,24 +95,13 @@ void InterfaceFactoryImpl::CreateVideoDecoder(
 #endif  // BUILDFLAG(ENABLE_MOJO_VIDEO_DECODER)
 }
 
-void InterfaceFactoryImpl::CreateRenderer(
-    media::mojom::HostedRendererType type,
-    const std::string& type_specific_id,
+void InterfaceFactoryImpl::CreateDefaultRenderer(
+    const std::string& audio_device_id,
     mojo::InterfaceRequest<mojom::Renderer> request) {
   DVLOG(2) << __func__;
 #if BUILDFLAG(ENABLE_MOJO_RENDERER)
-  // Creation requests for non default renderers should have already been
-  // handled by now, in a different layer.
-  if (type != media::mojom::HostedRendererType::kDefault) {
-    DLOG(ERROR) << "Creation of specialized renderers is not supported.";
-    return;
-  }
-
-  // For HostedRendererType::kDefault type, |type_specific_id| represents an
-  // audio device ID. See interface_factory.mojom.
-  const std::string& audio_device_id = type_specific_id;
   auto renderer = mojo_media_client_->CreateRenderer(
-      interfaces_.get(), base::ThreadTaskRunnerHandle::Get(), media_log_,
+      interfaces_.get(), base::ThreadTaskRunnerHandle::Get(), &media_log_,
       audio_device_id);
   if (!renderer) {
     DLOG(ERROR) << "Renderer creation failed.";
@@ -141,6 +126,19 @@ void InterfaceFactoryImpl::CreateRenderer(
                  base::Unretained(&renderer_bindings_), binding_id));
 #endif  // BUILDFLAG(ENABLE_MOJO_RENDERER)
 }
+
+#if defined(OS_ANDROID)
+void InterfaceFactoryImpl::CreateMediaPlayerRenderer(
+    mojo::InterfaceRequest<mojom::Renderer> request) {
+  NOTREACHED();
+}
+
+void InterfaceFactoryImpl::CreateFlingingRenderer(
+    const std::string& audio_device_id,
+    mojo::InterfaceRequest<mojom::Renderer> request) {
+  NOTREACHED();
+}
+#endif  // defined(OS_ANDROID)
 
 void InterfaceFactoryImpl::CreateCdm(
     const std::string& /* key_system */,
@@ -171,15 +169,10 @@ void InterfaceFactoryImpl::CreateDecryptor(int cdm_id,
                                  std::move(request));
 }
 
-void InterfaceFactoryImpl::CreateCdmProxy(const std::string& cdm_guid,
+void InterfaceFactoryImpl::CreateCdmProxy(const base::Token& cdm_guid,
                                           mojom::CdmProxyRequest request) {
   DVLOG(2) << __func__;
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-  if (!base::IsValidGUID(cdm_guid)) {
-    DLOG(ERROR) << "Invalid CDM GUID: " << cdm_guid;
-    return;
-  }
-
   auto cdm_proxy = mojo_media_client_->CreateCdmProxy(cdm_guid);
   if (!cdm_proxy) {
     DLOG(ERROR) << "CdmProxy creation failed.";

@@ -10,6 +10,7 @@
 #include "gpu/vulkan/buildflags.h"
 #include "ui/gfx/native_pixmap.h"
 #include "ui/ozone/public/overlay_surface.h"
+#include "ui/ozone/public/platform_window_surface.h"
 #include "ui/ozone/public/surface_ozone_canvas.h"
 
 #if BUILDFLAG(ENABLE_VULKAN)
@@ -51,6 +52,12 @@ SurfaceFactoryOzone::CreateNativePixmapForVulkan(
 }
 #endif
 
+std::unique_ptr<PlatformWindowSurface>
+SurfaceFactoryOzone::CreatePlatformWindowSurface(
+    gfx::AcceleratedWidget widget) {
+  return nullptr;
+}
+
 std::unique_ptr<OverlaySurface> SurfaceFactoryOzone::CreateOverlaySurface(
     gfx::AcceleratedWidget widget) {
   return nullptr;
@@ -59,11 +66,6 @@ std::unique_ptr<OverlaySurface> SurfaceFactoryOzone::CreateOverlaySurface(
 std::unique_ptr<SurfaceOzoneCanvas> SurfaceFactoryOzone::CreateCanvasForWidget(
     gfx::AcceleratedWidget widget) {
   return nullptr;
-}
-
-std::vector<gfx::BufferFormat> SurfaceFactoryOzone::GetScanoutFormats(
-    gfx::AcceleratedWidget widget) {
-  return std::vector<gfx::BufferFormat>();
 }
 
 scoped_refptr<gfx::NativePixmap> SurfaceFactoryOzone::CreateNativePixmap(

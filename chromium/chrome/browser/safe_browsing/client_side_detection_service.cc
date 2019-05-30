@@ -121,10 +121,10 @@ ClientSideDetectionService::~ClientSideDetectionService() {
 }
 
 // static
-ClientSideDetectionService* ClientSideDetectionService::Create(
+std::unique_ptr<ClientSideDetectionService> ClientSideDetectionService::Create(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return new ClientSideDetectionService(url_loader_factory);
+  return base::WrapUnique(new ClientSideDetectionService(url_loader_factory));
 }
 
 void ClientSideDetectionService::SetEnabledAndRefreshState(bool enabled) {
@@ -259,9 +259,10 @@ void ClientSideDetectionService::SendModelToProcess(
     return;
   }
   ChromeService::GetInstance()->connector()->BindInterface(
-      service_manager::Identity(chrome::mojom::kRendererServiceName,
-                                process->GetChildIdentity().user_id(),
-                                process->GetChildIdentity().instance()),
+      service_manager::ServiceFilter::ByNameWithIdInGroup(
+          chrome::mojom::kRendererServiceName,
+          process->GetChildIdentity().instance_id(),
+          process->GetChildIdentity().instance_group()),
       &phishing);
   phishing->SetPhishingModel(model);
 }
@@ -307,7 +308,7 @@ void ClientSideDetectionService::StartClientReportPhishingRequest(
 
   std::string request_data;
   if (!request->SerializeToString(&request_data)) {
-    UMA_HISTOGRAM_COUNTS("SBClientPhishing.RequestNotSerialized", 1);
+    UMA_HISTOGRAM_COUNTS_1M("SBClientPhishing.RequestNotSerialized", 1);
     DVLOG(1) << "Unable to serialize the CSD request. Proto file changed?";
     if (!callback.is_null())
       callback.Run(GURL(request->url()), false);
@@ -449,8 +450,8 @@ void ClientSideDetectionService::StartClientReportMalwareRequest(
   UMA_HISTOGRAM_ENUMERATION("SBClientMalware.SentReports", REPORT_SENT,
                             REPORT_RESULT_MAX);
 
-  UMA_HISTOGRAM_COUNTS("SBClientMalware.IPBlacklistRequestPayloadSize",
-                       request_data.size());
+  UMA_HISTOGRAM_COUNTS_1M("SBClientMalware.IPBlacklistRequestPayloadSize",
+                          request_data.size());
 
   // Record that we made a malware request
   malware_report_times_.push(base::Time::Now());

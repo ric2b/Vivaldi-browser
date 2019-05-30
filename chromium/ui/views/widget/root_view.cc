@@ -60,8 +60,9 @@ class PreEventDispatchHandler : public ui::EventHandler {
  public:
   explicit PreEventDispatchHandler(View* owner)
       : owner_(owner) {
+    owner_->AddPreTargetHandler(this);
   }
-  ~PreEventDispatchHandler() override {}
+  ~PreEventDispatchHandler() override { owner_->RemovePreTargetHandler(this); }
 
  private:
   // ui::EventHandler:
@@ -170,7 +171,6 @@ RootView::RootView(Widget* widget)
       focus_traversable_parent_view_(NULL),
       event_dispatch_target_(NULL),
       old_dispatch_target_(NULL) {
-  AddPreTargetHandler(pre_dispatch_handler_.get());
   AddPostTargetHandler(post_dispatch_handler_.get());
   SetEventTargeter(
       std::unique_ptr<ViewTargeter>(new RootViewTargeter(this, this)));
@@ -219,6 +219,15 @@ void RootView::SetFocusTraversableParentView(View* view) {
 
 void RootView::ThemeChanged() {
   View::PropagateThemeChanged();
+}
+
+void RootView::ResetEventHandlers() {
+  explicit_mouse_handler_ = false;
+  mouse_pressed_handler_ = nullptr;
+  mouse_move_handler_ = nullptr;
+  gesture_handler_ = nullptr;
+  event_dispatch_target_ = nullptr;
+  old_dispatch_target_ = nullptr;
 }
 
 void RootView::DeviceScaleFactorChanged(float old_device_scale_factor,
@@ -633,12 +642,7 @@ void RootView::VisibilityChanged(View* /*starting_from*/, bool is_visible) {
     // When the root view is being hidden (e.g. when widget is minimized)
     // handlers are reset, so that after it is reshown, events are not captured
     // by old handlers.
-    explicit_mouse_handler_ = false;
-    mouse_pressed_handler_ = NULL;
-    mouse_move_handler_ = NULL;
-    gesture_handler_ = NULL;
-    event_dispatch_target_ = NULL;
-    old_dispatch_target_ = NULL;
+    ResetEventHandlers();
   }
 }
 

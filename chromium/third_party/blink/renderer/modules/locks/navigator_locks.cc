@@ -29,15 +29,17 @@ class NavigatorLocksImpl final : public GarbageCollected<NavigatorLocksImpl<T>>,
     NavigatorLocksImpl* supplement = static_cast<NavigatorLocksImpl*>(
         Supplement<T>::template From<NavigatorLocksImpl>(navigator));
     if (!supplement) {
-      supplement = new NavigatorLocksImpl(navigator);
+      supplement = MakeGarbageCollected<NavigatorLocksImpl>(navigator);
       Supplement<T>::ProvideTo(navigator, supplement);
     }
     return *supplement;
   }
 
+  explicit NavigatorLocksImpl(T& navigator) : Supplement<T>(navigator) {}
+
   LockManager* GetLockManager(ExecutionContext* context) const {
     if (!lock_manager_ && context) {
-      lock_manager_ = new LockManager(context);
+      lock_manager_ = MakeGarbageCollected<LockManager>(context);
     }
     return lock_manager_.Get();
   }
@@ -52,8 +54,6 @@ class NavigatorLocksImpl final : public GarbageCollected<NavigatorLocksImpl<T>>,
   }
 
  private:
-  explicit NavigatorLocksImpl(T& navigator) : Supplement<T>(navigator) {}
-
   mutable TraceWrapperMember<LockManager> lock_manager_;
 };
 

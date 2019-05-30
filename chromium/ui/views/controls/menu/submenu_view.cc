@@ -61,6 +61,14 @@ SubmenuView::~SubmenuView() {
   delete scroll_view_container_;
 }
 
+bool SubmenuView::HasEmptyMenuItemView() {
+  for (int i = 0; i < child_count(); i++) {
+    if (child_at(i)->id() == MenuItemView::kEmptyMenuItemViewID)
+      return true;
+  }
+  return false;
+}
+
 bool SubmenuView::HasVisibleChildren() {
   for (int i = 0, item_count = GetMenuItemCount(); i < item_count; i++) {
     if (GetMenuItemAt(i)->visible())
@@ -233,7 +241,7 @@ void SubmenuView::PaintChildren(const PaintInfo& paint_info) {
 
 bool SubmenuView::GetDropFormats(
     int* formats,
-    std::set<ui::Clipboard::FormatType>* format_types) {
+    std::set<ui::ClipboardFormatType>* format_types) {
   DCHECK(GetMenuItem()->GetMenuController());
   return GetMenuItem()->GetMenuController()->GetDropFormats(this, formats,
                                                             format_types);
@@ -420,8 +428,11 @@ void SubmenuView::Close() {
 }
 
 void SubmenuView::Hide() {
-  if (host_)
+  if (host_) {
     host_->HideMenuHost();
+    NotifyAccessibilityEvent(ax::mojom::Event::kMenuPopupHide, true);
+  }
+
   if (scroll_animator_->is_scrolling())
     scroll_animator_->Stop();
 }
@@ -465,6 +476,14 @@ MenuScrollViewContainer* SubmenuView::GetScrollViewContainer() {
     scroll_view_container_->set_owned_by_client();
   }
   return scroll_view_container_;
+}
+
+MenuItemView* SubmenuView::GetLastItem() {
+  for (int i = child_count() - 1; i >= 0; i--) {
+    if (child_at(i)->id() == MenuItemView::kMenuItemViewID)
+      return static_cast<MenuItemView*>(child_at(i));
+  }
+  return nullptr;
 }
 
 void SubmenuView::MenuHostDestroyed() {

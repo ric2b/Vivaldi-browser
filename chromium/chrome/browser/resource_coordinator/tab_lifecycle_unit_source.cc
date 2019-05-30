@@ -10,7 +10,10 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/resource_coordinator/discard_metrics_lifecycle_unit_observer.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit_source_observer.h"
+#include "chrome/browser/resource_coordinator/resource_coordinator_parts.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit.h"
+#include "chrome/browser/resource_coordinator/tab_manager.h"
+#include "chrome/browser/resource_coordinator/tracing_lifecycle_unit_observer.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -22,10 +25,6 @@
 #include "content/public/browser/web_contents_user_data.h"
 
 namespace resource_coordinator {
-
-namespace {
-TabLifecycleUnitSource* instance_ = nullptr;
-}  // namespace
 
 // Allows storage of a TabLifecycleUnit on a WebContents.
 class TabLifecycleUnitSource::TabLifecycleUnitHolder
@@ -50,36 +49,29 @@ class TabLifecycleUnitSource::TabLifecycleUnitHolder
   std::unique_ptr<TabLifecycleUnit> lifecycle_unit_;
 
   DISALLOW_COPY_AND_ASSIGN(TabLifecycleUnitHolder);
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
 };
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(TabLifecycleUnitSource::TabLifecycleUnitHolder)
 
 TabLifecycleUnitSource::TabLifecycleUnitSource(
     InterventionPolicyDatabase* intervention_policy_database,
-    UsageClock* usage_clock)
+    UsageClock* usage_clock,
+    PageSignalReceiver* page_signal_receiver)
     : browser_tab_strip_tracker_(this, nullptr, this),
       page_signal_receiver_observer_(this),
       intervention_policy_database_(intervention_policy_database),
       usage_clock_(usage_clock) {
-  DCHECK(!instance_);
-
   // In unit tests, tabs might already exist when TabLifecycleUnitSource is
   // instantiated. No TabLifecycleUnit is created for these tabs.
 
   DCHECK(intervention_policy_database_);
   browser_tab_strip_tracker_.Init();
-  instance_ = this;
-  if (auto* page_signal_receiver = PageSignalReceiver::GetInstance())
+  if (page_signal_receiver)
     page_signal_receiver_observer_.Add(page_signal_receiver);
 }
 
-TabLifecycleUnitSource::~TabLifecycleUnitSource() {
-  DCHECK_EQ(instance_, this);
-  instance_ = nullptr;
-}
-
-// static
-TabLifecycleUnitSource* TabLifecycleUnitSource::GetInstance() {
-  return instance_;
-}
+TabLifecycleUnitSource::~TabLifecycleUnitSource() = default;
 
 TabLifecycleUnitExternal* TabLifecycleUnitSource::GetTabLifecycleUnitExternal(
     content::WebContents* web_contents) const {
@@ -196,8 +188,9 @@ void TabLifecycleUnitSource::OnTabInserted(TabStripModel* tab_strip_model,
     if (GetFocusedTabStripModel() == tab_strip_model && foreground)
       UpdateFocusedTabTo(lifecycle_unit);
 
-    // Add a self-owned observer to the LifecycleUnit to record metrics.
+    // Add a self-owned observers to record metrics and trace events.
     lifecycle_unit->AddObserver(new DiscardMetricsLifecycleUnitObserver());
+    lifecycle_unit->AddObserver(new TracingLifecycleUnitObserver());
 
     NotifyLifecycleUnitCreated(lifecycle_unit);
   }

@@ -34,6 +34,11 @@
             "type":  "boolean",
             "description":  "Should this capture be done in incognito mode, which means nothing will be stored on disk except bookmark thumbnails.",
             "optional": true
+          },
+          "bookmarkId":  {
+            "type":  "integer",
+            "description":  "This is the bookmark id for the thumbnail, when used with bookmark capture functions.",
+            "optional": true
           }
         }
       }
@@ -63,8 +68,7 @@
           },
           {
             "name": "params",
-            "$ref": "ThumbnailParams",
-            "optional": true
+            "$ref": "ThumbnailParams"
           },
           {
             "type": "function",
@@ -113,14 +117,8 @@
             "name": "instanceId"
           },
           {
-            "type": "string",
-            "name": "key",
-            "description": "Key the thumbnail will be stored under."
-          },
-          {
             "name": "params",
-            "$ref": "ThumbnailParams",
-            "optional": true
+            "$ref": "ThumbnailParams"
           },
           {
             "type": "function",

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind_helpers.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
@@ -9,7 +10,6 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/sync/test/integration/bookmarks_helper.h"
@@ -17,7 +17,6 @@
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
 #include "components/browser_sync/profile_sync_service.h"
-#include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/model/model_type_store_service.h"
 #include "components/sync/syncable/directory.h"
 #include "sql/test/test_helpers.h"
@@ -50,12 +49,13 @@ class SingleClientDirectorySyncTest : public SyncTest {
   DISALLOW_COPY_AND_ASSIGN(SingleClientDirectorySyncTest);
 };
 
-void WaitForExistingTasksOnLoop(base::MessageLoop* loop) {
+void WaitForExistingTasksOnTaskRunner(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   base::RunLoop run_loop;
   // Post a task to |loop| that will, in turn, post a task back to the current
   // sequenced task runner to quit the nested loop.
-  loop->task_runner()->PostTaskAndReply(FROM_HERE, base::DoNothing(),
-                                        run_loop.QuitClosure());
+  task_runner->PostTaskAndReply(FROM_HERE, base::DoNothing(),
+                                run_loop.QuitClosure());
   run_loop.Run();
 }
 
@@ -77,20 +77,12 @@ class SyncUnrecoverableErrorChecker : public SingleClientStatusChangeChecker {
 
 IN_PROC_BROWSER_TEST_F(SingleClientDirectorySyncTest,
                        StopThenDisableDeletesDirectory) {
-  // If SyncStandaloneTransport is enabled, then the sync service will
-  // immediately restart (and thus recreate directory files) after RequestStop.
-  // TODO(crbug.com/856179): Rewrite this test to pass with
-  // kSyncStandaloneTransport enabled.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(switches::kSyncStandaloneTransport);
-
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   browser_sync::ProfileSyncService* sync_service = GetSyncService(0);
-  FilePath directory_path = sync_service->GetSyncClient()
-                                ->GetModelTypeStoreService()
+  FilePath directory_path = sync_service->GetSyncClientForTest()
                                 ->GetSyncDataPath();
   ASSERT_TRUE(FolderContainsFiles(directory_path));
-  sync_service->RequestStop(browser_sync::ProfileSyncService::CLEAR_DATA);
+  sync_service->StopAndClear();
 
   // Wait for StartupController::StartUp()'s tasks to finish.
   base::RunLoop run_loop;
@@ -98,9 +90,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientDirectorySyncTest,
                                                 run_loop.QuitClosure());
   run_loop.Run();
   // Wait for the directory deletion to finish.
-  base::MessageLoop* sync_loop = sync_service->GetSyncLoopForTest();
-  WaitForExistingTasksOnLoop(sync_loop);
-  ASSERT_FALSE(FolderContainsFiles(directory_path));
+  WaitForExistingTasksOnTaskRunner(
+      sync_service->GetSyncThreadTaskRunnerForTest());
+  EXPECT_FALSE(FolderContainsFiles(directory_path));
 }
 
 // Verify that when the sync directory's backing store becomes corrupted, we
@@ -117,12 +109,12 @@ IN_PROC_BROWSER_TEST_F(SingleClientDirectorySyncTest,
   // completes.
   browser_sync::ProfileSyncService* sync_service = GetSyncService(0);
   sync_service->FlushDirectory();
-  base::MessageLoop* sync_loop = sync_service->GetSyncLoopForTest();
-  WaitForExistingTasksOnLoop(sync_loop);
+  scoped_refptr<base::SingleThreadTaskRunner> sync_thread_task_runner =
+      sync_service->GetSyncThreadTaskRunnerForTest();
+  WaitForExistingTasksOnTaskRunner(sync_thread_task_runner);
 
   // Now corrupt the database.
-  FilePath directory_path = sync_service->GetSyncClient()
-                                ->GetModelTypeStoreService()
+  FilePath directory_path = sync_service->GetSyncClientForTest()
                                 ->GetSyncDataPath();
   const FilePath sync_db(directory_path.Append(
       syncer::syncable::Directory::kSyncDatabaseFilename));
@@ -135,7 +127,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientDirectorySyncTest,
       0, bookmarks_helper::GetOtherNode(0), 0, "top");
   for (int i = 0; i < 100; ++i) {
     ASSERT_TRUE(
-        bookmarks_helper::AddURL(0, top, 0, base::Int64ToString(i), url));
+        bookmarks_helper::AddURL(0, top, 0, base::NumberToString(i), url));
   }
   sync_service->FlushDirectory();
 
@@ -153,7 +145,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientDirectorySyncTest,
 
   // Wait until the sync loop has processed any existing tasks and see that the
   // directory no longer exists.
-  WaitForExistingTasksOnLoop(sync_loop);
+  WaitForExistingTasksOnTaskRunner(sync_thread_task_runner);
   ASSERT_FALSE(FolderContainsFiles(directory_path));
 }
 

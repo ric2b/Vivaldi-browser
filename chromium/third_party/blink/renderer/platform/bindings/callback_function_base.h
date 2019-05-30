@@ -31,28 +31,69 @@ class PLATFORM_EXPORT CallbackFunctionBase
 
   virtual void Trace(blink::Visitor* visitor);
 
-  v8::Isolate* GetIsolate() const {
-    return callback_relevant_script_state_->GetIsolate();
+  v8::Local<v8::Object> CallbackObject() {
+    return callback_function_.NewLocal(GetIsolate());
   }
+
+  v8::Isolate* GetIsolate() const {
+    return incumbent_script_state_->GetIsolate();
+  }
+
+  // Returns the ScriptState of the relevant realm of the callback object.
+  //
+  // NOTE: This function must be used only when it's pretty sure that the
+  // callcack object is the same origin-domain. Otherwise,
+  // |CallbackRelevantScriptStateOrReportError| or
+  // |CallbackRelevantScriptStateOrThrowException| must be used instead.
   ScriptState* CallbackRelevantScriptState() {
+    DCHECK(callback_relevant_script_state_);
     return callback_relevant_script_state_;
   }
+
+  // Returns the ScriptState of the relevant realm of the callback object iff
+  // the callback is the same origin-domain. Otherwise, reports an error and
+  // returns nullptr.
+  ScriptState* CallbackRelevantScriptStateOrReportError(const char* interface,
+                                                        const char* operation);
+
+  // Returns the ScriptState of the relevant realm of the callback object iff
+  // the callback is the same origin-domain. Otherwise, throws an exception and
+  // returns nullptr.
+  ScriptState* CallbackRelevantScriptStateOrThrowException(
+      const char* interface,
+      const char* operation);
+
+  DOMWrapperWorld& GetWorld() const { return incumbent_script_state_->World(); }
 
   // Returns true if the ES function has a [[Construct]] internal method.
   bool IsConstructor() const { return CallbackFunction()->IsConstructor(); }
 
+  // Makes the underlying V8 function collectable by V8 Scavenger GC.  Do not
+  // use this function unless you really need a hacky performance optimization.
+  // The V8 function is collectable by V8 Full GC whenever this instance is no
+  // longer referenced, so there is no need to call this function unless you
+  // really need V8 *Scavenger* GC to collect the V8 function before V8 Full GC
+  // runs.
+  void DisposeV8FunctionImmediatelyToReduceMemoryFootprint() {
+    callback_function_.Clear();
+  }
+
  protected:
-  explicit CallbackFunctionBase(v8::Local<v8::Function>);
+  explicit CallbackFunctionBase(v8::Local<v8::Object>);
 
   v8::Local<v8::Function> CallbackFunction() const {
-    return callback_function_.NewLocal(GetIsolate());
+    return callback_function_.NewLocal(GetIsolate()).As<v8::Function>();
   }
+
   ScriptState* IncumbentScriptState() { return incumbent_script_state_; }
 
  private:
   // The "callback function type" value.
-  TraceWrapperV8Reference<v8::Function> callback_function_;
-  // The associated Realm of the callback function type value.
+  // Use v8::Object instead of v8::Function in order to handle
+  // [TreatNonObjectAsNull].
+  TraceWrapperV8Reference<v8::Object> callback_function_;
+  // The associated Realm of the callback function type value iff it's the same
+  // origin-domain. Otherwise, nullptr.
   Member<ScriptState> callback_relevant_script_state_;
   // The callback context, i.e. the incumbent Realm when an ECMAScript value is
   // converted to an IDL value.
@@ -60,9 +101,6 @@ class PLATFORM_EXPORT CallbackFunctionBase
   Member<ScriptState> incumbent_script_state_;
 
   friend class V8PersistentCallbackFunctionBase;
-  friend v8::Local<v8::Value> ToV8(CallbackFunctionBase* callback,
-                                   v8::Local<v8::Object> creation_context,
-                                   v8::Isolate*);
 };
 
 // V8PersistentCallbackFunctionBase retains the underlying v8::Function of a
@@ -92,7 +130,9 @@ class PLATFORM_EXPORT V8PersistentCallbackFunctionBase
 
  private:
   Member<CallbackFunctionBase> callback_function_;
-  v8::Persistent<v8::Function> v8_function_;
+  // Use v8::Object instead of v8::Function in order to handle
+  // [TreatNonObjectAsNull].
+  v8::Persistent<v8::Object> v8_function_;
 };
 
 // V8PersistentCallbackFunction<V8CallbackFunction> is a counter-part of
@@ -115,7 +155,8 @@ ToV8PersistentCallbackFunction(V8CallbackFunction* callback_function) {
       std::is_base_of<CallbackFunctionBase, V8CallbackFunction>::value,
       "V8CallbackFunction must be a subclass of CallbackFunctionBase.");
   return callback_function
-             ? new V8PersistentCallbackFunction<V8CallbackFunction>(
+             ? MakeGarbageCollected<
+                   V8PersistentCallbackFunction<V8CallbackFunction>>(
                    callback_function)
              : nullptr;
 }

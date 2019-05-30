@@ -41,7 +41,7 @@ QueryResults::~QueryResults() {}
 
 const size_t* QueryResults::MatchesForURL(const GURL& url,
                                           size_t* num_matches) const {
-  URLToResultIndices::const_iterator found = url_to_results_.find(url);
+  auto found = url_to_results_.find(url);
   if (found == url_to_results_.end()) {
     if (num_matches)
       *num_matches = 0;
@@ -94,7 +94,7 @@ void QueryResults::DeleteRange(size_t begin, size_t end) {
 
   // Delete the indicies referencing the deleted entries.
   for (const auto& url : urls_modified) {
-    URLToResultIndices::iterator found = url_to_results_.find(url);
+    auto found = url_to_results_.find(url);
     if (found == url_to_results_.end()) {
       NOTREACHED();
       continue;
@@ -121,7 +121,7 @@ void QueryResults::DeleteRange(size_t begin, size_t end) {
 }
 
 void QueryResults::AddURLUsageAtIndex(const GURL& url, size_t index) {
-  URLToResultIndices::iterator found = url_to_results_.find(url);
+  auto found = url_to_results_.find(url);
   if (found != url_to_results_.end()) {
     // The URL is already in the list, so we can just append the new index.
     found->second->push_back(index);
@@ -135,8 +135,7 @@ void QueryResults::AddURLUsageAtIndex(const GURL& url, size_t index) {
 }
 
 void QueryResults::AdjustResultMap(size_t begin, size_t end, ptrdiff_t delta) {
-  for (URLToResultIndices::iterator i = url_to_results_.begin();
-       i != url_to_results_.end(); ++i) {
+  for (auto i = url_to_results_.begin(); i != url_to_results_.end(); ++i) {
     for (size_t match = 0; match < i->second->size(); match++) {
       size_t match_index = i->second[match];
       if (match_index >= begin && match_index <= end)
@@ -178,10 +177,8 @@ QueryURLResult::~QueryURLResult() {
 
 MostVisitedURL::MostVisitedURL() {}
 
-MostVisitedURL::MostVisitedURL(const GURL& url,
-                               const base::string16& title,
-                               base::Time last_forced_time)
-    : url(url), title(title), last_forced_time(last_forced_time) {}
+MostVisitedURL::MostVisitedURL(const GURL& url, const base::string16& title)
+    : url(url), title(title) {}
 
 MostVisitedURL::MostVisitedURL(const GURL& url,
                                const base::string16& title,
@@ -230,14 +227,6 @@ FilteredURL::~FilteredURL() {}
 // FilteredURL::ExtendedInfo ---------------------------------------------------
 
 FilteredURL::ExtendedInfo::ExtendedInfo() = default;
-
-// Images ---------------------------------------------------------------------
-
-Images::Images() {}
-
-Images::Images(const Images& other) = default;
-
-Images::~Images() {}
 
 // TopSitesDelta --------------------------------------------------------------
 
@@ -292,18 +281,6 @@ HistoryAddPageArgs::HistoryAddPageArgs(const HistoryAddPageArgs& other) =
     default;
 
 HistoryAddPageArgs::~HistoryAddPageArgs() {}
-
-// ThumbnailMigration ---------------------------------------------------------
-
-ThumbnailMigration::ThumbnailMigration() {}
-
-ThumbnailMigration::~ThumbnailMigration() {}
-
-// MostVisitedThumbnails ------------------------------------------------------
-
-MostVisitedThumbnails::MostVisitedThumbnails() {}
-
-MostVisitedThumbnails::~MostVisitedThumbnails() {}
 
 // IconMapping ----------------------------------------------------------------
 
@@ -406,7 +383,7 @@ DeletionInfo::DeletionInfo(const DeletionTimeRange& time_range,
   DCHECK(time_range_.IsValid() || !restrict_urls_.has_value());
   // If restrict_urls_ is defined, it should be non-empty.
   DCHECK(!restrict_urls_.has_value() || !restrict_urls_->empty());
-};
+}
 
 DeletionInfo::~DeletionInfo() = default;
 

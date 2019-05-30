@@ -27,7 +27,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_CANVAS_CANVAS2D_CANVAS_RENDERING_CONTEXT_2D_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_CANVAS_CANVAS2D_CANVAS_RENDERING_CONTEXT_2D_H_
 
-#include "third_party/blink/public/platform/web_thread.h"
+#include "base/macros.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_factory.h"
@@ -40,6 +40,8 @@
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
+#include "third_party/blink/renderer/platform/wtf/linked_hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace cc {
@@ -71,8 +73,6 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
  public:
   class Factory : public CanvasRenderingContextFactory {
-    WTF_MAKE_NONCOPYABLE(Factory);
-
    public:
     Factory() = default;
     ~Factory() override = default;
@@ -81,14 +81,19 @@ class MODULES_EXPORT CanvasRenderingContext2D final
         CanvasRenderingContextHost* host,
         const CanvasContextCreationAttributesCore& attrs) override {
       DCHECK(!host->IsOffscreenCanvas());
-      return new CanvasRenderingContext2D(static_cast<HTMLCanvasElement*>(host),
-                                          attrs);
+      return MakeGarbageCollected<CanvasRenderingContext2D>(
+          static_cast<HTMLCanvasElement*>(host), attrs);
     }
     CanvasRenderingContext::ContextType GetContextType() const override {
       return CanvasRenderingContext::kContext2d;
     }
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(Factory);
   };
 
+  CanvasRenderingContext2D(HTMLCanvasElement*,
+                           const CanvasContextCreationAttributesCore&);
   ~CanvasRenderingContext2D() override;
 
   HTMLCanvasElement* canvas() const {
@@ -124,12 +129,12 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   void strokeText(const String& text, double x, double y, double max_width);
   TextMetrics* measureText(const String& text);
 
-  void getContextAttributes(CanvasRenderingContext2DSettings&) const;
+  CanvasRenderingContext2DSettings* getContextAttributes() const;
 
   void drawFocusIfNeeded(Element*);
   void drawFocusIfNeeded(Path2D*, Element*);
 
-  void addHitRegion(const HitRegionOptions&, ExceptionState&);
+  void addHitRegion(const HitRegionOptions*, ExceptionState&);
   void removeHitRegion(const String& id);
   void clearHitRegions();
   HitRegion* HitRegionAtPoint(const FloatPoint&);
@@ -141,7 +146,7 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   void RestoreCanvasMatrixClipStack(cc::PaintCanvas*) const override;
 
   // TaskObserver implementation
-  void DidProcessTask() final;
+  void DidProcessTask(const base::PendingTask&) final;
 
   void StyleDidChange(const ComputedStyle* old_style,
                       const ComputedStyle& new_style) override;
@@ -159,10 +164,8 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   // BaseRenderingContext2D implementation
   bool OriginClean() const final;
   void SetOriginTainted() final;
-  bool WouldTaintOrigin(CanvasImageSource* source,
-                        ExecutionContext* execution_context) final {
-    return CanvasRenderingContext::WouldTaintOrigin(
-        source, execution_context->GetSecurityOrigin());
+  bool WouldTaintOrigin(CanvasImageSource* source) final {
+    return CanvasRenderingContext::WouldTaintOrigin(source);
   }
   void DisableAcceleration() override;
   void DidInvokeGPUReadbackInCurrentFrame() override;
@@ -195,6 +198,8 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
   void Trace(blink::Visitor*) override;
 
+  CanvasColorParams ColorParamsForTest() const { return ColorParams(); }
+
  protected:
   void NeedsFinalizeFrame() override {
     CanvasRenderingContext::NeedsFinalizeFrame();
@@ -211,8 +216,6 @@ class MODULES_EXPORT CanvasRenderingContext2D final
  private:
   friend class CanvasRenderingContext2DAutoRestoreSkCanvas;
 
-  CanvasRenderingContext2D(HTMLCanvasElement*,
-                           const CanvasContextCreationAttributesCore&);
   void DispatchContextLostEvent(TimerBase*);
   void DispatchContextRestoredEvent(TimerBase*);
   void TryRestoreContextEvent(TimerBase*);
@@ -267,7 +270,7 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   FilterOperations filter_operations_;
   HashMap<String, Font> fonts_resolved_using_current_style_;
   bool should_prune_local_font_cache_;
-  ListHashSet<String> font_lru_list_;
+  LinkedHashSet<String> font_lru_list_;
 };
 
 DEFINE_TYPE_CASTS(CanvasRenderingContext2D,

@@ -9,12 +9,12 @@
 #include <set>
 
 #include "base/callback.h"
-#include "base/unguessable_token.h"
+#include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/frame/sandbox_flags.h"
-#include "third_party/blink/public/mojom/frame/find_in_page.mojom-shared.h"
-#include "third_party/blink/public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
-#include "third_party/blink/public/platform/site_engagement.mojom-shared.h"
+#include "third_party/blink/public/mojom/ad_tagging/ad_frame.mojom-shared.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-shared.h"
+#include "third_party/blink/public/mojom/frame/lifecycle.mojom-shared.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_focus_type.h"
 #include "third_party/blink/public/platform/web_size.h"
@@ -25,7 +25,6 @@
 #include "third_party/blink/public/web/web_document_loader.h"
 #include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
-#include "third_party/blink/public/web/web_history_item.h"
 #include "third_party/blink/public/web/web_ime_text_span.h"
 #include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/public/web/web_text_direction.h"
@@ -37,8 +36,8 @@ class FrameScheduler;
 class InterfaceRegistry;
 class WebAssociatedURLLoader;
 class WebAutofillClient;
+class WebContentCaptureClient;
 class WebContentSettingsClient;
-class WebData;
 class WebDocument;
 class WebDoubleSize;
 class WebDOMEvent;
@@ -49,7 +48,6 @@ class WebPerformance;
 class WebRange;
 class WebSecurityOrigin;
 class WebScriptExecutionCallback;
-class WebSharedWorkerRepositoryClient;
 class WebSpellCheckPanelHostClient;
 class WebString;
 class WebTextCheckClient;
@@ -59,9 +57,9 @@ enum class WebTreeScopeType;
 struct WebAssociatedURLLoaderOptions;
 struct WebConsoleMessage;
 struct WebContentSecurityPolicyViolation;
-struct WebNavigationParams;
-struct WebFindOptions;
+struct WebIsolatedWorldInfo;
 struct WebMediaPlayerAction;
+struct WebPoint;
 struct WebPrintParams;
 struct WebPrintPresetOptions;
 struct WebScriptSource;
@@ -82,9 +80,12 @@ class WebLocalFrame : public WebFrame {
       WebView*,
       WebLocalFrameClient*,
       blink::InterfaceRegistry*,
+      mojo::ScopedMessagePipeHandle,
       WebFrame* opener = nullptr,
       const WebString& name = WebString(),
-      WebSandboxFlags = WebSandboxFlags::kNone);
+      WebSandboxFlags = WebSandboxFlags::kNone,
+      const FeaturePolicy::FeatureState& opener_feature_state =
+          FeaturePolicy::FeatureState());
 
   // Used to create a provisional local frame. Currently, it's possible for a
   // provisional navigation not to commit (i.e. it might turn into a download),
@@ -106,6 +107,7 @@ class WebLocalFrame : public WebFrame {
   BLINK_EXPORT static WebLocalFrame* CreateProvisional(
       WebLocalFrameClient*,
       blink::InterfaceRegistry*,
+      mojo::ScopedMessagePipeHandle,
       WebRemoteFrame*,
       WebSandboxFlags,
       ParsedFeaturePolicy);
@@ -115,7 +117,8 @@ class WebLocalFrame : public WebFrame {
   // it's no longer needed.
   virtual WebLocalFrame* CreateLocalChild(WebTreeScopeType,
                                           WebLocalFrameClient*,
-                                          blink::InterfaceRegistry*) = 0;
+                                          blink::InterfaceRegistry*,
+                                          mojo::ScopedMessagePipeHandle) = 0;
 
   // Returns the WebFrame associated with the current V8 context. This
   // function can return 0 if the context is associated with a Document that
@@ -137,8 +140,9 @@ class WebLocalFrame : public WebFrame {
 
   virtual void SetAutofillClient(WebAutofillClient*) = 0;
   virtual WebAutofillClient* AutofillClient() = 0;
-  virtual void SetSharedWorkerRepositoryClient(
-      WebSharedWorkerRepositoryClient*) = 0;
+
+  virtual void SetContentCaptureClient(WebContentCaptureClient*) = 0;
+  virtual WebContentCaptureClient* ContentCaptureClient() const = 0;
 
   // Closing -------------------------------------------------------------
 
@@ -195,11 +199,6 @@ class WebLocalFrame : public WebFrame {
 
   // Navigation ----------------------------------------------------------
 
-  // Runs beforeunload handlers for this frame and returns the value returned
-  // by handlers.
-  // Note: this may lead to the destruction of the frame.
-  virtual bool DispatchBeforeUnloadEvent(bool is_reload) = 0;
-
   // Start reloading the current document.
   // Note: StartReload() will be deprecated, use StartNavigation() instead.
   virtual void StartReload(WebFrameLoadType) = 0;
@@ -207,86 +206,8 @@ class WebLocalFrame : public WebFrame {
   // Start navigation to the given URL.
   virtual void StartNavigation(const WebURLRequest&) = 0;
 
-  // Commits a cross-document navigation in the frame. For history navigations,
-  // a valid WebHistoryItem should be provided.
-  // TODO(dgozman): return mojom::CommitResult.
-  virtual void CommitNavigation(
-      const WebURLRequest&,
-      WebFrameLoadType,
-      const WebHistoryItem&,
-      bool is_client_redirect,
-      const base::UnguessableToken& devtools_navigation_token,
-      std::unique_ptr<WebNavigationParams> navigation_params,
-      std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) = 0;
-
-  // Commits a same-document navigation in the frame. For history navigations, a
-  // valid WebHistoryItem should be provided. Returns CommitResult::Ok if the
-  // navigation has actually committed.
-  virtual mojom::CommitResult CommitSameDocumentNavigation(
-      const WebURL&,
-      WebFrameLoadType,
-      const WebHistoryItem&,
-      bool is_client_redirect) = 0;
-
-  // Loads a JavaScript URL in the frame.
-  virtual void LoadJavaScriptURL(const WebURL&) = 0;
-
-  // This method is short-hand for calling CommitDataNavigation, where mime_type
-  // is "text/html" and text_encoding is "UTF-8".
-  // TODO(dgozman): rename to CommitHTMLStringNavigation.
-  virtual void LoadHTMLString(const WebData& html,
-                              const WebURL& base_url,
-                              const WebURL& unreachable_url = WebURL(),
-                              bool replace = false) = 0;
-
-  // Calls CommitDataNavigationWithRequest with a WebURLRequest that is built
-  // either 1) based on the previous, provisional request (if |replace| is true
-  // and |unreachable_url| is present) or 2) constructed from scratch otherwise.
-  //
-  // |base_url| indicates the security origin and is used to resolve links in
-  // the committed document.
-  //
-  // Please see documentation of CommitDataNavigationWithRequest for description
-  // of other parameters.
-  virtual void CommitDataNavigation(
-      const WebData& data,
-      const WebString& mime_type,
-      const WebString& text_encoding,
-      const WebURL& base_url,
-      const WebURL& unreachable_url,
-      bool replace,
-      WebFrameLoadType,
-      const WebHistoryItem&,
-      bool is_client_redirect,
-      std::unique_ptr<WebNavigationParams> navigation_params,
-      std::unique_ptr<WebDocumentLoader::ExtraData> navigation_data) = 0;
-
-  // Navigates to the given |data| with specified |mime_type| and optional
-  // |text_encoding|.
-  //
-  // If specified, |unreachable_url| is reported via
-  // WebDocumentLoader::UnreachableURL.
-  //
-  // If |replace| is false, then this data will be loaded as a normal
-  // navigation.  Otherwise, the current history item will be replaced.
-  //
-  // This method can be called instead of CommitDataNavigation when a
-  // ResourceRequest has already been precomputed (e.g. when trying to commit an
-  // error page, while mimicking the original failed request).
-  virtual void CommitDataNavigationWithRequest(
-      const WebURLRequest&,
-      const WebData&,
-      const WebString& mime_type,
-      const WebString& text_encoding,
-      const WebURL& unreachable_url,
-      bool replace,
-      WebFrameLoadType,
-      const WebHistoryItem&,
-      bool is_client_redirect,
-      std::unique_ptr<WebNavigationParams> navigation_params,
-      std::unique_ptr<WebDocumentLoader::ExtraData> navigation_data) = 0;
-
   // Returns the document loader that is currently loading.  May be null.
+  // TODO(dgozman): move this to WebNavigationControl.
   virtual WebDocumentLoader* GetProvisionalDocumentLoader() const = 0;
 
   // View-source rendering mode.  Set this before loading an URL to cause
@@ -296,18 +217,6 @@ class WebLocalFrame : public WebFrame {
 
   // Returns the document loader that is currently loaded.
   virtual WebDocumentLoader* GetDocumentLoader() const = 0;
-
-  enum FallbackContentResult {
-    // An error page should be shown instead of fallback.
-    NoFallbackContent,
-    // Something else committed, no fallback content or error page needed.
-    NoLoadInProgress,
-    // Fallback content rendered, no error page needed.
-    FallbackRendered
-  };
-  // On load failure, attempts to make frame's parent render fallback content.
-  virtual FallbackContentResult MaybeRenderFallbackContent(
-      const WebURLError&) const = 0;
 
   // Called when a navigation is blocked because a Content Security Policy (CSP)
   // is infringed.
@@ -338,11 +247,6 @@ class WebLocalFrame : public WebFrame {
   virtual bool IsNavigationScheduledWithin(
       double interval_in_seconds) const = 0;
 
-  // Override the normal rules for whether a load has successfully committed
-  // in this frame. Used to propagate state when this frame has navigated
-  // cross process.
-  virtual void SetCommittedFirstRealLoad() = 0;
-
   // Reports a list of unique blink::WebFeature values representing
   // Blink features used, performed or encountered by the browser during the
   // current page load happening on the frame.
@@ -354,15 +258,10 @@ class WebLocalFrame : public WebFrame {
   // console.
   virtual void MixedContentFound(const WebURL& main_resource_url,
                                  const WebURL& mixed_content_url,
-                                 WebURLRequest::RequestContext,
+                                 mojom::RequestContextType,
                                  bool was_allowed,
                                  bool had_redirect,
                                  const WebSourceLocation&) = 0;
-
-  // PlzNavigate
-  // Informs the frame that the navigation it asked the client to do was
-  // dropped.
-  virtual void ClientDroppedNavigation() = 0;
 
   // Orientation Changes ----------------------------------------------------
 
@@ -411,39 +310,22 @@ class WebLocalFrame : public WebFrame {
   // gets its own wrappers for all DOM nodes and DOM constructors.
   //
   // worldID must be > 0 (as 0 represents the main world).
-  // worldID must be < EmbedderWorldIdLimit, high number used internally.
+  // worldID must be < kEmbedderWorldIdLimit, high number used internally.
   virtual void ExecuteScriptInIsolatedWorld(int world_id,
                                             const WebScriptSource&) = 0;
 
   // worldID must be > 0 (as 0 represents the main world).
-  // worldID must be < EmbedderWorldIdLimit, high number used internally.
+  // worldID must be < kEmbedderWorldIdLimit, high number used internally.
   // DEPRECATED: Use WebLocalFrame::requestExecuteScriptInIsolatedWorld.
   WARN_UNUSED_RESULT virtual v8::Local<v8::Value>
   ExecuteScriptInIsolatedWorldAndReturnValue(int world_id,
                                              const WebScriptSource&) = 0;
 
-  // Associates an isolated world (see above for description) with a security
-  // origin. XMLHttpRequest instances used in that world will be considered
-  // to come from that origin, not the frame's.
-  //
-  // Currently the origin shouldn't be aliased, because IsolatedCopy() is
-  // taken before associating it to an isolated world and aliased relationship,
-  // if any, is broken. crbug.com/779730
-  virtual void SetIsolatedWorldSecurityOrigin(int world_id,
-                                              const WebSecurityOrigin&) = 0;
-
-  // Associates a content security policy with an isolated world. This policy
-  // should be used when evaluating script in the isolated world, and should
-  // also replace a protected resource's CSP when evaluating resources
-  // injected into the DOM.
-  //
-  // FIXME: Setting this simply bypasses the protected resource's CSP. It
-  //     doesn't yet restrict the isolated world to the provided policy.
-  virtual void SetIsolatedWorldContentSecurityPolicy(int world_id,
-                                                     const WebString&) = 0;
-
-  // Calls window.gc() if it is defined.
-  virtual void CollectGarbage() = 0;
+  // Sets up an isolated world by associating a |world_id| with |info|.
+  // worldID must be > 0 (as 0 represents the main world).
+  // worldID must be < kEmbedderWorldIdLimit, high number used internally.
+  virtual void SetIsolatedWorldInfo(int world_id,
+                                    const WebIsolatedWorldInfo& info) = 0;
 
   // Executes script in the context of the current page and returns the value
   // that the script evaluated to.
@@ -510,7 +392,7 @@ class WebLocalFrame : public WebFrame {
   };
 
   // worldID must be > 0 (as 0 represents the main world).
-  // worldID must be < EmbedderWorldIdLimit, high number used internally.
+  // worldID must be < kEmbedderWorldIdLimit, high number used internally.
   virtual void RequestExecuteScriptInIsolatedWorld(
       int world_id,
       const WebScriptSource* source_in,
@@ -518,11 +400,6 @@ class WebLocalFrame : public WebFrame {
       bool user_gesture,
       ScriptExecutionType,
       WebScriptExecutionCallback*) = 0;
-
-  // Associates an isolated world with human-readable name which is useful for
-  // extension debugging.
-  virtual void SetIsolatedWorldHumanReadableName(int world_id,
-                                                 const WebString&) = 0;
 
   // Logs to the console associated with this frame.
   virtual void AddMessageToConsole(const WebConsoleMessage&) = 0;
@@ -532,6 +409,12 @@ class WebLocalFrame : public WebFrame {
   virtual bool Confirm(const WebString& message) = 0;
   virtual WebString Prompt(const WebString& message,
                            const WebString& default_value) = 0;
+
+  // Debugging -----------------------------------------------------------
+
+  virtual void BindDevToolsAgent(
+      mojo::ScopedInterfaceEndpointHandle devtools_agent_host_ptr_info,
+      mojo::ScopedInterfaceEndpointHandle devtools_agent_request) = 0;
 
   // Editing -------------------------------------------------------------
 
@@ -679,7 +562,7 @@ class WebLocalFrame : public WebFrame {
 
   // Find-in-page -----------------------------------------------------------
 
-  // Searches a frame for a given string.
+  // Searches a frame for a given string. Only used for testing.
   //
   // If a match is found, this function will select it (scrolling down to
   // make it visible if needed) and fill in selectionRect with the
@@ -689,19 +572,13 @@ class WebLocalFrame : public WebFrame {
   // highlighting.
   //
   // Returns true if the search string was found, false otherwise.
-  virtual bool Find(int identifier,
-                    const WebString& search_text,
-                    const WebFindOptions&,
-                    bool wrap_within_frame,
-                    bool* active_now = nullptr) = 0;
-
-  // Notifies the frame that we are no longer interested in searching.  This
-  // will abort any asynchronous scoping effort already under way (see the
-  // function TextFinder::scopeStringMatches for details) and erase all
-  // tick-marks and highlighting from the previous search.  It will also
-  // follow the specified StopFindAction.
-  // TODO(rakina): Stop exposing this when possible.
-  virtual void StopFindingForTesting(mojom::StopFindAction) = 0;
+  virtual bool FindForTesting(int identifier,
+                              const WebString& search_text,
+                              bool match_case,
+                              bool forward,
+                              bool find_next,
+                              bool force,
+                              bool wrap_within_frame) = 0;
 
   // Set the tickmarks for the frame. This will override the default tickmarks
   // generated by find results. If this is called with an empty array, the
@@ -729,14 +606,12 @@ class WebLocalFrame : public WebFrame {
       const WebDOMEvent&,
       bool has_user_gesture) = 0;
 
-  // Site engagement --------------------------------------------------------
-
-  // Sets the site engagement level for this frame's document.
-  virtual void SetEngagementLevel(mojom::EngagementLevel) = 0;
-
   // TEMP: Usage count for chrome.loadtimes deprecation.
   // This will be removed following the deprecation.
   virtual void UsageCountChromeLoadTimes(const WebString& metric) = 0;
+
+  // Dispatches an event when a Portal gets activated.
+  virtual void OnPortalActivated() = 0;
 
   // Scheduling ---------------------------------------------------------------
 
@@ -773,9 +648,6 @@ class WebLocalFrame : public WebFrame {
   // The scroll offset from the top-left corner of the frame in pixels.
   virtual WebSize GetScrollOffset() const = 0;
   virtual void SetScrollOffset(const WebSize&) = 0;
-
-  // If set to false, do not draw scrollbars on this frame's view.
-  virtual void SetCanHaveScrollbars(bool) = 0;
 
   // The size of the document in this frame.
   virtual WebSize DocumentSize() const = 0;
@@ -818,11 +690,6 @@ class WebLocalFrame : public WebFrame {
   // This function should be called after pairs of PrintBegin() and PrintEnd().
   virtual void DispatchAfterPrintEvent() = 0;
 
-  // If the frame contains a full-frame plugin or the given node refers to a
-  // plugin whose content indicates that printed output should not be scaled,
-  // return true, otherwise return false.
-  virtual bool IsPrintScalingDisabledForPlugin(const WebNode& = WebNode()) = 0;
-
   // Advance the focus of the WebView to next text input element from current
   // input field wrt sequential navigation with TAB or Shift + TAB
   // WebFocusTypeForward simulates TAB and WebFocusTypeBackward simulates
@@ -842,17 +709,17 @@ class WebLocalFrame : public WebFrame {
 
   // This setter is available in case the embedder has more information about
   // whether or not the frame is an ad.
-  virtual void SetIsAdSubframe() = 0;
+  virtual void SetIsAdSubframe(blink::mojom::AdFrameType ad_frame_type) = 0;
 
   // Testing ------------------------------------------------------------------
 
   // Dumps the layer tree, used by the accelerated compositor, in
-  // text form. This is used only by layout tests.
+  // text form. This is used only by web tests.
   virtual WebString GetLayerTreeAsTextForTesting(
       bool show_debug_info = false) const = 0;
 
   // Prints the frame into the canvas, with page boundaries drawn as one pixel
-  // wide blue lines. This method exists to support layout tests.
+  // wide blue lines. This method exists to support web tests.
   virtual void PrintPagesForTesting(cc::PaintCanvas*, const WebSize&) = 0;
 
   // Returns the bounds rect for current selection. If selection is performed
@@ -865,6 +732,8 @@ class WebLocalFrame : public WebFrame {
   // given location.
   virtual void PerformMediaPlayerAction(const WebPoint&,
                                         const WebMediaPlayerAction&) = 0;
+
+  virtual void SetLifecycleState(mojom::FrameLifecycleState state) = 0;
 
  protected:
   explicit WebLocalFrame(WebTreeScopeType scope) : WebFrame(scope) {}

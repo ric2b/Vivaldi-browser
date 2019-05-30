@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/trace_event/trace_event_argument.h"
+#include "cc/trees/transform_node.h"
+#include "base/trace_event/traced_value.h"
 #include "cc/base/math_util.h"
 #include "cc/layers/layer.h"
 #include "cc/trees/property_tree.h"
-#include "cc/trees/transform_node.h"
 #include "ui/gfx/geometry/point3_f.h"
 
 namespace cc {
@@ -109,6 +109,8 @@ void TransformNode::AsValueInto(base::trace_event::TracedValue* value) const {
   MathUtil::AddToTracedValue("post_local", post_local, value);
   value->SetInteger("source_node_id", source_node_id);
   value->SetInteger("sorting_context_id", sorting_context_id);
+  value->SetInteger("flattens_inherited_transform",
+                    flattens_inherited_transform);
   MathUtil::AddToTracedValue("scroll_offset", scroll_offset, value);
   MathUtil::AddToTracedValue("snap_amount", snap_amount, value);
 }

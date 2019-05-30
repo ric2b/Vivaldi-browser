@@ -31,7 +31,6 @@
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/layout_ng_text.h"
 #include "third_party/blink/renderer/core/paint/object_paint_invalidator.h"
 
 namespace blink {
@@ -43,8 +42,10 @@ namespace {
 // They need to be invalidated when moving across inline formatting context
 // (i.e., to a different LayoutBlockFlow.)
 void InvalidateInlineItems(LayoutObject* object) {
-  if (object->IsLayoutNGText()) {
-    ToLayoutNGText(object)->InvalidateInlineItems();
+  if (object->IsInLayoutNGInlineFormattingContext())
+    object->SetFirstInlineFragment(nullptr);
+  if (object->IsText()) {
+    ToLayoutText(object)->InvalidateInlineItems();
   } else if (object->IsLayoutInline()) {
     // When moving without |notify_layout_object|, only top-level objects are
     // moved. Ensure to invalidate all LayoutNGText in this inline formatting
@@ -61,7 +62,7 @@ void LayoutObjectChildList::DestroyLeftoverChildren() {
   while (FirstChild()) {
     // List markers are owned by their enclosing list and so don't get destroyed
     // by this container.
-    if (FirstChild()->IsListMarker()) {
+    if (FirstChild()->IsListMarkerIncludingNG()) {
       FirstChild()->Remove();
       continue;
     }
@@ -90,9 +91,13 @@ LayoutObject* LayoutObjectChildList::RemoveChildNode(
     // flow child got yanked or that a positioned child got yanked). We also
     // issue paint invalidations, so that the area exposed when the child
     // disappears gets paint invalidated properly.
-    if (notify_layout_object && old_child->EverHadLayout())
+    if (notify_layout_object && old_child->EverHadLayout()) {
       old_child->SetNeedsLayoutAndPrefWidthsRecalc(
-          LayoutInvalidationReason::kRemovedFromLayout);
+          layout_invalidation_reason::kRemovedFromLayout);
+      if (old_child->IsOutOfFlowPositioned() &&
+          RuntimeEnabledFeatures::LayoutNGEnabled())
+        old_child->MarkParentForOutOfFlowPositionedChange();
+    }
     InvalidatePaintOnRemoval(*old_child);
   }
 
@@ -210,10 +215,16 @@ void LayoutObjectChildList::InsertChildNode(LayoutObject* owner,
   new_child->ClearNeedsCollectInlines();
 
   new_child->SetNeedsLayoutAndPrefWidthsRecalc(
-      LayoutInvalidationReason::kAddedToLayout);
+      layout_invalidation_reason::kAddedToLayout);
+  if (new_child->IsOutOfFlowPositioned() &&
+      RuntimeEnabledFeatures::LayoutNGEnabled())
+    new_child->MarkParentForOutOfFlowPositionedChange();
   new_child->SetShouldDoFullPaintInvalidation(
       PaintInvalidationReason::kAppeared);
-  new_child->SetSubtreeNeedsPaintPropertyUpdate();
+  new_child->AddSubtreePaintPropertyUpdateReason(
+      SubtreePaintPropertyUpdateReason::kContainerChainMayChange);
+  new_child->SetNeedsOverflowRecalc();
+
   if (!owner->NormalChildNeedsLayout()) {
     owner->SetChildNeedsLayout();  // We may supply the static position for an
                                    // absolute positioned child.

@@ -22,8 +22,29 @@ class MappedHostResolver::AlwaysErrorRequestImpl
   int Start(CompletionOnceCallback callback) override { return error_; }
 
   const base::Optional<AddressList>& GetAddressResults() const override {
-    static base::NoDestructor<base::Optional<AddressList>> nullopt_address_list;
-    return *nullopt_address_list;
+    static base::NoDestructor<base::Optional<AddressList>> nullopt_result;
+    return *nullopt_result;
+  }
+
+  const base::Optional<std::vector<std::string>>& GetTextResults()
+      const override {
+    static const base::NoDestructor<base::Optional<std::vector<std::string>>>
+        nullopt_result;
+    return *nullopt_result;
+  }
+
+  const base::Optional<std::vector<HostPortPair>>& GetHostnameResults()
+      const override {
+    static const base::NoDestructor<base::Optional<std::vector<HostPortPair>>>
+        nullopt_result;
+    return *nullopt_result;
+  }
+
+  const base::Optional<HostCache::EntryStaleness>& GetStaleInfo()
+      const override {
+    static const base::NoDestructor<base::Optional<HostCache::EntryStaleness>>
+        nullopt_result;
+    return *nullopt_result;
   }
 
  private:
@@ -49,45 +70,6 @@ MappedHostResolver::CreateRequest(
   return impl_->CreateRequest(rewritten, source_net_log, optional_parameters);
 }
 
-int MappedHostResolver::Resolve(const RequestInfo& original_info,
-                                RequestPriority priority,
-                                AddressList* addresses,
-                                CompletionOnceCallback callback,
-                                std::unique_ptr<Request>* request,
-                                const NetLogWithSource& net_log) {
-  RequestInfo info = original_info;
-  int rv = ApplyRules(&info);
-  if (rv != OK)
-    return rv;
-
-  return impl_->Resolve(info, priority, addresses, std::move(callback), request,
-                        net_log);
-}
-
-int MappedHostResolver::ResolveFromCache(const RequestInfo& original_info,
-                                         AddressList* addresses,
-                                         const NetLogWithSource& net_log) {
-  RequestInfo info = original_info;
-  int rv = ApplyRules(&info);
-  if (rv != OK)
-    return rv;
-
-  return impl_->ResolveFromCache(info, addresses, net_log);
-}
-
-int MappedHostResolver::ResolveStaleFromCache(
-    const RequestInfo& original_info,
-    AddressList* addresses,
-    HostCache::EntryStaleness* stale_info,
-    const NetLogWithSource& net_log) {
-  RequestInfo info = original_info;
-  int rv = ApplyRules(&info);
-  if (rv != OK)
-    return rv;
-
-  return impl_->ResolveStaleFromCache(info, addresses, stale_info, net_log);
-}
-
 void MappedHostResolver::SetDnsClientEnabled(bool enabled) {
   impl_->SetDnsClientEnabled(enabled);
 }
@@ -98,8 +80,9 @@ HostCache* MappedHostResolver::GetHostCache() {
 
 bool MappedHostResolver::HasCached(base::StringPiece hostname,
                                    HostCache::Entry::Source* source_out,
-                                   HostCache::EntryStaleness* stale_out) const {
-  return impl_->HasCached(hostname, source_out, stale_out);
+                                   HostCache::EntryStaleness* stale_out,
+                                   bool* secure_out) const {
+  return impl_->HasCached(hostname, source_out, stale_out, secure_out);
 }
 
 std::unique_ptr<base::Value> MappedHostResolver::GetDnsConfigAsValue() const {
@@ -114,14 +97,18 @@ bool MappedHostResolver::GetNoIPv6OnWifi() {
   return impl_->GetNoIPv6OnWifi();
 }
 
-int MappedHostResolver::ApplyRules(RequestInfo* info) const {
-  HostPortPair host_port(info->host_port_pair());
-  if (rules_.RewriteHost(&host_port)) {
-    if (host_port.host() == "~NOTFOUND")
-      return ERR_NAME_NOT_RESOLVED;
-    info->set_host_port_pair(host_port);
-  }
-  return OK;
+void MappedHostResolver::SetDnsConfigOverrides(
+    const DnsConfigOverrides& overrides) {
+  impl_->SetDnsConfigOverrides(overrides);
+}
+
+void MappedHostResolver::SetRequestContext(URLRequestContext* request_context) {
+  impl_->SetRequestContext(request_context);
+}
+
+const std::vector<DnsConfig::DnsOverHttpsServerConfig>*
+MappedHostResolver::GetDnsOverHttpsServersForTesting() const {
+  return impl_->GetDnsOverHttpsServersForTesting();
 }
 
 }  // namespace net

@@ -22,8 +22,6 @@
 #include "components/nacl/common/buildflags.h"
 #include "components/version_info/channel.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace install_static {
 
 enum class ProcessType {
@@ -374,6 +372,18 @@ std::wstring GetClientStateKeyPath() {
   return GetClientStateKeyPath(GetAppGuid());
 }
 
+std::wstring GetClientStateMediumKeyPath() {
+  return GetClientStateMediumKeyPath(GetAppGuid());
+}
+
+std::wstring GetClientStateKeyPathForBinaries() {
+  return GetBinariesClientStateKeyPath();
+}
+
+std::wstring GetClientStateMediumKeyPathForBinaries() {
+  return GetBinariesClientStateMediumKeyPath();
+}
+
 std::wstring GetUninstallRegistryPath() {
   std::wstring result(
       L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\");
@@ -393,6 +403,22 @@ const CLSID& GetToastActivatorClsid() {
 
 const CLSID& GetElevatorClsid() {
   return InstallDetails::Get().elevator_clsid();
+}
+
+const CLSID& GetElevatorIid() {
+  return InstallDetails::Get().elevator_iid();
+}
+
+std::wstring GetElevationServiceName() {
+  std::wstring name = GetElevationServiceDisplayName();
+  name.erase(std::remove_if(name.begin(), name.end(), isspace), name.end());
+  return name;
+}
+
+std::wstring GetElevationServiceDisplayName() {
+  static constexpr wchar_t kElevationServiceDisplayName[] =
+      L" Elevation Service";
+  return GetBaseAppName() + kElevationServiceDisplayName;
 }
 
 std::wstring GetBaseAppName() {
@@ -823,13 +849,15 @@ std::vector<std::wstring> TokenizeCommandLineToArray(
 
 std::wstring GetSwitchValueFromCommandLine(const std::wstring& command_line,
                                            const std::wstring& switch_name) {
+  static constexpr wchar_t kSwitchTerminator[] = L"--";
   assert(!command_line.empty());
   assert(!switch_name.empty());
 
   std::vector<std::wstring> as_array = TokenizeCommandLineToArray(command_line);
   std::wstring switch_with_equal = L"--" + switch_name + L"=";
-  for (size_t i = 1; i < as_array.size(); ++i) {
-    const std::wstring& arg = as_array[i];
+  auto end = std::find(as_array.cbegin(), as_array.cend(), kSwitchTerminator);
+  for (auto scan = as_array.cbegin(); scan != end; ++scan) {
+    const std::wstring& arg = *scan;
     if (arg.compare(0, switch_with_equal.size(), switch_with_equal) == 0)
       return arg.substr(switch_with_equal.size());
   }

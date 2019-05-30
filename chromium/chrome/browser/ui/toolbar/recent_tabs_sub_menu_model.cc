@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <algorithm>
+
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -13,37 +15,35 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/sync/session_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_live_tab_context.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
-#include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/theme_resources.h"
-#include "components/browser_sync/profile_sync_service.h"
 #include "components/favicon_base/favicon_types.h"
+#include "components/feature_engagement/buildflags.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
+#include "components/sync_sessions/session_sync_service.h"
 #include "components/sync_sessions/synced_session.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/resources/grit/ui_resources.h"
-
-#if !defined(OS_MACOSX)
-#include "chrome/app/vector_icons/vector_icons.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
-#endif
+#include "ui/native_theme/native_theme.h"
+#include "ui/resources/grit/ui_resources.h"
 
 namespace {
 
@@ -74,10 +74,6 @@ const int kMaxDeviceNameCommandId = 1110;
 // The maximum number of local recently closed entries (tab or window) to be
 // shown in the menu.
 const int kMaxLocalEntries = 8;
-
-// Index of the separator that follows the history menu item. Used as a
-// reference position for inserting local entries.
-const int kHistorySeparatorIndex = 1;
 
 // Comparator function for use with std::sort that will sort sessions by
 // descending modified_time (i.e., most recent first).
@@ -126,11 +122,21 @@ int CommandIdToWindowVectorIndex(int command_id) {
   return command_id - kFirstLocalWindowCommandId;
 }
 
-#if !defined(OS_MACOSX)
 gfx::Image CreateFavicon(const gfx::VectorIcon& icon) {
-  return gfx::Image(gfx::CreateVectorIcon(icon, 16, gfx::kChromeIconGrey));
+  ui::NativeTheme* native_theme = ui::NativeTheme::GetInstanceForNativeUi();
+  return gfx::Image(
+      gfx::CreateVectorIcon(icon, 16,
+                            native_theme->GetSystemColor(
+                                ui::NativeTheme::kColorId_DefaultIconColor)));
 }
-#endif
+
+// TODO(https://crbug.com/935593): Use a centralized method when it's available.
+gfx::Image GetDefaultFavicon() {
+  ui::NativeTheme* native_theme = ui::NativeTheme::GetInstanceForNativeUi();
+  return ui::ResourceBundle::GetSharedInstance().GetNativeImageNamed(
+      native_theme->SystemDarkModeEnabled() ? IDR_DEFAULT_FAVICON_DARK
+                                            : IDR_DEFAULT_FAVICON);
+}
 
 }  // namespace
 
@@ -167,25 +173,14 @@ struct RecentTabsSubMenuModel::TabNavigationItem {
   GURL url;
 };
 
-const int RecentTabsSubMenuModel::kRecentlyClosedHeaderCommandId = 1120;
-const int RecentTabsSubMenuModel::kDisabledRecentlyClosedHeaderCommandId = 1121;
-
 RecentTabsSubMenuModel::RecentTabsSubMenuModel(
     ui::AcceleratorProvider* accelerator_provider,
     Browser* browser)
     : ui::SimpleMenuModel(this),
       browser_(browser),
-      sync_service_(ProfileSyncServiceFactory::GetInstance()->GetForProfile(
-          browser->profile())),
-      last_local_model_index_(kHistorySeparatorIndex),
-      default_favicon_(
-          ui::ResourceBundle::GetSharedInstance().GetNativeImageNamed(
-              IDR_DEFAULT_FAVICON)),
-#if !defined(OS_MACOSX)
-      tab_restore_service_observer_(this),
-      sync_observer_(this),
-#endif  // !defined(OS_MACOSX)
-      weak_ptr_factory_(this) {
+      session_sync_service_(
+          SessionSyncServiceFactory::GetInstance()->GetForProfile(
+              browser->profile())) {
   // Invoke asynchronous call to load tabs from local last session, which does
   // nothing if the tabs have already been loaded or they shouldn't be loaded.
   // TabRestoreServiceChanged() will be called after the tabs are loaded.
@@ -193,18 +188,18 @@ RecentTabsSubMenuModel::RecentTabsSubMenuModel(
       TabRestoreServiceFactory::GetForProfile(browser_->profile());
   if (service) {
     service->LoadTabsFromLastSession();
-
-// Mac doesn't support the dynamic menu.
-#if !defined(OS_MACOSX)
     tab_restore_service_observer_.Add(service);
-#endif
   }
 
-// Mac doesn't support the dynamic menu.
-#if !defined(OS_MACOSX)
-  if (sync_service_)
-    sync_observer_.Add(sync_service_);
-#endif  // !defined(OS_MACOSX)
+  if (session_sync_service_) {
+    // Using a weak pointer below for simplicity although, strictly speaking,
+    // it's not needed because the subscription itself should take care.
+    foreign_session_updated_subscription_ =
+        session_sync_service_->SubscribeToForeignSessionsChanged(
+            base::BindRepeating(
+                &RecentTabsSubMenuModel::OnForeignSessionUpdated,
+                weak_ptr_factory_.GetWeakPtr()));
+  }
 
   Build();
 
@@ -223,13 +218,10 @@ bool RecentTabsSubMenuModel::IsCommandIdChecked(int command_id) const {
 }
 
 bool RecentTabsSubMenuModel::IsCommandIdEnabled(int command_id) const {
-  if (command_id == kRecentlyClosedHeaderCommandId ||
-      command_id == kDisabledRecentlyClosedHeaderCommandId ||
-      command_id == IDC_RECENT_TABS_NO_DEVICE_TABS ||
-      IsDeviceNameCommandId(command_id)) {
-    return false;
-  }
-  return true;
+  return command_id != kRecentlyClosedHeaderCommandId &&
+         command_id != kDisabledRecentlyClosedHeaderCommandId &&
+         command_id != IDC_RECENT_TABS_NO_DEVICE_TABS &&
+         !IsDeviceNameCommandId(command_id);
 }
 
 bool RecentTabsSubMenuModel::GetAcceleratorForCommandId(
@@ -328,6 +320,9 @@ void RecentTabsSubMenuModel::ExecuteCommand(int command_id, int event_flags) {
                                 disposition);
     }
   }
+
+  browser_->window()->OnTabRestored(command_id);
+
   UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.OpenRecentTab",
                              menu_opened_timer_.Elapsed());
   UMA_HISTOGRAM_ENUMERATION("WrenchMenu.MenuAction", MENU_ACTION_RECENT_TAB,
@@ -404,7 +399,7 @@ void RecentTabsSubMenuModel::BuildLocalEntries() {
   sessions::TabRestoreService* service =
       TabRestoreServiceFactory::GetForProfile(browser_->profile());
 
-  if (!service || service->entries().size() == 0) {
+  if (!service || service->entries().empty()) {
     // This is to show a disabled restore tab entry with the accelerator to
     // teach users about this command.
     InsertItemWithStringIdAt(++last_local_model_index_,
@@ -414,13 +409,7 @@ void RecentTabsSubMenuModel::BuildLocalEntries() {
     InsertItemWithStringIdAt(++last_local_model_index_,
                              kRecentlyClosedHeaderCommandId,
                              IDS_RECENTLY_CLOSED);
-#if defined(OS_MACOSX)
-    ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-    SetIcon(last_local_model_index_,
-            rb.GetNativeImageNamed(IDR_RECENTLY_CLOSED_WINDOW));
-#else
     SetIcon(last_local_model_index_, CreateFavicon(kTabIcon));
-#endif
 
     int added_count = 0;
     for (const auto& entry : service->entries()) {
@@ -530,12 +519,7 @@ void RecentTabsSubMenuModel::BuildLocalWindowItem(SessionID window_id,
   // See comments in BuildLocalEntries() about usage of InsertItem*At().
   InsertItemAt(curr_model_index, command_id, l10n_util::GetPluralStringFUTF16(
       IDS_RECENTLY_CLOSED_WINDOW, num_tabs));
-#if defined(OS_MACOSX)
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  SetIcon(curr_model_index, rb.GetNativeImageNamed(IDR_RECENTLY_CLOSED_WINDOW));
-#else
   SetIcon(curr_model_index, CreateFavicon(kTabIcon));
-#endif
   local_window_items_.push_back(window_id);
 }
 
@@ -561,30 +545,6 @@ void RecentTabsSubMenuModel::BuildOtherDevicesTabItem(
 void RecentTabsSubMenuModel::AddDeviceFavicon(
     int index_in_menu,
     sync_pb::SyncEnums::DeviceType device_type) {
-#if defined(OS_MACOSX)
-  int favicon_id = -1;
-  switch (device_type) {
-    case sync_pb::SyncEnums::TYPE_PHONE:
-      favicon_id = IDR_PHONE_FAVICON;
-      break;
-
-    case sync_pb::SyncEnums::TYPE_TABLET:
-      favicon_id = IDR_TABLET_FAVICON;
-      break;
-
-    case sync_pb::SyncEnums::TYPE_CROS:
-    case sync_pb::SyncEnums::TYPE_WIN:
-    case sync_pb::SyncEnums::TYPE_MAC:
-    case sync_pb::SyncEnums::TYPE_LINUX:
-    case sync_pb::SyncEnums::TYPE_OTHER:
-    case sync_pb::SyncEnums::TYPE_UNSET:
-      favicon_id = IDR_LAPTOP_FAVICON;
-      break;
-  }
-
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  SetIcon(index_in_menu, rb.GetNativeImageNamed(favicon_id));
-#else
   const gfx::VectorIcon* favicon = nullptr;
   switch (device_type) {
     case sync_pb::SyncEnums::TYPE_PHONE:
@@ -606,7 +566,6 @@ void RecentTabsSubMenuModel::AddDeviceFavicon(
   }
 
   SetIcon(index_in_menu, CreateFavicon(*favicon));
-#endif
 }
 
 void RecentTabsSubMenuModel::AddTabFavicon(int command_id, const GURL& url) {
@@ -631,7 +590,7 @@ void RecentTabsSubMenuModel::AddTabFavicon(int command_id, const GURL& url) {
 
   // Otherwise, start to fetch the favicon from local history asynchronously.
   // Set default icon first.
-  SetIcon(index_in_menu, default_favicon_);
+  SetIcon(index_in_menu, GetDefaultFavicon());
   // Start request to fetch actual icon if possible.
   favicon::FaviconService* favicon_service =
       FaviconServiceFactory::GetForProfile(browser_->profile(),
@@ -656,9 +615,9 @@ void RecentTabsSubMenuModel::OnFaviconDataAvailable(
   int index_in_menu = GetIndexOfCommandId(command_id);
   DCHECK_GT(index_in_menu, -1);
   SetIcon(index_in_menu, image_result.image);
-  ui::MenuModelDelegate* menu_model_delegate = GetMenuModelDelegate();
-  if (menu_model_delegate)
-    menu_model_delegate->OnIconChanged(index_in_menu);
+  ui::MenuModelDelegate* delegate = menu_model_delegate();
+  if (delegate)
+    delegate->OnIconChanged(index_in_menu);
 }
 
 int RecentTabsSubMenuModel::CommandIdToTabVectorIndex(
@@ -703,9 +662,8 @@ void RecentTabsSubMenuModel::ClearTabsFromOtherDevices() {
 sync_sessions::OpenTabsUIDelegate*
 RecentTabsSubMenuModel::GetOpenTabsUIDelegate() {
   // Only return the delegate if it exists and it is done syncing sessions.
-  return sync_service_ && sync_service_->IsSyncActive()
-             ? sync_service_->GetOpenTabsUIDelegate()
-             : nullptr;
+  return session_sync_service_ ? session_sync_service_->GetOpenTabsUIDelegate()
+                               : nullptr;
 }
 
 void RecentTabsSubMenuModel::TabRestoreServiceChanged(
@@ -714,9 +672,9 @@ void RecentTabsSubMenuModel::TabRestoreServiceChanged(
 
   BuildLocalEntries();
 
-  ui::MenuModelDelegate* menu_model_delegate = GetMenuModelDelegate();
-  if (menu_model_delegate)
-    menu_model_delegate->OnMenuStructureChanged();
+  ui::MenuModelDelegate* delegate = menu_model_delegate();
+  if (delegate)
+    delegate->OnMenuStructureChanged();
 }
 
 void RecentTabsSubMenuModel::TabRestoreServiceDestroyed(
@@ -724,18 +682,12 @@ void RecentTabsSubMenuModel::TabRestoreServiceDestroyed(
   TabRestoreServiceChanged(service);
 }
 
-void RecentTabsSubMenuModel::OnSyncConfigurationCompleted(
-    syncer::SyncService* sync) {
-  OnForeignSessionUpdated(sync);
-}
-
-void RecentTabsSubMenuModel::OnForeignSessionUpdated(
-    syncer::SyncService* sync) {
+void RecentTabsSubMenuModel::OnForeignSessionUpdated() {
   ClearTabsFromOtherDevices();
 
   BuildTabsFromOtherDevices();
 
-  ui::MenuModelDelegate* menu_model_delegate = GetMenuModelDelegate();
-  if (menu_model_delegate)
-    menu_model_delegate->OnMenuStructureChanged();
+  ui::MenuModelDelegate* delegate = menu_model_delegate();
+  if (delegate)
+    delegate->OnMenuStructureChanged();
 }

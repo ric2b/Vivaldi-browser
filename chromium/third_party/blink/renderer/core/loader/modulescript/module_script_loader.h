@@ -16,11 +16,11 @@
 
 namespace blink {
 
-class FetchClientSettingsObjectSnapshot;
 class Modulator;
 class ModuleScript;
 class ModuleScriptLoaderClient;
 class ModuleScriptLoaderRegistry;
+class ResourceFetcher;
 enum class ModuleGraphLevel;
 
 // ModuleScriptLoader is responsible for loading a new single ModuleScript.
@@ -45,16 +45,19 @@ class CORE_EXPORT ModuleScriptLoader final
   };
 
  public:
+  ModuleScriptLoader(Modulator*,
+                     const ScriptFetchOptions&,
+                     ModuleScriptLoaderRegistry*,
+                     ModuleScriptLoaderClient*);
   ~ModuleScriptLoader();
 
-  static void Fetch(
-      const ModuleScriptFetchRequest&,
-      FetchClientSettingsObjectSnapshot* fetch_client_settings_object,
-      ModuleGraphLevel,
-      Modulator* module_map_settings_object,
-      ModuleScriptCustomFetchType,
-      ModuleScriptLoaderRegistry*,
-      ModuleScriptLoaderClient*);
+  static void Fetch(const ModuleScriptFetchRequest&,
+                    ResourceFetcher* fetch_client_settings_object_fetcher,
+                    ModuleGraphLevel,
+                    Modulator* module_map_settings_object,
+                    ModuleScriptCustomFetchType,
+                    ModuleScriptLoaderRegistry*,
+                    ModuleScriptLoaderClient*);
 
   // Implements ModuleScriptFetcher::Client.
   void NotifyFetchFinished(
@@ -67,16 +70,10 @@ class CORE_EXPORT ModuleScriptLoader final
   void Trace(blink::Visitor*) override;
 
  private:
-  ModuleScriptLoader(Modulator*,
-                     const ScriptFetchOptions&,
-                     ModuleScriptLoaderRegistry*,
-                     ModuleScriptLoaderClient*);
-
-  void FetchInternal(
-      const ModuleScriptFetchRequest&,
-      FetchClientSettingsObjectSnapshot* fetch_client_settings_object,
-      ModuleGraphLevel,
-      ModuleScriptCustomFetchType);
+  void FetchInternal(const ModuleScriptFetchRequest&,
+                     ResourceFetcher* fetch_client_settings_object_fetcher,
+                     ModuleGraphLevel,
+                     ModuleScriptCustomFetchType);
 
   void AdvanceState(State new_state);
 #if DCHECK_IS_ON()

@@ -33,11 +33,28 @@ TEST(Value, ToString) {
 
   // Scopes.
   TestWithScope setup;
-  Scope* scope = new Scope(setup.scope());
+  Scope* scope = new Scope(setup.settings());
   Value scopeval(nullptr, std::unique_ptr<Scope>(scope));
   EXPECT_EQ("{ }", scopeval.ToString(false));
+
+  // Test that an empty scope equals an empty scope.
+  EXPECT_TRUE(scopeval == scopeval);
 
   scope->SetValue("a", Value(nullptr, static_cast<int64_t>(42)), nullptr);
   scope->SetValue("b", Value(nullptr, "hello, world"), nullptr);
   EXPECT_EQ("{\n  a = 42\n  b = \"hello, world\"\n}", scopeval.ToString(false));
+  EXPECT_TRUE(scopeval == scopeval);
+
+  Scope* inner_scope = new Scope(setup.settings());
+  Value inner_scopeval(nullptr, std::unique_ptr<Scope>(inner_scope));
+  inner_scope->SetValue("d", Value(nullptr, static_cast<int64_t>(42)), nullptr);
+  scope->SetValue("c", inner_scopeval, nullptr);
+
+  // Test inner scope equality.
+  EXPECT_TRUE(scopeval == scopeval);
+
+  // Nested scopes should not be equal.
+  Scope* nested_scope = new Scope(scope);
+  Value nested_scopeval(nullptr, std::unique_ptr<Scope>(nested_scope));
+  EXPECT_FALSE(nested_scopeval == nested_scopeval);
 }

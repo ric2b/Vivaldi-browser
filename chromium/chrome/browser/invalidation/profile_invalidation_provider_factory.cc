@@ -7,11 +7,13 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/gcm/instance_id/instance_id_profile_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/common/chrome_content_client.h"
 #include "components/gcm_driver/gcm_profile_service.h"
 #include "components/gcm_driver/instance_id/instance_id_profile_service.h"
@@ -33,12 +35,6 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "services/data_decoder/public/cpp/safe_json_parser.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
-
-#if defined(OS_ANDROID)
-#include "components/invalidation/impl/invalidation_service_android.h"
-#else
-#include "chrome/browser/signin/identity_manager_factory.h"
-#endif  // defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
 #include "base/files/file_path.h"
@@ -80,33 +76,23 @@ ProfileInvalidationProviderFactory::GetInstance() {
 ProfileInvalidationProviderFactory::ProfileInvalidationProviderFactory()
     : BrowserContextKeyedServiceFactory(
           "InvalidationService",
-          BrowserContextDependencyManager::GetInstance()),
-      testing_factory_(NULL) {
-#if !defined(OS_ANDROID)
+          BrowserContextDependencyManager::GetInstance()) {
   DependsOn(IdentityManagerFactory::GetInstance());
   DependsOn(gcm::GCMProfileServiceFactory::GetInstance());
-#endif
 }
 
 ProfileInvalidationProviderFactory::~ProfileInvalidationProviderFactory() =
     default;
 
 void ProfileInvalidationProviderFactory::RegisterTestingFactory(
-    TestingFactoryFunction testing_factory) {
-  testing_factory_ = testing_factory;
+    TestingFactory testing_factory) {
+  testing_factory_ = std::move(testing_factory);
 }
 
 KeyedService* ProfileInvalidationProviderFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   if (testing_factory_)
-    return testing_factory_(context).release();
-
-#if defined(OS_ANDROID)
-  // Android does not need an IdentityProvider, because it gets the account
-  // on the java side.
-  auto service = std::make_unique<InvalidationServiceAndroid>();
-  return new ProfileInvalidationProvider(std::move(service), nullptr);
-#else
+    return testing_factory_.Run(context).release();
 
   std::unique_ptr<IdentityProvider> identity_provider;
 
@@ -119,7 +105,8 @@ KeyedService* ProfileInvalidationProviderFactory::BuildServiceInstanceFor(
     identity_provider.reset(new chromeos::DeviceIdentityProvider(
         chromeos::DeviceOAuth2TokenServiceFactory::Get()));
   }
-#endif
+#endif  // defined(OS_CHROMEOS)
+
   Profile* profile = Profile::FromBrowserContext(context);
 
   if (!identity_provider) {
@@ -142,7 +129,6 @@ KeyedService* ProfileInvalidationProviderFactory::BuildServiceInstanceFor(
   service->Init();
   return new ProfileInvalidationProvider(std::move(service),
                                          std::move(identity_provider));
-#endif
 }
 
 }  // namespace invalidation

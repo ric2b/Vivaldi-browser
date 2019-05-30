@@ -12,17 +12,18 @@ import java.util.concurrent.ScheduledExecutorService;
  * schedule all tasks on one thread.
  */
 public final class CastCrashUploaderFactory {
-    private static ScheduledExecutorService sExecutorService = null;
-    public static CastCrashUploader createCastCrashUploader(String crashDumpPath, String uuid,
-            String applicationFeedback, boolean uploadCrashToStaging) {
+    private static ScheduledExecutorService sExecutorService;
+    public static CastCrashUploader createCastCrashUploader(String crashDumpPath,
+            String crashReportsPath, String uuid, String applicationFeedback,
+            boolean uploadCrashToStaging) {
         if (sExecutorService == null) {
             sExecutorService = Executors.newScheduledThreadPool(1);
         }
         ElidedLogcatProvider logcatProvider = shouldUseRemoteServiceLogs()
                 ? new ExternalServiceDeviceLogcatProvider()
                 : new AndroidAppLogcatProvider();
-        return new CastCrashUploader(sExecutorService, logcatProvider, crashDumpPath, uuid,
-                applicationFeedback, uploadCrashToStaging);
+        return new CastCrashUploader(sExecutorService, logcatProvider, crashDumpPath,
+                crashReportsPath, uuid, applicationFeedback, uploadCrashToStaging);
     }
 
     private static boolean shouldUseRemoteServiceLogs() {

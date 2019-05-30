@@ -14,7 +14,6 @@
 #include "build/build_config.h"
 #include "content/common/page_state.mojom.h"
 #include "content/common/unique_name_helper.h"
-#include "content/public/common/referrer_struct_traits.h"
 #include "ipc/ipc_message_utils.h"
 #include "mojo/public/cpp/base/string16_mojom_traits.h"
 #include "mojo/public/cpp/base/time_mojom_traits.h"
@@ -25,17 +24,15 @@
 #include "ui/gfx/geometry/mojo/geometry_struct_traits.h"
 #include "url/mojom/url_gurl_mojom_traits.h"
 
-namespace mojom = content::history::mojom;
-
 namespace content {
 
 #define STATIC_ASSERT_ENUM(a, b)                            \
   static_assert(static_cast<int>(a) == static_cast<int>(b), \
                 "mismatching enums: " #a)
 
-STATIC_ASSERT_ENUM(mojom::ScrollRestorationType::kAuto,
+STATIC_ASSERT_ENUM(history::mojom::ScrollRestorationType::kAuto,
                    blink::kWebHistoryScrollRestorationAuto);
-STATIC_ASSERT_ENUM(mojom::ScrollRestorationType::kManual,
+STATIC_ASSERT_ENUM(history::mojom::ScrollRestorationType::kManual,
                    blink::kWebHistoryScrollRestorationManual);
 
 namespace {
@@ -78,7 +75,7 @@ void AppendReferencedFilesFromHttpBody(
     const std::vector<network::DataElement>& elements,
     std::vector<base::Optional<base::string16>>* referenced_files) {
   for (size_t i = 0; i < elements.size(); ++i) {
-    if (elements[i].type() == network::DataElement::TYPE_FILE)
+    if (elements[i].type() == network::mojom::DataElementType::kFile)
       referenced_files->emplace_back(elements[i].path().AsUTF16Unsafe());
   }
 }
@@ -416,22 +413,22 @@ void WriteResourceRequestBody(const network::ResourceRequestBody& request_body,
   WriteAndValidateVectorSize(*request_body.elements(), obj);
   for (const auto& element : *request_body.elements()) {
     switch (element.type()) {
-      case network::DataElement::TYPE_BYTES:
+      case network::mojom::DataElementType::kBytes:
         WriteInteger(blink::WebHTTPBody::Element::kTypeData, obj);
         WriteData(element.bytes(), static_cast<int>(element.length()), obj);
         break;
-      case network::DataElement::TYPE_FILE:
+      case network::mojom::DataElementType::kFile:
         WriteInteger(blink::WebHTTPBody::Element::kTypeFile, obj);
         WriteString(element.path().AsUTF16Unsafe(), obj);
         WriteInteger64(static_cast<int64_t>(element.offset()), obj);
         WriteInteger64(static_cast<int64_t>(element.length()), obj);
         WriteReal(element.expected_modification_time().ToDoubleT(), obj);
         break;
-      case network::DataElement::TYPE_BLOB:
+      case network::mojom::DataElementType::kBlob:
         WriteInteger(blink::WebHTTPBody::Element::kTypeBlob, obj);
         WriteStdString(element.blob_uuid(), obj);
         break;
-      case network::DataElement::TYPE_RAW_FILE:
+      case network::mojom::DataElementType::kRawFile:
       default:
         NOTREACHED();
         continue;
@@ -554,7 +551,7 @@ void ReadFrameState(
 
   if (obj->version >= 18) {
     state->referrer_policy =
-        static_cast<blink::WebReferrerPolicy>(ReadInteger(obj));
+        static_cast<network::mojom::ReferrerPolicy>(ReadInteger(obj));
   }
 
   if (obj->version >= 20 && state->did_save_scroll_or_scale_state) {
@@ -686,32 +683,32 @@ void WritePageState(const ExplodedPageState& state, SerializeObject* obj) {
 // "Modern" read/write functions start here. These are probably what you want.
 
 void WriteResourceRequestBody(const network::ResourceRequestBody& request_body,
-                              mojom::RequestBody* mojo_body) {
+                              history::mojom::RequestBody* mojo_body) {
   for (const auto& element : *request_body.elements()) {
-    mojom::ElementPtr data_element = mojom::Element::New();
+    history::mojom::ElementPtr data_element = history::mojom::Element::New();
     switch (element.type()) {
-      case network::DataElement::TYPE_BYTES: {
+      case network::mojom::DataElementType::kBytes: {
         data_element->set_bytes(std::vector<unsigned char>(
             reinterpret_cast<const char*>(element.bytes()),
             element.bytes() + element.length()));
         break;
       }
-      case network::DataElement::TYPE_FILE: {
-        mojom::FilePtr file = mojom::File::New(
+      case network::mojom::DataElementType::kFile: {
+        history::mojom::FilePtr file = history::mojom::File::New(
             element.path().AsUTF16Unsafe(), element.offset(), element.length(),
             element.expected_modification_time());
         data_element->set_file(std::move(file));
         break;
       }
-      case network::DataElement::TYPE_BLOB:
+      case network::mojom::DataElementType::kBlob:
         data_element->set_blob_uuid(element.blob_uuid());
         break;
-      case network::DataElement::TYPE_DATA_PIPE:
+      case network::mojom::DataElementType::kDataPipe:
         NOTIMPLEMENTED();
         break;
-      case network::DataElement::TYPE_RAW_FILE:
-      case network::DataElement::TYPE_CHUNKED_DATA_PIPE:
-      case network::DataElement::TYPE_UNKNOWN:
+      case network::mojom::DataElementType::kRawFile:
+      case network::mojom::DataElementType::kChunkedDataPipe:
+      case network::mojom::DataElementType::kUnknown:
         NOTREACHED();
         continue;
     }
@@ -721,27 +718,27 @@ void WriteResourceRequestBody(const network::ResourceRequestBody& request_body,
 }
 
 void ReadResourceRequestBody(
-    mojom::RequestBody* mojo_body,
+    history::mojom::RequestBody* mojo_body,
     const scoped_refptr<network::ResourceRequestBody>& request_body) {
   for (const auto& element : mojo_body->elements) {
-    mojom::Element::Tag tag = element->which();
+    history::mojom::Element::Tag tag = element->which();
     switch (tag) {
-      case mojom::Element::Tag::BYTES:
+      case history::mojom::Element::Tag::BYTES:
         AppendDataToRequestBody(
             request_body,
             reinterpret_cast<const char*>(element->get_bytes().data()),
             element->get_bytes().size());
         break;
-      case mojom::Element::Tag::FILE: {
-        mojom::File* file = element->get_file().get();
+      case history::mojom::Element::Tag::FILE: {
+        history::mojom::File* file = element->get_file().get();
         AppendFileRangeToRequestBody(request_body, file->path, file->offset,
                                      file->length, file->modification_time);
         break;
       }
-      case mojom::Element::Tag::BLOB_UUID:
+      case history::mojom::Element::Tag::BLOB_UUID:
         AppendBlobToRequestBody(request_body, element->get_blob_uuid());
         break;
-      case mojom::Element::Tag::DEPRECATED_FILE_SYSTEM_FILE:
+      case history::mojom::Element::Tag::DEPRECATED_FILE_SYSTEM_FILE:
         // No longer supported.
         break;
     }
@@ -750,9 +747,9 @@ void ReadResourceRequestBody(
 }
 
 void WriteHttpBody(const ExplodedHttpBody& http_body,
-                   mojom::HttpBody* mojo_body) {
+                   history::mojom::HttpBody* mojo_body) {
   if (http_body.request_body != nullptr) {
-    mojo_body->request_body = mojom::RequestBody::New();
+    mojo_body->request_body = history::mojom::RequestBody::New();
     mojo_body->contains_passwords = http_body.contains_passwords;
     mojo_body->http_content_type = http_body.http_content_type;
     WriteResourceRequestBody(*http_body.request_body,
@@ -760,7 +757,8 @@ void WriteHttpBody(const ExplodedHttpBody& http_body,
   }
 }
 
-void ReadHttpBody(mojom::HttpBody* mojo_body, ExplodedHttpBody* http_body) {
+void ReadHttpBody(history::mojom::HttpBody* mojo_body,
+                  ExplodedHttpBody* http_body) {
   http_body->contains_passwords = mojo_body->contains_passwords;
   http_body->http_content_type = mojo_body->http_content_type;
   if (mojo_body->request_body) {
@@ -772,7 +770,7 @@ void ReadHttpBody(mojom::HttpBody* mojo_body, ExplodedHttpBody* http_body) {
 }
 
 void WriteFrameState(const ExplodedFrameState& state,
-                     mojom::FrameState* frame) {
+                     history::mojom::FrameState* frame) {
   frame->url_string = state.url_string;
   frame->referrer = state.referrer;
   frame->target = state.target;
@@ -783,10 +781,11 @@ void WriteFrameState(const ExplodedFrameState& state,
   }
 
   frame->scroll_restoration_type =
-      static_cast<mojom::ScrollRestorationType>(state.scroll_restoration_type);
+      static_cast<history::mojom::ScrollRestorationType>(
+          state.scroll_restoration_type);
 
   if (state.did_save_scroll_or_scale_state) {
-    frame->view_state = mojom::ViewState::New();
+    frame->view_state = history::mojom::ViewState::New();
     frame->view_state->scroll_offset = state.scroll_offset;
     frame->view_state->visual_viewport_scroll_offset =
         state.visual_viewport_scroll_offset;
@@ -807,19 +806,21 @@ void WriteFrameState(const ExplodedFrameState& state,
 
   frame->referrer_policy = state.referrer_policy;
 
-  frame->http_body = mojom::HttpBody::New();
+  frame->http_body = history::mojom::HttpBody::New();
   WriteHttpBody(state.http_body, frame->http_body.get());
 
   // Subitems
   const std::vector<ExplodedFrameState>& children = state.children;
   for (const auto& child : children) {
-    mojom::FrameStatePtr child_frame = mojom::FrameState::New();
+    history::mojom::FrameStatePtr child_frame =
+        history::mojom::FrameState::New();
     WriteFrameState(child, child_frame.get());
     frame->children.push_back(std::move(child_frame));
   }
 }
 
-void ReadFrameState(mojom::FrameState* frame, ExplodedFrameState* state) {
+void ReadFrameState(history::mojom::FrameState* frame,
+                    ExplodedFrameState* state) {
   state->url_string = frame->url_string;
   state->referrer = frame->referrer;
   state->target = frame->target;
@@ -872,8 +873,9 @@ void ReadMojoPageState(SerializeObject* obj, ExplodedPageState* state) {
   if (obj->parse_error)
     return;
 
-  mojom::PageStatePtr page;
-  obj->parse_error = !(mojom::PageState::Deserialize(tmp, length, &page));
+  history::mojom::PageStatePtr page;
+  obj->parse_error =
+      !(history::mojom::PageState::Deserialize(tmp, length, &page));
   if (obj->parse_error)
     return;
 
@@ -891,15 +893,15 @@ void ReadMojoPageState(SerializeObject* obj, ExplodedPageState* state) {
 void WriteMojoPageState(const ExplodedPageState& state, SerializeObject* obj) {
   WriteInteger(obj->version, obj);
 
-  mojom::PageStatePtr page = mojom::PageState::New();
+  history::mojom::PageStatePtr page = history::mojom::PageState::New();
   for (const auto& referenced_file : state.referenced_files) {
     page->referenced_files.push_back(referenced_file.value());
   }
 
-  page->top = mojom::FrameState::New();
+  page->top = history::mojom::FrameState::New();
   WriteFrameState(state.top, page->top.get());
 
-  std::vector<uint8_t> page_bytes = mojom::PageState::Serialize(&page);
+  std::vector<uint8_t> page_bytes = history::mojom::PageState::Serialize(&page);
   obj->pickle.WriteData(reinterpret_cast<char*>(page_bytes.data()),
                         page_bytes.size());
 }
@@ -953,7 +955,7 @@ ExplodedFrameState::ExplodedFrameState()
       item_sequence_number(0),
       document_sequence_number(0),
       page_scale_factor(0.0),
-      referrer_policy(blink::kWebReferrerPolicyDefault),
+      referrer_policy(network::mojom::ReferrerPolicy::kDefault),
       scroll_anchor_simhash(0) {}
 
 ExplodedFrameState::ExplodedFrameState(const ExplodedFrameState& other) {

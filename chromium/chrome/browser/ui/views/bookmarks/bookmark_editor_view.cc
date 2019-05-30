@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/bookmarks/bookmark_editor_view.h"
 
+#include <set>
 #include <string>
 
 #include "base/logging.h"
@@ -229,7 +230,7 @@ void BookmarkEditorView::Show(gfx::NativeWindow parent) {
   title_tf_->RequestFocus();
 }
 
-void BookmarkEditorView::ShowContextMenuForView(
+void BookmarkEditorView::ShowContextMenuForViewImpl(
     views::View* source,
     const gfx::Point& point,
     ui::MenuSourceType source_type) {
@@ -402,12 +403,6 @@ void BookmarkEditorView::Init() {
     layout->AddView(tree_view_->CreateParentIfNecessary());
   }
 
-  if (provider->UseExtraDialogPadding()) {
-    layout->AddPaddingRow(
-        views::GridLayout::kFixedSize,
-        provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL));
-  }
-
   if (!show_tree_ || bb_model_->loaded())
     Reset();
 }
@@ -475,8 +470,7 @@ BookmarkEditorView::EditorNode* BookmarkEditorView::AddNewFolder(
 void BookmarkEditorView::ExpandAndSelect() {
   BookmarkExpandedStateTracker::Nodes expanded_nodes =
       bb_model_->expanded_state_tracker()->GetExpandedNodes();
-  for (BookmarkExpandedStateTracker::Nodes::const_iterator i(
-       expanded_nodes.begin()); i != expanded_nodes.end(); ++i) {
+  for (auto i(expanded_nodes.begin()); i != expanded_nodes.end(); ++i) {
     EditorNode* editor_node =
         FindNodeWithID(tree_model_->GetRoot(), (*i)->id());
     if (editor_node)

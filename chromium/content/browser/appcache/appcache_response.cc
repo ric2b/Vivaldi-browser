@@ -18,15 +18,19 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "content/browser/appcache/appcache_disk_cache.h"
 #include "content/browser/appcache/appcache_storage.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "storage/common/storage_histograms.h"
+#include "third_party/blink/public/mojom/appcache/appcache_info.mojom.h"
 
 namespace content {
 
 namespace {
+
+using OnceCompletionCallback = base::OnceCallback<void(int)>;
 
 // Disk cache entry data indices.
 enum { kResponseInfoIndex, kResponseContentIndex, kResponseMetadataIndex };
@@ -52,7 +56,7 @@ class WrappedPickleIOBuffer : public net::WrappedIOBuffer {
 // AppCacheResponseInfo ----------------------------------------------
 
 AppCacheResponseInfo::AppCacheResponseInfo(
-    AppCacheStorage* storage,
+    base::WeakPtr<AppCacheStorage> storage,
     const GURL& manifest_url,
     int64_t response_id,
     std::unique_ptr<net::HttpResponseInfo> http_info,
@@ -61,44 +65,34 @@ AppCacheResponseInfo::AppCacheResponseInfo(
       response_id_(response_id),
       http_response_info_(std::move(http_info)),
       response_data_size_(response_data_size),
-      storage_(storage) {
+      storage_(std::move(storage)) {
   DCHECK(http_response_info_);
-  DCHECK(response_id != kAppCacheNoResponseId);
+  DCHECK(response_id != blink::mojom::kAppCacheNoResponseId);
   storage_->working_set()->AddResponseInfo(this);
 }
 
 AppCacheResponseInfo::~AppCacheResponseInfo() {
-  storage_->working_set()->RemoveResponseInfo(this);
+  if (storage_)
+    storage_->working_set()->RemoveResponseInfo(this);
 }
 
 // HttpResponseInfoIOBuffer ------------------------------------------
 
 HttpResponseInfoIOBuffer::HttpResponseInfoIOBuffer()
-    : response_data_size(kUnkownResponseDataSize) {}
+    : response_data_size(kUnknownResponseDataSize) {}
 
 HttpResponseInfoIOBuffer::HttpResponseInfoIOBuffer(
     std::unique_ptr<net::HttpResponseInfo> info)
-    : http_info(std::move(info)), response_data_size(kUnkownResponseDataSize) {}
+    : http_info(std::move(info)),
+      response_data_size(kUnknownResponseDataSize) {}
 
 HttpResponseInfoIOBuffer::~HttpResponseInfoIOBuffer() = default;
-
-// AppCacheDiskCacheInterface ----------------------------------------
-
-AppCacheDiskCacheInterface::AppCacheDiskCacheInterface(const char* uma_name)
-    : uma_name_(uma_name), weak_factory_(this) {}
-
-base::WeakPtr<AppCacheDiskCacheInterface>
-AppCacheDiskCacheInterface::GetWeakPtr() {
-  return weak_factory_.GetWeakPtr();
-}
-
-AppCacheDiskCacheInterface::~AppCacheDiskCacheInterface() {}
 
 // AppCacheResponseIO ----------------------------------------------
 
 AppCacheResponseIO::AppCacheResponseIO(
     int64_t response_id,
-    base::WeakPtr<AppCacheDiskCacheInterface> disk_cache)
+    base::WeakPtr<AppCacheDiskCache> disk_cache)
     : response_id_(response_id),
       disk_cache_(std::move(disk_cache)),
       entry_(nullptr),
@@ -152,13 +146,13 @@ void AppCacheResponseIO::OnRawIOComplete(int result) {
 
 void AppCacheResponseIO::OpenEntryIfNeeded() {
   int rv;
-  AppCacheDiskCacheInterface::Entry** entry_ptr = nullptr;
+  AppCacheDiskCacheEntry** entry_ptr = nullptr;
   if (entry_) {
     rv = net::OK;
   } else if (!disk_cache_) {
     rv = net::ERR_FAILED;
   } else {
-    entry_ptr = new AppCacheDiskCacheInterface::Entry*;
+    entry_ptr = new AppCacheDiskCacheEntry*;
     rv = disk_cache_->OpenEntry(
         response_id_, entry_ptr,
         base::BindOnce(&AppCacheResponseIO::OpenEntryCallback, GetWeakPtr(),
@@ -172,7 +166,7 @@ void AppCacheResponseIO::OpenEntryIfNeeded() {
 // static
 void AppCacheResponseIO::OpenEntryCallback(
     base::WeakPtr<AppCacheResponseIO> response,
-    AppCacheDiskCacheInterface::Entry** entry,
+    AppCacheDiskCacheEntry** entry,
     int rv) {
   if (!response) {
     delete entry;
@@ -194,7 +188,7 @@ void AppCacheResponseIO::OpenEntryCallback(
 
 AppCacheResponseReader::AppCacheResponseReader(
     int64_t response_id,
-    base::WeakPtr<AppCacheDiskCacheInterface> disk_cache)
+    base::WeakPtr<AppCacheDiskCache> disk_cache)
     : AppCacheResponseIO(response_id, std::move(disk_cache)),
       range_offset_(0),
       range_length_(std::numeric_limits<int32_t>::max()),
@@ -225,7 +219,7 @@ void AppCacheResponseReader::ContinueReadInfo() {
     return;
   }
 
-  buffer_ = new net::IOBuffer(size);
+  buffer_ = base::MakeRefCounted<net::IOBuffer>(size);
   ReadRaw(kResponseInfoIndex, 0, buffer_.get(), size);
 }
 
@@ -246,11 +240,11 @@ void AppCacheResponseReader::ReadData(net::IOBuffer* buf,
 }
 
 void AppCacheResponseReader::ContinueReadData() {
-  if (read_position_ + buffer_len_ > range_length_) {
-    // TODO(michaeln): What about integer overflows?
-    DCHECK(range_length_ >= read_position_);
+  // Since every read reads at most (range_length_ - read_position_) bytes,
+  // read_position_ can never become larger than range_length_.
+  DCHECK_GE(range_length_, read_position_);
+  if (range_length_ - read_position_ < buffer_len_)
     buffer_len_ = range_length_ - read_position_;
-  }
   ReadRaw(kResponseContentIndex,
           range_offset_ + read_position_,
           buffer_.get(),
@@ -290,8 +284,9 @@ void AppCacheResponseReader::OnIOComplete(int result) {
       int64_t metadata_size = entry_->GetSize(kResponseMetadataIndex);
       if (metadata_size > 0) {
         reading_metadata_size_ = metadata_size;
-        info_buffer_->http_info->metadata = new net::IOBufferWithSize(
-            base::checked_cast<size_t>(metadata_size));
+        info_buffer_->http_info->metadata =
+            base::MakeRefCounted<net::IOBufferWithSize>(
+                base::checked_cast<size_t>(metadata_size));
         ReadRaw(kResponseMetadataIndex, 0,
                 info_buffer_->http_info->metadata.get(), metadata_size);
         return;
@@ -325,7 +320,7 @@ base::WeakPtr<AppCacheResponseIO> AppCacheResponseReader::GetWeakPtr() {
 
 AppCacheResponseWriter::AppCacheResponseWriter(
     int64_t response_id,
-    base::WeakPtr<AppCacheDiskCacheInterface> disk_cache)
+    base::WeakPtr<AppCacheDiskCache> disk_cache)
     : AppCacheResponseIO(response_id, std::move(disk_cache)),
       info_size_(0),
       write_position_(0),
@@ -407,7 +402,7 @@ void AppCacheResponseWriter::OnIOComplete(int result) {
 
 void AppCacheResponseWriter::CreateEntryIfNeededAndContinue() {
   int rv;
-  AppCacheDiskCacheInterface::Entry** entry_ptr = nullptr;
+  AppCacheDiskCacheEntry** entry_ptr = nullptr;
   if (entry_) {
     creation_phase_ = NO_ATTEMPT;
     rv = net::OK;
@@ -416,7 +411,7 @@ void AppCacheResponseWriter::CreateEntryIfNeededAndContinue() {
     rv = net::ERR_FAILED;
   } else {
     creation_phase_ = INITIAL_ATTEMPT;
-    entry_ptr = new AppCacheDiskCacheInterface::Entry*;
+    entry_ptr = new AppCacheDiskCacheEntry*;
     rv = disk_cache_->CreateEntry(
         response_id_, entry_ptr,
         base::BindOnce(&AppCacheResponseWriter::OnCreateEntryComplete,
@@ -429,7 +424,7 @@ void AppCacheResponseWriter::CreateEntryIfNeededAndContinue() {
 // static
 void AppCacheResponseWriter::OnCreateEntryComplete(
     base::WeakPtr<AppCacheResponseWriter> writer,
-    AppCacheDiskCacheInterface::Entry** entry,
+    AppCacheDiskCacheEntry** entry,
     int rv) {
   if (!writer) {
     if (entry) {
@@ -462,8 +457,7 @@ void AppCacheResponseWriter::OnCreateEntryComplete(
   } else if (writer->creation_phase_ == DOOM_EXISTING) {
     DCHECK_EQ(nullptr, entry);
     writer->creation_phase_ = SECOND_ATTEMPT;
-    AppCacheDiskCacheInterface::Entry** entry_ptr =
-        new AppCacheDiskCacheInterface::Entry*;
+    AppCacheDiskCacheEntry** entry_ptr = new AppCacheDiskCacheEntry*;
     rv = writer->disk_cache_->CreateEntry(
         writer->response_id_, entry_ptr,
         base::BindOnce(&AppCacheResponseWriter::OnCreateEntryComplete, writer,
@@ -494,7 +488,7 @@ base::WeakPtr<AppCacheResponseIO> AppCacheResponseWriter::GetWeakPtr() {
 
 AppCacheResponseMetadataWriter::AppCacheResponseMetadataWriter(
     int64_t response_id,
-    base::WeakPtr<AppCacheDiskCacheInterface> disk_cache)
+    base::WeakPtr<AppCacheDiskCache> disk_cache)
     : AppCacheResponseIO(response_id, std::move(disk_cache)),
       write_amount_(0),
       weak_factory_(this) {}

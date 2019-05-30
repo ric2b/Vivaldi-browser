@@ -8,6 +8,15 @@
 
 namespace mojo_base {
 
+namespace {
+
+// In the case of shared memory allocation failure, we still attempt to fall
+// back onto inline bytes unless the buffer size exceeds a very large threshold,
+// given by this constant.
+constexpr size_t kMaxFallbackInlineBytes = 127 * 1024 * 1024;
+
+}  // namespace
+
 namespace internal {
 
 BigBufferSharedMemoryRegion::BigBufferSharedMemoryRegion() = default;
@@ -69,6 +78,10 @@ const uint8_t* BigBuffer::data() const {
       DCHECK(shared_memory_->buffer_mapping_);
       return static_cast<const uint8_t*>(
           const_cast<const void*>(shared_memory_->buffer_mapping_.get()));
+    case StorageType::kInvalidBuffer:
+      // We return null here but do not assert unlike the default case. No
+      // consumer is allowed to dereference this when |size()| is zero anyway.
+      return nullptr;
     default:
       NOTREACHED();
       return nullptr;
@@ -81,6 +94,8 @@ size_t BigBuffer::size() const {
       return bytes_.size();
     case StorageType::kSharedMemory:
       return shared_memory_->size();
+    case StorageType::kInvalidBuffer:
+      return 0;
     default:
       NOTREACHED();
       return 0;
@@ -99,6 +114,14 @@ BigBufferView::BigBufferView(base::span<const uint8_t> bytes) {
       shared_memory_.emplace(std::move(buffer), bytes.size());
       std::copy(bytes.begin(), bytes.end(),
                 static_cast<uint8_t*>(shared_memory_->buffer_mapping_.get()));
+      return;
+    }
+
+    if (bytes.size() > kMaxFallbackInlineBytes) {
+      // The data is too large to even bother with inline fallback, so we
+      // instead produce an invalid buffer. This will always fail validation on
+      // the receiving end.
+      storage_type_ = BigBuffer::StorageType::kInvalidBuffer;
       return;
     }
   }
@@ -131,12 +154,14 @@ void BigBufferView::SetSharedMemory(
 base::span<const uint8_t> BigBufferView::data() const {
   if (storage_type_ == BigBuffer::StorageType::kBytes) {
     return bytes_;
-  } else {
+  } else if (storage_type_ == BigBuffer::StorageType::kSharedMemory) {
     DCHECK(shared_memory_.has_value());
     return base::make_span(static_cast<const uint8_t*>(const_cast<const void*>(
                                shared_memory_->memory())),
                            shared_memory_->size());
   }
+
+  return base::span<const uint8_t>();
 }
 
 // static
@@ -146,10 +171,17 @@ BigBuffer BigBufferView::ToBigBuffer(BigBufferView view) {
   if (view.storage_type_ == BigBuffer::StorageType::kBytes) {
     std::copy(view.bytes_.begin(), view.bytes_.end(),
               std::back_inserter(buffer.bytes_));
-  } else {
+  } else if (view.storage_type_ == BigBuffer::StorageType::kSharedMemory) {
     buffer.shared_memory_ = std::move(*view.shared_memory_);
   }
   return buffer;
+}
+
+// static
+BigBufferView BigBufferView::CreateInvalidForTest() {
+  BigBufferView view;
+  view.storage_type_ = BigBuffer::StorageType::kInvalidBuffer;
+  return view;
 }
 
 }  // namespace mojo_base

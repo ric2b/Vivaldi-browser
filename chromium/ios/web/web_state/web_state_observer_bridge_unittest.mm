@@ -132,27 +132,6 @@ TEST_F(WebStateObserverBridgeTest, DidFinishNavigation) {
             actual_context->GetResponseHeaders());
 }
 
-// Tests |webState:didCommitNavigationWithDetails:| forwarding.
-TEST_F(WebStateObserverBridgeTest, NavigationItemCommitted) {
-  ASSERT_FALSE([observer_ commitNavigationInfo]);
-
-  LoadCommittedDetails load_details;
-  load_details.item = reinterpret_cast<web::NavigationItem*>(1);
-  load_details.previous_item_index = 15;
-  load_details.is_in_page = true;
-
-  observer_bridge_.NavigationItemCommitted(&test_web_state_, load_details);
-
-  ASSERT_TRUE([observer_ commitNavigationInfo]);
-  EXPECT_EQ(&test_web_state_, [observer_ commitNavigationInfo]->web_state);
-  EXPECT_EQ(load_details.item,
-            [observer_ commitNavigationInfo]->load_details.item);
-  EXPECT_EQ(load_details.previous_item_index,
-            [observer_ commitNavigationInfo]->load_details.previous_item_index);
-  EXPECT_EQ(load_details.is_in_page,
-            [observer_ commitNavigationInfo]->load_details.is_in_page);
-}
-
 // Tests |webState:didLoadPageWithSuccess:| forwarding.
 TEST_F(WebStateObserverBridgeTest, PageLoaded) {
   ASSERT_FALSE([observer_ loadPageInfo]);
@@ -200,15 +179,6 @@ TEST_F(WebStateObserverBridgeTest, DidChangeVisibleSecurityState) {
   ASSERT_TRUE([observer_ didChangeVisibleSecurityStateInfo]);
   EXPECT_EQ(&test_web_state_,
             [observer_ didChangeVisibleSecurityStateInfo]->web_state);
-}
-
-// Tests |webStateDidSuppressDialog:| forwarding.
-TEST_F(WebStateObserverBridgeTest, DidSuppressDialog) {
-  ASSERT_FALSE([observer_ didSuppressDialogInfo]);
-
-  observer_bridge_.DidSuppressDialog(&test_web_state_);
-  ASSERT_TRUE([observer_ didSuppressDialogInfo]);
-  EXPECT_EQ(&test_web_state_, [observer_ didSuppressDialogInfo]->web_state);
 }
 
 // Tests |webState:didUpdateFaviconURLCandidates:| forwarding.

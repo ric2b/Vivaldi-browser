@@ -37,11 +37,15 @@ class TextTrackCueList final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static TextTrackCueList* Create() { return new TextTrackCueList; }
+  static TextTrackCueList* Create() {
+    return MakeGarbageCollected<TextTrackCueList>();
+  }
 
-  unsigned long length() const;
+  TextTrackCueList();
 
-  TextTrackCue* AnonymousIndexedGetter(unsigned index) const;
+  wtf_size_t length() const;
+
+  TextTrackCue* AnonymousIndexedGetter(wtf_size_t index) const;
   TextTrackCue* getCueById(const AtomicString&) const;
 
   bool Add(TextTrackCue*);
@@ -51,21 +55,20 @@ class TextTrackCueList final : public ScriptWrappable {
 
   void CollectActiveCues(TextTrackCueList&) const;
   void UpdateCueIndex(TextTrackCue*);
-  bool IsCueIndexValid(unsigned probe_index) const {
+  bool IsCueIndexValid(wtf_size_t probe_index) const {
     return probe_index < first_invalid_index_;
   }
   void ValidateCueIndexes();
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
-  TextTrackCueList();
-  size_t FindInsertionIndex(const TextTrackCue*) const;
-  void InvalidateCueIndex(size_t index);
+  wtf_size_t FindInsertionIndex(const TextTrackCue*) const;
+  void InvalidateCueIndex(wtf_size_t index);
   void Clear();
 
   HeapVector<TraceWrapperMember<TextTrackCue>> list_;
-  size_t first_invalid_index_;
+  wtf_size_t first_invalid_index_;
 };
 
 }  // namespace blink

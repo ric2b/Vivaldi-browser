@@ -29,15 +29,11 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/wtf/text/cstring.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/threading.h"
 #include "third_party/blink/renderer/platform/wtf/threading_primitives.h"
-
-#if defined(COMPILER_MSVC)
-#pragma warning(disable : 4800)
-#endif
 
 struct sqlite3;
 
@@ -97,7 +93,7 @@ class SQLiteDatabase {
 
   sqlite3* Sqlite3Handle() const {
 #if DCHECK_IS_ON()
-    DCHECK_EQ(sharable_ || CurrentThread(), opening_thread_ || !db_);
+    DCHECK_EQ(!!CurrentThread(), opening_thread_ || !db_);
 #endif
     return db_;
   }
@@ -140,14 +136,11 @@ class SQLiteDatabase {
   int page_size_;
 
   bool transaction_in_progress_;
-#if DCHECK_IS_ON()
-  bool sharable_;
-#endif
 
   Mutex authorizer_lock_;
   CrossThreadPersistent<DatabaseAuthorizer> authorizer_;
 
-  ThreadIdentifier opening_thread_;
+  base::PlatformThreadId opening_thread_;
 
   Mutex database_closing_mutex_;
 

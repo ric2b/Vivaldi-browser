@@ -290,8 +290,7 @@ void KeywordProvider::Start(const AutocompleteInput& input,
         keyword, !remaining_input.empty(), &matches);
   }
 
-  for (TemplateURLService::TURLsAndMeaningfulLengths::iterator
-           i(matches.begin()); i != matches.end(); ) {
+  for (auto i(matches.begin()); i != matches.end();) {
     const TemplateURL* template_url = i->first;
 
     // Prune any extension keywords that are disallowed in incognito mode (if
@@ -483,6 +482,7 @@ AutocompleteMatch KeywordProvider::CreateAutocompleteMatch(
   FillInURLAndContents(remaining_input, template_url, &match);
 
   match.keyword = keyword;
+  match.from_keyword = true;
   match.transition = ui::PAGE_TRANSITION_KEYWORD;
 
   return match;

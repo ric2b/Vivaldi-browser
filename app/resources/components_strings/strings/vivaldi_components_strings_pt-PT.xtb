@@ -11,7 +11,6 @@
 <translation id="1375198122581997741">Acerca da versão</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> não enviou quaisquer dados.</translation>
 <translation id="14171126816530869">A identidade de <ph name="ORGANIZATION" /> em <ph name="LOCALITY" /> foi verificada por <ph name="ISSUER" />.</translation>
-<translation id="1506687042165942984">Mostrar uma cópia guardada desta página (isto é, uma cópia desatualizada).</translation>
 <translation id="1559528461873125649">Esse ficheiro ou diretório não existe</translation>
 <translation id="1620510694547887537">Câmara</translation>
 <translation id="1640244768702815859">Experimente <ph name="BEGIN_LINK" />aceder à página inicial do site<ph name="END_LINK" />.</translation>
@@ -38,6 +37,7 @@
 <translation id="2337852623177822836">Definição controlada pelo administrador</translation>
 <translation id="2355395290879513365">Os atacantes podem ver as imagens que está a visualizar neste site e enganá-lo, modificando-as.</translation>
 <translation id="2356070529366658676">Perguntar</translation>
+<translation id="2359808026110333948">Continuar</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />A executar diagnósticos de rede<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Notificações</translation>
 <translation id="2539524384386349900">Detetar</translation>
@@ -75,7 +75,6 @@
 <translation id="3630155396527302611">Se já estiver indicado na lista como sendo um programa com permissão para aceder à rede, experimente
     removê-lo da lista e adicioná-lo novamente.</translation>
 <translation id="3658742229777143148">Revisão</translation>
-<translation id="366094926047009040">Pode perder o acesso à sua Conta Vivaldi ou ser vítima de roubo de identidade. O Vivaldi recomenda a alteração da sua senha agora.</translation>
 <translation id="3681007416295224113">Informações do certificado</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />A verificar a configuração do proxy, da firewall e de DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Se utilizar um servidor de proxy...</translation>
@@ -109,7 +108,6 @@
 <translation id="4744603770635761495">Caminho do Executável</translation>
 <translation id="4750917950439032686">As suas informações (por exemplo, senhas ou números de cartões de crédito) são privadas quando são enviadas para este site.</translation>
 <translation id="4764776831041365478">A página Web em <ph name="URL" /> poderá estar temporariamente inactiva ou poderá ter sido movida permanentemente para um novo endereço Web.</translation>
-<translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
 <translation id="4974590756084640048">Reativar avisos</translation>
 <translation id="5023310440958281426">Verificar as políticas do administrador</translation>
 <translation id="5039804452771397117">Permitir</translation>
@@ -138,7 +136,7 @@
 <translation id="5810442152076338065">A sua ligação a <ph name="DOMAIN" /> está cifrada através de um conjunto de cifras obsoleto.</translation>
 <translation id="5838278095973806738">Não deve introduzir informações confidenciais neste site (por exemplo, senhas ou números de cartões de crédito), porque podem ser roubadas por atacantes.</translation>
 <translation id="5869405914158311789">Não é possível aceder a este site</translation>
-<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 em utilização} other {# em utilização}}</translation>
+<translation id="5932224571077948991">O site apresenta anúncios intrusivos ou enganadores</translation>
 <translation id="5990559369517809815">Os pedidos para o servidor foram bloqueados por uma extensão.</translation>
 <translation id="6051221802930200923">Não pode visitar <ph name="SITE" /> neste momento, porque o site utiliza a afixação de certificados. Os erros de rede e os ataques são geralmente temporários, pelo que esta página deverá funcionar mais tarde.</translation>
 <translation id="6146055958333702838">Verifique os cabos e reinicie todos os routers, modems ou outros
@@ -157,6 +155,7 @@
 <translation id="6417515091412812850">Não é possível verificar se o certificado foi revogado.</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> recusou estabelecer ligação.</translation>
 <translation id="6447842834002726250">Cookies</translation>
+<translation id="6451458296329894277">Confirmar nova submissão de formulário</translation>
 <translation id="6569060085658103619">Está a ver a página de uma extensão</translation>
 <translation id="6657585470893396449">Senha</translation>
 <translation id="6685834062052613830">Termine sessão e conclua a configuração</translation>
@@ -194,13 +193,14 @@
 <translation id="8025119109950072390">Os utilizadores mal intencionados neste site podem enganá-lo no sentido de fazer algo perigoso como instalar programas ou revelar as suas informações pessoais (por exemplo, senhas, números de telefone ou cartões de crédito).</translation>
 <translation id="8037357227543935929">Pedir (pré-definição)</translation>
 <translation id="8041940743680923270">Utilizar pré-definição global (Perguntar)</translation>
+<translation id="808894953321890993">Alterar senha</translation>
 <translation id="8142868475871995937">Visite &lt;strong&gt;vivaldi://policy&lt;/strong&gt; para ver os URLs que foram colocados na lista negra e outras políticas aplicadas pelo administrador do sistema.</translation>
 <translation id="8149426793427495338">O computador entrou em suspensão.</translation>
 <translation id="8150722005171944719">O ficheiro em <ph name="URL" /> não é legível. Pode ter sido removido, movido ou as permissões do ficheiro podem estar a impedir o acesso.</translation>
 <translation id="8184538546369750125">Utilizar pré-definição global (Permitir)</translation>
-<translation id="8205463626947051446">O site tem tendência para mostrar publicidade intrusiva</translation>
 <translation id="8211406090763984747">A ligação é segura</translation>
 <translation id="8225771182978767009">A pessoa que configurou este computador optou por bloquear este site.</translation>
+<translation id="8241707690549784388">A página que procura utilizou informações introduzidas por si. Regressar a essa página poderá originar a repetição de qualquer ação que tenha efetuado. Pretende continuar?</translation>
 <translation id="8241712895048303527">Bloquear neste site</translation>
 <translation id="8288807391153049143">Mostrar certificado</translation>
 <translation id="8289355894181816810">Se não tiver a certeza do que isto significa, contacte o administrador de rede.</translation>
@@ -216,10 +216,10 @@
 <translation id="9025348182339809926">(Inválido)</translation>
 <translation id="9039213469156557790">Além disso, esta página inclui outros recursos que não são seguros. Estes recursos podem ser vistos por outros utilizadores em trânsito e modificados por um utilizador mal intencionado com o intuito de alterar o comportamento da página.</translation>
 <translation id="9069693763241529744">Bloqueada por uma extensão</translation>
-<translation id="910908805481542201">Ajudem-me a corrigir isto</translation>
 <translation id="9169664750068251925">Bloquear sempre neste site</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> utiliza um protocolo não suportado.</translation>
 <translation id="9219103736887031265">Imagens</translation>
+<translation id="936602727769022409">Pode perder o acesso à sua Conta Google. O Vivaldi recomenda que altere a sua senha agora. Ser-lhe-á pedido para iniciar sessão.</translation>
 <translation id="969892804517981540">Compilação oficial</translation>
 <translation id="988159990683914416">Compilação de programador</translation>
 </translationbundle>

@@ -35,8 +35,8 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_blob_callback.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_host.h"
 #include "third_party/blink/renderer/core/html/canvas/image_encode_options.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
@@ -86,6 +86,16 @@ typedef CanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextO
     RenderingContext;
 #endif
 
+// This contains the information of HTML Canvas Element,
+// There are four different types of context this HTML Canvas can contain.
+// It can be a 3D Context (WebGL or WebGL2), 2D Context,
+// BitmapRenderingContext or it can have no context (Offscreencanvas).
+// To check the no context case is good to check if there is a placeholder.
+// For 3D and 2D contexts there are Is3D or Is2D functions.
+// The remaining case is BitmaprenderingContext.
+//
+// TODO (juanmihd): Study if a refactor of context could help in simplifying
+// this class and without overcomplicating context.
 class CORE_EXPORT HTMLCanvasElement final
     : public HTMLElement,
       public ContextLifecycleObserver,
@@ -102,6 +112,8 @@ class CORE_EXPORT HTMLCanvasElement final
   using Node::GetExecutionContext;
 
   DECLARE_NODE_FACTORY(HTMLCanvasElement);
+
+  explicit HTMLCanvasElement(Document&);
   ~HTMLCanvasElement() override;
 
   // Attributes and functions exposed to script
@@ -146,7 +158,9 @@ class CORE_EXPORT HTMLCanvasElement final
   void DidDraw(const FloatRect&) override;
   void DidDraw() override;
 
-  void Paint(GraphicsContext&, const LayoutRect&);
+  void Paint(GraphicsContext&,
+             const LayoutRect&,
+             bool flatten_composited_layers);
 
   void DisableDeferral(DisableDeferralReason);
 
@@ -195,7 +209,7 @@ class CORE_EXPORT HTMLCanvasElement final
   scoped_refptr<Image> GetSourceImageForCanvas(SourceImageStatus*,
                                                AccelerationHint,
                                                const FloatSize&) override;
-  bool WouldTaintOrigin(const SecurityOrigin*) const override;
+  bool WouldTaintOrigin() const override;
   FloatSize ElementSize(const FloatSize&) const override;
   bool IsCanvasElement() const override { return true; }
   bool IsOpaque() const override;
@@ -225,17 +239,18 @@ class CORE_EXPORT HTMLCanvasElement final
   ScriptPromise CreateImageBitmap(ScriptState*,
                                   EventTarget&,
                                   base::Optional<IntRect> crop_rect,
-                                  const ImageBitmapOptions&) override;
+                                  const ImageBitmapOptions*) override;
 
   // OffscreenCanvasPlaceholder implementation.
   void SetPlaceholderFrame(scoped_refptr<CanvasResource>,
                            base::WeakPtr<CanvasResourceDispatcher>,
                            scoped_refptr<base::SingleThreadTaskRunner>,
                            unsigned resource_id) override;
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
-  void SetCanvas2DLayerBridgeForTesting(std::unique_ptr<Canvas2DLayerBridge>,
-                                        const IntSize&);
+  void SetResourceProviderForTesting(std::unique_ptr<CanvasResourceProvider>,
+                                     std::unique_ptr<Canvas2DLayerBridge>,
+                                     const IntSize&);
 
   static void RegisterRenderingContextFactory(
       std::unique_ptr<CanvasRenderingContextFactory>);
@@ -298,12 +313,18 @@ class CORE_EXPORT HTMLCanvasElement final
   scoped_refptr<StaticBitmapImage> Snapshot(SourceDrawingBuffer,
                                             AccelerationHint) const;
 
+  // Returns the cc layer containing the contents. It's the cc layer of
+  // SurfaceLayerBridge() or RenderingContext(), or nullptr if the canvas is not
+  // composited.
+  cc::Layer* ContentsCcLayer() const;
+
  protected:
   void DidMoveToNewDocument(Document& old_document) override;
 
  private:
-  explicit HTMLCanvasElement(Document&);
   void Dispose();
+
+  void PaintInternal(GraphicsContext&, const LayoutRect&);
 
   using ContextFactoryVector =
       Vector<std::unique_ptr<CanvasRenderingContextFactory>>;
@@ -337,6 +358,12 @@ class CORE_EXPORT HTMLCanvasElement final
   // Returns true if the canvas' context type is inherited from
   // ImageBitmapRenderingContextBase.
   bool HasImageBitmapContext() const;
+
+  CanvasRenderingContext* GetCanvasRenderingContextInternal(
+      const String&,
+      const CanvasContextCreationAttributesCore&);
+
+  void OnContentsCcLayerChanged();
 
   HeapHashSet<WeakMember<CanvasDrawListener>> listeners_;
 

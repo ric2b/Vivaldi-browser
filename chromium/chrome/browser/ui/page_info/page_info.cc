@@ -14,16 +14,16 @@
 
 #include "base/command_line.h"
 #include "base/i18n/time_formatting.h"
-#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/browsing_data/browsing_data_channel_id_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_cookie_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_database_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_file_system_helper.h"
@@ -46,6 +46,7 @@
 #include "chrome/browser/ui/page_info/page_info_ui.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
+#include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
@@ -80,6 +81,8 @@
 #endif
 
 #if !defined(OS_ANDROID)
+#include "chrome/browser/serial/serial_chooser_context.h"
+#include "chrome/browser/serial/serial_chooser_context_factory.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
@@ -168,9 +171,6 @@ bool ShouldShowPermission(
   }
 
   if (info.type == CONTENT_SETTINGS_TYPE_SOUND) {
-    if (!base::FeatureList::IsEnabled(features::kSoundContentSetting))
-      return false;
-
     // The sound content setting should always show up when the tab has played
     // audio.
     if (web_contents && web_contents->WasEverAudible())
@@ -294,13 +294,26 @@ ChooserContextBase* GetUsbChooserContext(Profile* profile) {
   return UsbChooserContextFactory::GetForProfile(profile);
 }
 
+#if !defined(OS_ANDROID)
+ChooserContextBase* GetSerialChooserContext(Profile* profile) {
+  return SerialChooserContextFactory::GetForProfile(profile);
+}
+#endif
+
 // The list of chooser types that need to display entries in the Website
 // Settings UI. THE ORDER OF THESE ITEMS IS IMPORTANT. To propose changing it,
 // email security-dev@chromium.org.
 const PageInfo::ChooserUIInfo kChooserUIInfo[] = {
     {CONTENT_SETTINGS_TYPE_USB_CHOOSER_DATA, &GetUsbChooserContext,
-     IDS_PAGE_INFO_USB_DEVICE_LABEL, IDS_PAGE_INFO_USB_DEVICE_SECONDARY_LABEL,
+     IDS_PAGE_INFO_USB_DEVICE_SECONDARY_LABEL,
+     IDS_PAGE_INFO_USB_DEVICE_ALLOWED_BY_POLICY_LABEL,
      IDS_PAGE_INFO_DELETE_USB_DEVICE, "name"},
+#if !defined(OS_ANDROID)
+    {CONTENT_SETTINGS_TYPE_SERIAL_CHOOSER_DATA, &GetSerialChooserContext,
+     IDS_PAGE_INFO_SERIAL_PORT_SECONDARY_LABEL,
+     /*allowed_by_policy_description_string_id=*/-1,
+     IDS_PAGE_INFO_DELETE_SERIAL_PORT, "name"},
+#endif
 };
 
 // Time open histogram prefixes.
@@ -308,31 +321,6 @@ const char kPageInfoTimePrefix[] = "Security.PageInfo.TimeOpen";
 const char kPageInfoTimeActionPrefix[] = "Security.PageInfo.TimeOpen.Action";
 const char kPageInfoTimeNoActionPrefix[] =
     "Security.PageInfo.TimeOpen.NoAction";
-
-std::string GetHistogramSuffixForSecurityLevel(
-    security_state::SecurityLevel level) {
-  switch (level) {
-    case security_state::EV_SECURE:
-      return "EV_SECURE";
-    case security_state::SECURE:
-      return "SECURE";
-    case security_state::NONE:
-      return "NONE";
-    case security_state::HTTP_SHOW_WARNING:
-      return "HTTP_SHOW_WARNING";
-    case security_state::SECURE_WITH_POLICY_INSTALLED_CERT:
-      return "SECURE_WITH_POLICY_INSTALLED_CERT";
-    case security_state::DANGEROUS:
-      return "DANGEROUS";
-    default:
-      return "OTHER";
-  }
-}
-
-std::string GetHistogramName(const char* prefix,
-                             security_state::SecurityLevel level) {
-  return std::string(prefix) + "." + GetHistogramSuffixForSecurityLevel(level);
-}
 
 }  // namespace
 
@@ -369,6 +357,7 @@ PageInfo::PageInfo(PageInfoUI* ui,
   PresentSitePermissions();
   PresentSiteIdentity();
   PresentSiteData();
+  PresentPageFeatureInfo();
 
   // Every time the Page Info UI is opened a |PageInfo| object is
   // created. So this counts how ofter the Page Info UI is opened.
@@ -394,18 +383,21 @@ PageInfo::~PageInfo() {
   // Record the total time the Page Info UI was open for all opens as well as
   // split between whether any action was taken.
   base::UmaHistogramCustomTimes(
-      GetHistogramName(kPageInfoTimePrefix, security_level_),
+      security_state::GetSecurityLevelHistogramName(
+          kPageInfoTimePrefix, security_level_),
       base::TimeTicks::Now() - start_time_,
       base::TimeDelta::FromMilliseconds(1), base::TimeDelta::FromHours(1), 100);
   if (did_perform_action_) {
     base::UmaHistogramCustomTimes(
-        GetHistogramName(kPageInfoTimeActionPrefix, security_level_),
+        security_state::GetSecurityLevelHistogramName(
+            kPageInfoTimeActionPrefix, security_level_),
         base::TimeTicks::Now() - start_time_,
         base::TimeDelta::FromMilliseconds(1), base::TimeDelta::FromHours(1),
         100);
   } else {
     base::UmaHistogramCustomTimes(
-        GetHistogramName(kPageInfoTimeNoActionPrefix, security_level_),
+        security_state::GetSecurityLevelHistogramName(
+            kPageInfoTimeNoActionPrefix, security_level_),
         base::TimeTicks::Now() - start_time_,
         base::TimeDelta::FromMilliseconds(1), base::TimeDelta::FromHours(1),
         100);
@@ -783,15 +775,9 @@ void PageInfo::Init(const GURL& url,
     site_connection_details_.assign(l10n_util::GetStringFUTF16(
         IDS_PAGE_INFO_SECURITY_TAB_NOT_ENCRYPTED_CONNECTION_TEXT,
         subject_name));
-  } else if (security_info.security_bits < 0) {
-    // Security strength is unknown.  Say nothing.
-    site_connection_status_ = SITE_CONNECTION_STATUS_ENCRYPTED_ERROR;
-  } else if (security_info.security_bits == 0) {
+  } else if (!security_info.connection_info_initialized) {
     DCHECK_NE(security_info.security_level, security_state::NONE);
     site_connection_status_ = SITE_CONNECTION_STATUS_ENCRYPTED_ERROR;
-    site_connection_details_.assign(l10n_util::GetStringFUTF16(
-        IDS_PAGE_INFO_SECURITY_TAB_NOT_ENCRYPTED_CONNECTION_TEXT,
-        subject_name));
   } else {
     site_connection_status_ = SITE_CONNECTION_STATUS_ENCRYPTED;
 
@@ -810,7 +796,7 @@ void PageInfo::Init(const GURL& url,
 
   uint16_t cipher_suite =
       net::SSLConnectionStatusToCipherSuite(security_info.connection_status);
-  if (security_info.security_bits > 0 && cipher_suite) {
+  if (security_info.connection_info_initialized && cipher_suite) {
     int ssl_version =
         net::SSLConnectionStatusToVersion(security_info.connection_status);
     const char* ssl_version_str;
@@ -860,7 +846,7 @@ void PageInfo::PresentSitePermissions() {
   ChosenObjectInfoList chosen_object_info_list;
 
   PageInfoUI::PermissionInfo permission_info;
-  for (size_t i = 0; i < arraysize(kPermissionType); ++i) {
+  for (size_t i = 0; i < base::size(kPermissionType); ++i) {
     permission_info.type = kPermissionType[i];
 
     content_settings::SettingInfo info;
@@ -924,7 +910,7 @@ void PageInfo::PresentSitePermissions() {
       continue;
 
     auto chosen_objects = context->GetGrantedObjects(origin, origin);
-    for (std::unique_ptr<base::DictionaryValue>& object : chosen_objects) {
+    for (std::unique_ptr<ChooserContextBase::Object>& object : chosen_objects) {
       chosen_object_info_list.push_back(
           std::make_unique<PageInfoUI::ChosenObjectInfo>(ui_info,
                                                          std::move(object)));
@@ -998,9 +984,17 @@ void PageInfo::PresentSiteIdentity() {
 #endif
 }
 
+void PageInfo::PresentPageFeatureInfo() {
+  PageInfoUI::PageFeatureInfo info;
+  info.is_vr_presentation_in_headset =
+      vr::VrTabHelper::IsContentDisplayedInHeadset(web_contents());
+
+  ui_->SetPageFeatureInfo(info);
+}
+
 std::vector<ContentSettingsType> PageInfo::GetAllPermissionsForTesting() {
   std::vector<ContentSettingsType> permission_list;
-  for (size_t i = 0; i < arraysize(kPermissionType); ++i) {
+  for (size_t i = 0; i < base::size(kPermissionType); ++i) {
 #if !defined(OS_ANDROID)
     if (kPermissionType[i] == CONTENT_SETTINGS_TYPE_AUTOPLAY)
       continue;

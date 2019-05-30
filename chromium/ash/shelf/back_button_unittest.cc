@@ -7,12 +7,15 @@
 #include <memory>
 
 #include "ash/accelerators/accelerator_controller.h"
+#include "ash/app_list/test/app_list_test_helper.h"
+#include "ash/app_list/views/app_list_view.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shelf/shelf_view_test_api.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "base/run_loop.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/test_accelerator_target.h"
 #include "ui/events/test/event_generator.h"
@@ -37,7 +40,7 @@ class BackButtonTest : public AshTestBase {
     // GetSwitchStates post task in (Fake)PowerManagerClient which is triggered
     // by TabletModeController otherwise this will cause tablet mode to exit
     // while we wait for animations in the test.
-    RunAllPendingInMessageLoop();
+    base::RunLoop().RunUntilIdle();
   }
 
  private:
@@ -84,7 +87,15 @@ TEST_F(BackButtonTest, BackKeySequenceGenerated) {
 
   AcceleratorController* controller = Shell::Get()->accelerator_controller();
 
-  // Register an accelerator that looks for back presses.
+  // Register an accelerator that looks for back presses. Note there is already
+  // an accelerator on AppListView, which will handle the accelerator since it
+  // is targeted before AcceleratorController (switching to tablet mode with no
+  // other windows activates the app list). First remove that accelerator. In
+  // release, there's only the AppList's accelerator, so it's always hit when
+  // the app list is active. (ash/accelerators.cc has VKEY_BROWSER_BACK, but it
+  // also needs Ctrl pressed).
+  GetAppListTestHelper()->GetAppListView()->ResetAccelerators();
+
   ui::Accelerator accelerator_back_press(ui::VKEY_BROWSER_BACK, ui::EF_NONE);
   accelerator_back_press.set_key_state(ui::Accelerator::KeyState::PRESSED);
   ui::TestAcceleratorTarget target_back_press;
@@ -96,11 +107,15 @@ TEST_F(BackButtonTest, BackKeySequenceGenerated) {
   ui::TestAcceleratorTarget target_back_release;
   controller->Register({accelerator_back_release}, &target_back_release);
 
-  // Verify that by clicking the back button, a back key sequence will be
-  // generated.
+  // Verify that by pressing the back button no event is generated on the press,
+  // but there is one generated on the release.
   ui::test::EventGenerator* generator = GetEventGenerator();
   generator->MoveMouseTo(back_button()->GetBoundsInScreen().CenterPoint());
-  generator->ClickLeftButton();
+  generator->PressLeftButton();
+  EXPECT_EQ(0, target_back_press.accelerator_count());
+  EXPECT_EQ(0, target_back_release.accelerator_count());
+
+  generator->ReleaseLeftButton();
   EXPECT_EQ(1, target_back_press.accelerator_count());
   EXPECT_EQ(1, target_back_release.accelerator_count());
 }

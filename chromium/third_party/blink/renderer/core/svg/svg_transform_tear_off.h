@@ -43,27 +43,34 @@ class SVGTransformTearOff final : public SVGPropertyTearOff<SVGTransform> {
 
  public:
   enum SVGTransformType {
-    kSvgTransformUnknown = blink::kSvgTransformUnknown,
-    kSvgTransformMatrix = blink::kSvgTransformMatrix,
-    kSvgTransformTranslate = blink::kSvgTransformTranslate,
-    kSvgTransformScale = blink::kSvgTransformScale,
-    kSvgTransformRotate = blink::kSvgTransformRotate,
-    kSvgTransformSkewx = blink::kSvgTransformSkewx,
-    kSvgTransformSkewy = blink::kSvgTransformSkewy,
+    kSvgTransformUnknown = static_cast<int>(blink::SVGTransformType::kUnknown),
+    kSvgTransformMatrix = static_cast<int>(blink::SVGTransformType::kMatrix),
+    kSvgTransformTranslate =
+        static_cast<int>(blink::SVGTransformType::kTranslate),
+    kSvgTransformScale = static_cast<int>(blink::SVGTransformType::kScale),
+    kSvgTransformRotate = static_cast<int>(blink::SVGTransformType::kRotate),
+    kSvgTransformSkewx = static_cast<int>(blink::SVGTransformType::kSkewx),
+    kSvgTransformSkewy = static_cast<int>(blink::SVGTransformType::kSkewy),
   };
 
   static SVGTransformTearOff* Create(
       SVGTransform* target,
       SVGAnimatedPropertyBase* binding,
       PropertyIsAnimValType property_is_anim_val) {
-    return new SVGTransformTearOff(target, binding, property_is_anim_val);
+    return MakeGarbageCollected<SVGTransformTearOff>(target, binding,
+                                                     property_is_anim_val);
   }
   static SVGTransformTearOff* CreateDetached();
   static SVGTransformTearOff* Create(SVGMatrixTearOff*);
 
+  SVGTransformTearOff(SVGTransform*,
+                      SVGAnimatedPropertyBase* binding,
+                      PropertyIsAnimValType);
   ~SVGTransformTearOff() override;
 
-  unsigned short transformType() { return Target()->TransformType(); }
+  uint16_t transformType() {
+    return static_cast<uint16_t>(Target()->TransformType());
+  }
   SVGMatrixTearOff* matrix();
   float angle() { return Target()->Angle(); }
 
@@ -77,10 +84,6 @@ class SVGTransformTearOff final : public SVGPropertyTearOff<SVGTransform> {
   void Trace(blink::Visitor*) override;
 
  private:
-  SVGTransformTearOff(SVGTransform*,
-                      SVGAnimatedPropertyBase* binding,
-                      PropertyIsAnimValType);
-
   Member<SVGMatrixTearOff> matrix_tearoff_;
 };
 

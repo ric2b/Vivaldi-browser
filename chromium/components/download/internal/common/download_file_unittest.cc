@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -266,7 +267,8 @@ class DownloadFileTest : public testing::Test {
     for (size_t i = 0; i < num_chunks; i++) {
       const char* source_data = data_chunks[i];
       size_t length = strlen(source_data);
-      scoped_refptr<net::IOBuffer> data = new net::IOBuffer(length);
+      scoped_refptr<net::IOBuffer> data =
+          base::MakeRefCounted<net::IOBuffer>(length);
       memcpy(data->data(), source_data, length);
       EXPECT_CALL(*input_stream, Read(_, _))
           .InSequence(s)
@@ -501,10 +503,10 @@ class DownloadFileTestWithRename
 // DownloadFileTestWithRename.<FooTest> will be instantiated once with
 // RenameAndAnnotate as the value parameter and once with RenameAndUniquify as
 // the value parameter.
-INSTANTIATE_TEST_CASE_P(DownloadFile,
-                        DownloadFileTestWithRename,
-                        ::testing::Values(RENAME_AND_ANNOTATE,
-                                          RENAME_AND_UNIQUIFY));
+INSTANTIATE_TEST_SUITE_P(DownloadFile,
+                         DownloadFileTestWithRename,
+                         ::testing::Values(RENAME_AND_ANNOTATE,
+                                           RENAME_AND_UNIQUIFY));
 
 const char DownloadFileTest::kTestData1[] =
     "Let's write some data to the file!\n";

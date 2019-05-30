@@ -39,6 +39,7 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "build/build_config.h"
 #include "third_party/blink/renderer/platform/fonts/font.h"
 #include "third_party/blink/renderer/platform/fonts/font_description.h"
 #include "third_party/blink/renderer/platform/fonts/font_fallback_iterator.h"
@@ -70,8 +71,7 @@ void CheckShapeResultRange(const ShapeResult* result,
   DCHECK_LE(start, end);
   unsigned length = end - start;
   if (length == result->NumCharacters() &&
-      (!length || (start == result->StartIndexForResult() &&
-                   end == result->EndIndexForResult())))
+      (!length || (start == result->StartIndex() && end == result->EndIndex())))
     return;
 
   // Log font-family/size as specified.
@@ -99,8 +99,7 @@ void CheckShapeResultRange(const ShapeResult* result,
 
   // Log the text to shape.
   log.Append(String::Format(": %u-%u -> %u-%u:", start, end,
-                            result->StartIndexForResult(),
-                            result->EndIndexForResult()));
+                            result->StartIndex(), result->EndIndex()));
   for (unsigned i = start; i < end; ++i)
     log.Append(String::Format(" %02X", text[i]));
 
@@ -116,18 +115,17 @@ void CheckShapeResultRange(const ShapeResult* result,
 enum ReshapeQueueItemAction { kReshapeQueueNextFont, kReshapeQueueRange };
 
 struct ReshapeQueueItem {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
   ReshapeQueueItemAction action_;
   unsigned start_index_;
   unsigned num_characters_;
   ReshapeQueueItem(ReshapeQueueItemAction action, unsigned start, unsigned num)
-      : action_(action), start_index_(start), num_characters_(num){};
+      : action_(action), start_index_(start), num_characters_(num) {}
 };
 
 template <typename T>
 class HarfBuzzScopedPtr {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(HarfBuzzScopedPtr);
 
  public:
   typedef void (*DestroyFunction)(T*);
@@ -147,9 +145,9 @@ class HarfBuzzScopedPtr {
  private:
   T* ptr_;
   DestroyFunction destroy_;
-};
 
-HarfBuzzShaper::HarfBuzzShaper(const String& text) : text_(text) {}
+  DISALLOW_COPY_AND_ASSIGN(HarfBuzzScopedPtr);
+};
 
 using FeaturesVector = Vector<hb_feature_t, 6>;
 struct RangeData {
@@ -240,14 +238,6 @@ inline bool ShapeRange(hb_buffer_t* buffer,
                               ? HarfBuzzFace::PrepareForVerticalLayout
                               : HarfBuzzFace::NoVerticalLayout);
   hb_shape(hb_font, buffer, font_features, font_features_size);
-
-  // We cannot round all glyph positions during hb_shape because the
-  // hb_font_funcs_set_glyph_h_kerning_func only works for legacy kerning.
-  // OpenType uses gpos tables for kerning and harfbuzz does not call
-  // the callback to let us round as we go.
-  // Without this rounding, we get inconsistent spacing between kern points
-  // if subpixel positioning is disabled.
-  // See http://crbug.com/740385.
   if (!face->ShouldSubpixelPosition())
     RoundHarfBuzzBufferPositions(buffer);
 
@@ -338,12 +328,11 @@ void HarfBuzzShaper::CommitGlyphs(RangeData* range_data,
   // Here we need to specify glyph positions.
   BufferSlice next_slice;
   for (const BufferSlice* current_slice = &slice;;) {
-    ShapeResult::RunInfo* run = new ShapeResult::RunInfo(
+    auto run = ShapeResult::RunInfo::Create(
         current_font, direction, canvas_rotation, script,
         current_slice->start_character_index, current_slice->num_glyphs,
         current_slice->num_characters);
-    shape_result->InsertRun(base::WrapUnique(run),
-                            current_slice->start_glyph_index,
+    shape_result->InsertRun(run, current_slice->start_glyph_index,
                             current_slice->num_glyphs, range_data->buffer);
     unsigned num_glyphs_inserted = run->NumGlyphs();
     if (num_glyphs_inserted == current_slice->num_glyphs)
@@ -483,7 +472,7 @@ bool HarfBuzzShaper::CollectFallbackHintChars(
     const Deque<ReshapeQueueItem>& reshape_queue,
     bool needs_hint_list,
     Vector<UChar32>& hint) const {
-  if (!reshape_queue.size())
+  if (reshape_queue.empty())
     return false;
 
   // Clear without releasing the capacity to avoid reallocations.
@@ -565,7 +554,7 @@ void SplitUntilNextCaseChange(
   }
 }
 
-hb_feature_t CreateFeature(hb_tag_t tag, uint32_t value = 0) {
+constexpr hb_feature_t CreateFeature(hb_tag_t tag, uint32_t value = 0) {
   return {tag, value, 0 /* start */, static_cast<unsigned>(-1) /* end */};
 }
 
@@ -574,11 +563,11 @@ hb_feature_t CreateFeature(hb_tag_t tag, uint32_t value = 0) {
 void SetFontFeatures(const Font* font, FeaturesVector* features) {
   const FontDescription& description = font->GetFontDescription();
 
-  static hb_feature_t no_kern = CreateFeature(HB_TAG('k', 'e', 'r', 'n'));
-  static hb_feature_t no_vkrn = CreateFeature(HB_TAG('v', 'k', 'r', 'n'));
+  constexpr hb_feature_t no_kern = CreateFeature(HB_TAG('k', 'e', 'r', 'n'));
+  constexpr hb_feature_t no_vkrn = CreateFeature(HB_TAG('v', 'k', 'r', 'n'));
   switch (description.GetKerning()) {
     case FontDescription::kNormalKerning:
-      // kern/vkrn are enabled by default
+      // kern/vkrn are enabled by default in HarfBuzz
       break;
     case FontDescription::kNoneKerning:
       features->push_back(description.IsVerticalAnyUpright() ? no_vkrn
@@ -588,51 +577,41 @@ void SetFontFeatures(const Font* font, FeaturesVector* features) {
       break;
   }
 
-  static hb_feature_t no_clig = CreateFeature(HB_TAG('c', 'l', 'i', 'g'));
-  static hb_feature_t no_liga = CreateFeature(HB_TAG('l', 'i', 'g', 'a'));
-  switch (description.CommonLigaturesState()) {
-    case FontDescription::kDisabledLigaturesState:
+  {
+    bool default_is_off = description.TextRendering() == blink::kOptimizeSpeed;
+    bool letter_spacing = description.LetterSpacing() != 0;
+    constexpr auto normal = FontDescription::kNormalLigaturesState;
+    constexpr auto enabled = FontDescription::kEnabledLigaturesState;
+    constexpr auto disabled = FontDescription::kDisabledLigaturesState;
+
+    // clig and liga are on by default in HarfBuzz
+    constexpr hb_feature_t no_clig = CreateFeature(HB_TAG('c', 'l', 'i', 'g'));
+    constexpr hb_feature_t no_liga = CreateFeature(HB_TAG('l', 'i', 'g', 'a'));
+    auto common = description.CommonLigaturesState();
+    if (letter_spacing ||
+        (common == disabled || (common == normal && default_is_off))) {
       features->push_back(no_liga);
       features->push_back(no_clig);
-      break;
-    case FontDescription::kEnabledLigaturesState:
-      // liga and clig are on by default
-      break;
-    case FontDescription::kNormalLigaturesState:
-      break;
-  }
-  static hb_feature_t dlig = CreateFeature(HB_TAG('d', 'l', 'i', 'g'), 1);
-  switch (description.DiscretionaryLigaturesState()) {
-    case FontDescription::kDisabledLigaturesState:
-      // dlig is off by default
-      break;
-    case FontDescription::kEnabledLigaturesState:
+    }
+    // dlig is off by default in HarfBuzz
+    constexpr hb_feature_t dlig = CreateFeature(HB_TAG('d', 'l', 'i', 'g'), 1);
+    auto discretionary = description.DiscretionaryLigaturesState();
+    if (!letter_spacing && discretionary == enabled) {
       features->push_back(dlig);
-      break;
-    case FontDescription::kNormalLigaturesState:
-      break;
-  }
-  static hb_feature_t hlig = CreateFeature(HB_TAG('h', 'l', 'i', 'g'), 1);
-  switch (description.HistoricalLigaturesState()) {
-    case FontDescription::kDisabledLigaturesState:
-      // hlig is off by default
-      break;
-    case FontDescription::kEnabledLigaturesState:
+    }
+    // hlig is off by default in HarfBuzz
+    constexpr hb_feature_t hlig = CreateFeature(HB_TAG('h', 'l', 'i', 'g'), 1);
+    auto historical = description.HistoricalLigaturesState();
+    if (!letter_spacing && historical == enabled) {
       features->push_back(hlig);
-      break;
-    case FontDescription::kNormalLigaturesState:
-      break;
-  }
-  static hb_feature_t no_calt = CreateFeature(HB_TAG('c', 'a', 'l', 't'));
-  switch (description.ContextualLigaturesState()) {
-    case FontDescription::kDisabledLigaturesState:
+    }
+    // calt is on by default in HarfBuzz
+    constexpr hb_feature_t no_calt = CreateFeature(HB_TAG('c', 'a', 'l', 't'));
+    auto contextual = description.ContextualLigaturesState();
+    if (letter_spacing ||
+        (contextual == disabled || (contextual == normal && default_is_off))) {
       features->push_back(no_calt);
-      break;
-    case FontDescription::kEnabledLigaturesState:
-      // calt is on by default
-      break;
-    case FontDescription::kNormalLigaturesState:
-      break;
+    }
   }
 
   static hb_feature_t hwid = CreateFeature(HB_TAG('h', 'w', 'i', 'd'), 1);
@@ -774,7 +753,7 @@ class CapsFeatureSettingsScopedOverlay final {
   void OverlayCapsFeatures(FontDescription::FontVariantCaps);
   void PrependCounting(const hb_feature_t&);
   FeaturesVector* features_;
-  size_t count_features_;
+  wtf_size_t count_features_;
 };
 
 CapsFeatureSettingsScopedOverlay::CapsFeatureSettingsScopedOverlay(
@@ -858,7 +837,7 @@ void HarfBuzzShaper::ShapeSegment(
                                                range_data->start);
   }
   scoped_refptr<FontDataForRangeSet> current_font_data_for_range_set;
-  while (range_data->reshape_queue.size()) {
+  while (!range_data->reshape_queue.empty()) {
     ReshapeQueueItem current_queue_item = range_data->reshape_queue.TakeFirst();
 
     if (current_queue_item.action_ == kReshapeQueueNextFont) {
@@ -874,7 +853,7 @@ void HarfBuzzShaper::ShapeSegment(
       current_font_data_for_range_set =
           fallback_iterator->Next(fallback_chars_hint);
       if (!current_font_data_for_range_set->FontData()) {
-        DCHECK(!range_data->reshape_queue.size());
+        DCHECK(range_data->reshape_queue.empty());
         break;
       }
       font_cycle_queued = false;
@@ -1006,9 +985,9 @@ scoped_refptr<ShapeResult> HarfBuzzShaper::Shape(
     }
   }
 
-  // Ensure we have at least one run for StartIndexForResult().
-  if (UNLIKELY(result->runs_.IsEmpty() && start))
-    result->InsertRunForIndex(start);
+  // Ensure |start_index_| is updated even when no runs were inserted.
+  if (UNLIKELY(result->runs_.IsEmpty()))
+    result->start_index_ = start;
 
 #if DCHECK_IS_ON()
   if (result)

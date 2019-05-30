@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <algorithm>
+#include <limits>
 #include <memory>
 
 #include "base/bind.h"
@@ -20,6 +22,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "content/common/input/web_mouse_wheel_event_traits.h"
 #include "content/shell/test_runner/mock_spell_check.h"
 #include "content/shell/test_runner/test_interfaces.h"
 #include "content/shell/test_runner/web_test_delegate.h"
@@ -428,7 +431,7 @@ void PopulateCustomItems(const WebVector<WebMenuItemInfo>& customItems,
 }
 
 // Because actual context menu is implemented by the browser side,
-// this function does only what LayoutTests are expecting:
+// this function does only what web_tests are expecting:
 // - Many test checks the count of items. So returning non-zero value makes
 // sense.
 // - Some test compares the count before and after some action. So changing the
@@ -486,7 +489,7 @@ std::vector<std::string> MakeMenuItemStringsFor(
 }
 
 // How much we should scroll per event - the value here is chosen to match the
-// WebKit impl and layout test results.
+// WebKit impl and web test results.
 const float kScrollbarPixelsPerTick = 40.0f;
 
 // Get the edit command corresponding to a keyboard event.
@@ -618,6 +621,8 @@ class EventSenderBindings : public gin::Wrappable<EventSenderBindings> {
   void LeapForward(int milliseconds);
   double LastEventTimestamp();
   void BeginDragWithFiles(const std::vector<std::string>& files);
+  void BeginDragWithStringData(const std::string& data,
+                               const std::string& mime_type);
   void AddTouchPoint(double x, double y, gin::Arguments* args);
   void GestureScrollBegin(gin::Arguments* args);
   void GestureScrollEnd(gin::Arguments* args);
@@ -701,7 +706,8 @@ void EventSenderBindings::Install(base::WeakPtr<EventSender> sender,
   if (bindings.IsEmpty())
     return;
   v8::Local<v8::Object> global = context->Global();
-  global->Set(gin::StringToV8(isolate, "eventSender"), bindings.ToV8());
+  global->Set(context, gin::StringToV8(isolate, "eventSender"), bindings.ToV8())
+      .Check();
 }
 
 gin::ObjectTemplateBuilder EventSenderBindings::GetObjectTemplateBuilder(
@@ -740,6 +746,8 @@ gin::ObjectTemplateBuilder EventSenderBindings::GetObjectTemplateBuilder(
       .SetMethod("leapForward", &EventSenderBindings::LeapForward)
       .SetMethod("lastEventTimestamp", &EventSenderBindings::LastEventTimestamp)
       .SetMethod("beginDragWithFiles", &EventSenderBindings::BeginDragWithFiles)
+      .SetMethod("beginDragWithStringData",
+                 &EventSenderBindings::BeginDragWithStringData)
       .SetMethod("addTouchPoint", &EventSenderBindings::AddTouchPoint)
       .SetMethod("gestureScrollBegin", &EventSenderBindings::GestureScrollBegin)
       .SetMethod("gestureScrollEnd", &EventSenderBindings::GestureScrollEnd)
@@ -946,6 +954,13 @@ void EventSenderBindings::BeginDragWithFiles(
     const std::vector<std::string>& files) {
   if (sender_)
     sender_->BeginDragWithFiles(files);
+}
+
+void EventSenderBindings::BeginDragWithStringData(
+    const std::string& data,
+    const std::string& mime_type) {
+  if (sender_)
+    sender_->BeginDragWithStringData(data, mime_type);
 }
 
 void EventSenderBindings::AddTouchPoint(double x,
@@ -1299,8 +1314,8 @@ EventSender::SavedEvent::SavedEvent()
       milliseconds(0),
       modifiers(0) {}
 
-EventSender::EventSender(WebWidgetTestProxyBase* web_widget_test_proxy_base)
-    : web_widget_test_proxy_base_(web_widget_test_proxy_base),
+EventSender::EventSender(WebWidgetTestProxy* web_widget_test_proxy)
+    : web_widget_test_proxy_(web_widget_test_proxy),
       replaying_saved_events_(false),
       weak_factory_(this) {
   Reset();
@@ -1410,8 +1425,7 @@ void EventSender::PointerDown(int button_number,
                               int tiltX,
                               int tiltY) {
   if (force_layout_on_events_)
-    widget()->UpdateLifecycle(blink::WebWidget::LifecycleUpdate::kPrePaint);
-
+    UpdateLifecycleToPrePaint();
   DCHECK_NE(-1, button_number);
 
   WebMouseEvent::Button button_type =
@@ -1446,7 +1460,7 @@ void EventSender::PointerUp(int button_number,
                             int tiltX,
                             int tiltY) {
   if (force_layout_on_events_)
-    widget()->UpdateLifecycle(blink::WebWidget::LifecycleUpdate::kPrePaint);
+    UpdateLifecycleToPrePaint();
 
   DCHECK_NE(-1, button_number);
 
@@ -1502,7 +1516,7 @@ void EventSender::KeyDown(const std::string& code_str,
 
   bool generate_char = false;
 
-  // Convert \n -> VK_RETURN. Some layout tests use \n to mean "Enter", when
+  // Convert \n -> VK_RETURN. Some web tests use \n to mean "Enter", when
   // Windows uses \r for "Enter".
   int code = 0;
   int text = 0;
@@ -1712,7 +1726,7 @@ void EventSender::KeyDown(const std::string& code_str,
   // EventSender.m forces a layout here, with at least one
   // test (fast/forms/focus-control-to-page.html) relying on this.
   if (force_layout_on_events_)
-    widget()->UpdateLifecycle(blink::WebWidget::LifecycleUpdate::kPrePaint);
+    UpdateLifecycleToPrePaint();
 
   // In the browser, if a keyboard event corresponds to an editor command,
   // the command will be dispatched to the renderer just before dispatching
@@ -1755,7 +1769,7 @@ void EventSender::ClearKillRing() {}
 
 std::vector<std::string> EventSender::ContextClick() {
   if (force_layout_on_events_)
-    widget()->UpdateLifecycle(blink::WebWidget::LifecycleUpdate::kPrePaint);
+    UpdateLifecycleToPrePaint();
 
   UpdateClickCountForButton(WebMouseEvent::Button::kRight);
 
@@ -1817,32 +1831,32 @@ void EventSender::TextZoomOut() {
 }
 
 void EventSender::ZoomPageIn() {
-  const std::vector<WebViewTestProxyBase*>& window_list =
+  const std::vector<WebViewTestProxy*>& window_list =
       interfaces()->GetWindowList();
 
   for (size_t i = 0; i < window_list.size(); ++i) {
-    window_list.at(i)->web_view()->SetZoomLevel(
-        window_list.at(i)->web_view()->ZoomLevel() + 1);
+    window_list.at(i)->webview()->SetZoomLevel(
+        window_list.at(i)->webview()->ZoomLevel() + 1);
   }
 }
 
 void EventSender::ZoomPageOut() {
-  const std::vector<WebViewTestProxyBase*>& window_list =
+  const std::vector<WebViewTestProxy*>& window_list =
       interfaces()->GetWindowList();
 
   for (size_t i = 0; i < window_list.size(); ++i) {
-    window_list.at(i)->web_view()->SetZoomLevel(
-        window_list.at(i)->web_view()->ZoomLevel() - 1);
+    window_list.at(i)->webview()->SetZoomLevel(
+        window_list.at(i)->webview()->ZoomLevel() - 1);
   }
 }
 
 void EventSender::SetPageZoomFactor(double zoom_factor) {
-  const std::vector<WebViewTestProxyBase*>& window_list =
+  const std::vector<WebViewTestProxy*>& window_list =
       interfaces()->GetWindowList();
 
   for (size_t i = 0; i < window_list.size(); ++i) {
-    window_list.at(i)->web_view()->SetZoomLevel(std::log(zoom_factor) /
-                                                std::log(1.2));
+    window_list.at(i)->webview()->SetZoomLevel(std::log(zoom_factor) /
+                                               std::log(1.2));
   }
 }
 
@@ -1944,7 +1958,7 @@ void EventSender::GestureFlingCancel() {
   // choose Touchpad here.
 
   if (force_layout_on_events_)
-    widget()->UpdateLifecycle(blink::WebWidget::LifecycleUpdate::kPrePaint);
+    UpdateLifecycleToPrePaint();
 
   HandleInputEventOnViewOrPopup(event);
 }
@@ -1985,7 +1999,7 @@ void EventSender::GestureFlingStart(float x,
   event.data.fling_start.velocity_y = velocity_y;
 
   if (force_layout_on_events_)
-    widget()->UpdateLifecycle(blink::WebWidget::LifecycleUpdate::kPrePaint);
+    UpdateLifecycleToPrePaint();
 
   HandleInputEventOnViewOrPopup(event);
 }
@@ -2034,27 +2048,30 @@ void EventSender::LeapForward(int milliseconds) {
   }
 }
 
-void EventSender::BeginDragWithFiles(const std::vector<std::string>& files) {
+void EventSender::BeginDragWithItems(
+    const WebVector<WebDragData::Item>& items) {
   if (!current_drag_data_.IsNull()) {
     // Nested dragging not supported, fuzzer code a likely culprit.
     // Cancel the current drag operation and throw an error.
     KeyDown("Escape", 0, DOMKeyLocationStandard);
     v8::Isolate* isolate = blink::MainThreadIsolate();
     isolate->ThrowException(v8::Exception::Error(gin::StringToV8(
-        isolate, "Nested beginDragWithFiles() not supported.")));
+        isolate,
+        "Nested beginDragWithFiles/beginDragWithStringData() not supported.")));
     return;
   }
+
   current_drag_data_.Initialize();
-  WebVector<WebString> absolute_filenames(files.size());
-  for (size_t i = 0; i < files.size(); ++i) {
-    WebDragData::Item item;
-    item.storage_type = WebDragData::Item::kStorageTypeFilename;
-    item.filename_data = delegate()->GetAbsoluteWebStringFromUTF8Path(files[i]);
-    current_drag_data_.AddItem(item);
-    absolute_filenames[i] = item.filename_data;
+  WebVector<WebString> absolute_filenames;
+  for (size_t i = 0; i < items.size(); ++i) {
+    current_drag_data_.AddItem(items[i]);
+    if (items[i].storage_type == WebDragData::Item::kStorageTypeFilename)
+      absolute_filenames.emplace_back(items[i].filename_data);
   }
-  current_drag_data_.SetFilesystemId(
-      delegate()->RegisterIsolatedFileSystem(absolute_filenames));
+  if (!absolute_filenames.empty()) {
+    current_drag_data_.SetFilesystemId(
+        delegate()->RegisterIsolatedFileSystem(absolute_filenames));
+  }
   current_drag_effects_allowed_ = blink::kWebDragOperationCopy;
 
   const WebPoint& last_pos =
@@ -2076,6 +2093,30 @@ void EventSender::BeginDragWithFiles(const std::vector<std::string>& files) {
   current_pointer_state_[kRawMousePointerId].current_buttons_ |=
       GetWebMouseEventModifierForButton(
           current_pointer_state_[kRawMousePointerId].pressed_button_);
+}
+
+void EventSender::BeginDragWithFiles(const std::vector<std::string>& files) {
+  WebVector<WebDragData::Item> items;
+  for (size_t i = 0; i < files.size(); ++i) {
+    WebDragData::Item item;
+    item.storage_type = WebDragData::Item::kStorageTypeFilename;
+    item.filename_data = delegate()->GetAbsoluteWebStringFromUTF8Path(files[i]);
+    items.emplace_back(item);
+  }
+
+  BeginDragWithItems(items);
+}
+
+void EventSender::BeginDragWithStringData(const std::string& data,
+                                          const std::string& mime_type) {
+  WebVector<WebDragData::Item> items;
+  WebDragData::Item item;
+  item.storage_type = WebDragData::Item::kStorageTypeString;
+  item.string_data = WebString::FromUTF8(data);
+  item.string_type = WebString::FromUTF8(mime_type);
+  items.emplace_back(item);
+
+  BeginDragWithItems(items);
 }
 
 void EventSender::AddTouchPoint(float x, float y, gin::Arguments* args) {
@@ -2164,7 +2205,7 @@ void EventSender::MouseScrollBy(gin::Arguments* args,
 
 void EventSender::MouseMoveTo(gin::Arguments* args) {
   if (force_layout_on_events_)
-    widget()->UpdateLifecycle(blink::WebWidget::LifecycleUpdate::kPrePaint);
+    UpdateLifecycleToPrePaint();
 
   double x;
   double y;
@@ -2221,7 +2262,7 @@ void EventSender::MouseLeave(
     blink::WebPointerProperties::PointerType pointerType,
     int pointerId) {
   if (force_layout_on_events_)
-    widget()->UpdateLifecycle(blink::WebWidget::LifecycleUpdate::kPrePaint);
+    UpdateLifecycleToPrePaint();
 
   WebMouseEvent event(WebInputEvent::kMouseLeave,
                       ModifiersForPointer(pointerId), GetCurrentEventTime());
@@ -2277,7 +2318,7 @@ void EventSender::SendCurrentTouchEvent(WebInputEvent::Type type,
   DCHECK_LE(touch_points_.size(),
             static_cast<unsigned>(WebTouchEvent::kTouchesLengthCap));
   if (force_layout_on_events_)
-    widget()->UpdateLifecycle(blink::WebWidget::LifecycleUpdate::kPrePaint);
+    UpdateLifecycleToPrePaint();
 
   base::TimeTicks time_stamp = GetCurrentEventTime();
   blink::WebInputEvent::DispatchType dispatch_type =
@@ -2305,7 +2346,7 @@ void EventSender::SendCurrentTouchEvent(WebInputEvent::Type type,
       HandleInputEventOnViewOrPopup(pointer_event);
     }
   }
-  WebPagePopup* popup = widget()->GetPagePopup();
+  WebPagePopup* popup = view()->GetPagePopup();
   if (popup)
     popup->DispatchBufferedTouchEvents();
   else
@@ -2510,7 +2551,7 @@ void EventSender::GestureEvent(WebInputEvent::Type type, gin::Arguments* args) {
   event.SetPositionInScreen(event.PositionInWidget());
 
   if (force_layout_on_events_)
-    widget()->UpdateLifecycle(blink::WebWidget::LifecycleUpdate::kPrePaint);
+    UpdateLifecycleToPrePaint();
 
   WebInputEventResult result = HandleInputEventOnViewOrPopup(event);
 
@@ -2550,7 +2591,7 @@ WebMouseWheelEvent EventSender::GetMouseWheelEvent(gin::Arguments* args,
   // determined before we send events (as well as all the other methods
   // that send an event do).
   if (force_layout_on_events_)
-    widget()->UpdateLifecycle(blink::WebWidget::LifecycleUpdate::kPrePaint);
+    UpdateLifecycleToPrePaint();
 
   double horizontal;
   double vertical;
@@ -2605,6 +2646,7 @@ WebMouseWheelEvent EventSender::GetMouseWheelEvent(gin::Arguments* args,
     event.delta_x *= kScrollbarPixelsPerTick;
     event.delta_y *= kScrollbarPixelsPerTick;
   }
+  event.event_action = content::WebMouseWheelEventTraits::GetEventAction(event);
   return event;
 }
 
@@ -2782,7 +2824,7 @@ WebInputEventResult EventSender::HandleInputEventOnViewOrPopup(
     const WebInputEvent& raw_event) {
   last_event_timestamp_ = raw_event.TimeStamp();
 
-  WebPagePopup* popup = widget()->GetPagePopup();
+  WebPagePopup* popup = view()->GetPagePopup();
   if (popup && !WebInputEvent::IsKeyboardEventType(raw_event.GetType())) {
     // ui::ScaleWebInputEvent returns nullptr when the scale is 1.0f as the
     // event does not have to be converted.
@@ -2829,7 +2871,7 @@ void EventSender::SendGesturesForMouseWheelEvent(
   }
 
   if (force_layout_on_events_)
-    widget()->UpdateLifecycle(blink::WebWidget::LifecycleUpdate::kPrePaint);
+    UpdateLifecycleToPrePaint();
 
   HandleInputEventOnViewOrPopup(begin_event);
 
@@ -2845,7 +2887,7 @@ void EventSender::SendGesturesForMouseWheelEvent(
       begin_event.data.scroll_begin.delta_hint_units;
 
   if (force_layout_on_events_)
-    widget()->UpdateLifecycle(blink::WebWidget::LifecycleUpdate::kPrePaint);
+    UpdateLifecycleToPrePaint();
   HandleInputEventOnViewOrPopup(update_event);
 
   WebGestureEvent end_event(WebInputEvent::kGestureScrollEnd,
@@ -2856,29 +2898,28 @@ void EventSender::SendGesturesForMouseWheelEvent(
       begin_event.data.scroll_begin.delta_hint_units;
 
   if (force_layout_on_events_)
-    widget()->UpdateLifecycle(blink::WebWidget::LifecycleUpdate::kPrePaint);
+    UpdateLifecycleToPrePaint();
   HandleInputEventOnViewOrPopup(end_event);
 }
 
 TestInterfaces* EventSender::interfaces() {
-  return web_widget_test_proxy_base_->web_view_test_proxy_base()
-      ->test_interfaces();
+  return web_widget_test_proxy_->GetWebViewTestProxy()->test_interfaces();
 }
 
 WebTestDelegate* EventSender::delegate() {
-  return web_widget_test_proxy_base_->web_view_test_proxy_base()->delegate();
+  return web_widget_test_proxy_->GetWebViewTestProxy()->delegate();
 }
 
 const blink::WebView* EventSender::view() const {
-  return web_widget_test_proxy_base_->web_view_test_proxy_base()->web_view();
+  return web_widget_test_proxy_->GetWebViewTestProxy()->webview();
 }
 
 blink::WebView* EventSender::view() {
-  return web_widget_test_proxy_base_->web_view_test_proxy_base()->web_view();
+  return web_widget_test_proxy_->GetWebViewTestProxy()->webview();
 }
 
 blink::WebWidget* EventSender::widget() {
-  return web_widget_test_proxy_base_->web_widget();
+  return web_widget_test_proxy_->GetWebWidget();
 }
 
 blink::WebFrameWidget* EventSender::mainFrameWidget() {
@@ -2887,8 +2928,13 @@ blink::WebFrameWidget* EventSender::mainFrameWidget() {
 
 std::unique_ptr<WebInputEvent> EventSender::TransformScreenToWidgetCoordinates(
     const WebInputEvent& event) {
-  return delegate()->TransformScreenToWidgetCoordinates(
-      web_widget_test_proxy_base_, event);
+  return delegate()->TransformScreenToWidgetCoordinates(web_widget_test_proxy_,
+                                                        event);
+}
+
+void EventSender::UpdateLifecycleToPrePaint() {
+  widget()->UpdateLifecycle(blink::WebWidget::LifecycleUpdate::kPrePaint,
+                            blink::WebWidget::LifecycleUpdateReason::kTest);
 }
 
 }  // namespace test_runner

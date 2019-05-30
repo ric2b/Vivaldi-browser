@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "chromeos/components/proximity_auth/messenger_observer.h"
 #include "chromeos/components/proximity_auth/proximity_auth_system.h"
@@ -16,6 +17,7 @@
 #include "chromeos/components/proximity_auth/remote_status_update.h"
 #include "chromeos/components/proximity_auth/screenlock_bridge.h"
 #include "chromeos/components/proximity_auth/screenlock_state.h"
+#include "chromeos/components/proximity_auth/smart_lock_metrics_recorder.h"
 #include "chromeos/components/proximity_auth/unlock_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/services/secure_channel/public/mojom/secure_channel.mojom.h"
@@ -33,7 +35,6 @@ class ProximityMonitor;
 class UnlockManagerImpl : public UnlockManager,
                           public MessengerObserver,
                           public ProximityMonitorObserver,
-                          public ScreenlockBridge::Observer,
                           chromeos::PowerManagerClient::Observer,
                           public device::BluetoothAdapter::Observer {
  public:
@@ -49,6 +50,7 @@ class UnlockManagerImpl : public UnlockManager,
   void SetRemoteDeviceLifeCycle(RemoteDeviceLifeCycle* life_cycle) override;
   void OnLifeCycleStateChanged() override;
   void OnAuthAttempted(mojom::AuthType auth_type) override;
+  void CancelConnectionAttempt() override;
 
  protected:
   // Creates a ProximityMonitor instance for the given |connection|.
@@ -76,13 +78,6 @@ class UnlockManagerImpl : public UnlockManager,
   // ProximityMonitorObserver:
   void OnProximityStateChanged() override;
 
-  // ScreenlockBridge::Observer
-  void OnScreenDidLock(
-      ScreenlockBridge::LockHandler::ScreenType screen_type) override;
-  void OnScreenDidUnlock(
-      ScreenlockBridge::LockHandler::ScreenType screen_type) override;
-  void OnFocusedUserChanged(const AccountId& account_id) override;
-
   // Called when the screenlock state changes.
   void OnScreenLockedOrUnlocked(bool is_locked);
 
@@ -98,6 +93,13 @@ class UnlockManagerImpl : public UnlockManager,
 
   // chromeos::PowerManagerClient::Observer:
   void SuspendDone(const base::TimeDelta& sleep_duration) override;
+
+  // Returns true if the BluetoothAdapter is present and powered.
+  bool IsBluetoothPresentAndPowered() const;
+
+  // If the RemoteDeviceLifeCycle is available, ensure it is started (but only
+  // if Bluetooth is available).
+  void AttemptToStartRemoteDeviceLifecycle();
 
   // Called when auth is attempted to send the sign-in challenge to the remote
   // device for decryption.
@@ -126,9 +128,15 @@ class UnlockManagerImpl : public UnlockManager,
   // Sets waking up state.
   void SetWakingUpState(bool is_waking_up);
 
-  // Accepts or rejects the current auth attempt according to |should_accept|.
-  // If the auth attempt is accepted, unlocks the screen.
-  void AcceptAuthAttempt(bool should_accept);
+  // Accepts or rejects the current auth attempt according to |error|. Accepts
+  // if and only if |error| is empty. If the auth attempt is accepted, unlocks
+  // the screen.
+  void FinalizeAuthAttempt(
+      const base::Optional<
+          SmartLockMetricsRecorder::SmartLockAuthResultFailureReason>& error);
+
+  // Failed to create a connection to the host.
+  void OnConnectionAttemptTimeOut();
 
   // Returns the screen lock state corresponding to the given remote |status|
   // update.
@@ -139,6 +147,13 @@ class UnlockManagerImpl : public UnlockManager,
   // will return nullptr if |life_cycle_| is not set or the remote device is not
   // yet authenticated.
   Messenger* GetMessenger();
+
+  // Records UMA performance metrics for the unlockable remote status being
+  // received.
+  void RecordUnlockableRemoteStatusReceived();
+
+  // Clears the timers for beginning a scan and fetching remote status.
+  void ResetPerformanceMetricsTimestamps();
 
   // Whether |this| manager is being used for sign-in or session unlock.
   const ProximityAuthSystem::ScreenlockType screenlock_type_;
@@ -161,9 +176,6 @@ class UnlockManagerImpl : public UnlockManager,
   // Used to access the common prefs. Expected to outlive |this| instance.
   ProximityAuthPrefManager* pref_manager_;
 
-  // Whether the screen is currently locked.
-  bool is_locked_;
-
   // True if the manager is currently processing a user-initiated authentication
   // attempt, which is initiated when the user pod is clicked.
   bool is_attempting_auth_;
@@ -181,6 +193,16 @@ class UnlockManagerImpl : public UnlockManager,
 
   // The state of the current screen lock UI.
   ScreenlockState screenlock_state_;
+
+  // The timestamp of when UnlockManager begins to try to establish a secure
+  // connection to the requested remote device of the provided
+  // RemoteDeviceLifeCycle.
+  base::Time attempt_secure_connection_start_time_;
+
+  // The timestamp of when UnlockManager successfully establishes a secure
+  // connection to the requested remote device of the provided
+  // RemoteDeviceLifeCycle, and begins to try to fetch its "remote status".
+  base::Time attempt_get_remote_status_start_time_;
 
   // Used to clear the waking up state after a timeout.
   base::WeakPtrFactory<UnlockManagerImpl>

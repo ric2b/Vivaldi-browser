@@ -12,14 +12,13 @@
 
 #include "android_webview/browser/aw_browser_permission_request_delegate.h"
 #include "android_webview/browser/aw_render_process_gone_delegate.h"
-#include "android_webview/browser/aw_safe_browsing_ui_manager.h"
-#include "android_webview/browser/browser_view_renderer.h"
-#include "android_webview/browser/browser_view_renderer_client.h"
 #include "android_webview/browser/find_helper.h"
-#include "android_webview/browser/gl_view_renderer_manager.h"
+#include "android_webview/browser/gfx/browser_view_renderer.h"
+#include "android_webview/browser/gfx/browser_view_renderer_client.h"
 #include "android_webview/browser/icon_helper.h"
 #include "android_webview/browser/permission/permission_request_handler_client.h"
 #include "android_webview/browser/renderer_host/aw_render_view_host_ext.h"
+#include "android_webview/browser/safe_browsing/aw_safe_browsing_ui_manager.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/callback_forward.h"
@@ -27,7 +26,6 @@
 #include "content/public/browser/web_contents_observer.h"
 
 class SkBitmap;
-class TabContents;
 
 namespace autofill {
 class AutofillProvider;
@@ -39,17 +37,12 @@ class WebContents;
 
 namespace android_webview {
 
-class AwContentsContainer;
 class AwContentsClientBridge;
-class AwGLFunctor;
 class AwPdfExporter;
 class AwWebContentsDelegate;
 class PermissionRequestHandler;
 
 // Native side of java-class of same name.
-// Provides the ownership of and access to browser components required for
-// WebView functionality; analogous to chrome's TabContents, but with a
-// level of indirection provided by the AwContentsContainer abstraction.
 //
 // Object lifetime:
 // For most purposes the java and native objects can be considered to have
@@ -104,13 +97,16 @@ class AwContents : public FindHelper::Listener,
       const base::android::JavaParamRef<jobject>& contents_client_bridge,
       const base::android::JavaParamRef<jobject>& io_thread_client,
       const base::android::JavaParamRef<jobject>& intercept_navigation_delegate,
-      const base::android::JavaParamRef<jobject>& autofill_provider);
+      const base::android::JavaParamRef<jobject>& autofill_provider,
+      const base::android::JavaParamRef<jobject>&
+          content_capture_receiver_manager);
   base::android::ScopedJavaLocalRef<jobject> GetWebContents(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
-  void SetAwGLFunctor(JNIEnv* env,
-                      const base::android::JavaParamRef<jobject>& obj,
-                      jlong gl_functor);
+  void SetCompositorFrameConsumer(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jlong compositor_frame_consumer);
 
   base::android::ScopedJavaLocalRef<jobject> GetRenderProcess(
       JNIEnv* env,
@@ -223,6 +219,8 @@ class AwContents : public FindHelper::Listener,
   jint GetEffectivePriority(JNIEnv* env,
                             const base::android::JavaParamRef<jobject>& obj);
 
+  bool GetViewTreeForceDarkState() { return view_tree_force_dark_state_; }
+
   // PermissionRequestHandlerClient implementation.
   void OnPermissionRequest(base::android::ScopedJavaLocalRef<jobject> j_request,
                            AwPermissionRequest* request) override;
@@ -285,6 +283,8 @@ class AwContents : public FindHelper::Listener,
   void PostInvalidate() override;
   void OnNewPicture() override;
   gfx::Point GetLocationOnScreen() override;
+  void OnViewTreeForceDarkStateChanged(
+      bool view_tree_force_dark_state) override;
 
   // |new_value| is in physical pixel scale.
   void ScrollContainerViewTo(const gfx::Vector2d& new_value) override;
@@ -312,6 +312,11 @@ class AwContents : public FindHelper::Listener,
                 const base::android::JavaParamRef<jobject>& obj,
                 jint x,
                 jint y);
+  void RestoreScrollAfterTransition(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jint x,
+      jint y);
   void SmoothScroll(JNIEnv* env,
                     const base::android::JavaParamRef<jobject>& obj,
                     jint target_x,
@@ -343,6 +348,9 @@ class AwContents : public FindHelper::Listener,
 
   jlong GetAutofillProvider(JNIEnv* env,
                             const base::android::JavaParamRef<jobject>& obj);
+
+  void RendererUnresponsive(content::RenderProcessHost* render_process_host);
+  void RendererResponsive(content::RenderProcessHost* render_process_host);
 
   // content::WebContentsObserver overrides
   void RenderViewHostChanged(content::RenderViewHost* old_host,
@@ -376,10 +384,7 @@ class AwContents : public FindHelper::Listener,
 
   void SetDipScaleInternal(float dip_scale);
 
-  void SetAwGLFunctor(AwGLFunctor* functor);
-
   JavaObjectWeakGlobalRef java_ref_;
-  AwGLFunctor* functor_;
   BrowserViewRenderer browser_view_renderer_;  // Must outlive |web_contents_|.
   std::unique_ptr<content::WebContents> web_contents_;
   std::unique_ptr<AwWebContentsDelegate> web_contents_delegate_;
@@ -392,14 +397,14 @@ class AwContents : public FindHelper::Listener,
   std::unique_ptr<PermissionRequestHandler> permission_request_handler_;
   std::unique_ptr<autofill::AutofillProvider> autofill_provider_;
 
+  bool view_tree_force_dark_state_ = false;
+
   // GURL is supplied by the content layer as requesting frame.
   // Callback is supplied by the content layer, and is invoked with the result
   // from the permission prompt.
   typedef std::pair<const GURL, base::OnceCallback<void(bool)>> OriginCallback;
   // The first element in the list is always the currently pending request.
   std::list<OriginCallback> pending_geolocation_prompts_;
-
-  GLViewRendererManager::Key renderer_manager_key_;
 
   DISALLOW_COPY_AND_ASSIGN(AwContents);
 };

@@ -22,25 +22,31 @@ class OriginTrialsTest : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static OriginTrialsTest* Create() { return new OriginTrialsTest(); }
+  static OriginTrialsTest* Create() {
+    return MakeGarbageCollected<OriginTrialsTest>();
+  }
+
+  OriginTrialsTest() = default;
   ~OriginTrialsTest() override = default;
 
   bool normalAttribute() { return true; }
   static bool staticAttribute() { return true; }
   bool normalMethod() { return true; }
   static bool staticMethod() { return true; }
-  static const unsigned short kConstant = 1;
+  static const uint16_t kConstant = 1;
 
   bool throwingAttribute(ScriptState*, ExceptionState&);
-  void getDictionaryMethod(OriginTrialsTestDictionary&) {}
-  void checkDictionaryMethod(const OriginTrialsTestDictionary&) {}
+  OriginTrialsTestDictionary* getDictionaryMethod() {
+    return OriginTrialsTestDictionary::Create();
+  }
+  void checkDictionaryMethod(const OriginTrialsTestDictionary*) {}
 
   bool unconditionalAttribute() { return true; }
   static bool staticUnconditionalAttribute() { return true; }
   bool unconditionalMethod() { return true; }
-  void unconditionalDictionaryMethod(const OriginTrialsTestDictionary& dict) {}
+  void unconditionalDictionaryMethod(const OriginTrialsTestDictionary* dict) {}
   static bool staticUnconditionalMethod() { return true; }
-  static const unsigned short kUnconditionalConstant = 99;
+  static const uint16_t kUnconditionalConstant = 99;
 
   bool secureUnconditionalAttribute() { return true; }
   static bool secureStaticUnconditionalAttribute() { return true; }
@@ -53,9 +59,6 @@ class OriginTrialsTest : public ScriptWrappable {
   static bool secureStaticMethod() { return true; }
 
   bool impliedAttribute() { return true; }
-
- private:
-  OriginTrialsTest() = default;
 };
 
 }  // namespace blink

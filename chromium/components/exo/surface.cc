@@ -6,18 +6,20 @@
 
 #include <utility>
 
+#include "ash/public/cpp/shell_window_ids.h"
 #include "base/callback_helpers.h"
 #include "base/containers/adapters.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
-#include "base/trace_event/trace_event_argument.h"
-#include "cc/trees/layer_tree_frame_sink.h"
+#include "base/trace_event/traced_value.h"
 #include "components/exo/buffer.h"
-#include "components/exo/pointer.h"
+#include "components/exo/frame_sink_resource_manager.h"
+#include "components/exo/shell_surface_util.h"
 #include "components/exo/surface_delegate.h"
 #include "components/exo/surface_observer.h"
+#include "components/exo/wm_helper.h"
 #include "components/viz/common/quads/render_pass.h"
 #include "components/viz/common/quads/shared_quad_state.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
@@ -27,9 +29,11 @@
 #include "components/viz/service/surfaces/surface_manager.h"
 #include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "third_party/khronos/GLES2/gl2.h"
+#include "third_party/skia/include/core/SkPath.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/drag_drop_delegate.h"
 #include "ui/aura/window_delegate.h"
+#include "ui/aura/window_occlusion_tracker.h"
 #include "ui/aura/window_targeter.h"
 #include "ui/base/class_property.h"
 #include "ui/base/cursor/cursor.h"
@@ -41,23 +45,25 @@
 #include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/gpu_memory_buffer.h"
-#include "ui/gfx/path.h"
 #include "ui/gfx/presentation_feedback.h"
 #include "ui/gfx/transform_util.h"
 #include "ui/views/widget/widget.h"
 
-DEFINE_UI_CLASS_PROPERTY_TYPE(exo::Surface*);
+DEFINE_UI_CLASS_PROPERTY_TYPE(exo::Surface*)
 
 namespace exo {
 namespace {
 
 // A property key containing the surface that is associated with
 // window. If unset, no surface is associated with window.
-DEFINE_UI_CLASS_PROPERTY_KEY(Surface*, kSurfaceKey, nullptr);
+DEFINE_UI_CLASS_PROPERTY_KEY(Surface*, kSurfaceKey, nullptr)
 
 // A property key to store whether the surface should only consume
 // stylus input events.
-DEFINE_UI_CLASS_PROPERTY_KEY(bool, kStylusOnlyKey, false);
+DEFINE_UI_CLASS_PROPERTY_KEY(bool, kStylusOnlyKey, false)
+
+// Surface Id set by the client.
+DEFINE_UI_CLASS_PROPERTY_KEY(int32_t, kClientSurfaceIdKey, 0)
 
 // Helper function that returns an iterator to the first entry in |list|
 // with |key|.
@@ -123,6 +129,15 @@ class CustomWindowDelegate : public aura::WindowDelegate {
     return ui::CursorType::kNull;
   }
   int GetNonClientComponent(const gfx::Point& point) const override {
+    views::Widget* widget =
+        views::Widget::GetTopLevelWidgetForNativeView(surface_->window());
+    if (widget &&
+        widget->GetNativeView()->parent()->id() ==
+            ash::kShellWindowId_DefaultContainer &&
+        surface_->HitTest(point)) {
+      return HTCLIENT;
+    }
+
     return HTNOWHERE;
   }
   bool ShouldDescendIntoChildForEventHandling(
@@ -138,8 +153,12 @@ class CustomWindowDelegate : public aura::WindowDelegate {
   void OnWindowDestroying(aura::Window* window) override {}
   void OnWindowDestroyed(aura::Window* window) override { delete this; }
   void OnWindowTargetVisibilityChanged(bool visible) override {}
+  void OnWindowOcclusionChanged(aura::Window::OcclusionState occlusion_state,
+                                const SkRegion& occluded_region) override {
+    surface_->OnWindowOcclusionChanged();
+  }
   bool HasHitTestMask() const override { return true; }
-  void GetHitTestMask(gfx::Path* mask) const override {
+  void GetHitTestMask(SkPath* mask) const override {
     surface_->GetHitTestMask(mask);
   }
   void OnKeyEvent(ui::KeyEvent* event) override {
@@ -180,6 +199,19 @@ class CustomWindowTargeter : public aura::WindowTargeter {
  private:
   DISALLOW_COPY_AND_ASSIGN(CustomWindowTargeter);
 };
+
+const std::string& GetApplicationId(aura::Window* window) {
+  static const std::string empty_app_id;
+  if (!window)
+    return empty_app_id;
+  while (window) {
+    const std::string* app_id = exo::GetShellApplicationId(window);
+    if (app_id)
+      return *app_id;
+    window = window->parent();
+  }
+  return empty_app_id;
+}
 
 }  // namespace
 
@@ -223,9 +255,9 @@ Surface* Surface::AsSurface(const aura::Window* window) {
 }
 
 void Surface::Attach(Buffer* buffer) {
-  TRACE_EVENT1("exo", "Surface::Attach", "buffer",
-               buffer ? buffer->GetSize().ToString() : "null");
-
+  TRACE_EVENT2("exo", "Surface::Attach", "buffer_id",
+               buffer ? buffer->gfx_buffer() : nullptr, "app_id",
+               GetApplicationId(window_.get()));
   has_pending_contents_ = true;
   pending_buffer_.Reset(buffer ? buffer->AsWeakPtr() : base::WeakPtr<Buffer>());
 }
@@ -467,6 +499,17 @@ void Surface::SetParent(Surface* parent, const gfx::Point& position) {
     delegate_->OnSetParent(parent, position);
 }
 
+void Surface::SetClientSurfaceId(int32_t client_surface_id) {
+  if (client_surface_id)
+    window_->SetProperty(kClientSurfaceIdKey, client_surface_id);
+  else
+    window_->ClearProperty(kClientSurfaceIdKey);
+}
+
+int32_t Surface::GetClientSurfaceId() const {
+  return window_->GetProperty(kClientSurfaceIdKey);
+}
+
 void Surface::Commit() {
   TRACE_EVENT0("exo", "Surface::Commit");
 
@@ -478,6 +521,7 @@ void Surface::Commit() {
 }
 
 void Surface::CommitSurfaceHierarchy(bool synchronized) {
+  TRACE_EVENT0("exo", "Surface::CommitSurfaceHierarchy");
   if (needs_commit_surface_ && (synchronized || !IsSynchronized())) {
     needs_commit_surface_ = false;
     synchronized = true;
@@ -500,6 +544,8 @@ void Surface::CommitSurfaceHierarchy(bool synchronized) {
         pending_state_.buffer_scale != state_.buffer_scale ||
         pending_state_.buffer_transform != state_.buffer_transform;
 
+    bool pending_invert_y = false;
+
     // If the current state is fully transparent, the last submitted frame will
     // not include the TextureDrawQuad for the resource, so the resource might
     // have been released and needs to be updated again.
@@ -517,13 +563,21 @@ void Surface::CommitSurfaceHierarchy(bool synchronized) {
     // We update contents if Attach() has been called since last commit.
     if (has_pending_contents_) {
       has_pending_contents_ = false;
+
+      bool current_invert_y =
+          current_buffer_.buffer() && current_buffer_.buffer()->y_invert();
+      pending_invert_y =
+          pending_buffer_.buffer() && pending_buffer_.buffer()->y_invert();
+      if (current_invert_y != pending_invert_y)
+        needs_update_buffer_transform = true;
+
       current_buffer_ = std::move(pending_buffer_);
       if (state_.alpha)
         needs_update_resource_ = true;
     }
 
     if (needs_update_buffer_transform)
-      UpdateBufferTransform();
+      UpdateBufferTransform(pending_invert_y);
 
     // Move pending frame callbacks to the end of |frame_callbacks_|.
     frame_callbacks_.splice(frame_callbacks_.end(), pending_frame_callbacks_);
@@ -615,7 +669,7 @@ void Surface::AppendSurfaceHierarchyCallbacks(
 void Surface::AppendSurfaceHierarchyContentsToFrame(
     const gfx::Point& origin,
     float device_scale_factor,
-    LayerTreeFrameSinkHolder* frame_sink_holder,
+    FrameSinkResourceManager* resource_manager,
     viz::CompositorFrame* frame) {
   // The top most sub-surface is at the front of the RenderPass's quad_list,
   // so we need composite sub-surface in reversed order.
@@ -625,17 +679,16 @@ void Surface::AppendSurfaceHierarchyContentsToFrame(
     // decendents.
     sub_surface->AppendSurfaceHierarchyContentsToFrame(
         origin + sub_surface_entry.second.OffsetFromOrigin(),
-        device_scale_factor, frame_sink_holder, frame);
+        device_scale_factor, resource_manager, frame);
   }
 
   if (needs_update_resource_)
-    UpdateResource(frame_sink_holder);
+    UpdateResource(resource_manager);
 
   AppendContentsToFrame(origin, device_scale_factor, frame);
 
-  DCHECK(
-      !current_resource_.id ||
-      frame_sink_holder->HasReleaseCallbackForResource(current_resource_.id));
+  DCHECK(!current_resource_.id ||
+         resource_manager->HasReleaseCallbackForResource(current_resource_.id));
 }
 
 bool Surface::IsSynchronized() const {
@@ -654,7 +707,7 @@ bool Surface::HitTest(const gfx::Point& point) const {
   return hit_test_region_.Contains(point);
 }
 
-void Surface::GetHitTestMask(gfx::Path* mask) const {
+void Surface::GetHitTestMask(SkPath* mask) const {
   hit_test_region_.GetBoundaryPath(mask);
 }
 
@@ -705,6 +758,15 @@ bool Surface::FillsBoundsOpaquely() const {
   return !current_resource_has_alpha_ ||
          state_.blend_mode == SkBlendMode::kSrc ||
          state_.opaque_region.Contains(gfx::Rect(content_size_));
+}
+
+void Surface::SetOcclusionTracking(bool tracking) {
+  is_tracking_occlusion_ = tracking;
+  // TODO(edcourtney): Currently, it doesn't seem to be possible to stop
+  // tracking the occlusion state once started, but it would be nice to stop if
+  // the tracked occlusion region becomes empty.
+  if (is_tracking_occlusion_)
+    window()->TrackOcclusionState();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -765,12 +827,12 @@ void Surface::BufferAttachment::Reset(base::WeakPtr<Buffer> buffer) {
   buffer_ = buffer;
 }
 
-void Surface::UpdateResource(LayerTreeFrameSinkHolder* frame_sink_holder) {
+void Surface::UpdateResource(FrameSinkResourceManager* resource_manager) {
   DCHECK(needs_update_resource_);
   needs_update_resource_ = false;
   if (current_buffer_.buffer()) {
     if (current_buffer_.buffer()->ProduceTransferableResource(
-            frame_sink_holder, state_.only_visible_on_secure_output,
+            resource_manager, state_.only_visible_on_secure_output,
             &current_resource_)) {
       current_resource_has_alpha_ =
           FormatHasAlpha(current_buffer_.buffer()->GetFormat());
@@ -788,7 +850,7 @@ void Surface::UpdateResource(LayerTreeFrameSinkHolder* frame_sink_holder) {
   }
 }
 
-void Surface::UpdateBufferTransform() {
+void Surface::UpdateBufferTransform(bool y_invert) {
   SkMatrix buffer_matrix;
   switch (state_.buffer_transform) {
     case Transform::NORMAL:
@@ -804,6 +866,8 @@ void Surface::UpdateBufferTransform() {
       buffer_matrix.setSinCos(1, 0, 0.5f, 0.5f);
       break;
   }
+  if (y_invert)
+    buffer_matrix.preScale(1, -1, 0.5f, 0.5f);
   buffer_matrix.postIDiv(state_.buffer_scale, state_.buffer_scale);
   buffer_transform_ = gfx::Transform(buffer_matrix);
 }
@@ -878,14 +942,16 @@ void Surface::AppendContentsToFrame(const gfx::Point& origin,
       viz::TextureDrawQuad* texture_quad =
           render_pass->CreateAndAppendDrawQuad<viz::TextureDrawQuad>();
       float vertex_opacity[4] = {1.0, 1.0, 1.0, 1.0};
-
+      SkColor background_color = SK_ColorTRANSPARENT;
+      if (current_resource_has_alpha_ && are_contents_opaque)
+        background_color = SK_ColorBLACK;  // Avoid writing alpha < 1
       texture_quad->SetNew(
-          quad_state, quad_rect, quad_rect, !are_contents_opaque,
-          current_resource_.id, true /* premultiplied_alpha */,
-          uv_crop.origin(), uv_crop.bottom_right(),
-          SK_ColorTRANSPARENT /* background_color */, vertex_opacity,
-          false /* y_flipped */, false /* nearest_neighbor */,
-          state_.only_visible_on_secure_output);
+          quad_state, quad_rect, quad_rect,
+          /* needs_blending=*/!are_contents_opaque, current_resource_.id,
+          /* premultiplied_alpha=*/true, uv_crop.origin(),
+          uv_crop.bottom_right(), background_color, vertex_opacity,
+          /* y_flipped=*/false, /* nearest_neighbor=*/false,
+          state_.only_visible_on_secure_output, ui::ProtectedVideoType::kClear);
       if (current_resource_.is_overlay_candidate)
         texture_quad->set_resource_size_in_pixels(current_resource_.size);
       frame->resource_list.push_back(current_resource_);
@@ -925,6 +991,14 @@ void Surface::UpdateContentSize() {
     content_size_ = content_size;
     window_->SetBounds(gfx::Rect(window_->bounds().origin(), content_size_));
   }
+}
+
+void Surface::OnWindowOcclusionChanged() {
+  if (!is_tracking_occlusion_)
+    return;
+
+  for (SurfaceObserver& observer : observers_)
+    observer.OnWindowOcclusionChanged(this);
 }
 
 }  // namespace exo

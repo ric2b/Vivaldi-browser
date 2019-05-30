@@ -23,10 +23,11 @@ GalleryUtil.createEntrySet = function(originalEntries) {
     entriesPromise = parentPromise.then(function(parent) {
       var reader = parent.createReader();
       var readEntries = function() {
-        return new Promise(reader.readEntries.bind(reader)).then(
-            function(entries) {
-              if (entries.length === 0)
+        return new Promise(reader.readEntries.bind(reader))
+            .then(function(entries) {
+              if (entries.length === 0) {
                 return [];
+              }
               return readEntries().then(function(nextEntries) {
                 return entries.concat(nextEntries);
               });
@@ -58,7 +59,7 @@ GalleryUtil.createEntrySet = function(originalEntries) {
 /**
  * Returns true if entry is on MTP volume.
  * @param {!Entry} entry An entry.
- * @param {!VolumeManagerWrapper} volumeManager Volume manager.
+ * @param {!VolumeManager} volumeManager Volume manager.
  * @return True if entry is on MTP volume.
  */
 GalleryUtil.isOnMTPVolume = function(entry, volumeManager) {

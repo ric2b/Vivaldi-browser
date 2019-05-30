@@ -18,8 +18,8 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.invalidation.InvalidationServiceFactory;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -47,6 +47,18 @@ public final class SyncTestUtil {
             @Override
             public Boolean call() {
                 return ProfileSyncService.get().isSyncRequested();
+            }
+        });
+    }
+
+    /**
+     * Returns whether sync-the-feature can start.
+     */
+    public static boolean canSyncFeatureStart() {
+        return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Boolean>() {
+            @Override
+            public Boolean call() {
+                return ProfileSyncService.get().canSyncFeatureStart();
             }
         });
     }
@@ -269,7 +281,6 @@ public final class SyncTestUtil {
     public static void encryptWithPassphrase(final String passphrase) {
         ThreadUtils.runOnUiThreadBlocking(
                 () -> ProfileSyncService.get().setEncryptionPassphrase(passphrase));
-        waitForCryptographer();
         // Make sure the new encryption settings make it to the server.
         SyncTestUtil.triggerSyncAndWaitForCompletion();
     }
@@ -280,20 +291,5 @@ public final class SyncTestUtil {
     public static void decryptWithPassphrase(final String passphrase) {
         ThreadUtils.runOnUiThreadBlocking(
                 () -> { ProfileSyncService.get().setDecryptionPassphrase(passphrase); });
-    }
-
-    /**
-     * Blocks until the sync server is verified to be using a passphrase.
-     */
-    private static void waitForCryptographer() {
-        CriteriaHelper.pollUiThread(
-                new Criteria("Timed out waiting for cryptographer to be ready.") {
-                    @Override
-                    public boolean isSatisfied() {
-                        ProfileSyncService syncService = ProfileSyncService.get();
-                        return syncService.isUsingSecondaryPassphrase()
-                                && syncService.isCryptographerReady();
-                    }
-                });
     }
 }

@@ -50,7 +50,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.widget.AlwaysDismissedDialog;
 import org.chromium.chrome.browser.widget.FadingEdgeScrollView;
 import org.chromium.chrome.browser.widget.TintedDrawable;
-import org.chromium.ui.UiUtils;
+import org.chromium.ui.KeyboardVisibilityDelegate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -91,6 +91,7 @@ public class EditorDialog
     private View mLayout;
     private EditorModel mEditorModel;
     private Button mDoneButton;
+    private boolean mFormWasValid;
     private ViewGroup mDataView;
     private View mFooter;
     @Nullable
@@ -111,7 +112,7 @@ public class EditorDialog
      */
     public EditorDialog(
             Activity activity, EditorObserverForTest observerForTest, Runnable deleteRunnable) {
-        super(activity, R.style.FullscreenWhite);
+        super(activity, R.style.Theme_Chromium_Fullscreen);
         // Sets transparent background for animating content view.
         getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         mContext = activity;
@@ -189,7 +190,7 @@ public class EditorDialog
         EditorDialogToolbar toolbar = (EditorDialogToolbar) mLayout.findViewById(R.id.action_bar);
         toolbar.setBackgroundColor(ApiCompatibilityUtils.getColor(
                 toolbar.getResources(), R.color.modern_primary_color));
-        toolbar.setTitleTextAppearance(toolbar.getContext(), R.style.BlackHeadline1);
+        toolbar.setTitleTextAppearance(toolbar.getContext(), R.style.TextAppearance_BlackHeadline);
         toolbar.setTitle(mEditorModel.getTitle());
         toolbar.setShowDeleteMenuItem(mDeleteRunnable != null);
 
@@ -239,7 +240,7 @@ public class EditorDialog
      *
      * @return Whether all fields contain valid information.
      */
-    private boolean validateForm() {
+    public boolean validateForm() {
         final List<EditorFieldView> invalidViews = getViewsWithInvalidInformation(true);
 
         // Iterate over all the fields to update what errors are displayed, which is necessary to
@@ -260,6 +261,10 @@ public class EditorDialog
                 // field and focus it.
                 invalidViews.get(0).scrollToAndFocus();
             }
+        }
+
+        if (!invalidViews.isEmpty() && mObserverForTest != null) {
+            mObserverForTest.onEditorValidationError();
         }
 
         return invalidViews.isEmpty();
@@ -284,13 +289,10 @@ public class EditorDialog
 
         if (view.getId() == R.id.editor_dialog_done_button) {
             if (validateForm()) {
-                if (mEditorModel != null) mEditorModel.done();
-                mEditorModel = null;
+                mFormWasValid = true;
                 animateOutDialog();
                 return;
             }
-
-            if (mObserverForTest != null) mObserverForTest.onEditorValidationError();
         } else if (view.getId() == R.id.payments_edit_cancel_button) {
             animateOutDialog();
         }
@@ -330,7 +332,15 @@ public class EditorDialog
     @Override
     public void onDismiss(DialogInterface dialog) {
         mIsDismissed = true;
-        if (mEditorModel != null) mEditorModel.cancel();
+        if (mEditorModel != null) {
+            if (mFormWasValid) {
+                mEditorModel.done();
+                mFormWasValid = false;
+            } else {
+                mEditorModel.cancel();
+            }
+            mEditorModel = null;
+        }
         removeTextChangedListenersAndInputFilters();
     }
 
@@ -534,7 +544,9 @@ public class EditorDialog
         if (mDialogInOutAnimator != null && mIsDismissed) return;
 
         // Hide keyboard and disable EditText views for animation efficiency.
-        if (getCurrentFocus() != null) UiUtils.hideKeyboard(getCurrentFocus());
+        if (getCurrentFocus() != null) {
+            KeyboardVisibilityDelegate.getInstance().hideKeyboard(getCurrentFocus());
+        }
         for (int i = 0; i < mEditableTextFields.size(); i++) {
             mEditableTextFields.get(i).setEnabled(false);
         }
@@ -558,7 +570,9 @@ public class EditorDialog
                     mEditableTextFields.get(i).setEnabled(true);
                 }
                 // Note that keyboard will not show for dropdown field since it's not necessary.
-                if (getCurrentFocus() != null) UiUtils.showKeyboard(getCurrentFocus());
+                if (getCurrentFocus() != null) {
+                    KeyboardVisibilityDelegate.getInstance().showKeyboard(getCurrentFocus());
+                }
                 mDialogInOutAnimator = null;
                 initFocus();
             }

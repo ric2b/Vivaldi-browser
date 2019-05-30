@@ -53,7 +53,7 @@ class ExceptionState;
 // terminated). In such cases operations will silently fail, so you should not
 // use promises for critical use such as releasing a resource.
 class CORE_EXPORT ScriptPromise final {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
 
  public:
   // Constructs an empty promise.
@@ -67,9 +67,8 @@ class CORE_EXPORT ScriptPromise final {
 
   ~ScriptPromise();
 
-  ScriptPromise Then(
-      v8::Local<v8::Function> on_fulfilled,
-      v8::Local<v8::Function> on_rejected = v8::Local<v8::Function>());
+  ScriptPromise Then(v8::Local<v8::Function> on_fulfilled,
+                     v8::Local<v8::Function> on_rejected = {});
 
   bool IsObject() const { return promise_.IsObject(); }
 
@@ -88,6 +87,9 @@ class CORE_EXPORT ScriptPromise final {
   bool IsEmpty() const { return promise_.IsEmpty(); }
 
   void Clear() { promise_.Clear(); }
+
+  // Marks this promise as handled to avoid reporting unhandled rejections.
+  void MarkAsHandled();
 
   bool operator==(const ScriptPromise& value) const {
     return promise_ == value.promise_;

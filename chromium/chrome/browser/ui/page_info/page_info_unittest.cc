@@ -7,6 +7,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/at_exit.h"
@@ -31,9 +32,8 @@
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/common/content_switches.h"
-#include "device/base/mock_device_client.h"
-#include "device/usb/mock_usb_device.h"
-#include "device/usb/mock_usb_service.h"
+#include "device/usb/public/cpp/fake_usb_device_manager.h"
+#include "device/usb/public/mojom/device.mojom.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_connection_status_flags.h"
@@ -87,6 +87,7 @@ class MockPageInfoUI : public PageInfoUI {
   MOCK_METHOD1(SetCookieInfo, void(const CookieInfoList& cookie_info_list));
   MOCK_METHOD0(SetPermissionInfoStub, void());
   MOCK_METHOD1(SetIdentityInfo, void(const IdentityInfo& identity_info));
+  MOCK_METHOD1(SetPageFeatureInfo, void(const PageFeatureInfo& info));
 
   void SetPermissionInfo(
       const PermissionInfoList& permission_info_list,
@@ -203,14 +204,9 @@ class PageInfoTest : public ChromeRenderViewHostTestHarness {
     return page_info_.get();
   }
 
-  device::MockUsbService& usb_service() {
-    return *device_client_.usb_service();
-  }
-
   security_state::SecurityInfo security_info_;
 
  private:
-  device::MockDeviceClient device_client_;
   std::unique_ptr<PageInfo> page_info_;
   std::unique_ptr<MockPageInfoUI> mock_ui_;
   scoped_refptr<net::X509Certificate> cert_;
@@ -391,11 +387,16 @@ TEST_F(PageInfoTest, OnSiteDataAccessed) {
 }
 
 TEST_F(PageInfoTest, OnChosenObjectDeleted) {
-  scoped_refptr<device::UsbDevice> device =
-      new device::MockUsbDevice(0, 0, "Google", "Gizmo", "1234567890");
-  usb_service().AddDevice(device);
+  // Connect the UsbChooserContext with FakeUsbDeviceManager.
+  device::FakeUsbDeviceManager usb_device_manager;
+  device::mojom::UsbDeviceManagerPtr device_manager_ptr;
+  usb_device_manager.AddBinding(mojo::MakeRequest(&device_manager_ptr));
   UsbChooserContext* store = UsbChooserContextFactory::GetForProfile(profile());
-  store->GrantDevicePermission(url(), url(), device->guid());
+  store->SetDeviceManagerForTesting(std::move(device_manager_ptr));
+
+  auto device_info = usb_device_manager.CreateAndAddDevice(
+      0, 0, "Google", "Gizmo", "1234567890");
+  store->GrantDevicePermission(url(), url(), *device_info);
 
   EXPECT_CALL(*mock_ui(), SetIdentityInfo(_));
   EXPECT_CALL(*mock_ui(), SetCookieInfo(_));
@@ -408,9 +409,10 @@ TEST_F(PageInfoTest, OnChosenObjectDeleted) {
 
   ASSERT_EQ(1u, last_chosen_object_info().size());
   const PageInfoUI::ChosenObjectInfo* info = last_chosen_object_info()[0].get();
-  page_info()->OnSiteChosenObjectDeleted(info->ui_info, *info->object);
+  page_info()->OnSiteChosenObjectDeleted(info->ui_info,
+                                         info->chooser_object->value);
 
-  EXPECT_FALSE(store->HasDevicePermission(url(), url(), device));
+  EXPECT_FALSE(store->HasDevicePermission(url(), url(), *device_info));
   EXPECT_EQ(0u, last_chosen_object_info().size());
 }
 
@@ -490,11 +492,11 @@ TEST_F(PageInfoTest, HTTPSConnection) {
   security_info_.scheme_is_cryptographic = true;
   security_info_.certificate = cert();
   security_info_.cert_status = 0;
-  security_info_.security_bits = 81;  // No error if > 80.
   int status = 0;
   status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
   status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
   security_info_.connection_status = status;
+  security_info_.connection_info_initialized = true;
 
   SetDefaultUIExpectations(mock_ui());
 
@@ -661,7 +663,6 @@ TEST_F(PageInfoTest, InsecureContent) {
     security_info_.scheme_is_cryptographic = true;
     security_info_.certificate = cert();
     security_info_.cert_status = test.cert_status;
-    security_info_.security_bits = 81;  // No error if > 80.
     security_info_.mixed_content_status = test.mixed_content_status;
     security_info_.contained_mixed_form = test.contained_mixed_form;
     security_info_.content_with_cert_errors_status =
@@ -670,6 +671,7 @@ TEST_F(PageInfoTest, InsecureContent) {
     status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
     status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
     security_info_.connection_status = status;
+    security_info_.connection_info_initialized = true;
 
     SetDefaultUIExpectations(mock_ui());
 
@@ -696,13 +698,13 @@ TEST_F(PageInfoTest, HTTPSEVCert) {
   security_info_.scheme_is_cryptographic = true;
   security_info_.certificate = ev_cert;
   security_info_.cert_status = net::CERT_STATUS_IS_EV;
-  security_info_.security_bits = 81;  // No error if > 80.
   security_info_.mixed_content_status =
       security_state::CONTENT_STATUS_DISPLAYED;
   int status = 0;
   status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
   status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
   security_info_.connection_status = status;
+  security_info_.connection_info_initialized = true;
 
   SetDefaultUIExpectations(mock_ui());
 
@@ -718,11 +720,11 @@ TEST_F(PageInfoTest, HTTPSRevocationError) {
   security_info_.scheme_is_cryptographic = true;
   security_info_.certificate = cert();
   security_info_.cert_status = net::CERT_STATUS_UNABLE_TO_CHECK_REVOCATION;
-  security_info_.security_bits = 81;  // No error if > 80.
   int status = 0;
   status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
   status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
   security_info_.connection_status = status;
+  security_info_.connection_info_initialized = true;
 
   SetDefaultUIExpectations(mock_ui());
 
@@ -738,11 +740,13 @@ TEST_F(PageInfoTest, HTTPSConnectionError) {
   security_info_.scheme_is_cryptographic = true;
   security_info_.certificate = cert();
   security_info_.cert_status = 0;
-  security_info_.security_bits = -1;
   int status = 0;
   status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
   status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
   security_info_.connection_status = status;
+
+  // Simulate a failed connection.
+  security_info_.connection_info_initialized = false;
 
   SetDefaultUIExpectations(mock_ui());
 
@@ -760,11 +764,11 @@ TEST_F(PageInfoTest, HTTPSPolicyCertConnection) {
   security_info_.scheme_is_cryptographic = true;
   security_info_.certificate = cert();
   security_info_.cert_status = 0;
-  security_info_.security_bits = 81;  // No error if > 80.
   int status = 0;
   status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
   status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
   security_info_.connection_status = status;
+  security_info_.connection_info_initialized = true;
 
   SetDefaultUIExpectations(mock_ui());
 
@@ -781,12 +785,12 @@ TEST_F(PageInfoTest, HTTPSSHA1) {
   security_info_.scheme_is_cryptographic = true;
   security_info_.certificate = cert();
   security_info_.cert_status = 0;
-  security_info_.security_bits = 81;  // No error if > 80.
   int status = 0;
   status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
   status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
   security_info_.connection_status = status;
   security_info_.sha1_in_chain = true;
+  security_info_.connection_info_initialized = true;
 
   SetDefaultUIExpectations(mock_ui());
 
@@ -1093,7 +1097,9 @@ class UnifiedAutoplaySoundSettingsPageInfoTest
   ~UnifiedAutoplaySoundSettingsPageInfoTest() override = default;
 
   void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(media::kAutoplaySoundSettings);
+    scoped_feature_list_.InitWithFeatures(
+        {media::kAutoplayDisableSettings, media::kAutoplayWhitelistSettings},
+        {});
     ChromeRenderViewHostTestHarness::SetUp();
   }
 

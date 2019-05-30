@@ -50,11 +50,11 @@ std::string NotificationIdGenerator::GenerateForPersistentNotification(
   stream << origin;
   stream << kNotificationTagSeparator;
 
-  stream << base::IntToString(!tag.empty());
+  stream << base::NumberToString(!tag.empty());
   if (tag.size())
     stream << tag;
   else
-    stream << base::Int64ToString(persistent_notification_id);
+    stream << base::NumberToString(persistent_notification_id);
 
   return stream.str();
 }
@@ -64,7 +64,7 @@ std::string NotificationIdGenerator::GenerateForPersistentNotification(
 std::string NotificationIdGenerator::GenerateForNonPersistentNotification(
     const url::Origin& origin,
     const std::string& token) const {
-  DCHECK(!origin.unique());
+  DCHECK(!origin.opaque());
   DCHECK(!token.empty());
   return base::StringPrintf(
       "%c%c%s%c%s", kNonPersistentNotificationPrefix, kNotificationTagSeparator,

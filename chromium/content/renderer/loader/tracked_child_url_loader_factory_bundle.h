@@ -5,6 +5,10 @@
 #ifndef CONTENT_RENDERER_LOADER_TRACKED_CHILD_URL_LOADER_FACTORY_BUNDLE_H_
 #define CONTENT_RENDERER_LOADER_TRACKED_CHILD_URL_LOADER_FACTORY_BUNDLE_H_
 
+#include <memory>
+#include <unordered_map>
+#include <utility>
+
 #include "base/sequenced_task_runner.h"
 #include "content/common/content_export.h"
 #include "content/renderer/loader/child_url_loader_factory_bundle.h"
@@ -25,9 +29,11 @@ class CONTENT_EXPORT TrackedChildURLLoaderFactoryBundleInfo
   TrackedChildURLLoaderFactoryBundleInfo();
   TrackedChildURLLoaderFactoryBundleInfo(
       network::mojom::URLLoaderFactoryPtrInfo default_factory_info,
-      std::map<std::string, network::mojom::URLLoaderFactoryPtrInfo>
-          factories_info,
+      network::mojom::URLLoaderFactoryPtrInfo appcache_factory_info,
+      SchemeMap scheme_specific_factory_infos,
+      OriginMap initiator_specific_factory_infos,
       PossiblyAssociatedURLLoaderFactoryPtrInfo direct_network_factory_info,
+      network::mojom::URLLoaderFactoryPtrInfo prefetch_loader_factory_info,
       std::unique_ptr<HostPtrAndTaskRunner> main_thread_host_bundle,
       bool bypass_redirect_checks);
   ~TrackedChildURLLoaderFactoryBundleInfo() override;
@@ -116,13 +122,14 @@ class CONTENT_EXPORT HostChildURLLoaderFactoryBundle
   // Returns |std::unique_ptr<TrackedChildURLLoaderFactoryBundleInfo>|.
   std::unique_ptr<network::SharedURLLoaderFactoryInfo> Clone() override;
   std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-  CloneWithoutDefaultFactory() override;
+  CloneWithoutAppCacheFactory() override;
   bool IsHostChildURLLoaderFactoryBundle() const override;
 
   // Update this bundle with |info|, and post cloned |info| to tracked bundles.
-  // TODO(chongz): We should also update |direct_network_factory_| together with
-  // the |URLLoaderFactoryBundleInfo| we got from browser.
-  void UpdateThisAndAllClones(std::unique_ptr<URLLoaderFactoryBundleInfo> info);
+  // Note: We don't need to worry about |direct_network_factory_| since it's
+  // only used by |RendererBlinkPlatformImpl| and doesn't rely on this codepath.
+  void UpdateThisAndAllClones(
+      std::unique_ptr<blink::URLLoaderFactoryBundleInfo> info);
 
  private:
   friend class TrackedChildURLLoaderFactoryBundle;

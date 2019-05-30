@@ -17,29 +17,28 @@ class FakeAccessibilityHelperInstance
   FakeAccessibilityHelperInstance();
   ~FakeAccessibilityHelperInstance() override;
 
-  void InitDeprecated(mojom::AccessibilityHelperHostPtr host_ptr) override;
   void Init(mojom::AccessibilityHelperHostPtr host_ptr,
             InitCallback callback) override;
-  void PerformActionDeprecated(int32_t id,
-                               mojom::AccessibilityActionType action) override;
   void SetFilter(mojom::AccessibilityFilterType filter_type) override;
-  void PerformActionDeprecated2(
-      mojom::AccessibilityActionDataPtr action_data_ptr) override;
   void PerformAction(mojom::AccessibilityActionDataPtr action_data_ptr,
                      PerformActionCallback callback) override;
-  void SetNativeChromeVoxArcSupportDeprecated(
-      const std::string& package_name,
-      bool enabled,
-      SetNativeChromeVoxArcSupportDeprecatedCallback callback) override;
   void SetNativeChromeVoxArcSupportForFocusedWindow(
       bool enabled,
       SetNativeChromeVoxArcSupportForFocusedWindowCallback callback) override;
+  void SetExploreByTouchEnabled(bool enabled) override;
 
   mojom::AccessibilityFilterType filter_type() { return filter_type_; }
+  bool explore_by_touch_enabled() { return explore_by_touch_enabled_; }
+  void RefreshWithExtraData(mojom::AccessibilityActionDataPtr action_data_ptr,
+                            RefreshWithExtraDataCallback callback) override;
 
  private:
   mojom::AccessibilityFilterType filter_type_ =
       mojom::AccessibilityFilterType::OFF;
+
+  // Explore-by-touch is enabled by default in ARC++, so we default it to 'true'
+  // in this test as well.
+  bool explore_by_touch_enabled_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(FakeAccessibilityHelperInstance);
 };

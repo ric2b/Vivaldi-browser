@@ -5,12 +5,12 @@
 #ifndef CHROME_BROWSER_UI_BROWSER_DIALOGS_H_
 #define CHROME_BROWSER_UI_BROWSER_DIALOGS_H_
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/callback.h"
-#include "base/memory/scoped_refptr.h"
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
@@ -32,9 +32,8 @@ class FilePath;
 
 namespace content {
 class BrowserContext;
-class ColorChooser;
 class WebContents;
-}
+}  // namespace content
 
 namespace extensions {
 class Extension;
@@ -47,14 +46,14 @@ class AuthChallengeInfo;
 namespace payments {
 class PaymentRequest;
 class PaymentRequestDialog;
-}
+}  // namespace payments
 
 namespace safe_browsing {
 class ChromeCleanerController;
 class ChromeCleanerDialogController;
 class ChromeCleanerRebootDialogController;
 class SettingsResetPromptController;
-}
+}  // namespace safe_browsing
 
 namespace task_manager {
 class TaskManagerTableModel;
@@ -63,7 +62,7 @@ class TaskManagerTableModel;
 namespace ui {
 class WebDialogDelegate;
 struct SelectedFileInfo;
-}
+}  // namespace ui
 
 namespace chrome {
 
@@ -84,20 +83,6 @@ gfx::NativeWindow ShowWebDialog(gfx::NativeView parent,
                                 content::BrowserContext* context,
                                 ui::WebDialogDelegate* delegate);
 #endif  // !defined(OS_MACOSX)
-
-#if defined(OS_CHROMEOS)
-// Creates and shows an HTML dialog with the given delegate and browser context.
-// The dialog is placed in the ash window hierarchy in the given container. The
-// window is automatically destroyed when it is closed.
-// Returns the created window.
-// See ash/public/cpp/shell_window_ids.h for |container_id| values. The window
-// is destroyed when it is closed. See also chrome::ShowWebDialog().
-// |is_minimal_style| means whether the title area of the dialog should be hide.
-gfx::NativeWindow ShowWebDialogInContainer(int container_id,
-                                           content::BrowserContext* context,
-                                           ui::WebDialogDelegate* delegate,
-                                           bool is_minimal_style = false);
-#endif  // defined(OS_CHROMEOS)
 
 // Shows the create chrome app shortcut dialog box.
 // |close_callback| may be null.
@@ -138,10 +123,6 @@ void ShowPWAInstallDialog(content::WebContents* web_contents,
 // user interaction.
 void SetAutoAcceptPWAInstallDialogForTesting(bool auto_accept);
 
-// Shows a color chooser that reports to the given WebContents.
-content::ColorChooser* ShowColorChooser(content::WebContents* web_contents,
-                                        SkColor initial_color);
-
 #if defined(OS_MACOSX)
 
 // Bridging methods that show/hide the toolkit-views based Task Manager on Mac.
@@ -156,9 +137,9 @@ void ShowUpdateChromeDialogViews(gfx::NativeWindow parent);
 #if defined(TOOLKIT_VIEWS)
 
 // Creates a toolkit-views based LoginHandler (e.g. HTTP-Auth dialog).
-scoped_refptr<LoginHandler> CreateLoginHandlerViews(
+std::unique_ptr<LoginHandler> CreateLoginHandlerViews(
     net::AuthChallengeInfo* auth_info,
-    content::ResourceRequestInfo::WebContentsGetter web_contents_getter,
+    content::WebContents* web_contents,
     LoginAuthRequiredCallback auth_required_callback);
 
 // Shows the toolkit-views based BookmarkEditor.
@@ -280,6 +261,13 @@ enum class DialogIdentifier {
   DOWNLOAD_OPEN_CONFIRMATION = 87,
   ARC_DATA_REMOVAL_CONFIRMATION = 88,
   CROSTINI_UPGRADE = 89,
+  HATS_BUBBLE = 90,
+  CROSTINI_APP_RESTART = 91,
+  INCOGNITO_WINDOW_COUNTER = 92,
+  CROSTINI_APP_UNINSTALLER = 93,
+  CROSTINI_CONTAINER_UPGRADE = 94,
+  // Add values above this line with a corresponding label in
+  // tools/metrics/histograms/enums.xml
   MAX_VALUE
 };
 

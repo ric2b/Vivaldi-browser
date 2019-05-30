@@ -29,6 +29,7 @@ class WindowProxyManager : public GarbageCollected<WindowProxyManager> {
   void ClearForClose();
   void CORE_EXPORT ClearForNavigation();
   void ClearForSwap();
+  void ClearForV8MemoryPurge();
 
   // Global proxies are passed in a vector to maintain their order: global proxy
   // object for the main world is always first. This is needed to prevent bugs
@@ -91,8 +92,13 @@ class LocalWindowProxyManager
     : public WindowProxyManagerImplHelper<LocalFrame, LocalWindowProxy> {
  public:
   static LocalWindowProxyManager* Create(LocalFrame& frame) {
-    return new LocalWindowProxyManager(frame);
+    return MakeGarbageCollected<LocalWindowProxyManager>(frame);
   }
+
+  explicit LocalWindowProxyManager(LocalFrame& frame)
+      : WindowProxyManagerImplHelper<LocalFrame, LocalWindowProxy>(
+            frame,
+            FrameType::kLocal) {}
 
   // TODO(yukishiino): Remove this method.
   LocalWindowProxy* MainWorldProxyMaybeUninitialized() {
@@ -102,22 +108,15 @@ class LocalWindowProxyManager
   // Sets the given security origin to the main world's context.  Also updates
   // the security origin of the context for each isolated world.
   void UpdateSecurityOrigin(const SecurityOrigin*);
-
- private:
-  explicit LocalWindowProxyManager(LocalFrame& frame)
-      : WindowProxyManagerImplHelper<LocalFrame, LocalWindowProxy>(
-            frame,
-            FrameType::kLocal) {}
 };
 
 class RemoteWindowProxyManager
     : public WindowProxyManagerImplHelper<RemoteFrame, RemoteWindowProxy> {
  public:
   static RemoteWindowProxyManager* Create(RemoteFrame& frame) {
-    return new RemoteWindowProxyManager(frame);
+    return MakeGarbageCollected<RemoteWindowProxyManager>(frame);
   }
 
- private:
   explicit RemoteWindowProxyManager(RemoteFrame& frame)
       : WindowProxyManagerImplHelper<RemoteFrame, RemoteWindowProxy>(
             frame,

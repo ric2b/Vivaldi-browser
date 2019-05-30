@@ -12,9 +12,7 @@ import android.view.ViewGroup;
 
 import org.chromium.base.Callback;
 import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.modelutil.ListObservable;
-import org.chromium.chrome.browser.ntp.ContextMenuManager;
+import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageViewHolder.PartialBindCallback;
 import org.chromium.chrome.browser.ntp.snippets.CategoryInt;
 import org.chromium.chrome.browser.ntp.snippets.CategoryStatus;
@@ -29,6 +27,7 @@ import org.chromium.chrome.browser.suggestions.SuggestionsConfig;
 import org.chromium.chrome.browser.suggestions.SuggestionsRecyclerView;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
 import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
+import org.chromium.ui.modelutil.ListObservable;
 
 import java.util.List;
 import java.util.Set;
@@ -52,9 +51,10 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder>
     private final InnerNode<NewTabPageViewHolder, PartialBindCallback> mRoot;
 
     private final SectionList mSections;
-    private final @Nullable SignInPromo mSigninPromo;
     private final AllDismissedItem mAllDismissed;
     private final Footer mFooter;
+
+    private final RemoteSuggestionsStatusObserver mRemoteSuggestionsStatusObserver;
 
     /**
      * Creates the adapter that will manage all the cards to display on the NTP.
@@ -76,29 +76,18 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder>
         mUiConfig = uiConfig;
         mRoot = new InnerNode<>();
         mSections = new SectionList(mUiDelegate, offlinePageBridge);
-        mSigninPromo = SignInPromo.maybeCreatePromo(mUiDelegate);
         mAllDismissed = new AllDismissedItem();
 
         if (mAboveTheFoldView != null) mRoot.addChildren(new AboveTheFoldItem());
-
-        if (SuggestionsConfig.scrollToLoad()) {
-            // If scroll-to-load is enabled, show the sign-in promo above suggested content.
-            if (mSigninPromo != null) mRoot.addChildren(mSigninPromo);
-            mRoot.addChildren(mAllDismissed);
-            mRoot.addChildren(mSections);
-        } else {
-            mRoot.addChildren(mSections);
-            if (mSigninPromo != null) mRoot.addChildren(mSigninPromo);
-            mRoot.addChildren(mAllDismissed);
-        }
+        mRoot.addChildren(mAllDismissed, mSections);
 
         mFooter = new Footer();
         mRoot.addChildren(mFooter);
 
         mOfflinePageBridge = offlinePageBridge;
 
-        RemoteSuggestionsStatusObserver suggestionsObserver = new RemoteSuggestionsStatusObserver();
-        mUiDelegate.addDestructionObserver(suggestionsObserver);
+        mRemoteSuggestionsStatusObserver = new RemoteSuggestionsStatusObserver();
+        mUiDelegate.addDestructionObserver(mRemoteSuggestionsStatusObserver);
 
         updateAllDismissedVisibility();
         mRoot.addObserver(this);
@@ -136,7 +125,8 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder>
                         mRecyclerView, mContextMenuManager, mUiDelegate, mUiConfig);
 
             case ItemViewType.PROMO:
-                return mSigninPromo.createViewHolder(mRecyclerView, mContextMenuManager, mUiConfig);
+                return new PersonalizedPromoViewHolder(
+                        mRecyclerView, mContextMenuManager, mUiConfig);
 
             case ItemViewType.FOOTER:
                 return new Footer.ViewHolder(mRecyclerView, mUiDelegate.getNavigationDelegate());
@@ -180,39 +170,6 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder>
         return getFirstPositionForType(ItemViewType.HEADER);
     }
 
-    public int getFirstSnippetPosition() {
-        return getFirstPositionForType(ItemViewType.SNIPPET);
-    }
-
-    /**
-     * Returns the position in the adapter of the header to the article suggestions if it exists.
-     * @return The article header position. RecyclerView.NO_POSITION if articles or their header
-     *         does not exist.
-     */
-    public int getArticleHeaderPosition() {
-        SuggestionsSection suggestions = mSections.getSection(KnownCategories.ARTICLES);
-        if (suggestions == null || !suggestions.hasCards()) return RecyclerView.NO_POSITION;
-
-        int articlesRank = RecyclerView.NO_POSITION;
-        int emptySectionCount = 0;
-        int[] categories = mUiDelegate.getSuggestionsSource().getCategories();
-        for (int i = 0; i < categories.length; i++) {
-            // The categories array includes empty sections.
-            if (mSections.getSection(categories[i]) == null) emptySectionCount++;
-            if (categories[i] == KnownCategories.ARTICLES) {
-                articlesRank = i - emptySectionCount;
-                break;
-            }
-        }
-        if (articlesRank == RecyclerView.NO_POSITION) return RecyclerView.NO_POSITION;
-
-        int headerRank = RecyclerView.NO_POSITION;
-        for (int i = 0; i < getItemCount(); i++) {
-            if (getItemViewType(i) == ItemViewType.HEADER && ++headerRank == articlesRank) return i;
-        }
-        return RecyclerView.NO_POSITION;
-    }
-
     public int getFirstCardPosition() {
         for (int i = 0; i < getItemCount(); ++i) {
             if (CardViewHolder.isCard(getItemViewType(i))) return i;
@@ -224,10 +181,7 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder>
         boolean areRemoteSuggestionsEnabled =
                 mUiDelegate.getSuggestionsSource().areRemoteSuggestionsEnabled();
         boolean allDismissed = hasAllBeenDismissed() && !areArticlesLoading();
-        boolean isArticleSectionVisible =
-                ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER)
-                && mSections.getSection(KnownCategories.ARTICLES) != null;
+        boolean isArticleSectionVisible = mSections.getSection(KnownCategories.ARTICLES) != null;
 
         mAllDismissed.setVisible(areRemoteSuggestionsEnabled && allDismissed);
         mFooter.setVisible(!SuggestionsConfig.scrollToLoad() && !allDismissed
@@ -319,8 +273,6 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder>
     }
 
     private boolean hasAllBeenDismissed() {
-        if (mSigninPromo != null && mSigninPromo.isVisible()) return false;
-
         return mSections.isEmpty();
     }
 
@@ -339,6 +291,11 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder>
 
     public InnerNode getRootForTesting() {
         return mRoot;
+    }
+
+    @VisibleForTesting
+    SuggestionsSource.Observer getSuggestionsSourceObserverForTesting() {
+        return mRemoteSuggestionsStatusObserver;
     }
 
     private class RemoteSuggestionsStatusObserver

@@ -456,9 +456,16 @@ bool CanCoalesce(const WebGestureEvent& event_to_coalesce,
 
   // GesturePinchUpdate scales can be combined only if they share a focal point,
   // e.g., with double-tap drag zoom.
+  // Due to the imprecision of OOPIF coordinate conversions, the positions may
+  // not be exactly equal, so we only require approximate equality.
+  constexpr float kAnchorTolerance = 1.f;
   if (event.GetType() == WebInputEvent::kGesturePinchUpdate &&
-      event.PositionInWidget() == event_to_coalesce.PositionInWidget())
+      (std::abs(event.PositionInWidget().x -
+                event_to_coalesce.PositionInWidget().x) < kAnchorTolerance) &&
+      (std::abs(event.PositionInWidget().y -
+                event_to_coalesce.PositionInWidget().y) < kAnchorTolerance)) {
     return true;
+  }
 
   return false;
 }
@@ -575,9 +582,10 @@ void Coalesce(const blink::WebInputEvent& event_to_coalesce,
   }
 }
 
-// Whether |event_in_queue| is GesturePinchUpdate or GestureScrollUpdate and
-// has the same modifiers/source as the new scroll/pinch event. Compatible
-// scroll and pinch event pairs can be logically coalesced.
+// Whether |event_in_queue| is a touchscreen GesturePinchUpdate or
+// GestureScrollUpdate and has the same modifiers/source as the new
+// scroll/pinch event. Compatible touchscreen scroll and pinch event pairs
+// can be logically coalesced.
 bool IsCompatibleScrollorPinch(const WebGestureEvent& new_event,
                                const WebGestureEvent& event_in_queue) {
   DCHECK(new_event.GetType() == WebInputEvent::kGestureScrollUpdate ||
@@ -589,7 +597,8 @@ bool IsCompatibleScrollorPinch(const WebGestureEvent& new_event,
   return (event_in_queue.GetType() == WebInputEvent::kGestureScrollUpdate ||
           event_in_queue.GetType() == WebInputEvent::kGesturePinchUpdate) &&
          event_in_queue.GetModifiers() == new_event.GetModifiers() &&
-         event_in_queue.SourceDevice() == new_event.SourceDevice();
+         event_in_queue.SourceDevice() == blink::kWebGestureDeviceTouchscreen &&
+         new_event.SourceDevice() == blink::kWebGestureDeviceTouchscreen;
 }
 
 std::pair<WebGestureEvent, WebGestureEvent> CoalesceScrollAndPinch(
@@ -754,6 +763,8 @@ WebGestureEvent CreateWebGestureEvent(const GestureEventDetails& details,
       gesture.data.tap.tap_count = details.tap_count();
       gesture.data.tap.width = details.bounding_box_f().width();
       gesture.data.tap.height = details.bounding_box_f().height();
+      gesture.SetNeedsWheelEvent(source_device ==
+                                 blink::kWebGestureDeviceTouchpad);
       break;
     case ET_GESTURE_TAP:
       gesture.SetType(WebInputEvent::kGestureTap);
@@ -1077,13 +1088,13 @@ EventType WebEventTypeToEventType(WebInputEvent::Type type) {
       return ET_TOUCH_CANCELLED;
     case WebInputEvent::kTouchScrollStarted:
     case WebInputEvent::kPointerDown:
-      return ET_POINTER_DOWN;
+      return ET_TOUCH_PRESSED;
     case WebInputEvent::kPointerUp:
-      return ET_POINTER_UP;
+      return ET_TOUCH_RELEASED;
     case WebInputEvent::kPointerMove:
-      return ET_POINTER_MOVED;
+      return ET_TOUCH_MOVED;
     case WebInputEvent::kPointerCancel:
-      return ET_POINTER_CANCELLED;
+      return ET_TOUCH_CANCELLED;
     default:
       return ET_UNKNOWN;
   }

@@ -7,9 +7,10 @@
 #include <memory>
 #include <utility>
 
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/permissions_test_util.h"
 #include "chrome/browser/extensions/permissions_updater.h"
 #include "chrome/browser/extensions/test_extension_environment.h"
 #include "chrome/common/extensions/permissions/chrome_permission_message_provider.h"
@@ -79,9 +80,9 @@ class PermissionMessagesUnittest : public testing::Test {
   }
 
   void GrantOptionalPermissions() {
-    PermissionsUpdater perms_updater(env_.profile());
-    perms_updater.GrantOptionalPermissions(
-        *app_, PermissionsParser::GetOptionalPermissions(app_.get()));
+    permissions_test_util::GrantOptionalPermissionsAndWaitForCompletion(
+        env_.profile(), *app_,
+        PermissionsParser::GetOptionalPermissions(app_.get()));
   }
 
   std::vector<base::string16> active_permissions() {
@@ -338,7 +339,7 @@ TEST_F(USBDevicePermissionMessagesTest, MultipleDevice) {
   EXPECT_EQ(base::ASCIIToUTF16(kMessage), messages.front().message());
   const std::vector<base::string16>& submessages =
       messages.front().submessages();
-  ASSERT_EQ(arraysize(kDetails), submessages.size());
+  ASSERT_EQ(base::size(kDetails), submessages.size());
   for (size_t i = 0; i < submessages.size(); i++)
     EXPECT_EQ(base::ASCIIToUTF16(kDetails[i]), submessages[i]);
 }

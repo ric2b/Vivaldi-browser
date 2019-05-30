@@ -23,7 +23,6 @@
 #include "ash/app_list/views/search_box_view.h"
 #include "ash/app_list/views/top_icon_animation_view.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
-#include "ash/public/cpp/app_list/app_list_constants.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -36,6 +35,7 @@
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -48,7 +48,7 @@ namespace app_list {
 namespace {
 
 constexpr int kItemGridsBottomPadding = 24;
-constexpr int kOnscreenKeyboardTopPadding = 8;
+constexpr int kOnscreenKeyboardTopPadding = 16;
 
 // Indexes of interesting views in ViewModel of AppListFolderView.
 constexpr int kIndexBackground = 0;
@@ -87,7 +87,8 @@ class BackgroundAnimation : public gfx::SlideAnimation,
                       : AppListConfig::instance().folder_bubble_color();
 
     SetTweenType(gfx::Tween::FAST_OUT_SLOW_IN);
-    SetSlideDuration(kFolderTransitionInDurationMs);
+    SetSlideDuration(
+        AppListConfig::instance().folder_transition_in_duration_ms());
 
     folder_view_->UpdateBackgroundMask(
         from_radius_,
@@ -157,7 +158,8 @@ class FolderItemTitleAnimation : public gfx::SlideAnimation,
                       : AppListConfig::instance().grid_title_color();
 
     SetTweenType(gfx::Tween::FAST_OUT_SLOW_IN);
-    SetSlideDuration(kFolderTransitionInDurationMs);
+    SetSlideDuration(
+        AppListConfig::instance().folder_transition_in_duration_ms());
   }
 
   ~FolderItemTitleAnimation() override = default;
@@ -318,8 +320,9 @@ class TopIconAnimation : public AppListFolderView::Animation,
   // to AppListFolderView.
   std::vector<gfx::Rect> GetFirstPageItemViewsBounds() {
     std::vector<gfx::Rect> items_bounds;
-    const size_t count = std::min(
-        kMaxFolderItemsPerPage, folder_view_->folder_item()->ChildItemCount());
+    const size_t count =
+        std::min(AppListConfig::instance().max_folder_items_per_page(),
+                 folder_view_->folder_item()->ChildItemCount());
     for (size_t i = 0; i < count; ++i) {
       const gfx::Rect rect =
           folder_view_->items_grid_view()->GetItemViewAt(i)->bounds();
@@ -380,8 +383,8 @@ class ContentsContainerAnimation : public AppListFolderView::Animation,
     ui::ScopedLayerAnimationSettings animation(layer->GetAnimator());
     animation.SetTweenType(gfx::Tween::FAST_OUT_SLOW_IN);
     animation.AddObserver(this);
-    animation.SetTransitionDuration(
-        base::TimeDelta::FromMilliseconds(kFolderTransitionInDurationMs));
+    animation.SetTransitionDuration(base::TimeDelta::FromMilliseconds(
+        AppListConfig::instance().folder_transition_in_duration_ms()));
     layer->SetTransform(show_ ? gfx::Transform() : transform);
     layer->SetOpacity(show_ ? 1.0f : 0.0f);
 
@@ -410,6 +413,8 @@ class ContentsContainerAnimation : public AppListFolderView::Animation,
     // preferred bounds is calculated correctly.
     folder_view_->contents_container()->layer()->SetTransform(gfx::Transform());
     folder_view_->RecordAnimationSmoothness();
+
+    folder_view_->NotifyAccessibilityLocationChanges();
   }
 
  private:
@@ -449,8 +454,7 @@ AppListFolderView::AppListFolderView(AppsContainerView* container_view,
   AddChildView(background_view_);
   view_model_->Add(background_view_, kIndexBackground);
 
-  contents_container_->SetPaintToLayer();
-  contents_container_->layer()->SetFillsBoundsOpaquely(false);
+  contents_container_->SetPaintToLayer(ui::LAYER_NOT_DRAWN);
   AddChildView(contents_container_);
   view_model_->Add(contents_container_, kIndexContentsContainer);
 
@@ -483,10 +487,6 @@ AppListFolderView::~AppListFolderView() {
 }
 
 void AppListFolderView::SetAppListFolderItem(AppListFolderItem* folder) {
-  accessible_name_ = ui::ResourceBundle::GetSharedInstance().GetLocalizedString(
-      IDS_APP_LIST_FOLDER_OPEN_FOLDER_ACCESSIBILE_NAME);
-  NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
-
   folder_item_ = folder;
   items_grid_view_->SetItemList(folder_item_->item_list());
   folder_header_view_->SetFolderItem(folder_item_);
@@ -496,6 +496,7 @@ void AppListFolderView::SetAppListFolderItem(AppListFolderItem* folder) {
 
 void AppListFolderView::ScheduleShowHideAnimation(bool show,
                                                   bool hide_for_reparent) {
+  CreateOpenOrCloseFolderAccessibilityEvent(show);
   animation_start_frame_number_ =
       GetCompositorActivatedFrameCount(GetCompositor());
 
@@ -540,7 +541,7 @@ void AppListFolderView::Layout() {
 
 bool AppListFolderView::OnKeyPressed(const ui::KeyEvent& event) {
   // Let the FocusManager handle Left/Right keys.
-  if (!CanProcessUpDownKeyTraversal(event))
+  if (!IsUnhandledUpDownKeyEvent(event))
     return false;
 
   if (folder_header_view_->HasTextFocus() && event.key_code() == ui::VKEY_UP) {
@@ -578,7 +579,8 @@ void AppListFolderView::UpdatePreferredBounds() {
   // Calculate the folder icon's bounds relative to AppsContainerView.
   gfx::RectF rect(activated_folder_item_view->GetIconBounds());
   ConvertRectToTarget(activated_folder_item_view, container_view_, &rect);
-  gfx::Rect icon_bounds_in_container = gfx::ToEnclosingRect(rect);
+  gfx::Rect icon_bounds_in_container =
+      container_view_->GetMirroredRect(gfx::ToEnclosingRect(rect));
 
   // The opened folder view's center should try to overlap with the folder
   // item's center while it must fit within the bounds of AppsContainerView and
@@ -601,7 +603,7 @@ void AppListFolderView::UpdatePreferredBounds() {
 
 int AppListFolderView::GetYOffsetForFolder() {
   auto* const keyboard_controller = keyboard::KeyboardController::Get();
-  if (!keyboard_controller->enabled())
+  if (!keyboard_controller->IsEnabled())
     return 0;
 
   // This view should be on top of on-screen keyboard to prevent the folder
@@ -643,7 +645,8 @@ void AppListFolderView::RecordAnimationSmoothness() {
   if (end_frame_number > animation_start_frame_number_) {
     RecordFolderShowHideAnimationSmoothness(
         end_frame_number - animation_start_frame_number_,
-        kFolderTransitionInDurationMs, compositor->refresh_rate());
+        AppListConfig::instance().folder_transition_in_duration_ms(),
+        compositor->refresh_rate());
   }
 }
 
@@ -655,6 +658,17 @@ void AppListFolderView::UpdateBackgroundMask(int corner_radius,
   background_mask_->layer()->SetFillsBoundsOpaquely(false);
   background_mask_->layer()->SetBounds(background_view_->GetContentsBounds());
   background_view_->layer()->SetMaskLayer(background_mask_->layer());
+}
+
+void AppListFolderView::NotifyAccessibilityLocationChanges() {
+  contents_container_->NotifyAccessibilityEvent(
+      ax::mojom::Event::kLocationChanged, true);
+  items_grid_view_->NotifyAccessibilityEvent(ax::mojom::Event::kLocationChanged,
+                                             true);
+  folder_header_view_->NotifyAccessibilityEvent(
+      ax::mojom::Event::kLocationChanged, true);
+  page_switcher_->NotifyAccessibilityEvent(ax::mojom::Event::kLocationChanged,
+                                           true);
 }
 
 void AppListFolderView::CalculateIdealBounds() {
@@ -787,10 +801,6 @@ void AppListFolderView::HideViewImmediately() {
 }
 
 void AppListFolderView::CloseFolderPage() {
-  accessible_name_ = ui::ResourceBundle::GetSharedInstance().GetLocalizedString(
-      IDS_APP_LIST_FOLDER_CLOSE_FOLDER_ACCESSIBILE_NAME);
-  NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
-
   GiveBackFocusToSearchBox();
   if (items_grid_view()->dragging())
     items_grid_view()->EndDrag(true);
@@ -808,16 +818,19 @@ void AppListFolderView::SetRootLevelDragViewVisible(bool visible) {
 
 void AppListFolderView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ax::mojom::Role::kGenericContainer;
-  node_data->SetName(accessible_name_);
 }
 
 void AppListFolderView::NavigateBack(AppListFolderItem* item,
                                      const ui::Event& event_flags) {
-  CloseFolderPage();
+  contents_view_->Back();
 }
 
 void AppListFolderView::GiveBackFocusToSearchBox() {
-  contents_view_->GetSearchBoxView()->search_box()->RequestFocus();
+  // Avoid announcing search box focus since it is overlapped with closing
+  // folder alert.
+  auto* search_box = contents_view_->GetSearchBoxView()->search_box();
+  search_box->GetViewAccessibility().OverrideIsIgnored(true);
+  search_box->RequestFocus();
 }
 
 void AppListFolderView::SetItemName(AppListFolderItem* item,
@@ -827,6 +840,16 @@ void AppListFolderView::SetItemName(AppListFolderItem* item,
 
 ui::Compositor* AppListFolderView::GetCompositor() {
   return GetWidget()->GetCompositor();
+}
+
+void AppListFolderView::CreateOpenOrCloseFolderAccessibilityEvent(bool open) {
+  auto* announcement_view =
+      contents_view_->app_list_view()->announcement_view();
+  announcement_view->GetViewAccessibility().OverrideName(
+      ui::ResourceBundle::GetSharedInstance().GetLocalizedString(
+          open ? IDS_APP_LIST_FOLDER_OPEN_FOLDER_ACCESSIBILE_NAME
+               : IDS_APP_LIST_FOLDER_CLOSE_FOLDER_ACCESSIBILE_NAME));
+  announcement_view->NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
 }
 
 }  // namespace app_list

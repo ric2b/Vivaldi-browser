@@ -20,7 +20,6 @@
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "components/variations/child_process_field_trial_syncer.h"
-#include "content/child/memory/child_memory_coordinator_impl.h"
 #include "content/common/associated_interfaces.mojom.h"
 #include "content/common/child_control.mojom.h"
 #include "content/common/content_export.h"
@@ -31,13 +30,10 @@
 #include "ipc/message_router.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/associated_binding_set.h"
-#include "services/tracing/public/cpp/trace_event_agent.h"
 #include "third_party/blink/public/mojom/associated_interfaces/associated_interfaces.mojom.h"
 
 #if defined(OS_WIN)
 #include "content/public/common/font_cache_win.mojom.h"
-#elif defined(OS_MACOSX)
-#include "content/common/font_loader_mac.mojom.h"
 #endif
 
 namespace IPC {
@@ -62,7 +58,6 @@ class CONTENT_EXPORT ChildThreadImpl
     : public IPC::Listener,
       virtual public ChildThread,
       private base::FieldTrialList::Observer,
-      public ChildMemoryCoordinatorDelegate,
       public mojom::RouteProvider,
       public blink::mojom::AssociatedInterfaceProvider,
       public mojom::ChildControl {
@@ -70,10 +65,10 @@ class CONTENT_EXPORT ChildThreadImpl
   struct CONTENT_EXPORT Options;
 
   // Creates the thread.
-  ChildThreadImpl();
+  explicit ChildThreadImpl(base::RepeatingClosure quit_closure);
   // Allow to be used for single-process mode and for in process gpu mode via
   // options.
-  explicit ChildThreadImpl(const Options& options);
+  ChildThreadImpl(base::RepeatingClosure quit_closure, const Options& options);
   // ChildProcess::main_thread() is reset after Shutdown(), and before the
   // destructor, so any subsystem that relies on ChildProcess::main_thread()
   // must be terminated before Shutdown returns. In particular, if a subsystem
@@ -91,11 +86,6 @@ class CONTENT_EXPORT ChildThreadImpl
 #if defined(OS_WIN)
   void PreCacheFont(const LOGFONT& log_font) override;
   void ReleaseCachedFonts() override;
-#elif defined(OS_MACOSX)
-  bool LoadFont(const base::string16& font_name,
-                float font_point_size,
-                mojo::ScopedSharedBufferHandle* out_font_data,
-                uint32_t* out_font_id) override;
 #endif
   void RecordAction(const base::UserMetricsAction& action) override;
   void RecordComputedAction(const std::string& action) override;
@@ -108,9 +98,6 @@ class CONTENT_EXPORT ChildThreadImpl
   // base::FieldTrialList::Observer:
   void OnFieldTrialGroupFinalized(const std::string& trial_name,
                                   const std::string& group_name) override;
-
-  // ChildMemoryCoordinatorDelegate implementation.
-  void OnTrimMemoryImmediately() override {}
 
   IPC::SyncChannel* channel() { return channel_.get(); }
 
@@ -140,12 +127,6 @@ class CONTENT_EXPORT ChildThreadImpl
 
   // Returns the one child thread. Can only be called on the main thread.
   static ChildThreadImpl* current();
-
-#if defined(OS_ANDROID)
-  // Called on Android's service thread to shutdown the main thread of this
-  // process.
-  static void ShutdownThread();
-#endif
 
  protected:
   friend class ChildProcess;
@@ -178,10 +159,6 @@ class CONTENT_EXPORT ChildThreadImpl
 
   bool IsInBrowserProcess() const;
 
-#if defined(OS_MACOSX)
-  virtual mojom::FontLoaderMac* GetFontLoaderMac();
-#endif
-
  private:
   class ChildThreadMessageRouter : public IPC::MessageRouter {
    public:
@@ -198,7 +175,7 @@ class CONTENT_EXPORT ChildThreadImpl
 
   void Init(const Options& options);
 
-  // Sets chrome_trace_event_agent_ if necessary.
+  // Initializes tracing if necessary.
   void InitTracing();
 
   // We create the channel first without connecting it so we can add filters
@@ -233,8 +210,6 @@ class CONTENT_EXPORT ChildThreadImpl
   mojom::RouteProviderAssociatedPtr remote_route_provider_;
 #if defined(OS_WIN)
   mojom::FontCacheWinPtr font_cache_win_ptr_;
-#elif defined(OS_MACOSX)
-  mojom::FontLoaderMacPtr font_loader_mac_ptr_;
 #endif
 
   std::unique_ptr<IPC::SyncChannel> channel_;
@@ -255,15 +230,14 @@ class CONTENT_EXPORT ChildThreadImpl
   // TaskRunner to post tasks to the main thread.
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_runner_;
 
+  // Used to quit the main thread.
+  base::RepeatingClosure quit_closure_;
+
   std::unique_ptr<base::PowerMonitor> power_monitor_;
 
   scoped_refptr<base::SingleThreadTaskRunner> browser_process_io_runner_;
 
-  std::unique_ptr<tracing::TraceEventAgent> trace_event_agent_;
-
   std::unique_ptr<variations::ChildProcessFieldTrialSyncer> field_trial_syncer_;
-
-  std::unique_ptr<ChildMemoryCoordinatorImpl> memory_coordinator_;
 
   std::unique_ptr<base::WeakPtrFactory<ChildThreadImpl>>
       channel_connected_factory_;

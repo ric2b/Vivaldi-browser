@@ -7,7 +7,6 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "ui/views/animation/test/ink_drop_host_view_test_api.h"
 
@@ -31,7 +30,6 @@ class LocationIconViewBrowserTest : public InProcessBrowserTest {
   LocationIconView* icon_view() const { return icon_view_.get(); }
 
  private:
-  test::ScopedMacViewsBrowserMode views_mode_{true};
   LocationBarView* location_bar_;
 
   std::unique_ptr<LocationIconView> icon_view_;
@@ -44,13 +42,13 @@ class LocationIconViewBrowserTest : public InProcessBrowserTest {
 IN_PROC_BROWSER_TEST_F(LocationIconViewBrowserTest, InkDropMode) {
   OmniboxEditModel* model = location_bar()->GetOmniboxView()->model();
   model->SetInputInProgress(true);
-  icon_view()->Update();
+  icon_view()->Update(/*suppress_animations=*/true);
 
   EXPECT_EQ(IconLabelBubbleView::InkDropMode::OFF,
             views::test::InkDropHostViewTestApi(icon_view()).ink_drop_mode());
 
   model->SetInputInProgress(false);
-  icon_view()->Update();
+  icon_view()->Update(/*suppress_animations=*/true);
 
   EXPECT_EQ(IconLabelBubbleView::InkDropMode::ON,
             views::test::InkDropHostViewTestApi(icon_view()).ink_drop_mode());

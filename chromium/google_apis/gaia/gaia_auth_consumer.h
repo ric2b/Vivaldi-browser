@@ -12,10 +12,6 @@
 class GoogleServiceAuthError;
 class OAuthMultiloginResult;
 
-namespace net {
-typedef std::vector<std::string> ResponseCookies;
-}
-
 typedef std::map<std::string, std::string> UserInfoMap;
 
 // An interface that defines the callbacks for objects that
@@ -116,8 +112,7 @@ class GaiaAuthConsumer {
   virtual void OnListAccountsSuccess(const std::string& data) {}
   virtual void OnListAccountsFailure(const GoogleServiceAuthError& error) {}
 
-  virtual void OnOAuthMultiloginSuccess(const OAuthMultiloginResult& result) {}
-  virtual void OnOAuthMultiloginFailure(const GoogleServiceAuthError& error) {}
+  virtual void OnOAuthMultiloginFinished(const OAuthMultiloginResult& result) {}
 
   virtual void OnLogOutSuccess() {}
   virtual void OnLogOutFailure(const GoogleServiceAuthError& error) {}

@@ -16,37 +16,28 @@
 
 namespace chromeos {
 
-enum class AssistantOptInScreenExitCode {
-  VALUE_PROP_SKIPPED = 0,
-  VALUE_PROP_ACCEPTED = 1,
-  THIRD_PARTY_CONTINUED = 2,
-  EMAIL_OPTED_IN = 3,
-  EMAIL_OPTED_OUT = 4,
-  READY_SCREEN_CONTINUED = 5,
-  EXIT_CODES_COUNT
-};
-
 // Type of Assistant opt-in flow status. This enum is used to back an UMA
 // histogram and should be treated as append-only.
 enum AssistantOptInFlowStatus {
   FLOW_STARTED = 0,
-  ACTIVITY_CONTROL_SHOWN,
-  ACTIVITY_CONTROL_ACCEPTED,
-  ACTIVITY_CONTROL_SKIPPED,
-  THIRD_PARTY_SHOWN,
-  THIRD_PARTY_CONTINUED,
-  GET_MORE_SHOWN,
-  EMAIL_OPTED_IN,
-  EMAIL_OPTED_OUT,
-  GET_MORE_CONTINUED,
-  READY_SCREEN_SHOWN,
-  READY_SCREEN_CONTINUED,
+  ACTIVITY_CONTROL_SHOWN = 1,
+  ACTIVITY_CONTROL_ACCEPTED = 2,
+  ACTIVITY_CONTROL_SKIPPED = 3,
+  THIRD_PARTY_SHOWN = 4,
+  THIRD_PARTY_CONTINUED = 5,
+  GET_MORE_SHOWN = 6,
+  EMAIL_OPTED_IN = 7,
+  EMAIL_OPTED_OUT = 8,
+  GET_MORE_CONTINUED = 9,
+  READY_SCREEN_SHOWN = 10,
+  READY_SCREEN_CONTINUED = 11,
+  VOICE_MATCH_SHOWN = 12,
+  VOICE_MATCH_ENROLLMENT_DONE = 13,
+  VOICE_MATCH_ENROLLMENT_SKIPPED = 14,
+  VOICE_MATCH_ENROLLMENT_ERROR = 15,
   // Magic constant used by the histogram macros.
-  kMaxValue = READY_SCREEN_CONTINUED
+  kMaxValue = VOICE_MATCH_ENROLLMENT_ERROR
 };
-
-using OnAssistantOptInScreenExitCallback =
-    base::OnceCallback<void(AssistantOptInScreenExitCode exit_code)>;
 
 void RecordAssistantOptInStatus(AssistantOptInFlowStatus);
 
@@ -79,6 +70,8 @@ base::Value GetSettingsUiStrings(const assistant::SettingsUi& settings_ui,
 void RecordActivityControlConsent(Profile* profile,
                                   std::string ui_audit_key,
                                   bool opted_in);
+
+bool IsHotwordDspAvailable();
 
 }  // namespace chromeos
 

@@ -11,7 +11,7 @@ cr.define('extensions', function() {
     properties: {
       /**
        * The underlying permissions data.
-       * @type {chrome.developerPrivate.Permissions}
+       * @type {chrome.developerPrivate.RuntimeHostPermissions}
        */
       permissions: Object,
 
@@ -96,13 +96,12 @@ cr.define('extensions', function() {
      * @private
      */
     onHostAccessChange_: function(event) {
-      const select = /** @type {!HTMLSelectElement} */ (event.target);
-      const access =
-          /** @type {chrome.developerPrivate.HostAccess} */ (select.value);
+      const group = this.$['host-access'];
+      const access = group.selected;
 
       if (access == chrome.developerPrivate.HostAccess.ON_SPECIFIC_SITES &&
-          (!this.permissions.runtimeHostPermissions ||
-           this.permissions.runtimeHostPermissions.length == 0)) {
+          this.permissions.hostAccess !=
+              chrome.developerPrivate.HostAccess.ON_SPECIFIC_SITES) {
         // If the user is transitioning to the "on specific sites" option, show
         // the "add host" dialog. This serves two purposes:
         // - The user is prompted to add a host immediately, since otherwise
@@ -111,8 +110,8 @@ cr.define('extensions', function() {
         //   specific sites" is by checking if there are any specific sites.
         //   This ensures there will be at least one, so that the host access
         //   is properly calculated.
-        this.oldHostAccess_ = assert(this.permissions.hostAccess);
-        this.doShowHostDialog_(select, null);
+        this.oldHostAccess_ = this.permissions.hostAccess;
+        this.doShowHostDialog_(group, null);
       } else {
         this.delegate.setItemHostAccess(this.itemId, access);
       }
@@ -123,9 +122,26 @@ cr.define('extensions', function() {
      * @private
      */
     showSpecificSites_: function() {
-      return this.permissions &&
-          this.permissions.hostAccess ==
+      return this.permissions.hostAccess ==
           chrome.developerPrivate.HostAccess.ON_SPECIFIC_SITES;
+    },
+
+    /**
+     * Returns the granted host permissions as a sorted set of strings.
+     * @return {!Array<string>}
+     * @private
+     */
+    getRuntimeHosts_: function() {
+      if (!this.permissions.hosts) {
+        return [];
+      }
+
+      // Only show granted hosts in the list.
+      // TODO(devlin): For extensions that request a finite set of hosts,
+      // display them in a toggle list. https://crbug.com/891803.
+      return this.permissions.hosts.filter(control => control.granted)
+          .map(control => control.host)
+          .sort();
     },
 
     /**
@@ -157,6 +173,7 @@ cr.define('extensions', function() {
       cr.ui.focusWithoutInk(
           assert(this.hostDialogAnchorElement_, 'Host Anchor'));
       this.hostDialogAnchorElement_ = null;
+      this.oldHostAccess_ = null;
     },
 
     /** @private */
@@ -165,7 +182,7 @@ cr.define('extensions', function() {
       // if the dialog was shown when just transitioning to a new state.
       if (this.oldHostAccess_) {
         assert(this.permissions.hostAccess == this.oldHostAccess_);
-        this.$['host-access'].value = this.oldHostAccess_;
+        this.$['host-access'].selected = this.oldHostAccess_;
         this.oldHostAccess_ = null;
       }
     },

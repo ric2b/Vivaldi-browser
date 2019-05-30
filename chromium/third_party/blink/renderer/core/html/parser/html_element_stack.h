@@ -49,6 +49,8 @@ class HTMLElementStack {
 
   class ElementRecord final : public GarbageCollected<ElementRecord> {
    public:
+    ElementRecord(HTMLStackItem*, ElementRecord*);
+
     Element* GetElement() const { return item_->GetElement(); }
     ContainerNode* GetNode() const { return item_->GetNode(); }
     const AtomicString& NamespaceURI() const { return item_->NamespaceURI(); }
@@ -59,12 +61,10 @@ class HTMLElementStack {
 
     ElementRecord* Next() const { return next_.Get(); }
 
-    void Trace(blink::Visitor*);
+    void Trace(Visitor*);
 
    private:
     friend class HTMLElementStack;
-
-    ElementRecord(HTMLStackItem*, ElementRecord*);
 
     ElementRecord* ReleaseNext() { return next_.Release(); }
     void SetNext(ElementRecord* next) { next_ = next; }
@@ -165,7 +165,7 @@ class HTMLElementStack {
 
   ContainerNode* RootNode() const;
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
 #ifndef NDEBUG
   void Show();
@@ -191,8 +191,6 @@ class HTMLElementStack {
 
   DISALLOW_COPY_AND_ASSIGN(HTMLElementStack);
 };
-
-WILL_NOT_BE_EAGERLY_TRACED_CLASS(HTMLElementStack::ElementRecord);
 
 }  // namespace blink
 

@@ -103,8 +103,10 @@ class TabLifecycleUnitSource::TabLifecycleUnit
   bool CanFreeze(DecisionDetails* decision_details) const override;
   bool CanDiscard(LifecycleUnitDiscardReason reason,
                   DecisionDetails* decision_details) const override;
+  LifecycleUnitDiscardReason GetDiscardReason() const override;
   bool Freeze() override;
   bool Unfreeze() override;
+  bool Discard(LifecycleUnitDiscardReason discard_reason) override;
   ukm::SourceId GetUkmSourceId() const override;
 
   // Implementations of some functions from TabLifecycleUnitExternal. These are
@@ -128,9 +130,6 @@ class TabLifecycleUnitSource::TabLifecycleUnit
     kProactive,
     kExternalOrUrgent,
   };
-
-  // LifecycleUnitBase:
-  bool DiscardImpl(LifecycleUnitDiscardReason discard_reason) override;
 
   // Same as GetSource, but cast to the most derived type.
   TabLifecycleUnitSource* GetTabSource() const;
@@ -174,6 +173,18 @@ class TabLifecycleUnitSource::TabLifecycleUnit
   void CheckIfTabIsUsedInBackground(DecisionDetails* decision_details,
                                     InterventionType intervention_type) const;
 
+  // Runs the freezing heuristics checks on this tab and store the decision
+  // details in |decision_details|. This doesn't check for potential background
+  // feature usage.
+  void CanFreezeHeuristicsChecks(DecisionDetails* decision_details) const;
+
+  // Runs the discarding heuristics checks on this tab and store the decision
+  // details in |decision_details|. If |intervention_type| indicates that
+  // this is a proactive intervention then more heuristics will be
+  // applied. This doesn't check for potential background feature usage.
+  void CanDiscardHeuristicsChecks(DecisionDetails* decision_details,
+                                  LifecycleUnitDiscardReason reason) const;
+
   // List of observers to notify when the discarded state or the auto-
   // discardable state of this tab changes.
   base::ObserverList<TabLifecycleObserver>::Unchecked* observers_;
@@ -193,6 +204,11 @@ class TabLifecycleUnitSource::TabLifecycleUnit
 
   // When this is false, CanDiscard() always returns false.
   bool auto_discardable_ = true;
+
+  // Maintains the most recent LifecycleUnitDiscardReason that was passed into
+  // Discard().
+  LifecycleUnitDiscardReason discard_reason_ =
+      LifecycleUnitDiscardReason::EXTERNAL;
 
   // Timer that ensures that this tab does not wait forever for the callback
   // when it is being frozen.

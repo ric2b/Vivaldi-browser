@@ -15,12 +15,12 @@
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/page/autoscroll_controller.h"
 #include "third_party/blink/renderer/core/page/drag_data.h"
+#include "third_party/blink/renderer/core/page/drag_image.h"
 #include "third_party/blink/renderer/core/page/drag_state.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_request.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_test.h"
-#include "third_party/blink/renderer/platform/drag_image.h"
 
 namespace blink {
 
@@ -32,13 +32,13 @@ class DragMockChromeClient : public EmptyChromeClient {
                      const WebDragData&,
                      WebDragOperationsMask,
                      const SkBitmap& drag_image,
-                     const WebPoint& drag_image_offset) override {
+                     const gfx::Point& drag_image_offset) override {
     last_drag_image_size = WebSize(drag_image.width(), drag_image.height());
     last_drag_image_offset = drag_image_offset;
   }
 
   WebSize last_drag_image_size;
-  WebPoint last_drag_image_offset;
+  gfx::Point last_drag_image_offset;
 };
 
 class DragControllerTest : public RenderingTest {
@@ -46,14 +46,10 @@ class DragControllerTest : public RenderingTest {
   DragControllerTest()
       : RenderingTest(SingleChildLocalFrameClient::Create()),
 
-        chrome_client_(new DragMockChromeClient) {}
+        chrome_client_(MakeGarbageCollected<DragMockChromeClient>()) {}
   LocalFrame& GetFrame() const { return *GetDocument().GetFrame(); }
   DragMockChromeClient& GetChromeClient() const override {
     return *chrome_client_;
-  }
-
-  void UpdateAllLifecyclePhases() {
-    GetDocument().View()->UpdateAllLifecyclePhases();
   }
 
  private:
@@ -66,12 +62,12 @@ TEST_F(DragControllerTest, DragImageForSelectionUsesPageScaleFactor) {
       "by page scale factor</div>");
   GetFrame().GetPage()->GetVisualViewport().SetScale(1);
   GetFrame().Selection().SelectAll();
-  UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
   const std::unique_ptr<DragImage> image1(
       DragController::DragImageForSelection(GetFrame(), 0.75f));
   GetFrame().GetPage()->GetVisualViewport().SetScale(2);
   GetFrame().Selection().SelectAll();
-  UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
   const std::unique_ptr<DragImage> image2(
       DragController::DragImageForSelection(GetFrame(), 0.75f));
 
@@ -88,7 +84,7 @@ class DragControllerSimTest : public SimTest {};
 // https://crbug.com/733996.
 TEST_F(DragControllerSimTest, DropURLOnNonNavigatingClearsState) {
   WebView().GetPage()->GetSettings().SetNavigateOnDragDrop(false);
-  WebView().Resize(WebSize(800, 600));
+  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
   SimRequest main_resource("https://example.com/test.html", "text/html");
 
   LoadURL("https://example.com/test.html");
@@ -128,7 +124,7 @@ TEST_F(DragControllerSimTest, DropURLOnNonNavigatingClearsState) {
 // Regression test for https://crbug.com/685030
 TEST_F(DragControllerSimTest, ThrottledDocumentHandled) {
   WebView().GetPage()->GetSettings().SetNavigateOnDragDrop(false);
-  WebView().Resize(WebSize(800, 600));
+  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
   SimRequest main_resource("https://example.com/test.html", "text/html");
 
   LoadURL("https://example.com/test.html");
@@ -259,8 +255,8 @@ TEST_F(DragControllerTest, DragImageForSelectionClipsChildFrameToViewport) {
     </style>
     <div>abcdefg</div>
   )HTML");
-  UpdateAllLifecyclePhases();
-  auto& child_frame = *ToLocalFrame(GetFrame().Tree().FirstChild());
+  UpdateAllLifecyclePhasesForTest();
+  auto& child_frame = *To<LocalFrame>(GetFrame().Tree().FirstChild());
   child_frame.Selection().SelectAll();
 
   // The iframe's selection rect is in the frame's local coordinates and should
@@ -339,8 +335,8 @@ TEST_F(DragControllerTest,
   )HTML");
   const int page_scale_factor = 2;
   GetFrame().GetPage()->SetPageScaleFactor(page_scale_factor);
-  UpdateAllLifecyclePhases();
-  auto& child_frame = *ToLocalFrame(GetFrame().Tree().FirstChild());
+  UpdateAllLifecyclePhasesForTest();
+  auto& child_frame = *To<LocalFrame>(GetFrame().Tree().FirstChild());
   child_frame.Selection().SelectAll();
 
   // The iframe's selection rect is in the frame's local coordinates and should
@@ -483,9 +479,9 @@ TEST_F(DragControllerTest, DragLinkWithPageScaleFactor) {
   // The offset is mapped using integers which can introduce rounding errors
   // (see TODO in DragController::DoSystemDrag) so we accept values near our
   // expectation until more precise offset mapping is available.
-  EXPECT_NEAR(expected_offset.X(), GetChromeClient().last_drag_image_offset.x,
+  EXPECT_NEAR(expected_offset.X(), GetChromeClient().last_drag_image_offset.x(),
               1);
-  EXPECT_NEAR(expected_offset.Y(), GetChromeClient().last_drag_image_offset.y,
+  EXPECT_NEAR(expected_offset.Y(), GetChromeClient().last_drag_image_offset.y(),
               1);
 }
 

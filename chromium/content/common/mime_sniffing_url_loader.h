@@ -41,10 +41,10 @@ class MimeSniffingThrottle;
 //            type. The received body is kept in this loader until the mime type
 //            is decided. When the mime type is decided or all body has been
 //            received, this loader will dispatch queued messages like
-//            OnStartLoadingResponseBody() and OnComplete() to the destination
+//            OnStartLoadingResponseBody() to the destination
 //            loader client, and then the state is changed to kSending.
-// kSending: Receives the body and send it to the destination loader client. All
-//           data has been read by this loader, the state goes to kCompleted.
+// kSending: Receives the body and sends it to the destination loader client.
+//           The state changes to kCompleted after all data is sent.
 // kCompleted: All data has been sent to the destination loader.
 // kAborted: Unexpected behavior happens. Watchers, pipes and the binding from
 //           the source loader to |this| are stopped. All incoming messages from
@@ -67,14 +67,16 @@ class CONTENT_EXPORT MimeSniffingURLLoader
                     MimeSniffingURLLoader*>
   CreateLoader(base::WeakPtr<MimeSniffingThrottle> throttle,
                const GURL& response_url,
-               const network::ResourceResponseHead& response_head);
+               const network::ResourceResponseHead& response_head,
+               scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
  private:
   MimeSniffingURLLoader(
       base::WeakPtr<MimeSniffingThrottle> throttle,
       const GURL& response_url,
       const network::ResourceResponseHead& response_head,
-      network::mojom::URLLoaderClientPtr destination_url_loader_client);
+      network::mojom::URLLoaderClientPtr destination_url_loader_client,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   // network::mojom::URLLoaderClient implementation (called from the source of
   // the response):
@@ -94,10 +96,9 @@ class CONTENT_EXPORT MimeSniffingURLLoader
 
   // network::mojom::URLLoader implementation (called from the destination of
   // the response):
-  void FollowRedirect(const base::Optional<std::vector<std::string>>&
-                          to_be_removed_request_headers,
-                      const base::Optional<net::HttpRequestHeaders>&
-                          modified_request_headers) override;
+  void FollowRedirect(const std::vector<std::string>& removed_headers,
+                      const net::HttpRequestHeaders& modified_headers,
+                      const base::Optional<GURL>& new_url) override;
   void ProceedWithResponse() override;
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override;
@@ -126,6 +127,8 @@ class CONTENT_EXPORT MimeSniffingURLLoader
   // Capture the response head to defer to send it to the destination until the
   // mime type is decided.
   network::ResourceResponseHead response_head_;
+
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   enum class State { kWaitForBody, kSniffing, kSending, kCompleted, kAborted };
   State state_ = State::kWaitForBody;

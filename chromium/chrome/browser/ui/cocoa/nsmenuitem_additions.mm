@@ -78,6 +78,23 @@ void SetIsInputSourceDvorakQwertyForTesting(bool is_dvorak_qwerty) {
   NSUInteger eventModifiers =
       [event modifierFlags] & NSDeviceIndependentModifierFlagsMask;
 
+  // cmd-opt-a gives some weird char as characters and "a" as
+  // charactersWithoutModifiers with an US layout, but an "a" as characters and
+  // a weird char as "charactersWithoutModifiers" with a cyrillic layout. Oh,
+  // Cocoa! Instead of getting the current layout from Text Input Services,
+  // and then requesting the kTISPropertyUnicodeKeyLayoutData and looking in
+  // there, let's try a pragmatic hack.
+  if ([eventString length] == 0 ||
+      ([eventString characterAtIndex:0] > 0x7f &&
+       [[event characters] length] > 0 &&
+       [[event characters] characterAtIndex:0] <= 0x7f)) {
+    eventString = [event characters];
+
+    // Process the shift if necessary.
+    if (eventModifiers & NSShiftKeyMask)
+      eventString = [eventString uppercaseString];
+  }
+
   if ([eventString length] == 0 || [[self keyEquivalent] length] == 0)
     return NO;
 
@@ -110,22 +127,6 @@ void SetIsInputSourceDvorakQwertyForTesting(bool is_dvorak_qwerty) {
     eventModifiers |= NSFunctionKeyMask;
   }
 
-  // cmd-opt-a gives some weird char as characters and "a" as
-  // charactersWithoutModifiers with an US layout, but an "a" as characters and
-  // a weird char as "charactersWithoutModifiers" with a cyrillic layout. Oh,
-  // Cocoa! Instead of getting the current layout from Text Input Services,
-  // and then requesting the kTISPropertyUnicodeKeyLayoutData and looking in
-  // there, let's try a pragmatic hack.
-  if ([eventString characterAtIndex:0] > 0x7f &&
-      [[event characters] length] > 0 &&
-      [[event characters] characterAtIndex:0] <= 0x7f) {
-    eventString = [event characters];
-
-    // Process the shift if necessary.
-    if (eventModifiers & NSShiftKeyMask)
-      eventString = [eventString uppercaseString];
-  }
-
   // We intentionally leak this object.
   static __attribute__((unused)) KeyboardInputSourceListener* listener =
       [[KeyboardInputSourceListener alloc] init];
@@ -144,6 +145,20 @@ void SetIsInputSourceDvorakQwertyForTesting(bool is_dvorak_qwerty) {
     eventString = [NSString stringWithFormat:@"%C", shifted_character];
   }
 
+  // On all keyboards, treat cmd + <number key> as the equivalent numerical key.
+  // This is technically incorrect, since the actual character produced may not
+  // be a number key, but this causes Chrome to match platform behavior. For
+  // example, on the Czech keyboard, we want to interpret cmd + '+' as cmd +
+  // '1', even though the '1' character normally requires cmd + shift + '+'.
+  if (eventModifiers == NSCommandKeyMask) {
+    ui::KeyboardCode windows_keycode =
+        ui::KeyboardCodeFromKeyCode(event.keyCode);
+    if (windows_keycode >= ui::VKEY_0 && windows_keycode <= ui::VKEY_9) {
+      eventString =
+          [NSString stringWithFormat:@"%d", windows_keycode - ui::VKEY_0];
+    }
+  }
+
   // [ctr + shift + tab] generates the "End of Medium" keyEquivalent rather than
   // "Horizontal Tab". We still use "Horizontal Tab" in the main menu to match
   // the behavior of Safari and Terminal. Thus, we need to explicitly check for
@@ -154,7 +169,8 @@ void SetIsInputSourceDvorakQwertyForTesting(bool is_dvorak_qwerty) {
   } else {
     // Clear shift key for printable characters, excluding tab.
     if ((eventModifiers & (NSNumericPadKeyMask | NSFunctionKeyMask)) == 0 &&
-        [[self keyEquivalent] characterAtIndex:0] != '\r') {
+        [[self keyEquivalent] characterAtIndex:0] != '\r' &&
+        [[self keyEquivalent] characterAtIndex:0] != '\x9') {
       eventModifiers &= ~NSShiftKeyMask;
     }
   }

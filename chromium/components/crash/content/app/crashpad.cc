@@ -24,6 +24,8 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/system/sys_info.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/crash/content/app/crash_reporter_client.h"
 #include "third_party/crashpad/crashpad/client/annotation.h"
@@ -100,6 +102,7 @@ void InitializeCrashpadImpl(bool initial_client,
                             const std::string& process_type,
                             const std::string& user_data_dir,
                             const base::FilePath& exe_path,
+                            const std::vector<std::string>& initial_arguments,
                             bool embedded_handler) {
   static bool initialized = false;
   DCHECK(!initialized);
@@ -113,12 +116,14 @@ void InitializeCrashpadImpl(bool initial_client,
     // "relauncher" is hard-coded because it's a Chrome --type, but this
     // component can't see Chrome's switches. This is only used for argument
     // sanitization.
-    DCHECK(browser_process || process_type == "relauncher");
+    DCHECK(browser_process || process_type == "relauncher" ||
+           process_type == "app_shim");
 #elif defined(OS_WIN)
     // "Chrome Installer" is the name historically used for installer binaries
     // as processed by the backend.
     DCHECK(browser_process || process_type == "Chrome Installer" ||
-           process_type == "notification-helper");
+           process_type == "notification-helper" ||
+           process_type == "GCPW Installer" || process_type == "GCPW DLL");
 #elif defined(OS_LINUX) || defined(OS_ANDROID)
     DCHECK(browser_process);
 #else
@@ -131,7 +136,7 @@ void InitializeCrashpadImpl(bool initial_client,
   // database_path is only valid in the browser process.
   base::FilePath database_path = internal::PlatformCrashpadInitialization(
       initial_client, browser_process, embedded_handler, user_data_dir,
-      exe_path);
+      exe_path, initial_arguments);
 
 #if defined(OS_MACOSX)
 #if defined(NDEBUG)
@@ -161,10 +166,13 @@ void InitializeCrashpadImpl(bool initial_client,
 
   static crashpad::StringAnnotation<12> pid_key("pid");
 #if defined(OS_POSIX)
-  pid_key.Set(base::IntToString(getpid()));
+  pid_key.Set(base::NumberToString(getpid()));
 #elif defined(OS_WIN)
-  pid_key.Set(base::IntToString(::GetCurrentProcessId()));
+  pid_key.Set(base::NumberToString(::GetCurrentProcessId()));
 #endif
+
+  static crashpad::StringAnnotation<24> osarch_key("osarch");
+  osarch_key.Set(base::SysInfo::OperatingSystemArchitecture());
 
   logging::SetLogMessageHandler(LogMessageHandler);
 
@@ -201,7 +209,7 @@ void InitializeCrashpadImpl(bool initial_client,
 
 void InitializeCrashpad(bool initial_client, const std::string& process_type) {
   InitializeCrashpadImpl(initial_client, process_type, std::string(),
-                         base::FilePath(), false);
+                         base::FilePath(), std::vector<std::string>(), false);
 }
 
 #if defined(OS_WIN)
@@ -210,7 +218,17 @@ void InitializeCrashpadWithEmbeddedHandler(bool initial_client,
                                            const std::string& user_data_dir,
                                            const base::FilePath& exe_path) {
   InitializeCrashpadImpl(initial_client, process_type, user_data_dir, exe_path,
-                         true);
+                         std::vector<std::string>(), true);
+}
+
+void InitializeCrashpadWithDllEmbeddedHandler(
+    bool initial_client,
+    const std::string& process_type,
+    const std::string& user_data_dir,
+    const base::FilePath& exe_path,
+    const std::vector<std::string>& initial_arguments) {
+  InitializeCrashpadImpl(initial_client, process_type, user_data_dir, exe_path,
+                         initial_arguments, true);
 }
 #endif  // OS_WIN
 
@@ -252,9 +270,17 @@ bool GetUploadsEnabled() {
   return false;
 }
 
+#if !defined(OS_ANDROID)
 void DumpWithoutCrashing() {
   CRASHPAD_SIMULATE_CRASH();
 }
+#endif
+
+#if defined(OS_LINUX) || defined(OS_ANDROID)
+void CrashWithoutDumping(const std::string& message) {
+  crashpad::CrashpadClient::CrashWithoutDump(message);
+}
+#endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
 void GetReports(std::vector<Report>* reports) {
 #if defined(OS_WIN)
@@ -301,6 +327,14 @@ base::FilePath GetCrashpadDatabasePath() {
   return base::FilePath(GetCrashpadDatabasePath_ExportThunk());
 #else
   return base::FilePath(GetCrashpadDatabasePathImpl());
+#endif
+}
+
+void ClearReportsBetween(const base::Time& begin, const base::Time& end) {
+#if defined(OS_WIN)
+  ClearReportsBetween_ExportThunk(begin.ToTimeT(), end.ToTimeT());
+#else
+  ClearReportsBetweenImpl(begin.ToTimeT(), end.ToTimeT());
 #endif
 }
 
@@ -377,6 +411,21 @@ base::FilePath::StringType::const_pointer GetCrashpadDatabasePathImpl() {
     return nullptr;
 
   return g_database_path->value().c_str();
+}
+
+void ClearReportsBetweenImpl(time_t begin, time_t end) {
+  std::vector<Report> reports;
+  GetReports(&reports);
+  for (const Report& report : reports) {
+    // Delete if either time lies in the range, as they both reveal that the
+    // browser was open.
+    if ((begin <= report.capture_time && report.capture_time <= end) ||
+        (begin <= report.upload_time && report.upload_time <= end)) {
+      crashpad::UUID uuid;
+      uuid.InitializeFromString(report.local_id);
+      g_database->DeleteReport(uuid);
+    }
+  }
 }
 
 namespace internal {

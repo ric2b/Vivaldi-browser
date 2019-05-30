@@ -11,8 +11,8 @@
 #include "components/network_time/network_time_tracker.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_network_connection_tracker.h"
 #include "services/network/test/test_url_loader_factory.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -26,15 +26,13 @@ TestingApplicationContext::TestingApplicationContext()
       was_last_shutdown_clean_(false),
       test_url_loader_factory_(
           std::make_unique<network::TestURLLoaderFactory>()),
-      system_shared_url_loader_factory_(
-          base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
-              test_url_loader_factory_.get())) {
+      test_network_connection_tracker_(
+          network::TestNetworkConnectionTracker::CreateInstance()) {
   DCHECK(!GetApplicationContext());
   SetApplicationContext(this);
 }
 
 TestingApplicationContext::~TestingApplicationContext() {
-  system_shared_url_loader_factory_->Detach();
   DCHECK_EQ(this, GetApplicationContext());
   DCHECK(!local_state_);
   SetApplicationContext(nullptr);
@@ -98,7 +96,7 @@ TestingApplicationContext::GetSystemURLRequestContext() {
 scoped_refptr<network::SharedURLLoaderFactory>
 TestingApplicationContext::GetSharedURLLoaderFactory() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return system_shared_url_loader_factory_;
+  return test_url_loader_factory_->GetSafeWeakWrapper();
 }
 
 network::mojom::NetworkContext*
@@ -147,7 +145,13 @@ rappor::RapporServiceImpl* TestingApplicationContext::GetRapporServiceImpl() {
   return nullptr;
 }
 
-net_log::ChromeNetLog* TestingApplicationContext::GetNetLog() {
+net::NetLog* TestingApplicationContext::GetNetLog() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return nullptr;
+}
+
+net_log::NetExportFileWriter*
+TestingApplicationContext::GetNetExportFileWriter() {
   DCHECK(thread_checker_.CalledOnValidThread());
   return nullptr;
 }
@@ -178,4 +182,10 @@ component_updater::ComponentUpdateService*
 TestingApplicationContext::GetComponentUpdateService() {
   DCHECK(thread_checker_.CalledOnValidThread());
   return nullptr;
+}
+
+network::NetworkConnectionTracker*
+TestingApplicationContext::GetNetworkConnectionTracker() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return test_network_connection_tracker_.get();
 }

@@ -8,7 +8,10 @@
 #include <vector>
 
 #include "base/big_endian.h"
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/task/post_task.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/base/net_errors.h"
@@ -53,9 +56,9 @@ void WiFiDisplayMediaServiceImpl::Create(
 void WiFiDisplayMediaServiceImpl::BindToRequest(
     mojom::WiFiDisplayMediaServiceRequest request,
     content::RenderFrameHost* render_frame_host) {
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::Bind(WiFiDisplayMediaServiceImpl::Create,
-                                     base::Passed(std::move(request))));
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
+      base::BindOnce(WiFiDisplayMediaServiceImpl::Create, std::move(request)));
 }
 
 WiFiDisplayMediaServiceImpl::WiFiDisplayMediaServiceImpl()

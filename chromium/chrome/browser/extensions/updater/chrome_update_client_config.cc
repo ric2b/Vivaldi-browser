@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "base/command_line.h"
+#include "base/containers/flat_map.h"
 #include "base/no_destructor.h"
 #include "base/version.h"
 #include "chrome/browser/component_updater/component_updater_utils.h"
@@ -16,6 +17,8 @@
 #include "chrome/common/channel_info.h"
 #include "components/prefs/pref_service.h"
 #include "components/update_client/activity_data_service.h"
+#include "components/update_client/net/network_chromium.h"
+#include "components/update_client/protocol_handler.h"
 #include "components/update_client/update_query_params.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -154,7 +157,8 @@ std::string ChromeUpdateClientConfig::GetOSLongName() const {
   return impl_.GetOSLongName();
 }
 
-std::string ChromeUpdateClientConfig::ExtraRequestParams() const {
+base::flat_map<std::string, std::string>
+ChromeUpdateClientConfig::ExtraRequestParams() const {
   return impl_.ExtraRequestParams();
 }
 
@@ -162,10 +166,15 @@ std::string ChromeUpdateClientConfig::GetDownloadPreference() const {
   return std::string();
 }
 
-scoped_refptr<network::SharedURLLoaderFactory>
-ChromeUpdateClientConfig::URLLoaderFactory() const {
-  return content::BrowserContext::GetDefaultStoragePartition(context_)
-      ->GetURLLoaderFactoryForBrowserProcess();
+scoped_refptr<update_client::NetworkFetcherFactory>
+ChromeUpdateClientConfig::GetNetworkFetcherFactory() {
+  if (!network_fetcher_factory_) {
+    network_fetcher_factory_ =
+        base::MakeRefCounted<update_client::NetworkFetcherChromiumFactory>(
+            content::BrowserContext::GetDefaultStoragePartition(context_)
+                ->GetURLLoaderFactoryForBrowserProcess());
+  }
+  return network_fetcher_factory_;
 }
 
 std::unique_ptr<service_manager::Connector>
@@ -211,6 +220,16 @@ std::vector<uint8_t> ChromeUpdateClientConfig::GetRunActionKeyHash() const {
 
 std::string ChromeUpdateClientConfig::GetAppGuid() const {
   return impl_.GetAppGuid();
+}
+
+std::unique_ptr<update_client::ProtocolHandlerFactory>
+ChromeUpdateClientConfig::GetProtocolHandlerFactory() const {
+  return impl_.GetProtocolHandlerFactory();
+}
+
+update_client::RecoveryCRXElevator
+ChromeUpdateClientConfig::GetRecoveryCRXElevator() const {
+  return impl_.GetRecoveryCRXElevator();
 }
 
 ChromeUpdateClientConfig::~ChromeUpdateClientConfig() {}

@@ -43,7 +43,8 @@ void ManagedBookmarksPolicyHandler::ApplyPolicySettings(
   prefs->SetString(bookmarks::prefs::kManagedBookmarksFolderName,
                    GetFolderName(*list));
   FilterBookmarks(list);
-  prefs->SetValue(bookmarks::prefs::kManagedBookmarks, std::move(value));
+  prefs->SetValue(bookmarks::prefs::kManagedBookmarks,
+                  base::Value::FromUniquePtrValue(std::move(value)));
 }
 
 std::string
@@ -66,7 +67,7 @@ ManagedBookmarksPolicyHandler::GetFolderName(const base::ListValue& list) {
 
 void ManagedBookmarksPolicyHandler::FilterBookmarks(base::ListValue* list) {
   // Remove any non-conforming values found.
-  base::ListValue::iterator it = list->begin();
+  auto it = list->begin();
   while (it != list->end()) {
     base::DictionaryValue* dict = NULL;
     if (!it->GetAsDictionary(&dict)) {

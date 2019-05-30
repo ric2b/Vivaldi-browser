@@ -21,6 +21,7 @@
 #include "ui/android/resources/resource_manager_impl.h"
 #include "ui/android/view_android.h"
 #include "ui/gfx/android/java_bitmap.h"
+#include "ui/gfx/geometry/size_conversions.h"
 
 using base::android::JavaParamRef;
 using base::android::JavaRef;
@@ -33,12 +34,18 @@ ContextualSearchSceneLayer::ContextualSearchSceneLayer(
     : SceneLayer(env, jobj),
       env_(env),
       object_(jobj),
-      base_page_brightness_(1.0f),
+      color_overlay_(cc::SolidColorLayer::Create()),
       content_container_(cc::Layer::Create()) {
   // Responsible for moving the base page without modifying the layer itself.
   content_container_->SetIsDrawable(true);
   content_container_->SetPosition(gfx::PointF(0.0f, 0.0f));
   layer()->AddChild(content_container_);
+
+  color_overlay_->SetIsDrawable(true);
+  color_overlay_->SetOpacity(0.0f);
+  color_overlay_->SetBackgroundColor(SK_ColorBLACK);
+  color_overlay_->SetPosition(gfx::PointF(0.f, 0.f));
+  layer()->AddChild(color_overlay_);
 }
 
 void ContextualSearchSceneLayer::CreateContextualSearchLayer(
@@ -62,6 +69,7 @@ void ContextualSearchSceneLayer::UpdateContextualSearchLayer(
     JNIEnv* env,
     const JavaParamRef<jobject>& object,
     jint search_bar_background_resource_id,
+    jint search_bar_background_color,
     jint search_context_resource_id,
     jint search_term_resource_id,
     jint search_caption_resource_id,
@@ -76,6 +84,8 @@ void ContextualSearchSceneLayer::UpdateContextualSearchLayer(
     jint bar_banner_ripple_resource_id,
     jint bar_banner_text_resource_id,
     jfloat dp_to_px,
+    jfloat layout_width,
+    jfloat layout_height,
     jfloat base_page_brightness,
     jfloat base_page_offset,
     const JavaParamRef<jobject>& jweb_contents,
@@ -109,6 +119,7 @@ void ContextualSearchSceneLayer::UpdateContextualSearchLayer(
     jstring j_thumbnail_url,
     jfloat custom_image_visibility_percentage,
     jint bar_image_size,
+    jint icon_color,
     jfloat arrow_icon_opacity,
     jfloat arrow_icon_rotation,
     jfloat close_icon_opacity,
@@ -143,29 +154,24 @@ void ContextualSearchSceneLayer::UpdateContextualSearchLayer(
       web_contents ? web_contents->GetNativeView()->GetLayer() : nullptr;
 
   // Fade the base page out.
-  if (base_page_brightness_ != base_page_brightness) {
-    base_page_brightness_ = base_page_brightness;
-    cc::FilterOperations filters;
-    if (base_page_brightness < 1.f) {
-      filters.Append(
-          cc::FilterOperation::CreateBrightnessFilter(base_page_brightness));
-    }
-    content_container_->SetFilters(filters);
-  }
+  color_overlay_->SetOpacity(1.f - base_page_brightness);
+  color_overlay_->SetBounds(
+      gfx::ToCeiledSize(gfx::SizeF(layout_width, layout_height)));
 
   // Move the base page contents up.
   content_container_->SetPosition(gfx::PointF(0.0f, base_page_offset));
 
   contextual_search_layer_->SetProperties(
-      search_bar_background_resource_id, search_context_resource_id,
-      search_term_resource_id, search_caption_resource_id,
-      search_bar_shadow_resource_id, search_provider_icon_resource_id,
-      quick_action_icon_resource_id, arrow_up_resource_id,
-      close_icon_resource_id, progress_bar_background_resource_id,
-      progress_bar_resource_id, search_promo_resource_id,
-      bar_banner_ripple_resource_id, bar_banner_text_resource_id, dp_to_px,
-      content_layer, search_promo_visible, search_promo_height,
-      search_promo_opacity, search_bar_banner_visible, search_bar_banner_height,
+      search_bar_background_resource_id, search_bar_background_color,
+      search_context_resource_id, search_term_resource_id,
+      search_caption_resource_id, search_bar_shadow_resource_id,
+      search_provider_icon_resource_id, quick_action_icon_resource_id,
+      arrow_up_resource_id, close_icon_resource_id,
+      progress_bar_background_resource_id, progress_bar_resource_id,
+      search_promo_resource_id, bar_banner_ripple_resource_id,
+      bar_banner_text_resource_id, dp_to_px, content_layer,
+      search_promo_visible, search_promo_height, search_promo_opacity,
+      search_bar_banner_visible, search_bar_banner_height,
       search_bar_banner_padding, search_bar_banner_ripple_width,
       search_bar_banner_ripple_opacity, search_bar_banner_text_opacity,
       search_panel_x, search_panel_y, search_panel_width, search_panel_height,
@@ -175,12 +181,13 @@ void ContextualSearchSceneLayer::UpdateContextualSearchLayer(
       search_caption_visible, search_bar_border_visible,
       search_bar_border_height, search_bar_shadow_visible,
       search_bar_shadow_opacity, quick_action_icon_visible, thumbnail_visible,
-      custom_image_visibility_percentage, bar_image_size, arrow_icon_opacity,
-      arrow_icon_rotation, close_icon_opacity, progress_bar_visible,
-      progress_bar_height, progress_bar_opacity, progress_bar_completion,
-      divider_line_visibility_percentage, divider_line_width,
-      divider_line_height, divider_line_color, divider_line_x_offset,
-      touch_highlight_visible, touch_highlight_x_offset, touch_highlight_width);
+      custom_image_visibility_percentage, bar_image_size, icon_color,
+      arrow_icon_opacity, arrow_icon_rotation, close_icon_opacity,
+      progress_bar_visible, progress_bar_height, progress_bar_opacity,
+      progress_bar_completion, divider_line_visibility_percentage,
+      divider_line_width, divider_line_height, divider_line_color,
+      divider_line_x_offset, touch_highlight_visible, touch_highlight_x_offset,
+      touch_highlight_width);
 
   // Make the layer visible if it is not already.
   contextual_search_layer_->layer()->SetHideLayerAndSubtree(false);
@@ -236,9 +243,7 @@ void ContextualSearchSceneLayer::HideTree(JNIEnv* env,
     contextual_search_layer_->layer()->SetHideLayerAndSubtree(true);
   }
   // Reset base page brightness.
-  cc::FilterOperations filters;
-  filters.Append(cc::FilterOperation::CreateBrightnessFilter(1.0f));
-  content_container_->SetFilters(filters);
+  color_overlay_->SetOpacity(0.f);
   // Reset base page offset.
   content_container_->SetPosition(gfx::PointF(0.0f, 0.0f));
 }

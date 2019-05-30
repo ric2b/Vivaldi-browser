@@ -15,6 +15,7 @@
 #include "base/task/post_task.h"
 #include "components/crx_file/crx_verifier.h"
 #include "components/update_client/utils.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "crypto/sha2.h"
 #include "extensions/browser/content_verifier.h"
@@ -25,6 +26,7 @@
 #include "extensions/browser/install/crx_install_error.h"
 #include "extensions/browser/updater/manifest_fetch_data.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/verifier_formats.h"
 
 namespace extensions {
 
@@ -104,8 +106,9 @@ UpdateDataProvider::GetData(bool install_immediately,
     crx_component->requires_network_encryption = true;
     crx_component->crx_format_requirement =
         extension->from_webstore()
-            ? crx_file::VerifierFormat::CRX3_WITH_PUBLISHER_PROOF
-            : crx_file::VerifierFormat::CRX2_OR_CRX3;
+            ? GetWebstoreVerifierFormat()
+            : GetPolicyVerifierFormat(
+                  extension_prefs->InsecureExtensionUpdatesEnabled());
     crx_component->installer = base::MakeRefCounted<ExtensionInstaller>(
         id, extension->path(), install_immediately,
         base::BindOnce(&UpdateDataProvider::RunInstallCallback, this));
@@ -147,7 +150,7 @@ void UpdateDataProvider::RunInstallCallback(
     return;
   }
 
-  content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::UI)
+  base::CreateSingleThreadTaskRunnerWithTraits({content::BrowserThread::UI})
       ->PostTask(
           FROM_HERE,
           base::BindOnce(InstallUpdateCallback, browser_context_, extension_id,

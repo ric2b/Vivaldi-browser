@@ -27,17 +27,17 @@
 
 #ifndef EGL_CHROMIUM_create_context_bind_generates_resource
 #define EGL_CHROMIUM_create_context_bind_generates_resource 1
-#define EGL_CONTEXT_BIND_GENERATES_RESOURCE_CHROMIUM 0x3AAD
+#define EGL_CONTEXT_BIND_GENERATES_RESOURCE_CHROMIUM 0x33AD
 #endif /* EGL_CHROMIUM_create_context_bind_generates_resource */
 
 #ifndef EGL_ANGLE_create_context_webgl_compatibility
 #define EGL_ANGLE_create_context_webgl_compatibility 1
-#define EGL_CONTEXT_WEBGL_COMPATIBILITY_ANGLE 0x3AAC
+#define EGL_CONTEXT_WEBGL_COMPATIBILITY_ANGLE 0x33AC
 #endif /* EGL_ANGLE_create_context_webgl_compatibility */
 
 #ifndef EGL_ANGLE_display_texture_share_group
 #define EGL_ANGLE_display_texture_share_group 1
-#define EGL_DISPLAY_TEXTURE_SHARE_GROUP_ANGLE 0x3AAF
+#define EGL_DISPLAY_TEXTURE_SHARE_GROUP_ANGLE 0x33AF
 #endif /* EGL_ANGLE_display_texture_share_group */
 
 #ifndef EGL_ANGLE_create_context_client_arrays
@@ -62,11 +62,7 @@ using ui::GetLastEGLErrorString;
 namespace gl {
 
 GLContextEGL::GLContextEGL(GLShareGroup* share_group)
-    : GLContextReal(share_group),
-      context_(EGL_NO_CONTEXT),
-      display_(EGL_NO_DISPLAY),
-      config_(nullptr),
-      unbind_fbo_on_makecurrent_(false) {}
+    : GLContextReal(share_group) {}
 
 bool GLContextEGL::Initialize(GLSurface* compatible_surface,
                               const GLContextAttribs& attribs) {
@@ -278,8 +274,10 @@ void GLContextEGL::ReleaseYUVToRGBConverters() {
 
 bool GLContextEGL::MakeCurrent(GLSurface* surface) {
   DCHECK(context_);
+  if (lost_)
+    return false;
   if (IsCurrent(surface))
-      return true;
+    return true;
 
   ScopedReleaseCurrent release_current;
   TRACE_EVENT2("gpu", "GLContextEGL::MakeCurrent",
@@ -326,14 +324,20 @@ void GLContextEGL::ReleaseCurrent(GLSurface* surface) {
     glBindFramebufferEXT(GL_FRAMEBUFFER, 0);
 
   SetCurrent(nullptr);
-  eglMakeCurrent(display_,
-                 EGL_NO_SURFACE,
-                 EGL_NO_SURFACE,
-                 EGL_NO_CONTEXT);
+  if (!eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                      EGL_NO_CONTEXT)) {
+    DVLOG(1) << "eglMakeCurrent failed to release current with error "
+             << GetLastEGLErrorString();
+    lost_ = true;
+  }
+
+  DCHECK(!IsCurrent(nullptr));
 }
 
 bool GLContextEGL::IsCurrent(GLSurface* surface) {
   DCHECK(context_);
+  if (lost_)
+    return false;
 
   bool native_context_is_current = context_ == eglGetCurrentContext();
 

@@ -15,7 +15,6 @@
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_impl.h"
-#include "ui/views/controls/button/blue_button.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
@@ -36,12 +35,36 @@ namespace views {
 
 namespace {
 
-DEFINE_LOCAL_UI_CLASS_PROPERTY_KEY(bool, kIsButtonProperty, false);
+DEFINE_UI_CLASS_PROPERTY_KEY(bool, kIsButtonProperty, false)
 
 // How long the hover animation takes if uninterrupted.
 const int kHoverFadeDurationMs = 150;
 
 }  // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+// WidgetObserverButtonBridge:
+Button::WidgetObserverButtonBridge::WidgetObserverButtonBridge(Button* button)
+    : owner_(button) {
+  DCHECK(button->GetWidget());
+  button->GetWidget()->AddObserver(this);
+}
+
+Button::WidgetObserverButtonBridge::~WidgetObserverButtonBridge() {
+  if (owner_)
+    owner_->GetWidget()->RemoveObserver(this);
+}
+
+void Button::WidgetObserverButtonBridge::OnWidgetActivationChanged(
+    Widget* widget,
+    bool active) {
+  owner_->WidgetActivationChanged(widget, active);
+}
+
+void Button::WidgetObserverButtonBridge::OnWidgetDestroying(Widget* widget) {
+  widget->RemoveObserver(this);
+  owner_ = nullptr;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Button, static public:
@@ -89,8 +112,6 @@ void Button::SetFocusForPlatform() {
 
 void Button::SetTooltipText(const base::string16& tooltip_text) {
   tooltip_text_ = tooltip_text;
-  if (accessible_name_.empty())
-    accessible_name_ = tooltip_text_;
   OnSetTooltipText(tooltip_text);
   TooltipTextChanged();
 }
@@ -98,6 +119,10 @@ void Button::SetTooltipText(const base::string16& tooltip_text) {
 void Button::SetAccessibleName(const base::string16& name) {
   accessible_name_ = name;
   NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged, true);
+}
+
+const base::string16& Button::GetAccessibleName() const {
+  return accessible_name_.empty() ? tooltip_text_ : accessible_name_;
 }
 
 void Button::SetState(ButtonState state) {
@@ -127,6 +152,14 @@ void Button::SetState(ButtonState state) {
   state_ = state;
   StateChanged(old_state);
   SchedulePaint();
+}
+
+Button::ButtonState Button::GetVisualState() const {
+  if (PlatformStyle::kInactiveWidgetControlsAppearDisabled && GetWidget() &&
+      !GetWidget()->IsActive()) {
+    return STATE_DISABLED;
+  }
+  return state();
 }
 
 void Button::StartThrobbing(int cycles_til_stop) {
@@ -168,6 +201,12 @@ bool Button::IsHotTracked() const {
 
 void Button::SetFocusPainter(std::unique_ptr<Painter> focus_painter) {
   focus_painter_ = std::move(focus_painter);
+}
+
+void Button::SetHighlighted(bool bubble_visible) {
+  AnimateInkDrop(bubble_visible ? views::InkDropState::ACTIVATED
+                                : views::InkDropState::DEACTIVATED,
+                 nullptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -312,11 +351,6 @@ bool Button::OnKeyReleased(const ui::KeyEvent& event) {
 }
 
 void Button::OnGestureEvent(ui::GestureEvent* event) {
-  if (state_ == STATE_DISABLED) {
-    InkDropHostView::OnGestureEvent(event);
-    return;
-  }
-
   if (event->type() == ui::ET_GESTURE_TAP && IsTriggerableEvent(*event)) {
     // Set the button state to hot and start the animation fully faded in. The
     // GESTURE_END event issued immediately after will set the state to
@@ -325,18 +359,16 @@ void Button::OnGestureEvent(ui::GestureEvent* event) {
     SetState(STATE_HOVERED);
     hover_animation_.Reset(1.0);
     NotifyClick(*event);
-    event->StopPropagation();
+    event->SetHandled();
   } else if (event->type() == ui::ET_GESTURE_TAP_DOWN &&
              ShouldEnterPushedState(*event)) {
     SetState(STATE_PRESSED);
     RequestFocusFromEvent();
-    event->StopPropagation();
+    event->SetHandled();
   } else if (event->type() == ui::ET_GESTURE_TAP_CANCEL ||
              event->type() == ui::ET_GESTURE_END) {
     SetState(STATE_NORMAL);
   }
-  if (!event->handled())
-    InkDropHostView::OnGestureEvent(event);
 }
 
 bool Button::AcceleratorPressed(const ui::Accelerator& accelerator) {
@@ -393,7 +425,7 @@ void Button::OnPaint(gfx::Canvas* canvas) {
 
 void Button::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ax::mojom::Role::kButton;
-  node_data->SetName(accessible_name_);
+  node_data->SetName(GetAccessibleName());
   if (!enabled())
     node_data->SetRestriction(ax::mojom::Restriction::kDisabled);
 
@@ -450,11 +482,19 @@ void Button::OnBlur() {
     SchedulePaint();
 }
 
+void Button::AddedToWidget() {
+  if (PlatformStyle::kInactiveWidgetControlsAppearDisabled)
+    widget_observer_ = std::make_unique<WidgetObserverButtonBridge>(this);
+}
+
+void Button::RemovedFromWidget() {
+  widget_observer_.reset();
+}
+
 std::unique_ptr<InkDrop> Button::CreateInkDrop() {
-  std::unique_ptr<views::InkDropImpl> ink_drop = CreateDefaultInkDropImpl();
+  std::unique_ptr<InkDrop> ink_drop = InkDropHostView::CreateInkDrop();
   ink_drop->SetShowHighlightOnFocus(!focus_ring_);
-  ink_drop->SetAutoHighlightModeForPlatform();
-  return std::move(ink_drop);
+  return ink_drop;
 }
 
 SkColor Button::GetInkDropBaseColor() const {
@@ -560,6 +600,10 @@ bool Button::ShouldEnterHoveredState() {
 #endif
 
   return check_mouse_position && IsMouseHovered();
+}
+
+void Button::WidgetActivationChanged(Widget* widget, bool active) {
+  StateChanged(state());
 }
 
 }  // namespace views

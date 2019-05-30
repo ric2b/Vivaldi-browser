@@ -7,19 +7,18 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/elevation_icon_setter.h"
-#include "chrome/browser/ui/views_mode_controller.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link.h"
-#include "ui/views/view_properties.h"
+#include "ui/views/view_class_properties.h"
 
 #include "app/vivaldi_apptools.h"
 #include "ui/infobar_container_web_proxy.h"
@@ -33,10 +32,6 @@ std::unique_ptr<infobars::InfoBar> InfoBarService::CreateConfirmInfoBar(
         std::move(delegate), web_contents());
   }
 
-#if defined(OS_MACOSX)
-  if (views_mode_controller::IsViewsBrowserCocoa())
-    return InfoBarService::CreateConfirmInfoBarCocoa(std::move(delegate));
-#endif
   return std::make_unique<ConfirmInfoBar>(std::move(delegate));
 }
 

@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -13,11 +14,11 @@
 #include "ui/base/ui_base_switches.h"
 #include "ui/ozone/common/gpu/ozone_gpu_message_params.h"
 #include "ui/ozone/common/gpu/ozone_gpu_messages.h"
+#include "ui/ozone/platform/drm/common/drm_overlay_candidates.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/host/drm_cursor.h"
 #include "ui/ozone/platform/drm/host/drm_display_host_manager.h"
-#include "ui/ozone/platform/drm/host/drm_overlay_candidates_host.h"
-#include "ui/ozone/platform/drm/host/drm_overlay_manager.h"
+#include "ui/ozone/platform/drm/host/drm_overlay_manager_host.h"
 #include "ui/ozone/platform/drm/host/gpu_thread_observer.h"
 
 namespace ui {
@@ -78,9 +79,8 @@ void CursorIPC::Send(IPC::Message* message) {
                            FROM_HERE, base::BindOnce(send_callback_, message)))
     return;
 
-  // Drop disconnected updates. DrmWindowHost will call
-  // CommitBoundsChange() when we connect to initialize the cursor
-  // location.
+  // Drop disconnected updates. The cursor will get set once we connect, via
+  // SetDrmCursorProxy().
   delete message;
 }
 
@@ -304,7 +304,7 @@ bool DrmGpuPlatformSupportHost::GpuRemoveGraphicsDevice(
 
 // Overlays
 void DrmGpuPlatformSupportHost::RegisterHandlerForDrmOverlayManager(
-    DrmOverlayManager* handler) {
+    DrmOverlayManagerHost* handler) {
   overlay_manager_ = handler;
 }
 

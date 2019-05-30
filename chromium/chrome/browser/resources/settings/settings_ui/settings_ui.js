@@ -23,7 +23,7 @@ Polymer({
   behaviors: [
     settings.RouteObserverBehavior,
     CrContainerShadowBehavior,
-    settings.FindShortcutBehavior,
+    FindShortcutBehavior,
   ],
 
   properties: {
@@ -54,20 +54,13 @@ Polymer({
     showAndroidApps_: Boolean,
 
     /** @private */
+    showKioskNextShell_: Boolean,
+
+    /** @private */
     showCrostini_: Boolean,
 
     /** @private */
-    showMultidevice_: Boolean,
-
-    /** @private */
     havePlayStoreApp_: Boolean,
-
-    /**
-     * TODO(jdoerrie): https://crbug.com/854562.
-     * Remove once Autofill Home is launched.
-     * @private
-     */
-    autofillHomeEnabled_: Boolean,
 
     /** @private */
     lastSearchQuery_: {
@@ -92,12 +85,12 @@ Polymer({
    */
   ready: function() {
     // Lazy-create the drawer the first time it is opened or swiped into view.
-    listenOnce(this.$.drawer, 'open-changed', () => {
+    listenOnce(this.$.drawer, 'cr-drawer-opening', () => {
       this.$.drawerTemplate.if = true;
     });
 
     window.addEventListener('popstate', e => {
-      this.$.drawer.closeDrawer();
+      this.$.drawer.cancel();
     });
 
     CrPolicyStrings = {
@@ -146,16 +139,12 @@ Polymer({
 
     this.showAndroidApps_ = loadTimeData.valueExists('androidAppsVisible') &&
         loadTimeData.getBoolean('androidAppsVisible');
+    this.showKioskNextShell_ = loadTimeData.valueExists('showKioskNextShell') &&
+        loadTimeData.getBoolean('showKioskNextShell');
     this.showCrostini_ = loadTimeData.valueExists('showCrostini') &&
         loadTimeData.getBoolean('showCrostini');
-    this.showMultidevice_ =
-        loadTimeData.valueExists('enableMultideviceSettings') &&
-        loadTimeData.getBoolean('enableMultideviceSettings');
     this.havePlayStoreApp_ = loadTimeData.valueExists('havePlayStoreApp') &&
         loadTimeData.getBoolean('havePlayStoreApp');
-    this.autofillHomeEnabled_ =
-        loadTimeData.valueExists('autofillHomeEnabled') &&
-        loadTimeData.getBoolean('autofillHomeEnabled');
 
     this.addEventListener('show-container', () => {
       this.$.container.style.visibility = 'visible';
@@ -181,7 +170,12 @@ Polymer({
     settings.setGlobalScrollTarget(this.$.container);
 
     const scrollToTop = top => new Promise(resolve => {
-      this.$.container.scrollTo({top, behavior: 'smooth'});
+      // When transitioning  back to main page from a subpage on ChromeOS, using
+      // 'smooth' scroll here results in the scroll changing to whatever is last
+      // value of |top|. This happens even after setting the scroll position the
+      // UI or programmatically.
+      const behavior = cr.isChromeOS ? 'auto' : 'smooth';
+      this.$.container.scrollTo({top: top, behavior: behavior});
       const onScroll = () => {
         this.debounce('scrollEnd', () => {
           this.$.container.removeEventListener('scroll', onScroll);
@@ -197,8 +191,6 @@ Polymer({
       scrollToTop(e.detail.bottom - this.$.container.clientHeight)
           .then(e.detail.callback);
     });
-
-    this.becomeActiveFindShortcutListener();
   },
 
   /** @override */
@@ -209,8 +201,9 @@ Polymer({
   /** @param {!settings.Route} route */
   currentRouteChanged: function(route) {
     const urlSearchQuery = settings.getQueryParameters().get('search') || '';
-    if (urlSearchQuery == this.lastSearchQuery_)
+    if (urlSearchQuery == this.lastSearchQuery_) {
       return;
+    }
 
     this.lastSearchQuery_ = urlSearchQuery;
 
@@ -229,21 +222,26 @@ Polymer({
     this.$.main.searchContents(urlSearchQuery);
   },
 
-  // Override settings.FindShortcutBehavior methods.
+  // Override FindShortcutBehavior methods.
   handleFindShortcut: function(modalContextOpen) {
-    if (modalContextOpen)
+    if (modalContextOpen) {
       return false;
+    }
     this.$$('cr-toolbar').getSearchField().showAndFocus();
     return true;
   },
 
+  // Override FindShortcutBehavior methods.
+  searchInputHasFocus: function() {
+    return this.$$('cr-toolbar').getSearchField().isSearchFocused();
+  },
+
   /**
-   * @param {!CustomEvent} e
+   * @param {!CustomEvent<string>} e
    * @private
    */
   onRefreshPref_: function(e) {
-    const prefName = /** @type {string} */ (e.detail);
-    return /** @type {SettingsPrefsElement} */ (this.$.prefs).refresh(prefName);
+    return /** @type {SettingsPrefsElement} */ (this.$.prefs).refresh(e.detail);
   },
 
   /**
@@ -252,14 +250,7 @@ Polymer({
    * @private
    */
   onSearchChanged_: function(e) {
-    // Trim leading whitespace only, to prevent searching for empty string. This
-    // still allows the user to search for 'foo bar', while taking a long pause
-    // after typing 'foo '.
-    const query = e.detail.replace(/^\s+/, '');
-    // Prevent duplicate history entries.
-    if (query == this.lastSearchQuery_)
-      return;
-
+    const query = e.detail;
     settings.navigateTo(
         settings.routes.BASIC,
         query.length > 0 ?
@@ -269,12 +260,11 @@ Polymer({
   },
 
   /**
-   * @param {!Event} event
+   * Called when a section is selected.
    * @private
    */
-  onIronActivate_: function(event) {
-    if (event.detail.item.id != 'advancedSubmenu')
-      this.$.drawer.closeDrawer();
+  onIronActivate_: function() {
+    this.$.drawer.close();
   },
 
   /** @private */
@@ -282,8 +272,21 @@ Polymer({
     this.$.drawer.toggle();
   },
 
-  /** @private */
-  onMenuClosed_: function() {
+  /**
+   * When this is called, The drawer animation is finished, and the dialog no
+   * longer has focus. The selected section will gain focus if one was selected.
+   * Otherwise, the drawer was closed due being canceled, and the main settings
+   * container is given focus. That way the arrow keys can be used to scroll
+   * the container, and pressing tab focuses a component in settings.
+   * @private
+   */
+  onMenuClose_: function() {
+    if (!this.$.drawer.wasCanceled()) {
+      // If a navigation happened, MainPageBehavior#currentRouteChanged handles
+      // focusing the corresponding section.
+      return;
+    }
+
     // Add tab index so that the container can be focused.
     this.$.container.setAttribute('tabindex', '-1');
     this.$.container.focus();

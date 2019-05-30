@@ -6,7 +6,6 @@
 
 #include "ash/public/cpp/ash_constants.h"
 #include "ash/public/cpp/ash_features.h"
-#include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_ink_drop_style.h"
 #include "ash/system/tray/tray_popup_utils.h"
@@ -18,6 +17,7 @@
 #include "ui/views/animation/ink_drop_mask.h"
 #include "ui/views/animation/square_ink_drop_ripple.h"
 #include "ui/views/painter.h"
+#include "ui/views/view_class_properties.h"
 
 namespace ash {
 
@@ -63,6 +63,14 @@ void SystemMenuButton::SetInkDropColor(SkColor color) {
   ink_drop_color_ = color;
 }
 
+void SystemMenuButton::OnBoundsChanged(const gfx::Rect& previous_bounds) {
+  SetProperty(views::kHighlightPathKey,
+              TrayPopupUtils::CreateHighlightPath(
+                  TrayPopupInkDropStyle::HOST_CENTERED, this)
+                  .release());
+  ImageButton::OnBoundsChanged(previous_bounds);
+}
+
 std::unique_ptr<views::InkDrop> SystemMenuButton::CreateInkDrop() {
   return TrayPopupUtils::CreateInkDrop(this);
 }
@@ -80,12 +88,6 @@ SystemMenuButton::CreateInkDropHighlight() const {
   return TrayPopupUtils::CreateInkDropHighlight(
       TrayPopupInkDropStyle::HOST_CENTERED, this,
       ink_drop_color_.value_or(kTrayPopupInkDropBaseColor));
-}
-
-std::unique_ptr<views::InkDropMask> SystemMenuButton::CreateInkDropMask()
-    const {
-  return TrayPopupUtils::CreateInkDropMask(TrayPopupInkDropStyle::HOST_CENTERED,
-                                           this);
 }
 
 }  // namespace ash

@@ -25,52 +25,36 @@ class MockBlockingObserver : public base::internal::BlockingObserver {
 
 class ThreadConditionTest : public testing::Test {
  public:
-  void RunOtherThreadInfiniteWait() {
-    base::internal::SetBlockingObserverForCurrentThread(&observer_);
-    MutexLocker lock(mutex_);
-    ready_.Signal();
-    condition_.Wait(mutex_);
-  }
+  ThreadConditionTest() : condition_(mutex_) {}
 
-  void RunOtherThreadTimedWait() {
-    base::internal::SetBlockingObserverForCurrentThread(&observer_);
+  void RunOtherThreadInfiniteWait() {
     MutexLocker lock(mutex_);
     ready_.Signal();
-    condition_.TimedWait(mutex_, CurrentTime() + 10.0);
+
+    base::internal::SetBlockingObserverForCurrentThread(&observer_);
+    EXPECT_CALL(observer_, BlockingStarted(base::BlockingType::MAY_BLOCK));
+    EXPECT_CALL(observer_, BlockingEnded());
+    condition_.Wait();
+    testing::Mock::VerifyAndClear(&observer_);
   }
 
  protected:
+  // Used to make sure that the other thread gets to wait before the main thread
+  // signals it. Otherwise it may wait forever.
   base::WaitableEvent ready_;
+
   testing::StrictMock<MockBlockingObserver> observer_;
   Mutex mutex_;
   ThreadCondition condition_;
 };
 
 TEST_F(ThreadConditionTest, WaitReportsBlockingCall) {
-  EXPECT_CALL(observer_, BlockingStarted(base::BlockingType::MAY_BLOCK));
-  EXPECT_CALL(observer_, BlockingEnded());
-
   base::Thread other_thread("other thread");
   other_thread.StartAndWaitForTesting();
   other_thread.task_runner()->PostTask(
       FROM_HERE,
       base::BindOnce(&ThreadConditionTest::RunOtherThreadInfiniteWait,
                      base::Unretained(this)));
-
-  ready_.Wait();
-  MutexLocker lock(mutex_);
-  condition_.Signal();
-}
-
-TEST_F(ThreadConditionTest, TimedWaitReportsBlockingCall) {
-  EXPECT_CALL(observer_, BlockingStarted(base::BlockingType::MAY_BLOCK));
-  EXPECT_CALL(observer_, BlockingEnded());
-
-  base::Thread other_thread("other thread");
-  other_thread.StartAndWaitForTesting();
-  other_thread.task_runner()->PostTask(
-      FROM_HERE, base::BindOnce(&ThreadConditionTest::RunOtherThreadTimedWait,
-                                base::Unretained(this)));
 
   ready_.Wait();
   MutexLocker lock(mutex_);

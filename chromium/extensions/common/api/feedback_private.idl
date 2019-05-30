@@ -73,7 +73,7 @@ namespace feedbackPrivate {
     SystemInformation[]? systemInformation;
 
     // True if we have permission to add histograms to this feedback report.
-    boolean sendHistograms;
+    boolean? sendHistograms;
 
     // Optional feedback UI flow. Default is the regular user flow.
     FeedbackFlow? flow;
@@ -88,6 +88,15 @@ namespace feedbackPrivate {
 
     // Whether or not to send bluetooth logs with this report.
     boolean? sendBluetoothLogs;
+
+    // Whether or not to send Assistant feedback to Assistant server.
+    boolean? assistantDebugInfoAllowed;
+
+    // Whether or not triggered from Assistant.
+    boolean? fromAssistant;
+
+    // Whether or not to include bluetooth logs.
+    boolean? includeBluetoothLogs;
   };
 
   // Status of the sending of a feedback report.

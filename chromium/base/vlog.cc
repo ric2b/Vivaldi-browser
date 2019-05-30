@@ -10,7 +10,7 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 
@@ -94,7 +94,7 @@ base::StringPiece GetModule(const base::StringPiece& file) {
   base::StringPiece::size_type extension_start = module.rfind('.');
   module = module.substr(0, extension_start);
   static const char kInlSuffix[] = "-inl";
-  static const int kInlSuffixLen = arraysize(kInlSuffix) - 1;
+  static const int kInlSuffixLen = base::size(kInlSuffix) - 1;
   if (module.ends_with(kInlSuffix))
     module.remove_suffix(kInlSuffixLen);
   return module;
@@ -105,12 +105,11 @@ base::StringPiece GetModule(const base::StringPiece& file) {
 int VlogInfo::GetVlogLevel(const base::StringPiece& file) const {
   if (!vmodule_levels_.empty()) {
     base::StringPiece module(GetModule(file));
-    for (std::vector<VmodulePattern>::const_iterator it =
-             vmodule_levels_.begin(); it != vmodule_levels_.end(); ++it) {
+    for (const auto& it : vmodule_levels_) {
       base::StringPiece target(
-          (it->match_target == VmodulePattern::MATCH_FILE) ? file : module);
-      if (MatchVlogPattern(target, it->pattern))
-        return it->vlog_level;
+          (it.match_target == VmodulePattern::MATCH_FILE) ? file : module);
+      if (MatchVlogPattern(target, it.pattern))
+        return it.vlog_level;
     }
   }
   return GetMaxVlogLevel();

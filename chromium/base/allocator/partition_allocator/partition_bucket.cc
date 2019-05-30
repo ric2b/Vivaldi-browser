@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/allocator/partition_allocator/partition_bucket.h"
+
 #include "base/allocator/partition_allocator/oom.h"
 #include "base/allocator/partition_allocator/page_allocator.h"
 #include "base/allocator/partition_allocator/partition_alloc_constants.h"
@@ -10,6 +11,7 @@
 #include "base/allocator/partition_allocator/partition_oom.h"
 #include "base/allocator/partition_allocator/partition_page.h"
 #include "base/allocator/partition_allocator/partition_root_base.h"
+#include "base/logging.h"
 #include "build/build_config.h"
 
 namespace base {
@@ -37,8 +39,6 @@ ALWAYS_INLINE PartitionPage* PartitionDirectMap(PartitionRootBase* root,
   map_size += kPageAllocationGranularityOffsetMask;
   map_size &= kPageAllocationGranularityBaseMask;
 
-  // TODO: these pages will be zero-filled. Consider internalizing an
-  // AllocZeroed() API so we can avoid a memset() entirely in this case.
   char* ptr = reinterpret_cast<char*>(
       AllocPages(nullptr, map_size, kSuperPageSize, PageReadWrite));
   if (UNLIKELY(!ptr))
@@ -49,12 +49,12 @@ ALWAYS_INLINE PartitionPage* PartitionDirectMap(PartitionRootBase* root,
   root->IncreaseCommittedPages(committed_page_size);
 
   char* slot = ptr + kPartitionPageSize;
-  CHECK(SetSystemPagesAccess(ptr + (kSystemPageSize * 2),
-                             kPartitionPageSize - (kSystemPageSize * 2),
-                             PageInaccessible));
+  SetSystemPagesAccess(ptr + (kSystemPageSize * 2),
+                       kPartitionPageSize - (kSystemPageSize * 2),
+                       PageInaccessible);
 #if !defined(ARCH_CPU_64_BITS)
-  CHECK(SetSystemPagesAccess(ptr, kSystemPageSize, PageInaccessible));
-  CHECK(SetSystemPagesAccess(slot + size, kSystemPageSize, PageInaccessible));
+  SetSystemPagesAccess(ptr, kSystemPageSize, PageInaccessible);
+  SetSystemPagesAccess(slot + size, kSystemPageSize, PageInaccessible);
 #endif
 
   PartitionSuperPageExtentEntry* extent =
@@ -162,7 +162,8 @@ uint8_t PartitionBucket::get_system_pages_per_slot_span() {
             ? (kNumSystemPagesPerPartitionPage - num_remainder_pages)
             : 0;
     waste += sizeof(void*) * num_unfaulted_pages;
-    double waste_ratio = (double)waste / (double)page_size;
+    double waste_ratio =
+        static_cast<double>(waste) / static_cast<double>(page_size);
     if (waste_ratio < best_waste_ratio) {
       best_waste_ratio = waste_ratio;
       best_pages = i;
@@ -206,7 +207,7 @@ ALWAYS_INLINE void* PartitionBucket::AllocNewSlotSpan(
 
     // Fresh System Pages in the SuperPages are decommited. Commit them
     // before vending them back.
-    CHECK(SetSystemPagesAccess(ret, total_size, PageReadWrite));
+    SetSystemPagesAccess(ret, total_size, PageReadWrite);
 
     root->next_partition_page += total_size;
     root->IncreaseCommittedPages(total_size);
@@ -239,22 +240,22 @@ ALWAYS_INLINE void* PartitionBucket::AllocNewSlotSpan(
   // hole in the middle.
   // This is where we put page metadata and also a tiny amount of extent
   // metadata.
-  CHECK(SetSystemPagesAccess(super_page, kSystemPageSize, PageInaccessible));
-  CHECK(SetSystemPagesAccess(super_page + (kSystemPageSize * 2),
-                             kPartitionPageSize - (kSystemPageSize * 2),
-                             PageInaccessible));
-  //  CHECK(SetSystemPagesAccess(super_page + (kSuperPageSize -
+  SetSystemPagesAccess(super_page, kSystemPageSize, PageInaccessible);
+  SetSystemPagesAccess(super_page + (kSystemPageSize * 2),
+                       kPartitionPageSize - (kSystemPageSize * 2),
+                       PageInaccessible);
+  //  SetSystemPagesAccess(super_page + (kSuperPageSize -
   //  kPartitionPageSize),
-  //                             kPartitionPageSize, PageInaccessible));
+  //                             kPartitionPageSize, PageInaccessible);
   // All remaining slotspans for the unallocated PartitionPages inside the
   // SuperPage are conceptually decommitted. Correctly set the state here
   // so they do not occupy resources.
   //
   // TODO(ajwong): Refactor Page Allocator API so the SuperPage comes in
   // decommited initially.
-  CHECK(SetSystemPagesAccess(super_page + kPartitionPageSize + total_size,
-                             (kSuperPageSize - kPartitionPageSize - total_size),
-                             PageInaccessible));
+  SetSystemPagesAccess(super_page + kPartitionPageSize + total_size,
+                       (kSuperPageSize - kPartitionPageSize - total_size),
+                       PageInaccessible);
 
   // If we were after a specific address, but didn't get it, assume that
   // the system chose a lousy address. Here most OS'es have a default
@@ -450,11 +451,13 @@ bool PartitionBucket::SetNewActivePage() {
 
 void* PartitionBucket::SlowPathAlloc(PartitionRootBase* root,
                                      int flags,
-                                     size_t size) {
+                                     size_t size,
+                                     bool* is_already_zeroed) {
   // The slow path is called when the freelist is empty.
   DCHECK(!this->active_pages_head->freelist_head);
 
   PartitionPage* new_page = nullptr;
+  *is_already_zeroed = false;
 
   // For the PartitionRootGeneric::Alloc() API, we have a bunch of buckets
   // marked as special cases. We bounce them through to the slow path so that
@@ -476,6 +479,10 @@ void* PartitionBucket::SlowPathAlloc(PartitionRootBase* root,
       PartitionExcessiveAllocationSize();
     }
     new_page = PartitionDirectMap(root, flags, size);
+#if !defined(OS_MACOSX)
+    // Turn off the optimization to see if it helps https://crbug.com/892550.
+    *is_already_zeroed = true;
+#endif
   } else if (LIKELY(this->SetNewActivePage())) {
     // First, did we find an active page in the active pages list?
     new_page = this->active_pages_head;
@@ -507,6 +514,9 @@ void* PartitionBucket::SlowPathAlloc(PartitionRootBase* root,
       void* addr = PartitionPage::ToPointer(new_page);
       root->RecommitSystemPages(addr, new_page->bucket->get_bytes_per_span());
       new_page->Reset();
+      // TODO(https://crbug.com/890752): Optimizing here might cause pages to
+      // not be zeroed.
+      // *is_already_zeroed = true;
     }
     DCHECK(new_page);
   } else {
@@ -516,6 +526,9 @@ void* PartitionBucket::SlowPathAlloc(PartitionRootBase* root,
     if (LIKELY(raw_pages != nullptr)) {
       new_page = PartitionPage::FromPointerNoAlignmentCheck(raw_pages);
       InitializeSlotSpan(new_page);
+      // TODO(https://crbug.com/890752): Optimizing here causes pages to not be
+      // zeroed on at least macOS.
+      // *is_already_zeroed = true;
     }
   }
 

@@ -50,13 +50,9 @@ class TabManager::WebContentsData
                         content::WebContents* new_contents);
 
   // Sets the current purge state.
-  // TODO(tasak): remove this after the logic is moved into
-  // MemoryCoordinator.
   void set_is_purged(bool state) { is_purged_ = state; }
 
   // Returns the current state of purge.
-  // TODO(tasak): remove this after the logic is moved into
-  // MemoryCoordinator.
   bool is_purged() const { return is_purged_; }
 
   // Sets the time to purge after the tab is backgrounded.
@@ -90,6 +86,7 @@ class TabManager::WebContentsData
   }
 
  private:
+  friend class content::WebContentsUserData<TabManager::WebContentsData>;
   // Needed to access tab_data_.
   FRIEND_TEST_ALL_PREFIXES(TabManagerWebContentsDataTest, CopyState);
   FRIEND_TEST_ALL_PREFIXES(TabManagerWebContentsDataTest, TabLoadingState);
@@ -120,6 +117,7 @@ class TabManager::WebContentsData
   bool is_purged_;
 
   DISALLOW_COPY_AND_ASSIGN(WebContentsData);
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
 };
 
 }  // namespace resource_coordinator

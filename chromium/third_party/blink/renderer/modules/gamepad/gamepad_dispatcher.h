@@ -22,7 +22,8 @@ class GamepadDispatcher final
   USING_GARBAGE_COLLECTED_MIXIN(GamepadDispatcher);
 
  public:
-  static GamepadDispatcher& Instance();
+  explicit GamepadDispatcher(
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   ~GamepadDispatcher() override;
 
   void SampleGamepads(device::Gamepads&);
@@ -39,8 +40,6 @@ class GamepadDispatcher final
   void Trace(blink::Visitor*) override;
 
  private:
-  GamepadDispatcher();
-
   void InitializeHaptics();
 
   // WebGamepadListener
@@ -56,6 +55,7 @@ class GamepadDispatcher final
                                              const device::Gamepad&,
                                              bool connected);
 
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   std::unique_ptr<GamepadSharedMemoryReader> reader_;
   device::mojom::blink::GamepadHapticsManagerPtr gamepad_haptics_manager_;
 };

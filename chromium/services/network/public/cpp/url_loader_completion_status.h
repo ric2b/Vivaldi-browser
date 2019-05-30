@@ -13,6 +13,7 @@
 #include "base/time/time.h"
 #include "net/ssl/ssl_info.h"
 #include "services/network/public/cpp/cors/cors_error_status.h"
+#include "services/network/public/cpp/cors/preflight_timing_info.h"
 #include "services/network/public/mojom/cors.mojom-shared.h"
 
 namespace network {
@@ -30,7 +31,7 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) URLLoaderCompletionStatus {
 
   // Sets ERR_FAILED to |error_code|, |error| to |cors_error_status|, and
   // base::TimeTicks::Now() to |completion_time|.
-  explicit URLLoaderCompletionStatus(const CORSErrorStatus& error);
+  explicit URLLoaderCompletionStatus(const CorsErrorStatus& error);
 
   ~URLLoaderCompletionStatus();
 
@@ -48,6 +49,9 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) URLLoaderCompletionStatus {
   // Time the request completed.
   base::TimeTicks completion_time;
 
+  // Timing info if CORS preflights were made.
+  std::vector<cors::PreflightTimingInfo> cors_preflight_timing_info;
+
   // Total amount of data received from the network.
   int64_t encoded_data_length = 0;
 
@@ -58,7 +62,7 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) URLLoaderCompletionStatus {
   int64_t decoded_body_length = 0;
 
   // Optional CORS error details.
-  base::Optional<CORSErrorStatus> cors_error_status;
+  base::Optional<CorsErrorStatus> cors_error_status;
 
   // Optional SSL certificate info.
   base::Optional<net::SSLInfo> ssl_info;
@@ -66,6 +70,9 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) URLLoaderCompletionStatus {
   // Set when response blocked by CORB needs to be reported to the DevTools
   // console.
   bool should_report_corb_blocking = false;
+
+  // The proxy server used for this request, if any.
+  net::ProxyServer proxy_server;
 };
 
 }  // namespace network

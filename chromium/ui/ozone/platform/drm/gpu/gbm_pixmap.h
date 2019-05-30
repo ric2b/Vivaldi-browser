@@ -25,7 +25,6 @@ class GbmPixmap : public gfx::NativePixmap {
 
   // NativePixmap:
   bool AreDmaBufFdsValid() const override;
-  size_t GetDmaBufFdCount() const override;
   int GetDmaBufFd(size_t plane) const override;
   int GetDmaBufPitch(size_t plane) const override;
   int GetDmaBufOffset(size_t plane) const override;
@@ -50,9 +49,9 @@ class GbmPixmap : public gfx::NativePixmap {
  private:
   ~GbmPixmap() override;
 
-  GbmSurfaceFactory* surface_manager_;
-  std::unique_ptr<GbmBuffer> buffer_;
-  scoped_refptr<DrmFramebuffer> framebuffer_;
+  GbmSurfaceFactory* const surface_manager_;
+  const std::unique_ptr<GbmBuffer> buffer_;
+  const scoped_refptr<DrmFramebuffer> framebuffer_;
 
   DISALLOW_COPY_AND_ASSIGN(GbmPixmap);
 };

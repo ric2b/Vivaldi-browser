@@ -4,6 +4,7 @@
 
 #include "ui/gfx/image/image_platform.h"
 
+#include <memory>
 #include <set>
 #include <utility>
 
@@ -16,12 +17,11 @@ namespace internal {
 namespace {
 
 // Returns a 16x16 red image to visually show error in decoding PNG.
-// Caller takes ownership of returned ImageSkia.
-ImageSkia* GetErrorImageSkia() {
+std::unique_ptr<ImageSkia> GetErrorImageSkia() {
   SkBitmap bitmap;
   bitmap.allocN32Pixels(16, 16);
   bitmap.eraseARGB(0xff, 0xff, 0, 0);
-  return new ImageSkia(ImageSkiaRep(bitmap, 1.0f));
+  return std::make_unique<ImageSkia>(ImageSkiaRep(bitmap, 1.0f));
 }
 
 class PNGImageSource : public ImageSkiaSource {
@@ -39,8 +39,8 @@ class PNGImageSource : public ImageSkiaSource {
     // 1) The ImageSkiaRep with the highest scale if all available
     // scales are smaller than |scale|.
     // 2) The ImageSkiaRep with the smallest one that is larger than |scale|.
-    for (ImageSkiaRepSet::const_iterator iter = image_skia_reps_.begin();
-         iter != image_skia_reps_.end(); ++iter) {
+    for (auto iter = image_skia_reps_.begin(); iter != image_skia_reps_.end();
+         ++iter) {
       if ((*iter).scale() == scale)
         return (*iter);
       if (!rep || rep->scale() < (*iter).scale())
@@ -76,7 +76,7 @@ class PNGImageSource : public ImageSkiaSource {
 
  private:
   struct Compare {
-    bool operator()(const ImageSkiaRep& rep1, const ImageSkiaRep& rep2) {
+    bool operator()(const ImageSkiaRep& rep1, const ImageSkiaRep& rep2) const {
       return rep1.scale() < rep2.scale();
     }
   };
@@ -90,7 +90,8 @@ class PNGImageSource : public ImageSkiaSource {
 
 }  // namespace
 
-ImageSkia* ImageSkiaFromPNG(const std::vector<ImagePNGRep>& image_png_reps) {
+std::unique_ptr<ImageSkia> ImageSkiaFromPNG(
+    const std::vector<ImagePNGRep>& image_png_reps) {
   if (image_png_reps.empty())
     return GetErrorImageSkia();
   std::unique_ptr<PNGImageSource> image_source(new PNGImageSource);
@@ -103,7 +104,7 @@ ImageSkia* ImageSkiaFromPNG(const std::vector<ImagePNGRep>& image_png_reps) {
   DCHECK(!size.IsEmpty());
   if (size.IsEmpty())
     return GetErrorImageSkia();
-  return new ImageSkia(std::move(image_source), size);
+  return std::make_unique<ImageSkia>(std::move(image_source), size);
 }
 
 scoped_refptr<base::RefCountedMemory> Get1xPNGBytesFromImageSkia(
@@ -112,7 +113,7 @@ scoped_refptr<base::RefCountedMemory> Get1xPNGBytesFromImageSkia(
 
   scoped_refptr<base::RefCountedBytes> png_bytes(new base::RefCountedBytes());
   if (image_skia_rep.scale() != 1.0f ||
-      !PNGCodec::EncodeBGRASkBitmap(image_skia_rep.sk_bitmap(), false,
+      !PNGCodec::EncodeBGRASkBitmap(image_skia_rep.GetBitmap(), false,
                                     &png_bytes->data())) {
     return NULL;
   }

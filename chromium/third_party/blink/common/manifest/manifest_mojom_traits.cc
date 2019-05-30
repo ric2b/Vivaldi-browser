@@ -4,9 +4,12 @@
 
 #include "third_party/blink/public/common/manifest/manifest_mojom_traits.h"
 
+#include <string>
+#include <utility>
+
 #include "mojo/public/cpp/base/string16_mojom_traits.h"
 #include "third_party/blink/public/common/manifest/web_display_mode_mojom_traits.h"
-#include "third_party/blink/public/common/screen_orientation/web_screen_orientation_enum_traits.h"
+#include "third_party/blink/public/common/screen_orientation/web_screen_orientation_mojom_traits.h"
 #include "ui/gfx/geometry/mojo/geometry_struct_traits.h"
 #include "url/mojom/url_gurl_mojom_traits.h"
 
@@ -65,6 +68,9 @@ bool StructTraits<blink::mojom::ManifestDataView, ::blink::Manifest>::Read(
     return false;
 
   if (!data.ReadShareTarget(&out->share_target))
+    return false;
+
+  if (!data.ReadFileHandler(&out->file_handler))
     return false;
 
   if (!data.ReadRelatedApplications(&out->related_applications))
@@ -137,6 +143,25 @@ bool StructTraits<blink::mojom::ManifestRelatedApplicationDataView,
   return !(out->url.is_empty() && out->id.is_null());
 }
 
+bool StructTraits<blink::mojom::ManifestFileFilterDataView,
+                  ::blink::Manifest::FileFilter>::
+    Read(blink::mojom::ManifestFileFilterDataView data,
+         ::blink::Manifest::FileFilter* out) {
+  TruncatedString16 name;
+  if (!data.ReadName(&name))
+    return false;
+
+  if (!name.string)
+    return false;
+
+  out->name = *std::move(name.string);
+
+  if (!data.ReadAccept(&out->accept))
+    return false;
+
+  return true;
+}
+
 bool StructTraits<blink::mojom::ManifestShareTargetParamsDataView,
                   ::blink::Manifest::ShareTargetParams>::
     Read(blink::mojom::ManifestShareTargetParamsDataView data,
@@ -154,6 +179,9 @@ bool StructTraits<blink::mojom::ManifestShareTargetParamsDataView,
     return false;
   out->url = base::NullableString16(std::move(string.string));
 
+  if (!data.ReadFiles(&out->files))
+    return false;
+
   return true;
 }
 
@@ -163,6 +191,13 @@ bool StructTraits<blink::mojom::ManifestShareTargetDataView,
          ::blink::Manifest::ShareTarget* out) {
   if (!data.ReadAction(&out->action))
     return false;
+
+  if (!data.ReadMethod(&out->method))
+    return false;
+
+  if (!data.ReadEnctype(&out->enctype))
+    return false;
+
   return data.ReadParams(&out->params);
 }
 

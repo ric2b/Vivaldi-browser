@@ -101,7 +101,7 @@ std::string GetPermissionRequestString(PermissionRequestType type) {
 }
 
 void RecordEngagementMetric(const std::vector<PermissionRequest*>& requests,
-                            const content::WebContents* web_contents,
+                            content::WebContents* web_contents,
                             const std::string& action) {
   PermissionRequestType type = requests[0]->GetPermissionRequestType();
   if (requests.size() > 1)
@@ -206,6 +206,7 @@ void PermissionUmaUtil::RecordEmbargoPromptSuppressionFromSource(
     case PermissionStatusSource::KILL_SWITCH:
     case PermissionStatusSource::INSECURE_ORIGIN:
     case PermissionStatusSource::FEATURE_POLICY:
+    case PermissionStatusSource::VIRTUAL_URL_DIFFERENT_ORIGIN:
       // The permission wasn't under embargo, so don't record anything. We may
       // embargo it later.
       break;
@@ -238,7 +239,7 @@ void PermissionUmaUtil::PermissionPromptShown(
 
 void PermissionUmaUtil::PermissionPromptResolved(
     const std::vector<PermissionRequest*>& requests,
-    const content::WebContents* web_contents,
+    content::WebContents* web_contents,
     PermissionAction permission_action) {
   std::string action_string;
 

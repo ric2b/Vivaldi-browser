@@ -29,15 +29,12 @@ void TestPreferences::Reset() {
   loads_images_automatically = true;
   plugins_enabled = true;
   caret_browsing_enabled = false;
-
-  // Allow those layout tests running as local files, i.e. under
-  // LayoutTests/http/tests/local, to access http server.
-  allow_universal_access_from_file_urls = true;
+  allow_universal_access_from_file_urls = false;
 
 #if defined(OS_MACOSX)
-  editing_behavior = WebSettings::kEditingBehaviorMac;
+  editing_behavior = WebSettings::EditingBehavior::kMac;
 #else
-  editing_behavior = WebSettings::kEditingBehaviorWin;
+  editing_behavior = WebSettings::EditingBehavior::kWin;
 #endif
 
   tabs_to_links = false;

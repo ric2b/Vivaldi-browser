@@ -20,6 +20,7 @@ bool Validators::QueryObjectParameterValidator::IsValid(
   switch (value) {
     case GL_QUERY_RESULT_EXT:
     case GL_QUERY_RESULT_AVAILABLE_EXT:
+    case GL_QUERY_RESULT_AVAILABLE_NO_FLUSH_CHROMIUM_EXT:
       return true;
   }
   return false;
@@ -53,7 +54,9 @@ static const GLenum valid_texture_min_filter_mode_table[] = {
 };
 
 static const GLenum valid_texture_parameter_table[] = {
-    GL_TEXTURE_MAG_FILTER, GL_TEXTURE_MIN_FILTER, GL_TEXTURE_WRAP_S,
+    GL_TEXTURE_MAG_FILTER,
+    GL_TEXTURE_MIN_FILTER,
+    GL_TEXTURE_WRAP_S,
     GL_TEXTURE_WRAP_T,
 };
 
@@ -62,7 +65,8 @@ static const GLenum valid_texture_wrap_mode_table[] = {
 };
 
 static const gfx::BufferUsage valid_gfx_buffer_usage_table[] = {
-    gfx::BufferUsage::GPU_READ, gfx::BufferUsage::SCANOUT,
+    gfx::BufferUsage::GPU_READ,
+    gfx::BufferUsage::SCANOUT,
     gfx::BufferUsage::GPU_READ_CPU_READ_WRITE,
     gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT,
 };
@@ -81,18 +85,18 @@ static const viz::ResourceFormat valid_viz_resource_format_table[] = {
 };
 
 Validators::Validators()
-    : g_l_state(valid_g_l_state_table, arraysize(valid_g_l_state_table)),
+    : g_l_state(valid_g_l_state_table, base::size(valid_g_l_state_table)),
       texture_mag_filter_mode(valid_texture_mag_filter_mode_table,
-                              arraysize(valid_texture_mag_filter_mode_table)),
+                              base::size(valid_texture_mag_filter_mode_table)),
       texture_min_filter_mode(valid_texture_min_filter_mode_table,
-                              arraysize(valid_texture_min_filter_mode_table)),
+                              base::size(valid_texture_min_filter_mode_table)),
       texture_parameter(valid_texture_parameter_table,
-                        arraysize(valid_texture_parameter_table)),
+                        base::size(valid_texture_parameter_table)),
       texture_wrap_mode(valid_texture_wrap_mode_table,
-                        arraysize(valid_texture_wrap_mode_table)),
+                        base::size(valid_texture_wrap_mode_table)),
       gfx_buffer_usage(valid_gfx_buffer_usage_table,
-                       arraysize(valid_gfx_buffer_usage_table)),
+                       base::size(valid_gfx_buffer_usage_table)),
       viz_resource_format(valid_viz_resource_format_table,
-                          arraysize(valid_viz_resource_format_table)) {}
+                          base::size(valid_viz_resource_format_table)) {}
 
 #endif  // GPU_COMMAND_BUFFER_SERVICE_RASTER_CMD_VALIDATION_IMPLEMENTATION_AUTOGEN_H_

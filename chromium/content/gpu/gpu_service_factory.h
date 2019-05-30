@@ -11,6 +11,7 @@
 #include "base/single_thread_task_runner.h"
 #include "content/child/service_factory.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
+#include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_preferences.h"
 #include "media/base/android_overlay_mojo_factory.h"
 #include "media/mojo/buildflags.h"
@@ -27,12 +28,15 @@ class GpuServiceFactory : public ServiceFactory {
   GpuServiceFactory(
       const gpu::GpuPreferences& gpu_preferences,
       const gpu::GpuDriverBugWorkarounds& gpu_workarounds,
+      const gpu::GpuFeatureInfo& gpu_feature_info,
       base::WeakPtr<media::MediaGpuChannelManager> media_gpu_channel_manager,
       media::AndroidOverlayMojoFactoryCB android_overlay_factory_cb);
   ~GpuServiceFactory() override;
 
   // ServiceFactory overrides:
-  void RegisterServices(ServiceMap* services) override;
+  bool HandleServiceRequest(
+      const std::string& service_name,
+      service_manager::mojom::ServiceRequest request) override;
 
  private:
 #if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_GPU_PROCESS)
@@ -45,6 +49,7 @@ class GpuServiceFactory : public ServiceFactory {
   media::AndroidOverlayMojoFactoryCB android_overlay_factory_cb_;
   gpu::GpuPreferences gpu_preferences_;
   gpu::GpuDriverBugWorkarounds gpu_workarounds_;
+  gpu::GpuFeatureInfo gpu_feature_info_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(GpuServiceFactory);

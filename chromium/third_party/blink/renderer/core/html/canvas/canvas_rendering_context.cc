@@ -42,27 +42,29 @@ CanvasRenderingContext::CanvasRenderingContext(
     : host_(host),
       color_params_(kSRGBCanvasColorSpace, kRGBA8CanvasPixelFormat, kNonOpaque),
       creation_attributes_(attrs) {
-  // Supported color spaces: srgb-8888, srgb-f16, p3-f16, rec2020-f16. For wide
-  // gamut color spaces, user must explicitly request for float16 storage.
-  // Otherwise, we fall back to srgb-8888. Invalid requests fall back to
-  // srgb-8888 too.
+  // Supported color spaces and pixel formats: sRGB in uint8, e-sRGB in f16,
+  // linear sRGB and p3 and rec2020 with linear gamma transfer function in f16.
+  // For wide gamut color spaces, user must explicitly request half float
+  // storage. Otherwise, we fall back to sRGB in uint8. Invalid requests fall
+  // back to sRGB in uint8 too.
   if (creation_attributes_.pixel_format == kF16CanvasPixelFormatName) {
     color_params_.SetCanvasPixelFormat(kF16CanvasPixelFormat);
+    if (creation_attributes_.color_space == kLinearRGBCanvasColorSpaceName)
+      color_params_.SetCanvasColorSpace(kLinearRGBCanvasColorSpace);
     if (creation_attributes_.color_space == kRec2020CanvasColorSpaceName)
       color_params_.SetCanvasColorSpace(kRec2020CanvasColorSpace);
     else if (creation_attributes_.color_space == kP3CanvasColorSpaceName)
       color_params_.SetCanvasColorSpace(kP3CanvasColorSpace);
   }
 
-  if (!creation_attributes_.alpha) {
+  if (!creation_attributes_.alpha)
     color_params_.SetOpacityMode(kOpaque);
-  }
 
-  if (!OriginTrials::LowLatencyCanvasEnabled(host->GetTopExecutionContext()))
+  if (!origin_trials::LowLatencyCanvasEnabled(host->GetTopExecutionContext()))
     creation_attributes_.low_latency = false;
 
-  // Make m_creationAttributes reflect the effective colorSpace and pixelFormat
-  // rather than the requested one.
+  // Make creation_attributes_ reflect the effective color_space and
+  // pixel_format rather than the requested one.
   creation_attributes_.color_space = ColorSpaceAsString();
   creation_attributes_.pixel_format = PixelFormatAsString();
 }
@@ -71,6 +73,8 @@ WTF::String CanvasRenderingContext::ColorSpaceAsString() const {
   switch (color_params_.ColorSpace()) {
     case kSRGBCanvasColorSpace:
       return kSRGBCanvasColorSpaceName;
+    case kLinearRGBCanvasColorSpace:
+      return kLinearRGBCanvasColorSpaceName;
     case kRec2020CanvasColorSpace:
       return kRec2020CanvasColorSpaceName;
     case kP3CanvasColorSpace:
@@ -84,10 +88,6 @@ WTF::String CanvasRenderingContext::PixelFormatAsString() const {
   switch (color_params_.PixelFormat()) {
     case kRGBA8CanvasPixelFormat:
       return kRGBA8CanvasPixelFormatName;
-    case kRGB10A2CanvasPixelFormat:
-      return kRGB10A2CanvasPixelFormatName;
-    case kRGBA12CanvasPixelFormat:
-      return kRGBA12CanvasPixelFormatName;
     case kF16CanvasPixelFormat:
       return kF16CanvasPixelFormatName;
   };
@@ -96,15 +96,13 @@ WTF::String CanvasRenderingContext::PixelFormatAsString() const {
 }
 
 void CanvasRenderingContext::Dispose() {
-  if (finalize_frame_scheduled_) {
-    Platform::Current()->CurrentThread()->RemoveTaskObserver(this);
-  }
+  StopListeningForDidProcessTask();
 
   // HTMLCanvasElement and CanvasRenderingContext have a circular reference.
   // When the pair is no longer reachable, their destruction order is non-
   // deterministic, so the first of the two to be destroyed needs to notify
   // the other in order to break the circular reference.  This is to avoid
-  // an error when CanvasRenderingContext::didProcessTask() is invoked
+  // an error when CanvasRenderingContext::DidProcessTask() is invoked
   // after the HTMLCanvasElement is destroyed.
   if (Host()) {
     Host()->DetachContext();
@@ -114,29 +112,26 @@ void CanvasRenderingContext::Dispose() {
 
 void CanvasRenderingContext::DidDraw(const SkIRect& dirty_rect) {
   Host()->DidDraw(SkRect::Make(dirty_rect));
-  NeedsFinalizeFrame();
+  StartListeningForDidProcessTask();
 }
 
 void CanvasRenderingContext::DidDraw() {
   Host()->DidDraw();
-  NeedsFinalizeFrame();
+  StartListeningForDidProcessTask();
 }
 
 void CanvasRenderingContext::NeedsFinalizeFrame() {
-  if (!finalize_frame_scheduled_) {
-    finalize_frame_scheduled_ = true;
-    Platform::Current()->CurrentThread()->AddTaskObserver(this);
-  }
+  StartListeningForDidProcessTask();
 }
 
-void CanvasRenderingContext::DidProcessTask() {
-  Platform::Current()->CurrentThread()->RemoveTaskObserver(this);
-  finalize_frame_scheduled_ = false;
+void CanvasRenderingContext::DidProcessTask(
+    const base::PendingTask& /* pending_task */) {
+  StopListeningForDidProcessTask();
+
   // The end of a script task that drew content to the canvas is the point
   // at which the current frame may be considered complete.
-  if (Host()) {
+  if (Host())
     Host()->FinalizeFrame();
-  }
   FinalizeFrame();
 }
 
@@ -157,7 +152,7 @@ CanvasRenderingContext::ContextType CanvasRenderingContext::ContextTypeFromId(
     return kContextImageBitmap;
   if (id == "xrpresent")
     return kContextXRPresent;
-  return kContextTypeCount;
+  return kContextTypeUnknown;
 }
 
 CanvasRenderingContext::ContextType
@@ -168,35 +163,41 @@ CanvasRenderingContext::ResolveContextTypeAliases(
   return type;
 }
 
-bool CanvasRenderingContext::WouldTaintOrigin(
-    CanvasImageSource* image_source,
-    const SecurityOrigin* destination_security_origin) {
+bool CanvasRenderingContext::WouldTaintOrigin(CanvasImageSource* image_source) {
+  // Don't taint the canvas on data URLs. This special case is needed here
+  // because CanvasImageSource::WouldTaintOrigin() can return false for data
+  // URLs due to restrictions on SVG foreignObject nodes as described in
+  // https://crbug.com/294129.
+  // TODO(crbug.com/294129): Remove the restriction on foreignObject nodes, then
+  // this logic isn't needed, CanvasImageSource::SourceURL() isn't needed, and
+  // this function can just be image_source->WouldTaintOrigin().
   const KURL& source_url = image_source->SourceURL();
-  bool has_url = (source_url.IsValid() && !source_url.IsAboutBlankURL());
+  const bool has_url = (source_url.IsValid() && !source_url.IsAboutBlankURL());
+  if (has_url && source_url.ProtocolIsData())
+    return false;
 
-  if (has_url) {
-    if (source_url.ProtocolIsData() ||
-        clean_urls_.Contains(source_url.GetString()))
-      return false;
-    if (dirty_urls_.Contains(source_url.GetString()))
-      return true;
-  }
-
-  bool taint_origin =
-      image_source->WouldTaintOrigin(destination_security_origin);
-  if (has_url) {
-    if (taint_origin)
-      dirty_urls_.insert(source_url.GetString());
-    else
-      clean_urls_.insert(source_url.GetString());
-  }
-  return taint_origin;
+  return image_source->WouldTaintOrigin();
 }
 
-void CanvasRenderingContext::Trace(blink::Visitor* visitor) {
+void CanvasRenderingContext::Trace(Visitor* visitor) {
   visitor->Trace(host_);
-  visitor->Trace(creation_attributes_);
   ScriptWrappable::Trace(visitor);
+}
+
+void CanvasRenderingContext::StartListeningForDidProcessTask() {
+  if (listening_for_did_process_task_)
+    return;
+
+  listening_for_did_process_task_ = true;
+  Thread::Current()->AddTaskObserver(this);
+}
+
+void CanvasRenderingContext::StopListeningForDidProcessTask() {
+  if (!listening_for_did_process_task_)
+    return;
+
+  Thread::Current()->RemoveTaskObserver(this);
+  listening_for_did_process_task_ = false;
 }
 
 }  // namespace blink

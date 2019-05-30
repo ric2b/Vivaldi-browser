@@ -21,6 +21,7 @@ var kRTCRTPStreamStats = new RTCStats_(null, {
   associateStatsId: 'string',
   isRemote: 'boolean',
   mediaType: 'string',
+  kind: 'string',
   trackId: 'string',
   transportId: 'string',
   codecId: 'string',
@@ -147,6 +148,7 @@ var kRTCMediaStreamTrackStats = new RTCStats_(null, {
   concealedSamples: 'number',
   concealmentEvents: 'number',
   jitterBufferDelay: 'number',
+  jitterBufferEmittedCount: 'number',
   priority: 'string'
 });
 gStatsWhitelist.set('track', kRTCMediaStreamTrackStats);
@@ -196,6 +198,7 @@ var kRTCIceCandidateStats = new RTCStats_(null, {
   ip: 'string',
   port: 'number',
   protocol: 'string',
+  relayProtocol: 'string',
   candidateType: 'string',
   priority: 'number',
   url: 'string',

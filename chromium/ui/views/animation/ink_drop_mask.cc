@@ -24,10 +24,6 @@ InkDropMask::~InkDropMask() {
   layer_.set_delegate(nullptr);
 }
 
-void InkDropMask::UpdateLayerSize(const gfx::Size& new_layer_size) {
-  layer_.SetBounds(gfx::Rect(new_layer_size));
-}
-
 void InkDropMask::OnDeviceScaleFactorChanged(float old_device_scale_factor,
                                              float new_device_scale_factor) {}
 
@@ -73,6 +69,22 @@ void CircleInkDropMask::OnPaintLayer(const ui::PaintContext& context) {
 
   ui::PaintRecorder recorder(context, layer()->size());
   recorder.canvas()->DrawCircle(mask_center_, mask_radius_, flags);
+}
+
+// PathInkDropMask
+
+PathInkDropMask::PathInkDropMask(const gfx::Size& layer_size,
+                                 const SkPath& path)
+    : InkDropMask(layer_size), path_(path) {}
+
+void PathInkDropMask::OnPaintLayer(const ui::PaintContext& context) {
+  cc::PaintFlags flags;
+  flags.setAlpha(255);
+  flags.setStyle(cc::PaintFlags::kFill_Style);
+  flags.setAntiAlias(true);
+
+  ui::PaintRecorder recorder(context, layer()->size());
+  recorder.canvas()->DrawPath(path_, flags);
 }
 
 }  // namespace views

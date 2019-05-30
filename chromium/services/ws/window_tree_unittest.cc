@@ -10,25 +10,38 @@
 #include <memory>
 #include <queue>
 
+#include "base/bind.h"
 #include "base/run_loop.h"
 #include "base/unguessable_token.h"
+#include "components/viz/common/surfaces/child_local_surface_id_allocator.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
+#include "components/viz/host/host_frame_sink_manager.h"
+#include "components/viz/test/fake_host_frame_sink_client.h"
+#include "services/ws/client_root_test_helper.h"
 #include "services/ws/event_test_utils.h"
+#include "services/ws/proxy_window.h"
+#include "services/ws/proxy_window_test_helper.h"
 #include "services/ws/public/cpp/property_type_converters.h"
 #include "services/ws/public/mojom/window_manager.mojom.h"
-#include "services/ws/server_window.h"
-#include "services/ws/server_window_test_helper.h"
 #include "services/ws/window_service.h"
 #include "services/ws/window_service_test_setup.h"
 #include "services/ws/window_tree_test_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
+#include "ui/aura/env.h"
 #include "ui/aura/layout_manager.h"
+#include "ui/aura/mus/client_surface_embedder.h"
 #include "ui/aura/test/aura_test_helper.h"
 #include "ui/aura/test/test_screen.h"
 #include "ui/aura/test/test_window_delegate.h"
+#include "ui/aura/test/test_window_parenting_client.h"
+#include "ui/aura/test/window_occlusion_tracker_test_api.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tracker.h"
+#include "ui/base/hit_test.h"
+#include "ui/events/mojo/event_constants.mojom.h"
 #include "ui/events/test/event_generator.h"
+#include "ui/gfx/transform.h"
 #include "ui/wm/core/capture_controller.h"
 #include "ui/wm/core/default_screen_position_client.h"
 #include "ui/wm/core/focus_controller.h"
@@ -36,6 +49,9 @@
 
 namespace ws {
 namespace {
+
+DEFINE_UI_CLASS_PROPERTY_KEY(aura::Window*, kTestPropertyKey, nullptr)
+const char kTestPropertyServerKey[] = "test-property-server";
 
 // Passed to Embed() to give the default behavior (see kEmbedFlag* in mojom for
 // details).
@@ -147,6 +163,10 @@ TEST(WindowTreeTest, NewTopLevelWindow) {
   ASSERT_TRUE(top_level);
   EXPECT_EQ("TopLevelCreated id=1 window_id=0,1 drawn=false",
             SingleChangeToDescription(*setup.changes()));
+  ASSERT_TRUE((*setup.changes())[0].local_surface_id_allocation);
+  EXPECT_TRUE((*setup.changes())[0].local_surface_id_allocation->IsValid());
+  EXPECT_EQ(ProxyWindow::GetMayBeNull(top_level)->local_surface_id_allocation(),
+            (*setup.changes())[0].local_surface_id_allocation);
 }
 
 TEST(WindowTreeTest, NewTopLevelWindowWithProperties) {
@@ -167,21 +187,18 @@ TEST(WindowTreeTest, SetTopLevelWindowBounds) {
   aura::Window* top_level =
       setup.window_tree_test_helper()->NewTopLevelWindow();
   setup.changes()->clear();
+  ProxyWindow* top_level_proxy = ProxyWindow::GetMayBeNull(top_level);
 
   const gfx::Rect bounds_from_client = gfx::Rect(100, 200, 300, 400);
+  viz::ChildLocalSurfaceIdAllocator child_allocator;
+  child_allocator.UpdateFromParent(
+      *top_level_proxy->local_surface_id_allocation());
+  child_allocator.GenerateId();
   setup.window_tree_test_helper()->SetWindowBoundsWithAck(
-      top_level, bounds_from_client, 2);
+      top_level, bounds_from_client,
+      child_allocator.GetCurrentLocalSurfaceIdAllocation(), 2);
   EXPECT_EQ(bounds_from_client, top_level->GetBoundsInScreen());
-  ASSERT_EQ(2u, setup.changes()->size());
-  {
-    const Change& change = (*setup.changes())[0];
-    EXPECT_EQ(CHANGE_TYPE_NODE_BOUNDS_CHANGED, change.type);
-    EXPECT_EQ(top_level->GetBoundsInScreen(), change.bounds2);
-    EXPECT_TRUE(change.local_surface_id);
-    setup.changes()->erase(setup.changes()->begin());
-  }
-  // See comments in WindowTree::SetBoundsImpl() for why this returns false.
-  EXPECT_EQ("ChangeCompleted id=2 success=false",
+  EXPECT_EQ("ChangeCompleted id=2 success=true",
             SingleChangeToDescription(*setup.changes()));
   setup.changes()->clear();
 
@@ -189,7 +206,12 @@ TEST(WindowTreeTest, SetTopLevelWindowBounds) {
   top_level->SetBounds(bounds_from_server);
   ASSERT_EQ(1u, setup.changes()->size());
   EXPECT_EQ(CHANGE_TYPE_NODE_BOUNDS_CHANGED, (*setup.changes())[0].type);
-  EXPECT_EQ(bounds_from_server, (*setup.changes())[0].bounds2);
+  EXPECT_EQ(bounds_from_server, (*setup.changes())[0].bounds);
+  ASSERT_TRUE((*setup.changes())[0].local_surface_id_allocation);
+  EXPECT_NE((*setup.changes())[0].local_surface_id_allocation,
+            child_allocator.GetCurrentLocalSurfaceIdAllocation());
+  EXPECT_EQ(top_level_proxy->local_surface_id_allocation(),
+            (*setup.changes())[0].local_surface_id_allocation);
   setup.changes()->clear();
 
   // Set a LayoutManager so that when the client requests a bounds change the
@@ -199,14 +221,16 @@ TEST(WindowTreeTest, SetTopLevelWindowBounds) {
   const gfx::Rect restricted_bounds = gfx::Rect(401, 405, 406, 407);
   layout_manager->set_next_bounds(restricted_bounds);
   top_level->parent()->SetLayoutManager(layout_manager);
+  child_allocator.GenerateId();
   setup.window_tree_test_helper()->SetWindowBoundsWithAck(
-      top_level, bounds_from_client, 3);
+      top_level, bounds_from_client,
+      child_allocator.GetCurrentLocalSurfaceIdAllocation(), 3);
   ASSERT_EQ(2u, setup.changes()->size());
   // The layout manager changes the bounds to a different value than the client
   // requested, so the client should get OnWindowBoundsChanged() with
   // |restricted_bounds|.
   EXPECT_EQ(CHANGE_TYPE_NODE_BOUNDS_CHANGED, (*setup.changes())[0].type);
-  EXPECT_EQ(restricted_bounds, (*setup.changes())[0].bounds2);
+  EXPECT_EQ(restricted_bounds, (*setup.changes())[0].bounds);
 
   // And because the layout manager changed the bounds the result is false.
   EXPECT_EQ("ChangeCompleted id=3 success=false",
@@ -220,27 +244,20 @@ TEST(WindowTreeTest, SetTopLevelWindowBounds) {
                                         &screen_position_client);
 
   // Tests that top-level window bounds are set in screen coordinates.
+  child_allocator.GenerateId();
   setup.window_tree_test_helper()->SetWindowBoundsWithAck(
-      top_level, bounds_from_client, 4);
+      top_level, bounds_from_client,
+      child_allocator.GetCurrentLocalSurfaceIdAllocation(), 4);
   EXPECT_EQ(bounds_from_client, top_level->GetBoundsInScreen());
   EXPECT_EQ(bounds_from_client - screen_offset, top_level->bounds());
-  ASSERT_EQ(2u, setup.changes()->size());
-  {
-    const Change& change = (*setup.changes())[0];
-    EXPECT_EQ(CHANGE_TYPE_NODE_BOUNDS_CHANGED, change.type);
-    EXPECT_EQ(top_level->GetBoundsInScreen(), change.bounds2);
-    EXPECT_TRUE(change.local_surface_id);
-    setup.changes()->erase(setup.changes()->begin());
-  }
-  // See comments in WindowTree::SetBoundsImpl() for why this returns false.
-  EXPECT_EQ("ChangeCompleted id=4 success=false",
+  EXPECT_EQ("ChangeCompleted id=4 success=true",
             SingleChangeToDescription(*setup.changes()));
 
   aura::client::SetScreenPositionClient(setup.aura_test_helper()->root_window(),
                                         nullptr);
 }
 
-TEST(WindowTreeTest, SetTopLevelWindowBoundsFailsForSameSize) {
+TEST(WindowTreeTest, SetTopLevelWindowBoundsSameSize) {
   WindowServiceTestSetup setup;
   aura::Window* top_level =
       setup.window_tree_test_helper()->NewTopLevelWindow();
@@ -248,12 +265,134 @@ TEST(WindowTreeTest, SetTopLevelWindowBoundsFailsForSameSize) {
   const gfx::Rect bounds = gfx::Rect(1, 2, 300, 400);
   top_level->SetBounds(bounds);
   setup.changes()->clear();
-  // WindowTreeTestHelper::SetWindowBounds() uses a null LocalSurfaceId, which
-  // differs from the current LocalSurfaceId (assigned by ClientRoot). Because
-  // of this, the LocalSurfaceIds differ and the call returns false.
-  EXPECT_FALSE(
-      setup.window_tree_test_helper()->SetWindowBounds(top_level, bounds));
+  ProxyWindow* top_level_proxy = ProxyWindow::GetMayBeNull(top_level);
+  ASSERT_TRUE(top_level_proxy);
+  ASSERT_TRUE(top_level_proxy->local_surface_id_allocation().has_value());
+  viz::ChildLocalSurfaceIdAllocator child_allocator;
+  child_allocator.UpdateFromParent(
+      *top_level_proxy->local_surface_id_allocation());
+  child_allocator.GenerateId();
+  // WindowTreeTestHelper::SetWindowBounds() with same bounds should succeed.
+  EXPECT_TRUE(setup.window_tree_test_helper()->SetWindowBounds(
+      top_level, bounds, child_allocator.GetCurrentLocalSurfaceIdAllocation()));
   EXPECT_TRUE(setup.changes()->empty());
+  ASSERT_TRUE(top_level_proxy->local_surface_id_allocation().has_value());
+  EXPECT_EQ(child_allocator.GetCurrentLocalSurfaceIdAllocation(),
+            *top_level_proxy->local_surface_id_allocation());
+}
+
+TEST(WindowTreeTest, SetTopLevelWindowBoundsBadEmbedToken) {
+  WindowServiceTestSetup setup;
+  aura::Window* top_level =
+      setup.window_tree_test_helper()->NewTopLevelWindow();
+  setup.changes()->clear();
+  const gfx::Rect bounds = gfx::Rect(1, 2, 300, 400);
+  top_level->SetBounds(bounds);
+  setup.changes()->clear();
+  ProxyWindow* top_level_proxy = ProxyWindow::GetMayBeNull(top_level);
+  ASSERT_TRUE(top_level_proxy);
+  ASSERT_TRUE(top_level_proxy->local_surface_id_allocation().has_value());
+  const viz::LocalSurfaceId initial_lsia =
+      top_level_proxy->local_surface_id_allocation()->local_surface_id();
+  viz::LocalSurfaceIdAllocation lsia_with_different_embed_token(
+      viz::LocalSurfaceId(initial_lsia.parent_sequence_number(),
+                          initial_lsia.child_sequence_number(),
+                          base::UnguessableToken::Create()),
+      base::TimeTicks::Now());
+  // Clients are not allowed to change the embed token.
+  EXPECT_FALSE(setup.window_tree_test_helper()->SetWindowBounds(
+      top_level, gfx::Rect(1, 2, 3, 4), lsia_with_different_embed_token));
+  EXPECT_EQ(initial_lsia,
+            top_level_proxy->local_surface_id_allocation()->local_surface_id());
+  EXPECT_EQ(bounds, top_level->bounds());
+  EXPECT_TRUE(setup.changes()->empty());
+}
+
+TEST(WindowTreeTest, UpdateLocalSurfaceIdFromChildBadEmbedToken) {
+  WindowServiceTestSetup setup;
+  aura::Window* top_level =
+      setup.window_tree_test_helper()->NewTopLevelWindow();
+  setup.changes()->clear();
+  const gfx::Rect bounds = gfx::Rect(1, 2, 300, 400);
+  top_level->SetBounds(bounds);
+  setup.changes()->clear();
+  ProxyWindow* top_level_proxy = ProxyWindow::GetMayBeNull(top_level);
+  ASSERT_TRUE(top_level_proxy);
+  ASSERT_TRUE(top_level_proxy->local_surface_id_allocation().has_value());
+  const viz::LocalSurfaceId initial_lsia =
+      top_level_proxy->local_surface_id_allocation()->local_surface_id();
+  viz::LocalSurfaceIdAllocation lsia_with_different_embed_token(
+      viz::LocalSurfaceId(initial_lsia.parent_sequence_number(),
+                          initial_lsia.child_sequence_number(),
+                          base::UnguessableToken::Create()),
+      base::TimeTicks::Now());
+  // Clients are not allowed to change the embed token.
+  setup.window_tree_test_helper()->window_tree()->UpdateLocalSurfaceIdFromChild(
+      setup.window_tree_test_helper()->TransportIdForWindow(top_level),
+      lsia_with_different_embed_token);
+  EXPECT_EQ(initial_lsia,
+            top_level_proxy->local_surface_id_allocation()->local_surface_id());
+  EXPECT_EQ(bounds, top_level->bounds());
+  EXPECT_TRUE(setup.changes()->empty());
+}
+
+TEST(WindowTreeTest, UpdateLocalSurfaceIdFromScheduleEmbedWindow) {
+  WindowServiceTestSetup setup;
+  // Schedule an embed in the tree created by |setup|.
+  base::UnguessableToken token;
+  const uint32_t window_id_in_child = 149;
+  setup.window_tree_test_helper()
+      ->window_tree()
+      ->ScheduleEmbedForExistingClient(
+          window_id_in_child, base::BindOnce(&ScheduleEmbedCallback, &token));
+  EXPECT_FALSE(token.is_empty());
+
+  // Create a window that will serve as the parent for the remote window and
+  // complete the embedding.
+  aura::Window local_window(nullptr);
+  local_window.Init(ui::LAYER_NOT_DRAWN);
+  local_window.SetBounds(gfx::Rect(1, 2, 3, 4));
+  ASSERT_TRUE(setup.service()->CompleteScheduleEmbedForExistingClient(
+      &local_window, token, /* embed_flags */ 0));
+  EXPECT_TRUE(WindowService::IsProxyWindow(&local_window));
+
+  // Call UpdateLocalSurfaceIdFromScheduleEmbedWindow() for the embedded window
+  // and ensure the value is updated.
+  ProxyWindow* local_window_proxy = ProxyWindow::GetMayBeNull(&local_window);
+  ASSERT_TRUE(local_window_proxy);
+  ASSERT_TRUE(local_window_proxy->local_surface_id_allocation().has_value());
+  viz::ChildLocalSurfaceIdAllocator child_allocator;
+  child_allocator.UpdateFromParent(
+      *local_window_proxy->local_surface_id_allocation());
+  child_allocator.GenerateId();
+  setup.window_tree_test_helper()->window_tree()->UpdateLocalSurfaceIdFromChild(
+      setup.window_tree_test_helper()->TransportIdForWindow(&local_window),
+      child_allocator.GetCurrentLocalSurfaceIdAllocation());
+  EXPECT_EQ(child_allocator.GetCurrentLocalSurfaceIdAllocation(),
+            local_window_proxy->local_surface_id_allocation());
+}
+
+TEST(WindowTreeTest, SetTopLevelWindowBoundsNullSurfaceId) {
+  WindowServiceTestSetup setup;
+  aura::Window* top_level =
+      setup.window_tree_test_helper()->NewTopLevelWindow();
+  setup.changes()->clear();
+  const gfx::Rect bounds = gfx::Rect(1, 2, 300, 400);
+  top_level->SetBounds(bounds);
+  setup.changes()->clear();
+  // Server allows null LocalSurfaceIds, which is used on the initial resize
+  // from the client.
+  EXPECT_TRUE(
+      setup.window_tree_test_helper()->SetWindowBounds(top_level, bounds));
+  // The server always responds with a bounds change when the client changes the
+  // bounds and does not supply a LocalSurfaceId.
+  ASSERT_FALSE(setup.changes()->empty());
+  const auto& change = (*setup.changes())[0];
+  EXPECT_EQ(CHANGE_TYPE_NODE_BOUNDS_CHANGED, change.type);
+  EXPECT_EQ(setup.window_tree_test_helper()->TransportIdForWindow(top_level),
+            change.window_id);
+  EXPECT_TRUE(change.local_surface_id_allocation);
+  EXPECT_EQ(bounds, change.bounds);
 }
 
 TEST(WindowTreeTest, SetChildWindowBounds) {
@@ -292,18 +431,48 @@ TEST(WindowTreeTest, SetBoundsAtEmbedWindow) {
 
   // Set the bounds from the parent and ensure client is notified.
   const gfx::Rect bounds2 = gfx::Rect(1, 2, 300, 401);
-  base::Optional<viz::LocalSurfaceId> local_surface_id(
-      viz::LocalSurfaceId(1, 2, base::UnguessableToken::Create()));
+  base::Optional<viz::LocalSurfaceIdAllocation> local_surface_id_allocation(
+      viz::LocalSurfaceIdAllocation(
+          viz::LocalSurfaceId(1, 2, base::UnguessableToken::Create()),
+          base::TimeTicks::Now()));
   EXPECT_TRUE(setup.window_tree_test_helper()->SetWindowBounds(
-      window, bounds2, local_surface_id));
+      window, bounds2, local_surface_id_allocation));
   EXPECT_EQ(bounds2, window->bounds());
   ASSERT_EQ(1u,
             embedding_helper->window_tree_client.tracker()->changes()->size());
   const Change bounds_change =
       (*(embedding_helper->window_tree_client.tracker()->changes()))[0];
   EXPECT_EQ(CHANGE_TYPE_NODE_BOUNDS_CHANGED, bounds_change.type);
-  EXPECT_EQ(bounds2, bounds_change.bounds2);
-  EXPECT_EQ(local_surface_id, bounds_change.local_surface_id);
+  EXPECT_EQ(bounds2, bounds_change.bounds);
+  EXPECT_EQ(local_surface_id_allocation,
+            bounds_change.local_surface_id_allocation);
+  embedding_helper->window_tree_client.tracker()->changes()->clear();
+
+  // Set the bounds from the parent, only updating the LocalSurfaceId (bounds
+  // remains the same). The client should be notified.
+  base::Optional<viz::LocalSurfaceIdAllocation> local_surface_id_allocation2(
+      viz::LocalSurfaceIdAllocation(
+          viz::LocalSurfaceId(1, 3, base::UnguessableToken::Create()),
+          base::TimeTicks::Now()));
+  EXPECT_TRUE(setup.window_tree_test_helper()->SetWindowBounds(
+      window, bounds2, local_surface_id_allocation2));
+  EXPECT_EQ(bounds2, window->bounds());
+  ASSERT_EQ(1u,
+            embedding_helper->window_tree_client.tracker()->changes()->size());
+  const Change bounds_change2 =
+      (*(embedding_helper->window_tree_client.tracker()->changes()))[0];
+  EXPECT_EQ(CHANGE_TYPE_NODE_BOUNDS_CHANGED, bounds_change2.type);
+  EXPECT_EQ(bounds2, bounds_change2.bounds);
+  EXPECT_EQ(local_surface_id_allocation2,
+            bounds_change2.local_surface_id_allocation);
+  embedding_helper->window_tree_client.tracker()->changes()->clear();
+
+  // Try again with the same values. This should succeed, but not notify the
+  // client.
+  EXPECT_TRUE(setup.window_tree_test_helper()->SetWindowBounds(
+      window, bounds2, local_surface_id_allocation2));
+  EXPECT_TRUE(
+      embedding_helper->window_tree_client.tracker()->changes()->empty());
 }
 
 // Tests the ability of the client to change properties on the server.
@@ -351,8 +520,58 @@ TEST(WindowTreeTest, WindowToWindowData) {
                 data->properties[mojom::WindowManager::kAlwaysOnTop_Property]));
 }
 
+TEST(WindowTreeTest, SetWindowPointerProperty) {
+  WindowServiceTestSetup setup;
+  setup.service()->property_converter()->RegisterWindowPtrProperty(
+      kTestPropertyKey, kTestPropertyServerKey);
+
+  WindowTreeTestHelper* helper = setup.window_tree_test_helper();
+  aura::Window* top_level1 = helper->NewTopLevelWindow();
+  aura::Window* top_level2 = helper->NewTopLevelWindow();
+  Id id1 = helper->TransportIdForWindow(top_level1);
+  Id id2 = helper->TransportIdForWindow(top_level2);
+
+  base::Optional<std::vector<uint8_t>> value =
+      mojo::ConvertTo<std::vector<uint8_t>>(id2);
+  setup.window_tree_test_helper()->window_tree()->SetWindowProperty(
+      1, id1, kTestPropertyServerKey, value);
+  EXPECT_EQ(top_level2, top_level1->GetProperty(kTestPropertyKey));
+
+  value.reset();
+  setup.window_tree_test_helper()->window_tree()->SetWindowProperty(
+      1, id1, kTestPropertyServerKey, value);
+  EXPECT_FALSE(top_level1->GetProperty(kTestPropertyKey));
+}
+
+TEST(WindowTreeTest, SetWindowPointerPropertyWithInvalidValues) {
+  WindowServiceTestSetup setup;
+  setup.service()->property_converter()->RegisterWindowPtrProperty(
+      kTestPropertyKey, kTestPropertyServerKey);
+
+  WindowTreeTestHelper* helper = setup.window_tree_test_helper();
+  aura::Window* top_level = helper->NewTopLevelWindow();
+  Id id = helper->TransportIdForWindow(top_level);
+  base::Optional<std::vector<uint8_t>> value =
+      mojo::ConvertTo<std::vector<uint8_t>>(kInvalidTransportId);
+  setup.window_tree_test_helper()->window_tree()->SetWindowProperty(
+      1, id, kTestPropertyServerKey, value);
+  EXPECT_FALSE(top_level->GetProperty(kTestPropertyKey));
+
+  value = mojo::ConvertTo<std::vector<uint8_t>>(10);
+  setup.window_tree_test_helper()->window_tree()->SetWindowProperty(
+      1, id, kTestPropertyServerKey, value);
+  EXPECT_FALSE(top_level->GetProperty(kTestPropertyKey));
+
+  value->clear();
+  value->push_back(1);
+  setup.window_tree_test_helper()->window_tree()->SetWindowProperty(
+      1, id, kTestPropertyServerKey, value);
+  EXPECT_FALSE(top_level->GetProperty(kTestPropertyKey));
+}
+
 TEST(WindowTreeTest, OnWindowInputEventAck) {
   WindowServiceTestSetup setup;
+  setup.set_ack_events_immediately(false);
   TestWindowTreeClient* window_tree_client = setup.window_tree_client();
   WindowTreeTestHelper* tree = setup.window_tree_test_helper();
   aura::Window* top_level = tree->NewTopLevelWindow();
@@ -411,19 +630,15 @@ TEST(WindowTreeTest, OnWindowInputEventAck) {
   tree->OnWindowInputEventAck(event6.event_id, ws::mojom::EventResult::HANDLED);
   EXPECT_EQ(2u, tree->in_flight_other_events().size());
 
-  // Send two more key events.
+  // Send a key-press.
   event_generator.PressKey(ui::VKEY_A, ui::EF_NONE);
-  event_generator.ReleaseKey(ui::VKEY_A, ui::EF_NONE);
-  ASSERT_EQ(2u, window_tree_client->input_events().size());
+  ASSERT_EQ(1u, window_tree_client->input_events().size());
   TestWindowTreeClient::InputEvent event7 = window_tree_client->PopInputEvent();
   ASSERT_TRUE(event7.event->IsKeyEvent());
-  TestWindowTreeClient::InputEvent event8 = window_tree_client->PopInputEvent();
-  ASSERT_TRUE(event8.event->IsKeyEvent());
-
-  // The client cannot ack the second key event before the first.
-  EXPECT_EQ(2u, tree->in_flight_key_events().size());
-  tree->OnWindowInputEventAck(event8.event_id, ws::mojom::EventResult::HANDLED);
-  EXPECT_EQ(2u, tree->in_flight_key_events().size());
+  // Acking the wrong event should be ignored.
+  tree->OnWindowInputEventAck(event7.event_id + 11,
+                              ws::mojom::EventResult::HANDLED);
+  EXPECT_EQ(1u, tree->in_flight_key_events().size());
 }
 
 TEST(WindowTreeTest, EventLocation) {
@@ -525,22 +740,22 @@ TEST(WindowTreeTest, MovePressDragRelease) {
 
   ui::test::EventGenerator event_generator(setup.root());
   event_generator.MoveMouseTo(50, 50);
-  EXPECT_EQ("POINTER_MOVED 40,40",
+  EXPECT_EQ("MOUSE_MOVED 40,40",
             LocatedEventToEventTypeAndLocation(
                 window_tree_client->PopInputEvent().event.get()));
 
   event_generator.PressLeftButton();
-  EXPECT_EQ("POINTER_DOWN 40,40",
+  EXPECT_EQ("MOUSE_PRESSED 40,40",
             LocatedEventToEventTypeAndLocation(
                 window_tree_client->PopInputEvent().event.get()));
 
   event_generator.MoveMouseTo(0, 0);
-  EXPECT_EQ("POINTER_MOVED -10,-10",
+  EXPECT_EQ("MOUSE_DRAGGED -10,-10",
             LocatedEventToEventTypeAndLocation(
                 window_tree_client->PopInputEvent().event.get()));
 
   event_generator.ReleaseLeftButton();
-  EXPECT_EQ("POINTER_UP -10,-10",
+  EXPECT_EQ("MOUSE_RELEASED -10,-10",
             LocatedEventToEventTypeAndLocation(
                 window_tree_client->PopInputEvent().event.get()));
 }
@@ -555,7 +770,7 @@ TEST(WindowTreeTest, ShutdownWithTouchDown) {
   top_level->SetBounds(gfx::Rect(10, 10, 100, 100));
 
   ui::test::EventGenerator event_generator(setup.root());
-  event_generator.set_current_location(gfx::Point(50, 51));
+  event_generator.set_current_screen_location(gfx::Point(50, 51));
   event_generator.PressTouch();
 }
 
@@ -569,19 +784,19 @@ TEST(WindowTreeTest, TouchPressDragRelease) {
   top_level->SetBounds(gfx::Rect(10, 11, 100, 100));
 
   ui::test::EventGenerator event_generator(setup.root());
-  event_generator.set_current_location(gfx::Point(50, 51));
+  event_generator.set_current_screen_location(gfx::Point(50, 51));
   event_generator.PressTouch();
-  EXPECT_EQ("POINTER_DOWN 40,40",
+  EXPECT_EQ("ET_TOUCH_PRESSED 40,40",
             LocatedEventToEventTypeAndLocation(
                 window_tree_client->PopInputEvent().event.get()));
 
   event_generator.MoveTouch(gfx::Point(5, 6));
-  EXPECT_EQ("POINTER_MOVED -5,-5",
+  EXPECT_EQ("ET_TOUCH_MOVED -5,-5",
             LocatedEventToEventTypeAndLocation(
                 window_tree_client->PopInputEvent().event.get()));
 
   event_generator.ReleaseTouch();
-  EXPECT_EQ("POINTER_UP -5,-5",
+  EXPECT_EQ("ET_TOUCH_RELEASED -5,-5",
             LocatedEventToEventTypeAndLocation(
                 window_tree_client->PopInputEvent().event.get()));
 }
@@ -635,7 +850,7 @@ TEST(WindowTreeTest, MoveFromClientToNonClient) {
 
   ui::test::EventGenerator event_generator(setup.root());
   event_generator.MoveMouseTo(50, 50);
-  EXPECT_EQ("POINTER_MOVED 40,40",
+  EXPECT_EQ("MOUSE_MOVED 40,40",
             LocatedEventToEventTypeAndLocation(
                 window_tree_client->PopInputEvent().event.get()));
 
@@ -648,7 +863,7 @@ TEST(WindowTreeTest, MoveFromClientToNonClient) {
   // Move the mouse over the non-client area.
   // The event is still sent to the client, and the delegate.
   event_generator.MoveMouseTo(15, 16);
-  EXPECT_EQ("POINTER_MOVED 5,6",
+  EXPECT_EQ("MOUSE_MOVED 5,6",
             LocatedEventToEventTypeAndLocation(
                 window_tree_client->PopInputEvent().event.get()));
 
@@ -678,7 +893,7 @@ TEST(WindowTreeTest, MoveFromClientToNonClient) {
             EventToEventType(window_delegate.PopEvent().get()));
 
   event_generator.MoveMouseTo(26, 50);
-  EXPECT_EQ("POINTER_MOVED 16,40",
+  EXPECT_EQ("MOUSE_MOVED 16,40",
             LocatedEventToEventTypeAndLocation(
                 window_tree_client->PopInputEvent().event.get()));
 
@@ -688,7 +903,7 @@ TEST(WindowTreeTest, MoveFromClientToNonClient) {
 
   // Press in client area. Only the client should get the event.
   event_generator.PressLeftButton();
-  EXPECT_EQ("POINTER_DOWN 16,40",
+  EXPECT_EQ("MOUSE_PRESSED 16,40",
             LocatedEventToEventTypeAndLocation(
                 window_tree_client->PopInputEvent().event.get()));
 
@@ -721,7 +936,7 @@ TEST(WindowTreeTest, MouseDownInNonClientWithChildWindow) {
   // should get the event.
   ui::test::EventGenerator event_generator(setup.root());
   event_generator.MoveMouseTo(15, 16);
-  EXPECT_EQ("POINTER_MOVED 5,6",
+  EXPECT_EQ("MOUSE_MOVED 5,6",
             LocatedEventToEventTypeAndLocation(
                 window_tree_client->PopInputEvent().event.get()));
   EXPECT_TRUE(window_tree_client->input_events().empty());
@@ -773,7 +988,7 @@ TEST(WindowTreeTest, MouseDownInNonClientDragToClientWithChildWindow) {
   EXPECT_TRUE(window_tree_client->input_events().empty());
 }
 
-TEST(WindowTreeTest, SetHitTestMask) {
+TEST(WindowTreeTest, SetHitTestInsets) {
   EventRecordingWindowDelegate window_delegate;
   WindowServiceTestSetup setup;
   setup.delegate()->set_delegate_for_next_top_level(&window_delegate);
@@ -787,19 +1002,19 @@ TEST(WindowTreeTest, SetHitTestMask) {
   window_tree_client->ClearInputEvents();
   window_delegate.ClearEvents();
 
-  // Set a hit test mask in the window's bounds that excludes the top half.
-  setup.window_tree_test_helper()->SetHitTestMask(top_level,
-                                                  gfx::Rect(0, 50, 100, 50));
+  // Set the hit test insets in the window's bounds that excludes the top half.
+  setup.window_tree_test_helper()->SetHitTestInsets(
+      top_level, gfx::Insets(50, 0, 0, 0), gfx::Insets(50, 0, 0, 0));
 
-  // Events outside the hit test mask are not seen by the delegate or client.
+  // Events outside the hit test insets are not seen by the delegate or client.
   ui::test::EventGenerator event_generator(setup.root());
   event_generator.MoveMouseTo(50, 30);
   EXPECT_TRUE(window_tree_client->input_events().empty());
   EXPECT_TRUE(window_delegate.events().empty());
 
-  // Events in the hit test mask are seen by the delegate and client.
+  // Events in the hit test insets are seen by the delegate and client.
   event_generator.MoveMouseTo(50, 80);
-  EXPECT_EQ("POINTER_MOVED 40,70",
+  EXPECT_EQ("MOUSE_MOVED 40,70",
             LocatedEventToEventTypeAndLocation(
                 window_tree_client->PopInputEvent().event.get()));
   EXPECT_EQ("MOUSE_ENTERED 40,70", LocatedEventToEventTypeAndLocation(
@@ -808,54 +1023,49 @@ TEST(WindowTreeTest, SetHitTestMask) {
                                      window_delegate.PopEvent().get()));
 }
 
-TEST(WindowTreeTest, PointerWatcher) {
+TEST(WindowTreeTest, EventObserver) {
   WindowServiceTestSetup setup;
   TestWindowTreeClient* window_tree_client = setup.window_tree_client();
   aura::Window* top_level =
       setup.window_tree_test_helper()->NewTopLevelWindow();
   ASSERT_TRUE(top_level);
-  setup.window_tree_test_helper()->SetEventTargetingPolicy(
-      top_level, mojom::EventTargetingPolicy::NONE);
-  EXPECT_EQ(mojom::EventTargetingPolicy::NONE,
-            top_level->event_targeting_policy());
-  // Start the pointer watcher only for pointer down/up.
-  setup.window_tree_test_helper()->window_tree()->StartPointerWatcher(false);
+  // Start observing mouse press and release.
+  setup.window_tree_test_helper()->window_tree()->ObserveEventTypes(
+      {ui::mojom::EventType::MOUSE_PRESSED_EVENT,
+       ui::mojom::EventType::MOUSE_RELEASED_EVENT});
 
   top_level->Show();
   top_level->SetBounds(gfx::Rect(10, 10, 100, 100));
 
   ui::test::EventGenerator event_generator(setup.root());
   event_generator.MoveMouseTo(50, 50);
-  ASSERT_TRUE(window_tree_client->observed_pointer_events().empty());
+  ASSERT_TRUE(window_tree_client->observed_events().empty());
 
   event_generator.MoveMouseTo(5, 6);
-  ASSERT_TRUE(window_tree_client->observed_pointer_events().empty());
+  ASSERT_TRUE(window_tree_client->observed_events().empty());
 
   event_generator.PressLeftButton();
-  EXPECT_EQ("POINTER_DOWN 5,6",
+  EXPECT_EQ("MOUSE_PRESSED 5,6",
             LocatedEventToEventTypeAndLocation(
-                window_tree_client->PopObservedPointerEvent().event.get()));
+                window_tree_client->PopObservedEvent().get()));
 
   event_generator.ReleaseLeftButton();
-  EXPECT_EQ("POINTER_UP 5,6",
+  EXPECT_EQ("MOUSE_RELEASED 5,6",
             LocatedEventToEventTypeAndLocation(
-                window_tree_client->PopObservedPointerEvent().event.get()));
+                window_tree_client->PopObservedEvent().get()));
 
-  // Enable observing move events.
-  setup.window_tree_test_helper()->window_tree()->StartPointerWatcher(true);
+  // Start also observing mouse move events.
+  setup.window_tree_test_helper()->window_tree()->ObserveEventTypes(
+      {ui::mojom::EventType::MOUSE_PRESSED_EVENT,
+       ui::mojom::EventType::MOUSE_RELEASED_EVENT,
+       ui::mojom::EventType::MOUSE_MOVED_EVENT});
   event_generator.MoveMouseTo(8, 9);
-  EXPECT_EQ("POINTER_MOVED 8,9",
+  EXPECT_EQ("MOUSE_MOVED 8,9",
             LocatedEventToEventTypeAndLocation(
-                window_tree_client->PopObservedPointerEvent().event.get()));
-
-  const int kTouchId = 11;
-  event_generator.MoveTouchId(gfx::Point(2, 3), kTouchId);
-  EXPECT_EQ("POINTER_MOVED 2,3",
-            LocatedEventToEventTypeAndLocation(
-                window_tree_client->PopObservedPointerEvent().event.get()));
+                window_tree_client->PopObservedEvent().get()));
 }
 
-TEST(WindowTreeTest, MatchesPointerWatcherSet) {
+TEST(WindowTreeTest, MatchesEventObserverSet) {
   WindowServiceTestSetup setup;
   TestWindowTreeClient* window_tree_client = setup.window_tree_client();
   aura::Window* top_level =
@@ -863,26 +1073,25 @@ TEST(WindowTreeTest, MatchesPointerWatcherSet) {
   ASSERT_TRUE(top_level);
   top_level->Show();
   top_level->SetBounds(gfx::Rect(10, 10, 100, 100));
-  // Start the pointer watcher only for pointer down/up.
-  setup.window_tree_test_helper()->window_tree()->StartPointerWatcher(false);
+  // Start observing touch press and release.
+  setup.window_tree_test_helper()->window_tree()->ObserveEventTypes(
+      {ui::mojom::EventType::TOUCH_PRESSED,
+       ui::mojom::EventType::TOUCH_RELEASED});
 
   ui::test::EventGenerator event_generator(setup.root());
-  event_generator.MoveMouseTo(50, 50);
-  EXPECT_TRUE(window_tree_client->observed_pointer_events().empty());
-  window_tree_client->ClearInputEvents();
+  event_generator.set_current_screen_location(gfx::Point(50, 50));
+  event_generator.PressTouch();
 
-  event_generator.PressLeftButton();
-  // The client should get the event, and |matches_pointer_watcher| should be
-  // true (because it matched the pointer watcher).
+  // The client should get the input event, and |matches_event_observer| should
+  // be true (because it also matched the event observer).
   TestWindowTreeClient::InputEvent press_input =
       window_tree_client->PopInputEvent();
   ASSERT_TRUE(press_input.event);
-  EXPECT_EQ("POINTER_DOWN 40,40",
+  EXPECT_EQ("ET_TOUCH_PRESSED 40,40",
             LocatedEventToEventTypeAndLocation(press_input.event.get()));
-  EXPECT_TRUE(press_input.matches_pointer_watcher);
-  // Because the event matches a pointer event there should be no observed
-  // pointer events.
-  EXPECT_TRUE(window_tree_client->observed_pointer_events().empty());
+  EXPECT_TRUE(press_input.matches_event_observer);
+  // The event targeted the client, so there are no separately observed events.
+  EXPECT_TRUE(window_tree_client->observed_events().empty());
 }
 
 TEST(WindowTreeTest, Capture) {
@@ -906,6 +1115,21 @@ TEST(WindowTreeTest, Capture) {
   window->Show();
   EXPECT_TRUE(setup.window_tree_test_helper()->SetCapture(window));
   EXPECT_TRUE(setup.window_tree_test_helper()->ReleaseCapture(window));
+}
+
+TEST(WindowTreeTest, CaptureDisallowedWhenEmbedderInterceptsEvents) {
+  WindowServiceTestSetup setup;
+  aura::Window* top_level =
+      setup.window_tree_test_helper()->NewTopLevelWindow();
+  ASSERT_TRUE(top_level);
+  top_level->Show();
+  aura::Window* window = setup.window_tree_test_helper()->NewWindow();
+  top_level->AddChild(window);
+  window->Show();
+  std::unique_ptr<EmbeddingHelper> embedding_helper =
+      setup.CreateEmbedding(window, mojom::kEmbedFlagEmbedderInterceptsEvents);
+  ASSERT_TRUE(embedding_helper);
+  EXPECT_FALSE(embedding_helper->window_tree_test_helper->SetCapture(window));
 }
 
 TEST(WindowTreeTest, TransferCaptureToClient) {
@@ -938,7 +1162,7 @@ TEST(WindowTreeTest, TransferCaptureToClient) {
   event_generator.MoveMouseTo(8, 8);
   // Now the event should go to the client and not local.
   EXPECT_TRUE(window_delegate.events().empty());
-  EXPECT_EQ("POINTER_MOVED",
+  EXPECT_EQ("MOUSE_MOVED",
             EventToEventType(
                 setup.window_tree_client()->PopInputEvent().event.get()));
   EXPECT_TRUE(setup.window_tree_client()->input_events().empty());
@@ -974,7 +1198,7 @@ TEST(WindowTreeTest, TransferCaptureBetweenParentAndChild) {
   EXPECT_TRUE(setup.window_tree_client()->input_events().empty());
   EXPECT_TRUE(window_delegate.events().empty());
   EXPECT_EQ(
-      "POINTER_MOVED",
+      "MOUSE_MOVED",
       EventToEventType(
           embedding_helper->window_tree_client.PopInputEvent().event.get()));
   EXPECT_TRUE(embedding_helper->window_tree_client.input_events().empty());
@@ -982,7 +1206,7 @@ TEST(WindowTreeTest, TransferCaptureBetweenParentAndChild) {
   // Set capture from the parent, only the parent should get the event now.
   EXPECT_TRUE(setup.window_tree_test_helper()->SetCapture(top_level));
   event_generator.MoveMouseTo(8, 8);
-  EXPECT_EQ("POINTER_MOVED",
+  EXPECT_EQ("MOUSE_MOVED",
             EventToEventType(
                 setup.window_tree_client()->PopInputEvent().event.get()));
   EXPECT_TRUE(setup.window_tree_client()->input_events().empty());
@@ -1108,54 +1332,8 @@ TEST(WindowTreeTest, EventsGoToCaptureWindow) {
   auto drag_event = setup.window_tree_client()->PopInputEvent();
   EXPECT_EQ(setup.window_tree_test_helper()->TransportIdForWindow(window),
             drag_event.window_id);
-  EXPECT_EQ("POINTER_MOVED -4,-4",
+  EXPECT_EQ("MOUSE_DRAGGED -4,-4",
             LocatedEventToEventTypeAndLocation(drag_event.event.get()));
-}
-
-TEST(WindowTreeTest, InterceptEventsOnEmbeddedWindowWithCapture) {
-  EventRecordingWindowDelegate window_delegate;
-  WindowServiceTestSetup setup;
-  aura::Window* window = setup.window_tree_test_helper()->NewWindow();
-  ASSERT_TRUE(window);
-  setup.delegate()->set_delegate_for_next_top_level(&window_delegate);
-  aura::Window* top_level =
-      setup.window_tree_test_helper()->NewTopLevelWindow();
-  ASSERT_TRUE(top_level);
-  top_level->AddChild(window);
-  top_level->Show();
-  window->Show();
-
-  // Create an embedding, and a new window in the embedding.
-  std::unique_ptr<EmbeddingHelper> embedding_helper =
-      setup.CreateEmbedding(window, mojom::kEmbedFlagEmbedderInterceptsEvents);
-  ASSERT_TRUE(embedding_helper);
-  aura::Window* window_in_child =
-      embedding_helper->window_tree_test_helper->NewWindow();
-  ASSERT_TRUE(window_in_child);
-  window_in_child->Show();
-  window->AddChild(window_in_child);
-  EXPECT_TRUE(
-      embedding_helper->window_tree_test_helper->SetCapture(window_in_child));
-
-  // Do an initial move (which generates some additional events) and clear
-  // everything out.
-  ui::test::EventGenerator event_generator(setup.root());
-  event_generator.MoveMouseTo(5, 5);
-  setup.window_tree_client()->ClearInputEvents();
-  window_delegate.ClearEvents();
-  embedding_helper->window_tree_client.ClearInputEvents();
-
-  // Move the mouse. Even though the window in the embedding has capture, the
-  // event should go to the parent client (setup.window_tree_client()), because
-  // the embedding was created such that the embedder (parent) intercepts the
-  // events.
-  event_generator.MoveMouseTo(6, 6);
-  EXPECT_TRUE(window_delegate.events().empty());
-  EXPECT_EQ("POINTER_MOVED",
-            EventToEventType(
-                setup.window_tree_client()->PopInputEvent().event.get()));
-  EXPECT_TRUE(setup.window_tree_client()->input_events().empty());
-  EXPECT_TRUE(embedding_helper->window_tree_client.input_events().empty());
 }
 
 TEST(WindowTreeTest, PointerDownResetOnCaptureChange) {
@@ -1176,17 +1354,16 @@ TEST(WindowTreeTest, PointerDownResetOnCaptureChange) {
   ui::test::EventGenerator event_generator(setup.root());
   event_generator.MoveMouseTo(5, 5);
   event_generator.PressLeftButton();
-  ServerWindow* top_level_server_window = ServerWindow::GetMayBeNull(top_level);
-  ASSERT_TRUE(top_level_server_window);
-  ServerWindowTestHelper top_level_server_window_helper(
-      top_level_server_window);
-  EXPECT_TRUE(top_level_server_window_helper.IsHandlingPointerPress(
+  ProxyWindow* top_level_proxy_window = ProxyWindow::GetMayBeNull(top_level);
+  ASSERT_TRUE(top_level_proxy_window);
+  ProxyWindowTestHelper top_level_proxy_window_helper(top_level_proxy_window);
+  EXPECT_TRUE(top_level_proxy_window_helper.IsHandlingPointerPress(
       ui::MouseEvent::kMousePointerId));
 
   // Set capture on |window|, top_level should no longer be in pointer-down
   // (because capture changed).
   EXPECT_TRUE(setup.window_tree_test_helper()->SetCapture(window));
-  EXPECT_FALSE(top_level_server_window_helper.IsHandlingPointerPress(
+  EXPECT_FALSE(top_level_proxy_window_helper.IsHandlingPointerPress(
       ui::MouseEvent::kMousePointerId));
 }
 
@@ -1203,16 +1380,15 @@ TEST(WindowTreeTest, PointerDownResetOnHide) {
   ui::test::EventGenerator event_generator(setup.root());
   event_generator.MoveMouseTo(5, 5);
   event_generator.PressLeftButton();
-  ServerWindow* top_level_server_window = ServerWindow::GetMayBeNull(top_level);
-  ASSERT_TRUE(top_level_server_window);
-  ServerWindowTestHelper top_level_server_window_helper(
-      top_level_server_window);
-  EXPECT_TRUE(top_level_server_window_helper.IsHandlingPointerPress(
+  ProxyWindow* top_level_proxy_window = ProxyWindow::GetMayBeNull(top_level);
+  ASSERT_TRUE(top_level_proxy_window);
+  ProxyWindowTestHelper top_level_proxy_window_helper(top_level_proxy_window);
+  EXPECT_TRUE(top_level_proxy_window_helper.IsHandlingPointerPress(
       ui::MouseEvent::kMousePointerId));
 
   // Hiding should implicitly cancel capture.
   top_level->Hide();
-  EXPECT_FALSE(top_level_server_window_helper.IsHandlingPointerPress(
+  EXPECT_FALSE(top_level_proxy_window_helper.IsHandlingPointerPress(
       ui::MouseEvent::kMousePointerId));
 }
 
@@ -1300,7 +1476,7 @@ TEST(WindowTreeTest, Embed) {
   const Id embed_window_transport_id =
       setup.window_tree_test_helper()->TransportIdForWindow(embed_window);
   EXPECT_EQ(embed_window_transport_id, (*setup.changes())[0].window_id);
-  EXPECT_EQ(ServerWindow::GetMayBeNull(embed_window)->frame_sink_id(),
+  EXPECT_EQ(ProxyWindow::GetMayBeNull(embed_window)->frame_sink_id(),
             (*setup.changes())[0].frame_sink_id);
 }
 
@@ -1501,10 +1677,10 @@ TEST(WindowTreeTest, DeleteEmbededTreeFromScheduleEmbedForExistingClient) {
                      &embed_result));
   EXPECT_TRUE(embed_callback_called);
   EXPECT_TRUE(embed_result);
-  EXPECT_TRUE(ServerWindow::GetMayBeNull(window_in_parent)->HasEmbedding());
+  EXPECT_TRUE(ProxyWindow::GetMayBeNull(window_in_parent)->HasEmbedding());
 
   tree2.reset();
-  EXPECT_FALSE(ServerWindow::GetMayBeNull(window_in_parent)->HasEmbedding());
+  EXPECT_FALSE(ProxyWindow::GetMayBeNull(window_in_parent)->HasEmbedding());
 }
 
 TEST(WindowTreeTest, StackAtTop) {
@@ -1541,6 +1717,8 @@ TEST(WindowTreeTest, StackAtTop) {
 TEST(WindowTreeTest, OnUnhandledKeyEvent) {
   // Create a top-level, show it and give it focus.
   WindowServiceTestSetup setup;
+  // This test acks its own events.
+  setup.set_ack_events_immediately(false);
   aura::Window* top_level =
       setup.window_tree_test_helper()->NewTopLevelWindow();
   ASSERT_TRUE(top_level);
@@ -1681,6 +1859,18 @@ TEST(WindowTreeTest, StackAbove) {
       top_level1, non_top_level_window));
 }
 
+TEST(WindowTreeTest, VisibilityChanged) {
+  WindowServiceTestSetup setup;
+  aura::Window* window = setup.window_tree_test_helper()->NewTopLevelWindow();
+  setup.changes()->clear();
+  EXPECT_FALSE(window->IsVisible());
+
+  window->Show();
+  EXPECT_TRUE(window->IsVisible());
+  EXPECT_EQ("VisibilityChanged window=0,1 visible=true",
+            SingleChangeToDescription(*setup.changes()));
+}
+
 TEST(WindowTreeTest, RunMoveLoopTouch) {
   WindowServiceTestSetup setup;
   aura::Window* top_level =
@@ -1690,7 +1880,7 @@ TEST(WindowTreeTest, RunMoveLoopTouch) {
       setup.window_tree_test_helper()->TransportIdForWindow(top_level);
   setup.changes()->clear();
   setup.window_tree_test_helper()->window_tree()->PerformWindowMove(
-      12, top_level_id, mojom::MoveLoopSource::TOUCH, gfx::Point());
+      12, top_level_id, mojom::MoveLoopSource::TOUCH, gfx::Point(), HTCAPTION);
   // |top_level| isn't visible, so should fail immediately.
   EXPECT_EQ("ChangeCompleted id=12 success=false",
             SingleChangeToDescription(*setup.changes()));
@@ -1698,8 +1888,9 @@ TEST(WindowTreeTest, RunMoveLoopTouch) {
 
   // Make the window visible and repeat.
   top_level->Show();
+  setup.changes()->clear();
   setup.window_tree_test_helper()->window_tree()->PerformWindowMove(
-      13, top_level_id, mojom::MoveLoopSource::TOUCH, gfx::Point());
+      13, top_level_id, mojom::MoveLoopSource::TOUCH, gfx::Point(), HTCAPTION);
   // WindowServiceDelegate should be asked to do the move.
   WindowServiceDelegate::DoneCallback move_loop_callback =
       setup.delegate()->TakeMoveLoopCallback();
@@ -1721,7 +1912,7 @@ TEST(WindowTreeTest, RunMoveLoopTouch) {
       14,
       setup.window_tree_test_helper()->TransportIdForWindow(
           non_top_level_window),
-      mojom::MoveLoopSource::TOUCH, gfx::Point());
+      mojom::MoveLoopSource::TOUCH, gfx::Point(), HTCAPTION);
   EXPECT_EQ("ChangeCompleted id=14 success=false",
             SingleChangeToDescription(*setup.changes()));
 }
@@ -1736,7 +1927,7 @@ TEST(WindowTreeTest, RunMoveLoopMouse) {
       setup.window_tree_test_helper()->TransportIdForWindow(top_level);
   setup.changes()->clear();
   setup.window_tree_test_helper()->window_tree()->PerformWindowMove(
-      12, top_level_id, mojom::MoveLoopSource::MOUSE, gfx::Point());
+      12, top_level_id, mojom::MoveLoopSource::MOUSE, gfx::Point(), HTCAPTION);
   // The mouse isn't down, so this should fail.
   EXPECT_EQ("ChangeCompleted id=12 success=false",
             SingleChangeToDescription(*setup.changes()));
@@ -1746,7 +1937,7 @@ TEST(WindowTreeTest, RunMoveLoopMouse) {
   ui::test::EventGenerator event_generator(setup.root());
   event_generator.PressLeftButton();
   setup.window_tree_test_helper()->window_tree()->PerformWindowMove(
-      13, top_level_id, mojom::MoveLoopSource::MOUSE, gfx::Point());
+      13, top_level_id, mojom::MoveLoopSource::MOUSE, gfx::Point(), HTCAPTION);
   // WindowServiceDelegate should be asked to do the move.
   WindowServiceDelegate::DoneCallback move_loop_callback =
       setup.delegate()->TakeMoveLoopCallback();
@@ -1771,7 +1962,7 @@ TEST(WindowTreeTest, CancelMoveLoop) {
       setup.window_tree_test_helper()->TransportIdForWindow(top_level);
   setup.changes()->clear();
   setup.window_tree_test_helper()->window_tree()->PerformWindowMove(
-      12, top_level_id, mojom::MoveLoopSource::TOUCH, gfx::Point());
+      12, top_level_id, mojom::MoveLoopSource::TOUCH, gfx::Point(), HTCAPTION);
 
   // WindowServiceDelegate should be asked to do the move.
   WindowServiceDelegate::DoneCallback move_loop_callback =
@@ -1987,15 +2178,17 @@ TEST(WindowTreeTest, DsfChanges) {
       setup.window_tree_test_helper()->NewTopLevelWindow();
   ASSERT_TRUE(top_level);
   top_level->Show();
-  ServerWindow* top_level_server_window = ServerWindow::GetMayBeNull(top_level);
-  const base::Optional<viz::LocalSurfaceId> initial_surface_id =
-      top_level_server_window->local_surface_id();
-  EXPECT_TRUE(initial_surface_id);
+  ProxyWindow* top_level_proxy_window = ProxyWindow::GetMayBeNull(top_level);
+  const base::Optional<viz::LocalSurfaceIdAllocation>
+      initial_surface_id_allocation =
+          top_level_proxy_window->local_surface_id_allocation();
+  EXPECT_TRUE(initial_surface_id_allocation);
 
   // Changing the scale factor should change the LocalSurfaceId.
   setup.aura_test_helper()->test_screen()->SetDeviceScaleFactor(2.0f);
-  EXPECT_TRUE(top_level_server_window->local_surface_id());
-  EXPECT_NE(*top_level_server_window->local_surface_id(), *initial_surface_id);
+  EXPECT_TRUE(top_level_proxy_window->local_surface_id_allocation());
+  EXPECT_NE(*top_level_proxy_window->local_surface_id_allocation(),
+            *initial_surface_id_allocation);
 }
 
 TEST(WindowTreeTest, DontSendGestures) {
@@ -2019,10 +2212,10 @@ TEST(WindowTreeTest, DontSendGestures) {
   // never be forwarded to the client, as it's assumed the client runs its own
   // gesture recognizer.
   event_generator.GestureTapAt(gfx::Point(10, 10));
-  EXPECT_EQ("POINTER_DOWN",
+  EXPECT_EQ("ET_TOUCH_PRESSED",
             EventToEventType(
                 setup.window_tree_client()->PopInputEvent().event.get()));
-  EXPECT_EQ("POINTER_UP",
+  EXPECT_EQ("ET_TOUCH_RELEASED",
             EventToEventType(
                 setup.window_tree_client()->PopInputEvent().event.get()));
   EXPECT_TRUE(setup.window_tree_client()->input_events().empty());
@@ -2056,6 +2249,379 @@ TEST(WindowTreeTest, DeactivateWindow) {
   setup.window_tree_test_helper()->window_tree()->DeactivateWindow(
       setup.window_tree_test_helper()->TransportIdForWindow(top_level2));
   EXPECT_TRUE(wm::IsActiveWindow(top_level1));
+}
+
+TEST(WindowTreeTest, AttachFrameSinkId) {
+  // Create two top-levels and focuses (activates) the second.
+  WindowServiceTestSetup setup;
+  aura::Window* top_level =
+      setup.window_tree_test_helper()->NewTopLevelWindow();
+  ASSERT_TRUE(top_level);
+  top_level->Show();
+
+  aura::Window* child_window = setup.window_tree_test_helper()->NewWindow();
+  ASSERT_TRUE(child_window);
+  viz::FrameSinkId test_frame_sink_id(101, 102);
+  viz::HostFrameSinkManager* host_frame_sink_manager =
+      child_window->env()->context_factory_private()->GetHostFrameSinkManager();
+
+  // Attach a frame sink to |child_window|. This shouldn't immediately register.
+  setup.window_tree_test_helper()->window_tree()->AttachFrameSinkId(
+      setup.window_tree_test_helper()->TransportIdForWindow(child_window),
+      test_frame_sink_id);
+  EXPECT_FALSE(
+      host_frame_sink_manager->IsFrameSinkIdRegistered(test_frame_sink_id));
+
+  // Add the window to a parent, which should trigger registering the hierarchy.
+  viz::FakeHostFrameSinkClient test_host_frame_sink_client;
+  host_frame_sink_manager->RegisterFrameSinkId(
+      test_frame_sink_id, &test_host_frame_sink_client,
+      viz::ReportFirstSurfaceActivation::kYes);
+  EXPECT_EQ(test_frame_sink_id,
+            ProxyWindow::GetMayBeNull(child_window)->attached_frame_sink_id());
+  top_level->AddChild(child_window);
+  EXPECT_TRUE(host_frame_sink_manager->IsFrameSinkHierarchyRegistered(
+      ProxyWindow::GetMayBeNull(top_level)->frame_sink_id(),
+      test_frame_sink_id));
+
+  // Removing the window should remove the association.
+  top_level->RemoveChild(child_window);
+  EXPECT_FALSE(host_frame_sink_manager->IsFrameSinkHierarchyRegistered(
+      ProxyWindow::GetMayBeNull(top_level)->frame_sink_id(),
+      test_frame_sink_id));
+
+  setup.window_tree_test_helper()->DeleteWindow(child_window);
+
+  host_frame_sink_manager->InvalidateFrameSinkId(test_frame_sink_id);
+}
+
+TEST(WindowTreeTest, OcclusionStateChange) {
+  WindowServiceTestSetup setup;
+
+  // Create |tracked| and tracks its occlusion state.
+  aura::Window* tracked = setup.window_tree_test_helper()->NewTopLevelWindow();
+  ASSERT_TRUE(tracked);
+  tracked->SetBounds(gfx::Rect(0, 0, 10, 10));
+
+  tracked->TrackOcclusionState();
+
+  // Gets HIDDEN state since |tracked| is created hidden.
+  EXPECT_TRUE(ContainsChange(
+      *setup.changes(),
+      "OnOcclusionStatesChanged {{window_id=0,1, state=HIDDEN}}"));
+
+  // Gets VISIBLE state when |tracked| is shown.
+  tracked->Show();
+  EXPECT_TRUE(ContainsChange(
+      *setup.changes(),
+      "OnOcclusionStatesChanged {{window_id=0,1, state=VISIBLE}}"));
+
+  // Creates |blocking_window| and make it occlude |tracked|.
+  aura::Window* blocking_window =
+      setup.window_tree_test_helper()->NewTopLevelWindow();
+  ASSERT_TRUE(blocking_window);
+  blocking_window->SetProperty(aura::client::kClientWindowHasContent, true);
+  blocking_window->SetBounds(gfx::Rect(0, 0, 15, 15));
+  blocking_window->Show();
+
+  // Gets OCCLUDED state since |blocking_window| covers |tracked|.
+  EXPECT_TRUE(ContainsChange(
+      *setup.changes(),
+      "OnOcclusionStatesChanged {{window_id=0,1, state=OCCLUDED}}"));
+}
+
+TEST(WindowTreeTest, OcclusionStateChangeBatchSameTree) {
+  WindowServiceTestSetup setup;
+
+  // Create two tracked windows and tracks their occlusion state.
+  aura::Window* tracked_1 =
+      setup.window_tree_test_helper()->NewTopLevelWindow();
+  ASSERT_TRUE(tracked_1);
+  tracked_1->SetBounds(gfx::Rect(0, 0, 10, 10));
+  tracked_1->TrackOcclusionState();
+  tracked_1->Show();
+
+  aura::Window* tracked_2 =
+      setup.window_tree_test_helper()->NewTopLevelWindow();
+  ASSERT_TRUE(tracked_2);
+  tracked_2->SetBounds(gfx::Rect(10, 0, 10, 10));
+  tracked_2->TrackOcclusionState();
+  tracked_2->Show();
+
+  // Creates |blocking_window| and make it occlude both tracked windows.
+  aura::Window* blocking_window =
+      setup.window_tree_test_helper()->NewTopLevelWindow();
+  ASSERT_TRUE(blocking_window);
+  blocking_window->SetProperty(aura::client::kClientWindowHasContent, true);
+  blocking_window->SetBounds(gfx::Rect(0, 0, 20, 15));
+  blocking_window->Show();
+
+  // Occlusion changes of windows for the same tree are sent together.
+  EXPECT_TRUE(
+      ContainsChange(*setup.changes(),
+                     "OnOcclusionStatesChanged {{window_id=0,1, "
+                     "state=OCCLUDED}, {window_id=0,2, state=OCCLUDED}}"));
+}
+
+TEST(WindowTreeTest, OcclusionStateChangeBatchDifferentTree) {
+  WindowServiceTestSetup setup;
+
+  // Create |tracked_1| from default tree.
+  aura::Window* tracked_1 =
+      setup.window_tree_test_helper()->NewTopLevelWindow(100);
+  ASSERT_TRUE(tracked_1);
+  tracked_1->SetBounds(gfx::Rect(0, 0, 10, 10));
+  tracked_1->TrackOcclusionState();
+  tracked_1->Show();
+
+  // Create |tracked_2| from a second tree.
+  TestWindowTreeClient client2;
+  std::unique_ptr<WindowTree> tree2 =
+      setup.service()->CreateWindowTree(&client2);
+  tree2->InitFromFactory();
+  WindowTreeTestHelper tree2_test_helper(tree2.get());
+
+  aura::Window* tracked_2 = tree2_test_helper.NewTopLevelWindow(200);
+  ASSERT_TRUE(tracked_2);
+  tracked_2->SetBounds(gfx::Rect(10, 0, 10, 10));
+  tracked_2->TrackOcclusionState();
+  tracked_2->Show();
+
+  // Creates |blocking_window| and make it occlude both tracked windows.
+  aura::Window* blocking_window =
+      setup.window_tree_test_helper()->NewTopLevelWindow();
+  ASSERT_TRUE(blocking_window);
+  blocking_window->SetProperty(aura::client::kClientWindowHasContent, true);
+  blocking_window->SetBounds(gfx::Rect(0, 0, 20, 15));
+  blocking_window->Show();
+
+  // Occlusion changes are sent separately for different trees.
+  EXPECT_TRUE(ContainsChange(*setup.changes(),
+                             "OnOcclusionStatesChanged {{window_id=0,100, "
+                             "state=OCCLUDED}}"));
+  EXPECT_TRUE(ContainsChange(*client2.tracker()->changes(),
+                             "OnOcclusionStatesChanged {{window_id=0,200, "
+                             "state=OCCLUDED}}"));
+}
+
+TEST(WindowTreeTest, OcclusionTrackingPause) {
+  WindowServiceTestSetup setup;
+  aura::test::WindowOcclusionTrackerTestApi tracker_api(
+      setup.service()->env()->GetWindowOcclusionTracker());
+  ASSERT_FALSE(tracker_api.IsPaused());
+
+  // Simple case of one pause.
+  setup.window_tree_test_helper()
+      ->window_tree()
+      ->PauseWindowOcclusionTracking();
+  EXPECT_TRUE(tracker_api.IsPaused());
+  setup.window_tree_test_helper()
+      ->window_tree()
+      ->UnpauseWindowOcclusionTracking();
+  EXPECT_FALSE(tracker_api.IsPaused());
+
+  // Multiple pauses.
+  constexpr int kPauses = 3;
+  for (int i = 0; i < kPauses; ++i) {
+    setup.window_tree_test_helper()
+        ->window_tree()
+        ->PauseWindowOcclusionTracking();
+    EXPECT_TRUE(tracker_api.IsPaused());
+  }
+  for (int i = 0; i < kPauses - 1; ++i) {
+    setup.window_tree_test_helper()
+        ->window_tree()
+        ->UnpauseWindowOcclusionTracking();
+    EXPECT_TRUE(tracker_api.IsPaused());
+  }
+  setup.window_tree_test_helper()
+      ->window_tree()
+      ->UnpauseWindowOcclusionTracking();
+  EXPECT_FALSE(tracker_api.IsPaused());
+}
+
+TEST(WindowTreeTest, OcclusionTrackingPauseInterleaved) {
+  WindowServiceTestSetup setup;
+  aura::test::WindowOcclusionTrackerTestApi tracker_api(
+      setup.service()->env()->GetWindowOcclusionTracker());
+  ASSERT_FALSE(tracker_api.IsPaused());
+
+  // Creates a second WindowTree.
+  TestWindowTreeClient tree_client;
+  std::unique_ptr<WindowTree> tree2 =
+      setup.service()->CreateWindowTree(&tree_client);
+  tree2->InitFromFactory();
+  auto helper2 = std::make_unique<WindowTreeTestHelper>(tree2.get());
+
+  // Tree1 pauses.
+  setup.window_tree_test_helper()
+      ->window_tree()
+      ->PauseWindowOcclusionTracking();
+  EXPECT_TRUE(tracker_api.IsPaused());
+
+  // Tree2 pauses.
+  helper2->window_tree()->PauseWindowOcclusionTracking();
+  EXPECT_TRUE(tracker_api.IsPaused());
+
+  // Tree1 unpauses.
+  setup.window_tree_test_helper()
+      ->window_tree()
+      ->UnpauseWindowOcclusionTracking();
+  EXPECT_TRUE(tracker_api.IsPaused());
+
+  // Tree2 unpauses
+  helper2->window_tree()->UnpauseWindowOcclusionTracking();
+  EXPECT_FALSE(tracker_api.IsPaused());
+}
+
+TEST(WindowTreeTest, OcclusionTrackingPauseGoingAwayTree) {
+  WindowServiceTestSetup setup;
+  aura::test::WindowOcclusionTrackerTestApi tracker_api(
+      setup.service()->env()->GetWindowOcclusionTracker());
+  ASSERT_FALSE(tracker_api.IsPaused());
+
+  // Tree1 pauses.
+  setup.window_tree_test_helper()
+      ->window_tree()
+      ->PauseWindowOcclusionTracking();
+  EXPECT_TRUE(tracker_api.IsPaused());
+
+  // Creates a second WindowTree.
+  TestWindowTreeClient tree_client;
+  std::unique_ptr<WindowTree> tree2 =
+      setup.service()->CreateWindowTree(&tree_client);
+  tree2->InitFromFactory();
+  auto helper2 = std::make_unique<WindowTreeTestHelper>(tree2.get());
+
+  // Tree2 creates an outstanding pause.
+  helper2->window_tree()->PauseWindowOcclusionTracking();
+  EXPECT_TRUE(tracker_api.IsPaused());
+
+  // Tree2 goes away with the outstanding pause.
+  helper2.reset();
+  tree2.reset();
+
+  // Still paused because tree1 still holds a pause.
+  EXPECT_TRUE(tracker_api.IsPaused());
+
+  // Tree1 releases the pause and tracker is unpaused.
+  setup.window_tree_test_helper()
+      ->window_tree()
+      ->UnpauseWindowOcclusionTracking();
+  EXPECT_FALSE(tracker_api.IsPaused());
+}
+
+// Forces window visibility to a target value in OnWindowVisibilityChanged().
+// This mimics MultiUserWindowManager in ash.
+class WindowVisibilityEnforcer : public aura::WindowObserver {
+ public:
+  WindowVisibilityEnforcer(aura::Window* window, bool target_visibility)
+      : window_(window), target_visibility_(target_visibility) {
+    window_->AddObserver(this);
+  }
+  ~WindowVisibilityEnforcer() override { StopObservering(); }
+
+  // aura::WindowObserver:
+  void OnWindowVisibilityChanged(aura::Window* window, bool visible) override {
+    if (visible == target_visibility_)
+      return;
+
+    if (target_visibility_)
+      window->Show();
+    else
+      window->Hide();
+  }
+  void OnWindowDestroying(aura::Window* window) override { StopObservering(); }
+
+ private:
+  void StopObservering() {
+    if (!window_)
+      return;
+    window_->RemoveObserver(this);
+    window_ = nullptr;
+  }
+
+  aura::Window* window_;
+  const bool target_visibility_;
+
+  DISALLOW_COPY_AND_ASSIGN(WindowVisibilityEnforcer);
+};
+
+TEST(WindowTreeTest, ForcedWindowVisibility) {
+  WindowServiceTestSetup setup;
+  aura::Window* top_level =
+      setup.window_tree_test_helper()->NewTopLevelWindow();
+  setup.changes()->clear();
+
+  // WindowVisibilityEnforcer ensures the window remains hidden.
+  std::unique_ptr<WindowVisibilityEnforcer> enforcer =
+      std::make_unique<WindowVisibilityEnforcer>(top_level, false);
+  // Attempting to show the window should fail because WindowVisibilityEnforcer
+  // forces the window to remain hidden.
+  EXPECT_FALSE(
+      setup.window_tree_test_helper()->SetWindowVisibility(top_level, true));
+  EXPECT_FALSE(top_level->IsVisible());
+  // The client should not be notified of anything (returning false is enough).
+  EXPECT_TRUE(setup.changes()->empty());
+
+  // Destroy the enforcer and make the window visible.
+  enforcer.reset();
+  EXPECT_TRUE(
+      setup.window_tree_test_helper()->SetWindowVisibility(top_level, true));
+  EXPECT_TRUE(top_level->IsVisible());
+  EXPECT_TRUE(setup.changes()->empty());
+
+  // Create another enforcer that forces the window to remain visible.
+  enforcer = std::make_unique<WindowVisibilityEnforcer>(top_level, true);
+  // Attempting to hide the window should fail because WindowVisibilityEnforcer
+  // forces the window to remain visible.
+  EXPECT_FALSE(
+      setup.window_tree_test_helper()->SetWindowVisibility(top_level, false));
+  EXPECT_TRUE(top_level->IsVisible());
+  EXPECT_TRUE(setup.changes()->empty());
+}
+
+TEST(WindowTreeTest, SetWindowTransform) {
+  WindowServiceTestSetup setup;
+  aura::Window* top_level =
+      setup.window_tree_test_helper()->NewTopLevelWindow();
+  setup.changes()->clear();
+  gfx::Transform scaled;
+  scaled.Scale(2, 2);
+  EXPECT_FALSE(
+      setup.window_tree_test_helper()->SetTransform(top_level, scaled));
+  EXPECT_EQ(gfx::Transform(), top_level->transform());
+
+  aura::Window* child_window = setup.window_tree_test_helper()->NewWindow();
+  EXPECT_TRUE(
+      setup.window_tree_test_helper()->SetTransform(child_window, scaled));
+  EXPECT_EQ(scaled, child_window->transform());
+}
+
+TEST(WindowTreeTest, AddingTransientGoesThroughParentingClient) {
+  WindowServiceTestSetup setup;
+  aura::test::TestWindowParentingClient test_window_parenting_client(
+      setup.aura_test_helper()->root_window());
+  WindowTreeTestHelper* helper = setup.window_tree_test_helper();
+  aura::Window* top_level = helper->NewTopLevelWindow();
+  ASSERT_TRUE(top_level);
+  aura::Window* transient = helper->NewTopLevelWindow();
+  ASSERT_TRUE(transient);
+
+  // Put |top_level| in |container|.
+  aura::Window container(nullptr);
+  container.Init(ui::LAYER_NOT_DRAWN);
+  top_level->parent()->AddChild(&container);
+  container.AddChild(top_level);
+  test_window_parenting_client.set_default_parent(&container);
+  EXPECT_NE(&container, transient->parent());
+
+  // AddTransientWindow() should trigger calling into the WindowParentingClient,
+  // which will result in adding |transient| as a child of |container|.
+  helper->window_tree()->AddTransientWindow(
+      10, helper->TransportIdForWindow(top_level),
+      helper->TransportIdForWindow(transient));
+  EXPECT_EQ(&container, transient->parent());
 }
 
 }  // namespace

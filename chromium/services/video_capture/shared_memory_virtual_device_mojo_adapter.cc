@@ -4,6 +4,7 @@
 
 #include "services/video_capture/shared_memory_virtual_device_mojo_adapter.h"
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/capture/video/scoped_buffer_pool_reservation.h"
@@ -55,12 +56,15 @@ int SharedMemoryVirtualDeviceMojoAdapter::max_buffer_pool_buffer_count() {
 void SharedMemoryVirtualDeviceMojoAdapter::RequestFrameBuffer(
     const gfx::Size& dimension,
     media::VideoPixelFormat pixel_format,
+    media::mojom::PlaneStridesPtr strides,
     RequestFrameBufferCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   int buffer_id_to_drop = media::VideoCaptureBufferPool::kInvalidId;
-  const int buffer_id = buffer_pool_->ReserveForProducer(
-      dimension, pixel_format, 0 /* frame_feedback_id */, &buffer_id_to_drop);
+  int buffer_id = media::VideoCaptureBufferPool::kInvalidId;
+  const auto reserve_result = buffer_pool_->ReserveForProducer(
+      dimension, pixel_format, strides, 0 /* frame_feedback_id */, &buffer_id,
+      &buffer_id_to_drop);
 
   // Remove dropped buffer if there is one.
   if (buffer_id_to_drop != media::VideoCaptureBufferPool::kInvalidId) {
@@ -75,8 +79,8 @@ void SharedMemoryVirtualDeviceMojoAdapter::RequestFrameBuffer(
     }
   }
 
-  // No buffer available.
-  if (buffer_id == media::VideoCaptureBufferPool::kInvalidId) {
+  if (reserve_result !=
+      media::VideoCaptureDevice::Client::ReserveResult::kSucceeded) {
     std::move(callback).Run(mojom::kInvalidBufferId);
     return;
   }
@@ -165,16 +169,6 @@ void SharedMemoryVirtualDeviceMojoAdapter::Start(
   }
 }
 
-void SharedMemoryVirtualDeviceMojoAdapter::OnReceiverReportingUtilization(
-    int32_t frame_feedback_id,
-    double utilization) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-}
-
-void SharedMemoryVirtualDeviceMojoAdapter::RequestRefreshFrame() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-}
-
 void SharedMemoryVirtualDeviceMojoAdapter::MaybeSuspend() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
@@ -206,6 +200,10 @@ void SharedMemoryVirtualDeviceMojoAdapter::Stop() {
     return;
   // Unsubscribe from connection error callbacks.
   receiver_.set_connection_error_handler(base::OnceClosure());
+  // Send out OnBufferRetired events and OnStopped.
+  for (auto buffer_id : known_buffer_ids_)
+    receiver_->OnBufferRetired(buffer_id);
+  receiver_->OnStopped();
   receiver_.reset();
 }
 

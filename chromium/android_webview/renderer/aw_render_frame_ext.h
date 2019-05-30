@@ -27,7 +27,11 @@ namespace android_webview {
 // WebKit directly to implement (and that aren't needed in the chrome app).
 class AwRenderFrameExt : public content::RenderFrameObserver {
  public:
-  AwRenderFrameExt(content::RenderFrame* render_frame);
+  explicit AwRenderFrameExt(content::RenderFrame* render_frame);
+
+  static AwRenderFrameExt* FromRenderFrame(content::RenderFrame* render_frame);
+
+  bool GetWillSuppressErrorPage();
 
  private:
   ~AwRenderFrameExt() override;
@@ -36,8 +40,8 @@ class AwRenderFrameExt : public content::RenderFrameObserver {
   bool OnAssociatedInterfaceRequestForFrame(
       const std::string& interface_name,
       mojo::ScopedInterfaceEndpointHandle* handle) override;
-  void DidCommitProvisionalLoad(bool is_new_navigation,
-                                bool is_same_document_navigation) override;
+  void DidCommitProvisionalLoad(bool is_same_document_navigation,
+                                ui::PageTransition transition) override;
 
   bool OnMessageReceived(const IPC::Message& message) override;
   void FocusedNodeChanged(const blink::WebNode& node) override;
@@ -57,12 +61,17 @@ class AwRenderFrameExt : public content::RenderFrameObserver {
 
   void OnSmoothScroll(int target_x, int target_y, int duration_ms);
 
+  void OnSetWillSuppressErrorPage(bool suppress);
+
   blink::WebView* GetWebView();
   blink::WebFrameWidget* GetWebFrameWidget();
 
   url::Origin last_origin_;
 
   blink::AssociatedInterfaceRegistry registry_;
+
+  // Some WebView users might want to show their own error pages / logic
+  bool will_suppress_error_page_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(AwRenderFrameExt);
 };

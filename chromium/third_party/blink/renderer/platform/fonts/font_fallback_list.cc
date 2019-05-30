@@ -174,7 +174,7 @@ scoped_refptr<FontData> FontFallbackList::GetFontData(
   if (font_selector_) {
     // Try the user's preferred standard font.
     if (scoped_refptr<FontData> data = font_selector_->GetFontData(
-            font_description, FontFamilyNames::webkit_standard))
+            font_description, font_family_names::kWebkitStandard))
       return data;
   }
 
@@ -202,7 +202,8 @@ FallbackListCompositeKey FontFallbackList::CompositeKey(
               platform_data);
       }
       if (result) {
-        key.Add(font_description.CacheKey(params));
+        bool is_unique_match = false;
+        key.Add(font_description.CacheKey(params, is_unique_match));
         if (!result->IsSegmented() && !result->IsCustomFont())
           FontCache::GetFontCache()->ReleaseFontData(ToSimpleFontData(result));
       }

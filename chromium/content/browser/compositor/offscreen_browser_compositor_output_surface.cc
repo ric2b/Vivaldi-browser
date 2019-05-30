@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "components/viz/common/resources/resource_format_utils.h"
@@ -109,9 +110,7 @@ void OffscreenBrowserCompositorOutputSurface::DiscardBackbuffer() {
 }
 
 void OffscreenBrowserCompositorOutputSurface::SetDrawRectangle(
-    const gfx::Rect& draw_rectangle) {
-  NOTREACHED();
-}
+    const gfx::Rect& draw_rectangle) {}
 
 void OffscreenBrowserCompositorOutputSurface::Reshape(
     const gfx::Size& size,
@@ -160,8 +159,7 @@ void OffscreenBrowserCompositorOutputSurface::SwapBuffers(
       sync_token,
       base::BindOnce(
           &OffscreenBrowserCompositorOutputSurface::OnSwapBuffersComplete,
-          weak_ptr_factory_.GetWeakPtr(), frame.latency_info,
-          frame.need_presentation_feedback));
+          weak_ptr_factory_.GetWeakPtr(), frame.latency_info));
 }
 
 bool OffscreenBrowserCompositorOutputSurface::IsDisplayedAsOverlayPlane()
@@ -191,21 +189,11 @@ void OffscreenBrowserCompositorOutputSurface::OnReflectorChanged() {
 }
 
 void OffscreenBrowserCompositorOutputSurface::OnSwapBuffersComplete(
-    const std::vector<ui::LatencyInfo>& latency_info,
-    bool need_presentation_feedback) {
+    const std::vector<ui::LatencyInfo>& latency_info) {
   latency_tracker_.OnGpuSwapBuffersCompleted(latency_info);
   client_->DidReceiveSwapBuffersAck();
-  if (need_presentation_feedback)
-    client_->DidReceivePresentationFeedback(gfx::PresentationFeedback());
+  client_->DidReceivePresentationFeedback(gfx::PresentationFeedback());
 }
-
-#if BUILDFLAG(ENABLE_VULKAN)
-gpu::VulkanSurface*
-OffscreenBrowserCompositorOutputSurface::GetVulkanSurface() {
-  NOTIMPLEMENTED();
-  return nullptr;
-}
-#endif
 
 unsigned OffscreenBrowserCompositorOutputSurface::UpdateGpuFence() {
   return 0;

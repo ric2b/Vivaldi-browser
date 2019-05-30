@@ -17,11 +17,20 @@
 
 namespace blink {
 
-class GamepadHapticActuator final : public ScriptWrappable {
+class GamepadDispatcher;
+
+class GamepadHapticActuator final : public ScriptWrappable,
+                                    public ContextClient {
   DEFINE_WRAPPERTYPEINFO();
+  USING_GARBAGE_COLLECTED_MIXIN(GamepadHapticActuator);
 
  public:
-  static GamepadHapticActuator* Create(int pad_index);
+  static GamepadHapticActuator* Create(ExecutionContext* context,
+                                       int pad_index);
+
+  GamepadHapticActuator(ExecutionContext* context,
+                        int pad_index,
+                        device::GamepadHapticActuatorType type);
   ~GamepadHapticActuator() override;
 
   const String& type() const { return type_; }
@@ -29,22 +38,24 @@ class GamepadHapticActuator final : public ScriptWrappable {
 
   ScriptPromise playEffect(ScriptState*,
                            const String&,
-                           const GamepadEffectParameters&);
+                           const GamepadEffectParameters*);
 
   ScriptPromise reset(ScriptState*);
 
   void Trace(blink::Visitor*) override;
 
  private:
-  GamepadHapticActuator(int pad_index, device::GamepadHapticActuatorType);
-
   void OnPlayEffectCompleted(ScriptPromiseResolver*,
                              device::mojom::GamepadHapticsResult);
   void OnResetCompleted(ScriptPromiseResolver*,
                         device::mojom::GamepadHapticsResult);
+  void ResetVibrationIfNotPreempted();
 
   int pad_index_;
   String type_;
+  bool should_reset_ = false;
+
+  Member<GamepadDispatcher> gamepad_dispatcher_;
 };
 
 typedef HeapVector<Member<GamepadHapticActuator>> GamepadHapticActuatorVector;

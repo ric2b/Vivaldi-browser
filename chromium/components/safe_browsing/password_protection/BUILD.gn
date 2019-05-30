@@ -11,6 +11,8 @@ source_set("password_protection") {
       "password_protection_request.h",
       "password_protection_service.cc",
       "password_protection_service.h",
+      "visual_utils.cc",
+      "visual_utils.h",
     ]
 
     public_deps = [
@@ -33,6 +35,7 @@ source_set("password_protection") {
       "//components/safe_browsing/db:whitelist_checker_client",
       "//components/safe_browsing/web_ui:web_ui",
       "//components/sessions",
+      "//components/zoom",
       "//content/public/browser:browser",
       "//net:net",
       "//third_party/protobuf:protobuf_lite",
@@ -50,6 +53,7 @@ source_set("password_protection_metrics_util") {
     "//base",
     "//components/safe_browsing:csd_proto",
     "//net:net",
+    "//ui/gfx/geometry:geometry",
   ]
 }
 
@@ -58,6 +62,7 @@ source_set("password_protection_unittest") {
   if (!is_android && !is_ios) {
     sources = [
       "password_protection_service_unittest.cc",
+      "visual_utils_unittest.cc",
     ]
     deps = [
       ":mock_password_protection",

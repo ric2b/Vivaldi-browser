@@ -25,15 +25,15 @@
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/sync/session_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_live_tab_context.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "components/browser_sync/profile_sync_service.h"
 #include "components/sessions/content/content_live_tab.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
+#include "components/sync_sessions/session_sync_service.h"
 #include "components/sync_sessions/synced_session.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/web_contents.h"
@@ -153,7 +153,7 @@ api::tabs::Tab SessionsGetRecentlyClosedFunction::CreateTabModel(
     const sessions::TabRestoreService::Tab& tab,
     bool active) {
   return CreateTabModelHelper(tab.navigations[tab.current_navigation_index],
-                              base::IntToString(tab.id.id()),
+                              base::NumberToString(tab.id.id()),
                               tab.tabstrip_index, tab.pinned, active,
                               tab.ext_data,
                               extension());
@@ -170,7 +170,7 @@ SessionsGetRecentlyClosedFunction::CreateWindowModel(
         CreateTabModel(*tab, tab->tabstrip_index == window.selected_tab_index));
 
   return CreateWindowModelHelper(
-      std::move(tabs), base::IntToString(window.id.id()),
+      std::move(tabs), base::NumberToString(window.id.id()),
       api::windows::WINDOW_TYPE_NORMAL, api::windows::WINDOW_STATE_NORMAL,
                                  window.ext_data);
 }
@@ -360,18 +360,15 @@ api::sessions::Device SessionsGetDevicesFunction::CreateDeviceModel(
 }
 
 ExtensionFunction::ResponseAction SessionsGetDevicesFunction::Run() {
-  browser_sync::ProfileSyncService* service =
-      ProfileSyncServiceFactory::GetInstance()->GetForProfile(
+  sync_sessions::SessionSyncService* service =
+      SessionSyncServiceFactory::GetInstance()->GetForProfile(
           Profile::FromBrowserContext(browser_context()));
-  if (!(service && service->GetPreferredDataTypes().Has(syncer::SESSIONS))) {
-    // Sync not enabled.
-    return RespondNow(ArgumentList(
-        GetDevices::Results::Create(std::vector<api::sessions::Device>())));
-  }
+  DCHECK(service);
 
   sync_sessions::OpenTabsUIDelegate* open_tabs =
       service->GetOpenTabsUIDelegate();
   std::vector<const sync_sessions::SyncedSession*> sessions;
+  // If the user has disabled tab sync, GetOpenTabsUIDelegate() returns null.
   if (!(open_tabs && open_tabs->GetAllForeignSessions(&sessions))) {
     return RespondNow(ArgumentList(
         GetDevices::Results::Create(std::vector<api::sessions::Device>())));
@@ -501,12 +498,14 @@ ExtensionFunction::ResponseValue SessionsRestoreFunction::RestoreForeignSession(
     const SessionId& session_id,
     Browser* browser) {
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  browser_sync::ProfileSyncService* service =
-      ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
-  if (!(service && service->GetPreferredDataTypes().Has(syncer::SESSIONS)))
-    return Error(kSessionSyncError);
+  sync_sessions::SessionSyncService* service =
+      SessionSyncServiceFactory::GetInstance()->GetForProfile(
+          Profile::FromBrowserContext(browser_context()));
+  DCHECK(service);
+
   sync_sessions::OpenTabsUIDelegate* open_tabs =
       service->GetOpenTabsUIDelegate();
+  // If the user has disabled tab sync, GetOpenTabsUIDelegate() returns null.
   if (!open_tabs)
     return Error(kSessionSyncError);
 

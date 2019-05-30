@@ -39,6 +39,7 @@
 #include "third_party/blink/renderer/core/fileapi/blob.h"
 #include "third_party/blink/renderer/core/messaging/message_port.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/compiler.h"
 
 namespace blink {
@@ -49,26 +50,27 @@ class CORE_EXPORT MessageEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static MessageEvent* Create() { return new MessageEvent; }
+  static MessageEvent* Create() { return MakeGarbageCollected<MessageEvent>(); }
   static MessageEvent* Create(MessagePortArray* ports,
                               const String& origin = String(),
                               const String& last_event_id = String(),
                               EventTarget* source = nullptr) {
-    return new MessageEvent(origin, last_event_id, source, ports);
+    return MakeGarbageCollected<MessageEvent>(origin, last_event_id, source,
+                                              ports);
   }
   static MessageEvent* Create(MessagePortArray* ports,
                               scoped_refptr<SerializedScriptValue> data,
                               const String& origin = String(),
                               const String& last_event_id = String(),
                               EventTarget* source = nullptr) {
-    return new MessageEvent(std::move(data), origin, last_event_id, source,
-                            ports, nullptr);
+    return MakeGarbageCollected<MessageEvent>(
+        std::move(data), origin, last_event_id, source, ports, nullptr);
   }
   static MessageEvent* Create(MessagePortArray* ports,
                               scoped_refptr<SerializedScriptValue> data,
                               UserActivation* user_activation) {
-    return new MessageEvent(std::move(data), String(), String(), nullptr, ports,
-                            user_activation);
+    return MakeGarbageCollected<MessageEvent>(
+        std::move(data), String(), String(), nullptr, ports, user_activation);
   }
   static MessageEvent* Create(Vector<MessagePortChannel> channels,
                               scoped_refptr<SerializedScriptValue> data,
@@ -76,27 +78,52 @@ class CORE_EXPORT MessageEvent final : public Event {
                               const String& last_event_id = String(),
                               EventTarget* source = nullptr,
                               UserActivation* user_activation = nullptr) {
-    return new MessageEvent(std::move(data), origin, last_event_id, source,
-                            std::move(channels), user_activation);
+    return MakeGarbageCollected<MessageEvent>(
+        std::move(data), origin, last_event_id, source, std::move(channels),
+        user_activation);
   }
   static MessageEvent* CreateError(const String& origin = String(),
                                    EventTarget* source = nullptr) {
-    return new MessageEvent(origin, source);
+    return MakeGarbageCollected<MessageEvent>(origin, source);
   }
   static MessageEvent* Create(const String& data,
                               const String& origin = String()) {
-    return new MessageEvent(data, origin);
+    return MakeGarbageCollected<MessageEvent>(data, origin);
   }
   static MessageEvent* Create(Blob* data, const String& origin = String()) {
-    return new MessageEvent(data, origin);
+    return MakeGarbageCollected<MessageEvent>(data, origin);
   }
   static MessageEvent* Create(DOMArrayBuffer* data,
                               const String& origin = String()) {
-    return new MessageEvent(data, origin);
+    return MakeGarbageCollected<MessageEvent>(data, origin);
   }
   static MessageEvent* Create(const AtomicString& type,
-                              const MessageEventInit& initializer,
+                              const MessageEventInit* initializer,
                               ExceptionState&);
+
+  MessageEvent();
+  MessageEvent(const AtomicString&, const MessageEventInit*);
+  MessageEvent(const String& origin,
+               const String& last_event_id,
+               EventTarget* source,
+               MessagePortArray*);
+  MessageEvent(scoped_refptr<SerializedScriptValue> data,
+               const String& origin,
+               const String& last_event_id,
+               EventTarget* source,
+               MessagePortArray*,
+               UserActivation* user_activation);
+  MessageEvent(scoped_refptr<SerializedScriptValue> data,
+               const String& origin,
+               const String& last_event_id,
+               EventTarget* source,
+               Vector<MessagePortChannel>,
+               UserActivation* user_activation);
+  // Creates a "messageerror" event.
+  MessageEvent(const String& origin, EventTarget* source);
+  MessageEvent(const String& data, const String& origin);
+  MessageEvent(Blob* data, const String& origin);
+  MessageEvent(DOMArrayBuffer* data, const String& origin);
   ~MessageEvent() override;
 
   void initMessageEvent(const AtomicString& type,
@@ -183,6 +210,8 @@ class CORE_EXPORT MessageEvent final : public Event {
 
  private:
   class V8GCAwareString final {
+    DISALLOW_NEW();
+
    public:
     V8GCAwareString() = default;
     V8GCAwareString(const String&);
@@ -196,32 +225,6 @@ class CORE_EXPORT MessageEvent final : public Event {
    private:
     String string_;
   };
-
-  MessageEvent();
-  MessageEvent(const AtomicString&, const MessageEventInit&);
-  MessageEvent(const String& origin,
-               const String& last_event_id,
-               EventTarget* source,
-               MessagePortArray*);
-  MessageEvent(scoped_refptr<SerializedScriptValue> data,
-               const String& origin,
-               const String& last_event_id,
-               EventTarget* source,
-               MessagePortArray*,
-               UserActivation* user_activation);
-  MessageEvent(scoped_refptr<SerializedScriptValue> data,
-               const String& origin,
-               const String& last_event_id,
-               EventTarget* source,
-               Vector<MessagePortChannel>,
-               UserActivation* user_activation);
-
-  // Creates a "messageerror" event.
-  MessageEvent(const String& origin, EventTarget* source);
-
-  MessageEvent(const String& data, const String& origin);
-  MessageEvent(Blob* data, const String& origin);
-  MessageEvent(DOMArrayBuffer* data, const String& origin);
 
   DataType data_type_;
   ScriptValue data_as_script_value_;

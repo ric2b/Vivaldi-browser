@@ -45,7 +45,7 @@
 
 namespace blink {
 
-void V8DevToolsHost::platformMethodCustom(
+void V8DevToolsHost::PlatformMethodCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
 #if defined(OS_MACOSX)
   V8SetReturnValue(info, V8AtomicString(info.GetIsolate(), "mac"));
@@ -60,7 +60,7 @@ static bool PopulateContextMenuItems(v8::Isolate* isolate,
                                      const v8::Local<v8::Array>& item_array,
                                      WebVector<WebMenuItemInfo>& items) {
   v8::Local<v8::Context> context = isolate->GetCurrentContext();
-  for (size_t i = 0; i < item_array->Length(); ++i) {
+  for (uint32_t i = 0; i < item_array->Length(); ++i) {
     v8::Local<v8::Object> item =
         item_array->Get(context, i).ToLocalChecked().As<v8::Object>();
     v8::Local<v8::Value> type;
@@ -124,7 +124,7 @@ static bool PopulateContextMenuItems(v8::Isolate* isolate,
   return true;
 }
 
-void V8DevToolsHost::showContextMenuAtPointMethodCustom(
+void V8DevToolsHost::ShowContextMenuAtPointMethodCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   if (info.Length() < 3)
     return;
@@ -154,12 +154,12 @@ void V8DevToolsHost::showContextMenuAtPointMethodCustom(
     document = V8HTMLDocument::ToImplWithTypeCheck(isolate, info[3]);
   } else {
     v8::Local<v8::Object> window_wrapper =
-        V8Window::findInstanceInPrototypeChain(
-            isolate->GetEnteredContext()->Global(), isolate);
+        V8Window::FindInstanceInPrototypeChain(
+            isolate->GetEnteredOrMicrotaskContext()->Global(), isolate);
     if (window_wrapper.IsEmpty())
       return;
     DOMWindow* window = V8Window::ToImpl(window_wrapper);
-    document = window ? ToLocalDOMWindow(window)->document() : nullptr;
+    document = window ? To<LocalDOMWindow>(window)->document() : nullptr;
   }
   if (!document || !document->GetFrame())
     return;

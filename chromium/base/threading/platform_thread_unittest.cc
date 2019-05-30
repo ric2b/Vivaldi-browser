@@ -5,7 +5,7 @@
 #include <stddef.h>
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/platform_thread.h"
@@ -54,16 +54,16 @@ TEST(PlatformThreadTest, TrivialJoin) {
 
 TEST(PlatformThreadTest, TrivialJoinTimesTen) {
   TrivialThread thread[10];
-  PlatformThreadHandle handle[arraysize(thread)];
+  PlatformThreadHandle handle[base::size(thread)];
 
-  for (size_t n = 0; n < arraysize(thread); n++)
-    ASSERT_FALSE(thread[n].run_event().IsSignaled());
-  for (size_t n = 0; n < arraysize(thread); n++)
+  for (auto& n : thread)
+    ASSERT_FALSE(n.run_event().IsSignaled());
+  for (size_t n = 0; n < base::size(thread); n++)
     ASSERT_TRUE(PlatformThread::Create(0, &thread[n], &handle[n]));
-  for (size_t n = 0; n < arraysize(thread); n++)
-    PlatformThread::Join(handle[n]);
-  for (size_t n = 0; n < arraysize(thread); n++)
-    ASSERT_TRUE(thread[n].run_event().IsSignaled());
+  for (auto n : handle)
+    PlatformThread::Join(n);
+  for (auto& n : thread)
+    ASSERT_TRUE(n.run_event().IsSignaled());
 }
 
 // The following detach tests are by nature racy. The run_event approximates the
@@ -81,16 +81,16 @@ TEST(PlatformThreadTest, TrivialDetach) {
 
 TEST(PlatformThreadTest, TrivialDetachTimesTen) {
   TrivialThread thread[10];
-  PlatformThreadHandle handle[arraysize(thread)];
+  PlatformThreadHandle handle[base::size(thread)];
 
-  for (size_t n = 0; n < arraysize(thread); n++)
-    ASSERT_FALSE(thread[n].run_event().IsSignaled());
-  for (size_t n = 0; n < arraysize(thread); n++) {
+  for (auto& n : thread)
+    ASSERT_FALSE(n.run_event().IsSignaled());
+  for (size_t n = 0; n < base::size(thread); n++) {
     ASSERT_TRUE(PlatformThread::Create(0, &thread[n], &handle[n]));
     PlatformThread::Detach(handle[n]);
   }
-  for (size_t n = 0; n < arraysize(thread); n++)
-    thread[n].run_event().Wait();
+  for (auto& n : thread)
+    n.run_event().Wait();
 }
 
 // Tests of basic thread functions ---------------------------------------------
@@ -187,17 +187,17 @@ TEST(PlatformThreadTest, FunctionTimesTen) {
   PlatformThreadId main_thread_id = PlatformThread::CurrentId();
 
   FunctionTestThread thread[10];
-  PlatformThreadHandle handle[arraysize(thread)];
+  PlatformThreadHandle handle[base::size(thread)];
 
-  for (size_t n = 0; n < arraysize(thread); n++)
-    ASSERT_FALSE(thread[n].IsRunning());
+  for (const auto& n : thread)
+    ASSERT_FALSE(n.IsRunning());
 
-  for (size_t n = 0; n < arraysize(thread); n++)
+  for (size_t n = 0; n < base::size(thread); n++)
     ASSERT_TRUE(PlatformThread::Create(0, &thread[n], &handle[n]));
-  for (size_t n = 0; n < arraysize(thread); n++)
-    thread[n].WaitForTerminationReady();
+  for (auto& n : thread)
+    n.WaitForTerminationReady();
 
-  for (size_t n = 0; n < arraysize(thread); n++) {
+  for (size_t n = 0; n < base::size(thread); n++) {
     ASSERT_TRUE(thread[n].IsRunning());
     EXPECT_NE(thread[n].thread_id(), main_thread_id);
 
@@ -207,12 +207,12 @@ TEST(PlatformThreadTest, FunctionTimesTen) {
     }
   }
 
-  for (size_t n = 0; n < arraysize(thread); n++)
-    thread[n].MarkForTermination();
-  for (size_t n = 0; n < arraysize(thread); n++)
-    PlatformThread::Join(handle[n]);
-  for (size_t n = 0; n < arraysize(thread); n++)
-    ASSERT_FALSE(thread[n].IsRunning());
+  for (auto& n : thread)
+    n.MarkForTermination();
+  for (auto n : handle)
+    PlatformThread::Join(n);
+  for (const auto& n : thread)
+    ASSERT_FALSE(n.IsRunning());
 
   // Make sure that the thread ID is the same across calls.
   EXPECT_EQ(main_thread_id, PlatformThread::CurrentId());
@@ -220,88 +220,57 @@ TEST(PlatformThreadTest, FunctionTimesTen) {
 
 namespace {
 
-constexpr ThreadPriority kAllThreadPriorities[] = {
-    ThreadPriority::REALTIME_AUDIO, ThreadPriority::DISPLAY,
-    ThreadPriority::NORMAL, ThreadPriority::BACKGROUND};
-
 class ThreadPriorityTestThread : public FunctionTestThread {
  public:
-  explicit ThreadPriorityTestThread() = default;
+  explicit ThreadPriorityTestThread(ThreadPriority from, ThreadPriority to)
+      : from_(from), to_(to) {}
   ~ThreadPriorityTestThread() override = default;
 
  private:
   void RunTest() override {
-#if !defined(OS_ANDROID)
-    // TODO(fdoray): PlatformThread::CanIncreaseCurrentThreadPriority()
-    // incorrectly returns false on Android. There should be a cross-POSIX
-    // implementation of this method that checks RLIMIT_NICE to determine
-    // whether it is possible to increase thread priority.
-    // https://crbug.com/872820
-    if (PlatformThread::CanIncreaseCurrentThreadPriority()) {
-#endif
-      // On platforms that support increasing thread priority, test transition
-      // between every possible pair of priorities.
-      for (auto first_priority : kAllThreadPriorities) {
-        for (auto second_priority : kAllThreadPriorities) {
-          PlatformThread::SetCurrentThreadPriority(first_priority);
-          EXPECT_EQ(first_priority, PlatformThread::GetCurrentThreadPriority());
+    EXPECT_EQ(PlatformThread::GetCurrentThreadPriority(),
+              ThreadPriority::NORMAL);
+    PlatformThread::SetCurrentThreadPriority(from_);
+    EXPECT_EQ(PlatformThread::GetCurrentThreadPriority(), from_);
+    PlatformThread::SetCurrentThreadPriority(to_);
 
-          PlatformThread::SetCurrentThreadPriority(second_priority);
-          EXPECT_EQ(second_priority,
-                    PlatformThread::GetCurrentThreadPriority());
-        }
-      }
-#if !defined(OS_ANDROID)
+    if (static_cast<int>(to_) <= static_cast<int>(from_) ||
+        PlatformThread::CanIncreaseThreadPriority(to_)) {
+      EXPECT_EQ(PlatformThread::GetCurrentThreadPriority(), to_);
     } else {
-      // On platforms that don't support increasing thread priority, the only
-      // valid transition is NORMAL -> BACKGROUND (it isn't possible to get a
-      // thread running with a higher priority than NORMAL).
-      EXPECT_EQ(ThreadPriority::NORMAL,
-                PlatformThread::GetCurrentThreadPriority());
-
-      // Verify that transition to DISPLAY or REALTIME_AUDIO is impossible.
-      PlatformThread::SetCurrentThreadPriority(ThreadPriority::DISPLAY);
-      EXPECT_EQ(ThreadPriority::NORMAL,
-                PlatformThread::GetCurrentThreadPriority());
-      PlatformThread::SetCurrentThreadPriority(ThreadPriority::REALTIME_AUDIO);
-      EXPECT_EQ(ThreadPriority::NORMAL,
-                PlatformThread::GetCurrentThreadPriority());
-
-      // Verify that transition to BACKGROUND is possible.
-      PlatformThread::SetCurrentThreadPriority(ThreadPriority::BACKGROUND);
-      EXPECT_EQ(ThreadPriority::BACKGROUND,
-                PlatformThread::GetCurrentThreadPriority());
-
-      // Verify that transition to NORMAL, DISPLAY or REALTIME_AUDIO is
-      // impossible.
-      PlatformThread::SetCurrentThreadPriority(ThreadPriority::NORMAL);
-      EXPECT_EQ(ThreadPriority::BACKGROUND,
-                PlatformThread::GetCurrentThreadPriority());
-      PlatformThread::SetCurrentThreadPriority(ThreadPriority::DISPLAY);
-      EXPECT_EQ(ThreadPriority::BACKGROUND,
-                PlatformThread::GetCurrentThreadPriority());
-      PlatformThread::SetCurrentThreadPriority(ThreadPriority::REALTIME_AUDIO);
-      EXPECT_EQ(ThreadPriority::BACKGROUND,
-                PlatformThread::GetCurrentThreadPriority());
+      EXPECT_NE(PlatformThread::GetCurrentThreadPriority(), to_);
     }
-#endif  // !defined(OS_ANDROID)
   }
+
+  const ThreadPriority from_;
+  const ThreadPriority to_;
 
   DISALLOW_COPY_AND_ASSIGN(ThreadPriorityTestThread);
 };
 
 void TestSetCurrentThreadPriority() {
-  ThreadPriorityTestThread thread;
-  PlatformThreadHandle handle;
+  constexpr ThreadPriority kAllThreadPriorities[] = {
+      ThreadPriority::REALTIME_AUDIO, ThreadPriority::DISPLAY,
+      ThreadPriority::NORMAL, ThreadPriority::BACKGROUND};
 
-  ASSERT_FALSE(thread.IsRunning());
-  ASSERT_TRUE(PlatformThread::Create(0, &thread, &handle));
-  thread.WaitForTerminationReady();
-  ASSERT_TRUE(thread.IsRunning());
+  for (auto from : kAllThreadPriorities) {
+    if (static_cast<int>(from) <= static_cast<int>(ThreadPriority::NORMAL) ||
+        PlatformThread::CanIncreaseThreadPriority(from)) {
+      for (auto to : kAllThreadPriorities) {
+        ThreadPriorityTestThread thread(from, to);
+        PlatformThreadHandle handle;
 
-  thread.MarkForTermination();
-  PlatformThread::Join(handle);
-  ASSERT_FALSE(thread.IsRunning());
+        ASSERT_FALSE(thread.IsRunning());
+        ASSERT_TRUE(PlatformThread::Create(0, &thread, &handle));
+        thread.WaitForTerminationReady();
+        ASSERT_TRUE(thread.IsRunning());
+
+        thread.MarkForTermination();
+        PlatformThread::Join(handle);
+        ASSERT_FALSE(thread.IsRunning());
+      }
+    }
+  }
 }
 
 }  // namespace
@@ -320,13 +289,59 @@ TEST(PlatformThreadTest, MAYBE_SetCurrentThreadPriority) {
 #if defined(OS_WIN)
 // Test changing a created thread's priority, with the
 // kWindowsThreadModeBackground feature enabled.
-TEST(PlatformThreadTest, SetCurrentThreadPriorityWithThreadModeBackground) {
+// Flaky: https://crbug.com/931706
+TEST(PlatformThreadTest,
+     DISABLED_SetCurrentThreadPriorityWithThreadModeBackground) {
   test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(
       features::kWindowsThreadModeBackground);
   TestSetCurrentThreadPriority();
 }
+
+// Test changing a created thread's priority, with the
+// kWindowsThreadModeBackground feature enabled, in an IDLE_PRIORITY_CLASS
+// process (regression test for https://crbug.com/901483).
+// Flaky: https://crbug.com/931706
+TEST(PlatformThreadTest,
+     DISABLED_SetCurrentThreadPriorityWithThreadModeBackgroundIdleProcess) {
+  ::SetPriorityClass(Process::Current().Handle(), IDLE_PRIORITY_CLASS);
+
+  test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kWindowsThreadModeBackground);
+  TestSetCurrentThreadPriority();
+
+  ::SetPriorityClass(Process::Current().Handle(), NORMAL_PRIORITY_CLASS);
+}
 #endif  // defined(OS_WIN)
+
+// Ideally PlatformThread::CanIncreaseThreadPriority() would be true on all
+// platforms for all priorities. This not being the case. This test documents
+// and hardcodes what we know. Please inform scheduler-dev@chromium.org if this
+// proprerty changes for a given platform.
+TEST(PlatformThreadTest, CanIncreaseThreadPriority) {
+#if defined(OS_LINUX)
+  // On Ubuntu, RLIMIT_NICE and RLIMIT_RTPRIO are 0 by default, so we won't be
+  // able to increase priority to any level.
+  constexpr bool kCanIncreasePriority = false;
+#elif defined(OS_FUCHSIA)
+  // Fuchsia doesn't support thread priorities.
+  constexpr bool kCanIncreasePriority = false;
+#else
+  constexpr bool kCanIncreasePriority = true;
+#endif
+
+  EXPECT_EQ(
+      PlatformThread::CanIncreaseThreadPriority(ThreadPriority::BACKGROUND),
+      kCanIncreasePriority);
+  EXPECT_EQ(PlatformThread::CanIncreaseThreadPriority(ThreadPriority::NORMAL),
+            kCanIncreasePriority);
+  EXPECT_EQ(PlatformThread::CanIncreaseThreadPriority(ThreadPriority::DISPLAY),
+            kCanIncreasePriority);
+  EXPECT_EQ(
+      PlatformThread::CanIncreaseThreadPriority(ThreadPriority::REALTIME_AUDIO),
+      kCanIncreasePriority);
+}
 
 // This tests internal PlatformThread APIs used under some POSIX platforms,
 // with the exception of Mac OS X, iOS and Fuchsia.
@@ -396,6 +411,18 @@ TEST(PlatformThreadTest, SetHugeThreadName) {
   // SetName has no return code, so just verify that implementations
   // don't [D]CHECK().
   PlatformThread::SetName(long_name);
+}
+
+TEST(PlatformThreadTest, GetDefaultThreadStackSize) {
+  size_t stack_size = PlatformThread::GetDefaultThreadStackSize();
+#if defined(OS_WIN) || defined(OS_IOS) || defined(OS_FUCHSIA) || \
+    (defined(OS_LINUX) && !defined(THREAD_SANITIZER)) ||         \
+    (defined(OS_ANDROID) && !defined(ADDRESS_SANITIZER))
+  EXPECT_EQ(0u, stack_size);
+#else
+  EXPECT_GT(stack_size, 0u);
+  EXPECT_LT(stack_size, 20u * (1 << 20));
+#endif
 }
 
 }  // namespace base

@@ -13,7 +13,7 @@
 #include "importer/profile_vivaldi_import_process_param_traits_macros.h"
 
 // Generate destructors.
-#include "ipc/struct_destructor_macros.h"
+#include "ipc/struct_constructor_macros.h"
 #undef IMPORTER_PROFILE_VIVALDI_IMPORT_PROCESS_PARAM_TRAITS_MACROS_H_
 #include "importer/profile_vivaldi_import_process_param_traits_macros.h"
 

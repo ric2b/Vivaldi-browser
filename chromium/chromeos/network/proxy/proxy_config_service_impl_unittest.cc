@@ -11,7 +11,6 @@
 #include "base/values.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/network/network_handler.h"
-#include "chromeos/network/network_state_test.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/proxy_config/pref_proxy_config_tracker_impl.h"
@@ -47,15 +46,14 @@ class TestProxyConfigService : public net::ProxyConfigService {
 
 }  // namespace
 
-class ProxyConfigServiceImplTest : public NetworkStateTest {
+class ProxyConfigServiceImplTest : public testing::Test {
   void SetUp() override {
     DBusThreadManager::Initialize();
     chromeos::NetworkHandler::Initialize();
-    NetworkStateTest::SetUp();
+    base::RunLoop().RunUntilIdle();
   }
 
   void TearDown() override {
-    NetworkStateTest::TearDown();
     chromeos::NetworkHandler::Shutdown();
     DBusThreadManager::Shutdown();
   }

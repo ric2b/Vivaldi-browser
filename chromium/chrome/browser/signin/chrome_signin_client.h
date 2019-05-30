@@ -5,15 +5,18 @@
 #ifndef CHROME_BROWSER_SIGNIN_CHROME_SIGNIN_CLIENT_H_
 #define CHROME_BROWSER_SIGNIN_CHROME_SIGNIN_CLIENT_H_
 
+#include <list>
+#include <memory>
+#include <string>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "components/signin/core/browser/signin_client.h"
-#include "components/signin/core/browser/signin_error_controller.h"
 #include "google_apis/gaia/gaia_oauth_client.h"
-#include "google_apis/gaia/oauth2_token_service.h"
+#include "services/identity/public/cpp/primary_account_access_token_fetcher.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/network_change_manager.mojom.h"
 
@@ -31,12 +34,9 @@ class ChromeSigninClient
 #if !defined(OS_CHROMEOS)
       public network::NetworkConnectionTracker::NetworkConnectionObserver,
 #endif
-      public SigninErrorController::Observer,
-      public gaia::GaiaOAuthClient::Delegate,
-      public OAuth2TokenService::Consumer {
+      public gaia::GaiaOAuthClient::Delegate {
  public:
-  explicit ChromeSigninClient(
-      Profile* profile, SigninErrorController* signin_error_controller);
+  explicit ChromeSigninClient(Profile* profile);
   ~ChromeSigninClient() override;
 
   void DoFinalInit() override;
@@ -46,7 +46,9 @@ class ChromeSigninClient
 
   // SigninClient implementation.
   PrefService* GetPrefs() override;
-  void OnSignedOut() override;
+  void PreSignOut(
+      base::OnceCallback<void(SignoutDecision)> on_signout_decision_reached,
+      signin_metrics::ProfileSignout signout_source_metric) override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   network::mojom::CookieManager* GetCookieManager() override;
   bool IsFirstRun() const override;
@@ -56,10 +58,10 @@ class ChromeSigninClient
       content_settings::Observer* observer) override;
   void RemoveContentSettingsObserver(
       content_settings::Observer* observer) override;
-  void DelayNetworkCall(const base::Closure& callback) override;
+  void DelayNetworkCall(base::OnceClosure callback) override;
   std::unique_ptr<GaiaAuthFetcher> CreateGaiaAuthFetcher(
       GaiaAuthConsumer* consumer,
-      const std::string& source,
+      gaia::GaiaSource source,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
       override;
 
@@ -67,19 +69,6 @@ class ChromeSigninClient
   // <Build Info> <OS> <Version number> (<Last change>)<channel or "-devel">
   // If version information is unavailable, returns "invalid."
   std::string GetProductVersion() override;
-  void OnSignedIn(const std::string& account_id,
-                  const std::string& gaia_id,
-                  const std::string& username,
-                  const std::string& password) override;
-  void PostSignedIn(const std::string& account_id,
-                    const std::string& username,
-                    const std::string& password) override;
-  void PreSignOut(
-      const base::Callback<void()>& sign_out,
-      signin_metrics::ProfileSignout signout_source_metric) override;
-
-  // SigninErrorController::Observer implementation.
-  void OnErrorChanged() override;
 
   // gaia::GaiaOAuthClient::Delegate implementation.
   void OnGetTokenInfoResponse(
@@ -87,20 +76,12 @@ class ChromeSigninClient
   void OnOAuthError() override;
   void OnNetworkError(int response_code) override;
 
-  // OAuth2TokenService::Consumer implementation
-  void OnGetTokenSuccess(
-      const OAuth2TokenService::Request* request,
-      const OAuth2AccessTokenConsumer::TokenResponse& token_response) override;
-  void OnGetTokenFailure(const OAuth2TokenService::Request* request,
-                         const GoogleServiceAuthError& error) override;
-
 #if !defined(OS_CHROMEOS)
   // network::NetworkConnectionTracker::NetworkConnectionObserver
   // implementation.
   void OnConnectionChanged(network::mojom::ConnectionType type) override;
 #endif
 
-  void AfterCredentialsCopied() override;
   void SetReadyForDiceMigration(bool is_ready) override;
 
   // Used in tests to override the URLLoaderFactory returned by
@@ -116,16 +97,21 @@ class ChromeSigninClient
   void MaybeFetchSigninTokenHandle();
   void VerifySyncToken();
   void OnCloseBrowsersSuccess(
-      const base::Callback<void()>& sign_out,
       const signin_metrics::ProfileSignout signout_source_metric,
       const base::FilePath& profile_path);
   void OnCloseBrowsersAborted(const base::FilePath& profile_path);
 
+  // identity::PrimaryAccountAccessTokenFetcher callback
+  void OnAccessTokenAvailable(GoogleServiceAuthError error,
+                              identity::AccessTokenInfo access_token_info);
+
   Profile* profile_;
 
-  SigninErrorController* signin_error_controller_;
+  // Stored callback from PreSignOut();
+  base::OnceCallback<void(SignoutDecision)> on_signout_decision_reached_;
+
 #if !defined(OS_CHROMEOS)
-  std::list<base::Closure> delayed_callbacks_;
+  std::list<base::OnceClosure> delayed_callbacks_;
 #endif
 
   bool should_display_user_manager_ = true;
@@ -134,7 +120,8 @@ class ChromeSigninClient
 #endif
 
   std::unique_ptr<gaia::GaiaOAuthClient> oauth_client_;
-  std::unique_ptr<OAuth2TokenService::Request> oauth_request_;
+  std::unique_ptr<identity::PrimaryAccountAccessTokenFetcher>
+      access_token_fetcher_;
 
   scoped_refptr<network::SharedURLLoaderFactory>
       url_loader_factory_for_testing_;

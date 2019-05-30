@@ -15,11 +15,12 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/browser/storage_usage_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
-typedef BrowsingDataHelperCallback<content::IndexedDBInfo>
-    TestCompletionCallback;
+using TestCompletionCallback =
+    BrowsingDataHelperCallback<content::StorageUsageInfo>;
 
 class BrowsingDataIndexedDBHelperTest : public InProcessBrowserTest {
  public:
@@ -32,47 +33,42 @@ class BrowsingDataIndexedDBHelperTest : public InProcessBrowserTest {
 IN_PROC_BROWSER_TEST_F(BrowsingDataIndexedDBHelperTest, CannedAddIndexedDB) {
   const GURL origin1("http://host1:1/");
   const GURL origin2("http://host2:1/");
-  const base::string16 description(base::ASCIIToUTF16("description"));
 
   scoped_refptr<CannedBrowsingDataIndexedDBHelper> helper(
       new CannedBrowsingDataIndexedDBHelper(IndexedDBContext()));
-  helper->AddIndexedDB(origin1, description);
-  helper->AddIndexedDB(origin2, description);
+  helper->Add(url::Origin::Create(origin1));
+  helper->Add(url::Origin::Create(origin2));
 
   TestCompletionCallback callback;
   helper->StartFetching(
       base::Bind(&TestCompletionCallback::callback,
                  base::Unretained(&callback)));
 
-  std::list<content::IndexedDBInfo> result =
-      callback.result();
+  std::list<content::StorageUsageInfo> result = callback.result();
 
   ASSERT_EQ(2U, result.size());
-  std::list<content::IndexedDBInfo>::iterator info =
-      result.begin();
-  EXPECT_EQ(origin1, info->origin);
+  auto info = result.begin();
+  EXPECT_EQ(origin1, info->origin.GetURL());
   info++;
-  EXPECT_EQ(origin2, info->origin);
+  EXPECT_EQ(origin2, info->origin.GetURL());
 }
 
 IN_PROC_BROWSER_TEST_F(BrowsingDataIndexedDBHelperTest, CannedUnique) {
   const GURL origin("http://host1:1/");
-  const base::string16 description(base::ASCIIToUTF16("description"));
 
   scoped_refptr<CannedBrowsingDataIndexedDBHelper> helper(
       new CannedBrowsingDataIndexedDBHelper(IndexedDBContext()));
-  helper->AddIndexedDB(origin, description);
-  helper->AddIndexedDB(origin, description);
+  helper->Add(url::Origin::Create(origin));
+  helper->Add(url::Origin::Create(origin));
 
   TestCompletionCallback callback;
   helper->StartFetching(
       base::Bind(&TestCompletionCallback::callback,
                  base::Unretained(&callback)));
 
-  std::list<content::IndexedDBInfo> result =
-      callback.result();
+  std::list<content::StorageUsageInfo> result = callback.result();
 
   ASSERT_EQ(1U, result.size());
-  EXPECT_EQ(origin, result.begin()->origin);
+  EXPECT_EQ(origin, result.begin()->origin.GetURL());
 }
 }  // namespace

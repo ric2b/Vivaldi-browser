@@ -16,6 +16,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/task/task_scheduler/task_scheduler.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
@@ -26,6 +27,7 @@
 #include "content/common/url_schemes.h"
 #include "content/public/browser/browser_child_process_host_iterator.h"
 #include "content/public/browser/browser_plugin_guest_delegate.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -36,6 +38,8 @@
 #include "content/public/test/test_launcher.h"
 #include "content/public/test/test_service_manager_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/fetch/fetch_api_request_headers_map.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
 #include "url/url_util.h"
 
 namespace content {
@@ -118,6 +122,21 @@ bool IgnoreSourceAndDetails(
 
 }  // namespace
 
+blink::mojom::FetchAPIRequestPtr CreateFetchAPIRequest(
+    const GURL& url,
+    const std::string& method,
+    const blink::FetchAPIRequestHeadersMap& headers,
+    blink::mojom::ReferrerPtr referrer,
+    bool is_reload) {
+  auto request = blink::mojom::FetchAPIRequest::New();
+  request->url = url;
+  request->method = method;
+  request->headers = {headers.begin(), headers.end()};
+  request->referrer = std::move(referrer);
+  request->is_reload = is_reload;
+  return request;
+}
+
 void RunMessageLoop() {
   base::RunLoop run_loop;
   RunThisRunLoop(&run_loop);
@@ -150,8 +169,8 @@ void RunAllPendingInMessageLoop(BrowserThread::ID thread_id) {
   const base::Closure post_quit_run_loop_to_ui_thread = base::Bind(
       base::IgnoreResult(&base::SingleThreadTaskRunner::PostTask),
       base::ThreadTaskRunnerHandle::Get(), FROM_HERE, run_loop.QuitClosure());
-  BrowserThread::PostTask(
-      thread_id, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {thread_id},
       base::BindOnce(&DeferredQuitRunLoop, post_quit_run_loop_to_ui_thread,
                      kNumQuitDeferrals));
   RunThisRunLoop(&run_loop);
@@ -225,51 +244,20 @@ void DeprecatedEnableFeatureWithParam(const base::Feature& feature,
       kFakeTrialName, kFakeTrialGroupName, param_values, command_line);
 }
 
-namespace {
-
-// Helper class for CreateAndAttachInnerContents.
-//
-// TODO(lfg): https://crbug.com/821187 Inner webcontentses currently require
-// supplying a BrowserPluginGuestDelegate; however, the oopif architecture
-// doesn't really require it. Refactor this so that we can create an inner
-// contents without any of the guest machinery.
-class InnerWebContentsHelper : public WebContentsObserver {
- public:
-  explicit InnerWebContentsHelper() : WebContentsObserver() {}
-  ~InnerWebContentsHelper() override = default;
-
-  // WebContentsObserver:
-  void WebContentsDestroyed() override { delete this; }
-
-  void SetInnerWebContents(WebContents* inner_web_contents) {
-    Observe(inner_web_contents);
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(InnerWebContentsHelper);
-};
-
-}  // namespace
-
 WebContents* CreateAndAttachInnerContents(RenderFrameHost* rfh) {
   WebContents* outer_contents =
       static_cast<RenderFrameHostImpl*>(rfh)->delegate()->GetAsWebContents();
   if (!outer_contents)
     return nullptr;
 
-  auto guest_delegate = std::make_unique<InnerWebContentsHelper>();
-
   WebContents::CreateParams inner_params(outer_contents->GetBrowserContext());
 
-  // TODO(erikchen): Fix ownership semantics for guest views.
-  // https://crbug.com/832879.
-  WebContents* inner_contents = WebContents::Create(inner_params).release();
+  std::unique_ptr<WebContents> inner_contents_ptr =
+      WebContents::Create(inner_params);
 
   // Attach. |inner_contents| becomes owned by |outer_contents|.
-  inner_contents->AttachToOuterWebContentsFrame(outer_contents, rfh);
-
-  // |guest_delegate| becomes owned by |inner_contents|.
-  guest_delegate.release()->SetInnerWebContents(inner_contents);
+  WebContents* inner_contents = inner_contents_ptr.get();
+  outer_contents->AttachInnerWebContents(std::move(inner_contents_ptr), rfh);
 
   return inner_contents;
 }

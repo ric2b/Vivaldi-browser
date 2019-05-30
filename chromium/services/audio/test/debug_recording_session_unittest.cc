@@ -7,6 +7,7 @@
 #include <limits>
 #include <memory>
 
+#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -17,8 +18,9 @@
 #include "media/audio/audio_debug_recording_test.h"
 #include "media/audio/mock_audio_debug_recording_manager.h"
 #include "media/audio/mock_audio_manager.h"
+#include "services/audio/public/mojom/constants.mojom.h"
+#include "services/audio/service.h"
 #include "services/audio/service_factory.h"
-#include "services/service_manager/public/cpp/service_test.h"
 #include "services/service_manager/public/cpp/test/test_connector_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -28,9 +30,9 @@ namespace audio {
 namespace {
 
 #if defined(OS_WIN)
-#define IntToStringType base::IntToString16
+#define NumberToStringType base::NumberToString16
 #else
-#define IntToStringType base::IntToString
+#define NumberToStringType base::NumberToString
 #endif
 
 const base::FilePath::CharType kBaseFileName[] =
@@ -60,7 +62,7 @@ class DebugRecordingFileProviderTest : public testing::Test {
   base::FilePath GetFileName(const base::FilePath::StringType& stream_type,
                              uint32_t id) {
     return file_path_.AddExtension(stream_type)
-        .AddExtension(IntToStringType(id))
+        .AddExtension(NumberToStringType(id))
         .AddExtension(kWavExtension);
   }
 
@@ -89,10 +91,10 @@ class DebugRecordingSessionTest : public media::AudioDebugRecordingTest {
     CreateAudioManager();
     InitializeAudioDebugRecordingManager();
 
-    connector_factory_ =
-        service_manager::TestConnectorFactory::CreateForUniqueService(
-            CreateEmbeddedService(
-                static_cast<media::AudioManager*>(mock_audio_manager_.get())));
+    service_ = CreateEmbeddedService(
+        static_cast<media::AudioManager*>(mock_audio_manager_.get()),
+        connector_factory_.RegisterInstance(audio::mojom::kServiceName));
+
     scoped_task_environment_.RunUntilIdle();
   }
 
@@ -103,7 +105,7 @@ class DebugRecordingSessionTest : public media::AudioDebugRecordingTest {
     std::unique_ptr<DebugRecordingSession> session(
         std::make_unique<DebugRecordingSession>(
             base::FilePath(kBaseFileName),
-            connector_factory_->CreateConnector()));
+            connector_factory_.CreateConnector()));
     scoped_task_environment_.RunUntilIdle();
     return session;
   }
@@ -115,7 +117,8 @@ class DebugRecordingSessionTest : public media::AudioDebugRecordingTest {
   }
 
  private:
-  std::unique_ptr<service_manager::TestConnectorFactory> connector_factory_;
+  service_manager::TestConnectorFactory connector_factory_;
+  std::unique_ptr<Service> service_;
 
   DISALLOW_COPY_AND_ASSIGN(DebugRecordingSessionTest);
 };
@@ -181,7 +184,7 @@ TEST_F(DebugRecordingFileProviderTest,
   scoped_task_environment_.RunUntilIdle();
 
   base::FilePath file_name(
-      GetFileName(IntToStringType(invalid_stream_type), id));
+      GetFileName(NumberToStringType(invalid_stream_type), id));
   EXPECT_FALSE(base::PathExists(file_name));
 }
 

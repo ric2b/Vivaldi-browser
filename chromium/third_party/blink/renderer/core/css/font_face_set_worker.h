@@ -11,9 +11,7 @@
 #include "third_party/blink/renderer/core/css/font_face.h"
 #include "third_party/blink/renderer/core/css/font_face_set.h"
 #include "third_party/blink/renderer/core/css/offscreen_font_selector.h"
-#include "third_party/blink/renderer/core/dom/pausable_object.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
-#include "third_party/blink/renderer/platform/async_method_runner.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 
@@ -29,6 +27,7 @@ class CORE_EXPORT FontFaceSetWorker final
  public:
   static const char kSupplementName[];
 
+  explicit FontFaceSetWorker(WorkerGlobalScope&);
   ~FontFaceSetWorker() override;
 
   ScriptPromise ready(ScriptState*) override;
@@ -65,10 +64,8 @@ class CORE_EXPORT FontFaceSetWorker final
 
  private:
   static FontFaceSetWorker* Create(WorkerGlobalScope& worker) {
-    return new FontFaceSetWorker(worker);
+    return MakeGarbageCollected<FontFaceSetWorker>(worker);
   }
-
-  explicit FontFaceSetWorker(WorkerGlobalScope&);
 
   void FireDoneEventIfPossible() override;
   DISALLOW_COPY_AND_ASSIGN(FontFaceSetWorker);

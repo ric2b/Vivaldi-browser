@@ -60,7 +60,7 @@ FrameCaret::FrameCaret(LocalFrame& frame,
 
 FrameCaret::~FrameCaret() = default;
 
-void FrameCaret::Trace(blink::Visitor* visitor) {
+void FrameCaret::Trace(Visitor* visitor) {
   visitor->Trace(selection_editor_);
   visitor->Trace(frame_);
 }
@@ -74,6 +74,7 @@ const PositionWithAffinity FrameCaret::CaretPosition() const {
       selection_editor_->ComputeVisibleSelectionInDOMTree();
   if (!selection.IsCaret())
     return PositionWithAffinity();
+  DCHECK(selection.Start().IsValidFor(*frame_->GetDocument()));
   return PositionWithAffinity(selection.Start(), selection.Affinity());
 }
 
@@ -181,9 +182,7 @@ IntRect FrameCaret::AbsoluteCaretBounds() const {
   if (!IsActive())
     return AbsoluteBoundsForLocalRect(caret_node, LayoutRect());
   return AbsoluteBoundsForLocalRect(
-      caret_node,
-      CaretDisplayItemClient::ComputeCaretRect(
-          CreateVisiblePosition(CaretPosition()).ToPositionWithAffinity()));
+      caret_node, CaretDisplayItemClient::ComputeCaretRect(CaretPosition()));
 }
 
 void FrameCaret::SetShouldShowBlockCursor(bool should_show_block_cursor) {

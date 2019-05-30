@@ -8,6 +8,7 @@
 #include <set>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -18,6 +19,7 @@
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
@@ -33,7 +35,8 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/granted_file_entry.h"
-#include "extensions/browser/lazy_background_task_queue.h"
+#include "extensions/browser/lazy_context_id.h"
+#include "extensions/browser/lazy_context_task_queue.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/common/api/app_runtime.h"
 #include "extensions/common/extension.h"
@@ -136,7 +139,7 @@ class PlatformAppPathLauncher
       return;
 
     if (entry_paths_.empty()) {
-      LaunchWithNoLaunchData();
+      LaunchWithBasicData();
       return;
     }
 
@@ -160,8 +163,8 @@ class PlatformAppPathLauncher
         FROM_HERE,
         {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
          base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-        base::Bind(&PlatformAppPathLauncher::MakePathAbsolute, this,
-                   current_directory));
+        base::BindOnce(&PlatformAppPathLauncher::MakePathAbsolute, this,
+                       current_directory));
   }
 
  private:
@@ -174,17 +177,17 @@ class PlatformAppPathLauncher
          it != entry_paths_.end(); ++it) {
       if (!DoMakePathAbsolute(current_directory, &*it)) {
         LOG(WARNING) << "Cannot make absolute path from " << it->value();
-        BrowserThread::PostTask(
-            BrowserThread::UI,
-            FROM_HERE,
-            base::Bind(&PlatformAppPathLauncher::LaunchWithNoLaunchData, this));
+        base::PostTaskWithTraits(
+            FROM_HERE, {BrowserThread::UI},
+            base::BindOnce(&PlatformAppPathLauncher::LaunchWithBasicData,
+                           this));
         return;
       }
     }
 
-    BrowserThread::PostTask(BrowserThread::UI,
-                            FROM_HERE,
-                            base::Bind(&PlatformAppPathLauncher::Launch, this));
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
+        base::BindOnce(&PlatformAppPathLauncher::Launch, this));
   }
 
   void OnFilesValid(std::unique_ptr<std::set<base::FilePath>> directory_paths) {
@@ -196,10 +199,10 @@ class PlatformAppPathLauncher
   }
 
   void OnFilesInvalid(const base::FilePath& /* error_path */) {
-    LaunchWithNoLaunchData();
+    LaunchWithBasicData();
   }
 
-  void LaunchWithNoLaunchData() {
+  void LaunchWithBasicData() {
     // This method is required as an entry point on the UI thread.
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -210,6 +213,8 @@ class PlatformAppPathLauncher
     std::unique_ptr<app_runtime::LaunchData> launch_data =
         std::make_unique<app_runtime::LaunchData>();
     launch_data->action_data = std::move(action_data_);
+    if (!handler_id_.empty())
+      launch_data->id = std::make_unique<std::string>(handler_id_);
 
     AppRuntimeEventRouter::DispatchOnLaunchedEvent(
         context_, app, launch_source_, std::move(launch_data));
@@ -266,18 +271,18 @@ class PlatformAppPathLauncher
         }
       }
     } else {
-      const std::vector<const extensions::FileHandlerInfo*>& handlers =
-          extensions::app_file_handler_util::FindFileHandlersForEntries(
+      const std::vector<extensions::FileHandlerMatch> handlers =
+          extensions::app_file_handler_util::FindFileHandlerMatchesForEntries(
               *app, entries_);
       if (!handlers.empty())
-        handler = handlers[0];
+        handler = handlers[0].handler;
     }
 
     // If this app doesn't have a file handler that supports the file, launch
     // with no launch data.
     if (!handler) {
       LOG(WARNING) << "Extension does not provide a valid file handler.";
-      LaunchWithNoLaunchData();
+      LaunchWithBasicData();
       return;
     }
 
@@ -289,11 +294,11 @@ class PlatformAppPathLauncher
     // available, or it might be in the process of being unloaded, in which case
     // the lazy background task queue is used to load the extension and then
     // call back to us.
-    extensions::LazyBackgroundTaskQueue* const queue =
-        extensions::LazyBackgroundTaskQueue::Get(context_);
+    const extensions::LazyContextId context_id(context_, extension_id);
+    extensions::LazyContextTaskQueue* const queue = context_id.GetTaskQueue();
     if (queue->ShouldEnqueueTask(context_, app)) {
       queue->AddPendingTask(
-          context_, extension_id,
+          context_id,
           base::Bind(&PlatformAppPathLauncher::GrantAccessToFilesAndLaunch,
                      this));
       return;
@@ -304,25 +309,28 @@ class PlatformAppPathLauncher
     ExtensionHost* const host =
         process_manager->GetBackgroundHostForExtension(extension_id);
     DCHECK(host);
-    GrantAccessToFilesAndLaunch(host);
+    GrantAccessToFilesAndLaunch(
+        std::make_unique<extensions::LazyContextTaskQueue::ContextInfo>(host));
   }
 
-  void GrantAccessToFilesAndLaunch(ExtensionHost* host) {
+  void GrantAccessToFilesAndLaunch(
+      std::unique_ptr<extensions::LazyContextTaskQueue::ContextInfo>
+          context_info) {
     const Extension* app = GetExtension();
     if (!app)
       return;
 
-    // If there was an error loading the app page, |host| will be NULL.
-    if (!host) {
+    // If there was an error loading the app page, |context_info| will be NULL.
+    if (!context_info) {
       LOG(ERROR) << "Could not load app page for " << extension_id;
       return;
     }
 
     std::vector<GrantedFileEntry> granted_entries;
     for (size_t i = 0; i < entry_paths_.size(); ++i) {
-      granted_entries.push_back(
-          CreateFileEntry(context_, app, host->render_process_host()->GetID(),
-                          entries_[i].path, entries_[i].is_directory));
+      granted_entries.push_back(CreateFileEntry(
+          context_, app, context_info->render_process_host->GetID(),
+          entries_[i].path, entries_[i].is_directory));
     }
 
     AppRuntimeEventRouter::DispatchOnLaunchedEventWithFileEntries(

@@ -19,9 +19,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ActivityState;
-import org.chromium.base.AsyncTask;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.task.AsyncTask;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.CallbackHelper;
@@ -29,14 +29,13 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.TabState;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelper;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.snackbar.undo.UndoBarController;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabBuilder;
+import org.chromium.chrome.browser.tab.TabState;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabModelSelectorMetadata;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabPersistentStoreObserver;
 import org.chromium.chrome.browser.tabmodel.TestTabModelDirectory.TabModelMetaDataInfo;
@@ -100,10 +99,11 @@ public class TabPersistentStoreTest {
         }
 
         @Override
-        public Tab createNewTab(
-                LoadUrlParams loadUrlParams, @TabModel.TabLaunchType int type, Tab parent) {
-            Tab tab = Tab.createTabForLazyLoad(
-                    mIsIncognito, null, TabLaunchType.FROM_LINK, Tab.INVALID_TAB_ID, loadUrlParams);
+        public Tab createNewTab(LoadUrlParams loadUrlParams, @TabLaunchType int type, Tab parent) {
+            Tab tab = TabBuilder.createForLazyLoad(loadUrlParams)
+                              .setIncognito(mIsIncognito)
+                              .setLaunchType(TabLaunchType.FROM_LINK)
+                              .build();
             mSelector.getModel(mIsIncognito).addTab(tab, TabModel.INVALID_TAB_INDEX, type);
             storeTabInfo(null, tab.getId());
             return tab;
@@ -111,8 +111,11 @@ public class TabPersistentStoreTest {
 
         @Override
         public Tab createFrozenTab(TabState state, int id, int index) {
-            Tab tab = Tab.createFrozenTabFromState(
-                    id, state.isIncognito(), null, state.parentId, state);
+            Tab tab = TabBuilder.createFromFrozenState(state)
+                              .setId(id)
+                              .setParentId(state.parentId)
+                              .setIncognito(state.isIncognito())
+                              .build();
             mSelector.getModel(mIsIncognito).addTab(tab, index, TabLaunchType.FROM_RESTORE);
             storeTabInfo(state, id);
             return tab;
@@ -125,7 +128,7 @@ public class TabPersistentStoreTest {
         }
 
         @Override
-        public Tab launchUrl(String url, @TabModel.TabLaunchType int type) {
+        public Tab launchUrl(String url, @TabLaunchType int type) {
             return null;
         }
 
@@ -778,7 +781,7 @@ public class TabPersistentStoreTest {
         final List<Integer> closedTabIds = new ArrayList<>();
         TabModelObserver closeObserver = new EmptyTabModelObserver() {
             @Override
-            public void allTabsPendingClosure(List<Tab> tabs) {
+            public void multipleTabsPendingClosure(List<Tab> tabs, boolean isAllTabs) {
                 for (Tab tab : tabs) closedTabIds.add(tab.getId());
             }
         };

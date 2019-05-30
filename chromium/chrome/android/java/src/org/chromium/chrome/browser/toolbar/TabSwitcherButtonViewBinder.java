@@ -4,9 +4,9 @@
 
 package org.chromium.chrome.browser.toolbar;
 
-import org.chromium.chrome.browser.modelutil.PropertyKey;
-import org.chromium.chrome.browser.modelutil.PropertyModel;
-import org.chromium.chrome.browser.modelutil.PropertyModelChangeProcessor;
+import org.chromium.ui.modelutil.PropertyKey;
+import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
 /**
  * This class is responsible for pushing updates to the Android view of the tab switcher. These
@@ -26,14 +26,14 @@ public class TabSwitcherButtonViewBinder
     public final void bind(
             PropertyModel model, TabSwitcherButtonView view, PropertyKey propertyKey) {
         if (TabSwitcherButtonProperties.NUMBER_OF_TABS == propertyKey) {
-            view.updateTabCountVisuals(model.getValue(TabSwitcherButtonProperties.NUMBER_OF_TABS));
+            view.updateTabCountVisuals(model.get(TabSwitcherButtonProperties.NUMBER_OF_TABS));
         } else if (TabSwitcherButtonProperties.ON_CLICK_LISTENER == propertyKey) {
-            view.setOnClickListener(model.getValue(TabSwitcherButtonProperties.ON_CLICK_LISTENER));
+            view.setOnClickListener(model.get(TabSwitcherButtonProperties.ON_CLICK_LISTENER));
         } else if (TabSwitcherButtonProperties.ON_LONG_CLICK_LISTENER == propertyKey) {
             view.setOnLongClickListener(
-                    model.getValue(TabSwitcherButtonProperties.ON_LONG_CLICK_LISTENER));
+                    model.get(TabSwitcherButtonProperties.ON_LONG_CLICK_LISTENER));
         } else if (TabSwitcherButtonProperties.TINT == propertyKey) {
-            view.setTint(model.getValue(TabSwitcherButtonProperties.TINT));
+            view.setTint(model.get(TabSwitcherButtonProperties.TINT));
         } else {
             assert false : "Unhandled property detected in TabSwitcherViewBinder!";
         }

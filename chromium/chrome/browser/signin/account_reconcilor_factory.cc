@@ -7,26 +7,33 @@
 #include <memory>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
-#include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
-#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "components/signin/core/browser/account_consistency_method.h"
 #include "components/signin/core/browser/account_reconcilor.h"
 #include "components/signin/core/browser/account_reconcilor_delegate.h"
 #include "components/signin/core/browser/mirror_account_reconcilor_delegate.h"
-#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/signin_buildflags.h"
 
 #if defined(OS_CHROMEOS)
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
+#include "chrome/browser/chromeos/account_manager/account_manager_migrator.h"
+#include "chrome/browser/chromeos/account_manager/account_migration_runner.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "components/user_manager/user_manager.h"
 #include "google_apis/gaia/google_service_auth_error.h"
+#endif
+
+#if defined(OS_ANDROID)
+#include "components/signin/core/browser/mice_account_reconcilor_delegate.h"
 #endif
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
@@ -40,8 +47,8 @@ class ChromeOSChildAccountReconcilorDelegate
     : public signin::MirrorAccountReconcilorDelegate {
  public:
   explicit ChromeOSChildAccountReconcilorDelegate(
-      SigninManagerBase* signin_manager)
-      : signin::MirrorAccountReconcilorDelegate(signin_manager) {}
+      identity::IdentityManager* identity_manager)
+      : signin::MirrorAccountReconcilorDelegate(identity_manager) {}
 
   base::TimeDelta GetReconcileTimeout() const override {
     return base::TimeDelta::FromSeconds(10);
@@ -68,7 +75,42 @@ class ChromeOSChildAccountReconcilorDelegate
  private:
   DISALLOW_COPY_AND_ASSIGN(ChromeOSChildAccountReconcilorDelegate);
 };
-#endif
+
+// An |AccountReconcilorDelegate| for Chrome OS that is exactly the same as
+// |MirrorAccountReconcilorDelegate|, except that it does not begin account
+// reconciliation until accounts have been migrated to Chrome OS Account
+// Manager.
+// TODO(sinhak): Remove this when all users have been migrated to Chrome OS
+// Account Manager.
+class ChromeOSAccountReconcilorDelegate
+    : public signin::MirrorAccountReconcilorDelegate {
+ public:
+  ChromeOSAccountReconcilorDelegate(
+      identity::IdentityManager* identity_manager,
+      chromeos::AccountManagerMigrator* account_migrator)
+      : signin::MirrorAccountReconcilorDelegate(identity_manager),
+        account_migrator_(account_migrator) {}
+  ~ChromeOSAccountReconcilorDelegate() override = default;
+
+ private:
+  // AccountReconcilorDelegate:
+  bool IsReconcileEnabled() const override {
+    if (!MirrorAccountReconcilorDelegate::IsReconcileEnabled()) {
+      return false;
+    }
+
+    const chromeos::AccountMigrationRunner::Status status =
+        account_migrator_->GetStatus();
+    return status != chromeos::AccountMigrationRunner::Status::kNotStarted &&
+           status != chromeos::AccountMigrationRunner::Status::kRunning;
+  }
+
+  // A non-owning pointer.
+  const chromeos::AccountManagerMigrator* const account_migrator_;
+
+  DISALLOW_COPY_AND_ASSIGN(ChromeOSAccountReconcilorDelegate);
+};
+#endif  // defined(OS_CHROMEOS)
 
 }  // namespace
 
@@ -77,9 +119,7 @@ AccountReconcilorFactory::AccountReconcilorFactory()
           "AccountReconcilor",
           BrowserContextDependencyManager::GetInstance()) {
   DependsOn(ChromeSigninClientFactory::GetInstance());
-  DependsOn(GaiaCookieManagerServiceFactory::GetInstance());
-  DependsOn(ProfileOAuth2TokenServiceFactory::GetInstance());
-  DependsOn(SigninManagerFactory::GetInstance());
+  DependsOn(IdentityManagerFactory::GetInstance());
 }
 
 AccountReconcilorFactory::~AccountReconcilorFactory() {}
@@ -99,10 +139,8 @@ KeyedService* AccountReconcilorFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   Profile* profile = Profile::FromBrowserContext(context);
   AccountReconcilor* reconcilor = new AccountReconcilor(
-      ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
-      SigninManagerFactory::GetForProfile(profile),
+      IdentityManagerFactory::GetForProfile(profile),
       ChromeSigninClientFactory::GetForProfile(profile),
-      GaiaCookieManagerServiceFactory::GetForProfile(profile),
       CreateAccountReconcilorDelegate(profile));
   reconcilor->Initialize(true /* start_reconcile_if_tokens_available */);
   return reconcilor;
@@ -120,14 +158,26 @@ AccountReconcilorFactory::CreateAccountReconcilorDelegate(Profile* profile) {
       // delegate.
       if (profile->IsChild()) {
         return std::make_unique<ChromeOSChildAccountReconcilorDelegate>(
-            SigninManagerFactory::GetForProfile(profile));
+            IdentityManagerFactory::GetForProfile(profile));
       }
+
+      // TODO(sinhak): Remove the if-condition (and use
+      // |MirrorAccountReconcilorDelegate|) when all Chrome OS users have been
+      // migrated to Account Manager.
+      if (chromeos::switches::IsAccountManagerEnabled()) {
+        return std::make_unique<ChromeOSAccountReconcilorDelegate>(
+            IdentityManagerFactory::GetForProfile(profile),
+            chromeos::AccountManagerMigratorFactory::GetForBrowserContext(
+                profile));
+      }
+#elif defined(OS_ANDROID)
+      if (base::FeatureList::IsEnabled(signin::kMiceFeature))
+        return std::make_unique<signin::MiceAccountReconcilorDelegate>();
 #endif
       return std::make_unique<signin::MirrorAccountReconcilorDelegate>(
-          SigninManagerFactory::GetForProfile(profile));
+          IdentityManagerFactory::GetForProfile(profile));
 
     case signin::AccountConsistencyMethod::kDisabled:
-    case signin::AccountConsistencyMethod::kDiceFixAuthErrors:
       return std::make_unique<signin::AccountReconcilorDelegate>();
 
     case signin::AccountConsistencyMethod::kDiceMigration:

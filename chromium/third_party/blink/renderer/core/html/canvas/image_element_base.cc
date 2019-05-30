@@ -40,6 +40,10 @@ bool ImageElementBase::IsSVGSource() const {
   return CachedImage() && CachedImage()->GetImage()->IsSVGImage();
 }
 
+bool ImageElementBase::IsImageElement() const {
+  return CachedImage() && !CachedImage()->GetImage()->IsSVGImage();
+}
+
 scoped_refptr<Image> ImageElementBase::GetSourceImageForCanvas(
     SourceImageStatus* status,
     AccelerationHint,
@@ -69,10 +73,8 @@ scoped_refptr<Image> ImageElementBase::GetSourceImageForCanvas(
   return source_image->ImageForDefaultFrame();
 }
 
-bool ImageElementBase::WouldTaintOrigin(
-    const SecurityOrigin* destination_security_origin) const {
-  return CachedImage() &&
-         !CachedImage()->IsAccessAllowed(destination_security_origin);
+bool ImageElementBase::WouldTaintOrigin() const {
+  return CachedImage() && !CachedImage()->IsAccessAllowed();
 }
 
 FloatSize ImageElementBase::ElementSize(
@@ -110,7 +112,7 @@ bool ImageElementBase::IsAccelerated() const {
 }
 
 const KURL& ImageElementBase::SourceURL() const {
-  return CachedImage()->GetResponse().Url();
+  return CachedImage()->GetResponse().CurrentRequestUrl();
 }
 
 bool ImageElementBase::IsOpaque() const {
@@ -133,7 +135,7 @@ ScriptPromise ImageElementBase::CreateImageBitmap(
     ScriptState* script_state,
     EventTarget& event_target,
     base::Optional<IntRect> crop_rect,
-    const ImageBitmapOptions& options) {
+    const ImageBitmapOptions* options) {
   DCHECK(event_target.ToLocalDOMWindow());
 
   ImageResourceContent* image_content = CachedImage();
@@ -148,7 +150,7 @@ ScriptPromise ImageElementBase::CreateImageBitmap(
   if (image->IsSVGImage()) {
     if (!ToSVGImage(image)->HasIntrinsicDimensions() &&
         (!crop_rect &&
-         (!options.hasResizeWidth() || !options.hasResizeHeight()))) {
+         (!options->hasResizeWidth() || !options->hasResizeHeight()))) {
       return ScriptPromise::RejectWithDOMException(
           script_state,
           DOMException::Create(
@@ -157,9 +159,6 @@ ScriptPromise ImageElementBase::CreateImageBitmap(
               "dimensions, and no resize options or crop region are "
               "specified."));
     }
-  }
-
-  if (IsSVGSource()) {
     return ImageBitmap::CreateAsync(this, crop_rect,
                                     event_target.ToLocalDOMWindow()->document(),
                                     script_state, options);

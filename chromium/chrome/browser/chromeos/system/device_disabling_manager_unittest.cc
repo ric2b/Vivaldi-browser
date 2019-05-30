@@ -20,7 +20,7 @@
 #include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
 #include "chromeos/system/fake_statistics_provider.h"
 #include "components/ownership/mock_owner_key_util.h"
@@ -177,10 +177,10 @@ void DeviceDisablingManagerOOBETest::CheckWhetherDeviceDisabledDuringOOBE() {
 void DeviceDisablingManagerOOBETest::SetDeviceDisabled(bool disabled) {
   DictionaryPrefUpdate dict(&local_state_, prefs::kServerBackedDeviceState);
   if (disabled) {
-    dict->SetString(policy::kDeviceStateRestoreMode,
+    dict->SetString(policy::kDeviceStateMode,
                     policy::kDeviceStateRestoreModeDisabled);
   } else {
-    dict->Remove(policy::kDeviceStateRestoreMode, nullptr);
+    dict->Remove(policy::kDeviceStateMode, nullptr);
   }
   dict->SetString(policy::kDeviceStateManagementDomain, kEnrollmentDomain);
   dict->SetString(policy::kDeviceStateDisabledMessage, kDisabledMessage1);

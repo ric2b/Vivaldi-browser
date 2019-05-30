@@ -4,6 +4,7 @@
 
 #include "content/test/test_blink_web_unit_test_support.h"
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -12,11 +13,14 @@
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/task_scheduler/task_scheduler.h"
+#include "base/test/null_task_runner.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "content/app/mojo/mojo_init.h"
+#include "content/child/child_process.h"
 #include "content/public/common/service_names.mojom.h"
 #include "content/renderer/loader/web_data_consumer_handle_impl.h"
 #include "content/renderer/loader/web_url_loader_impl.h"
@@ -35,7 +39,6 @@
 #include "third_party/blink/public/platform/web_rtc_certificate_generator.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/public/platform/web_string.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_loader_factory.h"
 #include "third_party/blink/public/web/blink.h"
@@ -50,7 +53,7 @@
 #include "gin/v8_initializer.h"  // nogncheck
 #endif
 
-#include "third_party/webrtc/rtc_base/rtccertificate.h"  // nogncheck
+#include "third_party/webrtc/rtc_base/rtc_certificate.h"  // nogncheck
 
 using blink::WebString;
 
@@ -128,7 +131,8 @@ content::TestBlinkWebUnitTestSupport* g_test_platform = nullptr;
 
 namespace content {
 
-TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport()
+TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport(
+    TestBlinkWebUnitTestSupport::SchedulerType scheduler_type)
     : weak_factory_(this) {
 #if defined(OS_MACOSX)
   base::mac::ScopedNSAutoreleasePool autorelease_pool;
@@ -146,21 +150,27 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport()
 
   scoped_refptr<base::SingleThreadTaskRunner> dummy_task_runner;
   std::unique_ptr<base::ThreadTaskRunnerHandle> dummy_task_runner_handle;
-  if (!base::ThreadTaskRunnerHandle::IsSet()) {
-    // Dummy task runner is initialized here because the blink::initialize
+  if (scheduler_type == SchedulerType::kMockScheduler) {
+    main_thread_scheduler_ =
+        blink::scheduler::CreateWebMainThreadSchedulerForTests();
+    // Dummy task runner is initialized here because the blink::Initialize
     // creates IsolateHolder which needs the current task runner handle. There
     // should be no task posted to this task runner. The message loop is not
     // created before this initialization because some tests need specific kinds
     // of message loops, and their types are not known upfront. Some tests also
     // create their own thread bundles or message loops, and doing the same in
     // TestBlinkWebUnitTestSupport would introduce a conflict.
-    dummy_task_runner = base::MakeRefCounted<DummyTaskRunner>();
+    dummy_task_runner = base::MakeRefCounted<base::NullTaskRunner>();
     dummy_task_runner_handle.reset(
         new base::ThreadTaskRunnerHandle(dummy_task_runner));
+  } else {
+    DCHECK_EQ(scheduler_type, SchedulerType::kRealScheduler);
+    main_thread_scheduler_ =
+        blink::scheduler::WebThreadScheduler::CreateMainThreadScheduler(
+            base::MessageLoop::CreateMessagePumpForType(
+                base::MessageLoop::TYPE_DEFAULT));
+    base::TaskScheduler::CreateAndStartWithDefaultParams("BlinkTestSupport");
   }
-  main_thread_scheduler_ =
-      blink::scheduler::CreateWebMainThreadSchedulerForTests();
-  web_thread_ = main_thread_scheduler_->CreateMainThread();
 
   // Initialize mojo firstly to enable Blink initialization to use it.
   InitializeMojo();
@@ -170,17 +180,16 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport()
   blink_interface_provider_.reset(
       new BlinkInterfaceProviderImpl(connector_.get()));
 
-  service_manager::Connector::TestApi test_api(connector_.get());
-  test_api.OverrideBinderForTesting(
-      service_manager::Identity(mojom::kBrowserServiceName),
+  connector_->OverrideBinderForTesting(
+      service_manager::ServiceFilter::ByName(mojom::kBrowserServiceName),
       blink::mojom::ClipboardHost::Name_,
       base::BindRepeating(&TestBlinkWebUnitTestSupport::BindClipboardHost,
                           weak_factory_.GetWeakPtr()));
 
   service_manager::BinderRegistry empty_registry;
-  blink::Initialize(this, &empty_registry, CurrentThread());
+  blink::Initialize(this, &empty_registry, main_thread_scheduler_.get());
   g_test_platform = this;
-  blink::SetLayoutTestMode(true);
+  blink::SetWebTestMode(true);
   blink::WebRuntimeFeatures::EnableDatabase(true);
   blink::WebRuntimeFeatures::EnableNotifications(true);
   blink::WebRuntimeFeatures::EnableTouchEventFeatureDetection(true);
@@ -214,13 +223,6 @@ TestBlinkWebUnitTestSupport::~TestBlinkWebUnitTestSupport() {
 
 blink::WebBlobRegistry* TestBlinkWebUnitTestSupport::GetBlobRegistry() {
   return &blob_registry_;
-}
-
-std::unique_ptr<blink::WebIDBFactory>
-TestBlinkWebUnitTestSupport::CreateIdbFactory() {
-  NOTREACHED() <<
-      "IndexedDB cannot be tested with in-process harnesses.";
-  return nullptr;
 }
 
 std::unique_ptr<blink::WebURLLoaderFactory>
@@ -297,15 +299,15 @@ blink::WebString TestBlinkWebUnitTestSupport::DefaultLocale() {
   return blink::WebString::FromASCII("en-US");
 }
 
+scoped_refptr<base::SingleThreadTaskRunner>
+TestBlinkWebUnitTestSupport::GetIOTaskRunner() const {
+  return ChildProcess::current() ? ChildProcess::current()->io_task_runner()
+                                 : nullptr;
+}
+
 blink::WebURLLoaderMockFactory*
 TestBlinkWebUnitTestSupport::GetURLLoaderMockFactory() {
   return url_loader_factory_.get();
-}
-
-blink::WebThread* TestBlinkWebUnitTestSupport::CurrentThread() {
-  if (web_thread_ && web_thread_->IsCurrentThread())
-    return web_thread_.get();
-  return BlinkPlatformImpl::CurrentThread();
 }
 
 bool TestBlinkWebUnitTestSupport::IsThreadedAnimationEnabled() {

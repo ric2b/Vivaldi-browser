@@ -26,13 +26,14 @@
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/svg/svg_path_data.h"
+#include "third_party/blink/renderer/platform/geometry/float_point.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 
 namespace blink {
 
 class SVGPathConsumer;
 
-namespace SVGPathParser {
+namespace svg_path_parser {
 
 template <typename SourceType, typename ConsumerType>
 inline bool ParsePath(SourceType& source, ConsumerType& consumer) {
@@ -46,7 +47,7 @@ inline bool ParsePath(SourceType& source, ConsumerType& consumer) {
   return true;
 }
 
-}  // namespace SVGPathParser
+}  // namespace svg_path_parser
 
 class SVGPathNormalizer {
   STACK_ALLOCATED();
@@ -68,6 +69,22 @@ class SVGPathNormalizer {
   FloatPoint current_point_;
   FloatPoint sub_path_point_;
   SVGPathSegType last_command_;
+};
+
+class SVGPathAbsolutizer {
+  STACK_ALLOCATED();
+
+ public:
+  SVGPathAbsolutizer(SVGPathConsumer* consumer) : consumer_(consumer) {
+    DCHECK(consumer_);
+  }
+
+  void EmitSegment(const PathSegmentData&);
+
+ private:
+  SVGPathConsumer* consumer_;
+  FloatPoint sub_path_point_;
+  FloatPoint current_point_;
 };
 
 }  // namespace blink

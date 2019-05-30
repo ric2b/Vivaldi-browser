@@ -7,9 +7,11 @@
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_handle.h"
+#include "base/task/post_task.h"
 #include "content/browser/histogram_subscriber.h"
 #include "content/common/histogram_fetcher.mojom.h"
 #include "content/public/browser/browser_child_process_host_iterator.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/render_process_host.h"
@@ -42,8 +44,8 @@ void HistogramController::OnHistogramDataCollected(
     int sequence_number,
     const std::vector<std::string>& pickled_histograms) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&HistogramController::OnHistogramDataCollected,
                        base::Unretained(this), sequence_number,
                        pickled_histograms));
@@ -89,22 +91,22 @@ HistogramController::GetChildHistogramFetcherMap() {
 
 template void HistogramController::SetHistogramMemory(
     ChildProcessHost* host,
-    mojo::ScopedSharedBufferHandle shared_buffer);
+    base::WritableSharedMemoryRegion shared_region);
 
 template void HistogramController::SetHistogramMemory(
     RenderProcessHost* host,
-    mojo::ScopedSharedBufferHandle shared_buffer);
+    base::WritableSharedMemoryRegion shared_region);
 
 template <class T>
 void HistogramController::SetHistogramMemory(
     T* host,
-    mojo::ScopedSharedBufferHandle shared_buffer) {
+    base::WritableSharedMemoryRegion shared_region) {
   content::mojom::ChildHistogramFetcherFactoryPtr
       child_histogram_fetcher_factory;
   content::mojom::ChildHistogramFetcherPtr child_histogram_fetcher;
   content::BindInterface(host, &child_histogram_fetcher_factory);
   child_histogram_fetcher_factory->CreateFetcher(
-      std::move(shared_buffer), mojo::MakeRequest(&child_histogram_fetcher));
+      std::move(shared_region), mojo::MakeRequest(&child_histogram_fetcher));
   InsertChildHistogramFetcherInterface(host,
                                        std::move(child_histogram_fetcher));
 }
@@ -152,8 +154,8 @@ void HistogramController::GetHistogramDataFromChildProcesses(
     // In some cases, there may be no child process of the given type (for
     // example, the GPU process may not exist and there may instead just be a
     // GPU thread in the browser process). If that's the case, then the process
-    // handle will be base::kNullProcessHandle and we shouldn't ask it for data.
-    if (!data.IsHandleValid())
+    // will be invalid and we shouldn't ask it for data.
+    if (!data.GetProcess().IsValid())
       continue;
 
     if (auto* child_histogram_fetcher =
@@ -166,8 +168,8 @@ void HistogramController::GetHistogramDataFromChildProcesses(
       ++pending_processes;
     }
   }
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&HistogramController::OnPendingProcesses,
                      base::Unretained(this), sequence_number, pending_processes,
                      true));
@@ -191,8 +193,8 @@ void HistogramController::GetHistogramData(int sequence_number) {
   }
   OnPendingProcesses(sequence_number, pending_processes, false);
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::IO},
       base::BindOnce(&HistogramController::GetHistogramDataFromChildProcesses,
                      base::Unretained(this), sequence_number));
 }

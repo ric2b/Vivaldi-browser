@@ -8,12 +8,8 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/no_destructor.h"
 #include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
-
-namespace base {
-template <typename T>
-struct DefaultSingletonTraits;
-}  // namespace base
 
 class AutocompleteClassifier;
 
@@ -31,10 +27,10 @@ class AutocompleteClassifierFactory : public BrowserStateKeyedServiceFactory {
 
   // Returns the default factory used to build AutocompleteClassifiers. Can be
   // registered with SetTestingFactory to use real instances during testing.
-  static TestingFactoryFunction GetDefaultFactory();
+  static TestingFactory GetDefaultFactory();
 
  private:
-  friend struct base::DefaultSingletonTraits<AutocompleteClassifierFactory>;
+  friend class base::NoDestructor<AutocompleteClassifierFactory>;
 
   AutocompleteClassifierFactory();
   ~AutocompleteClassifierFactory() override;

@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/time/clock.h"
 #include "base/time/tick_clock.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
@@ -15,6 +16,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "ui/base/idle/idle.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
 
@@ -62,8 +64,10 @@ gfx::Image UpgradeDetector::GetIcon() {
   return gfx::Image(gfx::CreateVectorIcon(kBrowserToolsUpdateIcon, color));
 }
 
-UpgradeDetector::UpgradeDetector(const base::TickClock* tick_clock)
-    : tick_clock_(tick_clock),
+UpgradeDetector::UpgradeDetector(const base::Clock* clock,
+                                 const base::TickClock* tick_clock)
+    : clock_(clock),
+      tick_clock_(tick_clock),
       upgrade_available_(UPGRADE_AVAILABLE_NONE),
       best_effort_experiment_updates_available_(false),
       critical_experiment_updates_available_(false),
@@ -163,20 +167,16 @@ void UpgradeDetector::TriggerCriticalUpdate() {
 }
 
 void UpgradeDetector::CheckIdle() {
-  // CalculateIdleState expects an interval in seconds.
-  int idle_time_allowed =
-      UseTestingIntervals() ? kIdleAmount : kIdleAmount * 60 * 60;
-
-  CalculateIdleState(
-      idle_time_allowed,
-      base::Bind(&UpgradeDetector::IdleCallback, base::Unretained(this)));
-}
-
-void UpgradeDetector::IdleCallback(ui::IdleState state) {
   // Don't proceed while an incognito window is open. The timer will still
   // keep firing, so this function will get a chance to re-evaluate this.
   if (chrome::IsIncognitoSessionActive())
     return;
+
+  // CalculateIdleState expects an interval in seconds.
+  int idle_time_allowed =
+      UseTestingIntervals() ? kIdleAmount : kIdleAmount * 60 * 60;
+
+  ui::IdleState state = ui::CalculateIdleState(idle_time_allowed);
 
   switch (state) {
     case ui::IDLE_STATE_LOCKED:
@@ -191,10 +191,6 @@ void UpgradeDetector::IdleCallback(ui::IdleState state) {
       break;
     case ui::IDLE_STATE_ACTIVE:
     case ui::IDLE_STATE_UNKNOWN:
-      break;
-    default:
-      NOTREACHED();  // Need to add any new value above (either providing
-                     // automatic restart or show notification to user).
       break;
   }
 }

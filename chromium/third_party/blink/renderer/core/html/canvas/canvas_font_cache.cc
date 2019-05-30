@@ -10,7 +10,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
-#include "third_party/blink/renderer/platform/memory_coordinator.h"
+#include "third_party/blink/renderer/platform/memory_pressure_listener.h"
 
 namespace {
 
@@ -43,13 +43,14 @@ CanvasFontCache::~CanvasFontCache() {
 }
 
 unsigned CanvasFontCache::MaxFonts() {
-  return MemoryCoordinator::IsLowEndDevice() ? CanvasFontCacheMaxFontsLowEnd
-                                             : CanvasFontCacheMaxFonts;
+  return MemoryPressureListenerRegistry::IsLowEndDevice()
+             ? CanvasFontCacheMaxFontsLowEnd
+             : CanvasFontCacheMaxFonts;
 }
 
 unsigned CanvasFontCache::HardMaxFonts() {
   return document_->hidden() ? CanvasFontCacheHiddenMaxFonts
-                             : (MemoryCoordinator::IsLowEndDevice()
+                             : (MemoryPressureListenerRegistry::IsLowEndDevice()
                                     ? CanvasFontCacheHardMaxFontsLowEnd
                                     : CanvasFontCacheHardMaxFonts);
 }
@@ -59,9 +60,8 @@ bool CanvasFontCache::GetFontUsingDefaultStyle(const String& font_string,
   HashMap<String, Font>::iterator i =
       fonts_resolved_using_default_style_.find(font_string);
   if (i != fonts_resolved_using_default_style_.end()) {
-    DCHECK(font_lru_list_.Contains(font_string));
-    font_lru_list_.erase(font_string);
-    font_lru_list_.insert(font_string);
+    auto add_result = font_lru_list_.PrependOrMoveToFirst(font_string);
+    DCHECK(!add_result.is_new_entry);
     resolved_font = i->value;
     return true;
   }
@@ -85,10 +85,9 @@ MutableCSSPropertyValueSet* CanvasFontCache::ParseFont(
   MutableCSSPropertyValueSet* parsed_style;
   MutableStylePropertyMap::iterator i = fetched_fonts_.find(font_string);
   if (i != fetched_fonts_.end()) {
-    DCHECK(font_lru_list_.Contains(font_string));
+    auto add_result = font_lru_list_.PrependOrMoveToFirst(font_string);
+    DCHECK(!add_result.is_new_entry);
     parsed_style = i->value;
-    font_lru_list_.erase(font_string);
-    font_lru_list_.insert(font_string);
   } else {
     parsed_style = MutableCSSPropertyValueSet::Create(kHTMLStandardMode);
     CSSParser::ParseValue(parsed_style, CSSPropertyFont, font_string, true,
@@ -103,15 +102,15 @@ MutableCSSPropertyValueSet* CanvasFontCache::ParseFont(
     if (font_value && font_value->IsCSSWideKeyword())
       return nullptr;
     fetched_fonts_.insert(font_string, parsed_style);
-    font_lru_list_.insert(font_string);
+    font_lru_list_.PrependOrMoveToFirst(font_string);
     // Hard limit is applied here, on the fly, while the soft limit is
     // applied at the end of the task.
     if (fetched_fonts_.size() > HardMaxFonts()) {
       DCHECK_EQ(fetched_fonts_.size(), HardMaxFonts() + 1);
       DCHECK_EQ(font_lru_list_.size(), HardMaxFonts() + 1);
-      fetched_fonts_.erase(font_lru_list_.front());
-      fonts_resolved_using_default_style_.erase(font_lru_list_.front());
-      font_lru_list_.RemoveFirst();
+      fetched_fonts_.erase(font_lru_list_.back());
+      fonts_resolved_using_default_style_.erase(font_lru_list_.back());
+      font_lru_list_.pop_back();
     }
   }
   SchedulePruningIfNeeded();
@@ -119,16 +118,16 @@ MutableCSSPropertyValueSet* CanvasFontCache::ParseFont(
   return parsed_style;
 }
 
-void CanvasFontCache::DidProcessTask() {
+void CanvasFontCache::DidProcessTask(const base::PendingTask& pending_task) {
   DCHECK(pruning_scheduled_);
   DCHECK(main_cache_purge_preventer_);
   while (fetched_fonts_.size() > MaxFonts()) {
-    fetched_fonts_.erase(font_lru_list_.front());
-    fonts_resolved_using_default_style_.erase(font_lru_list_.front());
-    font_lru_list_.RemoveFirst();
+    fetched_fonts_.erase(font_lru_list_.back());
+    fonts_resolved_using_default_style_.erase(font_lru_list_.back());
+    font_lru_list_.pop_back();
   }
   main_cache_purge_preventer_.reset();
-  Platform::Current()->CurrentThread()->RemoveTaskObserver(this);
+  Thread::Current()->RemoveTaskObserver(this);
   pruning_scheduled_ = false;
 }
 
@@ -137,7 +136,7 @@ void CanvasFontCache::SchedulePruningIfNeeded() {
     return;
   DCHECK(!main_cache_purge_preventer_);
   main_cache_purge_preventer_ = std::make_unique<FontCachePurgePreventer>();
-  Platform::Current()->CurrentThread()->AddTaskObserver(this);
+  Thread::Current()->AddTaskObserver(this);
   pruning_scheduled_ = true;
 }
 
@@ -151,7 +150,7 @@ void CanvasFontCache::PruneAll() {
   fonts_resolved_using_default_style_.clear();
 }
 
-void CanvasFontCache::Trace(blink::Visitor* visitor) {
+void CanvasFontCache::Trace(Visitor* visitor) {
   visitor->Trace(fetched_fonts_);
   visitor->Trace(document_);
 }
@@ -159,7 +158,7 @@ void CanvasFontCache::Trace(blink::Visitor* visitor) {
 void CanvasFontCache::Dispose() {
   main_cache_purge_preventer_.reset();
   if (pruning_scheduled_) {
-    Platform::Current()->CurrentThread()->RemoveTaskObserver(this);
+    Thread::Current()->RemoveTaskObserver(this);
   }
 }
 

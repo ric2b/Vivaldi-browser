@@ -36,7 +36,6 @@ class CONTENT_EXPORT ResourceThrottle {
     // Tells the delegate to resume the deferred resource load.
     virtual void Resume() = 0;
 
-    virtual void SetDelegateOpenFlags(bool open_when_done, bool ask_for_target);
    protected:
     virtual ~Delegate() {}
   };
@@ -69,8 +68,6 @@ class CONTENT_EXPORT ResourceThrottle {
   virtual bool MustProcessResponseBeforeReadingBody();
 
   void set_delegate_for_testing(Delegate* delegate) { delegate_ = delegate; }
-
-  void SetOpenFlags(bool open_when_done, bool ask_for_target);
 
  protected:
   ResourceThrottle() : delegate_(nullptr) {}

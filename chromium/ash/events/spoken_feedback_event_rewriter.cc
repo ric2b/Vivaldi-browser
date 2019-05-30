@@ -15,7 +15,8 @@
 
 namespace ash {
 
-SpokenFeedbackEventRewriter::SpokenFeedbackEventRewriter() = default;
+SpokenFeedbackEventRewriter::SpokenFeedbackEventRewriter()
+    : continuation_(nullptr) {}
 
 SpokenFeedbackEventRewriter::~SpokenFeedbackEventRewriter() = default;
 
@@ -27,48 +28,63 @@ void SpokenFeedbackEventRewriter::SetDelegate(
 void SpokenFeedbackEventRewriter::OnUnhandledSpokenFeedbackEvent(
     std::unique_ptr<ui::Event> event) const {
   DCHECK(event->IsKeyEvent()) << "Unexpected unhandled event type";
-  // For now, these events are sent directly to the primary display's EventSink.
-  // TODO: Pass the event to the original EventSource, not the primary one.
-  ui::EventSource* source =
-      Shell::GetPrimaryRootWindow()->GetHost()->GetEventSource();
-  if (SendEventToEventSource(source, event.get()).dispatcher_destroyed) {
+  // Send the event to the most recently rewritten event's continuation,
+  // (that is, through its EventSource). Under the assumption that a single
+  // SpokenFeedbackEventRewriter is not registered to multiple EventSources,
+  // this will be the same as this event's original source.
+  const char* failure_reason = nullptr;
+  if (continuation_) {
+    ui::EventDispatchDetails details = SendEvent(continuation_, event.get());
+    if (details.dispatcher_destroyed)
+      failure_reason = "destroyed dispatcher";
+    else if (details.target_destroyed)
+      failure_reason = "destroyed target";
+  } else if (continuation_.WasInvalidated()) {
+    failure_reason = "destroyed source";
+  } else {
+    failure_reason = "no prior rewrite";
+  }
+  if (failure_reason) {
     VLOG(0) << "Undispatched key " << event->AsKeyEvent()->key_code()
-            << " due to destroyed dispatcher.";
+            << " due to " << failure_reason << ".";
   }
 }
 
-ui::EventRewriteStatus SpokenFeedbackEventRewriter::RewriteEvent(
+ui::EventDispatchDetails SpokenFeedbackEventRewriter::RewriteEvent(
     const ui::Event& event,
-    std::unique_ptr<ui::Event>* new_event) {
-  if (!delegate_.is_bound() || !event.IsKeyEvent())
-    return ui::EVENT_REWRITE_CONTINUE;
+    const Continuation continuation) {
+  // Save continuation for |OnUnhandledSpokenFeedbackEvent()|.
+  continuation_ = continuation;
 
-  if (!Shell::Get()->accessibility_controller()->IsSpokenFeedbackEnabled())
-    return ui::EVENT_REWRITE_CONTINUE;
+  if (!delegate_.is_bound() ||
+      !Shell::Get()->accessibility_controller()->spoken_feedback_enabled())
+    return SendEvent(continuation, &event);
 
-  const ui::KeyEvent* key_event = event.AsKeyEvent();
+  if (event.IsKeyEvent()) {
+    const ui::KeyEvent* key_event = event.AsKeyEvent();
 
-  bool capture = capture_all_keys_;
+    bool capture = capture_all_keys_;
 
-  // Always capture the Search key.
-  capture |= key_event->IsCommandDown();
+    // Always capture the Search key.
+    capture |= key_event->IsCommandDown();
 
-  // Don't capture tab as it gets consumed by Blink so never comes back
-  // unhandled. In third_party/WebKit/Source/core/input/EventHandler.cpp, a
-  // default tab handler consumes tab even when no focusable nodes are found; it
-  // sets focus to Chrome and eats the event.
-  if (key_event->GetDomKey() == ui::DomKey::TAB)
-    capture = false;
+    // Don't capture tab as it gets consumed by Blink so never comes back
+    // unhandled. In third_party/WebKit/Source/core/input/EventHandler.cpp, a
+    // default tab handler consumes tab even when no focusable nodes are found;
+    // it sets focus to Chrome and eats the event.
+    if (key_event->GetDomKey() == ui::DomKey::TAB)
+      capture = false;
 
-  delegate_->DispatchKeyEventToChromeVox(ui::Event::Clone(event), capture);
-  return capture ? ui::EVENT_REWRITE_DISCARD : ui::EVENT_REWRITE_CONTINUE;
-}
+    delegate_->DispatchKeyEventToChromeVox(ui::Event::Clone(event), capture);
+    return capture ? DiscardEvent(continuation)
+                   : SendEvent(continuation, &event);
+  }
 
-ui::EventRewriteStatus SpokenFeedbackEventRewriter::NextDispatchEvent(
-    const ui::Event& last_event,
-    std::unique_ptr<ui::Event>* new_event) {
-  NOTREACHED();
-  return ui::EVENT_REWRITE_CONTINUE;
+  if (send_mouse_events_ && event.IsMouseEvent()) {
+    delegate_->DispatchMouseEventToChromeVox(ui::Event::Clone(event));
+  }
+
+  return SendEvent(continuation, &event);
 }
 
 }  // namespace ash

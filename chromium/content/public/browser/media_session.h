@@ -7,18 +7,12 @@
 
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "base/unguessable_token.h"
 #include "content/common/content_export.h"
-#include "services/media_session/public/mojom/audio_focus.mojom.h"
-
-namespace blink {
-namespace mojom {
-enum class MediaSessionAction;
-}  // namespace mojom
-}  // namespace blink
+#include "services/media_session/public/mojom/media_session.mojom.h"
 
 namespace content {
 
-class MediaSessionObserver;
 class WebContents;
 
 // MediaSession manages the media session and audio focus for a given
@@ -28,68 +22,83 @@ class WebContents;
 // and allows clients to resume/suspend/stop the managed players.
 class MediaSession : public media_session::mojom::MediaSession {
  public:
-  enum class SuspendType {
-    // Suspended by the system because a transient sound needs to be played.
-    SYSTEM,
-    // Suspended by the UI.
-    UI,
-    // Suspended by the page via script or user interaction.
-    CONTENT,
-  };
-
   // Returns the MediaSession associated to this WebContents. Creates one if
   // none is currently available.
   CONTENT_EXPORT static MediaSession* Get(WebContents* contents);
 
   ~MediaSession() override = default;
 
-  // Resume the media session.
-  // |type| represents the origin of the request.
-  virtual void Resume(SuspendType suspend_type) = 0;
-
-  // Suspend the media session.
-  // |type| represents the origin of the request.
-  virtual void Suspend(SuspendType suspend_type) = 0;
-
-  // Stop the media session.
-  // |type| represents the origin of the request.
-  virtual void Stop(SuspendType suspend_type) = 0;
-
-  // Seek the media session forward.
-  virtual void SeekForward(base::TimeDelta seek_time) = 0;
-
-  // Seek the media session backward.
-  virtual void SeekBackward(base::TimeDelta seek_time) = 0;
-
-  // Return if the session can be controlled by Resume() and Suspend() calls
-  // above.
-  virtual bool IsControllable() const = 0;
-
-  // Return if the actual playback state is paused.
-  virtual bool IsActuallyPaused() const = 0;
-
   // Tell the media session a user action has performed.
-  virtual void DidReceiveAction(blink::mojom::MediaSessionAction action) = 0;
+  virtual void DidReceiveAction(
+      media_session::mojom::MediaSessionAction action) = 0;
 
   // Set the volume multiplier applied during ducking.
   virtual void SetDuckingVolumeMultiplier(double multiplier) = 0;
 
+  // Set the audio focus group id for this media session. Sessions in the same
+  // group can share audio focus. Setting this to null will use the browser
+  // default value. This will only have any effect if audio focus grouping is
+  // supported.
+  virtual void SetAudioFocusGroupId(const base::UnguessableToken& group_id) = 0;
+
+  // media_session.mojom.MediaSession overrides -------------------------------
+
+  // Suspend the media session.
+  // |type| represents the origin of the request.
+  void Suspend(SuspendType suspend_type) override = 0;
+
+  // Resume the media session.
+  // |type| represents the origin of the request.
+  void Resume(SuspendType suspend_type) override = 0;
+
   // Let the media session start ducking such that the volume multiplier is
   // reduced.
-  virtual void StartDucking() = 0;
+  void StartDucking() override = 0;
 
   // Let the media session stop ducking such that the volume multiplier is
   // recovered.
-  virtual void StopDucking() = 0;
+  void StopDucking() override = 0;
+
+  // Returns information about the MediaSession.
+  void GetMediaSessionInfo(GetMediaSessionInfoCallback callback) override = 0;
+
+  // Returns debug information about the MediaSession.
+  void GetDebugInfo(GetDebugInfoCallback callback) override = 0;
+
+  // Adds an observer to listen to events related to this MediaSession.
+  void AddObserver(
+      media_session::mojom::MediaSessionObserverPtr observer) override = 0;
+
+  // Skip to the previous track. If there is no previous track then this will be
+  // a no-op.
+  void PreviousTrack() override = 0;
+
+  // Skip to the next track. If there is no next track then this will be a
+  // no-op.
+  void NextTrack() override = 0;
+
+  // Skip ad.
+  void SkipAd() override = 0;
+
+  // Seek the media session. If the media cannot seek then this will be a no-op.
+  // The |seek_time| is the time delta that the media will seek by and supports
+  // both positive and negative values.
+  void Seek(base::TimeDelta seek_time) override = 0;
+
+  // Stop the media session.
+  // |type| represents the origin of the request.
+  void Stop(SuspendType suspend_type) override = 0;
+
+  // Downloads the bitmap version of a MediaImage at least |minimum_size_px|
+  // and closest to |desired_size_px|. If the download failed, was too small or
+  // the image did not come from the media session then returns a null image.
+  void GetMediaImageBitmap(const media_session::MediaImage& image,
+                           int minimum_size_px,
+                           int desired_size_px,
+                           GetMediaImageBitmapCallback callback) override = 0;
 
  protected:
   MediaSession() = default;
-
- private:
-  friend class MediaSessionObserver;
-
-  virtual void AddObserver(MediaSessionObserver* observer) = 0;
-  virtual void RemoveObserver(MediaSessionObserver* observer) = 0;
 };
 
 }  // namespace content

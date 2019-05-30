@@ -10,11 +10,13 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/memory/weak_ptr.h"
 #include "components/viz/client/frame_evictor.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/host/hit_test/hit_test_query.h"
 #include "components/viz/host/host_frame_sink_client.h"
+#include "components/viz/host/host_frame_sink_manager.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/renderer_host/dip_util.h"
 #include "content/common/content_export.h"
@@ -43,14 +45,14 @@ class CONTENT_EXPORT DelegatedFrameHostClient {
 
   virtual ui::Layer* DelegatedFrameHostGetLayer() const = 0;
   virtual bool DelegatedFrameHostIsVisible() const = 0;
-
   // Returns the color that the resize gutters should be drawn with.
   virtual SkColor DelegatedFrameHostGetGutterColor() const = 0;
-
-  virtual void OnFirstSurfaceActivation(
-      const viz::SurfaceInfo& surface_info) = 0;
   virtual void OnBeginFrame(base::TimeTicks frame_time) = 0;
   virtual void OnFrameTokenChanged(uint32_t frame_token) = 0;
+  virtual float GetDeviceScaleFactor() const = 0;
+  virtual void InvalidateLocalSurfaceIdOnEviction() = 0;
+  virtual std::vector<viz::SurfaceId> CollectSurfaceIdsForEviction() = 0;
+  virtual bool ShouldShowStaleContentOnEviction() = 0;
 };
 
 // The DelegatedFrameHost is used to host all of the RenderWidgetHostView state
@@ -74,29 +76,20 @@ class CONTENT_EXPORT DelegatedFrameHost
   ~DelegatedFrameHost() override;
 
   // ui::CompositorObserver implementation.
-  void OnCompositingDidCommit(ui::Compositor* compositor) override;
-  void OnCompositingStarted(ui::Compositor* compositor,
-                            base::TimeTicks start_time) override;
-  void OnCompositingEnded(ui::Compositor* compositor) override;
-  void OnCompositingChildResizing(ui::Compositor* compositor) override;
   void OnCompositingShuttingDown(ui::Compositor* compositor) override;
 
   // ui::ContextFactoryObserver implementation.
   void OnLostSharedContext() override;
   void OnLostVizProcess() override;
 
-  // FrameEvictorClient implementation.
-  void EvictDelegatedFrame() override;
-
   void ResetFallbackToFirstNavigationSurface();
 
   // viz::mojom::CompositorFrameSinkClient implementation.
   void DidReceiveCompositorFrameAck(
       const std::vector<viz::ReturnedResource>& resources) override;
-  void DidPresentCompositorFrame(
-      uint32_t presentation_token,
-      const gfx::PresentationFeedback& feedback) override;
-  void OnBeginFrame(const viz::BeginFrameArgs& args) override;
+  void OnBeginFrame(const viz::BeginFrameArgs& args,
+                    const base::flat_map<uint32_t, gfx::PresentationFeedback>&
+                        feedbacks) override;
   void ReclaimResources(
       const std::vector<viz::ReturnedResource>& resources) override;
   void OnBeginFramePausedChanged(bool paused) override;
@@ -113,7 +106,6 @@ class CONTENT_EXPORT DelegatedFrameHost
       const viz::LocalSurfaceId& local_surface_id,
       viz::CompositorFrame frame,
       base::Optional<viz::HitTestRegionList> hit_test_region_list);
-  void ClearDelegatedFrame();
   void WasHidden();
   // TODO(ccameron): Include device scale factor here.
   void WasShown(const viz::LocalSurfaceId& local_surface_id,
@@ -125,6 +117,10 @@ class CONTENT_EXPORT DelegatedFrameHost
   bool HasSavedFrame() const;
   void AttachToCompositor(ui::Compositor* compositor);
   void DetachFromCompositor();
+
+  // Copies |src_subrect| from the compositing surface into a bitmap (first
+  // overload) or texture (second overload). |output_size| specifies the size of
+  // the output bitmap or texture.
   // Note: |src_subrect| is specified in DIP dimensions while |output_size|
   // expects pixels. If |src_subrect| is empty, the entire surface area is
   // copied.
@@ -132,6 +128,11 @@ class CONTENT_EXPORT DelegatedFrameHost
       const gfx::Rect& src_subrect,
       const gfx::Size& output_size,
       base::OnceCallback<void(const SkBitmap&)> callback);
+  void CopyFromCompositingSurfaceAsTexture(
+      const gfx::Rect& src_subrect,
+      const gfx::Size& output_size,
+      viz::CopyOutputRequest::CopyOutputRequestCallback callback);
+
   bool CanCopyFromCompositingSurface() const;
   const viz::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
 
@@ -148,11 +149,9 @@ class CONTENT_EXPORT DelegatedFrameHost
   void SetWantsAnimateOnlyBeginFrames();
   void DidNotProduceFrame(const viz::BeginFrameAck& ack);
 
-  // Returns the surface id for the surface most recently activated by
-  // OnFirstSurfaceActivation.
-  // TODO(ccameron): GetActiveSurfaceId may be a better name.
+  // Returns the surface id for the most recently embedded surface.
   viz::SurfaceId GetCurrentSurfaceId() const {
-    return viz::SurfaceId(frame_sink_id_, active_local_surface_id_);
+    return viz::SurfaceId(frame_sink_id_, local_surface_id_);
   }
   viz::CompositorFrameSinkSupport* GetCompositorFrameSinkSupportForTesting() {
     return support_.get();
@@ -171,31 +170,42 @@ class CONTENT_EXPORT DelegatedFrameHost
 
   void DidNavigate();
 
-  bool IsPrimarySurfaceEvicted() const;
-
   void WindowTitleChanged(const std::string& title);
 
   // If our SurfaceLayer doesn't have a fallback, use the fallback info of
   // |other|.
   void TakeFallbackContentFrom(DelegatedFrameHost* other);
 
+  base::WeakPtr<DelegatedFrameHost> GetWeakPtr() {
+    return weak_factory_.GetWeakPtr();
+  }
+
  private:
   friend class DelegatedFrameHostClient;
-  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest,
-                           SkippedDelegatedFrames);
-  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest,
-                           DiscardDelegatedFramesWithLocking);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraBrowserTest,
+                           StaleFrameContentOnEvictionNormal);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraBrowserTest,
+                           StaleFrameContentOnEvictionRejected);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraBrowserTest,
+                           StaleFrameContentOnEvictionNone);
 
-  void LockResources();
-  void UnlockResources();
+  // FrameEvictorClient implementation.
+  void EvictDelegatedFrame() override;
+
+  void DidCopyStaleContent(std::unique_ptr<viz::CopyOutputResult> result);
+
+  void ContinueDelegatedFrameEviction();
 
   SkColor GetGutterColor() const;
 
   void CreateCompositorFrameSinkSupport();
   void ResetCompositorFrameSinkSupport();
 
-  void ProcessCopyOutputRequest(
-      std::unique_ptr<viz::CopyOutputRequest> request);
+  void CopyFromCompositingSurfaceInternal(
+      const gfx::Rect& src_subrect,
+      const gfx::Size& output_size,
+      viz::CopyOutputRequest::ResultFormat format,
+      viz::CopyOutputRequest::CopyOutputRequestCallback callback);
 
   const viz::FrameSinkId frame_sink_id_;
   DelegatedFrameHostClient* const client_;
@@ -203,27 +213,16 @@ class CONTENT_EXPORT DelegatedFrameHost
   const bool should_register_frame_sink_id_;
   ui::Compositor* compositor_ = nullptr;
 
-  // The surface id that was most recently activated by
-  // OnFirstSurfaceActivation.
-  viz::LocalSurfaceId active_local_surface_id_;
-  // The scale factor of the above surface.
-  float active_device_scale_factor_ = 0.f;
-
-  // The local surface id as of the most recent call to
-  // EmbedSurface or WasShown. This is the surface that we expect
-  // future frames to reference. This will eventually equal the active surface.
-  viz::LocalSurfaceId pending_local_surface_id_;
+  // The LocalSurfaceId of the currently embedded surface.
+  viz::LocalSurfaceId local_surface_id_;
   // The size of the above surface (updated at the same time).
-  gfx::Size pending_surface_dip_size_;
+  gfx::Size surface_dip_size_;
 
   // In non-surface sync, this is the size of the most recently activated
   // surface (which is suitable for calculating gutter size). In surface sync,
   // this is most recent size set in EmbedSurface.
   // TODO(ccameron): The meaning of "current" should be made more clear here.
   gfx::Size current_frame_size_in_dip_;
-
-  // This is the last root background color from a swapped frame.
-  SkColor background_color_;
 
   viz::HostFrameSinkManager* const host_frame_sink_manager_;
 
@@ -238,10 +237,24 @@ class CONTENT_EXPORT DelegatedFrameHost
   std::unique_ptr<viz::FrameEvictor> frame_evictor_;
 
   viz::LocalSurfaceId first_local_surface_id_after_navigation_;
-  bool received_frame_after_navigation_ = false;
 
-  std::vector<std::unique_ptr<viz::CopyOutputRequest>>
-      pending_first_frame_requests_;
+#ifdef OS_CHROMEOS
+  bool seen_first_activation_ = false;
+#endif
+
+  enum class FrameEvictionState {
+    kNotStarted = 0,          // Frame eviction is ready.
+    kPendingEvictionRequests  // Frame eviction is paused with pending requests.
+  };
+
+  FrameEvictionState frame_eviction_state_ = FrameEvictionState::kNotStarted;
+
+  // Layer responsible for displaying the stale content for the DFHC when the
+  // actual web content frame has been evicted. This will be reset when a new
+  // compositor frame is submitted.
+  std::unique_ptr<ui::Layer> stale_content_layer_;
+
+  base::WeakPtrFactory<DelegatedFrameHost> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(DelegatedFrameHost);
 };

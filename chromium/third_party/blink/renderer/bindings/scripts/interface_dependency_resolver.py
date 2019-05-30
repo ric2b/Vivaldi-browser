@@ -203,7 +203,7 @@ def merge_interface_dependencies(definitions, component, target_interface, depen
             # cpp class to obtain partial interface's cpp class.
             # e.g.. V8WindowPartial.cpp:
             #   DOMWindow* impl = V8Window::ToImpl(holder);
-            #   DOMWindowQuota* cppValue(DOMWindowQuota::webkitStorageInfo(impl));
+            #   DOMWindowQuota* cpp_value(DOMWindowQuota::webkitStorageInfo(impl));
             # TODO(tasak): remove ImplementedAs extended attributes
             # from all partial interfaces. Instead, rename all cpp/header
             # files correctly. ImplementedAs should not be allowed in
@@ -334,6 +334,9 @@ def inherit_unforgeable_attributes(resolved_definitions, interfaces_info):
         interface = interfaces_info[interface_name]
         unforgeable_attributes, referenced_interfaces, cpp_includes = collect_unforgeable_attributes_in_ancestors(interface.get('parent'), component)
         this_unforgeable = interface.get('unforgeable_attributes', [])
+        for attr in this_unforgeable:
+            if attr.defined_in is None:
+                attr.defined_in = interface_name
         unforgeable_attributes.extend(this_unforgeable)
         this_referenced = [attr.idl_type.base_type for attr in this_unforgeable
                            if attr.idl_type.base_type in

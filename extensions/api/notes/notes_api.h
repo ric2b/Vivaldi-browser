@@ -3,51 +3,16 @@
 #ifndef EXTENSIONS_API_NOTES_NOTES_API_H_
 #define EXTENSIONS_API_NOTES_NOTES_API_H_
 
-#include <memory>
-#include <string>
-
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
-#include "extensions/schema/notes.h"
-#include "notes/notes_model.h"
+#include "extensions/browser/extension_function.h"
 #include "notes/notes_model_observer.h"
-#include "notes/notesnode.h"
-
-using vivaldi::Notes_Model;
-using vivaldi::Notes_Node;
-using vivaldi::NotesModelObserver;
 
 namespace extensions {
 
-using vivaldi::notes::NoteTreeNode;
-using vivaldi::notes::NoteAttachment;
-
-// Observes NotesModel and then routes (some of) the notifications as events to
-// the extension system.
-class NotesEventRouter : public NotesModelObserver {
- public:
-  explicit NotesEventRouter(Profile* profile);
-  ~NotesEventRouter() override;
-
-  // vivaldi::NotesModelObserver:
-  // TODO(pettern): Wire up the other notifications to send events
-  // instead of sending them explicitly.
-  void ExtensiveNotesChangesBeginning(Notes_Model* model) override;
-  void ExtensiveNotesChangesEnded(Notes_Model* model) override;
-
- private:
-  // Helper to actually dispatch an event to extension listeners.
-  void DispatchEvent(const std::string& event_name,
-                     std::unique_ptr<base::ListValue> event_args);
-
-  content::BrowserContext* browser_context_;
-  Notes_Model* model_;
-
-  DISALLOW_COPY_AND_ASSIGN(NotesEventRouter);
-};
-
-class NotesAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
+class NotesAPI : public BrowserContextKeyedAPI,
+                 public EventRouter::Observer,
+                 public ::vivaldi::NotesModelObserver {
  public:
   explicit NotesAPI(content::BrowserContext* context);
   ~NotesAPI() override;
@@ -61,158 +26,120 @@ class NotesAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
   // EventRouter::Observer implementation.
   void OnListenerAdded(const EventListenerInfo& details) override;
 
+  // vivaldi::NotesModelObserver:
+  // TODO(pettern): Wire up the other notifications to send events
+  // instead of sending them explicitly.
+  void ExtensiveNotesChangesBeginning(::vivaldi::Notes_Model* model) override;
+  void ExtensiveNotesChangesEnded(::vivaldi::Notes_Model* model) override;
+
  private:
   friend class BrowserContextKeyedAPIFactory<NotesAPI>;
 
   content::BrowserContext* browser_context_;
 
+  // Initialized lazily upon the first OnListenerAdded.
+  ::vivaldi::Notes_Model* model_ = nullptr;
+
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "NotesAPI"; }
   static const bool kServiceIsNULLWhileTesting = true;
   static const bool kServiceRedirectedInIncognito = true;
-
-  // Created lazily upon OnListenerAdded.
-  std::unique_ptr<NotesEventRouter> notes_event_router_;
 };
 
-class NotesAsyncFunction : public ChromeAsyncExtensionFunction {
- public:
-  Notes_Node* GetNodeFromId(
-      Notes_Node* node,
-      int64_t id);
-  Notes_Model* GetNotesModel();
-
- protected:
-  ~NotesAsyncFunction() override {}
-};
-
-class NotesGetFunction : public NotesAsyncFunction {
+class NotesGetFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("notes.get", NOTES_GET)
-  NotesGetFunction();
+  NotesGetFunction() = default;
 
  protected:
-  ~NotesGetFunction() override;
+  ~NotesGetFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ExtensionFunction::ResponseAction Run() override;
 };
 
-class NotesGetChildrenFunction : public NotesAsyncFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("notes.getChildren", NOTES_GETCHILDREN)
-  NotesGetChildrenFunction();
-
- protected:
-  ~NotesGetChildrenFunction() override;
-  // ExtensionFunction:
-  bool RunAsync() override;
-};
-
-class NotesGetTreeFunction : public NotesAsyncFunction,
-                             public NotesModelObserver {
+class NotesGetTreeFunction : public UIThreadExtensionFunction,
+                             public ::vivaldi::NotesModelObserver {
  public:
   DECLARE_EXTENSION_FUNCTION("notes.getTree", NOTES_GETTREE)
-  NotesGetTreeFunction();
+  NotesGetTreeFunction() = default;
 
  protected:
-  ~NotesGetTreeFunction() override;
+  ~NotesGetTreeFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ExtensionFunction::ResponseAction Run() override;
 
  private:
-  void NotesModelLoaded(Notes_Model* model, bool ids_reassigned) override;
-  void NotesModelBeingDeleted(Notes_Model* model) override;
+  void NotesModelLoaded(::vivaldi::Notes_Model* model,
+                        bool ids_reassigned) override;
+  void NotesModelBeingDeleted(::vivaldi::Notes_Model* model) override;
 
-  bool SendGetTreeResponse(Notes_Model* model);
-  Notes_Model* notes_model_ = nullptr;
+  void SendGetTreeResponse(::vivaldi::Notes_Model* model);
 };
 
-class NotesMoveFunction : public NotesAsyncFunction {
+class NotesMoveFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("notes.move", NOTES_MOVE)
-  NotesMoveFunction();
+  NotesMoveFunction() = default;
 
  protected:
-  ~NotesMoveFunction() override;
+  ~NotesMoveFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ExtensionFunction::ResponseAction Run() override;
 };
 
-class NotesGetSubTreeFunction : public NotesAsyncFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("notes.getSubTree", NOTES_GETSUBTREE)
-  NotesGetSubTreeFunction();
-
- protected:
-  ~NotesGetSubTreeFunction() override;
-  // ExtensionFunction:
-  bool RunAsync() override;
-};
-
-class NotesSearchFunction : public NotesAsyncFunction {
+class NotesSearchFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("notes.search", NOTES_SEARCH)
-  NotesSearchFunction();
+  NotesSearchFunction() = default;
 
  protected:
-  ~NotesSearchFunction() override;
+  ~NotesSearchFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ExtensionFunction::ResponseAction Run() override;
 };
 
-class NotesCreateFunction : public NotesAsyncFunction {
+class NotesCreateFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("notes.create", NOTES_CREATE)
-  NotesCreateFunction();
+  NotesCreateFunction() = default;
 
  protected:
-  ~NotesCreateFunction() override;
+  ~NotesCreateFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ExtensionFunction::ResponseAction Run() override;
 };
 
-class NotesUpdateFunction : public NotesAsyncFunction {
+class NotesUpdateFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("notes.update", NOTES_UPDATE)
-  NotesUpdateFunction();
+  NotesUpdateFunction() = default;
 
  protected:
-  ~NotesUpdateFunction() override;
+  ~NotesUpdateFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ExtensionFunction::ResponseAction Run() override;
 };
 
-class NotesRemoveFunction : public NotesAsyncFunction {
+class NotesRemoveFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("notes.remove", NOTES_REMOVE)
-  NotesRemoveFunction();
+  NotesRemoveFunction() = default;
 
  protected:
-  ~NotesRemoveFunction() override;
+  ~NotesRemoveFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ExtensionFunction::ResponseAction Run() override;
 };
 
-class NotesRemoveTreeFunction : public NotesAsyncFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("notes.removeTree", NOTES_REMOVETREE)
-  NotesRemoveTreeFunction();
-
- protected:
-  ~NotesRemoveTreeFunction() override;
-  // ExtensionFunction:
-  bool RunAsync() override;
-};
-
-class NotesEmptyTrashFunction : public NotesAsyncFunction {
+class NotesEmptyTrashFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("notes.emptyTrash", NOTES_EMPTYTRASH)
-  NotesEmptyTrashFunction();
+  NotesEmptyTrashFunction() = default;
 
  protected:
-  ~NotesEmptyTrashFunction() override;
+  ~NotesEmptyTrashFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ExtensionFunction::ResponseAction Run() override;
 };
 
 }  // namespace extensions

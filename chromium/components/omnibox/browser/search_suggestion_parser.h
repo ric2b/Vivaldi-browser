@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/macros.h"
@@ -15,6 +16,7 @@
 #include "base/strings/string_piece.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
+#include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "url/gurl.h"
 
@@ -40,7 +42,7 @@ class SearchSuggestionParser {
   //           highly fragmented SearchProvider logic for each Result type.
   class Result {
    public:
-    Result(bool from_keyword_provider,
+    Result(bool from_keyword,
            int relevance,
            bool relevance_from_server,
            AutocompleteMatchType::Type type,
@@ -49,7 +51,7 @@ class SearchSuggestionParser {
     Result(const Result& other);
     virtual ~Result();
 
-    bool from_keyword_provider() const { return from_keyword_provider_; }
+    bool from_keyword() const { return from_keyword_; }
 
     const base::string16& match_contents() const { return match_contents_; }
     const ACMatchClassifications& match_contents_class() const {
@@ -87,8 +89,8 @@ class SearchSuggestionParser {
     base::string16 match_contents_;
     ACMatchClassifications match_contents_class_;
 
-    // True if the result came from the keyword provider.
-    bool from_keyword_provider_;
+    // True if the result came from a keyword suggestion.
+    bool from_keyword_;
 
     AutocompleteMatchType::Type type_;
 
@@ -125,7 +127,7 @@ class SearchSuggestionParser {
     SuggestResult(const base::string16& suggestion,
                   AutocompleteMatchType::Type type,
                   int subtype_identifier,
-                  bool from_keyword_provider,
+                  bool from_keyword,
                   int relevance,
                   bool relevance_from_server,
                   const base::string16& input_text);
@@ -139,7 +141,7 @@ class SearchSuggestionParser {
                   const std::string& deletion_url,
                   const std::string& image_dominant_color,
                   const std::string& image_url,
-                  bool from_keyword_provider,
+                  bool from_keyword,
                   int relevance,
                   bool relevance_from_server,
                   bool should_prefetch,
@@ -158,11 +160,7 @@ class SearchSuggestionParser {
       return additional_query_params_;
     }
 
-    void SetAnswer(const base::string16& answer_contents,
-                   const base::string16& answer_type,
-                   const SuggestionAnswer& answer);
-    const base::string16& answer_contents() const { return answer_contents_; }
-    const base::string16& answer_type() const { return answer_type_; }
+    void SetAnswer(const SuggestionAnswer& answer);
     const base::Optional<SuggestionAnswer>& answer() const { return answer_; }
 
     const std::string& image_dominant_color() const {
@@ -201,14 +199,6 @@ class SearchSuggestionParser {
     // Optional additional parameters to be added to the search URL.
     std::string additional_query_params_;
 
-    // TODO(jdonnelly): Remove the following two properties once the downstream
-    // clients are using the SuggestionAnswer.
-    // Optional formatted Answers result.
-    base::string16 answer_contents_;
-
-    // Type of optional formatted Answers result.
-    base::string16 answer_type_;
-
     // Optional short answer to the input that produced this suggestion.
     base::Optional<SuggestionAnswer> answer_;
 
@@ -230,7 +220,7 @@ class SearchSuggestionParser {
                      int subtype_identifier,
                      const base::string16& description,
                      const std::string& deletion_url,
-                     bool from_keyword_provider,
+                     bool from_keyword,
                      int relevance,
                      bool relevance_from_server,
                      const base::string16& input_text);
@@ -341,7 +331,16 @@ class SearchSuggestionParser {
       bool is_keyword_result,
       Results* results);
 
+  // Creates or returns a WordMap for |input_text|. A WordMap is a mapping from
+  // characters to groups of words that start with those characters. See
+  // comments by AutocompleteProvider::CreateWordMapForString() for details.
+  static const AutocompleteProvider::WordMap& GetOrCreateWordMapForInputText(
+      const base::string16& input_text);
+
  private:
+  static std::pair<base::string16, AutocompleteProvider::WordMap>&
+  GetWordMapCache();
+
   DISALLOW_COPY_AND_ASSIGN(SearchSuggestionParser);
 };
 

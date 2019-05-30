@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -33,6 +34,7 @@
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_source.h"
@@ -86,7 +88,6 @@ class TestSyncService : public browser_sync::ProfileSyncServiceMock {
   TransportState GetTransportState() const override {
     return TransportState::ACTIVE;
   }
-  bool IsFirstSetupComplete() const override { return true; }
   syncer::ModelTypeSet GetActiveDataTypes() const override {
     switch (synced_types_) {
       case SyncedTypes::ALL:
@@ -100,7 +101,6 @@ class TestSyncService : public browser_sync::ProfileSyncServiceMock {
   syncer::ModelTypeSet GetPreferredDataTypes() const override {
     return GetActiveDataTypes();
   }
-  bool IsUsingSecondaryPassphrase() const override { return false; }
 
   void set_synced_types(SyncedTypes synced_types) {
     synced_types_ = synced_types;
@@ -137,9 +137,10 @@ class ManagePasswordsBubbleModelTest : public ::testing::Test {
         .WillByDefault(Return(nullptr));
     PasswordStoreFactory::GetInstance()->SetTestingFactoryAndUse(
         profile(),
-        password_manager::BuildPasswordStore<
-            content::BrowserContext,
-            testing::StrictMock<password_manager::MockPasswordStore>>);
+        base::BindRepeating(
+            &password_manager::BuildPasswordStore<
+                content::BrowserContext,
+                testing::StrictMock<password_manager::MockPasswordStore>>));
     pending_password_.origin = GURL(kSiteOrigin);
     pending_password_.signon_realm = kSiteOrigin;
     pending_password_.username_value = base::ASCIIToUTF16(kUsername);
@@ -191,6 +192,7 @@ class ManagePasswordsBubbleModelTest : public ::testing::Test {
 
  private:
   content::TestBrowserThreadBundle thread_bundle_;
+  content::RenderViewHostTestEnabler rvh_enabler_;
   TestingProfile profile_;
   std::unique_ptr<content::WebContents> test_web_contents_;
   std::unique_ptr<ManagePasswordsBubbleModel> model_;
@@ -371,8 +373,12 @@ TEST_F(ManagePasswordsBubbleModelTest, ClickNever) {
 TEST_F(ManagePasswordsBubbleModelTest, ClickManage) {
   PretendManagingPasswords();
 
-  EXPECT_CALL(*controller(), NavigateToPasswordManagerSettingsPage());
-  model()->OnManageClicked();
+  EXPECT_CALL(
+      *controller(),
+      NavigateToPasswordManagerSettingsPage(
+          password_manager::ManagePasswordsReferrer::kManagePasswordsBubble));
+  model()->OnManageClicked(
+      password_manager::ManagePasswordsReferrer::kManagePasswordsBubble);
 
   EXPECT_EQ(password_manager::ui::MANAGE_STATE, model()->state());
   DestroyModelExpectReason(password_manager::metrics_util::CLICKED_MANAGE);
@@ -439,13 +445,6 @@ TEST_F(ManagePasswordsBubbleModelTest, EditCredential) {
   EXPECT_CALL(*controller(), NeverSavePassword()).Times(0);
   model()->OnSaveClicked();
   DestroyModelAndVerifyControllerExpectations();
-}
-
-TEST_F(ManagePasswordsBubbleModelTest, OnBrandLinkClicked) {
-  PretendPasswordWaiting();
-
-  EXPECT_CALL(*controller(), NavigateToSmartLockHelpPage());
-  model()->OnBrandLinkClicked();
 }
 
 TEST_F(ManagePasswordsBubbleModelTest, SuppressSignInPromo) {
@@ -551,20 +550,24 @@ class ManagePasswordsBubbleModelManageLinkTest
 TEST_P(ManagePasswordsBubbleModelManageLinkTest, OnManageClicked) {
   TestSyncService* sync_service = static_cast<TestSyncService*>(
       ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-          profile(), &TestingSyncFactoryFunction));
+          profile(), base::BindRepeating(&TestingSyncFactoryFunction)));
   sync_service->set_synced_types(GetParam());
 
   PretendManagingPasswords();
 
-  EXPECT_CALL(*controller(), NavigateToPasswordManagerSettingsPage());
+  EXPECT_CALL(
+      *controller(),
+      NavigateToPasswordManagerSettingsPage(
+          password_manager::ManagePasswordsReferrer::kManagePasswordsBubble));
 
-  model()->OnManageClicked();
+  model()->OnManageClicked(
+      password_manager::ManagePasswordsReferrer::kManagePasswordsBubble);
 }
 
-INSTANTIATE_TEST_CASE_P(Default,
-                        ManagePasswordsBubbleModelManageLinkTest,
-                        ::testing::Values(TestSyncService::SyncedTypes::ALL,
-                                          TestSyncService::SyncedTypes::NONE));
+INSTANTIATE_TEST_SUITE_P(Default,
+                         ManagePasswordsBubbleModelManageLinkTest,
+                         ::testing::Values(TestSyncService::SyncedTypes::ALL,
+                                           TestSyncService::SyncedTypes::NONE));
 
 // Verify that URL keyed metrics are properly recorded.
 TEST_F(ManagePasswordsBubbleModelTest, RecordUKMs) {

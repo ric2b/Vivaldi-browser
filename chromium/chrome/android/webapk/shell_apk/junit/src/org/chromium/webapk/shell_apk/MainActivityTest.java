@@ -8,11 +8,13 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
 
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -35,36 +37,40 @@ import org.chromium.webapk.test.WebApkTestHelper;
 @RunWith(LocalRobolectricTestRunner.class)
 @Config(manifest = Config.NONE, packageName = WebApkUtilsTest.WEBAPK_PACKAGE_NAME)
 public final class MainActivityTest {
+    private PackageManager mPackageManager;
+    private static final String BROWSER_PACKAGE_NAME = "com.android.chrome";
+
+    @Before
+    public void setUp() {
+        mPackageManager = RuntimeEnvironment.application.getPackageManager();
+        installBrowser(BROWSER_PACKAGE_NAME);
+    }
+
     /**
      * Test that MainActivity uses the manifest start URL and appends the intent url as a paramater,
      * if intent URL scheme does not match the scope url.
      */
     @Test
     public void testIntentUrlOutOfScopeBecauseOfScheme() {
-        final String intentStartUrl = "http://www.google.com/search_results?q=eh#cr=countryCA";
+        final String intentStartUrl = "geo:0,0?q=Kenora";
         final String manifestStartUrl = "https://www.google.com/index.html";
         final String manifestScope = "https://www.google.com/";
         final String expectedStartUrl =
-                "https://www.google.com/index.html?originalUrl=http%3A%2F%2Fwww.google.com%2Fsearch_results%3Fq%3Deh%23cr%3DcountryCA";
-        final String browserPackageName = "com.android.chrome";
+                "https://www.google.com/index.html?originalUrl=geo%3A0%2C0%3Fq%3DKenora";
 
         Bundle bundle = new Bundle();
         bundle.putString(WebApkMetaDataKeys.START_URL, manifestStartUrl);
         bundle.putString(WebApkMetaDataKeys.SCOPE, manifestScope);
-        bundle.putString(WebApkMetaDataKeys.RUNTIME_HOST, browserPackageName);
+        bundle.putString(WebApkMetaDataKeys.RUNTIME_HOST, BROWSER_PACKAGE_NAME);
         bundle.putString(WebApkMetaDataKeys.LOGGED_INTENT_URL_PARAM, "originalUrl");
-        WebApkTestHelper.registerWebApkWithMetaData(WebApkUtilsTest.WEBAPK_PACKAGE_NAME, bundle);
-
-        installBrowser(browserPackageName);
+        WebApkTestHelper.registerWebApkWithMetaData(
+                WebApkUtilsTest.WEBAPK_PACKAGE_NAME, bundle, null /* shareTargetMetaData */);
 
         Intent launchIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(intentStartUrl));
         Robolectric.buildActivity(MainActivity.class, launchIntent).create();
 
-        Intent startActivityIntent = ShadowApplication.getInstance().getNextStartedActivity();
-        Assert.assertEquals(
-                HostBrowserLauncher.ACTION_START_WEBAPK, startActivityIntent.getAction());
-        Assert.assertEquals(
-                expectedStartUrl, startActivityIntent.getStringExtra(WebApkConstants.EXTRA_URL));
+        Intent startedActivityIntent = ShadowApplication.getInstance().getNextStartedActivity();
+        assertWebApkLaunched(startedActivityIntent, expectedStartUrl);
     }
 
     /**
@@ -78,25 +84,20 @@ public final class MainActivityTest {
         final String manifestScope = "https://www.google.com/maps/contrib/";
         final String expectedStartUrl =
                 "https://www.google.com/maps/contrib/startUrl?originalUrl=https%3A%2F%2Fwww.google.com%2Fmaps%2F";
-        final String browserPackageName = "com.android.chrome";
 
         Bundle bundle = new Bundle();
         bundle.putString(WebApkMetaDataKeys.START_URL, manifestStartUrl);
         bundle.putString(WebApkMetaDataKeys.SCOPE, manifestScope);
-        bundle.putString(WebApkMetaDataKeys.RUNTIME_HOST, browserPackageName);
+        bundle.putString(WebApkMetaDataKeys.RUNTIME_HOST, BROWSER_PACKAGE_NAME);
         bundle.putString(WebApkMetaDataKeys.LOGGED_INTENT_URL_PARAM, "originalUrl");
-        WebApkTestHelper.registerWebApkWithMetaData(WebApkUtilsTest.WEBAPK_PACKAGE_NAME, bundle);
-
-        installBrowser(browserPackageName);
+        WebApkTestHelper.registerWebApkWithMetaData(
+                WebApkUtilsTest.WEBAPK_PACKAGE_NAME, bundle, null /* shareTargetMetaData */);
 
         Intent launchIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(intentStartUrl));
         Robolectric.buildActivity(MainActivity.class, launchIntent).create();
 
-        Intent startActivityIntent = ShadowApplication.getInstance().getNextStartedActivity();
-        Assert.assertEquals(
-                HostBrowserLauncher.ACTION_START_WEBAPK, startActivityIntent.getAction());
-        Assert.assertEquals(
-                expectedStartUrl, startActivityIntent.getStringExtra(WebApkConstants.EXTRA_URL));
+        Intent startedActivityIntent = ShadowApplication.getInstance().getNextStartedActivity();
+        assertWebApkLaunched(startedActivityIntent, expectedStartUrl);
     }
 
     /**
@@ -110,25 +111,20 @@ public final class MainActivityTest {
         final String manifestScope = "https://www.google.com/maps";
         final String expectedStartUrl =
                 "https://www.google.com/maps/startUrl?originalUrl=https%3A%2F%2Fwww.google.com%2Fmaps%2Faddress%3FA%3Da";
-        final String browserPackageName = "com.android.chrome";
 
         Bundle bundle = new Bundle();
         bundle.putString(WebApkMetaDataKeys.START_URL, manifestStartUrl);
         bundle.putString(WebApkMetaDataKeys.SCOPE, manifestScope);
-        bundle.putString(WebApkMetaDataKeys.RUNTIME_HOST, browserPackageName);
+        bundle.putString(WebApkMetaDataKeys.RUNTIME_HOST, BROWSER_PACKAGE_NAME);
         bundle.putString(WebApkMetaDataKeys.LOGGED_INTENT_URL_PARAM, "originalUrl");
-        WebApkTestHelper.registerWebApkWithMetaData(WebApkUtilsTest.WEBAPK_PACKAGE_NAME, bundle);
-
-        installBrowser(browserPackageName);
+        WebApkTestHelper.registerWebApkWithMetaData(
+                WebApkUtilsTest.WEBAPK_PACKAGE_NAME, bundle, null /* shareTargetMetaData */);
 
         Intent launchIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(intentStartUrl));
         Robolectric.buildActivity(MainActivity.class, launchIntent).create();
 
-        Intent startActivityIntent = ShadowApplication.getInstance().getNextStartedActivity();
-        Assert.assertEquals(
-                HostBrowserLauncher.ACTION_START_WEBAPK, startActivityIntent.getAction());
-        Assert.assertEquals(
-                expectedStartUrl, startActivityIntent.getStringExtra(WebApkConstants.EXTRA_URL));
+        Intent startedActivityIntent = ShadowApplication.getInstance().getNextStartedActivity();
+        assertWebApkLaunched(startedActivityIntent, expectedStartUrl);
     }
 
     /**
@@ -141,25 +137,20 @@ public final class MainActivityTest {
                 "https://www.google.com/maps/startUrl?originalUrl=https%3A%2F%2Fwww.google.com%2Fmaps%2Faddress%3FA%3Da";
         final String manifestStartUrl = "https://www.google.com/maps/startUrl";
         final String manifestScope = "https://www.google.com/maps";
-        final String browserPackageName = "com.android.chrome";
 
         Bundle bundle = new Bundle();
         bundle.putString(WebApkMetaDataKeys.START_URL, manifestStartUrl);
         bundle.putString(WebApkMetaDataKeys.SCOPE, manifestScope);
-        bundle.putString(WebApkMetaDataKeys.RUNTIME_HOST, browserPackageName);
+        bundle.putString(WebApkMetaDataKeys.RUNTIME_HOST, BROWSER_PACKAGE_NAME);
         bundle.putString(WebApkMetaDataKeys.LOGGED_INTENT_URL_PARAM, "originalUrl");
-        WebApkTestHelper.registerWebApkWithMetaData(WebApkUtilsTest.WEBAPK_PACKAGE_NAME, bundle);
-
-        installBrowser(browserPackageName);
+        WebApkTestHelper.registerWebApkWithMetaData(
+                WebApkUtilsTest.WEBAPK_PACKAGE_NAME, bundle, null /* shareTargetMetaData */);
 
         Intent launchIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(intentStartUrl));
         Robolectric.buildActivity(MainActivity.class, launchIntent).create();
 
-        Intent startActivityIntent = ShadowApplication.getInstance().getNextStartedActivity();
-        Assert.assertEquals(
-                HostBrowserLauncher.ACTION_START_WEBAPK, startActivityIntent.getAction());
-        Assert.assertEquals(
-                intentStartUrl, startActivityIntent.getStringExtra(WebApkConstants.EXTRA_URL));
+        Intent startedActivityIntent = ShadowApplication.getInstance().getNextStartedActivity();
+        assertWebApkLaunched(startedActivityIntent, intentStartUrl);
     }
 
     /**
@@ -175,29 +166,123 @@ public final class MainActivityTest {
         final String scope = "https://www.☺.com/";
         final String expectedStartUrl =
                 "https://www.☺.com/?originalUrl=https%3A%2F%2Fwww.google.com%2F";
-        final String browserPackageName = "com.android.chrome";
 
         Bundle bundle = new Bundle();
         bundle.putString(WebApkMetaDataKeys.START_URL, manifestStartUrl);
         bundle.putString(WebApkMetaDataKeys.SCOPE, scope);
-        bundle.putString(WebApkMetaDataKeys.RUNTIME_HOST, browserPackageName);
+        bundle.putString(WebApkMetaDataKeys.RUNTIME_HOST, BROWSER_PACKAGE_NAME);
         bundle.putString(WebApkMetaDataKeys.LOGGED_INTENT_URL_PARAM, "originalUrl");
-        WebApkTestHelper.registerWebApkWithMetaData(WebApkUtilsTest.WEBAPK_PACKAGE_NAME, bundle);
-
-        installBrowser(browserPackageName);
+        WebApkTestHelper.registerWebApkWithMetaData(
+                WebApkUtilsTest.WEBAPK_PACKAGE_NAME, bundle, null /* shareTargetMetaData */);
 
         Intent launchIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(intentStartUrl));
         Robolectric.buildActivity(MainActivity.class, launchIntent).create();
 
-        Intent startActivityIntent = ShadowApplication.getInstance().getNextStartedActivity();
-        Assert.assertEquals(
-                HostBrowserLauncher.ACTION_START_WEBAPK, startActivityIntent.getAction());
-        Assert.assertEquals(
-                expectedStartUrl, startActivityIntent.getStringExtra(WebApkConstants.EXTRA_URL));
+        Intent startedActivityIntent = ShadowApplication.getInstance().getNextStartedActivity();
+        assertWebApkLaunched(startedActivityIntent, expectedStartUrl);
+    }
+
+    /**
+     * Tests that a WebAPK should be launched as a tab if Chrome's version number is lower than
+     * {@link HostBrowserUtils#MINIMUM_REQUIRED_CHROME_VERSION}.
+     */
+    @Test
+    public void testShouldLaunchInTabWhenChromeVersionIsTooLow() throws Exception {
+        final String startUrl = "https://www.google.com/";
+        final String oldVersionName = "56.0.000.0";
+
+        Bundle bundle = new Bundle();
+        bundle.putString(WebApkMetaDataKeys.START_URL, startUrl);
+        bundle.putString(WebApkMetaDataKeys.SCOPE, startUrl);
+        bundle.putString(WebApkMetaDataKeys.RUNTIME_HOST, BROWSER_PACKAGE_NAME);
+        WebApkTestHelper.registerWebApkWithMetaData(
+                WebApkUtilsTest.WEBAPK_PACKAGE_NAME, bundle, null /* shareTargetMetaData */);
+
+        mPackageManager.getPackageInfo(BROWSER_PACKAGE_NAME, 0).versionName = oldVersionName;
+
+        Intent launchIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(startUrl));
+        Robolectric.buildActivity(MainActivity.class, launchIntent).create();
+
+        Intent startedActivityIntent = ShadowApplication.getInstance().getNextStartedActivity();
+        Assert.assertEquals(BROWSER_PACKAGE_NAME, startedActivityIntent.getPackage());
+        Assert.assertEquals(Intent.ACTION_VIEW, startedActivityIntent.getAction());
+        Assert.assertEquals(startUrl, startedActivityIntent.getDataString());
+    }
+
+    /**
+     * Tests that a WebAPK should not be launched as a tab if Chrome's version is higher or equal to
+     * {@link WebApkUtils#MINIMUM_REQUIRED_CHROME_VERSION}.
+     */
+    @Test
+    public void testShouldNotLaunchInTabWithNewVersionOfChrome() throws Exception {
+        final String startUrl = "https://www.google.com/";
+        final String newVersionName = "57.0.000.0";
+
+        Bundle bundle = new Bundle();
+        bundle.putString(WebApkMetaDataKeys.START_URL, startUrl);
+        bundle.putString(WebApkMetaDataKeys.SCOPE, startUrl);
+        bundle.putString(WebApkMetaDataKeys.RUNTIME_HOST, BROWSER_PACKAGE_NAME);
+        WebApkTestHelper.registerWebApkWithMetaData(
+                WebApkUtilsTest.WEBAPK_PACKAGE_NAME, bundle, null /* shareTargetMetaData */);
+
+        mPackageManager.getPackageInfo(BROWSER_PACKAGE_NAME, 0).versionName = newVersionName;
+
+        Intent launchIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(startUrl));
+        Robolectric.buildActivity(MainActivity.class, launchIntent).create();
+
+        Intent startedActivityIntent = ShadowApplication.getInstance().getNextStartedActivity();
+        assertWebApkLaunched(startedActivityIntent, startUrl);
+    }
+
+    /**
+     * Check that extras which should be propagated from the WebAPK launch intent to the browser
+     * launch intent are in fact propagated.
+     */
+    @Test
+    public void testPropagatedDeepLinkExtras() throws Exception {
+        final String startUrl = "https://www.google.com/";
+
+        Bundle extrasToPropagate = new Bundle();
+        // WebAPK should not override these extras if they are provided in the WebAPK launch intent.
+        extrasToPropagate.putBoolean(WebApkConstants.EXTRA_FORCE_NAVIGATION, true);
+        extrasToPropagate.putLong(WebApkConstants.EXTRA_WEBAPK_LAUNCH_TIME, 314159);
+
+        // WebAPK should copy to the browser launch intent arbirtary extras provided in the WebAPK
+        // launch intent.
+        extrasToPropagate.putString("randomKey", "randomValue");
+
+        Bundle bundle = new Bundle();
+        bundle.putString(WebApkMetaDataKeys.START_URL, startUrl);
+        bundle.putString(WebApkMetaDataKeys.SCOPE, startUrl);
+        bundle.putString(WebApkMetaDataKeys.RUNTIME_HOST, BROWSER_PACKAGE_NAME);
+        WebApkTestHelper.registerWebApkWithMetaData(
+                WebApkUtilsTest.WEBAPK_PACKAGE_NAME, bundle, null /* shareTargetMetaData */);
+
+        Intent launchIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(startUrl));
+        launchIntent.putExtras((Bundle) extrasToPropagate.clone());
+        Robolectric.buildActivity(MainActivity.class, launchIntent).create();
+
+        Intent startedActivityIntent = ShadowApplication.getInstance().getNextStartedActivity();
+        assertWebApkLaunched(startedActivityIntent, startUrl);
+        Bundle actualExtras = startedActivityIntent.getExtras();
+        Assert.assertNotNull(actualExtras);
+        for (String key : extrasToPropagate.keySet()) {
+            Assert.assertEquals(extrasToPropagate.get(key), actualExtras.get(key));
+        }
+    }
+
+    /**
+     * Asserts that the passed in intent is an intent to launch {@link BROWSER_PACKAGE_NAME} in
+     * WebAPK mode.
+     */
+    private void assertWebApkLaunched(Intent intent, String expectedStartUrl) {
+        Assert.assertEquals(BROWSER_PACKAGE_NAME, intent.getPackage());
+        Assert.assertEquals(HostBrowserLauncher.ACTION_START_WEBAPK, intent.getAction());
+        Assert.assertEquals(expectedStartUrl, intent.getStringExtra(WebApkConstants.EXTRA_URL));
     }
 
     private void installBrowser(String browserPackageName) {
-        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("http://"));
+        Intent intent = WebApkUtils.getQueryInstalledBrowsersIntent();
         Shadows.shadowOf(RuntimeEnvironment.application.getPackageManager())
                 .addResolveInfoForIntent(intent, newResolveInfo(browserPackageName));
         Shadows.shadowOf(RuntimeEnvironment.application.getPackageManager())
@@ -215,7 +300,7 @@ public final class MainActivityTest {
     private static PackageInfo newPackageInfo(String packageName) {
         PackageInfo packageInfo = new PackageInfo();
         packageInfo.packageName = packageName;
-        packageInfo.versionName = "Developer Build";
+        packageInfo.versionName = "10000.0.0.0";
         packageInfo.applicationInfo = new ApplicationInfo();
         packageInfo.applicationInfo.enabled = true;
         return packageInfo;

@@ -23,7 +23,8 @@ const char switches::kTestLauncherDebugLauncher[] =
 const char switches::kTestLauncherForceRunBrokenTests[] =
     "test-launcher-force-run-broken-tests";
 
-// Path to file containing test filter (one pattern per line).
+// List of paths to files (separated by ';') containing test filters (one
+// pattern per line).
 const char switches::kTestLauncherFilterFile[] = "test-launcher-filter-file";
 
 // Whether the test launcher should launch in "interactive mode", which disables
@@ -39,8 +40,12 @@ const char switches::kTestLauncherListTests[] = "test-launcher-list-tests";
 // Path to test results file in our custom test launcher format.
 const char switches::kTestLauncherOutput[] = "test-launcher-output";
 
+// These two flags has the same effect, but don't use them at the same time.
+// And isolated-script-test-launcher-retry-limit is preferred in the future.
 // Maximum number of times to retry a test after failure.
 const char switches::kTestLauncherRetryLimit[] = "test-launcher-retry-limit";
+const char switches::kIsolatedScriptTestLauncherRetryLimit[] =
+    "isolated-script-test-launcher-retry-limit";
 
 // Path to test results file with all the info from the test launcher.
 const char switches::kTestLauncherSummaryOutput[] =

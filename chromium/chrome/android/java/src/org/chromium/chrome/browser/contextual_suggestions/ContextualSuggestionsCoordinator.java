@@ -4,24 +4,26 @@
 
 package org.chromium.chrome.browser.contextual_suggestions;
 
-import android.content.Intent;
 import android.support.annotation.Nullable;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
+import org.chromium.chrome.browser.init.ActivityLifecycleDispatcher;
+import org.chromium.chrome.browser.lifecycle.Destroyable;
 import org.chromium.chrome.browser.preferences.ContextualSuggestionsPreference;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.suggestions.SuggestionsNavigationDelegate;
-import org.chromium.chrome.browser.suggestions.SuggestionsNavigationDelegateImpl;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegateImpl;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetObserver;
+
+import javax.inject.Inject;
 
 /**
  * The coordinator for the contextual suggestions UI component. Manages communication with other
@@ -31,11 +33,12 @@ import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetObserver;
  * and {@link ToolbarCoordinator}. These sub-components each have their own views and view binders.
  * They share a {@link ContextualSuggestionsMediator} and {@link ContextualSuggestionsModel}.
  */
-public class ContextualSuggestionsCoordinator {
+@ActivityScope
+public class ContextualSuggestionsCoordinator implements Destroyable {
     private static final String FEEDBACK_CONTEXT = "contextual_suggestions";
 
     private final Profile mProfile = Profile.getLastUsedProfile().getOriginalProfile();
-    private final ContextualSuggestionsModel mModel = new ContextualSuggestionsModel();
+    private final ContextualSuggestionsModel mModel;
     private final ChromeActivity mActivity;
     private final BottomSheetController mBottomSheetController;
     private final TabModelSelector mTabModelSelector;
@@ -46,23 +49,28 @@ public class ContextualSuggestionsCoordinator {
     private @Nullable ContextualSuggestionsBottomSheetContent mBottomSheetContent;
 
     /**
-     * Construct a new {@link ContextualSuggestionsCoordinator}.
      * @param activity The containing {@link ChromeActivity}.
      * @param bottomSheetController The {@link BottomSheetController} to request content be shown.
      * @param tabModelSelector The {@link TabModelSelector} for the activity.
+     * @param model The model of the component.
+     * @param mediator The mediator of the component
      */
-    public ContextualSuggestionsCoordinator(ChromeActivity activity,
-            BottomSheetController bottomSheetController, TabModelSelector tabModelSelector) {
+    @Inject
+    ContextualSuggestionsCoordinator(ChromeActivity activity,
+            BottomSheetController bottomSheetController, TabModelSelector tabModelSelector,
+            ContextualSuggestionsModel model, ContextualSuggestionsMediator mediator,
+            ActivityLifecycleDispatcher lifecycleDispatcher) {
         mActivity = activity;
+        mModel = model;
         mBottomSheetController = bottomSheetController;
         mTabModelSelector = tabModelSelector;
-
-        mMediator = new ContextualSuggestionsMediator(mProfile, tabModelSelector,
-                activity.getFullscreenManager(), this, mModel,
-                mBottomSheetController.getBottomSheet(), activity.getToolbarManager());
+        mMediator = mediator;
+        mediator.initialize(this);
+        lifecycleDispatcher.register(this);
     }
 
     /** Called when the containing activity is destroyed. */
+    @Override
     public void destroy() {
         mModel.getClusterList().destroy();
         mMediator.destroy();
@@ -70,14 +78,6 @@ public class ContextualSuggestionsCoordinator {
         if (mToolbarCoordinator != null) mToolbarCoordinator.destroy();
         if (mContentCoordinator != null) mContentCoordinator.destroy();
         if (mBottomSheetContent != null) mBottomSheetContent.destroy();
-    }
-
-    /**
-     * Called when accessibility mode changes.
-     * @param enabled Whether accessibility mode is enabled.
-     */
-    public void onAccessibilityModeChanged(boolean enabled) {
-        mMediator.onAccessibilityModeChanged();
     }
 
     /**
@@ -92,7 +92,7 @@ public class ContextualSuggestionsCoordinator {
         mContentCoordinator =
                 new ContentCoordinator(mActivity, mBottomSheetController.getBottomSheet());
         mBottomSheetContent = new ContextualSuggestionsBottomSheetContent(
-                mContentCoordinator, mToolbarCoordinator, mModel.isSlimPeekEnabled());
+                mContentCoordinator, mToolbarCoordinator);
         assert mBottomSheetContent != null;
         mBottomSheetController.requestShowContent(mBottomSheetContent, false);
     }
@@ -112,7 +112,7 @@ public class ContextualSuggestionsCoordinator {
             return;
         }
 
-        SuggestionsNavigationDelegate navigationDelegate = new SuggestionsNavigationDelegateImpl(
+        SuggestionsNavigationDelegate navigationDelegate = new SuggestionsNavigationDelegate(
                 mActivity, mProfile, mBottomSheetController.getBottomSheet(), mTabModelSelector);
         SuggestionsUiDelegateImpl uiDelegate = new SuggestionsUiDelegateImpl(suggestionsSource,
                 new ContextualSuggestionsEventReporter(mTabModelSelector, suggestionsSource),
@@ -168,9 +168,7 @@ public class ContextualSuggestionsCoordinator {
 
     /** Show the settings page for contextual suggestions. */
     void showSettings() {
-        Intent intent = PreferencesLauncher.createIntentForSettingsPage(
-                mActivity, ContextualSuggestionsPreference.class.getName());
-        IntentUtils.safeStartActivity(mActivity, intent);
+        PreferencesLauncher.launchSettingsPage(mActivity, ContextualSuggestionsPreference.class);
     }
 
     /** Show the feedback page. */

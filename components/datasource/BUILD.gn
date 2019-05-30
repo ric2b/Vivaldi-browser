@@ -10,6 +10,8 @@ jumbo_source_set("datasource") {
     "vivaldi_data_source.h",
     "vivaldi_data_source_api.cc",
     "vivaldi_data_source_api.h",
+    "vivaldi_web_source.cc",
+    "vivaldi_web_source.h",
   ]
   deps = [
     "//chrome/common:common",

@@ -4,11 +4,18 @@
 
 #include "content/browser/network_service_client.h"
 
+#include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/path_service.h"
 #include "base/test/scoped_task_environment.h"
+#include "base/test/test_file_util.h"
+#include "build/build_config.h"
 #include "content/browser/child_process_security_policy_impl.h"
+#include "content/public/test/test_browser_context.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace content {
@@ -42,12 +49,13 @@ void CreateFile(const base::FilePath& path, const char* content) {
   EXPECT_EQ(bytes_written, content_size);
 }
 
-void ValidateFileContents(base::File& file, const char* expected_content) {
-  int expected_length = strlen(expected_content);
+void ValidateFileContents(base::File& file,
+                          base::StringPiece expected_content) {
+  int expected_length = expected_content.size();
   ASSERT_EQ(file.GetLength(), expected_length);
   char content[expected_length];
   file.Read(0, content, expected_length);
-  EXPECT_EQ(0, strncmp(content, expected_content, expected_length));
+  EXPECT_EQ(0, strncmp(content, expected_content.data(), expected_length));
 }
 
 const int kBrowserProcessId = 0;
@@ -63,7 +71,8 @@ class NetworkServiceClientTest : public testing::Test {
 
   void SetUp() override {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
-    ChildProcessSecurityPolicyImpl::GetInstance()->Add(kRendererProcessId);
+    ChildProcessSecurityPolicyImpl::GetInstance()->Add(kRendererProcessId,
+                                                       &browser_context_);
   }
 
   void TearDown() override {
@@ -71,7 +80,8 @@ class NetworkServiceClientTest : public testing::Test {
   }
 
  protected:
-  base::test::ScopedTaskEnvironment scoped_task_environment_;
+  TestBrowserThreadBundle scoped_task_environment_;
+  TestBrowserContext browser_context_;
   network::mojom::NetworkServiceClientPtr client_ptr_;
   NetworkServiceClient client_;
   base::ScopedTempDir temp_dir_;
@@ -114,6 +124,33 @@ TEST_F(NetworkServiceClientTest, UploadOneValidFile) {
   EXPECT_FALSE(response.opened_files[0].async());
   ValidateFileContents(response.opened_files[0], kFileContent1);
 }
+
+#if defined(OS_ANDROID)
+TEST_F(NetworkServiceClientTest, UploadOneValidFileWithContentUri) {
+  base::FilePath image_path;
+  EXPECT_TRUE(base::PathService::Get(base::DIR_SOURCE_ROOT, &image_path));
+  image_path = image_path.AppendASCII("content")
+                   .AppendASCII("test")
+                   .AppendASCII("data")
+                   .AppendASCII("blank.jpg");
+  EXPECT_TRUE(base::PathExists(image_path));
+  base::FilePath content_path = base::InsertImageIntoMediaStore(image_path);
+  EXPECT_TRUE(content_path.IsContentUri());
+  EXPECT_TRUE(base::PathExists(content_path));
+  GrantAccess(content_path, kRendererProcessId);
+
+  UploadResponse response;
+  client_.OnFileUploadRequested(kRendererProcessId, false, {content_path},
+                                std::move(response.callback));
+  scoped_task_environment_.RunUntilIdle();
+  EXPECT_EQ(net::OK, response.error_code);
+  ASSERT_EQ(1U, response.opened_files.size());
+  EXPECT_FALSE(response.opened_files[0].async());
+  std::string contents;
+  EXPECT_TRUE(base::ReadFileToString(image_path, &contents));
+  ValidateFileContents(response.opened_files[0], contents);
+}
+#endif
 
 TEST_F(NetworkServiceClientTest, UploadTwoValidFiles) {
   base::FilePath path1 = temp_dir_.GetPath().AppendASCII("filename1");

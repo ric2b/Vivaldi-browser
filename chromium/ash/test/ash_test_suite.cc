@@ -4,7 +4,6 @@
 
 #include "ash/test/ash_test_suite.h"
 
-#include "ash/test/ash_test_environment.h"
 #include "ash/test/ash_test_helper.h"
 #include "base/files/file_path.h"
 #include "base/i18n/rtl.h"
@@ -16,7 +15,6 @@
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/test/context_factories_for_test.h"
-#include "ui/gfx/gfx_paths.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/test/gl_surface_test_support.h"
 
@@ -36,7 +34,6 @@ void AshTestSuite::Initialize() {
 
   gl::GLSurfaceTestSupport::InitializeOneOff();
 
-  gfx::RegisterPathProvider();
   ui::RegisterPathProvider();
 
   // Force unittests to run using en-US so if we test against string output,
@@ -52,7 +49,7 @@ void AshTestSuite::Initialize() {
 
   if (ui::ResourceBundle::IsScaleFactorSupported(ui::SCALE_FACTOR_100P)) {
     base::FilePath ash_test_resources_100 =
-        path.AppendASCII(AshTestEnvironment::Get100PercentResourceFileName());
+        path.AppendASCII("ash_test_resources_100_percent.pak");
     ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
         ash_test_resources_100, ui::SCALE_FACTOR_100P);
   }

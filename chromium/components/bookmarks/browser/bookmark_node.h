@@ -102,6 +102,12 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
   base::string16 GetThumbnail() const;
   void set_thumbnail(const base::string16 &thumbnail);
 
+  base::string16 GetPartner() const;
+  void set_partner(const base::string16 &partner);
+
+  bool GetBookmarkbar() const;
+  void set_bookmarkbar(const bool bookmarkbar);
+
   bool GetSpeeddial() const;
   void set_speeddial(const bool speeddial);
 

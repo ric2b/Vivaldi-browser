@@ -9,13 +9,14 @@
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_property.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/page/page_visibility_observer.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 
 namespace blink {
 
+class Document;
 class WakeLockRequest;
 
 class WakeLock final : public EventTargetWithInlineData,
@@ -26,16 +27,21 @@ class WakeLock final : public EventTargetWithInlineData,
   USING_GARBAGE_COLLECTED_MIXIN(WakeLock);
 
  public:
+  enum class LockType { kSystem, kScreen };
+
+  WakeLock(ScriptState*, LockType);
   ~WakeLock() override;
 
   // wake_lock.idl implementation
   AtomicString type() const;
   bool active() const;
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(activechange);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(activechange, kActivechange)
   WakeLockRequest* createRequest();
 
   // Called by NavigatorWakeLock to create Screen Wake Lock
   static WakeLock* CreateScreenWakeLock(ScriptState*);
+  // Called by NavigatorWakeLock to create System Wake Lock
+  static WakeLock* CreateSystemWakeLock(ScriptState*);
 
   // Resolves and returns same promise of that particular WakeLockType each time
   ScriptPromise GetPromise(ScriptState*);
@@ -59,10 +65,6 @@ class WakeLock final : public EventTargetWithInlineData,
   void CancelRequest();
 
  private:
-  enum class LockType { kSystem, kScreen };
-
-  WakeLock(ScriptState*, LockType);
-
   // Error handler in case of failure to connect to Wake Lock mojo service
   void OnConnectionError();
 
@@ -71,6 +73,9 @@ class WakeLock final : public EventTargetWithInlineData,
 
   // Binds to the Wake Lock mojo service
   void BindToServiceIfNeeded();
+
+  // Returns the document associated with the object. nullptr if there is none.
+  Document* GetDocument();
 
   device::mojom::blink::WakeLockPtr wake_lock_service_;
 

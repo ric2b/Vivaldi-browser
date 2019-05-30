@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/base64.h"
+#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
@@ -195,8 +196,8 @@ class ProtocolPerfTest
 
   void OnClientConnected(const std::string& jid) override {
     message_loop_.task_runner()->PostTask(
-        FROM_HERE, base::Bind(&ProtocolPerfTest::OnHostConnectedMainThread,
-                              base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&ProtocolPerfTest::OnHostConnectedMainThread,
+                                  base::Unretained(this)));
   }
 
  protected:
@@ -257,7 +258,7 @@ class ProtocolPerfTest
 
     host_thread_.task_runner()->PostTask(
         FROM_HERE,
-        base::Bind(&ProtocolPerfTest::StartHost, base::Unretained(this)));
+        base::BindOnce(&ProtocolPerfTest::StartHost, base::Unretained(this)));
   }
 
   void StartHost() {
@@ -322,8 +323,8 @@ class ProtocolPerfTest
     host_->Start(kHostOwner);
 
     message_loop_.task_runner()->PostTask(
-        FROM_HERE, base::Bind(&ProtocolPerfTest::StartClientAfterHost,
-                              base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&ProtocolPerfTest::StartClientAfterHost,
+                                  base::Unretained(this)));
   }
 
   void StartClientAfterHost() {
@@ -421,18 +422,18 @@ class ProtocolPerfTest
   DISALLOW_COPY_AND_ASSIGN(ProtocolPerfTest);
 };
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     NoDelay,
     ProtocolPerfTest,
     ::testing::Values(NetworkPerformanceParams(0, 0, 0, 0, 0.0, 0)));
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     HighLatency,
     ProtocolPerfTest,
     ::testing::Values(NetworkPerformanceParams(0, 0, 300, 30, 0.0, 0),
                       NetworkPerformanceParams(0, 0, 30, 10, 0.0, 0)));
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     OutOfOrder,
     ProtocolPerfTest,
     ::testing::Values(NetworkPerformanceParams(0, 0, 2, 0, 0.01, 0),
@@ -441,7 +442,7 @@ INSTANTIATE_TEST_CASE_P(
                       NetworkPerformanceParams(0, 0, 300, 20, 0.01, 0),
                       NetworkPerformanceParams(0, 0, 300, 20, 0.1, 0)));
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     LimitedBandwidth,
     ProtocolPerfTest,
     ::testing::Values(
@@ -458,7 +459,7 @@ INSTANTIATE_TEST_CASE_P(
         NetworkPerformanceParams(800, 0.25, 130, 5, 0.00, 0),
         NetworkPerformanceParams(800, 1.0, 130, 5, 0.00, 0)));
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     SlowSignaling,
     ProtocolPerfTest,
     ::testing::Values(NetworkPerformanceParams(8000, 0.25, 30, 0, 0.0, 50),

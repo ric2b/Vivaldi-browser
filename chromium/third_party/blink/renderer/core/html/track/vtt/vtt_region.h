@@ -49,8 +49,9 @@ class VTTRegion final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static VTTRegion* Create() { return new VTTRegion; }
+  static VTTRegion* Create() { return MakeGarbageCollected<VTTRegion>(); }
 
+  VTTRegion();
   ~VTTRegion() override;
 
   const String& id() const { return id_; }
@@ -87,11 +88,9 @@ class VTTRegion final : public ScriptWrappable {
   void DisplayLastVTTCueBox();
   void WillRemoveVTTCueBox(VTTCueBox*);
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
-  VTTRegion();
-
   void PrepareRegionDisplayTree();
 
   // The timer is needed to continue processing when cue scrolling ended.

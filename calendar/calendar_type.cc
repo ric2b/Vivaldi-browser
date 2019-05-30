@@ -15,7 +15,12 @@ namespace calendar {
 
 CreateCalendarResult::CreateCalendarResult() {}
 
-CalendarRow::CalendarRow() {}
+CalendarRow::CalendarRow() :
+  orderindex_(0),
+  hidden_(0),
+  active_(0),
+  iconindex_(0) {}
+
 CalendarRow::~CalendarRow() {}
 
 CalendarRow::CalendarRow(CalendarID id,
@@ -26,6 +31,9 @@ CalendarRow::CalendarRow(CalendarID id,
                          int orderindex,
                          std::string color,
                          bool hidden,
+                         bool active,
+                         int iconindex,
+                         base::string16 username,
                          base::Time created,
                          base::Time lastmodified)
     : name_(name),
@@ -35,6 +43,9 @@ CalendarRow::CalendarRow(CalendarID id,
       orderindex_(orderindex),
       color_(color),
       hidden_(hidden),
+      active_(active),
+      iconindex_(iconindex),
+      username_(username),
       created_(created),
       lastmodified_(lastmodified) {}
 
@@ -46,6 +57,9 @@ void CalendarRow::Swap(CalendarRow* other) {
   std::swap(orderindex_, other->orderindex_);
   std::swap(color_, other->color_);
   std::swap(hidden_, other->hidden_);
+  std::swap(active_, other->active_);
+  std::swap(iconindex_, other->iconindex_);
+  std::swap(username_, other->username_);
 }
 
 CalendarRow::CalendarRow(const CalendarRow& other)
@@ -57,13 +71,15 @@ CalendarRow::CalendarRow(const CalendarRow& other)
       orderindex_(other.orderindex_),
       color_(other.color_),
       hidden_(other.hidden_),
+      active_(other.active_),
+      iconindex_(other.iconindex_),
+      username_(other.username_),
       created_(other.created_),
       lastmodified_(other.lastmodified_) {}
 
 Calendar::Calendar()
     : name(base::ASCIIToUTF16("")),
       description(base::ASCIIToUTF16("")),
-      orderindex(0),
       updateFields(0) {}
 
 Calendar::Calendar(const Calendar& calendar)
@@ -75,6 +91,9 @@ Calendar::Calendar(const Calendar& calendar)
       orderindex(calendar.orderindex),
       color(calendar.color),
       hidden(calendar.hidden),
+      active(calendar.active),
+      iconindex(calendar.iconindex),
+      username(calendar.username),
       updateFields(calendar.updateFields) {}
 
 Calendar::~Calendar() {}

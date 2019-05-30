@@ -4,6 +4,8 @@
 
 #include "content/browser/browser_process_sub_thread.h"
 
+#include "base/bind.h"
+#include "base/clang_coverage_buildflags.h"
 #include "base/compiler_specific.h"
 #include "base/debug/alias.h"
 #include "base/metrics/histogram_macros.h"
@@ -80,7 +82,7 @@ BrowserProcessSubThread::CreateIOThread() {
   TRACE_EVENT0("startup", "BrowserProcessSubThread::CreateIOThread");
   base::Thread::Options options;
   options.message_loop_type = base::MessageLoop::TYPE_IO;
-#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS) || defined(USE_OZONE)
   // Up the priority of the |io_thread_| as some of its IPCs relate to
   // display tasks.
   options.priority = base::ThreadPriority::DISPLAY;
@@ -100,8 +102,7 @@ void BrowserProcessSubThread::Init() {
 #endif
 
   if (!is_blocking_allowed_for_testing_) {
-    base::DisallowBlocking();
-    base::DisallowBaseSyncPrimitives();
+    base::DisallowUnresponsiveTasks();
   }
 }
 
@@ -193,7 +194,17 @@ void BrowserProcessSubThread::IOThreadCleanUp() {
         service_manager::SANDBOX_TYPE_NETWORK) {
       // This ensures that cookies and cache are flushed to disk on shutdown.
       // https://crbug.com/841001
+#if BUILDFLAG(CLANG_COVERAGE)
+      // On coverage build, browser_tests runs 10x slower.
+      const int kMaxSecondsToWaitForNetworkProcess = 100;
+#elif defined(OS_CHROMEOS)
+      // ChromeOS will kill the browser process if it doesn't shut down within
+      // 3 seconds, so make sure we wait for less than that.
+      const int kMaxSecondsToWaitForNetworkProcess = 1;
+#else
       const int kMaxSecondsToWaitForNetworkProcess = 10;
+#endif
+
       ChildProcessHostImpl* child_process =
           static_cast<ChildProcessHostImpl*>(it.GetHost());
       auto& process = child_process->peer_process();

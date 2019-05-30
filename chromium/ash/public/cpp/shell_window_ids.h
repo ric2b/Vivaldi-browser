@@ -60,6 +60,9 @@ enum ShellWindowId {
   // The container for the app list in tablet mode.
   kShellWindowId_AppListTabletModeContainer,
 
+  // The container for the PIP window.
+  kShellWindowId_PipContainer,
+
   // The parent container that holds the ARC IME container and windows created
   // by ARC IME other than the virtual keyboard window.
   // This container window is to ensure that the ARC IME window is stacked above
@@ -135,6 +138,10 @@ enum ShellWindowId {
   // The container for mouse cursor.
   kShellWindowId_MouseCursorContainer,
 
+  // The container for an image that should stay on top of everything except for
+  // the power off animation.
+  kShellWindowId_AlwaysOnTopWallpaperContainer,
+
   // The topmost container, used for power off animation.
   kShellWindowId_PowerButtonAnimationContainer,
 
@@ -181,6 +188,7 @@ const int32_t kAllShellContainerIds[] = {
     kShellWindowId_OverlayContainer,
     kShellWindowId_DockedMagnifierContainer,
     kShellWindowId_MouseCursorContainer,
+    kShellWindowId_AlwaysOnTopWallpaperContainer,
     kShellWindowId_PowerButtonAnimationContainer,
 };
 

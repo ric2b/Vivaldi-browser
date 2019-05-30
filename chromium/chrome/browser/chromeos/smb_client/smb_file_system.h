@@ -14,7 +14,6 @@
 #include "base/callback.h"
 #include "base/files/file.h"
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/timer/elapsed_timer.h"
@@ -49,10 +48,21 @@ class SmbFileSystem : public file_system_provider::ProvidedFileSystemInterface,
   using UnmountCallback = base::OnceCallback<base::File::Error(
       const std::string&,
       file_system_provider::Service::UnmountReason)>;
+  using RequestCredentialsCallback =
+      base::RepeatingCallback<void(const std::string& /* share_path */,
+                                   int32_t /* mount_id */,
+                                   base::OnceClosure /* reply */)>;
+  using RequestUpdatedSharePathCallback =
+      base::RepeatingCallback<void(const std::string& /* share_path */,
+                                   int32_t /* mount_id */,
+                                   SmbService::StartReadDirIfSuccessfulCallback
+                                   /* reply */)>;
 
   SmbFileSystem(
       const file_system_provider::ProvidedFileSystemInfo& file_system_info,
-      UnmountCallback unmount_callback);
+      UnmountCallback unmount_callback,
+      RequestCredentialsCallback request_creds_callback,
+      RequestUpdatedSharePathCallback request_path_callback);
   ~SmbFileSystem() override;
 
   // ProvidedFileSystemInterface overrides.
@@ -208,6 +218,32 @@ class SmbFileSystem : public file_system_provider::ProvidedFileSystemInterface,
                     int32_t copy_token,
                     storage::AsyncFileUtil::StatusCallback callback);
 
+  // Starts a ReadDirectory operation for |directory_path| with the OperationId
+  // |operation_id|.
+  void StartReadDirectory(
+      const base::FilePath& directory_path,
+      OperationId operation_id,
+      storage::AsyncFileUtil::ReadDirectoryCallback callback);
+
+  // Continues a ReadDirectory corresponding to |operation_id| and
+  // |read_dir_token|. |entries_count| and |metrics_timer| are used for metrics
+  // recording.
+  void ContinueReadDirectory(
+      OperationId operation_id,
+      int32_t read_dir_token,
+      storage::AsyncFileUtil::ReadDirectoryCallback callback,
+      int entires_count,
+      base::ElapsedTimer metrics_timer);
+
+  // Requests updated credentials for the mount. Once the credentials have been
+  // updated, |reply| is executed.
+  void RequestUpdatedCredentials(base::OnceClosure reply);
+
+  // Requests updated share path for the mount. Once the share path have been,
+  // updated, |reply| is executed.
+  void RequestUpdatedSharePath(
+      SmbService::StartReadDirIfSuccessfulCallback reply);
+
   void HandleRequestUnmountCallback(
       storage::AsyncFileUtil::StatusCallback callback,
       smbprovider::ErrorType error);
@@ -268,7 +304,36 @@ class SmbFileSystem : public file_system_provider::ProvidedFileSystemInterface,
       int32_t copy_token,
       smbprovider::ErrorType error);
 
+  void HandleStartReadDirectoryCallback(
+      storage::AsyncFileUtil::ReadDirectoryCallback callback,
+      OperationId operation_id,
+      const base::FilePath& directory_path,
+      base::ElapsedTimer metrics_timer,
+      smbprovider::ErrorType error,
+      int32_t read_dir_token,
+      const smbprovider::DirectoryEntryListProto& entries);
+
+  void HandleContinueReadDirectoryCallback(
+      storage::AsyncFileUtil::ReadDirectoryCallback callback,
+      OperationId operation_id,
+      int32_t read_dir_token,
+      int entries_count,
+      base::ElapsedTimer metrics_timer,
+      smbprovider::ErrorType error,
+      const smbprovider::DirectoryEntryListProto& entries);
+
+  void ProcessReadDirectoryResults(
+      storage::AsyncFileUtil::ReadDirectoryCallback callback,
+      OperationId operation_id,
+      int32_t read_dir_token,
+      smbprovider::ErrorType error,
+      const smbprovider::DirectoryEntryListProto& entries,
+      int entries_count,
+      base::ElapsedTimer metrics_timer);
+
   int32_t GetMountId() const;
+
+  std::string GetMountPath() const;
 
   SmbProviderClient* GetSmbProviderClient() const;
   base::WeakPtr<SmbProviderClient> GetWeakSmbProviderClient() const;
@@ -284,11 +349,24 @@ class SmbFileSystem : public file_system_provider::ProvidedFileSystemInterface,
   // the OperationId for the newly created Operation.
   OperationId EnqueueTaskAndGetOperationId(SmbTask task);
 
+  // Check if the error can be recovered and handled to continue its original
+  // operation. Returns true if error can be handled.
+  bool IsRecoverableError(smbprovider::ErrorType error) const;
+
+  // Runs the StartReadDirectory if |should_retry_start_read_dir| is true. If
+  // false, |callback| will run instead.
+  void RetryStartReadDir(const base::FilePath& directory_path,
+                         OperationId operation_id,
+                         storage::AsyncFileUtil::ReadDirectoryCallback callback,
+                         bool should_retry_start_read_dir);
+
   const file_system_provider::ProvidedFileSystemInfo file_system_info_;
   // opened_files_ is marked const since is currently unsupported.
   const file_system_provider::OpenedFiles opened_files_;
 
   UnmountCallback unmount_callback_;
+  RequestCredentialsCallback request_creds_callback_;
+  RequestUpdatedSharePathCallback request_path_callback_;
   std::unique_ptr<TempFileManager> temp_file_manager_;
   mutable SmbTaskQueue task_queue_;
 

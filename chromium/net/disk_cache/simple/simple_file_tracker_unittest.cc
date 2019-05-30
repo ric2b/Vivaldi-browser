@@ -53,7 +53,8 @@ class SimpleFileTrackerTest : public DiskCacheTest {
   SyncEntryPointer MakeSyncEntry(uint64_t hash) {
     return SyncEntryPointer(
         new SimpleSynchronousEntry(net::DISK_CACHE, cache_path_, "dummy", hash,
-                                   /* had_index=*/true, &file_tracker_),
+                                   /* had_index=*/true, &file_tracker_,
+                                   /*trailer_prefetch_size=*/-1),
         SyncEntryDeleter(this));
   }
 
@@ -212,7 +213,7 @@ TEST_F(SimpleFileTrackerTest, PointerStability) {
         entries[0].get(), SimpleFileTracker::SubFile::FILE_0);
     for (int i = 1; i < kEntries; ++i) {
       std::unique_ptr<base::File> file_n = std::make_unique<base::File>(
-          cache_path_.AppendASCII(base::IntToString(i)),
+          cache_path_.AppendASCII(base::NumberToString(i)),
           base::File::FLAG_CREATE | base::File::FLAG_WRITE);
       ASSERT_TRUE(file_n->IsValid());
       file_tracker_.Register(entries[i].get(),
@@ -375,6 +376,6 @@ TEST_F(SimpleFileTrackerTest, OverLimit) {
 
   for (const auto& entry : entries)
     file_tracker_.Close(entry.get(), SimpleFileTracker::SubFile::FILE_0);
-};
+}
 
 }  // namespace disk_cache

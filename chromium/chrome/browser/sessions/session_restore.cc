@@ -45,7 +45,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/common/extensions/extension_metrics.h"
 #include "chrome/common/url_constants.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
@@ -62,7 +61,6 @@
 #include "content/public/browser/session_storage_namespace.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/page_state.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension_set.h"
@@ -83,88 +81,11 @@ namespace {
 bool HasSingleNewTabPage(Browser* browser) {
   if (browser->tab_strip_model()->count() != 1)
     return false;
-  const content::WebContents* active_tab =
+  content::WebContents* active_tab =
       browser->tab_strip_model()->GetWebContentsAt(0);
   return active_tab->GetURL() == chrome::kChromeUINewTabURL ||
          search::IsInstantNTP(active_tab);
 }
-
-// WebContentsDestructionChecker crashes if the WebContents that it's observing
-// gets destroyed.
-// TODO(crbug.com/850626): Remove after bug is fixed.
-class WebContentsDestructionChecker : public content::WebContentsObserver {
- public:
-  explicit WebContentsDestructionChecker(content::WebContents* contents)
-      : WebContentsObserver(contents) {}
-  ~WebContentsDestructionChecker() override = default;
-
-  const WebContents* contents() const { return web_contents(); }
-
-  // content::WebContentsObserver:
-  void WebContentsDestroyed() override {
-    LOG(FATAL) << "Restored WebContents " << web_contents() << " destroyed";
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(WebContentsDestructionChecker);
-};
-
-// TabStripRestoreObserver watches the next WebContents that's added to a
-// TabStripModel and crashes if it's closed or detached.
-// TODO(crbug.com/850626): Remove after bug is fixed.
-class TabStripRestoreObserver : public TabStripModelObserver {
- public:
-  explicit TabStripRestoreObserver(TabStripModel* tab_strip)
-      : tab_strip_(tab_strip) {
-    DCHECK(tab_strip_);
-    tab_strip_->AddObserver(this);
-  }
-  ~TabStripRestoreObserver() override { tab_strip_->RemoveObserver(this); }
-
-  // TabStripModelObserver:
-  void OnTabStripModelChanged(
-      TabStripModel* tab_strip_model,
-      const TabStripModelChange& change,
-      const TabStripSelectionChange& selection) override {
-    if (change.type() == TabStripModelChange::kInserted) {
-      for (const auto& delta : change.deltas())
-        OnTabInserted(delta.insert.contents);
-      return;
-    }
-
-    if (change.type() == TabStripModelChange::kRemoved) {
-      for (const auto& delta : change.deltas())
-        OnTabRemoved(delta.remove.contents, delta.remove.will_be_deleted);
-      return;
-    }
-  }
-
- private:
-  // Creates checker if needed.
-  void OnTabInserted(content::WebContents* contents) {
-    if (destruction_checker_)
-      return;
-
-    destruction_checker_ =
-        std::make_unique<WebContentsDestructionChecker>(contents);
-  }
-
-  void OnTabRemoved(content::WebContents* contents, bool will_be_deleted) {
-    if (!destruction_checker_)
-      return;
-
-    if (contents == destruction_checker_->contents())
-      LOG(FATAL) << "Restored WebContents " << contents
-                 << (will_be_deleted ? " closing" : " detached");
-  }
-
-  TabStripModel* tab_strip_;  // owned by caller
-
-  // Initialized after a WebContents is inserted into the strip.
-  std::unique_ptr<WebContentsDestructionChecker> destruction_checker_;
-
-  DISALLOW_COPY_AND_ASSIGN(TabStripRestoreObserver);
-};
 
 // Pointers to SessionRestoreImpls which are currently restoring the session.
 std::set<SessionRestoreImpl*>* active_session_restorers = nullptr;
@@ -251,8 +172,7 @@ class SessionRestoreImpl : public content::NotificationObserver {
     std::vector<Browser*> browsers;
     std::vector<RestoredTab> created_contents;
     // Create a browser instance to put the restored tabs in.
-    for (std::vector<const sessions::SessionWindow*>::const_iterator i = begin;
-         i != end; ++i) {
+    for (auto i = begin; i != end; ++i) {
       Browser* browser = CreateRestoredBrowser(
           BrowserTypeForWindowType((*i)->type), (*i)->bounds, (*i)->workspace,
           (*i)->show_state, (*i)->app_name);
@@ -319,7 +239,8 @@ class SessionRestoreImpl : public content::NotificationObserver {
     }
 
     if (use_new_window) {
-      browser->tab_strip_model()->ActivateTabAt(0, true);
+      browser->tab_strip_model()->ActivateTabAt(
+          0, {TabStripModel::GestureType::kOther});
       browser->window()->Show();
     }
     NotifySessionServiceOfRestoredTabs(browser,
@@ -523,7 +444,7 @@ class SessionRestoreImpl : public content::NotificationObserver {
       bool close_active_tab =
           clobber_existing_tab_ && i == windows->begin() &&
           (*i)->type == sessions::SessionWindow::TYPE_TABBED && active_tab &&
-          browser == browser_ && (*i)->tabs.size() > 0;
+          browser == browser_ && !(*i)->tabs.empty();
       if (close_active_tab)
         --initial_tab_count;
       int selected_tab_index =
@@ -672,9 +593,6 @@ class SessionRestoreImpl : public content::NotificationObserver {
               ->RecreateSessionStorage(tab.session_storage_persistent_id);
     }
 
-    // TODO(crbug.com/850626): Remove this after bug is fixed.
-    TabStripRestoreObserver tab_strip_observer(browser->tab_strip_model());
-
     WebContents* web_contents = chrome::AddRestoredTab(
         browser, tab.navigations, tab_index, selected_index,
         tab.extension_app_id, is_selected_tab, tab.pinned, true,
@@ -722,7 +640,8 @@ class SessionRestoreImpl : public content::NotificationObserver {
   void ShowBrowser(Browser* browser, int selected_tab_index) {
     DCHECK(browser);
     DCHECK(browser->tab_strip_model()->count());
-    browser->tab_strip_model()->ActivateTabAt(selected_tab_index, true);
+    browser->tab_strip_model()->ActivateTabAt(
+        selected_tab_index, {TabStripModel::GestureType::kOther});
 
     if (browser_ == browser)
       return;
@@ -890,8 +809,7 @@ WebContents* SessionRestore::RestoreForeignSessionTab(
 bool SessionRestore::IsRestoring(const Profile* profile) {
   if (active_session_restorers == nullptr)
     return false;
-  for (std::set<SessionRestoreImpl*>::const_iterator it =
-           active_session_restorers->begin();
+  for (auto it = active_session_restorers->begin();
        it != active_session_restorers->end(); ++it) {
     if ((*it)->profile() == profile)
       return true;
@@ -903,8 +821,7 @@ bool SessionRestore::IsRestoring(const Profile* profile) {
 bool SessionRestore::IsRestoringSynchronously() {
   if (!active_session_restorers)
     return false;
-  for (std::set<SessionRestoreImpl*>::const_iterator it =
-           active_session_restorers->begin();
+  for (auto it = active_session_restorers->begin();
        it != active_session_restorers->end(); ++it) {
     if ((*it)->synchronous())
       return true;

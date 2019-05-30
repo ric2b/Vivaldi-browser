@@ -4,6 +4,7 @@
 
 #include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
@@ -11,26 +12,30 @@
 
 void BrowserStateKeyedServiceFactory::SetTestingFactory(
     web::BrowserState* context,
-    TestingFactoryFunction testing_factory) {
-  KeyedServiceFactory::TestingFactoryFunction func;
+    TestingFactory testing_factory) {
+  KeyedServiceFactory::TestingFactory wrapped_factory;
   if (testing_factory) {
-    func = [=](base::SupportsUserData* context) {
-      return testing_factory(static_cast<web::BrowserState*>(context));
-    };
+    wrapped_factory = base::BindRepeating(
+        [](const TestingFactory& testing_factory, void* context) {
+          return testing_factory.Run(static_cast<web::BrowserState*>(context));
+        },
+        std::move(testing_factory));
   }
-  KeyedServiceFactory::SetTestingFactory(context, func);
+  KeyedServiceFactory::SetTestingFactory(context, std::move(wrapped_factory));
 }
 
 KeyedService* BrowserStateKeyedServiceFactory::SetTestingFactoryAndUse(
     web::BrowserState* context,
-    TestingFactoryFunction testing_factory) {
-  KeyedServiceFactory::TestingFactoryFunction func;
-  if (testing_factory) {
-    func = [=](base::SupportsUserData* context) {
-      return testing_factory(static_cast<web::BrowserState*>(context));
-    };
-  }
-  return KeyedServiceFactory::SetTestingFactoryAndUse(context, func);
+    TestingFactory testing_factory) {
+  DCHECK(testing_factory);
+  return KeyedServiceFactory::SetTestingFactoryAndUse(
+      context, nullptr /* side_parameter */,
+      base::BindRepeating(
+          [](const TestingFactory& testing_factory, void* context) {
+            return testing_factory.Run(
+                static_cast<web::BrowserState*>(context));
+          },
+          std::move(testing_factory)));
 }
 
 BrowserStateKeyedServiceFactory::BrowserStateKeyedServiceFactory(
@@ -45,7 +50,8 @@ BrowserStateKeyedServiceFactory::~BrowserStateKeyedServiceFactory() {
 KeyedService* BrowserStateKeyedServiceFactory::GetServiceForBrowserState(
     web::BrowserState* context,
     bool create) {
-  return KeyedServiceFactory::GetServiceForContext(context, create);
+  return KeyedServiceFactory::GetServiceForContext(
+      context, nullptr /* side_parameter */, create);
 }
 
 web::BrowserState* BrowserStateKeyedServiceFactory::GetBrowserStateToUse(
@@ -80,17 +86,16 @@ void BrowserStateKeyedServiceFactory::BrowserStateDestroyed(
 
 std::unique_ptr<KeyedService>
 BrowserStateKeyedServiceFactory::BuildServiceInstanceFor(
-    base::SupportsUserData* context) const {
+    void* context,
+    void* side_parameter) const {
   return BuildServiceInstanceFor(static_cast<web::BrowserState*>(context));
 }
 
-bool BrowserStateKeyedServiceFactory::IsOffTheRecord(
-    base::SupportsUserData* context) const {
+bool BrowserStateKeyedServiceFactory::IsOffTheRecord(void* context) const {
   return static_cast<web::BrowserState*>(context)->IsOffTheRecord();
 }
 
-base::SupportsUserData* BrowserStateKeyedServiceFactory::GetContextToUse(
-    base::SupportsUserData* context) const {
+void* BrowserStateKeyedServiceFactory::GetContextToUse(void* context) const {
   AssertContextWasntDestroyed(context);
   return GetBrowserStateToUse(static_cast<web::BrowserState*>(context));
 }
@@ -99,17 +104,20 @@ bool BrowserStateKeyedServiceFactory::ServiceIsCreatedWithContext() const {
   return ServiceIsCreatedWithBrowserState();
 }
 
-void BrowserStateKeyedServiceFactory::ContextShutdown(
-    base::SupportsUserData* context) {
+void BrowserStateKeyedServiceFactory::ContextShutdown(void* context) {
   BrowserStateShutdown(static_cast<web::BrowserState*>(context));
 }
 
-void BrowserStateKeyedServiceFactory::ContextDestroyed(
-    base::SupportsUserData* context) {
+void BrowserStateKeyedServiceFactory::ContextDestroyed(void* context) {
   BrowserStateDestroyed(static_cast<web::BrowserState*>(context));
 }
 
 void BrowserStateKeyedServiceFactory::RegisterPrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   RegisterBrowserStatePrefs(registry);
+}
+
+void BrowserStateKeyedServiceFactory::CreateServiceNow(void* context) {
+  KeyedServiceFactory::GetServiceForContext(context,
+                                            nullptr /* side_parameter */, true);
 }

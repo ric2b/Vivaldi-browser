@@ -17,6 +17,8 @@
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "media/base/media_export.h"
+#include "media/base/overlay_info.h"
+#include "media/base/video_decoder.h"
 #include "media/base/video_types.h"
 #include "media/video/video_decode_accelerator.h"
 #include "media/video/video_encode_accelerator.h"
@@ -28,10 +30,14 @@ class SharedMemory;
 }  // namespace base
 
 namespace gfx {
+class ColorSpace;
 class Size;
 }
 
 namespace gpu {
+class ContextSupport;
+class GpuMemoryBufferManager;
+class SharedImageInterface;
 struct SyncToken;
 }
 
@@ -41,6 +47,7 @@ class ContextProviderCommandBuffer;
 
 namespace media {
 
+class MediaLog;
 class VideoDecodeAccelerator;
 
 // Helper interface for specifying factories needed to instantiate a hardware
@@ -73,6 +80,16 @@ class MEDIA_EXPORT GpuVideoAcceleratorFactories {
 
   // Returns the |route_id| of the command buffer, or 0 if there is none.
   virtual int32_t GetCommandBufferRouteId() = 0;
+
+  // Return true if |config| is potentially supported by a decoder created with
+  // CreateVideoDecoder().
+  //
+  // May be called on any thread.
+  virtual bool IsDecoderConfigSupported(const VideoDecoderConfig& config) = 0;
+
+  virtual std::unique_ptr<media::VideoDecoder> CreateVideoDecoder(
+      MediaLog* media_log,
+      const RequestOverlayInfoCB& request_overlay_info_cb) = 0;
 
   // Caller owns returned pointer, but should call Destroy() on it (instead of
   // directly deleting) for proper destruction, as per the
@@ -123,6 +140,17 @@ class MEDIA_EXPORT GpuVideoAcceleratorFactories {
   // the context was lost.
   virtual gpu::gles2::GLES2Interface* ContextGL() = 0;
 
+  // Returns a SharedImageInterface that can be used (on any thread) to allocate
+  // and update shared images.
+  // nullptr will be returned in cases where a context couldn't be created or
+  // the context was lost.
+  virtual gpu::SharedImageInterface* SharedImageInterface() = 0;
+
+  // Returns the GpuMemoryBufferManager that is used to allocate
+  // GpuMemoryBuffers. May return null if
+  // ShouldUseGpuMemoryBuffersForVideoFrames return false.
+  virtual gpu::GpuMemoryBufferManager* GpuMemoryBufferManager() = 0;
+
   // Allocate & return a shared memory segment.
   virtual std::unique_ptr<base::SharedMemory> CreateSharedMemory(
       size_t size) = 0;
@@ -141,12 +169,11 @@ class MEDIA_EXPORT GpuVideoAcceleratorFactories {
 
   virtual scoped_refptr<ws::ContextProviderCommandBuffer>
   GetMediaContextProvider() = 0;
+  virtual gpu::ContextSupport* GetMediaContextProviderContextSupport() = 0;
 
   // Sets the current pipeline rendering color space.
   virtual void SetRenderingColorSpace(const gfx::ColorSpace& color_space) = 0;
 
- protected:
-  friend class base::RefCounted<GpuVideoAcceleratorFactories>;
   virtual ~GpuVideoAcceleratorFactories() = default;
 };
 

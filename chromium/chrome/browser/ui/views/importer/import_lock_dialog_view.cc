@@ -17,8 +17,8 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
+#include "ui/base/buildflags.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/ui_features.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/fill_layout.h"
@@ -28,13 +28,11 @@ using base::UserMetricsAction;
 
 namespace importer {
 
-#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
 void ShowImportLockDialog(gfx::NativeWindow parent,
                           const base::Callback<void(bool)>& callback,
                           base::string16 importer_locktext) {
   ImportLockDialogView::Show(parent, callback, importer_locktext);
 }
-#endif  // !OS_MACOSX || MAC_VIEWS_BROWSER
 
 }  // namespace importer
 

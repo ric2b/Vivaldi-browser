@@ -17,6 +17,8 @@
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/infobars/infobar.h"
 #import "ios/chrome/browser/passwords/update_password_infobar_controller.h"
+#import "ios/chrome/browser/ui/infobars/coordinators/infobar_password_coordinator.h"
+#import "ios/chrome/browser/ui/infobars/infobar_feature.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -29,21 +31,30 @@ using password_manager::PasswordFormManagerForUI;
 
 // static
 void IOSChromeUpdatePasswordInfoBarDelegate::Create(
-    bool is_smart_lock_branding_enabled,
+    bool is_sync_user,
     infobars::InfoBarManager* infobar_manager,
     std::unique_ptr<PasswordFormManagerForUI> form_manager,
     UIViewController* baseViewController,
     id<ApplicationCommands> dispatcher) {
   DCHECK(infobar_manager);
   auto delegate = base::WrapUnique(new IOSChromeUpdatePasswordInfoBarDelegate(
-      is_smart_lock_branding_enabled, std::move(form_manager)));
+      is_sync_user, std::move(form_manager)));
   delegate->set_dispatcher(dispatcher);
-  UpdatePasswordInfoBarController* controller =
-      [[UpdatePasswordInfoBarController alloc]
-          initWithBaseViewController:baseViewController
-                     infoBarDelegate:delegate.get()];
-  auto infobar = std::make_unique<InfoBarIOS>(controller, std::move(delegate));
-  infobar_manager->AddInfoBar(std::move(infobar));
+
+  if (IsInfobarUIRebootEnabled()) {
+    InfobarPasswordCoordinator* coordinator =
+        [[InfobarPasswordCoordinator alloc]
+            initWithInfoBarDelegate:delegate.get()];
+    infobar_manager->AddInfoBar(
+        std::make_unique<InfoBarIOS>(coordinator, std::move(delegate)));
+  } else {
+    UpdatePasswordInfoBarController* controller =
+        [[UpdatePasswordInfoBarController alloc]
+            initWithBaseViewController:baseViewController
+                       infoBarDelegate:delegate.get()];
+    infobar_manager->AddInfoBar(
+        std::make_unique<InfoBarIOS>(controller, std::move(delegate)));
+  }
 }
 
 IOSChromeUpdatePasswordInfoBarDelegate::
@@ -55,9 +66,9 @@ IOSChromeUpdatePasswordInfoBarDelegate::
 }
 
 IOSChromeUpdatePasswordInfoBarDelegate::IOSChromeUpdatePasswordInfoBarDelegate(
-    bool is_smart_lock_branding_enabled,
+    bool is_sync_user,
     std::unique_ptr<PasswordFormManagerForUI> form_manager)
-    : IOSChromePasswordManagerInfoBarDelegate(is_smart_lock_branding_enabled,
+    : IOSChromePasswordManagerInfoBarDelegate(is_sync_user,
                                               std::move(form_manager)) {
   selected_account_ = form_to_save()->GetPreferredMatch()->username_value;
   form_to_save()->GetMetricsRecorder()->RecordPasswordBubbleShown(
@@ -80,13 +91,6 @@ NSArray* IOSChromeUpdatePasswordInfoBarDelegate::GetAccounts() const {
   return usernames;
 }
 
-base::string16 IOSChromeUpdatePasswordInfoBarDelegate::GetBranding() const {
-  return l10n_util::GetStringUTF16(
-      is_smart_lock_branding_enabled()
-          ? IDS_IOS_PASSWORD_MANAGER_SMART_LOCK_FOR_PASSWORDS
-          : IDS_IOS_SHORT_PRODUCT_NAME);
-}
-
 infobars::InfoBarDelegate::InfoBarIdentifier
 IOSChromeUpdatePasswordInfoBarDelegate::GetIdentifier() const {
   return UPDATE_PASSWORD_INFOBAR_DELEGATE_MOBILE;
@@ -96,9 +100,9 @@ base::string16 IOSChromeUpdatePasswordInfoBarDelegate::GetMessageText() const {
   return selected_account_.length() > 0
              ? l10n_util::GetStringFUTF16(
                    IDS_IOS_PASSWORD_MANAGER_UPDATE_PASSWORD_FOR_ACCOUNT,
-                   GetBranding(), selected_account_)
-             : l10n_util::GetStringFUTF16(
-                   IDS_IOS_PASSWORD_MANAGER_UPDATE_PASSWORD, GetBranding());
+                   selected_account_)
+             : l10n_util::GetStringUTF16(
+                   IDS_IOS_PASSWORD_MANAGER_UPDATE_PASSWORD);
 }
 
 int IOSChromeUpdatePasswordInfoBarDelegate::GetButtons() const {

@@ -23,7 +23,7 @@ class Event;
 
 namespace vr {
 
-class CompositorDelegate;
+class GraphicsDelegate;
 class TestKeyboardDelegate;
 class Ui;
 struct Model;
@@ -32,11 +32,10 @@ struct Model;
 // manipulates the UI according to user input.
 class VrTestContext : public vr::UiBrowserInterface {
  public:
-  explicit VrTestContext(CompositorDelegate* compositor_delgate);
+  explicit VrTestContext(GraphicsDelegate* compositor_delgate);
   ~VrTestContext() override;
 
-  // TODO(vollick): we should refactor VrShellGl's rendering logic and use it
-  // directly. crbug.com/767282
+  // TODO(crbug/895313): Make use of BrowserRenderer.
   void DrawFrame();
   void HandleInput(ui::Event* event);
 
@@ -47,15 +46,12 @@ class VrTestContext : public vr::UiBrowserInterface {
   void NavigateForward() override;
   void ReloadTab() override;
   void OpenNewTab(bool incognito) override;
-  void SelectTab(int id, bool incognito) override;
   void OpenBookmarks() override;
   void OpenRecentTabs() override;
   void OpenHistory() override;
   void OpenDownloads() override;
   void OpenShare() override;
   void OpenSettings() override;
-  void CloseTab(int id, bool incognito) override;
-  void CloseAllTabs() override;
   void CloseAllIncognitoTabs() override;
   void OpenFeedback() override;
   void CloseHostedDialog() override;
@@ -114,10 +110,9 @@ class VrTestContext : public vr::UiBrowserInterface {
   bool touching_touchpad_ = false;
   bool recentered_ = false;
   base::TimeTicks page_load_start_;
-  int tab_id_ = 0;
   bool hosted_ui_enabled_ = false;
 
-  CompositorDelegate* compositor_delegate_;
+  GraphicsDelegate* graphics_delegate_;
   TestKeyboardDelegate* keyboard_delegate_;
 
   ControllerModel::Handedness handedness_ = ControllerModel::kRightHanded;

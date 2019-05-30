@@ -4,17 +4,37 @@
 
 #include "chrome/common/channel_info.h"
 
+#include "base/system/sys_info.h"
 #include "components/version_info/version_info.h"
 
 namespace chrome {
+namespace {
 
-static version_info::Channel chromeos_channel = version_info::Channel::UNKNOWN;
+version_info::Channel g_chromeos_channel = version_info::Channel::UNKNOWN;
+
+#if defined(GOOGLE_CHROME_BUILD)
+// Sets the |g_chromeos_channel|.
+void SetChannel(const std::string& channel) {
+  if (channel == "stable-channel")
+    g_chromeos_channel = version_info::Channel::STABLE;
+  else if (channel == "beta-channel")
+    g_chromeos_channel = version_info::Channel::BETA;
+  else if (channel == "dev-channel")
+    g_chromeos_channel = version_info::Channel::DEV;
+  else if (channel == "canary-channel")
+    g_chromeos_channel = version_info::Channel::CANARY;
+  else
+    g_chromeos_channel = version_info::Channel::UNKNOWN;
+}
+#endif
+
+}  // namespace
 
 std::string GetChannelName() {
 #if defined(GOOGLE_CHROME_BUILD)
-  switch (chromeos_channel) {
+  switch (g_chromeos_channel) {
     case version_info::Channel::STABLE:
-      return "";
+      return std::string();
     case version_info::Channel::BETA:
       return "beta";
     case version_info::Channel::DEV:
@@ -29,21 +49,19 @@ std::string GetChannelName() {
 }
 
 version_info::Channel GetChannel() {
-  return chromeos_channel;
-}
+  static bool is_channel_set = false;
+  if (is_channel_set)
+    return g_chromeos_channel;
 
-void SetChannel(const std::string& channel) {
 #if defined(GOOGLE_CHROME_BUILD)
-  if (channel == "stable-channel") {
-    chromeos_channel = version_info::Channel::STABLE;
-  } else if (channel == "beta-channel") {
-    chromeos_channel = version_info::Channel::BETA;
-  } else if (channel == "dev-channel") {
-    chromeos_channel = version_info::Channel::DEV;
-  } else if (channel == "canary-channel") {
-    chromeos_channel = version_info::Channel::CANARY;
+  static const char kChromeOSReleaseTrack[] = "CHROMEOS_RELEASE_TRACK";
+  std::string channel;
+  if (base::SysInfo::GetLsbReleaseValue(kChromeOSReleaseTrack, &channel)) {
+    SetChannel(channel);
+    is_channel_set = true;
   }
 #endif
+  return g_chromeos_channel;
 }
 
 #if defined(GOOGLE_CHROME_BUILD)

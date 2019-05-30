@@ -6,7 +6,9 @@
 
 #include <string>
 
+#include "base/bind.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -51,8 +53,8 @@
 #include "ui/gfx/color_utils.h"
 
 #if defined(OS_CHROMEOS)
-#include "ash/strings/grit/ash_strings.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chromeos/strings/grit/chromeos_strings.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -111,10 +113,10 @@ std::string GetNewTabBackgroundCSS(const ui::ThemeProvider& theme_provider,
     int offset = GetLayoutConstant(BOOKMARK_BAR_NTP_HEIGHT);
 
     if (alignment & ThemeProperties::ALIGN_LEFT)
-      return "left " + base::IntToString(-offset) + "px";
+      return "left " + base::NumberToString(-offset) + "px";
     else if (alignment & ThemeProperties::ALIGN_RIGHT)
-      return "right " + base::IntToString(-offset) + "px";
-    return "center " + base::IntToString(-offset) + "px";
+      return "right " + base::NumberToString(-offset) + "px";
+    return "center " + base::NumberToString(-offset) + "px";
   }
 
   return ThemeProperties::AlignmentToString(alignment);
@@ -352,12 +354,12 @@ void NTPResourceCache::CreateNewTabGuestHTML() {
 }
 
 // TODO(alancutter): Consider moving this utility function up somewhere where it
-// can be shared with md_bookmarks_ui.cc.
+// can be shared with bookmarks_ui.cc.
 // Ampersands are used by menus to determine which characters to use as shortcut
 // keys. This functionality is not implemented for NTP.
 static base::string16 GetLocalizedString(int message_id) {
   base::string16 result = l10n_util::GetStringUTF16(message_id);
-  result.erase(std::remove(result.begin(), result.end(), '&'), result.end());
+  base::Erase(result, '&');
   return result;
 }
 

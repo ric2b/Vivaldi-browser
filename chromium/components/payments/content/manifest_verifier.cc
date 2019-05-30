@@ -19,6 +19,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/console_message_level.h"
+#include "net/base/url_util.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -60,7 +61,7 @@ ManifestVerifier::ManifestVerifier(content::WebContents* web_contents,
                                    PaymentManifestDownloader* downloader,
                                    PaymentManifestParser* parser,
                                    PaymentManifestWebDataService* cache)
-    : dev_tools_(web_contents),
+    : log_(web_contents),
       downloader_(downloader),
       parser_(parser),
       cache_(cache),
@@ -97,25 +98,28 @@ void ManifestVerifier::Verify(content::PaymentAppProvider::PaymentApps apps,
       // https://w3c.github.io/webpayments-methods-tokenization/
       if (method == "basic-card" || method == "interledger" ||
           method == "payee-credit-transfer" ||
-          method == "payer-credit-transfer" ||
-          method == "tokenized-card") {
+          method == "payer-credit-transfer" || method == "tokenized-card") {
         verified_method_names.emplace_back(method);
         continue;
       }
 
       // GURL constructor may crash with some invalid unicode strings.
       if (!base::IsStringUTF8(method)) {
-        dev_tools_.WarnIfPossible("Payment method name \"" + method +
-                                  "\" is not valid unicode.");
+        log_.Warn("Payment method name \"" + method +
+                  "\" in payment handler \"" + app.second->scope.spec() +
+                  "\"  is not valid unicode.");
         continue;
       }
 
-      // All URL payment method names must be HTTPS.
+      // All URL payment method names must be HTTPS or localhost for test.
       GURL method_manifest_url = GURL(method);
       if (!method_manifest_url.is_valid() ||
-          method_manifest_url.scheme() != "https") {
-        dev_tools_.WarnIfPossible("\"" + method +
-                                  "\" is not a valid payment method name.");
+          (method_manifest_url.scheme() != "https" &&
+           !net::IsLocalhost(method_manifest_url))) {
+        log_.Warn(
+            "\"" + method +
+            "\" is not a valid payment method name in payment handler \"" +
+            app.second->scope.spec() + "\".");
         continue;
       }
 
@@ -150,22 +154,6 @@ void ManifestVerifier::Verify(content::PaymentAppProvider::PaymentApps apps,
   for (const auto& method_manifest_url : manifests_to_download) {
     cache_request_handles_[cache_->GetPaymentMethodManifest(
         method_manifest_url.spec(), this)] = method_manifest_url;
-  }
-}
-
-ManifestVerifier::DevToolsHelper::DevToolsHelper(
-    content::WebContents* web_contents)
-    : content::WebContentsObserver(web_contents) {}
-
-ManifestVerifier::DevToolsHelper::~DevToolsHelper() {}
-
-void ManifestVerifier::DevToolsHelper::WarnIfPossible(
-    const std::string& message) {
-  if (web_contents()) {
-    web_contents()->GetMainFrame()->AddMessageToConsole(
-        content::CONSOLE_MESSAGE_LEVEL_WARNING, message);
-  } else {
-    LOG(WARNING) << message;
   }
 }
 
@@ -225,6 +213,7 @@ void ManifestVerifier::OnWebDataServiceRequestDone(
 
 void ManifestVerifier::OnPaymentMethodManifestDownloaded(
     const GURL& method_manifest_url,
+    const GURL& unused_method_manifest_url_after_redirects,
     const std::string& content) {
   DCHECK_LT(0U, number_of_manifests_to_download_);
 
@@ -301,16 +290,16 @@ void ManifestVerifier::RemoveInvalidPaymentApps() {
     const std::set<GURL>& methods = it.second;
     for (const GURL& method : methods) {
       DCHECK(method.is_valid());
-      dev_tools_.WarnIfPossible(
-          "The payment handler \"" + app_scope +
-          "\" is not allowed to use payment method \"" + method.spec() +
-          "\", because the payment handler origin \"" + app_origin +
-          "\" is different from the payment method origin \"" +
-          method.GetOrigin().spec() +
-          "\" and the \"supported_origins\" field in the payment method "
-          "manifest for \"" +
-          method.spec() + "\" is not \"*\" and is not a list that includes \"" +
-          app_origin + "\".");
+      log_.Warn("The payment handler \"" + app_scope +
+                "\" is not allowed to use payment method \"" + method.spec() +
+                "\", because the payment handler origin \"" + app_origin +
+                "\" is different from the payment method origin \"" +
+                method.GetOrigin().spec() +
+                "\" and the \"supported_origins\" field in the payment method "
+                "manifest for \"" +
+                method.spec() +
+                "\" is not \"*\" and is not a list that includes \"" +
+                app_origin + "\".");
     }
   }
 

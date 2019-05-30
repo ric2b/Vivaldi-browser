@@ -8,15 +8,15 @@
 #include <stdint.h>
 
 #include <set>
+#include <unordered_map>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/containers/flat_set.h"
-#include "base/containers/hash_tables.h"
 #include "base/files/file_path.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/macros.h"
 #include "base/no_destructor.h"
-#include "base/sha1.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -26,6 +26,7 @@
 #include "chrome/browser/supervised_user/experimental/supervised_user_blacklist.h"
 #include "components/policy/core/browser/url_blacklist_manager.h"
 #include "components/policy/core/browser/url_util.h"
+#include "components/safe_search_api/safe_search/safe_search_url_checker_client.h"
 #include "components/url_matcher/url_matcher.h"
 #include "components/variations/service/variations_service.h"
 #include "content/public/browser/browser_thread.h"
@@ -74,9 +75,10 @@ GetBehaviorFromSafeSearchClassification(
 
 struct SupervisedUserURLFilter::Contents {
   URLMatcher url_matcher;
-  base::hash_multimap<HostnameHash,
-                      scoped_refptr<SupervisedUserSiteList>,
-                      HashHostnameHash> hostname_hashes;
+  std::unordered_multimap<HostnameHash,
+                          scoped_refptr<SupervisedUserSiteList>,
+                          HashHostnameHash>
+      hostname_hashes;
   // This only tracks pattern lists.
   std::map<URLMatcherConditionSet::ID, scoped_refptr<SupervisedUserSiteList>>
       site_lists_by_matcher_id;
@@ -550,7 +552,8 @@ void SupervisedUserURLFilter::InitAsyncURLChecker(
       country = variations_service->GetLatestCountry();
   }
   async_url_checker_ = std::make_unique<safe_search_api::URLChecker>(
-      std::move(url_loader_factory), traffic_annotation, country);
+      std::make_unique<safe_search_api::SafeSearchURLCheckerClient>(
+          std::move(url_loader_factory), traffic_annotation, country));
 }
 
 void SupervisedUserURLFilter::ClearAsyncURLChecker() {

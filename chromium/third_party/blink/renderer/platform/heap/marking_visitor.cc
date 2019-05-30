@@ -39,6 +39,19 @@ MarkingVisitor::MarkingVisitor(ThreadState* state, MarkingMode marking_mode)
 
 MarkingVisitor::~MarkingVisitor() = default;
 
+void MarkingVisitor::DynamicallyMarkAddress(Address address) {
+  BasePage* const page = PageFromObject(address);
+  HeapObjectHeader* const header =
+      page->IsLargeObjectPage()
+          ? static_cast<LargeObjectPage*>(page)->ObjectHeader()
+          : static_cast<NormalPage*>(page)->FindHeaderFromAddress(address);
+  DCHECK(header);
+  DCHECK(!header->IsInConstruction());
+  const GCInfo* gc_info =
+      GCInfoTable::Get().GCInfoFromIndex(header->GcInfoIndex());
+  MarkHeader(header, gc_info->trace);
+}
+
 void MarkingVisitor::ConservativelyMarkAddress(BasePage* page,
                                                Address address) {
 #if DCHECK_IS_ON()
@@ -48,65 +61,36 @@ void MarkingVisitor::ConservativelyMarkAddress(BasePage* page,
       page->IsLargeObjectPage()
           ? static_cast<LargeObjectPage*>(page)->ObjectHeader()
           : static_cast<NormalPage*>(page)->FindHeaderFromAddress(address);
-  if (!header)
+  if (!header || header->IsMarked())
     return;
-  ConservativelyMarkHeader(header);
-}
 
-#if DCHECK_IS_ON()
-void MarkingVisitor::ConservativelyMarkAddress(
-    BasePage* page,
-    Address address,
-    MarkedPointerCallbackForTesting callback) {
-  DCHECK(page->Contains(address));
-  HeapObjectHeader* const header =
-      page->IsLargeObjectPage()
-          ? static_cast<LargeObjectPage*>(page)->ObjectHeader()
-          : static_cast<NormalPage*>(page)->FindHeaderFromAddress(address);
-  if (!header)
-    return;
-  if (!callback(header))
-    ConservativelyMarkHeader(header);
-}
-#endif  // DCHECK_IS_ON
-
-namespace {
-
-#if DCHECK_IS_ON()
-bool IsUninitializedMemory(void* object_pointer, size_t object_size) {
-  // Scan through the object's fields and check that they are all zero.
-  Address* object_fields = reinterpret_cast<Address*>(object_pointer);
-  for (size_t i = 0; i < object_size / sizeof(Address); ++i) {
-    if (object_fields[i])
-      return false;
-  }
-  return true;
-}
-#endif
-
-}  // namespace
-
-void MarkingVisitor::ConservativelyMarkHeader(HeapObjectHeader* header) {
+  // Simple case for fully constructed objects.
   const GCInfo* gc_info =
       GCInfoTable::Get().GCInfoFromIndex(header->GcInfoIndex());
-  if (gc_info->HasVTable() && !VTableInitialized(header->Payload())) {
-    // We hit this branch when a GC strikes before GarbageCollected<>'s
-    // constructor runs.
-    //
-    // class A : public GarbageCollected<A> { virtual void f() = 0; };
-    // class B : public A {
-    //   B() : A(foo()) { };
-    // };
-    //
-    // If foo() allocates something and triggers a GC, the vtable of A
-    // has not yet been initialized. In this case, we should mark the A
-    // object without tracing any member of the A object.
-    MarkHeaderNoTracing(header);
-#if DCHECK_IS_ON()
-    DCHECK(IsUninitializedMemory(header->Payload(), header->PayloadSize()));
-#endif
-  } else {
-    MarkHeader(header, gc_info->trace_);
+  if (!header->IsInConstruction()) {
+    MarkHeader(header, gc_info->trace);
+    return;
+  }
+
+  // This case is reached for not-fully-constructed objects with vtables.
+  // We can differentiate multiple cases:
+  // 1. No vtable set up. Example:
+  //      class A : public GarbageCollected<A> { virtual void f() = 0; };
+  //      class B : public A { B() : A(foo()) {}; };
+  //    The vtable for A is not set up if foo() allocates and triggers a GC.
+  //
+  // 2. Vtables properly set up (non-mixin case).
+  // 3. Vtables not properly set up (mixin) if GC is allowed during mixin
+  //    construction.
+  //
+  // We use a simple conservative approach for these cases as they are not
+  // performance critical.
+  MarkHeaderNoTracing(header);
+  Address* payload = reinterpret_cast<Address*>(header->Payload());
+  const size_t payload_size = header->PayloadSize();
+  for (size_t i = 0; i < (payload_size / sizeof(Address)); ++i) {
+    if (payload[i])
+      Heap().CheckAndMarkPointer(this, payload[i]);
   }
 }
 
@@ -170,7 +154,7 @@ void MarkingVisitor::TraceMarkedBackingStoreSlow(void* value) {
   // strongifies them for the current cycle.
   GCInfoTable::Get()
       .GCInfoFromIndex(header->GcInfoIndex())
-      ->trace_(thread_state->CurrentVisitor(), value);
+      ->trace(thread_state->CurrentVisitor(), value);
 }
 
 }  // namespace blink

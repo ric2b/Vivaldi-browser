@@ -8,9 +8,12 @@
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/scoped_observer.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
+#include "ui/base/material_design/material_design_controller.h"
+#include "ui/base/material_design/material_design_controller_observer.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/widget/widget.h"
 
@@ -34,15 +37,14 @@ class MenuModel;
 }
 
 namespace views {
-class Button;
 class MenuRunner;
 class View;
 }
 
 // This is a virtual interface that allows system specific browser frames.
-class BrowserFrame
-    : public views::Widget,
-      public views::ContextMenuController {
+class BrowserFrame : public views::Widget,
+                     public views::ContextMenuController,
+                     public ui::MaterialDesignControllerObserver {
  public:
   explicit BrowserFrame(BrowserView* browser_view);
   ~BrowserFrame() override;
@@ -56,7 +58,7 @@ class BrowserFrame
 
   // Retrieves the bounds, in non-client view coordinates for the specified
   // TabStrip view.
-  gfx::Rect GetBoundsForTabStrip(views::View* tabstrip) const;
+  gfx::Rect GetBoundsForTabStrip(const views::View* tabstrip) const;
 
   // Returns the inset of the topmost view in the client view from the top of
   // the non-client view. The topmost view depends on the window type. The
@@ -98,7 +100,10 @@ class BrowserFrame
   // Called when BrowserView creates all it's child views.
   void OnBrowserViewInitViewsComplete();
 
-  // Overridden from views::Widget:
+  // Returns whether this window should be themed with the user's theme or not.
+  bool ShouldUseTheme() const;
+
+  // views::Widget:
   views::internal::RootView* CreateRootView() override;
   views::NonClientFrameView* CreateNonClientFrameView() override;
   bool GetAccelerator(int command_id,
@@ -108,12 +113,10 @@ class BrowserFrame
   void OnNativeWidgetWorkspaceChanged() override;
   void OnNativeThemeUpdated(ui::NativeTheme* observed_theme) override;
 
-  // Overridden from views::ContextMenuController:
-  void ShowContextMenuForView(views::View* source,
-                              const gfx::Point& p,
-                              ui::MenuSourceType source_type) override;
-
-  views::Button* GetNewAvatarMenuButton();
+  // views::ContextMenuController:
+  void ShowContextMenuForViewImpl(views::View* source,
+                                  const gfx::Point& p,
+                                  ui::MenuSourceType source_type) override;
 
   // Returns the menu model. BrowserFrame owns the returned model.
   // Note that in multi user mode this will upon each call create a new model.
@@ -122,6 +125,10 @@ class BrowserFrame
   NativeBrowserFrame* native_browser_frame() const {
     return native_browser_frame_;
   }
+
+ protected:
+  // ui::MaterialDesignControllerObserver:
+  void OnTouchUiChanged() override;
 
  private:
   // Callback for MenuRunner.
@@ -147,6 +154,10 @@ class BrowserFrame
   std::unique_ptr<views::MenuRunner> menu_runner_;
 
   std::unique_ptr<ui::EventHandler> browser_command_handler_;
+
+  ScopedObserver<ui::MaterialDesignController,
+                 ui::MaterialDesignControllerObserver>
+      md_observer_{this};
 
   DISALLOW_COPY_AND_ASSIGN(BrowserFrame);
 };

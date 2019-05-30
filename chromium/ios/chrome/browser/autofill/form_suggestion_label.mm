@@ -15,9 +15,9 @@
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/credit_card.h"
 #import "components/autofill/ios/browser/form_suggestion.h"
-#import "ios/chrome/browser/autofill/form_suggestion_view_client.h"
-#include "ios/chrome/browser/ui/ui_util.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/autofill/form_suggestion_client.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #include "ios/chrome/common/ui_util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -25,6 +25,10 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+// a11y identifier used to locate the autofill suggestion in automation
+NSString* const kFormSuggestionLabelAccessibilityIdentifier =
+    @"formSuggestionLabelAXID";
 
 namespace {
 
@@ -73,7 +77,7 @@ UILabel* TextLabel(NSString* text, CGFloat alpha, BOOL bold) {
 
 @implementation FormSuggestionLabel {
   // Client of this view.
-  __weak id<FormSuggestionViewClient> client_;
+  __weak id<FormSuggestionClient> client_;
   FormSuggestion* suggestion_;
   BOOL userInteractionEnabled_;
 }
@@ -82,7 +86,7 @@ UILabel* TextLabel(NSString* text, CGFloat alpha, BOOL bold) {
                      index:(NSUInteger)index
     userInteractionEnabled:(BOOL)userInteractionEnabled
             numSuggestions:(NSUInteger)numSuggestions
-                    client:(id<FormSuggestionViewClient>)client {
+                    client:(id<FormSuggestionClient>)client {
   self = [super initWithFrame:CGRectZero];
   if (self) {
     suggestion_ = suggestion;
@@ -131,8 +135,10 @@ UILabel* TextLabel(NSString* text, CGFloat alpha, BOOL bold) {
                                     base::SysNSStringToUTF16(suggestion.value),
                                     base::SysNSStringToUTF16(
                                         suggestion.displayDescription),
-                                    base::IntToString16(index + 1),
-                                    base::IntToString16(numSuggestions))];
+                                    base::NumberToString16(index + 1),
+                                    base::NumberToString16(numSuggestions))];
+    [self
+        setAccessibilityIdentifier:kFormSuggestionLabelAccessibilityIdentifier];
   }
 
   return self;

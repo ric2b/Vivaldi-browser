@@ -12,11 +12,13 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/test/bind_test_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
 #include "content/browser/indexed_db/indexed_db_quota_client.h"
+#include "content/browser/indexed_db/leveldb/leveldb_env.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -55,7 +57,8 @@ class IndexedDBQuotaClientTest : public testing::Test {
 
     idb_context_ = new IndexedDBContextImpl(
         browser_context_->GetPath(),
-        browser_context_->GetSpecialStoragePolicy(), quota_manager->proxy());
+        browser_context_->GetSpecialStoragePolicy(), quota_manager->proxy(),
+        indexed_db::GetDefaultLevelDBFactory());
     base::RunLoop().RunUntilIdle();
     setup_temp_dir();
   }
@@ -79,11 +82,13 @@ class IndexedDBQuotaClientTest : public testing::Test {
                          const url::Origin& origin,
                          StorageType type) {
     usage_ = -1;
-    client->GetOriginUsage(
-        origin, type,
-        base::BindOnce(&IndexedDBQuotaClientTest::OnGetOriginUsageComplete,
-                       weak_factory_.GetWeakPtr()));
-    RunAllTasksUntilIdle();
+    base::RunLoop loop;
+    client->GetOriginUsage(origin, type,
+                           base::BindLambdaForTesting([&](int64_t usage) {
+                             usage_ = usage;
+                             loop.Quit();
+                           }));
+    loop.Run();
     EXPECT_GT(usage_, -1);
     return usage_;
   }
@@ -91,10 +96,14 @@ class IndexedDBQuotaClientTest : public testing::Test {
   const std::set<url::Origin>& GetOriginsForType(storage::QuotaClient* client,
                                                  StorageType type) {
     origins_.clear();
+    base::RunLoop loop;
     client->GetOriginsForType(
-        type, base::BindOnce(&IndexedDBQuotaClientTest::OnGetOriginsComplete,
-                             weak_factory_.GetWeakPtr()));
-    RunAllTasksUntilIdle();
+        type,
+        base::BindLambdaForTesting([&](const std::set<url::Origin>& origins) {
+          origins_ = origins;
+          loop.Quit();
+        }));
+    loop.Run();
     return origins_;
   }
 
@@ -102,11 +111,14 @@ class IndexedDBQuotaClientTest : public testing::Test {
                                                  StorageType type,
                                                  const std::string& host) {
     origins_.clear();
+    base::RunLoop loop;
     client->GetOriginsForHost(
         type, host,
-        base::BindOnce(&IndexedDBQuotaClientTest::OnGetOriginsComplete,
-                       weak_factory_.GetWeakPtr()));
-    RunAllTasksUntilIdle();
+        base::BindLambdaForTesting([&](const std::set<url::Origin>& origins) {
+          origins_ = origins;
+          loop.Quit();
+        }));
+    loop.Run();
     return origins_;
   }
 
@@ -114,11 +126,14 @@ class IndexedDBQuotaClientTest : public testing::Test {
                                              const url::Origin& origin,
                                              StorageType type) {
     delete_status_ = blink::mojom::QuotaStatusCode::kUnknown;
+    base::RunLoop loop;
     client->DeleteOriginData(
         origin, type,
-        base::BindOnce(&IndexedDBQuotaClientTest::OnDeleteOriginComplete,
-                       weak_factory_.GetWeakPtr()));
-    RunAllTasksUntilIdle();
+        base::BindLambdaForTesting([&](blink::mojom::QuotaStatusCode code) {
+          delete_status_ = code;
+          loop.Quit();
+        }));
+    loop.Run();
     return delete_status_;
   }
 
@@ -142,16 +157,6 @@ class IndexedDBQuotaClientTest : public testing::Test {
   }
 
  private:
-  void OnGetOriginUsageComplete(int64_t usage) { usage_ = usage; }
-
-  void OnGetOriginsComplete(const std::set<url::Origin>& origins) {
-    origins_ = origins;
-  }
-
-  void OnDeleteOriginComplete(blink::mojom::QuotaStatusCode code) {
-    delete_status_ = code;
-  }
-
   content::TestBrowserThreadBundle thread_bundle_;
   base::ScopedTempDir temp_dir_;
   int64_t usage_;

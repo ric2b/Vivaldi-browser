@@ -31,6 +31,26 @@
 
 namespace blink {
 
+static bool CurrentColorChanged(StyleDifference diff, const StyleColor& color) {
+  return diff.TextDecorationOrColorChanged() && color.IsCurrentColor();
+}
+
+static void CheckForColorChange(SVGFilterPrimitiveStandardAttributes& element,
+                                const QualifiedName& attr_name,
+                                StyleDifference diff,
+                                const StyleColor& old_color,
+                                const StyleColor& new_color) {
+  // If the <color> change from/to 'currentcolor' then invalidate the filter
+  // chain so that it is rebuilt. (Makes sure the 'tainted' flag is
+  // propagated.)
+  if (new_color.IsCurrentColor() != old_color.IsCurrentColor()) {
+    element.Invalidate();
+    return;
+  }
+  if (new_color != old_color || CurrentColorChanged(diff, new_color))
+    element.PrimitiveAttributeChanged(attr_name);
+}
+
 void LayoutSVGResourceFilterPrimitive::StyleDidChange(
     StyleDifference diff,
     const ComputedStyle* old_style) {
@@ -43,19 +63,21 @@ void LayoutSVGResourceFilterPrimitive::StyleDidChange(
       ToSVGFilterPrimitiveStandardAttributes(*GetElement());
   const SVGComputedStyle& new_style = StyleRef().SvgStyle();
   if (IsSVGFEFloodElement(element) || IsSVGFEDropShadowElement(element)) {
-    if (new_style.FloodColor() != old_style->SvgStyle().FloodColor())
-      element.PrimitiveAttributeChanged(SVGNames::flood_colorAttr);
+    CheckForColorChange(element, svg_names::kFloodColorAttr, diff,
+                        old_style->SvgStyle().FloodColor(),
+                        new_style.FloodColor());
     if (new_style.FloodOpacity() != old_style->SvgStyle().FloodOpacity())
-      element.PrimitiveAttributeChanged(SVGNames::flood_opacityAttr);
+      element.PrimitiveAttributeChanged(svg_names::kFloodOpacityAttr);
   } else if (IsSVGFEDiffuseLightingElement(element) ||
              IsSVGFESpecularLightingElement(element)) {
-    if (new_style.LightingColor() != old_style->SvgStyle().LightingColor())
-      element.PrimitiveAttributeChanged(SVGNames::lighting_colorAttr);
+    CheckForColorChange(element, svg_names::kLightingColorAttr, diff,
+                        old_style->SvgStyle().LightingColor(),
+                        new_style.LightingColor());
   }
   if (new_style.ColorInterpolationFilters() !=
       old_style->SvgStyle().ColorInterpolationFilters()) {
     element.PrimitiveAttributeChanged(
-        SVGNames::color_interpolation_filtersAttr);
+        svg_names::kColorInterpolationFiltersAttr);
   }
 }
 

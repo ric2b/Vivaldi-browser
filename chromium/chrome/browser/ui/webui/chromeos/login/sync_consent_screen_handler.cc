@@ -57,8 +57,9 @@ void GetConsentIDs(const std::unordered_set<int>& known_ids,
 
 namespace chromeos {
 
-SyncConsentScreenHandler::SyncConsentScreenHandler()
-    : BaseScreenHandler(kScreenId) {
+SyncConsentScreenHandler::SyncConsentScreenHandler(
+    JSCallsContainer* js_calls_container)
+    : BaseScreenHandler(kScreenId, js_calls_container) {
   set_call_js_prefix(kJsScreenPath);
 }
 
@@ -150,16 +151,16 @@ void SyncConsentScreenHandler::Show() {
 void SyncConsentScreenHandler::Hide() {}
 
 void SyncConsentScreenHandler::SetThrobberVisible(bool visible) {
-  CallJS("setThrobberVisible", visible);
+  CallJS("login.SyncConsentScreen.setThrobberVisible", visible);
 }
 
 void SyncConsentScreenHandler::Initialize() {}
 
 void SyncConsentScreenHandler::RegisterMessages() {
-  AddPrefixedCallback("continueAndReview",
-                      &SyncConsentScreenHandler::HandleContinueAndReview);
-  AddPrefixedCallback("continueWithDefaults",
-                      &SyncConsentScreenHandler::HandleContinueWithDefaults);
+  AddCallback("login.SyncConsentScreen.continueAndReview",
+              &SyncConsentScreenHandler::HandleContinueAndReview);
+  AddCallback("login.SyncConsentScreen.continueWithDefaults",
+              &SyncConsentScreenHandler::HandleContinueWithDefaults);
 }
 
 void SyncConsentScreenHandler::GetAdditionalParameters(

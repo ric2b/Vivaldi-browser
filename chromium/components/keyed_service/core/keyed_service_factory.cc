@@ -21,15 +21,8 @@ KeyedServiceFactory::~KeyedServiceFactory() {
   DCHECK(mapping_.empty());
 }
 
-void KeyedServiceFactory::SetTestingFactory(
-    base::SupportsUserData* context,
-    TestingFactoryFunction testing_factory) {
-  // Destroying the context may cause us to lose data about whether |context|
-  // has our preferences registered on it (since the context object itself
-  // isn't dead). See if we need to readd it once we've gone through normal
-  // destruction.
-  bool add_context = ArePreferencesSetOn(context);
-
+void KeyedServiceFactory::SetTestingFactory(void* context,
+                                            TestingFactory testing_factory) {
   // Ensure that |context| is not marked as stale (e.g., due to it aliasing an
   // instance that was destroyed in an earlier test) in order to avoid accesses
   // to |context| in |BrowserContextShutdown| from causing
@@ -42,33 +35,32 @@ void KeyedServiceFactory::SetTestingFactory(
   ContextShutdown(context);
   ContextDestroyed(context);
 
-  if (add_context)
-    MarkPreferencesSetOn(context);
-
-  testing_factories_[context] = testing_factory;
+  testing_factories_.emplace(context, std::move(testing_factory));
 }
 
 KeyedService* KeyedServiceFactory::SetTestingFactoryAndUse(
-    base::SupportsUserData* context,
-    TestingFactoryFunction testing_factory) {
+    void* context,
+    void* side_parameter,
+    TestingFactory testing_factory) {
   DCHECK(testing_factory);
-  SetTestingFactory(context, testing_factory);
-  return GetServiceForContext(context, true);
+  SetTestingFactory(context, std::move(testing_factory));
+  return GetServiceForContext(context, side_parameter, true);
 }
 
-KeyedService* KeyedServiceFactory::GetServiceForContext(
-    base::SupportsUserData* context,
-    bool create) {
-  TRACE_EVENT0("browser,startup", "KeyedServiceFactory::GetServiceForContext");
+KeyedService* KeyedServiceFactory::GetServiceForContext(void* context,
+                                                        void* side_parameter,
+                                                        bool create) {
+  TRACE_EVENT1("browser,startup", "KeyedServiceFactory::GetServiceForContext",
+               "service_name", name());
   context = GetContextToUse(context);
   if (!context)
     return nullptr;
 
   // NOTE: If you modify any of the logic below, make sure to update the
   // refcounted version in refcounted_context_keyed_service_factory.cc!
-  const auto& it = mapping_.find(context);
-  if (it != mapping_.end())
-    return it->second;
+  auto iterator = mapping_.find(context);
+  if (iterator != mapping_.end())
+    return iterator->second.get();
 
   // Object not found.
   if (!create)
@@ -78,42 +70,39 @@ KeyedService* KeyedServiceFactory::GetServiceForContext(
   // Check to see if we have a per-context testing factory that we should use
   // instead of default behavior.
   std::unique_ptr<KeyedService> service;
-  const auto& jt = testing_factories_.find(context);
-  if (jt != testing_factories_.end()) {
-    if (jt->second) {
-      if (!IsOffTheRecord(context))
-        RegisterUserPrefsOnContextForTest(context);
-      service = jt->second(context);
+  auto factory_iterator = testing_factories_.find(context);
+  if (factory_iterator != testing_factories_.end()) {
+    if (factory_iterator->second) {
+      service = factory_iterator->second.Run(context);
     }
   } else {
-    service = BuildServiceInstanceFor(context);
+    service = BuildServiceInstanceFor(context, side_parameter);
   }
 
-  Associate(context, std::move(service));
-  return mapping_[context];
+  return Associate(context, std::move(service));
 }
 
-void KeyedServiceFactory::Associate(base::SupportsUserData* context,
-                                    std::unique_ptr<KeyedService> service) {
+KeyedService* KeyedServiceFactory::Associate(
+    void* context,
+    std::unique_ptr<KeyedService> service) {
   DCHECK(!base::ContainsKey(mapping_, context));
-  mapping_.insert(std::make_pair(context, service.release()));
+  auto iterator = mapping_.emplace(context, std::move(service)).first;
+  return iterator->second.get();
 }
 
-void KeyedServiceFactory::Disassociate(base::SupportsUserData* context) {
-  const auto& it = mapping_.find(context);
-  if (it != mapping_.end()) {
-    delete it->second;
-    mapping_.erase(it);
-  }
+void KeyedServiceFactory::Disassociate(void* context) {
+  auto iterator = mapping_.find(context);
+  if (iterator != mapping_.end())
+    mapping_.erase(iterator);
 }
 
-void KeyedServiceFactory::ContextShutdown(base::SupportsUserData* context) {
-  const auto& it = mapping_.find(context);
-  if (it != mapping_.end() && it->second)
-    it->second->Shutdown();
+void KeyedServiceFactory::ContextShutdown(void* context) {
+  auto iterator = mapping_.find(context);
+  if (iterator != mapping_.end() && iterator->second)
+    iterator->second->Shutdown();
 }
 
-void KeyedServiceFactory::ContextDestroyed(base::SupportsUserData* context) {
+void KeyedServiceFactory::ContextDestroyed(void* context) {
   Disassociate(context);
 
   // For unit tests, we also remove the factory function both so we don't
@@ -125,15 +114,10 @@ void KeyedServiceFactory::ContextDestroyed(base::SupportsUserData* context) {
   KeyedServiceBaseFactory::ContextDestroyed(context);
 }
 
-void KeyedServiceFactory::SetEmptyTestingFactory(
-    base::SupportsUserData* context) {
-  SetTestingFactory(context, nullptr);
+void KeyedServiceFactory::SetEmptyTestingFactory(void* context) {
+  SetTestingFactory(context, TestingFactory());
 }
 
-bool KeyedServiceFactory::HasTestingFactory(base::SupportsUserData* context) {
-  return testing_factories_.find(context) != testing_factories_.end();
-}
-
-void KeyedServiceFactory::CreateServiceNow(base::SupportsUserData* context) {
-  GetServiceForContext(context, true);
+bool KeyedServiceFactory::HasTestingFactory(void* context) {
+  return base::ContainsKey(testing_factories_, context);
 }

@@ -25,6 +25,31 @@
 		</dict>
 		<dict>
 			<key>name</key>
+			<string>Intents.strings</string>
+			<key>strings</key>
+			<array>
+				<dict>
+					<key>input</key>
+					<string>IDS_IOS_INTENTS_SEARCH_IN_CHROME_DESCRIPTION</string>
+					<key>output</key>
+					<string>4nGj7v</string>
+				</dict>
+				<dict>
+					<key>input</key>
+					<string>IDS_IOS_INTENTS_SEARCH_IN_CHROME_DESCRIPTION</string>
+					<key>output</key>
+					<string>k0Ho6W</string>
+				</dict>
+				<dict>
+					<key>input</key>
+					<string>IDS_IOS_INTENTS_SEARCH_IN_CHROME_TITLE</string>
+					<key>output</key>
+					<string>Z6KvRw</string>
+				</dict>
+			</array>
+		</dict>
+		<dict>
+			<key>name</key>
 			<string>InfoPlist.strings</string>
 			<key>strings</key>
 			<array>
@@ -64,7 +89,12 @@
 					<key>output</key>
 					<string>NSPhotoLibraryAddUsageDescription</string>
 				</dict>
-
+				<dict>
+					<key>input</key>
+					<string>IDS_IOS_FACE_ID_USAGE_DESCRIPTION</string>
+					<key>output</key>
+					<string>NSFaceIDUsageDescription</string>
+				</dict>
 				<string>IDS_IOS_APPLICATION_SHORTCUT_NEWTAB_TITLE</string>
 				<string>IDS_IOS_APPLICATION_SHORTCUT_NEWINCOGNITOTAB_TITLE</string>
 				<string>IDS_IOS_APPLICATION_SHORTCUT_VOICE_SEARCH_TITLE</string>

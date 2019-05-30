@@ -15,14 +15,14 @@
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -62,7 +62,6 @@
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 #include "chrome/browser/ui/tabs/pinned_tab_codec.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/views_mode_controller.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -100,7 +99,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/frame_navigate_params.h"
-#include "content/public/common/renderer_preferences.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -184,14 +182,21 @@ int CountRenderProcessHosts() {
   return result;
 }
 
-class MockTabStripModelObserver : public TabStripModelObserver {
+class TabClosingObserver : public TabStripModelObserver {
  public:
-  MockTabStripModelObserver() : closing_count_(0) {}
+  TabClosingObserver() : closing_count_(0) {}
 
-  void TabClosingAt(TabStripModel* tab_strip_model,
-                    WebContents* contents,
-                    int index) override {
-    ++closing_count_;
+  void OnTabStripModelChanged(
+      TabStripModel* tab_strip_model,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override {
+    if (change.type() != TabStripModelChange::kRemoved)
+      return;
+
+    for (const auto& delta : change.deltas()) {
+      if (delta.remove.will_be_deleted)
+        ++closing_count_;
+    }
   }
 
   int closing_count() const { return closing_count_; }
@@ -199,7 +204,7 @@ class MockTabStripModelObserver : public TabStripModelObserver {
  private:
   int closing_count_;
 
-  DISALLOW_COPY_AND_ASSIGN(MockTabStripModelObserver);
+  DISALLOW_COPY_AND_ASSIGN(TabClosingObserver);
 };
 
 // Used by CloseWithAppMenuOpen. Invokes CloseWindow on the supplied browser.
@@ -524,20 +529,13 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, NoJavaScriptDialogsActivateTab) {
   EXPECT_EQ(0, browser()->tab_strip_model()->active_index());
 }
 
-#if defined(OS_WIN) && !defined(NDEBUG)
-// http://crbug.com/114859. Times out frequently on Windows.
-#define MAYBE_ThirtyFourTabs DISABLED_ThirtyFourTabs
-#else
-#define MAYBE_ThirtyFourTabs ThirtyFourTabs
-#endif
-
 // Create 34 tabs and verify that a lot of processes have been created. The
 // exact number of processes depends on the amount of memory. Previously we
 // had a hard limit of 31 processes and this test is mainly directed at
 // verifying that we don't crash when we pass this limit.
 // Warning: this test can take >30 seconds when running on a slow (low
 // memory?) Mac builder.
-IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_ThirtyFourTabs) {
+IN_PROC_BROWSER_TEST_F(BrowserTest, ThirtyFourTabs) {
   GURL url(ui_test_utils::GetTestUrl(base::FilePath(
       base::FilePath::kCurrentDirectory), base::FilePath(kTitle2File)));
 
@@ -612,8 +610,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, ClearPendingOnFailUnlessNTP) {
 
 // Test for crbug.com/297289.  Ensure that modal dialogs are closed when a
 // cross-process navigation is ready to commit.
-// Flaky test, see https://crbug.com/445155.
-IN_PROC_BROWSER_TEST_F(BrowserTest, DISABLED_CrossProcessNavCancelsDialogs) {
+IN_PROC_BROWSER_TEST_F(BrowserTest, CrossProcessNavCancelsDialogs) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL("/empty.html"));
   ui_test_utils::NavigateToURL(browser(), url);
@@ -637,7 +634,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DISABLED_CrossProcessNavCancelsDialogs) {
   EXPECT_FALSE(js_helper->IsShowingDialogForTesting());
 
   // Make sure input events still work in the renderer process.
-  EXPECT_FALSE(contents->GetMainFrame()->GetProcess()->IgnoreInputEvents());
+  EXPECT_FALSE(contents->GetMainFrame()->GetProcess()->IsBlocked());
 }
 
 // Make sure that dialogs are closed after a renderer process dies, and that
@@ -736,7 +733,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, InterstitialCancelsGuestViewDialogs) {
 
 // Test for crbug.com/22004.  Reloading a page with a before unload handler and
 // then canceling the dialog should not leave the throbber spinning.
-IN_PROC_BROWSER_TEST_F(BrowserTest, ReloadThenCancelBeforeUnload) {
+// https://crbug.com/898370: Test is flakily timing out
+IN_PROC_BROWSER_TEST_F(BrowserTest, DISABLED_ReloadThenCancelBeforeUnload) {
   GURL url(std::string("data:text/html,") + kBeforeUnloadHTML);
   ui_test_utils::NavigateToURL(browser(), url);
   WebContents* contents = browser()->tab_strip_model()->GetActiveWebContents();
@@ -1108,6 +1106,9 @@ IN_PROC_BROWSER_TEST_F(BrowserTest,
 #define MAYBE_FaviconChange FaviconChange
 #endif
 // Test that an icon can be changed from JS.
+// This test doesn't seem to be correct now. The Favicon never seems to be set
+// as a NavigationEntry. The related events on the TestWebContentsObserver do
+// seem to be called, however.
 IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_FaviconChange) {
   static const base::FilePath::CharType* kFile =
       FILE_PATH_LITERAL("onload_change_favicon.html");
@@ -1125,16 +1126,9 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_FaviconChange) {
   EXPECT_EQ(expected_favicon_url.spec(), entry->GetFavicon().url.spec());
 }
 
-// http://crbug.com/172336
-#if defined(OS_WIN)
-#define MAYBE_TabClosingWhenRemovingExtension \
-    DISABLED_TabClosingWhenRemovingExtension
-#else
-#define MAYBE_TabClosingWhenRemovingExtension TabClosingWhenRemovingExtension
-#endif
 // Makes sure TabClosing is sent when uninstalling an extension that is an app
 // tab.
-IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_TabClosingWhenRemovingExtension) {
+IN_PROC_BROWSER_TEST_F(BrowserTest, TabClosingWhenRemovingExtension) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL("/empty.html"));
   TabStripModel* model = browser()->tab_strip_model();
@@ -1157,7 +1151,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_TabClosingWhenRemovingExtension) {
   model->SetTabPinned(0, true);
   ui_test_utils::NavigateToURL(browser(), url);
 
-  MockTabStripModelObserver observer;
+  TabClosingObserver observer;
   model->AddObserver(&observer);
 
   // Uninstall the extension and make sure TabClosing is sent.
@@ -1396,8 +1390,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, OpenAppWindowLikeNtp) {
   // Apps launched in a window from the NTP have an extensions tab helper with
   // extension_app set.
   ASSERT_TRUE(extensions::TabHelper::FromWebContents(app_window));
-  EXPECT_TRUE(
-      extensions::TabHelper::FromWebContents(app_window)->extension_app());
+  EXPECT_TRUE(extensions::TabHelper::FromWebContents(app_window)->is_app());
   EXPECT_EQ(extensions::AppLaunchInfo::GetFullLaunchURL(extension_app),
             app_window->GetURL());
 
@@ -1426,7 +1419,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, OpenAppWindowLikeNtp) {
 // set_show_state(ui::SHOW_STATE_MAXIMIZED) has been invoked.
 IN_PROC_BROWSER_TEST_F(BrowserTest, StartMaximized) {
   Browser::Type types[] = { Browser::TYPE_TABBED, Browser::TYPE_POPUP };
-  for (size_t i = 0; i < arraysize(types); ++i) {
+  for (size_t i = 0; i < base::size(types); ++i) {
     Browser::CreateParams params(types[i], browser()->profile(), true);
     params.initial_show_state = ui::SHOW_STATE_MAXIMIZED;
     AddBlankTabAndShow(new Browser(params));
@@ -1437,7 +1430,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, StartMaximized) {
 // set_show_state(ui::SHOW_STATE_MINIMIZED) has been invoked.
 IN_PROC_BROWSER_TEST_F(BrowserTest, StartMinimized) {
   Browser::Type types[] = { Browser::TYPE_TABBED, Browser::TYPE_POPUP };
-  for (size_t i = 0; i < arraysize(types); ++i) {
+  for (size_t i = 0; i < base::size(types); ++i) {
     Browser::CreateParams params(types[i], browser()->profile(), true);
     params.initial_show_state = ui::SHOW_STATE_MINIMIZED;
     AddBlankTabAndShow(new Browser(params));
@@ -1619,17 +1612,9 @@ void OnZoomLevelChanged(const base::Closure& callback,
 
 }  // namespace
 
-#if defined(OS_WIN)
-// Flakes regularly on Windows XP
-// http://crbug.com/146040
-#define MAYBE_PageZoom DISABLED_PageZoom
-#else
-#define MAYBE_PageZoom PageZoom
-#endif
-
 namespace {
 
-int GetZoomPercent(const content::WebContents* contents,
+int GetZoomPercent(content::WebContents* contents,
                    bool* enable_plus,
                    bool* enable_minus) {
   int percent =
@@ -1641,7 +1626,7 @@ int GetZoomPercent(const content::WebContents* contents,
 
 }  // namespace
 
-IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_PageZoom) {
+IN_PROC_BROWSER_TEST_F(BrowserTest, PageZoom) {
   WebContents* contents = browser()->tab_strip_model()->GetActiveWebContents();
   bool enable_plus, enable_minus;
 
@@ -1764,7 +1749,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, InterstitialClosesDialogs) {
   // interstitial is deleted now.
 
   // Make sure input events still work in the renderer process.
-  EXPECT_FALSE(contents->GetMainFrame()->GetProcess()->IgnoreInputEvents());
+  EXPECT_FALSE(contents->GetMainFrame()->GetProcess()->IsBlocked());
 }
 
 
@@ -1779,7 +1764,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, InterstitialCloseTab) {
 
   // Close the tab and wait for interstitial detach. This destroys |contents|.
   content::RunTaskAndWaitForInterstitialDetach(
-      contents, base::Bind(&chrome::CloseTab, browser()));
+      contents, base::BindOnce(&chrome::CloseTab, browser()));
   // interstitial is deleted now.
 }
 
@@ -1868,13 +1853,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest2, NoTabsInPopups) {
 }
 #endif
 
-// Flaky on Chrome OS only. TODO(https://crbug.com/823043) fix it.
-#if defined(OS_CHROMEOS)
-#define MAYBE_WindowOpenClose1 DISABLED_WindowOpenClose1
-#else
-#define MAYBE_WindowOpenClose1 WindowOpenClose1
-#endif
-IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_WindowOpenClose1) {
+IN_PROC_BROWSER_TEST_F(BrowserTest, WindowOpenClose1) {
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kDisablePopupBlocking);
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -1891,13 +1870,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_WindowOpenClose1) {
   EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
 }
 
-// Flaky on Chrome OS, Linux and Windows. TODO(https://crbug.com/823043) fix it.
-#if defined(OS_CHROMEOS) || defined(OS_LINUX) || defined(OS_WIN)
-#define MAYBE_WindowOpenClose2 DISABLED_WindowOpenClose2
-#else
-#define MAYBE_WindowOpenClose2 WindowOpenClose2
-#endif
-IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_WindowOpenClose2) {
+IN_PROC_BROWSER_TEST_F(BrowserTest, WindowOpenClose2) {
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kDisablePopupBlocking);
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -1914,13 +1887,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_WindowOpenClose2) {
   EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
 }
 
-#if (defined(OS_WIN) && !defined(NDEBUG))
-// Times out on windows (dbg). https://crbug.com/753691.
-#define MAYBE_WindowOpenClose3 DISABLED_WindowOpenClose3
-#else
-#define MAYBE_WindowOpenClose3 WindowOpenClose3
-#endif
-IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_WindowOpenClose3) {
+IN_PROC_BROWSER_TEST_F(BrowserTest, WindowOpenClose3) {
 #if defined(OS_MACOSX)
   // Ensure that tests don't wait for frames that will never come.
   ui::CATransactionCoordinator::Get().DisableForTesting();
@@ -2341,8 +2308,7 @@ IN_PROC_BROWSER_TEST_F(ClickModifierTest, HrefControlClickTest) {
 
 // Control-shift-clicks open in a foreground tab.
 // On OSX meta [the command key] takes the place of control.
-// http://crbug.com/396347
-IN_PROC_BROWSER_TEST_F(ClickModifierTest, DISABLED_HrefControlShiftClickTest) {
+IN_PROC_BROWSER_TEST_F(ClickModifierTest, HrefControlShiftClickTest) {
 #if defined(OS_MACOSX)
   int modifiers = blink::WebInputEvent::kMetaKey;
 #else
@@ -2363,8 +2329,7 @@ IN_PROC_BROWSER_TEST_F(ClickModifierTest, HrefMiddleClickTest) {
 }
 
 // Shift-middle-clicks open in a foreground tab.
-// http://crbug.com/396347
-IN_PROC_BROWSER_TEST_F(ClickModifierTest, DISABLED_HrefShiftMiddleClickTest) {
+IN_PROC_BROWSER_TEST_F(ClickModifierTest, HrefShiftMiddleClickTest) {
   int modifiers = blink::WebInputEvent::kShiftKey;
   blink::WebMouseEvent::Button button = blink::WebMouseEvent::Button::kMiddle;
   WindowOpenDisposition disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
@@ -2564,23 +2529,23 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DefaultMediaDevices) {
   ui_test_utils::NavigateToURL(browser(), GURL("chrome://newtab"));
   WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  auto GetDeviceID = [web_contents](content::MediaStreamType type) {
+  auto GetDeviceID = [web_contents](blink::MediaStreamType type) {
     return web_contents->GetDelegate()->GetDefaultMediaDeviceID(web_contents,
                                                                 type);
   };
   EXPECT_EQ(kDefaultAudioCapture1,
-            GetDeviceID(content::MEDIA_DEVICE_AUDIO_CAPTURE));
+            GetDeviceID(blink::MEDIA_DEVICE_AUDIO_CAPTURE));
   EXPECT_EQ(kDefaultVideoCapture1,
-            GetDeviceID(content::MEDIA_DEVICE_VIDEO_CAPTURE));
+            GetDeviceID(blink::MEDIA_DEVICE_VIDEO_CAPTURE));
 
   const std::string kDefaultAudioCapture2 = "test_default_audio_capture_2";
   const std::string kDefaultVideoCapture2 = "test_default_video_capture_2";
   SetString(prefs::kDefaultAudioCaptureDevice, kDefaultAudioCapture2);
   SetString(prefs::kDefaultVideoCaptureDevice, kDefaultVideoCapture2);
   EXPECT_EQ(kDefaultAudioCapture2,
-            GetDeviceID(content::MEDIA_DEVICE_AUDIO_CAPTURE));
+            GetDeviceID(blink::MEDIA_DEVICE_AUDIO_CAPTURE));
   EXPECT_EQ(kDefaultVideoCapture2,
-            GetDeviceID(content::MEDIA_DEVICE_VIDEO_CAPTURE));
+            GetDeviceID(blink::MEDIA_DEVICE_VIDEO_CAPTURE));
 }
 
 namespace {
@@ -2647,15 +2612,16 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DISABLED_ChangeDisplayMode) {
   CheckDisplayModeMQ(ASCIIToUTF16("fullscreen"), app_contents);
 }
 
+#if defined(OS_MACOSX)
+// The size computation on popups is wrong in MacViews, https://crbug.com/834908
+#define MAYBE_TestPopupBounds DISABLED_TestPopupBounds
+#else
+#define MAYBE_TestPopupBounds TestPopupBounds
+#endif
+
 // Test to ensure the bounds of popup, devtool, and app windows are properly
 // restored.
-IN_PROC_BROWSER_TEST_F(BrowserTest, TestPopupBounds) {
-#if BUILDFLAG(MAC_VIEWS_BROWSER)
-  // The size computation on popups is wrong in MacViews:
-  // https://crbug.com/834908.
-  if (!views_mode_controller::IsViewsBrowserCocoa())
-    return;
-#endif
+IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_TestPopupBounds) {
   // TODO(tdanderson|pkasting): Change this to verify that the contents bounds
   // set by params.initial_bounds are the same as the contents bounds in the
   // initialized window. See crbug.com/585856.
@@ -2797,4 +2763,53 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DialogsAllowedInFullscreenWithinTabMode) {
 
   browser_as_dialog_delegate->SetWebContentsBlocked(tab, false);
   tab->DecrementCapturerCount();
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserTest, CountIncognitoWindows) {
+  DCHECK_EQ(0, BrowserList::GetIncognitoSessionsActiveForProfile(
+                   browser()->profile()));
+
+  // Create an incognito browser and check the count.
+  Browser* browser1 = CreateIncognitoBrowser(browser()->profile());
+  DCHECK_EQ(1, BrowserList::GetIncognitoSessionsActiveForProfile(
+                   browser()->profile()));
+
+  // Create another incognito browser and check the count.
+  Browser* browser2 = CreateIncognitoBrowser(browser()->profile());
+  DCHECK_EQ(2, BrowserList::GetIncognitoSessionsActiveForProfile(
+                   browser()->profile()));
+
+  // Open a docked DevTool window and count.
+  DevToolsWindow* devtools_window =
+      DevToolsWindowTesting::OpenDevToolsWindowSync(browser1, true);
+  DCHECK_EQ(2, BrowserList::GetIncognitoSessionsActiveForProfile(
+                   browser()->profile()));
+  DevToolsWindowTesting::CloseDevToolsWindowSync(devtools_window);
+
+  // Open a detached DevTool window and count.
+  devtools_window =
+      DevToolsWindowTesting::OpenDevToolsWindowSync(browser1, false);
+  DCHECK_EQ(2, BrowserList::GetIncognitoSessionsActiveForProfile(
+                   browser()->profile()));
+  DevToolsWindowTesting::CloseDevToolsWindowSync(devtools_window);
+
+  // Close one browser and count.
+  CloseBrowserSynchronously(browser2);
+  DCHECK_EQ(1, BrowserList::GetIncognitoSessionsActiveForProfile(
+                   browser()->profile()));
+
+  // Close another browser and count.
+  CloseBrowserSynchronously(browser1);
+  DCHECK_EQ(0, BrowserList::GetIncognitoSessionsActiveForProfile(
+                   browser()->profile()));
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserTest, IsIncognitoSessionInUse) {
+  EXPECT_FALSE(BrowserList::IsIncognitoSessionInUse(browser()->profile()));
+
+  Browser* incognito_browser = CreateIncognitoBrowser(browser()->profile());
+  EXPECT_TRUE(BrowserList::IsIncognitoSessionInUse(browser()->profile()));
+
+  CloseBrowserSynchronously(incognito_browser);
+  EXPECT_FALSE(BrowserList::IsIncognitoSessionInUse(browser()->profile()));
 }

@@ -36,6 +36,7 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "mojo/public/cpp/system/wait.h"
+#include "third_party/blink/public/common/blob/blob_utils.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
@@ -61,21 +62,21 @@
 
 namespace blink {
 
-// static
-std::unique_ptr<FileReaderLoader> FileReaderLoader::Create(
+FileReaderLoader::FileReaderLoader(
     ReadType read_type,
-    FileReaderLoaderClient* client) {
-  return std::make_unique<FileReaderLoader>(read_type, client);
-}
-
-FileReaderLoader::FileReaderLoader(ReadType read_type,
-                                   FileReaderLoaderClient* client)
+    FileReaderLoaderClient* client,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
     : read_type_(read_type),
       client_(client),
-      // TODO(hajimehoshi): Pass an appropriate task runner to SimpleWatcher
-      // constructor.
-      handle_watcher_(FROM_HERE, mojo::SimpleWatcher::ArmingPolicy::AUTOMATIC),
+      // TODO(https://crbug.com/957651): task_runner should never be null, but
+      // if it is make sure SimpleWatcher doesn't crash and just use a default
+      // task runner instead for now.
+      handle_watcher_(
+          FROM_HERE,
+          mojo::SimpleWatcher::ArmingPolicy::AUTOMATIC,
+          task_runner ? task_runner : base::SequencedTaskRunnerHandle::Get()),
       binding_(this),
+      task_runner_(std::move(task_runner)),
       weak_factory_(this) {}
 
 FileReaderLoader::~FileReaderLoader() {
@@ -89,16 +90,22 @@ void FileReaderLoader::Start(scoped_refptr<BlobDataHandle> blob_data) {
   started_loading_ = true;
 #endif  // DCHECK_IS_ON()
 
+  MojoCreateDataPipeOptions options;
+  options.struct_size = sizeof(MojoCreateDataPipeOptions);
+  options.flags = MOJO_CREATE_DATA_PIPE_FLAG_NONE;
+  options.element_num_bytes = 1;
+  options.capacity_num_bytes =
+      blink::BlobUtils::GetDataPipeCapacity(blob_data->size());
+
   mojo::ScopedDataPipeProducerHandle producer_handle;
-  MojoResult result =
-      CreateDataPipe(nullptr, &producer_handle, &consumer_handle_);
-  if (result != MOJO_RESULT_OK) {
-    Failed(FileError::kNotReadableErr, FailureType::kMojoPipeCreation);
+  MojoResult rv = CreateDataPipe(&options, &producer_handle, &consumer_handle_);
+  if (rv != MOJO_RESULT_OK) {
+    Failed(FileErrorCode::kNotReadableErr, FailureType::kMojoPipeCreation);
     return;
   }
 
   mojom::blink::BlobReaderClientPtr client_ptr;
-  binding_.Bind(MakeRequest(&client_ptr));
+  binding_.Bind(MakeRequest(&client_ptr, task_runner_), task_runner_);
   blob_data->ReadAll(std::move(producer_handle), std::move(client_ptr));
 
   if (IsSyncLoad()) {
@@ -108,21 +115,22 @@ void FileReaderLoader::Start(scoped_refptr<BlobDataHandle> blob_data) {
     if (received_on_complete_)
       return;
     if (!received_all_data_) {
-      Failed(FileError::kNotReadableErr, FailureType::kSyncDataNotAllLoaded);
+      Failed(FileErrorCode::kNotReadableErr,
+             FailureType::kSyncDataNotAllLoaded);
       return;
     }
 
     // Wait for OnComplete
     binding_.WaitForIncomingMethodCall();
     if (!received_on_complete_) {
-      Failed(FileError::kNotReadableErr,
+      Failed(FileErrorCode::kNotReadableErr,
              FailureType::kSyncOnCompleteNotReceived);
     }
   }
 }
 
 void FileReaderLoader::Cancel() {
-  error_code_ = FileError::kAbortErr;
+  error_code_ = FileErrorCode::kAbortErr;
   Cleanup();
 }
 
@@ -132,32 +140,36 @@ DOMArrayBuffer* FileReaderLoader::ArrayBufferResult() {
     return array_buffer_result_;
 
   // If the loading is not started or an error occurs, return an empty result.
-  if (!raw_data_ || error_code_)
+  if (!raw_data_ || error_code_ != FileErrorCode::kOK)
     return nullptr;
 
-  DOMArrayBuffer* result = DOMArrayBuffer::Create(raw_data_->ToArrayBuffer());
-  if (finished_loading_) {
-    array_buffer_result_ = result;
-    AdjustReportedMemoryUsageToV8(
-        -1 * static_cast<int64_t>(raw_data_->ByteLength()));
-    raw_data_.reset();
+  if (!finished_loading_) {
+    return DOMArrayBuffer::Create(ArrayBuffer::Create(
+        raw_data_->Data(), static_cast<unsigned>(bytes_loaded_)));
   }
-  return result;
+
+  array_buffer_result_ = DOMArrayBuffer::Create(std::move(raw_data_));
+  AdjustReportedMemoryUsageToV8(-1 * static_cast<int64_t>(bytes_loaded_));
+  raw_data_.reset();
+  return array_buffer_result_;
 }
 
 String FileReaderLoader::StringResult() {
   DCHECK_NE(read_type_, kReadAsArrayBuffer);
   DCHECK_NE(read_type_, kReadByClient);
 
-  if (!raw_data_ || error_code_ || is_raw_data_converted_)
+  if (!raw_data_ || (error_code_ != FileErrorCode::kOK) ||
+      is_raw_data_converted_) {
     return string_result_;
+  }
 
   switch (read_type_) {
     case kReadAsArrayBuffer:
       // No conversion is needed.
       return string_result_;
     case kReadAsBinaryString:
-      SetStringResult(raw_data_->ToString());
+      SetStringResult(String(static_cast<const char*>(raw_data_->Data()),
+                             static_cast<size_t>(bytes_loaded_)));
       break;
     case kReadAsText:
       SetStringResult(ConvertToText());
@@ -173,8 +185,7 @@ String FileReaderLoader::StringResult() {
 
   if (finished_loading_) {
     DCHECK(is_raw_data_converted_);
-    AdjustReportedMemoryUsageToV8(
-        -1 * static_cast<int64_t>(raw_data_->ByteLength()));
+    AdjustReportedMemoryUsageToV8(-1 * static_cast<int64_t>(bytes_loaded_));
     raw_data_.reset();
   }
   return string_result_;
@@ -190,7 +201,7 @@ void FileReaderLoader::Cleanup() {
   consumer_handle_.reset();
 
   // If we get any error, we do not need to keep a buffer around.
-  if (error_code_) {
+  if (error_code_ != FileErrorCode::kOK) {
     raw_data_.reset();
     string_result_ = "";
     is_raw_data_converted_ = true;
@@ -200,13 +211,12 @@ void FileReaderLoader::Cleanup() {
   }
 }
 
-void FileReaderLoader::Failed(FileError::ErrorCode error_code,
-                              FailureType type) {
+void FileReaderLoader::Failed(FileErrorCode error_code, FailureType type) {
   DEFINE_THREAD_SAFE_STATIC_LOCAL(EnumerationHistogram, failure_histogram,
                                   ("Storage.Blob.FileReaderLoader.FailureType",
                                    static_cast<int>(FailureType::kCount)));
   // If an error was already reported, don't report this error again.
-  if (error_code_ != FileError::kOK)
+  if (error_code_ != FileErrorCode::kOK)
     return;
   error_code_ = error_code;
   failure_histogram.Count(static_cast<int>(type));
@@ -225,17 +235,16 @@ void FileReaderLoader::OnStartLoading(uint64_t total_bytes) {
     // so to call ArrayBuffer's create function.
     // FIXME: Support reading more than the current size limit of ArrayBuffer.
     if (total_bytes > std::numeric_limits<unsigned>::max()) {
-      Failed(FileError::kNotReadableErr, FailureType::kTotalBytesTooLarge);
+      Failed(FileErrorCode::kNotReadableErr, FailureType::kTotalBytesTooLarge);
       return;
     }
 
-    raw_data_ = std::make_unique<ArrayBufferBuilder>(total_bytes);
-    if (!raw_data_->IsValid()) {
-      Failed(FileError::kNotReadableErr,
+    raw_data_ = ArrayBuffer::Create(static_cast<unsigned>(total_bytes), 1);
+    if (!raw_data_) {
+      Failed(FileErrorCode::kNotReadableErr,
              FailureType::kArrayBufferBuilderCreation);
       return;
     }
-    raw_data_->SetVariableCapacity(false);
   }
 
   if (client_)
@@ -246,7 +255,7 @@ void FileReaderLoader::OnReceivedData(const char* data, unsigned data_length) {
   DCHECK(data);
 
   // Bail out if we already encountered an error.
-  if (error_code_)
+  if (error_code_ != FileErrorCode::kOK)
     return;
 
   if (read_type_ == kReadByClient) {
@@ -257,16 +266,23 @@ void FileReaderLoader::OnReceivedData(const char* data, unsigned data_length) {
     return;
   }
 
-  unsigned bytes_appended = raw_data_->Append(data, data_length);
-  if (!bytes_appended) {
+  // Receiving more data than expected would indicate a bug in the
+  // implementation of the mojom Blob interface. However there is no guarantee
+  // that the BlobPtr is actually backed by a "real" blob, so to defend against
+  // compromised renderer processes we still need to carefully validate anything
+  // received. So return an error if we received too much data.
+  if (bytes_loaded_ + data_length > raw_data_->ByteLength()) {
     raw_data_.reset();
     bytes_loaded_ = 0;
-    Failed(FileError::kNotReadableErr, FailureType::kArrayBufferBuilderAppend);
+    Failed(FileErrorCode::kNotReadableErr,
+           FailureType::kArrayBufferBuilderAppend);
     return;
   }
-  bytes_loaded_ += bytes_appended;
+  memcpy(static_cast<char*>(raw_data_->Data()) + bytes_loaded_, data,
+         data_length);
+  bytes_loaded_ += data_length;
   is_raw_data_converted_ = false;
-  AdjustReportedMemoryUsageToV8(bytes_appended);
+  AdjustReportedMemoryUsageToV8(data_length);
 
   if (client_)
     client_->DidReceiveData();
@@ -274,7 +290,7 @@ void FileReaderLoader::OnReceivedData(const char* data, unsigned data_length) {
 
 void FileReaderLoader::OnFinishLoading() {
   if (read_type_ != kReadByClient && raw_data_) {
-    raw_data_->ShrinkToFit();
+    DCHECK_EQ(bytes_loaded_, raw_data_->ByteLength());
     is_raw_data_converted_ = false;
   }
 
@@ -316,13 +332,13 @@ void FileReaderLoader::OnComplete(int32_t status, uint64_t data_length) {
   if (status != net::OK) {
     net_error_ = status;
     file_reader_loader_read_errors_histogram.Sample(std::max(0, -net_error_));
-    Failed(status == net::ERR_FILE_NOT_FOUND ? FileError::kNotFoundErr
-                                             : FileError::kNotReadableErr,
+    Failed(status == net::ERR_FILE_NOT_FOUND ? FileErrorCode::kNotFoundErr
+                                             : FileErrorCode::kNotReadableErr,
            FailureType::kBackendReadError);
     return;
   }
   if (data_length != total_bytes_) {
-    Failed(FileError::kNotReadableErr, FailureType::kReadSizesIncorrect);
+    Failed(FileErrorCode::kNotReadableErr, FailureType::kReadSizesIncorrect);
     return;
   }
 
@@ -334,7 +350,7 @@ void FileReaderLoader::OnComplete(int32_t status, uint64_t data_length) {
 void FileReaderLoader::OnDataPipeReadable(MojoResult result) {
   if (result != MOJO_RESULT_OK) {
     if (!received_all_data_) {
-      Failed(FileError::kNotReadableErr,
+      Failed(FileErrorCode::kNotReadableErr,
              FailureType::kDataPipeNotReadableWithBytesLeft);
     }
     return;
@@ -343,25 +359,27 @@ void FileReaderLoader::OnDataPipeReadable(MojoResult result) {
   while (true) {
     uint32_t num_bytes;
     const void* buffer;
-    MojoResult result = consumer_handle_->BeginReadData(
+    MojoResult pipe_result = consumer_handle_->BeginReadData(
         &buffer, &num_bytes, MOJO_READ_DATA_FLAG_NONE);
-    if (result == MOJO_RESULT_SHOULD_WAIT) {
+    if (pipe_result == MOJO_RESULT_SHOULD_WAIT) {
       if (!IsSyncLoad())
         return;
 
-      result = mojo::Wait(consumer_handle_.get(), MOJO_HANDLE_SIGNAL_READABLE);
-      if (result == MOJO_RESULT_OK)
+      pipe_result =
+          mojo::Wait(consumer_handle_.get(), MOJO_HANDLE_SIGNAL_READABLE);
+      if (pipe_result == MOJO_RESULT_OK)
         continue;
     }
-    if (result == MOJO_RESULT_FAILED_PRECONDITION) {
+    if (pipe_result == MOJO_RESULT_FAILED_PRECONDITION) {
       // Pipe closed.
       if (!received_all_data_) {
-        Failed(FileError::kNotReadableErr, FailureType::kMojoPipeClosedEarly);
+        Failed(FileErrorCode::kNotReadableErr,
+               FailureType::kMojoPipeClosedEarly);
       }
       return;
     }
-    if (result != MOJO_RESULT_OK) {
-      Failed(FileError::kNotReadableErr,
+    if (pipe_result != MOJO_RESULT_OK) {
+      Failed(FileErrorCode::kNotReadableErr,
              FailureType::kMojoPipeUnexpectedReadError);
       return;
     }
@@ -416,7 +434,7 @@ String FileReaderLoader::ConvertToText() {
         encoding_.IsValid() ? encoding_ : UTF8Encoding()));
   }
   builder.Append(decoder_->Decode(static_cast<const char*>(raw_data_->Data()),
-                                  raw_data_->ByteLength()));
+                                  static_cast<size_t>(bytes_loaded_)));
 
   if (finished_loading_)
     builder.Append(decoder_->Flush());
@@ -442,7 +460,7 @@ String FileReaderLoader::ConvertToDataURL() {
 
   Vector<char> out;
   Base64Encode(static_cast<const char*>(raw_data_->Data()),
-               raw_data_->ByteLength(), out);
+               static_cast<unsigned>(bytes_loaded_), out);
   out.push_back('\0');
   builder.Append(out.data());
 

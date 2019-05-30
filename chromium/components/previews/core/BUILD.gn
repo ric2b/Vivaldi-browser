@@ -4,20 +4,26 @@
 
 static_library("core") {
   sources = [
+    "bloom_filter.cc",
+    "bloom_filter.h",
+    "host_filter.cc",
+    "host_filter.h",
     "previews_black_list.cc",
     "previews_black_list.h",
+    "previews_constants.cc",
+    "previews_constants.h",
     "previews_decider.h",
     "previews_experiments.cc",
     "previews_experiments.h",
     "previews_features.cc",
     "previews_features.h",
+    "previews_lite_page_redirect.cc",
+    "previews_lite_page_redirect.h",
     "previews_logger.cc",
     "previews_logger.h",
     "previews_logger_observer.h",
     "previews_switches.cc",
     "previews_switches.h",
-    "previews_user_data.cc",
-    "previews_user_data.h",
   ]
 
   deps = [
@@ -26,6 +32,7 @@ static_library("core") {
     "//components/variations",
     "//net:net",
     "//third_party/re2",
+    "//third_party/smhasher:murmurhash3",
     "//url:url",
   ]
 }
@@ -51,10 +58,12 @@ static_library("test_support") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "bloom_filter_unittest.cc",
+    "host_filter_unittest.cc",
     "previews_black_list_unittest.cc",
     "previews_experiments_unittest.cc",
+    "previews_lite_page_redirect_unittest.cc",
     "previews_logger_unittest.cc",
-    "previews_user_data_unittest.cc",
   ]
 
   deps = [

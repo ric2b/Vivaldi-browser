@@ -85,12 +85,11 @@ void LayoutSVGInlineText::StyleDidChange(StyleDifference diff,
           LayoutSVGText::LocateLayoutSVGTextAncestor(this)) {
     text_layout_object->SetNeedsTextMetricsUpdate();
     text_layout_object->SetNeedsLayoutAndFullPaintInvalidation(
-        LayoutInvalidationReason::kStyleChange);
+        layout_invalidation_reason::kStyleChange);
   }
 }
 
-InlineTextBox* LayoutSVGInlineText::CreateTextBox(int start,
-                                                  unsigned short length) {
+InlineTextBox* LayoutSVGInlineText::CreateTextBox(int start, uint16_t length) {
   InlineTextBox* box =
       new SVGInlineTextBox(LineLayoutItem(this), start, length);
   box->SetHasVirtualLogicalHeight();
@@ -351,15 +350,15 @@ void LayoutSVGInlineText::UpdateMetricsList(
   bool bidi_override = IsOverride(StyleRef().GetUnicodeBidi());
   BidiStatus status(TextDirection::kLtr, bidi_override);
   if (run.Is8Bit() || bidi_override) {
-    WTF::Unicode::CharDirection direction = WTF::Unicode::kLeftToRight;
+    WTF::unicode::CharDirection direction = WTF::unicode::kLeftToRight;
     // If BiDi override is in effect, use the specified direction.
     if (bidi_override && !StyleRef().IsLeftToRightDirection())
-      direction = WTF::Unicode::kRightToLeft;
+      direction = WTF::unicode::kRightToLeft;
     bidi_runs.AddRun(new BidiCharacterRun(
         status.context->Override(), status.context->Level(), 0,
         run.CharactersLength(), direction, status.context->Dir()));
   } else {
-    status.last = status.last_strong = WTF::Unicode::kOtherNeutral;
+    status.last = status.last_strong = WTF::unicode::kOtherNeutral;
     bidi_resolver.SetStatus(status);
     bidi_resolver.SetPositionIgnoringNestedIsolates(TextRunIterator(&run, 0));
     const bool kHardLineBreak = false;
@@ -420,8 +419,8 @@ void LayoutSVGInlineText::ComputeNewScaledFontForStyle(
   scaled_font.Update(document.GetStyleEngine().GetFontSelector());
 }
 
-LayoutRect LayoutSVGInlineText::AbsoluteVisualRect() const {
-  return Parent()->AbsoluteVisualRect();
+LayoutRect LayoutSVGInlineText::VisualRectInDocument() const {
+  return Parent()->VisualRectInDocument();
 }
 
 FloatRect LayoutSVGInlineText::VisualRectInLocalSVGCoordinates() const {

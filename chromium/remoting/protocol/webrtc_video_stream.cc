@@ -16,12 +16,11 @@
 #include "remoting/codec/webrtc_video_encoder_vpx.h"
 #include "remoting/protocol/frame_stats.h"
 #include "remoting/protocol/host_video_stats_dispatcher.h"
-#include "remoting/protocol/webrtc_dummy_video_capturer.h"
 #include "remoting/protocol/webrtc_frame_scheduler_simple.h"
 #include "remoting/protocol/webrtc_transport.h"
-#include "third_party/webrtc/api/mediastreaminterface.h"
-#include "third_party/webrtc/api/peerconnectioninterface.h"
-#include "third_party/webrtc/media/base/videocapturer.h"
+#include "third_party/webrtc/api/media_stream_interface.h"
+#include "third_party/webrtc/api/notifier.h"
+#include "third_party/webrtc/api/peer_connection_interface.h"
 
 #if defined(USE_H264_ENCODER)
 #include "remoting/codec/webrtc_video_encoder_gpu.h"
@@ -50,10 +49,25 @@ std::string EncodeResultToString(WebrtcVideoEncoder::EncodeResult result) {
   return "";
 }
 
+class DummyVideoTrackSource
+    : public webrtc::Notifier<webrtc::VideoTrackSourceInterface> {
+ public:
+  SourceState state() const override { return kLive; }
+  bool remote() const override { return false; }
+  bool is_screencast() const override { return true; }
+  absl::optional<bool> needs_denoising() const override {
+    return absl::nullopt;
+  }
+  bool GetStats(Stats* stats) override { return false; }
+  void AddOrUpdateSink(rtc::VideoSinkInterface<webrtc::VideoFrame>* sink,
+                       const rtc::VideoSinkWants& wants) override {}
+  void RemoveSink(rtc::VideoSinkInterface<webrtc::VideoFrame>* sink) override {}
+};
+
 }  // namespace
 
 struct WebrtcVideoStream::FrameStats {
-  // The following fields is not null only for one frame after each incoming
+  // The following fields are non-null only for one frame after each incoming
   // input event.
   InputEventTimestamps input_event_timestamps;
 
@@ -64,6 +78,7 @@ struct WebrtcVideoStream::FrameStats {
   base::TimeTicks encode_ended_time;
 
   uint32_t capturer_id = 0;
+  int frame_quality = -1;
 };
 
 WebrtcVideoStream::WebrtcVideoStream(const SessionOptions& session_options)
@@ -85,11 +100,8 @@ WebrtcVideoStream::WebrtcVideoStream(const SessionOptions& session_options)
 
 WebrtcVideoStream::~WebrtcVideoStream() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (stream_) {
-    for (const auto& track : stream_->GetVideoTracks()) {
-      stream_->RemoveTrack(track.get());
-    }
-    peer_connection_->RemoveStream(stream_.get());
+  if (video_sender_) {
+    peer_connection_->RemoveTrack(video_sender_.get());
   }
 }
 
@@ -119,22 +131,16 @@ void WebrtcVideoStream::Start(
   capturer_->Start(this);
 
   rtc::scoped_refptr<webrtc::VideoTrackSourceInterface> src =
-      peer_connection_factory->CreateVideoSource(
-          std::make_unique<WebrtcDummyVideoCapturer>());
+      new rtc::RefCountedObject<DummyVideoTrackSource>();
   rtc::scoped_refptr<webrtc::VideoTrackInterface> video_track =
       peer_connection_factory->CreateVideoTrack(kVideoLabel, src);
 
-  stream_ = peer_connection_factory->CreateLocalMediaStream(kStreamLabel);
+  // value() DCHECKs if AddTrack() fails, which only happens if a track was
+  // already added with the stream label.
+  video_sender_ =
+      peer_connection_->AddTrack(video_track.get(), {kStreamLabel}).value();
 
-  // AddTrack() may fail only if there is another track with the same name,
-  // which is impossible because it's a brand new stream.
-  bool result = stream_->AddTrack(video_track.get());
-  DCHECK(result);
-
-  // AddStream() may fail if there is another stream with the same name or when
-  // the PeerConnection is closed, neither is expected.
-  result = peer_connection_->AddStream(stream_.get());
-  DCHECK(result);
+  webrtc_transport_->OnVideoSenderCreated(video_sender_);
 
   scheduler_.reset(new WebrtcFrameSchedulerSimple(session_options_));
   scheduler_->Start(
@@ -144,6 +150,10 @@ void WebrtcVideoStream::Start(
   video_stats_dispatcher_.Init(webrtc_transport_->CreateOutgoingChannel(
                                    video_stats_dispatcher_.channel_name()),
                                this);
+}
+
+void WebrtcVideoStream::SelectSource(int id) {
+  capturer_->SelectSource(id);
 }
 
 void WebrtcVideoStream::SetEventTimestampsSource(
@@ -243,6 +253,14 @@ void WebrtcVideoStream::OnFrameEncoded(
 
   current_frame_stats_->encode_ended_time = base::TimeTicks::Now();
 
+  // Convert the frame quantizer to a measure of frame quality between 0 and
+  // 100, for a simple visualization of quality over time. The quantizer from
+  // VP8/VP9 encoder lies within 0-63, with 0 representing a lossless
+  // frame.
+  // TODO(crbug.com/891571): Remove |quantizer| from the WebrtcVideoEncoder
+  // interface, and move this logic to the encoders.
+  current_frame_stats_->frame_quality = (63 - frame->quantizer) * 100 / 63;
+
   HostFrameStats stats;
   scheduler_->OnFrameEncoded(frame.get(), &stats);
 
@@ -296,6 +314,8 @@ void WebrtcVideoStream::OnFrameEncoded(
                          current_frame_stats_->encode_started_time;
 
     stats.capturer_id = current_frame_stats_->capturer_id;
+
+    stats.frame_quality = current_frame_stats_->frame_quality;
 
     video_stats_dispatcher_.OnVideoFrameStats(result.frame_id, stats);
   }

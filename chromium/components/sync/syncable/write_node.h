@@ -73,11 +73,11 @@ class WriteNode : public BaseNode {
   bool InitBookmarkByCreation(const BaseNode& parent,
                               const BaseNode* predecessor){
     return InitNodeByCreation(parent, predecessor, BOOKMARKS);
-  };
+  }
   bool InitNotesByCreation(const BaseNode& parent,
                               const BaseNode* predecessor){
     return InitNodeByCreation(parent, predecessor, NOTES);
-  };
+  }
 
   // Create nodes using this function if they're unique items that
   // you want to fetch using client_tag. Note that the behavior of these

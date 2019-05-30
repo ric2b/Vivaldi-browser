@@ -26,9 +26,8 @@
 #include "third_party/blink/renderer/modules/webaudio/media_stream_audio_source_node.h"
 
 #include <memory>
-#include "third_party/blink/renderer/core/frame/deprecation.h"
+#include "third_party/blink/renderer/modules/webaudio/audio_context.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_node_output.h"
-#include "third_party/blink/renderer/modules/webaudio/base_audio_context.h"
 #include "third_party/blink/renderer/modules/webaudio/media_stream_audio_source_options.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/wtf/locker.h"
@@ -62,7 +61,7 @@ MediaStreamAudioSourceHandler::~MediaStreamAudioSourceHandler() {
   Uninitialize();
 }
 
-void MediaStreamAudioSourceHandler::SetFormat(size_t number_of_channels,
+void MediaStreamAudioSourceHandler::SetFormat(uint32_t number_of_channels,
                                               float source_sample_rate) {
   if (number_of_channels != source_number_of_channels_ ||
       source_sample_rate != Context()->sampleRate()) {
@@ -92,7 +91,7 @@ void MediaStreamAudioSourceHandler::SetFormat(size_t number_of_channels,
   }
 }
 
-void MediaStreamAudioSourceHandler::Process(size_t number_of_frames) {
+void MediaStreamAudioSourceHandler::Process(uint32_t number_of_frames) {
   AudioBus* output_bus = Output(0).Bus();
 
   if (!GetAudioSourceProvider()) {
@@ -120,7 +119,7 @@ void MediaStreamAudioSourceHandler::Process(size_t number_of_frames) {
 // ----------------------------------------------------------------
 
 MediaStreamAudioSourceNode::MediaStreamAudioSourceNode(
-    BaseAudioContext& context,
+    AudioContext& context,
     MediaStream& media_stream,
     MediaStreamTrack* audio_track,
     std::unique_ptr<AudioSourceProvider> audio_source_provider)
@@ -132,15 +131,10 @@ MediaStreamAudioSourceNode::MediaStreamAudioSourceNode(
 }
 
 MediaStreamAudioSourceNode* MediaStreamAudioSourceNode::Create(
-    BaseAudioContext& context,
+    AudioContext& context,
     MediaStream& media_stream,
     ExceptionState& exception_state) {
   DCHECK(IsMainThread());
-
-  if (context.IsContextClosed()) {
-    context.ThrowExceptionForClosedState(exception_state);
-    return nullptr;
-  }
 
   MediaStreamTrackVector audio_tracks = media_stream.getAudioTracks();
   if (audio_tracks.IsEmpty()) {
@@ -154,8 +148,9 @@ MediaStreamAudioSourceNode* MediaStreamAudioSourceNode::Create(
   std::unique_ptr<AudioSourceProvider> provider =
       audio_track->CreateWebAudioSource();
 
-  MediaStreamAudioSourceNode* node = new MediaStreamAudioSourceNode(
-      context, media_stream, audio_track, std::move(provider));
+  MediaStreamAudioSourceNode* node =
+      MakeGarbageCollected<MediaStreamAudioSourceNode>(
+          context, media_stream, audio_track, std::move(provider));
 
   if (!node)
     return nullptr;
@@ -166,20 +161,14 @@ MediaStreamAudioSourceNode* MediaStreamAudioSourceNode::Create(
   // context keeps reference until node is disconnected
   context.NotifySourceNodeStartedProcessing(node);
 
-  if (!context.HasRealtimeConstraint()) {
-    Deprecation::CountDeprecation(
-        node->GetExecutionContext(),
-        WebFeature::kMediaStreamSourceOnOfflineContext);
-  }
-
   return node;
 }
 
 MediaStreamAudioSourceNode* MediaStreamAudioSourceNode::Create(
-    BaseAudioContext* context,
-    const MediaStreamAudioSourceOptions& options,
+    AudioContext* context,
+    const MediaStreamAudioSourceOptions* options,
     ExceptionState& exception_state) {
-  return Create(*context, *options.mediaStream(), exception_state);
+  return Create(*context, *options->mediaStream(), exception_state);
 }
 
 void MediaStreamAudioSourceNode::Trace(blink::Visitor* visitor) {
@@ -198,10 +187,15 @@ MediaStream* MediaStreamAudioSourceNode::getMediaStream() const {
   return media_stream_;
 }
 
-void MediaStreamAudioSourceNode::SetFormat(size_t number_of_channels,
+void MediaStreamAudioSourceNode::SetFormat(uint32_t number_of_channels,
                                            float source_sample_rate) {
   GetMediaStreamAudioSourceHandler().SetFormat(number_of_channels,
                                                source_sample_rate);
+}
+
+bool MediaStreamAudioSourceNode::HasPendingActivity() const {
+  // As long as the context is running, this node has activity.
+  return (context()->ContextState() == BaseAudioContext::kRunning);
 }
 
 }  // namespace blink

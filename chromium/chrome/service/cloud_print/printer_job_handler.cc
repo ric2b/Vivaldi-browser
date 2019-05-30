@@ -4,6 +4,7 @@
 
 #include "chrome/service/cloud_print/printer_job_handler.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -173,7 +174,7 @@ CloudPrintURLFetcher::ResponseAction PrinterJobHandler::HandleRawData(
 CloudPrintURLFetcher::ResponseAction PrinterJobHandler::HandleJSONData(
     const net::URLFetcher* source,
     const GURL& url,
-    const base::DictionaryValue* json_data,
+    const base::Value& json_data,
     bool succeeded) {
   DCHECK(next_json_data_handler_);
   return (this->*next_json_data_handler_)(source, url, json_data, succeeded);
@@ -217,7 +218,7 @@ bool PrinterJobHandler::OnJobCompleted(JobStatusUpdater* updater) {
   base::subtle::NoBarrier_AtomicIncrement(&g_total_jobs_done, 1);
   job_queue_handler_.JobDone(job_details_.job_id_);
 
-  for (JobStatusUpdaterList::iterator it = job_status_updater_list_.begin();
+  for (auto it = job_status_updater_list_.begin();
        it != job_status_updater_list_.end(); ++it) {
     if (it->get() == updater) {
       job_status_updater_list_.erase(it);
@@ -256,18 +257,14 @@ void PrinterJobHandler::OnJobChanged() {
 
 void PrinterJobHandler::OnJobSpoolSucceeded(const PlatformJobId& job_id) {
   DCHECK(CurrentlyOnPrintThread());
-  job_spooler_->AddRef();
-  print_thread_.task_runner()->ReleaseSoon(FROM_HERE, job_spooler_.get());
-  job_spooler_ = NULL;
+  print_thread_.task_runner()->ReleaseSoon(FROM_HERE, std::move(job_spooler_));
   job_handler_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&PrinterJobHandler::JobSpooled, this, job_id));
 }
 
 void PrinterJobHandler::OnJobSpoolFailed() {
   DCHECK(CurrentlyOnPrintThread());
-  job_spooler_->AddRef();
-  print_thread_.task_runner()->ReleaseSoon(FROM_HERE, job_spooler_.get());
-  job_spooler_ = NULL;
+  print_thread_.task_runner()->ReleaseSoon(FROM_HERE, std::move(job_spooler_));
   VLOG(1) << "CP_CONNECTOR: Job failed (spool failed)";
   job_handler_task_runner_->PostTask(
       FROM_HERE,
@@ -291,11 +288,10 @@ PrinterJobHandler::~PrinterJobHandler() {
 
 // Begin Response handlers
 CloudPrintURLFetcher::ResponseAction
-PrinterJobHandler::HandlePrinterUpdateResponse(
-    const net::URLFetcher* source,
-    const GURL& url,
-    const base::DictionaryValue* json_data,
-    bool succeeded) {
+PrinterJobHandler::HandlePrinterUpdateResponse(const net::URLFetcher* source,
+                                               const GURL& url,
+                                               const base::Value& json_data,
+                                               bool succeeded) {
   VLOG(1) << "CP_CONNECTOR: Handling printer update response"
           << ", printer id: " << printer_info_cloud_.printer_id;
   // We are done here. Go to the Stop state
@@ -307,16 +303,15 @@ PrinterJobHandler::HandlePrinterUpdateResponse(
 }
 
 CloudPrintURLFetcher::ResponseAction
-PrinterJobHandler::HandleJobMetadataResponse(
-    const net::URLFetcher* source,
-    const GURL& url,
-    const base::DictionaryValue* json_data,
-    bool succeeded) {
+PrinterJobHandler::HandleJobMetadataResponse(const net::URLFetcher* source,
+                                             const GURL& url,
+                                             const base::Value& json_data,
+                                             bool succeeded) {
   VLOG(1) << "CP_CONNECTOR: Handling job metadata response"
           << ", printer id: " << printer_info_cloud_.printer_id;
   if (succeeded) {
     std::vector<JobDetails> jobs =
-        job_queue_handler_.GetJobsFromQueue(*json_data);
+        job_queue_handler_.GetJobsFromQueue(json_data);
     if (!jobs.empty()) {
       if (jobs[0].time_remaining_.is_zero()) {
         job_details_ = jobs[0];
@@ -418,7 +413,7 @@ CloudPrintURLFetcher::ResponseAction
 PrinterJobHandler::HandleInProgressStatusUpdateResponse(
     const net::URLFetcher* source,
     const GURL& url,
-    const base::DictionaryValue* json_data,
+    const base::Value& json_data,
     bool succeeded) {
   VLOG(1) << "CP_CONNECTOR: Handling success status update response"
           << ", printer id: " << printer_info_cloud_.printer_id;
@@ -431,7 +426,7 @@ CloudPrintURLFetcher::ResponseAction
 PrinterJobHandler::HandleFailureStatusUpdateResponse(
     const net::URLFetcher* source,
     const GURL& url,
-    const base::DictionaryValue* json_data,
+    const base::Value& json_data,
     bool succeeded) {
   VLOG(1) << "CP_CONNECTOR: Handling failure status update response"
           << ", printer id: " << printer_info_cloud_.printer_id;
@@ -736,9 +731,9 @@ void PrinterJobHandler::OnReceivePrinterCaps(
       std::string(), &post_data);
   }
   if (printer_info.printer_status != printer_info_.printer_status) {
-    net::AddMultipartValueForUpload(kPrinterStatusValue,
-        base::IntToString(printer_info.printer_status), mime_boundary,
-        std::string(), &post_data);
+    net::AddMultipartValueForUpload(
+        kPrinterStatusValue, base::NumberToString(printer_info.printer_status),
+        mime_boundary, std::string(), &post_data);
   }
 
   // Add local_settings with a current XMPP ping interval.

@@ -38,7 +38,7 @@
     reset.
   </description>
 
-  <interface name="zcr_remote_shell_v1" version="18">
+  <interface name="zcr_remote_shell_v1" version="20">
     <description summary="remote_shell">
       The global interface that allows clients to turn a wl_surface into a
       "real window" which is remotely managed but can be stacked, activated
@@ -148,11 +148,11 @@
 
     <event name="workspace" since="5">
       <description summary="area of remote shell">
-	Defines an area of the remote shell used for layout. Each series of
+	[Deprecated] Defines an area of the remote shell used for layout. Each series of
 	"workspace" events must be terminated by a "configure" event.
       </description>
-      <arg name="id_hi" type="uint"/>
-      <arg name="id_lo" type="uint"/>
+      <arg name="display_id_hi" type="uint"/>
+      <arg name="display_id_lo" type="uint"/>
       <arg name="x" type="int"/>
       <arg name="y" type="int"/>
       <arg name="width" type="int"/>
@@ -193,9 +193,51 @@
       <arg name="id" type="new_id" interface="zcr_input_method_surface_v1"/>
       <arg name="surface" type="object" interface="wl_surface"/>
     </request>
+
+    <!-- Version 19 additions -->
+
+    <event name="display_info" since="19">
+      <description summary="extra display information">
+	[Deprecated] Sends display size in pixels and display identification data, typically
+	in EDID format. Preceded by a "workspace" event for the same display.
+      </description>
+      <arg name="display_id_hi" type="uint"/>
+      <arg name="display_id_lo" type="uint"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+      <arg name="identification_data" type="array"/>
+    </event>
+
+    <!-- Version 20 additions -->
+
+    <event name="workspace_info" since="20">
+      <description summary="area of remote shell in pixels">
+	Sends display information such as size, work area and its related information.
+	Each series of "workspace_info" events must be terminated by a "configure" event.
+      </description>
+      <arg name="display_id_hi" type="uint"/>
+      <arg name="display_id_lo" type="uint"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+      <arg name="inset_left" type="int"/>
+      <arg name="inset_top" type="int"/>
+      <arg name="inset_right" type="int"/>
+      <arg name="inset_bottom" type="int"/>
+      <arg name="stable_inset_left" type="int"/>
+      <arg name="stable_inset_top" type="int"/>
+      <arg name="stable_inset_right" type="int"/>
+      <arg name="stable_inset_bottom" type="int"/>
+      <arg name="systemui_visibility" type="int" summary="systemui_visibility_state"/>
+      <arg name="transform" type="int"/>
+      <arg name="is_internal" type="uint" summary="1 if screen is built-in"/>
+      <arg name="identification_data" type="array" summary="EDID blob data"/>
+    </event>
+
   </interface>
 
-  <interface name="zcr_remote_surface_v1" version="18">
+  <interface name="zcr_remote_surface_v1" version="19">
     <description summary="A desktop window">
       An interface that may be implemented by a wl_surface, for
       implementations that provide a desktop-style user interface
@@ -931,6 +973,24 @@
       <arg name="display_id_lo" type="uint"/>
       <arg name="x" type="int"/>
       <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </request>
+
+    <!-- Version 19 additions -->
+
+    <request name="set_aspect_ratio" since="19">
+      <description summary="set the maximum size">
+	Set an aspect ratio of the surface.
+
+	Values set in this way are double-buffered. They will get
+	applied on the next commit.
+
+	Setting the aspect ratio of the surface. The ratio of the values is used
+	for the ratio of width to height of the surface. The size of surface is
+	restricted to the ratio. If any value is zero, the restriction on aspect
+	ratio is unset.
+      </description>
       <arg name="width" type="int"/>
       <arg name="height" type="int"/>
     </request>

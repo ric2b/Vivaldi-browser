@@ -33,7 +33,7 @@
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_piece.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/timer.h"
@@ -63,6 +63,11 @@ class MediaKeys : public ScriptWrappable,
       ExecutionContext*,
       const WebVector<WebEncryptedMediaSessionType>& supported_session_types,
       std::unique_ptr<WebContentDecryptionModule>);
+
+  MediaKeys(
+      ExecutionContext*,
+      const WebVector<WebEncryptedMediaSessionType>& supported_session_types,
+      std::unique_ptr<WebContentDecryptionModule>);
   ~MediaKeys() override;
 
   MediaKeySession* createSession(ScriptState*,
@@ -72,7 +77,7 @@ class MediaKeys : public ScriptWrappable,
   ScriptPromise setServerCertificate(ScriptState*,
                                      const DOMArrayPiece& server_certificate);
 
-  ScriptPromise getStatusForPolicy(ScriptState*, const MediaKeysPolicy&);
+  ScriptPromise getStatusForPolicy(ScriptState*, const MediaKeysPolicy*);
 
   // Indicates that the provided HTMLMediaElement wants to use this object.
   // Returns true if no other HTMLMediaElement currently references this
@@ -103,10 +108,6 @@ class MediaKeys : public ScriptWrappable,
   bool HasPendingActivity() const final;
 
  private:
-  MediaKeys(
-      ExecutionContext*,
-      const WebVector<WebEncryptedMediaSessionType>& supported_session_types,
-      std::unique_ptr<WebContentDecryptionModule>);
   class PendingAction;
 
   void SetServerCertificateTask(DOMArrayBuffer* server_certificate,

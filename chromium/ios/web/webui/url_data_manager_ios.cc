@@ -10,13 +10,15 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/lazy_instance.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/no_destructor.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/lock.h"
+#include "base/task/post_task.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/url_data_source_ios.h"
+#include "ios/web/public/web_task_traits.h"
 #include "ios/web/public/web_thread.h"
 #include "ios/web/webui/url_data_manager_ios_backend.h"
 #include "ios/web/webui/url_data_source_ios_impl.h"
@@ -27,7 +29,10 @@ namespace {
 
 const char kURLDataManagerIOSKeyName[] = "url_data_manager";
 
-base::LazyInstance<base::Lock>::Leaky g_delete_lock = LAZY_INSTANCE_INITIALIZER;
+base::Lock& GetDeleteLock() {
+  static base::NoDestructor<base::Lock> delete_lock;
+  return *delete_lock;
+}
 
 URLDataManagerIOS* GetFromBrowserState(BrowserState* browser_state) {
   if (!browser_state->GetUserData(kURLDataManagerIOSKeyName)) {
@@ -62,10 +67,10 @@ URLDataManagerIOS::~URLDataManagerIOS() {
 
 void URLDataManagerIOS::AddDataSource(URLDataSourceIOSImpl* source) {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  web::WebThread::PostTask(
-      web::WebThread::IO, FROM_HERE,
-      base::Bind(&AddDataSourceOnIOThread, base::Unretained(browser_state_),
-                 base::WrapRefCounted(source)));
+  base::PostTaskWithTraits(
+      FROM_HERE, {web::WebThread::IO},
+      base::BindOnce(&AddDataSourceOnIOThread, base::Unretained(browser_state_),
+                     base::WrapRefCounted(source)));
 }
 
 // static
@@ -73,7 +78,7 @@ void URLDataManagerIOS::DeleteDataSources() {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   URLDataSources sources;
   {
-    base::AutoLock lock(g_delete_lock.Get());
+    base::AutoLock lock(GetDeleteLock());
     if (!data_sources_)
       return;
     data_sources_->swap(sources);
@@ -96,7 +101,7 @@ void URLDataManagerIOS::DeleteDataSource(
   // to delete.
   bool schedule_delete = false;
   {
-    base::AutoLock lock(g_delete_lock.Get());
+    base::AutoLock lock(GetDeleteLock());
     if (!data_sources_)
       data_sources_ = new URLDataSources();
     schedule_delete = data_sources_->empty();
@@ -104,8 +109,9 @@ void URLDataManagerIOS::DeleteDataSource(
   }
   if (schedule_delete) {
     // Schedule a task to delete the DataSource back on the UI thread.
-    web::WebThread::PostTask(web::WebThread::UI, FROM_HERE,
-                             base::Bind(&URLDataManagerIOS::DeleteDataSources));
+    base::PostTaskWithTraits(
+        FROM_HERE, {web::WebThread::UI},
+        base::BindOnce(&URLDataManagerIOS::DeleteDataSources));
   }
 }
 
@@ -126,7 +132,7 @@ void URLDataManagerIOS::AddWebUIIOSDataSource(BrowserState* browser_state,
 // static
 bool URLDataManagerIOS::IsScheduledForDeletion(
     const URLDataSourceIOSImpl* data_source) {
-  base::AutoLock lock(g_delete_lock.Get());
+  base::AutoLock lock(GetDeleteLock());
   if (!data_sources_)
     return false;
   return base::ContainsValue(*data_sources_, data_source);

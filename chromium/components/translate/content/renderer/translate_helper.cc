@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
+#include "base/feature_list.h"
 #include "base/json/string_escape.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -25,7 +26,10 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
+#include "services/network/public/cpp/features.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/common/loader/url_loader_factory_bundle.h"
+#include "third_party/blink/public/platform/web_isolated_world_info.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_language_detection_details.h"
 #include "third_party/blink/public/web/web_local_frame.h"
@@ -74,7 +78,10 @@ TranslateHelper::TranslateHelper(content::RenderFrame* render_frame,
       world_id_(world_id),
       extension_scheme_(extension_scheme),
       binding_(this),
-      weak_method_factory_(this) {}
+      weak_method_factory_(this) {
+  translate_task_runner_ = this->render_frame()->GetTaskRunner(
+      blink::TaskType::kInternalTranslation);
+}
 
 TranslateHelper::~TranslateHelper() {
 }
@@ -131,7 +138,9 @@ void TranslateHelper::PageCaptured(const base::string16& contents) {
   // captured, it should be treated as a new page to do translation.
   ResetPage();
   mojom::PagePtr page;
-  binding_.Bind(mojo::MakeRequest(&page));
+  binding_.Bind(
+      mojo::MakeRequest(&page),
+      main_frame->GetTaskRunner(blink::TaskType::kInternalTranslation));
   GetTranslateHandler()->RegisterPage(
       std::move(page), details, !details.has_notranslate && !language.empty());
 }
@@ -276,10 +285,20 @@ int64_t TranslateHelper::ExecuteScriptAndGetIntegerResult(
 }
 
 // mojom::Page implementations.
-void TranslateHelper::Translate(const std::string& translate_script,
-                                const std::string& source_lang,
-                                const std::string& target_lang,
-                                TranslateCallback callback) {
+void TranslateHelper::Translate(
+    const std::string& translate_script,
+    network::mojom::URLLoaderFactoryPtr loader_factory_for_translate_script,
+    const std::string& source_lang,
+    const std::string& target_lang,
+    TranslateCallback callback) {
+  url::Origin translate_origin =
+      url::Origin::Create(GetTranslateSecurityOrigin());
+
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    render_frame()->MarkInitiatorAsRequiringSeparateURLLoaderFactory(
+        translate_origin, std::move(loader_factory_for_translate_script));
+  }
+
   WebLocalFrame* main_frame = render_frame()->GetWebFrame();
   if (!main_frame) {
     // Cancelled.
@@ -315,12 +334,10 @@ void TranslateHelper::Translate(const std::string& translate_script,
 
   // Set up v8 isolated world with proper content-security-policy and
   // security-origin.
-  main_frame->SetIsolatedWorldContentSecurityPolicy(
-      world_id_, WebString::FromUTF8(kContentSecurityPolicy));
-
-  GURL security_origin = GetTranslateSecurityOrigin();
-  main_frame->SetIsolatedWorldSecurityOrigin(
-      world_id_, WebSecurityOrigin::Create(security_origin));
+  blink::WebIsolatedWorldInfo info;
+  info.security_origin = WebSecurityOrigin::Create(translate_origin.GetURL());
+  info.content_security_policy = WebString::FromUTF8(kContentSecurityPolicy);
+  main_frame->SetIsolatedWorldInfo(world_id_, info);
 
   if (!IsTranslateLibAvailable()) {
     // Evaluate the script to add the translation related method to the global
@@ -386,7 +403,7 @@ void TranslateHelper::CheckTranslateStatus() {
   }
 
   // The translation is still pending, check again later.
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  translate_task_runner_->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&TranslateHelper::CheckTranslateStatus,
                      weak_method_factory_.GetWeakPtr()),
@@ -430,7 +447,7 @@ void TranslateHelper::TranslatePageImpl(int count) {
     return;
   }
   // Check the status of the translation.
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  translate_task_runner_->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&TranslateHelper::CheckTranslateStatus,
                      weak_method_factory_.GetWeakPtr()),

@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "android_webview/browser/aw_field_trial_creator.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "content/public/browser/browser_main_parts.h"
@@ -26,7 +25,6 @@ class AwBrowserMainParts : public content::BrowserMainParts {
   ~AwBrowserMainParts() override;
 
   // Overriding methods from content::BrowserMainParts.
-  bool ShouldContentCreateFeatureList() override;
   int PreEarlyInitialization() override;
   int PreCreateThreads() override;
   void PreMainMessageLoopRun() override;
@@ -39,11 +37,6 @@ class AwBrowserMainParts : public content::BrowserMainParts {
   std::unique_ptr<base::MessageLoop> main_message_loop_;
 
   AwContentBrowserClient* browser_client_;
-
-  // Responsible for creating a feature list from the seed. This object must
-  // exist for the lifetime of the process as it contains the FieldTrialList
-  // that can be queried for the state of experiments.
-  AwFieldTrialCreator aw_field_trial_creator_;
 
   DISALLOW_COPY_AND_ASSIGN(AwBrowserMainParts);
 };

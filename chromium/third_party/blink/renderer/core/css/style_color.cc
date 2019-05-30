@@ -11,7 +11,7 @@ namespace blink {
 Color StyleColor::ColorFromKeyword(CSSValueID keyword) {
   if (const char* value_name = getValueName(keyword)) {
     if (const NamedColor* named_color =
-            FindColor(value_name, strlen(value_name)))
+            FindColor(value_name, static_cast<wtf_size_t>(strlen(value_name))))
       return Color(named_color->argb_value);
   }
   return LayoutTheme::GetTheme().SystemColor(keyword);
@@ -39,8 +39,9 @@ bool StyleColor::IsColorKeyword(CSSValueID id) {
   //   '-internal-inactive-list-box-selection-text'
   //   '-webkit-focus-ring-color'
   //   '-internal-quirk-inherit'
+  //   '-internal-root-color'
   //
-  return (id >= CSSValueAqua && id <= CSSValueInternalQuirkInherit) ||
+  return (id >= CSSValueAqua && id <= CSSValueInternalRootColor) ||
          (id >= CSSValueAliceblue && id <= CSSValueYellowgreen) ||
          id == CSSValueMenu;
 }

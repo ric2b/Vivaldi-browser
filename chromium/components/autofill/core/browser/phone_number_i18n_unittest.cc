@@ -61,6 +61,15 @@ struct ParseNumberTestCase {
   std::string deduced_region;
 };
 
+namespace {
+
+// Returns a string which is too long to be considered a phone number.
+std::string GenerateTooLongString() {
+  return std::string(i18n::kMaxPhoneNumberSize + 1, '7');
+}
+
+}  // namespace
+
 class ParseNumberTest : public testing::TestWithParam<ParseNumberTestCase> {};
 
 TEST_P(ParseNumberTest, ParsePhoneNumber) {
@@ -72,7 +81,7 @@ TEST_P(ParseNumberTest, ParsePhoneNumber) {
   ::i18n::phonenumbers::PhoneNumber unused_i18n_number;
   EXPECT_EQ(
       test_case.isPossibleNumber,
-      ParsePhoneNumber(ASCIIToUTF16(test_case.input), test_case.assumed_region,
+      ParsePhoneNumber(UTF8ToUTF16(test_case.input), test_case.assumed_region,
                        &country_code, &city_code, &number, &deduced_region,
                        &unused_i18n_number));
   EXPECT_EQ(ASCIIToUTF16(test_case.number), number);
@@ -81,7 +90,7 @@ TEST_P(ParseNumberTest, ParsePhoneNumber) {
   EXPECT_EQ(test_case.deduced_region, deduced_region);
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     PhoneNumberI18NTest,
     ParseNumberTest,
     testing::Values(
@@ -90,6 +99,8 @@ INSTANTIATE_TEST_CASE_P(
         // Test for string with less than 7 digits.  Should give back empty
         // strings.
         ParseNumberTestCase{false, "1234", "US"},
+        // Too long strings should not be parsed.
+        ParseNumberTestCase{false, GenerateTooLongString(), "US"},
         // Test for string with exactly 7 digits.
         // Still a possible number with unknown("ZZ") deduced region.
         ParseNumberTestCase{true, "17134567", "US", "7134567", "", "1", "ZZ"},
@@ -106,6 +117,19 @@ INSTANTIATE_TEST_CASE_P(
         // separators.
         // Should fail parsing in US.
         ParseNumberTestCase{false, "12.345-6789", "US"},
+        // Non-printable ASCII.
+        ParseNumberTestCase{false, "123\x11", "US"},
+        ParseNumberTestCase{false,
+                            "123\x7F"
+                            "567",
+                            "US"},
+        // Unicode noncharacters.
+        ParseNumberTestCase{false,
+                            "1\xEF\xB7\xAF"
+                            "23",
+                            "US"},
+        // Invalid UTF8.
+        ParseNumberTestCase{false, "1\xC0", "US"},
         // Test for string with exactly 10 digits.
         // Should give back phone number and city code.
         // This one going to fail because of the incorrect area code.
@@ -248,6 +272,37 @@ TEST(PhoneNumberUtilTest, FormatPhoneForResponse) {
             i18n::FormatPhoneForResponse("(1) 515-123-1234", "US"));
 }
 
+// Tests that phone numbers are correctly formatted in a national format.
+TEST(PhoneNumberUtilTest, FormatPhoneNationallyForDisplay) {
+  // Invalid US and Brazilian numbers are not formatted.
+  EXPECT_EQ("1234567890",
+            i18n::FormatPhoneNationallyForDisplay("1234567890", "US"));
+  EXPECT_EQ("(11) 13333-4444",
+            i18n::FormatPhoneNationallyForDisplay("(11) 13333-4444", "BR"));
+  EXPECT_EQ("(11) 13333-4444",
+            i18n::FormatPhoneNationallyForDisplay("(11) 13333-4444", "IN"));
+
+  // Valid US, Canadian, UK, and Brazilian numbers are nationally formatted.
+  EXPECT_EQ("(202) 444-0000",
+            i18n::FormatPhoneNationallyForDisplay("2024440000", "US"));
+  EXPECT_EQ("(202) 444-0000",
+            i18n::FormatPhoneNationallyForDisplay("+1(202)4440000", "US"));
+  EXPECT_EQ("(202) 444-0000",
+            i18n::FormatPhoneNationallyForDisplay("12024440000", "US"));
+  EXPECT_EQ("(202) 444-0000",
+            i18n::FormatPhoneNationallyForDisplay("(202)4440000", "US"));
+  EXPECT_EQ("(202) 444-0000",
+            i18n::FormatPhoneNationallyForDisplay("202-444-0000", "US"));
+  EXPECT_EQ("(819) 555-9999",
+            i18n::FormatPhoneNationallyForDisplay("+1(819)555 9999", "CA"));
+  EXPECT_EQ("(819) 555-9999",
+            i18n::FormatPhoneNationallyForDisplay("18195559999", "CA"));
+  EXPECT_EQ("020 7601 4444",
+            i18n::FormatPhoneNationallyForDisplay("+4402076014444", "UK"));
+  EXPECT_EQ("(21) 3883-5600",
+            i18n::FormatPhoneNationallyForDisplay("2138835600", "BR"));
+}
+
 // Tests that the phone numbers are correctly formatted to display to the user.
 TEST(PhoneNumberUtilTest, FormatPhoneForDisplay) {
   // Invalid number is not formatted.
@@ -290,7 +345,7 @@ TEST_P(GetFormattedPhoneNumberForDisplayTest,
                 profile, GetParam().locale)));
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     GetFormattedPhoneNumberForDisplay,
     GetFormattedPhoneNumberForDisplayTest,
     testing::Values(
@@ -397,7 +452,7 @@ INSTANTIATE_TEST_CASE_P(
         // This number is not a valid US number, we won't try to format.
         PhoneNumberFormatCase("55 5342 8400", "US", "5553428400")));
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     GetFormattedPhoneNumberForDisplay_EdgeCases,
     GetFormattedPhoneNumberForDisplayTest,
     testing::Values(

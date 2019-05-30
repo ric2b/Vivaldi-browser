@@ -6,7 +6,9 @@
 
 #include <utility>
 
+#include "ash/public/cpp/tablet_mode.h"
 #include "ash/public/interfaces/constants.mojom.h"
+#include "base/bind.h"
 #include "chrome/browser/ui/ash/tablet_mode_client_observer.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -15,6 +17,8 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/service_manager_connection.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "ui/base/material_design/material_design_controller.h"
+#include "ui/base/ui_base_features.h"
 
 namespace {
 
@@ -25,11 +29,17 @@ TabletModeClient* g_tablet_mode_client_instance = nullptr;
 TabletModeClient::TabletModeClient() : binding_(this) {
   DCHECK(!g_tablet_mode_client_instance);
   g_tablet_mode_client_instance = this;
+  if (features::IsMultiProcessMash()) {
+    ash::TabletMode::SetCallback(base::BindRepeating(
+        &TabletModeClient::tablet_mode_enabled, base::Unretained(this)));
+  }
 }
 
 TabletModeClient::~TabletModeClient() {
   DCHECK_EQ(this, g_tablet_mode_client_instance);
   g_tablet_mode_client_instance = nullptr;
+  if (features::IsMultiProcessMash())
+    ash::TabletMode::SetCallback({});
 }
 
 void TabletModeClient::Init() {
@@ -50,6 +60,14 @@ TabletModeClient* TabletModeClient::Get() {
   return g_tablet_mode_client_instance;
 }
 
+void TabletModeClient::SetTabletModeEnabledForTesting(
+    bool enabled,
+    ash::mojom::TabletModeController::SetTabletModeEnabledForTestingCallback
+        callback) {
+  tablet_mode_controller_->SetTabletModeEnabledForTesting(enabled,
+                                                          std::move(callback));
+}
+
 void TabletModeClient::AddObserver(TabletModeClientObserver* observer) {
   observers_.AddObserver(observer);
 }
@@ -66,6 +84,7 @@ void TabletModeClient::OnTabletModeToggled(bool enabled) {
 
   SetMobileLikeBehaviorEnabled(enabled);
 
+  ui::MaterialDesignController::OnTabletModeToggled(enabled);
   for (auto& observer : observers_)
     observer.OnTabletModeToggled(enabled);
 }
@@ -74,16 +93,20 @@ bool TabletModeClient::ShouldTrackBrowser(Browser* browser) {
   return tablet_mode_enabled_;
 }
 
-void TabletModeClient::TabInsertedAt(TabStripModel* tab_strip_model,
-                                     content::WebContents* contents,
-                                     int index,
-                                     bool foreground) {
+void TabletModeClient::OnTabStripModelChanged(
+    TabStripModel* tab_strip_model,
+    const TabStripModelChange& change,
+    const TabStripSelectionChange& selection) {
+  if (change.type() != TabStripModelChange::kInserted)
+    return;
+
   // We limit the mobile-like behavior to webcontents in tabstrips since many
   // apps and extensions draw their own caption buttons and header frames. We
   // don't want those to shrink down and resize to fit the width of their
   // windows like webpages on mobile do. So this behavior is limited to webpages
   // in tabs and packaged apps.
-  contents->NotifyPreferencesChanged();
+  for (const auto& delta : change.deltas())
+    delta.insert.contents->NotifyPreferencesChanged();
 }
 
 void TabletModeClient::FlushForTesting() {

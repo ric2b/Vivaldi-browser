@@ -13,7 +13,7 @@
  * @type {string}
  * @const
  */
-var FILE_MANAGER_HOST__ID3_PARSER =
+const FILE_MANAGER_HOST__ID3_PARSER =
     'chrome-extension://hhaomjibdihmijegdhdafkllkbggdgoj';
 
 importScripts(
@@ -46,8 +46,8 @@ Id3Parser.prototype.__proto__ = MetadataParser.prototype;
  * @return {number} Synchsafe value.
  * @private
  */
-Id3Parser.readSynchSafe_ = function(reader, length) {
-  var rv = 0;
+Id3Parser.readSynchSafe_ = (reader, length) => {
+  let rv = 0;
 
   switch (length) {
     case 4:
@@ -70,7 +70,7 @@ Id3Parser.readSynchSafe_ = function(reader, length) {
  * @return {number} Uint24 value.
  * @private
  */
-Id3Parser.readUInt24_ = function(reader) {
+Id3Parser.readUInt24_ = reader => {
   return reader.readScalar(2, false) << 16 | reader.readScalar(1, false);
 };
 
@@ -205,20 +205,22 @@ Id3Parser.prototype.readAPIC_ = function(reader, majorVersion, frame, end) {
  * @private
  */
 Id3Parser.prototype.readFrame_ = function(reader, majorVersion) {
-  if (reader.eof())
+  if (reader.eof()) {
     return null;
+  }
 
-  var frame = {};
+  const frame = {};
 
   reader.pushSeek(reader.tell(), ByteReader.SEEK_BEG);
 
-  var position = reader.tell();
+  const position = reader.tell();
 
   frame.name = (majorVersion == 2) ? reader.readNullTerminatedString(3) :
                                      reader.readNullTerminatedString(4);
 
-  if (frame.name == '')
+  if (frame.name == '') {
     return null;
+  }
 
   this.vlog('Found frame ' + (frame.name) + ' at position ' + position);
 
@@ -270,11 +272,11 @@ Id3Parser.prototype.readFrame_ = function(reader, majorVersion) {
  * @param {function(string)} onError Error callback.
  */
 Id3Parser.prototype.parse = function(file, metadata, callback, onError) {
-  var self = this;
+  const self = this;
 
   this.log('Starting id3 parser for ' + file.name);
 
-  var id3v1Parser = new FunctionSequence(
+  const id3v1Parser = new FunctionSequence(
       'id3v1parser',
       [
         /**
@@ -297,9 +299,9 @@ Id3Parser.prototype.parse = function(file, metadata, callback, onError) {
         function extractId3v1(file, reader) {
           if (reader.readString(3) == 'TAG') {
             this.logger.vlog('id3v1 found');
-            var id3v1 = metadata.id3v1 = {};
+            const id3v1 = metadata.id3v1 = {};
 
-            var title = reader.readNullTerminatedString(30).trim();
+            const title = reader.readNullTerminatedString(30).trim();
 
             if (title.length > 0) {
               metadata.title = title;
@@ -307,14 +309,14 @@ Id3Parser.prototype.parse = function(file, metadata, callback, onError) {
 
             reader.seek(3 + 30, ByteReader.SEEK_BEG);
 
-            var artist = reader.readNullTerminatedString(30).trim();
+            const artist = reader.readNullTerminatedString(30).trim();
             if (artist.length > 0) {
               metadata.artist = artist;
             }
 
             reader.seek(3 + 30 + 30, ByteReader.SEEK_BEG);
 
-            var album = reader.readNullTerminatedString(30).trim();
+            const album = reader.readNullTerminatedString(30).trim();
             if (album.length > 0) {
               metadata.album = album;
             }
@@ -323,10 +325,10 @@ Id3Parser.prototype.parse = function(file, metadata, callback, onError) {
         }
       ],
       this,
-      function() {},
-      function(error) {});
+      () => {},
+      error => {});
 
-  var id3v2Parser = new FunctionSequence(
+  const id3v2Parser = new FunctionSequence(
       'id3v2parser',
       [
         function readHead(file) {
@@ -343,7 +345,7 @@ Id3Parser.prototype.parse = function(file, metadata, callback, onError) {
         function checkId3v2(file, reader) {
           if (reader.readString(3) == 'ID3') {
             this.logger.vlog('id3v2 found');
-            var id3v2 = metadata.id3v2 = {};
+            const id3v2 = metadata.id3v2 = {};
             id3v2.major = reader.readScalar(1, false);
             id3v2.minor = reader.readScalar(1, false);
             id3v2.flags = reader.readScalar(1, false);
@@ -362,7 +364,7 @@ Id3Parser.prototype.parse = function(file, metadata, callback, onError) {
          * @param {ByteReader} reader Reader to use for metadata extraction.
          */
         function extractFrames(file, reader) {
-          var id3v2 = metadata.id3v2;
+          const id3v2 = metadata.id3v2;
 
           if ((id3v2.major > 2) &&
               (id3v2.flags & Id3Parser.v2.FLAG_EXTENDED_HEADER != 0)) {
@@ -374,7 +376,7 @@ Id3Parser.prototype.parse = function(file, metadata, callback, onError) {
             }
           }
 
-          var frame;
+          let frame;
 
           while (frame = self.readFrame_(reader, id3v2.major)) {
             metadata.id3v2[frame.name] = frame;
@@ -391,16 +393,17 @@ Id3Parser.prototype.parse = function(file, metadata, callback, onError) {
          * to properly format value before displaying to user.
          */
         function prepareDescription() {
-          var id3v2 = metadata.id3v2;
+          const id3v2 = metadata.id3v2;
 
-          if (id3v2['APIC'])
+          if (id3v2['APIC']) {
             metadata.thumbnailURL = id3v2['APIC'].imageUrl;
-          else if (id3v2['PIC'])
+          } else if (id3v2['PIC']) {
             metadata.thumbnailURL = id3v2['PIC'].imageUrl;
+          }
 
           metadata.description = [];
 
-          for (var key in id3v2) {
+          for (const key in id3v2) {
             if (typeof(Id3Parser.v2.MAPPERS[key]) != 'undefined' &&
                 id3v2[key].value.trim().length > 0) {
               metadata.description.push({
@@ -415,8 +418,8 @@ Id3Parser.prototype.parse = function(file, metadata, callback, onError) {
            * @param {...string} tags
            */
           function extract(propName, tags) {
-            for (var i = 1; i != arguments.length; i++) {
-              var tag = id3v2[arguments[i]];
+            for (let i = 1; i != arguments.length; i++) {
+              const tag = id3v2[arguments[i]];
               if (tag && tag.value) {
                 metadata[propName] = tag.value;
                 break;
@@ -428,7 +431,7 @@ Id3Parser.prototype.parse = function(file, metadata, callback, onError) {
           extract('title', 'TIT2', 'TT2');
           extract('artist', 'TPE1', 'TP1');
 
-          metadata.description.sort(function(a, b) {
+          metadata.description.sort((a, b) => {
             return Id3Parser.METADATA_ORDER.indexOf(a.key) -
                    Id3Parser.METADATA_ORDER.indexOf(b.key);
           });
@@ -436,14 +439,14 @@ Id3Parser.prototype.parse = function(file, metadata, callback, onError) {
         }
       ],
       this,
-      function() {},
-      function(error) {});
+      () => {},
+      error => {});
 
-  var metadataParser = new FunctionParallel(
+  const metadataParser = new FunctionParallel(
       'mp3metadataParser',
       [id3v1Parser, id3v2Parser],
       this,
-      function() {
+      () => {
         callback.call(null, metadata);
       },
       onError);

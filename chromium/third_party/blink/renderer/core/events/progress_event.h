@@ -36,38 +36,40 @@ class CORE_EXPORT ProgressEvent : public Event {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static ProgressEvent* Create() { return new ProgressEvent; }
+  static ProgressEvent* Create() {
+    return MakeGarbageCollected<ProgressEvent>();
+  }
   static ProgressEvent* Create(const AtomicString& type,
                                bool length_computable,
-                               unsigned long long loaded,
-                               unsigned long long total) {
-    return new ProgressEvent(type, length_computable, loaded, total);
+                               uint64_t loaded,
+                               uint64_t total) {
+    return MakeGarbageCollected<ProgressEvent>(type, length_computable, loaded,
+                                               total);
   }
   static ProgressEvent* Create(const AtomicString& type,
-                               const ProgressEventInit& initializer) {
-    return new ProgressEvent(type, initializer);
+                               const ProgressEventInit* initializer) {
+    return MakeGarbageCollected<ProgressEvent>(type, initializer);
   }
 
+  ProgressEvent();
+  ProgressEvent(const AtomicString& type,
+                bool length_computable,
+                uint64_t loaded,
+                uint64_t total);
+  ProgressEvent(const AtomicString&, const ProgressEventInit*);
+
   bool lengthComputable() const { return length_computable_; }
-  unsigned long long loaded() const { return loaded_; }
-  unsigned long long total() const { return total_; }
+  uint64_t loaded() const { return loaded_; }
+  uint64_t total() const { return total_; }
 
   const AtomicString& InterfaceName() const override;
 
   void Trace(blink::Visitor*) override;
 
- protected:
-  ProgressEvent();
-  ProgressEvent(const AtomicString& type,
-                bool length_computable,
-                unsigned long long loaded,
-                unsigned long long total);
-  ProgressEvent(const AtomicString&, const ProgressEventInit&);
-
  private:
   bool length_computable_;
-  unsigned long long loaded_;
-  unsigned long long total_;
+  uint64_t loaded_;
+  uint64_t total_;
 };
 
 }  // namespace blink

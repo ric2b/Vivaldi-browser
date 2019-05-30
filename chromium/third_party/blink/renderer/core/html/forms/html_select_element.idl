@@ -19,10 +19,10 @@
  * Boston, MA 02110-1301, USA.
  */
 
-// https://html.spec.whatwg.org/#the-select-element
+// https://html.spec.whatwg.org/C/#the-select-element
 [HTMLConstructor]
 interface HTMLSelectElement : HTMLElement {
-    [CEReactions, Reflect] attribute DOMString autocomplete;
+    [CEReactions, ImplementedAs=IDLExposedAutofillValue] attribute DOMString autocomplete;
     [CEReactions, Reflect] attribute boolean autofocus;
     [CEReactions, Reflect] attribute boolean disabled;
     [ImplementedAs=formOwner] readonly attribute HTMLFormElement? form;

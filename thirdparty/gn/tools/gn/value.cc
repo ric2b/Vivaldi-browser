@@ -11,71 +11,133 @@
 #include "base/strings/string_util.h"
 #include "tools/gn/scope.h"
 
-Value::Value()
-    : type_(NONE), boolean_value_(false), int_value_(0), origin_(nullptr) {}
+// NOTE: Cannot use = default here due to the use of a union member.
+Value::Value() {}
 
-Value::Value(const ParseNode* origin, Type t)
-    : type_(t), boolean_value_(false), int_value_(0), origin_(origin) {}
+Value::Value(const ParseNode* origin, Type t) : type_(t), origin_(origin) {
+  switch (type_) {
+    case NONE:
+      break;
+    case BOOLEAN:
+      boolean_value_ = false;
+      break;
+    case INTEGER:
+      int_value_ = 0;
+      break;
+    case STRING:
+      new (&string_value_) std::string();
+      break;
+    case LIST:
+      new (&list_value_) std::vector<Value>();
+      break;
+    case SCOPE:
+      new (&scope_value_) std::unique_ptr<Scope>();
+      break;
+  }
+}
 
 Value::Value(const ParseNode* origin, bool bool_val)
     : type_(BOOLEAN),
       boolean_value_(bool_val),
-      int_value_(0),
       origin_(origin) {}
 
 Value::Value(const ParseNode* origin, int64_t int_val)
     : type_(INTEGER),
-      boolean_value_(false),
       int_value_(int_val),
       origin_(origin) {}
 
 Value::Value(const ParseNode* origin, std::string str_val)
     : type_(STRING),
       string_value_(std::move(str_val)),
-      boolean_value_(false),
-      int_value_(0),
       origin_(origin) {}
 
 Value::Value(const ParseNode* origin, const char* str_val)
     : type_(STRING),
       string_value_(str_val),
-      boolean_value_(false),
-      int_value_(0),
       origin_(origin) {}
 
 Value::Value(const ParseNode* origin, std::unique_ptr<Scope> scope)
     : type_(SCOPE),
-      string_value_(),
-      boolean_value_(false),
-      int_value_(0),
       scope_value_(std::move(scope)),
       origin_(origin) {}
 
-Value::Value(const Value& other)
-    : type_(other.type_),
-      string_value_(other.string_value_),
-      boolean_value_(other.boolean_value_),
-      int_value_(other.int_value_),
-      list_value_(other.list_value_),
-      origin_(other.origin_) {
-  if (type() == SCOPE && other.scope_value_.get())
-    scope_value_ = other.scope_value_->MakeClosure();
+Value::Value(const Value& other) : type_(other.type_), origin_(other.origin_) {
+  switch (type_) {
+    case NONE:
+      break;
+    case BOOLEAN:
+      boolean_value_ = other.boolean_value_;
+      break;
+    case INTEGER:
+      int_value_ = other.int_value_;
+      break;
+    case STRING:
+      new (&string_value_) std::string(other.string_value_);
+      break;
+    case LIST:
+      new (&list_value_) std::vector<Value>(other.list_value_);
+      break;
+    case SCOPE:
+      new (&scope_value_) std::unique_ptr<Scope>(
+          other.scope_value_.get() ? other.scope_value_->MakeClosure()
+                                   : nullptr);
+      break;
+  }
 }
 
-Value::Value(Value&& other) noexcept = default;
-
-Value::~Value() = default;
+Value::Value(Value&& other) noexcept
+    : type_(other.type_), origin_(other.origin_) {
+  switch (type_) {
+    case NONE:
+      break;
+    case BOOLEAN:
+      boolean_value_ = other.boolean_value_;
+      break;
+    case INTEGER:
+      int_value_ = other.int_value_;
+      break;
+    case STRING:
+      new (&string_value_) std::string(std::move(other.string_value_));
+      break;
+    case LIST:
+      new (&list_value_) std::vector<Value>(std::move(other.list_value_));
+      break;
+    case SCOPE:
+      new (&scope_value_) std::unique_ptr<Scope>(std::move(other.scope_value_));
+      break;
+  }
+}
 
 Value& Value::operator=(const Value& other) {
-  type_ = other.type_;
-  string_value_ = other.string_value_;
-  boolean_value_ = other.boolean_value_;
-  int_value_ = other.int_value_;
-  list_value_ = other.list_value_;
-  if (type() == SCOPE && other.scope_value_.get())
-    scope_value_ = other.scope_value_->MakeClosure();
-  origin_ = other.origin_;
+  if (this != &other) {
+    this->~Value();
+    new (this) Value(other);
+  }
   return *this;
+}
+
+Value& Value::operator=(Value&& other) noexcept {
+  if (this != &other) {
+    this->~Value();
+    new (this) Value(std::move(other));
+  }
+  return *this;
+}
+
+Value::~Value() {
+  using namespace std;
+  switch (type_) {
+    case STRING:
+      string_value_.~string();
+      break;
+    case LIST:
+      list_value_.~vector<Value>();
+      break;
+    case SCOPE:
+      scope_value_.~unique_ptr<Scope>();
+      break;
+    default:;
+  }
 }
 
 // static
@@ -196,11 +258,11 @@ bool Value::operator==(const Value& other) const {
       }
       return true;
     case Value::SCOPE:
-      // Scopes are always considered not equal because there's currently
-      // no use case for comparing them, and it requires a bunch of complex
-      // iteration code.
+      return scope_value()->CheckCurrentScopeValuesEqual(other.scope_value());
+    case Value::NONE:
       return false;
     default:
+      NOTREACHED();
       return false;
   }
 }

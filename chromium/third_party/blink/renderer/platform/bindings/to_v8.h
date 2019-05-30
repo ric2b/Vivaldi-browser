@@ -10,6 +10,7 @@
 
 #include <utility>
 
+#include "base/containers/span.h"
 #include "base/optional.h"
 #include "third_party/blink/renderer/platform/bindings/callback_function_base.h"
 #include "third_party/blink/renderer/platform/bindings/callback_interface_base.h"
@@ -18,6 +19,7 @@
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
+#include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -45,10 +47,11 @@ inline v8::Local<v8::Value> ToV8(CallbackFunctionBase* callback,
                                  v8::Isolate* isolate) {
   // |creation_context| is intentionally ignored. Callback functions are not
   // wrappers nor clonable. ToV8 on a callback function must be used only when
-  // it's the same origin-domain in the same world.
-  DCHECK(!callback || (callback->CallbackRelevantScriptState()->GetContext() ==
-                       creation_context->CreationContext()));
-  return callback ? callback->CallbackFunction().As<v8::Value>()
+  // it's in the same world.
+  DCHECK(!callback ||
+         (&callback->GetWorld() ==
+          &ScriptState::From(creation_context->CreationContext())->World()));
+  return callback ? callback->CallbackObject().As<v8::Value>()
                   : v8::Null(isolate).As<v8::Value>();
 }
 
@@ -57,11 +60,12 @@ inline v8::Local<v8::Value> ToV8(CallbackFunctionBase* callback,
 inline v8::Local<v8::Value> ToV8(CallbackInterfaceBase* callback,
                                  v8::Local<v8::Object> creation_context,
                                  v8::Isolate* isolate) {
-  // |creation_context| is intentionally ignored. Callback interface objects
-  // are not wrappers nor clonable. ToV8 on a callback interface object must
-  // be used only when it's the same origin-domain in the same world.
-  DCHECK(!callback || (callback->CallbackRelevantScriptState()->GetContext() ==
-                       creation_context->CreationContext()));
+  // |creation_context| is intentionally ignored. Callback interfaces are not
+  // wrappers nor clonable. ToV8 on a callback interface must be used only when
+  // it's in the same world.
+  DCHECK(!callback ||
+         (&callback->GetWorld() ==
+          &ScriptState::From(creation_context->CreationContext())->World()));
   return callback ? callback->CallbackObject().As<v8::Value>()
                   : v8::Null(isolate).As<v8::Value>();
 }
@@ -206,6 +210,13 @@ inline v8::Local<v8::Value> ToV8SequenceInternal(
     v8::Local<v8::Object> creation_context,
     v8::Isolate*);
 
+template <typename T, size_t Extent>
+inline v8::Local<v8::Value> ToV8(base::span<T, Extent> value,
+                                 v8::Local<v8::Object> creation_context,
+                                 v8::Isolate* isolate) {
+  return ToV8SequenceInternal(value, creation_context, isolate);
+}
+
 template <typename T, wtf_size_t inlineCapacity>
 inline v8::Local<v8::Value> ToV8(const Vector<T, inlineCapacity>& value,
                                  v8::Local<v8::Object> creation_context,
@@ -231,14 +242,19 @@ inline v8::Local<v8::Value> ToV8(const Vector<std::pair<String, T>>& value,
     v8::Context::Scope context_scope(creation_context->CreationContext());
     object = v8::Object::New(isolate);
   }
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
   for (unsigned i = 0; i < value.size(); ++i) {
     v8::Local<v8::Value> v8_value = ToV8(value[i].second, object, isolate);
     if (v8_value.IsEmpty())
       v8_value = v8::Undefined(isolate);
-    if (!V8CallBoolean(object->CreateDataProperty(
-            isolate->GetCurrentContext(), V8String(isolate, value[i].first),
-            v8_value)))
+    bool created_property;
+    if (!object
+             ->CreateDataProperty(
+                 context, V8AtomicString(isolate, value[i].first), v8_value)
+             .To(&created_property) ||
+        !created_property) {
       return v8::Local<v8::Value>();
+    }
   }
   return object;
 }
@@ -252,14 +268,19 @@ inline v8::Local<v8::Value> ToV8(const HeapVector<std::pair<String, T>>& value,
     v8::Context::Scope context_scope(creation_context->CreationContext());
     object = v8::Object::New(isolate);
   }
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
   for (unsigned i = 0; i < value.size(); ++i) {
     v8::Local<v8::Value> v8_value = ToV8(value[i].second, object, isolate);
     if (v8_value.IsEmpty())
       v8_value = v8::Undefined(isolate);
-    if (!V8CallBoolean(object->CreateDataProperty(
-            isolate->GetCurrentContext(), V8String(isolate, value[i].first),
-            v8_value)))
+    bool created_property;
+    if (!object
+             ->CreateDataProperty(
+                 context, V8AtomicString(isolate, value[i].first), v8_value)
+             .To(&created_property) ||
+        !created_property) {
       return v8::Local<v8::Value>();
+    }
   }
   return object;
 }
@@ -274,8 +295,9 @@ inline v8::Local<v8::Value> ToV8SequenceInternal(
   v8::Local<v8::Array> array;
   {
     v8::Context::Scope context_scope(creation_context->CreationContext());
-    array = v8::Array::New(isolate, sequence.size());
+    array = v8::Array::New(isolate, SafeCast<int>(sequence.size()));
   }
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
   uint32_t index = 0;
   typename Sequence::const_iterator end = sequence.end();
   for (typename Sequence::const_iterator iter = sequence.begin(); iter != end;
@@ -283,9 +305,12 @@ inline v8::Local<v8::Value> ToV8SequenceInternal(
     v8::Local<v8::Value> value = ToV8(*iter, array, isolate);
     if (value.IsEmpty())
       value = v8::Undefined(isolate);
-    if (!V8CallBoolean(array->CreateDataProperty(isolate->GetCurrentContext(),
-                                                 index++, value)))
+    bool created_property;
+    if (!array->CreateDataProperty(context, index++, value)
+             .To(&created_property) ||
+        !created_property) {
       return v8::Local<v8::Value>();
+    }
   }
   return array;
 }

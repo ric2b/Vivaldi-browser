@@ -32,14 +32,18 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_SERVICE_WORKER_SERVICE_WORKER_CONTAINER_H_
 
 #include <memory>
+#include <vector>
+
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_provider.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_provider_client.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_property.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
+#include "third_party/blink/renderer/modules/service_worker/message_from_service_worker.h"
 #include "third_party/blink/renderer/modules/service_worker/registration_options.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_registration.h"
@@ -50,12 +54,10 @@
 namespace blink {
 
 class ExecutionContext;
-class NavigatorServiceWorker;
-class WebServiceWorker;
-class WebServiceWorkerProvider;
 
 class MODULES_EXPORT ServiceWorkerContainer final
     : public EventTargetWithInlineData,
+      public Supplement<Document>,
       public ContextLifecycleObserver,
       public WebServiceWorkerProviderClient {
   DEFINE_WRAPPERTYPEINFO();
@@ -65,54 +67,97 @@ class MODULES_EXPORT ServiceWorkerContainer final
   using RegistrationCallbacks =
       WebServiceWorkerProvider::WebServiceWorkerRegistrationCallbacks;
 
-  static ServiceWorkerContainer* Create(ExecutionContext*,
-                                        NavigatorServiceWorker*);
+  static const char kSupplementName[];
+
+  static ServiceWorkerContainer* From(Document*);
+
+  static ServiceWorkerContainer* CreateForTesting(
+      Document*,
+      std::unique_ptr<WebServiceWorkerProvider>);
+
+  explicit ServiceWorkerContainer(Document*);
   ~ServiceWorkerContainer() override;
 
   void Trace(blink::Visitor*) override;
 
   ServiceWorker* controller() { return controller_; }
   ScriptPromise ready(ScriptState*);
-  WebServiceWorkerProvider* Provider() { return provider_; }
 
   ScriptPromise registerServiceWorker(ScriptState*,
                                       const String& pattern,
-                                      const RegistrationOptions&);
+                                      const RegistrationOptions*);
   ScriptPromise getRegistration(ScriptState*, const String& document_url);
   ScriptPromise getRegistrations(ScriptState*);
+
+  void startMessages();
 
   void ContextDestroyed(ExecutionContext*) override;
 
   // WebServiceWorkerProviderClient implementation.
-  void SetController(std::unique_ptr<WebServiceWorker::Handle>,
+  void SetController(WebServiceWorkerObjectInfo,
                      bool should_notify_controller_change) override;
-  void DispatchMessageEvent(std::unique_ptr<WebServiceWorker::Handle>,
-                            TransferableMessage) override;
+  void ReceiveMessage(WebServiceWorkerObjectInfo source,
+                      TransferableMessage) override;
   void CountFeature(mojom::WebFeature) override;
 
   // EventTarget overrides.
-  ExecutionContext* GetExecutionContext() const override {
-    return ContextLifecycleObserver::GetExecutionContext();
-  }
+  ExecutionContext* GetExecutionContext() const override;
   const AtomicString& InterfaceName() const override;
 
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(controllerchange);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(message);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(controllerchange, kControllerchange)
+
+  void setOnmessage(EventListener* listener);
+  EventListener* onmessage();
+
+  // Returns the ServiceWorkerRegistration object described by the given info.
+  // Creates a new object if needed, or else returns the existing one.
+  ServiceWorkerRegistration* GetOrCreateServiceWorkerRegistration(
+      WebServiceWorkerRegistrationObjectInfo);
+
+  // Returns the ServiceWorker object described by the given info. Creates a new
+  // object if needed, or else returns the existing one.
+  ServiceWorker* GetOrCreateServiceWorker(WebServiceWorkerObjectInfo);
 
  private:
-  ServiceWorkerContainer(ExecutionContext*, NavigatorServiceWorker*);
-
+  class DomContentLoadedListener;
   class GetRegistrationForReadyCallback;
+
   using ReadyProperty =
       ScriptPromiseProperty<Member<ServiceWorkerContainer>,
                             Member<ServiceWorkerRegistration>,
                             Member<ServiceWorkerRegistration>>;
   ReadyProperty* CreateReadyProperty();
 
-  WebServiceWorkerProvider* provider_;
+  void EnableClientMessageQueue();
+  void DispatchMessageEvent(WebServiceWorkerObjectInfo source,
+                            TransferableMessage);
+
+  std::unique_ptr<WebServiceWorkerProvider> provider_;
   Member<ServiceWorker> controller_;
   Member<ReadyProperty> ready_;
-  Member<NavigatorServiceWorker> navigator_;
+
+  // Map from service worker registration id to JavaScript
+  // ServiceWorkerRegistration object in current execution context.
+  HeapHashMap<int64_t,
+              WeakMember<ServiceWorkerRegistration>,
+              WTF::IntHash<int64_t>,
+              WTF::UnsignedWithZeroKeyHashTraits<int64_t>>
+      service_worker_registration_objects_;
+  // Map from service worker version id to JavaScript ServiceWorker object in
+  // current execution context.
+  HeapHashMap<int64_t,
+              WeakMember<ServiceWorker>,
+              WTF::IntHash<int64_t>,
+              WTF::UnsignedWithZeroKeyHashTraits<int64_t>>
+      service_worker_objects_;
+
+  // For https://w3c.github.io/ServiceWorker/#dfn-client-message-queue
+  // Rather than pausing/resuming the task runner, we implement enabling the
+  // queue using this flag since the task runner is shared with other task
+  // sources.
+  bool is_client_message_queue_enabled_ = false;
+  std::vector<std::unique_ptr<MessageFromServiceWorker>> queued_messages_;
+  Member<DomContentLoadedListener> dom_content_loaded_observer_;
 };
 
 }  // namespace blink

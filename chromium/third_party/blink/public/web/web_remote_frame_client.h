@@ -6,11 +6,13 @@
 #define THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_REMOTE_FRAME_CLIENT_H_
 
 #include "cc/paint/paint_canvas.h"
+#include "third_party/blink/public/common/frame/occlusion_state.h"
+#include "third_party/blink/public/mojom/frame/lifecycle.mojom-shared.h"
 #include "third_party/blink/public/platform/web_focus_type.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_touch_action.h"
 #include "third_party/blink/public/web/web_dom_message_event.h"
-#include "third_party/blink/public/web/web_frame.h"
+#include "third_party/blink/public/web/web_remote_frame.h"
 
 namespace blink {
 class WebURLRequest;
@@ -39,6 +41,8 @@ class WebRemoteFrameClient {
   // A remote frame was asked to start a navigation.
   virtual void Navigate(const WebURLRequest& request,
                         bool should_replace_current_entry,
+                        bool is_opener_navigation,
+                        bool prevent_sandboxed_download,
                         mojo::ScopedMessagePipeHandle blob_url_token) {}
 
   virtual void FrameRectsChanged(const WebRect& local_frame_rect,
@@ -46,9 +50,9 @@ class WebRemoteFrameClient {
 
   virtual void UpdateRemoteViewportIntersection(
       const WebRect& viewport_intersection,
-      bool occluded_or_obscured) {}
+      FrameOcclusionState occlusion_state) {}
 
-  virtual void VisibilityChanged(bool visible) {}
+  virtual void VisibilityChanged(blink::mojom::FrameVisibility visibility) {}
 
   // Set or clear the inert property on the remote frame.
   virtual void SetIsInert(bool) {}

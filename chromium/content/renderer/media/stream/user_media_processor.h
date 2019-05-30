@@ -16,10 +16,10 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "content/common/content_export.h"
-#include "content/common/media/media_stream.mojom.h"
 #include "content/renderer/media/stream/media_stream_dispatcher_eventhandler.h"
-#include "content/renderer/media/stream/media_stream_source.h"
-#include "third_party/blink/public/platform/modules/mediastream/media_devices.mojom.h"
+#include "third_party/blink/public/mojom/mediastream/media_devices.mojom.h"
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
+#include "third_party/blink/public/platform/modules/mediastream/web_platform_media_stream_source.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_user_media_request.h"
 
@@ -28,6 +28,7 @@ class Size;
 }
 
 namespace blink {
+class MediaStreamAudioSource;
 class WebMediaStream;
 class WebMediaStreamSource;
 class WebString;
@@ -37,7 +38,6 @@ namespace content {
 
 class AudioCaptureSettings;
 class AudioDeviceCaptureCapability;
-class MediaStreamAudioSource;
 class MediaStreamDeviceObserver;
 class MediaStreamVideoSource;
 class PeerConnectionDependencyFactory;
@@ -72,13 +72,14 @@ class CONTENT_EXPORT UserMediaProcessor
       RenderFrameImpl* render_frame,
       PeerConnectionDependencyFactory* dependency_factory,
       std::unique_ptr<MediaStreamDeviceObserver> media_stream_device_observer,
-      MediaDevicesDispatcherCallback media_devices_dispatcher_cb);
+      MediaDevicesDispatcherCallback media_devices_dispatcher_cb,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   ~UserMediaProcessor() override;
 
   // It can be assumed that the output of CurrentRequest() remains the same
   // during the execution of a task on the main thread unless ProcessRequest or
   // DeleteWebRequest are invoked.
-  // TODO(guidou): Remove this method. http://crbug.com/764293
+  // TODO(guidou): Remove this method. https://crbug.com/764293
   UserMediaRequest* CurrentRequest();
 
   // Starts processing |request| in order to create a new MediaStream. When
@@ -93,7 +94,7 @@ class CONTENT_EXPORT UserMediaProcessor
   // false.
   // TODO(guidou): Make this method private and replace with a public
   // CancelRequest() method that deletes the request only if it has not been
-  // generated yet. http://crbug.com/764293
+  // generated yet. https://crbug.com/764293
   bool DeleteWebRequest(const blink::WebUserMediaRequest& web_request);
 
   // Stops processing the current request, if any, and stops all sources
@@ -105,11 +106,15 @@ class CONTENT_EXPORT UserMediaProcessor
     return media_stream_device_observer_.get();
   }
 
+  bool HasActiveSources() const;
+
   // MediaStreamDispatcherEventHandler implementation.
-  void OnDeviceStopped(const MediaStreamDevice& device) override;
+  void OnDeviceStopped(const blink::MediaStreamDevice& device) override;
+  void OnDeviceChanged(const blink::MediaStreamDevice& old_device,
+                       const blink::MediaStreamDevice& new_device) override;
 
   void set_media_stream_dispatcher_host_for_testing(
-      mojom::MediaStreamDispatcherHostPtr dispatcher_host) {
+      blink::mojom::MediaStreamDispatcherHostPtr dispatcher_host) {
     dispatcher_host_ = std::move(dispatcher_host);
   }
 
@@ -121,20 +126,19 @@ class CONTENT_EXPORT UserMediaProcessor
       const blink::WebMediaStream& stream,
       blink::WebUserMediaRequest web_request);
   virtual void GetUserMediaRequestFailed(
-      MediaStreamRequestResult result,
+      blink::MediaStreamRequestResult result,
       const blink::WebString& constraint_name = blink::WebString());
 
   // Creates a MediaStreamAudioSource/MediaStreamVideoSource objects.
   // These are virtual for test purposes.
-  // The caller takes ownership of the returned pointers.
-  // TODO(guidou): return std::unique_ptr to make ownership clearer.
-  // http://crbug.com/764293
-  virtual MediaStreamAudioSource* CreateAudioSource(
-      const MediaStreamDevice& device,
-      const MediaStreamSource::ConstraintsCallback& source_ready);
-  virtual MediaStreamVideoSource* CreateVideoSource(
-      const MediaStreamDevice& device,
-      const MediaStreamSource::SourceStoppedCallback& stop_callback);
+  virtual std::unique_ptr<blink::MediaStreamAudioSource> CreateAudioSource(
+      const blink::MediaStreamDevice& device,
+      const blink::WebPlatformMediaStreamSource::ConstraintsCallback&
+          source_ready);
+  virtual std::unique_ptr<MediaStreamVideoSource> CreateVideoSource(
+      const blink::MediaStreamDevice& device,
+      const blink::WebPlatformMediaStreamSource::SourceStoppedCallback&
+          stop_callback);
 
   // Intended to be used only for testing.
   const AudioCaptureSettings& AudioCaptureSettingsForTesting() const;
@@ -142,13 +146,13 @@ class CONTENT_EXPORT UserMediaProcessor
 
  private:
   class RequestInfo;
-  typedef std::vector<blink::WebMediaStreamSource> LocalStreamSources;
+  using LocalStreamSources = std::vector<blink::WebMediaStreamSource>;
 
   void OnStreamGenerated(int request_id,
-                         MediaStreamRequestResult result,
+                         blink::MediaStreamRequestResult result,
                          const std::string& label,
-                         const MediaStreamDevices& audio_devices,
-                         const MediaStreamDevices& video_devices);
+                         const blink::MediaStreamDevices& audio_devices,
+                         const blink::MediaStreamDevices& video_devices);
 
   void GotAllVideoInputFormatsForDevice(
       const blink::WebUserMediaRequest& web_request,
@@ -159,7 +163,7 @@ class CONTENT_EXPORT UserMediaProcessor
   gfx::Size GetScreenSize();
 
   void OnStreamGenerationFailed(int request_id,
-                                MediaStreamRequestResult result);
+                                blink::MediaStreamRequestResult result);
 
   bool IsCurrentRequestInfo(int request_id) const;
   bool IsCurrentRequestInfo(
@@ -169,7 +173,7 @@ class CONTENT_EXPORT UserMediaProcessor
       blink::WebUserMediaRequest web_request);
   void DelayedGetUserMediaRequestFailed(
       blink::WebUserMediaRequest web_request,
-      MediaStreamRequestResult result,
+      blink::MediaStreamRequestResult result,
       const blink::WebString& constraint_name);
 
   // Called when |source| has been stopped from JavaScript.
@@ -178,47 +182,47 @@ class CONTENT_EXPORT UserMediaProcessor
   // Creates a WebKit representation of a stream source based on
   // |device| from the MediaStreamDispatcherHost.
   blink::WebMediaStreamSource InitializeVideoSourceObject(
-      const MediaStreamDevice& device);
+      const blink::MediaStreamDevice& device);
 
   blink::WebMediaStreamSource InitializeAudioSourceObject(
-      const MediaStreamDevice& device,
+      const blink::MediaStreamDevice& device,
       bool* is_pending);
 
   void StartTracks(const std::string& label);
 
   void CreateVideoTracks(
-      const MediaStreamDevices& devices,
+      const blink::MediaStreamDevices& devices,
       blink::WebVector<blink::WebMediaStreamTrack>* webkit_tracks);
 
   void CreateAudioTracks(
-      const MediaStreamDevices& devices,
+      const blink::MediaStreamDevices& devices,
       blink::WebVector<blink::WebMediaStreamTrack>* webkit_tracks);
 
   // Callback function triggered when all native versions of the
   // underlying media sources and tracks have been created and started.
   void OnCreateNativeTracksCompleted(const std::string& label,
                                      RequestInfo* request,
-                                     MediaStreamRequestResult result,
+                                     blink::MediaStreamRequestResult result,
                                      const blink::WebString& result_name);
 
   void OnStreamGeneratedForCancelledRequest(
-      const MediaStreamDevices& audio_devices,
-      const MediaStreamDevices& video_devices);
+      const blink::MediaStreamDevices& audio_devices,
+      const blink::MediaStreamDevices& video_devices);
 
   static void OnAudioSourceStartedOnAudioThread(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       base::WeakPtr<UserMediaProcessor> weak_ptr,
-      MediaStreamSource* source,
-      MediaStreamRequestResult result,
+      blink::WebPlatformMediaStreamSource* source,
+      blink::MediaStreamRequestResult result,
       const blink::WebString& result_name);
 
-  void OnAudioSourceStarted(MediaStreamSource* source,
-                            MediaStreamRequestResult result,
+  void OnAudioSourceStarted(blink::WebPlatformMediaStreamSource* source,
+                            blink::MediaStreamRequestResult result,
                             const blink::WebString& result_name);
 
   void NotifyCurrentRequestInfoOfAudioSourceStarted(
-      MediaStreamSource* source,
-      MediaStreamRequestResult result,
+      blink::WebPlatformMediaStreamSource* source,
+      blink::MediaStreamRequestResult result,
       const blink::WebString& result_name);
 
   void DeleteAllUserMediaRequests();
@@ -226,21 +230,21 @@ class CONTENT_EXPORT UserMediaProcessor
   // Returns the source that use a device with |device.session_id|
   // and |device.device.id|. NULL if such source doesn't exist.
   const blink::WebMediaStreamSource* FindLocalSource(
-      const MediaStreamDevice& device) const {
+      const blink::MediaStreamDevice& device) const {
     return FindLocalSource(local_sources_, device);
   }
   const blink::WebMediaStreamSource* FindPendingLocalSource(
-      const MediaStreamDevice& device) const {
+      const blink::MediaStreamDevice& device) const {
     return FindLocalSource(pending_local_sources_, device);
   }
   const blink::WebMediaStreamSource* FindLocalSource(
       const LocalStreamSources& sources,
-      const MediaStreamDevice& device) const;
+      const blink::MediaStreamDevice& device) const;
 
   // Looks up a local source and returns it if found. If not found, prepares
   // a new WebMediaStreamSource with a NULL extraData pointer.
   blink::WebMediaStreamSource FindOrInitializeSourceObject(
-      const MediaStreamDevice& device);
+      const blink::MediaStreamDevice& device);
 
   // Returns true if we do find and remove the |source|.
   // Otherwise returns false.
@@ -249,7 +253,8 @@ class CONTENT_EXPORT UserMediaProcessor
   void StopLocalSource(const blink::WebMediaStreamSource& source,
                        bool notify_dispatcher);
 
-  const mojom::MediaStreamDispatcherHostPtr& GetMediaStreamDispatcherHost();
+  const blink::mojom::MediaStreamDispatcherHostPtr&
+  GetMediaStreamDispatcherHost();
   const blink::mojom::MediaDevicesDispatcherHostPtr&
   GetMediaDevicesDispatcher();
 
@@ -270,7 +275,7 @@ class CONTENT_EXPORT UserMediaProcessor
   void FinalizeSelectVideoDeviceSettings(
       const blink::WebUserMediaRequest& web_request,
       const VideoCaptureSettings& settings);
-  void SelectVideoContentSettings(bool allow_device_id_constraint);
+  void SelectVideoContentSettings();
 
   void GenerateStreamForCurrentRequestInfo();
 
@@ -289,7 +294,7 @@ class CONTENT_EXPORT UserMediaProcessor
   LocalStreamSources local_sources_;
   LocalStreamSources pending_local_sources_;
 
-  mojom::MediaStreamDispatcherHostPtr dispatcher_host_;
+  blink::mojom::MediaStreamDispatcherHostPtr dispatcher_host_;
 
   // UserMedia requests are processed sequentially. |current_request_info_|
   // contains the request currently being processed, if any, and
@@ -299,6 +304,7 @@ class CONTENT_EXPORT UserMediaProcessor
   base::OnceClosure request_completed_cb_;
 
   RenderFrameImpl* const render_frame_;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

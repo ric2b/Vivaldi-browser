@@ -101,29 +101,10 @@ gpu::ContextResult WebGPUCommandBufferStub::Initialize(
   share_group_ = manager->share_group();
   use_virtualized_gl_context_ = false;
 
-  TransferBufferManager* transfer_buffer_manager;
-  // TODO: all of this is necessary to get a transfer buffer manager - we would
-  // prefer to create a standalone one instead.
-  {
-    scoped_refptr<gles2::FeatureInfo> feature_info = new gles2::FeatureInfo(
-        manager->gpu_driver_bug_workarounds(), manager->gpu_feature_info());
-    gpu::GpuMemoryBufferFactory* gmb_factory =
-        manager->gpu_memory_buffer_factory();
-    context_group_ = new gles2::ContextGroup(
-        manager->gpu_preferences(), gles2::PassthroughCommandDecoderSupported(),
-        manager->mailbox_manager(), CreateMemoryTracker(init_params),
-        manager->shader_translator_cache(),
-        manager->framebuffer_completeness_cache(), feature_info,
-        init_params.attribs.bind_generates_resource, channel_->image_manager(),
-        gmb_factory ? gmb_factory->AsImageFactory() : nullptr,
-        manager->watchdog() /* progress_reporter */,
-        manager->gpu_feature_info(), manager->discardable_manager());
-
-    transfer_buffer_manager = context_group_->transfer_buffer_manager();
-  }
+  memory_tracker_ = CreateMemoryTracker(init_params);
 
   command_buffer_ =
-      std::make_unique<CommandBufferService>(this, transfer_buffer_manager);
+      std::make_unique<CommandBufferService>(this, memory_tracker_.get());
   std::unique_ptr<webgpu::WebGPUDecoder> decoder(webgpu::WebGPUDecoder::Create(
       this, command_buffer_.get(), manager->outputter()));
 
@@ -165,13 +146,12 @@ gpu::ContextResult WebGPUCommandBufferStub::Initialize(
 #endif  // defined(OS_FUCHSIA)
 }
 
-// WebGPUInterface clients should not manipulate the front buffer.
-void WebGPUCommandBufferStub::OnTakeFrontBuffer(const Mailbox& mailbox) {
-  LOG(ERROR) << "Called WebGPUCommandBufferStub::OnTakeFrontBuffer";
+MemoryTracker* WebGPUCommandBufferStub::GetMemoryTracker() const {
+  return memory_tracker_.get();
 }
-void WebGPUCommandBufferStub::OnReturnFrontBuffer(const Mailbox& mailbox,
-                                                  bool is_lost) {
-  LOG(ERROR) << "Called WebGPUCommandBufferStub::OnReturnFrontBuffer";
+
+bool WebGPUCommandBufferStub::HandleMessage(const IPC::Message& message) {
+  return false;
 }
 
 void WebGPUCommandBufferStub::OnSwapBuffers(uint64_t swap_id, uint32_t flags) {}

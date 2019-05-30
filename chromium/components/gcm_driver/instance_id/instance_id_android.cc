@@ -13,6 +13,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "jni/InstanceIDBridge_jni.h"
@@ -92,8 +93,11 @@ void InstanceIDAndroid::GetToken(
     const std::string& authorized_entity,
     const std::string& scope,
     const std::map<std::string, std::string>& options,
+    bool is_lazy,
     const GetTokenCallback& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
+
+  UMA_HISTOGRAM_COUNTS_100("InstanceID.GetToken.OptionsCount", options.size());
 
   int32_t request_id =
       get_token_callbacks_.Add(std::make_unique<GetTokenCallback>(callback));
@@ -109,7 +113,7 @@ void InstanceIDAndroid::GetToken(
       env, java_ref_, request_id,
       ConvertUTF8ToJavaString(env, authorized_entity),
       ConvertUTF8ToJavaString(env, scope),
-      base::android::ToJavaArrayOfStrings(env, options_strings));
+      base::android::ToJavaArrayOfStrings(env, options_strings), is_lazy);
 }
 
 void InstanceIDAndroid::ValidateToken(const std::string& authorized_entity,
@@ -118,7 +122,7 @@ void InstanceIDAndroid::ValidateToken(const std::string& authorized_entity,
                                       const ValidateTokenCallback& callback) {
   // gcm_driver doesn't store tokens on Android, so assume it's valid.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, true /* is_valid */));
+      FROM_HERE, base::BindOnce(callback, true /* is_valid */));
 }
 
 void InstanceIDAndroid::DeleteTokenImpl(const std::string& authorized_entity,

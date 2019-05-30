@@ -74,11 +74,12 @@ class MimeSniffingResourceHandler::Controller : public ResourceController {
     mime_handler_->ResumeInternal();
   }
 
-  void ResumeForRedirect(const base::Optional<net::HttpRequestHeaders>&
-                             modified_request_headers) override {
-    DCHECK(!modified_request_headers.has_value())
-        << "Redirect with modified headers was not supported yet. "
-           "crbug.com/845683";
+  void ResumeForRedirect(
+      const std::vector<std::string>& removed_headers,
+      const net::HttpRequestHeaders& modified_headers) override {
+    DCHECK(removed_headers.empty() && modified_headers.IsEmpty())
+        << "Redirect with removed or modified headers is not used nor "
+           "supported. See https://crbug.com/845683.";
     Resume();
   }
 
@@ -115,7 +116,7 @@ MimeSniffingResourceHandler::MimeSniffingResourceHandler(
     PluginService* plugin_service,
     InterceptingResourceHandler* intercepting_handler,
     net::URLRequest* request,
-    RequestContextType request_context_type)
+    blink::mojom::RequestContextType request_context_type)
     : LayeredResourceHandler(request, std::move(next_handler)),
       state_(STATE_STARTING),
       host_(host),
@@ -161,7 +162,7 @@ void MimeSniffingResourceHandler::OnResponseStarted(
   if (!(response_->head.headers.get() &&
         response_->head.headers->response_code() == 304)) {
     // MIME sniffing should be disabled for a request initiated by fetch().
-    if (request_context_type_ != REQUEST_CONTEXT_TYPE_FETCH &&
+    if (request_context_type_ != blink::mojom::RequestContextType::FETCH &&
         network::ShouldSniffContent(request(), response_.get())) {
       controller->Resume();
       return;
@@ -445,7 +446,8 @@ bool MimeSniffingResourceHandler::MaybeStartInterception() {
 
   // Allow requests for object/embed tags to be intercepted as streams.
   if (info->GetResourceType() == content::RESOURCE_TYPE_OBJECT) {
-    DCHECK(!info->allow_download());
+    DCHECK(info->resource_intercept_policy() !=
+           ResourceInterceptPolicy::kAllowAll);
 
     bool handled_by_plugin;
     if (!CheckForPluginHandler(&handled_by_plugin))
@@ -454,10 +456,10 @@ bool MimeSniffingResourceHandler::MaybeStartInterception() {
       return true;
   }
 
-  if (!info->allow_download())
+  if (info->resource_intercept_policy() == ResourceInterceptPolicy::kAllowNone)
     return true;
 
-  // info->allow_download() == true implies
+  // A policy unequal to ResourceInterceptPolicy::kAllowNone implies
   // info->GetResourceType() == RESOURCE_TYPE_MAIN_FRAME or
   // info->GetResourceType() == RESOURCE_TYPE_SUB_FRAME.
   DCHECK(info->GetResourceType() == RESOURCE_TYPE_MAIN_FRAME ||
@@ -476,6 +478,11 @@ bool MimeSniffingResourceHandler::MaybeStartInterception() {
       return false;
     if (handled_by_plugin)
       return true;
+  }
+
+  if (info->resource_intercept_policy() ==
+      ResourceInterceptPolicy::kAllowPluginOnly) {
+    return true;
   }
 
   // This request is a download.
@@ -580,8 +587,7 @@ bool MimeSniffingResourceHandler::MustDownload() {
              (response_->head.mime_type == "multipart/related" ||
               response_->head.mime_type == "message/rfc822")) {
     // It is OK to load the saved offline copy, in MHTML format.
-    const ResourceRequestInfo* info =
-        ResourceRequestInfo::ForRequest(request());
+    ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request());
     must_download_ =
         !GetContentClient()->browser()->AllowRenderingMhtmlOverHttp(
             info->GetNavigationUIData());

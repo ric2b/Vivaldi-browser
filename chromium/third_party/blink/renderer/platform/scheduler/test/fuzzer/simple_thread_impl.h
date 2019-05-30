@@ -29,14 +29,12 @@ class PLATFORM_EXPORT SimpleThreadImpl : public SimpleThread {
 
   ~SimpleThreadImpl() override;
 
-  ThreadManager* thread_manager() const;
-
  private:
   // This doesn't terminate until |this| object is destructed.
   void Run() override;
 
   // Owner of this class.
-  ThreadPoolManager* thread_pool_manager_;
+  ThreadPoolManager* thread_pool_manager_ = nullptr;
 
   // Time in which the thread is created.
   TimeTicks initial_time_;
@@ -44,11 +42,11 @@ class PLATFORM_EXPORT SimpleThreadImpl : public SimpleThread {
   // The object pointed to by |thread_manager_| is created and destructed from
   // the Run function. This is necessary since it has to be constructed from the
   // thread it should be bound to and destructed from the same thread.
-  ThreadManager* thread_manager_;
+  ThreadManager* thread_manager_ = nullptr;
 
   // Used by the Run function to only terminate when |this| is destructed, and
   // this is used so that |thread_data_| will live as long as |this|.
-  WaitableEvent thread_can_shutdown_;
+  base::WaitableEvent thread_can_shutdown_;
 
   ThreadCallback callback_;
 };

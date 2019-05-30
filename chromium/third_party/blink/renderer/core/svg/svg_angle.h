@@ -38,19 +38,16 @@ enum SVGMarkerOrientType {
   kSVGMarkerOrientAngle,
   kSVGMarkerOrientAutoStartReverse
 };
-template <>
-const SVGEnumerationStringEntries&
-GetStaticStringEntries<SVGMarkerOrientType>();
-template <>
-unsigned short GetMaxExposedEnumValue<SVGMarkerOrientType>();
+DECLARE_SVG_ENUM_MAP(SVGMarkerOrientType);
 
 class SVGMarkerOrientEnumeration final
     : public SVGEnumeration<SVGMarkerOrientType> {
  public:
   static SVGMarkerOrientEnumeration* Create(SVGAngle* angle) {
-    return new SVGMarkerOrientEnumeration(angle);
+    return MakeGarbageCollected<SVGMarkerOrientEnumeration>(angle);
   }
 
+  SVGMarkerOrientEnumeration(SVGAngle*);
   ~SVGMarkerOrientEnumeration() override;
 
   void Add(SVGPropertyBase*, SVGElement*) override;
@@ -66,8 +63,6 @@ class SVGMarkerOrientEnumeration final
   void Trace(blink::Visitor*) override;
 
  private:
-  SVGMarkerOrientEnumeration(SVGAngle*);
-
   void NotifyChange() override;
 
   Member<SVGAngle> angle_;
@@ -86,14 +81,23 @@ class SVGAngle final : public SVGPropertyHelper<SVGAngle> {
     kSvgAngletypeTurn = 5
   };
 
-  static SVGAngle* Create() { return new SVGAngle(); }
+  static SVGAngle* Create() { return MakeGarbageCollected<SVGAngle>(); }
 
+  SVGAngle();
+  SVGAngle(SVGAngleType, float, SVGMarkerOrientType);
   ~SVGAngle() override;
 
   SVGAngleType UnitType() const { return unit_type_; }
 
   void SetValue(float);
   float Value() const;
+
+  // Technically speaking, we don't need any bits (it's always the
+  // same), but we want SetInitial to be called.
+  static constexpr int kInitialValueBits = 1;
+  void SetInitial(unsigned) {
+    NewValueSpecifiedUnits(kSvgAngletypeUnspecified, 0);
+  }
 
   void SetValueInSpecifiedUnits(float value_in_specified_units) {
     value_in_specified_units_ = value_in_specified_units;
@@ -135,9 +139,6 @@ class SVGAngle final : public SVGPropertyHelper<SVGAngle> {
   void Trace(blink::Visitor*) override;
 
  private:
-  SVGAngle();
-  SVGAngle(SVGAngleType, float, SVGMarkerOrientType);
-
   void Assign(const SVGAngle&);
 
   SVGAngleType unit_type_;

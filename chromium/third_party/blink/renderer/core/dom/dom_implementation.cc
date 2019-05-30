@@ -49,12 +49,12 @@
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/page/plugin_data.h"
 #include "third_party/blink/renderer/core/svg_names.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
 #include "third_party/blink/renderer/platform/network/mime/content_type.h"
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
-#include "third_party/blink/renderer/platform/plugins/plugin_data.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 
@@ -84,9 +84,9 @@ XMLDocument* DOMImplementation::createDocument(
   XMLDocument* doc = nullptr;
   DocumentInit init =
       DocumentInit::Create().WithContextDocument(document_->ContextDocument());
-  if (namespace_uri == SVGNames::svgNamespaceURI) {
+  if (namespace_uri == svg_names::kNamespaceURI) {
     doc = XMLDocument::CreateSVG(init);
-  } else if (namespace_uri == HTMLNames::xhtmlNamespaceURI) {
+  } else if (namespace_uri == html_names::xhtmlNamespaceURI) {
     doc = XMLDocument::CreateXHTML(
         init.WithRegistrationContext(document_->RegistrationContext()));
   } else {
@@ -258,8 +258,10 @@ Document* DOMImplementation::createDocument(const String& type,
   // We do not want QuickTime to take over all image types, obviously.
   if ((type == "application/pdf" || type == "text/pdf") && plugin_data &&
       plugin_data->SupportsMimeType(type)) {
-    return PluginDocument::Create(
-        init, plugin_data->PluginBackgroundColorForMimeType(type));
+    return RuntimeEnabledFeatures::MimeHandlerViewInCrossProcessFrameEnabled()
+               ? HTMLDocument::Create(init)
+               : PluginDocument::Create(
+                     init, plugin_data->PluginBackgroundColorForMimeType(type));
   }
   // multipart/x-mixed-replace is only supported for images.
   if (MIMETypeRegistry::IsSupportedImageResourceMIMEType(type) ||
@@ -292,7 +294,7 @@ Document* DOMImplementation::createDocument(const String& type,
   return HTMLDocument::Create(init);
 }
 
-void DOMImplementation::Trace(blink::Visitor* visitor) {
+void DOMImplementation::Trace(Visitor* visitor) {
   visitor->Trace(document_);
   ScriptWrappable::Trace(visitor);
 }

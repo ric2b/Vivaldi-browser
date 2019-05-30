@@ -19,9 +19,10 @@
 #include "ipc/ipc_mojo_param_traits.h"
 #include "storage/common/blob_storage/blob_handle.h"
 #include "third_party/blink/public/platform/web_input_event.h"
-#include "ui/accessibility/ax_modes.h"
+#include "ui/accessibility/ax_mode.h"
 
 namespace blink {
+class PolicyValue;
 class MessagePortChannel;
 struct TransferableMessage;
 }
@@ -33,6 +34,7 @@ struct FrameMsg_ViewChanged_Params;
 namespace viz {
 class FrameSinkId;
 class LocalSurfaceId;
+class LocalSurfaceIdAllocation;
 class SurfaceId;
 class SurfaceInfo;
 }  // namespace viz
@@ -69,7 +71,18 @@ template <>
 struct CONTENT_EXPORT ParamTraits<blink::MessagePortChannel> {
   typedef blink::MessagePortChannel param_type;
   static void Write(base::Pickle* m, const param_type& p);
-  static bool Read(const base::Pickle* m, base::PickleIterator* iter,
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
+                   param_type* r);
+  static void Log(const param_type& p, std::string* l);
+};
+
+template <>
+struct CONTENT_EXPORT ParamTraits<blink::PolicyValue> {
+  typedef blink::PolicyValue param_type;
+  static void Write(base::Pickle* m, const param_type& p);
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
                    param_type* r);
   static void Log(const param_type& p, std::string* l);
 };
@@ -129,6 +142,16 @@ struct CONTENT_EXPORT ParamTraits<viz::FrameSinkId> {
 template <>
 struct CONTENT_EXPORT ParamTraits<viz::LocalSurfaceId> {
   typedef viz::LocalSurfaceId param_type;
+  static void Write(base::Pickle* m, const param_type& p);
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
+                   param_type* r);
+  static void Log(const param_type& p, std::string* l);
+};
+
+template <>
+struct CONTENT_EXPORT ParamTraits<viz::LocalSurfaceIdAllocation> {
+  typedef viz::LocalSurfaceIdAllocation param_type;
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,

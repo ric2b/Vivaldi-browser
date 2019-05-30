@@ -14,7 +14,7 @@
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
-#include "base/system_monitor/system_monitor.h"
+#include "base/system/system_monitor.h"
 #include "base/time/time.h"
 #include "device/gamepad/gamepad_export.h"
 #include "device/gamepad/gamepad_pad_state_provider.h"
@@ -113,6 +113,18 @@ class DEVICE_GAMEPAD_EXPORT GamepadProvider
   // Checks the gamepad state to see if the user has interacted with it. Returns
   // true if any user gesture observers were notified.
   bool CheckForUserGesture();
+
+  void PlayEffectOnPollingThread(
+      uint32_t pad_index,
+      mojom::GamepadHapticEffectType,
+      mojom::GamepadEffectParametersPtr,
+      mojom::GamepadHapticsManager::PlayVibrationEffectOnceCallback,
+      scoped_refptr<base::SequencedTaskRunner>);
+
+  void ResetVibrationOnPollingThread(
+      uint32_t pad_index,
+      mojom::GamepadHapticsManager::PlayVibrationEffectOnceCallback,
+      scoped_refptr<base::SequencedTaskRunner>);
 
   // The duration of the delay between iterations of DoPoll.
   base::TimeDelta sampling_interval_delta_;

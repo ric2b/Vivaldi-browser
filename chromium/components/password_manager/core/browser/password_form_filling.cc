@@ -103,7 +103,7 @@ void ShowInitialPasswordAccountSuggestions(
 
 }  // namespace
 
-void SendFillInformationToRenderer(
+LikelyFormFilling SendFillInformationToRenderer(
     const PasswordManagerClient& client,
     PasswordManagerDriver* driver,
     bool is_blacklisted,
@@ -115,25 +115,82 @@ void SendFillInformationToRenderer(
   DCHECK(driver);
   DCHECK_EQ(PasswordForm::SCHEME_HTML, observed_form.scheme);
 
-  if (!is_blacklisted)
+  const bool new_parsing_enabled =
+      base::FeatureList::IsEnabled(features::kNewPasswordFormParsing);
+
+  // No need to inform the renderer about form blacklisting.
+  // NewPasswordFormManager sends all needed information to the renderer.
+  if (!new_parsing_enabled && !is_blacklisted)
     driver->AllowPasswordGenerationForForm(observed_form);
 
   if (best_matches.empty()) {
     driver->InformNoSavedCredentials();
     metrics_recorder->RecordFillEvent(
         PasswordFormMetricsRecorder::kManagerFillEventNoCredential);
-    return;
+    return LikelyFormFilling::kNoFilling;
   }
   DCHECK(preferred_match);
+
+  // Chrome tries to avoid filling into fields where the user is asked to enter
+  // a fresh password. The old condition for filling on load was: "does the
+  // form lack a new-password field?" The new one is: "does the form have a
+  // current-password field?" because the current-password field is what should
+  // be filled. The old condition is used with the old parser, and the new
+  // condition with the new one. The new one is not explicitly checked here,
+  // because it is implicit in the way filling is done: if there is no current
+  // password field ID, then PasswordAutofillAgent has no way to fill the
+  // password anywhere.
+  const bool form_good_for_filling =
+      new_parsing_enabled || !observed_form.IsPossibleChangePasswordForm();
+
+  // If the parser of the NewPasswordFormManager decides that there is no
+  // current password field, no filling attempt will be made. In this case the
+  // renderer won't treat this as the "first filling" and won't record metrics
+  // accordingly. The browser should not do that either.
+  const bool no_sign_in_form = !observed_form.HasPasswordElement();
+
+  // Wait for the username before filling passwords in case the
+  // FillOnAccountSelectHttp feature is active and the main frame is
+  // insecure.
+  const bool enable_foas_on_http =
+      base::FeatureList::IsEnabled(features::kFillOnAccountSelectHttp) &&
+      !client.IsMainFrameSecure();
 
   // Proceed to autofill.
   // Note that we provide the choices but don't actually prefill a value if:
   // (1) we are in Incognito mode, or
   // (2) if it matched using public suffix domain matching, or
-  // (3) the form is change password form.
-  bool wait_for_username = client.IsIncognito() ||
-                           preferred_match->is_public_suffix_match ||
-                           observed_form.IsPossibleChangePasswordForm();
+  // (3) it would result in unexpected filling in a form with new password
+  //     fields.
+  // (4) the current main frame origin is insecure and the FOAS on HTTP feature
+  //     is active.
+  using WaitForUsernameReason =
+      PasswordFormMetricsRecorder::WaitForUsernameReason;
+  WaitForUsernameReason wait_for_username_reason =
+      WaitForUsernameReason::kDontWait;
+  if (client.IsIncognito()) {
+    wait_for_username_reason = WaitForUsernameReason::kIncognitoMode;
+  } else if (preferred_match->is_public_suffix_match) {
+    wait_for_username_reason = WaitForUsernameReason::kPublicSuffixMatch;
+  } else if (!form_good_for_filling) {
+    wait_for_username_reason = WaitForUsernameReason::kFormNotGoodForFilling;
+  } else if (no_sign_in_form) {
+    // If the parser did not find a current password element, don't fill.
+    wait_for_username_reason = WaitForUsernameReason::kFormNotGoodForFilling;
+  } else if (enable_foas_on_http) {
+    wait_for_username_reason = WaitForUsernameReason::kFoasOnHTTP;
+  }
+
+  // Record no "FirstWaitForUsernameReason" metrics for a form that is not meant
+  // for filling. The renderer won't record a "FirstFillingResult" either.
+  if (!no_sign_in_form) {
+    metrics_recorder->RecordFirstWaitForUsernameReason(
+        wait_for_username_reason);
+  }
+
+  bool wait_for_username =
+      wait_for_username_reason != WaitForUsernameReason::kDontWait;
+
   if (wait_for_username) {
     metrics_recorder->SetManagerAction(
         PasswordFormMetricsRecorder::kManagerActionNone);
@@ -154,12 +211,15 @@ void SendFillInformationToRenderer(
     ShowInitialPasswordAccountSuggestions(client, driver, observed_form,
                                           best_matches, *preferred_match,
                                           wait_for_username);
-  } else {
-    // If fill-on-account-select is not enabled, continue with autofilling any
-    // password forms as traditionally has been done.
-    Autofill(client, driver, observed_form, best_matches, federated_matches,
-             *preferred_match, wait_for_username);
+    return LikelyFormFilling::kShowInitialAccountSuggestions;
   }
+
+  // If fill-on-account-select is not enabled, continue with autofilling any
+  // password forms as traditionally has been done.
+  Autofill(client, driver, observed_form, best_matches, federated_matches,
+           *preferred_match, wait_for_username);
+  return wait_for_username ? LikelyFormFilling::kFillOnAccountSelect
+                           : LikelyFormFilling::kFillOnPageLoad;
 }
 
 }  // namespace password_manager

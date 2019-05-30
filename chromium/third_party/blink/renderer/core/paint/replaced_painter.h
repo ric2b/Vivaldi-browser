@@ -5,12 +5,13 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_REPLACED_PAINTER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_REPLACED_PAINTER_H_
 
+#include "third_party/blink/renderer/platform/geometry/layout_point.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 
 namespace blink {
 
 struct PaintInfo;
-class PaintInfoWithOffset;
+class ScopedPaintState;
 class LayoutReplaced;
 
 class ReplacedPainter {
@@ -22,9 +23,11 @@ class ReplacedPainter {
 
   void Paint(const PaintInfo&);
 
-  bool ShouldPaint(const PaintInfoWithOffset&) const;
+  bool ShouldPaint(const ScopedPaintState&) const;
 
  private:
+  bool ShouldPaintBoxDecorationBackground(const PaintInfo&);
+
   const LayoutReplaced& layout_replaced_;
 };
 

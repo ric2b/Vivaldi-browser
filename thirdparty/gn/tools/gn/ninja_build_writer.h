@@ -20,6 +20,10 @@ class Settings;
 class Target;
 class Toolchain;
 
+namespace base {
+class CommandLine;
+}  // base
+
 // Generates the toplevel "build.ninja" file. This references the individual
 // toolchain files and lists all input .gn files as dependencies of the
 // build itself.
@@ -69,5 +73,9 @@ class NinjaBuildWriter {
 };
 
 extern const char kNinjaRules_Help[];
+
+// Exposed for testing.
+base::CommandLine GetSelfInvocationCommandLine(
+    const BuildSettings* build_settings);
 
 #endif  // TOOLS_GN_NINJA_BUILD_WRITER_H_

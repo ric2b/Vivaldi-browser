@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/login/screens/reset_screen.h"
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/post_task.h"
@@ -17,7 +18,7 @@
 #include "chrome/browser/chromeos/reset/metrics.h"
 #include "chrome/browser/chromeos/tpm_firmware_update.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/dbus/session_manager_client.h"
@@ -92,9 +93,11 @@ void StartTPMFirmwareUpdate(
 }  // namespace
 
 ResetScreen::ResetScreen(BaseScreenDelegate* base_screen_delegate,
-                         ResetView* view)
+                         ResetView* view,
+                         const base::RepeatingClosure& exit_callback)
     : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_OOBE_RESET),
       view_(view),
+      exit_callback_(exit_callback),
       weak_ptr_factory_(this) {
   DCHECK(view_);
   if (view_)
@@ -137,8 +140,9 @@ void ResetScreen::Show() {
 
   ContextEditor context_editor = GetContextEditor();
 
-  bool restart_required = !base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kFirstExecAfterBoot);
+  bool restart_required = user_manager::UserManager::Get()->IsUserLoggedIn() ||
+                          !base::CommandLine::ForCurrentProcess()->HasSwitch(
+                              switches::kFirstExecAfterBoot);
   if (restart_required) {
     context_editor.SetInteger(kContextKeyScreenState, STATE_RESTART_REQUIRED);
     dialog_type = reset::DIALOG_SHORTCUT_RESTART_REQUIRED;
@@ -232,14 +236,17 @@ void ResetScreen::OnUserAction(const std::string& action_id) {
 
 void ResetScreen::OnCancel() {
   if (context_.GetInteger(kContextKeyScreenState, STATE_RESTART_REQUIRED) ==
-      STATE_REVERT_PROMISE)
+      STATE_REVERT_PROMISE) {
     return;
+  }
+
   // Hide Rollback view for the next show.
   if (context_.GetBoolean(kContextKeyIsRollbackAvailable) &&
-      context_.GetBoolean(kContextKeyIsRollbackChecked))
+      context_.GetBoolean(kContextKeyIsRollbackChecked)) {
     OnToggleRollback();
-  Finish(ScreenExitCode::RESET_CANCELED);
+  }
   DBusThreadManager::Get()->GetUpdateEngineClient()->RemoveObserver(this);
+  exit_callback_.Run();
 }
 
 void ResetScreen::OnPowerwash() {
@@ -290,7 +297,7 @@ void ResetScreen::OnRestart() {
   }
   prefs->CommitPendingWrite();
 
-  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->RequestRestart(
+  chromeos::PowerManagerClient::Get()->RequestRestart(
       power_manager::REQUEST_RESTART_FOR_USER, "login reset screen restart");
 }
 
@@ -354,7 +361,7 @@ void ResetScreen::UpdateStatusChanged(
     get_base_screen_delegate()->ShowErrorScreen();
   } else if (status.status ==
              UpdateEngineClient::UPDATE_STATUS_UPDATED_NEED_REBOOT) {
-    DBusThreadManager::Get()->GetPowerManagerClient()->RequestRestart(
+    PowerManagerClient::Get()->RequestRestart(
         power_manager::REQUEST_RESTART_FOR_UPDATE, "login reset screen update");
   }
 }

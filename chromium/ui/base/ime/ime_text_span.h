@@ -11,14 +11,14 @@
 #include <vector>
 
 #include "third_party/skia/include/core/SkColor.h"
-#include "ui/base/ime/ui_base_ime_export.h"
+#include "ui/base/ime/ui_base_ime_types_export.h"
 
 namespace ui {
 
 // Intentionally keep sync with blink::WebImeTextSpan defined in:
 // third_party/WebKit/public/web/WebImeTextSpan.h
 
-struct UI_BASE_IME_EXPORT ImeTextSpan {
+struct UI_BASE_IME_TYPES_EXPORT ImeTextSpan {
   enum class Type {
     // Creates a composition marker.
     kComposition,
@@ -65,6 +65,8 @@ struct UI_BASE_IME_EXPORT ImeTextSpan {
            (this->background_color == rhs.background_color) &&
            (this->suggestion_highlight_color ==
             rhs.suggestion_highlight_color) &&
+           (this->remove_on_finish_composing ==
+            rhs.remove_on_finish_composing) &&
            (this->suggestions == rhs.suggestions);
   }
 
@@ -77,6 +79,7 @@ struct UI_BASE_IME_EXPORT ImeTextSpan {
   Thickness thickness;
   SkColor background_color;
   SkColor suggestion_highlight_color;
+  bool remove_on_finish_composing = false;
   std::vector<std::string> suggestions;
 };
 

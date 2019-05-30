@@ -6,10 +6,9 @@
 
 #include <vector>
 
-#include "ash/test/ash_test_base.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/ui/aura/accessibility/ax_tree_source_aura.h"
+#include "chrome/test/views/chrome_views_test_base.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -20,12 +19,15 @@
 #include "ui/aura/window.h"
 #include "ui/views/accessibility/ax_aura_obj_cache.h"
 #include "ui/views/accessibility/ax_aura_obj_wrapper.h"
+#include "ui/views/accessibility/ax_root_obj_wrapper.h"
+#include "ui/views/accessibility/ax_tree_source_views.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/widget.h"
 
 using views::AXAuraObjCache;
 using views::AXAuraObjWrapper;
+using views::AXTreeSourceViews;
 using views::Textfield;
 using views::View;
 using views::Widget;
@@ -46,20 +48,20 @@ size_t GetSize(AXAuraObjWrapper* tree) {
   return count;
 }
 
-class AXTreeSourceAuraTest : public ash::AshTestBase {
+// Tests integration of AXTreeSourceViews with AXRootObjWrapper.
+// TODO(jamescook): Move into //ui/views/accessibility and combine with
+// AXTreeSourceViewsTest.
+class AXTreeSourceAuraTest : public ChromeViewsTestBase {
  public:
   AXTreeSourceAuraTest() {}
   ~AXTreeSourceAuraTest() override {}
 
   void SetUp() override {
-    AshTestBase::SetUp();
-
-    // This code is running outside of Ash.
-    SetRunningOutsideAsh();
+    ChromeViewsTestBase::SetUp();
 
     widget_ = new Widget();
     Widget::InitParams init_params(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
-    init_params.context = CurrentContext();
+    init_params.context = GetContext();
     widget_->Init(init_params);
 
     content_ = new View();
@@ -71,10 +73,18 @@ class AXTreeSourceAuraTest : public ash::AshTestBase {
     widget_->Show();
   }
 
+  void TearDown() override {
+    // ViewsTestBase requires all Widgets to be closed before shutdown.
+    widget_->CloseNow();
+    ChromeViewsTestBase::TearDown();
+  }
+
  protected:
   Widget* widget_;
   View* content_;
   Textfield* textfield_;
+  // A simulated desktop root with no delegate.
+  AXRootObjWrapper root_wrapper_{nullptr};
 
  private:
   DISALLOW_COPY_AND_ASSIGN(AXTreeSourceAuraTest);
@@ -84,11 +94,11 @@ TEST_F(AXTreeSourceAuraTest, Accessors) {
   // Focus the textfield so the cursor does not disappear.
   textfield_->RequestFocus();
 
-  AXTreeSourceAura ax_tree;
+  AXTreeSourceViews ax_tree(&root_wrapper_, ui::AXTreeID::CreateNewAXTreeID());
   ASSERT_TRUE(ax_tree.GetRoot());
 
   // ID's should be > 0.
-  ASSERT_GE(ax_tree.GetRoot()->GetUniqueId().Get(), 1);
+  ASSERT_GE(ax_tree.GetRoot()->GetUniqueId(), 1);
 
   // Grab the content view directly from cache to avoid walking down the tree.
   AXAuraObjWrapper* content =
@@ -121,7 +131,7 @@ TEST_F(AXTreeSourceAuraTest, Accessors) {
 }
 
 TEST_F(AXTreeSourceAuraTest, DoDefault) {
-  AXTreeSourceAura ax_tree;
+  AXTreeSourceViews ax_tree(&root_wrapper_, ui::AXTreeID::CreateNewAXTreeID());
 
   // Grab a wrapper to |DoDefault| (click).
   AXAuraObjWrapper* textfield_wrapper =
@@ -131,13 +141,13 @@ TEST_F(AXTreeSourceAuraTest, DoDefault) {
   ASSERT_FALSE(textfield_->HasFocus());
   ui::AXActionData action_data;
   action_data.action = ax::mojom::Action::kDoDefault;
-  action_data.target_node_id = textfield_wrapper->GetUniqueId().Get();
+  action_data.target_node_id = textfield_wrapper->GetUniqueId();
   textfield_wrapper->HandleAccessibleAction(action_data);
   ASSERT_TRUE(textfield_->HasFocus());
 }
 
 TEST_F(AXTreeSourceAuraTest, Focus) {
-  AXTreeSourceAura ax_tree;
+  AXTreeSourceViews ax_tree(&root_wrapper_, ui::AXTreeID::CreateNewAXTreeID());
 
   // Grab a wrapper to focus.
   AXAuraObjWrapper* textfield_wrapper =
@@ -147,22 +157,21 @@ TEST_F(AXTreeSourceAuraTest, Focus) {
   ASSERT_FALSE(textfield_->HasFocus());
   ui::AXActionData action_data;
   action_data.action = ax::mojom::Action::kFocus;
-  action_data.target_node_id = textfield_wrapper->GetUniqueId().Get();
+  action_data.target_node_id = textfield_wrapper->GetUniqueId();
   textfield_wrapper->HandleAccessibleAction(action_data);
   ASSERT_TRUE(textfield_->HasFocus());
 }
 
 TEST_F(AXTreeSourceAuraTest, Serialize) {
-  AXTreeSourceAura ax_tree;
+  AXTreeSourceViews ax_tree(&root_wrapper_, ui::AXTreeID::CreateNewAXTreeID());
   AuraAXTreeSerializer ax_serializer(&ax_tree);
   ui::AXTreeUpdate out_update;
 
   // This is the initial serialization.
   ax_serializer.SerializeChanges(ax_tree.GetRoot(), &out_update);
 
-  // The update should just be the desktop node and the fake alert window we use
-  // to handle posting text alerts.
-  ASSERT_EQ(2U, out_update.nodes.size());
+  // The update should just be the desktop node.
+  ASSERT_EQ(1U, out_update.nodes.size());
 
   // Try removing some child views and re-adding which should fire some events.
   content_->RemoveAllChildViews(false /* delete_children */);
@@ -180,11 +189,11 @@ TEST_F(AXTreeSourceAuraTest, Serialize) {
   size_t node_count = out_update2.nodes.size();
 
   // We should have far more updates this time around.
-  ASSERT_GE(node_count, 10U);
+  ASSERT_GE(node_count, 8U);
 
   int text_field_update_index = -1;
   for (size_t i = 0; i < node_count; ++i) {
-    if (textfield_wrapper->GetUniqueId().Get() == out_update2.nodes[i].id)
+    if (textfield_wrapper->GetUniqueId() == out_update2.nodes[i].id)
       text_field_update_index = i;
   }
 
@@ -194,7 +203,7 @@ TEST_F(AXTreeSourceAuraTest, Serialize) {
 }
 
 TEST_F(AXTreeSourceAuraTest, SerializeWindowSetsClipsChildren) {
-  AXTreeSourceAura ax_tree;
+  AXTreeSourceViews ax_tree(&root_wrapper_, ui::AXTreeID::CreateNewAXTreeID());
   AuraAXTreeSerializer ax_serializer(&ax_tree);
   AXAuraObjWrapper* widget_wrapper =
       AXAuraObjCache::GetInstance()->GetOrCreate(widget_);

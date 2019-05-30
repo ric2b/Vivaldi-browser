@@ -14,23 +14,25 @@
 #include "gpu/config/gpu_control_list_testing_data.h"
 
 namespace gpu {
-const int kFeatureListForEntry1[1] = {
+const int kFeatureListForGpuControlTestingEntry1[1] = {
     TEST_FEATURE_0,
 };
 
 const char* const kDisabledExtensionsForEntry1[2] = {
-    "test_extension1", "test_extension2",
+    "test_extension1",
+    "test_extension2",
 };
 
-const uint32_t kCrBugsForEntry1[2] = {
-    1024, 678,
+const uint32_t kCrBugsForGpuControlTestingEntry1[2] = {
+    1024,
+    678,
 };
 
-const uint32_t kDeviceIDsForEntry1[1] = {
+const uint32_t kDeviceIDsForGpuControlTestingEntry1[1] = {
     0x0640,
 };
 
-const GpuControlList::DriverInfo kDriverInfoForEntry1 = {
+const GpuControlList::DriverInfo kDriverInfoForGpuControlTestingEntry1 = {
     nullptr,  // driver_vendor
     {GpuControlList::kEQ, GpuControlList::kVersionStyleNumerical, "1.6.18",
      nullptr},  // driver_version
@@ -38,27 +40,27 @@ const GpuControlList::DriverInfo kDriverInfoForEntry1 = {
      nullptr},  // driver_date
 };
 
-const int kFeatureListForEntry2[1] = {
+const int kFeatureListForGpuControlTestingEntry2[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry3[1] = {
+const int kFeatureListForGpuControlTestingEntry3[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry4[1] = {
+const int kFeatureListForGpuControlTestingEntry4[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry5[1] = {
+const int kFeatureListForGpuControlTestingEntry5[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry6[1] = {
+const int kFeatureListForGpuControlTestingEntry6[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::DriverInfo kDriverInfoForEntry6 = {
+const GpuControlList::DriverInfo kDriverInfoForGpuControlTestingEntry6 = {
     nullptr,  // driver_vendor
     {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical, nullptr,
      nullptr},  // driver_version
@@ -66,19 +68,20 @@ const GpuControlList::DriverInfo kDriverInfoForEntry6 = {
      nullptr},  // driver_date
 };
 
-const int kFeatureListForEntry7[1] = {
+const int kFeatureListForGpuControlTestingEntry7[1] = {
     TEST_FEATURE_0,
 };
 
-const uint32_t kDeviceIDsForEntry7[2] = {
-    0x1023, 0x0640,
+const uint32_t kDeviceIDsForGpuControlTestingEntry7[2] = {
+    0x1023,
+    0x0640,
 };
 
-const int kFeatureListForEntry8[1] = {
+const int kFeatureListForGpuControlTestingEntry8[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry9[1] = {
+const int kFeatureListForGpuControlTestingEntry9[1] = {
     TEST_FEATURE_0,
 };
 
@@ -92,11 +95,12 @@ const GpuControlList::More kMoreForEntry9 = {
     0,          // gl_reset_notification_strategy
     true,       // direct_rendering
     {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical, nullptr,
-     nullptr},  // gpu_count
-    0,          // test_group
+     nullptr},                  // gpu_count
+    GpuControlList::kDontCare,  // hardware_overlay
+    0,                          // test_group
 };
 
-const int kFeatureListForEntry10[1] = {
+const int kFeatureListForGpuControlTestingEntry10[1] = {
     TEST_FEATURE_0,
 };
 
@@ -110,11 +114,12 @@ const GpuControlList::More kMoreForEntry10 = {
     0,          // gl_reset_notification_strategy
     true,       // direct_rendering
     {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical, nullptr,
-     nullptr},  // gpu_count
-    0,          // test_group
+     nullptr},                  // gpu_count
+    GpuControlList::kDontCare,  // hardware_overlay
+    0,                          // test_group
 };
 
-const int kFeatureListForEntry11[1] = {
+const int kFeatureListForGpuControlTestingEntry11[1] = {
     TEST_FEATURE_0,
 };
 
@@ -128,63 +133,79 @@ const GpuControlList::More kMoreForEntry11 = {
     0,          // gl_reset_notification_strategy
     true,       // direct_rendering
     {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical, nullptr,
-     nullptr},  // gpu_count
-    0,          // test_group
+     nullptr},                  // gpu_count
+    GpuControlList::kDontCare,  // hardware_overlay
+    0,                          // test_group
 };
 
-const int kFeatureListForEntry12[1] = {
+const int kFeatureListForGpuControlTestingEntry12[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::GLStrings kGLStringsForEntry12 = {
-    "NVIDIA", nullptr, nullptr, nullptr,
+const GpuControlList::GLStrings kGLStringsForGpuControlTestingEntry12 = {
+    "NVIDIA",
+    nullptr,
+    nullptr,
+    nullptr,
 };
 
-const int kFeatureListForEntry13[1] = {
+const int kFeatureListForGpuControlTestingEntry13[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::GLStrings kGLStringsForEntry13 = {
-    "X\\.Org.*", nullptr, nullptr, nullptr,
+const GpuControlList::GLStrings kGLStringsForGpuControlTestingEntry13 = {
+    "X\\.Org.*",
+    nullptr,
+    nullptr,
+    nullptr,
 };
 
-const int kFeatureListForEntry14[1] = {
+const int kFeatureListForGpuControlTestingEntry14[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::GLStrings kGLStringsForEntry14 = {
-    nullptr, ".*GeForce.*", nullptr, nullptr,
+const GpuControlList::GLStrings kGLStringsForGpuControlTestingEntry14 = {
+    nullptr,
+    ".*GeForce.*",
+    nullptr,
+    nullptr,
 };
 
-const int kFeatureListForEntry15[1] = {
+const int kFeatureListForGpuControlTestingEntry15[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::GLStrings kGLStringsForEntry15 = {
-    nullptr, "(?i).*software.*", nullptr, nullptr,
+const GpuControlList::GLStrings kGLStringsForGpuControlTestingEntry15 = {
+    nullptr,
+    "(?i).*software.*",
+    nullptr,
+    nullptr,
 };
 
-const int kFeatureListForEntry16[1] = {
+const int kFeatureListForGpuControlTestingEntry16[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::GLStrings kGLStringsForEntry16 = {
-    nullptr, nullptr, ".*GL_SUN_slice_accum", nullptr,
+const GpuControlList::GLStrings kGLStringsForGpuControlTestingEntry16 = {
+    nullptr,
+    nullptr,
+    ".*GL_SUN_slice_accum",
+    nullptr,
 };
 
-const int kFeatureListForEntry17[1] = {
+const int kFeatureListForGpuControlTestingEntry17[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry18[1] = {
+const int kFeatureListForGpuControlTestingEntry18[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry19[1] = {
+const int kFeatureListForGpuControlTestingEntry19[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::DriverInfo kDriverInfoForEntry19 = {
+const GpuControlList::DriverInfo kDriverInfoForGpuControlTestingEntry19 = {
     "NVIDIA.*",  // driver_vendor
     {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical, nullptr,
      nullptr},  // driver_version
@@ -192,11 +213,11 @@ const GpuControlList::DriverInfo kDriverInfoForEntry19 = {
      nullptr},  // driver_date
 };
 
-const int kFeatureListForEntry20[1] = {
+const int kFeatureListForGpuControlTestingEntry20[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::DriverInfo kDriverInfoForEntry20 = {
+const GpuControlList::DriverInfo kDriverInfoForGpuControlTestingEntry20 = {
     nullptr,  // driver_vendor
     {GpuControlList::kEQ, GpuControlList::kVersionStyleLexical, "8.76",
      nullptr},  // driver_version
@@ -204,11 +225,11 @@ const GpuControlList::DriverInfo kDriverInfoForEntry20 = {
      nullptr},  // driver_date
 };
 
-const int kFeatureListForEntry21[1] = {
+const int kFeatureListForGpuControlTestingEntry21[1] = {
     TEST_FEATURE_1,
 };
 
-const GpuControlList::DriverInfo kDriverInfoForEntry21 = {
+const GpuControlList::DriverInfo kDriverInfoForGpuControlTestingEntry21 = {
     nullptr,  // driver_vendor
     {GpuControlList::kLT, GpuControlList::kVersionStyleNumerical, "10.7",
      nullptr},  // driver_version
@@ -216,15 +237,19 @@ const GpuControlList::DriverInfo kDriverInfoForEntry21 = {
      nullptr},  // driver_date
 };
 
-const int kFeatureListForEntry22[1] = {
+const int kFeatureListForGpuControlTestingEntry22[1] = {
     TEST_FEATURE_1,
 };
 
-const GpuControlList::GLStrings kGLStringsForEntry22Exception0 = {
-    nullptr, ".*mesa.*", nullptr, nullptr,
+const GpuControlList::GLStrings
+    kGLStringsForGpuControlTestingEntry22Exception0 = {
+        nullptr,
+        ".*mesa.*",
+        nullptr,
+        nullptr,
 };
 
-const int kFeatureListForEntry23[1] = {
+const int kFeatureListForGpuControlTestingEntry23[1] = {
     TEST_FEATURE_1,
 };
 
@@ -238,32 +263,39 @@ const GpuControlList::More kMoreForEntry23 = {
     0,          // gl_reset_notification_strategy
     true,       // direct_rendering
     {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical, nullptr,
-     nullptr},  // gpu_count
-    0,          // test_group
+     nullptr},                  // gpu_count
+    GpuControlList::kDontCare,  // hardware_overlay
+    0,                          // test_group
 };
 
-const int kFeatureListForEntry24[3] = {
-    TEST_FEATURE_0, TEST_FEATURE_1, TEST_FEATURE_2,
+const int kFeatureListForGpuControlTestingEntry24[3] = {
+    TEST_FEATURE_0,
+    TEST_FEATURE_1,
+    TEST_FEATURE_2,
 };
 
-const int kFeatureListForEntry25[2] = {
-    TEST_FEATURE_1, TEST_FEATURE_2,
+const int kFeatureListForGpuControlTestingEntry25[2] = {
+    TEST_FEATURE_1,
+    TEST_FEATURE_2,
 };
 
-const int kFeatureListForEntry26[1] = {
+const int kFeatureListForGpuControlTestingEntry26[1] = {
     TEST_FEATURE_0,
 };
 
-const uint32_t kDeviceIDsForEntry26[1] = {
+const uint32_t kDeviceIDsForGpuControlTestingEntry26[1] = {
     0x0640,
 };
 
-const int kFeatureListForEntry27[1] = {
+const int kFeatureListForGpuControlTestingEntry27[1] = {
     TEST_FEATURE_0,
 };
 
 const char* const kMachineModelNameForEntry27[4] = {
-    "Nexus 4", "XT1032", "GT-.*", "SCH-.*",
+    "Nexus 4",
+    "XT1032",
+    "GT-.*",
+    "SCH-.*",
 };
 
 const GpuControlList::MachineModelInfo kMachineModelInfoForEntry27 = {
@@ -273,7 +305,7 @@ const GpuControlList::MachineModelInfo kMachineModelInfoForEntry27 = {
      nullptr},  // machine model version
 };
 
-const int kFeatureListForEntry28[1] = {
+const int kFeatureListForGpuControlTestingEntry28[1] = {
     TEST_FEATURE_0,
 };
 
@@ -289,7 +321,7 @@ const GpuControlList::MachineModelInfo kMachineModelInfoForEntry28Exception0 = {
      nullptr},  // machine model version
 };
 
-const int kFeatureListForEntry29[1] = {
+const int kFeatureListForGpuControlTestingEntry29[1] = {
     TEST_FEATURE_0,
 };
 
@@ -304,7 +336,7 @@ const GpuControlList::MachineModelInfo kMachineModelInfoForEntry29 = {
      nullptr},  // machine model version
 };
 
-const int kFeatureListForEntry30[1] = {
+const int kFeatureListForGpuControlTestingEntry30[1] = {
     TEST_FEATURE_0,
 };
 
@@ -326,71 +358,72 @@ const GpuControlList::MachineModelInfo kMachineModelInfoForEntry30Exception0 = {
      nullptr},  // machine model version
 };
 
-const int kFeatureListForEntry31[1] = {
+const int kFeatureListForGpuControlTestingEntry31[1] = {
     TEST_FEATURE_0,
 };
 
-const uint32_t kDeviceIDsForEntry31[1] = {
+const uint32_t kDeviceIDsForGpuControlTestingEntry31[1] = {
     0x0166,
 };
 
-const int kFeatureListForEntry32[1] = {
+const int kFeatureListForGpuControlTestingEntry32[1] = {
     TEST_FEATURE_0,
 };
 
-const uint32_t kDeviceIDsForEntry32[1] = {
+const uint32_t kDeviceIDsForGpuControlTestingEntry32[1] = {
     0x0640,
 };
 
-const int kFeatureListForEntry33[1] = {
+const int kFeatureListForGpuControlTestingEntry33[1] = {
     TEST_FEATURE_0,
 };
 
-const uint32_t kDeviceIDsForEntry33[1] = {
+const uint32_t kDeviceIDsForGpuControlTestingEntry33[1] = {
     0x0166,
 };
 
-const int kFeatureListForEntry34[1] = {
+const int kFeatureListForGpuControlTestingEntry34[1] = {
     TEST_FEATURE_0,
 };
 
-const uint32_t kDeviceIDsForEntry34[1] = {
+const uint32_t kDeviceIDsForGpuControlTestingEntry34[1] = {
     0x0166,
 };
 
-const int kFeatureListForEntry35[1] = {
+const int kFeatureListForGpuControlTestingEntry35[1] = {
     TEST_FEATURE_0,
 };
 
-const uint32_t kDeviceIDsForEntry35[1] = {
+const uint32_t kDeviceIDsForGpuControlTestingEntry35[1] = {
     0x0166,
 };
 
-const int kFeatureListForEntry36[1] = {
+const int kFeatureListForGpuControlTestingEntry36[1] = {
     TEST_FEATURE_0,
 };
 
-const uint32_t kDeviceIDsForEntry36[2] = {
-    0x0166, 0x0168,
+const uint32_t kDeviceIDsForGpuControlTestingEntry36[2] = {
+    0x0166,
+    0x0168,
 };
 
-const int kFeatureListForEntry37[1] = {
+const int kFeatureListForGpuControlTestingEntry37[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry38[1] = {
+const int kFeatureListForGpuControlTestingEntry38[1] = {
     TEST_FEATURE_0,
 };
 
-const uint32_t kDeviceIDsForEntry38[1] = {
+const uint32_t kDeviceIDsForGpuControlTestingEntry38[1] = {
     0x0640,
 };
 
-const int kFeatureListForEntry39[1] = {
+const int kFeatureListForGpuControlTestingEntry39[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry40[1] = {
+const int kFeatureListForGpuControlTestingEntry40[1] = {
     TEST_FEATURE_0,
 };
 
@@ -404,63 +437,66 @@ const GpuControlList::More kMoreForEntry40 = {
     0,          // gl_reset_notification_strategy
     true,       // direct_rendering
     {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical, nullptr,
-     nullptr},  // gpu_count
-    0,          // test_group
+     nullptr},                  // gpu_count
+    GpuControlList::kDontCare,  // hardware_overlay
+    0,                          // test_group
 };
 
-const int kFeatureListForEntry41[1] = {
+const int kFeatureListForGpuControlTestingEntry41[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry42[1] = {
+const int kFeatureListForGpuControlTestingEntry42[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry43[1] = {
+const int kFeatureListForGpuControlTestingEntry43[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry44[1] = {
+const int kFeatureListForGpuControlTestingEntry44[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry45[1] = {
+const int kFeatureListForGpuControlTestingEntry45[1] = {
     TEST_FEATURE_0,
 };
 
-const uint32_t kDeviceIDsForEntry45Exception0[1] = {
+const uint32_t kDeviceIDsForGpuControlTestingEntry45Exception0[1] = {
     0x2a06,
 };
 
-const GpuControlList::DriverInfo kDriverInfoForEntry45Exception0 = {
-    nullptr,  // driver_vendor
-    {GpuControlList::kGE, GpuControlList::kVersionStyleNumerical, "8.1",
-     nullptr},  // driver_version
-    {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical, nullptr,
-     nullptr},  // driver_date
+const GpuControlList::DriverInfo
+    kDriverInfoForGpuControlTestingEntry45Exception0 = {
+        nullptr,  // driver_vendor
+        {GpuControlList::kGE, GpuControlList::kVersionStyleNumerical, "8.1",
+         nullptr},  // driver_version
+        {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical,
+         nullptr, nullptr},  // driver_date
 };
 
-const uint32_t kDeviceIDsForEntry45Exception1[1] = {
+const uint32_t kDeviceIDsForGpuControlTestingEntry45Exception1[1] = {
     0x2a02,
 };
 
-const GpuControlList::DriverInfo kDriverInfoForEntry45Exception1 = {
-    nullptr,  // driver_vendor
-    {GpuControlList::kGE, GpuControlList::kVersionStyleNumerical, "9.1",
-     nullptr},  // driver_version
-    {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical, nullptr,
-     nullptr},  // driver_date
+const GpuControlList::DriverInfo
+    kDriverInfoForGpuControlTestingEntry45Exception1 = {
+        nullptr,  // driver_vendor
+        {GpuControlList::kGE, GpuControlList::kVersionStyleNumerical, "9.1",
+         nullptr},  // driver_version
+        {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical,
+         nullptr, nullptr},  // driver_date
 };
 
-const int kFeatureListForEntry46[1] = {
+const int kFeatureListForGpuControlTestingEntry46[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry47[1] = {
+const int kFeatureListForGpuControlTestingEntry47[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry48[1] = {
+const int kFeatureListForGpuControlTestingEntry48[1] = {
     TEST_FEATURE_0,
 };
 
@@ -474,19 +510,20 @@ const GpuControlList::More kMoreForEntry48 = {
     0,          // gl_reset_notification_strategy
     true,       // direct_rendering
     {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical, nullptr,
-     nullptr},  // gpu_count
-    0,          // test_group
+     nullptr},                  // gpu_count
+    GpuControlList::kDontCare,  // hardware_overlay
+    0,                          // test_group
 };
 
-const int kFeatureListForEntry49[1] = {
+const int kFeatureListForGpuControlTestingEntry49[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry50[1] = {
+const int kFeatureListForGpuControlTestingEntry50[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::DriverInfo kDriverInfoForEntry50 = {
+const GpuControlList::DriverInfo kDriverInfoForGpuControlTestingEntry50 = {
     nullptr,  // driver_vendor
     {GpuControlList::kLE, GpuControlList::kVersionStyleNumerical,
      "8.17.12.6973", nullptr},  // driver_version
@@ -494,11 +531,11 @@ const GpuControlList::DriverInfo kDriverInfoForEntry50 = {
      nullptr},  // driver_date
 };
 
-const int kFeatureListForEntry51[1] = {
+const int kFeatureListForGpuControlTestingEntry51[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::DriverInfo kDriverInfoForEntry51 = {
+const GpuControlList::DriverInfo kDriverInfoForGpuControlTestingEntry51 = {
     nullptr,  // driver_vendor
     {GpuControlList::kLT, GpuControlList::kVersionStyleNumerical, "12",
      nullptr},  // driver_version
@@ -506,23 +543,27 @@ const GpuControlList::DriverInfo kDriverInfoForEntry51 = {
      nullptr},  // driver_date
 };
 
-const int kFeatureListForEntry52[1] = {
+const int kFeatureListForGpuControlTestingEntry52[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::GLStrings kGLStringsForEntry52Exception0 = {
-    nullptr, ".*mesa.*", nullptr, nullptr,
+const GpuControlList::GLStrings
+    kGLStringsForGpuControlTestingEntry52Exception0 = {
+        nullptr,
+        ".*mesa.*",
+        nullptr,
+        nullptr,
 };
 
-const int kFeatureListForEntry53[1] = {
+const int kFeatureListForGpuControlTestingEntry53[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry54[1] = {
+const int kFeatureListForGpuControlTestingEntry54[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::DriverInfo kDriverInfoForEntry54 = {
+const GpuControlList::DriverInfo kDriverInfoForGpuControlTestingEntry54 = {
     nullptr,  // driver_vendor
     {GpuControlList::kLT, GpuControlList::kVersionStyleNumerical, "10.7",
      nullptr},  // driver_version
@@ -531,14 +572,16 @@ const GpuControlList::DriverInfo kDriverInfoForEntry54 = {
 };
 
 const char* const kDisabledExtensionsForEntry55[2] = {
-    "test_extension2", "test_extension1",
+    "test_extension2",
+    "test_extension1",
 };
 
 const char* const kDisabledExtensionsForEntry56[2] = {
-    "test_extension3", "test_extension2",
+    "test_extension3",
+    "test_extension2",
 };
 
-const int kFeatureListForEntry57[1] = {
+const int kFeatureListForGpuControlTestingEntry57[1] = {
     TEST_FEATURE_1,
 };
 
@@ -552,15 +595,16 @@ const GpuControlList::More kMoreForEntry57 = {
     0,          // gl_reset_notification_strategy
     false,      // direct_rendering
     {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical, nullptr,
-     nullptr},  // gpu_count
-    0,          // test_group
+     nullptr},                  // gpu_count
+    GpuControlList::kDontCare,  // hardware_overlay
+    0,                          // test_group
 };
 
-const int kFeatureListForEntry58[1] = {
+const int kFeatureListForGpuControlTestingEntry58[1] = {
     TEST_FEATURE_0,
 };
 
-const int kFeatureListForEntry59[1] = {
+const int kFeatureListForGpuControlTestingEntry59[1] = {
     TEST_FEATURE_0,
 };
 
@@ -574,11 +618,12 @@ const GpuControlList::More kMoreForEntry59 = {
     0,          // gl_reset_notification_strategy
     true,       // direct_rendering
     {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical, nullptr,
-     nullptr},  // gpu_count
-    1,          // test_group
+     nullptr},                  // gpu_count
+    GpuControlList::kDontCare,  // hardware_overlay
+    1,                          // test_group
 };
 
-const int kFeatureListForEntry60[1] = {
+const int kFeatureListForGpuControlTestingEntry60[1] = {
     TEST_FEATURE_1,
 };
 
@@ -592,69 +637,89 @@ const GpuControlList::More kMoreForEntry60 = {
     0,          // gl_reset_notification_strategy
     true,       // direct_rendering
     {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical, nullptr,
-     nullptr},  // gpu_count
-    2,          // test_group
+     nullptr},                  // gpu_count
+    GpuControlList::kDontCare,  // hardware_overlay
+    2,                          // test_group
 };
 
-const int kFeatureListForEntry61[1] = {
+const int kFeatureListForGpuControlTestingEntry61[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::GpuSeriesType kGpuSeriesForEntry61[2] = {
-    GpuControlList::GpuSeriesType::kIntelSkyLake,
-    GpuControlList::GpuSeriesType::kIntelKabyLake,
+const GpuSeriesType kGpuSeriesForEntry61[2] = {
+    GpuSeriesType::kIntelSkyLake,
+    GpuSeriesType::kIntelKabyLake,
 };
 
-const int kFeatureListForEntry62[1] = {
+const int kFeatureListForGpuControlTestingEntry62[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::GpuSeriesType kGpuSeriesForEntry62[1] = {
-    GpuControlList::GpuSeriesType::kIntelKabyLake,
+const GpuSeriesType kGpuSeriesForEntry62[1] = {
+    GpuSeriesType::kIntelKabyLake,
 };
 
-const int kFeatureListForEntry63[1] = {
+const int kFeatureListForGpuControlTestingEntry63[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::GpuSeriesType kGpuSeriesForEntry63[1] = {
-    GpuControlList::GpuSeriesType::kIntelKabyLake,
+const GpuSeriesType kGpuSeriesForEntry63[1] = {
+    GpuSeriesType::kIntelKabyLake,
 };
 
-const int kFeatureListForEntry64[1] = {
+const int kFeatureListForGpuControlTestingEntry64[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::GpuSeriesType kGpuSeriesForEntry64[1] = {
-    GpuControlList::GpuSeriesType::kIntelKabyLake,
+const GpuSeriesType kGpuSeriesForEntry64[1] = {
+    GpuSeriesType::kIntelKabyLake,
 };
 
-const int kFeatureListForEntry65[1] = {
+const int kFeatureListForGpuControlTestingEntry65[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::GpuSeriesType kGpuSeriesForEntry65[1] = {
-    GpuControlList::GpuSeriesType::kIntelKabyLake,
+const GpuSeriesType kGpuSeriesForEntry65[1] = {
+    GpuSeriesType::kIntelKabyLake,
 };
 
-const int kFeatureListForEntry66[1] = {
+const int kFeatureListForGpuControlTestingEntry66[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::GpuSeriesType kGpuSeriesForEntry66Exception0[1] = {
-    GpuControlList::GpuSeriesType::kIntelKabyLake,
+const GpuSeriesType kGpuSeriesForEntry66Exception0[1] = {
+    GpuSeriesType::kIntelKabyLake,
 };
 
-const int kFeatureListForEntry67[1] = {
+const int kFeatureListForGpuControlTestingEntry67[1] = {
     TEST_FEATURE_0,
 };
 
-const GpuControlList::DriverInfo kDriverInfoForEntry67 = {
+const GpuControlList::DriverInfo kDriverInfoForGpuControlTestingEntry67 = {
     nullptr,  // driver_vendor
     {GpuControlList::kLE, GpuControlList::kVersionStyleNumerical,
      "8.15.10.2702", nullptr},  // driver_version
     {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical, nullptr,
      nullptr},  // driver_date
+};
+
+const int kFeatureListForGpuControlTestingEntry68[1] = {
+    TEST_FEATURE_0,
+};
+
+const GpuControlList::More kMoreForEntry68 = {
+    GpuControlList::kGLTypeNone,  // gl_type
+    {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical, nullptr,
+     nullptr},  // gl_version
+    {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical, nullptr,
+     nullptr},  // pixel_shader_version
+    false,      // in_process_gpu
+    0,          // gl_reset_notification_strategy
+    true,       // direct_rendering
+    {GpuControlList::kUnknown, GpuControlList::kVersionStyleNumerical, nullptr,
+     nullptr},                     // gpu_count
+    GpuControlList::kUnsupported,  // hardware_overlay
+    0,                             // test_group
 };
 
 }  // namespace gpu

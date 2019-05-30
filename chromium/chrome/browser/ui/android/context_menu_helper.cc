@@ -10,6 +10,7 @@
 
 #include "base/android/callback_android.h"
 #include "base/android/jni_string.h"
+#include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "chrome/browser/android/download/download_controller_base.h"
@@ -158,8 +159,8 @@ ContextMenuHelper::CreateJavaContextMenuParams(
           ConvertUTF16ToJavaString(env, params.title_text),
           image_was_fetched_lo_fi,
           ConvertUTF8ToJavaString(env, sanitizedReferrer.spec()),
-          params.referrer_policy, can_save, params.x, params.y,
-          params.source_type);
+          static_cast<int>(params.referrer_policy), can_save, params.x,
+          params.y, params.source_type);
 
   return jmenu_info;
 }
@@ -240,3 +241,5 @@ void ContextMenuHelper::RetrieveImageInternal(
       base::Bind(retrieve_callback, base::Passed(&chrome_render_frame),
                  base::android::ScopedJavaGlobalRef<jobject>(env, jcallback)));
 }
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(ContextMenuHelper)

@@ -10,18 +10,23 @@ import android.webkit.URLUtil;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
+import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
+import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior.OverviewModeObserver;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.Tab.TabHidingType;
 import org.chromium.chrome.browser.tab.TabObserver;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
+import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.NavigationEntry;
 import org.chromium.content_public.browser.WebContents;
 
-import java.util.concurrent.TimeUnit;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /** Class allowing to measure and report a page view time in UMA. */
 public class PageViewTimer {
@@ -37,6 +42,7 @@ public class PageViewTimer {
      */
     @VisibleForTesting
     @IntDef({DurationBucket.SHORT_CLICK, DurationBucket.MEDIUM_CLICK, DurationBucket.LONG_CLICK})
+    @Retention(RetentionPolicy.SOURCE)
     public @interface DurationBucket {
         int SHORT_CLICK = 0; /** Click <= 4 secconds */
         int MEDIUM_CLICK = 1; /** 4 seconds < Click <= 180 seconds */
@@ -46,6 +52,7 @@ public class PageViewTimer {
 
     /** Track the navigation source to report the page view time under. */
     @IntDef({NavigationSource.OTHER, NavigationSource.CONTEXTUAL_SUGGESTIONS})
+    @Retention(RetentionPolicy.SOURCE)
     public @interface NavigationSource {
         int OTHER = 0;
         int CONTEXTUAL_SUGGESTIONS = 1;
@@ -53,8 +60,11 @@ public class PageViewTimer {
 
     private final TabModelSelectorTabModelObserver mTabModelObserver;
     private final TabObserver mTabObserver;
+    private final OverviewModeBehavior mOverviewModeBehavior;
 
-    /** Currnetly observed tab. */
+    /** Observer for the tab switcher, can be null. */
+    private OverviewModeObserver mOverviewModeObserver;
+    /** Currently observed tab. */
     private Tab mCurrentTab;
     /** Last URL loaded in the observed tab. */
     private String mLastUrl;
@@ -69,19 +79,40 @@ public class PageViewTimer {
     private boolean mIsPaused;
     /** When the timer is paused, track when the pause began. */
     private long mPauseStartTimeMs;
-    /** Keep a cumlative duration of page not being visible. */
+    /** Keep a cumulative duration of page not being visible. */
     private long mPauseDuration;
 
     public PageViewTimer(TabModelSelector tabModelSelector) {
+        this(tabModelSelector, null);
+    }
+
+    public PageViewTimer(
+            TabModelSelector tabModelSelector, OverviewModeBehavior overviewModeBehavior) {
+        mOverviewModeBehavior = overviewModeBehavior;
+        if (mOverviewModeBehavior != null) {
+            mOverviewModeObserver = new EmptyOverviewModeObserver() {
+                @Override
+                public void onOverviewModeStartedShowing(boolean showToolbar) {
+                    pauseMeasuring();
+                }
+
+                @Override
+                public void onOverviewModeFinishedHiding() {
+                    resumeMeasuring();
+                }
+            };
+            mOverviewModeBehavior.addOverviewModeObserver(mOverviewModeObserver);
+        }
+
         mTabObserver = new EmptyTabObserver() {
             @Override
-            public void onShown(Tab tab) {
-                resumeMeasuring(tab.getUrl());
+            public void onShown(Tab tab, @TabSelectionType int type) {
+                resumeMeasuring();
             }
 
             @Override
-            public void onHidden(Tab tab) {
-                pauseMeasuring(tab.getUrl());
+            public void onHidden(Tab tab, @TabHidingType int type) {
+                pauseMeasuring();
             }
 
             @Override
@@ -103,7 +134,7 @@ public class PageViewTimer {
             }
 
             @Override
-            public void onPageLoadFinished(Tab tab) {
+            public void onPageLoadFinished(Tab tab, String url) {
                 assert tab == mCurrentTab;
                 mPageDidPaint = true;
             }
@@ -120,6 +151,10 @@ public class PageViewTimer {
             public void didSelectTab(Tab tab, @TabSelectionType int type, int lastId) {
                 assert tab != null;
                 if (tab == mCurrentTab) return;
+
+                // If the tab switcher is entered, then the same tab is selected again, resume
+                // instead of reporting/resetting.
+                if (UrlUtilities.urlsMatchIgnoringFragments(tab.getUrl(), mLastUrl)) return;
 
                 maybeReportViewTime();
                 switchObserverToTab(tab);
@@ -151,14 +186,17 @@ public class PageViewTimer {
         maybeReportViewTime();
         switchObserverToTab(null);
         mTabModelObserver.destroy();
+
+        // Remove the observer if it's been set.
+        if (mOverviewModeBehavior != null) {
+            mOverviewModeBehavior.removeOverviewModeObserver(mOverviewModeObserver);
+        }
     }
 
     private void maybeReportViewTime() {
         if (mLastUrl != null && mStartTimeMs != 0 && mPageDidPaint) {
             long durationMs = SystemClock.uptimeMillis() - mStartTimeMs - mPauseDuration;
-            RecordHistogram.recordLongTimesHistogram100(
-                    "ContextualSuggestions.PageViewTime", durationMs, TimeUnit.MILLISECONDS);
-
+            reportDurationRaw(durationMs);
             reportDurationBucket(calculateDurationBucket(durationMs));
         }
 
@@ -171,6 +209,19 @@ public class PageViewTimer {
         mNavigationSource = NavigationSource.OTHER;
         mPauseDuration = 0;
         mPauseStartTimeMs = 0;
+    }
+
+    private void reportDurationRaw(long durationMs) {
+        RecordHistogram.recordLongTimesHistogram100(
+                "ContextualSuggestions.PageViewTime", durationMs);
+        if (mNavigationSource == NavigationSource.CONTEXTUAL_SUGGESTIONS) {
+            RecordHistogram.recordLongTimesHistogram100(
+                    "ContextualSuggestions.PageViewTime.ContextualSuggestions", durationMs);
+            return;
+        }
+
+        RecordHistogram.recordLongTimesHistogram100(
+                "ContextualSuggestions.PageViewTime.Other", durationMs);
     }
 
     private void reportDurationBucket(@DurationBucket int durationBucket) {
@@ -205,13 +256,14 @@ public class PageViewTimer {
         mNavigationSource = getNavigationSource(webContents);
     }
 
-    private void pauseMeasuring(String url) {
+    private void pauseMeasuring() {
         if (mIsPaused) return;
 
+        mIsPaused = true;
         mPauseStartTimeMs = SystemClock.uptimeMillis();
     }
 
-    private void resumeMeasuring(String url) {
+    private void resumeMeasuring() {
         if (!mIsPaused) return;
 
         mIsPaused = false;

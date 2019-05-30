@@ -10,13 +10,16 @@
 namespace data_reduction_proxy {
 namespace features {
 
-extern const base::Feature kDataReductionMainMenu;
 extern const base::Feature kDataReductionProxyDecidesTransform;
 extern const base::Feature kDataReductionProxyLowMemoryDevicePromo;
-extern const base::Feature kMissingViaHeaderShortDuration;
 extern const base::Feature kDataReductionProxyRobustConnection;
 extern const base::Feature kDogfood;
 extern const base::Feature kDataSaverSiteBreakdownUsingPageLoadMetrics;
+extern const base::Feature kDataReductionProxyEnabledWithNetworkService;
+extern const base::Feature kDataSaverUseOnDeviceSafeBrowsing;
+extern const base::Feature kDataReductionProxyBlockOnBadGatewayResponse;
+extern const base::Feature kDataReductionProxyPopulatePreviewsPageIDToPingback;
+extern const base::Feature kDataReductionProxyDisableProxyFailedWarmup;
 
 }  // namespace features
 }  // namespace data_reduction_proxy

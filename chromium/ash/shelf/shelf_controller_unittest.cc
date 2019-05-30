@@ -7,10 +7,10 @@
 #include <string>
 
 #include "ash/public/cpp/ash_pref_names.h"
-#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shelf_model_observer.h"
 #include "ash/public/cpp/shelf_prefs.h"
+#include "ash/public/cpp/window_properties.h"
 #include "ash/public/interfaces/shelf.mojom.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
@@ -21,6 +21,7 @@
 #include "ash/test/ash_test_helper.h"
 #include "ash/test_shell_delegate.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm/window_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -43,7 +44,7 @@ void BuildAndSendNotification(message_center::MessageCenter* message_center,
                               const std::string& app_id,
                               const std::string& notification_id) {
   const message_center::NotifierId notifier_id(
-      message_center::NotifierId::APPLICATION, app_id);
+      message_center::NotifierType::APPLICATION, app_id);
   std::unique_ptr<message_center::Notification> notification =
       std::make_unique<message_center::Notification>(
           message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
@@ -210,27 +211,46 @@ TEST_F(ShelfControllerTest, ShelfItemImageSynchronization) {
   EXPECT_FALSE(controller->model()->items()[index].image.isNull());
 }
 
-class ShelfControllerTouchableContextMenuTest : public AshTestBase {
+TEST_F(ShelfControllerTest, ShelfIDUpdate) {
+  ShelfModel* model = Shell::Get()->shelf_controller()->model();
+
+  const ShelfID id1("id1");
+  const ShelfID id2("id2");
+
+  std::unique_ptr<aura::Window> window(
+      CreateTestWindow(gfx::Rect(0, 0, 100, 100)));
+  window->SetProperty(kShelfIDKey, new std::string(id1.Serialize()));
+  wm::ActivateWindow(window.get());
+  EXPECT_EQ(id1, model->active_shelf_id());
+
+  window->SetProperty(kShelfIDKey, new std::string(id2.Serialize()));
+  EXPECT_EQ(id2, model->active_shelf_id());
+
+  window->ClearProperty(kShelfIDKey);
+  EXPECT_NE(id1, model->active_shelf_id());
+  EXPECT_NE(id2, model->active_shelf_id());
+}
+
+class ShelfControllerNotificationIndicatorTest : public AshTestBase {
  public:
-  ShelfControllerTouchableContextMenuTest() = default;
-  ~ShelfControllerTouchableContextMenuTest() override = default;
+  ShelfControllerNotificationIndicatorTest() = default;
+  ~ShelfControllerNotificationIndicatorTest() override = default;
 
   void SetUp() override {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kTouchableAppContextMenu, features::kNotificationIndicator},
-        {});
+    scoped_feature_list_.InitWithFeatures({features::kNotificationIndicator},
+                                          {});
     AshTestBase::SetUp();
   }
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 
-  DISALLOW_COPY_AND_ASSIGN(ShelfControllerTouchableContextMenuTest);
+  DISALLOW_COPY_AND_ASSIGN(ShelfControllerNotificationIndicatorTest);
 };
 
 // Tests that the ShelfController keeps the ShelfModel updated on new
 // notifications.
-TEST_F(ShelfControllerTouchableContextMenuTest, HasNotificationBasic) {
+TEST_F(ShelfControllerNotificationIndicatorTest, HasNotificationBasic) {
   ShelfController* controller = Shell::Get()->shelf_controller();
   const std::string app_id("app_id");
   ShelfItem item;

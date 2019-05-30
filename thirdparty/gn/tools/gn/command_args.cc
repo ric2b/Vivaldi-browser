@@ -205,6 +205,7 @@ void BuildArgJson(base::Value& dict,
 }
 
 int ListArgs(const std::string& build_dir) {
+  // Deliberately leaked to avoid expensive process teardown.
   Setup* setup = new Setup;
   if (!setup->DoSetup(build_dir, false) || !setup->Run())
     return 1;
@@ -408,7 +409,11 @@ const char kArgs[] = "args";
 const char kArgs_HelpShort[] =
     "args: Display or configure arguments declared by the build.";
 const char kArgs_Help[] =
-    R"(gn args <out_dir> [--list] [--short] [--args] [--overrides-only]
+    R"(gn args: (command-line tool)
+
+  Display or configure arguments declared by the build.
+
+    gn args <out_dir> [--list] [--short] [--args] [--overrides-only]
 
   See also "gn help buildargs" for a more high-level overview of how
   build arguments work.

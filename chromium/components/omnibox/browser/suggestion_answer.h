@@ -15,6 +15,10 @@
 #include "base/optional.h"
 #include "url/gurl.h"
 
+#ifdef OS_ANDROID
+#include "base/android/scoped_java_ref.h"
+#endif
+
 namespace base {
 class DictionaryValue;
 }
@@ -37,26 +41,39 @@ class SuggestionAnswer {
   // These values are based on the server-side type AnswerTriggererKey. Do not
   // remove values from this enum (or the client/server will become out of
   // sync).
+  //
+  // A Java counterpart will be generated for this enum.
+  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.omnibox
   enum AnswerType {
-    ANSWER_TYPE_INVALID,
-    ANSWER_TYPE_DICTIONARY,
-    ANSWER_TYPE_FINANCE,
-    ANSWER_TYPE_KNOWLEDGE_GRAPH,
-    ANSWER_TYPE_LOCAL,
-    ANSWER_TYPE_SPORTS,
-    ANSWER_TYPE_SUNRISE,
-    ANSWER_TYPE_TRANSLATION,
-    ANSWER_TYPE_WEATHER,
-    ANSWER_TYPE_WHEN_IS,
-    ANSWER_TYPE_CURRENCY,
-    ANSWER_TYPE_LOCAL_TIME,
-    ANSWER_TYPE_PLAY_INSTALL,
+    ANSWER_TYPE_INVALID = 0,
+    ANSWER_TYPE_DICTIONARY = 1,
+    ANSWER_TYPE_FINANCE = 2,
+    ANSWER_TYPE_KNOWLEDGE_GRAPH = 3,
+    ANSWER_TYPE_LOCAL = 4,
+    ANSWER_TYPE_SPORTS = 5,
+    ANSWER_TYPE_SUNRISE = 6,
+    ANSWER_TYPE_TRANSLATION = 7,
+    ANSWER_TYPE_WEATHER = 8,
+    ANSWER_TYPE_WHEN_IS = 9,
+    ANSWER_TYPE_CURRENCY = 10,
+    ANSWER_TYPE_LOCAL_TIME = 11,
+    ANSWER_TYPE_PLAY_INSTALL = 12,
+
+    // Last value - tracks total number of different answer types.
+    // Deliberately not assigning a value to this enum to prevent errors where a
+    // new enum values are added above and compiler accepts the overlapping
+    // enums.
+    ANSWER_TYPE_TOTAL_COUNT
   };
-  static_assert(ANSWER_TYPE_PLAY_INSTALL == 12,
+  static_assert(ANSWER_TYPE_TOTAL_COUNT == 13,
                 "Do not remove enums from AnswerType");
 
   // These values are named and numbered to match a specification at go/ais_api.
   // The values are only used for answer results.
+  //
+  // A Java counterpart will be generated for this enum.
+  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.omnibox
+  // GENERATED_JAVA_CLASS_NAME_OVERRIDE: AnswerTextType
   enum TextType {
     // Deprecated: ANSWER = 1,
     // Deprecated: HEADLINE = 2,
@@ -89,8 +106,12 @@ class SuggestionAnswer {
   // based on a finite set of text types instead of answer properties and rules.
   // Performance is also improved by doing this once at parse time instead of
   // every time render text is invalidated.
+  //
+  // A Java counterpart will be generated for this enum.
+  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.omnibox
+  // GENERATED_JAVA_CLASS_NAME_OVERRIDE: AnswerTextStyle
   enum class TextStyle {
-    NONE,
+    NONE = 0,
     NORMAL,
     NORMAL_DIM,
     SECONDARY,
@@ -222,6 +243,10 @@ class SuggestionAnswer {
 
   // For new answers, replace old answer text types with appropriate new types.
   void InterpretTextTypes();
+
+#ifdef OS_ANDROID
+  base::android::ScopedJavaLocalRef<jobject> CreateJavaObject() const;
+#endif
 
  private:
   GURL image_url_;

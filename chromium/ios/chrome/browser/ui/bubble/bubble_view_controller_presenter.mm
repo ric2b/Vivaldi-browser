@@ -9,7 +9,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "ios/chrome/browser/ui/bubble/bubble_util.h"
 #import "ios/chrome/browser/ui/bubble/bubble_view_controller.h"
-#include "ios/chrome/browser/ui/ui_util.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -18,7 +18,6 @@
 namespace {
 
 // How long, in seconds, the bubble is visible on the screen.
-const NSTimeInterval kBubbleVisibilityDurationLegacy = 4.0;
 const NSTimeInterval kBubbleVisibilityDuration = 5.0;
 // How long, in seconds, the user should be considered engaged with the bubble
 // after the bubble first becomes visible.
@@ -165,9 +164,7 @@ void LogBubbleDismissalReason(BubbleDismissalReason reason) {
   [parentView addGestureRecognizer:self.outsideBubbleTapRecognizer];
   [parentView addGestureRecognizer:self.swipeRecognizer];
 
-  CGFloat duration = IsUIRefreshPhase1Enabled()
-                         ? kBubbleVisibilityDuration
-                         : kBubbleVisibilityDurationLegacy;
+  CGFloat duration = kBubbleVisibilityDuration;
 
   self.bubbleDismissalTimer = [NSTimer
       scheduledTimerWithTimeInterval:duration

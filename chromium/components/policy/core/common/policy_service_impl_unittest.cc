@@ -11,14 +11,15 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/values.h"
 #include "components/policy/core/common/external_data_fetcher.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/mock_policy_service.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
+#include "components/strings/grit/components_strings.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -146,7 +147,7 @@ class PolicyServiceTest : public testing::Test {
   }
 
  protected:
-  base::MessageLoop loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
   MockConfigurationPolicyProvider provider0_;
   MockConfigurationPolicyProvider provider1_;
   MockConfigurationPolicyProvider provider2_;
@@ -362,6 +363,8 @@ TEST_F(PolicyServiceTest, Priorities) {
                std::make_unique<base::Value>(13), nullptr);
   expected.Set("aaa", POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(0), nullptr);
+  expected.GetMutable("aaa")->AddError(IDS_POLICY_CONFLICT_DIFF_VALUE);
+  expected.GetMutable("aaa")->AddError(IDS_POLICY_CONFLICT_DIFF_VALUE);
   policy0_.Set("aaa", POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(0), nullptr);
   policy1_.Set("aaa", POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
@@ -371,21 +374,28 @@ TEST_F(PolicyServiceTest, Priorities) {
   provider0_.UpdateChromePolicy(policy0_);
   provider1_.UpdateChromePolicy(policy1_);
   provider2_.UpdateChromePolicy(policy2_);
+  expected.GetMutable("aaa")->AddConflictingPolicy(*policy1_.Get("aaa"));
+  expected.GetMutable("aaa")->AddConflictingPolicy(*policy2_.Get("aaa"));
+
   EXPECT_TRUE(VerifyPolicies(
       PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()), expected));
 
   expected.Set("aaa", POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(1), nullptr);
+  expected.GetMutable("aaa")->AddError(IDS_POLICY_CONFLICT_DIFF_VALUE);
   policy0_.Erase("aaa");
   provider0_.UpdateChromePolicy(policy0_);
+  expected.GetMutable("aaa")->AddConflictingPolicy(*policy2_.Get("aaa"));
   EXPECT_TRUE(VerifyPolicies(
       PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()), expected));
 
   expected.Set("aaa", POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(2), nullptr);
+  expected.GetMutable("aaa")->AddError(IDS_POLICY_CONFLICT_SAME_VALUE);
   policy1_.Set("aaa", POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_USER,
                POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(1), nullptr);
-  provider1_.UpdateChromePolicy(policy1_);
+  expected.GetMutable("aaa")->AddConflictingPolicy(*policy2_.Get("aaa"));
+  provider1_.UpdateChromePolicy(policy2_);
   EXPECT_TRUE(VerifyPolicies(
       PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()), expected));
 }
@@ -526,22 +536,45 @@ TEST_F(PolicyServiceTest, NamespaceMerge) {
   AddTestPolicies(bundle2.get(), "bundle2",
                   POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE);
 
-  provider0_.UpdatePolicy(std::move(bundle0));
-  provider1_.UpdatePolicy(std::move(bundle1));
-  provider2_.UpdatePolicy(std::move(bundle2));
-  RunUntilIdle();
-
   PolicyMap expected;
   // For policies of the same level and scope, the first provider takes
   // precedence, on every namespace.
   expected.Set(kSameLevelPolicy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                POLICY_SOURCE_ENTERPRISE_DEFAULT,
                std::make_unique<base::Value>("bundle0"), nullptr);
+  expected.GetMutable(kSameLevelPolicy)
+      ->AddError(IDS_POLICY_CONFLICT_DIFF_VALUE);
+  expected.GetMutable(kSameLevelPolicy)
+      ->AddError(IDS_POLICY_CONFLICT_DIFF_VALUE);
+  expected.GetMutable(kSameLevelPolicy)
+      ->AddConflictingPolicy(
+          *bundle1->Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
+               .Get(kSameLevelPolicy));
+  expected.GetMutable(kSameLevelPolicy)
+      ->AddConflictingPolicy(
+          *bundle2->Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
+               .Get(kSameLevelPolicy));
   // For policies with different levels and scopes, the highest priority
   // level/scope combination takes precedence, on every namespace.
   expected.Set(kDiffLevelPolicy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
                POLICY_SOURCE_PLATFORM, std::make_unique<base::Value>("bundle2"),
                nullptr);
+  expected.GetMutable(kDiffLevelPolicy)
+      ->AddError(IDS_POLICY_CONFLICT_DIFF_VALUE);
+  expected.GetMutable(kDiffLevelPolicy)
+      ->AddConflictingPolicy(
+          *bundle0->Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
+               .Get(kDiffLevelPolicy));
+  expected.GetMutable(kDiffLevelPolicy)
+      ->AddConflictingPolicy(
+          *bundle1->Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
+               .Get(kDiffLevelPolicy));
+
+  provider0_.UpdatePolicy(std::move(bundle0));
+  provider1_.UpdatePolicy(std::move(bundle1));
+  provider2_.UpdatePolicy(std::move(bundle2));
+  RunUntilIdle();
+
   EXPECT_TRUE(policy_service_->GetPolicies(
       PolicyNamespace(POLICY_DOMAIN_CHROME, std::string())).Equals(expected));
   EXPECT_TRUE(policy_service_->GetPolicies(

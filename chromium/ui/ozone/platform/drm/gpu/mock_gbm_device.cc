@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "base/numerics/safe_math.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkSurface.h"
 #include "ui/ozone/common/linux/drm_util_linux.h"
 #include "ui/ozone/common/linux/gbm_buffer.h"
 
@@ -36,7 +37,6 @@ class MockGbmBuffer final : public ui::GbmBuffer {
   uint32_t GetFormat() const override { return format_; }
   uint64_t GetFormatModifier() const override { return format_modifier_; }
   uint32_t GetFlags() const override { return flags_; }
-  size_t GetFdCount() const override { return 0; }
   gfx::Size GetSize() const override { return size_; }
   gfx::BufferFormat GetBufferFormat() const override {
     return ui::GetBufferFormatFromFourCCFormat(format_);
@@ -68,6 +68,8 @@ class MockGbmBuffer final : public ui::GbmBuffer {
     NOTIMPLEMENTED();
     return gfx::NativePixmapHandle();
   }
+
+  sk_sp<SkSurface> GetSurface() override { return nullptr; }
 
  private:
   uint32_t format_ = 0;

@@ -30,7 +30,17 @@
 #include "third_party/blink/renderer/platform/platform_export.h"
 
 namespace blink {
-namespace AudioUtilities {
+namespace audio_utilities {
+
+// How to do rounding when converting time to sample frame.
+enum SampleFrameRounding {
+  // Round to nearest integer
+  kRoundToNearest,
+  // Round down
+  kRoundDown,
+  // Round up
+  kRoundUp
+};
 
 // Rendering quantum size.  This is how many frames are processed at a time for
 // each node in the audio graph.
@@ -48,7 +58,10 @@ PLATFORM_EXPORT double DiscreteTimeConstantForSampleRate(double time_constant,
                                                          double sample_rate);
 
 // Convert the time to a sample frame at the given sample rate.
-PLATFORM_EXPORT size_t TimeToSampleFrame(double time, double sample_rate);
+PLATFORM_EXPORT size_t
+TimeToSampleFrame(double time,
+                  double sample_rate,
+                  enum SampleFrameRounding rounding = kRoundToNearest);
 
 // Check that |sampleRate| is a valid rate for AudioBuffers.
 PLATFORM_EXPORT bool IsValidAudioBufferSampleRate(float sample_rate);
@@ -60,7 +73,7 @@ PLATFORM_EXPORT float MaxAudioBufferSampleRate();
 // Check to see if x is a power of two.  If x == 0, returns false.
 PLATFORM_EXPORT bool IsPowerOfTwo(size_t x);
 
-}  // namespace AudioUtilities
+}  // namespace audio_utilities
 }  // namespace blink
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_AUDIO_AUDIO_UTILITIES_H_

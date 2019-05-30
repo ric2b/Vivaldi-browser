@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.tab;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.MailTo;
 import android.net.Uri;
 import android.provider.Browser;
@@ -16,14 +17,14 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.DefaultBrowserInfo;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.contextmenu.ContextMenuItemDelegate;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
+import org.chromium.chrome.browser.download.ChromeDownloadDelegate;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
+import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.util.UrlUtilities;
@@ -84,7 +85,8 @@ public class TabContextMenuItemDelegate implements ContextMenuItemDelegate {
 
     @Override
     public boolean startDownload(String url, boolean isLink) {
-        return !isLink || !mTab.shouldInterceptContextMenuDownload(url);
+        return !isLink
+                || !ChromeDownloadDelegate.from(mTab).shouldInterceptContextMenuDownload(url);
     }
 
     @Override
@@ -168,15 +170,11 @@ public class TabContextMenuItemDelegate implements ContextMenuItemDelegate {
     @Override
     public void onOpenInNewTab(String url, Referrer referrer) {
         RecordUserAction.record("MobileNewTabOpened");
+        RecordUserAction.record("LinkOpenedInNewTab");
         LoadUrlParams loadUrlParams = new LoadUrlParams(url);
         loadUrlParams.setReferrer(referrer);
-        Tab newTab = mTab.getTabModelSelector().openNewTab(
+        mTab.getTabModelSelector().openNewTab(
                 loadUrlParams, TabLaunchType.FROM_LONGPRESS_BACKGROUND, mTab, isIncognito());
-
-        // {@code newTab} is null in document mode. Do not record metrics for document mode.
-        if (mTab.getTabUma() != null && newTab != null) {
-            mTab.getTabUma().onBackgroundTabOpenedFromContextMenu(newTab);
-        }
     }
 
     @Override
@@ -224,21 +222,26 @@ public class TabContextMenuItemDelegate implements ContextMenuItemDelegate {
     }
 
     @Override
+    public void onOpenInEphemeralTab(String url, String title) {
+        mTab.getActivity().getEphemeralTabPanel().requestOpenPanel(url, title, mTab.isIncognito());
+    }
+
+    @Override
     public void onOpenInChrome(String linkUrl, String pageUrl) {
         Context applicationContext = ContextUtils.getApplicationContext();
         Intent chromeIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(linkUrl));
         chromeIntent.setPackage(applicationContext.getPackageName());
         chromeIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        if (applicationContext.getPackageManager()
-                        .queryIntentActivities(chromeIntent, 0)
-                        .isEmpty()) {
+        PackageManager packageManager = applicationContext.getPackageManager();
+
+        if (packageManager.queryIntentActivities(chromeIntent, 0).isEmpty()) {
             // If Chrome can't handle intent fallback to using any other VIEW handlers.
             chromeIntent.setPackage(null);
-        }
 
-        // For "Open in Chrome" from the context menu in FullscreenActivity we want to bypass
-        // CustomTab, and this flag ensures we open in TabbedChrome.
-        chromeIntent.putExtra(LaunchIntentDispatcher.EXTRA_IS_ALLOWED_TO_RETURN_TO_PARENT, false);
+            // Query again without the package name set and if there are still no handlers for the
+            // URI fail gracefully, and do nothing, since this will still cause a crash if launched.
+            if (packageManager.queryIntentActivities(chromeIntent, 0).isEmpty()) return;
+        }
 
         boolean activityStarted = false;
         if (pageUrl != null) {
@@ -267,7 +270,6 @@ public class TabContextMenuItemDelegate implements ContextMenuItemDelegate {
         Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(linkUrl));
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         intent.setClass(mTab.getApplicationContext(), ChromeLauncherActivity.class);
-        intent.putExtra(LaunchIntentDispatcher.EXTRA_IS_ALLOWED_TO_RETURN_TO_PARENT, false);
         if (isIncognito) {
             intent.putExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, true);
             intent.putExtra(

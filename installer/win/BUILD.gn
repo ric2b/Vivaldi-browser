@@ -10,3 +10,27 @@ windows_manifest("dpi_aware_exe_manifest") {
     dpi_aware_manifest
   ]
 }
+
+action("vivaldi_release") {
+  script = "//vivaldi/scripts/generate_chrome_release.py"
+
+  chrome_release_file = "//chrome/installer/mini_installer/chrome.release"
+  vivaldi_release_file = "//vivaldi/installer/win/vivaldi.release"
+  vivaldi_release_target = "$root_gen_dir/vivaldi/vivaldi.release"
+
+  inputs = [
+    script,
+    chrome_release_file,
+    vivaldi_release_file,
+  ]
+
+  outputs = [
+    vivaldi_release_target,
+  ]
+
+  args = rebase_path([
+    chrome_release_file,
+    vivaldi_release_file,
+    vivaldi_release_target,
+  ], root_build_dir)
+}

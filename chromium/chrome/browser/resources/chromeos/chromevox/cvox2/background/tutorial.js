@@ -25,6 +25,9 @@ Tutorial = function() {
   this.page = sessionStorage['tutorial_page_pos'] !== undefined ?
       sessionStorage['tutorial_page_pos'] :
       0;
+
+  /** @private {boolean} */
+  this.incognito_ = !!chrome.runtime.getManifest()['incognito'];
 };
 
 /**
@@ -104,6 +107,21 @@ Tutorial.PAGES = [
   [
     {msgid: 'tutorial_earcon_page_title', heading: true},
     {msgid: 'tutorial_earcon_page_body'}, {custom: Tutorial.buildEarconPage_}
+  ],
+  [
+    {msgid: 'tutorial_touch_heading', heading: true},
+    {msgid: 'tutorial_touch_intro'}, {
+      list: true,
+      items: [
+        {msgid: 'tutorial_touch_drag_one_finger', listItem: true},
+        {msgid: 'tutorial_touch_swipe_left_right', listItem: true},
+        {msgid: 'tutorial_touch_swipe_up_down', listItem: true},
+        {msgid: 'tutorial_touch_double_tap', listItem: true},
+        {msgid: 'tutorial_touch_four_finger_tap', listItem: true},
+        {msgid: 'tutorial_touch_two_finger_tap', listItem: true},
+      ]
+    },
+    {msgid: 'tutorial_touch_learn_more'}
   ],
   [
     {msgid: 'tutorial_learn_more_heading', heading: true},
@@ -237,12 +255,18 @@ Tutorial.prototype = {
       } else if (pageElement.link) {
         element = document.createElement('a');
         element.href = pageElement.link;
-        element.setAttribute('tabindex', 0);
+        if (!this.incognito_)
+          element.setAttribute('tabindex', 0);
+        else
+          element.disabled = true;
         element.addEventListener('click', function(evt) {
+          if (this.incognito_)
+            return;
+
           Panel.closeMenusAndRestoreFocus();
           chrome.windows.create({url: evt.target.href});
           return false;
-        }, false);
+        }.bind(this), false);
       } else if (pageElement.custom) {
         element = document.createElement('div');
         pageElement.custom(element);

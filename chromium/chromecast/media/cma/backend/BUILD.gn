@@ -10,6 +10,8 @@ import("//media/media_options.gni")
 declare_args() {
   system_owns_volume =
       use_alsa && !enable_assistant && chromecast_branding != "google"
+
+  mixer_output = ""
 }
 
 cast_source_set("backend") {
@@ -80,9 +82,12 @@ cast_source_set("dummy") {
   ]
 
   deps = [
+    ":audio_buildflags",
     "//chromecast/public",
   ]
 }
+
+volume_control_in_media_shlib = !cast_volume_control_in_avsettings
 
 buildflag_header("audio_buildflags") {
   header = "audio_buildflags.h"
@@ -90,6 +95,7 @@ buildflag_header("audio_buildflags") {
   flags = [
     "MEDIA_CLOCK_MONOTONIC_RAW=$media_clock_monotonic_raw",
     "SYSTEM_OWNS_VOLUME=$system_owns_volume",
+    "VOLUME_CONTROL_IN_MEDIA_SHLIB=$volume_control_in_media_shlib",
   ]
 }
 
@@ -176,6 +182,64 @@ cast_source_set("post_processor_factory") {
   ]
 }
 
+cast_source_set("audio_resampler") {
+  sources = [
+    "audio_resampler.cc",
+    "audio_resampler.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/media/cma/base",
+    "//media",
+  ]
+}
+
+cast_source_set("mixer_pipeline") {
+  sources = [
+    "audio_output_redirector_input.h",
+    "filter_group.cc",
+    "filter_group.h",
+    "mixer_input.cc",
+    "mixer_input.h",
+    "mixer_pipeline.cc",
+    "mixer_pipeline.h",
+    "post_processing_pipeline.h",
+    "post_processing_pipeline_impl.cc",
+    "post_processing_pipeline_impl.h",
+    "post_processing_pipeline_parser.cc",
+    "post_processing_pipeline_parser.h",
+  ]
+  deps = [
+    ":audio_buildflags",
+    ":audio_helpers",
+    ":audio_resampler",
+    ":cast_audio_json",
+    ":post_processor_factory",
+    ":public",
+    "//base",
+    "//chromecast/base",
+    "//chromecast/media/base",
+    "//chromecast/media/cma/base",
+    "//chromecast/media/cma/decoder",
+    "//chromecast/public",
+    "//chromecast/public/media",
+    "//media",
+    "//media:shared_memory_support",
+  ]
+}
+
+cast_source_set("volume_map") {
+  sources = [
+    "volume_map.cc",
+    "volume_map.h",
+  ]
+  deps = [
+    ":cast_audio_json",
+    "//base",
+  ]
+}
+
 cast_source_set("for_mixer_audio") {
   sources = [
     "audio_decoder_for_mixer.cc",
@@ -187,30 +251,22 @@ cast_source_set("for_mixer_audio") {
     "cast_media_shlib_mixer_audio.cc",
     "direct_mixer_source.cc",
     "direct_mixer_source.h",
-    "filter_group.cc",
-    "filter_group.h",
     "media_pipeline_backend_for_mixer.cc",
     "media_pipeline_backend_for_mixer.h",
-    "mixer_input.cc",
-    "mixer_input.h",
-    "post_processing_pipeline.h",
-    "post_processing_pipeline_impl.cc",
-    "post_processing_pipeline_impl.h",
-    "post_processing_pipeline_parser.cc",
-    "post_processing_pipeline_parser.h",
     "stream_mixer.cc",
     "stream_mixer.h",
     "volume_control.cc",
-    "volume_map.cc",
-    "volume_map.h",
   ]
 
   deps = [
     ":audio_buildflags",
     ":audio_helpers",
+    ":audio_resampler",
     ":cast_audio_json",
+    ":mixer_pipeline",
     ":post_processor_factory",
     ":public",
+    ":volume_map",
     "//base",
     "//chromecast/base",
     "//chromecast/media/audio:libcast_external_audio_pipeline_1.0",
@@ -232,6 +288,9 @@ cast_source_set("for_mixer_audio") {
     # provide its own mixer output.
     if (!enable_video_with_mixed_audio) {
       sources += [ "mixer_output_stream_dummy.cc" ]
+    } else {
+      assert("$mixer_output" != "")
+      deps += [ "$mixer_output" ]
     }
   }
 }
@@ -243,19 +302,27 @@ test("cast_audio_backend_unittests") {
     "filter_group_unittest.cc",
     "mock_mixer_source.cc",
     "mock_mixer_source.h",
+    "mock_post_processor_factory.cc",
+    "mock_post_processor_factory.h",
     "mock_redirected_audio_output.cc",
     "mock_redirected_audio_output.h",
+    "stream_mixer_external_audio_pipeline_unittest.cc",
     "stream_mixer_unittest.cc",
+    "volume_map_unittest.cc",
   ]
 
   deps = [
     ":audio_helpers",
     ":av_sync_dummy",
+    ":cast_audio_json",
     ":for_mixer_audio",
+    ":mixer_pipeline",
     ":null_video",
     ":public",
+    ":volume_map",
     "//base",
     "//base/test:run_all_unittests",
+    "//chromecast/media/audio:fake_external_audio_pipeline",
     "//chromecast/media/cma/backend/post_processors:unittests",
     "//chromecast/public",
     "//chromecast/public/media",

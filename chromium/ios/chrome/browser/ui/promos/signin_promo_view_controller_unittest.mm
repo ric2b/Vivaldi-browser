@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/version.h"
@@ -83,7 +84,8 @@ class SigninPromoViewControllerTest : public BlockCleanupTest {
     builder.SetPrefService(CreatePrefService());
     builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
-        AuthenticationServiceFake::CreateAuthenticationService);
+        base::BindRepeating(
+            &AuthenticationServiceFake::CreateAuthenticationService));
     chrome_browser_state_ = builder.Build();
     ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()
         ->AddIdentities(@[ @"foo", @"bar" ]);

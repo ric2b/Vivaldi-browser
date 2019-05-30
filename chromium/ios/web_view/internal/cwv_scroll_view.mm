@@ -73,6 +73,14 @@
   _proxy.scrollsToTop = scrollsToTop;
 }
 
+- (BOOL)bounces {
+  return _proxy.bounces;
+}
+
+- (void)setBounces:(BOOL)bounces {
+  _proxy.bounces = bounces;
+}
+
 - (UIScrollViewContentInsetAdjustmentBehavior)contentInsetAdjustmentBehavior
     API_AVAILABLE(ios(11.0)) {
   return _proxy.contentInsetAdjustmentBehavior;
@@ -166,6 +174,14 @@
   if ([_delegate respondsToSelector:selector]) {
     [_delegate scrollViewWillBeginZooming:self];
   }
+}
+
+- (BOOL)webViewScrollViewShouldScrollToTop:
+    (CRWWebViewScrollViewProxy*)webViewScrollViewProxy {
+  if ([_delegate respondsToSelector:@selector(scrollViewShouldScrollToTop:)]) {
+    return [_delegate scrollViewShouldScrollToTop:self];
+  }
+  return YES;
 }
 
 - (void)webViewScrollViewDidResetContentSize:

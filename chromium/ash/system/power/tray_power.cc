@@ -12,9 +12,9 @@
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/system/date/date_view.h"
 #include "ash/system/power/battery_notification.h"
 #include "ash/system/power/dual_role_notification.h"
+#include "ash/system/time/time_view.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_item_view.h"
 #include "ash/system/tray/tray_utils.h"
@@ -40,7 +40,7 @@ namespace ash {
 
 namespace tray {
 
-PowerTrayView::PowerTrayView(SystemTrayItem* owner) : TrayItemView(owner) {
+PowerTrayView::PowerTrayView(Shelf* shelf) : TrayItemView(shelf) {
   CreateImageView();
   UpdateImage();
   UpdateStatus();
@@ -51,9 +51,30 @@ PowerTrayView::~PowerTrayView() {
   PowerStatus::Get()->RemoveObserver(this);
 }
 
+gfx::Size PowerTrayView::CalculatePreferredSize() const {
+  // The battery icon is a lot thinner than other icons, hence the special
+  // logic.
+  gfx::Size standard_size = TrayItemView::CalculatePreferredSize();
+  if (IsHorizontalAlignment())
+    return gfx::Size(kUnifiedTrayBatteryWidth, standard_size.height());
+  return standard_size;
+}
+
 void PowerTrayView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->SetName(accessible_name_);
   node_data->role = ax::mojom::Role::kButton;
+}
+
+views::View* PowerTrayView::GetTooltipHandlerForPoint(const gfx::Point& point) {
+  return GetLocalBounds().Contains(point) ? this : nullptr;
+}
+
+bool PowerTrayView::GetTooltipText(const gfx::Point& p,
+                                   base::string16* tooltip) const {
+  if (tooltip_.empty())
+    return false;
+  *tooltip = tooltip_;
+  return true;
 }
 
 void PowerTrayView::OnPowerStatusChanged() {
@@ -68,6 +89,10 @@ void PowerTrayView::UpdateStatus() {
   UpdateImage();
   SetVisible(PowerStatus::Get()->IsBatteryPresent());
   accessible_name_ = PowerStatus::Get()->GetAccessibleNameString(true);
+  tooltip_ = PowerStatus::Get()->GetInlinedStatusString();
+  // Currently ChromeVox only reads the inner view when touching the icon.
+  // As a result this node's accessible node data will not be read.
+  image_view()->SetAccessibleName(accessible_name_);
 }
 
 void PowerTrayView::UpdateImage() {
@@ -84,35 +109,12 @@ void PowerTrayView::UpdateImage() {
   info_ = info;
   icon_session_state_color_ = session_state;
 
-  SkColor color = TrayIconColor(session_state);
+  // Note: The icon color (both fg and bg) changes when the UI in in OOBE mode.
+  SkColor icon_fg_color = TrayIconColor(session_state);
+  SkColor icon_bg_color = SkColorSetA(icon_fg_color, kTrayIconBackgroundAlpha);
   image_view()->SetImage(PowerStatus::GetBatteryImage(
-      info, TrayConstants::GetTrayIconSize(), SkColorSetA(color, 0x4C), color));
+      info, kUnifiedTrayIconSize, icon_bg_color, icon_fg_color));
 }
 
 }  // namespace tray
-
-TrayPower::TrayPower(SystemTray* system_tray)
-    : SystemTrayItem(system_tray, SystemTrayItemUmaType::UMA_POWER) {}
-
-TrayPower::~TrayPower() = default;
-
-views::View* TrayPower::CreateTrayView(LoginStatus status) {
-  // There may not be enough information when this is created about whether
-  // there is a battery or not. So always create this, and adjust visibility as
-  // necessary.
-  CHECK(power_tray_ == nullptr);
-  power_tray_ = new tray::PowerTrayView(this);
-  return power_tray_;
-}
-
-views::View* TrayPower::CreateDefaultView(LoginStatus status) {
-  // Make sure icon status is up to date. (Also triggers stub activation).
-  PowerStatus::Get()->RequestStatusUpdate();
-  return nullptr;
-}
-
-void TrayPower::OnTrayViewDestroyed() {
-  power_tray_ = nullptr;
-}
-
 }  // namespace ash

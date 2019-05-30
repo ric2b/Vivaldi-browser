@@ -9,7 +9,7 @@
 
 namespace blink {
 
-// See WebInputEvent.h for details why this pack is here.
+// See web_input_event.h for details why this pack is here.
 #pragma pack(push, 4)
 
 // WebMouseWheelEvent ---------------------------------------------------------
@@ -37,6 +37,19 @@ class WebMouseWheelEvent : public WebMouseEvent {
     kPhaseMayBegin = 1 << 5,
   };
 
+  // A hint at the outcome of a wheel event should it not get canceled.
+  enum class EventAction : int {
+    // When the wheel event would result in page zoom,
+    kPageZoom = 0,
+    // When the wheel event would scroll but the direction is not (known to be)
+    // fixed to a certain axis,
+    kScroll,
+    // When the wheel event would scroll along X axis,
+    kScrollHorizontal,
+    // When the wheel event would scroll along Y axis,
+    kScrollVertical
+  };
+
   float delta_x;
   float delta_y;
   float wheel_ticks_x;
@@ -57,16 +70,19 @@ class WebMouseWheelEvent : public WebMouseEvent {
 
   // True when phase information is added in mouse_wheel_phase_handler based
   // on its timer.
-  bool has_synthetic_phase;
+  bool has_synthetic_phase = false;
 
-  bool scroll_by_page;
-  bool has_precise_scrolling_deltas;
+  bool scroll_by_page = false;
+  bool has_precise_scrolling_deltas = false;
 
   RailsMode rails_mode;
 
   // Whether the event is blocking, non-blocking, all event
   // listeners were passive or was forced to be non-blocking.
   DispatchType dispatch_type;
+
+  // The expected result of this wheel event (if not canceled).
+  EventAction event_action;
 
   WebMouseWheelEvent(Type type, int modifiers, base::TimeTicks time_stamp)
       : WebMouseEvent(sizeof(WebMouseWheelEvent),
@@ -83,8 +99,6 @@ class WebMouseWheelEvent : public WebMouseEvent {
         resending_plugin_id(-1),
         phase(kPhaseNone),
         momentum_phase(kPhaseNone),
-        scroll_by_page(false),
-        has_precise_scrolling_deltas(false),
         rails_mode(kRailsModeFree),
         dispatch_type(kBlocking) {}
 

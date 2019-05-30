@@ -7,11 +7,14 @@
 
 #include <string>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
+#include "base/task/post_task.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_message_filter.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "mojo/public/cpp/bindings/associated_binding_set.h"
@@ -73,8 +76,8 @@ class BrowserAssociatedInterface {
 
     void ClearBindings() {
       if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
-        BrowserThread::PostTask(
-            BrowserThread::IO, FROM_HERE,
+        base::PostTaskWithTraits(
+            FROM_HERE, {BrowserThread::IO},
             base::BindOnce(&InternalState::ClearBindings, this));
         return;
       }
@@ -107,6 +110,6 @@ class BrowserAssociatedInterface {
   DISALLOW_COPY_AND_ASSIGN(BrowserAssociatedInterface);
 };
 
-};
+}  // namespace content
 
 #endif  // CONTENT_BROWSER_BROWSER_ASSOCIATED_INTERFACE_H_

@@ -5,12 +5,14 @@
 #include "ash/system/palette/palette_tray.h"
 
 #include <memory>
+#include <string>
 
+#include "ash/assistant/assistant_controller.h"
+#include "ash/assistant/test/test_assistant_service.h"
 #include "ash/highlighter/highlighter_controller.h"
 #include "ash/highlighter/highlighter_controller_test_api.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/ash_switches.h"
-#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/stylus_utils.h"
 #include "ash/public/interfaces/voice_interaction_controller.mojom.h"
 #include "ash/root_window_controller.h"
@@ -29,10 +31,12 @@
 #include "ash/voice_interaction/voice_interaction_controller.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "base/test/simple_test_tick_clock.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/session_manager_types.h"
+#include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/test/display_manager_test_api.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/devices/stylus_state.h"
@@ -162,7 +166,7 @@ TEST_F(PaletteTrayTest, PaletteTrayWorkflow) {
   EXPECT_FALSE(test_api_->palette_tool_manager()->IsToolActive(
       PaletteToolId::CAPTURE_SCREEN));
   // Wait for the tray bubble widget to close.
-  RunAllPendingInMessageLoop();
+  base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(test_api_->tray_bubble_wrapper());
   EXPECT_FALSE(palette_tray_->is_active());
 }
@@ -214,29 +218,28 @@ TEST_F(PaletteTrayTest, EnableStylusPref) {
 TEST_F(PaletteTrayTest, WelcomeBubbleVisibility) {
   ASSERT_FALSE(active_user_pref_service()->GetBoolean(
       prefs::kShownPaletteWelcomeBubble));
-  EXPECT_FALSE(test_api_->welcome_bubble()->bubble_shown());
+  EXPECT_FALSE(test_api_->welcome_bubble()->GetBubbleViewForTesting());
 
   // Verify that the welcome bubble does not shown up after tapping the screen
   // with a finger.
   ui::test::EventGenerator* generator = GetEventGenerator();
   generator->PressTouch();
   generator->ReleaseTouch();
-  EXPECT_FALSE(test_api_->welcome_bubble()->bubble_shown());
+  EXPECT_FALSE(test_api_->welcome_bubble()->GetBubbleViewForTesting());
 
   // Verify that the welcome bubble shows up after tapping the screen with a
   // stylus for the first time.
   generator->EnterPenPointerMode();
   generator->PressTouch();
   generator->ReleaseTouch();
-  EXPECT_TRUE(test_api_->welcome_bubble()->bubble_shown());
+  EXPECT_TRUE(test_api_->welcome_bubble()->GetBubbleViewForTesting());
 }
 
-// Base class for tests that rely on voice interaction enabled.
+// Base class for tests that rely on Assistant enabled.
 class PaletteTrayTestWithVoiceInteraction : public PaletteTrayTest {
  public:
   PaletteTrayTestWithVoiceInteraction() {
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        chromeos::switches::kEnableVoiceInteraction);
+    feature_list_.InitAndEnableFeature(chromeos::switches::kAssistantFeature);
   }
   ~PaletteTrayTestWithVoiceInteraction() override = default;
 
@@ -254,6 +257,9 @@ class PaletteTrayTestWithVoiceInteraction : public PaletteTrayTest {
 
     highlighter_test_api_ = std::make_unique<HighlighterControllerTestApi>(
         Shell::Get()->highlighter_controller());
+
+    Shell::Get()->assistant_controller()->SetAssistant(
+        assistant_.CreateInterfacePtrAndBind());
   }
 
   void TearDown() override {
@@ -319,7 +325,9 @@ class PaletteTrayTestWithVoiceInteraction : public PaletteTrayTest {
   std::unique_ptr<HighlighterControllerTestApi> highlighter_test_api_;
 
  private:
+  TestAssistantService assistant_;
   base::SimpleTestTickClock simulated_clock_;
+  base::test::ScopedFeatureList feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(PaletteTrayTestWithVoiceInteraction);
 };
@@ -330,6 +338,8 @@ TEST_F(PaletteTrayTestWithVoiceInteraction, MetalayerToolViewCreated) {
 }
 
 TEST_F(PaletteTrayTestWithVoiceInteraction, MetalayerToolActivatesHighlighter) {
+  ui::ScopedAnimationDurationScaleMode animation_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
   Shell::Get()->voice_interaction_controller()->NotifyStatusChanged(
       mojom::VoiceInteractionState::RUNNING);
   Shell::Get()->voice_interaction_controller()->NotifySettingsEnabled(true);
@@ -409,6 +419,8 @@ TEST_F(PaletteTrayTestWithVoiceInteraction, MetalayerToolActivatesHighlighter) {
 
 TEST_F(PaletteTrayTestWithVoiceInteraction,
        StylusBarrelButtonActivatesHighlighter) {
+  ui::ScopedAnimationDurationScaleMode animation_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
   Shell::Get()->voice_interaction_controller()->NotifyStatusChanged(
       mojom::VoiceInteractionState::NOT_READY);
   Shell::Get()->voice_interaction_controller()->NotifySettingsEnabled(false);
@@ -591,10 +603,10 @@ TEST_F(PaletteTrayTestWithInternalStylus, WelcomeBubbleShownOnEject) {
                                          false);
   ASSERT_FALSE(active_user_pref_service()->GetBoolean(
       prefs::kShownPaletteWelcomeBubble));
-  EXPECT_FALSE(test_api_->welcome_bubble()->bubble_shown());
+  EXPECT_FALSE(test_api_->welcome_bubble()->GetBubbleViewForTesting());
 
   EjectStylus();
-  EXPECT_TRUE(test_api_->welcome_bubble()->bubble_shown());
+  EXPECT_TRUE(test_api_->welcome_bubble()->GetBubbleViewForTesting());
 }
 
 // Verify if the pref which tracks if the welcome bubble has been shown before
@@ -604,10 +616,10 @@ TEST_F(PaletteTrayTestWithInternalStylus, WelcomeBubbleNotShownIfShownBefore) {
                                          false);
   active_user_pref_service()->SetBoolean(prefs::kShownPaletteWelcomeBubble,
                                          true);
-  EXPECT_FALSE(test_api_->welcome_bubble()->bubble_shown());
+  EXPECT_FALSE(test_api_->welcome_bubble()->GetBubbleViewForTesting());
 
   EjectStylus();
-  EXPECT_FALSE(test_api_->welcome_bubble()->bubble_shown());
+  EXPECT_FALSE(test_api_->welcome_bubble()->GetBubbleViewForTesting());
 }
 
 // Verify that the bubble does not get shown if the auto open palette setting is
@@ -618,10 +630,10 @@ TEST_F(PaletteTrayTestWithInternalStylus,
       prefs::kLaunchPaletteOnEjectEvent));
   active_user_pref_service()->SetBoolean(prefs::kShownPaletteWelcomeBubble,
                                          false);
-  EXPECT_FALSE(test_api_->welcome_bubble()->bubble_shown());
+  EXPECT_FALSE(test_api_->welcome_bubble()->GetBubbleViewForTesting());
 
   EjectStylus();
-  EXPECT_FALSE(test_api_->welcome_bubble()->bubble_shown());
+  EXPECT_FALSE(test_api_->welcome_bubble()->GetBubbleViewForTesting());
 }
 
 // Verify that the bubble does not get shown if a stylus event has been seen by
@@ -630,11 +642,11 @@ TEST_F(PaletteTrayTestWithInternalStylus,
        WelcomeBubbleNotShownIfStylusTouchTray) {
   ASSERT_FALSE(active_user_pref_service()->GetBoolean(
       prefs::kShownPaletteWelcomeBubble));
-  EXPECT_FALSE(test_api_->welcome_bubble()->bubble_shown());
+  EXPECT_FALSE(test_api_->welcome_bubble()->GetBubbleViewForTesting());
 
   ui::test::EventGenerator* generator = GetEventGenerator();
   generator->EnterPenPointerMode();
-  generator->set_current_location(
+  generator->set_current_screen_location(
       palette_tray_->GetBoundsInScreen().CenterPoint());
   generator->PressTouch();
   generator->ReleaseTouch();
@@ -642,7 +654,7 @@ TEST_F(PaletteTrayTestWithInternalStylus,
   EXPECT_TRUE(active_user_pref_service()->GetBoolean(
       prefs::kShownPaletteWelcomeBubble));
   EjectStylus();
-  EXPECT_FALSE(test_api_->welcome_bubble()->bubble_shown());
+  EXPECT_FALSE(test_api_->welcome_bubble()->GetBubbleViewForTesting());
 }
 
 // Verify that palette bubble is shown/hidden on stylus eject/insert iff the

@@ -7,8 +7,10 @@
 
 #include <vector>
 
-#include "ash/shell.h"
 #include "base/command_line.h"
+#include "base/run_loop.h"
+#include "base/threading/thread_restrictions.h"
+#include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -22,7 +24,7 @@
 #include "extensions/common/extension.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ime/input_method.h"
-#include "ui/keyboard/keyboard_switches.h"
+#include "ui/keyboard/public/keyboard_switches.h"
 
 namespace {
 const base::FilePath::CharType kWebuiTestDir[] = FILE_PATH_LITERAL("webui");
@@ -76,9 +78,9 @@ void DefaultKeyboardExtensionBrowserTest::RunTest(
   InjectJavascript(base::FilePath(kWebuiTestDir),
                    base::FilePath(kMockController));
   InjectJavascript(base::FilePath(kWebuiTestDir), base::FilePath(kMockTimer));
-  InjectJavascript(base::FilePath(FILE_PATH_LITERAL(config.test_dir_)),
-                   base::FilePath(FILE_PATH_LITERAL(config.base_framework_)));
-  InjectJavascript(base::FilePath(FILE_PATH_LITERAL(config.test_dir_)), file);
+  InjectJavascript(base::FilePath(config.test_dir_),
+                   base::FilePath(config.base_framework_));
+  InjectJavascript(base::FilePath(config.test_dir_), file);
 
   ASSERT_TRUE(content::ExecuteScript(web_contents, utf8_content_));
 
@@ -87,17 +89,15 @@ void DefaultKeyboardExtensionBrowserTest::RunTest(
   EXPECT_TRUE(ExecuteWebUIResourceTest(web_contents, resource_ids));
 }
 
-void DefaultKeyboardExtensionBrowserTest::ShowVirtualKeyboard() {
-  aura::Window* window = ash::Shell::GetPrimaryRootWindow();
-  ui::InputMethod* input_method = window->GetHost()->GetInputMethod();
-  ASSERT_TRUE(input_method);
-  input_method->ShowVirtualKeyboardIfEnabled();
-}
-
 content::WebContents*
 DefaultKeyboardExtensionBrowserTest::GetKeyboardWebContents(
     const std::string& id) {
-  ShowVirtualKeyboard();
+  // Ensure the keyboard is shown.
+  auto* client = ChromeKeyboardControllerClient::Get();
+  client->SetEnableFlag(keyboard::mojom::KeyboardEnableFlag::kExtensionEnabled);
+  client->ShowKeyboard();
+  client->FlushForTesting();
+
   GURL url = extensions::Extension::GetBaseURLFromExtensionId(id);
   std::unique_ptr<content::RenderWidgetHostIterator> widgets(
       content::RenderWidgetHost::GetRenderWidgetHosts());
@@ -119,7 +119,10 @@ void DefaultKeyboardExtensionBrowserTest::InjectJavascript(
     const base::FilePath& file) {
   base::FilePath path = ui_test_utils::GetTestFilePath(dir, file);
   std::string library_content;
-  ASSERT_TRUE(base::ReadFileToString(path, &library_content)) << path.value();
+  {
+    base::ScopedAllowBlockingForTesting allow_io;
+    ASSERT_TRUE(base::ReadFileToString(path, &library_content)) << path.value();
+  }
   utf8_content_.append(library_content);
   utf8_content_.append(";\n");
 }
@@ -176,10 +179,13 @@ IN_PROC_BROWSER_TEST_F(DefaultKeyboardExtensionBrowserTest, EndToEndTest) {
 
   // Press 'a' on keyboard.
   base::FilePath path = ui_test_utils::GetTestFilePath(
-      base::FilePath(FILE_PATH_LITERAL(kVirtualKeyboardExtensionTestDir)),
+      base::FilePath(kVirtualKeyboardExtensionTestDir),
       base::FilePath(FILE_PATH_LITERAL("end_to_end_test.js")));
   std::string script;
-  ASSERT_TRUE(base::ReadFileToString(path, &script));
+  {
+    base::ScopedAllowBlockingForTesting allow_io;
+    ASSERT_TRUE(base::ReadFileToString(path, &script));
+  }
   EXPECT_TRUE(content::ExecuteScript(keyboard_wc, script));
   // Verify 'a' appeared on test page.
   bool success = false;

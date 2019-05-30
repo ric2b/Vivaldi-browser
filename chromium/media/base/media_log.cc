@@ -84,6 +84,8 @@ std::string MediaLog::EventTypeToString(MediaLogEvent::Type type) {
       return "MEDIA_DEBUG_LOG_ENTRY";
     case MediaLogEvent::PROPERTY_CHANGE:
       return "PROPERTY_CHANGE";
+    case MediaLogEvent::SUSPENDED:
+      return "SUSPENDED";
   }
   NOTREACHED();
   return NULL;
@@ -192,7 +194,7 @@ MediaLog::~MediaLog() {
 }
 
 void MediaLog::AddEvent(std::unique_ptr<MediaLogEvent> event) {
-  base::AutoLock auto_lock(lock());
+  base::AutoLock auto_lock(parent_log_record_->lock);
   // Forward to the parent log's implementation.
   if (parent_log_record_->media_log)
     parent_log_record_->media_log->AddEventLocked(std::move(event));
@@ -201,7 +203,7 @@ void MediaLog::AddEvent(std::unique_ptr<MediaLogEvent> event) {
 void MediaLog::AddEventLocked(std::unique_ptr<MediaLogEvent> event) {}
 
 std::string MediaLog::GetErrorMessage() {
-  base::AutoLock auto_lock(lock());
+  base::AutoLock auto_lock(parent_log_record_->lock);
   // Forward to the parent log's implementation.
   if (parent_log_record_->media_log)
     return parent_log_record_->media_log->GetErrorMessageLocked();
@@ -214,7 +216,7 @@ std::string MediaLog::GetErrorMessageLocked() {
 }
 
 void MediaLog::RecordRapporWithSecurityOrigin(const std::string& metric) {
-  base::AutoLock auto_lock(lock());
+  base::AutoLock auto_lock(parent_log_record_->lock);
   // Forward to the parent log's implementation.
   if (parent_log_record_->media_log)
     parent_log_record_->media_log->RecordRapporWithSecurityOriginLocked(metric);
@@ -262,11 +264,18 @@ std::unique_ptr<MediaLogEvent> MediaLog::CreateTimeEvent(
     MediaLogEvent::Type type,
     const std::string& property,
     base::TimeDelta value) {
+  return CreateTimeEvent(type, property, value.InSecondsF());
+}
+
+std::unique_ptr<MediaLogEvent> MediaLog::CreateTimeEvent(
+    MediaLogEvent::Type type,
+    const std::string& property,
+    double value) {
   std::unique_ptr<MediaLogEvent> event(CreateEvent(type));
-  if (value.is_max())
-    event->params.SetString(property, "unknown");
+  if (std::isfinite(value))
+    event->params.SetDouble(property, value);
   else
-    event->params.SetDouble(property, value.InSecondsF());
+    event->params.SetString(property, "unknown");
   return event;
 }
 
@@ -274,12 +283,6 @@ std::unique_ptr<MediaLogEvent> MediaLog::CreateLoadEvent(
     const std::string& url) {
   std::unique_ptr<MediaLogEvent> event(CreateEvent(MediaLogEvent::LOAD));
   event->params.SetString("url", TruncateUrlString(url));
-  return event;
-}
-
-std::unique_ptr<MediaLogEvent> MediaLog::CreateSeekEvent(double seconds) {
-  std::unique_ptr<MediaLogEvent> event(CreateEvent(MediaLogEvent::SEEK));
-  event->params.SetDouble("seek_target", seconds);
   return event;
 }
 
@@ -370,7 +373,7 @@ MediaLog::ParentLogRecord::ParentLogRecord(MediaLog* log) : media_log(log) {}
 MediaLog::ParentLogRecord::~ParentLogRecord() = default;
 
 void MediaLog::InvalidateLog() {
-  base::AutoLock auto_lock(lock());
+  base::AutoLock auto_lock(parent_log_record_->lock);
   // It's almost certainly unintentional to invalidate a parent log.
   DCHECK(parent_log_record_->media_log == nullptr ||
          parent_log_record_->media_log == this);

@@ -109,14 +109,19 @@ LayerAnimator* LayerAnimator::CreateImplicitAnimator() {
     return target.member;                                              \
   }
 
-ANIMATED_PROPERTY(
-    const gfx::Transform&, TRANSFORM, Transform, gfx::Transform, transform);
-ANIMATED_PROPERTY(const gfx::Rect&, BOUNDS, Bounds, gfx::Rect, bounds);
-ANIMATED_PROPERTY(float, OPACITY, Opacity, float, opacity);
-ANIMATED_PROPERTY(bool, VISIBILITY, Visibility, bool, visibility);
-ANIMATED_PROPERTY(float, BRIGHTNESS, Brightness, float, brightness);
-ANIMATED_PROPERTY(float, GRAYSCALE, Grayscale, float, grayscale);
-ANIMATED_PROPERTY(SkColor, COLOR, Color, SkColor, color);
+ANIMATED_PROPERTY(const gfx::Transform&,
+                  TRANSFORM,
+                  Transform,
+                  gfx::Transform,
+                  transform)
+ANIMATED_PROPERTY(const gfx::Rect&, BOUNDS, Bounds, gfx::Rect, bounds)
+ANIMATED_PROPERTY(float, OPACITY, Opacity, float, opacity)
+ANIMATED_PROPERTY(bool, VISIBILITY, Visibility, bool, visibility)
+ANIMATED_PROPERTY(float, BRIGHTNESS, Brightness, float, brightness)
+ANIMATED_PROPERTY(float, GRAYSCALE, Grayscale, float, grayscale)
+ANIMATED_PROPERTY(SkColor, COLOR, Color, SkColor, color)
+
+#undef ANIMATED_PROPERTY
 
 base::TimeDelta LayerAnimator::GetTransitionDuration() const {
   return transition_duration_;
@@ -227,7 +232,8 @@ void LayerAnimator::ScheduleAnimation(LayerAnimationSequence* animation) {
   scoped_refptr<LayerAnimator> retain(this);
   OnScheduled(animation);
   if (is_animating()) {
-    animation_queue_.push_back(make_linked_ptr(animation));
+    animation_queue_.push_back(
+        std::unique_ptr<LayerAnimationSequence>(animation));
     ProcessQueue();
   } else {
     StartSequenceImmediately(animation);
@@ -414,7 +420,7 @@ void LayerAnimator::OnThreadedAnimationStarted(
   // The call to GetRunningAnimation made above already purged deleted
   // animations, so we are guaranteed that all the animations we iterate
   // over now are alive.
-  for (RunningAnimations::iterator iter = running_animations_.begin();
+  for (auto iter = running_animations_.begin();
        iter != running_animations_.end(); ++iter) {
     // Ensure that each sequence is only Started once, regardless of the
     // number of sequences in the group that have threaded first elements.
@@ -536,12 +542,12 @@ void LayerAnimator::UpdateAnimationState() {
 
 LayerAnimationSequence* LayerAnimator::RemoveAnimation(
     LayerAnimationSequence* sequence) {
-  linked_ptr<LayerAnimationSequence> to_return;
+  std::unique_ptr<LayerAnimationSequence> to_return;
 
   bool is_running = false;
 
   // First remove from running animations
-  for (RunningAnimations::iterator iter = running_animations_.begin();
+  for (auto iter = running_animations_.begin();
        iter != running_animations_.end(); ++iter) {
     if ((*iter).sequence() == sequence) {
       running_animations_.erase(iter);
@@ -553,8 +559,8 @@ LayerAnimationSequence* LayerAnimator::RemoveAnimation(
   // Then remove from the queue
   for (AnimationQueue::iterator queue_iter = animation_queue_.begin();
        queue_iter != animation_queue_.end(); ++queue_iter) {
-    if ((*queue_iter) == sequence) {
-      to_return = *queue_iter;
+    if (queue_iter->get() == sequence) {
+      to_return = std::move(*queue_iter);
       animation_queue_.erase(queue_iter);
       break;
     }
@@ -638,7 +644,7 @@ void LayerAnimator::ClearAnimations() {
 LayerAnimator::RunningAnimation* LayerAnimator::GetRunningAnimation(
     LayerAnimationElement::AnimatableProperty property) {
   PurgeDeletedAnimations();
-  for (RunningAnimations::iterator iter = running_animations_.begin();
+  for (auto iter = running_animations_.begin();
        iter != running_animations_.end(); ++iter) {
     if ((*iter).sequence()->properties() & property)
       return &(*iter);
@@ -651,14 +657,16 @@ void LayerAnimator::AddToQueueIfNotPresent(LayerAnimationSequence* animation) {
   bool found_sequence = false;
   for (AnimationQueue::iterator queue_iter = animation_queue_.begin();
        queue_iter != animation_queue_.end(); ++queue_iter) {
-    if ((*queue_iter) == animation) {
+    if (queue_iter->get() == animation) {
       found_sequence = true;
       break;
     }
   }
 
-  if (!found_sequence)
-    animation_queue_.push_front(make_linked_ptr(animation));
+  if (!found_sequence) {
+    animation_queue_.push_front(
+        std::unique_ptr<LayerAnimationSequence>(animation));
+  }
 }
 
 void LayerAnimator::RemoveAllAnimationsWithACommonProperty(
@@ -749,7 +757,7 @@ void LayerAnimator::EnqueueNewAnimation(LayerAnimationSequence* sequence) {
   // It is assumed that if there was no conflicting animation, we would
   // not have been called. No need to check for a collision; just
   // add to the queue.
-  animation_queue_.push_back(make_linked_ptr(sequence));
+  animation_queue_.push_back(std::unique_ptr<LayerAnimationSequence>(sequence));
   ProcessQueue();
 }
 
@@ -782,7 +790,7 @@ void LayerAnimator::ReplaceQueuedAnimations(LayerAnimationSequence* sequence) {
     else
       ++i;
   }
-  animation_queue_.push_back(make_linked_ptr(sequence));
+  animation_queue_.push_back(std::unique_ptr<LayerAnimationSequence>(sequence));
   ProcessQueue();
 }
 

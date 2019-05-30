@@ -32,6 +32,13 @@ class SSLErrorUI;
 
 class ChromeMetricsHelper;
 
+// URL to use as the 'Learn More' link when the interstitial is caused by
+// a "ERR_CERT_SYMANTEC_LEGACY" error, -202 fragment is included so
+// chrome://connection-help expands the right section if the user can't reach
+// the help center.
+const char kSymantecSupportUrl[] =
+    "https://support.google.com/chrome?p=symantec#-202";
+
 // This class is responsible for showing/hiding the interstitial page that is
 // shown when a certificate error happens.
 // It deletes itself when the interstitial page is closed.
@@ -57,7 +64,6 @@ class SSLBlockingPage : public SSLBlockingPageBase {
       const base::Time& time_triggered,
       const GURL& support_url,
       std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
-      bool is_superfish,
       const base::Callback<void(content::CertificateRequestResultType)>&
           callback);
 
@@ -80,14 +86,13 @@ class SSLBlockingPage : public SSLBlockingPageBase {
       std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
       bool overrideable,
       std::unique_ptr<ChromeMetricsHelper> metrics_helper,
-      bool is_superfish,
       const base::Callback<void(content::CertificateRequestResultType)>&
           callback);
 
   // InterstitialPageDelegate implementation.
   void CommandReceived(const std::string& command) override;
   void OverrideEntry(content::NavigationEntry* entry) override;
-  void OverrideRendererPrefs(content::RendererPreferences* prefs) override;
+  void OverrideRendererPrefs(blink::mojom::RendererPreferences* prefs) override;
   void OnProceed() override;
   void OnDontProceed() override;
 

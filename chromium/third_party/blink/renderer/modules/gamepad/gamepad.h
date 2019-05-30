@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/modules/gamepad/gamepad_button.h"
 #include "third_party/blink/renderer/modules/gamepad/gamepad_haptic_actuator.h"
 #include "third_party/blink/renderer/modules/gamepad/gamepad_pose.h"
+#include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -38,11 +39,15 @@
 
 namespace blink {
 
-class Gamepad final : public ScriptWrappable {
+class MODULES_EXPORT Gamepad final : public ScriptWrappable,
+                                     public ContextClient {
   DEFINE_WRAPPERTYPEINFO();
+  USING_GARBAGE_COLLECTED_MIXIN(Gamepad);
 
  public:
-  static Gamepad* Create() { return new Gamepad; }
+  static Gamepad* Create(ExecutionContext* context);
+
+  explicit Gamepad(ExecutionContext*);
   ~Gamepad() override;
 
   typedef Vector<double> DoubleVector;
@@ -87,8 +92,6 @@ class Gamepad final : public ScriptWrappable {
   void Trace(blink::Visitor*) override;
 
  private:
-  Gamepad();
-
   String id_;
   unsigned index_;
   bool connected_;

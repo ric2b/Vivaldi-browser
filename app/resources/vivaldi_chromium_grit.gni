@@ -163,6 +163,13 @@ template("chromium_merge_grit_action") {
     outputs = [
       grit_grd_file,
     ]
+    foreach(file,
+            exec_script(_merge_resources_cmd,
+                        [ "--list-sources" ] + command_parameters,
+                        "list lines")) {
+      outputs +=
+          [ "$root_build_dir/" + file ]
+    }
     if (have_strings) {
       outputs += [ translation_stamp ]
     }

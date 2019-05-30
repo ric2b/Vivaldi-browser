@@ -67,9 +67,7 @@ EmbeddedTestServer::~EmbeddedTestServer() {
   }
 
   {
-    // Thread::Join induced by test code should cause an assert.
-    base::ScopedAllowBlockingForTesting allow_blocking;
-
+    base::ScopedAllowBaseSyncPrimitivesForTesting allow_wait_for_thread_join;
     io_thread_.reset();
   }
 }
@@ -89,15 +87,15 @@ void EmbeddedTestServer::SetConnectionListener(
   connection_listener_ = listener;
 }
 
-bool EmbeddedTestServer::Start() {
-  bool success = InitializeAndListen();
+bool EmbeddedTestServer::Start(int port) {
+  bool success = InitializeAndListen(port);
   if (!success)
     return false;
   StartAcceptingConnections();
   return true;
 }
 
-bool EmbeddedTestServer::InitializeAndListen() {
+bool EmbeddedTestServer::InitializeAndListen(int port) {
   DCHECK(!Started());
 
   const int max_tries = 5;
@@ -114,7 +112,8 @@ bool EmbeddedTestServer::InitializeAndListen() {
 
     listen_socket_.reset(new TCPServerSocket(nullptr, NetLogSource()));
 
-    int result = listen_socket_->ListenWithAddressAndPort("127.0.0.1", 0, 10);
+    int result =
+        listen_socket_->ListenWithAddressAndPort("127.0.0.1", port, 10);
     if (result) {
       LOG(ERROR) << "Listen failed: " << ErrorToString(result);
       listen_socket_.reset();
@@ -181,8 +180,8 @@ void EmbeddedTestServer::StartAcceptingConnections() {
   CHECK(io_thread_->WaitUntilThreadStarted());
 
   io_thread_->task_runner()->PostTask(
-      FROM_HERE,
-      base::Bind(&EmbeddedTestServer::DoAcceptLoop, base::Unretained(this)));
+      FROM_HERE, base::BindOnce(&EmbeddedTestServer::DoAcceptLoop,
+                                base::Unretained(this)));
 }
 
 bool EmbeddedTestServer::ShutdownAndWaitUntilComplete() {
@@ -277,6 +276,10 @@ bool EmbeddedTestServer::GetAddressList(AddressList* address_list) const {
   return true;
 }
 
+std::string EmbeddedTestServer::GetIPLiteralString() const {
+  return local_endpoint_.address().ToString();
+}
+
 void EmbeddedTestServer::ResetSSLConfigOnIOThread(
     ServerCertificate cert,
     const SSLServerConfig& ssl_config) {
@@ -311,6 +314,8 @@ std::string EmbeddedTestServer::GetCertificateName() const {
       return "common_name_only.pem";
     case CERT_SHA1_LEAF:
       return "sha1_leaf.pem";
+    case CERT_OK_BY_INTERMEDIATE:
+      return "ok_cert_by_intermediate.pem";
   }
 
   return "ok_cert.pem";
@@ -321,7 +326,8 @@ scoped_refptr<X509Certificate> EmbeddedTestServer::GetCertificate() const {
   base::FilePath certs_dir(GetTestCertsDirectory());
 
   base::ScopedAllowBlockingForTesting allow_blocking;
-  return ImportCertFromFile(certs_dir, GetCertificateName());
+  return CreateCertificateChainFromFile(certs_dir, GetCertificateName(),
+                                        X509Certificate::FORMAT_AUTO);
 }
 
 void EmbeddedTestServer::ServeFilesFromDirectory(
@@ -501,7 +507,7 @@ bool EmbeddedTestServer::PostTaskToIOThreadAndWait(
   // already.
   //
   // To handle this situation, create temporary message loop to support the
-  // PostTaskAndReply operation if the current thread as no message loop.
+  // PostTaskAndReply operation if the current thread has no message loop.
   std::unique_ptr<base::MessageLoop> temporary_loop;
   if (!base::MessageLoopCurrent::Get())
     temporary_loop.reset(new base::MessageLoop());

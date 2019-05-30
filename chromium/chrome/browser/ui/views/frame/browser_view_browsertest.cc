@@ -6,18 +6,20 @@
 
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/devtools/devtools_window_testing.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/tab_modal_confirm_dialog.h"
 #include "chrome/browser/ui/tab_ui_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view_observer.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/chromium_strings.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/invalidate_type.h"
@@ -25,6 +27,9 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "ui/accessibility/platform/ax_platform_node.h"
+#include "ui/accessibility/platform/ax_platform_node_test_helper.h"
+#include "ui/base/l10n/l10n_util.h"
 
 class BrowserViewTest : public InProcessBrowserTest {
  public:
@@ -59,8 +64,6 @@ class BrowserViewTest : public InProcessBrowserTest {
   DevToolsWindow* devtools_;
 
  private:
-  test::ScopedMacViewsBrowserMode views_mode_{true};
-
   DISALLOW_COPY_AND_ASSIGN(BrowserViewTest);
 };
 
@@ -87,6 +90,17 @@ class TestWebContentsObserver : public content::WebContentsObserver {
   DISALLOW_COPY_AND_ASSIGN(TestWebContentsObserver);
 };
 
+class TestTabModalConfirmDialogDelegate : public TabModalConfirmDialogDelegate {
+ public:
+  explicit TestTabModalConfirmDialogDelegate(content::WebContents* contents)
+      : TabModalConfirmDialogDelegate(contents) {}
+  base::string16 GetTitle() override {
+    return base::string16(base::ASCIIToUTF16("Dialog Title"));
+  }
+  base::string16 GetDialogMessage() override { return base::string16(); }
+
+  DISALLOW_COPY_AND_ASSIGN(TestTabModalConfirmDialogDelegate);
+};
 }  // namespace
 
 // Verifies don't crash when CloseNow() is invoked with two tabs in a browser.
@@ -110,7 +124,8 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, CloseWithTabsStartWithActive) {
       new Browser(Browser::CreateParams(browser()->profile(), true));
   chrome::AddTabAt(browser2, GURL(), -1, true);
   chrome::AddTabAt(browser2, GURL(), -1, true);
-  browser2->tab_strip_model()->ActivateTabAt(0, true);
+  browser2->tab_strip_model()->ActivateTabAt(
+      0, {TabStripModel::GestureType::kOther});
   TestWebContentsObserver observer(
       browser2->tab_strip_model()->GetWebContentsAt(0),
       browser2->tab_strip_model()->GetWebContentsAt(1));
@@ -119,14 +134,7 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, CloseWithTabsStartWithActive) {
 
 // Verifies that page and devtools WebViews are being correctly layed out
 // when DevTools is opened/closed/updated/undocked.
-
-// Flaky on Chrome OS.  http://crbug.com/693000
-#if defined(OS_CHROMEOS)
-#define MAYBE_DevToolsUpdatesBrowserWindow DISABLED_DevToolsUpdatesBrowserWindow
-#else
-#define MAYBE_DevToolsUpdatesBrowserWindow DevToolsUpdatesBrowserWindow
-#endif
-IN_PROC_BROWSER_TEST_F(BrowserViewTest, MAYBE_DevToolsUpdatesBrowserWindow) {
+IN_PROC_BROWSER_TEST_F(BrowserViewTest, DevToolsUpdatesBrowserWindow) {
   gfx::Rect full_bounds =
       browser_view()->GetContentsContainerForTest()->GetLocalBounds();
   gfx::Rect small_bounds(10, 20, 30, 40);
@@ -195,51 +203,14 @@ class BookmarkBarViewObserverImpl : public BookmarkBarViewObserver {
   int change_count() const { return change_count_; }
   void clear_change_count() { change_count_ = 0; }
 
-  int end_count() const { return end_count_; }
-  void clear_end_count() { end_count_ = 0; }
-
   // BookmarkBarViewObserver:
   void OnBookmarkBarVisibilityChanged() override { change_count_++; }
-  void OnBookmarkBarAnimationEnded() override { end_count_++; }
 
  private:
   int change_count_ = 0;
-  int end_count_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(BookmarkBarViewObserverImpl);
 };
-
-// Verifies we notify the BookmarkBarViewObserver when an animation ends.
-IN_PROC_BROWSER_TEST_F(BrowserViewTest, VerifyAnimationEndObserved) {
-  BookmarkBarView::DisableAnimationsForTesting(true);
-  // No bookmark bar.
-  browser()->profile()->GetPrefs()->SetBoolean(
-      bookmarks::prefs::kShowBookmarkBar, false);
-
-  // Add observer and confirm bookmark bar not visible.
-  ASSERT_TRUE(browser_view()->bookmark_bar());
-  BookmarkBarViewObserverImpl observer;
-  BookmarkBarView* bookmark_bar = browser_view()->bookmark_bar();
-  bookmark_bar->AddObserver(&observer);
-  EXPECT_FALSE(bookmark_bar->visible());
-  EXPECT_EQ(0, observer.end_count());
-
-  // Show the bookmark bar.
-  browser()->profile()->GetPrefs()->SetBoolean(
-      bookmarks::prefs::kShowBookmarkBar, true);
-
-  EXPECT_TRUE(bookmark_bar->visible());
-  EXPECT_EQ(1, observer.end_count());
-  observer.clear_end_count();
-
-  // Hide the bookmark bar.
-  browser()->profile()->GetPrefs()->SetBoolean(
-      bookmarks::prefs::kShowBookmarkBar, false);
-
-  EXPECT_FALSE(bookmark_bar->visible());
-  EXPECT_EQ(1, observer.end_count());
-  BookmarkBarView::DisableAnimationsForTesting(false);
-}
 
 // Verifies we don't unnecessarily change the visibility of the BookmarkBarView.
 IN_PROC_BROWSER_TEST_F(BrowserViewTest, AvoidUnnecessaryVisibilityChanges) {
@@ -258,38 +229,38 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, AvoidUnnecessaryVisibilityChanges) {
   EXPECT_TRUE(bookmark_bar->visible());
 
   // Go to empty tab. Bookmark bar should hide.
-  browser()->tab_strip_model()->ActivateTabAt(0, true);
+  browser()->tab_strip_model()->ActivateTabAt(
+      0, {TabStripModel::GestureType::kOther});
   EXPECT_FALSE(bookmark_bar->visible());
   EXPECT_EQ(1, observer.change_count());
   observer.clear_change_count();
-  EXPECT_EQ(0, observer.end_count());
 
   // Go to ntp tab. Bookmark bar should show.
-  browser()->tab_strip_model()->ActivateTabAt(1, true);
+  browser()->tab_strip_model()->ActivateTabAt(
+      1, {TabStripModel::GestureType::kOther});
   EXPECT_TRUE(bookmark_bar->visible());
   EXPECT_EQ(1, observer.change_count());
   observer.clear_change_count();
-  EXPECT_EQ(0, observer.end_count());
 
   // Repeat with the bookmark bar always visible.
   browser()->profile()->GetPrefs()->SetBoolean(
       bookmarks::prefs::kShowBookmarkBar, true);
-  browser()->tab_strip_model()->ActivateTabAt(1, true);
+  browser()->tab_strip_model()->ActivateTabAt(
+      1, {TabStripModel::GestureType::kOther});
   EXPECT_TRUE(bookmark_bar->visible());
   observer.clear_change_count();
-  EXPECT_EQ(0, observer.end_count());
 
-  browser()->tab_strip_model()->ActivateTabAt(0, true);
+  browser()->tab_strip_model()->ActivateTabAt(
+      0, {TabStripModel::GestureType::kOther});
   EXPECT_TRUE(bookmark_bar->visible());
   EXPECT_EQ(0, observer.change_count());
   observer.clear_change_count();
-  EXPECT_EQ(0, observer.end_count());
 
-  browser()->tab_strip_model()->ActivateTabAt(1, true);
+  browser()->tab_strip_model()->ActivateTabAt(
+      1, {TabStripModel::GestureType::kOther});
   EXPECT_TRUE(bookmark_bar->visible());
   EXPECT_EQ(0, observer.change_count());
   observer.clear_change_count();
-  EXPECT_EQ(0, observer.end_count());
 
   browser_view()->bookmark_bar()->RemoveObserver(&observer);
 }
@@ -305,14 +276,12 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, TitleAndLoadState) {
       contents, 1, content::MessageLoopRunner::QuitMode::DEFERRED);
 
   TabStrip* tab_strip = browser_view()->tabstrip();
-
   // Navigate without blocking.
-  ui_test_utils::NavigateToURLWithDispositionBlockUntilNavigationsComplete(
-      browser(),
-      ui_test_utils::GetTestUrl(
-          base::FilePath(base::FilePath::kCurrentDirectory),
-          base::FilePath(FILE_PATH_LITERAL("title2.html"))),
-      0, WindowOpenDisposition::CURRENT_TAB, ui_test_utils::BROWSER_TEST_NONE);
+  const GURL test_url = ui_test_utils::GetTestUrl(
+      base::FilePath(base::FilePath::kCurrentDirectory),
+      base::FilePath(FILE_PATH_LITERAL("title2.html")));
+  contents->GetController().LoadURL(test_url, content::Referrer(),
+                                    ui::PAGE_TRANSITION_LINK, std::string());
   EXPECT_TRUE(browser()->tab_strip_model()->TabsAreLoading());
   EXPECT_EQ(TabNetworkState::kWaiting,
             tab_strip->tab_at(0)->data().network_state);
@@ -339,3 +308,62 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, ShowFaviconInTab) {
   auto favicon = helper->GetFavicon();
   ASSERT_FALSE(favicon.IsEmpty());
 }
+
+// On Mac, voiceover treats tab modal dialogs as native windows, so setting an
+// accessible title for tab-modal dialogs is not necessary.
+#if !defined(OS_MACOSX)
+
+// Open a tab-modal dialog and check that the accessible window title is the
+// title of the dialog.
+IN_PROC_BROWSER_TEST_F(BrowserViewTest, GetAccessibleTabModalDialogTitle) {
+  base::string16 window_title = base::ASCIIToUTF16("about:blank - ") +
+                                l10n_util::GetStringUTF16(IDS_PRODUCT_NAME);
+  EXPECT_TRUE(base::StartsWith(browser_view()->GetAccessibleWindowTitle(),
+                               window_title, base::CompareCase::SENSITIVE));
+
+  content::WebContents* contents = browser_view()->GetActiveWebContents();
+  TestTabModalConfirmDialogDelegate* delegate =
+      new TestTabModalConfirmDialogDelegate(contents);
+  TabModalConfirmDialog::Create(delegate, contents);
+  EXPECT_EQ(browser_view()->GetAccessibleWindowTitle(), delegate->GetTitle());
+
+  delegate->Close();
+  EXPECT_TRUE(base::StartsWith(browser_view()->GetAccessibleWindowTitle(),
+                               window_title, base::CompareCase::SENSITIVE));
+}
+
+// Open a tab-modal dialog and check that the accessibility tree only contains
+// the dialog.
+IN_PROC_BROWSER_TEST_F(BrowserViewTest, GetAccessibleTabModalDialogTree) {
+  ui::AXPlatformNode* ax_node = ui::AXPlatformNode::FromNativeViewAccessible(
+      browser_view()->GetWidget()->GetRootView()->GetNativeViewAccessible());
+// We expect this conversion to be safe on Windows, but can't guarantee that it
+// is safe on other platforms.
+#if defined(OS_WIN)
+  ASSERT_TRUE(ax_node);
+#else
+  if (!ax_node)
+    return;
+#endif
+
+  // There is no dialog, but the browser UI should be visible. So we expect the
+  // browser's reload button and no "OK" button from a dialog.
+  EXPECT_NE(ui::AXPlatformNodeTestHelper::FindChildByName(ax_node, "Reload"),
+            nullptr);
+  EXPECT_EQ(ui::AXPlatformNodeTestHelper::FindChildByName(ax_node, "OK"),
+            nullptr);
+
+  content::WebContents* contents = browser_view()->GetActiveWebContents();
+  TestTabModalConfirmDialogDelegate* delegate =
+      new TestTabModalConfirmDialogDelegate(contents);
+  TabModalConfirmDialog::Create(delegate, contents);
+
+  // The tab modal dialog should be in the accessibility tree; everything else
+  // should be hidden. So we expect an "OK" button and no reload button.
+  EXPECT_EQ(ui::AXPlatformNodeTestHelper::FindChildByName(ax_node, "Reload"),
+            nullptr);
+  EXPECT_NE(ui::AXPlatformNodeTestHelper::FindChildByName(ax_node, "OK"),
+            nullptr);
+}
+
+#endif  // !defined(OS_MACOSX)

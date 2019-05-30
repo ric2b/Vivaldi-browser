@@ -30,10 +30,10 @@ config("features") {
   if (is_official_build) {
     defines += [ "VIVALDI_PRODUCT_VERSION=\"$official_product_kind_string\"" ]
   }
-  if (cc_wrapper != "") {
-    defines += [ "VIVALDI_WIN_COMPILE_CACHE" ]
-  }
   if (is_win) {
+    if (cc_wrapper != "") {
+      defines += [ "VIVALDI_WIN_COMPILE_CACHE" ]
+    }
     ldflags = [ "notelemetry.obj" ]
   }
 }

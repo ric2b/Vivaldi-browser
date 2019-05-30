@@ -58,7 +58,6 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
     SECURITY_LEVEL_3 = 3,
   };
 
-  using ResetCredentialsCB = base::Callback<void(bool)>;
   using MediaCryptoReadyCB = MediaCryptoContext::MediaCryptoReadyCB;
 
   // Checks whether MediaDRM is available and usable, including for decoding.
@@ -74,6 +73,14 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   static bool IsKeySystemSupportedWithType(
       const std::string& key_system,
       const std::string& container_mime_type);
+
+  // Whether per-origin provisioning (setting "origin" property on MediaDrm) is
+  // supported or not. If false, per-device provisioning is used.
+  static bool IsPerOriginProvisioningSupported();
+
+  // Returns true if this device supports per-application provisioning, false
+  // otherwise.
+  static bool IsPerApplicationProvisioningSupported();
 
   static bool IsPersistentLicenseTypeSupported(const std::string& key_system);
 
@@ -121,6 +128,11 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   // CdmContext implementation.
   MediaCryptoContext* GetMediaCryptoContext() override;
 
+  // Provision the origin bound with |this|. |provisioning_complete_cb| will be
+  // called asynchronously to indicate whether this was successful or not.
+  // MediaDrmBridge must be created with a valid origin ID.
+  void Provision(base::OnceCallback<void(bool)> provisioning_complete_cb);
+
   // Unprovision the origin bound with |this|. This will remove the cert for
   // current origin and leave the offline licenses in invalid state (offline
   // licenses can't be used anymore).
@@ -142,11 +154,6 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   // Helper function to determine whether a secure decoder is required for the
   // video playback.
   bool IsSecureCodecRequired();
-
-  // Reset the device credentials. MediaDrmBridge must be created without
-  // session support.
-  // TODO(xhwang): Unify Unprovision() and ResetDeviceCredentials().
-  void ResetDeviceCredentials(const ResetCredentialsCB& callback);
 
   // Helper functions to resolve promises.
   void ResolvePromise(uint32_t promise_id);
@@ -171,11 +178,18 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
       const base::android::JavaParamRef<jobject>& j_media_crypto);
 
   // Called by Java when we need to send a provisioning request,
-  void OnStartProvisioning(
+  void OnProvisionRequest(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& j_media_drm,
       const base::android::JavaParamRef<jstring>& j_default_url,
       const base::android::JavaParamRef<jbyteArray>& j_request_data);
+
+  // Called by Java when provisioning is complete. This is only in response to a
+  // provision() request.
+  void OnProvisioningComplete(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& j_media_drm,
+      bool success);
 
   // Callbacks to resolve the promise for |promise_id|.
   void OnPromiseResolved(
@@ -231,12 +245,6 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
       const base::android::JavaParamRef<jbyteArray>& j_session_id,
       jlong expiry_time_ms);
 
-  // Called by the java object when credential reset is completed.
-  void OnResetDeviceCredentialsCompleted(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>&,
-      bool success);
-
  private:
   friend class MediaDrmBridgeFactory;
   // For DeleteSoon() in DeleteOnCorrectThread().
@@ -258,8 +266,7 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   // default security level will be used if |security_level| is
   // SECURITY_LEVEL_DEFAULT.
   //
-  // |origin_id| is a random string that can identify an origin. It may be empty
-  // when reseting device credential.
+  // |origin_id| is a random string that can identify an origin.
   //
   // If |requires_media_crypto| is true, MediaCrypto is expected to be created
   // and notified via MediaCryptoReadyCB set in SetMediaCryptoReadyCB(). This
@@ -270,8 +277,7 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   //
   // If |requires_media_crypto| is false, MediaCrypto will not be created. This
   // object cannot be used for playback, but can be used to unprovision the
-  // device/origin via Unprovision() and ResetDeviceCredentials(). Sessions
-  // should not be created in this mode.
+  // device/origin via Unprovision(). Sessions are not created in this mode.
   MediaDrmBridge(const std::vector<uint8_t>& scheme_uuid,
                  const std::string& origin_id,
                  SecurityLevel security_level,
@@ -326,6 +332,9 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   // Non-null iff when a provision request is pending.
   std::unique_ptr<ProvisionFetcher> provision_fetcher_;
 
+  // The callback to be called when provisioning is complete.
+  base::OnceCallback<void(bool)> provisioning_complete_cb_;
+
   // Callbacks for firing session events.
   SessionMessageCB session_message_cb_;
   SessionClosedCB session_closed_cb_;
@@ -333,8 +342,6 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   SessionExpirationUpdateCB session_expiration_update_cb_;
 
   MediaCryptoReadyCB media_crypto_ready_cb_;
-
-  ResetCredentialsCB reset_credentials_cb_;
 
   PlayerTrackerImpl player_tracker_;
 

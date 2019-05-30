@@ -2,13 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <vector>
 
-#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_view_ids.h"
+#include "ash/public/interfaces/ash_message_center_controller.mojom-test-utils.h"
 #include "ash/public/interfaces/ash_message_center_controller.mojom.h"
 #include "ash/public/interfaces/constants.mojom.h"
-#include "ash/public/interfaces/system_tray_test_api.mojom.h"
+#include "ash/public/interfaces/system_tray_test_api.test-mojom-test-utils.h"
+#include "ash/public/interfaces/system_tray_test_api.test-mojom.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/media/router/media_routes_observer.h"
@@ -56,46 +58,26 @@ class SystemTrayTrayCastMediaRouterChromeOSTest : public InProcessBrowserTest {
   bool IsViewDrawn(int view_id) {
     ash::mojom::SystemTrayTestApiAsyncWaiter wait_for(tray_test_api_.get());
     bool visible = false;
-    wait_for.IsBubbleViewVisible(view_id, &visible);
+    wait_for.IsBubbleViewVisible(view_id, false /* open_tray */, &visible);
     return visible;
   }
 
   bool IsTrayVisible() { return IsViewDrawn(ash::VIEW_ID_CAST_MAIN_VIEW); }
 
   bool IsCastingNotificationVisible() {
-    ash::mojom::SystemTrayTestApiAsyncWaiter wait_for(tray_test_api_.get());
-    if (ash::features::IsSystemTrayUnifiedEnabled())
-      return !GetNotificationString().empty();
-    else
-      return IsViewDrawn(ash::VIEW_ID_CAST_CAST_VIEW);
-  }
-
-  bool IsTraySelectViewVisible() {
-    // TODO(tetsui): Remove this method because in UnifiedSystemTray we don't
-    // have distinction between select view and cast view.
-    if (ash::features::IsSystemTrayUnifiedEnabled())
-      return IsTrayVisible();
-    ash::mojom::SystemTrayTestApiAsyncWaiter wait_for(tray_test_api_.get());
-    return IsViewDrawn(ash::VIEW_ID_CAST_SELECT_VIEW);
+    return !GetNotificationString().empty();
   }
 
   base::string16 GetNotificationString() {
-    if (ash::features::IsSystemTrayUnifiedEnabled()) {
-      ash::mojom::AshMessageCenterControllerAsyncWaiter wait_for(
-          ash_message_center_controller_.get());
-      std::vector<message_center::Notification> notifications;
-      wait_for.GetActiveNotifications(&notifications);
-      for (const auto& notification : notifications) {
-        if (notification.id() == kNotificationId)
-          return notification.title();
-      }
-      return base::string16();
-    } else {
-      base::string16 result;
-      ash::mojom::SystemTrayTestApiAsyncWaiter wait_for(tray_test_api_.get());
-      wait_for.GetBubbleLabelText(ash::VIEW_ID_CAST_CAST_VIEW_LABEL, &result);
-      return result;
+    ash::mojom::AshMessageCenterControllerAsyncWaiter wait_for(
+        ash_message_center_controller_.get());
+    std::vector<message_center::Notification> notifications;
+    wait_for.GetActiveNotifications(&notifications);
+    for (const auto& notification : notifications) {
+      if (notification.id() == kNotificationId)
+        return notification.title();
     }
+    return base::string16();
   }
 
   media_router::MediaSinksObserver* media_sinks_observer() const {
@@ -110,6 +92,18 @@ class SystemTrayTrayCastMediaRouterChromeOSTest : public InProcessBrowserTest {
 
  private:
   // InProcessBrowserTest:
+  void PreRunTestOnMainThread() override {
+    media_router_ = std::make_unique<media_router::MockMediaRouter>();
+    ON_CALL(*media_router_, RegisterMediaSinksObserver(_))
+        .WillByDefault(Invoke(
+            this, &SystemTrayTrayCastMediaRouterChromeOSTest::CaptureSink));
+    ON_CALL(*media_router_, RegisterMediaRoutesObserver(_))
+        .WillByDefault(Invoke(
+            this, &SystemTrayTrayCastMediaRouterChromeOSTest::CaptureRoutes));
+    CastConfigClientMediaRouter::SetMediaRouterForTest(media_router_.get());
+    InProcessBrowserTest::PreRunTestOnMainThread();
+  }
+
   void SetUpOnMainThread() override {
     InProcessBrowserTest::SetUpOnMainThread();
     // Connect to the ash test interface.
@@ -123,6 +117,11 @@ class SystemTrayTrayCastMediaRouterChromeOSTest : public InProcessBrowserTest {
                         &ash_message_center_controller_);
   }
 
+  void PostRunTestOnMainThread() override {
+    InProcessBrowserTest::PostRunTestOnMainThread();
+    CastConfigClientMediaRouter::SetMediaRouterForTest(nullptr);
+  }
+
   bool CaptureSink(media_router::MediaSinksObserver* media_sinks_observer) {
     media_sinks_observer_ = media_sinks_observer;
     return true;
@@ -132,21 +131,7 @@ class SystemTrayTrayCastMediaRouterChromeOSTest : public InProcessBrowserTest {
     media_routes_observer_ = media_routes_observer;
   }
 
-  void SetUpInProcessBrowserTestFixture() override {
-    ON_CALL(media_router_, RegisterMediaSinksObserver(_))
-        .WillByDefault(Invoke(
-            this, &SystemTrayTrayCastMediaRouterChromeOSTest::CaptureSink));
-    ON_CALL(media_router_, RegisterMediaRoutesObserver(_))
-        .WillByDefault(Invoke(
-            this, &SystemTrayTrayCastMediaRouterChromeOSTest::CaptureRoutes));
-    CastConfigClientMediaRouter::SetMediaRouterForTest(&media_router_);
-  }
-
-  void TearDownInProcessBrowserTestFixture() override {
-    CastConfigClientMediaRouter::SetMediaRouterForTest(nullptr);
-  }
-
-  media_router::MockMediaRouter media_router_;
+  std::unique_ptr<media_router::MockMediaRouter> media_router_;
   media_router::MediaSinksObserver* media_sinks_observer_ = nullptr;
   media_router::MediaRoutesObserver* media_routes_observer_ = nullptr;
   ash::mojom::SystemTrayTestApiPtr tray_test_api_;
@@ -185,7 +170,6 @@ IN_PROC_BROWSER_TEST_F(SystemTrayTrayCastMediaRouterChromeOSTest,
   media_sinks_observer()->OnSinksUpdated(two_sinks, std::vector<url::Origin>());
   content::RunAllPendingInMessageLoop();
   EXPECT_TRUE(IsTrayVisible());
-  EXPECT_TRUE(IsTraySelectViewVisible());
 
   // And if all of the sinks go away, it should be hidden again.
   media_sinks_observer()->OnSinksUpdated(zero_sinks,

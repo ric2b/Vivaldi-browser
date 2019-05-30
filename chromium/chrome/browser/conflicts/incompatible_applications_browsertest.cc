@@ -10,6 +10,7 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/scoped_native_library.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_reg_util_win.h"
@@ -86,7 +87,7 @@ class IncompatibleApplicationsBrowserTest : public InProcessBrowserTest {
     // TODO(crbug.com/850517): Don't do test-specific setup if the test isn't
     // going to do anything. It seems to conflict with the VizDisplayCompositor
     // feature.
-    if (!base::FeatureList::IsEnabled(features::kVizDisplayCompositor)) {
+    if (!features::IsVizDisplayCompositorEnabled()) {
       ASSERT_TRUE(scoped_temp_dir_.CreateUniqueTempDir());
 
       ASSERT_NO_FATAL_FAILURE(
@@ -199,7 +200,7 @@ IN_PROC_BROWSER_TEST_F(IncompatibleApplicationsBrowserTest,
     return;
 
   // TODO(crbug.com/850517) This fails in viz_browser_tests in official builds.
-  if (base::FeatureList::IsEnabled(features::kVizDisplayCompositor))
+  if (features::IsVizDisplayCompositorEnabled())
     return;
 
   ModuleDatabase* module_database = ModuleDatabase::GetInstance();

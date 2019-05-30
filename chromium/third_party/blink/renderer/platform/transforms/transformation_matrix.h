@@ -27,12 +27,13 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_TRANSFORMS_TRANSFORMATION_MATRIX_H_
 
 #include <string.h>  // for memcpy
+#include <cmath>
+#include <limits>
 #include <memory>
 #include "SkMatrix44.h"
 #include "build/build_config.h"
 #include "third_party/blink/renderer/platform/geometry/float_point.h"
 #include "third_party/blink/renderer/platform/geometry/float_point_3d.h"
-#include "third_party/blink/renderer/platform/wtf/alignment.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 
 namespace gfx {
@@ -51,6 +52,9 @@ class JSONArray;
 struct Rotation;
 #if defined(ARCH_CPU_X86_64)
 #define TRANSFORMATION_MATRIX_USE_X86_64_SSE2
+#define ALIGNAS_TRANSFORMATION_MATRIX alignas(16)
+#else
+#define ALIGNAS_TRANSFORMATION_MATRIX
 #endif
 
 class PLATFORM_EXPORT TransformationMatrix {
@@ -60,24 +64,25 @@ class PLATFORM_EXPORT TransformationMatrix {
   USING_FAST_MALLOC(TransformationMatrix);
 
  public:
-// Throughout this class, we will be speaking in column vector convention.
-// i.e. Applying a transform T to point P is T * P.
-// The elements of the matrix and the vector looks like:
-// | scale_x  skew_y_x skew_z_x translate_x |   | x |
-// | skew_x_y scale_y  skew_z_y translate_y | * | y |
-// | skew_x_z skew_y_z scale_z  translate_z |   | z |
-// | persp_x  persp_y  persp_z  persp_w     |   | w |
-// Internally the matrix is stored as a 2-dimensional array in col-major order.
-// In other words, this is the layout of the matrix:
-// | matrix_[0][0] matrix_[1][0] matrix_[2][0] matrix_[3][0] |
-// | matrix_[0][1] matrix_[1][1] matrix_[2][1] matrix_[3][1] |
-// | matrix_[0][2] matrix_[1][2] matrix_[2][2] matrix_[3][2] |
-// | matrix_[0][3] matrix_[1][3] matrix_[2][3] matrix_[3][3] |
-#if defined(TRANSFORMATION_MATRIX_USE_X86_64_SSE2)
-  typedef WTF_ALIGNED(double, Matrix4[4][4], 16);
-#else
-  typedef double Matrix4[4][4];
-#endif
+  // Throughout this class, we will be speaking in column vector convention.
+  // i.e. Applying a transform T to point P is T * P.
+  // The elements of the matrix and the vector looks like:
+  // | scale_x  skew_y_x skew_z_x translate_x |   | x |
+  // | skew_x_y scale_y  skew_z_y translate_y | * | y |
+  // | skew_x_z skew_y_z scale_z  translate_z |   | z |
+  // | persp_x  persp_y  persp_z  persp_w     |   | w |
+  // Internally the matrix is stored as a 2-dimensional array in col-major
+  // order. In other words, this is the layout of the matrix:
+  // | matrix_[0][0] matrix_[1][0] matrix_[2][0] matrix_[3][0] |
+  // | matrix_[0][1] matrix_[1][1] matrix_[2][1] matrix_[3][1] |
+  // | matrix_[0][2] matrix_[1][2] matrix_[2][2] matrix_[3][2] |
+  // | matrix_[0][3] matrix_[1][3] matrix_[2][3] matrix_[3][3] |
+  struct ALIGNAS_TRANSFORMATION_MATRIX Matrix4 {
+    using Column = double[4];
+    Column& operator[](size_t i) { return columns[i]; }
+    const Column& operator[](size_t i) const { return columns[i]; }
+    Column columns[4];
+  };
 
   static std::unique_ptr<TransformationMatrix> Create() {
     return std::make_unique<TransformationMatrix>();
@@ -388,10 +393,20 @@ class PLATFORM_EXPORT TransformationMatrix {
     double perspective_x, perspective_y, perspective_z, perspective_w;
   } DecomposedType;
 
-  WARN_UNUSED_RESULT bool Decompose(DecomposedType&) const;
-  void Recompose(const DecomposedType&);
+  // Decompose 2-D transform matrix into its component parts.
+  typedef struct {
+    double scale_x, scale_y;
+    double skew_xy;
+    double translate_x, translate_y;
+    double angle;
+  } Decomposed2dType;
 
+  WARN_UNUSED_RESULT bool Decompose(DecomposedType&) const;
+  WARN_UNUSED_RESULT bool Decompose2D(Decomposed2dType&) const;
+  void Recompose(const DecomposedType&);
+  void Recompose2D(const Decomposed2dType&);
   void Blend(const TransformationMatrix& from, double progress);
+  void Blend2D(const TransformationMatrix& from, double progress);
 
   bool IsAffine() const {
     return M13() == 0 && M14() == 0 && M23() == 0 && M24() == 0 && M31() == 0 &&
@@ -470,11 +485,20 @@ class PLATFORM_EXPORT TransformationMatrix {
            matrix_[2][3] == 0 && matrix_[3][2] == 0 && matrix_[3][3] == 1;
   }
 
+  bool Is2dTransform() const;
+
   bool IsIntegerTranslation() const;
+
+  // Returns true if axis-aligned 2d rects will remain axis-aligned after being
+  // transformed by this matrix.
+  bool Preserves2dAxisAlignment() const;
 
   // If this transformation is identity or 2D translation, returns the
   // translation.
-  FloatSize To2DTranslation() const;
+  FloatSize To2DTranslation() const {
+    DCHECK(IsIdentityOr2DTranslation());
+    return FloatSize(matrix_[3][0], matrix_[3][1]);
+  }
 
   typedef float FloatMatrix4[16];
   void ToColumnMajorFloatArray(FloatMatrix4& result) const;
@@ -515,17 +539,14 @@ class PLATFORM_EXPORT TransformationMatrix {
                         static_cast<float>(result_z));
   }
 
-  void SetMatrix(const Matrix4 m) {
-    if (m && m != matrix_)
-      memcpy(matrix_, m, sizeof(Matrix4));
-  }
+  void SetMatrix(const Matrix4& m) { memcpy(&matrix_, &m, sizeof(Matrix4)); }
 
   void CheckAlignment() {
 #if defined(TRANSFORMATION_MATRIX_USE_X86_64_SSE2)
     // m_matrix can cause this class to require higher than usual alignment.
     // Make sure the allocator handles this.
     DCHECK_EQ((reinterpret_cast<uintptr_t>(this) &
-               (WTF_ALIGN_OF(TransformationMatrix) - 1)),
+               (alignof(TransformationMatrix) - 1)),
               0UL);
 #endif
   }

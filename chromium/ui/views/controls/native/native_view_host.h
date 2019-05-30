@@ -57,11 +57,25 @@ class VIEWS_EXPORT NativeViewHost : public View {
   // NB: This does not interact nicely with fast_resize.
   bool SetCustomMask(std::unique_ptr<ui::LayerOwner> mask);
 
+  // Sets the height of the top region where the gfx::NativeView shouldn't be
+  // targeted. This will be used when another view is covering there
+  // temporarily, like the immersive fullscreen mode of ChromeOS.
+  void SetHitTestTopInset(int top_inset);
+  int GetHitTestTopInset() const;
+
   // Sets the size for the NativeView that may or may not match the size of this
   // View when it is being captured. If the size does not match, scaling will
   // occur. Pass an empty size to revert to the default behavior, where the
   // NatieView's size always equals this View's size.
   void SetNativeViewSize(const gfx::Size& size);
+
+  // Returns the container that contains this host's native view. Returns null
+  // if there's no attached native view or it has no container.
+  gfx::NativeView GetNativeViewContainer() const;
+
+  // Pass the parent accessible object to this host's native view so that
+  // it can return this value when querying its parent accessible.
+  void SetParentAccessible(gfx::NativeViewAccessible);
 
   // Fast resizing will move the native view and clip its visible region, this
   // will result in white areas and will not resize the content (so scrollbars
@@ -94,6 +108,7 @@ class VIEWS_EXPORT NativeViewHost : public View {
   void OnFocus() override;
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
   gfx::NativeCursor GetCursor(const ui::MouseEvent& event) override;
+  void SetVisible(bool visible) override;
 
  protected:
   bool GetNeedsNotificationWhenVisibleBoundsChange() const override;

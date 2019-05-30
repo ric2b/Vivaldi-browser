@@ -7,6 +7,7 @@
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 分 }other{# 分 }}</translation>
 <translation id="1752946267035950200">{MINUTES,plural, =1{1 分}other{# 分}}</translation>
 <translation id="1761785978543082658"><ph name="QUANTITY" /> B</translation>
+<translation id="1801827354178857021">.</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/秒</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 時間 }other{# 時間 }}</translation>
 <translation id="1859234291848436338">文章の方向</translation>

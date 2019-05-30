@@ -7,7 +7,7 @@
 
 #include "base/optional.h"
 #include "content/common/service_worker/service_worker_types.h"
-#include "third_party/blink/public/platform/modules/cache_storage/cache_storage.mojom.h"
+#include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom.h"
 
 namespace content {
 
@@ -15,25 +15,27 @@ class CONTENT_EXPORT BackgroundFetchRequestMatchParams {
  public:
   BackgroundFetchRequestMatchParams();
   BackgroundFetchRequestMatchParams(
-      base::Optional<ServiceWorkerFetchRequest> request_to_match,
-      blink::mojom::QueryParamsPtr cache_query_params,
+      blink::mojom::FetchAPIRequestPtr request_to_match,
+      blink::mojom::CacheQueryOptionsPtr cache_query_options,
       bool match_all);
   ~BackgroundFetchRequestMatchParams();
 
-  bool FilterByRequest() const {
-    return request_to_match_.has_value();
-  }
+  bool FilterByRequest() const { return !request_to_match_.is_null(); }
 
   // Only call this method if a valid request_to_match was previously provided.
-  const ServiceWorkerFetchRequest& request_to_match() const {
-    DCHECK(request_to_match_.has_value());
-    return request_to_match_.value();
+  const blink::mojom::FetchAPIRequestPtr& request_to_match() const {
+    DCHECK(request_to_match_);
+    return request_to_match_;
   }
 
-  blink::mojom::QueryParamsPtr cloned_cache_query_params() const {
-    if (!cache_query_params_)
+  const blink::mojom::CacheQueryOptionsPtr& cache_query_options() const {
+    return cache_query_options_;
+  }
+
+  blink::mojom::CacheQueryOptionsPtr cloned_cache_query_options() const {
+    if (!cache_query_options_)
       return nullptr;
-    return cache_query_params_->Clone();
+    return cache_query_options_->Clone();
   }
 
   bool match_all() const { return match_all_; }
@@ -42,10 +44,10 @@ class CONTENT_EXPORT BackgroundFetchRequestMatchParams {
   // If |request_to_match| is present, we get response(s) only for this request.
   // If not present, response(s) for all requests (contained in the fetch) will
   // be returned.
-  base::Optional<ServiceWorkerFetchRequest> request_to_match_;
+  blink::mojom::FetchAPIRequestPtr request_to_match_;
 
   // When nullptr, this has no effect on the response(s) returned.
-  blink::mojom::QueryParamsPtr cache_query_params_;
+  blink::mojom::CacheQueryOptionsPtr cache_query_options_;
 
   // Whether to return all matching responses from the cache storage.
   bool match_all_ = false;

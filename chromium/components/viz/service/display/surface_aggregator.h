@@ -6,6 +6,7 @@
 #define COMPONENTS_VIZ_SERVICE_DISPLAY_SURFACE_AGGREGATOR_H_
 
 #include <memory>
+#include <string>
 #include <unordered_map>
 
 #include "base/containers/flat_map.h"
@@ -40,7 +41,7 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator {
 
   CompositorFrame Aggregate(const SurfaceId& surface_id,
                             base::TimeTicks expected_display_time,
-                            int32_t display_trace_id = -1);
+                            int64_t display_trace_id = -1);
   void ReleaseResources(const SurfaceId& surface_id);
   const SurfaceIndexMap& previous_contained_surfaces() const {
     return previous_contained_surfaces_;
@@ -64,6 +65,8 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator {
     ClipData(bool is_clipped, const gfx::Rect& rect)
         : is_clipped(is_clipped), rect(rect) {}
 
+    std::string ToString() const;
+
     bool is_clipped;
     gfx::Rect rect;
   };
@@ -82,26 +85,6 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator {
     int id;
     // This is true if the pass was used in the last aggregated frame.
     bool in_use = true;
-  };
-
-  struct SurfaceDrawQuadUmaStats {
-    void Reset() {
-      valid_surface = 0;
-      using_fallback_surface = 0;
-    }
-
-    // The surface exists and has an active frame.
-    int valid_surface;
-
-    // The surface doesn't exist.
-    int missing_surface;
-
-    // The surface exists but doesn't have an active frame.
-    int no_active_frame;
-
-    // The primary surface is not available but the fallback
-    // is used.
-    int using_fallback_surface;
   };
 
   ClipData CalculateClipRect(const ClipData& surface_clip,
@@ -150,7 +133,8 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator {
   SharedQuadState* CopySharedQuadState(const SharedQuadState* source_sqs,
                                        const gfx::Transform& target_transform,
                                        const ClipData& clip_rect,
-                                       RenderPass* dest_render_pass);
+                                       RenderPass* dest_render_pass,
+                                       bool has_surface_damage);
 
   SharedQuadState* CopyAndScaleSharedQuadState(
       const SharedQuadState* source_sqs,
@@ -160,8 +144,7 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator {
       const gfx::Rect& visible_quad_layer_rect,
       const ClipData& clip_rect,
       RenderPass* dest_render_pass,
-      float x_scale,
-      float y_scale);
+      bool has_surface_damage);
 
   void CopyQuadsToPass(
       const QuadList& source_quad_list,
@@ -171,7 +154,8 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator {
       const gfx::Transform& target_transform,
       const ClipData& clip_rect,
       RenderPass* dest_pass,
-      const SurfaceId& surface_id);
+      const SurfaceId& surface_id,
+      bool has_surface_damage);
   gfx::Rect PrewalkTree(Surface* surface,
                         bool in_moved_pixel_surface,
                         int parent_pass,
@@ -190,6 +174,7 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator {
   void PropagateCopyRequestPasses();
 
   int ChildIdForSurface(Surface* surface);
+  bool IsSurfaceFrameIndexSameAsPrevious(const Surface* surface) const;
   gfx::Rect DamageRectForSurface(const Surface* surface,
                                  const RenderPass& source,
                                  const gfx::Rect& full_rect) const;
@@ -274,14 +259,12 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator {
   // passes. This is valid during Aggregate after PrewalkTree is called.
   bool has_cached_render_passes_;
 
-  // Tracks UMA stats for SurfaceDrawQuads during a call to Aggregate().
-  SurfaceDrawQuadUmaStats uma_stats_;
-
   // For each FrameSinkId, contains a vector of SurfaceRanges that will damage
   // the display if they're damaged.
   base::flat_map<FrameSinkId, std::vector<SurfaceRange>> damage_ranges_;
 
-  int32_t display_trace_id_ = -1;
+  int64_t display_trace_id_ = -1;
+  base::flat_set<SurfaceId> undrawn_surfaces_;
 
   base::WeakPtrFactory<SurfaceAggregator> weak_factory_;
 

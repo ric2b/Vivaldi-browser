@@ -26,7 +26,7 @@ class LayoutThemeTest : public PageTestBase {
 void LayoutThemeTest::SetHtmlInnerHTML(const char* html_content) {
   GetDocument().documentElement()->SetInnerHTMLFromString(
       String::FromUTF8(html_content));
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 }
 
 inline Color OutlineColor(Element* element) {
@@ -55,7 +55,7 @@ TEST_F(LayoutThemeTest, ChangeFocusRingColor) {
   GetDocument().GetPage()->GetFocusController().SetActive(true);
   GetDocument().GetPage()->GetFocusController().SetFocused(true);
   span->focus();
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   // Checking focused style.
   EXPECT_NE(EBorderStyle::kNone, OutlineStyle(span));
@@ -64,11 +64,60 @@ TEST_F(LayoutThemeTest, ChangeFocusRingColor) {
   // Change focus ring color.
   LayoutTheme::GetTheme().SetCustomFocusRingColor(custom_color);
   Page::PlatformColorsChanged();
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
 
   // Check that the focus ring color is updated.
   EXPECT_NE(EBorderStyle::kNone, OutlineStyle(span));
   EXPECT_EQ(custom_color, OutlineColor(span));
+}
+
+TEST_F(LayoutThemeTest, RootElementColor) {
+  EXPECT_EQ(Color::kBlack,
+            LayoutTheme::GetTheme().RootElementColor(ColorScheme::kLight));
+  EXPECT_EQ(Color::kWhite,
+            LayoutTheme::GetTheme().RootElementColor(ColorScheme::kDark));
+}
+
+TEST_F(LayoutThemeTest, RootElementColorChange) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      #initial { color: initial }
+    </style>
+    <div id="initial"></div>
+  )HTML");
+
+  Element* initial = GetDocument().getElementById("initial");
+  ASSERT_TRUE(initial);
+  EXPECT_EQ(ColorScheme::kLight, GetDocument().GetColorScheme());
+
+  ASSERT_TRUE(GetDocument().documentElement());
+  const ComputedStyle* document_element_style =
+      GetDocument().documentElement()->GetComputedStyle();
+  ASSERT_TRUE(document_element_style);
+  EXPECT_EQ(Color::kBlack, document_element_style->VisitedDependentColor(
+                               GetCSSPropertyColor()));
+
+  const ComputedStyle* initial_style = initial->GetComputedStyle();
+  ASSERT_TRUE(initial_style);
+  EXPECT_EQ(Color::kBlack,
+            initial_style->VisitedDependentColor(GetCSSPropertyColor()));
+
+  // Change color scheme to dark.
+  GetDocument().SetColorScheme(ColorScheme::kDark);
+  EXPECT_EQ(ColorScheme::kDark, GetDocument().GetColorScheme());
+  UpdateAllLifecyclePhasesForTest();
+
+  document_element_style = GetDocument().documentElement()->GetComputedStyle();
+  ASSERT_TRUE(document_element_style);
+  EXPECT_EQ(Color::kWhite, document_element_style->VisitedDependentColor(
+                               GetCSSPropertyColor()));
+
+  initial_style = initial->GetComputedStyle();
+  ASSERT_TRUE(initial_style);
+  // Theming does not change the initial value for color, only the UA style for
+  // the root element.
+  EXPECT_EQ(Color::kBlack,
+            initial_style->VisitedDependentColor(GetCSSPropertyColor()));
 }
 
 }  // namespace blink

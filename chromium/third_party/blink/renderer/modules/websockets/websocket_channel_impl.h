@@ -39,7 +39,6 @@
 #include "third_party/blink/public/platform/web_callbacks.h"
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
-#include "third_party/blink/renderer/core/fileapi/file_error.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/modules/websockets/websocket_channel.h"
 #include "third_party/blink/renderer/modules/websockets/websocket_handle.h"
@@ -51,10 +50,12 @@
 #include "third_party/blink/renderer/platform/wtf/text/cstring.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
+#include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
 
 namespace blink {
 
 class BaseFetchContext;
+enum class FileErrorCode;
 class WebSocketChannelClient;
 class WebSocketHandshakeThrottle;
 
@@ -80,6 +81,10 @@ class MODULES_EXPORT WebSocketChannelImpl final
       WebSocketHandle*,
       std::unique_ptr<WebSocketHandshakeThrottle>);
 
+  WebSocketChannelImpl(ExecutionContext*,
+                       WebSocketChannelClient*,
+                       std::unique_ptr<SourceLocation>,
+                       std::unique_ptr<WebSocketHandle>);
   ~WebSocketChannelImpl() override;
 
   // Allows the caller to provide the Mojo pipe through which the socket is
@@ -101,9 +106,11 @@ class MODULES_EXPORT WebSocketChannelImpl final
   // argument to omit payload.
   void Close(int code, const String& reason) override;
   void Fail(const String& reason,
-            MessageLevel,
+            mojom::ConsoleMessageLevel,
             std::unique_ptr<SourceLocation>) override;
   void Disconnect() override;
+
+  ExecutionContext* GetExecutionContext();
 
   void Trace(blink::Visitor*) override;
 
@@ -126,25 +133,19 @@ class MODULES_EXPORT WebSocketChannelImpl final
     Vector<char> data;
   };
 
-  WebSocketChannelImpl(ExecutionContext*,
-                       WebSocketChannelClient*,
-                       std::unique_ptr<SourceLocation>,
-                       std::unique_ptr<WebSocketHandle>);
-
   void SendInternal(WebSocketHandle::MessageType,
                     const char* data,
-                    size_t total_size,
+                    wtf_size_t total_size,
                     uint64_t* consumed_buffered_amount);
   void ProcessSendQueue();
   void FlowControlIfNecessary();
   void InitialFlowControl();
   void FailAsError(const String& reason) {
-    Fail(reason, kErrorMessageLevel, location_at_construction_->Clone());
+    Fail(reason, mojom::ConsoleMessageLevel::kError,
+         location_at_construction_->Clone());
   }
   void AbortAsyncOperations();
-  void HandleDidClose(bool was_clean,
-                      unsigned short code,
-                      const String& reason);
+  void HandleDidClose(bool was_clean, uint16_t code, const String& reason);
 
   // WebSocketHandleClient functions.
   void DidConnect(WebSocketHandle*,
@@ -164,7 +165,7 @@ class MODULES_EXPORT WebSocketChannelImpl final
                       size_t) override;
   void DidClose(WebSocketHandle*,
                 bool was_clean,
-                unsigned short code,
+                uint16_t code,
                 const String& reason) override;
   void DidReceiveFlowControl(WebSocketHandle*, int64_t quota) override;
   void DidStartClosingHandshake(WebSocketHandle*) override;
@@ -176,7 +177,7 @@ class MODULES_EXPORT WebSocketChannelImpl final
 
   // Methods for BlobLoader.
   void DidFinishLoadingBlob(DOMArrayBuffer*);
-  void DidFailLoadingBlob(FileError::ErrorCode);
+  void DidFailLoadingBlob(FileErrorCode);
 
   void TearDownFailedConnection();
   bool ShouldDisallowConnection(const KURL&);
@@ -200,7 +201,7 @@ class MODULES_EXPORT WebSocketChannelImpl final
   bool receiving_message_type_is_text_;
   uint64_t sending_quota_;
   uint64_t received_data_size_for_flow_control_;
-  size_t sent_size_of_top_message_;
+  wtf_size_t sent_size_of_top_message_;
   std::unique_ptr<FrameScheduler::ActiveConnectionHandle>
       connection_handle_for_scheduler_;
 
@@ -211,6 +212,8 @@ class MODULES_EXPORT WebSocketChannelImpl final
   // throttle response when DidConnect is called.
   std::unique_ptr<ConnectInfo> connect_info_;
   bool throttle_passed_;
+
+  scoped_refptr<base::SingleThreadTaskRunner> file_reading_task_runner_;
 
   static const uint64_t kReceivedDataSizeForFlowControlHighWaterMark = 1 << 15;
 };

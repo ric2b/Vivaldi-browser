@@ -76,7 +76,7 @@ Examples:
 
 * chrome-devtools:
 * chrome-extensions:
-* chrome: 
+* chrome:
 * file:
 * view-source:
 
@@ -238,9 +238,42 @@ $('bakeDonutsButton').onclick = function() {
 <a name="AllowJavascript"></a>
 ### WebUIMessageHandler::AllowJavascript()
 
-This method determines whether browser &rarr; renderer communication is allowed.
-It is called in response to a signal from JavaScript that the page is ready to
-communicate.
+A tab that has been used for settings UI may be reloaded, or may navigate to an
+external origin. In both cases, one does not want callbacks from C++ to
+Javascript to run. In the former case, the callbacks will occur when the
+Javascript doesn't expect them. In the latter case, sensitive information may be
+delivered to an untrusted origin.
+
+Therefore each message handler maintains
+[a boolean](https://cs.chromium.org/search/?q=WebUIMessageHandler::javascript_allowed_)
+that describes whether delivering callbacks to Javascript is currently
+appropriate. This boolean is set by calling `AllowJavascript`, which should be
+done when handling a call from Javascript, because that indicates that the page
+is ready for the subsequent callback. (See
+[design doc](https://drive.google.com/open?id=1z1diKvwgMmn4YFzlW1kss0yHmo8yy68TN_FUhUzRz7Q).)
+If the tab navigates or reloads,
+[`DisallowJavascript`](https://cs.chromium.org/search/?q=WebUIMessageHandler::DisallowJavascript)
+is called to clear the flag.
+
+Therefore, before each callback from C++ to Javascript, the flag must be tested
+by calling
+[`IsJavascriptAllowed`](https://cs.chromium.org/search/?q=WebUIMessageHandler::IsJavascriptAllowed).
+If false, then the callback must be dropped. (When the flag is false, calling
+[`ResolveJavascriptCallback`](https://cs.chromium.org/search/?q=WebUIMessageHandler::ResolveJavascriptCallback)
+will crash. See
+[design doc](https://docs.google.com/document/d/1udXoW3aJL0-l5wrbsOg5bpYWB0qOCW5K7yXpv4tFeA8).)
+
+Also beware of [ABA](https://en.wikipedia.org/wiki/ABA_problem) issues: Consider
+the case where an asynchronous operation is started, the settings page is
+reloaded, and the user triggers another operation using the original message
+handler. The `javascript_allowed_` boolean will be true, but the original
+callback should still be dropped because it relates to a operation that was
+discarded by the reload. (Reloading settings UI does _not_ cause message handler
+objects to be deleted.)
+
+Thus a message handler may override
+[`OnJavascriptDisallowed`](https://cs.chromium.org/search/?q=WebUIMessageHandler::OnJavascriptDisallowed)
+to learn when pending callbacks should be canceled.
 
 In the JS:
 
@@ -502,8 +535,7 @@ renderer:
 
 ```c++
 // WebUIExtension::Install():
-v8::Local<v8::Object> chrome =
-    GetOrCreateChromeObject(isolate, context->Global());
+v8::Local<v8::Object> chrome = GetOrCreateChromeObject(isolate, context);
 chrome->Set(gin::StringToSymbol(isolate, "send"),
             gin::CreateFunctionTemplate(
                 isolate, base::Bind(&WebUIExtension::Send))->GetFunction());
@@ -652,6 +684,38 @@ This approach still relies on the C++ calling a globally exposed method, but
 reduces the surface to only a single global (`cr.webUIResponse`) instead of
 many. It also makes per-request responses easier, which is helpful when multiple
 are in flight.
+
+
+## Security considerations
+
+Because WebUI pages are highly privileged, they are often targets for attack,
+since taking control of a WebUI page can sometimes be sufficient to escape
+Chrome's sandbox.  To make sure that the special powers granted to WebUI pages
+are safe, WebUI pages are restricted in what they can do:
+
+* WebUI pages cannot embed http/https resources or frames
+* WebUI pages cannot issue http/https fetches
+
+In the rare case that a WebUI page really needs to include web content, the safe
+way to do this is by using a `<webview>` tag.  Using a `<webview>` tag is more
+secure than using an iframe for multiple reasons, even if Site Isolation and
+out-of-process iframes keep the web content out of the privileged WebUI process.
+
+First, the content inside the `<webview>` tag has a much reduced attack surface,
+since it does not have a window reference to its embedder or any other frames.
+Only postMessage channel is supported, and this needs to be initiated by the
+embedder, not the guest.
+
+Second, the content inside the `<webview>` tag is hosted in a separate
+StoragePartition. Thus, cookies and other persistent storage for both the WebUI
+page and other browser tabs are inaccessible to it.
+
+This greater level of isolation makes it safer to load possibly untrustworthy or
+compromised web content, reducing the risk of sandbox escapes.
+
+For an example of switching from iframe to webview tag see
+https://crrev.com/c/710738.
+
 
 ## See also
 

@@ -37,20 +37,21 @@ class LayoutObject;
 
 class LayoutImageResourceStyleImage final : public LayoutImageResource {
  public:
+  explicit LayoutImageResourceStyleImage(StyleImage*);
   ~LayoutImageResourceStyleImage() override;
 
   static LayoutImageResource* Create(StyleImage* style_image) {
-    return new LayoutImageResourceStyleImage(style_image);
+    return MakeGarbageCollected<LayoutImageResourceStyleImage>(style_image);
   }
   void Initialize(LayoutObject*) override;
   void Shutdown() override;
 
   bool HasImage() const override { return true; }
-  scoped_refptr<Image> GetImage(const LayoutSize&) const override;
+  scoped_refptr<Image> GetImage(const FloatSize&) const override;
   bool ErrorOccurred() const override { return style_image_->ErrorOccurred(); }
 
-  bool ImageHasRelativeSize() const override {
-    return style_image_->ImageHasRelativeSize();
+  bool HasIntrinsicSize() const override {
+    return style_image_->HasIntrinsicSize();
   }
   FloatSize ImageSize(float multiplier) const override;
   FloatSize ImageSizeWithDefaultSize(float multiplier,
@@ -60,7 +61,6 @@ class LayoutImageResourceStyleImage final : public LayoutImageResource {
   void Trace(blink::Visitor*) override;
 
  private:
-  explicit LayoutImageResourceStyleImage(StyleImage*);
   Member<StyleImage> style_image_;
 };
 

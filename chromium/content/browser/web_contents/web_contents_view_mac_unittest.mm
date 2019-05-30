@@ -6,6 +6,7 @@
 
 #include "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
+#import "content/browser/web_contents/web_contents_view_cocoa.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/test_renderer_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -38,6 +39,10 @@ TEST_F(WebContentsViewCocoaTest, NonWebDragSourceTest) {
       [view draggingSourceOperationMaskForLocal:NO]);
 }
 
+// This test uses deprecated NSObject accessibility APIs - see
+// https://crbug.com/921109.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 TEST_F(WebContentsViewCocoaTest, AccessibilityParentTest) {
   // The designated initializer is private but init should be fine in this case.
   base::scoped_nsobject<WebContentsViewCocoa> view(
@@ -59,6 +64,7 @@ TEST_F(WebContentsViewCocoaTest, AccessibilityParentTest) {
   EXPECT_NSEQ([view accessibilityAttributeValue:NSAccessibilityParentAttribute],
               parent_view);
 }
+#pragma clang diagnostic pop
 
 namespace {
 
@@ -69,7 +75,8 @@ class WebContentsViewMacTest : public RenderViewHostTestHarness {
   void SetUp() override {
     RenderViewHostTestHarness::SetUp();
     window_.reset([[CocoaTestHelperWindow alloc] init]);
-    [[window_ contentView] addSubview:web_contents()->GetNativeView()];
+    [[window_ contentView]
+        addSubview:web_contents()->GetNativeView().GetNativeNSView()];
   }
 
   base::scoped_nsobject<CocoaTestHelperWindow> window_;

@@ -4,11 +4,14 @@
 
 import("//ios/build/config.gni")
 import("//ios/third_party/earl_grey/ios_eg_test.gni")
+import("//ios/third_party/earl_grey2/ios_eg2_test.gni")
 
 group("all_tests") {
   testonly = true
   deps = [
+    ":ios_web_shell_eg2tests",
     ":ios_web_shell_egtests",
+    ":ios_web_shell_test_app_host",
   ]
 }
 
@@ -16,12 +19,7 @@ ios_eg_test("ios_web_shell_egtests") {
   info_plist = "//ios/web/shell/Info.plist"
   sources = [
     "context_menu_egtest.mm",
-    "meta_tags_egtest.mm",
-    "navigation_egtest.mm",
     "page_state_egtest.mm",
-    "pdf_egtest.mm",
-    "plugin_placeholder_egtest.mm",
-    "redirect_egtest.mm",
     "service_manager_egtest.mm",
   ]
 
@@ -52,6 +50,7 @@ ios_eg_test("ios_web_shell_egtests") {
 }
 
 source_set("earl_grey_test_support") {
+  defines = [ "CHROME_EARL_GREY_1" ]
   testonly = true
 
   deps = [
@@ -85,6 +84,8 @@ source_set("earl_grey_test_support") {
     "earl_grey/shell_earl_grey.mm",
     "earl_grey/shell_matchers.h",
     "earl_grey/shell_matchers.mm",
+    "earl_grey/shell_matchers_shorthand.h",
+    "earl_grey/shell_matchers_shorthand.mm",
     "earl_grey/web_shell_test_case.h",
     "earl_grey/web_shell_test_case.mm",
   ]
@@ -93,14 +94,81 @@ source_set("earl_grey_test_support") {
 }
 
 bundle_data("bundle") {
-  visibility = [ ":ios_web_shell_egtests" ]
+  visibility = [ ":*" ]
   sources = [
-    "http_server_files/basic_navigation_test.html",
     "http_server_files/tall_page.html",
-    "http_server_files/testpage.pdf",
   ]
   outputs = [
     "{{bundle_resources_dir}}/{{source_root_relative_dir}}/" +
         "{{source_file_part}}",
   ]
+}
+
+################################
+# EG2 targets.
+
+group("eg_app_support+eg2") {
+  testonly = true
+}
+
+source_set("eg_test_support+eg2") {
+  defines = [ "CHROME_EARL_GREY_2" ]
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//build/config/ios:xctest_config",
+  ]
+  testonly = true
+
+  sources = [
+    "earl_grey/web_shell_test_case.h",
+    "earl_grey/web_shell_test_case.mm",
+  ]
+
+  deps = [
+    "//ios/testing/earl_grey:eg_test_support+eg2",
+    "//ios/third_party/earl_grey2:test_lib",
+    "//ios/web/public/test/http_server",
+  ]
+}
+
+source_set("eg_tests+eg2") {
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//build/config/ios:xctest_config",
+  ]
+  testonly = true
+
+  sources = [
+    "web_shell_sample_egtest.mm",
+  ]
+
+  deps = [
+    ":eg_test_support+eg2",
+    "//ios/third_party/earl_grey2:test_lib",
+  ]
+
+  libs = [ "UIKit.framework" ]
+}
+
+ios_eg2_test_app_host("ios_web_shell_test_app_host") {
+  info_plist = "//ios/web/shell/Info.plist"
+
+  deps = [
+    "//ios/web/shell",
+
+    # Test support libraries.
+    ":eg_app_support+eg2",
+    "//ios/testing/earl_grey:eg_app_support+eg2",
+  ]
+}
+
+ios_eg2_test("ios_web_shell_eg2tests") {
+  xcode_test_application_name = "ios_web_shell_test_app_host"
+
+  deps = [
+    # Test support libraries.
+    ":eg_tests+eg2",
+  ]
+
+  bundle_deps = [ ":bundle" ]
 }

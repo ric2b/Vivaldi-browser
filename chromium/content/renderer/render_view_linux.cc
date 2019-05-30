@@ -4,7 +4,7 @@
 
 #include "content/renderer/render_view_impl.h"
 
-#include "content/public/common/renderer_preferences.h"
+#include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
 #include "third_party/blink/public/platform/web_font_render_style.h"
 #include "third_party/skia/include/core/SkFontLCDConfig.h"
 #include "ui/gfx/font_render_params.h"
@@ -15,40 +15,44 @@ namespace content {
 
 namespace {
 
-SkPaint::Hinting RendererPreferencesToSkiaHinting(
-    const RendererPreferences& prefs) {
+SkFontHinting RendererPreferencesToSkiaHinting(
+    const blink::mojom::RendererPreferences& prefs) {
   if (!prefs.should_antialias_text) {
     // When anti-aliasing is off, GTK maps all non-zero hinting settings to
     // 'Normal' hinting so we do the same. Otherwise, folks who have 'Slight'
     // hinting selected will see readable text in everything expect Chromium.
     switch (prefs.hinting) {
       case gfx::FontRenderParams::HINTING_NONE:
-        return SkPaint::kNo_Hinting;
+        return SkFontHinting::kNone;
       case gfx::FontRenderParams::HINTING_SLIGHT:
       case gfx::FontRenderParams::HINTING_MEDIUM:
       case gfx::FontRenderParams::HINTING_FULL:
-        return SkPaint::kNormal_Hinting;
+        return SkFontHinting::kNormal;
       default:
         NOTREACHED();
-        return SkPaint::kNormal_Hinting;
+        return SkFontHinting::kNormal;
     }
   }
 
   switch (prefs.hinting) {
-    case gfx::FontRenderParams::HINTING_NONE:   return SkPaint::kNo_Hinting;
-    case gfx::FontRenderParams::HINTING_SLIGHT: return SkPaint::kSlight_Hinting;
-    case gfx::FontRenderParams::HINTING_MEDIUM: return SkPaint::kNormal_Hinting;
-    case gfx::FontRenderParams::HINTING_FULL:   return SkPaint::kFull_Hinting;
+    case gfx::FontRenderParams::HINTING_NONE:
+      return SkFontHinting::kNone;
+    case gfx::FontRenderParams::HINTING_SLIGHT:
+      return SkFontHinting::kSlight;
+    case gfx::FontRenderParams::HINTING_MEDIUM:
+      return SkFontHinting::kNormal;
+    case gfx::FontRenderParams::HINTING_FULL:
+      return SkFontHinting::kFull;
     default:
       NOTREACHED();
-      return SkPaint::kNormal_Hinting;
+      return SkFontHinting::kNormal;
     }
 }
 
 }  // namespace
 
 void RenderViewImpl::UpdateFontRenderingFromRendererPrefs() {
-  const RendererPreferences& prefs = renderer_preferences_;
+  const blink::mojom::RendererPreferences& prefs = renderer_preferences_;
   WebFontRenderStyle::SetHinting(RendererPreferencesToSkiaHinting(prefs));
   WebFontRenderStyle::SetAutoHint(prefs.use_autohinter);
   WebFontRenderStyle::SetUseBitmaps(prefs.use_bitmaps);

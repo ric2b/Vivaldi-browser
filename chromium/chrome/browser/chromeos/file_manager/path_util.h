@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_CHROMEOS_FILE_MANAGER_PATH_UTIL_H_
 
 #include <string>
+#include <vector>
 
 #include "base/files/file_path.h"
 #include "storage/browser/fileapi/file_system_url.h"
@@ -26,6 +27,9 @@ extern const base::FilePath::CharType kAndroidFilesPath[];
 // Gets the absolute path for the 'Downloads' folder for the |profile|.
 base::FilePath GetDownloadsFolderForProfile(Profile* profile);
 
+// Gets the absolute path for the 'MyFiles' folder for the |profile|.
+base::FilePath GetMyFilesFolderForProfile(Profile* profile);
+
 // Converts |old_path| to |new_path| and returns true, if the old path points
 // to an old location of user folders (in "Downloads" or "Google Drive").
 // The |profile| argument is used for determining the location of the
@@ -34,17 +38,42 @@ base::FilePath GetDownloadsFolderForProfile(Profile* profile);
 // As of now (M40), the conversion is used only during initialization of
 // download_prefs, where profile unaware initialization precedes profile
 // aware stage. Below are the list of relocations we have made in the past.
+// *Updated in M73 to handle /home/chronos/user to
+// /home/chronos/u-{hash}/MyFiles/Downloads
 //
 // M27: crbug.com/229304, for supporting {offline, recent, shared} folders
 //   in Drive. Migration code for this is removed in M34.
 // M34-35: crbug.com/313539, 356322, for supporting multi profiles.
 //   Migration code is removed in M40.
 bool MigratePathFromOldFormat(Profile* profile,
+                              const base::FilePath& old_base,
                               const base::FilePath& old_path,
                               base::FilePath* new_path);
 
+// Converts |old_path| in <cryptohome>/Downloads[/*] to |new_path| in
+// <cryptohome/MyFiles/Downloads[*].  Returns true if path is changed else
+// returns false if |old_path| was not inside Downloads, and |new_path| is
+// undefined.
+//
+// Introduced in M73.  This code updates values stored in prefs.
+// TODO(crbug.com/911946) Remove this when no users are running M72 or earlier.
+bool MigrateFromDownloadsToMyFiles(Profile* profile,
+                                   const base::FilePath& old_path,
+                                   base::FilePath* new_path);
+
+// Convers |old_path| in /special/drive-<hash> to |new_path| in
+// /media/fuse/drivefs-<id>. Returns true if path is changed else
+// returns false if |old_path| was not inside Drive, and |new_path| is
+// undefined.
+bool MigrateToDriveFs(Profile* profile,
+                      const base::FilePath& old_path,
+                      base::FilePath* new_path);
+
 // The canonical mount point name for "Downloads" folder.
 std::string GetDownloadsMountPointName(Profile* profile);
+
+// The canonical mount point name for ARC "Play files" folder.
+const std::string GetAndroidFilesMountPointName();
 
 // The canonical mount point name for crostini "Linux files" folder.
 std::string GetCrostiniMountPointName(Profile* profile);
@@ -59,9 +88,10 @@ std::vector<std::string> GetCrostiniMountOptions(
     const std::string& container_public_key);
 
 // Convert a cracked url to a path inside the Crostini VM.
-std::string ConvertFileSystemURLToPathInsideCrostini(
+bool ConvertFileSystemURLToPathInsideCrostini(
     Profile* profile,
-    const storage::FileSystemURL& file_system_url);
+    const storage::FileSystemURL& file_system_url,
+    base::FilePath* inside);
 
 // DEPRECATED. Use |ConvertToContentUrls| instead.
 // While this function can convert paths under Downloads, /media/removable
@@ -80,16 +110,25 @@ void ConvertToContentUrls(
     const std::vector<storage::FileSystemURL>& file_system_urls,
     ConvertToContentUrlsCallback callback);
 
-// Convert download location path into a string suitable for display.
+// Convert path into a string suitable for display in settings.
 // Replacements:
 // * /home/chronos/user/Downloads                => Downloads
 // * /home/chronos/u-<hash>/Downloads            => Downloads
 // * /special/drive-<hash>/root                  => Google Drive
+// * /special/drive-<hash>/team_drives           => Team Drives
+// * /special/drive-<hash>/Computers             => Computers
 // * /run/arc/sdcard/write/emulated/0            => Play files
 // * /media/fuse/crostini_<hash>_termina_penguin => Linux files
 // * '/' with ' \u203a ' (angled quote sign) for display purposes.
-std::string GetDownloadLocationText(Profile* profile, const std::string& path);
+std::string GetPathDisplayTextForSettings(Profile* profile,
+                                          const std::string& path);
 
+// Extracts |mount_name|, |file_system_name|, and |full_path| from given
+// |absolute_path|.
+bool ExtractMountNameFileSystemNameFullPath(const base::FilePath& absolute_path,
+                                            std::string* mount_name,
+                                            std::string* file_system_name,
+                                            std::string* full_path);
 }  // namespace util
 }  // namespace file_manager
 

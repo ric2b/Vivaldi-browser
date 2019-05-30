@@ -17,8 +17,9 @@ const char kJsScreenPath[] = "login.DeviceDisabledScreen";
 
 namespace chromeos {
 
-DeviceDisabledScreenHandler::DeviceDisabledScreenHandler()
-    : BaseScreenHandler(kScreenId) {
+DeviceDisabledScreenHandler::DeviceDisabledScreenHandler(
+    JSCallsContainer* js_calls_container)
+    : BaseScreenHandler(kScreenId, js_calls_container) {
   set_call_js_prefix(kJsScreenPath);
 }
 
@@ -34,9 +35,9 @@ void DeviceDisabledScreenHandler::Show() {
   }
 
   if (delegate_) {
-    CallJS("setSerialNumberAndEnrollmentDomain", delegate_->GetSerialNumber(),
-           delegate_->GetEnrollmentDomain());
-    CallJS("setMessage", delegate_->GetMessage());
+    CallJS("login.DeviceDisabledScreen.setSerialNumberAndEnrollmentDomain",
+           delegate_->GetSerialNumber(), delegate_->GetEnrollmentDomain());
+    CallJS("login.DeviceDisabledScreen.setMessage", delegate_->GetMessage());
   }
   ShowScreen(kScreenId);
 }
@@ -53,7 +54,7 @@ void DeviceDisabledScreenHandler::SetDelegate(Delegate* delegate) {
 
 void DeviceDisabledScreenHandler::UpdateMessage(const std::string& message) {
   if (page_is_ready())
-    CallJS("setMessage", message);
+    CallJS("login.DeviceDisabledScreen.setMessage", message);
 }
 
 void DeviceDisabledScreenHandler::DeclareLocalizedValues(

@@ -8,10 +8,12 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/users/mock_user_manager.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/sync/profile_sync_test_util.h"
+#include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
@@ -24,7 +26,6 @@
 
 using ::testing::NiceMock;
 using ::testing::Return;
-using ::testing::ReturnRef;
 using ::testing::_;
 
 namespace {
@@ -67,18 +68,16 @@ class SyncErrorNotifierTest : public BrowserWithTestWindowTest {
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
 
-    service_ = std::make_unique<browser_sync::ProfileSyncServiceMock>(
+    service_ = std::make_unique<NiceMock<browser_sync::ProfileSyncServiceMock>>(
         CreateProfileSyncServiceParamsForTest(profile()));
 
     FakeLoginUIService* login_ui_service = static_cast<FakeLoginUIService*>(
         LoginUIServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-            profile(), BuildMockLoginUIService));
+            profile(), base::BindRepeating(&BuildMockLoginUIService)));
     login_ui_service->SetLoginUI(&login_ui_);
 
-    error_controller_ =
-        std::make_unique<syncer::SyncErrorController>(service_.get());
     error_notifier_ =
-        std::make_unique<SyncErrorNotifier>(error_controller_.get(), profile());
+        std::make_unique<SyncErrorNotifier>(service_.get(), profile());
 
     display_service_ =
         std::make_unique<NotificationDisplayServiceTester>(profile());
@@ -98,15 +97,15 @@ class SyncErrorNotifierTest : public BrowserWithTestWindowTest {
                                      bool is_signed_in,
                                      bool is_error,
                                      bool expected_notification) {
-    EXPECT_CALL(*service_, IsFirstSetupComplete())
-        .WillRepeatedly(Return(is_signed_in));
+    ON_CALL(*service_->GetUserSettingsMock(), IsFirstSetupComplete())
+        .WillByDefault(Return(is_signed_in));
 
-    GoogleServiceAuthError auth_error(error_state);
-    EXPECT_CALL(*service_, GetAuthError()).WillRepeatedly(
-        ReturnRef(auth_error));
+    ON_CALL(*service_, GetAuthError())
+        .WillByDefault(Return(GoogleServiceAuthError(error_state)));
+    ASSERT_EQ(is_error,
+              sync_ui_util::ShouldShowPassphraseError(service_.get()));
 
-    error_controller_->OnStateChanged(service_.get());
-    EXPECT_EQ(is_error, error_controller_->HasError());
+    error_notifier_->OnStateChanged(service_.get());
 
     base::Optional<message_center::Notification> notification =
         display_service_->GetNotification(kNotificationId);
@@ -119,7 +118,6 @@ class SyncErrorNotifierTest : public BrowserWithTestWindowTest {
     }
   }
 
-  std::unique_ptr<syncer::SyncErrorController> error_controller_;
   std::unique_ptr<SyncErrorNotifier> error_notifier_;
   std::unique_ptr<browser_sync::ProfileSyncServiceMock> service_;
   FakeLoginUI login_ui_;
@@ -137,13 +135,12 @@ TEST_F(SyncErrorNotifierTest, PassphraseNotification) {
   ASSERT_FALSE(display_service_->GetNotification(kNotificationId));
 
   syncer::SyncEngine::Status status;
-  EXPECT_CALL(*service_, QueryDetailedSyncStatus(_))
-              .WillRepeatedly(Return(false));
+  ON_CALL(*service_, QueryDetailedSyncStatus(_)).WillByDefault(Return(false));
 
-  EXPECT_CALL(*service_, IsPassphraseRequired())
-              .WillRepeatedly(Return(true));
-  EXPECT_CALL(*service_, IsPassphraseRequiredForDecryption())
-              .WillRepeatedly(Return(true));
+  ON_CALL(*service_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(true));
+  ON_CALL(*service_->GetUserSettingsMock(), IsPassphraseRequiredForDecryption())
+      .WillByDefault(Return(true));
   {
     SCOPED_TRACE("Expected a notification for passphrase error");
     VerifySyncErrorNotifierResult(GoogleServiceAuthError::NONE,
@@ -162,10 +159,10 @@ TEST_F(SyncErrorNotifierTest, PassphraseNotification) {
   }
 
   // Check that no notification is shown if there is no error.
-  EXPECT_CALL(*service_, IsPassphraseRequired())
-              .WillRepeatedly(Return(false));
-  EXPECT_CALL(*service_, IsPassphraseRequiredForDecryption())
-              .WillRepeatedly(Return(false));
+  ON_CALL(*service_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(false));
+  ON_CALL(*service_->GetUserSettingsMock(), IsPassphraseRequiredForDecryption())
+      .WillByDefault(Return(false));
   {
     SCOPED_TRACE("Not expecting notification since no error exists");
     VerifySyncErrorNotifierResult(GoogleServiceAuthError::NONE,
@@ -174,10 +171,10 @@ TEST_F(SyncErrorNotifierTest, PassphraseNotification) {
   }
 
   // Check that no notification is shown if sync setup is not completed.
-  EXPECT_CALL(*service_, IsPassphraseRequired())
-              .WillRepeatedly(Return(true));
-  EXPECT_CALL(*service_, IsPassphraseRequiredForDecryption())
-              .WillRepeatedly(Return(true));
+  ON_CALL(*service_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(true));
+  ON_CALL(*service_->GetUserSettingsMock(), IsPassphraseRequiredForDecryption())
+      .WillByDefault(Return(true));
   {
     SCOPED_TRACE("Not expecting notification since sync setup is incomplete");
     VerifySyncErrorNotifierResult(

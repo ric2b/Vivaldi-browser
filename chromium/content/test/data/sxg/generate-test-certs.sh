@@ -6,6 +6,13 @@
 
 set -e
 
+dumpSPKIHash() {
+  openssl x509 -noout -pubkey -in $1 | \
+      openssl pkey -pubin -outform der | \
+      openssl dgst -sha256 -binary | \
+      base64
+}
+
 # Generate a "secp256r1 (== prime256v1) ecdsa with sha256" key/cert pair
 openssl ecparam -out prime256v1.key -name prime256v1 -genkey
 
@@ -36,15 +43,16 @@ echo "Update the test certs in signed_exchange_signature_verifier_unittest.cc"
 echo "with the followings:"
 echo "===="
 
-echo 'constexpr char kCertPEMRSA[] = R"('
-sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' \
-  ../../../../net/data/ssl/certificates/wildcard.pem
-echo ')";'
 echo 'constexpr char kCertPEMECDSAP256[] = R"('
 cat ./prime256v1-sha256.public.pem
 echo ')";'
 echo 'constexpr char kCertPEMECDSAP384[] = R"('
 cat ./secp384r1-sha256.public.pem
 echo ')";'
+
+echo "constexpr char kPEMECDSAP256SPKIHash = "
+echo "    \"$(dumpSPKIHash ./prime256v1-sha256.public.pem)\";"
+echo "constexpr char kPEMECDSAP384SPKIHash = "
+echo "    \"$(dumpSPKIHash ./secp384r1-sha256.public.pem)\";"
 
 echo "===="

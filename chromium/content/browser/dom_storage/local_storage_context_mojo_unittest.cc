@@ -4,6 +4,8 @@
 
 #include "content/browser/dom_storage/local_storage_context_mojo.h"
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -25,7 +27,7 @@
 #include "content/browser/dom_storage/test/storage_area_test_util.h"
 #include "content/common/dom_storage/dom_storage_types.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/local_storage_usage_info.h"
+#include "content/public/browser/storage_usage_info.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "content/test/fake_leveldb_database.h"
@@ -33,11 +35,8 @@
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/strong_associated_binding.h"
-#include "services/file/file_service.h"
 #include "services/file/public/mojom/constants.mojom.h"
 #include "services/file/user_id_map.h"
-#include "services/service_manager/public/cpp/service_context.h"
-#include "services/service_manager/public/cpp/test/test_service_decorator.h"
 #include "services/service_manager/public/mojom/service_factory.mojom.h"
 #include "storage/browser/test/mock_special_storage_policy.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -57,8 +56,8 @@ using test::FakeLevelDBDatabaseErrorOnWrite;
 constexpr const char kLocalStorageNamespaceId[] = "";
 
 void GetStorageUsageCallback(const base::RepeatingClosure& callback,
-                             std::vector<LocalStorageUsageInfo>* out_result,
-                             std::vector<LocalStorageUsageInfo> result) {
+                             std::vector<StorageUsageInfo>* out_result,
+                             std::vector<StorageUsageInfo> result) {
   *out_result = std::move(result);
   callback.Run();
 }
@@ -174,9 +173,9 @@ class LocalStorageContextMojoTest : public testing::Test {
     mock_data_[StdStringToUint8Vector(key)] = StdStringToUint8Vector(value);
   }
 
-  std::vector<LocalStorageUsageInfo> GetStorageUsageSync() {
+  std::vector<StorageUsageInfo> GetStorageUsageSync() {
     base::RunLoop run_loop;
-    std::vector<LocalStorageUsageInfo> result;
+    std::vector<StorageUsageInfo> result;
     context()->GetStorageUsage(base::BindOnce(&GetStorageUsageCallback,
                                               run_loop.QuitClosure(), &result));
     run_loop.Run();
@@ -195,6 +194,8 @@ class LocalStorageContextMojoTest : public testing::Test {
     return success ? base::Optional<std::vector<uint8_t>>(result)
                    : base::nullopt;
   }
+
+  void CloseBinding() { db_binding_.Close(); }
 
   base::FilePath TempPath() { return temp_path_.GetPath(); }
 
@@ -333,7 +334,7 @@ TEST_F(LocalStorageContextMojoTest, VersionOnlyWrittenOnCommit) {
 }
 
 TEST_F(LocalStorageContextMojoTest, GetStorageUsage_NoData) {
-  std::vector<LocalStorageUsageInfo> info = GetStorageUsageSync();
+  std::vector<StorageUsageInfo> info = GetStorageUsageSync();
   EXPECT_EQ(0u, info.size());
 }
 
@@ -358,16 +359,16 @@ TEST_F(LocalStorageContextMojoTest, GetStorageUsage_Data) {
 
   // GetStorageUsage only includes committed data, but still returns all origins
   // that used localstorage with zero size.
-  std::vector<LocalStorageUsageInfo> info = GetStorageUsageSync();
+  std::vector<StorageUsageInfo> info = GetStorageUsageSync();
   ASSERT_EQ(2u, info.size());
-  if (url::Origin::Create(info[0].origin) == origin2)
+  if (info[0].origin == origin2)
     std::swap(info[0], info[1]);
-  EXPECT_EQ(origin1, url::Origin::Create(info[0].origin));
-  EXPECT_EQ(origin2, url::Origin::Create(info[1].origin));
+  EXPECT_EQ(origin1, info[0].origin);
+  EXPECT_EQ(origin2, info[1].origin);
   EXPECT_LE(before_write, info[0].last_modified);
   EXPECT_LE(before_write, info[1].last_modified);
-  EXPECT_EQ(0u, info[0].data_size);
-  EXPECT_EQ(0u, info[1].data_size);
+  EXPECT_EQ(0u, info[0].total_size_bytes);
+  EXPECT_EQ(0u, info[1].total_size_bytes);
 
   // Make sure all data gets committed to disk.
   base::RunLoop().RunUntilIdle();
@@ -376,15 +377,15 @@ TEST_F(LocalStorageContextMojoTest, GetStorageUsage_Data) {
 
   info = GetStorageUsageSync();
   ASSERT_EQ(2u, info.size());
-  if (url::Origin::Create(info[0].origin) == origin2)
+  if (info[0].origin == origin2)
     std::swap(info[0], info[1]);
-  EXPECT_EQ(origin1, url::Origin::Create(info[0].origin));
-  EXPECT_EQ(origin2, url::Origin::Create(info[1].origin));
+  EXPECT_EQ(origin1, info[0].origin);
+  EXPECT_EQ(origin2, info[1].origin);
   EXPECT_LE(before_write, info[0].last_modified);
   EXPECT_LE(before_write, info[1].last_modified);
   EXPECT_GE(after_write, info[0].last_modified);
   EXPECT_GE(after_write, info[1].last_modified);
-  EXPECT_GT(info[0].data_size, info[1].data_size);
+  EXPECT_GT(info[0].total_size_bytes, info[1].total_size_bytes);
 }
 
 TEST_F(LocalStorageContextMojoTest, MetaDataClearedOnDelete) {
@@ -452,6 +453,36 @@ TEST_F(LocalStorageContextMojoTest, MetaDataClearedOnDeleteAll) {
     EXPECT_NE(std::string::npos,
               Uint8VectorToStdString(it.first).find(origin2.Serialize()));
   }
+}
+
+TEST_F(LocalStorageContextMojoTest, MojoConnectionDisconnects) {
+  url::Origin origin1 = url::Origin::Create(GURL("http://foobar.com"));
+  auto key = StdStringToUint8Vector("key");
+  auto value = StdStringToUint8Vector("value");
+
+  {
+    blink::mojom::StorageAreaPtr area;
+    context()->OpenLocalStorage(origin1, MakeRequest(&area));
+    area->Put(key, value, base::nullopt, "source", base::DoNothing());
+    area.reset();
+  }
+  EXPECT_EQ(value, DoTestGet(key));
+
+  // Close the database connection.
+  CloseBinding();
+  base::RunLoop().RunUntilIdle();
+
+  // We can't access the data anymore.
+  EXPECT_EQ(base::nullopt, DoTestGet(key));
+
+  // Check that local storage still works without a database.
+  {
+    blink::mojom::StorageAreaPtr area;
+    context()->OpenLocalStorage(origin1, MakeRequest(&area));
+    area->Put(key, value, base::nullopt, "source", base::DoNothing());
+    area.reset();
+  }
+  EXPECT_EQ(value, DoTestGet(key));
 }
 
 TEST_F(LocalStorageContextMojoTest, DeleteStorage) {
@@ -1006,13 +1037,10 @@ TEST_F(LocalStorageContextMojoTestWithService, CorruptionOnDisk) {
 
 TEST_F(LocalStorageContextMojoTestWithService, RecreateOnCommitFailure) {
   FakeLevelDBService mock_leveldb_service;
-  ResetFileServiceAndConnector(
-      service_manager::TestServiceDecorator::CreateServiceWithUniqueOverride(
-          file::CreateFileService(),
-
-          leveldb::mojom::LevelDBService::Name_,
-          base::BindRepeating(&test::FakeLevelDBService::Bind,
-                              base::Unretained(&mock_leveldb_service))));
+  file_service()->GetBinderRegistryForTesting()->AddInterface(
+      leveldb::mojom::LevelDBService::Name_,
+      base::BindRepeating(&test::FakeLevelDBService::Bind,
+                          base::Unretained(&mock_leveldb_service)));
 
   std::map<std::vector<uint8_t>, std::vector<uint8_t>> test_data;
 
@@ -1158,11 +1186,10 @@ TEST_F(LocalStorageContextMojoTestWithService, RecreateOnCommitFailure) {
 TEST_F(LocalStorageContextMojoTestWithService,
        DontRecreateOnRepeatedCommitFailure) {
   FakeLevelDBService mock_leveldb_service;
-  ResetFileServiceAndConnector(
-      service_manager::TestServiceDecorator::CreateServiceWithUniqueOverride(
-          file::CreateFileService(), leveldb::mojom::LevelDBService::Name_,
-          base::BindRepeating(&test::FakeLevelDBService::Bind,
-                              base::Unretained(&mock_leveldb_service))));
+  file_service()->GetBinderRegistryForTesting()->AddInterface(
+      leveldb::mojom::LevelDBService::Name_,
+      base::BindRepeating(&test::FakeLevelDBService::Bind,
+                          base::Unretained(&mock_leveldb_service)));
 
   std::map<std::vector<uint8_t>, std::vector<uint8_t>> test_data;
 

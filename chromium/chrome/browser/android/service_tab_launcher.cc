@@ -21,7 +21,6 @@ using base::android::ScopedJavaLocalRef;
 // Called by Java when the WebContents instance for a request Id is available.
 void JNI_ServiceTabLauncher_OnWebContentsForRequestAvailable(
     JNIEnv* env,
-    const JavaParamRef<jclass>& clazz,
     jint request_id,
     const JavaParamRef<jobject>& android_web_contents) {
   ServiceTabLauncher::GetInstance()->OnTabLaunched(
@@ -66,10 +65,10 @@ void ServiceTabLauncher::LaunchTab(content::BrowserContext* browser_context,
       std::make_unique<TabLaunchedCallback>(callback));
   DCHECK_GE(request_id, 1);
 
-  Java_ServiceTabLauncher_launchTab(env, request_id,
-                                    browser_context->IsOffTheRecord(), url,
-                                    static_cast<int>(disposition), referrer_url,
-                                    params.referrer.policy, headers, post_data);
+  Java_ServiceTabLauncher_launchTab(
+      env, request_id, browser_context->IsOffTheRecord(), url,
+      static_cast<int>(disposition), referrer_url,
+      static_cast<int>(params.referrer.policy), headers, post_data);
 }
 
 void ServiceTabLauncher::OnTabLaunched(int request_id,

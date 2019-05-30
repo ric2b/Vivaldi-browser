@@ -136,7 +136,11 @@ class NodeListsNodeData final : public GarbageCollected<NodeListsNodeData> {
     return list;
   }
 
-  static NodeListsNodeData* Create() { return new NodeListsNodeData; }
+  static NodeListsNodeData* Create() {
+    return MakeGarbageCollected<NodeListsNodeData>();
+  }
+
+  NodeListsNodeData() : child_node_list_(nullptr) {}
 
   void InvalidateCaches(const QualifiedName* attr_name = nullptr);
 
@@ -170,11 +174,9 @@ class NodeListsNodeData final : public GarbageCollected<NodeListsNodeData> {
     }
   }
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
  private:
-  NodeListsNodeData() : child_node_list_(nullptr) {}
-
   // Can be a ChildNodeList or an EmptyNodeList.
   TraceWrapperMember<NodeList> child_node_list_;
   NodeListAtomicNameCacheMap atomic_name_caches_;

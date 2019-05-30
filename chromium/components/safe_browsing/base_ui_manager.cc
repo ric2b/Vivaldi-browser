@@ -33,7 +33,7 @@ const void* const kWhitelistKey = &kWhitelistKey;
 class WhitelistUrlSet : public base::SupportsUserData::Data {
  public:
   WhitelistUrlSet() {}
-  bool Contains(const GURL url, SBThreatType* threat_type) {
+  bool Contains(const GURL& url, SBThreatType* threat_type) {
     auto found = map_.find(url);
     if (found == map_.end())
       return false;
@@ -47,7 +47,7 @@ class WhitelistUrlSet : public base::SupportsUserData::Data {
       pending_.erase(url);
   }
   void Remove(const GURL& url) { map_.erase(url); }
-  void Insert(const GURL url, SBThreatType threat_type) {
+  void Insert(const GURL& url, SBThreatType threat_type) {
     if (Contains(url, nullptr))
       return;
     map_[url] = threat_type;
@@ -61,7 +61,7 @@ class WhitelistUrlSet : public base::SupportsUserData::Data {
       *threat_type = found->second.first;
     return true;
   }
-  void InsertPending(const GURL url, SBThreatType threat_type) {
+  void InsertPending(const GURL& url, SBThreatType threat_type) {
     if (pending_.find(url) != pending_.end()) {
       pending_[url].first = threat_type;
       pending_[url].second++;
@@ -258,7 +258,7 @@ void BaseUIManager::ShowBlockingPageForResource(
 // users who are not in incognito mode.
 void BaseUIManager::MaybeReportSafeBrowsingHit(
     const HitReport& hit_report,
-    const content::WebContents* web_contents) {
+    content::WebContents* web_contents) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return;
 }
@@ -305,7 +305,6 @@ const std::string BaseUIManager::app_locale() const {
 
 history::HistoryService* BaseUIManager::history_service(
     content::WebContents* web_contents) {
-  // TODO(jialiul): figure out how to get HistoryService from webview.
   return nullptr;
 }
 

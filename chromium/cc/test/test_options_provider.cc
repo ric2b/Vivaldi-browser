@@ -34,17 +34,22 @@ TestOptionsProvider::TestOptionsProvider()
       strike_server_(discardable_manager_.get()),
       strike_client_(discardable_manager_),
       color_space_(SkColorSpace::MakeSRGB()),
+      client_paint_cache_(std::numeric_limits<size_t>::max()),
       serialize_options_(this,
                          this,
+                         &client_paint_cache_,
                          &canvas_,
                          &strike_server_,
-                         color_space_.get(),
+                         color_space_,
                          can_use_lcd_text_,
                          context_supports_distance_field_text_,
                          max_texture_size_,
                          max_texture_bytes_,
                          SkMatrix::I()),
-      deserialize_options_(this, &strike_client_) {}
+      deserialize_options_(this,
+                           &service_paint_cache_,
+                           &strike_client_,
+                           &scratch_buffer_) {}
 
 TestOptionsProvider::~TestOptionsProvider() = default;
 
@@ -56,13 +61,14 @@ void TestOptionsProvider::PushFonts() {
   CHECK(strike_client_.readStrikeData(font_data.data(), font_data.size()));
 }
 
-ImageProvider::ScopedDecodedDrawImage TestOptionsProvider::GetDecodedDrawImage(
+ImageProvider::ScopedResult TestOptionsProvider::GetRasterContent(
     const DrawImage& draw_image) {
+  DCHECK(!draw_image.paint_image().IsPaintWorklet());
   uint32_t image_id = draw_image.paint_image().GetSkImage()->uniqueID();
   // Lock and reuse the entry if possible.
   const EntryKey entry_key(TransferCacheEntryType::kImage, image_id);
   if (LockEntryDirect(entry_key)) {
-    return ScopedDecodedDrawImage(
+    return ScopedResult(
         DecodedDrawImage(image_id, SkSize::MakeEmpty(), draw_image.scale(),
                          draw_image.filter_quality(), false, true));
   }
@@ -81,14 +87,20 @@ ImageProvider::ScopedDecodedDrawImage TestOptionsProvider::GetDecodedDrawImage(
   std::vector<uint8_t> data;
   data.resize(cache_entry.SerializedSize());
   if (!cache_entry.Serialize(base::span<uint8_t>(data.data(), data.size()))) {
-    return ScopedDecodedDrawImage();
+    return ScopedResult();
   }
 
   CreateEntryDirect(entry_key, base::span<uint8_t>(data.data(), data.size()));
 
-  return ScopedDecodedDrawImage(
+  return ScopedResult(
       DecodedDrawImage(image_id, SkSize::MakeEmpty(), draw_image.scale(),
                        draw_image.filter_quality(), false, true));
+}
+
+void TestOptionsProvider::ClearPaintCache() {
+  client_paint_cache_.FinalizePendingEntries();
+  client_paint_cache_.PurgeAll();
+  service_paint_cache_.PurgeAll();
 }
 
 }  // namespace cc

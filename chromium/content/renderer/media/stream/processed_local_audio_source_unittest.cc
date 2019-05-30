@@ -5,19 +5,20 @@
 #include <memory>
 #include <string>
 
+#include "base/bind.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "build/build_config.h"
-#include "content/public/renderer/media_stream_audio_sink.h"
 #include "content/renderer/media/audio/mock_audio_device_factory.h"
 #include "content/renderer/media/stream/media_stream_audio_processor_options.h"
-#include "content/renderer/media/stream/media_stream_audio_track.h"
 #include "content/renderer/media/stream/processed_local_audio_source.h"
 #include "content/renderer/media/webrtc/mock_peer_connection_dependency_factory.h"
 #include "media/base/audio_bus.h"
 #include "media/base/audio_parameters.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/platform/modules/mediastream/media_stream_audio_track.h"
+#include "third_party/blink/public/platform/modules/mediastream/web_media_stream_audio_sink.h"
 #include "third_party/blink/public/platform/web_media_constraints.h"
 #include "third_party/blink/public/web/web_heap.h"
 
@@ -48,7 +49,7 @@ constexpr int kExpectedSourceBufferSize = kRequestedBufferSize;
 // output end of its FIFO.
 constexpr int kExpectedOutputBufferSize = kSampleRate / 100;
 
-class MockMediaStreamAudioSink : public MediaStreamAudioSink {
+class MockMediaStreamAudioSink : public blink::WebMediaStreamAudioSink {
  public:
   MockMediaStreamAudioSink() {}
   ~MockMediaStreamAudioSink() override {}
@@ -97,17 +98,20 @@ class ProcessedLocalAudioSourceTest : public testing::Test {
 
   void CreateProcessedLocalAudioSource(
       const AudioProcessingProperties& properties) {
-    ProcessedLocalAudioSource* const source = new ProcessedLocalAudioSource(
-        -1 /* consumer_render_frame_id is N/A for non-browser tests */,
-        MediaStreamDevice(MEDIA_DEVICE_AUDIO_CAPTURE, "mock_audio_device_id",
-                          "Mock audio device", kSampleRate, kChannelLayout,
-                          kRequestedBufferSize),
-        false /* hotword_enabled */, false /* disable_local_echo */, properties,
-        base::Bind(&ProcessedLocalAudioSourceTest::OnAudioSourceStarted,
-                   base::Unretained(this)),
-        &mock_dependency_factory_);
+    std::unique_ptr<ProcessedLocalAudioSource> source =
+        std::make_unique<ProcessedLocalAudioSource>(
+            -1 /* consumer_render_frame_id is N/A for non-browser tests */,
+            blink::MediaStreamDevice(blink::MEDIA_DEVICE_AUDIO_CAPTURE,
+                                     "mock_audio_device_id",
+                                     "Mock audio device", kSampleRate,
+                                     kChannelLayout, kRequestedBufferSize),
+            false /* disable_local_echo */, properties,
+            base::Bind(&ProcessedLocalAudioSourceTest::OnAudioSourceStarted,
+                       base::Unretained(this)),
+            &mock_dependency_factory_);
     source->SetAllowInvalidRenderFrameIdForTesting(true);
-    blink_audio_source_.SetExtraData(source);  // Takes ownership.
+    blink_audio_source_.SetPlatformSource(
+        std::move(source));  // Takes ownership.
   }
 
   void CheckSourceFormatMatches(const media::AudioParameters& params) {
@@ -131,20 +135,21 @@ class ProcessedLocalAudioSourceTest : public testing::Test {
         ProcessedLocalAudioSource::From(audio_source()));
   }
 
-  MediaStreamAudioSource* audio_source() const {
-    return MediaStreamAudioSource::From(blink_audio_source_);
+  blink::MediaStreamAudioSource* audio_source() const {
+    return blink::MediaStreamAudioSource::From(blink_audio_source_);
   }
 
   const blink::WebMediaStreamTrack& blink_audio_track() {
     return blink_audio_track_;
   }
 
-  void OnAudioSourceStarted(MediaStreamSource* source,
-                            MediaStreamRequestResult result,
+  void OnAudioSourceStarted(blink::WebPlatformMediaStreamSource* source,
+                            blink::MediaStreamRequestResult result,
                             const blink::WebString& result_name) {}
 
  private:
-  base::MessageLoop main_thread_message_loop_;  // Needed for MSAudioProcessor.
+  base::test::ScopedTaskEnvironment
+      task_environment_;  // Needed for MSAudioProcessor.
   MockAudioDeviceFactory mock_audio_device_factory_;
   MockPeerConnectionDependencyFactory mock_dependency_factory_;
   blink::WebMediaStreamSource blink_audio_source_;
@@ -184,7 +189,7 @@ TEST_F(ProcessedLocalAudioSourceTest, VerifyAudioFlowWithoutAudioProcessing) {
       new MockMediaStreamAudioSink());
   EXPECT_CALL(*sink, FormatIsSet(_))
       .WillOnce(Invoke(this, &ThisTest::CheckOutputFormatMatches));
-  MediaStreamAudioTrack::From(blink_audio_track())->AddSink(sink.get());
+  blink::MediaStreamAudioTrack::From(blink_audio_track())->AddSink(sink.get());
 
   // Feed audio data into the ProcessedLocalAudioSource and expect it to reach
   // the sink.
@@ -201,7 +206,7 @@ TEST_F(ProcessedLocalAudioSourceTest, VerifyAudioFlowWithoutAudioProcessing) {
   // Expect the ProcessedLocalAudioSource to auto-stop the MockCapturerSource
   // when the track is stopped.
   EXPECT_CALL(*mock_audio_device_factory()->mock_capturer_source(), Stop());
-  MediaStreamAudioTrack::From(blink_audio_track())->Stop();
+  blink::MediaStreamAudioTrack::From(blink_audio_track())->Stop();
 }
 
 

@@ -54,6 +54,10 @@ class FeedbackData : public FeedbackCommon {
   content::BrowserContext* context() const { return context_; }
   const std::string& attached_file_uuid() const { return attached_file_uuid_; }
   const std::string& screenshot_uuid() const { return screenshot_uuid_; }
+  bool from_assistant() const { return from_assistant_; }
+  bool assistant_debug_info_allowed() const {
+    return assistant_debug_info_allowed_;
+  }
 
   // Setters
   void set_context(content::BrowserContext* context) { context_ = context; }
@@ -67,6 +71,12 @@ class FeedbackData : public FeedbackCommon {
     screenshot_uuid_ = uuid;
   }
   void set_trace_id(int trace_id) { trace_id_ = trace_id; }
+  void set_from_assistant(bool from_assistant) {
+    from_assistant_ = from_assistant;
+  }
+  void set_assistant_debug_info_allowed(bool assistant_debug_info_allowed) {
+    assistant_debug_info_allowed_ = assistant_debug_info_allowed;
+  }
 
  private:
   ~FeedbackData() override;
@@ -89,6 +99,8 @@ class FeedbackData : public FeedbackCommon {
 
   int pending_op_count_;
   bool report_sent_;
+  bool from_assistant_;
+  bool assistant_debug_info_allowed_;
 
   DISALLOW_COPY_AND_ASSIGN(FeedbackData);
 };

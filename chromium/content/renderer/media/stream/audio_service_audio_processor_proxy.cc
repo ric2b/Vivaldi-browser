@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
@@ -100,12 +101,6 @@ void AudioServiceAudioProcessorProxy::SetControls(
   // ensure that we do get the filter when we should.
   if (aec_dump_message_filter_)
     aec_dump_message_filter_->AddDelegate(this);
-}
-
-void AudioServiceAudioProcessorProxy::GetStats(AudioProcessorStats* out) {
-  // This is the old GetStats interface from webrtc::AudioProcessorInterface.
-  // It should not be in use by Chrome any longer.
-  NOTREACHED();
 }
 
 webrtc::AudioProcessorInterface::AudioProcessorStatistics

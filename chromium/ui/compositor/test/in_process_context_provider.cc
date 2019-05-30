@@ -17,6 +17,7 @@
 #include "gpu/command_buffer/client/shared_memory_limits.h"
 #include "gpu/command_buffer/common/skia_utils.h"
 #include "gpu/ipc/gl_in_process_context.h"
+#include "gpu/ipc/test_gpu_thread_holder.h"
 #include "gpu/skia_bindings/grcontext_for_gles2_interface.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
@@ -98,12 +99,10 @@ gpu::ContextResult InProcessContextProvider::BindToCurrentThread() {
 
   context_ = std::make_unique<gpu::GLInProcessContext>();
   bind_result_ = context_->Initialize(
-      nullptr,  /* service */
-      nullptr,  /* surface */
+      gpu::GetTestGpuThreadHolder()->GetTaskExecutor(), nullptr, /* surface */
       !window_, /* is_offscreen */
       window_, attribs_, gpu::SharedMemoryLimits(), gpu_memory_buffer_manager_,
-      image_factory_, nullptr /* gpu_channel_manager_delegate */,
-      base::ThreadTaskRunnerHandle::Get());
+      image_factory_, base::ThreadTaskRunnerHandle::Get());
 
   if (bind_result_ != gpu::ContextResult::kSuccess)
     return bind_result_;
@@ -119,9 +118,7 @@ gpu::ContextResult InProcessContextProvider::BindToCurrentThread() {
       "gpu_toplevel", unique_context_name.c_str());
 
   raster_context_ = std::make_unique<gpu::raster::RasterImplementationGLES>(
-      context_->GetImplementation(),
-      context_->GetImplementation()->command_buffer(),
-      context_->GetImplementation()->capabilities());
+      context_->GetImplementation());
 
   return bind_result_;
 }
@@ -167,6 +164,10 @@ class GrContext* InProcessContextProvider::GrContext() {
   cache_controller_->SetGrContext(gr_context_->get());
 
   return gr_context_->get();
+}
+
+gpu::SharedImageInterface* InProcessContextProvider::SharedImageInterface() {
+  return context_->GetSharedImageInterface();
 }
 
 viz::ContextCacheController* InProcessContextProvider::CacheController() {

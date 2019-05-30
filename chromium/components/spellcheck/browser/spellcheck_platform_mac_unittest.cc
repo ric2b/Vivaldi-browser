@@ -7,12 +7,12 @@
 #include <stddef.h>
 
 #include "base/bind.h"
-#include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/spellcheck/common/spellcheck_result.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -36,19 +36,21 @@ class SpellcheckPlatformMacTest: public testing::Test {
 
  private:
   void QuitMessageLoop() {
-    CHECK(base::MessageLoop::current() == &message_loop_);
+    ASSERT_TRUE(
+        task_environment_.GetMainThreadTaskRunner()->BelongsToCurrentThread());
     base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
   void CompletionCallback(const std::vector<SpellCheckResult>& results) {
     results_ = results;
     callback_finished_ = true;
-    message_loop_.task_runner()->PostTask(
+    task_environment_.GetMainThreadTaskRunner()->PostTask(
         FROM_HERE, base::BindOnce(&SpellcheckPlatformMacTest::QuitMessageLoop,
                                   base::Unretained(this)));
   }
 
-  base::MessageLoopForUI message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_{
+      base::test::ScopedTaskEnvironment::MainThreadType::UI};
   spellcheck_platform::ScopedEnglishLanguageForTest scoped_language_;
 };
 
@@ -64,7 +66,7 @@ TEST_F(SpellcheckPlatformMacTest, IgnoreWords_EN_US) {
     "noooen",
   };
 
-  for (size_t i = 0; i < arraysize(kTestCases); ++i) {
+  for (size_t i = 0; i < base::size(kTestCases); ++i) {
     const base::string16 word(base::ASCIIToUTF16(kTestCases[i]));
     const int doc_tag = spellcheck_platform::GetDocumentTag();
 
@@ -362,7 +364,7 @@ TEST_F(SpellcheckPlatformMacTest, SpellCheckSuggestions_EN_US) {
     {"writting", "writing"},
   };
 
-  for (size_t i = 0; i < arraysize(kTestCases); ++i) {
+  for (size_t i = 0; i < base::size(kTestCases); ++i) {
     const base::string16 word(base::ASCIIToUTF16(kTestCases[i].input));
     EXPECT_FALSE(spellcheck_platform::CheckSpelling(word, 0)) << word;
 

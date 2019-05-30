@@ -16,7 +16,7 @@
 #include "extensions/common/permissions/base_set_operators.h"
 
 namespace base {
-class ListValue;
+class Value;
 }  // namespace base
 
 namespace extensions {
@@ -43,9 +43,8 @@ class APIPermissionSet : public BaseSetOperators<APIPermissionSet> {
 
   void insert(APIPermission::ID id);
 
-  // Insert |permission| into the APIPermissionSet. The APIPermissionSet will
-  // take the ownership of |permission|,
-  void insert(APIPermission* permission);
+  // Inserts |permission| into the APIPermissionSet.
+  void insert(std::unique_ptr<APIPermission> permission);
 
   // Parses permissions from |permissions| and adds the parsed permissions to
   // |api_permissions|. If |source| is kDisallowInternalPermissions, treat
@@ -55,12 +54,11 @@ class APIPermissionSet : public BaseSetOperators<APIPermissionSet> {
   // next permission if invalid data is detected. If |error| is not NULL, it
   // will be set to an error message and false is returned when an invalid
   // permission is found.
-  static bool ParseFromJSON(
-      const base::ListValue* permissions,
-      ParseSource source,
-      APIPermissionSet* api_permissions,
-      base::string16* error,
-      std::vector<std::string>* unhandled_permissions);
+  static bool ParseFromJSON(const base::Value* permissions,
+                            ParseSource source,
+                            APIPermissionSet* api_permissions,
+                            base::string16* error,
+                            std::vector<std::string>* unhandled_permissions);
 };
 
 // An ID representing a single permission that belongs to an app or extension.

@@ -4,18 +4,11 @@
 
 #include "third_party/blink/renderer/core/paint/ng/ng_fragment_painter.h"
 
-#include "third_party/blink/renderer/core/layout/layout_theme.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_fragment_traversal.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_line_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_outline_utils.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_fragment.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
-#include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment_traversal.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
-#include "third_party/blink/renderer/core/style/border_edge.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
-#include "third_party/blink/renderer/platform/geometry/layout_point.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context_state_saver.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -26,20 +19,15 @@ void NGFragmentPainter::PaintOutline(const PaintInfo& paint_info,
                                      const LayoutPoint& paint_offset) {
   DCHECK(ShouldPaintSelfOutline(paint_info.phase));
 
-  const ComputedStyle& style = paint_fragment_.Style();
-  if (!style.HasOutline() || style.Visibility() != EVisibility::kVisible)
+  if (!NGOutlineUtils::HasPaintedOutline(paint_fragment_.Style(),
+                                         paint_fragment_.GetNode()))
     return;
-
-  // Only paint the focus ring by hand if the theme isn't able to draw the focus
-  // ring.
-  if (style.OutlineStyleIsAuto() &&
-      !LayoutTheme::GetTheme().ShouldDrawDefaultFocusRing(
-          paint_fragment_.GetNode(), style)) {
-    return;
-  }
 
   Vector<LayoutRect> outline_rects;
-  paint_fragment_.AddSelfOutlineRect(&outline_rects, paint_offset);
+  paint_fragment_.AddSelfOutlineRect(
+      &outline_rects, paint_offset,
+      paint_fragment_.GetLayoutObject()
+          ->OutlineRectsShouldIncludeBlockVisualOverflow());
   if (outline_rects.IsEmpty())
     return;
 
@@ -49,41 +37,7 @@ void NGFragmentPainter::PaintOutline(const PaintInfo& paint_info,
 
   DrawingRecorder recorder(paint_info.context, paint_fragment_,
                            paint_info.phase);
-  PaintOutlineRects(paint_info, outline_rects, style);
-}
-
-void NGFragmentPainter::PaintDescendantOutlines(
-    const PaintInfo& paint_info,
-    const LayoutPoint& paint_offset) {
-  DCHECK(ShouldPaintDescendantOutlines(paint_info.phase));
-
-  NGOutlineUtils::FragmentMap anchor_fragment_map;
-  NGOutlineUtils::OutlineRectMap outline_rect_map;
-
-  DCHECK(paint_fragment_.PhysicalFragment().IsBox());
-  if (!paint_fragment_.GetLayoutObject()->OutlineMayBeAffectedByDescendants())
-    return;
-  NGOutlineUtils::CollectDescendantOutlines(
-      ToNGPhysicalBoxFragment(paint_fragment_.PhysicalFragment()),
-      NGPhysicalOffset(paint_offset.X(), paint_offset.Y()),
-      &anchor_fragment_map, &outline_rect_map);
-
-  // Paint all outlines.
-  if (anchor_fragment_map.size() == 0)
-    return;
-  if (DrawingRecorder::UseCachedDrawingIfPossible(
-          paint_info.context, paint_fragment_,
-          PaintPhase::kDescendantOutlinesOnly))
-    return;
-
-  DrawingRecorder recorder(paint_info.context, paint_fragment_,
-                           PaintPhase::kDescendantOutlinesOnly);
-  for (auto& anchor_iter : anchor_fragment_map) {
-    const NGPhysicalFragment* fragment = anchor_iter.value;
-    Vector<LayoutRect>* outline_rects =
-        &outline_rect_map.find(anchor_iter.key)->value;
-    PaintOutlineRects(paint_info, *outline_rects, fragment->Style());
-  }
+  PaintOutlineRects(paint_info, outline_rects, paint_fragment_.Style());
 }
 
 void NGFragmentPainter::AddPDFURLRectIfNeeded(const PaintInfo& paint_info,
@@ -122,6 +76,25 @@ void NGFragmentPainter::AddPDFURLRectIfNeeded(const PaintInfo& paint_info,
     return;
   }
   paint_info.context.SetURLForRect(url, rect);
+}
+
+bool NGFragmentPainter::ShouldRecordHitTestData(
+    const PaintInfo& paint_info,
+    const NGPhysicalFragment& fragment) {
+  // Hit test display items are only needed for compositing. This flag is used
+  // for for printing and drag images which do not need hit testing.
+  if (paint_info.GetGlobalPaintFlags() & kGlobalPaintFlattenCompositingLayers)
+    return false;
+
+  // If an object is not visible, it does not participate in hit testing.
+  if (fragment.Style().Visibility() != EVisibility::kVisible)
+    return false;
+
+  auto touch_action = fragment.EffectiveWhitelistedTouchAction();
+  if (touch_action == TouchAction::kTouchActionAuto)
+    return false;
+
+  return true;
 }
 
 }  // namespace blink

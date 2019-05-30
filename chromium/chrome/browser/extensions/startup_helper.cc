@@ -15,11 +15,13 @@
 #include "base/task/post_task.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/initialize_extensions_client.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/service_manager_connection.h"
 #include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/browser/sandboxed_unpacker.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/verifier_formats.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 using content::BrowserThread;
@@ -113,8 +115,8 @@ class ValidateCrxHelper : public SandboxedUnpackerClient {
       const base::Optional<int>& dnr_ruleset_checksum) override {
     DCHECK(GetExtensionFileTaskRunner()->RunsTasksInCurrentSequence());
     success_ = true;
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&ValidateCrxHelper::FinishOnUIThread, this));
   }
 
@@ -122,8 +124,8 @@ class ValidateCrxHelper : public SandboxedUnpackerClient {
     DCHECK(GetExtensionFileTaskRunner()->RunsTasksInCurrentSequence());
     success_ = false;
     error_ = error.message();
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&ValidateCrxHelper::FinishOnUIThread, this));
   }
 
@@ -180,7 +182,7 @@ bool StartupHelper::ValidateCrx(const base::CommandLine& cmd_line,
   }
 
   base::RunLoop run_loop;
-  CRXFileInfo file(path);
+  CRXFileInfo file(path, extensions::GetExternalVerifierFormat());
   auto helper = base::MakeRefCounted<ValidateCrxHelper>(
       file, temp_dir.GetPath(), run_loop.QuitClosure());
   helper->Start();

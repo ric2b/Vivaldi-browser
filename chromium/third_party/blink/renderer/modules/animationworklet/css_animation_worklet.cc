@@ -45,7 +45,8 @@ CSSAnimationWorklet& CSSAnimationWorklet::From(LocalDOMWindow& window) {
   CSSAnimationWorklet* supplement =
       Supplement<LocalDOMWindow>::From<CSSAnimationWorklet>(window);
   if (!supplement) {
-    supplement = new CSSAnimationWorklet(window.GetFrame()->GetDocument());
+    supplement = MakeGarbageCollected<CSSAnimationWorklet>(
+        window.GetFrame()->GetDocument());
     ProvideTo(window, supplement);
   }
   return *supplement;
@@ -53,7 +54,7 @@ CSSAnimationWorklet& CSSAnimationWorklet::From(LocalDOMWindow& window) {
 
 CSSAnimationWorklet::CSSAnimationWorklet(Document* document)
     : ContextLifecycleObserver(document),
-      animation_worklet_(new AnimationWorklet(document)) {
+      animation_worklet_(MakeGarbageCollected<AnimationWorklet>(document)) {
   DCHECK(GetExecutionContext());
 }
 

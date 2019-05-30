@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
@@ -15,11 +16,12 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/threading/platform_thread.h"
 #include "base/timer/hi_res_timer_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "components/tracing/common/tracing_sampler_profiler.h"
 #include "components/viz/service/main/viz_main_impl.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/content_switches_internal.h"
@@ -63,6 +65,7 @@
 #endif
 
 #if defined(OS_WIN)
+#include "base/trace_event/trace_event_etw_export_win.h"
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/windows_version.h"
 #include "media/gpu/windows/dxva_video_decode_accelerator_win.h"
@@ -102,7 +105,7 @@ extern "C" {
 void _LSSetApplicationLaunchServicesServerConnectionStatus(
     uint64_t flags,
     bool (^connection_allowed)(CFDictionaryRef));
-};
+}
 #endif  // defined(OS_MACOSX)
 
 namespace content {
@@ -213,6 +216,8 @@ int GpuMain(const MainFunctionParams& parameters) {
   base::Time start_time = base::Time::Now();
 
 #if defined(OS_WIN)
+  base::trace_event::TraceEventETWExport::EnableETWExport();
+
   // Prevent Windows from displaying a modal dialog on failures like not being
   // able to load a DLL.
   SetErrorMode(
@@ -283,7 +288,7 @@ int GpuMain(const MainFunctionParams& parameters) {
 
   base::PlatformThread::SetName("CrGpuMain");
 
-#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS) || defined(USE_OZONE)
   // Set thread priority before sandbox initialization.
   base::PlatformThread::SetCurrentThreadPriority(base::ThreadPriority::DISPLAY);
 #endif
@@ -316,7 +321,7 @@ int GpuMain(const MainFunctionParams& parameters) {
   GetContentClient()->SetGpuInfo(gpu_init->gpu_info());
 
   base::ThreadPriority io_thread_priority = base::ThreadPriority::NORMAL;
-#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS) || defined(USE_OZONE)
   io_thread_priority = base::ThreadPriority::DISPLAY;
 #endif
 
@@ -326,13 +331,19 @@ int GpuMain(const MainFunctionParams& parameters) {
   if (client)
     client->PostIOThreadCreated(gpu_process.io_task_runner());
 
-  GpuChildThread* child_thread = new GpuChildThread(
-      std::move(gpu_init), std::move(deferred_messages.Get()));
+  base::RunLoop run_loop;
+  GpuChildThread* child_thread =
+      new GpuChildThread(run_loop.QuitClosure(), std::move(gpu_init),
+                         std::move(deferred_messages.Get()));
   deferred_messages.Get().clear();
 
   child_thread->Init(start_time);
 
   gpu_process.set_main_thread(child_thread);
+
+  // Setup tracing sampler profiler as early as possible.
+  std::unique_ptr<tracing::TracingSamplerProfiler> tracing_sampler_profiler =
+      tracing::TracingSamplerProfiler::CreateOnMainThread();
 
 #if defined(OS_ANDROID)
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
@@ -344,7 +355,7 @@ int GpuMain(const MainFunctionParams& parameters) {
 
   {
     TRACE_EVENT0("gpu", "Run Message Loop");
-    base::RunLoop().Run();
+    run_loop.Run();
   }
 
   return dead_on_arrival ? RESULT_CODE_GPU_DEAD_ON_ARRIVAL : 0;

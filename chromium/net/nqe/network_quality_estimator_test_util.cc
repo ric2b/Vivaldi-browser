@@ -56,14 +56,10 @@ TestNetworkQualityEstimator::TestNetworkQualityEstimator(
           net_log->bound().net_log()),
       net_log_(std::move(net_log)),
       current_network_type_(NetworkChangeNotifier::CONNECTION_UNKNOWN),
-      accuracy_recording_intervals_set_(false),
       embedded_test_server_(base::FilePath(kTestFilePath)),
       suppress_notifications_for_testing_(suppress_notifications_for_testing) {
   SetUseLocalHostRequestsForTesting(allow_local_host_requests_for_tests);
   SetUseSmallResponsesForTesting(allow_smaller_responses_for_tests);
-
-  // Set up the embedded test server.
-  EXPECT_TRUE(embedded_test_server_.Start());
 }
 
 TestNetworkQualityEstimator::TestNetworkQualityEstimator(
@@ -77,16 +73,18 @@ TestNetworkQualityEstimator::TestNetworkQualityEstimator(
     : NetworkQualityEstimator(std::move(params), net_log->bound().net_log()),
       net_log_(std::move(net_log)),
       current_network_type_(NetworkChangeNotifier::CONNECTION_UNKNOWN),
-      accuracy_recording_intervals_set_(false),
       embedded_test_server_(base::FilePath(kTestFilePath)),
       suppress_notifications_for_testing_(false) {
-  // Set up the embedded test server.
-  EXPECT_TRUE(embedded_test_server_.Start());
 }
 
 TestNetworkQualityEstimator::~TestNetworkQualityEstimator() = default;
 
 void TestNetworkQualityEstimator::RunOneRequest() {
+  // Set up the embedded test server.
+  if (!embedded_test_server_.Started()) {
+    EXPECT_TRUE(embedded_test_server_.Start());
+  }
+
   TestDelegate test_delegate;
   TestURLRequestContext context(true);
   context.set_network_quality_estimator(this);
@@ -107,11 +105,19 @@ void TestNetworkQualityEstimator::SimulateNetworkChange(
   OnConnectionTypeChanged(new_connection_type);
 }
 
-const GURL TestNetworkQualityEstimator::GetEchoURL() const {
+const GURL TestNetworkQualityEstimator::GetEchoURL() {
+  // Set up the embedded test server.
+  if (!embedded_test_server_.Started()) {
+    EXPECT_TRUE(embedded_test_server_.Start());
+  }
   return embedded_test_server_.GetURL("/simple.html");
 }
 
-const GURL TestNetworkQualityEstimator::GetRedirectURL() const {
+const GURL TestNetworkQualityEstimator::GetRedirectURL() {
+  // Set up the embedded test server.
+  if (!embedded_test_server_.Started()) {
+    EXPECT_TRUE(embedded_test_server_.Start());
+  }
   return embedded_test_server_.GetURL("/redirect302-to-https");
 }
 
@@ -248,27 +254,6 @@ base::TimeDelta TestNetworkQualityEstimator::GetRTTEstimateInternal(
       start_time, observation_category, percentile, observations_count);
 }
 
-void TestNetworkQualityEstimator::SetAccuracyRecordingIntervals(
-    const std::vector<base::TimeDelta>& accuracy_recording_intervals) {
-  accuracy_recording_intervals_set_ = true;
-  accuracy_recording_intervals_ = accuracy_recording_intervals;
-}
-
-const std::vector<base::TimeDelta>&
-TestNetworkQualityEstimator::GetAccuracyRecordingIntervals() const {
-  if (accuracy_recording_intervals_set_)
-    return accuracy_recording_intervals_;
-
-  return NetworkQualityEstimator::GetAccuracyRecordingIntervals();
-}
-
-base::Optional<int32_t>
-TestNetworkQualityEstimator::GetBandwidthDelayProductKbits() const {
-  if (bandwidth_delay_product_kbits_.has_value())
-    return bandwidth_delay_product_kbits_.value();
-  return NetworkQualityEstimator::GetBandwidthDelayProductKbits();
-}
-
 int TestNetworkQualityEstimator::GetEntriesCount(NetLogEventType type) const {
   TestNetLogEntry::List entries;
   net_log_->GetEntries(&entries);
@@ -323,10 +308,19 @@ void TestNetworkQualityEstimator::
   }
 }
 
-void TestNetworkQualityEstimator::NotifyObserversOfEffectiveConnectionType(
-    EffectiveConnectionType type) {
+void TestNetworkQualityEstimator::
+    SetAndNotifyObserversOfEffectiveConnectionType(
+        EffectiveConnectionType type) {
+  set_effective_connection_type(type);
   for (auto& observer : effective_connection_type_observer_list_)
     observer.OnEffectiveConnectionTypeChanged(type);
+}
+
+void TestNetworkQualityEstimator::RecordSpdyPingLatency(
+    const HostPortPair& host_port_pair,
+    base::TimeDelta rtt) {
+  ++ping_rtt_received_count_;
+  NetworkQualityEstimator::RecordSpdyPingLatency(host_port_pair, rtt);
 }
 
 const NetworkQualityEstimatorParams* TestNetworkQualityEstimator::params()
@@ -338,6 +332,15 @@ nqe::internal::NetworkID TestNetworkQualityEstimator::GetCurrentNetworkID()
     const {
   return nqe::internal::NetworkID(current_network_type_, current_network_id_,
                                   INT32_MIN);
+}
+
+int32_t TestNetworkQualityEstimator::GetCurrentSignalStrength() const {
+  return current_cellular_signal_strength_;
+}
+
+void TestNetworkQualityEstimator::SetCurrentSignalStrength(
+    int32_t signal_strength) {
+  current_cellular_signal_strength_ = signal_strength;
 }
 
 TestNetworkQualityEstimator::LocalHttpTestServer::LocalHttpTestServer(

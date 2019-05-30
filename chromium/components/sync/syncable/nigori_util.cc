@@ -13,6 +13,7 @@
 
 #include "base/containers/queue.h"
 #include "base/json/json_writer.h"
+#include "base/metrics/histogram_macros.h"
 #include "components/sync/base/cryptographer.h"
 #include "components/sync/base/passphrase_enums.h"
 #include "components/sync/syncable/directory.h"
@@ -211,6 +212,9 @@ bool UpdateEntryWithEncryption(BaseTransaction* const trans,
           generated_specifics.SerializeAsString()) {
     DVLOG(2) << "Specifics of type " << ModelTypeToString(type)
              << " already match, dropping change.";
+    UMA_HISTOGRAM_ENUMERATION("Sync.ModelTypeRedundantPut",
+                              ModelTypeToHistogramInt(type),
+                              static_cast<int>(MODEL_TYPE_COUNT));
     return true;
   }
 
@@ -253,7 +257,7 @@ void UpdateNigoriFromEncryptedTypes(ModelTypeSet encrypted_types,
                                     bool encrypt_everything,
                                     sync_pb::NigoriSpecifics* nigori) {
   nigori->set_encrypt_everything(encrypt_everything);
-  static_assert(42 + 1  /*notes*/ == MODEL_TYPE_COUNT,
+  static_assert(44 + 1 /* notes */ == MODEL_TYPE_COUNT,
                 "If adding an encryptable type, update handling below.");
   nigori->set_encrypt_bookmarks(encrypted_types.Has(BOOKMARKS));
   nigori->set_encrypt_preferences(encrypted_types.Has(PREFERENCES));
@@ -270,7 +274,8 @@ void UpdateNigoriFromEncryptedTypes(ModelTypeSet encrypted_types,
   nigori->set_encrypt_app_settings(encrypted_types.Has(APP_SETTINGS));
   nigori->set_encrypt_extension_settings(
       encrypted_types.Has(EXTENSION_SETTINGS));
-  nigori->set_encrypt_app_notifications(encrypted_types.Has(APP_NOTIFICATIONS));
+  nigori->set_encrypt_app_notifications(
+      encrypted_types.Has(DEPRECATED_APP_NOTIFICATIONS));
   nigori->set_encrypt_dictionary(encrypted_types.Has(DICTIONARY));
   nigori->set_encrypt_favicon_images(encrypted_types.Has(FAVICON_IMAGES));
   nigori->set_encrypt_favicon_tracking(encrypted_types.Has(FAVICON_TRACKING));
@@ -280,6 +285,7 @@ void UpdateNigoriFromEncryptedTypes(ModelTypeSet encrypted_types,
   nigori->set_encrypt_printers(encrypted_types.Has(PRINTERS));
   nigori->set_encrypt_reading_list(encrypted_types.Has(READING_LIST));
   nigori->set_encrypt_mountain_shares(encrypted_types.Has(MOUNTAIN_SHARES));
+  nigori->set_encrypt_send_tab_to_self(encrypted_types.Has(SEND_TAB_TO_SELF));
   nigori->set_encrypt_notes(encrypted_types.Has(NOTES));
 }
 
@@ -289,7 +295,7 @@ ModelTypeSet GetEncryptedTypesFromNigori(
     return ModelTypeSet::All();
 
   ModelTypeSet encrypted_types;
-  static_assert(42 + 1  /*notes*/ == MODEL_TYPE_COUNT,
+  static_assert(44 + 1 /* notes */ == MODEL_TYPE_COUNT,
                 "If adding an encryptable type, update handling below.");
   if (nigori.encrypt_bookmarks())
     encrypted_types.Put(BOOKMARKS);
@@ -318,7 +324,7 @@ ModelTypeSet GetEncryptedTypesFromNigori(
   if (nigori.encrypt_extension_settings())
     encrypted_types.Put(EXTENSION_SETTINGS);
   if (nigori.encrypt_app_notifications())
-    encrypted_types.Put(APP_NOTIFICATIONS);
+    encrypted_types.Put(DEPRECATED_APP_NOTIFICATIONS);
   if (nigori.encrypt_dictionary())
     encrypted_types.Put(DICTIONARY);
   if (nigori.encrypt_favicon_images())
@@ -337,6 +343,8 @@ ModelTypeSet GetEncryptedTypesFromNigori(
     encrypted_types.Put(READING_LIST);
   if (nigori.encrypt_mountain_shares())
     encrypted_types.Put(MOUNTAIN_SHARES);
+  if (nigori.encrypt_send_tab_to_self())
+    encrypted_types.Put(SEND_TAB_TO_SELF);
   if (nigori.encrypt_notes())
     encrypted_types.Put(NOTES);
   return encrypted_types;

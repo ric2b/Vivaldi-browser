@@ -11,10 +11,6 @@ void RenderWidgetHostViewChildFrame::PassSurfaceCopyRequest(
   support_->RequestCopyOfOutput(viz::LocalSurfaceId(), std::move(request));
 }
 
-bool RenderWidgetHostDelegate::HasFocusedGuests() {
-  return false;
-}
-
 bool RenderWidgetHostViewBase::IsAura() const {
   return false;
 }

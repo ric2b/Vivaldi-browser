@@ -4,6 +4,7 @@
 
 #include "extensions/browser/zipfile_installer.h"
 
+#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/task/post_task.h"
@@ -35,8 +36,6 @@ constexpr const base::FilePath::CharType* kAllowedThemeFiletypes[] = {
 
 base::Optional<base::FilePath> PrepareAndGetUnzipDir(
     const base::FilePath& zip_file) {
-  base::AssertBlockingAllowed();
-
   base::FilePath dir_temp;
   base::PathService::Get(base::DIR_TEMP, &dir_temp);
 
@@ -51,8 +50,6 @@ base::Optional<base::FilePath> PrepareAndGetUnzipDir(
 }
 
 base::Optional<std::string> ReadFileContent(const base::FilePath& path) {
-  base::AssertBlockingAllowed();
-
   std::string content;
   return base::ReadFileToString(path, &content) ? content
                                                 : base::Optional<std::string>();

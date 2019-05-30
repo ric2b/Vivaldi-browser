@@ -29,7 +29,7 @@
 #include "third_party/blink/public/mojom/speech/speech_recognizer.mojom-blink.h"
 #include "third_party/blink/public/platform/web_private_ptr.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/page/page_visibility_observer.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
@@ -58,6 +58,8 @@ class MODULES_EXPORT SpeechRecognition final
 
  public:
   static SpeechRecognition* Create(ExecutionContext*);
+
+  SpeechRecognition(LocalFrame*, ExecutionContext*);
   ~SpeechRecognition() override;
 
   // SpeechRecognition.idl implemementation.
@@ -106,30 +108,28 @@ class MODULES_EXPORT SpeechRecognition final
   // PageVisibilityObserver
   void PageVisibilityChanged() override;
 
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(audiostart);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(soundstart);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(speechstart);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(speechend);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(soundend);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(audioend);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(result);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(nomatch);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(error);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(start);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(end);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(audiostart, kAudiostart)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(soundstart, kSoundstart)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(speechstart, kSpeechstart)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(speechend, kSpeechend)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(soundend, kSoundend)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(audioend, kAudioend)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(result, kResult)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(nomatch, kNomatch)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(error, kError)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(start, kStart)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(end, kEnd)
 
   void Trace(blink::Visitor*) override;
 
  private:
-  SpeechRecognition(LocalFrame*, ExecutionContext*);
-
   void OnConnectionError();
 
   Member<SpeechGrammarList> grammars_;
   String lang_;
   bool continuous_;
   bool interim_results_;
-  unsigned long max_alternatives_;
+  uint32_t max_alternatives_;
 
   Member<SpeechRecognitionController> controller_;
   bool started_;

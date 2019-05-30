@@ -5,9 +5,13 @@
 #ifndef CONTENT_BROWSER_WEB_PACKAGE_SIGNED_EXCHANGE_LOADER_H_
 #define CONTENT_BROWSER_WEB_PACKAGE_SIGNED_EXCHANGE_LOADER_H_
 
+#include <memory>
+#include <string>
+
 #include "base/callback.h"
 #include "base/optional.h"
 #include "base/unguessable_token.h"
+#include "content/browser/web_package/signed_exchange_error.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
@@ -30,6 +34,8 @@ namespace content {
 class SignedExchangeDevToolsProxy;
 class SignedExchangeHandler;
 class SignedExchangeHandlerFactory;
+class SignedExchangePrefetchMetricRecorder;
+class SignedExchangeReporter;
 class URLLoaderThrottle;
 class SourceStreamToDataPipe;
 
@@ -38,8 +44,9 @@ class SourceStreamToDataPipe;
 // exchange response, and is owned by the handler until the StartLoaderCallback
 // of SignedExchangeRequestHandler::StartResponse is called. After that, it is
 // owned by the URLLoader mojo endpoint.
-class SignedExchangeLoader final : public network::mojom::URLLoaderClient,
-                                   public network::mojom::URLLoader {
+class CONTENT_EXPORT SignedExchangeLoader final
+    : public network::mojom::URLLoaderClient,
+      public network::mojom::URLLoader {
  public:
   using URLLoaderThrottlesGetter = base::RepeatingCallback<
       std::vector<std::unique_ptr<content::URLLoaderThrottle>>()>;
@@ -47,24 +54,21 @@ class SignedExchangeLoader final : public network::mojom::URLLoaderClient,
   // If |should_redirect_on_failure| is true, verification failure causes a
   // redirect to the fallback URL.
   SignedExchangeLoader(
-      const GURL& outer_request_url,
+      const network::ResourceRequest& outer_request,
       const network::ResourceResponseHead& outer_response,
       network::mojom::URLLoaderClientPtr forwarding_client,
       network::mojom::URLLoaderClientEndpointsPtr endpoints,
-      url::Origin request_initiator,
       uint32_t url_loader_options,
-      int load_flags,
       bool should_redirect_on_failure,
-      const base::Optional<base::UnguessableToken>& throttling_profile_id,
       std::unique_ptr<SignedExchangeDevToolsProxy> devtools_proxy,
+      std::unique_ptr<SignedExchangeReporter> reporter,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       URLLoaderThrottlesGetter url_loader_throttles_getter,
-      base::RepeatingCallback<int(void)> frame_tree_node_id_getter);
+      base::RepeatingCallback<int(void)> frame_tree_node_id_getter,
+      scoped_refptr<SignedExchangePrefetchMetricRecorder> metric_recorder,
+      const std::string& accept_langs);
   ~SignedExchangeLoader() override;
 
-  bool HasRedirectedToFallbackURL() const {
-    return has_redirected_to_fallback_url_;
-  }
 
   // network::mojom::URLLoaderClient implementation
   // Only OnStartLoadingResponseBody() and OnComplete() are called.
@@ -83,10 +87,9 @@ class SignedExchangeLoader final : public network::mojom::URLLoaderClient,
   void OnComplete(const network::URLLoaderCompletionStatus& status) override;
 
   // network::mojom::URLLoader implementation
-  void FollowRedirect(const base::Optional<std::vector<std::string>>&
-                          to_be_removed_request_headers,
-                      const base::Optional<net::HttpRequestHeaders>&
-                          modified_request_headers) override;
+  void FollowRedirect(const std::vector<std::string>& removed_headers,
+                      const net::HttpRequestHeaders& modified_headers,
+                      const base::Optional<GURL>& new_url) override;
   void ProceedWithResponse() override;
   void SetPriority(net::RequestPriority priority,
                    int intra_priority_value) override;
@@ -95,8 +98,14 @@ class SignedExchangeLoader final : public network::mojom::URLLoaderClient,
 
   void ConnectToClient(network::mojom::URLLoaderClientPtr client);
 
+  const base::Optional<GURL>& fallback_url() const { return fallback_url_; }
+
+  const base::Optional<GURL>& inner_request_url() const {
+    return inner_request_url_;
+  }
+
   // Set nullptr to reset the mocking.
-  CONTENT_EXPORT static void SetSignedExchangeHandlerFactoryForTest(
+  static void SetSignedExchangeHandlerFactoryForTest(
       SignedExchangeHandlerFactory* factory);
 
  private:
@@ -105,15 +114,17 @@ class SignedExchangeLoader final : public network::mojom::URLLoaderClient,
   // Called from |signed_exchange_handler_| when it finds an origin-signed HTTP
   // exchange.
   void OnHTTPExchangeFound(
+      SignedExchangeLoadResult result,
       net::Error error,
       const GURL& request_url,
-      const std::string& request_method,
       const network::ResourceResponseHead& resource_response,
       std::unique_ptr<net::SourceStream> payload_stream);
 
   void FinishReadingBody(int result);
+  void NotifyClientOnCompleteIfReady();
+  void ReportLoadResult(SignedExchangeLoadResult result);
 
-  const GURL outer_request_url_;
+  const network::ResourceRequest outer_request_;
 
   // This timing info is used to create a dummy redirect response.
   std::unique_ptr<const ResponseTimingInfo> outer_response_timing_info_;
@@ -142,20 +153,32 @@ class SignedExchangeLoader final : public network::mojom::URLLoaderClient,
   // Kept around until ProceedWithResponse is called.
   mojo::ScopedDataPipeConsumerHandle pending_body_consumer_;
 
-  url::Origin request_initiator_;
   const uint32_t url_loader_options_;
-  const int load_flags_;
   const bool should_redirect_on_failure_;
-  bool has_redirected_to_fallback_url_ = false;
-  const base::Optional<base::UnguessableToken> throttling_profile_id_;
   std::unique_ptr<SignedExchangeDevToolsProxy> devtools_proxy_;
+  std::unique_ptr<SignedExchangeReporter> reporter_;
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
   URLLoaderThrottlesGetter url_loader_throttles_getter_;
   base::RepeatingCallback<int(void)> frame_tree_node_id_getter_;
+  scoped_refptr<SignedExchangePrefetchMetricRecorder> metric_recorder_;
 
   base::Optional<net::SSLInfo> ssl_info_;
 
   std::string content_type_;
+
+  base::Optional<GURL> fallback_url_;
+  base::Optional<GURL> inner_request_url_;
+
+  struct OuterResponseLengthInfo {
+    int64_t encoded_data_length;
+    int64_t decoded_body_length;
+  };
+  // Set when URLLoaderClient::OnComplete() is called.
+  base::Optional<OuterResponseLengthInfo> outer_response_length_info_;
+
+  // Set when |body_data_pipe_adapter_| finishes loading the decoded body.
+  base::Optional<int> decoded_body_read_result_;
+  const std::string accept_langs_;
 
   base::WeakPtrFactory<SignedExchangeLoader> weak_factory_;
 

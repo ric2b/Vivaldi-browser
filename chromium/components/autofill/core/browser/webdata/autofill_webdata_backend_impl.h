@@ -55,15 +55,27 @@ class AutofillWebDataBackendImpl
       const base::Closure& on_changed_callback,
       const base::Callback<void(syncer::ModelType)>& on_sync_started_callback);
 
+  void SetAutofillProfileChangedCallback(
+      base::RepeatingCallback<void(const AutofillProfileDeepChange&)>
+          change_cb);
+
   // AutofillWebDataBackend implementation.
   void AddObserver(
       AutofillWebDataServiceObserverOnDBSequence* observer) override;
   void RemoveObserver(
       AutofillWebDataServiceObserverOnDBSequence* observer) override;
   WebDatabase* GetDatabase() override;
-  void RemoveExpiredFormElements() override;
+  void NotifyOfAutofillProfileChanged(
+      const AutofillProfileChange& change) override;
+  void NotifyOfCreditCardChanged(const CreditCardChange& change) override;
   void NotifyOfMultipleAutofillChanges() override;
   void NotifyThatSyncHasStarted(syncer::ModelType model_type) override;
+  void CommitChanges() override;
+
+  // TODO(crbug.com/920214): Deprecated, will be removed when
+  // autocomplete retention policy shipped. Replaced by
+  // RemoveExpiredAutocompleteEntries.
+  void RemoveExpiredFormElements() override;
 
   // Returns a SupportsUserData object that may be used to store data accessible
   // from the DB sequence. Should be called only from the DB sequence, and will
@@ -83,6 +95,12 @@ class AutofillWebDataBackendImpl
       const base::string16& name,
       const base::string16& prefix,
       int limit,
+      WebDatabase* db);
+
+  // Function to remove expired Autocomplete entries, which deletes them from
+  // the Sqlite table, unlinks them from Sync and cleans up the metadata.
+  // Returns the number of entries cleaned-up.
+  std::unique_ptr<WDTypedResult> RemoveExpiredAutocompleteEntries(
       WebDatabase* db);
 
   // Removes form elements recorded for Autocomplete from the database.
@@ -215,6 +233,9 @@ class AutofillWebDataBackendImpl
   // by this object. Is created on first call to |GetDBUserData()|.
   std::unique_ptr<SupportsUserDataAggregatable> user_data_;
 
+  // TODO(crbug.com/920214): Deprecated, will be removed when
+  // autocomplete retention policy shipped. Replaced by
+  // RemoveExpiredAutocompleteEntries.
   WebDatabase::State RemoveExpiredFormElementsImpl(WebDatabase* db);
 
   base::ObserverList<AutofillWebDataServiceObserverOnDBSequence>::Unchecked
@@ -226,6 +247,9 @@ class AutofillWebDataBackendImpl
 
   base::Closure on_changed_callback_;
   base::Callback<void(syncer::ModelType)> on_sync_started_callback_;
+
+  base::RepeatingCallback<void(const AutofillProfileDeepChange&)>
+      on_autofill_profile_changed_cb_;
 
   DISALLOW_COPY_AND_ASSIGN(AutofillWebDataBackendImpl);
 };

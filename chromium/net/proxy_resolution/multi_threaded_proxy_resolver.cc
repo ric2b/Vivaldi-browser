@@ -28,6 +28,11 @@
 #include "net/proxy_resolution/proxy_resolver.h"
 
 namespace net {
+
+// http://crbug.com/69710
+class MultiThreadedProxyResolverScopedAllowJoinOnIO
+    : public base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {};
+
 namespace {
 class Job;
 
@@ -234,7 +239,8 @@ class CreateResolverJob : public Job {
 
     DCHECK_NE(rv, ERR_IO_PENDING);
     origin_runner->PostTask(
-        FROM_HERE, base::Bind(&CreateResolverJob::RequestComplete, this, rv));
+        FROM_HERE,
+        base::BindOnce(&CreateResolverJob::RequestComplete, this, rv));
   }
 
  protected:
@@ -302,7 +308,7 @@ class MultiThreadedProxyResolver::GetProxyForURLJob : public Job {
     DCHECK_NE(rv, ERR_IO_PENDING);
 
     origin_runner->PostTask(
-        FROM_HERE, base::Bind(&GetProxyForURLJob::QueryComplete, this, rv));
+        FROM_HERE, base::BindOnce(&GetProxyForURLJob::QueryComplete, this, rv));
   }
 
  protected:
@@ -357,7 +363,7 @@ void Executor::StartJob(Job* job) {
   job->FinishedWaitingForThread();
   thread_->task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&Job::Run, job, base::ThreadTaskRunnerHandle::Get()));
+      base::BindOnce(&Job::Run, job, base::ThreadTaskRunnerHandle::Get()));
 }
 
 void Executor::OnJobCompleted(Job* job) {
@@ -370,8 +376,9 @@ void Executor::Destroy() {
   DCHECK(coordinator_);
 
   {
-    // See http://crbug.com/69710.
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
+    // TODO(http://crbug.com/69710): Use TaskScheduler instead of creating a
+    // base::Thread.
+    MultiThreadedProxyResolverScopedAllowJoinOnIO allow_thread_join;
 
     // Join the worker thread.
     thread_.reset();
@@ -467,8 +474,7 @@ int MultiThreadedProxyResolver::GetProxyForURL(
 
 Executor* MultiThreadedProxyResolver::FindIdleExecutor() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  for (ExecutorList::iterator it = executors_.begin();
-       it != executors_.end(); ++it) {
+  for (auto it = executors_.begin(); it != executors_.end(); ++it) {
     Executor* executor = it->get();
     if (!executor->outstanding_job())
       return executor;

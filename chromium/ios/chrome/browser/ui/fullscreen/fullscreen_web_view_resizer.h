@@ -27,10 +27,18 @@ class WebState;
 // WebState currently displayed.
 @property(nonatomic, assign) web::WebState* webState;
 
-// Updates the WebView of the current webState to adjust it to the current
-// fullscreen |progress|. |progress| should be between 0 and 1, 0 meaning that
-// the application is in fullscreen, 1 that it is out of fullscreen.
-- (void)updateForFullscreenProgress:(CGFloat)progress;
+// Whether the content offset should be matching the frame changes. Default is
+// YES.
+@property(nonatomic, assign) BOOL compensateFrameChangeByOffset;
+
+// Updates the WebState view, based on the current state of the webState and the
+// model.
+- (void)updateForCurrentState;
+
+// Force the updates of the WebView to |progress|. |progress| should be between
+// 0 and 1, 0 meaning that the application is in fullscreen, 1 that it is out of
+// fullscreen.
+- (void)forceToUpdateToProgress:(CGFloat)progress;
 
 @end
 

@@ -53,7 +53,7 @@ inline ProcessingInstruction::ProcessingInstruction(Document& document,
 ProcessingInstruction* ProcessingInstruction::Create(Document& document,
                                                      const String& target,
                                                      const String& data) {
-  return new ProcessingInstruction(document, target, data);
+  return MakeGarbageCollected<ProcessingInstruction>(document, target, data);
 }
 
 ProcessingInstruction::~ProcessingInstruction() = default;
@@ -81,14 +81,17 @@ Node::NodeType ProcessingInstruction::getNodeType() const {
 }
 
 Node* ProcessingInstruction::Clone(Document& factory, CloneChildrenFlag) const {
-  // FIXME: Is it a problem that this does not copy m_localHref?
+  // FIXME: Is it a problem that this does not copy local_href_?
   // What about other data members?
   return Create(factory, target_, data_);
 }
 
 void ProcessingInstruction::DidAttributeChanged() {
-  if (sheet_)
+  if (sheet_) {
+    if (sheet_->IsLoading())
+      RemovePendingSheet();
     ClearSheet();
+  }
 
   String href;
   String charset;
@@ -151,7 +154,8 @@ void ProcessingInstruction::Process(const String& href, const String& charset) {
     return;
 
   ResourceLoaderOptions options;
-  options.initiator_info.name = FetchInitiatorTypeNames::processinginstruction;
+  options.initiator_info.name =
+      fetch_initiator_type_names::kProcessinginstruction;
   FetchParameters params(ResourceRequest(GetDocument().CompleteURL(href)),
                          options);
   loading_ = true;
@@ -179,8 +183,7 @@ bool ProcessingInstruction::IsLoading() const {
 bool ProcessingInstruction::SheetLoaded() {
   if (!IsLoading()) {
     if (!DocumentXSLT::SheetLoaded(GetDocument(), this))
-      GetDocument().GetStyleEngine().RemovePendingSheet(*this,
-                                                        style_engine_context_);
+      RemovePendingSheet();
     return true;
   }
   return false;
@@ -196,15 +199,15 @@ void ProcessingInstruction::NotifyFinished(Resource* resource) {
       is_xsl_ ? IncrementLoadEventDelayCount::Create(GetDocument()) : nullptr;
   if (is_xsl_) {
     sheet_ = XSLStyleSheet::Create(this, resource->Url(),
-                                   resource->GetResponse().Url());
+                                   resource->GetResponse().ResponseUrl());
     ToXSLStyleSheet(sheet_.Get())
         ->ParseString(ToXSLStyleSheetResource(resource)->Sheet());
   } else {
     DCHECK(is_css_);
     CSSStyleSheetResource* style_resource = ToCSSStyleSheetResource(resource);
     CSSParserContext* parser_context = CSSParserContext::Create(
-        GetDocument(), style_resource->GetResponse().Url(),
-        style_resource->GetResponse().IsOpaqueResponseFromServiceWorker(),
+        GetDocument(), style_resource->GetResponse().ResponseUrl(),
+        style_resource->GetResponse().IsCorsSameOrigin(),
         style_resource->GetReferrerPolicy(), style_resource->Encoding());
 
     StyleSheetContents* new_sheet =
@@ -230,7 +233,7 @@ void ProcessingInstruction::NotifyFinished(Resource* resource) {
   loading_ = false;
 
   if (is_css_)
-    ToCSSStyleSheet(sheet_.Get())->Contents()->CheckLoaded();
+    To<CSSStyleSheet>(sheet_.Get())->Contents()->CheckLoaded();
   else if (is_xsl_)
     ToXSLStyleSheet(sheet_.Get())->CheckLoaded();
 }
@@ -264,6 +267,9 @@ void ProcessingInstruction::RemovedFrom(ContainerNode& insertion_point) {
         *this, insertion_point);
   }
 
+  if (IsLoading())
+    RemovePendingSheet();
+
   if (sheet_) {
     DCHECK_EQ(sheet_->ownerNode(), this);
     ClearSheet();
@@ -275,13 +281,15 @@ void ProcessingInstruction::RemovedFrom(ContainerNode& insertion_point) {
 
 void ProcessingInstruction::ClearSheet() {
   DCHECK(sheet_);
-  if (sheet_->IsLoading())
-    GetDocument().GetStyleEngine().RemovePendingSheet(*this,
-                                                      style_engine_context_);
   sheet_.Release()->ClearOwnerNode();
 }
 
-void ProcessingInstruction::Trace(blink::Visitor* visitor) {
+void ProcessingInstruction::RemovePendingSheet() {
+  GetDocument().GetStyleEngine().RemovePendingSheet(*this,
+                                                    style_engine_context_);
+}
+
+void ProcessingInstruction::Trace(Visitor* visitor) {
   visitor->Trace(sheet_);
   visitor->Trace(listener_for_xslt_);
   CharacterData::Trace(visitor);

@@ -5,6 +5,7 @@
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
@@ -849,16 +850,8 @@ void SitePerProcessInteractiveBrowserTest::FullscreenElementInABA(
   EXPECT_EQ("none", GetFullscreenElementId(grandchild));
 }
 
-// This is flaky on Linux (crbug.com/854294)
-#if defined(OS_LINUX)
-#define MAYBE_FullscreenElementInABAAndExitViaEscapeKey \
-  DISABLED_FullscreenElementInABAAndExitViaEscapeKey
-#else
-#define MAYBE_FullscreenElementInABAAndExitViaEscapeKey \
-  FullscreenElementInABAAndExitViaEscapeKey
-#endif
 IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
-                       MAYBE_FullscreenElementInABAAndExitViaEscapeKey) {
+                       FullscreenElementInABAAndExitViaEscapeKey) {
   if (IsMacViewsBrowser())
     return;
   FullscreenElementInABA(FullscreenExitMethod::ESC_PRESS);

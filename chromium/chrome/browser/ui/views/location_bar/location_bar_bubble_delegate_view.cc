@@ -24,30 +24,21 @@ LocationBarBubbleDelegateView::WebContentMouseHandler::WebContentMouseHandler(
   DCHECK(bubble_);
   DCHECK(web_contents_);
   event_monitor_ = views::EventMonitor::CreateWindowMonitor(
-      this, web_contents_->GetTopLevelNativeWindow());
+      this, web_contents_->GetTopLevelNativeWindow(),
+      {ui::ET_MOUSE_PRESSED, ui::ET_KEY_PRESSED, ui::ET_TOUCH_PRESSED});
 }
 
 LocationBarBubbleDelegateView::WebContentMouseHandler::
-    ~WebContentMouseHandler() {}
+    ~WebContentMouseHandler() = default;
 
-void LocationBarBubbleDelegateView::WebContentMouseHandler::OnKeyEvent(
-    ui::KeyEvent* event) {
-  if ((event->key_code() == ui::VKEY_ESCAPE ||
-       web_contents_->IsFocusedElementEditable()) &&
-      event->type() == ui::ET_KEY_PRESSED)
-    bubble_->CloseBubble();
-}
+void LocationBarBubbleDelegateView::WebContentMouseHandler::OnEvent(
+    const ui::Event& event) {
+  if (event.IsKeyEvent() && event.AsKeyEvent()->key_code() != ui::VKEY_ESCAPE &&
+      !web_contents_->IsFocusedElementEditable()) {
+    return;
+  }
 
-void LocationBarBubbleDelegateView::WebContentMouseHandler::OnMouseEvent(
-    ui::MouseEvent* event) {
-  if (event->type() == ui::ET_MOUSE_PRESSED)
-    bubble_->CloseBubble();
-}
-
-void LocationBarBubbleDelegateView::WebContentMouseHandler::OnTouchEvent(
-    ui::TouchEvent* event) {
-  if (event->type() == ui::ET_TOUCH_PRESSED)
-    bubble_->CloseBubble();
+  bubble_->CloseBubble();
 }
 
 LocationBarBubbleDelegateView::LocationBarBubbleDelegateView(
@@ -70,20 +61,23 @@ LocationBarBubbleDelegateView::LocationBarBubbleDelegateView(
     SetAnchorRect(gfx::Rect(anchor_point, gfx::Size()));
 }
 
-LocationBarBubbleDelegateView::~LocationBarBubbleDelegateView() {}
+LocationBarBubbleDelegateView::~LocationBarBubbleDelegateView() = default;
 
-void LocationBarBubbleDelegateView::ShowForReason(DisplayReason reason) {
+void LocationBarBubbleDelegateView::ShowForReason(DisplayReason reason,
+                                                  bool allow_refocus_alert) {
   if (reason == USER_GESTURE) {
     GetWidget()->Show();
   } else {
     GetWidget()->ShowInactive();
 
-    // Since this widget is inactive (but shown), accessibility tools won't
-    // alert the user to its presence. Accessibility tools such as screen
-    // readers work by tracking system focus. Give users of these tools a hint
-    // description and alert them to the presence of this widget.
-    GetWidget()->GetRootView()->GetViewAccessibility().OverrideDescription(
-        l10n_util::GetStringUTF8(IDS_SHOW_BUBBLE_INACTIVE_DESCRIPTION));
+    if (allow_refocus_alert) {
+      // Since this widget is inactive (but shown), accessibility tools won't
+      // alert the user to its presence. Accessibility tools such as screen
+      // readers work by tracking system focus. Give users of these tools a hint
+      // description and alert them to the presence of this widget.
+      GetWidget()->GetRootView()->GetViewAccessibility().OverrideDescription(
+          l10n_util::GetStringUTF8(IDS_SHOW_BUBBLE_INACTIVE_DESCRIPTION));
+    }
   }
   GetWidget()->GetRootView()->NotifyAccessibilityEvent(ax::mojom::Event::kAlert,
                                                        true);

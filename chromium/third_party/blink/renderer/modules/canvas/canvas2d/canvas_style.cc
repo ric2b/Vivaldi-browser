@@ -29,9 +29,9 @@
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_style.h"
 
 #include "base/memory/scoped_refptr.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
-#include "third_party/blink/renderer/core/css_property_names.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_gradient.h"
@@ -100,12 +100,12 @@ CanvasStyle::CanvasStyle(CanvasPattern* pattern)
 
 CanvasStyle* CanvasStyle::CreateFromGradient(CanvasGradient* gradient) {
   DCHECK(gradient);
-  return new CanvasStyle(gradient);
+  return MakeGarbageCollected<CanvasStyle>(gradient);
 }
 
 CanvasStyle* CanvasStyle::CreateFromPattern(CanvasPattern* pattern) {
   DCHECK(pattern);
-  return new CanvasStyle(pattern);
+  return MakeGarbageCollected<CanvasStyle>(pattern);
 }
 
 void CanvasStyle::ApplyToFlags(PaintFlags& flags) const {

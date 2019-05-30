@@ -10,10 +10,12 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/bind.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "jni/VideoCapture_jni.h"
+#include "media/capture/mojom/image_capture_types.h"
 #include "media/capture/video/android/photo_capabilities.h"
 #include "media/capture/video/android/video_capture_device_factory_android.h"
 #include "third_party/libyuv/include/libyuv.h"
@@ -134,7 +136,7 @@ void VideoCaptureDeviceAndroid::AllocateAndStart(
   jboolean ret = Java_VideoCapture_allocate(
       env, j_capture_, params.requested_format.frame_size.width(),
       params.requested_format.frame_size.height(),
-      params.requested_format.frame_rate);
+      params.requested_format.frame_rate, params.enable_face_detection);
   if (!ret) {
     SetErrorState(media::VideoCaptureError::kAndroidFailedToAllocate, FROM_HERE,
                   "failed to allocate");
@@ -204,11 +206,18 @@ void VideoCaptureDeviceAndroid::StopAndDeAllocate() {
 
 void VideoCaptureDeviceAndroid::TakePhoto(TakePhotoCallback callback) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
+  TRACE_EVENT_INSTANT0(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
+                       "VideoCaptureDeviceAndroid::TakePhoto",
+                       TRACE_EVENT_SCOPE_PROCESS);
   {
     base::AutoLock lock(lock_);
     if (state_ != kConfigured)
       return;
     if (!got_first_frame_) {  // We have to wait until we get the first frame.
+      TRACE_EVENT_INSTANT0(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
+                           "VideoCaptureDeviceAndroid::TakePhoto enqueuing to "
+                           "wait for first frame",
+                           TRACE_EVENT_SCOPE_PROCESS);
       photo_requests_queue_.push_back(
           base::Bind(&VideoCaptureDeviceAndroid::DoTakePhoto,
                      weak_ptr_factory_.GetWeakPtr(), base::Passed(&callback)));
@@ -335,7 +344,7 @@ void VideoCaptureDeviceAndroid::OnI420FrameAvailable(JNIEnv* env,
   const int y_plane_length = width * height;
   const int uv_plane_length = y_plane_length / 4;
   const int buffer_length = y_plane_length + uv_plane_length * 2;
-  std::unique_ptr<uint8_t> buffer(new uint8_t[buffer_length]);
+  std::unique_ptr<uint8_t[]> buffer(new uint8_t[buffer_length]);
 
   libyuv::Android420ToI420(y_src, y_stride, u_src, uv_row_stride, v_src,
                            uv_row_stride, uv_pixel_stride, buffer.get(), width,
@@ -385,6 +394,10 @@ void VideoCaptureDeviceAndroid::OnGetPhotoCapabilitiesReply(
     NOTREACHED() << "|callback_id| not found.";
     return;
   }
+  if (result == nullptr) {
+    get_photo_state_callbacks_.erase(reference_it);
+    return;
+  }
 
   base::android::ScopedJavaLocalRef<jobject> scoped_photo_capabilities(env,
                                                                        result);
@@ -392,7 +405,7 @@ void VideoCaptureDeviceAndroid::OnGetPhotoCapabilitiesReply(
 
   // TODO(mcasas): Manual member copying sucks, consider adding typemapping from
   // PhotoCapabilities to mojom::PhotoStatePtr, https://crbug.com/622002.
-  mojom::PhotoStatePtr photo_capabilities = mojom::PhotoState::New();
+  mojom::PhotoStatePtr photo_capabilities = mojo::CreateEmptyPhotoState();
 
   const auto jni_white_balance_modes = caps.getWhiteBalanceModes();
   std::vector<mojom::MeteringMode> white_balance_modes;
@@ -418,6 +431,12 @@ void VideoCaptureDeviceAndroid::OnGetPhotoCapabilitiesReply(
   photo_capabilities->current_focus_mode =
       ToMojomMeteringMode(caps.getFocusMode());
 
+  photo_capabilities->focus_distance = mojom::Range::New();
+  photo_capabilities->focus_distance->current = caps.getCurrentFocusDistance();
+  photo_capabilities->focus_distance->max = caps.getMaxFocusDistance();
+  photo_capabilities->focus_distance->min = caps.getMinFocusDistance();
+  photo_capabilities->focus_distance->step = caps.getStepFocusDistance();
+
   photo_capabilities->exposure_compensation = mojom::Range::New();
   photo_capabilities->exposure_compensation->current =
       caps.getCurrentExposureCompensation();
@@ -427,6 +446,13 @@ void VideoCaptureDeviceAndroid::OnGetPhotoCapabilitiesReply(
       caps.getMinExposureCompensation();
   photo_capabilities->exposure_compensation->step =
       caps.getStepExposureCompensation();
+
+  photo_capabilities->exposure_time = mojom::Range::New();
+  photo_capabilities->exposure_time->current = caps.getCurrentExposureTime();
+  photo_capabilities->exposure_time->max = caps.getMaxExposureTime();
+  photo_capabilities->exposure_time->min = caps.getMinExposureTime();
+  photo_capabilities->exposure_time->step = caps.getStepExposureTime();
+
   photo_capabilities->color_temperature = mojom::Range::New();
   photo_capabilities->color_temperature->current =
       caps.getCurrentColorTemperature();
@@ -482,6 +508,9 @@ void VideoCaptureDeviceAndroid::OnPhotoTaken(
     jlong callback_id,
     const base::android::JavaParamRef<jbyteArray>& data) {
   DCHECK(callback_id);
+  TRACE_EVENT_INSTANT0(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
+                       "VideoCaptureDeviceAndroid::OnPhotoTaken",
+                       TRACE_EVENT_SCOPE_PROCESS);
 
   base::AutoLock lock(photo_callbacks_lock_);
 
@@ -500,7 +529,7 @@ void VideoCaptureDeviceAndroid::OnPhotoTaken(
 
   if (data != nullptr) {
     mojom::BlobPtr blob = mojom::Blob::New();
-    base::android::JavaByteArrayToByteVector(env, data.obj(), &blob->data);
+    base::android::JavaByteArrayToByteVector(env, data, &blob->data);
     blob->mime_type = blob->data.empty() ? "" : "image/jpeg";
     std::move(*cb).Run(std::move(blob));
   }
@@ -594,6 +623,9 @@ void VideoCaptureDeviceAndroid::SetErrorState(media::VideoCaptureError error,
 
 void VideoCaptureDeviceAndroid::DoTakePhoto(TakePhotoCallback callback) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
+  TRACE_EVENT_INSTANT0(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
+                       "VideoCaptureDeviceAndroid::DoTakePhoto",
+                       TRACE_EVENT_SCOPE_PROCESS);
 #if DCHECK_IS_ON()
   {
     base::AutoLock lock(lock_);
@@ -652,6 +684,9 @@ void VideoCaptureDeviceAndroid::DoSetPhotoOptions(
 
   const double zoom = settings->has_zoom ? settings->zoom : 0.0;
 
+  const double focusDistance =
+      settings->has_focus_distance ? settings->focus_distance : 0.0;
+
   const PhotoCapabilities::AndroidMeteringMode focus_mode =
       settings->has_focus_mode
           ? ToAndroidMeteringMode(settings->focus_mode)
@@ -676,6 +711,8 @@ void VideoCaptureDeviceAndroid::DoSetPhotoOptions(
   const double exposure_compensation = settings->has_exposure_compensation
                                            ? settings->exposure_compensation
                                            : 0.0;
+  const double exposure_time =
+      settings->has_exposure_time ? settings->exposure_time : 0.0;
 
   const PhotoCapabilities::AndroidMeteringMode white_balance_mode =
       settings->has_white_balance_mode
@@ -693,9 +730,9 @@ void VideoCaptureDeviceAndroid::DoSetPhotoOptions(
       settings->has_color_temperature ? settings->color_temperature : 0.0;
 
   Java_VideoCapture_setPhotoOptions(
-      env, j_capture_, zoom, static_cast<int>(focus_mode),
+      env, j_capture_, zoom, static_cast<int>(focus_mode), focusDistance,
       static_cast<int>(exposure_mode), width, height, points_of_interest,
-      settings->has_exposure_compensation, exposure_compensation,
+      settings->has_exposure_compensation, exposure_compensation, exposure_time,
       static_cast<int>(white_balance_mode), iso,
       settings->has_red_eye_reduction, settings->red_eye_reduction,
       static_cast<int>(fill_light_mode), settings->has_torch, settings->torch,

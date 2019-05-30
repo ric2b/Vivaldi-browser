@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/simple_thread.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -119,7 +119,7 @@ class TaskGraphRunnerTest : public TaskGraphRunnerTestBase,
   TaskRunnerTestDelegate delegate_;
 };
 
-TYPED_TEST_CASE_P(TaskGraphRunnerTest);
+TYPED_TEST_SUITE_P(TaskGraphRunnerTest);
 
 TYPED_TEST_P(TaskGraphRunnerTest, Basic) {
   const int kNamespaceCount = TaskGraphRunnerTestBase::kNamespaceCount;
@@ -257,13 +257,16 @@ TYPED_TEST_P(TaskGraphRunnerTest, Categorys) {
   }
 }
 
-REGISTER_TYPED_TEST_CASE_P(TaskGraphRunnerTest, Basic, Dependencies, Categorys);
+REGISTER_TYPED_TEST_SUITE_P(TaskGraphRunnerTest,
+                            Basic,
+                            Dependencies,
+                            Categorys);
 
 template <typename TaskRunnerTestDelegate>
 using SingleThreadTaskGraphRunnerTest =
     TaskGraphRunnerTest<TaskRunnerTestDelegate>;
 
-TYPED_TEST_CASE_P(SingleThreadTaskGraphRunnerTest);
+TYPED_TEST_SUITE_P(SingleThreadTaskGraphRunnerTest);
 
 TYPED_TEST_P(SingleThreadTaskGraphRunnerTest, Priority) {
   const int kNamespaceCount = TaskGraphRunnerTestBase::kNamespaceCount;
@@ -274,8 +277,8 @@ TYPED_TEST_P(SingleThreadTaskGraphRunnerTest, Priority) {
         TaskInfo(i, 0u, 2u, 1u, 0u, 1u),  // Priority 1
         TaskInfo(i, 1u, 3u, 1u, 0u, 0u)   // Priority 0
     };
-    this->ScheduleTasks(i,
-                        std::vector<TaskInfo>(tasks, tasks + arraysize(tasks)));
+    this->ScheduleTasks(
+        i, std::vector<TaskInfo>(tasks, tasks + base::size(tasks)));
   }
 
   for (int i = 0; i < kNamespaceCount; ++i) {
@@ -293,7 +296,7 @@ TYPED_TEST_P(SingleThreadTaskGraphRunnerTest, Priority) {
   }
 }
 
-REGISTER_TYPED_TEST_CASE_P(SingleThreadTaskGraphRunnerTest, Priority);
+REGISTER_TYPED_TEST_SUITE_P(SingleThreadTaskGraphRunnerTest, Priority);
 
 }  // namespace cc
 

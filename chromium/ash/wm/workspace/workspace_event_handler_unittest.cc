@@ -13,6 +13,7 @@
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace_controller.h"
 #include "ash/wm/workspace_controller_test_api.h"
+#include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "services/ws/public/mojom/window_tree_constants.mojom.h"
@@ -36,7 +37,7 @@ namespace {
 void ClickButtonWithFlags(ui::test::EventGenerator* generator,
                           int button,
                           int flags) {
-  gfx::Point location = generator->current_location();
+  gfx::Point location = generator->current_screen_location();
   ui::MouseEvent press(ui::ET_MOUSE_PRESSED, location, location,
                        ui::EventTimeForNow(), button | flags, button);
   generator->Dispatch(&press);
@@ -121,7 +122,7 @@ TEST_F(WorkspaceEventHandlerTest, DoubleClickSingleAxisResizeEdge) {
   generator.ReleaseLeftButton();
   generator.set_flags(ui::EF_IS_DOUBLE_CLICK);
   generator.PressLeftButton();
-  generator.MoveMouseTo(generator.current_location(), 1);
+  generator.MoveMouseTo(generator.current_screen_location(), 1);
   generator.ReleaseLeftButton();
   gfx::Rect bounds_in_screen = window->GetBoundsInScreen();
   EXPECT_EQ(restored_bounds.x(), bounds_in_screen.x());
@@ -171,9 +172,8 @@ TEST_F(WorkspaceEventHandlerTest, DoubleClickSingleAxisResizeEdge) {
   generator2.ReleaseLeftButton();
   generator2.set_flags(ui::EF_IS_DOUBLE_CLICK);
   generator2.PressLeftButton();
-  generator2.MoveMouseTo(generator.current_location(), 1);
+  generator2.MoveMouseTo(generator2.current_screen_location(), 1);
   generator2.ReleaseLeftButton();
-  generator.DoubleClickLeftButton();
   bounds_in_screen = window->GetBoundsInScreen();
   EXPECT_EQ(restored_bounds.x(), bounds_in_screen.x());
   EXPECT_EQ(restored_bounds.width(), bounds_in_screen.width());
@@ -310,7 +310,7 @@ TEST_F(WorkspaceEventHandlerTest,
 
   generator.GestureTapAt(gfx::Point(25, 25));
   generator.GestureTapAt(gfx::Point(25, 25));
-  RunAllPendingInMessageLoop();
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ("10,20 30x40", window->bounds().ToString());
   EXPECT_FALSE(window_state->IsMaximized());
 }
@@ -409,7 +409,7 @@ TEST_F(WorkspaceEventHandlerTest, DoubleTapCaptionTogglesMaximize) {
                                      window.get());
   generator.GestureTapAt(gfx::Point(25, 25));
   generator.GestureTapAt(gfx::Point(25, 25));
-  RunAllPendingInMessageLoop();
+  base::RunLoop().RunUntilIdle();
   EXPECT_NE(bounds.ToString(), window->bounds().ToString());
   EXPECT_TRUE(window_state->IsMaximized());
 
@@ -435,10 +435,12 @@ TEST_F(WorkspaceEventHandlerTest, DeleteWhenDragging) {
   ui::test::EventGenerator generator(window->GetRootWindow());
   generator.MoveMouseToCenterOf(window.get());
   generator.PressLeftButton();
-  generator.MoveMouseTo(generator.current_location() + gfx::Vector2d(50, 50));
+  generator.MoveMouseTo(generator.current_screen_location() +
+                        gfx::Vector2d(50, 50));
   DCHECK_NE(bounds.origin().ToString(), window->bounds().origin().ToString());
   window.reset();
-  generator.MoveMouseTo(generator.current_location() + gfx::Vector2d(50, 50));
+  generator.MoveMouseTo(generator.current_screen_location() +
+                        gfx::Vector2d(50, 50));
 }
 
 // Verifies deleting the window while in a run loop doesn't crash.

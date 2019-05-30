@@ -9,9 +9,9 @@
 
 #include "base/allocator/allocator_extension.h"
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
-#include "base/memory/memory_coordinator_client_registry.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
@@ -82,24 +82,43 @@ class QueueingConnectionFilter : public ConnectionFilter {
     DCHECK(io_thread_checker_.CalledOnValidThread());
   }
 
-  base::Closure GetReleaseCallback() {
-    return base::Bind(base::IgnoreResult(&base::TaskRunner::PostTask),
-                      io_task_runner_, FROM_HERE,
-                      base::Bind(&QueueingConnectionFilter::Release,
-                                 weak_factory_.GetWeakPtr()));
+  base::OnceClosure GetReleaseCallback() {
+    return base::BindOnce(base::IgnoreResult(&base::TaskRunner::PostTask),
+                          io_task_runner_, FROM_HERE,
+                          base::BindOnce(&QueueingConnectionFilter::Release,
+                                         weak_factory_.GetWeakPtr()));
   }
 
-  void AddInterfaces() {
 #if defined(USE_OZONE)
-    ui::OzonePlatform::GetInstance()->AddInterfaces(registry_.get());
+  void set_viz_main(viz::VizMainImpl* viz_main) { viz_main_ = viz_main; }
 #endif
-  }
 
  private:
   struct PendingRequest {
     std::string interface_name;
     mojo::ScopedMessagePipeHandle interface_pipe;
   };
+
+  bool CanBindInterface(const std::string& interface_name) const {
+#if defined(USE_OZONE)
+    DCHECK(viz_main_);
+    if (viz_main_->CanBindInterface(interface_name))
+      return true;
+#endif
+    return registry_->CanBindInterface(interface_name);
+  }
+
+  void BindInterface(const std::string& interface_name,
+                     mojo::ScopedMessagePipeHandle interface_pipe) {
+    if (registry_->TryBindInterface(interface_name, &interface_pipe))
+      return;
+#if defined(USE_OZONE)
+    DCHECK(viz_main_);
+    viz_main_->BindInterface(interface_name, std::move(interface_pipe));
+#else
+    NOTREACHED();
+#endif
+  }
 
   // ConnectionFilter:
   void OnBindInterface(const service_manager::BindSourceInfo& source_info,
@@ -108,9 +127,9 @@ class QueueingConnectionFilter : public ConnectionFilter {
                        service_manager::Connector* connector) override {
     DCHECK(io_thread_checker_.CalledOnValidThread());
 
-    if (registry_->CanBindInterface(interface_name)) {
+    if (CanBindInterface(interface_name)) {
       if (released_) {
-        registry_->BindInterface(interface_name, std::move(*interface_pipe));
+        BindInterface(interface_name, std::move(*interface_pipe));
       } else {
         std::unique_ptr<PendingRequest> request =
             std::make_unique<PendingRequest>();
@@ -125,8 +144,8 @@ class QueueingConnectionFilter : public ConnectionFilter {
     DCHECK(io_thread_checker_.CalledOnValidThread());
     released_ = true;
     for (auto& request : pending_requests_) {
-      registry_->BindInterface(request->interface_name,
-                               std::move(request->interface_pipe));
+      BindInterface(request->interface_name,
+                    std::move(request->interface_pipe));
     }
   }
 
@@ -136,6 +155,10 @@ class QueueingConnectionFilter : public ConnectionFilter {
   std::vector<std::unique_ptr<PendingRequest>> pending_requests_;
   std::unique_ptr<service_manager::BinderRegistry> registry_;
 
+#if defined(USE_OZONE)
+  viz::VizMainImpl* viz_main_ = nullptr;
+#endif
+
   base::WeakPtrFactory<QueueingConnectionFilter> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(QueueingConnectionFilter);
@@ -144,10 +167,12 @@ class QueueingConnectionFilter : public ConnectionFilter {
 viz::VizMainImpl::ExternalDependencies CreateVizMainDependencies(
     service_manager::Connector* connector) {
   viz::VizMainImpl::ExternalDependencies deps;
-  deps.create_display_compositor =
-      base::FeatureList::IsEnabled(features::kVizDisplayCompositor);
-  if (GetContentClient()->gpu())
+  deps.create_display_compositor = features::IsVizDisplayCompositorEnabled();
+  if (GetContentClient()->gpu()) {
     deps.sync_point_manager = GetContentClient()->gpu()->GetSyncPointManager();
+    deps.shared_image_manager =
+        GetContentClient()->gpu()->GetSharedImageManager();
+  }
   auto* process = ChildProcess::current();
   deps.shutdown_event = process->GetShutDownEvent();
   deps.io_thread_task_runner = process->io_task_runner();
@@ -157,27 +182,33 @@ viz::VizMainImpl::ExternalDependencies CreateVizMainDependencies(
 
 }  // namespace
 
-GpuChildThread::GpuChildThread(std::unique_ptr<gpu::GpuInit> gpu_init,
+GpuChildThread::GpuChildThread(base::RepeatingClosure quit_closure,
+                               std::unique_ptr<gpu::GpuInit> gpu_init,
                                viz::VizMainImpl::LogMessages log_messages)
-    : GpuChildThread(GetOptions(), std::move(gpu_init)) {
+    : GpuChildThread(std::move(quit_closure),
+                     GetOptions(),
+                     std::move(gpu_init)) {
   viz_main_.SetLogMessagesForHost(std::move(log_messages));
 }
 
 GpuChildThread::GpuChildThread(const InProcessChildThreadParams& params,
                                std::unique_ptr<gpu::GpuInit> gpu_init)
-    : GpuChildThread(ChildThreadImpl::Options::Builder()
+    : GpuChildThread(base::DoNothing(),
+                     ChildThreadImpl::Options::Builder()
                          .InBrowserProcess(params)
                          .AutoStartServiceManagerConnection(false)
                          .ConnectToBrowser(true)
                          .Build(),
                      std::move(gpu_init)) {}
 
-GpuChildThread::GpuChildThread(const ChildThreadImpl::Options& options,
+GpuChildThread::GpuChildThread(base::RepeatingClosure quit_closure,
+                               const ChildThreadImpl::Options& options,
                                std::unique_ptr<gpu::GpuInit> gpu_init)
-    : ChildThreadImpl(options),
+    : ChildThreadImpl(MakeQuitSafelyClosure(), options),
       viz_main_(this,
                 CreateVizMainDependencies(GetConnector()),
                 std::move(gpu_init)),
+      quit_closure_(std::move(quit_closure)),
       weak_factory_(this) {
   if (in_process_gpu()) {
     DCHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -188,7 +219,6 @@ GpuChildThread::GpuChildThread(const ChildThreadImpl::Options& options,
 }
 
 GpuChildThread::~GpuChildThread() {
-  base::MemoryCoordinatorClientRegistry::GetInstance()->Unregister(this);
 }
 
 void GpuChildThread::Init(const base::Time& process_start_time) {
@@ -205,27 +235,30 @@ void GpuChildThread::Init(const base::Time& process_start_time) {
 
   blink::AssociatedInterfaceRegistry* associated_registry =
       &associated_interfaces_;
-  associated_registry->AddInterface(base::Bind(
+  associated_registry->AddInterface(base::BindRepeating(
       &GpuChildThread::CreateVizMainService, base::Unretained(this)));
 
   auto registry = std::make_unique<service_manager::BinderRegistry>();
-  registry->AddInterface(base::Bind(&GpuChildThread::BindServiceFactoryRequest,
-                                    weak_factory_.GetWeakPtr()),
-                         base::ThreadTaskRunnerHandle::Get());
+  registry->AddInterface(
+      base::BindRepeating(&GpuChildThread::BindServiceFactoryRequest,
+                          weak_factory_.GetWeakPtr()),
+      base::ThreadTaskRunnerHandle::Get());
   if (GetContentClient()->gpu())  // nullptr in tests.
     GetContentClient()->gpu()->InitializeRegistry(registry.get());
 
   std::unique_ptr<QueueingConnectionFilter> filter =
       std::make_unique<QueueingConnectionFilter>(GetIOTaskRunner(),
                                                  std::move(registry));
+#if defined(USE_OZONE)
+  filter->set_viz_main(&viz_main_);
+#endif
+
   release_pending_requests_closure_ = filter->GetReleaseCallback();
 
-  filter->AddInterfaces();
   GetServiceManagerConnection()->AddConnectionFilter(std::move(filter));
 
   StartServiceManagerConnection();
 
-  base::MemoryCoordinatorClientRegistry::GetInstance()->Register(this);
   memory_pressure_listener_ =
       std::make_unique<base::MemoryPressureListener>(base::BindRepeating(
           &GpuChildThread::OnMemoryPressure, base::Unretained(this)));
@@ -262,8 +295,9 @@ void GpuChildThread::OnInitializationFailed() {
 void GpuChildThread::OnGpuServiceConnection(viz::GpuServiceImpl* gpu_service) {
   media::AndroidOverlayMojoFactoryCB overlay_factory_cb;
 #if defined(OS_ANDROID)
-  overlay_factory_cb = base::Bind(&GpuChildThread::CreateAndroidOverlay,
-                                  base::ThreadTaskRunnerHandle::Get());
+  overlay_factory_cb =
+      base::BindRepeating(&GpuChildThread::CreateAndroidOverlay,
+                          base::ThreadTaskRunnerHandle::Get());
   gpu_service->media_gpu_channel_manager()->SetOverlayFactory(
       overlay_factory_cb);
 #endif
@@ -272,6 +306,7 @@ void GpuChildThread::OnGpuServiceConnection(viz::GpuServiceImpl* gpu_service) {
   service_factory_.reset(new GpuServiceFactory(
       gpu_service->gpu_preferences(),
       gpu_service->gpu_channel_manager()->gpu_driver_bug_workarounds(),
+      gpu_service->gpu_feature_info(),
       gpu_service->media_gpu_channel_manager()->AsWeakPtr(),
       std::move(overlay_factory_cb)));
 
@@ -280,7 +315,8 @@ void GpuChildThread::OnGpuServiceConnection(viz::GpuServiceImpl* gpu_service) {
         gpu_service->gpu_preferences());
   }
 
-  release_pending_requests_closure_.Run();
+  DCHECK(release_pending_requests_closure_);
+  std::move(release_pending_requests_closure_).Run();
 }
 
 void GpuChildThread::PostCompositorThreadCreated(
@@ -288,6 +324,10 @@ void GpuChildThread::PostCompositorThreadCreated(
   auto* gpu_client = GetContentClient()->gpu();
   if (gpu_client)
     gpu_client->PostCompositorThreadCreated(task_runner);
+}
+
+void GpuChildThread::QuitMainMessageLoop() {
+  quit_closure_.Run();
 }
 
 void GpuChildThread::BindServiceFactoryRequest(
@@ -298,21 +338,37 @@ void GpuChildThread::BindServiceFactoryRequest(
                                        std::move(request));
 }
 
-void GpuChildThread::OnTrimMemoryImmediately() {
-  OnPurgeMemory();
-}
-
 void GpuChildThread::OnMemoryPressure(
     base::MemoryPressureListener::MemoryPressureLevel level) {
-  if (level == base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL)
-    OnPurgeMemory();
-}
+  if (level != base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL)
+    return;
 
-void GpuChildThread::OnPurgeMemory() {
   base::allocator::ReleaseFreeMemory();
   if (viz_main_.discardable_shared_memory_manager())
     viz_main_.discardable_shared_memory_manager()->ReleaseFreeMemory();
   SkGraphics::PurgeAllCaches();
+}
+
+void GpuChildThread::QuitSafelyHelper(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+  // Post a new task (even if we're called on the |task_runner|'s thread) to
+  // ensure that we are post-init.
+  task_runner->PostTask(
+      FROM_HERE, base::BindOnce([]() {
+        ChildThreadImpl* current_child_thread = ChildThreadImpl::current();
+        if (!current_child_thread)
+          return;
+        GpuChildThread* gpu_child_thread =
+            static_cast<GpuChildThread*>(current_child_thread);
+        gpu_child_thread->viz_main_.ExitProcess();
+      }));
+}
+
+// Returns a closure which calls into the VizMainImpl to perform shutdown
+// before quitting the main message loop. Must be called on the main thread.
+base::RepeatingClosure GpuChildThread::MakeQuitSafelyClosure() {
+  return base::BindRepeating(&GpuChildThread::QuitSafelyHelper,
+                             base::ThreadTaskRunnerHandle::Get());
 }
 
 #if defined(OS_ANDROID)

@@ -29,6 +29,7 @@
 #include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #include "third_party/blink/renderer/core/dom/events/event_dispatcher.h"
 #include "third_party/blink/renderer/core/dom/events/event_path.h"
+#include "third_party/blink/renderer/core/event_interface_names.h"
 #include "third_party/blink/renderer/core/frame/frame_console.h"
 #include "third_party/blink/renderer/core/frame/intervention.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -146,7 +147,7 @@ enum TouchTargetAndDispatchResultType {
 };
 
 void LogTouchTargetHistogram(EventTarget* event_target,
-                             unsigned short phase,
+                             uint8_t phase,
                              bool default_prevented_before_current_target,
                              bool default_prevented) {
   int result = 0;
@@ -242,17 +243,17 @@ TouchEvent::TouchEvent(const WebCoalescedInputEvent& event,
 }
 
 TouchEvent::TouchEvent(const AtomicString& type,
-                       const TouchEventInit& initializer)
+                       const TouchEventInit* initializer)
     : UIEventWithKeyState(type, initializer),
-      touches_(TouchList::Create(initializer.touches())),
-      target_touches_(TouchList::Create(initializer.targetTouches())),
-      changed_touches_(TouchList::Create(initializer.changedTouches())),
+      touches_(TouchList::Create(initializer->touches())),
+      target_touches_(TouchList::Create(initializer->targetTouches())),
+      changed_touches_(TouchList::Create(initializer->changedTouches())),
       current_touch_action_(TouchAction::kTouchActionAuto) {}
 
 TouchEvent::~TouchEvent() = default;
 
 const AtomicString& TouchEvent::InterfaceName() const {
-  return EventNames::TouchEvent;
+  return event_interface_names::kTouchEvent;
 }
 
 bool TouchEvent::IsTouchEvent() const {
@@ -294,28 +295,30 @@ void TouchEvent::preventDefault() {
       break;
   }
 
-  if (!message.IsEmpty() && view() && view()->IsLocalDOMWindow() &&
-      view()->GetFrame()) {
-    Intervention::GenerateReport(ToLocalDOMWindow(view())->GetFrame(), id,
-                                 message);
+  auto* local_dom_window = DynamicTo<LocalDOMWindow>(view());
+  if (!message.IsEmpty() && local_dom_window && local_dom_window->GetFrame()) {
+    Intervention::GenerateReport(local_dom_window->GetFrame(), id, message);
   }
 
-  if ((type() == EventTypeNames::touchstart ||
-       type() == EventTypeNames::touchmove) &&
-      view() && view()->IsLocalDOMWindow() && view()->GetFrame() &&
-      current_touch_action_ == TouchAction::kTouchActionAuto) {
-    switch (HandlingPassive()) {
-      case PassiveMode::kNotPassiveDefault:
-        UseCounter::Count(ToLocalFrame(view()->GetFrame()),
-                          WebFeature::kTouchEventPreventedNoTouchAction);
-        break;
-      case PassiveMode::kPassiveForcedDocumentLevel:
-        UseCounter::Count(
-            ToLocalFrame(view()->GetFrame()),
-            WebFeature::kTouchEventPreventedForcedDocumentPassiveNoTouchAction);
-        break;
-      default:
-        break;
+  if ((type() == event_type_names::kTouchstart ||
+       type() == event_type_names::kTouchmove) &&
+      local_dom_window) {
+    auto* local_frame = DynamicTo<LocalFrame>(view()->GetFrame());
+    if (local_frame && current_touch_action_ == TouchAction::kTouchActionAuto) {
+      switch (HandlingPassive()) {
+        case PassiveMode::kNotPassiveDefault:
+          UseCounter::Count(local_dom_window->document(),
+                            WebFeature::kTouchEventPreventedNoTouchAction);
+          break;
+        case PassiveMode::kPassiveForcedDocumentLevel:
+          UseCounter::Count(
+              local_dom_window->document(),
+              WebFeature::
+                  kTouchEventPreventedForcedDocumentPassiveNoTouchAction);
+          break;
+        default:
+          break;
+      }
     }
   }
 }

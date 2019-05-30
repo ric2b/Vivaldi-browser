@@ -4,6 +4,7 @@
 
 #include "components/safe_browsing/renderer/renderer_url_loader_throttle.h"
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
 #include "components/safe_browsing/common/safebrowsing_constants.h"
@@ -70,7 +71,7 @@ void RendererURLLoaderThrottle::WillStartRequest(
 }
 
 void RendererURLLoaderThrottle::WillRedirectRequest(
-    const net::RedirectInfo& redirect_info,
+    net::RedirectInfo* redirect_info,
     const network::ResourceResponseHead& /* response_head */,
     bool* /* defer */,
     std::vector<std::string>* /* to_be_removed_headers */,
@@ -86,7 +87,7 @@ void RendererURLLoaderThrottle::WillRedirectRequest(
 
   pending_checks_++;
   url_checker_->CheckUrl(
-      redirect_info.new_url, redirect_info.new_method,
+      redirect_info->new_url, redirect_info->new_method,
       base::BindOnce(&RendererURLLoaderThrottle::OnCheckUrlResult,
                      base::Unretained(this)));
 }
@@ -184,7 +185,7 @@ void RendererURLLoaderThrottle::OnCompleteCheckInternal(
     notifier_bindings_.reset();
     pending_checks_ = 0;
     pending_slow_checks_ = 0;
-    delegate_->CancelWithError(net::ERR_ABORTED,
+    delegate_->CancelWithError(GetNetErrorCodeForSafeBrowsing(),
                                kCustomCancelReasonForURLLoader);
   }
 }

@@ -6,6 +6,8 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_ANIMATION_COMPOSITOR_ANIMATION_H_
 
 #include <memory>
+
+#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/optional.h"
 #include "cc/animation/animation_delegate.h"
@@ -14,7 +16,7 @@
 #include "cc/animation/worklet_animation.h"
 #include "third_party/blink/renderer/platform/graphics/compositor_element_id.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
-#include "third_party/blink/renderer/platform/wtf/noncopyable.h"
+#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace cc {
 class AnimationCurve;
@@ -29,13 +31,12 @@ class CompositorKeyframeModel;
 
 // A compositor representation for Animation.
 class PLATFORM_EXPORT CompositorAnimation : public cc::AnimationDelegate {
-  WTF_MAKE_NONCOPYABLE(CompositorAnimation);
-
  public:
   static std::unique_ptr<CompositorAnimation> Create();
   static std::unique_ptr<CompositorAnimation> CreateWorkletAnimation(
       cc::WorkletAnimationId,
       const String& name,
+      double playback_rate,
       std::unique_ptr<CompositorScrollTimeline>,
       std::unique_ptr<cc::AnimationOptions>);
 
@@ -60,7 +61,10 @@ class PLATFORM_EXPORT CompositorAnimation : public cc::AnimationDelegate {
   void PauseKeyframeModel(int keyframe_model_id, double time_offset);
   void AbortKeyframeModel(int keyframe_model_id);
 
-  void UpdateScrollTimelineId(base::Optional<cc::ElementId>);
+  void UpdateScrollTimeline(base::Optional<cc::ElementId>,
+                            base::Optional<double> start_scroll_offset,
+                            base::Optional<double> end_scroll_offset);
+  void UpdatePlaybackRate(double playback_rate);
 
  private:
   // cc::AnimationDelegate implementation.
@@ -80,6 +84,8 @@ class PLATFORM_EXPORT CompositorAnimation : public cc::AnimationDelegate {
 
   scoped_refptr<cc::SingleKeyframeEffectAnimation> animation_;
   CompositorAnimationDelegate* delegate_;
+
+  DISALLOW_COPY_AND_ASSIGN(CompositorAnimation);
 };
 
 }  // namespace blink

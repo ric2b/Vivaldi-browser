@@ -228,7 +228,8 @@ std::string GetFilteredJSONPolicies(const policy::PolicyMap& policy_map,
     std::string app_policy_string;
     app_policy_value->GetAsString(&app_policy_string);
     std::unique_ptr<base::DictionaryValue> app_policy_dict =
-        base::DictionaryValue::From(base::JSONReader::Read(app_policy_string));
+        base::DictionaryValue::From(
+            base::JSONReader::ReadDeprecated(app_policy_string));
     if (app_policy_dict) {
       // Need a deep copy of all values here instead of doing a swap, because
       // JSONReader::Read constructs a dictionary whose StringValues are
@@ -264,6 +265,8 @@ std::string GetFilteredJSONPolicies(const policy::PolicyMap& policy_map,
                 /* invert_bool_value */ false, &filtered_policies);
   MapObjectToPresenceBool("setWallpaperDisabled", policy::key::kWallpaperImage,
                           policy_map, &filtered_policies, {"url", "hash"});
+  MapBoolToBool("vpnConfigDisabled", policy::key::kVpnConfigAllowed, policy_map,
+                /* invert_bool_value */ true, &filtered_policies);
 
   // Add CA certificates.
   AddOncCaCertsToPolicies(policy_map, &filtered_policies);

@@ -13,122 +13,49 @@
 
 namespace device {
 
-FakeARCore::FakeARCore()
+FakeArCore::FakeArCore()
     : gl_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
 
-FakeARCore::~FakeARCore() = default;
+FakeArCore::~FakeArCore() = default;
 
-bool FakeARCore::Initialize() {
+bool FakeArCore::Initialize(
+    base::android::ScopedJavaLocalRef<jobject> application_context) {
   DCHECK(IsOnGlThread());
   return true;
 }
 
-void FakeARCore::SetDisplayGeometry(
+void FakeArCore::SetDisplayGeometry(
     const gfx::Size& frame_size,
     display::Display::Rotation display_rotation) {
   DCHECK(IsOnGlThread());
+
   display_rotation_ = display_rotation;
   frame_size_ = frame_size;
 }
 
-void FakeARCore::SetCameraTexture(GLuint texture) {
+void FakeArCore::SetCameraTexture(GLuint texture) {
   DCHECK(IsOnGlThread());
-  // We need a GL_TEXTURE_EXTERNAL_OES to be compatible with the real ARCore.
-  // The content doesn't really matter, just create an AHardwareBuffer-backed
-  // GLImage and bind it to the texture.
+  // This is a no-op for the FakeArCore implementation. We might want to
+  // store the textureid for use in unit tests, but currently ArCoreDeviceTest
+  // is using mocked image transport so the actual texture doesn't have to
+  // be set. Current approach won't work for tests that rely on the texture.
 
   DVLOG(2) << __FUNCTION__ << ": camera texture=" << texture;
-
-  // Set up a low-resolution image containing the the text "AR" and a shaded
-  // background. Goal is to have something asymmetric to make
-  // rotations/reflections visible. To test clipping, this uses a 4:3 aspect
-  // ratio which is different from typical phone screen aspect ratios.
-  gfx::BufferFormat format = gfx::BufferFormat::RGBA_8888;
-  static int image_width = 12;
-  static int image_height = 9;
-  // Each value is one column with 8 bits of the result.
-  static int image_bitmap[] = {0, 0, 0, 76, 170, 170, 236, 170, 170, 0, 0, 0};
-
-  SetCameraAspect(static_cast<float>(image_width) / image_height);
-
-  // cf. gpu_memory_buffer_impl_android_hardware_buffer
-  AHardwareBuffer_Desc desc = {};
-  desc.width = image_width;
-  desc.height = image_height;
-  desc.layers = 1;  // number of images
-  desc.usage = AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE |
-               AHARDWAREBUFFER_USAGE_GPU_COLOR_OUTPUT |
-               AHARDWAREBUFFER_USAGE_CPU_READ_RARELY |
-               AHARDWAREBUFFER_USAGE_CPU_WRITE_RARELY;
-
-  switch (format) {
-    case gfx::BufferFormat::RGBA_8888:
-      desc.format = AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM;
-      break;
-    case gfx::BufferFormat::RGBX_8888:
-      desc.format = AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM;
-      break;
-    default:
-      NOTREACHED();
-  }
-
-  AHardwareBuffer* buffer = nullptr;
-  base::AndroidHardwareBufferCompat::GetInstance().Allocate(&desc, &buffer);
-  DCHECK(buffer);
-
-  uint8_t* data = nullptr;
-  int lock_result = base::AndroidHardwareBufferCompat::GetInstance().Lock(
-      buffer, AHARDWAREBUFFER_USAGE_CPU_WRITE_RARELY, -1, nullptr,
-      reinterpret_cast<void**>(&data));
-  DCHECK_EQ(lock_result, 0);
-  DCHECK(data);
-
-  AHardwareBuffer_Desc desc_locked = {};
-  base::AndroidHardwareBufferCompat::GetInstance().Describe(buffer,
-                                                            &desc_locked);
-  // The loop checks bits in the input bitmap. If the bit is on, it uses the
-  // foreground color - a reddish color, rgb(178, 34, 34).
-  // otherwise a background color using a x/y dependent blue/green gradient.
-  int stride = desc_locked.stride * 4;  // bytes per pixel;
-  for (int y = 0; y < image_height; ++y) {
-    for (int x = 0; x < image_width; ++x) {
-      bool on = image_bitmap[x] & (1 << y);
-      data[y * stride + x * 4] = on ? 178 : 0;
-      data[y * stride + x * 4 + 1] = on ? 34 : x * 8;
-      data[y * stride + x * 4 + 2] = on ? 34 : y * 8;
-      data[y * stride + x * 4 + 3] = 255;
-    }
-  }
-
-  int unlock_result =
-      base::AndroidHardwareBufferCompat::GetInstance().Unlock(buffer, nullptr);
-  DCHECK_EQ(unlock_result, 0);
-
-  // Must keep the image alive for the texture to remain valid.
-  gfx::Size size(image_width, image_height);
-  placeholder_camera_image_ =
-      base::MakeRefCounted<gl::GLImageAHardwareBuffer>(size);
-  placeholder_camera_image_->Initialize(buffer, true);
-  glBindTexture(GL_TEXTURE_EXTERNAL_OES, texture);
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  placeholder_camera_image_->BindTexImage(GL_TEXTURE_EXTERNAL_OES);
-  glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0);
 }
 
-std::vector<float> FakeARCore::TransformDisplayUvCoords(
+std::vector<float> FakeArCore::TransformDisplayUvCoords(
     const base::span<const float> uvs) {
-  // Try to match ARCore's transfore values.
+  // Try to match ArCore's transfore values.
   //
-  // Sample ARCore input: width=1080, height=1795, rotation=0,
+  // Sample ArCore input: width=1080, height=1795, rotation=0,
   // vecs = (0, 0), (0, 1), (1, 0), (1, 1)
-  // Sample ARCore output:
+  // Sample ArCore output:
   //   (0.0325544, 1,
   //    0.967446, 1,
   //    0.0325543, 0,
   //    0.967446, 1.19209e-07)
   //
-  // FakeARCoreDriver test_arcore;
+  // FakeArCoreDriver test_arcore;
   // test_arcore.SetCameraAspect(16.f / 9.f);
   // test_arcore.SetDisplayGeometry(0, 1080, 1795);
   // float in[8] = {0, 0, 0, 1, 1, 0, 1, 1};
@@ -221,12 +148,12 @@ std::vector<float> FakeARCore::TransformDisplayUvCoords(
   return uvs_out;
 }
 
-gfx::Transform FakeARCore::GetProjectionMatrix(float near, float far) {
+gfx::Transform FakeArCore::GetProjectionMatrix(float near, float far) {
   DCHECK(IsOnGlThread());
   // Get a projection matrix matching the current screen orientation and
   // aspect. Currently, this uses a hardcoded FOV angle for the smaller screen
   // dimension, and adjusts the other angle to preserve the aspect. A better
-  // simulation of ARCore should apply cropping to the underlying fixed-aspect
+  // simulation of ArCore should apply cropping to the underlying fixed-aspect
   // simulated camera image.
   constexpr float fov_half_angle_degrees = 30.f;
   float base_tan = tanf(fov_half_angle_degrees * base::kPiFloat / 180.f);
@@ -253,7 +180,7 @@ gfx::Transform FakeARCore::GetProjectionMatrix(float near, float far) {
   return result;
 }
 
-mojom::VRPosePtr FakeARCore::Update(bool* camera_updated) {
+mojom::VRPosePtr FakeArCore::Update(bool* camera_updated) {
   DCHECK(IsOnGlThread());
   DCHECK(camera_updated);
 
@@ -274,24 +201,35 @@ mojom::VRPosePtr FakeARCore::Update(bool* camera_updated) {
   return pose;
 }
 
-bool FakeARCore::RequestHitTest(
+bool FakeArCore::RequestHitTest(
     const mojom::XRRayPtr& ray,
-    const gfx::Size& image_size,
     std::vector<mojom::XRHitResultPtr>* hit_results) {
-  // TODO(https://crbug.com/837834): implement for testing.
-  return false;
+  mojom::XRHitResultPtr hit = mojom::XRHitResult::New();
+  hit->hit_matrix.resize(16);
+  // Identity matrix - no translation and default orientation.
+  hit->hit_matrix.data()[0] = 1;
+  hit->hit_matrix.data()[5] = 1;
+  hit->hit_matrix.data()[10] = 1;
+  hit->hit_matrix.data()[15] = 1;
+  hit_results->push_back(std::move(hit));
+
+  return true;
 }
 
-void FakeARCore::Pause() {
+void FakeArCore::Pause() {
   DCHECK(IsOnGlThread());
 }
 
-void FakeARCore::Resume() {
+void FakeArCore::Resume() {
   DCHECK(IsOnGlThread());
 }
 
-bool FakeARCore::IsOnGlThread() const {
+bool FakeArCore::IsOnGlThread() const {
   return gl_thread_task_runner_->BelongsToCurrentThread();
+}
+
+std::unique_ptr<ArCore> FakeArCoreFactory::Create() {
+  return std::make_unique<FakeArCore>();
 }
 
 }  // namespace device

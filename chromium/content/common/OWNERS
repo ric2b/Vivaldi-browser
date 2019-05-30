@@ -16,9 +16,6 @@ per-file sandbox_mac*=file://sandbox/mac/OWNERS
 per-file *.sb=set noparent
 per-file *.sb=file://sandbox/mac/OWNERS
 
-per-file pepper*=bauerb@chromium.org
-per-file plugin*=bauerb@chromium.org
-
 per-file *_messages*.h=set noparent
 per-file *_messages*.h=file://ipc/SECURITY_OWNERS
 
@@ -44,6 +41,6 @@ per-file *.mojom=file://ipc/SECURITY_OWNERS
 per-file accessibility_node_data.*=dmazzoni@chromium.org
 per-file accessibility_node_data.*=dtseng@chromium.org
 
-# DirectWrite
-per-file dwrite_font_platform_win*=scottmg@chromium.org
-per-file font_warmup_win.cc=scottmg@chromium.org
+# AppCache
+per-file appcache_interfaces.h=pwnall@chromium.org
+per-file appcache_interfaces.cc=pwnall@chromium.org

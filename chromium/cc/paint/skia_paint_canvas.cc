@@ -4,12 +4,12 @@
 
 #include "cc/paint/skia_paint_canvas.h"
 
+#include "base/bind.h"
 #include "cc/paint/display_item_list.h"
 #include "cc/paint/paint_recorder.h"
 #include "cc/paint/scoped_raster_flags.h"
 #include "third_party/skia/include/core/SkAnnotation.h"
 #include "third_party/skia/include/core/SkColorSpaceXformCanvas.h"
-#include "third_party/skia/include/core/SkMetaData.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/utils/SkNWayCanvas.h"
@@ -57,10 +57,6 @@ void SkiaPaintCanvas::WrapCanvasInColorSpaceXformCanvas(
   }
 }
 
-SkMetaData& SkiaPaintCanvas::getMetaData() {
-  return canvas_->getMetaData();
-}
-
 SkImageInfo SkiaPaintCanvas::imageInfo() const {
   return canvas_->imageInfo();
 }
@@ -81,14 +77,7 @@ int SkiaPaintCanvas::saveLayer(const SkRect* bounds, const PaintFlags* flags) {
   return canvas_->saveLayer(bounds, &paint);
 }
 
-int SkiaPaintCanvas::saveLayerAlpha(const SkRect* bounds,
-                                    uint8_t alpha,
-                                    bool preserve_lcd_text_requests) {
-  if (preserve_lcd_text_requests) {
-    SkPaint paint;
-    paint.setAlpha(alpha);
-    return canvas_->saveLayerPreserveLCDTextRequests(bounds, &paint);
-  }
+int SkiaPaintCanvas::saveLayerAlpha(const SkRect* bounds, uint8_t alpha) {
   return canvas_->saveLayerAlpha(bounds, alpha);
 }
 
@@ -303,7 +292,13 @@ void SkiaPaintCanvas::drawImageRect(const PaintImage& image,
   FlushAfterDrawIfNeeded();
 }
 
-void SkiaPaintCanvas::drawTextBlob(scoped_refptr<PaintTextBlob> blob,
+void SkiaPaintCanvas::drawSkottie(scoped_refptr<SkottieWrapper> skottie,
+                                  const SkRect& dst,
+                                  float t) {
+  skottie->Draw(canvas_, t, dst);
+}
+
+void SkiaPaintCanvas::drawTextBlob(sk_sp<SkTextBlob> blob,
                                    SkScalar x,
                                    SkScalar y,
                                    const PaintFlags& flags) {
@@ -312,8 +307,16 @@ void SkiaPaintCanvas::drawTextBlob(scoped_refptr<PaintTextBlob> blob,
   if (!raster_flags.flags())
     return;
   SkPaint paint = raster_flags.flags()->ToSkPaint();
-  canvas_->drawTextBlob(blob->ToSkTextBlob(), x, y, paint);
+  canvas_->drawTextBlob(blob, x, y, paint);
   FlushAfterDrawIfNeeded();
+}
+
+void SkiaPaintCanvas::drawTextBlob(sk_sp<SkTextBlob> blob,
+                                   SkScalar x,
+                                   SkScalar y,
+                                   const PaintFlags& flags,
+                                   const NodeHolder& holder) {
+  drawTextBlob(blob, x, y, flags);
 }
 
 void SkiaPaintCanvas::drawPicture(sk_sp<const PaintRecord> record) {

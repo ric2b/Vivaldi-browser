@@ -36,19 +36,6 @@ class PLATFORM_EXPORT AutoAdvancingVirtualTimeDomain
                                  BaseTimeOverridePolicy policy);
   ~AutoAdvancingVirtualTimeDomain() override;
 
-  class PLATFORM_EXPORT Observer {
-   public:
-    Observer();
-    virtual ~Observer();
-
-    // Notification received when the virtual time advances.
-    virtual void OnVirtualTimeAdvanced() = 0;
-  };
-
-  // Note its assumed that |observer| will either remove itself or last at least
-  // as long as this AutoAdvancingVirtualTimeDomain.
-  void SetObserver(Observer* observer);
-
   // Controls whether or not virtual time is allowed to advance, when the
   // SequenceManager runs out of immediate work to do.
   void SetCanAdvanceVirtualTime(bool can_advance_virtual_time);
@@ -77,6 +64,7 @@ class PLATFORM_EXPORT AutoAdvancingVirtualTimeDomain
   base::TimeTicks Now() const override;
   base::Optional<base::TimeDelta> DelayTillNextTask(
       base::sequence_manager::LazyNow* lazy_now) override;
+  bool MaybeFastForwardToNextTask(bool quit_when_idle_requested) override;
 
  protected:
   const char* GetName() const override;
@@ -101,7 +89,6 @@ class PLATFORM_EXPORT AutoAdvancingVirtualTimeDomain
   int max_task_starvation_count_;
 
   bool can_advance_virtual_time_;
-  Observer* observer_;       // NOT OWNED
   SchedulerHelper* helper_;  // NOT OWNED
 
   // VirtualTime is usually doled out in 100ms intervals using fences and this

@@ -4,26 +4,36 @@
 
 #include <wayland-server.h>
 
+#include "base/bind.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/ozone/platform/wayland/fake_server.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/dragdrop/os_exchange_data.h"
+#include "ui/events/base_event_utils.h"
+#include "ui/ozone/platform/wayland/test/constants.h"
+#include "ui/ozone/platform/wayland/test/mock_surface.h"
+#include "ui/ozone/platform/wayland/test/test_data_device.h"
+#include "ui/ozone/platform/wayland/test/test_data_device_manager.h"
+#include "ui/ozone/platform/wayland/test/test_data_offer.h"
+#include "ui/ozone/platform/wayland/test/test_data_source.h"
+#include "ui/ozone/platform/wayland/test/test_wayland_server_thread.h"
 #include "ui/ozone/platform/wayland/wayland_test.h"
-#include "ui/ozone/public/clipboard_delegate.h"
+#include "ui/ozone/public/platform_clipboard.h"
 
 namespace ui {
 
 // This class mocks how a real clipboard/ozone client would
-// hook to ClipboardDelegate, with one difference: real clients
+// hook to PlatformClipboard, with one difference: real clients
 // have no access to the WaylandConnection instance like this
 // MockClipboardClient impl does. Instead, clients and ozone gets
 // plumbbed up by calling the appropriated Ozone API,
-// OzonePlatform::GetClipboardDelegate.
+// OzonePlatform::GetPlatformClipboard.
 class MockClipboardClient {
  public:
   MockClipboardClient(WaylandConnection* connection) {
     DCHECK(connection);
     // See comment above for reasoning to access the WaylandConnection
     // directly from here.
-    delegate_ = connection->GetClipboardDelegate();
+    delegate_ = connection->GetPlatformClipboard();
 
     DCHECK(delegate_);
   }
@@ -32,7 +42,7 @@ class MockClipboardClient {
   // Fill the clipboard backing store with sample data.
   void SetData(const std::string& utf8_text,
                const std::string& mime_type,
-               ClipboardDelegate::OfferDataClosure callback) {
+               PlatformClipboard::OfferDataClosure callback) {
     // This mimics how Mus' ClipboardImpl writes data to the DataMap.
     std::vector<char> object_map(utf8_text.begin(), utf8_text.end());
     char* object_data = &object_map.front();
@@ -43,7 +53,7 @@ class MockClipboardClient {
   }
 
   void ReadData(const std::string& mime_type,
-                ClipboardDelegate::RequestDataClosure callback) {
+                PlatformClipboard::RequestDataClosure callback) {
     delegate_->RequestClipboardData(mime_type, &data_types_,
                                     std::move(callback));
   }
@@ -51,8 +61,8 @@ class MockClipboardClient {
   bool IsSelectionOwner() { return delegate_->IsSelectionOwner(); }
 
  private:
-  ClipboardDelegate* delegate_ = nullptr;
-  ClipboardDelegate::DataMap data_types_;
+  PlatformClipboard* delegate_ = nullptr;
+  PlatformClipboard::DataMap data_types_;
 
   DISALLOW_COPY_AND_ASSIGN(MockClipboardClient);
 };
@@ -73,9 +83,10 @@ class WaylandDataDeviceManagerTest : public WaylandTest {
   }
 
  protected:
-  wl::MockDataDeviceManager* data_device_manager_;
+  wl::TestDataDeviceManager* data_device_manager_;
   std::unique_ptr<MockClipboardClient> clipboard_client_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(WaylandDataDeviceManagerTest);
 };
 
@@ -100,7 +111,7 @@ TEST_P(WaylandDataDeviceManagerTest, ReadFromClibpard) {
   // focused and compositor sends data_device data to it.
   auto* data_offer = data_device_manager_->data_device()->OnDataOffer();
   data_offer->OnOffer(wl::kTextMimeTypeUtf8);
-  data_device_manager_->data_device()->OnSelection(*data_offer);
+  data_device_manager_->data_device()->OnSelection(data_offer);
   Sync();
 
   // The client requests to reading clipboard data from the server.
@@ -131,12 +142,69 @@ TEST_P(WaylandDataDeviceManagerTest, IsSelectionOwner) {
   ASSERT_FALSE(clipboard_client_->IsSelectionOwner());
 }
 
-INSTANTIATE_TEST_CASE_P(XdgVersionV5Test,
-                        WaylandDataDeviceManagerTest,
-                        ::testing::Values(kXdgShellV5));
+TEST_P(WaylandDataDeviceManagerTest, StartDrag) {
+  bool restored_focus = window_->has_pointer_focus();
+  window_->set_pointer_focus(true);
 
-INSTANTIATE_TEST_CASE_P(XdgVersionV6Test,
-                        WaylandDataDeviceManagerTest,
-                        ::testing::Values(kXdgShellV6));
+  // The client starts dragging.
+  std::unique_ptr<OSExchangeData> os_exchange_data =
+      std::make_unique<OSExchangeData>();
+  int operation = DragDropTypes::DRAG_COPY | DragDropTypes::DRAG_MOVE;
+  connection_->StartDrag(*os_exchange_data, operation);
+
+  WaylandDataSource::DragDataMap data;
+  data[wl::kTextMimeTypeText] = wl::kSampleTextForDragAndDrop;
+  connection_->drag_data_source()->SetDragData(data);
+
+  Sync();
+  // The server reads the data and the callback gets it.
+  data_device_manager_->data_source()->ReadData(
+      base::BindOnce([](const std::vector<uint8_t>& data) {
+        std::string string_data(data.begin(), data.end());
+        EXPECT_EQ(wl::kSampleTextForDragAndDrop, string_data);
+      }));
+
+  window_->set_pointer_focus(restored_focus);
+}
+
+TEST_P(WaylandDataDeviceManagerTest, ReceiveDrag) {
+  auto* data_offer = data_device_manager_->data_device()->OnDataOffer();
+  data_offer->OnOffer(wl::kTextMimeTypeText);
+
+  gfx::Point entered_point(10, 10);
+  // The server sends an enter event.
+  data_device_manager_->data_device()->OnEnter(
+      1002, surface_->resource(), wl_fixed_from_int(entered_point.x()),
+      wl_fixed_from_int(entered_point.y()), data_offer);
+
+  int64_t time =
+      (ui::EventTimeForNow() - base::TimeTicks()).InMilliseconds() & UINT32_MAX;
+  gfx::Point motion_point(11, 11);
+
+  // The server sends an motion event.
+  data_device_manager_->data_device()->OnMotion(
+      time, wl_fixed_from_int(motion_point.x()),
+      wl_fixed_from_int(motion_point.y()));
+
+  Sync();
+
+  auto callback = base::BindOnce([](const std::string& contents) {
+    EXPECT_EQ(wl::kSampleTextForDragAndDrop, contents);
+  });
+
+  // The client requests the data and gets callback with it.
+  connection_->RequestDragData(wl::kTextMimeTypeText, std::move(callback));
+  Sync();
+
+  data_device_manager_->data_device()->OnLeave();
+}
+
+INSTANTIATE_TEST_SUITE_P(XdgVersionV5Test,
+                         WaylandDataDeviceManagerTest,
+                         ::testing::Values(kXdgShellV5));
+
+INSTANTIATE_TEST_SUITE_P(XdgVersionV6Test,
+                         WaylandDataDeviceManagerTest,
+                         ::testing::Values(kXdgShellV6));
 
 }  // namespace ui

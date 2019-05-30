@@ -1,4 +1,4 @@
-// Copyright 2015 Vivaldi Technologies
+// Copyright (c) 2015-2019 Vivaldi Technologies, All Rights Reserved.
 
 #include "prefs/vivaldi_browser_prefs.h"
 
@@ -19,14 +19,12 @@ void RegisterOldPlatformPrefs(user_prefs::PrefRegistrySyncable* registry) {
 }
 
 void MigrateOldPlatformPrefs(PrefService* prefs) {
-  {
-    const base::Value* old_hide_mouse_cursor_in_full_screen_pref =
-        prefs->GetUserPrefValue(vivaldiprefs::kOldHideMouseCursorInFullscreen);
-    if (old_hide_mouse_cursor_in_full_screen_pref)
-      prefs->Set(vivaldiprefs::kWebpagesFullScreenHideMouse,
-                 *old_hide_mouse_cursor_in_full_screen_pref);
-    prefs->ClearPref(vivaldiprefs::kOldHideMouseCursorInFullscreen);
-  }
+  const base::Value* old_hide_mouse_cursor_in_full_screen_pref =
+      prefs->GetUserPrefValue(vivaldiprefs::kOldHideMouseCursorInFullscreen);
+  if (old_hide_mouse_cursor_in_full_screen_pref)
+    prefs->Set(vivaldiprefs::kWebpagesFullScreenHideMouse,
+                *old_hide_mouse_cursor_in_full_screen_pref);
+  prefs->ClearPref(vivaldiprefs::kOldHideMouseCursorInFullscreen);
 }
 
 std::unique_ptr<base::Value> GetPlatformComputedDefault(
@@ -37,7 +35,6 @@ std::unique_ptr<base::Value> GetPlatformComputedDefault(
                                   CLSCTX_ALL, IID_PPV_ARGS(&desktop_w));
     return std::make_unique<base::Value>(SUCCEEDED(hr));
   }
-
   return std::make_unique<base::Value>();
 }
 

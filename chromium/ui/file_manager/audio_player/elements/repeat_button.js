@@ -12,28 +12,28 @@ Polymer({
 
   hostAttributes: {
     role: 'button',
-    tabindex: 0
+    tabindex: 0,
   },
 
   behaviors: [
     Polymer.IronButtonState,
-    Polymer.IronControlState
+    Polymer.IronControlState,
   ],
 
   properties: {
     'repeatMode': {
       type: String,
       notify: true,
-      reflectToAttribute: true
+      reflectToAttribute: true,
     }
   },
 
   listeners: {
-    tap: '_tapHandler'
+    click: '_clickHandler',
   },
 
   observers: [
-    '_focusedChanged(receivedFocusFromKeyboard)'
+    '_focusedChanged(receivedFocusFromKeyboard)',
   ],
 
   _focusedChanged: function(receivedFocusFromKeyboard) {
@@ -58,7 +58,7 @@ Polymer({
     ];
   },
 
-  _tapHandler: function() {
+  _clickHandler: function() {
     this.next_();
   },
 
@@ -68,8 +68,9 @@ Polymer({
    */
   next_: function() {
     this.index_ = this.index_ || this.modeName_.indexOf(this.repeatMode);
-    if(this.index_ === -1)
+    if (this.index_ === -1) {
       return;
+    }
 
     var nextIndex = (this.index_ + 1) % this.modeName_.length;
     this.repeatMode = this.modeName_[nextIndex];

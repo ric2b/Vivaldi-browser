@@ -210,7 +210,6 @@ void InstalledLoader::Load(const ExtensionInfo& info, bool write_to_prefs) {
 
   const ManagementPolicy* policy = extensions::ExtensionSystem::Get(
       extension_service_->profile())->management_policy();
-  bool force_disabled = false;
 
   if (extension_prefs_->IsExtensionDisabled(extension->id())) {
     int disable_reasons = extension_prefs_->GetDisableReasons(extension->id());
@@ -243,12 +242,8 @@ void InstalledLoader::Load(const ExtensionInfo& info, bool write_to_prefs) {
     disable_reason::DisableReason disable_reason = disable_reason::DISABLE_NONE;
     if (policy->MustRemainDisabled(extension.get(), &disable_reason, nullptr)) {
       extension_prefs_->SetExtensionDisabled(extension->id(), disable_reason);
-      force_disabled = true;
     }
   }
-
-  UMA_HISTOGRAM_BOOLEAN("ExtensionInstalledLoader.ForceDisabled2",
-                        force_disabled);
 
   if (write_to_prefs)
     extension_prefs_->UpdateManifest(extension.get());
@@ -364,6 +359,7 @@ void InstalledLoader::RecordExtensionsMetrics() {
   int eventless_event_pages_count = 0;
   int off_store_item_count = 0;
   int web_request_blocking_count = 0;
+  int web_request_count = 0;
 
   const ExtensionSet& extensions = extension_registry_->enabled_extensions();
   for (ExtensionSet::const_iterator iter = extensions.begin();
@@ -418,6 +414,11 @@ void InstalledLoader::RecordExtensionsMetrics() {
     if (extension->permissions_data()->HasAPIPermission(
             APIPermission::kWebRequestBlocking)) {
       web_request_blocking_count++;
+    }
+
+    if (extension->permissions_data()->HasAPIPermission(
+            APIPermission::kWebRequest)) {
+      web_request_count++;
     }
 
     // From now on, don't count component extensions, since they are only
@@ -668,6 +669,7 @@ void InstalledLoader::RecordExtensionsMetrics() {
                            off_store_item_count);
   UMA_HISTOGRAM_COUNTS_100("Extensions.WebRequestBlockingCount",
                            web_request_blocking_count);
+  UMA_HISTOGRAM_COUNTS_100("Extensions.WebRequestCount", web_request_count);
 }
 
 int InstalledLoader::GetCreationFlags(const ExtensionInfo* info) {

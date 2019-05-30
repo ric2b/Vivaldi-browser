@@ -9,6 +9,7 @@ import android.support.annotation.Nullable;
 import android.text.TextUtils;
 
 import org.chromium.base.Log;
+import org.chromium.base.TimeUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
@@ -197,6 +198,15 @@ public class ContextualSearchSelectionController {
     }
 
     /**
+     * Overrides the current internal setting that tracks the selection.
+     *
+     * @param selection The new selection value.
+     */
+    void setSelectedText(String selection) {
+        mSelectedText = selection;
+    }
+
+    /**
      * @return The Pixel to Device independent Pixel ratio.
      */
     float getPxToDp() {
@@ -354,7 +364,7 @@ public class ContextualSearchSelectionController {
         if (mSelectionType != SelectionType.LONG_PRESS) {
             if (mTapTimeNanoseconds != 0) {
                 mTapDurationMs = (int) ((System.nanoTime() - mTapTimeNanoseconds)
-                        / ContextualSearchHeuristic.NANOSECONDS_IN_A_MILLISECOND);
+                        / TimeUtils.NANOSECONDS_PER_MILLISECOND);
             }
             mWasTapGestureDetected = true;
             mSelectionType = SelectionType.TAP;

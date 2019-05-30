@@ -4,15 +4,17 @@
 
 #include "base/command_line.h"
 #include "base/run_loop.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/gpu/gpu_process_host.h"
-#include "content/common/gpu_stream_constants.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/browser/gpu_utils.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/gpu_stream_constants.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/test/gpu_browsertest_helpers.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
@@ -88,6 +90,7 @@ class ContextTestBase : public content::ContentBrowserTest {
 
 // Include the shared tests.
 #define CONTEXT_TEST_F IN_PROC_BROWSER_TEST_F
+#include "base/bind.h"
 #include "content/public/browser/browser_thread.h"
 #include "gpu/ipc/client/gpu_context_tests.h"
 
@@ -106,11 +109,6 @@ class BrowserGpuChannelHostFactoryTest : public ContentBrowserTest {
     // Start all tests without a gpu channel so that the tests exercise a
     // consistent codepath.
     command_line->AppendSwitch(switches::kDisableGpuEarlyInit);
-  }
-
-  void OnContextLost(const base::Closure callback, int* counter) {
-    (*counter)++;
-    callback.Run();
   }
 
   void Signal(bool* event,
@@ -181,34 +179,6 @@ IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest,
   EXPECT_EQ(gpu_channel.get(), GetGpuChannel());
 }
 #endif
-
-// Test fails on Chromeos + Mac, flaky on Windows because UI Compositor
-// establishes a GPU channel.
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-#define MAYBE_CallbacksDontRunOnEstablishSync CallbacksDontRunOnEstablishSync
-#else
-#define MAYBE_CallbacksDontRunOnEstablishSync \
-  DISABLED_CallbacksDontRunOnEstablishSync
-#endif
-IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest,
-                       MAYBE_CallbacksDontRunOnEstablishSync) {
-  DCHECK(!IsChannelEstablished());
-  bool event = false;
-  base::RunLoop run_loop;
-  GetFactory()->EstablishGpuChannel(
-      base::BindOnce(&BrowserGpuChannelHostFactoryTest::SignalAndQuitLoop,
-                     base::Unretained(this), &event, &run_loop));
-
-  scoped_refptr<gpu::GpuChannelHost> gpu_channel =
-      GetFactory()->EstablishGpuChannelSync();
-
-  // Expect async callback didn't run yet.
-  EXPECT_FALSE(event);
-
-  run_loop.Run();
-  EXPECT_TRUE(event);
-  EXPECT_EQ(gpu_channel.get(), GetGpuChannel());
-}
 
 // Test fails on Windows because GPU Channel set-up fails.
 #if !defined(OS_WIN)
@@ -284,7 +254,7 @@ IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest,
   ASSERT_EQ(provider->BindToCurrentThread(), gpu::ContextResult::kSuccess);
   GpuProcessHost::CallOnIO(GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
                            false /* force_create */,
-                           base::Bind([](GpuProcessHost* host) {
+                           base::BindOnce([](GpuProcessHost* host) {
                              if (host)
                                host->gpu_service()->Crash();
                            }));
@@ -349,7 +319,7 @@ IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest, CreateTransferBuffer) {
   // channel on the IO thread, which then notifies the main thread about the
   // error state.
   base::RunLoop wait_for_io_run_loop;
-  BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)
+  base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO})
       ->PostTask(FROM_HERE, wait_for_io_run_loop.QuitClosure());
   // Waits for the IO thread to run.
   wait_for_io_run_loop.Run();

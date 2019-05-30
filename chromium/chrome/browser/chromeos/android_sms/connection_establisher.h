@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "content/public/browser/service_worker_context.h"
+#include "url/gurl.h"
 
 namespace chromeos {
 
@@ -16,9 +17,17 @@ namespace android_sms {
 // service worker to the Tachyon server.
 class ConnectionEstablisher {
  public:
+  enum class ConnectionMode { kStartConnection, kResumeExistingConnection };
+
   virtual ~ConnectionEstablisher() = default;
 
   virtual void EstablishConnection(
+      const GURL& url,
+      ConnectionMode connection_mode,
+      content::ServiceWorkerContext* service_worker_context) = 0;
+
+  virtual void TearDownConnection(
+      const GURL& url,
       content::ServiceWorkerContext* service_worker_context) = 0;
 
  protected:

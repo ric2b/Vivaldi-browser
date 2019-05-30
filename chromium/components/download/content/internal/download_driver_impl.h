@@ -44,7 +44,7 @@ class DownloadDriverImpl : public DownloadDriver,
       const base::FilePath& file_path,
       scoped_refptr<network::ResourceRequestBody> post_body,
       const net::NetworkTrafficAnnotationTag& traffic_annotation) override;
-  void Remove(const std::string& guid) override;
+  void Remove(const std::string& guid, bool remove_file) override;
   void Pause(const std::string& guid) override;
   void Resume(const std::string& guid) override;
   base::Optional<DriverEntry> Find(const std::string& guid) override;
@@ -62,10 +62,12 @@ class DownloadDriverImpl : public DownloadDriver,
   void OnDownloadRemoved(content::DownloadManager* manager,
                          download::DownloadItem* item) override;
 
+  void OnUploadProgress(const std::string& guid, uint64_t bytes_uploaded);
+
   void OnHardRecoverComplete(bool success);
 
   // Remove the download, used to be posted to the task queue.
-  void DoRemoveDownload(const std::string& guid);
+  void DoRemoveDownload(const std::string& guid, bool remove_file);
 
   // Low level download handle.
   content::DownloadManager* download_manager_;

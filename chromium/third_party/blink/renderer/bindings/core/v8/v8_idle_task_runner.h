@@ -29,19 +29,19 @@
 #include <memory>
 
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "gin/public/v8_idle_task_runner.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 
 namespace blink {
 
 class V8IdleTaskRunner : public gin::V8IdleTaskRunner {
   USING_FAST_MALLOC(V8IdleTaskRunner);
-  WTF_MAKE_NONCOPYABLE(V8IdleTaskRunner);
 
  public:
   explicit V8IdleTaskRunner(ThreadScheduler* scheduler)
@@ -60,6 +60,8 @@ class V8IdleTaskRunner : public gin::V8IdleTaskRunner {
 
  private:
   ThreadScheduler* scheduler_;
+
+  DISALLOW_COPY_AND_ASSIGN(V8IdleTaskRunner);
 };
 
 }  // namespace blink

@@ -42,17 +42,17 @@ class V0CustomElementDefinition final
   static V0CustomElementDefinition* Create(const V0CustomElementDescriptor&,
                                            V0CustomElementLifecycleCallbacks*);
 
+  V0CustomElementDefinition(const V0CustomElementDescriptor&,
+                            V0CustomElementLifecycleCallbacks*);
+
   const V0CustomElementDescriptor& Descriptor() const { return descriptor_; }
   V0CustomElementLifecycleCallbacks* Callbacks() const {
     return callbacks_.Get();
   }
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
  private:
-  V0CustomElementDefinition(const V0CustomElementDescriptor&,
-                            V0CustomElementLifecycleCallbacks*);
-
   V0CustomElementDescriptor descriptor_;
   Member<V0CustomElementLifecycleCallbacks> callbacks_;
 };

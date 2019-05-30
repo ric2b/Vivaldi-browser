@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/file_manager/open_util.h"
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -55,7 +56,7 @@ void ExecuteFileTaskForUrl(Profile* profile,
       GetFileManagerMainPageUrl(),  // Executing task on behalf of the Files
                                     // app.
       task, std::vector<FileSystemURL>(1, file_system_context->CrackURL(url)),
-      base::Bind(&IgnoreFileTaskExecuteResult));
+      base::BindOnce(&IgnoreFileTaskExecuteResult));
 }
 
 // Opens the file manager for the specified |url|. Used to implement
@@ -72,9 +73,8 @@ void OpenFileManagerWithInternalActionId(Profile* profile,
     return;
   base::RecordAction(base::UserMetricsAction("ShowFileBrowserFullTab"));
 
-  file_tasks::TaskDescriptor task(kFileManagerAppId,
-                                  file_tasks::TASK_TYPE_FILE_BROWSER_HANDLER,
-                                  action_id);
+  file_tasks::TaskDescriptor task(
+      kFileManagerAppId, file_tasks::TASK_TYPE_FILE_HANDLER, action_id);
   ExecuteFileTaskForUrl(profile, task, url);
 }
 
@@ -119,9 +119,9 @@ void OpenFileWithMimeType(Profile* profile,
   file_urls.push_back(url);
 
   file_tasks::FindAllTypesOfTasks(
-      profile, drive::util::GetDriveAppRegistryByProfile(profile), entries,
-      file_urls,
-      base::Bind(&OpenFileMimeTypeAfterTasksListed, profile, url, callback));
+      profile, entries, file_urls,
+      base::BindOnce(&OpenFileMimeTypeAfterTasksListed, profile, url,
+                     callback));
 }
 
 // Opens the file specified by |url| by finding and executing a file task for

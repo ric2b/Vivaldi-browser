@@ -12,7 +12,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "content/browser/cache_storage/cache_storage_histogram_macros.h"
+#include "content/browser/cache_storage/cache_storage_histogram_utils.h"
 #include "content/browser/cache_storage/cache_storage_operation.h"
 
 namespace content {
@@ -23,12 +23,15 @@ CacheStorageScheduler::CacheStorageScheduler(
 
 CacheStorageScheduler::~CacheStorageScheduler() {}
 
-void CacheStorageScheduler::ScheduleOperation(base::OnceClosure closure) {
-  CACHE_STORAGE_SCHEDULER_UMA(COUNTS_10000, "QueueLength", client_type_,
-                              pending_operations_.size());
+void CacheStorageScheduler::ScheduleOperation(CacheStorageSchedulerOp op_type,
+                                              base::OnceClosure closure) {
+  RecordCacheStorageSchedulerUMA(CacheStorageSchedulerUMA::kQueueLength,
+                                 client_type_, op_type,
+                                 pending_operations_.size());
 
   pending_operations_.push_back(std::make_unique<CacheStorageOperation>(
-      std::move(closure), client_type_, base::ThreadTaskRunnerHandle::Get()));
+      std::move(closure), client_type_, op_type,
+      base::ThreadTaskRunnerHandle::Get()));
   RunOperationIfIdle();
 }
 
@@ -49,8 +52,9 @@ void CacheStorageScheduler::RunOperationIfIdle() {
     running_operation_ = std::move(pending_operations_.front());
     pending_operations_.pop_front();
 
-    CACHE_STORAGE_SCHEDULER_UMA(
-        TIMES, "QueueDuration", client_type_,
+    RecordCacheStorageSchedulerUMA(
+        CacheStorageSchedulerUMA::kQueueDuration, client_type_,
+        running_operation_->op_type(),
         base::TimeTicks::Now() - running_operation_->creation_ticks());
 
     base::ThreadTaskRunnerHandle::Get()->PostTask(

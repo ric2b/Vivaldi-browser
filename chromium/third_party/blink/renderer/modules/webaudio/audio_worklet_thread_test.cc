@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/modules/webaudio/audio_worklet_thread.h"
 
 #include <memory>
+#include "base/synchronization/waitable_event.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -15,22 +16,20 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_gc_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/core/inspector/worker_devtools_params.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
 #include "third_party/blink/renderer/core/script/script.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/core/workers/global_scope_creation_params.h"
 #include "third_party/blink/renderer/core/workers/worker_backing_thread.h"
-#include "third_party/blink/renderer/core/workers/worker_inspector_proxy.h"
 #include "third_party/blink/renderer/core/workers/worker_or_worklet_global_scope.h"
 #include "third_party/blink/renderer/core/workers/worker_reporting_proxy.h"
 #include "third_party/blink/renderer/core/workers/worklet_module_responses_map.h"
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/loader/fetch/access_control_status.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_loader_options.h"
 #include "third_party/blink/renderer/platform/testing/testing_platform_support.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
-#include "third_party/blink/renderer/platform/waitable_event.h"
 #include "third_party/blink/renderer/platform/web_thread_supporting_gc.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_position.h"
 
@@ -39,7 +38,7 @@ namespace blink {
 class AudioWorkletThreadTest : public PageTestBase {
  public:
   void SetUp() override {
-    AudioWorkletThread::CreateSharedBackingThreadForTest();
+    AudioWorkletThread::EnsureSharedBackingThread();
     PageTestBase::SetUp(IntSize());
     Document* document = &GetDocument();
     document->SetURL(KURL("https://example.com/"));
@@ -53,22 +52,25 @@ class AudioWorkletThreadTest : public PageTestBase {
     Document* document = &GetDocument();
     thread->Start(
         std::make_unique<GlobalScopeCreationParams>(
-            document->Url(), ScriptType::kModule, document->UserAgent(),
+            document->Url(), mojom::ScriptType::kModule,
+            OffMainThreadWorkerScriptFetchOption::kEnabled, "AudioWorklet",
+            document->UserAgent(), nullptr /* web_worker_fetch_context */,
             Vector<CSPHeaderAndType>(), document->GetReferrerPolicy(),
             document->GetSecurityOrigin(), document->IsSecureContext(),
             document->GetHttpsState(), nullptr /* worker_clients */,
             document->AddressSpace(),
             OriginTrialContext::GetTokens(document).get(),
             base::UnguessableToken::Create(), nullptr /* worker_settings */,
-            kV8CacheOptionsDefault, new WorkletModuleResponsesMap),
-        base::nullopt, WorkerInspectorProxy::PauseOnWorkerStart::kDontPause,
+            kV8CacheOptionsDefault,
+            MakeGarbageCollected<WorkletModuleResponsesMap>()),
+        base::nullopt, std::make_unique<WorkerDevToolsParams>(),
         ParentExecutionContextTaskRunners::Create());
     return thread;
   }
 
   // Attempts to run some simple script for |thread|.
   void CheckWorkletCanExecuteScript(WorkerThread* thread) {
-    WaitableEvent wait_event;
+    base::WaitableEvent wait_event;
     thread->GetWorkerBackingThread().BackingThread().PostTask(
         FROM_HERE,
         CrossThreadBind(&AudioWorkletThreadTest::ExecuteScriptInWorklet,
@@ -79,7 +81,8 @@ class AudioWorkletThreadTest : public PageTestBase {
   }
 
  private:
-  void ExecuteScriptInWorklet(WorkerThread* thread, WaitableEvent* wait_event) {
+  void ExecuteScriptInWorklet(WorkerThread* thread,
+                              base::WaitableEvent* wait_event) {
     ScriptState* script_state =
         thread->GlobalScope()->ScriptController()->GetScriptState();
     EXPECT_TRUE(script_state);
@@ -87,8 +90,8 @@ class AudioWorkletThreadTest : public PageTestBase {
     KURL js_url("https://example.com/worklet.js");
     ScriptModule module = ScriptModule::Compile(
         script_state->GetIsolate(), "var counter = 0; ++counter;", js_url,
-        js_url, ScriptFetchOptions(), kSharableCrossOrigin,
-        TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
+        js_url, ScriptFetchOptions(), TextPosition::MinimumPosition(),
+        ASSERT_NO_EXCEPTION);
     EXPECT_FALSE(module.IsNull());
     ScriptValue exception = module.Instantiate(script_state);
     EXPECT_TRUE(exception.IsEmpty());

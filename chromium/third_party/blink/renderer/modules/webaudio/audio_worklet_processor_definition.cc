@@ -12,8 +12,8 @@ AudioWorkletProcessorDefinition* AudioWorkletProcessorDefinition::Create(
     v8::Local<v8::Object> constructor,
     v8::Local<v8::Function> process) {
   DCHECK(!IsMainThread());
-  return new AudioWorkletProcessorDefinition(isolate, name, constructor,
-                                             process);
+  return MakeGarbageCollected<AudioWorkletProcessorDefinition>(
+      isolate, name, constructor, process);
 }
 
 AudioWorkletProcessorDefinition::AudioWorkletProcessorDefinition(
@@ -40,15 +40,15 @@ v8::Local<v8::Function> AudioWorkletProcessorDefinition::ProcessLocal(
 }
 
 void AudioWorkletProcessorDefinition::SetAudioParamDescriptors(
-    const HeapVector<AudioParamDescriptor>& descriptors) {
+    const HeapVector<Member<AudioParamDescriptor>>& descriptors) {
   audio_param_descriptors_ = descriptors;
 }
 
 const Vector<String>
     AudioWorkletProcessorDefinition::GetAudioParamDescriptorNames() const {
   Vector<String> names;
-  for (const auto& descriptor : audio_param_descriptors_) {
-    names.push_back(descriptor.name());
+  for (const auto descriptor : audio_param_descriptors_) {
+    names.push_back(descriptor->name());
   }
   return names;
 }
@@ -56,9 +56,9 @@ const Vector<String>
 const AudioParamDescriptor*
     AudioWorkletProcessorDefinition::GetAudioParamDescriptor (
         const String& key) const {
-  for (const auto& descriptor : audio_param_descriptors_) {
-    if (descriptor.name() == key)
-      return &descriptor;
+  for (const auto descriptor : audio_param_descriptors_) {
+    if (descriptor->name() == key)
+      return descriptor;
   }
   return nullptr;
 }

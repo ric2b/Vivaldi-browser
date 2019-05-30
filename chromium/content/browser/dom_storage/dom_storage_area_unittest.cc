@@ -10,10 +10,11 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -74,7 +75,7 @@ class DOMStorageAreaTest : public testing::Test {
   }
 
  private:
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
 };
 
 class DOMStorageAreaParamTest : public DOMStorageAreaTest,
@@ -84,7 +85,7 @@ class DOMStorageAreaParamTest : public DOMStorageAreaTest,
   ~DOMStorageAreaParamTest() override {}
 };
 
-INSTANTIATE_TEST_CASE_P(_, DOMStorageAreaParamTest, ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(_, DOMStorageAreaParamTest, ::testing::Bool());
 
 TEST_P(DOMStorageAreaParamTest, DOMStorageAreaBasics) {
   const std::string kFirstNamespaceId = "id1";
@@ -510,7 +511,7 @@ TEST_F(DOMStorageAreaTest, DatabaseFileNames) {
       {"file:///", "file__0.localstorage"},
   };
 
-  for (size_t i = 0; i < arraysize(kCases); ++i) {
+  for (size_t i = 0; i < base::size(kCases); ++i) {
     url::Origin origin =
         url::Origin::Create(GURL(kCases[i].origin).GetOrigin());
     base::FilePath file_name =

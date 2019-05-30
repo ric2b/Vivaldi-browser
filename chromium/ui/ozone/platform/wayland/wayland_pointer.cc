@@ -6,6 +6,7 @@
 
 #include <linux/input.h>
 #include <wayland-client.h>
+#include <memory>
 
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
@@ -41,7 +42,7 @@ WaylandPointer::WaylandPointer(wl_pointer* pointer,
 
   wl_pointer_add_listener(obj_.get(), &listener, this);
 
-  cursor_.reset(new WaylandCursor);
+  cursor_ = std::make_unique<WaylandCursor>();
 }
 
 WaylandPointer::~WaylandPointer() {
@@ -61,11 +62,10 @@ void WaylandPointer::Enter(void* data,
   WaylandPointer* pointer = static_cast<WaylandPointer*>(data);
   pointer->location_.SetPoint(wl_fixed_to_double(surface_x),
                               wl_fixed_to_double(surface_y));
-  if (surface) {
-    WaylandWindow* window = WaylandWindow::FromSurface(surface);
-    window->set_pointer_focus(true);
-    pointer->window_with_pointer_focus_ = window;
-  }
+  pointer->FocusWindow(surface);
+  MouseEvent event(ET_MOUSE_ENTERED, pointer->location_, pointer->location_,
+                   EventTimeForNow(), pointer->flags_, 0);
+  pointer->callback_.Run(&event);
 }
 
 // static
@@ -77,11 +77,7 @@ void WaylandPointer::Leave(void* data,
   MouseEvent event(ET_MOUSE_EXITED, gfx::Point(), gfx::Point(),
                    EventTimeForNow(), pointer->flags_, 0);
   pointer->callback_.Run(&event);
-  if (surface) {
-    WaylandWindow* window = WaylandWindow::FromSurface(surface);
-    window->set_pointer_focus(false);
-    pointer->window_with_pointer_focus_ = nullptr;
-  }
+  pointer->UnfocusWindow(surface);
 }
 
 // static
@@ -94,8 +90,8 @@ void WaylandPointer::Motion(void* data,
   pointer->location_.SetPoint(wl_fixed_to_double(surface_x),
                               wl_fixed_to_double(surface_y));
   MouseEvent event(ET_MOUSE_MOVED, gfx::Point(), gfx::Point(),
-                   base::TimeTicks() + base::TimeDelta::FromMilliseconds(time),
-                   pointer->GetFlagsWithKeyboardModifiers(), 0);
+                   EventTimeForNow(), pointer->GetFlagsWithKeyboardModifiers(),
+                   0);
   event.set_location_f(pointer->location_);
   event.set_root_location_f(pointer->location_);
   pointer->callback_.Run(&event);
@@ -146,10 +142,8 @@ void WaylandPointer::Button(void* data,
 
   // MouseEvent's flags should contain the button that was released too.
   const int flags = pointer->GetFlagsWithKeyboardModifiers() | changed_button;
-  MouseEvent event(type, gfx::Point(), gfx::Point(),
-                   base::TimeTicks() + base::TimeDelta::FromMilliseconds(time),
-                   flags, changed_button);
-
+  MouseEvent event(type, gfx::Point(), gfx::Point(), EventTimeForNow(), flags,
+                   changed_button);
   event.set_location_f(pointer->location_);
   event.set_root_location_f(pointer->location_);
 
@@ -187,10 +181,8 @@ void WaylandPointer::Axis(void* data,
                  MouseWheelEvent::kWheelDelta);
   else
     return;
-  MouseWheelEvent event(
-      offset, gfx::Point(), gfx::Point(),
-      base::TimeTicks() + base::TimeDelta::FromMilliseconds(time),
-      pointer->GetFlagsWithKeyboardModifiers(), 0);
+  MouseWheelEvent event(offset, gfx::Point(), gfx::Point(), EventTimeForNow(),
+                        pointer->GetFlagsWithKeyboardModifiers(), 0);
   event.set_location_f(pointer->location_);
   event.set_root_location_f(pointer->location_);
   pointer->callback_.Run(&event);
@@ -214,6 +206,28 @@ int WaylandPointer::GetFlagsWithKeyboardModifiers() {
   flags_ |= keyboard_modifiers_;
   DCHECK(VerifyFlagsAfterMasking(flags_, old_flags, keyboard_modifiers_));
   return flags_;
+}
+
+void WaylandPointer::ResetFlags() {
+  flags_ = 0;
+  keyboard_modifiers_ = 0;
+}
+
+void WaylandPointer::FocusWindow(wl_surface* surface) {
+  if (surface) {
+    WaylandWindow* window = WaylandWindow::FromSurface(surface);
+    window->set_pointer_focus(true);
+    window_with_pointer_focus_ = window;
+  }
+}
+
+void WaylandPointer::UnfocusWindow(wl_surface* surface) {
+  if (surface) {
+    WaylandWindow* window = WaylandWindow::FromSurface(surface);
+    window->set_pointer_focus(false);
+    window->set_has_implicit_grab(false);
+    window_with_pointer_focus_ = nullptr;
+  }
 }
 
 }  // namespace ui

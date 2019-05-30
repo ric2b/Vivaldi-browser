@@ -14,8 +14,8 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
-#include "components/metrics/call_stack_profile_builder.h"
 #include "components/metrics/call_stack_profile_params.h"
+#include "third_party/metrics_proto/sampled_profile.pb.h"
 
 namespace service_manager {
 class Connector;
@@ -91,6 +91,8 @@ class ThreadProfiler {
       service_manager::Connector* connector);
 
  private:
+  class WorkIdRecorder;
+
   // Creates the profiler. The task runner will be supplied for child threads
   // but not for main threads.
   ThreadProfiler(
@@ -110,9 +112,11 @@ class ThreadProfiler {
   // Creates a new periodic profiler and initiates a collection with it.
   void StartPeriodicSamplingCollection();
 
+  metrics::CallStackProfileParams::Thread thread_;
+
   scoped_refptr<base::SingleThreadTaskRunner> owning_thread_task_runner_;
 
-  const metrics::CallStackProfileParams periodic_profile_params_;
+  std::unique_ptr<WorkIdRecorder> work_id_recorder_;
 
   std::unique_ptr<base::StackSamplingProfiler> startup_profiler_;
 

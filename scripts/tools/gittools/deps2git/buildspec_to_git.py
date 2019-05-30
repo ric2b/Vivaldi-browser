@@ -3,9 +3,10 @@
 # found in the LICENSE file.
 
 """Public buildspec to GIT mapping."""
+from __future__ import absolute_import
 
 import re
-from deps2git import SplitScmUrl
+from .deps2git import SplitScmUrl
 
 GIT_HOST = 'https://chromium.googlesource.com/'
 webkit_git = GIT_HOST + 'chromium/blink.git'
@@ -26,7 +27,7 @@ def CleanDeps(deps, deps_os, include_rules, skip_child_includes, hooks):
                            [(os, deps_os[os]) for os in deps_os]):
     del_deps = []
     add_deps = {}
-    for dep, dep_url in deps_section.iteritems():
+    for dep, dep_url in deps_section.items():
       # Skip 'None' exclusion entries.
       if not dep_url:
         continue

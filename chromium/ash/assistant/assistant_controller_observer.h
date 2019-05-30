@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/observer_list_types.h"
 
 class GURL;
 
@@ -20,7 +21,9 @@ enum class DeepLinkType;
 }  // namespace util
 }  // namespace assistant
 
-class AssistantControllerObserver {
+// A checked observer which receives notification of changes to the
+// AssistantController.
+class AssistantControllerObserver : public base::CheckedObserver {
  public:
   // Invoked when the AssistantController has been fully constructed.
   virtual void OnAssistantControllerConstructed() {}
@@ -34,12 +37,13 @@ class AssistantControllerObserver {
       assistant::util::DeepLinkType type,
       const std::map<std::string, std::string>& params) {}
 
-  // Invoked when the specified |url| is opened by Assistant in a new tab.
-  virtual void OnUrlOpened(const GURL& url) {}
+  // Invoked when the specified |url| is opened by Assistant in a new tab. If
+  // |from_server| is true, this event was triggered by a server response.
+  virtual void OnUrlOpened(const GURL& url, bool from_server) {}
 
  protected:
   AssistantControllerObserver() = default;
-  virtual ~AssistantControllerObserver() = default;
+  ~AssistantControllerObserver() override = default;
 
   DISALLOW_COPY_AND_ASSIGN(AssistantControllerObserver);
 };

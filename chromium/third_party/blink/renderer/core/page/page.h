@@ -30,17 +30,13 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/hosts_using_features.h"
-#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings_delegate.h"
 #include "third_party/blink/renderer/core/page/page_animator.h"
-#include "third_party/blink/renderer/core/page/page_overlay.h"
 #include "third_party/blink/renderer/core/page/page_visibility_notifier.h"
 #include "third_party/blink/renderer/core/page/page_visibility_observer.h"
-#include "third_party/blink/renderer/core/page/page_visibility_state.h"
 #include "third_party/blink/renderer/core/page/viewport_description.h"
-#include "third_party/blink/renderer/platform/geometry/layout_rect.h"
-#include "third_party/blink/renderer/platform/geometry/region.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_lifecycle_state.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_scheduler.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
@@ -48,19 +44,24 @@
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
-namespace blink {
+namespace cc {
+class AnimationHost;
+}
 
+namespace blink {
 class AutoscrollController;
 class BrowserControls;
 class ChromeClient;
+class ConsoleMessageStorage;
 class ContextMenuController;
 class Document;
-class DOMRectList;
 class DragCaret;
 class DragController;
 class FocusController;
 class Frame;
 class LinkHighlights;
+class LocalFrame;
+class LocalFrameView;
 class OverscrollController;
 struct PageScaleConstraints;
 class PageScaleConstraintsSet;
@@ -70,8 +71,9 @@ class PointerLockController;
 class ScopedPagePauser;
 class ScrollingCoordinator;
 class ScrollbarTheme;
+class SecurityOrigin;
 class Settings;
-class ConsoleMessageStorage;
+class SpatialNavigationController;
 class TopDocumentRootScrollerController;
 class ValidationMessageClient;
 class VisualViewport;
@@ -108,12 +110,13 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   // An "ordinary" page is a fully-featured page owned by a web view.
   static Page* CreateOrdinary(PageClients&, Page* opener);
 
+  explicit Page(PageClients&);
   ~Page() override;
 
   void CloseSoon();
   bool IsClosing() const { return is_closing_; }
 
-  using PageSet = PersistentHeapHashSet<WeakMember<Page>>;
+  using PageSet = HeapHashSet<WeakMember<Page>>;
 
   // Return the current set of full-fledged, ordinary pages.
   // Each created and owned by a WebView.
@@ -125,7 +128,7 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   // Returns pages related to the current browsing context (excluding the
   // current page).  See also
-  // https://html.spec.whatwg.org/multipage/browsers.html#unit-of-related-browsing-contexts
+  // https://html.spec.whatwg.org/C/#unit-of-related-browsing-contexts
   HeapVector<Member<Page>> RelatedPages();
 
   static void PlatformColorsChanged();
@@ -152,9 +155,7 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   // depends on this will generally have to be rewritten to propagate any
   // necessary state through all renderer processes for that page and/or
   // coordinate/rely on the browser process to help dispatch/coordinate work.
-  LocalFrame* DeprecatedLocalMainFrame() const {
-    return ToLocalFrame(main_frame_);
-  }
+  LocalFrame* DeprecatedLocalMainFrame() const;
 
   void DocumentDetached(Document*);
 
@@ -172,6 +173,7 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   DragCaret& GetDragCaret() const { return *drag_caret_; }
   DragController& GetDragController() const { return *drag_controller_; }
   FocusController& GetFocusController() const { return *focus_controller_; }
+  SpatialNavigationController& GetSpatialNavigationController();
   ContextMenuController& GetContextMenuController() const {
     return *context_menu_controller_;
   }
@@ -184,8 +186,6 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   void SetValidationMessageClientForTesting(ValidationMessageClient*);
 
   ScrollingCoordinator* GetScrollingCoordinator();
-
-  DOMRectList* NonFastScrollableRectsForTesting(const LocalFrame*);
 
   Settings& GetSettings() const { return *settings_; }
 
@@ -227,15 +227,12 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   // Pausing is used to implement the "Optionally, pause while waiting for
   // the user to acknowledge the message" step of simple dialog processing:
-  // https://html.spec.whatwg.org/multipage/webappapis.html#simple-dialogs
+  // https://html.spec.whatwg.org/C/#simple-dialogs
   //
-  // Per https://html.spec.whatwg.org/multipage/webappapis.html#pause, no loads
+  // Per https://html.spec.whatwg.org/C/#pause, no loads
   // are allowed to start/continue in this state, and all background processing
   // is also paused.
   bool Paused() const { return paused_; }
-  // This function is public to be used for suspending/resuming Page's tasks.
-  // Refer to |WebContentImpl::PausePageScheduledTasks| and
-  // http://crbug.com/822564 for more details.
   void SetPaused(bool);
 
   void SetPageScaleFactor(float);
@@ -257,8 +254,7 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   static void AllVisitedStateChanged(bool invalidate_visited_link_hashes);
   static void VisitedStateChanged(LinkHash visited_hash);
 
-  void SetVisibilityState(mojom::PageVisibilityState, bool);
-  mojom::PageVisibilityState VisibilityState() const;
+  void SetIsHidden(bool hidden, bool is_initial_state);
   bool IsPageVisible() const;
 
   PageLifecycleState LifecycleState() const;
@@ -293,7 +289,9 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   void Trace(blink::Visitor*) override;
 
-  void LayerTreeViewInitialized(WebLayerTreeView&, LocalFrameView*);
+  void LayerTreeViewInitialized(WebLayerTreeView&,
+                                cc::AnimationHost&,
+                                LocalFrameView*);
   void WillCloseLayerTreeView(WebLayerTreeView&, LocalFrameView*);
 
   void WillBeDestroyed();
@@ -314,16 +312,11 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   int32_t AutoplayFlags() const;
 
-  void SetPageOverlayColor(SkColor);
-
-  void UpdatePageColorOverlay();
-
-  void PaintPageColorOverlay();
+  void SetInsidePortal(bool inside_portal);
+  bool InsidePortal() const;
 
  private:
   friend class ScopedPagePauser;
-
-  explicit Page(PageClients&);
 
   void InitGroup();
 
@@ -366,12 +359,11 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   const Member<VisualViewport> visual_viewport_;
   const Member<OverscrollController> overscroll_controller_;
   const Member<LinkHighlights> link_highlights_;
+  Member<SpatialNavigationController> spatial_navigation_controller_;
 
   Member<PluginData> plugin_data_;
 
   Member<ValidationMessageClient> validation_message_client_;
-
-  std::unique_ptr<PageOverlay> page_color_overlay_;
 
   Deprecation deprecation_;
   HostsUsingFeatures hosts_using_features_;
@@ -390,7 +382,7 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   float device_scale_factor_;
 
-  mojom::PageVisibilityState visibility_state_;
+  bool is_hidden_;
 
   PageLifecycleState page_lifecycle_state_;
 
@@ -412,6 +404,9 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   std::unique_ptr<PageScheduler> page_scheduler_;
 
   int32_t autoplay_flags_;
+
+  // Accessed by frames to determine whether to expose the PortalHost object.
+  bool inside_portal_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(Page);
 };

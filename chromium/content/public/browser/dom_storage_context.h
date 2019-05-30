@@ -10,28 +10,28 @@
 
 #include "base/callback.h"
 
-class GURL;
+namespace url {
+class Origin;
+}
 
 namespace content {
 
 class BrowserContext;
-struct LocalStorageUsageInfo;
+struct StorageUsageInfo;
 class SessionStorageNamespace;
 struct SessionStorageUsageInfo;
 
 // Represents the per-BrowserContext Local Storage data.
 class DOMStorageContext {
  public:
-  typedef base::Callback<
-      void(const std::vector<LocalStorageUsageInfo>&)>
-          GetLocalStorageUsageCallback;
+  using GetLocalStorageUsageCallback =
+      base::OnceCallback<void(const std::vector<StorageUsageInfo>&)>;
 
-  typedef base::OnceCallback<void(const std::vector<SessionStorageUsageInfo>&)>
-      GetSessionStorageUsageCallback;
+  using GetSessionStorageUsageCallback =
+      base::OnceCallback<void(const std::vector<SessionStorageUsageInfo>&)>;
 
   // Returns a collection of origins using local storage to the given callback.
-  virtual void GetLocalStorageUsage(
-      const GetLocalStorageUsageCallback& callback) = 0;
+  virtual void GetLocalStorageUsage(GetLocalStorageUsageCallback callback) = 0;
 
   // Returns a collection of origins using session storage to the given
   // callback.
@@ -41,12 +41,17 @@ class DOMStorageContext {
   // Deletes the local storage for the origin of |origin_url|. |callback| is
   // called when the deletion is sent to the database and GetLocalStorageUsage()
   // will not return entries for |origin_url| anymore.
-  virtual void DeleteLocalStorage(const GURL& origin_url,
+  virtual void DeleteLocalStorage(const url::Origin& origin,
                                   base::OnceClosure callback) = 0;
 
+  // Removes traces of deleted data from the local storage backend.
+  virtual void PerformLocalStorageCleanup(base::OnceClosure callback) = 0;
+
   // Deletes the session storage data identified by |usage_info|.
-  virtual void DeleteSessionStorage(
-      const SessionStorageUsageInfo& usage_info) = 0;
+  virtual void DeleteSessionStorage(const SessionStorageUsageInfo& usage_info,
+                                    base::OnceClosure callback) = 0;
+
+  virtual void PerformSessionStorageCleanup(base::OnceClosure callback) = 0;
 
   // If this is called, sessionStorage data will be stored on disk, and can be
   // restored after a browser restart (with RecreateSessionStorage). This

@@ -39,24 +39,25 @@ class ShillPropertyObserver;
 // (including once to set their initial state after Init() gets called).
 // It also observes Shill.Service for all services in Manager.ServiceWatchList.
 // This class must not outlive the ShillManagerClient instance.
-class CHROMEOS_EXPORT ShillPropertyHandler
+class COMPONENT_EXPORT(CHROMEOS_NETWORK) ShillPropertyHandler
     : public ShillPropertyChangedObserver,
       public base::SupportsWeakPtr<ShillPropertyHandler> {
  public:
   typedef std::map<std::string, std::unique_ptr<ShillPropertyObserver>>
       ShillPropertyObserverMap;
 
-  class CHROMEOS_EXPORT Listener {
+  class COMPONENT_EXPORT(CHROMEOS_NETWORK) Listener {
    public:
     // Called when the entries in a managed list have changed.
     virtual void UpdateManagedList(ManagedState::ManagedType type,
                                    const base::ListValue& entries) = 0;
 
     // Called when the properties for a managed state have changed.
+    // |properties| is expected to be of type DICTIONARY.
     virtual void UpdateManagedStateProperties(
         ManagedState::ManagedType type,
         const std::string& path,
-        const base::DictionaryValue& properties) = 0;
+        const base::Value& properties) = 0;
 
     // Called when the list of profiles changes.
     virtual void ProfileListChanged() = 0;
@@ -74,11 +75,10 @@ class CHROMEOS_EXPORT ShillPropertyHandler
         const base::Value& value) = 0;
 
     // Called when a watched network or device IPConfig property changes.
-    virtual void UpdateIPConfigProperties(
-        ManagedState::ManagedType type,
-        const std::string& path,
-        const std::string& ip_config_path,
-        const base::DictionaryValue& properties) = 0;
+    virtual void UpdateIPConfigProperties(ManagedState::ManagedType type,
+                                          const std::string& path,
+                                          const std::string& ip_config_path,
+                                          const base::Value& properties) = 0;
 
     // Called when the list of devices with portal check enabled changes.
     virtual void CheckPortalListChanged(
@@ -150,6 +150,9 @@ class CHROMEOS_EXPORT ShillPropertyHandler
   void SetNetworkThrottlingStatus(bool enabled,
                                   uint32_t upload_rate_kbits,
                                   uint32_t download_rate_kbits);
+
+  // Sets Fast Transition status.
+  void SetFastTransitionStatus(bool enabled);
 
   // Requests an immediate network scan for |type|.
   void RequestScanByType(const std::string& type) const;

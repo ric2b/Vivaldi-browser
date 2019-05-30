@@ -12,9 +12,11 @@
 #include "build/build_config.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "content/public/browser/global_request_id.h"
+#include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/common/referrer.h"
+#include "content/public/common/was_activated_option.h"
 #include "services/network/public/cpp/resource_request_body.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/base/page_transition_types.h"
@@ -78,6 +80,9 @@ struct NavigateParams {
   // The URL/referrer to be loaded. Ignored if |contents_to_insert| is non-NULL.
   GURL url;
   content::Referrer referrer;
+
+  // The origin of the initiator of the navigation.
+  base::Optional<url::Origin> initiator_origin;
 
   // The frame name to be used for the main frame.
   std::string frame_name;
@@ -255,6 +260,27 @@ struct NavigateParams {
   // Indicates that the navigation should happen in an pwa window if
   // possible, i.e. if the is a PWA installed for the target URL.
   bool open_pwa_window_if_possible = false;
+
+  // The time when the input which led to the navigation occurred. Currently
+  // only set when a link is clicked or the navigation takes place from the
+  // desktop omnibox.
+  base::TimeTicks input_start;
+
+  // Indicates that the new page should have a propagated user activation.
+  // This should be used when we want to pass an activation that occurred
+  // outside of the page and pass it to the page as if it happened on a prior
+  // page. For example, if the assistant opens a page we should treat the
+  // user's interaction with the assistant as a previous user activation.
+  content::WasActivatedOption was_activated =
+      content::WasActivatedOption::kUnknown;
+
+  // If this navigation was initiated from a link that specified the
+  // hrefTranslate attribute, this contains the attribute's value (a BCP47
+  // language code). Empty otherwise.
+  std::string href_translate;
+
+  // Indicates the reload type of this navigation.
+  content::ReloadType reload_type = content::ReloadType::NONE;
 
  private:
   NavigateParams();

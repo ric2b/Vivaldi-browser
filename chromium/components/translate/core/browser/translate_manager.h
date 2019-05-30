@@ -95,6 +95,15 @@ class TranslateManager {
   static std::string GetAutoTargetLanguage(const std::string& original_language,
                                            TranslatePrefs* translate_prefs);
 
+  // Returns the target language for a manually triggered translation: the
+  // output of GetTargetLanguage if the page hasn't been translated yet,
+  // otherwise the page's current language.
+  static std::string GetManualTargetLanguage(
+      const std::string& source_code,
+      const LanguageState& language_state,
+      translate::TranslatePrefs* prefs,
+      language::LanguageModel* language_model);
+
   // Translates the page contents from |source_lang| to |target_lang|.
   // The actual translation might be performed asynchronously if the translate
   // script is not yet available.
@@ -104,6 +113,13 @@ class TranslateManager {
 
   // Starts the translation process for the page in the |page_lang| language.
   void InitiateTranslation(const std::string& page_lang);
+
+  // Initiate a manually triggered translation process for the current page.
+  // Collect source and target languages, and show translation UI.
+  void InitiateManualTranslation();
+
+  // Returns true iff the current page could be manually translated.
+  bool CanManuallyTranslate();
 
   // Shows the after translate or error infobar depending on the details.
   void PageTranslated(const std::string& source_lang,
@@ -155,8 +171,13 @@ class TranslateManager {
   bool ShouldSuppressBubbleUI(bool triggered_from_menu,
                               const std::string& source_language);
 
+  // Sets target language.
+  void SetPredefinedTargetLanguage(const std::string& language_code);
+
  private:
   friend class translate::testing::TranslateManagerTest;
+
+  struct TranslateTriggerDecision;
 
   // Sends a translation request to the TranslateDriver.
   void DoTranslatePage(const std::string& translate_script,
@@ -180,6 +201,77 @@ class TranslateManager {
 
   void AddTargetLanguageToAcceptLanguages(
       const std::string& target_language_code);
+
+  // Creates a TranslateTriggerDecision and filters out possible outcomes based
+  // on the current state. Returns a decision objects ready to be used to
+  // trigger behavior and record metrics.
+  const TranslateTriggerDecision ComputePossibleOutcomes(
+      TranslatePrefs* translate_prefs,
+      const std::string& page_language_code,
+      const std::string& target_lang);
+
+  // Determines whether translation is even possible (connected to the internet,
+  // source and target languages don't match, etc) and mutates |decision| based
+  // on the result.
+  void FilterIsTranslatePossible(TranslateTriggerDecision* decision,
+                                 TranslatePrefs* translate_prefs,
+                                 const std::string& page_language_code,
+                                 const std::string& target_lang);
+
+  // Determines whether auto-translate is a possible outcome, and mutates
+  // |decision| accordingly.
+  void FilterAutoTranslate(TranslateTriggerDecision* decision,
+                           TranslatePrefs* translate_prefs,
+                           const std::string& page_language_code);
+
+  // Determines whether user prefs prohibit translations for this specific
+  // navigation. For example, a user can select "never translate this language".
+  // Mutates |decision| accordingly.
+  void FilterForUserPrefs(TranslateTriggerDecision* decision,
+                          TranslatePrefs* translate_prefs,
+                          const std::string& page_language_code);
+
+  // Determines if either auto-translation or showing the UI is supported for
+  // the current navigation's hrefTranslate attribute. Writes the results to
+  // |decision|.
+  void FilterForHrefTranslate(TranslateTriggerDecision* decision,
+                              TranslatePrefs* translate_prefs,
+                              const std::string& page_language_code);
+
+  // Determines if showing the UI is supported for the predefined target
+  // language which was set via SetPredefinedTargetLanguage call.
+  // Writes the results to |decision|.
+  void FilterForPredefinedTarget(TranslateTriggerDecision* decision,
+                                 TranslatePrefs* translate_prefs,
+                                 const std::string& page_language_code);
+
+  // Check whether there is specified target, the source and
+  // the target are both supported, and the source and target don't match.
+  bool IsTranslatableLanguagePair(const std::string& page_language_code,
+                                  const std::string& target_language_code);
+
+  // Enables or disables the translate omnibox icon depending on |decision|. The
+  // icon is always shown if translate UI is shown, auto-translation happens, or
+  // the UI is suppressed by ranker.
+  void MaybeShowOmniboxIcon(const TranslateTriggerDecision& decision);
+
+  // Shows the UI or auto-translates based on the state of |decision|. Returns
+  // true if UI was shown, false otherwise.
+  bool MaterializeDecision(const TranslateTriggerDecision& decision,
+                           TranslatePrefs* translate_prefs,
+                           const std::string& page_language_code,
+                           const std::string target_lang);
+
+  // Records all UMA metrics related to the current |decision|.
+  void RecordDecisionMetrics(const TranslateTriggerDecision& decision,
+                             const std::string& page_language_code,
+                             bool ui_shown);
+
+  // Records the RankerEvent associated with the current |decision|.
+  void RecordDecisionRankerEvent(const TranslateTriggerDecision& decision,
+                                 TranslatePrefs* translate_prefs,
+                                 const std::string& page_language_code,
+                                 const std::string& target_lang);
 
   // Sequence number of the current page.
   int page_seq_no_;

@@ -43,16 +43,19 @@ PendingConnectionManagerImpl::Factory::~Factory() = default;
 std::unique_ptr<PendingConnectionManager>
 PendingConnectionManagerImpl::Factory::BuildInstance(
     Delegate* delegate,
-    BleConnectionManager* ble_connection_manager) {
-  return base::WrapUnique(
-      new PendingConnectionManagerImpl(delegate, ble_connection_manager));
+    BleConnectionManager* ble_connection_manager,
+    scoped_refptr<device::BluetoothAdapter> bluetooth_adapter) {
+  return base::WrapUnique(new PendingConnectionManagerImpl(
+      delegate, ble_connection_manager, bluetooth_adapter));
 }
 
 PendingConnectionManagerImpl::PendingConnectionManagerImpl(
     Delegate* delegate,
-    BleConnectionManager* ble_connection_manager)
+    BleConnectionManager* ble_connection_manager,
+    scoped_refptr<device::BluetoothAdapter> bluetooth_adapter)
     : PendingConnectionManager(delegate),
-      ble_connection_manager_(ble_connection_manager) {}
+      ble_connection_manager_(ble_connection_manager),
+      bluetooth_adapter_(bluetooth_adapter) {}
 
 PendingConnectionManagerImpl::~PendingConnectionManagerImpl() = default;
 
@@ -65,12 +68,13 @@ void PendingConnectionManagerImpl::HandleConnectionRequest(
 
   // If the client has canceled the request, it does not need to be processed.
   if (!client_connection_parameters->IsClientWaitingForResponse()) {
-    PA_LOG(INFO) << "PendingConnectionManagerImpl::HandleConnectionRequest(): "
-                 << "Request was canceled by the client before being passed to "
-                 << "PendingConnectionManager; ignoring. Details: "
-                 << connection_attempt_details
-                 << ", Parameters: " << *client_connection_parameters
-                 << ", Priority: " << connection_priority;
+    PA_LOG(VERBOSE)
+        << "PendingConnectionManagerImpl::HandleConnectionRequest(): "
+        << "Request was canceled by the client before being passed to "
+        << "PendingConnectionManager; ignoring. Details: "
+        << connection_attempt_details
+        << ", Parameters: " << *client_connection_parameters
+        << ", Priority: " << connection_priority;
     return;
   }
 
@@ -174,7 +178,7 @@ void PendingConnectionManagerImpl::HandleBleInitiatorRequest(
   bool success = connection_attempt->AddPendingConnectionRequest(
       PendingBleInitiatorConnectionRequest::Factory::Get()->BuildInstance(
           std::move(client_connection_parameters), connection_priority,
-          connection_attempt.get() /* delegate */));
+          connection_attempt.get() /* delegate */, bluetooth_adapter_));
 
   if (!success) {
     PA_LOG(ERROR) << "PendingConnectionManagerImpl::"
@@ -207,7 +211,7 @@ void PendingConnectionManagerImpl::HandleBleListenerRequest(
   bool success = connection_attempt->AddPendingConnectionRequest(
       PendingBleListenerConnectionRequest::Factory::Get()->BuildInstance(
           std::move(client_connection_parameters), connection_priority,
-          connection_attempt.get() /* delegate */));
+          connection_attempt.get() /* delegate */, bluetooth_adapter_));
 
   if (!success) {
     PA_LOG(ERROR) << "PendingConnectionManagerImpl::"

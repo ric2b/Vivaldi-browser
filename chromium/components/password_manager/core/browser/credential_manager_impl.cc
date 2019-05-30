@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/metrics/user_metrics.h"
 #include "components/password_manager/core/browser/credential_manager_logger.h"
 #include "components/password_manager/core/browser/form_fetcher_impl.h"
@@ -45,13 +46,13 @@ void CredentialManagerImpl::Store(const CredentialInfo& credential,
   // Send acknowledge response back.
   std::move(callback).Run();
 
-  if (!client_->IsSavingAndFillingEnabledForCurrentPage() ||
+  const GURL origin = GetLastCommittedURL();
+  if (!client_->IsSavingAndFillingEnabled(origin) ||
       !client_->OnCredentialManagerUsed())
     return;
 
   client_->NotifyStorePasswordCalled();
 
-  GURL origin = GetLastCommittedURL().GetOrigin();
   std::unique_ptr<autofill::PasswordForm> form(
       CreatePasswordFormFromCredentialInfo(credential, origin));
 
@@ -78,7 +79,7 @@ void CredentialManagerImpl::PreventSilentAccess(
   std::move(callback).Run();
 
   PasswordStore* store = GetPasswordStore();
-  if (!store || !client_->IsSavingAndFillingEnabledForCurrentPage() ||
+  if (!store || !client_->IsSavingAndFillingEnabled(GetLastCommittedURL()) ||
       !client_->OnCredentialManagerUsed())
     return;
 
@@ -113,7 +114,7 @@ void CredentialManagerImpl::Get(CredentialMediationRequirement mediation,
 
   // Return an empty credential if the current page has TLS errors, or if the
   // page is being prerendered.
-  if (!client_->IsFillingEnabledForCurrentPage() ||
+  if (!client_->IsFillingEnabled(GetLastCommittedURL()) ||
       !client_->OnCredentialManagerUsed()) {
     std::move(callback).Run(CredentialManagerError::SUCCESS, CredentialInfo());
     LogCredentialManagerGetResult(metrics_util::CREDENTIAL_MANAGER_GET_NONE,
@@ -177,7 +178,7 @@ void CredentialManagerImpl::SendPasswordForm(
   CredentialInfo info;
   if (form) {
     password_manager::CredentialType type_to_return =
-        form->federation_origin.unique()
+        form->federation_origin.opaque()
             ? CredentialType::CREDENTIAL_TYPE_PASSWORD
             : CredentialType::CREDENTIAL_TYPE_FEDERATED;
     info = CredentialInfo(*form, type_to_return);
@@ -216,8 +217,8 @@ void CredentialManagerImpl::DoneRequiringUserMediation() {
 
 void CredentialManagerImpl::OnProvisionalSaveComplete() {
   DCHECK(form_manager_);
-  DCHECK(client_->IsSavingAndFillingEnabledForCurrentPage());
   const autofill::PasswordForm& form = form_manager_->GetPendingCredentials();
+  DCHECK(client_->IsSavingAndFillingEnabled(form.origin));
 
   if (form_manager_->IsPendingCredentialsPublicSuffixMatch()) {
     // Having a credential with a PSL match implies there is no credential with
@@ -227,7 +228,7 @@ void CredentialManagerImpl::OnProvisionalSaveComplete() {
     return;
   }
 
-  if (!form.federation_origin.unique()) {
+  if (!form.federation_origin.opaque()) {
     // If this is a federated credential, check it against the federated matches
     // produced by the PasswordFormManager. If a match is found, update it and
     // return.

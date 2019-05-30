@@ -9,12 +9,14 @@
 
 #include <cmath>
 #include <memory>
+#include <unordered_map>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/values.h"
 #include "content/renderer/pepper/resource_converter.h"
 #include "ppapi/c/pp_bool.h"
@@ -74,19 +76,20 @@ class MockResourceConverter : public content::ResourceConverter {
 };
 
 // Maps PP_Var IDs to the V8 value handle they correspond to.
-typedef base::hash_map<int64_t, v8::Local<v8::Value> > VarHandleMap;
+typedef std::unordered_map<int64_t, v8::Local<v8::Value>> VarHandleMap;
 
 bool Equals(const PP_Var& var,
             v8::Local<v8::Value> val,
             VarHandleMap* visited_ids) {
   if (ppapi::VarTracker::IsVarTypeRefcounted(var.type)) {
-    VarHandleMap::iterator it = visited_ids->find(var.value.as_id);
+    auto it = visited_ids->find(var.value.as_id);
     if (it != visited_ids->end())
       return it->second == val;
     (*visited_ids)[var.value.as_id] = val;
   }
 
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
   if (val->IsUndefined()) {
     return var.type == PP_VARTYPE_UNDEFINED;
   } else if (val->IsNull()) {
@@ -96,10 +99,10 @@ bool Equals(const PP_Var& var,
            PP_FromBool(val->ToBoolean(isolate)->Value()) == var.value.as_bool;
   } else if (val->IsInt32()) {
     return var.type == PP_VARTYPE_INT32 &&
-           val->ToInt32(isolate)->Value() == var.value.as_int;
+           val.As<v8::Int32>()->Value() == var.value.as_int;
   } else if (val->IsNumber() || val->IsNumberObject()) {
     return var.type == PP_VARTYPE_DOUBLE &&
-           fabs(val->ToNumber(isolate)->Value() - var.value.as_double) <=
+           fabs(val->NumberValue(context).ToChecked() - var.value.as_double) <=
                1.0e-4;
   } else if (val->IsString() || val->IsStringObject()) {
     if (var.type != PP_VARTYPE_STRING)
@@ -117,7 +120,8 @@ bool Equals(const PP_Var& var,
     if (v8_array->Length() != array_var->elements().size())
       return false;
     for (uint32_t i = 0; i < v8_array->Length(); ++i) {
-      v8::Local<v8::Value> child_v8 = v8_array->Get(i);
+      v8::Local<v8::Value> child_v8 =
+          v8_array->Get(context, i).ToLocalChecked();
       if (!Equals(array_var->elements()[i].get(), child_v8, visited_ids))
         return false;
     }
@@ -133,15 +137,18 @@ bool Equals(const PP_Var& var,
         return false;
       DictionaryVar* dict_var = DictionaryVar::FromPPVar(var);
       DCHECK(dict_var);
-      v8::Local<v8::Array> property_names(v8_object->GetOwnPropertyNames());
+      v8::Local<v8::Array> property_names(
+          v8_object->GetOwnPropertyNames(context).ToLocalChecked());
       if (property_names->Length() != dict_var->key_value_map().size())
         return false;
       for (uint32_t i = 0; i < property_names->Length(); ++i) {
-        v8::Local<v8::Value> key(property_names->Get(i));
+        v8::Local<v8::Value> key(
+            property_names->Get(context, i).ToLocalChecked());
 
         if (!key->IsString() && !key->IsNumber())
           return false;
-        v8::Local<v8::Value> child_v8 = v8_object->Get(key);
+        v8::Local<v8::Value> child_v8 =
+            v8_object->Get(context, key).ToLocalChecked();
 
         v8::String::Utf8Value name_utf8(isolate, key);
         ScopedPPVar release_key(ScopedPPVar::PassRef(),
@@ -236,7 +243,8 @@ class V8VarConverterTest : public testing::Test {
   std::unique_ptr<V8VarConverter> converter_;
 
  private:
-  base::MessageLoop message_loop_;  // Required to receive callbacks.
+  base::test::ScopedTaskEnvironment
+      task_environment_;  // Required to receive callbacks.
 
   TestGlobals globals_;
 };
@@ -374,16 +382,20 @@ TEST_F(V8VarConverterTest, Cycles) {
 
     // Array <-> dictionary cycle.
     std::string key = "1";
-    object->Set(
-        v8::String::NewFromUtf8(
-            isolate_, key.c_str(), v8::String::kNormalString, key.length()),
-        array);
-    array->Set(0, object);
+    object
+        ->Set(context,
+              v8::String::NewFromUtf8(isolate_, key.c_str(),
+                                      v8::NewStringType::kInternalized,
+                                      key.length())
+                  .ToLocalChecked(),
+              array)
+        .ToChecked();
+    array->Set(context, 0, object).ToChecked();
 
     ASSERT_FALSE(FromV8ValueSync(object, context, &var_result));
 
     // Array with self reference.
-    array->Set(0, array);
+    array->Set(context, 0, array).Check();
     ASSERT_FALSE(FromV8ValueSync(array, context, &var_result));
   }
 }
@@ -419,7 +431,10 @@ TEST_F(V8VarConverterTest, StrangeDictionaryKeyTest) {
         "})();";
 
     v8::Local<v8::Script> script(
-        v8::Script::Compile(context, v8::String::NewFromUtf8(isolate_, source))
+        v8::Script::Compile(context,
+                            v8::String::NewFromUtf8(isolate_, source,
+                                                    v8::NewStringType::kNormal)
+                                .ToLocalChecked())
             .ToLocalChecked());
     v8::Local<v8::Object> object =
         script->Run(context).ToLocalChecked().As<v8::Object>();

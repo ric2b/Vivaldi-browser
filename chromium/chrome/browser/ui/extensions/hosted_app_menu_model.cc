@@ -14,8 +14,6 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
-#include "extensions/browser/extension_system.h"
-#include "extensions/browser/management_policy.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -39,7 +37,8 @@ void HostedAppMenuModel::Build() {
                        ->tab_strip_model()
                        ->GetActiveWebContents()
                        ->GetVisibleURL()));
-  SetMinorIcon(app_info_index, browser()->toolbar_model()->GetVectorIcon());
+  SetMinorIcon(app_info_index,
+               browser()->location_bar_model()->GetVectorIcon());
 
   AddSeparator(ui::NORMAL_SEPARATOR);
   AddItemWithStringId(IDC_COPY_URL, IDS_COPY_URL);
@@ -49,12 +48,14 @@ void HostedAppMenuModel::Build() {
 // option in the app menu.
 #if !defined(OS_CHROMEOS)
   DCHECK(browser()->hosted_app_controller());
-  AddSeparator(ui::NORMAL_SEPARATOR);
-  AddItem(kUninstallAppCommandId,
-          l10n_util::GetStringFUTF16(
-              IDS_UNINSTALL_FROM_OS_LAUNCH_SURFACE,
-              base::UTF8ToUTF16(
-                  browser()->hosted_app_controller()->GetAppShortName())));
+  if (browser()->hosted_app_controller()->IsInstalled()) {
+    AddSeparator(ui::NORMAL_SEPARATOR);
+    AddItem(kUninstallAppCommandId,
+            l10n_util::GetStringFUTF16(
+                IDS_UNINSTALL_FROM_OS_LAUNCH_SURFACE,
+                base::UTF8ToUTF16(
+                    browser()->hosted_app_controller()->GetAppShortName())));
+  }
 #endif  // !defined(OS_CHROMEOS)
   AddSeparator(ui::LOWER_SEPARATOR);
 
@@ -69,13 +70,9 @@ void HostedAppMenuModel::Build() {
 }
 
 bool HostedAppMenuModel::IsCommandIdEnabled(int command_id) const {
-  if (command_id == kUninstallAppCommandId) {
-    return extensions::ExtensionSystem::Get(browser()->profile())
-        ->management_policy()
-        ->UserMayModifySettings(
-            browser()->hosted_app_controller()->GetExtension(), nullptr);
-  }
-  return AppMenuModel::IsCommandIdEnabled(command_id);
+  return command_id == kUninstallAppCommandId
+             ? browser()->hosted_app_controller()->CanUninstall()
+             : AppMenuModel::IsCommandIdEnabled(command_id);
 }
 
 void HostedAppMenuModel::ExecuteCommand(int command_id, int event_flags) {

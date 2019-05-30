@@ -41,7 +41,6 @@ class KeepAliveScheduler : public ActiveHost::Observer,
       device_sync::DeviceSyncClient* device_sync_client,
       secure_channel::SecureChannelClient* secure_channel_client,
       ActiveHost* active_host,
-      BleConnectionManager* connection_manager,
       HostScanCache* host_scan_cache,
       DeviceIdTetherNetworkGuidMap* device_id_tether_network_guid_map);
   virtual ~KeepAliveScheduler();
@@ -52,7 +51,7 @@ class KeepAliveScheduler : public ActiveHost::Observer,
 
   // KeepAliveOperation::Observer:
   void OnOperationFinished(
-      cryptauth::RemoteDeviceRef remote_device,
+      multidevice::RemoteDeviceRef remote_device,
       std::unique_ptr<DeviceStatus> device_status) override;
 
  private:
@@ -62,7 +61,6 @@ class KeepAliveScheduler : public ActiveHost::Observer,
       device_sync::DeviceSyncClient* device_sync_client,
       secure_channel::SecureChannelClient* secure_channel_client,
       ActiveHost* active_host,
-      BleConnectionManager* connection_manager,
       HostScanCache* host_scan_cache,
       DeviceIdTetherNetworkGuidMap* device_id_tether_network_guid_map,
       std::unique_ptr<base::RepeatingTimer> timer);
@@ -74,12 +72,11 @@ class KeepAliveScheduler : public ActiveHost::Observer,
   device_sync::DeviceSyncClient* device_sync_client_;
   secure_channel::SecureChannelClient* secure_channel_client_;
   ActiveHost* active_host_;
-  BleConnectionManager* connection_manager_;
   HostScanCache* host_scan_cache_;
   DeviceIdTetherNetworkGuidMap* device_id_tether_network_guid_map_;
 
   std::unique_ptr<base::RepeatingTimer> timer_;
-  base::Optional<cryptauth::RemoteDeviceRef> active_host_device_;
+  base::Optional<multidevice::RemoteDeviceRef> active_host_device_;
   std::unique_ptr<KeepAliveOperation> keep_alive_operation_;
 
   base::WeakPtrFactory<KeepAliveScheduler> weak_ptr_factory_;

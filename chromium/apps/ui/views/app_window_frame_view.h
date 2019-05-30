@@ -10,7 +10,6 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/path.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/window/non_client_view.h"
 
@@ -60,9 +59,7 @@ class AppWindowFrameView : public views::NonClientFrameView,
   void SetResizeSizes(int resize_inside_bounds_size,
                       int resize_outside_bounds_size,
                       int resize_area_corner_size);
-  int resize_inside_bounds_size() const {
-    return resize_inside_bounds_size_;
-  };
+  int resize_inside_bounds_size() const { return resize_inside_bounds_size_; }
 
  private:
   // views::NonClientFrameView implementation.
@@ -70,7 +67,7 @@ class AppWindowFrameView : public views::NonClientFrameView,
   gfx::Rect GetWindowBoundsForClientBounds(
       const gfx::Rect& client_bounds) const override;
   int NonClientHitTest(const gfx::Point& point) override;
-  void GetWindowMask(const gfx::Size& size, gfx::Path* window_mask) override;
+  void GetWindowMask(const gfx::Size& size, SkPath* window_mask) override;
   void ResetWindowControls() override {}
   void UpdateWindowIcon() override {}
   void UpdateWindowTitle() override {}

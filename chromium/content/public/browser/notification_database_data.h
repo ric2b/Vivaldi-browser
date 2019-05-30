@@ -11,7 +11,8 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
-#include "content/public/common/platform_notification_data.h"
+#include "third_party/blink/public/common/notifications/notification_resources.h"
+#include "third_party/blink/public/common/notifications/platform_notification_data.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -51,7 +52,15 @@ struct CONTENT_EXPORT NotificationDatabaseData {
   int64_t service_worker_registration_id = 0;
 
   // Platform data of the notification that's being stored.
-  PlatformNotificationData notification_data;
+  blink::PlatformNotificationData notification_data;
+
+  // Flag if this notification has been triggered by its |showTrigger|.
+  bool has_triggered = false;
+
+  // Notification resources to allow showing scheduled notifications. This is
+  // only used to store resources in the NotificationDatabase and is not
+  // deserialized when reading from the database.
+  base::Optional<blink::NotificationResources> notification_resources;
 
   // Boolean for if this current notification is replacing an existing
   // notification.

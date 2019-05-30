@@ -93,7 +93,7 @@ typedef HistogramBase::Count Count;
 typedef HistogramBase::Sample Sample;
 
 // static
-const uint32_t Histogram::kBucketCount_MAX = 16384u;
+const uint32_t Histogram::kBucketCount_MAX = 10002u;
 
 class Histogram::Factory {
  public:
@@ -166,6 +166,7 @@ HistogramBase* Histogram::Factory::Build() {
       return DummyHistogram::GetInstance();
     // To avoid racy destruction at shutdown, the following will be leaked.
     const BucketRanges* created_ranges = CreateRanges();
+
     const BucketRanges* registered_ranges =
         StatisticsRecorder::RegisterOrDeleteDuplicateRanges(created_ranges);
 
@@ -252,7 +253,7 @@ HistogramBase* Histogram::FactoryGet(const std::string& name,
                                      int32_t flags) {
   bool valid_arguments =
       InspectConstructionArguments(name, &minimum, &maximum, &bucket_count);
-  DCHECK(valid_arguments);
+  DCHECK(valid_arguments) << name;
 
   return Factory(name, minimum, maximum, bucket_count, flags).Build();
 }
@@ -336,9 +337,11 @@ void Histogram::InitializeBucketRanges(Sample minimum,
   Sample current = minimum;
   ranges->set_range(bucket_index, current);
   size_t bucket_count = ranges->bucket_count();
+
   while (bucket_count > ++bucket_index) {
     double log_current;
     log_current = log(static_cast<double>(current));
+    debug::Alias(&log_current);
     // Calculate the count'th root of the range.
     log_ratio = (log_max - log_current) / (bucket_count - bucket_index);
     // See where the next bucket would start.
@@ -419,27 +422,60 @@ bool Histogram::InspectConstructionArguments(StringPiece name,
                                              Sample* minimum,
                                              Sample* maximum,
                                              uint32_t* bucket_count) {
+  bool check_okay = true;
+
+  // Checks below must be done after any min/max swap.
+  if (*minimum > *maximum) {
+    check_okay = false;
+    std::swap(*minimum, *maximum);
+  }
+
   // Defensive code for backward compatibility.
   if (*minimum < 1) {
     DVLOG(1) << "Histogram: " << name << " has bad minimum: " << *minimum;
     *minimum = 1;
+    if (*maximum < 1)
+      *maximum = 1;
   }
   if (*maximum >= kSampleType_MAX) {
     DVLOG(1) << "Histogram: " << name << " has bad maximum: " << *maximum;
     *maximum = kSampleType_MAX - 1;
   }
   if (*bucket_count >= kBucketCount_MAX) {
+    check_okay = false;
     DVLOG(1) << "Histogram: " << name << " has bad bucket_count: "
              << *bucket_count;
     *bucket_count = kBucketCount_MAX - 1;
   }
+  if (*bucket_count > 1002) {
+    UmaHistogramSparse("Histogram.TooManyBuckets.1000",
+                       static_cast<Sample>(HashMetricName(name)));
 
-  bool check_okay = true;
-
-  if (*minimum > *maximum) {
-    check_okay = false;
-    std::swap(*minimum, *maximum);
+    // TODO(bcwhite): Clean these up as bugs get fixed. Also look at injecting
+    // whitelist (using hashes) from a higher layer rather than hardcoding
+    // them here.
+    // Blink.UseCounter legitimately has more than 1000 entries in its enum.
+    // Arc.OOMKills: https://crbug.com/916757
+    // Autofill.FieldPredictionQuality.ByFieldType: https://crbug.com/916752
+    // Bluetooth.MacOS.Errors: https://crbug.com/916754
+    // BlinkGC.CommittedSize: https://crbug.com/916761
+    // PartitionAlloc.CommittedSize: https://crbug.com/916761
+    if (!name.starts_with("Blink.UseCounter") &&
+        !name.starts_with("Arc.OOMKills.") &&
+        !name.starts_with("Autofill.FieldPredictionQuality.ByFieldType.") &&
+        !name.starts_with("Bluetooth.MacOS.Errors.") &&
+        name != "BlinkGC.CommittedSize" &&
+        name != "PartitionAlloc.CommittedSize") {
+      // Assume it's a mistake and limit to 100 buckets, plus under and over.
+      // If the DCHECK doesn't alert the user then hopefully the small number
+      // will be obvious on the dashboard. If not, then it probably wasn't
+      // important.
+      *bucket_count = 102;
+      check_okay = false;
+    }
   }
+
+  // Ensure parameters are sane.
   if (*maximum == *minimum) {
     check_okay = false;
     *maximum = *minimum + 1;
@@ -447,13 +483,6 @@ bool Histogram::InspectConstructionArguments(StringPiece name,
   if (*bucket_count < 3) {
     check_okay = false;
     *bucket_count = 3;
-  }
-  // Very high bucket counts are wasteful. Use a sparse histogram instead.
-  // Value of 10002 equals a user-supplied value of 10k + 2 overflow buckets.
-  constexpr uint32_t kMaxBucketCount = 10002;
-  if (*bucket_count > kMaxBucketCount) {
-    check_okay = false;
-    *bucket_count = kMaxBucketCount;
   }
   if (*bucket_count > static_cast<uint32_t>(*maximum - *minimum + 2)) {
     check_okay = false;
@@ -919,9 +948,21 @@ HistogramBase* LinearHistogram::FactoryGetWithRangeDescription(
     uint32_t bucket_count,
     int32_t flags,
     const DescriptionPair descriptions[]) {
+  // Originally, histograms were required to have at least one sample value
+  // plus underflow and overflow buckets. For single-entry enumerations,
+  // that one value is usually zero (which IS the underflow bucket)
+  // resulting in a |maximum| value of 1 (the exclusive upper-bound) and only
+  // the two outlier buckets. Handle this by making max==2 and buckets==3.
+  // This usually won't have any cost since the single-value-optimization
+  // will be used until the count exceeds 16 bits.
+  if (maximum == 1 && bucket_count == 2) {
+    maximum = 2;
+    bucket_count = 3;
+  }
+
   bool valid_arguments = Histogram::InspectConstructionArguments(
       name, &minimum, &maximum, &bucket_count);
-  DCHECK(valid_arguments);
+  DCHECK(valid_arguments) << name;
 
   return Factory(name, minimum, maximum, bucket_count, flags, descriptions)
       .Build();
@@ -982,10 +1023,12 @@ void LinearHistogram::InitializeBucketRanges(Sample minimum,
   double min = minimum;
   double max = maximum;
   size_t bucket_count = ranges->bucket_count();
+
   for (size_t i = 1; i < bucket_count; ++i) {
     double linear_range =
         (min * (bucket_count - 1 - i) + max * (i - 1)) / (bucket_count - 2);
-    ranges->set_range(i, static_cast<Sample>(linear_range + 0.5));
+    uint32_t range = static_cast<Sample>(linear_range + 0.5);
+    ranges->set_range(i, range);
   }
   ranges->set_range(ranges->bucket_count(), HistogramBase::kSampleType_MAX);
   ranges->ResetChecksum();

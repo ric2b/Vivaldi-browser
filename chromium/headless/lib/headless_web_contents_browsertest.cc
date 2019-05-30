@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "base/base64.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
@@ -166,13 +166,8 @@ IN_PROC_BROWSER_TEST_F(HeadlessWebContentsTest, HandleSSLError) {
 }
 
 namespace {
-bool DecodePNG(std::string base64_data, SkBitmap* bitmap) {
-  std::string png_data;
-  if (!base::Base64Decode(base64_data, &png_data))
-    return false;
-  return gfx::PNGCodec::Decode(
-      reinterpret_cast<unsigned const char*>(png_data.data()), png_data.size(),
-      bitmap);
+bool DecodePNG(const protocol::Binary& png_data, SkBitmap* bitmap) {
+  return gfx::PNGCodec::Decode(png_data.data(), png_data.size(), bitmap);
 }
 }  // namespace
 
@@ -211,10 +206,10 @@ class HeadlessWebContentsScreenshotTest
 
   void OnScreenshotCaptured(
       std::unique_ptr<page::CaptureScreenshotResult> result) {
-    std::string base64 = result->GetData();
-    EXPECT_GT(base64.length(), 0U);
+    protocol::Binary png_data = result->GetData();
+    EXPECT_GT(png_data.size(), 0U);
     SkBitmap result_bitmap;
-    EXPECT_TRUE(DecodePNG(base64, &result_bitmap));
+    EXPECT_TRUE(DecodePNG(png_data, &result_bitmap));
 
     EXPECT_EQ(800, result_bitmap.width());
     EXPECT_EQ(600, result_bitmap.height());
@@ -228,9 +223,9 @@ class HeadlessWebContentsScreenshotTest
 HEADLESS_ASYNC_DEVTOOLED_TEST_P(HeadlessWebContentsScreenshotTest);
 
 // Instantiate test case for both software and gpu compositing modes.
-INSTANTIATE_TEST_CASE_P(HeadlessWebContentsScreenshotTests,
-                        HeadlessWebContentsScreenshotTest,
-                        ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(HeadlessWebContentsScreenshotTests,
+                         HeadlessWebContentsScreenshotTest,
+                         ::testing::Bool());
 
 // Regression test for crbug.com/832138.
 class HeadlessWebContentsScreenshotWindowPositionTest
@@ -264,9 +259,9 @@ HEADLESS_ASYNC_DEVTOOLED_TEST_P(
     HeadlessWebContentsScreenshotWindowPositionTest);
 
 // Instantiate test case for both software and gpu compositing modes.
-INSTANTIATE_TEST_CASE_P(HeadlessWebContentsScreenshotWindowPositionTests,
-                        HeadlessWebContentsScreenshotWindowPositionTest,
-                        ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(HeadlessWebContentsScreenshotWindowPositionTests,
+                         HeadlessWebContentsScreenshotWindowPositionTest,
+                         ::testing::Bool());
 
 #if BUILDFLAG(ENABLE_PRINTING)
 class HeadlessWebContentsPDFTest : public HeadlessAsyncDevTooledBrowserTest {
@@ -308,12 +303,9 @@ class HeadlessWebContentsPDFTest : public HeadlessAsyncDevTooledBrowserTest {
   }
 
   void OnPDFCreated(std::unique_ptr<page::PrintToPDFResult> result) {
-    std::string base64 = result->GetData();
-    EXPECT_GT(base64.length(), 0U);
-    std::string pdf_data;
-    EXPECT_TRUE(base::Base64Decode(base64, &pdf_data));
-
-    auto pdf_span = base::as_bytes(base::make_span(pdf_data));
+    protocol::Binary pdf_data = result->GetData();
+    EXPECT_GT(pdf_data.size(), 0U);
+    auto pdf_span = base::make_span(pdf_data.data(), pdf_data.size());
     int num_pages;
     EXPECT_TRUE(chrome_pdf::GetPDFDocInfo(pdf_span, &num_pages, nullptr));
     EXPECT_EQ(std::ceil(kDocHeight / kPaperHeight), num_pages);
@@ -472,7 +464,7 @@ class HeadlessWebContentsBeginFrameControlTest
 
     browser_devtools_client_->GetTarget()->GetExperimental()->CreateTarget(
         target::CreateTargetParams::Builder()
-            .SetUrl("about://blank")
+            .SetUrl("about:blank")
             .SetWidth(200)
             .SetHeight(200)
             .SetEnableBeginFrameControl(true)
@@ -641,44 +633,34 @@ class HeadlessWebContentsBeginFrameControlBasicTest
   }
 
   void OnNeedsBeginFrame() override {
-    // Try to capture a screenshot in first frame. This should fail because the
-    // surface doesn't exist yet.
     BeginFrame(true);
   }
 
   void OnFrameFinished(std::unique_ptr<headless_experimental::BeginFrameResult>
                            result) override {
     if (num_begin_frames_ == 1) {
-      // First BeginFrame should have caused damage.
+      // First BeginFrame should have caused damage and have a screenshot.
       EXPECT_TRUE(result->GetHasDamage());
-      // But the screenshot should have failed (see above).
-      EXPECT_FALSE(result->HasScreenshotData());
-    } else if (num_begin_frames_ == 2) {
-      // Expect a valid screenshot in second BeginFrame.
-      EXPECT_TRUE(result->GetHasDamage());
-      EXPECT_TRUE(result->HasScreenshotData());
-      if (result->HasScreenshotData()) {
-        std::string base64 = result->GetScreenshotData();
-        EXPECT_LT(0u, base64.length());
-        SkBitmap result_bitmap;
-        EXPECT_TRUE(DecodePNG(base64, &result_bitmap));
-
-        EXPECT_EQ(200, result_bitmap.width());
-        EXPECT_EQ(200, result_bitmap.height());
-        SkColor expected_color = SkColorSetRGB(0x00, 0x00, 0xff);
-        SkColor actual_color = result_bitmap.getColor(100, 100);
-        EXPECT_EQ(expected_color, actual_color);
-      }
+      ASSERT_TRUE(result->HasScreenshotData());
+      protocol::Binary png_data = result->GetScreenshotData();
+      EXPECT_LT(0u, png_data.size());
+      SkBitmap result_bitmap;
+      EXPECT_TRUE(DecodePNG(png_data, &result_bitmap));
+      EXPECT_EQ(200, result_bitmap.width());
+      EXPECT_EQ(200, result_bitmap.height());
+      SkColor expected_color = SkColorSetRGB(0x00, 0x00, 0xff);
+      SkColor actual_color = result_bitmap.getColor(100, 100);
+      EXPECT_EQ(expected_color, actual_color);
     } else {
-      DCHECK_EQ(3, num_begin_frames_);
-      // Can't guarantee that the last BeginFrame didn't have damage, but it
+      DCHECK_EQ(2, num_begin_frames_);
+      // Can't guarantee that the second BeginFrame didn't have damage, but it
       // should not have a screenshot.
       EXPECT_FALSE(result->HasScreenshotData());
     }
 
-    if (num_begin_frames_ < 3) {
-      // Capture a screenshot in second but not third BeginFrame.
-      BeginFrame(num_begin_frames_ == 1);
+    if (num_begin_frames_ < 2) {
+      // Don't capture a screenshot in the second BeginFrame.
+      BeginFrame(false);
     } else {
       // Post completion to avoid deleting the WebContents on the same callstack
       // as frame finished callback.
@@ -747,10 +729,10 @@ class HeadlessWebContentsBeginFrameControlViewportTest
     EXPECT_TRUE(result->GetHasDamage());
     EXPECT_TRUE(result->HasScreenshotData());
     if (result->HasScreenshotData()) {
-      std::string base64 = result->GetScreenshotData();
-      EXPECT_LT(0u, base64.length());
+      protocol::Binary png_data = result->GetScreenshotData();
+      EXPECT_LT(0u, png_data.size());
       SkBitmap result_bitmap;
-      EXPECT_TRUE(DecodePNG(base64, &result_bitmap));
+      EXPECT_TRUE(DecodePNG(png_data, &result_bitmap));
 
       EXPECT_EQ(300, result_bitmap.width());
       EXPECT_EQ(300, result_bitmap.height());

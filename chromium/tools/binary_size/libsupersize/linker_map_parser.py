@@ -1,11 +1,35 @@
+#!/usr/bin/env python
 # Copyright 2017 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+"""Parser for linker map files.
+
+The format of a linker map file depends on the linker that generates it. This
+file uses "coded linker name" to identify formats and variants:
+
+  'gold': The gold linker (usage is being deprecated by Chrome).
+  'lld_v0': LLD linker (no LTO), old format.
+  'lld-lto_v0': LLD linker with ThinLTO, old format.
+  'lld_v1': LLD linker (no LTO), new format.
+  'lld-lto_v1': LLD linker with ThinLTO, new format.
+
+The |linker_name| parameter in various functions must take one of the above
+coded linker name values.
+"""
+
+from __future__ import print_function
+
+import argparse
+import code
+import collections
+import itertools
 import logging
 import os
 import re
+import readline
 
+import demangle
 import models
 
 # About linker maps:
@@ -35,7 +59,7 @@ class MapFileParserGold(object):
       identify file type.
 
     Returns:
-      A tuple of (section_sizes, symbols).
+      A tuple of (section_sizes, symbols, extras).
     """
     self._lines = iter(lines)
     logging.debug('Scanning for Header')
@@ -49,7 +73,7 @@ class MapFileParserGold(object):
       elif line.startswith('Memory map'):
         self._ParseSections()
       break
-    return self._section_sizes, self._symbols
+    return self._section_sizes, self._symbols, {}
 
   def _SkipToLineWithPrefix(self, prefix, prefix2=None):
     for l in self._lines:
@@ -98,21 +122,23 @@ class MapFileParserGold(object):
 #                 0x00290711                base::AutoLock::~AutoLock()
 #                 0x00290711                base::AutoLock::~AutoLock()
 # .text._ZNK5blink15LayoutBlockFlow31mustSeparateMarginAfterForChildERK...
-#                0xffffffffffffffff       0x46 obj/...
-#                0x006808e1                blink::LayoutBlockFlow::...
+#                 0xffffffffffffffff       0x46 obj/...
+#                 0x006808e1                blink::LayoutBlockFlow::...
+# .text.OUTLINED_FUNCTION_0
+#                 0x002a2000       0x20 obj/net/net/tag.o
 # .bss
 #  .bss._ZGVZN11GrProcessor11initClassIDI10LightingFPEEvvE8kClassID
-#                0x02d4b294        0x4 obj/skia/skia/SkLightingShader.o
-#                0x02d4b294   guard variable for void GrProcessor::initClassID
+#                 0x02d4b294        0x4 obj/skia/skia/SkLightingShader.o
+#                 0x02d4b294   guard variable for void GrProcessor::initClassID
 # .data           0x0028c600  0x22d3468
 #  .data.rel.ro._ZTVN3gvr7android19ScopedJavaGlobalRefIP12_jfloatArrayEE
-#                0x02d1e668       0x10 ../../third_party/.../libfoo.a(bar.o)
-#                0x02d1e668   vtable for gvr::android::GlobalRef<_jfloatArray*>
+#                 0x02d1e668       0x10 ../../third_party/.../libfoo.a(bar.o)
+#                 0x02d1e668   vtable for gvr::android::GlobalRef<_jfloatArray*>
 #  ** merge strings
 #                 0x0255fb00   0x1f2424
 #  ** merge constants
 #                 0x0255fb00   0x8
-# ** common      0x02db5700   0x13ab48
+# ** common       0x02db5700   0x13ab48
     syms = self._symbols
     while True:
       line = self._SkipToLineWithPrefix('.')
@@ -242,6 +268,10 @@ class MapFileParserGold(object):
               if mangled_name and (not name or mangled_name.startswith('_Z') or
                                    '._Z' in mangled_name):
                 full_name = mangled_name
+              # Handle outlined functions. These are actual LLD features, but we
+              # handle them here for Gold to facilitate testing.
+              if full_name and full_name.startswith('OUTLINED_FUNCTION_'):
+                full_name = '** outlined function'
 
               sym = models.Symbol(section_name, size, address=address,
                                   full_name=full_name, object_path=path)
@@ -264,24 +294,8 @@ class MapFileParserGold(object):
         raise
 
 
-class _SymbolMaker(object):
-  def __init__(self):
-    self.syms = []
-    self.cur_sym = None
-
-  def Flush(self):
-    if self.cur_sym:
-      self.syms.append(self.cur_sym)
-      self.cur_sym = None
-
-  def Create(self, *args, **kwargs):
-    self.Flush()
-    self.cur_sym = models.Symbol(*args, **kwargs)
-
-
 class MapFileParserLld(object):
   """Parses a linker map file from LLD."""
-  # TODO(huangs): Add LTO support.
   # Map file writer for LLD linker (for ELF):
   # https://github.com/llvm-mirror/lld/blob/HEAD/ELF/MapFile.cpp
   _LINE_RE_V0 = re.compile(r'([0-9a-f]+)\s+([0-9a-f]+)\s+(\d+) ( *)(.*)')
@@ -293,6 +307,86 @@ class MapFileParserLld(object):
     self._linker_name = linker_name
     self._common_symbols = []
     self._section_sizes = {}
+
+  @staticmethod
+  def ParseArmAnnotations(tok):
+    """Decides whether a Level 3 token is an annotation.
+
+    Returns:
+      A 2-tuple (is_annotation, next_thumb2_mode):
+        is_annotation: Whether |tok| is an annotation.
+        next_thumb2_mode: New |thumb2_mode| value, or None if keep old value.
+    """
+    # Annotations for ARM match '$t', '$d.1', but not '$_21::invoke'.
+    if tok.startswith('$') and (len(tok) == 2 or
+                                (len(tok) >= 3 and tok[2] == '.')):
+      if tok.startswith('$t'):
+        return True, True  # Is annotation, enter Thumb2 mode.
+      if tok.startswith('$a'):
+        return True, False  # Is annotation, enter ARM32 mode.
+      return True, None  # Is annotation, keep old |thumb2_mode| value.
+    return False, None  # Not annotation, keep old |thumb2_mode| value.
+
+  def Tokenize(self, lines):
+    """Generator to filter and tokenize linker map lines."""
+    # Extract e.g., 'lld_v0' -> 0, or 'lld-lto_v1' -> 1.
+    map_file_version = int(self._linker_name.split('_v')[1])
+    pattern = MapFileParserLld._LINE_RE[map_file_version]
+
+    # A Level 3 symbol can have |size == 0| in some situations (e.g., assembly
+    # code symbols). To provided better size estimates in this case, the "span"
+    # of a Level 3 symbol is computed as:
+    #  (A) The |address| difference compared to the next Level 3 symbol.
+    #  (B) If the Level 3 symbol is the last among Level 3 lines nested under a
+    #      Level 2 line: The difference between the Level 3 symbol's |address|
+    #      and the containing Level 2 line's end address.
+    # To handle (A), |lines| is visited using a one-step lookahead, using
+    # |sentinel| to handle the last line. To handle (B), |level2_end_address| is
+    # computed for each Level 2 line.
+    sentinel = '0 0 0 0 THE_END'
+    assert pattern.match(sentinel)
+    level2_end_address = None
+    thumb2_mode = False
+    (line, address, size, level, tok) = (None, None, None, None, None)
+    for next_line in itertools.chain(lines, (sentinel,)):
+      m = pattern.match(next_line)
+      if m is None:
+        continue
+      next_address = int(m.group(1), 16)
+      next_size = int(m.group(2), 16)
+      next_level = (len(m.group(4)) // 8) + 1  # Add 1 to agree with comments.
+      next_tok = m.group(5)
+
+      if next_level == 3:
+        assert level >= 2, 'Cannot jump from Level 1 to Level 3.'
+        # Detect annotations. If found, maybe update |thumb2_mode|, then skip.
+        (is_annotation, next_thumb2_mode) = (
+            MapFileParserLld.ParseArmAnnotations(next_tok))
+        if is_annotation:
+          if next_thumb2_mode:
+            thumb2_mode = next_thumb2_mode
+          continue  # Skip annotations.
+        if thumb2_mode:
+          # Adjust odd address to even. Alignment is not guanteed for all
+          # symbols (e.g., data, or x86), so this is judiciously applied.
+          next_address &= ~1
+      else:
+        thumb2_mode = False  # Resets on leaving Level 3.
+
+      if address is not None:
+        span = None
+        if level == 3:
+          span = next_address if next_level == 3 else level2_end_address
+          span -= address
+        elif level == 2:
+          level2_end_address = address + size
+        yield (line, address, size, level, span, tok)
+
+      line = next_line
+      address = next_address
+      size = next_size
+      level = next_level
+      tok = next_tok
 
   def Parse(self, lines):
     """Parses a linker map file.
@@ -310,6 +404,15 @@ class MapFileParserLld(object):
 #     194      194       13     1         <internal>:(.interp)
 #     1a8      1a8     22d8     4 .ARM.exidx
 #     1b0      1b0        8     4         obj/sandbox/syscall.o:(.ARM.exidx)
+#     400      400   123400    64 .text
+#     600      600       14     4         obj/...:(.text.OUTLINED_FUNCTION_0)
+#     600      600        0     1                 $x.3
+#     600      600       14     1                 OUTLINED_FUNCTION_0
+#  123800   123800    20000   256 .rodata
+#  123800   123800       4      4         ...:o:(.rodata._ZN3fooE.llvm.1234)
+#  123800   123800       4      1                 foo (.llvm.1234)
+#  123804   123804       4      4         ...:o:(.rodata.bar.llvm.1234)
+#  123804   123804       4      1                 bar.llvm.1234
 # Older format:
 # Address          Size             Align Out     In      Symbol
 # 00000000002002a8 000000000000001c     1 .interp
@@ -326,26 +429,38 @@ class MapFileParserLld(object):
 # 00000000002010c0 0000000000000000     0                 frame_dummy
 # 00000000002010ed 0000000000000071     1         a.o:(.text)
 # 00000000002010ed 0000000000000071     0                 main
-    # Extract e.g., 'lld_v0' -> 0, or 'lld-lto_v1' -> 1.
-    map_file_version = int(self._linker_name.split('_v')[1])
-    pattern = MapFileParserLld._LINE_RE[map_file_version]
-
-    sym_maker = _SymbolMaker()
+    syms = []
     cur_section = None
     cur_section_is_useful = None
+    promoted_name_count = 0
+    # A Level 2 line does not supply |full_name| data (unless '<internal>').
+    # This would be taken from a Level 3 line. |is_partial| indicates that an
+    # eligible Level 3 line should be used to update |syms[-1].full_name|
+    # instead of creating a new symbol.
+    is_partial = False
+    # Assembly code can create consecutive Level 3 lines with |size == 0|. These
+    # lines can represent
+    #  (1) assembly functions (should form symbol), or
+    #  (2) assembly labels (should NOT form symbol).
+    # It seems (2) correlates with the presence of a leading Level 3 line with
+    # |size > 0|. This gives rise to the following strategy: Each symbol S from
+    # a Level 3 line suppresses Level 3 lines with |address| less than
+    # |next_usable_address := S.address + S.size|.
+    next_usable_address = 0
 
-    for line in lines:
-      m = pattern.match(line)
-      if m is None:
-        continue
-      address = int(m.group(1), 16)
-      size = int(m.group(2), 16)
-      indent_size = len(m.group(4))
-      tok = m.group(5)
+    # For Thin-LTO, a map from each address to the Thin-LTO cache file. This
+    # provides hints downstream to identify object_paths for .L.ref.tmp symbols,
+    # but is not useful in the final output. Therefore it's stored separately,
+    # instead of being in Symbol.
+    thin_map = {}
 
-      if indent_size == 0:
-        sym_maker.Flush()
-        self._section_sizes[tok] = size
+    tokenizer = self.Tokenize(lines)
+    for (line, address, size, level, span, tok) in tokenizer:
+      # Level 1 data match the "Out" column. They specify sections or
+      # PROVIDE_HIDDEN lines.
+      if level == 1:
+        if not tok.startswith('PROVIDE_HIDDEN'):
+          self._section_sizes[tok] = size
         cur_section = tok
         # E.g., Want to convert "(.text._name)" -> "_name" later.
         mangled_start_idx = len(cur_section) + 2
@@ -354,14 +469,18 @@ class MapFileParserLld(object):
                             models.SECTION_RODATA,
                             models.SECTION_TEXT) or
             cur_section.startswith(models.SECTION_DATA))
+
       elif cur_section_is_useful:
-        if indent_size == 8:
-          sym_maker.Flush()
-          # e.g. path.o:(.text._name)
+        # Level 2 data match the "In" column. They specify object paths and
+        # section names within objects, or '<internal>:...'.
+        if level == 2:
+          # Create a symbol here since there may be no ensuing Level 3 lines.
+          # But if there are, then the symbol can be modified later as sym[-1].
+          syms.append(models.Symbol(cur_section, size, address=address))
+          # E.g., 'path.o:(.text._name)' => ['path.o', '(.text._name)'].
           cur_obj, paren_value = tok.split(':')
-          # "(.text._name)" -> "_name".
+          # E.g., '(.text._name)' -> '_name'.
           mangled_name = paren_value[mangled_start_idx:-1]
-          sym_maker.Create(cur_section, size, address=address)
           # As of 2017/11 LLD does not distinguish merged strings from other
           # merged data. Feature request is filed under:
           # https://bugs.llvm.org/show_bug.cgi?id=35248
@@ -370,26 +489,84 @@ class MapFileParserLld(object):
               # Treat all <internal> sections within .rodata as as string
               # literals. Some may hold numeric constants or other data, but
               # there is currently no way to distinguish them.
-              sym_maker.cur_sym.full_name = '** lld merge strings'
+              syms[-1].full_name = '** lld merge strings'
             else:
               # e.g. <internal>:(.text.thunk)
-              sym_maker.cur_sym.full_name = '** ' + mangled_name
-          elif cur_obj == 'lto.tmp' or cur_obj.startswith('thinlto-cache'):
-            pass
-          else:
-            sym_maker.cur_sym.object_path = cur_obj
+              syms[-1].full_name = '** ' + mangled_name
+            cur_obj = None
+          elif cur_obj == 'lto.tmp' or 'thinlto-cache' in cur_obj:
+            thin_map[address] = os.path.basename(cur_obj)
+            cur_obj = None
+          if cur_obj is not None:
+            syms[-1].object_path = cur_obj
 
-        elif indent_size == 16:
-          # If multiple entries exist, take the first on that reports a size.
-          # Zero-length symbols look like "$t.4", "$d.5".
-          if size and not sym_maker.cur_sym.full_name:
-            sym_maker.cur_sym.full_name = tok
+          is_partial = not bool(syms[-1].full_name)
+          # Level 3 |address| is nested under Level 2, don't add |size|.
+          next_usable_address = address
+
+        # Level 3 data match the "Symbol" column. They specify symbol names or
+        # special names such as '.L_MergeGlobals'. Annotations such as '$d',
+        # '$t.42' also appear at Level 3, but they are consumed by |tokenizer|,
+        # so don't appear hear.
+        elif level == 3:
+          # Ignore anything with '.L_MergedGlobals' prefix. This seems to only
+          # happen for ARM (32-bit) builds.
+          if tok.startswith('.L_MergedGlobals'):
+            continue
+
+          # Use |span| to decide whether to use a Level 3 line for Symbols. This
+          # is useful for two purposes:
+          # * This is a better indicator than |size|, which can be 0 for
+          #   assembly functions.
+          # * If multiple Level 3 lines have the same starting address, this
+          #   cause all but the last line to have |span > 0|. This dedups lines
+          #   with identical symbol names (why do they exist?). Note that this
+          #   also skips legitimate aliases, but that's desired because nm.py
+          #   (downstream) assumes no aliases already exist.
+          if span > 0:
+            # Outlined functions have names like OUTLINED_FUNCTION_0, which can
+            # appear 1000+ time, and can cause false aliasing. We treat these as
+            # special cases by designating them as a placeholder symbols and
+            # renaming them to '** outlined function'.
+            if tok.startswith('OUTLINED_FUNCTION_'):
+              tok = '** outlined function'
+            stripped_tok = demangle.StripLlvmPromotedGlobalNames(tok)
+            if len(tok) != len(stripped_tok):
+              promoted_name_count += 1
+              tok = stripped_tok
+
+            # Handle special case where a partial symbol consumes bytes before
+            # the first Level 3 symbol.
+            if is_partial and syms[-1].address < address:
+              # Truncate the partial symbol and leave it without |full_name|.
+              # The data from the current line will form a new symbol.
+              syms[-1].size = address - syms[-1].address
+              next_usable_address = address
+              is_partial = False
+
+            if is_partial:
+              syms[-1].full_name = tok
+              syms[-1].size = size if size > 0 else min(syms[-1].size, span)
+              next_usable_address = address + syms[-1].size
+              is_partial = False
+            elif address >= next_usable_address:
+              # Prefer |size|, and only fall back to |span| if |size == 0|.
+              size_to_use = size if size > 0 else span
+              syms.append(
+                  models.Symbol(
+                      cur_section, size_to_use, address=address, full_name=tok))
+              # Suppress symbols with overlapping |address|. This eliminates
+              # labels from assembly sources.
+              next_usable_address = address + size_to_use
+              if cur_obj is not None:
+                syms[-1].object_path = cur_obj
 
         else:
           logging.error('Problem line: %r', line)
 
-    sym_maker.Flush()
-    return self._section_sizes, sym_maker.syms
+    if promoted_name_count:
+      logging.info('Found %d promoted global names', promoted_name_count)
+    return self._section_sizes, syms, {'thin_map': thin_map}
 
 
 def _DetectLto(lines):
@@ -426,7 +603,15 @@ def _DetectLto(lines):
 
 
 def DetectLinkerNameFromMapFile(lines):
-  """Scans linker map file, and returns a coded linker name."""
+  """Heuristic linker detection from partial scan of the linker map.
+
+  Args:
+    lines: Iterable of lines from the linker map.
+
+  Returns:
+    A coded linker name.
+
+  """
   first_line = next(lines)
 
   if first_line.startswith('Address'):
@@ -442,15 +627,16 @@ def DetectLinkerNameFromMapFile(lines):
 
 
 class MapFileParser(object):
-  """Parses a linker map file, with heuristic linker detection."""
+  """Parses a linker map file generated from a specified linker."""
   def Parse(self, linker_name, lines):
     """Parses a linker map file.
 
     Args:
-      lines: Iterable of lines.
+      linker_name: Coded linker name to specify a linker.
+      lines: Iterable of lines from the linker map.
 
     Returns:
-      A tuple of (section_sizes, symbols).
+      A tuple of (section_sizes, symbols, extras).
     """
     next(lines)  # Consume the first line of headers.
     if linker_name.startswith('lld'):
@@ -460,10 +646,100 @@ class MapFileParser(object):
     else:
       raise Exception('.map file is from a unsupported linker.')
 
-    section_sizes, syms = inner_parser.Parse(lines)
+    section_sizes, syms, extras = inner_parser.Parse(lines)
     for sym in syms:
       if sym.object_path and not sym.object_path.endswith(')'):
         # Don't want '' to become '.'.
         # Thin archives' paths will get fixed in |ar.CreateThinObjectPath|.
         sym.object_path = os.path.normpath(sym.object_path)
-    return (section_sizes, syms)
+    return (section_sizes, syms, extras)
+
+
+def DeduceObjectPathsFromThinMap(raw_symbols, extras):
+  """Uses Thin-LTO object paths to find object_paths of symbols. """
+  thin_map = extras.get('thin_map', None)  # |address| -> |thin_obj|
+  if not thin_map:  # None or empty.
+    logging.info('No thin-object-path found: Skipping object path deduction.')
+    return
+
+  # Build map of |thin_obj| -> |object_paths|.
+  thin_obj_to_object_paths = collections.defaultdict(set)
+  logging.info('Building map of thin-object-path -> object path.')
+  for symbol in raw_symbols:
+    if symbol.object_path:
+      thin_obj = thin_map.get(symbol.address, None)
+      if thin_obj:
+        thin_obj_to_object_paths[thin_obj].add(symbol.object_path)
+
+  # For each ".L.ref.tmp" symbol without |object_path|, translate |address| ->
+  # |thin_obj| -> |object_paths|. If unique, then assign to symbol. Stats are
+  # kept, keyed on |len(object_paths)|.
+  logging.info('Assigning object paths to .L.ref.tmp symbols.')
+  ref_tmp_popu = [0] * 3
+  ref_tmp_pss = [0] * 3
+  for symbol in raw_symbols:
+    if symbol.full_name.startswith('.L.ref.tmp') and not symbol.object_path:
+      thin_obj = thin_map[symbol.address]
+      count = 0
+      if thin_obj in thin_obj_to_object_paths:
+        object_paths = thin_obj_to_object_paths.get(thin_obj, set())
+        count = min(len(object_paths), 2)  # 2+ maps to 2.
+        if count == 1:
+          for object_path in object_paths:  # Get the unique element.
+            symbol.object_path = object_path
+      ref_tmp_popu[count] += 1
+      ref_tmp_pss[count] += symbol.pss
+
+  logging.info('Object path deduction results for .L.ref.tmp symbols:')
+  logging.info('  No match: %d symbols with total PSS = %g', ref_tmp_popu[0],
+               ref_tmp_pss[0])
+  logging.info('  Assigned (1 object path): %d symbols with total PSS = %g',
+               ref_tmp_popu[1], ref_tmp_pss[1])
+  logging.info('  Ambiguous (2+ object paths): %d symbols with total PSS = %g',
+               ref_tmp_popu[2], ref_tmp_pss[2])
+
+
+def main():
+  parser = argparse.ArgumentParser()
+  parser.add_argument('linker_file', type=os.path.realpath)
+  parser.add_argument(
+      '-v',
+      '--verbose',
+      default=0,
+      action='count',
+      help='Verbose level (multiple times for more)')
+  parser.add_argument('--dump', action='store_true')
+  args = parser.parse_args()
+
+  logging.basicConfig(
+      level=logging.WARNING - args.verbose * 10,
+      format='%(levelname).1s %(relativeCreated)6d %(message)s')
+
+  with open(args.linker_file, 'r') as map_file:
+    linker_name = DetectLinkerNameFromMapFile(map_file)
+  print('Linker type: %s' % linker_name)
+
+  with open(args.linker_file, 'r') as map_file:
+    section_sizes, syms, extras = MapFileParser().Parse(linker_name, map_file)
+
+  if args.dump:
+    print(section_sizes)
+    for sym in syms:
+      print(sym)
+  else:
+    # Enter interactive shell.
+    readline.parse_and_bind('tab: complete')
+    variables = {'section_sizes': section_sizes, 'syms': syms, 'extras': extras}
+    banner_lines = [
+        '*' * 80,
+        'Variables:',
+        '  section_sizes: Map from section to sizes.',
+        '  syms: Raw symbols parsed from the linker map file.',
+        '  extras: Format-specific extra data.',
+        '*' * 80,
+    ]
+    code.InteractiveConsole(variables).interact('\n'.join(banner_lines))
+
+
+if __name__ == '__main__':
+  main()

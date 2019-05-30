@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # Copyright (c) 2012 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -16,8 +15,8 @@ from grit import util
 from grit.extern import FP
 import grit.format.rc_header
 from grit.node import base
-from grit.node import io
 from grit.node import message
+from grit.node import node_io
 
 
 # RTL languages
@@ -456,7 +455,7 @@ class GritNode(base.Node):
       self.SetFallbackToDefaultLayout(fallback)
 
       for node in self.ActiveDescendants():
-        if isinstance(node, (io.FileNode, include.IncludeNode,
+        if isinstance(node, (node_io.FileNode, include.IncludeNode,
                              structure.StructureNode, variant.SkeletonNode)):
           input_path = node.GetInputPath()
           if input_path is not None:

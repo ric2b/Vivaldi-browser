@@ -7,21 +7,22 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <limits>
 #include <memory>
 #include <vector>
 
 #include "base/allocator/partition_allocator/address_space_randomization.h"
-#include "base/bit_cast.h"
-#include "base/bits.h"
-#include "base/sys_info.h"
+#include "base/allocator/partition_allocator/partition_alloc.h"
+#include "base/logging.h"
+#include "base/rand_util.h"
+#include "base/stl_util.h"
+#include "base/system/sys_info.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_POSIX)
 #include <sys/mman.h>
-#if !defined(OS_FUCHSIA)
 #include <sys/resource.h>
-#endif
 #include <sys/time.h>
 #endif  // defined(OS_POSIX)
 
@@ -71,7 +72,7 @@ bool SetAddressSpaceLimit() {
 }
 
 bool ClearAddressSpaceLimit() {
-#if !defined(ARCH_CPU_64_BITS) || !defined(OS_POSIX) || defined(OS_FUCHSIA)
+#if !defined(ARCH_CPU_64_BITS) || !defined(OS_POSIX)
   return true;
 #elif defined(OS_POSIX)
   struct rlimit limit;
@@ -84,6 +85,35 @@ bool ClearAddressSpaceLimit() {
 #else
   return false;
 #endif
+}
+
+const size_t kTestSizes[] = {
+    1,
+    17,
+    100,
+    base::kSystemPageSize,
+    base::kSystemPageSize + 1,
+    base::internal::PartitionBucket::get_direct_map_size(100),
+    1 << 20,
+    1 << 21,
+};
+constexpr size_t kTestSizesCount = base::size(kTestSizes);
+
+void AllocateRandomly(base::PartitionRootGeneric* root,
+                      size_t count,
+                      int flags) {
+  std::vector<void*> allocations(count, nullptr);
+  for (size_t i = 0; i < count; ++i) {
+    const size_t size = kTestSizes[base::RandGenerator(kTestSizesCount)];
+    allocations[i] = PartitionAllocGenericFlags(root, flags, size, nullptr);
+    EXPECT_NE(nullptr, allocations[i]) << " size: " << size << " i: " << i;
+  }
+
+  for (size_t i = 0; i < count; ++i) {
+    if (allocations[i]) {
+      base::PartitionFree(allocations[i]);
+    }
+  }
 }
 
 }  // namespace
@@ -728,19 +758,16 @@ TEST_F(PartitionAllocTest, GenericAllocSizes) {
   EXPECT_EQ(ptr3, new_ptr);
   new_ptr = generic_allocator.root()->Alloc(size, type_name);
   EXPECT_EQ(ptr2, new_ptr);
-#if defined(OS_LINUX) && !DCHECK_IS_ON()
-  // On Linux, we have a guarantee that freelisting a page should cause its
-  // contents to be nulled out. We check for null here to detect an bug we
-  // had where a large slot size was causing us to not properly free all
-  // resources back to the system.
-  // We only run the check when asserts are disabled because when they are
-  // enabled, the allocated area is overwritten with an "uninitialized"
-  // byte pattern.
-  EXPECT_EQ(0, *(reinterpret_cast<char*>(new_ptr) + (size - 1)));
-#endif
+
   generic_allocator.root()->Free(new_ptr);
   generic_allocator.root()->Free(ptr3);
   generic_allocator.root()->Free(ptr4);
+
+#if DCHECK_IS_ON()
+  // |PartitionPage::Free| must poison the slot's contents with |kFreedByte|.
+  EXPECT_EQ(kFreedByte,
+            *(reinterpret_cast<unsigned char*>(new_ptr) + (size - 1)));
+#endif
 
   // Can we allocate a massive (512MB) size?
   // Allocate 512MB, but +1, to test for cookie writing alignment issues.
@@ -1156,10 +1183,10 @@ TEST_F(PartitionAllocTest, MappingCollision) {
   map2 = AllocPages(page_base + kSuperPageSize, kPageAllocationGranularity,
                     kPageAllocationGranularity, PageReadWrite);
   EXPECT_TRUE(map2);
-  EXPECT_TRUE(
-      SetSystemPagesAccess(map1, kPageAllocationGranularity, PageInaccessible));
-  EXPECT_TRUE(
-      SetSystemPagesAccess(map2, kPageAllocationGranularity, PageInaccessible));
+  EXPECT_TRUE(TrySetSystemPagesAccess(map1, kPageAllocationGranularity,
+                                      PageInaccessible));
+  EXPECT_TRUE(TrySetSystemPagesAccess(map2, kPageAllocationGranularity,
+                                      PageInaccessible));
 
   PartitionPage* page_in_third_super_page = GetFullPage(kTestAllocSize);
   FreePages(map1, kPageAllocationGranularity);
@@ -1323,8 +1350,7 @@ TEST_F(PartitionAllocTest, LostFreePagesBug) {
 // cause flake.
 #if !defined(OS_WIN) &&            \
     (!defined(ARCH_CPU_64_BITS) || \
-     (defined(OS_POSIX) &&         \
-      !(defined(OS_FUCHSIA) || defined(OS_MACOSX) || defined(OS_ANDROID))))
+     (defined(OS_POSIX) && !(defined(OS_MACOSX) || defined(OS_ANDROID))))
 
 // The following four tests wrap a called function in an expect death statement
 // to perform their test, because they are non-hermetic. Specifically they are
@@ -1372,7 +1398,7 @@ TEST_F(PartitionAllocDeathTest, RepeatedTryReallocReturnNull) {
 }
 
 #endif  // !defined(ARCH_CPU_64_BITS) || (defined(OS_POSIX) &&
-        // !(defined(OS_FUCHSIA) || defined(OS_MACOSX) || defined(OS_ANDROID)))
+        // !(defined(OS_MACOSX) || defined(OS_ANDROID)))
 
 // Make sure that malloc(-1) dies.
 // In the past, we had an integer overflow that would alias malloc(-1) to
@@ -2156,6 +2182,48 @@ TEST_F(PartitionAllocTest, SmallReallocDoesNotMoveTrailingCookie) {
   EXPECT_TRUE(ptr);
 
   generic_allocator.root()->Free(ptr);
+}
+
+TEST_F(PartitionAllocTest, ZeroFill) {
+  constexpr static size_t kAllZerosSentinel =
+      std::numeric_limits<size_t>::max();
+  for (size_t size : kTestSizes) {
+    char* p = static_cast<char*>(PartitionAllocGenericFlags(
+        generic_allocator.root(), PartitionAllocZeroFill, size, nullptr));
+    size_t non_zero_position = kAllZerosSentinel;
+    for (size_t i = 0; i < size; ++i) {
+      if (0 != p[i]) {
+        non_zero_position = i;
+        break;
+      }
+    }
+    EXPECT_EQ(kAllZerosSentinel, non_zero_position)
+        << "test allocation size: " << size;
+    PartitionFree(p);
+  }
+
+  for (int i = 0; i < 10; ++i) {
+    SCOPED_TRACE(i);
+    AllocateRandomly(generic_allocator.root(), 1000, PartitionAllocZeroFill);
+  }
+}
+
+TEST_F(PartitionAllocTest, Bug_897585) {
+  // Need sizes big enough to be direct mapped and a delta small enough to
+  // allow re-use of the page when cookied. These numbers fall out of the
+  // test case in the indicated bug.
+  size_t kInitialSize = 983040;
+  size_t kDesiredSize = 983100;
+  void* ptr = PartitionAllocGenericFlags(generic_allocator.root(),
+                                         PartitionAllocReturnNull, kInitialSize,
+                                         nullptr);
+  ASSERT_NE(nullptr, ptr);
+  ptr = PartitionReallocGenericFlags(generic_allocator.root(),
+                                     PartitionAllocReturnNull, ptr,
+                                     kDesiredSize, nullptr);
+  ASSERT_NE(nullptr, ptr);
+  memset(ptr, 0xbd, kDesiredSize);
+  PartitionFree(ptr);
 }
 
 }  // namespace internal

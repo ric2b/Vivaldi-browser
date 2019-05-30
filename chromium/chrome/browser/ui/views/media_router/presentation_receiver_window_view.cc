@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/media_router/presentation_receiver_window_view.h"
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -25,7 +26,7 @@
 #include "chrome/browser/ui/views/accelerator_table.h"
 #include "chrome/browser/ui/views/exclusive_access_bubble_views.h"
 #include "chrome/browser/ui/views/media_router/presentation_receiver_window_frame.h"
-#include "components/toolbar/toolbar_model_impl.h"
+#include "components/omnibox/browser/location_bar_model_impl.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_constants.h"
 #include "ui/base/accelerators/accelerator_manager.h"
@@ -43,8 +44,12 @@
 #if defined(OS_CHROMEOS)
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/interfaces/window_state_type.mojom.h"
+#include "base/callback.h"
+#include "base/scoped_observer.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gfx/native_widget_types.h"
 #endif
 
@@ -54,79 +59,45 @@ using content::WebContents;
 // Observes the NativeWindow hosting the receiver view to look for fullscreen
 // state changes.  This helps monitor fullscreen changes that don't go through
 // the normal key accelerator to display and hide the location bar.
-class PresentationReceiverWindowView::FullscreenWindowObserver final
-    : public aura::WindowObserver {
+class FullscreenWindowObserver : public aura::WindowObserver {
  public:
-  explicit FullscreenWindowObserver(
-      PresentationReceiverWindowView* presentation_receiver_window_view);
-  ~FullscreenWindowObserver() final;
+  FullscreenWindowObserver(aura::Window* observed_window,
+                           base::RepeatingClosure on_fullscreen_change)
+      : on_fullscreen_change_(on_fullscreen_change) {
+    if (features::IsUsingWindowService())
+      observed_window = observed_window->GetRootWindow();
+    observed_window_.Add(observed_window);
+  }
+
+  ~FullscreenWindowObserver() override = default;
 
  private:
   // aura::WindowObserver overrides.
   void OnWindowPropertyChanged(aura::Window* window,
                                const void* key,
-                               intptr_t old) final;
-  void OnWindowDestroying(aura::Window* window) final;
+                               intptr_t old) override {
+    if (key == aura::client::kShowStateKey) {
+      ui::WindowShowState new_state =
+          window->GetProperty(aura::client::kShowStateKey);
+      ui::WindowShowState old_state = static_cast<ui::WindowShowState>(old);
+      if (old_state == ui::SHOW_STATE_FULLSCREEN ||
+          new_state == ui::SHOW_STATE_FULLSCREEN) {
+        on_fullscreen_change_.Run();
+      }
+    }
+  }
 
-  PresentationReceiverWindowView* const presentation_receiver_window_view_;
+  void OnWindowDestroying(aura::Window* window) override {
+    observed_window_.Remove(window);
+  }
+
+  base::RepeatingClosure on_fullscreen_change_;
+
+  ScopedObserver<aura::Window, aura::WindowObserver> observed_window_{this};
 
   DISALLOW_COPY_AND_ASSIGN(FullscreenWindowObserver);
 };
 
-PresentationReceiverWindowView::FullscreenWindowObserver::
-    FullscreenWindowObserver(
-        PresentationReceiverWindowView* presentation_receiver_window_view)
-    : presentation_receiver_window_view_(presentation_receiver_window_view) {
-  DCHECK(presentation_receiver_window_view);
-  DCHECK(presentation_receiver_window_view->GetWidget());
-  DCHECK(presentation_receiver_window_view->GetWidget()->GetNativeWindow());
-  presentation_receiver_window_view_->GetWidget()
-      ->GetNativeWindow()
-      ->AddObserver(this);
-}
-
-PresentationReceiverWindowView::FullscreenWindowObserver::
-    ~FullscreenWindowObserver() = default;
-
-void PresentationReceiverWindowView::FullscreenWindowObserver::
-    OnWindowPropertyChanged(aura::Window* window,
-                            const void* key,
-                            intptr_t old) {
-  DCHECK(presentation_receiver_window_view_->GetWidget());
-  DCHECK(window ==
-         presentation_receiver_window_view_->GetWidget()->GetNativeWindow());
-  if (key == ash::kWindowStateTypeKey) {
-    ash::mojom::WindowStateType new_state =
-        window->GetProperty(ash::kWindowStateTypeKey);
-    ash::mojom::WindowStateType old_state(
-        static_cast<ash::mojom::WindowStateType>(old));
-
-    // Toggle fullscreen when the user toggles fullscreen without going through
-    // FullscreenController::ToggleBrowserFullscreenMode(). This is the case if
-    // the user uses a hardware window state toggle button.
-    if (new_state != ash::mojom::WindowStateType::FULLSCREEN &&
-        new_state != ash::mojom::WindowStateType::PINNED &&
-        new_state != ash::mojom::WindowStateType::TRUSTED_PINNED &&
-        new_state != ash::mojom::WindowStateType::MINIMIZED &&
-        old_state == ash::mojom::WindowStateType::FULLSCREEN) {
-      presentation_receiver_window_view_->ExitFullscreen();
-    } else if (new_state == ash::mojom::WindowStateType::FULLSCREEN &&
-               old_state != ash::mojom::WindowStateType::PINNED &&
-               old_state != ash::mojom::WindowStateType::TRUSTED_PINNED) {
-      presentation_receiver_window_view_->EnterFullscreen();
-    }
-  }
-}
-
-void PresentationReceiverWindowView::FullscreenWindowObserver::
-    OnWindowDestroying(aura::Window* window) {
-  DCHECK(presentation_receiver_window_view_->GetWidget());
-  DCHECK(window ==
-         presentation_receiver_window_view_->GetWidget()->GetNativeWindow());
-  presentation_receiver_window_view_->GetWidget()
-      ->GetNativeWindow()
-      ->RemoveObserver(this);
-}
 #endif
 
 PresentationReceiverWindowView::PresentationReceiverWindowView(
@@ -134,9 +105,9 @@ PresentationReceiverWindowView::PresentationReceiverWindowView(
     PresentationReceiverWindowDelegate* delegate)
     : frame_(frame),
       delegate_(delegate),
-      toolbar_model_(
-          std::make_unique<ToolbarModelImpl>(this,
-                                             content::kMaxURLDisplayChars)),
+      location_bar_model_(
+          std::make_unique<LocationBarModelImpl>(this,
+                                                 content::kMaxURLDisplayChars)),
       command_updater_(this),
       exclusive_access_manager_(this) {
   DCHECK(frame);
@@ -209,7 +180,10 @@ void PresentationReceiverWindowView::Init() {
   location_bar_view_->Init();
 
 #if defined(OS_CHROMEOS)
-  window_observer_ = std::make_unique<FullscreenWindowObserver>(this);
+  window_observer_ = std::make_unique<FullscreenWindowObserver>(
+      GetWidget()->GetNativeWindow(),
+      base::BindRepeating(&PresentationReceiverWindowView::OnFullscreenChanged,
+                          base::Unretained(this)));
 #endif
 }
 
@@ -248,12 +222,13 @@ WebContents* PresentationReceiverWindowView::GetWebContents() {
   return delegate_->web_contents();
 }
 
-ToolbarModel* PresentationReceiverWindowView::GetToolbarModel() {
-  return toolbar_model_.get();
+LocationBarModel* PresentationReceiverWindowView::GetLocationBarModel() {
+  return location_bar_model_.get();
 }
 
-const ToolbarModel* PresentationReceiverWindowView::GetToolbarModel() const {
-  return toolbar_model_.get();
+const LocationBarModel* PresentationReceiverWindowView::GetLocationBarModel()
+    const {
+  return location_bar_model_.get();
 }
 
 ContentSettingBubbleModelDelegate*
@@ -313,18 +288,20 @@ bool PresentationReceiverWindowView::IsFullscreen() const {
 void PresentationReceiverWindowView::EnterFullscreen(
     const GURL& url,
     ExclusiveAccessBubbleType bubble_type) {
-  EnterFullscreen();
+  frame_->SetFullscreen(true);
+#if !defined(OS_CHROMEOS)
+  OnFullscreenChanged();
+#endif
   UpdateExclusiveAccessExitBubbleContent(url, bubble_type,
                                          ExclusiveAccessBubbleHideCallback(),
                                          /*force_update=*/false);
 }
 
 void PresentationReceiverWindowView::ExitFullscreen() {
-  exclusive_access_bubble_.reset();
-  location_bar_view_->SetVisible(true);
   frame_->SetFullscreen(false);
-  if (location_bar_view_->height() <= 0)
-    Layout();
+#if !defined(OS_CHROMEOS)
+  OnFullscreenChanged();
+#endif
 }
 
 void PresentationReceiverWindowView::UpdateExclusiveAccessExitBubbleContent(
@@ -370,15 +347,6 @@ content::WebContents* PresentationReceiverWindowView::GetActiveWebContents() {
 void PresentationReceiverWindowView::UnhideDownloadShelf() {}
 
 void PresentationReceiverWindowView::HideDownloadShelf() {}
-
-bool PresentationReceiverWindowView::ShouldHideUIForFullscreen() const {
-  return false;
-}
-
-ExclusiveAccessBubbleViews*
-PresentationReceiverWindowView::GetExclusiveAccessBubble() {
-  return exclusive_access_bubble_.get();
-}
 
 bool PresentationReceiverWindowView::CanUserExitFullscreen() const {
   return true;
@@ -437,9 +405,11 @@ bool PresentationReceiverWindowView::GetAcceleratorForCommandId(
   return true;
 }
 
-void PresentationReceiverWindowView::EnterFullscreen() {
-  location_bar_view_->SetVisible(false);
-  frame_->SetFullscreen(true);
-  if (location_bar_view_->height() > 0)
+void PresentationReceiverWindowView::OnFullscreenChanged() {
+  const bool fullscreen = IsFullscreen();
+  if (!fullscreen)
+    exclusive_access_bubble_.reset();
+  location_bar_view_->SetVisible(!fullscreen);
+  if (fullscreen == (location_bar_view_->height() > 0))
     Layout();
 }

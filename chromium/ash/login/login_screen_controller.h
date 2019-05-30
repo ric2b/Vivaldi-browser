@@ -7,6 +7,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/login/login_screen_controller_observer.h"
+#include "ash/public/cpp/system_tray_focus_observer.h"
 #include "ash/public/interfaces/kiosk_app_info.mojom.h"
 #include "ash/public/interfaces/login_screen.mojom.h"
 #include "base/macros.h"
@@ -19,18 +20,19 @@ class PrefRegistrySimple;
 namespace ash {
 
 class LoginDataDispatcher;
+class SystemTrayNotifier;
 
 // LoginScreenController implements mojom::LoginScreen and wraps the
 // mojom::LoginScreenClient interface. This lets a consumer of ash provide a
 // LoginScreenClient, which we will dispatch to if one has been provided to us.
 // This could send requests to LoginScreenClient and also handle requests from
 // LoginScreenClient through mojo.
-class ASH_EXPORT LoginScreenController : public mojom::LoginScreen {
+class ASH_EXPORT LoginScreenController : public mojom::LoginScreen,
+                                         public SystemTrayFocusObserver {
  public:
   // The current authentication stage. Used to get more verbose logging.
   enum class AuthenticationStage {
     kIdle,
-    kGetSystemSalt,
     kDoAuthenticate,
     kUserCallback,
   };
@@ -41,8 +43,12 @@ class ASH_EXPORT LoginScreenController : public mojom::LoginScreen {
   // succeeded/failed.
   using OnAuthenticateCallback =
       base::OnceCallback<void(base::Optional<bool> success)>;
+  // Callback for parent access code validation. |success| is nullopt if
+  // validation did not run, otherwise it contains validation result.
+  using OnParentAccessValidation =
+      base::OnceCallback<void(base::Optional<bool> success)>;
 
-  LoginScreenController();
+  explicit LoginScreenController(SystemTrayNotifier* system_tray_notifier);
   ~LoginScreenController() override;
 
   static void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test);
@@ -57,13 +63,18 @@ class ASH_EXPORT LoginScreenController : public mojom::LoginScreen {
   // LoginScreenClient (in the chrome process) will do the authentication and
   // request to show error messages in the screen if auth fails, or request to
   // clear errors if auth succeeds.
-  void AuthenticateUser(const AccountId& account_id,
-                        const std::string& password,
-                        bool authenticated_by_pin,
-                        OnAuthenticateCallback callback);
-  void AttemptUnlock(const AccountId& account_id);
+  void AuthenticateUserWithPasswordOrPin(const AccountId& account_id,
+                                         const std::string& password,
+                                         bool authenticated_by_pin,
+                                         OnAuthenticateCallback callback);
+  void AuthenticateUserWithExternalBinary(const AccountId& account_id,
+                                          OnAuthenticateCallback callback);
+  void EnrollUserWithExternalBinary(OnAuthenticateCallback callback);
+  void AuthenticateUserWithEasyUnlock(const AccountId& account_id);
+  void ValidateParentAccessCode(const AccountId& account_id,
+                                const std::string& code,
+                                OnParentAccessValidation callback);
   void HardlockPod(const AccountId& account_id);
-  void RecordClickOnLockIcon(const AccountId& account_id);
   void OnFocusPod(const AccountId& account_id);
   void OnNoPodFocused();
   void LoadWallpaper(const AccountId& account_id);
@@ -86,6 +97,8 @@ class ASH_EXPORT LoginScreenController : public mojom::LoginScreen {
   void LaunchArcKioskApp(const AccountId& account_id);
   void ShowResetScreen();
   void ShowAccountAccessHelpApp();
+  void FocusOobeDialog();
+  void NotifyUserActivity();
 
   // Add or remove an observer.
   void AddObserver(LoginScreenControllerObserver* observer);
@@ -117,6 +130,10 @@ class ASH_EXPORT LoginScreenController : public mojom::LoginScreen {
   void SetUserList(std::vector<mojom::LoginUserInfoPtr> users) override;
   void SetPinEnabledForUser(const AccountId& account_id,
                             bool is_enabled) override;
+  void SetFingerprintState(const AccountId& account_id,
+                           mojom::FingerprintState state) override;
+  void NotifyFingerprintAuthResult(const AccountId& account_id,
+                                   bool successful) override;
   void SetAvatarForUser(const AccountId& account_id,
                         mojom::UserAvatarPtr avatar) override;
   void SetAuthEnabledForUser(
@@ -139,14 +156,18 @@ class ASH_EXPORT LoginScreenController : public mojom::LoginScreen {
       const AccountId& account_id,
       const std::string& locale,
       std::vector<mojom::InputMethodItemPtr> keyboard_layouts) override;
-  void SetFingerprintUnlockState(const AccountId& account_id,
-                                 mojom::FingerprintUnlockState state) override;
+  void SetPublicSessionShowFullManagementDisclosure(
+      bool is_full_management_disclosure_needed) override;
   void SetKioskApps(std::vector<mojom::KioskAppInfoPtr> kiosk_apps) override;
   void ShowKioskAppError(const std::string& message) override;
   void NotifyOobeDialogState(mojom::OobeDialogState state) override;
   void SetAddUserButtonEnabled(bool enable) override;
+  void SetShutdownButtonEnabled(bool enable) override;
   void SetAllowLoginAsGuest(bool allow_guest) override;
-  void SetShowGuestButtonForGaiaScreen(bool can_show) override;
+  void SetShowGuestButtonInOobe(bool show) override;
+  void SetShowParentAccessButton(bool show) override;
+  void SetShowParentAccessDialog(bool show) override;
+  void FocusLoginShelf(bool reverse) override;
 
   // Flushes the mojo pipes - to be used in tests.
   void FlushForTesting();
@@ -156,21 +177,18 @@ class ASH_EXPORT LoginScreenController : public mojom::LoginScreen {
   }
 
  private:
-  using PendingDoAuthenticateUser =
-      base::OnceCallback<void(const std::string& system_salt)>;
-
-  void DoAuthenticateUser(const AccountId& account_id,
-                          const std::string& password,
-                          bool authenticated_by_pin,
-                          OnAuthenticateCallback callback,
-                          const std::string& system_salt);
   void OnAuthenticateComplete(OnAuthenticateCallback callback, bool success);
+  void OnParentAccessValidationComplete(OnParentAccessValidation callback,
+                                        bool success);
 
   // Returns the active data dispatcher or nullptr if there is no lock screen.
   LoginDataDispatcher* DataDispatcher() const;
 
   // Common code that is called when the login/lock screen is shown.
   void OnShow();
+
+  // SystemTrayFocusObserver:
+  void OnFocusLeavingSystemTray(bool reverse) override;
 
   // Client interface in chrome browser. May be null in tests.
   mojom::LoginScreenClientPtr login_screen_client_;
@@ -179,6 +197,8 @@ class ASH_EXPORT LoginScreenController : public mojom::LoginScreen {
   mojo::BindingSet<mojom::LoginScreen> bindings_;
 
   AuthenticationStage authentication_stage_ = AuthenticationStage::kIdle;
+
+  SystemTrayNotifier* system_tray_notifier_;
 
   base::ObserverList<LoginScreenControllerObserver>::Unchecked observers_;
 

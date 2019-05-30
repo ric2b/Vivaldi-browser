@@ -9,6 +9,7 @@
 #include "third_party/blink/renderer/platform/geometry/layout_point.h"
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
 #include "third_party/blink/renderer/platform/geometry/layout_size.h"
+#include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 
 namespace blink {
@@ -25,7 +26,7 @@ class ComputedStyle;
 class ImageResourceObserver;
 
 class BackgroundImageGeometry {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
 
  public:
   // Constructor for LayoutView where the coordinate space is different.
@@ -87,6 +88,7 @@ class BackgroundImageGeometry {
   const ImageResourceObserver& ImageClient() const;
   const Document& ImageDocument() const;
   const ComputedStyle& ImageStyle() const;
+  InterpolationQuality ImageInterpolationQuality() const;
 
  private:
   void SetSpaceSize(const LayoutSize& repeat_spacing) {
@@ -95,8 +97,12 @@ class BackgroundImageGeometry {
   void SetPhaseX(float x) { phase_.SetX(x); }
   void SetPhaseY(float y) { phase_.SetY(y); }
 
-  void SetNoRepeatX(LayoutUnit x_offset, LayoutUnit snapped_x_offset);
-  void SetNoRepeatY(LayoutUnit y_offset, LayoutUnit snapped_y_offset);
+  void SetNoRepeatX(const FillLayer&,
+                    LayoutUnit x_offset,
+                    LayoutUnit snapped_x_offset);
+  void SetNoRepeatY(const FillLayer&,
+                    LayoutUnit y_offset,
+                    LayoutUnit snapped_y_offset);
   void SetRepeatX(const FillLayer&,
                   LayoutUnit available_width,
                   LayoutUnit extra_offset);
@@ -144,14 +150,15 @@ class BackgroundImageGeometry {
                              const LayoutSize&,
                              const LayoutSize&);
 
-  // The box_ is the source for the Document and StyleRef for
-  // background properties. It also the image client unless
-  // painting the view background.
+  // |box_| is the source for the Document. In most cases it also provides the
+  // background properties (see |positioning_box_| for exceptions.) It's also
+  // the image client unless painting the view background.
   const LayoutBoxModelObject& box_;
 
-  // The positioning box is the source of geometric information
-  // for positioning and sizing the background. We have some problems here
-  // with currentColor. See crbug.com/848860.
+  // The positioning box is the source of geometric information for positioning
+  // and sizing the background. It also provides the background properties if
+  // painting the view background or a table-cell using its container's
+  // (row's/column's) background.
   const LayoutBoxModelObject& positioning_box_;
 
   // When painting table cells or the view, the positioning area

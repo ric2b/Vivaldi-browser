@@ -21,16 +21,6 @@ IntersectionObservation* ElementIntersectionObserverData::GetObservationFor(
   return i->value;
 }
 
-void ElementIntersectionObserverData::AddObserver(
-    IntersectionObserver& observer) {
-  intersection_observers_.insert(&observer);
-}
-
-void ElementIntersectionObserverData::RemoveObserver(
-    IntersectionObserver& observer) {
-  intersection_observers_.erase(&observer);
-}
-
 void ElementIntersectionObserverData::AddObservation(
     IntersectionObservation& observation) {
   DCHECK(observation.Observer());
@@ -42,28 +32,26 @@ void ElementIntersectionObserverData::RemoveObservation(
   intersection_observations_.erase(&observer);
 }
 
-void ElementIntersectionObserverData::ActivateValidIntersectionObservers(
-    Node& node) {
-  for (auto& observer : intersection_observers_) {
-    Document* document = observer->TrackingDocument();
-    if (!document)
-      continue;
-    document->EnsureIntersectionObserverController().AddTrackedObserver(
-        *observer);
+bool ElementIntersectionObserverData::ComputeObservations(unsigned flags) {
+  bool needs_occlusion_tracking = false;
+  HeapVector<Member<IntersectionObservation>> observations_to_process;
+  CopyValuesToVector(intersection_observations_, observations_to_process);
+  for (auto& observation : observations_to_process) {
+    needs_occlusion_tracking |= observation->Observer()->trackVisibility();
+    observation->Compute(flags);
   }
-  for (auto& observation : intersection_observations_)
-    observation.value->UpdateShouldReportRootBoundsAfterDomChange();
+  return needs_occlusion_tracking;
 }
 
-void ElementIntersectionObserverData::DeactivateAllIntersectionObservers(
-    Node& node) {
-  node.GetDocument()
-      .EnsureIntersectionObserverController()
-      .RemoveTrackedObserversForRoot(node);
+bool ElementIntersectionObserverData::NeedsOcclusionTracking() const {
+  for (auto& entry : intersection_observations_) {
+    if (entry.key->trackVisibility())
+      return true;
+  }
+  return false;
 }
 
 void ElementIntersectionObserverData::Trace(blink::Visitor* visitor) {
-  visitor->Trace(intersection_observers_);
   visitor->Trace(intersection_observations_);
 }
 

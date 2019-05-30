@@ -14,21 +14,20 @@ import android.content.ServiceConnection;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
+import android.support.annotation.Nullable;
 
 import com.google.ipc.invalidation.util.Preconditions;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.download.DownloadNotificationService2.DownloadStatus;
+import org.chromium.chrome.browser.download.DownloadNotificationService.DownloadStatus;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-
-import javax.annotation.Nullable;
 
 /**
  * Manager to stop and start the foreground service associated with downloads.
@@ -37,12 +36,12 @@ public class DownloadForegroundServiceManager {
     private static class DownloadUpdate {
         int mNotificationId;
         Notification mNotification;
-        @DownloadNotificationService2.DownloadStatus
+        @DownloadNotificationService.DownloadStatus
         int mDownloadStatus;
         Context mContext;
 
         DownloadUpdate(int notificationId, Notification notification,
-                @DownloadNotificationService2.DownloadStatus int downloadStatus, Context context) {
+                @DownloadNotificationService.DownloadStatus int downloadStatus, Context context) {
             mNotificationId = notificationId;
             mNotification = notification;
             mDownloadStatus = downloadStatus;
@@ -69,7 +68,7 @@ public class DownloadForegroundServiceManager {
             Log.w(TAG, "Done checking if delayed stopAndUnbindService needs to be resolved.");
         }
     };
-    private boolean mStopServiceDelayed = false;
+    private boolean mStopServiceDelayed;
 
     private int mPinnedNotificationId = INVALID_NOTIFICATION_ID;
 
@@ -84,9 +83,9 @@ public class DownloadForegroundServiceManager {
     public DownloadForegroundServiceManager() {}
 
     public void updateDownloadStatus(Context context,
-            @DownloadNotificationService2.DownloadStatus int downloadStatus, int notificationId,
+            @DownloadNotificationService.DownloadStatus int downloadStatus, int notificationId,
             Notification notification) {
-        if (downloadStatus != DownloadNotificationService2.DownloadStatus.IN_PROGRESS) {
+        if (downloadStatus != DownloadNotificationService.DownloadStatus.IN_PROGRESS) {
             Log.w(TAG,
                     "updateDownloadStatus status: " + downloadStatus + ", id: " + notificationId);
         }
@@ -183,8 +182,8 @@ public class DownloadForegroundServiceManager {
         return null;
     }
 
-    private boolean isActive(@DownloadNotificationService2.DownloadStatus int downloadStatus) {
-        return downloadStatus == DownloadNotificationService2.DownloadStatus.IN_PROGRESS;
+    private boolean isActive(@DownloadNotificationService.DownloadStatus int downloadStatus) {
+        return downloadStatus == DownloadNotificationService.DownloadStatus.IN_PROGRESS;
     }
 
     private void cleanDownloadUpdateQueue() {
@@ -266,50 +265,42 @@ public class DownloadForegroundServiceManager {
     /** Helper code to stop and unbind service. */
 
     @VisibleForTesting
-    void stopAndUnbindService(@DownloadNotificationService2.DownloadStatus int downloadStatus) {
+    void stopAndUnbindService(@DownloadNotificationService.DownloadStatus int downloadStatus) {
         Log.w(TAG, "stopAndUnbindService status: " + downloadStatus);
         Preconditions.checkNotNull(mBoundService);
         mIsServiceBound = false;
 
         @DownloadForegroundService.StopForegroundNotification
         int stopForegroundNotification;
-        if (downloadStatus == DownloadNotificationService2.DownloadStatus.CANCELLED) {
+        if (downloadStatus == DownloadNotificationService.DownloadStatus.CANCELLED) {
             stopForegroundNotification = DownloadForegroundService.StopForegroundNotification.KILL;
-        } else if (downloadStatus == DownloadNotificationService2.DownloadStatus.PAUSED) {
-            stopForegroundNotification =
-                    DownloadForegroundService.StopForegroundNotification.DETACH_OR_PERSIST;
         } else {
             stopForegroundNotification =
-                    DownloadForegroundService.StopForegroundNotification.DETACH_OR_ADJUST;
+                    DownloadForegroundService.StopForegroundNotification.DETACH;
         }
 
         DownloadUpdate downloadUpdate = mDownloadUpdateQueue.get(mPinnedNotificationId);
         Notification oldNotification =
                 (downloadUpdate == null) ? null : downloadUpdate.mNotification;
 
-        boolean notificationHandledProperly = stopAndUnbindServiceInternal(
+        stopAndUnbindServiceInternal(
                 stopForegroundNotification, mPinnedNotificationId, oldNotification);
 
         mBoundService = null;
 
-        // Only if the notification was handled properly (ie. detached or killed), reset stored ID.
-        if (notificationHandledProperly) mPinnedNotificationId = INVALID_NOTIFICATION_ID;
+        mPinnedNotificationId = INVALID_NOTIFICATION_ID;
     }
 
     @VisibleForTesting
-    boolean stopAndUnbindServiceInternal(
+    void stopAndUnbindServiceInternal(
             @DownloadForegroundService.StopForegroundNotification int stopForegroundStatus,
             int pinnedNotificationId, Notification pinnedNotification) {
-        boolean notificationHandledProperly = mBoundService.stopDownloadForegroundService(
+        mBoundService.stopDownloadForegroundService(
                 stopForegroundStatus, pinnedNotificationId, pinnedNotification);
         ContextUtils.getApplicationContext().unbindService(mConnection);
 
-        if (notificationHandledProperly) {
-            DownloadForegroundServiceObservers.removeObserver(
-                    DownloadNotificationServiceObserver.class);
-        }
-
-        return notificationHandledProperly;
+        DownloadForegroundServiceObservers.removeObserver(
+                DownloadNotificationServiceObserver.class);
     }
 
     /** Helper code for testing. */

@@ -14,6 +14,10 @@
 #include "build/build_config.h"
 #include "components/safe_browsing/proto/csd.pb.h"
 
+namespace base {
+class File;
+}
+
 namespace safe_browsing {
 
 struct ArchiveAnalyzerResults {
@@ -29,10 +33,19 @@ struct ArchiveAnalyzerResults {
       ClientDownloadRequest_DetachedCodeSignature>
       detached_code_signatures;
 #endif  // OS_MACOSX
+  int file_count;
+  int directory_count;
   ArchiveAnalyzerResults();
   ArchiveAnalyzerResults(const ArchiveAnalyzerResults& other);
   ~ArchiveAnalyzerResults();
 };
+
+// Updates |results| with the results of inspecting |file|, given that it will
+// be extracted to |path|.
+void UpdateArchiveAnalyzerResultsWithFile(base::FilePath path,
+                                          base::File* file,
+                                          bool is_encrypted,
+                                          ArchiveAnalyzerResults* results);
 
 }  // namespace safe_browsing
 

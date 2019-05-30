@@ -28,7 +28,7 @@ namespace suggestions {
 
 namespace {
 
-const char kTestUrl[] = "http://go.com/";
+const char kImageFetcherUmaClientName[] = "TestClientName";
 const char kTestImagePath[] = "/image_decoding/droids.png";
 const char kInvalidImagePath[] = "/DOESNOTEXIST";
 
@@ -50,8 +50,8 @@ class ImageFetcherImplBrowserTest : public InProcessBrowserTest {
     ASSERT_TRUE(test_server_.Start());
   }
 
-  ImageFetcherImpl* CreateImageFetcher() {
-    ImageFetcherImpl* fetcher = new ImageFetcherImpl(
+  ImageFetcher* CreateImageFetcher() {
+    ImageFetcher* fetcher = new ImageFetcherImpl(
         std::make_unique<suggestions::ImageDecoderImpl>(),
         content::BrowserContext::GetDefaultStoragePartition(
             browser()->profile())
@@ -60,7 +60,6 @@ class ImageFetcherImplBrowserTest : public InProcessBrowserTest {
   }
 
   void OnImageAvailable(base::RunLoop* loop,
-                        const std::string& id,
                         const gfx::Image& image,
                         const image_fetcher::RequestMetadata& metadata) {
     if (!image.IsEmpty()) {
@@ -81,16 +80,18 @@ class ImageFetcherImplBrowserTest : public InProcessBrowserTest {
   }
 
   void FetchImageAndDataHelper(const GURL& image_url) {
-    std::unique_ptr<ImageFetcherImpl> image_fetcher_(CreateImageFetcher());
+    std::unique_ptr<ImageFetcher> image_fetcher_(CreateImageFetcher());
+    image_fetcher::ImageFetcherParams params(TRAFFIC_ANNOTATION_FOR_TESTS,
+                                             kImageFetcherUmaClientName);
 
     base::RunLoop run_loop;
     image_fetcher_->FetchImageAndData(
-        kTestUrl, image_url,
+        image_url,
         base::BindOnce(&ImageFetcherImplBrowserTest::OnImageDataAvailable,
                        base::Unretained(this)),
         base::Bind(&ImageFetcherImplBrowserTest::OnImageAvailable,
                    base::Unretained(this), &run_loop),
-        TRAFFIC_ANNOTATION_FOR_TESTS);
+        std::move(params));
     run_loop.Run();
   }
 

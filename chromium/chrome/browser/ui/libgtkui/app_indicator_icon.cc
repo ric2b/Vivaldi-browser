@@ -12,7 +12,7 @@
 #include "base/files/file_util.h"
 #include "base/md5.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/strings/stringize_macros.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
@@ -83,22 +83,19 @@ app_indicator_set_icon_full_func app_indicator_set_icon_full = nullptr;
 app_indicator_set_icon_theme_path_func app_indicator_set_icon_theme_path =
     nullptr;
 
-void EnsureMethodsLoaded() {
+void EnsureLibAppIndicatorLoaded() {
   if (g_attempted_load)
     return;
 
   g_attempted_load = true;
 
-  void* indicator_lib = nullptr;
+  std::string lib_name =
+      "libappindicator" + base::NumberToString(GTK_MAJOR_VERSION) + ".so";
+  void* indicator_lib = dlopen(lib_name.c_str(), RTLD_LAZY);
 
   if (!indicator_lib) {
-    indicator_lib =
-        dlopen("libappindicator" STRINGIZE(GTK_MAJOR_VERSION) ".so", RTLD_LAZY);
-  }
-
-  if (!indicator_lib) {
-    indicator_lib = dlopen(
-        "libappindicator" STRINGIZE(GTK_MAJOR_VERSION) ".so.1", RTLD_LAZY);
+    lib_name += ".1";
+    indicator_lib = dlopen(lib_name.c_str(), RTLD_LAZY);
   }
 
   if (!indicator_lib)
@@ -163,7 +160,7 @@ AppIndicatorIcon::AppIndicatorIcon(std::string id,
   std::unique_ptr<base::Environment> env(base::Environment::Create());
   desktop_env_ = base::nix::GetDesktopEnvironment(env.get());
 
-  EnsureMethodsLoaded();
+  EnsureLibAppIndicatorLoaded();
   tool_tip_ = base::UTF16ToUTF8(tool_tip);
   SetImage(image);
 }
@@ -179,7 +176,7 @@ AppIndicatorIcon::~AppIndicatorIcon() {
 
 // static
 bool AppIndicatorIcon::CouldOpen() {
-  EnsureMethodsLoaded();
+  EnsureLibAppIndicatorLoaded();
   return g_opened;
 }
 
@@ -274,15 +271,16 @@ AppIndicatorIcon::WriteKDE4TempImageOnWorkerThread(
   std::string icon_name = base::StringPrintf(
       "chrome_app_indicator2_%s", base::MD5DigestToBase16(digest).c_str());
 
-  // If |bitmap| is not 22x22, KDE does some really ugly resizing. Pad |bitmap|
-  // with transparent pixels to make it 22x22.
-  const int kDesiredSize = 22;
+  // If |bitmap| is smaller than 22x22, KDE does some really ugly resizing.
+  // Pad |bitmap| with transparent pixels to make it 22x22.
+  const int kMinimalSize = 22;
   SkBitmap scaled_bitmap;
-  scaled_bitmap.allocN32Pixels(kDesiredSize, kDesiredSize);
+  scaled_bitmap.allocN32Pixels(std::max(bitmap.width(), kMinimalSize),
+                               std::max(bitmap.height(), kMinimalSize));
   scaled_bitmap.eraseARGB(0, 0, 0, 0);
   SkCanvas canvas(scaled_bitmap);
-  canvas.drawBitmap(bitmap, (kDesiredSize - bitmap.width()) / 2,
-                    (kDesiredSize - bitmap.height()) / 2);
+  canvas.drawBitmap(bitmap, (scaled_bitmap.width() - bitmap.width()) / 2,
+                    (scaled_bitmap.height() - bitmap.height()) / 2);
 
   base::FilePath image_path = image_dir.Append(icon_name + ".png");
   if (!WriteFile(image_path, scaled_bitmap))

@@ -27,8 +27,71 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "ui/base/resource/resource_bundle.h"
+// #include "ui/native_theme/test_native_theme.h"
+
+// namespace {
+
+// // Delimiter in the Most Visited icon URL that indicates a dark icon. Keep
+// value
+// // in sync with NtpIconSource.
+// const char kMVIconDarkParameter[] = "/dark/";
+
+// }  // namespace
 
 namespace local_ntp_test_utils {
+
+// // Tests that dark mode styling is properly applied to the local NTP.
+// class BaseDarkModeTest {
+//  public:
+//   BaseDarkModeTest() {}
+
+//   ui::TestNativeTheme* theme() { return &theme_; }
+
+//   // Returns true if dark mode is applied on the |frame|.
+//   bool GetIsDarkModeApplied(const content::ToRenderFrameHost& frame) {
+//     bool dark_mode_applied = false;
+//     if (instant_test_utils::GetBoolFromJS(
+//             frame,
+//             "document.documentElement.getAttribute('darkmode') === 'true'",
+//             &dark_mode_applied)) {
+//       return dark_mode_applied;
+//     }
+//     return false;
+//   }
+
+//   // Returns true if dark mode is applied on the |frame|.
+//   bool GetIsDarkModeChipApplied(const content::ToRenderFrameHost& frame) {
+//     bool dark_mode_chip_applied = false;
+//     if (!instant_test_utils::GetBoolFromJS(
+//             frame,
+//             "document.documentElement.getAttribute('darkmode') === 'true' &&
+//             "
+//             "!document.body.classList.contains('light-chip')",
+//             &dark_mode_chip_applied)) {
+//       return dark_mode_chip_applied;
+//     }
+//     return false;
+//   }
+
+//   // Returns true if dark mode is applied to the Most Visited icon at |index|
+//   // (i.e. the icon URL contains the |kMVIconDarkParameter|).
+//   bool GetIsDarkTile(const content::ToRenderFrameHost& frame, int index) {
+//     bool dark_tile = false;
+//     if (instant_test_utils::GetBoolFromJS(
+//             frame,
+//             base::StringPrintf(
+//                 "document.querySelectorAll('#mv-tiles .md-icon img')[%d]"
+//                 ".src.includes('%s')",
+//                 index, kMVIconDarkParameter),
+//             &dark_tile)) {
+//       return dark_tile;
+//     }
+//     return false;
+//   }
+
+//  private:
+//   ui::TestNativeTheme theme_;
+// };
 
 content::WebContents* OpenNewTab(Browser* browser, const GURL& url) {
   ui_test_utils::NavigateToURLWithDisposition(
@@ -54,6 +117,32 @@ void NavigateToNTPAndWaitUntilLoaded(Browser* browser, int delay) {
   ASSERT_EQ(GURL(chrome::kChromeSearchLocalNtpUrl),
             active_tab->GetController().GetVisibleEntry()->GetURL());
 
+  WaitUntilTilesLoaded(active_tab, &msg_queue, delay);
+}
+
+void ExecuteScriptOnNTPAndWaitUntilLoaded(content::RenderFrameHost* host,
+                                          const std::string& script) {
+  content::WebContents* contents =
+      content::WebContents::FromRenderFrameHost(host);
+
+  ASSERT_TRUE(search::IsInstantNTP(contents));
+
+  // Attach a message queue *before* executing the script, to make sure we don't
+  // miss the 'loaded' message due to some race condition.
+  content::DOMMessageQueue msg_queue(contents);
+
+  // Execute the script, and get rid of the message that the ExecuteScript call
+  // produces.
+  EXPECT_TRUE(content::ExecuteScript(host, script));
+  std::string message;
+  ASSERT_TRUE(msg_queue.PopMessage(&message));
+
+  WaitUntilTilesLoaded(contents, &msg_queue, /*delay=*/0);
+}
+
+void WaitUntilTilesLoaded(content::WebContents* active_tab,
+                          content::DOMMessageQueue* msg_queue,
+                          int delay) {
   // At this point, the MV iframe may or may not have been fully loaded. Once
   // it loads, it sends a 'loaded' postMessage to the page. Check if the page
   // has already received that, and if not start listening for it. It's
@@ -64,22 +153,26 @@ void NavigateToNTPAndWaitUntilLoaded(Browser* browser, int delay) {
       active_tab, base::StringPrintf(R"js(
       (function() {
         if (tilesAreLoaded) {
+          tilesAreLoaded = false;
           return true;
         }
-        window.addEventListener('message', function(event) {
+        const loaded = (event) => {
           if (event.data.cmd == 'loaded') {
+            window.removeEventListener('message', loaded);
             setTimeout(() => {
-             domAutomationController.send('NavigateToNTPAndWaitUntilLoaded');
+              tilesAreLoaded = false;
+              domAutomationController.send('WaitUntilTilesLoaded');
             }, %d);
           }
-        });
+        };
+        window.addEventListener('message', loaded);
         return false;
       })()
       )js", delay), &mv_tiles_loaded));
 
   std::string message;
   // Get rid of the message that the GetBoolFromJS call produces.
-  ASSERT_TRUE(msg_queue.PopMessage(&message));
+  ASSERT_TRUE(msg_queue->PopMessage(&message));
 
   if (mv_tiles_loaded) {
     // The tiles are already loaded, i.e. we missed the 'loaded' message. All
@@ -87,11 +180,11 @@ void NavigateToNTPAndWaitUntilLoaded(Browser* browser, int delay) {
     return;
   }
 
-  // Not loaded yet. Wait for the "NavigateToNTPAndWaitUntilLoaded" message.
-  ASSERT_TRUE(msg_queue.WaitForMessage(&message));
-  ASSERT_EQ("\"NavigateToNTPAndWaitUntilLoaded\"", message);
+  // Not loaded yet. Wait for the "WaitUntilTilesLoaded" message.
+  ASSERT_TRUE(msg_queue->WaitForMessage(&message));
+  ASSERT_EQ("\"WaitUntilTilesLoaded\"", message);
   // There shouldn't be any other messages.
-  ASSERT_FALSE(msg_queue.PopMessage(&message));
+  ASSERT_FALSE(msg_queue->PopMessage(&message));
 }
 
 bool SwitchBrowserLanguageToFrench() {

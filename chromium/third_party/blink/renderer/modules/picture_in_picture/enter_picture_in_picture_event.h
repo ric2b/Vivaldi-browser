@@ -22,17 +22,17 @@ class MODULES_EXPORT EnterPictureInPictureEvent final : public Event {
                                             PictureInPictureWindow*);
   static EnterPictureInPictureEvent* Create(
       const AtomicString&,
-      const EnterPictureInPictureEventInit&);
+      const EnterPictureInPictureEventInit*);
+
+  EnterPictureInPictureEvent(AtomicString const&, PictureInPictureWindow*);
+  EnterPictureInPictureEvent(AtomicString const&,
+                             const EnterPictureInPictureEventInit*);
 
   PictureInPictureWindow* pictureInPictureWindow() const;
 
   void Trace(blink::Visitor*) override;
 
  private:
-  EnterPictureInPictureEvent(AtomicString const&, PictureInPictureWindow*);
-  EnterPictureInPictureEvent(AtomicString const&,
-                             const EnterPictureInPictureEventInit&);
-
   Member<PictureInPictureWindow> picture_in_picture_window_;
 };
 

@@ -4,6 +4,7 @@
 
 #include "components/ntp_snippets/breaking_news/breaking_news_gcm_app_handler.h"
 
+#include "base/bind.h"
 #include "base/json/json_writer.h"
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
@@ -95,7 +96,7 @@ BreakingNewsGCMAppHandler::BreakingNewsGCMAppHandler(
     PrefService* pref_service,
     std::unique_ptr<SubscriptionManager> subscription_manager,
     const ParseJSONCallback& parse_json_callback,
-    base::Clock* clock,
+    const base::Clock* clock,
     std::unique_ptr<base::OneShotTimer> token_validation_timer,
     std::unique_ptr<base::OneShotTimer> forced_subscription_timer)
     : gcm_driver_(gcm_driver),
@@ -177,6 +178,7 @@ void BreakingNewsGCMAppHandler::Subscribe(bool force_token_retrieval) {
   instance_id_driver_->GetInstanceID(kBreakingNewsGCMAppID)
       ->GetToken(kBreakingNewsGCMSenderId, kGCMScope,
                  /*options=*/std::map<std::string, std::string>(),
+                 /*is_lazy=*/false,
                  base::Bind(&BreakingNewsGCMAppHandler::DidRetrieveToken,
                             weak_ptr_factory_.GetWeakPtr()));
 }
@@ -230,7 +232,7 @@ void BreakingNewsGCMAppHandler::ResubscribeIfInvalidToken() {
   instance_id_driver_->GetInstanceID(kBreakingNewsGCMAppID)
       ->GetToken(
           kBreakingNewsGCMSenderId, kGCMScope,
-          /*options=*/std::map<std::string, std::string>(),
+          /*options=*/std::map<std::string, std::string>(), /*is_lazy=*/false,
           base::Bind(&BreakingNewsGCMAppHandler::DidReceiveTokenForValidation,
                      weak_ptr_factory_.GetWeakPtr()));
 }

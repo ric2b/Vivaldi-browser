@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
@@ -30,8 +31,7 @@ namespace dom_distiller {
 SourcePageHandleWebContents::SourcePageHandleWebContents(
     content::WebContents* web_contents,
     bool owned)
-    : web_contents_(web_contents), owned_(owned) {
-}
+    : web_contents_(web_contents), owned_(owned) {}
 
 SourcePageHandleWebContents::~SourcePageHandleWebContents() {
   if (owned_) {
@@ -76,11 +76,10 @@ DistillerPageWebContents::DistillerPageWebContents(
   }
 }
 
-DistillerPageWebContents::~DistillerPageWebContents() {
-}
+DistillerPageWebContents::~DistillerPageWebContents() {}
 
 bool DistillerPageWebContents::StringifyOutput() {
- return false;
+  return false;
 }
 
 void DistillerPageWebContents::DistillPageImpl(const GURL& url,

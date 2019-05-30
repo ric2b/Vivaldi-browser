@@ -67,13 +67,16 @@ bool Path::operator==(const Path& other) const {
 }
 
 bool Path::Contains(const FloatPoint& point) const {
-  return path_.contains(WebCoreFloatToSkScalar(point.X()),
-                        WebCoreFloatToSkScalar(point.Y()));
+  if (!std::isfinite(point.X()) || !std::isfinite(point.Y()))
+    return false;
+  return path_.contains(SkScalar(point.X()), SkScalar(point.Y()));
 }
 
 bool Path::Contains(const FloatPoint& point, WindRule rule) const {
-  SkScalar x = WebCoreFloatToSkScalar(point.X());
-  SkScalar y = WebCoreFloatToSkScalar(point.Y());
+  if (!std::isfinite(point.X()) || !std::isfinite(point.Y()))
+    return false;
+  SkScalar x = point.X();
+  SkScalar y = point.Y();
   SkPath::FillType fill_type = WebCoreWindRuleToSkFillType(rule);
   if (path_.getFillType() != fill_type) {
     SkPath tmp(path_);
@@ -101,9 +104,10 @@ SkPath Path::StrokePath(const StrokeData& stroke_data) const {
 
 bool Path::StrokeContains(const FloatPoint& point,
                           const StrokeData& stroke_data) const {
+  if (!std::isfinite(point.X()) || !std::isfinite(point.Y()))
+    return false;
   return StrokePath(stroke_data)
-      .contains(WebCoreFloatToSkScalar(point.X()),
-                WebCoreFloatToSkScalar(point.Y()));
+      .contains(SkScalar(point.X()), SkScalar(point.Y()));
 }
 
 FloatRect Path::BoundingRect() const {
@@ -349,13 +353,10 @@ void Path::AddEllipse(const FloatPoint& p,
                       float radius_x,
                       float radius_y,
                       float start_angle,
-                      float end_angle,
-                      bool anticlockwise) {
+                      float end_angle) {
   DCHECK(EllipseIsRenderable(start_angle, end_angle));
   DCHECK_GE(start_angle, 0);
   DCHECK_LT(start_angle, kTwoPiFloat);
-  DCHECK((anticlockwise && (start_angle - end_angle) >= 0) ||
-         (!anticlockwise && (end_angle - start_angle) >= 0));
 
   SkScalar cx = WebCoreFloatToSkScalar(p.X());
   SkScalar cy = WebCoreFloatToSkScalar(p.Y());
@@ -396,9 +397,8 @@ void Path::AddEllipse(const FloatPoint& p,
 void Path::AddArc(const FloatPoint& p,
                   float radius,
                   float start_angle,
-                  float end_angle,
-                  bool anticlockwise) {
-  AddEllipse(p, radius, radius, start_angle, end_angle, anticlockwise);
+                  float end_angle) {
+  AddEllipse(p, radius, radius, start_angle, end_angle);
 }
 
 void Path::AddRect(const FloatRect& rect) {
@@ -411,17 +411,14 @@ void Path::AddEllipse(const FloatPoint& p,
                       float radius_y,
                       float rotation,
                       float start_angle,
-                      float end_angle,
-                      bool anticlockwise) {
+                      float end_angle) {
   DCHECK(EllipseIsRenderable(start_angle, end_angle));
   DCHECK_GE(start_angle, 0);
   DCHECK_LT(start_angle, kTwoPiFloat);
-  DCHECK((anticlockwise && (start_angle - end_angle) >= 0) ||
-         (!anticlockwise && (end_angle - start_angle) >= 0));
 
   if (!rotation) {
     AddEllipse(FloatPoint(p.X(), p.Y()), radius_x, radius_y, start_angle,
-               end_angle, anticlockwise);
+               end_angle);
     return;
   }
 
@@ -431,8 +428,7 @@ void Path::AddEllipse(const FloatPoint& p,
   DCHECK(ellipse_transform.IsInvertible());
   AffineTransform inverse_ellipse_transform = ellipse_transform.Inverse();
   Transform(inverse_ellipse_transform);
-  AddEllipse(FloatPoint::Zero(), radius_x, radius_y, start_angle, end_angle,
-             anticlockwise);
+  AddEllipse(FloatPoint::Zero(), radius_x, radius_y, start_angle, end_angle);
   Transform(ellipse_transform);
 }
 

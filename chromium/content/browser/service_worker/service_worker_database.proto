@@ -23,6 +23,10 @@ message ServiceWorkerNavigationPreloadState {
 }
 
 message ServiceWorkerRegistrationData {
+  enum ServiceWorkerScriptType {
+    CLASSIC = 0;
+    MODULE = 1;
+  }
   enum ServiceWorkerUpdateViaCacheType {
     IMPORTS = 0;
     ALL = 1;
@@ -63,6 +67,11 @@ message ServiceWorkerRegistrationData {
 
   optional ServiceWorkerUpdateViaCacheType update_via_cache = 14
       [default = IMPORTS];
+  optional ServiceWorkerScriptType script_type = 15 [default = CLASSIC];
+
+  // The time when the browser received the service worker main script,
+  // serialized by Time::ToDeltaSinceWindowsEpoch().
+  optional int64 script_response_time = 16;
 }
 
 message ServiceWorkerResourceRecord {

@@ -21,9 +21,6 @@ def AddCommonArgs(arg_parser):
   common_args.add_argument('--package-name', required=True,
                            help='Name of the package to execute, defined in ' +
                                 'package metadata.')
-  common_args.add_argument('--package-manifest',
-                           type=os.path.realpath, required=True,
-                           help='Path to the Fuchsia package manifest file.')
   common_args.add_argument('--package-dep', action='append', default=[],
                            help='Path to an additional package to install.')
   common_args.add_argument('--install-only', action='store_true', default=False,
@@ -34,6 +31,9 @@ def AddCommonArgs(arg_parser):
                                  'are located (must include build type).'))
   common_args.add_argument('--target-cpu', required=True,
                            help='GN target_cpu setting for the build.')
+  common_args.add_argument('--target-staging-path',
+                           help='target path under which to stage packages '
+                           'during deployment.', default='/data')
   common_args.add_argument('--device', '-d', action='store_true', default=False,
                            help='Run on hardware device instead of QEMU.')
   common_args.add_argument('--host', help='The IP of the target device. ' +
@@ -57,6 +57,10 @@ def AddCommonArgs(arg_parser):
   common_args.add_argument('--qemu-cpu-cores', type=int, default=4,
                            help='Sets the number of CPU cores to provide if '
                            'launching in a VM with QEMU.'),
+  common_args.add_argument('--qemu-require-kvm', action='store_true',
+                           help='Disables fall-back to emulated CPU if the '
+                           'host system does not support KVM acceleration.'),
+
 
 def ConfigureLogging(args):
   """Configures the logging level based on command line |args|."""
@@ -88,7 +92,8 @@ def GetDeploymentTargetForArgs(args):
 
   if not args.device:
     return QemuTarget(args.output_directory, args.target_cpu,
-                      args.qemu_cpu_cores, system_log_file)
+                      args.qemu_cpu_cores, system_log_file,
+                      args.qemu_require_kvm)
   else:
     return DeviceTarget(args.output_directory, args.target_cpu, args.host,
                         args.port, args.ssh_config, system_log_file)

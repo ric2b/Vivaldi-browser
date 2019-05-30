@@ -42,6 +42,9 @@ class CORE_EXPORT SVGImageElement final
 
  public:
   DECLARE_NODE_FACTORY(SVGImageElement);
+
+  explicit SVGImageElement(Document&);
+
   void Trace(blink::Visitor*) override;
 
   bool CurrentFrameHasSingleSecurityOrigin() const;
@@ -52,6 +55,10 @@ class CORE_EXPORT SVGImageElement final
   SVGAnimatedLength* height() const { return height_.Get(); }
   SVGAnimatedPreserveAspectRatio* preserveAspectRatio() {
     return preserve_aspect_ratio_.Get();
+  }
+
+  IntSize GetOverriddenIntrinsicSize() const {
+    return overridden_intrinsic_size_;
   }
 
   bool HasPendingActivity() const final {
@@ -65,9 +72,15 @@ class CORE_EXPORT SVGImageElement final
     return GetImageLoader().GetContent();
   }
 
- private:
-  explicit SVGImageElement(Document&);
+  bool IsDefaultIntrinsicSize() const {
+    return is_default_overridden_intrinsic_size_;
+  }
 
+  void SetImageForTest(ImageResourceContent* content) {
+    GetImageLoader().SetImageForTest(content);
+  }
+
+ private:
   bool IsStructurallyExternal() const override {
     return !HrefString().IsNull();
   }
@@ -92,6 +105,9 @@ class CORE_EXPORT SVGImageElement final
   bool SelfHasRelativeLengths() const override;
   void DidMoveToNewDocument(Document& old_document) override;
   SVGImageLoader& GetImageLoader() const override { return *image_loader_; }
+
+  IntSize overridden_intrinsic_size_;
+  bool is_default_overridden_intrinsic_size_;
 
   Member<SVGAnimatedLength> x_;
   Member<SVGAnimatedLength> y_;

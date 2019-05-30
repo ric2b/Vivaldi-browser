@@ -4,6 +4,7 @@
 
 #include <math.h>
 
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/math_constants.h"
 #include "base/time/time.h"
@@ -147,7 +148,7 @@ void VROrientationDevice::RequestSession(
   ReturnNonImmersiveSession(std::move(callback));
 }
 
-void VROrientationDevice::OnMagicWindowFrameDataRequest(
+void VROrientationDevice::OnGetInlineFrameData(
     mojom::XRFrameDataProvider::GetFrameDataCallback callback) {
   mojom::VRPosePtr pose = mojom::VRPose::New();
   pose->orientation.emplace(4);

@@ -8,7 +8,7 @@
 
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
-#include "chromeos/components/proximity_auth/logging/logging.h"
+#include "chromeos/components/multidevice/logging/logging.h"
 #include "chromeos/components/tether/connection_preserver.h"
 #include "chromeos/components/tether/device_id_tether_network_guid_map.h"
 #include "chromeos/components/tether/device_status_util.h"
@@ -17,7 +17,6 @@
 #include "chromeos/components/tether/master_host_scan_cache.h"
 #include "chromeos/components/tether/tether_host_fetcher.h"
 #include "chromeos/network/network_state.h"
-#include "components/cryptauth/remote_device_loader.h"
 #include "components/session_manager/core/session_manager.h"
 
 namespace chromeos {
@@ -30,7 +29,6 @@ HostScannerImpl::HostScannerImpl(
     NetworkStateHandler* network_state_handler,
     session_manager::SessionManager* session_manager,
     TetherHostFetcher* tether_host_fetcher,
-    BleConnectionManager* connection_manager,
     HostScanDevicePrioritizer* host_scan_device_prioritizer,
     TetherHostResponseRecorder* tether_host_response_recorder,
     GmsCoreNotificationsStateTrackerImpl* gms_core_notifications_state_tracker,
@@ -44,7 +42,6 @@ HostScannerImpl::HostScannerImpl(
       network_state_handler_(network_state_handler),
       session_manager_(session_manager),
       tether_host_fetcher_(tether_host_fetcher),
-      connection_manager_(connection_manager),
       host_scan_device_prioritizer_(host_scan_device_prioritizer),
       tether_host_response_recorder_(tether_host_response_recorder),
       gms_core_notifications_state_tracker_(
@@ -79,7 +76,7 @@ void HostScannerImpl::StopScan() {
   if (!host_scanner_operation_)
     return;
 
-  PA_LOG(INFO) << "Host scan has been stopped prematurely.";
+  PA_LOG(VERBOSE) << "Host scan has been stopped prematurely.";
 
   host_scanner_operation_->RemoveObserver(
       gms_core_notifications_state_tracker_);
@@ -90,7 +87,7 @@ void HostScannerImpl::StopScan() {
 }
 
 void HostScannerImpl::OnTetherHostsFetched(
-    const cryptauth::RemoteDeviceRefList& tether_hosts) {
+    const multidevice::RemoteDeviceRefList& tether_hosts) {
   is_fetching_hosts_ = false;
 
   if (tether_hosts.empty()) {
@@ -98,16 +95,16 @@ void HostScannerImpl::OnTetherHostsFetched(
     return;
   }
 
-  PA_LOG(INFO) << "Starting Tether host scan. " << tether_hosts.size() << " "
-               << "potential host(s) included in the search.";
+  PA_LOG(VERBOSE) << "Starting Tether host scan. " << tether_hosts.size() << " "
+                  << "potential host(s) included in the search.";
 
   tether_guids_in_cache_before_scan_ =
       host_scan_cache_->GetTetherGuidsInCache();
 
   host_scanner_operation_ = HostScannerOperation::Factory::NewInstance(
       tether_hosts, device_sync_client_, secure_channel_client_,
-      connection_manager_, host_scan_device_prioritizer_,
-      tether_host_response_recorder_, connection_preserver_);
+      host_scan_device_prioritizer_, tether_host_response_recorder_,
+      connection_preserver_);
   // Add |gms_core_notifications_state_tracker_| as the first observer. When the
   // final change event is emitted, this class will destroy
   // |host_scanner_operation_|, so |gms_core_notifications_state_tracker_| must
@@ -120,7 +117,7 @@ void HostScannerImpl::OnTetherHostsFetched(
 void HostScannerImpl::OnTetherAvailabilityResponse(
     const std::vector<HostScannerOperation::ScannedDeviceInfo>&
         scanned_device_list_so_far,
-    const cryptauth::RemoteDeviceRefList&
+    const multidevice::RemoteDeviceRefList&
         gms_core_notifications_disabled_devices,
     bool is_final_scan_result) {
   if (scanned_device_list_so_far.empty() && !is_final_scan_result) {
@@ -140,7 +137,7 @@ void HostScannerImpl::OnTetherAvailabilityResponse(
              NotificationPresenter::PotentialHotspotNotificationState::
                  MULTIPLE_HOTSPOTS_NEARBY_SHOWN ||
          is_final_scan_result)) {
-      cryptauth::RemoteDeviceRef remote_device =
+      multidevice::RemoteDeviceRef remote_device =
           scanned_device_list_so_far.at(0).remote_device;
       int32_t signal_strength;
       NormalizeDeviceStatus(scanned_device_list_so_far.at(0).device_status,
@@ -173,15 +170,17 @@ void HostScannerImpl::OnSessionStateChanged() {
   // notification to be shown once each time the device is unlocked. Without
   // this change, the notification would only be shown once per user login.
   // See https://crbug.com/813838.
-  PA_LOG(INFO) << "Screen was locked; the \"available hosts\" notification can "
-               << "be shown again after the next unlock.";
+  PA_LOG(VERBOSE)
+      << "Screen was locked; the \"available hosts\" notification can "
+      << "be shown again after the next unlock.";
   has_notification_been_shown_in_previous_scan_ = false;
 }
 
 void HostScannerImpl::SetCacheEntry(
     const HostScannerOperation::ScannedDeviceInfo& scanned_device_info) {
   const DeviceStatus& status = scanned_device_info.device_status;
-  cryptauth::RemoteDeviceRef remote_device = scanned_device_info.remote_device;
+  multidevice::RemoteDeviceRef remote_device =
+      scanned_device_info.remote_device;
 
   std::string carrier;
   int32_t battery_percentage;
@@ -241,8 +240,8 @@ void HostScannerImpl::OnFinalScanResultReceived(
   was_notification_shown_in_current_scan_ = false;
   was_notification_showing_when_current_scan_started_ = false;
 
-  PA_LOG(INFO) << "Finished Tether host scan. " << final_scan_results.size()
-               << " potential host(s) were found.";
+  PA_LOG(VERBOSE) << "Finished Tether host scan. " << final_scan_results.size()
+                  << " potential host(s) were found.";
 
   // If the final scan result has been received, the operation is finished.
   // Delete it.
@@ -267,12 +266,15 @@ bool HostScannerImpl::IsPotentialHotspotNotificationShowing() {
 }
 
 bool HostScannerImpl::CanAvailableHostNotificationBeShown() {
+  const chromeos::NetworkTypePattern network_type_pattern =
+      chromeos::switches::ShouldTetherHostScansIgnoreWiredConnections()
+          ? chromeos::NetworkTypePattern::Wireless()
+          : chromeos::NetworkTypePattern::Default();
   // Note: If a network is active (i.e., connecting or connected), it will be
   // returned at the front of the list, so using FirstNetworkByType() guarantees
   // that we will find an active network if there is one.
   const chromeos::NetworkState* first_network =
-      network_state_handler_->FirstNetworkByType(
-          chromeos::NetworkTypePattern::Default());
+      network_state_handler_->FirstNetworkByType(network_type_pattern);
   if (first_network && first_network->IsConnectingOrConnected()) {
     // If a network is connecting or connected, the notification should not be
     // shown.

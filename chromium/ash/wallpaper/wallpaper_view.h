@@ -5,8 +5,6 @@
 #ifndef ASH_WALLPAPER_WALLPAPER_VIEW_H_
 #define ASH_WALLPAPER_WALLPAPER_VIEW_H_
 
-#include <memory>
-
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/view.h"
 
@@ -16,8 +14,6 @@ class Window;
 
 namespace ash {
 
-class PreEventDispatchHandler;
-
 class WallpaperView : public views::View, public views::ContextMenuController {
  public:
   WallpaperView();
@@ -26,21 +22,21 @@ class WallpaperView : public views::View, public views::ContextMenuController {
  private:
   friend class WallpaperControllerTest;
 
-  // Overridden from views::View:
+  // views::View:
   void OnPaint(gfx::Canvas* canvas) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
 
-  // Overridden from views::ContextMenuController:
-  void ShowContextMenuForView(views::View* source,
-                              const gfx::Point& point,
-                              ui::MenuSourceType source_type) override;
-  std::unique_ptr<PreEventDispatchHandler> pre_dispatch_handler_;
+  // views::ContextMenuController:
+  void ShowContextMenuForViewImpl(views::View* source,
+                                  const gfx::Point& point,
+                                  ui::MenuSourceType source_type) override;
 
   DISALLOW_COPY_AND_ASSIGN(WallpaperView);
 };
 
 views::Widget* CreateWallpaperWidget(aura::Window* root_window,
-                                     int container_id);
+                                     int container_id,
+                                     WallpaperView** out_wallpaper_view);
 
 }  // namespace ash
 

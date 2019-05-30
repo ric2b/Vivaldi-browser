@@ -30,25 +30,26 @@ class BrowserContext;
 class KEYED_SERVICE_EXPORT RefcountedBrowserContextKeyedServiceFactory
     : public RefcountedKeyedServiceFactory {
  public:
-  // A function that supplies the instance of a KeyedService for a given
+  // A callback that supplies the instance of a KeyedService for a given
   // BrowserContext. This is used primarily for testing, where we want to feed
-  // a specific mock into the BCKSF system.
-  typedef scoped_refptr<RefcountedKeyedService>(*TestingFactoryFunction)(
-      content::BrowserContext* context);
+  // a specific test double into the BCKSF system.
+  using TestingFactory =
+      base::RepeatingCallback<scoped_refptr<RefcountedKeyedService>(
+          content::BrowserContext* context)>;
 
-  // Associates |factory| with |context| so that |factory| is used to create
-  // the KeyedService when requested.  |factory| can be NULL to signal that
-  // KeyedService should be NULL. Multiple calls to SetTestingFactory() are
-  // allowed; previous services will be shut down.
+  // Associates |testing_factory| with |context| so that |testing_factory| is
+  // used to create the KeyedService when requested.  |testing_factory| can be
+  // empty to signal that KeyedService should be null. Multiple calls to
+  // SetTestingFactory() are allowed; previous services will be shut down.
   void SetTestingFactory(content::BrowserContext* context,
-                         TestingFactoryFunction factory);
+                         TestingFactory testing_factory);
 
-  // Associates |factory| with |context| and immediately returns the created
-  // KeyedService. Since the factory will be used immediately, it may not be
-  // NULL.
+  // Associates |testing_factory| with |context| and immediately returns the
+  // created KeyedService. Since the factory will be used immediately, it may
+  // not be empty.
   scoped_refptr<RefcountedKeyedService> SetTestingFactoryAndUse(
       content::BrowserContext* context,
-      TestingFactoryFunction factory);
+      TestingFactory testing_factory);
 
  protected:
   // RefcountedBrowserContextKeyedServiceFactories must communicate with a
@@ -119,23 +120,22 @@ class KEYED_SERVICE_EXPORT RefcountedBrowserContextKeyedServiceFactory
  private:
   friend class BrowserContextDependencyManagerUnittests;
 
-  // Registers any user preferences on this service. This is called by
-  // RegisterPrefsIfNecessaryForContext() and should be overriden by any service
-  // that wants to register profile-specific preferences.
+  // Registers any user preferences on this service. This should be overriden by
+  // any service that wants to register profile-specific preferences.
   virtual void RegisterProfilePrefs(
       user_prefs::PrefRegistrySyncable* registry) {}
 
   // RefcountedKeyedServiceFactory:
   scoped_refptr<RefcountedKeyedService> BuildServiceInstanceFor(
-      base::SupportsUserData* context) const final;
-  bool IsOffTheRecord(base::SupportsUserData* context) const final;
+      void* context,
+      void* side_parameter) const final;
+  bool IsOffTheRecord(void* context) const final;
 
   // KeyedServiceBaseFactory:
-  base::SupportsUserData* GetContextToUse(
-      base::SupportsUserData* context) const final;
+  void* GetContextToUse(void* context) const final;
   bool ServiceIsCreatedWithContext() const final;
-  void ContextShutdown(base::SupportsUserData* context) final;
-  void ContextDestroyed(base::SupportsUserData* context) final;
+  void ContextShutdown(void* context) final;
+  void ContextDestroyed(void* context) final;
   void RegisterPrefs(user_prefs::PrefRegistrySyncable* registry) final;
 
   DISALLOW_COPY_AND_ASSIGN(RefcountedBrowserContextKeyedServiceFactory);

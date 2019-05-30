@@ -10,7 +10,8 @@ class VivaldiNativeAppWindow : public extensions::NativeAppWindow,
                                public content::WebContentsObserver {
  public:
   // Update the inset. Used to update when a frameless window goes to maximized.
-  virtual void UpdateEventTargeterWithInset(){};
+  virtual void UpdateEventTargeterWithInset() {}
+  virtual void ShowEmojiPanel() {}
 };
 
 #endif  // UI_VIVALDI_NATIVE_APP_WINDOW_H_

@@ -25,7 +25,7 @@
 #include "ui/views/test/native_widget_factory.h"
 #include "ui/views/test/test_platform_native_widget.h"
 #include "ui/views/test/widget_test.h"
-#include "ui/views/view_properties.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 
 #if defined(USE_AURA)
@@ -130,12 +130,6 @@ TEST_F(FocusManagerTest, FocusChangeListener) {
 }
 
 TEST_F(FocusManagerTest, WidgetFocusChangeListener) {
-  // TODO: this test ends up calling focus on the aura::Window associated with
-  // the Widget and expecting that to change activation. This should work for
-  // aura-mus-client as well. http://crbug.com/664261.
-  if (IsMus())
-    return;
-
   // First, ensure the simulator is aware of the Widget created in SetUp() being
   // currently active.
   test::WidgetTest::SimulateNativeActivate(GetWidget());
@@ -160,14 +154,14 @@ TEST_F(FocusManagerTest, WidgetFocusChangeListener) {
   gfx::NativeView native_view1 = widget1->GetNativeView();
   test::WidgetTest::SimulateNativeActivate(widget1.get());
   ASSERT_EQ(2u, widget_listener.focus_changes().size());
-  EXPECT_EQ(nullptr, widget_listener.focus_changes()[0]);
+  EXPECT_EQ(gfx::kNullNativeView, widget_listener.focus_changes()[0]);
   EXPECT_EQ(native_view1, widget_listener.focus_changes()[1]);
 
   widget_listener.ClearFocusChanges();
   gfx::NativeView native_view2 = widget2->GetNativeView();
   test::WidgetTest::SimulateNativeActivate(widget2.get());
   ASSERT_EQ(2u, widget_listener.focus_changes().size());
-  EXPECT_EQ(nullptr, widget_listener.focus_changes()[0]);
+  EXPECT_EQ(gfx::kNullNativeView, widget_listener.focus_changes()[0]);
   EXPECT_EQ(native_view2, widget_listener.focus_changes()[1]);
 }
 
@@ -443,9 +437,7 @@ class FocusManagerDtorTest : public FocusManagerTest {
         : dtor_tracker_(dtor_tracker) {}
     ~TestFocusManagerFactory() override {}
 
-    std::unique_ptr<FocusManager> CreateFocusManager(
-        Widget* widget,
-        bool desktop_widget) override {
+    std::unique_ptr<FocusManager> CreateFocusManager(Widget* widget) override {
       return std::make_unique<FocusManagerDtorTracked>(widget, dtor_tracker_);
     }
 
@@ -668,7 +660,7 @@ class FocusManagerArrowKeyTraversalTest
 
 // Instantiate the Boolean which is used to toggle RTL in
 // the parameterized tests.
-INSTANTIATE_TEST_CASE_P(, FocusManagerArrowKeyTraversalTest, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(, FocusManagerArrowKeyTraversalTest, testing::Bool());
 
 }  // namespace
 
@@ -844,7 +836,7 @@ class TestBubbleDialogDelegateView : public BubbleDialogDelegateView {
   // platform and other factors.
   void UseNativeWidgetAura() { use_native_widget_aura_ = true; }
 
-  // ui::DialogModel override.
+  // BubbleDialogDelegateView:
   int GetDialogButtons() const override { return 0; }
 
   void OnBeforeBubbleWidgetInit(Widget::InitParams* params,
@@ -937,11 +929,21 @@ TEST_F(FocusManagerTest, NavigateIntoAnchoredDialog) {
   GetWidget()->GetRootView()->AddChildView(parent3);
   GetWidget()->GetRootView()->AddChildView(parent4);
 
+  // Add an unfocusable child view to the dialog anchor view. This is a
+  // regression test that makes sure focus is able to navigate past unfocusable
+  // children and try to go into the anchored dialog. |kAnchoredDialogKey| was
+  // previously not checked if a recursive search to find a focusable child view
+  // was attempted (and failed), so the dialog would previously be skipped.
+  parent3->AddChildView(new View());
+
   BubbleDialogDelegateView* bubble_delegate =
       new TestBubbleDialogDelegateView(parent3);
   test::WidgetTest::WidgetAutoclosePtr bubble_widget(
       BubbleDialogDelegateView::CreateBubble(bubble_delegate));
-  bubble_delegate->EnableFocusTraversalFromAnchorView();
+  bubble_widget->SetFocusTraversableParent(
+      bubble_delegate->anchor_widget()->GetFocusTraversable());
+
+  bubble_widget->SetFocusTraversableParentView(parent3);
   View* child1 = new View();
   View* child2 = new View();
   child1->SetFocusBehavior(View::FocusBehavior::ALWAYS);
@@ -1002,7 +1004,9 @@ TEST_F(FocusManagerTest, AnchoredDialogOnContainerView) {
       new TestBubbleDialogDelegateView(parent_group);
   test::WidgetTest::WidgetAutoclosePtr bubble_widget(
       BubbleDialogDelegateView::CreateBubble(bubble_delegate));
-  bubble_delegate->EnableFocusTraversalFromAnchorView();
+  bubble_widget->SetFocusTraversableParent(
+      bubble_delegate->anchor_widget()->GetFocusTraversable());
+  bubble_widget->SetFocusTraversableParentView(parent_group);
   View* child1 = new View();
   View* child2 = new View();
   child1->SetFocusBehavior(View::FocusBehavior::ALWAYS);
@@ -1035,19 +1039,64 @@ TEST_F(FocusManagerTest, AnchoredDialogOnContainerView) {
   EXPECT_TRUE(parent3->HasFocus());
 }
 
-// Desktop native widget Aura tests are for non Chrome OS platforms.
+// Checks that focus traverses from a View to a bubble anchored at that View
+// when in a pane.
+TEST_F(FocusManagerTest, AnchoredDialogInPane) {
+  // Set up a focusable view (to which we will anchor our bubble) inside an
+  // AccessiblePaneView.
+  View* root_view = GetWidget()->GetRootView();
+  AccessiblePaneView* pane =
+      root_view->AddChildView(std::make_unique<AccessiblePaneView>());
+  View* anchor = pane->AddChildView(std::make_unique<View>());
+  anchor->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+
+  BubbleDialogDelegateView* bubble = new TestBubbleDialogDelegateView(anchor);
+  test::WidgetTest::WidgetAutoclosePtr bubble_widget(
+      BubbleDialogDelegateView::CreateBubble(bubble));
+  bubble_widget->SetFocusTraversableParent(
+      bubble->anchor_widget()->GetFocusTraversable());
+  bubble_widget->SetFocusTraversableParentView(anchor);
+  bubble->set_close_on_deactivate(false);
+  bubble_widget->Show();
+
+  // We need a focusable view inside our bubble to check that focus traverses
+  // in.
+  View* bubble_child = bubble->AddChildView(std::make_unique<View>());
+  bubble_child->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+
+  // Verify that, when in pane focus mode, focus advances from the anchor view
+  // to inside the bubble.
+  pane->SetPaneFocus(anchor);
+  EXPECT_TRUE(anchor->HasFocus());
+  GetWidget()->GetFocusManager()->AdvanceFocus(false);
+  EXPECT_TRUE(bubble_child->HasFocus());
+}
+
 // This test is specifically for the permutation where the main
 // widget is a DesktopNativeWidgetAura and the bubble is a
 // NativeWidgetAura. When focus moves back from the bubble to the
 // parent widget, ensure that the DNWA's aura window is focused.
-#if defined(USE_AURA) && !defined(OS_CHROMEOS)
-TEST_F(FocusManagerTest, AnchoredDialogInDesktopNativeWidgetAura) {
+#if defined(USE_AURA)
+class DesktopWidgetFocusManagerTest : public FocusManagerTest {
+ public:
+  DesktopWidgetFocusManagerTest() = default;
+  ~DesktopWidgetFocusManagerTest() override = default;
+
+  // FocusManagerTest:
+  void SetUp() override {
+    set_native_widget_type(NativeWidgetType::kDesktop);
+    FocusManagerTest::SetUp();
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DesktopWidgetFocusManagerTest);
+};
+
+TEST_F(DesktopWidgetFocusManagerTest, AnchoredDialogInDesktopNativeWidgetAura) {
   Widget widget;
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.bounds = gfx::Rect(0, 0, 1024, 768);
-  params.native_widget =
-      test::CreatePlatformDesktopNativeWidgetImpl(params, &widget, nullptr);
   widget.Init(params);
   widget.Show();
   widget.Activate();
@@ -1066,7 +1115,9 @@ TEST_F(FocusManagerTest, AnchoredDialogInDesktopNativeWidgetAura) {
   bubble_delegate->UseNativeWidgetAura();
   test::WidgetTest::WidgetAutoclosePtr bubble_widget(
       BubbleDialogDelegateView::CreateBubble(bubble_delegate));
-  bubble_delegate->EnableFocusTraversalFromAnchorView();
+  bubble_widget->SetFocusTraversableParent(
+      bubble_delegate->anchor_widget()->GetFocusTraversable());
+  bubble_widget->SetFocusTraversableParentView(parent2);
   View* child = new View();
   child->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   bubble_widget->GetRootView()->AddChildView(child);
@@ -1100,6 +1151,40 @@ TEST_F(FocusManagerTest, AnchoredDialogInDesktopNativeWidgetAura) {
   // Finally, the outer widget's window should be focused again.
   ASSERT_EQ(widget.GetNativeView(), focus_client->GetFocusedWindow());
 }
-#endif  // defined(USE_AURA) && !defined(OS_CHROMEOS)
+#endif  // defined(USE_AURA)
+
+// Ensures graceful failure if there is a focus cycle.
+TEST_F(FocusManagerTest, HandlesFocusCycles) {
+  // Create two side-by-side views.
+  View* root_view = GetWidget()->GetRootView();
+  View* left = root_view->AddChildView(std::make_unique<View>());
+  View* right = root_view->AddChildView(std::make_unique<View>());
+
+  // Create a cycle where the left view is focusable and the right isn't.
+  left->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  right->SetFocusBehavior(View::FocusBehavior::NEVER);
+  left->SetNextFocusableView(right);
+  right->SetNextFocusableView(left);
+
+  // Set focus on the left view then make it unfocusable, which both advances
+  // focus and ensures there's no candidate for focusing.
+  left->RequestFocus();
+  EXPECT_TRUE(left->HasFocus());
+  left->SetFocusBehavior(View::FocusBehavior::NEVER);
+
+  // At this point, we didn't crash. Just as a sanity check, ensure neither of
+  // our views were incorrectly focused.
+  EXPECT_FALSE(left->HasFocus());
+  EXPECT_FALSE(right->HasFocus());
+
+  // Now test focusing in reverse.
+  GetFocusManager()->SetFocusedView(right);
+  EXPECT_TRUE(right->HasFocus());
+  GetFocusManager()->AdvanceFocus(true);
+
+  // We don't check whether |right| has focus since if no focusable view is
+  // found, AdvanceFocus() doesn't clear focus.
+  EXPECT_FALSE(left->HasFocus());
+}
 
 }  // namespace views

@@ -431,33 +431,6 @@ TEST_F(DelayBasedBeginFrameSourceTest, VSyncChanges) {
   task_runner_->FastForwardTo(TicksFromMicroseconds(60000));
 }
 
-TEST_F(DelayBasedBeginFrameSourceTest, AuthoritativeVSyncChanges) {
-  source_->OnUpdateVSyncParameters(TicksFromMicroseconds(500),
-                                   base::TimeDelta::FromMicroseconds(10000));
-  EXPECT_BEGIN_FRAME_SOURCE_PAUSED(*obs_, false);
-  EXPECT_BEGIN_FRAME_USED_MISSED(*obs_, source_->source_id(), 1, 500, 10500,
-                                 10000);
-  source_->AddObserver(obs_.get());
-
-  EXPECT_BEGIN_FRAME_USED(*obs_, source_->source_id(), 2, 10500, 20500, 10000);
-  EXPECT_BEGIN_FRAME_USED(*obs_, source_->source_id(), 3, 20500, 30500, 10000);
-  task_runner_->FastForwardTo(TicksFromMicroseconds(20501));
-
-  // This will keep the same timebase, so 500, 9999
-  source_->SetAuthoritativeVSyncInterval(
-      base::TimeDelta::FromMicroseconds(9999));
-  EXPECT_BEGIN_FRAME_USED(*obs_, source_->source_id(), 4, 30500, 40496, 9999);
-  EXPECT_BEGIN_FRAME_USED(*obs_, source_->source_id(), 5, 40496, 50495, 9999);
-  task_runner_->FastForwardTo(TicksFromMicroseconds(40497));
-
-  // Change the vsync params, but the new interval will be ignored.
-  source_->OnUpdateVSyncParameters(TicksFromMicroseconds(400),
-                                   base::TimeDelta::FromMicroseconds(1));
-  EXPECT_BEGIN_FRAME_USED(*obs_, source_->source_id(), 6, 50495, 60394, 9999);
-  EXPECT_BEGIN_FRAME_USED(*obs_, source_->source_id(), 7, 60394, 70393, 9999);
-  task_runner_->FastForwardTo(TicksFromMicroseconds(60395));
-}
-
 TEST_F(DelayBasedBeginFrameSourceTest, MultipleObservers) {
   NiceMock<MockBeginFrameObserver> obs1, obs2;
 
@@ -643,6 +616,53 @@ TEST_F(ExternalBeginFrameSourceTest, DISABLED_GetMissedBeginFrameArgs) {
   EXPECT_BEGIN_FRAME_SOURCE_PAUSED(*obs_, false);
   EXPECT_CALL(*obs_, OnBeginFrame(_)).Times(0);
   source_->AddObserver(obs_.get());
+}
+
+// Tests that an observer which returns true from IsRoot is notified after
+// observers which return false.
+TEST_F(ExternalBeginFrameSourceTest, RootsNotifiedLast) {
+  using ::testing::InSequence;
+
+  NiceMock<MockBeginFrameObserver> obs1, obs2;
+  source_->AddObserver(&obs1);
+  source_->AddObserver(&obs2);
+
+  {
+    BeginFrameArgs args = CreateBeginFrameArgsForTesting(
+        BEGINFRAME_FROM_HERE, 0, 1, 10000, 10100, 100);
+    // Set obs1 to root, obs2 to child.
+    EXPECT_CALL(obs1, IsRoot()).WillRepeatedly(::testing::Return(true));
+    EXPECT_CALL(obs2, IsRoot()).WillRepeatedly(::testing::Return(false));
+    {
+      // Ensure that OnBeginFrame delivers the calls in the right order.
+      InSequence s;
+      EXPECT_CALL(obs2, OnBeginFrame(args))
+          .WillOnce(::testing::SaveArg<0>(&(obs2.last_begin_frame_args)));
+      EXPECT_CALL(obs1, OnBeginFrame(args))
+          .WillOnce(::testing::SaveArg<0>(&(obs1.last_begin_frame_args)));
+      source_->OnBeginFrame(args);
+    }
+  }
+
+  {
+    BeginFrameArgs args = CreateBeginFrameArgsForTesting(
+        BEGINFRAME_FROM_HERE, 0, 2, 10001, 10101, 100);
+    // Set obs2 to root, obs1 to child.
+    EXPECT_CALL(obs1, IsRoot()).WillRepeatedly(::testing::Return(false));
+    EXPECT_CALL(obs2, IsRoot()).WillRepeatedly(::testing::Return(true));
+    {
+      // Ensure that OnBeginFrame delivers the calls in the right order.
+      InSequence s;
+      EXPECT_CALL(obs1, OnBeginFrame(args))
+          .WillOnce(::testing::SaveArg<0>(&(obs1.last_begin_frame_args)));
+      EXPECT_CALL(obs2, OnBeginFrame(args))
+          .WillOnce(::testing::SaveArg<0>(&(obs2.last_begin_frame_args)));
+      source_->OnBeginFrame(args);
+    }
+  }
+
+  source_->RemoveObserver(&obs1);
+  source_->RemoveObserver(&obs2);
 }
 
 }  // namespace

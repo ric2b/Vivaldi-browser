@@ -96,15 +96,14 @@ TEST(ExtensionListPolicyHandlerTest, CheckPolicySettings) {
 }
 
 TEST(ExtensionSettingsPolicyHandlerTest, CheckPolicySettingsURL) {
-  std::vector<std::string> good_urls = {
-      "*://*.example.com", "*://example.com", "http://cat.example.com",
-      "https://example.*", "*://*.example.*", "<all_urls>"};
+  std::vector<std::string> good_urls = {"*://*.example.com", "*://example.com",
+                                        "http://cat.example.com", "<all_urls>"};
 
   // Invalid URLPattern or with a non-standard path
   std::vector<std::string> bad_urls = {
       "://*.example.com",       "*://example.com/cat*",  "*://example.com/",
       "*://*.example.com/*cat", "*://example.com/cat/*", "bad",
-      "*://example.com/*"};
+      "*://example.com/*",      "https://example.*",     "*://*.example.*"};
 
   // Crafts and parses a ExtensionSettings policy to test URL parsing.
   auto url_parses_successfully = [](const char* policy_template,
@@ -112,7 +111,7 @@ TEST(ExtensionSettingsPolicyHandlerTest, CheckPolicySettingsURL) {
     std::string policy = base::StringPrintf(policy_template, url.c_str());
     std::string error;
     std::unique_ptr<base::Value> policy_value =
-        base::JSONReader::ReadAndReturnError(
+        base::JSONReader::ReadAndReturnErrorDeprecated(
             policy, base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS,
             nullptr, &error);
     if (!policy_value)
@@ -353,7 +352,7 @@ TEST(ExtensionURLPatternListPolicyHandlerTest, ApplyPolicySettings) {
 TEST(ExtensionSettingsPolicyHandlerTest, CheckPolicySettings) {
   std::string error;
   std::unique_ptr<base::Value> policy_value =
-      base::JSONReader::ReadAndReturnError(
+      base::JSONReader::ReadAndReturnErrorDeprecated(
           kTestManagementPolicy1,
           base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS, NULL, &error);
   ASSERT_TRUE(policy_value.get()) << error;
@@ -380,7 +379,7 @@ TEST(ExtensionSettingsPolicyHandlerTest, ApplyPolicySettings) {
 
   std::string error;
   std::unique_ptr<base::Value> policy_value =
-      base::JSONReader::ReadAndReturnError(
+      base::JSONReader::ReadAndReturnErrorDeprecated(
           kTestManagementPolicy2,
           base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS, NULL, &error);
   ASSERT_TRUE(policy_value.get()) << error;
@@ -412,7 +411,7 @@ TEST(ExtensionSettingsPolicyHandlerTest, NonManagedOffWebstoreExtension) {
 
   std::string error;
   std::unique_ptr<base::Value> policy_value =
-      base::JSONReader::ReadAndReturnError(
+      base::JSONReader::ReadAndReturnErrorDeprecated(
           kTestManagementPolicy2,
           base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS, nullptr, &error);
   ASSERT_TRUE(policy_value.get()) << error;

@@ -28,10 +28,10 @@ SimpleImageParser.prototype.__proto__ = ImageParser.prototype;
  */
 SimpleImageParser.prototype.parse = function(
     file, metadata, callback, errorCallback) {
-  var self = this;
+  const self = this;
   MetadataParser.readFileBytes(
       file, 0, this.headerSize,
-      function(file, br) {
+      (file, br) => {
         try {
           self.parseHeader(metadata, br);
           callback(metadata);
@@ -47,7 +47,7 @@ SimpleImageParser.prototype.parse = function(
  * @param {Object} metadata Dictionary to store the parsed metadata.
  * @param {ByteReader} byteReader Reader for header binary data.
  */
-SimpleImageParser.prototype.parseHeader = function(metadata, byteReader) {};
+SimpleImageParser.prototype.parseHeader = (metadata, byteReader) => {};
 
 /**
  * Parser for the header of png files.
@@ -65,17 +65,19 @@ PngParser.prototype = {__proto__: SimpleImageParser.prototype};
 /**
  * @override
  */
-PngParser.prototype.parseHeader = function(metadata, br) {
+PngParser.prototype.parseHeader = (metadata, br) => {
   br.setByteOrder(ByteReader.BIG_ENDIAN);
 
-  var signature = br.readString(8);
-  if (signature != '\x89PNG\x0D\x0A\x1A\x0A')
+  const signature = br.readString(8);
+  if (signature != '\x89PNG\x0D\x0A\x1A\x0A') {
     throw new Error('Invalid PNG signature: ' + signature);
+  }
 
   br.seek(12);
-  var ihdr = br.readString(4);
-  if (ihdr != 'IHDR')
+  const ihdr = br.readString(4);
+  if (ihdr != 'IHDR') {
     throw new Error('Missing IHDR chunk');
+  }
 
   metadata.width = br.readScalar(4);
   metadata.height = br.readScalar(4);
@@ -99,12 +101,13 @@ BmpParser.prototype = {__proto__: SimpleImageParser.prototype};
 /**
  * @override
  */
-BmpParser.prototype.parseHeader = function(metadata, br) {
+BmpParser.prototype.parseHeader = (metadata, br) => {
   br.setByteOrder(ByteReader.LITTLE_ENDIAN);
 
-  var signature = br.readString(2);
-  if (signature != 'BM')
+  const signature = br.readString(2);
+  if (signature != 'BM') {
     throw new Error('Invalid BMP signature: ' + signature);
+  }
 
   br.seek(18);
   metadata.width = br.readScalar(4);
@@ -129,12 +132,13 @@ GifParser.prototype = {__proto__: SimpleImageParser.prototype};
 /**
  * @override
  */
-GifParser.prototype.parseHeader = function(metadata, br) {
+GifParser.prototype.parseHeader = (metadata, br) => {
   br.setByteOrder(ByteReader.LITTLE_ENDIAN);
 
-  var signature = br.readString(6);
-  if (!signature.match(/GIF8(7|9)a/))
+  const signature = br.readString(6);
+  if (!signature.match(/GIF8(7|9)a/)) {
     throw new Error('Invalid GIF signature: ' + signature);
+  }
 
   metadata.width = br.readScalar(2);
   metadata.height = br.readScalar(2);
@@ -158,24 +162,26 @@ WebpParser.prototype = {__proto__: SimpleImageParser.prototype};
 /**
  * @override
  */
-WebpParser.prototype.parseHeader = function(metadata, br) {
+WebpParser.prototype.parseHeader = (metadata, br) => {
   br.setByteOrder(ByteReader.LITTLE_ENDIAN);
 
-  var riffSignature = br.readString(4);
-  if (riffSignature != 'RIFF')
+  const riffSignature = br.readString(4);
+  if (riffSignature != 'RIFF') {
     throw new Error('Invalid RIFF signature: ' + riffSignature);
+  }
 
   br.seek(8);
-  var webpSignature = br.readString(4);
-  if (webpSignature != 'WEBP')
+  const webpSignature = br.readString(4);
+  if (webpSignature != 'WEBP') {
     throw new Error('Invalid WEBP signature: ' + webpSignature);
+  }
 
-  var chunkFormat = br.readString(4);
+  const chunkFormat = br.readString(4);
   switch (chunkFormat) {
     // VP8 lossy bitstream format.
     case 'VP8 ':
       br.seek(23);
-      var lossySignature = br.readScalar(2) | (br.readScalar(1) << 16);
+      const lossySignature = br.readScalar(2) | (br.readScalar(1) << 16);
       if (lossySignature != 0x2a019d) {
         throw new Error('Invalid VP8 lossy bitstream signature: ' +
             lossySignature);
@@ -188,7 +194,7 @@ WebpParser.prototype.parseHeader = function(metadata, br) {
     // VP8 lossless bitstream format.
     case 'VP8L':
       br.seek(20);
-      var losslessSignature = br.readScalar(1);
+      const losslessSignature = br.readScalar(1);
       if (losslessSignature != 0x2f) {
         throw new Error('Invalid VP8 lossless bitstream signature: ' +
             losslessSignature);
@@ -228,12 +234,13 @@ IcoParser.prototype = {__proto__: SimpleImageParser.prototype};
 /**
  * @override
  */
-IcoParser.prototype.parseHeader = function(metadata, byteReader) {
+IcoParser.prototype.parseHeader = (metadata, byteReader) => {
   byteReader.setByteOrder(ByteReader.LITTLE_ENDIAN);
 
-  var signature = byteReader.readString(4);
-  if (signature !== '\x00\x00\x00\x01')
+  const signature = byteReader.readString(4);
+  if (signature !== '\x00\x00\x00\x01') {
     throw new Error('Invalid ICO signature: ' + signature);
+  }
 
   byteReader.seek(2);
   metadata.width = byteReader.readScalar(1);

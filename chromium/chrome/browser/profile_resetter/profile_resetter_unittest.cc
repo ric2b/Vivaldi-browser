@@ -6,14 +6,16 @@
 
 #include <stddef.h>
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
 #include <utility>
 
-#include "base/macros.h"
+#include "base/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_path_override.h"
@@ -27,6 +29,7 @@
 #include "chrome/browser/profile_resetter/profile_reset_report.pb.h"
 #include "chrome/browser/profile_resetter/profile_resetter_test_base.h"
 #include "chrome/browser/profile_resetter/resettable_settings_snapshot.h"
+#include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
@@ -151,7 +154,7 @@ void ProfileResetterTest::SetUp() {
 
   profile()->CreateWebDataService();
   TemplateURLServiceFactory::GetInstance()->SetTestingFactory(
-      profile(), &CreateTemplateURLServiceForTesting);
+      profile(), base::BindRepeating(&CreateTemplateURLServiceForTesting));
   resetter_.reset(new ProfileResetter(profile()));
 }
 
@@ -318,6 +321,14 @@ void ShortcutHandler::Delete() {
 }
 #endif  // defined(OS_WIN)
 
+// MockInstantService
+class MockInstantService : public InstantService {
+ public:
+  explicit MockInstantService(Profile* profile) : InstantService(profile) {}
+  ~MockInstantService() override = default;
+
+  MOCK_METHOD0(ResetToDefault, void());
+};
 
 // helper functions -----------------------------------------------------------
 
@@ -658,7 +669,8 @@ TEST_F(ProfileResetterTest, ResetStartPageNonOrganic) {
   startup_pref = SessionStartupPref::GetStartupPref(prefs);
   EXPECT_EQ(SessionStartupPref::URLS, startup_pref.type);
   const GURL urls[] = {GURL("http://goo.gl"), GURL("http://foo.de")};
-  EXPECT_EQ(std::vector<GURL>(urls, urls + arraysize(urls)), startup_pref.urls);
+  EXPECT_EQ(std::vector<GURL>(urls, urls + base::size(urls)),
+            startup_pref.urls);
 }
 
 
@@ -668,14 +680,15 @@ TEST_F(ProfileResetterTest, ResetStartPagePartially) {
 
   const GURL urls[] = {GURL("http://foo"), GURL("http://bar")};
   SessionStartupPref startup_pref(SessionStartupPref::URLS);
-  startup_pref.urls.assign(urls, urls + arraysize(urls));
+  startup_pref.urls.assign(urls, urls + base::size(urls));
   SessionStartupPref::SetStartupPref(prefs, startup_pref);
 
   ResetAndWait(ProfileResetter::STARTUP_PAGES, std::string());
 
   startup_pref = SessionStartupPref::GetStartupPref(prefs);
   EXPECT_EQ(SessionStartupPref::GetDefaultStartupType(), startup_pref.type);
-  EXPECT_EQ(std::vector<GURL>(urls, urls + arraysize(urls)), startup_pref.urls);
+  EXPECT_EQ(std::vector<GURL>(urls, urls + base::size(urls)),
+            startup_pref.urls);
 }
 
 TEST_F(PinnedTabsResetTest, ResetPinnedTabs) {
@@ -777,8 +790,7 @@ TEST_F(ConfigParserTest, ParseConfig) {
       settings->GetUrlsToRestoreOnStartup());
   EXPECT_TRUE(startup_list);
   std::vector<std::string> startup_pages;
-  for (base::ListValue::iterator i = startup_list->begin();
-       i != startup_list->end(); ++i) {
+  for (auto i = startup_list->begin(); i != startup_list->end(); ++i) {
     std::string url;
     EXPECT_TRUE(i->GetAsString(&url));
     startup_pages.push_back(url);
@@ -854,7 +866,7 @@ TEST_F(ProfileResetterTest, CheckSnapshots) {
   EXPECT_EQ(diff_fields, nonorganic_snap.FindDifferentFields(organic_snap));
   nonorganic_snap.Subtract(organic_snap);
   const GURL urls[] = {GURL("http://foo.de"), GURL("http://goo.gl")};
-  EXPECT_EQ(std::vector<GURL>(urls, urls + arraysize(urls)),
+  EXPECT_EQ(std::vector<GURL>(urls, urls + base::size(urls)),
             nonorganic_snap.startup_urls());
   EXPECT_EQ(SessionStartupPref::URLS, nonorganic_snap.startup_type());
   EXPECT_EQ("http://www.foo.com", nonorganic_snap.homepage());
@@ -969,9 +981,8 @@ TEST_F(ProfileResetterTest, GetReadableFeedback) {
   EXPECT_CALL(capture, OnUpdatedList());
   ResettableSettingsSnapshot snapshot(profile());
   snapshot.RequestShortcuts(base::Bind(&FeedbackCapture::SetFeedback,
-                                       base::Unretained(&capture),
-                                       profile(),
-                                       base::ConstRef(snapshot)));
+                                       base::Unretained(&capture), profile(),
+                                       std::cref(snapshot)));
   // Let it enumerate shortcuts on a blockable task runner.
   content::RunAllTasksUntilIdle();
   EXPECT_TRUE(snapshot.shortcuts_determined());
@@ -1014,6 +1025,14 @@ TEST_F(ProfileResetterTest, DestroySnapshotFast) {
   // Running remaining tasks shouldn't trigger the callback to be called as
   // |deleted_snapshot| was deleted before it could run.
   base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(ProfileResetterTest, ResetNTPCustomizationsTest) {
+  MockInstantService mock_ntp_service(profile());
+  resetter_->ntp_service_ = &mock_ntp_service;
+
+  EXPECT_CALL(mock_ntp_service, ResetToDefault());
+  ResetAndWait(ProfileResetter::NTP_CUSTOMIZATIONS);
 }
 
 }  // namespace

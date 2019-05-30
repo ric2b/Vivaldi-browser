@@ -19,7 +19,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chromeos/dbus/dbus_switches.h"
+#include "chromeos/dbus/constants/dbus_switches.h"
 
 namespace {
 
@@ -31,7 +31,7 @@ const char kCrOSTraceLabel[] = "systemTraceEvents";
 namespace chromeos {
 
 FakeDebugDaemonClient::FakeDebugDaemonClient()
-    : featues_mask_(DebugDaemonClient::DEV_FEATURE_NONE),
+    : features_mask_(DebugDaemonClient::DEV_FEATURE_NONE),
       service_is_available_(true) {
 }
 
@@ -68,9 +68,9 @@ void FakeDebugDaemonClient::StartAgentTracing(
 
 void FakeDebugDaemonClient::StopAgentTracing(
     StopAgentTracingCallback callback) {
-  std::string no_data;
+  std::string trace_data = "# tracer: nop\n";
   std::move(callback).Run(GetTracingAgentName(), GetTraceEventLabel(),
-                          base::RefCountedString::TakeString(&no_data));
+                          base::RefCountedString::TakeString(&trace_data));
 }
 
 void FakeDebugDaemonClient::SetStopAgentTracingTaskRunner(
@@ -112,7 +112,7 @@ void FakeDebugDaemonClient::GetPerfOutput(
     base::TimeDelta duration,
     const std::vector<std::string>& perf_args,
     int file_descriptor,
-    VoidDBusMethodCallback error_callback) {}
+    DBusMethodCallback<uint64_t> error_callback) {}
 
 void FakeDebugDaemonClient::GetScrubbedLogs(const GetLogsCallback& callback) {
   std::map<std::string, std::string> sample;
@@ -184,7 +184,7 @@ void FakeDebugDaemonClient::QueryDebuggingFeatures(
       base::BindOnce(
           callback, true,
           static_cast<int>(
-              supported ? featues_mask_
+              supported ? features_mask_
                         : debugd::DevFeatureFlag::DEV_FEATURES_DISABLED)));
 }
 
@@ -212,8 +212,8 @@ void FakeDebugDaemonClient::SetOomScoreAdj(
       FROM_HERE, base::BindOnce(callback, true, ""));
 }
 
-void FakeDebugDaemonClient::SetDebuggingFeaturesStatus(int featues_mask) {
-  featues_mask_ = featues_mask;
+void FakeDebugDaemonClient::SetDebuggingFeaturesStatus(int features_mask) {
+  features_mask_ = features_mask;
 }
 
 void FakeDebugDaemonClient::SetServiceIsAvailable(bool is_available) {
@@ -269,6 +269,14 @@ void FakeDebugDaemonClient::StopConcierge(ConciergeCallback callback) {
 }
 
 void FakeDebugDaemonClient::SetRlzPingSent(SetRlzPingSentCallback callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), true));
+}
+
+void FakeDebugDaemonClient::SetSchedulerConfiguration(
+    const std::string& config_name,
+    VoidDBusMethodCallback callback) {
+  scheduler_configuration_name_ = config_name;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), true));
 }

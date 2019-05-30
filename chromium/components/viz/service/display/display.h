@@ -76,7 +76,11 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
 
   ~Display() override;
 
-  void Initialize(DisplayClient* client, SurfaceManager* surface_manager);
+  // TODO(cblume, crbug.com/900973): |enable_shared_images| is a temporary
+  // solution that unblocks us until SharedImages are threadsafe in WebView.
+  void Initialize(DisplayClient* client,
+                  SurfaceManager* surface_manager,
+                  bool enable_shared_images = true);
 
   void AddObserver(DisplayObserver* observer);
   void RemoveObserver(DisplayObserver* observer);
@@ -99,7 +103,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
 
   // DisplaySchedulerClient implementation.
   bool DrawAndSwap() override;
-  bool SurfaceHasUndrawnFrame(const SurfaceId& surface_id) const override;
+  bool SurfaceHasUnackedFrame(const SurfaceId& surface_id) const override;
   bool SurfaceDamaged(const SurfaceId& surface_id,
                       const BeginFrameAck& ack) override;
   void SurfaceDiscarded(const SurfaceId& surface_id) override;
@@ -134,8 +138,11 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   void RemoveOverdrawQuads(CompositorFrame* frame);
 
  private:
-  void InitializeRenderer();
+  // TODO(cblume, crbug.com/900973): |enable_shared_images| is a temporary
+  // solution that unblocks us until SharedImages are threadsafe in WebView.
+  void InitializeRenderer(bool enable_shared_images = true);
   void UpdateRootFrameMissing();
+  void RunDrawCallbacks();
 
   // ContextLostObserver implementation.
   void OnContextLost() override;
@@ -168,11 +175,13 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   std::vector<ui::LatencyInfo> stored_latency_info_;
   std::vector<SurfaceId> surfaces_to_ack_on_next_draw_;
 
-  base::circular_deque<std::vector<Surface::PresentedCallback>>
+  base::circular_deque<
+      std::pair<base::TimeTicks, std::vector<Surface::PresentedCallback>>>
       pending_presented_callbacks_;
 
-  int32_t swapped_trace_id_ = 0;
-  int32_t last_acked_trace_id_ = 0;
+  int64_t swapped_trace_id_ = 0;
+  int64_t last_acked_trace_id_ = 0;
+  int64_t last_presented_trace_id_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(Display);
 };

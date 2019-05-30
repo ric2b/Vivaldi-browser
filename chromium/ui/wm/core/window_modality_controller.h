@@ -21,7 +21,7 @@ class Env;
 namespace ui {
 class EventTarget;
 class LocatedEvent;
-}
+}  // namespace ui
 
 namespace wm {
 
@@ -31,6 +31,8 @@ WM_CORE_EXPORT void SetModalParent(aura::Window* child, aura::Window* parent);
 // Returns the modal transient child of |window|, or NULL if |window| does not
 // have any modal transient children.
 WM_CORE_EXPORT aura::Window* GetModalTransient(aura::Window* window);
+WM_CORE_EXPORT const aura::Window* GetModalTransient(
+    const aura::Window* window);
 
 // WindowModalityController is an event filter that consumes events sent to
 // windows that are the transient parents of window-modal windows. This filter
@@ -61,8 +63,11 @@ class WM_CORE_EXPORT WindowModalityController : public ui::EventHandler,
  private:
   // Processes a mouse/touch event, and returns true if the event should be
   // consumed.
-  bool ProcessLocatedEvent(aura::Window* target,
-                           ui::LocatedEvent* event);
+  bool ProcessLocatedEvent(aura::Window* target, ui::LocatedEvent* event);
+
+  // Cancel touches on the transient window tree rooted to the top level
+  // transient window of the |window|.
+  void CancelTouchesOnTransientWindowTree(aura::Window* window);
 
   aura::Env* env_;
 

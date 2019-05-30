@@ -16,15 +16,18 @@ class MediaDevices;
 
 class NavigatorUserMedia final : public GarbageCollected<NavigatorUserMedia>,
                                  public Supplement<Navigator> {
-  USING_GARBAGE_COLLECTED_MIXIN(NavigatorUserMedia)
+  USING_GARBAGE_COLLECTED_MIXIN(NavigatorUserMedia);
+
  public:
   static const char kSupplementName[];
 
   static MediaDevices* mediaDevices(Navigator&);
+
+  explicit NavigatorUserMedia(Navigator&);
+
   void Trace(blink::Visitor*) override;
 
  private:
-  explicit NavigatorUserMedia(Navigator&);
   MediaDevices* GetMediaDevices();
   static NavigatorUserMedia& From(Navigator&);
 

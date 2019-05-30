@@ -4,10 +4,9 @@
 
 package org.chromium.chrome.browser.firstrun;
 
-import android.accounts.Account;
 import android.content.Context;
+import android.support.annotation.Nullable;
 
-import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
@@ -18,9 +17,6 @@ import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.ChildAccountStatus;
-import org.chromium.components.signin.ChromeSigninController;
-
-import javax.annotation.Nullable;
 
 /**
  * A helper to perform all necessary steps for forced sign in.
@@ -48,17 +44,19 @@ public final class ForcedSigninProcessor {
      * changes with early exit if an account has already been signed in.
      */
     public static void start(final Context appContext, @Nullable final Runnable onComplete) {
-        if (ChromeSigninController.get().isSignedIn()) return;
         new AndroidEduAndChildAccountHelper() {
             @Override
             public void onParametersReady() {
                 boolean isAndroidEduDevice = isAndroidEduDevice();
                 boolean hasChildAccount = ChildAccountStatus.isChild(getChildAccountStatus());
-                // If neither a child account or and EDU device, we return.
-                if (!isAndroidEduDevice && !hasChildAccount) return;
                 // Child account and EDU device at the same time is not supported.
                 assert !(isAndroidEduDevice && hasChildAccount);
-                processForcedSignIn(appContext, onComplete);
+
+                boolean forceSignin = isAndroidEduDevice || hasChildAccount;
+                AccountManagementFragment.setSignOutAllowedPreferenceValue(!forceSignin);
+                if (forceSignin) {
+                    processForcedSignIn(appContext, onComplete);
+                }
             }
         }.start();
     }
@@ -76,31 +74,26 @@ public final class ForcedSigninProcessor {
             Log.d(TAG, "Sign in disallowed");
             return;
         }
-        AccountManagerFacade.get().tryGetGoogleAccounts(new Callback<Account[]>() {
-            @Override
-            public void onResult(Account[] accounts) {
-                if (accounts.length != 1) {
-                    Log.d(TAG, "Incorrect number of accounts (%d)", accounts.length);
-                    return;
-                }
-                signinManager.signIn(accounts[0], null, new SigninManager.SignInCallback() {
-                    @Override
-                    public void onSignInComplete() {
-                        // Since this is a forced signin, signout is not allowed.
-                        AccountManagementFragment.setSignOutAllowedPreferenceValue(false);
-                        if (onComplete != null) {
-                            onComplete.run();
-                        }
-                    }
-
-                    @Override
-                    public void onSignInAborted() {
-                        if (onComplete != null) {
-                            onComplete.run();
-                        }
-                    }
-                });
+        AccountManagerFacade.get().tryGetGoogleAccounts(accounts -> {
+            if (accounts.size() != 1) {
+                Log.d(TAG, "Incorrect number of accounts (%d)", accounts.size());
+                return;
             }
+            signinManager.signIn(accounts.get(0), null, new SigninManager.SignInCallback() {
+                @Override
+                public void onSignInComplete() {
+                    if (onComplete != null) {
+                        onComplete.run();
+                    }
+                }
+
+                @Override
+                public void onSignInAborted() {
+                    if (onComplete != null) {
+                        onComplete.run();
+                    }
+                }
+            });
         });
     }
 

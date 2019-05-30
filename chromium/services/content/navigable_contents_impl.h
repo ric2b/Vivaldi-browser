@@ -15,7 +15,6 @@
 #include "ui/gfx/native_widget_types.h"
 
 namespace views {
-class NativeViewHost;
 class RemoteViewProvider;
 }
 
@@ -38,9 +37,12 @@ class NavigableContentsImpl : public mojom::NavigableContents {
 
  private:
   // mojom::NavigableContents:
-  void Navigate(const GURL& url) override;
+  void Navigate(const GURL& url, mojom::NavigateParamsPtr params) override;
+  void GoBack(mojom::NavigableContents::GoBackCallback callback) override;
   void CreateView(bool in_service_process,
                   CreateViewCallback callback) override;
+  void Focus() override;
+  void FocusThroughTabTraversal(bool reverse) override;
 
 #if BUILDFLAG(ENABLE_REMOTE_NAVIGABLE_CONTENTS_VIEW)
   void OnEmbedTokenReceived(CreateViewCallback callback,
@@ -60,13 +62,6 @@ class NavigableContentsImpl : public mojom::NavigableContents {
 
 #if BUILDFLAG(ENABLE_REMOTE_NAVIGABLE_CONTENTS_VIEW)
   std::unique_ptr<views::RemoteViewProvider> remote_view_provider_;
-#endif
-
-#if defined(TOOLKIT_VIEWS)
-  // Used to support local view embedding in cases where remote embedding is
-  // not supported and the client controlling this NavigableContents is running
-  // within the same process as the Content Service.
-  std::unique_ptr<views::NativeViewHost> local_view_host_;
 #endif
 
   base::WeakPtrFactory<NavigableContentsImpl> weak_ptr_factory_{this};

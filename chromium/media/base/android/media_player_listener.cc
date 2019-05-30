@@ -11,7 +11,7 @@
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "jni/MediaPlayerListener_jni.h"
-#include "media/base/android/media_player_android.h"
+#include "media/base/android/media_player_bridge.h"
 
 using base::android::AttachCurrentThread;
 using base::android::CheckException;
@@ -23,9 +23,8 @@ namespace media {
 
 MediaPlayerListener::MediaPlayerListener(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-    base::WeakPtr<MediaPlayerAndroid> media_player)
-    : task_runner_(task_runner),
-      media_player_(media_player) {
+    base::WeakPtr<MediaPlayerBridge> media_player)
+    : task_runner_(task_runner), media_player_(media_player) {
   DCHECK(task_runner_.get());
   DCHECK(media_player_);
 }
@@ -49,8 +48,9 @@ void MediaPlayerListener::ReleaseMediaPlayerListenerResources() {
 void MediaPlayerListener::OnMediaError(JNIEnv* /* env */,
                                        const JavaParamRef<jobject>& /* obj */,
                                        jint error_type) {
-  task_runner_->PostTask(FROM_HERE, base::Bind(
-      &MediaPlayerAndroid::OnMediaError, media_player_, error_type));
+  task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&MediaPlayerBridge::OnMediaError, media_player_,
+                                error_type));
 }
 
 void MediaPlayerListener::OnVideoSizeChanged(
@@ -58,45 +58,25 @@ void MediaPlayerListener::OnVideoSizeChanged(
     const JavaParamRef<jobject>& /* obj */,
     jint width,
     jint height) {
-  task_runner_->PostTask(FROM_HERE, base::Bind(
-      &MediaPlayerAndroid::OnVideoSizeChanged, media_player_,
-      width, height));
-}
-
-void MediaPlayerListener::OnBufferingUpdate(
-    JNIEnv* /* env */,
-    const JavaParamRef<jobject>& /* obj */,
-    jint percent) {
-  task_runner_->PostTask(FROM_HERE, base::Bind(
-      &MediaPlayerAndroid::OnBufferingUpdate, media_player_, percent));
+  task_runner_->PostTask(FROM_HERE,
+                         base::BindOnce(&MediaPlayerBridge::OnVideoSizeChanged,
+                                        media_player_, width, height));
 }
 
 void MediaPlayerListener::OnPlaybackComplete(
     JNIEnv* /* env */,
     const JavaParamRef<jobject>& /* obj */) {
-  task_runner_->PostTask(FROM_HERE, base::Bind(
-      &MediaPlayerAndroid::OnPlaybackComplete, media_player_));
-}
-
-void MediaPlayerListener::OnSeekComplete(
-    JNIEnv* /* env */,
-    const JavaParamRef<jobject>& /* obj */) {
-  task_runner_->PostTask(FROM_HERE, base::Bind(
-      &MediaPlayerAndroid::OnSeekComplete, media_player_));
+  task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&MediaPlayerBridge::OnPlaybackComplete, media_player_));
 }
 
 void MediaPlayerListener::OnMediaPrepared(
     JNIEnv* /* env */,
     const JavaParamRef<jobject>& /* obj */) {
-  task_runner_->PostTask(FROM_HERE, base::Bind(
-      &MediaPlayerAndroid::OnMediaPrepared, media_player_));
-}
-
-void MediaPlayerListener::OnMediaInterrupted(
-    JNIEnv* /* env */,
-    const JavaParamRef<jobject>& /* obj */) {
-  task_runner_->PostTask(FROM_HERE, base::Bind(
-      &MediaPlayerAndroid::OnMediaInterrupted, media_player_));
+  task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&MediaPlayerBridge::OnMediaPrepared, media_player_));
 }
 
 }  // namespace media

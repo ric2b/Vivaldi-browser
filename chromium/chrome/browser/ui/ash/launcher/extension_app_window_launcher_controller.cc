@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "ash/public/cpp/app_list/internal_app_id_constants.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/window_properties.h"
@@ -13,14 +14,15 @@
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
+#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
 #include "chrome/browser/ui/ash/launcher/extension_app_window_launcher_item_controller.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/common/extension.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/base_window.h"
+#include "ui/views/widget/widget.h"
 
 using extensions::AppWindow;
 using extensions::AppWindowRegistry;
@@ -29,6 +31,9 @@ namespace {
 
 // Get the ShelfID for a given |app_window|.
 ash::ShelfID GetShelfId(AppWindow* app_window) {
+  if (IsCameraApp(app_window->extension_id()))
+    return ash::ShelfID(app_list::kInternalAppIdCamera);
+
   // Set launch_id default value to an empty string. If showInShelf parameter
   // is true and the window key is not empty, its value is appended to the
   // launch_id. Otherwise, if the window key is empty, the session_id is used.
@@ -54,8 +59,12 @@ ExtensionAppWindowLauncherController::ExtensionAppWindowLauncherController(
 ExtensionAppWindowLauncherController::~ExtensionAppWindowLauncherController() {
   registry_->RemoveObserver(this);
 
-  for (const auto& iter : window_to_shelf_id_map_)
+  for (const auto& iter : window_to_shelf_id_map_) {
     iter.first->RemoveObserver(this);
+    views::Widget* widget = views::Widget::GetWidgetForNativeView(iter.first);
+    DCHECK(widget);  // Extension windows are always backed by Widgets.
+    widget->RemoveObserver(this);
+  }
 }
 
 AppWindowLauncherItemController*
@@ -91,6 +100,15 @@ void ExtensionAppWindowLauncherController::OnItemDelegateDiscarded(
   }
 }
 
+void ExtensionAppWindowLauncherController::OnWindowActivated(
+    wm::ActivationChangeObserver::ActivationReason reason,
+    aura::Window* gained_active,
+    aura::Window* lost_active) {
+  // All work is done in OnWidgetActivationChanged(). This does nothing as the
+  // supplied windows are created by ash, which is *not* the same as the windows
+  // created by the browser when running in mash.
+}
+
 void ExtensionAppWindowLauncherController::OnAppWindowAdded(
     extensions::AppWindow* app_window) {
   RegisterApp(app_window);
@@ -119,6 +137,29 @@ void ExtensionAppWindowLauncherController::OnWindowDestroying(
   UnregisterApp(window);
 }
 
+void ExtensionAppWindowLauncherController::OnWidgetActivationChanged(
+    views::Widget* widget,
+    bool active) {
+  AppWindowLauncherItemController* controller = nullptr;
+  if (active) {
+    aura::Window* active_window = widget->GetNativeWindow();
+    DCHECK(active_window);
+    controller = ControllerForWindow(active_window);
+    DCHECK(controller);  // Observer is only added for known controllers.
+    controller->SetActiveWindow(active_window);
+  }
+  if (!active_shelf_id_.IsNull() &&
+      (!controller || controller->shelf_id() != active_shelf_id_)) {
+    owner()->SetItemStatus(active_shelf_id_, ash::STATUS_RUNNING);
+  }
+  active_shelf_id_ = controller ? controller->shelf_id() : ash::ShelfID();
+}
+
+void ExtensionAppWindowLauncherController::OnWidgetDestroying(
+    views::Widget* widget) {
+  widget->RemoveObserver(this);
+}
+
 void ExtensionAppWindowLauncherController::RegisterApp(AppWindow* app_window) {
   aura::Window* window = app_window->GetNativeWindow();
   const ash::ShelfID shelf_id = GetShelfId(app_window);
@@ -138,6 +179,10 @@ void ExtensionAppWindowLauncherController::RegisterApp(AppWindow* app_window) {
   DCHECK_EQ(window_to_shelf_id_map_.count(window), 0u);
   window_to_shelf_id_map_[window] = shelf_id;
   window->AddObserver(this);
+
+  views::Widget* widget = views::Widget::GetWidgetForNativeView(window);
+  DCHECK(widget);  // Extension windows are always backed by Widgets.
+  widget->AddObserver(this);
 
   // Find or create an item controller and launcher item.
   AppControllerMap::iterator app_controller_iter =
@@ -175,6 +220,10 @@ void ExtensionAppWindowLauncherController::UnregisterApp(aura::Window* window) {
   ash::ShelfID shelf_id = window_iter->second;
   window_to_shelf_id_map_.erase(window_iter);
   window->RemoveObserver(this);
+
+  views::Widget* widget = views::Widget::GetWidgetForNativeView(window);
+  DCHECK(widget);  // Extension windows are always backed by Widgets.
+  widget->RemoveObserver(this);
 
   AppControllerMap::iterator app_controller_iter =
       app_controller_map_.find(shelf_id);

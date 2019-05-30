@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/renderer/core/loader/frame_loader_types.h"
 
 namespace blink {
 
@@ -18,21 +19,11 @@ class UserGestureToken;
 class ScheduledNavigation
     : public GarbageCollectedFinalized<ScheduledNavigation> {
  public:
-  enum class Reason {
-    kFormSubmissionGet,
-    kFormSubmissionPost,
-    kHttpHeaderRefresh,
-    kFrameNavigation,
-    kMetaTagRefresh,
-    kPageBlock,
-    kReload,
-  };
-
-  ScheduledNavigation(Reason,
+  ScheduledNavigation(ClientNavigationReason,
                       double delay,
                       Document* origin_document,
-                      bool replaces_current_item,
-                      bool is_location_change);
+                      bool is_location_change,
+                      base::TimeTicks input_timestamp);
   virtual ~ScheduledNavigation();
 
   virtual void Fire(LocalFrame*) = 0;
@@ -41,12 +32,12 @@ class ScheduledNavigation
 
   virtual bool ShouldStartTimer(LocalFrame*) { return true; }
 
-  Reason GetReason() const { return reason_; }
+  ClientNavigationReason GetReason() const { return reason_; }
   double Delay() const { return delay_; }
   Document* OriginDocument() const { return origin_document_.Get(); }
-  bool ReplacesCurrentItem() const { return replaces_current_item_; }
   bool IsLocationChange() const { return is_location_change_; }
   std::unique_ptr<UserGestureIndicator> CreateUserGestureIndicator();
+  base::TimeTicks InputTimestamp() const { return input_timestamp_; }
 
   virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(origin_document_);
@@ -56,12 +47,12 @@ class ScheduledNavigation
   void ClearUserGesture() { user_gesture_token_ = nullptr; }
 
  private:
-  Reason reason_;
+  ClientNavigationReason reason_;
   double delay_;
   Member<Document> origin_document_;
-  bool replaces_current_item_;
   bool is_location_change_;
   scoped_refptr<UserGestureToken> user_gesture_token_;
+  base::TimeTicks input_timestamp_;
 
   DISALLOW_COPY_AND_ASSIGN(ScheduledNavigation);
 };

@@ -5,6 +5,7 @@
 #ifndef ASH_ASSISTANT_ASSISTANT_INTERACTION_CONTROLLER_H_
 #define ASH_ASSISTANT_ASSISTANT_INTERACTION_CONTROLLER_H_
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -13,9 +14,10 @@
 #include "ash/assistant/model/assistant_interaction_model.h"
 #include "ash/assistant/model/assistant_interaction_model_observer.h"
 #include "ash/assistant/model/assistant_ui_model_observer.h"
-#include "ash/assistant/ui/dialog_plate/dialog_plate.h"
+#include "ash/assistant/ui/assistant_view_delegate.h"
 #include "ash/highlighter/highlighter_controller.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
@@ -23,14 +25,16 @@ namespace ash {
 
 class AssistantController;
 class AssistantInteractionModelObserver;
+enum class AssistantButtonId;
+enum class AssistantQuerySource;
 
 class AssistantInteractionController
     : public chromeos::assistant::mojom::AssistantInteractionSubscriber,
       public AssistantControllerObserver,
       public AssistantInteractionModelObserver,
       public AssistantUiModelObserver,
-      public HighlighterController::Observer,
-      public DialogPlateObserver {
+      public AssistantViewDelegateObserver,
+      public HighlighterController::Observer {
  public:
   using AssistantSuggestion = chromeos::assistant::mojom::AssistantSuggestion;
   using AssistantSuggestionPtr =
@@ -46,9 +50,7 @@ class AssistantInteractionController
   void SetAssistant(chromeos::assistant::mojom::Assistant* assistant);
 
   // Returns a reference to the underlying model.
-  const AssistantInteractionModel* model() const {
-    return &assistant_interaction_model_;
-  }
+  const AssistantInteractionModel* model() const { return &model_; }
 
   // Adds/removes the specified interaction model |observer|.
   void AddModelObserver(AssistantInteractionModelObserver* observer);
@@ -64,12 +66,16 @@ class AssistantInteractionController
   // AssistantInteractionModelObserver:
   void OnInteractionStateChanged(InteractionState interaction_state) override;
   void OnInputModalityChanged(InputModality input_modality) override;
+  void OnMicStateChanged(MicState mic_state) override;
+  void OnCommittedQueryChanged(const AssistantQuery& assistant_query) override;
 
   // AssistantUiModelObserver:
   void OnUiModeChanged(AssistantUiMode ui_mode) override;
-  void OnUiVisibilityChanged(AssistantVisibility new_visibility,
-                             AssistantVisibility old_visibility,
-                             AssistantSource source) override;
+  void OnUiVisibilityChanged(
+      AssistantVisibility new_visibility,
+      AssistantVisibility old_visibility,
+      base::Optional<AssistantEntryPoint> entry_point,
+      base::Optional<AssistantExitPoint> exit_point) override;
 
   // HighlighterController::Observer:
   void OnHighlighterEnabledChanged(HighlighterEnabledState state) override;
@@ -79,7 +85,8 @@ class AssistantInteractionController
   void OnInteractionStarted(bool is_voice_interaction) override;
   void OnInteractionFinished(
       AssistantInteractionResolution resolution) override;
-  void OnHtmlResponse(const std::string& response) override;
+  void OnHtmlResponse(const std::string& response,
+                      const std::string& fallback) override;
   void OnSuggestionsResponse(
       std::vector<AssistantSuggestionPtr> response) override;
   void OnTextResponse(const std::string& response) override;
@@ -93,19 +100,27 @@ class AssistantInteractionController
   void OnSpeechLevelUpdated(float speech_level) override;
   void OnTtsStarted(bool due_to_error) override;
 
-  // DialogPlateObserver:
-  void OnDialogPlateButtonPressed(DialogPlateButtonId id) override;
+  // AssistantViewDelegateObserver:
+  void OnDialogPlateButtonPressed(AssistantButtonId id) override;
   void OnDialogPlateContentsCommitted(const std::string& text) override;
-
-  // Invoked on suggestion chip pressed event.
-  void OnSuggestionChipPressed(const AssistantSuggestion* suggestion);
+  void OnSuggestionChipPressed(const AssistantSuggestion* suggestion) override;
 
  private:
+  bool HasUnprocessedPendingResponse();
+
+  void OnProcessPendingResponse();
+  void OnPendingResponseProcessed(bool success);
+
+  void OnUiVisible(AssistantEntryPoint entry_point);
+
   void StartMetalayerInteraction(const gfx::Rect& region);
-  void StartScreenContextInteraction();
-  void StartTextInteraction(const std::string text);
+  void StartScreenContextInteraction(AssistantQuerySource query_source);
+  void StartTextInteraction(const std::string text,
+                            bool allow_tts,
+                            AssistantQuerySource query_source);
+
   void StartVoiceInteraction();
-  void StopActiveInteraction();
+  void StopActiveInteraction(bool cancel_conversation);
 
   void OpenUrl(const GURL& url);
 
@@ -117,7 +132,11 @@ class AssistantInteractionController
   mojo::Binding<chromeos::assistant::mojom::AssistantInteractionSubscriber>
       assistant_interaction_subscriber_binding_;
 
-  AssistantInteractionModel assistant_interaction_model_;
+  AssistantInteractionModel model_;
+
+  bool should_attempt_warmer_welcome_ = true;
+
+  base::WeakPtrFactory<AssistantInteractionController> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AssistantInteractionController);
 };

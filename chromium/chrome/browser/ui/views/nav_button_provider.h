@@ -6,8 +6,8 @@
 #define CHROME_BROWSER_UI_VIEWS_NAV_BUTTON_PROVIDER_H_
 
 #include "build/buildflag.h"
+#include "ui/views/buildflags.h"
 #include "ui/views/controls/button/button.h"
-#include "ui/views/features.h"
 
 #if !BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
 #error "Include not allowed."
@@ -53,17 +53,6 @@ class NavButtonProvider {
 
   // Gets the spacing to be used to separate buttons.
   virtual int GetInterNavButtonSpacing() const = 0;
-
-  // Creates a background for the profile chooser button.
-  virtual std::unique_ptr<Background> CreateAvatarButtonBackground(
-      const views::Button* button) const = 0;
-
-  // Calculates the profile chooser button's size and spacing.
-  virtual void CalculateCaptionButtonLayout(
-      const gfx::Size& content_size,
-      int top_area_height,
-      gfx::Size* caption_button_size,
-      gfx::Insets* caption_button_spacing) const = 0;
 };
 
 }  // namespace views

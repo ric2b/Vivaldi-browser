@@ -26,6 +26,7 @@
 #include "third_party/blink/renderer/modules/indexeddb/idb_open_db_request.h"
 
 #include <memory>
+
 #include "base/optional.h"
 #include "third_party/blink/renderer/bindings/modules/v8/idb_object_store_or_idb_index_or_idb_cursor.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
@@ -35,8 +36,6 @@
 #include "third_party/blink/renderer/modules/indexeddb/idb_tracing.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_version_change_event.h"
 
-using blink::WebIDBDatabase;
-
 namespace blink {
 
 IDBOpenDBRequest* IDBOpenDBRequest::Create(
@@ -45,10 +44,8 @@ IDBOpenDBRequest* IDBOpenDBRequest::Create(
     int64_t transaction_id,
     int64_t version,
     IDBRequest::AsyncTraceState metrics) {
-  IDBOpenDBRequest* request = new IDBOpenDBRequest(
+  return MakeGarbageCollected<IDBOpenDBRequest>(
       script_state, callbacks, transaction_id, version, std::move(metrics));
-  request->PauseIfNeeded();
-  return request;
 }
 
 IDBOpenDBRequest::IDBOpenDBRequest(ScriptState* script_state,
@@ -80,26 +77,26 @@ void IDBOpenDBRequest::ContextDestroyed(ExecutionContext* destroyed_context) {
 }
 
 const AtomicString& IDBOpenDBRequest::InterfaceName() const {
-  return EventTargetNames::IDBOpenDBRequest;
+  return event_target_names::kIDBOpenDBRequest;
 }
 
 void IDBOpenDBRequest::EnqueueBlocked(int64_t old_version) {
   IDB_TRACE("IDBOpenDBRequest::onBlocked()");
   if (!ShouldEnqueueEvent())
     return;
-  base::Optional<unsigned long long> new_version_nullable;
+  base::Optional<uint64_t> new_version_nullable;
   if (version_ != IDBDatabaseMetadata::kDefaultVersion) {
     new_version_nullable = version_;
   }
   EnqueueEvent(IDBVersionChangeEvent::Create(
-      EventTypeNames::blocked, old_version, new_version_nullable));
+      event_type_names::kBlocked, old_version, new_version_nullable));
 }
 
 void IDBOpenDBRequest::EnqueueUpgradeNeeded(
     int64_t old_version,
     std::unique_ptr<WebIDBDatabase> backend,
     const IDBDatabaseMetadata& metadata,
-    WebIDBDataLoss data_loss,
+    mojom::IDBDataLoss data_loss,
     String data_loss_message) {
   IDB_TRACE("IDBOpenDBRequest::onUpgradeNeeded()");
   if (!ShouldEnqueueEvent()) {
@@ -128,7 +125,7 @@ void IDBOpenDBRequest::EnqueueUpgradeNeeded(
 
   if (version_ == IDBDatabaseMetadata::kNoVersion)
     version_ = 1;
-  EnqueueEvent(IDBVersionChangeEvent::Create(EventTypeNames::upgradeneeded,
+  EnqueueEvent(IDBVersionChangeEvent::Create(event_type_names::kUpgradeneeded,
                                              old_version, version_, data_loss,
                                              data_loss_message));
 }
@@ -157,7 +154,7 @@ void IDBOpenDBRequest::EnqueueResponse(std::unique_ptr<WebIDBDatabase> backend,
     SetResult(IDBAny::Create(idb_database));
   }
   idb_database->SetMetadata(metadata);
-  EnqueueEvent(Event::Create(EventTypeNames::success));
+  EnqueueEvent(Event::Create(event_type_names::kSuccess));
   metrics_.RecordAndReset();
 }
 
@@ -172,7 +169,7 @@ void IDBOpenDBRequest::EnqueueResponse(int64_t old_version) {
     old_version = IDBDatabaseMetadata::kDefaultVersion;
   }
   SetResult(IDBAny::CreateUndefined());
-  EnqueueEvent(IDBVersionChangeEvent::Create(EventTypeNames::success,
+  EnqueueEvent(IDBVersionChangeEvent::Create(event_type_names::kSuccess,
                                              old_version, base::nullopt));
   metrics_.RecordAndReset();
 }
@@ -189,7 +186,7 @@ bool IDBOpenDBRequest::ShouldEnqueueEvent() const {
 DispatchEventResult IDBOpenDBRequest::DispatchEventInternal(Event& event) {
   // If the connection closed between onUpgradeNeeded and the delivery of the
   // "success" event, an "error" event should be fired instead.
-  if (event.type() == EventTypeNames::success &&
+  if (event.type() == event_type_names::kSuccess &&
       ResultAsAny()->GetType() == IDBAny::kIDBDatabaseType &&
       ResultAsAny()->IdbDatabase()->IsClosePending()) {
     SetResult(nullptr);

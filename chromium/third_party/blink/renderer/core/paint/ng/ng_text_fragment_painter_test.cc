@@ -19,6 +19,8 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_controller.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
+using testing::ElementsAre;
+
 namespace blink {
 
 class NGTextFragmentPainterTest : public PaintControllerPaintTest,
@@ -29,7 +31,7 @@ class NGTextFragmentPainterTest : public PaintControllerPaintTest,
         ScopedLayoutNGForTest(true) {}
 };
 
-INSTANTIATE_PAINT_TEST_CASE_P(NGTextFragmentPainterTest);
+INSTANTIATE_PAINT_TEST_SUITE_P(NGTextFragmentPainterTest);
 
 TEST_P(NGTextFragmentPainterTest, TestTextStyle) {
   SetBodyInnerHTML(R"HTML(
@@ -45,19 +47,18 @@ TEST_P(NGTextFragmentPainterTest, TestTextStyle) {
 
   InvalidateAll(RootPaintController());
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
-  IntRect interest_rect(0, 0, 640, 480);
-  Paint(&interest_rect);
+  Paint(IntRect(0, 0, 640, 480));
 
   const NGPaintFragment& root_fragment = *block_flow.PaintFragment();
   EXPECT_EQ(1u, root_fragment.Children().size());
-  const NGPaintFragment& line_box_fragment = *root_fragment.Children()[0];
+  const NGPaintFragment& line_box_fragment = *root_fragment.FirstChild();
   EXPECT_EQ(1u, line_box_fragment.Children().size());
-  const NGPaintFragment& text_fragment = *line_box_fragment.Children()[0];
+  const NGPaintFragment& text_fragment = *line_box_fragment.FirstChild();
 
-  EXPECT_DISPLAY_LIST(
-      RootPaintController().GetDisplayItemList(), 2,
-      TestDisplayItem(ViewBackgroundClient(), DisplayItem::kDocumentBackground),
-      TestDisplayItem(text_fragment, kForegroundType));
+  EXPECT_THAT(RootPaintController().GetDisplayItemList(),
+              ElementsAre(IsSameId(&ViewScrollingBackgroundClient(),
+                                   DisplayItem::kDocumentBackground),
+                          IsSameId(&text_fragment, kForegroundType)));
 }
 
 }  // namespace blink

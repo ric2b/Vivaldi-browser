@@ -4,12 +4,13 @@
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/win/windows_types.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome_elf/chrome_elf_main.h"
-#include "chrome_elf/third_party_dlls/logging_api.h"
+#include "chrome_elf/third_party_dlls/public_api.h"
 
 // This function is a temporary workaround for https://crbug.com/655788. We
 // need to come up with a better way to initialize crash reporting that can
@@ -42,7 +43,7 @@ void SetMetricsClientId(const char* client_id) {}
 //------------------------------------------------------------------------------
 // chrome_elf\third_party_dlls export test stubs.
 // - For use by \\chrome\browser\conflicts\* testing.
-// - Stubs should shadow third_party_dlls\logging_api.h and logs_unittest.cc.
+// - Stubs should shadow third_party_dlls\public_api.h and logs_unittest.cc.
 //------------------------------------------------------------------------------
 
 struct TestLogEntry {
@@ -88,9 +89,24 @@ uint32_t DrainLog(uint8_t* buffer,
 
     tracker += entry_size;
   }
-  return tracker - buffer;
+
+  return base::checked_cast<uint32_t>(tracker - buffer);
 }
 
 bool RegisterLogNotification(HANDLE event_handle) {
   return true;
+}
+
+uint32_t GetBlockedModulesCount() {
+  return 0;
+}
+
+uint32_t GetUniqueBlockedModulesCount() {
+  return 0;
+}
+
+void DisableHook() {}
+
+int32_t GetApplyHookResult() {
+  return 0;
 }

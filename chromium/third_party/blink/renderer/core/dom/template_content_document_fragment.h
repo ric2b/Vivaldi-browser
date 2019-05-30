@@ -35,20 +35,21 @@ class TemplateContentDocumentFragment final : public DocumentFragment {
  public:
   static TemplateContentDocumentFragment* Create(Document& document,
                                                  Element* host) {
-    return new TemplateContentDocumentFragment(document, host);
+    return MakeGarbageCollected<TemplateContentDocumentFragment>(document,
+                                                                 host);
   }
+
+  TemplateContentDocumentFragment(Document& document, Element* host)
+      : DocumentFragment(&document, kCreateDocumentFragment), host_(host) {}
 
   Element* Host() const { return host_; }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(host_);
     DocumentFragment::Trace(visitor);
   }
 
  private:
-  TemplateContentDocumentFragment(Document& document, Element* host)
-      : DocumentFragment(&document, kCreateDocumentFragment), host_(host) {}
-
   bool IsTemplateContent() const override { return true; }
 
   Member<Element> host_;

@@ -5,6 +5,7 @@
 #include "ash/components/tap_visualizer/tap_renderer.h"
 
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/time/time.h"
 #include "cc/paint/paint_flags.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
@@ -51,16 +52,17 @@ class TouchPointView : public views::View, public gfx::AnimationDelegate {
     gradient_pos_[1] = SkFloatToScalar(1.0f);
   }
 
-  void UpdateTouch(const ui::PointerEvent& touch) {
-    if (touch.type() == ui::ET_POINTER_UP ||
-        touch.type() == ui::ET_POINTER_CANCELLED) {
+  void UpdateTouch(const ui::TouchEvent& touch) {
+    if (touch.type() == ui::ET_TOUCH_RELEASED ||
+        touch.type() == ui::ET_TOUCH_CANCELLED) {
       fadeout_.reset(
           new gfx::LinearAnimation(kFadeoutDuration, kFadeoutFrameRate, this));
       fadeout_->Start();
     } else {
-      SetX(parent()->GetMirroredXInView(touch.root_location().x()) -
-           kPointRadius - 1);
-      SetY(touch.root_location().y() - kPointRadius - 1);
+      gfx::Point location = touch.root_location();
+      ConvertPointFromScreen(parent(), &location);
+      SetX(parent()->GetMirroredXInView(location.x()) - kPointRadius - 1);
+      SetY(location.y() - kPointRadius - 1);
     }
   }
 
@@ -79,7 +81,7 @@ class TouchPointView : public views::View, public gfx::AnimationDelegate {
     stroke_flags_.setAlpha(alpha);
     fill_flags_.setShader(cc::PaintShader::MakeRadialGradient(
         gradient_center_, SkIntToScalar(kPointRadius), gradient_colors_,
-        gradient_pos_, arraysize(gradient_colors_),
+        gradient_pos_, base::size(gradient_colors_),
         SkShader::kMirror_TileMode));
     canvas->DrawCircle(circle_center_, SkIntToScalar(kPointRadius),
                        fill_flags_);
@@ -122,10 +124,9 @@ TapRenderer::TapRenderer(std::unique_ptr<views::Widget> widget)
 
 TapRenderer::~TapRenderer() = default;
 
-void TapRenderer::HandleTouchEvent(const ui::PointerEvent& event) {
-  DCHECK(event.IsTouchPointerEvent());
+void TapRenderer::HandleTouchEvent(const ui::TouchEvent& event) {
   const int id = event.pointer_details().id;
-  if (event.type() == ui::ET_POINTER_DOWN) {
+  if (event.type() == ui::ET_TOUCH_PRESSED) {
     TouchPointView* point = new TouchPointView();
     widget_->GetContentsView()->AddChildView(point);
     point->UpdateTouch(event);
@@ -141,8 +142,8 @@ void TapRenderer::HandleTouchEvent(const ui::PointerEvent& event) {
     std::map<int, TouchPointView*>::iterator iter = points_.find(id);
     if (iter != points_.end()) {
       iter->second->UpdateTouch(event);
-      if (event.type() == ui::ET_POINTER_UP ||
-          event.type() == ui::ET_POINTER_CANCELLED) {
+      if (event.type() == ui::ET_TOUCH_RELEASED ||
+          event.type() == ui::ET_TOUCH_CANCELLED) {
         points_.erase(iter);
         // View will fade out then delete itself.
       }

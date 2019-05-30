@@ -13,7 +13,6 @@
 #include "net/http/http_util.h"
 #include "net/url_request/url_request_data_job.h"
 #include "third_party/blink/public/common/mime_util/mime_util.h"
-#include "third_party/blink/public/platform/url_conversion.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 #include "third_party/blink/renderer/platform/shared_buffer.h"
@@ -25,14 +24,15 @@
 namespace {
 
 net::registry_controlled_domains::PrivateRegistryFilter
-getNetPrivateRegistryFilter(blink::NetworkUtils::PrivateRegistryFilter filter) {
+getNetPrivateRegistryFilter(
+    blink::network_utils::PrivateRegistryFilter filter) {
   switch (filter) {
-    case blink::NetworkUtils::kIncludePrivateRegistries:
+    case blink::network_utils::kIncludePrivateRegistries:
       return net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES;
-    case blink::NetworkUtils::kExcludePrivateRegistries:
+    case blink::network_utils::kExcludePrivateRegistries:
       return net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES;
   }
-  // There are only two NetworkUtils::PrivateRegistryFilter enum entries, so
+  // There are only two network_utils::PrivateRegistryFilter enum entries, so
   // we should never reach this point. However, we must have a default return
   // value to avoid a compiler error.
   NOTREACHED();
@@ -43,7 +43,7 @@ getNetPrivateRegistryFilter(blink::NetworkUtils::PrivateRegistryFilter filter) {
 
 namespace blink {
 
-namespace NetworkUtils {
+namespace network_utils {
 
 bool IsReservedIPAddress(const String& host) {
   net::IPAddress address;
@@ -65,9 +65,8 @@ String GetDomainAndRegistry(const String& host, PrivateRegistryFilter filter) {
   return String(domain.data(), domain.length());
 }
 
-scoped_refptr<SharedBuffer> ParseDataURLAndPopulateResponse(
-    const KURL& url,
-    ResourceResponse& response) {
+std::tuple<int, ResourceResponse, scoped_refptr<SharedBuffer>>
+ParseDataURLAndPopulateResponse(const KURL& url, bool verify_mime_type) {
   // The following code contains duplication of GetInfoFromDataURL() and
   // WebURLLoaderImpl::PopulateURLResponse() in
   // content/child/web_url_loader_impl.cc. Merge them once content/child is
@@ -79,21 +78,20 @@ scoped_refptr<SharedBuffer> ParseDataURLAndPopulateResponse(
       new net::HttpResponseHeaders(std::string()));
 
   int result = net::URLRequestDataJob::BuildResponse(
-      WebStringToGURL(url.GetString()), &utf8_mime_type, &utf8_charset,
-      &data_string, headers.get());
+      GURL(url), &utf8_mime_type, &utf8_charset, &data_string, headers.get());
   if (result != net::OK)
-    return nullptr;
+    return std::make_tuple(result, ResourceResponse(), nullptr);
 
-  if (!blink::IsSupportedMimeType(utf8_mime_type))
-    return nullptr;
+  if (verify_mime_type && !blink::IsSupportedMimeType(utf8_mime_type))
+    return std::make_tuple(net::ERR_FAILED, ResourceResponse(), nullptr);
 
-  scoped_refptr<SharedBuffer> data =
-      SharedBuffer::Create(data_string.data(), data_string.size());
-  response.SetHTTPStatusCode(200);
+  auto buffer = SharedBuffer::Create(data_string.data(), data_string.size());
+  ResourceResponse response;
+  response.SetHttpStatusCode(200);
   response.SetHTTPStatusText("OK");
-  response.SetURL(url);
+  response.SetCurrentRequestUrl(url);
   response.SetMimeType(WebString::FromUTF8(utf8_mime_type));
-  response.SetExpectedContentLength(data->size());
+  response.SetExpectedContentLength(buffer->size());
   response.SetTextEncodingName(WebString::FromUTF8(utf8_charset));
 
   size_t iter = 0;
@@ -103,14 +101,13 @@ scoped_refptr<SharedBuffer> ParseDataURLAndPopulateResponse(
     response.AddHTTPHeaderField(WebString::FromLatin1(name),
                                 WebString::FromLatin1(value));
   }
-  return data;
+  return std::make_tuple(net::OK, std::move(response), std::move(buffer));
 }
 
 bool IsDataURLMimeTypeSupported(const KURL& url) {
   std::string utf8_mime_type;
   std::string utf8_charset;
-  if (net::DataURL::Parse(WebStringToGURL(url.GetString()), &utf8_mime_type,
-                          &utf8_charset, nullptr)) {
+  if (net::DataURL::Parse(GURL(url), &utf8_mime_type, &utf8_charset, nullptr)) {
     return blink::IsSupportedMimeType(utf8_mime_type);
   }
   return false;
@@ -124,10 +121,6 @@ bool IsCertificateTransparencyRequiredError(int error_code) {
   return error_code == net::ERR_CERTIFICATE_TRANSPARENCY_REQUIRED;
 }
 
-bool IsLegacySymantecCertError(int error_code) {
-  return error_code == net::ERR_CERT_SYMANTEC_LEGACY;
-}
-
 String GenerateAcceptLanguageHeader(const String& lang) {
   CString cstring(lang.Utf8());
   std::string string(cstring.data(), cstring.length());
@@ -135,6 +128,21 @@ String GenerateAcceptLanguageHeader(const String& lang) {
       net::HttpUtil::GenerateAcceptLanguageHeader(string));
 }
 
-}  // NetworkUtils
+Vector<char> ParseMultipartBoundary(const AtomicString& content_type_header) {
+  CString cstring(content_type_header.Utf8());
+  std::string string(cstring.data(), cstring.length());
+  std::string mime_type;
+  std::string charset;
+  bool had_charset = false;
+  std::string boundary;
+  net::HttpUtil::ParseContentType(string, &mime_type, &charset, &had_charset,
+                                  &boundary);
+  base::TrimString(boundary, " \"", &boundary);
+  Vector<char> result;
+  result.Append(boundary.data(), boundary.size());
+  return result;
+}
+
+}  // namespace network_utils
 
 }  // namespace blink

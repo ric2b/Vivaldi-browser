@@ -12,15 +12,12 @@ import android.graphics.Canvas;
 import android.graphics.Paint.Align;
 import android.graphics.Rect;
 import android.graphics.Typeface;
-import android.support.v7.content.res.AppCompatResources;
 import android.text.TextPaint;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.widget.TintedDrawable;
-import org.chromium.ui.base.DeviceFormFactor;
 
 import java.util.Locale;
 
@@ -45,17 +42,14 @@ public class TabSwitcherDrawable extends TintedDrawable {
      * @return          A {@link TabSwitcherDrawable} instance.
      */
     public static TabSwitcherDrawable createTabSwitcherDrawable(Context context, boolean useLight) {
-        Bitmap icon = BitmapFactory.decodeResource(context.getResources(),
-                FeatureUtilities.isChromeModernDesignEnabled() && !DeviceFormFactor.isTablet()
-                        ? R.drawable.btn_tabswitcher_modern
-                        : R.drawable.btn_tabswitcher);
+        Bitmap icon = BitmapFactory.decodeResource(
+                context.getResources(), R.drawable.btn_tabswitcher_modern);
         return new TabSwitcherDrawable(context, useLight, icon);
     }
 
     private TabSwitcherDrawable(Context context, boolean useLight, Bitmap bitmap) {
         super(context, bitmap);
-        int id = useLight ? R.color.light_mode_tint : R.color.dark_mode_tint;
-        setTint(AppCompatResources.getColorStateList(context, id));
+        setTint(ColorUtils.getThemedToolbarIconTint(context, useLight));
         mSingleDigitTextSize =
                 context.getResources().getDimension(R.dimen.toolbar_tab_count_text_size_1_digit);
         mDoubleDigitTextSize =
@@ -114,10 +108,6 @@ public class TabSwitcherDrawable extends TintedDrawable {
     }
 
     private String getTabCountString() {
-        if (ChromeFeatureList.isInitialized()
-                && ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_MEMEX)) {
-            return "M";
-        }
         if (mTabCount <= 0) {
             return "";
         } else if (mTabCount > 99) {

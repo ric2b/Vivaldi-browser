@@ -4,9 +4,10 @@
 
 #include "chromeos/components/tether/network_connection_handler_tether_delegate.h"
 
+#include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/stl_util.h"
-#include "chromeos/components/proximity_auth/logging/logging.h"
+#include "chromeos/components/multidevice/logging/logging.h"
 #include "chromeos/components/tether/active_host.h"
 #include "chromeos/components/tether/tether_connector.h"
 #include "chromeos/components/tether/tether_disconnector.h"
@@ -95,10 +96,10 @@ void NetworkConnectionHandlerTetherDelegate::ConnectToNetwork(
     std::string previous_host_guid = active_host_->GetTetherNetworkGuid();
     DCHECK(!previous_host_guid.empty());
 
-    PA_LOG(INFO) << "Connection requested to GUID " << tether_network_guid
-                 << ", but there is already an active connection. "
-                 << "Disconnecting from network with GUID "
-                 << previous_host_guid << ".";
+    PA_LOG(VERBOSE) << "Connection requested to GUID " << tether_network_guid
+                    << ", but there is already an active connection. "
+                    << "Disconnecting from network with GUID "
+                    << previous_host_guid << ".";
     DisconnectFromNetwork(
         previous_host_guid, base::DoNothing(),
         base::Bind(&OnFailedDisconnectionFromPreviousHost, previous_host_guid));

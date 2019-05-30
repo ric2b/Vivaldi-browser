@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <map>
 #include <set>
 #include <utility>
 
@@ -120,11 +121,9 @@ base::Optional<ModelError> DeviceInfoSyncBridge::MergeSyncData(
   DCHECK(change_processor()->IsTrackingMetadata());
   const DeviceInfo* local_info =
       local_device_info_provider_->GetLocalDeviceInfo();
-  // If our dependency was yanked out from beneath us, we cannot correctly
-  // handle this request, and all our data will be deleted soon.
-  if (local_info == nullptr) {
-    return {};
-  }
+  // DEVICE_INFO sync is running; DeviceInfo thus exists (it gets cleared only
+  // synchronously with disabling DEVICE_INFO sync).
+  DCHECK(local_info);
 
   // Local data should typically be near empty, with the only possible value
   // corresponding to this device. This is because on signout all device info
@@ -173,13 +172,9 @@ base::Optional<ModelError> DeviceInfoSyncBridge::ApplySyncChanges(
   DCHECK(has_provider_initialized_);
   const DeviceInfo* local_info =
       local_device_info_provider_->GetLocalDeviceInfo();
-  // If our dependency was yanked out from beneath us, we cannot correctly
-  // handle this request, and all our data will be deleted soon.
-  // However, we can still handle the request if it only has metadata changes.
-  // This ensures we properly clears metadata on shutdown.
-  if (local_info == nullptr && !entity_changes.empty()) {
-    return {};
-  }
+  // DEVICE_INFO sync is running; DeviceInfo thus exists (it gets cleared only
+  // synchronously with disabling DEVICE_INFO sync).
+  DCHECK(local_info);
 
   std::unique_ptr<WriteBatch> batch = store_->CreateWriteBatch();
   bool has_changes = false;
@@ -239,8 +234,7 @@ std::string DeviceInfoSyncBridge::GetStorageKey(const EntityData& entity_data) {
   return entity_data.specifics.device_info().cache_guid();
 }
 
-ModelTypeSyncBridge::StopSyncResponse
-DeviceInfoSyncBridge::ApplyStopSyncChanges(
+void DeviceInfoSyncBridge::ApplyStopSyncChanges(
     std::unique_ptr<MetadataChangeList> delete_metadata_change_list) {
   // TODO(skym, crbug.com/659263): Would it be reasonable to pulse_timer_.Stop()
   // or subscription_.reset() here?
@@ -254,7 +248,6 @@ DeviceInfoSyncBridge::ApplyStopSyncChanges(
       NotifyObservers();
     }
   }
-  return StopSyncResponse::kModelStillReadyToSync;
 }
 
 bool DeviceInfoSyncBridge::IsSyncing() const {
@@ -273,8 +266,7 @@ std::unique_ptr<DeviceInfo> DeviceInfoSyncBridge::GetDeviceInfo(
 std::vector<std::unique_ptr<DeviceInfo>>
 DeviceInfoSyncBridge::GetAllDeviceInfo() const {
   std::vector<std::unique_ptr<DeviceInfo>> list;
-  for (ClientIdToSpecifics::const_iterator iter = all_data_.begin();
-       iter != all_data_.end(); ++iter) {
+  for (auto iter = all_data_.begin(); iter != all_data_.end(); ++iter) {
     list.push_back(SpecificsToModel(*iter->second));
   }
   return list;
@@ -485,11 +477,51 @@ void DeviceInfoSyncBridge::CommitAndNotify(std::unique_ptr<WriteBatch> batch,
 }
 
 int DeviceInfoSyncBridge::CountActiveDevices(const Time now) const {
-  return std::count_if(all_data_.begin(), all_data_.end(),
-                       [now](ClientIdToSpecifics::const_reference pair) {
-                         return DeviceInfoUtil::IsActive(
-                             GetLastUpdateTime(*pair.second), now);
-                       });
+  // The algorithm below leverages sync timestamps to give a tight lower bound
+  // (modulo clock skew) on how many distinct devices are currently active
+  // (where active means being used recently enough as specified by
+  // DeviceInfoUtil::kActiveThreshold).
+  //
+  // Devices of the same type that have no overlap between their time-of-use are
+  // likely to be the same device (just with a different cache GUID). Thus, the
+  // algorithm counts, for each device type separately, the maximum number of
+  // devices observed concurrently active. Then returns the maximum.
+
+  // The series of relevant events over time, the value being +1 when a device
+  // was seen for the first time, and -1 when a device was seen last.
+  std::map<sync_pb::SyncEnums_DeviceType, std::multimap<base::Time, int>>
+      relevant_events;
+
+  for (const auto& pair : all_data_) {
+    if (DeviceInfoUtil::IsActive(GetLastUpdateTime(*pair.second), now)) {
+      base::Time begin = change_processor()->GetEntityCreationTime(pair.first);
+      base::Time end =
+          change_processor()->GetEntityModificationTime(pair.first);
+      // Begin/end timestamps are received from other devices without local
+      // sanitizing, so potentially the timestamps could be malformed, and the
+      // modification time may predate the creation time.
+      if (begin > end) {
+        continue;
+      }
+      relevant_events[pair.second->device_type()].emplace(begin, 1);
+      relevant_events[pair.second->device_type()].emplace(end, -1);
+    }
+  }
+
+  int max_overlapping_sum = 0;
+  for (const auto& type_and_events : relevant_events) {
+    int max_overlapping = 0;
+    int overlapping = 0;
+    for (const auto& event : type_and_events.second) {
+      overlapping += event.second;
+      DCHECK_LE(0, overlapping);
+      max_overlapping = std::max(max_overlapping, overlapping);
+    }
+    DCHECK_EQ(overlapping, 0);
+    max_overlapping_sum += max_overlapping;
+  }
+
+  return max_overlapping_sum;
 }
 
 }  // namespace syncer

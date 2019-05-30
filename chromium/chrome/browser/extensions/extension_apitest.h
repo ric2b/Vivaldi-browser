@@ -84,6 +84,13 @@ class ExtensionApiTest : public ExtensionBrowserTest {
   bool RunExtensionTestWithArg(const std::string& extension_name,
                                const char* custom_arg);
 
+  // Similar to RunExtensionTest, except sets an additional string arguments
+  // |customArg| to the test config object and |flags| (as defined in the Flags
+  // enum).
+  bool RunExtensionTestWithFlagsAndArg(const std::string& extension_name,
+                                       const char* custom_arg,
+                                       int flags);
+
   // Same as RunExtensionTest, but enables the extension for incognito mode.
   bool RunExtensionTestIncognito(const std::string& extension_name);
 
@@ -97,6 +104,10 @@ class ExtensionApiTest : public ExtensionBrowserTest {
 
   // Same as RunExtensionTest, but loads extension as component.
   bool RunComponentExtensionTest(const std::string& extension_name);
+
+  // Same as RunComponentExtensionTest, but provides extra arg.
+  bool RunComponentExtensionTestWithArg(const std::string& extension_name,
+                                        const char* custom_arg);
 
   // Same as RunExtensionTest, but disables file access.
   bool RunExtensionTestNoFileAccess(const std::string& extension_name);

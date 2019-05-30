@@ -13,6 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/strings/string_piece.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
@@ -54,21 +55,27 @@ class ChromeAuthenticatorRequestDelegate
       const override;
 #endif  // defined(OS_MACOSX)
 
-  base::Optional<device::FidoTransportProtocol> GetLastTransportUsed() const;
   base::WeakPtr<ChromeAuthenticatorRequestDelegate> AsWeakPtr();
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(ChromeAuthenticatorRequestDelegateTest,
+                           TestTransportPrefType);
+  FRIEND_TEST_ALL_PREFIXES(ChromeAuthenticatorRequestDelegateTest,
+                           TestPairedDeviceAddressPreference);
+
   content::RenderFrameHost* render_frame_host() const {
     return render_frame_host_;
   }
   content::BrowserContext* browser_context() const;
 
   // content::AuthenticatorRequestClientDelegate:
-  void DidFailWithInterestingReason(InterestingFailureReason reason) override;
+  bool DoesBlockRequestOnFailure(InterestingFailureReason reason) override;
   void RegisterActionCallbacks(
       base::OnceClosure cancel_callback,
       device::FidoRequestHandlerBase::RequestCallback request_callback,
-      base::RepeatingClosure bluetooth_adapter_power_on_callback) override;
+      base::RepeatingClosure bluetooth_adapter_power_on_callback,
+      device::FidoRequestHandlerBase::BlePairingCallback ble_pairing_callback)
+      override;
   bool ShouldPermitIndividualAttestation(
       const std::string& relying_party_id) override;
   void ShouldReturnAttestation(
@@ -77,8 +84,10 @@ class ChromeAuthenticatorRequestDelegate
   bool IsFocused() override;
   void UpdateLastTransportUsed(
       device::FidoTransportProtocol transport) override;
+  void DisableUI() override;
+  bool IsWebAuthnUIEnabled() override;
 
-  // device::FidoRequestHandlerBase::TransportAvailabilityObserver:
+  // device::FidoRequestHandlerBase::Observer:
   void OnTransportAvailabilityEnumerated(
       device::FidoRequestHandlerBase::TransportAvailabilityInfo data) override;
   bool EmbedderControlsAuthenticatorDispatch(
@@ -86,11 +95,23 @@ class ChromeAuthenticatorRequestDelegate
   void FidoAuthenticatorAdded(
       const device::FidoAuthenticator& authenticator) override;
   void FidoAuthenticatorRemoved(base::StringPiece authenticator_id) override;
+  void FidoAuthenticatorIdChanged(base::StringPiece old_authenticator_id,
+                                  std::string new_authenticator_id) override;
+  void FidoAuthenticatorPairingModeChanged(base::StringPiece authenticator_id,
+                                           bool is_in_pairing_mode) override;
   void BluetoothAdapterPowerChanged(bool is_powered_on) override;
+  void CollectPIN(
+      base::Optional<int> attempts,
+      base::OnceCallback<void(std::string)> provide_pin_cb) override;
+  void FinishCollectPIN() override;
 
   // AuthenticatorRequestDialogModel::Observer:
   void OnModelDestroyed() override;
   void OnCancelRequest() override;
+
+  void AddFidoBleDeviceToPairedList(std::string ble_authenticator_id);
+  base::Optional<device::FidoTransportProtocol> GetLastTransportUsed() const;
+  const base::ListValue* GetPreviouslyPairedFidoBleDeviceIds() const;
 
   content::RenderFrameHost* const render_frame_host_;
   AuthenticatorRequestDialogModel* weak_dialog_model_ = nullptr;
@@ -103,6 +124,11 @@ class ChromeAuthenticatorRequestDelegate
       transient_dialog_model_holder_;
   base::OnceClosure cancel_callback_;
   device::FidoRequestHandlerBase::RequestCallback request_callback_;
+
+  // If in the TransportAvailabilityInfo reported by the request handler,
+  // disable_embedder_ui is set, this will be set to true. No UI must be
+  // rendered and all request handler callbacks will be ignored.
+  bool disable_ui_ = false;
 
   base::WeakPtrFactory<ChromeAuthenticatorRequestDelegate> weak_ptr_factory_;
 

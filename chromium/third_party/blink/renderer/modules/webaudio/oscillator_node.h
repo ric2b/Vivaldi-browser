@@ -46,7 +46,13 @@ class OscillatorHandler final : public AudioScheduledSourceHandler {
  public:
   // The waveform type.
   // These must be defined as in the .idl file.
-  enum { SINE = 0, SQUARE = 1, SAWTOOTH = 2, TRIANGLE = 3, CUSTOM = 4 };
+  enum : uint8_t {
+    SINE = 0,
+    SQUARE = 1,
+    SAWTOOTH = 2,
+    TRIANGLE = 3,
+    CUSTOM = 4
+  };
 
   static scoped_refptr<OscillatorHandler> Create(AudioNode&,
                                                  float sample_rate,
@@ -57,12 +63,14 @@ class OscillatorHandler final : public AudioScheduledSourceHandler {
   ~OscillatorHandler() override;
 
   // AudioHandler
-  void Process(size_t frames_to_process) override;
+  void Process(uint32_t frames_to_process) override;
 
   String GetType() const;
   void SetType(const String&, ExceptionState&);
 
   void SetPeriodicWave(PeriodicWave*);
+
+  void HandleStoppableSourceNode() override;
 
  private:
   OscillatorHandler(AudioNode&,
@@ -71,15 +79,15 @@ class OscillatorHandler final : public AudioScheduledSourceHandler {
                     PeriodicWave* wave_table,
                     AudioParamHandler& frequency,
                     AudioParamHandler& detune);
-  bool SetType(unsigned);  // Returns true on success.
+  bool SetType(uint8_t);  // Returns true on success.
 
   // Returns true if there are sample-accurate timeline parameter changes.
-  bool CalculateSampleAccuratePhaseIncrements(size_t frames_to_process);
+  bool CalculateSampleAccuratePhaseIncrements(uint32_t frames_to_process);
 
   bool PropagatesSilence() const override;
 
   // One of the waveform types defined in the enum.
-  unsigned short type_;
+  uint8_t type_;
 
   // Frequency value in Hertz.
   scoped_refptr<AudioParamHandler> frequency_;
@@ -98,10 +106,8 @@ class OscillatorHandler final : public AudioScheduledSourceHandler {
   AudioFloatArray phase_increments_;
   AudioFloatArray detune_values_;
 
-  // This Persistent doesn't make a reference cycle including the owner
-  // OscillatorNode. It is cross-thread, as it will be accessed by the audio
-  // thread.
-  CrossThreadPersistent<PeriodicWave> periodic_wave_;
+  // PeriodicWave is held alive by OscillatorNode.
+  CrossThreadWeakPersistent<PeriodicWave> periodic_wave_;
 };
 
 class OscillatorNode final : public AudioScheduledSourceNode {
@@ -113,8 +119,12 @@ class OscillatorNode final : public AudioScheduledSourceNode {
                                 PeriodicWave* wave_table,
                                 ExceptionState&);
   static OscillatorNode* Create(BaseAudioContext*,
-                                const OscillatorOptions&,
+                                const OscillatorOptions*,
                                 ExceptionState&);
+
+  OscillatorNode(BaseAudioContext&,
+                 const String& oscillator_type,
+                 PeriodicWave* wave_table);
   void Trace(blink::Visitor*) override;
 
   String type() const;
@@ -123,14 +133,14 @@ class OscillatorNode final : public AudioScheduledSourceNode {
   AudioParam* detune();
   void setPeriodicWave(PeriodicWave*);
 
- private:
-  OscillatorNode(BaseAudioContext&,
-                 const String& oscillator_type,
-                 PeriodicWave* wave_table);
   OscillatorHandler& GetOscillatorHandler() const;
 
+ private:
   Member<AudioParam> frequency_;
   Member<AudioParam> detune_;
+  // This PeriodicWave is held alive here to allow referencing it from
+  // OscillatorHandler via weak reference.
+  Member<PeriodicWave> periodic_wave_;
 };
 
 }  // namespace blink

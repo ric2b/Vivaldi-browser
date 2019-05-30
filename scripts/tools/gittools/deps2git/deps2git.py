@@ -4,22 +4,30 @@
 # found in the LICENSE file.
 
 """Convert SVN based DEPS into .DEPS.git for use with NewGit."""
+from __future__ import print_function
+from __future__ import absolute_import
+
+from past.builtins import execfile
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+from builtins import range
 
 import collections
-from cStringIO import StringIO
+from io import StringIO
 import json
 import optparse
 import os
-import Queue
+import queue
 import shutil
 import subprocess
 import sys
 import threading
 import time
 
-import deps_utils
-import git_tools
-import svn_to_git_public
+from . import deps_utils
+from . import git_tools
+from . import svn_to_git_public
 
 try:
   import git_cache
@@ -93,7 +101,7 @@ def SvnRevToGitHash(
         not os.path.exists(os.path.join(git_repo_path, '.git'))):
       # shutil.rmtree is unreliable on windows
       if sys.platform == 'win32':
-        for _ in xrange(3):
+        for _ in range(3):
           if not subprocess.call(['cmd.exe', '/c', 'rd', '/q', '/s',
                                   os.path.normcase(git_repo_path)]):
             break
@@ -129,15 +137,15 @@ def MessageMain(message_q, threads):
   while True:
     try:
       msg = message_q.get(True, 10)
-    except Queue.Empty:
-      print >> sys.stderr, 'Still working on:'
+    except queue.Empty:
+      print('Still working on:', file=sys.stderr)
       for s in sorted([th.working_on for th in threads if th.working_on]):
-        print >> sys.stderr, '  %s' % s
+        print('  %s' % s, file=sys.stderr)
       continue
-    if msg is Queue.Empty:
+    if msg is queue.Empty:
       return
     if msg:
-      print >> sys.stderr, msg
+      print(msg, file=sys.stderr)
 
 
 def ConvertDepMain(dep_q, message_q, options, results):
@@ -147,7 +155,7 @@ def ConvertDepMain(dep_q, message_q, options, results):
       job = dep_q.get(False)
       dep, git_url, dep_url, path, git_host, dep_rev, svn_branch = job
       cur_thread.working_on = dep
-    except Queue.Empty:
+    except queue.Empty:
       cur_thread.working_on = None
       return
 
@@ -221,8 +229,8 @@ def ConvertDepsToGit(deps, options, deps_vars, svn_to_git_objs):
   )
 
   # Populate our deps list.
-  deps_to_process = Queue.Queue()
-  for dep, dep_url in deps.iteritems():
+  deps_to_process = queue.Queue()
+  for dep, dep_url in deps.items():
     if not dep_url:  # dep is 'None' and emitted to exclude the dep
       results.new_deps[dep] = None
       continue
@@ -256,10 +264,10 @@ def ConvertDepsToGit(deps, options, deps_vars, svn_to_git_objs):
         Job(dep, git_url, dep_url, path, git_host, dep_rev, svn_branch))
 
   threads = []
-  message_q = Queue.Queue()
+  message_q = queue.Queue()
   thread_args = (deps_to_process, message_q, options, results)
   num_threads = options.num_threads or deps_to_process.qsize()
-  for _ in xrange(num_threads):
+  for _ in range(num_threads):
     th = threading.Thread(target=ConvertDepMain, args=thread_args)
     th.working_on = None
     th.start()
@@ -269,7 +277,7 @@ def ConvertDepsToGit(deps, options, deps_vars, svn_to_git_objs):
 
   for th in threads:
     th.join()
-  message_q.put(Queue.Empty)
+  message_q.put(queue.Empty)
   message_th.join()
 
   return results
@@ -352,16 +360,16 @@ def main():
     try:
       execfile(gclient_file, {}, gclient_dict)
     except IOError:
-      print >> sys.stderr, 'Could not open %s' % gclient_file
+      print('Could not open %s' % gclient_file, file=sys.stderr)
       raise
     except SyntaxError:
-      print >> sys.stderr, 'Could not parse %s' % gclient_file
+      print('Could not parse %s' % gclient_file, file=sys.stderr)
       raise
     target_os = gclient_dict.get('target_os', [])
     if not target_os or not gclient_dict.get('target_os_only'):
       target_os.append(DEPS_OS_CHOICES.get(sys.platform, 'unix'))
     if 'all' not in target_os:
-      deps_os = dict([(k, v) for k, v in deps_os.iteritems() if k in target_os])
+      deps_os = dict([(k, v) for k, v in deps_os.items() if k in target_os])
     if not options.cache_dir and 'cache_dir' in gclient_dict:
       options.cache_dir = os.path.abspath(gclient_dict['cache_dir'])
 
@@ -395,29 +403,29 @@ def main():
       json.dump(list(results.bad_git_urls), f, sort_keys=True, indent=2)
 
   if results.bad_git_urls:
-    print >> sys.stderr, ('\nUnable to resolve the following repositories. '
+    print(('\nUnable to resolve the following repositories. '
         'Please make sure\nthat any svn URLs have a git mirror associated with '
         'them.\nTo see the exact error, run `git ls-remote [repository]` where'
         '\n[repository] is the URL ending in .git (strip off the @revision\n'
         'number.) For more information, visit http://code.google.com\n'
-        '/p/chromium/wiki/UsingGit#Adding_new_repositories_to_DEPS.\n')
+        '/p/chromium/wiki/UsingGit#Adding_new_repositories_to_DEPS.\n'), file=sys.stderr)
     for dep in results.bad_git_urls:
-      print >> sys.stderr, ' ' + dep
+      print(' ' + dep, file=sys.stderr)
   if results.bad_dep_urls:
-    print >> sys.stderr, '\nNo mappings found for the following urls:\n'
+    print('\nNo mappings found for the following urls:\n', file=sys.stderr)
     for bad in results.bad_dep_urls:
-      print >> sys.stderr, ' ' + bad
+      print(' ' + bad, file=sys.stderr)
   if results.bad_git_hash:
-    print >> sys.stderr, '\nsvn rev to git hash failures:\n'
+    print('\nsvn rev to git hash failures:\n', file=sys.stderr)
     for bad in results.bad_git_hash:
-      print >> sys.stderr, ' ' + str(bad)
+      print(' ' + str(bad), file=sys.stderr)
 
   if (results.bad_git_urls or results.bad_dep_urls or results.bad_git_hash):
     return 2
 
   if options.verify:
-    print >> sys.stderr, ('\nAll referenced repositories were successfully '
-                          'resolved.')
+    print(('\nAll referenced repositories were successfully '
+                          'resolved.'), file=sys.stderr)
     return 0
 
   # Write the DEPS file to disk.

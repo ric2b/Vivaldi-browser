@@ -45,16 +45,16 @@ import org.chromium.chrome.test.util.FullscreenTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.chrome.test.util.PrerenderTestHelper;
 import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.JavaScriptUtils;
-import org.chromium.content.browser.test.util.TestTouchUtils;
-import org.chromium.content.browser.test.util.TouchCommon;
-import org.chromium.content.browser.test.util.UiUtils;
 import org.chromium.content_public.browser.GestureListenerManager;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.content_public.browser.SelectionPopupController;
-import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.JavaScriptUtils;
+import org.chromium.content_public.browser.test.util.TestTouchUtils;
+import org.chromium.content_public.browser.test.util.TouchCommon;
+import org.chromium.content_public.browser.test.util.UiUtils;
+import org.chromium.content_public.browser.test.util.WebContentsUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 
 import java.util.concurrent.TimeUnit;
@@ -67,8 +67,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({
         ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        "disable-features=" + ChromeFeatureList.FULLSCREEN_ACTIVITY,
-        "enable-blink-features=FullscreenUnprefixed,FullscreenOptions",
 })
 @RetryOnFailure
 public class FullscreenManagerTest {
@@ -231,8 +229,9 @@ public class FullscreenManagerTest {
     }
 
     @Test
-    @LargeTest
-    @Feature({"Fullscreen"})
+    //@LargeTest
+    //@Feature({"Fullscreen"})
+    @DisabledTest(message = "crbug.com/901280")
     public void testManualHidingShowingBrowserControls() throws InterruptedException {
         FullscreenManagerTestUtils.disableBrowserOverrides();
         mActivityTestRule.startMainActivityWithURL(LONG_HTML_TEST_PAGE);
@@ -251,8 +250,9 @@ public class FullscreenManagerTest {
     }
 
     @Test
-    @LargeTest
-    @RetryOnFailure
+    //@LargeTest
+    //@RetryOnFailure
+    @DisabledTest(message = "crbug.com/901280")
     public void testHideBrowserControlsAfterFlingBoosting() throws InterruptedException {
         // Test that fling boosting doesn't break the scroll state management
         // that's used by the FullscreenManager to dispatch URL bar based
@@ -279,19 +279,18 @@ public class FullscreenManagerTest {
         };
 
         Tab tab = mActivityTestRule.getActivity().getActivityTab();
-        WebContents webContents = tab.getWebContents();
         GestureListenerManager gestureListenerManager =
-                GestureListenerManager.fromWebContents(webContents);
+                WebContentsUtils.getGestureListenerManager(tab.getWebContents());
         gestureListenerManager.addListener(scrollListener);
 
         final CallbackHelper viewportCallback = new CallbackHelper();
         ChromeFullscreenManager.FullscreenListener fullscreenListener =
                 new ChromeFullscreenManager.FullscreenListener() {
                     @Override
-                    public void onContentOffsetChanged(float offset) {}
+                    public void onContentOffsetChanged(int offset) {}
                     @Override
                     public void onControlsOffsetChanged(
-                            float topOffset, float bottomOffset, boolean needsAnimate) {}
+                            int topOffset, int bottomOffset, boolean needsAnimate) {}
                     @Override
                     public void onToggleOverlayVideoMode(boolean enabled) {}
                     @Override
@@ -347,15 +346,10 @@ public class FullscreenManagerTest {
                 "Failed to reset scrolling state", gestureListenerManager.isScrollInProgress());
     }
 
-    /**
-     * TODO(https://crbug.com/876097): Remove the DisableFeatures block turning off contextual
-     * suggestions.
-     */
     @Test
     @LargeTest
     @Feature({"Fullscreen"})
-    @Features.DisableFeatures({ChromeFeatureList.CONTEXTUAL_SUGGESTIONS_BOTTOM_SHEET,
-            ChromeFeatureList.CONTEXTUAL_SUGGESTIONS_BUTTON})
+    @Features.DisableFeatures({ChromeFeatureList.OFFLINE_INDICATOR})
     public void testHidingBrowserControlsRemovesSurfaceFlingerOverlay()
             throws InterruptedException {
         FullscreenManagerTestUtils.disableBrowserOverrides();
@@ -415,6 +409,7 @@ public class FullscreenManagerTest {
     @Test
     @LargeTest
     @Feature({"Fullscreen"})
+    @DisabledTest(message = "Flaky. crbug.com/936252")
     public void testManualFullscreenDisabledForChromePages() throws InterruptedException {
         FullscreenManagerTestUtils.disableBrowserOverrides();
         // The credits page was chosen as it is a chrome:// page that is long and would support
@@ -435,9 +430,9 @@ public class FullscreenManagerTest {
         TouchCommon.dragStart(mActivityTestRule.getActivity(), dragX, dragStartY, downTime);
         TouchCommon.dragTo(mActivityTestRule.getActivity(), dragX, dragX, dragStartY, dragFullY,
                 100, downTime);
-        FullscreenManagerTestUtils.waitForBrowserControlsPosition(mActivityTestRule, 0f);
+        FullscreenManagerTestUtils.waitForBrowserControlsPosition(mActivityTestRule, 0);
         TouchCommon.dragEnd(mActivityTestRule.getActivity(), dragX, dragFullY, downTime);
-        FullscreenManagerTestUtils.waitForBrowserControlsPosition(mActivityTestRule, 0f);
+        FullscreenManagerTestUtils.waitForBrowserControlsPosition(mActivityTestRule, 0);
     }
 
     @Test
@@ -462,7 +457,7 @@ public class FullscreenManagerTest {
                 delegate.rendererUnresponsive();
             }
         });
-        FullscreenManagerTestUtils.waitForBrowserControlsPosition(mActivityTestRule, 0f);
+        FullscreenManagerTestUtils.waitForBrowserControlsPosition(mActivityTestRule, 0);
 
         ThreadUtils.runOnUiThread(new Runnable() {
             @Override

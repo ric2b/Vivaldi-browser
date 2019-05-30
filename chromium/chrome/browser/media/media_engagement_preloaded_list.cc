@@ -7,6 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/media/media_engagement_preload.pb.h"
@@ -29,8 +30,8 @@ const char MediaEngagementPreloadedList::kHistogramLookupTimeName[] =
 
 // static
 MediaEngagementPreloadedList* MediaEngagementPreloadedList::GetInstance() {
-  CR_DEFINE_STATIC_LOCAL(MediaEngagementPreloadedList, instance, ());
-  return &instance;
+  static base::NoDestructor<MediaEngagementPreloadedList> instance;
+  return instance.get();
 }
 
 MediaEngagementPreloadedList::MediaEngagementPreloadedList() {
@@ -110,7 +111,7 @@ bool MediaEngagementPreloadedList::CheckOriginIsPresent(
   if (origin.port() != url::DefaultPortForScheme(origin.scheme().data(),
                                                  origin.scheme().length())) {
     location.push_back(':');
-    std::string port(base::UintToString(origin.port()));
+    std::string port(base::NumberToString(origin.port()));
     location.append(std::move(port));
   }
 

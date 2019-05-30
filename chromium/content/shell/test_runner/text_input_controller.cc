@@ -85,7 +85,10 @@ void TextInputControllerBindings::Install(
   if (bindings.IsEmpty())
     return;
   v8::Local<v8::Object> global = context->Global();
-  global->Set(gin::StringToV8(isolate, "textInputController"), bindings.ToV8());
+  global
+      ->Set(context, gin::StringToV8(isolate, "textInputController"),
+            bindings.ToV8())
+      .Check();
 }
 
 TextInputControllerBindings::TextInputControllerBindings(
@@ -193,10 +196,8 @@ void TextInputControllerBindings::ForceTextInputStateUpdate() {
 }
 // TextInputController ---------------------------------------------------------
 
-TextInputController::TextInputController(
-    WebViewTestProxyBase* web_view_test_proxy_base)
-    : web_view_test_proxy_base_(web_view_test_proxy_base),
-      weak_factory_(this) {}
+TextInputController::TextInputController(WebViewTestProxy* web_view_test_proxy)
+    : web_view_test_proxy_(web_view_test_proxy), weak_factory_(this) {}
 
 TextInputController::~TextInputController() {}
 
@@ -372,7 +373,8 @@ void TextInputController::SetComposition(const std::string& text) {
                                    ui::EventTimeForNow());
 
   key_down.windows_key_code = 0xE5;  // VKEY_PROCESSKEY
-  view()->HandleInputEvent(blink::WebCoalescedInputEvent(key_down));
+  view()->MainFrameWidget()->HandleInputEvent(
+      blink::WebCoalescedInputEvent(key_down));
 
   // The value returned by std::string::length() may not correspond to the
   // actual number of encoded characters in sequences of multi-byte or
@@ -392,16 +394,16 @@ void TextInputController::SetComposition(const std::string& text) {
 }
 
 void TextInputController::ForceTextInputStateUpdate() {
-  // TODO(lukasza): Finish adding OOPIF support to the layout tests harness.
+  // TODO(lukasza): Finish adding OOPIF support to the web tests harness.
   CHECK(view()->MainFrame()->IsWebLocalFrame())
       << "WebView does not have a local main frame and"
          " cannot handle input method controller tasks.";
-  web_view_test_proxy_base_->delegate()->ForceTextInputStateUpdate(
+  web_view_test_proxy_->delegate()->ForceTextInputStateUpdate(
       view()->MainFrame()->ToWebLocalFrame());
 }
 
 blink::WebView* TextInputController::view() {
-  return web_view_test_proxy_base_->web_view();
+  return web_view_test_proxy_->webview();
 }
 
 blink::WebInputMethodController*
@@ -409,7 +411,7 @@ TextInputController::GetInputMethodController() {
   if (!view()->MainFrame())
     return nullptr;
 
-  // TODO(lukasza): Finish adding OOPIF support to the layout tests harness.
+  // TODO(lukasza): Finish adding OOPIF support to the web tests harness.
   CHECK(view()->MainFrame()->IsWebLocalFrame())
       << "WebView does not have a local main frame and"
          " cannot handle input method controller tasks.";

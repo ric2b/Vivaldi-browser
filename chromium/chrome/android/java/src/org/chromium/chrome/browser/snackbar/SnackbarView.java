@@ -28,7 +28,6 @@ import android.widget.TextView;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
 
@@ -234,6 +233,43 @@ public class SnackbarView {
         mRootContentView.addOnLayoutChangeListener(mLayoutListener);
     }
 
+    // TODO(fgorski): Start using color ID, to remove the view from arguments.
+    private static int getBackgroundColor(View view, Snackbar snackbar) {
+        // Themes are used first.
+        if (snackbar.getTheme() == Snackbar.Theme.GOOGLE) {
+            return ApiCompatibilityUtils.getColor(view.getResources(), R.color.light_active_color);
+        }
+
+        assert snackbar.getTheme() == Snackbar.Theme.BASIC;
+        if (snackbar.getBackgroundColor() != 0) {
+            return snackbar.getBackgroundColor();
+        }
+
+        return ApiCompatibilityUtils.getColor(view.getResources(), R.color.modern_primary_color);
+    }
+
+    private static int getTextAppearance(Snackbar snackbar) {
+        if (snackbar.getTheme() == Snackbar.Theme.GOOGLE) {
+            return R.style.TextAppearance_Body_Inverse;
+        }
+
+        assert snackbar.getTheme() == Snackbar.Theme.BASIC;
+        if (snackbar.getTextAppearance() != 0) {
+            return snackbar.getTextAppearance();
+        }
+
+        return R.style.TextAppearance_BlackBodyDefault;
+    }
+
+    private static int getButtonTextAppearance(Snackbar snackbar) {
+        if (snackbar.getTheme() == Snackbar.Theme.GOOGLE) {
+            return R.style.TextAppearance_WhiteButtonText;
+        }
+
+        assert snackbar.getTheme() == Snackbar.Theme.BASIC;
+        return R.style.TextButton;
+    }
+
     private boolean updateInternal(Snackbar snackbar, boolean animate) {
         if (mSnackbar == snackbar) return false;
         mSnackbar = snackbar;
@@ -242,22 +278,11 @@ public class SnackbarView {
         setViewText(mMessageView, snackbar.getText(), animate);
         String actionText = snackbar.getActionText();
 
-        int backgroundColor = snackbar.getBackgroundColor();
-        if (backgroundColor == 0) {
-            backgroundColor = ApiCompatibilityUtils.getColor(mContainerView.getResources(),
-                    FeatureUtilities.isChromeModernDesignEnabled()
-                            ? R.color.modern_primary_color
-                            : R.color.snackbar_background_color);
-        }
+        ApiCompatibilityUtils.setTextAppearance(mMessageView, getTextAppearance(snackbar));
+        ApiCompatibilityUtils.setTextAppearance(
+                mActionButtonView, getButtonTextAppearance(snackbar));
 
-        int textAppearanceResId = snackbar.getTextAppearance();
-        if (textAppearanceResId == 0) {
-            textAppearanceResId = FeatureUtilities.isChromeModernDesignEnabled()
-                    ? R.style.BlackBodyDefault
-                    : R.style.WhiteBody;
-        }
-        ApiCompatibilityUtils.setTextAppearance(mMessageView, textAppearanceResId);
-
+        int backgroundColor = getBackgroundColor(mContainerView, snackbar);
         if (mIsTablet) {
             // On tablet, snackbars have rounded corners.
             mSnackbarView.setBackgroundResource(R.drawable.snackbar_background_tablet);
@@ -282,16 +307,11 @@ public class SnackbarView {
             mProfileImageView.setVisibility(View.GONE);
         }
 
-        if (FeatureUtilities.isChromeModernDesignEnabled()) {
-            mActionButtonView.setTextColor(ApiCompatibilityUtils.getColor(
-                    mContainerView.getResources(), R.color.blue_when_enabled));
-
-            mContainerView.findViewById(R.id.snackbar_shadow_top).setVisibility(View.VISIBLE);
-            if (mIsTablet) {
-                mContainerView.findViewById(R.id.snackbar_shadow_left).setVisibility(View.VISIBLE);
-                mContainerView.findViewById(R.id.snackbar_shadow_right).setVisibility(View.VISIBLE);
-            }
+        if (mIsTablet) {
+            mContainerView.findViewById(R.id.snackbar_shadow_left).setVisibility(View.VISIBLE);
+            mContainerView.findViewById(R.id.snackbar_shadow_right).setVisibility(View.VISIBLE);
         }
+
         return true;
     }
 

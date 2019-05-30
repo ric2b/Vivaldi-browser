@@ -23,7 +23,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// http://www.whatwg.org/specs/web-apps/current-work/multipage/the-canvas-element.html#canvasrenderingcontext2d
+// https://html.spec.whatwg.org/C/#canvasrenderingcontext2d
 
 // The spec specifies:
 //    typedef (HTMLImageElement or
@@ -77,7 +77,7 @@ interface CanvasRenderingContext2D {
     attribute (DOMString or CanvasGradient or CanvasPattern) fillStyle; // (default black)
     CanvasGradient createLinearGradient(double x0, double y0, double x1, double y1);
     [RaisesException] CanvasGradient createRadialGradient(double x0, double y0, double r0, double x1, double y1, double r1);
-    [CallWith=ScriptState, RaisesException] CanvasPattern? createPattern(CanvasImageSource image, [TreatNullAs=NullString] DOMString repetitionType);
+    [CallWith=ScriptState, RaisesException] CanvasPattern? createPattern(CanvasImageSource image, [TreatNullAs=EmptyString] DOMString repetitionType);
 
     // shadows
     attribute unrestricted double shadowOffsetX;
@@ -125,10 +125,10 @@ interface CanvasRenderingContext2D {
 
     // pixel manipulation
     [RaisesException] ImageData createImageData(ImageData imagedata);
-    [RaisesException] ImageData createImageData(long sw, long sh);
-    [RaisesException] ImageData getImageData(long sx, long sy, long sw, long sh);
-    [RaisesException] void putImageData(ImageData imagedata, long dx, long dy);
-    [RaisesException] void putImageData(ImageData imagedata, long dx, long dy, long dirtyX, long dirtyY, long dirtyWidth, long dirtyHeight);
+    [RaisesException] ImageData createImageData([EnforceRange] long sw, [EnforceRange] long sh);
+    [RaisesException] ImageData getImageData([EnforceRange] long sx, [EnforceRange] long sy, [EnforceRange] long sw, [EnforceRange] long sh);
+    [RaisesException] void putImageData(ImageData imagedata, [EnforceRange] long dx, [EnforceRange] long dy);
+    [RaisesException] void putImageData(ImageData imagedata, [EnforceRange] long dx, [EnforceRange] long dy, [EnforceRange] long dirtyX, [EnforceRange] long dirtyY, [EnforceRange] long dirtyWidth, [EnforceRange] long dirtyHeight);
 
     // https://github.com/WICG/canvas-color-space/blob/master/CanvasColorSpaceProposal.md
     [RuntimeEnabled=CanvasColorManagement, RaisesException] ImageData createImageData(unsigned long sw, unsigned long sh, ImageDataColorSettings imageDataColorSettings);
@@ -138,8 +138,7 @@ interface CanvasRenderingContext2D {
     // Should be merged with WebGL counterpart in CanvasRenderingContext, once no-longer experimental
     [RuntimeEnabled=Canvas2dContextLostRestored] boolean isContextLost();
 
-    // TODO: This will have to be standardized for feature detection as part of the Canvas ColorSpace proposal.
-    [RuntimeEnabled=CanvasColorManagement, MeasureAs=GetCanvas2DContextAttributes] CanvasRenderingContext2DSettings getContextAttributes();
+    [MeasureAs=GetCanvas2DContextAttributes] CanvasRenderingContext2DSettings getContextAttributes();
 
     // FIXME: factor out to CanvasDrawingStyles
     // line caps/joins

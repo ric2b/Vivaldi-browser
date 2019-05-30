@@ -439,23 +439,29 @@ def DoInline(
 
     return pattern % InlineCSSText(text, filepath)
 
+  def GetUrlRegexString(postfix=''):
+    """Helper function that returns a string for a regex that matches url('')
+       but not url([[ ]]) or url({{ }}). Appends |postfix| to group names.
+    """
+    url_re = 'url\((?!\[\[|{{)(?P<q%s>"|\'|)(?P<filename%s>[^"\'()]*)(?P=q%s)\)'
+    return url_re % (postfix, postfix, postfix)
 
   def InlineCSSImages(text, filepath=input_filepath):
     """Helper function that inlines external images in CSS backgrounds."""
     # Replace contents of url() for css attributes: content, background,
     # or *-image.
-    return re.sub('(content|background|[\w-]*-image):[^;]*' +
-                  '(url\((?P<quote1>"|\'|)[^"\'()]*(?P=quote1)\)|' +
-                      'image-set\(' +
-                          '([ ]*url\((?P<quote2>"|\'|)[^"\'()]*(?P=quote2)\)' +
-                              '[ ]*[0-9.]*x[ ]*(,[ ]*)?)+\))',
-                  lambda m: InlineCSSUrls(m, filepath),
-                  text)
+    property_re = '(content|background|[\w-]*-image):[^;]*'
+    # Replace group names to prevent duplicates when forming value_re.
+    image_set_value_re = 'image-set\(([ ]*' + GetUrlRegexString('2') + \
+        '[ ]*[0-9.]*x[ ]*(,[ ]*)?)+\)'
+    value_re = '(%s|%s)' % (GetUrlRegexString(), image_set_value_re)
+    css_re = property_re + value_re
+    return re.sub(css_re, lambda m: InlineCSSUrls(m, filepath), text)
 
   def InlineCSSUrls(src_match, filepath=input_filepath):
     """Helper function that inlines each url on a CSS image rule match."""
     # Replace contents of url() references in matches.
-    return re.sub('url\((?P<quote>"|\'|)(?P<filename>[^"\'()]*)(?P=quote)\)',
+    return re.sub(GetUrlRegexString(),
                   lambda m: SrcReplace(m, filepath),
                   src_match.group(0))
 
@@ -463,8 +469,7 @@ def DoInline(
     """Helper function that inlines CSS files included via the @import
        directive.
     """
-    return re.sub('@import\s+url\((?P<quote>"|\'|)(?P<filename>[^"\'()]*)' +
-                  '(?P=quote)\);',
+    return re.sub('@import\s+' + GetUrlRegexString() + ';',
                   lambda m: InlineCSSFile(m, '%s', filepath),
                   text)
 

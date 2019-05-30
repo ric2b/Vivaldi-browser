@@ -16,6 +16,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/common/content_export.h"
 #include "content/common/service_worker/service_worker_types.h"
@@ -46,7 +47,7 @@ class CONTENT_EXPORT ServiceWorkerRegistration
    public:
     virtual void OnVersionAttributesChanged(
         ServiceWorkerRegistration* registration,
-        ChangedVersionAttributesMask changed_mask,
+        blink::mojom::ChangedServiceWorkerObjectsMaskPtr changed_mask,
         const ServiceWorkerRegistrationInfo& info) {}
     virtual void OnUpdateViaCacheChanged(
         ServiceWorkerRegistration* registation) {}
@@ -67,7 +68,7 @@ class CONTENT_EXPORT ServiceWorkerRegistration
       base::WeakPtr<ServiceWorkerContextCore> context);
 
   int64_t id() const { return registration_id_; }
-  const GURL& pattern() const { return pattern_; }
+  const GURL& scope() const { return scope_; }
   blink::mojom::ServiceWorkerUpdateViaCache update_via_cache() const {
     return update_via_cache_;
   }
@@ -106,8 +107,8 @@ class CONTENT_EXPORT ServiceWorkerRegistration
     return installing_version_.get();
   }
 
-  bool has_installed_version() const {
-    return active_version() || waiting_version();
+  ServiceWorkerVersion* newest_installed_version() const {
+    return waiting_version() ? waiting_version() : active_version();
   }
 
   const blink::mojom::NavigationPreloadState navigation_preload_state() const {
@@ -120,7 +121,8 @@ class CONTENT_EXPORT ServiceWorkerRegistration
   virtual void RemoveListener(Listener* listener);
   void NotifyRegistrationFailed();
   void NotifyUpdateFound();
-  void NotifyVersionAttributesChanged(ChangedVersionAttributesMask mask);
+  void NotifyVersionAttributesChanged(
+      blink::mojom::ChangedServiceWorkerObjectsMaskPtr mask);
 
   ServiceWorkerRegistrationInfo GetInfo();
 
@@ -174,7 +176,7 @@ class CONTENT_EXPORT ServiceWorkerRegistration
   // registration from storage if there is no longer a stored version.
   void DeleteVersion(const scoped_refptr<ServiceWorkerVersion>& version);
 
-  void RegisterRegistrationFinishedCallback(const base::Closure& callback);
+  void RegisterRegistrationFinishedCallback(base::OnceClosure callback);
   void NotifyRegistrationFinished();
 
   void SetTaskRunnerForTest(
@@ -193,7 +195,7 @@ class CONTENT_EXPORT ServiceWorkerRegistration
 
   void UnsetVersionInternal(
       ServiceWorkerVersion* version,
-      ChangedVersionAttributesMask* mask);
+      blink::mojom::ChangedServiceWorkerObjectsMask* mask);
 
   // ServiceWorkerVersion::Observer override.
   void OnNoControllees(ServiceWorkerVersion* version) override;
@@ -226,7 +228,7 @@ class CONTENT_EXPORT ServiceWorkerRegistration
                          scoped_refptr<ServiceWorkerVersion> version,
                          blink::ServiceWorkerStatusCode status);
 
-  const GURL pattern_;
+  const GURL scope_;
   blink::mojom::ServiceWorkerUpdateViaCache update_via_cache_;
   const int64_t registration_id_;
   bool is_deleted_;
@@ -244,7 +246,7 @@ class CONTENT_EXPORT ServiceWorkerRegistration
   scoped_refptr<ServiceWorkerVersion> installing_version_;
 
   base::ObserverList<Listener>::Unchecked listeners_;
-  std::vector<base::Closure> registration_finished_callbacks_;
+  std::vector<base::OnceClosure> registration_finished_callbacks_;
   base::WeakPtr<ServiceWorkerContextCore> context_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 

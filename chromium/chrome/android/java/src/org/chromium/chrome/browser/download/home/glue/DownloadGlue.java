@@ -23,7 +23,6 @@ import org.chromium.components.offline_items_collection.OfflineItemShareInfo;
 import org.chromium.components.offline_items_collection.ShareCallback;
 import org.chromium.components.offline_items_collection.VisualsCallback;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -109,7 +108,7 @@ public class DownloadGlue implements DownloadObserver {
     public void removeItem(OfflineItem item) {
         DownloadManagerService.getDownloadManagerService().removeDownload(
                 item.id.id, item.isOffTheRecord, item.externallyRemoved);
-        FileDeletionQueue.get().delete(new File(item.filePath));
+        FileDeletionQueue.get().delete(item.filePath);
     }
 
     /** @see OfflineContentProvider#cancelDownload(ContentId) */
@@ -124,12 +123,24 @@ public class DownloadGlue implements DownloadObserver {
                 item.id, item.isOffTheRecord);
     }
 
-    /** @see OfflineContentProvider#resumeDownload(ContentId) */
+    /** @see OfflineContentProvider#resumeDownload(ContentId, boolean) */
     public void resumeDownload(OfflineItem item, boolean hasUserGesture) {
-        DownloadItem downloadItem = new DownloadItem(
-                false /* useAndroidDownloadManager */, DownloadInfo.fromOfflineItem(item, null));
-        DownloadManagerService.getDownloadManagerService().resumeDownload(
-                item.id, downloadItem, hasUserGesture);
+        DownloadInfo.Builder builder = DownloadInfo.builderFromOfflineItem(item, null);
+
+        // This is a temporary hack to work around the assumption that the DownloadItem passed to
+        // DownloadManagerService#resumeDownload() will not be paused.
+        builder.setIsPaused(false);
+
+        DownloadItem downloadItem =
+                new DownloadItem(false /* useAndroidDownloadManager */, builder.build());
+
+        if (item.isResumable) {
+            DownloadManagerService.getDownloadManagerService().resumeDownload(
+                    item.id, downloadItem, hasUserGesture);
+        } else {
+            DownloadManagerService.getDownloadManagerService().retryDownload(
+                    item.id, downloadItem, hasUserGesture);
+        }
     }
 
     /** @see OfflineContentProvider#getItemById(ContentId, Callback) */
@@ -156,7 +167,7 @@ public class DownloadGlue implements DownloadObserver {
     /** @see OfflineContentProvider#getShareInfoForItem(ContentId, ShareCallback) */
     public void getShareInfoForItem(OfflineItem item, ShareCallback callback) {
         OfflineItemShareInfo info = new OfflineItemShareInfo();
-        info.uri = DownloadUtils.getUriForItem(new File(item.filePath));
+        info.uri = DownloadUtils.getUriForItem(item.filePath);
         new Handler().post(() -> callback.onShareInfoAvailable(item.id, info));
     }
 

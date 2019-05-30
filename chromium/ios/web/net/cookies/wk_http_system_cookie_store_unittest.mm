@@ -5,7 +5,7 @@
 #import "ios/web/net/cookies/wk_http_system_cookie_store.h"
 
 #import <Foundation/Foundation.h>
-#import <WebKit/Webkit.h>
+#import <WebKit/WebKit.h>
 
 #include <memory>
 
@@ -13,8 +13,6 @@
 #include "ios/net/cookies/system_cookie_store_unittest_template.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-#if defined(__IPHONE_11_0) && (__IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_11_0)
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -106,11 +104,8 @@ class API_AVAILABLE(ios(11.0)) WKHTTPSystemCookieStoreTestDelegate {
 };
 
 API_AVAILABLE(ios(11.0))
-INSTANTIATE_TYPED_TEST_CASE_P(WKHTTPSystemCookieStore,
-                              SystemCookieStoreTest,
-                              WKHTTPSystemCookieStoreTestDelegate);
+INSTANTIATE_TYPED_TEST_SUITE_P(WKHTTPSystemCookieStore,
+                               SystemCookieStoreTest,
+                               WKHTTPSystemCookieStoreTestDelegate);
 
 }  // namespace net
-
-#endif  // defined(__IPHONE_11_0) && (__IPHONE_OS_VERSION_MAX_ALLOWED >=
-//__IPHONE_11_0)

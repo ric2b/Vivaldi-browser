@@ -10,15 +10,14 @@
 
 #include "content/common/content_export.h"
 #include "content/renderer/media/stream/media_stream_constraints_util.h"
-#include "third_party/blink/public/platform/modules/mediastream/media_devices.mojom.h"
+#include "third_party/blink/public/mojom/mediastream/media_devices.mojom.h"
 
 namespace blink {
+class MediaStreamAudioSource;
 class WebMediaConstraints;
 }
 
 namespace content {
-
-class MediaStreamAudioSource;
 
 // This class represents the capability of an audio-capture device.
 // It may represent three different things:
@@ -53,14 +52,14 @@ class CONTENT_EXPORT AudioDeviceCaptureCapability {
   // settings are restricted to the current settings of |source|. Intended to be
   // used by applyConstraints() for both device and content capture, and by
   // getUserMedia() with device capture for devices that are currently in use.
-  explicit AudioDeviceCaptureCapability(MediaStreamAudioSource* source);
+  explicit AudioDeviceCaptureCapability(blink::MediaStreamAudioSource* source);
 
   AudioDeviceCaptureCapability(const AudioDeviceCaptureCapability& other);
 
   // If this capability represents a device currently in use, this method
   // returns a pointer to the MediaStreamAudioSource object associated with the
   // device. Otherwise, it returns null.
-  MediaStreamAudioSource* source() const { return source_; }
+  blink::MediaStreamAudioSource* source() const { return source_; }
 
   // Returns the ID of the device associated with this capability. If empty,
   // it means that this capability is not associated with a known device and
@@ -77,7 +76,7 @@ class CONTENT_EXPORT AudioDeviceCaptureCapability {
   const media::AudioParameters& Parameters() const;
 
  private:
-  MediaStreamAudioSource* source_ = nullptr;
+  blink::MediaStreamAudioSource* source_ = nullptr;
   std::string device_id_;
   std::string group_id_;
   media::AudioParameters parameters_;
@@ -112,11 +111,10 @@ using AudioDeviceCaptureCapabilities =
 //    For content capture, all device IDs are considered valid by
 //    SelectSettings. Actual validation is performed by the getUserMedia
 //    implementation.
-//  * Audio features: the hotword_enabled, disable_local_echo and
-//    render_to_associated_sink constraints can be used to enable the
-//    corresponding audio feature. If not specified, their default value is
-//    false, except for disable_local_echo, whose default value is false only
-//    for desktop capture.
+//  * Audio features: the disable_local_echo and render_to_associated_sink
+//    constraints can be used to enable the corresponding audio feature. If not
+//    specified, their default value is false, except for disable_local_echo,
+//    whose default value is false only for desktop capture.
 //  * Audio processing. The remaining constraints are used to control audio
 //    processing. This is how audio-processing properties are set for device
 //    capture(see the content::AudioProcessingProperties struct) :
@@ -147,7 +145,7 @@ using AudioDeviceCaptureCapabilities =
 //    audio-processing properties for which no explicit value is provided in
 //    their corresponding constraints.
 // TODO(guidou): Add support for other standard constraints such as sampleRate,
-// channelCount and groupId. http://crbug.com/731170
+// channelCount and groupId. https://crbug.com/731170
 AudioCaptureSettings CONTENT_EXPORT
 SelectSettingsAudioCapture(const AudioDeviceCaptureCapabilities& capabilities,
                            const blink::WebMediaConstraints& constraints,
@@ -159,9 +157,9 @@ SelectSettingsAudioCapture(const AudioDeviceCaptureCapabilities& capabilities,
 // The current implementation rejects constraints that would result in settings
 // different from those of |source| because it is currently not possible to
 // reconfigure audio tracks or sources.
-// TODO(guidou): Allow reconfiguring audio tracks. http://crbug.com/796964
+// TODO(guidou): Allow reconfiguring audio tracks. https://crbug.com/796964
 AudioCaptureSettings CONTENT_EXPORT
-SelectSettingsAudioCapture(MediaStreamAudioSource* source,
+SelectSettingsAudioCapture(blink::MediaStreamAudioSource* source,
                            const blink::WebMediaConstraints& constraints);
 
 }  // namespace content

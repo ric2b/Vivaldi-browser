@@ -93,7 +93,7 @@ namespace blink {
 // which of the 2 destructs first.
 
 DatabaseContext* DatabaseContext::Create(ExecutionContext* context) {
-  DatabaseContext* self = new DatabaseContext(context);
+  DatabaseContext* self = MakeGarbageCollected<DatabaseContext>(context);
   DatabaseManager::Manager().RegisterDatabaseContext(self);
   return self;
 }
@@ -175,7 +175,7 @@ void DatabaseContext::StopDatabases() {
 }
 
 bool DatabaseContext::AllowDatabaseAccess() const {
-  return ToDocument(GetExecutionContext())->IsActive();
+  return To<Document>(GetExecutionContext())->IsActive();
 }
 
 const SecurityOrigin* DatabaseContext::GetSecurityOrigin() const {

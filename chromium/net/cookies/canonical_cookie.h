@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
@@ -20,6 +21,8 @@ class GURL;
 namespace net {
 
 class ParsedCookie;
+
+struct CookieWithStatus;
 
 class NET_EXPORT CanonicalCookie {
  public:
@@ -46,14 +49,37 @@ class NET_EXPORT CanonicalCookie {
 
   // Supports the default copy constructor.
 
+  // This enum represents if a cookie was included or excluded, and if excluded
+  // why.
+  enum class CookieInclusionStatus {
+    INCLUDE = 0,
+    EXCLUDE_HTTP_ONLY,
+    EXCLUDE_SECURE_ONLY,
+    EXCLUDE_DOMAIN_MISMATCH,
+    EXCLUDE_NOT_ON_PATH,
+    EXCLUDE_SAMESITE_STRICT,
+    EXCLUDE_SAMESITE_LAX,
+
+    // Statuses specific to setting cookies
+    EXCLUDE_FAILURE_TO_STORE,
+    EXCLUDE_NONCOOKIEABLE_SCHEME,
+    EXCLUDE_OVERWRITE_SECURE,
+    EXCLUDE_OVERWRITE_HTTP_ONLY,
+    EXCLUDE_INVALID_DOMAIN,
+    EXCLUDE_INVALID_PREFIX,
+    EXCLUDE_THIRD_PARTY_POLICY
+  };
+
   // Creates a new |CanonicalCookie| from the |cookie_line| and the
   // |creation_time|.  Canonicalizes and validates inputs. May return NULL if
-  // an attribute value is invalid.  |creation_time| may not be null.
+  // an attribute value is invalid.  |creation_time| may not be null. Sets
+  // optional |status| to the relevent CookieInclusionStatus if provided
   static std::unique_ptr<CanonicalCookie> Create(
       const GURL& url,
       const std::string& cookie_line,
       const base::Time& creation_time,
-      const CookieOptions& options);
+      const CookieOptions& options,
+      CookieInclusionStatus* status = nullptr);
 
   // Create a canonical cookie based on sanitizing the passed inputs in the
   // context of the passed URL.  Returns a null unique pointer if the inputs
@@ -107,6 +133,12 @@ class NET_EXPORT CanonicalCookie {
             && path_ == ecc.Path());
   }
 
+  // Returns a key such that two cookies with the same UniqueKey() are
+  // guaranteed to be equivalent in the sense of IsEquivalent().
+  std::tuple<std::string, std::string, std::string> UniqueKey() const {
+    return std::make_tuple(name_, domain_, path_);
+  }
+
   // Checks a looser set of equivalency rules than 'IsEquivalent()' in order
   // to support the stricter 'Secure' behaviors specified in
   // https://tools.ietf.org/html/draft-ietf-httpbis-cookie-alone#section-3
@@ -134,12 +166,13 @@ class NET_EXPORT CanonicalCookie {
   // section 5.1.3 of RFC 6265.
   bool IsDomainMatch(const std::string& host) const;
 
-  // Returns true if the cookie should be included for the given request |url|.
-  // HTTP only cookies can be filter by using appropriate cookie |options|.
-  // PLEASE NOTE that this method does not check whether a cookie is expired or
-  // not!
-  bool IncludeForRequestURL(const GURL& url,
-                            const CookieOptions& options) const;
+  // Returns if the cookie should be included (and if not, why) for the given
+  // request |url| using the CookieInclusionStatus enum. HTTP only cookies can
+  // be filter by using appropriate cookie |options|. PLEASE NOTE that this
+  // method does not check whether a cookie is expired or not!
+  CookieInclusionStatus IncludeForRequestURL(
+      const GURL& url,
+      const CookieOptions& options) const;
 
   std::string DebugString() const;
 
@@ -226,7 +259,25 @@ class NET_EXPORT CanonicalCookie {
   CookiePriority priority_;
 };
 
+// These enable us to pass along a list of excluded cookie with the reason they
+// were excluded
+struct CookieWithStatus {
+  CanonicalCookie cookie;
+  CanonicalCookie::CookieInclusionStatus status;
+};
+
+// Just used for the next function to send the cookie string with it's status
+struct CookieLineWithStatus {
+  CookieLineWithStatus(std::string cookie_string,
+                       CanonicalCookie::CookieInclusionStatus status);
+
+  std::string cookie_string;
+  CanonicalCookie::CookieInclusionStatus status;
+};
+
 typedef std::vector<CanonicalCookie> CookieList;
+
+typedef std::vector<CookieWithStatus> CookieStatusList;
 
 }  // namespace net
 

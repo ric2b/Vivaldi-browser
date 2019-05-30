@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/content_setting_bubble_contents.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/strings/utf_string_conversions.h"
@@ -66,19 +67,19 @@ struct LayoutRow {
 // in the content setting bubble.
 class MediaComboboxModel : public ui::ComboboxModel {
  public:
-  explicit MediaComboboxModel(content::MediaStreamType type);
+  explicit MediaComboboxModel(blink::MediaStreamType type);
   ~MediaComboboxModel() override;
 
-  content::MediaStreamType type() const { return type_; }
-  const content::MediaStreamDevices& GetDevices() const;
-  int GetDeviceIndex(const content::MediaStreamDevice& device) const;
+  blink::MediaStreamType type() const { return type_; }
+  const blink::MediaStreamDevices& GetDevices() const;
+  int GetDeviceIndex(const blink::MediaStreamDevice& device) const;
 
   // ui::ComboboxModel:
   int GetItemCount() const override;
   base::string16 GetItemAt(int index) override;
 
  private:
-  content::MediaStreamType type_;
+  blink::MediaStreamType type_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaComboboxModel);
 };
@@ -116,7 +117,7 @@ class MediaMenuBlock : public views::View {
       first_row = false;
 
       layout->StartRow(views::GridLayout::kFixedSize, kColumnSetId);
-      content::MediaStreamType stream_type = i->first;
+      blink::MediaStreamType stream_type = i->first;
       const ContentSettingBubbleModel::MediaMenu& menu = i->second;
 
       views::Label* label = new views::Label(menu.label);
@@ -150,24 +151,24 @@ class MediaMenuBlock : public views::View {
 
 // MediaComboboxModel ----------------------------------------------------------
 
-MediaComboboxModel::MediaComboboxModel(content::MediaStreamType type)
+MediaComboboxModel::MediaComboboxModel(blink::MediaStreamType type)
     : type_(type) {
-  DCHECK(type_ == content::MEDIA_DEVICE_AUDIO_CAPTURE ||
-         type_ == content::MEDIA_DEVICE_VIDEO_CAPTURE);
+  DCHECK(type_ == blink::MEDIA_DEVICE_AUDIO_CAPTURE ||
+         type_ == blink::MEDIA_DEVICE_VIDEO_CAPTURE);
 }
 
 MediaComboboxModel::~MediaComboboxModel() {}
 
-const content::MediaStreamDevices& MediaComboboxModel::GetDevices() const {
+const blink::MediaStreamDevices& MediaComboboxModel::GetDevices() const {
   MediaCaptureDevicesDispatcher* dispatcher =
       MediaCaptureDevicesDispatcher::GetInstance();
-  return type_ == content::MEDIA_DEVICE_AUDIO_CAPTURE
+  return type_ == blink::MEDIA_DEVICE_AUDIO_CAPTURE
              ? dispatcher->GetAudioCaptureDevices()
              : dispatcher->GetVideoCaptureDevices();
 }
 
 int MediaComboboxModel::GetDeviceIndex(
-    const content::MediaStreamDevice& device) const {
+    const blink::MediaStreamDevice& device) const {
   const auto& devices = GetDevices();
   for (size_t i = 0; i < devices.size(); ++i) {
     if (device.id == devices[i].id)
@@ -359,13 +360,13 @@ void ContentSettingBubbleContents::ListItemContainer::AddRowToLayout(
 // ContentSettingBubbleContents -----------------------------------------------
 
 ContentSettingBubbleContents::ContentSettingBubbleContents(
-    ContentSettingBubbleModel* content_setting_bubble_model,
+    std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model,
     content::WebContents* web_contents,
     views::View* anchor_view,
     views::BubbleBorder::Arrow arrow)
     : content::WebContentsObserver(web_contents),
       BubbleDialogDelegateView(anchor_view, arrow),
-      content_setting_bubble_model_(content_setting_bubble_model),
+      content_setting_bubble_model_(std::move(content_setting_bubble_model)),
       list_item_container_(nullptr),
       custom_link_(nullptr),
       manage_button_(nullptr),
@@ -382,7 +383,8 @@ ContentSettingBubbleContents::~ContentSettingBubbleContents() {
 }
 
 void ContentSettingBubbleContents::WindowClosing() {
-  content_setting_bubble_model_->CommitChanges();
+  if (content_setting_bubble_model_)
+    content_setting_bubble_model_->CommitChanges();
 }
 
 gfx::Size ContentSettingBubbleContents::CalculatePreferredSize() const {
@@ -423,6 +425,8 @@ void ContentSettingBubbleContents::OnNativeThemeChanged(
 }
 
 base::string16 ContentSettingBubbleContents::GetWindowTitle() const {
+  if (!content_setting_bubble_model_)
+    return base::string16();
   return content_setting_bubble_model_->bubble_content().title;
 }
 
@@ -431,6 +435,7 @@ bool ContentSettingBubbleContents::ShouldShowCloseButton() const {
 }
 
 void ContentSettingBubbleContents::Init() {
+  DCHECK(content_setting_bubble_model_);
   const ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::kVertical, gfx::Insets(),
@@ -466,11 +471,10 @@ void ContentSettingBubbleContents::Init() {
   const ContentSettingBubbleModel::RadioGroup& radio_group =
       bubble_content.radio_group;
   if (!radio_group.radio_items.empty()) {
-    for (ContentSettingBubbleModel::RadioItems::const_iterator i(
-         radio_group.radio_items.begin());
+    for (auto i(radio_group.radio_items.begin());
          i != radio_group.radio_items.end(); ++i) {
       auto radio = std::make_unique<views::RadioButton>(*i, 0);
-      radio->SetEnabled(bubble_content.radio_group_enabled);
+      radio->SetEnabled(radio_group.user_managed);
       radio->SetMultiLine(true);
       radio_group_.push_back(radio.get());
       rows.push_back({std::move(radio), LayoutRowType::INDENTED});
@@ -488,8 +492,7 @@ void ContentSettingBubbleContents::Init() {
          LayoutRowType::INDENTED});
   }
 
-  for (std::vector<ContentSettingBubbleModel::DomainList>::const_iterator i(
-           bubble_content.domain_lists.begin());
+  for (auto i(bubble_content.domain_lists.begin());
        i != bubble_content.domain_lists.end(); ++i) {
     auto list_view =
         std::make_unique<ContentSettingDomainListView>(i->title, i->hosts);
@@ -538,6 +541,7 @@ void ContentSettingBubbleContents::Init() {
 }
 
 views::View* ContentSettingBubbleContents::CreateExtraView() {
+  DCHECK(content_setting_bubble_model_);
   const auto& bubble_content = content_setting_bubble_model_->bubble_content();
   const auto* layout = ChromeLayoutProvider::Get();
   std::vector<View*> extra_views;
@@ -590,6 +594,9 @@ int ContentSettingBubbleContents::GetDialogButtons() const {
 
 base::string16 ContentSettingBubbleContents::GetDialogButtonLabel(
     ui::DialogButton button) const {
+  if (!content_setting_bubble_model_)
+    return base::string16();
+
   const base::string16& done_text =
       content_setting_bubble_model_->bubble_content().done_button_text;
   return done_text.empty() ? l10n_util::GetStringUTF16(IDS_DONE) : done_text;
@@ -621,11 +628,20 @@ void ContentSettingBubbleContents::OnVisibilityChanged(
 }
 
 void ContentSettingBubbleContents::WebContentsDestroyed() {
+  // Destroy the bubble model to ensure that the underlying WebContents outlives
+  // it.
+  content_setting_bubble_model_->CommitChanges();
+  content_setting_bubble_model_.reset();
+
+  // Closing the widget should synchronously hide it (and post a task to delete
+  // it). Subsequent event listener methods should not be invoked on hidden
+  // widgets.
   GetWidget()->Close();
 }
 
 void ContentSettingBubbleContents::ButtonPressed(views::Button* sender,
                                                  const ui::Event& event) {
+  DCHECK(content_setting_bubble_model_);
   if (sender == manage_checkbox_) {
     content_setting_bubble_model_->OnManageCheckboxChecked(
         manage_checkbox_->checked());
@@ -646,6 +662,7 @@ void ContentSettingBubbleContents::ButtonPressed(views::Button* sender,
 
 void ContentSettingBubbleContents::LinkClicked(views::Link* source,
                                                int event_flags) {
+  DCHECK(content_setting_bubble_model_);
   if (source == custom_link_) {
     content_setting_bubble_model_->OnCustomLinkClicked();
     GetWidget()->Close();
@@ -657,6 +674,7 @@ void ContentSettingBubbleContents::LinkClicked(views::Link* source,
 }
 
 void ContentSettingBubbleContents::OnPerformAction(views::Combobox* combobox) {
+  DCHECK(content_setting_bubble_model_);
   MediaComboboxModel* model =
       static_cast<MediaComboboxModel*>(combobox->model());
   content_setting_bubble_model_->OnMediaMenuClicked(

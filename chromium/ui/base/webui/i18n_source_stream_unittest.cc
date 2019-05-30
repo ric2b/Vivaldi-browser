@@ -87,7 +87,7 @@ class I18nSourceStreamTest : public ::testing::TestWithParam<I18nTestParam> {
 
   // Helpful function to initialize the test fixture.
   void Init() {
-    output_buffer_ = new net::IOBuffer(output_buffer_size_);
+    output_buffer_ = base::MakeRefCounted<net::IOBuffer>(output_buffer_size_);
     std::unique_ptr<net::MockSourceStream> source(new net::MockSourceStream());
     source_ = source.get();
 
@@ -163,7 +163,7 @@ class I18nSourceStreamTest : public ::testing::TestWithParam<I18nTestParam> {
   TemplateReplacements replacements_;
 };
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     I18nSourceStreamTests,
     I18nSourceStreamTest,
     ::testing::Values(

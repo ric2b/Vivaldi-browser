@@ -35,7 +35,7 @@ struct ModelNeutralState;
 class SyncSchedulerImpl : public SyncScheduler {
  public:
   // |name| is a display string to identify the syncer thread.  Takes
-  // |ownership of |syncer| and |delay_provider|.
+  // ownership of |syncer| and |delay_provider|.
   SyncSchedulerImpl(const std::string& name,
                     BackoffDelayProvider* delay_provider,
                     SyncCycleContext* context,
@@ -47,7 +47,6 @@ class SyncSchedulerImpl : public SyncScheduler {
 
   void Start(Mode mode, base::Time last_poll_time) override;
   void ScheduleConfiguration(const ConfigurationParams& params) override;
-  void ScheduleClearServerData(const ClearParams& params) override;
   void Stop() override;
   void ScheduleLocalNudge(ModelTypeSet types,
                           const base::Location& nudge_location) override;
@@ -62,8 +61,7 @@ class SyncSchedulerImpl : public SyncScheduler {
   void SetNotificationsEnabled(bool notifications_enabled) override;
 
   void OnCredentialsUpdated() override;
-  void OnConnectionStatusChange(
-      net::NetworkChangeNotifier::ConnectionType type) override;
+  void OnConnectionStatusChange(network::mojom::ConnectionType type) override;
 
   // SyncCycle::Delegate implementation.
   void OnThrottled(const base::TimeDelta& throttle_duration) override;
@@ -86,10 +84,10 @@ class SyncSchedulerImpl : public SyncScheduler {
   bool IsGlobalThrottle() const;
   bool IsGlobalBackoff() const;
 
-  // Changes the default delay between nudge cycles. Model-type specific
-  // overrides will still apply. This is made public so that nudge cycles can be
-  // shortened in integration tests.
-  void SetDefaultNudgeDelay(base::TimeDelta delay_ms);
+  // Reduces nudge delays for all types to a very short value and prevents their
+  // further changing by the server. Used to speed up passing of integration
+  // tests.
+  void ForceShortNudgeDelayForTest();
 
  private:
   enum JobPriority {
@@ -107,7 +105,6 @@ class SyncSchedulerImpl : public SyncScheduler {
   };
 
   friend class SyncSchedulerImplTest;
-  friend class SyncSchedulerWhiteboxTest;
   friend class SyncerTest;
 
   FRIEND_TEST_ALL_PREFIXES(SyncSchedulerTest, TransientPollFailure);
@@ -128,8 +125,6 @@ class SyncSchedulerImpl : public SyncScheduler {
 
   // Invoke the syncer to perform a configuration job.
   void DoConfigurationSyncCycleJob(JobPriority priority);
-
-  void DoClearServerDataSyncCycleJob(JobPriority priority);
 
   // Helper function for Do{Nudge,Configuration,Poll}SyncCycleJob.
   void HandleSuccess();
@@ -259,8 +254,6 @@ class SyncSchedulerImpl : public SyncScheduler {
   // that (mode_ != CONFIGURATION_MODE) \implies !pending_configure_params_.
   std::unique_ptr<ConfigurationParams> pending_configure_params_;
 
-  std::unique_ptr<ClearParams> pending_clear_params_;
-
   // Keeps track of work that the syncer needs to handle.
   NudgeTracker nudge_tracker_;
 
@@ -291,6 +284,9 @@ class SyncSchedulerImpl : public SyncScheduler {
 
   // Dictates if the scheduler should wait for authentication to happen or not.
   bool ignore_auth_credentials_;
+
+  // Used to prevent changing nudge delays by the server in integration tests.
+  bool force_short_nudge_delay_for_test_ = false;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

@@ -8,8 +8,6 @@
 #include "base/metrics/histogram_macros.h"
 #import "ios/web/public/web_state/web_state.h"
 
-DEFINE_WEB_STATE_USER_DATA_KEY(LoadTimingTabHelper);
-
 const char LoadTimingTabHelper::kOmnibarToPageLoadedMetric[] =
     "IOS.PageLoadTiming.OmnibarToPageLoaded";
 
@@ -59,3 +57,5 @@ void LoadTimingTabHelper::ReportLoadTime(const base::TimeDelta& elapsed) {
 void LoadTimingTabHelper::ResetTimer() {
   load_start_time_ = base::TimeTicks();
 }
+
+WEB_STATE_USER_DATA_KEY_IMPL(LoadTimingTabHelper)

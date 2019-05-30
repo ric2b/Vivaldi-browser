@@ -22,8 +22,10 @@
 #include "gpu/command_buffer/service/logger.h"
 #include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
+#include "gpu/command_buffer/service/passthrough_discardable_manager.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
 #include "gpu/command_buffer/service/service_utils.h"
+#include "gpu/command_buffer/service/shared_image_manager.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -37,8 +39,8 @@
 namespace gpu {
 namespace {
 
-constexpr int kDefaultRuns = 4;
-constexpr int kDefaultIterations = 10000;
+constexpr int kDefaultRuns = 8;
+constexpr int kDefaultIterations = 50000;
 
 // A command buffer that can record and replay commands
 // This goes through 3 states, allowing setting up of initial state before
@@ -54,10 +56,7 @@ class RecordReplayCommandBuffer : public CommandBufferDirect {
  public:
   enum Mode { kDirect, kRecord, kReplay };
 
-  explicit RecordReplayCommandBuffer(
-      TransferBufferManager* transfer_buffer_manager)
-      : CommandBufferDirect(transfer_buffer_manager) {}
-
+  RecordReplayCommandBuffer() = default;
   ~RecordReplayCommandBuffer() override = default;
 
   void AdvanceMode() {
@@ -179,9 +178,9 @@ class RecordReplayContext : public GpuControl {
         &translator_cache_, &completeness_cache_, feature_info,
         bind_generates_resource, &image_manager_, nullptr /* image_factory */,
         nullptr /* progress_reporter */, GpuFeatureInfo(),
-        &discardable_manager_);
-    command_buffer_.reset(new RecordReplayCommandBuffer(
-        context_group->transfer_buffer_manager()));
+        &discardable_manager_, &passthrough_discardable_manager_,
+        &shared_image_manager_);
+    command_buffer_.reset(new RecordReplayCommandBuffer());
 
     decoder_.reset(gles2::GLES2Decoder::Create(
         command_buffer_.get(), command_buffer_->service(), &outputter_,
@@ -261,61 +260,62 @@ class RecordReplayContext : public GpuControl {
 
   int32_t CreateImage(ClientBuffer buffer,
                       size_t width,
-                      size_t height,
-                      unsigned internalformat) override {
+                      size_t height) override {
     NOTIMPLEMENTED();
     return -1;
   }
 
-  void DestroyImage(int32_t id) override { NOTIMPLEMENTED(); }
+  void DestroyImage(int32_t id) override { NOTREACHED(); }
 
   void SignalQuery(uint32_t query, base::OnceClosure callback) override {
-    NOTIMPLEMENTED();
+    NOTREACHED();
   }
 
   void CreateGpuFence(uint32_t gpu_fence_id, ClientGpuFence source) override {
-    NOTIMPLEMENTED();
+    NOTREACHED();
   }
 
   void GetGpuFence(uint32_t gpu_fence_id,
                    base::OnceCallback<void(std::unique_ptr<gfx::GpuFence>)>
                        callback) override {
-    NOTIMPLEMENTED();
+    NOTREACHED();
   }
 
-  void SetLock(base::Lock*) override { NOTIMPLEMENTED(); }
+  void SetLock(base::Lock*) override { NOTREACHED(); }
 
-  void EnsureWorkVisible() override {}
+  void EnsureWorkVisible() override { NOTREACHED(); }
 
   gpu::CommandBufferNamespace GetNamespaceID() const override {
-    return command_buffer_->GetNamespaceID();
+    return gpu::CommandBufferNamespace::INVALID;
   }
 
   CommandBufferId GetCommandBufferID() const override {
-    return command_buffer_->GetCommandBufferID();
+    return gpu::CommandBufferId();
   }
 
-  void FlushPendingWork() override {}
+  void FlushPendingWork() override { NOTREACHED(); }
 
   uint64_t GenerateFenceSyncRelease() override {
-    NOTIMPLEMENTED();
+    NOTREACHED();
     return 0;
   }
 
   bool IsFenceSyncReleased(uint64_t release) override {
-    NOTIMPLEMENTED();
+    NOTREACHED();
     return true;
   }
 
   void SignalSyncToken(const gpu::SyncToken& sync_token,
                        base::OnceClosure callback) override {
-    NOTIMPLEMENTED();
+    NOTREACHED();
   }
 
-  void WaitSyncTokenHint(const gpu::SyncToken& sync_token) override {}
+  void WaitSyncToken(const gpu::SyncToken& sync_token) override {
+    NOTREACHED();
+  }
 
   bool CanWaitUnverifiedSyncToken(const gpu::SyncToken& sync_token) override {
-    NOTIMPLEMENTED();
+    NOTREACHED();
     return true;
   }
 
@@ -325,6 +325,8 @@ class RecordReplayContext : public GpuControl {
   scoped_refptr<gl::GLShareGroup> share_group_;
   gles2::ImageManager image_manager_;
   ServiceDiscardableManager discardable_manager_;
+  PassthroughDiscardableManager passthrough_discardable_manager_;
+  SharedImageManager shared_image_manager_;
 
   scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<gl::GLContext> context_;
@@ -357,6 +359,10 @@ class PerfIterator {
     // 3- avoid unneeded syscalls (time, print).
     for_linux_perf_ =
         base::CommandLine::ForCurrentProcess()->HasSwitch("for-linux-perf");
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch("fast-run")) {
+      runs_ = 1;
+      iterations_ = 100;
+    }
   }
 
   bool Iterate() {

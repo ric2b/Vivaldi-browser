@@ -45,29 +45,22 @@ TEST_F(ChromeProxyMainDialogTest, Create) {
   dialog_->Create();
 }
 
-TEST_F(ChromeProxyMainDialogTest, StartScanning) {
-  dialog_->StartScanning();
-}
-
 TEST_F(ChromeProxyMainDialogTest, NoPUPsFound) {
   base::MessageLoopForUI ui_message_loop_;
 
   base::RunLoop run_loop;
   EXPECT_CALL(delegate_, OnClose())
       .WillOnce(testing::InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
-  EXPECT_CALL(chrome_prompt_ipc_, MockPostPromptUserTask(_, _, _))
+  EXPECT_CALL(chrome_prompt_ipc_, MockPostPromptUserTask(_, _, _, _))
       .WillOnce(Invoke([](const std::vector<base::FilePath>& files_to_delete,
                           const std::vector<base::string16>& registry_keys,
+                          const std::vector<base::string16>& extension_ids,
                           mojom::ChromePrompt::PromptUserCallback* callback) {
         std::move(*callback).Run(PromptAcceptance::DENIED);
       }));
 
   dialog_->NoPUPsFound();
   run_loop.Run();
-}
-
-TEST_F(ChromeProxyMainDialogTest, StartCleanup) {
-  dialog_->StartCleanup(10);
 }
 
 TEST_F(ChromeProxyMainDialogTest, CleanupDone) {
@@ -127,10 +120,11 @@ TEST_P(ConfirmCleanupChromeProxyMainDialogTest, ConfirmCleanup) {
 
   StrictMock<MockChromePromptIPC> chrome_prompt_ipc;
   EXPECT_CALL(chrome_prompt_ipc,
-              MockPostPromptUserTask(SizeIs(2), SizeIs(1), _))
+              MockPostPromptUserTask(SizeIs(2), SizeIs(1), _, _))
       .WillOnce(Invoke([prompt_acceptance](
                            const std::vector<base::FilePath>& files_to_delete,
                            const std::vector<base::string16>& registry_keys,
+                           const std::vector<base::string16>& extension_ids,
                            mojom::ChromePrompt::PromptUserCallback* callback) {
         std::move(*callback).Run(prompt_acceptance);
       }));
@@ -145,11 +139,12 @@ TEST_P(ConfirmCleanupChromeProxyMainDialogTest, ConfirmCleanup) {
   run_loop.Run();
 }
 
-INSTANTIATE_TEST_CASE_P(All,
-                        ConfirmCleanupChromeProxyMainDialogTest,
-                        testing::Values(PromptAcceptance::ACCEPTED_WITH_LOGS,
-                                        PromptAcceptance::ACCEPTED_WITHOUT_LOGS,
-                                        PromptAcceptance::DENIED));
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ConfirmCleanupChromeProxyMainDialogTest,
+    testing::Values(PromptAcceptance::ACCEPTED_WITH_LOGS,
+                    PromptAcceptance::ACCEPTED_WITHOUT_LOGS,
+                    PromptAcceptance::DENIED));
 
 }  // namespace
 }  // namespace chrome_cleaner

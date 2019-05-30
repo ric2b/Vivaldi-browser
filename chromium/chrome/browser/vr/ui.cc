@@ -11,15 +11,18 @@
 
 #include "chrome/browser/vr/ui.h"
 
+#include "base/bind.h"
 #include "base/numerics/math_constants.h"
 #include "base/numerics/ranges.h"
 #include "base/strings/string16.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/vr/content_input_delegate.h"
 #include "chrome/browser/vr/elements/content_element.h"
+#include "chrome/browser/vr/elements/keyboard.h"
 #include "chrome/browser/vr/elements/text_input.h"
-#include "chrome/browser/vr/ganesh_surface_provider.h"
 #include "chrome/browser/vr/keyboard_delegate.h"
+#include "chrome/browser/vr/keyboard_delegate_for_testing.h"
 #include "chrome/browser/vr/model/assets.h"
 #include "chrome/browser/vr/model/model.h"
 #include "chrome/browser/vr/model/omnibox_suggestions.h"
@@ -27,10 +30,12 @@
 #include "chrome/browser/vr/model/sound_id.h"
 #include "chrome/browser/vr/platform_input_handler.h"
 #include "chrome/browser/vr/platform_ui_input_delegate.h"
+#include "chrome/browser/vr/skia_surface_provider_factory.h"
 #include "chrome/browser/vr/speech_recognizer.h"
 #include "chrome/browser/vr/ui_browser_interface.h"
 #include "chrome/browser/vr/ui_element_renderer.h"
 #include "chrome/browser/vr/ui_input_manager.h"
+#include "chrome/browser/vr/ui_input_manager_for_testing.h"
 #include "chrome/browser/vr/ui_renderer.h"
 #include "chrome/browser/vr/ui_scene.h"
 #include "chrome/browser/vr/ui_scene_constants.h"
@@ -67,6 +72,28 @@ UiElementName UserFriendlyElementNameToUiElementName(
       return kOverflowMenuNewIncognitoTabItem;
     case UserFriendlyElementName::kCloseIncognitoTabs:
       return kOverflowMenuCloseAllIncognitoTabsItem;
+    case UserFriendlyElementName::kExitPrompt:
+      return kExitPrompt;
+    case UserFriendlyElementName::kSuggestionBox:
+      return kOmniboxSuggestions;
+    case UserFriendlyElementName::kOmniboxTextField:
+      return kOmniboxTextField;
+    case UserFriendlyElementName::kOmniboxCloseButton:
+      return kOmniboxCloseButton;
+    case UserFriendlyElementName::kAppButtonExitToast:
+      return kWebVrExclusiveScreenToast;
+    case UserFriendlyElementName::kWebXrAudioIndicator:
+      return kWebVrAudioCaptureIndicator;
+    case UserFriendlyElementName::kWebXrHostedContent:
+      return kWebVrHostedUiContent;
+    case UserFriendlyElementName::kMicrophonePermissionIndicator:
+      return kAudioCaptureIndicator;
+    case UserFriendlyElementName::kWebXrExternalPromptNotification:
+      return kWebXrExternalPromptNotification;
+    case UserFriendlyElementName::kCameraPermissionIndicator:
+      return kVideoCaptureIndicator;
+    case UserFriendlyElementName::kLocationPermissionIndicator:
+      return kLocationAccessIndicator;
     default:
       NOTREACHED();
       return kNone;
@@ -128,6 +155,10 @@ base::WeakPtr<BrowserUiInterface> Ui::GetBrowserUiWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
+SchedulerUiInterface* Ui::GetSchedulerUiPtr() {
+  return this;
+}
+
 void Ui::SetWebVrMode(bool enabled) {
   if (enabled) {
     model_->web_vr.has_received_permissions = false;
@@ -149,13 +180,12 @@ void Ui::SetFullscreen(bool enabled) {
   }
 }
 
-void Ui::SetToolbarState(const ToolbarState& state) {
-  model_->toolbar_state = state;
+void Ui::SetLocationBarState(const LocationBarState& state) {
+  model_->location_bar_state = state;
 }
 
 void Ui::SetIncognito(bool enabled) {
   model_->incognito = enabled;
-  model_->incognito_tabs_view_selected = enabled;
 }
 
 void Ui::SetLoading(bool loading) {
@@ -164,10 +194,6 @@ void Ui::SetLoading(bool loading) {
 
 void Ui::SetLoadProgress(float progress) {
   model_->load_progress = progress;
-}
-
-void Ui::SetIsExiting() {
-  model_->exiting_vr = true;
 }
 
 void Ui::SetHistoryButtonsEnabled(bool can_go_back, bool can_go_forward) {
@@ -264,13 +290,18 @@ void Ui::SetRecognitionResult(const base::string16& result) {
   model_->speech.recognition_result = result;
 }
 
+void Ui::SetHasOrCanRequestRecordAudioPermission(
+    bool const has_or_can_request_record_audio) {
+  model_->speech.has_or_can_request_record_audio_permission =
+      has_or_can_request_record_audio;
+}
+
 void Ui::OnSpeechRecognitionStateChanged(int new_state) {
   model_->speech.speech_recognition_state = new_state;
 }
 
-void Ui::SetOmniboxSuggestions(
-    std::unique_ptr<OmniboxSuggestions> suggestions) {
-  model_->omnibox_suggestions = suggestions->suggestions;
+void Ui::SetOmniboxSuggestions(std::vector<OmniboxSuggestion> suggestions) {
+  model_->omnibox_suggestions = std::move(suggestions);
 }
 
 void Ui::ShowSoftInput(bool show) {
@@ -292,29 +323,6 @@ void Ui::UpdateWebInputIndices(int selection_start,
             *model = new_state;
           },
           base::Unretained(&model_->web_input_text_field_info.current)));
-}
-
-void Ui::AddOrUpdateTab(int id, bool incognito, const base::string16& title) {
-  auto* tabs = incognito ? &model_->incognito_tabs : &model_->regular_tabs;
-  auto tab_iter = FindTab(id, tabs);
-  if (tab_iter == tabs->end()) {
-    tabs->push_back(TabModel(id, title));
-  } else {
-    tab_iter->title = title;
-  }
-}
-
-void Ui::RemoveTab(int id, bool incognito) {
-  auto* tabs = incognito ? &model_->incognito_tabs : &model_->regular_tabs;
-  auto tab_iter = FindTab(id, tabs);
-  if (tab_iter != tabs->end()) {
-    tabs->erase(tab_iter);
-  }
-}
-
-void Ui::RemoveAllTabs() {
-  model_->regular_tabs.clear();
-  model_->incognito_tabs.clear();
 }
 
 void Ui::SetAlertDialogEnabled(bool enabled,
@@ -369,21 +377,20 @@ void Ui::CancelPlatformToast() {
   model_->platform_toast.reset();
 }
 
-void Ui::OnGlInitialized(unsigned int content_texture_id,
-                         GlTextureLocation content_location,
+void Ui::OnGlInitialized(GlTextureLocation textures_location,
+                         unsigned int content_texture_id,
                          unsigned int content_overlay_texture_id,
-                         GlTextureLocation content_overlay_location,
-                         unsigned int ui_texture_id) {
+                         unsigned int platform_ui_texture_id) {
   ui_element_renderer_ = std::make_unique<UiElementRenderer>();
   ui_renderer_ =
       std::make_unique<UiRenderer>(scene_.get(), ui_element_renderer_.get());
-  provider_ = std::make_unique<GaneshSurfaceProvider>();
+  provider_ = SkiaSurfaceProviderFactory::Create();
   scene_->OnGlInitialized(provider_.get());
   model_->content_texture_id = content_texture_id;
   model_->content_overlay_texture_id = content_overlay_texture_id;
-  model_->content_location = content_location;
-  model_->content_overlay_location = content_overlay_location;
-  model_->hosted_platform_ui.texture_id = ui_texture_id;
+  model_->content_location = textures_location;
+  model_->content_overlay_location = textures_location;
+  model_->hosted_platform_ui.texture_id = platform_ui_texture_id;
 }
 
 void Ui::RequestFocus(int element_id) {
@@ -446,12 +453,15 @@ void Ui::OnMenuButtonClicked() {
   }
 }
 
-void Ui::OnControllerUpdated(const ControllerModel& controller_model,
-                             const ReticleModel& reticle_model) {
-  model_->controller = controller_model;
+void Ui::OnControllersUpdated(
+    const std::vector<ControllerModel>& controller_models,
+    const ReticleModel& reticle_model) {
+  model_->controllers = controller_models;
   model_->reticle = reticle_model;
-  model_->controller.resting_in_viewport =
-      input_manager_->controller_resting_in_viewport();
+  for (auto& controller : model_->controllers) {
+    controller.resting_in_viewport =
+        input_manager_->ControllerRestingInViewport();
+  }
 }
 
 void Ui::OnProjMatrixChanged(const gfx::Transform& proj_matrix) {
@@ -540,6 +550,14 @@ void Ui::WaitForAssets() {
   model_->waiting_for_background = true;
 }
 
+void Ui::SetRegularTabsOpen(bool open) {
+  model_->regular_tabs_open = open;
+}
+
+void Ui::SetIncognitoTabsOpen(bool open) {
+  model_->incognito_tabs_open = open;
+}
+
 void Ui::SetOverlayTextureEmpty(bool empty) {
   model_->content_overlay_texture_non_empty = !empty;
 }
@@ -548,9 +566,31 @@ void Ui::ReinitializeForTest(const UiInitialState& ui_initial_state) {
   InitializeModel(ui_initial_state);
 }
 
+bool Ui::GetElementVisibilityForTesting(UserFriendlyElementName element_name) {
+  auto* target_element = scene()->GetUiElementByName(
+      UserFriendlyElementNameToUiElementName(element_name));
+  DCHECK(target_element) << "Unsupported test element";
+  return target_element->IsVisible();
+}
+
+void Ui::SetUiInputManagerForTesting(bool enabled) {
+  if (enabled) {
+    DCHECK(input_manager_for_testing_ == nullptr)
+        << "Attempted to set test UiInputManager while already using it";
+    input_manager_for_testing_ =
+        std::make_unique<UiInputManagerForTesting>(scene_.get());
+    input_manager_for_testing_.swap(input_manager_);
+  } else {
+    DCHECK(input_manager_for_testing_ != nullptr)
+        << "Attempted to unset test UiInputManager while not using it";
+    input_manager_for_testing_.swap(input_manager_);
+    input_manager_for_testing_.reset();
+  }
+}
+
 void Ui::InitializeModel(const UiInitialState& ui_initial_state) {
-  model_->speech.has_or_can_request_audio_permission =
-      ui_initial_state.has_or_can_request_audio_permission;
+  model_->speech.has_or_can_request_record_audio_permission =
+      ui_initial_state.has_or_can_request_record_audio_permission;
   model_->ui_modes.clear();
   model_->push_mode(kModeBrowsing);
   if (ui_initial_state.in_web_vr) {
@@ -565,9 +605,9 @@ void Ui::InitializeModel(const UiInitialState& ui_initial_state) {
   model_->supports_selection = ui_initial_state.supports_selection;
   model_->needs_keyboard_update = ui_initial_state.needs_keyboard_update;
   model_->standalone_vr_device = ui_initial_state.is_standalone_vr_device;
-  model_->create_tabs_view = ui_initial_state.create_tabs_view;
   model_->use_new_incognito_strings =
       ui_initial_state.use_new_incognito_strings;
+  model_->controllers.push_back(ControllerModel());
 }
 
 void Ui::AcceptDoffPromptForTesting() {
@@ -601,6 +641,49 @@ gfx::Point3F Ui::GetTargetPointForTesting(UserFriendlyElementName element_name,
          gfx::ScaleVector3d(direction, scene()->background_distance());
 }
 
+void Ui::PerformKeyboardInputForTesting(KeyboardTestInput keyboard_input) {
+  DCHECK(keyboard_delegate_);
+  if (keyboard_input.action == KeyboardTestAction::kRevertToRealKeyboard) {
+    if (using_keyboard_delegate_for_testing_) {
+      DCHECK(static_cast<KeyboardDelegateForTesting*>(keyboard_delegate_.get())
+                 ->IsQueueEmpty())
+          << "Attempted to revert to real keyboard with input still queued";
+      using_keyboard_delegate_for_testing_ = false;
+      keyboard_delegate_for_testing_.swap(keyboard_delegate_);
+      static_cast<Keyboard*>(
+          scene_->GetUiElementByName(UiElementName::kKeyboard))
+          ->SetKeyboardDelegate(keyboard_delegate_.get());
+      text_input_delegate_->SetUpdateInputCallback(
+          base::BindRepeating(&KeyboardDelegate::UpdateInput,
+                              base::Unretained(keyboard_delegate_.get())));
+    }
+    return;
+  }
+  if (!using_keyboard_delegate_for_testing_) {
+    using_keyboard_delegate_for_testing_ = true;
+    if (!keyboard_delegate_for_testing_) {
+      keyboard_delegate_for_testing_ =
+          std::make_unique<KeyboardDelegateForTesting>();
+      keyboard_delegate_for_testing_->SetUiInterface(this);
+    }
+    keyboard_delegate_for_testing_.swap(keyboard_delegate_);
+    static_cast<Keyboard*>(scene_->GetUiElementByName(UiElementName::kKeyboard))
+        ->SetKeyboardDelegate(keyboard_delegate_.get());
+    text_input_delegate_->SetUpdateInputCallback(
+        base::BindRepeating(&KeyboardDelegate::UpdateInput,
+                            base::Unretained(keyboard_delegate_.get())));
+  }
+  if (keyboard_input.action != KeyboardTestAction::kEnableMockedKeyboard) {
+    static_cast<KeyboardDelegateForTesting*>(keyboard_delegate_.get())
+        ->QueueKeyboardInputForTesting(keyboard_input);
+  }
+}
+
+void Ui::SetVisibleExternalPromptNotification(
+    ExternalPromptNotificationType prompt) {
+  model_->web_vr.external_prompt_notification = prompt;
+}
+
 ContentElement* Ui::GetContentElement() {
   if (!content_element_) {
     content_element_ =
@@ -621,13 +704,7 @@ gfx::Transform Ui::GetContentWorldSpaceTransform() {
   return GetContentElement()->world_space_transform();
 }
 
-std::vector<TabModel>::iterator Ui::FindTab(int id,
-                                            std::vector<TabModel>* tabs) {
-  return std::find_if(tabs->begin(), tabs->end(),
-                      [id](const TabModel& tab) { return tab.id == id; });
-}
-
-bool Ui::OnBeginFrame(const base::TimeTicks& current_time,
+bool Ui::OnBeginFrame(base::TimeTicks current_time,
                       const gfx::Transform& head_pose) {
   return scene_->OnBeginFrame(current_time, head_pose);
 }
@@ -660,6 +737,8 @@ void Ui::DrawContent(const float (&uv_transform)[16],
 }
 
 void Ui::DrawWebXr(int texture_data_handle, const float (&uv_transform)[16]) {
+  if (!texture_data_handle)
+    return;
   ui_element_renderer_->DrawTextureCopy(texture_data_handle, uv_transform, 0,
                                         0);
 }
@@ -683,7 +762,7 @@ void Ui::HandleInput(base::TimeTicks current_time,
 }
 
 void Ui::HandleMenuButtonEvents(InputEventList* input_event_list) {
-  InputEventList::iterator it = input_event_list->begin();
+  auto it = input_event_list->begin();
   while (it != input_event_list->end()) {
     if (InputEvent::IsMenuButtonEventType((*it)->type())) {
       switch ((*it)->type()) {
@@ -812,21 +891,24 @@ FovRectangle Ui::GetMinimalFov(const gfx::Transform& view_matrix,
   return FovRectangle{left_degrees, right_degrees, bottom_degrees, top_degrees};
 }
 
-#if defined(FEATURE_MODULES)
-
+#if defined(OS_ANDROID)
 extern "C" {
-Ui* CreateUi(UiBrowserInterface* browser,
-             PlatformInputHandler* content_input_forwarder,
-             std::unique_ptr<KeyboardDelegate> keyboard_delegate,
-             std::unique_ptr<TextInputDelegate> text_input_delegate,
-             std::unique_ptr<AudioDelegate> audio_delegate,
-             const UiInitialState& ui_initial_state) {
+
+// This symbol is retrieved from the VR feature module library via dlsym(),
+// where it's bare address is type-cast to a CreateUiFunction pointer and
+// executed. Any changes to the arguments here must be mirrored in that type.
+__attribute__((visibility("default"))) UiInterface* CreateUi(
+    UiBrowserInterface* browser,
+    PlatformInputHandler* content_input_forwarder,
+    std::unique_ptr<KeyboardDelegate> keyboard_delegate,
+    std::unique_ptr<TextInputDelegate> text_input_delegate,
+    std::unique_ptr<AudioDelegate> audio_delegate,
+    const UiInitialState& ui_initial_state) {
   return new Ui(browser, content_input_forwarder, std::move(keyboard_delegate),
                 std::move(text_input_delegate), std::move(audio_delegate),
                 ui_initial_state);
 }
 }
-
-#endif  // defined(FEATURE_MODULES)
+#endif  // defined(OS_ANDROID
 
 }  // namespace vr

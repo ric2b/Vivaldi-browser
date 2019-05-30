@@ -4,7 +4,9 @@
 
 #include "services/network/test/test_network_service_client.h"
 
+#include "base/optional.h"
 #include "base/task/post_task.h"
+#include "base/unguessable_token.h"
 
 namespace network {
 
@@ -40,6 +42,7 @@ void TestNetworkServiceClient::OnAuthRequired(
 }
 
 void TestNetworkServiceClient::OnCertificateRequested(
+    const base::Optional<base::UnguessableToken>& window_id,
     uint32_t process_id,
     uint32_t routing_id,
     uint32_t request_id,
@@ -79,6 +82,13 @@ void TestNetworkServiceClient::OnCookieChange(
   NOTREACHED();
 }
 
+#if defined(OS_CHROMEOS)
+void TestNetworkServiceClient::OnTrustAnchorUsed(
+    const std::string& username_hash) {
+  NOTREACHED();
+}
+#endif
+
 void TestNetworkServiceClient::OnFileUploadRequested(
     uint32_t process_id,
     bool async,
@@ -117,5 +127,21 @@ void TestNetworkServiceClient::OnClearSiteData(
     OnClearSiteDataCallback callback) {
   NOTREACHED();
 }
+
+void TestNetworkServiceClient::OnDataUseUpdate(
+    int32_t network_traffic_annotation_id_hash,
+    int64_t recv_bytes,
+    int64_t sent_bytes) {}
+
+#if defined(OS_ANDROID)
+void TestNetworkServiceClient::OnGenerateHttpNegotiateAuthToken(
+    const std::string& server_auth_token,
+    bool can_delegate,
+    const std::string& auth_negotiate_android_account_type,
+    const std::string& spn,
+    OnGenerateHttpNegotiateAuthTokenCallback callback) {
+  NOTREACHED();
+}
+#endif
 
 }  // namespace network

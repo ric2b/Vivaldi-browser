@@ -37,7 +37,7 @@
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/network/form_data_encoder.h"
-#include "third_party/blink/renderer/platform/text/line_ending.h"
+#include "third_party/blink/renderer/platform/wtf/text/line_ending.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
@@ -68,18 +68,18 @@ class FormDataIterationSource final
     return true;
   }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(form_data_);
     PairIterable<String, FormDataEntryValue>::IterationSource::Trace(visitor);
   }
 
  private:
   const Member<FormData> form_data_;
-  size_t current_;
+  wtf_size_t current_;
 };
 
 String Normalize(const String& input) {
-  // https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#append-an-entry
+  // https://html.spec.whatwg.org/C/#append-an-entry
   return ReplaceUnmatchedSurrogates(NormalizeLineEndingsToCRLF(input));
 }
 
@@ -87,18 +87,39 @@ String Normalize(const String& input) {
 
 FormData::FormData(const WTF::TextEncoding& encoding) : encoding_(encoding) {}
 
-FormData::FormData(HTMLFormElement* form) : encoding_(UTF8Encoding()) {
-  if (form)
-    form->ConstructFormDataSet(nullptr, *this);
+FormData::FormData(const FormData& form_data)
+    : encoding_(form_data.encoding_),
+      entries_(form_data.entries_),
+      contains_password_data_(form_data.contains_password_data_) {}
+
+FormData::FormData() : encoding_(UTF8Encoding()) {}
+
+FormData* FormData::Create(HTMLFormElement* form,
+                           ExceptionState& exception_state) {
+  // TODO(tkent): Null check should be unnecessary.  We should remove
+  // LegacyInterfaceTypeChecking from form_data.idl.  crbug.com/561338
+  if (!form)
+    return MakeGarbageCollected<FormData>();
+  FormData* form_data = form->ConstructEntryList(nullptr, UTF8Encoding());
+  if (!form_data) {
+    DCHECK(RuntimeEnabledFeatures::FormDataEventEnabled());
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "The form is constructing entry list.");
+    return nullptr;
+  }
+  // Return a shallow copy of |form_data| because |form_data| is visible in
+  // "formdata" event, and the specification says it should be different from
+  // the FormData object to be returned.
+  return MakeGarbageCollected<FormData>(*form_data);
 }
 
-void FormData::Trace(blink::Visitor* visitor) {
+void FormData::Trace(Visitor* visitor) {
   visitor->Trace(entries_);
   ScriptWrappable::Trace(visitor);
 }
 
 void FormData::append(const String& name, const String& value) {
-  entries_.push_back(new Entry(name, value));
+  entries_.push_back(MakeGarbageCollected<Entry>(name, value));
 }
 
 void FormData::append(ScriptState* script_state,
@@ -113,7 +134,7 @@ void FormData::append(ScriptState* script_state,
 }
 
 void FormData::deleteEntry(const String& name) {
-  size_t i = 0;
+  wtf_size_t i = 0;
   while (i < entries_.size()) {
     if (entries_[i]->name() == name) {
       entries_.EraseAt(i);
@@ -164,17 +185,17 @@ bool FormData::has(const String& name) {
 }
 
 void FormData::set(const String& name, const String& value) {
-  SetEntry(new Entry(name, value));
+  SetEntry(MakeGarbageCollected<Entry>(name, value));
 }
 
 void FormData::set(const String& name, Blob* blob, const String& filename) {
-  SetEntry(new Entry(name, blob, filename));
+  SetEntry(MakeGarbageCollected<Entry>(name, blob, filename));
 }
 
 void FormData::SetEntry(const Entry* entry) {
   DCHECK(entry);
   bool found = false;
-  size_t i = 0;
+  wtf_size_t i = 0;
   while (i < entries_.size()) {
     if (entries_[i]->name() != entry->name()) {
       ++i;
@@ -191,7 +212,7 @@ void FormData::SetEntry(const Entry* entry) {
 }
 
 void FormData::append(const String& name, Blob* blob, const String& filename) {
-  entries_.push_back(new Entry(name, blob, filename));
+  entries_.push_back(MakeGarbageCollected<Entry>(name, blob, filename));
 }
 
 void FormData::AppendFromElement(const String& name, int value) {
@@ -199,11 +220,13 @@ void FormData::AppendFromElement(const String& name, int value) {
 }
 
 void FormData::AppendFromElement(const String& name, File* file) {
-  entries_.push_back(new Entry(Normalize(name), file, String()));
+  entries_.push_back(
+      MakeGarbageCollected<Entry>(Normalize(name), file, String()));
 }
 
 void FormData::AppendFromElement(const String& name, const String& value) {
-  entries_.push_back(new Entry(Normalize(name), Normalize(value)));
+  entries_.push_back(
+      MakeGarbageCollected<Entry>(Normalize(name), Normalize(value)));
 }
 
 CString FormData::Encode(const String& string) const {
@@ -238,8 +261,7 @@ scoped_refptr<EncodedFormData> FormData::EncodeMultiPartFormData() {
     // filename.
     if (entry->GetBlob()) {
       String name;
-      if (entry->GetBlob()->IsFile()) {
-        File* file = ToFile(entry->GetBlob());
+      if (auto* file = DynamicTo<File>(entry->GetBlob())) {
         // For file blob, use the filename (or relative path if it is
         // present) as the name.
         name = file->webkitRelativePath().IsEmpty()
@@ -280,7 +302,7 @@ scoped_refptr<EncodedFormData> FormData::EncodeMultiPartFormData() {
     form_data->AppendData(header.data(), header.size());
     if (entry->GetBlob()) {
       if (entry->GetBlob()->HasBackingFile()) {
-        File* file = ToFile(entry->GetBlob());
+        auto* file = To<File>(entry->GetBlob());
         // Do not add the file if the path is empty.
         if (!file->GetPath().IsEmpty())
           form_data->AppendFile(file->GetPath());
@@ -302,7 +324,7 @@ scoped_refptr<EncodedFormData> FormData::EncodeMultiPartFormData() {
 
 PairIterable<String, FormDataEntryValue>::IterationSource*
 FormData::StartIteration(ScriptState*, ExceptionState&) {
-  return new FormDataIterationSource(this);
+  return MakeGarbageCollected<FormDataIterationSource>(this);
 }
 
 // ----------------------------------------------------------------
@@ -321,7 +343,7 @@ FormData::Entry::Entry(const String& name, Blob* blob, const String& filename)
       << "'name' should be a USVString.";
 }
 
-void FormData::Entry::Trace(blink::Visitor* visitor) {
+void FormData::Entry::Trace(Visitor* visitor) {
   visitor->Trace(blob_);
 }
 
@@ -332,8 +354,7 @@ File* FormData::Entry::GetFile() const {
   // entries.
   // FIXME: Consider applying the name during insertion.
 
-  if (GetBlob()->IsFile()) {
-    File* file = ToFile(GetBlob());
+  if (auto* file = DynamicTo<File>(GetBlob())) {
     if (Filename().IsNull())
       return file;
     return file->Clone(Filename());

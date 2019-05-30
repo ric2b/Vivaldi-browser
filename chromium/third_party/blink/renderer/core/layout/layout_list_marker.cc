@@ -36,7 +36,7 @@ namespace blink {
 
 const int kCMarkerPaddingPx = 7;
 
-// TODO(glebl): Move to WebKit/Source/core/css/html.css after
+// TODO(glebl): Move to core/html/resources/html.css after
 // Blink starts to support ::marker crbug.com/457718
 // Recommended UA margin for list markers.
 const int kCUAMarkerMarginEm = 1;
@@ -84,9 +84,10 @@ void LayoutListMarker::StyleWillChange(StyleDifference diff,
                                        const ComputedStyle& new_style) {
   if (Style() &&
       (new_style.ListStylePosition() != StyleRef().ListStylePosition() ||
-       new_style.ListStyleType() != StyleRef().ListStyleType()))
+       new_style.ListStyleType() != StyleRef().ListStyleType())) {
     SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
-        LayoutInvalidationReason::kStyleChange);
+        layout_invalidation_reason::kStyleChange);
+  }
 
   LayoutBox::StyleWillChange(diff, new_style);
 }
@@ -149,8 +150,8 @@ void LayoutListMarker::UpdateLayout() {
   SetMarginStart(LayoutUnit());
   SetMarginEnd(LayoutUnit());
 
-  Length start_margin = StyleRef().MarginStart();
-  Length end_margin = StyleRef().MarginEnd();
+  const Length& start_margin = StyleRef().MarginStart();
+  const Length& end_margin = StyleRef().MarginEnd();
   if (start_margin.IsFixed())
     SetMarginStart(LayoutUnit(start_margin.Value()));
   if (end_margin.IsFixed())
@@ -159,20 +160,19 @@ void LayoutListMarker::UpdateLayout() {
   ClearNeedsLayout();
 }
 
-void LayoutListMarker::ImageChanged(WrappedImagePtr o,
-                                    CanDeferInvalidation,
-                                    const IntRect*) {
+void LayoutListMarker::ImageChanged(WrappedImagePtr o, CanDeferInvalidation) {
   // A list marker can't have a background or border image, so no need to call
   // the base class method.
   if (!image_ || o != image_->Data())
     return;
 
   LayoutSize image_size = IsImage() ? ImageBulletSize() : LayoutSize();
-  if (Size() != image_size || image_->ErrorOccurred())
+  if (Size() != image_size || image_->ErrorOccurred()) {
     SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
-        LayoutInvalidationReason::kImageChanged);
-  else
+        layout_invalidation_reason::kImageChanged);
+  } else {
     SetShouldDoFullPaintInvalidation();
+  }
 }
 
 void LayoutListMarker::UpdateMarginsAndContent() {
@@ -194,19 +194,19 @@ void LayoutListMarker::UpdateContent() {
     case ListStyleCategory::kNone:
       break;
     case ListStyleCategory::kSymbol:
-      text_ = ListMarkerText::GetText(StyleRef().ListStyleType(),
-                                      0);  // value is ignored for these types
+      text_ = list_marker_text::GetText(StyleRef().ListStyleType(),
+                                        0);  // value is ignored for these types
       break;
     case ListStyleCategory::kLanguage:
-      text_ = ListMarkerText::GetText(StyleRef().ListStyleType(),
-                                      list_item_->Value());
+      text_ = list_marker_text::GetText(StyleRef().ListStyleType(),
+                                        list_item_->Value());
       break;
   }
 }
 
 String LayoutListMarker::TextAlternative() const {
   UChar suffix =
-      ListMarkerText::Suffix(StyleRef().ListStyleType(), list_item_->Value());
+      list_marker_text::Suffix(StyleRef().ListStyleType(), list_item_->Value());
   // Return suffix after the marker text, even in RTL, reflecting speech order.
   return text_ + suffix + ' ';
 }
@@ -219,7 +219,7 @@ LayoutUnit LayoutListMarker::GetWidthOfTextWithSuffix() const {
   // TODO(wkorman): Look into constructing a text run for both text and suffix
   // and painting them together.
   UChar suffix[2] = {
-      ListMarkerText::Suffix(StyleRef().ListStyleType(), list_item_->Value()),
+      list_marker_text::Suffix(StyleRef().ListStyleType(), list_item_->Value()),
       ' '};
   TextRun run =
       ConstructTextRun(font, suffix, 2, StyleRef(), StyleRef().Direction());
@@ -282,8 +282,8 @@ void LayoutListMarker::UpdateMargins() {
         InlineMarginsForOutside(style, IsImage(), MinPreferredLogicalWidth());
   }
 
-  Length start_length(margin_start, kFixed);
-  Length end_length(margin_end, kFixed);
+  Length start_length = Length::Fixed(margin_start);
+  Length end_length = Length::Fixed(margin_end);
 
   if (start_length != style.MarginStart() || end_length != style.MarginEnd()) {
     scoped_refptr<ComputedStyle> new_style = ComputedStyle::Clone(style);

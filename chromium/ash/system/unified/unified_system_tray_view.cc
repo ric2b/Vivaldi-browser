@@ -4,18 +4,17 @@
 
 #include "ash/system/unified/unified_system_tray_view.h"
 
-#include "ash/message_center/ash_message_center_lock_screen_controller.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
-#include "ash/public/cpp/ash_features.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
+#include "ash/system/message_center/ash_message_center_lock_screen_controller.h"
+#include "ash/system/message_center/unified_message_center_view.h"
 #include "ash/system/tray/interacted_by_tap_recorder.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/unified/feature_pod_button.h"
 #include "ash/system/unified/feature_pods_container_view.h"
 #include "ash/system/unified/notification_hidden_view.h"
 #include "ash/system/unified/top_shortcuts_view.h"
-#include "ash/system/unified/unified_message_center_view.h"
 #include "ash/system/unified/unified_system_info_view.h"
 #include "ash/system/unified/unified_system_tray_controller.h"
 #include "ash/system/unified/unified_system_tray_model.h"
@@ -37,13 +36,16 @@ namespace {
 // Border applied to SystemTrayContainer and DetailedViewContainer to iminate
 // notification list scrolling under SystemTray part of UnifiedSystemTray.
 // The border paints mock notification frame behind the top corners based on
-// |height_below_scroll|.
+// |rect_below_scroll|.
 class TopCornerBorder : public views::Border {
  public:
   TopCornerBorder() = default;
 
   // views::Border:
   void Paint(const views::View& view, gfx::Canvas* canvas) override {
+    if (rect_below_scroll_.IsEmpty())
+      return;
+
     gfx::ScopedCanvas scoped(canvas);
 
     SkPath path;
@@ -57,25 +59,22 @@ class TopCornerBorder : public views::Border {
     flags.setStyle(cc::PaintFlags::kFill_Style);
     flags.setAntiAlias(true);
 
-    const int height = kUnifiedTrayCornerRadius * 4;
-    canvas->DrawRoundRect(
-        gfx::RectF(0,
-                   -height + std::min(height_below_scroll_,
-                                      kUnifiedTrayCornerRadius * 2),
-                   view.width(), height),
-        kUnifiedTrayCornerRadius, flags);
+    gfx::Rect rect = rect_below_scroll_;
+    rect.set_height(std::min(rect.height(), kUnifiedTrayCornerRadius * 2));
+    rect.Inset(gfx::Insets(-kUnifiedTrayCornerRadius * 4, 0, 0, 0));
+    canvas->DrawRoundRect(gfx::RectF(rect), kUnifiedTrayCornerRadius, flags);
   }
 
   gfx::Insets GetInsets() const override { return gfx::Insets(); }
 
   gfx::Size GetMinimumSize() const override { return gfx::Size(); }
 
-  void set_height_below_scroll(int height_below_scroll) {
-    height_below_scroll_ = height_below_scroll;
+  void set_rect_below_scroll(const gfx::Rect& rect_below_scroll) {
+    rect_below_scroll_ = rect_below_scroll;
   }
 
  private:
-  int height_below_scroll_ = 0;
+  gfx::Rect rect_below_scroll_;
 
   DISALLOW_COPY_AND_ASSIGN(TopCornerBorder);
 };
@@ -194,9 +193,14 @@ class UnifiedSystemTrayView::FocusSearch : public views::FocusSearch {
       FocusSearch::AnchoredDialogPolicy can_go_into_anchored_dialog,
       views::FocusTraversable** focus_traversable,
       views::View** focus_traversable_view) override {
+    // Initial view that is focused when first time Tab or Shift-Tab is pressed.
+    views::View* default_start_view =
+        search_direction == FocusSearch::SearchDirection::kForwards
+            ? view_->system_tray_container_
+            : view_->notification_hidden_view_;
     return views::FocusSearch::FindNextFocusableView(
-        starting_view ? starting_view : view_->system_tray_container_,
-        search_direction, traversal_direction,
+        starting_view ? starting_view : default_start_view, search_direction,
+        traversal_direction,
         starting_view ? check_starting_view
                       : StartingViewPolicy::kCheckStartingView,
         can_go_into_anchored_dialog, focus_traversable, focus_traversable_view);
@@ -221,9 +225,7 @@ UnifiedSystemTrayView::UnifiedSystemTrayView(
       system_tray_container_(new SystemTrayContainer()),
       detailed_view_container_(new DetailedViewContainer()),
       message_center_view_(
-          new UnifiedMessageCenterView(controller,
-                                       this,
-                                       message_center::MessageCenter::Get())),
+          new UnifiedMessageCenterView(this, controller->model())),
       focus_search_(std::make_unique<FocusSearch>(this)),
       interacted_by_tap_recorder_(
           std::make_unique<InteractedByTapRecorder>(this)) {
@@ -238,9 +240,6 @@ UnifiedSystemTrayView::UnifiedSystemTrayView(
 
   SessionController* session_controller = Shell::Get()->session_controller();
 
-  message_center_view_->SetVisible(
-      session_controller->ShouldShowNotificationTray() &&
-      !session_controller->IsScreenLocked());
   AddChildView(message_center_view_);
   layout->SetFlexForView(message_center_view_, 1);
 
@@ -264,8 +263,8 @@ UnifiedSystemTrayView::UnifiedSystemTrayView(
   // |system_tray_container_|, but we have to complete the cycle by setting
   // |message_center_view_| next to |detailed_view_container_|.
   // Also, SetNextFocusableView does not support loop as mentioned in the doc,
-  // we have to set null to |message_center_view_|.
-  message_center_view_->SetNextFocusableView(nullptr);
+  // we have to set null to |notification_hidden_view_|.
+  notification_hidden_view_->SetNextFocusableView(nullptr);
   detailed_view_container_->SetNextFocusableView(message_center_view_);
 
   top_shortcuts_view_->SetExpandedAmount(expanded_amount_);
@@ -358,16 +357,12 @@ bool UnifiedSystemTrayView::IsTransformEnabled() const {
          !message_center_view_->visible();
 }
 
-void UnifiedSystemTrayView::ShowClearAllAnimation() {
-  message_center_view_->ShowClearAllAnimation();
-}
-
-void UnifiedSystemTrayView::SetNotificationHeightBelowScroll(
-    int height_below_scroll) {
+void UnifiedSystemTrayView::SetNotificationRectBelowScroll(
+    const gfx::Rect& rect_below_scroll) {
   static_cast<TopCornerBorder*>(system_tray_container_->border())
-      ->set_height_below_scroll(height_below_scroll);
+      ->set_rect_below_scroll(rect_below_scroll);
   static_cast<TopCornerBorder*>(detailed_view_container_->border())
-      ->set_height_below_scroll(height_below_scroll);
+      ->set_rect_below_scroll(rect_below_scroll);
   SchedulePaint();
 }
 
@@ -375,7 +370,7 @@ void UnifiedSystemTrayView::SetNotificationHeightBelowScroll(
 std::unique_ptr<views::Background> UnifiedSystemTrayView::CreateBackground() {
   return views::CreateBackgroundFromPainter(
       views::Painter::CreateSolidRoundRectPainter(
-          app_list::features::IsBackgroundBlurEnabled()
+          app_list_features::IsBackgroundBlurEnabled()
               ? kUnifiedMenuBackgroundColorWithBlur
               : kUnifiedMenuBackgroundColor,
           kUnifiedTrayCornerRadius));

@@ -35,12 +35,22 @@ class NET_EXPORT HttpUtil {
   // is stripped (username, password, reference).
   static std::string SpecForRequest(const GURL& url);
 
-  // Parses the value of a Content-Type header.  The resulting mime_type and
-  // charset values are normalized to lowercase.  The mime_type and charset
-  // output values are only modified if the content_type_str contains a mime
-  // type and charset value, respectively.  The boundary output value is
-  // optional and will be assigned the (unquoted) value of the boundary
-  // parameter, if any.
+  // Parses the value of a Content-Type header.  |mime_type|, |charset|, and
+  // |had_charset| output parameters must be valid pointers.  |boundary| may be
+  // nullptr.  |*mime_type| and |*charset| should be empty and |*had_charset|
+  // false when called with the first Content-Type header value in a given
+  // header list.
+  //
+  // ParseContentType() supports parsing multiple Content-Type headers in the
+  // same header list.  For this operation, subsequent calls should pass in the
+  // same |mime_type|, |charset|, and |had_charset| arguments without clearing
+  // them.
+  //
+  // The resulting mime_type and charset values are normalized to lowercase.
+  // The mime_type and charset output values are only modified if the
+  // content_type_str contains a mime type and charset value, respectively.  If
+  // |boundary| is not null, then |*boundary| will be assigned the (unquoted)
+  // value of the boundary parameter, if any.
   static void ParseContentType(const std::string& content_type_str,
                                std::string* mime_type,
                                std::string* charset,
@@ -140,8 +150,6 @@ class NET_EXPORT HttpUtil {
   // unescaped actually is a valid quoted string. Returns false for an empty
   // string, a string without quotes, a string with mismatched quotes, and
   // a string with unescaped embeded quotes.
-  // In accordance with RFC 2616 this method only allows double quotes to
-  // enclose the string.
   static bool StrictUnquote(std::string::const_iterator begin,
                             std::string::const_iterator end,
                             std::string* out) WARN_UNUSED_RESULT;
@@ -153,27 +161,29 @@ class NET_EXPORT HttpUtil {
   // The reverse of Unquote() -- escapes and surrounds with "
   static std::string Quote(const std::string& str);
 
-  // Returns the start of the status line, or -1 if no status line was found.
-  // This allows for 4 bytes of junk to precede the status line (which is what
-  // mozilla does too).
-  static int LocateStartOfStatusLine(const char* buf, int buf_len);
+  // Returns the start of the status line, or std::string::npos if no status
+  // line was found. This allows for 4 bytes of junk to precede the status line
+  // (which is what Mozilla does too).
+  static size_t LocateStartOfStatusLine(const char* buf, size_t buf_len);
 
-  // Returns index beyond the end-of-headers marker or -1 if not found.  RFC
-  // 2616 defines the end-of-headers marker as a double CRLF; however, some
-  // servers only send back LFs (e.g., Unix-based CGI scripts written using the
-  // ASIS Apache module).  This function therefore accepts the pattern LF[CR]LF
-  // as end-of-headers (just like Mozilla). The first line of |buf| is
-  // considered the status line, even if empty.
-  // The parameter |i| is the offset within |buf| to begin searching from.
-  static int LocateEndOfHeaders(const char* buf, int buf_len, int i = 0);
+  // Returns index beyond the end-of-headers marker or std::string::npos if not
+  // found.  RFC 2616 defines the end-of-headers marker as a double CRLF;
+  // however, some servers only send back LFs (e.g., Unix-based CGI scripts
+  // written using the ASIS Apache module).  This function therefore accepts the
+  // pattern LF[CR]LF as end-of-headers (just like Mozilla). The first line of
+  // |buf| is considered the status line, even if empty. The parameter |i| is
+  // the offset within |buf| to begin searching from.
+  static size_t LocateEndOfHeaders(const char* buf,
+                                   size_t buf_len,
+                                   size_t i = 0);
 
   // Same as |LocateEndOfHeaders|, but does not expect a status line, so can be
   // used on multi-part responses or HTTP/1.x trailers.  As a result, if |buf|
   // starts with a single [CR]LF,  it is considered an empty header list, as
   // opposed to an empty status line above a header list.
-  static int LocateEndOfAdditionalHeaders(const char* buf,
-                                          int buf_len,
-                                          int i = 0);
+  static size_t LocateEndOfAdditionalHeaders(const char* buf,
+                                             size_t buf_len,
+                                             size_t i = 0);
 
   // Assemble "raw headers" in the format required by HttpResponseHeaders.
   // This involves normalizing line terminators, converting [CR]LF to \0 and
@@ -186,13 +196,21 @@ class NET_EXPORT HttpUtil {
   //
   // TODO(crbug.com/671799): Should remove or internalize this to
   //                         HttpResponseHeaders.
-  static std::string AssembleRawHeaders(const char* buf, int buf_len);
+  static std::string AssembleRawHeaders(const char* buf, size_t buf_len);
 
   // Converts assembled "raw headers" back to the HTTP response format. That is
   // convert each \0 occurence to CRLF. This is used by DevTools.
   // Since all line continuations info is already lost at this point, the result
   // consists of status line and then one line for each header.
   static std::string ConvertHeadersBackToHTTPResponse(const std::string& str);
+
+  // Given a comma separated ordered list of language codes, return an expanded
+  // list by adding the base language from language-region pair if it doesn't
+  // already exist. This increases the chances of language matching in many
+  // cases as explained at this w3c doc:
+  // https://www.w3.org/International/questions/qa-lang-priorities#langtagdetail
+  // Note that we do not support Q values (e.g. ;q=0.9) in |language_prefs|.
+  static std::string ExpandLanguageList(const std::string& language_prefs);
 
   // Given a comma separated ordered list of language codes, return
   // the list with a qvalue appended to each language.
@@ -317,20 +335,14 @@ class NET_EXPORT HttpUtil {
   //
   // This iterator is careful to skip over delimiters found inside an HTTP
   // quoted string.
-  //
   class NET_EXPORT_PRIVATE ValuesIterator {
    public:
     ValuesIterator(std::string::const_iterator values_begin,
                    std::string::const_iterator values_end,
-                   char delimiter);
+                   char delimiter,
+                   bool ignore_empty_values = true);
     ValuesIterator(const ValuesIterator& other);
     ~ValuesIterator();
-
-    // Set the characters to regard as quotes.  By default, this includes both
-    // single and double quotes.
-    void set_quote_chars(const char* quotes) {
-      values_.set_quote_chars(quotes);
-    }
 
     // Advances the iterator to the next value, if any.  Returns true if there
     // is a next value.  Use value* methods to access the resultant value.
@@ -350,6 +362,7 @@ class NET_EXPORT HttpUtil {
     base::StringTokenizer values_;
     std::string::const_iterator value_begin_;
     std::string::const_iterator value_end_;
+    bool ignore_empty_values_;
   };
 
   // Iterates over a delimited sequence of name-value pairs in an HTTP header.
@@ -421,8 +434,6 @@ class NET_EXPORT HttpUtil {
                                                        value_end_); }
 
    private:
-    bool IsQuote(char c) const;
-
     HttpUtil::ValuesIterator props_;
     bool valid_;
 

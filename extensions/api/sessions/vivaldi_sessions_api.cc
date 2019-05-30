@@ -103,6 +103,7 @@ bool SessionsPrivateSaveOpenTabsFunction::RunAsync() {
       new ::vivaldi::VivaldiSessionService(GetProfile()));
 
   int save_window_id = params->options.save_only_window_id;
+  std::vector<int>* ids = params->options.ids.get();
 
   if (params->name.empty()) {
     error_code = SessionErrorCodes::kErrorMissingName;
@@ -120,7 +121,7 @@ bool SessionsPrivateSaveOpenTabsFunction::RunAsync() {
           browser->tab_strip_model()->count() && browser->window()) {
         if (save_window_id == 0 ||
             (save_window_id && browser->session_id().id() == save_window_id)) {
-          service->BuildCommandsForBrowser(browser);
+          service->BuildCommandsForBrowser(browser, ids);
         }
       }
     }

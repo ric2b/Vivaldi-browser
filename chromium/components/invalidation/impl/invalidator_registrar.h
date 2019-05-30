@@ -33,23 +33,24 @@ class INVALIDATION_EXPORT InvalidatorRegistrar {
   // and it must already be registered.
   void RegisterHandler(InvalidationHandler* handler);
 
-  // Updates the set of topics associated with |handler|.  |handler| must
-  // not be NULL, and must already be registered.  A topic must be registered
-  // for at most one handler. If topic is already registered function returns
-  // false.
-  bool UpdateRegisteredTopics(InvalidationHandler* handler,
-                              const TopicSet& topics) WARN_UNUSED_RESULT;
-
   // Stops sending notifications to |handler|.  |handler| must not be NULL, and
   // it must already be registered.  Note that this doesn't unregister the IDs
   // associated with |handler|.
   void UnregisterHandler(InvalidationHandler* handler);
 
-  TopicSet GetRegisteredTopics(InvalidationHandler* handler) const;
+  // Updates the set of topics associated with |handler|.  |handler| must
+  // not be NULL, and must already be registered.  A topic must be registered
+  // for at most one handler. If topic is already registered function returns
+  // false.
+  virtual bool UpdateRegisteredTopics(InvalidationHandler* handler,
+                                      const TopicSet& topics)
+      WARN_UNUSED_RESULT;
+
+  virtual TopicSet GetRegisteredTopics(InvalidationHandler* handler) const;
 
   // Returns the set of all IDs that are registered to some handler (even
   // handlers that have been unregistered).
-  TopicSet GetAllRegisteredIds() const;
+  virtual TopicSet GetAllRegisteredIds() const;
 
   // Sorts incoming invalidations into a bucket for each handler and then
   // dispatches the batched invalidations to the corresponding handler.
@@ -63,6 +64,10 @@ class INVALIDATION_EXPORT InvalidatorRegistrar {
   // call GetInvalidatorState() when notified will see the new state.
   void UpdateInvalidatorState(InvalidatorState state);
 
+  // Updates the invalidator id to the given one and then notifies
+  // all handlers.
+  void UpdateInvalidatorId(const std::string& id);
+
   // Returns the current invalidator state.  When called from within
   // InvalidationHandler::OnInvalidatorStateChange(), this returns the
   // updated state.
@@ -73,7 +78,7 @@ class INVALIDATION_EXPORT InvalidatorRegistrar {
   // to display every registered handlers and its objectsIds.
   std::map<std::string, TopicSet> GetSanitizedHandlersIdsMap();
 
-  bool IsHandlerRegisteredForTest(const InvalidationHandler* handler) const;
+  bool IsHandlerRegistered(const InvalidationHandler* handler) const;
 
   // Needed for death tests.
   void DetachFromThreadForTest();

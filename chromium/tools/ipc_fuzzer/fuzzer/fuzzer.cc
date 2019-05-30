@@ -9,10 +9,12 @@
 #include <utility>
 #include <vector>
 
-#include "base/macros.h"
+#include "base/compiler_specific.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory_handle.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
+#include "base/unguessable_token.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "ipc/ipc_message.h"
@@ -31,14 +33,6 @@
 // First include of all message files to provide basic types.
 #include "tools/ipc_fuzzer/message_lib/all_messages.h"
 #include "tools/ipc_fuzzer/message_lib/all_message_null_macros.h"
-
-#if defined(COMPILER_GCC)
-#define PRETTY_FUNCTION __PRETTY_FUNCTION__
-#elif defined(COMPILER_MSVC)
-#define PRETTY_FUNCTION __FUNCSIG__
-#else
-#define PRETTY_FUNCTION __FUNCTION__
-#endif
 
 namespace IPC {
 class Message;
@@ -642,6 +636,20 @@ struct FuzzTraits<base::DictionaryValue> {
 };
 
 template <>
+struct FuzzTraits<base::UnguessableToken> {
+  static bool Fuzz(base::UnguessableToken* p, Fuzzer* fuzzer) {
+    auto low = p->GetLowForSerialization();
+    auto high = p->GetHighForSerialization();
+    if (!FuzzParam(&low, fuzzer))
+      return false;
+    if (!FuzzParam(&high, fuzzer))
+      return false;
+    *p = base::UnguessableToken::Deserialize(high, low);
+    return true;
+  }
+};
+
+template <>
 struct FuzzTraits<viz::CompositorFrame> {
   static bool Fuzz(viz::CompositorFrame* p, Fuzzer* fuzzer) {
     // TODO(mbarbella): Support mutation.
@@ -899,10 +907,10 @@ template <>
 struct FuzzTraits<gfx::Transform> {
   static bool Fuzz(gfx::Transform* p, Fuzzer* fuzzer) {
     SkMScalar matrix[16];
-    for (size_t i = 0; i < arraysize(matrix); i++) {
+    for (size_t i = 0; i < base::size(matrix); i++) {
       matrix[i] = p->matrix().get(i / 4, i % 4);
     }
-    if (!FuzzParamArray(&matrix[0], arraysize(matrix), fuzzer))
+    if (!FuzzParamArray(&matrix[0], base::size(matrix), fuzzer))
       return false;
     *p = gfx::Transform(matrix[0], matrix[1], matrix[2], matrix[3], matrix[4],
                         matrix[5], matrix[6], matrix[7], matrix[8], matrix[9],
@@ -1152,19 +1160,6 @@ struct FuzzTraits<media::cast::RtpTimeTicks> {
     if (!FuzzParam(&base, fuzzer))
       return false;
     *p = media::cast::RtpTimeTicks::FromTimeDelta(delta, base);
-    return true;
-  }
-};
-
-template <>
-struct FuzzTraits<media::VideoCaptureFormat> {
-  static bool Fuzz(media::VideoCaptureFormat* p, Fuzzer* fuzzer) {
-    if (!FuzzParam(&p->frame_size, fuzzer))
-      return false;
-    if (!FuzzParam(&p->frame_rate, fuzzer))
-      return false;
-    if (!FuzzParam(reinterpret_cast<int*>(&p->pixel_format), fuzzer))
-      return false;
     return true;
   }
 };
@@ -1509,21 +1504,48 @@ struct FuzzTraits<ui::LatencyInfo> {
 template <>
 struct FuzzTraits<url::Origin> {
   static bool Fuzz(url::Origin* p, Fuzzer* fuzzer) {
-    std::string scheme = p->scheme();
-    std::string host = p->host();
-    uint16_t port = p->port();
+    bool opaque = p->opaque();
+    if (!FuzzParam(&opaque, fuzzer))
+      return false;
+    std::string scheme = p->GetTupleOrPrecursorTupleIfOpaque().scheme();
+    std::string host = p->GetTupleOrPrecursorTupleIfOpaque().host();
+    uint16_t port = p->GetTupleOrPrecursorTupleIfOpaque().port();
     if (!FuzzParam(&scheme, fuzzer))
       return false;
     if (!FuzzParam(&host, fuzzer))
       return false;
     if (!FuzzParam(&port, fuzzer))
       return false;
-    *p = url::Origin::UnsafelyCreateOriginWithoutNormalization(scheme, host,
-                                                               port);
 
-    // Force a unique origin 1% of the time:
-    if (RandInRange(100) == 1)
-      *p = url::Origin();
+    base::Optional<url::Origin> origin;
+    if (!opaque) {
+      origin = url::Origin::UnsafelyCreateTupleOriginWithoutNormalization(
+          scheme, host, port);
+    } else {
+      base::Optional<base::UnguessableToken> token =
+          p->GetNonceForSerialization();
+      if (!token)
+        token = base::UnguessableToken::Deserialize(RandU64(), RandU64());
+      if (!FuzzParam(&(*token), fuzzer))
+        return false;
+      origin = url::Origin::UnsafelyCreateOpaqueOriginWithoutNormalization(
+          scheme, host, port, url::Origin::Nonce(*token));
+    }
+
+    if (!origin) {
+      // This means that we produced non-canonical values that were rejected by
+      // UnsafelyCreate. Which is nice, except, those are arguably interesting
+      // values to be sending over the wire sometimes, to make sure they're
+      // rejected at the receiving end.
+      //
+      // We could potentially call CreateFromNormalizedTuple here to force their
+      // creation, except that could lead to invariant violations within the
+      // url::Origin we construct -- and potentially crash the fuzzer. What to
+      // do?
+      return false;
+    }
+
+    *p = std::move(origin).value();
     return true;
   }
 };

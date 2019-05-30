@@ -4,10 +4,13 @@
 
 #include "content/browser/renderer_host/media/peer_connection_tracker_host.h"
 
+#include "base/bind.h"
 #include "base/power_monitor/power_monitor.h"
+#include "base/task/post_task.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/webrtc/webrtc_internals.h"
 #include "content/common/media/peer_connection_tracker_messages.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/webrtc_event_logger.h"
 
 namespace content {
@@ -73,15 +76,14 @@ void PeerConnectionTrackerHost::OnAddPeerConnection(
   WebRtcEventLogger* const logger = WebRtcEventLogger::Get();
   if (logger) {
     logger->PeerConnectionAdded(render_process_id_, info.lid,
-                                info.peer_connection_id,
                                 base::OnceCallback<void(bool)>());
   }
 }
 
 void PeerConnectionTrackerHost::RemovePeerConnection(int lid) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&PeerConnectionTrackerHost::RemovePeerConnection, this,
                        lid));
     return;
@@ -101,8 +103,8 @@ void PeerConnectionTrackerHost::UpdatePeerConnection(int lid,
                                                      const std::string& type,
                                                      const std::string& value) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&PeerConnectionTrackerHost::UpdatePeerConnection, this,
                        lid, type, value));
     return;
@@ -122,6 +124,25 @@ void PeerConnectionTrackerHost::UpdatePeerConnection(int lid,
   }
 }
 
+void PeerConnectionTrackerHost::OnPeerConnectionSessionIdSet(
+    int lid,
+    const std::string& session_id) {
+  if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
+        base::BindOnce(&PeerConnectionTrackerHost::OnPeerConnectionSessionIdSet,
+                       this, lid, session_id));
+    return;
+  }
+
+  WebRtcEventLogger* const logger = WebRtcEventLogger::Get();
+  if (!logger) {
+    return;
+  }
+  logger->PeerConnectionSessionIdSet(render_process_id_, lid, session_id,
+                                     base::OnceCallback<void(bool)>());
+}
+
 void PeerConnectionTrackerHost::OnAddStats(int lid,
                                            const base::ListValue& value) {
   WebRTCInternals* webrtc_internals = WebRTCInternals::GetInstance();
@@ -137,8 +158,8 @@ void PeerConnectionTrackerHost::GetUserMedia(
     const std::string& audio_constraints,
     const std::string& video_constraints) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&PeerConnectionTrackerHost::GetUserMedia, this, origin,
                        audio, video, audio_constraints, video_constraints));
     return;
@@ -154,8 +175,8 @@ void PeerConnectionTrackerHost::GetUserMedia(
 void PeerConnectionTrackerHost::WebRtcEventLogWrite(int lid,
                                                     const std::string& output) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&PeerConnectionTrackerHost::WebRtcEventLogWrite, this,
                        lid, output));
     return;
@@ -169,8 +190,8 @@ void PeerConnectionTrackerHost::WebRtcEventLogWrite(int lid,
 }
 
 void PeerConnectionTrackerHost::OnSuspend() {
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&PeerConnectionTrackerHost::SendOnSuspendOnUIThread,
                      this));
 }

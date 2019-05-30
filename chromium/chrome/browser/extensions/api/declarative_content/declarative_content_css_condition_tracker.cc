@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
@@ -200,8 +201,7 @@ void DeclarativeContentCssConditionTracker::StopTrackingPredicates(
       continue;
     for (const DeclarativeContentCssPredicate* predicate : loc->second) {
       for (const std::string& selector : predicate->css_selectors()) {
-        std::map<std::string, int>::iterator loc =
-            watched_css_selector_predicate_count_.find(selector);
+        auto loc = watched_css_selector_predicate_count_.find(selector);
         DCHECK(loc != watched_css_selector_predicate_count_.end());
         if (--loc->second == 0) {
           watched_css_selector_predicate_count_.erase(loc);
@@ -218,13 +218,12 @@ void DeclarativeContentCssConditionTracker::StopTrackingPredicates(
 
 void DeclarativeContentCssConditionTracker::TrackForWebContents(
     content::WebContents* contents) {
-  per_web_contents_tracker_[contents] =
-      make_linked_ptr(new PerWebContentsTracker(
-          contents,
-          base::Bind(&Delegate::RequestEvaluation, base::Unretained(delegate_)),
-          base::Bind(&DeclarativeContentCssConditionTracker::
-                     DeletePerWebContentsTracker,
-                     base::Unretained(this))));
+  per_web_contents_tracker_[contents] = std::make_unique<PerWebContentsTracker>(
+      contents,
+      base::Bind(&Delegate::RequestEvaluation, base::Unretained(delegate_)),
+      base::Bind(
+          &DeclarativeContentCssConditionTracker::DeletePerWebContentsTracker,
+          base::Unretained(this)));
   // Note: the condition is always false until we receive OnWatchedPageChange,
   // so there's no need to evaluate it here.
 }
@@ -245,7 +244,7 @@ bool DeclarativeContentCssConditionTracker::EvaluatePredicate(
       static_cast<const DeclarativeContentCssPredicate*>(predicate);
   auto loc = per_web_contents_tracker_.find(tab);
   DCHECK(loc != per_web_contents_tracker_.end());
-  const base::hash_set<std::string>& matching_css_selectors =
+  const std::unordered_set<std::string>& matching_css_selectors =
       loc->second->matching_css_selectors();
   for (const std::string& predicate_css_selector :
            typed_predicate->css_selectors()) {

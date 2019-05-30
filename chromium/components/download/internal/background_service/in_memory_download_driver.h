@@ -33,6 +33,7 @@ class InMemoryDownloadFactory : public InMemoryDownload::Factory {
   std::unique_ptr<InMemoryDownload> Create(
       const std::string& guid,
       const RequestParams& request_params,
+      scoped_refptr<network::ResourceRequestBody> request_body,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
       InMemoryDownload::Delegate* delegate) override;
 
@@ -64,7 +65,7 @@ class InMemoryDownloadDriver : public DownloadDriver,
       const base::FilePath& file_path,
       scoped_refptr<network::ResourceRequestBody> post_body,
       const net::NetworkTrafficAnnotationTag& traffic_annotation) override;
-  void Remove(const std::string& guid) override;
+  void Remove(const std::string& guid, bool remove_file) override;
   void Pause(const std::string& guid) override;
   void Resume(const std::string& guid) override;
   base::Optional<DriverEntry> Find(const std::string& guid) override;
@@ -72,8 +73,10 @@ class InMemoryDownloadDriver : public DownloadDriver,
   size_t EstimateMemoryUsage() const override;
 
   // InMemoryDownload::Delegate implementation.
+  void OnDownloadStarted(InMemoryDownload* download) override;
   void OnDownloadProgress(InMemoryDownload* download) override;
   void OnDownloadComplete(InMemoryDownload* download) override;
+  void OnUploadProgress(InMemoryDownload* download) override;
 
   // The client that receives updates from low level download logic.
   DownloadDriver::Client* client_;

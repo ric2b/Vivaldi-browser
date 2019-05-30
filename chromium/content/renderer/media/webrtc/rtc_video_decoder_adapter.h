@@ -18,6 +18,8 @@
 #include "media/base/decode_status.h"
 #include "media/base/video_codecs.h"
 #include "media/base/video_decoder.h"
+#include "media/base/video_decoder_config.h"
+#include "third_party/webrtc/api/video_codecs/sdp_video_format.h"
 #include "third_party/webrtc/modules/video_coding/include/video_codec_interface.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -48,22 +50,12 @@ namespace content {
 // way to synchronize this correctly.
 class CONTENT_EXPORT RTCVideoDecoderAdapter : public webrtc::VideoDecoder {
  public:
-  using CreateVideoDecoderCB =
-      base::RepeatingCallback<std::unique_ptr<media::VideoDecoder>(
-          media::MediaLog*)>;
-
   // Creates and initializes an RTCVideoDecoderAdapter. Returns nullptr if
-  // |video_codec_type| cannot be supported.
+  // |format| cannot be supported.
   // Called on the worker thread.
   static std::unique_ptr<RTCVideoDecoderAdapter> Create(
-      webrtc::VideoCodecType video_codec_type,
       media::GpuVideoAcceleratorFactories* gpu_factories,
-      CreateVideoDecoderCB create_video_decoder_cb);
-
-  // Called on the worker thread.
-  static void DeleteSoonOnMediaThread(
-      std::unique_ptr<webrtc::VideoDecoder> rtc_video_decoder_adapter,
-      media::GpuVideoAcceleratorFactories* gpu_factories);
+      const webrtc::SdpVideoFormat& format);
 
   // Called on |media_task_runner_|.
   ~RTCVideoDecoderAdapter() override;
@@ -80,29 +72,40 @@ class CONTENT_EXPORT RTCVideoDecoderAdapter : public webrtc::VideoDecoder {
                  bool missing_frames,
                  const webrtc::CodecSpecificInfo* codec_specific_info,
                  int64_t render_time_ms) override;
-  // Called on the worker thread.
+  // Called on the worker thread and on the DecodingThread.
   int32_t Release() override;
   // Called on the worker thread and on the DecodingThread.
   const char* ImplementationName() const override;
 
  private:
-  // |create_video_decoder_cb| will always be called on |media_task_runner|.
-  // Called on the worker thread.
-  RTCVideoDecoderAdapter(
-      scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
-      CreateVideoDecoderCB create_video_decoder_cb,
-      webrtc::VideoCodecType video_codec_type);
+  using CreateVideoDecoderCB =
+      base::RepeatingCallback<std::unique_ptr<media::VideoDecoder>(
+          media::MediaLog*)>;
+  using FlushDoneCB = base::OnceCallback<void()>;
 
-  bool InitializeSync();
-  void InitializeOnMediaThread(media::VideoDecoder::InitCB init_cb);
+  // Called on the worker thread.
+  RTCVideoDecoderAdapter(media::GpuVideoAcceleratorFactories* gpu_factories,
+                         const media::VideoDecoderConfig& config,
+                         const webrtc::SdpVideoFormat& format);
+
+  bool InitializeSync(const media::VideoDecoderConfig& config);
+  void InitializeOnMediaThread(const media::VideoDecoderConfig& config,
+                               const media::VideoDecoder::InitCB& init_cb);
   void DecodeOnMediaThread();
   void OnDecodeDone(media::DecodeStatus status);
   void OnOutput(const scoped_refptr<media::VideoFrame>& frame);
 
+  bool ShouldReinitializeForSettingHDRColorSpace(
+      const webrtc::EncodedImage& input_image) const;
+  bool ReinitializeSync(const media::VideoDecoderConfig& config);
+  void FlushOnMediaThread(FlushDoneCB flush_success_cb,
+                          FlushDoneCB flush_fail_cb);
+
   // Construction parameters.
   scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_;
-  CreateVideoDecoderCB create_video_decoder_cb_;
-  webrtc::VideoCodecType video_codec_type_;
+  media::GpuVideoAcceleratorFactories* gpu_factories_;
+  webrtc::SdpVideoFormat format_;
+  media::VideoDecoderConfig config_;
 
   // Media thread members.
   // |media_log_| must outlive |video_decoder_| because it is passed as a raw
@@ -111,6 +114,8 @@ class CONTENT_EXPORT RTCVideoDecoderAdapter : public webrtc::VideoDecoder {
   std::unique_ptr<media::VideoDecoder> video_decoder_;
   int32_t outstanding_decode_requests_ = 0;
 
+  // Decoding thread members.
+  bool key_frame_required_ = true;
   // Shared members.
   base::Lock lock_;
   int32_t consecutive_error_count_ = 0;

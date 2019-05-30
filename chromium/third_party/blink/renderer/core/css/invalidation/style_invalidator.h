@@ -7,16 +7,13 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "third_party/blink/renderer/core/css/invalidation/invalidation_flags.h"
 #include "third_party/blink/renderer/core/css/invalidation/pending_invalidations.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/wtf/noncopyable.h"
 
 namespace blink {
 
 class ContainerNode;
-class Document;
 class Element;
 class HTMLSlotElement;
 class InvalidationSet;
@@ -32,7 +29,7 @@ class CORE_EXPORT StyleInvalidator {
   StyleInvalidator(PendingInvalidationMap&);
 
   ~StyleInvalidator();
-  void Invalidate(Document&);
+  void Invalidate(Document& document, Element* invalidation_root);
 
  private:
   class SiblingData;
@@ -95,7 +92,7 @@ class CORE_EXPORT StyleInvalidator {
 
    private:
     struct Entry {
-      DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+      DISALLOW_NEW();
       Entry(const SiblingInvalidationSet* invalidation_set,
             unsigned invalidation_limit)
           : invalidation_set_(invalidation_set),

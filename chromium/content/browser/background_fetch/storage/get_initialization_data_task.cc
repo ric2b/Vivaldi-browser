@@ -5,6 +5,8 @@
 #include "content/browser/background_fetch/storage/get_initialization_data_task.h"
 
 #include "base/barrier_closure.h"
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
@@ -15,6 +17,7 @@
 #include "content/browser/background_fetch/storage/image_helpers.h"
 #include "content/browser/background_fetch/storage/mark_registration_for_deletion_task.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
+#include "content/common/service_worker/service_worker_utils.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "ui/gfx/image/image.h"
 #include "url/origin.h"
@@ -237,8 +240,9 @@ class GetRequestsTask : public InitializationSubTask {
 
       auto request_info = base::MakeRefCounted<BackgroundFetchRequestInfo>(
           active_request.request_index(),
-          ServiceWorkerFetchRequest::ParseFromString(
-              active_request.serialized_request()));
+          ServiceWorkerUtils::DeserializeFetchRequestFromString(
+              active_request.serialized_request()),
+          active_request.request_body_size());
       request_info->SetDownloadGuid(active_request.download_guid());
 
       sub_task_init().initialization_data->active_fetch_requests.push_back(
@@ -336,22 +340,15 @@ class FillFromMetadataTask : public InitializationSubTask {
 
     // Fill BackgroundFetchRegistration.
     auto& registration = sub_task_init().initialization_data->registration;
-    // TODO(crbug.com/853874): Unify conversion logic.
-    registration.developer_id = metadata.registration().developer_id();
-    registration.unique_id = metadata.registration().unique_id();
-    registration.upload_total = metadata.registration().upload_total();
-    registration.uploaded = metadata.registration().uploaded();
-    registration.download_total = metadata.registration().download_total();
-    registration.downloaded = metadata.registration().downloaded();
+    ToBackgroundFetchRegistration(metadata, registration.get());
 
     // Total number of requests.
     sub_task_init().initialization_data->num_requests = metadata.num_fetches();
-
     // Fill BackgroundFetchOptions.
     auto& options = sub_task_init().initialization_data->options;
-    options.title = metadata.options().title();
-    options.download_total = metadata.options().download_total();
-    options.icons.reserve(metadata.options().icons_size());
+    options->title = metadata.options().title();
+    options->download_total = metadata.options().download_total();
+    options->icons.reserve(metadata.options().icons_size());
     for (const auto& icon : metadata.options().icons()) {
       blink::Manifest::ImageResource ir;
       ir.src = GURL(icon.src());
@@ -402,20 +399,19 @@ class FillBackgroundFetchInitializationDataTask : public InitializationSubTask {
     // 2. Request statuses and state sanitization
     // 3. UI Options (+ icon deserialization)
     base::RepeatingClosure barrier_closure = base::BarrierClosure(
-        3u,
-        base::BindOnce(
-            [](base::WeakPtr<FillBackgroundFetchInitializationDataTask> task) {
-              if (task)
-                task->FinishWithError(
-                    task->sub_task_init().initialization_data->error);
-            },
-            weak_factory_.GetWeakPtr()));
+        3u, base::BindOnce(&FillBackgroundFetchInitializationDataTask::
+                               DidQueryInitializationData,
+                           weak_factory_.GetWeakPtr()));
     AddSubTask(std::make_unique<FillFromMetadataTask>(this, sub_task_init(),
                                                       barrier_closure));
     AddSubTask(std::make_unique<GetRequestsTask>(this, sub_task_init(),
                                                  barrier_closure));
     AddSubTask(std::make_unique<GetUIOptionsTask>(this, sub_task_init(),
                                                   barrier_closure));
+  }
+
+  void DidQueryInitializationData() {
+    FinishWithError(sub_task_init().initialization_data->error);
   }
 
  private:
@@ -482,7 +478,7 @@ void GetInitializationDataTask::DidGetRegistrations(
         this,
         InitializationSubTask::SubTaskInit{
             ud.first, ud.second,
-            &insertion_result.first->second /* initialization_data */},
+            /* initialization_data= */ &insertion_result.first->second},
         barrier_closure));
   }
 }
@@ -505,7 +501,8 @@ void GetInitializationDataTask::FinishWithError(
       // TODO(crbug.com/865388): Getting the Developer ID should be possible
       // since it is part of the key for when we got the Unique ID.
       AddDatabaseTask(std::make_unique<MarkRegistrationForDeletionTask>(
-          data_manager(), data.second.registration_id, base::DoNothing()));
+          data_manager(), data.second.registration_id,
+          /* check_for_failure= */ false, base::DoNothing()));
     }
 
     if (data.second.error ==

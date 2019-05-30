@@ -21,9 +21,11 @@ import android.view.Window;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 
-import org.chromium.chrome.browser.modaldialog.ModalDialogManager;
-import org.chromium.chrome.browser.modaldialog.ModalDialogView;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
+import org.chromium.ui.modaldialog.DialogDismissalCause;
+import org.chromium.ui.modaldialog.ModalDialogManager;
+import org.chromium.ui.modaldialog.ModalDialogProperties;
+import org.chromium.ui.modelutil.PropertyModel;
 
 /**
  * Represents the dialog containing the page info view.
@@ -39,11 +41,11 @@ class PageInfoDialog {
     // The dialog implementation.
     // mSheetDialog is set if the dialog appears as a sheet. Otherwise, mModalDialog is set.
     private final Dialog mSheetDialog;
-    private final ModalDialogView mModalDialog;
+    private final PropertyModel mModalDialogModel;
     @NonNull
     private final ModalDialogManager mManager;
     @NonNull
-    private final ModalDialogView.Controller mController;
+    private final ModalDialogProperties.Controller mController;
 
     // Animation which is currently running, if there is one.
     private Animator mCurrentAnimation;
@@ -64,7 +66,7 @@ class PageInfoDialog {
      */
     public PageInfoDialog(Context context, @NonNull PageInfoView view, View tabView,
             boolean isSheet, @NonNull ModalDialogManager manager,
-            @NonNull ModalDialogView.Controller controller) {
+            @NonNull ModalDialogProperties.Controller controller) {
         mView = view;
         mIsSheet = isSheet;
         mManager = manager;
@@ -96,9 +98,9 @@ class PageInfoDialog {
 
         if (isSheet) {
             mSheetDialog = createSheetDialog(context, container);
-            mModalDialog = null;
+            mModalDialogModel = null;
         } else {
-            mModalDialog = createModalDialog(container);
+            mModalDialogModel = createModalDialog(container);
             mSheetDialog = null;
         }
     }
@@ -108,7 +110,7 @@ class PageInfoDialog {
         if (mIsSheet) {
             mSheetDialog.show();
         } else {
-            mManager.showDialog(mModalDialog, ModalDialogManager.ModalDialogType.APP);
+            mManager.showDialog(mModalDialogModel, ModalDialogManager.ModalDialogType.APP);
         }
     }
 
@@ -122,7 +124,7 @@ class PageInfoDialog {
         if (mIsSheet) {
             mSheetDialog.dismiss();
         } else {
-            mManager.dismissDialog(mModalDialog);
+            mManager.dismissDialog(mModalDialogModel, DialogDismissalCause.UNKNOWN);
         }
     }
 
@@ -157,7 +159,7 @@ class PageInfoDialog {
         sheetDialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
             @Override
             public void onDismiss(DialogInterface dialog) {
-                mController.onDismiss();
+                mController.onDismiss(null, DialogDismissalCause.UNKNOWN);
             }
         });
 
@@ -171,11 +173,12 @@ class PageInfoDialog {
         return sheetDialog;
     }
 
-    private ModalDialogView createModalDialog(View container) {
-        ModalDialogView.Params params = new ModalDialogView.Params();
-        params.customView = container;
-        params.cancelOnTouchOutside = true;
-        return new ModalDialogView(mController, params);
+    private PropertyModel createModalDialog(View container) {
+        return new PropertyModel.Builder(ModalDialogProperties.ALL_KEYS)
+                .with(ModalDialogProperties.CONTROLLER, mController)
+                .with(ModalDialogProperties.CUSTOM_VIEW, container)
+                .with(ModalDialogProperties.CANCEL_ON_TOUCH_OUTSIDE, true)
+                .build();
     }
 
     private ViewGroup createSheetContainer(Context context, View tabView) {

@@ -13,13 +13,9 @@
 #include "content/public/browser/guest_mode.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
+#include "content/public/browser/web_contents_delegate.h"
 
 namespace content {
-
-bool WebContentsImpl::HasFocusedGuests() {
-  return browser_plugin_embedder_ &&
-    browser_plugin_embedder_->AreAnyGuestsFocused();
-}
 
 void WebContentsImpl::SetExtData(const std::string& ext_data) {
   ext_data_ = ext_data;
@@ -45,6 +41,36 @@ void FrameTreeNode::DidChangeLoadProgressExtended(double load_progress,
   total_elements_ = total_elements;
 
   frame_tree_->UpdateLoadProgress(load_progress);
+}
+
+void WebContentsImpl::FrameTreeNodeDestroyed() {
+  for (auto& observer : observers_) {
+    observer.WebContentsDidDetach();
+  }
+}
+
+void WebContentsImpl::AttachedToOuter() {
+  for (auto& observer : observers_) {
+    observer.WebContentsDidAttach();
+  }
+}
+
+void WebContentsImpl::WebContentsTreeNode::DetachFromOuterWebContents() {
+  if (outer_web_contents_) {
+    if ((current_web_contents_->GetDelegate() &&
+      !current_web_contents_->GetDelegate()->HasOwnerShipOfContents())) {
+      // Detach inner so the WebContents is not destroyed, it is destroyed by
+      // the |TabStripModel|
+      outer_web_contents_->node_.DetachInnerWebContents(current_web_contents_)
+        .release();
+    }
+  }
+  outer_web_contents_ = nullptr;
+  outer_contents_frame_tree_node_id_ = FrameTreeNode::kFrameTreeNodeInvalidId;
+}
+
+void WebContentsImpl::DetachFromOuter() {
+  node_.OnFrameTreeNodeDestroyed(node_.OuterContentsFrameTreeNode());
 }
 
 }  // namespace content

@@ -6,11 +6,10 @@
 
 #include <utility>
 
-#include "base/bind.h"
 #include "base/memory/ptr_util.h"
-#include "base/strings/utf_string_conversions.h"
 #include "components/pdf/browser/pdf_web_contents_helper_client.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/common/referrer_type_converters.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/strings/grit/ui_strings.h"
@@ -33,13 +32,7 @@ PDFWebContentsHelper::PDFWebContentsHelper(
     std::unique_ptr<PDFWebContentsHelperClient> client)
     : content::WebContentsObserver(web_contents),
       pdf_service_bindings_(web_contents, this),
-      client_(std::move(client)),
-      touch_selection_controller_client_manager_(nullptr),
-      selection_left_height_(0),
-      selection_right_height_(0),
-      has_selection_(false),
-      remote_pdf_client_(nullptr),
-      web_contents_(web_contents) {}
+      client_(std::move(client)) {}
 
 PDFWebContentsHelper::~PDFWebContentsHelper() {
   if (!touch_selection_controller_client_manager_)
@@ -57,7 +50,7 @@ gfx::PointF PDFWebContentsHelper::ConvertHelper(const gfx::PointF& point_f,
                                                 float scale) const {
   gfx::PointF origin_f;
   content::RenderWidgetHostView* view =
-      web_contents_->GetRenderWidgetHostView();
+      web_contents()->GetRenderWidgetHostView();
   if (view) {
     origin_f = view->TransformPointToRootCoordSpaceF(gfx::PointF());
     origin_f.Scale(scale);
@@ -86,6 +79,10 @@ void PDFWebContentsHelper::SelectionChanged(const gfx::PointF& left,
   selection_right_height_ = right_height;
 
   DidScroll();
+}
+
+void PDFWebContentsHelper::SetPluginCanSave(bool can_save) {
+  client_->SetPluginCanSave(web_contents(), can_save);
 }
 
 void PDFWebContentsHelper::DidScroll() {
@@ -154,7 +151,7 @@ PDFWebContentsHelper::CreateDrawable() {
 
 void PDFWebContentsHelper::OnManagerWillDestroy(
     content::TouchSelectionControllerClientManager* manager) {
-  DCHECK(manager == touch_selection_controller_client_manager_);
+  DCHECK_EQ(touch_selection_controller_client_manager_, manager);
   manager->RemoveObserver(this);
   touch_selection_controller_client_manager_ = nullptr;
 }
@@ -188,6 +185,14 @@ void PDFWebContentsHelper::RunContextMenu() {
   NOTIMPLEMENTED();
 }
 
+bool PDFWebContentsHelper::ShouldShowQuickMenu() {
+  return false;
+}
+
+base::string16 PDFWebContentsHelper::GetSelectedText() {
+  return base::string16();
+}
+
 void PDFWebContentsHelper::InitTouchSelectionClientManager() {
   content::RenderWidgetHostView* view =
       web_contents()->GetRenderWidgetHostView();
@@ -207,14 +212,16 @@ void PDFWebContentsHelper::HasUnsupportedFeature() {
 }
 
 void PDFWebContentsHelper::SaveUrlAs(const GURL& url,
-                                     const content::Referrer& referrer) {
+                                     blink::mojom::ReferrerPtr referrer) {
   client_->OnSaveURL(web_contents());
-  web_contents()->SaveFrame(url, referrer);
+  web_contents()->SaveFrame(url, referrer.To<content::Referrer>());
 }
 
 void PDFWebContentsHelper::UpdateContentRestrictions(
     int32_t content_restrictions) {
   client_->UpdateContentRestrictions(web_contents(), content_restrictions);
 }
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(PDFWebContentsHelper)
 
 }  // namespace pdf

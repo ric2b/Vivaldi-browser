@@ -33,15 +33,15 @@
 
 #include "base/location.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/renderer/platform/audio/audio_bus.h"
 #include "third_party/blink/renderer/platform/audio/vector_math.h"
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
-#include "third_party/blink/renderer/platform/web_task_runner.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 
 namespace blink {
 
-using namespace VectorMath;
+using namespace vector_math;
 
 const int kInputBufferSize = 8 * 16384;
 
@@ -139,9 +139,8 @@ ReverbConvolver::ReverbConvolver(AudioChannel* impulse_response,
   // FIXME: would be better to up the thread priority here.  It doesn't need to
   // be real-time, but higher than the default...
   if (use_background_threads && background_stages_.size() > 0) {
-    background_thread_ =
-        Platform::Current()->CreateThread(WebThreadCreationParams(
-            WebThreadType::kReverbConvolutionBackgroundThread));
+    background_thread_ = Platform::Current()->CreateThread(ThreadCreationParams(
+        WebThreadType::kReverbConvolutionBackgroundThread));
   }
 }
 
@@ -174,7 +173,7 @@ void ReverbConvolver::ProcessInBackground() {
 
 void ReverbConvolver::Process(const AudioChannel* source_channel,
                               AudioChannel* destination_channel,
-                              size_t frames_to_process) {
+                              uint32_t frames_to_process) {
   bool is_safe = source_channel && destination_channel &&
                  source_channel->length() >= frames_to_process &&
                  destination_channel->length() >= frames_to_process;

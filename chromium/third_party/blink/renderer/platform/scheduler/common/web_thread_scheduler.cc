@@ -7,8 +7,8 @@
 #include <utility>
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "third_party/blink/renderer/platform/scheduler/common/tracing_helper.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
-#include "third_party/blink/renderer/platform/scheduler/util/tracing_helper.h"
 
 namespace blink {
 namespace scheduler {
@@ -18,16 +18,20 @@ WebThreadScheduler::~WebThreadScheduler() = default;
 // static
 std::unique_ptr<WebThreadScheduler>
 WebThreadScheduler::CreateMainThreadScheduler(
+    std::unique_ptr<base::MessagePump> message_pump,
     base::Optional<base::Time> initial_virtual_time) {
-  // Ensure categories appear as an option in chrome://tracing.
-  WarmupTracingCategories();
-  // Workers might be short-lived, so placing warmup here.
-  TRACE_EVENT_WARMUP_CATEGORY(TRACE_DISABLED_BY_DEFAULT("worker.scheduler"));
-
+  auto settings = base::sequence_manager::SequenceManager::Settings{
+      .randomised_sampling_enabled = true};
+  auto sequence_manager =
+      message_pump
+          ? base::sequence_manager::
+                CreateSequenceManagerOnCurrentThreadWithPump(
+                    std::move(message_pump), std::move(settings))
+          : base::sequence_manager::CreateSequenceManagerOnCurrentThread(
+                std::move(settings));
   std::unique_ptr<MainThreadSchedulerImpl> scheduler(
-      new MainThreadSchedulerImpl(
-          base::sequence_manager::CreateSequenceManagerOnCurrentThread(),
-          initial_virtual_time));
+      new MainThreadSchedulerImpl(std::move(sequence_manager),
+                                  initial_virtual_time));
   return std::move(scheduler);
 }
 
@@ -76,7 +80,7 @@ WebThreadScheduler::CleanupTaskRunner() {
   return nullptr;
 }
 
-std::unique_ptr<WebThread> WebThreadScheduler::CreateMainThread() {
+std::unique_ptr<Thread> WebThreadScheduler::CreateMainThread() {
   NOTREACHED();
   return nullptr;
 }
@@ -106,6 +110,16 @@ void WebThreadScheduler::DidCommitFrameToCompositor() {
 void WebThreadScheduler::DidHandleInputEventOnCompositorThread(
     const WebInputEvent& web_input_event,
     InputEventState event_state) {
+  NOTREACHED();
+}
+
+void WebThreadScheduler::WillPostInputEventToMainThread(
+    WebInputEvent::Type web_input_event_type) {
+  NOTREACHED();
+}
+
+void WebThreadScheduler::WillHandleInputEventOnMainThread(
+    WebInputEvent::Type web_input_event_type) {
   NOTREACHED();
 }
 
@@ -161,7 +175,7 @@ void WebThreadScheduler::AddRAILModeObserver(WebRAILModeObserver* observer) {
   NOTREACHED();
 }
 
-void WebThreadScheduler::SetRendererProcessType(RendererProcessType type) {
+void WebThreadScheduler::SetRendererProcessType(WebRendererProcessType type) {
   NOTREACHED();
 }
 

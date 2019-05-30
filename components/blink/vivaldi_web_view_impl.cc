@@ -3,13 +3,15 @@
 #include "app/vivaldi_apptools.h"
 #include "third_party/blink/renderer/core/exported/web_settings_impl.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
+#include "third_party/blink/renderer/core/frame/frame.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/html_collection.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/platform/graphics/bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
-#include "third_party/blink/renderer/platform/plugins/plugin_data.h"
+#include "third_party/blink/renderer/core/page/plugin_data.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 namespace blink {
@@ -20,8 +22,9 @@ void WebViewImpl::SetPluginsEnabled(const bool plugins_enabled) {
 }
 
 void WebViewImpl::SetImagesEnabled(const bool images_enabled) {
-  Document* document = page_->MainFrame()->IsLocalFrame()
-                           ? page_->DeprecatedLocalMainFrame()->GetDocument()
+  Page* page = AsView().page.Get();
+  Document* document = page->MainFrame()->IsLocalFrame()
+                           ? page->DeprecatedLocalMainFrame()->GetDocument()
                            : 0;
 
   if (document && document->GetSettings()->GetImagesEnabled() == images_enabled)
@@ -43,7 +46,7 @@ void WebViewImpl::SetImagesEnabled(const bool images_enabled) {
         HTMLImageElement& imageElement = ToHTMLImageElement(*element);
 
         if (images_enabled) {
-          imageElement.setAttribute(HTMLNames::srcAttr,
+          imageElement.setAttribute(html_names::kSrcAttr,
                                     element->ImageSourceURL());
         } else {
           int width = 10, height = 10;
@@ -72,8 +75,9 @@ void WebViewImpl::SetAllowAccessKeys(const bool allow_access_keys) {
   web_settings_->SetAllowAccessKeys(allow_access_keys);
 }
 
-void WebViewImpl::LoadImageAt(const WebPoint& point) {
-  HitTestResult result = HitTestResultForRootFramePos(LayoutPoint(point));
+void WebViewImpl::LoadImageAt(const gfx::Point& point) {
+  HitTestResult result =
+      HitTestResultForRootFramePos(LayoutPoint(point.x(), point.y()));
   Node* node = result.InnerNode();
   DCHECK(node);
   if (!node || !IsHTMLImageElement(*node))

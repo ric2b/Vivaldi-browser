@@ -138,7 +138,7 @@ void LayoutFrameSet::LayOutAxis(GridAxis& axis,
       if (grid[i].IsAbsolute()) {
         long long temp_product =
             static_cast<long long>(grid_layout[i]) * remaining_fixed;
-        grid_layout[i] = temp_product / total_fixed;
+        grid_layout[i] = static_cast<int>(temp_product / total_fixed);
         remaining_len -= grid_layout[i];
       }
     }
@@ -158,7 +158,7 @@ void LayoutFrameSet::LayOutAxis(GridAxis& axis,
       if (grid[i].IsPercentage()) {
         long long temp_product =
             static_cast<long long>(grid_layout[i]) * remaining_percent;
-        grid_layout[i] = temp_product / total_percent;
+        grid_layout[i] = static_cast<int>(temp_product / total_percent);
         remaining_len -= grid_layout[i];
       }
     }
@@ -208,7 +208,7 @@ void LayoutFrameSet::LayOutAxis(GridAxis& axis,
         if (grid[i].IsPercentage()) {
           long long temp_product =
               static_cast<long long>(grid_layout[i]) * remaining_percent;
-          change_percent = temp_product / total_percent;
+          change_percent = static_cast<int>(temp_product / total_percent);
           grid_layout[i] += change_percent;
           remaining_len -= change_percent;
         }
@@ -224,7 +224,7 @@ void LayoutFrameSet::LayOutAxis(GridAxis& axis,
         if (grid[i].IsAbsolute()) {
           long long temp_product =
               static_cast<long long>(grid_layout[i]) * remaining_fixed;
-          change_fixed = temp_product / total_fixed;
+          change_fixed = static_cast<int>(temp_product / total_fixed);
           grid_layout[i] += change_fixed;
           remaining_len -= change_fixed;
         }
@@ -428,7 +428,7 @@ void LayoutFrameSet::PositionFrames() {
       if (size != child->Size() || size.IsEmpty()) {
         child->SetSize(size);
         child->SetNeedsLayoutAndFullPaintInvalidation(
-            LayoutInvalidationReason::kSizeChanged);
+            layout_invalidation_reason::kSizeChanged);
         child->UpdateLayout();
       }
 
@@ -467,16 +467,16 @@ void LayoutFrameSet::ContinueResizing(GridAxis& axis, int position) {
   axis.deltas_[axis.split_being_resized_ - 1] += delta;
   axis.deltas_[axis.split_being_resized_] -= delta;
   SetNeedsLayoutAndFullPaintInvalidation(
-      LayoutInvalidationReason::kSizeChanged);
+      layout_invalidation_reason::kSizeChanged);
 }
 
 bool LayoutFrameSet::UserResize(const MouseEvent& evt) {
   if (!is_resizing_) {
     if (NeedsLayout())
       return false;
-    if (evt.type() == EventTypeNames::mousedown &&
+    if (evt.type() == event_type_names::kMousedown &&
         evt.button() ==
-            static_cast<short>(WebPointerProperties::Button::kLeft)) {
+            static_cast<int16_t>(WebPointerProperties::Button::kLeft)) {
       FloatPoint local_pos =
           AbsoluteToLocal(FloatPoint(evt.AbsoluteLocation()), kUseTransforms);
       StartResizing(cols_, local_pos.X());
@@ -488,17 +488,17 @@ bool LayoutFrameSet::UserResize(const MouseEvent& evt) {
       }
     }
   } else {
-    if (evt.type() == EventTypeNames::mousemove ||
-        (evt.type() == EventTypeNames::mouseup &&
+    if (evt.type() == event_type_names::kMousemove ||
+        (evt.type() == event_type_names::kMouseup &&
          evt.button() ==
-             static_cast<short>(WebPointerProperties::Button::kLeft))) {
+             static_cast<int16_t>(WebPointerProperties::Button::kLeft))) {
       FloatPoint local_pos =
           AbsoluteToLocal(FloatPoint(evt.AbsoluteLocation()), kUseTransforms);
       ContinueResizing(cols_, local_pos.X());
       ContinueResizing(rows_, local_pos.Y());
-      if (evt.type() == EventTypeNames::mouseup &&
+      if (evt.type() == event_type_names::kMouseup &&
           evt.button() ==
-              static_cast<short>(WebPointerProperties::Button::kLeft)) {
+              static_cast<int16_t>(WebPointerProperties::Button::kLeft)) {
         SetIsResizing(false);
         return true;
       }

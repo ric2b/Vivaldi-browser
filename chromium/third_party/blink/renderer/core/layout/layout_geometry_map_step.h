@@ -48,7 +48,7 @@ typedef unsigned GeometryInfoFlags;
 
 // Stores data about how to map from one layoutObject to its container.
 struct LayoutGeometryMapStep {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
   LayoutGeometryMapStep(const LayoutGeometryMapStep& o)
       : layout_object_(o.layout_object_),
         offset_(o.offset_),
@@ -69,7 +69,6 @@ struct LayoutGeometryMapStep {
 
 }  // namespace blink
 
-WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(
-    blink::LayoutGeometryMapStep);
+WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(blink::LayoutGeometryMapStep)
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_GEOMETRY_MAP_STEP_H_

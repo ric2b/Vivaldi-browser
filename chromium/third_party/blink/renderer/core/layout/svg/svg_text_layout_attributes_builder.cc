@@ -169,7 +169,7 @@ class AttributeListsIterator {
     return x_list_remaining_ || y_list_remaining_ || dx_list_remaining_ ||
            dy_list_remaining_ || rotate_list_remaining_;
   }
-  void UpdateCharacterData(size_t index, SVGCharacterData&);
+  void UpdateCharacterData(wtf_size_t index, SVGCharacterData&);
 
  private:
   SVGLengthContext length_context_;
@@ -200,7 +200,7 @@ AttributeListsIterator::AttributeListsIterator(
       rotate_list_remaining_(rotate_list_->length()) {}
 
 inline void AttributeListsIterator::UpdateCharacterData(
-    size_t index,
+    wtf_size_t index,
     SVGCharacterData& data) {
   if (x_list_remaining_) {
     data.x = x_list_->at(index)->Value(length_context_);
@@ -232,7 +232,8 @@ inline void AttributeListsIterator::UpdateCharacterData(
 void SVGTextLayoutAttributesBuilder::FillCharacterDataMap(
     const TextPosition& position) {
   AttributeListsIterator attr_lists(position.element);
-  for (unsigned i = 0; attr_lists.HasAttributes() && i < position.length; ++i) {
+  for (wtf_size_t i = 0; attr_lists.HasAttributes() && i < position.length;
+       ++i) {
     SVGCharacterData& data =
         character_data_map_.insert(position.start + i + 1, SVGCharacterData())
             .stored_value->value;

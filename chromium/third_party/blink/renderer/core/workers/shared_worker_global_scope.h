@@ -32,6 +32,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_WORKERS_SHARED_WORKER_GLOBAL_SCOPE_H_
 
 #include <memory>
+#include "third_party/blink/public/common/messaging/message_port_channel.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/workers/global_scope_creation_params.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
@@ -39,15 +40,13 @@
 
 namespace blink {
 
-class MessageEvent;
 class SharedWorkerThread;
 
-class SharedWorkerGlobalScope final : public WorkerGlobalScope {
+class CORE_EXPORT SharedWorkerGlobalScope final : public WorkerGlobalScope {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  SharedWorkerGlobalScope(const String& name,
-                          std::unique_ptr<GlobalScopeCreationParams>,
+  SharedWorkerGlobalScope(std::unique_ptr<GlobalScopeCreationParams>,
                           SharedWorkerThread*,
                           base::TimeTicks time_origin);
   ~SharedWorkerGlobalScope() override;
@@ -60,22 +59,28 @@ class SharedWorkerGlobalScope final : public WorkerGlobalScope {
   // WorkerGlobalScope
   void ImportModuleScript(
       const KURL& module_url_record,
-      FetchClientSettingsObjectSnapshot* outside_settings_object,
+      const FetchClientSettingsObjectSnapshot& outside_settings_object,
       network::mojom::FetchCredentialsMode) override;
 
-  // Setters/Getters for attributes in SharedWorkerGlobalScope.idl
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(connect);
-  String name() const { return name_; }
+  // shared_worker_global_scope.idl
+  const String name() const;
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(connect, kConnect)
+
+  void Connect(MessagePortChannel channel);
 
   void Trace(blink::Visitor*) override;
 
  private:
   void ExceptionThrown(ErrorEvent*) override;
-
-  const String name_;
+  mojom::RequestContextType GetDestinationForMainScript() override;
 };
 
-CORE_EXPORT MessageEvent* CreateConnectEvent(MessagePort*);
+template <>
+struct DowncastTraits<SharedWorkerGlobalScope> {
+  static bool AllowFrom(const ExecutionContext& context) {
+    return context.IsSharedWorkerGlobalScope();
+  }
+};
 
 }  // namespace blink
 

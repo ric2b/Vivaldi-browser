@@ -105,9 +105,8 @@ void SafeBrowsingUIManager::ShowBlockingPageForResource(
 }
 
 // static
-bool SafeBrowsingUIManager::ShouldSendHitReport(
-    const HitReport& hit_report,
-    const WebContents* web_contents) {
+bool SafeBrowsingUIManager::ShouldSendHitReport(const HitReport& hit_report,
+                                                WebContents* web_contents) {
   return web_contents &&
          hit_report.extended_reporting_level != SBER_LEVEL_OFF &&
          !web_contents->GetBrowserContext()->IsOffTheRecord();
@@ -118,7 +117,7 @@ bool SafeBrowsingUIManager::ShouldSendHitReport(
 // extended-reporting users.
 void SafeBrowsingUIManager::MaybeReportSafeBrowsingHit(
     const HitReport& hit_report,
-    const WebContents* web_contents) {
+    WebContents* web_contents) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // Send report if user opted-in to extended reporting and is not in
@@ -151,6 +150,26 @@ void SafeBrowsingUIManager::AddObserver(Observer* observer) {
 void SafeBrowsingUIManager::RemoveObserver(Observer* observer) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   observer_list_.RemoveObserver(observer);
+}
+
+void SafeBrowsingUIManager::AddUnsafeResource(
+    GURL url,
+    security_interstitials::UnsafeResource resource) {
+  unsafe_resources_.push_back(std::make_pair(url, resource));
+}
+
+bool SafeBrowsingUIManager::PopUnsafeResourceForURL(
+    GURL url,
+    security_interstitials::UnsafeResource* resource) {
+  for (auto it = unsafe_resources_.begin(); it != unsafe_resources_.end();
+       it++) {
+    if (it->first == url) {
+      *resource = it->second;
+      unsafe_resources_.erase(it);
+      return true;
+    }
+  }
+  return false;
 }
 
 const std::string SafeBrowsingUIManager::app_locale() const {
@@ -195,7 +214,7 @@ void SafeBrowsingUIManager::OnBlockingPageDone(
     const GURL& main_frame_url) {
   BaseUIManager::OnBlockingPageDone(resources, proceed, web_contents,
                                     main_frame_url);
-  if (proceed && resources.size() > 0) {
+  if (proceed && !resources.empty()) {
     MaybeTriggerSecurityInterstitialProceededEvent(
         web_contents, main_frame_url,
         GetThreatTypeStringForInterstitial(resources[0].threat_type),

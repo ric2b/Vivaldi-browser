@@ -50,6 +50,8 @@ class TreeOrderedMap : public GarbageCollected<TreeOrderedMap> {
  public:
   static TreeOrderedMap* Create();
 
+  TreeOrderedMap();
+
   void Add(const AtomicString&, Element&);
   void Remove(const AtomicString&, Element&);
 
@@ -65,7 +67,7 @@ class TreeOrderedMap : public GarbageCollected<TreeOrderedMap> {
   // TreeOrderedMap exactly.
   Element* GetCachedFirstElementWithoutAccessingNodeTree(const AtomicString&);
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
 #if DCHECK_IS_ON()
   // While removing a ContainerNode, ID lookups won't be precise should the tree
@@ -91,8 +93,6 @@ class TreeOrderedMap : public GarbageCollected<TreeOrderedMap> {
 #endif
 
  private:
-  TreeOrderedMap();
-
   template <bool keyMatches(const AtomicString&, const Element&)>
   Element* Get(const AtomicString&, const TreeScope&) const;
 
@@ -101,7 +101,7 @@ class TreeOrderedMap : public GarbageCollected<TreeOrderedMap> {
     explicit MapEntry(Element& first_element)
         : element(first_element), count(1) {}
 
-    void Trace(blink::Visitor*);
+    void Trace(Visitor*);
 
     Member<Element> element;
     unsigned count;

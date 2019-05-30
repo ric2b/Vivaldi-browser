@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/time/time.h"
+#include "net/base/ip_endpoint.h"
 #include "net/base/net_export.h"
 #include "net/base/proxy_server.h"
 #include "net/http/http_vary_data.h"
@@ -57,6 +58,9 @@ class NET_EXPORT HttpResponseInfo {
     CONNECTION_INFO_QUIC_43 = 21,
     CONNECTION_INFO_QUIC_99 = 22,
     CONNECTION_INFO_QUIC_44 = 23,
+    CONNECTION_INFO_QUIC_45 = 24,
+    CONNECTION_INFO_QUIC_46 = 25,
+    CONNECTION_INFO_QUIC_47 = 26,
     NUM_OF_CONNECTION_INFOS,
   };
 
@@ -167,7 +171,7 @@ class NET_EXPORT HttpResponseInfo {
   // originally.  This is true even if the response was re-validated using a
   // different remote address, or if some of the content came from a byte-range
   // request to a different address.
-  HostPortPair socket_address;
+  IPEndPoint remote_endpoint;
 
   // Protocol negotiated with the server.
   std::string alpn_negotiated_protocol;

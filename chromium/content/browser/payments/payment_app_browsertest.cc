@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
@@ -167,8 +168,7 @@ class PaymentAppBrowserTest : public ContentBrowserTest {
             shell()->web_contents()->GetBrowserContext()))
         ->ClearData(StoragePartition::REMOVE_DATA_MASK_SERVICE_WORKERS,
                     StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL, GURL(),
-                    StoragePartition::OriginMatcherFunction(), base::Time(),
-                    base::Time::Max(), run_loop.QuitClosure());
+                    base::Time(), base::Time::Max(), run_loop.QuitClosure());
 
     run_loop.Run();
   }

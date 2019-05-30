@@ -18,7 +18,7 @@
 #include "base/native_library.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "base/win/win_util.h"
 #include "ui/base/ui_base_switches.h"
 
@@ -42,7 +42,8 @@ bool InvokeShellExecute(const base::string16 path,
                         const base::string16 args,
                         const base::string16 verb,
                         DWORD mask) {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::WILL_BLOCK);
   SHELLEXECUTEINFO sei = {sizeof(sei)};
   sei.fMask = mask;
   sei.nShow = SW_SHOWNORMAL;

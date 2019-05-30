@@ -7,31 +7,32 @@
 
 #include <stdint.h>
 
+#include "base/component_export.h"
 #include "base/time/time.h"
 #include "storage/browser/quota/quota_client.h"
-#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
-#include "url/gurl.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom-forward.h"
+#include "url/origin.h"
 
 namespace storage {
 
 // This interface is implemented by observers that wish to monitor storage
 // events, such as changes in quota or usage.
-class STORAGE_EXPORT StorageObserver {
+class COMPONENT_EXPORT(STORAGE_BROWSER) StorageObserver {
  public:
-  struct STORAGE_EXPORT Filter {
+  struct COMPONENT_EXPORT(STORAGE_BROWSER) Filter {
     // The storage type to monitor. This must not be kUnknown or
     // kQuotaNotManaged.
     blink::mojom::StorageType storage_type;
 
     // The origin to monitor usage for. Must be specified.
-    GURL origin;
+    url::Origin origin;
 
     Filter();
-    Filter(blink::mojom::StorageType storage_type, const GURL& origin);
+    Filter(blink::mojom::StorageType storage_type, const url::Origin& origin);
     bool operator==(const Filter& other) const;
   };
 
-  struct STORAGE_EXPORT MonitorParams {
+  struct COMPONENT_EXPORT(STORAGE_BROWSER) MonitorParams {
     // Storage type and origin to monitor.
     Filter filter;
 
@@ -45,7 +46,7 @@ class STORAGE_EXPORT StorageObserver {
 
     MonitorParams();
     MonitorParams(blink::mojom::StorageType storage_type,
-                  const GURL& origin,
+                  const url::Origin& origin,
                   const base::TimeDelta& rate,
                   bool get_initial_state);
     MonitorParams(const Filter& filter,
@@ -53,7 +54,7 @@ class STORAGE_EXPORT StorageObserver {
                   bool get_initial_state);
   };
 
-  struct STORAGE_EXPORT Event {
+  struct COMPONENT_EXPORT(STORAGE_BROWSER) Event {
     // The storage type and origin monitored.
     Filter filter;
 

@@ -108,7 +108,6 @@ class ResourceCreationProxy : public InterfaceProxy,
                                 PP_AudioSampleRate sample_rate,
                                 uint32_t sample_frame_count) override;
   PP_Resource CreateCameraDevicePrivate(PP_Instance instance) override;
-  PP_Resource CreateCompositor(PP_Instance instance) override;
   PP_Resource CreateFileChooser(PP_Instance instance,
                                 PP_FileChooserMode_Dev mode,
                                 const PP_Var& accept_types) override;
@@ -154,9 +153,7 @@ class ResourceCreationProxy : public InterfaceProxy,
   PP_Resource CreateUDPSocket(PP_Instance instance) override;
   PP_Resource CreateUDPSocketPrivate(PP_Instance instance) override;
   PP_Resource CreateVideoDecoder(PP_Instance instance) override;
-  PP_Resource CreateVideoDestination(PP_Instance instance) override;
   PP_Resource CreateVideoEncoder(PP_Instance instance) override;
-  PP_Resource CreateVideoSource(PP_Instance instance) override;
   PP_Resource CreateVpnProvider(PP_Instance instance) override;
   PP_Resource CreateWebSocket(PP_Instance instance) override;
   PP_Resource CreateX509CertificatePrivate(PP_Instance instance) override;

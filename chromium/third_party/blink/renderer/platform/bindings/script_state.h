@@ -10,6 +10,7 @@
 #include "gin/public/context_holder.h"
 #include "gin/public/gin_embedders.h"
 #include "third_party/blink/renderer/platform/bindings/scoped_persistent.h"
+#include "third_party/blink/renderer/platform/bindings/v8_cross_origin_setter_info.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/heap/self_keep_alive.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
@@ -73,8 +74,6 @@ class V8PerContextData;
 // all V8 proxy objects that have references to the ScriptState are destructed.
 class PLATFORM_EXPORT ScriptState final
     : public GarbageCollectedFinalized<ScriptState> {
-  WTF_MAKE_NONCOPYABLE(ScriptState);
-
  public:
   class Scope {
     STACK_ALLOCATED();
@@ -98,6 +97,8 @@ class PLATFORM_EXPORT ScriptState final
 
   static ScriptState* Create(v8::Local<v8::Context>,
                              scoped_refptr<DOMWrapperWorld>);
+
+  ScriptState(v8::Local<v8::Context>, scoped_refptr<DOMWrapperWorld>);
   ~ScriptState();
 
   void Trace(blink::Visitor*) {}
@@ -111,8 +112,17 @@ class PLATFORM_EXPORT ScriptState final
     return From(info.GetIsolate()->GetCurrentContext());
   }
 
+  static ScriptState* ForCurrentRealm(
+      const v8::PropertyCallbackInfo<v8::Value>& info) {
+    return From(info.GetIsolate()->GetCurrentContext());
+  }
+
   static ScriptState* ForRelevantRealm(
       const v8::FunctionCallbackInfo<v8::Value>& info) {
+    return From(info.Holder()->CreationContext());
+  }
+
+  static ScriptState* ForRelevantRealm(const V8CrossOriginSetterInfo& info) {
     return From(info.Holder()->CreationContext());
   }
 
@@ -159,9 +169,6 @@ class PLATFORM_EXPORT ScriptState final
   // termination.
   void DissociateContext();
 
- protected:
-  ScriptState(v8::Local<v8::Context>, scoped_refptr<DOMWrapperWorld>);
-
  private:
   static void OnV8ContextCollectedCallback(
       const v8::WeakCallbackInfo<ScriptState>&);
@@ -192,6 +199,8 @@ class PLATFORM_EXPORT ScriptState final
   static constexpr int kV8ContextPerContextDataIndex = static_cast<int>(
       gin::kPerContextDataStartIndex +  // NOLINT(readability/enum_casing)
       gin::kEmbedderBlink);             // NOLINT(readability/enum_casing)
+
+  DISALLOW_COPY_AND_ASSIGN(ScriptState);
 };
 
 // ScriptStateProtectingContext keeps the context associated with the
@@ -199,11 +208,18 @@ class PLATFORM_EXPORT ScriptState final
 // context. Otherwise, the context will leak.
 class ScriptStateProtectingContext
     : public GarbageCollectedFinalized<ScriptStateProtectingContext> {
-  WTF_MAKE_NONCOPYABLE(ScriptStateProtectingContext);
-
  public:
   static ScriptStateProtectingContext* Create(ScriptState* script_state) {
-    return new ScriptStateProtectingContext(script_state);
+    return MakeGarbageCollected<ScriptStateProtectingContext>(script_state);
+  }
+
+  explicit ScriptStateProtectingContext(ScriptState* script_state)
+      : script_state_(script_state) {
+    if (script_state_) {
+      context_.Set(script_state_->GetIsolate(), script_state_->GetContext());
+      context_.Get().AnnotateStrongRetainer(
+          "blink::ScriptStateProtectingContext::context_");
+    }
   }
 
   void Trace(blink::Visitor* visitor) { visitor->Trace(script_state_); }
@@ -222,17 +238,10 @@ class ScriptStateProtectingContext
   }
 
  private:
-  explicit ScriptStateProtectingContext(ScriptState* script_state)
-      : script_state_(script_state) {
-    if (script_state_) {
-      context_.Set(script_state_->GetIsolate(), script_state_->GetContext());
-      context_.Get().AnnotateStrongRetainer(
-          "blink::ScriptStateProtectingContext::context_");
-    }
-  }
-
   Member<ScriptState> script_state_;
   ScopedPersistent<v8::Context> context_;
+
+  DISALLOW_COPY_AND_ASSIGN(ScriptStateProtectingContext);
 };
 
 }  // namespace blink

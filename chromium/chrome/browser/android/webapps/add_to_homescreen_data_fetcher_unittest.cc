@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -141,7 +142,8 @@ class TestInstallableManager : public InstallableManager {
       code = NO_ACCEPTABLE_ICON;
       is_installable = false;
     } else if (params.valid_manifest && params.has_worker) {
-      if (!IsManifestValidForWebApp(manifest_)) {
+      if (!IsManifestValidForWebApp(manifest_,
+                                    true /* check_webapp_manifest_display */)) {
         code = valid_manifest_->error;
         is_installable = false;
       } else if (!is_installable_) {
@@ -169,6 +171,7 @@ class TestInstallableManager : public InstallableManager {
     callback.Run({code, GURL(kDefaultManifestUrl), &manifest_,
                   params.valid_primary_icon ? primary_icon_url_ : GURL(),
                   params.valid_primary_icon ? primary_icon_.get() : nullptr,
+                  params.prefer_maskable_icon,
                   params.valid_badge_icon ? badge_icon_url_ : GURL(),
                   params.valid_badge_icon ? badge_icon_.get() : nullptr,
                   params.valid_manifest ? is_installable : false,

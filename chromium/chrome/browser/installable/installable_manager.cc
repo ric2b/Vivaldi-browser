@@ -5,6 +5,7 @@
 #include "chrome/browser/installable/installable_manager.h"
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
@@ -17,9 +18,12 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/common/origin_util.h"
+#include "content/public/common/url_constants.h"
 #include "net/base/url_util.h"
 #include "third_party/blink/public/common/manifest/manifest_icon_selector.h"
 #include "third_party/blink/public/common/manifest/web_display_mode.h"
+#include "url/origin.h"
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/shortcut_helper.h"
@@ -62,16 +66,26 @@ int GetIdealBadgeIconSizeInPx() {
 #endif
 }
 
+using IconPurpose = blink::Manifest::ImageResource::Purpose;
+
 // Returns true if the overall security state of |web_contents| is sufficient to
 // be considered installable.
 bool IsContentSecure(content::WebContents* web_contents) {
   if (!web_contents)
     return false;
 
-  // Whitelist localhost. Check the VisibleURL to match what the
-  // SecurityStateTabHelper looks at.
-  if (net::IsLocalhost(web_contents->GetVisibleURL()))
+  // chrome:// URLs are considered secure.
+  const GURL& url = web_contents->GetVisibleURL();
+  if (url.scheme() == content::kChromeUIScheme)
     return true;
+
+  // SecurityStateTabHelper ignores origins that are manually listed as secure.
+  // Check those explicitly, using the VisibleURL to match what
+  // SecurityStateTabHelper looks at.
+  if (net::IsLocalhost(url) ||
+      content::IsWhitelistedAsSecureOrigin(url::Origin::Create(url))) {
+    return true;
+  }
 
   security_state::SecurityInfo security_info;
   SecurityStateTabHelper::FromWebContents(web_contents)
@@ -211,13 +225,40 @@ void InstallableManager::RecordAddToHomescreenInstallabilityTimeout() {
   metrics_->RecordAddToHomescreenInstallabilityTimeout();
 }
 
+bool InstallableManager::IsContentSecureForTesting() {
+  return IsContentSecure(web_contents());
+}
+
 bool InstallableManager::IsIconFetched(const IconPurpose purpose) const {
   const auto it = icons_.find(purpose);
   return it != icons_.end() && it->second.fetched;
 }
 
+bool InstallableManager::IsPrimaryIconFetched(
+    const InstallableParams& params) const {
+  return IsIconFetched(GetPrimaryIconPurpose(params));
+}
+
 void InstallableManager::SetIconFetched(const IconPurpose purpose) {
   icons_[purpose].fetched = true;
+}
+
+IconPurpose InstallableManager::GetPrimaryIconPurpose(
+    const InstallableParams& params) const {
+  if (params.prefer_maskable_icon) {
+    const auto it = icons_.find(IconPurpose::MASKABLE);
+
+    // If we haven't attempted fetching the maskable icon yet, we still plan
+    // to use that one for primary.
+    if (it == icons_.end() || !it->second.fetched)
+      return IconPurpose::MASKABLE;
+
+    // If fetching was successful, use MASKABLE.
+    if (it->second.error == NO_ERROR_DETECTED)
+      return IconPurpose::MASKABLE;
+  }
+  // Otherwise fall back to ANY.
+  return IconPurpose::ANY;
 }
 
 InstallableStatusCode InstallableManager::GetErrorCode(
@@ -235,7 +276,7 @@ InstallableStatusCode InstallableManager::GetErrorCode(
     return worker_->error;
 
   if (params.valid_primary_icon) {
-    IconProperty& icon = icons_[IconPurpose::ANY];
+    IconProperty& icon = icons_[GetPrimaryIconPurpose(params)];
     if (icon.error != NO_ERROR_DETECTED)
       return icon.error;
   }
@@ -302,7 +343,7 @@ bool InstallableManager::IsComplete(const InstallableParams& params) const {
          manifest_->fetched &&
          (!params.valid_manifest || valid_manifest_->fetched) &&
          (!params.has_worker || worker_->fetched) &&
-         (!params.valid_primary_icon || IsIconFetched(IconPurpose::ANY)) &&
+         (!params.valid_primary_icon || IsPrimaryIconFetched(params)) &&
          (!params.valid_badge_icon || IsIconFetched(IconPurpose::BADGE));
 }
 
@@ -342,6 +383,7 @@ void InstallableManager::SetManifestDependentTasksComplete() {
   worker_->fetched = true;
   SetIconFetched(IconPurpose::ANY);
   SetIconFetched(IconPurpose::BADGE);
+  SetIconFetched(IconPurpose::MASKABLE);
 }
 
 void InstallableManager::RunCallback(const InstallableTask& task,
@@ -349,11 +391,15 @@ void InstallableManager::RunCallback(const InstallableTask& task,
   const InstallableParams& params = task.params;
   IconProperty null_icon;
   IconProperty* primary_icon = &null_icon;
+  bool has_maskable_primary_icon = false;
   IconProperty* badge_icon = &null_icon;
 
-  if (params.valid_primary_icon && base::ContainsKey(icons_, IconPurpose::ANY))
-    primary_icon = &icons_[IconPurpose::ANY];
-  if (params.valid_badge_icon && base::ContainsKey(icons_, IconPurpose::BADGE))
+  IconPurpose purpose = GetPrimaryIconPurpose(params);
+  if (params.valid_primary_icon && IsIconFetched(purpose)) {
+    primary_icon = &icons_[purpose];
+    has_maskable_primary_icon = (purpose == IconPurpose::MASKABLE);
+  }
+  if (params.valid_badge_icon && IsIconFetched(IconPurpose::BADGE))
     badge_icon = &icons_[IconPurpose::BADGE];
 
   InstallableData data = {
@@ -362,6 +408,7 @@ void InstallableManager::RunCallback(const InstallableTask& task,
       &manifest(),
       primary_icon->url,
       primary_icon->icon.get(),
+      has_maskable_primary_icon,
       badge_icon->url,
       badge_icon->icon.get(),
       valid_manifest_->is_valid,
@@ -399,11 +446,16 @@ void InstallableManager::WorkOnTask() {
     CheckEligiblity();
   } else if (!manifest_->fetched) {
     FetchManifest();
+  } else if (params.valid_primary_icon && params.prefer_maskable_icon &&
+             !IsIconFetched(IconPurpose::MASKABLE)) {
+    CheckAndFetchBestIcon(GetIdealPrimaryIconSizeInPx(),
+                          GetMinimumPrimaryIconSizeInPx(),
+                          IconPurpose::MASKABLE);
   } else if (params.valid_primary_icon && !IsIconFetched(IconPurpose::ANY)) {
     CheckAndFetchBestIcon(GetIdealPrimaryIconSizeInPx(),
                           GetMinimumPrimaryIconSizeInPx(), IconPurpose::ANY);
   } else if (params.valid_manifest && !valid_manifest_->fetched) {
-    CheckManifestValid();
+    CheckManifestValid(params.check_webapp_manifest_display);
   } else if (params.has_worker && !worker_->fetched) {
     CheckServiceWorker();
   } else if (params.valid_badge_icon && !IsIconFetched(IconPurpose::BADGE)) {
@@ -459,17 +511,20 @@ void InstallableManager::OnDidGetManifest(const GURL& manifest_url,
   WorkOnTask();
 }
 
-void InstallableManager::CheckManifestValid() {
+void InstallableManager::CheckManifestValid(
+    bool check_webapp_manifest_display) {
   DCHECK(!valid_manifest_->fetched);
   DCHECK(!manifest().IsEmpty());
 
-  valid_manifest_->is_valid = IsManifestValidForWebApp(manifest());
+  valid_manifest_->is_valid =
+      IsManifestValidForWebApp(manifest(), check_webapp_manifest_display);
   valid_manifest_->fetched = true;
   WorkOnTask();
 }
 
 bool InstallableManager::IsManifestValidForWebApp(
-    const blink::Manifest& manifest) {
+    const blink::Manifest& manifest,
+    bool check_webapp_manifest_display) {
   if (manifest.IsEmpty()) {
     valid_manifest_->error = MANIFEST_EMPTY;
     return false;
@@ -486,7 +541,8 @@ bool InstallableManager::IsManifestValidForWebApp(
     return false;
   }
 
-  if (manifest.display != blink::kWebDisplayModeStandalone &&
+  if (check_webapp_manifest_display &&
+      manifest.display != blink::kWebDisplayModeStandalone &&
       manifest.display != blink::kWebDisplayModeFullscreen &&
       manifest.display != blink::kWebDisplayModeMinimalUi) {
     valid_manifest_->error = MANIFEST_DISPLAY_NOT_SUPPORTED;
@@ -506,10 +562,9 @@ void InstallableManager::CheckServiceWorker() {
   DCHECK(!manifest().IsEmpty());
   DCHECK(manifest().start_url.is_valid());
 
-  // Check to see if there is a single service worker controlling this page
-  // and the manifest's start url.
+  // Check to see if there is a service worker for the manifest's start url.
   service_worker_context_->CheckHasServiceWorker(
-      GetWebContents()->GetLastCommittedURL(), manifest().start_url,
+      manifest().start_url,
       base::Bind(&InstallableManager::OnDidCheckHasServiceWorker,
                  weak_factory_.GetWeakPtr()));
 }
@@ -653,3 +708,5 @@ bool InstallableManager::valid_manifest() {
 bool InstallableManager::has_worker() {
   return worker_->has_worker;
 }
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(InstallableManager)

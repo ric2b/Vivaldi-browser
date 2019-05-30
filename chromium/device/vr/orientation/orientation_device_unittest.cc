@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
@@ -35,11 +36,11 @@ class FakeScreen : public display::Screen {
  public:
   FakeScreen() = default;
   ~FakeScreen() override = default;
-  display::Display GetPrimaryDisplay() const override { return display; };
+  display::Display GetPrimaryDisplay() const override { return display; }
 
   // Unused functions
-  gfx::Point GetCursorScreenPoint() override { return gfx::Point(); };
-  bool IsWindowUnderCursor(gfx::NativeWindow window) override { return false; };
+  gfx::Point GetCursorScreenPoint() override { return gfx::Point(); }
+  bool IsWindowUnderCursor(gfx::NativeWindow window) override { return false; }
   gfx::NativeWindow GetWindowAtScreenPoint(const gfx::Point& point) override {
     return nullptr;
   }
@@ -51,7 +52,7 @@ class FakeScreen : public display::Screen {
       const gfx::Point& point) const override {
     return display;
   }
-  int GetNumDisplays() const override { return 0; };
+  int GetNumDisplays() const override { return 0; }
   display::Display GetDisplayMatching(
       const gfx::Rect& match_rect) const override {
     return display;
@@ -84,7 +85,7 @@ class VROrientationDeviceTest : public testing::Test {
 
     shared_buffer_handle_ = mojo::SharedBufferHandle::Create(
         sizeof(SensorReadingSharedBuffer) *
-        static_cast<uint64_t>(mojom::SensorType::LAST));
+        (static_cast<uint64_t>(mojom::SensorType::kMaxValue) + 1));
 
     shared_buffer_mapping_ = shared_buffer_handle_->MapAtOffset(
         mojom::SensorInitParams::kReadBufferSizeForTests, GetBufferOffset());
@@ -134,7 +135,7 @@ class VROrientationDeviceTest : public testing::Test {
 
     base::RunLoop loop;
 
-    device_->OnMagicWindowFrameDataRequest(base::BindOnce(
+    device_->OnGetInlineFrameData(base::BindOnce(
         [](base::OnceClosure quit_closure,
            base::OnceCallback<void(mojom::VRPosePtr)> callback,
            mojom::XRFrameDataPtr ptr) {
@@ -233,7 +234,7 @@ TEST_F(VROrientationDeviceTest, SensorIsAvailableTest) {
 }
 
 TEST_F(VROrientationDeviceTest, GetOrientationTest) {
-  // Tests that OnMagicWindowFrameDataRequest returns a pose ptr without mishap.
+  // Tests that OnGetInlineFrameData returns a pose ptr without mishap.
 
   InitializeDevice(FakeInitParams());
 

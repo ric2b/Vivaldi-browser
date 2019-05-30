@@ -69,7 +69,6 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   RenderWidgetHostViewBase* GetParentView() override;
 
   // RenderWidgetHostView implementation.
-  bool OnMessageReceived(const IPC::Message& msg) override;
   void InitAsChild(gfx::NativeView parent_view) override;
   void SetSize(const gfx::Size& size) override;
   void SetBounds(const gfx::Rect& rect) override;
@@ -83,10 +82,6 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   gfx::Rect GetBoundsInRootWindow() override;
   gfx::Size GetCompositorViewportPixelSize() const override;
   base::string16 GetSelectedText() override;
-  base::string16 GetSurroundingText() override;
-  gfx::Range GetSelectedRange() override;
-  size_t GetOffsetForSurroundingText() override;
-  void SetNeedsBeginFrames(bool needs_begin_frames) override;
   TouchSelectionControllerClientManager*
   GetTouchSelectionControllerClientManager() override;
   gfx::PointF TransformPointToRootCoordSpaceF(
@@ -121,7 +116,7 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
                         size_t offset,
                         const gfx::Range& range) override;
   void SelectionBoundsChanged(
-      const ViewHostMsg_SelectionBounds_Params& params) override;
+      const WidgetHostMsg_SelectionBounds_Params& params) override;
   void PreProcessMouseEvent(const blink::WebMouseEvent& event) override;
   void PreProcessTouchEvent(const blink::WebTouchEvent& event) override;
 
@@ -129,7 +124,8 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   bool LockMouse() override;
   void UnlockMouse() override;
   viz::FrameSinkId GetRootFrameSinkId() override;
-  const viz::LocalSurfaceId& GetLocalSurfaceId() const override;
+  const viz::LocalSurfaceIdAllocation& GetLocalSurfaceIdAllocation()
+      const override;
   void DidCreateNewRendererCompositorFrameSink(
       viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink)
       override;
@@ -171,8 +167,6 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
  private:
   friend class RenderWidgetHostView;
 
-  void FirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
-
   void OnDidUpdateVisualPropertiesComplete(
       const cc::RenderFrameMetadata& metadata);
 
@@ -188,6 +182,7 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   // TODO(wjmaclean): When we remove BrowserPlugin, delete this code.
   // http://crbug.com/533069
   void MaybeSendSyntheticTapGesture(
+      RenderWidgetHostViewBase* owner_view,
       const blink::WebFloatPoint& position,
       const blink::WebFloatPoint& screen_position) const;
 
@@ -195,8 +190,8 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
                           int browser_plugin_instance_id,
                           const blink::WebInputEvent* event);
 
-  void ProcessTouchpadPinchAckInRoot(const blink::WebGestureEvent& event,
-                                     InputEventAckState ack_result);
+  void ProcessTouchpadZoomEventAckInRoot(const blink::WebGestureEvent& event,
+                                         InputEventAckState ack_result);
 
 #if defined(USE_AURA)
   void OnGotEmbedToken(const base::UnguessableToken& token);

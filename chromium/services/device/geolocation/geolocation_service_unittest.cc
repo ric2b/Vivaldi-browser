@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
 #include "base/run_loop.h"
 #include "base/test/bind_test_util.h"
 #include "build/build_config.h"
@@ -10,6 +11,7 @@
 #include "chromeos/network/geolocation_handler.h"
 #endif
 #include "mojo/public/cpp/bindings/interface_ptr.h"
+#include "net/base/network_change_notifier.h"
 #include "services/device/device_service_test_base.h"
 #include "services/device/geolocation/geolocation_provider_impl.h"
 #include "services/device/geolocation/network_location_request.h"
@@ -37,12 +39,14 @@ class GeolocationServiceUnitTest : public DeviceServiceTestBase {
 
  protected:
   void SetUp() override {
-    DeviceServiceTestBase::SetUp();
-
 #if defined(OS_CHROMEOS)
     chromeos::DBusThreadManager::Initialize();
     chromeos::NetworkHandler::Initialize();
 #endif
+    network_change_notifier_.reset(net::NetworkChangeNotifier::CreateMock());
+    // We need to initialize the above *before* the base fixture instantiates
+    // the device service.
+    DeviceServiceTestBase::SetUp();
 
     connector()->BindInterface(mojom::kServiceName, &geolocation_control_);
     geolocation_control_->UserDidOptIntoLocationServices();
@@ -72,6 +76,7 @@ class GeolocationServiceUnitTest : public DeviceServiceTestBase {
     connector()->BindInterface(mojom::kServiceName, &geolocation_config_);
   }
 
+  std::unique_ptr<net::NetworkChangeNotifier> network_change_notifier_;
   mojom::GeolocationControlPtr geolocation_control_;
   mojom::GeolocationContextPtr geolocation_context_;
   mojom::GeolocationPtr geolocation_;
@@ -102,7 +107,13 @@ TEST_F(GeolocationServiceUnitTest, UrlWithApiKey) {
 }
 #endif
 
-TEST_F(GeolocationServiceUnitTest, GeolocationConfig) {
+// TODO(https://crbug.com/912057): Flaky on Chrome OS / Fails often on *San.
+#if defined(OS_CHROMEOS)
+#define MAYBE_GeolocationConfig DISABLED_GeolocationConfig
+#else
+#define MAYBE_GeolocationConfig GeolocationConfig
+#endif
+TEST_F(GeolocationServiceUnitTest, MAYBE_GeolocationConfig) {
   BindGeolocationConfig();
   {
     base::RunLoop run_loop;

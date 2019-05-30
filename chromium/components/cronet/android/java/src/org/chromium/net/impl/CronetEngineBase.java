@@ -6,12 +6,6 @@ package org.chromium.net.impl;
 import android.support.annotation.IntDef;
 import android.support.annotation.Nullable;
 
-import static org.chromium.net.UrlRequest.Builder.REQUEST_PRIORITY_HIGHEST;
-import static org.chromium.net.UrlRequest.Builder.REQUEST_PRIORITY_IDLE;
-import static org.chromium.net.UrlRequest.Builder.REQUEST_PRIORITY_LOW;
-import static org.chromium.net.UrlRequest.Builder.REQUEST_PRIORITY_LOWEST;
-import static org.chromium.net.UrlRequest.Builder.REQUEST_PRIORITY_MEDIUM;
-
 import org.chromium.net.BidirectionalStream;
 import org.chromium.net.ExperimentalBidirectionalStream;
 import org.chromium.net.ExperimentalCronetEngine;
@@ -108,10 +102,9 @@ public abstract class CronetEngineBase extends ExperimentalCronetEngine {
         return new UrlRequestBuilderImpl(url, callback, executor, this);
     }
 
-    @IntDef({
-            REQUEST_PRIORITY_IDLE, REQUEST_PRIORITY_LOWEST, REQUEST_PRIORITY_LOW,
-            REQUEST_PRIORITY_MEDIUM, REQUEST_PRIORITY_HIGHEST,
-    })
+    @IntDef({UrlRequest.Builder.REQUEST_PRIORITY_IDLE, UrlRequest.Builder.REQUEST_PRIORITY_LOWEST,
+            UrlRequest.Builder.REQUEST_PRIORITY_LOW, UrlRequest.Builder.REQUEST_PRIORITY_MEDIUM,
+            UrlRequest.Builder.REQUEST_PRIORITY_HIGHEST})
     @Retention(RetentionPolicy.SOURCE)
     public @interface RequestPriority {}
 

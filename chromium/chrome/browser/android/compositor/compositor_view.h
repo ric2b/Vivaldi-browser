@@ -15,12 +15,13 @@
 #include "cc/resources/ui_resource_client.h"
 #include "content/public/browser/android/compositor_client.h"
 #include "content/public/browser/browser_child_process_observer.h"
+#include "content/public/browser/gpu_feature_checker.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 namespace cc {
 class Layer;
 class SolidColorLayer;
-}
+}  // namespace cc
 
 namespace content {
 class Compositor;
@@ -30,7 +31,7 @@ namespace ui {
 class WindowAndroid;
 class ResourceManager;
 class UIResourceProvider;
-}
+}  // namespace ui
 
 namespace android {
 
@@ -67,6 +68,7 @@ class CompositorView : public content::CompositorClient,
                       jint format,
                       jint width,
                       jint height,
+                      bool backed_by_surface_texture,
                       const base::android::JavaParamRef<jobject>& surface);
   void OnPhysicalBackingSizeChanged(
       JNIEnv* env,
@@ -87,6 +89,7 @@ class CompositorView : public content::CompositorClient,
       const base::android::JavaParamRef<jobject>& window_android);
 
   // CompositorClient implementation:
+  void RecreateSurface() override;
   void UpdateLayerTreeHost() override;
   void DidSwapFrame(int pending_frames) override;
   void DidSwapBuffers(const gfx::Size& swap_size) override;
@@ -101,6 +104,7 @@ class CompositorView : public content::CompositorClient,
       const content::ChildProcessTerminationInfo& info) override;
 
   void SetBackground(bool visible, SkColor color);
+  void OnSurfaceControlFeatureStatusUpdate(bool available);
 
   base::android::ScopedJavaGlobalRef<jobject> obj_;
   std::unique_ptr<content::Compositor> compositor_;
@@ -114,6 +118,8 @@ class CompositorView : public content::CompositorClient,
   int content_width_;
   int content_height_;
   bool overlay_video_mode_;
+
+  scoped_refptr<content::GpuFeatureChecker> surface_control_feature_checker_;
 
   base::WeakPtrFactory<CompositorView> weak_factory_;
 

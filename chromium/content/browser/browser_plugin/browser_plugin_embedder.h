@@ -83,11 +83,6 @@ class CONTENT_EXPORT BrowserPluginEmbedder : public WebContentsObserver {
   // are currently audible.
   bool AreAnyGuestsCurrentlyAudible();
 
-  // TODO(ekaramad): This is solely used for BrowserPlugin. Remove when issue
-  // https://crbug.com/533069 is fixed.
-  // Returns true if there are any focused guests inside the embedder.
-  bool AreAnyGuestsFocused();
-
  private:
   explicit BrowserPluginEmbedder(WebContentsImpl* web_contents);
 

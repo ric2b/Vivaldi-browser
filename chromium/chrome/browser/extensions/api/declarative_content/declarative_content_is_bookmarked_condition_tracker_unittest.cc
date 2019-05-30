@@ -22,7 +22,6 @@
 #include "components/bookmarks/browser/scoped_group_bookmark_actions.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "content/public/browser/navigation_controller.h"
-#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
@@ -32,7 +31,7 @@ namespace extensions {
 
 namespace {
 
-scoped_refptr<Extension> CreateExtensionWithBookmarksPermission(
+scoped_refptr<const Extension> CreateExtensionWithBookmarksPermission(
     bool include_bookmarks) {
   ListBuilder permissions;
   permissions.Append("declarativeContent");
@@ -56,7 +55,8 @@ std::unique_ptr<DeclarativeContentIsBookmarkedPredicate> CreatePredicate(
   std::unique_ptr<DeclarativeContentIsBookmarkedPredicate> predicate =
       DeclarativeContentIsBookmarkedPredicate::Create(
           evaluator, extension,
-          *base::test::ParseJson(is_bookmarked ? "true" : "false"), &error);
+          *base::test::ParseJsonDeprecated(is_bookmarked ? "true" : "false"),
+          &error);
   EXPECT_EQ("", error);
   EXPECT_TRUE(predicate);
   EXPECT_EQ(is_bookmarked, predicate->is_bookmarked());
@@ -150,7 +150,7 @@ class DeclarativeContentIsBookmarkedConditionTrackerTest
   Delegate delegate_;
   bookmarks::BookmarkModel* bookmark_model_;
   std::unique_ptr<DeclarativeContentIsBookmarkedConditionTracker> tracker_;
-  scoped_refptr<Extension> extension_;
+  scoped_refptr<const Extension> extension_;
   std::unique_ptr<DeclarativeContentIsBookmarkedPredicate>
       is_bookmarked_predicate_;
   std::unique_ptr<DeclarativeContentIsBookmarkedPredicate>
@@ -164,12 +164,13 @@ class DeclarativeContentIsBookmarkedConditionTrackerTest
 // Tests that condition with isBookmarked requires "bookmarks" permission.
 TEST(DeclarativeContentIsBookmarkedPredicateTest,
      IsBookmarkedPredicateRequiresBookmarkPermissionPermission) {
-  scoped_refptr<Extension> extension =
+  scoped_refptr<const Extension> extension =
       CreateExtensionWithBookmarksPermission(false);
   std::string error;
   std::unique_ptr<DeclarativeContentIsBookmarkedPredicate> predicate =
       DeclarativeContentIsBookmarkedPredicate::Create(
-          nullptr, extension.get(), *base::test::ParseJson("true"), &error);
+          nullptr, extension.get(), *base::test::ParseJsonDeprecated("true"),
+          &error);
   EXPECT_THAT(error, HasSubstr("requires 'bookmarks' permission"));
   EXPECT_FALSE(predicate);
 }
@@ -177,19 +178,20 @@ TEST(DeclarativeContentIsBookmarkedPredicateTest,
 // Tests an invalid isBookmarked value type.
 TEST(DeclarativeContentIsBookmarkedPredicateTest,
      WrongIsBookmarkedPredicateDatatype) {
-  scoped_refptr<Extension> extension =
+  scoped_refptr<const Extension> extension =
       CreateExtensionWithBookmarksPermission(true);
   std::string error;
   std::unique_ptr<DeclarativeContentIsBookmarkedPredicate> predicate =
       DeclarativeContentIsBookmarkedPredicate::Create(
-          nullptr, extension.get(), *base::test::ParseJson("[]"), &error);
+          nullptr, extension.get(), *base::test::ParseJsonDeprecated("[]"),
+          &error);
   EXPECT_THAT(error, HasSubstr("invalid type"));
   EXPECT_FALSE(predicate);
 }
 
 // Tests isBookmark: true. Predicate state is checked in CreatePredicate().
 TEST(DeclarativeContentIsBookmarkedPredicateTest, IsBookmarkedPredicateTrue) {
-  scoped_refptr<Extension> extension =
+  scoped_refptr<const Extension> extension =
       CreateExtensionWithBookmarksPermission(true);
   std::unique_ptr<DeclarativeContentIsBookmarkedPredicate> predicate =
       CreatePredicate(nullptr, extension.get(), true);
@@ -197,7 +199,7 @@ TEST(DeclarativeContentIsBookmarkedPredicateTest, IsBookmarkedPredicateTrue) {
 
 // Tests isBookmark: false. Predicate state is checked in CreatePredicate().
 TEST(DeclarativeContentIsBookmarkedPredicateTest, IsBookmarkedPredicateFalse) {
-  scoped_refptr<Extension> extension =
+  scoped_refptr<const Extension> extension =
       CreateExtensionWithBookmarksPermission(true);
   std::unique_ptr<DeclarativeContentIsBookmarkedPredicate> predicate =
       CreatePredicate(nullptr, extension.get(), false);
@@ -238,10 +240,7 @@ TEST_F(DeclarativeContentIsBookmarkedConditionTrackerTest,
   // Navigate the first tab to a URL that we will bookmark.
   delegate_.evaluation_requests().clear();
   LoadURL(tabs[0].get(), GURL("http://bookmarked/"));
-  std::unique_ptr<content::NavigationHandle> navigation_handle =
-      content::NavigationHandle::CreateNavigationHandleForTesting(
-          GURL(), tabs[0]->GetMainFrame(), true);
-  tracker_->OnWebContentsNavigation(tabs[0].get(), navigation_handle.get());
+  tracker_->OnWebContentsNavigation(tabs[0].get(), nullptr);
   EXPECT_THAT(delegate_.evaluation_requests(),
               UnorderedElementsAre(tabs[0].get()));
   EXPECT_TRUE(CheckPredicates(tabs[0].get(), false));
@@ -284,10 +283,7 @@ TEST_F(DeclarativeContentIsBookmarkedConditionTrackerTest, ExtensiveChanges) {
   // Navigate the first tab to a URL that we will bookmark.
   delegate_.evaluation_requests().clear();
   LoadURL(tabs[0].get(), GURL("http://bookmarked/"));
-  std::unique_ptr<content::NavigationHandle> navigation_handle =
-      content::NavigationHandle::CreateNavigationHandleForTesting(
-          GURL(), tabs[0]->GetMainFrame(), true);
-  tracker_->OnWebContentsNavigation(tabs[0].get(), navigation_handle.get());
+  tracker_->OnWebContentsNavigation(tabs[0].get(), nullptr);
   EXPECT_THAT(delegate_.evaluation_requests(),
               UnorderedElementsAre(tabs[0].get()));
   EXPECT_TRUE(CheckPredicates(tabs[0].get(), false));
@@ -388,10 +384,7 @@ TEST_F(DeclarativeContentIsBookmarkedConditionTrackerTest, Navigation) {
   // Navigate the first tab to one bookmarked URL.
   delegate_.evaluation_requests().clear();
   LoadURL(tabs[0].get(), GURL("http://bookmarked1/"));
-  std::unique_ptr<content::NavigationHandle> navigation_handle =
-      content::NavigationHandle::CreateNavigationHandleForTesting(
-          GURL(), tabs[0]->GetMainFrame(), true);
-  tracker_->OnWebContentsNavigation(tabs[0].get(), navigation_handle.get());
+  tracker_->OnWebContentsNavigation(tabs[0].get(), nullptr);
   EXPECT_THAT(delegate_.evaluation_requests(),
               UnorderedElementsAre(tabs[0].get()));
   EXPECT_TRUE(CheckPredicates(tabs[0].get(), true));
@@ -402,7 +395,7 @@ TEST_F(DeclarativeContentIsBookmarkedConditionTrackerTest, Navigation) {
   // bookmarked state hasn't.
   delegate_.evaluation_requests().clear();
   LoadURL(tabs[0].get(), GURL("http://bookmarked2/"));
-  tracker_->OnWebContentsNavigation(tabs[0].get(), navigation_handle.get());
+  tracker_->OnWebContentsNavigation(tabs[0].get(), nullptr);
   EXPECT_THAT(delegate_.evaluation_requests(),
               UnorderedElementsAre(tabs[0].get()));
   EXPECT_TRUE(CheckPredicates(tabs[0].get(), true));
@@ -411,7 +404,7 @@ TEST_F(DeclarativeContentIsBookmarkedConditionTrackerTest, Navigation) {
   // Navigate the first tab to a non-bookmarked URL.
   delegate_.evaluation_requests().clear();
   LoadURL(tabs[0].get(), GURL("http://not-bookmarked1/"));
-  tracker_->OnWebContentsNavigation(tabs[0].get(), navigation_handle.get());
+  tracker_->OnWebContentsNavigation(tabs[0].get(), nullptr);
   EXPECT_THAT(delegate_.evaluation_requests(),
               UnorderedElementsAre(tabs[0].get()));
   EXPECT_TRUE(CheckPredicates(tabs[0].get(), false));
@@ -422,7 +415,7 @@ TEST_F(DeclarativeContentIsBookmarkedConditionTrackerTest, Navigation) {
   // bookmarked state hasn't.
   delegate_.evaluation_requests().clear();
   LoadURL(tabs[0].get(), GURL("http://not-bookmarked2/"));
-  tracker_->OnWebContentsNavigation(tabs[0].get(), navigation_handle.get());
+  tracker_->OnWebContentsNavigation(tabs[0].get(), nullptr);
   EXPECT_THAT(delegate_.evaluation_requests(),
               UnorderedElementsAre(tabs[0].get()));
   EXPECT_TRUE(CheckPredicates(tabs[0].get(), false));

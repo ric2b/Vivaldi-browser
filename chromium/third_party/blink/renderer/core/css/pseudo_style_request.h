@@ -24,15 +24,15 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_PSEUDO_STYLE_REQUEST_H_
 
 #include "third_party/blink/renderer/core/layout/layout_scrollbar.h"
+#include "third_party/blink/renderer/core/scroll/scroll_types.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_types.h"
 
 namespace blink {
 
 class ComputedStyle;
 
 class PseudoStyleRequest {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+  DISALLOW_NEW();
 
  public:
   enum RequestType { kForRenderer, kForComputedStyle };

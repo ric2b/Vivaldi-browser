@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -13,27 +14,33 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
+#include "base/test/test_mock_time_task_runner.h"
 #include "base/test/test_simple_task_runner.h"
+#include "base/time/time.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/policy/user_cloud_policy_token_forwarder.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/stub_install_attributes.h"
 #include "chrome/browser/policy/cloud/cloud_policy_test_utils.h"
 #include "chrome/browser/prefs/browser_prefs.h"
-#include "chrome/browser/signin/fake_profile_oauth2_token_service_builder.h"
-#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/policy/core/common/cloud/cloud_external_data_manager.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
+#include "components/policy/core/common/cloud/cloud_policy_refresh_scheduler.h"
 #include "components/policy/core/common/cloud/mock_cloud_external_data_manager.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_store.h"
 #include "components/policy/core/common/cloud/mock_device_management_service.h"
@@ -45,9 +52,6 @@
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
-#include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
-#include "components/signin/core/browser/profile_oauth2_token_service.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -59,6 +63,7 @@
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_status.h"
+#include "services/identity/public/cpp/identity_manager.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
@@ -77,6 +82,9 @@ using testing::_;
 
 namespace {
 
+const char kUMAReregistrationResult[] =
+    "Enterprise.UserPolicyChromeOS.ReregistrationResult";
+
 enum PolicyRequired { POLICY_NOT_REQUIRED, POLICY_REQUIRED };
 
 }  // namespace
@@ -85,28 +93,21 @@ namespace policy {
 
 using PolicyEnforcement = UserCloudPolicyManagerChromeOS::PolicyEnforcement;
 
-constexpr char kAccountId[] = "user@example.com";
+constexpr char kEmail[] = "user@example.com";
 constexpr char kTestGaiaId[] = "12345";
-
-constexpr char kChildAccountId[] = "child@example.com";
-constexpr char kChildTestGaiaId[] = "54321";
-
-constexpr char kOAuthCodeCookie[] = "oauth_code=1234; Secure; HttpOnly";
-
-constexpr char kOAuth2TokenPairData[] = R"(
-    {
-      "refresh_token": "1234",
-      "access_token": "5678",
-      "expires_in": 3600
-    })";
 
 constexpr char kOAuth2AccessTokenData[] = R"(
     {
       "access_token": "5678",
       "expires_in": 3600
     })";
+constexpr char kOAuthToken[] = "5678";
+constexpr char kDMToken[] = "dmtoken123";
 
-class UserCloudPolicyManagerChromeOSTest : public testing::Test {
+// UserCloudPolicyManagerChromeOS test class that can be used with different
+// feature flags.
+class UserCloudPolicyManagerChromeOSTest
+    : public testing::TestWithParam<std::vector<base::Feature>> {
  public:
   // Note: This method has to be public, so that a pointer to it may be obtained
   // in the test.
@@ -128,7 +129,7 @@ class UserCloudPolicyManagerChromeOSTest : public testing::Test {
   UserCloudPolicyManagerChromeOSTest()
       : store_(nullptr),
         external_data_manager_(nullptr),
-        task_runner_(new base::TestSimpleTaskRunner()),
+        task_runner_(base::MakeRefCounted<base::TestMockTimeTaskRunner>()),
         profile_(nullptr),
         signin_profile_(nullptr),
         user_manager_(new chromeos::FakeChromeUserManager()),
@@ -140,33 +141,28 @@ class UserCloudPolicyManagerChromeOSTest : public testing::Test {
             base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
                 &test_system_url_loader_factory_)) {}
 
-  void AddAndSwitchToChildAccountWithProfile() {
-    const AccountId child_account_id =
-        AccountId::FromUserEmailGaiaId(kChildAccountId, kChildTestGaiaId);
-    TestingProfile* profile =
-        profile_manager_->CreateTestingProfile(child_account_id.GetUserEmail());
-    user_manager_->AddUserWithAffiliationAndTypeAndProfile(
-        child_account_id, false, user_manager::UserType::USER_TYPE_CHILD,
-        profile);
-    user_manager_->SwitchActiveUser(child_account_id);
-  }
-
   void SetUp() override {
     chromeos::DBusThreadManager::Initialize();
+
+    scoped_feature_list_.InitWithFeatures(
+        GetParam() /* enabled_features */,
+        std::vector<base::Feature>() /* disabled_features */);
 
     // The initialization path that blocks on the initial policy fetch requires
     // a signin Profile to use its URLRequestContext.
     profile_manager_.reset(
         new TestingProfileManager(TestingBrowserProcess::GetGlobal()));
     ASSERT_TRUE(profile_manager_->SetUp());
-    TestingProfile::TestingFactories factories;
-    factories.push_back(
-        std::make_pair(ProfileOAuth2TokenServiceFactory::GetInstance(),
-                       BuildFakeProfileOAuth2TokenService));
+    TestingProfile::TestingFactories factories =
+        IdentityTestEnvironmentProfileAdaptor::
+            GetIdentityTestEnvironmentFactories();
     profile_ = profile_manager_->CreateTestingProfile(
         chrome::kInitialProfile,
         std::unique_ptr<sync_preferences::PrefServiceSyncable>(),
-        base::UTF8ToUTF16(""), 0, std::string(), factories);
+        base::UTF8ToUTF16(""), 0, std::string(), std::move(factories));
+    identity_test_env_profile_adaptor_ =
+        std::make_unique<IdentityTestEnvironmentProfileAdaptor>(profile_);
+
     // Usually the signin Profile and the main Profile are separate, but since
     // the signin Profile is an OTR Profile then for this test it suffices to
     // attach it to the main Profile.
@@ -187,31 +183,29 @@ class UserCloudPolicyManagerChromeOSTest : public testing::Test {
     // Create fake policy blobs to deliver to the client.
     em::DeviceRegisterResponse* register_response =
         register_blob_.mutable_register_response();
-    register_response->set_device_management_token("dmtoken123");
+    register_response->set_device_management_token(kDMToken);
 
     em::CloudPolicySettings policy_proto;
     policy_proto.mutable_homepagelocation()->set_value("http://chromium.org");
     ASSERT_TRUE(
         policy_proto.SerializeToString(policy_data_.mutable_policy_value()));
     policy_data_.set_policy_type(dm_protocol::kChromeUserPolicyType);
-    policy_data_.set_request_token("dmtoken123");
+    policy_data_.set_request_token(kDMToken);
     policy_data_.set_device_id("id987");
     policy_data_.set_username("user@example.com");
     em::PolicyFetchResponse* policy_response =
-        policy_blob_.mutable_policy_response()->add_response();
+        policy_blob_.mutable_policy_response()->add_responses();
     ASSERT_TRUE(policy_data_.SerializeToString(
         policy_response->mutable_policy_data()));
 
-    EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _))
+    EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _, _))
         .Times(AnyNumber());
 
-    AccountId account_id =
-        AccountId::FromUserEmailGaiaId(kAccountId, kTestGaiaId);
-    user_manager_->AddUser(account_id);
+    AccountId account_id = AccountId::FromUserEmailGaiaId(kEmail, kTestGaiaId);
     TestingProfile* profile =
         profile_manager_->CreateTestingProfile(account_id.GetUserEmail());
-    user_manager_->AddUserWithAffiliationAndTypeAndProfile(
-        account_id, false, user_manager::UserType::USER_TYPE_REGULAR, profile);
+    user_manager_->AddUserWithAffiliationAndTypeAndProfile(account_id, false,
+                                                           user_type_, profile);
     user_manager_->SwitchActiveUser(account_id);
     ASSERT_TRUE(user_manager_->GetActiveUser());
   }
@@ -226,6 +220,7 @@ class UserCloudPolicyManagerChromeOSTest : public testing::Test {
     }
     signin_profile_ = NULL;
     profile_ = NULL;
+    identity_test_env_profile_adaptor_.reset();
     profile_manager_->DeleteTestingProfile(chrome::kInitialProfile);
     test_system_shared_loader_factory_->Detach();
     test_signin_shared_loader_factory_->Detach();
@@ -262,56 +257,34 @@ class UserCloudPolicyManagerChromeOSTest : public testing::Test {
       GaiaUrls* gaia_urls = GaiaUrls::GetInstance();
 
       network::URLLoaderCompletionStatus ok_completion_status(net::OK);
-      // Raw headers are needed on the ResourceResponseHead for cookies to be
-      // accessible.
-      network::ResourceResponseHead ok_response_with_oauth_cookie =
-          network::CreateResourceResponseHead(net::HTTP_OK,
-                                              /*report_raw_headers=*/true);
-      network::AddCookiesToResourceResponseHead({kOAuthCodeCookie},
-                                                &ok_response_with_oauth_cookie);
-
-      // Issue the oauth_token cookie first.
-      if (!test_signin_url_loader_factory_.SimulateResponseForPendingRequest(
-              gaia_urls->deprecated_client_login_to_oauth2_url(),
-              ok_completion_status, ok_response_with_oauth_cookie,
-              /*content=*/"",
-              /*flags=*/network::TestURLLoaderFactory::kUrlMatchPrefix))
-        return nullptr;
-
       network::ResourceResponseHead ok_response =
           network::CreateResourceResponseHead(net::HTTP_OK);
-      // Issue the refresh token.
-      if (!test_signin_url_loader_factory_.SimulateResponseForPendingRequest(
-              gaia_urls->oauth2_token_url(), ok_completion_status, ok_response,
-              kOAuth2TokenPairData))
-        return nullptr;
-
       // Issue the access token.
       EXPECT_TRUE(
           test_system_url_loader_factory_.SimulateResponseForPendingRequest(
               gaia_urls->oauth2_token_url(), ok_completion_status, ok_response,
               kOAuth2AccessTokenData));
     } else {
-      // Since the refresh token is available, OAuth2TokenService was used
+      // Since the refresh token is available, IdentityManager was used
       // to request the access token and not UserCloudPolicyTokenForwarder.
       // Issue the access token with the former.
-      FakeProfileOAuth2TokenService* token_service =
-        static_cast<FakeProfileOAuth2TokenService*>(
-            ProfileOAuth2TokenServiceFactory::GetForProfile(profile_));
-      EXPECT_TRUE(token_service);
-      OAuth2TokenService::ScopeSet scopes;
+      identity::ScopeSet scopes;
       scopes.insert(GaiaConstants::kDeviceManagementServiceOAuth);
       scopes.insert(GaiaConstants::kOAuthWrapBridgeUserInfoScope);
-      token_service->IssueTokenForScope(
-          scopes, "5678",
-          base::Time::Now() + base::TimeDelta::FromSeconds(3600));
+
+      identity_test_env()
+          ->WaitForAccessTokenRequestIfNecessaryAndRespondWithTokenForScopes(
+              kOAuthToken,
+              base::Time::Now() +
+                  base::TimeDelta::FromSeconds(3600) /*expiration*/,
+              std::string() /*id_token*/, scopes);
     }
 
     EXPECT_TRUE(register_request);
     EXPECT_FALSE(manager_->core()->client()->is_registered());
 
     Mock::VerifyAndClearExpectations(&device_management_service_);
-    EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _))
+    EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _, _))
         .Times(AnyNumber());
 
     return register_request;
@@ -325,13 +298,21 @@ class UserCloudPolicyManagerChromeOSTest : public testing::Test {
     EXPECT_CALL(device_management_service_,
                 CreateJob(DeviceManagementRequestJob::TYPE_POLICY_FETCH, _))
         .WillOnce(device_management_service_.CreateAsyncJob(&policy_request));
+    bool is_oauth_token_passed =
+        user_type_ == user_manager::UserType::USER_TYPE_CHILD &&
+        base::FeatureList::IsEnabled(features::kDMServerOAuthForChildUser);
+    EXPECT_CALL(device_management_service_,
+                StartJob(dm_protocol::kValueRequestPolicy, "" /* gaia_token */,
+                         is_oauth_token_passed ? kOAuthToken : "", kDMToken,
+                         "" /* enrollment_token */, _, _))
+        .Times(1);
     std::move(trigger_fetch).Run();
     ASSERT_TRUE(policy_request);
     EXPECT_TRUE(manager_->core()->service()->IsInitializationComplete());
     EXPECT_TRUE(manager_->core()->client()->is_registered());
 
     Mock::VerifyAndClearExpectations(&device_management_service_);
-    EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _))
+    EXPECT_CALL(device_management_service_, StartJob(_, _, _, _, _, _, _))
         .Times(AnyNumber());
 
     if (timeout) {
@@ -370,7 +351,7 @@ class UserCloudPolicyManagerChromeOSTest : public testing::Test {
   MockDeviceManagementService device_management_service_;
   MockCloudPolicyStore* store_;  // Not owned.
   MockCloudExternalDataManager* external_data_manager_;  // Not owned.
-  scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
+  scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
   SchemaRegistry schema_registry_;
   std::unique_ptr<UserCloudPolicyManagerChromeOS> manager_;
   std::unique_ptr<UserCloudPolicyTokenForwarder> token_forwarder_;
@@ -379,6 +360,9 @@ class UserCloudPolicyManagerChromeOSTest : public testing::Test {
   std::unique_ptr<TestingProfileManager> profile_manager_;
   TestingProfile* profile_;
   TestingProfile* signin_profile_;
+  std::unique_ptr<IdentityTestEnvironmentProfileAdaptor>
+      identity_test_env_profile_adaptor_;
+  user_manager::UserType user_type_ = user_manager::UserType::USER_TYPE_REGULAR;
 
   chromeos::FakeChromeUserManager* user_manager_;
   user_manager::ScopedUserManager user_manager_enabler_;
@@ -407,27 +391,25 @@ class UserCloudPolicyManagerChromeOSTest : public testing::Test {
         test_signin_shared_loader_factory_);
     manager_->SetSystemURLLoaderFactoryForTests(
         test_system_shared_loader_factory_);
-    should_create_token_forwarder_ = fetch_timeout.is_zero();
+    manager_->SetUserContextRefreshTokenForTests("fake-user-context-rt");
   }
 
   void InitAndConnectManager() {
     manager_->Init(&schema_registry_);
     manager_->Connect(&prefs_, &device_management_service_,
                       /*system_url_loader_factory=*/nullptr);
-    if (should_create_token_forwarder_) {
-      // Create the UserCloudPolicyTokenForwarder, which fetches the access
-      // token using the OAuth2PolicyFetcher and forwards it to the
-      // UserCloudPolicyManagerChromeOS. This service is automatically created
-      // for regular Profiles but not for testing Profiles.
-      ProfileOAuth2TokenService* token_service =
-          ProfileOAuth2TokenServiceFactory::GetForProfile(profile_);
-      ASSERT_TRUE(token_service);
-      SigninManagerBase* signin_manager =
-          SigninManagerFactory::GetForProfile(profile_);
-      ASSERT_TRUE(signin_manager);
-      token_forwarder_.reset(new UserCloudPolicyTokenForwarder(
-          manager_.get(), token_service, signin_manager));
-    }
+    // Create the UserCloudPolicyTokenForwarder, which fetches the access
+    // token using the IdentityManager and forwards it to the
+    // UserCloudPolicyManagerChromeOS. This service is automatically created
+    // for regular Profiles but not for testing Profiles.
+    identity::IdentityManager* identity_manager =
+        IdentityManagerFactory::GetForProfile(profile_);
+    ASSERT_TRUE(identity_manager);
+    token_forwarder_ = std::make_unique<UserCloudPolicyTokenForwarder>(
+        manager_.get(), identity_test_env()->identity_manager());
+    token_forwarder_->OverrideTimeForTesting(task_runner_->GetMockClock(),
+                                             task_runner_->GetMockTickClock(),
+                                             task_runner_);
   }
 
   network::TestURLLoaderFactory* test_signin_url_loader_factory() {
@@ -438,11 +420,14 @@ class UserCloudPolicyManagerChromeOSTest : public testing::Test {
     return &test_system_url_loader_factory_;
   }
 
+  identity::IdentityTestEnvironment* identity_test_env() {
+    return identity_test_env_profile_adaptor_->identity_test_env();
+  }
+
  private:
   // Invoked when a fatal error is encountered.
   void OnFatalErrorEncountered() { fatal_error_encountered_ = true; }
 
-  bool should_create_token_forwarder_ = false;
   bool fatal_error_encountered_ = false;
 
   network::TestURLLoaderFactory test_signin_url_loader_factory_;
@@ -453,10 +438,21 @@ class UserCloudPolicyManagerChromeOSTest : public testing::Test {
   scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
       test_system_shared_loader_factory_;
 
+  base::test::ScopedFeatureList scoped_feature_list_;
+
   DISALLOW_COPY_AND_ASSIGN(UserCloudPolicyManagerChromeOSTest);
 };
 
-TEST_F(UserCloudPolicyManagerChromeOSTest, BlockingFirstFetch) {
+// TODO(agawronska): Remove test instantiation with kDMServerOAuthForChildUser
+// once it is enabled by default.
+INSTANTIATE_TEST_SUITE_P(
+    /* no prefix */,
+    UserCloudPolicyManagerChromeOSTest,
+    testing::Values(std::vector<base::Feature>(),
+                    std::vector<base::Feature>{
+                        features::kDMServerOAuthForChildUser}));
+
+TEST_P(UserCloudPolicyManagerChromeOSTest, BlockingFirstFetch) {
   // Tests the initialization of a manager whose Profile is waiting for the
   // initial fetch, when the policy cache is empty.
   ASSERT_NO_FATAL_FAILURE(MakeManagerWithEmptyStore(
@@ -481,7 +477,7 @@ TEST_F(UserCloudPolicyManagerChromeOSTest, BlockingFirstFetch) {
               false);
 }
 
-TEST_F(UserCloudPolicyManagerChromeOSTest, BlockingRefreshFetch) {
+TEST_P(UserCloudPolicyManagerChromeOSTest, BlockingRefreshFetch) {
   // Tests the initialization of a manager whose Profile is waiting for the
   // refresh fetch, when a previously cached policy and DMToken already exist.
   ASSERT_NO_FATAL_FAILURE(MakeManagerWithEmptyStore(
@@ -495,7 +491,7 @@ TEST_F(UserCloudPolicyManagerChromeOSTest, BlockingRefreshFetch) {
               false);
 }
 
-TEST_F(UserCloudPolicyManagerChromeOSTest, SynchronousLoadWithEmptyStore) {
+TEST_P(UserCloudPolicyManagerChromeOSTest, SynchronousLoadWithEmptyStore) {
   // Tests the initialization of a manager who requires policy, but who
   // has no policy stored on disk. The manager should abort and exit the
   // session.
@@ -510,7 +506,7 @@ TEST_F(UserCloudPolicyManagerChromeOSTest, SynchronousLoadWithEmptyStore) {
   EXPECT_TRUE(manager_->core()->service()->IsInitializationComplete());
 }
 
-TEST_F(UserCloudPolicyManagerChromeOSTest, BlockingFetchStoreError) {
+TEST_P(UserCloudPolicyManagerChromeOSTest, BlockingFetchStoreError) {
   // Tests the initialization of a manager whose Profile is waiting for the
   // initial fetch, when the initial store load fails.
   ASSERT_NO_FATAL_FAILURE(MakeManagerWithEmptyStore(
@@ -535,7 +531,7 @@ TEST_F(UserCloudPolicyManagerChromeOSTest, BlockingFetchStoreError) {
               false);
 }
 
-TEST_F(UserCloudPolicyManagerChromeOSTest, BlockingFetchOAuthError) {
+TEST_P(UserCloudPolicyManagerChromeOSTest, BlockingFetchOAuthError) {
   // Tests the initialization of a manager whose Profile is waiting for the
   // initial fetch, when the OAuth2 token fetch fails. This should result in a
   // fatal error.
@@ -552,13 +548,13 @@ TEST_F(UserCloudPolicyManagerChromeOSTest, BlockingFetchOAuthError) {
   EXPECT_FALSE(manager_->IsInitializationComplete(POLICY_DOMAIN_CHROME));
   // The PolicyOAuth2TokenFetcher posts delayed retries on some errors. This
   // data will make it fail immediately.
+
   EXPECT_TRUE(
-      test_signin_url_loader_factory()->SimulateResponseForPendingRequest(
-          GaiaUrls::GetInstance()->deprecated_client_login_to_oauth2_url(),
+      test_system_url_loader_factory()->SimulateResponseForPendingRequest(
+          GaiaUrls::GetInstance()->oauth2_token_url(),
           network::URLLoaderCompletionStatus(net::OK),
           network::CreateResourceResponseHead(net::HTTP_BAD_REQUEST),
-          "Error=BadAuthentication",
-          /*flags=*/network::TestURLLoaderFactory::kUrlMatchPrefix));
+          "Error=BadAuthentication"));
 
   // Server check failed, so profile should not be initialized.
   EXPECT_FALSE(manager_->IsInitializationComplete(POLICY_DOMAIN_CHROME));
@@ -566,7 +562,7 @@ TEST_F(UserCloudPolicyManagerChromeOSTest, BlockingFetchOAuthError) {
   Mock::VerifyAndClearExpectations(&observer_);
 }
 
-TEST_F(UserCloudPolicyManagerChromeOSTest, BlockingFetchRegisterError) {
+TEST_P(UserCloudPolicyManagerChromeOSTest, BlockingFetchRegisterError) {
   // Tests the initialization of a manager whose Profile is waiting for the
   // initial fetch, when the device management registration fails.
   fatal_error_expected_ = true;
@@ -594,7 +590,7 @@ TEST_F(UserCloudPolicyManagerChromeOSTest, BlockingFetchRegisterError) {
   Mock::VerifyAndClearExpectations(&observer_);
 }
 
-TEST_F(UserCloudPolicyManagerChromeOSTest, BlockingFetchPolicyFetchError) {
+TEST_P(UserCloudPolicyManagerChromeOSTest, BlockingFetchPolicyFetchError) {
   // Tests the initialization of a manager whose Profile is waiting for the
   // initial fetch, when the policy fetch request fails.
   fatal_error_expected_ = true;
@@ -637,7 +633,7 @@ TEST_F(UserCloudPolicyManagerChromeOSTest, BlockingFetchPolicyFetchError) {
   EXPECT_TRUE(PolicyBundle().Equals(manager_->policies()));
 }
 
-TEST_F(UserCloudPolicyManagerChromeOSTest,
+TEST_P(UserCloudPolicyManagerChromeOSTest,
        NoCacheButPolicyExpectedRegistrationError) {
   // Tests the case where we have no local policy and the policy fetch
   // request fails, but we think we should have policy - this covers the
@@ -666,7 +662,7 @@ TEST_F(UserCloudPolicyManagerChromeOSTest,
   EXPECT_FALSE(manager_->core()->client()->is_registered());
 }
 
-TEST_F(UserCloudPolicyManagerChromeOSTest, NoCacheButPolicyExpectedFetchError) {
+TEST_P(UserCloudPolicyManagerChromeOSTest, NoCacheButPolicyExpectedFetchError) {
   // Tests the case where we have no local policy and the policy fetch
   // request fails, but we think we should have policy - this covers the
   // situation where local policy cache is lost due to disk corruption and
@@ -710,7 +706,7 @@ TEST_F(UserCloudPolicyManagerChromeOSTest, NoCacheButPolicyExpectedFetchError) {
   EXPECT_TRUE(PolicyBundle().Equals(manager_->policies()));
 }
 
-TEST_F(UserCloudPolicyManagerChromeOSTest, NonBlockingFirstFetch) {
+TEST_P(UserCloudPolicyManagerChromeOSTest, NonBlockingFirstFetch) {
   // Tests the first policy fetch request by a Profile that isn't managed.
   ASSERT_NO_FATAL_FAILURE(MakeManagerWithEmptyStore(
       base::TimeDelta(), PolicyEnforcement::kPolicyOptional));
@@ -731,18 +727,11 @@ TEST_F(UserCloudPolicyManagerChromeOSTest, NonBlockingFirstFetch) {
   // fetchers.
   EXPECT_FALSE(test_url_fetcher_factory_.GetFetcherByID(0));
 
-  // Set a fake refresh token at the OAuth2TokenService.
-  FakeProfileOAuth2TokenService* token_service =
-    static_cast<FakeProfileOAuth2TokenService*>(
-        ProfileOAuth2TokenServiceFactory::GetForProfile(profile_));
-  ASSERT_TRUE(token_service);
-  SigninManagerBase* signin_manager =
-      SigninManagerFactory::GetForProfile(profile_);
-  ASSERT_TRUE(signin_manager);
-  const std::string& account_id = signin_manager->GetAuthenticatedAccountId();
-  EXPECT_FALSE(token_service->RefreshTokenIsAvailable(account_id));
-  token_service->UpdateCredentials(account_id, "refresh_token");
-  EXPECT_TRUE(token_service->RefreshTokenIsAvailable(account_id));
+  AccountInfo account_info =
+      identity_test_env()->MakePrimaryAccountAvailable(kEmail);
+  EXPECT_TRUE(
+      identity_test_env()->identity_manager()->HasAccountWithRefreshToken(
+          account_info.account_id));
 
   // That should have notified the manager, which now issues the request for the
   // policy oauth token.
@@ -753,11 +742,11 @@ TEST_F(UserCloudPolicyManagerChromeOSTest, NonBlockingFirstFetch) {
   // The refresh scheduler takes care of the initial fetch for unmanaged users.
   // Running the task runner issues the initial fetch.
   FetchPolicy(
-      base::BindOnce(&base::TestSimpleTaskRunner::RunUntilIdle, task_runner_),
+      base::BindOnce(&base::TestMockTimeTaskRunner::RunUntilIdle, task_runner_),
       false);
 }
 
-TEST_F(UserCloudPolicyManagerChromeOSTest, BlockingRefreshFetchWithTimeout) {
+TEST_P(UserCloudPolicyManagerChromeOSTest, BlockingRefreshFetchWithTimeout) {
   // Tests the case where a profile has policy, but the refresh policy fetch
   // fails (times out) - ensures that we don't mark the profile as initialized
   // until after the timeout.
@@ -779,7 +768,7 @@ TEST_F(UserCloudPolicyManagerChromeOSTest, BlockingRefreshFetchWithTimeout) {
   Mock::VerifyAndClearExpectations(&observer_);
 }
 
-TEST_F(UserCloudPolicyManagerChromeOSTest, SynchronousLoadWithPreloadedStore) {
+TEST_P(UserCloudPolicyManagerChromeOSTest, SynchronousLoadWithPreloadedStore) {
   // Tests the initialization of a manager with non-blocking initial policy
   // fetch, when a previously cached policy and DMToken are already loaded
   // before the manager is constructed (this simulates synchronously
@@ -789,7 +778,7 @@ TEST_F(UserCloudPolicyManagerChromeOSTest, SynchronousLoadWithPreloadedStore) {
   EXPECT_TRUE(manager_->policies().Equals(expected_bundle_));
 }
 
-TEST_F(UserCloudPolicyManagerChromeOSTest, TestLifetimeReportingRegular) {
+TEST_P(UserCloudPolicyManagerChromeOSTest, TestLifetimeReportingRegular) {
   ASSERT_NO_FATAL_FAILURE(MakeManagerWithEmptyStore(
       base::TimeDelta::FromSeconds(1000), PolicyEnforcement::kPolicyRequired));
 
@@ -798,9 +787,9 @@ TEST_F(UserCloudPolicyManagerChromeOSTest, TestLifetimeReportingRegular) {
   em::DeviceManagementRequest register_request;
 
   EXPECT_CALL(device_management_service_,
-              StartJob(dm_protocol::kValueRequestRegister, _, _, _, _, _))
+              StartJob(dm_protocol::kValueRequestRegister, _, _, _, _, _, _))
       .Times(AtMost(1))
-      .WillOnce(SaveArg<5>(&register_request));
+      .WillOnce(SaveArg<6>(&register_request));
 
   MockDeviceManagementJob* register_job = IssueOAuthToken(false);
   ASSERT_TRUE(register_job);
@@ -811,7 +800,7 @@ TEST_F(UserCloudPolicyManagerChromeOSTest, TestLifetimeReportingRegular) {
             register_request.register_request().lifetime());
 }
 
-TEST_F(UserCloudPolicyManagerChromeOSTest, TestLifetimeReportingEphemeralUser) {
+TEST_P(UserCloudPolicyManagerChromeOSTest, TestLifetimeReportingEphemeralUser) {
   user_manager_->set_current_user_ephemeral(true);
 
   ASSERT_NO_FATAL_FAILURE(MakeManagerWithEmptyStore(
@@ -822,9 +811,9 @@ TEST_F(UserCloudPolicyManagerChromeOSTest, TestLifetimeReportingEphemeralUser) {
   em::DeviceManagementRequest register_request;
 
   EXPECT_CALL(device_management_service_,
-              StartJob(dm_protocol::kValueRequestRegister, _, _, _, _, _))
+              StartJob(dm_protocol::kValueRequestRegister, _, _, _, _, _, _))
       .Times(AtMost(1))
-      .WillOnce(SaveArg<5>(&register_request));
+      .WillOnce(SaveArg<6>(&register_request));
 
   MockDeviceManagementJob* register_job = IssueOAuthToken(false);
   ASSERT_TRUE(register_job);
@@ -836,10 +825,270 @@ TEST_F(UserCloudPolicyManagerChromeOSTest, TestLifetimeReportingEphemeralUser) {
             register_request.register_request().lifetime());
 }
 
-TEST_F(UserCloudPolicyManagerChromeOSTest, TestHasAppInstallEventLogUploader) {
+TEST_P(UserCloudPolicyManagerChromeOSTest, TestHasAppInstallEventLogUploader) {
   ASSERT_NO_FATAL_FAILURE(MakeManagerWithEmptyStore(
       base::TimeDelta(), PolicyEnforcement::kPolicyRequired));
   EXPECT_TRUE(manager_->GetAppInstallEventLogUploader());
+}
+
+TEST_P(UserCloudPolicyManagerChromeOSTest, Reregistration) {
+  // Tests the initialization of a manager whose Profile is waiting for the
+  // initial fetch, when the policy cache is empty.
+  fatal_error_expected_ = true;
+  ASSERT_NO_FATAL_FAILURE(MakeManagerWithEmptyStore(
+      base::TimeDelta(), PolicyEnforcement::kServerCheckRequired));
+  base::HistogramTester histogram_tester;
+
+  // Initialize the CloudPolicyService without any stored data.
+  EXPECT_FALSE(manager_->core()->service()->IsInitializationComplete());
+  store_->NotifyStoreLoaded();
+  EXPECT_TRUE(manager_->core()->service()->IsInitializationComplete());
+  EXPECT_FALSE(manager_->core()->client()->is_registered());
+
+  // This starts the OAuth2 policy token fetcher using the signin Profile.
+  // The manager will then issue the registration request.
+  MockDeviceManagementJob* register_job = IssueOAuthToken(false);
+  ASSERT_TRUE(register_job);
+
+  // Register.
+  MockDeviceManagementJob* policy_job = NULL;
+  EXPECT_CALL(device_management_service_,
+              CreateJob(DeviceManagementRequestJob::TYPE_POLICY_FETCH, _))
+      .WillRepeatedly(device_management_service_.CreateAsyncJob(&policy_job));
+  register_job->SendResponse(DM_STATUS_SUCCESS, register_blob_);
+
+  // Validate registered state.
+  ASSERT_TRUE(policy_job);
+  EXPECT_TRUE(manager_->core()->service()->IsInitializationComplete());
+  EXPECT_TRUE(manager_->core()->client()->is_registered());
+  EXPECT_FALSE(user_manager_->GetActiveUser()->force_online_signin());
+
+  // Simulate policy fetch fail (error code 410), which should trigger the
+  // re-registration flow (FetchPolicyOAuthToken()).
+  MockDeviceManagementJob* reregister_job = NULL;
+  EXPECT_CALL(device_management_service_,
+              CreateJob(DeviceManagementRequestJob::TYPE_REGISTRATION, _))
+      .WillOnce(device_management_service_.CreateAsyncJob(&reregister_job));
+  EXPECT_CALL(observer_, OnUpdatePolicy(manager_.get())).Times(0);
+  policy_job->SendResponse(DM_STATUS_SERVICE_DEVICE_NOT_FOUND,
+                           em::DeviceManagementResponse());
+  histogram_tester.ExpectUniqueSample(kUMAReregistrationResult, 0, 1);
+
+  // Copy register request (used to check correct re-registration parameters are
+  // submitted).
+  em::DeviceManagementRequest register_request;
+  EXPECT_CALL(device_management_service_,
+              StartJob(dm_protocol::kValueRequestRegister, _, _, _, _, _, _))
+      .WillOnce(SaveArg<6>(&register_request));
+
+  // Simulate OAuth token fetch.
+  GaiaUrls* gaia_urls = GaiaUrls::GetInstance();
+  network::URLLoaderCompletionStatus ok_completion_status(net::OK);
+  network::ResourceResponseHead ok_response =
+      network::CreateResourceResponseHead(net::HTTP_OK);
+  EXPECT_TRUE(
+      test_system_url_loader_factory()->SimulateResponseForPendingRequest(
+          gaia_urls->oauth2_token_url(), ok_completion_status, ok_response,
+          kOAuth2AccessTokenData));
+
+  // Validate that re-registration sends the correct parameters.
+  EXPECT_TRUE(register_request.register_request().reregister());
+  EXPECT_EQ(kDMToken,
+            register_request.register_request().reregistration_dm_token());
+
+  // Validate re-registration state.
+  ASSERT_TRUE(reregister_job);
+  EXPECT_TRUE(manager_->core()->service()->IsInitializationComplete());
+  EXPECT_FALSE(manager_->core()->client()->is_registered());
+  EXPECT_FALSE(user_manager_->GetActiveUser()->force_online_signin());
+
+  // Validate successful re-registration.
+  reregister_job->SendResponse(DM_STATUS_SUCCESS, register_blob_);
+  ASSERT_TRUE(policy_job);
+  EXPECT_TRUE(manager_->core()->service()->IsInitializationComplete());
+  EXPECT_TRUE(manager_->core()->client()->is_registered());
+  EXPECT_FALSE(user_manager_->GetActiveUser()->force_online_signin());
+  histogram_tester.ExpectBucketCount(kUMAReregistrationResult, 0, 1);
+  histogram_tester.ExpectBucketCount(kUMAReregistrationResult, 1, 1);
+  histogram_tester.ExpectBucketCount(kUMAReregistrationResult, 2, 0);
+  histogram_tester.ExpectTotalCount(kUMAReregistrationResult, 2);
+}
+
+TEST_P(UserCloudPolicyManagerChromeOSTest, ReregistrationFails) {
+  // Tests the initialization of a manager whose Profile is waiting for the
+  // initial fetch, when the policy cache is empty.
+  fatal_error_expected_ = true;
+  ASSERT_NO_FATAL_FAILURE(MakeManagerWithEmptyStore(
+      base::TimeDelta(), PolicyEnforcement::kServerCheckRequired));
+  base::HistogramTester histogram_tester;
+
+  // Initialize the CloudPolicyService without any stored data.
+  EXPECT_FALSE(manager_->core()->service()->IsInitializationComplete());
+  store_->NotifyStoreLoaded();
+  EXPECT_TRUE(manager_->core()->service()->IsInitializationComplete());
+  EXPECT_FALSE(manager_->core()->client()->is_registered());
+
+  // This starts the OAuth2 policy token fetcher using the signin Profile.
+  // The manager will then issue the registration request.
+  MockDeviceManagementJob* register_job = IssueOAuthToken(false);
+  ASSERT_TRUE(register_job);
+
+  // Register.
+  MockDeviceManagementJob* policy_job = NULL;
+  EXPECT_CALL(device_management_service_,
+              CreateJob(DeviceManagementRequestJob::TYPE_POLICY_FETCH, _))
+      .WillRepeatedly(device_management_service_.CreateAsyncJob(&policy_job));
+  register_job->SendResponse(DM_STATUS_SUCCESS, register_blob_);
+
+  // Validate registered state.
+  ASSERT_TRUE(policy_job);
+  EXPECT_TRUE(manager_->core()->service()->IsInitializationComplete());
+  EXPECT_TRUE(manager_->core()->client()->is_registered());
+  EXPECT_FALSE(user_manager_->GetActiveUser()->force_online_signin());
+
+  // Simulate policy fetch fail (error code 410), which should trigger the
+  // re-registration flow (FetchPolicyOAuthToken()).
+  MockDeviceManagementJob* reregister_job = NULL;
+  EXPECT_CALL(device_management_service_,
+              CreateJob(DeviceManagementRequestJob::TYPE_REGISTRATION, _))
+      .WillOnce(device_management_service_.CreateAsyncJob(&reregister_job));
+  EXPECT_CALL(observer_, OnUpdatePolicy(manager_.get())).Times(0);
+  policy_job->SendResponse(DM_STATUS_SERVICE_DEVICE_NOT_FOUND,
+                           em::DeviceManagementResponse());
+  histogram_tester.ExpectUniqueSample(kUMAReregistrationResult, 0, 1);
+
+  // Simulate OAuth token fetch.
+  GaiaUrls* gaia_urls = GaiaUrls::GetInstance();
+  network::URLLoaderCompletionStatus ok_completion_status(net::OK);
+  network::ResourceResponseHead ok_response =
+      network::CreateResourceResponseHead(net::HTTP_OK);
+  EXPECT_TRUE(
+      test_system_url_loader_factory()->SimulateResponseForPendingRequest(
+          gaia_urls->oauth2_token_url(), ok_completion_status, ok_response,
+          kOAuth2AccessTokenData));
+
+  // Validate re-registration state.
+  ASSERT_TRUE(reregister_job);
+  EXPECT_TRUE(manager_->core()->service()->IsInitializationComplete());
+  EXPECT_FALSE(manager_->core()->client()->is_registered());
+  EXPECT_FALSE(user_manager_->GetActiveUser()->force_online_signin());
+
+  // Validate unsuccessful re-registration.
+  reregister_job->SendResponse(DM_STATUS_TEMPORARY_UNAVAILABLE, register_blob_);
+  ASSERT_TRUE(policy_job);
+  EXPECT_TRUE(manager_->core()->service()->IsInitializationComplete());
+  EXPECT_FALSE(manager_->core()->client()->is_registered());
+  EXPECT_TRUE(user_manager_->GetActiveUser()->force_online_signin());
+  histogram_tester.ExpectBucketCount(kUMAReregistrationResult, 0, 1);
+  histogram_tester.ExpectBucketCount(kUMAReregistrationResult, 1, 0);
+  histogram_tester.ExpectBucketCount(kUMAReregistrationResult, 2, 1);
+  histogram_tester.ExpectTotalCount(kUMAReregistrationResult, 2);
+}
+
+// Tests UserCloudPolicyManagerChromeOS for child user.
+class UserCloudPolicyManagerChromeOSChildTest
+    : public UserCloudPolicyManagerChromeOSTest {
+ public:
+  // Issues OAuthToken for device management scopes using OAuth2TokenService.
+  void IssueOAuthTokenWithTokenService(base::TimeDelta token_lifetime) {
+    identity::ScopeSet scopes;
+    scopes.insert(GaiaConstants::kDeviceManagementServiceOAuth);
+    scopes.insert(GaiaConstants::kOAuthWrapBridgeUserInfoScope);
+    identity_test_env()
+        ->WaitForAccessTokenRequestIfNecessaryAndRespondWithTokenForScopes(
+            kOAuthToken, task_runner_->Now() + token_lifetime,
+            std::string() /*id_token*/, scopes);
+  }
+
+ protected:
+  UserCloudPolicyManagerChromeOSChildTest() {
+    user_type_ = user_manager::UserType::USER_TYPE_CHILD;
+  }
+  ~UserCloudPolicyManagerChromeOSChildTest() override = default;
+
+  // UserCloudPolicyManagerChromeOSTest:
+  void SetUp() override {
+    UserCloudPolicyManagerChromeOSTest::SetUp();
+    identity_test_env()->MakePrimaryAccountAvailable(kEmail);
+  }
+
+  // Sets the initially cached data and initializes the CloudPolicyService.
+  void LoadStoreWithCachedData() {
+    store_->policy_ = std::make_unique<em::PolicyData>(policy_data_);
+    store_->policy_map_.CopyFrom(policy_map_);
+    store_->NotifyStoreLoaded();
+    EXPECT_TRUE(manager_->IsInitializationComplete(POLICY_DOMAIN_CHROME));
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UserCloudPolicyManagerChromeOSChildTest);
+};
+
+// TODO(agawronska): Remove test instantiation with kDMServerOAuthForChildUser
+// once it is enabled by default.
+INSTANTIATE_TEST_SUITE_P(
+    /* no prefix */,
+    UserCloudPolicyManagerChromeOSChildTest,
+    testing::Values(std::vector<base::Feature>{
+        features::kDMServerOAuthForChildUser}));
+
+TEST_P(UserCloudPolicyManagerChromeOSChildTest, RefreshFetchDoesNotBlock) {
+  // Tests the profile initialization is not blocked on policy refresh.
+  ASSERT_NO_FATAL_FAILURE(MakeManagerWithEmptyStore(
+      base::TimeDelta::FromSeconds(0), PolicyEnforcement::kPolicyRequired));
+  EXPECT_FALSE(manager_->IsInitializationComplete(POLICY_DOMAIN_CHROME));
+
+  LoadStoreWithCachedData();
+  EXPECT_TRUE(manager_->IsInitializationComplete(POLICY_DOMAIN_CHROME));
+}
+
+TEST_P(UserCloudPolicyManagerChromeOSChildTest, RefreshSchedulerStart) {
+  // Tests that refresh scheduler is started after OAuth token is available.
+  ASSERT_NO_FATAL_FAILURE(MakeManagerWithEmptyStore(
+      base::TimeDelta::FromSeconds(0), PolicyEnforcement::kPolicyRequired));
+  LoadStoreWithCachedData();
+  EXPECT_FALSE(manager_->core()->refresh_scheduler());
+
+  IssueOAuthTokenWithTokenService(base::TimeDelta::FromSeconds(3600));
+
+  EXPECT_TRUE(manager_->core()->refresh_scheduler());
+}
+
+TEST_P(UserCloudPolicyManagerChromeOSChildTest, RefreshScheduler) {
+  // Tests that refresh schedule isn't affected by periodic OAuth token updates.
+  ASSERT_NO_FATAL_FAILURE(MakeManagerWithEmptyStore(
+      base::TimeDelta::FromSeconds(0), PolicyEnforcement::kPolicyRequired));
+  LoadStoreWithCachedData();
+
+  // This starts refresh scheduler.
+  const base::TimeDelta token_lifetime = base::TimeDelta::FromMinutes(50);
+  IssueOAuthTokenWithTokenService(token_lifetime);
+
+  // First refresh is scheduled with delay of 0s - let it execute.
+  FetchPolicy(
+      base::BindOnce(&base::TestMockTimeTaskRunner::RunUntilIdle, task_runner_),
+      false);
+
+  // Assert that the initial delay (right now 3h) is at least |iterations| times
+  // longer than token lifetime. If default delay changes and is lesser the rest
+  // of the test will work incorrectly and should be updated.
+  const int iterations = 3;
+  base::TimeDelta refresh_delay = base::TimeDelta::FromMilliseconds(
+      manager_->core()->refresh_scheduler()->GetActualRefreshDelay());
+  ASSERT_GT(refresh_delay, iterations * token_lifetime);
+
+  // Advancing the clock will trigger delivery of new tokens. It should not
+  // trigger policy refresh nor affect scheduled refresh.
+  for (int i = 0; i < iterations; ++i) {
+    task_runner_->FastForwardBy(token_lifetime);
+    refresh_delay -= token_lifetime;
+    IssueOAuthTokenWithTokenService(token_lifetime);
+  }
+
+  // Advance the clock by the remaining time to get scheduled policy refresh.
+  FetchPolicy(base::BindOnce(&base::TestMockTimeTaskRunner::FastForwardBy,
+                             task_runner_, refresh_delay),
+              false);
 }
 
 }  // namespace policy

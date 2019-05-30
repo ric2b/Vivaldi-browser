@@ -134,9 +134,9 @@ Vector<HTMLDimension> ParseListOfDimensions(const String& input) {
   // Step 3. To avoid String copies, we just look for commas instead of
   // splitting.
   Vector<HTMLDimension> parsed_dimensions;
-  size_t last_parsed_index = 0;
+  wtf_size_t last_parsed_index = 0;
   while (true) {
-    size_t next_comma = trimmed_string.find(kComma, last_parsed_index);
+    wtf_size_t next_comma = trimmed_string.find(kComma, last_parsed_index);
     if (next_comma == kNotFound)
       break;
 
@@ -187,7 +187,7 @@ static bool ParseDimensionValue(const CharacterType* current,
   return true;
 }
 
-// https://html.spec.whatwg.org/multipage/infrastructure.html#rules-for-parsing-dimension-values
+// https://html.spec.whatwg.org/C/#rules-for-parsing-dimension-values
 bool ParseDimensionValue(const String& input, HTMLDimension& dimension) {
   if (input.IsEmpty())
     return false;

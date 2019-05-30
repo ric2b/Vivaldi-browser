@@ -10,6 +10,7 @@
 #include "chromeos/services/device_sync/public/cpp/device_sync_client.h"
 #include "chromeos/services/multidevice_setup/feature_state_manager.h"
 #include "chromeos/services/multidevice_setup/host_status_provider.h"
+#include "chromeos/services/multidevice_setup/public/cpp/android_sms_pairing_state_tracker.h"
 #include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
 #include "components/prefs/pref_change_registrar.h"
 
@@ -26,7 +27,8 @@ namespace multidevice_setup {
 // class utilizes per-user preferences.
 class FeatureStateManagerImpl : public FeatureStateManager,
                                 public HostStatusProvider::Observer,
-                                public device_sync::DeviceSyncClient::Observer {
+                                public device_sync::DeviceSyncClient::Observer,
+                                public AndroidSmsPairingStateTracker::Observer {
  public:
   class Factory {
    public:
@@ -36,7 +38,8 @@ class FeatureStateManagerImpl : public FeatureStateManager,
     virtual std::unique_ptr<FeatureStateManager> BuildInstance(
         PrefService* pref_service,
         HostStatusProvider* host_status_provider,
-        device_sync::DeviceSyncClient* device_sync_client);
+        device_sync::DeviceSyncClient* device_sync_client,
+        AndroidSmsPairingStateTracker* android_sms_pairing_state_tracker);
 
    private:
     static Factory* test_factory_;
@@ -45,9 +48,11 @@ class FeatureStateManagerImpl : public FeatureStateManager,
   ~FeatureStateManagerImpl() override;
 
  private:
-  FeatureStateManagerImpl(PrefService* pref_service,
-                          HostStatusProvider* host_status_provider,
-                          device_sync::DeviceSyncClient* device_sync_client);
+  FeatureStateManagerImpl(
+      PrefService* pref_service,
+      HostStatusProvider* host_status_provider,
+      device_sync::DeviceSyncClient* device_sync_client,
+      AndroidSmsPairingStateTracker* android_sms_pairing_state_tracker);
 
   // FeatureStateManager:
   FeatureStatesMap GetFeatureStates() override;
@@ -61,20 +66,25 @@ class FeatureStateManagerImpl : public FeatureStateManager,
   // DeviceSyncClient::Observer:
   void OnNewDevicesSynced() override;
 
+  // AndroidSmsPairingStateTracker::Observer:
+  void OnPairingStateChanged() override;
+
   void OnPrefValueChanged();
   void UpdateFeatureStateCache(bool notify_observers_of_changes);
   mojom::FeatureState ComputeFeatureState(mojom::Feature feature);
   bool IsAllowedByPolicy(mojom::Feature feature);
   bool IsSupportedByChromebook(mojom::Feature feature);
   bool HasSufficientSecurity(mojom::Feature feature,
-                             const cryptauth::RemoteDeviceRef& host_device);
+                             const multidevice::RemoteDeviceRef& host_device);
   bool HasBeenActivatedByPhone(mojom::Feature feature,
-                               const cryptauth::RemoteDeviceRef& host_device);
+                               const multidevice::RemoteDeviceRef& host_device);
+  bool RequiresFurtherSetup(mojom::Feature feature);
   mojom::FeatureState GetEnabledOrDisabledState(mojom::Feature feature);
 
   PrefService* pref_service_;
   HostStatusProvider* host_status_provider_;
   device_sync::DeviceSyncClient* device_sync_client_;
+  AndroidSmsPairingStateTracker* android_sms_pairing_state_tracker_;
 
   // Map from feature to the pref name which indicates the enabled/disabled
   // boolean state for the feature.

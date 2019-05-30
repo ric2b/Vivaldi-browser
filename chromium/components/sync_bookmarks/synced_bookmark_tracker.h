@@ -18,6 +18,7 @@
 #include "components/sync/protocol/unique_position.pb.h"
 
 namespace bookmarks {
+class BookmarkModel;
 class BookmarkNode;
 }
 
@@ -62,15 +63,28 @@ class SyncedBookmarkTracker {
     // Used in local deletions to mark and entity as a tommstone.
     void clear_bookmark_node() { bookmark_node_ = nullptr; }
 
-    const sync_pb::EntityMetadata* metadata() const { return metadata_.get(); }
-    sync_pb::EntityMetadata* metadata() { return metadata_.get(); }
+    const sync_pb::EntityMetadata* metadata() const {
+      // TODO(crbug.com/516866): The below CHECK is added to debug some crashes.
+      // Should be removed after figuring out the reason for the crash.
+      CHECK(metadata_);
+      return metadata_.get();
+    }
+    sync_pb::EntityMetadata* metadata() {
+      // TODO(crbug.com/516866): The below CHECK is added to debug some crashes.
+      // Should be removed after figuring out the reason for the crash.
+      CHECK(metadata_);
+      return metadata_.get();
+    }
+
+    // Returns the estimate of dynamically allocated memory in bytes.
+    size_t EstimateMemoryUsage() const;
 
    private:
     // Null for tombstones.
     const bookmarks::BookmarkNode* bookmark_node_;
 
     // Serializable Sync metadata.
-    std::unique_ptr<sync_pb::EntityMetadata> metadata_;
+    const std::unique_ptr<sync_pb::EntityMetadata> metadata_;
 
     DISALLOW_COPY_AND_ASSIGN(Entity);
   };
@@ -81,6 +95,13 @@ class SyncedBookmarkTracker {
       std::vector<NodeMetadataPair> nodes_metadata,
       std::unique_ptr<sync_pb::ModelTypeState> model_type_state);
   ~SyncedBookmarkTracker();
+
+  // Checks the integrity of the |model_metadata|. It also verifies that the
+  // contents of the |model_metadata| match the contents of |model|. It should
+  // only be called if the initial sync has completed.
+  static bool BookmarkModelMatchesMetadata(
+      const bookmarks::BookmarkModel* model,
+      const sync_pb::BookmarkModelMetadata& model_metadata);
 
   // Returns null if no entity is found.
   const Entity* GetEntityForSyncId(const std::string& sync_id) const;
@@ -136,6 +157,8 @@ class SyncedBookmarkTracker {
     model_type_state_ = std::move(model_type_state);
   }
 
+  std::vector<const Entity*> GetAllEntities() const;
+
   std::vector<const Entity*> GetEntitiesWithLocalChanges(
       size_t max_entries) const;
 
@@ -149,6 +172,11 @@ class SyncedBookmarkTracker {
                                 int64_t acked_sequence_number,
                                 int64_t server_version);
 
+  // Informs the tracker that the sync id for an entity has changed. It updates
+  // the internal state of the tracker accordingly.
+  void UpdateSyncForLocalCreationIfNeeded(const std::string& old_id,
+                                          const std::string& new_id);
+
   // Set the value of |EntityMetadata.acked_sequence_number| in the entity with
   // |sync_id| to be equal to |EntityMetadata.sequence_number| such that it is
   // not returned in GetEntitiesWithLocalChanges().
@@ -157,8 +185,23 @@ class SyncedBookmarkTracker {
   // Whether the tracker is empty or not.
   bool IsEmpty() const;
 
+  // Returns the estimate of dynamically allocated memory in bytes.
+  size_t EstimateMemoryUsage() const;
+
   // Returns number of tracked entities. Used only in test.
-  std::size_t TrackedEntitiesCountForTest() const;
+  size_t TrackedEntitiesCountForTest() const;
+
+  // Returns number of tracked bookmarks that aren't deleted.
+  size_t TrackedBookmarksCountForDebugging() const;
+
+  // Returns number of bookmarks that have been deleted but the server hasn't
+  // confirmed the deletion yet.
+  size_t TrackedUncommittedTombstonesCountForDebugging() const;
+
+  // Checks whther all nodes in |bookmark_model| that *should* be tracked as per
+  // CanSyncNode() are tracked.
+  void CheckAllNodesTracked(
+      const bookmarks::BookmarkModel* bookmark_model) const;
 
  private:
   // Reorders |entities| that represents local non-deletions such that parent

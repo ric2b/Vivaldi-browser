@@ -24,6 +24,7 @@ template <class, typename>
 class RefCounted;
 template <class, typename>
 class RefCountedThreadSafe;
+class SequencedTaskRunner;
 
 template <typename T>
 scoped_refptr<T> AdoptRef(T* t);
@@ -62,7 +63,7 @@ template <typename T>
 scoped_refptr<T> AdoptRef(T* obj) {
   using Tag = std::decay_t<decltype(T::kRefCountPreference)>;
   static_assert(std::is_same<subtle::StartRefCountFromOneTag, Tag>::value,
-                "Use AdoptRef only for the reference count starts from one.");
+                "Use AdoptRef only if the reference count starts from one.");
 
   DCHECK(obj);
   DCHECK(obj->HasOneRef());
@@ -257,6 +258,11 @@ class scoped_refptr {
  private:
   template <typename U>
   friend scoped_refptr<U> base::AdoptRef(U*);
+  friend class ::base::SequencedTaskRunner;
+
+  // Returns the owned pointer (if any), releasing ownership to the caller. The
+  // caller is responsible for managing the lifetime of the reference.
+  T* release();
 
   scoped_refptr(T* p, base::subtle::AdoptRefTag) : ptr_(p) {}
 
@@ -271,6 +277,13 @@ class scoped_refptr {
   static void AddRef(T* ptr);
   static void Release(T* ptr);
 };
+
+template <typename T>
+T* scoped_refptr<T>::release() {
+  T* ptr = ptr_;
+  ptr_ = nullptr;
+  return ptr;
+}
 
 // static
 template <typename T>

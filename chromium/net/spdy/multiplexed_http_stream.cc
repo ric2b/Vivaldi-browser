@@ -8,7 +8,7 @@
 
 #include "base/logging.h"
 #include "net/http/http_raw_request_headers.h"
-#include "net/third_party/spdy/core/spdy_header_block.h"
+#include "net/third_party/quiche/src/spdy/core/spdy_header_block.h"
 
 namespace net {
 
@@ -35,13 +35,6 @@ void MultiplexedHttpStream::GetSSLCertRequestInfo(
   // A multiplexed stream cannot request client certificates. Client
   // authentication may only occur during the initial SSL handshake.
   NOTREACHED();
-}
-
-Error MultiplexedHttpStream::GetTokenBindingSignature(
-    crypto::ECPrivateKey* key,
-    TokenBindingType tb_type,
-    std::vector<uint8_t>* out) {
-  return session_->GetTokenBindingSignature(key, tb_type, out);
 }
 
 void MultiplexedHttpStream::Drain(HttpNetworkSession* session) {

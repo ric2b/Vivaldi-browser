@@ -88,12 +88,12 @@ struct HashAndUTF8CharactersTranslator {
     if (buffer.utf16_length != buffer.length) {
       if (string->Is8Bit()) {
         const LChar* characters8 = string->Characters8();
-        return Unicode::EqualLatin1WithUTF8(
+        return unicode::EqualLatin1WithUTF8(
             characters8, characters8 + string->length(), buffer.characters,
             buffer.characters + buffer.length);
       }
       const UChar* characters16 = string->Characters16();
-      return Unicode::EqualUTF16WithUTF8(
+      return unicode::EqualUTF16WithUTF8(
           characters16, characters16 + string->length(), buffer.characters,
           buffer.characters + buffer.length);
     }
@@ -124,20 +124,22 @@ struct HashAndUTF8CharactersTranslator {
   static void Translate(StringImpl*& location,
                         const HashAndUTF8Characters& buffer,
                         unsigned hash) {
-    UChar* target;
-    scoped_refptr<StringImpl> new_string =
-        StringImpl::CreateUninitialized(buffer.utf16_length, target);
+    scoped_refptr<StringImpl> new_string;
+    // If buffer contains only ASCII characters, the UTF-8 and UTF-16 lengths
+    // are the same.
+    bool is_all_ascii = buffer.utf16_length == buffer.length;
+    if (!is_all_ascii) {
+      UChar* target;
+      new_string = StringImpl::CreateUninitialized(buffer.utf16_length, target);
 
-    bool is_all_ascii;
-    const char* source = buffer.characters;
-    if (Unicode::ConvertUTF8ToUTF16(&source, source + buffer.length, &target,
-                                    target + buffer.utf16_length,
-                                    &is_all_ascii) != Unicode::kConversionOK)
-      NOTREACHED();
-
-    if (is_all_ascii)
+      const char* source = buffer.characters;
+      if (unicode::ConvertUTF8ToUTF16(&source, source + buffer.length, &target,
+                                      target + buffer.utf16_length,
+                                      &is_all_ascii) != unicode::kConversionOK)
+        NOTREACHED();
+    } else {
       new_string = StringImpl::Create(buffer.characters, buffer.length);
-
+    }
     new_string->AddRef();
     location = new_string.get();
     location->SetHash(hash);
@@ -208,7 +210,7 @@ scoped_refptr<StringImpl> AtomicStringTable::AddUTF8(
     const char* characters_end) {
   HashAndUTF8Characters buffer;
   buffer.characters = characters_start;
-  buffer.hash = Unicode::CalculateStringHashAndLengthFromUTF8MaskingTop8Bits(
+  buffer.hash = unicode::CalculateStringHashAndLengthFromUTF8MaskingTop8Bits(
       characters_start, characters_end, buffer.length, buffer.utf16_length);
 
   if (!buffer.hash)

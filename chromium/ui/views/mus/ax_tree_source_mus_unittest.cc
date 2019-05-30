@@ -31,6 +31,7 @@ class AXTreeSourceMusTest : public ViewsTestBase {
 
   // testing::Test:
   void SetUp() override {
+    set_native_widget_type(NativeWidgetType::kDesktop);
     ViewsTestBase::SetUp();
     widget_ = std::make_unique<Widget>();
     Widget::InitParams params(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
@@ -51,6 +52,7 @@ class AXTreeSourceMusTest : public ViewsTestBase {
 
   std::unique_ptr<Widget> widget_;
   Label* label_ = nullptr;  // Owned by views hierarchy.
+  const ui::AXTreeID ax_tree_id_ = ui::AXTreeID::CreateNewAXTreeID();
 
  private:
   DISALLOW_COPY_AND_ASSIGN(AXTreeSourceMusTest);
@@ -59,17 +61,17 @@ class AXTreeSourceMusTest : public ViewsTestBase {
 TEST_F(AXTreeSourceMusTest, GetTreeData) {
   AXAuraObjWrapper* root =
       AXAuraObjCache::GetInstance()->GetOrCreate(widget_->GetContentsView());
-  AXTreeSourceMus tree(root);
+  AXTreeSourceMus tree(root, ax_tree_id_);
   ui::AXTreeData tree_data;
   tree.GetTreeData(&tree_data);
-  EXPECT_EQ(AXRemoteHost::kRemoteAXTreeID, tree_data.tree_id);
+  EXPECT_EQ(ax_tree_id_, tree_data.tree_id);
 }
 
 TEST_F(AXTreeSourceMusTest, Serialize) {
   AXAuraObjCache* cache = AXAuraObjCache::GetInstance();
   AXAuraObjWrapper* root = cache->GetOrCreate(widget_->GetContentsView());
 
-  AXTreeSourceMus tree(root);
+  AXTreeSourceMus tree(root, ax_tree_id_);
   EXPECT_EQ(root, tree.GetRoot());
 
   // Serialize the root.
@@ -77,15 +79,15 @@ TEST_F(AXTreeSourceMusTest, Serialize) {
   tree.SerializeNode(root, &node_data);
 
   // Root is at the origin and has no parent container.
-  EXPECT_EQ(gfx::RectF(0, 0, 333, 444), node_data.location);
-  EXPECT_EQ(-1, node_data.offset_container_id);
+  EXPECT_EQ(gfx::RectF(0, 0, 333, 444), node_data.relative_bounds.bounds);
+  EXPECT_EQ(-1, node_data.relative_bounds.offset_container_id);
 
   // Serialize a child.
   tree.SerializeNode(cache->GetOrCreate(label_), &node_data);
 
   // Child has relative position with the root as the container.
-  EXPECT_EQ(gfx::RectF(1, 1, 111, 111), node_data.location);
-  EXPECT_EQ(root->GetUniqueId().Get(), node_data.offset_container_id);
+  EXPECT_EQ(gfx::RectF(1, 1, 111, 111), node_data.relative_bounds.bounds);
+  EXPECT_EQ(root->GetUniqueId(), node_data.relative_bounds.offset_container_id);
 }
 
 TEST_F(AXTreeSourceMusTest, ScaleFactor) {
@@ -93,7 +95,7 @@ TEST_F(AXTreeSourceMusTest, ScaleFactor) {
   AXAuraObjWrapper* root = cache->GetOrCreate(widget_->GetContentsView());
 
   // Simulate serializing a widget on a high-dpi display.
-  AXTreeSourceMus tree(root);
+  AXTreeSourceMus tree(root, ax_tree_id_);
   tree.set_device_scale_factor(2.f);
 
   // Serialize the root.
@@ -101,9 +103,10 @@ TEST_F(AXTreeSourceMusTest, ScaleFactor) {
   tree.SerializeNode(root, &node_data);
 
   // Transform is scaled.
-  ASSERT_TRUE(node_data.transform);
-  EXPECT_TRUE(node_data.transform->IsScale2d());
-  EXPECT_EQ(gfx::Vector2dF(2.f, 2.f), node_data.transform->Scale2d());
+  ASSERT_TRUE(node_data.relative_bounds.transform);
+  EXPECT_TRUE(node_data.relative_bounds.transform->IsScale2d());
+  EXPECT_EQ(gfx::Vector2dF(2.f, 2.f),
+            node_data.relative_bounds.transform->Scale2d());
 }
 
 }  // namespace

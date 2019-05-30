@@ -7,22 +7,26 @@
 #include <math.h>
 
 #include <queue>
+#include <unordered_map>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "content/browser/devtools/render_frame_devtools_agent_host.h"
+#include "content/browser/devtools/devtools_instrumentation.h"
 #include "content/browser/frame_host/frame_tree.h"
+#include "content/browser/frame_host/navigation_controller_impl.h"
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/navigator.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/common/content_features.h"
+#include "content/public/common/navigation_policy.h"
 #include "third_party/blink/public/common/frame/sandbox_flags.h"
 #include "third_party/blink/public/common/frame/user_activation_update_type.h"
 
@@ -32,7 +36,7 @@ namespace {
 
 // This is a global map between frame_tree_node_ids and pointers to
 // FrameTreeNodes.
-typedef base::hash_map<int, FrameTreeNode*> FrameTreeNodeIdMap;
+typedef std::unordered_map<int, FrameTreeNode*> FrameTreeNodeIdMap;
 
 base::LazyInstance<FrameTreeNodeIdMap>::DestructorAtExit
     g_frame_tree_node_id_map = LAZY_INSTANCE_INITIALIZER;
@@ -82,28 +86,23 @@ int FrameTreeNode::next_frame_tree_node_id_ = 1;
 FrameTreeNode* FrameTreeNode::GloballyFindByID(int frame_tree_node_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   FrameTreeNodeIdMap* nodes = g_frame_tree_node_id_map.Pointer();
-  FrameTreeNodeIdMap::iterator it = nodes->find(frame_tree_node_id);
+  auto it = nodes->find(frame_tree_node_id);
   return it == nodes->end() ? nullptr : it->second;
 }
 
 FrameTreeNode::FrameTreeNode(FrameTree* frame_tree,
                              Navigator* navigator,
-                             RenderFrameHostDelegate* render_frame_delegate,
-                             RenderWidgetHostDelegate* render_widget_delegate,
-                             RenderFrameHostManager::Delegate* manager_delegate,
                              FrameTreeNode* parent,
                              blink::WebTreeScopeType scope,
                              const std::string& name,
                              const std::string& unique_name,
                              bool is_created_by_script,
                              const base::UnguessableToken& devtools_frame_token,
-                             const FrameOwnerProperties& frame_owner_properties)
+                             const FrameOwnerProperties& frame_owner_properties,
+                             blink::FrameOwnerElementType owner_type)
     : frame_tree_(frame_tree),
       navigator_(navigator),
-      render_manager_(this,
-                      render_frame_delegate,
-                      render_widget_delegate,
-                      manager_delegate),
+      render_manager_(this, frame_tree->manager_delegate()),
       frame_tree_node_id_(next_frame_tree_node_id_++),
       parent_(parent),
       depth_(parent ? parent->depth_ + 1 : 0u),
@@ -120,7 +119,8 @@ FrameTreeNode::FrameTreeNode(FrameTree* frame_tree,
           /* hashes of hosts for insecure request upgrades */,
           false /* is a potentially trustworthy unique origin */,
           false /* has received a user gesture */,
-          false /* has received a user gesture before nav */),
+          false /* has received a user gesture before nav */,
+          owner_type),
       is_created_by_script_(is_created_by_script),
       devtools_frame_token_(devtools_frame_token),
       frame_owner_properties_(frame_owner_properties),
@@ -136,9 +136,10 @@ FrameTreeNode::FrameTreeNode(FrameTree* frame_tree,
 }
 
 FrameTreeNode::~FrameTreeNode() {
-  // Remove the children.  See https://crbug.com/612450 for explanation why we
-  // don't just call the std::vector::clear method.
-  std::vector<std::unique_ptr<FrameTreeNode>>().swap(children_);
+  // Remove the children.
+  current_frame_host()->ResetChildren();
+
+  current_frame_host()->ResetLoadingState();
 
   // If the removed frame was created by a script, then its history entry will
   // never be reused - we can save some memory by removing the history entry.
@@ -169,6 +170,12 @@ FrameTreeNode::~FrameTreeNode() {
     navigation_request_.reset();
     DidStopLoading();
   }
+
+  // ~SiteProcessCountTracker DCHECKs in some tests if CleanUpNavigation is not
+  // called last. Ideally this would be closer to (possible before) the
+  // ResetLoadingState() call above.
+  render_manager_.CleanUpNavigation();
+  DCHECK(!IsLoading());
 }
 
 void FrameTreeNode::AddObserver(Observer* observer) {
@@ -183,49 +190,6 @@ bool FrameTreeNode::IsMainFrame() const {
   return frame_tree_->root() == this;
 }
 
-FrameTreeNode* FrameTreeNode::AddChild(std::unique_ptr<FrameTreeNode> child,
-                                       int process_id,
-                                       int frame_routing_id) {
-  // Child frame must always be created in the same process as the parent.
-  CHECK_EQ(process_id, render_manager_.current_host()->GetProcess()->GetID());
-
-  // Initialize the RenderFrameHost for the new node.  We always create child
-  // frames in the same SiteInstance as the current frame, and they can swap to
-  // a different one if they navigate away.
-  child->render_manager()->Init(
-      render_manager_.current_host()->GetSiteInstance(),
-      render_manager_.current_host()->GetRoutingID(), frame_routing_id,
-      MSG_ROUTING_NONE, false);
-
-  // Other renderer processes in this BrowsingInstance may need to find out
-  // about the new frame.  Create a proxy for the child frame in all
-  // SiteInstances that have a proxy for the frame's parent, since all frames
-  // in a frame tree should have the same set of proxies.
-  render_manager_.CreateProxiesForChildFrame(child.get());
-
-  children_.push_back(std::move(child));
-  return children_.back().get();
-}
-
-void FrameTreeNode::RemoveChild(FrameTreeNode* child) {
-  for (auto iter = children_.begin(); iter != children_.end(); ++iter) {
-    if (iter->get() == child) {
-      // Subtle: we need to make sure the node is gone from the tree before
-      // observers are notified of its deletion.
-      std::unique_ptr<FrameTreeNode> node_to_delete(std::move(*iter));
-      children_.erase(iter);
-      node_to_delete.reset();
-      return;
-    }
-  }
-}
-
-void FrameTreeNode::ResetForNewProcess() {
-  // Remove child nodes from the tree, then delete them. This destruction
-  // operation will notify observers.
-  std::vector<std::unique_ptr<FrameTreeNode>>().swap(children_);
-}
-
 void FrameTreeNode::ResetForNavigation() {
   // Discard any CSP headers from the previous document.
   replication_state_.accumulated_csp_headers.clear();
@@ -234,6 +198,11 @@ void FrameTreeNode::ResetForNavigation() {
   // Clear any CSP-set sandbox flags, and the declared feature policy for the
   // frame.
   UpdateFramePolicyHeaders(blink::WebSandboxFlags::kNone, {});
+
+  // This frame has had its user activation bits cleared in the renderer
+  // before arriving here. We just need to clear them here and in the other
+  // renderer processes that may have a reference to this frame.
+  UpdateUserActivationState(blink::UserActivationUpdateType::kClearActivation);
 }
 
 void FrameTreeNode::SetOpener(FrameTreeNode* opener) {
@@ -359,18 +328,6 @@ void FrameTreeNode::SetPendingFramePolicy(blink::FramePolicy frame_policy) {
   }
 }
 
-bool FrameTreeNode::IsDescendantOf(FrameTreeNode* other) const {
-  if (!other || !other->child_count())
-    return false;
-
-  for (FrameTreeNode* node = parent(); node; node = node->parent()) {
-    if (node == other)
-      return true;
-  }
-
-  return false;
-}
-
 FrameTreeNode* FrameTreeNode::PreviousSibling() const {
   return GetSibling(-1);
 }
@@ -414,15 +371,12 @@ bool FrameTreeNode::CommitPendingFramePolicy() {
 
 void FrameTreeNode::TransferNavigationRequestOwnership(
     RenderFrameHostImpl* render_frame_host) {
-  RenderFrameDevToolsAgentHost::OnResetNavigationRequest(
-      navigation_request_.get());
+  devtools_instrumentation::OnResetNavigationRequest(navigation_request_.get());
   render_frame_host->SetNavigationRequest(std::move(navigation_request_));
 }
 
 void FrameTreeNode::CreatedNavigationRequest(
     std::unique_ptr<NavigationRequest> navigation_request) {
-  CHECK(IsBrowserSideNavigationEnabled());
-
   // This is never called when navigating to a Javascript URL. For the loading
   // state, this matches what Blink is doing: Blink doesn't send throbber
   // notifications for Javascript URLS.
@@ -458,12 +412,10 @@ void FrameTreeNode::CreatedNavigationRequest(
 
 void FrameTreeNode::ResetNavigationRequest(bool keep_state,
                                            bool inform_renderer) {
-  CHECK(IsBrowserSideNavigationEnabled());
   if (!navigation_request_)
     return;
 
-  RenderFrameDevToolsAgentHost::OnResetNavigationRequest(
-      navigation_request_.get());
+  devtools_instrumentation::OnResetNavigationRequest(navigation_request_.get());
 
   // The renderer should be informed if the caller allows to do so and the
   // navigation came from a BeginNavigation IPC.
@@ -503,6 +455,9 @@ void FrameTreeNode::ResetNavigationRequest(bool keep_state,
 
 void FrameTreeNode::DidStartLoading(bool to_different_document,
                                     bool was_previously_loading) {
+  TRACE_EVENT2("navigation", "FrameTreeNode::DidStartLoading",
+               "frame_tree_node", frame_tree_node_id(), "to different document",
+               to_different_document);
   // Any main frame load to a new document should reset the load progress since
   // it will replace the current page and any frames. The WebContents will
   // be notified when DidChangeLoadProgress is called.
@@ -522,6 +477,8 @@ void FrameTreeNode::DidStartLoading(bool to_different_document,
 }
 
 void FrameTreeNode::DidStopLoading() {
+  TRACE_EVENT1("navigation", "FrameTreeNode::DidStopLoading", "frame_tree_node",
+               frame_tree_node_id());
   // Set final load progress and update overall progress. This will notify
   // the WebContents of the load progress change.
   DidChangeLoadProgress(kLoadingProgressDone);
@@ -549,19 +506,17 @@ void FrameTreeNode::DidChangeLoadProgress(double load_progress) {
 }
 
 bool FrameTreeNode::StopLoading() {
-  if (IsBrowserSideNavigationEnabled()) {
-    if (navigation_request_) {
-      int expected_pending_nav_entry_id = navigation_request_->nav_entry_id();
-      if (navigation_request_->navigation_handle()) {
-        navigation_request_->navigation_handle()->set_net_error_code(
-            net::ERR_ABORTED);
-        expected_pending_nav_entry_id =
-            navigation_request_->navigation_handle()->pending_nav_entry_id();
-      }
-      navigator_->DiscardPendingEntryIfNeeded(expected_pending_nav_entry_id);
+  if (navigation_request_) {
+    int expected_pending_nav_entry_id = navigation_request_->nav_entry_id();
+    if (navigation_request_->navigation_handle()) {
+      navigation_request_->navigation_handle()->set_net_error_code(
+          net::ERR_ABORTED);
+      expected_pending_nav_entry_id =
+          navigation_request_->navigation_handle()->pending_nav_entry_id();
     }
-    ResetNavigationRequest(false, true);
+    navigator_->DiscardPendingEntryIfNeeded(expected_pending_nav_entry_id);
   }
+  ResetNavigationRequest(false, true);
 
   // TODO(nasko): see if child frames should send IPCs in site-per-process
   // mode.
@@ -600,9 +555,36 @@ void FrameTreeNode::BeforeUnloadCanceled() {
 }
 
 bool FrameTreeNode::NotifyUserActivation() {
-  for (FrameTreeNode* node = this; node; node = node->parent())
+  for (FrameTreeNode* node = this; node; node = node->parent()) {
+    if (!node->user_activation_state_.HasBeenActive() &&
+        node->current_frame_host())
+      node->current_frame_host()->DidReceiveFirstUserActivation();
     node->user_activation_state_.Activate();
+  }
   replication_state_.has_received_user_gesture = true;
+
+  // TODO(mustaq): The following block relaxes UAv2 a bit to make it slightly
+  // closer to the old (v1) model, to address a Hangout regression.  We will
+  // remove this after implementing a mechanism to delegate activation to
+  // subframes (https://crbug.com/728334)
+  if (base::FeatureList::IsEnabled(features::kUserActivationV2) &&
+      base::FeatureList::IsEnabled(
+          features::kUserActivationSameOriginVisibility)) {
+    const url::Origin& current_origin =
+        this->current_frame_host()->GetLastCommittedOrigin();
+    for (FrameTreeNode* node : frame_tree()->Nodes()) {
+      if (node->current_frame_host()->GetLastCommittedOrigin().IsSameOriginWith(
+              current_origin)) {
+        node->user_activation_state_.Activate();
+      }
+    }
+  }
+
+  NavigationControllerImpl* controller =
+      static_cast<NavigationControllerImpl*>(navigator()->GetController());
+  if (controller)
+    controller->NotifyUserActivation();
+
   return true;
 }
 
@@ -611,6 +593,12 @@ bool FrameTreeNode::ConsumeTransientUserActivation() {
   for (FrameTreeNode* node : frame_tree()->Nodes())
     node->user_activation_state_.ConsumeIfActive();
   return was_active;
+}
+
+bool FrameTreeNode::ClearUserActivation() {
+  for (FrameTreeNode* node : frame_tree()->SubtreeNodes(this))
+    node->user_activation_state_.Clear();
+  return true;
 }
 
 bool FrameTreeNode::UpdateUserActivationState(
@@ -622,6 +610,9 @@ bool FrameTreeNode::UpdateUserActivationState(
 
     case blink::UserActivationUpdateType::kNotifyActivation:
       return NotifyUserActivation();
+
+    case blink::UserActivationUpdateType::kClearActivation:
+      return ClearUserActivation();
   }
   NOTREACHED() << "Invalid update_type.";
 }
@@ -668,6 +659,27 @@ void FrameTreeNode::UpdateFramePolicyHeaders(
   // Notify any proxies if the policies have been changed.
   if (changed)
     render_manager()->OnDidSetFramePolicyHeaders();
+}
+
+void FrameTreeNode::PruneChildFrameNavigationEntries(
+    NavigationEntryImpl* entry) {
+  for (size_t i = 0; i < current_frame_host()->child_count(); ++i) {
+    FrameTreeNode* child = current_frame_host()->child_at(i);
+    if (child->is_created_by_script_) {
+      entry->RemoveEntryForFrame(child,
+                                 /* only_if_different_position = */ false);
+    } else {
+      child->PruneChildFrameNavigationEntries(entry);
+    }
+  }
+}
+
+void FrameTreeNode::SetOpenerFeaturePolicyState(
+    const blink::FeaturePolicy::FeatureState& feature_state) {
+  DCHECK(IsMainFrame());
+  if (base::FeatureList::IsEnabled(features::kFeaturePolicyForSandbox)) {
+    replication_state_.opener_feature_state = feature_state;
+  }
 }
 
 }  // namespace content

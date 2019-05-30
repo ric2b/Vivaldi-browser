@@ -33,23 +33,10 @@ class CONTENT_EXPORT SiteIsolationPolicy {
   // Returns true if every site should be placed in a dedicated process.
   static bool UseDedicatedProcessesForAllSites();
 
-  // Returns whether cross-site document responses can be blocked.
-  enum CrossSiteDocumentBlockingEnabledState {
-    XSDB_ENABLED_UNCONDITIONALLY,
-    XSDB_ENABLED_IF_ISOLATED,
-    XSDB_DISABLED,
-  };
-  static CrossSiteDocumentBlockingEnabledState
-  IsCrossSiteDocumentBlockingEnabled();
-
   // Populates CORB-related (Cross-Origin Read Blocking related) parts of the
   // URLLoaderFactoryParams depending on the current Site Isolation policy.
   static void PopulateURLLoaderFactoryParamsPtrForCORB(
       network::mojom::URLLoaderFactoryParams* params);
-
-  // Returns true if third-party subframes of a page should be kept in a
-  // different process from the main frame.
-  static bool IsTopDocumentIsolationEnabled();
 
   // Returns true if isolated origins feature is enabled.
   static bool AreIsolatedOriginsEnabled();
@@ -60,6 +47,11 @@ class CONTENT_EXPORT SiteIsolationPolicy {
   // Returns true if the PDF compositor should be enabled to allow out-of-
   // process iframes (OOPIF's) to print properly.
   static bool ShouldPdfCompositorBeEnabledForOopifs();
+
+  // Returns true if isolated origins may be added at runtime in response
+  // to hints such as users typing in a password or (in the future) an origin
+  // opting itself into isolation via a header.
+  static bool AreDynamicIsolatedOriginsEnabled();
 
   // Returns the origins to isolate.  See also AreIsolatedOriginsEnabled.
   // This list applies globally to the whole browser in all profiles.

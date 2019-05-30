@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/omnibox/omnibox_page_handler.h"
 #include "chrome/common/url_constants.h"
@@ -19,9 +20,18 @@ OmniboxUI::OmniboxUI(content::WebUI* web_ui) : ui::MojoWebUIController(web_ui) {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIOmniboxHost);
   source->AddResourcePath("omnibox.css", IDR_OMNIBOX_CSS);
+  source->AddResourcePath("omnibox_input.css", IDR_OMNIBOX_INPUT_CSS);
+  source->AddResourcePath("output_results_group.css",
+                          IDR_OUTPUT_RESULTS_GROUP_CSS);
+  source->AddResourcePath("omnibox_output_column_widths.css",
+                          IDR_OMNIBOX_OUTPUT_COLUMN_WIDTHS_CSS);
+  source->AddResourcePath("omnibox_element.js", IDR_OMNIBOX_ELEMENT_JS);
+  source->AddResourcePath("omnibox_input.js", IDR_OMNIBOX_INPUT_JS);
+  source->AddResourcePath("omnibox_output.js", IDR_OMNIBOX_OUTPUT_JS);
   source->AddResourcePath("omnibox.js", IDR_OMNIBOX_JS);
-  source->AddResourcePath("chrome/browser/ui/webui/omnibox/omnibox.mojom.js",
-                          IDR_OMNIBOX_MOJO_JS);
+  source->AddResourcePath(
+      "chrome/browser/ui/webui/omnibox/omnibox.mojom-lite.js",
+      IDR_OMNIBOX_MOJO_JS);
   source->SetDefaultResource(IDR_OMNIBOX_HTML);
   source->UseGzip();
 

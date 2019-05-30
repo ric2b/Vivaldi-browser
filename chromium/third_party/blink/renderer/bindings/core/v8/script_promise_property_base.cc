@@ -16,7 +16,7 @@ ScriptPromisePropertyBase::ScriptPromisePropertyBase(
     ExecutionContext* execution_context,
     Name name)
     : ContextClient(execution_context),
-      isolate_(ToIsolate(execution_context)),
+      isolate_(execution_context->GetIsolate()),
       name_(name),
       state_(kPending) {}
 
@@ -75,7 +75,7 @@ void ScriptPromisePropertyBase::ResolveOrReject(State target_state) {
   state_ = target_state;
 
   v8::HandleScope handle_scope(isolate_);
-  size_t i = 0;
+  wtf_size_t i = 0;
   while (i < wrappers_.size()) {
     const std::unique_ptr<ScopedPersistent<v8::Object>>& persistent =
         wrappers_[i];
@@ -129,7 +129,7 @@ void ScriptPromisePropertyBase::ResolveOrRejectInternal(
 v8::Local<v8::Object> ScriptPromisePropertyBase::EnsureHolderWrapper(
     ScriptState* script_state) {
   v8::Local<v8::Context> context = script_state->GetContext();
-  size_t i = 0;
+  wtf_size_t i = 0;
   while (i < wrappers_.size()) {
     const std::unique_ptr<ScopedPersistent<v8::Object>>& persistent =
         wrappers_[i];
@@ -166,8 +166,20 @@ void ScriptPromisePropertyBase::ClearWrappers() {
     if (!wrapper.IsEmpty()) {
       v8::Context::Scope scope(wrapper->CreationContext());
       // TODO(peria): Use deleteProperty() if http://crbug.com/v8/6227 is fixed.
-      ResolverSymbol().Set(wrapper, v8::Undefined(isolate_));
-      PromiseSymbol().Set(wrapper, v8::Undefined(isolate_));
+
+      // Check whether the value has been set or not. Unfortunately, HasValue
+      // cannot be used as it triggers regular ScriptForbiddenScope through V8
+      // callbacks. GetOrUndefined avoids this because it does not enter a
+      // proper scope in V8.
+      v8::Local<v8::Value> cache;
+      if (ResolverSymbol().GetOrUndefined(wrapper).ToLocal(&cache) &&
+          !cache->IsUndefined()) {
+        ResolverSymbol().Set(wrapper, v8::Undefined(isolate_));
+      }
+      if (PromiseSymbol().GetOrUndefined(wrapper).ToLocal(&cache) &&
+          !cache->IsUndefined()) {
+        PromiseSymbol().Set(wrapper, v8::Undefined(isolate_));
+      }
     }
   }
   wrappers_.clear();

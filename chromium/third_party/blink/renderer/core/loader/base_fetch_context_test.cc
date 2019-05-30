@@ -36,6 +36,9 @@
 #include "third_party/blink/renderer/core/script/fetch_client_settings_object_impl.h"
 #include "third_party/blink/renderer/core/testing/null_execution_context.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
+#include "third_party/blink/renderer/platform/loader/testing/test_resource_fetcher_properties.h"
+#include "third_party/blink/renderer/platform/scheduler/test/fake_task_runner.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
 namespace blink {
@@ -43,17 +46,15 @@ namespace blink {
 class MockBaseFetchContext final : public BaseFetchContext {
  public:
   explicit MockBaseFetchContext(ExecutionContext* execution_context)
-      : execution_context_(execution_context),
-        fetch_client_settings_object_(
-            new FetchClientSettingsObjectImpl(*execution_context)) {}
+      : execution_context_(execution_context) {}
   ~MockBaseFetchContext() override = default;
 
   // BaseFetchContext overrides:
-  const FetchClientSettingsObject* GetFetchClientSettingsObject()
-      const override {
-    return fetch_client_settings_object_.Get();
-  }
   KURL GetSiteForCookies() const override { return KURL(); }
+  scoped_refptr<const blink::SecurityOrigin> GetTopFrameOrigin()
+      const override {
+    return SecurityOrigin::CreateUniqueOpaque();
+  }
   bool AllowScriptFromSource(const KURL&) const override { return false; }
   SubresourceFilter* GetSubresourceFilter() const override { return nullptr; }
   PreviewsResourceLoadingHints* GetPreviewsResourceLoadingHints()
@@ -66,7 +67,7 @@ class MockBaseFetchContext final : public BaseFetchContext {
   void DispatchDidBlockRequest(const ResourceRequest&,
                                const FetchInitiatorInfo&,
                                ResourceRequestBlockedReason,
-                               Resource::Type) const override {}
+                               ResourceType) const override {}
   bool ShouldBypassMainWorldCSP() const override { return false; }
   bool IsSVGImageChromeClient() const override { return false; }
   void CountUsage(WebFeature) const override {}
@@ -79,7 +80,7 @@ class MockBaseFetchContext final : public BaseFetchContext {
     return nullptr;
   }
   bool ShouldBlockFetchByMixedContentCheck(
-      WebURLRequest::RequestContext,
+      mojom::RequestContextType,
       network::mojom::RequestContextFrameType,
       ResourceRequest::RedirectStatus,
       const KURL&,
@@ -92,15 +93,8 @@ class MockBaseFetchContext final : public BaseFetchContext {
   }
   const KURL& Url() const override { return execution_context_->Url(); }
 
-  const SecurityOrigin* GetSecurityOrigin() const override {
-    return fetch_client_settings_object_->GetSecurityOrigin();
-  }
   const SecurityOrigin* GetParentSecurityOrigin() const override {
     return nullptr;
-  }
-  base::Optional<mojom::IPAddressSpace> GetAddressSpace() const override {
-    return base::make_optional(
-        execution_context_->GetSecurityContext().AddressSpace());
   }
   const ContentSecurityPolicy* GetContentSecurityPolicy() const override {
     return execution_context_->GetContentSecurityPolicy();
@@ -113,26 +107,39 @@ class MockBaseFetchContext final : public BaseFetchContext {
     BaseFetchContext::Trace(visitor);
   }
 
-  bool IsDetached() const override { return is_detached_; }
-  void SetIsDetached(bool is_detached) { is_detached_ = is_detached; }
-
  private:
   Member<ExecutionContext> execution_context_;
-  Member<FetchClientSettingsObjectImpl> fetch_client_settings_object_;
-  bool is_detached_ = false;
+  Member<const FetchClientSettingsObjectImpl> fetch_client_settings_object_;
 };
 
 class BaseFetchContextTest : public testing::Test {
  protected:
   void SetUp() override {
-    execution_context_ = new NullExecutionContext();
+    execution_context_ = MakeGarbageCollected<NullExecutionContext>();
     static_cast<NullExecutionContext*>(execution_context_.Get())
         ->SetUpSecurityContext();
-    fetch_context_ = new MockBaseFetchContext(execution_context_);
+    fetch_context_ =
+        MakeGarbageCollected<MockBaseFetchContext>(execution_context_);
+    resource_fetcher_properties_ =
+        MakeGarbageCollected<TestResourceFetcherProperties>(
+            *MakeGarbageCollected<FetchClientSettingsObjectImpl>(
+                *execution_context_));
+    resource_fetcher_ = MakeGarbageCollected<ResourceFetcher>(
+        ResourceFetcherInit(*resource_fetcher_properties_, fetch_context_,
+                            base::MakeRefCounted<scheduler::FakeTaskRunner>()));
+  }
+
+  const FetchClientSettingsObject& GetFetchClientSettingsObject() const {
+    return resource_fetcher_->GetProperties().GetFetchClientSettingsObject();
+  }
+  const SecurityOrigin* GetSecurityOrigin() const {
+    return GetFetchClientSettingsObject().GetSecurityOrigin();
   }
 
   Persistent<ExecutionContext> execution_context_;
   Persistent<MockBaseFetchContext> fetch_context_;
+  Persistent<ResourceFetcher> resource_fetcher_;
+  Persistent<TestResourceFetcherProperties> resource_fetcher_properties_;
 };
 
 TEST_F(BaseFetchContextTest, SetIsExternalRequestForPublicContext) {
@@ -156,14 +163,8 @@ TEST_F(BaseFetchContextTest, SetIsExternalRequestForPublicContext) {
     ScopedCorsRFC1918ForTest cors_rfc1918(false);
     for (const auto& test : cases) {
       SCOPED_TRACE(test.url);
-      ResourceRequest main_request(test.url);
-      fetch_context_->AddAdditionalRequestHeaders(main_request,
-                                                  kFetchMainResource);
-      EXPECT_FALSE(main_request.IsExternalRequest());
-
       ResourceRequest sub_request(test.url);
-      fetch_context_->AddAdditionalRequestHeaders(sub_request,
-                                                  kFetchSubresource);
+      fetch_context_->AddAdditionalRequestHeaders(sub_request);
       EXPECT_FALSE(sub_request.IsExternalRequest());
     }
   }
@@ -172,14 +173,8 @@ TEST_F(BaseFetchContextTest, SetIsExternalRequestForPublicContext) {
     ScopedCorsRFC1918ForTest cors_rfc1918(true);
     for (const auto& test : cases) {
       SCOPED_TRACE(test.url);
-      ResourceRequest main_request(test.url);
-      fetch_context_->AddAdditionalRequestHeaders(main_request,
-                                                  kFetchMainResource);
-      EXPECT_EQ(test.is_external_expectation, main_request.IsExternalRequest());
-
       ResourceRequest sub_request(test.url);
-      fetch_context_->AddAdditionalRequestHeaders(sub_request,
-                                                  kFetchSubresource);
+      fetch_context_->AddAdditionalRequestHeaders(sub_request);
       EXPECT_EQ(test.is_external_expectation, sub_request.IsExternalRequest());
     }
   }
@@ -208,14 +203,8 @@ TEST_F(BaseFetchContextTest, SetIsExternalRequestForPrivateContext) {
     ScopedCorsRFC1918ForTest cors_rfc1918(false);
     for (const auto& test : cases) {
       SCOPED_TRACE(test.url);
-      ResourceRequest main_request(test.url);
-      fetch_context_->AddAdditionalRequestHeaders(main_request,
-                                                  kFetchMainResource);
-      EXPECT_FALSE(main_request.IsExternalRequest());
-
       ResourceRequest sub_request(test.url);
-      fetch_context_->AddAdditionalRequestHeaders(sub_request,
-                                                  kFetchSubresource);
+      fetch_context_->AddAdditionalRequestHeaders(sub_request);
       EXPECT_FALSE(sub_request.IsExternalRequest());
     }
   }
@@ -224,14 +213,8 @@ TEST_F(BaseFetchContextTest, SetIsExternalRequestForPrivateContext) {
     ScopedCorsRFC1918ForTest cors_rfc1918(true);
     for (const auto& test : cases) {
       SCOPED_TRACE(test.url);
-      ResourceRequest main_request(test.url);
-      fetch_context_->AddAdditionalRequestHeaders(main_request,
-                                                  kFetchMainResource);
-      EXPECT_EQ(test.is_external_expectation, main_request.IsExternalRequest());
-
       ResourceRequest sub_request(test.url);
-      fetch_context_->AddAdditionalRequestHeaders(sub_request,
-                                                  kFetchSubresource);
+      fetch_context_->AddAdditionalRequestHeaders(sub_request);
       EXPECT_EQ(test.is_external_expectation, sub_request.IsExternalRequest());
     }
   }
@@ -259,14 +242,8 @@ TEST_F(BaseFetchContextTest, SetIsExternalRequestForLocalContext) {
   {
     ScopedCorsRFC1918ForTest cors_rfc1918(false);
     for (const auto& test : cases) {
-      ResourceRequest main_request(test.url);
-      fetch_context_->AddAdditionalRequestHeaders(main_request,
-                                                  kFetchMainResource);
-      EXPECT_FALSE(main_request.IsExternalRequest());
-
       ResourceRequest sub_request(test.url);
-      fetch_context_->AddAdditionalRequestHeaders(sub_request,
-                                                  kFetchSubresource);
+      fetch_context_->AddAdditionalRequestHeaders(sub_request);
       EXPECT_FALSE(sub_request.IsExternalRequest());
     }
   }
@@ -274,14 +251,8 @@ TEST_F(BaseFetchContextTest, SetIsExternalRequestForLocalContext) {
   {
     ScopedCorsRFC1918ForTest cors_rfc1918(true);
     for (const auto& test : cases) {
-      ResourceRequest main_request(test.url);
-      fetch_context_->AddAdditionalRequestHeaders(main_request,
-                                                  kFetchMainResource);
-      EXPECT_EQ(test.is_external_expectation, main_request.IsExternalRequest());
-
       ResourceRequest sub_request(test.url);
-      fetch_context_->AddAdditionalRequestHeaders(sub_request,
-                                                  kFetchSubresource);
+      fetch_context_->AddAdditionalRequestHeaders(sub_request);
       EXPECT_EQ(test.is_external_expectation, sub_request.IsExternalRequest());
     }
   }
@@ -300,7 +271,8 @@ TEST_F(BaseFetchContextTest, CanRequest) {
 
   KURL url(NullURL(), "http://baz.test");
   ResourceRequest resource_request(url);
-  resource_request.SetRequestContext(WebURLRequest::kRequestContextScript);
+  resource_request.SetRequestContext(mojom::RequestContextType::SCRIPT);
+  resource_request.SetRequestorOrigin(GetSecurityOrigin());
   resource_request.SetFetchCredentialsMode(
       network::mojom::FetchCredentialsMode::kOmit);
 
@@ -308,7 +280,7 @@ TEST_F(BaseFetchContextTest, CanRequest) {
 
   EXPECT_EQ(ResourceRequestBlockedReason::kCSP,
             fetch_context_->CanRequest(
-                Resource::kScript, resource_request, url, options,
+                ResourceType::kScript, resource_request, url, options,
                 SecurityViolationReportingPolicy::kReport,
                 ResourceRequest::RedirectStatus::kFollowedRedirect));
   EXPECT_EQ(1u, policy->violation_reports_sent_.size());
@@ -331,7 +303,7 @@ TEST_F(BaseFetchContextTest, CheckCSPForRequest) {
 
   EXPECT_EQ(base::nullopt,
             fetch_context_->CheckCSPForRequest(
-                WebURLRequest::kRequestContextScript, url, options,
+                mojom::RequestContextType::SCRIPT, url, options,
                 SecurityViolationReportingPolicy::kReport,
                 ResourceRequest::RedirectStatus::kFollowedRedirect));
   EXPECT_EQ(1u, policy->violation_reports_sent_.size());
@@ -340,58 +312,64 @@ TEST_F(BaseFetchContextTest, CheckCSPForRequest) {
 TEST_F(BaseFetchContextTest, CanRequestWhenDetached) {
   KURL url(NullURL(), "http://www.example.com/");
   ResourceRequest request(url);
+  request.SetRequestorOrigin(GetSecurityOrigin());
   ResourceRequest keepalive_request(url);
+  keepalive_request.SetRequestorOrigin(GetSecurityOrigin());
   keepalive_request.SetKeepalive(true);
 
   EXPECT_EQ(base::nullopt,
             fetch_context_->CanRequest(
-                Resource::kRaw, request, url, ResourceLoaderOptions(),
+                ResourceType::kRaw, request, url, ResourceLoaderOptions(),
                 SecurityViolationReportingPolicy::kSuppressReporting,
                 ResourceRequest::RedirectStatus::kNoRedirect));
 
-  EXPECT_EQ(base::nullopt,
-            fetch_context_->CanRequest(
-                Resource::kRaw, keepalive_request, url, ResourceLoaderOptions(),
-                SecurityViolationReportingPolicy::kSuppressReporting,
-                ResourceRequest::RedirectStatus::kNoRedirect));
+  EXPECT_EQ(
+      base::nullopt,
+      fetch_context_->CanRequest(
+          ResourceType::kRaw, keepalive_request, url, ResourceLoaderOptions(),
+          SecurityViolationReportingPolicy::kSuppressReporting,
+          ResourceRequest::RedirectStatus::kNoRedirect));
 
   EXPECT_EQ(base::nullopt,
             fetch_context_->CanRequest(
-                Resource::kRaw, request, url, ResourceLoaderOptions(),
-                SecurityViolationReportingPolicy::kSuppressReporting,
-                ResourceRequest::RedirectStatus::kFollowedRedirect));
-
-  EXPECT_EQ(base::nullopt,
-            fetch_context_->CanRequest(
-                Resource::kRaw, keepalive_request, url, ResourceLoaderOptions(),
+                ResourceType::kRaw, request, url, ResourceLoaderOptions(),
                 SecurityViolationReportingPolicy::kSuppressReporting,
                 ResourceRequest::RedirectStatus::kFollowedRedirect));
 
-  fetch_context_->SetIsDetached(true);
+  EXPECT_EQ(
+      base::nullopt,
+      fetch_context_->CanRequest(
+          ResourceType::kRaw, keepalive_request, url, ResourceLoaderOptions(),
+          SecurityViolationReportingPolicy::kSuppressReporting,
+          ResourceRequest::RedirectStatus::kFollowedRedirect));
+
+  resource_fetcher_->ClearContext();
 
   EXPECT_EQ(ResourceRequestBlockedReason::kOther,
             fetch_context_->CanRequest(
-                Resource::kRaw, request, url, ResourceLoaderOptions(),
+                ResourceType::kRaw, request, url, ResourceLoaderOptions(),
                 SecurityViolationReportingPolicy::kSuppressReporting,
                 ResourceRequest::RedirectStatus::kNoRedirect));
 
-  EXPECT_EQ(ResourceRequestBlockedReason::kOther,
-            fetch_context_->CanRequest(
-                Resource::kRaw, keepalive_request, url, ResourceLoaderOptions(),
-                SecurityViolationReportingPolicy::kSuppressReporting,
-                ResourceRequest::RedirectStatus::kNoRedirect));
+  EXPECT_EQ(
+      ResourceRequestBlockedReason::kOther,
+      fetch_context_->CanRequest(
+          ResourceType::kRaw, keepalive_request, url, ResourceLoaderOptions(),
+          SecurityViolationReportingPolicy::kSuppressReporting,
+          ResourceRequest::RedirectStatus::kNoRedirect));
 
   EXPECT_EQ(ResourceRequestBlockedReason::kOther,
             fetch_context_->CanRequest(
-                Resource::kRaw, request, url, ResourceLoaderOptions(),
+                ResourceType::kRaw, request, url, ResourceLoaderOptions(),
                 SecurityViolationReportingPolicy::kSuppressReporting,
                 ResourceRequest::RedirectStatus::kFollowedRedirect));
 
-  EXPECT_EQ(base::nullopt,
-            fetch_context_->CanRequest(
-                Resource::kRaw, keepalive_request, url, ResourceLoaderOptions(),
-                SecurityViolationReportingPolicy::kSuppressReporting,
-                ResourceRequest::RedirectStatus::kFollowedRedirect));
+  EXPECT_EQ(
+      base::nullopt,
+      fetch_context_->CanRequest(
+          ResourceType::kRaw, keepalive_request, url, ResourceLoaderOptions(),
+          SecurityViolationReportingPolicy::kSuppressReporting,
+          ResourceRequest::RedirectStatus::kFollowedRedirect));
 }
 
 // Test that User Agent CSS can only load images with data urls.
@@ -400,24 +378,25 @@ TEST_F(BaseFetchContextTest, UACSSTest) {
   KURL data_url("data:image/png;base64,test");
 
   ResourceRequest resource_request(test_url);
+  resource_request.SetRequestorOrigin(GetSecurityOrigin());
   ResourceLoaderOptions options;
-  options.initiator_info.name = FetchInitiatorTypeNames::uacss;
+  options.initiator_info.name = fetch_initiator_type_names::kUacss;
 
   EXPECT_EQ(ResourceRequestBlockedReason::kOther,
             fetch_context_->CanRequest(
-                Resource::kScript, resource_request, test_url, options,
+                ResourceType::kScript, resource_request, test_url, options,
                 SecurityViolationReportingPolicy::kReport,
                 ResourceRequest::RedirectStatus::kFollowedRedirect));
 
   EXPECT_EQ(ResourceRequestBlockedReason::kOther,
             fetch_context_->CanRequest(
-                Resource::kImage, resource_request, test_url, options,
+                ResourceType::kImage, resource_request, test_url, options,
                 SecurityViolationReportingPolicy::kReport,
                 ResourceRequest::RedirectStatus::kFollowedRedirect));
 
   EXPECT_EQ(base::nullopt,
             fetch_context_->CanRequest(
-                Resource::kImage, resource_request, data_url, options,
+                ResourceType::kImage, resource_request, data_url, options,
                 SecurityViolationReportingPolicy::kReport,
                 ResourceRequest::RedirectStatus::kFollowedRedirect));
 }
@@ -433,12 +412,13 @@ TEST_F(BaseFetchContextTest, UACSSTest_BypassCSP) {
   KURL data_url("data:image/png;base64,test");
 
   ResourceRequest resource_request(data_url);
+  resource_request.SetRequestorOrigin(GetSecurityOrigin());
   ResourceLoaderOptions options;
-  options.initiator_info.name = FetchInitiatorTypeNames::uacss;
+  options.initiator_info.name = fetch_initiator_type_names::kUacss;
 
   EXPECT_EQ(base::nullopt,
             fetch_context_->CanRequest(
-                Resource::kImage, resource_request, data_url, options,
+                ResourceType::kImage, resource_request, data_url, options,
                 SecurityViolationReportingPolicy::kReport,
                 ResourceRequest::RedirectStatus::kFollowedRedirect));
 }

@@ -4,27 +4,31 @@
 
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_mediator.h"
 
+#include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/tracker.h"
+#include "components/open_from_clipboard/clipboard_recent_content.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/find_in_page/find_tab_helper.h"
+#import "ios/chrome/browser/search_engines/search_engines_util.h"
 #import "ios/chrome/browser/ui/activity_services/canonical_url_retriever.h"
 #include "ios/chrome/browser/ui/bookmarks/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/reading_list_add_command.h"
-#import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_item.h"
+#import "ios/chrome/browser/ui/list_model/list_model.h"
 #import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_navigation_item.h"
 #import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_tools_item.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
-#import "ios/chrome/browser/ui/popup_menu/popup_menu_table_view_controller.h"
-#import "ios/chrome/browser/ui/popup_menu/popup_menu_table_view_controller_commands.h"
+#import "ios/chrome/browser/ui/popup_menu/public/cells/popup_menu_item.h"
+#import "ios/chrome/browser/ui/popup_menu/public/popup_menu_consumer.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notification_delegate.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notifier.h"
-#include "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -36,7 +40,7 @@
 #include "ios/web/public/navigation_manager.h"
 #include "ios/web/public/user_agent.h"
 #include "ios/web/public/web_client.h"
-#include "ios/web/public/web_state/web_state.h"
+#import "ios/web/public/web_state/web_state.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image.h"
@@ -63,11 +67,10 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
 }
 }
 
-@interface PopupMenuMediator ()<BookmarkModelBridgeObserver,
-                                CRWWebStateObserver,
-                                PopupMenuTableViewControllerCommands,
-                                ReadingListMenuNotificationDelegate,
-                                WebStateListObserving> {
+@interface PopupMenuMediator () <BookmarkModelBridgeObserver,
+                                 CRWWebStateObserver,
+                                 ReadingListMenuNotificationDelegate,
+                                 WebStateListObserving> {
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
   std::unique_ptr<WebStateListObserverBridge> _webStateListObserver;
   // Bridge to register for bookmark changes.
@@ -219,6 +222,11 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
   [self updatePopupMenu];
 }
 
+- (void)webStateDidChangeBackForwardState:(web::WebState*)webState {
+  DCHECK_EQ(_webState, webState);
+  [self updatePopupMenu];
+}
+
 - (void)webStateDidChangeVisibleSecurityState:(web::WebState*)webState {
   DCHECK_EQ(_webState, webState);
   [self updatePopupMenu];
@@ -305,7 +313,7 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
   }
 }
 
-- (void)setPopupMenu:(PopupMenuTableViewController*)popupMenu {
+- (void)setPopupMenu:(id<PopupMenuConsumer>)popupMenu {
   _popupMenu = popupMenu;
 
   [_popupMenu setPopupMenuItems:self.items];
@@ -313,7 +321,6 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
     _popupMenu.itemToHighlight = self.openNewIncognitoTabItem;
     self.triggerNewIncognitoTabTip = NO;
   }
-  _popupMenu.commandHandler = self;
   if (self.webState) {
     [self updatePopupMenu];
   }
@@ -388,7 +395,7 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
   return _items;
 }
 
-#pragma mark - PopupMenuTableViewControllerCommands
+#pragma mark - PopupMenuActionHandlerCommands
 
 - (void)readPageLater {
   if (!self.webState)
@@ -429,10 +436,6 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
 
   self.readingListItem.badgeNumber = unreadCount;
   [self.popupMenu itemsHaveChanged:@[ self.readingListItem ]];
-}
-
-- (void)unseenStateChanged:(BOOL)unseenItemsExist {
-  // TODO(crbug.com/800266): Remove this method.
 }
 
 #pragma mark - Popup updates (Private)
@@ -513,7 +516,8 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
   if (URL.SchemeIs(kChromeUIScheme) && URL.host() == kChromeUIOfflineHost) {
     return YES;
   }
-  return URL.is_valid() && !web::GetWebClient()->IsAppSpecificURL(URL);
+  return navItem->GetVirtualURL().is_valid() &&
+         !web::GetWebClient()->IsAppSpecificURL(navItem->GetVirtualURL());
 }
 
 // Whether the current page is a web page.
@@ -584,12 +588,39 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
 // Creates the menu items for the search menu.
 - (void)createSearchMenuItems {
   NSMutableArray* items = [NSMutableArray array];
-  NSString* pasteboardString = [UIPasteboard generalPasteboard].string;
-  if (pasteboardString) {
-    PopupMenuToolsItem* pasteAndGo = CreateTableViewItem(
-        IDS_IOS_TOOLS_MENU_PASTE_AND_GO, PopupMenuActionPasteAndGo,
-        @"popup_menu_paste_and_go", kToolsMenuPasteAndGo);
-    [items addObject:pasteAndGo];
+
+  if (base::FeatureList::IsEnabled(kCopiedContentBehavior)) {
+    ClipboardRecentContent* clipboardRecentContent =
+        ClipboardRecentContent::GetInstance();
+    PopupMenuToolsItem* copiedContentItem = nil;
+
+    if (search_engines::SupportsSearchByImage(self.templateURLService) &&
+        clipboardRecentContent->GetRecentImageFromClipboard()) {
+      copiedContentItem = CreateTableViewItem(
+          IDS_IOS_TOOLS_MENU_SEARCH_COPIED_IMAGE,
+          PopupMenuActionSearchCopiedImage, @"popup_menu_paste_and_go",
+          kToolsMenuCopiedImageSearch);
+    } else if (clipboardRecentContent->GetRecentURLFromClipboard()) {
+      copiedContentItem = CreateTableViewItem(
+          IDS_IOS_TOOLS_MENU_VISIT_COPIED_LINK, PopupMenuActionPasteAndGo,
+          @"popup_menu_paste_and_go", kToolsMenuPasteAndGo);
+    } else if (clipboardRecentContent->GetRecentTextFromClipboard()) {
+      copiedContentItem = CreateTableViewItem(
+          IDS_IOS_TOOLS_MENU_SEARCH_COPIED_TEXT, PopupMenuActionPasteAndGo,
+          @"popup_menu_paste_and_go", kToolsMenuPasteAndGo);
+    }
+
+    if (copiedContentItem) {
+      [items addObject:copiedContentItem];
+    }
+  } else {
+    NSString* pasteboardString = [UIPasteboard generalPasteboard].string;
+    if (pasteboardString) {
+      PopupMenuToolsItem* pasteAndGo = CreateTableViewItem(
+          IDS_IOS_TOOLS_MENU_PASTE_AND_GO, PopupMenuActionPasteAndGo,
+          @"popup_menu_paste_and_go", kToolsMenuPasteAndGo);
+      [items addObject:pasteAndGo];
+    }
   }
 
   PopupMenuToolsItem* QRCodeSearch = CreateTableViewItem(

@@ -6,6 +6,7 @@
 
 #include "components/metrics/reporting_service.h"
 
+#include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
@@ -81,16 +82,6 @@ bool ReportingService::reporting_active() const {
   return reporting_active_;
 }
 
-void ReportingService::UpdateMetricsUsagePrefs(const std::string& service_name,
-                                               int message_size,
-                                               bool is_cellular) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (data_use_tracker_) {
-    data_use_tracker_->UpdateMetricsUsagePrefs(service_name, message_size,
-                                               is_cellular);
-  }
-}
-
 //------------------------------------------------------------------------------
 // private methods
 //------------------------------------------------------------------------------
@@ -98,10 +89,13 @@ void ReportingService::UpdateMetricsUsagePrefs(const std::string& service_name,
 void ReportingService::SendNextLog() {
   DVLOG(1) << "SendNextLog";
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!last_upload_finish_time_.is_null()) {
-    LogActualUploadInterval(base::TimeTicks::Now() - last_upload_finish_time_);
-    last_upload_finish_time_ = base::TimeTicks();
-  }
+
+  const base::TimeTicks now = base::TimeTicks::Now();
+  LogActualUploadInterval(last_upload_finish_time_.is_null()
+                              ? base::TimeDelta()
+                              : now - last_upload_finish_time_);
+  last_upload_finish_time_ = now;
+
   if (!reporting_active()) {
     upload_scheduler_->StopAndUploadCancelled();
     return;
@@ -124,7 +118,7 @@ void ReportingService::SendNextLog() {
   bool is_cellular_logic = client_->IsUMACellularUploadLogicEnabled();
   if (is_cellular_logic && data_use_tracker_ &&
       !data_use_tracker_->ShouldUploadLogOnCellular(
-          log_store()->staged_log_hash().size())) {
+          log_store()->staged_log().size())) {
     upload_scheduler_->UploadOverDataUsageCap();
     upload_canceled = true;
   } else {
@@ -157,7 +151,10 @@ void ReportingService::SendStagedLog() {
   const std::string hash =
       base::HexEncode(log_store()->staged_log_hash().data(),
                       log_store()->staged_log_hash().size());
-  log_uploader_->UploadLog(log_store()->staged_log(), hash, reporting_info_);
+  std::string signature;
+  base::Base64Encode(log_store()->staged_log_signature(), &signature);
+  log_uploader_->UploadLog(log_store()->staged_log(), hash, signature,
+                           reporting_info_);
 }
 
 void ReportingService::OnLogUploadComplete(int response_code,

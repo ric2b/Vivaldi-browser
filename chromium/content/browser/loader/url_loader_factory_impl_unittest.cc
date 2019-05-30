@@ -18,12 +18,14 @@
 #include "base/memory/weak_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/task/post_task.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/loader/mojo_async_resource_handler.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader/resource_message_filter.h"
 #include "content/browser/loader/resource_request_info_impl.h"
 #include "content/browser/loader_delegate_impl.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/common/content_paths.h"
@@ -44,6 +46,7 @@
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "net/test/url_request/url_request_slow_download_job.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_filter.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
@@ -74,12 +77,15 @@ class URLLoaderFactoryImplTest : public ::testing::TestWithParam<size_t> {
             nullptr,
             nullptr,
             nullptr,
+            browser_context_->GetSharedCorsOriginAccessList(),
             base::Bind(&URLLoaderFactoryImplTest::GetContexts,
                        base::Unretained(this)),
-            BrowserThread::GetTaskRunnerForThread(BrowserThread::IO))) {
+            base::CreateSingleThreadTaskRunnerWithTraits(
+                {BrowserThread::IO}))) {
     // Some tests specify request.report_raw_headers, but the RDH checks the
     // CanReadRawCookies permission before enabling it.
-    ChildProcessSecurityPolicyImpl::GetInstance()->Add(kChildId);
+    ChildProcessSecurityPolicyImpl::GetInstance()->Add(kChildId,
+                                                       browser_context_.get());
     ChildProcessSecurityPolicyImpl::GetInstance()->GrantReadRawCookies(
         kChildId);
 
@@ -93,7 +99,7 @@ class URLLoaderFactoryImplTest : public ::testing::TestWithParam<size_t> {
         mojo::MakeRequest(&factory_));
 
     // Calling this function creates a request context.
-    browser_context_->GetResourceContext()->GetRequestContext();
+    browser_context_->GetRequestContext()->GetURLRequestContext();
     base::RunLoop().RunUntilIdle();
   }
 
@@ -114,7 +120,7 @@ class URLLoaderFactoryImplTest : public ::testing::TestWithParam<size_t> {
                    net::URLRequestContext** request_context) {
     *resource_context = browser_context_->GetResourceContext();
     *request_context =
-        browser_context_->GetResourceContext()->GetRequestContext();
+        browser_context_->GetRequestContext()->GetURLRequestContext();
   }
 
   // Must outlive all members below.
@@ -424,9 +430,9 @@ TEST_P(URLLoaderFactoryImplTest, CancelFromRenderer) {
   ASSERT_FALSE(rdh_.GetURLRequest(GlobalRequestID(kChildId, kRequestId)));
 }
 
-INSTANTIATE_TEST_CASE_P(URLLoaderFactoryImplTest,
-                        URLLoaderFactoryImplTest,
-                        ::testing::Values(128, 32 * 1024));
+INSTANTIATE_TEST_SUITE_P(URLLoaderFactoryImplTest,
+                         URLLoaderFactoryImplTest,
+                         ::testing::Values(128, 32 * 1024));
 
 }  // namespace
 

@@ -29,7 +29,7 @@ cr.define('print_preview_new', function() {
     },
 
     /**
-     * @return {!HTMLInputElement} The input element the behavior should use.
+     * @return {!CrInputElement} The cr-input element the behavior should use.
      *     Should be overridden by elements using this behavior.
      */
     getInput: function() {},
@@ -52,10 +52,11 @@ cr.define('print_preview_new', function() {
      * @private
      */
     onKeyDown_: function(event) {
-      if (event.code != 'Enter')
+      if (event.code != 'Enter') {
         return;
+      }
 
-      this.resetAndUpdate_();
+      this.resetAndUpdate();
     },
 
     /**

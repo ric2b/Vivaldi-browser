@@ -8,6 +8,7 @@
 #include <tuple>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/optional.h"
 #include "base/time/default_clock.h"
@@ -15,10 +16,11 @@
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager_util.h"
 #include "chrome/browser/chromeos/policy/off_hours/off_hours_proto_parser.h"
-#include "chrome/browser/chromeos/policy/weekly_time/time_utils.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/policy/weekly_time/time_utils.h"
+#include "components/prefs/pref_value_map.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 
@@ -30,30 +32,24 @@ namespace off_hours {
 DeviceOffHoursController::DeviceOffHoursController()
     : timer_(std::make_unique<base::OneShotTimer>()),
       clock_(base::DefaultClock::GetInstance()) {
-  // IsInitialized() check is used for testing. Otherwise it has to be already
-  // initialized.
-  if (chromeos::DBusThreadManager::IsInitialized()) {
-    chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->AddObserver(
-        this);
-    chromeos::DBusThreadManager::Get()->GetSystemClockClient()->AddObserver(
-        this);
-    chromeos::DBusThreadManager::Get()
-        ->GetSystemClockClient()
-        ->WaitForServiceToBeAvailable(
-            base::Bind(&DeviceOffHoursController::SystemClockInitiallyAvailable,
-                       weak_ptr_factory_.GetWeakPtr()));
+  auto* system_clock_client = chromeos::SystemClockClient::Get();
+  if (system_clock_client) {
+    system_clock_client->AddObserver(this);
+    system_clock_client->WaitForServiceToBeAvailable(
+        base::Bind(&DeviceOffHoursController::SystemClockInitiallyAvailable,
+                   weak_ptr_factory_.GetWeakPtr()));
   }
+
+  if (chromeos::PowerManagerClient::Get())
+    chromeos::PowerManagerClient::Get()->AddObserver(this);
 }
 
 DeviceOffHoursController::~DeviceOffHoursController() {
-  // IsInitialized() check is used for testing. Otherwise it has to be already
-  // initialized.
-  if (chromeos::DBusThreadManager::IsInitialized()) {
-    chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->RemoveObserver(
-        this);
-    chromeos::DBusThreadManager::Get()->GetSystemClockClient()->RemoveObserver(
-        this);
-  }
+  if (chromeos::SystemClockClient::Get())
+    chromeos::SystemClockClient::Get()->RemoveObserver(this);
+
+  if (chromeos::PowerManagerClient::Get())
+    chromeos::PowerManagerClient::Get()->RemoveObserver(this);
 }
 
 void DeviceOffHoursController::AddObserver(Observer* observer) {
@@ -79,21 +75,23 @@ bool DeviceOffHoursController::IsCurrentSessionAllowedOnlyForOffHours() const {
       user_manager::UserManager::Get();
   const user_manager::UserList& logged_in_users =
       user_manager->GetLoggedInUsers();
-  // If at least one logged in user won't be allowed after OffHours,
-  // the session will be terminated.
+  user_manager::UserList users_to_check;
   for (auto* user : logged_in_users) {
-    if (user->GetType() != user_manager::USER_TYPE_REGULAR &&
-        user->GetType() != user_manager::USER_TYPE_GUEST &&
-        user->GetType() != user_manager::USER_TYPE_SUPERVISED &&
-        user->GetType() != user_manager::USER_TYPE_CHILD) {
-      continue;
-    }
-    if (!chromeos::chrome_user_manager_util::IsUserAllowed(
-            *user, device_settings_proto_)) {
-      return true;
+    if (user->GetType() == user_manager::USER_TYPE_REGULAR ||
+        user->GetType() == user_manager::USER_TYPE_GUEST ||
+        user->GetType() == user_manager::USER_TYPE_SUPERVISED ||
+        user->GetType() == user_manager::USER_TYPE_CHILD) {
+      users_to_check.push_back(user);
     }
   }
-  return false;
+
+  if (users_to_check.empty())
+    return false;
+
+  // If at least one logged in user won't be allowed after OffHours,
+  // the session will be terminated.
+  return !chromeos::chrome_user_manager_util::AreAllUsersAllowed(
+      users_to_check, device_settings_proto_);
 }
 
 void DeviceOffHoursController::UpdateOffHoursPolicy(
@@ -193,7 +191,7 @@ void DeviceOffHoursController::SystemClockUpdated() {
   // current device time. Ask SystemClockClient to update information about the
   // system time synchronization with the network time asynchronously.
   // Information will be received by NetworkSynchronizationUpdated method.
-  chromeos::DBusThreadManager::Get()->GetSystemClockClient()->GetLastSyncInfo(
+  chromeos::SystemClockClient::Get()->GetLastSyncInfo(
       base::Bind(&DeviceOffHoursController::NetworkSynchronizationUpdated,
                  weak_ptr_factory_.GetWeakPtr()));
 }
@@ -202,7 +200,7 @@ void DeviceOffHoursController::SystemClockInitiallyAvailable(
     bool service_is_available) {
   if (!service_is_available)
     return;
-  chromeos::DBusThreadManager::Get()->GetSystemClockClient()->GetLastSyncInfo(
+  chromeos::SystemClockClient::Get()->GetLastSyncInfo(
       base::Bind(&DeviceOffHoursController::NetworkSynchronizationUpdated,
                  weak_ptr_factory_.GetWeakPtr()));
 }

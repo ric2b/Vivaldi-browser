@@ -7,6 +7,30 @@
 // and failures are detected.
 
 var availableTests = [
+  function changeSavedPassword() {
+    var numCalls = 0;
+    var callback = function(savedPasswordsList) {
+      numCalls++;
+      if (numCalls == 1) {
+        chrome.passwordsPrivate.changeSavedPassword(0, 'new_user');
+      } else if (numCalls == 2) {
+        chrome.test.assertEq('new_user', savedPasswordsList[0].username);
+        chrome.passwordsPrivate.changeSavedPassword(
+            0, 'another_user', 'new_pass');
+      } else if (numCalls == 3) {
+        chrome.test.assertEq('another_user', savedPasswordsList[0].username);
+        chrome.test.assertEq(
+            'new_pass'.length, savedPasswordsList[0].numCharactersInPassword);
+        chrome.test.succeed();
+      } else {
+        chrome.test.fail();
+      }
+    };
+
+    chrome.passwordsPrivate.onSavedPasswordsListChanged.addListener(callback);
+    chrome.passwordsPrivate.getSavedPasswordList(callback);
+  },
+
   function removeAndUndoRemoveSavedPassword() {
     var numCalls = 0;
     var numSavedPasswords;
@@ -15,8 +39,7 @@ var availableTests = [
 
       if (numCalls == 1) {
         numSavedPasswords = savedPasswordsList.length;
-        chrome.passwordsPrivate.removeSavedPassword(
-            savedPasswordsList[0].index);
+        chrome.passwordsPrivate.removeSavedPassword(savedPasswordsList[0].id);
       } else if (numCalls == 2) {
         chrome.test.assertEq(
             savedPasswordsList.length, numSavedPasswords - 1);
@@ -42,7 +65,7 @@ var availableTests = [
       if (numCalls == 1) {
         numPasswordExceptions = passwordExceptionsList.length;
         chrome.passwordsPrivate.removePasswordException(
-            passwordExceptionsList[0].index);
+            passwordExceptionsList[0].id);
       } else if (numCalls == 2) {
         chrome.test.assertEq(
             passwordExceptionsList.length, numPasswordExceptions - 1);
@@ -62,13 +85,10 @@ var availableTests = [
   },
 
   function requestPlaintextPassword() {
-    var callback = function() {
+    chrome.passwordsPrivate.requestPlaintextPassword(0, password => {
       // Ensure that the callback is invoked.
       chrome.test.succeed();
-    };
-
-    chrome.passwordsPrivate.onPlaintextPasswordRetrieved.addListener(callback);
-    chrome.passwordsPrivate.requestPlaintextPassword(0);
+    });
   },
 
   function getSavedPasswordList() {
@@ -76,15 +96,18 @@ var availableTests = [
       chrome.test.assertTrue(!!list);
       chrome.test.assertTrue(list.length > 0);
 
+      var idSet = new Set();
       for (var i = 0; i < list.length; ++i) {
         var entry = list[i];
-        chrome.test.assertTrue(!!entry.loginPair);
-        chrome.test.assertTrue(!!entry.loginPair.urls.origin);
-        chrome.test.assertTrue(!!entry.loginPair.urls.shown);
-        chrome.test.assertTrue(!!entry.loginPair.urls.link);
-        chrome.test.assertEq(entry.index, i);
+        chrome.test.assertTrue(!!entry);
+        chrome.test.assertTrue(!!entry.urls.origin);
+        chrome.test.assertTrue(!!entry.urls.shown);
+        chrome.test.assertTrue(!!entry.urls.link);
+        idSet.add(entry.id);
       }
 
+      // Ensure that all entry ids are unique.
+      chrome.test.assertEq(list.length, idSet.size);
       // Ensure that the callback is invoked.
       chrome.test.succeed();
     };
@@ -97,14 +120,17 @@ var availableTests = [
       chrome.test.assertTrue(!!list);
       chrome.test.assertTrue(list.length > 0);
 
+      var idSet = new Set();
       for (var i = 0; i < list.length; ++i) {
         var exception = list[i];
         chrome.test.assertTrue(!!exception.urls.origin);
         chrome.test.assertTrue(!!exception.urls.shown);
         chrome.test.assertTrue(!!exception.urls.link);
-        chrome.test.assertEq(exception.index, i);
+        idSet.add(exception.id);
       }
 
+      // Ensure that all exception ids are unique.
+      chrome.test.assertEq(list.length, idSet.size);
       // Ensure that the callback is invoked.
       chrome.test.succeed();
     };

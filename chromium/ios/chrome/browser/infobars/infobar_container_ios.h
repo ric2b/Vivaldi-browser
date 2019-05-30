@@ -7,28 +7,19 @@
 
 #include "components/infobars/core/infobar_container.h"
 
-#include <stddef.h>
-
 #include "base/macros.h"
 
-@class InfoBarContainerView;
+@protocol InfobarContainerConsumer;
 
-// IOS infobar container specialization, managing infobars visibility so
-// that only the front most one is visible at any time.
+// IOS infobar container specialization, managing infobars visibility and
+// presentation via the InfobarContainerConsumer protocol.|legacyConsumer| is
+// used to support the legacy InfobarPresentation concurrently with the new one
+// that uses |consumer|.
 class InfoBarContainerIOS : public infobars::InfoBarContainer {
  public:
-  explicit InfoBarContainerIOS(infobars::InfoBarContainer::Delegate* delegate);
+  InfoBarContainerIOS(id<InfobarContainerConsumer> consumer,
+                      id<InfobarContainerConsumer> legacyConsumer);
   ~InfoBarContainerIOS() override;
-
-  // Returns the UIView container.
-  InfoBarContainerView* view();
-
-  // Hides the current infobar keeping the current state. If a new infobar is
-  // added, it will be hidden as well.
-  void SuspendInfobars();
-
-  // Restores the normal behavior of the infobars.
-  void RestoreInfobars();
 
  protected:
   void PlatformSpecificAddInfoBar(infobars::InfoBar* infobar,
@@ -37,8 +28,8 @@ class InfoBarContainerIOS : public infobars::InfoBarContainer {
   void PlatformSpecificInfoBarStateChanged(bool is_animating) override;
 
  private:
-  InfoBarContainerView* container_view_;
-  InfoBarContainer::Delegate* delegate_;
+  id<InfobarContainerConsumer> consumer_;
+  id<InfobarContainerConsumer> legacyConsumer_;
 
   DISALLOW_COPY_AND_ASSIGN(InfoBarContainerIOS);
 };

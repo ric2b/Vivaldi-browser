@@ -227,8 +227,15 @@ ExternalPolicyDataFetcher::ExternalPolicyDataFetcher(
       weak_factory_(this) {}
 
 ExternalPolicyDataFetcher::~ExternalPolicyDataFetcher() {
-  DCHECK(task_runner_->RunsTasksInCurrentSequence());
-  for (JobSet::iterator it = jobs_.begin(); it != jobs_.end(); ++it)
+  // No RunsTasksInCurrentSequence() check to avoid unit tests failures.
+  // In unit tests the browser process instance is deleted only after test ends
+  // and test task scheduler is shutted down. Therefore we need to delete some
+  // components of BrowserPolicyConnector (ResourceCache and
+  // CloudExternalDataManagerBase::Backend) manually when task runner doesn't
+  // accept new tasks (DeleteSoon in this case). This leads to the situation
+  // when this destructor is called not on |task_runner|.
+
+  for (auto it = jobs_.begin(); it != jobs_.end(); ++it)
     CancelJob(*it);
 }
 
@@ -271,7 +278,7 @@ void ExternalPolicyDataFetcher::OnJobFinished(
     Result result,
     std::unique_ptr<std::string> data) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
-  JobSet::iterator it = jobs_.find(job);
+  auto it = jobs_.find(job);
   if (it == jobs_.end()) {
     // The |job| has been canceled and removed from |jobs_| already. This can
     // happen because the |backend_| runs on a different thread and a |job| may

@@ -33,11 +33,11 @@ StaticRange::StaticRange(Document& document,
 // static
 StaticRange* StaticRange::Create(const EphemeralRange& range) {
   DCHECK(!range.IsNull());
-  return new StaticRange(range.GetDocument(),
-                         range.StartPosition().ComputeContainerNode(),
-                         range.StartPosition().ComputeOffsetInContainerNode(),
-                         range.EndPosition().ComputeContainerNode(),
-                         range.EndPosition().ComputeOffsetInContainerNode());
+  return MakeGarbageCollected<StaticRange>(
+      range.GetDocument(), range.StartPosition().ComputeContainerNode(),
+      range.StartPosition().ComputeOffsetInContainerNode(),
+      range.EndPosition().ComputeContainerNode(),
+      range.EndPosition().ComputeOffsetInContainerNode());
 }
 
 void StaticRange::setStart(Node* container, unsigned offset) {
@@ -58,7 +58,7 @@ Range* StaticRange::toRange(ExceptionState& exception_state) const {
   return range;
 }
 
-void StaticRange::Trace(blink::Visitor* visitor) {
+void StaticRange::Trace(Visitor* visitor) {
   visitor->Trace(owner_document_);
   visitor->Trace(start_container_);
   visitor->Trace(end_container_);

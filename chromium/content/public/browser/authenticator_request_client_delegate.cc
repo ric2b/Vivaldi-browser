@@ -16,13 +16,16 @@ AuthenticatorRequestClientDelegate::AuthenticatorRequestClientDelegate() =
 AuthenticatorRequestClientDelegate::~AuthenticatorRequestClientDelegate() =
     default;
 
-void AuthenticatorRequestClientDelegate::DidFailWithInterestingReason(
-    InterestingFailureReason reason) {}
+bool AuthenticatorRequestClientDelegate::DoesBlockRequestOnFailure(
+    InterestingFailureReason reason) {
+  return false;
+}
 
 void AuthenticatorRequestClientDelegate::RegisterActionCallbacks(
     base::OnceClosure cancel_callback,
     device::FidoRequestHandlerBase::RequestCallback request_callback,
-    base::RepeatingClosure bluetooth_adapter_power_on_callback) {}
+    base::RepeatingClosure bluetooth_adapter_power_on_callback,
+    device::FidoRequestHandlerBase::BlePairingCallback ble_pairing_callback) {}
 
 bool AuthenticatorRequestClientDelegate::ShouldPermitIndividualAttestation(
     const std::string& relying_party_id) {
@@ -49,6 +52,12 @@ AuthenticatorRequestClientDelegate::GetTouchIdAuthenticatorConfig() const {
 void AuthenticatorRequestClientDelegate::UpdateLastTransportUsed(
     device::FidoTransportProtocol transport) {}
 
+void AuthenticatorRequestClientDelegate::DisableUI() {}
+
+bool AuthenticatorRequestClientDelegate::IsWebAuthnUIEnabled() {
+  return false;
+}
+
 void AuthenticatorRequestClientDelegate::OnTransportAvailabilityEnumerated(
     device::FidoRequestHandlerBase::TransportAvailabilityInfo data) {}
 
@@ -65,5 +74,19 @@ void AuthenticatorRequestClientDelegate::FidoAuthenticatorAdded(
 
 void AuthenticatorRequestClientDelegate::FidoAuthenticatorRemoved(
     base::StringPiece device_id) {}
+
+void AuthenticatorRequestClientDelegate::FidoAuthenticatorIdChanged(
+    base::StringPiece old_authenticator_id,
+    std::string new_authenticator_id) {}
+
+void AuthenticatorRequestClientDelegate::FidoAuthenticatorPairingModeChanged(
+    base::StringPiece authenticator_id,
+    bool is_in_pairing_mode) {}
+
+void AuthenticatorRequestClientDelegate::CollectPIN(
+    base::Optional<int> attempts,
+    base::OnceCallback<void(std::string)> provide_pin_cb) {}
+
+void AuthenticatorRequestClientDelegate::FinishCollectPIN() {}
 
 }  // namespace content

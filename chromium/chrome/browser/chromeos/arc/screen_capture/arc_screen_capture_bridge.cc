@@ -9,7 +9,7 @@
 #include "base/command_line.h"
 #include "base/memory/singleton.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "chrome/browser/chromeos/arc/screen_capture/arc_screen_capture_session.h"
 #include "chrome/browser/media/webrtc/desktop_media_list_ash.h"
 #include "components/arc/arc_bridge_service.h"
@@ -162,7 +162,7 @@ void ArcScreenCaptureBridge::TestModeAcceptPermission(
   granted_permissions_map_.emplace(std::make_pair(
       package_name,
       GrantedCaptureParams(found->second.display_name,
-                           content::DesktopMediaID::RegisterAuraWindow(
+                           content::DesktopMediaID::RegisterNativeWindow(
                                content::DesktopMediaID::TYPE_SCREEN,
                                ash::Shell::GetPrimaryRootWindow()),
                            false /* enable notification */)));
@@ -170,6 +170,10 @@ void ArcScreenCaptureBridge::TestModeAcceptPermission(
   pending_permissions_map_.erase(found);
   // The dialog will be closed when 'found' goes out of scope and is
   // destructed and the dialog within it is destructed.
+
+  // If we're auto-sharing the screen in test mode, we don't want to record
+  // the cursor, so turn it off.
+  ash::Shell::Get()->cursor_manager()->HideCursor();
 }
 
 void ArcScreenCaptureBridge::OpenSession(

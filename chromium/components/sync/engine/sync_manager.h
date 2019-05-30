@@ -31,8 +31,7 @@
 #include "components/sync/engine/sync_status.h"
 #include "components/sync/protocol/sync_protocol_error.h"
 #include "components/sync/syncable/change_record.h"
-
-class GURL;
+#include "url/gurl.h"
 
 namespace base {
 namespace trace_event {
@@ -251,6 +250,13 @@ class SyncManager {
     // Define the polling intervals. Must not be zero.
     base::TimeDelta short_poll_interval;
     base::TimeDelta long_poll_interval;
+
+    // Non-authoritative values from prefs, to be compared with the Directory's
+    // counterparts.
+    // TODO(crbug.com/923285): Consider making these the authoritative data.
+    std::string cache_guid;
+    std::string birthday;
+    std::string bag_of_chips;
   };
 
   // The state of sync the feature. If the user turned on sync explicitly, it
@@ -305,14 +311,10 @@ class SyncManager {
   // syncer will remain in CONFIGURATION_MODE until StartSyncingNormally is
   // called.
   // |ready_task| is invoked when the configuration completes.
-  // |retry_task| is invoked if the configuration job could not immediately
-  //              execute. |ready_task| will still be called when it eventually
-  //              does finish.
   virtual void ConfigureSyncer(ConfigureReason reason,
                                ModelTypeSet to_download,
                                SyncFeatureState sync_feature_state,
-                               const base::Closure& ready_task,
-                               const base::Closure& retry_task) = 0;
+                               const base::Closure& ready_task) = 0;
 
   // Inform the syncer of a change in the invalidator's state.
   virtual void SetInvalidatorEnabled(bool invalidator_enabled) = 0;
@@ -388,13 +390,6 @@ class SyncManager {
   // been updated.  Useful for initializing new observers' state.
   virtual void RequestEmitDebugInfo() = 0;
 
-  // Clears server data and invokes |callback| when complete.
-  //
-  // This is an asynchronous operation that requires interaction with the sync
-  // server. The operation will automatically be retried with backoff until it
-  // completes successfully or sync is shutdown.
-  virtual void ClearServerData(const base::Closure& callback) = 0;
-
   // Updates Sync's tracking of whether the cookie jar has a mismatch with the
   // chrome account. See ClientConfigParams proto message for more info.
   // Note: this does not trigger a sync cycle. It just updates the sync context.
@@ -402,6 +397,9 @@ class SyncManager {
 
   // Adds memory usage statistics to |pmd| for chrome://tracing.
   virtual void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd) = 0;
+
+  // Updates invalidation client id.
+  virtual void UpdateInvalidationClientId(const std::string& client_id) = 0;
 };
 
 }  // namespace syncer

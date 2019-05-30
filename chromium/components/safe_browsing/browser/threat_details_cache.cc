@@ -12,10 +12,12 @@
 #include "base/lazy_instance.h"
 #include "base/md5.h"
 #include "base/strings/string_util.h"
+#include "base/task/post_task.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/safe_browsing/browser/threat_details_cache.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "net/base/host_port_pair.h"
+#include "net/base/ip_endpoint.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_headers.h"
@@ -51,8 +53,8 @@ void ThreatDetailsCacheCollector::StartCacheCollection(
 
   // Post a task in the message loop, so the callers don't need to
   // check if we call their callback immediately.
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&ThreatDetailsCacheCollector::OpenEntry, this));
 }
 
@@ -124,7 +126,7 @@ void ThreatDetailsCacheCollector::OpenEntry() {
 
 ClientSafeBrowsingReportRequest::Resource*
 ThreatDetailsCacheCollector::GetResource(const GURL& url) {
-  ResourceMap::iterator it = resources_->find(url.spec());
+  auto it = resources_->find(url.spec());
   if (it != resources_->end()) {
     return it->second.get();
   }
@@ -196,9 +198,12 @@ void ThreatDetailsCacheCollector::ReadResponse(
     pb_header->set_value(value);
   }
 
-  if (!current_load_->ResponseInfo()->was_fetched_via_proxy) {
+  bool was_fetched_via_proxy =
+      current_load_->ResponseInfo()->proxy_server.is_valid() &&
+      !current_load_->ResponseInfo()->proxy_server.is_direct();
+  if (!was_fetched_via_proxy) {
     pb_response->set_remote_ip(
-        current_load_->ResponseInfo()->socket_address.ToString());
+        current_load_->ResponseInfo()->remote_endpoint.ToString());
   }
 }
 
@@ -224,8 +229,8 @@ void ThreatDetailsCacheCollector::AdvanceEntry() {
   current_load_.reset();
 
   // Create a task so we don't take over the UI thread for too long.
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&ThreatDetailsCacheCollector::OpenEntry, this));
 }
 
@@ -233,7 +238,7 @@ void ThreatDetailsCacheCollector::AllDone(bool success) {
   DVLOG(1) << "AllDone";
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   *result_ = success;
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, callback_);
+  base::PostTaskWithTraits(FROM_HERE, {BrowserThread::UI}, callback_);
   callback_.Reset();
 }
 

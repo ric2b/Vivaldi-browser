@@ -4,6 +4,7 @@
 
 module blink.mojom;
 
+import "third_party/blink/public/mojom/script/script_type.mojom";
 import "third_party/blink/public/mojom/service_worker/navigation_preload_state.mojom";
 import "third_party/blink/public/mojom/service_worker/service_worker_error_type.mojom";
 import "third_party/blink/public/mojom/service_worker/service_worker_object.mojom";
@@ -19,10 +20,17 @@ enum ServiceWorkerUpdateViaCache {
   kNone,
 };
 
+struct ChangedServiceWorkerObjectsMask {
+  bool installing;
+  bool waiting;
+  bool active;
+};
+
 // Represents options for register():
 // https://w3c.github.io/ServiceWorker/#dictdef-registrationoptions
 struct ServiceWorkerRegistrationOptions {
   url.mojom.Url scope;
+  ScriptType type = kClassic;
   ServiceWorkerUpdateViaCache update_via_cache = kImports;
 };
 
@@ -32,9 +40,10 @@ struct ServiceWorkerRegistrationObjectInfo {
   // The globally unique identifier of a service worker registration entity.
   int64 registration_id = kInvalidServiceWorkerRegistrationId;
 
-  // The registration options attached with this registration object, including
-  // some information such as scope of this registration.
-  ServiceWorkerRegistrationOptions options;
+  // Corresponds to ServiceWorkerRegistration#scope.
+  url.mojom.Url scope;
+  // Corresponds to ServiceWorkerRegistration#updateViaCache.
+  ServiceWorkerUpdateViaCache update_via_cache;
 
   // Holds one mojo connection to browser process, acts as a reference count to
   // control lifetime of ServiceWorkerRegistration in the browser process.
@@ -94,16 +103,13 @@ interface ServiceWorkerRegistrationObjectHost {
 interface ServiceWorkerRegistrationObject {
   // Sets changed service worker objects for this registration object.
   // |changed_mask| indicates which objects of {|installing|,|waiting|,|active|}
-  // have changed. See ChangedVersionAttributesMask in service_worker_types.h
-  // for details.
+  // have changed.
   // Changed objects may be null to indicate that the object does not exist
   // anymore. Unchanged ones are always null.
-  // TODO(leonhsl): Use mojofied ChangedVersionAttributesMask directly instead
-  // of an int32 for |changed_mask|.
-  SetVersionAttributes(int32 changed_mask,
-                       ServiceWorkerObjectInfo? installing,
-                       ServiceWorkerObjectInfo? waiting,
-                       ServiceWorkerObjectInfo? active);
+  SetServiceWorkerObjects(ChangedServiceWorkerObjectsMask changed_mask,
+                          ServiceWorkerObjectInfo? installing,
+                          ServiceWorkerObjectInfo? waiting,
+                          ServiceWorkerObjectInfo? active);
 
   // Sets ServiceWorkerRegistration#updateViaCache.
   SetUpdateViaCache(ServiceWorkerUpdateViaCache update_via_cache);

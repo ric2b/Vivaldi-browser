@@ -8,18 +8,16 @@
 #include <string>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/signin/account_tracker_service_factory.h"
-#include "chrome/browser/signin/fake_signin_manager_builder.h"
-#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
+#include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/browser/signin/scoped_account_consistency.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/profile_sync_test_util.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -34,11 +32,6 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/account_tracker_service.h"
-#include "components/signin/core/browser/fake_auth_status_provider.h"
-#include "components/signin/core/browser/profile_oauth2_token_service.h"
-#include "components/signin/core/browser/signin_manager.h"
-#include "components/sync/base/sync_prefs.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/unified_consent/scoped_unified_consent.h"
 #include "content/public/browser/web_contents.h"
@@ -49,14 +42,15 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_web_ui.h"
 #include "content/public/test/web_contents_tester.h"
+#include "services/identity/public/cpp/accounts_mutator.h"
+#include "services/identity/public/cpp/identity_manager.h"
+#include "services/identity/public/cpp/identity_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/base/layout.h"
 
 using ::testing::_;
 using ::testing::Invoke;
 using ::testing::Mock;
 using ::testing::Return;
-using ::testing::ReturnRef;
 using ::testing::Values;
 using browser_sync::ProfileSyncService;
 using browser_sync::ProfileSyncServiceMock;
@@ -112,7 +106,6 @@ std::string GetConfiguration(const base::DictionaryValue* extra_values,
   result.SetBoolean("tabsSynced", types.Has(syncer::PROXY_TABS));
   result.SetBoolean("themesSynced", types.Has(syncer::THEMES));
   result.SetBoolean("typedUrlsSynced", types.Has(syncer::TYPED_URLS));
-  result.SetBoolean("userEventsSynced", types.Has(syncer::USER_EVENTS));
   result.SetBoolean("paymentsIntegrationEnabled", false);
   result.SetBoolean("notesSynced", types.Has(syncer::NOTES));
   std::string args;
@@ -161,7 +154,6 @@ void CheckConfigDataTypeArguments(const base::DictionaryValue* dictionary,
   CheckBool(dictionary, "tabsSynced", types.Has(syncer::PROXY_TABS));
   CheckBool(dictionary, "themesSynced", types.Has(syncer::THEMES));
   CheckBool(dictionary, "typedUrlsSynced", types.Has(syncer::TYPED_URLS));
-  CheckBool(dictionary, "userEventsSynced", types.Has(syncer::USER_EVENTS));
   CheckBool(dictionary, "notesSynced", types.Has(syncer::NOTES));
 }
 
@@ -201,25 +193,26 @@ class TestWebUIProvider
 // /ClientLogin enabled or not.
 class PeopleHandlerTest : public ChromeRenderViewHostTestHarness {
  public:
-  PeopleHandlerTest() : error_(GoogleServiceAuthError::NONE) {}
+  PeopleHandlerTest() = default;
+
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
-    error_ = GoogleServiceAuthError::AuthErrorNone();
 
     // Sign in the user.
-    mock_signin_ = SigninManagerFactory::GetForProfile(profile());
+    identity_test_env_adaptor_ =
+        std::make_unique<IdentityTestEnvironmentProfileAdaptor>(profile());
+
     std::string username = GetTestUser();
     if (!username.empty())
-      mock_signin_->SetAuthenticatedAccountInfo(username, username);
+      identity_test_env()->SetPrimaryAccount(username);
 
     mock_pss_ = static_cast<ProfileSyncServiceMock*>(
         ProfileSyncServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-            profile(), BuildMockProfileSyncService));
-    ON_CALL(*mock_pss_, GetAuthError()).WillByDefault(ReturnRef(error_));
-    ON_CALL(*mock_pss_, GetPassphraseType())
+            profile(), base::BindRepeating(&BuildMockProfileSyncService)));
+    ON_CALL(*mock_pss_->GetUserSettingsMock(), GetPassphraseType())
         .WillByDefault(Return(syncer::PassphraseType::IMPLICIT_PASSPHRASE));
-    ON_CALL(*mock_pss_, GetExplicitPassphraseTime()).WillByDefault(
-        Return(base::Time()));
+    ON_CALL(*mock_pss_->GetUserSettingsMock(), GetExplicitPassphraseTime())
+        .WillByDefault(Return(base::Time()));
     ON_CALL(*mock_pss_, GetRegisteredDataTypes())
         .WillByDefault(Return(syncer::ModelTypeSet()));
     ON_CALL(*mock_pss_, GetSetupInProgressHandle())
@@ -237,29 +230,41 @@ class PeopleHandlerTest : public ChromeRenderViewHostTestHarness {
     handler_->set_web_ui(nullptr);
     handler_->DisallowJavascript();
     handler_->sync_startup_tracker_.reset();
+    identity_test_env_adaptor_.reset();
     ChromeRenderViewHostTestHarness::TearDown();
+  }
+
+  content::BrowserContext* CreateBrowserContext() override {
+    // Setup the profile.
+    std::unique_ptr<TestingProfile> profile =
+        IdentityTestEnvironmentProfileAdaptor::
+            CreateProfileForIdentityTestEnvironment();
+    return profile.release();
   }
 
   // Setup the expectations for calls made when displaying the config page.
   void SetDefaultExpectationsForConfigPage() {
     ON_CALL(*mock_pss_, GetDisableReasons())
         .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
+    ON_CALL(*mock_pss_->GetUserSettingsMock(), IsSyncRequested())
+        .WillByDefault(Return(true));
     ON_CALL(*mock_pss_, GetRegisteredDataTypes())
         .WillByDefault(Return(GetAllTypes()));
-    ON_CALL(*mock_pss_, GetPreferredDataTypes())
+    ON_CALL(*mock_pss_->GetUserSettingsMock(), IsSyncEverythingEnabled())
+        .WillByDefault(Return(true));
+    ON_CALL(*mock_pss_->GetUserSettingsMock(), GetChosenDataTypes())
         .WillByDefault(Return(GetAllTypes()));
     ON_CALL(*mock_pss_, GetActiveDataTypes())
         .WillByDefault(Return(GetAllTypes()));
-    ON_CALL(*mock_pss_, IsEncryptEverythingAllowed())
+    ON_CALL(*mock_pss_->GetUserSettingsMock(), IsEncryptEverythingAllowed())
         .WillByDefault(Return(true));
-    ON_CALL(*mock_pss_, IsEncryptEverythingEnabled())
+    ON_CALL(*mock_pss_->GetUserSettingsMock(), IsEncryptEverythingEnabled())
         .WillByDefault(Return(false));
   }
 
   void SetupInitializedProfileSyncService() {
     // An initialized ProfileSyncService will have already completed sync setup
     // and will have an initialized sync engine.
-    ASSERT_TRUE(mock_signin_->IsInitialized());
     ON_CALL(*mock_pss_, GetTransportState())
         .WillByDefault(Return(syncer::SyncService::TransportState::ACTIVE));
   }
@@ -326,9 +331,13 @@ class PeopleHandlerTest : public ChromeRenderViewHostTestHarness {
     return std::string(kTestUser);
   }
 
+  identity::IdentityTestEnvironment* identity_test_env() {
+    return identity_test_env_adaptor_->identity_test_env();
+  }
+
   ProfileSyncServiceMock* mock_pss_;
-  GoogleServiceAuthError error_;
-  SigninManagerBase* mock_signin_;
+  std::unique_ptr<IdentityTestEnvironmentProfileAdaptor>
+      identity_test_env_adaptor_;
   content::TestWebUI web_ui_;
   TestWebUIProvider test_provider_;
   std::unique_ptr<TestChromeWebUIControllerFactory> test_factory_;
@@ -346,11 +355,10 @@ TEST_F(PeopleHandlerFirstSigninTest, DisplayBasicLogin) {
 
   ON_CALL(*mock_pss_, GetDisableReasons())
       .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NOT_SIGNED_IN));
-  ON_CALL(*mock_pss_, IsFirstSetupComplete()).WillByDefault(Return(false));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsFirstSetupComplete())
+      .WillByDefault(Return(false));
   // Ensure that the user is not signed in before calling |HandleStartSignin()|.
-  SigninManager* manager = SigninManager::FromSigninManagerBase(mock_signin_);
-  manager->SignOut(signin_metrics::SIGNOUT_TEST,
-                   signin_metrics::SignoutDelete::IGNORE_METRIC);
+  identity_test_env()->ClearPrimaryAccount();
   base::ListValue list_args;
   handler_->HandleStartSignin(&list_args);
 
@@ -370,7 +378,8 @@ TEST_F(PeopleHandlerFirstSigninTest, DisplayBasicLogin) {
 TEST_F(PeopleHandlerTest, ShowSyncSetupWhenNotSignedIn) {
   ON_CALL(*mock_pss_, GetDisableReasons())
       .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NOT_SIGNED_IN));
-  ON_CALL(*mock_pss_, IsFirstSetupComplete()).WillByDefault(Return(false));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsFirstSetupComplete())
+      .WillByDefault(Return(false));
   handler_->HandleShowSetupUI(nullptr);
 
   ExpectPageStatusChanged(PeopleHandler::kDonePageStatus);
@@ -402,11 +411,13 @@ TEST_F(PeopleHandlerTest, HandleSetupUIWhenSyncDisabled) {
 TEST_F(PeopleHandlerTest, DisplayConfigureWithEngineDisabledAndCancel) {
   ON_CALL(*mock_pss_, GetDisableReasons())
       .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
-  ON_CALL(*mock_pss_, IsFirstSetupComplete()).WillByDefault(Return(false));
-  error_ = GoogleServiceAuthError::AuthErrorNone();
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsSyncRequested())
+      .WillByDefault(Return(true));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsFirstSetupComplete())
+      .WillByDefault(Return(false));
   ON_CALL(*mock_pss_, GetTransportState())
       .WillByDefault(Return(syncer::SyncService::TransportState::INITIALIZING));
-  EXPECT_CALL(*mock_pss_, RequestStart());
+  EXPECT_CALL(*mock_pss_->GetUserSettingsMock(), SetSyncRequested(true));
 
   // We're simulating a user setting up sync, which would cause the engine to
   // kick off initialization, but not download user data types. The sync
@@ -426,15 +437,17 @@ TEST_F(PeopleHandlerTest, DisplayConfigureWithEngineDisabledAndCancel) {
 // to showing a configuration page when sync setup completes successfully.
 TEST_F(PeopleHandlerTest,
        DisplayConfigureWithEngineDisabledAndSyncStartupCompleted) {
-  ON_CALL(*mock_pss_, IsFirstSetupComplete()).WillByDefault(Return(false));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsFirstSetupComplete())
+      .WillByDefault(Return(false));
   ON_CALL(*mock_pss_, GetDisableReasons())
       .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
-  error_ = GoogleServiceAuthError::AuthErrorNone();
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsSyncRequested())
+      .WillByDefault(Return(true));
   // Sync engine is stopped initially, and will start up.
   ON_CALL(*mock_pss_, GetTransportState())
-      .WillByDefault(Return(
-          syncer::SyncService::TransportState::WAITING_FOR_START_REQUEST));
-  EXPECT_CALL(*mock_pss_, RequestStart());
+      .WillByDefault(
+          Return(syncer::SyncService::TransportState::START_DEFERRED));
+  EXPECT_CALL(*mock_pss_->GetUserSettingsMock(), SetSyncRequested(true));
   SetDefaultExpectationsForConfigPage();
 
   handler_->HandleShowSetupUI(nullptr);
@@ -447,8 +460,6 @@ TEST_F(PeopleHandlerTest,
   SetDefaultExpectationsForConfigPage();
   ON_CALL(*mock_pss_, GetTransportState())
       .WillByDefault(Return(syncer::SyncService::TransportState::ACTIVE));
-  error_ = GoogleServiceAuthError::AuthErrorNone();
-  ON_CALL(*mock_pss_, GetAuthError()).WillByDefault(ReturnRef(error_));
   handler_->SyncStartupCompleted();
 
   EXPECT_EQ(2U, web_ui_.call_data().size());
@@ -469,19 +480,21 @@ TEST_F(PeopleHandlerTest,
        DisplayConfigureWithEngineDisabledAndCancelAfterSigninSuccess) {
   ON_CALL(*mock_pss_, GetDisableReasons())
       .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
-  ON_CALL(*mock_pss_, IsFirstSetupComplete()).WillByDefault(Return(false));
-  error_ = GoogleServiceAuthError::AuthErrorNone();
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsSyncRequested())
+      .WillByDefault(Return(true));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsFirstSetupComplete())
+      .WillByDefault(Return(false));
   EXPECT_CALL(*mock_pss_, GetTransportState())
       .WillOnce(Return(syncer::SyncService::TransportState::INITIALIZING))
       .WillRepeatedly(Return(syncer::SyncService::TransportState::ACTIVE));
-  EXPECT_CALL(*mock_pss_, RequestStart());
+  EXPECT_CALL(*mock_pss_->GetUserSettingsMock(), SetSyncRequested(true));
   SetDefaultExpectationsForConfigPage();
   handler_->HandleShowSetupUI(nullptr);
 
   // It's important to tell sync the user cancelled the setup flow before we
   // tell it we're through with the setup progress.
   testing::InSequence seq;
-  EXPECT_CALL(*mock_pss_, RequestStop(ProfileSyncService::CLEAR_DATA));
+  EXPECT_CALL(*mock_pss_, StopAndClear());
   EXPECT_CALL(*mock_pss_, OnSetupInProgressHandleDestroyed());
 
   handler_->CloseSyncSetup();
@@ -493,18 +506,20 @@ TEST_F(PeopleHandlerTest,
 TEST_F(PeopleHandlerTest, DisplayConfigureWithEngineDisabledAndSigninFailed) {
   ON_CALL(*mock_pss_, GetDisableReasons())
       .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
-  ON_CALL(*mock_pss_, IsFirstSetupComplete()).WillByDefault(Return(false));
-  error_ = GoogleServiceAuthError::AuthErrorNone();
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsSyncRequested())
+      .WillByDefault(Return(true));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsFirstSetupComplete())
+      .WillByDefault(Return(false));
   ON_CALL(*mock_pss_, GetTransportState())
       .WillByDefault(Return(syncer::SyncService::TransportState::INITIALIZING));
-  EXPECT_CALL(*mock_pss_, RequestStart());
+  EXPECT_CALL(*mock_pss_->GetUserSettingsMock(), SetSyncRequested(true));
 
   handler_->HandleShowSetupUI(nullptr);
   ExpectPageStatusChanged(PeopleHandler::kSpinnerPageStatus);
   Mock::VerifyAndClearExpectations(mock_pss_);
-  error_ = GoogleServiceAuthError(
-      GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS);
-  ON_CALL(*mock_pss_, GetAuthError()).WillByDefault(ReturnRef(error_));
+  ON_CALL(*mock_pss_, GetAuthError())
+      .WillByDefault(Return(GoogleServiceAuthError(
+          GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS)));
   NotifySyncListeners();
 
   // On failure, the dialog will be closed.
@@ -518,20 +533,24 @@ TEST_F(PeopleHandlerTest, RestartSyncAfterDashboardClear) {
   // being set.
   ON_CALL(*mock_pss_, GetDisableReasons())
       .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_USER_CHOICE));
-  ON_CALL(*mock_pss_, IsFirstSetupComplete()).WillByDefault(Return(true));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsFirstSetupComplete())
+      .WillByDefault(Return(true));
   ON_CALL(*mock_pss_, GetTransportState())
       .WillByDefault(Return(syncer::SyncService::TransportState::DISABLED));
 
   // Attempting to open the setup UI should restart sync.
-  EXPECT_CALL(*mock_pss_, RequestStart()).WillOnce([&]() {
-    // RequestStart() clears DISABLE_REASON_USER_CHOICE, and immediately starts
-    // initialzing the engine.
-    ON_CALL(*mock_pss_, GetDisableReasons())
-        .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
-    ON_CALL(*mock_pss_, GetTransportState())
-        .WillByDefault(
-            Return(syncer::SyncService::TransportState::INITIALIZING));
-  });
+  EXPECT_CALL(*mock_pss_->GetUserSettingsMock(), SetSyncRequested(true))
+      .WillOnce([&](bool) {
+        // SetSyncRequested(true) clears DISABLE_REASON_USER_CHOICE, and
+        // immediately starts initialzing the engine.
+        ON_CALL(*mock_pss_, GetDisableReasons())
+            .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
+        ON_CALL(*mock_pss_->GetUserSettingsMock(), IsSyncRequested())
+            .WillByDefault(Return(true));
+        ON_CALL(*mock_pss_, GetTransportState())
+            .WillByDefault(
+                Return(syncer::SyncService::TransportState::INITIALIZING));
+      });
 
   handler_->HandleShowSetupUI(nullptr);
   ExpectPageStatusChanged(PeopleHandler::kSpinnerPageStatus);
@@ -544,20 +563,24 @@ TEST_F(PeopleHandlerTest,
   // mode.
   ON_CALL(*mock_pss_, GetDisableReasons())
       .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_USER_CHOICE));
-  ON_CALL(*mock_pss_, IsFirstSetupComplete()).WillByDefault(Return(true));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsFirstSetupComplete())
+      .WillByDefault(Return(true));
   ON_CALL(*mock_pss_, GetTransportState())
       .WillByDefault(Return(syncer::SyncService::TransportState::ACTIVE));
 
   // Attempting to open the setup UI should re-enable sync-the-feature.
-  EXPECT_CALL(*mock_pss_, RequestStart()).WillOnce([&]() {
-    // RequestStart() clears DISABLE_REASON_USER_CHOICE. Since the engine is
-    // already running, it just gets reconfigured.
-    ON_CALL(*mock_pss_, GetDisableReasons())
-        .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
-    ON_CALL(*mock_pss_, GetTransportState())
-        .WillByDefault(
-            Return(syncer::SyncService::TransportState::CONFIGURING));
-  });
+  EXPECT_CALL(*mock_pss_->GetUserSettingsMock(), SetSyncRequested(true))
+      .WillOnce([&](bool) {
+        // SetSyncRequested(true) clears DISABLE_REASON_USER_CHOICE. Since the
+        // engine is already running, it just gets reconfigured.
+        ON_CALL(*mock_pss_, GetDisableReasons())
+            .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
+        ON_CALL(*mock_pss_->GetUserSettingsMock(), IsSyncRequested())
+            .WillByDefault(Return(true));
+        ON_CALL(*mock_pss_, GetTransportState())
+            .WillByDefault(
+                Return(syncer::SyncService::TransportState::CONFIGURING));
+      });
 
   handler_->HandleShowSetupUI(nullptr);
   ExpectPageStatusChanged(PeopleHandler::kSpinnerPageStatus);
@@ -568,7 +591,8 @@ TEST_F(PeopleHandlerTest,
 TEST_F(PeopleHandlerTest, OnlyStartEngineWhenConfiguringSync) {
   ON_CALL(*mock_pss_, GetTransportState())
       .WillByDefault(Return(syncer::SyncService::TransportState::INITIALIZING));
-  EXPECT_CALL(*mock_pss_, RequestStart()).Times(0);
+  EXPECT_CALL(*mock_pss_->GetUserSettingsMock(), SetSyncRequested(true))
+      .Times(0);
   NotifySyncStateChanged();
 }
 
@@ -606,7 +630,8 @@ TEST_F(PeopleHandlerNonCrosTest, UnrecoverableErrorInitializingSync) {
   ON_CALL(*mock_pss_, GetDisableReasons())
       .WillByDefault(
           Return(syncer::SyncService::DISABLE_REASON_UNRECOVERABLE_ERROR));
-  ON_CALL(*mock_pss_, IsFirstSetupComplete()).WillByDefault(Return(false));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsFirstSetupComplete())
+      .WillByDefault(Return(false));
   // Open the web UI.
   handler_->HandleShowSetupUI(nullptr);
 
@@ -616,7 +641,8 @@ TEST_F(PeopleHandlerNonCrosTest, UnrecoverableErrorInitializingSync) {
 TEST_F(PeopleHandlerNonCrosTest, GaiaErrorInitializingSync) {
   ON_CALL(*mock_pss_, GetDisableReasons())
       .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NOT_SIGNED_IN));
-  ON_CALL(*mock_pss_, IsFirstSetupComplete()).WillByDefault(Return(false));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsFirstSetupComplete())
+      .WillByDefault(Return(false));
   // Open the web UI.
   handler_->HandleShowSetupUI(nullptr);
 
@@ -631,11 +657,13 @@ TEST_F(PeopleHandlerTest, TestSyncEverything) {
   base::ListValue list_args;
   list_args.AppendString(kTestCallbackId);
   list_args.AppendString(args);
-  ON_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(),
+          IsPassphraseRequiredForDecryption())
       .WillByDefault(Return(false));
-  ON_CALL(*mock_pss_, IsPassphraseRequired()).WillByDefault(Return(false));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(false));
   SetupInitializedProfileSyncService();
-  EXPECT_CALL(*mock_pss_, OnUserChoseDatatypes(true, _));
+  EXPECT_CALL(*mock_pss_->GetUserSettingsMock(), SetChosenDataTypes(true, _));
   handler_->HandleSetDatatypes(&list_args);
 
   ExpectPageStatusResponse(PeopleHandler::kConfigurePageStatus);
@@ -647,10 +675,12 @@ TEST_F(PeopleHandlerTest, TestPassphraseStillRequired) {
   base::ListValue list_args;
   list_args.AppendString(kTestCallbackId);
   list_args.AppendString(args);
-  ON_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(),
+          IsPassphraseRequiredForDecryption())
       .WillByDefault(Return(true));
-  ON_CALL(*mock_pss_, IsPassphraseRequired()).WillByDefault(Return(true));
-  ON_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(true));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsUsingSecondaryPassphrase())
       .WillByDefault(Return(false));
   SetupInitializedProfileSyncService();
   SetDefaultExpectationsForConfigPage();
@@ -670,13 +700,16 @@ TEST_F(PeopleHandlerTest, EnterExistingFrozenImplicitPassword) {
   list_args.AppendString(args);
   // Act as if an encryption passphrase is required the first time, then never
   // again after that.
-  EXPECT_CALL(*mock_pss_, IsPassphraseRequired()).WillOnce(Return(true));
-  ON_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
+  EXPECT_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillOnce(Return(true));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(),
+          IsPassphraseRequiredForDecryption())
       .WillByDefault(Return(false));
-  ON_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsUsingSecondaryPassphrase())
       .WillByDefault(Return(false));
   SetupInitializedProfileSyncService();
-  EXPECT_CALL(*mock_pss_, SetDecryptionPassphrase("oldGaiaPassphrase"))
+  EXPECT_CALL(*mock_pss_->GetUserSettingsMock(),
+              SetDecryptionPassphrase("oldGaiaPassphrase"))
       .WillOnce(Return(true));
 
   handler_->HandleSetEncryption(&list_args);
@@ -691,15 +724,18 @@ TEST_F(PeopleHandlerTest, SetNewCustomPassphrase) {
   base::ListValue list_args;
   list_args.AppendString(kTestCallbackId);
   list_args.AppendString(args);
-  ON_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsEncryptEverythingAllowed())
+      .WillByDefault(Return(true));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(),
+          IsPassphraseRequiredForDecryption())
       .WillByDefault(Return(false));
-  ON_CALL(*mock_pss_, IsPassphraseRequired()).WillByDefault(Return(false));
-  ON_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(false));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsUsingSecondaryPassphrase())
       .WillByDefault(Return(false));
   SetupInitializedProfileSyncService();
-  EXPECT_CALL(*mock_pss_,
-              SetEncryptionPassphrase("custom_passphrase",
-                                      ProfileSyncService::EXPLICIT));
+  EXPECT_CALL(*mock_pss_->GetUserSettingsMock(),
+              SetEncryptionPassphrase("custom_passphrase"));
 
   handler_->HandleSetEncryption(&list_args);
   ExpectPageStatusResponse(PeopleHandler::kConfigurePageStatus);
@@ -713,14 +749,17 @@ TEST_F(PeopleHandlerTest, EnterWrongExistingPassphrase) {
   base::ListValue list_args;
   list_args.AppendString(kTestCallbackId);
   list_args.AppendString(args);
-  ON_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(),
+          IsPassphraseRequiredForDecryption())
       .WillByDefault(Return(true));
-  ON_CALL(*mock_pss_, IsPassphraseRequired()).WillByDefault(Return(true));
-  ON_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(true));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsUsingSecondaryPassphrase())
       .WillByDefault(Return(false));
   SetupInitializedProfileSyncService();
-  EXPECT_CALL(*mock_pss_, SetDecryptionPassphrase("invalid_passphrase")).
-      WillOnce(Return(false));
+  EXPECT_CALL(*mock_pss_->GetUserSettingsMock(),
+              SetDecryptionPassphrase("invalid_passphrase"))
+      .WillOnce(Return(false));
 
   SetDefaultExpectationsForConfigPage();
 
@@ -740,10 +779,12 @@ TEST_F(PeopleHandlerTest, EnterBlankExistingPassphrase) {
   base::ListValue list_args;
   list_args.AppendString(kTestCallbackId);
   list_args.AppendString(args);
-  ON_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(),
+          IsPassphraseRequiredForDecryption())
       .WillByDefault(Return(true));
-  ON_CALL(*mock_pss_, IsPassphraseRequired()).WillByDefault(Return(true));
-  ON_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(true));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsUsingSecondaryPassphrase())
       .WillByDefault(Return(false));
   SetupInitializedProfileSyncService();
 
@@ -769,12 +810,14 @@ TEST_F(PeopleHandlerTest, TestSyncIndividualTypes) {
     base::ListValue list_args;
     list_args.AppendString(kTestCallbackId);
     list_args.AppendString(args);
-    ON_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
+    ON_CALL(*mock_pss_->GetUserSettingsMock(),
+            IsPassphraseRequiredForDecryption())
         .WillByDefault(Return(false));
-    ON_CALL(*mock_pss_, IsPassphraseRequired()).WillByDefault(Return(false));
+    ON_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+        .WillByDefault(Return(false));
     SetupInitializedProfileSyncService();
-    EXPECT_CALL(*mock_pss_,
-                OnUserChoseDatatypes(false, ModelTypeSetMatches(type_to_set)));
+    EXPECT_CALL(*mock_pss_->GetUserSettingsMock(),
+                SetChosenDataTypes(false, ModelTypeSetMatches(type_to_set)));
 
     handler_->HandleSetDatatypes(&list_args);
     ExpectPageStatusResponse(PeopleHandler::kConfigurePageStatus);
@@ -791,20 +834,23 @@ TEST_F(PeopleHandlerTest, TestSyncAllManually) {
   base::ListValue list_args;
   list_args.AppendString(kTestCallbackId);
   list_args.AppendString(args);
-  ON_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(),
+          IsPassphraseRequiredForDecryption())
       .WillByDefault(Return(false));
-  ON_CALL(*mock_pss_, IsPassphraseRequired()).WillByDefault(Return(false));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(false));
   SetupInitializedProfileSyncService();
-  EXPECT_CALL(*mock_pss_,
-              OnUserChoseDatatypes(false, ModelTypeSetMatches(GetAllTypes())));
+  EXPECT_CALL(*mock_pss_->GetUserSettingsMock(),
+              SetChosenDataTypes(false, ModelTypeSetMatches(GetAllTypes())));
   handler_->HandleSetDatatypes(&list_args);
 
   ExpectPageStatusResponse(PeopleHandler::kConfigurePageStatus);
 }
 
 TEST_F(PeopleHandlerTest, ShowSyncSetup) {
-  ON_CALL(*mock_pss_, IsPassphraseRequired()).WillByDefault(Return(false));
-  ON_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(false));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsUsingSecondaryPassphrase())
       .WillByDefault(Return(false));
   SetupInitializedProfileSyncService();
   // This should display the sync setup dialog (not login).
@@ -817,18 +863,36 @@ TEST_F(PeopleHandlerTest, ShowSyncSetup) {
 // We do not display signin on chromeos in the case of auth error.
 TEST_F(PeopleHandlerTest, ShowSigninOnAuthError) {
   // Initialize the system to a signed in state, but with an auth error.
-  error_ = GoogleServiceAuthError(
-      GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS);
+  ON_CALL(*mock_pss_, GetAuthError())
+      .WillByDefault(Return(GoogleServiceAuthError(
+          GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS)));
 
   SetupInitializedProfileSyncService();
-  mock_signin_->SetAuthenticatedAccountInfo(kTestUser, kTestUser);
-  FakeAuthStatusProvider provider(
-      SigninErrorControllerFactory::GetForProfile(profile()));
-  provider.SetAuthError(kTestUser, error_);
+
+  auto* identity_manager = identity_test_env()->identity_manager();
+  CoreAccountInfo primary_account_info =
+      identity_manager->GetPrimaryAccountInfo();
+  DCHECK_EQ(primary_account_info.email, kTestUser);
+
+  auto* accounts_mutator = identity_manager->GetAccountsMutator();
+  DCHECK(accounts_mutator);
+
+  accounts_mutator->AddOrUpdateAccount(
+      primary_account_info.gaia, primary_account_info.email, "refresh_token",
+      primary_account_info.is_under_advanced_protection,
+      signin_metrics::SourceForRefreshTokenOperation::kUnknown);
+
+  identity::UpdatePersistentErrorOfRefreshTokenForAccount(
+      identity_manager, primary_account_info.account_id,
+      GoogleServiceAuthError(GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS));
+
   ON_CALL(*mock_pss_, GetDisableReasons())
       .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
-  ON_CALL(*mock_pss_, IsPassphraseRequired()).WillByDefault(Return(false));
-  ON_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsSyncRequested())
+      .WillByDefault(Return(true));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(false));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsUsingSecondaryPassphrase())
       .WillByDefault(Return(false));
   ON_CALL(*mock_pss_, GetTransportState())
       .WillByDefault(Return(syncer::SyncService::TransportState::INITIALIZING));
@@ -858,8 +922,9 @@ TEST_F(PeopleHandlerTest, ShowSigninOnAuthError) {
 }
 
 TEST_F(PeopleHandlerTest, ShowSetupSyncEverything) {
-  ON_CALL(*mock_pss_, IsPassphraseRequired()).WillByDefault(Return(false));
-  ON_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(false));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsUsingSecondaryPassphrase())
       .WillByDefault(Return(false));
   SetupInitializedProfileSyncService();
   SetDefaultExpectationsForConfigPage();
@@ -877,7 +942,6 @@ TEST_F(PeopleHandlerTest, ShowSetupSyncEverything) {
   CheckBool(dictionary, "tabsRegistered", true);
   CheckBool(dictionary, "themesRegistered", true);
   CheckBool(dictionary, "typedUrlsRegistered", true);
-  CheckBool(dictionary, "userEventsRegistered", true);
   CheckBool(dictionary, "paymentsIntegrationEnabled", true);
   CheckBool(dictionary, "passphraseRequired", false);
   CheckBool(dictionary, "passphraseTypeIsCustom", false);
@@ -887,13 +951,14 @@ TEST_F(PeopleHandlerTest, ShowSetupSyncEverything) {
 }
 
 TEST_F(PeopleHandlerTest, ShowSetupManuallySyncAll) {
-  ON_CALL(*mock_pss_, IsPassphraseRequired()).WillByDefault(Return(false));
-  ON_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(false));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsUsingSecondaryPassphrase())
       .WillByDefault(Return(false));
   SetupInitializedProfileSyncService();
-  syncer::SyncPrefs sync_prefs(profile()->GetPrefs());
-  sync_prefs.SetKeepEverythingSynced(false);
   SetDefaultExpectationsForConfigPage();
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsSyncEverythingEnabled())
+      .WillByDefault(Return(false));
   // This should display the sync setup dialog (not login).
   handler_->HandleShowSetupUI(nullptr);
 
@@ -904,16 +969,18 @@ TEST_F(PeopleHandlerTest, ShowSetupManuallySyncAll) {
 TEST_F(PeopleHandlerTest, ShowSetupSyncForAllTypesIndividually) {
   syncer::ModelTypeSet user_selectable_types = GetAllTypes();
   for (syncer::ModelType type : user_selectable_types) {
-    ON_CALL(*mock_pss_, IsPassphraseRequired()).WillByDefault(Return(false));
-    ON_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
+    ON_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+        .WillByDefault(Return(false));
+    ON_CALL(*mock_pss_->GetUserSettingsMock(), IsUsingSecondaryPassphrase())
         .WillByDefault(Return(false));
     SetupInitializedProfileSyncService();
-    syncer::SyncPrefs sync_prefs(profile()->GetPrefs());
-    sync_prefs.SetKeepEverythingSynced(false);
     SetDefaultExpectationsForConfigPage();
+    ON_CALL(*mock_pss_->GetUserSettingsMock(), IsSyncEverythingEnabled())
+        .WillByDefault(Return(false));
     syncer::ModelTypeSet types;
     types.Put(type);
-    ON_CALL(*mock_pss_, GetPreferredDataTypes()).WillByDefault(Return(types));
+    ON_CALL(*mock_pss_->GetUserSettingsMock(), GetChosenDataTypes())
+        .WillByDefault(Return(types));
 
     // This should display the sync setup dialog (not login).
     handler_->HandleShowSetupUI(nullptr);
@@ -931,8 +998,9 @@ TEST_F(PeopleHandlerTest, ShowSetupSyncForAllTypesIndividually) {
 }
 
 TEST_F(PeopleHandlerTest, ShowSetupOldGaiaPassphraseRequired) {
-  ON_CALL(*mock_pss_, IsPassphraseRequired()).WillByDefault(Return(true));
-  ON_CALL(*mock_pss_, GetPassphraseType())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(true));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), GetPassphraseType())
       .WillByDefault(
           Return(syncer::PassphraseType::FROZEN_IMPLICIT_PASSPHRASE));
   SetupInitializedProfileSyncService();
@@ -947,8 +1015,9 @@ TEST_F(PeopleHandlerTest, ShowSetupOldGaiaPassphraseRequired) {
 }
 
 TEST_F(PeopleHandlerTest, ShowSetupCustomPassphraseRequired) {
-  ON_CALL(*mock_pss_, IsPassphraseRequired()).WillByDefault(Return(true));
-  ON_CALL(*mock_pss_, GetPassphraseType())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(true));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), GetPassphraseType())
       .WillByDefault(Return(syncer::PassphraseType::CUSTOM_PASSPHRASE));
   SetupInitializedProfileSyncService();
   SetDefaultExpectationsForConfigPage();
@@ -962,12 +1031,14 @@ TEST_F(PeopleHandlerTest, ShowSetupCustomPassphraseRequired) {
 }
 
 TEST_F(PeopleHandlerTest, ShowSetupEncryptAll) {
-  ON_CALL(*mock_pss_, IsPassphraseRequired()).WillByDefault(Return(false));
-  ON_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(false));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsUsingSecondaryPassphrase())
       .WillByDefault(Return(false));
   SetupInitializedProfileSyncService();
   SetDefaultExpectationsForConfigPage();
-  ON_CALL(*mock_pss_, IsEncryptEverythingEnabled()).WillByDefault(Return(true));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsEncryptEverythingEnabled())
+      .WillByDefault(Return(true));
 
   // This should display the sync setup dialog (not login).
   handler_->HandleShowSetupUI(nullptr);
@@ -977,12 +1048,13 @@ TEST_F(PeopleHandlerTest, ShowSetupEncryptAll) {
 }
 
 TEST_F(PeopleHandlerTest, ShowSetupEncryptAllDisallowed) {
-  ON_CALL(*mock_pss_, IsPassphraseRequired()).WillByDefault(Return(false));
-  ON_CALL(*mock_pss_, IsUsingSecondaryPassphrase())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(false));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsUsingSecondaryPassphrase())
       .WillByDefault(Return(false));
   SetupInitializedProfileSyncService();
   SetDefaultExpectationsForConfigPage();
-  ON_CALL(*mock_pss_, IsEncryptEverythingAllowed())
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsEncryptEverythingAllowed())
       .WillByDefault(Return(false));
 
   // This should display the sync setup dialog (not login).
@@ -994,18 +1066,28 @@ TEST_F(PeopleHandlerTest, ShowSetupEncryptAllDisallowed) {
 }
 
 TEST_F(PeopleHandlerTest, TurnOnEncryptAllDisallowed) {
-  std::string args = GetConfiguration(
-      NULL, SYNC_ALL_DATA, GetAllTypes(), std::string(), ENCRYPT_ALL_DATA);
+  ON_CALL(*mock_pss_->GetUserSettingsMock(),
+          IsPassphraseRequiredForDecryption())
+      .WillByDefault(Return(false));
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsPassphraseRequired())
+      .WillByDefault(Return(false));
+  SetupInitializedProfileSyncService();
+  ON_CALL(*mock_pss_->GetUserSettingsMock(), IsEncryptEverythingAllowed())
+      .WillByDefault(Return(false));
+
+  base::DictionaryValue dict;
+  dict.SetBoolean("setNewPassphrase", true);
+  std::string args = GetConfiguration(&dict, SYNC_ALL_DATA, GetAllTypes(),
+                                      "password", ENCRYPT_ALL_DATA);
   base::ListValue list_args;
   list_args.AppendString(kTestCallbackId);
   list_args.AppendString(args);
-  ON_CALL(*mock_pss_, IsPassphraseRequiredForDecryption())
-      .WillByDefault(Return(false));
-  ON_CALL(*mock_pss_, IsPassphraseRequired()).WillByDefault(Return(false));
-  SetupInitializedProfileSyncService();
-  ON_CALL(*mock_pss_, IsEncryptEverythingAllowed())
-      .WillByDefault(Return(false));
-  EXPECT_CALL(*mock_pss_, EnableEncryptEverything()).Times(0);
+
+  EXPECT_CALL(*mock_pss_->GetUserSettingsMock(), EnableEncryptEverything())
+      .Times(0);
+  EXPECT_CALL(*mock_pss_->GetUserSettingsMock(), SetEncryptionPassphrase(_))
+      .Times(0);
+
   handler_->HandleSetEncryption(&list_args);
 
   ExpectPageStatusResponse(PeopleHandler::kConfigurePageStatus);
@@ -1024,50 +1106,50 @@ TEST_P(PeopleHandlerDiceUnifiedConsentTest, StoredAccountsList) {
   std::tie(dice_enabled, unified_consent_enabled) = GetParam();
   unified_consent::ScopedUnifiedConsent unified_consent(
       unified_consent_enabled
-          ? unified_consent::UnifiedConsentFeatureState::kEnabledWithBump
+          ? unified_consent::UnifiedConsentFeatureState::kEnabled
           : unified_consent::UnifiedConsentFeatureState::kDisabled);
   ScopedAccountConsistency dice(
       dice_enabled ? signin::AccountConsistencyMethod::kDice
-                   : signin::AccountConsistencyMethod::kDiceFixAuthErrors);
+                   : signin::AccountConsistencyMethod::kDiceMigration);
 
   // Setup the profile.
-  TestingProfile profile;
-  AccountTrackerService* account_tracker =
-      AccountTrackerServiceFactory::GetForProfile(&profile);
-  SigninManager* signin_manager = SigninManagerFactory::GetForProfile(&profile);
-  ProfileOAuth2TokenService* token_service =
-      ProfileOAuth2TokenServiceFactory::GetForProfile(&profile);
-  std::string account_1 =
-      account_tracker->SeedAccountInfo("1234", "a@gmail.com");
-  std::string account_2 =
-      account_tracker->SeedAccountInfo("5678", "b@gmail.com");
-  token_service->UpdateCredentials(account_1, "token");
-  token_service->UpdateCredentials(account_2, "token");
-  signin_manager->SetAuthenticatedAccountInfo("1234", "a@gmail.com");
+  std::unique_ptr<TestingProfile> profile =
+      IdentityTestEnvironmentProfileAdaptor::
+          CreateProfileForIdentityTestEnvironment();
 
-  PeopleHandler handler(&profile);
-  std::unique_ptr<base::ListValue> accounts_list =
-      handler.GetStoredAccountsList();
+  auto identity_test_env_adaptor =
+      std::make_unique<IdentityTestEnvironmentProfileAdaptor>(profile.get());
+  auto* identity_test_env = identity_test_env_adaptor->identity_test_env();
+
+  auto account_1 = identity_test_env->MakeAccountAvailable("a@gmail.com");
+  auto account_2 = identity_test_env->MakeAccountAvailable("b@gmail.com");
+  identity_test_env->SetPrimaryAccount(account_1.email);
+
+  PeopleHandler handler(profile.get());
+  base::Value accounts = handler.GetStoredAccountsList();
+
+  ASSERT_TRUE(accounts.is_list());
+  const base::Value::ListStorage& accounts_list = accounts.GetList();
 
   if (dice_enabled) {
-    EXPECT_EQ(2u, accounts_list->GetSize());
-    EXPECT_EQ("a@gmail.com",
-              accounts_list->GetList()[0].FindKey("email")->GetString());
-    EXPECT_EQ("b@gmail.com",
-              accounts_list->GetList()[1].FindKey("email")->GetString());
+    ASSERT_EQ(2u, accounts_list.size());
+    ASSERT_TRUE(accounts_list[0].FindKey("email"));
+    ASSERT_TRUE(accounts_list[1].FindKey("email"));
+    EXPECT_EQ("a@gmail.com", accounts_list[0].FindKey("email")->GetString());
+    EXPECT_EQ("b@gmail.com", accounts_list[1].FindKey("email")->GetString());
   } else if (unified_consent_enabled) {
-    EXPECT_EQ(1u, accounts_list->GetSize());
-    EXPECT_EQ("a@gmail.com",
-              accounts_list->GetList()[0].FindKey("email")->GetString());
+    ASSERT_EQ(1u, accounts_list.size());
+    ASSERT_TRUE(accounts_list[0].FindKey("email"));
+    EXPECT_EQ("a@gmail.com", accounts_list[0].FindKey("email")->GetString());
   } else {
-    EXPECT_EQ(0u, accounts_list->GetSize());
+    EXPECT_EQ(0u, accounts_list.size());
   }
 }
 
-INSTANTIATE_TEST_CASE_P(Test,
-                        PeopleHandlerDiceUnifiedConsentTest,
-                        ::testing::Combine(::testing::Bool(),
-                                           ::testing::Bool()));
+INSTANTIATE_TEST_SUITE_P(Test,
+                         PeopleHandlerDiceUnifiedConsentTest,
+                         ::testing::Combine(::testing::Bool(),
+                                            ::testing::Bool()));
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 }  // namespace settings

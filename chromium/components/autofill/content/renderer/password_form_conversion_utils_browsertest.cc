@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <memory>
 
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -100,12 +100,12 @@ class PasswordFormBuilder {
 
   // Appends a disabled text-type field at the end of the form.
   void AddDisabledUsernameField() {
-    html_ += "<INPUT type=\"text\" disabled/>";
+    html_ += "<INPUT name=\"disabled field\" type=\"text\" disabled/>";
   }
 
   // Appends a disabled password-type field at the end of the form.
   void AddDisabledPasswordField() {
-    html_ += "<INPUT type=\"password\" disabled/>";
+    html_ += "<INPUT name=\"disabled field\" type=\"password\" disabled/>";
   }
 
   // Appends a hidden field at the end of the form.
@@ -187,19 +187,10 @@ class PasswordFormBuilder {
   DISALLOW_COPY_AND_ASSIGN(PasswordFormBuilder);
 };
 
-// RenderViewTest-based tests crash on Android
-// http://crbug.com/187500
-#if defined(OS_ANDROID)
-#define MAYBE_PasswordFormConversionUtilsTest \
-  DISABLED_PasswordFormConversionUtilsTest
-#else
-#define MAYBE_PasswordFormConversionUtilsTest PasswordFormConversionUtilsTest
-#endif  // defined(OS_ANDROID)
-
-class MAYBE_PasswordFormConversionUtilsTest : public content::RenderViewTest {
+class PasswordFormConversionUtilsTest : public content::RenderViewTest {
  public:
-  MAYBE_PasswordFormConversionUtilsTest() {}
-  ~MAYBE_PasswordFormConversionUtilsTest() override {}
+  PasswordFormConversionUtilsTest() = default;
+  ~PasswordFormConversionUtilsTest() override = default;
 
  protected:
   // Loads the given |html|, retrieves the sole WebFormElement from it, and then
@@ -296,12 +287,12 @@ class MAYBE_PasswordFormConversionUtilsTest : public content::RenderViewTest {
   UsernameDetectorCache username_detector_cache_;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(MAYBE_PasswordFormConversionUtilsTest);
+  DISALLOW_COPY_AND_ASSIGN(PasswordFormConversionUtilsTest);
 };
 
 }  // namespace
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, BasicFormAttributes) {
+TEST_F(PasswordFormConversionUtilsTest, BasicFormAttributes) {
   PasswordFormBuilder builder(kTestFormActionURL);
   builder.AddTextField("username", "johnsmith", nullptr);
   builder.AddSubmitButton("inactive_submit");
@@ -314,7 +305,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, BasicFormAttributes) {
       LoadHTMLAndConvertForm(html, nullptr, false);
   ASSERT_TRUE(password_form);
 
-  EXPECT_FALSE(password_form->only_for_fallback_saving);
+  EXPECT_FALSE(password_form->only_for_fallback);
   EXPECT_EQ("data:", password_form->signon_realm);
   EXPECT_EQ(GURL(kTestFormActionURL), password_form->action);
   EXPECT_EQ(base::UTF8ToUTF16("username"), password_form->username_element);
@@ -327,7 +318,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, BasicFormAttributes) {
   EXPECT_EQ(PasswordForm::TYPE_MANUAL, password_form->type);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, DisabledFieldsAreIgnored) {
+TEST_F(PasswordFormConversionUtilsTest, DisabledFieldsAreIgnored) {
   PasswordFormBuilder builder(kTestFormActionURL);
   builder.AddTextField("username", "johnsmith", nullptr);
   builder.AddDisabledUsernameField();
@@ -339,14 +330,18 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, DisabledFieldsAreIgnored) {
   std::unique_ptr<PasswordForm> password_form =
       LoadHTMLAndConvertForm(html, nullptr, false);
   ASSERT_TRUE(password_form);
-  EXPECT_FALSE(password_form->only_for_fallback_saving);
+  EXPECT_FALSE(password_form->only_for_fallback);
   EXPECT_EQ(base::UTF8ToUTF16("username"), password_form->username_element);
   EXPECT_EQ(base::UTF8ToUTF16("johnsmith"), password_form->username_value);
   EXPECT_EQ(base::UTF8ToUTF16("password"), password_form->password_element);
   EXPECT_EQ(base::UTF8ToUTF16("secret"), password_form->password_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, OnlyDisabledFields) {
+// When not enough fields are enabled to parse the form, the result should still
+// be not null. It must contain only minimal information, so that it is not used
+// for fill on load, for example. It must contain the full FormData, so that the
+// new parser can be run as well.
+TEST_F(PasswordFormConversionUtilsTest, OnlyDisabledFields) {
   PasswordFormBuilder builder(kTestFormActionURL);
   builder.AddDisabledUsernameField();
   builder.AddDisabledPasswordField();
@@ -355,11 +350,14 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, OnlyDisabledFields) {
 
   std::unique_ptr<PasswordForm> password_form =
       LoadHTMLAndConvertForm(html, nullptr, false);
-  ASSERT_FALSE(password_form);
+  ASSERT_TRUE(password_form);
+  EXPECT_TRUE(password_form->username_element.empty());
+  EXPECT_TRUE(password_form->password_element.empty());
+  EXPECT_TRUE(password_form->new_password_element.empty());
+  EXPECT_EQ(2u, password_form->form_data.fields.size());
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
-       HTMLDetector_DeveloperGroupAttributes) {
+TEST_F(PasswordFormConversionUtilsTest, HTMLDetector_DeveloperGroupAttributes) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(
       password_manager::features::kHtmlBasedUsernameDetector);
@@ -446,7 +444,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
        "id",
        "123"}};
 
-  for (size_t i = 0; i < arraysize(cases); ++i) {
+  for (size_t i = 0; i < base::size(cases); ++i) {
     SCOPED_TRACE(testing::Message() << "Iteration " << i);
 
     PasswordFormBuilder builder(kTestFormActionURL);
@@ -481,7 +479,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   }
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, HTMLDetector_SeveralDetections) {
+TEST_F(PasswordFormConversionUtilsTest, HTMLDetector_SeveralDetections) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(
       password_manager::features::kHtmlBasedUsernameDetector);
@@ -514,8 +512,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, HTMLDetector_SeveralDetections) {
       username_detector_cache_.begin()->second[0].NameForAutofill().Utf8());
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
-       HTMLDetector_UserGroupAttributes) {
+TEST_F(PasswordFormConversionUtilsTest, HTMLDetector_UserGroupAttributes) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(
       password_manager::features::kHtmlBasedUsernameDetector);
@@ -598,7 +595,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
        "name1",
        "johnsmith"}};
 
-  for (size_t i = 0; i < arraysize(cases); ++i) {
+  for (size_t i = 0; i < base::size(cases); ++i) {
     SCOPED_TRACE(testing::Message() << "Iteration " << i);
 
     PasswordFormBuilder builder(kTestFormActionURL);
@@ -635,7 +632,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   }
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, HTMLDetectorCache) {
+TEST_F(PasswordFormConversionUtilsTest, HTMLDetectorCache) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(
       password_manager::features::kHtmlBasedUsernameDetector);
@@ -711,8 +708,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, HTMLDetectorCache) {
           base::Bucket(UsernameDetectionMethod::HTML_BASED_CLASSIFIER, 2)));
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
-       HTMLDetectorCache_SkipSomePredictions) {
+TEST_F(PasswordFormConversionUtilsTest, HTMLDetectorCache_SkipSomePredictions) {
   // The cache of HTML based username detector may contain several predictions
   // (in the order of decreasing reliability) for the given form, but the
   // detector should consider only |possible_usernames| passed to
@@ -756,7 +752,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   EXPECT_EQ(base::UTF8ToUTF16("id"), password_form->username_element);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
+TEST_F(PasswordFormConversionUtilsTest,
        IdentifyingUsernameFieldsWithBaseHeuristic) {
   // Each test case consists of a set of parameters to be plugged into the
   // PasswordFormBuilder below, plus the corresponding expectations.
@@ -831,7 +827,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
        "John",
        "William+usrname2, Smith+usrname3"}};
 
-  for (size_t i = 0; i < arraysize(cases); ++i) {
+  for (size_t i = 0; i < base::size(cases); ++i) {
     for (size_t nonempty_username_fields = 0; nonempty_username_fields < 2;
          ++nonempty_username_fields) {
       SCOPED_TRACE(testing::Message()
@@ -862,7 +858,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
           LoadHTMLAndConvertForm(html, nullptr, false);
       ASSERT_TRUE(password_form);
 
-      EXPECT_FALSE(password_form->only_for_fallback_saving);
+      EXPECT_FALSE(password_form->only_for_fallback);
       EXPECT_EQ(base::UTF8ToUTF16(cases[i].expected_username_element),
                 password_form->username_element);
 
@@ -884,7 +880,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   }
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, IdentifyingTwoPasswordFields) {
+TEST_F(PasswordFormConversionUtilsTest, IdentifyingTwoPasswordFields) {
   // Each test case consists of a set of parameters to be plugged into the
   // PasswordFormBuilder below, plus the corresponding expectations.
   struct TestCase {
@@ -908,7 +904,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, IdentifyingTwoPasswordFields) {
       {{"", "beta"}, "password1", "", "password2", "beta", ""},
       {{"alpha", "beta"}, "password1", "alpha", "password2", "beta", ""}};
 
-  for (size_t i = 0; i < arraysize(cases); ++i) {
+  for (size_t i = 0; i < base::size(cases); ++i) {
     SCOPED_TRACE(testing::Message() << "Iteration " << i);
 
     PasswordFormBuilder builder(kTestFormActionURL);
@@ -923,7 +919,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, IdentifyingTwoPasswordFields) {
         LoadHTMLAndConvertForm(html, nullptr, false);
     ASSERT_TRUE(password_form);
 
-    EXPECT_FALSE(password_form->only_for_fallback_saving);
+    EXPECT_FALSE(password_form->only_for_fallback);
     EXPECT_EQ(base::UTF8ToUTF16(cases[i].expected_password_element),
               password_form->password_element);
     EXPECT_EQ(base::UTF8ToUTF16(cases[i].expected_password_value),
@@ -945,7 +941,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, IdentifyingTwoPasswordFields) {
   }
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, IdentifyingThreePasswordFields) {
+TEST_F(PasswordFormConversionUtilsTest, IdentifyingThreePasswordFields) {
   // Each test case consists of a set of parameters to be plugged into the
   // PasswordFormBuilder below, plus the corresponding expectations.
   struct TestCase {
@@ -977,7 +973,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, IdentifyingThreePasswordFields) {
       // them the same for now to keep our abstract interpretation less flaky.
       {{"", "", ""}, "password1", "", "password2", "", "password3"}};
 
-  for (size_t i = 0; i < arraysize(cases); ++i) {
+  for (size_t i = 0; i < base::size(cases); ++i) {
     SCOPED_TRACE(testing::Message() << "Iteration " << i);
 
     PasswordFormBuilder builder(kTestFormActionURL);
@@ -993,7 +989,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, IdentifyingThreePasswordFields) {
         LoadHTMLAndConvertForm(html, nullptr, false);
     ASSERT_TRUE(password_form);
 
-    EXPECT_FALSE(password_form->only_for_fallback_saving);
+    EXPECT_FALSE(password_form->only_for_fallback);
     EXPECT_EQ(base::UTF8ToUTF16(cases[i].expected_password_element),
               password_form->password_element);
     EXPECT_EQ(base::UTF8ToUTF16(cases[i].expected_password_value),
@@ -1015,7 +1011,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, IdentifyingThreePasswordFields) {
   }
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
+TEST_F(PasswordFormConversionUtilsTest,
        IdentifyingPasswordFieldsWithAutocompleteAttributes) {
   // Each test case consists of a set of parameters to be plugged into the
   // PasswordFormBuilder below, plus the corresponding expectations.
@@ -1340,7 +1336,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
        "usrname2",
        "Smith"}};
 
-  for (size_t i = 0; i < arraysize(cases); ++i) {
+  for (size_t i = 0; i < base::size(cases); ++i) {
     SCOPED_TRACE(testing::Message() << "Iteration " << i);
 
     PasswordFormBuilder builder(kTestFormActionURL);
@@ -1358,7 +1354,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
         LoadHTMLAndConvertForm(html, nullptr, false);
     ASSERT_TRUE(password_form);
 
-    EXPECT_FALSE(password_form->only_for_fallback_saving);
+    EXPECT_FALSE(password_form->only_for_fallback);
     // In the absence of username autocomplete attributes, the username should
     // be the text input field just before 'current-password' or before
     // 'new-password', if there is no 'current-password'.
@@ -1390,7 +1386,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   }
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
+TEST_F(PasswordFormConversionUtilsTest,
        UsernameDetection_AutocompleteAttribute) {
   PasswordFormBuilder builder(kTestFormActionURL);
   builder.AddTextField("username", "JohnSmith", "username");
@@ -1410,7 +1406,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
       UsernameDetectionMethod::AUTOCOMPLETE_ATTRIBUTE, 1);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, IgnoreInvisibledTextFields) {
+TEST_F(PasswordFormConversionUtilsTest, IgnoreInvisibledTextFields) {
   PasswordFormBuilder builder(kTestFormActionURL);
 
   builder.AddNonDisplayedTextField("nondisplayed1", "nodispalyed_value1");
@@ -1426,7 +1422,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, IgnoreInvisibledTextFields) {
   std::unique_ptr<PasswordForm> password_form =
       LoadHTMLAndConvertForm(html, nullptr, false);
   ASSERT_TRUE(password_form);
-  EXPECT_FALSE(password_form->only_for_fallback_saving);
+  EXPECT_FALSE(password_form->only_for_fallback);
   EXPECT_EQ(base::UTF8ToUTF16("username"), password_form->username_element);
   EXPECT_EQ(base::UTF8ToUTF16("johnsmith"), password_form->username_value);
   EXPECT_EQ(base::UTF8ToUTF16(""), password_form->password_element);
@@ -1434,7 +1430,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, IgnoreInvisibledTextFields) {
   EXPECT_EQ(base::UTF8ToUTF16("secret"), password_form->new_password_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, IgnoreInvisiblLoginPairs) {
+TEST_F(PasswordFormConversionUtilsTest, IgnoreInvisiblLoginPairs) {
   PasswordFormBuilder builder(kTestFormActionURL);
 
   builder.AddNonDisplayedTextField("nondisplayed1", "nodispalyed_value1");
@@ -1454,7 +1450,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, IgnoreInvisiblLoginPairs) {
   std::unique_ptr<PasswordForm> password_form =
       LoadHTMLAndConvertForm(html, nullptr, false);
   ASSERT_TRUE(password_form);
-  EXPECT_FALSE(password_form->only_for_fallback_saving);
+  EXPECT_FALSE(password_form->only_for_fallback);
   EXPECT_EQ(base::UTF8ToUTF16("username"), password_form->username_element);
   EXPECT_EQ(base::UTF8ToUTF16("johnsmith"), password_form->username_value);
   EXPECT_EQ(base::UTF8ToUTF16(""), password_form->password_element);
@@ -1462,7 +1458,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, IgnoreInvisiblLoginPairs) {
   EXPECT_EQ(base::UTF8ToUTF16("secret"), password_form->new_password_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, OnlyNonDisplayedLoginPair) {
+TEST_F(PasswordFormConversionUtilsTest, OnlyNonDisplayedLoginPair) {
   PasswordFormBuilder builder(kTestFormActionURL);
 
   builder.AddNonDisplayedTextField("username", "William");
@@ -1473,7 +1469,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, OnlyNonDisplayedLoginPair) {
   std::unique_ptr<PasswordForm> password_form =
       LoadHTMLAndConvertForm(html, nullptr, false);
   ASSERT_TRUE(password_form);
-  EXPECT_FALSE(password_form->only_for_fallback_saving);
+  EXPECT_FALSE(password_form->only_for_fallback);
   EXPECT_EQ(base::UTF8ToUTF16("username"),
             password_form->username_element);
   EXPECT_EQ(base::UTF8ToUTF16("William"),
@@ -1484,7 +1480,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, OnlyNonDisplayedLoginPair) {
             password_form->password_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, OnlyNonVisibleLoginPair) {
+TEST_F(PasswordFormConversionUtilsTest, OnlyNonVisibleLoginPair) {
   PasswordFormBuilder builder(kTestFormActionURL);
 
   builder.AddNonVisibleTextField("username", "William");
@@ -1495,15 +1491,14 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, OnlyNonVisibleLoginPair) {
   std::unique_ptr<PasswordForm> password_form =
       LoadHTMLAndConvertForm(html, nullptr, false);
   ASSERT_TRUE(password_form);
-  EXPECT_FALSE(password_form->only_for_fallback_saving);
+  EXPECT_FALSE(password_form->only_for_fallback);
   EXPECT_EQ(base::UTF8ToUTF16("username"), password_form->username_element);
   EXPECT_EQ(base::UTF8ToUTF16("William"), password_form->username_value);
   EXPECT_EQ(base::UTF8ToUTF16("password"), password_form->password_element);
   EXPECT_EQ(base::UTF8ToUTF16("secret"), password_form->password_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
-       VisiblePasswordAndInvisibleUsername) {
+TEST_F(PasswordFormConversionUtilsTest, VisiblePasswordAndInvisibleUsername) {
   PasswordFormBuilder builder(kTestFormActionURL);
 
   builder.AddNonDisplayedTextField("username", "William");
@@ -1514,14 +1509,14 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   std::unique_ptr<PasswordForm> password_form =
       LoadHTMLAndConvertForm(html, nullptr, false);
   ASSERT_TRUE(password_form);
-  EXPECT_FALSE(password_form->only_for_fallback_saving);
+  EXPECT_FALSE(password_form->only_for_fallback);
   EXPECT_EQ(base::UTF8ToUTF16("username"), password_form->username_element);
   EXPECT_EQ(base::UTF8ToUTF16("William"), password_form->username_value);
   EXPECT_EQ(base::UTF8ToUTF16("password"), password_form->password_element);
   EXPECT_EQ(base::UTF8ToUTF16("secret"), password_form->password_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
+TEST_F(PasswordFormConversionUtilsTest,
        InvisiblePassword_LatestUsernameIsVisible) {
   PasswordFormBuilder builder(kTestFormActionURL);
 
@@ -1534,14 +1529,14 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   std::unique_ptr<PasswordForm> password_form =
       LoadHTMLAndConvertForm(html, nullptr, false);
   ASSERT_TRUE(password_form);
-  EXPECT_FALSE(password_form->only_for_fallback_saving);
+  EXPECT_FALSE(password_form->only_for_fallback);
   EXPECT_EQ(base::UTF8ToUTF16("username"), password_form->username_element);
   EXPECT_EQ(base::UTF8ToUTF16("William"), password_form->username_value);
   EXPECT_EQ(base::UTF8ToUTF16("password"), password_form->password_element);
   EXPECT_EQ(base::UTF8ToUTF16("secret"), password_form->password_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
+TEST_F(PasswordFormConversionUtilsTest,
        InvisiblePassword_LatestUsernameIsInvisible) {
   PasswordFormBuilder builder(kTestFormActionURL);
 
@@ -1554,7 +1549,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   std::unique_ptr<PasswordForm> password_form =
       LoadHTMLAndConvertForm(html, nullptr, false);
   ASSERT_TRUE(password_form);
-  EXPECT_FALSE(password_form->only_for_fallback_saving);
+  EXPECT_FALSE(password_form->only_for_fallback);
   EXPECT_EQ(base::UTF8ToUTF16("username"), password_form->username_element);
   EXPECT_EQ(base::UTF8ToUTF16("William"), password_form->username_value);
   EXPECT_EQ(base::UTF8ToUTF16("password"), password_form->password_element);
@@ -1563,7 +1558,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
 
 // Checks that username/password fields are detected based on user input even if
 // visibility heuristics disagree.
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, UserInput) {
+TEST_F(PasswordFormConversionUtilsTest, UserInput) {
   PasswordFormBuilder builder(kTestFormActionURL);
 
   builder.AddNonVisibleTextField("nonvisible_text", "actual_username");
@@ -1594,7 +1589,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, UserInput) {
       form, &field_data_manager, nullptr, nullptr);
 
   ASSERT_TRUE(password_form);
-  EXPECT_FALSE(password_form->only_for_fallback_saving);
+  EXPECT_FALSE(password_form->only_for_fallback);
   EXPECT_EQ(base::UTF8ToUTF16("nonvisible_text"),
             password_form->username_element);
   EXPECT_EQ(base::UTF8ToUTF16("actual_username"),
@@ -1607,8 +1602,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, UserInput) {
   EXPECT_EQ(base::UTF8ToUTF16(""), password_form->new_password_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
-       TypedPasswordAndUsernameCachedOnPage) {
+TEST_F(PasswordFormConversionUtilsTest, TypedPasswordAndUsernameCachedOnPage) {
   PasswordFormBuilder builder(kTestFormActionURL);
   // The heuristics should consider only password field with user input (i.e.
   // password_with_user_input?) and visible username fields (i.e. nickname,
@@ -1652,7 +1646,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
       form, &field_data_manager, nullptr, nullptr);
 
   ASSERT_TRUE(password_form);
-  EXPECT_FALSE(password_form->only_for_fallback_saving);
+  EXPECT_FALSE(password_form->only_for_fallback);
 
   EXPECT_EQ(base::UTF8ToUTF16("visible_text"), password_form->username_element);
   EXPECT_EQ(base::UTF8ToUTF16("cached_username"),
@@ -1667,8 +1661,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
             password_form->new_password_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
-       TypedPasswordAndInvisibleUsername) {
+TEST_F(PasswordFormConversionUtilsTest, TypedPasswordAndInvisibleUsername) {
   PasswordFormBuilder builder(kTestFormActionURL);
   // The heuristics should consider only password field with user input (i.e.
   // password_with_user_input?) and invisible username fields since all username
@@ -1710,7 +1703,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
       form, &field_data_manager, nullptr, nullptr);
 
   ASSERT_TRUE(password_form);
-  EXPECT_FALSE(password_form->only_for_fallback_saving);
+  EXPECT_FALSE(password_form->only_for_fallback);
 
   EXPECT_EQ(base::UTF8ToUTF16("this_is_username"),
             password_form->username_element);
@@ -1726,7 +1719,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
             password_form->new_password_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, InvalidFormDueToBadActionURL) {
+TEST_F(PasswordFormConversionUtilsTest, InvalidFormDueToBadActionURL) {
   PasswordFormBuilder builder("invalid_target");
   builder.AddTextField("username", "JohnSmith", nullptr);
   builder.AddSubmitButton("submit");
@@ -1738,8 +1731,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, InvalidFormDueToBadActionURL) {
   EXPECT_FALSE(password_form);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
-       InvalidFormDueToNoPasswordFields) {
+TEST_F(PasswordFormConversionUtilsTest, InvalidFormDueToNoPasswordFields) {
   PasswordFormBuilder builder(kTestFormActionURL);
   builder.AddTextField("username1", "John", nullptr);
   builder.AddTextField("username2", "Smith", nullptr);
@@ -1751,7 +1743,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   EXPECT_FALSE(password_form);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, ConfusingPasswordFields) {
+TEST_F(PasswordFormConversionUtilsTest, ConfusingPasswordFields) {
   // Each test case consists of a set of parameters to be plugged into the
   // PasswordFormBuilder below.
   const char* cases[][3] = {
@@ -1764,7 +1756,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, ConfusingPasswordFields) {
       {"alpha", "alpha", "alpha"},
       {"alpha", "beta", "alpha"}};
 
-  for (size_t i = 0; i < arraysize(cases); ++i) {
+  for (size_t i = 0; i < base::size(cases); ++i) {
     SCOPED_TRACE(testing::Message() << "Iteration " << i);
 
     PasswordFormBuilder builder(kTestFormActionURL);
@@ -1778,7 +1770,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, ConfusingPasswordFields) {
     std::unique_ptr<PasswordForm> password_form =
         LoadHTMLAndConvertForm(html, nullptr, false);
     ASSERT_TRUE(password_form);
-    EXPECT_FALSE(password_form->only_for_fallback_saving);
+    EXPECT_FALSE(password_form->only_for_fallback);
     EXPECT_EQ(base::UTF8ToUTF16("username1"), password_form->username_element);
     EXPECT_EQ(base::UTF8ToUTF16("John"), password_form->username_value);
     EXPECT_EQ(base::UTF8ToUTF16("password1"), password_form->password_element);
@@ -1786,7 +1778,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, ConfusingPasswordFields) {
   }
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
+TEST_F(PasswordFormConversionUtilsTest,
        ManyPasswordFieldsWithoutAutocompleteAttributes) {
   PasswordFormBuilder builder(kTestFormActionURL);
   builder.AddTextField("username1", "John", nullptr);
@@ -1800,14 +1792,14 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   std::unique_ptr<PasswordForm> password_form =
       LoadHTMLAndConvertForm(html, nullptr, false);
   ASSERT_TRUE(password_form);
-  EXPECT_FALSE(password_form->only_for_fallback_saving);
+  EXPECT_FALSE(password_form->only_for_fallback);
   EXPECT_EQ(base::UTF8ToUTF16("username1"), password_form->username_element);
   EXPECT_EQ(base::UTF8ToUTF16("John"), password_form->username_value);
   EXPECT_EQ(base::UTF8ToUTF16("password1"), password_form->password_element);
   EXPECT_EQ(base::UTF8ToUTF16("alpha"), password_form->password_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, SetOtherPossiblePasswords) {
+TEST_F(PasswordFormConversionUtilsTest, SetOtherPossiblePasswords) {
   PasswordFormBuilder builder(kTestFormActionURL);
   builder.AddTextField("username1", "John", nullptr);
   builder.AddPasswordField("password1", "alpha1", nullptr);
@@ -1841,7 +1833,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, SetOtherPossiblePasswords) {
             ValueElementVectorToString(password_form->all_possible_passwords));
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
+TEST_F(PasswordFormConversionUtilsTest,
        AllPossiblePasswordsIncludeAutofilledValue) {
   for (bool autofilled_value_was_modified_by_user : {false, true}) {
     PasswordFormBuilder builder(kTestFormActionURL);
@@ -1873,101 +1865,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   }
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, LayoutClassificationLogin) {
-  PasswordFormBuilder builder(kTestFormActionURL);
-  builder.AddHiddenField();
-  builder.AddTextField("username", "", nullptr);
-  builder.AddPasswordField("password", "", nullptr);
-  builder.AddSubmitButton("submit");
-  std::string login_html = builder.ProduceHTML();
-
-  std::unique_ptr<PasswordForm> login_form =
-      LoadHTMLAndConvertForm(login_html, nullptr, false);
-  ASSERT_TRUE(login_form);
-  EXPECT_FALSE(login_form->only_for_fallback_saving);
-  EXPECT_EQ(PasswordForm::Layout::LAYOUT_OTHER, login_form->layout);
-}
-
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, LayoutClassificationSignup) {
-  PasswordFormBuilder builder(kTestFormActionURL);
-  builder.AddTextField("someotherfield", "", nullptr);
-  builder.AddTextField("username", "", nullptr);
-  builder.AddPasswordField("new_password", "", nullptr);
-  builder.AddHiddenField();
-  builder.AddPasswordField("new_password2", "", nullptr);
-  builder.AddSubmitButton("submit");
-  std::string signup_html = builder.ProduceHTML();
-
-  std::unique_ptr<PasswordForm> signup_form =
-      LoadHTMLAndConvertForm(signup_html, nullptr, false);
-  ASSERT_TRUE(signup_form);
-  EXPECT_FALSE(signup_form->only_for_fallback_saving);
-  EXPECT_EQ(PasswordForm::Layout::LAYOUT_OTHER, signup_form->layout);
-}
-
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, LayoutClassificationChange) {
-  PasswordFormBuilder builder(kTestFormActionURL);
-  builder.AddTextField("username", "", nullptr);
-  builder.AddPasswordField("old_password", "", nullptr);
-  builder.AddHiddenField();
-  builder.AddPasswordField("new_password", "", nullptr);
-  builder.AddPasswordField("new_password2", "", nullptr);
-  builder.AddSubmitButton("submit");
-  std::string change_html = builder.ProduceHTML();
-
-  std::unique_ptr<PasswordForm> change_form =
-      LoadHTMLAndConvertForm(change_html, nullptr, false);
-  ASSERT_TRUE(change_form);
-  EXPECT_FALSE(change_form->only_for_fallback_saving);
-  EXPECT_EQ(PasswordForm::Layout::LAYOUT_OTHER, change_form->layout);
-}
-
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
-       LayoutClassificationLoginPlusSignup_A) {
-  PasswordFormBuilder builder(kTestFormActionURL);
-  builder.AddTextField("username", "", nullptr);
-  builder.AddHiddenField();
-  builder.AddPasswordField("password", "", nullptr);
-  builder.AddTextField("username2", "", nullptr);
-  builder.AddTextField("someotherfield", "", nullptr);
-  builder.AddPasswordField("new_password", "", nullptr);
-  builder.AddPasswordField("new_password2", "", nullptr);
-  builder.AddHiddenField();
-  builder.AddSubmitButton("submit");
-  std::string login_plus_signup_html = builder.ProduceHTML();
-
-  std::unique_ptr<PasswordForm> login_plus_signup_form =
-      LoadHTMLAndConvertForm(login_plus_signup_html, nullptr, false);
-  ASSERT_TRUE(login_plus_signup_form);
-  EXPECT_FALSE(login_plus_signup_form->only_for_fallback_saving);
-  EXPECT_EQ(PasswordForm::Layout::LAYOUT_LOGIN_AND_SIGNUP,
-            login_plus_signup_form->layout);
-}
-
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
-       LayoutClassificationLoginPlusSignup_B) {
-  PasswordFormBuilder builder(kTestFormActionURL);
-  builder.AddTextField("username", "", nullptr);
-  builder.AddHiddenField();
-  builder.AddPasswordField("password", "", nullptr);
-  builder.AddTextField("usrname2", "", nullptr);
-  builder.AddTextField("someotherfield", "", nullptr);
-  builder.AddPasswordField("new_password", "", nullptr);
-  builder.AddTextField("someotherfield2", "", nullptr);
-  builder.AddHiddenField();
-  builder.AddSubmitButton("submit");
-  std::string login_plus_signup_html = builder.ProduceHTML();
-
-  std::unique_ptr<PasswordForm> login_plus_signup_form =
-      LoadHTMLAndConvertForm(login_plus_signup_html, nullptr, false);
-  ASSERT_TRUE(login_plus_signup_form);
-  EXPECT_FALSE(login_plus_signup_form->only_for_fallback_saving);
-  EXPECT_EQ(PasswordForm::Layout::LAYOUT_LOGIN_AND_SIGNUP,
-            login_plus_signup_form->layout);
-}
-
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
-       CreditCardNumberWithTypePasswordForm) {
+TEST_F(PasswordFormConversionUtilsTest, CreditCardNumberWithTypePasswordForm) {
   PasswordFormBuilder builder(kTestFormActionURL);
   builder.AddTextField("Credit-card-owner-name", "John Smith", nullptr);
   builder.AddPasswordField("Credit-card-number", "0000 0000 0000 0000",
@@ -1985,7 +1883,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   std::unique_ptr<PasswordForm> password_form =
       LoadHTMLAndConvertForm(html, &predictions, false);
   EXPECT_TRUE(password_form);
-  EXPECT_TRUE(password_form->only_for_fallback_saving);
+  EXPECT_TRUE(password_form->only_for_fallback);
   EXPECT_EQ(base::UTF8ToUTF16("Credit-card-owner-name"),
             password_form->username_element);
   EXPECT_EQ(base::UTF8ToUTF16("John Smith"), password_form->username_value);
@@ -1995,7 +1893,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
             password_form->password_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, UsernamePredictionFromServer) {
+TEST_F(PasswordFormConversionUtilsTest, UsernamePredictionFromServer) {
   PasswordFormBuilder builder(kTestFormActionURL);
   builder.AddTextField("username", "JohnSmith", nullptr);
   // 'autocomplete' attribute cannot override server's prediction.
@@ -2020,7 +1918,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, UsernamePredictionFromServer) {
       UsernameDetectionMethod::SERVER_SIDE_PREDICTION, 1);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
+TEST_F(PasswordFormConversionUtilsTest,
        UsernamePredictionFromServerToEmptyField) {
   // Tests that if a form has user input and the username prediction by the
   // server points to an empty field, then the prediction is ignored.
@@ -2054,7 +1952,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   EXPECT_EQ(base::UTF8ToUTF16("JohnSmith"), password_form->username_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
+TEST_F(PasswordFormConversionUtilsTest,
        CreditCardVerificationNumberWithTypePasswordForm) {
   PasswordFormBuilder builder(kTestFormActionURL);
   builder.AddTextField("Credit-card-owner-name", "John Smith", nullptr);
@@ -2072,7 +1970,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   std::unique_ptr<PasswordForm> password_form =
       LoadHTMLAndConvertForm(html, &predictions, false);
   EXPECT_TRUE(password_form);
-  EXPECT_TRUE(password_form->only_for_fallback_saving);
+  EXPECT_TRUE(password_form->only_for_fallback);
   EXPECT_EQ(base::UTF8ToUTF16("Credit-card-number"),
             password_form->username_element);
   EXPECT_EQ(base::UTF8ToUTF16("0000 0000 0000 0000"),
@@ -2081,7 +1979,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   EXPECT_EQ(base::UTF8ToUTF16("000"), password_form->password_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
+TEST_F(PasswordFormConversionUtilsTest,
        CreditCardNumberWithTypePasswordFormWithAutocomplete) {
   PasswordFormBuilder builder(kTestFormActionURL);
   builder.AddTextField("Credit-card-owner-name", "John Smith", nullptr);
@@ -2100,7 +1998,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   std::unique_ptr<PasswordForm> password_form =
       LoadHTMLAndConvertForm(html, &predictions, false);
   EXPECT_TRUE(password_form);
-  EXPECT_FALSE(password_form->only_for_fallback_saving);
+  EXPECT_FALSE(password_form->only_for_fallback);
   EXPECT_EQ(base::UTF8ToUTF16("Credit-card-owner-name"),
             password_form->username_element);
   EXPECT_EQ(base::UTF8ToUTF16("John Smith"), password_form->username_value);
@@ -2110,7 +2008,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
             password_form->password_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
+TEST_F(PasswordFormConversionUtilsTest,
        CreditCardVerificationNumberWithTypePasswordFormWithAutocomplete) {
   PasswordFormBuilder builder(kTestFormActionURL);
   builder.AddTextField("Credit-card-owner-name", "John Smith", nullptr);
@@ -2128,7 +2026,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   std::unique_ptr<PasswordForm> password_form =
       LoadHTMLAndConvertForm(html, &predictions, false);
   ASSERT_TRUE(password_form);
-  EXPECT_FALSE(password_form->only_for_fallback_saving);
+  EXPECT_FALSE(password_form->only_for_fallback);
   EXPECT_EQ(base::UTF8ToUTF16("Credit-card-number"),
             password_form->username_element);
   EXPECT_EQ(base::UTF8ToUTF16("0000 0000 0000 0000"),
@@ -2139,7 +2037,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   EXPECT_EQ(base::UTF8ToUTF16("000"), password_form->new_password_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, IsGaiaReauthFormIgnored) {
+TEST_F(PasswordFormConversionUtilsTest, IsGaiaReauthFormIgnored) {
   struct TestCase {
     const char* origin;
     struct KeyValue {
@@ -2236,7 +2134,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, IsGaiaReauthFormIgnored) {
   }
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, IsGaiaWithSkipSavePasswordForm) {
+TEST_F(PasswordFormConversionUtilsTest, IsGaiaWithSkipSavePasswordForm) {
   struct TestCase {
     const char* origin;
     bool expected_form_has_skip_save_password;
@@ -2270,7 +2168,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, IsGaiaWithSkipSavePasswordForm) {
   }
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
+TEST_F(PasswordFormConversionUtilsTest,
        IdentifyingFieldsWithoutNameOrIdAttributes) {
   const char* kEmpty = nullptr;
   const struct {
@@ -2291,7 +2189,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
        "anonymous_new_password"},
   };
 
-  for (size_t i = 0; i < arraysize(test_cases); ++i) {
+  for (size_t i = 0; i < base::size(test_cases); ++i) {
     SCOPED_TRACE(testing::Message()
                  << "Iteration " << i << ", expected_username "
                  << test_cases[i].expected_username_element
@@ -2325,7 +2223,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
         LoadHTMLAndConvertForm(html, nullptr, false);
     EXPECT_TRUE(password_form);
 
-    EXPECT_FALSE(password_form->only_for_fallback_saving);
+    EXPECT_FALSE(password_form->only_for_fallback);
     EXPECT_EQ(base::UTF8ToUTF16(test_cases[i].expected_username_element),
               password_form->username_element);
     EXPECT_EQ(base::UTF8ToUTF16(test_cases[i].expected_password_element),
@@ -2335,7 +2233,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
   }
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, TooManyFieldsToParseForm) {
+TEST_F(PasswordFormConversionUtilsTest, TooManyFieldsToParseForm) {
   PasswordFormBuilder builder(kTestFormActionURL);
   for (size_t i = 0; i < form_util::kMaxParseableFields + 1; ++i)
     builder.AddTextField("id", "value", "autocomplete");
@@ -2344,7 +2242,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, TooManyFieldsToParseForm) {
   EXPECT_FALSE(password_form);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, OnlyCreditCardFields) {
+TEST_F(PasswordFormConversionUtilsTest, OnlyCreditCardFields) {
   PasswordFormBuilder builder(kTestFormActionURL);
   builder.AddTextField("ccname", "johnsmith", "cc-name");
   builder.AddPasswordField("cc_security_code", "0123456789", "cc-csc");
@@ -2354,7 +2252,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, OnlyCreditCardFields) {
   std::unique_ptr<PasswordForm> password_form =
       LoadHTMLAndConvertForm(html, nullptr, false);
   EXPECT_TRUE(password_form);
-  EXPECT_TRUE(password_form->only_for_fallback_saving);
+  EXPECT_TRUE(password_form->only_for_fallback);
   EXPECT_EQ(base::UTF8ToUTF16("ccname"), password_form->username_element);
   EXPECT_EQ(base::UTF8ToUTF16("johnsmith"), password_form->username_value);
   EXPECT_EQ(base::UTF8ToUTF16("cc_security_code"),
@@ -2362,7 +2260,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, OnlyCreditCardFields) {
   EXPECT_EQ(base::UTF8ToUTF16("0123456789"), password_form->password_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest,
+TEST_F(PasswordFormConversionUtilsTest,
        FieldsWithAndWithoutCreditCardAttributes) {
   PasswordFormBuilder builder(kTestFormActionURL);
   builder.AddTextField("username", "johnsmith", nullptr);
@@ -2377,14 +2275,14 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest,
 
   ASSERT_TRUE(password_form);
 
-  EXPECT_FALSE(password_form->only_for_fallback_saving);
+  EXPECT_FALSE(password_form->only_for_fallback);
   EXPECT_EQ(base::UTF8ToUTF16("username"), password_form->username_element);
   EXPECT_EQ(base::UTF8ToUTF16("johnsmith"), password_form->username_value);
   EXPECT_EQ(base::UTF8ToUTF16("password"), password_form->password_element);
   EXPECT_EQ(base::UTF8ToUTF16("secret"), password_form->password_value);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, ResetPasswordForm) {
+TEST_F(PasswordFormConversionUtilsTest, ResetPasswordForm) {
   // GetPassword (including HTML classifier) should process correctly forms
   // without any text fields.
   base::test::ScopedFeatureList feature_list;
@@ -2410,7 +2308,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, ResetPasswordForm) {
       UsernameDetectionMethod::NO_USERNAME_DETECTED, 1);
 }
 
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, StickyPasswordType) {
+TEST_F(PasswordFormConversionUtilsTest, StickyPasswordType) {
   PasswordFormBuilder builder(kTestFormActionURL);
   builder.AddTextField("username", "johnsmith", nullptr);
   builder.AddPasswordField("password", "secret", nullptr);
@@ -2447,7 +2345,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, StickyPasswordType) {
 
 // Check that Chrome remembers the value typed by the user in cases when it gets
 // overridden by the page.
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, TypedValuePreserved) {
+TEST_F(PasswordFormConversionUtilsTest, TypedValuePreserved) {
   PasswordFormBuilder builder(kTestFormActionURL);
   builder.AddTextField("fine", "", "username");
   builder.AddPasswordField("mangled", "", "current-password");
@@ -2505,7 +2403,7 @@ TEST_F(MAYBE_PasswordFormConversionUtilsTest, TypedValuePreserved) {
 }
 
 // Check that non-text fields are ignored.
-TEST_F(MAYBE_PasswordFormConversionUtilsTest, NonTextFields) {
+TEST_F(PasswordFormConversionUtilsTest, NonTextFields) {
   PasswordFormBuilder builder(kTestFormActionURL);
   // Avoid calling the text fields anything related to "username" to prevent the
   // local HTML classifier from influencing the test result.

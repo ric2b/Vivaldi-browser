@@ -36,10 +36,11 @@ extern VivaldiBrowserWindow* GetActiveAppWindow();
 
 extern extensions::WebViewGuest* GetActiveWebGuestFromBrowser(Browser* browser);
 
-extern content::WebContents* GetWebContentsFromTabStrip(int tab_id,
-                                                        Profile* profile);
+extern content::WebContents* GetWebContentsFromTabStrip(
+    int tab_id,
+    content::BrowserContext* browser_context);
 
-extern bool IsOutsideAppWindow(int screen_x, int screen_y, Profile* profile);
+extern bool IsOutsideAppWindow(int screen_x, int screen_y);
 
 extern bool EncodeBitmap(
     const SkBitmap& screen_capture,

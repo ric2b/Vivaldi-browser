@@ -138,8 +138,6 @@ class CONTENT_EXPORT ResourceHandler {
       const net::URLRequestStatus& status,
       std::unique_ptr<ResourceController> controller) = 0;
 
-  virtual void SetOpenFlags(bool open_when_done, bool ask_for_target) {};
-
  protected:
   explicit ResourceHandler(net::URLRequest* request);
 
@@ -161,8 +159,8 @@ class CONTENT_EXPORT ResourceHandler {
   // These call the corresponding methods on the ResourceController previously
   // passed to HoldController and then destroy it.
   void Resume();
-  void ResumeForRedirect(
-      const base::Optional<net::HttpRequestHeaders>& modified_request_headers);
+  void ResumeForRedirect(const std::vector<std::string>& removed_headers,
+                         const net::HttpRequestHeaders& modified_headers);
   void Cancel();
   void CancelWithError(int error_code);
 

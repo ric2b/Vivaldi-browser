@@ -9,6 +9,7 @@
 #include <tuple>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/logging.h"
 #include "content/browser/media/cdm_file_impl.h"
@@ -36,7 +37,7 @@ void CdmStorageImpl::Create(RenderFrameHost* render_frame_host,
                             const std::string& cdm_file_system_id,
                             media::mojom::CdmStorageRequest request) {
   DVLOG(3) << __func__;
-  DCHECK(!render_frame_host->GetLastCommittedOrigin().unique())
+  DCHECK(!render_frame_host->GetLastCommittedOrigin().opaque())
       << "Invalid origin specified for CdmStorageImpl::Create";
 
   // Take a reference to the FileSystemContext.

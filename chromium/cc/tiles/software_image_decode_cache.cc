@@ -6,16 +6,18 @@
 
 #include <stdint.h>
 
+#include "base/bind.h"
 #include "base/format_macros.h"
 #include "base/macros.h"
-#include "base/memory/memory_coordinator_client_registry.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "cc/base/devtools_instrumentation.h"
 #include "cc/base/histograms.h"
 #include "cc/raster/tile_task.h"
 #include "cc/tiles/mipmap_util.h"
+#include "ui/gfx/color_space.h"
 #include "ui/gfx/skia_util.h"
 
 using base::trace_event::MemoryAllocatorDump;
@@ -30,8 +32,6 @@ namespace {
 // Depending on the memory state of the system, we limit the amount of items
 // differently.
 const size_t kNormalMaxItemsInCacheForSoftware = 200;
-const size_t kThrottledMaxItemsInCacheForSoftware = 100;
-const size_t kSuspendedMaxItemsInCacheForSoftware = 0;
 
 class AutoRemoveKeyFromTaskMap {
  public:
@@ -142,8 +142,10 @@ void RecordLockExistingCachedImageHistogram(TilePriority::PriorityBin bin,
 SoftwareImageDecodeCache::SoftwareImageDecodeCache(
     SkColorType color_type,
     size_t locked_memory_limit_bytes,
-    PaintImage::GeneratorClientId generator_client_id)
+    PaintImage::GeneratorClientId generator_client_id,
+    sk_sp<SkColorSpace> target_color_space)
     : decoded_images_(ImageMRUCache::NO_AUTO_EVICT),
+      target_color_space_(std::move(target_color_space)),
       locked_images_budget_(locked_memory_limit_bytes),
       color_type_(color_type),
       generator_client_id_(generator_client_id),
@@ -155,8 +157,6 @@ SoftwareImageDecodeCache::SoftwareImageDecodeCache(
         this, "cc::SoftwareImageDecodeCache",
         base::ThreadTaskRunnerHandle::Get());
   }
-  // Register this component with base::MemoryCoordinatorClientRegistry.
-  base::MemoryCoordinatorClientRegistry::GetInstance()->Register(this);
   memory_pressure_listener_.reset(new base::MemoryPressureListener(
       base::BindRepeating(&SoftwareImageDecodeCache::OnMemoryPressure,
                           base::Unretained(this))));
@@ -166,9 +166,6 @@ SoftwareImageDecodeCache::~SoftwareImageDecodeCache() {
   // It is safe to unregister, even if we didn't register in the constructor.
   base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
       this);
-  // Unregister this component with memory_coordinator::ClientRegistry.
-  base::MemoryCoordinatorClientRegistry::GetInstance()->Unregister(this);
-
   // TODO(vmpstr): If we don't have a client name, it may cause problems in
   // unittests, since most tests don't set the name but some do. The UMA system
   // expects the name to be always the same. This assertion is violated in the
@@ -369,8 +366,9 @@ void SoftwareImageDecodeCache::DecodeImageIfNecessary(
   // If we can use the original decode, we'll definitely need a decode.
   if (key.type() == CacheKey::kOriginal) {
     base::AutoUnlock release(lock_);
-    local_cache_entry = Utils::DoDecodeImage(key, paint_image, color_type_,
-                                             generator_client_id_);
+    local_cache_entry =
+        Utils::DoDecodeImage(key, paint_image, color_type_, target_color_space_,
+                             generator_client_id_);
   } else {
     // Attempt to find a cached decode to generate a scaled/subrected decode
     // from.
@@ -397,8 +395,9 @@ void SoftwareImageDecodeCache::DecodeImageIfNecessary(
     DCHECK(!should_decode_to_scale || !key.is_nearest_neighbor());
     if (should_decode_to_scale) {
       base::AutoUnlock release(lock_);
-      local_cache_entry = Utils::DoDecodeImage(key, paint_image, color_type_,
-                                               generator_client_id_);
+      local_cache_entry =
+          Utils::DoDecodeImage(key, paint_image, color_type_,
+                               target_color_space_, generator_client_id_);
     }
 
     // Couldn't decode to scale or find a cached candidate. Create the
@@ -423,9 +422,9 @@ void SoftwareImageDecodeCache::DecodeImageIfNecessary(
           key.type() == CacheKey::kSubrectOriginal
               ? SkIRect::MakeWH(paint_image.width(), paint_image.height())
               : gfx::RectToSkIRect(key.src_rect());
-      DrawImage candidate_draw_image(
-          paint_image, src_rect, kNone_SkFilterQuality, SkMatrix::I(),
-          key.frame_key().frame_index(), key.target_color_space());
+      DrawImage candidate_draw_image(paint_image, src_rect,
+                                     kNone_SkFilterQuality, SkMatrix::I(),
+                                     key.frame_key().frame_index());
       candidate_key.emplace(
           CacheKey::FromDrawImage(candidate_draw_image, color_type_));
     }
@@ -526,9 +525,7 @@ bool SoftwareImageDecodeCache::UseCacheForDrawImage(
   // Cache images that need to be converted to a non-sRGB color space.
   // TODO(ccameron): Consider caching when any color conversion is required.
   // https://crbug.com/791828
-  const gfx::ColorSpace& dst_color_space = draw_image.target_color_space();
-  if (dst_color_space.IsValid() &&
-      dst_color_space != gfx::ColorSpace::CreateSRGB()) {
+  if (target_color_space_ && !target_color_space_->isSRGB()) {
     return true;
   }
 
@@ -657,8 +654,8 @@ bool SoftwareImageDecodeCache::OnMemoryDump(
       int image_id = static_cast<int>(image_pair.first.frame_key().hash());
       CacheEntry* entry = image_pair.second.get();
       DCHECK(entry);
-      // We might not have memory for this cache entry, depending on where int
-      // he CacheEntry lifecycle we are. If we don't have memory, then we don't
+      // We might not have memory for this cache entry, depending on where in
+      // the CacheEntry lifecycle we are. If we don't have memory, then we don't
       // have to record it in the dump.
       if (!entry->memory)
         continue;
@@ -682,31 +679,6 @@ bool SoftwareImageDecodeCache::OnMemoryDump(
 
   // Memory dump can't fail, always return true.
   return true;
-}
-
-void SoftwareImageDecodeCache::OnMemoryStateChange(base::MemoryState state) {
-  {
-    base::AutoLock hold(lock_);
-    switch (state) {
-      case base::MemoryState::NORMAL:
-        max_items_in_cache_ = kNormalMaxItemsInCacheForSoftware;
-        break;
-      case base::MemoryState::THROTTLED:
-        max_items_in_cache_ = kThrottledMaxItemsInCacheForSoftware;
-        break;
-      case base::MemoryState::SUSPENDED:
-        max_items_in_cache_ = kSuspendedMaxItemsInCacheForSoftware;
-        break;
-      case base::MemoryState::UNKNOWN:
-        NOTREACHED();
-        return;
-    }
-  }
-}
-
-void SoftwareImageDecodeCache::OnPurgeMemory() {
-  base::AutoLock lock(lock_);
-  ReduceCacheUsageUntilWithinLimit(0);
 }
 
 void SoftwareImageDecodeCache::OnMemoryPressure(

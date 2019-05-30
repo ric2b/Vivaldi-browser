@@ -4,10 +4,14 @@
 
 #include "device/fido/hid/fido_hid_device.h"
 
+#include <limits>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "crypto/random.h"
 #include "device/fido/hid/fido_hid_message.h"
@@ -23,9 +27,16 @@ static constexpr uint8_t kReportId = 0x00;
 FidoHidDevice::FidoHidDevice(device::mojom::HidDeviceInfoPtr device_info,
                              device::mojom::HidManager* hid_manager)
     : FidoDevice(),
+      output_report_size_(device_info->max_output_report_size),
       hid_manager_(hid_manager),
       device_info_(std::move(device_info)),
-      weak_factory_(this) {}
+      weak_factory_(this) {
+  DCHECK_GE(std::numeric_limits<decltype(output_report_size_)>::max(),
+            device_info_->max_output_report_size);
+  // These limits on the report size are enforced in fido_hid_discovery.cc.
+  DCHECK_LT(kHidInitPacketHeaderSize, output_report_size_);
+  DCHECK_GE(kHidMaxPacketSize, output_report_size_);
+}
 
 FidoHidDevice::~FidoHidDevice() = default;
 
@@ -39,11 +50,16 @@ void FidoHidDevice::Cancel() {
   if (state_ != State::kBusy && state_ != State::kReady)
     return;
 
-  // Delete any remaining pending requests on this Channel ID.
+  state_ = State::kReady;
   pending_transactions_ = {};
+  timeout_callback_.Cancel();
+
   WriteMessage(
-      FidoHidMessage::Create(channel_id_, FidoHidDeviceCommand::kCancel,
-                             std::vector<uint8_t>()),
+      FidoHidMessage::Create(channel_id_,
+                             supported_protocol() == ProtocolVersion::kCtap
+                                 ? FidoHidDeviceCommand::kCancel
+                                 : FidoHidDeviceCommand::kInit,
+                             output_report_size_, std::vector<uint8_t>()),
       false /* response_expected */, base::DoNothing());
 }
 
@@ -75,7 +91,8 @@ void FidoHidDevice::Transition(std::vector<uint8_t> command,
                                     ? FidoHidDeviceCommand::kCbor
                                     : FidoHidDeviceCommand::kMsg;
       WriteMessage(
-          FidoHidMessage::Create(channel_id_, command_type, std::move(command)),
+          FidoHidMessage::Create(channel_id_, command_type, output_report_size_,
+                                 std::move(command)),
           true,
           base::BindOnce(&FidoHidDevice::MessageReceived,
                          weak_factory_.GetWeakPtr(), repeating_callback));
@@ -126,12 +143,12 @@ void FidoHidDevice::AllocateChannel(std::vector<uint8_t> command,
   // Send random nonce to device to verify received message.
   std::vector<uint8_t> nonce(8);
   crypto::RandBytes(nonce.data(), nonce.size());
-  WriteMessage(
-      FidoHidMessage::Create(channel_id_, FidoHidDeviceCommand::kInit, nonce),
-      true,
-      base::BindOnce(&FidoHidDevice::OnAllocateChannel,
-                     weak_factory_.GetWeakPtr(), nonce, std::move(command),
-                     std::move(callback)));
+  WriteMessage(FidoHidMessage::Create(channel_id_, FidoHidDeviceCommand::kInit,
+                                      output_report_size_, nonce),
+               true,
+               base::BindOnce(&FidoHidDevice::OnAllocateChannel,
+                              weak_factory_.GetWeakPtr(), nonce,
+                              std::move(command), std::move(callback)));
 }
 
 void FidoHidDevice::OnAllocateChannel(std::vector<uint8_t> nonce,
@@ -167,7 +184,8 @@ void FidoHidDevice::OnAllocateChannel(std::vector<uint8_t> nonce,
   auto received_nonce = base::make_span(payload).first(8);
   // Received a broadcast message for a different client. Disregard and continue
   // reading.
-  if (base::make_span(nonce) != received_nonce) {
+  if (!std::equal(nonce.begin(), nonce.end(), received_nonce.begin(),
+                  received_nonce.end())) {
     auto repeating_callback =
         base::AdaptCallbackForRepeating(std::move(callback));
     ArmTimeout(repeating_callback);
@@ -194,7 +212,9 @@ void FidoHidDevice::WriteMessage(base::Optional<FidoHidMessage> message,
     std::move(callback).Run(base::nullopt);
     return;
   }
-  const auto& packet = message->PopNextPacket();
+  auto packet = message->PopNextPacket();
+  DCHECK_LE(packet.size(), output_report_size_);
+  packet.resize(output_report_size_, 0);
   connection_->Write(
       kReportId, packet,
       base::BindOnce(&FidoHidDevice::PacketWritten, weak_factory_.GetWeakPtr(),
@@ -339,11 +359,12 @@ void FidoHidDevice::TryWink(WinkCallback callback) {
     return;
   }
 
-  WriteMessage(FidoHidMessage::Create(channel_id_, FidoHidDeviceCommand::kWink,
-                                      std::vector<uint8_t>()),
-               true,
-               base::BindOnce(&FidoHidDevice::OnWink,
-                              weak_factory_.GetWeakPtr(), std::move(callback)));
+  WriteMessage(
+      FidoHidMessage::Create(channel_id_, FidoHidDeviceCommand::kWink,
+                             output_report_size_, std::vector<uint8_t>()),
+      true,
+      base::BindOnce(&FidoHidDevice::OnWink, weak_factory_.GetWeakPtr(),
+                     std::move(callback)));
 }
 
 void FidoHidDevice::OnKeepAlive(DeviceCallback callback) {
@@ -402,6 +423,39 @@ std::string FidoHidDevice::GetId() const {
 
 FidoTransportProtocol FidoHidDevice::DeviceTransport() const {
   return FidoTransportProtocol::kUsbHumanInterfaceDevice;
+}
+
+// VidPidToString returns the device's vendor and product IDs as formatted by
+// the lsusb utility.
+static std::string VidPidToString(const mojom::HidDeviceInfoPtr& device_info) {
+  static_assert(sizeof(device_info->vendor_id) == 2,
+                "vendor_id must be uint16_t");
+  static_assert(sizeof(device_info->product_id) == 2,
+                "product_id must be uint16_t");
+  uint16_t vendor_id = ((device_info->vendor_id & 0xff) << 8) |
+                       ((device_info->vendor_id & 0xff00) >> 8);
+  uint16_t product_id = ((device_info->product_id & 0xff) << 8) |
+                        ((device_info->product_id & 0xff00) >> 8);
+  return base::ToLowerASCII(base::HexEncode(&vendor_id, 2) + ":" +
+                            base::HexEncode(&product_id, 2));
+}
+
+void FidoHidDevice::DiscoverSupportedProtocolAndDeviceInfo(
+    base::OnceClosure done) {
+  // The following devices cannot handle GetInfo messages.
+  static const base::flat_set<std::string> kForceU2fCompatibilitySet({
+      "10c4:8acf",  // U2F Zero
+      "20a0:4287",  // Nitrokey FIDO U2F
+  });
+
+  if (base::ContainsKey(kForceU2fCompatibilitySet,
+                        VidPidToString(device_info_))) {
+    supported_protocol_ = ProtocolVersion::kU2f;
+    DCHECK(SupportedProtocolIsInitialized());
+    std::move(done).Run();
+    return;
+  }
+  FidoDevice::DiscoverSupportedProtocolAndDeviceInfo(std::move(done));
 }
 
 // static

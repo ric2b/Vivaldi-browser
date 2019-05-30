@@ -25,6 +25,8 @@
 
 #include "third_party/blink/renderer/core/clipboard/data_transfer.h"
 #include "third_party/blink/renderer/core/dom/events/event_dispatcher.h"
+#include "third_party/blink/renderer/core/event_interface_names.h"
+#include "third_party/blink/renderer/core/frame/intervention.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/use_counter.h"
 
@@ -44,20 +46,20 @@ long NegateIfPossible(long value) {
   return -value;
 }
 
-MouseEventInit GetMouseEventInitForWheel(const WebMouseWheelEvent& event,
-                                         AbstractView* view) {
-  MouseEventInit initializer;
-  initializer.setBubbles(true);
-  initializer.setCancelable(event.IsCancelable());
+MouseEventInit* GetMouseEventInitForWheel(const WebMouseWheelEvent& event,
+                                          AbstractView* view) {
+  MouseEventInit* initializer = MouseEventInit::Create();
+  initializer->setBubbles(true);
+  initializer->setCancelable(event.IsCancelable());
+  auto* local_dom_window = DynamicTo<LocalDOMWindow>(view);
   MouseEvent::SetCoordinatesFromWebPointerProperties(
-      event.FlattenTransform(),
-      view->IsLocalDOMWindow() ? ToLocalDOMWindow(view) : nullptr, initializer);
-  initializer.setButton(static_cast<short>(event.button));
-  initializer.setButtons(
+      event.FlattenTransform(), local_dom_window, initializer);
+  initializer->setButton(static_cast<int16_t>(event.button));
+  initializer->setButtons(
       MouseEvent::WebInputEventModifiersToButtons(event.GetModifiers()));
-  initializer.setView(view);
-  initializer.setComposed(true);
-  initializer.setDetail(event.click_count);
+  initializer->setView(view);
+  initializer->setComposed(true);
+  initializer->setDetail(event.click_count);
   UIEventWithKeyState::SetFromWebInputEventModifiers(
       initializer, static_cast<WebInputEvent::Modifiers>(event.GetModifiers()));
 
@@ -72,30 +74,32 @@ MouseEventInit GetMouseEventInitForWheel(const WebMouseWheelEvent& event,
 
 WheelEvent* WheelEvent::Create(const WebMouseWheelEvent& event,
                                AbstractView* view) {
-  return new WheelEvent(event, view);
+  return MakeGarbageCollected<WheelEvent>(event, view);
 }
 
 WheelEvent::WheelEvent()
     : delta_x_(0), delta_y_(0), delta_z_(0), delta_mode_(kDomDeltaPixel) {}
 
 WheelEvent::WheelEvent(const AtomicString& type,
-                       const WheelEventInit& initializer)
+                       const WheelEventInit* initializer)
     : MouseEvent(type, initializer),
-      wheel_delta_(initializer.wheelDeltaX() ? initializer.wheelDeltaX()
-                                             : -initializer.deltaX(),
-                   initializer.wheelDeltaY() ? initializer.wheelDeltaY()
-                                             : -initializer.deltaY()),
-      delta_x_(initializer.deltaX()
-                   ? initializer.deltaX()
-                   : NegateIfPossible(initializer.wheelDeltaX())),
-      delta_y_(initializer.deltaY()
-                   ? initializer.deltaY()
-                   : NegateIfPossible(initializer.wheelDeltaY())),
-      delta_z_(initializer.deltaZ()),
-      delta_mode_(initializer.deltaMode()) {}
+      wheel_delta_(initializer->wheelDeltaX()
+                       ? initializer->wheelDeltaX()
+                       : NegateIfPossible(-initializer->deltaX()),
+                   initializer->wheelDeltaY()
+                       ? initializer->wheelDeltaY()
+                       : NegateIfPossible(-initializer->deltaY())),
+      delta_x_(initializer->deltaX()
+                   ? initializer->deltaX()
+                   : NegateIfPossible(initializer->wheelDeltaX())),
+      delta_y_(initializer->deltaY()
+                   ? initializer->deltaY()
+                   : NegateIfPossible(initializer->wheelDeltaY())),
+      delta_z_(initializer->deltaZ()),
+      delta_mode_(initializer->deltaMode()) {}
 
 WheelEvent::WheelEvent(const WebMouseWheelEvent& event, AbstractView* view)
-    : MouseEvent(EventTypeNames::wheel,
+    : MouseEvent(event_type_names::kWheel,
                  GetMouseEventInitForWheel(event, view),
                  event.TimeStamp()),
       wheel_delta_(event.wheel_ticks_x * kTickMultiplier,
@@ -107,7 +111,7 @@ WheelEvent::WheelEvent(const WebMouseWheelEvent& event, AbstractView* view)
       native_event_(event) {}
 
 const AtomicString& WheelEvent::InterfaceName() const {
-  return EventNames::WheelEvent;
+  return event_interface_names::kWheelEvent;
 }
 
 bool WheelEvent::IsMouseEvent() const {
@@ -121,10 +125,22 @@ bool WheelEvent::IsWheelEvent() const {
 void WheelEvent::preventDefault() {
   MouseEvent::preventDefault();
 
+  PassiveMode passive_mode = HandlingPassive();
+  if (passive_mode == PassiveMode::kPassiveForcedDocumentLevel) {
+    String id = "PreventDefaultPassive";
+    String message =
+        "Unable to preventDefault inside passive event listener due to "
+        "target being treated as passive. See "
+        "https://www.chromestatus.com/features/6662647093133312";
+    auto* local_dom_window = DynamicTo<LocalDOMWindow>(view());
+    if (local_dom_window && local_dom_window->GetFrame()) {
+      Intervention::GenerateReport(local_dom_window->GetFrame(), id, message);
+    }
+  }
+
   if (!currentTarget() || !currentTarget()->IsTopLevelNode())
     return;
 
-  PassiveMode passive_mode = HandlingPassive();
   if (passive_mode == PassiveMode::kPassiveForcedDocumentLevel ||
       passive_mode == PassiveMode::kNotPassiveDefault) {
     if (ExecutionContext* context = currentTarget()->GetExecutionContext()) {

@@ -10,19 +10,17 @@
 #include <string>
 #include <vector>
 
-#include "base/containers/hash_tables.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/process/process_info.h"
+#include "base/process/process.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/threading/platform_thread.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "components/metrics/call_stack_profile_builder.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/startup_metric_utils/browser/pref_names.h"
@@ -294,7 +292,8 @@ std::string GetSameVersionStartupCountSuffix() {
   DCHECK_GE(g_startups_with_current_version, 1);
   if (g_startups_with_current_version > kMaxSameVersionCountRecorded)
     return ".Over";
-  return std::string(".") + base::IntToString(g_startups_with_current_version);
+  return std::string(".") +
+         base::NumberToString(g_startups_with_current_version);
 }
 
 // Returns the system uptime on process launch.
@@ -462,7 +461,7 @@ void RecordTimeSinceLastStartup(PrefService* pref_service) {
 
   // Get the timestamp of the current startup.
   const base::Time process_start_time =
-      base::CurrentProcessInfo::CreationTime();
+      base::Process::Current().CreationTime();
 
   // Get the timestamp of the last startup from |pref_service|.
   const int64_t last_startup_timestamp_internal =
@@ -579,8 +578,6 @@ void RecordBrowserMainMessageLoopStart(base::TimeTicks ticks,
   RecordHardFaultHistogram();
 
   // Record timing of the browser message-loop start time.
-  metrics::CallStackProfileBuilder::SetProcessMilestone(
-      metrics::CallStackProfileBuilder::MAIN_LOOP_START);
   if (!is_first_run && !g_process_creation_ticks.is_null()) {
     UMA_HISTOGRAM_AND_TRACE_WITH_TEMPERATURE_AND_SAME_VERSION_COUNT(
         UMA_HISTOGRAM_LONG_TIMES_100, "Startup.BrowserMessageLoopStartTime",
@@ -702,8 +699,6 @@ void RecordFirstWebContentsNonEmptyPaint(
   if (!ShouldLogStartupHistogram())
     return;
 
-  metrics::CallStackProfileBuilder::SetProcessMilestone(
-      metrics::CallStackProfileBuilder::FIRST_NONEMPTY_PAINT);
   UMA_HISTOGRAM_AND_TRACE_WITH_TEMPERATURE_AND_SAME_VERSION_COUNT(
       UMA_HISTOGRAM_LONG_TIMES_100, "Startup.FirstWebContents.NonEmptyPaint2",
       g_process_creation_ticks, now);
@@ -727,8 +722,6 @@ void RecordFirstWebContentsMainNavigationStart(base::TimeTicks ticks,
   if (!ShouldLogStartupHistogram())
     return;
 
-  metrics::CallStackProfileBuilder::SetProcessMilestone(
-      metrics::CallStackProfileBuilder::MAIN_NAVIGATION_START);
   UMA_HISTOGRAM_AND_TRACE_WITH_TEMPERATURE_AND_SAME_VERSION_COUNT(
       UMA_HISTOGRAM_LONG_TIMES_100,
       "Startup.FirstWebContents.MainNavigationStart", g_process_creation_ticks,
@@ -758,8 +751,6 @@ void RecordFirstWebContentsMainNavigationFinished(base::TimeTicks ticks) {
   if (!ShouldLogStartupHistogram())
     return;
 
-  metrics::CallStackProfileBuilder::SetProcessMilestone(
-      metrics::CallStackProfileBuilder::MAIN_NAVIGATION_FINISHED);
   UMA_HISTOGRAM_AND_TRACE_WITH_TEMPERATURE_AND_SAME_VERSION_COUNT(
       UMA_HISTOGRAM_LONG_TIMES_100,
       "Startup.FirstWebContents.MainNavigationFinished",

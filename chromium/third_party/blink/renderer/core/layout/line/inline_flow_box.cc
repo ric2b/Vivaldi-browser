@@ -22,7 +22,7 @@
 
 #include <math.h>
 #include <algorithm>
-#include "third_party/blink/renderer/core/css_property_names.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/layout/api/line_layout_api_shim.h"
 #include "third_party/blink/renderer/core/layout/api/line_layout_box.h"
@@ -168,7 +168,7 @@ void InlineFlowBox::AddToLine(InlineBox* child) {
         should_clear_descendants_have_same_line_height_and_baseline = true;
     } else {
       if (child->GetLineLayoutItem().IsBR()) {
-        // FIXME: This is dumb. We only turn off because current layout test
+        // FIXME: This is dumb. We only turn off because current web test
         // results expect the <br> to be 0-height on the baseline.
         // Other than making a zillion tests have to regenerate results, there's
         // no reason to ditch the optimization here.
@@ -202,7 +202,8 @@ void InlineFlowBox::AddToLine(InlineBox* child) {
         child->ClearKnownToHaveNoOverflow();
     } else if (child->GetLineLayoutItem().IsAtomicInlineLevel()) {
       LineLayoutBox box = LineLayoutBox(child->GetLineLayoutItem());
-      if (box.HasOverflowModel() || box.HasSelfPaintingLayer())
+      if (box.HasLayoutOverflow() || box.HasVisualOverflow() ||
+          box.HasSelfPaintingLayer())
         child->ClearKnownToHaveNoOverflow();
     } else if (!child->GetLineLayoutItem().IsBR() &&
                (child->GetLineLayoutItem()
@@ -299,11 +300,12 @@ void InlineFlowBox::Move(const LayoutSize& delta) {
       continue;
     child->Move(delta);
   }
-  if (overflow_) {
-    // FIXME: Rounding error here since overflow was pixel snapped, but nobody
-    // other than list markers passes non-integral values here.
-    overflow_->Move(delta.Width(), delta.Height());
-  }
+  // FIXME: Rounding error here since overflow was pixel snapped, but nobody
+  // other than list markers passes non-integral values here.
+  if (LayoutOverflowIsSet())
+    overflow_->layout_overflow->Move(delta.Width(), delta.Height());
+  if (VisualOverflowIsSet())
+    overflow_->visual_overflow->Move(delta.Width(), delta.Height());
 }
 
 LineBoxList* InlineFlowBox::LineBoxes() const {
@@ -918,6 +920,31 @@ void InlineFlowBox::PlaceBoxesInBlockDirection(
   }
 }
 
+bool InlineFlowBox::OverrideVisualOverflowFromLogicalRect(
+    const LayoutRect& logical_visual_overflow,
+    LayoutUnit line_top,
+    LayoutUnit line_bottom) {
+  // If we are setting an overflow, then we can't pretend not to have an
+  // overflow.
+  ClearKnownToHaveNoOverflow();
+  LayoutRect old_visual_overflow_rect =
+      VisualOverflowRect(line_top, line_bottom);
+  SetVisualOverflowFromLogicalRect(logical_visual_overflow, line_top,
+                                   line_bottom);
+  return VisualOverflowRect(line_top, line_bottom) != old_visual_overflow_rect;
+}
+
+void InlineFlowBox::OverrideLayoutOverflowFromLogicalRect(
+    const LayoutRect& logical_layout_overflow,
+    LayoutUnit line_top,
+    LayoutUnit line_bottom) {
+  // If we are setting an overflow, then we can't pretend not to have an
+  // overflow.
+  ClearKnownToHaveNoOverflow();
+  SetLayoutOverflowFromLogicalRect(logical_layout_overflow, line_top,
+                                   line_bottom);
+}
+
 LayoutUnit InlineFlowBox::FarthestPositionForUnderline(
     LineLayoutItem decorating_box,
     FontVerticalPositionType position_type,
@@ -1099,23 +1126,10 @@ inline void InlineFlowBox::AddTextBoxVisualOverflow(
     text_box->SetLogicalOverflowRect(logical_visual_overflow);
 }
 
-inline void InlineFlowBox::AddReplacedChildOverflow(
+inline void InlineFlowBox::AddReplacedChildLayoutOverflow(
     const InlineBox* inline_box,
-    LayoutRect& logical_layout_overflow,
-    LayoutRect& logical_visual_overflow) {
+    LayoutRect& logical_layout_overflow) {
   LineLayoutBox box = LineLayoutBox(inline_box->GetLineLayoutItem());
-
-  // Visual overflow only propagates if the box doesn't have a self-painting
-  // layer. This rectangle does not include transforms or relative positioning
-  // (since those objects always have self-painting layers), but it does need to
-  // be adjusted for writing-mode differences.
-  if (!box.HasSelfPaintingLayer()) {
-    LayoutRect child_logical_visual_overflow =
-        box.LogicalVisualOverflowRectForPropagation();
-    child_logical_visual_overflow.Move(inline_box->LogicalLeft(),
-                                       inline_box->LogicalTop());
-    logical_visual_overflow.Unite(child_logical_visual_overflow);
-  }
 
   // Layout overflow internal to the child box only propagates if the child box
   // doesn't have overflow clip set. Otherwise the child border box propagates
@@ -1126,6 +1140,53 @@ inline void InlineFlowBox::AddReplacedChildOverflow(
   child_logical_layout_overflow.Move(inline_box->LogicalLeft(),
                                      inline_box->LogicalTop());
   logical_layout_overflow.Unite(child_logical_layout_overflow);
+}
+
+void InlineFlowBox::AddReplacedChildrenVisualOverflow(LayoutUnit line_top,
+                                                      LayoutUnit line_bottom) {
+  LayoutRect logical_visual_overflow =
+      LogicalVisualOverflowRect(line_top, line_bottom);
+  bool visual_overflow_may_have_changed = false;
+  for (InlineBox* curr = FirstChild(); curr; curr = curr->NextOnLine()) {
+    const LineLayoutItem& item = curr->GetLineLayoutItem();
+    if (item.IsOutOfFlowPositioned() || item.IsText())
+      continue;
+
+    if (item.IsLayoutInline()) {
+      InlineFlowBox* flow = ToInlineFlowBox(curr);
+      flow->AddReplacedChildrenVisualOverflow(line_top, line_bottom);
+      // Propagate visual overflow only if it may be present.
+      if (!KnownToHaveNoOverflow()) {
+        if (!flow->BoxModelObject().HasSelfPaintingLayer()) {
+          logical_visual_overflow.Unite(
+              flow->LogicalVisualOverflowRect(line_top, line_bottom));
+          visual_overflow_may_have_changed = true;
+        }
+      }
+
+      continue;
+    }
+
+    LineLayoutBox box = LineLayoutBox(curr->GetLineLayoutItem());
+
+    // Visual overflow only propagates if the box doesn't have a self-painting
+    // layer. This rectangle does not include transforms or relative positioning
+    // (since those objects always have self-painting layers), but it does need
+    // to be adjusted for writing-mode differences.
+    if (!box.HasSelfPaintingLayer()) {
+      LayoutRect child_logical_visual_overflow =
+          box.LogicalVisualOverflowRectForPropagation();
+      child_logical_visual_overflow.Move(curr->LogicalLeft(),
+                                         curr->LogicalTop());
+      logical_visual_overflow.Unite(child_logical_visual_overflow);
+      ClearKnownToHaveNoOverflow();
+      visual_overflow_may_have_changed = true;
+    }
+  }
+  if (visual_overflow_may_have_changed) {
+    SetVisualOverflowFromLogicalRect(logical_visual_overflow, line_top,
+                                     line_bottom);
+  }
 }
 
 static void ComputeGlyphOverflow(
@@ -1165,12 +1226,11 @@ void InlineFlowBox::ComputeOverflow(
     GlyphOverflowAndFallbackFontsMap& text_box_data_map) {
   // If we know we have no overflow, we can just bail.
   if (KnownToHaveNoOverflow()) {
-    DCHECK(!overflow_);
+    DCHECK(!LayoutOverflowIsSet() && !VisualOverflowIsSet());
     return;
   }
 
-  if (overflow_)
-    overflow_.reset();
+  overflow_.reset();
 
   // Visual overflow just includes overflow for stuff we need to issues paint
   // invalidations for ourselves. Self-painting layers are ignored.
@@ -1228,13 +1288,14 @@ void InlineFlowBox::ComputeOverflow(
         logical_layout_overflow =
             LogicalFrameRectIncludingLineHeight(line_top, line_bottom);
       }
-      AddReplacedChildOverflow(curr, logical_layout_overflow,
-                               logical_visual_overflow);
+      AddReplacedChildLayoutOverflow(curr, logical_layout_overflow);
     }
   }
 
-  SetOverflowFromLogicalRects(logical_layout_overflow, logical_visual_overflow,
-                              line_top, line_bottom);
+  SetLayoutOverflowFromLogicalRect(logical_layout_overflow, line_top,
+                                   line_bottom);
+  SetVisualOverflowFromLogicalRect(logical_visual_overflow, line_top,
+                                   line_bottom);
 }
 
 void InlineFlowBox::SetLayoutOverflow(const LayoutRect& rect,
@@ -1243,10 +1304,13 @@ void InlineFlowBox::SetLayoutOverflow(const LayoutRect& rect,
   if (frame_box.Contains(rect) || rect.IsEmpty())
     return;
 
-  if (!overflow_)
-    overflow_ = std::make_unique<SimpleOverflowModel>(frame_box, frame_box);
+  if (!LayoutOverflowIsSet()) {
+    if (!overflow_)
+      overflow_ = std::make_unique<SimpleOverflowModel>();
+    overflow_->layout_overflow.emplace(frame_box);
+  }
 
-  overflow_->SetLayoutOverflow(rect);
+  overflow_->layout_overflow->SetLayoutOverflow(rect);
 }
 
 void InlineFlowBox::SetVisualOverflow(const LayoutRect& rect,
@@ -1255,15 +1319,29 @@ void InlineFlowBox::SetVisualOverflow(const LayoutRect& rect,
   if (frame_box.Contains(rect) || rect.IsEmpty())
     return;
 
-  if (!overflow_)
-    overflow_ = std::make_unique<SimpleOverflowModel>(frame_box, frame_box);
+  if (!VisualOverflowIsSet()) {
+    if (!overflow_)
+      overflow_ = std::make_unique<SimpleOverflowModel>();
+    overflow_->visual_overflow.emplace(frame_box);
+  }
 
-  overflow_->SetVisualOverflow(rect);
+  overflow_->visual_overflow->SetVisualOverflow(rect);
 }
 
-void InlineFlowBox::SetOverflowFromLogicalRects(
-    const LayoutRect& logical_layout_overflow,
+void InlineFlowBox::SetVisualOverflowFromLogicalRect(
     const LayoutRect& logical_visual_overflow,
+    LayoutUnit line_top,
+    LayoutUnit line_bottom) {
+  DCHECK(!KnownToHaveNoOverflow());
+  LayoutRect frame_box = FrameRectIncludingLineHeight(line_top, line_bottom);
+  LayoutRect visual_overflow(IsHorizontal()
+                                 ? logical_visual_overflow
+                                 : logical_visual_overflow.TransposedRect());
+  SetVisualOverflow(visual_overflow, frame_box);
+}
+
+void InlineFlowBox::SetLayoutOverflowFromLogicalRect(
+    const LayoutRect& logical_layout_overflow,
     LayoutUnit line_top,
     LayoutUnit line_bottom) {
   DCHECK(!KnownToHaveNoOverflow());
@@ -1273,11 +1351,6 @@ void InlineFlowBox::SetOverflowFromLogicalRects(
                                  ? logical_layout_overflow
                                  : logical_layout_overflow.TransposedRect());
   SetLayoutOverflow(layout_overflow, frame_box);
-
-  LayoutRect visual_overflow(IsHorizontal()
-                                 ? logical_visual_overflow
-                                 : logical_visual_overflow.TransposedRect());
-  SetVisualOverflow(visual_overflow, frame_box);
 }
 
 bool InlineFlowBox::NodeAtPoint(HitTestResult& result,
@@ -1449,11 +1522,6 @@ LayoutUnit InlineFlowBox::PlaceEllipsisBox(bool ltr,
   // If our flow is ltr then iterate over the boxes from left to right,
   // otherwise iterate from right to left. Varying the order allows us to
   // correctly hide the boxes following the ellipsis.
-  LayoutUnit relative_offset =
-      BoxModelObject().IsInline() && BoxModelObject().IsRelPositioned()
-          ? BoxModelObject().RelativePositionLogicalOffset().Width()
-          : LayoutUnit();
-  logical_left_offset += relative_offset;
   InlineBox* box = ltr ? FirstChild() : LastChild();
 
   // NOTE: these will cross after foundBox = true.
@@ -1483,7 +1551,7 @@ LayoutUnit InlineFlowBox::PlaceEllipsisBox(bool ltr,
       box = box->PrevOnLine();
     }
   }
-  return result + relative_offset;
+  return result;
 }
 
 void InlineFlowBox::ClearTruncation() {
@@ -1626,63 +1694,6 @@ LayoutUnit InlineFlowBox::ComputeUnderAnnotationAdjustment(
     }
   }
   return result;
-}
-
-void InlineFlowBox::CollectLeafBoxesInLogicalOrder(
-    Vector<InlineBox*>& leaf_boxes_in_logical_order,
-    CustomInlineBoxRangeReverse custom_reverse_implementation) const {
-  InlineBox* leaf = FirstLeafChild();
-
-  // FIXME: The reordering code is a copy of parts from BidiResolver::
-  // createBidiRunsForLine, operating directly on InlineBoxes, instead of
-  // BidiRuns. Investigate on how this code could possibly be shared.
-  unsigned char min_level = 128;
-  unsigned char max_level = 0;
-
-  // First find highest and lowest levels, and initialize
-  // leafBoxesInLogicalOrder with the leaf boxes in visual order.
-  for (; leaf; leaf = leaf->NextLeafChild()) {
-    min_level = std::min(min_level, leaf->BidiLevel());
-    max_level = std::max(max_level, leaf->BidiLevel());
-    leaf_boxes_in_logical_order.push_back(leaf);
-  }
-
-  if (GetLineLayoutItem().StyleRef().RtlOrdering() == EOrder::kVisual)
-    return;
-
-  // Reverse of reordering of the line (L2 according to Bidi spec):
-  // L2. From the highest level found in the text to the lowest odd level on
-  // each line, reverse any contiguous sequence of characters that are at that
-  // level or higher.
-
-  // Reversing the reordering of the line is only done up to the lowest odd
-  // level.
-  if (!(min_level % 2))
-    ++min_level;
-
-  Vector<InlineBox*>::iterator end = leaf_boxes_in_logical_order.end();
-  while (min_level <= max_level) {
-    Vector<InlineBox*>::iterator it = leaf_boxes_in_logical_order.begin();
-    while (it != end) {
-      while (it != end) {
-        if ((*it)->BidiLevel() >= min_level)
-          break;
-        ++it;
-      }
-      Vector<InlineBox*>::iterator first = it;
-      while (it != end) {
-        if ((*it)->BidiLevel() < min_level)
-          break;
-        ++it;
-      }
-      Vector<InlineBox*>::iterator last = it;
-      if (custom_reverse_implementation)
-        (*custom_reverse_implementation)(first, last);
-      else
-        std::reverse(first, last);
-    }
-    ++min_level;
-  }
 }
 
 const char* InlineFlowBox::BoxName() const {

@@ -31,6 +31,7 @@
 #include <memory>
 
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "build/build_config.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -69,6 +70,12 @@ void NotifyFinishObservers(
     observer->NotifyFinished();
 }
 
+blink::mojom::CodeCacheType ToCodeCacheType(ResourceType resource_type) {
+  return resource_type == ResourceType::kRaw
+             ? blink::mojom::CodeCacheType::kWebAssembly
+             : blink::mojom::CodeCacheType::kJavascript;
+}
+
 }  // namespace
 
 // These response headers are not copied from a revalidated response to the
@@ -99,12 +106,12 @@ const char* const kHeaderPrefixesToIgnoreAfterRevalidation[] = {
 
 static inline bool ShouldUpdateHeaderAfterRevalidation(
     const AtomicString& header) {
-  for (size_t i = 0; i < arraysize(kHeadersToIgnoreAfterRevalidation); i++) {
+  for (size_t i = 0; i < base::size(kHeadersToIgnoreAfterRevalidation); i++) {
     if (DeprecatedEqualIgnoringCase(header,
                                     kHeadersToIgnoreAfterRevalidation[i]))
       return false;
   }
-  for (size_t i = 0; i < arraysize(kHeaderPrefixesToIgnoreAfterRevalidation);
+  for (size_t i = 0; i < base::size(kHeaderPrefixesToIgnoreAfterRevalidation);
        i++) {
     if (header.StartsWithIgnoringASCIICase(
             kHeaderPrefixesToIgnoreAfterRevalidation[i]))
@@ -113,76 +120,8 @@ static inline bool ShouldUpdateHeaderAfterRevalidation(
   return true;
 }
 
-// This is a CachedMetadataSender implementation for normal responses.
-class CachedMetadataSenderImpl : public CachedMetadataSender {
- public:
-  CachedMetadataSenderImpl(const Resource*);
-  ~CachedMetadataSenderImpl() override = default;
-
-  void Send(const char*, size_t) override;
-  bool IsServedFromCacheStorage() override { return false; }
-
- private:
-  const KURL response_url_;
-  const Time response_time_;
-};
-
-CachedMetadataSenderImpl::CachedMetadataSenderImpl(const Resource* resource)
-    : response_url_(resource->GetResponse().Url()),
-      response_time_(resource->GetResponse().ResponseTime()) {
-  DCHECK(resource->GetResponse().CacheStorageCacheName().IsNull());
-}
-
-void CachedMetadataSenderImpl::Send(const char* data, size_t size) {
-  Platform::Current()->CacheMetadata(response_url_, response_time_, data, size);
-}
-
-// This is a CachedMetadataSender implementation that does nothing.
-class NullCachedMetadataSender : public CachedMetadataSender {
- public:
-  NullCachedMetadataSender() = default;
-  ~NullCachedMetadataSender() override = default;
-
-  void Send(const char*, size_t) override {}
-  bool IsServedFromCacheStorage() override { return false; }
-};
-
-// This is a CachedMetadataSender implementation for responses that are served
-// by a ServiceWorker from cache storage.
-class ServiceWorkerCachedMetadataSender : public CachedMetadataSender {
- public:
-  ServiceWorkerCachedMetadataSender(const Resource*, const SecurityOrigin*);
-  ~ServiceWorkerCachedMetadataSender() override = default;
-
-  void Send(const char*, size_t) override;
-  bool IsServedFromCacheStorage() override { return true; }
-
- private:
-  const KURL response_url_;
-  const Time response_time_;
-  const String cache_storage_cache_name_;
-  scoped_refptr<const SecurityOrigin> security_origin_;
-};
-
-ServiceWorkerCachedMetadataSender::ServiceWorkerCachedMetadataSender(
-    const Resource* resource,
-    const SecurityOrigin* security_origin)
-    : response_url_(resource->GetResponse().Url()),
-      response_time_(resource->GetResponse().ResponseTime()),
-      cache_storage_cache_name_(
-          resource->GetResponse().CacheStorageCacheName()),
-      security_origin_(security_origin) {
-  DCHECK(!cache_storage_cache_name_.IsNull());
-}
-
-void ServiceWorkerCachedMetadataSender::Send(const char* data, size_t size) {
-  Platform::Current()->CacheMetadataInCacheStorage(
-      response_url_, response_time_, data, size,
-      WebSecurityOrigin(security_origin_), cache_storage_cache_name_);
-}
-
 Resource::Resource(const ResourceRequest& request,
-                   Type type,
+                   ResourceType type,
                    const ResourceLoaderOptions& options)
     : type_(type),
       status_(ResourceStatus::kNotStarted),
@@ -190,7 +129,6 @@ Resource::Resource(const ResourceRequest& request,
       encoded_size_(0),
       encoded_size_memory_usage_(0),
       decoded_size_(0),
-      overhead_size_(CalculateOverheadSize()),
       cache_identifier_(MemoryCache::DefaultCacheIdentifier()),
       link_preload_(false),
       is_revalidating_(false),
@@ -199,11 +137,12 @@ Resource::Resource(const ResourceRequest& request,
       integrity_disposition_(ResourceIntegrityDisposition::kNotChecked),
       options_(options),
       response_timestamp_(CurrentTime()),
-      resource_request_(request) {
+      resource_request_(request),
+      overhead_size_(CalculateOverheadSize()) {
   InstanceCounters::IncrementCounter(InstanceCounters::kResourceCounter);
 
   if (IsMainThread())
-    MemoryCoordinator::Instance().RegisterClient(this);
+    MemoryPressureListenerRegistry::Instance().RegisterClient(this);
 }
 
 Resource::~Resource() {
@@ -217,7 +156,7 @@ void Resource::Trace(blink::Visitor* visitor) {
   visitor->Trace(clients_awaiting_callback_);
   visitor->Trace(finished_clients_);
   visitor->Trace(finish_observers_);
-  MemoryCoordinatorClient::Trace(visitor);
+  MemoryPressureListener::Trace(visitor);
 }
 
 void Resource::SetLoader(ResourceLoader* loader) {
@@ -268,7 +207,7 @@ void Resource::CheckResourceIntegrity() {
 }
 
 void Resource::NotifyFinished() {
-  DCHECK(IsLoaded());
+  CHECK(IsFinishedInternal());
 
   ResourceClientWalker<ResourceClient> w(clients_);
   while (ResourceClient* c = w.Next()) {
@@ -295,6 +234,10 @@ void Resource::AppendData(const char* data, size_t length) {
       data_ = SharedBuffer::Create(data, length);
     SetEncodedSize(data_->size());
   }
+  NotifyDataReceived(data, length);
+}
+
+void Resource::NotifyDataReceived(const char* data, size_t length) {
   ResourceClientWalker<ResourceClient> w(Clients());
   while (ResourceClient* c = w.Next())
     c->DataReceived(this, data, length);
@@ -318,8 +261,9 @@ void Resource::TriggerNotificationForFinishObservers(
   if (finish_observers_.IsEmpty())
     return;
 
-  auto* new_collections = new HeapHashSet<WeakMember<ResourceFinishObserver>>(
-      std::move(finish_observers_));
+  auto* new_collections =
+      MakeGarbageCollected<HeapHashSet<WeakMember<ResourceFinishObserver>>>(
+          std::move(finish_observers_));
   finish_observers_.clear();
 
   task_runner->PostTask(FROM_HERE, WTF::Bind(&NotifyFinishObservers,
@@ -335,22 +279,22 @@ void Resource::SetDataBufferingPolicy(
   SetEncodedSize(0);
 }
 
-static bool NeedsSynchronousCacheHit(Resource::Type type,
+static bool NeedsSynchronousCacheHit(ResourceType type,
                                      const ResourceLoaderOptions& options) {
   // Synchronous requests must always succeed or fail synchronously.
   if (options.synchronous_policy == kRequestSynchronously)
     return true;
   // Some resources types default to return data synchronously. For most of
-  // these, it's because there are layout tests that expect data to return
+  // these, it's because there are web tests that expect data to return
   // synchronously in case of cache hit. In the case of fonts, there was a
   // performance regression.
   // FIXME: Get to the point where we don't need to special-case sync/async
   // behavior for different resource types.
-  if (type == Resource::kCSSStyleSheet)
+  if (type == ResourceType::kCSSStyleSheet)
     return true;
-  if (type == Resource::kScript)
+  if (type == ResourceType::kScript)
     return true;
-  if (type == Resource::kFont)
+  if (type == ResourceType::kFont)
     return true;
   return false;
 }
@@ -364,8 +308,15 @@ void Resource::FinishAsError(const ResourceError& error,
     GetMemoryCache()->Remove(this);
 
   bool failed_during_start = status_ == ResourceStatus::kNotStarted;
-  if (!ErrorOccurred())
+  if (!ErrorOccurred()) {
     SetStatus(ResourceStatus::kLoadError);
+    // If the response type has not been set, set it to "error". This is
+    // important because in some cases we arrive here after setting the response
+    // type (e.g., while downloading payload), and that shouldn't change the
+    // response type.
+    if (response_.GetType() == network::mojom::FetchResponseType::kDefault)
+      response_.SetType(network::mojom::FetchResponseType::kError);
+  }
   DCHECK(ErrorOccurred());
   ClearData();
   loader_ = nullptr;
@@ -387,10 +338,10 @@ void Resource::FinishAsError(const ResourceError& error,
   }
 }
 
-void Resource::Finish(TimeTicks load_finish_time,
+void Resource::Finish(TimeTicks load_response_end,
                       base::SingleThreadTaskRunner* task_runner) {
   DCHECK(!is_revalidating_);
-  load_finish_time_ = load_finish_time;
+  load_response_end_ = load_response_end;
   if (!ErrorOccurred())
     status_ = ResourceStatus::kCached;
   loader_ = nullptr;
@@ -410,6 +361,10 @@ bool Resource::MustRefetchDueToIntegrityMetadata(
 
   return !IntegrityMetadata::SetsEqual(IntegrityMetadata(),
                                        params.IntegrityMetadata());
+}
+
+const scoped_refptr<const SecurityOrigin>& Resource::GetOrigin() const {
+  return LastResourceRequest().RequestorOrigin();
 }
 
 static double CurrentAge(const ResourceResponse& response,
@@ -432,13 +387,13 @@ static double FreshnessLifetime(const ResourceResponse& response,
                                 double response_timestamp) {
 #if !defined(OS_ANDROID)
   // On desktop, local files should be reloaded in case they change.
-  if (response.Url().IsLocalFile())
+  if (response.CurrentRequestUrl().IsLocalFile())
     return 0;
 #endif
 
   // Cache other non-http / non-filesystem resources liberally.
-  if (!response.Url().ProtocolIsInHTTPFamily() &&
-      !response.Url().ProtocolIs("filesystem"))
+  if (!response.CurrentRequestUrl().ProtocolIsInHTTPFamily() &&
+      !response.CurrentRequestUrl().ProtocolIs("filesystem"))
     return std::numeric_limits<double>::max();
 
   // RFC2616 13.2.4
@@ -519,30 +474,17 @@ void Resource::SetResponse(const ResourceResponse& response) {
 
   // Currently we support the metadata caching only for HTTP family.
   if (!GetResourceRequest().Url().ProtocolIsInHTTPFamily() ||
-      !GetResponse().Url().ProtocolIsInHTTPFamily()) {
+      !GetResponse().CurrentRequestUrl().ProtocolIsInHTTPFamily()) {
     cache_handler_.Clear();
     return;
   }
 
-  cache_handler_ = CreateCachedMetadataHandler(CreateCachedMetadataSender());
+  cache_handler_ = CreateCachedMetadataHandler(
+      CachedMetadataSender::Create(GetResponse(), ToCodeCacheType(GetType()),
+                                   GetResourceRequest().RequestorOrigin()));
 }
 
-std::unique_ptr<CachedMetadataSender> Resource::CreateCachedMetadataSender()
-    const {
-  if (GetResponse().WasFetchedViaServiceWorker()) {
-    // TODO(leszeks): Check whether it's correct that the source_origin can be
-    // null.
-    if (!source_origin_ || GetResponse().CacheStorageCacheName().IsNull()) {
-      return std::make_unique<NullCachedMetadataSender>();
-    }
-    return std::make_unique<ServiceWorkerCachedMetadataSender>(
-        this, source_origin_.get());
-  }
-  return std::make_unique<CachedMetadataSenderImpl>(this);
-}
-
-void Resource::ResponseReceived(const ResourceResponse& response,
-                                std::unique_ptr<WebDataConsumerHandle>) {
+void Resource::ResponseReceived(const ResourceResponse& response) {
   response_timestamp_ = CurrentTime();
   if (is_revalidating_) {
     if (response.HttpStatusCode() == 304) {
@@ -557,7 +499,7 @@ void Resource::ResponseReceived(const ResourceResponse& response,
     SetEncoding(encoding);
 }
 
-void Resource::SetSerializedCachedMetadata(const char* data, size_t size) {
+void Resource::SetSerializedCachedMetadata(const uint8_t* data, size_t size) {
   DCHECK(!is_revalidating_);
   DCHECK(!GetResponse().IsNull());
 }
@@ -601,7 +543,7 @@ void Resource::DidAddClient(ResourceClient* c) {
   }
   if (!HasClient(c))
     return;
-  if (IsLoaded()) {
+  if (IsFinishedInternal()) {
     c->NotifyFinished(this);
     if (clients_.Contains(c)) {
       finished_clients_.insert(c);
@@ -673,6 +615,12 @@ void Resource::AddFinishObserver(ResourceFinishObserver* client,
 
   WillAddClientOrObserver();
   finish_observers_.insert(client);
+  // Despite these being "Finish" observers, what they actually care about is
+  // whether the resource is "Loaded", not "Finished" (e.g. link onload). Hence
+  // we check IsLoaded directly here, rather than IsFinishedInternal.
+  //
+  // TODO(leszeks): Either rename FinishObservers to LoadedObservers, or the
+  // NotifyFinished method of ResourceClient to NotifyProcessed (or similar).
   if (IsLoaded())
     TriggerNotificationForFinishObservers(task_runner);
 }
@@ -764,12 +712,16 @@ void Resource::FinishPendingClients() {
   DCHECK(clients_awaiting_callback_.IsEmpty() || scheduled);
 }
 
-Resource::MatchStatus Resource::CanReuse(
-    const FetchParameters& params,
-    scoped_refptr<const SecurityOrigin> new_source_origin) const {
+Resource::MatchStatus Resource::CanReuse(const FetchParameters& params) const {
   const ResourceRequest& new_request = params.GetResourceRequest();
   const ResourceLoaderOptions& new_options = params.Options();
-  DCHECK_EQ(GetDataBufferingPolicy(), kBufferData);
+  scoped_refptr<const SecurityOrigin> existing_origin =
+      GetResourceRequest().RequestorOrigin();
+  scoped_refptr<const SecurityOrigin> new_origin =
+      new_request.RequestorOrigin();
+
+  DCHECK(existing_origin);
+  DCHECK(new_origin);
 
   // Never reuse opaque responses from a service worker for requests that are
   // not no-cors. https://crbug.com/625575
@@ -777,7 +729,7 @@ Resource::MatchStatus Resource::CanReuse(
   if (GetResponse().WasFetchedViaServiceWorker() &&
       GetResponse().GetType() == network::mojom::FetchResponseType::kOpaque &&
       new_request.GetFetchRequestMode() !=
-          network::mojom::FetchRequestMode::kNoCORS) {
+          network::mojom::FetchRequestMode::kNoCors) {
     return MatchStatus::kUnknownFailure;
   }
 
@@ -843,11 +795,9 @@ Resource::MatchStatus Resource::CanReuse(
   if (GetResourceRequest().HttpBody() != new_request.HttpBody())
     return MatchStatus::kUnknownFailure;
 
-  DCHECK(source_origin_);
-  DCHECK(new_source_origin);
 
   // Don't reuse an existing resource when the source origin is different.
-  if (!source_origin_->IsSameSchemeHostPort(new_source_origin.get()))
+  if (!existing_origin->IsSameSchemeHostPort(new_origin.get()))
     return MatchStatus::kUnknownFailure;
 
   // securityOrigin has more complicated checks which callers are responsible
@@ -865,13 +815,13 @@ Resource::MatchStatus Resource::CanReuse(
     return MatchStatus::kRequestModeDoesNotMatch;
 
   switch (new_mode) {
-    case network::mojom::FetchRequestMode::kNoCORS:
+    case network::mojom::FetchRequestMode::kNoCors:
     case network::mojom::FetchRequestMode::kNavigate:
       break;
 
-    case network::mojom::FetchRequestMode::kCORS:
+    case network::mojom::FetchRequestMode::kCors:
     case network::mojom::FetchRequestMode::kSameOrigin:
-    case network::mojom::FetchRequestMode::kCORSWithForcedPreflight:
+    case network::mojom::FetchRequestMode::kCorsWithForcedPreflight:
       // We have two separate CORS handling logics in ThreadableLoader
       // and ResourceLoader and sharing resources is difficult when they are
       // handled differently.
@@ -945,7 +895,7 @@ void Resource::OnMemoryDump(WebMemoryDumpLevelOfDetail level_of_detail,
               WTF::CodePointCompareLessThan);
 
     StringBuilder builder;
-    for (size_t i = 0;
+    for (wtf_size_t i = 0;
          i < client_names.size() && i < kMaxResourceClientToShowInMemoryInfra;
          ++i) {
       if (i > 0)
@@ -967,6 +917,10 @@ void Resource::OnMemoryDump(WebMemoryDumpLevelOfDetail level_of_detail,
   overhead_dump->AddScalar("size", "bytes", OverheadSize());
   memory_dump->AddSuballocation(
       overhead_dump->Guid(), String(WTF::Partitions::kAllocatedObjectPoolName));
+
+  const String cache_name = dump_name + "/code_cache";
+  if (cache_handler_)
+    cache_handler_->OnMemoryDump(memory_dump, cache_name);
 }
 
 String Resource::GetMemoryDumpName() const {
@@ -991,8 +945,9 @@ void Resource::ClearRangeRequestHeader() {
 void Resource::RevalidationSucceeded(
     const ResourceResponse& validating_response) {
   SECURITY_CHECK(redirect_chain_.IsEmpty());
-  SECURITY_CHECK(EqualIgnoringFragmentIdentifier(validating_response.Url(),
-                                                 GetResponse().Url()));
+  SECURITY_CHECK(
+      EqualIgnoringFragmentIdentifier(validating_response.CurrentRequestUrl(),
+                                      GetResponse().CurrentRequestUrl()));
   response_.SetResourceLoadTiming(validating_response.GetResourceLoadTiming());
 
   // RFC2616 10.3.5
@@ -1053,7 +1008,7 @@ bool Resource::HasCacheControlNoStoreHeader() const {
 
 bool Resource::MustReloadDueToVaryHeader(
     const ResourceRequest& new_request) const {
-  const AtomicString& vary = GetResponse().HttpHeaderField(HTTPNames::Vary);
+  const AtomicString& vary = GetResponse().HttpHeaderField(http_names::kVary);
   if (vary.IsNull())
     return false;
   if (vary == "*")
@@ -1114,6 +1069,17 @@ bool Resource::StaleRevalidationRequested() const {
   return false;
 }
 
+bool Resource::NetworkAccessed() const {
+  if (GetResponse().NetworkAccessed())
+    return true;
+
+  for (auto& redirect : redirect_chain_) {
+    if (redirect.redirect_response_.NetworkAccessed())
+      return true;
+  }
+  return false;
+}
+
 bool Resource::CanUseCacheValidator() const {
   if (IsLoading() || ErrorOccurred())
     return false;
@@ -1146,79 +1112,90 @@ void Resource::DidChangePriority(ResourceLoadPriority load_priority,
 // TODO(toyoshim): Consider to generate automatically. https://crbug.com/675515.
 static const char* InitiatorTypeNameToString(
     const AtomicString& initiator_type_name) {
-  if (initiator_type_name == FetchInitiatorTypeNames::audio)
+  if (initiator_type_name == fetch_initiator_type_names::kAudio)
     return "Audio";
-  if (initiator_type_name == FetchInitiatorTypeNames::css)
+  if (initiator_type_name == fetch_initiator_type_names::kCSS)
     return "CSS resource";
-  if (initiator_type_name == FetchInitiatorTypeNames::document)
+  if (initiator_type_name == fetch_initiator_type_names::kDocument)
     return "Document";
-  if (initiator_type_name == FetchInitiatorTypeNames::icon)
+  if (initiator_type_name == fetch_initiator_type_names::kIcon)
     return "Icon";
-  if (initiator_type_name == FetchInitiatorTypeNames::internal)
+  if (initiator_type_name == fetch_initiator_type_names::kInternal)
     return "Internal resource";
-  if (initiator_type_name == FetchInitiatorTypeNames::fetch)
+  if (initiator_type_name == fetch_initiator_type_names::kFetch)
     return "Fetch";
-  if (initiator_type_name == FetchInitiatorTypeNames::link)
+  if (initiator_type_name == fetch_initiator_type_names::kLink)
     return "Link element resource";
-  if (initiator_type_name == FetchInitiatorTypeNames::other)
+  if (initiator_type_name == fetch_initiator_type_names::kOther)
     return "Other resource";
-  if (initiator_type_name == FetchInitiatorTypeNames::processinginstruction)
+  if (initiator_type_name == fetch_initiator_type_names::kProcessinginstruction)
     return "Processing instruction";
-  if (initiator_type_name == FetchInitiatorTypeNames::track)
+  if (initiator_type_name == fetch_initiator_type_names::kTrack)
     return "Track";
-  if (initiator_type_name == FetchInitiatorTypeNames::uacss)
+  if (initiator_type_name == fetch_initiator_type_names::kUacss)
     return "User Agent CSS resource";
-  if (initiator_type_name == FetchInitiatorTypeNames::video)
+  if (initiator_type_name == fetch_initiator_type_names::kVideo)
     return "Video";
-  if (initiator_type_name == FetchInitiatorTypeNames::xml)
+  if (initiator_type_name == fetch_initiator_type_names::kXml)
     return "XML resource";
-  if (initiator_type_name == FetchInitiatorTypeNames::xmlhttprequest)
+  if (initiator_type_name == fetch_initiator_type_names::kXmlhttprequest)
     return "XMLHttpRequest";
 
   static_assert(
-      FetchInitiatorTypeNames::FetchInitiatorTypeNamesCount == 17,
+      fetch_initiator_type_names::kNamesCount == 17,
       "New FetchInitiatorTypeNames should be handled correctly here.");
 
   return "Resource";
 }
 
 const char* Resource::ResourceTypeToString(
-    Type type,
+    ResourceType type,
     const AtomicString& fetch_initiator_name) {
   switch (type) {
-    case Resource::kMainResource:
-      return "Main resource";
-    case Resource::kImage:
+    case ResourceType::kImage:
       return "Image";
-    case Resource::kCSSStyleSheet:
+    case ResourceType::kCSSStyleSheet:
       return "CSS stylesheet";
-    case Resource::kScript:
+    case ResourceType::kScript:
       return "Script";
-    case Resource::kFont:
+    case ResourceType::kFont:
       return "Font";
-    case Resource::kRaw:
+    case ResourceType::kRaw:
       return InitiatorTypeNameToString(fetch_initiator_name);
-    case Resource::kSVGDocument:
+    case ResourceType::kSVGDocument:
       return "SVG document";
-    case Resource::kXSLStyleSheet:
+    case ResourceType::kXSLStyleSheet:
       return "XSL stylesheet";
-    case Resource::kLinkPrefetch:
+    case ResourceType::kLinkPrefetch:
       return "Link prefetch resource";
-    case Resource::kTextTrack:
+    case ResourceType::kTextTrack:
       return "Text track";
-    case Resource::kImportResource:
+    case ResourceType::kImportResource:
       return "Imported resource";
-    case Resource::kAudio:
+    case ResourceType::kAudio:
       return "Audio";
-    case Resource::kVideo:
+    case ResourceType::kVideo:
       return "Video";
-    case Resource::kManifest:
+    case ResourceType::kManifest:
       return "Manifest";
-    case Resource::kMock:
+    case ResourceType::kMock:
       return "Mock";
   }
   NOTREACHED();
   return InitiatorTypeNameToString(fetch_initiator_name);
+}
+
+// static
+blink::mojom::CodeCacheType Resource::ResourceTypeToCodeCacheType(
+    ResourceType resource_type) {
+  DCHECK(
+      // Cacheable WebAssembly modules are fetched, so raw resource type.
+      resource_type == ResourceType::kRaw ||
+      // Cacheable Javascript is a script resource.
+      resource_type == ResourceType::kScript ||
+      // Also accept mock resources for testing.
+      resource_type == ResourceType::kMock);
+  return ToCodeCacheType(resource_type);
 }
 
 bool Resource::ShouldBlockLoadEvent() const {
@@ -1227,22 +1204,21 @@ bool Resource::ShouldBlockLoadEvent() const {
 
 bool Resource::IsLoadEventBlockingResourceType() const {
   switch (type_) {
-    case Resource::kMainResource:
-    case Resource::kImage:
-    case Resource::kCSSStyleSheet:
-    case Resource::kScript:
-    case Resource::kFont:
-    case Resource::kSVGDocument:
-    case Resource::kXSLStyleSheet:
-    case Resource::kImportResource:
+    case ResourceType::kImage:
+    case ResourceType::kCSSStyleSheet:
+    case ResourceType::kScript:
+    case ResourceType::kFont:
+    case ResourceType::kSVGDocument:
+    case ResourceType::kXSLStyleSheet:
+    case ResourceType::kImportResource:
       return true;
-    case Resource::kRaw:
-    case Resource::kLinkPrefetch:
-    case Resource::kTextTrack:
-    case Resource::kAudio:
-    case Resource::kVideo:
-    case Resource::kManifest:
-    case Resource::kMock:
+    case ResourceType::kRaw:
+    case ResourceType::kLinkPrefetch:
+    case ResourceType::kTextTrack:
+    case ResourceType::kAudio:
+    case ResourceType::kVideo:
+    case ResourceType::kManifest:
+    case ResourceType::kMock:
       return false;
   }
   NOTREACHED();

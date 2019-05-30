@@ -37,14 +37,13 @@ namespace blink {
 class AXObjectCacheImpl;
 
 class AXListBox final : public AXLayoutObject {
- private:
-  AXListBox(LayoutObject*, AXObjectCacheImpl&);
-
  public:
   static AXListBox* Create(LayoutObject*, AXObjectCacheImpl&);
+
+  AXListBox(LayoutObject*, AXObjectCacheImpl&);
   ~AXListBox() override;
 
-  AccessibilityRole DetermineAccessibilityRole() final;
+  ax::mojom::Role DetermineAccessibilityRole() final;
   bool IsAXListBox() const override { return true; }
   AXObject* ActiveDescendant() final;
 

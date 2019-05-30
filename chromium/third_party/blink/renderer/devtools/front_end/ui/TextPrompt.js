@@ -110,12 +110,11 @@ UI.TextPrompt = class extends Common.Object {
     this._boundOnMouseWheel = this.onMouseWheel.bind(this);
     this._boundClearAutocomplete = this.clearAutocomplete.bind(this);
     this._proxyElement = element.ownerDocument.createElement('span');
-    const shadowRoot = UI.createShadowRootWithCoreStyles(this._proxyElement, 'ui/textPrompt.css');
-    this._contentElement = shadowRoot.createChild('div', 'text-prompt-root');
-    this._contentElement.createChild('content');
+    UI.appendStyle(this._proxyElement, 'ui/textPrompt.css');
+    this._contentElement = this._proxyElement.createChild('div', 'text-prompt-root');
     this._proxyElement.style.display = this._proxyElementDisplay;
     element.parentElement.insertBefore(this._proxyElement, element);
-    this._proxyElement.appendChild(element);
+    this._contentElement.appendChild(element);
     this._element.classList.add('text-prompt');
     UI.ARIAUtils.markAsTextBox(this._element);
     this._element.setAttribute('contenteditable', 'plaintext-only');
@@ -274,7 +273,7 @@ UI.TextPrompt = class extends Common.Object {
    */
   onKeyDown(event) {
     let handled = false;
-    if (this._isSuggestBoxVisible() && this._suggestBox.keyPressed(event)) {
+    if (this.isSuggestBoxVisible() && this._suggestBox.keyPressed(event)) {
       event.consume(true);
       return;
     }
@@ -299,7 +298,7 @@ UI.TextPrompt = class extends Common.Object {
           this.clearAutocomplete();
         break;
       case 'Escape':
-        if (this._isSuggestBoxVisible()) {
+        if (this.isSuggestBoxVisible()) {
           this.clearAutocomplete();
           handled = true;
         }
@@ -338,7 +337,7 @@ UI.TextPrompt = class extends Common.Object {
    */
   acceptAutoComplete() {
     let result = false;
-    if (this._isSuggestBoxVisible())
+    if (this.isSuggestBoxVisible())
       result = this._suggestBox.acceptSuggestion();
     if (!result)
       result = this._acceptSuggestionInternal();
@@ -349,7 +348,7 @@ UI.TextPrompt = class extends Common.Object {
   clearAutocomplete() {
     const beforeText = this.textWithCurrentSuggestion();
 
-    if (this._isSuggestBoxVisible())
+    if (this.isSuggestBoxVisible())
       this._suggestBox.hide();
     this._clearAutocompleteTimeout();
     this._queryRange = null;
@@ -382,7 +381,7 @@ UI.TextPrompt = class extends Common.Object {
    * @param {boolean=} force
    */
   autoCompleteSoon(force) {
-    const immediately = this._isSuggestBoxVisible() || force;
+    const immediately = this.isSuggestBoxVisible() || force;
     if (!this._completeTimeout) {
       this._completeTimeout =
           setTimeout(this.complete.bind(this, force), immediately ? 0 : this._autocompletionTimeout);
@@ -401,7 +400,7 @@ UI.TextPrompt = class extends Common.Object {
 
     let shouldExit;
 
-    if (!force && !this._isCaretAtEndOfPrompt() && !this._isSuggestBoxVisible())
+    if (!force && !this._isCaretAtEndOfPrompt() && !this.isSuggestBoxVisible())
       shouldExit = true;
     else if (!selection.isCollapsed)
       shouldExit = true;
@@ -416,7 +415,7 @@ UI.TextPrompt = class extends Common.Object {
 
     const expressionRange = wordQueryRange.cloneRange();
     expressionRange.collapse(true);
-    expressionRange.setStartBefore(this._proxyElement);
+    expressionRange.setStartBefore(this._element);
     const completionRequestId = ++this._completionRequestId;
     const completions = await this._loadCompletions(expressionRange.toString(), wordQueryRange.toString(), !!force);
     this._completionsReady(completionRequestId, selection, wordQueryRange, !!force, completions);
@@ -565,9 +564,10 @@ UI.TextPrompt = class extends Common.Object {
   }
 
   /**
+   * @protected
    * @return {boolean}
    */
-  _isSuggestBoxVisible() {
+  isSuggestBoxVisible() {
     return this._suggestBox && this._suggestBox.visible();
   }
 

@@ -1320,7 +1320,7 @@ void UseCounter::CountIfFeatureWouldBeBlockedByFeaturePolicy(
   if (!frame.GetSecurityContext()->GetSecurityOrigin()->CanAccess(topOrigin)) {
     // This frame is cross-origin with the top-level frame, and so would be
     // blocked without a feature policy.
-    UseCounter::Count(&frame, blocked_cross_origin);
+    UseCounter::Count(frame.GetDocument(), blocked_cross_origin);
     return;
   }
 
@@ -1330,7 +1330,7 @@ void UseCounter::CountIfFeatureWouldBeBlockedByFeaturePolicy(
   const Frame* f = &frame;
   while (!f->IsMainFrame()) {
     if (!f->GetSecurityContext()->GetSecurityOrigin()->CanAccess(topOrigin)) {
-      UseCounter::Count(&frame, blocked_same_origin);
+      UseCounter::Count(frame.GetDocument(), blocked_same_origin);
       return;
     }
     f = f->Tree().Parent();
@@ -1345,18 +1345,21 @@ void UseCounter::DidCommitLoad(const LocalFrame* frame) {
   const KURL url = frame->GetDocument()->Url();
   if (url.ProtocolIs("chrome-extension"))
     context_ = kExtensionContext;
+  if (url.ProtocolIs("file"))
+    context_ = kFileContext;
 
   DCHECK_EQ(kPreCommit, commit_state_);
   commit_state_ = kCommited;
   if (!mute_count_) {
     // If any feature was recorded prior to navigation commits, flush to the
     // browser side.
-    for (size_t feature_id = 0; feature_id < features_recorded_.size();
+    for (wtf_size_t feature_id = 0; feature_id < features_recorded_.size();
          ++feature_id) {
       if (features_recorded_.QuickGet(feature_id))
         ReportAndTraceMeasurementByFeatureId(feature_id, *frame);
     }
-    for (size_t sample_id = 0; sample_id < css_recorded_.size(); ++sample_id) {
+    for (wtf_size_t sample_id = 0; sample_id < css_recorded_.size();
+         ++sample_id) {
       if (css_recorded_.QuickGet(sample_id))
         ReportAndTraceMeasurementByCSSSampleId(sample_id, frame, false);
       if (animated_css_recorded_.QuickGet(sample_id))
@@ -1365,19 +1368,11 @@ void UseCounter::DidCommitLoad(const LocalFrame* frame) {
 
     // TODO(loonybear): remove or move SVG histogram and extension histogram
     // to the browser side.
-    if ((context_ == kSVGImageContext || context_ == kExtensionContext))
+    if ((context_ == kSVGImageContext || context_ == kExtensionContext ||
+         context_ == kFileContext)) {
       FeaturesHistogram().Count(static_cast<int>(WebFeature::kPageVisits));
+    }
   }
-}
-
-// TODO(loonybear): Replace Count(LocalFrame*) by Count(DocumentLoader*).
-void UseCounter::Count(const LocalFrame* frame, WebFeature feature) {
-  if (!frame)
-    return;
-  DocumentLoader* loader = frame->GetDocument()
-                               ? frame->GetDocument()->Loader()
-                               : frame->Loader().GetProvisionalDocumentLoader();
-  UseCounter::Count(loader, feature);
 }
 
 void UseCounter::Count(DocumentLoader* loader, WebFeature feature) {
@@ -1394,13 +1389,12 @@ void UseCounter::Count(const Document& document, WebFeature feature) {
 void UseCounter::Count(ExecutionContext* context, WebFeature feature) {
   if (!context)
     return;
-  if (context->IsDocument()) {
-    Count(*ToDocument(context), feature);
+  if (auto* document = DynamicTo<Document>(context)) {
+    Count(*document, feature);
     return;
   }
-  if (context->IsWorkerOrWorkletGlobalScope()) {
-    ToWorkerOrWorkletGlobalScope(context)->CountFeature(feature);
-  }
+  if (auto* scope = DynamicTo<WorkerOrWorkletGlobalScope>(context))
+    scope->CountFeature(feature);
 }
 
 bool UseCounter::IsCounted(Document& document, WebFeature feature) {
@@ -1437,7 +1431,7 @@ void UseCounter::CountCrossOriginIframe(const Document& document,
                                         WebFeature feature) {
   LocalFrame* frame = document.GetFrame();
   if (frame && frame->IsCrossOriginSubframe())
-    Count(frame, feature);
+    Count(document, feature);
 }
 
 void UseCounter::ReportAndTraceMeasurementByCSSSampleId(int sample_id,
@@ -1528,9 +1522,6 @@ void UseCounter::NotifyFeatureCounted(WebFeature feature) {
 }
 
 EnumerationHistogram& UseCounter::FeaturesHistogram() const {
-  DCHECK_NE(kDisabledContext, context_);
-  // The default features histogram is being recorded on the browser side.
-  DCHECK_NE(kDefaultContext, context_);
   // Every SVGImage has it's own Page instance, and multiple web pages can
   // share the usage of a single SVGImage.  Ideally perhaps we'd delegate
   // metrics from an SVGImage to one of the Page's it's displayed in, but
@@ -1543,9 +1534,29 @@ EnumerationHistogram& UseCounter::FeaturesHistogram() const {
   DEFINE_STATIC_LOCAL(blink::EnumerationHistogram, extension_histogram,
                       ("Blink.UseCounter.Extensions.Features",
                        static_cast<int32_t>(WebFeature::kNumberOfFeatures)));
+  DEFINE_STATIC_LOCAL(blink::EnumerationHistogram, file_histogram,
+                      ("Blink.UseCounter.File.Features",
+                       static_cast<int32_t>(WebFeature::kNumberOfFeatures)));
   // Track what features/properties have been reported to the browser side
   // histogram.
-  return context_ == kSVGImageContext ? svg_histogram : extension_histogram;
+  switch (context_) {
+    case kDefaultContext:
+      // The default features histogram is being recorded on the browser side.
+      NOTREACHED();
+      break;
+    case kSVGImageContext:
+      return svg_histogram;
+    case kExtensionContext:
+      return extension_histogram;
+    case kFileContext:
+      return file_histogram;
+    case kDisabledContext:
+      NOTREACHED();
+      break;
+  }
+  NOTREACHED();
+  blink::EnumerationHistogram* null = nullptr;
+  return *null;
 }
 
 EnumerationHistogram& UseCounter::CssHistogram() const {

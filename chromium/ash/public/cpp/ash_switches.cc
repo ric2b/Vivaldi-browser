@@ -18,13 +18,6 @@ const char kAshDebugShortcuts[] = "ash-debug-shortcuts";
 // Enable keyboard shortcuts used by developers only.
 const char kAshDeveloperShortcuts[] = "ash-dev-shortcuts";
 
-// Disables the dimming and blur of the wallpaper on login and lock screens.
-const char kAshDisableLoginDimAndBlur[] = "ash-disable-login-dim-and-blur";
-
-// Disables a smoother animation for screen rotation.
-const char kAshDisableSmoothScreenRotation[] =
-    "ash-disable-smooth-screen-rotation";
-
 // Disables the split view on tablet mode.
 const char kAshDisableTabletSplitView[] = "disable-tablet-splitview";
 
@@ -49,20 +42,16 @@ const char kAshEnableMagnifierKeyScroller[] =
 const char kAshEnablePaletteOnAllDisplays[] =
     "ash-enable-palette-on-all-displays";
 
-// Enables the observation of accelerometer events to enter tablet
-// mode.  The flag is "enable-touchview" not "enable-tabletmode" as this
-// is used to enable tablet mode on convertible devices.
+// If the flag is present, it indicates 1) the device has accelerometer and 2)
+// the device is a convertible device or a tablet device (thus is capable of
+// entering tablet mode). If this flag is not set, then the device is not
+// capable of entering tablet mode. For example, Samus has accelerometer, but
+// is not a covertible or tablet, thus doesn't have this flag set, thus can't
+// enter tablet mode.
 const char kAshEnableTabletMode[] = "enable-touchview";
 
 // Enable the wayland server.
 const char kAshEnableWaylandServer[] = "enable-wayland-server";
-
-// Enables mirrored screen.
-const char kAshEnableMirroredScreen[] = "ash-enable-mirrored-screen";
-
-// Enables display scale tray settings. This uses force-device-scale-factor flag
-// to modify the dsf of the device to any non discrete value.
-const char kAshEnableScaleSettingsTray[] = "ash-enable-scale-settings-tray";
 
 // Enables the stylus tools next to the status area.
 const char kAshForceEnableStylusTools[] = "force-enable-stylus-tools";
@@ -114,6 +103,10 @@ const char kAshTouchHud[] = "ash-touch-hud";
 // lock the screen or shutdown the system immediately in response to a press
 // instead of displaying an interactive animation.
 const char kAuraLegacyPowerButton[] = "aura-legacy-power-button";
+
+// If set, tablet-like power button behavior (i.e. tapping the button turns the
+// screen off) is used even if the device is in laptop mode.
+const char kForceTabletPowerButton[] = "force-tablet-power-button";
 
 // Whether this device has an internal stylus.
 const char kHasInternalStylus[] = "has-internal-stylus";

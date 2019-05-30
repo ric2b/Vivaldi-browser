@@ -4,14 +4,14 @@
 
 package org.chromium.chrome.browser.contextualsearch;
 
-import org.chromium.chrome.browser.gsa.GSAContextDisplaySelection;
+import android.support.annotation.Nullable;
 
-import javax.annotation.Nullable;
+import org.chromium.chrome.browser.gsa.GSAContextDisplaySelection;
 
 /**
  * An interface to be notified when contextual searches are performed or no longer active.
  */
-public interface ContextualSearchObserver {
+interface ContextualSearchObserver {
     /**
      * Notifies that a contextual search was performed, and provides the selection context if
      * the feature is fully enabled (and {@code null} otherwise).

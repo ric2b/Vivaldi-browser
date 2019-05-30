@@ -39,7 +39,7 @@ class UsbServiceWin : public DeviceMonitorWin::Observer, public UsbService {
   void HelperStarted();
   void CreateDeviceObject(const std::string& device_path,
                           const std::string& hub_path,
-                          int port_number,
+                          uint32_t bus_number, uint32_t port_number,
                           const std::string& driver_name);
 
   void DeviceReady(scoped_refptr<UsbDeviceWin> device, bool success);
@@ -53,6 +53,7 @@ class UsbServiceWin : public DeviceMonitorWin::Observer, public UsbService {
   uint32_t first_enumeration_countdown_ = 0;
   std::list<GetDevicesCallback> enumeration_callbacks_;
 
+  scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_;
   std::unique_ptr<BlockingTaskHelper> helper_;
   std::unordered_map<std::string, scoped_refptr<UsbDeviceWin>> devices_by_path_;
 

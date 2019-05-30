@@ -23,11 +23,15 @@ namespace blink {
 class WebPepperSocketChannelClientProxy final
     : public GarbageCollectedFinalized<WebPepperSocketChannelClientProxy>,
       public WebSocketChannelClient {
-  USING_GARBAGE_COLLECTED_MIXIN(WebPepperSocketChannelClientProxy)
+  USING_GARBAGE_COLLECTED_MIXIN(WebPepperSocketChannelClientProxy);
+
  public:
   static WebPepperSocketChannelClientProxy* Create(WebPepperSocketImpl* impl) {
-    return new WebPepperSocketChannelClientProxy(impl);
+    return MakeGarbageCollected<WebPepperSocketChannelClientProxy>(impl);
   }
+
+  explicit WebPepperSocketChannelClientProxy(WebPepperSocketImpl* impl)
+      : impl_(impl) {}
 
   void DidConnect(const String& subprotocol,
                   const String& extensions) override {
@@ -47,7 +51,7 @@ class WebPepperSocketChannelClientProxy final
     impl_->DidStartClosingHandshake();
   }
   void DidClose(ClosingHandshakeCompletionStatus status,
-                unsigned short code,
+                uint16_t code,
                 const String& reason) override {
     WebPepperSocketImpl* impl = impl_;
     impl_ = nullptr;
@@ -59,9 +63,6 @@ class WebPepperSocketChannelClientProxy final
   }
 
  private:
-  explicit WebPepperSocketChannelClientProxy(WebPepperSocketImpl* impl)
-      : impl_(impl) {}
-
   WebPepperSocketImpl* impl_;
 };
 

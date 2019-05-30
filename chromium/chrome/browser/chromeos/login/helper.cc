@@ -19,7 +19,7 @@
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/login/auth/user_context.h"
 #include "chromeos/network/managed_network_configuration_handler.h"
 #include "chromeos/network/network_connection_handler.h"
@@ -34,6 +34,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/display/display.h"
@@ -126,8 +127,9 @@ void NetworkStateHelper::CreateAndConnectNetworkFromOnc(
     const base::Closure& success_callback,
     const network_handler::ErrorCallback& error_callback) const {
   std::string error;
-  std::unique_ptr<base::Value> root = base::JSONReader::ReadAndReturnError(
-      onc_spec, base::JSON_ALLOW_TRAILING_COMMAS, nullptr, &error);
+  std::unique_ptr<base::Value> root =
+      base::JSONReader::ReadAndReturnErrorDeprecated(
+          onc_spec, base::JSON_ALLOW_TRAILING_COMMAS, nullptr, &error);
 
   base::DictionaryValue* toplevel_onc = nullptr;
   if (!root || !root->GetAsDictionary(&toplevel_onc)) {
@@ -183,18 +185,13 @@ content::StoragePartition* GetSigninPartition() {
   return signin_partition_manager->GetCurrentStoragePartition();
 }
 
-net::URLRequestContextGetter* GetSigninContext() {
+network::mojom::NetworkContext* GetSigninNetworkContext() {
   content::StoragePartition* signin_partition = GetSigninPartition();
-
-  // Special case for unit tests. There's no LoginDisplayHost thus no
-  // webview instance. See http://crbug.com/477402
-  if (!signin_partition && !LoginDisplayHost::default_host())
-    return ProfileHelper::GetSigninProfile()->GetRequestContext();
 
   if (!signin_partition)
     return nullptr;
 
-  return signin_partition->GetURLRequestContext();
+  return signin_partition->GetNetworkContext();
 }
 
 scoped_refptr<network::SharedURLLoaderFactory> GetSigninURLLoaderFactory() {

@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/offline_pages/offline_page_mhtml_archiver.h"
@@ -175,7 +175,7 @@ bool RecentTabHelper::EnsureInitialized() {
   tab_id_.clear();
 
   if (delegate_->GetTabId(web_contents(), &tab_id_number))
-    tab_id_ = base::IntToString(tab_id_number);
+    tab_id_ = base::NumberToString(tab_id_number);
 
   // TODO(dimich): When we have BackgroundOffliner, avoid capturing prerenderer
   // WebContents with its origin as well.
@@ -563,5 +563,7 @@ void RecentTabHelper::CancelInFlightSnapshots() {
   downloads_latest_saved_snapshot_info_.reset();
   last_n_ongoing_snapshot_info_.reset();
 }
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(RecentTabHelper)
 
 }  // namespace offline_pages

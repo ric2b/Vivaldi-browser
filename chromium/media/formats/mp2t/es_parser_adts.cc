@@ -15,7 +15,6 @@
 #include "media/base/bit_reader.h"
 #include "media/base/channel_layout.h"
 #include "media/base/encryption_pattern.h"
-#include "media/base/encryption_scheme.h"
 #include "media/base/media_util.h"
 #include "media/base/stream_parser_buffer.h"
 #include "media/base/timestamp_constants.h"
@@ -139,7 +138,7 @@ EsParserAdts::EsParserAdts(const NewAudioConfigCB& new_audio_config_cb,
       get_decrypt_config_cb_(get_decrypt_config_cb),
       use_hls_sample_aes_(use_hls_sample_aes),
       sbr_in_mimetype_(sbr_in_mimetype) {
-  DCHECK_EQ(!get_decrypt_config_cb_.is_null(), use_hls_sample_aes_);
+  DCHECK_EQ(!!get_decrypt_config_cb_, use_hls_sample_aes_);
 }
 #endif
 
@@ -220,7 +219,7 @@ bool EsParserAdts::ParseFromEsQueue() {
             std::make_unique<DecryptConfig>(
                 base_decrypt_config->encryption_mode(),
                 base_decrypt_config->key_id(), base_decrypt_config->iv(),
-                subsamples, base_decrypt_config->encryption_pattern()));
+                subsamples, EncryptionPattern()));
       }
     }
 #endif

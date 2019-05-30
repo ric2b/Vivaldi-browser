@@ -10,7 +10,7 @@
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 
 namespace arc {
 namespace policy_util {
@@ -46,7 +46,8 @@ EcryptfsMigrationAction GetDefaultEcryptfsMigrationActionForManagedUser(
 
 std::set<std::string> GetRequestedPackagesFromArcPolicy(
     const std::string& arc_policy) {
-  std::unique_ptr<base::Value> dict = base::JSONReader::Read(arc_policy);
+  std::unique_ptr<base::Value> dict =
+      base::JSONReader::ReadDeprecated(arc_policy);
   if (!dict || !dict->is_dict())
     return {};
 

@@ -10,6 +10,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/base/math_util.h"
 #include "cc/trees/layer_tree_frame_sink.h"
@@ -154,12 +155,17 @@ class FastInkView::LayerTreeFrameSinkHolder
     frame.metadata.begin_frame_ack.has_damage = true;
     frame.metadata.device_scale_factor =
         holder->last_frame_device_scale_factor_;
+    frame.metadata.local_surface_id_allocation_time =
+        holder->last_local_surface_id_allocation_time_;
+    frame.metadata.frame_token = ++holder->next_frame_token_;
     std::unique_ptr<viz::RenderPass> pass = viz::RenderPass::Create();
     pass->SetNew(1, gfx::Rect(holder->last_frame_size_in_pixels_),
                  gfx::Rect(holder->last_frame_size_in_pixels_),
                  gfx::Transform());
     frame.render_pass_list.push_back(std::move(pass));
-    holder->frame_sink_->SubmitCompositorFrame(std::move(frame));
+    holder->frame_sink_->SubmitCompositorFrame(std::move(frame),
+                                               /*hit_test_data_changed=*/true,
+                                               /*show_hit_test_borders=*/false);
 
     // Delete sink holder immediately if not waiting for exported resources to
     // be reclaimed.
@@ -188,7 +194,12 @@ class FastInkView::LayerTreeFrameSinkHolder
     exported_resources_[resource_id] = std::move(resource);
     last_frame_size_in_pixels_ = frame.size_in_pixels();
     last_frame_device_scale_factor_ = frame.metadata.device_scale_factor;
-    frame_sink_->SubmitCompositorFrame(std::move(frame));
+    last_local_surface_id_allocation_time_ =
+        frame.metadata.local_surface_id_allocation_time;
+    frame.metadata.frame_token = ++next_frame_token_;
+    frame_sink_->SubmitCompositorFrame(std::move(frame),
+                                       /*hit_test_data_changed=*/true,
+                                       /*show_hit_test_borders=*/false);
   }
 
   void DamageExportedResources() {
@@ -203,6 +214,8 @@ class FastInkView::LayerTreeFrameSinkHolder
   }
   void ReclaimResources(
       const std::vector<viz::ReturnedResource>& resources) override {
+    if (delete_pending_)
+      return;
     for (auto& entry : resources) {
       auto it = exported_resources_.find(entry.id);
       DCHECK(it != exported_resources_.end());
@@ -216,7 +229,7 @@ class FastInkView::LayerTreeFrameSinkHolder
     if (root_window_ && exported_resources_.empty())
       ScheduleDelete();
   }
-  void SetTreeActivationCallback(const base::Closure& callback) override {}
+  void SetTreeActivationCallback(base::RepeatingClosure callback) override {}
   void DidReceiveCompositorFrameAck() override {
     if (view_)
       view_->DidReceiveCompositorFrameAck();
@@ -232,6 +245,7 @@ class FastInkView::LayerTreeFrameSinkHolder
     if (root_window_)
       ScheduleDelete();
   }
+  void DidNotNeedBeginFrame() override {}
   void OnDraw(const gfx::Transform& transform,
               const gfx::Rect& viewport,
               bool resourceless_software_draw,
@@ -263,8 +277,10 @@ class FastInkView::LayerTreeFrameSinkHolder
   std::unique_ptr<cc::LayerTreeFrameSink> frame_sink_;
   base::flat_map<viz::ResourceId, std::unique_ptr<Resource>>
       exported_resources_;
+  viz::FrameTokenGenerator next_frame_token_;
   gfx::Size last_frame_size_in_pixels_;
   float last_frame_device_scale_factor_ = 1.0f;
+  base::TimeTicks last_local_surface_id_allocation_time_;
   aura::Window* root_window_ = nullptr;
   bool delete_pending_ = false;
 
@@ -484,28 +500,24 @@ void FastInkView::SubmitCompositorFrame() {
   frame.metadata.begin_frame_ack =
       viz::BeginFrameAck::CreateManualAckWithDamage();
   frame.metadata.device_scale_factor = device_scale_factor;
+  frame.metadata.local_surface_id_allocation_time =
+      widget_->GetNativeView()->GetLocalSurfaceIdAllocation().allocation_time();
 
-  if (!presentation_callback_.is_null()) {
-    // If overflow happens, we increase it again.
-    if (!++presentation_token_)
-      ++presentation_token_;
-    frame.metadata.frame_token = presentation_token_;
-    frame.metadata.request_presentation_feedback = true;
-  }
+  frame.metadata.frame_token = ++next_frame_token_;
 
   viz::TextureDrawQuad* texture_quad =
       render_pass->CreateAndAppendDrawQuad<viz::TextureDrawQuad>();
   float vertex_opacity[4] = {1.0f, 1.0f, 1.0f, 1.0f};
   gfx::RectF uv_crop(quad_rect);
   uv_crop.Scale(1.f / buffer_size_.width(), 1.f / buffer_size_.height());
-  texture_quad->SetNew(quad_state, quad_rect, quad_rect,
-                       /*needs_blending=*/true, transferable_resource.id,
-                       /*premultiplied_alpha=*/true, uv_crop.origin(),
-                       uv_crop.bottom_right(),
-                       /*background_color=*/SK_ColorTRANSPARENT, vertex_opacity,
-                       /*y_flipped=*/false,
-                       /*nearest_neighbor=*/false,
-                       /*secure_output_only=*/false);
+  texture_quad->SetNew(
+      quad_state, quad_rect, quad_rect,
+      /*needs_blending=*/true, transferable_resource.id,
+      /*premultiplied_alpha=*/true, uv_crop.origin(), uv_crop.bottom_right(),
+      /*background_color=*/SK_ColorTRANSPARENT, vertex_opacity,
+      /*y_flipped=*/false,
+      /*nearest_neighbor=*/false,
+      /*secure_output_only=*/false, ui::ProtectedVideoType::kClear);
   texture_quad->set_resource_size_in_pixels(transferable_resource.size);
   frame.resource_list.push_back(transferable_resource);
 
@@ -533,8 +545,8 @@ void FastInkView::DidReceiveCompositorFrameAck() {
 
 void FastInkView::DidPresentCompositorFrame(
     const gfx::PresentationFeedback& feedback) {
-  DCHECK(!presentation_callback_.is_null());
-  presentation_callback_.Run(feedback);
+  if (!presentation_callback_.is_null())
+    presentation_callback_.Run(feedback);
 }
 
 void FastInkView::ReclaimResource(std::unique_ptr<Resource> resource) {

@@ -75,8 +75,8 @@ void PopupMenuHelper::ShowPopupMenu(
       ->current_frame_host()
       ->GetView());
 
-    cocoa_view.reset(
-     static_cast<RenderWidgetHostViewCocoa*>([rwhvg->GetNativeView() retain]));
+    cocoa_view.reset(static_cast<RenderWidgetHostViewCocoa*>(
+        [rwhvg->GetNativeView().GetNativeNSView() retain]));
   } else {
     cocoa_view.reset([rwhvm->cocoa_view() retain]);
   }

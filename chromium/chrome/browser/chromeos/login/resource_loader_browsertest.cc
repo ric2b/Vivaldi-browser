@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_piece.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -27,12 +28,13 @@
 namespace {
 
 GURL CreateResource(const std::string& content, const std::string& file_ext) {
+  base::ScopedAllowBlockingForTesting allow_io;
   base::FilePath path;
   EXPECT_TRUE(base::CreateTemporaryFile(&path));
   EXPECT_EQ(static_cast<int>(content.size()),
             base::WriteFile(path, content.c_str(), content.size()));
   base::FilePath path_with_extension;
-  path_with_extension = path.AddExtension(FILE_PATH_LITERAL(file_ext));
+  path_with_extension = path.AddExtension(file_ext);
   EXPECT_TRUE(base::Move(path, path_with_extension));
   return net::FilePathToFileURL(path_with_extension);
 }

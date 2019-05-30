@@ -19,8 +19,6 @@ class FlingBooster;
 
 namespace content {
 
-class GestureEventQueue;
-
 class FlingController;
 
 // Interface with which the FlingController can forward generated fling progress
@@ -73,8 +71,7 @@ class CONTENT_EXPORT FlingController {
     ActiveFlingParameters() : modifiers(0) {}
   };
 
-  FlingController(GestureEventQueue* gesture_event_queue,
-                  FlingControllerEventSenderClient* event_sender_client,
+  FlingController(FlingControllerEventSenderClient* event_sender_client,
                   FlingControllerSchedulerClient* scheduler_client,
                   const Config& config);
 
@@ -87,9 +84,6 @@ class CONTENT_EXPORT FlingController {
   void StopFling();
 
   bool FilterGestureEvent(const GestureEventWithLatencyInfo& gesture_event);
-
-  void OnGestureEventAck(const GestureEventWithLatencyInfo& acked_event,
-                         InputEventAckState ack_result);
 
   void ProcessGestureFlingStart(
       const GestureEventWithLatencyInfo& gesture_event);
@@ -105,6 +99,8 @@ class CONTENT_EXPORT FlingController {
 
   // Returns the |TouchpadTapSuppressionController| instance.
   TouchpadTapSuppressionController* GetTouchpadTapSuppressionController();
+
+  void set_clock_for_testing(const base::TickClock* clock) { clock_ = clock; }
 
  protected:
   std::unique_ptr<ui::FlingBooster> fling_booster_;
@@ -150,8 +146,6 @@ class CONTENT_EXPORT FlingController {
   bool UpdateCurrentFlingState(const blink::WebGestureEvent& fling_start_event,
                                const gfx::Vector2dF& velocity);
 
-  GestureEventQueue* gesture_event_queue_;
-
   FlingControllerEventSenderClient* event_sender_client_;
 
   FlingControllerSchedulerClient* scheduler_client_;
@@ -177,6 +171,12 @@ class CONTENT_EXPORT FlingController {
   // Whether an active fling has seen a |ProgressFling()| call. This is useful
   // for determining if the fling start time should be re-initialized.
   bool has_fling_animation_started_;
+
+  // The last time fling progress events were sent.
+  base::TimeTicks last_progress_time_;
+
+  // The clock used; overridable for tests.
+  const base::TickClock* clock_;
 
   base::WeakPtrFactory<FlingController> weak_ptr_factory_;
 

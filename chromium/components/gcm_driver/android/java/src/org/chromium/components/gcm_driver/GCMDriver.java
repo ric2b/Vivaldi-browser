@@ -4,14 +4,20 @@
 
 package org.chromium.components.gcm_driver;
 
-import org.chromium.base.AsyncTask;
+import android.os.SystemClock;
+
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.task.AsyncTask;
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 
 import java.io.IOException;
+import java.util.Set;
 
 /**
  * This class is the Java counterpart to the C++ GCMDriverAndroid class.
@@ -62,6 +68,34 @@ public class GCMDriver {
     }
 
     @CalledByNative
+    private void replayPersistedMessages(final String appId) {
+        if (LazySubscriptionsManager.hasPersistedMessages()) {
+            long time = SystemClock.elapsedRealtime();
+            Set<String> lazySubscriptionIds = LazySubscriptionsManager.getLazySubscriptionIds();
+            boolean hasRemainingMessages = false;
+            for (String id : lazySubscriptionIds) {
+                if (!id.startsWith(appId)) {
+                    hasRemainingMessages = (LazySubscriptionsManager.readMessages(id).length != 0);
+                    continue;
+                }
+                GCMMessage[] messages = LazySubscriptionsManager.readMessages(id);
+                for (GCMMessage message : messages) {
+                    dispatchMessage(message);
+                }
+                LazySubscriptionsManager.deletePersistedMessagesForSubscriptionId(id);
+            }
+            LazySubscriptionsManager.storeHasPersistedMessages(hasRemainingMessages);
+            long duration = SystemClock.elapsedRealtime() - time;
+            // Call RecordHistogram.recordTimesHistogram() on a background thread to avoid expensive
+            // JNI calls in the critical path.
+            PostTask.postTask(TaskTraits.BEST_EFFORT_MAY_BLOCK, () -> {
+                RecordHistogram.recordTimesHistogram(
+                        "PushMessaging.TimeToReadPersistedMessages", duration);
+            });
+        }
+    }
+
+    @CalledByNative
     private void register(final String appId, final String senderId) {
         new AsyncTask<String>() {
             @Override
@@ -80,8 +114,7 @@ public class GCMDriver {
                 nativeOnRegisterFinished(mNativeGCMDriverAndroid, appId, registrationId,
                                          !registrationId.isEmpty());
             }
-        }
-                .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
     @CalledByNative

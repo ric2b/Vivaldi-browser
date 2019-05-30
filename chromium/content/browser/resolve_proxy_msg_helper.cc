@@ -66,11 +66,11 @@ void ResolveProxyMsgHelper::StartPendingRequest() {
   binding_.Bind(mojo::MakeRequest(&proxy_lookup_client));
   binding_.set_connection_error_handler(
       base::BindOnce(&ResolveProxyMsgHelper::OnProxyLookupComplete,
-                     base::Unretained(this), base::nullopt));
+                     base::Unretained(this), net::ERR_ABORTED, base::nullopt));
   owned_self_ = this;
   if (!SendRequestToNetworkService(pending_requests_.front().url,
                                    std::move(proxy_lookup_client))) {
-    OnProxyLookupComplete(base::nullopt);
+    OnProxyLookupComplete(net::ERR_FAILED, base::nullopt);
   }
 }
 
@@ -91,20 +91,25 @@ bool ResolveProxyMsgHelper::SendRequestToNetworkService(
 }
 
 void ResolveProxyMsgHelper::OnProxyLookupComplete(
+    int32_t net_error,
     const base::Optional<net::ProxyInfo>& proxy_info) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!pending_requests_.empty());
 
   binding_.Close();
 
-  // If all references except |owned_self_| have been released, just release
-  // the last reference, without doing anything.
-  if (HasOneRef()) {
-    scoped_refptr<ResolveProxyMsgHelper> self = std::move(owned_self_);
-    return;
-  }
+  // Need to keep |this| alive until the end of this method, and then release
+  // this reference. StartPendingRequest(), if called, will grab other
+  // reference, and a reference may be owned by the IO thread or by other
+  // posted tasks, so |this| may or may not be deleted at the end of this
+  // method.
+  scoped_refptr<ResolveProxyMsgHelper> owned_self = std::move(owned_self_);
 
-  owned_self_ = nullptr;
+  // If all references except |owned_self| have been released, then there's
+  // nothing waiting for pending requests to complete. So just exit this method,
+  // which will release the last reference, destroying |this|.
+  if (HasOneRef())
+    return;
 
   // Clear the current (completed) request.
   PendingRequest completed_req = std::move(pending_requests_.front());

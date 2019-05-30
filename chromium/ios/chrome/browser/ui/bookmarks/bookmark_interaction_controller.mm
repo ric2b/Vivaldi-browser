@@ -10,16 +10,15 @@
 #include "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
-#include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/experimental_flags.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #import "ios/chrome/browser/tabs/tab.h"
+#import "ios/chrome/browser/tabs/tab_title_util.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_edit_view_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_folder_editor_view_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_home_view_controller.h"
@@ -35,9 +34,11 @@
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_delegate.h"
 #import "ios/chrome/browser/ui/table_view/table_view_presentation_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_presentation_controller_delegate.h"
-#include "ios/chrome/browser/ui/uikit_ui_util.h"
-#include "ios/chrome/browser/ui/url_loader.h"
-#import "ios/chrome/browser/ui/util/form_sheet_navigation_controller.h"
+#include "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/url_loading/url_loading_service.h"
+#import "ios/chrome/browser/url_loading/url_loading_service_factory.h"
+#import "ios/chrome/browser/url_loading/url_loading_util.h"
+#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
 #import "ios/web/public/navigation_manager.h"
@@ -75,11 +76,11 @@ enum class PresentedState {
   // it is incognito.
   ios::ChromeBrowserState* _browserState;  // weak
 
-  // The designated url loader.
-  __weak id<UrlLoader> _loader;
-
   // The parent controller on top of which the UI needs to be presented.
   __weak UIViewController* _parentController;
+
+  // The web state list currently in use.
+  WebStateList* _webStateList;
 }
 
 // The type of view controller that is being presented.
@@ -152,18 +153,18 @@ enum class PresentedState {
 @synthesize mediator = _mediator;
 
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
-                              loader:(id<UrlLoader>)loader
                     parentController:(UIViewController*)parentController
-                          dispatcher:(id<ApplicationCommands>)dispatcher {
+                          dispatcher:(id<ApplicationCommands>)dispatcher
+                        webStateList:(WebStateList*)webStateList {
   self = [super init];
   if (self) {
     // Bookmarks are always opened with the main browser state, even in
     // incognito mode.
     _currentBrowserState = browserState;
     _browserState = browserState->GetOriginalChromeBrowserState();
-    _loader = loader;
     _parentController = parentController;
     _dispatcher = dispatcher;
+    _webStateList = webStateList;
     _bookmarkModel =
         ios::BookmarkModelFactory::GetForBrowserState(_browserState);
     _mediator = [[BookmarkMediator alloc] initWithBrowserState:_browserState];
@@ -208,7 +209,7 @@ enum class PresentedState {
         return;
       [strongSelf presentBookmarkEditorForBookmarkedTab:weakTab];
     };
-    [self.mediator addBookmarkWithTitle:tab.title
+    [self.mediator addBookmarkWithTitle:tab_util::GetTabTitle(tab.webState)
                                     URL:tab.webState->GetLastCommittedURL()
                              editAction:editAction];
   }
@@ -218,10 +219,10 @@ enum class PresentedState {
   DCHECK_EQ(PresentedState::NONE, self.currentPresentedState);
   DCHECK(!self.bookmarkNavigationController);
 
-  self.bookmarkBrowser =
-      [[BookmarkHomeViewController alloc] initWithLoader:_loader
-                                            browserState:_currentBrowserState
-                                              dispatcher:self.dispatcher];
+  self.bookmarkBrowser = [[BookmarkHomeViewController alloc]
+      initWithBrowserState:_currentBrowserState
+                dispatcher:self.dispatcher
+              webStateList:_webStateList];
   self.bookmarkBrowser.homeDelegate = self;
 
   NSArray<BookmarkHomeViewController*>* replacementViewControllers = nil;
@@ -332,7 +333,7 @@ enum class PresentedState {
 
   self.bookmarkEditor.delegate = nil;
   self.bookmarkEditor = nil;
-  [_parentController
+  [self.bookmarkNavigationController
       dismissViewControllerAnimated:animated
                          completion:^{
                            self.bookmarkNavigationController = nil;
@@ -346,7 +347,7 @@ enum class PresentedState {
     return;
   DCHECK(self.bookmarkNavigationController);
 
-  [_parentController
+  [self.bookmarkNavigationController
       dismissViewControllerAnimated:animated
                          completion:^{
                            self.folderEditor.delegate = nil;
@@ -504,59 +505,44 @@ bookmarkHomeViewControllerWantsDismissal:(BookmarkHomeViewController*)controller
 - (void)presentTableViewController:(ChromeTableViewController*)viewController
     withReplacementViewControllers:
         (NSArray<ChromeTableViewController*>*)replacementViewControllers {
-  if (experimental_flags::IsBookmarksUIRebootEnabled()) {
-    TableViewNavigationController* navController =
-        [[TableViewNavigationController alloc] initWithTable:viewController];
-    self.bookmarkNavigationController = navController;
-    if (replacementViewControllers) {
-      [navController setViewControllers:replacementViewControllers];
-    }
-
-    navController.toolbarHidden = YES;
-    self.bookmarkNavigationControllerDelegate =
-        [[TableViewNavigationControllerDelegate alloc] init];
-    navController.delegate = self.bookmarkNavigationControllerDelegate;
-    self.bookmarkTransitioningDelegate =
-        [[BookmarkTransitioningDelegate alloc] init];
-    self.bookmarkTransitioningDelegate.presentationControllerModalDelegate =
-        self;
-    navController.transitioningDelegate = self.bookmarkTransitioningDelegate;
-    navController.modalPresentationStyle = UIModalPresentationCustom;
-
-    [_parentController presentViewController:navController
-                                    animated:YES
-                                  completion:nil];
-
-    TableViewPresentationController* presentationController =
-        base::mac::ObjCCastStrict<TableViewPresentationController>(
-            navController.presentationController);
-    self.bookmarkNavigationControllerDelegate.modalController =
-        presentationController;
-  } else {
-    FormSheetNavigationController* navController =
-        [[FormSheetNavigationController alloc]
-            initWithRootViewController:viewController];
-    if (replacementViewControllers) {
-      [navController setViewControllers:replacementViewControllers];
-    }
-    navController.modalPresentationStyle = UIModalPresentationFormSheet;
-    self.bookmarkNavigationController = navController;
-    [_parentController presentViewController:navController
-                                    animated:YES
-                                  completion:nil];
+  TableViewNavigationController* navController =
+      [[TableViewNavigationController alloc] initWithTable:viewController];
+  self.bookmarkNavigationController = navController;
+  if (replacementViewControllers) {
+    [navController setViewControllers:replacementViewControllers];
   }
+
+  navController.toolbarHidden = YES;
+  self.bookmarkNavigationControllerDelegate =
+      [[TableViewNavigationControllerDelegate alloc] init];
+  navController.delegate = self.bookmarkNavigationControllerDelegate;
+  self.bookmarkTransitioningDelegate =
+      [[BookmarkTransitioningDelegate alloc] init];
+  self.bookmarkTransitioningDelegate.presentationControllerModalDelegate = self;
+  navController.transitioningDelegate = self.bookmarkTransitioningDelegate;
+  navController.modalPresentationStyle = UIModalPresentationCustom;
+
+  [_parentController presentViewController:navController
+                                  animated:YES
+                                completion:nil];
+
+  TableViewPresentationController* presentationController =
+      base::mac::ObjCCastStrict<TableViewPresentationController>(
+          navController.presentationController);
+  self.bookmarkNavigationControllerDelegate.modalController =
+      presentationController;
 }
 
 - (void)openURLInCurrentTab:(const GURL&)url {
-  if (url.SchemeIs(url::kJavaScriptScheme)) {  // bookmarklet
-    NSString* jsToEval = [base::SysUTF8ToNSString(url.GetContent())
-        stringByRemovingPercentEncoding];
-    [_loader loadJavaScriptFromLocationBar:jsToEval];
+  if (url.SchemeIs(url::kJavaScriptScheme) && _webStateList) {  // bookmarklet
+    LoadJavaScriptURL(url, _browserState, _webStateList->GetActiveWebState());
     return;
   }
   web::NavigationManager::WebLoadParams params(url);
   params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
-  [_loader loadURLWithParams:params];
+  ChromeLoadParams chromeParams(params);
+  UrlLoadingServiceFactory::GetForBrowserState(_currentBrowserState)
+      ->LoadUrlInCurrentTab(chromeParams);
 }
 
 - (void)openURLInNewTab:(const GURL&)url
@@ -570,7 +556,8 @@ bookmarkHomeViewControllerWantsDismissal:(BookmarkHomeViewController*)controller
                                  inIncognito:inIncognito
                                 inBackground:inBackground
                                     appendTo:kLastTab];
-  [_loader webPageOrderedOpen:command];
+  UrlLoadingServiceFactory::GetForBrowserState(_currentBrowserState)
+      ->OpenUrlInNewTab(command);
 }
 
 @end

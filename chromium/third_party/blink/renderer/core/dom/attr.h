@@ -41,6 +41,9 @@ class CORE_EXPORT Attr final : public Node {
   static Attr* Create(Document&,
                       const QualifiedName&,
                       const AtomicString& value);
+
+  Attr(Element&, const QualifiedName&);
+  Attr(Document&, const QualifiedName&, const AtomicString& value);
   ~Attr() override;
 
   String name() const { return name_.ToString(); }
@@ -59,12 +62,9 @@ class CORE_EXPORT Attr final : public Node {
   const AtomicString& namespaceURI() const { return name_.NamespaceURI(); }
   const AtomicString& prefix() const { return name_.Prefix(); }
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
-  Attr(Element&, const QualifiedName&);
-  Attr(Document&, const QualifiedName&, const AtomicString& value);
-
   bool IsElementNode() const =
       delete;  // This will catch anyone doing an unnecessary check.
 
@@ -79,13 +79,13 @@ class CORE_EXPORT Attr final : public Node {
 
   // Attr wraps either an element/name, or a name/value pair (when it's a
   // standalone Node.)
-  // Note that m_name is always set, but m_element/m_standaloneValue may be
-  // null.
+  // Note that name_ is always set, but element_ /
+  // standalone_value_or_attached_local_name_ may be null.
   TraceWrapperMember<Element> element_;
   QualifiedName name_;
   // Holds the value if it is a standalone Node, or the local name of the
   // attribute it is attached to on an Element. The latter may (letter case)
-  // differ from m_name's local name. As these two modes are non-overlapping,
+  // differ from name_'s local name. As these two modes are non-overlapping,
   // use a single field.
   AtomicString standalone_value_or_attached_local_name_;
 };

@@ -9,8 +9,9 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
@@ -132,7 +133,7 @@ void BrowserActionsBarBrowserTest::LoadExtensions() {
       extensions::ExtensionRegistry::Get(profile());
   // Add each, and verify that it is both correctly added to the extension
   // registry and to the browser actions container.
-  for (size_t i = 0; i < arraysize(extensions); ++i) {
+  for (size_t i = 0; i < base::size(extensions); ++i) {
     extension_service()->AddExtension(extensions[i]);
     EXPECT_TRUE(registry->enabled_extensions().GetByID(extensions[i]->id())) <<
         extensions[i]->name();
@@ -373,14 +374,14 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest,
 
   // Neither should yet be showing a popup.
   EXPECT_FALSE(browser_actions_bar()->HasPopup());
-  EXPECT_FALSE(first_controller->is_showing_popup());
-  EXPECT_FALSE(second_controller->is_showing_popup());
+  EXPECT_FALSE(first_controller->IsShowingPopup());
+  EXPECT_FALSE(second_controller->IsShowingPopup());
 
   // Click on the first extension's browser action. This should open a popup.
   browser_actions_bar()->Press(0);
   EXPECT_TRUE(browser_actions_bar()->HasPopup());
-  EXPECT_TRUE(first_controller->is_showing_popup());
-  EXPECT_FALSE(second_controller->is_showing_popup());
+  EXPECT_TRUE(first_controller->IsShowingPopup());
+  EXPECT_FALSE(second_controller->IsShowingPopup());
 
   {
     content::WindowedNotificationObserver observer(
@@ -394,8 +395,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest,
     // notification.
     observer.Wait();
     EXPECT_TRUE(browser_actions_bar()->HasPopup());
-    EXPECT_FALSE(first_controller->is_showing_popup());
-    EXPECT_TRUE(second_controller->is_showing_popup());
+    EXPECT_FALSE(first_controller->IsShowingPopup());
+    EXPECT_TRUE(second_controller->IsShowingPopup());
   }
 
   {
@@ -407,8 +408,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest,
     browser_actions_bar()->Press(1);
     observer.Wait();
     EXPECT_FALSE(browser_actions_bar()->HasPopup());
-    EXPECT_FALSE(first_controller->is_showing_popup());
-    EXPECT_FALSE(second_controller->is_showing_popup());
+    EXPECT_FALSE(first_controller->IsShowingPopup());
+    EXPECT_FALSE(second_controller->IsShowingPopup());
   }
 }
 
@@ -456,16 +457,16 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest,
 
   // Neither should yet be showing a popup.
   EXPECT_FALSE(browser_actions_bar()->HasPopup());
-  EXPECT_FALSE(second_controller_main->is_showing_popup());
-  EXPECT_FALSE(second_controller_overflow->is_showing_popup());
+  EXPECT_FALSE(second_controller_main->IsShowingPopup());
+  EXPECT_FALSE(second_controller_overflow->IsShowingPopup());
 
   // Click on the first extension's browser action. This should open a popup.
   overflow_bar->Press(1);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(browser_actions_bar()->HasPopup());
   EXPECT_FALSE(overflow_bar->HasPopup());
-  EXPECT_TRUE(second_controller_main->is_showing_popup());
-  EXPECT_FALSE(second_controller_overflow->is_showing_popup());
+  EXPECT_TRUE(second_controller_main->IsShowingPopup());
+  EXPECT_FALSE(second_controller_overflow->IsShowingPopup());
 
   EXPECT_EQ(1, browser_actions_bar()->VisibleBrowserActions());
   EXPECT_EQ(1u, main_tab->GetIconCount());
@@ -486,8 +487,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest,
 
   EXPECT_FALSE(browser_actions_bar()->HasPopup());
   EXPECT_FALSE(overflow_bar->HasPopup());
-  EXPECT_FALSE(second_controller_main->is_showing_popup());
-  EXPECT_FALSE(second_controller_overflow->is_showing_popup());
+  EXPECT_FALSE(second_controller_main->IsShowingPopup());
+  EXPECT_FALSE(second_controller_overflow->IsShowingPopup());
   EXPECT_EQ(0, browser_actions_bar()->VisibleBrowserActions());
   EXPECT_EQ(2, overflow_bar->VisibleBrowserActions());
   base::RunLoop().RunUntilIdle();
@@ -534,7 +535,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest,
 
   EXPECT_EQ(0, browser_actions_bar()->VisibleBrowserActions());
   EXPECT_EQ(0, overflow_bar->VisibleBrowserActions());
-  EXPECT_EQ(0u, toolbar_model()->toolbar_items().size());
+  EXPECT_EQ(0u, toolbar_model()->action_ids().size());
 }
 
 // Test that page action popups work with the toolbar redesign.
@@ -664,9 +665,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarIncognitoTest, IncognitoMode) {
   const extensions::Extension* extension = LoadExtensionIncognito(
       test_data_dir_.AppendASCII("api_test/browser_action_with_icon"));
   ASSERT_TRUE(extension);
-  Browser* second_browser =
-      new Browser(Browser::CreateParams(profile()->GetOriginalProfile(), true));
-  base::RunLoop().RunUntilIdle();
+  Browser* second_browser = CreateBrowser(profile()->GetOriginalProfile());
   EXPECT_FALSE(second_browser->profile()->IsOffTheRecord());
 
   CloseBrowserSynchronously(browser());
@@ -697,7 +696,7 @@ class BrowserActionsBarRuntimeHostPermissionsBrowserTest
   void SetUpCommandLine(base::CommandLine* command_line) override {
     BrowserActionsBarBrowserTest::SetUpCommandLine(command_line);
     scoped_feature_list_.InitAndEnableFeature(
-        extensions::features::kRuntimeHostPermissions);
+        extensions_features::kRuntimeHostPermissions);
   }
 
   void SetUpOnMainThread() override {

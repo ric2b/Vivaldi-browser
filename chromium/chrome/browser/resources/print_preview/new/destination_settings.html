@@ -2,106 +2,85 @@
 
 <link rel="import" href="chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.html">
 <link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/html/event_tracker.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="../data/destination.html">
 <link rel="import" href="../data/destination_store.html">
 <link rel="import" href="../data/invitation_store.html">
 <link rel="import" href="../data/user_info.html">
-<link rel="import" href="button_css.html">
 <link rel="import" href="destination_dialog.html">
+<link rel="import" href="destination_select.html">
 <link rel="import" href="print_preview_shared_css.html">
 <link rel="import" href="throbber_css.html">
 <link rel="import" href="settings_section.html">
+<link rel="import" href="state.html">
 <link rel="import" href="strings.html">
 
 <dom-module id="print-preview-destination-settings">
   <template>
-    <style include="print-preview-shared button throbber cr-hidden-style">
-      :host button {
-        margin-top: 10px;
-      }
-
-      .throbber {
-        margin-top: 6px;
-      }
-
-      .destination-settings-box,
+    <style include="print-preview-shared throbber cr-hidden-style">
       .throbber-container {
         align-items: center;
         display: flex;
-        min-height: 28px;
         overflow: hidden;
       }
 
-      .destination-icon {
-        height: 24px;
-        margin-inline-end: 8px;
-        vertical-align: middle;
-        width: 24px;
-      }
-
-      .destination-info-wrapper {
-        display: flex;
-        flex: 1;
-        flex-direction: column;
+      .destination-status {
+        color: var(--google-grey-700);
+        font-size: calc(12/13 * 1em);
         overflow: hidden;
-        width: 100%;
-      }
-
-      .destination-info-wrapper > div,
-      .destination-throbber-name {
-        flex: 1;
-        overflow: hidden;
+        padding-top: 4px;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
 
-      .destination-throbber-name,
-      .destination-name {
-        font-size: 110%;
+      #destinationSelect {
+        margin-inline-start: 13px;
       }
 
-      .destination-location,
-      :host([stale_]) .destination-info-wrapper {
-        opacity: 0.4;
+      #destination-status-wrapper,
+      #destination-status-wrapper div {
+        height: 100%;
+        min-height: 0;
       }
     </style>
-    <print-preview-settings-section class="multirow-controls">
+    <print-preview-settings-section>
       <span slot="title">$i18n{destinationLabel}</span>
       <div slot="controls">
-        <div class="throbber-container" hidden="[[!loadingDestination_]]">
+        <div class="throbber-container" hidden$="[[shouldHideSpinner_]]">
           <div class="throbber"></div>
-          <div class="destination-throbber-name"></div>
         </div>
-        <div class="destination-settings-box" hidden="[[loadingDestination_]]">
-          <img class="destination-icon"
-             src="[[destination.iconUrl]]" alt="">
-          <div class="destination-info-wrapper">
-            <div class="destination-name">[[destination.displayName]]</div>
-            <div class="destination-location">[[destination.hint]]</div>
-            <div class="destination-connection-status">
-              [[getStatusText_(destination.connectionStatusText,
-                  destination.shouldShowInvalidCertificateError)]]
-            </div>
-          </div>
-        </div>
-        <button
-          disabled$="[[shouldDisableButton_(destinationStore, disabled,
-                                            state)]]"
-          on-click="onChangeButtonClick_">
-          $i18n{changeDestination}
-        </button>
+        <print-preview-destination-select id="destinationSelect"
+            hidden$="[[!shouldHideSpinner_]]"
+            active-user="[[activeUser]]"
+            app-kiosk-mode="[[appKioskMode]]"
+            cloud-print-state="[[cloudPrintState]]"
+            destination="[[destination]]"
+            disabled="[[shouldDisableDropdown_(destinationStore, disabled,
+                                               shouldHideSpinner_, state)]]"
+            no-destinations-found="[[noDestinationsFound]]"
+            recent-destination-list="[[recentDestinationList_]]"
+            on-selected-option-change="onSelectedDestinationOptionChange_">
+        </print-preview-destination-select>
+      </div>
+    </print-preview-settings-section>
+    <print-preview-settings-section id="destination-status-wrapper"
+        hidden$="[[!statusText_]]">
+      <div slot="title"></div>
+      <div slot="controls">
+        <div class="destination-status">[[statusText_]]</div>
       </div>
     </print-preview-settings-section>
     <cr-lazy-render id="destinationDialog">
       <template>
         <print-preview-destination-dialog
+            cloud-print-state="[[cloudPrintState]]"
             destination-store="[[destinationStore]]"
             invitation-store="[[invitationStore]]"
-            recent-destinations="[[recentDestinations]]"
-            user-info="{{userInfo}}"
-            show-cloud-print-promo="{{showCloudPrintPromo_}}"
+            recent-destination-list="[[recentDestinationList_]]"
+            active-user="[[activeUser]]" users="[[users]]"
+            current-destination-account="[[destination.account]]"
             on-close="onDialogClose_">
         </print-preview-destination-dialog>
       </template>

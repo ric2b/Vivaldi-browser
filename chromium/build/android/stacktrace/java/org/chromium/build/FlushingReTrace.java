@@ -34,11 +34,21 @@ public class FlushingReTrace {
             // Eagerly match logcat prefix to avoid conflicting with the patterns below.
             LOGCAT_PREFIX
             + "(?:"
-            // Based on default ReTrace regex, but with "at" changed to to allow :
-            // E.g.: 06-22 13:58:02.895  4674  4674 E THREAD_STATE:     bLA.a(PG:173)
+            // Based on default ReTrace regex, but with whitespaces allowed in file:line parentheses
+            // and "at" changed to to allow :
+            // E.g.: 06-22 13:58:02.895  4674  4674 E THREAD_STATE:     bLA.a( PG : 173 )
             // Normal stack trace lines look like:
             // \tat org.chromium.chrome.browser.tab.Tab.handleJavaCrash(Tab.java:682)
-            + "(?:.*?(?::|\\bat)\\s+%c\\.%m\\s*\\(%s(?::%l)?\\))|"
+            + "(?:.*?(?::|\\bat)\\s+%c\\.%m\\s*\\(\\s*%s(?:\\s*:\\s*%l\\s*)?\\))|"
+            // E.g.: Caused by: java.lang.NullPointerException: Attempt to read from field 'int bLA'
+            // on a null object reference
+            + "(?:.*java\\.lang\\.NullPointerException.*[\"']%t\\s*%c\\.(?:%f|%m\\(%a\\))[\"'].*)|"
+            // E.g.: java.lang.VerifyError: bLA
+            + "(?:java\\.lang\\.VerifyError: %c)|"
+            // E.g.: java.lang.NoSuchFieldError: No instance field e of type L...; in class LbxK;
+            + "(?:java\\.lang\\.NoSuchFieldError: No instance field %f of type .*? in class L%C;)|"
+            // E.g.: Object of type Clazz was not destroyed... (See LifetimeAssert.java)
+            + "(?:.*?Object of type %c .*)|"
             // E.g.: VFY: unable to resolve new-instance 3810 (LSome/Framework/Class;) in Lfoo/Bar;
             + "(?:.*L%C;.*)|"
             // E.g.: END SomeTestClass#someMethod
@@ -50,6 +60,8 @@ public class FlushingReTrace {
             // Special-case for a common junit logcat message:
             // E.g.: java.lang.NoClassDefFoundError: SomeFrameworkClass in isTestClass for Foo
             + "(?:.* isTestClass for %c)|"
+            // E.g.: Caused by: java.lang.RuntimeException: Intentional Java Crash
+            + "(?:Caused by: %c:.*)|"
             // E.g.: java.lang.RuntimeException: Intentional Java Crash
             + "(?:%c:.*)|"
             // All lines that end with a class / class+method:
@@ -58,8 +70,8 @@ public class FlushingReTrace {
             // E.g.: NoClassDefFoundError: SomeFrameworkClass in isTestClass for Foo
             // E.g.: Could not find class 'SomeFrameworkClass', referenced from method Foo.bar
             // E.g.: Could not find method SomeFrameworkMethod, referenced from method Foo.bar
-            + "(?:.*(?:=|:\\s*|\\s+)%c\\.%m)|"
-            + "(?:.*(?:=|:\\s*|\\s+)%c)"
+            + "(?:.*(?:=|:\\s*|\\b)%c\\.%m)|"
+            + "(?:.*(?:=|:\\s*|\\b)%c)"
             + ")";
 
     private static void usage() {

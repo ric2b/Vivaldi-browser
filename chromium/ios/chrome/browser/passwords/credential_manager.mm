@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/passwords/credential_manager.h"
 
+#include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ios/chrome/browser/passwords/credential_manager_util.h"
 #include "ios/chrome/browser/passwords/js_credential_manager.h"
@@ -44,7 +45,8 @@ CredentialManager::~CredentialManager() {
 bool CredentialManager::HandleScriptCommand(const base::DictionaryValue& json,
                                             const GURL& origin_url,
                                             bool user_is_interacting,
-                                            bool is_main_frame) {
+                                            bool is_main_frame,
+                                            web::WebFrame* sender_frame) {
   if (!is_main_frame) {
     // Credentials manager is only supported on main frame.
     return false;

@@ -4,6 +4,7 @@
 
 #include "services/device/fingerprint/fingerprint_chromeos.h"
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -23,14 +24,14 @@ class FakeFingerprintObserver : public mojom::FingerprintObserver {
   // mojom::FingerprintObserver
   void OnRestarted() override { restarts_++; }
 
-  void OnEnrollScanDone(uint32_t scan_result,
+  void OnEnrollScanDone(device::mojom::ScanResult scan_result,
                         bool is_complete,
                         int percent_complete) override {
     enroll_scan_dones_++;
   }
 
   void OnAuthScanDone(
-      uint32_t scan_result,
+      device::mojom::ScanResult scan_result,
       const base::flat_map<std::string, std::vector<std::string>>& matches)
       override {
     auth_scan_dones_++;

@@ -19,10 +19,6 @@
 #include "ui/gfx/geometry/scroll_offset.h"
 #include "ui/gfx/transform.h"
 
-namespace gfx {
-class BoxF;
-}
-
 namespace cc {
 
 class AnimationHost;
@@ -31,8 +27,6 @@ class KeyframeEffect;
 class TransformOperations;
 enum class ElementListType;
 struct AnimationEvent;
-
-enum class UpdateTickingType { NORMAL, FORCE };
 
 // An ElementAnimations owns a list of all KeyframeEffects attached to a single
 // target (represented by an ElementId).
@@ -44,18 +38,17 @@ class CC_ANIMATION_EXPORT ElementAnimations
     : public AnimationTarget,
       public base::RefCounted<ElementAnimations> {
  public:
-  static scoped_refptr<ElementAnimations> Create();
+  static scoped_refptr<ElementAnimations> Create(AnimationHost* host,
+                                                 ElementId element_id);
+
+  bool AnimationHostIs(AnimationHost* host) const {
+    return animation_host_ == host;
+  }
+  void ClearAnimationHost() { animation_host_ = nullptr; }
 
   ElementId element_id() const { return element_id_; }
-  void SetElementId(ElementId element_id);
 
-  // Parent AnimationHost.
-  AnimationHost* animation_host() { return animation_host_; }
-  const AnimationHost* animation_host() const { return animation_host_; }
-  void SetAnimationHost(AnimationHost* host);
-
-  void InitAffectedElementTypes();
-  void ClearAffectedElementTypes();
+  void ClearAffectedElementTypes(const PropertyToElementIdMap& element_id_map);
 
   void ElementRegistered(ElementId element_id, ElementListType list_type);
   void ElementUnregistered(ElementId element_id, ElementListType list_type);
@@ -63,11 +56,6 @@ class CC_ANIMATION_EXPORT ElementAnimations
   void AddKeyframeEffect(KeyframeEffect* keyframe_effect);
   void RemoveKeyframeEffect(KeyframeEffect* keyframe_effect);
   bool IsEmpty() const;
-
-  typedef base::ObserverList<KeyframeEffect>::Unchecked KeyframeEffectsList;
-  const KeyframeEffectsList& keyframe_effects_list() const {
-    return keyframe_effects_list_;
-  }
 
   // Ensures that the list of active animations on the main thread and the impl
   // thread are kept in sync. This function does not take ownership of the impl
@@ -98,7 +86,6 @@ class CC_ANIMATION_EXPORT ElementAnimations
   void NotifyAnimationStarted(const AnimationEvent& event);
   void NotifyAnimationFinished(const AnimationEvent& event);
   void NotifyAnimationAborted(const AnimationEvent& event);
-  void NotifyAnimationPropertyUpdate(const AnimationEvent& event);
   void NotifyAnimationTakeover(const AnimationEvent& event);
 
   bool has_element_in_active_list() const {
@@ -118,9 +105,6 @@ class CC_ANIMATION_EXPORT ElementAnimations
     has_element_in_pending_list_ = has_element_in_pending_list;
   }
 
-  bool TransformAnimationBoundsForBox(const gfx::BoxF& box,
-                                      gfx::BoxF* bounds) const;
-
   bool HasOnlyTranslationTransforms(ElementListType list_type) const;
 
   bool AnimationsPreserveAxisAlignment() const;
@@ -138,8 +122,6 @@ class CC_ANIMATION_EXPORT ElementAnimations
   bool ScrollOffsetAnimationWasInterrupted() const;
 
   void SetNeedsPushProperties();
-  bool needs_push_properties() const { return needs_push_properties_; }
-
   void UpdateClientAnimationState();
 
   void NotifyClientFloatAnimated(float opacity,
@@ -150,10 +132,10 @@ class CC_ANIMATION_EXPORT ElementAnimations
                                   KeyframeModel* keyframe_model) override;
   void NotifyClientSizeAnimated(const gfx::SizeF& size,
                                 int target_property_id,
-                                KeyframeModel* keyframe_model) override{};
+                                KeyframeModel* keyframe_model) override {}
   void NotifyClientColorAnimated(SkColor color,
                                  int target_property_id,
-                                 KeyframeModel* keyframe_model) override{};
+                                 KeyframeModel* keyframe_model) override {}
   void NotifyClientTransformOperationsAnimated(
       const TransformOperations& operations,
       int target_property_id,
@@ -164,30 +146,49 @@ class CC_ANIMATION_EXPORT ElementAnimations
 
   gfx::ScrollOffset ScrollOffsetForAnimation() const;
 
+  // Returns a map of target property to the ElementId for that property, for
+  // KeyframeEffects associated with this ElementAnimations.
+  //
+  // This method makes the assumption that a given target property doesn't map
+  // to more than one ElementId. While conceptually this isn't true for
+  // cc/animations, it is true for the two current clients (ui/ and blink) and
+  // this is required to let BGPT ship (see http://crbug.com/912574).
+  PropertyToElementIdMap GetPropertyToElementIdMap() const;
+
+  unsigned int CountKeyframesForTesting() const;
+  KeyframeEffect* FirstKeyframeEffectForTesting() const;
+  bool HasKeyframeEffectForTesting(const KeyframeEffect* keyframe) const;
+
  private:
   friend class base::RefCounted<ElementAnimations>;
 
-  ElementAnimations();
+  ElementAnimations(AnimationHost* host, ElementId element_id);
   ~ElementAnimations() override;
 
+  void InitAffectedElementTypes();
+
   void OnFilterAnimated(ElementListType list_type,
-                        const FilterOperations& filters);
-  void OnOpacityAnimated(ElementListType list_type, float opacity);
+                        const FilterOperations& filters,
+                        KeyframeModel* keyframe_model);
+  void OnOpacityAnimated(ElementListType list_type,
+                         float opacity,
+                         KeyframeModel* keyframe_model);
   void OnTransformAnimated(ElementListType list_type,
-                           const gfx::Transform& transform);
+                           const gfx::Transform& transform,
+                           KeyframeModel* keyframe_model);
   void OnScrollOffsetAnimated(ElementListType list_type,
-                              const gfx::ScrollOffset& scroll_offset);
+                              const gfx::ScrollOffset& scroll_offset,
+                              KeyframeModel* keyframe_model);
 
   static TargetProperties GetPropertiesMaskForAnimationState();
 
-  void UpdateKeyframeEffectsTickingState(
-      UpdateTickingType update_ticking_type) const;
+  void UpdateKeyframeEffectsTickingState() const;
   void RemoveKeyframeEffectsFromTicking() const;
 
   bool KeyframeModelAffectsActiveElements(KeyframeModel* keyframe_model) const;
   bool KeyframeModelAffectsPendingElements(KeyframeModel* keyframe_model) const;
 
-  KeyframeEffectsList keyframe_effects_list_;
+  base::ObserverList<KeyframeEffect>::Unchecked keyframe_effects_list_;
   AnimationHost* animation_host_;
   ElementId element_id_;
 

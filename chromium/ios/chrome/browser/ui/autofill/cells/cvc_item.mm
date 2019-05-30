@@ -6,7 +6,7 @@
 
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/ui/text_field_styling.h"
@@ -145,8 +145,8 @@ const CGFloat kDateTextFieldWidth = 40;
     [_dateContainerView addSubview:_monthInput];
 
     _dateSeparator = [[UILabel alloc] init];
-    _dateSeparator.text = l10n_util::GetNSString(
-        IDS_AUTOFILL_CARD_UNMASK_EXPIRATION_DATE_SEPARATOR);
+    _dateSeparator.text =
+        l10n_util::GetNSString(IDS_AUTOFILL_EXPIRATION_DATE_SEPARATOR);
     _dateSeparator.translatesAutoresizingMaskIntoConstraints = NO;
     [_dateContainerView addSubview:_dateSeparator];
 

@@ -27,7 +27,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_WTF_COMPILER_H_
 
 #include "base/compiler_specific.h"
-#include "build/build_config.h"
 
 /* ==== Compiler features ==== */
 
@@ -39,34 +38,6 @@
 #else
 #define OBJC_CLASS class
 #endif
-#endif
-
-/* WTF_PRETTY_FUNCTION */
-
-#if defined(COMPILER_GCC)
-#define WTF_PRETTY_FUNCTION __PRETTY_FUNCTION__
-#elif defined(COMPILER_MSVC)
-#define WTF_PRETTY_FUNCTION __FUNCSIG__
-#else
-#define WTF_PRETTY_FUNCTION __func__
-#endif
-
-/* NO_SANITIZE_UNRELATED_CAST - Disable runtime checks related to casts between
- * unrelated objects (-fsanitize=cfi-unrelated-cast or -fsanitize=vptr). */
-
-#if defined(__clang__)
-#define NO_SANITIZE_UNRELATED_CAST \
-  __attribute__((no_sanitize("cfi-unrelated-cast", "vptr")))
-#define NO_SANITIZE_CFI_ICALL __attribute__((no_sanitize("cfi-icall")))
-#else
-#define NO_SANITIZE_UNRELATED_CAST
-#define NO_SANITIZE_CFI_ICALL
-#endif
-
-#if defined(COMPILER_MSVC)
-#define WTF_NOINLINE __declspec(noinline)
-#else
-#define WTF_NOINLINE __attribute__((noinline))
 #endif
 
 #endif /* WTF_Compiler_h */

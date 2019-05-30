@@ -24,9 +24,6 @@
 // Arguments passed to |webState:didFinishNavigation:|.
 @property(nonatomic, readonly)
     web::TestDidFinishNavigationInfo* didFinishNavigationInfo;
-// Arguments passed to |webState:didCommitNavigationWithDetails:|.
-@property(nonatomic, readonly)
-    web::TestCommitNavigationInfo* commitNavigationInfo;
 // Arguments passed to |webState:didLoadPageWithSuccess:|.
 @property(nonatomic, readonly) web::TestLoadPageInfo* loadPageInfo;
 // Arguments passed to |webState:didChangeLoadingProgress:|.
@@ -37,9 +34,6 @@
 // Arguments passed to |webStateDidChangeVisibleSecurityState:|.
 @property(nonatomic, readonly) web::TestDidChangeVisibleSecurityStateInfo*
     didChangeVisibleSecurityStateInfo;
-// Arguments passed to |webStateDidSuppressDialog:|.
-@property(nonatomic, readonly)
-    web::TestDidSuppressDialogInfo* didSuppressDialogInfo;
 // Arguments passed to |webState:didUpdateFaviconURLCandidates|.
 @property(nonatomic, readonly)
     web::TestUpdateFaviconUrlCandidatesInfo* updateFaviconUrlCandidatesInfo;

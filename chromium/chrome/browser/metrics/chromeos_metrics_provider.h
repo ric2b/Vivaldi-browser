@@ -10,7 +10,8 @@
 #include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/metrics/perf/perf_provider_chromeos.h"
+#include "chrome/browser/metrics/perf/profile_provider_chromeos.h"
+#include "components/metrics/metrics_log_uploader.h"
 #include "components/metrics/metrics_provider.h"
 
 namespace device {
@@ -40,7 +41,8 @@ class ChromeOSMetricsProvider : public metrics::MetricsProvider {
     ENROLLMENT_STATUS_MAX,
   };
 
-  ChromeOSMetricsProvider();
+  explicit ChromeOSMetricsProvider(
+      metrics::MetricsLogUploader::MetricServiceType service_type);
   ~ChromeOSMetricsProvider() override;
 
   static void RegisterPrefs(PrefRegistrySimple* registry);
@@ -67,8 +69,6 @@ class ChromeOSMetricsProvider : public metrics::MetricsProvider {
       metrics::SystemProfileProto* system_profile_proto) override;
   void ProvideStabilityMetrics(
       metrics::SystemProfileProto* system_profile_proto) override;
-  void ProvidePreviousSessionData(
-      metrics::ChromeUserMetricsExtension* uma_proto) override;
   void ProvideCurrentSessionData(
       metrics::ChromeUserMetricsExtension* uma_proto) override;
 
@@ -91,14 +91,8 @@ class ChromeOSMetricsProvider : public metrics::MetricsProvider {
   // Writes info about paired Bluetooth devices on this system.
   void WriteBluetoothProto(metrics::SystemProfileProto* system_profile_proto);
 
-  // Record the device enrollment status.
-  void RecordEnrollmentStatus();
-
-  // Record whether ARC is enabled or not for ARC capable devices.
-  void RecordArcState();
-
-  // For collecting systemwide perf data.
-  metrics::PerfProvider perf_provider_;
+  // For collecting systemwide performance data via the UMA channel.
+  std::unique_ptr<metrics::ProfileProvider> profile_provider_;
 
   // Bluetooth Adapter instance for collecting information about paired devices.
   scoped_refptr<device::BluetoothAdapter> adapter_;

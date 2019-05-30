@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="fa">
 <translation id="1055184225775184556">&amp;واگرد افزودن</translation>
+<translation id="1276145862619442150">شماره گیری سریع</translation>
 <translation id="1411638389238344450">ارسال پیوند از طریق ایمیل</translation>
 <translation id="1728549374069268714">جایگذاری و اجرا</translation>
 <translation id="1756026472674246267">گشودن پیوند در زبانه‌ی جدید</translation>
@@ -16,6 +17,7 @@
 <translation id="3027988479108856431">متأسفانه، تنظیمات Yandex در هنگام اجرای مرورگر در دسترس نیست. برای وارد کردن این تنظیمات به ویوالدی، کارهای خود را ذخیره و تمام پنجره‌های Yandex را ببندید. سپس بر روی ادامه کلیک کنید.</translation>
 <translation id="3259769196742189631">اعتبارسنجی</translation>
 <translation id="3270847123878663523">&amp;واگرد چینش</translation>
+<translation id="3334610655141903168">(بدون عنوان)</translation>
 <translation id="3402602684546832928">انتخاب پرونده‌ی نشانک Opera</translation>
 <translation id="3427342743765426898">ویرایش مجدد</translation>
 <translation id="3542768452570884558">گشودن پیوند در پنجره جدید</translation>
@@ -26,6 +28,7 @@
 <translation id="4044951018940382324">ویوالدی</translation>
 <translation id="4073157431025461511">&amp;مجدداً نشان نده</translation>
 <translation id="4074744496918018786">گشودن تصویر در پنجره‌ی خصوصی جدید</translation>
+<translation id="443008484043213881">ابزارها</translation>
 <translation id="4512900838580567989">باز کردن پیوند در زبانه‌ی پس‌زمینه‌ی جدید</translation>
 <translation id="4515472507709384008">Opera نسخه 15+</translation>
 <translation id="4548358047305717967">باز کردن &amp;تصویر در زبانه‌ی پس‌زمینه‌ی جدید</translation>
@@ -57,7 +60,6 @@
 <translation id="8197810018650377191">صفحه‌ی نشانک</translation>
 <translation id="8624587806981488221">&amp;بارگذاری مجدد تصویر</translation>
 <translation id="864444594187862076">Opera نسخه 15+ (Developer)</translation>
-<translation id="8647783768664050873">جهت بروزرسانی ویوالدی به نسخه‌ی $1 اینجا کلیک کنید.</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8773635261052182196">این اعلانات را دیگر مشاهده نخواهید کرد. مجدداً می‌توانید از طریق تنظیمات ویوالدی آن‌ها را فعال کنید.</translation>
 <translation id="8894900864683381599">افزودن پیوند به پنل وب</translation>

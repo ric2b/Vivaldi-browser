@@ -238,12 +238,14 @@ class WatchTimeReporterTest
     }
     void Initialize(bool is_mse, mojom::MediaURLScheme url_scheme) override {}
     void OnError(PipelineStatus status) override {}
+    void SetIsAdMedia() override {}
     void SetIsEME() override {}
     void SetTimeToMetadata(base::TimeDelta elapsed) override {}
     void SetTimeToFirstFrame(base::TimeDelta elapsed) override {}
     void SetTimeToPlayReady(base::TimeDelta elapsed) override {}
     void SetContainerName(
         container_names::MediaContainerName container_name) override {}
+    void AddBytesReceived(uint64_t bytes_received) override {}
 
    private:
     WatchTimeReporterTest* parent_;
@@ -785,6 +787,8 @@ TEST_P(WatchTimeReporterTest, WatchTimeReporterSecondaryProperties) {
       has_video_ ? kCodecH264 : kUnknownVideoCodec,
       has_audio_ ? "FirstAudioDecoder" : "",
       has_video_ ? "FirstVideoDecoder" : "",
+      has_audio_ ? EncryptionMode::kCenc : EncryptionMode::kUnencrypted,
+      has_video_ ? EncryptionMode::kCbcs : EncryptionMode::kUnencrypted,
       has_video_ ? gfx::Size(800, 600) : gfx::Size());
 
   // Get a pointer to our original properties since we're not allowed to use
@@ -1995,29 +1999,29 @@ TEST_P(MutedWatchTimeReporterTest, MutedDisplayType) {
   wtr_.reset();
 }
 
-INSTANTIATE_TEST_CASE_P(WatchTimeReporterTest,
-                        WatchTimeReporterTest,
-                        testing::ValuesIn({// has_video, has_audio
-                                           std::make_tuple(true, true),
-                                           // has_video
-                                           std::make_tuple(true, false),
-                                           // has_audio
-                                           std::make_tuple(false, true)}));
+INSTANTIATE_TEST_SUITE_P(WatchTimeReporterTest,
+                         WatchTimeReporterTest,
+                         testing::ValuesIn({// has_video, has_audio
+                                            std::make_tuple(true, true),
+                                            // has_video
+                                            std::make_tuple(true, false),
+                                            // has_audio
+                                            std::make_tuple(false, true)}));
 
 // Separate test set since display tests only work with video.
-INSTANTIATE_TEST_CASE_P(DisplayTypeWatchTimeReporterTest,
-                        DisplayTypeWatchTimeReporterTest,
-                        testing::ValuesIn({// has_video, has_audio
-                                           std::make_tuple(true, true),
-                                           // has_video
-                                           std::make_tuple(true, false)}));
+INSTANTIATE_TEST_SUITE_P(DisplayTypeWatchTimeReporterTest,
+                         DisplayTypeWatchTimeReporterTest,
+                         testing::ValuesIn({// has_video, has_audio
+                                            std::make_tuple(true, true),
+                                            // has_video
+                                            std::make_tuple(true, false)}));
 
 // Separate test set since muted tests only work with audio+video.
-INSTANTIATE_TEST_CASE_P(MutedWatchTimeReporterTest,
-                        MutedWatchTimeReporterTest,
-                        testing::ValuesIn({
-                            // has_video, has_audio
-                            std::make_tuple(true, true),
-                        }));
+INSTANTIATE_TEST_SUITE_P(MutedWatchTimeReporterTest,
+                         MutedWatchTimeReporterTest,
+                         testing::ValuesIn({
+                             // has_video, has_audio
+                             std::make_tuple(true, true),
+                         }));
 
 }  // namespace media

@@ -40,6 +40,8 @@ class SVGUseElement final : public SVGGraphicsElement,
 
  public:
   static SVGUseElement* Create(Document&);
+
+  explicit SVGUseElement(Document&);
   ~SVGUseElement() override;
 
   void InvalidateShadowTree();
@@ -62,8 +64,6 @@ class SVGUseElement final : public SVGGraphicsElement,
   void Trace(blink::Visitor*) override;
 
  private:
-  explicit SVGUseElement(Document&);
-
   void Dispose();
 
   FloatRect GetBBox() override;
@@ -105,10 +105,9 @@ class SVGUseElement final : public SVGGraphicsElement,
   void ClearInstanceRoot();
   Element* CreateInstanceTree(SVGElement& target_root) const;
   void ClearResourceReference();
-  bool HasCycleUseReferencing(SVGUseElement&,
-                              const ContainerNode& target_instance,
-                              SVGElement*& new_target) const;
-  bool ExpandUseElementsInShadowTree();
+  bool HasCycleUseReferencing(const ContainerNode& target_instance,
+                              const SVGElement& new_target) const;
+  void ExpandUseElementsInShadowTree();
   void CloneNonMarkupEventListeners();
   void AddReferencesToFirstDegreeNestedUseElements(SVGElement& target);
 

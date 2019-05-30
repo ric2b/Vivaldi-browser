@@ -10,6 +10,7 @@
 #include <sys/resource.h>
 #include <sys/wait.h>
 
+#include "base/clang_coverage_buildflags.h"
 #include "base/debug/activity_tracker.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
@@ -272,7 +273,7 @@ bool Process::CanBackgroundProcesses() {
 
 // static
 void Process::TerminateCurrentProcessImmediately(int exit_code) {
-#if defined(CLANG_COVERAGE)
+#if BUILDFLAG(CLANG_COVERAGE)
   WriteClangCoverageProfile();
 #endif
   _exit(exit_code);
@@ -337,6 +338,9 @@ bool Process::WaitForExit(int* exit_code) const {
 }
 
 bool Process::WaitForExitWithTimeout(TimeDelta timeout, int* exit_code) const {
+  // Intentionally avoid instantiating ScopedBlockingCallWithBaseSyncPrimitives.
+  // In some cases, this function waits on a child Process doing CPU work.
+  // http://crbug.com/905788
   if (!timeout.is_zero())
     internal::AssertBaseSyncPrimitivesAllowed();
 

@@ -17,7 +17,6 @@
 #include <vector>
 
 #include "base/command_line.h"
-#include "base/containers/hash_tables.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
@@ -205,7 +204,7 @@ void ContactDatabase::Vacuum() {
 }
 
 void ContactDatabase::TrimMemory(bool aggressively) {
-  db_.TrimMemory(aggressively);
+  db_.TrimMemory();
 }
 
 bool ContactDatabase::Raze() {

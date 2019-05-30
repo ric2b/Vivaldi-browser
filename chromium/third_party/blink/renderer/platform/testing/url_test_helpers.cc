@@ -43,7 +43,7 @@
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 
 namespace blink {
-namespace URLTestHelpers {
+namespace url_test_helpers {
 
 WebURL RegisterMockedURLLoadFromBase(const WebString& base_url,
                                      const WebString& base_path,
@@ -70,8 +70,8 @@ void RegisterMockedURLLoad(const WebURL& full_url,
 
   WebURLResponse response(full_url);
   response.SetMIMEType(mime_type);
-  response.SetHTTPHeaderField(HTTPNames::Content_Type, mime_type);
-  response.SetHTTPStatusCode(200);
+  response.SetHTTPHeaderField(http_names::kContentType, mime_type);
+  response.SetHttpStatusCode(200);
   response.SetLoadTiming(timing);
 
   RegisterMockedURLLoadWithCustomResponse(full_url, file_path, response);
@@ -83,8 +83,8 @@ void RegisterMockedErrorURLLoad(const WebURL& full_url) {
 
   WebURLResponse response;
   response.SetMIMEType("image/png");
-  response.SetHTTPHeaderField(HTTPNames::Content_Type, "image/png");
-  response.SetHTTPStatusCode(404);
+  response.SetHTTPHeaderField(http_names::kContentType, "image/png");
+  response.SetHttpStatusCode(404);
   response.SetLoadTiming(timing);
 
   ResourceError error = ResourceError::Failure(full_url);
@@ -103,5 +103,5 @@ void RegisterMockedURLUnregister(const WebURL& url) {
   Platform::Current()->GetURLLoaderMockFactory()->UnregisterURL(url);
 }
 
-}  // namespace URLTestHelpers
+}  // namespace url_test_helpers
 }  // namespace blink

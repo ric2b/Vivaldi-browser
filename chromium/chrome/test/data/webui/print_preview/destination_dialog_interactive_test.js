@@ -6,6 +6,7 @@ cr.define('destination_dialog_interactive_test', function() {
   /** @enum {string} */
   const TestNames = {
     FocusSearchBox: 'focus search box',
+    EscapeSearchBox: 'escape search box',
   };
 
   const suiteName = 'DestinationDialogInteractiveTest';
@@ -21,13 +22,16 @@ cr.define('destination_dialog_interactive_test', function() {
     let nativeLayer = null;
 
     /** @override */
+    suiteSetup(function() {
+      print_preview_test_utils.setupTestListenerElement();
+    });
+
+    /** @override */
     setup(function() {
       // Create destinations.
       nativeLayer = new print_preview.NativeLayerStub();
       print_preview.NativeLayer.setInstance(nativeLayer);
-      const userInfo = new print_preview.UserInfo();
-      destinationStore = new print_preview.DestinationStore(
-          userInfo, new WebUIListenerTracker());
+      destinationStore = print_preview_test_utils.createDestinationStore();
       const localDestinations = [];
       const destinations = print_preview_test_utils.getDestinations(
           nativeLayer, localDestinations);
@@ -41,9 +45,10 @@ cr.define('destination_dialog_interactive_test', function() {
 
       // Set up dialog
       dialog = document.createElement('print-preview-destination-dialog');
-      dialog.userInfo = userInfo;
+      dialog.activeUser = '';
+      dialog.users = [];
       dialog.destinationStore = destinationStore;
-      dialog.invitationStore = new print_preview.InvitationStore(userInfo);
+      dialog.invitationStore = new print_preview.InvitationStore();
       dialog.recentDestinations = recentDestinations;
       document.body.appendChild(dialog);
       return nativeLayer.whenCalled('getPrinterCapabilities');
@@ -58,6 +63,56 @@ cr.define('destination_dialog_interactive_test', function() {
       destinationStore.startLoadAllDestinations();
       dialog.show();
       return whenFocusDone;
+    });
+
+    // Tests that pressing the escape key while the search box is focused
+    // closes the dialog if and only if the query is empty.
+    test(assert(TestNames.EscapeSearchBox), function() {
+      const searchInput = dialog.$.searchBox.getSearchInput();
+      assertTrue(!!searchInput);
+      const whenFocusDone = test_util.eventToPromise('focus', searchInput);
+      destinationStore.startLoadAllDestinations();
+      dialog.show();
+      return whenFocusDone
+          .then(() => {
+            assertTrue(dialog.$.dialog.open);
+
+            // Put something in the search box.
+            const whenSearchChanged =
+                test_util.eventToPromise('search-changed', dialog.$.searchBox);
+            dialog.$.searchBox.setValue('query');
+            return whenSearchChanged;
+          })
+          .then(() => {
+            assertEquals('query', searchInput.value);
+
+            // Simulate escape
+            const whenKeyDown = test_util.eventToPromise('keydown', dialog);
+            MockInteractions.keyDownOn(searchInput, 19, [], 'Escape');
+            return whenKeyDown;
+          })
+          .then(() => {
+            // Dialog should still be open.
+            assertTrue(dialog.$.dialog.open);
+
+            // Clear the search box.
+            const whenSearchChanged =
+                test_util.eventToPromise('search-changed', dialog.$.searchBox);
+            dialog.$.searchBox.setValue('');
+            return whenSearchChanged;
+          })
+          .then(() => {
+            assertEquals('', searchInput.value);
+
+            // Simulate escape
+            const whenKeyDown = test_util.eventToPromise('keydown', dialog);
+            MockInteractions.keyDownOn(searchInput, 19, [], 'Escape');
+            return whenKeyDown;
+          })
+          .then(() => {
+            // Dialog is closed.
+            assertFalse(dialog.$.dialog.open);
+          });
     });
   });
 

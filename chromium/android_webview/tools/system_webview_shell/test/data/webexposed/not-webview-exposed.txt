@@ -1,11 +1,8 @@
-# speech api not enabled in webview, crbug.com/487255
+# speech synthesis api not enabled in webview
+# but speech recognition is enabled, crbug.com/487255
+interface SpeechSynthesisErrorEvent : SpeechSynthesisEvent
 interface SpeechSynthesisEvent : Event
 interface SpeechSynthesisUtterance : EventTarget
-interface webkitSpeechGrammar
-interface webkitSpeechGrammarList
-interface webkitSpeechRecognition : EventTarget
-interface webkitSpeechRecognitionError : Event
-interface webkitSpeechRecognitionEvent : Event
 
 # permissions api not enabled in webview, crbug.com/490120
 interface PermissionStatus : EventTarget
@@ -16,9 +13,10 @@ interface Notification : EventTarget
 
 # web payments api not enabled in webiew, crbug.com/667069
 interface PaymentAddress
+interface PaymentMethodChangeEvent : PaymentRequestUpdateEvent
 interface PaymentRequest : EventTarget
 interface PaymentRequestUpdateEvent : Event
-interface PaymentResponse
+interface PaymentResponse : EventTarget
 
 # not yet supported in webview and chrome on android in general, crbug.com/154571
 interface SharedWorker : EventTarget
@@ -56,14 +54,19 @@ interface HTMLMediaElement : HTMLElement
     getter remote                      # crbug.com/521319
 
 # permissions API (crbug.com/490120), presentation API (crbug.com/521319),
-# share API (crbug.com/765923) and custom scheme handlers (crbug.com/589502)
-# not supported in webview
+# share API (crbug.com/765923), custom scheme handlers (crbug.com/589502)
+# and media session API (crbug.com/925997) are not supported in webview.
 interface Navigator
+    getter mediaSession                # crbug.com/925997
     getter permissions                 # crbug.com/490120
     getter presentation                # crbug.com/521319
     method registerProtocolHandler     # crbug.com/589502
     method unregisterProtocolHandler   # crbug.com/589502
     method share                       # crbug.com/765923
+
+# Media Session API is not enabled in Android WebView (crbug.com/925997)
+interface MediaMetadata
+interface MediaSession
 
 # notifications not yet supported in webview, crbug.com/551446
 interface ServiceWorkerRegistration : EventTarget
@@ -87,6 +90,7 @@ interface AuthenticatorResponse
 interface AuthenticatorAttestationResponse : AuthenticatorResponse
 
 # Picture-in-Picture API is disabled in Android WebView, crbug.com/852449
+interface EnterPictureInPictureEvent : Event
 interface PictureInPictureWindow : EventTarget
 interface Document : Node
     method exitPictureInPicture
@@ -102,6 +106,31 @@ interface HTMLVideoElement : HTMLMediaElement
     setter onenterpictureinpicture
     getter onleavepictureinpicture
     setter onleavepictureinpicture
+
+# Background Fetch API is not enabled in Android webview, crbug.com/766077
+interface BackgroundFetchManager
+    method fetch
+    method get
+    method getIds
+interface BackgroundFetchRecord
+    getter request
+    getter responseReady
+interface BackgroundFetchRegistration : EventTarget
+    getter downloadTotal
+    getter downloaded
+    getter failureReason
+    getter id
+    getter onprogress
+    getter recordsAvailable
+    getter result
+    getter uploadTotal
+    getter uploaded
+    method abort
+    method match
+    method matchAll
+    setter onprogress
+interface ServiceWorkerRegistration : EventTarget
+    getter backgroundFetch
 
 # support_webgl2_compute_context not supported on android, crbug.com/865569
 interface WebGL2ComputeRenderingContext

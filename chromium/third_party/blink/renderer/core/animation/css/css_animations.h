@@ -140,7 +140,7 @@ class CSSAnimations final {
   };
 
   struct RunningTransition {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+    DISALLOW_NEW();
 
    public:
     void Trace(blink::Visitor* visitor) { visitor->Trace(animation); }
@@ -239,6 +239,8 @@ class CSSAnimations final {
     void Trace(blink::Visitor*) override;
 
    private:
+    void EnqueueEvent(const WTF::AtomicString& type, double elapsed_time);
+
     const Element& TransitionTarget() const { return *transition_target_; }
     EventTarget* GetEventTarget() const;
     PseudoId GetPseudoId() const { return transition_target_->GetPseudoId(); }

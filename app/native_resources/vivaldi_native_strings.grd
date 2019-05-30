@@ -60,6 +60,22 @@
     <output filename="vivaldi_native_strings_vi.pak" type="data_package" lang="vi" />
     <output filename="vivaldi_native_strings_zh-CN.pak" type="data_package" lang="zh-CN" />
     <output filename="vivaldi_native_strings_zh-TW.pak" type="data_package" lang="zh-TW" />
+    <output filename="vivaldi_native_strings_be.pak" type="data_package" lang="be" />
+    <output filename="vivaldi_native_strings_eo.pak" type="data_package" lang="eo" />
+    <output filename="vivaldi_native_strings_es-PE.pak" type="data_package" lang="es-PE" />
+    <output filename="vivaldi_native_strings_eu.pak" type="data_package" lang="eu" />
+    <output filename="vivaldi_native_strings_fy.pak" type="data_package" lang="fy" />
+    <output filename="vivaldi_native_strings_gl.pak" type="data_package" lang="gl" />
+    <output filename="vivaldi_native_strings_hy.pak" type="data_package" lang="hy" />
+    <output filename="vivaldi_native_strings_io.pak" type="data_package" lang="io" />
+    <output filename="vivaldi_native_strings_is.pak" type="data_package" lang="is" />
+    <output filename="vivaldi_native_strings_jbo.pak" type="data_package" lang="jbo" />
+    <output filename="vivaldi_native_strings_ka.pak" type="data_package" lang="ka" />
+    <output filename="vivaldi_native_strings_ku.pak" type="data_package" lang="ku" />
+    <output filename="vivaldi_native_strings_mk.pak" type="data_package" lang="mk" />
+    <output filename="vivaldi_native_strings_sc.pak" type="data_package" lang="sc" />
+    <output filename="vivaldi_native_strings_sq.pak" type="data_package" lang="sq" />
+    <output filename="vivaldi_native_strings_nn.pak" type="data_package" lang="nn" />
   </outputs>
   <translations>
     <file path="strings/vivaldi_native_strings_am.xtb" lang="am" />
@@ -145,6 +161,21 @@
         <message name="IDS_CONTENT_CONTEXT_PASTE_AND_GO" desc="The name of the 'Paste and go'command in the content area context menu">
           Paste and go
         </message>
+        <message name="IDS_EXIT_CONFIRMATION_WARNING_TITLE" desc="The title of the exit confirmation dialog">
+          Confirm exit
+        </message>
+        <message name="IDS_EXIT_CONFIRMATION_WARNING" desc="The contents of the exit confirmation dialog">
+          Do you really want to exit Vivaldi?
+        </message>
+        <message name="IDS_EXIT_CONFIRMATION_DONOTSHOW" desc="The checkbox to disable the exit confirmation dialog">
+          Do not show confirmation again
+        </message>
+        <message name="IDS_WINDOW_CLOSE_CONFIRMATION_WARNING_TITLE" desc="The title of the window close confirmation dialog">
+          Confirm window close
+        </message>
+        <message name="IDS_WINDOW_CLOSE_CONFIRMATION_WARNING" desc="The contents of the window close confirmation dialog">
+          Do you really want to close this window?
+        </message>
       </if>
 
       <if expr="use_titlecase">
@@ -156,6 +187,21 @@
         </message>
         <message name="IDS_CONTENT_CONTEXT_PASTE_AND_GO" desc="In Title Case: The name of the 'Paste and go'command in the content area context menu">
           Paste and Go
+        </message>
+        <message name="IDS_EXIT_CONFIRMATION_WARNING_TITLE" desc="In Title Case: The title of the exit confirmation dialog">
+          Confirm Exit
+        </message>
+        <message name="IDS_EXIT_CONFIRMATION_WARNING" desc="In Title Case: The contents of the exit confirmation dialog">
+          Do You Really Want To Exit Vivaldi?
+        </message>
+        <message name="IDS_EXIT_CONFIRMATION_DONOTSHOW" desc="In Title Case: The checkbox to disable the exit confirmation dialog">
+          Do Not Show Confirmation Again
+        </message>
+        <message name="IDS_WINDOW_CLOSE_CONFIRMATION_WARNING_TITLE" desc="In Title Case: The title of the window close confirmation dialog">
+          Confirm Window Close
+        </message>
+        <message name="IDS_WINDOW_CLOSE_CONFIRMATION_WARNING" desc="In Title Case: The contents of the window close confirmation dialog">
+          Do You Really Want To Close This Window?
         </message>
       </if>
 

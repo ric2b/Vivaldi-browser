@@ -9,7 +9,7 @@
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_button.h"
+#include "ash/shelf/shelf_app_button.h"
 #include "ash/shelf/shelf_view_test_api.h"
 #include "ash/shell.h"
 #include "base/macros.h"
@@ -39,6 +39,7 @@
 #include "ui/display/types/display_constants.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/test/event_generator.h"
+#include "ui/views/animation/ink_drop.h"
 
 namespace mojo {
 
@@ -330,7 +331,7 @@ IN_PROC_BROWSER_TEST_F(ArcAppDeferredLauncherBrowserTest,
 
   controller->FlushForTesting();
 
-  ash::ShelfButton* const button = test_api.GetButton(item_index);
+  ash::ShelfAppButton* const button = test_api.GetButton(item_index);
   ASSERT_TRUE(button);
 
   views::InkDrop* const ink_drop = button->GetInkDropForTesting();
@@ -443,9 +444,9 @@ IN_PROC_BROWSER_TEST_P(ArcAppDeferredLauncherWithParamsBrowserTest,
   }
 }
 
-INSTANTIATE_TEST_CASE_P(ArcAppDeferredLauncherWithParamsBrowserTestInstance,
-                        ArcAppDeferredLauncherWithParamsBrowserTest,
-                        ::testing::ValuesIn(build_test_parameter));
+INSTANTIATE_TEST_SUITE_P(ArcAppDeferredLauncherWithParamsBrowserTestInstance,
+                         ArcAppDeferredLauncherWithParamsBrowserTest,
+                         ::testing::ValuesIn(build_test_parameter));
 
 // This tests validates pin state on package update and remove.
 IN_PROC_BROWSER_TEST_F(ArcAppLauncherBrowserTest, PinOnPackageUpdateAndRemove) {

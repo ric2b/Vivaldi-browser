@@ -18,7 +18,7 @@ class CustomElementRegistry;
 
 // Implement CustomElementDefinitionBuilder to provide
 // technology-specific steps for CustomElementRegistry.define.
-// https://html.spec.whatwg.org/multipage/scripting.html#dom-customelementsregistry-define
+// https://html.spec.whatwg.org/C/#dom-customelementsregistry-define
 class CORE_EXPORT CustomElementDefinitionBuilder {
   STACK_ALLOCATED();
 
@@ -34,10 +34,6 @@ class CORE_EXPORT CustomElementDefinitionBuilder {
   // Check the constructor is not already registered in the calling
   // registry. Return false if processing should not proceed.
   virtual bool CheckConstructorNotRegistered() = 0;
-
-  // Checking the prototype may destroy the window. Return false if
-  // processing should not proceed.
-  virtual bool CheckPrototype() = 0;
 
   // Cache properties for build to use. Return false if processing
   // should not proceed.

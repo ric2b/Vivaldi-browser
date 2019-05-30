@@ -35,6 +35,7 @@ BookmarkLocalChangesBuilder::BuildCommitRequests(size_t max_entries) const {
   std::vector<syncer::CommitRequestData> commit_requests;
   for (const SyncedBookmarkTracker::Entity* entity :
        entities_with_local_changes) {
+    DCHECK(entity);
     DCHECK(entity->IsUnsynced());
     const sync_pb::EntityMetadata* metadata = entity->metadata();
 
@@ -59,14 +60,12 @@ BookmarkLocalChangesBuilder::BuildCommitRequests(size_t max_entries) const {
       // 2. Bookmarks (maybe ancient legacy bookmarks only?) use/used |name| to
       //    encode the title.
       data.is_folder = node->is_folder();
-      // TODO(crbug.com/516866): Set the non_unique_name similar to directory
-      // implementation.
-      // https://cs.chromium.org/chromium/src/components/sync/syncable/write_node.cc?l=41&rcl=1675007db1e0eb03417e81442688bb11cd181f58
-      data.non_unique_name = base::UTF16ToUTF8(node->GetTitle());
       data.unique_position = metadata->unique_position();
       // Assign specifics only for the non-deletion case. In case of deletion,
       // EntityData should contain empty specifics to indicate deletion.
-      data.specifics = CreateSpecificsFromBookmarkNode(node, bookmark_model_);
+      data.specifics = CreateSpecificsFromBookmarkNode(
+          node, bookmark_model_, /*force_favicon_load=*/true);
+      data.non_unique_name = data.specifics.bookmark().title();
     }
     request.entity = data.PassToPtr();
     request.sequence_number = metadata->sequence_number();

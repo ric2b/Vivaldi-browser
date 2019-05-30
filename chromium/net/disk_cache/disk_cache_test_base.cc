@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -120,16 +121,32 @@ void DiskCacheTestWithCache::SetTestMode() {
   cache_impl_->SetUnitTestMode();
 }
 
-void DiskCacheTestWithCache::SetMaxSize(int size) {
+void DiskCacheTestWithCache::SetMaxSize(int64_t size, bool should_succeed) {
   size_ = size;
   if (simple_cache_impl_)
-    EXPECT_TRUE(simple_cache_impl_->SetMaxSize(size));
+    EXPECT_EQ(should_succeed, simple_cache_impl_->SetMaxSize(size));
 
   if (cache_impl_)
-    EXPECT_TRUE(cache_impl_->SetMaxSize(size));
+    EXPECT_EQ(should_succeed, cache_impl_->SetMaxSize(size));
 
   if (mem_cache_)
-    EXPECT_TRUE(mem_cache_->SetMaxSize(size));
+    EXPECT_EQ(should_succeed, mem_cache_->SetMaxSize(size));
+}
+
+int DiskCacheTestWithCache::OpenOrCreateEntry(
+    const std::string& key,
+    disk_cache::EntryWithOpened* entry_struct) {
+  return OpenOrCreateEntryWithPriority(key, net::HIGHEST, entry_struct);
+}
+
+int DiskCacheTestWithCache::OpenOrCreateEntryWithPriority(
+    const std::string& key,
+    net::RequestPriority request_priority,
+    disk_cache::EntryWithOpened* entry_struct) {
+  net::TestCompletionCallback cb;
+  int rv = cache_->OpenOrCreateEntry(key, request_priority, entry_struct,
+                                     cb.callback());
+  return cb.GetResult(rv);
 }
 
 int DiskCacheTestWithCache::OpenEntry(const std::string& key,
@@ -185,18 +202,18 @@ int DiskCacheTestWithCache::DoomEntriesSince(const base::Time initial_time) {
   return cb.GetResult(rv);
 }
 
-int DiskCacheTestWithCache::CalculateSizeOfAllEntries() {
-  net::TestCompletionCallback cb;
-  int rv = cache_->CalculateSizeOfAllEntries(cb.callback());
+int64_t DiskCacheTestWithCache::CalculateSizeOfAllEntries() {
+  net::TestInt64CompletionCallback cb;
+  int64_t rv = cache_->CalculateSizeOfAllEntries(cb.callback());
   return cb.GetResult(rv);
 }
 
-int DiskCacheTestWithCache::CalculateSizeOfEntriesBetween(
+int64_t DiskCacheTestWithCache::CalculateSizeOfEntriesBetween(
     const base::Time initial_time,
     const base::Time end_time) {
-  net::TestCompletionCallback cb;
-  int rv = cache_->CalculateSizeOfEntriesBetween(initial_time, end_time,
-                                                 cb.callback());
+  net::TestInt64CompletionCallback cb;
+  int64_t rv = cache_->CalculateSizeOfEntriesBetween(initial_time, end_time,
+                                                     cb.callback());
   return cb.GetResult(rv);
 }
 

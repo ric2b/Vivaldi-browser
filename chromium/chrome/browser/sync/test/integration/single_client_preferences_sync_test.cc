@@ -3,8 +3,13 @@
 // found in the LICENSE file.
 
 #include "base/macros.h"
+#include "base/strings/stringprintf.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/values.h"
+#include "build/build_config.h"
+#include "chrome/browser/sync/test/integration/feature_toggler.h"
 #include "chrome/browser/sync/test/integration/preferences_helper.h"
+#include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
 #include "chrome/common/pref_names.h"
@@ -12,6 +17,7 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_service.h"
+#include "components/sync/driver/sync_driver_switches.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 using preferences_helper::BooleanPrefMatches;
@@ -24,16 +30,18 @@ using testing::NotNull;
 
 namespace {
 
-class SingleClientPreferencesSyncTest : public SyncTest {
+class SingleClientPreferencesSyncTest : public FeatureToggler, public SyncTest {
  public:
-  SingleClientPreferencesSyncTest() : SyncTest(SINGLE_CLIENT) {}
+  SingleClientPreferencesSyncTest()
+      : FeatureToggler(switches::kSyncPseudoUSSPreferences),
+        SyncTest(SINGLE_CLIENT) {}
   ~SingleClientPreferencesSyncTest() override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SingleClientPreferencesSyncTest);
 };
 
-IN_PROC_BROWSER_TEST_F(SingleClientPreferencesSyncTest, Sanity) {
+IN_PROC_BROWSER_TEST_P(SingleClientPreferencesSyncTest, Sanity) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(BooleanPrefMatches(prefs::kHomePageIsNewTabPage));
   ChangeBooleanPref(0, prefs::kHomePageIsNewTabPage);
@@ -43,7 +51,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientPreferencesSyncTest, Sanity) {
 
 // This test simply verifies that preferences registered after sync started
 // get properly synced.
-IN_PROC_BROWSER_TEST_F(SingleClientPreferencesSyncTest, LateRegistration) {
+IN_PROC_BROWSER_TEST_P(SingleClientPreferencesSyncTest, LateRegistration) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   PrefRegistrySyncable* registry = GetRegistry(GetProfile(0));
   const std::string pref_name = "testing.my-test-preference";
@@ -64,8 +72,16 @@ IN_PROC_BROWSER_TEST_F(SingleClientPreferencesSyncTest, LateRegistration) {
   EXPECT_FALSE(BooleanPrefMatches(pref_name.c_str()));
 }
 
-IN_PROC_BROWSER_TEST_F(SingleClientPreferencesSyncTest,
-                       ShouldRemoveBadDataWhenRegistering) {
+// Flaky on Windows. https://crbug.com/930482
+#if defined(OS_WIN)
+#define MAYBE_ShouldRemoveBadDataWhenRegistering \
+  DISABLED_ShouldRemoveBadDataWhenRegistering
+#else
+#define MAYBE_ShouldRemoveBadDataWhenRegistering \
+  ShouldRemoveBadDataWhenRegistering
+#endif
+IN_PROC_BROWSER_TEST_P(SingleClientPreferencesSyncTest,
+                       MAYBE_ShouldRemoveBadDataWhenRegistering) {
   // Populate the data store with data of type boolean but register as string.
   SetPreexistingPreferencesFileContents(
       0, "{\"testing\":{\"my-test-preference\":true}}");
@@ -90,5 +106,82 @@ IN_PROC_BROWSER_TEST_F(SingleClientPreferencesSyncTest,
   const base::Value* result;
   EXPECT_FALSE(pref_store->GetValue("testing.my-test-preference", &result));
 }
+
+// Regression test to verify that pagination during GetUpdates() contributes
+// properly to UMA histograms.
+IN_PROC_BROWSER_TEST_P(SingleClientPreferencesSyncTest,
+                       EmitModelTypeEntityChangeToUma) {
+  const int kNumEntities = 17;
+
+  fake_server_->SetMaxGetUpdatesBatchSize(7);
+
+  sync_pb::EntitySpecifics specifics;
+  for (int i = 0; i < kNumEntities; i++) {
+    specifics.mutable_preference()->set_name(base::StringPrintf("pref%d", i));
+    fake_server_->InjectEntity(
+        syncer::PersistentUniqueClientEntity::CreateFromSpecificsForTesting(
+            /*non_unique_name=*/"",
+            /*client_tag=*/specifics.preference().name(), specifics,
+            /*creation_time=*/0, /*last_modified_time=*/0));
+  }
+
+  base::HistogramTester histogram_tester;
+  ASSERT_TRUE(SetupSync());
+  EXPECT_EQ(kNumEntities, histogram_tester.GetBucketCount(
+                              "Sync.ModelTypeEntityChange3.PREFERENCE",
+                              /*REMOTE_INITIAL_UPDATE=*/5));
+}
+
+IN_PROC_BROWSER_TEST_P(SingleClientPreferencesSyncTest,
+                       PRE_PersistProgressMarkerOnRestart) {
+  sync_pb::EntitySpecifics specifics;
+  specifics.mutable_preference()->set_name("testing.my-test-preference");
+  fake_server_->InjectEntity(
+      syncer::PersistentUniqueClientEntity::CreateFromSpecificsForTesting(
+          /*non_unique_name=*/"",
+          /*client_tag=*/specifics.preference().name(), specifics,
+          /*creation_time=*/0,
+          /*last_modified_time=*/0));
+
+  base::HistogramTester histogram_tester;
+  ASSERT_TRUE(SetupSync());
+  EXPECT_EQ(1, histogram_tester.GetBucketCount(
+                   "Sync.ModelTypeEntityChange3.PREFERENCE",
+                   /*REMOTE_INITIAL_UPDATE=*/5));
+}
+
+IN_PROC_BROWSER_TEST_P(SingleClientPreferencesSyncTest,
+                       PersistProgressMarkerOnRestart) {
+  sync_pb::EntitySpecifics specifics;
+  specifics.mutable_preference()->set_name("testing.my-test-preference");
+  fake_server_->InjectEntity(
+      syncer::PersistentUniqueClientEntity::CreateFromSpecificsForTesting(
+          /*non_unique_name=*/"",
+          /*client_tag=*/specifics.preference().name(), specifics,
+          /*creation_time=*/0,
+          /*last_modified_time=*/0));
+
+  base::HistogramTester histogram_tester;
+  ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
+#if defined(CHROMEOS)
+  // identity::SetRefreshTokenForPrimaryAccount() is needed on ChromeOS in order
+  // to get a non-empty refresh token on startup.
+  GetClient(0)->SignInPrimaryAccount();
+#endif  // defined(CHROMEOS)
+  ASSERT_TRUE(GetClient(0)->AwaitEngineInitialization());
+
+  // After restart, the last sync cycle snapshot should be empty.
+  // Once a sync request happened (e.g. by a poll), that snapshot is populated.
+  // We use the following checker to simply wait for an non-empty snapshot.
+  EXPECT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
+
+  EXPECT_EQ(0, histogram_tester.GetBucketCount(
+                   "Sync.ModelTypeEntityChange3.PREFERENCE",
+                   /*REMOTE_INITIAL_UPDATE=*/5));
+}
+
+INSTANTIATE_TEST_SUITE_P(USS,
+                         SingleClientPreferencesSyncTest,
+                         ::testing::Values(false, true));
 
 }  // namespace

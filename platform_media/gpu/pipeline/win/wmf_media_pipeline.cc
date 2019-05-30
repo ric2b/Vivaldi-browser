@@ -13,6 +13,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/stl_util.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -266,7 +267,7 @@ WMFMediaPipeline::~WMFMediaPipeline() {
   media_pipeline_task_runner_->DeleteSoon(FROM_HERE, threaded_impl_.release());
   if (byte_stream_)
     byte_stream_->Stop();
-};
+}
 
 void WMFMediaPipeline::Initialize(const std::string& mime_type,
                                   const InitializeCB& initialize_cb) {
@@ -523,6 +524,8 @@ void WMFMediaPipeline::ThreadedImpl::Initialize(
 void WMFMediaPipeline::ThreadedImpl::ReadData(PlatformMediaDataType type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__;
+
   // We might have some data ready to send.
   if (pending_decoded_data_[type]) {
     scoped_refptr<DataBuffer> decoded_data = pending_decoded_data_[type];
@@ -551,6 +554,8 @@ void WMFMediaPipeline::ThreadedImpl::OnReadSample(
     DWORD stream_index,
     const Microsoft::WRL::ComPtr<IMFSample>& sample) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << ", status: " << (int)status;
 
   PlatformMediaDataType media_type =
       PlatformMediaDataType::PLATFORM_MEDIA_AUDIO;
@@ -632,6 +637,8 @@ void WMFMediaPipeline::ThreadedImpl::OnReadSample(
 
 scoped_refptr<DataBuffer>
 WMFMediaPipeline::ThreadedImpl::CreateDataBufferFromMemory(IMFSample* sample) {
+  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__;
+
   // Get a pointer to the IMFMediaBuffer in the sample.
   Microsoft::WRL::ComPtr<IMFMediaBuffer> output_buffer;
   HRESULT hr = sample->ConvertToContiguousBuffer(output_buffer.GetAddressOf());
@@ -662,6 +669,8 @@ WMFMediaPipeline::ThreadedImpl::CreateDataBufferFromMemory(IMFSample* sample) {
 scoped_refptr<DataBuffer> WMFMediaPipeline::ThreadedImpl::CreateDataBuffer(
     IMFSample* sample,
     PlatformMediaDataType media_type) {
+  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__;
+
   scoped_refptr<DataBuffer> data_buffer;
 
   data_buffer = CreateDataBufferFromMemory(sample);
@@ -958,6 +967,8 @@ bool WMFMediaPipeline::ThreadedImpl::CreateSourceReaderCallbackAndAttributes(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!source_reader_callback_.Get());
 
+  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__;
+
   source_reader_callback_ = new SourceReaderCallback(BindToCurrentLoop(
       base::Bind(&WMFMediaPipeline::ThreadedImpl::OnReadSample,
                  weak_ptr_factory_.GetWeakPtr())));
@@ -1077,8 +1088,10 @@ bool WMFMediaPipeline::ThreadedImpl::ConfigureSourceReader() {
   DCHECK(source_reader_worker_.hasReader());
 
   static const PlatformMediaDataType media_types[] = {
-      PlatformMediaDataType::PLATFORM_MEDIA_AUDIO, PlatformMediaDataType::PLATFORM_MEDIA_VIDEO};
-  static_assert(arraysize(media_types) == PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT,
+      PlatformMediaDataType::PLATFORM_MEDIA_AUDIO,
+      PlatformMediaDataType::PLATFORM_MEDIA_VIDEO};
+  static_assert(base::size(media_types) ==
+                    PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT,
                 "Not all media types chosen to be configured.");
 
   bool status = false;

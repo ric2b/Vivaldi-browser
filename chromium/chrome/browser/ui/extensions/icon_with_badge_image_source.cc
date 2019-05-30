@@ -33,19 +33,13 @@ gfx::ImageSkiaRep ScaleImageSkiaRep(const gfx::ImageSkiaRep& rep,
                                     float target_scale) {
   int width_px = target_width_dp * target_scale;
   return gfx::ImageSkiaRep(
-      skia::ImageOperations::Resize(rep.sk_bitmap(),
+      skia::ImageOperations::Resize(rep.GetBitmap(),
                                     skia::ImageOperations::RESIZE_BEST,
                                     width_px, width_px),
       target_scale);
 }
 
 float GetBlockedActionBadgeRadius() {
-#if defined(OS_MACOSX)
-  // Cocoa. Note: this doesn't look great on Cocoa. But runtime host
-  // permissions are expected to be launched after MacViews for top-chrome.
-  if (!base::FeatureList::IsEnabled(features::kViewsBrowserWindows))
-    return 11.4f;
-#endif
   return 12.0f;
 }
 
@@ -88,7 +82,7 @@ void IconWithBadgeImageSource::Draw(gfx::Canvas* canvas) {
         rep, ExtensionAction::ActionIconSize(), canvas->image_scale()));
   }
   if (grayscale_)
-    skia = gfx::ImageSkiaOperations::CreateHSLShiftedImage(skia, {-1, 0, 0.75});
+    skia = gfx::ImageSkiaOperations::CreateHSLShiftedImage(skia, {-1, 0, 0.6});
 
   int x_offset =
       std::floor((size().width() - ExtensionAction::ActionIconSize()) / 2.0);
@@ -130,8 +124,7 @@ void IconWithBadgeImageSource::PaintBadge(gfx::Canvas* canvas) {
   for (size_t i = 0; i < kMaxIncrementAttempts; ++i) {
     int w = 0;
     int h = 0;
-    gfx::FontList bigger_font =
-        base_font.Derive(1, 0, gfx::Font::Weight::NORMAL);
+    gfx::FontList bigger_font = base_font.Derive(1, 0, gfx::Font::Weight::BOLD);
     gfx::Canvas::SizeStringInt(utf16_text, bigger_font, &w, &h, 0,
                                gfx::Canvas::NO_ELLIPSIS);
     if (h > kBadgeHeight)

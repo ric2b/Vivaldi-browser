@@ -30,6 +30,10 @@ std::unique_ptr<service_manager::Connector> CreateConnector() {
   return service_manager::Connector::Create(&request);
 }
 
+std::string DummyGetSessionId(std::string /* audio_group_id */) {
+  return "";
+}
+
 }  // namespace
 
 namespace chromecast {
@@ -109,6 +113,7 @@ class MockCastAudioManager : public CastAudioManager {
             nullptr,
             base::BindRepeating(&MockCastAudioManager::GetCmaBackendFactory,
                                 base::Unretained(this)),
+            base::BindRepeating(&DummyGetSessionId),
             media_task_runner,
             media_task_runner,
             connector,
@@ -274,7 +279,7 @@ TEST_F(CastAudioMixerTest, MultiStreamCycle) {
   std::vector<std::unique_ptr<MockAudioSourceCallback>> sources(streams.size());
   std::generate(streams.begin(), streams.end(),
                 [this] { return CreateMixerStream(); });
-  std::generate(sources.begin(), sources.end(), [this] {
+  std::generate(sources.begin(), sources.end(), [] {
     return std::unique_ptr<MockAudioSourceCallback>(
         new StrictMock<MockAudioSourceCallback>());
   });

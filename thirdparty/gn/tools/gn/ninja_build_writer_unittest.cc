@@ -4,15 +4,67 @@
 
 #include <sstream>
 
+#include "base/command_line.h"
+#include "base/files/file_util.h"
 #include "tools/gn/ninja_build_writer.h"
 #include "tools/gn/pool.h"
 #include "tools/gn/scheduler.h"
+#include "tools/gn/switches.h"
 #include "tools/gn/target.h"
 #include "tools/gn/test_with_scheduler.h"
 #include "tools/gn/test_with_scope.h"
 #include "util/test/test.h"
 
 using NinjaBuildWriterTest = TestWithScheduler;
+
+class ScopedDotGNFile {
+ public:
+  ScopedDotGNFile(const base::FilePath& path)
+      : path_(path),
+        file_(path, base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE) {
+    EXPECT_TRUE(file_.IsValid());
+  }
+  ~ScopedDotGNFile() {
+    file_.Close();
+    base::DeleteFile(path_, false);
+  }
+
+ private:
+  base::FilePath path_;
+  base::File file_;
+};
+
+TEST_F(NinjaBuildWriterTest, GetSelfInvocationCommandLine) {
+  // TestWithScope sets up a config with a build dir of //out/Debug.
+  TestWithScope setup;
+  base::CommandLine cmd_out(base::CommandLine::NO_PROGRAM);
+
+  // Setup sets the default root dir to ".".
+  base::FilePath root(FILE_PATH_LITERAL("."));
+  base::FilePath root_realpath = base::MakeAbsoluteFilePath(root);
+
+  base::FilePath gn(FILE_PATH_LITERAL("testdot.gn"));
+
+  // The file must exist on disk for MakeAbsoluteFilePath() to work.
+  ScopedDotGNFile dot_gn(gn);
+  base::FilePath gn_realpath = base::MakeAbsoluteFilePath(gn);
+
+  // Without any parameters the self invocation should pass --root=../..
+  // (from //out/Debug to //).
+  setup.build_settings()->SetRootPath(root_realpath);
+  cmd_out = GetSelfInvocationCommandLine(setup.build_settings());
+  EXPECT_EQ("../..", cmd_out.GetSwitchValueASCII(switches::kRoot));
+  EXPECT_FALSE(cmd_out.HasSwitch(switches::kDotfile));
+
+  // If --root is . and --dotfile is foo/.gn, then --dotfile also needs
+  // to to become ../../foo/.gn.
+  setup.build_settings()->SetRootPath(root_realpath);
+  setup.build_settings()->set_dotfile_name(gn_realpath);
+  cmd_out = GetSelfInvocationCommandLine(setup.build_settings());
+  EXPECT_EQ("../..", cmd_out.GetSwitchValueASCII(switches::kRoot));
+  EXPECT_EQ("../../testdot.gn",
+            cmd_out.GetSwitchValueASCII(switches::kDotfile));
+}
 
 TEST_F(NinjaBuildWriterTest, TwoTargets) {
   TestWithScope setup;
@@ -61,7 +113,8 @@ TEST_F(NinjaBuildWriterTest, TwoTargets) {
   target_baz.action_values().outputs() = SubstitutionList::MakeForTest(
       "//out/Debug/out5.out", "//out/Debug/out6.out");
   target_baz.SetToolchain(&other_toolchain);
-  target_baz.action_values().set_pool(LabelPtrPair<Pool>(&another_regular_pool));
+  target_baz.action_values().set_pool(
+      LabelPtrPair<Pool>(&another_regular_pool));
   ASSERT_TRUE(target_baz.OnResolved(&err));
 
   // The console pool must be in the default toolchain.

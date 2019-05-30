@@ -121,10 +121,16 @@ std::vector<ScopedCupsOption> SettingsToCupsOptions(
                       settings.requested_media().vendor_id));  // paper size
   options.push_back(
       ConstructOption(kIppCopies,
-                      base::IntToString(settings.copies())));  // copies
+                      base::NumberToString(settings.copies())));  // copies
   options.push_back(
       ConstructOption(kIppCollate,
                       GetCollateString(settings.collate())));  // collate
+  if (settings.send_user_info()) {
+    options.push_back(
+        ConstructOption(kIppDocumentName, base::UTF16ToUTF8(settings.title())));
+    options.push_back(
+        ConstructOption(kIppRequestingUserName, settings.username()));
+  }
 
   return options;
 }

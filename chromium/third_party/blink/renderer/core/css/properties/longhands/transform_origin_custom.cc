@@ -13,7 +13,7 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 
 namespace blink {
-namespace CSSLonghand {
+namespace css_longhand {
 
 const CSSValue* TransformOrigin::ParseSingleValue(
     CSSParserTokenRange& range,
@@ -21,20 +21,17 @@ const CSSValue* TransformOrigin::ParseSingleValue(
     const CSSParserLocalContext&) const {
   CSSValue* result_x = nullptr;
   CSSValue* result_y = nullptr;
-  if (CSSPropertyParserHelpers::ConsumeOneOrTwoValuedPosition(
+  if (css_property_parser_helpers::ConsumeOneOrTwoValuedPosition(
           range, context.Mode(),
-          CSSPropertyParserHelpers::UnitlessQuirk::kForbid, result_x,
+          css_property_parser_helpers::UnitlessQuirk::kForbid, result_x,
           result_y)) {
     CSSValueList* list = CSSValueList::CreateSpaceSeparated();
     list->Append(*result_x);
     list->Append(*result_y);
-    CSSValue* result_z = CSSPropertyParserHelpers::ConsumeLength(
+    CSSValue* result_z = css_property_parser_helpers::ConsumeLength(
         range, context.Mode(), kValueRangeAll);
-    if (!result_z) {
-      result_z =
-          CSSPrimitiveValue::Create(0, CSSPrimitiveValue::UnitType::kPixels);
-    }
-    list->Append(*result_z);
+    if (result_z)
+      list->Append(*result_z);
     return list;
   }
   return nullptr;
@@ -42,7 +39,8 @@ const CSSValue* TransformOrigin::ParseSingleValue(
 
 bool TransformOrigin::IsLayoutDependent(const ComputedStyle* style,
                                         LayoutObject* layout_object) const {
-  return layout_object && layout_object->IsBox();
+  return layout_object &&
+         (layout_object->IsBox() || layout_object->IsSVGChild());
 }
 
 const CSSValue* TransformOrigin::CSSValueFromComputedStyleInternal(
@@ -53,26 +51,23 @@ const CSSValue* TransformOrigin::CSSValueFromComputedStyleInternal(
     bool allow_visited_style) const {
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
   if (layout_object) {
-    LayoutRect box;
-    if (layout_object->IsBox())
-      box = ToLayoutBox(layout_object)->BorderBoxRect();
-
-    list->Append(*ZoomAdjustedPixelValue(
-        MinimumValueForLength(style.TransformOriginX(), box.Width()), style));
-    list->Append(*ZoomAdjustedPixelValue(
-        MinimumValueForLength(style.TransformOriginY(), box.Height()), style));
-    if (style.TransformOriginZ() != 0)
-      list->Append(*ZoomAdjustedPixelValue(style.TransformOriginZ(), style));
+    FloatRect reference_box = ComputedStyleUtils::ReferenceBoxForTransform(
+        *layout_object, ComputedStyleUtils::kDontUsePixelSnappedBox);
+    FloatSize resolved_origin(
+        FloatValueForLength(style.TransformOriginX(), reference_box.Width()),
+        FloatValueForLength(style.TransformOriginY(), reference_box.Height()));
+    list->Append(*ZoomAdjustedPixelValue(resolved_origin.Width(), style));
+    list->Append(*ZoomAdjustedPixelValue(resolved_origin.Height(), style));
   } else {
     list->Append(*ComputedStyleUtils::ZoomAdjustedPixelValueForLength(
         style.TransformOriginX(), style));
     list->Append(*ComputedStyleUtils::ZoomAdjustedPixelValueForLength(
         style.TransformOriginY(), style));
-    if (style.TransformOriginZ() != 0)
-      list->Append(*ZoomAdjustedPixelValue(style.TransformOriginZ(), style));
   }
+  if (style.TransformOriginZ() != 0)
+    list->Append(*ZoomAdjustedPixelValue(style.TransformOriginZ(), style));
   return list;
 }
 
-}  // namespace CSSLonghand
+}  // namespace css_longhand
 }  // namespace blink

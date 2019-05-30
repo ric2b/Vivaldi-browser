@@ -30,6 +30,7 @@
 
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
+#include "third_party/blink/renderer/core/dom/traversal_range.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 
 namespace blink {
@@ -55,13 +56,14 @@ class HasTagName {
 // that defines operator(). HasTagName above is an example of a matcher.
 //
 // For example, a caller could do this:
-//   Traversal<Element>::firstChild(someNode, HasTagName(HTMLNames::titleTag));
+//   Traversal<Element>::firstChild(some_node,
+//                                  HasTagName(html_names::kTitleTag));
 //
-// This invocation would return the first child of |someNode| (which has to be a
-// ContainerNode) for which HasTagName(HTMLNames::titleTag) returned true, so it
-// would return the first child of |someNode| which is a <title> element. If the
-// caller needs to traverse a Node this way, it's necessary to first check
-// Node::isContainerNode() and then use toContainerNode().
+// This invocation would return the first child of |some_node| (which has to be
+// a ContainerNode) for which HasTagName(html_names::kTitleTag) returned true,
+// so it would return the first child of |someNode| which is a <title> element.
+// If the caller needs to traverse a Node this way, it's necessary to first
+// check Node::IsContainerNode() and then use ToContainerNode().
 //
 // When looking for a specific element type, it is more efficient to do this:
 //   Traversal<HTMLTitleElement>::firstChild(someNode);
@@ -186,17 +188,14 @@ class Traversal {
   template <class MatchFunc>
   static ElementType* NextSibling(const Node&, MatchFunc);
 
-  static TraversalRange<TraversalChildrenIterator<Traversal<ElementType>>>
-  ChildrenOf(const Node&);
-  static TraversalRange<TraversalDescendantIterator<Traversal<ElementType>>>
-  DescendantsOf(const Node&);
-  static TraversalRange<
-      TraversalInclusiveDescendantIterator<Traversal<ElementType>>>
+  static TraversalSiblingRange<Traversal<ElementType>> ChildrenOf(const Node&);
+  static TraversalDescendantRange<Traversal<ElementType>> DescendantsOf(
+      const Node&);
+  static TraversalInclusiveDescendantRange<Traversal<ElementType>>
   InclusiveDescendantsOf(const ElementType&);
-  static TraversalRange<TraversalNextIterator<Traversal<ElementType>>> StartsAt(
-      const ElementType*);
-  static TraversalRange<TraversalNextIterator<Traversal<ElementType>>>
-  StartsAfter(const Node&);
+  static TraversalNextRange<Traversal<ElementType>> StartsAt(
+      const ElementType&);
+  static TraversalNextRange<Traversal<ElementType>> StartsAfter(const Node&);
 
  private:
   template <class NodeType>
@@ -218,38 +217,36 @@ class Traversal {
 typedef Traversal<Element> ElementTraversal;
 
 template <class ElementType>
-inline TraversalRange<TraversalChildrenIterator<Traversal<ElementType>>>
+inline TraversalSiblingRange<Traversal<ElementType>>
 Traversal<ElementType>::ChildrenOf(const Node& start) {
-  return TraversalRange<TraversalChildrenIterator<Traversal<ElementType>>>(
-      &start);
-};
+  return TraversalSiblingRange<Traversal<ElementType>>(
+      Traversal<ElementType>::FirstChild(start));
+}
 
 template <class ElementType>
-inline TraversalRange<TraversalDescendantIterator<Traversal<ElementType>>>
+inline TraversalDescendantRange<Traversal<ElementType>>
 Traversal<ElementType>::DescendantsOf(const Node& root) {
-  return TraversalRange<TraversalDescendantIterator<Traversal<ElementType>>>(
-      &root);
-};
+  return TraversalDescendantRange<Traversal<ElementType>>(&root);
+}
 
 template <class ElementType>
-inline TraversalRange<
-    TraversalInclusiveDescendantIterator<Traversal<ElementType>>>
+inline TraversalInclusiveDescendantRange<Traversal<ElementType>>
 Traversal<ElementType>::InclusiveDescendantsOf(const ElementType& root) {
-  return TraversalRange<
-      TraversalInclusiveDescendantIterator<Traversal<ElementType>>>(&root);
-};
+  return TraversalInclusiveDescendantRange<Traversal<ElementType>>(&root);
+}
 
 template <class ElementType>
-inline TraversalRange<TraversalNextIterator<Traversal<ElementType>>>
-Traversal<ElementType>::StartsAt(const ElementType* start) {
-  return TraversalRange<TraversalNextIterator<Traversal<ElementType>>>(start);
-};
+inline TraversalNextRange<Traversal<ElementType>>
+Traversal<ElementType>::StartsAt(const ElementType& start) {
+  return TraversalNextRange<Traversal<ElementType>>(&start);
+}
 
 template <class ElementType>
-inline TraversalRange<TraversalNextIterator<Traversal<ElementType>>>
+inline TraversalNextRange<Traversal<ElementType>>
 Traversal<ElementType>::StartsAfter(const Node& start) {
-  return StartsAt(Traversal<ElementType>::Next(start));
-};
+  return TraversalNextRange<Traversal<ElementType>>(
+      Traversal<ElementType>::Next(start));
+}
 
 // Specialized for pure Element to exploit the fact that Elements parent is
 // always either another Element or the root.

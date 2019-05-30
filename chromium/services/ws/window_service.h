@@ -16,6 +16,8 @@
 #include "base/observer_list.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/cpp/service_binding.h"
+#include "services/service_manager/public/mojom/service.mojom.h"
 #include "services/ws/ids.h"
 #include "services/ws/ime/ime_driver_bridge.h"
 #include "services/ws/ime/ime_registrar_impl.h"
@@ -56,10 +58,11 @@ class ClipboardHost;
 namespace ws {
 
 class EventInjector;
+class EventQueue;
 class GpuInterfaceProvider;
 class RemotingEventInjector;
 class ScreenProvider;
-class ServerWindow;
+class ProxyWindow;
 class UserActivityMonitor;
 class WindowServiceDelegate;
 class WindowServiceObserver;
@@ -83,8 +86,12 @@ class COMPONENT_EXPORT(WINDOW_SERVICE) WindowService
                 aura::Env* env = nullptr);
   ~WindowService() override;
 
-  // Gets the ServerWindow for |window|, creating if necessary.
-  ServerWindow* GetServerWindowForWindowCreateIfNecessary(aura::Window* window);
+  // Binds this WindowService instance to a ServiceRequest from the Service
+  // Manger.
+  void BindServiceRequest(service_manager::mojom::ServiceRequest request);
+
+  // Gets the ProxyWindow for |window|, creating if necessary.
+  ProxyWindow* GetProxyWindowForWindowCreateIfNecessary(aura::Window* window);
 
   // Creates a new WindowTree, caller must call one of the Init() functions on
   // the returned object.
@@ -100,8 +107,24 @@ class COMPONENT_EXPORT(WINDOW_SERVICE) WindowService
   // over mojo to all remote clients.
   void SetDisplayForNewWindows(int64_t display_id);
 
-  // Whether |window| hosts a remote client.
-  static bool HasRemoteClient(const aura::Window* window);
+  // Returns true if |window| is a proxy window.
+  static bool IsProxyWindow(const aura::Window* window);
+
+  // Returns true if |window| hosts a remote client and is a toplevel window.
+  static bool IsTopLevelWindow(const aura::Window* window);
+
+  // Returns the window representing the specified id.
+  aura::Window* GetWindowByClientId(Id transport_id);
+
+  // Returns the transport-id for the specified |window|. If |window| was
+  // not created by a client, returns kInvalidTransportId.
+  // NOTE: this function returns an id with the client_id portion set to the
+  // id of the client that created it. The client that created the window
+  // generally uses a client_id of 0 for Windows it creates. If you need to
+  // correlate this with a WindowMus you will most likely need to set the
+  // client_id to 0. See documentation of ClientWindowId in README.md
+  // for more details.
+  Id GetCompleteTransportIdForWindow(aura::Window* window);
 
   struct TreeAndWindowId {
     ClientWindowId id;
@@ -147,7 +170,14 @@ class COMPONENT_EXPORT(WINDOW_SERVICE) WindowService
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics);
 
-  // Returns an id useful for debugging. See ServerWindow::GetIdForDebugging()
+  // Called after WindowTreeHosts have changed display ids. |root_windows| is
+  // the set of root windows of the changed WindowTreeHosts. Clients that have
+  // windows contained by the root windows needs to be updated with the new
+  // display ids.
+  void OnWindowTreeHostsDisplayIdChanged(
+      const std::set<aura::Window*>& root_windows);
+
+  // Returns an id useful for debugging. See ProxyWindow::GetIdForDebugging()
   // for details.
   std::string GetIdForDebugging(aura::Window* window);
 
@@ -165,6 +195,8 @@ class COMPONENT_EXPORT(WINDOW_SERVICE) WindowService
 
   service_manager::BinderRegistry* registry() { return &registry_; }
 
+  EventQueue* event_queue() { return event_queue_.get(); }
+
   // service_manager::Service:
   void OnStart() override;
   void OnBindInterface(const service_manager::BindSourceInfo& remote_info,
@@ -173,6 +205,9 @@ class COMPONENT_EXPORT(WINDOW_SERVICE) WindowService
 
  private:
   friend class WindowServerTestImpl;
+  friend class WindowServiceTestHelper;
+
+  WindowTree* GetTreeById(ClientSpecificId id);
 
   // Sets a callback to be called whenever a surface is activated. This
   // corresponds to a client submitting a new CompositorFrame for a Window. This
@@ -197,6 +232,8 @@ class COMPONENT_EXPORT(WINDOW_SERVICE) WindowService
   WindowServiceDelegate* delegate_;
 
   aura::Env* env_;
+
+  service_manager::ServiceBinding service_binding_{this};
 
   // GpuInterfaceProvider may be null in tests.
   std::unique_ptr<GpuInterfaceProvider> gpu_interface_provider_;
@@ -244,6 +281,8 @@ class COMPONENT_EXPORT(WINDOW_SERVICE) WindowService
 
   // Returns true if various test interfaces are exposed.
   bool test_config_ = false;
+
+  std::unique_ptr<EventQueue> event_queue_;
 
   base::OnceCallback<void(const std::string&)> surface_activation_callback_;
 

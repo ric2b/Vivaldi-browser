@@ -12,20 +12,22 @@
 #include <string>
 #include <vector>
 
+#include "base/macros.h"
 #include "base/memory/shared_memory.h"
 #include "base/values.h"
 #include "content/public/common/common_param_traits.h"
 #include "content/public/common/socket_permission_request.h"
 #include "extensions/common/api/messaging/message.h"
+#include "extensions/common/api/messaging/messaging_endpoint.h"
+#include "extensions/common/api/messaging/port_context.h"
 #include "extensions/common/api/messaging/port_id.h"
-#include "extensions/common/constants.h"
 #include "extensions/common/common_param_traits.h"
+#include "extensions/common/constants.h"
 #include "extensions/common/draggable_region.h"
 #include "extensions/common/event_filtering_info.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extensions_client.h"
 #include "extensions/common/host_id.h"
-#include "extensions/common/permissions/media_galleries_permission_data.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/socket_permission_data.h"
 #include "extensions/common/permissions/usb_device_permission_data.h"
@@ -50,6 +52,9 @@ IPC_ENUM_TRAITS_MAX_VALUE(extensions::UserScript::InjectionType,
 
 IPC_ENUM_TRAITS_MAX_VALUE(extensions::UserScript::RunLocation,
                           extensions::UserScript::RUN_LOCATION_LAST - 1)
+
+IPC_ENUM_TRAITS_MAX_VALUE(extensions::MessagingEndpoint::Type,
+                          extensions::MessagingEndpoint::Type::kLast)
 
 IPC_ENUM_TRAITS_MAX_VALUE(HostID::HostType, HostID::HOST_TYPE_LAST)
 
@@ -211,15 +216,20 @@ IPC_STRUCT_BEGIN(ExtensionMsg_TabTargetConnectionInfo)
   IPC_STRUCT_MEMBER(int, frame_id)
 IPC_STRUCT_END()
 
+IPC_STRUCT_TRAITS_BEGIN(extensions::MessagingEndpoint)
+  IPC_STRUCT_TRAITS_MEMBER(type)
+  IPC_STRUCT_TRAITS_MEMBER(extension_id)
+  IPC_STRUCT_TRAITS_MEMBER(native_app_name)
+IPC_STRUCT_TRAITS_END()
+
 // Struct containing the data for external connections to extensions. Used to
 // handle the IPCs initiated by both connect() and onConnect().
 IPC_STRUCT_BEGIN(ExtensionMsg_ExternalConnectionInfo)
   // The ID of the extension that is the target of the request.
   IPC_STRUCT_MEMBER(std::string, target_id)
 
-  // The ID of the extension that initiated the request. May be empty if it
-  // wasn't initiated by an extension.
-  IPC_STRUCT_MEMBER(std::string, source_id)
+  // Specifies the type and the ID of the endpoint that initiated the request.
+  IPC_STRUCT_MEMBER(extensions::MessagingEndpoint, source_endpoint)
 
   // The URL of the frame that initiated the request.
   IPC_STRUCT_MEMBER(GURL, source_url)
@@ -242,6 +252,21 @@ IPC_STRUCT_TRAITS_BEGIN(content::SocketPermissionRequest)
   IPC_STRUCT_TRAITS_MEMBER(port)
 IPC_STRUCT_TRAITS_END()
 
+IPC_STRUCT_TRAITS_BEGIN(extensions::PortContext::FrameContext)
+  IPC_STRUCT_TRAITS_MEMBER(routing_id)
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(extensions::PortContext::WorkerContext)
+  IPC_STRUCT_TRAITS_MEMBER(thread_id)
+  IPC_STRUCT_TRAITS_MEMBER(version_id)
+  IPC_STRUCT_TRAITS_MEMBER(extension_id)
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(extensions::PortContext)
+  IPC_STRUCT_TRAITS_MEMBER(frame)
+  IPC_STRUCT_TRAITS_MEMBER(worker)
+IPC_STRUCT_TRAITS_END()
+
 IPC_STRUCT_TRAITS_BEGIN(extensions::SocketPermissionEntry)
   IPC_STRUCT_TRAITS_MEMBER(pattern_)
   IPC_STRUCT_TRAITS_MEMBER(match_subdomains_)
@@ -262,10 +287,6 @@ IPC_STRUCT_TRAITS_BEGIN(extensions::UsbDevicePermissionData)
   IPC_STRUCT_TRAITS_MEMBER(vendor_id())
   IPC_STRUCT_TRAITS_MEMBER(product_id())
   IPC_STRUCT_TRAITS_MEMBER(interface_class())
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(extensions::MediaGalleriesPermissionData)
-  IPC_STRUCT_TRAITS_MEMBER(permission())
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(extensions::Message)
@@ -311,9 +332,11 @@ struct ExtensionMsg_PermissionSetStruct {
   ExtensionMsg_PermissionSetStruct();
   explicit ExtensionMsg_PermissionSetStruct(
       const extensions::PermissionSet& permissions);
-  ExtensionMsg_PermissionSetStruct(
-      const ExtensionMsg_PermissionSetStruct& other);
   ~ExtensionMsg_PermissionSetStruct();
+
+  ExtensionMsg_PermissionSetStruct(ExtensionMsg_PermissionSetStruct&& other);
+  ExtensionMsg_PermissionSetStruct& operator=(
+      ExtensionMsg_PermissionSetStruct&& other);
 
   std::unique_ptr<const extensions::PermissionSet> ToPermissionSet() const;
 
@@ -321,6 +344,8 @@ struct ExtensionMsg_PermissionSetStruct {
   extensions::ManifestPermissionSet manifest_permissions;
   extensions::URLPatternSet explicit_hosts;
   extensions::URLPatternSet scriptable_hosts;
+
+  DISALLOW_COPY_AND_ASSIGN(ExtensionMsg_PermissionSetStruct);
 };
 
 struct ExtensionMsg_Loaded_Params {
@@ -640,26 +665,35 @@ IPC_MESSAGE_ROUTED2(ExtensionMsg_GetAppInstallStateResponse,
                     std::string /* state */,
                     int32_t /* callback_id */)
 
-// Check whether the Port for extension messaging exists in the frame. If the
-// port ID is unknown, the frame replies with ExtensionHostMsg_CloseMessagePort.
-IPC_MESSAGE_ROUTED1(ExtensionMsg_ValidateMessagePort,
+// Check whether the Port for extension messaging exists in a frame or a Service
+// Worker. If the port ID is unknown, the frame replies with
+// ExtensionHostMsg_CloseMessagePort.
+IPC_MESSAGE_ROUTED2(ExtensionMsg_ValidateMessagePort,
+                    // For main thread, this is kMainThreadId.
+                    int /* worker_thread_id */,
                     extensions::PortId /* port_id */)
 
 // Dispatch the Port.onConnect event for message channels.
 IPC_MESSAGE_ROUTED5(ExtensionMsg_DispatchOnConnect,
+                    // For main thread, this is kMainThreadId.
+                    // TODO(lazyboy): Can this be base::Optional<int> instead?
+                    int /* worker_thread_id */,
                     extensions::PortId /* target_port_id */,
                     std::string /* channel_name */,
                     ExtensionMsg_TabConnectionInfo /* source */,
-                    ExtensionMsg_ExternalConnectionInfo,
-                    std::string /* tls_channel_id */)
+                    ExtensionMsg_ExternalConnectionInfo)
 
 // Deliver a message sent with ExtensionHostMsg_PostMessage.
-IPC_MESSAGE_ROUTED2(ExtensionMsg_DeliverMessage,
+IPC_MESSAGE_ROUTED3(ExtensionMsg_DeliverMessage,
+                    // For main thread, this is kMainThreadId.
+                    int /* worker_thread_id */,
                     extensions::PortId /* target_port_id */,
                     extensions::Message)
 
 // Dispatch the Port.onDisconnect event for message channels.
-IPC_MESSAGE_ROUTED2(ExtensionMsg_DispatchOnDisconnect,
+IPC_MESSAGE_ROUTED3(ExtensionMsg_DispatchOnDisconnect,
+                    // For main thread, this is kMainThreadId.
+                    int /* worker_thread_id */,
                     extensions::PortId /* port_id */,
                     std::string /* error_message */)
 
@@ -691,6 +725,10 @@ IPC_MESSAGE_CONTROL1(ExtensionMsg_TransferBlobs,
 // Report the WebView partition ID to the WebView guest renderer process.
 IPC_MESSAGE_CONTROL1(ExtensionMsg_SetWebViewPartitionID,
                      std::string /* webview_partition_id */)
+
+// Enable or disable spatial navigation.
+IPC_MESSAGE_ROUTED1(ExtensionMsg_SetSpatialNavigationEnabled,
+                    bool /* spatial_nav_enabled */)
 
 // Messages sent from the renderer to the browser:
 
@@ -778,22 +816,21 @@ IPC_MESSAGE_ROUTED1(ExtensionHostMsg_EventAck, int /* message_id */)
 // Open a channel to all listening contexts owned by the extension with
 // the given ID. This responds asynchronously with ExtensionMsg_AssignPortId.
 // If an error occurred, the opener will be notified asynchronously.
-IPC_MESSAGE_CONTROL5(ExtensionHostMsg_OpenChannelToExtension,
-                     int /* frame_routing_id */,
+IPC_MESSAGE_CONTROL4(ExtensionHostMsg_OpenChannelToExtension,
+                     extensions::PortContext /* source_context */,
                      ExtensionMsg_ExternalConnectionInfo,
                      std::string /* channel_name */,
-                     bool /* include_tls_channel_id */,
                      extensions::PortId /* port_id */)
 
 IPC_MESSAGE_CONTROL3(ExtensionHostMsg_OpenChannelToNativeApp,
-                     int /* frame_routing_id */,
+                     extensions::PortContext /* source_context */,
                      std::string /* native_app_name */,
                      extensions::PortId /* port_id */)
 
 // Get a port handle to the given tab.  The handle can be used for sending
 // messages to the extension.
 IPC_MESSAGE_CONTROL5(ExtensionHostMsg_OpenChannelToTab,
-                     int /* frame_routing_id */,
+                     extensions::PortContext /* source_context */,
                      ExtensionMsg_TabTargetConnectionInfo,
                      std::string /* extension_id */,
                      std::string /* channel_name */,
@@ -802,21 +839,21 @@ IPC_MESSAGE_CONTROL5(ExtensionHostMsg_OpenChannelToTab,
 // Sent in response to ExtensionMsg_DispatchOnConnect when the port is accepted.
 // The handle is the value returned by ExtensionHostMsg_OpenChannelTo*.
 IPC_MESSAGE_CONTROL2(ExtensionHostMsg_OpenMessagePort,
-                     int /* frame_routing_id */,
+                     extensions::PortContext /* port_context */,
                      extensions::PortId /* port_id */)
 
 // Sent in response to ExtensionMsg_DispatchOnConnect and whenever the port is
 // closed. The handle is the value returned by ExtensionHostMsg_OpenChannelTo*.
 IPC_MESSAGE_CONTROL3(ExtensionHostMsg_CloseMessagePort,
-                     int /* frame_routing_id */,
+                     extensions::PortContext /* port_context */,
                      extensions::PortId /* port_id */,
                      bool /* force_close */)
 
 // Send a message to an extension process.  The handle is the value returned
 // by ExtensionHostMsg_OpenChannelTo*.
-IPC_MESSAGE_ROUTED2(ExtensionHostMsg_PostMessage,
-                    extensions::PortId /* port_id */,
-                    extensions::Message)
+IPC_MESSAGE_CONTROL2(ExtensionHostMsg_PostMessage,
+                     extensions::PortId /* port_id */,
+                     extensions::Message)
 
 // Used to get the extension message bundle.
 IPC_SYNC_MESSAGE_CONTROL1_1(ExtensionHostMsg_GetMessageBundle,
@@ -1001,5 +1038,126 @@ IPC_MESSAGE_CONTROL2(ExtensionHostMsg_DecrementServiceWorkerActivity,
 IPC_MESSAGE_CONTROL2(ExtensionHostMsg_EventAckWorker,
                      int64_t /* service_worker_version_id */,
                      int /* event_id */)
+
+// Tells the browser that an extension service worker context was initialized,
+// but possibly didn't start executing its top-level JavaScript.
+IPC_MESSAGE_CONTROL3(ExtensionHostMsg_DidInitializeServiceWorkerContext,
+                     std::string /* extension_id */,
+                     int64_t /* service_worker_version_id */,
+                     int /* worker_thread_id */)
+
+// Tells the browser that an extension service worker context has started and
+// finished executing its top-level JavaScript.
+// Start corresponds to EmbeddedWorkerInstance::OnStarted notification.
+//
+// TODO(lazyboy): This is a workaround: ideally this IPC should be redundant
+// because it directly corresponds to EmbeddedWorkerInstance::OnStarted message.
+// However, because OnStarted message is on different mojo IPC pipe, and most
+// extension IPCs are on legacy IPC pipe, this IPC is necessary to ensure FIFO
+// ordering of this message with rest of the extension IPCs.
+// Two possible solutions to this:
+//   - Associate extension IPCs with Service Worker IPCs. This can be done (and
+//     will be a requirement) when extension IPCs are moved to mojo, but
+//     requires resolving or defining ordering dependencies amongst the
+//     extension messages, and any additional messages in Chrome.
+//   - Make Service Worker IPCs channel-associated so that there's FIFO
+//     guarantee between extension IPCs and Service Worker IPCs. This isn't
+//     straightforward as it changes SW IPC ordering with respect of rest of
+//     Chrome.
+// See https://crbug.com/879015#c4 for details.
+IPC_MESSAGE_CONTROL4(ExtensionHostMsg_DidStartServiceWorkerContext,
+                     std::string /* extension_id */,
+                     GURL /* service_worker_scope */,
+                     int64_t /* service_worker_version_id */,
+                     int /* worker_thread_id */)
+
+// Tells the browser that an extension service worker context has been
+// destroyed.
+IPC_MESSAGE_CONTROL4(ExtensionHostMsg_DidStopServiceWorkerContext,
+                     std::string /* extension_id */,
+                     GURL /* service_worker_scope */,
+                     int64_t /* service_worker_version_id */,
+                     int /* worker_thread_id */)
+
+IPC_STRUCT_TRAITS_BEGIN(ui::AXNodeData)
+  IPC_STRUCT_TRAITS_MEMBER(id)
+  IPC_STRUCT_TRAITS_MEMBER(role)
+  IPC_STRUCT_TRAITS_MEMBER(state)
+  IPC_STRUCT_TRAITS_MEMBER(actions)
+  IPC_STRUCT_TRAITS_MEMBER(string_attributes)
+  IPC_STRUCT_TRAITS_MEMBER(int_attributes)
+  IPC_STRUCT_TRAITS_MEMBER(float_attributes)
+  IPC_STRUCT_TRAITS_MEMBER(bool_attributes)
+  IPC_STRUCT_TRAITS_MEMBER(intlist_attributes)
+  IPC_STRUCT_TRAITS_MEMBER(stringlist_attributes)
+  IPC_STRUCT_TRAITS_MEMBER(html_attributes)
+  IPC_STRUCT_TRAITS_MEMBER(child_ids)
+  IPC_STRUCT_TRAITS_MEMBER(relative_bounds)
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(ui::AXTreeData)
+  IPC_STRUCT_TRAITS_MEMBER(tree_id)
+  IPC_STRUCT_TRAITS_MEMBER(parent_tree_id)
+  IPC_STRUCT_TRAITS_MEMBER(focused_tree_id)
+  IPC_STRUCT_TRAITS_MEMBER(url)
+  IPC_STRUCT_TRAITS_MEMBER(title)
+  IPC_STRUCT_TRAITS_MEMBER(mimetype)
+  IPC_STRUCT_TRAITS_MEMBER(doctype)
+  IPC_STRUCT_TRAITS_MEMBER(loaded)
+  IPC_STRUCT_TRAITS_MEMBER(loading_progress)
+  IPC_STRUCT_TRAITS_MEMBER(focus_id)
+  IPC_STRUCT_TRAITS_MEMBER(sel_anchor_object_id)
+  IPC_STRUCT_TRAITS_MEMBER(sel_anchor_offset)
+  IPC_STRUCT_TRAITS_MEMBER(sel_anchor_affinity)
+  IPC_STRUCT_TRAITS_MEMBER(sel_focus_object_id)
+  IPC_STRUCT_TRAITS_MEMBER(sel_focus_offset)
+  IPC_STRUCT_TRAITS_MEMBER(sel_focus_affinity)
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(ui::AXTreeUpdate)
+  IPC_STRUCT_TRAITS_MEMBER(has_tree_data)
+  IPC_STRUCT_TRAITS_MEMBER(tree_data)
+  IPC_STRUCT_TRAITS_MEMBER(node_id_to_clear)
+  IPC_STRUCT_TRAITS_MEMBER(root_id)
+  IPC_STRUCT_TRAITS_MEMBER(nodes)
+  IPC_STRUCT_TRAITS_MEMBER(event_from)
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_BEGIN(ExtensionMsg_AccessibilityEventBundleParams)
+  // ID of the accessibility tree that this event applies to.
+  IPC_STRUCT_MEMBER(ui::AXTreeID, tree_id)
+
+  // Zero or more updates to the accessibility tree to apply first.
+  IPC_STRUCT_MEMBER(std::vector<ui::AXTreeUpdate>, updates)
+
+  // Zero or more events to fire after the tree updates have been applied.
+  IPC_STRUCT_MEMBER(std::vector<ui::AXEvent>, events)
+
+  // The mouse location in screen coordinates.
+  IPC_STRUCT_MEMBER(gfx::Point, mouse_location)
+IPC_STRUCT_END()
+
+IPC_STRUCT_BEGIN(ExtensionMsg_AccessibilityLocationChangeParams)
+  // ID of the accessibility tree that this event applies to.
+  IPC_STRUCT_MEMBER(ui::AXTreeID, tree_id)
+
+  // ID of the object whose location is changing.
+  IPC_STRUCT_MEMBER(int, id)
+
+  // The object's new location info.
+  IPC_STRUCT_MEMBER(ui::AXRelativeBounds, new_location)
+IPC_STRUCT_END()
+
+// Forward an accessibility message to an extension process where an
+// extension is using the automation API to listen for accessibility events.
+IPC_MESSAGE_CONTROL2(ExtensionMsg_AccessibilityEventBundle,
+                     ExtensionMsg_AccessibilityEventBundleParams /* events */,
+                     bool /* is_active_profile */)
+
+// Forward an accessibility location change message to an extension process
+// where an extension is using the automation API to listen for
+// accessibility events.
+IPC_MESSAGE_CONTROL1(ExtensionMsg_AccessibilityLocationChange,
+                     ExtensionMsg_AccessibilityLocationChangeParams)
 
 #endif  // EXTENSIONS_COMMON_EXTENSION_MESSAGES_H_

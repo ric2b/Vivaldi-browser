@@ -6,21 +6,24 @@
 
 #include <memory>
 
+#include "base/bind.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/scoped_observer.h"
-#include "base/strings/sys_string_conversions.h"
 #include "components/favicon/ios/web_favicon_driver.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/chrome_url_util.h"
-#include "ios/chrome/browser/experimental_flags.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache_factory.h"
+#import "ios/chrome/browser/snapshots/snapshot_cache_observer.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
+#include "ios/chrome/browser/system_flags.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
+#import "ios/chrome/browser/tabs/tab_title_util.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_consumer.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_item.h"
-#include "ios/chrome/browser/ui/ui_util.h"
+#include "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/browser/web/tab_id_tab_helper.h"
 #include "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
@@ -29,7 +32,7 @@
 #import "ios/chrome/browser/web_state_list/web_usage_enabler/web_state_list_web_usage_enabler.h"
 #import "ios/chrome/browser/web_state_list/web_usage_enabler/web_state_list_web_usage_enabler_factory.h"
 #import "ios/web/public/navigation_manager.h"
-#include "ios/web/public/web_state/web_state.h"
+#import "ios/web/public/web_state/web_state.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
 #include "ui/gfx/image/image.h"
 
@@ -46,7 +49,7 @@ GridItem* CreateItem(web::WebState* web_state) {
   if (IsURLNtp(web_state->GetVisibleURL())) {
     item.hidesTitle = YES;
   }
-  item.title = base::SysUTF16ToNSString(web_state->GetTitle());
+  item.title = tab_util::GetTabTitle(web_state);
   return item;
 }
 
@@ -62,6 +65,14 @@ NSArray* CreateItems(WebStateList* web_state_list) {
 
 // Returns the ID of the active tab in |web_state_list|.
 NSString* GetActiveTabId(WebStateList* web_state_list) {
+  // TODO(crbug.com/877792) : Real-world crashes have been caused by
+  // |web_state_list| being nil in this function. Capture histogram to retain
+  // visibility of issue severity.
+  UMA_HISTOGRAM_BOOLEAN("IOS.TabGridMediator.GetActiveTabIDNilWebStateList",
+                        !web_state_list);
+  if (!web_state_list)
+    return nil;
+
   web::WebState* web_state = web_state_list->GetActiveWebState();
   if (!web_state)
     return nil;
@@ -96,7 +107,9 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
 
 }  // namespace
 
-@interface TabGridMediator ()<CRWWebStateObserver, WebStateListObserving>
+@interface TabGridMediator ()<CRWWebStateObserver,
+                              SnapshotCacheObserver,
+                              WebStateListObserving>
 // The list from the tab model.
 @property(nonatomic, assign) WebStateList* webStateList;
 // The UI consumer to which updates are made.
@@ -152,9 +165,11 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
 #pragma mark - Public properties
 
 - (void)setTabModel:(TabModel*)tabModel {
+  [self.snapshotCache removeObserver:self];
   _scopedWebStateListObserver->RemoveAll();
   _scopedWebStateObserver->RemoveAll();
   _tabModel = tabModel;
+  [self.snapshotCache addObserver:self];
   _webStateList = tabModel.webStateList;
   if (_webStateList) {
     _scopedWebStateListObserver->Add(_webStateList);
@@ -200,6 +215,13 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
 - (void)webStateList:(WebStateList*)webStateList
     didDetachWebState:(web::WebState*)webState
               atIndex:(int)index {
+  // TODO(crbug.com/877792) : Real-world crashes have been caused by
+  // |webStateList| being nil in this callback. Capture histogram to retain
+  // visibility of issue severity.
+  UMA_HISTOGRAM_BOOLEAN("IOS.TabGridMediator.DidDetachNilWebStateList",
+                        !webStateList);
+  if (!webStateList)
+    return;
   TabIdTabHelper* tabHelper = TabIdTabHelper::FromWebState(webState);
   NSString* itemID = tabHelper->tab_id();
   [self.consumer removeItemWithID:itemID
@@ -230,6 +252,20 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
   TabIdTabHelper* tabHelper = TabIdTabHelper::FromWebState(webState);
   NSString* itemID = tabHelper->tab_id();
   [self.consumer replaceItemID:itemID withItem:CreateItem(webState)];
+}
+
+#pragma mark - SnapshotCacheObserver
+
+- (void)snapshotCache:(SnapshotCache*)snapshotCache
+    didUpdateSnapshotForIdentifier:(NSString*)identifier {
+  [self.appearanceCache removeObjectForKey:identifier];
+  web::WebState* webState = GetWebStateWithId(self.webStateList, identifier);
+  if (webState) {
+    // It is possible to observe an updated snapshot for a WebState before
+    // observing that the WebState has been added to the WebStateList. It is the
+    // consumer's responsibility to ignore any updates before inserts.
+    [self.consumer replaceItemID:identifier withItem:CreateItem(webState)];
+  }
 }
 
 #pragma mark - GridCommands
@@ -430,6 +466,13 @@ web::WebState* GetWebStateWithId(WebStateList* web_state_list,
   for (const SessionID sessionID : identifiers) {
     self.tabRestoreService->RemoveTabEntryById(sessionID);
   }
+}
+
+// Returns a SnapshotCache for the current BrowserState.
+- (SnapshotCache*)snapshotCache {
+  if (!_tabModel.browserState)
+    return nil;
+  return SnapshotCacheFactory::GetForBrowserState(_tabModel.browserState);
 }
 
 @end

@@ -6,38 +6,38 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/sys_byteorder.h"
 #include "base/task/post_task.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "net/base/address_family.h"
 #include "net/base/ip_address.h"
 #include "net/base/network_interfaces.h"
-#include "net/dns/dns_protocol.h"
-#include "net/dns/mdns_client.h"
+#include "net/dns/public/dns_protocol.h"
+#include "net/dns/public/util.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 
 namespace {
 
 const int kMaxRestartAttempts = 10;
 
-void GetNetworkListInBackground(
-    base::OnceCallback<void(net::NetworkInterfaceList)> callback) {
-  net::NetworkInterfaceList networks;
-  {
-    base::ScopedBlockingCall scoped_blocking_call(
-        base::BlockingType::MAY_BLOCK);
-    if (!GetNetworkList(&networks, net::INCLUDE_HOST_SCOPE_VIRTUAL_INTERFACES))
-      return;
-  }
+void OnGetNetworkList(
+    base::OnceCallback<void(net::NetworkInterfaceList)> callback,
+    const base::Optional<net::NetworkInterfaceList>& networks) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!networks.has_value())
+    return;
 
   net::NetworkInterfaceList ip4_networks;
-  for (const auto& network : networks) {
+  for (const auto& network : networks.value()) {
     net::AddressFamily address_family = net::GetAddressFamily(network.address);
     if (address_family == net::ADDRESS_FAMILY_IPV4 &&
         network.prefix_length >= 24) {
@@ -46,17 +46,21 @@ void GetNetworkListInBackground(
   }
 
   net::IPAddress localhost_prefix(127, 0, 0, 0);
-  ip4_networks.push_back(
-      net::NetworkInterface("lo",
-                            "lo",
-                            0,
-                            net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
-                            localhost_prefix,
-                            8,
-                            net::IP_ADDRESS_ATTRIBUTE_NONE));
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
+  ip4_networks.push_back(net::NetworkInterface(
+      "lo", "lo", 0, net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
+      localhost_prefix, 8, net::IP_ADDRESS_ATTRIBUTE_NONE));
+
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
       base::BindOnce(std::move(callback), std::move(ip4_networks)));
+}
+
+void GetNetworkListOnUIThread(
+    base::OnceCallback<void(net::NetworkInterfaceList)> callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  content::GetNetworkService()->GetNetworkList(
+      net::INCLUDE_HOST_SCOPE_VIRTUAL_INTERFACES,
+      base::BindOnce(&OnGetNetworkList, std::move(callback)));
 }
 
 void CreateUDPSocketOnUIThread(
@@ -80,8 +84,8 @@ PrivetTrafficDetector::PrivetTrafficDetector(
     : helper_(new Helper(profile, on_traffic_detected)) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   content::GetNetworkConnectionTracker()->AddNetworkConnectionObserver(this);
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
       base::BindOnce(&PrivetTrafficDetector::Helper::ScheduleRestart,
                      base::Unretained(helper_)));
 }
@@ -96,8 +100,8 @@ PrivetTrafficDetector::~PrivetTrafficDetector() {
 void PrivetTrafficDetector::OnConnectionChanged(
     network::mojom::ConnectionType type) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
       base::BindOnce(&PrivetTrafficDetector::Helper::HandleConnectionChanged,
                      base::Unretained(helper_), type));
 }
@@ -131,9 +135,9 @@ void PrivetTrafficDetector::Helper::ScheduleRestart() {
   ResetConnection();
   weak_ptr_factory_.InvalidateWeakPtrs();
   base::PostDelayedTaskWithTraits(
-      FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
+      FROM_HERE, {content::BrowserThread::UI},
       base::BindOnce(
-          &GetNetworkListInBackground,
+          &GetNetworkListOnUIThread,
           base::BindOnce(&Helper::Restart, weak_ptr_factory_.GetWeakPtr())),
       base::TimeDelta::FromSeconds(3));
 }
@@ -157,34 +161,31 @@ void PrivetTrafficDetector::Helper::Bind() {
   network::mojom::UDPSocketReceiverRequest receiver_request =
       mojo::MakeRequest(&receiver_ptr);
   receiver_binding_.Bind(std::move(receiver_request));
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
       base::BindOnce(&CreateUDPSocketOnUIThread, profile_,
                      mojo::MakeRequest(&socket_), std::move(receiver_ptr)));
 
-  net::IPEndPoint multicast_addr =
-      net::GetMDnsIPEndPoint(net::ADDRESS_FAMILY_IPV4);
-  net::IPEndPoint bind_endpoint(
-      net::IPAddress::AllZeros(multicast_addr.address().size()),
-      multicast_addr.port());
-
   network::mojom::UDPSocketOptionsPtr socket_options =
       network::mojom::UDPSocketOptions::New();
-  socket_options->allow_address_reuse = true;
+  socket_options->allow_address_sharing_for_multicast = true;
   socket_options->multicast_loopback_mode = false;
 
-  socket_->Bind(bind_endpoint, std::move(socket_options),
-                base::BindOnce(&Helper::OnBindComplete,
-                               weak_ptr_factory_.GetWeakPtr(), multicast_addr));
+  socket_->Bind(
+      net::dns_util::GetMdnsReceiveEndPoint(net::ADDRESS_FAMILY_IPV4),
+      std::move(socket_options),
+      base::BindOnce(
+          &Helper::OnBindComplete, weak_ptr_factory_.GetWeakPtr(),
+          net::dns_util::GetMdnsGroupEndPoint(net::ADDRESS_FAMILY_IPV4)));
 }
 
 void PrivetTrafficDetector::Helper::OnBindComplete(
-    net::IPEndPoint multicast_addr,
+    net::IPEndPoint multicast_group_addr,
     int rv,
     const base::Optional<net::IPEndPoint>& ip_endpoint) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   if (rv == net::OK) {
-    socket_->JoinGroup(multicast_addr.address(),
+    socket_->JoinGroup(multicast_group_addr.address(),
                        base::BindOnce(&Helper::OnJoinGroupComplete,
                                       weak_ptr_factory_.GetWeakPtr()));
     return;
@@ -223,8 +224,8 @@ bool PrivetTrafficDetector::Helper::IsPrivetPacket(
 
   static const char kPrivetDeviceTypeDnsString[] = "\x07_privet";
   const char* substring_begin = kPrivetDeviceTypeDnsString;
-  const char* substring_end = substring_begin +
-                              arraysize(kPrivetDeviceTypeDnsString) - 1;
+  const char* substring_end =
+      substring_begin + base::size(kPrivetDeviceTypeDnsString) - 1;
   // Check for expected substring, any Privet device must include this.
   return std::search(buffer_begin, buffer_end, substring_begin,
                      substring_end) != buffer_end;
@@ -262,8 +263,8 @@ void PrivetTrafficDetector::Helper::OnReceived(
   recv_addr_ = src_addr.value();
   if (IsPrivetPacket(data.value())) {
     ResetConnection();
-    content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                     on_traffic_detected_);
+    base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                             on_traffic_detected_);
     base::TimeDelta time_delta = base::Time::Now() - start_time_;
     UMA_HISTOGRAM_LONG_TIMES("LocalDiscovery.DetectorTriggerTime", time_delta);
   } else {

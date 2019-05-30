@@ -188,6 +188,10 @@ void GLContext::ForceReleaseVirtuallyCurrent() {
   NOTREACHED();
 }
 
+void GLContext::DirtyVirtualContextState() {
+  current_virtual_context_ = nullptr;
+}
+
 #if defined(OS_MACOSX)
 uint64_t GLContext::BackpressureFenceCreate() {
   return 0;
@@ -285,6 +289,7 @@ bool GLContext::WasAllocatedUsingRobustnessExtension() {
 
 void GLContext::InitializeDynamicBindings() {
   DCHECK(IsCurrent(nullptr));
+  BindGLApi();
   DCHECK(static_bindings_initialized_);
   if (!dynamic_bindings_initialized_) {
     if (real_gl_api_) {

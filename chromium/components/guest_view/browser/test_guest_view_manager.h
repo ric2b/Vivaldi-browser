@@ -9,6 +9,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "components/guest_view/browser/guest_view_manager.h"
@@ -44,15 +45,12 @@ class TestGuestViewManager : public GuestViewManager {
   // Returns the size of the set of removed instance IDs.
   size_t GetNumRemovedInstanceIDs() const;
 
-  using GuestViewCreateFunction =
-      base::Callback<GuestViewBase*(content::WebContents*)>;
-
   template <typename T>
   void RegisterTestGuestViewType(
       const GuestViewCreateFunction& create_function) {
     auto registry_entry = std::make_pair(
         T::Type,
-        GuestViewData(create_function, base::Bind(&T::CleanUp)));
+        GuestViewData(create_function, base::BindRepeating(&T::CleanUp)));
     guest_view_registry_.insert(registry_entry);
   }
 

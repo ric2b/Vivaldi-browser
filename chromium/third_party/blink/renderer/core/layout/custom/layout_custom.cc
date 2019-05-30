@@ -165,21 +165,22 @@ bool LayoutCustom::PerformLayout(bool relayout_children,
 
     if (!instance_) {
       GetDocument().AddConsoleMessage(ConsoleMessage::Create(
-          kJSMessageSource, kInfoMessageLevel,
+          kJSMessageSource, mojom::ConsoleMessageLevel::kInfo,
           "Unable to create an instance of layout class '" + name +
               "', falling back to block layout."));
       return false;
     }
 
-    FragmentResultOptions fragment_result_options;
+    FragmentResultOptions* fragment_result_options =
+        FragmentResultOptions::Create();
     scoped_refptr<SerializedScriptValue> fragment_result_data;
-    if (!instance_->Layout(*this, &fragment_result_options,
+    if (!instance_->Layout(*this, fragment_result_options,
                            &fragment_result_data))
       return false;
 
     size_t index = 0;
     const HeapVector<Member<CustomLayoutFragment>>& child_fragments =
-        fragment_result_options.childFragments();
+        fragment_result_options->childFragments();
     for (LayoutBox* child = FirstChildBox(); child;
          child = child->NextSiblingBox()) {
       if (child->IsOutOfFlowPositioned()) {
@@ -193,18 +194,18 @@ bool LayoutCustom::PerformLayout(bool relayout_children,
       }
 
       if (index >= child_fragments.size()) {
-        GetDocument().AddConsoleMessage(
-            ConsoleMessage::Create(kJSMessageSource, kInfoMessageLevel,
-                                   "Chrome currently requires exactly one "
-                                   "LayoutFragment per LayoutChild, "
-                                   "falling back to block layout."));
+        GetDocument().AddConsoleMessage(ConsoleMessage::Create(
+            kJSMessageSource, mojom::ConsoleMessageLevel::kInfo,
+            "Chrome currently requires exactly one "
+            "LayoutFragment per LayoutChild, "
+            "falling back to block layout."));
         return false;
       }
 
       CustomLayoutFragment* fragment = child_fragments[index++];
       if (!fragment->IsValid()) {
         GetDocument().AddConsoleMessage(ConsoleMessage::Create(
-            kJSMessageSource, kInfoMessageLevel,
+            kJSMessageSource, mojom::ConsoleMessageLevel::kInfo,
             "An invalid LayoutFragment was returned from the "
             "layout, falling back to block layout."));
         return false;
@@ -243,11 +244,11 @@ bool LayoutCustom::PerformLayout(bool relayout_children,
 
     // Currently we only support exactly one LayoutFragment per LayoutChild.
     if (index != child_fragments.size()) {
-      GetDocument().AddConsoleMessage(
-          ConsoleMessage::Create(kJSMessageSource, kInfoMessageLevel,
-                                 "Chrome currently requires exactly one "
-                                 "LayoutFragment per LayoutChild, "
-                                 "falling back to block layout."));
+      GetDocument().AddConsoleMessage(ConsoleMessage::Create(
+          kJSMessageSource, mojom::ConsoleMessageLevel::kInfo,
+          "Chrome currently requires exactly one "
+          "LayoutFragment per LayoutChild, "
+          "falling back to block layout."));
       return false;
     }
 
@@ -256,7 +257,7 @@ bool LayoutCustom::PerformLayout(bool relayout_children,
     fragment_result_data_ = std::move(fragment_result_data);
 
     SetLogicalHeight(
-        LayoutUnit::FromDoubleRound(fragment_result_options.autoBlockSize()));
+        LayoutUnit::FromDoubleRound(fragment_result_options->autoBlockSize()));
 
     LayoutUnit old_client_after_edge = ClientLogicalBottom();
     UpdateLogicalHeight();
@@ -265,7 +266,7 @@ bool LayoutCustom::PerformLayout(bool relayout_children,
       relayout_children = true;
 
     LayoutPositionedObjects(relayout_children || IsDocumentElement());
-    ComputeOverflow(old_client_after_edge);
+    ComputeLayoutOverflow(old_client_after_edge);
   }
 
   UpdateAfterLayout();

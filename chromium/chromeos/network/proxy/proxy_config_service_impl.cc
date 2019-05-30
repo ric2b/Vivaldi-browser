@@ -161,7 +161,7 @@ bool ProxyConfigServiceImpl::IgnoreProxy(const PrefService* profile_prefs,
   if (onc_source == ::onc::ONC_SOURCE_DEVICE_POLICY) {
     const user_manager::User* primary_user =
         user_manager::UserManager::Get()->GetPrimaryUser();
-    if (primary_user->IsAffiliated()) {
+    if (!primary_user || primary_user->IsAffiliated()) {
       VLOG(1) << "Respecting proxy for network, as the primary user belongs to "
               << "the domain the device is enrolled to.";
       return false;
@@ -262,7 +262,9 @@ void ProxyConfigServiceImpl::DetermineEffectiveConfigFromDefaultNetwork() {
   if (effective_config.value().proxy_rules().type !=
       net::ProxyConfig::ProxyRules::Type::EMPTY) {
     net::ProxyConfig proxy_config = effective_config.value();
-    proxy_config.proxy_rules().bypass_rules.AddRuleToBypassLocal();
+    // TODO(https://crbug.com/902418): Is this rule still needed?
+    proxy_config.proxy_rules()
+        .bypass_rules.PrependRuleToBypassSimpleHostnames();
     effective_config = net::ProxyConfigWithAnnotation(
         proxy_config, effective_config.traffic_annotation());
   }

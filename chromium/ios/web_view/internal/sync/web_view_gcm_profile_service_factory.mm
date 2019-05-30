@@ -4,15 +4,18 @@
 
 #import "ios/web_view/internal/sync/web_view_gcm_profile_service_factory.h"
 
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
 #include "components/gcm_driver/gcm_client_factory.h"
 #include "components/gcm_driver/gcm_profile_service.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
+#include "ios/web/public/web_task_traits.h"
 #include "ios/web/public/web_thread.h"
+#include "ios/web_view/internal/app/application_context.h"
 #include "ios/web_view/internal/signin/web_view_identity_manager_factory.h"
 #include "ios/web_view/internal/web_view_browser_state.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -43,11 +46,10 @@ void RequestProxyResolvingSocketFactory(
     web::BrowserState* context,
     base::WeakPtr<gcm::GCMProfileService> service,
     network::mojom::ProxyResolvingSocketFactoryRequest request) {
-  web::WebThread::GetTaskRunnerForThread(web::WebThread::UI)
-      ->PostTask(
-          FROM_HERE,
-          base::BindOnce(&RequestProxyResolvingSocketFactoryOnUIThread, context,
-                         std::move(service), std::move(request)));
+  base::PostTaskWithTraits(
+      FROM_HERE, {web::WebThread::UI},
+      base::BindOnce(&RequestProxyResolvingSocketFactoryOnUIThread, context,
+                     std::move(service), std::move(request)));
 }
 
 }  // namespace
@@ -62,7 +64,8 @@ gcm::GCMProfileService* WebViewGCMProfileServiceFactory::GetForBrowserState(
 // static
 WebViewGCMProfileServiceFactory*
 WebViewGCMProfileServiceFactory::GetInstance() {
-  return base::Singleton<WebViewGCMProfileServiceFactory>::get();
+  static base::NoDestructor<WebViewGCMProfileServiceFactory> instance;
+  return instance.get();
 }
 
 // static
@@ -94,11 +97,12 @@ WebViewGCMProfileServiceFactory::BuildServiceInstanceFor(
       browser_state->GetPrefs(), browser_state->GetStatePath(),
       base::BindRepeating(&RequestProxyResolvingSocketFactory, context),
       browser_state->GetSharedURLLoaderFactory(),
+      ApplicationContext::GetInstance()->GetNetworkConnectionTracker(),
       version_info::Channel::UNKNOWN, GetProductCategoryForSubtypes(),
       WebViewIdentityManagerFactory::GetForBrowserState(browser_state),
       base::WrapUnique(new gcm::GCMClientFactory),
-      web::WebThread::GetTaskRunnerForThread(web::WebThread::UI),
-      web::WebThread::GetTaskRunnerForThread(web::WebThread::IO),
+      base::CreateSingleThreadTaskRunnerWithTraits({web::WebThread::UI}),
+      base::CreateSingleThreadTaskRunnerWithTraits({web::WebThread::IO}),
       blocking_task_runner);
 }
 }  // namespace ios_web_view

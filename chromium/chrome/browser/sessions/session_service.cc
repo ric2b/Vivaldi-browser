@@ -47,7 +47,10 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/session_storage_namespace.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/common/extension.h"
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/crostini/crostini_util.h"
+#endif
 
 #if defined(OS_MACOSX)
 #include "chrome/browser/app_controller_mac.h"
@@ -205,7 +208,7 @@ void SessionService::TabClosed(const SessionID& window_id,
   if (!ShouldTrackChangesToWindow(window_id))
     return;
 
-  IdToRange::iterator i = tab_to_available_range_.find(tab_id);
+  auto i = tab_to_available_range_.find(tab_id);
   if (i != tab_to_available_range_.end())
     tab_to_available_range_.erase(i);
 
@@ -324,12 +327,10 @@ void SessionService::TabInserted(WebContents* contents) {
                session_tab_helper->session_id());
   extensions::TabHelper* extensions_tab_helper =
       extensions::TabHelper::FromWebContents(contents);
-  if (extensions_tab_helper &&
-      extensions_tab_helper->extension_app()) {
-    SetTabExtensionAppID(
-        session_tab_helper->window_id(),
-        session_tab_helper->session_id(),
-        extensions_tab_helper->extension_app()->id());
+  if (extensions_tab_helper && extensions_tab_helper->is_app()) {
+    SetTabExtensionAppID(session_tab_helper->window_id(),
+                         session_tab_helper->session_id(),
+                         extensions_tab_helper->GetAppId());
   }
 
   // Record the association between the SessionStorageNamespace and the
@@ -387,32 +388,41 @@ void SessionService::SetWindowAppName(
   ScheduleCommand(sessions::CreateSetWindowAppNameCommand(window_id, app_name));
 }
 
-void SessionService::TabNavigationPathPrunedFromBack(const SessionID& window_id,
-                                                     const SessionID& tab_id,
-                                                     int count) {
+void SessionService::TabNavigationPathPruned(const SessionID& window_id,
+                                             const SessionID& tab_id,
+                                             int index,
+                                             int count) {
   if (!ShouldTrackChangesToWindow(window_id))
     return;
 
-  ScheduleCommand(
-      sessions::CreateTabNavigationPathPrunedFromBackCommand(tab_id, count));
-}
+  DCHECK_GE(index, 0);
+  DCHECK_GT(count, 0);
 
-void SessionService::TabNavigationPathPrunedFromFront(
-    const SessionID& window_id,
-    const SessionID& tab_id,
-    int count) {
-  if (!ShouldTrackChangesToWindow(window_id))
-    return;
-
-  // Update the range of indices.
+  // Update the range of available indices.
   if (tab_to_available_range_.find(tab_id) != tab_to_available_range_.end()) {
     std::pair<int, int>& range = tab_to_available_range_[tab_id];
-    range.first = std::max(0, range.first - count);
-    range.second = std::max(0, range.second - count);
+
+    // if both range.first and range.second are also deleted.
+    if (range.second >= index && range.second < index + count &&
+        range.first >= index && range.first < index + count) {
+      range.first = range.second = 0;
+    } else {
+      // Update range.first
+      if (range.first >= index + count)
+        range.first = range.first - count;
+      else if (range.first >= index && range.first < index + count)
+        range.first = index;
+
+      // Update range.second
+      if (range.second >= index + count)
+        range.second = std::max(range.first, range.second - count);
+      else if (range.second >= index && range.second < index + count)
+        range.second = std::max(range.first, index - 1);
+    }
   }
 
-  ScheduleCommand(
-      sessions::CreateTabNavigationPathPrunedFromFrontCommand(tab_id, count));
+  return ScheduleCommand(
+      sessions::CreateTabNavigationPathPrunedCommand(tab_id, index, count));
 }
 
 void SessionService::TabNavigationPathEntriesDeleted(const SessionID& window_id,
@@ -660,11 +670,10 @@ void SessionService::BuildCommandsForTab(const SessionID& window_id,
 
   extensions::TabHelper* extensions_tab_helper =
       extensions::TabHelper::FromWebContents(tab);
-  if (extensions_tab_helper->extension_app()) {
+  if (extensions_tab_helper->is_app()) {
     base_session_service_->AppendRebuildCommand(
         sessions::CreateSetTabExtensionAppIDCommand(
-            session_id,
-            extensions_tab_helper->extension_app()->id()));
+            session_id, extensions_tab_helper->GetAppId()));
   }
 
   if (!tab->GetExtData().empty()) {
@@ -680,13 +689,13 @@ void SessionService::BuildCommandsForTab(const SessionID& window_id,
   }
 
   for (int i = min_index; i < max_index; ++i) {
-    const NavigationEntry* entry = (i == pending_index) ?
-        tab->GetController().GetPendingEntry() :
-        tab->GetController().GetEntryAtIndex(i);
+    NavigationEntry* entry = (i == pending_index)
+                                 ? tab->GetController().GetPendingEntry()
+                                 : tab->GetController().GetEntryAtIndex(i);
     DCHECK(entry);
     if (ShouldTrackURLForRestore(entry->GetVirtualURL())) {
       const SerializedNavigationEntry navigation =
-          ContentSerializedNavigationBuilder::FromNavigationEntry(i, *entry);
+          ContentSerializedNavigationBuilder::FromNavigationEntry(i, entry);
       base_session_service_->AppendRebuildCommand(
           CreateUpdateTabNavigationCommand(session_id, navigation));
     }
@@ -815,13 +824,13 @@ void SessionService::ScheduleCommand(
 }
 
 void SessionService::CommitPendingCloses() {
-  for (PendingTabCloseIDs::iterator i = pending_tab_close_ids_.begin();
+  for (auto i = pending_tab_close_ids_.begin();
        i != pending_tab_close_ids_.end(); ++i) {
     ScheduleCommand(sessions::CreateTabClosedCommand(*i));
   }
   pending_tab_close_ids_.clear();
 
-  for (PendingWindowCloseIDs::iterator i = pending_window_close_ids_.begin();
+  for (auto i = pending_window_close_ids_.begin();
        i != pending_window_close_ids_.end(); ++i) {
     ScheduleCommand(sessions::CreateWindowClosedCommand(*i));
   }
@@ -876,6 +885,13 @@ bool SessionService::ShouldTrackChangesToWindow(
 bool SessionService::ShouldTrackBrowser(Browser* browser) const {
   if (browser->profile() != profile())
     return false;
+#if defined(OS_CHROMEOS)
+  // Do not track Crostini apps because they will be dead upon restoring the
+  // browser session since VMs do not automatically restart on session restore.
+  if (crostini::CrostiniAppIdFromAppName(browser->app_name())) {
+    return false;
+  }
+#endif
   // Never track app popup windows that do not have a trusted source (i.e.
   // popup windows spawned by an app). If this logic changes, be sure to also
   // change SessionRestoreImpl::CreateRestoredBrowser().
@@ -915,4 +931,20 @@ void SessionService::MaybeDeleteSessionOnlyData() {
 
 sessions::BaseSessionService* SessionService::GetBaseSessionServiceForTest() {
   return base_session_service_.get();
+}
+
+void SessionService::SetAvailableRangeForTest(
+    const SessionID& tab_id,
+    const std::pair<int, int>& range) {
+  tab_to_available_range_[tab_id] = range;
+}
+
+bool SessionService::GetAvailableRangeForTest(const SessionID& tab_id,
+                                              std::pair<int, int>* range) {
+  auto i = tab_to_available_range_.find(tab_id);
+  if (i == tab_to_available_range_.end())
+    return false;
+
+  *range = i->second;
+  return true;
 }

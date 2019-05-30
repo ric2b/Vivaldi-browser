@@ -152,8 +152,7 @@ public class BookmarkManager implements BookmarkDelegate, SearchDelegate,
 
         mToolbar = (BookmarkActionBar) mSelectableListLayout.initializeToolbar(
                 R.layout.bookmark_action_bar, mSelectionDelegate, 0, null, R.id.normal_menu_group,
-                R.id.selection_mode_menu_group, R.color.modern_primary_color, null, true,
-                isDialogUi);
+                R.id.selection_mode_menu_group, null, true, isDialogUi);
         mToolbar.initializeSearchView(
                 this, R.string.bookmark_action_bar_search, R.id.search_menu_id);
 
@@ -347,7 +346,7 @@ public class BookmarkManager implements BookmarkDelegate, SearchDelegate,
             BookmarkUtils.setLastUsedUrl(mActivity, state.mUrl);
             // If a loading state is replaced by another loading state, do not notify this change.
             if (mNativePage != null) {
-                mNativePage.onStateChange(state.mUrl);
+                mNativePage.onStateChange(state.mUrl, false);
             }
         }
 

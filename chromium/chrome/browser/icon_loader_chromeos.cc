@@ -13,10 +13,12 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
+#include "base/task/post_task.h"
 #include "chrome/grit/theme_resources.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "media/media_buildflags.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -127,7 +129,7 @@ IconMapper::IconMapper() {
     std::make_pair(".webm", kVideoIdrs),
   };
 
-  const size_t kESize = arraysize(kExtensionIdrBySizeData);
+  const size_t kESize = base::size(kExtensionIdrBySizeData);
   ExtensionIconMap source(&kExtensionIdrBySizeData[0],
                           &kExtensionIdrBySizeData[kESize]);
   extension_icon_map_.swap(source);
@@ -193,8 +195,8 @@ IconLoader::IconGroup IconLoader::GroupForFilepath(
 scoped_refptr<base::TaskRunner> IconLoader::GetReadIconTaskRunner() {
   // ReadIcon touches non thread safe ResourceBundle images, so it must be on
   // the UI thread.
-  return content::BrowserThread::GetTaskRunnerForThread(
-      content::BrowserThread::UI);
+  return base::CreateSingleThreadTaskRunnerWithTraits(
+      {content::BrowserThread::UI});
 }
 
 void IconLoader::ReadIcon() {

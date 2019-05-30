@@ -8,6 +8,7 @@
 #include <cstring>
 #include <fstream>
 
+#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/task/post_task.h"
@@ -21,8 +22,7 @@ ReadFromBinaryFileOnFileThread(const base::FilePath& path) {
       new std::vector<SupervisedUserBlacklist::Hash>);
 
   base::MemoryMappedFile file;
-  file.Initialize(path);
-  if (!file.IsValid())
+  if (!file.Initialize(path))
     return host_hashes;
 
   size_t size = file.length();

@@ -33,8 +33,8 @@
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/scroll/scroll_animator_compositor_coordinator.h"
+#include "third_party/blink/renderer/core/scroll/scroll_types.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_types.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 
 namespace blink {
@@ -55,6 +55,7 @@ class CORE_EXPORT ScrollAnimatorBase
  public:
   static ScrollAnimatorBase* Create(ScrollableArea*);
 
+  explicit ScrollAnimatorBase(ScrollableArea*);
   ~ScrollAnimatorBase() override;
 
   virtual void Dispose() {}
@@ -114,8 +115,6 @@ class CORE_EXPORT ScrollAnimatorBase
   void Trace(blink::Visitor*) override;
 
  protected:
-  explicit ScrollAnimatorBase(ScrollableArea*);
-
   virtual void NotifyOffsetChanged();
 
   Member<ScrollableArea> scrollable_area_;

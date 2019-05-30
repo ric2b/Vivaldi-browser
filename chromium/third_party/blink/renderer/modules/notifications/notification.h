@@ -39,13 +39,13 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/dom/dom_time_stamp.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/modules/vibration/navigator_vibration.h"
-#include "third_party/blink/renderer/platform/async_method_runner.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 
 namespace blink {
@@ -55,6 +55,7 @@ class NotificationOptions;
 class NotificationResourcesLoader;
 class ScriptState;
 class V8NotificationPermissionCallback;
+class TimestampTrigger;
 
 class MODULES_EXPORT Notification final
     : public EventTargetWithInlineData,
@@ -70,7 +71,7 @@ class MODULES_EXPORT Notification final
   // when the developer-provided data is valid.
   static Notification* Create(ExecutionContext* context,
                               const String& title,
-                              const NotificationOptions& options,
+                              const NotificationOptions* options,
                               ExceptionState& state);
 
   // Used for embedder-created persistent notifications. Initializes the state
@@ -80,14 +81,22 @@ class MODULES_EXPORT Notification final
                               mojom::blink::NotificationDataPtr data,
                               bool showing);
 
+  // The type of notification this instance represents. Non-persistent
+  // notifications will have events delivered to their instance, whereas
+  // persistent notification will be using a Service Worker.
+  enum class Type { kNonPersistent, kPersistent };
+
+  Notification(ExecutionContext* context,
+               Type type,
+               mojom::blink::NotificationDataPtr data);
   ~Notification() override;
 
   void close();
 
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(click);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(show);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(error);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(close);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(click, kClick)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(show, kShow)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(error, kError)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(close, kClose)
 
   // NonPersistentNotificationListener interface.
   void OnShow() override;
@@ -109,6 +118,7 @@ class MODULES_EXPORT Notification final
   bool requireInteraction() const;
   ScriptValue data(ScriptState* script_state);
   Vector<v8::Local<v8::Value>> actions(ScriptState* script_state) const;
+  TimestampTrigger* showTrigger() const { return show_trigger_; }
 
   static String PermissionString(mojom::blink::PermissionStatus permission);
   static String permission(ExecutionContext* context);
@@ -116,7 +126,7 @@ class MODULES_EXPORT Notification final
       ScriptState* script_state,
       V8NotificationPermissionCallback* deprecated_callback = nullptr);
 
-  static size_t maxActions();
+  static uint32_t maxActions();
 
   // EventTarget interface.
   ExecutionContext* GetExecutionContext() const final {
@@ -137,17 +147,8 @@ class MODULES_EXPORT Notification final
   DispatchEventResult DispatchEventInternal(Event& event) final;
 
  private:
-  // The type of notification this instance represents. Non-persistent
-  // notifications will have events delivered to their instance, whereas
-  // persistent notification will be using a Service Worker.
-  enum class Type { kNonPersistent, kPersistent };
-
   // The current phase of the notification in its lifecycle.
   enum class State { kLoading, kShowing, kClosing, kClosed };
-
-  Notification(ExecutionContext* context,
-               Type type,
-               mojom::blink::NotificationDataPtr data);
 
   // Sets the state of the notification in its lifecycle.
   void SetState(State state) { state_ = state; }
@@ -169,7 +170,7 @@ class MODULES_EXPORT Notification final
 
   // Verifies that permission has been granted, then asynchronously starts
   // loading the resources associated with this notification.
-  void PrepareShow();
+  void PrepareShow(TimerBase* timer);
 
   // Shows the notification through the embedder using the loaded resources.
   void DidLoadResources(NotificationResourcesLoader* loader);
@@ -181,11 +182,13 @@ class MODULES_EXPORT Notification final
 
   mojom::blink::NotificationDataPtr data_;
 
+  Member<TimestampTrigger> show_trigger_;
+
   String notification_id_;
 
   String token_;
 
-  Member<AsyncMethodRunner<Notification>> prepare_show_method_runner_;
+  TaskRunnerTimer<Notification> prepare_show_timer_;
 
   Member<NotificationResourcesLoader> loader_;
 

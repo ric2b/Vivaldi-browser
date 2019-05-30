@@ -12,10 +12,8 @@
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "content/public/browser/browser_child_process_observer.h"
-#include "content/public/browser/browser_context.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/child_process_termination_info.h"
-#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/process_type.h"
@@ -84,12 +82,9 @@ void ChromeStabilityMetricsProvider::Observe(
     const content::NotificationSource& source,
     const content::NotificationDetails& details) {
   switch (type) {
-    case content::NOTIFICATION_LOAD_START: {
-      content::NavigationController* tab =
-          content::Source<content::NavigationController>(source).ptr();
-      helper_.LogLoadStarted(tab->GetBrowserContext()->IsOffTheRecord());
+    case content::NOTIFICATION_LOAD_START:
+      helper_.LogLoadStarted();
       break;
-    }
 
     case content::NOTIFICATION_RENDERER_PROCESS_CLOSED: {
       content::ChildProcessTerminationInfo* process_info =
@@ -108,9 +103,12 @@ void ChromeStabilityMetricsProvider::Observe(
       break;
     }
 
-    case content::NOTIFICATION_RENDER_WIDGET_HOST_HANG:
-      helper_.LogRendererHang();
+    case content::NOTIFICATION_RENDER_WIDGET_HOST_HANG: {
+      const metrics::RendererHangCause* hang_cause =
+          content::Details<metrics::RendererHangCause>(details).ptr();
+      helper_.LogRendererHang(*hang_cause);
       break;
+    }
 
     case content::NOTIFICATION_RENDERER_PROCESS_CREATED: {
       bool was_extension_process = false;
@@ -160,13 +158,13 @@ void ChromeStabilityMetricsProvider::OnCrashDumpProcessed(
     int rph_id,
     const crash_reporter::CrashMetricsReporter::ReportedCrashTypeSet&
         reported_counts) {
-  if (reported_counts.count(
-          crash_reporter::CrashMetricsReporter::ProcessedCrashCounts::
-              kRendererForegroundVisibleCrash) ||
-      reported_counts.count(
-          crash_reporter::CrashMetricsReporter::ProcessedCrashCounts::
-              kRendererForegroundVisibleSubframeCrash)) {
+  if (reported_counts.count(crash_reporter::CrashMetricsReporter::
+                                ProcessedCrashCounts::kRendererCrashAll)) {
     helper_.IncreaseRendererCrashCount();
+  }
+  if (reported_counts.count(crash_reporter::CrashMetricsReporter::
+                                ProcessedCrashCounts::kGpuCrashAll)) {
+    helper_.IncreaseGpuCrashCount();
   }
 }
 

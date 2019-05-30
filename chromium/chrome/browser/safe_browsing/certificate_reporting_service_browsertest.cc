@@ -4,8 +4,11 @@
 
 #include "chrome/browser/safe_browsing/certificate_reporting_service.h"
 
+#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/macros.h"
+#include "base/task/post_task.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
@@ -27,6 +30,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/variations/variations_params_manager.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
@@ -52,6 +56,10 @@ const char* kFailedReportHistogram = "SSL.CertificateErrorReportFailure";
 void CleanUpOnIOThread() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   net::URLRequestFilter::GetInstance()->ClearHandlers();
+}
+
+bool AreCommittedInterstitialsEnabled() {
+  return base::FeatureList::IsEnabled(features::kSSLCommittedInterstitials);
 }
 
 }  // namespace
@@ -103,8 +111,8 @@ class CertificateReportingServiceBrowserTest
 
   void TearDownOnMainThread() override {
     test_helper()->ExpectNoRequests(service());
-    content::BrowserThread::PostTask(content::BrowserThread::IO, FROM_HERE,
-                                     base::BindOnce(&CleanUpOnIOThread));
+    base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::IO},
+                             base::BindOnce(&CleanUpOnIOThread));
     EXPECT_GE(num_expected_failed_report_, 0)
         << "Don't forget to set expected failed report count.";
     // Check the histogram as the last thing. This makes sure no in-flight
@@ -166,15 +174,14 @@ class CertificateReportingServiceBrowserTest
     TabStripModel* tab_strip_model = browser()->tab_strip_model();
     content::WebContents* contents = tab_strip_model->GetActiveWebContents();
     ui_test_utils::NavigateToURL(browser(), kCertErrorURL);
-    // When GetParam() is true, committed interstitials are enabled. In this
-    // case, no interstitial attaches; once a navigation commits, the error page
-    // is present.
-    if (!GetParam())
+    // When committed interstitials are enabled, no interstitial attaches; once
+    // a navigation commits, the error page is present.
+    if (!AreCommittedInterstitialsEnabled())
       content::WaitForInterstitialAttach(contents);
 
     // Navigate away from the interstitial to trigger report upload.
     ui_test_utils::NavigateToURL(browser(), GURL("about:blank"));
-    if (!GetParam())
+    if (!AreCommittedInterstitialsEnabled())
       content::WaitForInterstitialDetach(contents);
   }
 
@@ -256,9 +263,9 @@ class CertificateReportingServiceBrowserTest
   DISALLOW_COPY_AND_ASSIGN(CertificateReportingServiceBrowserTest);
 };
 
-INSTANTIATE_TEST_CASE_P(,
-                        CertificateReportingServiceBrowserTest,
-                        ::testing::Values(false, true));
+INSTANTIATE_TEST_SUITE_P(,
+                         CertificateReportingServiceBrowserTest,
+                         ::testing::Values(false, true));
 
 // Tests that report send attempt should be cancelled when extended
 // reporting is not opted in.

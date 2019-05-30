@@ -16,7 +16,7 @@
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/scoped_blocking_call.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "chrome/browser/android/color_helpers.h"
 #include "chrome/browser/android/webapk/chrome_webapk_host.h"
@@ -54,7 +54,7 @@ void GetHomescreenIconAndSplashImageSizes() {
   ScopedJavaLocalRef<jintArray> java_size_array =
       Java_ShortcutHelper_getHomeScreenIconAndSplashImageSizes(env);
   std::vector<int> sizes;
-  base::android::JavaIntArrayToIntVector(env, java_size_array.obj(), &sizes);
+  base::android::JavaIntArrayToIntVector(env, java_size_array, &sizes);
 
   // Check that the size returned is what is expected.
   DCHECK(sizes.size() == 5);
@@ -79,6 +79,7 @@ void GetHomescreenIconAndSplashImageSizes() {
 void AddWebappWithSkBitmap(const ShortcutInfo& info,
                            const std::string& webapp_id,
                            const SkBitmap& icon_bitmap,
+                           bool is_icon_maskable,
                            const base::Closure& splash_image_callback) {
   // Send the data to the Java side to create the shortcut.
   JNIEnv* env = base::android::AttachCurrentThread();
@@ -113,8 +114,8 @@ void AddWebappWithSkBitmap(const ShortcutInfo& info,
 
   Java_ShortcutHelper_addWebapp(
       env, java_webapp_id, java_url, java_scope_url, java_user_title, java_name,
-      java_short_name, java_best_primary_icon_url, java_bitmap, info.display,
-      info.orientation, info.source,
+      java_short_name, java_best_primary_icon_url, java_bitmap,
+      is_icon_maskable, info.display, info.orientation, info.source,
       OptionalSkColorToJavaColor(info.theme_color),
       OptionalSkColorToJavaColor(info.background_color), java_splash_screen_url,
       callback_pointer);
@@ -123,7 +124,8 @@ void AddWebappWithSkBitmap(const ShortcutInfo& info,
 // Adds a shortcut which opens in a browser tab to the launcher.
 void AddShortcutWithSkBitmap(const ShortcutInfo& info,
                              const std::string& id,
-                             const SkBitmap& icon_bitmap) {
+                             const SkBitmap& icon_bitmap,
+                             bool is_icon_maskable) {
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jstring> java_id =
       base::android::ConvertUTF8ToJavaString(env, id);
@@ -136,7 +138,7 @@ void AddShortcutWithSkBitmap(const ShortcutInfo& info,
     java_bitmap = gfx::ConvertToJavaBitmap(&icon_bitmap);
 
   Java_ShortcutHelper_addShortcut(env, java_id, java_url, java_user_title,
-                                  java_bitmap, info.source);
+                                  java_bitmap, is_icon_maskable, info.source);
 }
 
 }  // anonymous namespace
@@ -171,19 +173,20 @@ std::unique_ptr<ShortcutInfo> ShortcutHelper::CreateShortcutInfo(
 void ShortcutHelper::AddToLauncherWithSkBitmap(
     content::WebContents* web_contents,
     const ShortcutInfo& info,
-    const SkBitmap& icon_bitmap) {
+    const SkBitmap& icon_bitmap,
+    bool is_icon_maskable) {
   std::string webapp_id = base::GenerateGUID();
   if (info.display == blink::kWebDisplayModeStandalone ||
       info.display == blink::kWebDisplayModeFullscreen ||
       info.display == blink::kWebDisplayModeMinimalUi) {
     AddWebappWithSkBitmap(
-        info, webapp_id, icon_bitmap,
+        info, webapp_id, icon_bitmap, is_icon_maskable,
         base::Bind(&ShortcutHelper::FetchSplashScreenImage, web_contents,
                    info.splash_image_url, info.ideal_splash_image_size_in_px,
                    info.minimum_splash_image_size_in_px, webapp_id));
     return;
   }
-  AddShortcutWithSkBitmap(info, webapp_id, icon_bitmap);
+  AddShortcutWithSkBitmap(info, webapp_id, icon_bitmap, is_icon_maskable);
 }
 
 void ShortcutHelper::ShowWebApkInstallInProgressToast() {
@@ -255,9 +258,10 @@ void ShortcutHelper::StoreWebappSplashImage(const std::string& webapp_id,
 // static
 SkBitmap ShortcutHelper::FinalizeLauncherIconInBackground(
     const SkBitmap& bitmap,
+    bool is_icon_maskable,
     const GURL& url,
     bool* is_generated) {
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::AssertLongCPUWorkAllowed();
 
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jobject> result;
@@ -268,8 +272,8 @@ SkBitmap ShortcutHelper::FinalizeLauncherIconInBackground(
                                                          bitmap.height())) {
       ScopedJavaLocalRef<jobject> java_bitmap =
           gfx::ConvertToJavaBitmap(&bitmap);
-      result =
-          Java_ShortcutHelper_createHomeScreenIconFromWebIcon(env, java_bitmap);
+      result = Java_ShortcutHelper_createHomeScreenIconFromWebIcon(
+          env, java_bitmap, is_icon_maskable);
     }
   }
 
@@ -295,12 +299,12 @@ SkBitmap ShortcutHelper::FinalizeLauncherIconInBackground(
 }
 
 // static
-std::string ShortcutHelper::QueryWebApkPackage(const GURL& url) {
+std::string ShortcutHelper::QueryFirstWebApkPackage(const GURL& url) {
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jstring> java_url =
       base::android::ConvertUTF8ToJavaString(env, url.spec());
   ScopedJavaLocalRef<jstring> java_webapk_package_name =
-      Java_ShortcutHelper_queryWebApkPackage(env, java_url);
+      Java_ShortcutHelper_queryFirstWebApkPackage(env, java_url);
 
   std::string webapk_package_name = "";
   if (java_webapk_package_name.obj()) {
@@ -314,7 +318,7 @@ std::string ShortcutHelper::QueryWebApkPackage(const GURL& url) {
 bool ShortcutHelper::IsWebApkInstalled(content::BrowserContext* browser_context,
                                        const GURL& start_url,
                                        const GURL& manifest_url) {
-  return !QueryWebApkPackage(start_url).empty() ||
+  return !QueryFirstWebApkPackage(start_url).empty() ||
          WebApkInstallService::Get(browser_context)
              ->IsInstallInProgress(manifest_url);
 }
@@ -343,7 +347,6 @@ void ShortcutHelper::RetrieveWebApks(const WebApkInfoCallback& callback) {
 // webapp-capable site; otherwise, |splash_image_callback| will have never been
 // allocated and doesn't need to be run or deleted.
 void JNI_ShortcutHelper_OnWebappDataStored(JNIEnv* env,
-                                           const JavaParamRef<jclass>& clazz,
                                            jlong jsplash_image_callback) {
   DCHECK(jsplash_image_callback);
   base::Closure* splash_image_callback =
@@ -354,7 +357,6 @@ void JNI_ShortcutHelper_OnWebappDataStored(JNIEnv* env,
 
 void JNI_ShortcutHelper_OnWebApksRetrieved(
     JNIEnv* env,
-    const JavaParamRef<jclass>& clazz,
     const jlong jcallback_pointer,
     const JavaParamRef<jobjectArray>& jnames,
     const JavaParamRef<jobjectArray>& jshort_names,

@@ -5,13 +5,16 @@
 #ifndef CONTENT_BROWSER_RENDERER_HOST_FRAME_CONNECTOR_DELEGATE_H_
 #define CONTENT_BROWSER_RENDERER_HOST_FRAME_CONNECTOR_DELEGATE_H_
 
+#include "base/compiler_specific.h"
+#include "base/time/time.h"
 #include "cc/input/touch_action.h"
-#include "components/viz/common/surfaces/local_surface_id.h"
+#include "components/viz/common/surfaces/local_surface_id_allocation.h"
 #include "components/viz/host/hit_test/hit_test_query.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/content_export.h"
 #include "content/public/common/input_event_ack_state.h"
 #include "content/public/common/screen_info.h"
+#include "third_party/blink/public/common/frame/occlusion_state.h"
 #include "ui/gfx/geometry/rect.h"
 
 #if defined(USE_AURA)
@@ -79,8 +82,9 @@ class CONTENT_EXPORT FrameConnectorDelegate {
       const blink::WebIntrinsicSizingInfo&) {}
 
   // Sends new resize parameters to the sub-frame's renderer.
-  void SynchronizeVisualProperties(const viz::SurfaceId& surface_id,
-                                   const FrameVisualProperties& resize_params);
+  void SynchronizeVisualProperties(
+      const viz::FrameSinkId& frame_sink_id,
+      const FrameVisualProperties& visual_properties);
 
   // Return the size of the CompositorFrame to use in the child renderer.
   const gfx::Size& local_frame_size_in_pixels() const {
@@ -141,17 +145,21 @@ class CONTENT_EXPORT FrameConnectorDelegate {
       const gfx::PointF& point,
       RenderWidgetHostViewBase* target_view,
       const viz::SurfaceId& local_surface_id,
-      gfx::PointF* transformed_point,
-      viz::EventSource source = viz::EventSource::ANY);
+      gfx::PointF* transformed_point);
 
-  // Pass acked touchpad pinch gesture events to the root view for processing.
-  virtual void ForwardAckedTouchpadPinchGestureEvent(
+  // Pass acked touchpad pinch or double tap gesture events to the root view
+  // for processing.
+  virtual void ForwardAckedTouchpadZoomEvent(
       const blink::WebGestureEvent& event,
       InputEventAckState ack_result) {}
 
-  // Gesture events with unused scroll deltas must be bubbled to ancestors
-  // who may consume the delta.
-  virtual void BubbleScrollEvent(const blink::WebGestureEvent& event) {}
+  // A gesture scroll sequence that is not consumed by a child must be bubbled
+  // to ancestors who may consume it.
+  // Returns false if the scroll event could not be bubbled. The caller must
+  // not attempt to bubble the rest of the scroll sequence in this case.
+  // Otherwise, returns true.
+  virtual bool BubbleScrollEvent(const blink::WebGestureEvent& event)
+      WARN_UNUSED_RESULT;
 
   // Determines whether the root RenderWidgetHostView (and thus the current
   // page) has focus.
@@ -180,12 +188,14 @@ class CONTENT_EXPORT FrameConnectorDelegate {
 
   // Returns whether the current view may be occluded or distorted (e.g, with
   // CSS opacity or transform) in the parent view.
-  bool occluded_or_obscured() const { return occluded_or_obscured_; }
+  blink::FrameOcclusionState occlusion_state() const {
+    return occlusion_state_;
+  }
 
-  // Returns the viz::LocalSurfaceId propagated from the parent to be used by
-  // this child frame.
-  const viz::LocalSurfaceId& local_surface_id() const {
-    return local_surface_id_;
+  // Returns the viz::LocalSurfaceIdAllocation propagated from the parent to be
+  // used by this child frame.
+  const viz::LocalSurfaceIdAllocation& local_surface_id_allocation() const {
+    return local_surface_id_allocation_;
   }
 
   // Returns the ScreenInfo propagated from the parent to be used by this
@@ -262,10 +272,8 @@ class CONTENT_EXPORT FrameConnectorDelegate {
   // This is here rather than in the implementation class so that
   // ViewportIntersection() can return a reference.
   gfx::Rect viewport_intersection_rect_;
-
   gfx::Rect compositor_visible_rect_;
-
-  bool occluded_or_obscured_ = false;
+  blink::FrameOcclusionState occlusion_state_ = blink::kUnknownOcclusionState;
 
   ScreenInfo screen_info_;
   gfx::Size local_frame_size_in_dip_;
@@ -273,7 +281,7 @@ class CONTENT_EXPORT FrameConnectorDelegate {
   gfx::Rect screen_space_rect_in_dip_;
   gfx::Rect screen_space_rect_in_pixels_;
 
-  viz::LocalSurfaceId local_surface_id_;
+  viz::LocalSurfaceIdAllocation local_surface_id_allocation_;
 
   bool has_size_ = false;
   const bool use_zoom_for_device_scale_factor_;

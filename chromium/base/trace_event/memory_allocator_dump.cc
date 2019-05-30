@@ -12,7 +12,7 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "base/trace_event/process_memory_dump.h"
-#include "base/trace_event/trace_event_argument.h"
+#include "base/trace_event/traced_value.h"
 #include "base/values.h"
 
 namespace base {
@@ -101,7 +101,7 @@ uint64_t MemoryAllocatorDump::GetSizeInternal() const {
     }
   }
   return 0;
-};
+}
 
 MemoryAllocatorDump::Entry::Entry() : entry_type(kString), value_uint64() {}
 MemoryAllocatorDump::Entry::Entry(MemoryAllocatorDump::Entry&&) noexcept =

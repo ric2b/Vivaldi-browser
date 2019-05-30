@@ -19,6 +19,7 @@
 <translation id="1274977772557788323">Adobe Flash Player のストレージ設定</translation>
 <translation id="1297175357211070620">送信先</translation>
 <translation id="1303101771013849280">ブックマークHTMLファイル</translation>
+<translation id="1380436189840894976">シークレットモードを終了しますか？</translation>
 <translation id="1430915738399379752">印刷</translation>
 <translation id="1433811987160647649">アクセスする前に確認する</translation>
 <translation id="1451375123200651445">ウェブページ、単一ファイル</translation>
@@ -30,13 +31,13 @@
 <translation id="1603914832182249871">(プライベート)</translation>
 <translation id="1620510694547887537">カメラ</translation>
 <translation id="1635033183663317347">管理責任者によってインストールされています。</translation>
+<translation id="1682548588986054654">新しいプライベートウィンドウ</translation>
 <translation id="1698122934742150150">現在のシークレット モード セッションのみ</translation>
 <translation id="1706625117072057435">拡大縮小レベル</translation>
 <translation id="1708338024780164500">(非アクティブ)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
 <translation id="1723824996674794290">新しいウィンドウ (&amp;N)</translation>
 <translation id="1729533290416704613">この拡張機能では、アドレスバーからの検索時に表示されるページも制御されます。</translation>
-<translation id="1731589410171062430">印刷総数: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" />（<ph name="NUMBER_OF_PAGES" /> <ph name="PAGE_OR_PAGES_LABEL" />）</translation>
 <translation id="1744108098763830590">バックグラウンドページ</translation>
 <translation id="1805822111539868586">ビューを検証</translation>
 <translation id="1828901632669367785">システムダイアログを使用して印刷...</translation>
@@ -46,7 +47,6 @@
 <translation id="1901303067676059328">すべて選択 (&amp;A)</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">すべて削除</translation>
-<translation id="1974060860693918893">詳細設定</translation>
 <translation id="1989112275319619282">参照</translation>
 <translation id="1992397118740194946">未設定</translation>
 <translation id="1994173015038366702">サイトの URL</translation>
@@ -93,9 +93,7 @@
 <translation id="26224892172169984">すべてのサイトに対してプロトコルの処理を許可しない</translation>
 <translation id="2662876636500006917">Chromeウェブストア</translation>
 <translation id="2678063897982469759">再度有効にする</translation>
-<translation id="2679385451463308372">システムダイアログを使用して印刷…</translation>
 <translation id="2721037002783622288"><ph name="SEARCH_ENGINE" />で画像を検索 (&amp;S)</translation>
-<translation id="2726934403674109201">(合計<ph name="COUNT" />箇所)</translation>
 <translation id="2785873697295365461">ファイル記述子</translation>
 <translation id="2809586584051668049">、他<ph name="NUMBER_ADDITIONAL_DISABLED" />件</translation>
 <translation id="2812989263793994277">すべての画像を表示しない</translation>
@@ -103,7 +101,6 @@
 <translation id="2850541429955027218">テーマを追加</translation>
 <translation id="2861941300086904918">ネイティブクライアントセキュリティマネージャー</translation>
 <translation id="2889064240420137087">次のプログラムでリンクを開く...</translation>
-<translation id="2890678560483811744">ページ範囲が上限を超えています</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" />はこのプリンターと通信できませんでした。プリンターが接続されていることを確認して、もう一度お試しください。</translation>
 <translation id="2904456025988372123">サイトが最初のファイルに続けて次のファイルを自動的にダウンロードしようとする際に確認する</translation>
 <translation id="2913331724188855103">サイトに Cookie データの保存と読み取りを許可する（推奨）</translation>
@@ -130,20 +127,17 @@
 <translation id="3222066309010235055">事前レンダリング: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">マイク</translation>
 <translation id="3241680850019875542">パッケージ化する拡張機能のルートフォルダーを選択します。拡張機能を更新するには、再使用する秘密鍵ファイルも選択してください。</translation>
-<translation id="3269093882174072735">画像を読み込む</translation>
 <translation id="3280237271814976245">名前を付けて保存... (&amp;A)</translation>
 <translation id="3288047731229977326">デベロッパーモードで実行される拡張機能はパソコンにダメージを与える恐れがあります。デベロッパーでない場合は、安全のため、デベロッパーモードで実行されているこれらの拡張機能を無効にしてください。</translation>
 <translation id="329838636886466101">修復</translation>
 <translation id="3303818374450886607">部数</translation>
 <translation id="3305661444342691068">PDFを既定アプリで開く</translation>
 <translation id="3317459757438853210">両面印刷</translation>
-<translation id="3319048459796106952">プライベートウィンドウを開く (&amp;I)</translation>
 <translation id="3341703758641437857">ファイルのURLへのアクセスを許可</translation>
 <translation id="3347086966102161372">画像のアドレスをコピー (&amp;O)</translation>
 <translation id="3360297538363969800">印刷できませんでした。プリンターを確認してもう一度お試しください。</translation>
 <translation id="3378503599595235699">ブラウザーを終了するまでローカル データを保持する</translation>
 <translation id="3378572629723696641">この拡張機能は破損している可能性があります。</translation>
-<translation id="3396331542604645348">選択したプリンターは利用できないか、正しくインストールされていません。プリンターを確認するか、別のプリンターを選択してみてください。</translation>
 <translation id="3432227430032737297">表示中のサイトをすべて削除</translation>
 <translation id="3435896845095436175">有効にする</translation>
 <translation id="3440761377721825626">サイトがプラグインを使用してパソコンにアクセスしようとしたときに確認する</translation>
@@ -153,6 +147,7 @@
 <translation id="3505030558724226696">デバイスのアクセスを取り消す</translation>
 <translation id="3523642406908660543">サイトがプラグインを使用してパソコンにアクセスしようとしたときに確認する（推奨）</translation>
 <translation id="354068948465830244">サイトデータの読み取りと変更を行います</translation>
+<translation id="3574917942258583917">シークレッ モードを終了してもよろしいですか？</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt;さんがあなたのグループ&lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;と&lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;プリンターの共有を希望しています。共有を許可すると、グループのメンバー全員がこのプリンターに印刷できるようになります。</translation>
 <translation id="3587482841069643663">すべて</translation>
 <translation id="3627588569887975815">プライベートウィンドウで開く (&amp;G)</translation>
@@ -165,6 +160,7 @@
 <translation id="3797900183766075808"><ph name="SEARCH_ENGINE" />で「<ph name="SEARCH_TERMS" />」を検索 (&amp;S)</translation>
 <translation id="3798449238516105146">バージョン</translation>
 <translation id="3800806661949714323">すべて表示（推奨）</translation>
+<translation id="3810973564298564668">管理</translation>
 <translation id="383891835335927981">拡大縮小を設定したサイトはありません</translation>
 <translation id="385051799172605136">戻る</translation>
 <translation id="3855441664322950881">拡張機能のパッケージ化</translation>
@@ -210,7 +206,6 @@
 <translation id="4593021220803146968"><ph name="URL" />に移動 (&amp;G)</translation>
 <translation id="4595560905247879544">アプリと拡張機能は管理者(<ph name="CUSTODIAN_NAME" />)だけが変更できます。</translation>
 <translation id="4613271546271159013">拡張機能によって、新しいタブを開いたときに表示されるページが変更されました。</translation>
-<translation id="4628314759732363424">変更...</translation>
 <translation id="4677772697204437347">GPUメモリー</translation>
 <translation id="4681930562518940301">元の画像を新しいタブで開く (&amp;I)</translation>
 <translation id="4688541352655220763">この機能を使用すると、テレビや他の端末にVivaldiのコンテンツを表示できます。</translation>
@@ -242,17 +237,15 @@
 <translation id="5233736638227740678">貼り付け (&amp;P)</translation>
 <translation id="5265562206369321422">1週間以上オフライン</translation>
 <translation id="5269977353971873915">印刷が失敗しました</translation>
-<translation id="5271549068863921519">パスワードを保存</translation>
 <translation id="52912272896845572">秘密鍵ファイルが無効です。</translation>
 <translation id="5301954838959518834">OK</translation>
 <translation id="5317780077021120954">保存</translation>
-<translation id="5329858601952122676">削除 (&amp;D)</translation>
 <translation id="5355926466126177564">拡張機能「<ph name="EXTENSION_NAME" />」により、アドレスバーから検索したときに表示されるページが変更されました。</translation>
 <translation id="5362741141255528695">秘密鍵ファイルを選択します。</translation>
 <translation id="5370819323174483825">再読み込み (&amp;R)</translation>
 <translation id="5398572795982417028">ページ範囲が上限を超えています。上限は<ph name="MAXIMUM_PAGE" />です。</translation>
+<translation id="5425042808445046667">ダウンロードを続行</translation>
 <translation id="5431318178759467895">カラー</translation>
-<translation id="5451285724299252438">ページ範囲のテキストボックス</translation>
 <translation id="5483785310822538350">ファイルとデバイスのアクセスを取り消す</translation>
 <translation id="5485102783864353244">アプリを追加</translation>
 <translation id="5487521232677179737">データを消去</translation>
@@ -262,7 +255,6 @@
 <translation id="5542132724887566711">プロフィール</translation>
 <translation id="5556459405103347317">再読み込み</translation>
 <translation id="5575473780076478375">プライベート拡張機能: <ph name="EXTENSION_NAME" /></translation>
-<translation id="5581700288664681403"><ph name="CLOUD_PRINT_NAME" />を読み込んでいます</translation>
 <translation id="5614553682702429503">パスワードを保存しますか？</translation>
 <translation id="5623842676595125836">ログ</translation>
 <translation id="5627086634964711283">この拡張機能では、ホームボタンのクリック時に表示されるページも制御されます。</translation>
@@ -273,15 +265,16 @@
 <translation id="5707185214361380026">拡張機能の読み込みに失敗しました:</translation>
 <translation id="5715711091495208045">プラグインブローカー: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">PDFで保存</translation>
+<translation id="5747809636523347288">貼り付けて <ph name="URL" /> に移動(&amp;s)</translation>
 <translation id="5759728514498647443">印刷用に「<ph name="APP_NAME" />」から送信したドキュメントは「<ph name="APP_NAME" />」で読むことができます。</translation>
 <translation id="5764483294734785780">名前を付けて音声を保存... (&amp;V)</translation>
 <translation id="577624874850706961">Cookie を検索</translation>
 <translation id="5780973441651030252">プロセスの優先度</translation>
 <translation id="5804241973901381774">権限</translation>
 <translation id="5828633471261496623">印刷中...</translation>
-<translation id="5829401023154985950">管理...</translation>
 <translation id="583281660410589416">不明</translation>
 <translation id="5838456317242088717">現在のシークレット モード セッション</translation>
+<translation id="5877584842898320529">選択したプリンタは利用できないか、正しくインストールされていません。<ph name="BR" />プリンターを確認するか、別のプリンターを選択してみてください。</translation>
 <translation id="5908769186679515905">サイトでの Flash の実行をブロックする</translation>
 <translation id="5956585768868398362">これを検索ページにしてもよろしいですか？</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (最大<ph name="NUM_KILOBYTES_LIVE" />)</translation>
@@ -321,6 +314,7 @@
 <translation id="6498249116389603658">選択したすべての言語 (&amp;A)</translation>
 <translation id="6503077044568424649">よくアクセスするページ</translation>
 <translation id="6508261954199872201">アプリ: <ph name="APP_NAME" /></translation>
+<translation id="6516243500644829484">シークレット ウィンドウを開く(&amp;p)</translation>
 <translation id="6518014396551869914">画像をコピー (&amp;Y)</translation>
 <translation id="6550675742724504774">オプション</translation>
 <translation id="6612358246767739896">保護されたコンテンツ</translation>
@@ -334,7 +328,6 @@
 <translation id="6787839852456839824">キーボードショートカット</translation>
 <translation id="6788210894632713004">パッケージ化されていない拡張機能</translation>
 <translation id="6798954102094737107">プラグイン: <ph name="PLUGIN_NAME" /></translation>
-<translation id="6807889908376551050">すべて表示...</translation>
 <translation id="6812841287760418429">変更を保持</translation>
 <translation id="6817174620439930047">サイトがシステム エクスクルーシブ メッセージを使用してMIDIデバイスにアクセスする際に確認する (推奨)</translation>
 <translation id="682123305478866682">デスクトップをキャストする</translation>
@@ -374,6 +367,7 @@
 <translation id="7701040980221191251">なし</translation>
 <translation id="7704305437604973648">タスク</translation>
 <translation id="7710568461918838723">キャスト... (&amp;C)</translation>
+<translation id="7750228210027921155">ピクチャー イン ピクチャー</translation>
 <translation id="7751260505918304024">すべて表示</translation>
 <translation id="7760004034676677601">これを起動時に開くページにしてもよろしいですか？</translation>
 <translation id="7771452384635174008">レイアウト</translation>
@@ -405,6 +399,7 @@
 <translation id="8137559199583651773">拡張機能の管理</translation>
 <translation id="8180239481735238521">ページ</translation>
 <translation id="8188120771410500975">テキストフィールドのスペルチェック (&amp;C)</translation>
+<translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{ダウンロードが進行中です}other{ダウンロードが進行中です}}</translation>
 <translation id="8230134520748321204"><ph name="ORIGIN" /> のパスワードを保存しますか？</translation>
 <translation id="8261378640211443080">この拡張機能は<ph name="IDS_EXTENSION_WEB_STORE_TITLE" />で提供されていません。意図せずに追加された可能性があります。</translation>
 <translation id="8270242299912238708">PDF ドキュメント</translation>
@@ -412,7 +407,6 @@
 <translation id="8339059274628563283"><ph name="SITE" /> によりデータがローカルに保存されました</translation>
 <translation id="8351419472474436977">この拡張機能によってプロキシ設定が制御されています。オンラインで行う操作は、この拡張機能によって変更、遮断、傍受される可能性があります。この変更が行われた理由に心当たりがない場合、これは不正な変更と考えられます。</translation>
 <translation id="8382913212082956454">メール アドレスをコピー (&amp;E)</translation>
-<translation id="839736845446313156">登録</translation>
 <translation id="8413385045638830869">最初に確認する（推奨）</translation>
 <translation id="8523849605371521713">エンタープライズポリシーによって追加されました</translation>
 <translation id="8546306075665861288">画像キャッシュ</translation>
@@ -422,8 +416,6 @@
 <translation id="8615618338313291042">プライベートアプリ: <ph name="APP_NAME" /></translation>
 <translation id="8627151598708688654">ソースを選択</translation>
 <translation id="862750493060684461">CSSキャッシュ</translation>
-<translation id="8652487083013326477">ページ範囲のラジオボタン</translation>
-<translation id="8658595122208653918">プリンターのオプションを変更...</translation>
 <translation id="8664389313780386848">ページのソースを表示 (&amp;V)</translation>
 <translation id="8708000541097332489">終了時に消去</translation>
 <translation id="8714838604780058252">背景のグラフィック</translation>
@@ -437,8 +429,8 @@
 <translation id="8808478386290700967">ウェブストア</translation>
 <translation id="8813811964357448561">枚</translation>
 <translation id="8823514049557262177">リンクテキストをコピー (&amp;X)</translation>
+<translation id="8823704566850948458">パスワードを自動生成...</translation>
 <translation id="8859174528519900719">サブフレーム: <ph name="SUBFRAME_SITE" /></translation>
-<translation id="8876309039915144086">パスワードを生成...</translation>
 <translation id="8899851313684471736">新しいウィンドウで開く (&amp;W)</translation>
 <translation id="8910146161325739742">画面を共有する</translation>
 <translation id="8915370057835397490">候補を読み込んでいます</translation>
@@ -450,6 +442,7 @@
 <translation id="9003647077635673607">全てのウェブサイトでの実行を許可</translation>
 <translation id="9056810968620647706">一致する項目が見つかりません。</translation>
 <translation id="9137916601698928395"><ph name="USER" />としてリンクを開く</translation>
+<translation id="916607977885256133">ピクチャー イン ピクチャー</translation>
 <translation id="9170848237812810038">取り消し (&amp;U)</translation>
 <translation id="9215293857209265904">「<ph name="EXTENSION_NAME" />」が追加されました</translation>
 <translation id="9218430445555521422">既定として設定</translation>

@@ -10,6 +10,7 @@
 #import <objc/runtime.h>
 #include <stddef.h>
 
+#include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/mac/foundation_util.h"
@@ -40,7 +41,6 @@
 #include "chrome/browser/ui/search/local_ntp_test_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/user_manager.h"
-#include "chrome/browser/ui/views_mode_controller.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -224,8 +224,10 @@ IN_PROC_BROWSER_TEST_F(AppControllerPlatformAppBrowserTest,
   NSWindow* app_window = extensions::AppWindowRegistry::Get(profile())
                              ->GetAppWindowsForApp(app->id())
                              .front()
-                             ->GetNativeWindow();
-  NSWindow* browser_window = browser()->window()->GetNativeWindow();
+                             ->GetNativeWindow()
+                             .GetNativeNSWindow();
+  NSWindow* browser_window =
+      browser()->window()->GetNativeWindow().GetNativeNSWindow();
 
   chrome::testing::NSRunLoopRunAllPending();
   EXPECT_LE([[NSApp orderedWindows] indexOfObject:app_window],
@@ -830,7 +832,8 @@ IN_PROC_BROWSER_TEST_F(AppControllerHandoffBrowserTest, TestHandoffURLs) {
   EXPECT_EQ(g_handoff_url, test_url2);
 
   // Test that switching tabs updates the handoff URL.
-  browser()->tab_strip_model()->ActivateTabAt(0, true);
+  browser()->tab_strip_model()->ActivateTabAt(
+      0, {TabStripModel::GestureType::kOther});
   EXPECT_EQ(g_handoff_url, test_url1);
 
   // Test that closing the current tab updates the handoff URL.

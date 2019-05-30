@@ -5,7 +5,7 @@
 #include "ios/chrome/browser/reading_list/reading_list_download_service_factory.h"
 
 #include "base/files/file_path.h"
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "components/dom_distiller/core/distiller.h"
 #include "components/dom_distiller/core/distiller_url_fetcher.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
@@ -29,7 +29,8 @@ ReadingListDownloadServiceFactory::GetForBrowserState(
 // static
 ReadingListDownloadServiceFactory*
 ReadingListDownloadServiceFactory::GetInstance() {
-  return base::Singleton<ReadingListDownloadServiceFactory>::get();
+  static base::NoDestructor<ReadingListDownloadServiceFactory> instance;
+  return instance.get();
 }
 
 ReadingListDownloadServiceFactory::ReadingListDownloadServiceFactory()
@@ -66,8 +67,8 @@ ReadingListDownloadServiceFactory::BuildServiceInstanceFor(
   return std::make_unique<ReadingListDownloadService>(
       ReadingListModelFactory::GetForBrowserState(chrome_browser_state),
       chrome_browser_state->GetPrefs(), chrome_browser_state->GetStatePath(),
-      chrome_browser_state->GetRequestContext(), std::move(distiller_factory),
-      std::move(distiller_page_factory));
+      chrome_browser_state->GetSharedURLLoaderFactory(),
+      std::move(distiller_factory), std::move(distiller_page_factory));
 }
 
 web::BrowserState* ReadingListDownloadServiceFactory::GetBrowserStateToUse(

@@ -5,16 +5,16 @@
 #ifndef BASE_TASK_SEQUENCE_MANAGER_WORK_QUEUE_SETS_H_
 #define BASE_TASK_SEQUENCE_MANAGER_WORK_QUEUE_SETS_H_
 
+#include <array>
 #include <map>
-#include <vector>
 
 #include "base/base_export.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/task/sequence_manager/intrusive_heap.h"
+#include "base/task/common/intrusive_heap.h"
 #include "base/task/sequence_manager/task_queue_impl.h"
 #include "base/task/sequence_manager/work_queue.h"
-#include "base/trace_event/trace_event_argument.h"
+#include "base/trace_event/traced_value.h"
 
 namespace base {
 namespace sequence_manager {
@@ -28,7 +28,16 @@ namespace internal {
 // values are kept in sorted order.
 class BASE_EXPORT WorkQueueSets {
  public:
-  WorkQueueSets(size_t num_sets, const char* name);
+  class Observer {
+   public:
+    virtual ~Observer() {}
+
+    virtual void WorkQueueSetBecameEmpty(size_t set_index) = 0;
+
+    virtual void WorkQueueSetBecameNonEmpty(size_t set_index) = 0;
+  };
+
+  WorkQueueSets(const char* name, Observer* observer);
   ~WorkQueueSets();
 
   // O(log num queues)
@@ -41,25 +50,25 @@ class BASE_EXPORT WorkQueueSets {
   void ChangeSetIndex(WorkQueue* queue, size_t set_index);
 
   // O(log num queues)
-  void OnFrontTaskChanged(WorkQueue* queue);
+  void OnQueuesFrontTaskChanged(WorkQueue* queue);
 
   // O(log num queues)
   void OnTaskPushedToEmptyQueue(WorkQueue* work_queue);
 
-  // If empty it's O(1) amortized, otherwise it's O(log num queues)
+  // If empty it's O(1) amortized, otherwise it's O(log num queues). Slightly
+  // faster on average than OnQueuesFrontTaskChanged.
   // Assumes |work_queue| contains the lowest enqueue order in the set.
-  void OnPopQueue(WorkQueue* work_queue);
+  void OnPopMinQueueInSet(WorkQueue* work_queue);
 
   // O(log num queues)
   void OnQueueBlocked(WorkQueue* work_queue);
 
   // O(1)
-  bool GetOldestQueueInSet(size_t set_index, WorkQueue** out_work_queue) const;
+  WorkQueue* GetOldestQueueInSet(size_t set_index) const;
 
   // O(1)
-  bool GetOldestQueueAndEnqueueOrderInSet(
+  WorkQueue* GetOldestQueueAndEnqueueOrderInSet(
       size_t set_index,
-      WorkQueue** out_work_queue,
       EnqueueOrder* out_enqueue_order) const;
 
   // O(1)
@@ -82,15 +91,23 @@ class BASE_EXPORT WorkQueueSets {
       return key <= other.key;
     }
 
-    void SetHeapHandle(HeapHandle handle) { value->set_heap_handle(handle); }
+    void SetHeapHandle(base::internal::HeapHandle handle) {
+      value->set_heap_handle(handle);
+    }
 
-    void ClearHeapHandle() { value->set_heap_handle(HeapHandle()); }
+    void ClearHeapHandle() {
+      value->set_heap_handle(base::internal::HeapHandle());
+    }
   };
+
+  const char* const name_;
+  Observer* const observer_;
 
   // For each set |work_queue_heaps_| has a queue of WorkQueue ordered by the
   // oldest task in each WorkQueue.
-  std::vector<IntrusiveHeap<OldestTaskEnqueueOrder>> work_queue_heaps_;
-  const char* const name_;
+  std::array<base::internal::IntrusiveHeap<OldestTaskEnqueueOrder>,
+             TaskQueue::kQueuePriorityCount>
+      work_queue_heaps_;
 
   DISALLOW_COPY_AND_ASSIGN(WorkQueueSets);
 };

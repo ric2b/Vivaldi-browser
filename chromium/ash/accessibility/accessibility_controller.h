@@ -27,6 +27,8 @@ namespace ash {
 class AccessibilityHighlightController;
 class AccessibilityObserver;
 class ScopedBacklightsForcedOff;
+class SelectToSpeakEventHandler;
+class SwitchAccessEventHandler;
 
 enum AccessibilityNotificationVisibility {
   A11Y_NOTIFICATION_NONE,
@@ -64,51 +66,60 @@ class ASH_EXPORT AccessibilityController
   bool HasDockedMagnifierAcceleratorDialogBeenAccepted() const;
   void SetDictationAcceleratorDialogAccepted();
   bool HasDictationAcceleratorDialogBeenAccepted() const;
+  void SetDisplayRotationAcceleratorDialogBeenAccepted();
+  bool HasDisplayRotationAcceleratorDialogBeenAccepted() const;
 
   void SetAutoclickEnabled(bool enabled);
-  bool IsAutoclickEnabled() const;
+  bool autoclick_enabled() const { return autoclick_enabled_; }
+  void SetAutoclickEventType(mojom::AutoclickEventType event_type);
+  mojom::AutoclickEventType GetAutoclickEventType();
 
   void SetCaretHighlightEnabled(bool enabled);
-  bool IsCaretHighlightEnabled() const;
+  bool caret_highlight_enabled() const { return caret_highlight_enabled_; }
 
   void SetCursorHighlightEnabled(bool enabled);
-  bool IsCursorHighlightEnabled() const;
+  bool cursor_highlight_enabled() const { return cursor_highlight_enabled_; }
 
   void SetDictationEnabled(bool enabled);
-  bool IsDictationEnabled() const;
+  bool dictation_enabled() const { return dictation_enabled_; }
 
   void SetFocusHighlightEnabled(bool enabled);
-  bool IsFocusHighlightEnabled() const;
+  bool focus_highlight_enabled() const { return focus_highlight_enabled_; }
 
   void SetFullscreenMagnifierEnabled(bool enabled);
 
   void SetHighContrastEnabled(bool enabled);
-  bool IsHighContrastEnabled() const;
+  bool high_contrast_enabled() const { return high_contrast_enabled_; }
 
   void SetLargeCursorEnabled(bool enabled);
-  bool IsLargeCursorEnabled() const;
+  bool large_cursor_enabled() const { return large_cursor_enabled_; }
 
   void SetMonoAudioEnabled(bool enabled);
-  bool IsMonoAudioEnabled() const;
+  bool mono_audio_enabled() const { return mono_audio_enabled_; }
 
   void SetSpokenFeedbackEnabled(bool enabled,
                                 AccessibilityNotificationVisibility notify);
-  bool IsSpokenFeedbackEnabled() const;
+  bool spoken_feedback_enabled() const { return spoken_feedback_enabled_; }
 
   void SetSelectToSpeakEnabled(bool enabled);
-  bool IsSelectToSpeakEnabled() const;
+  bool select_to_speak_enabled() const { return select_to_speak_enabled_; }
 
   void RequestSelectToSpeakStateChange();
   mojom::SelectToSpeakState GetSelectToSpeakState() const;
 
   void SetStickyKeysEnabled(bool enabled);
-  bool IsStickyKeysEnabled() const;
+  bool sticky_keys_enabled() const { return sticky_keys_enabled_; }
+
+  void SetSwitchAccessEnabled(bool enabled);
+  bool switch_access_enabled() const { return switch_access_enabled_; }
+
+  void SetSwitchAccessIgnoreVirtualKeyEvent(bool should_ignore);
 
   void SetVirtualKeyboardEnabled(bool enabled);
-  bool IsVirtualKeyboardEnabled() const;
+  bool virtual_keyboard_enabled() const { return virtual_keyboard_enabled_; }
 
-  bool IsDictationActive() const;
   void SetDictationActive(bool is_active);
+  bool dictation_active() const { return dictation_active_; }
 
   // Triggers an accessibility alert to give the user feedback.
   void TriggerAccessibilityAlert(mojom::AccessibilityAlert alert);
@@ -164,6 +175,15 @@ class ASH_EXPORT AccessibilityController
       const gfx::Rect& bounds,
       mojom::AccessibilityPanelState state) override;
   void SetSelectToSpeakState(mojom::SelectToSpeakState state) override;
+  void SetSelectToSpeakEventHandlerDelegate(
+      mojom::SelectToSpeakEventHandlerDelegatePtr delegate) override;
+  void SetSwitchAccessKeysToCapture(
+      const std::vector<int>& keys_to_capture) override;
+  void SetSwitchAccessEventHandlerDelegate(
+      mojom::SwitchAccessEventHandlerDelegatePtr delegate) override;
+  void ToggleDictationFromSource(mojom::DictationToggleSource source) override;
+  void ForwardKeyEventsToSwitchAccess(bool should_forward) override;
+  void GetBatteryDescription(GetBatteryDescriptionCallback callback) override;
 
   // SessionObserver:
   void OnSigninScreenPrefServiceInitialized(PrefService* prefs) override;
@@ -183,6 +203,9 @@ class ASH_EXPORT AccessibilityController
 
   void UpdateAutoclickFromPref();
   void UpdateAutoclickDelayFromPref();
+  void UpdateAutoclickEventTypeFromPref();
+  void UpdateAutoclickRevertToLeftClickFromPref();
+  void UpdateAutoclickMovementThresholdFromPref();
   void UpdateCaretHighlightFromPref();
   void UpdateCursorHighlightFromPref();
   void UpdateDictationFromPref();
@@ -193,8 +216,12 @@ class ASH_EXPORT AccessibilityController
   void UpdateSpokenFeedbackFromPref();
   void UpdateSelectToSpeakFromPref();
   void UpdateStickyKeysFromPref();
+  void UpdateSwitchAccessFromPref();
   void UpdateVirtualKeyboardFromPref();
   void UpdateAccessibilityHighlightingFromPrefs();
+
+  void MaybeCreateSelectToSpeakEventHandler();
+  void MaybeCreateSwitchAccessEventHandler();
 
   // The pref service of the currently active user or the signin profile before
   // user logs in. Can be null in ash_unittests.
@@ -221,11 +248,21 @@ class ASH_EXPORT AccessibilityController
   bool spoken_feedback_enabled_ = false;
   bool select_to_speak_enabled_ = false;
   bool sticky_keys_enabled_ = false;
+  bool switch_access_enabled_ = false;
   bool virtual_keyboard_enabled_ = false;
   bool dictation_active_ = false;
 
   mojom::SelectToSpeakState select_to_speak_state_ =
       mojom::SelectToSpeakState::kSelectToSpeakStateInactive;
+  std::unique_ptr<SelectToSpeakEventHandler> select_to_speak_event_handler_;
+  mojom::SelectToSpeakEventHandlerDelegatePtr
+      select_to_speak_event_handler_delegate_ptr_;
+
+  // List of key codes that Switch Access should capture.
+  std::vector<int> switch_access_keys_to_capture_;
+  std::unique_ptr<SwitchAccessEventHandler> switch_access_event_handler_;
+  mojom::SwitchAccessEventHandlerDelegatePtr
+      switch_access_event_handler_delegate_ptr_;
 
   // Used to control the highlights of caret, cursor and focus.
   std::unique_ptr<AccessibilityHighlightController>

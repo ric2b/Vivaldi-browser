@@ -47,20 +47,36 @@ Polymer({
   screenShown_: false,
 
   /**
+   * Whether the voice match feature has been enabled.
+   * @type {boolean}
+   * @private
+   */
+  voiceMatchFeatureEnabled_: false,
+
+  /**
    * On-tap event handler for next button.
    *
    * @private
    */
   onNextTap_: function() {
-    var hotword = this.$$('#toggle0').hasAttribute('checked');
-    var screenContext = this.$$('#toggle1').hasAttribute('checked');
-    var toggle2 = this.$$('#toggle2');
-    var emailOptedIn = toggle2 != null && toggle2.hasAttribute('checked');
+    if (this.buttonsDisabled) {
+      return;
+    }
+    this.buttonsDisabled = true;
+
+    if (!this.voiceMatchFeatureEnabled_) {
+      var hotword = this.$$('#toggle-hotword').hasAttribute('checked');
+      chrome.send('login.AssistantOptInFlowScreen.hotwordResult', [hotword]);
+    }
+    var screenContext = this.$$('#toggle-context').hasAttribute('checked');
+    var toggleEmail = this.$$('#toggle-email');
+    var emailOptedIn =
+        toggleEmail != null && toggleEmail.hasAttribute('checked');
 
     // TODO(updowndota): Wrap chrome.send() calls with a proxy object.
-    chrome.send('assistantOptInFlow.hotwordResult', [hotword]);
     chrome.send(
-        'assistant.GetMoreScreen.userActed', [screenContext, emailOptedIn]);
+        'login.AssistantOptInFlowScreen.GetMoreScreen.userActed',
+        [screenContext, emailOptedIn]);
   },
 
   /**
@@ -75,9 +91,7 @@ Polymer({
    * Reload the page with the given consent string text data.
    */
   reloadContent: function(data) {
-    this.$['title-text'].textContent = data['getMoreTitle'];
-    this.$['intro-text'].textContent = data['getMoreIntro'];
-    this.$['next-button-text'].textContent = data['getMoreContinueButton'];
+    this.voiceMatchFeatureEnabled_ = data['voiceMatchFeatureEnabled'];
 
     this.consentStringLoaded_ = true;
     if (this.settingZippyLoaded_) {
@@ -97,8 +111,9 @@ Polymer({
           'icon-src',
           'data:text/html;charset=utf-8,' +
               encodeURIComponent(zippy.getWrappedIcon(data['iconUri'])));
+      zippy.setAttribute('hide-line', true);
       zippy.setAttribute('toggle-style', true);
-      zippy.id = 'zippy' + i;
+      zippy.id = 'zippy-' + data['id'];
       var title = document.createElement('div');
       title.className = 'zippy-title';
       title.textContent = data['title'];
@@ -106,7 +121,7 @@ Polymer({
 
       var toggle = document.createElement('cr-toggle');
       toggle.className = 'zippy-toggle';
-      toggle.id = 'toggle' + i;
+      toggle.id = 'toggle-' + data['id'];
       if (data['defaultEnabled']) {
         toggle.setAttribute('checked', '');
       }
@@ -122,7 +137,7 @@ Polymer({
       }
       zippy.appendChild(description);
 
-      Polymer.dom(this.$['insertion-point']).appendChild(zippy);
+      Polymer.dom(this.$['toggles-container']).appendChild(zippy);
     }
 
     this.settingZippyLoaded_ = true;
@@ -139,7 +154,7 @@ Polymer({
     this.buttonsDisabled = false;
     this.$['next-button'].focus();
     if (!this.hidden && !this.screenShown_) {
-      chrome.send('assistant.GetMoreScreen.screenShown');
+      chrome.send('login.AssistantOptInFlowScreen.GetMoreScreen.screenShown');
       this.screenShown_ = true;
     }
   },
@@ -152,7 +167,7 @@ Polymer({
       this.reloadPage();
     } else {
       this.$['next-button'].focus();
-      chrome.send('assistant.GetMoreScreen.screenShown');
+      chrome.send('login.AssistantOptInFlowScreen.GetMoreScreen.screenShown');
       this.screenShown_ = true;
     }
   },

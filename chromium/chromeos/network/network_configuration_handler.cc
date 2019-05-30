@@ -347,12 +347,6 @@ void NetworkConfigurationHandler::CreateShillConfiguration(
   std::string network_id =
       shill_property_util::GetNetworkIdFromProperties(shill_properties);
 
-  if (NetworkTypePattern::Ethernet().MatchesType(type)) {
-    InvokeErrorCallback(network_id, error_callback,
-                        "ConfigureServiceForProfile: Invalid type: " + type);
-    return;
-  }
-
   std::unique_ptr<base::DictionaryValue> properties_to_set(
       shill_properties.DeepCopy());
 
@@ -485,6 +479,7 @@ void NetworkConfigurationHandler::NetworkListChanged() {
 
 void NetworkConfigurationHandler::OnShuttingDown() {
   network_state_handler_->RemoveObserver(this, FROM_HERE);
+  network_state_handler_ = nullptr;
 }
 
 // NetworkConfigurationHandler Private methods
@@ -492,7 +487,11 @@ void NetworkConfigurationHandler::OnShuttingDown() {
 NetworkConfigurationHandler::NetworkConfigurationHandler()
     : network_state_handler_(nullptr), weak_ptr_factory_(this) {}
 
-NetworkConfigurationHandler::~NetworkConfigurationHandler() = default;
+NetworkConfigurationHandler::~NetworkConfigurationHandler() {
+  // Make sure that this has been removed as a NetworkStateHandler observer.
+  if (network_state_handler_)
+    OnShuttingDown();
+}
 
 void NetworkConfigurationHandler::Init(
     NetworkStateHandler* network_state_handler,

@@ -32,13 +32,21 @@ class EVENTS_EXPORT KeyboardHook {
   // |callback| is called for each key which is intercepted.
   // Returns a valid instance if the hook was created and successfully
   // registered otherwise nullptr.
-  static std::unique_ptr<KeyboardHook> Create(
+  static std::unique_ptr<KeyboardHook> CreateModifierKeyboardHook(
       base::Optional<base::flat_set<DomCode>> dom_codes,
       gfx::AcceleratedWidget accelerated_widget,
       KeyEventCallback callback);
 
+  // Creates a platform-specific KeyboardHook implementation that captures the
+  // play/pause, stop, and next/previous track media keys.
+  // |callback| is called for each key which is intercepted.
+  // Returns a valid instance if the hook was created and successfully
+  // registered otherwise nullptr.
+  static std::unique_ptr<KeyboardHook> CreateMediaKeyboardHook(
+      KeyEventCallback callback);
+
   // True if |dom_code| is reserved for an active KeyboardLock request.
-  virtual bool IsKeyLocked(DomCode dom_code) = 0;
+  virtual bool IsKeyLocked(DomCode dom_code) const = 0;
 };
 
 }  // namespace ui

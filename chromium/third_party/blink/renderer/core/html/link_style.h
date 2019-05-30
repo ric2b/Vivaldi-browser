@@ -38,7 +38,7 @@ class LinkStyle final : public LinkResource, ResourceClient {
   void Process() override;
   void OwnerRemoved() override;
   bool HasLoaded() const override { return loaded_sheet_; }
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   void StartLoadingDynamicSheet();
   void NotifyLoadedSheetAndAllCriticalSubresources(
@@ -74,13 +74,6 @@ class LinkStyle final : public LinkResource, ResourceClient {
   void AddPendingSheet(PendingSheetType);
   void RemovePendingSheet();
 
-  void SetCrossOriginStylesheetStatus(CSSStyleSheet*);
-  void SetFetchFollowingCORS() {
-    DCHECK(!fetch_following_cors_);
-    fetch_following_cors_ = true;
-  }
-  void ClearFetchFollowingCORS() { fetch_following_cors_ = false; }
-
   Member<CSSStyleSheet> sheet_;
   DisabledState disabled_state_;
   PendingSheetType pending_sheet_type_;
@@ -88,7 +81,6 @@ class LinkStyle final : public LinkResource, ResourceClient {
   bool loading_;
   bool fired_load_;
   bool loaded_sheet_;
-  bool fetch_following_cors_;
 };
 
 }  // namespace blink

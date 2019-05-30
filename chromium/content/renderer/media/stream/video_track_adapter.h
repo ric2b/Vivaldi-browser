@@ -16,14 +16,24 @@
 #include "content/common/content_export.h"
 #include "content/renderer/media/stream/media_stream_video_track.h"
 #include "media/base/video_frame.h"
+#include "third_party/blink/public/platform/modules/mediastream/media_stream_types.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace content {
 
-struct CONTENT_EXPORT VideoTrackAdapterSettings {
+class CONTENT_EXPORT VideoTrackAdapterSettings {
+ public:
+  // Creates a VideoTrackAdapterSettings with no target resolution or frame rate
+  // and without any constraints on the resolution.
   VideoTrackAdapterSettings();
-  VideoTrackAdapterSettings(int max_width,
-                            int max_height,
+  // Creates a VideoTrackAdapterSettings with a given target resolution and
+  // and frame rate, and without any constraints on the resolution.
+  VideoTrackAdapterSettings(const gfx::Size& target_size,
+                            double max_frame_rate);
+  // Creates a VideoTrackAdapterSettings with the specified resolution, frame
+  // rate and resolution constraints. If |target_size| is null, it means that
+  // no video processing is desired.
+  VideoTrackAdapterSettings(base::Optional<gfx::Size> target_size,
                             double min_aspect_ratio,
                             double max_aspect_ratio,
                             double max_frame_rate);
@@ -31,14 +41,30 @@ struct CONTENT_EXPORT VideoTrackAdapterSettings {
   VideoTrackAdapterSettings& operator=(const VideoTrackAdapterSettings& other);
   bool operator==(const VideoTrackAdapterSettings& other) const;
 
-  int max_width;
-  int max_height;
-  double min_aspect_ratio;
-  double max_aspect_ratio;
-  // A |max_frame_rate| of zero is used to signal that no frame-rate adjustment
-  // is necessary.
-  // TODO(guidou): Change this to base::Optional. http://crbug.com/734528
-  double max_frame_rate;
+  const base::Optional<gfx::Size>& target_size() const { return target_size_; }
+  int target_width() const {
+    DCHECK(target_size_);
+    return target_size_->width();
+  }
+  int target_height() const {
+    DCHECK(target_size_);
+    return target_size_->height();
+  }
+  double min_aspect_ratio() const { return min_aspect_ratio_; }
+  double max_aspect_ratio() const { return max_aspect_ratio_; }
+  double max_frame_rate() const { return max_frame_rate_; }
+  void set_max_frame_rate(double max_frame_rate) {
+    max_frame_rate_ = max_frame_rate;
+  }
+
+ private:
+  base::Optional<gfx::Size> target_size_;
+  double min_aspect_ratio_;
+  double max_aspect_ratio_;
+  // A |max_frame_rate| of zero is used to signal that no frame-rate
+  // adjustment is necessary.
+  // TODO(guidou): Change this to base::Optional. https://crbug.com/734528
+  double max_frame_rate_;
 };
 
 // VideoTrackAdapter is a helper class used by MediaStreamVideoSource used for
@@ -53,19 +79,23 @@ struct CONTENT_EXPORT VideoTrackAdapterSettings {
 class VideoTrackAdapter
     : public base::RefCountedThreadSafe<VideoTrackAdapter> {
  public:
-  typedef base::Callback<void(bool mute_state)> OnMutedCallback;
+  using OnMutedCallback = base::Callback<void(bool mute_state)>;
 
-  explicit VideoTrackAdapter(
-      scoped_refptr<base::SingleThreadTaskRunner> io_task_runner);
+  VideoTrackAdapter(
+      scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
+      base::RepeatingCallback<void(media::VideoCaptureFrameDropReason)>
+          frame_dropped_cb);
 
   // Register |track| to receive video frames in |frame_callback| with
-  // a resolution within the boundaries of the arguments.
-  // Must be called on the main render thread. |frame_callback| is guaranteed to
-  // be released on the main render thread.
+  // a resolution within the boundaries of the arguments, and settings
+  // updates in |settings_callback|.
+  // Must be called on the main render thread.
   // |source_frame_rate| is used to calculate a prudent interval to check for
   // passing frames and inform of the result via |on_muted_state_callback|.
   void AddTrack(const MediaStreamVideoTrack* track,
-                VideoCaptureDeliverFrameCB frame_callback,
+                blink::VideoCaptureDeliverFrameCB frame_callback,
+                blink::VideoTrackSettingsCallback settings_callback,
+                blink::VideoTrackFormatCallback track_callback,
                 const VideoTrackAdapterSettings& settings);
   void RemoveTrack(const MediaStreamVideoTrack* track);
   void ReconfigureTrack(const MediaStreamVideoTrack* track,
@@ -77,7 +107,7 @@ class VideoTrackAdapter
                         base::TimeTicks estimated_capture_time);
 
   base::SingleThreadTaskRunner* io_task_runner() const {
-    DCHECK(thread_checker_.CalledOnValidThread());
+    DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
     return io_task_runner_.get();
   }
 
@@ -91,7 +121,10 @@ class VideoTrackAdapter
   void SetSourceFrameSize(const gfx::Size& source_frame_size);
 
   // Exported for testing.
-  CONTENT_EXPORT static void CalculateTargetSize(
+  // Returns true if |desired_size| is updated successfully, false otherwise.
+  // |desired_size| is not updated |settings| has rescaling disabled and
+  // |input_size| is invalid.
+  CONTENT_EXPORT static bool CalculateDesiredSize(
       bool is_rotated,
       const gfx::Size& input_size,
       const VideoTrackAdapterSettings& settings,
@@ -102,7 +135,9 @@ class VideoTrackAdapter
   friend class base::RefCountedThreadSafe<VideoTrackAdapter>;
 
   void AddTrackOnIO(const MediaStreamVideoTrack* track,
-                    VideoCaptureDeliverFrameCB frame_callback,
+                    blink::VideoCaptureDeliverFrameCB frame_callback,
+                    blink::VideoTrackSettingsCallback settings_callback,
+                    blink::VideoTrackFormatCallback track_callback,
                     const VideoTrackAdapterSettings& settings);
   void RemoveTrackOnIO(const MediaStreamVideoTrack* track);
   void ReconfigureTrackOnIO(const MediaStreamVideoTrack* track,
@@ -120,7 +155,7 @@ class VideoTrackAdapter
                                uint64_t old_frame_counter_snapshot);
 
   // |thread_checker_| is bound to the main render thread.
-  base::ThreadChecker thread_checker_;
+  THREAD_CHECKER(thread_checker_);
 
   const scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
 
@@ -128,12 +163,14 @@ class VideoTrackAdapter
   // VideoCaptureDeliverFrameCB is released on the main render thread.
   const scoped_refptr<base::SingleThreadTaskRunner> renderer_task_runner_;
 
-  // VideoFrameResolutionAdapter is an inner class that is created on the main
-  // render thread but operates on the IO-thread. It does the resolution
-  // adaptation and delivers frames to all registered tracks on the IO-thread.
+  const base::RepeatingCallback<void(media::VideoCaptureFrameDropReason)>
+      frame_dropped_cb_;
+
+  // VideoFrameResolutionAdapter is an inner class that lives on the IO-thread.
+  // It does the resolution adaptation and delivers frames to all registered
+  // tracks.
   class VideoFrameResolutionAdapter;
-  typedef std::vector<scoped_refptr<VideoFrameResolutionAdapter> >
-      FrameAdapters;
+  using FrameAdapters = std::vector<scoped_refptr<VideoFrameResolutionAdapter>>;
   FrameAdapters adapters_;
 
   // Set to true if frame monitoring has been started. It is only accessed on

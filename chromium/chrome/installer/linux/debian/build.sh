@@ -121,10 +121,6 @@ do_package() {
   local COMPRESSION_OPTS="-Zxz -z9"
   log_cmd fakeroot dpkg-deb ${COMPRESSION_OPTS} -b "${STAGEDIR}" .
   verify_package "$DEPENDS"
-
-  if [ "${VIVALDI_SIGNING_KEY:-}" ] ; then
-    dpkg-sig -s ${VIVALDI_SIGNING_ID:-builder} "${PACKAGE}-${CHANNEL}_${VERSIONFULL}_${DEB_HOST_ARCH}.deb"
-  fi
 }
 
 # Remove temporary files and unwanted packaging output.

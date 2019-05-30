@@ -16,11 +16,6 @@ namespace ash {
 enum class LoginStatus;
 }
 
-namespace views {
-class Widget;
-class WidgetDelegate;
-}  // namespace views
-
 // Handles method calls delegated back to chrome from ash. Also notifies ash of
 // relevant state changes in chrome.
 // TODO: Consider renaming this to SystemTrayClientChromeOS.
@@ -33,16 +28,6 @@ class SystemTrayClient : public ash::mojom::SystemTrayClient,
   ~SystemTrayClient() override;
 
   static SystemTrayClient* Get();
-
-  // Returns the container id for the parent window for new dialogs. The parent
-  // varies based on the current login and lock screen state.
-  static int GetDialogParentContainerId();
-
-  // Creates a modal dialog in the parent window for new dialogs on the primary
-  // display. See GetDialogParentContainerId() and views::CreateDialogWidget().
-  // The returned widget is owned by its native widget.
-  static views::Widget* CreateUnownedDialogWidget(
-      views::WidgetDelegate* widget_delegate);
 
   // Shows an update icon for an Adobe Flash update and forces a device reboot
   // when the update is applied.
@@ -58,6 +43,8 @@ class SystemTrayClient : public ash::mojom::SystemTrayClient,
   void SetPrimaryTrayEnabled(bool enabled);
   void SetPrimaryTrayVisible(bool visible);
   void SetPerformanceTracingIconVisible(bool visible);
+  void SetLocaleList(std::vector<ash::mojom::LocaleInfoPtr> locale_list,
+                     const std::string& current_locale_iso_code);
 
   // ash::mojom::SystemTrayClient:
   void ShowSettings() override;
@@ -72,6 +59,7 @@ class SystemTrayClient : public ash::mojom::SystemTrayClient,
   void ShowPowerSettings() override;
   void ShowChromeSlow() override;
   void ShowIMESettings() override;
+  void ShowConnectedDevicesSettings() override;
   void ShowAboutChromeOS() override;
   void ShowHelp() override;
   void ShowAccessibilityHelp() override;
@@ -87,6 +75,7 @@ class SystemTrayClient : public ash::mojom::SystemTrayClient,
   void ShowNetworkSettings(const std::string& network_id) override;
   void ShowMultiDeviceSetup() override;
   void RequestRestartForUpdate() override;
+  void SetLocaleAndExit(const std::string& locale_iso_code) override;
 
  private:
   // Helper function shared by ShowNetworkSettings() and ShowNetworkConfigure().

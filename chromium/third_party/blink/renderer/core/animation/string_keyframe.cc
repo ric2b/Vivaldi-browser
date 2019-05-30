@@ -141,7 +141,7 @@ void StringKeyframe::Trace(Visitor* visitor) {
 }
 
 Keyframe* StringKeyframe::Clone() const {
-  return new StringKeyframe(*this);
+  return MakeGarbageCollected<StringKeyframe>(*this);
 }
 
 Keyframe::PropertySpecificKeyframe*
@@ -169,7 +169,7 @@ StringKeyframe::CreatePropertySpecificKeyframe(
 }
 
 bool StringKeyframe::CSSPropertySpecificKeyframe::PopulateAnimatableValue(
-    const CSSProperty& property,
+    const PropertyHandle& property,
     Element& element,
     const ComputedStyle& base_style,
     const ComputedStyle* parent_style) const {

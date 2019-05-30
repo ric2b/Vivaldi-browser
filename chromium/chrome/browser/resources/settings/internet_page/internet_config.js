@@ -69,9 +69,9 @@ Polymer({
      * The current properties if an existing network is being configured, or
      * a minimal subset for a new network. Note: network-config may modify
      * this (specifically .name).
-     * @private {!chrome.networkingPrivate.NetworkProperties}
+     * @private {!chrome.networkingPrivate.ManagedProperties}
      */
-    networkProperties_: Object,
+    managedProperties_: Object,
 
     /**
      * Set by network-config when a configuration error occurs.
@@ -85,15 +85,16 @@ Polymer({
 
   open: function() {
     const dialog = /** @type {!CrDialogElement} */ (this.$.dialog);
-    if (!dialog.open)
+    if (!dialog.open) {
       dialog.showModal();
+    }
 
-    // Set networkProperties for new configurations and for existing
+    // Set managedProperties for new configurations and for existing
     // configurations until the current properties are loaded.
     assert(this.type && this.type != CrOnc.Type.ALL);
-    this.networkProperties_ = {
+    this.managedProperties_ = {
       GUID: this.guid,
-      Name: this.name,
+      Name: {Active: this.name},
       Type: this.type,
     };
     this.$.networkConfig.init();
@@ -101,8 +102,9 @@ Polymer({
 
   close: function() {
     const dialog = /** @type {!CrDialogElement} */ (this.$.dialog);
-    if (dialog.open)
+    if (dialog.open) {
       dialog.close();
+    }
   },
 
   /**
@@ -120,10 +122,12 @@ Polymer({
    * @private
    */
   getDialogTitle_: function() {
-    const name = this.networkProperties_.Name;
-    if (name)
+    const name = /** @type {string} */ (
+        CrOnc.getActiveValue(this.managedProperties_.Name));
+    if (name) {
       return this.i18n('internetConfigName', HTMLEscape(name));
-    const type = this.i18n('OncType' + this.networkProperties_.Type);
+    }
+    const type = this.i18n('OncType' + this.managedProperties_.Type);
     return this.i18n('internetJoinType', type);
   },
 
@@ -132,8 +136,9 @@ Polymer({
    * @private
    */
   getError_: function() {
-    if (this.i18nExists(this.error_))
+    if (this.i18nExists(this.error_)) {
       return this.i18n(this.error_);
+    }
     return this.i18n('networkErrorUnknown');
   },
 

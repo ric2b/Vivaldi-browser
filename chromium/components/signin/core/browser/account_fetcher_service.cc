@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
 #include "base/trace_event/trace_event.h"
@@ -17,10 +18,13 @@
 #include "components/signin/core/browser/account_info_fetcher.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/avatar_icon_util.h"
-#include "components/signin/core/browser/child_account_info_fetcher.h"
 #include "components/signin/core/browser/signin_client.h"
 #include "components/signin/core/browser/signin_switches.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+
+#if defined(OS_ANDROID)
+#include "components/signin/core/browser/child_account_info_fetcher_android.h"
+#endif
 
 namespace {
 
@@ -37,6 +41,8 @@ bool AccountSupportsUserInfo(const std::string& account_id) {
 
 }  // namespace
 
+const char kImageFetcherUmaClient[] = "AccountFetcherService";
+
 // This pref used to be in the AccountTrackerService, hence its string value.
 const char AccountFetcherService::kLastUpdatePref[] =
     "account_tracker_service_last_update";
@@ -44,17 +50,7 @@ const char AccountFetcherService::kLastUpdatePref[] =
 const int AccountFetcherService::kAccountImageDownloadSize = 64;
 
 // AccountFetcherService implementation
-AccountFetcherService::AccountFetcherService()
-    : account_tracker_service_(nullptr),
-      token_service_(nullptr),
-      signin_client_(nullptr),
-      invalidation_service_(nullptr),
-      network_fetches_enabled_(false),
-      profile_loaded_(false),
-      refresh_tokens_loaded_(false),
-      shutdown_called_(false),
-      scheduled_refresh_enabled_(true),
-      child_info_request_(nullptr) {}
+AccountFetcherService::AccountFetcherService() = default;
 
 AccountFetcherService::~AccountFetcherService() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -91,10 +87,11 @@ void AccountFetcherService::Initialize(
 
 void AccountFetcherService::Shutdown() {
   token_service_->RemoveObserver(this);
+#if defined(OS_ANDROID)
   // child_info_request_ is an invalidation handler and needs to be
   // unregistered during the lifetime of the invalidation service.
   child_info_request_.reset();
-  invalidation_service_ = nullptr;
+#endif
   shutdown_called_ = true;
 }
 
@@ -102,26 +99,32 @@ bool AccountFetcherService::IsAllUserInfoFetched() const {
   return user_info_requests_.empty();
 }
 
-void AccountFetcherService::FetchUserInfoBeforeSignin(
+void AccountFetcherService::ForceRefreshOfAccountInfo(
     const std::string& account_id) {
   DCHECK(network_fetches_enabled_);
   RefreshAccountInfo(account_id, false);
 }
 
-void AccountFetcherService::SetupInvalidationsOnProfileLoad(
-    invalidation::InvalidationService* invalidation_service) {
-  DCHECK(!invalidation_service_);
-  DCHECK(!profile_loaded_);
+void AccountFetcherService::OnNetworkInitialized() {
+  DCHECK(!network_initialized_);
   DCHECK(!network_fetches_enabled_);
+#if defined(OS_ANDROID)
   DCHECK(!child_info_request_);
-  invalidation_service_ = invalidation_service;
-  profile_loaded_ = true;
+#endif
+  network_initialized_ = true;
   MaybeEnableNetworkFetches();
 }
 
 void AccountFetcherService::EnableNetworkFetchesForTest() {
-  SetupInvalidationsOnProfileLoad(nullptr);
-  OnRefreshTokensLoaded();
+  if (!network_initialized_)
+    OnNetworkInitialized();
+
+  if (!refresh_tokens_loaded_)
+    OnRefreshTokensLoaded();
+}
+
+void AccountFetcherService::EnableAccountRemovalForTest() {
+  enable_account_removal_for_test_ = true;
 }
 
 void AccountFetcherService::RefreshAllAccountInfo(bool only_fetch_if_invalid) {
@@ -159,7 +162,7 @@ void AccountFetcherService::UpdateChildInfo() {
 
 void AccountFetcherService::MaybeEnableNetworkFetches() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!profile_loaded_ || !refresh_tokens_loaded_)
+  if (!network_initialized_ || !refresh_tokens_loaded_)
     return;
   if (!network_fetches_enabled_) {
     network_fetches_enabled_ = true;
@@ -181,8 +184,6 @@ void AccountFetcherService::RefreshAllAccountsAndScheduleNext() {
 }
 
 void AccountFetcherService::ScheduleNextRefresh() {
-  if (!scheduled_refresh_enabled_)
-    return;
   DCHECK(!timer_.IsRunning());
   DCHECK(network_fetches_enabled_);
 
@@ -215,12 +216,12 @@ void AccountFetcherService::StartFetchingUserInfo(
   }
 }
 
+#if defined(OS_ANDROID)
 // Starts fetching whether this is a child account. Handles refresh internally.
 void AccountFetcherService::StartFetchingChildInfo(
     const std::string& account_id) {
-  child_info_request_ = ChildAccountInfoFetcher::CreateFrom(
-      child_request_account_id_, this, token_service_,
-      signin_client_->GetURLLoaderFactory(), invalidation_service_);
+  child_info_request_ =
+      ChildAccountInfoFetcherAndroid::Create(this, child_request_account_id_);
 }
 
 void AccountFetcherService::ResetChildInfo() {
@@ -229,6 +230,13 @@ void AccountFetcherService::ResetChildInfo() {
   child_request_account_id_.clear();
   child_info_request_.reset();
 }
+
+void AccountFetcherService::SetIsChildAccount(const std::string& account_id,
+                                              bool is_child_account) {
+  if (child_request_account_id_ == account_id)
+    account_tracker_service_->SetIsChildAccount(account_id, is_child_account);
+}
+#endif
 
 void AccountFetcherService::RefreshAccountInfo(const std::string& account_id,
                                                bool only_fetch_if_invalid) {
@@ -253,8 +261,8 @@ void AccountFetcherService::RefreshAccountInfo(const std::string& account_id,
 void AccountFetcherService::OnUserInfoFetchSuccess(
     const std::string& account_id,
     std::unique_ptr<base::DictionaryValue> user_info) {
-  account_tracker_service_->SetAccountStateFromUserInfo(account_id,
-                                                        user_info.get());
+  account_tracker_service_->SetAccountInfoFromUserInfo(account_id,
+                                                       user_info.get());
   FetchAccountImage(account_id);
   user_info_requests_.erase(account_id);
 }
@@ -304,15 +312,11 @@ void AccountFetcherService::FetchAccountImage(const std::string& account_id) {
   GURL image_url_with_size(signin::GetAvatarImageURLWithOptions(
       picture_url, kAccountImageDownloadSize, true /* no_silhouette */));
   auto callback = base::BindRepeating(&AccountFetcherService::OnImageFetched,
-                                      base::Unretained(this));
-  GetOrCreateImageFetcher()->FetchImage(account_id, image_url_with_size,
-                                        callback, traffic_annotation);
-}
-
-void AccountFetcherService::SetIsChildAccount(const std::string& account_id,
-                                              bool is_child_account) {
-  if (child_request_account_id_ == account_id)
-    account_tracker_service_->SetIsChildAccount(account_id, is_child_account);
+                                      base::Unretained(this), account_id);
+  image_fetcher::ImageFetcherParams params(traffic_annotation,
+                                           kImageFetcherUmaClient);
+  GetOrCreateImageFetcher()->FetchImage(image_url_with_size, callback,
+                                        std::move(params));
 }
 
 void AccountFetcherService::OnUserInfoFetchFailure(
@@ -349,8 +353,14 @@ void AccountFetcherService::OnRefreshTokenRevoked(
                account_id);
   DVLOG(1) << "REVOKED " << account_id;
 
-  if (!network_fetches_enabled_)
+  // Short-circuit out if network fetches are not enabled.
+  if (!network_fetches_enabled_) {
+    if (enable_account_removal_for_test_) {
+      account_tracker_service_->StopTrackingAccount(account_id);
+    }
     return;
+  }
+
   user_info_requests_.erase(account_id);
 #if defined(OS_ANDROID)
   UpdateChildInfo();

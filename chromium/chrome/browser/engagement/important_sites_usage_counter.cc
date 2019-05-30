@@ -7,7 +7,9 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/dom_storage_context.h"
 
@@ -43,8 +45,8 @@ ImportantSitesUsageCounter::~ImportantSitesUsageCounter() {}
 void ImportantSitesUsageCounter::RunAndDestroySelfWhenFinished() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   tasks_ += 1;
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
       base::BindOnce(&ImportantSitesUsageCounter::GetQuotaUsageOnIOThread,
                      base::Unretained(this)));
   tasks_ += 1;
@@ -61,16 +63,16 @@ void ImportantSitesUsageCounter::GetQuotaUsageOnIOThread() {
 }
 
 void ImportantSitesUsageCounter::ReceiveQuotaUsageOnIOThread(
-    const std::vector<storage::UsageInfo>& usage_infos) {
+    std::vector<storage::UsageInfo> usage_infos) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
       base::BindOnce(&ImportantSitesUsageCounter::ReceiveQuotaUsage,
-                     base::Unretained(this), usage_infos));
+                     base::Unretained(this), std::move(usage_infos)));
 }
 
 void ImportantSitesUsageCounter::ReceiveQuotaUsage(
-    const std::vector<storage::UsageInfo>& usage_infos) {
+    std::vector<storage::UsageInfo> usage_infos) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   for (const storage::UsageInfo& info : usage_infos) {
     IncrementUsage(
@@ -81,11 +83,12 @@ void ImportantSitesUsageCounter::ReceiveQuotaUsage(
 }
 
 void ImportantSitesUsageCounter::ReceiveLocalStorageUsage(
-    const std::vector<content::LocalStorageUsageInfo>& storage_infos) {
+    const std::vector<content::StorageUsageInfo>& storage_infos) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  for (const content::LocalStorageUsageInfo& info : storage_infos) {
-    IncrementUsage(ImportantSitesUtil::GetRegisterableDomainOrIP(info.origin),
-                   info.data_size);
+  for (const content::StorageUsageInfo& info : storage_infos) {
+    IncrementUsage(
+        ImportantSitesUtil::GetRegisterableDomainOrIP(info.origin.GetURL()),
+        info.total_size_bytes);
   }
   Done();
 }

@@ -4,6 +4,7 @@
 
 #include "components/download/internal/common/download_worker.h"
 
+#include "base/bind.h"
 #include "components/download/internal/common/resource_downloader.h"
 #include "components/download/public/common/download_create_info.h"
 #include "components/download/public/common/download_interrupt_reasons.h"
@@ -12,6 +13,7 @@
 #include "components/download/public/common/download_utils.h"
 #include "components/download/public/common/input_stream.h"
 #include "components/download/public/common/url_download_handler_factory.h"
+#include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
@@ -20,9 +22,15 @@ namespace {
 
 const int kWorkerVerboseLevel = 1;
 
+bool IsURLSafe(int render_process_id, const GURL& url) {
+  // The URL will be checked in the main request, parallel request will ignore
+  // the security check here.
+  return true;
+}
+
 class CompletedInputStream : public InputStream {
  public:
-  CompletedInputStream(DownloadInterruptReason status) : status_(status){};
+  CompletedInputStream(DownloadInterruptReason status) : status_(status) {}
   ~CompletedInputStream() override = default;
 
   // InputStream
@@ -45,10 +53,12 @@ void CreateUrlDownloadHandler(
     base::WeakPtr<UrlDownloadHandler::Delegate> delegate,
     scoped_refptr<download::DownloadURLLoaderFactoryGetter>
         url_loader_factory_getter,
+    const URLSecurityPolicy& url_security_policy,
+    scoped_refptr<net::URLRequestContextGetter> url_request_context_getter,
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner) {
   auto downloader = UrlDownloadHandlerFactory::Create(
       std::move(params), delegate, std::move(url_loader_factory_getter),
-      task_runner);
+      url_security_policy, std::move(url_request_context_getter), task_runner);
   task_runner->PostTask(
       FROM_HERE,
       base::BindOnce(&UrlDownloadHandler::Delegate::OnUrlDownloadHandlerCreated,
@@ -76,11 +86,14 @@ DownloadWorker::~DownloadWorker() = default;
 void DownloadWorker::SendRequest(
     std::unique_ptr<DownloadUrlParameters> params,
     scoped_refptr<download::DownloadURLLoaderFactoryGetter>
-        url_loader_factory_getter) {
+        url_loader_factory_getter,
+    scoped_refptr<net::URLRequestContextGetter> url_request_context_getter) {
   GetIOTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&CreateUrlDownloadHandler, std::move(params),
                                 weak_factory_.GetWeakPtr(),
                                 std::move(url_loader_factory_getter),
+                                base::BindRepeating(&IsURLSafe),
+                                std::move(url_request_context_getter),
                                 base::ThreadTaskRunnerHandle::Get()));
 }
 

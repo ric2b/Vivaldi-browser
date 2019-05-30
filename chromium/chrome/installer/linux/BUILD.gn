@@ -12,8 +12,9 @@ import("//build/util/process_version.gni")
 import("//build/util/version.gni")
 import("//chrome/process_version_rc_template.gni")  # For branding_file_path.
 import("//components/nacl/features.gni")
+import("//third_party/widevine/cdm/widevine.gni")
 
-if (current_cpu == "x86" || current_cpu == "x64") {
+if (bundle_widevine_cdm) {
   import("//media/cdm/library_cdm/cdm_paths.gni")
 }
 
@@ -60,8 +61,7 @@ if (enable_nacl) {
   }
 }
 
-# The widevine BUILD.gn only produces shared libraries for x86 and x64
-if (is_chrome_branded && (current_cpu == "x86" || current_cpu == "x64")) {
+if (bundle_widevine_cdm) {
   packaging_files_shlibs +=
       [ "$root_out_dir/$widevine_cdm_path/libwidevinecdm.so" ]
 }
@@ -189,7 +189,8 @@ action("strip_chrome_binary") {
     stripped_file,
   ]
   args = [
-    rebase_path("//third_party/eu-strip/bin/eu-strip", root_build_dir),
+    rebase_path("//buildtools/third_party/eu-strip/bin/eu-strip",
+                root_build_dir),
     "-o",
     rebase_path(stripped_file, root_build_dir),
     "-f",
@@ -257,9 +258,6 @@ copy("common_packaging_files") {
     "common/symlinks.include",
     "common/variables.include",
     "common/wrapper",
-    "//vivaldi/installer/linux/common/vivaldi.info",
-    "//vivaldi/installer/linux/common/xfce-helper.template",
-    "//vivaldi/installer/linux/common/appdata.xml.template",
   ]
 
   if (is_chrome_branded) {
@@ -274,7 +272,7 @@ copy("common_packaging_files") {
     ]
   }
 
-  sources += [ "//third_party/eu-strip/bin/eu-strip" ]
+  sources += [ "//buildtools/third_party/eu-strip/bin/eu-strip" ]
 
   outputs = [
     "$root_out_dir/installer/common/{{source_file_part}}",
@@ -347,7 +345,6 @@ if (!is_chromeos) {
     visibility = [ ":*" ]
     sources = [
       "rpm/build.sh",
-      "//vivaldi/installer/linux/rpm/vivaldi.spec.template",
     ]
     outputs = [
       "$root_out_dir/installer/rpm/{{source_file_part}}",
@@ -394,7 +391,7 @@ group("installer_deps") {
       "//ppapi/native_client:irt",
     ]
   }
-  if (current_cpu == "x86" || current_cpu == "x64") {
+  if (bundle_widevine_cdm) {
     public_deps += [ "//third_party/widevine/cdm" ]
   }
   if (!is_chromeos) {

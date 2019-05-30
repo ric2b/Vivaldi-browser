@@ -7,6 +7,7 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/layout/ng/exclusions/ng_exclusion_space.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_bfc_offset.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_margin_strut.h"
 #include "third_party/blink/renderer/core/layout/ng/list/ng_unpositioned_list_marker.h"
@@ -19,8 +20,10 @@
 
 namespace blink {
 
+class NGBoxFragmentBuilder;
+class NGContainerFragmentBuilder;
 class NGExclusionSpace;
-struct NGPositionedFloat;
+class NGLineBoxFragmentBuilder;
 
 // The NGLayoutResult stores the resulting data from layout. This includes
 // geometry information in form of a NGPhysicalFragment, which is kept around
@@ -37,34 +40,27 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
     // enough to store.
   };
 
+  // Create a copy of NGLayoutResult with |BfcBlockOffset| replaced by the given
+  // parameter. Note, when |bfc_block_offset| is |nullopt|, |BfcBlockOffset| is
+  // still replaced with |nullopt|.
+  NGLayoutResult(const NGLayoutResult&,
+                 base::Optional<LayoutUnit> bfc_block_offset);
   ~NGLayoutResult();
 
-  scoped_refptr<const NGPhysicalFragment> PhysicalFragment() const {
-    return root_fragment_.get();
+  const NGPhysicalFragment* PhysicalFragment() const {
+    return physical_fragment_.get();
   }
-  NGPhysicalOffset Offset() const { return root_fragment_.Offset(); }
-  void SetOffset(NGPhysicalOffset offset) { root_fragment_.offset_ = offset; }
 
   const Vector<NGOutOfFlowPositionedDescendant>&
   OutOfFlowPositionedDescendants() const {
     return oof_positioned_descendants_;
   }
 
-  // A line-box can have a list of positioned floats. These should be added to
-  // the line-box's parent fragment (as floats which occur within a line-box do
-  // not appear a children).
-  const Vector<NGPositionedFloat>& PositionedFloats() const {
-    DCHECK(root_fragment_->Type() == NGPhysicalFragment::kFragmentLineBox);
-    return positioned_floats_;
-  }
-
   const NGUnpositionedListMarker& UnpositionedListMarker() const {
     return unpositioned_list_marker_;
   }
 
-  const NGExclusionSpace* ExclusionSpace() const {
-    return exclusion_space_.get();
-  }
+  const NGExclusionSpace& ExclusionSpace() const { return exclusion_space_; }
 
   NGLayoutResultStatus Status() const {
     return static_cast<NGLayoutResultStatus>(status_);
@@ -78,7 +74,9 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
   const NGMarginStrut EndMarginStrut() const { return end_margin_strut_; }
 
   const LayoutUnit IntrinsicBlockSize() const {
-    DCHECK(root_fragment_->Type() == NGPhysicalFragment::kFragmentBox);
+    DCHECK(physical_fragment_->Type() == NGPhysicalFragment::kFragmentBox ||
+           physical_fragment_->Type() ==
+               NGPhysicalFragment::kFragmentRenderedLegend);
     return intrinsic_block_size_;
   }
 
@@ -109,51 +107,72 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
   // the block, and the block will fail to clear).
   NGFloatTypes AdjoiningFloatTypes() const { return adjoining_floats_; }
 
-  scoped_refptr<NGLayoutResult> CloneWithoutOffset() const;
+  bool HasOrthogonalFlowRoots() const { return has_orthogonal_flow_roots_; }
+
+  // Returns true if we aren't able to re-use this layout result if the
+  // PercentageResolutionBlockSize changes.
+  bool DependsOnPercentageBlockSize() const {
+    return depends_on_percentage_block_size_;
+  }
+
+  // Returns true if the space stored with this layout result, is valid.
+  bool HasValidConstraintSpaceForCaching() const { return has_valid_space_; }
+
+  // Returns the space which generated this object for caching purposes.
+  const NGConstraintSpace& GetConstraintSpaceForCaching() const {
+    DCHECK(has_valid_space_);
+    return space_;
+  }
 
  private:
-  friend class NGFragmentBuilder;
+  friend class NGBoxFragmentBuilder;
   friend class NGLineBoxFragmentBuilder;
 
+  // This constructor requires a non-null fragment and sets a success status.
   NGLayoutResult(scoped_refptr<const NGPhysicalFragment> physical_fragment,
-                 Vector<NGOutOfFlowPositionedDescendant>&
-                     out_of_flow_positioned_descendants,
-                 Vector<NGPositionedFloat>& positioned_floats,
-                 const NGUnpositionedListMarker& unpositioned_list_marker,
-                 std::unique_ptr<const NGExclusionSpace> exclusion_space,
-                 LayoutUnit bfc_line_offset,
-                 const base::Optional<LayoutUnit> bfc_block_offset,
-                 const NGMarginStrut end_margin_strut,
-                 const LayoutUnit intrinsic_block_size,
-                 LayoutUnit minimal_space_shortage,
-                 EBreakBetween initial_break_before,
-                 EBreakBetween final_break_after,
-                 bool has_forced_break,
-                 bool is_pushed_by_floats,
-                 NGFloatTypes adjoining_floats,
-                 NGLayoutResultStatus status);
+                 NGBoxFragmentBuilder*);
+  // This constructor requires a non-null fragment and sets a success status.
+  NGLayoutResult(scoped_refptr<const NGPhysicalFragment> physical_fragment,
+                 NGLineBoxFragmentBuilder*);
+  // This constructor is for a non-success status.
+  NGLayoutResult(NGLayoutResultStatus, NGBoxFragmentBuilder*);
 
-  NGLink root_fragment_;
+  // We don't need copy constructor today. Delete this to clarify that the
+  // default copy constructor will not work because RefCounted can't be copied.
+  NGLayoutResult(const NGLayoutResult&) = delete;
+
+  // Delegate constructor that sets up what it can, based on the builder.
+  NGLayoutResult(NGContainerFragmentBuilder* builder, bool cache_space);
+
+  static bool DependsOnPercentageBlockSize(const NGContainerFragmentBuilder&);
+
+  // The constraint space which generated this layout result, may not be valid
+  // as indicated by |has_valid_space_|.
+  const NGConstraintSpace space_;
+
+  scoped_refptr<const NGPhysicalFragment> physical_fragment_;
   Vector<NGOutOfFlowPositionedDescendant> oof_positioned_descendants_;
-
-  Vector<NGPositionedFloat> positioned_floats_;
 
   NGUnpositionedListMarker unpositioned_list_marker_;
 
-  const std::unique_ptr<const NGExclusionSpace> exclusion_space_;
+  const NGExclusionSpace exclusion_space_;
   const LayoutUnit bfc_line_offset_;
   const base::Optional<LayoutUnit> bfc_block_offset_;
   const NGMarginStrut end_margin_strut_;
-  const LayoutUnit intrinsic_block_size_;
-  const LayoutUnit minimal_space_shortage_;
+  LayoutUnit intrinsic_block_size_;
+  LayoutUnit minimal_space_shortage_ = LayoutUnit::Max();
 
-  EBreakBetween initial_break_before_;
-  EBreakBetween final_break_after_;
+  EBreakBetween initial_break_before_ = EBreakBetween::kAuto;
+  EBreakBetween final_break_after_ = EBreakBetween::kAuto;
 
+  unsigned has_valid_space_ : 1;
   unsigned has_forced_break_ : 1;
 
   unsigned is_pushed_by_floats_ : 1;
   unsigned adjoining_floats_ : 2;  // NGFloatTypes
+
+  unsigned has_orthogonal_flow_roots_ : 1;
+  unsigned depends_on_percentage_block_size_ : 1;
 
   unsigned status_ : 1;
 };

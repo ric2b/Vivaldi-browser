@@ -25,11 +25,14 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_INDEXEDDB_IDB_FACTORY_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_INDEXEDDB_IDB_FACTORY_H_
 
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_factory.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_open_db_request.h"
+#include "third_party/blink/renderer/modules/indexeddb/web_idb_factory.h"
+#include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -39,25 +42,32 @@ namespace blink {
 class ExceptionState;
 class ScriptState;
 
-class IDBFactory final : public ScriptWrappable {
+class MODULES_EXPORT IDBFactory final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static IDBFactory* Create() { return new IDBFactory(); }
+  static IDBFactory* Create() { return MakeGarbageCollected<IDBFactory>(); }
+  static IDBFactory* CreateForTest(
+      std::unique_ptr<WebIDBFactory> web_idb_factory) {
+    return MakeGarbageCollected<IDBFactory>(std::move(web_idb_factory));
+  }
+
+  IDBFactory();
+  IDBFactory(std::unique_ptr<WebIDBFactory>);
 
   // Implement the IDBFactory IDL
   IDBOpenDBRequest* open(ScriptState*, const String& name, ExceptionState&);
   IDBOpenDBRequest* open(ScriptState*,
                          const String& name,
-                         unsigned long long version,
+                         uint64_t version,
                          ExceptionState&);
   IDBOpenDBRequest* deleteDatabase(ScriptState*,
                                    const String& name,
                                    ExceptionState&);
-  short cmp(ScriptState*,
-            const ScriptValue& first,
-            const ScriptValue& second,
-            ExceptionState&);
+  int16_t cmp(ScriptState*,
+              const ScriptValue& first,
+              const ScriptValue& second,
+              ExceptionState&);
 
   // These are not exposed to the web applications and only used by DevTools.
   IDBRequest* GetDatabaseNames(ScriptState*, ExceptionState&);
@@ -65,10 +75,10 @@ class IDBFactory final : public ScriptWrappable {
                                                       const String& name,
                                                       ExceptionState&);
 
- private:
-  IDBFactory();
+  ScriptPromise GetDatabaseInfo(ScriptState*, ExceptionState&);
 
-  WebIDBFactory* GetFactory();
+ private:
+  WebIDBFactory* GetFactory(ExecutionContext* execution_context);
 
   IDBOpenDBRequest* OpenInternal(ScriptState*,
                                  const String& name,

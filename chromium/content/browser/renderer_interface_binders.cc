@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/no_destructor.h"
 #include "content/browser/background_fetch/background_fetch_service_impl.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/cookie_store/cookie_store_context.h"
@@ -33,8 +34,8 @@
 #include "services/shape_detection/public/mojom/constants.mojom.h"
 #include "services/shape_detection/public/mojom/facedetection_provider.mojom.h"
 #include "services/shape_detection/public/mojom/textdetection.mojom.h"
+#include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom.h"
 #include "third_party/blink/public/mojom/cookie_store/cookie_store.mojom.h"
-#include "third_party/blink/public/platform/modules/cache_storage/cache_storage.mojom.h"
 #include "third_party/blink/public/platform/modules/notifications/notification_service.mojom.h"
 #include "url/origin.h"
 
@@ -149,6 +150,19 @@ void RendererInterfaceBinders::InitializeParameterizedBinderRegistry() {
         static_cast<RenderProcessHostImpl*>(host)->BindCacheStorage(
             std::move(request), origin);
       }));
+  parameterized_binder_registry_.AddInterface(base::BindRepeating(
+      [](blink::mojom::IDBFactoryRequest request, RenderProcessHost* host,
+         const url::Origin& origin) {
+        static_cast<RenderProcessHostImpl*>(host)->BindIndexedDB(
+            std::move(request), origin);
+      }));
+  // TODO(https://crbug.com/873661): Pass origin to FileSystemMananger.
+  parameterized_binder_registry_.AddInterface(base::BindRepeating(
+      [](blink::mojom::FileSystemManagerRequest request,
+         RenderProcessHost* host, const url::Origin& origin) {
+        static_cast<RenderProcessHostImpl*>(host)->BindFileSystemManager(
+            std::move(request));
+      }));
   parameterized_binder_registry_.AddInterface(
       base::Bind([](blink::mojom::PermissionServiceRequest request,
                     RenderProcessHost* host, const url::Origin& origin) {
@@ -161,6 +175,13 @@ void RendererInterfaceBinders::InitializeParameterizedBinderRegistry() {
          const url::Origin& origin) {
         static_cast<StoragePartitionImpl*>(host->GetStoragePartition())
             ->GetLockManager()
+            ->CreateService(std::move(request), origin);
+      }));
+  parameterized_binder_registry_.AddInterface(base::BindRepeating(
+      [](blink::mojom::IdleManagerRequest request, RenderProcessHost* host,
+         const url::Origin& origin) {
+        static_cast<StoragePartitionImpl*>(host->GetStoragePartition())
+            ->GetIdleManager()
             ->CreateService(std::move(request), origin);
       }));
   parameterized_binder_registry_.AddInterface(
@@ -186,16 +207,18 @@ void RendererInterfaceBinders::InitializeParameterizedBinderRegistry() {
 }
 
 RendererInterfaceBinders& GetRendererInterfaceBinders() {
-  CR_DEFINE_STATIC_LOCAL(RendererInterfaceBinders, binders, ());
-  return binders;
+  static base::NoDestructor<RendererInterfaceBinders> binders;
+  return *binders;
 }
 
 void RendererInterfaceBinders::CreateWebSocket(
     network::mojom::WebSocketRequest request,
     RenderProcessHost* host,
     const url::Origin& origin) {
+  // TODO(jam): is it ok to not send extraHeaders for sockets created from
+  // shared and service workers?
   WebSocketManager::CreateWebSocket(host->GetID(), MSG_ROUTING_NONE, origin,
-                                    nullptr, std::move(request));
+                                    nullptr, nullptr, std::move(request));
 }
 
 }  // namespace

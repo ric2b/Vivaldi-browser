@@ -14,7 +14,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/common/navigation_policy.h"
 #include "net/url_request/redirect_info.h"
 #include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
@@ -28,13 +28,12 @@ TestNavigationURLLoader::TestNavigationURLLoader(
       delegate_(delegate),
       redirect_count_(0),
       response_proceeded_(false) {
-  DCHECK(IsBrowserSideNavigationEnabled());
 }
 
 void TestNavigationURLLoader::FollowRedirect(
-    const base::Optional<std::vector<std::string>>&
-        to_be_removed_request_headers,
-    const base::Optional<net::HttpRequestHeaders>& modified_request_headers) {
+    const std::vector<std::string>& removed_headers,
+    const net::HttpRequestHeaders& modified_headers,
+    PreviewsState new_previews_state) {
   redirect_count_++;
 }
 
@@ -54,7 +53,12 @@ void TestNavigationURLLoader::SimulateServerRedirect(const GURL& redirect_url) {
 }
 
 void TestNavigationURLLoader::SimulateError(int error_code) {
-  delegate_->OnRequestFailed(network::URLLoaderCompletionStatus(error_code));
+  SimulateErrorWithStatus(network::URLLoaderCompletionStatus(error_code));
+}
+
+void TestNavigationURLLoader::SimulateErrorWithStatus(
+    const network::URLLoaderCompletionStatus& status) {
+  delegate_->OnRequestFailed(status);
 }
 
 void TestNavigationURLLoader::CallOnRequestRedirected(
@@ -91,7 +95,8 @@ void TestNavigationURLLoader::CallOnResponseStarted(
 
   delegate_->OnResponseStarted(response, std::move(url_loader_client_endpoints),
                                std::move(navigation_data), global_id, false,
-                               false, PREVIEWS_OFF, base::nullopt);
+                               NavigationDownloadPolicy::kAllow, false,
+                               base::nullopt);
 }
 
 TestNavigationURLLoader::~TestNavigationURLLoader() {}

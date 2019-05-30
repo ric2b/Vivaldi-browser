@@ -25,6 +25,7 @@ import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.CollectionUtil;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.test.ChromeBrowserTestRule;
@@ -395,6 +396,25 @@ public class IntentHandlerTest {
 
     @Test
     @SmallTest
+    @UiThreadTest
+    @Feature({"Android-AppBase"})
+    public void testLogHeaders() {
+        Bundle bundle = new Bundle();
+        bundle.putString("Content-Length", "1234");
+        Intent headersIntent = new Intent(Intent.ACTION_VIEW);
+        headersIntent.putExtra(Browser.EXTRA_HEADERS, bundle);
+
+        IntentHandler.getExtraHeadersFromIntent(headersIntent);
+        Assert.assertEquals(0,
+                RecordHistogram.getHistogramTotalCountForTesting("Android.IntentHeaders"));
+
+        IntentHandler.getExtraHeadersFromIntent(headersIntent, true);
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramTotalCountForTesting("Android.IntentHeaders"));
+    }
+
+    @Test
+    @SmallTest
     @Feature({"Android-AppBase"})
     public void testMaybeAddAdditionalExtraHeaders() {
         String contentUrl = "content://com.example.org/document/1";
@@ -442,5 +462,24 @@ public class IntentHandlerTest {
     public void testIsIntentForMhtmlFileOrContent() {
         checkIntentForMhtmlFileOrContent(INTENT_URLS_AND_TYPES_FOR_MHTML, true);
         checkIntentForMhtmlFileOrContent(INTENT_URLS_AND_TYPES_NOT_FOR_MHTML, false);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Android-AppBase"})
+    public void testCreateTrustedOpenNewTabIntent() {
+        Context context = InstrumentationRegistry.getTargetContext();
+        Intent intent = IntentHandler.createTrustedOpenNewTabIntent(context, true);
+
+        Assert.assertEquals(intent.getAction(), Intent.ACTION_VIEW);
+        Assert.assertEquals(intent.getData(), Uri.parse(UrlConstants.NTP_URL));
+        Assert.assertTrue(intent.getBooleanExtra(Browser.EXTRA_CREATE_NEW_TAB, false));
+        Assert.assertTrue(IntentHandler.wasIntentSenderChrome(intent));
+        Assert.assertTrue(
+                intent.getBooleanExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, false));
+
+        intent = IntentHandler.createTrustedOpenNewTabIntent(context, false);
+        Assert.assertFalse(
+                intent.getBooleanExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, true));
     }
 }

@@ -8,10 +8,10 @@
 #include <limits.h>
 
 #include <cstring>
-#include <set>
 #include <unordered_map>
 #include <vector>
 
+#include "base/big_endian.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -19,9 +19,8 @@
 #include "build/build_config.h"
 #include "net/base/address_list.h"
 #include "net/base/url_util.h"
-#include "net/dns/dns_protocol.h"
+#include "net/dns/public/dns_protocol.h"
 #include "net/third_party/uri_template/uri_template.h"
-#include "url/gurl.h"
 #include "url/url_canon.h"
 
 namespace {
@@ -30,6 +29,10 @@ namespace {
 // Section 3.1: Each label is represented as a one octet length field followed
 // by that number of octets.
 const int kMaxLabelLength = 63;
+
+// RFC 1035, section 4.1.4: the first two bits of a 16-bit name pointer are
+// ones.
+const uint16_t kFlagNamePointer = 0xc000;
 
 }  // namespace
 
@@ -48,9 +51,12 @@ const int kMaxLabelLength = 63;
 #endif
 
 namespace net {
+namespace {
 
 // Based on DJB's public domain code.
-bool DNSDomainFromDot(const base::StringPiece& dotted, std::string* out) {
+bool DNSDomainFromDot(const base::StringPiece& dotted,
+                      bool is_unrestricted,
+                      std::string* out) {
   const char* buf = dotted.data();
   size_t n = dotted.size();
   char label[kMaxLabelLength];
@@ -78,7 +84,7 @@ bool DNSDomainFromDot(const base::StringPiece& dotted, std::string* out) {
     }
     if (labellen >= sizeof label)
       return false;
-    if (!IsValidHostLabelCharacter(ch, labellen == 0)) {
+    if (!is_unrestricted && !IsValidHostLabelCharacter(ch, labellen == 0)) {
       return false;
     }
     label[labellen++] = ch;
@@ -96,7 +102,7 @@ bool DNSDomainFromDot(const base::StringPiece& dotted, std::string* out) {
 
   if (namelen + 1 > sizeof name)
     return false;
-  if (namelen == 0) // Empty names e.g. "", "." are not valid.
+  if (namelen == 0)  // Empty names e.g. "", "." are not valid.
     return false;
   name[namelen++] = 0;  // This is the root label (of length 0).
 
@@ -104,9 +110,25 @@ bool DNSDomainFromDot(const base::StringPiece& dotted, std::string* out) {
   return true;
 }
 
+}  // namespace
+
+bool DNSDomainFromDot(const base::StringPiece& dotted, std::string* out) {
+  return DNSDomainFromDot(dotted, false /* is_unrestricted */, out);
+}
+
+bool DNSDomainFromUnrestrictedDot(const base::StringPiece& dotted,
+                                  std::string* out) {
+  return DNSDomainFromDot(dotted, true /* is_unrestricted */, out);
+}
+
 bool IsValidDNSDomain(const base::StringPiece& dotted) {
   std::string dns_formatted;
   return DNSDomainFromDot(dotted, &dns_formatted);
+}
+
+bool IsValidUnrestrictedDNSDomain(const base::StringPiece& dotted) {
+  std::string dns_formatted;
+  return DNSDomainFromUnrestrictedDot(dotted, &dns_formatted);
 }
 
 bool IsValidHostLabelCharacter(char c, bool is_first_char) {
@@ -141,35 +163,6 @@ std::string GetURLFromTemplateWithoutParameters(const string& server_template) {
   std::unordered_map<string, string> parameters;
   uri_template::Expand(server_template, parameters, &url_string);
   return url_string;
-}
-
-bool IsValidDoHTemplate(const string& server_template,
-                        const string& server_method) {
-  std::string url_string;
-  std::string test_query = "this_is_a_test_query";
-  std::unordered_map<std::string, std::string> template_params(
-      {{"dns", test_query}});
-  std::set<std::string> vars_found;
-  bool valid_template = uri_template::Expand(server_template, template_params,
-                                             &url_string, &vars_found);
-  if (!valid_template) {
-    // The URI template is malformed.
-    return false;
-  }
-  if (server_method != "POST" && vars_found.find("dns") == vars_found.end()) {
-    // GET requests require the template to have a dns variable.
-    return false;
-  }
-  GURL url(url_string);
-  if (!url.is_valid() || !url.SchemeIs("https")) {
-    // The expanded template must be a valid HTTPS URL.
-    return false;
-  }
-  if (url.host().find(test_query) != std::string::npos) {
-    // The dns variable may not be part of the hostname.
-    return false;
-  }
-  return true;
 }
 
 #if !defined(OS_NACL)
@@ -222,12 +215,21 @@ AddressListDeltaType FindAddressListDeltaType(const AddressList& a,
       if (a[i] == b[j]) {
         any_match = true;
         this_match = true;
+        // If there is no match before, and the current match, this means
+        // DELTA_OVERLAP.
+        if (any_missing)
+          return DELTA_OVERLAP;
       } else if (i == j) {
         pairwise_mismatch = true;
       }
     }
-    if (!this_match)
+    if (!this_match) {
       any_missing = true;
+      // If any match has occurred before, then there is no need to compare the
+      // remaining addresses. This means DELTA_OVERLAP.
+      if (any_match)
+        return DELTA_OVERLAP;
+    }
   }
 
   if (same_size && !pairwise_mismatch)
@@ -238,6 +240,46 @@ AddressListDeltaType FindAddressListDeltaType(const AddressList& a,
     return DELTA_OVERLAP;
   else
     return DELTA_DISJOINT;
+}
+
+std::string CreateNamePointer(uint16_t offset) {
+  DCHECK_LE(offset, 0x3fff);
+  offset |= kFlagNamePointer;
+  char buf[2];
+  base::WriteBigEndian(buf, offset);
+  return std::string(buf, sizeof(buf));
+}
+
+uint16_t DnsQueryTypeToQtype(DnsQueryType dns_query_type) {
+  switch (dns_query_type) {
+    case DnsQueryType::UNSPECIFIED:
+      NOTREACHED();
+      return 0;
+    case DnsQueryType::A:
+      return dns_protocol::kTypeA;
+    case DnsQueryType::AAAA:
+      return dns_protocol::kTypeAAAA;
+    case DnsQueryType::TXT:
+      return dns_protocol::kTypeTXT;
+    case DnsQueryType::PTR:
+      return dns_protocol::kTypePTR;
+    case DnsQueryType::SRV:
+      return dns_protocol::kTypeSRV;
+  }
+}
+
+DnsQueryType AddressFamilyToDnsQueryType(AddressFamily address_family) {
+  switch (address_family) {
+    case ADDRESS_FAMILY_UNSPECIFIED:
+      return DnsQueryType::UNSPECIFIED;
+    case ADDRESS_FAMILY_IPV4:
+      return DnsQueryType::A;
+    case ADDRESS_FAMILY_IPV6:
+      return DnsQueryType::AAAA;
+    default:
+      NOTREACHED();
+      return DnsQueryType::UNSPECIFIED;
+  }
 }
 
 }  // namespace net

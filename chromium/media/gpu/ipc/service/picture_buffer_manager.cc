@@ -12,7 +12,9 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/synchronization/lock.h"
+#include "base/thread_annotations.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
+#include "media/base/video_util.h"
 
 namespace media {
 
@@ -48,19 +50,23 @@ class PictureBufferManagerImpl : public PictureBufferManager {
 
     base::AutoLock lock(picture_buffers_lock_);
 
-    // If there are no assigned picture buffers, predict that the VDA will
-    // request some.
-    if (picture_buffers_.empty())
-      return true;
-
-    // Predict that the VDA can output a picture if at least one picture buffer
-    // is not in use as an output.
+    // If at least one picture buffer is not in use, predict that the VDA can
+    // use it to output another picture.
+    bool has_assigned_picture_buffer = false;
     for (const auto& it : picture_buffers_) {
-      if (it.second.state != PictureBufferState::OUTPUT)
-        return true;
+      if (!it.second.dismissed) {
+        // Note: If a picture buffer is waiting for SyncToken release, that
+        // release is already in some command buffer (or the wait is invalid).
+        // The wait will complete without further interaction from the client.
+        if (it.second.output_count == 0)
+          return true;
+        has_assigned_picture_buffer = true;
+      }
     }
 
-    return false;
+    // If there are no assigned picture buffers, predict that the VDA will
+    // request some.
+    return !has_assigned_picture_buffer;
   }
 
   std::vector<PictureBuffer> CreatePictureBuffers(
@@ -85,9 +91,7 @@ class PictureBufferManagerImpl : public PictureBufferManager {
 
     std::vector<PictureBuffer> picture_buffers;
     for (uint32_t i = 0; i < count; i++) {
-      PictureBuffer::TextureIds service_ids;
-      PictureBufferData picture_data = {PictureBufferState::AVAILABLE,
-                                        pixel_format, texture_size};
+      PictureBufferData picture_data = {pixel_format, texture_size};
 
       for (uint32_t j = 0; j < planes; j++) {
         // Create a texture for this plane.
@@ -95,7 +99,7 @@ class PictureBufferManagerImpl : public PictureBufferManager {
             texture_target, GL_RGBA, texture_size.width(),
             texture_size.height(), GL_RGBA, GL_UNSIGNED_BYTE);
         DCHECK(service_id);
-        service_ids.push_back(service_id);
+        picture_data.service_ids.push_back(service_id);
 
         // The texture is not cleared yet, but it will be before the VDA outputs
         // it. Rather than requiring output to happen on the GPU thread, mark
@@ -121,44 +125,52 @@ class PictureBufferManagerImpl : public PictureBufferManager {
       //
       // TODO(sandersd): Refactor the bind image callback to use service IDs so
       // that we can get rid of the client IDs altogether.
-      picture_buffers.emplace_back(picture_buffer_id, texture_size, service_ids,
-                                   service_ids, texture_target, pixel_format);
-
-      // Record the textures used by the picture buffer.
-      picture_buffer_textures_[picture_buffer_id] = std::move(service_ids);
+      picture_buffers.emplace_back(
+          picture_buffer_id, texture_size, picture_data.service_ids,
+          picture_data.service_ids, texture_target, pixel_format);
     }
     return picture_buffers;
   }
 
   bool DismissPictureBuffer(int32_t picture_buffer_id) override {
     DVLOG(2) << __func__ << "(" << picture_buffer_id << ")";
-    DCHECK(gpu_task_runner_);
-    DCHECK(gpu_task_runner_->BelongsToCurrentThread());
 
     base::AutoLock lock(picture_buffers_lock_);
 
-    // Check the state of the picture buffer.
     const auto& it = picture_buffers_.find(picture_buffer_id);
-    if (it == picture_buffers_.end()) {
+    if (it == picture_buffers_.end() || it->second.dismissed) {
       DVLOG(1) << "Unknown picture buffer " << picture_buffer_id;
       return false;
     }
 
-    bool is_available = it->second.state == PictureBufferState::AVAILABLE;
+    it->second.dismissed = true;
 
-    // Destroy the picture buffer data.
-    picture_buffers_.erase(it);
-
-    // If the picture was available, we can destroy its textures immediately.
-    if (is_available) {
+    // If the picture buffer is not in use, it should be destroyed immediately.
+    if (!it->second.IsInUse()) {
       gpu_task_runner_->PostTask(
           FROM_HERE,
-          base::BindOnce(
-              &PictureBufferManagerImpl::DestroyPictureBufferTextures, this,
-              picture_buffer_id));
+          base::BindOnce(&PictureBufferManagerImpl::DestroyPictureBuffer, this,
+                         picture_buffer_id));
     }
 
     return true;
+  }
+
+  void DismissAllPictureBuffers() override {
+    DVLOG(2) << __func__;
+
+    std::vector<int32_t> assigned_picture_buffer_ids;
+    {
+      base::AutoLock lock(picture_buffers_lock_);
+
+      for (const auto& it : picture_buffers_) {
+        if (!it.second.dismissed)
+          assigned_picture_buffer_ids.push_back(it.first);
+      }
+    }
+
+    for (int32_t picture_buffer_id : assigned_picture_buffer_ids)
+      DismissPictureBuffer(picture_buffer_id);
   }
 
   scoped_refptr<VideoFrame> CreateVideoFrame(Picture picture,
@@ -176,28 +188,25 @@ class PictureBufferManagerImpl : public PictureBufferManager {
 
     // Verify that the picture buffer is available.
     const auto& it = picture_buffers_.find(picture_buffer_id);
-    if (it == picture_buffers_.end()) {
+    if (it == picture_buffers_.end() || it->second.dismissed) {
       DVLOG(1) << "Unknown picture buffer " << picture_buffer_id;
       return nullptr;
     }
 
+    // Ensure that the picture buffer is large enough.
     PictureBufferData& picture_buffer_data = it->second;
-    if (picture_buffer_data.state != PictureBufferState::AVAILABLE) {
-      DLOG(ERROR) << "Picture buffer " << picture_buffer_id
-                  << " is not available";
-      return nullptr;
-    }
-
-    // Verify that the picture buffer is large enough.
     if (!gfx::Rect(picture_buffer_data.texture_size).Contains(visible_rect)) {
-      DLOG(ERROR) << "visible_rect " << visible_rect.ToString()
-                  << " exceeds coded_size "
-                  << picture_buffer_data.texture_size.ToString();
-      return nullptr;
+      DLOG(WARNING) << "visible_rect " << visible_rect.ToString()
+                    << " exceeds coded_size "
+                    << picture_buffer_data.texture_size.ToString();
+      double pixel_aspect_ratio =
+          GetPixelAspectRatio(visible_rect, natural_size);
+      visible_rect.Intersect(gfx::Rect(picture_buffer_data.texture_size));
+      natural_size = GetNaturalSize(visible_rect, pixel_aspect_ratio);
     }
 
-    // Mark the picture as an output.
-    picture_buffer_data.state = PictureBufferState::OUTPUT;
+    // Record the output.
+    picture_buffer_data.output_count++;
 
     // Create and return a VideoFrame for the picture buffer.
     scoped_refptr<VideoFrame> frame = VideoFrame::WrapNativeTextures(
@@ -211,6 +220,10 @@ class PictureBufferManagerImpl : public PictureBufferManager {
 
     if (picture.allow_overlay())
       frame->metadata()->SetBoolean(VideoFrameMetadata::ALLOW_OVERLAY, true);
+    if (picture.read_lock_fences_enabled()) {
+      frame->metadata()->SetBoolean(
+          VideoFrameMetadata::READ_LOCK_FENCES_ENABLED, true);
+    }
 
     // TODO(sandersd): Provide an API for VDAs to control this.
     frame->metadata()->SetBoolean(VideoFrameMetadata::POWER_EFFICIENT, true);
@@ -219,7 +232,10 @@ class PictureBufferManagerImpl : public PictureBufferManager {
   }
 
  private:
-  ~PictureBufferManagerImpl() override { DVLOG(1) << __func__; }
+  ~PictureBufferManagerImpl() override {
+    DVLOG(1) << __func__;
+    DCHECK(picture_buffers_.empty() || !command_buffer_helper_->HasStub());
+  }
 
   void OnVideoFrameDestroyed(int32_t picture_buffer_id,
                              const gpu::SyncToken& sync_token) {
@@ -227,12 +243,13 @@ class PictureBufferManagerImpl : public PictureBufferManager {
 
     base::AutoLock lock(picture_buffers_lock_);
 
-    // If the picture buffer is still assigned, mark it as unreleased.
+    // Record the picture buffer as waiting for SyncToken release (even if it
+    // has been dismissed already).
     const auto& it = picture_buffers_.find(picture_buffer_id);
-    if (it != picture_buffers_.end()) {
-      DCHECK_EQ(it->second.state, PictureBufferState::OUTPUT);
-      it->second.state = PictureBufferState::WAITING_FOR_SYNCTOKEN;
-    }
+    DCHECK(it != picture_buffers_.end());
+    DCHECK_GT(it->second.output_count, 0);
+    it->second.output_count--;
+    it->second.waiting_for_synctoken_count++;
 
     // Wait for the SyncToken release.
     gpu_task_runner_->PostTask(
@@ -249,41 +266,55 @@ class PictureBufferManagerImpl : public PictureBufferManager {
     DCHECK(gpu_task_runner_);
     DCHECK(gpu_task_runner_->BelongsToCurrentThread());
 
-    // If the picture buffer is still assigned, mark it as available.
+    // Remove the pending wait.
     bool is_assigned = false;
+    bool is_in_use = true;
     {
       base::AutoLock lock(picture_buffers_lock_);
       const auto& it = picture_buffers_.find(picture_buffer_id);
-      if (it != picture_buffers_.end()) {
-        DCHECK_EQ(it->second.state, PictureBufferState::WAITING_FOR_SYNCTOKEN);
-        it->second.state = PictureBufferState::AVAILABLE;
-        is_assigned = true;
-      }
+      DCHECK(it != picture_buffers_.end());
+
+      DCHECK_GT(it->second.waiting_for_synctoken_count, 0);
+      it->second.waiting_for_synctoken_count--;
+
+      is_assigned = !it->second.dismissed;
+      is_in_use = it->second.IsInUse();
     }
 
     // If the picture buffer is still assigned, it is ready to be reused.
-    // Otherwise it has been dismissed and we can now delete its textures.
-    // Neither of these operations should be done while holding the lock.
+    // Otherwise it should be destroyed if it is no longer in use. Neither of
+    // these operations should be done while holding the lock.
     if (is_assigned) {
+      // The callback is called even if the picture buffer is still in use; the
+      // client is expected to wait for all copies of a picture buffer to be
+      // returned before reusing any textures.
       reuse_picture_buffer_cb_.Run(picture_buffer_id);
-    } else {
-      DestroyPictureBufferTextures(picture_buffer_id);
+    } else if (!is_in_use) {
+      DestroyPictureBuffer(picture_buffer_id);
     }
   }
 
-  void DestroyPictureBufferTextures(int32_t picture_buffer_id) {
+  void DestroyPictureBuffer(int32_t picture_buffer_id) {
     DVLOG(3) << __func__ << "(" << picture_buffer_id << ")";
     DCHECK(gpu_task_runner_);
     DCHECK(gpu_task_runner_->BelongsToCurrentThread());
 
+    std::vector<GLuint> service_ids;
+    {
+      base::AutoLock lock(picture_buffers_lock_);
+      const auto& it = picture_buffers_.find(picture_buffer_id);
+      DCHECK(it != picture_buffers_.end());
+      DCHECK(it->second.dismissed);
+      DCHECK(!it->second.IsInUse());
+      service_ids = std::move(it->second.service_ids);
+      picture_buffers_.erase(it);
+    }
+
     if (!command_buffer_helper_->MakeContextCurrent())
       return;
 
-    const auto& it = picture_buffer_textures_.find(picture_buffer_id);
-    DCHECK(it != picture_buffer_textures_.end());
-    for (GLuint service_id : it->second)
+    for (GLuint service_id : service_ids)
       command_buffer_helper_->DestroyTexture(service_id);
-    picture_buffer_textures_.erase(it);
   }
 
   ReusePictureBufferCB reuse_picture_buffer_cb_;
@@ -292,27 +323,30 @@ class PictureBufferManagerImpl : public PictureBufferManager {
   scoped_refptr<CommandBufferHelper> command_buffer_helper_;
 
   int32_t picture_buffer_id_ = 0;
-  // Includes picture puffers that have been dismissed if their textures have
-  // not been deleted yet.
-  std::map<int32_t, std::vector<GLuint>> picture_buffer_textures_;
 
-  base::Lock picture_buffers_lock_;
-  enum class PictureBufferState {
-    // Available for use by the VDA.
-    AVAILABLE,
-    // Output by the VDA, still bound to a VideoFrame.
-    OUTPUT,
-    // Waiting on a SyncToken before being reused.
-    WAITING_FOR_SYNCTOKEN,
-  };
   struct PictureBufferData {
-    PictureBufferState state;
     VideoPixelFormat pixel_format;
     gfx::Size texture_size;
+    std::vector<GLuint> service_ids;
     gpu::MailboxHolder mailbox_holders[VideoFrame::kMaxPlanes];
+    bool dismissed = false;
+
+    // The same picture buffer can be output from the VDA multiple times
+    // concurrently, so the state is tracked using counts.
+    //   |output_count|: Number of VideoFrames this picture buffer is bound to.
+    //   |waiting_for_synctoken_count|: Number of returned frames that are
+    //       waiting for SyncToken release.
+    int output_count = 0;
+    int waiting_for_synctoken_count = 0;
+
+    bool IsInUse() const {
+      return output_count > 0 || waiting_for_synctoken_count > 0;
+    }
   };
-  // Pictures buffers that are assigned to the VDA.
-  std::map<int32_t, PictureBufferData> picture_buffers_;
+
+  base::Lock picture_buffers_lock_;
+  std::map<int32_t, PictureBufferData> picture_buffers_
+      GUARDED_BY(picture_buffers_lock_);
 
   DISALLOW_COPY_AND_ASSIGN(PictureBufferManagerImpl);
 };

@@ -9,7 +9,7 @@
 
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "google_apis/gaia/gaia_auth_util.h"
@@ -32,15 +32,6 @@ const char kKeyGaiaIdPrefix[] = "g-";
 const char kKeyAdIdPrefix[] = "a-";
 
 }  // anonymous namespace
-
-struct AccountId::EmptyAccountId {
-  EmptyAccountId() : user_id() {}
-  const AccountId user_id;
-
-  static EmptyAccountId* GetInstance() {
-    return base::Singleton<EmptyAccountId>::get();
-  }
-};
 
 AccountId::AccountId() {}
 
@@ -250,7 +241,7 @@ std::string AccountId::Serialize() const {
 bool AccountId::Deserialize(const std::string& serialized,
                             AccountId* account_id) {
   base::JSONReader reader;
-  std::unique_ptr<const base::Value> value(reader.Read(serialized));
+  std::unique_ptr<const base::Value> value(reader.ReadDeprecated(serialized));
   const base::DictionaryValue* dictionary_value = nullptr;
 
   if (!value || !value->GetAsDictionary(&dictionary_value))
@@ -330,13 +321,14 @@ std::ostream& operator<<(std::ostream& stream, const AccountId& account_id) {
 }
 
 const AccountId& EmptyAccountId() {
-  return AccountId::EmptyAccountId::GetInstance()->user_id;
+  static const base::NoDestructor<AccountId> empty_account_id;
+  return *empty_account_id;
 }
 
-namespace BASE_HASH_NAMESPACE {
+namespace std {
 
 std::size_t hash<AccountId>::operator()(const AccountId& user_id) const {
   return hash<std::string>()(user_id.GetUserEmail());
 }
 
-}  // namespace BASE_HASH_NAMESPACE
+}  // namespace std

@@ -34,6 +34,11 @@
   public *;
 }
 
+# Functor classes with native methods implemented in Android.
+-keep class com.android.webview.chromium.DrawFunctor
+-keep class com.android.webview.chromium.DrawGLFunctor
+-keep class com.android.webview.chromium.GraphicsUtils
+
 # Linker dynamically casts to $TestRunner when running tests. We don't run these
 # tests in WebView.
 -dontnote org.chromium.base.library_loader.Linker$TestRunner
@@ -64,11 +69,6 @@
 }
 
 # Accessed via reflection but not present in all builds
--keep class com.android.webview.chromium.PlatformServiceBridgeGoogle {
-  void setMetricsSettingListener(...);
-  PlatformServiceBridgeGoogle(...);
-}
--dontnote com.android.webview.chromium.PlatformServiceBridgeGoogle
 -keep class com.android.webview.chromium.AwSafeBrowsingApiHandler {
   AwSafeBrowsingApiHandler(...);
 }
@@ -76,3 +76,7 @@
 
 # We strip some unused resources when preprocessing the GMS client libs.
 -dontwarn com.google.android.gms.R**
+
+# Trichrome builds don't include a native library list in the main APK; it's
+# picked up from the library APK at runtime.
+-dontwarn org.chromium.base.library_loader.NativeLibraries

@@ -2,7 +2,8 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="fr">
 <translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Tous droits réservés.</translation>
-<translation id="3850557856045828465">Attention : Vivaldi ne peut pas empêcher les extensions d'enregistrer votre historique de navigation. Pour désactiver cette extension en mode navigation privée, désélectionnez-la.</translation>
+<translation id="3642991949832251880">Voulez-vous vraiment quitter Vivaldi ?</translation>
+<translation id="3850557856045828465">Attention : Vivaldi ne peut pas empêcher les extensions d’enregistrer votre historique de navigation. Pour désactiver cette extension en mode navigation privée, désélectionnez-la.</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="5743878272102782872">Gestionnaire de tâches - Vivaldi</translation>
 </translationbundle>

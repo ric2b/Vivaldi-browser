@@ -25,7 +25,8 @@ ApplicationTestRunner.postToServiceWorker = function(scope, message) {
 
 ApplicationTestRunner.waitForServiceWorker = function(callback) {
   function isRightTarget(target) {
-    return TestRunner.isDedicatedWorker(target) && TestRunner.isServiceWorker(target.parentTarget());
+    return target.type() === SDK.Target.Type.Worker && target.parentTarget() &&
+        target.parentTarget().type() === SDK.Target.Type.ServiceWorker;
   }
 
   SDK.targetManager.observeTargets({
@@ -46,6 +47,8 @@ ApplicationTestRunner.dumpServiceWorkersView = function() {
   return swView._currentWorkersView._sectionList.childTextNodes()
       .concat(swView._otherWorkersView._sectionList.childTextNodes())
       .map(function(node) {
+        if (node.textContent === 'Received ' + (new Date(0)).toLocaleString())
+          return 'Invalid scriptResponseTime (unix epoch)';
         return node.textContent.replace(/Received.*/, 'Received').replace(/#\d+/, '#N');
       })
       .join('\n');

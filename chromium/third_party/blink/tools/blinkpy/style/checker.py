@@ -190,7 +190,7 @@ _PNG_FILE_EXTENSION = 'png'
 # This list should be in addition to files with FileType.NONE.  Files
 # with FileType.NONE are automatically skipped without warning.
 _SKIPPED_FILES_WITHOUT_WARNING = [
-    'LayoutTests' + os.path.sep,
+    'web_tests' + os.path.sep,
     'third_party' + os.path.sep + 'blink' + os.path.sep + 'renderer' + os.path.sep + 'devtools' + os.path.sep + 'protocol.json',
 ]
 
@@ -226,22 +226,22 @@ def _all_categories():
     return categories
 
 
-def _check_webkit_style_defaults():
+def _check_blink_style_defaults():
     """Return the default command-line options for check_blink_style.py."""
     return DefaultCommandOptionValues(min_confidence=_DEFAULT_MIN_CONFIDENCE,
                                       output_format=_DEFAULT_OUTPUT_FORMAT)
 
 
 # This function assists in optparser not having to import from checker.
-def check_webkit_style_parser():
+def check_blink_style_parser():
     all_categories = _all_categories()
-    default_options = _check_webkit_style_defaults()
+    default_options = _check_blink_style_defaults()
     return ArgumentParser(all_categories=all_categories,
                           base_filter_rules=_BASE_FILTER_RULES,
                           default_options=default_options)
 
 
-def check_webkit_style_configuration(options):
+def check_blink_style_configuration(options):
     """Return a StyleProcessorConfiguration instance for check_blink_style.py.
 
     Args:
@@ -383,15 +383,13 @@ class CheckerDispatcher(object):
         """Return whether the given file should be skipped without a warning."""
         if not self._file_type(file_path):  # FileType.NONE.
             return True
-        # Since "LayoutTests" is in _SKIPPED_FILES_WITHOUT_WARNING, make
+        # Since "web_tests" is in _SKIPPED_FILES_WITHOUT_WARNING, make
         # an exception to prevent files like 'TestExpectations' from being skipped.
         #
         # FIXME: Figure out a good way to avoid having to add special logic
         #        for this special case.
         basename = os.path.basename(file_path)
         if basename == 'TestExpectations':
-            # TODO(qyearsley): Replace hard-coded "TestExpectations" with a
-            # list of known "TestExpectations" files. Maybe shared with Port.
             return False
         for skipped_file in _SKIPPED_FILES_WITHOUT_WARNING:
             if self._should_skip_file_path(file_path, skipped_file):

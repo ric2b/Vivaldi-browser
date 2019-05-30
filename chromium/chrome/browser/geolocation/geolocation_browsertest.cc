@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
@@ -44,7 +45,7 @@
 namespace {
 
 std::string GetErrorCodePermissionDenied() {
-  return base::IntToString(static_cast<int>(
+  return base::NumberToString(static_cast<int>(
       device::mojom::Geoposition::ErrorCode::PERMISSION_DENIED));
 }
 

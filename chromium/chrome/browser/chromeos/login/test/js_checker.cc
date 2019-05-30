@@ -5,6 +5,8 @@
 #include "chrome/browser/chromeos/login/test/js_checker.h"
 
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/chromeos/login/test/test_predicate_waiter.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
@@ -17,12 +19,17 @@ std::string WrapSend(const std::string& expression) {
   return "window.domAutomationController.send(" + expression + ")";
 }
 
+bool CheckConditionIfOobeExists(const std::string& js_condition) {
+  return !chromeos::LoginDisplayHost::default_host() ||
+         chromeos::test::OobeJS().GetBool(js_condition);
+}
+
 }  // namespace
 
 namespace chromeos {
 namespace test {
 
-JSChecker::JSChecker() : web_contents_(NULL) {}
+JSChecker::JSChecker() = default;
 
 JSChecker::JSChecker(content::WebContents* web_contents)
     : web_contents_(web_contents) {}
@@ -83,6 +90,21 @@ void JSChecker::ExpectNE(const std::string& expression,
   EXPECT_NE(GetString(expression), result) << expression;
 }
 
+void JSChecker::ExpectEQ(const std::string& expression, bool result) {
+  EXPECT_EQ(GetBool(expression), result) << expression;
+}
+
+void JSChecker::ExpectNE(const std::string& expression, bool result) {
+  EXPECT_NE(GetBool(expression), result) << expression;
+}
+
+std::unique_ptr<TestConditionWaiter> JSChecker::CreateWaiter(
+    const std::string& js_condition) {
+  TestPredicateWaiter::PredicateCheck predicate = base::BindRepeating(
+      &JSChecker::GetBool, base::Unretained(this), js_condition);
+  return std::make_unique<TestPredicateWaiter>(predicate);
+}
+
 void JSChecker::GetBoolImpl(const std::string& expression, bool* result) {
   CHECK(web_contents_);
   ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
@@ -100,6 +122,27 @@ void JSChecker::GetStringImpl(const std::string& expression,
   CHECK(web_contents_);
   ASSERT_TRUE(content::ExecuteScriptAndExtractString(
       web_contents_, WrapSend(expression), result));
+}
+
+JSChecker OobeJS() {
+  return JSChecker(LoginDisplayHost::default_host()->GetOobeWebContents());
+}
+
+void ExecuteOobeJS(const std::string& script) {
+  ASSERT_TRUE(content::ExecuteScript(
+      LoginDisplayHost::default_host()->GetOobeWebContents(), script));
+}
+
+void ExecuteOobeJSAsync(const std::string& script) {
+  content::ExecuteScriptAsync(
+      LoginDisplayHost::default_host()->GetOobeWebContents(), script);
+}
+
+std::unique_ptr<TestConditionWaiter> CreatePredicateOrOobeDestroyedWaiter(
+    const std::string& js_condition) {
+  TestPredicateWaiter::PredicateCheck predicate =
+      base::BindRepeating(&CheckConditionIfOobeExists, js_condition);
+  return std::make_unique<TestPredicateWaiter>(predicate);
 }
 
 }  // namespace test

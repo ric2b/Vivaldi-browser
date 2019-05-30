@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/cookies/canonical_cookie.h"
@@ -13,6 +14,7 @@
 #include "net/cookies/cookie_options.h"
 #include "net/cookies/cookie_store.h"
 #include "net/cookies/cookie_util.h"
+#include "services/network/cookie_managers_shared.h"
 #include "services/network/session_cleanup_channel_id_store.h"
 #include "services/network/session_cleanup_cookie_store.h"
 #include "url/gurl.h"
@@ -24,26 +26,17 @@ namespace network {
 
 namespace {
 
-mojom::CookieChangeCause ChangeCauseTranslation(
-    net::CookieChangeCause net_cause) {
-  switch (net_cause) {
-    case net::CookieChangeCause::INSERTED:
-      return mojom::CookieChangeCause::INSERTED;
-    case net::CookieChangeCause::EXPLICIT:
-      return mojom::CookieChangeCause::EXPLICIT;
-    case net::CookieChangeCause::UNKNOWN_DELETION:
-      return mojom::CookieChangeCause::UNKNOWN_DELETION;
-    case net::CookieChangeCause::OVERWRITE:
-      return mojom::CookieChangeCause::OVERWRITE;
-    case net::CookieChangeCause::EXPIRED:
-      return mojom::CookieChangeCause::EXPIRED;
-    case net::CookieChangeCause::EVICTED:
-      return mojom::CookieChangeCause::EVICTED;
-    case net::CookieChangeCause::EXPIRED_OVERWRITE:
-      return mojom::CookieChangeCause::EXPIRED_OVERWRITE;
-  }
-  NOTREACHED();
-  return mojom::CookieChangeCause::EXPLICIT;
+// Converts the one-argument callbacks to two-argument callback that ignores
+// the second arument for the cookie_store
+net::CookieStore::GetCookieListCallback IgnoreSecondArg(
+    base::OnceCallback<void(const net::CookieList&)> callback) {
+  return base::BindOnce(
+      [](base::OnceCallback<void(const net::CookieList&)> callback,
+         const net::CookieList& cookies,
+         const net::CookieStatusList& excluded_list) {
+        std::move(callback).Run(cookies);
+      },
+      std::move(callback));
 }
 
 }  // namespace
@@ -55,7 +48,7 @@ CookieManager::ListenerRegistration::~ListenerRegistration() {}
 void CookieManager::ListenerRegistration::DispatchCookieStoreChange(
     const net::CanonicalCookie& cookie,
     net::CookieChangeCause cause) {
-  listener->OnCookieChange(cookie, ChangeCauseTranslation(cause));
+  listener->OnCookieChange(cookie, ToCookieChangeCause(cause));
 }
 
 CookieManager::CookieManager(
@@ -72,6 +65,12 @@ CookieManager::CookieManager(
     cookie_settings_.set_block_third_party_cookies(
         params->block_third_party_cookies);
     cookie_settings_.set_content_settings(params->settings);
+    cookie_settings_.set_secure_origin_cookies_allowed_schemes(
+        params->secure_origin_cookies_allowed_schemes);
+    cookie_settings_.set_matching_scheme_cookies_allowed_schemes(
+        params->matching_scheme_cookies_allowed_schemes);
+    cookie_settings_.set_third_party_cookies_allowed_schemes(
+        params->third_party_cookies_allowed_schemes);
   }
 }
 
@@ -92,23 +91,23 @@ void CookieManager::AddRequest(mojom::CookieManagerRequest request) {
 }
 
 void CookieManager::GetAllCookies(GetAllCookiesCallback callback) {
-  cookie_store_->GetAllCookiesAsync(std::move(callback));
+  cookie_store_->GetAllCookiesAsync(IgnoreSecondArg(std::move(callback)));
 }
 
 void CookieManager::GetCookieList(const GURL& url,
                                   const net::CookieOptions& cookie_options,
                                   GetCookieListCallback callback) {
-  cookie_store_->GetCookieListWithOptionsAsync(url, cookie_options,
-                                               std::move(callback));
+  cookie_store_->GetCookieListWithOptionsAsync(
+      url, cookie_options, IgnoreSecondArg(std::move(callback)));
 }
 
 void CookieManager::SetCanonicalCookie(const net::CanonicalCookie& cookie,
-                                       bool secure_source,
+                                       const std::string& source_scheme,
                                        bool modify_http_only,
                                        SetCanonicalCookieCallback callback) {
   cookie_store_->SetCanonicalCookieAsync(
-      std::make_unique<net::CanonicalCookie>(cookie), secure_source,
-      modify_http_only, std::move(callback));
+      std::make_unique<net::CanonicalCookie>(cookie), source_scheme,
+      modify_http_only, AdaptCookieInclusionStatusToBool(std::move(callback)));
 }
 
 void CookieManager::DeleteCanonicalCookie(

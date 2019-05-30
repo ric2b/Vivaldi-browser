@@ -375,12 +375,14 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, OpenAppUrlShortcut) {
             web_contents->GetLastCommittedURL().ExtractFileName());
 }
 
-// App shortcuts are not implemented on mac os.
-#if !defined(OS_MACOSX)
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, OpenAppShortcutNoPref) {
   // Load an app with launch.container = 'tab'.
   const Extension* extension_app = NULL;
   ASSERT_NO_FATAL_FAILURE(LoadApp("app_with_tab_container", &extension_app));
+
+  // When we start, the browser should already have an open tab.
+  TabStripModel* tab_strip = browser()->tab_strip_model();
+  EXPECT_EQ(1, tab_strip->count());
 
   // Add --app-id=<extension->id()> to the command line.
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
@@ -391,16 +393,17 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, OpenAppShortcutNoPref) {
   StartupBrowserCreatorImpl launch(base::FilePath(), command_line, first_run);
   ASSERT_TRUE(launch.Launch(browser()->profile(), std::vector<GURL>(), false));
 
-  // No pref was set, so the app should have opened in a tab in a new window.
-  // The launch should have created a new browser.
-  Browser* new_browser = FindOneOtherBrowser(browser());
-  ASSERT_TRUE(new_browser);
+  // No pref was set, so the app should have opened in a tab in the existing
+  // window.
+  ASSERT_EQ(1u, chrome::GetBrowserCount(browser()->profile()));
+  EXPECT_EQ(2, tab_strip->count());
+  EXPECT_EQ(tab_strip->GetActiveWebContents(), tab_strip->GetWebContentsAt(1));
 
   // If new bookmark apps are enabled, it should be a standard tabbed window,
   // not an app window; otherwise the reverse should be true.
   bool new_bookmark_apps_enabled = extensions::util::IsNewBookmarkAppsEnabled();
-  EXPECT_EQ(!new_bookmark_apps_enabled, new_browser->is_app());
-  EXPECT_EQ(new_bookmark_apps_enabled, new_browser->is_type_tabbed());
+  EXPECT_EQ(!new_bookmark_apps_enabled, browser()->is_app());
+  EXPECT_EQ(new_bookmark_apps_enabled, browser()->is_type_tabbed());
 }
 
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, OpenAppShortcutWindowPref) {
@@ -433,11 +436,15 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, OpenAppShortcutWindowPref) {
 }
 
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, OpenAppShortcutTabPref) {
+  // When we start, the browser should already have an open tab.
+  TabStripModel* tab_strip = browser()->tab_strip_model();
+  EXPECT_EQ(1, tab_strip->count());
+
   // Load an app with launch.container = 'tab'.
   const Extension* extension_app = NULL;
   ASSERT_NO_FATAL_FAILURE(LoadApp("app_with_tab_container", &extension_app));
 
-  // Set a pref indicating that the user wants to open this app in a window.
+  // Set a pref indicating that the user wants to open this app in a tab.
   SetAppLaunchPref(extension_app->id(), extensions::LAUNCH_TYPE_REGULAR);
 
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
@@ -447,24 +454,17 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, OpenAppShortcutTabPref) {
   StartupBrowserCreatorImpl launch(base::FilePath(), command_line, first_run);
   ASSERT_TRUE(launch.Launch(browser()->profile(), std::vector<GURL>(), false));
 
-  // When an app shortcut is open and the pref indicates a tab should
-  // open, the tab is open in a new browser window.  Expect a new window.
-  ASSERT_EQ(2u, chrome::GetBrowserCount(browser()->profile()));
+  // When an app shortcut is open and the pref indicates a tab should open, the
+  // tab is open in the existing browser window.
+  ASSERT_EQ(1u, chrome::GetBrowserCount(browser()->profile()));
+  EXPECT_EQ(2, tab_strip->count());
+  EXPECT_EQ(tab_strip->GetActiveWebContents(), tab_strip->GetWebContentsAt(1));
 
-  Browser* new_browser = FindOneOtherBrowser(browser());
-  ASSERT_TRUE(new_browser);
-
-  // The tab should be in a tabbed window.
-  EXPECT_TRUE(new_browser->is_type_tabbed());
-
-  // The browser's app_name should not include the app's ID: It is in a
-  // normal browser.
-  EXPECT_EQ(
-      new_browser->app_name_.find(extension_app->id()),
-      std::string::npos) << new_browser->app_name_;
+  // The browser's app_name should not include the app's ID: it is in a normal
+  // tabbed browser.
+  EXPECT_EQ(browser()->app_name_.find(extension_app->id()), std::string::npos)
+      << browser()->app_name_;
 }
-
-#endif  // !defined(OS_MACOSX)
 
 #endif  // !defined(OS_CHROMEOS)
 
@@ -648,13 +648,19 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, PRE_UpdateWithTwoProfiles) {
   // Create two profiles.
   base::FilePath dest_path = profile_manager->user_data_dir();
 
-  Profile* profile1 = profile_manager->GetProfile(
-      dest_path.Append(FILE_PATH_LITERAL("New Profile 1")));
-  ASSERT_TRUE(profile1);
+  Profile* profile1 = nullptr;
+  Profile* profile2 = nullptr;
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    profile1 = profile_manager->GetProfile(
+        dest_path.Append(FILE_PATH_LITERAL("New Profile 1")));
+    ASSERT_TRUE(profile1);
 
-  Profile* profile2 = profile_manager->GetProfile(
-      dest_path.Append(FILE_PATH_LITERAL("New Profile 2")));
-  ASSERT_TRUE(profile2);
+    profile2 = profile_manager->GetProfile(
+        dest_path.Append(FILE_PATH_LITERAL("New Profile 2")));
+    ASSERT_TRUE(profile2);
+  }
+  DisableWelcomePages({profile1, profile2});
 
   // Open some urls with the browsers, and close them.
   Browser* browser1 =
@@ -693,10 +699,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, PRE_UpdateWithTwoProfiles) {
   profile2->GetPrefs()->CommitPendingWrite();
 }
 
-// See crbug.com/376184 about improvements to this test on Mac.
-// Disabled because it's flaky. http://crbug.com/379579
-IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
-                       DISABLED_UpdateWithTwoProfiles) {
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, UpdateWithTwoProfiles) {
   // Make StartupBrowserCreator::WasRestarted() return true.
   StartupBrowserCreator::was_restarted_read_ = false;
   PrefService* pref_service = g_browser_process->local_state();
@@ -707,13 +710,18 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
   // Open the two profiles.
   base::FilePath dest_path = profile_manager->user_data_dir();
 
-  Profile* profile1 = profile_manager->GetProfile(
-      dest_path.Append(FILE_PATH_LITERAL("New Profile 1")));
-  ASSERT_TRUE(profile1);
+  Profile* profile1 = nullptr;
+  Profile* profile2 = nullptr;
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    profile1 = profile_manager->GetProfile(
+        dest_path.Append(FILE_PATH_LITERAL("New Profile 1")));
+    ASSERT_TRUE(profile1);
 
-  Profile* profile2 = profile_manager->GetProfile(
-      dest_path.Append(FILE_PATH_LITERAL("New Profile 2")));
-  ASSERT_TRUE(profile2);
+    profile2 = profile_manager->GetProfile(
+        dest_path.Append(FILE_PATH_LITERAL("New Profile 2")));
+    ASSERT_TRUE(profile2);
+  }
 
   // Simulate a launch after a browser update.
   base::CommandLine dummy(base::CommandLine::NO_PROGRAM);
@@ -1088,14 +1096,7 @@ void StartupBrowserCreatorFirstRunTest::SetUpInProcessBrowserTestFixture() {
   policy::BrowserPolicyConnector::SetPolicyProviderForTesting(&provider_);
 }
 
-// http://crbug.com/691707
-#if defined(OS_MACOSX)
-#define MAYBE_AddFirstRunTab DISABLED_AddFirstRunTab
-#else
-#define MAYBE_AddFirstRunTab AddFirstRunTab
-#endif
-IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
-                       MAYBE_AddFirstRunTab) {
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest, AddFirstRunTab) {
   ASSERT_TRUE(embedded_test_server()->Start());
   StartupBrowserCreator browser_creator;
   browser_creator.AddFirstRunTab(
@@ -1208,10 +1209,6 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
       embedded_test_server()->GetURL("/title1.html"));
   browser()->profile()->GetPrefs()->SetInteger(
       prefs::kRestoreOnStartup, 1);
-  // We switch off the sign-in promo too because it's behavior varies between
-  // platforms too much.
-  browser()->profile()->GetPrefs()->SetBoolean(
-      prefs::kSignInPromoUserSkipped, true);
 
   // Do a process-startup browser launch.
   base::CommandLine dummy(base::CommandLine::NO_PROGRAM);
@@ -1230,13 +1227,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
             tab_strip->GetWebContentsAt(0)->GetURL().ExtractFileName());
 }
 
-// http://crbug.com/691707
-#if defined(OS_MACOSX)
-#define MAYBE_WelcomePages DISABLED_WelcomePages
-#else
-#define MAYBE_WelcomePages WelcomePages
-#endif
-IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest, MAYBE_WelcomePages) {
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest, WelcomePages) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   ProfileManager* profile_manager = g_browser_process->profile_manager();
@@ -1287,14 +1278,8 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest, MAYBE_WelcomePages) {
             tab_strip->GetWebContentsAt(0)->GetURL().possibly_invalid_spec());
 }
 
-// http://crbug.com/691707
-#if defined(OS_MACOSX)
-#define MAYBE_WelcomePagesWithPolicy DISABLED_WelcomePagesWithPolicy
-#else
-#define MAYBE_WelcomePagesWithPolicy WelcomePagesWithPolicy
-#endif
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
-                       MAYBE_WelcomePagesWithPolicy) {
+                       WelcomePagesWithPolicy) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Set the following user policies:
@@ -1453,13 +1438,8 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorWelcomeBackTest,
 }
 #endif  // defined(OS_WIN)
 
-#if defined(OS_LINUX)
-#define MAYBE_WelcomeBackStandardNoPolicy DISABLED_WelcomeBackStandardNoPolicy
-#else
-#define MAYBE_WelcomeBackStandardNoPolicy WelcomeBackStandardNoPolicy
-#endif
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorWelcomeBackTest,
-                       MAYBE_WelcomeBackStandardNoPolicy) {
+                       WelcomeBackStandardNoPolicy) {
   ASSERT_NO_FATAL_FAILURE(
       StartBrowser(StartupBrowserCreator::WelcomeBackPage::kWelcomeStandard,
                    PolicyVariant()));

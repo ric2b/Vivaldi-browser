@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/core/frame/use_counter.h"
 #include "third_party/blink/renderer/modules/webmidi/midi_access.h"
 #include "third_party/blink/renderer/modules/webmidi/midi_connection_event.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 using midi::mojom::PortState;
 
@@ -198,7 +199,7 @@ void MIDIPort::OpenAsynchronously(ScriptPromiseResolver* resolver) {
   if (!GetExecutionContext())
     return;
 
-  UseCounter::Count(*ToDocument(GetExecutionContext()),
+  UseCounter::Count(*To<Document>(GetExecutionContext()),
                     WebFeature::kMIDIPortOpen);
   DCHECK_NE(0u, running_open_count_);
   running_open_count_--;

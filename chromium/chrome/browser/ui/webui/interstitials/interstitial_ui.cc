@@ -11,6 +11,8 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/lookalikes/lookalike_url_controller_client.h"
+#include "chrome/browser/lookalikes/lookalike_url_interstitial_page.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/safe_browsing_blocking_page.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
@@ -24,9 +26,11 @@
 #include "chrome/common/url_constants.h"
 #include "components/grit/components_resources.h"
 #include "components/safe_browsing/db/database_manager.h"
+#include "components/security_interstitials/content/origin_policy_ui.h"
 #include "components/security_interstitials/core/ssl_error_ui.h"
 #include "components/supervised_user_error_page/supervised_user_error_page.h"
 #include "content/public/browser/interstitial_page_delegate.h"
+#include "content/public/browser/origin_policy_error_reason.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/url_data_source.h"
@@ -39,6 +43,7 @@
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
 #include "net/ssl/ssl_info.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/webui/web_ui_util.h"
 
@@ -131,8 +136,7 @@ class CaptivePortalBlockingPageWithNetInfo : public CaptivePortalBlockingPage {
 };
 #endif
 
-SSLBlockingPage* CreateSSLBlockingPage(content::WebContents* web_contents,
-                                       bool is_superfish) {
+SSLBlockingPage* CreateSSLBlockingPage(content::WebContents* web_contents) {
   // Random parameters for SSL blocking page.
   int cert_error = net::ERR_CERT_CONTAINS_ERRORS;
   GURL request_url("https://example.com");
@@ -177,7 +181,7 @@ SSLBlockingPage* CreateSSLBlockingPage(content::WebContents* web_contents,
     options_mask |= security_interstitials::SSLErrorUI::STRICT_ENFORCEMENT;
   return SSLBlockingPage::Create(
       web_contents, cert_error, ssl_info, request_url, options_mask,
-      time_triggered_, GURL(), nullptr, is_superfish,
+      time_triggered_, GURL(), nullptr,
       base::Callback<void(content::CertificateRequestResultType)>());
 }
 
@@ -249,6 +253,18 @@ BadClockBlockingPage* CreateBadClockBlockingPage(
       web_contents, cert_error, ssl_info, request_url, base::Time::Now(),
       clock_state, nullptr,
       base::Callback<void(content::CertificateRequestResultType)>());
+}
+
+LookalikeUrlInterstitialPage* CreateLookalikeInterstitialPage(
+    content::WebContents* web_contents) {
+  GURL request_url("https://example.net");
+  GURL safe_url("https://example.com");
+
+  return new LookalikeUrlInterstitialPage(
+      web_contents, safe_url, ukm::kInvalidSourceId,
+      LookalikeUrlInterstitialPage::MatchType::kNone,
+      std::make_unique<LookalikeUrlControllerClient>(web_contents, request_url,
+                                                     safe_url));
 }
 
 safe_browsing::SafeBrowsingBlockingPage* CreateSafeBrowsingBlockingPage(
@@ -330,6 +346,8 @@ TestSafeBrowsingBlockingPageQuiet* CreateSafeBrowsingQuietBlockingPage(
       threat_type = safe_browsing::SB_THREAT_TYPE_URL_PHISHING;
     } else if (type_param == "unwanted") {
       threat_type = safe_browsing::SB_THREAT_TYPE_URL_UNWANTED;
+    } else if (type_param == "billing") {
+      threat_type = safe_browsing::SB_THREAT_TYPE_BILLING;
     } else if (type_param == "giant") {
       threat_type = safe_browsing::SB_THREAT_TYPE_URL_MALWARE;
       is_giant_webview = true;
@@ -403,12 +421,18 @@ CaptivePortalBlockingPage* CreateCaptivePortalBlockingPage(
 }
 #endif
 
+security_interstitials::SecurityInterstitialPage*
+CreateOriginPolicyInterstitialPage(content::WebContents* web_contents) {
+  return security_interstitials::OriginPolicyUI::GetBlockingPage(
+      content::OriginPolicyErrorReason::kCannotLoadPolicy, web_contents,
+      GURL("https://example.com/broken/origin/policy"));
+}
+
 }  //  namespace
 
 InterstitialUI::InterstitialUI(content::WebUI* web_ui)
     : WebUIController(web_ui) {
-  Profile* profile = Profile::FromWebUI(web_ui);
-  content::URLDataSource::Add(profile,
+  content::URLDataSource::Add(Profile::FromWebUI(web_ui),
                               std::make_unique<InterstitialHTMLSource>());
 }
 
@@ -457,21 +481,22 @@ void InterstitialHTMLSource::StartDataRequest(
       GURL(chrome::kChromeUIInterstitialURL).GetWithEmptyPath().Resolve(path);
   std::string path_without_query = url.path();
   if (path_without_query == "/ssl") {
-    interstitial_delegate.reset(
-        CreateSSLBlockingPage(web_contents, false /* is superfish */));
-  } else if (path_without_query == "/superfish-ssl") {
-    interstitial_delegate.reset(
-        CreateSSLBlockingPage(web_contents, true /* is superfish */));
+    interstitial_delegate.reset(CreateSSLBlockingPage(web_contents));
   } else if (path_without_query == "/mitm-software-ssl") {
     interstitial_delegate.reset(CreateMITMSoftwareBlockingPage(web_contents));
   } else if (path_without_query == "/safebrowsing") {
     interstitial_delegate.reset(CreateSafeBrowsingBlockingPage(web_contents));
   } else if (path_without_query == "/clock") {
     interstitial_delegate.reset(CreateBadClockBlockingPage(web_contents));
+  } else if (path_without_query == "/lookalike") {
+    interstitial_delegate.reset(CreateLookalikeInterstitialPage(web_contents));
 #if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
   } else if (path_without_query == "/captiveportal") {
     interstitial_delegate.reset(CreateCaptivePortalBlockingPage(web_contents));
 #endif
+  } else if (path_without_query == "/origin_policy") {
+    interstitial_delegate.reset(
+        CreateOriginPolicyInterstitialPage(web_contents));
   }
 
   if (path_without_query == "/supervised_user") {

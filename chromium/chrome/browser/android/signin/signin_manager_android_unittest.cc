@@ -7,8 +7,10 @@
 #include <memory>
 #include <set>
 
+#include "base/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browsing_data/browsing_data_cache_storage_helper.h"
@@ -28,6 +30,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/origin.h"
 
 namespace {
 
@@ -51,7 +54,7 @@ class SigninManagerAndroidTest : public ::testing::Test {
  public:
   SigninManagerAndroidTest()
       : profile_manager_(TestingBrowserProcess::GetGlobal()) {}
-  ~SigninManagerAndroidTest() override{};
+  ~SigninManagerAndroidTest() override {}
 
   void SetUp() override {
     ASSERT_TRUE(profile_manager_.SetUp());
@@ -71,7 +74,7 @@ class SigninManagerAndroidTest : public ::testing::Test {
     // Creating a BookmarkModel also a creates a StubOfflinePageModel.
     // We need to replace this with a mock that responds to deletions.
     offline_pages::OfflinePageModelFactory::GetInstance()->SetTestingFactory(
-        profile_, BuildOfflinePageModel);
+        profile_, base::BindRepeating(&BuildOfflinePageModel));
     bookmarks::BookmarkModel* bookmark_model =
         BookmarkModelFactory::GetForBrowserContext(profile_);
     bookmarks::test::WaitForBookmarkModelToLoad(bookmark_model);
@@ -102,7 +105,10 @@ class SigninManagerAndroidTest : public ::testing::Test {
   DISALLOW_COPY_AND_ASSIGN(SigninManagerAndroidTest);
 };
 
-TEST_F(SigninManagerAndroidTest, DeleteGoogleServiceWorkerCaches) {
+// TODO(crbug.com/929456): This test does not actually test anything; the
+// CannedBrowsingDataCacheStorageHelper isn't hooked up to observe any
+// deletions. Disabled to allow refactoring of browsing data code.
+TEST_F(SigninManagerAndroidTest, DISABLED_DeleteGoogleServiceWorkerCaches) {
   struct TestCase {
     std::string worker_url;
     bool should_be_deleted;
@@ -126,16 +132,17 @@ TEST_F(SigninManagerAndroidTest, DeleteGoogleServiceWorkerCaches) {
       {"https://google.com:8444/worker.html", true},
   };
 
+  // TODO(crbug.com/929456): This helper is not attached anywhere to
+  // be able to observe deletions.
   // Add service workers.
-  scoped_refptr<CannedBrowsingDataCacheStorageHelper> helper(
-      new CannedBrowsingDataCacheStorageHelper(
-          content::BrowserContext::GetDefaultStoragePartition(profile())
-              ->GetCacheStorageContext()));
+  auto helper = base::MakeRefCounted<CannedBrowsingDataCacheStorageHelper>(
+      content::BrowserContext::GetDefaultStoragePartition(profile())
+          ->GetCacheStorageContext());
 
   for (const TestCase& test_case : kTestCases)
-    helper->AddCacheStorage(GURL(test_case.worker_url));
+    helper->Add(url::Origin::Create(GURL(test_case.worker_url)));
 
-  ASSERT_EQ(arraysize(kTestCases), helper->GetCacheStorageCount());
+  ASSERT_EQ(base::size(kTestCases), helper->GetCount());
 
   // Delete service workers and wait for completion.
   base::RunLoop run_loop;
@@ -145,13 +152,14 @@ TEST_F(SigninManagerAndroidTest, DeleteGoogleServiceWorkerCaches) {
   run_loop.Run();
 
   // Test whether the correct service worker caches were deleted.
-  std::set<std::string> remaining_cache_storages;
-  for (const auto& info : helper->GetCacheStorageUsageInfo())
-    remaining_cache_storages.insert(info.origin.spec());
+  std::set<url::Origin> remaining_cache_storages = helper->GetOrigins();
 
+  // TODO(crbug.com/929456): If deleted, the key should not be present.
   for (const TestCase& test_case : kTestCases) {
-    EXPECT_EQ(test_case.should_be_deleted,
-              base::ContainsKey(remaining_cache_storages, test_case.worker_url))
+    EXPECT_EQ(
+        test_case.should_be_deleted,
+        base::ContainsKey(remaining_cache_storages,
+                          url::Origin::Create(GURL(test_case.worker_url))))
         << test_case.worker_url << " should "
         << (test_case.should_be_deleted ? "" : "NOT ")
         << "be deleted, but it was"

@@ -69,7 +69,7 @@ std::string GenerateSetCallbackErrorCodeScript(int code) {
   return base::StringPrintf("%s%d", kSetCallbackErrorCode, code);
 }
 
-};  // namespace
+}  // namespace
 
 // This class is for testing resource/translate.js works and reports errors
 // correctly.
@@ -107,10 +107,6 @@ class TranslateScriptBrowserTest : public ChromeRenderViewTest {
   }
 
  private:
-  void SetUp() override { ChromeRenderViewTest::SetUp(); }
-
-  void TearDown() override { ChromeRenderViewTest::TearDown(); }
-
   double ExecuteScriptAndGetNumberResult(const std::string& script) {
     WebScriptSource source =
         WebScriptSource(blink::WebString::FromASCII(script));

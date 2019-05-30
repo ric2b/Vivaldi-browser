@@ -22,9 +22,6 @@ const char kSyncLongPollIntervalSeconds[] = "sync.long_poll_interval";
 // Boolean specifying whether the user finished setting up sync at least once.
 const char kSyncFirstSetupComplete[] = "sync.has_setup_completed";
 
-// Boolean specifying whether sync has an auth error.
-const char kSyncHasAuthError[] = "sync.has_auth_error";
-
 // Boolean specifying whether to automatically sync all data types (including
 // future ones, as they're added).  If this is true, the following preferences
 // (kSyncBookmarks, kSyncPasswords, etc.) can all be ignored.
@@ -57,6 +54,7 @@ const char kSyncPrinters[] = "sync.printers";
 const char kSyncPriorityPreferences[] = "sync.priority_preferences";
 const char kSyncReadingList[] = "sync.reading_list";
 const char kSyncSearchEngines[] = "sync.search_engines";
+const char kSyncSendTabToSelf[] = "sync.send_tab_to_self";
 const char kSyncSessions[] = "sync.sessions";
 const char kSyncSupervisedUserSettings[] = "sync.managed_user_settings";
 const char kSyncSupervisedUserSharedSettings[] =
@@ -90,15 +88,15 @@ const char kSyncEncryptionBootstrapToken[] = "sync.encryption_bootstrap_token";
 const char kSyncKeystoreEncryptionBootstrapToken[] =
     "sync.keystore_encryption_bootstrap_token";
 
-// The GUID session sync will use to identify this client, even across sync
-// disable/enable events.
-const char kSyncSessionsGUID[] = "sync.session_sync_guid";
-
 #if defined(OS_CHROMEOS)
 // A string that is used to store first-time sync startup after once sync is
 // disabled. This will be refreshed every sign-in.
 const char kSyncSpareBootstrapToken[] = "sync.spare_bootstrap_token";
 #endif  // defined(OS_CHROMEOS)
+
+const char kSyncCacheGuid[] = "sync.cache_guid";
+const char kSyncBirthday[] = "sync.birthday";
+const char kSyncBagOfChips[] = "sync.bag_of_chips";
 
 // Stores the timestamp of first sync.
 const char kSyncFirstSyncTime[] = "sync.first_sync_time";
@@ -119,18 +117,6 @@ const char kSyncInvalidationVersions[] = "sync.invalidation_versions";
 
 // The product version from the last restart of Chrome.
 const char kSyncLastRunVersion[] = "sync.last_run_version";
-
-// Flag indicating that passphrase encryption transition is in progress.
-// Transition involves multiple steps and should continue across restarts.
-const char kSyncPassphraseEncryptionTransitionInProgress[] =
-    "sync.passphrase_encryption_transition_in_progress";
-
-// Updated Nigori state after user entering passphrase. This Nigori state should
-// be persisted across restarts and passed to backend when it is initialized
-// after directory cleanup. Preference contains base64 encoded serialized
-// sync_pb::NigoriSpecifics.
-const char kSyncNigoriStateForPassphraseTransition[] =
-    "sync.nigori_state_for_passphrase_transition";
 
 // Enabled the local sync backend implemented by the LoopbackServer.
 const char kEnableLocalSyncBackend[] = "sync.enable_local_sync_backend";

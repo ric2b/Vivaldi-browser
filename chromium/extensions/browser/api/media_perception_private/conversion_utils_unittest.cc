@@ -38,6 +38,15 @@ constexpr float kWhiteboardBottomRightX = 0.85;
 constexpr float kWhiteboardBottomRightY = 0.79;
 constexpr float kWhiteboardAspectRatio = 1.76;
 
+// One numerical value, one empty and one string NamedTemplateArgument
+constexpr unsigned kNamedTemplateArgumentsSize = 3;
+
+constexpr char kNumericalTemplateArgumentName[] = "numerical_template_argument";
+constexpr double kNumericalTemplateArgumentValue = 42;
+constexpr char kStringTemplateArgumentName[] = "string_template_argument";
+constexpr char kStringTemplateArgumentValue[] = "string_value";
+constexpr double kDoubleTolerance = 0.01;
+
 void InitializeVideoStreamParam(media_perception::VideoStreamParam& param,
                                 const std::string& id,
                                 int width,
@@ -47,6 +56,10 @@ void InitializeVideoStreamParam(media_perception::VideoStreamParam& param,
   param.width = std::make_unique<int>(width);
   param.height = std::make_unique<int>(height);
   param.frame_rate = std::make_unique<int>(frame_rate);
+}
+
+void InitializeFakeMetadata(mri::Metadata* metadata) {
+  metadata->set_visual_experience_controller_version("30.0");
 }
 
 void InitializeFakeAudioPerception(mri::AudioPerception* audio_perception) {
@@ -178,6 +191,11 @@ std::unique_ptr<media_perception::Point> MakePointIdl(float x, float y) {
   point->y = std::make_unique<double>(y);
 
   return point;
+}
+
+void ValidateMetadataResult(const media_perception::Metadata& metadata_result) {
+  ASSERT_TRUE(metadata_result.visual_experience_controller_version);
+  EXPECT_EQ(*metadata_result.visual_experience_controller_version, "30.0");
 }
 
 void ValidateFramePerceptionResult(
@@ -428,6 +446,8 @@ TEST(MediaPerceptionConversionUtilsTest, MediaPerceptionProtoToIdl) {
   mri::AudioVisualPerception* audio_visual_perception =
       media_perception.add_audio_visual_perception();
   InitializeFakeAudioVisualPerception(audio_visual_perception);
+  mri::Metadata* metadata = media_perception.mutable_metadata();
+  InitializeFakeMetadata(metadata);
   media_perception::MediaPerception media_perception_result =
       media_perception::MediaPerceptionProtoToIdl(media_perception);
   EXPECT_EQ(*media_perception_result.timestamp, 1);
@@ -435,12 +455,14 @@ TEST(MediaPerceptionConversionUtilsTest, MediaPerceptionProtoToIdl) {
   ASSERT_EQ(1u, media_perception_result.frame_perceptions->size());
   ASSERT_TRUE(media_perception_result.audio_perceptions);
   ASSERT_EQ(1u, media_perception_result.audio_perceptions->size());
+  ASSERT_TRUE(media_perception_result.metadata);
   ValidateFramePerceptionResult(
       kFrameId, media_perception_result.frame_perceptions->at(0));
   ValidateAudioPerceptionResult(
       media_perception_result.audio_perceptions->at(0));
   ValidateAudioVisualPerceptionResult(
       media_perception_result.audio_visual_perceptions->at(0));
+  ValidateMetadataResult(*media_perception_result.metadata.get());
 }
 
 TEST(MediaPerceptionConversionUtilsTest, DiagnosticsProtoToIdl) {
@@ -454,6 +476,8 @@ TEST(MediaPerceptionConversionUtilsTest, DiagnosticsProtoToIdl) {
     InitializeFakeFramePerception(i, frame_perception);
     mri::ImageFrame* image_frame = perception_sample->mutable_image_frame();
     InitializeFakeImageFrameData(image_frame);
+    mri::Metadata* metadata = perception_sample->mutable_metadata();
+    InitializeFakeMetadata(metadata);
   }
   media_perception::Diagnostics diagnostics_result =
       media_perception::DiagnosticsProtoToIdl(diagnostics);
@@ -471,8 +495,13 @@ TEST(MediaPerceptionConversionUtilsTest, DiagnosticsProtoToIdl) {
         perception_sample_result.image_frame.get();
     ASSERT_TRUE(image_frame_result);
 
+    const media_perception::Metadata* metadata_result =
+        perception_sample_result.metadata.get();
+    ASSERT_TRUE(metadata_result);
+
     ValidateFramePerceptionResult(i, *frame_perception_result);
     ValidateFakeImageFrameData(*image_frame_result);
+    ValidateMetadataResult(*metadata_result);
   }
 }
 
@@ -495,6 +524,27 @@ TEST(MediaPerceptionConversionUtilsTest, StateProtoToIdl) {
       kWhiteboardBottomRightY);
   state.mutable_whiteboard()->set_aspect_ratio(kWhiteboardAspectRatio);
 
+  state.add_features(mri::State::FEATURE_AUTOZOOM);
+  state.add_features(mri::State::FEATURE_HOTWORD_DETECTION);
+  state.add_features(mri::State::FEATURE_OCCUPANCY_DETECTION);
+  state.add_features(mri::State::FEATURE_EDGE_EMBEDDINGS);
+  state.add_features(mri::State::FEATURE_SOFTWARE_CROPPING);
+  state.add_features(mri::State::FEATURE_UNSET);
+
+  // Number NamedTemplateArgument.
+  mri::State::NamedTemplateArgument* named_template_argument_proto =
+      state.add_named_template_arguments();
+  named_template_argument_proto->set_name(kNumericalTemplateArgumentName);
+  named_template_argument_proto->set_num(kNumericalTemplateArgumentValue);
+
+  // Empty
+  named_template_argument_proto = state.add_named_template_arguments();
+
+  // String NamedTemplateArgument.
+  named_template_argument_proto = state.add_named_template_arguments();
+  named_template_argument_proto->set_name(kStringTemplateArgumentName);
+  named_template_argument_proto->set_str(kStringTemplateArgumentValue);
+
   media_perception::State state_result =
       media_perception::StateProtoToIdl(state);
   EXPECT_EQ(state_result.status, media_perception::STATUS_RUNNING);
@@ -512,6 +562,47 @@ TEST(MediaPerceptionConversionUtilsTest, StateProtoToIdl) {
                    kWhiteboardBottomRightX, kWhiteboardBottomRightY);
   ASSERT_TRUE(state_result.whiteboard->aspect_ratio);
   EXPECT_EQ(*state_result.whiteboard->aspect_ratio, kWhiteboardAspectRatio);
+
+  ASSERT_TRUE(state_result.features);
+  ASSERT_TRUE(state_result.features.get());
+  ASSERT_EQ(state_result.features.get()->size(), 5u);
+  EXPECT_EQ(state_result.features.get()->at(0),
+            media_perception::FEATURE_AUTOZOOM);
+  EXPECT_EQ(state_result.features.get()->at(1),
+            media_perception::FEATURE_HOTWORD_DETECTION);
+  EXPECT_EQ(state_result.features.get()->at(2),
+            media_perception::FEATURE_OCCUPANCY_DETECTION);
+  EXPECT_EQ(state_result.features.get()->at(3),
+            media_perception::FEATURE_EDGE_EMBEDDINGS);
+  EXPECT_EQ(state_result.features.get()->at(4),
+            media_perception::FEATURE_SOFTWARE_CROPPING);
+
+  ASSERT_EQ(state_result.named_template_arguments->size(),
+            kNamedTemplateArgumentsSize);
+
+  // Number.
+
+  EXPECT_EQ(*state_result.named_template_arguments->at(0).name,
+            kNumericalTemplateArgumentName);
+  EXPECT_NEAR(*state_result.named_template_arguments->at(0).value->as_number,
+              kNumericalTemplateArgumentValue, kDoubleTolerance);
+  EXPECT_EQ(state_result.named_template_arguments->at(0).value->as_string,
+            nullptr);
+
+  // Empty.
+  EXPECT_EQ(*state_result.named_template_arguments->at(1).name, "");
+  EXPECT_EQ(state_result.named_template_arguments->at(1).value->as_string,
+            nullptr);
+  EXPECT_EQ(state_result.named_template_arguments->at(1).value->as_number,
+            nullptr);
+
+  // String.
+  EXPECT_EQ(*state_result.named_template_arguments->at(2).name,
+            kStringTemplateArgumentName);
+  EXPECT_EQ(state_result.named_template_arguments->at(2).value->as_number,
+            nullptr);
+  EXPECT_EQ(*state_result.named_template_arguments->at(2).value->as_string,
+            kStringTemplateArgumentValue);
 
   state.set_status(mri::State::STARTED);
   state.set_device_context(kTestDeviceContext);
@@ -549,6 +640,38 @@ TEST(MediaPerceptionConversionUtilsTest, StateIdlToProto) {
       MakePointIdl(kWhiteboardBottomRightX, kWhiteboardBottomRightY);
   state.whiteboard->aspect_ratio =
       std::make_unique<double>(kWhiteboardAspectRatio);
+
+  state.features =
+      std::make_unique<std::vector<media_perception::Feature>>();
+  state.features->emplace_back(media_perception::FEATURE_AUTOZOOM);
+  state.features->emplace_back(media_perception::FEATURE_HOTWORD_DETECTION);
+  state.features->emplace_back(media_perception::FEATURE_OCCUPANCY_DETECTION);
+  state.features->emplace_back(media_perception::FEATURE_EDGE_EMBEDDINGS);
+  state.features->emplace_back(media_perception::FEATURE_SOFTWARE_CROPPING);
+  state.features->emplace_back(media_perception::FEATURE_NONE);
+
+  // {Number, Empty, String} test cases.
+  state.named_template_arguments =
+      std::make_unique<std::vector<media_perception::NamedTemplateArgument>>(
+          kNamedTemplateArgumentsSize);
+
+  state.named_template_arguments->at(0).name =
+      std::make_unique<std::string>(kNumericalTemplateArgumentName);
+
+  state.named_template_arguments->at(0).value =
+      std::make_unique<media_perception::NamedTemplateArgument::Value>();
+  media_perception::NamedTemplateArgument::Value::Populate(
+      base::Value(kNumericalTemplateArgumentValue),
+      state.named_template_arguments->at(0).value.get());
+
+  state.named_template_arguments->at(2).name =
+      std::make_unique<std::string>(kStringTemplateArgumentName);
+  state.named_template_arguments->at(2).value =
+      std::make_unique<media_perception::NamedTemplateArgument::Value>();
+  media_perception::NamedTemplateArgument::Value::Populate(
+      base::Value(kStringTemplateArgumentValue),
+      state.named_template_arguments->at(2).value.get());
+
   state_proto = StateIdlToProto(state);
   EXPECT_EQ(state_proto.status(), mri::State::RUNNING);
   ASSERT_TRUE(state_proto.has_configuration());
@@ -568,6 +691,31 @@ TEST(MediaPerceptionConversionUtilsTest, StateIdlToProto) {
                      kWhiteboardBottomRightX, kWhiteboardBottomRightY);
   ASSERT_TRUE(state_proto.whiteboard().has_aspect_ratio());
   EXPECT_EQ(state_proto.whiteboard().aspect_ratio(), kWhiteboardAspectRatio);
+
+  ASSERT_EQ(state_proto.features_size(), 6);
+  EXPECT_EQ(state_proto.features(0), mri::State::FEATURE_AUTOZOOM);
+  EXPECT_EQ(state_proto.features(1), mri::State::FEATURE_HOTWORD_DETECTION);
+  EXPECT_EQ(state_proto.features(2), mri::State::FEATURE_OCCUPANCY_DETECTION);
+  EXPECT_EQ(state_proto.features(3), mri::State::FEATURE_EDGE_EMBEDDINGS);
+  EXPECT_EQ(state_proto.features(4), mri::State::FEATURE_SOFTWARE_CROPPING);
+  EXPECT_EQ(state_proto.features(5), mri::State::FEATURE_UNSET);
+
+  ASSERT_EQ(state_proto.named_template_arguments_size(),
+            static_cast<int>(kNamedTemplateArgumentsSize));
+
+  EXPECT_EQ(state_proto.named_template_arguments(0).name(),
+            kNumericalTemplateArgumentName);
+  EXPECT_NEAR(state_proto.named_template_arguments(0).num(),
+              kNumericalTemplateArgumentValue, kDoubleTolerance);
+
+  EXPECT_FALSE(state_proto.named_template_arguments(1).has_name());
+  EXPECT_FALSE(state_proto.named_template_arguments(1).has_str());
+  EXPECT_FALSE(state_proto.named_template_arguments(1).has_num());
+
+  EXPECT_EQ(state_proto.named_template_arguments(2).name(),
+            kStringTemplateArgumentName);
+  EXPECT_EQ(state_proto.named_template_arguments(2).str(),
+            kStringTemplateArgumentValue);
 
   state.status = media_perception::STATUS_SUSPENDED;
   state.device_context = std::make_unique<std::string>(kTestDeviceContext);

@@ -12,7 +12,7 @@
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 #if DCHECK_IS_ON()
-#include "third_party/blink/renderer/platform/wtf/list_hash_set.h"
+#include "third_party/blink/renderer/platform/wtf/linked_hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #endif
 
@@ -55,6 +55,11 @@ PLATFORM_EXPORT const TransformPaintPropertyNode& LowestCommonAncestorInternal(
     const TransformPaintPropertyNode&);
 
 template <typename NodeType>
+const NodeType* SafeUnalias(const NodeType* node) {
+  return node ? &node->Unalias() : nullptr;
+}
+
+template <typename NodeType>
 class PaintPropertyNode : public RefCounted<NodeType> {
  public:
   // Parent property node, or nullptr if this is the root node.
@@ -69,9 +74,25 @@ class PaintPropertyNode : public RefCounted<NodeType> {
     return true;
   }
 
-  void ClearChangedToRoot() const {
-    for (auto* n = this; n; n = n->Parent())
+  void ClearChangedToRoot() const { ClearChangedTo(nullptr); }
+  void ClearChangedTo(const NodeType* node) const {
+    for (auto* n = this; n && n != node; n = n->Parent())
       n->changed_ = false;
+  }
+
+  // Returns true if this node is an alias for its parent. A parent alias is a
+  // node which on its own does not contribute to the rendering output, and only
+  // exists to enforce a particular structure of the paint property tree. Its
+  // value is ignored during display item list generation, instead the parent
+  // value is used. See Unalias().
+  bool IsParentAlias() const { return is_parent_alias_; }
+  // Returns the first node up the parent chain that is not an alias; return the
+  // root node if every node is an alias.
+  const NodeType& Unalias() const {
+    const auto* node = static_cast<const NodeType*>(this);
+    while (node->Parent() && node->IsParentAlias())
+      node = node->Parent();
+    return *node;
   }
 
   String ToString() const {
@@ -91,8 +112,10 @@ class PaintPropertyNode : public RefCounted<NodeType> {
 #endif
 
  protected:
-  PaintPropertyNode(const NodeType* parent)
-      : parent_(parent), changed_(!!parent) {}
+  PaintPropertyNode(const NodeType* parent, bool is_parent_alias = false)
+      : parent_(parent),
+        is_parent_alias_(is_parent_alias),
+        changed_(!!parent) {}
 
   bool SetParent(const NodeType* parent) {
     DCHECK(!IsRoot());
@@ -100,9 +123,12 @@ class PaintPropertyNode : public RefCounted<NodeType> {
     if (parent == parent_)
       return false;
 
-    SetChanged();
     parent_ = parent;
+    static_cast<NodeType*>(this)->SetChanged();
     return true;
+  }
+  bool HasParentChanged(const NodeType* parent) const {
+    return parent != parent_;
   }
 
   void SetChanged() {
@@ -113,9 +139,22 @@ class PaintPropertyNode : public RefCounted<NodeType> {
 
  private:
   friend class PaintPropertyNodeTest;
+  // Object paint properties can set the parent directly for an alias update.
+  friend class ObjectPaintProperties;
 
   scoped_refptr<const NodeType> parent_;
-  mutable bool changed_;
+  // Indicates whether this node is an alias for its parent. Parent aliases are
+  // nodes that do not affect rendering and are ignored for the purposes of
+  // display item list generation.
+  bool is_parent_alias_ = false;
+
+  // Indicates that the paint property value changed in the last update in the
+  // prepaint lifecycle step. This is used for raster invalidation and damage
+  // in the compositor. This value is cleared through |ClearChangedTo*|. With
+  // BlinkGenPropertyTrees, this is cleared explicitly at the end of paint (see:
+  // LocalFrameView::RunPaintLifecyclePhase), otherwise this is cleared through
+  // PaintController::FinishCycle.
+  mutable bool changed_ = true;
 
 #if DCHECK_IS_ON()
   String debug_name_;
@@ -140,45 +179,44 @@ class PropertyTreePrinter {
     return string_builder.ToString();
   }
 
-  String PathAsString(const NodeType* last_node) {
-    for (const auto* n = last_node; n; n = n->Parent())
+  String PathAsString(const NodeType& last_node) {
+    for (const auto* n = &last_node; n; n = n->Parent())
       AddNode(n);
     return NodesAsTreeString();
   }
 
  private:
   void BuildTreeString(StringBuilder& string_builder,
-                       const NodeType* node,
+                       const NodeType& node,
                        unsigned indent) {
-    DCHECK(node);
     for (unsigned i = 0; i < indent; i++)
       string_builder.Append(' ');
-    string_builder.Append(node->ToString());
+    string_builder.Append(node.ToString());
     string_builder.Append("\n");
 
     for (const auto* child_node : nodes_) {
-      if (child_node->Parent() == node)
-        BuildTreeString(string_builder, child_node, indent + 2);
+      if (child_node->Parent() == &node)
+        BuildTreeString(string_builder, *child_node, indent + 2);
     }
   }
 
-  const NodeType* RootNode() {
+  const NodeType& RootNode() {
     const auto* node = nodes_.back();
     while (!node->IsRoot())
       node = node->Parent();
     if (node->DebugName().IsEmpty())
       const_cast<NodeType*>(node)->SetDebugName("root");
     nodes_.insert(node);
-    return node;
+    return *node;
   }
 
-  ListHashSet<const NodeType*> nodes_;
+  LinkedHashSet<const NodeType*> nodes_;
 };
 
 template <typename NodeType>
 String PaintPropertyNode<NodeType>::ToTreeString() const {
   return PropertyTreePrinter<NodeType>().PathAsString(
-      static_cast<const NodeType*>(this));
+      *static_cast<const NodeType*>(this));
 }
 
 #endif  // DCHECK_IS_ON()

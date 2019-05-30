@@ -8,13 +8,13 @@
 #include <utility>
 
 #include "ash/public/cpp/shelf_types.h"
+#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
 #include "chrome/browser/ui/ash/launcher/launcher_controller_helper.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/base/base_window.h"
-#include "ui/wm/core/window_animations.h"
 #include "ui/wm/core/window_util.h"
 
 AppWindowLauncherItemController::AppWindowLauncherItemController(
@@ -123,14 +123,6 @@ void AppWindowLauncherItemController::ActivateIndexedApp(size_t index) {
   ShowAndActivateOrMinimize(*it);
 }
 
-ui::BaseWindow* AppWindowLauncherItemController::GetLastActiveWindow() {
-  if (last_active_window_)
-    return last_active_window_;
-  if (windows_.empty())
-    return nullptr;
-  return windows_.front();
-}
-
 void AppWindowLauncherItemController::OnWindowPropertyChanged(
     aura::Window* window,
     const void* key,
@@ -148,6 +140,14 @@ void AppWindowLauncherItemController::OnWindowPropertyChanged(
   } else if (key == aura::client::kAppIconKey) {
     UpdateShelfItemIcon();
   }
+}
+
+ui::BaseWindow* AppWindowLauncherItemController::GetLastActiveWindow() {
+  if (last_active_window_)
+    return last_active_window_;
+  if (windows_.empty())
+    return nullptr;
+  return windows_.front();
 }
 
 ash::ShelfAction AppWindowLauncherItemController::ShowAndActivateOrMinimize(
@@ -171,8 +171,7 @@ AppWindowLauncherItemController::ActivateOrAdvanceToNextAppWindow(
   if (window_to_show->IsActive()) {
     // Coming here, only a single window is active. For keyboard activations
     // the window gets animated.
-    AnimateWindow(window_to_show->GetNativeWindow(),
-                  wm::WINDOW_ANIMATION_TYPE_BOUNCE);
+    ash_util::BounceWindow(window_to_show->GetNativeWindow());
   } else {
     return ShowAndActivateOrMinimize(window_to_show);
   }

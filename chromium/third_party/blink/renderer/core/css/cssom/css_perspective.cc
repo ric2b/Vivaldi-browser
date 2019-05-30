@@ -26,7 +26,7 @@ CSSPerspective* CSSPerspective::Create(CSSNumericValue* length,
     exception_state.ThrowTypeError("Must pass length to CSSPerspective");
     return nullptr;
   }
-  return new CSSPerspective(length);
+  return MakeGarbageCollected<CSSPerspective>(length);
 }
 
 void CSSPerspective::setLength(CSSNumericValue* length,
@@ -43,11 +43,11 @@ CSSPerspective* CSSPerspective::FromCSSValue(const CSSFunctionValue& value) {
   DCHECK_EQ(value.length(), 1U);
   CSSNumericValue* length =
       CSSNumericValue::FromCSSValue(ToCSSPrimitiveValue(value.Item(0)));
-  return new CSSPerspective(length);
+  return MakeGarbageCollected<CSSPerspective>(length);
 }
 
 DOMMatrix* CSSPerspective::toMatrix(ExceptionState& exception_state) const {
-  if (length_->IsUnitValue() && ToCSSUnitValue(length_)->value() < 0) {
+  if (length_->IsUnitValue() && To<CSSUnitValue>(length_.Get())->value() < 0) {
     // Negative values are invalid.
     // https://github.com/w3c/css-houdini-drafts/issues/420
     return nullptr;
@@ -65,7 +65,7 @@ DOMMatrix* CSSPerspective::toMatrix(ExceptionState& exception_state) const {
 
 const CSSFunctionValue* CSSPerspective::ToCSSValue() const {
   const CSSValue* length = nullptr;
-  if (length_->IsUnitValue() && ToCSSUnitValue(length_)->value() < 0) {
+  if (length_->IsUnitValue() && To<CSSUnitValue>(length_.Get())->value() < 0) {
     // Wrap out of range length with a calc.
     CSSCalcExpressionNode* node = length_->ToCalcExpressionNode();
     node->SetIsNestedCalc();

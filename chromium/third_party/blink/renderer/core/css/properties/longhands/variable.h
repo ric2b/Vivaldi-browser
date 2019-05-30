@@ -13,30 +13,26 @@
 
 namespace blink {
 
-class Variable final : public Longhand {
+// TODO(andruud): Remove this class when the static Variable instance
+// (as returned by GetCSSPropertyVariable()) has been removed.
+class CORE_EXPORT Variable : public Longhand {
  public:
   constexpr Variable() : Longhand() {}
 
   bool IsInherited() const override { return true; }
   bool IsAffectedByAll() const override { return false; }
   CSSPropertyID PropertyID() const override { return CSSPropertyVariable; }
-  const char* GetPropertyName() const override { return "variable\0"; }
+  CSSPropertyName GetCSSPropertyName() const override {
+    NOTREACHED();
+    return CSSPropertyName("");
+  }
+  const char* GetPropertyName() const override { return "variable"; }
   const WTF::AtomicString& GetPropertyNameAtomicString() const override {
-    static const WTF::AtomicString& name = WTF::AtomicString("variable\0");
+    DEFINE_STATIC_LOCAL(const AtomicString, name, ("variable"));
     return name;
   }
-  const CSSValue* CSSValueFromComputedStyleInternal(
-      const ComputedStyle&,
-      const SVGComputedStyle&,
-      const LayoutObject*,
-      Node*,
-      bool allow_visited_style) const override {
-    NOTREACHED();
-    return nullptr;
-  }
 
-  void ApplyValue(StyleResolverState& state,
-                  const CSSValue& value) const override;
+  static bool IsStaticInstance(const CSSProperty&);
 };
 
 }  // namespace blink

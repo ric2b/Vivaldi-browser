@@ -58,10 +58,6 @@ void OAuth2TokenServiceDelegate::RemoveObserver(
 
 void OAuth2TokenServiceDelegate::StartBatchChanges() {
   ++batch_change_depth_;
-  if (batch_change_depth_ == 1) {
-    for (auto& observer : observer_list_)
-      observer.OnStartBatchChanges();
-  }
 }
 
 void OAuth2TokenServiceDelegate::EndBatchChanges() {
@@ -97,6 +93,11 @@ void OAuth2TokenServiceDelegate::FireAuthErrorChanged(
     observer.OnAuthErrorChanged(account_id, error);
 }
 
+std::string OAuth2TokenServiceDelegate::GetTokenForMultilogin(
+    const std::string& account_id) const {
+  return std::string();
+}
+
 scoped_refptr<network::SharedURLLoaderFactory>
 OAuth2TokenServiceDelegate::GetURLLoaderFactory() const {
   return nullptr;
@@ -115,7 +116,19 @@ const net::BackoffEntry* OAuth2TokenServiceDelegate::BackoffEntry() const {
   return nullptr;
 }
 
-OAuth2TokenServiceDelegate::LoadCredentialsState
-OAuth2TokenServiceDelegate::GetLoadCredentialsState() const {
-  return LOAD_CREDENTIALS_UNKNOWN;
+void OAuth2TokenServiceDelegate::LoadCredentials(
+    const std::string& primary_account_id) {
+  NOTREACHED() << "OAuth2TokenServiceDelegate does not load credentials. "
+                  "Subclasses that need to load credentials must provide "
+                  "an implemenation of this method";
+}
+
+void OAuth2TokenServiceDelegate::ExtractCredentials(
+    OAuth2TokenService* to_service,
+    const std::string& account_id) {
+  NOTREACHED();
+}
+
+bool OAuth2TokenServiceDelegate::FixRequestErrorIfPossible() {
+  return false;
 }

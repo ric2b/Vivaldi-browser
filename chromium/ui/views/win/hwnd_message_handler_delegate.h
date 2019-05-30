@@ -10,9 +10,10 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/views_export.h"
 
+class SkPath;
+
 namespace gfx {
 class Insets;
-class Path;
 class Point;
 class Rect;
 class Size;
@@ -23,7 +24,6 @@ class Accelerator;
 class InputMethod;
 class KeyEvent;
 class MouseEvent;
-class PointerEvent;
 class ScrollEvent;
 class TouchEvent;
 }
@@ -83,7 +83,7 @@ class VIEWS_EXPORT HWNDMessageHandlerDelegate {
   virtual bool WillProcessWorkAreaChange() const = 0;
 
   virtual int GetNonClientComponent(const gfx::Point& point) const = 0;
-  virtual void GetWindowMask(const gfx::Size& size, gfx::Path* mask) = 0;
+  virtual void GetWindowMask(const gfx::Size& size, SkPath* mask) = 0;
 
   // Returns true if the delegate modifies |insets| to define a custom client
   // area for the window, false if the default client area should be used. If
@@ -94,6 +94,10 @@ class VIEWS_EXPORT HWNDMessageHandlerDelegate {
   // OnNCCalcSize for more details).
   virtual bool GetClientAreaInsets(gfx::Insets* insets,
                                    HMONITOR monitor) const = 0;
+
+  // Returns true if DWM frame should be extended into client area by |insets|.
+  // Insets are specified in screen pixels not DIP because that's what DWM uses.
+  virtual bool GetDwmFrameInsetsInPixels(gfx::Insets* insets) const = 0;
 
   // Returns the minimum and maximum size the window can be resized to by the
   // user.
@@ -176,6 +180,9 @@ class VIEWS_EXPORT HWNDMessageHandlerDelegate {
   // Called when the window's visibility changed. |visible| holds the new state.
   virtual void HandleVisibilityChanged(bool visible) = 0;
 
+  // Called when a top level window is minimized or restored.
+  virtual void HandleWindowMinimizedOrRestored(bool restored) = 0;
+
   // Called when the window's client size changed. |new_size| holds the new
   // size.
   virtual void HandleClientSizeChanged(const gfx::Size& new_size) = 0;
@@ -192,10 +199,6 @@ class VIEWS_EXPORT HWNDMessageHandlerDelegate {
   // Called when a mouse event is received. Returns true if the event was
   // handled by the delegate.
   virtual bool HandleMouseEvent(ui::MouseEvent* event) = 0;
-
-  // Called when a pointer event is received. Returns true if the event was
-  // handled by the delegate.
-  virtual bool HandlePointerEvent(ui::PointerEvent* event) = 0;
 
   // Called when an untranslated key event is received (i.e. pre-IME
   // translation).

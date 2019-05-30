@@ -15,7 +15,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/path_service.h"
 #include "base/rand_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task_runner.h"
@@ -30,7 +32,6 @@
 #include "chrome/browser/download/download_history.h"
 #include "chrome/browser/download/download_item_model.h"
 #include "chrome/browser/download/download_location_dialog_type.h"
-#include "chrome/browser/download/download_path_reservation_tracker.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/download/download_request_limiter.h"
 #include "chrome/browser/download/download_stats.h"
@@ -47,16 +48,18 @@
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/common/pdf_uma.h"
+#include "chrome/common/chrome_paths.h"
+#include "chrome/common/pdf_util.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/safe_browsing/file_type_policies.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/download/database/in_progress/in_progress_cache_impl.h"
 #include "components/download/public/common/download_interrupt_reasons.h"
 #include "components/download/public/common/download_item.h"
+#include "components/offline_pages/buildflags/buildflags.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/download_manager.h"
@@ -75,6 +78,7 @@
 #include "chrome/browser/android/download/download_controller.h"
 #include "chrome/browser/android/download/download_location_dialog_bridge_impl.h"
 #include "chrome/browser/android/download/download_manager_service.h"
+#include "chrome/browser/android/download/download_utils.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #endif
 
@@ -91,9 +95,20 @@
 #include "extensions/common/constants.h"
 #endif
 
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+#include "chrome/browser/offline_pages/offline_page_utils.h"
+#include "components/offline_pages/core/client_namespace_constants.h"
+#include "services/network/public/cpp/features.h"
+#endif
+
+#include "app/vivaldi_apptools.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
+
 using content::BrowserThread;
-using download::DownloadItem;
 using content::DownloadManager;
+using download::DownloadItem;
+using download::DownloadPathReservationTracker;
+using download::PathValidationResult;
 using safe_browsing::DownloadFileType;
 using safe_browsing::DownloadProtectionService;
 
@@ -296,6 +311,7 @@ void OnDownloadLocationDetermined(
 ChromeDownloadManagerDelegate::ChromeDownloadManagerDelegate(Profile* profile)
     : profile_(profile),
       next_download_id_(download::DownloadItem::kInvalidId),
+      next_id_retrieved_(false),
       download_prefs_(new DownloadPrefs(profile)),
       disk_access_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
           {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
@@ -357,17 +373,13 @@ void ChromeDownloadManagerDelegate::SetNextId(uint32_t next_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!profile_->IsOffTheRecord());
 
-  // |download::DownloadItem::kInvalidId| will be returned only when download
+  // |download::DownloadItem::kInvalidId| will be returned only when history
   // database failed to initialize.
-  bool download_db_available = (next_id != download::DownloadItem::kInvalidId);
-  RecordDatabaseAvailability(download_db_available);
-  if (download_db_available) {
+  bool history_db_available = (next_id != download::DownloadItem::kInvalidId);
+  RecordDatabaseAvailability(history_db_available);
+  if (history_db_available)
     next_download_id_ = next_id;
-  } else {
-    // Still download files without download database, all download history in
-    // this browser session will not be persisted.
-    next_download_id_ = download::DownloadItem::kInvalidId + 1;
-  }
+  next_id_retrieved_ = true;
 
   IdCallbackVector callbacks;
   id_callbacks_.swap(callbacks);
@@ -381,11 +393,11 @@ void ChromeDownloadManagerDelegate::GetNextId(
     const content::DownloadIdCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (profile_->IsOffTheRecord()) {
-    content::BrowserContext::GetDownloadManager(
-        profile_->GetOriginalProfile())->GetDelegate()->GetNextId(callback);
+    content::BrowserContext::GetDownloadManager(profile_->GetOriginalProfile())
+        ->GetNextId(callback);
     return;
   }
-  if (next_download_id_ == download::DownloadItem::kInvalidId) {
+  if (!next_id_retrieved_) {
     id_callbacks_.push_back(callback);
     return;
   }
@@ -396,8 +408,10 @@ void ChromeDownloadManagerDelegate::ReturnNextId(
     const content::DownloadIdCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!profile_->IsOffTheRecord());
-  DCHECK_NE(download::DownloadItem::kInvalidId, next_download_id_);
-  callback.Run(next_download_id_++);
+  // kInvalidId is returned to indicate the error.
+  callback.Run(next_download_id_);
+  if (next_download_id_ != download::DownloadItem::kInvalidId)
+    ++next_download_id_;
 }
 
 bool ChromeDownloadManagerDelegate::DetermineDownloadTarget(
@@ -413,11 +427,17 @@ bool ChromeDownloadManagerDelegate::DetermineDownloadTarget(
                  weak_ptr_factory_.GetWeakPtr(),
                  download->GetId(),
                  callback);
-  DownloadTargetDeterminer::Start(
-      download,
-      GetPlatformDownloadPath(profile_, download, PLATFORM_TARGET_PATH),
-      kDefaultPlatformConflictAction, download_prefs_.get(), this,
-      target_determined_callback);
+  base::FilePath download_path =
+      GetPlatformDownloadPath(profile_, download, PLATFORM_TARGET_PATH);
+  DownloadPathReservationTracker::FilenameConflictAction action =
+      kDefaultPlatformConflictAction;
+#if defined(OS_ANDROID)
+  if (!download_path.empty())
+    action = DownloadPathReservationTracker::UNIQUIFY;
+#endif
+  DownloadTargetDeterminer::Start(download, download_path, action,
+                                  download_prefs_.get(), this,
+                                  target_determined_callback);
   return true;
 }
 
@@ -503,8 +523,8 @@ bool ChromeDownloadManagerDelegate::IsDownloadReadyForCompletion(
       }
       UMA_HISTOGRAM_ENUMERATION("Download.DangerousFile.Reason",
                                 SB_NOT_AVAILABLE, DANGEROUS_FILE_REASON_MAX);
-      content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                       internal_complete_callback);
+      base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                               internal_complete_callback);
       return false;
     }
   } else if (!state->is_complete()) {
@@ -564,9 +584,25 @@ bool ChromeDownloadManagerDelegate::ShouldOpenDownload(
 
 bool ChromeDownloadManagerDelegate::InterceptDownloadIfApplicable(
     const GURL& url,
+    const std::string& user_agent,
+    const std::string& content_disposition,
     const std::string& mime_type,
     const std::string& request_origin,
+    int64_t content_length,
     content::WebContents* web_contents) {
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    if (offline_pages::OfflinePageUtils::CanDownloadAsOfflinePage(url,
+                                                                  mime_type)) {
+      offline_pages::OfflinePageUtils::ScheduleDownload(
+          web_contents, offline_pages::kDownloadNamespace, url,
+          offline_pages::OfflinePageUtils::DownloadUIActionFlags::ALL,
+          request_origin);
+      return true;
+    }
+  }
+#endif
   return false;
 }
 
@@ -642,11 +678,7 @@ void ChromeDownloadManagerDelegate::OpenDownload(DownloadItem* download) {
                                          false /* show_download_in_folder */);
 
 #if defined(OS_ANDROID)
-  // TODO(shaktisahu@): Pull out to static helper method once
-  // DownloadManagerService goes away.  Put the helper method in the download
-  // component.
-  DownloadManagerService::GetInstance()->OpenDownload(download,
-                                                      0 /* download source */);
+  DownloadUtils::OpenDownload(download, 0 /* download source */);
   return;
 #endif
 
@@ -808,13 +840,11 @@ void ChromeDownloadManagerDelegate::ReserveVirtualPath(
     return;
   }
 #endif
+  base::FilePath document_dir;
+  base::PathService::Get(chrome::DIR_USER_DOCUMENTS, &document_dir);
   DownloadPathReservationTracker::GetReservedPath(
-      download,
-      virtual_path,
-      download_prefs_->DownloadPath(),
-      create_directory,
-      conflict_action,
-      callback);
+      download, virtual_path, download_prefs_->DownloadPath(), document_dir,
+      create_directory, conflict_action, callback);
 }
 
 void ChromeDownloadManagerDelegate::RequestConfirmation(
@@ -876,7 +906,8 @@ void ChromeDownloadManagerDelegate::RequestConfirmation(
 
       gfx::NativeWindow native_window = web_contents->GetTopLevelNativeWindow();
       DownloadPathReservationTracker::GetReservedPath(
-          download, suggested_path, download_dir, true,
+          download, suggested_path, download_dir,
+          base::FilePath() /* fallback_directory */, true,
           DownloadPathReservationTracker::UNIQUIFY,
           base::BindRepeating(
               &ChromeDownloadManagerDelegate::GenerateUniqueFileNameDone,
@@ -978,10 +1009,25 @@ void ChromeDownloadManagerDelegate::OnConfirmationCallbackComplete(
     const DownloadTargetDeterminerDelegate::ConfirmationCallback& callback,
     DownloadConfirmationResult result,
     const base::FilePath& virtual_path) {
+
+  // NOTE(andre@vivaldi.com) : Wanted this on the client side, but did not have
+  // a hook there.
+  if (vivaldi::IsVivaldiRunning()) {
+    bool update_default_location_to_saved = profile_->GetPrefs()->GetBoolean(
+      vivaldiprefs::kDownloadsUpdateDefaultDownloadWhenSavingAs);
+    if (update_default_location_to_saved &&
+      result == DownloadConfirmationResult::CONFIRMED) {
+      // Update default download directory.
+      base::FilePath target_directory = virtual_path.DirName();
+      download_prefs_->SetDownloadPath(target_directory);
+    }
+  } //IsVivaldiRunning
+
   callback.Run(result, virtual_path);
   if (!file_picker_callbacks_.empty()) {
     base::OnceClosure callback = std::move(file_picker_callbacks_.front());
-    std::move(callback).Run();
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback)));
     file_picker_callbacks_.pop_front();
   } else {
     is_file_picker_showing_ = false;
@@ -994,15 +1040,23 @@ void ChromeDownloadManagerDelegate::ShowFilePicker(
     const DownloadTargetDeterminerDelegate::ConfirmationCallback& callback) {
   DownloadItem* download = download_manager_->GetDownloadByGuid(guid);
   if (download) {
-    DownloadFilePicker::ShowFilePicker(
-        download, suggested_path,
-        base::BindRepeating(
-            &ChromeDownloadManagerDelegate::OnConfirmationCallbackComplete,
-            weak_ptr_factory_.GetWeakPtr(), callback));
+    ShowFilePickerForDownload(download, suggested_path, callback);
   } else {
     OnConfirmationCallbackComplete(
         callback, DownloadConfirmationResult::CANCELED, base::FilePath());
   }
+}
+
+void ChromeDownloadManagerDelegate::ShowFilePickerForDownload(
+    DownloadItem* download,
+    const base::FilePath& suggested_path,
+    const DownloadTargetDeterminerDelegate::ConfirmationCallback& callback) {
+  DCHECK(download);
+  DownloadFilePicker::ShowFilePicker(
+      download, suggested_path,
+      base::BindRepeating(
+          &ChromeDownloadManagerDelegate::OnConfirmationCallbackComplete,
+          weak_ptr_factory_.GetWeakPtr(), callback));
 }
 
 #if defined(OS_ANDROID)
@@ -1309,6 +1363,12 @@ bool ChromeDownloadManagerDelegate::ShouldBlockFile(
     case (DownloadPrefs::DownloadRestriction::DANGEROUS_FILES): {
       return (danger_type == download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT ||
               danger_type == download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE ||
+              danger_type == download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL);
+    }
+
+    case (DownloadPrefs::DownloadRestriction::MALICIOUS_FILES): {
+      return (danger_type == download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT ||
+              danger_type == download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST ||
               danger_type == download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL);
     }
 

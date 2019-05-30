@@ -27,6 +27,7 @@
 
 #include "third_party/blink/renderer/core/xml/xpath_functions.h"
 
+#include "base/stl_util.h"
 #include "third_party/blink/renderer/core/dom/attr.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/processing_instruction.h"
@@ -41,14 +42,14 @@
 #include <limits>
 
 namespace blink {
-namespace XPath {
+namespace xpath {
 
 static inline bool IsWhitespace(UChar c) {
   return c == ' ' || c == '\n' || c == '\r' || c == '\t';
 }
 
 #define DEFINE_FUNCTION_CREATOR(Class) \
-  static Function* Create##Class() { return new Class; }
+  static Function* Create##Class() { return MakeGarbageCollected<Class>(); }
 
 class Interval {
  public:
@@ -355,7 +356,7 @@ Value FunId::Evaluate(EvaluationContext& context) const {
     if (start_pos == length)
       break;
 
-    size_t end_pos = start_pos;
+    unsigned end_pos = start_pos;
     while (end_pos < length && !IsWhitespace(id_list[end_pos]))
       ++end_pos;
 
@@ -511,7 +512,7 @@ Value FunSubstringBefore::Evaluate(EvaluationContext& context) const {
   if (s2.IsEmpty())
     return "";
 
-  size_t i = s1.Find(s2);
+  wtf_size_t i = s1.Find(s2);
 
   if (i == kNotFound)
     return "";
@@ -523,7 +524,7 @@ Value FunSubstringAfter::Evaluate(EvaluationContext& context) const {
   String s1 = Arg(0)->Evaluate(context).ToString();
   String s2 = Arg(1)->Evaluate(context).ToString();
 
-  size_t i = s1.Find(s2);
+  wtf_size_t i = s1.Find(s2);
   if (i == kNotFound)
     return "";
 
@@ -599,7 +600,7 @@ Value FunTranslate::Evaluate(EvaluationContext& context) const {
 
   for (unsigned i1 = 0; i1 < s1.length(); ++i1) {
     UChar ch = s1[i1];
-    size_t i2 = s2.find(ch);
+    wtf_size_t i2 = s2.find(ch);
 
     if (i2 == kNotFound)
       result.Append(ch);
@@ -630,7 +631,7 @@ Value FunLang::Evaluate(EvaluationContext& context) const {
   while (node) {
     if (node->IsElementNode()) {
       Element* element = ToElement(node);
-      language_attribute = element->Attributes().Find(XMLNames::langAttr);
+      language_attribute = element->Attributes().Find(xml_names::kLangAttr);
     }
     if (language_attribute)
       break;
@@ -646,7 +647,7 @@ Value FunLang::Evaluate(EvaluationContext& context) const {
       return true;
 
     // Remove suffixes one by one.
-    size_t index = lang_value.ReverseFind('-');
+    wtf_size_t index = lang_value.ReverseFind('-');
     if (index == kNotFound)
       break;
     lang_value = lang_value.Left(index);
@@ -742,7 +743,7 @@ static void CreateFunctionMap() {
   };
 
   g_function_map = new HashMap<String, FunctionRec>;
-  for (size_t i = 0; i < arraysize(functions); ++i)
+  for (size_t i = 0; i < base::size(functions); ++i)
     g_function_map->Set(functions[i].name, functions[i].function);
 }
 
@@ -770,5 +771,5 @@ Function* CreateFunction(const String& name,
   return function;
 }
 
-}  // namespace XPath
+}  // namespace xpath
 }  // namespace blink

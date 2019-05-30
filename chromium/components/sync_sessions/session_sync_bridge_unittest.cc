@@ -11,14 +11,15 @@
 #include "base/bind_helpers.h"
 #include "base/json/json_writer.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/mock_callback.h"
+#include "base/test/scoped_task_environment.h"
+#include "components/prefs/testing_pref_service.h"
 #include "components/sync/base/hash_util.h"
 #include "components/sync/base/sync_prefs.h"
-#include "components/sync/device_info/local_device_info_provider_mock.h"
+#include "components/sync/device_info/device_info.h"
 #include "components/sync/model/data_batch.h"
 #include "components/sync/model/data_type_activation_request.h"
 #include "components/sync/model/metadata_batch.h"
@@ -33,6 +34,7 @@
 #include "components/sync/test/test_matchers.h"
 #include "components/sync_sessions/favicon_cache.h"
 #include "components/sync_sessions/mock_sync_sessions_client.h"
+#include "components/sync_sessions/session_sync_prefs.h"
 #include "components/sync_sessions/tab_node_pool.h"
 #include "components/sync_sessions/test_matchers.h"
 #include "components/sync_sessions/test_synced_window_delegates_getter.h"
@@ -52,6 +54,7 @@ using syncer::MetadataBatch;
 using syncer::MetadataChangeList;
 using syncer::MockModelTypeChangeProcessor;
 using testing::_;
+using testing::AtLeast;
 using testing::Contains;
 using testing::ElementsAre;
 using testing::Eq;
@@ -70,15 +73,6 @@ using testing::UnorderedElementsAre;
 using testing::WithArg;
 
 const char kLocalSessionTag[] = "sessiontag1";
-
-class MockSessionSyncPrefs : public syncer::SessionSyncPrefs {
- public:
-  MockSessionSyncPrefs() = default;
-  ~MockSessionSyncPrefs() override = default;
-
-  MOCK_CONST_METHOD0(GetSyncSessionsGUID, std::string());
-  MOCK_METHOD1(SetSyncSessionsGUID, void(const std::string& guid));
-};
 
 MATCHER_P(EntityDataHasSpecifics, session_specifics_matcher, "") {
   return session_specifics_matcher.MatchAndExplain(arg->specifics.session(),
@@ -166,17 +160,34 @@ sync_pb::SessionSpecifics CreateTabSpecifics(const std::string& session_tag,
 class SessionSyncBridgeTest : public ::testing::Test {
  protected:
   SessionSyncBridgeTest()
-      : store_(syncer::ModelTypeStoreTestUtil::CreateInMemoryStoreForTest(
+      : local_device_info_("TestCacheGuid",
+                           "Wayne Gretzky's Hacking Box",
+                           "Chromium 10k",
+                           "Chrome 10k",
+                           sync_pb::SyncEnums_DeviceType_TYPE_LINUX,
+                           "device_id"),
+        store_(syncer::ModelTypeStoreTestUtil::CreateInMemoryStoreForTest(
             syncer::SESSIONS)),
+        session_sync_prefs_(&pref_service_),
         favicon_cache_(/*favicon_service=*/nullptr,
                        /*history_service=*/nullptr,
                        /*max_sync_favicon_limit=*/0) {
+    SessionSyncPrefs::RegisterProfilePrefs(pref_service_.registry());
+
+    ON_CALL(mock_sync_sessions_client_, GetSessionSyncPrefs())
+        .WillByDefault(Return(&session_sync_prefs_));
+    ON_CALL(mock_sync_sessions_client_, GetStoreFactory())
+        .WillByDefault(
+            Return(syncer::ModelTypeStoreTestUtil::FactoryForForwardingStore(
+                store_.get())));
+    ON_CALL(mock_sync_sessions_client_, GetLocalDeviceInfo())
+        .WillByDefault(Return(&local_device_info_));
     ON_CALL(mock_sync_sessions_client_, GetSyncedWindowDelegatesGetter())
         .WillByDefault(Return(&window_getter_));
     ON_CALL(mock_sync_sessions_client_, GetLocalSessionEventRouter())
         .WillByDefault(Return(window_getter_.router()));
-    ON_CALL(mock_sync_prefs_, GetSyncSessionsGUID())
-        .WillByDefault(Return(kLocalSessionTag));
+
+    session_sync_prefs_.SetSyncSessionsGUID(kLocalSessionTag);
 
     // Even if we use NiceMock, let's be strict about errors and let tests
     // explicitly list them.
@@ -193,11 +204,7 @@ class SessionSyncBridgeTest : public ::testing::Test {
     mock_processor_.DelegateCallsByDefaultTo(real_processor_.get());
     // Instantiate the bridge.
     bridge_ = std::make_unique<SessionSyncBridge>(
-        &mock_sync_sessions_client_, &mock_sync_prefs_,
-        &mock_device_info_provider_,
-        /*store_factory=*/
-        syncer::ModelTypeStoreTestUtil::FactoryForForwardingStore(store_.get()),
-        mock_foreign_sessions_updated_callback_.Get(),
+        mock_foreign_session_updated_cb_.Get(), &mock_sync_sessions_client_,
         mock_processor_.CreateForwardingProcessor());
   }
 
@@ -209,12 +216,6 @@ class SessionSyncBridgeTest : public ::testing::Test {
   }
 
   void StartSyncing(const std::vector<SessionSpecifics>& remote_data = {}) {
-    // DeviceInfo is provided when sync is being enabled, which should lead to
-    // ModelReadyToSync().
-    mock_device_info_provider_.Initialize(std::make_unique<syncer::DeviceInfo>(
-        "cache_guid", "Wayne Gretzky's Hacking Box", "Chromium 10k",
-        "Chrome 10k", sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "device_id"));
-
     syncer::DataTypeActivationRequest request;
     request.error_handler = base::DoNothing();
     request.cache_guid = "TestCacheGuid";
@@ -304,6 +305,15 @@ class SessionSyncBridgeTest : public ::testing::Test {
 
   void SessionRestoreComplete() { window_getter_.SessionRestoreComplete(); }
 
+  MockSyncSessionsClient& mock_sync_sessions_client() {
+    return mock_sync_sessions_client_;
+  }
+
+  base::MockCallback<base::RepeatingClosure>&
+  mock_foreign_session_updated_cb() {
+    return mock_foreign_session_updated_cb_;
+  }
+
   SessionSyncBridge* bridge() { return bridge_.get(); }
 
   syncer::MockModelTypeChangeProcessor& mock_processor() {
@@ -314,22 +324,20 @@ class SessionSyncBridgeTest : public ::testing::Test {
     return real_processor_.get();
   }
 
-  base::MockCallback<base::RepeatingClosure>&
-  mock_foreign_sessions_updated_callback() {
-    return mock_foreign_sessions_updated_callback_;
-  }
+  syncer::ModelTypeStore* underlying_store() { return store_.get(); }
 
  private:
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
+  const syncer::DeviceInfo local_device_info_;
   const std::unique_ptr<syncer::ModelTypeStore> store_;
 
   // Dependencies.
-  testing::NiceMock<MockSyncSessionsClient> mock_sync_sessions_client_;
-  testing::NiceMock<MockSessionSyncPrefs> mock_sync_prefs_;
-  syncer::LocalDeviceInfoProviderMock mock_device_info_provider_;
-  testing::NiceMock<MockModelTypeChangeProcessor> mock_processor_;
+  TestingPrefServiceSimple pref_service_;
+  SessionSyncPrefs session_sync_prefs_;
   testing::NiceMock<base::MockCallback<base::RepeatingClosure>>
-      mock_foreign_sessions_updated_callback_;
+      mock_foreign_session_updated_cb_;
+  testing::NiceMock<MockSyncSessionsClient> mock_sync_sessions_client_;
+  testing::NiceMock<MockModelTypeChangeProcessor> mock_processor_;
   TestSyncedWindowDelegatesGetter window_getter_;
   FaviconCache favicon_cache_;
 
@@ -463,7 +471,7 @@ TEST_F(SessionSyncBridgeTest, ShouldReportLocalTabCreation) {
   StartSyncing();
 
   ASSERT_THAT(GetAllData(), SizeIs(2));
-  EXPECT_CALL(mock_foreign_sessions_updated_callback(), Run()).Times(0);
+  EXPECT_CALL(mock_foreign_session_updated_cb(), Run()).Times(0);
 
   // Expectations for the processor.
   std::string header_storage_key;
@@ -927,12 +935,20 @@ TEST_F(SessionSyncBridgeTest, ShouldRestoreLocalSessionWithFreedTab) {
   InitializeBridge();
   StartSyncing();
 
-  ASSERT_THAT(GetData(header_storage_key),
-              EntityDataHasSpecifics(
-                  MatchesHeader(kLocalSessionTag, {kWindowId2}, {kTabId3})));
+  // One tab node de should be free at this point. In the current implementation
+  // (subject to change), this is |kTabNodeId1|. This is because |kTabId3| is
+  // assigned |kTabNodeId2|.
+  ASSERT_THAT(
+      GetAllData(),
+      UnorderedElementsAre(
+          Pair(header_storage_key,
+               EntityDataHasSpecifics(
+                   MatchesHeader(kLocalSessionTag, {kWindowId2}, {kTabId3}))),
+          Pair(tab_storage_key2, EntityDataHasSpecifics(MatchesTab(
+                                     kLocalSessionTag, kWindowId2, kTabId3,
+                                     kTabNodeId2, {"http://qux.com/"})))));
 
-  // |kTabNodeId1| should be free at this point. When a new tab is opened
-  // (|kTabId4|), it should be reused.
+  // When a new tab is opened (|kTabId4|), |kTabNodeId1| should be reused.
   AddTab(kWindowId2, "http://quux.com/", kTabId4);
   EXPECT_THAT(
       GetAllData(),
@@ -968,7 +984,6 @@ TEST_F(SessionSyncBridgeTest, ShouldDisableSyncAndReenable) {
   EXPECT_CALL(mock_processor(), ModelReadyToSync(_)).Times(0);
   real_processor()->OnSyncStopping(syncer::CLEAR_METADATA);
 
-  EXPECT_CALL(mock_processor(), ModelReadyToSync(IsEmptyMetadataBatch()));
   StartSyncing();
   ASSERT_THAT(GetData(header_storage_key),
               EntityDataHasSpecifics(
@@ -997,8 +1012,7 @@ TEST_F(SessionSyncBridgeTest, ShouldMergeForeignSession) {
   EXPECT_CALL(
       mock_processor(),
       Put(_, EntityDataHasSpecifics(MatchesHeader(kLocalSessionTag, _, _)), _));
-  EXPECT_CALL(mock_foreign_sessions_updated_callback(), Run());
-
+  EXPECT_CALL(mock_foreign_session_updated_cb(), Run());
   StartSyncing({foreign_header, foreign_tab});
 
   std::vector<const SyncedSession*> foreign_sessions;
@@ -1127,6 +1141,17 @@ TEST_F(SessionSyncBridgeTest, ShouldHandleRemoteDeletion) {
                          kForeignTabNodeId, "http://baz.com/");
   StartSyncing({foreign_header, foreign_tab});
 
+  sync_pb::ModelTypeState state;
+  state.set_initial_sync_done(true);
+
+  // Mimic receiving a commit ack for the local header entity, to later be able
+  // to verify HasLocalChangesForTest() without interferences from the local
+  // session.
+  ASSERT_TRUE(real_processor()->HasLocalChangesForTest());
+  real_processor()->OnCommitCompleted(
+      state, {CreateSuccessResponse(kLocalSessionTag)});
+  ASSERT_FALSE(real_processor()->HasLocalChangesForTest());
+
   const sessions::SessionTab* foreign_session_tab = nullptr;
   ASSERT_TRUE(bridge()->GetOpenTabsUIDelegate()->GetForeignTab(
       kForeignSessionTag, SessionID::FromSerializedValue(kForeignTabId),
@@ -1140,12 +1165,14 @@ TEST_F(SessionSyncBridgeTest, ShouldHandleRemoteDeletion) {
                   kForeignSessionTag,
                   {{kForeignWindowId, std::vector<int>{kForeignTabId}}})));
   ASSERT_TRUE(real_processor()->IsTrackingMetadata());
+  ASSERT_TRUE(real_processor()->IsTrackingEntityForTest(
+      SessionStore::GetHeaderStorageKey(kForeignSessionTag)));
+  ASSERT_TRUE(real_processor()->IsTrackingEntityForTest(
+      SessionStore::GetTabStorageKey(kForeignSessionTag, kForeignTabNodeId)));
+  ASSERT_FALSE(real_processor()->HasLocalChangesForTest());
 
   // Mimic receiving a remote deletion of the foreign session.
-  sync_pb::ModelTypeState state;
-  state.set_initial_sync_done(true);
-
-  EXPECT_CALL(mock_foreign_sessions_updated_callback(), Run());
+  EXPECT_CALL(mock_foreign_session_updated_cb(), Run());
   real_processor()->OnUpdateReceived(
       state, {CreateTombstone(SessionStore::GetClientTag(foreign_header))});
 
@@ -1156,6 +1183,51 @@ TEST_F(SessionSyncBridgeTest, ShouldHandleRemoteDeletion) {
 
   EXPECT_FALSE(bridge()->GetOpenTabsUIDelegate()->GetAllForeignSessions(
       &foreign_sessions));
+
+  EXPECT_FALSE(real_processor()->HasLocalChangesForTest());
+
+  const std::string header_storage_key =
+      SessionStore::GetHeaderStorageKey(kForeignSessionTag);
+  const std::string tab_storage_key =
+      SessionStore::GetTabStorageKey(kForeignSessionTag, kForeignTabNodeId);
+
+  EXPECT_FALSE(real_processor()->IsTrackingEntityForTest(header_storage_key));
+  EXPECT_FALSE(real_processor()->IsTrackingEntityForTest(tab_storage_key));
+
+  // Verify that both entities have been deleted from storage.
+  {
+    base::RunLoop loop;
+    underlying_store()->ReadData(
+        {header_storage_key, tab_storage_key},
+        base::BindLambdaForTesting(
+            [&](const base::Optional<syncer::ModelError>& error,
+                std::unique_ptr<syncer::ModelTypeStore::RecordList>
+                    data_records,
+                std::unique_ptr<syncer::ModelTypeStore::IdList>
+                    missing_id_list) {
+              EXPECT_THAT(data_records, Pointee(IsEmpty()));
+              EXPECT_THAT(
+                  missing_id_list,
+                  Pointee(ElementsAre(header_storage_key, tab_storage_key)));
+              loop.Quit();
+            }));
+    loop.Run();
+  }
+
+  // Verify that the sync metadata for both entities have been deleted too.
+  {
+    base::RunLoop loop;
+    underlying_store()->ReadAllMetadata(base::BindLambdaForTesting(
+        [&](const base::Optional<syncer::ModelError>& error,
+            std::unique_ptr<syncer::MetadataBatch> metadata_batch) {
+          syncer::EntityMetadataMap entity_metadata_map =
+              metadata_batch->TakeAllMetadata();
+          EXPECT_EQ(0U, entity_metadata_map.count(header_storage_key));
+          EXPECT_EQ(0U, entity_metadata_map.count(tab_storage_key));
+          loop.Quit();
+        }));
+    loop.Run();
+  }
 }
 
 TEST_F(SessionSyncBridgeTest, ShouldIgnoreRemoteDeletionOfLocalTab) {
@@ -1314,7 +1386,7 @@ TEST_F(SessionSyncBridgeTest, ShouldDeleteForeignSessionFromUI) {
   // Mimic the user requesting a session deletion from the UI.
   EXPECT_CALL(mock_processor(), Delete(foreign_header_storage_key, _));
   EXPECT_CALL(mock_processor(), Delete(foreign_tab_storage_key, _));
-  EXPECT_CALL(mock_foreign_sessions_updated_callback(), Run());
+  EXPECT_CALL(mock_foreign_session_updated_cb(), Run());
   bridge()->GetOpenTabsUIDelegate()->DeleteForeignSession(kForeignSessionTag);
 
   // Verify what gets exposed to the UI.
@@ -1336,7 +1408,7 @@ TEST_F(SessionSyncBridgeTest, ShouldIgnoreLocalSessionDeletionFromUI) {
   InitializeBridge();
   StartSyncing();
 
-  EXPECT_CALL(mock_foreign_sessions_updated_callback(), Run()).Times(0);
+  EXPECT_CALL(mock_foreign_session_updated_cb(), Run()).Times(0);
   EXPECT_CALL(mock_processor(), Delete(_, _)).Times(0);
 
   bridge()->GetOpenTabsUIDelegate()->DeleteForeignSession(kLocalSessionTag);
@@ -1354,7 +1426,7 @@ TEST_F(SessionSyncBridgeTest, ShouldNotBroadcastUpdatesIfEmpty) {
   InitializeBridge();
   StartSyncing();
 
-  EXPECT_CALL(mock_foreign_sessions_updated_callback(), Run()).Times(0);
+  EXPECT_CALL(mock_foreign_session_updated_cb(), Run()).Times(0);
 
   // Mimic receiving an empty list of remote updates.
   sync_pb::ModelTypeState state;
@@ -1397,7 +1469,6 @@ TEST_F(SessionSyncBridgeTest, ShouldDoGarbageCollection) {
       CreateTabSpecifics(kRecentSessionTag, kWindowId, kTabId, kTabNodeId,
                          "http://baz.com/"),
       recent_mtime));
-  real_processor()->OnUpdateReceived(state, updates);
 
   // During garbage collection, we expect |kStaleSessionTag| to be deleted.
   EXPECT_CALL(mock_processor(),
@@ -1405,10 +1476,9 @@ TEST_F(SessionSyncBridgeTest, ShouldDoGarbageCollection) {
   EXPECT_CALL(
       mock_processor(),
       Delete(SessionStore::GetTabStorageKey(kStaleSessionTag, kTabNodeId), _));
-  EXPECT_CALL(mock_foreign_sessions_updated_callback(), Run());
 
-  bridge()->ScheduleGarbageCollection();
-  base::RunLoop().RunUntilIdle();
+  EXPECT_CALL(mock_foreign_session_updated_cb(), Run()).Times(AtLeast(1));
+  real_processor()->OnUpdateReceived(state, updates);
 }
 
 }  // namespace

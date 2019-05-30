@@ -13,7 +13,6 @@
 #include "ash/frame/non_client_frame_view_ash.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/app_types.h"
-#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
@@ -26,20 +25,26 @@
 #include "ash/shell.h"
 #include "ash/shell_observer.h"
 #include "ash/shell_test_api.h"
+#include "ash/system/unified/unified_system_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wallpaper/wallpaper_controller_test_api.h"
 #include "ash/window_factory.h"
+#include "ash/wm/always_on_top_controller.h"
 #include "ash/wm/fullscreen_window_finder.h"
-#include "ash/wm/overview/window_selector_controller.h"
+#include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_backdrop_delegate_impl.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm/window_properties.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
+#include "ash/wm/workspace/backdrop_controller.h"
 #include "ash/wm/workspace/backdrop_delegate.h"
 #include "ash/wm/workspace/workspace_window_resizer.h"
 #include "ash/wm/workspace_controller_test_api.h"
+#include "base/bind_helpers.h"
+#include "base/command_line.h"
 #include "base/run_loop.h"
 #include "chromeos/audio/chromeos_sounds.h"
 #include "ui/aura/client/aura_constants.h"
@@ -62,6 +67,7 @@
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_ui.h"
 #include "ui/keyboard/keyboard_util.h"
+#include "ui/keyboard/public/keyboard_switches.h"
 #include "ui/keyboard/test/keyboard_test_util.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -123,17 +129,11 @@ class ScopedStickyKeyboardEnabler {
  public:
   ScopedStickyKeyboardEnabler()
       : accessibility_controller_(Shell::Get()->accessibility_controller()),
-        enabled_(accessibility_controller_->IsVirtualKeyboardEnabled()) {
+        enabled_(accessibility_controller_->virtual_keyboard_enabled()) {
     accessibility_controller_->SetVirtualKeyboardEnabled(true);
-    keyboard::KeyboardController::Get()->EnableKeyboard(
-        std::make_unique<keyboard::TestKeyboardUI>(
-            Shell::Get()->window_tree_host_manager()->input_method()),
-        nullptr);
-    keyboard::KeyboardController::Get()->set_keyboard_locked(true);
   }
 
   ~ScopedStickyKeyboardEnabler() {
-    keyboard::KeyboardController::Get()->set_keyboard_locked(false);
     accessibility_controller_->SetVirtualKeyboardEnabled(enabled_);
   }
 
@@ -449,7 +449,7 @@ TEST_F(WorkspaceLayoutManagerTest, MaximizeWithEmptySize) {
   std::unique_ptr<aura::Window> window =
       window_factory::NewWindow(nullptr, aura::client::WINDOW_TYPE_NORMAL);
   window->Init(ui::LAYER_TEXTURED);
-  wm::GetWindowState(window.get())->Maximize();
+  window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
   aura::Window* default_container =
       Shell::GetPrimaryRootWindowController()->GetContainer(
           kShellWindowId_DefaultContainer);
@@ -460,12 +460,6 @@ TEST_F(WorkspaceLayoutManagerTest, MaximizeWithEmptySize) {
 }
 
 TEST_F(WorkspaceLayoutManagerTest, WindowShouldBeOnScreenWhenAdded) {
-  // TODO: fix. This test verifies that when a window is added the bounds are
-  // adjusted. CreateTestWindow() for mus adds, then sets the bounds (this comes
-  // from NativeWidgetAura), which means this test now fails for aura-mus.
-  if (Shell::GetAshConfig() == Config::MASH_DEPRECATED)
-    return;
-
   // Normal window bounds shouldn't be changed.
   gfx::Rect window_bounds(100, 100, 200, 200);
   std::unique_ptr<aura::Window> window(CreateTestWindow(window_bounds));
@@ -653,6 +647,7 @@ TEST_F(WorkspaceLayoutManagerTest, AdjustSnappedBoundsWidth) {
   const gfx::Rect new_work_area =
       display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
   EXPECT_NE(work_area, new_work_area);
+
   const gfx::Rect new_expected_left_snapped_bounds =
       gfx::Rect(new_work_area.x(), new_work_area.y(), new_work_area.width() / 2,
                 new_work_area.height());
@@ -689,6 +684,17 @@ TEST_F(WorkspaceLayoutManagerTest,
   Shell::Get()->SetDisplayWorkAreaInsets(window.get(),
                                          gfx::Insets(50, 0, 0, 0));
   EXPECT_EQ(expected_bounds.ToString(), window2->bounds().ToString());
+}
+
+TEST_F(WorkspaceLayoutManagerTest, EnsureWindowStateInOverlay) {
+  std::unique_ptr<aura::Window> window =
+      window_factory::NewWindow(nullptr, aura::client::WINDOW_TYPE_NORMAL);
+  window->Init(ui::LAYER_TEXTURED);
+  auto* overlay_container =
+      Shell::GetPrimaryRootWindowController()->GetContainer(
+          kShellWindowId_OverlayContainer);
+  overlay_container->AddChild(window.get());
+  EXPECT_TRUE(window->GetProperty(kWindowStateKey));
 }
 
 // Following "Solo" tests were originally written for BaseLayoutManager.
@@ -859,6 +865,35 @@ TEST_F(WorkspaceLayoutManagerSoloTest, FullscreenSuspendsAlwaysOnTop) {
   EXPECT_EQ(nullptr, wm::GetWindowForFullscreenMode(fullscreen_window.get()));
 }
 
+TEST_F(WorkspaceLayoutManagerSoloTest,
+       FullscreenDoesNotSuspendAlwaysOnTopForPip) {
+  gfx::Rect bounds(100, 100, 200, 200);
+  std::unique_ptr<aura::Window> fullscreen_window(
+      CreateTestWindowInShellWithBounds(bounds));
+  std::unique_ptr<aura::Window> pip_window(
+      CreateTestWindowInShellWithBounds(bounds));
+
+  wm::WindowState* window_state = wm::GetWindowState(pip_window.get());
+  const wm::WMEvent enter_pip(wm::WM_EVENT_PIP);
+  window_state->OnWMEvent(&enter_pip);
+  pip_window->SetProperty(aura::client::kAlwaysOnTopKey, true);
+  EXPECT_TRUE(window_state->IsPip());
+  EXPECT_TRUE(pip_window->GetProperty(aura::client::kAlwaysOnTopKey));
+
+  // Making a window fullscreen temporarily suspends always on top state, but
+  // should not do so for PIP.
+  fullscreen_window->SetProperty(aura::client::kShowStateKey,
+                                 ui::SHOW_STATE_FULLSCREEN);
+  EXPECT_TRUE(pip_window->GetProperty(aura::client::kAlwaysOnTopKey));
+  EXPECT_NE(nullptr, wm::GetWindowForFullscreenMode(fullscreen_window.get()));
+
+  // Making fullscreen window normal does not affect PIP.
+  fullscreen_window->SetProperty(aura::client::kShowStateKey,
+                                 ui::SHOW_STATE_NORMAL);
+  EXPECT_TRUE(pip_window->GetProperty(aura::client::kAlwaysOnTopKey));
+  EXPECT_EQ(nullptr, wm::GetWindowForFullscreenMode(fullscreen_window.get()));
+}
+
 // Similary, pinned window causes always_on_top_ windows to stack below.
 TEST_F(WorkspaceLayoutManagerSoloTest, PinnedSuspendsAlwaysOnTop) {
   gfx::Rect bounds(100, 100, 200, 200);
@@ -894,6 +929,45 @@ TEST_F(WorkspaceLayoutManagerSoloTest, PinnedSuspendsAlwaysOnTop) {
       always_on_top_window2->GetProperty(aura::client::kAlwaysOnTopKey));
   EXPECT_TRUE(
       always_on_top_window3->GetProperty(aura::client::kAlwaysOnTopKey));
+}
+
+TEST_F(WorkspaceLayoutManagerSoloTest, PinnedDoesNotSuspendAlwaysOnTopForPip) {
+  gfx::Rect bounds(100, 100, 200, 200);
+  std::unique_ptr<aura::Window> pinned_window(
+      CreateTestWindowInShellWithBounds(bounds));
+  std::unique_ptr<aura::Window> pip_window(
+      CreateTestWindowInShellWithBounds(bounds));
+  {
+    wm::WindowState* window_state = wm::GetWindowState(pip_window.get());
+    const wm::WMEvent enter_pip(wm::WM_EVENT_PIP);
+    window_state->OnWMEvent(&enter_pip);
+    pip_window->SetProperty(aura::client::kAlwaysOnTopKey, true);
+    EXPECT_TRUE(window_state->IsPip());
+    EXPECT_TRUE(pip_window->GetProperty(aura::client::kAlwaysOnTopKey));
+  }
+
+  // Making a window pinned temporarily suspends always on top state, except
+  // for PIP.
+  const bool trusted = false;
+  wm::PinWindow(pinned_window.get(), trusted);
+  EXPECT_TRUE(pip_window->GetProperty(aura::client::kAlwaysOnTopKey));
+
+  // Adding a new PIP window should still end up always on top.
+  std::unique_ptr<aura::Window> pip_window2(
+      CreateTestWindowInShellWithBounds(bounds));
+  {
+    wm::WindowState* window_state = wm::GetWindowState(pip_window2.get());
+    const wm::WMEvent enter_pip(wm::WM_EVENT_PIP);
+    window_state->OnWMEvent(&enter_pip);
+    pip_window2->SetProperty(aura::client::kAlwaysOnTopKey, true);
+    EXPECT_TRUE(window_state->IsPip());
+    EXPECT_TRUE(pip_window2->GetProperty(aura::client::kAlwaysOnTopKey));
+  }
+
+  // Making pinned window normal should not affect existing PIP windows.
+  wm::GetWindowState(pinned_window.get())->Restore();
+  EXPECT_TRUE(pip_window->GetProperty(aura::client::kAlwaysOnTopKey));
+  EXPECT_TRUE(pip_window2->GetProperty(aura::client::kAlwaysOnTopKey));
 }
 
 // Tests fullscreen window size during root window resize.
@@ -1209,7 +1283,7 @@ TEST_F(WorkspaceLayoutManagerBackdropTest,
   Shelf* shelf = GetPrimaryShelf();
   ShelfLayoutManager* shelf_layout_manager = shelf->shelf_layout_manager();
   ShowTopWindowBackdropForContainer(default_container(), true);
-  RunAllPendingInMessageLoop();
+  base::RunLoop().RunUntilIdle();
   const gfx::Size fullscreen_size = GetPrimaryDisplay().size();
 
   std::unique_ptr<aura::Window> window(CreateTestWindow(gfx::Rect(1, 2, 3, 4)));
@@ -1311,12 +1385,12 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, BackdropTest) {
   }
 
   // Toggle overview.
-  Shell::Get()->window_selector_controller()->ToggleOverview();
-  RunAllPendingInMessageLoop();
+  Shell::Get()->overview_controller()->ToggleOverview();
+  base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(test_helper.GetBackdropWindow());
 
-  Shell::Get()->window_selector_controller()->ToggleOverview();
-  RunAllPendingInMessageLoop();
+  Shell::Get()->overview_controller()->ToggleOverview();
+  base::RunLoop().RunUntilIdle();
   backdrop = test_helper.GetBackdropWindow();
   EXPECT_TRUE(backdrop);
   {
@@ -1341,11 +1415,11 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, BackdropTest) {
   }
 
   // Toggle overview with the delegate.
-  Shell::Get()->window_selector_controller()->ToggleOverview();
-  RunAllPendingInMessageLoop();
+  Shell::Get()->overview_controller()->ToggleOverview();
+  base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(test_helper.GetBackdropWindow());
-  Shell::Get()->window_selector_controller()->ToggleOverview();
-  RunAllPendingInMessageLoop();
+  Shell::Get()->overview_controller()->ToggleOverview();
+  base::RunLoop().RunUntilIdle();
   backdrop = test_helper.GetBackdropWindow();
   {
     aura::Window::Windows children = window1->parent()->children();
@@ -1462,7 +1536,7 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, SpokenFeedbackFullscreenBackground) {
 
   // Enable spoken feedback.
   controller->SetSpokenFeedbackEnabled(true, A11Y_NOTIFICATION_NONE);
-  EXPECT_TRUE(controller->IsSpokenFeedbackEnabled());
+  EXPECT_TRUE(controller->spoken_feedback_enabled());
 
   generator->MoveMouseTo(300, 300);
   generator->ClickLeftButton();
@@ -1476,7 +1550,7 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, SpokenFeedbackFullscreenBackground) {
 
   // Disable spoken feedback. Shadow underlay is restored.
   controller->SetSpokenFeedbackEnabled(false, A11Y_NOTIFICATION_NONE);
-  EXPECT_FALSE(controller->IsSpokenFeedbackEnabled());
+  EXPECT_FALSE(controller->spoken_feedback_enabled());
 
   generator->MoveMouseTo(300, 300);
   generator->ClickLeftButton();
@@ -1487,82 +1561,6 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, SpokenFeedbackFullscreenBackground) {
   generator->ClickLeftButton();
   controller->FlushMojoForTest();
   EXPECT_EQ(kNoSoundKey, client.GetPlayedEarconAndReset());
-}
-
-TEST_F(WorkspaceLayoutManagerBackdropTest,
-       DualDisplayShowAppListWithBackdropState) {
-  // Create two displays.
-  UpdateDisplay("0+0-200x200,+200+0-100x100");
-  aura::Window::Windows root_windows = Shell::GetAllRootWindows();
-  EXPECT_EQ(root_windows.size(), 2u);
-
-  // Create a window in each display and show them in maximized state.
-  aura::Window* window_1 = CreateTestWindowInParent(root_windows[0]);
-  window_1->SetBounds(gfx::Rect(0, 0, 100, 100));
-  window_1->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
-  window_1->Show();
-  aura::Window* window_2 = CreateTestWindowInParent(root_windows[1]);
-  window_2->SetBounds(gfx::Rect(201, 0, 100, 100));
-  window_2->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
-  window_2->Show();
-
-  RootWindowController* primary_controller =
-      Shell::GetPrimaryRootWindowController();
-  WorkspaceController* primary_wc = primary_controller->workspace_controller();
-  Shell::RootWindowControllerList controllers =
-      Shell::GetAllRootWindowControllers();
-  WorkspaceController* secondary_wc = nullptr;
-  RootWindowController* secondary_controller = nullptr;
-  EXPECT_EQ(controllers.size(), 2u);
-  for (size_t i = 0; i < controllers.size(); ++i) {
-    if (controllers[i] != primary_controller) {
-      secondary_controller = controllers[i];
-      secondary_wc = secondary_controller->workspace_controller();
-    }
-  }
-
-  // Turn on top window backdrop for two displays.
-  WorkspaceControllerTestApi primary_test_helper(primary_wc);
-  WorkspaceControllerTestApi secondary_test_helper(secondary_wc);
-  ShowTopWindowBackdropForContainer(default_container(), true);
-  EXPECT_TRUE(primary_test_helper.GetBackdropWindow());
-  ShowTopWindowBackdropForContainer(
-      secondary_controller->GetContainer(kShellWindowId_DefaultContainer),
-      true);
-  EXPECT_TRUE(secondary_test_helper.GetBackdropWindow());
-
-  // Showing the app list on the primary display should not hide the backdrop on
-  // the secondary display.
-  EXPECT_TRUE(primary_test_helper.GetBackdropWindow());
-  EXPECT_TRUE(secondary_test_helper.GetBackdropWindow());
-  GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplay().id());
-  EXPECT_FALSE(primary_test_helper.GetBackdropWindow());
-  EXPECT_TRUE(secondary_test_helper.GetBackdropWindow());
-}
-
-// Fullscreen app list changes to visible should hide the backdrop, otherwise,
-// should show the backdrop.
-TEST_F(WorkspaceLayoutManagerBackdropTest,
-       BackdropUpdatesOnFullscreenAppListVisibilityNotification) {
-  WorkspaceController* wc = ShellTestApi(Shell::Get()).workspace_controller();
-  WorkspaceControllerTestApi test_helper(wc);
-
-  std::unique_ptr<aura::Window> window(
-      CreateTestWindow(gfx::Rect(0, 0, 100, 100)));
-  EXPECT_FALSE(test_helper.GetBackdropWindow());
-
-  // Turn the top window backdrop on.
-  ShowTopWindowBackdropForContainer(default_container(), true);
-  EXPECT_TRUE(test_helper.GetBackdropWindow());
-
-  ui::ScopedAnimationDurationScaleMode test_duration_mode(
-      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
-  EXPECT_TRUE(test_helper.GetBackdropWindow());
-  // Showing the fullscreen app list should hide the backdrop.
-  GetAppListTestHelper()->Show(GetPrimaryDisplay().id());
-  EXPECT_FALSE(test_helper.GetBackdropWindow());
-  // Dismissing the app list should cause the backdrop to be shown again.
-  GetAppListTestHelper()->Dismiss();
 }
 
 // TODO(crbug.com/803286): The npot texture check failed on asan tests bot.
@@ -1580,8 +1578,8 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, DISABLED_OpenAppListInOverviewMode) {
   EXPECT_TRUE(test_helper.GetBackdropWindow());
 
   // Toggle overview button to enter overview mode.
-  Shell::Get()->window_selector_controller()->ToggleOverview();
-  RunAllPendingInMessageLoop();
+  Shell::Get()->overview_controller()->ToggleOverview();
+  base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(test_helper.GetBackdropWindow());
 
   ui::ScopedAnimationDurationScaleMode test_duration_mode(
@@ -1601,7 +1599,7 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, SpokenFeedbackForArc) {
   controller->SetClient(client.CreateInterfacePtrAndBind());
 
   controller->SetSpokenFeedbackEnabled(true, A11Y_NOTIFICATION_NONE);
-  EXPECT_TRUE(controller->IsSpokenFeedbackEnabled());
+  EXPECT_TRUE(controller->spoken_feedback_enabled());
 
   aura::test::TestWindowDelegate delegate;
   std::unique_ptr<aura::Window> window_arc(CreateTestWindowInShellWithDelegate(
@@ -1810,9 +1808,6 @@ TEST_F(WorkspaceLayoutManagerKeyboardTest,
 
   // Open keyboard in non-sticky mode.
   kb_controller->ShowKeyboard(false);
-  kb_controller->ui()->GetKeyboardWindow()->SetBounds(
-      keyboard::KeyboardBoundsFromRootBounds(
-          Shell::GetPrimaryRootWindow()->bounds(), 100));
 
   // Window should not be shifted up.
   EXPECT_EQ(orig_window_bounds, window->bounds());
@@ -1822,7 +1817,7 @@ TEST_F(WorkspaceLayoutManagerKeyboardTest,
 
   // Open keyboard in sticky mode.
   kb_controller->ShowKeyboard(true);
-  kb_controller->NotifyKeyboardWindowLoaded();
+  ASSERT_TRUE(keyboard::WaitUntilShown());
 
   int shift =
       work_area.height() - kb_controller->GetKeyboardWindow()->bounds().y();
@@ -1908,6 +1903,175 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, BackdropForSplitScreenTest) {
   EXPECT_EQ(window2.get(), default_container()->children()[2]);
   EXPECT_EQ(default_container()->bounds(),
             default_container()->children()[0]->bounds());
+}
+
+namespace {
+
+class TestState : public wm::WindowState::State {
+ public:
+  TestState() = default;
+  ~TestState() override = default;
+
+  // WindowState::State overrides:
+  void OnWMEvent(wm::WindowState* window_state,
+                 const wm::WMEvent* event) override {
+    if (event->type() == wm::WM_EVENT_SYSTEM_UI_AREA_CHANGED)
+      num_system_ui_area_changes_++;
+  }
+  mojom::WindowStateType GetType() const override {
+    return mojom::WindowStateType::NORMAL;
+  }
+  void AttachState(wm::WindowState* window_state,
+                   wm::WindowState::State* previous_state) override {}
+  void DetachState(wm::WindowState* window_state) override {}
+
+  int num_system_ui_area_changes() const { return num_system_ui_area_changes_; }
+
+  void reset_num_system_ui_area_changes() { num_system_ui_area_changes_ = 0; }
+
+ private:
+  int num_system_ui_area_changes_ = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(TestState);
+};
+
+}  // namespace
+
+class WorkspaceLayoutManagerSystemUiAreaTest : public AshTestBase {
+ public:
+  WorkspaceLayoutManagerSystemUiAreaTest() = default;
+  ~WorkspaceLayoutManagerSystemUiAreaTest() override = default;
+
+  // AshTestBase:
+  void SetUp() override {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        keyboard::switches::kEnableVirtualKeyboard);
+    AshTestBase::SetUp();
+    SetTouchKeyboardEnabled(true);
+
+    window_ = CreateTestWindowInShellWithBounds(gfx::Rect(0, 0, 100, 100));
+    wm::WindowState* window_state = wm::GetWindowState(window_);
+    test_state_ = new TestState();
+    window_state->SetStateObject(
+        std::unique_ptr<wm::WindowState::State>(test_state_));
+  }
+
+  void TearDown() override {
+    SetTouchKeyboardEnabled(false);
+    AshTestBase::TearDown();
+  }
+
+ protected:
+  aura::Window* window() { return window_; }
+  TestState* test_state() { return test_state_; }
+
+ private:
+  aura::Window* window_ = nullptr;
+  TestState* test_state_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(WorkspaceLayoutManagerSystemUiAreaTest);
+};
+
+// Expect that showing and hiding the unified system tray triggers a system ui
+// area change event.
+TEST_F(WorkspaceLayoutManagerSystemUiAreaTest,
+       SystemUiAreaChangeOnUnifiedSystemTrayVisibilityChange) {
+  auto* unified_system_tray = GetPrimaryUnifiedSystemTray();
+  EXPECT_FALSE(unified_system_tray->IsBubbleShown());
+  EXPECT_EQ(0, test_state()->num_system_ui_area_changes());
+
+  unified_system_tray->ShowBubble(/*show_by_click=*/false);
+  EXPECT_GE(test_state()->num_system_ui_area_changes(), 1);
+  test_state()->reset_num_system_ui_area_changes();
+
+  unified_system_tray->CloseBubble();
+  EXPECT_GE(test_state()->num_system_ui_area_changes(), 1);
+}
+
+// Expect that showing and hiding the keyboard triggers a system ui area
+// change event.
+TEST_F(WorkspaceLayoutManagerSystemUiAreaTest,
+       SystemUiAreaChangeOnVirtualKeyboardVisibilityChange) {
+  auto* keyboard_controller = keyboard::KeyboardController::Get();
+  EXPECT_EQ(0, test_state()->num_system_ui_area_changes());
+
+  keyboard_controller->ShowKeyboard(/*lock=*/true);
+  ASSERT_TRUE(keyboard::WaitUntilShown());
+  EXPECT_GE(test_state()->num_system_ui_area_changes(), 1);
+  test_state()->reset_num_system_ui_area_changes();
+
+  keyboard_controller->HideKeyboardExplicitlyBySystem();
+  EXPECT_GE(test_state()->num_system_ui_area_changes(), 1);
+}
+
+// Expect that changing the keyboard bounds triggers a system ui area
+// change event.
+TEST_F(WorkspaceLayoutManagerSystemUiAreaTest,
+       SystemUiAreaChangeOnVirtualKeyboardSizeChange) {
+  auto* keyboard_controller = keyboard::KeyboardController::Get();
+  EXPECT_EQ(0, test_state()->num_system_ui_area_changes());
+
+  keyboard_controller->ShowKeyboard(/*lock=*/true);
+  ASSERT_TRUE(keyboard::WaitUntilShown());
+
+  keyboard_controller->SetKeyboardWindowBounds(gfx::Rect(0, 0, 100, 50));
+  EXPECT_GE(test_state()->num_system_ui_area_changes(), 1);
+  test_state()->reset_num_system_ui_area_changes();
+
+  keyboard_controller->SetKeyboardWindowBounds(gfx::Rect(0, 0, 100, 100));
+  EXPECT_GE(test_state()->num_system_ui_area_changes(), 1);
+}
+
+// Expect that changing the keyboard container type triggers a system ui area
+// change event.
+TEST_F(WorkspaceLayoutManagerSystemUiAreaTest,
+       SystemUiAreaChangeOnVirtualKeyboardContainerTypeChange) {
+  auto* keyboard_controller = keyboard::KeyboardController::Get();
+  EXPECT_EQ(0, test_state()->num_system_ui_area_changes());
+
+  keyboard_controller->ShowKeyboard(/*lock=*/true);
+  ASSERT_TRUE(keyboard::WaitUntilShown());
+  EXPECT_GE(test_state()->num_system_ui_area_changes(), 1);
+  test_state()->reset_num_system_ui_area_changes();
+
+  keyboard_controller->SetContainerType(
+      keyboard::mojom::ContainerType::kFloating, base::nullopt,
+      base::DoNothing());
+  EXPECT_GE(test_state()->num_system_ui_area_changes(), 1);
+  test_state()->reset_num_system_ui_area_changes();
+
+  keyboard_controller->SetContainerType(
+      keyboard::mojom::ContainerType::kFullWidth, base::nullopt,
+      base::DoNothing());
+  EXPECT_GE(test_state()->num_system_ui_area_changes(), 1);
+}
+
+
+TEST_F(WorkspaceLayoutManagerBackdropTest,
+       BackdropWindowIsNotReparentedFromAlwaysOnTopContainer) {
+  WorkspaceController* wc = ShellTestApi(Shell::Get()).workspace_controller();
+  WorkspaceControllerTestApi test_helper(wc);
+  RootWindowController* controller = Shell::GetPrimaryRootWindowController();
+  AlwaysOnTopController* always_on_top_controller =
+      controller->always_on_top_controller();
+
+  std::unique_ptr<aura::Window> always_on_top_window(
+      CreateTestWindowInShellWithBounds(gfx::Rect(1, 2, 3, 4)));
+  always_on_top_window->Show();
+  always_on_top_window->SetProperty(aura::client::kAlwaysOnTopKey, true);
+
+  aura::Window* always_on_top_container =
+  always_on_top_controller->GetContainer(always_on_top_window.get());
+  ShowTopWindowBackdropForContainer(always_on_top_container, true);
+  // AlwaysOnTopContainer has |always_on_top_window| and a backdrop window
+  // at this moment.
+  ASSERT_EQ(always_on_top_container->children().size(), 2U);
+
+  always_on_top_window->SetProperty(aura::client::kAlwaysOnTopKey, false);
+  // Make sure the backdrop window stays in AlwaysOnTopContainer even after
+  // |always_on_top_window| moves to the default container.
+  ASSERT_EQ(always_on_top_container->children().size(), 1U);
+  EXPECT_EQ(always_on_top_container->children()[0]->GetName(), "Backdrop");
 }
 
 }  // namespace ash

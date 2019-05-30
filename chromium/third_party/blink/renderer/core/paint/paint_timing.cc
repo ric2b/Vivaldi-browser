@@ -47,7 +47,7 @@ const char PaintTiming::kSupplementName[] = "PaintTiming";
 PaintTiming& PaintTiming::From(Document& document) {
   PaintTiming* timing = Supplement<Document>::From<PaintTiming>(document);
   if (!timing) {
-    timing = new PaintTiming(document);
+    timing = MakeGarbageCollected<PaintTiming>(document);
     ProvideTo(document, timing);
   }
   return *timing;
@@ -72,14 +72,6 @@ void PaintTiming::MarkFirstContentfulPaint() {
   SetFirstContentfulPaint(CurrentTimeTicks());
 }
 
-void PaintTiming::MarkFirstTextPaint() {
-  if (!first_text_paint_.is_null())
-    return;
-  first_text_paint_ = CurrentTimeTicks();
-  SetFirstContentfulPaint(first_text_paint_);
-  RegisterNotifySwapTime(PaintEvent::kFirstTextPaint);
-}
-
 void PaintTiming::MarkFirstImagePaint() {
   if (!first_image_paint_.is_null())
     return;
@@ -98,12 +90,9 @@ void PaintTiming::SetFirstMeaningfulPaintCandidate(TimeTicks timestamp) {
 }
 
 void PaintTiming::SetFirstMeaningfulPaint(
-    TimeTicks stamp,
     TimeTicks swap_stamp,
     FirstMeaningfulPaintDetector::HadUserInput had_input) {
-  DCHECK(first_meaningful_paint_.is_null());
   DCHECK(first_meaningful_paint_swap_.is_null());
-  DCHECK(!stamp.is_null());
   DCHECK(!swap_stamp.is_null());
 
   TRACE_EVENT_MARK_WITH_TIMESTAMP2(
@@ -119,7 +108,6 @@ void PaintTiming::SetFirstMeaningfulPaint(
   // Notify FMP for UMA only if there's no user input before FMP, so that layout
   // changes caused by user interactions wouldn't be considered as FMP.
   if (had_input == FirstMeaningfulPaintDetector::kNoUserInput) {
-    first_meaningful_paint_ = stamp;
     first_meaningful_paint_swap_ = swap_stamp;
     NotifyPaintTimingChanged();
   }
@@ -144,7 +132,7 @@ void PaintTiming::NotifyPaint(bool is_first_paint,
   if (is_first_paint)
     MarkFirstPaint();
   if (text_painted)
-    MarkFirstTextPaint();
+    MarkFirstContentfulPaint();
   if (image_painted)
     MarkFirstImagePaint();
   fmp_detector_->NotifyPaint();
@@ -157,7 +145,7 @@ void PaintTiming::Trace(blink::Visitor* visitor) {
 
 PaintTiming::PaintTiming(Document& document)
     : Supplement<Document>(document),
-      fmp_detector_(new FirstMeaningfulPaintDetector(this)) {}
+      fmp_detector_(MakeGarbageCollected<FirstMeaningfulPaintDetector>(this)) {}
 
 LocalFrame* PaintTiming::GetFrame() const {
   return GetSupplementable()->GetFrame();
@@ -226,9 +214,6 @@ void PaintTiming::ReportSwapTime(PaintEvent event,
     case PaintEvent::kFirstContentfulPaint:
       SetFirstContentfulPaintSwap(timestamp);
       return;
-    case PaintEvent::kFirstTextPaint:
-      SetFirstTextPaintSwap(timestamp);
-      return;
     case PaintEvent::kFirstImagePaint:
       SetFirstImagePaintSwap(timestamp);
       return;
@@ -240,8 +225,8 @@ void PaintTiming::ReportSwapTime(PaintEvent event,
 void PaintTiming::SetFirstPaintSwap(TimeTicks stamp) {
   DCHECK(first_paint_swap_.is_null());
   first_paint_swap_ = stamp;
-  probe::paintTiming(GetSupplementable(), "firstPaint",
-                     TimeTicksInSeconds(first_paint_swap_));
+  probe::PaintTiming(GetSupplementable(), "firstPaint",
+                     first_paint_swap_.since_origin().InSecondsF());
   WindowPerformance* performance = GetPerformanceInstance(GetFrame());
   if (performance)
     performance->AddFirstPaintTiming(first_paint_swap_);
@@ -251,8 +236,8 @@ void PaintTiming::SetFirstPaintSwap(TimeTicks stamp) {
 void PaintTiming::SetFirstContentfulPaintSwap(TimeTicks stamp) {
   DCHECK(first_contentful_paint_swap_.is_null());
   first_contentful_paint_swap_ = stamp;
-  probe::paintTiming(GetSupplementable(), "firstContentfulPaint",
-                     TimeTicksInSeconds(first_contentful_paint_swap_));
+  probe::PaintTiming(GetSupplementable(), "firstContentfulPaint",
+                     first_contentful_paint_swap_.since_origin().InSecondsF());
   WindowPerformance* performance = GetPerformanceInstance(GetFrame());
   if (performance)
     performance->AddFirstContentfulPaintTiming(first_contentful_paint_swap_);
@@ -262,19 +247,11 @@ void PaintTiming::SetFirstContentfulPaintSwap(TimeTicks stamp) {
   fmp_detector_->NotifyFirstContentfulPaint(first_contentful_paint_swap_);
 }
 
-void PaintTiming::SetFirstTextPaintSwap(TimeTicks stamp) {
-  DCHECK(first_text_paint_swap_.is_null());
-  first_text_paint_swap_ = stamp;
-  probe::paintTiming(GetSupplementable(), "firstTextPaint",
-                     TimeTicksInSeconds(first_text_paint_swap_));
-  NotifyPaintTimingChanged();
-}
-
 void PaintTiming::SetFirstImagePaintSwap(TimeTicks stamp) {
   DCHECK(first_image_paint_swap_.is_null());
   first_image_paint_swap_ = stamp;
-  probe::paintTiming(GetSupplementable(), "firstImagePaint",
-                     TimeTicksInSeconds(first_image_paint_swap_));
+  probe::PaintTiming(GetSupplementable(), "firstImagePaint",
+                     first_image_paint_swap_.since_origin().InSecondsF());
   NotifyPaintTimingChanged();
 }
 

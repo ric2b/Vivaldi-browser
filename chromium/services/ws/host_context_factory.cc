@@ -46,7 +46,7 @@ void HostContextFactory::OnEstablishedGpuChannel(
     return;
   }
   context_factory_private_->ConfigureCompositor(
-      compositor, std::move(context_provider), nullptr);
+      compositor.get(), std::move(context_provider), nullptr);
 }
 
 void HostContextFactory::CreateLayerTreeFrameSink(
@@ -72,10 +72,6 @@ HostContextFactory::SharedMainThreadContextProvider() {
 
 void HostContextFactory::RemoveCompositor(ui::Compositor* compositor) {
   context_factory_private_->UnconfigureCompositor(compositor);
-}
-
-double HostContextFactory::GetRefreshRate() const {
-  return 60.0;
 }
 
 gpu::GpuMemoryBufferManager* HostContextFactory::GetGpuMemoryBufferManager() {

@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <tuple>
 #include <utility>
 
 #include "base/macros.h"
@@ -29,7 +30,7 @@
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/frame_visual_properties.h"
-#include "content/common/view_messages.h"
+#include "content/common/widget_messages.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
@@ -39,6 +40,7 @@
 #include "content/test/mock_widget_impl.h"
 #include "content/test/test_render_view_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/frame/occlusion_state.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/compositor/compositor.h"
 
@@ -71,13 +73,25 @@ class MockFrameConnectorDelegate : public FrameConnectorDelegate {
     return nullptr;
   }
 
-  void BubbleScrollEvent(const blink::WebGestureEvent& event) override {
-    if (event.GetType() == blink::WebInputEvent::kGestureScrollUpdate)
-      seen_bubbled_gsu_ = true;
+  bool BubbleScrollEvent(const blink::WebGestureEvent& event) override {
+    last_bubbled_event_type_ = event.GetType();
+    return can_bubble_;
   }
 
+  blink::WebInputEvent::Type GetAndResetLastBubbledEventType() {
+    blink::WebInputEvent::Type last = last_bubbled_event_type_;
+    last_bubbled_event_type_ = blink::WebInputEvent::kUndefined;
+    return last;
+  }
+
+  void SetCanBubble(bool can_bubble) { can_bubble_ = can_bubble; }
+
   viz::SurfaceInfo last_surface_info_;
-  bool seen_bubbled_gsu_ = false;
+
+ private:
+  blink::WebInputEvent::Type last_bubbled_event_type_ =
+      blink::WebInputEvent::kUndefined;
+  bool can_bubble_ = true;
 };
 
 class RenderWidgetHostViewChildFrameTest : public testing::Test {
@@ -198,6 +212,9 @@ TEST_F(RenderWidgetHostViewChildFrameTest, VisibilityTest) {
 // Verify that RenderWidgetHostViewChildFrame passes the child's SurfaceId to
 // FrameConnectorDelegate to be sent to the embedding renderer.
 TEST_F(RenderWidgetHostViewChildFrameTest, PassesSurfaceId) {
+  if (features::IsSurfaceSynchronizationEnabled())
+    return;
+
   gfx::Size view_size(100, 100);
   gfx::Rect view_rect(view_size);
   float scale_factor = 1.f;
@@ -205,8 +222,9 @@ TEST_F(RenderWidgetHostViewChildFrameTest, PassesSurfaceId) {
   view_->SetSize(view_size);
   view_->Show();
 
-  viz::SurfaceId surface_id(view_->GetFrameSinkId(),
-                            view_->GetLocalSurfaceId());
+  viz::SurfaceId surface_id(
+      view_->GetFrameSinkId(),
+      view_->GetLocalSurfaceIdAllocation().local_surface_id());
   viz::SurfaceInfo surface_info(surface_id, scale_factor, view_size);
   view_->OnFirstSurfaceActivation(surface_info);
 
@@ -228,11 +246,11 @@ TEST_F(RenderWidgetHostViewChildFrameTest, ViewportIntersectionUpdated) {
 
   const IPC::Message* intersection_update =
       process->sink().GetUniqueMessageMatching(
-          ViewMsg_SetViewportIntersection::ID);
+          WidgetMsg_SetViewportIntersection::ID);
   ASSERT_TRUE(intersection_update);
-  std::tuple<gfx::Rect, gfx::Rect, bool> sent_rects;
+  std::tuple<gfx::Rect, gfx::Rect, blink::FrameOcclusionState> sent_rects;
 
-  ViewMsg_SetViewportIntersection::Read(intersection_update, &sent_rects);
+  WidgetMsg_SetViewportIntersection::Read(intersection_update, &sent_rects);
   EXPECT_EQ(intersection_rect, std::get<0>(sent_rects));
   EXPECT_EQ(intersection_rect, std::get<1>(sent_rects));
 }
@@ -270,9 +288,10 @@ TEST_F(RenderWidgetHostViewChildFrameZoomForDSFTest,
             test_frame_connector_->screen_space_rect_in_pixels().origin());
 }
 
-// Tests that WasResized is called only once and all the parameters change
-// atomically.
-TEST_F(RenderWidgetHostViewChildFrameTest, WasResizedOncePerChange) {
+// Tests that SynchronizeVisualProperties is called only once and all the
+// parameters change atomically.
+TEST_F(RenderWidgetHostViewChildFrameTest,
+       SynchronizeVisualPropertiesOncePerChange) {
   MockRenderProcessHost* process =
       static_cast<MockRenderProcessHost*>(widget_host_->GetProcess());
   process->Init();
@@ -282,9 +301,10 @@ TEST_F(RenderWidgetHostViewChildFrameTest, WasResizedOncePerChange) {
   constexpr gfx::Size compositor_viewport_pixel_size(100, 100);
   constexpr gfx::Rect screen_space_rect(compositor_viewport_pixel_size);
   viz::ParentLocalSurfaceIdAllocator allocator;
-  viz::LocalSurfaceId local_surface_id = allocator.GetCurrentLocalSurfaceId();
+  allocator.GenerateId();
+  viz::LocalSurfaceIdAllocation local_surface_id_allocation =
+      allocator.GetCurrentLocalSurfaceIdAllocation();
   constexpr viz::FrameSinkId frame_sink_id(1, 1);
-  const viz::SurfaceId surface_id(frame_sink_id, local_surface_id);
 
   process->sink().ClearMessages();
 
@@ -292,21 +312,128 @@ TEST_F(RenderWidgetHostViewChildFrameTest, WasResizedOncePerChange) {
   visual_properties.screen_space_rect = screen_space_rect;
   visual_properties.local_frame_size = compositor_viewport_pixel_size;
   visual_properties.capture_sequence_number = 123u;
-  test_frame_connector_->SynchronizeVisualProperties(surface_id,
+  visual_properties.local_surface_id_allocation = local_surface_id_allocation;
+  test_frame_connector_->SynchronizeVisualProperties(frame_sink_id,
                                                      visual_properties);
 
   ASSERT_EQ(1u, process->sink().message_count());
 
   const IPC::Message* resize_msg = process->sink().GetUniqueMessageMatching(
-      ViewMsg_SynchronizeVisualProperties::ID);
+      WidgetMsg_SynchronizeVisualProperties::ID);
   ASSERT_NE(nullptr, resize_msg);
-  ViewMsg_SynchronizeVisualProperties::Param params;
-  ViewMsg_SynchronizeVisualProperties::Read(resize_msg, &params);
+  WidgetMsg_SynchronizeVisualProperties::Param params;
+  WidgetMsg_SynchronizeVisualProperties::Read(resize_msg, &params);
   EXPECT_EQ(compositor_viewport_pixel_size,
             std::get<0>(params).compositor_viewport_pixel_size);
   EXPECT_EQ(screen_space_rect.size(), std::get<0>(params).new_size);
-  EXPECT_EQ(local_surface_id, std::get<0>(params).local_surface_id);
+  EXPECT_EQ(local_surface_id_allocation,
+            std::get<0>(params).local_surface_id_allocation);
   EXPECT_EQ(123u, std::get<0>(params).capture_sequence_number);
+}
+
+// Test that when we have a gesture scroll sequence that is not consumed by the
+// child, the events are bubbled so that the parent may consume them.
+TEST_F(RenderWidgetHostViewChildFrameTest, UncomsumedGestureScrollBubbled) {
+  blink::WebGestureEvent scroll_begin =
+      SyntheticWebGestureEventBuilder::BuildScrollBegin(
+          0.f, 10.f, blink::kWebGestureDeviceTouchscreen);
+  blink::WebGestureEvent scroll_update =
+      SyntheticWebGestureEventBuilder::BuildScrollUpdate(
+          0.f, 10.f, 0, blink::kWebGestureDeviceTouchscreen);
+  blink::WebGestureEvent scroll_end = SyntheticWebGestureEventBuilder::Build(
+      blink::WebInputEvent::kGestureScrollEnd,
+      blink::kWebGestureDeviceTouchscreen);
+
+  view_->GestureEventAck(scroll_begin,
+                         INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
+  EXPECT_EQ(blink::WebInputEvent::kGestureScrollBegin,
+            test_frame_connector_->GetAndResetLastBubbledEventType());
+  view_->GestureEventAck(scroll_update,
+                         INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
+  EXPECT_EQ(blink::WebInputEvent::kGestureScrollUpdate,
+            test_frame_connector_->GetAndResetLastBubbledEventType());
+  view_->GestureEventAck(scroll_end, INPUT_EVENT_ACK_STATE_IGNORED);
+  EXPECT_EQ(blink::WebInputEvent::kGestureScrollEnd,
+            test_frame_connector_->GetAndResetLastBubbledEventType());
+}
+
+// Test that when we have a gesture scroll sequence that is consumed by the
+// child, the events are not bubbled to the parent.
+TEST_F(RenderWidgetHostViewChildFrameTest, ConsumedGestureScrollNotBubbled) {
+  blink::WebGestureEvent scroll_begin =
+      SyntheticWebGestureEventBuilder::BuildScrollBegin(
+          0.f, 10.f, blink::kWebGestureDeviceTouchscreen);
+  blink::WebGestureEvent scroll_update =
+      SyntheticWebGestureEventBuilder::BuildScrollUpdate(
+          0.f, 10.f, 0, blink::kWebGestureDeviceTouchscreen);
+  blink::WebGestureEvent scroll_end = SyntheticWebGestureEventBuilder::Build(
+      blink::WebInputEvent::kGestureScrollEnd,
+      blink::kWebGestureDeviceTouchscreen);
+
+  view_->GestureEventAck(scroll_begin, INPUT_EVENT_ACK_STATE_CONSUMED);
+  EXPECT_EQ(blink::WebInputEvent::kUndefined,
+            test_frame_connector_->GetAndResetLastBubbledEventType());
+  view_->GestureEventAck(scroll_update, INPUT_EVENT_ACK_STATE_CONSUMED);
+  EXPECT_EQ(blink::WebInputEvent::kUndefined,
+            test_frame_connector_->GetAndResetLastBubbledEventType());
+
+  // Scrolling in a child my reach its extent and no longer be consumed, however
+  // scrolling is latched to the child so we do not bubble the update.
+  view_->GestureEventAck(scroll_update,
+                         INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
+  EXPECT_EQ(blink::WebInputEvent::kUndefined,
+            test_frame_connector_->GetAndResetLastBubbledEventType());
+
+  view_->GestureEventAck(scroll_end, INPUT_EVENT_ACK_STATE_IGNORED);
+  EXPECT_EQ(blink::WebInputEvent::kUndefined,
+            test_frame_connector_->GetAndResetLastBubbledEventType());
+}
+
+// Test that the child does not continue to attempt to bubble scroll events if
+// bubbling has failed for the current scroll gesture.
+TEST_F(RenderWidgetHostViewChildFrameTest,
+       DoNotBubbleRemainingEventsOfRejectedScrollGesture) {
+  blink::WebGestureEvent scroll_begin =
+      SyntheticWebGestureEventBuilder::BuildScrollBegin(
+          0.f, 10.f, blink::kWebGestureDeviceTouchscreen);
+  blink::WebGestureEvent scroll_update =
+      SyntheticWebGestureEventBuilder::BuildScrollUpdate(
+          0.f, 10.f, 0, blink::kWebGestureDeviceTouchscreen);
+  blink::WebGestureEvent scroll_end = SyntheticWebGestureEventBuilder::Build(
+      blink::WebInputEvent::kGestureScrollEnd,
+      blink::kWebGestureDeviceTouchscreen);
+
+  test_frame_connector_->SetCanBubble(false);
+
+  view_->GestureEventAck(scroll_begin,
+                         INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
+  EXPECT_EQ(blink::WebInputEvent::kGestureScrollBegin,
+            test_frame_connector_->GetAndResetLastBubbledEventType());
+
+  // The GSB was rejected, so the child view must not attempt to bubble the
+  // remaining events of the scroll sequence.
+  view_->GestureEventAck(scroll_update,
+                         INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
+  EXPECT_EQ(blink::WebInputEvent::kUndefined,
+            test_frame_connector_->GetAndResetLastBubbledEventType());
+  view_->GestureEventAck(scroll_end, INPUT_EVENT_ACK_STATE_IGNORED);
+  EXPECT_EQ(blink::WebInputEvent::kUndefined,
+            test_frame_connector_->GetAndResetLastBubbledEventType());
+
+  test_frame_connector_->SetCanBubble(true);
+
+  // When we have a new scroll gesture, the view may try bubbling again.
+  view_->GestureEventAck(scroll_begin,
+                         INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
+  EXPECT_EQ(blink::WebInputEvent::kGestureScrollBegin,
+            test_frame_connector_->GetAndResetLastBubbledEventType());
+  view_->GestureEventAck(scroll_update,
+                         INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
+  EXPECT_EQ(blink::WebInputEvent::kGestureScrollUpdate,
+            test_frame_connector_->GetAndResetLastBubbledEventType());
+  view_->GestureEventAck(scroll_end, INPUT_EVENT_ACK_STATE_IGNORED);
+  EXPECT_EQ(blink::WebInputEvent::kGestureScrollEnd,
+            test_frame_connector_->GetAndResetLastBubbledEventType());
 }
 
 }  // namespace content

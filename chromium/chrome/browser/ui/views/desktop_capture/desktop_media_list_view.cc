@@ -8,8 +8,10 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/media/webrtc/desktop_media_list.h"
 #include "chrome/browser/media/webrtc/window_icon_util.h"
 #include "chrome/browser/ui/views/desktop_capture/desktop_media_picker_views.h"
@@ -17,6 +19,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/theme_resources.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/grit/extensions_browser_resources.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -179,7 +182,7 @@ void DesktopMediaListView::OnSourceAdded(DesktopMediaList* list, int index) {
     // Empty icons are used to represent default icon for aura windows. By
     // detecting this, we load the default icon from resource.
     if (icon_image.isNull()) {
-      aura::Window* window = DesktopMediaID::GetAuraWindowById(source.id);
+      aura::Window* window = DesktopMediaID::GetNativeWindowById(source.id);
       if (window)
         icon_image = LoadDefaultIcon(window);
     }
@@ -191,8 +194,9 @@ void DesktopMediaListView::OnSourceAdded(DesktopMediaList* list, int index) {
   if ((child_count() - 1) % active_style_->columns == 0)
     parent_->OnMediaListRowsChanged();
 
-  // Auto select the first screen.
-  if (index == 0 && source.id.type == DesktopMediaID::TYPE_SCREEN)
+  // Auto select the first screen for extension desktopCapture API only.
+  if (index == 0 && source.id.type == DesktopMediaID::TYPE_SCREEN &&
+      parent_->IsCreatedByExtension())
     source_view->RequestFocus();
 
   PreferredSizeChanged();
@@ -205,8 +209,8 @@ void DesktopMediaListView::OnSourceAdded(DesktopMediaList* list, int index) {
     // Select, then accept and close the dialog when we're done adding sources.
     parent_->SelectTab(source.id.type);
     source_view->OnFocus();
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::UI},
         base::BindOnce(&DesktopMediaListView::AcceptSelection,
                        weak_factory_.GetWeakPtr()));
   }

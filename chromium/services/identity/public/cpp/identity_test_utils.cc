@@ -4,109 +4,67 @@
 
 #include "services/identity/public/cpp/identity_test_utils.h"
 
+#include <utility>
+#include <vector>
+
 #include "base/run_loop.h"
 #include "base/strings/string_split.h"
 #include "components/signin/core/browser/account_tracker_service.h"
-#include "components/signin/core/browser/fake_signin_manager.h"
+#include "components/signin/core/browser/list_accounts_test_utils.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
+#include "google_apis/gaia/gaia_auth_util.h"
 #include "services/identity/public/cpp/identity_manager.h"
+#include "services/identity/public/cpp/test_identity_manager_observer.h"
+
+#if defined(OS_ANDROID)
+#include "components/signin/core/browser/oauth2_token_service_delegate_android.h"
+#endif
 
 namespace identity {
 
 namespace {
 
-enum class IdentityManagerEvent {
-  PRIMARY_ACCOUNT_SET,
-  PRIMARY_ACCOUNT_CLEARED,
-  REFRESH_TOKEN_UPDATED,
-  REFRESH_TOKEN_REMOVED
-};
+void WaitForLoadCredentialsToComplete(IdentityManager* identity_manager) {
+  base::RunLoop run_loop;
+  TestIdentityManagerObserver load_credentials_observer(identity_manager);
+  load_credentials_observer.SetOnRefreshTokensLoadedCallback(
+      run_loop.QuitClosure());
 
-class OneShotIdentityManagerObserver : public IdentityManager::Observer {
- public:
-  OneShotIdentityManagerObserver(IdentityManager* identity_manager,
-                                 base::OnceClosure done_closure,
-                                 IdentityManagerEvent event_to_wait_on);
-  ~OneShotIdentityManagerObserver() override;
-
- private:
-  // IdentityManager::Observer:
-  void OnPrimaryAccountSet(const AccountInfo& primary_account_info) override;
-  void OnPrimaryAccountCleared(
-      const AccountInfo& previous_primary_account_info) override;
-  void OnRefreshTokenUpdatedForAccount(const AccountInfo& account_info,
-                                       bool is_valid) override;
-  void OnRefreshTokenRemovedForAccount(
-      const AccountInfo& account_info) override;
-
-  IdentityManager* identity_manager_;
-  base::OnceClosure done_closure_;
-  IdentityManagerEvent event_to_wait_on_;
-
-  DISALLOW_COPY_AND_ASSIGN(OneShotIdentityManagerObserver);
-};
-
-OneShotIdentityManagerObserver::OneShotIdentityManagerObserver(
-    IdentityManager* identity_manager,
-    base::OnceClosure done_closure,
-    IdentityManagerEvent event_to_wait_on)
-    : identity_manager_(identity_manager),
-      done_closure_(std::move(done_closure)),
-      event_to_wait_on_(event_to_wait_on) {
-  identity_manager_->AddObserver(this);
-}
-
-OneShotIdentityManagerObserver::~OneShotIdentityManagerObserver() {
-  identity_manager_->RemoveObserver(this);
-}
-
-void OneShotIdentityManagerObserver::OnPrimaryAccountSet(
-    const AccountInfo& primary_account_info) {
-  if (event_to_wait_on_ != IdentityManagerEvent::PRIMARY_ACCOUNT_SET)
+  if (identity_manager->AreRefreshTokensLoaded())
     return;
 
-  DCHECK(done_closure_);
-  std::move(done_closure_).Run();
-}
+  // Do NOT explicitly load credentials here:
+  // 1. It is not re-entrant and will DCHECK fail.
+  // 2. It should have been called by IdentityManager during its initialization.
 
-void OneShotIdentityManagerObserver::OnPrimaryAccountCleared(
-    const AccountInfo& previous_primary_account_info) {
-  if (event_to_wait_on_ != IdentityManagerEvent::PRIMARY_ACCOUNT_CLEARED)
-    return;
-
-  DCHECK(done_closure_);
-  std::move(done_closure_).Run();
-}
-
-void OneShotIdentityManagerObserver::OnRefreshTokenUpdatedForAccount(
-    const AccountInfo& account_info,
-    bool is_valid) {
-  if (event_to_wait_on_ != IdentityManagerEvent::REFRESH_TOKEN_UPDATED)
-    return;
-
-  DCHECK(done_closure_);
-  std::move(done_closure_).Run();
-}
-
-void OneShotIdentityManagerObserver::OnRefreshTokenRemovedForAccount(
-    const AccountInfo& account_info) {
-  if (event_to_wait_on_ != IdentityManagerEvent::REFRESH_TOKEN_REMOVED)
-    return;
-
-  DCHECK(done_closure_);
-  std::move(done_closure_).Run();
+  run_loop.Run();
 }
 
 // Helper function that updates the refresh token for |account_id| to
-// |new_token|. Blocks until the update is processed by |identity_manager|.
-void UpdateRefreshTokenForAccount(ProfileOAuth2TokenService* token_service,
-                                  IdentityManager* identity_manager,
-                                  const std::string& account_id,
-                                  const std::string& new_token) {
+// |new_token|. Before updating the refresh token, blocks until refresh tokens
+// are loaded. After updating the token, blocks until the update is processed by
+// |identity_manager|.
+void UpdateRefreshTokenForAccount(
+    ProfileOAuth2TokenService* token_service,
+    AccountTrackerService* account_tracker_service,
+    IdentityManager* identity_manager,
+    const std::string& account_id,
+    const std::string& new_token) {
+  DCHECK_EQ(account_tracker_service->GetAccountInfo(account_id).account_id,
+            account_id)
+      << "To set the refresh token for an unknown account, use "
+         "MakeAccountAvailable()";
+
+  // Ensure that refresh tokens are loaded; some platforms enforce the invariant
+  // that refresh token mutation cannot occur until refresh tokens are loaded,
+  // and it is desired to eventually enforce that invariant across all
+  // platforms.
+  WaitForLoadCredentialsToComplete(identity_manager);
+
   base::RunLoop run_loop;
-  OneShotIdentityManagerObserver token_updated_observer(
-      identity_manager, run_loop.QuitClosure(),
-      IdentityManagerEvent::REFRESH_TOKEN_UPDATED);
+  TestIdentityManagerObserver token_updated_observer(identity_manager);
+  token_updated_observer.SetOnRefreshTokenUpdatedCallback(
+      run_loop.QuitClosure());
 
   token_service->UpdateCredentials(account_id, new_token);
 
@@ -115,12 +73,24 @@ void UpdateRefreshTokenForAccount(ProfileOAuth2TokenService* token_service,
 
 }  // namespace
 
-AccountInfo SetPrimaryAccount(SigninManagerBase* signin_manager,
-                              IdentityManager* identity_manager,
-                              const std::string& email) {
-  DCHECK(!signin_manager->IsAuthenticated());
+CoreAccountInfo SetPrimaryAccount(IdentityManager* identity_manager,
+                                  const std::string& email) {
   DCHECK(!identity_manager->HasPrimaryAccount());
-  std::string gaia_id = "gaia_id_for_" + email;
+  SigninManagerBase* signin_manager = identity_manager->GetSigninManager();
+  DCHECK(!signin_manager->IsAuthenticated());
+
+  AccountTrackerService* account_tracker_service =
+      identity_manager->GetAccountTrackerService();
+  AccountInfo account_info =
+      account_tracker_service->FindAccountInfoByEmail(email);
+  if (account_info.account_id.empty()) {
+    std::string gaia_id = GetTestGaiaIdForEmail(email);
+    account_tracker_service->SeedAccountInfo(gaia_id, email);
+    account_info = account_tracker_service->FindAccountInfoByEmail(email);
+  }
+
+  std::string gaia_id = account_info.gaia;
+  DCHECK(!gaia_id.empty());
 
 #if defined(OS_CHROMEOS)
   // ChromeOS has no real notion of signin, so just plumb the information
@@ -129,26 +99,9 @@ AccountInfo SetPrimaryAccount(SigninManagerBase* signin_manager,
   identity_manager->SetPrimaryAccountSynchronously(gaia_id, email,
                                                    /*refresh_token=*/"");
 #else
-
-  base::RunLoop run_loop;
-  OneShotIdentityManagerObserver signin_observer(
-      identity_manager, run_loop.QuitClosure(),
-      IdentityManagerEvent::PRIMARY_ACCOUNT_SET);
-
   SigninManager* real_signin_manager =
       SigninManager::FromSigninManagerBase(signin_manager);
-  // Note: It's important to pass base::DoNothing() (rather than a null
-  // callback) to make this work with both SigninManager and FakeSigninManager.
-  // If we would pass a null callback, then SigninManager would call
-  // CompletePendingSignin directly, but FakeSigninManager never does that.
-  // Note: pass an empty string as the refresh token so that no refresh token is
-  // set.
-  real_signin_manager->StartSignInWithRefreshToken(
-      /*refresh_token=*/"", gaia_id, email, /*password=*/"",
-      /*oauth_fetched_callback=*/base::DoNothing());
-  real_signin_manager->CompletePendingSignin();
-
-  run_loop.Run();
+  real_signin_manager->OnExternalSigninCompleted(email);
 #endif
 
   DCHECK(signin_manager->IsAuthenticated());
@@ -156,48 +109,44 @@ AccountInfo SetPrimaryAccount(SigninManagerBase* signin_manager,
   return identity_manager->GetPrimaryAccountInfo();
 }
 
-void SetRefreshTokenForPrimaryAccount(ProfileOAuth2TokenService* token_service,
-                                      IdentityManager* identity_manager) {
+void SetRefreshTokenForPrimaryAccount(IdentityManager* identity_manager,
+                                      const std::string& token_value) {
   DCHECK(identity_manager->HasPrimaryAccount());
-  std::string account_id = identity_manager->GetPrimaryAccountInfo().account_id;
-
-  std::string refresh_token = "refresh_token_for_" + account_id;
-  SetRefreshTokenForAccount(token_service, identity_manager, account_id);
+  std::string account_id = identity_manager->GetPrimaryAccountId();
+  SetRefreshTokenForAccount(identity_manager, account_id, token_value);
 }
 
 void SetInvalidRefreshTokenForPrimaryAccount(
-    ProfileOAuth2TokenService* token_service,
     IdentityManager* identity_manager) {
   DCHECK(identity_manager->HasPrimaryAccount());
-  std::string account_id = identity_manager->GetPrimaryAccountInfo().account_id;
+  std::string account_id = identity_manager->GetPrimaryAccountId();
 
-  SetInvalidRefreshTokenForAccount(token_service, identity_manager, account_id);
+  SetInvalidRefreshTokenForAccount(identity_manager, account_id);
 }
 
-void RemoveRefreshTokenForPrimaryAccount(
-    ProfileOAuth2TokenService* token_service,
-    IdentityManager* identity_manager) {
+void RemoveRefreshTokenForPrimaryAccount(IdentityManager* identity_manager) {
   if (!identity_manager->HasPrimaryAccount())
     return;
 
-  std::string account_id = identity_manager->GetPrimaryAccountInfo().account_id;
+  std::string account_id = identity_manager->GetPrimaryAccountId();
 
-  RemoveRefreshTokenForAccount(token_service, identity_manager, account_id);
+  RemoveRefreshTokenForAccount(identity_manager, account_id);
 }
 
-AccountInfo MakePrimaryAccountAvailable(
-    SigninManagerBase* signin_manager,
-    ProfileOAuth2TokenService* token_service,
-    IdentityManager* identity_manager,
-    const std::string& email) {
-  AccountInfo account_info =
-      SetPrimaryAccount(signin_manager, identity_manager, email);
-  SetRefreshTokenForPrimaryAccount(token_service, identity_manager);
-  return account_info;
+AccountInfo MakePrimaryAccountAvailable(IdentityManager* identity_manager,
+                                        const std::string& email) {
+  CoreAccountInfo account_info = SetPrimaryAccount(identity_manager, email);
+  SetRefreshTokenForPrimaryAccount(identity_manager);
+  base::Optional<AccountInfo> primary_account_info =
+      identity_manager->FindAccountInfoForAccountWithRefreshTokenByAccountId(
+          account_info.account_id);
+  // Ensure that extended information for the account is available after setting
+  // the refresh token.
+  DCHECK(primary_account_info.has_value());
+  return primary_account_info.value();
 }
 
-void ClearPrimaryAccount(SigninManagerBase* signin_manager,
-                         IdentityManager* identity_manager,
+void ClearPrimaryAccount(IdentityManager* identity_manager,
                          ClearPrimaryAccountPolicy policy) {
 #if defined(OS_CHROMEOS)
   // TODO(blundell): If we ever need this functionality on ChromeOS (which seems
@@ -209,12 +158,11 @@ void ClearPrimaryAccount(SigninManagerBase* signin_manager,
     return;
 
   base::RunLoop run_loop;
-  OneShotIdentityManagerObserver signout_observer(
-      identity_manager, run_loop.QuitClosure(),
-      IdentityManagerEvent::PRIMARY_ACCOUNT_CLEARED);
+  TestIdentityManagerObserver signout_observer(identity_manager);
+  signout_observer.SetOnPrimaryAccountClearedCallback(run_loop.QuitClosure());
 
-  SigninManager* real_signin_manager =
-      SigninManager::FromSigninManagerBase(signin_manager);
+  SigninManager* real_signin_manager = SigninManager::FromSigninManagerBase(
+      identity_manager->GetSigninManager());
   signin_metrics::ProfileSignout signout_source_metric =
       signin_metrics::SIGNOUT_TEST;
   signin_metrics::SignoutDelete signout_delete_metric =
@@ -239,55 +187,143 @@ void ClearPrimaryAccount(SigninManagerBase* signin_manager,
 #endif
 }
 
-AccountInfo MakeAccountAvailable(AccountTrackerService* account_tracker_service,
-                                 ProfileOAuth2TokenService* token_service,
-                                 IdentityManager* identity_manager,
+AccountInfo MakeAccountAvailable(IdentityManager* identity_manager,
                                  const std::string& email) {
+  AccountTrackerService* account_tracker_service =
+      identity_manager->GetAccountTrackerService();
+
+  DCHECK(account_tracker_service);
   DCHECK(account_tracker_service->FindAccountInfoByEmail(email).IsEmpty());
 
-  std::string gaia_id = "gaia_id_for_" + email;
+  // Wait until tokens are loaded, otherwise the account will be removed as soon
+  // as tokens finish loading.
+  WaitForLoadCredentialsToComplete(identity_manager);
+
+  std::string gaia_id = GetTestGaiaIdForEmail(email);
   account_tracker_service->SeedAccountInfo(gaia_id, email);
 
   AccountInfo account_info =
       account_tracker_service->FindAccountInfoByEmail(email);
   DCHECK(!account_info.account_id.empty());
 
-  SetRefreshTokenForAccount(token_service, identity_manager,
-                            account_info.account_id);
+  SetRefreshTokenForAccount(identity_manager, account_info.account_id);
 
   return account_info;
 }
 
-void SetRefreshTokenForAccount(ProfileOAuth2TokenService* token_service,
-                               IdentityManager* identity_manager,
-                               const std::string& account_id) {
-  std::string refresh_token = "refresh_token_for_" + account_id;
-  UpdateRefreshTokenForAccount(token_service, identity_manager, account_id,
-                               refresh_token);
+void SetRefreshTokenForAccount(IdentityManager* identity_manager,
+                               const std::string& account_id,
+                               const std::string& token_value) {
+  UpdateRefreshTokenForAccount(
+      identity_manager->GetTokenService(),
+      identity_manager->GetAccountTrackerService(), identity_manager,
+      account_id,
+      token_value.empty() ? "refresh_token_for_" + account_id : token_value);
 }
 
-void SetInvalidRefreshTokenForAccount(ProfileOAuth2TokenService* token_service,
-                                      IdentityManager* identity_manager,
+void SetInvalidRefreshTokenForAccount(IdentityManager* identity_manager,
                                       const std::string& account_id) {
   UpdateRefreshTokenForAccount(
-      token_service, identity_manager, account_id,
-      OAuth2TokenServiceDelegate::kInvalidRefreshToken);
+      identity_manager->GetTokenService(),
+
+      identity_manager->GetAccountTrackerService(), identity_manager,
+      account_id, OAuth2TokenServiceDelegate::kInvalidRefreshToken);
 }
 
-void RemoveRefreshTokenForAccount(ProfileOAuth2TokenService* token_service,
-                                  IdentityManager* identity_manager,
+void RemoveRefreshTokenForAccount(IdentityManager* identity_manager,
                                   const std::string& account_id) {
   if (!identity_manager->HasAccountWithRefreshToken(account_id))
     return;
 
   base::RunLoop run_loop;
-  OneShotIdentityManagerObserver token_updated_observer(
-      identity_manager, run_loop.QuitClosure(),
-      IdentityManagerEvent::REFRESH_TOKEN_REMOVED);
+  TestIdentityManagerObserver token_updated_observer(identity_manager);
+  token_updated_observer.SetOnRefreshTokenRemovedCallback(
+      run_loop.QuitClosure());
 
-  token_service->RevokeCredentials(account_id);
+  identity_manager->GetTokenService()->RevokeCredentials(account_id);
 
   run_loop.Run();
+}
+
+void SetCookieAccounts(IdentityManager* identity_manager,
+                       network::TestURLLoaderFactory* test_url_loader_factory,
+                       const std::vector<CookieParams>& cookie_accounts) {
+  // Convert |cookie_accounts| to the format list_accounts_test_utils wants.
+  std::vector<signin::CookieParams> gaia_cookie_accounts;
+  for (const CookieParams& params : cookie_accounts) {
+    gaia_cookie_accounts.push_back({params.email, params.gaia_id,
+                                    /*valid=*/true, /*signed_out=*/false,
+                                    /*verified=*/true});
+  }
+
+  base::RunLoop run_loop;
+  TestIdentityManagerObserver cookie_observer(identity_manager);
+  cookie_observer.SetOnAccountsInCookieUpdatedCallback(run_loop.QuitClosure());
+
+  signin::SetListAccountsResponseWithParams(gaia_cookie_accounts,
+                                            test_url_loader_factory);
+
+  GaiaCookieManagerService* cookie_manager =
+      identity_manager->GetGaiaCookieManagerService();
+  cookie_manager->set_list_accounts_stale_for_testing(true);
+  cookie_manager->ListAccounts(nullptr, nullptr);
+
+  run_loop.Run();
+}
+
+void UpdateAccountInfoForAccount(IdentityManager* identity_manager,
+                                 AccountInfo account_info) {
+  // Make sure the account being updated is a known account.
+
+  AccountTrackerService* account_tracker_service =
+      identity_manager->GetAccountTrackerService();
+
+  DCHECK(account_tracker_service);
+  DCHECK(!account_tracker_service->GetAccountInfo(account_info.account_id)
+              .account_id.empty());
+
+  account_tracker_service->SeedAccountInfo(account_info);
+}
+
+void SetFreshnessOfAccountsInGaiaCookie(IdentityManager* identity_manager,
+                                        bool accounts_are_fresh) {
+  GaiaCookieManagerService* cookie_manager =
+      identity_manager->GetGaiaCookieManagerService();
+  cookie_manager->set_list_accounts_stale_for_testing(!accounts_are_fresh);
+}
+
+std::string GetTestGaiaIdForEmail(const std::string& email) {
+  std::string gaia_id =
+      std::string("gaia_id_for_") + gaia::CanonicalizeEmail(email);
+  // Avoid character '@' in the gaia ID string as there is code in the codebase
+  // that asserts that a gaia ID does not contain a "@" character.
+  std::replace(gaia_id.begin(), gaia_id.end(), '@', '_');
+  return gaia_id;
+}
+
+void UpdatePersistentErrorOfRefreshTokenForAccount(
+    IdentityManager* identity_manager,
+    const std::string& account_id,
+    const GoogleServiceAuthError& auth_error) {
+  DCHECK(identity_manager->HasAccountWithRefreshToken(account_id));
+  identity_manager->GetTokenService()->GetDelegate()->UpdateAuthError(
+      account_id, auth_error);
+}
+
+void DisableAccessTokenFetchRetries(IdentityManager* identity_manager) {
+  identity_manager->GetTokenService()
+      ->set_max_authorization_token_fetch_retries_for_testing(0);
+}
+
+#if defined(OS_ANDROID)
+void DisableInteractionWithSystemAccounts() {
+  OAuth2TokenServiceDelegateAndroid::
+      set_disable_interaction_with_system_accounts();
+}
+#endif
+
+void CancelAllOngoingGaiaCookieOperations(IdentityManager* identity_manager) {
+  identity_manager->GetGaiaCookieManagerService()->CancelAll();
 }
 
 }  // namespace identity

@@ -18,6 +18,7 @@
 #include "ui/aura/window.h"
 
 namespace base {
+class TimeDelta;
 class UnguessableToken;
 }
 
@@ -44,6 +45,10 @@ class AURA_EXPORT PropertyConverter {
   // Creates a validation callback for use in RegisterProperty() which will
   // accept any value.
   static base::RepeatingCallback<bool(int64_t)> CreateAcceptAnyValueCallback();
+
+  // Returns the key for the window property registered against the specified
+  // transport name.
+  const void* GetPropertyKeyFromTransportName(const std::string& name);
 
   // Returns true if RegisterProperty() has been called with the specified
   // transport name.
@@ -107,13 +112,29 @@ class AURA_EXPORT PropertyConverter {
                             const char* transport_name);
   void RegisterSizeProperty(const WindowProperty<gfx::Size*>* property,
                             const char* transport_name);
+  void RegisterSizeFProperty(const WindowProperty<gfx::SizeF*>* property,
+                             const char* transport_name);
   void RegisterStringProperty(const WindowProperty<std::string*>* property,
                               const char* transport_name);
   void RegisterString16Property(const WindowProperty<base::string16*>* property,
                                 const char* transport_name);
+  void RegisterTimeDeltaProperty(
+      const WindowProperty<base::TimeDelta>* property,
+      const char* transport_name);
   void RegisterUnguessableTokenProperty(
       const WindowProperty<base::UnguessableToken*>* property,
       const char* transport_name);
+  void RegisterWindowPtrProperty(const WindowProperty<Window*>* property,
+                                 const char* transport_name);
+
+  // Returns the window property key of Window* value which is registered with
+  // the transport_name. If the name is not registered or registered with a
+  // different type, returns nullptr.
+  const WindowProperty<Window*>* GetWindowPtrProperty(
+      const std::string& transport_name) const;
+
+  bool IsWindowPtrPropertyRegistered(
+      const WindowProperty<Window*>* property) const;
 
   // Get a flat map of the window's registered properties, to use for transport.
   base::flat_map<std::string, std::vector<uint8_t>> GetTransportProperties(
@@ -146,11 +167,13 @@ class AURA_EXPORT PropertyConverter {
       image_properties_;
   std::map<const WindowProperty<gfx::Rect*>*, const char*> rect_properties_;
   std::map<const WindowProperty<gfx::Size*>*, const char*> size_properties_;
+  std::map<const WindowProperty<gfx::SizeF*>*, const char*> size_f_properties_;
   std::map<const WindowProperty<std::string*>*, const char*> string_properties_;
   std::map<const WindowProperty<base::string16*>*, const char*>
       string16_properties_;
   std::map<const WindowProperty<base::UnguessableToken*>*, const char*>
       unguessable_token_properties_;
+  std::map<const WindowProperty<Window*>*, const char*> window_ptr_properties_;
 
   // Set of transport names supplied to RegisterProperty().
   std::set<std::string> transport_names_;

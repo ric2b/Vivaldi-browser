@@ -1,3 +1,4 @@
+from __future__ import print_function
 
 import sys
 
@@ -8,6 +9,6 @@ branch = sys.argv[1]
 branch = branch.split("/")
 
 if len(branch) > 1 and branch[0] == "releases":
-  print branch[1]
+  print(branch[1])
 else:
-  print "normal"
+  print("normal")

@@ -10,6 +10,7 @@ import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.support.annotation.CallSuper;
+import android.support.annotation.Nullable;
 import android.support.annotation.StringRes;
 import android.support.v4.view.GravityCompat;
 import android.support.v4.view.ViewCompat;
@@ -28,7 +29,9 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.Window;
 import android.view.inputmethod.EditorInfo;
+import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.TextView.OnEditorActionListener;
@@ -36,24 +39,20 @@ import android.widget.TextView.OnEditorActionListener;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.toolbar.ActionModeController;
-import org.chromium.chrome.browser.toolbar.ToolbarActionModeCallback;
+import org.chromium.chrome.browser.toolbar.top.ActionModeController;
+import org.chromium.chrome.browser.toolbar.top.ToolbarActionModeCallback;
 import org.chromium.chrome.browser.util.ColorUtils;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.vr.VrModeObserver;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.chrome.browser.widget.NumberRollView;
 import org.chromium.chrome.browser.widget.TintedDrawable;
-import org.chromium.chrome.browser.widget.TintedImageButton;
 import org.chromium.chrome.browser.widget.displaystyle.DisplayStyleObserver;
 import org.chromium.chrome.browser.widget.displaystyle.HorizontalDisplayStyle;
 import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate.SelectionObserver;
-import org.chromium.ui.UiUtils;
+import org.chromium.ui.KeyboardVisibilityDelegate;
 
 import java.util.List;
-
-import javax.annotation.Nullable;
 
 /**
  * A toolbar that changes its view depending on whether a selection is established. The toolbar
@@ -92,15 +91,15 @@ public class SelectableListToolbar<E>
 
     protected boolean mIsSelectionEnabled;
     protected SelectionDelegate<E> mSelectionDelegate;
-    protected boolean mIsSearching;
 
+    private boolean mIsSearching;
     private boolean mHasSearchView;
     private LinearLayout mSearchView;
     private EditText mSearchText;
     private EditText mSearchEditText;
-    private TintedImageButton mClearTextButton;
+    private ImageButton mClearTextButton;
     private SearchDelegate mSearchDelegate;
-    private boolean mSelectableListHasItems;
+    private boolean mSearchEnabled;
     private boolean mIsVrEnabled;
     private boolean mUpdateStatusBarColor;
 
@@ -153,7 +152,7 @@ public class SelectableListToolbar<E>
     public void destroy() {
         mIsDestroyed = true;
         if (mSelectionDelegate != null) mSelectionDelegate.removeObserver(this);
-        UiUtils.hideKeyboard(mSearchEditText);
+        KeyboardVisibilityDelegate.getInstance().hideKeyboard(mSearchEditText);
         VrModuleProvider.unregisterVrModeObserver(this);
     }
 
@@ -168,16 +167,13 @@ public class SelectableListToolbar<E>
      *                         established.
      * @param selectedGroupResId The resource id of the menu item to show when a selection is
      *                           established.
-     * @param normalBackgroundColorResId The resource id of the color to use as the background color
-     *                                   when selection is not enabled. If null the default appbar
-     *                                   background color will be used.
      * @param updateStatusBarColor Whether the status bar color should be updated to match the
      *                             toolbar color. If true, the status bar will only be updated if
      *                             the current device fully supports theming and is on Android M+.
      */
     public void initialize(SelectionDelegate<E> delegate, int titleResId,
             @Nullable DrawerLayout drawerLayout, int normalGroupResId, int selectedGroupResId,
-            @Nullable Integer normalBackgroundColorResId, boolean updateStatusBarColor) {
+            boolean updateStatusBarColor) {
         mTitleResId = titleResId;
         mDrawerLayout = drawerLayout;
         mNormalGroupResId = normalGroupResId;
@@ -199,22 +195,19 @@ public class SelectableListToolbar<E>
 
         if (mDrawerLayout != null) initActionBarDrawerToggle();
 
-        normalBackgroundColorResId = normalBackgroundColorResId != null
-                ? normalBackgroundColorResId
-                : ColorUtils.getDefaultThemeColor(
-                          getResources(), FeatureUtilities.isChromeModernDesignEnabled(), false);
         mNormalBackgroundColor =
-                ApiCompatibilityUtils.getColor(getResources(), normalBackgroundColorResId);
+                ApiCompatibilityUtils.getColor(getResources(), R.color.modern_primary_color);
         setBackgroundColor(mNormalBackgroundColor);
 
         mSelectionBackgroundColor = ApiCompatibilityUtils.getColor(
                 getResources(), R.color.light_active_color);
 
         mDarkIconColorList =
-                AppCompatResources.getColorStateList(getContext(), R.color.dark_mode_tint);
+                AppCompatResources.getColorStateList(getContext(), R.color.standard_mode_tint);
         mLightIconColorList =
                 AppCompatResources.getColorStateList(getContext(), R.color.white_mode_tint);
 
+        setTitleTextAppearance(getContext(), R.style.TextAppearance_BlackHeadline);
         if (mTitleResId != 0) setTitle(mTitleResId);
 
         // TODO(twellington): add the concept of normal & selected tint to apply to all toolbar
@@ -225,10 +218,6 @@ public class SelectableListToolbar<E>
                 getContext(), R.drawable.ic_more_vert_black_24dp, R.color.white_mode_tint);
         mNavigationIconDrawable = TintedDrawable.constructTintedDrawable(
                 getContext(), R.drawable.ic_arrow_back_white_24dp);
-
-        if (!FeatureUtilities.isChromeModernDesignEnabled()) {
-            setTitleTextAppearance(getContext(), R.style.BlackHeadline2);
-        }
 
         VrModuleProvider.registerVrModeObserver(this);
         if (VrModuleProvider.getDelegate().isInVr()) onEnterVr();
@@ -242,7 +231,7 @@ public class SelectableListToolbar<E>
         MenuItem extraMenuItem = getMenu().findItem(mExtraMenuItemId);
         if (extraMenuItem != null) {
             Drawable iconDrawable = TintedDrawable.constructTintedDrawable(
-                    getContext(), R.drawable.ic_more_vert_black_24dp, R.color.dark_mode_tint);
+                    getContext(), R.drawable.ic_more_vert_black_24dp, R.color.standard_mode_tint);
             extraMenuItem.setIcon(iconDrawable);
         }
     }
@@ -301,20 +290,13 @@ public class SelectableListToolbar<E>
             public void afterTextChanged(Editable s) {}
         });
 
-        mClearTextButton = (TintedImageButton) findViewById(R.id.clear_text_button);
+        mClearTextButton = findViewById(R.id.clear_text_button);
         mClearTextButton.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
                 mSearchEditText.setText("");
             }
         });
-
-        if (FeatureUtilities.isChromeModernDesignEnabled()) {
-            mClearTextButton.setPadding(ViewCompat.getPaddingStart(mClearTextButton),
-                    mClearTextButton.getPaddingTop(),
-                    getResources().getDimensionPixelSize(R.dimen.clear_text_button_end_padding),
-                    mClearTextButton.getPaddingBottom());
-        }
     }
 
     @Override
@@ -324,6 +306,7 @@ public class SelectableListToolbar<E>
         LayoutInflater.from(getContext()).inflate(R.layout.number_roll_view, this);
         mNumberRollView = (NumberRollView) findViewById(R.id.selection_mode_number);
         mNumberRollView.setString(R.plurals.selected_items);
+        mNumberRollView.setStringForZero(R.string.select_items);
     }
 
     @Override
@@ -447,7 +430,7 @@ public class SelectableListToolbar<E>
         showSearchViewInternal();
 
         mSearchEditText.requestFocus();
-        UiUtils.showKeyboard(mSearchEditText);
+        KeyboardVisibilityDelegate.getInstance().showKeyboard(mSearchEditText);
         setTitle(null);
     }
 
@@ -471,19 +454,19 @@ public class SelectableListToolbar<E>
 
         mIsSearching = false;
         mSearchEditText.setText("");
-        UiUtils.hideKeyboard(mSearchEditText);
+        KeyboardVisibilityDelegate.getInstance().hideKeyboard(mSearchEditText);
         showNormalView();
 
         mSearchDelegate.onEndSearch();
     }
 
     /**
-     * Called when the data in the selectable list this toolbar is associated with changes.
-     * @param numItems The number of items in the selectable list.
+     * Called to enable/disable search menu button.
+     * @param searchEnabled Whether the search button should be enabled.
      */
-    protected void onDataChanged(int numItems) {
+    public void setSearchEnabled(boolean searchEnabled) {
         if (mHasSearchView) {
-            mSelectableListHasItems = numItems != 0;
+            mSearchEnabled = searchEnabled;
             updateSearchMenuItem();
         }
     }
@@ -491,7 +474,7 @@ public class SelectableListToolbar<E>
     @Override
     public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
         if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-            UiUtils.hideKeyboard(v);
+            KeyboardVisibilityDelegate.getInstance().hideKeyboard(v);
         }
         return false;
     }
@@ -528,8 +511,7 @@ public class SelectableListToolbar<E>
         int padding =
                 SelectableListLayout.getPaddingForDisplayStyle(newDisplayStyle, getResources());
         int paddingStartOffset = 0;
-        boolean isModernSearchViewEnabled = mIsSearching && !mIsSelectionEnabled
-                && FeatureUtilities.isChromeModernDesignEnabled();
+        boolean isSearchViewShowing = mIsSearching && !mIsSelectionEnabled;
         MarginLayoutParams params = (MarginLayoutParams) getLayoutParams();
 
         if (newDisplayStyle.horizontal == HorizontalDisplayStyle.WIDE
@@ -541,8 +523,7 @@ public class SelectableListToolbar<E>
 
         // The margin instead of padding will be set to adjust the modern search view background
         // in search mode.
-        if (newDisplayStyle.horizontal == HorizontalDisplayStyle.WIDE
-                && isModernSearchViewEnabled) {
+        if (newDisplayStyle.horizontal == HorizontalDisplayStyle.WIDE && isSearchViewShowing) {
             params.setMargins(padding, params.topMargin, padding, params.bottomMargin);
             padding = 0;
         } else {
@@ -612,6 +593,7 @@ public class SelectableListToolbar<E>
     protected void showSelectionView(List<E> selectedItems, boolean wasSelectionEnabled) {
         getMenu().setGroupVisible(mNormalGroupResId, false);
         getMenu().setGroupVisible(mSelectedGroupResId, true);
+        getMenu().setGroupEnabled(mSelectedGroupResId, !selectedItems.isEmpty());
         if (mHasSearchView) mSearchView.setVisibility(View.GONE);
 
         setNavigationButton(NAVIGATION_BUTTON_SELECTION_BACK);
@@ -620,7 +602,7 @@ public class SelectableListToolbar<E>
 
         switchToNumberRollView(selectedItems, wasSelectionEnabled);
 
-        if (mIsSearching) UiUtils.hideKeyboard(mSearchEditText);
+        if (mIsSearching) KeyboardVisibilityDelegate.getInstance().hideKeyboard(mSearchEditText);
 
         updateDisplayStyleIfNecessary();
     }
@@ -632,12 +614,8 @@ public class SelectableListToolbar<E>
         mSearchView.setVisibility(View.VISIBLE);
 
         setNavigationButton(NAVIGATION_BUTTON_BACK);
-        if (FeatureUtilities.isChromeModernDesignEnabled()) {
-            setBackgroundResource(R.drawable.search_toolbar_modern_bg);
-            updateStatusBarColor(mSearchBackgroundColor);
-        } else {
-            setBackgroundColor(mSearchBackgroundColor);
-        }
+        setBackgroundResource(R.drawable.search_toolbar_modern_bg);
+        updateStatusBarColor(mSearchBackgroundColor);
 
         updateDisplayStyleIfNecessary();
     }
@@ -646,8 +624,8 @@ public class SelectableListToolbar<E>
         if (!mHasSearchView) return;
         MenuItem searchMenuItem = getMenu().findItem(mSearchMenuItemId);
         if (searchMenuItem != null) {
-            searchMenuItem.setVisible(mSelectableListHasItems && !mIsSelectionEnabled
-                    && !mIsSearching && !mIsVrEnabled);
+            searchMenuItem.setVisible(
+                    mSearchEnabled && !mIsSelectionEnabled && !mIsSearching && !mIsVrEnabled);
         }
     }
 
@@ -720,7 +698,7 @@ public class SelectableListToolbar<E>
             if (mShowInfoIcon) {
                 Drawable iconDrawable =
                         TintedDrawable.constructTintedDrawable(getContext(), R.drawable.btn_info,
-                                infoShowing ? R.color.blue_mode_tint : R.color.dark_mode_tint);
+                                infoShowing ? R.color.blue_mode_tint : R.color.standard_mode_tint);
 
                 infoMenuItem.setIcon(iconDrawable);
             }
@@ -788,6 +766,10 @@ public class SelectableListToolbar<E>
             View child = getChildAt(i);
             if (!(child instanceof TextView)) continue;
             child.setFocusable(true);
+
+            // setFocusableInTouchMode is problematic for buttons, see
+            // https://crbug.com/813422.
+            if ((child instanceof Button)) continue;
             child.setFocusableInTouchMode(true);
         }
     }

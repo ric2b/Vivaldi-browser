@@ -12,7 +12,8 @@
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/style/grid_positions_resolver.h"
 #include "third_party/blink/renderer/core/style/grid_track_size.h"
-#include "third_party/blink/renderer/platform/layout_unit.h"
+#include "third_party/blink/renderer/platform/geometry/layout_unit.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 
 namespace blink {
@@ -33,6 +34,8 @@ enum TrackSizeComputationPhase {
 };
 
 class GridTrack {
+  DISALLOW_NEW();
+
  public:
   GridTrack() : infinitely_growable_(false) {}
 
@@ -97,10 +100,14 @@ class GridTrackSizingAlgorithm final {
   // TODO (jfernandez): We should remove any public getter for this attribute
   // and encapsulate any access in the algorithm class.
   Grid& GetMutableGrid() const { return grid_; }
-  LayoutUnit MinContentSize() const { return min_content_size_; };
-  LayoutUnit MaxContentSize() const { return max_content_size_; };
+  LayoutUnit MinContentSize() const { return min_content_size_; }
+  LayoutUnit MaxContentSize() const { return max_content_size_; }
 
   LayoutUnit BaselineOffsetForChild(const LayoutBox&, GridAxis) const;
+
+  void CacheBaselineAlignedItem(const LayoutBox&, GridAxis);
+  void CopyBaselineItemsCache(const GridTrackSizingAlgorithm&, GridAxis);
+  void ClearBaselineItemsCache();
 
   LayoutSize EstimatedGridAreaBreadthForChild(const LayoutBox& child) const;
 
@@ -161,8 +168,9 @@ class GridTrackSizingAlgorithm final {
                                      GridTrackSizingDirection) const;
 
   void ComputeBaselineAlignmentContext();
-  void UpdateBaselineAlignmentContext(LayoutBox&, GridAxis);
+  void UpdateBaselineAlignmentContext(const LayoutBox&, GridAxis);
   bool CanParticipateInBaselineAlignment(const LayoutBox&, GridAxis) const;
+  bool ParticipateInBaselineAlignment(const LayoutBox&, GridAxis) const;
 
   bool IsIntrinsicSizedGridArea(const LayoutBox&, GridAxis) const;
   void ComputeGridContainerIntrinsicSizes();
@@ -239,6 +247,9 @@ class GridTrackSizingAlgorithm final {
   SizingState sizing_state_;
 
   GridBaselineAlignment baseline_alignment_;
+  typedef HashMap<const LayoutBox*, bool> BaselineItemsCache;
+  BaselineItemsCache column_baseline_items_map_;
+  BaselineItemsCache row_baseline_items_map_;
 
   // This is a RAII class used to ensure that the track sizing algorithm is
   // executed as it is suppossed to be, i.e., first resolve columns and then
@@ -282,7 +293,7 @@ class GridTrackSizingAlgorithmStrategy {
       : algorithm_(algorithm) {}
 
   virtual LayoutUnit MinLogicalWidthForChild(LayoutBox&,
-                                             Length child_min_size,
+                                             const Length& child_min_size,
                                              LayoutUnit available_size) const;
   virtual void LayoutGridItemForMinSizeComputation(
       LayoutBox&,

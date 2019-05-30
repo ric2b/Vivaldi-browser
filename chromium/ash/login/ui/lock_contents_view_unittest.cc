@@ -15,7 +15,6 @@
 #include "ash/login/ui/lock_screen.h"
 #include "ash/login/ui/login_auth_user_view.h"
 #include "ash/login/ui/login_big_user_view.h"
-#include "ash/login/ui/login_bubble.h"
 #include "ash/login/ui/login_display_style.h"
 #include "ash/login/ui/login_expanded_public_account_view.h"
 #include "ash/login/ui/login_keyboard_test_base.h"
@@ -29,9 +28,13 @@
 #include "ash/public/interfaces/tray_action.mojom.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
+#include "ash/system/power/backlights_forced_off_setter.h"
+#include "ash/system/power/power_button_controller.h"
 #include "ash/system/status_area_widget.h"
+#include "ash/tray_action/test_tray_action_client.h"
+#include "ash/tray_action/tray_action.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
+#include "base/test/simple_test_tick_clock.h"
 #include "chromeos/dbus/fake_power_manager_client.h"
 #include "chromeos/dbus/power_manager/suspend.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -47,6 +50,27 @@ using ::testing::Mock;
 
 namespace ash {
 
+namespace {
+
+void PressAndReleasePowerButton() {
+  base::SimpleTestTickClock tick_clock;
+  auto dispatch_power_button_event_after_delay =
+      [&](const base::TimeDelta& delta, bool down) {
+        tick_clock.Advance(delta + base::TimeDelta::FromMilliseconds(1));
+        Shell::Get()->power_button_controller()->OnPowerButtonEvent(
+            down, tick_clock.NowTicks());
+        base::RunLoop().RunUntilIdle();
+      };
+
+  // Press and release the power button to force backlights off.
+  dispatch_power_button_event_after_delay(
+      PowerButtonController::kIgnorePowerButtonAfterResumeDelay, true /*down*/);
+  dispatch_power_button_event_after_delay(
+      PowerButtonController::kIgnoreRepeatedButtonUpDelay, false /*down*/);
+}
+
+}  // namespace
+
 using LockContentsViewUnitTest = LoginTestBase;
 using LockContentsViewKeyboardUnitTest = LoginKeyboardTestBase;
 
@@ -54,8 +78,8 @@ TEST_F(LockContentsViewUnitTest, DisplayMode) {
   // Build lock screen with 1 user.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(1);
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
 
@@ -101,8 +125,8 @@ TEST_F(LockContentsViewUnitTest, DisplayMode) {
 TEST_F(LockContentsViewUnitTest, SingleUserCentered) {
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(1);
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
 
@@ -124,8 +148,8 @@ TEST_F(LockContentsViewUnitTest, SingleUserCentered) {
 TEST_F(LockContentsViewUnitTest, SingleUserCenteredNoteActionEnabled) {
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(1);
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
 
@@ -148,8 +172,8 @@ TEST_F(LockContentsViewUnitTest, LayoutInSmallScreenSize) {
   // Build lock screen.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   LockContentsView::TestApi lock_contents(contents);
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
   display::test::DisplayManagerTestApi display_manager_test_api(
@@ -208,8 +232,8 @@ TEST_F(LockContentsViewUnitTest, AutoLayoutAfterRotation) {
   // Build lock screen with three users.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   LockContentsView::TestApi lock_contents(contents);
   SetUserCount(3);
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
@@ -259,8 +283,8 @@ TEST_F(LockContentsViewUnitTest, AutoLayoutExtraSmallUsersListAfterRotation) {
   // Build lock screen with extra small layout (> 6 users).
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(9);
   ScrollableUsersListView* users_list =
       LockContentsView::TestApi(contents).users_list();
@@ -296,8 +320,8 @@ TEST_F(LockContentsViewUnitTest, AutoLayoutSmallUsersListAfterRotation) {
   // Build lock screen with small layout (3-6 users).
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(4);
   ScrollableUsersListView* users_list =
       LockContentsView::TestApi(contents).users_list();
@@ -353,7 +377,7 @@ TEST_F(LockContentsViewKeyboardUnitTest,
   LockContentsView* contents =
       LockScreen::TestApi(LockScreen::Get()).contents_view();
   ASSERT_NE(nullptr, contents);
-  LoadUsers(9);
+  SetUserCount(9);
 
   // Users list in extra small layout should adjust its height to parent.
   ScrollableUsersListView* users_list =
@@ -375,7 +399,7 @@ TEST_F(LockContentsViewKeyboardUnitTest, AutoLayoutSmallUsersListForKeyboard) {
   LockContentsView* contents =
       LockScreen::TestApi(LockScreen::Get()).contents_view();
   ASSERT_NE(nullptr, contents);
-  LoadUsers(4);
+  SetUserCount(4);
   ScrollableUsersListView* users_list =
       LockContentsView::TestApi(contents).users_list();
 
@@ -411,8 +435,8 @@ TEST_F(LockContentsViewUnitTest, SwapAuthUsersInTwoUserLayout) {
   // Build lock screen with two users.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   LockContentsView::TestApi test_api(contents);
   SetUserCount(2);
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
@@ -457,8 +481,8 @@ TEST_F(LockContentsViewUnitTest, SwapUserListToPrimaryAuthUser) {
   // Build lock screen with five users.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   LockContentsView::TestApi lock_contents(contents);
   SetUserCount(5);
   ScrollableUsersListView::TestApi users_list(lock_contents.users_list());
@@ -501,8 +525,8 @@ TEST_F(LockContentsViewUnitTest, SwapUserListToPrimaryAuthUser) {
 TEST_F(LockContentsViewUnitTest, NoteActionButtonVisibilityChanges) {
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(1);
   SetWidget(CreateWidgetWithContent(contents));
 
@@ -513,20 +537,20 @@ TEST_F(LockContentsViewUnitTest, NoteActionButtonVisibilityChanges) {
   EXPECT_TRUE(note_action_button->visible());
 
   // In kLaunching state, the note action button should not be visible.
-  data_dispatcher()->SetLockScreenNoteState(mojom::TrayActionState::kLaunching);
+  DataDispatcher()->SetLockScreenNoteState(mojom::TrayActionState::kLaunching);
   EXPECT_FALSE(note_action_button->visible());
 
   // In kActive state, the note action button should not be visible.
-  data_dispatcher()->SetLockScreenNoteState(mojom::TrayActionState::kActive);
+  DataDispatcher()->SetLockScreenNoteState(mojom::TrayActionState::kActive);
   EXPECT_FALSE(note_action_button->visible());
 
   // When moved back to kAvailable state, the note action button should become
   // visible again.
-  data_dispatcher()->SetLockScreenNoteState(mojom::TrayActionState::kAvailable);
+  DataDispatcher()->SetLockScreenNoteState(mojom::TrayActionState::kAvailable);
   EXPECT_TRUE(note_action_button->visible());
 
   // In kNotAvailable state, the note action button should not be visible.
-  data_dispatcher()->SetLockScreenNoteState(
+  DataDispatcher()->SetLockScreenNoteState(
       mojom::TrayActionState::kNotAvailable);
   EXPECT_FALSE(note_action_button->visible());
 }
@@ -535,8 +559,8 @@ TEST_F(LockContentsViewUnitTest, NoteActionButtonVisibilityChanges) {
 TEST_F(LockContentsViewUnitTest, NoteActionButtonBounds) {
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(1);
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
 
@@ -548,7 +572,7 @@ TEST_F(LockContentsViewUnitTest, NoteActionButtonBounds) {
 
   // When the note action becomes available, the note action button should be
   // shown.
-  data_dispatcher()->SetLockScreenNoteState(mojom::TrayActionState::kAvailable);
+  DataDispatcher()->SetLockScreenNoteState(mojom::TrayActionState::kAvailable);
   EXPECT_TRUE(test_api.note_action()->visible());
 
   // Verify the bounds of the note action button are as expected.
@@ -561,7 +585,7 @@ TEST_F(LockContentsViewUnitTest, NoteActionButtonBounds) {
 
   // If the note action is disabled again, the note action button should be
   // hidden.
-  data_dispatcher()->SetLockScreenNoteState(
+  DataDispatcher()->SetLockScreenNoteState(
       mojom::TrayActionState::kNotAvailable);
   EXPECT_FALSE(test_api.note_action()->visible());
 }
@@ -571,8 +595,8 @@ TEST_F(LockContentsViewUnitTest, NoteActionButtonBounds) {
 TEST_F(LockContentsViewUnitTest, NoteActionButtonBoundsInitiallyAvailable) {
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(1);
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
 
@@ -589,7 +613,7 @@ TEST_F(LockContentsViewUnitTest, NoteActionButtonBoundsInitiallyAvailable) {
             test_api.note_action()->GetBoundsInScreen());
 
   // If the note action is disabled, the note action button should be hidden.
-  data_dispatcher()->SetLockScreenNoteState(
+  DataDispatcher()->SetLockScreenNoteState(
       mojom::TrayActionState::kNotAvailable);
   EXPECT_FALSE(test_api.note_action()->visible());
 }
@@ -598,8 +622,8 @@ TEST_F(LockContentsViewUnitTest, NoteActionButtonBoundsInitiallyAvailable) {
 TEST_F(LockContentsViewUnitTest, SystemInfoViewBounds) {
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(1);
 
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
@@ -610,8 +634,8 @@ TEST_F(LockContentsViewUnitTest, SystemInfoViewBounds) {
 
   // Verify that the system info view becomes visible and it doesn't block the
   // note action button.
-  data_dispatcher()->SetSystemInfo(true /*show_if_hidden*/, "Best version ever",
-                                   "Asset ID: 6666", "Bluetooth adapter");
+  DataDispatcher()->SetSystemInfo(true /*show_if_hidden*/, "Best version ever",
+                                  "Asset ID: 6666", "Bluetooth adapter");
   EXPECT_TRUE(test_api.system_info()->visible());
   EXPECT_TRUE(test_api.note_action()->visible());
   gfx::Size note_action_size = test_api.note_action()->GetPreferredSize();
@@ -621,7 +645,7 @@ TEST_F(LockContentsViewUnitTest, SystemInfoViewBounds) {
 
   // Verify that if the note action is disabled, the system info view moves to
   // the right to fill the empty space.
-  data_dispatcher()->SetLockScreenNoteState(
+  DataDispatcher()->SetLockScreenNoteState(
       mojom::TrayActionState::kNotAvailable);
   EXPECT_FALSE(test_api.note_action()->visible());
   EXPECT_LT(widget_bounds.right() -
@@ -633,8 +657,8 @@ TEST_F(LockContentsViewUnitTest, SystemInfoViewBounds) {
 TEST_F(LockContentsViewUnitTest, AltVShowsHiddenSystemInfo) {
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(1);
 
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
@@ -644,9 +668,8 @@ TEST_F(LockContentsViewUnitTest, AltVShowsHiddenSystemInfo) {
 
   // Verify that the system info view does not become visible when given data
   // but show is false.
-  data_dispatcher()->SetSystemInfo(false /*show_if_hidden*/,
-                                   "Best version ever", "Asset ID: 6666",
-                                   "Bluetooth adapter");
+  DataDispatcher()->SetSystemInfo(false /*show_if_hidden*/, "Best version ever",
+                                  "Asset ID: 6666", "Bluetooth adapter");
   EXPECT_FALSE(test_api.system_info()->visible());
 
   // Alt-V shows hidden system info.
@@ -665,16 +688,16 @@ TEST_F(LockContentsViewUnitTest, AltVShowsHiddenSystemInfo) {
 TEST_F(LockContentsViewUnitTest, ShowRevealsHiddenSystemInfo) {
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(1);
 
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
   LockContentsView::TestApi test_api(contents);
 
   auto set_system_info = [&](bool show_if_hidden) {
-    data_dispatcher()->SetSystemInfo(show_if_hidden, "Best version ever",
-                                     "Asset ID: 6666", "Bluetooth adapter");
+    DataDispatcher()->SetSystemInfo(show_if_hidden, "Best version ever",
+                                    "Asset ID: 6666", "Bluetooth adapter");
   };
 
   // Start with hidden system info.
@@ -694,30 +717,30 @@ TEST_F(LockContentsViewUnitTest, ShowRevealsHiddenSystemInfo) {
 TEST_F(LockContentsViewUnitTest, EasyUnlockForceTooltipCreatesTooltipWidget) {
   auto* lock = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
 
   SetUserCount(1);
   SetWidget(CreateWidgetWithContent(lock));
 
   LockContentsView::TestApi test_api(lock);
   // Creating lock screen does not show tooltip bubble.
-  EXPECT_FALSE(test_api.tooltip_bubble()->IsVisible());
+  EXPECT_FALSE(test_api.tooltip_bubble()->visible());
 
   // Show an icon with |autoshow_tooltip| is false. Tooltip bubble is not
   // activated.
   auto icon = mojom::EasyUnlockIconOptions::New();
   icon->icon = mojom::EasyUnlockIconId::LOCKED;
   icon->autoshow_tooltip = false;
-  data_dispatcher()->ShowEasyUnlockIcon(users()[0]->basic_user_info->account_id,
-                                        icon);
-  EXPECT_FALSE(test_api.tooltip_bubble()->IsVisible());
+  DataDispatcher()->ShowEasyUnlockIcon(users()[0]->basic_user_info->account_id,
+                                       icon);
+  EXPECT_FALSE(test_api.tooltip_bubble()->visible());
 
   // Show icon with |autoshow_tooltip| set to true. Tooltip bubble is shown.
   icon->autoshow_tooltip = true;
-  data_dispatcher()->ShowEasyUnlockIcon(users()[0]->basic_user_info->account_id,
-                                        icon);
-  EXPECT_TRUE(test_api.tooltip_bubble()->IsVisible());
+  DataDispatcher()->ShowEasyUnlockIcon(users()[0]->basic_user_info->account_id,
+                                       icon);
+  EXPECT_TRUE(test_api.tooltip_bubble()->visible());
 }
 
 // Verifies that easy unlock icon state persists when changing auth user.
@@ -725,8 +748,8 @@ TEST_F(LockContentsViewUnitTest, EasyUnlockIconUpdatedDuringUserSwap) {
   // Build lock screen with two users.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(2);
   SetWidget(CreateWidgetWithContent(contents));
 
@@ -750,7 +773,7 @@ TEST_F(LockContentsViewUnitTest, EasyUnlockIconUpdatedDuringUserSwap) {
   auto enable_icon = [&](LoginBigUserView* view) {
     auto icon = mojom::EasyUnlockIconOptions::New();
     icon->icon = mojom::EasyUnlockIconId::LOCKED;
-    data_dispatcher()->ShowEasyUnlockIcon(
+    DataDispatcher()->ShowEasyUnlockIcon(
         view->GetCurrentUser()->basic_user_info->account_id, icon);
   };
 
@@ -758,7 +781,7 @@ TEST_F(LockContentsViewUnitTest, EasyUnlockIconUpdatedDuringUserSwap) {
   auto disable_icon = [&](LoginBigUserView* view) {
     auto icon = mojom::EasyUnlockIconOptions::New();
     icon->icon = mojom::EasyUnlockIconId::NONE;
-    data_dispatcher()->ShowEasyUnlockIcon(
+    DataDispatcher()->ShowEasyUnlockIcon(
         view->GetCurrentUser()->basic_user_info->account_id, icon);
   };
 
@@ -816,8 +839,8 @@ TEST_F(LockContentsViewUnitTest, ShowErrorBubbleOnAuthFailure) {
   // Build lock screen with a single user.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(1);
   SetWidget(CreateWidgetWithContent(contents));
 
@@ -826,9 +849,9 @@ TEST_F(LockContentsViewUnitTest, ShowErrorBubbleOnAuthFailure) {
   // Password submit runs mojo.
   std::unique_ptr<MockLoginScreenClient> client = BindMockLoginScreenClient();
   client->set_authenticate_user_callback_result(false);
-  EXPECT_CALL(
-      *client,
-      AuthenticateUser_(users()[0]->basic_user_info->account_id, _, false, _));
+  EXPECT_CALL(*client,
+              AuthenticateUserWithPasswordOrPin_(
+                  users()[0]->basic_user_info->account_id, _, false, _));
 
   // Submit password.
   ui::test::EventGenerator* generator = GetEventGenerator();
@@ -836,12 +859,59 @@ TEST_F(LockContentsViewUnitTest, ShowErrorBubbleOnAuthFailure) {
   generator->PressKey(ui::KeyboardCode::VKEY_RETURN, 0);
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_TRUE(test_api.auth_error_bubble()->IsVisible());
+  EXPECT_TRUE(test_api.auth_error_bubble()->visible());
 
   // The error bubble is expected to close on a user action - e.g. if they start
   // typing the password again.
   generator->PressKey(ui::KeyboardCode::VKEY_B, 0);
-  EXPECT_FALSE(test_api.auth_error_bubble()->IsVisible());
+  EXPECT_FALSE(test_api.auth_error_bubble()->visible());
+}
+
+TEST_F(LockContentsViewUnitTest, AuthErrorButtonClickable) {
+  // Build lock screen with a single user.
+  auto* contents = new LockContentsView(
+      mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
+  SetUserCount(1);
+  SetWidget(CreateWidgetWithContent(contents));
+
+  LockContentsView::TestApi test_api(contents);
+
+  // Password submit runs mojo.
+  std::unique_ptr<MockLoginScreenClient> client = BindMockLoginScreenClient();
+  client->set_authenticate_user_callback_result(false);
+  EXPECT_CALL(*client,
+              AuthenticateUserWithPasswordOrPin_(
+                  users()[0]->basic_user_info->account_id, _, false, _));
+
+  // AuthErrorButton should not be visible yet.
+  EXPECT_FALSE(test_api.auth_error_bubble()->visible());
+
+  // Submit password.
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  generator->PressKey(ui::KeyboardCode::VKEY_A, 0);
+  generator->PressKey(ui::KeyboardCode::VKEY_RETURN, 0);
+  base::RunLoop().RunUntilIdle();
+
+  // Auth Error button should be visible as an incorrect password was given.
+  EXPECT_TRUE(test_api.auth_error_bubble()->visible());
+
+  // Find button in auth_error_bubble children.
+  views::View* button = FindTopButton(test_api.auth_error_bubble());
+  ASSERT_TRUE(button);
+
+  // Expect ShowAccountAccessHelp() to be called due to button click.
+  EXPECT_CALL(*client, ShowAccountAccessHelpApp()).Times(1);
+
+  // Move mouse to AuthError's ShowAccountAccessHelp button and click it.
+  // Should result in ShowAccountAccessHelpApp().
+  generator->MoveMouseTo(button->GetBoundsInScreen().CenterPoint());
+  generator->ClickLeftButton();
+  Shell::Get()->login_screen_controller()->FlushForTesting();
+
+  // AuthErrorButton should go away after button press.
+  EXPECT_FALSE(test_api.auth_error_bubble()->visible());
 }
 
 // Gaia is never shown on lock, no mater how many times auth fails.
@@ -849,8 +919,8 @@ TEST_F(LockContentsViewUnitTest, GaiaNeverShownOnLockAfterFailedAuth) {
   // Build lock screen with a single user.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(1);
   SetWidget(CreateWidgetWithContent(contents));
 
@@ -875,8 +945,8 @@ TEST_F(LockContentsViewUnitTest, ShowGaiaAuthAfterManyFailedLoginAttempts) {
   // Build lock screen with a single user.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLogin,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(1);
   SetWidget(CreateWidgetWithContent(contents));
 
@@ -908,14 +978,14 @@ TEST_F(LockContentsViewUnitTest, ShowGaiaAuthAfterManyFailedLoginAttempts) {
 
 TEST_F(LockContentsViewUnitTest, ErrorBubbleOnUntrustedDetachableBase) {
   auto fake_detachable_base_model =
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher());
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher());
   FakeLoginDetachableBaseModel* detachable_base_model =
       fake_detachable_base_model.get();
 
   // Build lock screen with 2 users.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(), std::move(fake_detachable_base_model));
+      DataDispatcher(), std::move(fake_detachable_base_model));
   SetUserCount(2);
 
   const AccountId& kFirstUserAccountId =
@@ -933,17 +1003,17 @@ TEST_F(LockContentsViewUnitTest, ErrorBubbleOnUntrustedDetachableBase) {
   LockContentsView::TestApi test_api(contents);
   ui::test::EventGenerator* generator = GetEventGenerator();
 
-  EXPECT_FALSE(test_api.detachable_base_error_bubble()->IsVisible());
+  EXPECT_FALSE(test_api.detachable_base_error_bubble()->visible());
 
   // Change detachable base to a base different than the one previously used by
   // the user - verify that a detachable base error bubble is shown.
   detachable_base_model->SetPairingStatus(
       DetachableBasePairingStatus::kAuthenticated, "5678");
-  EXPECT_TRUE(test_api.detachable_base_error_bubble()->IsVisible());
+  EXPECT_TRUE(test_api.detachable_base_error_bubble()->visible());
 
   // Verify that the bubble is not hidden if the user starts typing.
   generator->PressKey(ui::KeyboardCode::VKEY_B, 0);
-  EXPECT_TRUE(test_api.detachable_base_error_bubble()->IsVisible());
+  EXPECT_TRUE(test_api.detachable_base_error_bubble()->visible());
 
   // Switching to the user that doesn't have previously used detachable base
   // (and should thus not be warned about the detachable base missmatch) should
@@ -954,7 +1024,7 @@ TEST_F(LockContentsViewUnitTest, ErrorBubbleOnUntrustedDetachableBase) {
       secondary_test_api.user_view()->GetBoundsInScreen().CenterPoint());
   generator->ClickLeftButton();
 
-  EXPECT_FALSE(test_api.detachable_base_error_bubble()->IsVisible());
+  EXPECT_FALSE(test_api.detachable_base_error_bubble()->visible());
 
   // The error should be shown again when switching back to the primary user.
   LoginAuthUserView::TestApi primary_test_api(
@@ -963,7 +1033,7 @@ TEST_F(LockContentsViewUnitTest, ErrorBubbleOnUntrustedDetachableBase) {
       primary_test_api.user_view()->GetBoundsInScreen().CenterPoint());
   generator->ClickLeftButton();
 
-  EXPECT_TRUE(test_api.detachable_base_error_bubble()->IsVisible());
+  EXPECT_TRUE(test_api.detachable_base_error_bubble()->visible());
   EXPECT_FALSE(primary_test_api.password_view()->HasFocus());
 
   EXPECT_EQ("1234",
@@ -974,7 +1044,8 @@ TEST_F(LockContentsViewUnitTest, ErrorBubbleOnUntrustedDetachableBase) {
   // after they authenticate - test for this.
   std::unique_ptr<MockLoginScreenClient> client = BindMockLoginScreenClient();
   client->set_authenticate_user_callback_result(true);
-  EXPECT_CALL(*client, AuthenticateUser_(kFirstUserAccountId, _, false, _));
+  EXPECT_CALL(*client, AuthenticateUserWithPasswordOrPin_(kFirstUserAccountId,
+                                                          _, false, _));
 
   // Submit password.
   primary_test_api.password_view()->RequestFocus();
@@ -989,14 +1060,14 @@ TEST_F(LockContentsViewUnitTest, ErrorBubbleOnUntrustedDetachableBase) {
 
 TEST_F(LockContentsViewUnitTest, ErrorBubbleForUnauthenticatedDetachableBase) {
   auto fake_detachable_base_model =
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher());
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher());
   FakeLoginDetachableBaseModel* detachable_base_model =
       fake_detachable_base_model.get();
 
   // Build lock screen with 2 users.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(), std::move(fake_detachable_base_model));
+      DataDispatcher(), std::move(fake_detachable_base_model));
   SetUserCount(2);
 
   const AccountId& kFirstUserAccountId =
@@ -1011,16 +1082,16 @@ TEST_F(LockContentsViewUnitTest, ErrorBubbleForUnauthenticatedDetachableBase) {
   LockContentsView::TestApi test_api(contents);
   ui::test::EventGenerator* generator = GetEventGenerator();
 
-  EXPECT_FALSE(test_api.detachable_base_error_bubble()->IsVisible());
+  EXPECT_FALSE(test_api.detachable_base_error_bubble()->visible());
 
   // Show notification if unauthenticated base is attached.
   detachable_base_model->SetPairingStatus(
       DetachableBasePairingStatus::kNotAuthenticated, "");
-  EXPECT_TRUE(test_api.detachable_base_error_bubble()->IsVisible());
+  EXPECT_TRUE(test_api.detachable_base_error_bubble()->visible());
 
   // Verify that the bubble is not hidden if the user starts typing.
   generator->PressKey(ui::KeyboardCode::VKEY_B, 0);
-  EXPECT_TRUE(test_api.detachable_base_error_bubble()->IsVisible());
+  EXPECT_TRUE(test_api.detachable_base_error_bubble()->visible());
 
   // Switching to another user should not hide the error bubble.
   LoginAuthUserView::TestApi secondary_test_api(
@@ -1029,14 +1100,15 @@ TEST_F(LockContentsViewUnitTest, ErrorBubbleForUnauthenticatedDetachableBase) {
       secondary_test_api.user_view()->GetBoundsInScreen().CenterPoint());
   generator->ClickLeftButton();
 
-  EXPECT_TRUE(test_api.detachable_base_error_bubble()->IsVisible());
+  EXPECT_TRUE(test_api.detachable_base_error_bubble()->visible());
   EXPECT_FALSE(secondary_test_api.password_view()->HasFocus());
 
   // The last trusted detachable used by the user should not be overriden by
   // user authentication.
   std::unique_ptr<MockLoginScreenClient> client = BindMockLoginScreenClient();
   client->set_authenticate_user_callback_result(true);
-  EXPECT_CALL(*client, AuthenticateUser_(kSecondUserAccountId, _, false, _));
+  EXPECT_CALL(*client, AuthenticateUserWithPasswordOrPin_(kSecondUserAccountId,
+                                                          _, false, _));
 
   // Submit password.
   secondary_test_api.password_view()->RequestFocus();
@@ -1051,14 +1123,14 @@ TEST_F(LockContentsViewUnitTest, ErrorBubbleForUnauthenticatedDetachableBase) {
 TEST_F(LockContentsViewUnitTest,
        RemovingAttachedBaseHidesDetachableBaseNotification) {
   auto fake_detachable_base_model =
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher());
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher());
   FakeLoginDetachableBaseModel* detachable_base_model =
       fake_detachable_base_model.get();
 
   // Build lock screen with 2 users.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(), std::move(fake_detachable_base_model));
+      DataDispatcher(), std::move(fake_detachable_base_model));
   SetUserCount(1);
 
   const AccountId& kUserAccountId = users()[0]->basic_user_info->account_id;
@@ -1077,24 +1149,24 @@ TEST_F(LockContentsViewUnitTest,
   // the user - verify that a detachable base error bubble is shown.
   detachable_base_model->SetPairingStatus(
       DetachableBasePairingStatus::kAuthenticated, "5678");
-  EXPECT_TRUE(test_api.detachable_base_error_bubble()->IsVisible());
+  EXPECT_TRUE(test_api.detachable_base_error_bubble()->visible());
 
   // The notification should be hidden if the base gets detached.
   detachable_base_model->SetPairingStatus(DetachableBasePairingStatus::kNone,
                                           "");
-  EXPECT_FALSE(test_api.detachable_base_error_bubble()->IsVisible());
+  EXPECT_FALSE(test_api.detachable_base_error_bubble()->visible());
 }
 
 TEST_F(LockContentsViewUnitTest, DetachableBaseErrorClearsAuthError) {
   auto fake_detachable_base_model =
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher());
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher());
   FakeLoginDetachableBaseModel* detachable_base_model =
       fake_detachable_base_model.get();
 
   // Build lock screen with a single user.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(), std::move(fake_detachable_base_model));
+      DataDispatcher(), std::move(fake_detachable_base_model));
   SetUserCount(1);
 
   const AccountId& kUserAccountId = users()[0]->basic_user_info->account_id;
@@ -1110,20 +1182,21 @@ TEST_F(LockContentsViewUnitTest, DetachableBaseErrorClearsAuthError) {
   LockContentsView::TestApi test_api(contents);
   ui::test::EventGenerator* generator = GetEventGenerator();
 
-  EXPECT_FALSE(test_api.detachable_base_error_bubble()->IsVisible());
+  EXPECT_FALSE(test_api.detachable_base_error_bubble()->visible());
 
   // Attempt and fail user auth - an auth error is expected to be shown.
   std::unique_ptr<MockLoginScreenClient> client = BindMockLoginScreenClient();
   client->set_authenticate_user_callback_result(false);
-  EXPECT_CALL(*client, AuthenticateUser_(kUserAccountId, _, false, _));
+  EXPECT_CALL(*client,
+              AuthenticateUserWithPasswordOrPin_(kUserAccountId, _, false, _));
 
   // Submit password.
   generator->PressKey(ui::KeyboardCode::VKEY_A, 0);
   generator->PressKey(ui::KeyboardCode::VKEY_RETURN, 0);
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_TRUE(test_api.auth_error_bubble()->IsVisible());
-  EXPECT_FALSE(test_api.detachable_base_error_bubble()->IsVisible());
+  EXPECT_TRUE(test_api.auth_error_bubble()->visible());
+  EXPECT_FALSE(test_api.detachable_base_error_bubble()->visible());
 
   // Change detachable base to a base different than the one previously used by
   // the user - verify that a detachable base error bubble is shown, and the
@@ -1131,20 +1204,20 @@ TEST_F(LockContentsViewUnitTest, DetachableBaseErrorClearsAuthError) {
   detachable_base_model->SetPairingStatus(
       DetachableBasePairingStatus::kAuthenticated, "5678");
 
-  EXPECT_TRUE(test_api.detachable_base_error_bubble()->IsVisible());
-  EXPECT_FALSE(test_api.auth_error_bubble()->IsVisible());
+  EXPECT_TRUE(test_api.detachable_base_error_bubble()->visible());
+  EXPECT_FALSE(test_api.auth_error_bubble()->visible());
 }
 
 TEST_F(LockContentsViewUnitTest, AuthErrorDoesNotRemoveDetachableBaseError) {
   auto fake_detachable_base_model =
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher());
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher());
   FakeLoginDetachableBaseModel* detachable_base_model =
       fake_detachable_base_model.get();
 
   // Build lock screen with a single user.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(), std::move(fake_detachable_base_model));
+      DataDispatcher(), std::move(fake_detachable_base_model));
   SetUserCount(1);
 
   const AccountId& kUserAccountId = users()[0]->basic_user_info->account_id;
@@ -1160,7 +1233,7 @@ TEST_F(LockContentsViewUnitTest, AuthErrorDoesNotRemoveDetachableBaseError) {
   LockContentsView::TestApi test_api(contents);
   ui::test::EventGenerator* generator = GetEventGenerator();
 
-  EXPECT_FALSE(test_api.detachable_base_error_bubble()->IsVisible());
+  EXPECT_FALSE(test_api.detachable_base_error_bubble()->visible());
 
   // Change detachable base to a base different than the one previously used by
   // the user - verify that a detachable base error bubble is shown, and the
@@ -1168,13 +1241,14 @@ TEST_F(LockContentsViewUnitTest, AuthErrorDoesNotRemoveDetachableBaseError) {
   detachable_base_model->SetPairingStatus(
       DetachableBasePairingStatus::kAuthenticated, "5678");
 
-  EXPECT_TRUE(test_api.detachable_base_error_bubble()->IsVisible());
+  EXPECT_TRUE(test_api.detachable_base_error_bubble()->visible());
 
   // Attempt and fail user auth - an auth error is expected to be shown.
   // Detachable base error should not be hidden.
   std::unique_ptr<MockLoginScreenClient> client = BindMockLoginScreenClient();
   client->set_authenticate_user_callback_result(false);
-  EXPECT_CALL(*client, AuthenticateUser_(kUserAccountId, _, false, _));
+  EXPECT_CALL(*client,
+              AuthenticateUserWithPasswordOrPin_(kUserAccountId, _, false, _));
 
   // Submit password.
   LoginAuthUserView::TestApi(test_api.primary_big_view()->auth_user())
@@ -1184,15 +1258,15 @@ TEST_F(LockContentsViewUnitTest, AuthErrorDoesNotRemoveDetachableBaseError) {
   generator->PressKey(ui::KeyboardCode::VKEY_RETURN, 0);
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_TRUE(test_api.auth_error_bubble()->IsVisible());
-  EXPECT_TRUE(test_api.detachable_base_error_bubble()->IsVisible());
+  EXPECT_TRUE(test_api.auth_error_bubble()->visible());
+  EXPECT_TRUE(test_api.detachable_base_error_bubble()->visible());
 
   // User action, like pressing a key should close the auth error bubble, but
   // not the detachable base error bubble.
   generator->PressKey(ui::KeyboardCode::VKEY_A, 0);
 
-  EXPECT_TRUE(test_api.detachable_base_error_bubble()->IsVisible());
-  EXPECT_FALSE(test_api.auth_error_bubble()->IsVisible());
+  EXPECT_TRUE(test_api.detachable_base_error_bubble()->visible());
+  EXPECT_FALSE(test_api.auth_error_bubble()->visible());
 }
 
 TEST_F(LockContentsViewKeyboardUnitTest, SwitchPinAndVirtualKeyboard) {
@@ -1203,7 +1277,7 @@ TEST_F(LockContentsViewKeyboardUnitTest, SwitchPinAndVirtualKeyboard) {
 
   // Add user who can use pin authentication.
   const std::string email = "user@domain.com";
-  LoadUser(email);
+  AddUserByEmail(email);
   contents->OnPinEnabledForUserChanged(AccountId::FromUserEmail(email), true);
   LoginBigUserView* big_view =
       LockContentsView::TestApi(contents).primary_big_view();
@@ -1231,7 +1305,7 @@ TEST_F(LockContentsViewKeyboardUnitTest, SwitchUserWhileKeyboardShown) {
       LockScreen::TestApi(LockScreen::Get()).contents_view();
   ASSERT_NE(nullptr, contents);
 
-  LoadUsers(2);
+  SetUserCount(2);
 
   LoginAuthUserView::TestApi primary_user(
       LockContentsView::TestApi(contents).primary_big_view()->auth_user());
@@ -1277,7 +1351,7 @@ TEST_F(LockContentsViewKeyboardUnitTest, PinSubmitWithVirtualKeyboardShown) {
 
   // Add user who can use pin authentication.
   const std::string email = "user@domain.com";
-  LoadUser(email);
+  AddUserByEmail(email);
   contents->OnPinEnabledForUserChanged(AccountId::FromUserEmail(email), true);
   LoginBigUserView* big_view =
       LockContentsView::TestApi(contents).primary_big_view();
@@ -1285,8 +1359,8 @@ TEST_F(LockContentsViewKeyboardUnitTest, PinSubmitWithVirtualKeyboardShown) {
   // Require that AuthenticateUser is called with authenticated_by_pin set to
   // true.
   auto client = BindMockLoginScreenClient();
-  EXPECT_CALL(*client,
-              AuthenticateUser_(_, "1111", true /*authenticated_by_pin*/, _));
+  EXPECT_CALL(*client, AuthenticateUserWithPasswordOrPin_(
+                           _, "1111", true /*authenticated_by_pin*/, _));
 
   // Hide the PIN keyboard.
   LoginPinView* pin_view =
@@ -1315,8 +1389,8 @@ TEST_F(LockContentsViewUnitTest, SwapAuthAndPublicAccountUserInTwoUserLayout) {
   // user.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
   AddPublicAccountUsers(1);
   AddUsers(1);
@@ -1376,8 +1450,8 @@ TEST_F(LockContentsViewUnitTest, SwapUserListToPrimaryBigUser) {
   // users.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
   AddPublicAccountUsers(2);
   AddUsers(2);
@@ -1502,8 +1576,8 @@ TEST_F(LockContentsViewUnitTest, SwapUserListToPrimaryBigUser) {
 TEST_F(LockContentsViewUnitTest, AuthUserSwapFocusesPassword) {
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   AddUsers(2);
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
 
@@ -1532,8 +1606,8 @@ TEST_F(LockContentsViewUnitTest, AuthUserSwapFocusesPassword) {
 TEST_F(LockContentsViewUnitTest, TapOnAuthUserFocusesPassword) {
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
 
   auto do_test = [&](AuthTarget auth_target) {
@@ -1575,8 +1649,8 @@ TEST_F(LockContentsViewUnitTest, TapOnAuthUserFocusesPassword) {
 TEST_F(LockContentsViewUnitTest, UserListUserSwapFocusesPassword) {
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   LockContentsView::TestApi contents_test_api(contents);
   AddUsers(3);
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
@@ -1597,12 +1671,12 @@ TEST_F(LockContentsViewUnitTest, UserListUserSwapFocusesPassword) {
 
 TEST_F(LockContentsViewUnitTest, BadDetachableBaseUnfocusesPasswordView) {
   auto fake_detachable_base_model =
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher());
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher());
   FakeLoginDetachableBaseModel* detachable_base_model =
       fake_detachable_base_model.get();
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(), std::move(fake_detachable_base_model));
+      DataDispatcher(), std::move(fake_detachable_base_model));
   SetUserCount(3);
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
 
@@ -1631,8 +1705,8 @@ TEST_F(LockContentsViewUnitTest, ExpandedPublicSessionView) {
   // users.
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   LockContentsView::TestApi lock_contents(contents);
   std::unique_ptr<views::Widget> widget = CreateWidgetWithContent(contents);
   AddPublicAccountUsers(1);
@@ -1668,11 +1742,11 @@ TEST_F(LockContentsViewUnitTest, ExpandedPublicSessionView) {
   base::RunLoop().RunUntilIdle();
 }
 
-TEST_F(LockContentsViewUnitTest, OnUnlockAllowedForUserChanged) {
+TEST_F(LockContentsViewUnitTest, OnAuthEnabledForUserChanged) {
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(1);
   SetWidget(CreateWidgetWithContent(contents));
 
@@ -1681,62 +1755,96 @@ TEST_F(LockContentsViewUnitTest, OnUnlockAllowedForUserChanged) {
   LockContentsView::TestApi contents_test_api(contents);
   LoginAuthUserView::TestApi auth_test_api(
       contents_test_api.primary_big_view()->auth_user());
-  views::View* note_action_button = contents_test_api.note_action();
   LoginPasswordView* password_view = auth_test_api.password_view();
   LoginPinView* pin_view = auth_test_api.pin_view();
   views::View* disabled_auth_message = auth_test_api.disabled_auth_message();
 
-  // The password field is shown by default, and the note action button is
-  // shown because the lock screen note state is |kAvailable|.
-  EXPECT_TRUE(note_action_button->visible());
+  // The password field is shown by default.
   EXPECT_TRUE(password_view->visible());
   EXPECT_FALSE(pin_view->visible());
   EXPECT_FALSE(disabled_auth_message->visible());
-  // Setting auth disabled will hide the password field and the note action
-  // button, and show the message.
-  data_dispatcher()->SetAuthEnabledForUser(
+  // Setting auth disabled will hide the password field and show the message.
+  DataDispatcher()->SetAuthEnabledForUser(
       kFirstUserAccountId, false,
       base::Time::Now() + base::TimeDelta::FromHours(8));
-  EXPECT_FALSE(note_action_button->visible());
   EXPECT_FALSE(password_view->visible());
   EXPECT_FALSE(pin_view->visible());
   EXPECT_TRUE(disabled_auth_message->visible());
   // Setting auth enabled will hide the message and show the password field.
-  data_dispatcher()->SetAuthEnabledForUser(kFirstUserAccountId, true,
-                                           base::nullopt);
-  EXPECT_FALSE(note_action_button->visible());
+  DataDispatcher()->SetAuthEnabledForUser(kFirstUserAccountId, true,
+                                          base::nullopt);
   EXPECT_TRUE(password_view->visible());
   EXPECT_FALSE(pin_view->visible());
   EXPECT_FALSE(disabled_auth_message->visible());
 
   // Set auth disabled again.
-  data_dispatcher()->SetAuthEnabledForUser(
+  DataDispatcher()->SetAuthEnabledForUser(
       kFirstUserAccountId, false,
       base::Time::Now() + base::TimeDelta::FromHours(8));
-  EXPECT_FALSE(note_action_button->visible());
   EXPECT_FALSE(password_view->visible());
   EXPECT_FALSE(pin_view->visible());
   EXPECT_TRUE(disabled_auth_message->visible());
   // Enable PIN. There's no UI change because auth is currently disabled.
-  data_dispatcher()->SetPinEnabledForUser(kFirstUserAccountId, true);
-  EXPECT_FALSE(note_action_button->visible());
+  DataDispatcher()->SetPinEnabledForUser(kFirstUserAccountId, true);
   EXPECT_FALSE(password_view->visible());
   EXPECT_FALSE(pin_view->visible());
   EXPECT_TRUE(disabled_auth_message->visible());
   // Set auth enabled again. Both password field and PIN keyboard are shown.
-  data_dispatcher()->SetAuthEnabledForUser(kFirstUserAccountId, true,
-                                           base::nullopt);
-  EXPECT_FALSE(note_action_button->visible());
+  DataDispatcher()->SetAuthEnabledForUser(kFirstUserAccountId, true,
+                                          base::nullopt);
   EXPECT_TRUE(password_view->visible());
   EXPECT_TRUE(pin_view->visible());
   EXPECT_FALSE(disabled_auth_message->visible());
 }
 
+TEST_F(LockContentsViewUnitTest,
+       ToggleNoteActionVisibilityOnAuthEnabledChanged) {
+  auto* tray_action = Shell::Get()->tray_action();
+  TestTrayActionClient action_client;
+  tray_action->SetClient(action_client.CreateInterfacePtrAndBind(),
+                         mojom::TrayActionState::kAvailable);
+  auto* contents = new LockContentsView(
+      Shell::Get()->tray_action()->GetLockScreenNoteState(),
+      LockScreen::ScreenType::kLock, DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
+  SetUserCount(1);
+  SetWidget(CreateWidgetWithContent(contents));
+
+  const AccountId& kFirstUserAccountId =
+      users()[0]->basic_user_info->account_id;
+  LockContentsView::TestApi contents_test_api(contents);
+  views::View* note_action_button = contents_test_api.note_action();
+
+  EXPECT_TRUE(note_action_button->visible());
+  // Setting auth disabled hides the note action button.
+  DataDispatcher()->SetAuthEnabledForUser(
+      kFirstUserAccountId, false,
+      base::Time::Now() + base::TimeDelta::FromHours(8));
+  EXPECT_FALSE(note_action_button->visible());
+  // Setting auth enabled shows the note action button.
+  DataDispatcher()->SetAuthEnabledForUser(kFirstUserAccountId, true,
+                                          base::nullopt);
+  EXPECT_TRUE(note_action_button->visible());
+
+  // Set auth disabled again.
+  DataDispatcher()->SetAuthEnabledForUser(
+      kFirstUserAccountId, false,
+      base::Time::Now() + base::TimeDelta::FromHours(8));
+  EXPECT_FALSE(note_action_button->visible());
+  // Set the lock screen note state to |kNotAvailable| while the note action
+  // button is hidden.
+  tray_action->UpdateLockScreenNoteState(mojom::TrayActionState::kNotAvailable);
+  DataDispatcher()->SetAuthEnabledForUser(kFirstUserAccountId, true,
+                                          base::nullopt);
+  // The note action button remains hidden after setting auth enabled.
+  EXPECT_FALSE(note_action_button->visible());
+}
+
 TEST_F(LockContentsViewUnitTest, DisabledAuthMessageFocusBehavior) {
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(1);
   SetWidget(CreateWidgetWithContent(contents));
 
@@ -1749,7 +1857,7 @@ TEST_F(LockContentsViewUnitTest, DisabledAuthMessageFocusBehavior) {
   LoginUserView* user_view = auth_test_api.user_view();
 
   // The message is visible after disabling auth and it receives initial focus.
-  data_dispatcher()->SetAuthEnabledForUser(
+  DataDispatcher()->SetAuthEnabledForUser(
       kFirstUserAccountId, false,
       base::Time::Now() + base::TimeDelta::FromHours(8));
   EXPECT_TRUE(disabled_auth_message->visible());
@@ -1771,16 +1879,47 @@ TEST_F(LockContentsViewUnitTest, DisabledAuthMessageFocusBehavior) {
   EXPECT_TRUE(HasFocusInAnyChildView(status_area));
 }
 
-class LockContentsViewPowerManagerUnitTest
-    : public LockContentsViewKeyboardUnitTest {
- public:
-  void SetUp() override {
-    chromeos::DBusThreadManager::GetSetterForTesting()->SetPowerManagerClient(
-        std::make_unique<chromeos::FakePowerManagerClient>());
+// Tests parent access dialog showing and hiding.
+TEST_F(LockContentsViewUnitTest, ParentAccessDialog) {
+  auto* contents = new LockContentsView(
+      mojom::TrayActionState::kAvailable, LockScreen::ScreenType::kLock,
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
+  AddChildUsers(1);
+  SetWidget(CreateWidgetWithContent(contents));
 
-    LockContentsViewKeyboardUnitTest::SetUp();
-  }
-};
+  LoginBigUserView* primary_view =
+      LockContentsView::TestApi(contents).primary_big_view();
+  LoginAuthUserView::TestApi auth_user =
+      LoginAuthUserView::TestApi(primary_view->auth_user());
+
+  EXPECT_TRUE(primary_view->auth_user());
+  EXPECT_FALSE(primary_view->parent_access());
+  EXPECT_TRUE(LoginPasswordView::TestApi(auth_user.password_view())
+                  .textfield()
+                  ->HasFocus());
+
+  DataDispatcher()->SetShowParentAccessDialog(true);
+
+  EXPECT_TRUE(primary_view->auth_user());
+  EXPECT_TRUE(primary_view->parent_access());
+  EXPECT_FALSE(LoginPasswordView::TestApi(auth_user.password_view())
+                   .textfield()
+                   ->HasFocus());
+  EXPECT_TRUE(HasFocusInAnyChildView(
+      ParentAccessView::TestApi(primary_view->parent_access())
+          .access_code_view()));
+
+  DataDispatcher()->SetShowParentAccessDialog(false);
+
+  EXPECT_TRUE(primary_view->auth_user());
+  EXPECT_FALSE(primary_view->parent_access());
+  EXPECT_TRUE(LoginPasswordView::TestApi(auth_user.password_view())
+                  .textfield()
+                  ->HasFocus());
+}
+
+using LockContentsViewPowerManagerUnitTest = LockContentsViewUnitTest;
 
 // Ensures that a PowerManagerClient::Observer is added on LockScreen::Show()
 // and removed on LockScreen::Destroy().
@@ -1789,23 +1928,19 @@ TEST_F(LockContentsViewPowerManagerUnitTest,
   ASSERT_NO_FATAL_FAILURE(ShowLockScreen());
   LockContentsView* contents =
       LockScreen::TestApi(LockScreen::Get()).contents_view();
-  EXPECT_TRUE(
-      chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->HasObserver(
-          contents));
+  EXPECT_TRUE(chromeos::PowerManagerClient::Get()->HasObserver(contents));
 
   LockScreen::Get()->Destroy();
   // Wait for LockScreen to be fully destroyed
   base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(
-      chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->HasObserver(
-          contents));
+  EXPECT_FALSE(chromeos::PowerManagerClient::Get()->HasObserver(contents));
 }
 
 // Verifies that the password box for the active user is cleared if a suspend
 // event is received.
-TEST_F(LockContentsViewKeyboardUnitTest, PasswordClearedOnSuspend) {
+TEST_F(LockContentsViewUnitTest, PasswordClearedOnSuspend) {
   ASSERT_NO_FATAL_FAILURE(ShowLoginScreen());
-  LoadUsers(1);
+  AddUsers(1);
 
   LockScreen::TestApi lock_screen = LockScreen::TestApi(LockScreen::Get());
   LockContentsView* contents = lock_screen.contents_view();
@@ -1823,9 +1958,9 @@ TEST_F(LockContentsViewKeyboardUnitTest, PasswordClearedOnSuspend) {
   EXPECT_TRUE(textfield->text().empty());
 }
 
-TEST_F(LockContentsViewKeyboardUnitTest, ArrowNavSingleUser) {
+TEST_F(LockContentsViewUnitTest, ArrowNavSingleUser) {
   ASSERT_NO_FATAL_FAILURE(ShowLoginScreen());
-  LoadUsers(1);
+  SetUserCount(1);
   LockContentsView* lock_contents =
       LockScreen::TestApi(LockScreen::Get()).contents_view();
 
@@ -1841,10 +1976,10 @@ TEST_F(LockContentsViewKeyboardUnitTest, ArrowNavSingleUser) {
   EXPECT_TRUE(login_views_utils::HasFocusInAnyChildView(primary_big_view));
 }
 
-TEST_F(LockContentsViewKeyboardUnitTest, ArrowNavTwoUsers) {
+TEST_F(LockContentsViewUnitTest, ArrowNavTwoUsers) {
   ASSERT_NO_FATAL_FAILURE(ShowLoginScreen());
-  LoadUsers(1);
-  LoadPublicAccountUsers(1);
+  AddUsers(1);
+  AddPublicAccountUsers(1);
   LockContentsView::TestApi lock_contents = LockContentsView::TestApi(
       LockScreen::TestApi(LockScreen::Get()).contents_view());
 
@@ -1871,9 +2006,9 @@ TEST_F(LockContentsViewKeyboardUnitTest, ArrowNavTwoUsers) {
   EXPECT_TRUE(login_views_utils::HasFocusInAnyChildView(primary_password_view));
 }
 
-TEST_F(LockContentsViewKeyboardUnitTest, ArrowNavThreeUsers) {
+TEST_F(LockContentsViewUnitTest, ArrowNavThreeUsers) {
   ASSERT_NO_FATAL_FAILURE(ShowLoginScreen());
-  LoadUsers(3);
+  SetUserCount(3);
   LockContentsView::TestApi lock_contents = LockContentsView::TestApi(
       LockScreen::TestApi(LockScreen::Get()).contents_view());
 
@@ -1904,9 +2039,9 @@ TEST_F(LockContentsViewKeyboardUnitTest, ArrowNavThreeUsers) {
   EXPECT_TRUE(login_views_utils::HasFocusInAnyChildView(primary_password_view));
 }
 
-TEST_F(LockContentsViewKeyboardUnitTest, UserSwapFocusesBigView) {
+TEST_F(LockContentsViewUnitTest, UserSwapFocusesBigView) {
   ASSERT_NO_FATAL_FAILURE(ShowLoginScreen());
-  LoadUsers(3);
+  SetUserCount(3);
   LockContentsView::TestApi lock_contents = LockContentsView::TestApi(
       LockScreen::TestApi(LockScreen::Get()).contents_view());
 
@@ -1924,8 +2059,8 @@ TEST_F(LockContentsViewKeyboardUnitTest, UserSwapFocusesBigView) {
 TEST_F(LockContentsViewUnitTest, PowerwashShortcutSendsMojoCall) {
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLogin,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(1);
   SetWidget(CreateWidgetWithContent(contents));
 
@@ -1942,8 +2077,8 @@ TEST_F(LockContentsViewUnitTest, PowerwashShortcutSendsMojoCall) {
 TEST_F(LockContentsViewUnitTest, UsersChangedRetainsExistingState) {
   auto* contents = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(2);
   SetWidget(CreateWidgetWithContent(contents));
 
@@ -1952,7 +2087,7 @@ TEST_F(LockContentsViewUnitTest, UsersChangedRetainsExistingState) {
   AccountId primary_user = test_api.primary_big_view()
                                ->GetCurrentUser()
                                ->basic_user_info->account_id;
-  data_dispatcher()->SetPinEnabledForUser(primary_user, true);
+  DataDispatcher()->SetPinEnabledForUser(primary_user, true);
 
   // This user should be identical to the user we enabled PIN for.
   SetUserCount(1);
@@ -1967,8 +2102,8 @@ TEST_F(LockContentsViewUnitTest, ShowHideWarningBannerBubble) {
   // Build lock screen with a single user.
   auto* lock = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   SetUserCount(1);
   SetWidget(CreateWidgetWithContent(lock));
 
@@ -1978,25 +2113,26 @@ TEST_F(LockContentsViewUnitTest, ShowHideWarningBannerBubble) {
   ui::test::EventGenerator* generator = GetEventGenerator();
 
   // Creating lock screen does not show warning banner bubble.
-  EXPECT_FALSE(test_api.warning_banner_bubble()->IsVisible());
+  EXPECT_FALSE(test_api.warning_banner_bubble()->visible());
 
   // Verifies that a warning banner is shown by giving a non-empty message.
-  data_dispatcher()->ShowWarningBanner(base::ASCIIToUTF16("foo"));
-  EXPECT_TRUE(test_api.warning_banner_bubble()->IsVisible());
+  DataDispatcher()->ShowWarningBanner(base::ASCIIToUTF16("foo"));
+  EXPECT_TRUE(test_api.warning_banner_bubble()->visible());
 
   // Verifies that a warning banner is hidden by HideWarningBanner().
-  data_dispatcher()->HideWarningBanner();
-  EXPECT_FALSE(test_api.warning_banner_bubble()->IsVisible());
+  DataDispatcher()->HideWarningBanner();
+  EXPECT_FALSE(test_api.warning_banner_bubble()->visible());
 
   // Shows a warning banner again.
-  data_dispatcher()->ShowWarningBanner(base::ASCIIToUTF16("foo"));
-  EXPECT_TRUE(test_api.warning_banner_bubble()->IsVisible());
+  DataDispatcher()->ShowWarningBanner(base::ASCIIToUTF16("foo"));
+  EXPECT_TRUE(test_api.warning_banner_bubble()->visible());
 
   // Attempt and fail user auth - an auth error is expected to be shown.
   // The warning banner should not be hidden.
   std::unique_ptr<MockLoginScreenClient> client = BindMockLoginScreenClient();
   client->set_authenticate_user_callback_result(false);
-  EXPECT_CALL(*client, AuthenticateUser_(kUserAccountId, _, false, _));
+  EXPECT_CALL(*client,
+              AuthenticateUserWithPasswordOrPin_(kUserAccountId, _, false, _));
 
   // Submit password.
   LoginAuthUserView::TestApi(test_api.primary_big_view()->auth_user())
@@ -2006,20 +2142,20 @@ TEST_F(LockContentsViewUnitTest, ShowHideWarningBannerBubble) {
   generator->PressKey(ui::KeyboardCode::VKEY_RETURN, 0);
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_TRUE(test_api.auth_error_bubble()->IsVisible());
-  EXPECT_TRUE(test_api.warning_banner_bubble()->IsVisible());
+  EXPECT_TRUE(test_api.auth_error_bubble()->visible());
+  EXPECT_TRUE(test_api.warning_banner_bubble()->visible());
 }
 
 TEST_F(LockContentsViewUnitTest, RemoveUserFocusMovesBackToPrimaryUser) {
   // Build lock screen with one public account and one normal user.
   auto* lock = new LockContentsView(
       mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
-      data_dispatcher(),
-      std::make_unique<FakeLoginDetachableBaseModel>(data_dispatcher()));
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
   AddPublicAccountUsers(1);
   AddUsers(1);
   users()[1]->can_remove = true;
-  data_dispatcher()->NotifyUsers(users());
+  DataDispatcher()->NotifyUsers(users());
   SetWidget(CreateWidgetWithContent(lock));
 
   LockContentsView::TestApi test_api(lock);
@@ -2034,7 +2170,7 @@ TEST_F(LockContentsViewUnitTest, RemoveUserFocusMovesBackToPrimaryUser) {
   generator->PressKey(ui::KeyboardCode::VKEY_RETURN, 0);
   base::RunLoop().RunUntilIdle();
   // Focus the remove user bubble, tap twice to remove the user.
-  user_test_api.menu()->bubble_view()->RequestFocus();
+  user_test_api.menu()->RequestFocus();
   generator->PressKey(ui::KeyboardCode::VKEY_RETURN, 0);
   base::RunLoop().RunUntilIdle();
   generator->PressKey(ui::KeyboardCode::VKEY_RETURN, 0);
@@ -2044,6 +2180,96 @@ TEST_F(LockContentsViewUnitTest, RemoveUserFocusMovesBackToPrimaryUser) {
   EXPECT_EQ(nullptr, test_api.opt_secondary_big_view());
   // Primary user has focus.
   EXPECT_TRUE(HasFocusInAnyChildView(test_api.primary_big_view()));
+}
+
+// Verifies that setting fingerprint state keeps the backlights forced off. A
+// fingerprint state change is not a user action, excluding too many
+// authentication attempts, which will trigger the auth attempt flow.
+TEST_F(LockContentsViewUnitTest,
+       BacklightRemainsForcedOffAfterFingerprintStateChange) {
+  // Enter tablet mode so the power button events force the backlight off.
+  Shell::Get()->power_button_controller()->OnTabletModeStarted();
+
+  // Show lock screen with one normal user.
+  auto* lock = new LockContentsView(
+      mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
+  AddUsers(1);
+  SetWidget(CreateWidgetWithContent(lock));
+
+  // Force the backlights off.
+  PressAndReleasePowerButton();
+  EXPECT_TRUE(
+      Shell::Get()->backlights_forced_off_setter()->backlights_forced_off());
+
+  // Change fingerprint state; backlights remain forced off.
+  DataDispatcher()->SetFingerprintState(
+      users()[0]->basic_user_info->account_id,
+      mojom::FingerprintState::DISABLED_FROM_ATTEMPTS);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(
+      Shell::Get()->backlights_forced_off_setter()->backlights_forced_off());
+
+  Shell::Get()->power_button_controller()->OnTabletModeEnded();
+}
+
+// Verifies that a fingerprint authentication attempt makes sure the backlights
+// are not forced off.
+TEST_F(LockContentsViewUnitTest,
+       BacklightIsNotForcedOffAfterFingerprintAuthenticationAttempt) {
+  // Enter tablet mode so the power button events force the backlight off.
+  Shell::Get()->power_button_controller()->OnTabletModeStarted();
+
+  // Show lock screen with one normal user.
+  auto* lock = new LockContentsView(
+      mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
+  AddUsers(1);
+  SetWidget(CreateWidgetWithContent(lock));
+
+  // Force the backlights off.
+  PressAndReleasePowerButton();
+  EXPECT_TRUE(
+      Shell::Get()->backlights_forced_off_setter()->backlights_forced_off());
+
+  // Validate a fingerprint authentication attempt resets backlights being
+  // forced off.
+  DataDispatcher()->NotifyFingerprintAuthResult(
+      users()[0]->basic_user_info->account_id, false /*successful*/);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(
+      Shell::Get()->backlights_forced_off_setter()->backlights_forced_off());
+
+  Shell::Get()->power_button_controller()->OnTabletModeEnded();
+}
+
+TEST_F(LockContentsViewUnitTest, RightAndLeftAcceleratorsWithNoUser) {
+  // Show lock screen but do *not* initialize any users.
+  auto* lock = new LockContentsView(
+      mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
+  SetWidget(CreateWidgetWithContent(lock));
+
+  // Nothing to validate except that there is no crash.
+  lock->AcceleratorPressed(ui::Accelerator(ui::VKEY_RIGHT, 0));
+  lock->AcceleratorPressed(ui::Accelerator(ui::VKEY_LEFT, 0));
+}
+
+TEST_F(LockContentsViewUnitTest, OnFocusLeavingSystemTrayWithNoUsers) {
+  auto* lock = new LockContentsView(
+      mojom::TrayActionState::kNotAvailable, LockScreen::ScreenType::kLock,
+      DataDispatcher(),
+      std::make_unique<FakeLoginDetachableBaseModel>(DataDispatcher()));
+  SetWidget(CreateWidgetWithContent(lock));
+
+  // Check that there is always a focusable view after transitioning focus.
+  lock->OnFocusLeavingSystemTray(false /* reverse */);
+  EXPECT_TRUE(lock->GetFocusManager()->GetFocusedView());
+  lock->OnFocusLeavingSystemTray(true /* reverse */);
+  EXPECT_TRUE(lock->GetFocusManager()->GetFocusedView());
 }
 
 }  // namespace ash

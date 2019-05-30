@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "content/common/mime_sniffing_url_loader.h"
@@ -190,7 +191,8 @@ class MimeSniffingThrottleTest : public testing::Test {
 };
 
 TEST_F(MimeSniffingThrottleTest, NoMimeTypeWithSniffableScheme) {
-  auto throttle = std::make_unique<MimeSniffingThrottle>();
+  auto throttle = std::make_unique<MimeSniffingThrottle>(
+      scoped_task_environment_.GetMainThreadTaskRunner());
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
@@ -203,7 +205,8 @@ TEST_F(MimeSniffingThrottleTest, NoMimeTypeWithSniffableScheme) {
 }
 
 TEST_F(MimeSniffingThrottleTest, SniffableMimeTypeWithSniffableScheme) {
-  auto throttle = std::make_unique<MimeSniffingThrottle>();
+  auto throttle = std::make_unique<MimeSniffingThrottle>(
+      scoped_task_environment_.GetMainThreadTaskRunner());
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
@@ -217,7 +220,8 @@ TEST_F(MimeSniffingThrottleTest, SniffableMimeTypeWithSniffableScheme) {
 }
 
 TEST_F(MimeSniffingThrottleTest, NotSniffableMimeTypeWithSniffableScheme) {
-  auto throttle = std::make_unique<MimeSniffingThrottle>();
+  auto throttle = std::make_unique<MimeSniffingThrottle>(
+      scoped_task_environment_.GetMainThreadTaskRunner());
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
@@ -231,7 +235,8 @@ TEST_F(MimeSniffingThrottleTest, NotSniffableMimeTypeWithSniffableScheme) {
 }
 
 TEST_F(MimeSniffingThrottleTest, NoMimeTypeWithNotSniffableScheme) {
-  auto throttle = std::make_unique<MimeSniffingThrottle>();
+  auto throttle = std::make_unique<MimeSniffingThrottle>(
+      scoped_task_environment_.GetMainThreadTaskRunner());
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
@@ -244,7 +249,8 @@ TEST_F(MimeSniffingThrottleTest, NoMimeTypeWithNotSniffableScheme) {
 }
 
 TEST_F(MimeSniffingThrottleTest, SniffableMimeTypeWithNotSniffableScheme) {
-  auto throttle = std::make_unique<MimeSniffingThrottle>();
+  auto throttle = std::make_unique<MimeSniffingThrottle>(
+      scoped_task_environment_.GetMainThreadTaskRunner());
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
@@ -258,7 +264,8 @@ TEST_F(MimeSniffingThrottleTest, SniffableMimeTypeWithNotSniffableScheme) {
 }
 
 TEST_F(MimeSniffingThrottleTest, NotSniffableMimeTypeWithNotSniffableScheme) {
-  auto throttle = std::make_unique<MimeSniffingThrottle>();
+  auto throttle = std::make_unique<MimeSniffingThrottle>(
+      scoped_task_environment_.GetMainThreadTaskRunner());
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
@@ -272,7 +279,8 @@ TEST_F(MimeSniffingThrottleTest, NotSniffableMimeTypeWithNotSniffableScheme) {
 }
 
 TEST_F(MimeSniffingThrottleTest, SniffableButAlreadySniffed) {
-  auto throttle = std::make_unique<MimeSniffingThrottle>();
+  auto throttle = std::make_unique<MimeSniffingThrottle>(
+      scoped_task_environment_.GetMainThreadTaskRunner());
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
@@ -287,7 +295,8 @@ TEST_F(MimeSniffingThrottleTest, SniffableButAlreadySniffed) {
 }
 
 TEST_F(MimeSniffingThrottleTest, NoBody) {
-  auto throttle = std::make_unique<MimeSniffingThrottle>();
+  auto throttle = std::make_unique<MimeSniffingThrottle>(
+      scoped_task_environment_.GetMainThreadTaskRunner());
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
@@ -300,6 +309,34 @@ TEST_F(MimeSniffingThrottleTest, NoBody) {
 
   // Call OnComplete() without sending body.
   delegate->source_loader_client()->OnComplete(
+      network::URLLoaderCompletionStatus(net::ERR_FAILED));
+  delegate->destination_loader_client()->RunUntilComplete();
+
+  // The mime type should be updated to the default mime type ("text/plain").
+  EXPECT_TRUE(delegate->destination_loader_client()->has_received_response());
+  EXPECT_EQ("text/plain",
+            delegate->destination_loader_client()->response_head().mime_type);
+}
+
+TEST_F(MimeSniffingThrottleTest, EmptyBody) {
+  auto throttle = std::make_unique<MimeSniffingThrottle>(
+      scoped_task_environment_.GetMainThreadTaskRunner());
+  auto delegate = std::make_unique<MockDelegate>();
+  throttle->set_delegate(delegate.get());
+
+  GURL response_url("https://example.com");
+  network::ResourceResponseHead response_head;
+  bool defer = false;
+  throttle->WillProcessResponse(response_url, &response_head, &defer);
+  EXPECT_TRUE(defer);
+  EXPECT_TRUE(delegate->is_intercepted());
+
+  mojo::DataPipe pipe;
+  delegate->source_loader_client()->OnStartLoadingResponseBody(
+      std::move(pipe.consumer_handle));
+  pipe.producer_handle.reset();  // The pipe is empty.
+
+  delegate->source_loader_client()->OnComplete(
       network::URLLoaderCompletionStatus());
   delegate->destination_loader_client()->RunUntilComplete();
 
@@ -310,7 +347,8 @@ TEST_F(MimeSniffingThrottleTest, NoBody) {
 }
 
 TEST_F(MimeSniffingThrottleTest, Body_PlainText) {
-  auto throttle = std::make_unique<MimeSniffingThrottle>();
+  auto throttle = std::make_unique<MimeSniffingThrottle>(
+      scoped_task_environment_.GetMainThreadTaskRunner());
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
@@ -333,7 +371,8 @@ TEST_F(MimeSniffingThrottleTest, Body_PlainText) {
 }
 
 TEST_F(MimeSniffingThrottleTest, Body_Docx) {
-  auto throttle = std::make_unique<MimeSniffingThrottle>();
+  auto throttle = std::make_unique<MimeSniffingThrottle>(
+      scoped_task_environment_.GetMainThreadTaskRunner());
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
@@ -356,7 +395,8 @@ TEST_F(MimeSniffingThrottleTest, Body_Docx) {
 }
 
 TEST_F(MimeSniffingThrottleTest, Body_PNG) {
-  auto throttle = std::make_unique<MimeSniffingThrottle>();
+  auto throttle = std::make_unique<MimeSniffingThrottle>(
+      scoped_task_environment_.GetMainThreadTaskRunner());
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
@@ -379,7 +419,8 @@ TEST_F(MimeSniffingThrottleTest, Body_PNG) {
 }
 
 TEST_F(MimeSniffingThrottleTest, Body_LongPlainText) {
-  auto throttle = std::make_unique<MimeSniffingThrottle>();
+  auto throttle = std::make_unique<MimeSniffingThrottle>(
+      scoped_task_environment_.GetMainThreadTaskRunner());
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
@@ -406,6 +447,14 @@ TEST_F(MimeSniffingThrottleTest, Body_LongPlainText) {
   delegate->LoadResponseBody(long_body);
   scoped_task_environment_.RunUntilIdle();
 
+  // Send OnComplete() to the MimeSniffingURLLoader.
+  delegate->CompleteResponse();
+  scoped_task_environment_.RunUntilIdle();
+  // MimeSniffingURLLoader should not send OnComplete() to the destination
+  // client until it finished writing all the data.
+  EXPECT_FALSE(
+      delegate->destination_loader_client()->has_received_completion());
+
   // Read the half of the body. This unblocks MimeSniffingURLLoader to push the
   // rest of the body to the data pipe.
   uint32_t read_bytes = delegate->ReadResponseBody(long_body.size() / 2);
@@ -414,7 +463,6 @@ TEST_F(MimeSniffingThrottleTest, Body_LongPlainText) {
   // Read the rest of the body.
   read_bytes += delegate->ReadResponseBody(long_body.size() / 2);
   scoped_task_environment_.RunUntilIdle();
-  delegate->CompleteResponse();
   delegate->destination_loader_client()->RunUntilComplete();
 
   // Check if all data has been read.
@@ -427,7 +475,8 @@ TEST_F(MimeSniffingThrottleTest, Body_LongPlainText) {
 }
 
 TEST_F(MimeSniffingThrottleTest, Abort_NoBodyPipe) {
-  auto throttle = std::make_unique<MimeSniffingThrottle>();
+  auto throttle = std::make_unique<MimeSniffingThrottle>(
+      scoped_task_environment_.GetMainThreadTaskRunner());
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 

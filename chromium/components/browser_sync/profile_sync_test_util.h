@@ -13,29 +13,16 @@
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/invalidation/impl/fake_invalidation_service.h"
 #include "components/invalidation/impl/profile_identity_provider.h"
-#include "components/signin/core/browser/account_tracker_service.h"
-#include "components/signin/core/browser/fake_gaia_cookie_manager_service.h"
-#include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
-#include "components/signin/core/browser/fake_signin_manager.h"
-#include "components/signin/core/browser/test_signin_client.h"
-#include "components/sync/driver/fake_sync_client.h"
+#include "components/sync/device_info/device_info_sync_service_impl.h"
 #include "components/sync/driver/sync_api_component_factory_mock.h"
+#include "components/sync/driver/sync_client_mock.h"
 #include "components/sync/model/test_model_type_store_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
-#include "components/sync_sessions/mock_sync_sessions_client.h"
-#include "services/identity/public/cpp/identity_manager.h"
+#include "services/identity/public/cpp/identity_test_environment.h"
 #include "services/network/test/test_url_loader_factory.h"
-
-namespace history {
-class HistoryService;
-}
 
 namespace user_prefs {
 class PrefRegistrySyncable;
-}
-
-namespace sync_sessions {
-class LocalSessionEventRouter;
 }
 
 namespace browser_sync {
@@ -49,71 +36,12 @@ void RegisterPrefsForProfileSyncService(
 // MessageLoop, though.
 class ProfileSyncServiceBundle {
  public:
-#if defined(OS_CHROMEOS)
-  using FakeSigninManagerType = FakeSigninManagerBase;
-#else
-  using FakeSigninManagerType = FakeSigninManager;
-#endif
-
   ProfileSyncServiceBundle();
 
   ~ProfileSyncServiceBundle();
 
-  // Builders
-
-  // Builds a child of FakeSyncClient which overrides some of the client's
-  // accessors to return objects from the bundle.
-  class SyncClientBuilder {
-   public:
-    // Construct the builder and associate with the |bundle| to source objects
-    // from.
-    explicit SyncClientBuilder(ProfileSyncServiceBundle* bundle);
-
-    ~SyncClientBuilder();
-
-    void SetPersonalDataManager(
-        autofill::PersonalDataManager* personal_data_manager);
-
-    // The client will call this callback to produce the SyncableService
-    // specific to |type|.
-    void SetSyncableServiceCallback(
-        const base::RepeatingCallback<base::WeakPtr<syncer::SyncableService>(
-            syncer::ModelType type)>& get_syncable_service_callback);
-
-    // The client will call this callback to produce the SyncService for the
-    // current Profile.
-    void SetSyncServiceCallback(
-        const base::Callback<syncer::SyncService*(void)>&
-            get_sync_service_callback);
-
-    void SetHistoryService(history::HistoryService* history_service);
-
-    void SetBookmarkModelCallback(
-        const base::Callback<bookmarks::BookmarkModel*(void)>&
-            get_bookmark_model_callback);
-
-    void set_activate_model_creation() { activate_model_creation_ = true; }
-
-    std::unique_ptr<syncer::FakeSyncClient> Build();
-
-   private:
-    // Associated bundle to source objects from.
-    ProfileSyncServiceBundle* const bundle_;
-
-    autofill::PersonalDataManager* personal_data_manager_;
-    base::Callback<base::WeakPtr<syncer::SyncableService>(
-        syncer::ModelType type)>
-        get_syncable_service_callback_;
-    base::Callback<syncer::SyncService*(void)> get_sync_service_callback_;
-    history::HistoryService* history_service_ = nullptr;
-    base::Callback<bookmarks::BookmarkModel*(void)>
-        get_bookmark_model_callback_;
-    // If set, the built client will be able to build some ModelSafeWorker
-    // instances.
-    bool activate_model_creation_ = false;
-
-    DISALLOW_COPY_AND_ASSIGN(SyncClientBuilder);
-  };
+  // Creates a mock sync client that leverages the dependencies in this bundle.
+  std::unique_ptr<syncer::SyncClientMock> CreateSyncClientMock();
 
   // Creates an InitParams instance with the specified |start_behavior| and
   // |sync_client|, and fills the rest with dummy values and objects owned by
@@ -132,20 +60,16 @@ class ProfileSyncServiceBundle {
     return &pref_service_;
   }
 
-  FakeProfileOAuth2TokenService* auth_service() { return &auth_service_; }
+  identity::IdentityTestEnvironment* identity_test_env() {
+    return &identity_test_env_;
+  }
 
-  FakeSigninManagerType* signin_manager() { return &signin_manager_; }
-
-  identity::IdentityManager* identity_manager() { return &identity_manager_; }
-
-  AccountTrackerService* account_tracker() { return &account_tracker_; }
+  identity::IdentityManager* identity_manager() {
+    return identity_test_env_.identity_manager();
+  }
 
   syncer::SyncApiComponentFactoryMock* component_factory() {
     return &component_factory_;
-  }
-
-  sync_sessions::MockSyncSessionsClient* sync_sessions_client() {
-    return &sync_sessions_client_;
   }
 
   invalidation::ProfileIdentityProvider* identity_provider() {
@@ -156,28 +80,16 @@ class ProfileSyncServiceBundle {
     return &fake_invalidation_service_;
   }
 
-  base::SequencedTaskRunner* db_thread() { return db_thread_.get(); }
-
-  void set_db_thread(
-      const scoped_refptr<base::SequencedTaskRunner>& db_thread) {
-    db_thread_ = db_thread;
+  syncer::DeviceInfoSyncService* device_info_sync_service() {
+    return &device_info_sync_service_;
   }
 
  private:
-  scoped_refptr<base::SequencedTaskRunner> db_thread_;
   sync_preferences::TestingPrefServiceSyncable pref_service_;
   syncer::TestModelTypeStoreService model_type_store_service_;
-  TestSigninClient signin_client_;
-  AccountTrackerService account_tracker_;
-  FakeSigninManagerType signin_manager_;
-  FakeProfileOAuth2TokenService auth_service_;
-  FakeGaiaCookieManagerService gaia_cookie_manager_service_;
-  identity::IdentityManager identity_manager_;
+  syncer::DeviceInfoSyncServiceImpl device_info_sync_service_;
+  identity::IdentityTestEnvironment identity_test_env_;
   testing::NiceMock<syncer::SyncApiComponentFactoryMock> component_factory_;
-  std::unique_ptr<sync_sessions::LocalSessionEventRouter>
-      local_session_event_router_;
-  testing::NiceMock<sync_sessions::MockSyncSessionsClient>
-      sync_sessions_client_;
   std::unique_ptr<invalidation::ProfileIdentityProvider> identity_provider_;
   invalidation::FakeInvalidationService fake_invalidation_service_;
   network::TestURLLoaderFactory test_url_loader_factory_;

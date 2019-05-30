@@ -12,8 +12,8 @@
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/sequenced_task_runner.h"
-#include "base/sys_info.h"
 #include "base/syslog_logging.h"
+#include "base/system/sys_info.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/policy/device_status_collector.h"
 #include "chromeos/settings/cros_settings_names.h"
@@ -22,7 +22,7 @@
 #include "components/policy/core/common/cloud/device_management_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/media_request_state.h"
-#include "content/public/common/media_stream_request.h"
+#include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "ui/base/user_activity/user_activity_detector.h"
 
 namespace em = enterprise_management;
@@ -47,16 +47,6 @@ StatusUploader::StatusUploader(
       upload_frequency_(default_upload_frequency),
       has_captured_media_(false),
       weak_factory_(this) {
-  // StatusUploader is currently only created for registered clients, and
-  // it is currently safe to assume that the client will not unregister while
-  // StatusUploader is alive.
-  //
-  // If future changes result in StatusUploader's lifetime extending beyond
-  // unregistration events, then this class should be updated
-  // to skip status uploads for unregistered clients, and to observe the client
-  // and kick off an upload when registration happens.
-  DCHECK(client->is_registered());
-
   // Track whether any media capture devices are in use - this changes what
   // type of information we are allowed to upload.
   MediaCaptureDevicesDispatcher::GetInstance()->AddObserver(this);
@@ -82,13 +72,13 @@ StatusUploader::~StatusUploader() {
   MediaCaptureDevicesDispatcher::GetInstance()->RemoveObserver(this);
 }
 
-void StatusUploader::ScheduleNextStatusUpload(bool immediately) {
+bool StatusUploader::ScheduleNextStatusUpload(bool immediately) {
   // Don't schedule a new status upload if there's a status upload in progress
   // (it will be scheduled once the current one completes).
   if (status_upload_in_progress_) {
     SYSLOG(INFO) << "In the middle of a status upload, not scheduling the next "
                  << "one until this one finishes.";
-    return;
+    return false;
   }
 
   // Calculate when to fire off the next update (if it should have already
@@ -103,6 +93,7 @@ void StatusUploader::ScheduleNextStatusUpload(bool immediately) {
   upload_callback_.Reset(base::Bind(&StatusUploader::UploadStatus,
                                     base::Unretained(this)));
   task_runner_->PostDelayedTask(FROM_HERE, upload_callback_.callback(), delay);
+  return true;
 }
 
 void StatusUploader::RefreshUploadFrequency() {
@@ -170,20 +161,20 @@ bool StatusUploader::IsSessionDataUploadAllowed() {
 
 void StatusUploader::OnRequestUpdate(int render_process_id,
                                      int render_frame_id,
-                                     content::MediaStreamType stream_type,
+                                     blink::MediaStreamType stream_type,
                                      const content::MediaRequestState state) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   // If a video or audio capture stream is opened, set a flag so we disallow
   // upload of potentially sensitive data.
   if (state == content::MEDIA_REQUEST_STATE_OPENING &&
-      (stream_type == content::MEDIA_DEVICE_AUDIO_CAPTURE ||
-       stream_type == content::MEDIA_DEVICE_VIDEO_CAPTURE)) {
+      (stream_type == blink::MEDIA_DEVICE_AUDIO_CAPTURE ||
+       stream_type == blink::MEDIA_DEVICE_VIDEO_CAPTURE)) {
     has_captured_media_ = true;
   }
 }
 
-void StatusUploader::ScheduleNextStatusUploadImmediately() {
-  ScheduleNextStatusUpload(true);
+bool StatusUploader::ScheduleNextStatusUploadImmediately() {
+  return ScheduleNextStatusUpload(true);
 }
 
 void StatusUploader::UploadStatus() {

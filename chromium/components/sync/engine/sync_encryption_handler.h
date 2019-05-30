@@ -45,6 +45,9 @@ class SyncEncryptionHandler {
  public:
   class NigoriState;
 
+  static constexpr PassphraseType kInitialPassphraseType =
+      PassphraseType::IMPLICIT_PASSPHRASE;
+
   // All Observer methods are done synchronously from within a transaction and
   // on the sync thread.
   class Observer {
@@ -116,12 +119,10 @@ class SyncEncryptionHandler {
                                          base::Time passphrase_time) = 0;
 
     // The user has set a passphrase using this device.
-    //
-    // |nigori_state| can be used to restore nigori state across
-    // SyncEncryptionHandlerImpl lifetimes. See also SyncEncryptionHandlerImpl's
-    // RestoredNigori method.
+    // TODO(treib): This method is only overridden in tests which use it to
+    // capture the NigoriState; we should find a better way to do that.
     virtual void OnLocalSetPassphraseEncryption(
-        const NigoriState& nigori_state) = 0;
+        const NigoriState& nigori_state) {}
   };
 
   class NigoriState {
@@ -149,12 +150,8 @@ class SyncEncryptionHandler {
   // Notifies observers of the result of the operation via OnPassphraseAccepted
   // or OnPassphraseRequired, updates the nigori node, and does re-encryption as
   // appropriate. If an explicit password has been set previously, we drop
-  // subsequent requests to set a passphrase. If the cryptographer has pending
-  // keys, and a new implicit passphrase is provided, we try decrypting the
-  // pending keys with it, and if that fails, we cache the passphrase for
-  // re-encryption once the pending keys are decrypted.
-  virtual void SetEncryptionPassphrase(const std::string& passphrase,
-                                       bool is_explicit) = 0;
+  // subsequent requests to set a passphrase.
+  virtual void SetEncryptionPassphrase(const std::string& passphrase) = 0;
 
   // Provides a passphrase for decrypting the user's existing sync data.
   // Notifies observers of the result of the operation via OnPassphraseAccepted

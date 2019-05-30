@@ -10,6 +10,8 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/observer_list.h"
+#include "base/observer_list_types.h"
 #include "chromecast/graphics/cast_window_manager.h"
 #include "chromecast/graphics/gestures/cast_gesture_handler.h"
 #include "content/public/browser/web_contents.h"
@@ -19,6 +21,7 @@ namespace chromecast {
 namespace shell {
 
 // Describes visual context of the window within the UI.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chromecast.shell
 enum class VisibilityType {
   // Unknown visibility state.
   UNKNOWN = 0,
@@ -41,6 +44,7 @@ enum class VisibilityType {
 // 2. Whether the window should become immediately visible
 // 3. How much screen space the window should occupy
 // 4. What state to return to when the activity is completed
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chromecast.shell
 enum class VisibilityPriority {
   // Default priority. It is up to system to decide how to show the activity.
   DEFAULT = 0,
@@ -63,14 +67,21 @@ enum class VisibilityPriority {
 
   // The activity should not be visible.
   HIDDEN = 5,
+
+  // The activity should not be visible, but the activity will consider itself
+  // to be visible. This is useful for opaque overlays while the activity is
+  // still active.
+  HIDDEN_STICKY = 6,
 };
 
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chromecast.shell
 enum class GestureType {
   NO_GESTURE = 0,
   GO_BACK = 1,
   TAP = 2,
   TAP_DOWN = 3,
   TOP_DRAG = 4,
+  RIGHT_DRAG = 5,
 };
 
 // Class that represents the "window" a WebContents is displayed in cast_shell.
@@ -92,12 +103,12 @@ class CastContentWindow {
 
     // Called while a system UI gesture is in progress.
     virtual void GestureProgress(GestureType gesture_type,
-                                 const gfx::Point& touch_location){};
+                                 const gfx::Point& touch_location) {}
 
     // Called when an in-progress system UI gesture is cancelled (for example
     // when the finger is lifted before the completion of the gesture.)
     virtual void CancelGesture(GestureType gesture_type,
-                               const gfx::Point& touch_location){};
+                               const gfx::Point& touch_location) {}
 
     // Consume and handle a completed UI gesture. Returns whether the gesture
     // was handled or not.
@@ -130,18 +141,31 @@ class CastContentWindow {
     // True if this app should turn on the screen.
     bool turn_on_screen = true;
 
+    // application or acitivity's session ID
+    std::string session_id = "";
+
     // Gesture priority for when the window is visible.
     CastGestureHandler::Priority gesture_priority =
         CastGestureHandler::Priority::NONE;
 
-    CreateParams() = default;
+    CreateParams();
+  };
+
+  class Observer : public base::CheckedObserver {
+   public:
+    // Notify visibility change for this window.
+    virtual void OnVisibilityChange(VisibilityType visibility_type) {}
+
+   protected:
+    ~Observer() override {}
   };
 
   // Creates the platform specific CastContentWindow. |delegate| should outlive
   // the created CastContentWindow.
   static std::unique_ptr<CastContentWindow> Create(const CreateParams& params);
 
-  virtual ~CastContentWindow() {}
+  CastContentWindow();
+  virtual ~CastContentWindow();
 
   // Creates a full-screen window for |web_contents| and displays it if screen
   // access has been granted.
@@ -170,6 +194,15 @@ class CastContentWindow {
   // change.
   virtual void RequestVisibility(VisibilityPriority visibility_priority) = 0;
 
+  // Provide activity-related metadata. This data should include information
+  // that is common for all activities, such as type.
+  // TODO(seantopping): Define a schema for this data.
+  virtual void SetActivityContext(base::Value activity_context) = 0;
+
+  // Use this to stash custom data for this class. This data will be visible to
+  // the window manager.
+  virtual void SetHostContext(base::Value host_context) = 0;
+
   // Notify the window that its visibility type has changed. This should only
   // ever be called by the window manager.
   // TODO(seantopping): Make this private to the window manager.
@@ -178,6 +211,13 @@ class CastContentWindow {
   // Cast activity or application calls it to request for moving out of the
   // screen.
   virtual void RequestMoveOut() = 0;
+
+  // Observer interface:
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
+
+ protected:
+  base::ObserverList<Observer> observer_list_;
 };
 
 }  // namespace shell

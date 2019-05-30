@@ -19,6 +19,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/task_scheduler/task_scheduler.h"
 #include "build/build_config.h"
@@ -31,7 +32,7 @@
 #include "net/proxy_resolution/proxy_config_service_android.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
 #include "third_party/zlib/zlib.h"
-#include "url/url_features.h"
+#include "url/buildflags.h"
 #include "url/url_util.h"
 
 #if !BUILDFLAG(USE_PLATFORM_ICU_ALTERNATIVES)
@@ -62,6 +63,14 @@ base::WaitableEvent g_init_thread_init_done(
     base::WaitableEvent::InitialState::NOT_SIGNALED);
 
 void NativeInit() {
+// In integrated mode, ICU and FeatureList has been initialized by the host.
+#if !BUILDFLAG(INTEGRATED_MODE)
+#if !BUILDFLAG(USE_PLATFORM_ICU_ALTERNATIVES)
+  base::i18n::InitializeICU();
+#endif
+  base::FeatureList::InitializeInstance(std::string(), std::string());
+#endif
+
   if (!base::TaskScheduler::GetInstance())
     base::TaskScheduler::CreateAndStartWithDefaultParams("Cronet");
   url::Initialize();
@@ -71,7 +80,7 @@ void NativeInit() {
 
 bool OnInitThread() {
   DCHECK(g_init_message_loop);
-  return g_init_message_loop == base::MessageLoop::current();
+  return g_init_message_loop->IsBoundToCurrentThread();
 }
 
 // In integrated mode, Cronet native library is built and loaded together with
@@ -98,19 +107,9 @@ void CronetOnUnLoad(JavaVM* jvm, void* reserved) {
 }
 #endif
 
-void JNI_CronetLibraryLoader_CronetInitOnInitThread(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& jcaller) {
-// In integrated mode, ICU and FeatureList has been initialized by the host.
-#if !BUILDFLAG(INTEGRATED_MODE)
-#if !BUILDFLAG(USE_PLATFORM_ICU_ALTERNATIVES)
-  base::i18n::InitializeICU();
-#endif
-  base::FeatureList::InitializeInstance(std::string(), std::string());
-#endif
-
+void JNI_CronetLibraryLoader_CronetInitOnInitThread(JNIEnv* env) {
   // Initialize message loop for init thread.
-  DCHECK(!base::MessageLoop::current());
+  DCHECK(!base::MessageLoopCurrent::IsSet());
   DCHECK(!g_init_message_loop);
   g_init_message_loop =
       new base::MessageLoop(base::MessageLoop::Type::TYPE_JAVA);
@@ -131,8 +130,7 @@ void JNI_CronetLibraryLoader_CronetInitOnInitThread(
 }
 
 ScopedJavaLocalRef<jstring> JNI_CronetLibraryLoader_GetCronetVersion(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& jcaller) {
+    JNIEnv* env) {
 #if defined(ARCH_CPU_ARM64)
   // Attempt to avoid crashes on some ARM64 Marshmallow devices by
   // prompting zlib ARM feature detection early on. https://crbug.com/853725

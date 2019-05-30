@@ -6,11 +6,13 @@
 
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/task/post_task.h"
 #include "base/task_runner_util.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/media/media_devices_permission_checker.h"
 #include "content/browser/media/media_devices_util.h"
 #include "content/browser/renderer_host/media/audio_input_device_manager.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/media_device_id.h"
 #include "content/public/browser/render_frame_host.h"
@@ -52,11 +54,11 @@ void CheckAccessOnUIThread(
     return;
   }
 
-  std::move(cb).Run(
-      std::move(salt_and_origin.device_id_salt),
-      std::move(salt_and_origin.origin),
-      MediaDevicesPermissionChecker().CheckPermissionOnUIThread(
-          MEDIA_DEVICE_TYPE_AUDIO_OUTPUT, render_process_id, render_frame_id));
+  std::move(cb).Run(std::move(salt_and_origin.device_id_salt),
+                    std::move(salt_and_origin.origin),
+                    MediaDevicesPermissionChecker().CheckPermissionOnUIThread(
+                        blink::MEDIA_DEVICE_TYPE_AUDIO_OUTPUT,
+                        render_process_id, render_frame_id));
 }
 
 }  // namespace
@@ -161,15 +163,15 @@ void AudioOutputAuthorizationHandler::RequestDeviceAuthorization(
   // output device is found, reuse the input device permissions.
   if (media::AudioDeviceDescription::UseSessionIdToSelectDevice(session_id,
                                                                 device_id)) {
-    const MediaStreamDevice* device =
+    const blink::MediaStreamDevice* device =
         media_stream_manager_->audio_input_device_manager()
             ->GetOpenedDeviceById(session_id);
     if (device && device->matched_output_device_id) {
       trace_scope->UsingSessionId(session_id, device->id);
       // We don't need the origin for authorization in this case, but it's used
       // for hashing the device id before sending it back to the renderer.
-      BrowserThread::PostTaskAndReplyWithResult(
-          BrowserThread::UI, FROM_HERE,
+      base::PostTaskWithTraitsAndReplyWithResult(
+          FROM_HERE, {BrowserThread::UI},
           base::BindOnce(&GetMediaDeviceSaltAndOrigin, render_process_id_,
                          render_frame_id),
           base::BindOnce(&AudioOutputAuthorizationHandler::HashDeviceId,
@@ -189,8 +191,8 @@ void AudioOutputAuthorizationHandler::RequestDeviceAuthorization(
 
   trace_scope->CheckAccessStart(device_id);
   // Check device permissions if nondefault device is requested.
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&CheckAccessOnUIThread, render_process_id_,
                      render_frame_id, override_permissions_,
                      permissions_override_value_,
@@ -250,7 +252,7 @@ void AudioOutputAuthorizationHandler::AccessChecked(
   }
 
   MediaDevicesManager::BoolDeviceTypes devices_to_enumerate;
-  devices_to_enumerate[MEDIA_DEVICE_TYPE_AUDIO_OUTPUT] = true;
+  devices_to_enumerate[blink::MEDIA_DEVICE_TYPE_AUDIO_OUTPUT] = true;
   media_stream_manager_->media_devices_manager()->EnumerateDevices(
       devices_to_enumerate,
       base::BindOnce(&AudioOutputAuthorizationHandler::TranslateDeviceID,
@@ -269,8 +271,8 @@ void AudioOutputAuthorizationHandler::TranslateDeviceID(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(!media::AudioDeviceDescription::IsDefaultDevice(device_id));
 
-  for (const MediaDeviceInfo& device_info :
-       enumeration[MEDIA_DEVICE_TYPE_AUDIO_OUTPUT]) {
+  for (const blink::WebMediaDeviceInfo& device_info :
+       enumeration[blink::MEDIA_DEVICE_TYPE_AUDIO_OUTPUT]) {
     if (DoesMediaDeviceIDMatchHMAC(salt, security_origin, device_id,
                                    device_info.device_id)) {
       GetDeviceParameters(std::move(trace_scope), std::move(cb),

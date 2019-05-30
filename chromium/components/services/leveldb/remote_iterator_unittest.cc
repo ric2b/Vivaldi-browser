@@ -7,11 +7,15 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
+#include "components/services/leveldb/public/cpp/manifest.h"
 #include "components/services/leveldb/public/cpp/remote_iterator.h"
 #include "components/services/leveldb/public/cpp/util.h"
 #include "components/services/leveldb/public/interfaces/leveldb.mojom.h"
-#include "services/service_manager/public/cpp/service_context.h"
-#include "services/service_manager/public/cpp/service_test.h"
+#include "services/service_manager/public/cpp/manifest_builder.h"
+#include "services/service_manager/public/cpp/test/test_service.h"
+#include "services/service_manager/public/cpp/test/test_service_manager.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 namespace leveldb {
 namespace {
@@ -39,15 +43,24 @@ base::Callback<void(const base::UnguessableToken&)> CaptureToken(
                     quit_closure);
 }
 
-class RemoteIteratorTest : public service_manager::test::ServiceTest {
+const char kTestServiceName[] = "leveldb_service_unittests";
+
+class RemoteIteratorTest : public testing::Test {
  public:
-  RemoteIteratorTest() : ServiceTest("leveldb_service_unittests") {}
-  ~RemoteIteratorTest() override {}
+  RemoteIteratorTest()
+      : test_service_manager_(
+            {GetManifest(), service_manager::ManifestBuilder()
+                                .WithServiceName(kTestServiceName)
+                                .RequireCapability("leveldb", "leveldb:leveldb")
+                                .Build()}),
+        test_service_(
+            test_service_manager_.RegisterTestInstance(kTestServiceName)) {}
+  ~RemoteIteratorTest() override = default;
 
  protected:
-  // Overridden from mojo::test::ApplicationTestBase:
+  service_manager::Connector* connector() { return test_service_.connector(); }
+
   void SetUp() override {
-    ServiceTest::SetUp();
     connector()->BindInterface("leveldb", &leveldb_);
 
     mojom::DatabaseError error;
@@ -73,15 +86,14 @@ class RemoteIteratorTest : public service_manager::test::ServiceTest {
     }
   }
 
-  void TearDown() override {
-    leveldb_.reset();
-    ServiceTest::TearDown();
-  }
-
   mojom::LevelDBServicePtr& leveldb() { return leveldb_; }
   mojom::LevelDBDatabaseAssociatedPtr& database() { return database_; }
 
  private:
+  base::test::ScopedTaskEnvironment task_environment_;
+  service_manager::TestServiceManager test_service_manager_;
+  service_manager::TestService test_service_;
+
   mojom::LevelDBServicePtr leveldb_;
   mojom::LevelDBDatabaseAssociatedPtr database_;
 

@@ -7,12 +7,16 @@ package org.chromium.chrome.browser.widget;
 import android.graphics.Bitmap;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.v4.util.LruCache;
 import android.text.TextUtils;
 
 import org.chromium.base.DiscardableReferencePool;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.BitmapCache;
 import org.chromium.chrome.browser.util.ConversionUtils;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -30,10 +34,32 @@ import java.util.Locale;
  *                    duplicating work to decode the same image for two different requests.
  */
 public class ThumbnailProviderImpl implements ThumbnailProvider, ThumbnailStorageDelegate {
-    /** 5 MB of thumbnails should be enough for everyone. */
-    private static final int MAX_CACHE_BYTES = 5 * ConversionUtils.BYTES_PER_MEGABYTE;
+    public enum ClientType { DOWNLOAD_HOME, NTP_SUGGESTIONS }
 
+    /** Default in-memory thumbnail cache size. */
+    private static final int DEFAULT_MAX_CACHE_BYTES = 5 * ConversionUtils.BYTES_PER_MEGABYTE;
+
+    /**
+     * Helper object to store in the LruCache when we don't really need a value but can't use null.
+     */
+    private static final Object NO_BITMAP_PLACEHOLDER = new Object();
+
+    /**
+     * An in-memory LRU cache used to cache bitmaps, mostly improve performance for scrolling, when
+     * the view is recycled and needs a new thumbnail.
+     */
     private BitmapCache mBitmapCache;
+
+    /** The client type of the client using this provider. */
+    private final ClientType mClient;
+
+    /**
+     * Tracks a set of Content Ids where thumbnail generation or retrieval failed.  This should
+     * prevent making subsequent (potentially expensive) thumbnail generation requests when there
+     * would be no point.
+     */
+    private LruCache<String /* Content Id */, Object /* Placeholder */> mNoBitmapCache =
+            new LruCache<>(100);
 
     /** Queue of files to retrieve thumbnails for. */
     private final Deque<ThumbnailRequest> mRequestQueue = new ArrayDeque<>();
@@ -43,16 +69,41 @@ public class ThumbnailProviderImpl implements ThumbnailProvider, ThumbnailStorag
 
     private ThumbnailDiskStorage mStorage;
 
-    public ThumbnailProviderImpl(DiscardableReferencePool referencePool) {
+    private int mCacheSizeMaxBytesUma;
+
+    /**
+     * Constructor to build the thumbnail provider with default thumbnail cache size.
+     * @param referencePool The application's reference pool.
+     * @param client The associated client type.
+     */
+    public ThumbnailProviderImpl(DiscardableReferencePool referencePool, ClientType client) {
+        this(referencePool, DEFAULT_MAX_CACHE_BYTES, client);
+    }
+
+    /**
+     * Constructor to build the thumbnail provider.
+     * @param referencePool The application's reference pool.
+     * @param bitmapCacheSizeByte The size in bytes of the in-memory LRU bitmap cache.
+     * @param client The associated client type.
+     */
+    public ThumbnailProviderImpl(
+            DiscardableReferencePool referencePool, int bitmapCacheSizeByte, ClientType client) {
         ThreadUtils.assertOnUiThread();
-        mBitmapCache = new BitmapCache(referencePool, MAX_CACHE_BYTES);
+        mBitmapCache = new BitmapCache(referencePool, bitmapCacheSizeByte);
         mStorage = ThumbnailDiskStorage.create(this);
+        mClient = client;
     }
 
     @Override
     public void destroy() {
+        // Drop any references to any current requests.
+        mCurrentRequest = null;
+        mRequestQueue.clear();
+
         ThreadUtils.assertOnUiThread();
+        recordBitmapCacheSize();
         mStorage.destroy();
+        mBitmapCache.destroy();
     }
 
     /**
@@ -67,6 +118,11 @@ public class ThumbnailProviderImpl implements ThumbnailProvider, ThumbnailStorag
         ThreadUtils.assertOnUiThread();
 
         if (TextUtils.isEmpty(request.getContentId())) {
+            return;
+        }
+
+        if (mNoBitmapCache.get(request.getContentId()) != null) {
+            request.onThumbnailRetrieved(request.getContentId(), null);
             return;
         }
 
@@ -97,7 +153,7 @@ public class ThumbnailProviderImpl implements ThumbnailProvider, ThumbnailStorag
     }
 
     private void processQueue() {
-        ThreadUtils.postOnUiThread(this::processNextRequest);
+        PostTask.postTask(UiThreadTaskTraits.DEFAULT, this::processNextRequest);
     }
 
     private String getKey(String contentId, int bitmapSizePx) {
@@ -108,6 +164,10 @@ public class ThumbnailProviderImpl implements ThumbnailProvider, ThumbnailStorag
         String key = getKey(contentId, bitmapSizePx);
         Bitmap cachedBitmap = mBitmapCache.getBitmap(key);
         assert cachedBitmap == null || !cachedBitmap.isRecycled();
+
+        RecordHistogram.recordBooleanHistogram(
+                "Android.ThumbnailProvider.CachedBitmap.Found." + getClientTypeUmaSuffix(mClient),
+                cachedBitmap != null);
         return cachedBitmap;
     }
 
@@ -156,6 +216,9 @@ public class ThumbnailProviderImpl implements ThumbnailProvider, ThumbnailStorag
      */
     @Override
     public void onThumbnailRetrieved(@NonNull String contentId, @Nullable Bitmap bitmap) {
+        // Early-out if we have no actual current request.
+        if (mCurrentRequest == null) return;
+
         if (bitmap != null) {
             // The bitmap returned here is retrieved from the native side. The image decoder there
             // scales down the image (if it is too big) so that one of its sides is smaller than or
@@ -169,12 +232,34 @@ public class ThumbnailProviderImpl implements ThumbnailProvider, ThumbnailStorag
             // fetches of this thumbnail can recognise the key in the cache.
             String key = getKey(contentId, mCurrentRequest.getIconSize());
             mBitmapCache.putBitmap(key, bitmap);
+            mNoBitmapCache.remove(contentId);
             mCurrentRequest.onThumbnailRetrieved(contentId, bitmap);
+
+            mCacheSizeMaxBytesUma = Math.max(mCacheSizeMaxBytesUma, mBitmapCache.size());
         } else {
+            mNoBitmapCache.put(contentId, NO_BITMAP_PLACEHOLDER);
             mCurrentRequest.onThumbnailRetrieved(contentId, null);
         }
 
         mCurrentRequest = null;
         processQueue();
+    }
+
+    private void recordBitmapCacheSize() {
+        RecordHistogram.recordMemoryKBHistogram(
+                "Android.ThumbnailProvider.BitmapCache.Size." + getClientTypeUmaSuffix(mClient),
+                mCacheSizeMaxBytesUma / ConversionUtils.BYTES_PER_KILOBYTE);
+    }
+
+    private static String getClientTypeUmaSuffix(ClientType clientType) {
+        switch (clientType) {
+            case DOWNLOAD_HOME:
+                return "DownloadHome";
+            case NTP_SUGGESTIONS:
+                return "NTPSnippets";
+            default:
+                assert false;
+                return "Other";
+        }
     }
 }

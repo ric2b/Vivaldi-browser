@@ -11,6 +11,7 @@
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
@@ -74,6 +75,7 @@ content::WebContents* WebView::GetWebContents() {
 }
 
 void WebView::SetWebContents(content::WebContents* replacement) {
+  TRACE_EVENT0("views", "WebView::SetWebContents");
   if (replacement == web_contents())
     return;
   SetCrashedOverlayView(nullptr);
@@ -129,6 +131,10 @@ void WebView::SetCrashedOverlayView(View* crashed_overlay_view) {
 
   if (crashed_overlay_view_) {
     RemoveChildView(crashed_overlay_view_);
+    // Show the hosted web contents view iff the crashed
+    // overlay is NOT showing, to ensure hit testing is
+    // correct on Mac. See https://crbug.com/896508
+    holder_->SetVisible(true);
     if (!crashed_overlay_view_->owned_by_client())
       delete crashed_overlay_view_;
   }
@@ -136,6 +142,7 @@ void WebView::SetCrashedOverlayView(View* crashed_overlay_view) {
   crashed_overlay_view_ = crashed_overlay_view;
   if (crashed_overlay_view_) {
     AddChildView(crashed_overlay_view_);
+    holder_->SetVisible(false);
     crashed_overlay_view_->SetBoundsRect(gfx::Rect(size()));
   }
 
@@ -147,18 +154,6 @@ void WebView::SetCrashedOverlayView(View* crashed_overlay_view) {
 
 const char* WebView::GetClassName() const {
   return kViewClassName;
-}
-
-std::unique_ptr<content::WebContents> WebView::SwapWebContents(
-    std::unique_ptr<content::WebContents> new_web_contents) {
-  if (wc_owner_)
-    wc_owner_->SetDelegate(NULL);
-  std::unique_ptr<content::WebContents> old_web_contents(std::move(wc_owner_));
-  wc_owner_ = std::move(new_web_contents);
-  if (wc_owner_)
-    wc_owner_->SetDelegate(this);
-  SetWebContents(wc_owner_.get());
-  return old_web_contents;
 }
 
 void WebView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
@@ -258,6 +253,10 @@ void WebView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   // provided via other means. Providing it here would be redundant.
   // Mark the name as explicitly empty so that accessibility_checks pass.
   node_data->SetNameExplicitlyEmpty();
+  if (child_ax_tree_id_ != ui::AXTreeIDUnknown()) {
+    node_data->AddStringAttribute(ax::mojom::StringAttribute::kChildTreeId,
+                                  child_ax_tree_id_.ToString());
+  }
 }
 
 gfx::NativeViewAccessible WebView::GetNativeViewAccessible() {
@@ -354,6 +353,7 @@ void WebView::ResizeDueToAutoResize(content::WebContents* source,
 // WebView, private:
 
 void WebView::AttachWebContents() {
+  TRACE_EVENT0("views", "WebView::AttachWebContents");
   // Prevents attachment if the WebView isn't already in a Widget, or it's
   // already attached.
   if (!GetWidget() || !web_contents())
@@ -368,6 +368,10 @@ void WebView::AttachWebContents() {
 
   holder_->Attach(view_to_attach);
 
+  // We set the parent accessible of the native view to be our parent.
+  if (parent())
+    holder_->SetParentAccessible(parent()->GetNativeViewAccessible());
+
   // The WebContents is not focused automatically when attached, so we need to
   // tell the WebContents it has focus if this has focus.
   if (HasFocus())
@@ -377,8 +381,10 @@ void WebView::AttachWebContents() {
 }
 
 void WebView::DetachWebContents() {
-  if (web_contents())
+  TRACE_EVENT0("views", "WebView::DetachWebContents");
+  if (web_contents()) {
     holder_->Detach();
+  }
 }
 
 void WebView::ReattachForFullscreenChange(bool enter_fullscreen) {
@@ -415,8 +421,10 @@ void WebView::UpdateCrashedOverlayView() {
 }
 
 void WebView::NotifyAccessibilityWebContentsChanged() {
-  if (web_contents())
-    NotifyAccessibilityEvent(ax::mojom::Event::kChildrenChanged, false);
+  content::RenderFrameHost* rfh =
+      web_contents() ? web_contents()->GetMainFrame() : nullptr;
+  child_ax_tree_id_ = rfh ? rfh->GetAXTreeID() : ui::AXTreeIDUnknown();
+  NotifyAccessibilityEvent(ax::mojom::Event::kChildrenChanged, false);
 }
 
 std::unique_ptr<content::WebContents> WebView::CreateWebContents(

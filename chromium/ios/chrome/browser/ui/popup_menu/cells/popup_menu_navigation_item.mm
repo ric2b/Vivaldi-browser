@@ -5,7 +5,7 @@
 #import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_navigation_item.h"
 
 #include "base/logging.h"
-#import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
+#import "ios/chrome/browser/ui/popup_menu/public/popup_menu_ui_constants.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
 #import "ios/chrome/common/ui_util/constraints_ui_util.h"
 
@@ -57,6 +57,7 @@ const CGFloat kMaxHeight = 100;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
     cell = [[PopupMenuNavigationCell alloc] init];
+    [cell registerForContentSizeUpdates];
   });
 
   [self configureCell:cell withStyler:[[ChromeTableViewStyler alloc] init]];
@@ -91,7 +92,8 @@ const CGFloat kMaxHeight = 100;
 
     _titleLabel = [[UILabel alloc] init];
     _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+    _titleLabel.font = [self titleFont];
+    _titleLabel.adjustsFontForContentSizeCategory = YES;
 
     UIView* faviconBackground = [[UIView alloc] init];
     faviconBackground.translatesAutoresizingMaskIntoConstraints = NO;
@@ -152,9 +154,31 @@ const CGFloat kMaxHeight = 100;
   }
 }
 
+- (void)registerForContentSizeUpdates {
+  // This is needed because if the cell is static (used for height),
+  // adjustsFontForContentSizeCategory isn't working.
+  [[NSNotificationCenter defaultCenter]
+      addObserver:self
+         selector:@selector(preferredContentSizeDidChange:)
+             name:UIContentSizeCategoryDidChangeNotification
+           object:nil];
+}
+
 - (void)prepareForReuse {
   [super prepareForReuse];
   [self setFavicon:nil];
+}
+
+#pragma mark - Private
+
+// Callback when the preferred Content Size change.
+- (void)preferredContentSizeDidChange:(NSNotification*)notification {
+  self.titleLabel.font = [self titleFont];
+}
+
+// Font to be used for the title.
+- (UIFont*)titleFont {
+  return [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
 }
 
 @end

@@ -20,7 +20,6 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/sync/base/cryptographer.h"
 #include "components/sync/base/data_type_histogram.h"
-#include "components/sync/driver/sync_client.h"
 #include "components/sync/engine/engine_util.h"
 #include "components/sync/model/sync_error.h"
 #include "components/sync/model/sync_merge_result.h"
@@ -152,10 +151,8 @@ const BookmarkNode* BookmarkNodeFinder::FindBookmarkNode(
   std::string adjusted_title;
   ConvertTitleToSyncInternalFormat(title, &adjusted_title);
   BookmarkNodeRange range = child_nodes_.equal_range(adjusted_title);
-  BookmarkNodeMap::iterator match_iter = range.second;
-  for (BookmarkNodeMap::iterator iter = range.first;
-       iter != range.second;
-       ++iter) {
+  auto match_iter = range.second;
+  for (auto iter = range.first; iter != range.second; ++iter) {
     // Then within the range match the node by the folder bit
     // and the url.
     const BookmarkNode* node = iter->second;
@@ -302,12 +299,14 @@ void BookmarkModelAssociator::Context::MarkForVersionUpdate(
 
 BookmarkModelAssociator::BookmarkModelAssociator(
     BookmarkModel* bookmark_model,
-    syncer::SyncClient* sync_client,
+    BookmarkUndoService* bookmark_undo_service,
+    favicon::FaviconService* favicon_service,
     syncer::UserShare* user_share,
     std::unique_ptr<syncer::DataTypeErrorHandler> unrecoverable_error_handler,
     bool expect_mobile_bookmarks_folder)
     : bookmark_model_(bookmark_model),
-      sync_client_(sync_client),
+      bookmark_undo_service_(bookmark_undo_service),
+      favicon_service_(favicon_service),
       user_share_(user_share),
       unrecoverable_error_handler_(std::move(unrecoverable_error_handler)),
       expect_mobile_bookmarks_folder_(expect_mobile_bookmarks_folder),
@@ -319,6 +318,18 @@ BookmarkModelAssociator::BookmarkModelAssociator(
 
 BookmarkModelAssociator::~BookmarkModelAssociator() {
   DCHECK(thread_checker_.CalledOnValidThread());
+}
+
+bookmarks::BookmarkModel* BookmarkModelAssociator::GetBookmarkModel() {
+  return bookmark_model_;
+}
+
+favicon::FaviconService* BookmarkModelAssociator::GetFaviconService() {
+  return favicon_service_;
+}
+
+BookmarkUndoService* BookmarkModelAssociator::GetBookmarkUndoService() {
+  return bookmark_undo_service_;
 }
 
 syncer::SyncError BookmarkModelAssociator::DisassociateModels() {
@@ -378,7 +389,7 @@ void BookmarkModelAssociator::Associate(const BookmarkNode* node,
 
 void BookmarkModelAssociator::Disassociate(int64_t sync_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  SyncIdToBookmarkNodeMap::iterator iter = id_map_inverse_.find(sync_id);
+  auto iter = id_map_inverse_.find(sync_id);
   if (iter == id_map_inverse_.end())
     return;
   id_map_.erase(iter->second->id());
@@ -449,8 +460,7 @@ syncer::SyncError BookmarkModelAssociator::AssociateModels(
     syncer::SyncMergeResult* syncer_merge_result) {
   // Since any changes to the bookmark model made here are not user initiated,
   // these change should not be undoable and so suspend the undo tracking.
-  ScopedSuspendBookmarkUndo suspend_undo(
-      sync_client_->GetBookmarkUndoServiceIfExists());
+  ScopedSuspendBookmarkUndo suspend_undo(bookmark_undo_service_);
 
   Context context(local_merge_result, syncer_merge_result);
 
@@ -667,10 +677,10 @@ syncer::SyncError BookmarkModelAssociator::BuildAssociations(Context* context) {
   BookmarkChangeProcessor::UpdateTransactionVersion(
       new_version, bookmark_model_, context->bookmarks_for_version_update());
 
-  UMA_HISTOGRAM_COUNTS("Sync.BookmarksDuplicationsAtAssociation",
-                       context->duplicate_count());
-  UMA_HISTOGRAM_COUNTS("Sync.BookmarksNewDuplicationsAtAssociation",
-                       context->duplicate_count() - initial_duplicate_count);
+  UMA_HISTOGRAM_COUNTS_1M("Sync.BookmarksDuplicationsAtAssociation",
+                          context->duplicate_count());
+  UMA_HISTOGRAM_COUNTS_1M("Sync.BookmarksNewDuplicationsAtAssociation",
+                          context->duplicate_count() - initial_duplicate_count);
 
   if (context->duplicate_count() > initial_duplicate_count) {
     UMA_HISTOGRAM_ENUMERATION("Sync.BookmarksModelSyncStateAtNewDuplication",
@@ -689,8 +699,7 @@ syncer::SyncError BookmarkModelAssociator::BuildAssociations(
   BookmarkNodeFinder node_finder(parent_node);
 
   int index = 0;
-  for (std::vector<int64_t>::const_iterator it = sync_ids.begin();
-       it != sync_ids.end(); ++it) {
+  for (auto it = sync_ids.begin(); it != sync_ids.end(); ++it) {
     int64_t sync_child_id = *it;
     syncer::ReadNode sync_child_node(trans);
     if (sync_child_node.InitByIdLookup(sync_child_id) !=
@@ -713,7 +722,7 @@ syncer::SyncError BookmarkModelAssociator::BuildAssociations(
                         (parent_node->GetChild(index) == child_node);
       if (!is_in_sync) {
         BookmarkChangeProcessor::UpdateBookmarkWithSyncData(
-            sync_child_node, bookmark_model_, child_node, sync_client_);
+            sync_child_node, bookmark_model_, child_node, favicon_service_);
         bookmark_model_->Move(child_node, parent_node, index);
         context->IncrementLocalItemsModified();
         context->MarkForVersionUpdate(child_node);
@@ -787,7 +796,7 @@ const BookmarkNode* BookmarkModelAssociator::CreateBookmarkNode(
   base::string16 bookmark_title = base::UTF8ToUTF16(sync_title);
   const BookmarkNode* child_node = BookmarkChangeProcessor::CreateBookmarkNode(
       bookmark_title, url, sync_child_node, parent_node, bookmark_model_,
-      sync_client_, bookmark_index);
+      favicon_service_, bookmark_index);
   if (!child_node) {
     *error = unrecoverable_error_handler_->CreateAndUploadError(
         FROM_HERE, "Failed to create bookmark node with title " + sync_title +
@@ -829,7 +838,7 @@ void BookmarkModelAssociator::ApplyDeletesFromSyncJournal(
 
   // Check bookmark model from top to bottom.
   BookmarkStack dfs_stack;
-  for (BookmarkList::const_iterator it = context->bookmark_roots().begin();
+  for (auto it = context->bookmark_roots().begin();
        it != context->bookmark_roots().end(); ++it) {
     dfs_stack.push(*it);
   }
@@ -894,8 +903,7 @@ void BookmarkModelAssociator::ApplyDeletesFromSyncJournal(
   std::set<int64_t> journals_to_purge;
 
   // Remove empty folders from bottom to top.
-  for (FolderInfoList::reverse_iterator it = folders_matched.rbegin();
-      it != folders_matched.rend(); ++it) {
+  for (auto it = folders_matched.rbegin(); it != folders_matched.rend(); ++it) {
     if (it->folder->child_count() == 0) {
       bookmark_model_->Remove(it->folder);
       context->IncrementLocalItemsDeleted();

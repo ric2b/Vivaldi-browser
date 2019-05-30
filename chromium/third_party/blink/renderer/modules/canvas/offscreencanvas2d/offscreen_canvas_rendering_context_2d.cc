@@ -33,15 +33,15 @@ OffscreenCanvasRenderingContext2D::OffscreenCanvasRenderingContext2D(
     const CanvasContextCreationAttributesCore& attrs)
     : CanvasRenderingContext(canvas, attrs) {
   ExecutionContext* execution_context = canvas->GetTopExecutionContext();
-  if (execution_context->IsDocument()) {
-    Settings* settings = ToDocument(execution_context)->GetSettings();
+  if (auto* document = DynamicTo<Document>(execution_context)) {
+    Settings* settings = document->GetSettings();
     if (settings->GetDisableReadingFromCanvas())
       canvas->SetDisableReadingFromCanvasTrue();
     return;
   }
   dirty_rect_for_commit_.setEmpty();
   WorkerSettings* worker_settings =
-      ToWorkerGlobalScope(execution_context)->GetWorkerSettings();
+      To<WorkerGlobalScope>(execution_context)->GetWorkerSettings();
   if (worker_settings && worker_settings->DisableReadingFromCanvas())
     canvas->SetDisableReadingFromCanvasTrue();
 }
@@ -55,7 +55,7 @@ void OffscreenCanvasRenderingContext2D::commit() {
   // TODO(fserb): consolidate this with PushFrame
   SkIRect damage_rect(dirty_rect_for_commit_);
   dirty_rect_for_commit_.setEmpty();
-  Host()->Commit(ProduceFrame(), damage_rect);
+  Host()->Commit(ProduceCanvasResource(), damage_rect);
 }
 
 // BaseRenderingContext2D implementation
@@ -68,17 +68,8 @@ void OffscreenCanvasRenderingContext2D::SetOriginTainted() {
 }
 
 bool OffscreenCanvasRenderingContext2D::WouldTaintOrigin(
-    CanvasImageSource* source,
-    ExecutionContext* execution_context) {
-  if (execution_context->IsWorkerGlobalScope()) {
-    // We only support passing in ImageBitmap and OffscreenCanvases as
-    // source images in drawImage() or createPattern() in a
-    // OffscreenCanvas2d in worker.
-    DCHECK(source->IsImageBitmap() || source->IsOffscreenCanvas());
-  }
-
-  return CanvasRenderingContext::WouldTaintOrigin(
-      source, execution_context->GetSecurityOrigin());
+    CanvasImageSource* source) {
+  return CanvasRenderingContext::WouldTaintOrigin(source);
 }
 
 int OffscreenCanvasRenderingContext2D::Width() const {
@@ -104,11 +95,11 @@ void OffscreenCanvasRenderingContext2D::Reset() {
 }
 
 scoped_refptr<CanvasResource>
-OffscreenCanvasRenderingContext2D::ProduceFrame() {
+OffscreenCanvasRenderingContext2D::ProduceCanvasResource() {
   if (!CanCreateCanvas2dResourceProvider())
     return nullptr;
   scoped_refptr<CanvasResource> frame =
-      GetCanvasResourceProvider()->ProduceFrame();
+      GetCanvasResourceProvider()->ProduceCanvasResource();
   if (!frame)
     return nullptr;
 
@@ -121,7 +112,7 @@ void OffscreenCanvasRenderingContext2D::PushFrame() {
     return;
 
   SkIRect damage_rect(dirty_rect_for_commit_);
-  Host()->PushFrame(ProduceFrame(), damage_rect);
+  Host()->PushFrame(ProduceCanvasResource(), damage_rect);
   dirty_rect_for_commit_.setEmpty();
 }
 
@@ -418,7 +409,7 @@ void OffscreenCanvasRenderingContext2D::DrawTextInternal(
                    false);
   text_run.SetNormalizeSpace(true);
   // Draw the item text at the correct point.
-  FloatPoint location(x, y + GetFontBaseline(font_metrics));
+  FloatPoint location(x, y + GetFontBaseline(*font_data));
   double font_width = font.Width(text_run);
 
   bool use_max_width = (max_width && *max_width < font_width);
@@ -441,15 +432,13 @@ void OffscreenCanvasRenderingContext2D::DrawTextInternal(
       break;
   }
 
-  // The slop built in to this mask rect matches the heuristic used in
-  // FontCGWin.cpp for GDI text.
   TextRunPaintInfo text_run_paint_info(text_run);
-  text_run_paint_info.bounds =
-      FloatRect(location.X() - font_metrics.Height() / 2,
-                location.Y() - font_metrics.Ascent() - font_metrics.LineGap(),
-                width + font_metrics.Height(), font_metrics.LineSpacing());
+  FloatRect bounds(
+      location.X() - font_metrics.Height() / 2,
+      location.Y() - font_metrics.Ascent() - font_metrics.LineGap(),
+      width + font_metrics.Height(), font_metrics.LineSpacing());
   if (paint_type == CanvasRenderingContext2DState::kStrokePaintType)
-    InflateStrokeRect(text_run_paint_info.bounds);
+    InflateStrokeRect(bounds);
 
   int save_count = c->getSaveCount();
   if (use_max_width) {
@@ -471,7 +460,7 @@ void OffscreenCanvasRenderingContext2D::DrawTextInternal(
       },
       [](const SkIRect& rect)  // overdraw test lambda
       { return false; },
-      text_run_paint_info.bounds, paint_type);
+      bounds, paint_type);
   c->restoreToCount(save_count);
   ValidateStateStack();
 }

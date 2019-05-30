@@ -15,9 +15,15 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/memory_usage_estimator.h"
 #include "base/values.h"
-#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "net/base/escape.h"
 #include "url/url_constants.h"
+
+#ifdef OS_ANDROID
+#include "base/android/jni_string.h"
+#include "jni/SuggestionAnswer_jni.h"
+
+using base::android::ScopedJavaLocalRef;
+#endif
 
 namespace {
 
@@ -268,8 +274,7 @@ bool SuggestionAnswer::ParseAnswer(const base::DictionaryValue* answer_json,
 
   std::string image_url;
   const base::DictionaryValue* optional_image;
-  if (OmniboxFieldTrial::IsNewAnswerLayoutEnabled() &&
-      answer_json->GetDictionary("i", &optional_image) &&
+  if (answer_json->GetDictionary("i", &optional_image) &&
       optional_image->GetString("d", &image_url)) {
     result->image_url_ = GURL(image_url);
   } else {
@@ -285,7 +290,7 @@ bool SuggestionAnswer::Equals(const SuggestionAnswer& answer) const {
          second_line_.Equals(answer.second_line_);
 }
 
-void SuggestionAnswer::AddImageURLsTo(std::vector<GURL>* urls) const {
+void SuggestionAnswer::AddImageURLsTo(URLs* urls) const {
   // Note: first_line_.image_url() is not used in practice (so it's ignored).
   if (image_url_.is_valid())
     urls->push_back(image_url_);
@@ -304,9 +309,6 @@ size_t SuggestionAnswer::EstimateMemoryUsage() const {
 }
 
 void SuggestionAnswer::InterpretTextTypes() {
-  if (!OmniboxFieldTrial::IsNewAnswerLayoutEnabled())
-    return;
-
   switch (type()) {
     case SuggestionAnswer::ANSWER_TYPE_WEATHER: {
       second_line_.SetTextStyles(SuggestionAnswer::TOP_ALIGNED,
@@ -341,3 +343,54 @@ void SuggestionAnswer::InterpretTextTypes() {
   first_line_.SetTextStyles(0, TextStyle::NORMAL_DIM);
   second_line_.SetTextStyles(0, TextStyle::NORMAL);
 }
+
+#ifdef OS_ANDROID
+namespace {
+
+ScopedJavaLocalRef<jobject> CreateJavaTextField(
+    JNIEnv* env,
+    const SuggestionAnswer::TextField& text_field) {
+  return Java_SuggestionAnswer_createTextField(
+      env, text_field.type(),
+      base::android::ConvertUTF16ToJavaString(env, text_field.text()),
+      static_cast<int>(text_field.style()), text_field.num_lines());
+}
+
+ScopedJavaLocalRef<jobject> CreateJavaImageLine(
+    JNIEnv* env,
+    const SuggestionAnswer::ImageLine* image_line) {
+  ScopedJavaLocalRef<jobject> jtext_fields =
+      Java_SuggestionAnswer_createTextFieldList(env);
+  for (const SuggestionAnswer::TextField& text_field :
+       image_line->text_fields()) {
+    Java_SuggestionAnswer_addTextFieldToList(
+        env, jtext_fields, CreateJavaTextField(env, text_field));
+  }
+
+  ScopedJavaLocalRef<jobject> jadditional_text;
+  if (image_line->additional_text())
+    jadditional_text = CreateJavaTextField(env, *image_line->additional_text());
+
+  ScopedJavaLocalRef<jobject> jstatus_text;
+  if (image_line->status_text())
+    jstatus_text = CreateJavaTextField(env, *image_line->status_text());
+
+  ScopedJavaLocalRef<jstring> jimage_url;
+  if (image_line->image_url().is_valid()) {
+    jimage_url = base::android::ConvertUTF8ToJavaString(
+        env, image_line->image_url().spec());
+  }
+
+  return Java_SuggestionAnswer_createImageLine(
+      env, jtext_fields, jadditional_text, jstatus_text, jimage_url);
+}
+
+}  // namespace
+
+ScopedJavaLocalRef<jobject> SuggestionAnswer::CreateJavaObject() const {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return Java_SuggestionAnswer_createSuggestionAnswer(
+      env, static_cast<int>(type_), CreateJavaImageLine(env, &first_line_),
+      CreateJavaImageLine(env, &second_line_));
+}
+#endif  // OS_ANDROID

@@ -63,6 +63,9 @@ Polymer({
     /** @private {HTMLElement} */
     omniboxExtensionlastFocused_: Object,
 
+    /** @private {boolean} */
+    omniboxExtensionListBlurred_: Boolean,
+
     /** @private {?SearchEngine} */
     dialogModel_: {
       type: Object,
@@ -125,20 +128,21 @@ Polymer({
   },
 
   /**
-   * @param {!CustomEvent} e
+   * @param {!CustomEvent<!{
+   *     engine: !SearchEngine,
+   *     anchorElement: !HTMLElement
+   * }>} e
    * @private
    */
   onEditSearchEngine_: function(e) {
-    const params =
-        /** @type {!{engine: !SearchEngine, anchorElement: !HTMLElement}} */ (
-            e.detail);
-    this.openDialog_(params.engine, params.anchorElement);
+    this.openDialog_(e.detail.engine, e.detail.anchorElement);
   },
 
   /** @private */
   extensionsChanged_: function() {
-    if (this.showExtensionsList_ && this.$.extensions)
+    if (this.showExtensionsList_ && this.$.extensions) {
       this.$.extensions.notifyResize();
+    }
   },
 
   /**
@@ -177,8 +181,9 @@ Polymer({
    * @private
    */
   computeMatchingEngines_: function(list) {
-    if (this.filter == '')
+    if (this.filter == '') {
       return list;
+    }
 
     const filter = this.filter.toLowerCase();
     return list.filter(e => {

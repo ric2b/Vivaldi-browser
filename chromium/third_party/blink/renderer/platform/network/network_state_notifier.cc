@@ -30,7 +30,7 @@
 #include "net/nqe/network_quality_estimator_params.h"
 #include "third_party/blink/public/common/client_hints/client_hints.h"
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
-#include "third_party/blink/renderer/platform/web_task_runner.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
@@ -39,6 +39,29 @@
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
 
 namespace blink {
+
+namespace {
+
+// Typical HTTP RTT value corresponding to a given WebEffectiveConnectionType
+// value. Taken from
+// https://cs.chromium.org/chromium/src/net/nqe/network_quality_estimator_params.cc.
+const base::TimeDelta kTypicalHttpRttEffectiveConnectionType
+    [static_cast<size_t>(WebEffectiveConnectionType::kMaxValue) + 1] = {
+        base::TimeDelta::FromMilliseconds(0),
+        base::TimeDelta::FromMilliseconds(0),
+        base::TimeDelta::FromMilliseconds(3600),
+        base::TimeDelta::FromMilliseconds(1800),
+        base::TimeDelta::FromMilliseconds(450),
+        base::TimeDelta::FromMilliseconds(175)};
+
+// Typical downlink throughput (in Mbps) value corresponding to a given
+// WebEffectiveConnectionType value. Taken from
+// https://cs.chromium.org/chromium/src/net/nqe/network_quality_estimator_params.cc.
+const double kTypicalDownlinkMbpsEffectiveConnectionType
+    [static_cast<size_t>(WebEffectiveConnectionType::kMaxValue) + 1] = {
+        0, 0, 0.040, 0.075, 0.400, 1.600};
+
+}  // namespace
 
 template <>
 struct CrossThreadCopier<NetworkStateNotifier::NetworkState>
@@ -144,6 +167,19 @@ void NetworkStateNotifier::SetNetworkQuality(WebEffectiveConnectionType type,
   }
 }
 
+void NetworkStateNotifier::SetNetworkQualityWebHoldback(
+    WebEffectiveConnectionType type) {
+  DCHECK(IsMainThread());
+  if (type == WebEffectiveConnectionType::kTypeUnknown)
+    return;
+  ScopedNotifier notifier(*this);
+  {
+    MutexLocker locker(mutex_);
+
+    state_.network_quality_web_holdback = type;
+  }
+}
+
 std::unique_ptr<NetworkStateNotifier::NetworkStateObserverHandle>
 NetworkStateNotifier::AddConnectionObserver(
     NetworkStateObserver* observer,
@@ -175,7 +211,7 @@ void NetworkStateNotifier::SetNetworkConnectionInfoOverride(
     bool on_line,
     WebConnectionType type,
     base::Optional<WebEffectiveConnectionType> effective_type,
-    unsigned long http_rtt_msec,
+    int64_t http_rtt_msec,
     double max_bandwidth_mbps) {
   DCHECK(IsMainThread());
   ScopedNotifier notifier(*this);
@@ -265,7 +301,7 @@ void NetworkStateNotifier::NotifyObserversOnTaskRunner(
 
   observer_list->iterating = true;
 
-  for (size_t i = 0; i < observer_list->observers.size(); ++i) {
+  for (wtf_size_t i = 0; i < observer_list->observers.size(); ++i) {
     // Observers removed during iteration are zeroed out, skip them.
     if (!observer_list->observers[i])
       continue;
@@ -334,7 +370,7 @@ void NetworkStateNotifier::RemoveObserverFromMap(
     return;
 
   Vector<NetworkStateObserver*>& observers = observer_list->observers;
-  size_t index = observers.Find(observer);
+  wtf_size_t index = observers.Find(observer);
   if (index != kNotFound) {
     observers[index] = 0;
     observer_list->zeroed_observers.push_back(index);
@@ -362,7 +398,7 @@ void NetworkStateNotifier::CollectZeroedObservers(
 
   // If any observers were removed during the iteration they will have
   // 0 values, clean them up.
-  for (size_t i = 0; i < list->zeroed_observers.size(); ++i)
+  for (wtf_size_t i = 0; i < list->zeroed_observers.size(); ++i)
     list->observers.EraseAt(list->zeroed_observers[i]);
 
   list->zeroed_observers.clear();
@@ -446,6 +482,69 @@ double NetworkStateNotifier::RoundMbps(
 
   // Convert from Kbps to Mbps.
   return downlink_kbps_rounded / 1000;
+}
+
+base::Optional<WebEffectiveConnectionType>
+NetworkStateNotifier::GetWebHoldbackEffectiveType() const {
+  MutexLocker locker(mutex_);
+
+  const NetworkState& state = has_override_ ? override_ : state_;
+  // TODO (tbansal): Add a DCHECK to check that |state.on_line_initialized| is
+  // true once https://crbug.com/728771 is fixed.
+  return state.network_quality_web_holdback;
+}
+
+base::Optional<TimeDelta> NetworkStateNotifier::GetWebHoldbackHttpRtt() const {
+  base::Optional<WebEffectiveConnectionType> override_ect =
+      GetWebHoldbackEffectiveType();
+
+  if (override_ect) {
+    return kTypicalHttpRttEffectiveConnectionType[static_cast<size_t>(
+        override_ect.value())];
+  }
+  return base::nullopt;
+}
+
+base::Optional<double>
+NetworkStateNotifier::GetWebHoldbackDownlinkThroughputMbps() const {
+  base::Optional<WebEffectiveConnectionType> override_ect =
+      GetWebHoldbackEffectiveType();
+
+  if (override_ect) {
+    return kTypicalDownlinkMbpsEffectiveConnectionType[static_cast<size_t>(
+        override_ect.value())];
+  }
+  return base::nullopt;
+}
+
+void NetworkStateNotifier::GetMetricsWithWebHoldback(
+    WebConnectionType* type,
+    double* downlink_max_mbps,
+    WebEffectiveConnectionType* effective_type,
+    base::Optional<TimeDelta>* http_rtt,
+    base::Optional<double>* downlink_mbps,
+    bool* save_data) const {
+  MutexLocker locker(mutex_);
+  const NetworkState& state = has_override_ ? override_ : state_;
+
+  *type = state.type;
+  *downlink_max_mbps = state.max_bandwidth_mbps;
+
+  base::Optional<WebEffectiveConnectionType> override_ect =
+      state.network_quality_web_holdback;
+  if (override_ect) {
+    *effective_type = override_ect.value();
+    *http_rtt = kTypicalHttpRttEffectiveConnectionType[static_cast<size_t>(
+        override_ect.value())];
+    *downlink_mbps =
+        kTypicalDownlinkMbpsEffectiveConnectionType[static_cast<size_t>(
+            override_ect.value())];
+  } else {
+    *effective_type = state.effective_type;
+    *http_rtt = state.http_rtt;
+    *downlink_mbps = state.downlink_throughput_mbps;
+  }
+  *save_data = state.save_data;
 }
 
 }  // namespace blink

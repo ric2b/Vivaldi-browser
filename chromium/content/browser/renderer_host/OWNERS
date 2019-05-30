@@ -22,9 +22,12 @@ tdresser@chromium.org
 
 # For surface ID propagation and synchronization
 fsamuel@chromium.org
+samans@chromium.org
+jonross@chromium.org
 
 # DelegatedFrame*
 per-file *delegated_frame*=fsamuel@chromium.org
+per-file *delegated_frame*=samans@chromium.org
 
 # WebSQL
 per-file web_database_*=jsbell@chromium.org
@@ -35,5 +38,8 @@ per-file embedded_frame_sink*.*=xlai@chromium.org
 per-file embedded_frame_sink*.*=xidachen@chromium.org
 per-file embedded_frame_sink*.*=junov@chromium.org
 per-file embedded_frame_sink*.*=kylechar@chromium.org
+
+# DirectWrite Font Code
+per-file dwrite_*=drott@chromium.org
 
 # COMPONENT: Internals>Core

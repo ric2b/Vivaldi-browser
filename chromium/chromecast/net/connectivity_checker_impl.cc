@@ -4,6 +4,7 @@
 
 #include "chromecast/net/connectivity_checker_impl.h"
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -201,7 +202,8 @@ void ConnectivityCheckerImpl::OnResponseStarted(net::URLRequest* request,
     // Some products don't have an idle screen that makes periodic network
     // requests. Schedule another check to ensure connectivity hasn't dropped.
     task_runner_->PostDelayedTask(
-        FROM_HERE, base::Bind(&ConnectivityCheckerImpl::CheckInternal, this),
+        FROM_HERE,
+        base::BindOnce(&ConnectivityCheckerImpl::CheckInternal, this),
         base::TimeDelta::FromSeconds(kConnectivitySuccessPeriodSeconds));
     timeout_.Cancel();
     return;
@@ -231,7 +233,9 @@ void ConnectivityCheckerImpl::OnSSLCertificateError(
   }
   DCHECK(task_runner_->BelongsToCurrentThread());
   LOG(ERROR) << "OnSSLCertificateError: cert_status=" << ssl_info.cert_status;
-  net::SSLClientSocket::ClearSessionCache();
+  url_request_context_->http_transaction_factory()
+      ->GetSession()
+      ->ClearSSLSessionCache();
   OnUrlRequestError(ErrorType::SSL_CERTIFICATE_ERROR);
   timeout_.Cancel();
 }

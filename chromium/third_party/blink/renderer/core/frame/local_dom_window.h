@@ -36,6 +36,7 @@
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 
 #include <memory>
@@ -60,8 +61,8 @@ class MediaQueryList;
 class MessageEvent;
 class Modulator;
 class Navigator;
-class PostMessageTimer;
 class Screen;
+class ScriptedTaskQueueController;
 class ScriptPromise;
 class ScriptState;
 class ScrollToOptions;
@@ -73,6 +74,7 @@ class TrustedTypePolicyFactory;
 class USVStringOrTrustedURL;
 class V8FrameRequestCallback;
 class V8IdleRequestCallback;
+class V8VoidFunction;
 
 enum PageshowEventPersistence {
   kPageshowEventNotPersisted = 0,
@@ -99,14 +101,15 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
                                   const DocumentInit&,
                                   bool force_xhtml);
   static LocalDOMWindow* Create(LocalFrame& frame) {
-    return new LocalDOMWindow(frame);
+    return MakeGarbageCollected<LocalDOMWindow>(frame);
   }
 
   static LocalDOMWindow* From(const ScriptState*);
 
+  explicit LocalDOMWindow(LocalFrame&);
   ~LocalDOMWindow() override;
 
-  LocalFrame* GetFrame() const { return ToLocalFrame(DOMWindow::GetFrame()); }
+  LocalFrame* GetFrame() const { return To<LocalFrame>(DOMWindow::GetFrame()); }
 
   void Trace(blink::Visitor*) override;
 
@@ -196,11 +199,11 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   // FIXME: ScrollBehaviorSmooth is currently unsupported in VisualViewport.
   // crbug.com/434497
   void scrollBy(double x, double y) const;
-  void scrollBy(const ScrollToOptions&) const;
+  void scrollBy(const ScrollToOptions*) const;
   void scrollTo(double x, double y) const;
-  void scrollTo(const ScrollToOptions&) const;
+  void scrollTo(const ScrollToOptions*) const;
   void scroll(double x, double y) const { scrollTo(x, y); }
-  void scroll(const ScrollToOptions& scroll_to_options) const {
+  void scroll(const ScrollToOptions* scroll_to_options) const {
     scrollTo(scroll_to_options);
   }
   void moveBy(int x, int y) const;
@@ -219,13 +222,18 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   // Acessibility Object Model
   ScriptPromise getComputedAccessibleNode(ScriptState*, Element*);
 
+  ScriptedTaskQueueController* taskQueue() const;
+
   // WebKit animation extensions
   int requestAnimationFrame(V8FrameRequestCallback*);
   int webkitRequestAnimationFrame(V8FrameRequestCallback*);
   void cancelAnimationFrame(int id);
 
+  // https://html.spec.whatwg.org/C/#windoworworkerglobalscope-mixin
+  void queueMicrotask(V8VoidFunction*);
+
   // Idle callback extensions
-  int requestIdleCallback(V8IdleRequestCallback*, const IdleRequestOptions&);
+  int requestIdleCallback(V8IdleRequestCallback*, const IdleRequestOptions*);
   void cancelIdleCallback(int id);
 
   // Custom elements
@@ -242,22 +250,19 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   bool isSecureContext() const;
 
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(animationend);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(animationiteration);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(animationstart);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(search);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(transitionend);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(animationend, kAnimationend)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(animationiteration, kAnimationiteration)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(animationstart, kAnimationstart)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(search, kSearch)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(transitionend, kTransitionend)
 
-  DEFINE_MAPPED_ATTRIBUTE_EVENT_LISTENER(webkitanimationstart,
-                                         webkitAnimationStart);
-  DEFINE_MAPPED_ATTRIBUTE_EVENT_LISTENER(webkitanimationiteration,
-                                         webkitAnimationIteration);
-  DEFINE_MAPPED_ATTRIBUTE_EVENT_LISTENER(webkitanimationend,
-                                         webkitAnimationEnd);
-  DEFINE_MAPPED_ATTRIBUTE_EVENT_LISTENER(webkittransitionend,
-                                         webkitTransitionEnd);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(webkitanimationstart, kWebkitAnimationStart)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(webkitanimationiteration,
+                                  kWebkitAnimationIteration)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(webkitanimationend, kWebkitAnimationEnd)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(webkittransitionend, kWebkitTransitionEnd)
 
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(orientationchange);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(orientationchange, kOrientationchange)
 
   void RegisterEventListenerObserver(EventListenerObserver*);
 
@@ -266,42 +271,22 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   Element* frameElement() const;
 
-  DOMWindow* open(ExecutionContext*,
-                  LocalDOMWindow* current_window,
-                  LocalDOMWindow* entered_window,
-                  const USVStringOrTrustedURL& stringOrUrl,
+  DOMWindow* open(v8::Isolate*,
+                  const USVStringOrTrustedURL& string_or_url,
                   const AtomicString& target,
                   const String& features,
-                  ExceptionState&);
-
-  DOMWindow* open(const USVStringOrTrustedURL& stringOrUrl,
-                  const AtomicString& frame_name,
-                  const String& window_features_string,
-                  LocalDOMWindow* calling_window,
-                  LocalDOMWindow* entered_window,
-                  ExceptionState&);
-
-  DOMWindow* open(ExecutionContext*,
-                  LocalDOMWindow* current_window,
-                  LocalDOMWindow* entered_window,
-                  const String& str_url,
-                  const AtomicString& target,
-                  const String& features,
-                  ExceptionState&);
-
-  DOMWindow* open(const String& str_url,
-                  const AtomicString& frame_name,
-                  const String& window_features_string,
-                  LocalDOMWindow* calling_window,
-                  LocalDOMWindow* entered_window,
                   ExceptionState&);
 
   FrameConsole* GetFrameConsole() const;
 
   void PrintErrorMessage(const String&) const;
 
-  void PostMessageTimerFired(PostMessageTimer*);
-  void RemovePostMessageTimer(PostMessageTimer*);
+  void DispatchPostMessage(
+      MessageEvent* event,
+      scoped_refptr<UserGestureToken> token,
+      scoped_refptr<const SecurityOrigin> intended_target_origin,
+      std::unique_ptr<SourceLocation>);
+
   void DispatchMessageEventWithOriginCheck(
       const SecurityOrigin* intended_target_origin,
       Event*,
@@ -352,26 +337,10 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   bool IsRemoteDOMWindow() const override { return false; }
   void WarnUnusedPreloads(TimerBase*);
 
-  explicit LocalDOMWindow(LocalFrame&);
   void Dispose();
 
   void DispatchLoadEvent();
   void ClearDocument();
-
-  DOMWindow* openFromString(ExecutionContext*,
-                            LocalDOMWindow* current_window,
-                            LocalDOMWindow* entered_window,
-                            const String& url,
-                            const AtomicString& target,
-                            const String& features,
-                            ExceptionState&);
-
-  DOMWindow* openFromString(const String& url_string,
-                            const AtomicString& frame_name,
-                            const String& window_features_string,
-                            LocalDOMWindow* calling_window,
-                            LocalDOMWindow* entered_window,
-                            ExceptionState&);
 
   // Return the viewport size including scrollbars.
   IntSize GetViewportSize() const;
@@ -408,17 +377,17 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   scoped_refptr<SerializedScriptValue> pending_state_object_;
 
-  HeapHashSet<Member<PostMessageTimer>> post_message_timers_;
   HeapHashSet<WeakMember<EventListenerObserver>> event_listener_observers_;
 
   mutable Member<TrustedTypePolicyFactory> trusted_types_;
 };
 
-DEFINE_TYPE_CASTS(LocalDOMWindow,
-                  DOMWindow,
-                  x,
-                  x->IsLocalDOMWindow(),
-                  x.IsLocalDOMWindow());
+template <>
+struct DowncastTraits<LocalDOMWindow> {
+  static bool AllowFrom(const DOMWindow& window) {
+    return window.IsLocalDOMWindow();
+  }
+};
 
 inline String LocalDOMWindow::status() const {
   return status_;

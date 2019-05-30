@@ -67,6 +67,8 @@ class SubstitutionPattern {
   const std::vector<Subrange>& ranges() const { return ranges_; }
   bool empty() const { return ranges_.empty(); }
 
+  const ParseNode* origin() const { return origin_; }
+
  private:
   std::vector<Subrange> ranges_;
   const ParseNode* origin_;

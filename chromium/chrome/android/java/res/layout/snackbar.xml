@@ -17,8 +17,7 @@
         android:layout_above="@+id/snackbar"
         android:layout_toEndOf="@+id/snackbar_shadow_left"
         android:layout_toStartOf="@+id/snackbar_shadow_right"
-        android:background="@drawable/infobar_shadow_top"
-        android:visibility="gone" />
+        android:background="@drawable/infobar_shadow_top" />
 
     <View
         android:id="@+id/snackbar_shadow_left"
@@ -69,18 +68,15 @@
             android:layout_marginBottom="14dp"
             android:layout_weight="1"
             android:textAlignment="viewStart"
-            android:textAppearance="@style/WhiteBody" />
+            android:textAppearance="@style/TextAppearance.WhiteBody" />
 
-        <Button
+        <org.chromium.ui.widget.ButtonCompat
             android:id="@+id/snackbar_button"
             android:layout_width="wrap_content"
             android:layout_height="@dimen/snackbar_min_height"
             android:layout_gravity="center_vertical"
             android:paddingEnd="24dp"
             android:paddingStart="24dp"
-            android:textAllCaps="true"
-            android:textColor="@color/snackbar_button_color"
-            android:textSize="@dimen/text_size_medium"
-            style="@style/ButtonCompatBorderless" />
+            style="@style/TextButton" />
     </LinearLayout>
 </RelativeLayout>

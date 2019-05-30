@@ -4,6 +4,11 @@
 # found in the LICENSE file.
 
 """Utilities for formatting and writing DEPS files."""
+from __future__ import print_function
+
+from builtins import str
+from builtins import range
+from builtins import object
 
 import errno
 import os
@@ -28,6 +33,8 @@ class VarImpl(object):
       return self._local_scope['vars'][var_name]
     raise Exception('Var is not defined: %s' % var_name)
 
+def __do__exec(content, global_scope, local_scope):
+  exec(content, global_scope, local_scope)
 
 def GetDepsContent(deps_path, text=None, return_dict=False, git_url=None):
   """Read a DEPS file and return all the sections."""
@@ -50,7 +57,7 @@ def GetDepsContent(deps_path, text=None, return_dict=False, git_url=None):
       'skip_child_includes': [],
       'hooks': [],
   }
-  exec(content, global_scope, local_scope)
+  __do__exec(content, global_scope, local_scope)
   local_scope.setdefault('deps', {})
   local_scope.setdefault('deps_os', {})
   local_scope.setdefault('include_rules', [])
@@ -61,9 +68,9 @@ def GetDepsContent(deps_path, text=None, return_dict=False, git_url=None):
   
   def update_alternative_variables(old_dict):
     new_dict = {}
-    for key, item in old_dict.iteritems():
+    for key, item in old_dict.items():
       key = key.format(**local_scope["vars"])
-      if isinstance(item, str):
+      if isinstance(item, basestring):
         item = item.format(**local_scope["vars"])
       elif isinstance(item, dict):
         item = update_alternative_variables(item)
@@ -205,7 +212,7 @@ def RemoveDirectory(*path):
   if sys.platform == 'win32':
     # Give up and use cmd.exe's rd command.
     file_path = os.path.normcase(file_path)
-    for _ in xrange(3):
+    for _ in range(3):
       if not subprocess.call(['cmd.exe', '/c', 'rd', '/q', '/s', file_path]):
         break
       time.sleep(3)
@@ -245,7 +252,7 @@ def RemoveDirectory(*path):
       if exception_value.errno == errno.ENOENT:
         # File does not exist, and we're trying to delete, so we can ignore the
         # failure.
-        print 'WARNING:  Failed to list %s during rmtree.  Ignoring.\n' % path
+        print('WARNING:  Failed to list %s during rmtree.  Ignoring.\n' % path)
       else:
         raise
     else:
@@ -254,7 +261,7 @@ def RemoveDirectory(*path):
   for root, dirs, files in os.walk(file_path, topdown=False):
     # For POSIX:  making the directory writable guarantees removability.
     # Windows will ignore the non-read-only bits in the chmod value.
-    os.chmod(root, 0770)
+    os.chmod(root, 0o770)
     for name in files:
       remove_with_retry(os.remove, os.path.join(root, name))
     for name in dirs:

@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/window_animation_types.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/cpp/window_state_type.h"
 #include "ash/screen_util.h"
@@ -14,8 +15,8 @@
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/splitview/split_view_controller.h"
+#include "ash/wm/splitview/split_view_utils.h"
 #include "ash/wm/tablet_mode/tablet_mode_window_manager.h"
-#include "ash/wm/window_animation_types.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_state_util.h"
 #include "ash/wm/window_util.h"
@@ -74,19 +75,12 @@ gfx::Rect GetCenteredBounds(const gfx::Rect& bounds_in_parent,
   return work_area_in_parent;
 }
 
-// Returns true if the window can snap in tablet mode.
-bool CanSnap(wm::WindowState* window_state) {
-  // If split view mode is not allowed in tablet mode, do not allow snapping
-  // windows.
-  if (!SplitViewController::ShouldAllowSplitView())
-    return false;
-  return window_state->CanSnap();
-}
-
 // Returns the maximized/full screen and/or centered bounds of a window.
 gfx::Rect GetBoundsInMaximizedMode(wm::WindowState* state_object) {
-  if (state_object->IsFullscreen() || state_object->IsPinned())
-    return screen_util::GetDisplayBoundsInParent(state_object->window());
+  if (state_object->IsFullscreen() || state_object->IsPinned()) {
+    return screen_util::GetFullscreenWindowBoundsInParent(
+        state_object->window());
+  }
 
   if (state_object->GetStateType() == mojom::WindowStateType::LEFT_SNAPPED) {
     return Shell::Get()
@@ -162,23 +156,32 @@ bool IsTabDraggingSourceWindow(aura::Window* window) {
 }  // namespace
 
 // static
-void TabletModeWindowState::UpdateWindowPosition(
-    wm::WindowState* window_state) {
+void TabletModeWindowState::UpdateWindowPosition(wm::WindowState* window_state,
+                                                 bool animate) {
   gfx::Rect bounds_in_parent = GetBoundsInMaximizedMode(window_state);
   if (bounds_in_parent == window_state->window()->GetTargetBounds())
     return;
-  window_state->SetBoundsDirect(bounds_in_parent);
+
+  if (animate)
+    window_state->SetBoundsDirectAnimated(bounds_in_parent);
+  else
+    window_state->SetBoundsDirect(bounds_in_parent);
 }
 
 TabletModeWindowState::TabletModeWindowState(aura::Window* window,
-                                             TabletModeWindowManager* creator)
+                                             TabletModeWindowManager* creator,
+                                             bool snap,
+                                             bool animate_bounds_on_attach)
     : window_(window),
       creator_(creator),
-      current_state_type_(wm::GetWindowState(window)->GetStateType()),
-      defer_bounds_updates_(false) {
-  old_state_.reset(wm::GetWindowState(window)
-                       ->SetStateObject(std::unique_ptr<State>(this))
-                       .release());
+      animate_bounds_on_attach_(animate_bounds_on_attach) {
+  wm::WindowState* state = wm::GetWindowState(window);
+  current_state_type_ = state->GetStateType();
+  DCHECK(!snap || CanSnapInSplitview(window));
+  state_type_on_attach_ =
+      snap ? current_state_type_ : GetMaximizedOrCenteredWindowType(state);
+  old_state_.reset(
+      state->SetStateObject(std::unique_ptr<State>(this)).release());
 }
 
 TabletModeWindowState::~TabletModeWindowState() {
@@ -220,6 +223,12 @@ void TabletModeWindowState::OnWMEvent(wm::WindowState* window_state,
         UpdateWindow(window_state, mojom::WindowStateType::PINNED,
                      true /* animated */);
       break;
+    case wm::WM_EVENT_PIP:
+      if (!window_state->IsPip()) {
+        UpdateWindow(window_state, mojom::WindowStateType::PIP,
+                     true /* animated */);
+      }
+      break;
     case wm::WM_EVENT_TRUSTED_PIN:
       if (!Shell::Get()->screen_pinning_controller()->IsPinned())
         UpdateWindow(window_state, mojom::WindowStateType::TRUSTED_PINNED,
@@ -260,6 +269,7 @@ void TabletModeWindowState::OnWMEvent(wm::WindowState* window_state,
                    true /* animated */);
       return;
     case wm::WM_EVENT_SHOW_INACTIVE:
+    case wm::WM_EVENT_SYSTEM_UI_AREA_CHANGED:
       return;
     case wm::WM_EVENT_SET_BOUNDS: {
       gfx::Rect bounds_in_parent =
@@ -337,14 +347,13 @@ void TabletModeWindowState::AttachState(
                               window_state->GetShowState());
   }
 
-  // Initialize the state to a good preset.
   if (current_state_type_ != mojom::WindowStateType::MAXIMIZED &&
       current_state_type_ != mojom::WindowStateType::MINIMIZED &&
       current_state_type_ != mojom::WindowStateType::FULLSCREEN &&
       current_state_type_ != mojom::WindowStateType::PINNED &&
       current_state_type_ != mojom::WindowStateType::TRUSTED_PINNED) {
-    UpdateWindow(window_state, GetMaximizedOrCenteredWindowType(window_state),
-                 true /* animated */);
+    UpdateWindow(window_state, state_type_on_attach_,
+                 animate_bounds_on_attach_);
   }
 }
 
@@ -423,8 +432,9 @@ mojom::WindowStateType TabletModeWindowState::GetSnappedWindowStateType(
     mojom::WindowStateType target_state) {
   DCHECK(target_state == mojom::WindowStateType::LEFT_SNAPPED ||
          target_state == mojom::WindowStateType::RIGHT_SNAPPED);
-  return CanSnap(window_state) ? target_state
-                               : GetMaximizedOrCenteredWindowType(window_state);
+  return CanSnapInSplitview(window_state->window())
+             ? target_state
+             : GetMaximizedOrCenteredWindowType(window_state);
 }
 
 void TabletModeWindowState::UpdateBounds(wm::WindowState* window_state,
@@ -449,6 +459,11 @@ void TabletModeWindowState::UpdateBounds(wm::WindowState* window_state,
     if (!window_state->window()->IsVisible() || !animated) {
       window_state->SetBoundsDirect(bounds_in_parent);
     } else {
+      if (use_zero_animation_type_) {
+        window_state->SetBoundsDirectCrossFade(bounds_in_parent,
+                                               gfx::Tween::ZERO);
+        return;
+      }
       // If we animate (to) tablet mode, we want to use the cross fade to
       // avoid flashing.
       if (window_state->IsMaximized())

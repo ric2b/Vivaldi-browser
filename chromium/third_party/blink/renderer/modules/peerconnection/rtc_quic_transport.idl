@@ -13,18 +13,24 @@ enum RTCQuicTransportState {
 
 // https://w3c.github.io/webrtc-quic/#quic-transport*
 [
-   Constructor(RTCIceTransport transport, sequence<RTCCertificate> certificates),
+   Constructor(RTCIceTransport transport),
+   ConstructorCallWith=ExecutionContext,
    RaisesException=Constructor,
    Exposed=Window,
-   RuntimeEnabled=RTCQuicTransport
-] interface RTCQuicTransport {
-    readonly attribute RTCIceTransport transport;
-    readonly attribute RTCQuicTransportState state;
-    RTCQuicParameters getLocalParameters();
-    RTCQuicParameters? getRemoteParameters();
-    sequence<RTCCertificate> getCertificates();
-    sequence<ArrayBuffer> getRemoteCertificates();
-    void stop();
-    [RaisesException, RuntimeEnabled=RTCQuicStream] RTCQuicStream createStream();
-    // TODO(crbug.com/868068): Implement remaining control methods + events.
+   Measure,
+   OriginTrialEnabled=RTCQuicTransport,
+   SecureContext
+] interface RTCQuicTransport : EventTarget {
+    [Measure] readonly attribute RTCIceTransport transport;
+    [Measure] readonly attribute RTCQuicTransportState state;
+    [Measure] ArrayBuffer getKey();
+    [Measure, RaisesException] void connect();
+    [Measure, RaisesException] void listen(BufferSource remote_key);
+    [Measure] void stop();
+    [Measure, RaisesException] RTCQuicStream createStream();
+    [CallWith=ScriptState, Measure, RaisesException]
+    Promise<RTCQuicTransportStats> getStats();
+    attribute EventHandler onstatechange;
+    attribute EventHandler onerror;
+    attribute EventHandler onquicstream;
 };

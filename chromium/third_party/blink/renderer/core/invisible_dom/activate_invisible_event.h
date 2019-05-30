@@ -16,8 +16,10 @@ class ActivateInvisibleEvent : public Event {
 
  public:
   static ActivateInvisibleEvent* Create(Element* activated_element) {
-    return new ActivateInvisibleEvent(activated_element);
+    return MakeGarbageCollected<ActivateInvisibleEvent>(activated_element);
   }
+
+  explicit ActivateInvisibleEvent(Element* activated_element);
 
   Element* activatedElement() const { return activated_element_.Get(); }
 
@@ -26,17 +28,12 @@ class ActivateInvisibleEvent : public Event {
   }
 
   const AtomicString& InterfaceName() const override;
-  bool IsActivateInvisibleEvent() const override;
 
   void Trace(Visitor*) override;
 
  private:
-  explicit ActivateInvisibleEvent(Element* activated_element);
-
   Member<Element> activated_element_;
 };
-
-DEFINE_EVENT_TYPE_CASTS(ActivateInvisibleEvent);
 
 }  // namespace blink
 

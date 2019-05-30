@@ -43,13 +43,12 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/user_activation.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
-#include "third_party/blink/renderer/core/inspector/thread_debugger.h"
 #include "third_party/blink/renderer/core/workers/dedicated_worker_messaging_proxy.h"
 #include "third_party/blink/renderer/core/workers/parent_execution_context_task_runners.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/core/workers/worker_thread.h"
 #include "third_party/blink/renderer/platform/cross_thread_functional.h"
-#include "third_party/blink/renderer/platform/web_task_runner.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
@@ -77,29 +76,15 @@ void DedicatedWorkerObjectProxy::PostMessageToWorkerObject(
 void DedicatedWorkerObjectProxy::ProcessMessageFromWorkerObject(
     BlinkTransferableMessage message,
     WorkerThread* worker_thread) {
-  WorkerGlobalScope* global_scope =
-      ToWorkerGlobalScope(worker_thread->GlobalScope());
-  MessagePortArray* ports =
-      MessagePort::EntanglePorts(*global_scope, std::move(message.ports));
-
-  ThreadDebugger* debugger = ThreadDebugger::From(worker_thread->GetIsolate());
-  debugger->ExternalAsyncTaskStarted(message.sender_stack_trace_id);
-  UserActivation* user_activation = nullptr;
-  if (message.user_activation) {
-    user_activation =
-        new UserActivation(message.user_activation->has_been_active,
-                           message.user_activation->was_active);
-  }
-  global_scope->DispatchEvent(*MessageEvent::Create(
-      ports, std::move(message.message), user_activation));
-  debugger->ExternalAsyncTaskFinished(message.sender_stack_trace_id);
+  To<WorkerGlobalScope>(worker_thread->GlobalScope())
+      ->ReceiveMessage(std::move(message));
 }
 
 void DedicatedWorkerObjectProxy::ProcessUnhandledException(
     int exception_id,
     WorkerThread* worker_thread) {
   WorkerGlobalScope* global_scope =
-      ToWorkerGlobalScope(worker_thread->GlobalScope());
+      To<WorkerGlobalScope>(worker_thread->GlobalScope());
   global_scope->ExceptionUnhandled(exception_id);
 }
 
@@ -113,6 +98,22 @@ void DedicatedWorkerObjectProxy::ReportException(
       CrossThreadBind(&DedicatedWorkerMessagingProxy::DispatchErrorEvent,
                       messaging_proxy_weak_ptr_, error_message,
                       WTF::Passed(location->Clone()), exception_id));
+}
+
+void DedicatedWorkerObjectProxy::DidFailToFetchClassicScript() {
+  PostCrossThreadTask(
+      *GetParentExecutionContextTaskRunners()->Get(TaskType::kInternalDefault),
+      FROM_HERE,
+      CrossThreadBind(&DedicatedWorkerMessagingProxy::DidFailToFetchScript,
+                      messaging_proxy_weak_ptr_));
+}
+
+void DedicatedWorkerObjectProxy::DidFailToFetchModuleScript() {
+  PostCrossThreadTask(
+      *GetParentExecutionContextTaskRunners()->Get(TaskType::kInternalDefault),
+      FROM_HERE,
+      CrossThreadBind(&DedicatedWorkerMessagingProxy::DidFailToFetchScript,
+                      messaging_proxy_weak_ptr_));
 }
 
 void DedicatedWorkerObjectProxy::DidEvaluateClassicScript(bool success) {

@@ -38,6 +38,11 @@ class UI_BASE_EXPORT Accelerator {
   };
 
   Accelerator();
+  // |modifiers| consists of ui::EventFlags bitwise-or-ed together,
+  // for example:
+  //     Accelerator(ui::VKEY_Z, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)
+  // would correspond to the shortcut "ctrl + shift + z".
+  //
   // NOTE: this constructor strips out non key related flags.
   Accelerator(KeyboardCode key_code,
               int modifiers,
@@ -113,8 +118,8 @@ class UI_BASE_EXPORT Accelerator {
   // Whether the accelerator is interrupted by a mouse press/release. This is
   // optionally used by AcceleratorController. Even this is set to true, the
   // accelerator may still be handled successfully. (Currently only
-  // TOGGLE_APP_LIST is disabled when mouse press/release occurs between
-  // search key down and up. See crbug.com/665897)
+  // TOGGLE_APP_LIST and TOGGLE_APP_LIST_FULLSCREEN are disabled when mouse
+  // press/release occurs between search key down and up. See crbug.com/665897)
   bool interrupted_by_mouse_event_;
 };
 

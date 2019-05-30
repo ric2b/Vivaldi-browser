@@ -14,7 +14,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "content/public/renderer/fixed_received_data.h"
 
 namespace content {
 
@@ -34,8 +33,8 @@ class DelegateThreadSafeReceivedData final
     }
   }
 
-  const char* payload() const override { return data_->payload(); }
-  int length() const override { return data_->length(); }
+  const char* payload() override { return data_->payload(); }
+  int length() override { return data_->length(); }
 
  private:
   std::unique_ptr<RequestPeer::ReceivedData> data_;
@@ -53,12 +52,12 @@ using Result = blink::WebDataConsumerHandle::Result;
 class SharedMemoryDataConsumerHandle::Context final
     : public base::RefCountedThreadSafe<Context> {
  public:
-  explicit Context(const base::Closure& on_reader_detached)
+  explicit Context(base::OnceClosure on_reader_detached)
       : result_(kOk),
         first_offset_(0),
         client_(nullptr),
         writer_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-        on_reader_detached_(on_reader_detached),
+        on_reader_detached_(std::move(on_reader_detached)),
         is_on_reader_detached_valid_(!on_reader_detached_.is_null()),
         is_handle_active_(true),
         is_two_phase_read_in_progress_(false) {}
@@ -72,10 +71,12 @@ class SharedMemoryDataConsumerHandle::Context final
     if (!is_handle_locked() && !is_handle_active()) {
       // No one is interested in the contents.
       if (is_on_reader_detached_valid_) {
+        is_on_reader_detached_valid_ = false;
         // We post a task even in the writer thread in order to avoid a
         // reentrance problem as calling |on_reader_detached_| may manipulate
         // the context synchronously.
-        writer_task_runner_->PostTask(FROM_HERE, on_reader_detached_);
+        writer_task_runner_->PostTask(FROM_HERE,
+                                      std::move(on_reader_detached_));
       }
       Clear();
     }
@@ -105,12 +106,14 @@ class SharedMemoryDataConsumerHandle::Context final
     lock_.AssertAcquired();
     result_ = r;
   }
-  void AcquireReaderLock(Client* client) {
+  void AcquireReaderLock(
+      Client* client,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
     lock_.AssertAcquired();
     // TODO(yhirano): Turn these CHECKs to DCHECKs once the crash is fixed.
     CHECK(!notification_task_runner_);
     CHECK(!client_);
-    notification_task_runner_ = base::ThreadTaskRunnerHandle::Get();
+    notification_task_runner_ = std::move(task_runner);
     client_ = client;
     if (client && !(IsEmpty() && result() == kOk)) {
       // We cannot notify synchronously because the user doesn't have the reader
@@ -249,7 +252,7 @@ class SharedMemoryDataConsumerHandle::Context final
   Client* client_;
   scoped_refptr<base::SingleThreadTaskRunner> notification_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> writer_task_runner_;
-  base::Closure on_reader_detached_;
+  base::OnceClosure on_reader_detached_;
   // We need this boolean variable to remember if |on_reader_detached_| is
   // callable because we need to reset |on_reader_detached_| only on the writer
   // thread and hence |on_reader_detached_.is_null()| is untrustworthy on
@@ -262,10 +265,8 @@ class SharedMemoryDataConsumerHandle::Context final
 };
 
 SharedMemoryDataConsumerHandle::Writer::Writer(
-    const scoped_refptr<Context>& context,
-    BackpressureMode mode)
-    : context_(context), mode_(mode) {
-}
+    const scoped_refptr<Context>& context)
+    : context_(context) {}
 
 SharedMemoryDataConsumerHandle::Writer::~Writer() {
   Close();
@@ -289,14 +290,9 @@ void SharedMemoryDataConsumerHandle::Writer::AddData(
     }
 
     needs_notification = context_->IsEmpty();
-    std::unique_ptr<RequestPeer::ThreadSafeReceivedData> data_to_pass;
-    if (mode_ == kApplyBackpressure) {
-      data_to_pass =
-          std::make_unique<DelegateThreadSafeReceivedData>(std::move(data));
-    } else {
-      data_to_pass = std::make_unique<FixedReceivedData>(data.get());
-    }
-    context_->Push(std::move(data_to_pass));
+    // Transfers |data| in order to apply backpressure.
+    context_->Push(
+        std::make_unique<DelegateThreadSafeReceivedData>(std::move(data)));
   }
 
   if (needs_notification) {
@@ -343,11 +339,12 @@ void SharedMemoryDataConsumerHandle::Writer::Fail() {
 
 SharedMemoryDataConsumerHandle::ReaderImpl::ReaderImpl(
     scoped_refptr<Context> context,
-    Client* client)
+    Client* client,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
     : context_(context) {
   base::AutoLock lock(context_->lock());
   DCHECK(!context_->is_handle_locked());
-  context_->AcquireReaderLock(client);
+  context_->AcquireReaderLock(client, std::move(task_runner));
 }
 
 SharedMemoryDataConsumerHandle::ReaderImpl::~ReaderImpl() {
@@ -435,16 +432,14 @@ Result SharedMemoryDataConsumerHandle::ReaderImpl::EndRead(size_t read_size) {
 }
 
 SharedMemoryDataConsumerHandle::SharedMemoryDataConsumerHandle(
-    BackpressureMode mode,
     std::unique_ptr<Writer>* writer)
-    : SharedMemoryDataConsumerHandle(mode, base::Closure(), writer) {}
+    : SharedMemoryDataConsumerHandle(base::OnceClosure(), writer) {}
 
 SharedMemoryDataConsumerHandle::SharedMemoryDataConsumerHandle(
-    BackpressureMode mode,
-    const base::Closure& on_reader_detached,
+    base::OnceClosure on_reader_detached,
     std::unique_ptr<Writer>* writer)
-    : context_(new Context(on_reader_detached)) {
-  writer->reset(new Writer(context_, mode));
+    : context_(new Context(std::move(on_reader_detached))) {
+  writer->reset(new Writer(context_));
 }
 
 SharedMemoryDataConsumerHandle::~SharedMemoryDataConsumerHandle() {
@@ -457,7 +452,8 @@ std::unique_ptr<blink::WebDataConsumerHandle::Reader>
 SharedMemoryDataConsumerHandle::ObtainReader(
     Client* client,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  return base::WrapUnique(new ReaderImpl(context_, client));
+  return base::WrapUnique(
+      new ReaderImpl(context_, client, std::move(task_runner)));
 }
 
 const char* SharedMemoryDataConsumerHandle::DebugName() const {

@@ -7,15 +7,7 @@
 
 #include "ash/ash_export.h"
 #include "base/macros.h"
-#include "ui/views/pointer_watcher.h"
-
-namespace gfx {
-class Point;
-}
-
-namespace ui {
-class PointerEvent;
-}
+#include "ui/events/event_handler.h"
 
 namespace ash {
 
@@ -33,17 +25,86 @@ enum class DownEventFormFactor {
 // This enum is used to control a UMA histogram buckets. If you change this
 // enum, you should update DownEventMetric as well.
 enum class DownEventSource {
-  kUnknown = 0,
+  kUnknown = 0,  // Deprecated, never occurs in practice.
   kMouse,
   kStylus,
   kTouch,
   kSourceCount,
 };
 
+// App type (Destination), Input and FormFactor Combination of the down event.
+// This enum is used to back an UMA histogram and new values should
+// be inserted immediately above kCombinationCount.
+enum class DownEventMetric2 {
+  // All "Unknown" types are deprecated, never occur in practice.
+  kOthersUnknownClamshell = 0,
+  kOthersUnknownTabletLandscape = 1,
+  kOthersUnknownTabletPortrait = 2,
+  kOthersMouseClamshell = 3,
+  kOthersMouseTabletLandscape = 4,
+  kOthersMouseTabletPortrait = 5,
+  kOthersStylusClamshell = 6,
+  kOthersStylusTabletLandscape = 7,
+  kOthersStylusTabletPortrait = 8,
+  kOthersTouchClamshell = 9,
+  kOthersTouchTabletLandscape = 10,
+  kOthersTouchTabletPortrait = 11,
+  kBrowserUnknownClamshell = 12,
+  kBrowserUnknownTabletLandscape = 13,
+  kBrowserUnknownTabletPortrait = 14,
+  kBrowserMouseClamshell = 15,
+  kBrowserMouseTabletLandscape = 16,
+  kBrowserMouseTabletPortrait = 17,
+  kBrowserStylusClamshell = 18,
+  kBrowserStylusTabletLandscape = 19,
+  kBrowserStylusTabletPortrait = 20,
+  kBrowserTouchClamshell = 21,
+  kBrowserTouchTabletLandscape = 22,
+  kBrowserTouchTabletPortrait = 23,
+  kChromeAppUnknownClamshell = 24,
+  kChromeAppUnknownTabletLandscape = 25,
+  kChromeAppUnknownTabletPortrait = 26,
+  kChromeAppMouseClamshell = 27,
+  kChromeAppMouseTabletLandscape = 28,
+  kChromeAppMouseTabletPortrait = 29,
+  kChromeAppStylusClamshell = 30,
+  kChromeAppStylusTabletLandscape = 31,
+  kChromeAppStylusTabletPortrait = 32,
+  kChromeAppTouchClamshell = 33,
+  kChromeAppTouchTabletLandscape = 34,
+  kChromeAppTouchTabletPortrait = 35,
+  kArcAppUnknownClamshell = 36,
+  kArcAppUnknownTabletLandscape = 37,
+  kArcAppUnknownTabletPortrait = 38,
+  kArcAppMouseClamshell = 39,
+  kArcAppMouseTabletLandscape = 40,
+  kArcAppMouseTabletPortrait = 41,
+  kArcAppStylusClamshell = 42,
+  kArcAppStylusTabletLandscape = 43,
+  kArcAppStylusTabletPortrait = 44,
+  kArcAppTouchClamshell = 45,
+  kArcAppTouchTabletLandscape = 46,
+  kArcAppTouchTabletPortrait = 47,
+  kCrostiniAppUnknownClamshell = 48,
+  kCrostiniAppUnknownTabletLandscape = 49,
+  kCrostiniAppUnknownTabletPortrait = 50,
+  kCrostiniAppMouseClamshell = 51,
+  kCrostiniAppMouseTabletLandscape = 52,
+  kCrostiniAppMouseTabletPortrait = 53,
+  kCrostiniAppStylusClamshell = 54,
+  kCrostiniAppStylusTabletLandscape = 55,
+  kCrostiniAppStylusTabletPortrait = 56,
+  kCrostiniAppTouchClamshell = 57,
+  kCrostiniAppTouchTabletLandscape = 58,
+  kCrostiniAppTouchTabletPortrait = 59,
+  kMaxValue = kCrostiniAppTouchTabletPortrait
+};
+
 // Input, FormFactor, and Destination Combination of the down event.
 // This enum is used to back an UMA histogram and new values should
 // be inserted immediately above kCombinationCount.
 enum class DownEventMetric {
+  // All "Unknown" types are deprecated, never occur in practice.
   kUnknownClamshellOthers = 0,
   kUnknownClamshellBrowser,
   kUnknownClamshellChromeApp,
@@ -96,15 +157,14 @@ enum class DownEventMetric {
 };
 
 // A metrics recorder that records pointer related metrics.
-class ASH_EXPORT PointerMetricsRecorder : public views::PointerWatcher {
+class ASH_EXPORT PointerMetricsRecorder : public ui::EventHandler {
  public:
   PointerMetricsRecorder();
   ~PointerMetricsRecorder() override;
 
-  // views::PointerWatcher:
-  void OnPointerEventObserved(const ui::PointerEvent& event,
-                              const gfx::Point& location_in_screen,
-                              gfx::NativeView target) override;
+  // ui::EventHandler:
+  void OnMouseEvent(ui::MouseEvent* event) override;
+  void OnTouchEvent(ui::TouchEvent* event) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PointerMetricsRecorder);

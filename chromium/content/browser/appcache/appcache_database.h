@@ -16,6 +16,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "content/browser/appcache/appcache_namespace.h"
 #include "content/common/appcache_interfaces.h"
 #include "content/common/content_export.h"
 #include "sql/statement_id.h"
@@ -41,13 +42,12 @@ FORWARD_DECLARE_TEST(AppCacheDatabaseTest, OnlineWhiteListRecords);
 FORWARD_DECLARE_TEST(AppCacheDatabaseTest, ReCreate);
 FORWARD_DECLARE_TEST(AppCacheDatabaseTest, DeletableResponseIds);
 FORWARD_DECLARE_TEST(AppCacheDatabaseTest, OriginUsage);
-FORWARD_DECLARE_TEST(AppCacheDatabaseTest, UpgradeSchema3to7);
-FORWARD_DECLARE_TEST(AppCacheDatabaseTest, UpgradeSchema4to7);
-FORWARD_DECLARE_TEST(AppCacheDatabaseTest, UpgradeSchema5or6to7);
+FORWARD_DECLARE_TEST(AppCacheDatabaseTest, UpgradeSchemaNukesDeprecatedVersion);
 FORWARD_DECLARE_TEST(AppCacheDatabaseTest, WasCorrutionDetected);
 class AppCacheDatabaseTest;
 class AppCacheStorageImplTest;
 
+// A wrapper around the SQLite database that serves one StoragePartition.
 class CONTENT_EXPORT AppCacheDatabase {
  public:
   struct CONTENT_EXPORT GroupRecord {
@@ -258,9 +258,8 @@ class CONTENT_EXPORT AppCacheDatabase {
   FRIEND_TEST_ALL_PREFIXES(content::AppCacheDatabaseTest, ReCreate);
   FRIEND_TEST_ALL_PREFIXES(content::AppCacheDatabaseTest, DeletableResponseIds);
   FRIEND_TEST_ALL_PREFIXES(content::AppCacheDatabaseTest, OriginUsage);
-  FRIEND_TEST_ALL_PREFIXES(content::AppCacheDatabaseTest, UpgradeSchema3to7);
-  FRIEND_TEST_ALL_PREFIXES(content::AppCacheDatabaseTest, UpgradeSchema4to7);
-  FRIEND_TEST_ALL_PREFIXES(content::AppCacheDatabaseTest, UpgradeSchema5or6to7);
+  FRIEND_TEST_ALL_PREFIXES(content::AppCacheDatabaseTest,
+                           UpgradeSchemaNukesDeprecatedVersion);
   FRIEND_TEST_ALL_PREFIXES(content::AppCacheDatabaseTest, WasCorrutionDetected);
 
   DISALLOW_COPY_AND_ASSIGN(AppCacheDatabase);

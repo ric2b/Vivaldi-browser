@@ -195,6 +195,22 @@ enum {
 #define WIN_ACCESSIBILITY_API_HISTOGRAM(enum_value) \
   UMA_HISTOGRAM_ENUMERATION("Accessibility.WinAPIs", enum_value, UMA_API_MAX)
 
+//
+// Macros to use at the top of any AXPlatformNodeWin (or derived class) method
+// that implements a UIA COM interface. The error code UIA_E_ELEMENTNOTAVAILABLE
+// signals to the OS that the object is no longer valid and no further methods
+// should be called on it.
+//
+#define UIA_VALIDATE_CALL()               \
+  if (!AXPlatformNodeBase::GetDelegate()) \
+    return UIA_E_ELEMENTNOTAVAILABLE;
+#define UIA_VALIDATE_CALL_1_ARG(arg)      \
+  if (!AXPlatformNodeBase::GetDelegate()) \
+    return UIA_E_ELEMENTNOTAVAILABLE;     \
+  if (!arg)                               \
+    return E_INVALIDARG;                  \
+  *arg = {};
+
 namespace ui {
 class AXPlatformNodeWin;
 class AXPlatformRelationWin;
@@ -218,10 +234,11 @@ class AX_EXPORT IAccessible2UsageObserver {
 extern AX_EXPORT base::ObserverList<IAccessible2UsageObserver>::Unchecked&
 GetIAccessible2UsageObserverList();
 
+// TODO(nektar): Remove multithread superclass since we don't support it.
 class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
     AXPlatformNodeWin : public CComObjectRootEx<CComMultiThreadModel>,
-                        public IDispatchImpl<IAccessible2_2,
-                                             &IID_IAccessible2,
+                        public IDispatchImpl<IAccessible2_4,
+                                             &IID_IAccessible2_4,
                                              &LIBID_IAccessible2Lib>,
                         public IAccessibleEx,
                         public IAccessibleText,
@@ -232,7 +249,8 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
                         public IGridItemProvider,
                         public IGridProvider,
                         public IRangeValueProvider,
-                        public IRawElementProviderSimple,
+                        public IRawElementProviderFragment,
+                        public IRawElementProviderSimple2,
                         public IScrollItemProvider,
                         public IScrollProvider,
                         public ISelectionItemProvider,
@@ -242,14 +260,21 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
                         public ITableProvider,
                         public IToggleProvider,
                         public IValueProvider,
+                        public IWindowProvider,
                         public AXPlatformNodeBase {
  public:
   BEGIN_COM_MAP(AXPlatformNodeWin)
+    // TODO(nektar): Change the following to COM_INTERFACE_ENTRY(IDispatch).
     COM_INTERFACE_ENTRY2(IDispatch, IAccessible2_2)
+    COM_INTERFACE_ENTRY2(IUnknown, IDispatchImpl)
+    // TODO(nektar): Find a way to remove the following entry because it's not
+    // an interface.
     COM_INTERFACE_ENTRY(AXPlatformNodeWin)
     COM_INTERFACE_ENTRY(IAccessible)
     COM_INTERFACE_ENTRY(IAccessible2)
     COM_INTERFACE_ENTRY(IAccessible2_2)
+    COM_INTERFACE_ENTRY(IAccessible2_3)
+    COM_INTERFACE_ENTRY(IAccessible2_4)
     COM_INTERFACE_ENTRY(IAccessibleEx)
     COM_INTERFACE_ENTRY(IAccessibleText)
     COM_INTERFACE_ENTRY(IAccessibleTable)
@@ -259,7 +284,9 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
     COM_INTERFACE_ENTRY(IGridItemProvider)
     COM_INTERFACE_ENTRY(IGridProvider)
     COM_INTERFACE_ENTRY(IRangeValueProvider)
+    COM_INTERFACE_ENTRY(IRawElementProviderFragment)
     COM_INTERFACE_ENTRY(IRawElementProviderSimple)
+    COM_INTERFACE_ENTRY(IRawElementProviderSimple2)
     COM_INTERFACE_ENTRY(IScrollItemProvider)
     COM_INTERFACE_ENTRY(IScrollProvider)
     COM_INTERFACE_ENTRY(ISelectionItemProvider)
@@ -268,19 +295,16 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
     COM_INTERFACE_ENTRY(ITableProvider)
     COM_INTERFACE_ENTRY(IToggleProvider)
     COM_INTERFACE_ENTRY(IValueProvider)
+    COM_INTERFACE_ENTRY(IWindowProvider)
     COM_INTERFACE_ENTRY(IServiceProvider)
   END_COM_MAP()
 
   ~AXPlatformNodeWin() override;
 
-  // Return the number of instances of AXPlatformNodeWin, for leak testing.
-  static size_t GetInstanceCountForTesting();
-
   void Init(AXPlatformNodeDelegate* delegate) override;
 
   // Clear any AXPlatformRelationWin nodes owned by this node.
   void ClearOwnRelations();
-  static AXPlatformNode* GetFromUniqueId(int32_t unique_id);
 
   // AXPlatformNode overrides.
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
@@ -289,12 +313,8 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   // AXPlatformNodeBase overrides.
   void Destroy() override;
   int GetIndexInParent() override;
-  base::string16 GetValue() override;
-
-  // For the moment, we add a special version of this method which returns a
-  // base::string16, but once the hypertext generation code is shared between
-  // platforms we can just override AXPlatformNodeBase::GetText().
-  base::string16 GetTextAsString16();
+  base::string16 GetValue() const override;
+  base::string16 GetText() const override;
 
   //
   // IAccessible methods.
@@ -420,6 +440,18 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   IFACEMETHODIMP get_locale(IA2Locale* locale) override;
   IFACEMETHODIMP get_accessibleWithCaret(IUnknown** accessible,
                                          LONG* caret_offset) override;
+
+  //
+  // IAccessible2_3 methods.
+  //
+
+  IFACEMETHODIMP get_selectionRanges(IA2Range** ranges, LONG* nRanges);
+
+  //
+  // IAccessible2_4 methods.
+  //
+
+  IFACEMETHODIMP setSelectionRanges(LONG nRanges, IA2Range* ranges);
 
   //
   // IAccessibleEx methods.
@@ -562,6 +594,29 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   IFACEMETHODIMP get_Value(BSTR* result) override;
 
   //
+  // IWindowProvider methods.
+  //
+
+  IFACEMETHODIMP SetVisualState(WindowVisualState window_visual_state) override;
+
+  IFACEMETHODIMP Close() override;
+
+  IFACEMETHODIMP WaitForInputIdle(int milliseconds, BOOL* result) override;
+
+  IFACEMETHODIMP get_CanMaximize(BOOL* result) override;
+
+  IFACEMETHODIMP get_CanMinimize(BOOL* result) override;
+
+  IFACEMETHODIMP get_IsModal(BOOL* result) override;
+
+  IFACEMETHODIMP get_WindowVisualState(WindowVisualState* result) override;
+
+  IFACEMETHODIMP get_WindowInteractionState(
+      WindowInteractionState* result) override;
+
+  IFACEMETHODIMP get_IsTopmost(BOOL* result) override;
+
+  //
   // IRangeValueProvider methods.
   //
 
@@ -578,8 +633,6 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   IFACEMETHODIMP get_Value(double* result) override;
 
   // IAccessibleEx methods not implemented.
-  IFACEMETHODIMP GetRuntimeId(SAFEARRAY** runtime_id) override;
-
   IFACEMETHODIMP
   ConvertReturnedElement(IRawElementProviderSimple* element,
                          IAccessibleEx** acc) override;
@@ -798,6 +851,21 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
                                         LONG y) override;
 
   //
+  // IRawElementProviderFragment methods.
+  //
+
+  IFACEMETHODIMP Navigate(
+      NavigateDirection direction,
+      IRawElementProviderFragment** element_provider) override;
+  IFACEMETHODIMP GetRuntimeId(SAFEARRAY** runtime_id) override;
+  IFACEMETHODIMP get_BoundingRectangle(UiaRect* bounding_rectangle) override;
+  IFACEMETHODIMP GetEmbeddedFragmentRoots(
+      SAFEARRAY** embedded_fragment_roots) override;
+  IFACEMETHODIMP SetFocus() override;
+  IFACEMETHODIMP get_FragmentRoot(
+      IRawElementProviderFragmentRoot** fragment_root) override;
+
+  //
   // IRawElementProviderSimple methods.
   //
 
@@ -807,13 +875,17 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   IFACEMETHODIMP GetPropertyValue(PROPERTYID property_id,
                                   VARIANT* result) override;
 
-  // IRawElementProviderSimple methods not implemented.
-
   IFACEMETHODIMP
   get_ProviderOptions(enum ProviderOptions* ret) override;
 
   IFACEMETHODIMP
   get_HostRawElementProvider(IRawElementProviderSimple** provider) override;
+
+  //
+  // IRawElementProviderSimple2 methods.
+  //
+
+  IFACEMETHODIMP ShowContextMenu() override;
 
   //
   // IServiceProvider methods.
@@ -824,9 +896,14 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
                               void** object) override;
 
  protected:
+  // This is hard-coded; all products based on the Chromium engine will have the
+  // same framework name, so that assistive technology can detect any
+  // Chromium-based product.
+  static constexpr const base::char16* FRAMEWORK_ID = L"Chrome";
+
   AXPlatformNodeWin();
 
-  int MSAAState();
+  int MSAAState() const;
 
   int MSAARole();
   std::string StringOverrideForMSAARole();
@@ -842,6 +919,8 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   base::string16 ComputeUIAProperties();
 
   LONG ComputeUIAControlType();
+
+  bool IsUIAControl() const;
 
   // AXPlatformNodeBase overrides.
   void Dispose() override;
@@ -921,7 +1000,6 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
  private:
   int MSAAEvent(ax::mojom::Event event);
   bool IsWebAreaForPresentationalIframe();
-  bool ShouldNodeHaveReadonlyStateByDefault(const AXNodeData& data) const;
   bool ShouldNodeHaveFocusableState(const AXNodeData& data) const;
 
   HRESULT GetStringAttributeAsBstr(ax::mojom::StringAttribute attribute,
@@ -976,12 +1054,22 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   // If the IntList attribute |attribute| is present, return an array
   // of automation elements referenced by the ids in the
   // IntList attribute. Otherwise return an empty array.
+  // The function will skip over any ids that cannot be resolved.
   SAFEARRAY* CreateUIAElementsArrayForRelation(
+      const ax::mojom::IntListAttribute& attribute);
+
+  // Return an unordered array of automation elements which reference this node
+  // for the given attribute.
+  SAFEARRAY* CreateUIAElementsArrayForReverseRelation(
       const ax::mojom::IntListAttribute& attribute);
 
   // Return an array of automation elements given a vector
   // of |AXNode| ids.
   SAFEARRAY* CreateUIAElementsArrayFromIdVector(std::vector<int32_t>& ids);
+
+  // Return an array that contains the center x, y coordinates of the
+  // clickable point.
+  SAFEARRAY* CreateClickablePointArray();
 
   // Returns the scroll offsets to which UI Automation should scroll an
   // accessible object, given the horizontal and vertical scroll amounts.

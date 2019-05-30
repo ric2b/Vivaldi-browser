@@ -15,7 +15,6 @@
 #include "base/macros.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/memory/shared_memory.h"
 #include "base/optional.h"
 #include "components/services/pdf_compositor/public/cpp/pdf_service_mojo_types.h"
 #include "components/services/pdf_compositor/public/interfaces/pdf_compositor.mojom.h"
@@ -27,8 +26,7 @@ namespace printing {
 
 class PdfCompositorImpl : public mojom::PdfCompositor {
  public:
-  PdfCompositorImpl(
-      const std::string& creator,
+  explicit PdfCompositorImpl(
       std::unique_ptr<service_manager::ServiceContextRef> service_ref);
   ~PdfCompositorImpl() override;
 
@@ -36,20 +34,20 @@ class PdfCompositorImpl : public mojom::PdfCompositor {
   void NotifyUnavailableSubframe(uint64_t frame_guid) override;
   void AddSubframeContent(
       uint64_t frame_guid,
-      mojo::ScopedSharedBufferHandle serialized_content,
+      base::ReadOnlySharedMemoryRegion serialized_content,
       const ContentToFrameMap& subframe_content_map) override;
   void CompositePageToPdf(
       uint64_t frame_guid,
-      uint32_t page_num,
-      mojo::ScopedSharedBufferHandle serialized_content,
+      base::ReadOnlySharedMemoryRegion serialized_content,
       const ContentToFrameMap& subframe_content_map,
       mojom::PdfCompositor::CompositePageToPdfCallback callback) override;
   void CompositeDocumentToPdf(
       uint64_t frame_guid,
-      mojo::ScopedSharedBufferHandle serialized_content,
+      base::ReadOnlySharedMemoryRegion serialized_content,
       const ContentToFrameMap& subframe_content_map,
       mojom::PdfCompositor::CompositeDocumentToPdfCallback callback) override;
   void SetWebContentsURL(const GURL& url) override;
+  void SetUserAgent(const std::string& user_agent) override;
 
  protected:
   // This is the uniform underlying type for both
@@ -61,9 +59,7 @@ class PdfCompositorImpl : public mojom::PdfCompositor {
 
   // Make this function virtual so tests can override it.
   virtual void FulfillRequest(
-      uint64_t frame_guid,
-      base::Optional<uint32_t> page_num,
-      std::unique_ptr<base::SharedMemory> serialized_content,
+      base::ReadOnlySharedMemoryMapping serialized_content,
       const ContentToFrameMap& subframe_content_map,
       CompositeToPdfCallback callback);
 
@@ -79,13 +75,13 @@ class PdfCompositorImpl : public mojom::PdfCompositor {
   // Base structure to store a frame's content and its subframe
   // content information.
   struct FrameContentInfo {
-    FrameContentInfo(std::unique_ptr<base::SharedMemory> content,
+    FrameContentInfo(base::ReadOnlySharedMemoryMapping content,
                      const ContentToFrameMap& map);
     FrameContentInfo();
     ~FrameContentInfo();
 
     // Serialized SkPicture content of this frame.
-    std::unique_ptr<base::SharedMemory> serialized_content;
+    base::ReadOnlySharedMemoryMapping serialized_content;
 
     // Frame content after composition with subframe content.
     sk_sp<SkPicture> content;
@@ -111,16 +107,11 @@ class PdfCompositorImpl : public mojom::PdfCompositor {
 
   // Stores the page or document's request information.
   struct RequestInfo : public FrameContentInfo {
-    RequestInfo(uint64_t frame_guid,
-                base::Optional<uint32_t> page_num,
-                std::unique_ptr<base::SharedMemory> content,
+    RequestInfo(base::ReadOnlySharedMemoryMapping content,
                 const ContentToFrameMap& content_info,
                 const base::flat_set<uint64_t>& pending_subframes,
                 CompositeToPdfCallback callback);
     ~RequestInfo();
-
-    uint64_t frame_guid;
-    base::Optional<uint32_t> page_number;
 
     // All pending frame ids whose content is not available but needed
     // for composition.
@@ -152,16 +143,13 @@ class PdfCompositorImpl : public mojom::PdfCompositor {
   // requests.
   void HandleCompositionRequest(
       uint64_t frame_guid,
-      base::Optional<uint32_t> page_num,
-      mojo::ScopedSharedBufferHandle serialized_content,
+      base::ReadOnlySharedMemoryRegion serialized_content,
       const ContentToFrameMap& subframe_content_ids,
       CompositeToPdfCallback callback);
 
   // The core function for content composition and conversion to a pdf file.
   mojom::PdfCompositor::Status CompositeToPdf(
-      uint64_t frame_guid,
-      base::Optional<uint32_t> page_num,
-      std::unique_ptr<base::SharedMemory> shared_mem,
+      base::ReadOnlySharedMemoryMapping shared_mem,
       const ContentToFrameMap& subframe_content_map,
       base::ReadOnlySharedMemoryRegion* region);
 
@@ -172,12 +160,16 @@ class PdfCompositorImpl : public mojom::PdfCompositor {
       const ContentToFrameMap& subframe_content_map);
 
   const std::unique_ptr<service_manager::ServiceContextRef> service_ref_;
-  const std::string creator_;
+  // The creator of this service.
+
+  // Currently contains the service creator's user agent string if given,
+  // otherwise just use string "Chromium".
+  std::string creator_ = "Chromium";
 
   // Keep track of all frames' information indexed by frame id.
   FrameMap frame_info_map_;
 
-  std::vector<std::unique_ptr<RequestInfo>> requests_;
+  static std::vector<std::unique_ptr<RequestInfo>> requests_;
 
   DISALLOW_COPY_AND_ASSIGN(PdfCompositorImpl);
 };

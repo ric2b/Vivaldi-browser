@@ -43,7 +43,11 @@ class XPathEvaluator final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static XPathEvaluator* Create() { return new XPathEvaluator; }
+  static XPathEvaluator* Create() {
+    return MakeGarbageCollected<XPathEvaluator>();
+  }
+
+  XPathEvaluator() = default;
 
   XPathExpression* createExpression(const String& expression,
                                     XPathNSResolver*,
@@ -52,12 +56,9 @@ class XPathEvaluator final : public ScriptWrappable {
   XPathResult* evaluate(const String& expression,
                         Node* context_node,
                         XPathNSResolver*,
-                        unsigned short type,
+                        uint16_t type,
                         const ScriptValue&,
                         ExceptionState&);
-
- private:
-  XPathEvaluator() = default;
 };
 
 }  // namespace blink

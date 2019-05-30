@@ -703,12 +703,11 @@ Edge* RecordInfo::CreateEdge(const Type* type) {
 
   if (Config::IsGCCollection(info->name()) ||
       Config::IsWTFCollection(info->name())) {
-    bool is_root = Config::IsPersistentGCCollection(info->name());
-    bool on_heap = is_root || info->IsHeapAllocatedCollection();
+    bool on_heap = info->IsHeapAllocatedCollection();
     size_t count = Config::CollectionDimension(info->name());
     if (!info->GetTemplateArgs(count, &args))
       return 0;
-    Collection* edge = new Collection(info, on_heap, is_root);
+    Collection* edge = new Collection(info, on_heap);
     for (TemplateArgs::iterator it = args.begin(); it != args.end(); ++it) {
       if (Edge* member = CreateEdge(*it)) {
         edge->members().push_back(member);
@@ -717,6 +716,20 @@ Edge* RecordInfo::CreateEdge(const Type* type) {
       // argument is a primitive type or just not fully known yet).
     }
     return edge;
+  }
+
+  if (Config::IsTraceWrapperMember(info->name()) &&
+      info->GetTemplateArgs(1, &args)) {
+    if (Edge* ptr = CreateEdge(args[0]))
+      return new TraceWrapperMember(ptr);
+    return 0;
+  }
+
+  if (Config::IsTraceWrapperV8Reference(info->name()) &&
+      info->GetTemplateArgs(1, &args)) {
+    if (Edge* ptr = CreateEdge(args[0]))
+      return new TraceWrapperV8Reference(ptr);
+    return 0;
   }
 
   return new Value(info);

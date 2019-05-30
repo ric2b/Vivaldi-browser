@@ -7,6 +7,7 @@
 #include <limits>
 #include <string>
 
+#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -15,6 +16,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/task_runner_util.h"
 #include "base/threading/scoped_blocking_call.h"
+#include "build/build_config.h"
 #include "chrome/browser/resource_coordinator/utils.h"
 #include "third_party/leveldatabase/env_chromium.h"
 #include "third_party/leveldatabase/leveldb_chrome.h"
@@ -84,6 +86,11 @@ bool ShouldAttemptDbRepair(const leveldb::Status& status) {
   return false;
 }
 
+struct DatabaseSizeResult {
+  base::Optional<int64_t> num_rows;
+  base::Optional<int64_t> on_disk_size_kb;
+};
+
 }  // namespace
 
 // Version history:
@@ -135,6 +142,8 @@ class LevelDBSiteCharacteristicsDatabase::AsyncHelper {
   void RemoveSiteCharacteristicsFromDB(
       const std::vector<url::Origin>& site_origin);
   void ClearDatabase();
+  // Returns a struct with unset fields on failure.
+  DatabaseSizeResult GetDatabaseSize();
 
   bool DBIsInitialized() { return db_ != nullptr; }
 
@@ -219,7 +228,7 @@ LevelDBSiteCharacteristicsDatabase::AsyncHelper::ReadSiteCharacteristicsFromDB(
   std::string protobuf_value;
   {
     base::ScopedBlockingCall scoped_blocking_call(
-        base::BlockingType::MAY_BLOCK);
+        FROM_HERE, base::BlockingType::MAY_BLOCK);
     s = db_->Get(read_options_, SerializeOriginIntoDatabaseKey(origin),
                  &protobuf_value);
   }
@@ -247,7 +256,7 @@ void LevelDBSiteCharacteristicsDatabase::AsyncHelper::
   leveldb::Status s;
   {
     base::ScopedBlockingCall scoped_blocking_call(
-        base::BlockingType::MAY_BLOCK);
+        FROM_HERE, base::BlockingType::MAY_BLOCK);
     s = db_->Put(write_options_, SerializeOriginIntoDatabaseKey(origin),
                  site_characteristic_proto.SerializeAsString());
   }
@@ -267,7 +276,8 @@ void LevelDBSiteCharacteristicsDatabase::AsyncHelper::
   if (!db_)
     return;
 
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   leveldb::WriteBatch batch;
   for (const auto& iter : site_origins)
     batch.Delete(SerializeOriginIntoDatabaseKey(iter));
@@ -283,7 +293,8 @@ void LevelDBSiteCharacteristicsDatabase::AsyncHelper::ClearDatabase() {
   if (!db_)
     return;
 
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
   db_.reset();
   leveldb_env::Options options;
   leveldb::Status status = leveldb::DestroyDB(db_path_.AsUTF8Unsafe(), options);
@@ -295,11 +306,47 @@ void LevelDBSiteCharacteristicsDatabase::AsyncHelper::ClearDatabase() {
   }
 }
 
+DatabaseSizeResult
+LevelDBSiteCharacteristicsDatabase::AsyncHelper::GetDatabaseSize() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!db_)
+    return DatabaseSizeResult();
+
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
+  DatabaseSizeResult ret;
+#if defined(OS_WIN)
+  // Windows has an annoying mis-feature that the size of an open file is not
+  // written to the parent directory until the file is closed. Since this is a
+  // diagnostic interface that should be rarely called, go to the trouble of
+  // closing and re-opening the database in order to get an up-to date size to
+  // report.
+  db_.reset();
+#endif
+  ret.on_disk_size_kb = base::ComputeDirectorySize(db_path_) / 1024;
+#if defined(OS_WIN)
+  OpenOrCreateDatabase();
+  if (!db_)
+    return DatabaseSizeResult();
+#endif
+
+  // Default read options will fill the cache as we go.
+  std::unique_ptr<leveldb::Iterator> iterator(
+      db_->NewIterator(leveldb::ReadOptions()));
+  int64_t num_rows = 0;
+  for (iterator->SeekToFirst(); iterator->Valid(); iterator->Next())
+    ++num_rows;
+
+  ret.num_rows = num_rows;
+  return ret;
+}
+
 LevelDBSiteCharacteristicsDatabase::AsyncHelper::OpeningType
 LevelDBSiteCharacteristicsDatabase::AsyncHelper::OpenOrCreateDatabaseImpl() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!db_) << "Database already open";
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   OpeningType opening_type = OpeningType::kNewDb;
 
@@ -406,6 +453,25 @@ void LevelDBSiteCharacteristicsDatabase::ClearDatabase() {
       base::BindOnce(
           &LevelDBSiteCharacteristicsDatabase::AsyncHelper::ClearDatabase,
           base::Unretained(async_helper_.get())));
+}
+
+void LevelDBSiteCharacteristicsDatabase::GetDatabaseSize(
+    GetDatabaseSizeCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // Adapt the callback with a lambda to allow using PostTaskAndReplyWithResult.
+  auto reply_callback = base::BindOnce(
+      [](GetDatabaseSizeCallback callback, const DatabaseSizeResult& result) {
+        std::move(callback).Run(result.num_rows, result.on_disk_size_kb);
+      },
+      std::move(callback));
+
+  base::PostTaskAndReplyWithResult(
+      blocking_task_runner_.get(), FROM_HERE,
+      base::BindOnce(
+          &LevelDBSiteCharacteristicsDatabase::AsyncHelper::GetDatabaseSize,
+          base::Unretained(async_helper_.get())),
+      std::move(reply_callback));
 }
 
 bool LevelDBSiteCharacteristicsDatabase::DatabaseIsInitializedForTesting() {

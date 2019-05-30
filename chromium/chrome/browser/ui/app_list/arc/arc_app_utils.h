@@ -23,6 +23,12 @@ class BrowserContext;
 
 namespace arc {
 
+extern const char kCameraAppId[];
+extern const char kCameraMigrationAppId[];
+extern const char kGoogleDuo[];
+extern const char kInfinitePainter[];
+extern const char kLegacyCameraAppId[];
+extern const char kLightRoom[];
 extern const char kPlayStoreAppId[];
 extern const char kPlayBooksAppId[];
 extern const char kPlayGamesAppId[];
@@ -129,9 +135,6 @@ void CloseTask(int task_id);
 
 // Opens TalkBack settings window.
 void ShowTalkBackSettings();
-
-// Starts Play Auto Install flow.
-void StartPaiFlow();
 
 // Gets user selected package names.
 std::vector<std::string> GetSelectedPackagesFromPrefs(

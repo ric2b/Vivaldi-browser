@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/css/style_sheet_candidate.h"
+#include "third_party/blink/renderer/core/css/style_sheet_list.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/processing_instruction.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
@@ -83,9 +84,22 @@ void DocumentStyleSheetCollection::CollectStyleSheetsFromCandidates(
             GetDocument().GetStyleEngine().PreferredStylesheetSetName()))
       continue;
 
-    CSSStyleSheet* css_sheet = ToCSSStyleSheet(sheet);
+    CSSStyleSheet* css_sheet = To<CSSStyleSheet>(sheet);
     collector.AppendActiveStyleSheet(
         std::make_pair(css_sheet, master_engine.RuleSetForSheet(*css_sheet)));
+  }
+  if (!GetTreeScope().HasAdoptedStyleSheets())
+    return;
+
+  for (CSSStyleSheet* sheet : GetTreeScope().AdoptedStyleSheets()) {
+    if (!sheet ||
+        !sheet->CanBeActivated(
+            GetDocument().GetStyleEngine().PreferredStylesheetSetName()))
+      continue;
+    DCHECK_EQ(GetDocument(), sheet->AssociatedDocument());
+    collector.AppendSheetForList(sheet);
+    collector.AppendActiveStyleSheet(
+        std::make_pair(sheet, master_engine.RuleSetForSheet(*sheet)));
   }
 }
 
@@ -130,7 +144,7 @@ void DocumentStyleSheetCollection::CollectViewportRules(
             GetDocument().GetStyleEngine().PreferredStylesheetSetName()))
       continue;
     viewport_resolver.CollectViewportRulesFromAuthorSheet(
-        *ToCSSStyleSheet(sheet));
+        To<CSSStyleSheet>(*sheet));
   }
 }
 

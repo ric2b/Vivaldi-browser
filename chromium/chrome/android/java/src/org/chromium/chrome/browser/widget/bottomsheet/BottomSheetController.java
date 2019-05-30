@@ -7,26 +7,18 @@ package org.chromium.chrome.browser.widget.bottomsheet;
 import android.app.Activity;
 import android.view.View;
 
-import org.chromium.base.ActivityState;
-import org.chromium.base.ApplicationStatus;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ActivityTabProvider;
+import org.chromium.chrome.browser.ActivityTabProvider.HintlessActivityTabObserver;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
-import org.chromium.chrome.browser.compositor.layouts.Layout;
-import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
-import org.chromium.chrome.browser.compositor.layouts.SceneChangeObserver;
-import org.chromium.chrome.browser.compositor.layouts.StaticLayout;
-import org.chromium.chrome.browser.compositor.layouts.phone.SimpleAnimationLayout;
-import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
-import org.chromium.chrome.browser.contextualsearch.ContextualSearchObserver;
-import org.chromium.chrome.browser.gsa.GSAContextDisplaySelection;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager.OverlayPanelManagerObserver;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
-import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tabmodel.TabModelObserver;
-import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
-import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
+import org.chromium.chrome.browser.tab.TabObserver;
+import org.chromium.chrome.browser.vr.VrModeObserver;
+import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.chrome.browser.widget.ScrimView;
 import org.chromium.chrome.browser.widget.ScrimView.ScrimObserver;
 import org.chromium.chrome.browser.widget.ScrimView.ScrimParams;
@@ -34,10 +26,9 @@ import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.BottomSheetCon
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.StateChangeReason;
 
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.PriorityQueue;
 import java.util.Set;
-
-import javax.annotation.Nullable;
 
 /**
  * This class is responsible for managing the content shown by the {@link BottomSheet}. Features
@@ -45,15 +36,12 @@ import javax.annotation.Nullable;
  * and call {@link #requestShowContent(BottomSheetContent, boolean)} which will return true if the
  * content was actually shown (see full doc on method).
  */
-public class BottomSheetController implements ApplicationStatus.ActivityStateListener {
+public class BottomSheetController {
     /** The initial capacity for the priority queue handling pending content show requests. */
     private static final int INITIAL_QUEUE_CAPACITY = 1;
 
     /** The parameters that controll how the scrim behaves while the sheet is open. */
     private final ScrimParams mScrimParams;
-
-    /** A handle to the {@link LayoutManager} to determine what state the browser is in. */
-    private final LayoutManager mLayoutManager;
 
     /** A handle to the {@link BottomSheet} that this class controls. */
     private final BottomSheet mBottomSheet;
@@ -73,102 +61,97 @@ public class BottomSheetController implements ApplicationStatus.ActivityStateLis
     /** Track whether the sheet was shown for the current tab. */
     private boolean mWasShownForCurrentTab;
 
-    /** Whether composited UI is currently showing (such as Contextual Search). */
-    private boolean mIsCompositedUIShowing;
-
     /** Whether the bottom sheet is temporarily suppressed. */
     private boolean mIsSuppressed;
 
-    /** The manager for Contextual Search to attach listeners to. */
-    private ContextualSearchManager mContextualSearchManager;
+    /** The manager for overlay panels to attach listeners to. */
+    private OverlayPanelManager mOverlayPanelManager;
 
     /** Whether the bottom sheet should be suppressed when Contextual Search is showing. */
     private boolean mSuppressSheetForContextualSearch;
 
+    /** A means for getting the activity's current tab and observing change events. */
+    private ActivityTabProvider mTabProvider;
+
+    /** The last known activity tab, if available. */
+    private Tab mLastActivityTab;
+
     /**
      * Build a new controller of the bottom sheet.
-     * @param tabModelSelector A tab model selector to track events on tabs open in the browser.
-     * @param layoutManager A layout manager for detecting changes in the active layout.
+     * @param activity An activity for context.
+     * @param activityTabProvider The provider of the activity's current tab.
      * @param scrim The scrim that shows when the bottom sheet is opened.
      * @param bottomSheet The bottom sheet that this class will be controlling.
-     * @param contextualSearchManager The manager for Contextual Search to attach listeners to.
+     * @param overlayManager The manager for overlay panels to attach listeners to.
      * @param suppressSheetForContextualSearch Whether the bottom sheet should be suppressed when
      *                                         Contextual Search is showing.
      */
-    public BottomSheetController(final Activity activity, final TabModelSelector tabModelSelector,
-            final LayoutManager layoutManager, final ScrimView scrim, BottomSheet bottomSheet,
-            ContextualSearchManager contextualSearchManager,
+    public BottomSheetController(final Activity activity,
+            final ActivityTabProvider activityTabProvider, final ScrimView scrim,
+            BottomSheet bottomSheet, OverlayPanelManager overlayManager,
             boolean suppressSheetForContextualSearch) {
         mBottomSheet = bottomSheet;
-        mLayoutManager = layoutManager;
-        mContextualSearchManager = contextualSearchManager;
+        mTabProvider = activityTabProvider;
+        mOverlayPanelManager = overlayManager;
         mSuppressSheetForContextualSearch = suppressSheetForContextualSearch;
         mSnackbarManager = new SnackbarManager(
                 activity, mBottomSheet.findViewById(R.id.bottom_sheet_snackbar_container));
-        mSnackbarManager.onStart();
-        ApplicationStatus.registerStateListenerForActivity(this, activity);
         mFullShowRequestedSet = new HashSet<>();
 
-        // Watch for navigation and tab switching that close the sheet.
-        new TabModelSelectorTabObserver(tabModelSelector) {
+        // Initialize the queue with a comparator that checks content priority.
+        mContentQueue = new PriorityQueue<>(INITIAL_QUEUE_CAPACITY,
+                (content1, content2) -> content2.getPriority() - content1.getPriority());
+
+        final TabObserver tabObserver = new EmptyTabObserver() {
             @Override
             public void onPageLoadStarted(Tab tab, String url) {
-                if (tab != tabModelSelector.getCurrentTab()) return;
                 clearRequestsAndHide();
             }
 
             @Override
-            public void onCrash(Tab tab, boolean sadTabShown) {
-                if (tab != tabModelSelector.getCurrentTab()) return;
+            public void onCrash(Tab tab) {
                 clearRequestsAndHide();
             }
-        };
-
-        final TabModelObserver tabSelectionObserver = new EmptyTabModelObserver() {
-            /** The currently active tab. */
-            private Tab mCurrentTab = tabModelSelector.getCurrentTab();
 
             @Override
-            public void didSelectTab(Tab tab, @TabModel.TabSelectionType int type, int lastId) {
-                if (tab == mCurrentTab) return;
-                mCurrentTab = tab;
-                clearRequestsAndHide();
+            public void onDestroyed(Tab tab) {
+                if (mLastActivityTab == tab) mLastActivityTab = null;
             }
         };
 
-        tabModelSelector.getCurrentModel().addObserver(tabSelectionObserver);
-        tabModelSelector.addObserver(new TabModelSelectorObserver() {
+        VrModuleProvider.registerVrModeObserver(new VrModeObserver() {
             @Override
-            public void onChange() {}
-
-            @Override
-            public void onNewTabCreated(Tab tab) {}
-
-            @Override
-            public void onTabModelSelected(TabModel newModel, TabModel oldModel) {
-                if (oldModel != null) oldModel.removeObserver(tabSelectionObserver);
-                newModel.addObserver(tabSelectionObserver);
-                clearRequestsAndHide();
+            public void onEnterVr() {
+                suppressSheet(StateChangeReason.VR);
             }
 
             @Override
-            public void onTabStateInitialized() {}
+            public void onExitVr() {
+                unsuppressSheet();
+            }
         });
 
-        // If the layout changes (to tab switcher, toolbar swipe, etc.) hide the sheet.
-        mLayoutManager.addSceneChangeObserver(new SceneChangeObserver() {
+        mTabProvider.addObserverAndTrigger(new HintlessActivityTabObserver() {
             @Override
-            public void onTabSelectionHinted(int tabId) {}
-
-            @Override
-            public void onSceneChange(Layout layout) {
-                // If the tab did not change, reshow the existing content. Once the tab actually
-                // changes, existing content and requests will be cleared.
-                if (canShowInLayout(layout)) {
-                    unsuppressSheet();
-                } else if (!canShowInLayout(layout)) {
+            public void onActivityTabChanged(Tab tab) {
+                // Temporarily suppress the sheet if entering a state where there is no activity
+                // tab.
+                if (tab == null) {
                     suppressSheet(StateChangeReason.COMPOSITED_UI);
+                    return;
                 }
+
+                // If refocusing the same tab, simply unsuppress the sheet.
+                if (mLastActivityTab == tab) {
+                    unsuppressSheet();
+                    return;
+                }
+
+                // Move the observer to the new activity tab and clear the sheet.
+                if (mLastActivityTab != null) mLastActivityTab.removeObserver(tabObserver);
+                mLastActivityTab = tab;
+                mLastActivityTab.addObserver(tabObserver);
+                clearRequestsAndHide();
             }
         });
 
@@ -214,29 +197,19 @@ public class BottomSheetController implements ApplicationStatus.ActivityStateLis
             }
         });
 
-        // TODO(mdjones): This should be changed to a generic OverlayPanel observer.
-        if (mContextualSearchManager != null && mSuppressSheetForContextualSearch) {
-            mContextualSearchManager.addObserver(new ContextualSearchObserver() {
+        if (mSuppressSheetForContextualSearch) {
+            mOverlayPanelManager.addObserver(new OverlayPanelManagerObserver() {
                 @Override
-                public void onShowContextualSearch(
-                        @Nullable GSAContextDisplaySelection selectionContext) {
-                    // Contextual Search can call this method more than once per show event.
-                    if (mIsCompositedUIShowing) return;
-                    mIsCompositedUIShowing = true;
+                public void onOverlayPanelShown() {
                     suppressSheet(StateChangeReason.COMPOSITED_UI);
                 }
 
                 @Override
-                public void onHideContextualSearch() {
-                    mIsCompositedUIShowing = false;
+                public void onOverlayPanelHidden() {
                     unsuppressSheet();
                 }
             });
         }
-
-        // Initialize the queue with a comparator that checks content priority.
-        mContentQueue = new PriorityQueue<>(INITIAL_QUEUE_CAPACITY,
-                (content1, content2) -> content2.getPriority() - content1.getPriority());
     }
 
     /**
@@ -254,8 +227,8 @@ public class BottomSheetController implements ApplicationStatus.ActivityStateLis
      * the browser (i.e. the tab switcher may be showing).
      */
     private void unsuppressSheet() {
-        if (!mIsSuppressed || !canShowInLayout(mLayoutManager.getActiveLayout())
-                || !mWasShownForCurrentTab || isOtherUIObscuring()) {
+        if (!mIsSuppressed || mTabProvider.getActivityTab() == null || !mWasShownForCurrentTab
+                || isOtherUIObscuring() || VrModuleProvider.getDelegate().isInVr()) {
             return;
         }
         mIsSuppressed = false;
@@ -308,7 +281,7 @@ public class BottomSheetController implements ApplicationStatus.ActivityStateLis
      */
     private boolean loadInternal(BottomSheetContent content) {
         if (content == mBottomSheet.getCurrentSheetContent()) return true;
-        if (!canShowInLayout(mLayoutManager.getActiveLayout())) return false;
+        if (mTabProvider.getActivityTab() == null) return false;
 
         BottomSheetContent shownContent = mBottomSheet.getCurrentSheetContent();
         boolean shouldSuppressExistingContent = shownContent != null
@@ -377,19 +350,11 @@ public class BottomSheetController implements ApplicationStatus.ActivityStateLis
     public void expandSheet() {
         if (mBottomSheet.getCurrentSheetContent() == null) return;
         mBottomSheet.setSheetState(BottomSheet.SheetState.HALF, true);
-        if (mContextualSearchManager != null) {
-            mContextualSearchManager.hideContextualSearch(OverlayPanel.StateChangeReason.UNKNOWN);
-        }
-    }
-
-    @Override
-    public void onActivityStateChange(Activity activity, int newState) {
-        if (newState == ActivityState.STARTED) {
-            mSnackbarManager.onStart();
-        } else if (newState == ActivityState.STOPPED) {
-            mSnackbarManager.onStop();
-        } else if (newState == ActivityState.DESTROYED) {
-            ApplicationStatus.unregisterActivityStateListener(this);
+        if (mOverlayPanelManager.getActivePanel() != null) {
+            // TODO(mdjones): This should only apply to contextual search, but contextual search is
+            //                the only implementation. Fix this to only apply to contextual search.
+            mOverlayPanelManager.getActivePanel().closePanel(
+                    OverlayPanel.StateChangeReason.UNKNOWN, true);
         }
     }
 
@@ -411,32 +376,41 @@ public class BottomSheetController implements ApplicationStatus.ActivityStateLis
     }
 
     /**
-     * Clear all the content show requests and hide the current content.
+     * For all contents that don't have a custom lifecycle, we remove them from show requests or
+     * hide it if it is currently shown.
      */
     private void clearRequestsAndHide() {
-        mContentQueue.clear();
-        mFullShowRequestedSet.clear();
-        // TODO(mdjones): Replace usages of bottom sheet with a model in line with MVC.
-        // TODO(mdjones): It would probably be useful to expose an observer method that notifies
-        //                objects when all content requests are cleared.
-        hideContent(mBottomSheet.getCurrentSheetContent(), true);
-        mWasShownForCurrentTab = false;
-        mIsSuppressed = false;
+        clearRequests(mContentQueue.iterator());
+        clearRequests(mFullShowRequestedSet.iterator());
+
+        BottomSheetContent currentContent = mBottomSheet.getCurrentSheetContent();
+        if (currentContent != null && !currentContent.hasCustomLifecycle()) {
+            if (mContentQueue.isEmpty() && mFullShowRequestedSet.isEmpty()) {
+                mWasShownForCurrentTab = false;
+                mIsSuppressed = false;
+            }
+
+            hideContent(currentContent, /* animate= */ true);
+        }
     }
 
     /**
-     * @param layout A {@link Layout} to check if the sheet can be shown in.
-     * @return Whether the bottom sheet can show in the specified layout.
+     * Remove all contents from {@code iterator} that don't have a custom lifecycle.
+     * @param iterator The iterator whose items must be removed.
      */
-    protected boolean canShowInLayout(Layout layout) {
-        return layout instanceof StaticLayout || layout instanceof SimpleAnimationLayout;
+    private void clearRequests(Iterator<BottomSheetContent> iterator) {
+        while (iterator.hasNext()) {
+            if (!iterator.next().hasCustomLifecycle()) {
+                iterator.remove();
+            }
+        }
     }
 
     /**
      * @return Whether some other UI is preventing the sheet from showing.
      */
     protected boolean isOtherUIObscuring() {
-        return mIsCompositedUIShowing;
+        return mOverlayPanelManager.getActivePanel() != null;
     }
 
     /**

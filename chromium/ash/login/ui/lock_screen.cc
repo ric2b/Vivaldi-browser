@@ -9,24 +9,26 @@
 
 #include "ash/login/ui/lock_contents_view.h"
 #include "ash/login/ui/lock_debug_view.h"
-#include "ash/login/ui/lock_window.h"
 #include "ash/login/ui/login_data_dispatcher.h"
 #include "ash/login/ui/login_detachable_base_model.h"
+#include "ash/public/cpp/lock_screen_widget_factory.h"
+#include "ash/public/cpp/shell_window_ids.h"
+#include "ash/shelf/login_shelf_view.h"
+#include "ash/shelf/shelf.h"
+#include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/tray_action/tray_action.h"
 #include "ash/wallpaper/wallpaper_controller.h"
+#include "base/bind.h"
 #include "base/command_line.h"
-#include "base/timer/timer.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/views/widget/widget.h"
 #include "ui/wm/core/capture_controller.h"
 
 namespace ash {
 namespace {
-
-constexpr base::TimeDelta kShowLoginScreenTimeout =
-    base::TimeDelta::FromSeconds(5);
 
 // Global lock screen instance. There can only ever be on lock screen at a
 // time.
@@ -45,9 +47,18 @@ LockContentsView* LockScreen::TestApi::contents_view() const {
 
 LockScreen::LockScreen(ScreenType type) : type_(type) {
   tray_action_observer_.Add(ash::Shell::Get()->tray_action());
+  saved_clipboard_ = ui::Clipboard::TakeForCurrentThread();
 }
 
-LockScreen::~LockScreen() = default;
+LockScreen::~LockScreen() {
+  // Must happen before data_dispatcher_.reset().
+  widget_.reset();
+  data_dispatcher_.reset();
+
+  ui::Clipboard::DestroyClipboardForCurrentThread();
+  if (saved_clipboard_)
+    ui::Clipboard::SetClipboardForCurrentThread(std::move(saved_clipboard_));
+}
 
 // static
 LockScreen* LockScreen::Get() {
@@ -63,8 +74,13 @@ void LockScreen::Show(ScreenType type) {
 
   instance_ = new LockScreen(type);
 
-  instance_->window_ = new LockWindow();
-  instance_->window_->SetBounds(
+  aura::Window* parent = nullptr;
+  if (Shell::HasInstance()) {
+    parent = Shell::GetContainer(Shell::GetPrimaryRootWindow(),
+                                 kShellWindowId_LockScreenContainer);
+  }
+  instance_->widget_ = CreateLockScreenWidget(parent);
+  instance_->widget_->SetBounds(
       display::Screen::GetScreen()->GetPrimaryDisplay().bounds());
 
   auto data_dispatcher = std::make_unique<LoginDataDispatcher>();
@@ -75,39 +91,34 @@ void LockScreen::Show(ScreenType type) {
     auto* debug_view = new LockDebugView(initial_note_action_state, type,
                                          data_dispatcher.get());
     instance_->contents_view_ = debug_view->lock();
-    instance_->window_->SetContentsView(debug_view);
+    instance_->widget_->SetContentsView(debug_view);
   } else {
     auto detachable_base_model = LoginDetachableBaseModel::Create(
         Shell::Get()->detachable_base_handler(), data_dispatcher.get());
     instance_->contents_view_ = new LockContentsView(
         initial_note_action_state, type, data_dispatcher.get(),
         std::move(detachable_base_model));
-    instance_->window_->SetContentsView(instance_->contents_view_);
+    instance_->widget_->SetContentsView(instance_->contents_view_);
   }
 
-  instance_->window_->set_data_dispatcher(std::move(data_dispatcher));
-  const base::RepeatingClosure show_screen = base::BindRepeating([]() {
-    // |instance_| may already be destroyed in tests.
-    if (!instance_ || instance_->is_shown_)
-      return;
-    instance_->is_shown_ = true;
-    instance_->window_->Show();
-  });
-  if (type == ScreenType::kLogin) {
-    // Postpone showing the login screen after the animation of the first
-    // wallpaper completes, to make the transition smooth.
-    Shell::Get()->wallpaper_controller()->AddFirstWallpaperAnimationEndCallback(
-        show_screen, instance_->window_->GetNativeView());
-    // In case the wallpaper animation takes forever to complete, set a timer to
-    // make sure the login screen is shown eventually. This should never happen,
-    // so use an extra long time-out value to raise awareness.
-    instance_->show_login_screen_fallback_timer_ =
-        std::make_unique<base::OneShotTimer>();
-    instance_->show_login_screen_fallback_timer_->Start(
-        FROM_HERE, kShowLoginScreenTimeout, show_screen);
-  } else {
-    show_screen.Run();
-  }
+  data_dispatcher->AddObserver(Shelf::ForWindow(Shell::GetPrimaryRootWindow())
+                                   ->shelf_widget()
+                                   ->login_shelf_view());
+
+  instance_->data_dispatcher_ = std::move(data_dispatcher);
+
+  // Postpone showing the screen after the animation of the first wallpaper
+  // completes, to make the transition smooth. The callback will be dispatched
+  // immediately if the animation is already complete (e.g. kLock).
+  Shell::Get()->wallpaper_controller()->AddFirstWallpaperAnimationEndCallback(
+      base::BindOnce([]() {
+        // |instance_| may already be destroyed in tests.
+        if (!instance_ || instance_->is_shown_)
+          return;
+        instance_->is_shown_ = true;
+        instance_->widget_->Show();
+      }),
+      instance_->widget_->GetNativeView());
 }
 
 // static
@@ -126,13 +137,13 @@ void LockScreen::Destroy() {
   }
   CHECK_EQ(instance_, this);
 
-  window_->Close();
+  data_dispatcher_->RemoveObserver(
+      Shelf::ForWindow(Shell::GetPrimaryRootWindow())
+          ->shelf_widget()
+          ->login_shelf_view());
+
   delete instance_;
   instance_ = nullptr;
-}
-
-LoginDataDispatcher* LockScreen::data_dispatcher() {
-  return window_->data_dispatcher();
 }
 
 void LockScreen::FocusNextUser() {

@@ -14,14 +14,40 @@
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
 #include "base/optional.h"
+#include "base/stl_util.h"
 #include "content/common/content_export.h"
-#include "content/renderer/media/stream/media_stream_constraints_util.h"
+#include "third_party/blink/public/platform/web_media_constraints.h"
 
 namespace blink {
 struct WebMediaTrackConstraintSet;
 }
 
 namespace content {
+
+template <typename ConstraintType>
+bool ConstraintHasMax(const ConstraintType& constraint) {
+  return constraint.HasMax() || constraint.HasExact();
+}
+
+template <typename ConstraintType>
+bool ConstraintHasMin(const ConstraintType& constraint) {
+  return constraint.HasMin() || constraint.HasExact();
+}
+
+template <typename ConstraintType>
+auto ConstraintMax(const ConstraintType& constraint)
+    -> decltype(constraint.Max()) {
+  DCHECK(ConstraintHasMax(constraint));
+  return constraint.HasExact() ? constraint.Exact() : constraint.Max();
+}
+
+template <typename ConstraintType>
+auto ConstraintMin(const ConstraintType& constraint)
+    -> decltype(constraint.Min()) {
+  DCHECK(ConstraintHasMin(constraint));
+  return constraint.HasExact() ? constraint.Exact() : constraint.Min();
+}
+
 namespace media_constraints {
 
 // This class template represents a set of candidates suitable for a numeric
@@ -31,7 +57,7 @@ class NumericRangeSet {
  public:
   NumericRangeSet() = default;
   NumericRangeSet(base::Optional<T> min, base::Optional<T> max)
-      : min_(min), max_(max) {}
+      : min_(std::move(min)), max_(std::move(max)) {}
   NumericRangeSet(const NumericRangeSet& other) = default;
   NumericRangeSet& operator=(const NumericRangeSet& other) = default;
   ~NumericRangeSet() = default;
@@ -50,6 +76,10 @@ class NumericRangeSet {
       max = max ? std::min(*max, *other.Max()) : other.Max();
 
     return NumericRangeSet(min, max);
+  }
+
+  bool Contains(T value) const {
+    return (!Min() || value >= *Min()) && (!Max() || value <= *Max());
   }
 
   // Creates a NumericRangeSet based on the minimum and maximum values of
@@ -81,6 +111,25 @@ class NumericRangeSet {
             : base::Optional<T>());
   }
 
+  // Creates a NumericRangeSet based on the minimum and maximum values of
+  // |constraint| and a client-provided range of valid values.
+  template <typename ConstraintType>
+  static NumericRangeSet<T> FromConstraint(ConstraintType constraint) {
+    return NumericRangeSet<T>(
+        ConstraintHasMin(constraint) ? ConstraintMin(constraint)
+                                     : base::Optional<T>(),
+        ConstraintHasMax(constraint) ? ConstraintMax(constraint)
+                                     : base::Optional<T>());
+  }
+
+  // Creates a NumericRangeSet based on a single value representing both the
+  // minimum and the maximum values for this range.
+  static NumericRangeSet<T> FromValue(T value) {
+    return NumericRangeSet<T>(value, value);
+  }
+
+  static NumericRangeSet<T> EmptySet() { return NumericRangeSet(1, 0); }
+
  private:
   base::Optional<T> min_;
   base::Optional<T> max_;
@@ -95,7 +144,7 @@ class NumericRangeSet {
 // is application defined (e.g., it could be all possible boolean values, all
 // possible strings of length N, or anything that suits a particular
 // application).
-// TODO(guidou): Rename this class. http://crbug.com/731166
+// TODO(guidou): Rename this class. https://crbug.com/731166
 template <typename T>
 class DiscreteSet {
  public:
@@ -118,8 +167,7 @@ class DiscreteSet {
   ~DiscreteSet() = default;
 
   bool Contains(const T& value) const {
-    return is_universal_ || std::find(elements_.begin(), elements_.end(),
-                                      value) != elements_.end();
+    return is_universal_ || base::ContainsValue(elements_, value);
   }
 
   bool IsEmpty() const { return !is_universal_ && elements_.empty(); }
@@ -137,11 +185,8 @@ class DiscreteSet {
     // Both sets have explicit elements.
     std::vector<T> intersection;
     for (const auto& entry : elements_) {
-      auto it =
-          std::find(other.elements_.begin(), other.elements_.end(), entry);
-      if (it != other.elements_.end()) {
+      if (base::ContainsValue(other.elements_, entry))
         intersection.push_back(entry);
-      }
     }
     return DiscreteSet(std::move(intersection));
   }
@@ -167,6 +212,13 @@ class DiscreteSet {
   bool is_universal_;
   std::vector<T> elements_;
 };
+
+// Special case for DiscreteSet<bool> where it is easy to produce an explicit
+// set that contains all possible elements.
+template <>
+inline bool DiscreteSet<bool>::is_universal() const {
+  return Contains(true) && Contains(false);
+}
 
 DiscreteSet<std::string> StringSetFromConstraint(
     const blink::StringConstraint& constraint);
@@ -331,6 +383,9 @@ class CONTENT_EXPORT ResolutionSet {
   static ResolutionSet FromAspectRatio(double min, double max);
   static ResolutionSet FromExactAspectRatio(double value);
 
+  // Returns a ResolutionSet containing only the specified width and height.
+  static ResolutionSet FromExactResolution(int width, int height);
+
   // Returns a ResolutionCandidateSet initialized with |constraint_set|'s
   // width, height and aspectRatio constraints.
   static ResolutionSet FromConstraintSet(
@@ -390,8 +445,17 @@ class CONTENT_EXPORT ResolutionSet {
 };
 
 // Scalar multiplication for Points.
-ResolutionSet::Point CONTENT_EXPORT operator*(double d,
+CONTENT_EXPORT ResolutionSet::Point operator*(double d,
                                               const ResolutionSet::Point& p);
+
+// This function returns a set of bools from a resizeMode StringConstraint.
+// If |resize_mode_constraint| includes
+// blink::WebMediaStreamTrack::kResizeModeNone, false is included in the
+// returned value. If |resize_mode_constraint| includes
+// blink::WebMediaStreamTrack::kResizeModeRescale, true is included in the
+// returned value.
+CONTENT_EXPORT DiscreteSet<bool> RescaleSetFromConstraint(
+    const blink::StringConstraint& resize_mode_constraint);
 
 }  // namespace media_constraints
 }  // namespace content

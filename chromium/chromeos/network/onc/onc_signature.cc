@@ -189,6 +189,7 @@ const OncFieldSignature tether_with_state_fields[] = {
     {NULL}};
 
 const OncFieldSignature ipconfig_fields[] = {
+    {::onc::kRecommended, &kRecommendedSignature},
     {::onc::ipconfig::kGateway, &kStringSignature},
     {::onc::ipconfig::kIPAddress, &kStringSignature},
     {::onc::ipconfig::kNameServers, &kStringListSignature},
@@ -517,6 +518,9 @@ const CredentialEntry credentials[] = {
     {&kOpenVPNSignature, ::onc::openvpn::kTLSAuthContents},
     {&kWiFiSignature, ::onc::wifi::kPassphrase},
     {&kCellularApnSignature, ::onc::cellular_apn::kPassword},
+    // While not really a credential, PKCS12 blobs may contain unencrypted
+    // private keys.
+    {&kCertificateSignature, ::onc::certificate::kPKCS12},
     {NULL}};
 
 }  // namespace

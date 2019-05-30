@@ -15,28 +15,71 @@
         "enum": [ "connected", "disconnected" ]
       },
       {
-        "id": "SyncOperationResult",
-        "description": "The current result of a sync commit or download operation. Passed from the engine when requesting status.",
+        "id": "EngineState",
+        "description": "The state of the sync engine.",
         "type": "string",
-        "enum": [ "pending", "success", "failure" ]
+        "enum": [ {
+          "name": "stopped",
+          "description": "Sync has not been requested by the user"
+        }, {
+          "name": "starting",
+          "description": "Sync has been requested but the engine is not done starting"
+        }, {
+          "name": "started",
+          "description": "The sync engine is running normally"
+        }, {
+          "name": "clearing_data",
+          "description": "The sync engine is running, but it is in the process of requesting server data to be cleared."
+        }, {
+          "name": "configuration_pending",
+          "description": "The sync engine is running, but it is waiting for the current setup to be complete before actually syncing anything"
+        }, {
+          "name": "failed",
+          "description": "The sync engine encountered an error that forced it to stop."
+        } ]
       },
       {
-        "id": "SyncToken",
-        "type": "object",
-        "description": "Information available following a successful sync login",
-        "properties": {
-          "token": {
-            "type": "string",
-            "description": "The token obtained from the server"
-          },
-          "account_id": {
-            "type": "string",
-            "descirption": "The sync account id for which the token is valid"
-          }
-        }
+        "id": "DisableReason",
+        "description": "The reason why the sync engine is in a failed state. This should be kept in sync with SyncService::DisableReason (chromium/components/sync/driver/sync_service.h)",
+        "type": "string",
+        "enum" : [ "platform_override", "enterprise_policy", "not_signed_in",
+          "user_choice", "unrecoverable_error", "flag" ]
       },
       {
-        "id": "SyncDataType",
+        "id": "SyncerError",
+        "description": "Error occuring as part of the sync cycle. This should be kept in sync with syncer::SyncerError (chromium/components/sync/base/syncer_error.h)",
+        "type": "string",
+        "enum": [ "unset", "cannot_do_work", "network_connection_unavailable",
+          "network_io_error", "sync_server_error", "sync_auth_error",
+          "server_return_invalid_credential", "server_return_unknown_error",
+          "server_return_throttled", "server_return_transient_error",
+          "server_return_migration_done", "server_return_clear_pending",
+          "server_return_not_my_birthday", "server_return_conflict",
+          "server_response_validation_failed",
+          "server_return_disabled_by_admin", "server_return_user_rollback",
+          "server_return_partial_failure", "server_return_client_data_obsolete",
+          "datatype_triggered_retry", "server_more_to_download", "syncer_ok" ]
+      },
+      {
+        "id": "ProtocolErrorType",
+        "description": "Possible error types for errors returned as part of sync server responses. This should be kept in sync with syncer::SyncProtocolErrorType (chromium/components/sync/protocol/sync_protocol_error.h)",
+        "type": "string",
+        "enum" : [ "success", "not_my_birthday", "throttled", "clear_pending",
+          "transient_error", "migration_done", "invalid_credential",
+          "disabled_by_admin", "partial_failure", "client_data_obsolete",
+          "unknown" ]
+      },
+      {
+        "id": "ClientAction",
+        "description": "Possible action that the client can take to fix the last server-returned error. This should be kept in sync with syncer::ClientAction (chromium/components/sync/protocol/sync_protocol_error.h)",
+        "type": "string",
+        "enum" : [ "upgrade_client", "clear_user_data_and_resync",
+          "enable_sync_on_account", "stop_and_restart_sync",
+          "disable_sync_on_client", "stop_sync_for_disabled_account",
+          "reset_local_sync_data", "unknown" ]
+      },
+      {
+        "id": "DataType",
         "type": "object",
         "description": "A structure containing the system status of a data type.",
         "properties": {
@@ -51,29 +94,98 @@
         }
       },
       {
-        "id": "SyncStatusInfo",
+        "id": "EngineData",
         "type": "object",
-        "description": "Contains information about the last sync cycle and the state of the sync engine",
+        "description": "Contains information about the state of the sync engine.",
         "properties":{
-          "last_sync_time": {
-            "type": "number",
-            "description": "The last time a sync cycle started"
+          "engineState": {
+            "$ref": "EngineState"
           },
-          "last_download_updates_status": {
-            "$ref": "SyncOperationResult",
-            "description": "Whether the download updates part of the last sync cycle was successful"
+          "disableReasons": {
+            "type" : "array",
+            "items": {
+              "$ref": "DisableReason"
+            }
           },
-          "last_commit_status": {
-            "$ref": "SyncOperationResult",
-            "description": "Whether the commit part of the last sync cycle was successful"
+          "protocolErrorType": {
+            "$ref": "ProtocolErrorType"
           },
-          "is_encrypting_everything": {
+          "protocolErrorDescription": {
+            "type": "string",
+            "description": "Plain english description of the error as sent by the server"
+          },
+          "protocolErrorClientAction": {
+            "$ref": "ClientAction"
+          },
+          "usesEncryptionPassword": {
+            "type": "boolean",
+            "description": "Whether encryption has been set up"
+          },
+          "needsDecryptionPassword": {
+            "type": "boolean",
+            "description": "Whether a password is needed to decrypt the sync data"
+          },
+          "isEncryptingEverything": {
             "type": "boolean",
             "description": "Wheter the engine is encrypting all data types"
           },
-          "has_synced": {
+          "isSetupInProgress": {
+            "type": "boolean",
+            "description": "Whether the sync service is being configured."
+          },
+          "isFirstSetupComplete": {
+            "type": "boolean",
+            "description": "Whether the sync service has been configured and started before."
+          },
+          "syncEverything": {
+            "type": "boolean",
+            "description": "Indicates that all datatypes will always be synced."
+          },
+          "dataTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "DataType"
+            },
+            "description": "List of available data types and whether the user chose to sync them."
+          },
+          "isReady": {
+            "type": "boolean",
+            "desccription": "Always true. Lets the JS code knows that it has received the real data."
+          }
+        }
+      },
+      {
+        "id": "CycleData",
+        "type": "object",
+        "description": "Contains information about the last sync cycle.",
+        "properties":{
+          "lastSyncTime": {
+            "type": "number",
+            "description": "The last time a sync cycle started"
+          },
+          "lastDownloadUpdatesResult": {
+            "$ref": "SyncerError",
+            "description": "Whether the download updates part of the last sync cycle was successful"
+          },
+          "lastCommitResult": {
+            "$ref": "SyncerError",
+            "description": "Whether the commit part of the last sync cycle was successful"
+          },
+          "hasRemainingLocalChanges": {
+            "type": "boolean",
+            "description": "Whether there are items left to commit after the last cycle"
+          },
+          "hasSynced": {
             "type": "boolean",
             "description": "Whether the first sync cycle has been completed"
+          },
+          "nextRetryTime": {
+            "type": "number",
+            "description": "The time at which the next sync attempt will be made, if the last one failed"
+          },
+          "isReady": {
+            "type": "boolean",
+            "desccription": "Always true. Lets the JS code knows that it has received the real data."
           }
         }
       }
@@ -82,24 +194,14 @@
       {
         "name": "start",
         "type": "function",
-        "description": "Causes sync to be started using the provided token.",
-        "parameters": [
-          {
-            "name": "token",
-            "$ref": "SyncToken"
-          }
-        ]
+        "description": "Starts up sync. Feedback about the startup process can be obtained by listening to onEngineStateChanged.",
+        "parameters": [ ]
       },
       {
-        "name": "refreshToken",
+        "name": "stop",
         "type": "function",
-        "description": "Indicates that the a new access token to the sync account was obtained.",
-        "parameters": [
-          {
-            "name": "token",
-            "$ref": "SyncToken"
-          }
-        ]
+        "description": "Shuts sync down.",
+        "parameters": [ ]
       },
       {
         "name": "setEncryptionPassword",
@@ -118,45 +220,23 @@
                 "name": "accepted",
                 "type": "boolean",
                 "description": "Whether the password was accepted. This will be false if we have data to decrypt and the password doesn't allow to decrypt them or if we already had a password set."
-              },
-              {
-                "name": "passwordRequired",
-                "type": "boolean",
-                "description": "Whether the password is actually required. If accepted is false and this sis true, the user must be prompted again."
               }
             ]
           }
         ]
       },
       {
-        "name": "isFirstSetup",
+        "name": "getDefaultSessionName",
         "type": "function",
-        "description": "Returns true if this is the initial setup of Sync. If so,setTypes must be called before any syncing occurs.",
+        "description": "Returns the device name as determined by the OS.",
         "parameters": [
           {
-            "name": "callback",
             "type": "function",
+            "name": "callback",
             "parameters": [
               {
-                "name": "firstSetup",
-                "type": "boolean"
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "name": "isEncryptionPasswordSetUp",
-        "type": "function",
-        "description": "Returns true if an encryption password has been set up.",
-        "parameters": [
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name": "firstSetup",
-                "type": "boolean"
+                "name": "result",
+                "type": "string"
               }
             ]
           }
@@ -176,50 +256,41 @@
             "name": "types",
             "type": "array",
             "items": {
-              "$ref": "SyncDataType"
+              "$ref": "DataType"
             },
             "description": "List of data types to be enabled"
           }
         ]
       },
       {
-        "name": "getTypes",
+        "name": "getEngineState",
         "type": "function",
-        "description": "Sets which data types should be synced",
-        "parameters": [
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name": "syncEverything",
-                "type": "boolean",
-                "description": "Gets a list of datatypes that are currently synced."
-              },
-              {
-                "name": "types",
-                "type": "array",
-                "items": {
-                  "$ref": "SyncDataType"
-                },
-                "description": "List of data types to be enabled"
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "name": "getStatus",
-        "type": "function",
-        "description": "Returns informations about the status of the last sync cycle and the sync engine",
+        "description": "Returns informations about the status of the sync engine.",
         "parameters":[
           {
             "name": "callback",
             "type": "function",
             "parameters":[
               {
-                "name": "Status_info",
-                "$ref": "SyncStatusInfo"
+                "name": "data",
+                "$ref": "EngineData"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getLastCycleState",
+        "type": "function",
+        "description": "Returns informations about the status of the last sync cycle.",
+        "parameters":[
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters":[
+              {
+                "name": "data",
+                "$ref": "CycleData"
               }
             ]
           }
@@ -228,13 +299,7 @@
       {
         "name": "setupComplete",
         "type": "function",
-        "description": "Informs the backed that the user is done setting up sync",
-        "parameters": [ ]
-      },
-      {
-        "name": "logout",
-        "type": "function",
-        "description": "Indicates that the user should be logged out from sync",
+        "description": "Informs the backend that the user is done configuring sync types",
         "parameters": [ ]
       },
       {
@@ -277,46 +342,26 @@
     ],
     "events": [
       {
-        "name": "onEngineStarted",
+        "name": "onEngineStateChanged",
         "type": "function",
-        "description": "Fired when the sync engine has started.",
-        "parameters": []
+        "description": "Fired when the sync engine state has changed.",
+        "parameters": [
+          {
+            "name": "data",
+            "$ref": "EngineData"
+          }
+        ]
       },
       {
-        "name": "onEngineInitFailed",
+        "name": "onCycleCompleted",
         "type": "function",
-        "description": "Fired when the sync engine has failed to start.",
-        "parameters": []
-      },
-      {
-        "name": "onBeginSyncing",
-        "type": "function",
-        "description": "Fired when syncing starts.",
-        "parameters": []
-      },
-      {
-        "name": "onEndSyncing",
-        "type": "function",
-        "description": "Fired when syncing is done.",
-        "parameters": []
-      },
-      {
-        "name": "onEngineStopped",
-        "type": "function",
-        "description": "Fired when the user has been logged out, either from a UI action or from a server request.",
-        "parameters": []
-      },
-      {
-        "name": "onAccessTokenRequested",
-        "type": "function",
-        "description": "Fired when a new access token is required.",
-        "parameters": []
-      },
-      {
-        "name": "onEncryptionPasswordRequested",
-        "type": "function",
-        "description": "Fired when a password is required to decrypt received Sync data.",
-        "parameters": []
+        "description": "Fired when a sync cycle completed.",
+        "parameters": [
+          {
+            "name": "data",
+            "$ref": "CycleData"
+          }
+        ]
       }
     ]
   }

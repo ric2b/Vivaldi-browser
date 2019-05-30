@@ -15,7 +15,7 @@ struct PaintChunk;
 class PaintChunkSubset {
  public:
   PaintChunkSubset(const Vector<PaintChunk>& chunks,
-                   const Vector<size_t>& subset_indices)
+                   const Vector<wtf_size_t>& subset_indices)
       : chunks_(chunks), subset_indices_(&subset_indices) {}
 
   // For convenience, this allows using a Vector<PaintChunk> in place of
@@ -24,6 +24,8 @@ class PaintChunkSubset {
       : chunks_(chunks), subset_indices_(nullptr) {}
 
   class Iterator {
+    STACK_ALLOCATED();
+
    public:
     const PaintChunk& operator*() const { return subset_[offset_]; }
     const PaintChunk* operator->() const { return &subset_[offset_]; }
@@ -41,35 +43,35 @@ class PaintChunkSubset {
 
    private:
     friend class PaintChunkSubset;
-    Iterator(const PaintChunkSubset& subset, size_t offset)
+    Iterator(const PaintChunkSubset& subset, wtf_size_t offset)
         : subset_(subset), offset_(offset) {}
 
     const PaintChunkSubset& subset_;
-    size_t offset_;
+    wtf_size_t offset_;
   };
 
   Iterator begin() const { return Iterator(*this, 0); }
 
   Iterator end() const { return Iterator(*this, size()); }
 
-  size_t size() const {
+  wtf_size_t size() const {
     return subset_indices_ ? subset_indices_->size() : chunks_.size();
   }
 
   // |i| is an index in the subset.
-  const PaintChunk& operator[](size_t i) const {
+  const PaintChunk& operator[](wtf_size_t i) const {
     return chunks_[OriginalIndex(i)];
   }
 
   // |i| is an index in the subset.
   // Returns the index in the whole paint chunks set.
-  size_t OriginalIndex(size_t i) const {
+  wtf_size_t OriginalIndex(wtf_size_t i) const {
     return subset_indices_ ? (*subset_indices_)[i] : i;
   }
 
  private:
   const Vector<PaintChunk>& chunks_;
-  const Vector<size_t>* subset_indices_;
+  const Vector<wtf_size_t>* subset_indices_;
 };
 
 }  // namespace blink

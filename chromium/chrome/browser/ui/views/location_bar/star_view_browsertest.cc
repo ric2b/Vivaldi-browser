@@ -18,7 +18,6 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/test/browser_test_utils.h"
@@ -40,17 +39,14 @@ class StarViewTest : public InProcessBrowserTest {
   ~StarViewTest() override = default;
 
  private:
-  test::ScopedMacViewsBrowserMode views_mode_{true};
-
   DISALLOW_COPY_AND_ASSIGN(StarViewTest);
 };
 
 // Verify that clicking the bookmark star a second time hides the bookmark
 // bubble.
-#if defined(OS_LINUX) && defined(USE_AURA) && !defined(OS_CHROMEOS)
-#define MAYBE_HideOnSecondClick DISABLED_HideOnSecondClick
-#elif defined(OS_MACOSX)
-// Focusing or input is not completely working on Mac: http://crbug.com/824418
+#if defined(OS_MACOSX)
+// TODO(robliao): https://crbug.com/824418  Focusing or input is not completely
+// working on Mac.
 #define MAYBE_HideOnSecondClick DISABLED_HideOnSecondClick
 #else
 #define MAYBE_HideOnSecondClick HideOnSecondClick

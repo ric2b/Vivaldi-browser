@@ -16,6 +16,16 @@
 namespace gpu {
 namespace gles2 {
 
+ProgramCache::ScopedCacheUse::ScopedCacheUse(ProgramCache* cache,
+                                             CacheProgramCallback callback)
+    : cache_(cache) {
+  cache_->cache_program_callback_ = callback;
+}
+
+ProgramCache::ScopedCacheUse::~ScopedCacheUse() {
+  cache_->cache_program_callback_.Reset();
+}
+
 ProgramCache::ProgramCache(size_t max_cache_size_bytes)
     : max_size_bytes_(max_cache_size_bytes) {}
 ProgramCache::~ProgramCache() = default;

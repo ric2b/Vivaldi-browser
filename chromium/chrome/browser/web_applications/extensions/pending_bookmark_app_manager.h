@@ -28,6 +28,10 @@ class RenderFrameHost;
 class WebContents;
 }  // namespace content
 
+namespace web_app {
+class AppRegistrar;
+}  // namespace web_app
+
 namespace extensions {
 
 // Implementation of web_app::PendingAppManager that manages the set of
@@ -43,7 +47,8 @@ class PendingBookmarkAppManager final : public web_app::PendingAppManager,
   using TaskFactory = base::RepeatingCallback<
       std::unique_ptr<BookmarkAppInstallationTask>(Profile*, AppInfo)>;
 
-  explicit PendingBookmarkAppManager(Profile* profile);
+  explicit PendingBookmarkAppManager(Profile* profile,
+                                     web_app::AppRegistrar* registrar_);
   ~PendingBookmarkAppManager() override;
 
   // web_app::PendingAppManager
@@ -52,6 +57,9 @@ class PendingBookmarkAppManager final : public web_app::PendingAppManager,
                    const RepeatingInstallCallback& callback) override;
   void UninstallApps(std::vector<GURL> apps_to_uninstall,
                      const UninstallCallback& callback) override;
+  std::vector<GURL> GetInstalledAppUrls(
+      web_app::InstallSource install_source) const override;
+  base::Optional<std::string> LookupAppId(const GURL& url) const override;
 
   void SetFactoriesForTesting(WebContentsFactory web_contents_factory,
                               TaskFactory task_factory);
@@ -60,10 +68,16 @@ class PendingBookmarkAppManager final : public web_app::PendingAppManager,
  private:
   struct TaskAndCallback;
 
+  // Returns (as the base::Optional part) whether or not there is already a
+  // known extension for the given ID. The bool inside the base::Optional is,
+  // when known, whether the extension is installed (true) or uninstalled
+  // (false).
   base::Optional<bool> IsExtensionPresentAndInstalled(
       const std::string& extension_id);
 
   void MaybeStartNextInstallation();
+
+  void StartInstallationTask(std::unique_ptr<TaskAndCallback> task);
 
   void CreateWebContentsIfNecessary();
 
@@ -82,6 +96,7 @@ class PendingBookmarkAppManager final : public web_app::PendingAppManager,
                    const base::string16& error_description) override;
 
   Profile* profile_;
+  web_app::AppRegistrar* registrar_;
   web_app::ExtensionIdsMap extension_ids_map_;
 
   WebContentsFactory web_contents_factory_;

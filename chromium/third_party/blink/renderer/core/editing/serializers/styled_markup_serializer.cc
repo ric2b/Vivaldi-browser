@@ -79,7 +79,7 @@ bool HandleSelectionBoundary<EditingInFlatTreeStrategy>(const Node& node) {
 
 }  // namespace
 
-using namespace HTMLNames;
+using namespace html_names;
 
 template <typename Strategy>
 class StyledMarkupTraverser {
@@ -120,8 +120,8 @@ bool StyledMarkupTraverser<Strategy>::ShouldConvertBlocksToInlines() const {
 
 template <typename Strategy>
 StyledMarkupSerializer<Strategy>::StyledMarkupSerializer(
-    EAbsoluteURLs should_resolve_urls,
-    EAnnotateForInterchange should_annotate,
+    AbsoluteURLs should_resolve_urls,
+    AnnotateForInterchange should_annotate,
     const PositionTemplate<Strategy>& start,
     const PositionTemplate<Strategy>& end,
     Node* highest_node_to_be_serialized,
@@ -206,7 +206,7 @@ String StyledMarkupSerializer<Strategy>::CreateMarkup() {
     }
   }
 
-  // If there is no the highest node in the selected nodes, |m_lastClosed| can
+  // If there is no the highest node in the selected nodes, |last_closed_| can
   // be #text when its parent is a formatting tag. In this case, #text is
   // wrapped by <span> tag, but this text should be wrapped by the formatting
   // tag. See http://crbug.com/634482
@@ -230,7 +230,7 @@ String StyledMarkupSerializer<Strategy>::CreateMarkup() {
         *start_.ComputeContainerNode(), *end_.ComputeContainerNode());
     DCHECK(common_ancestor);
     HTMLBodyElement* body = ToHTMLBodyElement(EnclosingElementWithTag(
-        Position::FirstPositionInNode(*common_ancestor), bodyTag));
+        Position::FirstPositionInNode(*common_ancestor), kBodyTag));
     HTMLBodyElement* fully_selected_root = nullptr;
     // FIXME: Do this for all fully selected blocks, not just the body.
     if (body && AreSameRanges(body, start_, end_))
@@ -252,10 +252,10 @@ String StyledMarkupSerializer<Strategy>::CreateMarkup() {
              !fully_selected_root_style->Style() ||
              !fully_selected_root_style->Style()->GetPropertyCSSValue(
                  CSSPropertyBackgroundImage)) &&
-            fully_selected_root->hasAttribute(backgroundAttr)) {
+            fully_selected_root->hasAttribute(kBackgroundAttr)) {
           fully_selected_root_style->Style()->SetProperty(
               CSSPropertyBackgroundImage,
-              "url('" + fully_selected_root->getAttribute(backgroundAttr) +
+              "url('" + fully_selected_root->getAttribute(kBackgroundAttr) +
                   "')",
               /* important */ false,
               fully_selected_root->GetDocument().GetSecureContextMode());
@@ -361,7 +361,7 @@ Node* StyledMarkupTraverser<Strategy>::Traverse(Node* start_node,
       if (!n->GetLayoutObject() &&
           (!n->IsElementNode() || !ToElement(n)->HasDisplayContentsStyle()) &&
           !EnclosingElementWithTag(FirstPositionInOrBeforeNode(*n),
-                                   selectTag)) {
+                                   kSelectTag)) {
         next = Strategy::NextSkippingChildren(*n);
         // Don't skip over pastEnd.
         if (past_end && Strategy::IsDescendantOf(*past_end, *n))
@@ -446,8 +446,8 @@ void StyledMarkupTraverser<Strategy>::WrapWithNode(ContainerNode& node,
   if (!accumulator_)
     return;
   StringBuilder markup;
-  if (node.IsDocumentNode()) {
-    MarkupFormatter::AppendXMLDeclaration(markup, ToDocument(node));
+  if (auto* document = DynamicTo<Document>(node)) {
+    MarkupFormatter::AppendXMLDeclaration(markup, *document);
     accumulator_->PushMarkup(markup.ToString());
     return;
   }

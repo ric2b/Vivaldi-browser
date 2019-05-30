@@ -6,10 +6,10 @@
 
 #include <stdint.h>
 #include <memory>
+#include <unordered_set>
 #include <utility>
 
 #include "base/bind.h"
-#include "base/containers/hash_tables.h"
 #include "base/files/file_path.h"
 #include "base/i18n/case_conversion.h"
 #include "base/i18n/string_search.h"
@@ -66,6 +66,7 @@ void CloneBookmarkNodeImpl(BookmarkModel* model,
                                              element.nickname,
                                              element.description,
                                              element.thumbnail,
+                                             element.partner,
                                              element.speeddial,
                                              &element.date_visited);
   } else {
@@ -263,8 +264,7 @@ void CopyToClipboard(BookmarkModel* model,
     if (!HasSelectedAncestor(model, nodes, nodes[i]->parent()))
       filtered_nodes.push_back(nodes[i]);
 
-  BookmarkNodeData(filtered_nodes).
-      WriteToClipboard(ui::CLIPBOARD_TYPE_COPY_PASTE);
+  BookmarkNodeData(filtered_nodes).WriteToClipboard();
 
   if (remove_nodes) {
     ScopedGroupBookmarkActions group_cut(model);
@@ -282,7 +282,7 @@ void MakeTitleUnique(const BookmarkModel* model,
                      const BookmarkNode* parent,
                      const GURL& url,
                      base::string16* title) {
-  base::hash_set<base::string16> titles;
+  std::unordered_set<base::string16> titles;
   base::string16 original_title_lower = base::i18n::ToLower(*title);
   for (int i = 0; i < parent->child_count(); i++) {
     const BookmarkNode* node = parent->GetChild(i);
@@ -361,9 +361,8 @@ std::vector<const BookmarkNode*> GetMostRecentlyModifiedUserFolders(
       if (max_count == 0) {
         nodes.push_back(parent);
       } else {
-        std::vector<const BookmarkNode*>::iterator i =
-            std::upper_bound(nodes.begin(), nodes.end(), parent,
-                             &MoreRecentlyModified);
+        auto i = std::upper_bound(nodes.begin(), nodes.end(), parent,
+                                  &MoreRecentlyModified);
         if (nodes.size() < max_count || i != nodes.end()) {
           nodes.insert(i, parent);
           while (nodes.size() > max_count)
@@ -411,9 +410,8 @@ void GetMostRecentlyAddedEntries(BookmarkModel* model,
   while (iterator.has_next()) {
     const BookmarkNode* node = iterator.Next();
     if (node->is_url()) {
-      std::vector<const BookmarkNode*>::iterator insert_position =
-          std::upper_bound(nodes->begin(), nodes->end(), node,
-                           &MoreRecentlyAdded);
+      auto insert_position = std::upper_bound(nodes->begin(), nodes->end(),
+                                              node, &MoreRecentlyAdded);
       if (nodes->size() < count || insert_position != nodes->end()) {
         nodes->insert(insert_position, node);
         while (nodes->size() > count)
@@ -480,8 +478,7 @@ void RegisterManagedBookmarksPrefs(PrefRegistrySimple* registry) {
   // will cause a deadlock (see http://crbug.com/97955).  If we truly
   // want to sync the expanded state of folders, it should be part of
   // bookmark sync itself (i.e., a property of the sync folder nodes).
-  registry->RegisterListPref(prefs::kBookmarkEditorExpandedNodes,
-                             std::make_unique<base::ListValue>());
+  registry->RegisterListPref(prefs::kBookmarkEditorExpandedNodes);
   registry->RegisterListPref(prefs::kManagedBookmarks);
   registry->RegisterStringPref(
       prefs::kManagedBookmarksFolderName, std::string());
@@ -516,9 +513,7 @@ void DeleteBookmarkFolders(BookmarkModel* model,
                            const std::vector<int64_t>& ids) {
   // Remove the folders that were removed. This has to be done after all the
   // other changes have been committed.
-  for (std::vector<int64_t>::const_iterator iter = ids.begin();
-       iter != ids.end();
-       ++iter) {
+  for (auto iter = ids.begin(); iter != ids.end(); ++iter) {
     const BookmarkNode* node = GetBookmarkNodeByID(model, *iter);
     if (!node)
       continue;

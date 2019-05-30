@@ -11,6 +11,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Paint.FontMetrics;
 import android.graphics.RectF;
+import android.support.annotation.Nullable;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.util.Log;
@@ -21,8 +22,6 @@ import org.chromium.chrome.browser.util.UrlUtilities;
 
 import java.net.URI;
 import java.util.Locale;
-
-import javax.annotation.Nullable;
 
 /**
  * Generator for transparent icons containing a rounded rectangle with a given background color,
@@ -105,23 +104,12 @@ public class RoundedIconGenerator {
      * @return The generated icon.
      */
     public Bitmap generateIconForText(String text) {
-        return generateIconForText(text, 1);
-    }
-
-    /**
-     * Generates an icon based on |text|.
-     *
-     * @param text The text to render on the icon.
-     * @param numChars The maximum number of characters to return.
-     * @return The generated icon.
-     */
-    public Bitmap generateIconForText(String text, int numChars) {
         Bitmap icon = Bitmap.createBitmap(mIconWidthPx, mIconHeightPx, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(icon);
 
         canvas.drawRoundRect(mBackgroundRect, mCornerRadiusPx, mCornerRadiusPx, mBackgroundPaint);
 
-        int length = Math.min(numChars, text.length());
+        int length = Math.min(1, text.length());
         String displayText = text.substring(0, length).toUpperCase(Locale.getDefault());
         float textWidth = mTextPaint.measureText(displayText);
 

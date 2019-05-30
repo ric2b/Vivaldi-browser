@@ -7,80 +7,67 @@
 #include <string>
 
 #include "base/observer_list.h"
-#include "chrome/browser/sync/sync_startup_tracker.h"
 #include "components/browser_sync/profile_sync_service.h"
-#include "sync/vivaldi_sync_manager_observer.h"
+#include "sync/vivaldi_sync_ui_helper.h"
+
+class Profile;
 
 namespace base {
 class CommandLine;
-};
-
-using browser_sync::ProfileSyncService;
+}
 
 namespace vivaldi {
 class VivaldiInvalidationService;
 class VivaldiSyncAuthManager;
+class VivaldiAccountManager;
 
-class VivaldiSyncManager : public ProfileSyncService,
-                           public SyncStartupTracker::Observer {
+class VivaldiSyncManager : public browser_sync::ProfileSyncService {
  public:
   // invalidation_service as parameter to work around possible effects of
   // immedatiate move of init_params
   VivaldiSyncManager(
-      ProfileSyncService::InitParams* init_params,
-      std::shared_ptr<VivaldiInvalidationService> invalidation_service);
+      browser_sync::ProfileSyncService::InitParams* init_params,
+      Profile* profile,
+      std::shared_ptr<VivaldiInvalidationService> invalidation_service,
+      VivaldiAccountManager* account_manager);
   ~VivaldiSyncManager() override;
 
   base::WeakPtr<VivaldiSyncManager> AsWeakPtr() {
     return weak_factory_.GetWeakPtr();
   }
 
-  void AddVivaldiObserver(VivaldiSyncManagerObserver* observer);
-  void RemoveVivaldiObserver(VivaldiSyncManagerObserver* observer);
-
-  void SetToken(bool start_sync, std::string account_id, std::string token);
-  bool SetEncryptionPassword(const std::string& password);
-
   void ClearSyncData();
 
-  void Logout();
-  void SetupComplete();
-  void ConfigureTypes(bool sync_everything, syncer::ModelTypeSet chosen_types);
   VivaldiInvalidationService* invalidation_service() {
     return invalidation_service_.get();
   }
 
-  void NotifyEngineStarted();
-  void NotifySyncStarted();
-  void NotifySyncCompleted();
-  void NotifyEngineInitFailed();
-  void NotifyEngineStopped();
-  void NotifyAccessTokenRequested();
-  void NotifyEncryptionPasswordRequested();
+  bool is_clearing_sync_data() { return is_clearing_sync_data_; }
 
-  static bool IsSyncEnabled() { return true; }
-
-  void OnSyncCycleCompleted(const syncer::SyncCycleSnapshot& snapshot) override;
-  void OnConfigureDone(
-      const syncer::DataTypeManager::ConfigureResult& result) override;
-
-  // SyncStartupTracker::Observer
-  void SyncStartupCompleted() override;
-  void SyncStartupFailed() override;
+  void OnEngineInitialized(
+      syncer::ModelTypeSet initial_types,
+      const syncer::WeakHandle<syncer::JsBackend>& js_backend,
+      const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
+          debug_info_listener,
+      const std::string& cache_guid,
+      const std::string& session_name,
+      const std::string& birthday,
+      const std::string& bag_of_chips,
+      bool success) override;
 
  private:
   void ShutdownImpl(syncer::ShutdownReason reason) override;
+  void StartSyncingWithServer() override;
 
-  void SetupConfiguration();
+  void OnClearDataComplete(scoped_refptr<net::HttpResponseHeaders> headers);
 
-  std::unique_ptr<syncer::SyncSetupInProgressHandle> sync_blocker_;
-  std::unique_ptr<SyncStartupTracker> sync_startup_tracker_;
+  bool is_clearing_sync_data_ = false;
+  std::unique_ptr<network::SimpleURLLoader> clear_data_url_loader_;
+
+  Profile* profile_;
+
   std::shared_ptr<VivaldiInvalidationService> invalidation_service_;
-
-  // Avoid name collision with observers_ from the base class
-  base::ObserverList<VivaldiSyncManagerObserver> vivaldi_observers_;
-
-  VivaldiSyncAuthManager* vivaldi_sync_auth_manager_;
+  VivaldiSyncUIHelper ui_helper_;
 
   base::WeakPtrFactory<VivaldiSyncManager> weak_factory_;
 

@@ -45,7 +45,7 @@ class TextFieldInputType : public InputType,
   USING_GARBAGE_COLLECTED_MIXIN(TextFieldInputType);
 
  public:
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
   using InputType::GetElement;
 
  protected:
@@ -101,7 +101,7 @@ class TextFieldInputType : public InputType,
   void SpinButtonDidReleaseMouseCapture(SpinButtonElement::EventDispatch) final;
 
   SpinButtonElement* GetSpinButtonElement() const;
-  void DisabledOrReadonlyAttributeChanged(const QualifiedName&);
+  void DisabledOrReadonlyAttributeChanged();
 };
 
 }  // namespace blink

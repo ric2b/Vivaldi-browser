@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/location.h"
@@ -24,11 +25,13 @@
 #include "gpu/command_buffer/common/command_buffer_shared.h"
 #include "gpu/command_buffer/common/gpu_memory_allocation.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
+#include "gpu/command_buffer/common/presentation_feedback_utils.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "gpu/ipc/common/command_buffer_id.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "gpu/ipc/common/gpu_param_traits.h"
+#include "mojo/public/cpp/base/shared_memory_utils.h"
 #include "mojo/public/cpp/system/buffer.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "ui/gfx/geometry/size.h"
@@ -97,9 +100,12 @@ ContextResult CommandBufferProxyImpl::Initialize(
   base::UnsafeSharedMemoryRegion region =
       channel->ShareToGpuProcess(shared_state_shm_);
   if (!region.IsValid()) {
-    LOG(ERROR) << "ContextResult::kFatalFailure: "
+    // TODO(piman): ShareToGpuProcess should alert if it is failing due to
+    // being out of file descriptors, in which case this is a fatal error
+    // that won't be recovered from.
+    LOG(ERROR) << "ContextResult::kTransientFailure: "
                   "Shared memory region is not valid";
-    return ContextResult::kFatalFailure;
+    return ContextResult::kTransientFailure;
   }
 
   // Route must be added before sending the message, otherwise messages sent
@@ -144,6 +150,7 @@ bool CommandBufferProxyImpl::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(GpuCommandBufferMsg_BufferPresented, OnBufferPresented);
     IPC_MESSAGE_HANDLER(GpuCommandBufferMsg_GetGpuFenceHandleComplete,
                         OnGetGpuFenceHandleComplete);
+    IPC_MESSAGE_HANDLER(GpuCommandBufferMsg_ReturnData, OnReturnData);
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -265,10 +272,6 @@ void CommandBufferProxyImpl::OrderingBarrierHelper(int32_t put_offset) {
   last_put_offset_ = put_offset;
   last_flush_id_ = channel_->OrderingBarrier(
       route_id_, put_offset, std::move(pending_sync_token_fences_));
-
-  pending_sync_token_fences_.clear();
-
-  flushed_fence_sync_release_ = next_fence_sync_release_ - 1;
 }
 
 void CommandBufferProxyImpl::SetUpdateVSyncParametersCallback(
@@ -355,13 +358,13 @@ void CommandBufferProxyImpl::SetGetBuffer(int32_t shm_id) {
 }
 
 scoped_refptr<gpu::Buffer> CommandBufferProxyImpl::CreateTransferBuffer(
-    size_t size,
+    uint32_t size,
     int32_t* id) {
   CheckLock();
   base::AutoLock lock(last_state_lock_);
   *id = -1;
 
-  int32_t new_id = channel_->ReserveTransferBufferId();
+  int32_t new_id = GetNextBufferId();
 
   base::UnsafeSharedMemoryRegion shared_memory_region;
   base::WritableSharedMemoryMapping shared_memory_mapping;
@@ -372,6 +375,7 @@ scoped_refptr<gpu::Buffer> CommandBufferProxyImpl::CreateTransferBuffer(
       OnClientError(gpu::error::kOutOfBounds);
     return nullptr;
   }
+  DCHECK_LE(shared_memory_mapping.size(), static_cast<size_t>(UINT32_MAX));
 
   if (last_state_.error == gpu::error::kNoError) {
     base::UnsafeSharedMemoryRegion region =
@@ -412,8 +416,7 @@ const gpu::Capabilities& CommandBufferProxyImpl::GetCapabilities() const {
 
 int32_t CommandBufferProxyImpl::CreateImage(ClientBuffer buffer,
                                             size_t width,
-                                            size_t height,
-                                            unsigned internal_format) {
+                                            size_t height) {
   CheckLock();
   base::AutoLock lock(last_state_lock_);
   if (last_state_.error != gpu::error::kNoError)
@@ -432,26 +435,19 @@ int32_t CommandBufferProxyImpl::CreateImage(ClientBuffer buffer,
   bool requires_sync_token = handle.type == gfx::IO_SURFACE_BUFFER;
 
   uint64_t image_fence_sync = 0;
-  if (requires_sync_token) {
+  if (requires_sync_token)
     image_fence_sync = GenerateFenceSyncRelease();
-
-    // Make sure fence syncs were flushed before CreateImage() was called.
-    DCHECK_EQ(image_fence_sync, flushed_fence_sync_release_ + 1);
-  }
 
   DCHECK(gpu::IsImageFromGpuMemoryBufferFormatSupported(
       gpu_memory_buffer->GetFormat(), capabilities_));
   DCHECK(gpu::IsImageSizeValidForGpuMemoryBufferFormat(
       gfx::Size(width, height), gpu_memory_buffer->GetFormat()));
-  DCHECK(gpu::IsImageFormatCompatibleWithGpuMemoryBufferFormat(
-      internal_format, gpu_memory_buffer->GetFormat()));
 
   GpuCommandBufferMsg_CreateImage_Params params;
   params.id = new_id;
   params.gpu_memory_buffer = std::move(handle);
   params.size = gfx::Size(width, height);
   params.format = gpu_memory_buffer->GetFormat();
-  params.internal_format = internal_format;
   params.image_release_count = image_fence_sync;
 
   Send(new GpuCommandBufferMsg_CreateImage(route_id_, params));
@@ -547,8 +543,7 @@ void CommandBufferProxyImpl::SignalSyncToken(const gpu::SyncToken& sync_token,
   signal_tasks_.insert(std::make_pair(signal_id, std::move(callback)));
 }
 
-void CommandBufferProxyImpl::WaitSyncTokenHint(
-    const gpu::SyncToken& sync_token) {
+void CommandBufferProxyImpl::WaitSyncToken(const gpu::SyncToken& sync_token) {
   CheckLock();
   base::AutoLock lock(last_state_lock_);
   if (last_state_.error != gpu::error::kNoError)
@@ -638,13 +633,22 @@ void CommandBufferProxyImpl::OnGetGpuFenceHandleComplete(
   std::move(callback).Run(std::move(gpu_fence));
 }
 
+void CommandBufferProxyImpl::OnReturnData(const std::vector<uint8_t>& data) {
+  if (gpu_control_client_) {
+    gpu_control_client_->OnGpuControlReturnData(data);
+  }
+}
+
 void CommandBufferProxyImpl::TakeFrontBuffer(const gpu::Mailbox& mailbox) {
   CheckLock();
   base::AutoLock lock(last_state_lock_);
   if (last_state_.error != gpu::error::kNoError)
     return;
 
-  Send(new GpuCommandBufferMsg_TakeFrontBuffer(route_id_, mailbox));
+  // TakeFrontBuffer should be a deferred message so that it's sequenced
+  // correctly with respect to preceding ReturnFrontBuffer messages.
+  last_flush_id_ = channel_->EnqueueDeferredMessage(
+      GpuCommandBufferMsg_TakeFrontBuffer(route_id_, mailbox));
 }
 
 void CommandBufferProxyImpl::ReturnFrontBuffer(const gpu::Mailbox& mailbox,
@@ -655,8 +659,9 @@ void CommandBufferProxyImpl::ReturnFrontBuffer(const gpu::Mailbox& mailbox,
   if (last_state_.error != gpu::error::kNoError)
     return;
 
-  Send(new GpuCommandBufferMsg_WaitSyncToken(route_id_, sync_token));
-  Send(new GpuCommandBufferMsg_ReturnFrontBuffer(route_id_, mailbox, is_lost));
+  last_flush_id_ = channel_->EnqueueDeferredMessage(
+      GpuCommandBufferMsg_ReturnFrontBuffer(route_id_, mailbox, is_lost),
+      {sync_token});
 }
 
 bool CommandBufferProxyImpl::Send(IPC::Message* msg) {
@@ -698,20 +703,10 @@ bool CommandBufferProxyImpl::Send(IPC::Message* msg) {
 
 std::pair<base::UnsafeSharedMemoryRegion, base::WritableSharedMemoryMapping>
 CommandBufferProxyImpl::AllocateAndMapSharedMemory(size_t size) {
-  mojo::ScopedSharedBufferHandle handle =
-      mojo::SharedBufferHandle::Create(size);
-  if (!handle.is_valid()) {
-    DLOG(ERROR) << "AllocateAndMapSharedMemory: Create failed";
-    return {};
-  }
-
-  // Mojo creates a handle with Writable mode, it needs to be converted to
-  // Unsafe.
   base::UnsafeSharedMemoryRegion region =
-      base::WritableSharedMemoryRegion::ConvertToUnsafe(
-          mojo::UnwrapWritableSharedMemoryRegion(std::move(handle)));
+      mojo::CreateUnsafeSharedMemoryRegion(size);
   if (!region.IsValid()) {
-    DLOG(ERROR) << "AllocateAndMapSharedMemory: Unwrap failed";
+    DLOG(ERROR) << "AllocateAndMapSharedMemory: Allocation failed";
     return {};
   }
 
@@ -755,8 +750,8 @@ void CommandBufferProxyImpl::TryUpdateStateThreadSafe() {
     if (last_state_.error != gpu::error::kNoError) {
       callback_thread_->PostTask(
           FROM_HERE,
-          base::Bind(&CommandBufferProxyImpl::LockAndDisconnectChannel,
-                     weak_ptr_factory_.GetWeakPtr()));
+          base::BindOnce(&CommandBufferProxyImpl::LockAndDisconnectChannel,
+                         weak_ptr_factory_.GetWeakPtr()));
     }
   }
 }
@@ -784,9 +779,7 @@ void CommandBufferProxyImpl::OnBufferPresented(
   if (gpu_control_client_)
     gpu_control_client_->OnSwapBufferPresented(swap_id, feedback);
   if (update_vsync_parameters_completion_callback_ &&
-      feedback.flags & gfx::PresentationFeedback::kVSync &&
-      feedback.timestamp != base::TimeTicks() &&
-      feedback.interval != base::TimeDelta()) {
+      ShouldUpdateVsyncParams(feedback)) {
     update_vsync_parameters_completion_callback_.Run(feedback.timestamp,
                                                      feedback.interval);
   }
@@ -849,8 +842,9 @@ void CommandBufferProxyImpl::DisconnectChannelInFreshCallStack() {
   // stack in case things will use it, and give the GpuChannelClient a chance to
   // act fully on the lost context.
   callback_thread_->PostTask(
-      FROM_HERE, base::Bind(&CommandBufferProxyImpl::LockAndDisconnectChannel,
-                            weak_ptr_factory_.GetWeakPtr()));
+      FROM_HERE,
+      base::BindOnce(&CommandBufferProxyImpl::LockAndDisconnectChannel,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void CommandBufferProxyImpl::LockAndDisconnectChannel() {

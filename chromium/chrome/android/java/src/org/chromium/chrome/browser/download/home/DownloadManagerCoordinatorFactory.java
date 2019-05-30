@@ -11,28 +11,28 @@ import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.download.ui.DownloadManagerUi;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 
 /** A helper class to build and return an {@link DownloadManagerCoordinator}. */
 public class DownloadManagerCoordinatorFactory {
     /**
      * Returns an instance of a {@link DownloadManagerCoordinator} to be used in the UI.
      * @param activity           The parent {@link Activity}.
-     * @param isOffTheRecord     Whether or not this UI should include off the record items.
+     * @param config             A {@link DownloadManagerUiConfig} to provide configuration params.
      * @param parentComponent    The parent component.
-     * @param isSeparateActivity Whether or not the UI is being shown as part of a separate
-     *                           activity.
      * @param snackbarManager    The {@link SnackbarManager} that should be used to show snackbars.
+     * @param modalDialogManager The {@link ModalDialogManager} that should be used to show dialog.
      * @return                   A new {@link DownloadManagerCoordinator} instance.
      */
-    public static DownloadManagerCoordinator create(Activity activity, boolean isOffTheRecord,
-            SnackbarManager snackbarManager, ComponentName parentComponent,
-            boolean isSeparateActivity) {
+    public static DownloadManagerCoordinator create(Activity activity,
+            DownloadManagerUiConfig config, SnackbarManager snackbarManager,
+            ComponentName parentComponent, ModalDialogManager modalDialogManager) {
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOAD_HOME_V2)) {
             return new DownloadManagerCoordinatorImpl(Profile.getLastUsedProfile(), activity,
-                    isOffTheRecord, isSeparateActivity, snackbarManager);
+                    config, snackbarManager, modalDialogManager);
         } else {
-            return new DownloadManagerUi(
-                    activity, isOffTheRecord, parentComponent, isSeparateActivity, snackbarManager);
+            return new DownloadManagerUi(activity, config.isOffTheRecord, parentComponent,
+                    config.isSeparateActivity, snackbarManager);
         }
     }
 }

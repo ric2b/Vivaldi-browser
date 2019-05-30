@@ -6,10 +6,13 @@
 
 #include <stdint.h>
 
+#include <functional>
 #include <limits>
+#include <string>
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
@@ -55,7 +58,9 @@ void PopulateHidDeviceInfo(hid::HidDeviceInfo* output,
     api_collection.usage_page = collection->usage->usage_page;
     api_collection.usage = collection->usage->usage;
 
-    api_collection.report_ids = collection->report_ids;
+    api_collection.report_ids.insert(api_collection.report_ids.begin(),
+                                     collection->report_ids.begin(),
+                                     collection->report_ids.end());
 
     output->collections.push_back(std::move(api_collection));
   }
@@ -126,7 +131,7 @@ void HidDeviceManager::GetApiDevices(
     std::unique_ptr<base::ListValue> devices =
         CreateApiDeviceList(extension, filters);
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, base::Passed(&devices)));
+        FROM_HERE, base::BindOnce(callback, std::move(devices)));
   } else {
     pending_enumerations_.push_back(
         std::make_unique<GetApiDevicesParams>(extension, filters, callback));
@@ -265,7 +270,8 @@ void HidDeviceManager::DeviceRemoved(device::mojom::HidDeviceInfoPtr device) {
   DevicePermissionsManager* permissions_manager =
       DevicePermissionsManager::Get(browser_context_);
   DCHECK(permissions_manager);
-  permissions_manager->RemoveEntryByHidDeviceGUID(device->guid);
+  permissions_manager->RemoveEntryByDeviceGUID(DevicePermissionEntry::Type::HID,
+                                               device->guid);
 }
 
 void HidDeviceManager::LazyInitialize() {
@@ -358,8 +364,8 @@ void HidDeviceManager::DispatchEvent(
   // The |event->will_dispatch_callback| will be called synchronously, it is
   // safe to pass |device_info| by reference.
   event->will_dispatch_callback =
-      base::Bind(&WillDispatchDeviceEvent, weak_factory_.GetWeakPtr(),
-                 base::ConstRef(device_info));
+      base::BindRepeating(&WillDispatchDeviceEvent, weak_factory_.GetWeakPtr(),
+                          std::cref(device_info));
   event_router_->BroadcastEvent(std::move(event));
 }
 

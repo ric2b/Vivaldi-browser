@@ -8,6 +8,10 @@
 
 namespace ui {
 
+base::string16 WebDialogDelegate::GetAccessibleDialogTitle() const {
+  return GetDialogTitle();
+}
+
 std::string WebDialogDelegate::GetDialogName() const {
   return std::string();
 }
@@ -30,6 +34,7 @@ void WebDialogDelegate::OnDialogCloseFromWebUI(
 }
 
 bool WebDialogDelegate::HandleContextMenu(
+    content::RenderFrameHost* render_frame_host,
     const content::ContextMenuParams& params) {
   return false;
 }

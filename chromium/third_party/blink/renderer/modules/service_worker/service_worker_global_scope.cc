@@ -33,31 +33,37 @@
 #include <memory>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
+#include "base/numerics/safe_conversions.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/renderer/bindings/core/v8/callback_promise_adapter.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
+#include "third_party/blink/renderer/bindings/core/v8/string_or_trusted_script_url.h"
+#include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/fetch/global_fetch.h"
-#include "third_party/blink/renderer/core/frame/deprecation.h"
-#include "third_party/blink/renderer/core/frame/use_counter.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/inspector/worker_inspector_controller.h"
 #include "third_party/blink/renderer/core/inspector/worker_thread_debugger.h"
 #include "third_party/blink/renderer/core/loader/threadable_loader.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
+#include "third_party/blink/renderer/core/trustedtypes/trusted_script_url.h"
 #include "third_party/blink/renderer/core/workers/global_scope_creation_params.h"
 #include "third_party/blink/renderer/core/workers/installed_scripts_manager.h"
 #include "third_party/blink/renderer/core/workers/worker_clients.h"
 #include "third_party/blink/renderer/core/workers/worker_reporting_proxy.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/service_worker/respond_with_observer.h"
+#include "third_party/blink/renderer/modules/service_worker/service_worker.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_clients.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_global_scope_client.h"
+#include "third_party/blink/renderer/modules/service_worker/service_worker_module_tree_client.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_registration.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_script_cached_metadata_handler.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_thread.h"
@@ -74,6 +80,20 @@
 
 namespace blink {
 
+namespace {
+
+void DidSkipWaiting(ScriptPromiseResolver* resolver, bool success) {
+  if (!resolver->GetExecutionContext() ||
+      resolver->GetExecutionContext()->IsContextDestroyed())
+    return;
+  // Per spec the promise returned by skipWaiting() can never reject.
+  if (!success)
+    return;
+  resolver->Resolve();
+}
+
+}  // namespace
+
 ServiceWorkerGlobalScope* ServiceWorkerGlobalScope::Create(
     ServiceWorkerThread* thread,
     std::unique_ptr<GlobalScopeCreationParams> creation_params,
@@ -87,12 +107,13 @@ ServiceWorkerGlobalScope* ServiceWorkerGlobalScope::Create(
     // CSP headers, referrer policy, and origin trial tokens will be provided by
     // the InstalledScriptsManager in EvaluateClassicScript().
     DCHECK(creation_params->content_security_policy_parsed_headers.IsEmpty());
-    DCHECK_EQ(kReferrerPolicyDefault, creation_params->referrer_policy);
+    DCHECK_EQ(network::mojom::ReferrerPolicy::kDefault,
+              creation_params->referrer_policy);
     DCHECK(creation_params->origin_trial_tokens->IsEmpty());
   }
-  return new ServiceWorkerGlobalScope(std::move(creation_params), thread,
-                                      std::move(cache_storage_info),
-                                      time_origin);
+  return MakeGarbageCollected<ServiceWorkerGlobalScope>(
+      std::move(creation_params), thread, std::move(cache_storage_info),
+      time_origin);
 }
 
 ServiceWorkerGlobalScope::ServiceWorkerGlobalScope(
@@ -112,121 +133,104 @@ void ServiceWorkerGlobalScope::ReadyToEvaluateScript() {
     std::move(evaluate_script_).Run();
 }
 
-void ServiceWorkerGlobalScope::EvaluateClassicScript(
-    const KURL& script_url,
-    String source_code,
-    std::unique_ptr<Vector<char>> cached_meta_data) {
-  DCHECK(IsContextThread());
-
-  if (!evaluate_script_ready_) {
-    evaluate_script_ =
-        WTF::Bind(&ServiceWorkerGlobalScope::EvaluateClassicScript,
-                  WrapWeakPersistent(this), script_url, std::move(source_code),
-                  std::move(cached_meta_data));
-    return;
-  }
-
-  // Receive the main script via script streaming if needed.
-  InstalledScriptsManager* installed_scripts_manager =
-      GetThread()->GetInstalledScriptsManager();
-  if (installed_scripts_manager &&
-      installed_scripts_manager->IsScriptInstalled(script_url)) {
-    // GetScriptData blocks until the script is received from the browser.
-    InstalledScriptsManager::ScriptData script_data;
-    InstalledScriptsManager::ScriptStatus status =
-        installed_scripts_manager->GetScriptData(script_url, &script_data);
-    if (status == InstalledScriptsManager::ScriptStatus::kFailed) {
-      close();
-      return;
-    }
-
-    DCHECK(source_code.IsEmpty());
-    DCHECK(!cached_meta_data);
-    source_code = script_data.TakeSourceText();
-    cached_meta_data = script_data.TakeMetaData();
-
-    base::Optional<ContentSecurityPolicyResponseHeaders>
-        content_security_policy_raw_headers =
-            script_data.GetContentSecurityPolicyResponseHeaders();
-    ApplyContentSecurityPolicyFromHeaders(
-        content_security_policy_raw_headers.value());
-
-    String referrer_policy = script_data.GetReferrerPolicy();
-    if (!referrer_policy.IsNull())
-      ParseAndSetReferrerPolicy(referrer_policy);
-
-    std::unique_ptr<Vector<String>> origin_trial_tokens =
-        script_data.CreateOriginTrialTokens();
-    OriginTrialContext::AddTokens(this, origin_trial_tokens.get());
-
-    ReportingProxy().DidLoadInstalledScript();
-  }
-
-  WorkerGlobalScope::EvaluateClassicScript(script_url, source_code,
-                                           std::move(cached_meta_data));
+bool ServiceWorkerGlobalScope::ShouldInstallV8Extensions() const {
+  return Platform::Current()->AllowScriptExtensionForServiceWorker(
+      WebSecurityOrigin(GetSecurityOrigin()));
 }
 
 void ServiceWorkerGlobalScope::ImportModuleScript(
     const KURL& module_url_record,
-    FetchClientSettingsObjectSnapshot* outside_settings_object,
+    const FetchClientSettingsObjectSnapshot& outside_settings_object,
     network::mojom::FetchCredentialsMode credentials_mode) {
-  // TODO(nhiroki): Implement module loading for service workers.
-  // (https://crbug.com/824647)
-  NOTREACHED();
+  Modulator* modulator = Modulator::From(ScriptController()->GetScriptState());
+
+  ModuleScriptCustomFetchType fetch_type =
+      ModuleScriptCustomFetchType::kWorkerConstructor;
+  InstalledScriptsManager* installed_scripts_manager =
+      GetThread()->GetInstalledScriptsManager();
+  if (installed_scripts_manager &&
+      installed_scripts_manager->IsScriptInstalled(module_url_record)) {
+    fetch_type = ModuleScriptCustomFetchType::kInstalledServiceWorker;
+  }
+
+  FetchModuleScript(
+      module_url_record, outside_settings_object,
+      mojom::RequestContextType::SERVICE_WORKER, credentials_mode, fetch_type,
+      MakeGarbageCollected<ServiceWorkerModuleTreeClient>(modulator));
+}
+
+void ServiceWorkerGlobalScope::Dispose() {
+  DCHECK(IsContextThread());
+  ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
+      ->WillDestroyWorkerContext();
+  WorkerGlobalScope::Dispose();
 }
 
 void ServiceWorkerGlobalScope::CountWorkerScript(size_t script_size,
                                                  size_t cached_metadata_size) {
+  DCHECK_EQ(GetScriptType(), mojom::ScriptType::kClassic);
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       CustomCountHistogram, script_size_histogram,
       ("ServiceWorker.ScriptSize", 1000, 5000000, 50));
-  script_size_histogram.Count(script_size);
+  script_size_histogram.Count(
+      base::saturated_cast<base::Histogram::Sample>(script_size));
 
   if (cached_metadata_size) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(
         CustomCountHistogram, script_cached_metadata_size_histogram,
         ("ServiceWorker.ScriptCachedMetadataSize", 1000, 50000000, 50));
-    script_cached_metadata_size_histogram.Count(cached_metadata_size);
+    script_cached_metadata_size_histogram.Count(
+        base::saturated_cast<base::Histogram::Sample>(cached_metadata_size));
   }
 
-  RecordScriptSize(script_size, cached_metadata_size);
+  CountScriptInternal(script_size, cached_metadata_size);
 }
 
 void ServiceWorkerGlobalScope::CountImportedScript(
     size_t script_size,
     size_t cached_metadata_size) {
-  RecordScriptSize(script_size, cached_metadata_size);
+  DCHECK_EQ(GetScriptType(), mojom::ScriptType::kClassic);
+  CountScriptInternal(script_size, cached_metadata_size);
 }
 
-void ServiceWorkerGlobalScope::RecordScriptSize(size_t script_size,
-                                                size_t cached_metadata_size) {
-  ++script_count_;
-  script_total_size_ += script_size;
-  script_cached_metadata_total_size_ += cached_metadata_size;
-}
+void ServiceWorkerGlobalScope::DidEvaluateScript() {
+  DCHECK(!did_evaluate_script_);
+  did_evaluate_script_ = true;
 
-void ServiceWorkerGlobalScope::DidEvaluateClassicScript() {
+  // Skip recording UMAs for module scripts because there're no ways to get the
+  // number of static-imported scripts and the total size of the imported
+  // scripts.
+  if (GetScriptType() == mojom::ScriptType::kModule) {
+    return;
+  }
+
+  // TODO(asamidoi,nhiroki): Record the UMAs for module scripts, or remove them
+  // if they're no longer used.
   DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, script_count_histogram,
                                   ("ServiceWorker.ScriptCount", 1, 1000, 50));
-  script_count_histogram.Count(script_count_);
+  script_count_histogram.Count(
+      base::saturated_cast<base::Histogram::Sample>(script_count_));
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       CustomCountHistogram, script_total_size_histogram,
       ("ServiceWorker.ScriptTotalSize", 1000, 5000000, 50));
-  script_total_size_histogram.Count(script_total_size_);
+  script_total_size_histogram.Count(
+      base::saturated_cast<base::Histogram::Sample>(script_total_size_));
   if (script_cached_metadata_total_size_) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(
         CustomCountHistogram, cached_metadata_histogram,
         ("ServiceWorker.ScriptCachedMetadataTotalSize", 1000, 50000000, 50));
-    cached_metadata_histogram.Count(script_cached_metadata_total_size_);
+    cached_metadata_histogram.Count(
+        base::saturated_cast<base::Histogram::Sample>(
+            script_cached_metadata_total_size_));
   }
-  did_evaluate_script_ = true;
 }
 
-ScriptPromise ServiceWorkerGlobalScope::fetch(ScriptState* script_state,
-                                              const RequestInfo& input,
-                                              const RequestInit& init,
-                                              ExceptionState& exception_state) {
-  return GlobalFetch::fetch(script_state, *this, input, init, exception_state);
+void ServiceWorkerGlobalScope::CountScriptInternal(
+    size_t script_size,
+    size_t cached_metadata_size) {
+  ++script_count_;
+  script_total_size_ += script_size;
+  script_cached_metadata_total_size_ += cached_metadata_size;
 }
 
 ServiceWorkerClients* ServiceWorkerGlobalScope::clients() {
@@ -247,40 +251,122 @@ ScriptPromise ServiceWorkerGlobalScope::skipWaiting(ScriptState* script_state) {
     return ScriptPromise();
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
-  ScriptPromise promise = resolver->Promise();
-
   ServiceWorkerGlobalScopeClient::From(execution_context)
-      ->SkipWaiting(
-          std::make_unique<CallbackPromiseAdapter<void, void>>(resolver));
-  return promise;
+      ->SkipWaiting(WTF::Bind(&DidSkipWaiting, WrapPersistent(resolver)));
+  return resolver->Promise();
+}
+
+void ServiceWorkerGlobalScope::BindServiceWorkerHost(
+    mojom::blink::ServiceWorkerHostAssociatedPtrInfo service_worker_host) {
+  ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
+      ->BindServiceWorkerHost(std::move(service_worker_host));
 }
 
 void ServiceWorkerGlobalScope::SetRegistration(
-    std::unique_ptr<WebServiceWorkerRegistration::Handle> handle) {
+    WebServiceWorkerRegistrationObjectInfo info) {
   if (!GetExecutionContext())
     return;
-  registration_ = ServiceWorkerRegistration::GetOrCreate(
-      GetExecutionContext(), base::WrapUnique(handle.release()));
+  registration_ = MakeGarbageCollected<ServiceWorkerRegistration>(
+      GetExecutionContext(), std::move(info));
+}
+
+ServiceWorker* ServiceWorkerGlobalScope::GetOrCreateServiceWorker(
+    WebServiceWorkerObjectInfo info) {
+  if (info.version_id == mojom::blink::kInvalidServiceWorkerVersionId)
+    return nullptr;
+  ServiceWorker* worker = service_worker_objects_.at(info.version_id);
+  if (!worker) {
+    worker = MakeGarbageCollected<ServiceWorker>(this, std::move(info));
+    service_worker_objects_.Set(info.version_id, worker);
+  }
+  return worker;
 }
 
 bool ServiceWorkerGlobalScope::AddEventListenerInternal(
     const AtomicString& event_type,
     EventListener* listener,
-    const AddEventListenerOptionsResolved& options) {
+    const AddEventListenerOptionsResolved* options) {
   if (did_evaluate_script_) {
     String message = String::Format(
         "Event handler of '%s' event must be added on the initial evaluation "
         "of worker script.",
         event_type.Utf8().data());
-    AddConsoleMessage(ConsoleMessage::Create(kJSMessageSource,
-                                             kWarningMessageLevel, message));
+    AddConsoleMessage(ConsoleMessage::Create(
+        kJSMessageSource, mojom::ConsoleMessageLevel::kWarning, message));
   }
   return WorkerGlobalScope::AddEventListenerInternal(event_type, listener,
                                                      options);
 }
 
+void ServiceWorkerGlobalScope::EvaluateClassicScriptInternal(
+    const KURL& script_url,
+    String source_code,
+    std::unique_ptr<Vector<uint8_t>> cached_meta_data) {
+  DCHECK(IsContextThread());
+
+  if (!evaluate_script_ready_) {
+    evaluate_script_ =
+        WTF::Bind(&ServiceWorkerGlobalScope::EvaluateClassicScriptInternal,
+                  WrapWeakPersistent(this), script_url, std::move(source_code),
+                  std::move(cached_meta_data));
+    return;
+  }
+
+  // Receive the main script via script streaming if needed.
+  // TODO(nhiroki): Merge script loading from the installed script manager
+  // into regular off-the-main-thread script fetch path so that we can remove
+  // this special casing.
+  InstalledScriptsManager* installed_scripts_manager =
+      GetThread()->GetInstalledScriptsManager();
+  if (installed_scripts_manager &&
+      installed_scripts_manager->IsScriptInstalled(script_url)) {
+    // GetScriptData blocks until the script is received from the browser.
+    std::unique_ptr<InstalledScriptsManager::ScriptData> script_data =
+        installed_scripts_manager->GetScriptData(script_url);
+    if (!script_data) {
+      ReportingProxy().DidFailToLoadClassicScript();
+      // This will eventually initiate worker thread termination. See
+      // ServiceWorkerGlobalScopeProxy::DidCloseWorkerGlobalScope() for details.
+      close();
+      return;
+    }
+
+    if (base::FeatureList::IsEnabled(
+            features::kOffMainThreadServiceWorkerScriptFetch)) {
+      // WorkerGlobalScope sets the URL in DidImportClassicScript() when
+      // off-the-main-thread fetch is enabled. Since we bypass calling
+      // DidImportClassicScript(), set the URL here.
+      InitializeURL(script_url);
+    }
+
+    DCHECK(source_code.IsEmpty());
+    DCHECK(!cached_meta_data);
+    source_code = script_data->TakeSourceText();
+    cached_meta_data = script_data->TakeMetaData();
+
+    base::Optional<ContentSecurityPolicyResponseHeaders>
+        content_security_policy_raw_headers =
+            script_data->GetContentSecurityPolicyResponseHeaders();
+    ApplyContentSecurityPolicyFromHeaders(
+        content_security_policy_raw_headers.value());
+
+    String referrer_policy = script_data->GetReferrerPolicy();
+    if (!referrer_policy.IsNull())
+      ParseAndSetReferrerPolicy(referrer_policy);
+
+    std::unique_ptr<Vector<String>> origin_trial_tokens =
+        script_data->CreateOriginTrialTokens();
+    OriginTrialContext::AddTokens(this, origin_trial_tokens.get());
+
+    ReportingProxy().DidLoadClassicScript();
+  }
+
+  WorkerGlobalScope::EvaluateClassicScriptInternal(script_url, source_code,
+                                                   std::move(cached_meta_data));
+}
+
 const AtomicString& ServiceWorkerGlobalScope::InterfaceName() const {
-  return EventTargetNames::ServiceWorkerGlobalScope;
+  return event_target_names::kServiceWorkerGlobalScope;
 }
 
 void ServiceWorkerGlobalScope::DispatchExtendableEvent(
@@ -310,31 +396,36 @@ void ServiceWorkerGlobalScope::DispatchExtendableEventWithRespondWith(
 void ServiceWorkerGlobalScope::Trace(blink::Visitor* visitor) {
   visitor->Trace(clients_);
   visitor->Trace(registration_);
+  visitor->Trace(service_worker_objects_);
   WorkerGlobalScope::Trace(visitor);
 }
 
-void ServiceWorkerGlobalScope::importScripts(const Vector<String>& urls,
-                                             ExceptionState& exception_state) {
+void ServiceWorkerGlobalScope::importScripts(
+    const HeapVector<StringOrTrustedScriptURL>& urls,
+    ExceptionState& exception_state) {
   InstalledScriptsManager* installed_scripts_manager =
       GetThread()->GetInstalledScriptsManager();
-  for (auto& url : urls) {
-    KURL completed_url = CompleteURL(url);
-    // Counts the usage of importScripts() of new scripts after installation
-    // because we want to deprecate such usage (https://crbug.com/719052).
-    // This will undercount because installed scripts manager is only provided
-    // to installed service workers on startup, but this gives us an idea of
-    // the usage.
-    if (installed_scripts_manager &&
-        !installed_scripts_manager->IsScriptInstalled(completed_url)) {
-      DCHECK(installed_scripts_manager->IsScriptInstalled(Url()));
-      CountFeature(WebFeature::kServiceWorkerImportScriptNotInstalled);
-      Deprecation::CountDeprecation(
-          this, WebFeature::kServiceWorkerImportScriptNotInstalled);
-    }
+  for (const StringOrTrustedScriptURL& stringOrUrl : urls) {
+    String string_url = stringOrUrl.IsString()
+                            ? stringOrUrl.GetAsString()
+                            : stringOrUrl.GetAsTrustedScriptURL()->toString();
+
+    KURL completed_url = CompleteURL(string_url);
     // Bust the MemoryCache to ensure script requests reach the browser-side
     // and get added to and retrieved from the ServiceWorker's script cache.
     // FIXME: Revisit in light of the solution to crbug/388375.
     RemoveURLFromMemoryCache(completed_url);
+
+    if (installed_scripts_manager &&
+        !installed_scripts_manager->IsScriptInstalled(completed_url)) {
+      DCHECK(installed_scripts_manager->IsScriptInstalled(Url()));
+      exception_state.ThrowDOMException(
+          DOMExceptionCode::kNetworkError,
+          "Failed to import '" + completed_url.ElidedString() +
+              "'. importScripts() of new scripts after service worker "
+              "installation is not allowed.");
+      return;
+    }
   }
   WorkerGlobalScope::importScripts(urls, exception_state);
 }
@@ -342,9 +433,16 @@ void ServiceWorkerGlobalScope::importScripts(const Vector<String>& urls,
 SingleCachedMetadataHandler*
 ServiceWorkerGlobalScope::CreateWorkerScriptCachedMetadataHandler(
     const KURL& script_url,
-    const Vector<char>* meta_data) {
+    const Vector<uint8_t>* meta_data) {
   return ServiceWorkerScriptCachedMetadataHandler::Create(this, script_url,
                                                           meta_data);
+}
+
+ScriptPromise ServiceWorkerGlobalScope::fetch(ScriptState* script_state,
+                                              const RequestInfo& input,
+                                              const RequestInit* init,
+                                              ExceptionState& exception_state) {
+  return GlobalFetch::fetch(script_state, *this, input, init, exception_state);
 }
 
 void ServiceWorkerGlobalScope::ExceptionThrown(ErrorEvent* event) {
@@ -352,6 +450,11 @@ void ServiceWorkerGlobalScope::ExceptionThrown(ErrorEvent* event) {
   if (WorkerThreadDebugger* debugger =
           WorkerThreadDebugger::From(GetThread()->GetIsolate()))
     debugger->ExceptionThrown(GetThread(), event);
+}
+
+mojom::RequestContextType
+ServiceWorkerGlobalScope::GetDestinationForMainScript() {
+  return mojom::RequestContextType::SERVICE_WORKER;
 }
 
 void ServiceWorkerGlobalScope::CountCacheStorageInstalledScript(
@@ -365,14 +468,16 @@ void ServiceWorkerGlobalScope::CountCacheStorageInstalledScript(
       CustomCountHistogram, script_size_histogram,
       ("ServiceWorker.CacheStorageInstalledScript.ScriptSize", 1000, 5000000,
        50));
-  script_size_histogram.Count(script_size);
+  script_size_histogram.Count(
+      base::saturated_cast<base::Histogram::Sample>(script_size));
 
   if (script_metadata_size) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(
         CustomCountHistogram, script_metadata_size_histogram,
         ("ServiceWorker.CacheStorageInstalledScript.CachedMetadataSize", 1000,
          50000000, 50));
-    script_metadata_size_histogram.Count(script_metadata_size);
+    script_metadata_size_histogram.Count(
+        base::saturated_cast<base::Histogram::Sample>(script_metadata_size));
   }
 }
 
@@ -387,13 +492,15 @@ void ServiceWorkerGlobalScope::SetIsInstalling(bool is_installing) {
       CustomCountHistogram, cache_storage_installed_script_count_histogram,
       ("ServiceWorker.CacheStorageInstalledScript.Count", 1, 1000, 50));
   cache_storage_installed_script_count_histogram.Count(
-      cache_storage_installed_script_count_);
+      base::saturated_cast<base::Histogram::Sample>(
+          cache_storage_installed_script_count_));
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       CustomCountHistogram, cache_storage_installed_script_total_size_histogram,
       ("ServiceWorker.CacheStorageInstalledScript.ScriptTotalSize", 1000,
        50000000, 50));
   cache_storage_installed_script_total_size_histogram.Count(
-      cache_storage_installed_script_total_size_);
+      base::saturated_cast<base::Histogram::Sample>(
+          cache_storage_installed_script_total_size_));
 
   if (cache_storage_installed_script_metadata_total_size_) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(
@@ -402,12 +509,23 @@ void ServiceWorkerGlobalScope::SetIsInstalling(bool is_installing) {
         ("ServiceWorker.CacheStorageInstalledScript.CachedMetadataTotalSize",
          1000, 50000000, 50));
     cache_storage_installed_script_metadata_total_size_histogram.Count(
-        cache_storage_installed_script_metadata_total_size_);
+        base::saturated_cast<base::Histogram::Sample>(
+            cache_storage_installed_script_metadata_total_size_));
   }
 }
 
 mojom::blink::CacheStoragePtrInfo ServiceWorkerGlobalScope::TakeCacheStorage() {
   return std::move(cache_storage_info_);
+}
+
+int ServiceWorkerGlobalScope::WillStartTask() {
+  return ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
+      ->WillStartTask();
+}
+
+void ServiceWorkerGlobalScope::DidEndTask(int task_id) {
+  ServiceWorkerGlobalScopeClient::From(GetExecutionContext())
+      ->DidEndTask(task_id);
 }
 
 }  // namespace blink

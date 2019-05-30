@@ -114,12 +114,9 @@ jumbo_source_set("common_sources") {
   visibility = [ "//content/*" ]
 
   sources = [
-    "appcache_info.h",
     "bind_interface_helpers.h",
     "bindings_policy.h",
     "browser_controls_state.h",
-    "browser_side_navigation_policy.cc",
-    "browser_side_navigation_policy.h",
     "cdm_info.h",
     "child_process_host.h",
     "child_process_host_delegate.h",
@@ -147,10 +144,6 @@ jumbo_source_set("common_sources") {
     "drop_data.h",
     "favicon_url.cc",
     "favicon_url.h",
-    "file_chooser_file_info.cc",
-    "file_chooser_file_info.h",
-    "file_chooser_params.cc",
-    "file_chooser_params.h",
     "font_cache_dispatcher_win.h",
     "frame_navigate_params.cc",
     "frame_navigate_params.h",
@@ -163,18 +156,16 @@ jumbo_source_set("common_sources") {
     "main_function_params.h",
     "manifest_util.cc",
     "manifest_util.h",
-    "media_metadata.cc",
-    "media_metadata.h",
-    "media_stream_request.cc",
-    "media_stream_request.h",
     "menu_item.cc",
     "menu_item.h",
     "mhtml_generation_params.cc",
     "mhtml_generation_params.h",
     "mime_handler_view_mode.cc",
     "mime_handler_view_mode.h",
-    "notification_resources.cc",
-    "notification_resources.h",
+    "navigation_policy.cc",
+    "navigation_policy.h",
+    "network_service_util.cc",
+    "network_service_util.h",
     "origin_util.h",
     "page_importance_signals.h",
     "page_state.cc",
@@ -184,16 +175,16 @@ jumbo_source_set("common_sources") {
     "pepper_plugin_info.cc",
     "pepper_plugin_info.h",
     "persistent_notification_status.h",
-    "platform_notification_data.cc",
-    "platform_notification_data.h",
     "previews_state.h",
     "process_type.h",
+    "profiling.cc",
+    "profiling.h",
     "push_subscription_options.h",
     "referrer.cc",
     "referrer.h",
-    "renderer_preferences.cc",
-    "renderer_preferences.h",
-    "request_context_type.h",
+    "referrer_type_converters.cc",
+    "referrer_type_converters.h",
+    "resource_intercept_policy.h",
     "resource_request_body_android.cc",
     "resource_request_body_android.h",
     "resource_type.cc",
@@ -223,6 +214,7 @@ jumbo_source_set("common_sources") {
     "use_zoom_for_dsf_policy.cc",
     "use_zoom_for_dsf_policy.h",
     "user_agent.h",
+    "was_activated_option.h",
     "web_preferences.cc",
     "web_preferences.h",
     "webplugininfo.cc",
@@ -230,6 +222,7 @@ jumbo_source_set("common_sources") {
     "webplugininfo_param_traits.h",
     "webrtc_ip_handling_policy.cc",
     "webrtc_ip_handling_policy.h",
+    "widget_type.h",
   ]
 
   configs += [
@@ -249,7 +242,6 @@ jumbo_source_set("common_sources") {
     "//net",
     "//services/network:network_service",
     "//services/network/public/mojom",
-    "//services/service_manager/embedder",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/mojom",
     "//third_party/blink/public:blink_headers",
@@ -265,6 +257,7 @@ jumbo_source_set("common_sources") {
     # needed because of allow_circular_includes_from.
     "//content/common:mojo_bindings",
     "//media",
+    "//media/mojo/interfaces",
     "//ppapi/buildflags",
     "//ppapi/c",
     "//services/network/public/cpp",
@@ -298,6 +291,11 @@ jumbo_source_set("common_sources") {
 
   if (is_chromeos) {
     public_deps += [ "//media/capture/video/chromeos/public" ]
+  }
+
+  if (rtc_use_pipewire) {
+    configs +=
+        [ "//third_party/webrtc/modules/desktop_capture:pipewire_config" ]
   }
 
   # //content/common needs to include public headers.
@@ -346,18 +344,11 @@ mojom("interfaces") {
     "//extensions/common:mojo_blink",
   ]
 
-  # imports vs deps check is disabled for this target to work around
-  # windows multiple definitions linker error caused by having
-  # both a direct and an indirect dependency on the same target
-  skip_deps_check = true
-
   sources = [
-    "appcache_info.mojom",
+    "drop_data.mojom",
     "fullscreen_video_element.mojom",
     "load_timing_info.mojom",
     "push_messaging_status.mojom",
-    "renderer_preference_watcher.mojom",
-    "renderer_preferences.mojom",
     "resource_load_info.mojom",
     "resource_usage_reporter.mojom",
     "transferrable_url_loader.mojom",
@@ -371,11 +362,26 @@ mojom("interfaces") {
 
   public_deps = [
     ":resource_type_bindings",
+    "//mojo/public/mojom/base:base",
     "//services/network/public/mojom",
+    "//services/network/public/mojom:mojom_ip_address",
+    "//services/network/public/mojom:websocket_mojom",
     "//third_party/blink/public:mojo_bindings",
+    "//ui/accessibility:ax_enums_mojo",
     "//url/mojom:url_mojom_gurl",
     "//url/mojom:url_mojom_origin",
   ]
+
+  if (is_mac) {
+    sources += [
+      "ns_view_bridge_factory.mojom",
+      "web_contents_ns_view_bridge.mojom",
+    ]
+    public_deps += [
+      "//ui/gfx/geometry/mojo",
+      "//ui/gfx/image/mojo:interfaces",
+    ]
+  }
 
   component_output_prefix = "content_public_common_mojo_bindings"
   export_class_attribute = "CONTENT_EXPORT"

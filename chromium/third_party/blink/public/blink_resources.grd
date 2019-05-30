@@ -8,19 +8,19 @@
   </outputs>
   <release seq="1">
     <includes>
-      <!-- Source/core/css/html.css processed through minimize_css.py -->
+      <!-- renderer/core/html/resources/html.css processed through minimize_css.py -->
       <include name="IDR_UASTYLE_HTML_CSS" file="${cwd}/${html_min_css}" type="BINDATA" compress="gzip"/>
-      <include name="IDR_UASTYLE_QUIRKS_CSS" file="../renderer/core/css/quirks.css" type="BINDATA" compress="gzip"/>
+      <include name="IDR_UASTYLE_QUIRKS_CSS" file="../renderer/core/html/resources/quirks.css" type="BINDATA" compress="gzip"/>
       <include name="IDR_UASTYLE_VIEW_SOURCE_CSS" file="../renderer/core/css/view-source.css" type="BINDATA" compress="gzip"/>
-      <include name="IDR_UASTYLE_THEME_CHROMIUM_ANDROID_CSS" file="../renderer/core/css/themeChromiumAndroid.css" type="BINDATA" compress="gzip"/>
+      <include name="IDR_UASTYLE_THEME_CHROMIUM_ANDROID_CSS" file="../renderer/core/html/resources/android.css" type="BINDATA" compress="gzip"/>
       <include name="IDR_UASTYLE_FULLSCREEN_ANDROID_CSS" file="../renderer/core/css/fullscreenAndroid.css" type="BINDATA" compress="gzip"/>
-      <include name="IDR_UASTYLE_THEME_CHROMIUM_LINUX_CSS" file="../renderer/core/css/themeChromiumLinux.css" type="BINDATA" compress="gzip"/>
+      <include name="IDR_UASTYLE_THEME_CHROMIUM_LINUX_CSS" file="../renderer/core/html/resources/linux.css" type="BINDATA" compress="gzip"/>
       <if expr="is_macosx">
-        <include name="IDR_UASTYLE_THEME_MAC_CSS" file="../renderer/core/css/themeMac.css" type="BINDATA" compress="gzip"/>
+        <include name="IDR_UASTYLE_THEME_MAC_CSS" file="../renderer/core/html/resources/mac.css" type="BINDATA" compress="gzip"/>
       </if>
-      <include name="IDR_UASTYLE_THEME_INPUT_MULTIPLE_FIELDS_CSS" file="../renderer/core/css/themeInputMultipleFields.css" type="BINDATA" compress="gzip"/>
-      <include name="IDR_UASTYLE_THEME_WIN_CSS" file="../renderer/core/css/themeWin.css" type="BINDATA" compress="gzip"/>
-      <include name="IDR_UASTYLE_THEME_WIN_QUIRKS_CSS" file="../renderer/core/css/themeWinQuirks.css" type="BINDATA" compress="gzip"/>
+      <include name="IDR_UASTYLE_THEME_INPUT_MULTIPLE_FIELDS_CSS" file="../renderer/core/html/resources/input_multiple_fields.css" type="BINDATA" compress="gzip"/>
+      <include name="IDR_UASTYLE_THEME_WIN_CSS" file="../renderer/core/html/resources/win.css" type="BINDATA" compress="gzip"/>
+      <include name="IDR_UASTYLE_THEME_WIN_QUIRKS_CSS" file="../renderer/core/html/resources/win_quirks.css" type="BINDATA" compress="gzip"/>
       <include name="IDR_UASTYLE_SVG_CSS" file="../renderer/core/css/svg.css" type="BINDATA" compress="gzip"/>
       <include name="IDR_UASTYLE_MATHML_CSS" file="../renderer/core/css/mathml.css" type="BINDATA" compress="gzip"/>
       <include name="IDR_UASTYLE_FULLSCREEN_CSS" file="../renderer/core/css/fullscreen.css" type="BINDATA" compress="gzip"/>
@@ -48,17 +48,8 @@
       </if>
       <include name="IDR_AUDIO_SPATIALIZATION_COMPOSITE" file="../renderer/platform/audio/resources/Composite.flac" type="BINDATA"/>
 
-      <!-- Layered API scripts. Should be consistent with kLayeredAPIResources
-           in renderer/core/script/layered_api.cc -->
-      <include name="IDR_LAYERED_API_ASYNC_LOCAL_STORAGE_INDEX_JS" file="../renderer/core/script/resources/layered_api/async-local-storage/index.js" type="BINDATA" skip_minify="true"/>
-      <include name="IDR_LAYERED_API_BLANK_INDEX_JS" file="../renderer/core/script/resources/layered_api/blank/index.js" type="BINDATA" skip_minify="true"/>
-      <include name="IDR_LAYERED_API_VIRTUAL_SCROLLER_INDEX_JS" file="../renderer/core/script/resources/layered_api/virtual-scroller/index.js" type="BINDATA" skip_minify="true"/>
-      <include name="IDR_LAYERED_API_VIRTUAL_SCROLLER_ITEM_SOURCE_JS" file="../renderer/core/script/resources/layered_api/virtual-scroller/item-source.js" type="BINDATA" skip_minify="true"/>
-      <include name="IDR_LAYERED_API_VIRTUAL_SCROLLER_LAYOUTS_LAYOUT_1D_BASE_JS" file="../renderer/core/script/resources/layered_api/virtual-scroller/layouts/layout-1d-base.js" type="BINDATA" skip_minify="true"/>
-      <include name="IDR_LAYERED_API_VIRTUAL_SCROLLER_LAYOUTS_LAYOUT_1D_GRID_JS" file="../renderer/core/script/resources/layered_api/virtual-scroller/layouts/layout-1d-grid.js" type="BINDATA" skip_minify="true"/>
-      <include name="IDR_LAYERED_API_VIRTUAL_SCROLLER_LAYOUTS_LAYOUT_1D_JS" file="../renderer/core/script/resources/layered_api/virtual-scroller/layouts/layout-1d.js" type="BINDATA" skip_minify="true"/>
-      <include name="IDR_LAYERED_API_VIRTUAL_SCROLLER_VIRTUAL_SCROLLER_JS" file="../renderer/core/script/resources/layered_api/virtual-scroller/virtual-scroller.js" type="BINDATA" skip_minify="true"/>
-      <include name="IDR_LAYERED_API_VIRTUAL_SCROLLER_VIRTUAL_REPEATER_JS" file="../renderer/core/script/resources/layered_api/virtual-scroller/virtual-repeater.js" type="BINDATA" skip_minify="true"/>
+      <!-- Layered API scripts. -->
+      <part file="../renderer/core/script/resources/layered_api/resources.grdp" />
 
     </includes>
   </release>

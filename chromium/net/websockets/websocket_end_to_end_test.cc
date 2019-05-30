@@ -30,6 +30,7 @@
 #include "build/build_config.h"
 #include "net/base/auth.h"
 #include "net/base/host_port_pair.h"
+#include "net/base/ip_endpoint.h"
 #include "net/base/proxy_delegate.h"
 #include "net/base/url_util.h"
 #include "net/http/http_request_headers.h"
@@ -127,7 +128,7 @@ class ConnectTestingEventInterface : public WebSocketEventInterface {
 
   int OnAuthRequired(scoped_refptr<AuthChallengeInfo> auth_info,
                      scoped_refptr<HttpResponseHeaders> response_headers,
-                     const HostPortPair& host_port_pair,
+                     const IPEndPoint& remote_endpoint,
                      base::OnceCallback<void(const AuthCredentials*)> callback,
                      base::Optional<AuthCredentials>* credentials) override;
 
@@ -202,15 +203,15 @@ void ConnectTestingEventInterface::OnSSLCertificateError(
     const SSLInfo& ssl_info,
     bool fatal) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&SSLErrorCallbacks::CancelSSLRequest,
-                            base::Owned(ssl_error_callbacks.release()),
-                            ERR_SSL_PROTOCOL_ERROR, &ssl_info));
+      FROM_HERE, base::BindOnce(&SSLErrorCallbacks::CancelSSLRequest,
+                                base::Owned(ssl_error_callbacks.release()),
+                                ERR_SSL_PROTOCOL_ERROR, &ssl_info));
 }
 
 int ConnectTestingEventInterface::OnAuthRequired(
     scoped_refptr<AuthChallengeInfo> auth_info,
     scoped_refptr<HttpResponseHeaders> response_headers,
-    const HostPortPair& host_port_pair,
+    const IPEndPoint& remote_endpoint,
     base::OnceCallback<void(const AuthCredentials*)> callback,
     base::Optional<AuthCredentials>* credentials) {
   *credentials = base::nullopt;
@@ -247,6 +248,15 @@ class TestProxyDelegateWithProxyInfo : public ProxyDelegate {
 
   void OnFallback(const ProxyServer& bad_proxy, int net_error) override {}
 
+  void OnBeforeHttp1TunnelRequest(const ProxyServer& proxy_server,
+                                  HttpRequestHeaders* extra_headers) override {}
+
+  Error OnHttp1TunnelHeadersReceived(
+      const ProxyServer& proxy_server,
+      const HttpResponseHeaders& response_headers) override {
+    return OK;
+  }
+
  private:
   ResolvedProxyInfo resolved_proxy_info_;
 
@@ -266,8 +276,9 @@ class WebSocketEndToEndTest : public TestWithScopedTaskEnvironment {
   // ConnectAndWait(). This method is for the use of tests that need the
   // URLRequestContext initialised before calling ConnectAndWait().
   void InitialiseContext() {
-    context_.set_proxy_delegate(proxy_delegate_.get());
     context_.Init();
+    context_.proxy_resolution_service()->SetProxyDelegate(
+        proxy_delegate_.get());
     initialised_context_ = true;
   }
 
@@ -348,11 +359,15 @@ TEST_F(WebSocketEndToEndTest, MAYBE_HttpsWssProxyUnauthedFails) {
   ASSERT_TRUE(wss_server.StartInBackground());
   ASSERT_TRUE(proxy_server.BlockUntilStarted());
   ASSERT_TRUE(wss_server.BlockUntilStarted());
-  std::string proxy_config =
-      "https=" + proxy_server.host_port_pair().ToString();
+  ProxyConfig proxy_config;
+  proxy_config.proxy_rules().ParseFromString(
+      "https=" + proxy_server.host_port_pair().ToString());
+  // TODO(https://crbug.com/901896): Don't rely on proxying localhost.
+  proxy_config.proxy_rules().bypass_rules.AddRulesToSubtractImplicit();
+
   std::unique_ptr<ProxyResolutionService> proxy_resolution_service(
-      ProxyResolutionService::CreateFixed(proxy_config,
-                                          TRAFFIC_ANNOTATION_FOR_TESTS));
+      ProxyResolutionService::CreateFixed(ProxyConfigWithAnnotation(
+          proxy_config, TRAFFIC_ANNOTATION_FOR_TESTS)));
   ASSERT_TRUE(proxy_resolution_service);
   context_.set_proxy_resolution_service(proxy_resolution_service.get());
   EXPECT_FALSE(ConnectAndWait(wss_server.GetURL(kEchoServer)));
@@ -370,12 +385,16 @@ TEST_F(WebSocketEndToEndTest, MAYBE_HttpsProxyUsed) {
   ASSERT_TRUE(ws_server.StartInBackground());
   ASSERT_TRUE(proxy_server.BlockUntilStarted());
   ASSERT_TRUE(ws_server.BlockUntilStarted());
-  std::string proxy_config = "https=" +
-                             proxy_server.host_port_pair().ToString() + ";" +
-                             "http=" + proxy_server.host_port_pair().ToString();
+  ProxyConfig proxy_config;
+  proxy_config.proxy_rules().ParseFromString(
+      "https=" + proxy_server.host_port_pair().ToString() + ";" +
+      "http=" + proxy_server.host_port_pair().ToString());
+  // TODO(https://crbug.com/901896): Don't rely on proxying localhost.
+  proxy_config.proxy_rules().bypass_rules.AddRulesToSubtractImplicit();
+
   std::unique_ptr<ProxyResolutionService> proxy_resolution_service(
-      ProxyResolutionService::CreateFixed(proxy_config,
-                                          TRAFFIC_ANNOTATION_FOR_TESTS));
+      ProxyResolutionService::CreateFixed(ProxyConfigWithAnnotation(
+          proxy_config, TRAFFIC_ANNOTATION_FOR_TESTS)));
   context_.set_proxy_resolution_service(proxy_resolution_service.get());
   InitialiseContext();
 
@@ -447,8 +466,8 @@ TEST_F(WebSocketEndToEndTest, MAYBE_ProxyPacUsed) {
   context_.set_proxy_resolution_service(proxy_resolution_service.get());
   InitialiseContext();
 
-  // We need to use something that doesn't look like localhost, or Windows'
-  // resolver will send us direct regardless of what proxy.pac says.
+  // Use a name other than localhost, since localhost implicitly bypasses the
+  // use of proxy.pac.
   HostPortPair fake_ws_host_port_pair("stealth-localhost",
                                       ws_server.host_port_pair().port());
 

@@ -36,10 +36,9 @@
 #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
-#include "third_party/blink/renderer/core/inspector/thread_debugger.h"
+#include "third_party/blink/renderer/core/inspector/worker_thread_debugger.h"
 #include "third_party/blink/renderer/core/messaging/post_message_options.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
-#include "third_party/blink/renderer/core/script/fetch_client_settings_object_snapshot.h"
 #include "third_party/blink/renderer/core/script/modulator.h"
 #include "third_party/blink/renderer/core/workers/dedicated_worker_object_proxy.h"
 #include "third_party/blink/renderer/core/workers/dedicated_worker_thread.h"
@@ -48,32 +47,30 @@
 #include "third_party/blink/renderer/core/workers/worker_module_tree_client.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
+#include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object_snapshot.h"
 
 namespace blink {
 
 DedicatedWorkerGlobalScope::DedicatedWorkerGlobalScope(
-    const String& name,
     std::unique_ptr<GlobalScopeCreationParams> creation_params,
     DedicatedWorkerThread* thread,
     base::TimeTicks time_origin)
-    : WorkerGlobalScope(std::move(creation_params), thread, time_origin),
-      name_(name) {}
+    : WorkerGlobalScope(std::move(creation_params), thread, time_origin) {}
 
 DedicatedWorkerGlobalScope::~DedicatedWorkerGlobalScope() = default;
 
 const AtomicString& DedicatedWorkerGlobalScope::InterfaceName() const {
-  return EventTargetNames::DedicatedWorkerGlobalScope;
+  return event_target_names::kDedicatedWorkerGlobalScope;
 }
 
-// https://html.spec.whatwg.org/multipage/workers.html#worker-processing-model
+// https://html.spec.whatwg.org/C/#worker-processing-model
 void DedicatedWorkerGlobalScope::ImportModuleScript(
     const KURL& module_url_record,
-    FetchClientSettingsObjectSnapshot* outside_settings_object,
+    const FetchClientSettingsObjectSnapshot& outside_settings_object,
     network::mojom::FetchCredentialsMode credentials_mode) {
   // Step 12: "Let destination be "sharedworker" if is shared is true, and
   // "worker" otherwise."
-  WebURLRequest::RequestContext destination =
-      WebURLRequest::kRequestContextWorker;
+  mojom::RequestContextType destination = mojom::RequestContextType::WORKER;
 
   Modulator* modulator = Modulator::From(ScriptController()->GetScriptState());
 
@@ -83,26 +80,26 @@ void DedicatedWorkerGlobalScope::ImportModuleScript(
   FetchModuleScript(module_url_record, outside_settings_object, destination,
                     credentials_mode,
                     ModuleScriptCustomFetchType::kWorkerConstructor,
-                    new WorkerModuleTreeClient(modulator));
+                    MakeGarbageCollected<WorkerModuleTreeClient>(modulator));
 }
 
 const String DedicatedWorkerGlobalScope::name() const {
-  return name_;
+  return Name();
 }
 
 void DedicatedWorkerGlobalScope::postMessage(ScriptState* script_state,
                                              const ScriptValue& message,
                                              Vector<ScriptValue>& transfer,
                                              ExceptionState& exception_state) {
-  PostMessageOptions options;
+  PostMessageOptions* options = PostMessageOptions::Create();
   if (!transfer.IsEmpty())
-    options.setTransfer(transfer);
+    options->setTransfer(transfer);
   postMessage(script_state, message, options, exception_state);
 }
 
 void DedicatedWorkerGlobalScope::postMessage(ScriptState* script_state,
                                              const ScriptValue& message,
-                                             const PostMessageOptions& options,
+                                             const PostMessageOptions* options,
                                              ExceptionState& exception_state) {
   Transferables transferables;
   scoped_refptr<SerializedScriptValue> serialized_message =
@@ -120,7 +117,8 @@ void DedicatedWorkerGlobalScope::postMessage(ScriptState* script_state,
       exception_state);
   if (exception_state.HadException())
     return;
-  ThreadDebugger* debugger = ThreadDebugger::From(script_state->GetIsolate());
+  WorkerThreadDebugger* debugger =
+      WorkerThreadDebugger::From(script_state->GetIsolate());
   transferable_message.sender_stack_trace_id =
       debugger->StoreCurrentStackTrace("postMessage");
   WorkerObjectProxy().PostMessageToWorkerObject(
@@ -134,6 +132,11 @@ DedicatedWorkerObjectProxy& DedicatedWorkerGlobalScope::WorkerObjectProxy()
 
 void DedicatedWorkerGlobalScope::Trace(blink::Visitor* visitor) {
   WorkerGlobalScope::Trace(visitor);
+}
+
+mojom::RequestContextType
+DedicatedWorkerGlobalScope::GetDestinationForMainScript() {
+  return mojom::RequestContextType::WORKER;
 }
 
 }  // namespace blink

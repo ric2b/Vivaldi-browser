@@ -66,14 +66,14 @@ void AccessibilityFocusRingController::SetFocusRingColor(
     SkColor color,
     const std::string& caller_id) {
   AccessibilityFocusRingGroup* focus_ring_group =
-      GetFocusRingGroupForCallerId(caller_id, /* Create if missing */ true);
+      GetFocusRingGroupForCallerId(caller_id, true /* Create if missing */);
   focus_ring_group->SetColor(color, this);
 }
 
 void AccessibilityFocusRingController::ResetFocusRingColor(
     const std::string& caller_id) {
   AccessibilityFocusRingGroup* focus_ring_group =
-      GetFocusRingGroupForCallerId(caller_id, /* Do not create */ false);
+      GetFocusRingGroupForCallerId(caller_id, false /* Do not create */);
   if (!focus_ring_group)
     return;
   focus_ring_group->ResetColor(this);
@@ -84,7 +84,7 @@ void AccessibilityFocusRingController::SetFocusRing(
     mojom::FocusRingBehavior focus_ring_behavior,
     const std::string& caller_id) {
   AccessibilityFocusRingGroup* focus_ring_group =
-      GetFocusRingGroupForCallerId(caller_id, /* Create if missing */ true);
+      GetFocusRingGroupForCallerId(caller_id, true /* Create if missing */);
   if (focus_ring_group->SetFocusRectsAndBehavior(rects, focus_ring_behavior,
                                                  this))
     OnLayerChange(focus_ring_group->focus_animation_info());
@@ -93,7 +93,7 @@ void AccessibilityFocusRingController::SetFocusRing(
 void AccessibilityFocusRingController::HideFocusRing(
     const std::string& caller_id) {
   AccessibilityFocusRingGroup* focus_ring_group =
-      GetFocusRingGroupForCallerId(caller_id, /* Do not create */ false);
+      GetFocusRingGroupForCallerId(caller_id, false /* Do not create */);
   if (!focus_ring_group)
     return;
   focus_ring_group->ClearFocusRects(this);
@@ -112,6 +112,23 @@ void AccessibilityFocusRingController::SetHighlights(
 void AccessibilityFocusRingController::HideHighlights() {
   highlight_rects_.clear();
   UpdateHighlightFromHighlightRects();
+}
+
+void AccessibilityFocusRingController::EnableDoubleFocusRing(
+    SkColor color,
+    const std::string& caller_id) {
+  AccessibilityFocusRingGroup* focus_ring_group =
+      GetFocusRingGroupForCallerId(caller_id, true /* Create if missing */);
+  focus_ring_group->EnableDoubleFocusRing(color, this);
+}
+
+void AccessibilityFocusRingController::DisableDoubleFocusRing(
+    const std::string& caller_id) {
+  AccessibilityFocusRingGroup* focus_ring_group =
+      GetFocusRingGroupForCallerId(caller_id, false /* Do not create */);
+  if (!focus_ring_group)
+    return;
+  focus_ring_group->DisableDoubleFocusRing(this);
 }
 
 void AccessibilityFocusRingController::UpdateHighlightFromHighlightRects() {
@@ -162,8 +179,10 @@ void AccessibilityFocusRingController::HideCaretRing() {
 }
 
 void AccessibilityFocusRingController::SetNoFadeForTesting() {
+  no_fade_for_testing_ = true;
   for (auto iter = focus_ring_groups_.begin(); iter != focus_ring_groups_.end();
        ++iter) {
+    iter->second->set_no_fade_for_testing();
     iter->second->focus_animation_info()->fade_in_time = base::TimeDelta();
     iter->second->focus_animation_info()->fade_out_time =
         base::TimeDelta::FromHours(1);
@@ -253,6 +272,9 @@ AccessibilityFocusRingController::GetFocusRingGroupForCallerId(
   // Add it and then return it.
   focus_ring_groups_[caller_id_to_focus_ring_group_] =
       std::make_unique<AccessibilityFocusRingGroup>();
+  if (no_fade_for_testing_) {
+    SetNoFadeForTesting();
+  }
   return focus_ring_groups_[caller_id_to_focus_ring_group_].get();
 }
 

@@ -34,8 +34,7 @@ class FakeReflector : public ui::Reflector {
 }  // namespace
 
 TestImageTransportFactory::TestImageTransportFactory()
-    : enable_viz_(
-          base::FeatureList::IsEnabled(features::kVizDisplayCompositor)),
+    : enable_viz_(features::IsVizDisplayCompositorEnabled()),
       frame_sink_id_allocator_(kDefaultClientId) {
   if (enable_viz_) {
     test_frame_sink_manager_impl_ =
@@ -94,12 +93,6 @@ TestImageTransportFactory::SharedMainThreadContextProvider() {
     shared_main_context_provider_ = nullptr;
 
   return shared_main_context_provider_;
-}
-
-double TestImageTransportFactory::GetRefreshRate() const {
-  // The context factory created here is for unit tests, thus using a higher
-  // refresh rate to spend less time waiting for BeginFrames.
-  return 200.0;
 }
 
 gpu::GpuMemoryBufferManager*

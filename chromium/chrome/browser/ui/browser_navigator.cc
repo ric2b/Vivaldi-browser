@@ -18,8 +18,10 @@
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
+#include "chrome/browser/previews/previews_lite_page_decider.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_host/chrome_navigation_ui_data.h"
+#include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/ui/browser.h"
@@ -46,7 +48,7 @@
 #include "url/url_constants.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
+#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_client.h"
 #include "components/account_id/account_id.h"
 #endif
 
@@ -87,7 +89,7 @@ namespace {
 // those types of Browser.
 bool WindowCanOpenTabs(Browser* browser) {
   return browser->CanSupportWindowFeature(Browser::FEATURE_TABSTRIP) ||
-      browser->tab_strip_model()->empty();
+         browser->tab_strip_model()->empty();
 }
 
 // Finds an existing Browser compatible with |profile|, making a new one if no
@@ -120,7 +122,7 @@ bool AdjustNavigateParamsForURL(NavigateParams* params) {
     // If incognito is forced, we punt.
     PrefService* prefs = profile->GetPrefs();
     if (prefs && IncognitoModePrefs::GetAvailability(prefs) ==
-            IncognitoModePrefs::FORCED) {
+                     IncognitoModePrefs::FORCED) {
       return false;
     }
 
@@ -213,7 +215,7 @@ std::pair<Browser*, int> GetBrowserAndTabForDisposition(
             extensions::TabHelper::FromWebContents(params.source_contents);
         if (extensions_tab_helper && extensions_tab_helper->is_app()) {
           app_name = web_app::GenerateApplicationNameFromAppId(
-              extensions_tab_helper->extension_app()->id());
+              extensions_tab_helper->GetAppId());
         }
       }
 #endif
@@ -315,6 +317,7 @@ void LoadURLInContents(WebContents* target_contents,
                        const GURL& url,
                        NavigateParams* params) {
   NavigationController::LoadURLParams load_url_params(url);
+  load_url_params.initiator_origin = params->initiator_origin;
   load_url_params.source_site_instance = params->source_site_instance;
   load_url_params.referrer = params->referrer;
   load_url_params.frame_name = params->frame_name;
@@ -328,13 +331,19 @@ void LoadURLInContents(WebContents* target_contents,
   load_url_params.started_from_context_menu = params->started_from_context_menu;
   load_url_params.has_user_gesture = params->user_gesture;
   load_url_params.blob_url_loader_factory = params->blob_url_loader_factory;
+  load_url_params.input_start = params->input_start;
+  load_url_params.was_activated = params->was_activated;
+  load_url_params.href_translate = params->href_translate;
+  load_url_params.reload_type = params->reload_type;
 
   // |frame_tree_node_id| is kNoFrameTreeNodeId for main frame navigations.
   if (params->frame_tree_node_id ==
       content::RenderFrameHost::kNoFrameTreeNodeId) {
     load_url_params.navigation_ui_data =
         ChromeNavigationUIData::CreateForMainFrameNavigation(
-            target_contents, params->disposition);
+            target_contents, params->disposition,
+            PreviewsLitePageDecider::GeneratePageIdForProfile(
+                GetSourceProfile(params)));
   }
 
   if (params->uses_post) {
@@ -409,11 +418,8 @@ std::unique_ptr<content::WebContents> CreateTargetContents(
     create_params.initially_hidden = true;
 
 #if defined(USE_AURA)
-  if (params.browser->window() &&
-      params.browser->window()->GetNativeWindow()) {
-    create_params.context =
-        params.browser->window()->GetNativeWindow();
-  }
+  if (params.browser->window() && params.browser->window()->GetNativeWindow())
+    create_params.context = params.browser->window()->GetNativeWindow();
 #endif
 
   create_params.always_create_guest = params.should_create_guestframe;
@@ -446,7 +452,7 @@ bool SwapInPrerender(const GURL& url,
   prerender::PrerenderManager* prerender_manager =
       prerender::PrerenderManagerFactory::GetForBrowserContext(profile);
   return prerender_manager &&
-      prerender_manager->MaybeUsePrerenderedPage(url, params);
+         prerender_manager->MaybeUsePrerenderedPage(url, params);
 }
 
 }  // namespace
@@ -462,8 +468,9 @@ void Navigate(NavigateParams* params) {
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   const extensions::Extension* extension =
-    extensions::ExtensionRegistry::Get(params->initiating_profile)->
-        enabled_extensions().GetExtensionOrAppByURL(params->url);
+      extensions::ExtensionRegistry::Get(params->initiating_profile)
+          ->enabled_extensions()
+          .GetExtensionOrAppByURL(params->url);
   // Platform apps cannot navigate. Block the request.
   if (extension && extension->is_platform_app() &&
     (!source_browser || !source_browser->is_vivaldi()))
@@ -502,25 +509,35 @@ void Navigate(NavigateParams* params) {
   if (singleton_index != -1) {
     contents_to_navigate_or_insert =
         params->browser->tab_strip_model()->GetWebContentsAt(singleton_index);
+  } else if (params->disposition == WindowOpenDisposition::SWITCH_TO_TAB) {
+    // The user is trying to open a tab that no longer exists. If we open a new
+    // tab, it could leave orphaned NTPs around, but always overwriting the
+    // current tab could could clobber state that the user was trying to
+    // preserve. Fallback to the behavior used for singletons: overwrite the
+    // current tab if it's the NTP, otherwise open a new tab.
+    params->disposition = WindowOpenDisposition::SINGLETON_TAB;
+    ShowSingletonTabOverwritingNTP(params->browser, std::move(*params));
+    return;
   }
 #if defined(OS_CHROMEOS)
   if (source_browser && source_browser != params->browser) {
     // When the newly created browser was spawned by a browser which visits
     // another user's desktop, it should be shown on the same desktop as the
     // originating one. (This is part of the desktop separation per profile).
-    MultiUserWindowManager* manager = MultiUserWindowManager::GetInstance();
-    // Some unit tests have no manager instantiated.
-    if (manager) {
+    MultiUserWindowManagerClient* client =
+        MultiUserWindowManagerClient::GetInstance();
+    // Some unit tests have no client instantiated.
+    if (client) {
       aura::Window* src_window = source_browser->window()->GetNativeWindow();
       aura::Window* new_window = params->browser->window()->GetNativeWindow();
       const AccountId& src_account_id =
-          manager->GetUserPresentingWindow(src_window);
-      if (src_account_id != manager->GetUserPresentingWindow(new_window)) {
+          client->GetUserPresentingWindow(src_window);
+      if (src_account_id != client->GetUserPresentingWindow(new_window)) {
         // Once the window gets presented, it should be shown on the same
         // desktop as the desktop of the creating browser. Note that this
         // command will not show the window if it wasn't shown yet by the
         // browser creation.
-        manager->ShowWindowForUser(new_window, src_account_id);
+        client->ShowWindowForUser(new_window, src_account_id);
       }
     }
   }
@@ -689,8 +706,10 @@ void Navigate(NavigateParams* params) {
     if (params->source_contents != contents_to_navigate_or_insert) {
       // Use the index before the potential close below, because it could
       // make the index refer to a different tab.
+      auto gesture_type = user_initiated ? TabStripModel::GestureType::kOther
+                                         : TabStripModel::GestureType::kNone;
       params->browser->tab_strip_model()->ActivateTabAt(singleton_index,
-                                                        user_initiated);
+                                                        {gesture_type});
       if (params->disposition == WindowOpenDisposition::SWITCH_TO_TAB) {
         // Close orphaned NTP (and the like) with no history when the user
         // switches away from them.
@@ -718,6 +737,49 @@ void Navigate(NavigateParams* params) {
   params->navigated_or_inserted_contents = contents_to_navigate_or_insert;
 }
 
+bool IsHostAllowedInIncognito(const GURL& url) {
+  std::string scheme = url.scheme();
+  base::StringPiece host = url.host_piece();
+  if (scheme == chrome::kChromeSearchScheme) {
+    return host != chrome::kChromeUIThumbnailHost &&
+           host != chrome::kChromeUIThumbnailHost2 &&
+           host != chrome::kChromeUIThumbnailListHost &&
+           host != chrome::kChromeUISuggestionsHost;
+  }
+
+  if (scheme != content::kChromeUIScheme)
+    return true;
+
+  if (host == chrome::kChromeUIChromeSigninHost) {
+#if defined(OS_WIN)
+    // Allow incognito mode for the chrome-signin url if we only want to
+    // retrieve the login scope token without touching any profiles. This
+    // option is only available on Windows for use with Google Credential
+    // Provider for Windows.
+    return signin::GetSigninReasonForEmbeddedPromoURL(url) ==
+           signin_metrics::Reason::REASON_FETCH_LST_ONLY;
+#else
+    return false;
+#endif  // defined(OS_WIN)
+  }
+
+  // Most URLs are allowed in incognito; the following are exceptions.
+  // chrome://extensions is on the list because it redirects to
+  // chrome://settings.
+  return host != chrome::kChromeUIAppLauncherPageHost &&
+         host != chrome::kChromeUISettingsHost &&
+         host != chrome::kChromeUIHelpHost &&
+         host != chrome::kChromeUIHistoryHost &&
+         host != chrome::kChromeUIExtensionsHost &&
+         host != chrome::kChromeUIBookmarksHost &&
+         host != chrome::kChromeUIUberHost &&
+         host != chrome::kChromeUIThumbnailHost &&
+         host != chrome::kChromeUIThumbnailHost2 &&
+         host != chrome::kChromeUIThumbnailListHost &&
+         host != chrome::kChromeUISuggestionsHost &&
+         host != chrome::kChromeUIDevicesHost;
+}
+
 bool IsURLAllowedInIncognito(const GURL& url,
                              content::BrowserContext* browser_context) {
   if (url.scheme() == content::kViewSourceScheme) {
@@ -729,35 +791,11 @@ bool IsURLAllowedInIncognito(const GURL& url,
     stripped_spec.erase(0, strlen(content::kViewSourceScheme) + 1);
     GURL stripped_url(stripped_spec);
     return stripped_url.is_valid() &&
-        IsURLAllowedInIncognito(stripped_url, browser_context);
-  }
-  // Most URLs are allowed in incognito; the following are exceptions.
-  // chrome://extensions is on the list because it redirects to
-  // chrome://settings.
-  if (url.scheme() == content::kChromeUIScheme &&
-      (url.host_piece() == chrome::kChromeUIAppLauncherPageHost ||
-       url.host_piece() == chrome::kChromeUISettingsHost ||
-       url.host_piece() == chrome::kChromeUIHelpHost ||
-       url.host_piece() == chrome::kChromeUIHistoryHost ||
-       url.host_piece() == chrome::kChromeUIExtensionsHost ||
-       url.host_piece() == chrome::kChromeUIBookmarksHost ||
-       url.host_piece() == chrome::kChromeUIChromeSigninHost ||
-       url.host_piece() == chrome::kChromeUIUberHost ||
-       url.host_piece() == chrome::kChromeUIThumbnailHost ||
-       url.host_piece() == chrome::kChromeUIThumbnailHost2 ||
-       url.host_piece() == chrome::kChromeUIThumbnailListHost ||
-       url.host_piece() == chrome::kChromeUISuggestionsHost ||
-       url.host_piece() == chrome::kChromeUIDevicesHost)) {
-    return false;
+           IsURLAllowedInIncognito(stripped_url, browser_context);
   }
 
-  if (url.scheme() == chrome::kChromeSearchScheme &&
-      (url.host_piece() == chrome::kChromeUIThumbnailHost ||
-       url.host_piece() == chrome::kChromeUIThumbnailHost2 ||
-       url.host_piece() == chrome::kChromeUIThumbnailListHost ||
-       url.host_piece() == chrome::kChromeUISuggestionsHost)) {
+  if (!IsHostAllowedInIncognito(url))
     return false;
-  }
 
   GURL rewritten_url = url;
   bool reverse_on_redirect = false;

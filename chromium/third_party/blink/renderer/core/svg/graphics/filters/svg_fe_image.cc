@@ -24,7 +24,7 @@
 #include "third_party/blink/renderer/core/svg/graphics/filters/svg_fe_image.h"
 
 #include "third_party/blink/renderer/core/layout/layout_object.h"
-#include "third_party/blink/renderer/core/paint/svg_paint_context.h"
+#include "third_party/blink/renderer/core/paint/svg_object_painter.h"
 #include "third_party/blink/renderer/core/svg/svg_element.h"
 #include "third_party/blink/renderer/core/svg/svg_length_context.h"
 #include "third_party/blink/renderer/core/svg/svg_uri_reference.h"
@@ -69,7 +69,8 @@ FEImage* FEImage::CreateWithImage(
     Filter* filter,
     scoped_refptr<Image> image,
     SVGPreserveAspectRatio* preserve_aspect_ratio) {
-  return new FEImage(filter, std::move(image), preserve_aspect_ratio);
+  return MakeGarbageCollected<FEImage>(filter, std::move(image),
+                                       preserve_aspect_ratio);
 }
 
 FEImage* FEImage::CreateWithIRIReference(
@@ -77,7 +78,8 @@ FEImage* FEImage::CreateWithIRIReference(
     TreeScope& tree_scope,
     const String& href,
     SVGPreserveAspectRatio* preserve_aspect_ratio) {
-  return new FEImage(filter, tree_scope, href, preserve_aspect_ratio);
+  return MakeGarbageCollected<FEImage>(filter, tree_scope, href,
+                                       preserve_aspect_ratio);
 }
 
 static FloatRect GetLayoutObjectRepaintRect(LayoutObject* layout_object) {
@@ -179,7 +181,7 @@ sk_sp<PaintFilter> FEImage::CreateImageFilterForLayoutObject(
   }
 
   PaintRecordBuilder builder;
-  SVGPaintContext::PaintResourceSubtree(builder.Context(), &layout_object);
+  SVGObjectPainter(layout_object).PaintResourceSubtree(builder.Context());
 
   PaintRecorder paint_recorder;
   cc::PaintCanvas* canvas = paint_recorder.beginRecording(dst_rect);

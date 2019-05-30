@@ -35,7 +35,7 @@
 #include "third_party/blink/public/web/web_user_media_request.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_navigator_user_media_error_callback.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_navigator_user_media_success_callback.h"
-#include "third_party/blink/renderer/core/dom/pausable_object.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_source.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
@@ -74,17 +74,24 @@ class MODULES_EXPORT UserMediaRequest final
   static UserMediaRequest* Create(ExecutionContext*,
                                   UserMediaController*,
                                   WebUserMediaRequest::MediaType media_type,
-                                  const MediaStreamConstraints& options,
+                                  const MediaStreamConstraints* options,
                                   Callbacks*,
                                   MediaErrorState&);
   static UserMediaRequest* Create(ExecutionContext*,
                                   UserMediaController*,
-                                  const MediaStreamConstraints& options,
+                                  const MediaStreamConstraints* options,
                                   V8NavigatorUserMediaSuccessCallback*,
                                   V8NavigatorUserMediaErrorCallback*,
                                   MediaErrorState&);
   static UserMediaRequest* CreateForTesting(const WebMediaConstraints& audio,
                                             const WebMediaConstraints& video);
+
+  UserMediaRequest(ExecutionContext*,
+                   UserMediaController*,
+                   WebUserMediaRequest::MediaType media_type,
+                   WebMediaConstraints audio,
+                   WebMediaConstraints video,
+                   Callbacks*);
   virtual ~UserMediaRequest();
 
   Document* OwnerDocument();
@@ -115,13 +122,6 @@ class MODULES_EXPORT UserMediaRequest final
   void Trace(blink::Visitor*) override;
 
  private:
-  UserMediaRequest(ExecutionContext*,
-                   UserMediaController*,
-                   WebUserMediaRequest::MediaType media_type,
-                   WebMediaConstraints audio,
-                   WebMediaConstraints video,
-                   Callbacks*);
-
   WebUserMediaRequest::MediaType media_type_;
   WebMediaConstraints audio_;
   WebMediaConstraints video_;

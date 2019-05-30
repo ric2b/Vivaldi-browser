@@ -4,12 +4,14 @@
 
 #include <stddef.h>
 
+#include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
+#include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/api/virtual_keyboard_private/virtual_keyboard_delegate.h"
@@ -32,7 +34,6 @@
 #include "ui/events/event.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
-#include "ui/keyboard/keyboard_util.h"
 
 namespace chromeos {
 namespace input_method {
@@ -144,15 +145,15 @@ class KeyEventDoneCallback {
   DISALLOW_COPY_AND_ASSIGN(KeyEventDoneCallback);
 };
 
-INSTANTIATE_TEST_CASE_P(InputMethodEngineBrowserTest,
-                        InputMethodEngineBrowserTest,
-                        ::testing::Values(kTestTypeNormal));
-INSTANTIATE_TEST_CASE_P(InputMethodEngineIncognitoBrowserTest,
-                        InputMethodEngineBrowserTest,
-                        ::testing::Values(kTestTypeIncognito));
-INSTANTIATE_TEST_CASE_P(InputMethodEngineComponentExtensionBrowserTest,
-                        InputMethodEngineBrowserTest,
-                        ::testing::Values(kTestTypeComponent));
+INSTANTIATE_TEST_SUITE_P(InputMethodEngineBrowserTest,
+                         InputMethodEngineBrowserTest,
+                         ::testing::Values(kTestTypeNormal));
+INSTANTIATE_TEST_SUITE_P(InputMethodEngineIncognitoBrowserTest,
+                         InputMethodEngineBrowserTest,
+                         ::testing::Values(kTestTypeIncognito));
+INSTANTIATE_TEST_SUITE_P(InputMethodEngineComponentExtensionBrowserTest,
+                         InputMethodEngineBrowserTest,
+                         ::testing::Values(kTestTypeComponent));
 
 IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
                        BasicScenarioTest) {
@@ -414,7 +415,7 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest,
     { ui::VKEY_F9, "F9", "AudioVolumeDown" },
     { ui::VKEY_F10, "F10", "AudioVolumeUp" },
   };
-  for (size_t i = 0; i < arraysize(kMediaKeyCases); ++i) {
+  for (size_t i = 0; i < base::size(kMediaKeyCases); ++i) {
     SCOPED_TRACE(std::string("KeyDown, ") + kMediaKeyCases[i].code);
     KeyEventDoneCallback callback(false);
     const std::string expected_value =
@@ -1041,12 +1042,14 @@ IN_PROC_BROWSER_TEST_P(InputMethodEngineBrowserTest, RestrictedKeyboard) {
       ui::IMEBridge::Get()->GetCurrentEngineHandler();
   ASSERT_TRUE(engine_handler);
 
-  keyboard::KeyboardConfig keyboard_config = keyboard::GetKeyboardConfig();
+  auto keyboard_config =
+      ChromeKeyboardControllerClient::Get()->GetKeyboardConfig();
   // Turn off these features, which are on by default.
   keyboard_config.auto_correct = false;
   keyboard_config.auto_complete = false;
   keyboard_config.spell_check = false;
-  keyboard::UpdateKeyboardConfig(keyboard_config);
+  ChromeKeyboardControllerClient::Get()->SetKeyboardConfig(keyboard_config);
+
   extensions::ExtensionHost* host =
       extensions::ProcessManager::Get(profile())->GetBackgroundHostForExtension(
           extension_->id());

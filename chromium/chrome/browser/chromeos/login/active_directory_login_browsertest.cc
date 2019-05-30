@@ -14,6 +14,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/active_directory_test_helper.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
+#include "chrome/browser/chromeos/login/login_shelf_test_helper.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
@@ -23,7 +24,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_auth_policy_client.h"
 #include "chromeos/dbus/fake_cryptohome_client.h"
@@ -47,33 +48,32 @@ constexpr char kAdOfflineAuthId[] = "offline-ad-auth";
 
 constexpr char kTestActiveDirectoryUser[] = "test-user";
 constexpr char kTestUserRealm[] = "user.realm";
-constexpr char kAdMachineInput[] = "machineNameInput";
-constexpr char kAdMoreOptionsButton[] = "moreOptionsBtn";
-constexpr char kAdUserInput[] = "userInput";
-constexpr char kAdPasswordInput[] = "passwordInput";
-constexpr char kAdCredsButton[] = "adCreds /deep/ #button";
-constexpr char kAdPasswordChangeButton[] = "button";
-constexpr char kAdWelcomMessage[] = "welcomeMsg";
-constexpr char kAdAutocompleteRealm[] = "userInput /deep/ #domainLabel";
+constexpr char kAdMachineInput[] = "$.machineNameInput";
+constexpr char kAdMoreOptionsButton[] = "$.moreOptionsBtn";
+constexpr char kAdUserInput[] = "$.userInput";
+constexpr char kAdPasswordInput[] = "$.passwordInput";
+constexpr char kAdCredsButton[] = "$$('#nextButton')";
+constexpr char kAdPasswordChangeButton[] = "$.inputForm.$.button";
+constexpr char kAdAutocompleteRealm[] = "$.userInput.querySelector('span')";
 
-constexpr char kAdPasswordChangeId[] = "ad-password-change";
-constexpr char kAdAnimatedPages[] = "animatedPages";
-constexpr char kAdOldPasswordInput[] = "oldPassword";
-constexpr char kAdNewPassword1Input[] = "newPassword1";
-constexpr char kAdNewPassword2Input[] = "newPassword2";
+constexpr char kAdPasswordChangeId[] = "active-directory-password-change";
+constexpr char kAdAnimatedPages[] = "$.animatedPages";
+constexpr char kAdOldPasswordInput[] = "$.oldPassword";
+constexpr char kAdNewPassword1Input[] = "$.newPassword1";
+constexpr char kAdNewPassword2Input[] = "$.newPassword2";
 constexpr char kNewPassword[] = "new_password";
 constexpr char kDifferentNewPassword[] = "different_new_password";
 
-constexpr char kCloseButtonId[] = "closeButton";
+constexpr char kCloseButtonId[] = "$.navigation.$.closeButton";
 
 class ActiveDirectoryLoginTest : public LoginManagerTest {
  public:
   ActiveDirectoryLoginTest()
-      : LoginManagerTest(true),
+      : LoginManagerTest(true, true),
         // Using the same realm as supervised user domain. Should be treated as
         // normal realm.
         test_realm_(user_manager::kSupervisedUserDomain),
-        autocomplete_realm_(test_realm_) {}
+        test_user_(kTestActiveDirectoryUser + ("@" + test_realm_)) {}
 
   ~ActiveDirectoryLoginTest() override = default;
 
@@ -110,8 +110,7 @@ class ActiveDirectoryLoginTest : public LoginManagerTest {
 
   void MarkAsActiveDirectoryEnterprise() {
     StartupUtils::MarkOobeCompleted();
-    active_directory_test_helper::PrepareLogin(kTestActiveDirectoryUser +
-                                               ("@" + test_realm_));
+    active_directory_test_helper::PrepareLogin(test_user_);
   }
 
   void TriggerPasswordChangeScreen() {
@@ -120,14 +119,14 @@ class ActiveDirectoryLoginTest : public LoginManagerTest {
 
     fake_auth_policy_client()->set_auth_error(
         authpolicy::ERROR_PASSWORD_EXPIRED);
-    SubmitActiveDirectoryCredentials(kTestActiveDirectoryUser, kPassword);
+    SubmitActiveDirectoryCredentials(test_user_, kPassword);
     screen_waiter.Wait();
     TestAdPasswordChangeError(std::string());
   }
 
   void ClosePasswordChangeScreen() {
-    js_checker().Evaluate(JSElement(kAdPasswordChangeId, kCloseButtonId) +
-                          ".fire('tap')");
+    test::OobeJS().Evaluate(JSElement(kAdPasswordChangeId, kCloseButtonId) +
+                            ".click()");
   }
 
   // Checks if Active Directory login is visible.
@@ -135,73 +134,89 @@ class ActiveDirectoryLoginTest : public LoginManagerTest {
     OobeScreenWaiter screen_waiter(OobeScreen::SCREEN_GAIA_SIGNIN);
     screen_waiter.Wait();
     // Checks if Gaia signin is hidden.
-    JSExpect("document.querySelector('#signin-frame').hidden");
+    test::OobeJS().ExpectTrue("document.querySelector('#signin-frame').hidden");
 
     // Checks if Active Directory signin is visible.
-    JSExpect("!document.querySelector('#offline-ad-auth').hidden");
-    JSExpect(JSElement(kAdOfflineAuthId, kAdMachineInput) + ".hidden");
-    JSExpect(JSElement(kAdOfflineAuthId, kAdMoreOptionsButton) + ".hidden");
-    JSExpect("!" + JSElement(kAdOfflineAuthId, kAdUserInput) + ".hidden");
-    JSExpect("!" + JSElement(kAdOfflineAuthId, kAdPasswordInput) + ".hidden");
+    test::OobeJS().ExpectTrue(
+        "!document.querySelector('#offline-ad-auth').hidden");
+    test::OobeJS().ExpectTrue(JSElement(kAdOfflineAuthId, kAdMachineInput) +
+                              ".hidden");
+    test::OobeJS().ExpectTrue(
+        JSElement(kAdOfflineAuthId, kAdMoreOptionsButton) + ".hidden");
+    test::OobeJS().ExpectTrue("!" + JSElement(kAdOfflineAuthId, kAdUserInput) +
+                              ".hidden");
+    test::OobeJS().ExpectTrue(
+        "!" + JSElement(kAdOfflineAuthId, kAdPasswordInput) + ".hidden");
 
-    const std::string innerText(".innerText");
-    // Checks if Active Directory welcome message contains realm.
-    EXPECT_EQ(l10n_util::GetStringFUTF8(IDS_AD_DOMAIN_AUTH_WELCOME_MESSAGE,
-                                        base::UTF8ToUTF16(test_realm_)),
-              js_checker().GetString(
-                  JSElement(kAdOfflineAuthId, kAdWelcomMessage) + innerText));
-
+    std::string autocomplete_domain_ui;
+    base::TrimString(
+        test::OobeJS().GetString(
+            JSElement(kAdOfflineAuthId, kAdAutocompleteRealm) + ".innerText"),
+        base::kWhitespaceASCII, &autocomplete_domain_ui);
     // Checks if realm is set to autocomplete username.
-    EXPECT_EQ(
-        "@" + autocomplete_realm_,
-        js_checker().GetString(
-            JSElement(kAdOfflineAuthId, kAdAutocompleteRealm) + innerText));
+    EXPECT_EQ(autocomplete_realm_, autocomplete_domain_ui);
 
-    // Checks if bottom bar is visible.
-    JSExpect("!Oobe.getInstance().headerHidden");
+    EXPECT_TRUE(LoginShelfTestHelper().IsLoginShelfShown());
   }
 
   // Checks if Active Directory password change screen is shown.
   void TestPasswordChangeVisible() {
     // Checks if Gaia signin is hidden.
-    JSExpect("document.querySelector('#signin-frame').hidden");
+    test::OobeJS().ExpectTrue("document.querySelector('#signin-frame').hidden");
     // Checks if Active Directory signin is visible.
-    JSExpect("!document.querySelector('#ad-password-change').hidden");
-    JSExpect(JSElement(kAdPasswordChangeId, kAdAnimatedPages) +
-             ".selected == 0");
-    JSExpect("!" + JSElement(kAdPasswordChangeId, kCloseButtonId) + ".hidden");
+    test::OobeJS().ExpectTrue(
+        "!document.querySelector('#ad-password-change').hidden");
+    test::OobeJS().ExpectTrue(JSElement(kAdPasswordChangeId, kAdAnimatedPages) +
+                              ".selected == 0");
+    test::OobeJS().ExpectTrue(
+        "!" + JSElement(kAdPasswordChangeId, kCloseButtonId) + ".hidden");
   }
 
   // Checks if user input is marked as invalid.
   void TestUserError() {
     TestLoginVisible();
-    JSExpect(JSElement(kAdOfflineAuthId, kAdUserInput) + ".isInvalid");
+    test::OobeJS().ExpectTrue(JSElement(kAdOfflineAuthId, kAdUserInput) +
+                              ".invalid");
+  }
+
+  void SetUserInput(const std::string& value) {
+    test::OobeJS().ExecuteAsync(JSElement(kAdOfflineAuthId, kAdUserInput) +
+                                ".value='" + value + "'");
+  }
+
+  void TestUserInput(const std::string& value) {
+    test::OobeJS().ExpectEQ(
+        JSElement(kAdOfflineAuthId, kAdUserInput) + ".value", value);
   }
 
   // Checks if password input is marked as invalid.
   void TestPasswordError() {
     TestLoginVisible();
-    JSExpect(JSElement(kAdOfflineAuthId, kAdPasswordInput) + ".isInvalid");
+    test::OobeJS().ExpectTrue(JSElement(kAdOfflineAuthId, kAdPasswordInput) +
+                              ".invalid");
   }
 
   // Checks that machine, password and user inputs are valid.
   void TestNoError() {
     TestLoginVisible();
-    JSExpect("!" + JSElement(kAdOfflineAuthId, kAdMachineInput) + ".isInvalid");
-    JSExpect("!" + JSElement(kAdOfflineAuthId, kAdUserInput) + ".isInvalid");
-    JSExpect("!" + JSElement(kAdOfflineAuthId, kAdPasswordInput) +
-             ".isInvalid");
+    test::OobeJS().ExpectTrue(
+        "!" + JSElement(kAdOfflineAuthId, kAdMachineInput) + ".invalid");
+    test::OobeJS().ExpectTrue("!" + JSElement(kAdOfflineAuthId, kAdUserInput) +
+                              ".invalid");
+    test::OobeJS().ExpectTrue(
+        "!" + JSElement(kAdOfflineAuthId, kAdPasswordInput) + ".invalid");
   }
 
   // Checks if autocomplete domain is visible for the user input.
   void TestDomainVisible() {
-    JSExpect("!" + JSElement(kAdOfflineAuthId, kAdAutocompleteRealm) +
-             ".hidden");
+    test::OobeJS().ExpectTrue(
+        "!" + JSElement(kAdOfflineAuthId, kAdAutocompleteRealm) + ".hidden");
   }
 
   // Checks if autocomplete domain is hidden for the user input.
   void TestDomainHidden() {
-    JSExpect(JSElement(kAdOfflineAuthId, kAdAutocompleteRealm) + ".hidden");
+    test::OobeJS().ExpectTrue(
+        JSElement(kAdOfflineAuthId, kAdAutocompleteRealm) + ".hidden");
   }
 
   // Checks if Active Directory password change screen is shown. Also checks if
@@ -214,19 +229,19 @@ class ActiveDirectoryLoginTest : public LoginManagerTest {
           JSElement(kAdPasswordChangeId, element) + ".isInvalid";
       if (element != invalid_element)
         js_assertion = "!" + js_assertion;
-      JSExpect(js_assertion);
+      test::OobeJS().ExpectTrue(js_assertion);
     }
   }
 
   // Sets username and password for the Active Directory login and submits it.
   void SubmitActiveDirectoryCredentials(const std::string& username,
                                         const std::string& password) {
-    js_checker().ExecuteAsync(JSElement(kAdOfflineAuthId, kAdUserInput) +
-                              ".value='" + username + "'");
-    js_checker().ExecuteAsync(JSElement(kAdOfflineAuthId, kAdPasswordInput) +
-                              ".value='" + password + "'");
-    js_checker().Evaluate(JSElement(kAdOfflineAuthId, kAdCredsButton) +
-                          ".fire('tap')");
+    test::OobeJS().ExecuteAsync(JSElement(kAdOfflineAuthId, kAdUserInput) +
+                                ".value='" + username + "'");
+    test::OobeJS().ExecuteAsync(JSElement(kAdOfflineAuthId, kAdPasswordInput) +
+                                ".value='" + password + "'");
+    test::OobeJS().Evaluate(JSElement(kAdOfflineAuthId, kAdCredsButton) +
+                            ".click()");
   }
 
   // Sets username and password for the Active Directory login and submits it.
@@ -234,22 +249,21 @@ class ActiveDirectoryLoginTest : public LoginManagerTest {
       const std::string& old_password,
       const std::string& new_password1,
       const std::string& new_password2) {
-    js_checker().ExecuteAsync(
+    test::OobeJS().ExecuteAsync(
         JSElement(kAdPasswordChangeId, kAdOldPasswordInput) + ".value='" +
         old_password + "'");
-    js_checker().ExecuteAsync(
+    test::OobeJS().ExecuteAsync(
         JSElement(kAdPasswordChangeId, kAdNewPassword1Input) + ".value='" +
         new_password1 + "'");
-    js_checker().ExecuteAsync(
+    test::OobeJS().ExecuteAsync(
         JSElement(kAdPasswordChangeId, kAdNewPassword2Input) + ".value='" +
         new_password2 + "'");
-    js_checker().Evaluate(
-        JSElement(kAdPasswordChangeId, kAdPasswordChangeButton) +
-        ".fire('tap')");
+    test::OobeJS().Evaluate(
+        JSElement(kAdPasswordChangeId, kAdPasswordChangeButton) + ".click()");
   }
 
   void SetupActiveDirectoryJSNotifications() {
-    js_checker().Evaluate(
+    test::OobeJS().Evaluate(
         "var testInvalidateAd = login.GaiaSigninScreen.invalidateAd;"
         "login.GaiaSigninScreen.invalidateAd = function(user, errorState) {"
         "  testInvalidateAd(user, errorState);"
@@ -269,15 +283,15 @@ class ActiveDirectoryLoginTest : public LoginManagerTest {
   // Returns string representing element with id=|element_id| inside Active
   // Directory login element.
   std::string JSElement(const std::string& parent_id,
-                        const std::string& element_id) {
-    return "document.querySelector('#" + parent_id + " /deep/ #" + element_id +
-           "')";
+                        const std::string& selector) {
+    return "document.querySelector('#" + parent_id + "')." + selector;
   }
   FakeAuthPolicyClient* fake_auth_policy_client() {
     return fake_auth_policy_client_;
   }
 
   const std::string test_realm_;
+  const std::string test_user_;
   std::string autocomplete_realm_;
 
  private:
@@ -296,7 +310,7 @@ class ActiveDirectoryLoginAutocompleteTest : public ActiveDirectoryLoginTest {
     device_settings.mutable_login_screen_domain_auto_complete()
         ->set_login_screen_domain_auto_complete(kTestUserRealm);
     fake_auth_policy_client()->set_device_policy(device_settings);
-    autocomplete_realm_ = kTestUserRealm;
+    autocomplete_realm_ = "@" + std::string(kTestUserRealm);
   }
 
  private:
@@ -316,12 +330,12 @@ class ActiveDirectoryLoginAutocompleteTest : public ActiveDirectoryLoginTest {
 // Test successful Active Directory login.
 IN_PROC_BROWSER_TEST_F_WITH_PRE(ActiveDirectoryLoginTest, LoginSuccess) {
   TestNoError();
-  TestDomainVisible();
+  TestDomainHidden();
 
   content::WindowedNotificationObserver session_start_waiter(
       chrome::NOTIFICATION_SESSION_STARTED,
       content::NotificationService::AllSources());
-  SubmitActiveDirectoryCredentials(kTestActiveDirectoryUser, kPassword);
+  SubmitActiveDirectoryCredentials(test_user_, kPassword);
   session_start_waiter.Wait();
 }
 
@@ -329,49 +343,49 @@ IN_PROC_BROWSER_TEST_F_WITH_PRE(ActiveDirectoryLoginTest, LoginSuccess) {
 IN_PROC_BROWSER_TEST_F_WITH_PRE(ActiveDirectoryLoginTest, LoginErrors) {
   SetupActiveDirectoryJSNotifications();
   TestNoError();
-  TestDomainVisible();
+  TestDomainHidden();
 
   content::DOMMessageQueue message_queue;
 
   SubmitActiveDirectoryCredentials("", "");
   TestUserError();
-  TestDomainVisible();
+  TestDomainHidden();
 
-  SubmitActiveDirectoryCredentials(kTestActiveDirectoryUser, "");
+  SubmitActiveDirectoryCredentials(test_user_, "");
   TestPasswordError();
-  TestDomainVisible();
+  TestDomainHidden();
 
   SubmitActiveDirectoryCredentials(std::string(kTestActiveDirectoryUser) + "@",
                                    kPassword);
+  WaitForMessage(&message_queue, "\"ShowAuthError\"");
   TestUserError();
   TestDomainHidden();
 
   fake_auth_policy_client()->set_auth_error(authpolicy::ERROR_BAD_USER_NAME);
-  SubmitActiveDirectoryCredentials(
-      std::string(kTestActiveDirectoryUser) + "@" + test_realm_, kPassword);
+  SubmitActiveDirectoryCredentials(test_user_, kPassword);
   WaitForMessage(&message_queue, "\"ShowAuthError\"");
   TestUserError();
-  TestDomainVisible();
+  TestDomainHidden();
 
   fake_auth_policy_client()->set_auth_error(authpolicy::ERROR_BAD_PASSWORD);
-  SubmitActiveDirectoryCredentials(kTestActiveDirectoryUser, kPassword);
+  SubmitActiveDirectoryCredentials(test_user_, kPassword);
   WaitForMessage(&message_queue, "\"ShowAuthError\"");
   TestPasswordError();
-  TestDomainVisible();
+  TestDomainHidden();
 
   fake_auth_policy_client()->set_auth_error(authpolicy::ERROR_UNKNOWN);
-  SubmitActiveDirectoryCredentials(kTestActiveDirectoryUser, kPassword);
+  SubmitActiveDirectoryCredentials(test_user_, kPassword);
   WaitForMessage(&message_queue, "\"ShowAuthError\"");
   // Inputs are not invalidated for the unknown error.
   TestNoError();
-  TestDomainVisible();
+  TestDomainHidden();
 }
 
 // Test successful Active Directory login from the password change screen.
 IN_PROC_BROWSER_TEST_F_WITH_PRE(ActiveDirectoryLoginTest,
                                 PasswordChange_LoginSuccess) {
   TestLoginVisible();
-  TestDomainVisible();
+  TestDomainHidden();
 
   TriggerPasswordChangeScreen();
 
@@ -389,7 +403,7 @@ IN_PROC_BROWSER_TEST_F_WITH_PRE(ActiveDirectoryLoginTest,
 IN_PROC_BROWSER_TEST_F_WITH_PRE(ActiveDirectoryLoginTest,
                                 PasswordChange_UIErrors) {
   TestLoginVisible();
-  TestDomainVisible();
+  TestDomainHidden();
 
   TriggerPasswordChangeScreen();
   // Password rejected by UX.
@@ -421,7 +435,7 @@ IN_PROC_BROWSER_TEST_F_WITH_PRE(ActiveDirectoryLoginTest,
 IN_PROC_BROWSER_TEST_F_WITH_PRE(ActiveDirectoryLoginTest,
                                 PasswordChange_ReopenClearErrors) {
   TestLoginVisible();
-  TestDomainVisible();
+  TestDomainHidden();
 
   TriggerPasswordChangeScreen();
 
@@ -434,12 +448,50 @@ IN_PROC_BROWSER_TEST_F_WITH_PRE(ActiveDirectoryLoginTest,
   TriggerPasswordChangeScreen();
 }
 
-// Tests that DeviceLoginScreenDomainAutoComplete policy overrides device realm
-// for user autocomplete.
+// Tests that autocomplete works. Submits username without domain.
+IN_PROC_BROWSER_TEST_F_WITH_PRE(ActiveDirectoryLoginAutocompleteTest,
+                                LoginSuccess) {
+  TestNoError();
+  TestDomainVisible();
+
+  content::WindowedNotificationObserver session_start_waiter(
+      chrome::NOTIFICATION_SESSION_STARTED,
+      content::NotificationService::AllSources());
+  SubmitActiveDirectoryCredentials(kTestActiveDirectoryUser, kPassword);
+  session_start_waiter.Wait();
+}
+
+// Tests that user could override autocomplete domain.
 IN_PROC_BROWSER_TEST_F_WITH_PRE(ActiveDirectoryLoginAutocompleteTest,
                                 TestAutocomplete) {
+  SetupActiveDirectoryJSNotifications();
+
   TestLoginVisible();
   TestDomainVisible();
+  fake_auth_policy_client()->set_auth_error(authpolicy::ERROR_BAD_PASSWORD);
+  content::DOMMessageQueue message_queue;
+
+  // Submit with a different domain.
+  SetUserInput(test_user_);
+  TestDomainHidden();
+  TestUserInput(test_user_);
+  SubmitActiveDirectoryCredentials(test_user_, "password");
+  WaitForMessage(&message_queue, "\"ShowAuthError\"");
+  TestLoginVisible();
+  TestDomainHidden();
+  TestUserInput(test_user_);
+
+  // Set userinput with the autocomplete domain. JS will remove the autocomplete
+  // domain.
+  SetUserInput(kTestActiveDirectoryUser + autocomplete_realm_);
+  TestDomainVisible();
+  TestUserInput(kTestActiveDirectoryUser);
+  SubmitActiveDirectoryCredentials(
+      kTestActiveDirectoryUser + autocomplete_realm_, "password");
+  WaitForMessage(&message_queue, "\"ShowAuthError\"");
+  TestLoginVisible();
+  TestDomainVisible();
+  TestUserInput(kTestActiveDirectoryUser);
 }
 
 #undef IN_PROC_BROWSER_TEST_F_WITH_PRE

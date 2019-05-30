@@ -11,6 +11,7 @@
 
 #include "base/json/json_reader.h"
 #include "base/memory/ref_counted.h"
+#include "base/stl_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
@@ -23,11 +24,10 @@
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #import "components/password_manager/ios/js_password_manager.h"
-#import "components/password_manager/ios/password_controller_helper.h"
+#import "components/password_manager/ios/password_form_helper.h"
 #include "components/password_manager/ios/test_helpers.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
-#include "components/security_state/ios/ssl_status_input_event_data.h"
 #import "ios/chrome/browser/autofill/form_suggestion_controller.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/passwords/password_form_filler.h"
@@ -36,9 +36,11 @@
 #import "ios/chrome/browser/web/chrome_web_test.h"
 #import "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
-#include "ios/web/public/ssl_status.h"
 #import "ios/web/public/test/fakes/test_web_state.h"
 #import "ios/web/public/test/web_js_test.h"
+#include "ios/web/public/web_state/web_frame.h"
+#include "ios/web/public/web_state/web_frame_util.h"
+#import "ios/web/public/web_state/web_frames_manager.h"
 #import "ios/web/public/web_state/web_state.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -147,8 +149,8 @@ ACTION(InvokeEmptyConsumerWithForms) {
 @interface PasswordController (
     Testing)<CRWWebStateObserver, FormSuggestionProvider>
 
-// Provides access to common helper logic for testing with mocks.
-@property(readonly) PasswordControllerHelper* helper;
+// Provides access to common form helper logic for testing with mocks.
+@property(readonly) PasswordFormHelper* formHelper;
 
 - (void)fillPasswordForm:(const PasswordFormFillData&)formData
        completionHandler:(void (^)(BOOL))completionHandler;
@@ -157,7 +159,7 @@ ACTION(InvokeEmptyConsumerWithForms) {
 
 @end
 
-@interface PasswordControllerHelper (Testing)
+@interface PasswordFormHelper (Testing)
 
 // Provides access to JavaScript Manager for testing with mocks.
 @property(readonly) JsPasswordManager* jsPasswordManager;
@@ -213,10 +215,11 @@ class PasswordControllerTest : public ChromeWebTest {
                  providers:@[ [passwordController_ suggestionProvider] ]];
       accessoryMediator_ =
           [[FormInputAccessoryMediator alloc] initWithConsumer:nil
-                                                  webStateList:NULL];
+                                                  webStateList:NULL
+                                           personalDataManager:NULL
+                                                 passwordStore:NULL];
       [accessoryMediator_ injectWebState:web_state()];
-      [accessoryMediator_
-          injectProviders:@[ [suggestionController_ accessoryViewProvider] ]];
+      [accessoryMediator_ injectProviders:@[ suggestionController_ ]];
     }
   }
 
@@ -251,7 +254,7 @@ class PasswordControllerTest : public ChromeWebTest {
   // |failure_count| reaches |target_failure_count|, stop the partial mock
   // and let the original JavaScript manager execute.
   void SetFillPasswordFormFailureCount(int target_failure_count) {
-    id original_manager = passwordController_.helper.jsPasswordManager;
+    id original_manager = passwordController_.formHelper.jsPasswordManager;
     OCPartialMockObject* failing_manager =
         [OCMockObject partialMockForObject:original_manager];
     __block int failure_count = 0;
@@ -385,11 +388,12 @@ TEST_F(PasswordControllerTest, FLAKY_FindPasswordFormsInView) {
     LoadHtml(data.html_string);
     __block std::vector<PasswordForm> forms;
     __block BOOL block_was_called = NO;
-    [passwordController_.helper findPasswordFormsWithCompletionHandler:^(
-                                    const std::vector<PasswordForm>& result) {
-      block_was_called = YES;
-      forms = result;
-    }];
+    [passwordController_.formHelper
+        findPasswordFormsWithCompletionHandler:^(
+            const std::vector<PasswordForm>& result) {
+          block_was_called = YES;
+          forms = result;
+        }];
     EXPECT_TRUE(
         WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool() {
           return block_was_called;
@@ -486,7 +490,7 @@ TEST_F(PasswordControllerTest, FLAKY_GetSubmittedPasswordForm) {
                   form.username_element);
       }
     };
-    [passwordController_.helper
+    [passwordController_.formHelper
         extractSubmittedPasswordForm:FormName(data.number_of_forms_to_submit)
                    completionHandler:completion_handler];
     EXPECT_TRUE(
@@ -727,10 +731,10 @@ TEST_F(PasswordControllerTest, FillPasswordForm) {
     ExecuteJavaScript(kClearInputFieldsScript);
 
     PasswordFormFillData form_data;
-    SetPasswordFormFillData(form_data, data.origin, data.action,
-                            data.username_field, data.username_value,
-                            data.password_field, data.password_value, nullptr,
-                            nullptr, false);
+    SetPasswordFormFillData(data.origin, data.action, data.username_field,
+                            data.username_value, data.password_field,
+                            data.password_value, nullptr, nullptr, false,
+                            &form_data);
 
     __block BOOL block_was_called = NO;
     [passwordController_ fillPasswordForm:form_data
@@ -810,8 +814,8 @@ BOOL PasswordControllerTest::BasicFormFill(NSString* html) {
   LoadHtml(html);
   const std::string base_url = BaseUrl();
   PasswordFormFillData form_data;
-  SetPasswordFormFillData(form_data, base_url, base_url, "un0", "test_user",
-                          "pw0", "test_password", nullptr, nullptr, false);
+  SetPasswordFormFillData(base_url, base_url, "un0", "test_user", "pw0",
+                          "test_password", nullptr, nullptr, false, &form_data);
   __block BOOL block_was_called = NO;
   __block BOOL return_value = NO;
   [passwordController_ fillPasswordForm:form_data
@@ -873,7 +877,9 @@ static NSString* kHtmlWithTwoPasswordForms =
      "<input type='password' id='p1'>"
      "</form>"
      "<form id='f2'>"
-     "<input type='text' id='u2'>"
+     "<input type='text' id='u2'"
+     "  onkeyup='window.onKeyUpCalled_=true'"
+     "  onchange='window.onChangeCalled_=true'>"
      "<input type='password' id='p2'>"
      "</form>";
 
@@ -938,8 +944,8 @@ TEST_F(PasswordControllerTest, SuggestionUpdateTests) {
   // we can test with an initially-empty username field. Testing with a
   // username field that contains input is performed by a specific test below.
   PasswordFormFillData form_data;
-  SetPasswordFormFillData(form_data, base_url, base_url, "un", "user0", "pw",
-                          "password0", "abc", "def", true);
+  SetPasswordFormFillData(base_url, base_url, "un", "user0", "pw", "password0",
+                          "abc", "def", true, &form_data);
   form_data.name = base::ASCIIToUTF16(FormName(0));
 
   __block BOOL block_was_called = NO;
@@ -1028,16 +1034,16 @@ TEST_F(PasswordControllerTest, SelectingSuggestionShouldFillPasswordForm) {
   } const kTestData[] = {{"f1", "u1", "p1"}, {"f2", "u2", "p2"}};
 
   // Send fill data to passwordController_.
-  for (size_t form_i = 0; form_i < arraysize(kTestData); ++form_i) {
+  for (size_t form_i = 0; form_i < base::size(kTestData); ++form_i) {
     // Initialize |form_data| with test data and an indicator that autofill
     // should not be performed while the user is entering the username so that
     // we can test with an initially-empty username field.
     const auto& test_data = kTestData[form_i];
 
     PasswordFormFillData form_data;
-    SetPasswordFormFillData(
-        form_data, base_url, base_url, test_data.username_element, "user0",
-        test_data.password_element, "password0", "abc", "def", true);
+    SetPasswordFormFillData(base_url, base_url, test_data.username_element,
+                            "user0", test_data.password_element, "password0",
+                            "abc", "def", true, &form_data);
     form_data.name = base::ASCIIToUTF16(test_data.form_name);
 
     __block BOOL block_was_called = NO;
@@ -1054,7 +1060,7 @@ TEST_F(PasswordControllerTest, SelectingSuggestionShouldFillPasswordForm) {
   }
 
   // Check that the right password form is filled on suggesion selection.
-  for (size_t form_i = 0; form_i < arraysize(kTestData); ++form_i) {
+  for (size_t form_i = 0; form_i < base::size(kTestData); ++form_i) {
     const auto& test_data = kTestData[form_i];
     NSString* form_name = base::SysUTF8ToNSString(test_data.form_name);
     NSString* username_element =
@@ -1071,17 +1077,18 @@ TEST_F(PasswordControllerTest, SelectingSuggestionShouldFillPasswordForm) {
     EXPECT_NSEQ(@"[]=, onkeyup=false, onchange=false",
                 ExecuteJavaScript(kUsernamePasswordVerificationScript));
 
+    std::string mainFrameID = web::GetMainWebFrameId(web_state());
     // Emulate that the user clicks on the username field in the first form.
     // That's required in order that PasswordController can identify which form
     // should be filled.
     __block BOOL block_was_called = NO;
     [passwordController_
         retrieveSuggestionsForForm:form_name
-                         fieldName:username_element
                    fieldIdentifier:username_element
                          fieldType:@"text"
                               type:@"focus"
                         typedValue:@""
+                           frameID:base::SysUTF8ToNSString(mainFrameID)
                           webState:web_state()
                  completionHandler:^(NSArray* suggestions,
                                      id<FormSuggestionProvider> provider) {
@@ -1108,14 +1115,14 @@ TEST_F(PasswordControllerTest, SelectingSuggestionShouldFillPasswordForm) {
     block_was_called = NO;
     SuggestionHandledCompletion completion = ^{
       block_was_called = YES;
-      EXPECT_NSEQ(@"abc[]=def, onkeyup=false, onchange=false",
+      EXPECT_NSEQ(@"abc[]=def, onkeyup=true, onchange=true",
                   ExecuteJavaScript(kUsernamePasswordVerificationScript));
     };
     [passwordController_
         didSelectSuggestion:suggestion
-                  fieldName:@"u"
-            fieldIdentifier:@"u"
                        form:base::SysUTF8ToNSString(FormName(0))
+            fieldIdentifier:@"u"
+                    frameID:base::SysUTF8ToNSString(mainFrameID)
           completionHandler:completion];
     EXPECT_TRUE(
         WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool() {
@@ -1163,62 +1170,6 @@ TEST_F(PasswordControllerTestSimple, SaveOnNonHTMLLandingPage) {
   web_state.SetContentIsHTML(false);
   web_state.SetCurrentURL(GURL("https://example.com"));
   [passwordController webState:&web_state didLoadPageWithSuccess:YES];
-}
-
-// Tests that an HTTP page without a password field does not update the SSL
-// status to indicate |password_field_shown|.
-TEST_F(PasswordControllerTest, HTTPNoPassword) {
-  LoadHtml(kHtmlWithoutPasswordForm, GURL("http://chromium.test"));
-
-  web::SSLStatus ssl_status =
-      web_state()->GetNavigationManager()->GetLastCommittedItem()->GetSSL();
-  security_state::SSLStatusInputEventData* input_events =
-      static_cast<security_state::SSLStatusInputEventData*>(
-          ssl_status.user_data.get());
-  EXPECT_FALSE(input_events &&
-               input_events->input_events()->password_field_shown);
-}
-
-// Tests that an HTTP page with a password field updates the SSL status
-// to indicate |password_field_shown|.
-TEST_F(PasswordControllerTest, HTTPPassword) {
-  LoadHtml(kHtmlWithPasswordForm, GURL("http://chromium.test"));
-
-  web::SSLStatus ssl_status =
-      web_state()->GetNavigationManager()->GetLastCommittedItem()->GetSSL();
-  security_state::SSLStatusInputEventData* input_events =
-      static_cast<security_state::SSLStatusInputEventData*>(
-          ssl_status.user_data.get());
-  ASSERT_TRUE(input_events);
-  EXPECT_TRUE(input_events->input_events()->password_field_shown);
-}
-
-// Tests that an HTTPS page without a password field does not update the SSL
-// status to indicate |password_field_shown|.
-TEST_F(PasswordControllerTest, HTTPSNoPassword) {
-  LoadHtml(kHtmlWithoutPasswordForm, GURL("https://chromium.test"));
-
-  web::SSLStatus ssl_status =
-      web_state()->GetNavigationManager()->GetLastCommittedItem()->GetSSL();
-  security_state::SSLStatusInputEventData* input_events =
-      static_cast<security_state::SSLStatusInputEventData*>(
-          ssl_status.user_data.get());
-  EXPECT_FALSE(input_events &&
-               input_events->input_events()->password_field_shown);
-}
-
-// Tests that an HTTPS page with a password field does not update the SSL status
-// to indicate |password_field_shown|.
-TEST_F(PasswordControllerTest, HTTPSPassword) {
-  LoadHtml(kHtmlWithPasswordForm, GURL("https://chromium.test"));
-
-  web::SSLStatus ssl_status =
-      web_state()->GetNavigationManager()->GetLastCommittedItem()->GetSSL();
-  security_state::SSLStatusInputEventData* input_events =
-      static_cast<security_state::SSLStatusInputEventData*>(
-          ssl_status.user_data.get());
-  EXPECT_FALSE(input_events &&
-               input_events->input_events()->password_field_shown);
 }
 
 // Checks that when the user set a focus on a field of a password form which was
@@ -1280,7 +1231,7 @@ TEST_F(PasswordControllerTest, TouchendAsSubmissionIndicator) {
   EXPECT_CALL(*weak_client_, GetLogManager())
       .WillRepeatedly(Return(&log_manager));
 
-  for (size_t i = 0; i < arraysize(kHtml); ++i) {
+  for (size_t i = 0; i < base::size(kHtml); ++i) {
     LoadHtml(base::SysUTF8ToNSString(kHtml[i]));
     // Use a mock LogManager to detect that OnPasswordFormSubmitted has been
     // called. TODO(crbug.com/598672): this is a hack, we should modularize the
@@ -1370,20 +1321,21 @@ TEST_F(PasswordControllerTest, CheckAsyncSuggestions) {
       EXPECT_CALL(*store_, GetLogins(_, _))
           .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
     }
-    [passwordController_ checkIfSuggestionsAvailableForForm:@"dynamic_form"
-                                                  fieldName:@"username"
-                                            fieldIdentifier:@"username"
-                                                  fieldType:@"text"
-                                                       type:@"focus"
-                                                 typedValue:@""
-                                                isMainFrame:YES
-                                             hasUserGesture:YES
-                                                   webState:web_state()
-                                          completionHandler:^(BOOL success) {
-                                            completion_handler_success =
-                                                success;
-                                            completion_handler_called = YES;
-                                          }];
+    std::string mainFrameID = web::GetMainWebFrameId(web_state());
+    [passwordController_
+        checkIfSuggestionsAvailableForForm:@"dynamic_form"
+                           fieldIdentifier:@"username"
+                                 fieldType:@"text"
+                                      type:@"focus"
+                                typedValue:@""
+                                   frameID:base::SysUTF8ToNSString(mainFrameID)
+                               isMainFrame:YES
+                            hasUserGesture:YES
+                                  webState:web_state()
+                         completionHandler:^(BOOL success) {
+                           completion_handler_success = success;
+                           completion_handler_called = YES;
+                         }];
     // Wait until the expected handler is called.
     EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^bool() {
       return completion_handler_called;
@@ -1407,19 +1359,21 @@ TEST_F(PasswordControllerTest, CheckNoAsyncSuggestionsOnNonUsernameField) {
   PasswordForm form(CreatePasswordForm(BaseUrl().c_str(), "user", "pw"));
   EXPECT_CALL(*store_, GetLogins(_, _))
       .WillOnce(WithArg<1>(InvokeConsumer(form)));
-  [passwordController_ checkIfSuggestionsAvailableForForm:@"dynamic_form"
-                                                fieldName:@"address"
-                                          fieldIdentifier:@"address"
-                                                fieldType:@"text"
-                                                     type:@"focus"
-                                               typedValue:@""
-                                              isMainFrame:YES
-                                           hasUserGesture:YES
-                                                 webState:web_state()
-                                        completionHandler:^(BOOL success) {
-                                          completion_handler_success = success;
-                                          completion_handler_called = YES;
-                                        }];
+  std::string mainFrameID = web::GetMainWebFrameId(web_state());
+  [passwordController_
+      checkIfSuggestionsAvailableForForm:@"dynamic_form"
+                         fieldIdentifier:@"address"
+                               fieldType:@"text"
+                                    type:@"focus"
+                              typedValue:@""
+                                 frameID:base::SysUTF8ToNSString(mainFrameID)
+                             isMainFrame:YES
+                          hasUserGesture:YES
+                                webState:web_state()
+                       completionHandler:^(BOOL success) {
+                         completion_handler_success = success;
+                         completion_handler_called = YES;
+                       }];
   // Wait until the expected handler is called.
   EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^bool() {
     return completion_handler_called;
@@ -1437,19 +1391,21 @@ TEST_F(PasswordControllerTest, CheckNoAsyncSuggestionsOnNoPasswordForms) {
   __block BOOL completion_handler_called = NO;
 
   EXPECT_CALL(*store_, GetLogins(_, _)).Times(0);
-  [passwordController_ checkIfSuggestionsAvailableForForm:@"form"
-                                                fieldName:@"address"
-                                          fieldIdentifier:@"address"
-                                                fieldType:@"text"
-                                                     type:@"focus"
-                                               typedValue:@""
-                                              isMainFrame:YES
-                                           hasUserGesture:YES
-                                                 webState:web_state()
-                                        completionHandler:^(BOOL success) {
-                                          completion_handler_success = success;
-                                          completion_handler_called = YES;
-                                        }];
+  std::string mainFrameID = web::GetMainWebFrameId(web_state());
+  [passwordController_
+      checkIfSuggestionsAvailableForForm:@"form"
+                         fieldIdentifier:@"address"
+                               fieldType:@"text"
+                                    type:@"focus"
+                              typedValue:@""
+                                 frameID:base::SysUTF8ToNSString(mainFrameID)
+                             isMainFrame:YES
+                          hasUserGesture:YES
+                                webState:web_state()
+                       completionHandler:^(BOOL success) {
+                         completion_handler_success = success;
+                         completion_handler_called = YES;
+                       }];
   // Wait until the expected handler is called.
   EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^bool() {
     return completion_handler_called;

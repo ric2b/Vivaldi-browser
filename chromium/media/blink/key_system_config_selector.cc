@@ -15,6 +15,7 @@
 #include "media/base/cdm_config.h"
 #include "media/base/key_system_names.h"
 #include "media/base/key_systems.h"
+#include "media/base/logging_override_if_enabled.h"
 #include "media/base/media_permission.h"
 #include "media/base/mime_util.h"
 #include "media/blink/webmediaplayer_util.h"
@@ -156,7 +157,7 @@ bool IsSupportedMediaType(const std::string& container_mime_type,
            << ", use_aes_decryptor=" << use_aes_decryptor;
 
   std::vector<std::string> codec_vector;
-  SplitCodecsToVector(codecs, &codec_vector, false);
+  SplitCodecs(codecs, &codec_vector);
 
   // AesDecryptor decrypts the stream in the demuxer before it reaches the
   // decoder so check whether the media format is supported when clear.
@@ -321,7 +322,9 @@ bool KeySystemConfigSelector::IsSupportedContentType(
     const std::string& container_mime_type,
     const std::string& codecs,
     KeySystemConfigSelector::ConfigState* config_state) {
-  DVLOG(3) << __func__;
+  DVLOG(3) << __func__ << ": key_system = " << key_system
+           << ", container_mime_type = " << container_mime_type
+           << ", codecs = " << codecs;
 
   // From RFC6838: "Both top-level type and subtype names are case-insensitive."
   std::string container_lower = base::ToLowerASCII(container_mime_type);
@@ -346,13 +349,13 @@ bool KeySystemConfigSelector::IsSupportedContentType(
     return false;
   }
 
-  // Check that |container_mime_type| and |codecs| are supported by the CDM.
-  // This check does not handle extended codecs, so extended codec information
-  // is stripped (extended codec information was checked above).
-  std::vector<std::string> stripped_codec_vector;
-  SplitCodecsToVector(codecs, &stripped_codec_vector, true);
+  // Before checking CDM support, split |codecs| into a vector of codecs.
+  std::vector<std::string> codec_vector;
+  SplitCodecs(codecs, &codec_vector);
+
+  // Check that |container_lower| and |codec_vector| are supported by the CDM.
   EmeConfigRule codecs_rule = key_systems_->GetContentTypeConfigRule(
-      key_system, media_type, container_lower, stripped_codec_vector);
+      key_system, media_type, container_lower, codec_vector);
   if (!config_state->IsRuleSupported(codecs_rule)) {
     DVLOG(3) << "Container mime type and codecs are not supported by CDM";
     return false;
@@ -514,7 +517,7 @@ KeySystemConfigSelector::GetSupportedConfiguration(
 
   // 3. If the initDataTypes member of candidate configuration is non-empty,
   //    run the following steps:
-  if (!candidate.init_data_types.IsEmpty()) {
+  if (!candidate.init_data_types.empty()) {
     // 3.1. Let supported types be an empty sequence of DOMStrings.
     std::vector<blink::WebEncryptedMediaInitDataType> supported_types;
 
@@ -702,8 +705,8 @@ KeySystemConfigSelector::GetSupportedConfiguration(
 
   // 15. If the videoCapabilities and audioCapabilities members in candidate
   //     configuration are both empty, return NotSupported.
-  if (candidate.video_capabilities.IsEmpty() &&
-      candidate.audio_capabilities.IsEmpty()) {
+  if (candidate.video_capabilities.empty() &&
+      candidate.audio_capabilities.empty()) {
     DVLOG(2) << "Rejecting requested configuration because "
              << "neither audioCapabilities nor videoCapabilities is specified";
     return CONFIGURATION_NOT_SUPPORTED;
@@ -712,7 +715,7 @@ KeySystemConfigSelector::GetSupportedConfiguration(
   // 16. If the videoCapabilities member in candidate configuration is
   //     non-empty:
   std::vector<blink::WebMediaKeySystemMediaCapability> video_capabilities;
-  if (!candidate.video_capabilities.IsEmpty()) {
+  if (!candidate.video_capabilities.empty()) {
     // 16.1. Let video capabilities be the result of executing the Get
     //       Supported Capabilities for Audio/Video Type algorithm on Video,
     //       candidate configuration's videoCapabilities member, accumulated
@@ -738,7 +741,7 @@ KeySystemConfigSelector::GetSupportedConfiguration(
   // 17. If the audioCapabilities member in candidate configuration is
   //     non-empty:
   std::vector<blink::WebMediaKeySystemMediaCapability> audio_capabilities;
-  if (!candidate.audio_capabilities.IsEmpty()) {
+  if (!candidate.audio_capabilities.empty()) {
     // 17.1. Let audio capabilities be the result of executing the Get
     //       Supported Capabilities for Audio/Video Type algorithm on Audio,
     //       candidate configuration's audioCapabilities member, accumulated

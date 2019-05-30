@@ -27,6 +27,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "absl/base/internal/exception_testing.h"
+#include "absl/hash/hash_testing.h"
 #include "absl/memory/memory.h"
 
 using ::testing::ElementsAreArray;
@@ -867,4 +868,22 @@ TEST(FixedArrayTest, AddressSanitizerAnnotations4) {
   EXPECT_DEATH(raw[21] = ThreeInts(), "container-overflow");
 }
 #endif  // ADDRESS_SANITIZER
+
+TEST(FixedArrayTest, AbslHashValueWorks) {
+  using V = absl::FixedArray<int>;
+  std::vector<V> cases;
+
+  // Generate a variety of vectors some of these are small enough for the inline
+  // space but are stored out of line.
+  for (int i = 0; i < 10; ++i) {
+    V v(i);
+    for (int j = 0; j < i; ++j) {
+      v[j] = j;
+    }
+    cases.push_back(v);
+  }
+
+  EXPECT_TRUE(absl::VerifyTypeImplementsAbslHashCorrectly(cases));
+}
+
 }  // namespace

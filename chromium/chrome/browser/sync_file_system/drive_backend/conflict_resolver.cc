@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/format_macros.h"
 #include "base/location.h"
@@ -71,8 +72,7 @@ void ConflictResolver::RunExclusive(std::unique_ptr<SyncTaskToken> token) {
         trackers.active_tracker()));
 
     DCHECK(trackers.has_active());
-    for (TrackerIDSet::const_iterator itr = trackers.begin();
-         itr != trackers.end(); ++itr) {
+    for (auto itr = trackers.begin(); itr != trackers.end(); ++itr) {
       FileTracker tracker;
       if (!metadata_database()->FindTrackerByTrackerID(*itr, &tracker)) {
         NOTREACHED();
@@ -100,8 +100,7 @@ void ConflictResolver::RunExclusive(std::unique_ptr<SyncTaskToken> token) {
     target_file_id_ = PickPrimaryFile(trackers);
     DCHECK(!target_file_id_.empty());
     int64_t primary_tracker_id = -1;
-    for (TrackerIDSet::const_iterator itr = trackers.begin();
-         itr != trackers.end(); ++itr) {
+    for (auto itr = trackers.begin(); itr != trackers.end(); ++itr) {
       FileTracker tracker;
       if (!metadata_database()->FindTrackerByTrackerID(*itr, &tracker)) {
         NOTREACHED();
@@ -166,8 +165,7 @@ void ConflictResolver::DidDetachFromParent(
 
 std::string ConflictResolver::PickPrimaryFile(const TrackerIDSet& trackers) {
   std::unique_ptr<FileMetadata> primary;
-  for (TrackerIDSet::const_iterator itr = trackers.begin();
-       itr != trackers.end(); ++itr) {
+  for (auto itr = trackers.begin(); itr != trackers.end(); ++itr) {
     FileTracker tracker;
     if (!metadata_database()->FindTrackerByTrackerID(*itr, &tracker)) {
       NOTREACHED();

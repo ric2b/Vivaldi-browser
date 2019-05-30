@@ -36,16 +36,15 @@
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/io_buffer.h"
+#include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
+#include "net/url_request/url_request_context_getter.h"
 #include "services/device/public/mojom/constants.mojom.h"
 #include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
-
-#include "app/vivaldi_apptools.h"
-#include "ui/content/vivaldi_download_data.h"
 
 namespace content {
 
@@ -129,16 +128,14 @@ const int DownloadRequestCore::kDownloadByteStreamSize = 100 * 1024;
 // static
 std::unique_ptr<net::URLRequest> DownloadRequestCore::CreateRequestOnIOThread(
     bool is_new_download,
-    download::DownloadUrlParameters* params) {
+    download::DownloadUrlParameters* params,
+    scoped_refptr<net::URLRequestContextGetter> url_request_context_getter) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(is_new_download || !params->content_initiated())
       << "Content initiated downloads should be a new download";
 
-  std::unique_ptr<net::URLRequest> request = CreateURLRequestOnIOThread(params);
-
-  if (vivaldi::IsVivaldiRunning()) {
-    vivaldi::VivaldiDownloadData::Attach(request.get(), params);
-  }
+  std::unique_ptr<net::URLRequest> request =
+      CreateURLRequestOnIOThread(params, std::move(url_request_context_getter));
 
   DownloadRequestData::Attach(request.get(), params, is_new_download);
   return request;
@@ -228,8 +225,10 @@ DownloadRequestCore::CreateDownloadCreateInfo(
       new download::DownloadCreateInfo(base::Time::Now(),
                                        std::move(save_info_)));
 
-  if (result == download::DOWNLOAD_INTERRUPT_REASON_NONE)
-    create_info->remote_address = request()->GetSocketAddress().host();
+  if (result == download::DOWNLOAD_INTERRUPT_REASON_NONE) {
+    create_info->remote_address =
+        request()->GetResponseRemoteEndpoint().ToStringWithoutPort();
+  }
   create_info->method = request()->method();
   create_info->connection_info = request()->response_info().connection_info;
   create_info->url_chain = request()->url_chain();
@@ -272,15 +271,6 @@ bool DownloadRequestCore::OnResponseStarted(
                        base::ResetAndReturn(&on_started_callback_));
     return false;
   }
-
-  // Vivaldi addition ////////
-  if(create_info->save_info &&
-      !create_info->save_info->prompt_for_save_location) {
-    // if prompt has been set from "Save image as..." keep it.
-    create_info->save_info->prompt_for_save_location = ask_for_target_;
-  }
-  create_info->open_when_finished = open_when_done_;
-  // Vivaldi addition ////////
 
   // If it's a download, we don't want to poison the cache with it.
   request()->StopCaching();
@@ -356,7 +346,7 @@ bool DownloadRequestCore::OnWillRead(scoped_refptr<net::IOBuffer>* buf,
   DCHECK(!read_buffer_.get());
 
   *buf_size = kReadBufSize;
-  read_buffer_ = new net::IOBuffer(*buf_size);
+  read_buffer_ = base::MakeRefCounted<net::IOBuffer>(*buf_size);
   *buf = read_buffer_.get();
   return true;
 }

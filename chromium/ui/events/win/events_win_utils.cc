@@ -3,12 +3,12 @@
 // found in the LICENSE file.
 
 #include <stdint.h>
-#include <windowsx.h>
 
 #include "ui/events/event_constants.h"
 
 #include "base/logging.h"
 #include "base/time/time.h"
+#include "base/win/windowsx_shim.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
@@ -254,7 +254,7 @@ gfx::Point EventLocationFromMSG(const MSG& native_event) {
     // Note: Wheel events are considered client, but their position is in screen
     //       coordinates.
     // Client message. The position is contained in the LPARAM.
-    return gfx::Point(native_event.lParam);
+    return gfx::Point(static_cast<DWORD>(native_event.lParam));
   } else {
     DCHECK(IsNonClientMouseEvent(native_event) ||
            IsMouseWheelEvent(native_event) || IsScrollEvent(native_event));

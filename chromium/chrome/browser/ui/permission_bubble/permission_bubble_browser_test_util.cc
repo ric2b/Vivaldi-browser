@@ -15,7 +15,9 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/test/base/ui_test_utils.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "url/gurl.h"
 
 TestPermissionBubbleViewDelegate::TestPermissionBubbleViewDelegate()
     : PermissionPrompt::Delegate() {
@@ -57,9 +59,10 @@ Browser* PermissionBubbleBrowserTest::OpenExtensionAppWindow() {
       LoadExtension(test_data_dir_.AppendASCII("app_with_panel_container/"));
   CHECK(extension);
 
-  AppLaunchParams params(
-      browser()->profile(), extension, extensions::LAUNCH_CONTAINER_PANEL,
-      WindowOpenDisposition::NEW_WINDOW, extensions::SOURCE_TEST);
+  AppLaunchParams params(browser()->profile(), extension,
+                         extensions::LAUNCH_CONTAINER_PANEL_DEPRECATED,
+                         WindowOpenDisposition::NEW_WINDOW,
+                         extensions::SOURCE_TEST);
 
   content::WebContents* app_window = OpenApplication(params);
   CHECK(app_window);
@@ -81,4 +84,8 @@ void PermissionBubbleKioskBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {
   PermissionBubbleBrowserTest::SetUpCommandLine(command_line);
   command_line->AppendSwitch(switches::kKioskMode);
+  // Navigate to a test file URL.
+  GURL test_file_url(ui_test_utils::GetTestUrl(
+      base::FilePath(), base::FilePath(FILE_PATH_LITERAL("simple.html"))));
+  command_line->AppendArg(test_file_url.spec());
 }

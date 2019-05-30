@@ -15,6 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/bind_test_util.h"
 #include "build/build_config.h"
 #include "cc/trees/layer_tree_frame_sink.h"
 #include "services/ws/public/mojom/window_tree_constants.mojom.h"
@@ -106,11 +107,11 @@ class DeletionTestProperty {
 
 DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(DeletionTestProperty,
                                    kDeletionTestPropertyKey,
-                                   nullptr);
+                                   nullptr)
 
 }  // namespace
 
-DEFINE_UI_CLASS_PROPERTY_TYPE(DeletionTestProperty*);
+DEFINE_UI_CLASS_PROPERTY_TYPE(DeletionTestProperty*)
 
 namespace aura {
 namespace test {
@@ -424,7 +425,10 @@ TEST_P(WindowTest, RootWindowHasValidLocalSurfaceId) {
   // When mus is hosting viz, the LocalSurfaceId is sent from mus.
   if (GetParam() != Env::Mode::LOCAL)
     return;
-  EXPECT_TRUE(root_window()->GetLocalSurfaceId().is_valid());
+  EXPECT_TRUE(root_window()
+                  ->GetLocalSurfaceIdAllocation()
+                  .local_surface_id()
+                  .is_valid());
 }
 
 TEST_P(WindowTest, WindowEmbeddingClientHasValidLocalSurfaceId) {
@@ -435,7 +439,8 @@ TEST_P(WindowTest, WindowEmbeddingClientHasValidLocalSurfaceId) {
       SK_ColorWHITE, 1, gfx::Rect(10, 10, 300, 200), root_window()));
   test::WindowTestApi(window.get()).DisableFrameSinkRegistration();
   window->SetEmbedFrameSinkId(viz::FrameSinkId(0, 1));
-  EXPECT_TRUE(window->GetLocalSurfaceId().is_valid());
+  EXPECT_TRUE(
+      window->GetLocalSurfaceIdAllocation().local_surface_id().is_valid());
 }
 
 // Test Window::ConvertPointToWindow() with transform to root_window.
@@ -1638,9 +1643,13 @@ TEST_P(WindowTest, Transform) {
 }
 
 TEST_P(WindowTest, TransformGesture) {
-  // TODO(sky): fails with mus. https://crbug.com/866502
+  // This test is only applicable to LOCAL mode as it's setting a transform on
+  // host() and expecting events to be transformed while routing the event
+  // directly through host(). In MUS mode the window-service does the
+  // transformation.
   if (GetParam() == Env::Mode::MUS)
     return;
+
   gfx::Size size = host()->GetBoundsInPixels().size();
 
   std::unique_ptr<GestureTrackPositionDelegate> delegate(
@@ -3247,38 +3256,50 @@ TEST_P(WindowTest, RootWindowUsesCompositorFrameSinkId) {
 }
 
 TEST_P(WindowTest, LocalSurfaceIdChanges) {
+  // This uses Window::CreateLayerTreeFrameSink(), which is not wired up in
+  // Mus. At this time it is only used for LOCAL, so it's not wired up for MUS.
+  if (GetParam() == Env::Mode::MUS)
+    return;
+
   Window window(nullptr);
   window.Init(ui::LAYER_NOT_DRAWN);
   window.SetBounds(gfx::Rect(300, 300));
 
+  root_window()->AddChild(&window);
+
   std::unique_ptr<cc::LayerTreeFrameSink> frame_sink(
       window.CreateLayerTreeFrameSink());
-  viz::LocalSurfaceId local_surface_id1 = window.GetLocalSurfaceId();
+  viz::LocalSurfaceId local_surface_id1 =
+      window.GetLocalSurfaceIdAllocation().local_surface_id();
   EXPECT_NE(nullptr, frame_sink.get());
   EXPECT_TRUE(local_surface_id1.is_valid());
 
   // Resize 0x0 to make sure WindowPort* stores the correct window size before
   // creating the frame sink.
   window.SetBounds(gfx::Rect(0, 0));
-  viz::LocalSurfaceId local_surface_id2 = window.GetLocalSurfaceId();
+  viz::LocalSurfaceId local_surface_id2 =
+      window.GetLocalSurfaceIdAllocation().local_surface_id();
   EXPECT_TRUE(local_surface_id2.is_valid());
   EXPECT_NE(local_surface_id1, local_surface_id2);
 
   window.SetBounds(gfx::Rect(300, 300));
-  viz::LocalSurfaceId local_surface_id3 = window.GetLocalSurfaceId();
+  viz::LocalSurfaceId local_surface_id3 =
+      window.GetLocalSurfaceIdAllocation().local_surface_id();
   EXPECT_TRUE(local_surface_id3.is_valid());
   EXPECT_NE(local_surface_id1, local_surface_id3);
   EXPECT_NE(local_surface_id2, local_surface_id3);
 
   window.OnDeviceScaleFactorChanged(1.0f, 3.0f);
-  viz::LocalSurfaceId local_surface_id4 = window.GetLocalSurfaceId();
+  viz::LocalSurfaceId local_surface_id4 =
+      window.GetLocalSurfaceIdAllocation().local_surface_id();
   EXPECT_TRUE(local_surface_id4.is_valid());
   EXPECT_NE(local_surface_id1, local_surface_id4);
   EXPECT_NE(local_surface_id2, local_surface_id4);
   EXPECT_NE(local_surface_id3, local_surface_id4);
 
   window.RecreateLayer();
-  viz::LocalSurfaceId local_surface_id5 = window.GetLocalSurfaceId();
+  viz::LocalSurfaceId local_surface_id5 =
+      window.GetLocalSurfaceIdAllocation().local_surface_id();
   EXPECT_TRUE(local_surface_id5.is_valid());
   EXPECT_NE(local_surface_id1, local_surface_id5);
   EXPECT_NE(local_surface_id2, local_surface_id5);
@@ -3286,7 +3307,8 @@ TEST_P(WindowTest, LocalSurfaceIdChanges) {
   EXPECT_NE(local_surface_id4, local_surface_id5);
 
   window.AllocateLocalSurfaceId();
-  viz::LocalSurfaceId local_surface_id6 = window.GetLocalSurfaceId();
+  viz::LocalSurfaceId local_surface_id6 =
+      window.GetLocalSurfaceIdAllocation().local_surface_id();
   EXPECT_TRUE(local_surface_id6.is_valid());
   EXPECT_NE(local_surface_id1, local_surface_id6);
   EXPECT_NE(local_surface_id2, local_surface_id6);
@@ -3295,13 +3317,101 @@ TEST_P(WindowTest, LocalSurfaceIdChanges) {
   EXPECT_NE(local_surface_id5, local_surface_id6);
 }
 
-INSTANTIATE_TEST_CASE_P(/* no prefix */,
-                        WindowTest,
-                        ::testing::Values(Env::Mode::LOCAL, Env::Mode::MUS));
+// This delegate moves its parent window to the specified one when the gesture
+// ends.
+class HandleGestureEndDelegate : public TestWindowDelegate {
+ public:
+  explicit HandleGestureEndDelegate(
+      base::OnceCallback<void(Window*)> on_gesture_end)
+      : on_gesture_end_(std::move(on_gesture_end)) {}
+  ~HandleGestureEndDelegate() override = default;
 
-INSTANTIATE_TEST_CASE_P(/* no prefix */,
-                        WindowObserverTest,
-                        ::testing::Values(Env::Mode::LOCAL, Env::Mode::MUS));
+ private:
+  // WindowDelegate:
+  void OnGestureEvent(ui::GestureEvent* event) override {
+    switch (event->type()) {
+      case ui::ET_GESTURE_SCROLL_END:
+      case ui::ET_GESTURE_END:
+      case ui::ET_GESTURE_PINCH_END: {
+        if (on_gesture_end_)
+          std::move(on_gesture_end_).Run(static_cast<Window*>(event->target()));
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  base::OnceCallback<void(Window*)> on_gesture_end_;
+  DISALLOW_COPY_AND_ASSIGN(HandleGestureEndDelegate);
+};
+
+TEST_P(WindowTest, CleanupGestureStateChangesWindowHierarchy) {
+  Window window(nullptr);
+  window.Init(ui::LAYER_NOT_DRAWN);
+  root_window()->AddChild(&window);
+  window.SetBounds(gfx::Rect(0, 0, 100, 100));
+  window.Show();
+  Window window2(nullptr);
+  window2.Init(ui::LAYER_NOT_DRAWN);
+  root_window()->AddChild(&window2);
+  root_window()->StackChildAtBottom(&window2);
+  window2.Show();
+  HandleGestureEndDelegate delegate(base::BindLambdaForTesting(
+      [&](Window* target_window) { window2.AddChild(target_window); }));
+  std::unique_ptr<Window> child = std::make_unique<Window>(&delegate);
+  child->Init(ui::LAYER_NOT_DRAWN);
+  window.AddChild(child.get());
+  child->SetBounds(gfx::Rect(0, 0, 100, 100));
+  child->Show();
+  EXPECT_EQ(1u, window.children().size());
+  EXPECT_EQ(0u, window2.children().size());
+
+  ui::test::EventGenerator event_generator(root_window(), child.get());
+  event_generator.PressTouch();
+  window.CleanupGestureState();
+  EXPECT_EQ(0u, window.children().size());
+  EXPECT_EQ(1u, window2.children().size());
+  child.reset();
+}
+
+TEST_P(WindowTest, CleanupGestureStateDeleteOtherWindows) {
+  Window window(nullptr);
+  window.Init(ui::LAYER_NOT_DRAWN);
+  root_window()->AddChild(&window);
+  window.SetBounds(gfx::Rect(0, 0, 200, 200));
+  window.Show();
+  std::unique_ptr<Window> child1 = std::make_unique<Window>(nullptr);
+  child1->Init(ui::LAYER_NOT_DRAWN);
+  child1->SetBounds(gfx::Rect(100, 100, 100, 100));
+  window.AddChild(child1.get());
+  child1->Show();
+  HandleGestureEndDelegate delegate(base::BindLambdaForTesting(
+      [&](Window* target_window) { child1.reset(); }));
+  std::unique_ptr<Window> child2 = std::make_unique<Window>(&delegate);
+  child2->Init(ui::LAYER_NOT_DRAWN);
+  window.AddChild(child2.get());
+  child2->SetBounds(gfx::Rect(0, 0, 100, 100));
+  child2->Show();
+  window.StackChildAtBottom(child2.get());
+  EXPECT_EQ(2u, window.children().size());
+  EXPECT_EQ(child2.get(), window.children().front());
+
+  ui::test::EventGenerator event_generator(root_window(), child2.get());
+  event_generator.PressTouch();
+  window.CleanupGestureState();
+  EXPECT_EQ(1u, window.children().size());
+  EXPECT_FALSE(child1);
+  child2.reset();
+}
+
+INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+                         WindowTest,
+                         ::testing::Values(Env::Mode::LOCAL, Env::Mode::MUS));
+
+INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+                         WindowObserverTest,
+                         ::testing::Values(Env::Mode::LOCAL, Env::Mode::MUS));
 
 }  // namespace
 }  // namespace test

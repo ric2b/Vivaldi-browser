@@ -4,12 +4,14 @@
 
 #include "components/arc/arc_util.h"
 
+#include <algorithm>
 #include <string>
 
 #include "ash/public/cpp/app_types.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "components/arc/arc_features.h"
@@ -31,7 +33,6 @@ const base::Feature kEnableArcFeature{"EnableARC",
 constexpr char kAvailabilityNone[] = "none";
 constexpr char kAvailabilityInstalled[] = "installed";
 constexpr char kAvailabilityOfficiallySupported[] = "officially-supported";
-constexpr char kAlwaysStart[] = "always-start";
 constexpr char kAlwaysStartWithNoPlayStore[] =
     "always-start-with-no-play-store";
 
@@ -71,29 +72,22 @@ bool IsArcAvailable() {
           base::FeatureList::IsEnabled(kEnableArcFeature));
 }
 
-bool IsWebstoreSearchEnabled() {
-  return false;
-}
-
-bool IsPlayStoreAvailable() {
-  if (IsRobotOrOfflineDemoAccountMode())
-    return false;
-  const auto* command_line = base::CommandLine::ForCurrentProcess();
-  if (!command_line->HasSwitch(chromeos::switches::kArcStartMode))
-    return true;
-
-  const std::string value =
-      command_line->GetSwitchValueASCII(chromeos::switches::kArcStartMode);
-  return value != kAlwaysStartWithNoPlayStore;
+bool IsArcVmEnabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kEnableArcVm);
 }
 
 bool ShouldArcAlwaysStart() {
   const auto* command_line = base::CommandLine::ForCurrentProcess();
   if (!command_line->HasSwitch(chromeos::switches::kArcStartMode))
     return false;
-  const std::string value =
-      command_line->GetSwitchValueASCII(chromeos::switches::kArcStartMode);
-  return value == kAlwaysStartWithNoPlayStore || value == kAlwaysStart;
+  return command_line->GetSwitchValueASCII(chromeos::switches::kArcStartMode) ==
+         kAlwaysStartWithNoPlayStore;
+}
+
+bool ShouldArcAlwaysStartWithNoPlayStore() {
+  return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+             chromeos::switches::kArcStartMode) == kAlwaysStartWithNoPlayStore;
 }
 
 bool ShouldShowOptInForTesting() {
@@ -101,10 +95,9 @@ bool ShouldShowOptInForTesting() {
       chromeos::switches::kArcForceShowOptInUi);
 }
 
-void SetArcAlwaysStartForTesting(bool play_store_available) {
+void SetArcAlwaysStartWithoutPlayStoreForTesting() {
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      chromeos::switches::kArcStartMode,
-      play_store_available ? kAlwaysStart : kAlwaysStartWithNoPlayStore);
+      chromeos::switches::kArcStartMode, kAlwaysStartWithNoPlayStore);
 }
 
 bool IsArcKioskAvailable() {
@@ -199,9 +192,29 @@ void SetArcCpuRestriction(bool do_restrict) {
       state, base::BindOnce(SetArcCpuRestrictionCallback, state));
 }
 
+bool IsArcForceCacheAppIcon() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kArcForceCacheAppIcons);
+}
+
 bool IsArcDataCleanupOnStartRequested() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       chromeos::switches::kArcDataCleanupOnStart);
+}
+
+bool IsArcAppSyncFlowDisabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kArcDisableAppSync);
+}
+
+bool IsArcLocaleSyncDisabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kArcDisableLocaleSync);
+}
+
+bool IsArcPlayAutoInstallDisabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kArcDisablePlayAutoInstall);
 }
 
 // static

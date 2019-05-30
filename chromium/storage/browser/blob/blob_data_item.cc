@@ -4,11 +4,13 @@
 
 #include "storage/browser/blob/blob_data_item.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
 #include "base/strings/string_number_conversions.h"
 #include "storage/browser/fileapi/file_system_context.h"
+#include "third_party/blink/public/common/blob/blob_utils.h"
 
 namespace storage {
 
@@ -16,8 +18,6 @@ namespace {
 const base::FilePath::CharType kFutureFileName[] =
     FILE_PATH_LITERAL("_future_name_");
 }
-
-constexpr uint64_t BlobDataItem::kUnknownSize;
 
 bool BlobDataItem::DataHandle::IsValid() {
   return true;
@@ -42,7 +42,7 @@ scoped_refptr<BlobDataItem> BlobDataItem::CreateBytesDescription(
 
 // static
 scoped_refptr<BlobDataItem> BlobDataItem::CreateFile(base::FilePath path) {
-  return CreateFile(path, 0, kUnknownSize);
+  return CreateFile(path, 0, blink::BlobUtils::kUnknownSize);
 }
 
 // static
@@ -212,7 +212,8 @@ bool operator==(const BlobDataItem& a, const BlobDataItem& b) {
     return false;
   switch (a.type()) {
     case BlobDataItem::Type::kBytes:
-      return a.bytes() == b.bytes();
+      return std::equal(a.bytes().begin(), a.bytes().end(), b.bytes().begin(),
+                        b.bytes().end());
     case BlobDataItem::Type::kBytesDescription:
       return true;
     case BlobDataItem::Type::kFile:

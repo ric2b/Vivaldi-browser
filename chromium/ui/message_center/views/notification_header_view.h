@@ -6,6 +6,8 @@
 #define UI_MESSAGE_CENTER_VIEWS_NOTIFICATION_HEADER_VIEW_H_
 
 #include "base/macros.h"
+#include "ui/gfx/text_constants.h"
+#include "ui/message_center/message_center_export.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
 #include "ui/views/controls/button/button.h"
 
@@ -18,12 +20,13 @@ namespace message_center {
 
 class NotificationControlButtonsView;
 
-class NotificationHeaderView : public views::Button {
+class MESSAGE_CENTER_EXPORT NotificationHeaderView : public views::Button {
  public:
   NotificationHeaderView(NotificationControlButtonsView* control_buttons_view,
                          views::ButtonListener* listener);
   void SetAppIcon(const gfx::ImageSkia& img);
   void SetAppName(const base::string16& name);
+  void SetAppNameElideBehavior(gfx::ElideBehavior elide_behavior);
   void SetProgress(int progress);
   void SetOverflowIndicator(int count);
   void SetTimestamp(base::Time past);
@@ -51,6 +54,8 @@ class NotificationHeaderView : public views::Button {
   views::ImageView* expand_button() { return expand_button_; }
 
   SkColor accent_color_for_testing() { return accent_color_; }
+
+  const base::string16& app_name_for_testing() const;
 
  private:
   // Update visibility for both |summary_text_view_| and |timestamp_view_|.

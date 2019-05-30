@@ -15,7 +15,6 @@
 #include "base/trace_event/trace_event.h"
 
 namespace gpu {
-namespace gles2 {
 
 // A MemoryTracker is used to propagate per-ContextGroup memory usage
 // statistics to the global GpuMemoryManager.
@@ -25,15 +24,15 @@ class MemoryTracker {
   virtual void TrackMemoryAllocatedChange(uint64_t delta) = 0;
   virtual uint64_t GetSize() const = 0;
 
+  // Raw ID identifying the GPU client for whom memory is being allocated.
+  virtual int ClientId() const = 0;
+
   // Tracing id which identifies the GPU client for whom memory is being
   // allocated.
   virtual uint64_t ClientTracingId() const = 0;
 
-  // Identifies the share group within which memory is being allocated.
-  virtual uint64_t ShareGroupTracingGUID() const = 0;
-
-  // Raw ID identifying the GPU client for whom memory is being allocated.
-  virtual int ClientId() const = 0;
+  // Returns an ID that uniquely identifies the context group.
+  virtual uint64_t ContextGroupTracingId() const = 0;
 };
 
 // A MemoryTypeTracker tracks the use of a particular type of memory (buffer,
@@ -70,7 +69,6 @@ class MemoryTypeTracker {
   DISALLOW_COPY_AND_ASSIGN(MemoryTypeTracker);
 };
 
-}  // namespace gles2
 }  // namespace gpu
 
 #endif  // GPU_COMMAND_BUFFER_SERVICE_MEMORY_TRACKING_H_

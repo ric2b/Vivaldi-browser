@@ -121,8 +121,11 @@ def CopyAllFilesToStagingDir(config, distribution, staging_dir, build_dir,
   if distribution:
     if len(distribution) > 1 and distribution[0] == '_':
       distribution = distribution[1:]
-    CopySectionFilesToStagingDir(config, distribution.upper(),
-                                 staging_dir, build_dir)
+
+    distribution = distribution.upper()
+    if config.has_section(distribution):
+      CopySectionFilesToStagingDir(config, distribution,
+                                   staging_dir, build_dir)
   if enable_hidpi == '1':
     CopySectionFilesToStagingDir(config, 'HIDPI', staging_dir, build_dir)
 
@@ -136,9 +139,10 @@ def CopySectionFilesToStagingDir(config, section, staging_dir, src_dir):
     if option.endswith('dir'):
       continue
 
+    src_subdir = option.replace('\\', os.sep)
     dst_dir = os.path.join(staging_dir, config.get(section, option))
     dst_dir = dst_dir.replace('\\', os.sep)
-    src_paths = glob.glob(os.path.join(src_dir, option))
+    src_paths = glob.glob(os.path.join(src_dir, src_subdir))
     if src_paths and not os.path.exists(dst_dir) and (len(src_paths) != 1 or not os.path.isdir(src_paths[0])):
       os.makedirs(dst_dir)
     for src_path in src_paths:
@@ -153,19 +157,18 @@ def CopySectionFilesToStagingDir(config, section, staging_dir, src_dir):
         g_archive_inputs.append(src_path)
         shutil.copy(src_path, dst_dir)
 
-def SignTarget(target):
-  if not (os.environ.get("VIVALDI_SIGN_EXECUTABLE", None) and
-	  os.environ.get("VIVALDI_SIGNING_KEY", None)):
-    return;
+def SignTarget(options, target):
+  if not options.sign_executables:
+    return
   if target.rpartition(".")[-1].lower() not in ["dll", "exe"]:
     return
 
   print "Starting Signing of", target
-  signcommand = ([os.environ.get("VIVALDI_SIGN_EXECUTABLE"),
+  signcommand = ([options.vivaldi_sign_cmd,
       "sign",
       "/v",
     ] +
-    os.environ.get("VIVALDI_SIGNING_KEY").split()+
+    options.vivaldi_sign_key.split()+
     [
       target # target file
     ])
@@ -174,29 +177,26 @@ def SignTarget(target):
   if ret != 0:
     raise Exception("Signing %s failed", target)
 
-def SignTargets(config, distribution, staging_dir,enable_hidpi):
-  if (os.environ.get("VIVALDI_SIGN_EXECUTABLE", None) and
-	  os.environ.get("VIVALDI_SIGNING_KEY", None)):
+def SignTargets(config, options, distribution, staging_dir,enable_hidpi):
+  print "Start Signing"
+  sections = ['GENERAL']
+  if distribution:
+    if len(distribution) > 1 and distribution[0] == '_':
+      distribution = distribution[1:]
+    sections.append(distribution.upper())
+  if enable_hidpi == '1':
+    sections.append('HIDPI')
 
-    print "Start Signing"
-    sections = ['GENERAL']
-    if distribution:
-      if len(distribution) > 1 and distribution[0] == '_':
-        distribution = distribution[1:]
-      sections.append(distribution.upper())
-    if enable_hidpi == '1':
-      sections.append('HIDPI')
+  for section in sections:
+    for option in config.options(section):
+      if option.endswith('dir'):
+        continue
 
-    for section in sections:
-      for option in config.options(section):
-        if option.endswith('dir'):
-          continue
-
-        src_dir = os.path.join(staging_dir, config.get(section, option))
-        src_paths = glob.glob(os.path.join(src_dir, option))
-        for target in src_paths:
-          SignTarget(target)
-    print "Completed signing"
+      src_dir = os.path.join(staging_dir, config.get(section, option))
+      src_paths = glob.glob(os.path.join(src_dir, option))
+      for target in src_paths:
+        SignTarget(options, target)
+  print "Completed signing"
 
 def GenerateDiffPatch(options, orig_file, new_file, patch_file):
   if (options.diff_algorithm == "COURGETTE"):
@@ -377,7 +377,7 @@ def PrepareSetupExec(options, current_version, prev_version):
   """Prepares setup.exe for bundling in mini_installer based on options."""
   if options.setup_exe_format == "FULL":
     setup_file = SETUP_EXEC
-    SignTarget(SETUP_EXEC)
+    SignTarget(options, SETUP_EXEC)
   elif options.setup_exe_format == "DIFF":
     if not options.last_chrome_installer:
       raise Exception(
@@ -390,11 +390,11 @@ def PrepareSetupExec(options, current_version, prev_version):
     setup_file = SETUP_PATCH_FILE_PREFIX + '_' + current_version + \
                  '_from_' + prev_version + COMPRESSED_FILE_EXT
     setup_file_path = os.path.join(options.build_dir, setup_file)
-    SignTarget(setup_file_path)
+    SignTarget(options, setup_file_path)
     CompressUsingLZMA(options.build_dir, setup_file_path, patch_file,
                       options.verbose)
   else:
-    SignTarget(os.path.join(options.build_dir, SETUP_EXEC))
+    SignTarget(options, os.path.join(options.build_dir, SETUP_EXEC))
     # Use makecab.py instead of makecab.exe so that this works when building
     # on non-Windows hosts too.
     makecab_py = os.path.join(os.path.dirname(__file__), 'makecab.py')
@@ -505,36 +505,6 @@ def CopyIfChanged(src, target_dir):
     shutil.copyfile(src, dest)
 
 
-# Taken and modified from:
-# third_party\blink\tools\blinkpy\web_tests\port\factory.py
-def _read_configuration_from_gn(build_dir):
-  """Return the configuration to used based on args.gn, if possible."""
-  path = os.path.join(build_dir, 'args.gn')
-  if not os.path.exists(path):
-    path = os.path.join(build_dir, 'toolchain.ninja')
-    if not os.path.exists(path):
-      # This does not appear to be a GN-based build directory, so we don't
-      # know how to interpret it.
-      return None
-
-    # toolchain.ninja exists, but args.gn does not; this can happen when
-    # `gn gen` is run with no --args.
-    return 'Debug'
-
-  args = open(path).read()
-  for l in args.splitlines():
-    # See the original of this function and then gn documentation for why this
-    # regular expression is correct:
-    # https://chromium.googlesource.com/chromium/src/+/master/tools/gn/docs/reference.md#GN-build-language-grammar
-    m = re.match('^\s*is_debug\s*=\s*false(\s*$|\s*#.*$)', l)
-    if m:
-      return 'Release'
-
-  # if is_debug is set to anything other than false, or if it
-  # does not exist at all, we should use the default value (True).
-  return 'Debug'
-
-
 def ParseDLLsFromDeps(build_dir, runtime_deps_file):
   """Parses the runtime_deps file and returns the set of DLLs in it, relative
   to build_dir."""
@@ -620,7 +590,7 @@ def main(options):
                            options.enable_hidpi)
 
   if options.sign_executables:
-    SignTargets(config, options.distribution,
+    SignTargets(config, options, options.distribution,
                              staging_dir,
                              options.enable_hidpi)
 
@@ -709,10 +679,16 @@ def _ParseOptions():
       help='Whether to sign the executables being archived first')
   parser.add_option('--vivaldi-version', action="store_true")
   parser.add_option('--vivaldi-build-version', default="", type="str")
+  parser.add_option("--vivaldi-sign-key", default="", type="str")
+  parser.add_option("--vivaldi-sign-cmd", default="", type="str")
 
   options, _ = parser.parse_args()
   if not options.build_dir:
     parser.error('You must provide a build dir.')
+
+  if options.sign_executables and not(options.vivaldi_sign_key and options.vivaldi_sign_cmd):
+    parser.error('When using --sign-executables both --vivaldi-sign-key and '
+                 '--vivaldi-sign-key must be provided.')
 
   options.build_dir = os.path.normpath(options.build_dir)
 

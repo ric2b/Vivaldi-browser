@@ -6,6 +6,8 @@
 
 #include <utility>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/sequenced_task_runner.h"
@@ -210,7 +212,6 @@ void StorageMonitorCros::OnMountEvent(
   switch (event) {
     case DiskMountManager::MOUNTING: {
       if (base::ContainsKey(mount_map_, mount_info.mount_path)) {
-        NOTREACHED();
         return;
       }
 

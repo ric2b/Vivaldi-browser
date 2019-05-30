@@ -36,6 +36,13 @@ namespace blink {
 
 class HTMLMetaCharsetParser;
 
+// Implements https://encoding.spec.whatwg.org/#decode or
+// https://encoding.spec.whatwg.org/#utf-8-decode when an appropriate
+// TextResourceDecoderOptions is given.
+// See comments in text_resource_decoder_options.h.
+//
+// To construct a string from known-UTF-8 data without BOM, please use
+// WTF::String::FromUTF8 instead.
 class CORE_EXPORT TextResourceDecoder {
   USING_FAST_MALLOC(TextResourceDecoder);
 
@@ -69,7 +76,7 @@ class CORE_EXPORT TextResourceDecoder {
   String Flush();
 
   bool SawError() const { return saw_error_; }
-  size_t CheckForBOM(const char*, size_t);
+  wtf_size_t CheckForBOM(const char*, wtf_size_t);
 
  protected:
   TextResourceDecoder(const TextResourceDecoderOptions&);
@@ -79,10 +86,10 @@ class CORE_EXPORT TextResourceDecoder {
       TextResourceDecoderOptions::ContentType,
       const WTF::TextEncoding& default_encoding);
 
-  bool CheckForCSSCharset(const char*, size_t, bool& moved_data_to_buffer);
-  bool CheckForXMLCharset(const char*, size_t, bool& moved_data_to_buffer);
-  void CheckForMetaCharset(const char*, size_t);
-  void AutoDetectEncodingIfAllowed(const char* data, size_t len);
+  bool CheckForCSSCharset(const char*, wtf_size_t, bool& moved_data_to_buffer);
+  bool CheckForXMLCharset(const char*, wtf_size_t, bool& moved_data_to_buffer);
+  void CheckForMetaCharset(const char*, wtf_size_t);
+  void AutoDetectEncodingIfAllowed(const char* data, wtf_size_t len);
 
   const TextResourceDecoderOptions options_;
 

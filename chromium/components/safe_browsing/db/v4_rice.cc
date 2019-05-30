@@ -13,7 +13,7 @@
 
 #if defined(OS_WIN)
 #include <winsock2.h>
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 #include <arpa/inet.h>
 #endif
 
@@ -273,7 +273,7 @@ uint32_t V4RiceDecoder::GetBitsFromCurrentWord(
   current_word_ = current_word_ >> num_requested_bits;
   current_word_bit_index_ += num_requested_bits;
   return x;
-};
+}
 
 std::string V4RiceDecoder::DebugString() const {
   // Calculates the total number of bits that we have read from the buffer,

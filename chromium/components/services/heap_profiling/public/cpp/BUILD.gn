@@ -4,8 +4,6 @@
 
 static_library("cpp") {
   sources = [
-    "allocator_shim.cc",
-    "allocator_shim.h",
     "client.cc",
     "client.h",
     "controller.cc",
@@ -50,5 +48,19 @@ source_set("unit_tests") {
     "//base/allocator:buildflags",
     "//base/test:test_support",
     "//testing/gtest",
+  ]
+}
+
+source_set("manifest") {
+  sources = [
+    "manifest.cc",
+    "manifest.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/services/heap_profiling/public/mojom",
+    "//services/resource_coordinator/public/mojom",
+    "//services/service_manager/public/cpp",
   ]
 }

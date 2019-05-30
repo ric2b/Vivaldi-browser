@@ -21,10 +21,10 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/base/locale_util.h"
+#include "chrome/browser/chromeos/child_accounts/child_policy_observer.h"
 #include "chrome/browser/chromeos/eol_notification.h"
 #include "chrome/browser/chromeos/hats/hats_notification_controller.h"
 #include "chrome/browser/chromeos/login/oobe_screen.h"
-#include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_notification_controller.h"
 #include "chrome/browser/chromeos/login/signin/oauth2_login_manager.h"
 #include "chrome/browser/chromeos/login/signin/token_handle_util.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
@@ -34,7 +34,7 @@
 #include "components/arc/net/always_on_vpn_manager.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
-#include "net/base/network_change_notifier.h"
+#include "services/network/public/cpp/network_connection_tracker.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 
 class AccountId;
@@ -46,14 +46,6 @@ class TokenHandleFetcher;
 
 namespace base {
 class CommandLine;
-}
-
-namespace net {
-class URLRequestContextGetter;
-}
-
-namespace network {
-class SharedURLLoaderFactory;
 }
 
 namespace user_manager {
@@ -99,7 +91,7 @@ class UserSessionStateObserver {
 // load profile, restore OAuth authentication session etc.
 class UserSessionManager
     : public OAuth2LoginManager::Observer,
-      public net::NetworkChangeNotifier::NetworkChangeObserver,
+      public network::NetworkConnectionTracker::NetworkConnectionObserver,
       public base::SupportsWeakPtr<UserSessionManager>,
       public UserSessionManagerDelegate,
       public user_manager::UserManager::UserSessionStateObserver,
@@ -280,17 +272,14 @@ class UserSessionManager
   // and show the message accordingly.
   void CheckEolStatus(Profile* profile);
 
+  // Starts migrating accounts to Chrome OS Account Manager.
+  void StartAccountManagerMigration(Profile* profile);
+
   // Note this could return NULL if not enabled.
   EasyUnlockKeyManager* GetEasyUnlockKeyManager();
 
   // Update Easy unlock cryptohome keys for given user context.
   void UpdateEasyUnlockKeys(const UserContext& user_context);
-
-  // Returns the auth request context/URLLoaderFactory associated with auth
-  // data.
-  net::URLRequestContextGetter* GetAuthRequestContext() const;
-  scoped_refptr<network::SharedURLLoaderFactory> GetAuthURLLoaderFactory()
-      const;
 
   // Removes a profile from the per-user input methods states map.
   void RemoveProfileForTesting(Profile* profile);
@@ -332,14 +321,16 @@ class UserSessionManager
   UserSessionManager();
   ~UserSessionManager() override;
 
+  void SetNetworkConnectionTracker(
+      network::NetworkConnectionTracker* network_connection_tracker);
+
   // OAuth2LoginManager::Observer overrides:
   void OnSessionRestoreStateChanged(
       Profile* user_profile,
       OAuth2LoginManager::SessionRestoreState state) override;
 
-  // net::NetworkChangeNotifier::NetworkChangeObserver overrides:
-  void OnNetworkChanged(
-      net::NetworkChangeNotifier::ConnectionType type) override;
+  // network::NetworkConnectionTracker::NetworkConnectionObserver overrides:
+  void OnConnectionChanged(network::mojom::ConnectionType type) override;
 
   // UserSessionManagerDelegate overrides:
   // Used when restoring user sessions after crash.
@@ -407,6 +398,13 @@ class UserSessionManager
   // Finalized profile preparation.
   void FinalizePrepareProfile(Profile* profile);
 
+  // Launch browser or proceed to alternative login flow. Should be called after
+  // profile is ready.
+  void InitializeBrowser(Profile* profile);
+
+  // Initialize child user profile services that depend on the policy.
+  void InitializeChildUserServices(Profile* profile);
+
   // Starts out-of-box flow with the specified screen.
   void ActivateWizard(OobeScreen screen);
 
@@ -452,6 +450,12 @@ class UserSessionManager
 
   // Callback invoked when Easy unlock key operations are finished.
   void OnEasyUnlockKeyOpsFinished(const std::string& user_id, bool success);
+
+  // Callback invoked when child policy is ready and the session for child user
+  // can be started.
+  void OnChildPolicyReady(
+      Profile* profile,
+      ChildPolicyObserver::InitialPolicyRefreshResult result);
 
   // Internal implementation of DoBrowserLaunch. Initially should be called with
   // |locale_pref_checked| set to false which will result in postponing browser
@@ -514,6 +518,9 @@ class UserSessionManager
 
   UserSessionManagerDelegate* delegate_;
 
+  // Used to listen to network changes.
+  network::NetworkConnectionTracker* network_connection_tracker_;
+
   // Authentication/user context.
   UserContext user_context_;
   scoped_refptr<Authenticator> authenticator_;
@@ -568,18 +575,6 @@ class UserSessionManager
   std::map<Profile*, std::unique_ptr<EolNotification>, ProfileCompare>
       eol_notification_handler_;
 
-  // Per-user-session PIN Unlock Feature Notification
-  std::map<Profile*,
-           scoped_refptr<quick_unlock::QuickUnlockNotificationController>,
-           ProfileCompare>
-      pin_unlock_notification_handler_;
-
-  // Per-user-session Fingerprint Unlock Feature Notification
-  std::map<Profile*,
-           scoped_refptr<quick_unlock::QuickUnlockNotificationController>,
-           ProfileCompare>
-      fingerprint_unlock_notification_handler_;
-
   // Maps command-line switch types to the currently set command-line switches
   // for that type. Note: This is not per Profile/AccountId, because session
   // manager currently doesn't support setting command-line switches per
@@ -616,6 +611,8 @@ class UserSessionManager
   base::RepeatingClosure attempt_restart_closure_;
 
   std::unique_ptr<arc::AlwaysOnVpnManager> always_on_vpn_manager_;
+
+  std::unique_ptr<ChildPolicyObserver> child_policy_observer_;
 
   base::WeakPtrFactory<UserSessionManager> weak_factory_;
 

@@ -72,26 +72,27 @@ class PrintContextTest : public PaintTestConfigurations, public RenderingTest {
 
   void SetUp() override {
     RenderingTest::SetUp();
-    print_context_ = new PrintContext(GetDocument().GetFrame(),
-                                      /*use_printing_layout=*/true);
+    print_context_ =
+        MakeGarbageCollected<PrintContext>(GetDocument().GetFrame(),
+                                           /*use_printing_layout=*/true);
   }
 
   PrintContext& GetPrintContext() { return *print_context_.Get(); }
 
   void SetBodyInnerHTML(String body_content) {
-    GetDocument().body()->setAttribute(HTMLNames::styleAttr, "margin: 0");
+    GetDocument().body()->setAttribute(html_names::kStyleAttr, "margin: 0");
     GetDocument().body()->SetInnerHTMLFromString(body_content);
   }
 
   void PrintSinglePage(MockPageContextCanvas& canvas) {
     IntRect page_rect(0, 0, kPageWidth, kPageHeight);
     GetPrintContext().BeginPrintMode(page_rect.Width(), page_rect.Height());
-    GetDocument().View()->UpdateAllLifecyclePhases();
+    UpdateAllLifecyclePhasesForTest();
     PaintRecordBuilder builder;
     GraphicsContext& context = builder.Context();
     context.SetPrinting(true);
-    GetDocument().View()->PaintContents(context, kGlobalPaintPrinting,
-                                        page_rect);
+    GetDocument().View()->PaintContentsOutsideOfLifecycle(
+        context, kGlobalPaintPrinting, CullRect(page_rect));
     {
       DrawingRecorder recorder(
           context, *GetDocument().GetLayoutView(),
@@ -150,7 +151,7 @@ class PrintContextFrameTest : public PrintContextTest {
   EXPECT_EQ(expectedWidth, actualRect.width());                               \
   EXPECT_EQ(expectedHeight, actualRect.height());
 
-INSTANTIATE_PAINT_TEST_CASE_P(PrintContextTest);
+INSTANTIATE_PAINT_TEST_SUITE_P(PrintContextTest);
 
 TEST_P(PrintContextTest, LinkTarget) {
   MockPageContextCanvas canvas;
@@ -311,7 +312,7 @@ TEST_P(PrintContextTest, LinkTargetBoundingBox) {
   EXPECT_SKRECT_EQ(50, 60, 200, 100, operations[0].rect);
 }
 
-INSTANTIATE_PAINT_TEST_CASE_P(PrintContextFrameTest);
+INSTANTIATE_PAINT_TEST_SUITE_P(PrintContextFrameTest);
 
 TEST_P(PrintContextFrameTest, WithSubframe) {
   GetDocument().SetBaseURLOverride(KURL("http://a.com/"));

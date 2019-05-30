@@ -22,13 +22,15 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_TEXT_TEXT_BREAK_ITERATOR_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_TEXT_TEXT_BREAK_ITERATOR_H_
 
+#include <type_traits>
+
+#include <unicode/brkiter.h>
+
 #include "base/macros.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_names.h"
 #include "third_party/blink/renderer/platform/wtf/text/unicode.h"
-
-#include <unicode/brkiter.h>
 
 namespace blink {
 
@@ -143,33 +145,33 @@ class PLATFORM_EXPORT LazyLineBreakIterator final {
   const String& GetString() const { return string_; }
 
   UChar LastCharacter() const {
-    static_assert(arraysize(prior_context_) == 2,
+    static_assert(std::extent<decltype(prior_context_)>() == 2,
                   "TextBreakIterator has unexpected prior context length");
     return prior_context_[1];
   }
 
   UChar SecondToLastCharacter() const {
-    static_assert(arraysize(prior_context_) == 2,
+    static_assert(std::extent<decltype(prior_context_)>() == 2,
                   "TextBreakIterator has unexpected prior context length");
     return prior_context_[0];
   }
 
   void SetPriorContext(UChar last, UChar second_to_last) {
-    static_assert(arraysize(prior_context_) == 2,
+    static_assert(std::extent<decltype(prior_context_)>() == 2,
                   "TextBreakIterator has unexpected prior context length");
     prior_context_[0] = second_to_last;
     prior_context_[1] = last;
   }
 
   void UpdatePriorContext(UChar last) {
-    static_assert(arraysize(prior_context_) == 2,
+    static_assert(std::extent<decltype(prior_context_)>() == 2,
                   "TextBreakIterator has unexpected prior context length");
     prior_context_[0] = prior_context_[1];
     prior_context_[1] = last;
   }
 
   void ResetPriorContext() {
-    static_assert(arraysize(prior_context_) == 2,
+    static_assert(std::extent<decltype(prior_context_)>() == 2,
                   "TextBreakIterator has unexpected prior context length");
     prior_context_[0] = 0;
     prior_context_[1] = 0;
@@ -181,7 +183,7 @@ class PLATFORM_EXPORT LazyLineBreakIterator final {
   };
 
   PriorContext GetPriorContext() const {
-    static_assert(arraysize(prior_context_) == 2,
+    static_assert(std::extent<decltype(prior_context_)>() == 2,
                   "TextBreakIterator has unexpected prior context length");
     if (prior_context_[1]) {
       if (prior_context_[0])
@@ -346,30 +348,30 @@ class PLATFORM_EXPORT NonSharedCharacterBreakIterator final {
   int Preceding(int offset) const;
   int Following(int offset) const;
 
-  bool operator!() const { return !is8_bit_ && !iterator_; }
+  bool operator!() const { return !is_8bit_ && !iterator_; }
 
  private:
   void CreateIteratorForBuffer(const UChar*, unsigned length);
 
   unsigned ClusterLengthStartingAt(unsigned offset) const {
-    DCHECK(is8_bit_);
+    DCHECK(is_8bit_);
     // The only Latin-1 Extended Grapheme Cluster is CR LF
     return IsCRBeforeLF(offset) ? 2 : 1;
   }
 
   bool IsCRBeforeLF(unsigned offset) const {
-    DCHECK(is8_bit_);
+    DCHECK(is_8bit_);
     return charaters8_[offset] == '\r' && offset + 1 < length_ &&
            charaters8_[offset + 1] == '\n';
   }
 
   bool IsLFAfterCR(unsigned offset) const {
-    DCHECK(is8_bit_);
+    DCHECK(is_8bit_);
     return charaters8_[offset] == '\n' && offset >= 1 &&
            charaters8_[offset - 1] == '\r';
   }
 
-  bool is8_bit_;
+  bool is_8bit_;
 
   // For 8 bit strings, we implement the iterator ourselves.
   const LChar* charaters8_;

@@ -33,7 +33,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/profile_management_switches.h"
+#include "components/signin/core/browser/account_consistency_method.h"
 #include "components/signin/core/browser/signin_switches.h"
 #include "components/zoom/page_zoom.h"
 #include "components/zoom/zoom_event_manager.h"
@@ -128,13 +128,6 @@ class HostZoomMapBrowserTest : public InProcessBrowserTest {
         results.push_back(it.key());
     }
     return results;
-  }
-
-  std::string GetSigninPromoURL() {
-    return signin::GetPromoURLForTab(
-               signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE,
-               signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT, false)
-        .spec();
   }
 
   GURL ConstructTestServerURL(const char* url_template) {
@@ -251,10 +244,14 @@ IN_PROC_BROWSER_TEST_F(HostZoomMapBrowserTest, ZoomEventsWorkForOffTheRecord) {
                                 test_scheme, test_host));
 }
 
+#if !defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(
     HostZoomMapBrowserTest,
     WebviewBasedSigninUsesDefaultStoragePartitionForEmbedder) {
-  GURL test_url = ConstructTestServerURL(GetSigninPromoURL().c_str());
+  GURL signin_url = signin::GetEmbeddedPromoURL(
+      signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE,
+      signin_metrics::Reason::REASON_FORCED_SIGNIN_PRIMARY_ACCOUNT, false);
+  GURL test_url = ConstructTestServerURL(signin_url.spec().c_str());
   std::string test_host(test_url.host());
   std::string test_scheme(test_url.scheme());
   ui_test_utils::NavigateToURL(browser(), test_url);
@@ -270,6 +267,7 @@ IN_PROC_BROWSER_TEST_F(
       HostZoomMap::GetDefaultForBrowserContext(browser()->profile());
   EXPECT_EQ(host_zoom_map, default_profile_host_zoom_map);
 }
+#endif
 
 // Regression test for crbug.com/364399.
 IN_PROC_BROWSER_TEST_F(HostZoomMapBrowserTest, ToggleDefaultZoomLevel) {

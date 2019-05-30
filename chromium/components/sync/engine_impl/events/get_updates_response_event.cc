@@ -17,6 +17,11 @@ GetUpdatesResponseEvent::GetUpdatesResponseEvent(
 
 GetUpdatesResponseEvent::~GetUpdatesResponseEvent() {}
 
+std::unique_ptr<ProtocolEvent> GetUpdatesResponseEvent::Clone() const {
+  return std::make_unique<GetUpdatesResponseEvent>(timestamp_, response_,
+                                                   error_);
+}
+
 base::Time GetUpdatesResponseEvent::GetTimestamp() const {
   return timestamp_;
 }
@@ -26,28 +31,21 @@ std::string GetUpdatesResponseEvent::GetType() const {
 }
 
 std::string GetUpdatesResponseEvent::GetDetails() const {
-  switch (error_) {
-    case SYNCER_OK:
+  switch (error_.value()) {
+    case SyncerError::SYNCER_OK:
       return base::StringPrintf("Received %d update(s).",
                                 response_.get_updates().entries_size());
-    case SERVER_MORE_TO_DOWNLOAD:
+    case SyncerError::SERVER_MORE_TO_DOWNLOAD:
       return base::StringPrintf("Received %d update(s).  Some updates remain.",
                                 response_.get_updates().entries_size());
     default:
-      return base::StringPrintf("Received error: %s",
-                                GetSyncerErrorString(error_));
+      return "Received error: " + error_.ToString();
   }
 }
 
 std::unique_ptr<base::DictionaryValue> GetUpdatesResponseEvent::GetProtoMessage(
     bool include_specifics) const {
-  return std::unique_ptr<base::DictionaryValue>(
-      ClientToServerResponseToValue(response_, include_specifics));
-}
-
-std::unique_ptr<ProtocolEvent> GetUpdatesResponseEvent::Clone() const {
-  return std::unique_ptr<ProtocolEvent>(
-      new GetUpdatesResponseEvent(timestamp_, response_, error_));
+  return ClientToServerResponseToValue(response_, include_specifics);
 }
 
 }  // namespace syncer

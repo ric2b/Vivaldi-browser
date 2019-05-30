@@ -7,6 +7,7 @@
 
 #include "base/callback.h"
 #include "base/logging.h"
+#include "third_party/blink/public/common/messaging/transferable_message.h"
 
 namespace content {
 
@@ -28,7 +29,7 @@ void FakeServiceWorkerContext::RegisterServiceWorker(
   NOTREACHED();
 }
 void FakeServiceWorkerContext::UnregisterServiceWorker(
-    const GURL& pattern,
+    const GURL& scope,
     ResultCallback callback) {
   NOTREACHED();
 }
@@ -57,9 +58,12 @@ void FakeServiceWorkerContext::DeleteForOrigin(const GURL& origin,
                                                ResultCallback callback) {
   NOTREACHED();
 }
+void FakeServiceWorkerContext::PerformStorageCleanup(
+    base::OnceClosure callback) {
+  NOTREACHED();
+}
 void FakeServiceWorkerContext::CheckHasServiceWorker(
     const GURL& url,
-    const GURL& other_url,
     CheckHasServiceWorkerCallback callback) {
   NOTREACHED();
 }
@@ -67,8 +71,8 @@ void FakeServiceWorkerContext::ClearAllServiceWorkersForTest(
     base::OnceClosure) {
   NOTREACHED();
 }
-void FakeServiceWorkerContext::StartWorkerForPattern(
-    const GURL& pattern,
+void FakeServiceWorkerContext::StartWorkerForScope(
+    const GURL& scope,
     ServiceWorkerContext::StartWorkerCallback info_callback,
     base::OnceClosure failure_callback) {
   NOTREACHED();
@@ -79,12 +83,20 @@ void FakeServiceWorkerContext::StartServiceWorkerForNavigationHint(
   start_service_worker_for_navigation_hint_called_ = true;
 }
 
+void FakeServiceWorkerContext::StartServiceWorkerAndDispatchMessage(
+    const GURL& scope,
+    blink::TransferableMessage message,
+    ResultCallback result_callback) {
+  start_service_worker_and_dispatch_message_calls_.push_back(
+      std::make_tuple(scope, std::move(message), std::move(result_callback)));
+}
+
 void FakeServiceWorkerContext::StartServiceWorkerAndDispatchLongRunningMessage(
-    const GURL& pattern,
+    const GURL& scope,
     blink::TransferableMessage message,
     ResultCallback result_callback) {
   start_service_worker_and_dispatch_long_running_message_calls_.push_back(
-      std::make_tuple(pattern, std::move(message), std::move(result_callback)));
+      std::make_tuple(scope, std::move(message), std::move(result_callback)));
 }
 
 void FakeServiceWorkerContext::StopAllServiceWorkersForOrigin(

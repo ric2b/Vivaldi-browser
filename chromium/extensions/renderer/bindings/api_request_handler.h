@@ -48,11 +48,16 @@ class APIRequestHandler {
   };
 
   using SendRequestMethod =
-      base::Callback<void(std::unique_ptr<Request>, v8::Local<v8::Context>)>;
+      base::RepeatingCallback<void(std::unique_ptr<Request>,
+                                   v8::Local<v8::Context>)>;
 
-  APIRequestHandler(const SendRequestMethod& send_request,
+  using GetUserActivationState =
+      base::RepeatingCallback<bool(v8::Local<v8::Context>)>;
+
+  APIRequestHandler(SendRequestMethod send_request,
                     APILastError last_error,
-                    ExceptionHandler* exception_handler);
+                    ExceptionHandler* exception_handler,
+                    GetUserActivationState get_user_activation_state_callback);
   ~APIRequestHandler();
 
   // Begins the process of processing the request. Returns the identifier of the
@@ -69,6 +74,7 @@ class APIRequestHandler {
   // CompleteRequest). This is used by renderer-side implementations that
   // shouldn't be dispatched to the browser in the normal flow, but means other
   // classes don't have to worry about context invalidation.
+  // Note: Unlike StartRequest(), this will not track user gesture state.
   int AddPendingRequest(v8::Local<v8::Context> context,
                         v8::Local<v8::Function> callback);
 
@@ -106,7 +112,8 @@ class APIRequestHandler {
         v8::Local<v8::Context> context,
         const std::string& method_name,
         v8::Local<v8::Function> callback,
-        const base::Optional<std::vector<v8::Local<v8::Value>>>& callback_args);
+        const base::Optional<std::vector<v8::Local<v8::Value>>>& callback_args,
+        const base::Optional<blink::WebUserGestureToken>& user_gesture_token);
     ~PendingRequest();
     PendingRequest(PendingRequest&&);
     PendingRequest& operator=(PendingRequest&&);
@@ -147,6 +154,9 @@ class APIRequestHandler {
   // The response validator used to check the responses for resolved requests.
   // Null if response validation is disabled.
   std::unique_ptr<APIResponseValidator> response_validator_;
+
+  // The callback to determine transient user activation state of the context.
+  GetUserActivationState get_user_activation_state_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(APIRequestHandler);
 };

@@ -31,6 +31,10 @@ char kTSanDefaultSuppressions[] =
     // Races in libevent, http://crbug.com/23244.
     "race:libevent/event.c\n"
 
+    // Data race caused by swapping out the network change notifier with a mock
+    // [test-only]. http://crbug.com/927330.
+    "race:content/browser/net_info_browsertest.cc\n"
+
     // http://crbug.com/84094.
     "race:sqlite3StatusSet\n"
     "race:pcache1EnforceMaxPage\n"
@@ -229,13 +233,6 @@ char kTSanDefaultSuppressions[] =
 
     // http://crbug.com/633145
     "race:third_party/libjpeg_turbo/simd/jsimd_x86_64.c\n"
-
-    // http://crbug.com/587199
-    "race:base::TimerTest_OneShotTimer_CustomTaskRunner_Test::TestBody\n"
-    "race:base::TimerSequenceTest_OneShotTimerTaskOnPoolSequence_Test::"
-    "TestBody\n"
-    "race:base::TimerSequenceTest_"
-    "OneShotTimerUsedAndTaskedOnDifferentSequences\n"
 
     // http://crbug.com/v8/6065
     "race:net::(anonymous namespace)::ProxyResolverV8TracingImpl::RequestImpl"

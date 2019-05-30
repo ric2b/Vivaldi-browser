@@ -9,8 +9,11 @@ include_rules = [
     "+base",
     "+build",
     "+net",
+    "+media",
     "+mojo",
+    "+services/metrics/public/cpp",
     "+services/network/public/cpp",
+    "+services/network/public/mojom/url_loader.mojom.h",
     "+skia/public/interfaces/bitmap_skbitmap_struct_traits.h",
     "+testing/gmock/include/gmock",
     "+testing/gtest/include/gtest",
@@ -19,6 +22,7 @@ include_rules = [
     "+third_party/blink/public/mojom",
     "+third_party/icu/source/common/unicode/unistr.h",
     "+ui/gfx/geometry",
+    "+ui/gfx/win/direct_write.h",
     "+url",
 ]
 specific_include_rules = {

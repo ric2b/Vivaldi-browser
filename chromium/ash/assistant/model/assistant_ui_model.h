@@ -5,23 +5,52 @@
 #ifndef ASH_ASSISTANT_MODEL_ASSISTANT_UI_MODEL_H_
 #define ASH_ASSISTANT_MODEL_ASSISTANT_UI_MODEL_H_
 
+#include "base/component_export.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace ash {
 
 class AssistantUiModelObserver;
 
-// Enumeration of Assistant entry/exit points.
-enum class AssistantSource {
-  kUnspecified,
-  kDeepLink,
-  kHotkey,
-  kHotword,
-  kLongPressLauncher,
-  kSetup,
-  kStylus,
-  kLauncherSearchBox,
+// Enumeration of Assistant entry points. These values are persisted to logs.
+// Entries should not be renumbered and  numeric values should never be reused.
+// Only append to this enum is allowed if the possible entry source grows.
+enum class AssistantEntryPoint {
+  kUnspecified = 0,
+  kDeepLink = 1,
+  kHotkey = 2,
+  kHotword = 3,
+  kLauncherSearchBox = 4,
+  kLongPressLauncher = 5,
+  kSetup = 6,
+  kStylus = 7,
+  kLauncherSearchResult = 8,
+  kLauncherSearchBoxMic = 9,
+  // Special enumerator value used by histogram macros.
+  kMaxValue = kLauncherSearchBoxMic
+};
+
+// Enumeration of Assistant exit points. These values are persisted to logs.
+// Entries should not be renumbered and numeric values should never be reused.
+// Only append to this enum is allowed if the possible exit source grows.
+enum class AssistantExitPoint {
+  // Includes keyboard interruptions (e.g. launching Chrome OS feedback
+  // using keyboard shortcuts, pressing search button).
+  kUnspecified = 0,
+  kCloseButton = 1,
+  kHotkey = 2,
+  kNewBrowserTabFromServer = 3,
+  kNewBrowserTabFromUser = 4,
+  kOutsidePress = 5,
+  kSetup = 6,
+  kStylus = 7,
+  kBackInLauncher = 8,
+  kLauncherClose = 9,
+  kLauncherOpen = 10,
+  // Special enumerator value used by histogram macros.
+  kMaxValue = kLauncherOpen
 };
 
 // Enumeration of Assistant UI modes.
@@ -29,6 +58,7 @@ enum class AssistantUiMode {
   kMainUi,
   kMiniUi,
   kWebUi,
+  kLauncherEmbeddedUi,
 };
 
 // Enumeration of Assistant visibility states.
@@ -38,8 +68,22 @@ enum class AssistantVisibility {
   kVisible,  // Assistant UI is visible and a session is in progress.
 };
 
+// Enumeration of Assistant button ID. These values are persisted to logs.
+// Entries should not be renumbered and numeric values should never be reused.
+// Only append to this enum is allowed if more buttons will be added.
+enum class AssistantButtonId {
+  kBack = 1,
+  kClose = 2,
+  kMinimize = 3,
+  kKeyboardInputToggle = 4,
+  kVoiceInputToggle = 5,
+  kSettings = 6,
+  kBackInLauncherDeprecated = 7,
+  kMaxValue = kBackInLauncherDeprecated
+};
+
 // Models the Assistant UI.
-class AssistantUiModel {
+class COMPONENT_EXPORT(ASSISTANT_MODEL) AssistantUiModel {
  public:
   AssistantUiModel();
   ~AssistantUiModel();
@@ -55,20 +99,44 @@ class AssistantUiModel {
   AssistantUiMode ui_mode() const { return ui_mode_; }
 
   // Sets the UI visibility.
-  void SetVisibility(AssistantVisibility visibility, AssistantSource source);
+  void SetVisible(AssistantEntryPoint entry_point);
+  void SetHidden(AssistantExitPoint exit_point);
+  void SetClosed(AssistantExitPoint exit_point);
 
   AssistantVisibility visibility() const { return visibility_; }
 
- private:
-  void NotifyUiModeChanged();
-  void NotifyUiVisibilityChanged(AssistantVisibility old_visibility,
-                                 AssistantSource source);
+  // Sets the current usable work area.
+  void SetUsableWorkArea(const gfx::Rect& usable_work_area);
 
-  AssistantUiMode ui_mode_ = AssistantUiMode::kMainUi;
+  // Returns the current usable work area.
+  const gfx::Rect& usable_work_area() const { return usable_work_area_; }
+
+  // Returns the UI entry point. Only valid while UI is visible.
+  AssistantEntryPoint entry_point() const { return entry_point_; }
+
+ private:
+  void SetVisibility(AssistantVisibility visibility,
+                     base::Optional<AssistantEntryPoint> entry_point,
+                     base::Optional<AssistantExitPoint> exit_point);
+
+  void NotifyUiModeChanged();
+  void NotifyUiVisibilityChanged(
+      AssistantVisibility old_visibility,
+      base::Optional<AssistantEntryPoint> entry_point,
+      base::Optional<AssistantExitPoint> exit_point);
+  void NotifyUsableWorkAreaChanged();
+
+  AssistantUiMode ui_mode_;
 
   AssistantVisibility visibility_ = AssistantVisibility::kClosed;
 
-  base::ObserverList<AssistantUiModelObserver>::Unchecked observers_;
+  AssistantEntryPoint entry_point_ = AssistantEntryPoint::kUnspecified;
+
+  base::ObserverList<AssistantUiModelObserver> observers_;
+
+  // Usable work area for Assistant. Value is only meaningful when Assistant
+  // UI exists.
+  gfx::Rect usable_work_area_;
 
   DISALLOW_COPY_AND_ASSIGN(AssistantUiModel);
 };

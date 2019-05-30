@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/payments/profile_list_view_controller.h"
 
+#include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view_ids.h"
@@ -177,8 +178,10 @@ class ShippingProfileViewController : public ProfileListViewController,
   // | Warning icon | Warning message            |
   // ---------------------------------------------
   std::unique_ptr<views::View> CreateHeaderView() override {
-    if (!spec()->GetShippingOptions().empty())
+    if (!spec()->GetShippingOptions().empty() &&
+        spec()->selected_shipping_option_error().empty()) {
       return nullptr;
+    }
 
     auto header_view = std::make_unique<views::View>();
     // 8 pixels between the warning icon view (if present) and the text.
@@ -258,6 +261,8 @@ class ShippingProfileViewController : public ProfileListViewController,
         // The error profile is known, refresh the view to display it correctly.
         PopulateList();
         UpdateContentView();
+        if (spec()->has_shipping_address_error())
+          ShowEditor(state()->selected_shipping_option_error_profile());
       }
     }
   }

@@ -28,6 +28,7 @@ class TestToolbarActionViewController : public ToolbarActionViewController {
   bool IsEnabled(content::WebContents* web_contents) const override;
   bool WantsToRun(content::WebContents* web_contents) const override;
   bool HasPopup(content::WebContents* web_contents) const override;
+  bool IsShowingPopup() const override;
   void HidePopup() override;
   gfx::NativeView GetPopupNativeView() override;
   ui::MenuModel* GetContextMenu() override;
@@ -55,23 +56,26 @@ class TestToolbarActionViewController : public ToolbarActionViewController {
   std::string id_;
 
   // The delegate of the controller, if one exists.
-  ToolbarActionViewDelegate* delegate_;
+  ToolbarActionViewDelegate* delegate_ = nullptr;
 
   // The optional accessible name and tooltip; by default these are empty.
   base::string16 accessible_name_;
   base::string16 tooltip_;
 
-  // Whether or not the action is enabled. Defaults to true.
-  bool is_enabled_;
+  // Whether or not the action is enabled.
+  bool is_enabled_ = true;
 
-  // Whether or not the action wants to run. Defaults to false.
-  bool wants_to_run_;
+  // Whether or not the action wants to run.
+  bool wants_to_run_ = false;
 
   // Whether or not a click on a disabled action should open the context menu.
-  bool disabled_click_opens_menu_;
+  bool disabled_click_opens_menu_ = false;
 
   // The number of times the action would have been executed.
-  int execute_action_count_;
+  int execute_action_count_ = 0;
+
+  // True if a popup is (supposedly) currently showing.
+  bool popup_showing_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TestToolbarActionViewController);
 };

@@ -38,8 +38,10 @@ bool ChromeWebContentsViewFocusHelper::Focus() {
 
   const web_modal::WebContentsModalDialogManager* manager =
       web_modal::WebContentsModalDialogManager::FromWebContents(web_contents_);
-  if (manager && manager->IsDialogActive())
+  if (manager && manager->IsDialogActive()) {
     manager->FocusTopmostDialog();
+    return true;
+  }
 
   return false;
 }
@@ -96,3 +98,5 @@ views::FocusManager* ChromeWebContentsViewFocusHelper::GetFocusManager() {
   views::Widget* toplevel_widget = GetTopLevelWidget();
   return toplevel_widget ? toplevel_widget->GetFocusManager() : NULL;
 }
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(ChromeWebContentsViewFocusHelper)

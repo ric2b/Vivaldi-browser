@@ -21,7 +21,8 @@ class TestFrameSinkManagerImpl : public mojom::FrameSinkManager {
 
  private:
   // mojom::FrameSinkManager:
-  void RegisterFrameSinkId(const FrameSinkId& frame_sink_id) override {}
+  void RegisterFrameSinkId(const FrameSinkId& frame_sink_id,
+                           bool report_activation) override {}
   void InvalidateFrameSinkId(const FrameSinkId& frame_sink_id) override {}
   void EnableSynchronizationReporting(
       const FrameSinkId& frame_sink_id,
@@ -43,9 +44,6 @@ class TestFrameSinkManagerImpl : public mojom::FrameSinkManager {
   void UnregisterFrameSinkHierarchy(
       const FrameSinkId& parent_frame_sink_id,
       const FrameSinkId& child_frame_sink_id) override {}
-  void AssignTemporaryReference(const SurfaceId& surface_id,
-                                const FrameSinkId& owner) override {}
-  void DropTemporaryReference(const SurfaceId& surface_id) override {}
   void AddVideoDetectorObserver(
       mojom::VideoDetectorObserverPtr observer) override {}
   void CreateVideoCapturer(
@@ -54,6 +52,10 @@ class TestFrameSinkManagerImpl : public mojom::FrameSinkManager {
   void RequestCopyOfOutput(
       const SurfaceId& surface_id,
       std::unique_ptr<CopyOutputRequest> request) override {}
+  void SetHitTestAsyncQueriedDebugRegions(
+      const FrameSinkId& root_frame_sink_id,
+      const std::vector<FrameSinkId>& hit_test_async_queried_debug_queue)
+      override {}
 
   mojo::Binding<mojom::FrameSinkManager> binding_;
   mojom::FrameSinkManagerClientPtr client_;

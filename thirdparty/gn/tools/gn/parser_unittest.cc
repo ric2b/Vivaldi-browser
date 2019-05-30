@@ -32,7 +32,7 @@ void DoParserPrintTest(const char* input, const char* expected) {
   ASSERT_TRUE(result);
 
   std::ostringstream collector;
-  result->Print(collector, 0);
+  RenderToText(result->GetJSONNode(), 0, collector);
 
   EXPECT_EQ(expected, collector.str());
 }
@@ -48,7 +48,7 @@ void DoExpressionPrintTest(const char* input, const char* expected) {
   ASSERT_TRUE(result);
 
   std::ostringstream collector;
-  result->Print(collector, 0);
+  RenderToText(result->GetJSONNode(), 0, collector);
 
   EXPECT_EQ(expected, collector.str());
 }

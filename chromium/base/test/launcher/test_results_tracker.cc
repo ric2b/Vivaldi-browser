@@ -68,6 +68,7 @@ struct TestSuiteResultsAggregator {
       case TestResult::TEST_TIMEOUT:
       case TestResult::TEST_CRASH:
       case TestResult::TEST_UNKNOWN:
+      case TestResult::TEST_NOT_RUN:
         errors++;
         break;
       case TestResult::TEST_SKIPPED:
@@ -90,6 +91,7 @@ TestResultsTracker::TestResultsTracker() : iteration_(-1), out_(nullptr) {}
 
 TestResultsTracker::~TestResultsTracker() {
   DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_GE(iteration_, 0);
 
   if (!out_)
     return;
@@ -231,14 +233,64 @@ void TestResultsTracker::AddTestLocation(const std::string& test_name,
   test_locations_.insert(std::make_pair(test_name, CodeLocation(file, line)));
 }
 
+void TestResultsTracker::AddTestPlaceholder(const std::string& test_name) {
+  test_placeholders_.insert(test_name);
+}
+
 void TestResultsTracker::AddTestResult(const TestResult& result) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_GE(iteration_, 0);
+
+  PerIterationData::ResultsMap& results_map =
+      per_iteration_data_[iteration_].results;
+  std::string test_name_without_disabled_prefix =
+      TestNameWithoutDisabledPrefix(result.full_name);
+  auto it = results_map.find(test_name_without_disabled_prefix);
+  // If the test name is not present in the results map, then we did not
+  // generate a placeholder for the test. We shouldn't record its result either.
+  // It's a test that the delegate ran, e.g. a PRE_XYZ test.
+  if (it == results_map.end())
+    return;
 
   // Record disabled test names without DISABLED_ prefix so that they are easy
   // to compare with regular test names, e.g. before or after disabling.
-  per_iteration_data_[iteration_].results[
-      TestNameWithoutDisabledPrefix(result.full_name)].test_results.push_back(
-          result);
+  AggregateTestResult& aggregate_test_result = it->second;
+
+  // If the last test result is a placeholder, then get rid of it now that we
+  // have real results. It's possible for no placeholder to exist if the test is
+  // setup for another test, e.g. PRE_ComponentAppBackgroundPage is a test whose
+  // sole purpose is to prime the test ComponentAppBackgroundPage.
+  if (!aggregate_test_result.test_results.empty() &&
+      aggregate_test_result.test_results.back().status ==
+          TestResult::TEST_NOT_RUN) {
+    aggregate_test_result.test_results.pop_back();
+  }
+
+  aggregate_test_result.test_results.push_back(result);
+}
+
+void TestResultsTracker::GeneratePlaceholderIteration() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  for (auto& full_test_name : test_placeholders_) {
+    std::string test_name = TestNameWithoutDisabledPrefix(full_test_name);
+
+    // Ignore disabled tests.
+    if (disabled_tests_.find(test_name) != disabled_tests_.end())
+      continue;
+
+    TestResult test_result;
+    test_result.full_name = test_name;
+    test_result.status = TestResult::TEST_NOT_RUN;
+
+    // There shouldn't be any existing results when we generate placeholder
+    // results.
+    DCHECK(
+        per_iteration_data_[iteration_].results[test_name].test_results.empty())
+        << test_name;
+    per_iteration_data_[iteration_].results[test_name].test_results.push_back(
+        test_result);
+  }
 }
 
 void TestResultsTracker::PrintSummaryOfCurrentIteration() const {
@@ -265,6 +317,8 @@ void TestResultsTracker::PrintSummaryOfCurrentIteration() const {
   PrintTests(tests_by_status[TestResult::TEST_UNKNOWN].begin(),
              tests_by_status[TestResult::TEST_UNKNOWN].end(),
              "had unknown result");
+  PrintTests(tests_by_status[TestResult::TEST_NOT_RUN].begin(),
+             tests_by_status[TestResult::TEST_NOT_RUN].end(), "not run");
 }
 
 void TestResultsTracker::PrintSummaryOfAllIterations() const {
@@ -296,6 +350,8 @@ void TestResultsTracker::PrintSummaryOfAllIterations() const {
   PrintTests(tests_by_status[TestResult::TEST_UNKNOWN].begin(),
              tests_by_status[TestResult::TEST_UNKNOWN].end(),
              "had unknown result");
+  PrintTests(tests_by_status[TestResult::TEST_NOT_RUN].begin(),
+             tests_by_status[TestResult::TEST_NOT_RUN].end(), "not run");
 
   fprintf(stdout, "End of the summary.\n");
   fflush(stdout);
@@ -333,18 +389,18 @@ bool TestResultsTracker::SaveSummaryAsJSON(
 
   std::unique_ptr<ListValue> per_iteration_data(new ListValue);
 
-  for (int i = 0; i <= iteration_; i++) {
+  // Even if we haven't run any tests, we still have the dummy iteration.
+  int max_iteration = iteration_ < 0 ? 0 : iteration_;
+
+  for (int i = 0; i <= max_iteration; i++) {
     std::unique_ptr<DictionaryValue> current_iteration_data(
         new DictionaryValue);
 
-    for (PerIterationData::ResultsMap::const_iterator j =
-             per_iteration_data_[i].results.begin();
-         j != per_iteration_data_[i].results.end();
-         ++j) {
+    for (const auto& j : per_iteration_data_[i].results) {
       std::unique_ptr<ListValue> test_results(new ListValue);
 
-      for (size_t k = 0; k < j->second.test_results.size(); k++) {
-        const TestResult& test_result = j->second.test_results[k];
+      for (size_t k = 0; k < j.second.test_results.size(); k++) {
+        const TestResult& test_result = j.second.test_results[k];
 
         std::unique_ptr<DictionaryValue> test_result_value(new DictionaryValue);
 
@@ -419,7 +475,7 @@ bool TestResultsTracker::SaveSummaryAsJSON(
         test_results->Append(std::move(test_result_value));
       }
 
-      current_iteration_data->SetWithoutPathExpansion(j->first,
+      current_iteration_data->SetWithoutPathExpansion(j.first,
                                                       std::move(test_results));
     }
     per_iteration_data->Append(std::move(current_iteration_data));
@@ -488,12 +544,9 @@ TestResultsTracker::TestStatusMap
 
 void TestResultsTracker::GetTestStatusForIteration(
     int iteration, TestStatusMap* map) const {
-  for (PerIterationData::ResultsMap::const_iterator j =
-           per_iteration_data_[iteration].results.begin();
-       j != per_iteration_data_[iteration].results.end();
-       ++j) {
+  for (const auto& j : per_iteration_data_[iteration].results) {
     // Use the last test result as the final one.
-    const TestResult& result = j->second.test_results.back();
+    const TestResult& result = j.second.test_results.back();
     (*map)[result.status].insert(result.full_name);
   }
 }

@@ -34,7 +34,7 @@
 
 @end
 
-@interface BookmarkTextFieldCell : UITableViewCell
+@interface BookmarkTextFieldCell : TableViewCell
 
 // Label to display the type of content |self.textField| is displaying.
 @property(nonatomic, strong) UILabel* titleLabel;
@@ -44,13 +44,6 @@
 
 // Returns the appropriate text color to use for the given |editing| state.
 + (UIColor*)textColorForEditing:(BOOL)editing;
-
-@end
-
-@interface LegacyBookmarkTextFieldCell : UITableViewCell
-
-// Text field to display the title or the URL of the bookmark node.
-@property(nonatomic, readonly, strong) UITextField<TextFieldStyling>* textField;
 
 @end
 

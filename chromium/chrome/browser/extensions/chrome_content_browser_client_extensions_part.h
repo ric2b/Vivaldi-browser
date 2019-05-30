@@ -11,10 +11,14 @@
 #include "base/macros.h"
 #include "chrome/browser/chrome_content_browser_client_parts.h"
 #include "content/public/common/resource_type.h"
+#include "services/network/public/mojom/network_context.mojom.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "ui/base/page_transition_types.h"
 
 namespace content {
 struct Referrer;
+class RenderFrameHost;
+class RenderProcessHost;
 class ResourceContext;
 class VpnServiceProxy;
 }
@@ -24,8 +28,6 @@ class Origin;
 }
 
 namespace extensions {
-
-class URLPatternSet;
 
 // Implements the extensions portion of ChromeContentBrowserClient.
 class ChromeContentBrowserClientExtensionsPart
@@ -58,6 +60,8 @@ class ChromeContentBrowserClientExtensionsPart
                              const GURL& site_url);
   static bool ShouldTryToUseExistingProcessHost(Profile* profile,
                                                 const GURL& url);
+  static bool ShouldSubframesTryToReuseExistingProcess(
+      content::RenderFrameHost* main_frame);
   static bool ShouldSwapBrowsingInstancesForNavigation(
       content::SiteInstance* site_instance,
       const GURL& current_url,
@@ -84,14 +88,20 @@ class ChromeContentBrowserClientExtensionsPart
   static std::unique_ptr<content::VpnServiceProxy> GetVpnServiceProxy(
       content::BrowserContext* browser_context);
 
-  static bool ShouldFrameShareParentSiteInstanceDespiteTopDocumentIsolation(
-      const GURL& url,
-      content::SiteInstance* parent_site_instance);
-
   static void LogInitiatorSchemeBypassingDocumentBlocking(
       const url::Origin& initiator_origin,
       int render_process_id,
       content::ResourceType resource_type);
+
+  static network::mojom::URLLoaderFactoryPtrInfo
+  CreateURLLoaderFactoryForNetworkRequests(
+      content::RenderProcessHost* process,
+      network::mojom::NetworkContext* network_context,
+      network::mojom::TrustedURLLoaderHeaderClientPtrInfo* header_client,
+      const url::Origin& request_initiator);
+
+  static bool IsBuiltinComponent(content::BrowserContext* browser_context,
+                                 const url::Origin& origin);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ChromeContentBrowserClientExtensionsPartTest,
@@ -121,15 +131,6 @@ class ChromeContentBrowserClientExtensionsPart
       ShouldAllowOpenURLFailureReason reason,
       const GURL& site_url);
 
-  // Returns true if all URLs matched by |web_extent| have the same origin as
-  // |origin|, or have an origin which is a subdomain of |origin|.
-  //
-  // When |origin| requires a dedicated process, this helps determine whether
-  // all URLs in |web_extent| are ok to go into |origin|'s process.
-  static bool DoesOriginMatchAllURLsInWebExtent(
-      const url::Origin& origin,
-      const URLPatternSet& web_extent);
-
   // ChromeContentBrowserClientParts:
   void RenderProcessWillLaunch(content::RenderProcessHost* host) override;
   void SiteInstanceGotProcess(content::SiteInstance* site_instance) override;
@@ -158,4 +159,3 @@ class ChromeContentBrowserClientExtensionsPart
 }  // namespace extensions
 
 #endif  // CHROME_BROWSER_EXTENSIONS_CHROME_CONTENT_BROWSER_CLIENT_EXTENSIONS_PART_H_
-

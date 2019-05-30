@@ -55,6 +55,11 @@ class VIEWS_EXPORT PlatformStyle {
   // Otherwise, Return does nothing unless it is handled by an accelerator.
   static const bool kReturnClicksFocusedControl;
 
+  // Whether cursor left and right can be used in a TableView to select and
+  // resize columns and whether a focus ring should be shown around the active
+  // cell.
+  static const bool kTableViewSupportsKeyboardNavigationByCell;
+
   // Whether selecting a row in a TreeView selects the entire row or only the
   // label for that row.
   static const bool kTreeViewSelectionPaintsEntireRow;
@@ -70,10 +75,6 @@ class VIEWS_EXPORT PlatformStyle {
   // dragging but available to do so.
   static const bool kTextfieldUsesDragCursorWhenDraggable;
 
-  // Whether bookmarks in the bookmarks bar are elided [and show elipses at the
-  // tail] or fade out.
-  static const bool kShouldElideBookmarksInBookmarksBar;
-
   // The thickness and inset amount of focus ring halos.
   static const float kFocusHaloThickness;
   static const float kFocusHaloInset;
@@ -82,6 +83,9 @@ class VIEWS_EXPORT PlatformStyle {
   // decorations) UI elements should use a focus ring, rather than show
   // hover state on focus.
   static const bool kPreferFocusRings;
+
+  // Whether controls in inactive widgets appear disabled.
+  static const bool kInactiveWidgetControlsAppearDisabled;
 
   // Creates the default scrollbar for the given orientation.
   static std::unique_ptr<ScrollBar> CreateScrollBar(bool is_horizontal);

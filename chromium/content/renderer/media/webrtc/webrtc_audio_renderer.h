@@ -18,12 +18,12 @@
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
-#include "content/public/renderer/media_stream_audio_renderer.h"
 #include "content/renderer/media/webrtc/webrtc_audio_device_impl.h"
 #include "media/base/audio_decoder.h"
 #include "media/base/audio_pull_fifo.h"
 #include "media/base/audio_renderer_sink.h"
 #include "media/base/channel_layout.h"
+#include "third_party/blink/public/platform/modules/mediastream/web_media_stream_audio_renderer.h"
 #include "third_party/blink/public/platform/web_media_stream.h"
 
 namespace webrtc {
@@ -38,7 +38,7 @@ class WebRtcAudioRendererSource;
 // for connecting WebRtc MediaStream with the audio pipeline.
 class CONTENT_EXPORT WebRtcAudioRenderer
     : public media::AudioRendererSink::RenderCallback,
-      public MediaStreamAudioRenderer {
+      public blink::WebMediaStreamAudioRenderer {
  public:
   // This is a little utility class that holds the configured state of an audio
   // stream.
@@ -98,8 +98,8 @@ class CONTENT_EXPORT WebRtcAudioRenderer
   // When Stop() is called or when the proxy goes out of scope, the proxy
   // will ensure that Pause() is called followed by a call to Stop(), which
   // is the usage pattern that WebRtcAudioRenderer requires.
-  scoped_refptr<MediaStreamAudioRenderer> CreateSharedAudioRendererProxy(
-      const blink::WebMediaStream& media_stream);
+  scoped_refptr<blink::WebMediaStreamAudioRenderer>
+  CreateSharedAudioRendererProxy(const blink::WebMediaStream& media_stream);
 
   // Used to DCHECK on the expected state.
   bool IsStarted() const;
@@ -113,19 +113,19 @@ class CONTENT_EXPORT WebRtcAudioRenderer
   bool CurrentThreadIsRenderingThread();
 
  private:
-  // MediaStreamAudioRenderer implementation.  This is private since we want
-  // callers to use proxy objects.
-  // TODO(tommi): Make the MediaStreamAudioRenderer implementation a pimpl?
+  // blink::WebMediaStreamAudioRenderer implementation.  This is private since
+  // we want callers to use proxy objects.
+  // TODO(tommi): Make the blink::WebMediaStreamAudioRenderer implementation a
+  // pimpl?
   void Start() override;
   void Play() override;
   void Pause() override;
   void Stop() override;
   void SetVolume(float volume) override;
-  media::OutputDeviceInfo GetOutputDeviceInfo() override;
-  base::TimeDelta GetCurrentRenderTime() const override;
-  bool IsLocalRenderer() const override;
+  base::TimeDelta GetCurrentRenderTime() override;
+  bool IsLocalRenderer() override;
   void SwitchOutputDevice(const std::string& device_id,
-                          const media::OutputDeviceStatusCB& callback) override;
+                          media::OutputDeviceStatusCB callback) override;
 
   // Called when an audio renderer, either the main or a proxy, starts playing.
   // Here we maintain a reference count of how many renderers are currently
@@ -156,7 +156,7 @@ class CONTENT_EXPORT WebRtcAudioRenderer
       SourcePlayingStates;
 
   // Used to DCHECK that we are called on the correct thread.
-  base::ThreadChecker thread_checker_;
+  THREAD_CHECKER(thread_checker_);
 
   // Flag to keep track the state of the renderer.
   State state_;

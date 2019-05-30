@@ -8,14 +8,17 @@
 #include <errno.h>
 #include <sys/mman.h>
 
+#include "base/logging.h"
+#include "build/build_config.h"
+
 #if defined(OS_MACOSX)
 #include <mach/mach.h>
 #endif
 #if defined(OS_LINUX)
 #include <sys/resource.h>
-#endif
 
-#include "build/build_config.h"
+#include <algorithm>
+#endif
 
 #ifndef MAP_ANONYMOUS
 #define MAP_ANONYMOUS MAP_ANON
@@ -24,7 +27,7 @@
 namespace base {
 
 // |mmap| uses a nearby address if the hint address is blocked.
-const bool kHintIsAdvisory = true;
+constexpr bool kHintIsAdvisory = true;
 std::atomic<int32_t> s_allocPageErrorCode{0};
 
 int GetAccessFlags(PageAccessibilityConfiguration accessibility) {
@@ -83,8 +86,18 @@ void* SystemAllocPagesInternal(void* hint,
 #endif
 
   int access_flag = GetAccessFlags(accessibility);
+  int map_flags = MAP_ANONYMOUS | MAP_PRIVATE;
+
+  // TODO(https://crbug.com/927411): Remove once Fuchsia uses a native page
+  // allocator, rather than relying on POSIX compatibility.
+#if defined(OS_FUCHSIA)
+  if (page_tag == PageTag::kV8) {
+    map_flags |= MAP_JIT;
+  }
+#endif
+
   void* ret =
-      mmap(hint, length, access_flag, MAP_ANONYMOUS | MAP_PRIVATE, fd, 0);
+      mmap(hint, length, access_flag, map_flags, fd, 0);
   if (ret == MAP_FAILED) {
     s_allocPageErrorCode = errno;
     ret = nullptr;
@@ -114,11 +127,18 @@ void* TrimMappingInternal(void* base,
   return ret;
 }
 
-bool SetSystemPagesAccessInternal(
+bool TrySetSystemPagesAccessInternal(
     void* address,
     size_t length,
     PageAccessibilityConfiguration accessibility) {
   return 0 == mprotect(address, length, GetAccessFlags(accessibility));
+}
+
+void SetSystemPagesAccessInternal(
+    void* address,
+    size_t length,
+    PageAccessibilityConfiguration accessibility) {
+  CHECK_EQ(0, mprotect(address, length, GetAccessFlags(accessibility)));
 }
 
 void FreePagesInternal(void* address, size_t length) {

@@ -4,14 +4,16 @@
 # found in the LICENSE file.
 
 """Convert SVN based DEPS into .DEPS.git for use with NewGit."""
+from __future__ import print_function
+from __future__ import absolute_import
 
 import optparse
 import os, os.path
 import sys
 
-import deps_utils
-import git_tools
-import svn_to_git_public
+from . import deps_utils
+from . import git_tools
+from . import svn_to_git_public
 
 
 def SplitScmUrl(url):
@@ -100,14 +102,14 @@ def main():
     baddeps = baddeps.union(os_bad_deps)
 
   if baddeps:
-    print >> sys.stderr, ('\nUnable to resolve the following repositories. '
+    print('\nUnable to resolve the following repositories. '
         'Please make sure\nthat any svn URLs have a git mirror associated with '
         'them.\nTo see the exact error, run `git ls-remote [repository]` where'
         '\n[repository] is the URL ending in .git (strip off the @revision\n'
         'number.) For more information, visit http://code.google.com\n'
-        '/p/chromium/wiki/UsingNewGit#Adding_new_repositories_to_DEPS.\n')
+        '/p/chromium/wiki/UsingNewGit#Adding_new_repositories_to_DEPS.\n', file=sys.stderr)
     for dep in baddeps:
-      print >> sys.stderr, ' ' + dep
+      print(' ' + dep, file=sys.stderr)
     return 2
 
   # Write the DEPS file to disk.

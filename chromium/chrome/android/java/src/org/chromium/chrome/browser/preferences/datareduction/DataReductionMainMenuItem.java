@@ -5,11 +5,7 @@
 package org.chromium.chrome.browser.preferences.datareduction;
 
 import android.content.Context;
-import android.content.Intent;
-import android.graphics.ColorMatrix;
-import android.graphics.ColorMatrixColorFilter;
-import android.graphics.drawable.Drawable;
-import android.graphics.drawable.LayerDrawable;
+import android.os.Bundle;
 import android.text.format.DateUtils;
 import android.text.format.Formatter;
 import android.util.AttributeSet;
@@ -18,7 +14,6 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
@@ -46,6 +41,10 @@ public class DataReductionMainMenuItem extends FrameLayout implements View.OnCli
 
         TextView itemText = (TextView) findViewById(R.id.menu_item_text);
         TextView itemSummary = (TextView) findViewById(R.id.menu_item_summary);
+        ImageView icon = (ImageView) findViewById(R.id.icon);
+        icon.setContentDescription(getContext().getString(
+                DataReductionBrandingResourceProvider.getDataSaverBrandedString(
+                        R.string.data_reduction_title)));
 
         if (DataReductionProxySettings.getInstance().isDataReductionProxyEnabled()) {
             DataReductionProxyUma.dataReductionProxyUIAction(
@@ -70,30 +69,13 @@ public class DataReductionMainMenuItem extends FrameLayout implements View.OnCli
             itemText.setText(
                     getContext().getString(R.string.data_reduction_saved_label, dataSaved));
             itemSummary.setText(getContext().getString(R.string.data_reduction_date_label, date));
-
-            int textColorLink = ApiCompatibilityUtils.getColor(
-                    getContext().getResources(), R.color.default_text_color_link);
-            itemText.setTextColor(textColorLink);
-
-            // Reset the icon to blue.
-            ImageView icon = (ImageView) findViewById(R.id.chart_icon);
-            LayerDrawable layers = (LayerDrawable) icon.getDrawable();
-            Drawable chart = layers.findDrawableByLayerId(R.id.main_menu_chart);
-            chart.setColorFilter(null);
         } else {
             DataReductionProxyUma.dataReductionProxyUIAction(
                     DataReductionProxyUma.ACTION_MAIN_MENU_DISPLAYED_OFF);
 
-            itemText.setText(R.string.data_reduction_title);
+            itemText.setText(DataReductionBrandingResourceProvider.getDataSaverBrandedString(
+                    R.string.data_reduction_title));
             itemSummary.setText(R.string.text_off);
-
-            // Make the icon grey.
-            ImageView icon = (ImageView) findViewById(R.id.chart_icon);
-            LayerDrawable layers = (LayerDrawable) icon.getDrawable();
-            Drawable chart = layers.findDrawableByLayerId(R.id.main_menu_chart);
-            ColorMatrix matrix = new ColorMatrix();
-            matrix.setSaturation(0);
-            chart.setColorFilter(new ColorMatrixColorFilter(matrix));
         }
 
         setOnClickListener(this);
@@ -101,11 +83,11 @@ public class DataReductionMainMenuItem extends FrameLayout implements View.OnCli
 
     @Override
     public void onClick(View v) {
-        Intent intent = PreferencesLauncher.createIntentForSettingsPage(
-                getContext(), DataReductionPreferences.class.getName());
         RecordUserAction.record("MobileMenuDataSaverOpened");
-        intent.putExtra(DataReductionPreferences.FROM_MAIN_MENU, true);
-        getContext().startActivity(intent);
+        Bundle fragmentArgs = new Bundle();
+        fragmentArgs.putBoolean(DataReductionPreferenceFragment.FROM_MAIN_MENU, true);
+        PreferencesLauncher.launchSettingsPage(
+                getContext(), DataReductionPreferenceFragment.class, fragmentArgs);
 
         Tracker tracker = TrackerFactory.getTrackerForProfile(Profile.getLastUsedProfile());
         tracker.notifyEvent(EventConstants.DATA_SAVER_DETAIL_OPENED);

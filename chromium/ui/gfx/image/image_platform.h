@@ -11,6 +11,7 @@
 #ifndef UI_GFX_IMAGE_IMAGE_PLATFORM_H_
 #define UI_GFX_IMAGE_IMAGE_PLATFORM_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/memory/ref_counted.h"
@@ -35,19 +36,18 @@ namespace internal {
 #if defined(OS_IOS)
 scoped_refptr<base::RefCountedMemory> Get1xPNGBytesFromUIImage(
     UIImage* uiimage);
-// Caller takes ownership of the returned UIImage.
-UIImage* CreateUIImageFromPNG(const std::vector<ImagePNGRep>& image_png_reps);
+UIImage* UIImageFromPNG(const std::vector<ImagePNGRep>& image_png_reps);
 gfx::Size UIImageSize(UIImage* image);
 #elif defined(OS_MACOSX)
 scoped_refptr<base::RefCountedMemory> Get1xPNGBytesFromNSImage(
     NSImage* nsimage);
-// Caller takes ownership of the returned NSImage.
 NSImage* NSImageFromPNG(const std::vector<ImagePNGRep>& image_png_reps,
                         CGColorSpaceRef color_space);
 gfx::Size NSImageSize(NSImage* image);
 #endif  // defined(OS_MACOSX)
 
-ImageSkia* ImageSkiaFromPNG(const std::vector<ImagePNGRep>& image_png_reps);
+std::unique_ptr<ImageSkia> ImageSkiaFromPNG(
+    const std::vector<ImagePNGRep>& image_png_reps);
 scoped_refptr<base::RefCountedMemory> Get1xPNGBytesFromImageSkia(
     const ImageSkia* image_skia);
 

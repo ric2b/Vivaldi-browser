@@ -147,6 +147,16 @@ void PaymentRequestBrowserTestBase::OnCanMakePaymentReturned() {
     event_waiter_->OnEvent(DialogEvent::CAN_MAKE_PAYMENT_RETURNED);
 }
 
+void PaymentRequestBrowserTestBase::OnHasEnrolledInstrumentCalled() {
+  if (event_waiter_)
+    event_waiter_->OnEvent(DialogEvent::HAS_ENROLLED_INSTRUMENT_CALLED);
+}
+
+void PaymentRequestBrowserTestBase::OnHasEnrolledInstrumentReturned() {
+  if (event_waiter_)
+    event_waiter_->OnEvent(DialogEvent::HAS_ENROLLED_INSTRUMENT_RETURNED);
+}
+
 void PaymentRequestBrowserTestBase::OnNotSupportedError() {
   if (event_waiter_)
     event_waiter_->OnEvent(DialogEvent::NOT_SUPPORTED_ERROR);
@@ -446,8 +456,10 @@ void PaymentRequestBrowserTestBase::AddAutofillProfile(
   PersonalDataLoadedObserverMock personal_data_observer;
   personal_data_manager->AddObserver(&personal_data_observer);
   base::RunLoop data_loop;
-  EXPECT_CALL(personal_data_observer, OnPersonalDataChanged())
+  EXPECT_CALL(personal_data_observer, OnPersonalDataFinishedProfileTasks())
       .WillOnce(QuitMessageLoop(&data_loop));
+  EXPECT_CALL(personal_data_observer, OnPersonalDataChanged())
+      .Times(testing::AnyNumber());
   personal_data_manager->AddProfile(profile);
   data_loop.Run();
 
@@ -468,13 +480,28 @@ void PaymentRequestBrowserTestBase::AddCreditCard(
   PersonalDataLoadedObserverMock personal_data_observer;
   personal_data_manager->AddObserver(&personal_data_observer);
   base::RunLoop data_loop;
-  EXPECT_CALL(personal_data_observer, OnPersonalDataChanged())
+  EXPECT_CALL(personal_data_observer, OnPersonalDataFinishedProfileTasks())
       .WillOnce(QuitMessageLoop(&data_loop));
+  EXPECT_CALL(personal_data_observer, OnPersonalDataChanged())
+      .Times(testing::AnyNumber());
+
   personal_data_manager->AddCreditCard(card);
   data_loop.Run();
 
   personal_data_manager->RemoveObserver(&personal_data_observer);
   EXPECT_EQ(card_count + 1, personal_data_manager->GetCreditCards().size());
+}
+
+void PaymentRequestBrowserTestBase::WaitForOnPersonalDataChanged() {
+  autofill::PersonalDataManager* personal_data_manager = GetDataManager();
+  PersonalDataLoadedObserverMock personal_data_observer;
+  personal_data_manager->AddObserver(&personal_data_observer);
+  base::RunLoop run_loop;
+  EXPECT_CALL(personal_data_observer, OnPersonalDataFinishedProfileTasks())
+      .WillOnce(QuitMessageLoop(&run_loop));
+  EXPECT_CALL(personal_data_observer, OnPersonalDataChanged())
+      .Times(testing::AnyNumber());
+  run_loop.Run();
 }
 
 void PaymentRequestBrowserTestBase::CreatePaymentRequestForTest(
@@ -638,11 +665,13 @@ void PaymentRequestBrowserTestBase::PayWithCreditCard(
 }
 
 void PaymentRequestBrowserTestBase::RetryPaymentRequest(
-    const std::string& validation_errors) {
-  ResetEventWaiterForSequence(
-      {DialogEvent::PROCESSING_SPINNER_HIDDEN, DialogEvent::SPEC_DONE_UPDATING,
-       DialogEvent::PROCESSING_SPINNER_HIDDEN, DialogEvent::SPEC_DONE_UPDATING,
-       DialogEvent::PROCESSING_SPINNER_HIDDEN, DialogEvent::DIALOG_OPENED});
+    const std::string& validation_errors,
+    PaymentRequestDialogView* dialog_view) {
+  EXPECT_EQ(2U, dialog_view->view_stack_for_testing()->size());
+  ResetEventWaiterForSequence({DialogEvent::PROCESSING_SPINNER_HIDDEN,
+                               DialogEvent::SPEC_DONE_UPDATING,
+                               DialogEvent::PROCESSING_SPINNER_HIDDEN,
+                               DialogEvent::BACK_TO_PAYMENT_SHEET_NAVIGATION});
 
   ASSERT_TRUE(content::ExecuteScript(GetActiveWebContents(),
                                      "retry(" + validation_errors + ");"));
@@ -652,12 +681,13 @@ void PaymentRequestBrowserTestBase::RetryPaymentRequest(
 
 void PaymentRequestBrowserTestBase::RetryPaymentRequest(
     const std::string& validation_errors,
-    const DialogEvent& dialog_event) {
+    const DialogEvent& dialog_event,
+    PaymentRequestDialogView* dialog_view) {
+  EXPECT_EQ(2U, dialog_view->view_stack_for_testing()->size());
   ResetEventWaiterForSequence(
       {DialogEvent::PROCESSING_SPINNER_HIDDEN, DialogEvent::SPEC_DONE_UPDATING,
-       DialogEvent::PROCESSING_SPINNER_HIDDEN, DialogEvent::SPEC_DONE_UPDATING,
-       DialogEvent::PROCESSING_SPINNER_HIDDEN, DialogEvent::DIALOG_OPENED,
-       dialog_event});
+       DialogEvent::PROCESSING_SPINNER_HIDDEN,
+       DialogEvent::BACK_TO_PAYMENT_SHEET_NAVIGATION, dialog_event});
 
   ASSERT_TRUE(content::ExecuteScript(GetActiveWebContents(),
                                      "retry(" + validation_errors + ");"));
@@ -866,6 +896,12 @@ std::ostream& operator<<(
       break;
     case DialogEvent::CAN_MAKE_PAYMENT_RETURNED:
       out << "CAN_MAKE_PAYMENT_RETURNED";
+      break;
+    case DialogEvent::HAS_ENROLLED_INSTRUMENT_CALLED:
+      out << "HAS_ENROLLED_INSTRUMENT_CALLED";
+      break;
+    case DialogEvent::HAS_ENROLLED_INSTRUMENT_RETURNED:
+      out << "HAS_ENROLLED_INSTRUMENT_RETURNED";
       break;
     case DialogEvent::ERROR_MESSAGE_SHOWN:
       out << "ERROR_MESSAGE_SHOWN";

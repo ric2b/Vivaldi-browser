@@ -23,14 +23,17 @@ BloatedRendererDetector::OnNearV8HeapLimitOnMainThread() {
 
 NearV8HeapLimitHandling
 BloatedRendererDetector::OnNearV8HeapLimitOnMainThreadImpl() {
+  WTF::TimeTicks now = WTF::CurrentTimeTicks();
   if (!RuntimeEnabledFeatures::
           BloatedRendererDetectionSkipUptimeCheckEnabled()) {
-    WTF::TimeDelta uptime = (WTF::CurrentTimeTicks() - startup_time_);
-    if (uptime.InMinutes() < kMinimumUptimeInMinutes) {
-      return NearV8HeapLimitHandling::kIgnoredDueToSmallUptime;
+    WTF::TimeDelta delta = now - last_detection_time_;
+    if (delta.InMinutes() < kMinimumCooldownInMinutes) {
+      return NearV8HeapLimitHandling::kIgnoredDueToCooldownTime;
     }
   }
-  RendererResourceCoordinator::Get().OnRendererIsBloated();
+  last_detection_time_ = now;
+  if (auto* renderer_resource_coordinator = RendererResourceCoordinator::Get())
+    renderer_resource_coordinator->OnRendererIsBloated();
   return NearV8HeapLimitHandling::kForwardedToBrowser;
 }
 

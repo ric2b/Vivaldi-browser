@@ -33,7 +33,6 @@
 #include <string>
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/web_string.h"
-#include "third_party/blink/public/platform/web_thread.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -46,7 +45,8 @@
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_error.h"
-#include "third_party/blink/renderer/platform/serialized_resource.h"
+#include "third_party/blink/renderer/platform/mhtml/serialized_resource.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/testing/testing_platform_support.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/url_test_helpers.h"
@@ -61,12 +61,12 @@ class FrameSerializerTest : public testing::Test,
  public:
   FrameSerializerTest()
       : folder_("frameserializer/"),
-        base_url_(URLTestHelpers::ToKURL("http://www.test.com")) {}
+        base_url_(url_test_helpers::ToKURL("http://www.test.com")) {}
 
  protected:
   void SetUp() override {
     // We want the images to load.
-    helper_.Initialize(nullptr, nullptr, nullptr, &ConfigureSettings);
+    helper_.InitializeWithSettings(&ConfigureSettings);
   }
 
   void TearDown() override {
@@ -79,7 +79,7 @@ class FrameSerializerTest : public testing::Test,
   void SetRewriteURLFolder(const char* folder) { rewrite_folder_ = folder; }
 
   void RegisterURL(const KURL& url, const char* file, const char* mime_type) {
-    URLTestHelpers::RegisterMockedURLLoad(
+    url_test_helpers::RegisterMockedURLLoad(
         url, test::CoreTestDataPath(WebString::FromUTF8(folder_ + file)),
         WebString::FromUTF8(mime_type));
   }
@@ -97,7 +97,7 @@ class FrameSerializerTest : public testing::Test,
 
     WebURLResponse response;
     response.SetMIMEType("text/html");
-    response.SetHTTPStatusCode(status_code);
+    response.SetHttpStatusCode(status_code);
 
     platform_->GetURLLoaderMockFactory()->RegisterErrorURL(
         KURL(base_url_, file), response, error);
@@ -112,14 +112,19 @@ class FrameSerializerTest : public testing::Test,
   }
 
   void Serialize(const char* url) {
-    FrameTestHelpers::LoadFrame(helper_.GetWebView()->MainFrameImpl(),
-                                KURL(base_url_, url).GetString().Utf8().data());
+    frame_test_helpers::LoadFrame(
+        helper_.GetWebView()->MainFrameImpl(),
+        KURL(base_url_, url).GetString().Utf8().data());
+    // Sometimes we have iframes created in "onload" handler - wait for them to
+    // load.
+    frame_test_helpers::PumpPendingRequestsForFrameToLoad(
+        helper_.GetWebView()->MainFrameImpl());
     FrameSerializer serializer(resources_, *this);
     Frame* frame = helper_.LocalMainFrame()->GetFrame();
     for (; frame; frame = frame->Tree().TraverseNext()) {
       // This is safe, because tests do not do cross-site navigation
       // (and therefore don't have remote frames).
-      serializer.SerializeFrame(*ToLocalFrame(frame));
+      serializer.SerializeFrame(*To<LocalFrame>(frame));
     }
   }
 
@@ -187,7 +192,7 @@ class FrameSerializerTest : public testing::Test,
     return skip_urls_.Contains(url);
   }
 
-  FrameTestHelpers::WebViewHelper helper_;
+  frame_test_helpers::WebViewHelper helper_;
   std::string folder_;
   KURL base_url_;
   Deque<SerializedResource> resources_;
@@ -355,7 +360,7 @@ TEST_F(FrameSerializerTest, CSS) {
   RegisterURL("ol-dot.png", "image.png", "image/png");
 
   const KURL image_url_from_data_url(
-      URLTestHelpers::ToKURL("http://www.dataurl.com"),
+      url_test_helpers::ToKURL("http://www.dataurl.com"),
       "fuchsia_background.png");
   RegisterURL(image_url_from_data_url, "image.png", "image/png");
 

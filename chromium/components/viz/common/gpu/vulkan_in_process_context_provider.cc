@@ -4,10 +4,10 @@
 
 #include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
 #include "gpu/vulkan/buildflags.h"
-#include "gpu/vulkan/init/vulkan_factory.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
 #include "gpu/vulkan/vulkan_function_pointers.h"
 #include "gpu/vulkan/vulkan_implementation.h"
+#include "gpu/vulkan/vulkan_instance.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 
 namespace viz {
@@ -45,21 +45,34 @@ bool VulkanInProcessContextProvider::Initialize() {
   }
 
   device_queue_ = std::move(device_queue);
-  const uint32_t feature_flags = kGeometryShader_GrVkFeatureFlag |
-                                 kDualSrcBlend_GrVkFeatureFlag |
-                                 kSampleRateShading_GrVkFeatureFlag;
-  const uint32_t extension_flags =
-      kEXT_debug_report_GrVkExtensionFlag | kKHR_surface_GrVkExtensionFlag |
-      kKHR_swapchain_GrVkExtensionFlag | kKHR_xcb_surface_GrVkExtensionFlag;
   GrVkBackendContext backend_context;
   backend_context.fInstance = device_queue_->GetVulkanInstance();
   backend_context.fPhysicalDevice = device_queue_->GetVulkanPhysicalDevice();
   backend_context.fDevice = device_queue_->GetVulkanDevice();
   backend_context.fQueue = device_queue_->GetVulkanQueue();
   backend_context.fGraphicsQueueIndex = device_queue_->GetVulkanQueueIndex();
-  backend_context.fMinAPIVersion = VK_MAKE_VERSION(1, 0, 8);
-  backend_context.fExtensions = extension_flags;
-  backend_context.fFeatures = feature_flags;
+  backend_context.fInstanceVersion =
+      vulkan_implementation_->GetVulkanInstance()->api_version();
+
+  backend_context.fExtensions = 0;
+
+  // Instance extensions.
+  const gfx::ExtensionSet& extensions =
+      vulkan_implementation_->GetVulkanInstance()->enabled_extensions();
+  if (gfx::HasExtension(extensions, VK_EXT_DEBUG_REPORT_EXTENSION_NAME))
+    backend_context.fExtensions |= kEXT_debug_report_GrVkExtensionFlag;
+  if (gfx::HasExtension(extensions, VK_KHR_SURFACE_EXTENSION_NAME))
+    backend_context.fExtensions |= kKHR_surface_GrVkExtensionFlag;
+
+  // Device extensions.
+  if (gfx::HasExtension(device_queue_->enabled_extensions(),
+                        VK_KHR_SWAPCHAIN_EXTENSION_NAME)) {
+    backend_context.fExtensions |= kKHR_swapchain_GrVkExtensionFlag;
+  }
+
+  backend_context.fFeatures = kGeometryShader_GrVkFeatureFlag |
+                              kDualSrcBlend_GrVkFeatureFlag |
+                              kSampleRateShading_GrVkFeatureFlag;
 
   gpu::VulkanFunctionPointers* vulkan_function_pointers =
       gpu::GetVulkanFunctionPointers();
@@ -68,7 +81,8 @@ bool VulkanInProcessContextProvider::Initialize() {
                           vulkan_function_pointers->vkGetDeviceProcAddrFn);
   backend_context.fOwnsInstanceAndDevice = false;
   gr_context_ = GrContext::MakeVulkan(backend_context);
-  return true;
+
+  return gr_context_ != nullptr;
 }
 
 void VulkanInProcessContextProvider::Destroy() {

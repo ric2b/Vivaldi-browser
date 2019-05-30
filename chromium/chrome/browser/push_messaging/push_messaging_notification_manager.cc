@@ -7,11 +7,13 @@
 #include <stddef.h>
 
 #include <bitset>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/notifications/platform_notification_service_impl.h"
@@ -22,17 +24,19 @@
 #include "components/rappor/rappor_service_impl.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/page_visibility_state.h"
 #include "content/public/browser/platform_notification_context.h"
 #include "content/public/browser/push_messaging_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/notification_resources.h"
 #include "content/public/common/push_messaging_status.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
-#include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
+#include "third_party/blink/public/common/notifications/notification_resources.h"
+#include "third_party/blink/public/mojom/notifications/notification.mojom-shared.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -45,11 +49,15 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #endif
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/android_sms/android_sms_service_factory.h"
+#include "chrome/browser/chromeos/android_sms/android_sms_urls.h"
+#include "chrome/browser/chromeos/multidevice_setup/multidevice_setup_client_factory.h"
+#endif
+
 using content::BrowserThread;
 using content::NotificationDatabaseData;
-using content::NotificationResources;
 using content::PlatformNotificationContext;
-using content::PlatformNotificationData;
 using content::PushMessagingService;
 using content::ServiceWorkerContext;
 using content::WebContents;
@@ -67,11 +75,11 @@ content::StoragePartition* GetStoragePartition(Profile* profile,
 NotificationDatabaseData CreateDatabaseData(
     const GURL& origin,
     int64_t service_worker_registration_id) {
-  PlatformNotificationData notification_data;
+  blink::PlatformNotificationData notification_data;
   notification_data.title = url_formatter::FormatUrlForSecurityDisplay(
       origin, url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS);
   notification_data.direction =
-      PlatformNotificationData::DIRECTION_LEFT_TO_RIGHT;
+      blink::mojom::NotificationDirection::LEFT_TO_RIGHT;
   notification_data.body =
       l10n_util::GetStringUTF16(IDS_PUSH_MESSAGING_GENERIC_NOTIFICATION_BODY);
   notification_data.tag = kPushMessagingForcedNotificationTag;
@@ -97,45 +105,32 @@ PushMessagingNotificationManager::~PushMessagingNotificationManager() {}
 void PushMessagingNotificationManager::EnforceUserVisibleOnlyRequirements(
     const GURL& origin,
     int64_t service_worker_registration_id,
-    const base::Closure& message_handled_closure) {
+    base::OnceClosure message_handled_closure) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+#if defined(OS_CHROMEOS)
+  if (ShouldSkipUserVisibleOnlyRequirements(origin)) {
+    std::move(message_handled_closure).Run();
+    return;
+  }
+#endif
+
   // TODO(johnme): Relax this heuristic slightly.
   scoped_refptr<PlatformNotificationContext> notification_context =
       GetStoragePartition(profile_, origin)->GetPlatformNotificationContext();
 
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(
-          &PlatformNotificationContext::
-              ReadAllNotificationDataForServiceWorkerRegistration,
-          notification_context, origin, service_worker_registration_id,
-          base::Bind(&PushMessagingNotificationManager::
-                         DidGetNotificationsFromDatabaseIOProxy,
-                     weak_factory_.GetWeakPtr(), origin,
-                     service_worker_registration_id, message_handled_closure)));
-}
-
-// static
-void PushMessagingNotificationManager::DidGetNotificationsFromDatabaseIOProxy(
-    const base::WeakPtr<PushMessagingNotificationManager>& ui_weak_ptr,
-    const GURL& origin,
-    int64_t service_worker_registration_id,
-    const base::Closure& message_handled_closure,
-    bool success,
-    const std::vector<NotificationDatabaseData>& data) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  notification_context->ReadAllNotificationDataForServiceWorkerRegistration(
+      origin, service_worker_registration_id,
       base::BindOnce(
           &PushMessagingNotificationManager::DidGetNotificationsFromDatabase,
-          ui_weak_ptr, origin, service_worker_registration_id,
-          message_handled_closure, success, data));
+          weak_factory_.GetWeakPtr(), origin, service_worker_registration_id,
+          std::move(message_handled_closure)));
 }
 
 void PushMessagingNotificationManager::DidGetNotificationsFromDatabase(
     const GURL& origin,
     int64_t service_worker_registration_id,
-    const base::Closure& message_handled_closure,
+    base::OnceClosure message_handled_closure,
     bool success,
     const std::vector<NotificationDatabaseData>& data) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -187,7 +182,7 @@ void PushMessagingNotificationManager::DidGetNotificationsFromDatabase(
         base::BindOnce(&PushMessagingNotificationManager::ProcessSilentPush,
                        weak_factory_.GetWeakPtr(), origin,
                        service_worker_registration_id,
-                       message_handled_closure));
+                       std::move(message_handled_closure)));
     return;
   }
 
@@ -202,7 +197,7 @@ void PushMessagingNotificationManager::DidGetNotificationsFromDatabase(
         content::mojom::PushUserVisibleStatus::NOT_REQUIRED_BUT_SHOWN);
   }
 
-  message_handled_closure.Run();
+  std::move(message_handled_closure).Run();
 }
 
 bool PushMessagingNotificationManager::IsTabVisible(
@@ -218,10 +213,10 @@ bool PushMessagingNotificationManager::IsTabVisible(
 
   // Ignore minimized windows.
   switch (active_web_contents->GetMainFrame()->GetVisibilityState()) {
-    case blink::mojom::PageVisibilityState::kHidden:
-    case blink::mojom::PageVisibilityState::kPrerender:
+    case content::PageVisibilityState::kHidden:
+    case content::PageVisibilityState::kPrerender:
       return false;
-    case blink::mojom::PageVisibilityState::kVisible:
+    case content::PageVisibilityState::kVisible:
       break;
   }
 
@@ -241,7 +236,7 @@ bool PushMessagingNotificationManager::IsTabVisible(
 void PushMessagingNotificationManager::ProcessSilentPush(
     const GURL& origin,
     int64_t service_worker_registration_id,
-    const base::Closure& message_handled_closure,
+    base::OnceClosure message_handled_closure,
     bool silent_push_allowed) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -249,7 +244,7 @@ void PushMessagingNotificationManager::ProcessSilentPush(
   if (silent_push_allowed) {
     RecordUserVisibleStatus(content::mojom::PushUserVisibleStatus::
                                 REQUIRED_BUT_NOT_SHOWN_USED_GRACE);
-    message_handled_closure.Run();
+    std::move(message_handled_closure).Run();
     return;
   }
 
@@ -269,45 +264,26 @@ void PushMessagingNotificationManager::ProcessSilentPush(
   int64_t next_persistent_notification_id =
       PlatformNotificationServiceImpl::GetInstance()
           ->ReadNextPersistentNotificationId(profile_);
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&PlatformNotificationContext::WriteNotificationData,
-                     notification_context, next_persistent_notification_id,
-                     service_worker_registration_id, origin, database_data,
-                     base::Bind(&PushMessagingNotificationManager::
-                                    DidWriteNotificationDataIOProxy,
-                                weak_factory_.GetWeakPtr(), origin,
-                                database_data.notification_data,
-                                message_handled_closure)));
-}
 
-// static
-void PushMessagingNotificationManager::DidWriteNotificationDataIOProxy(
-    const base::WeakPtr<PushMessagingNotificationManager>& ui_weak_ptr,
-    const GURL& origin,
-    const PlatformNotificationData& notification_data,
-    const base::Closure& message_handled_closure,
-    bool success,
-    const std::string& notification_id) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
+  notification_context->WriteNotificationData(
+      next_persistent_notification_id, service_worker_registration_id, origin,
+      database_data,
       base::BindOnce(
           &PushMessagingNotificationManager::DidWriteNotificationData,
-          ui_weak_ptr, origin, notification_data, message_handled_closure,
-          success, notification_id));
+          weak_factory_.GetWeakPtr(), origin, database_data.notification_data,
+          std::move(message_handled_closure)));
 }
 
 void PushMessagingNotificationManager::DidWriteNotificationData(
     const GURL& origin,
-    const PlatformNotificationData& notification_data,
-    const base::Closure& message_handled_closure,
+    const blink::PlatformNotificationData& notification_data,
+    base::OnceClosure message_handled_closure,
     bool success,
     const std::string& notification_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!success) {
     DLOG(ERROR) << "Writing forced notification to database should not fail";
-    message_handled_closure.Run();
+    std::move(message_handled_closure).Run();
     return;
   }
 
@@ -317,7 +293,66 @@ void PushMessagingNotificationManager::DidWriteNotificationData(
   // rarely.
   PlatformNotificationServiceImpl::GetInstance()->DisplayPersistentNotification(
       profile_, notification_id, GURL() /* service_worker_scope */, origin,
-      notification_data, NotificationResources());
+      notification_data, blink::NotificationResources());
 
-  message_handled_closure.Run();
+  std::move(message_handled_closure).Run();
 }
+
+#if defined(OS_CHROMEOS)
+bool PushMessagingNotificationManager::ShouldSkipUserVisibleOnlyRequirements(
+    const GURL& origin) {
+  // This is a short-term exception to user visible only enforcement added
+  // to support for "Messages for Web" integration on ChromeOS.
+
+  chromeos::multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client;
+  if (test_multidevice_setup_client_) {
+    multidevice_setup_client = test_multidevice_setup_client_;
+  } else {
+    multidevice_setup_client = chromeos::multidevice_setup::
+        MultiDeviceSetupClientFactory::GetForProfile(profile_);
+  }
+
+  if (!multidevice_setup_client)
+    return false;
+
+  // Check if messages feature is enabled
+  if (multidevice_setup_client->GetFeatureState(
+          chromeos::multidevice_setup::mojom::Feature::kMessages) !=
+      chromeos::multidevice_setup::mojom::FeatureState::kEnabledByUser) {
+    return false;
+  }
+
+  chromeos::android_sms::AndroidSmsAppManager* android_sms_app_manager;
+  if (test_android_sms_app_manager_) {
+    android_sms_app_manager = test_android_sms_app_manager_;
+  } else {
+    chromeos::android_sms::AndroidSmsService* android_sms_service =
+        chromeos::android_sms::AndroidSmsServiceFactory::GetForBrowserContext(
+            profile_);
+    if (!android_sms_service)
+      return false;
+    android_sms_app_manager = android_sms_service->android_sms_app_manager();
+  }
+
+  // Check if origin matches current messages url
+  base::Optional<GURL> app_url = android_sms_app_manager->GetCurrentAppUrl();
+  if (!app_url)
+    app_url = chromeos::android_sms::GetAndroidMessagesURL();
+
+  if (!origin.EqualsIgnoringRef(app_url->GetOrigin()))
+    return false;
+
+  return true;
+}
+
+void PushMessagingNotificationManager::SetTestMultiDeviceSetupClient(
+    chromeos::multidevice_setup::MultiDeviceSetupClient*
+        multidevice_setup_client) {
+  test_multidevice_setup_client_ = multidevice_setup_client;
+}
+
+void PushMessagingNotificationManager::SetTestAndroidSmsAppManager(
+    chromeos::android_sms::AndroidSmsAppManager* android_sms_app_manager) {
+  test_android_sms_app_manager_ = android_sms_app_manager;
+}
+#endif

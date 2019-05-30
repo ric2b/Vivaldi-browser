@@ -6,21 +6,22 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/test/scoped_task_environment.h"
 #include "build/build_config.h"
 #include "content/child/child_process.h"
-#include "content/renderer/media/stream/media_stream_audio_source.h"
 #include "content/renderer/media/webrtc/mock_peer_connection_dependency_factory.h"
 #include "content/renderer/media/webrtc/mock_peer_connection_impl.h"
 #include "content/renderer/media/webrtc/webrtc_media_stream_track_adapter_map.h"
 #include "content/renderer/media/webrtc/webrtc_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/platform/modules/mediastream/media_stream_audio_source.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/public/platform/web_media_stream_source.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -104,8 +105,8 @@ class RTCRtpTransceiverTest : public ::testing::Test {
   }
 
   rtc::scoped_refptr<FakeRtpTransceiver> CreateWebRtcTransceiver(
-      rtc::scoped_refptr<webrtc::RtpSenderInterface> sender,
-      rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver,
+      rtc::scoped_refptr<FakeRtpSender> sender,
+      rtc::scoped_refptr<FakeRtpReceiver> receiver,
       base::Optional<std::string> mid,
       bool stopped,
       webrtc::RtpTransceiverDirection direction,
@@ -153,9 +154,10 @@ class RTCRtpTransceiverTest : public ::testing::Test {
     web_source.Initialize(
         blink::WebString::FromUTF8(id), blink::WebMediaStreamSource::kTypeAudio,
         blink::WebString::FromUTF8("local_audio_track"), false);
-    MediaStreamAudioSource* audio_source = new MediaStreamAudioSource(true);
+    blink::MediaStreamAudioSource* audio_source =
+        new blink::MediaStreamAudioSource(true);
     // Takes ownership of |audio_source|.
-    web_source.SetExtraData(audio_source);
+    web_source.SetPlatformSource(base::WrapUnique(audio_source));
 
     blink::WebMediaStreamTrack web_track;
     web_track.Initialize(web_source.Id(), web_source);
@@ -172,7 +174,7 @@ class RTCRtpTransceiverTest : public ::testing::Test {
   }
 
  private:
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
 
  protected:
   std::unique_ptr<MockPeerConnectionDependencyFactory> dependency_factory_;

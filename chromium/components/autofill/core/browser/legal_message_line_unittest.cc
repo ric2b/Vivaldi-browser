@@ -104,7 +104,7 @@ class LegalMessageLineTest : public ::testing::TestWithParam<TestCase> {
 // Verifies that legal message parsing is correct.
 TEST_P(LegalMessageLineTest, Parsing) {
   std::unique_ptr<base::Value> value(
-      base::JSONReader::Read(GetParam().message_json));
+      base::JSONReader::ReadDeprecated(GetParam().message_json));
   ASSERT_TRUE(value);
   base::DictionaryValue* dictionary = nullptr;
   EXPECT_TRUE(value->GetAsDictionary(&dictionary));
@@ -114,9 +114,9 @@ TEST_P(LegalMessageLineTest, Parsing) {
                           GetParam().escape_apostrophes);
 
   EXPECT_EQ(GetParam().expected_lines, actual_lines);
-};
+}
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     TestCases,
     LegalMessageLineTest,
     testing::Values(

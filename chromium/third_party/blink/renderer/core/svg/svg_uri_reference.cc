@@ -61,9 +61,9 @@ bool SVGURIReference::IsKnownAttribute(const QualifiedName& attr_name) {
 
 const AtomicString& SVGURIReference::LegacyHrefString(
     const SVGElement& element) {
-  if (element.hasAttribute(SVGNames::hrefAttr))
-    return element.getAttribute(SVGNames::hrefAttr);
-  return element.getAttribute(XLinkNames::hrefAttr);
+  if (element.hasAttribute(svg_names::kHrefAttr))
+    return element.getAttribute(svg_names::kHrefAttr);
+  return element.getAttribute(xlink_names::kHrefAttr);
 }
 
 KURL SVGURIReference::LegacyHrefURL(const Document& document) const {
@@ -90,8 +90,8 @@ bool SVGURLReferenceResolver::IsLocal() const {
 AtomicString SVGURLReferenceResolver::FragmentIdentifier() const {
   // Use KURL's FragmentIdentifier to ensure that we're handling the
   // fragment in a consistent manner.
-  return AtomicString(
-      DecodeURLEscapeSequences(AbsoluteUrl().FragmentIdentifier()));
+  return AtomicString(DecodeURLEscapeSequences(
+      AbsoluteUrl().FragmentIdentifier(), DecodeURLMode::kUTF8OrIsomorphic));
 }
 
 AtomicString SVGURIReference::FragmentIdentifierFromIRIString(
@@ -138,8 +138,8 @@ Element* SVGURIReference::ObserveTarget(Member<IdTargetObserver>& observer,
   DCHECK(!observer);
   if (id.IsEmpty())
     return nullptr;
-  observer =
-      new SVGElementReferenceObserver(tree_scope, id, std::move(closure));
+  observer = MakeGarbageCollected<SVGElementReferenceObserver>(
+      tree_scope, id, std::move(closure));
   return tree_scope.getElementById(id);
 }
 

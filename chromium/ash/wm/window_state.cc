@@ -7,6 +7,11 @@
 #include <memory>
 #include <utility>
 
+#include "ash/focus_cycler.h"
+#include "ash/metrics/pip_uma.h"
+#include "ash/public/cpp/app_types.h"
+#include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/window_animation_types.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/cpp/window_state_type.h"
 #include "ash/public/interfaces/window_pin_type.mojom.h"
@@ -14,6 +19,7 @@
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/wm/default_state.h"
+#include "ash/wm/pip/pip_positioner.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_animations.h"
 #include "ash/wm/window_positioning_utils.h"
@@ -23,15 +29,20 @@
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "base/auto_reset.h"
+#include "base/metrics/histogram_macros.h"
 #include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/layout_manager.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/compositor/layer_tree_owner.h"
+#include "ui/compositor/paint_recorder.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/views/painter.h"
+#include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_delegate.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/ime_util_chromeos.h"
 #include "ui/wm/core/window_util.h"
@@ -44,6 +55,15 @@ bool IsTabletModeEnabled() {
   return Shell::Get()
       ->tablet_mode_controller()
       ->IsTabletModeWindowManagerEnabled();
+}
+
+bool IsToplevelContainer(aura::Window* window) {
+  DCHECK(window);
+  int container_id = window->id();
+  // ArcVirtualKeyboard is implemented as a exo window which requires
+  // WindowState to manage its state.
+  return IsActivatableShellWindowId(container_id) ||
+         container_id == kShellWindowId_ArcVirtualKeyboardContainer;
 }
 
 // A tentative class to set the bounds on the window.
@@ -140,7 +160,27 @@ void MoveAllTransientChildrenToNewRoot(aura::Window* window) {
     MoveAllTransientChildrenToNewRoot(child);
 }
 
+void CollectPipEnterExitMetrics(aura::Window* window, bool enter) {
+  const bool is_android = window->GetProperty(aura::client::kAppType) ==
+                          static_cast<int>(ash::AppType::ARC_APP);
+  if (enter) {
+    UMA_HISTOGRAM_ENUMERATION(kAshPipEventsHistogramName,
+                              AshPipEvents::PIP_START);
+    UMA_HISTOGRAM_ENUMERATION(kAshPipEventsHistogramName,
+                              is_android ? AshPipEvents::ANDROID_PIP_START
+                                         : AshPipEvents::CHROME_PIP_START);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION(kAshPipEventsHistogramName,
+                              AshPipEvents::PIP_END);
+    UMA_HISTOGRAM_ENUMERATION(kAshPipEventsHistogramName,
+                              is_android ? AshPipEvents::ANDROID_PIP_END
+                                         : AshPipEvents::CHROME_PIP_END);
+  }
+}
+
 }  // namespace
+
+constexpr base::TimeDelta WindowState::kBoundsChangeSlideDuration;
 
 WindowState::~WindowState() {
   // WindowState is registered as an owned property of |window_|, and window
@@ -211,8 +251,7 @@ bool WindowState::IsActive() const {
 }
 
 bool WindowState::IsUserPositionable() const {
-  return (window_->type() == aura::client::WINDOW_TYPE_NORMAL ||
-          window_->type() == aura::client::WINDOW_TYPE_PANEL);
+  return wm::IsWindowUserPositionable(window_);
 }
 
 bool WindowState::HasMaximumWidthOrHeight() const {
@@ -248,10 +287,7 @@ bool WindowState::CanActivate() const {
 }
 
 bool WindowState::CanSnap() const {
-  const bool is_panel_window =
-      window_->type() == aura::client::WINDOW_TYPE_PANEL;
-
-  if (!CanResize() || is_panel_window || IsPip())
+  if (!CanResize() || IsPip())
     return false;
 
   // Allow windows with no maximum width or height to be snapped.
@@ -261,7 +297,8 @@ bool WindowState::CanSnap() const {
 }
 
 bool WindowState::HasRestoreBounds() const {
-  return window_->GetProperty(aura::client::kRestoreBoundsKey) != nullptr;
+  gfx::Rect* bounds = window_->GetProperty(aura::client::kRestoreBoundsKey);
+  return bounds != nullptr && !bounds->IsEmpty();
 }
 
 void WindowState::Maximize() {
@@ -292,7 +329,7 @@ void WindowState::Restore() {
 }
 
 void WindowState::DisableAlwaysOnTop(aura::Window* window_on_top) {
-  if (GetAlwaysOnTop()) {
+  if (GetAlwaysOnTop() && !IsPip()) {
     // |window_| is hidden first to avoid canceling fullscreen mode when it is
     // no longer always on top and gets added to default container. This avoids
     // sending redundant OnFullscreenStateChanged to the layout manager. The
@@ -443,12 +480,7 @@ void WindowState::SetCanConsumeSystemKeys(bool can_consume_system_keys) {
 }
 
 bool WindowState::IsInImmersiveFullscreen() const {
-  return window_->GetProperty(aura::client::kImmersiveFullscreenKey);
-}
-
-void WindowState::SetInImmersiveFullscreen(bool enabled) {
-  base::AutoReset<bool> resetter(&ignore_property_change_, true);
-  window_->SetProperty(aura::client::kImmersiveFullscreenKey, enabled);
+  return window_->GetProperty(kImmersiveIsActive);
 }
 
 void WindowState::set_bounds_changed_by_user(bool bounds_changed_by_user) {
@@ -478,6 +510,18 @@ void WindowState::OnRevertDrag(const gfx::Point& location) {
     delegate_->OnDragFinished(/*canceled=*/true, location);
 }
 
+void WindowState::OnActivationLost() {
+  if (IsPip()) {
+    views::Widget::GetWidgetForNativeWindow(window())
+        ->widget_delegate()
+        ->SetCanActivate(false);
+  }
+}
+
+display::Display WindowState::GetDisplay() {
+  return display::Screen::GetScreen()->GetDisplayNearestWindow(window());
+}
+
 void WindowState::CreateDragDetails(const gfx::Point& point_in_parent,
                                     int window_component,
                                     ::wm::WindowMoveSource source) {
@@ -498,7 +542,6 @@ void WindowState::SetAndClearRestoreBounds() {
 WindowState::WindowState(aura::Window* window)
     : window_(window),
       bounds_changed_by_user_(false),
-      ignored_by_shelf_(false),
       can_consume_system_keys_(false),
       unminimize_to_restore_bounds_(false),
       hide_shelf_when_fullscreen_(true),
@@ -507,6 +550,7 @@ WindowState::WindowState(aura::Window* window)
       ignore_property_change_(false),
       current_state_(new DefaultState(ToWindowStateType(GetShowState()))) {
   window_->AddObserver(this);
+  UpdatePipState(mojom::WindowStateType::DEFAULT);
 }
 
 bool WindowState::GetAlwaysOnTop() const {
@@ -579,6 +623,7 @@ void WindowState::NotifyPreStateTypeChange(
     mojom::WindowStateType old_window_state_type) {
   for (auto& observer : observer_list_)
     observer.OnPreWindowStateTypeChange(this, old_window_state_type);
+  UpdatePipState(old_window_state_type);
 }
 
 void WindowState::NotifyPostStateTypeChange(
@@ -617,19 +662,18 @@ void WindowState::SetBoundsConstrained(const gfx::Rect& bounds) {
   SetBoundsDirect(child_bounds);
 }
 
-void WindowState::SetBoundsDirectAnimated(const gfx::Rect& bounds) {
-  const int kBoundsChangeSlideDurationMs = 120;
-
+void WindowState::SetBoundsDirectAnimated(const gfx::Rect& bounds,
+                                          base::TimeDelta duration) {
   ui::Layer* layer = window_->layer();
   ui::ScopedLayerAnimationSettings slide_settings(layer->GetAnimator());
   slide_settings.SetPreemptionStrategy(
       ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
-  slide_settings.SetTransitionDuration(
-      base::TimeDelta::FromMilliseconds(kBoundsChangeSlideDurationMs));
+  slide_settings.SetTransitionDuration(duration);
   SetBoundsDirect(bounds);
 }
 
-void WindowState::SetBoundsDirectCrossFade(const gfx::Rect& new_bounds) {
+void WindowState::SetBoundsDirectCrossFade(const gfx::Rect& new_bounds,
+                                           gfx::Tween::Type animation_type) {
   // Some test results in invoking CrossFadeToBounds when window is not visible.
   // No animation is necessary in that case, thus just change the bounds and
   // quit.
@@ -656,7 +700,51 @@ void WindowState::SetBoundsDirectCrossFade(const gfx::Rect& new_bounds) {
   // Resize the window to the new size, which will force a layout and paint.
   SetBoundsDirect(new_bounds);
 
-  CrossFadeAnimation(window_, std::move(old_layer_owner), gfx::Tween::EASE_OUT);
+  CrossFadeAnimation(window_, std::move(old_layer_owner), animation_type);
+}
+
+void WindowState::UpdatePipState(mojom::WindowStateType old_window_state_type) {
+  auto* widget = views::Widget::GetWidgetForNativeWindow(window());
+  if (IsPip()) {
+    // widget may not exit in some unit tests.
+    // TODO(oshima): Fix unit tests and add DCHECK.
+    if (widget) {
+      widget->widget_delegate()->SetCanActivate(false);
+      if (widget->IsActive())
+        widget->Deactivate();
+      Shell::Get()->focus_cycler()->AddWidget(widget);
+    }
+    ::wm::SetWindowVisibilityAnimationType(
+        window(), WINDOW_VISIBILITY_ANIMATION_TYPE_FADE_IN_SLIDE_OUT);
+    // There may already be a system ui window on the initial position.
+    UpdatePipBounds();
+    if (old_window_state_type != mojom::WindowStateType::PIP) {
+      window()->SetProperty(ash::kPrePipWindowStateTypeKey,
+                            old_window_state_type);
+    }
+
+    CollectPipEnterExitMetrics(window(), /*enter=*/true);
+  } else if (old_window_state_type == mojom::WindowStateType::PIP) {
+    if (widget) {
+      widget->widget_delegate()->SetCanActivate(true);
+      Shell::Get()->focus_cycler()->RemoveWidget(widget);
+    }
+    ::wm::SetWindowVisibilityAnimationType(
+        window(), ::wm::WINDOW_VISIBILITY_ANIMATION_TYPE_DEFAULT);
+
+    CollectPipEnterExitMetrics(window(), /*enter=*/false);
+  }
+}
+
+void WindowState::UpdatePipBounds() {
+  gfx::Rect new_bounds =
+      PipPositioner::GetPositionAfterMovementAreaChange(this);
+  ::wm::ConvertRectFromScreen(window()->GetRootWindow(), &new_bounds);
+  if (window()->bounds() != new_bounds) {
+    wm::SetBoundsEvent event(wm::WM_EVENT_SET_BOUNDS, new_bounds,
+                             /*animate=*/true);
+    OnWMEvent(&event);
+  }
 }
 
 WindowState* GetActiveWindowState() {
@@ -667,12 +755,22 @@ WindowState* GetActiveWindowState() {
 WindowState* GetWindowState(aura::Window* window) {
   if (!window)
     return nullptr;
-  WindowState* settings = window->GetProperty(kWindowStateKey);
-  if (!settings) {
-    settings = new WindowState(window);
-    window->SetProperty(kWindowStateKey, settings);
-  }
-  return settings;
+
+  WindowState* state = window->GetProperty(kWindowStateKey);
+  if (state)
+    return state;
+
+  if (window->type() == aura::client::WINDOW_TYPE_CONTROL)
+    return nullptr;
+
+  DCHECK(window->parent());
+
+  if (!IsToplevelContainer(window->parent()))
+    return nullptr;
+
+  state = new WindowState(window);
+  window->SetProperty(kWindowStateKey, state);
+  return state;
 }
 
 const WindowState* GetWindowState(const aura::Window* window) {
@@ -682,6 +780,7 @@ const WindowState* GetWindowState(const aura::Window* window) {
 void WindowState::OnWindowPropertyChanged(aura::Window* window,
                                           const void* key,
                                           intptr_t old) {
+  DCHECK_EQ(window_, window);
   if (key == aura::client::kShowStateKey) {
     if (!ignore_property_change_) {
       WMEvent event(WMEventTypeFromShowState(GetShowState()));
@@ -696,6 +795,16 @@ void WindowState::OnWindowPropertyChanged(aura::Window* window,
     }
     return;
   }
+  if (key == kWindowPipTypeKey) {
+    if (window->GetProperty(kWindowPipTypeKey)) {
+      WMEvent event(WM_EVENT_PIP);
+      OnWMEvent(&event);
+    } else {
+      // Currently "restore" is not implemented.
+      NOTIMPLEMENTED();
+    }
+    return;
+  }
   if (key == kWindowStateTypeKey) {
     if (!ignore_property_change_) {
       // This change came from somewhere else. Revert it.
@@ -703,8 +812,7 @@ void WindowState::OnWindowPropertyChanged(aura::Window* window,
     }
     return;
   }
-  if (key == kHideShelfWhenFullscreenKey ||
-      key == aura::client::kImmersiveFullscreenKey) {
+  if (key == kHideShelfWhenFullscreenKey || key == kImmersiveIsActive) {
     if (!ignore_property_change_) {
       // This change came from outside ash. Update our shelf visibility based
       // on our changed state.
@@ -723,6 +831,15 @@ void WindowState::OnWindowAddedToRootWindow(aura::Window* window) {
 
 void WindowState::OnWindowDestroying(aura::Window* window) {
   DCHECK_EQ(window_, window);
+
+  // If the window is destroyed during PIP, count that as exiting.
+  if (IsPip())
+    CollectPipEnterExitMetrics(window, /*enter=*/false);
+
+  auto* widget = views::Widget::GetWidgetForNativeWindow(window);
+  if (widget)
+    Shell::Get()->focus_cycler()->RemoveWidget(widget);
+
   current_state_->OnWindowDestroying(this);
   delegate_.reset();
 }

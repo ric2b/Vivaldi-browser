@@ -34,11 +34,41 @@
 
 namespace content {
 
+namespace {
+
+// If |frame| is an iframe or a GuestView, returns its parent, null otherwise.
+RenderFrameHostImpl* ParentRenderFrameHost(RenderFrameHostImpl* frame) {
+  // Find the parent in the FrameTree (iframe).
+  if (frame->GetParent())
+    return frame->GetParent();
+
+  // Find the parent in the WebContentsTree (GuestView).
+  FrameTreeNode* frame_in_embedder =
+      frame->frame_tree_node()->render_manager()->GetOuterDelegateNode();
+  if (frame_in_embedder)
+    return frame_in_embedder->current_frame_host()->GetParent();
+
+  // No parent found.
+  return nullptr;
+}
+
+// Return the root RenderFrameHost in the outermost WebContents.
+RenderFrameHostImpl* RootRenderFrameHost(RenderFrameHostImpl* frame) {
+  RenderFrameHostImpl* current = frame;
+  while (true) {
+    RenderFrameHostImpl* parent = ParentRenderFrameHost(current);
+    if (!parent)
+      return current;
+    current = parent;
+  };
+}
+
+}  // namespace
+
 CrossProcessFrameConnector::CrossProcessFrameConnector(
     RenderFrameProxyHost* frame_proxy_in_parent_renderer)
     : FrameConnectorDelegate(IsUseZoomForDSFEnabled()),
-      frame_proxy_in_parent_renderer_(frame_proxy_in_parent_renderer),
-      is_scroll_bubbling_(false) {
+      frame_proxy_in_parent_renderer_(frame_proxy_in_parent_renderer) {
   frame_proxy_in_parent_renderer->frame_tree_node()
       ->render_manager()
       ->current_frame_host()
@@ -88,14 +118,17 @@ void CrossProcessFrameConnector::SetView(RenderWidgetHostViewChildFrame* view) {
     // The RenderWidgetHostDelegate needs to be checked because SetView() can
     // be called during nested WebContents destruction. See
     // https://crbug.com/644306.
-    if (is_scroll_bubbling_ && GetParentRenderWidgetHostView() &&
-        GetParentRenderWidgetHostView()->host()->delegate()) {
+    if (GetParentRenderWidgetHostView() &&
+        GetParentRenderWidgetHostView()->host()->delegate() &&
+        GetParentRenderWidgetHostView()
+            ->host()
+            ->delegate()
+            ->GetInputEventRouter()) {
       GetParentRenderWidgetHostView()
           ->host()
           ->delegate()
           ->GetInputEventRouter()
-          ->CancelScrollBubbling(view_);
-      is_scroll_bubbling_ = false;
+          ->WillDetachChildView(view_);
     }
     view_->SetFrameConnectorDelegate(nullptr);
   }
@@ -114,12 +147,13 @@ void CrossProcessFrameConnector::SetView(RenderWidgetHostViewChildFrame* view) {
       MaybeLogCrash(CrashVisibility::kNeverVisibleAfterCrash);
     }
     is_crash_already_logged_ = has_crashed_ = false;
+    delegate_was_shown_after_crash_ = false;
 
     view_->SetFrameConnectorDelegate(this);
-    if (is_hidden_)
-      OnVisibilityChanged(false);
+    if (visibility_ != blink::mojom::FrameVisibility::kRenderedInViewport)
+      OnVisibilityChanged(visibility_);
     FrameMsg_ViewChanged_Params params;
-    if (!features::IsUsingWindowService())
+    if (!features::IsMultiProcessMash())
       params.frame_sink_id = view_->GetFrameSinkId();
     frame_proxy_in_parent_renderer_->Send(new FrameMsg_ViewChanged(
         frame_proxy_in_parent_renderer_->GetRoutingID(), params));
@@ -191,15 +225,15 @@ bool CrossProcessFrameConnector::TransformPointToLocalCoordSpaceLegacy(
   // Transformations use physical pixels rather than DIP, so conversion
   // is necessary.
   *transformed_point =
-      gfx::ConvertPointToPixel(view_->current_surface_scale_factor(), point);
+      gfx::ConvertPointToPixel(view_->GetDeviceScaleFactor(), point);
   viz::SurfaceHittest hittest(nullptr,
                               GetFrameSinkManager()->surface_manager());
   if (!hittest.TransformPointToTargetSurface(original_surface, local_surface_id,
                                              transformed_point))
     return false;
 
-  *transformed_point = gfx::ConvertPointToDIP(
-      view_->current_surface_scale_factor(), *transformed_point);
+  *transformed_point =
+      gfx::ConvertPointToDIP(view_->GetDeviceScaleFactor(), *transformed_point);
   return true;
 }
 
@@ -207,8 +241,7 @@ bool CrossProcessFrameConnector::TransformPointToCoordSpaceForView(
     const gfx::PointF& point,
     RenderWidgetHostViewBase* target_view,
     const viz::SurfaceId& local_surface_id,
-    gfx::PointF* transformed_point,
-    viz::EventSource source) {
+    gfx::PointF* transformed_point) {
   RenderWidgetHostViewBase* root_view = GetRootRenderWidgetHostView();
   if (!root_view)
     return false;
@@ -218,41 +251,39 @@ bool CrossProcessFrameConnector::TransformPointToCoordSpaceForView(
   // be siblings). To account for this, the point is first transformed into the
   // root coordinate space and then the root is asked to perform the conversion.
   if (!root_view->TransformPointToLocalCoordSpace(point, local_surface_id,
-                                                  transformed_point, source))
+                                                  transformed_point))
     return false;
 
   if (target_view == root_view)
     return true;
 
   return root_view->TransformPointToCoordSpaceForView(
-      *transformed_point, target_view, transformed_point, source);
+      *transformed_point, target_view, transformed_point);
 }
 
-void CrossProcessFrameConnector::ForwardAckedTouchpadPinchGestureEvent(
+void CrossProcessFrameConnector::ForwardAckedTouchpadZoomEvent(
     const blink::WebGestureEvent& event,
     InputEventAckState ack_result) {
   auto* root_view = GetRootRenderWidgetHostView();
   if (!root_view)
     return;
 
-  blink::WebGestureEvent pinch_event(event);
+  blink::WebGestureEvent root_event(event);
   const gfx::PointF root_point =
       view_->TransformPointToRootCoordSpaceF(event.PositionInWidget());
-  pinch_event.SetPositionInWidget(root_point);
-  root_view->GestureEventAck(pinch_event, ack_result);
+  root_event.SetPositionInWidget(root_point);
+  root_view->GestureEventAck(root_event, ack_result);
 }
 
-void CrossProcessFrameConnector::BubbleScrollEvent(
+bool CrossProcessFrameConnector::BubbleScrollEvent(
     const blink::WebGestureEvent& event) {
   DCHECK(event.GetType() == blink::WebInputEvent::kGestureScrollBegin ||
          event.GetType() == blink::WebInputEvent::kGestureScrollUpdate ||
-         event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
-         event.GetType() == blink::WebInputEvent::kGestureFlingStart ||
-         event.GetType() == blink::WebInputEvent::kGestureFlingCancel);
+         event.GetType() == blink::WebInputEvent::kGestureScrollEnd);
   auto* parent_view = GetParentRenderWidgetHostView();
 
   if (!parent_view)
-    return;
+    return false;
 
   auto* event_router = parent_view->host()->delegate()->GetInputEventRouter();
 
@@ -268,18 +299,8 @@ void CrossProcessFrameConnector::BubbleScrollEvent(
   // action of the parent frame to Auto so that this gesture event is allowed.
   parent_view->host()->input_router()->ForceSetTouchActionAuto();
 
-  if (event.GetType() == blink::WebInputEvent::kGestureScrollBegin) {
-    event_router->BubbleScrollEvent(parent_view, resent_gesture_event, view_);
-    is_scroll_bubbling_ = true;
-  } else if (is_scroll_bubbling_ ||
-             event.GetType() == blink::WebInputEvent::kGestureFlingCancel) {
-    // For GFC events the router decides whether to bubble them or not.
-    event_router->BubbleScrollEvent(parent_view, resent_gesture_event, view_);
-  }
-  if (event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
-      event.GetType() == blink::WebInputEvent::kGestureFlingStart) {
-    is_scroll_bubbling_ = false;
-  }
+  return event_router->BubbleScrollEvent(parent_view, view_,
+                                         resent_gesture_event);
 }
 
 bool CrossProcessFrameConnector::HasFocus() {
@@ -309,15 +330,27 @@ void CrossProcessFrameConnector::UnlockMouse() {
 }
 
 void CrossProcessFrameConnector::OnSynchronizeVisualProperties(
-    const viz::SurfaceId& surface_id,
+    const viz::FrameSinkId& frame_sink_id,
     const FrameVisualProperties& visual_properties) {
+  TRACE_EVENT_WITH_FLOW2(
+      TRACE_DISABLED_BY_DEFAULT("viz.surface_id_flow"),
+      "CrossProcessFrameConnector::OnSynchronizeVisualProperties Receive "
+      "Message",
+      TRACE_ID_GLOBAL(
+          visual_properties.local_surface_id_allocation.local_surface_id()
+              .submission_trace_id()),
+      TRACE_EVENT_FLAG_FLOW_IN, "message",
+      "FrameHostMsg_SynchronizeVisualProperties", "new_local_surface_id",
+      visual_properties.local_surface_id_allocation.local_surface_id()
+          .ToString());
   // If the |screen_space_rect| or |screen_info| of the frame has changed, then
   // the viz::LocalSurfaceId must also change.
   if ((last_received_local_frame_size_ != visual_properties.local_frame_size ||
        screen_info_ != visual_properties.screen_info ||
        capture_sequence_number() != visual_properties.capture_sequence_number ||
        last_received_zoom_level_ != visual_properties.zoom_level) &&
-      local_surface_id_ == surface_id.local_surface_id()) {
+      local_surface_id_allocation_.local_surface_id() ==
+          visual_properties.local_surface_id_allocation.local_surface_id()) {
     bad_message::ReceivedBadMessage(
         frame_proxy_in_parent_renderer_->GetProcess(),
         bad_message::CPFC_RESIZE_PARAMS_CHANGED_LOCAL_SURFACE_ID_UNCHANGED);
@@ -326,38 +359,43 @@ void CrossProcessFrameConnector::OnSynchronizeVisualProperties(
 
   last_received_zoom_level_ = visual_properties.zoom_level;
   last_received_local_frame_size_ = visual_properties.local_frame_size;
-  SynchronizeVisualProperties(surface_id, visual_properties);
+  SynchronizeVisualProperties(frame_sink_id, visual_properties);
 }
 
 void CrossProcessFrameConnector::OnUpdateViewportIntersection(
     const gfx::Rect& viewport_intersection,
     const gfx::Rect& compositor_visible_rect,
-    bool occluded_or_obscured) {
+    blink::FrameOcclusionState occlusion_state) {
   viewport_intersection_rect_ = viewport_intersection;
   compositor_visible_rect_ = compositor_visible_rect;
-  occluded_or_obscured_ = occluded_or_obscured;
+  occlusion_state_ = occlusion_state;
   if (view_)
-    view_->UpdateViewportIntersection(
-        viewport_intersection, compositor_visible_rect, occluded_or_obscured);
+    view_->UpdateViewportIntersection(viewport_intersection,
+                                      compositor_visible_rect, occlusion_state);
 
   if (IsVisible()) {
-    // MaybeLogCrash will check 1) if there was a crash or not and 2) if the
-    // crash might have been already logged earlier as kCrashedWhileVisible or
-    // kShownAfterCrashing.
-    MaybeLogCrash(CrashVisibility::kShownAfterCrashing);
+    // Record metrics if a crashed subframe became visible as a result of this
+    // viewport intersection update.  For example, this might happen if a user
+    // scrolls to a crashed subframe.
+    MaybeLogShownCrash(ShownAfterCrashingReason::kViewportIntersection);
   }
 }
 
-void CrossProcessFrameConnector::OnVisibilityChanged(bool visible) {
-  is_hidden_ = !visible;
+void CrossProcessFrameConnector::OnVisibilityChanged(
+    blink::mojom::FrameVisibility visibility) {
+  bool visible = visibility != blink::mojom::FrameVisibility::kNotRendered;
+  visibility_ = visibility;
   if (IsVisible()) {
-    // MaybeLogCrash will check 1) if there was a crash or not and 2) if the
-    // crash might have been already logged earlier as kCrashedWhileVisible or
-    // kShownAfterCrashing.
-    MaybeLogCrash(CrashVisibility::kShownAfterCrashing);
+    // Record metrics if a crashed subframe became visible as a result of this
+    // visibility change.
+    MaybeLogShownCrash(ShownAfterCrashingReason::kVisibility);
   }
   if (!view_)
     return;
+
+  frame_proxy_in_parent_renderer_->frame_tree_node()
+      ->current_frame_host()
+      ->VisibilityChanged(visibility);
 
   // NOTE(david@vivaldi.com): Make sure we are not going to handle the
   // visibility within an inner WebContents when the current frame has a parent.
@@ -366,16 +404,16 @@ void CrossProcessFrameConnector::OnVisibilityChanged(bool visible) {
   if (!frame_proxy_in_parent_renderer_->frame_tree_node()
            ->current_frame_host()
            ->GetParent()) {
-    // If there is an inner WebContents, it should be notified of the change in
-    // the visibility. The Show/Hide methods will not be called if an inner
-    // WebContents exists since the corresponding WebContents will itself call
-    // Show/Hide on all the RenderWidgetHostViews (including this) one.
-    if (frame_proxy_in_parent_renderer_->frame_tree_node()
-            ->render_manager()
-            ->ForInnerDelegate()) {
-      view_->host()->delegate()->OnRenderFrameProxyVisibilityChanged(visible);
-      return;
-    }
+  // If there is an inner WebContents, it should be notified of the change in
+  // the visibility. The Show/Hide methods will not be called if an inner
+  // WebContents exists since the corresponding WebContents will itself call
+  // Show/Hide on all the RenderWidgetHostViews (including this) one.
+  if (frame_proxy_in_parent_renderer_->frame_tree_node()
+          ->render_manager()
+          ->ForInnerDelegate()) {
+    view_->host()->delegate()->OnRenderFrameProxyVisibilityChanged(visibility);
+    return;
+  }
   }
 
   if (visible && !view_->host()->delegate()->IsHidden()) {
@@ -404,43 +442,19 @@ CrossProcessFrameConnector::GetRootRenderWidgetHostView() {
   if (!frame_proxy_in_parent_renderer_)
     return nullptr;
 
-  RenderFrameHostImpl* top_host = frame_proxy_in_parent_renderer_->
-      frame_tree_node()->frame_tree()->root()->current_frame_host();
-
-  // This method should return the root RWHV from the top-level WebContents,
-  // in the case of nested WebContents.
-  while (top_host->frame_tree_node()->render_manager()->ForInnerDelegate()) {
-    FrameTreeNode* outer_delegate_node =
-        top_host->frame_tree_node()->render_manager()->GetOuterDelegateNode();
-    if (!outer_delegate_node)
-      return nullptr;
-    top_host = outer_delegate_node->frame_tree()->root()->current_frame_host();
-  }
-
-  return static_cast<RenderWidgetHostViewBase*>(top_host->GetView());
+  RenderFrameHostImpl* current =
+      frame_proxy_in_parent_renderer_->frame_tree_node()->current_frame_host();
+  RenderFrameHostImpl* root = RootRenderFrameHost(current);
+  return static_cast<RenderWidgetHostViewBase*>(root->GetView());
 }
 
 RenderWidgetHostViewBase*
 CrossProcessFrameConnector::GetParentRenderWidgetHostView() {
-  FrameTreeNode* parent =
-      frame_proxy_in_parent_renderer_->frame_tree_node()->parent();
-
-  if (!parent &&
-      frame_proxy_in_parent_renderer_->frame_tree_node()
-          ->render_manager()
-          ->GetOuterDelegateNode()) {
-    parent = frame_proxy_in_parent_renderer_->frame_tree_node()
-                 ->render_manager()
-                 ->GetOuterDelegateNode()
-                 ->parent();
-  }
-
-  if (parent) {
-    return static_cast<RenderWidgetHostViewBase*>(
-        parent->current_frame_host()->GetView());
-  }
-
-  return nullptr;
+  RenderFrameHostImpl* current =
+      frame_proxy_in_parent_renderer_->frame_tree_node()->current_frame_host();
+  RenderFrameHostImpl* parent = ParentRenderFrameHost(current);
+  return parent ? static_cast<RenderWidgetHostViewBase*>(parent->GetView())
+                : nullptr;
 }
 
 void CrossProcessFrameConnector::EnableAutoResize(const gfx::Size& min_size,
@@ -464,7 +478,7 @@ cc::TouchAction CrossProcessFrameConnector::InheritedEffectiveTouchAction()
 }
 
 bool CrossProcessFrameConnector::IsHidden() const {
-  return is_hidden_;
+  return visibility_ == blink::mojom::FrameVisibility::kNotRendered;
 }
 
 #if defined(USE_AURA)
@@ -521,7 +535,7 @@ void CrossProcessFrameConnector::SetScreenSpaceRect(
 }
 
 void CrossProcessFrameConnector::ResetScreenSpaceRect() {
-  local_surface_id_ = viz::LocalSurfaceId();
+  local_surface_id_allocation_ = viz::LocalSurfaceIdAllocation();
   // TODO(lfg): Why do we need to reset the screen_space_rect_ that comes from
   // the parent when setting the child? https://crbug.com/809275
   screen_space_rect_in_pixels_ = gfx::Rect();
@@ -549,31 +563,57 @@ bool CrossProcessFrameConnector::IsSubtreeThrottled() const {
   return subtree_throttled_;
 }
 
-void CrossProcessFrameConnector::MaybeLogCrash(CrashVisibility visibility) {
+bool CrossProcessFrameConnector::MaybeLogCrash(CrashVisibility visibility) {
   if (!has_crashed_)
-    return;
+    return false;
 
   // Only log once per renderer crash.
   if (is_crash_already_logged_)
-    return;
+    return false;
   is_crash_already_logged_ = true;
 
   // Actually log the UMA.
   UMA_HISTOGRAM_ENUMERATION("Stability.ChildFrameCrash.Visibility", visibility);
 
-  if (visibility == CrashVisibility::kShownAfterCrashing) {
-    auto* rfh = frame_proxy_in_parent_renderer_->frame_tree_node()
-                    ->current_frame_host();
-    if (rfh->GetParent() && rfh->is_local_root()) {
-      UMA_HISTOGRAM_BOOLEAN(
-          "RenderFrameHostImpl.ReceivedPostMessageFromNonDescendant",
-          rfh->received_post_message_from_non_descendant());
-    }
+  return true;
+}
+
+void CrossProcessFrameConnector::MaybeLogShownCrash(
+    ShownAfterCrashingReason reason) {
+  if (!MaybeLogCrash(CrashVisibility::kShownAfterCrashing))
+    return;
+
+  // Identify cases where the sad frame was initially in a hidden tab, then the
+  // tab became visible, and finally the sad frame became visible because it
+  // was scrolled into view or its visibility changed.  Record these cases
+  // separately, since they might be avoided by reloading the tab when it
+  // becomes visible.
+  if (delegate_was_shown_after_crash_) {
+    if (reason == ShownAfterCrashingReason::kViewportIntersection)
+      reason = ShownAfterCrashingReason::kViewportIntersectionAfterTabWasShown;
+    else if (reason == ShownAfterCrashingReason::kVisibility)
+      reason = ShownAfterCrashingReason::kVisibilityAfterTabWasShown;
   }
+
+  UMA_HISTOGRAM_ENUMERATION(
+      "Stability.ChildFrameCrash.ShownAfterCrashingReason", reason);
+}
+
+void CrossProcessFrameConnector::DelegateWasShown() {
+  if (IsVisible()) {
+    // MaybeLogShownCrash will check 1) if there was a crash or not and 2) if
+    // the crash might have been already logged earlier as
+    // kCrashedWhileVisible.
+    MaybeLogShownCrash(
+        CrossProcessFrameConnector::ShownAfterCrashingReason::kTabWasShown);
+  }
+
+  if (has_crashed_)
+    delegate_was_shown_after_crash_ = true;
 }
 
 bool CrossProcessFrameConnector::IsVisible() {
-  if (is_hidden_)
+  if (visibility_ == blink::mojom::FrameVisibility::kNotRendered)
     return false;
   if (viewport_intersection_rect().IsEmpty())
     return false;

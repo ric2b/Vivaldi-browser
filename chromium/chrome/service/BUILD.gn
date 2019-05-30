@@ -4,7 +4,6 @@
 
 import("//build/config/features.gni")
 import("//printing/buildflags/buildflags.gni")
-import("//services/catalog/public/tools/catalog.gni")
 
 assert(!is_chromeos)
 
@@ -41,6 +40,8 @@ static_library("service") {
     "cloud_print/printer_job_handler.h",
     "cloud_print/printer_job_queue_handler.cc",
     "cloud_print/printer_job_queue_handler.h",
+    "net/in_process_network_connection_tracker.cc",
+    "net/in_process_network_connection_tracker.h",
     "net/service_url_request_context_getter.cc",
     "net/service_url_request_context_getter.h",
     "service_ipc_server.cc",
@@ -55,7 +56,6 @@ static_library("service") {
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   deps = [
-    ":service_process_catalog_source",
     "//base",
     "//chrome:strings",
     "//chrome/common",
@@ -64,12 +64,14 @@ static_library("service") {
     "//components/data_use_measurement/core",
     "//components/network_session_configurator/browser",
     "//components/printing/common",
+    "//content/public/app:service_manifests",
     "//google_apis",
     "//jingle:notifier",
     "//mojo/public/cpp/platform",
     "//mojo/public/cpp/system",
     "//net",
     "//printing",
+    "//services/network/public/cpp",
     "//skia",
     "//third_party/webrtc_overrides",
   ]
@@ -87,16 +89,4 @@ static_library("service") {
       "service_utility_process_host.h",
     ]
   }
-}
-
-catalog("service_process_catalog") {
-  embedded_services = [
-    "//content/public/app:browser_manifest",
-    "//content/public/app:utility_manifest",
-  ]
-}
-
-catalog_cpp_source("service_process_catalog_source") {
-  catalog = ":service_process_catalog"
-  generated_function_name = "CreateServiceProcessCatalog"
 }

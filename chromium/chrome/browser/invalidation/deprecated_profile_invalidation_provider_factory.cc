@@ -7,12 +7,14 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/gcm/instance_id/instance_id_profile_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_content_client.h"
 #include "components/gcm_driver/gcm_profile_service.h"
 #include "components/gcm_driver/instance_id/instance_id_profile_service.h"
 #include "components/invalidation/impl/invalidation_prefs.h"
@@ -28,9 +30,11 @@
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/service_manager_connection.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "services/data_decoder/public/cpp/safe_json_parser.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
@@ -50,6 +54,36 @@
 #endif
 
 namespace invalidation {
+
+namespace {
+
+#if !defined(OS_ANDROID)
+void RequestProxyResolvingSocketFactoryOnUIThread(
+    Profile* profile,
+    base::WeakPtr<TiclInvalidationService> service,
+    network::mojom::ProxyResolvingSocketFactoryRequest request) {
+  if (!service)
+    return;
+  network::mojom::NetworkContext* network_context =
+      content::BrowserContext::GetDefaultStoragePartition(profile)
+          ->GetNetworkContext();
+  network_context->CreateProxyResolvingSocketFactory(std::move(request));
+}
+
+// A thread-safe wrapper to request a ProxyResolvingSocketFactoryPtr.
+void RequestProxyResolvingSocketFactory(
+    Profile* profile,
+    base::WeakPtr<TiclInvalidationService> service,
+    network::mojom::ProxyResolvingSocketFactoryRequest request) {
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
+      base::BindOnce(&RequestProxyResolvingSocketFactoryOnUIThread, profile,
+                     std::move(service), std::move(request)));
+}
+
+#endif
+
+}  // namespace
 
 // static
 ProfileInvalidationProvider*
@@ -81,8 +115,7 @@ DeprecatedProfileInvalidationProviderFactory::
     DeprecatedProfileInvalidationProviderFactory()
     : BrowserContextKeyedServiceFactory(
           "InvalidationService",
-          BrowserContextDependencyManager::GetInstance()),
-      testing_factory_(NULL) {
+          BrowserContextDependencyManager::GetInstance()) {
 #if !defined(OS_ANDROID)
   DependsOn(IdentityManagerFactory::GetInstance());
   DependsOn(gcm::GCMProfileServiceFactory::GetInstance());
@@ -93,15 +126,15 @@ DeprecatedProfileInvalidationProviderFactory::
     ~DeprecatedProfileInvalidationProviderFactory() {}
 
 void DeprecatedProfileInvalidationProviderFactory::RegisterTestingFactory(
-    TestingFactoryFunction testing_factory) {
-  testing_factory_ = testing_factory;
+    TestingFactory testing_factory) {
+  testing_factory_ = std::move(testing_factory);
 }
 
 KeyedService*
 DeprecatedProfileInvalidationProviderFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   if (testing_factory_)
-    return testing_factory_(context).release();
+    return testing_factory_.Run(context).release();
 
 #if defined(OS_ANDROID)
   // Android does not need an IdentityProvider, because it gets the account
@@ -134,9 +167,12 @@ DeprecatedProfileInvalidationProviderFactory::BuildServiceInstanceFor(
           GetUserAgent(), identity_provider.get(),
           std::make_unique<TiclProfileSettingsProvider>(profile->GetPrefs()),
           gcm::GCMProfileServiceFactory::GetForProfile(profile)->driver(),
-          profile->GetRequestContext(),
+          base::BindRepeating(&RequestProxyResolvingSocketFactory, profile),
+          base::CreateSingleThreadTaskRunnerWithTraits(
+              {content::BrowserThread::IO}),
           content::BrowserContext::GetDefaultStoragePartition(profile)
-              ->GetURLLoaderFactoryForBrowserProcess());
+              ->GetURLLoaderFactoryForBrowserProcess(),
+          content::GetNetworkConnectionTracker());
   service->Init(std::unique_ptr<syncer::InvalidationStateTracker>(
       new InvalidatorStorage(profile->GetPrefs())));
 

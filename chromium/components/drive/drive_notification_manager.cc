@@ -7,7 +7,9 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/rand_util.h"
 #include "base/strings/char_traits.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
@@ -25,11 +27,10 @@ const int kFastPollingIntervalInSecs = 60;
 
 // The polling interval time is used when XMPP is enabled.  Theoretically
 // polling should be unnecessary if XMPP is enabled, but just in case.
-const int kSlowPollingIntervalInSecs = 300;
+const int kSlowPollingIntervalInSecs = 3600;
 
 // The period to batch together invalidations before passing them to observers.
-constexpr base::TimeDelta kInvalidationBatchInterval =
-    base::TimeDelta::FromSeconds(5);
+constexpr int kInvalidationBatchIntervalSecs = 15;
 
 // The sync invalidation object ID for Google Drive.
 const char kDriveInvalidationObjectId[] = "CHANGELOG";
@@ -49,16 +50,11 @@ DriveNotificationManager::DriveNotificationManager(
       push_notification_registered_(false),
       push_notification_enabled_(false),
       observers_notified_(false),
+      batch_timer_(clock),
       weak_ptr_factory_(this) {
   DCHECK(invalidation_service_);
   RegisterDriveNotifications();
   RestartPollingTimer();
-
-  batch_timer_ = std::make_unique<base::RetainingOneShotTimer>(
-      FROM_HERE, kInvalidationBatchInterval,
-      base::BindRepeating(&DriveNotificationManager::OnBatchTimerExpired,
-                          weak_ptr_factory_.GetWeakPtr()),
-      clock);
 }
 
 DriveNotificationManager::~DriveNotificationManager() {
@@ -98,15 +94,22 @@ void DriveNotificationManager::OnIncomingInvalidation(
   syncer::ObjectIdSet ids = invalidation_map.GetObjectIds();
 
   for (const auto& id : ids) {
-    if (id.name() == kDriveInvalidationObjectId) {
-      // Empty string indicates default change list.
-      invalidated_change_ids_.insert("");
-    } else if (base::StartsWith(id.name(), kTeamDriveChangePrefix,
-                                base::CompareCase::SENSITIVE)) {
-      invalidated_change_ids_.insert(
-          id.name().substr(kTeamDriveChangePrefixLength));
-    } else {
-      NOTREACHED() << "Unexpected ID " << id.name();
+    // Empty string indicates default change list.
+    std::string unpacked_id;
+    if (id.name() != kDriveInvalidationObjectId) {
+      DCHECK(base::StartsWith(id.name(), kTeamDriveChangePrefix,
+                              base::CompareCase::SENSITIVE))
+          << "Unexpected ID " << id.name();
+      unpacked_id = id.name().substr(kTeamDriveChangePrefixLength);
+    }
+    auto invalidations = invalidation_map.ForObject(id);
+    int64_t& invalidation_version =
+        invalidated_change_ids_.emplace(unpacked_id, -1).first->second;
+    for (auto& invalidation : invalidations) {
+      if (!invalidation.is_unknown_version() &&
+          invalidation.version() > invalidation_version) {
+        invalidation_version = invalidation.version();
+      }
     }
   }
 
@@ -115,12 +118,12 @@ void DriveNotificationManager::OnIncomingInvalidation(
   // See crbug.com/320878.
   invalidation_map.AcknowledgeAll();
 
-  if (!batch_timer_->IsRunning() && !invalidated_change_ids_.empty()) {
+  if (!batch_timer_.IsRunning() && !invalidated_change_ids_.empty()) {
     // Stop the polling timer as we'll be sending a batch soon.
     polling_timer_.Stop();
 
     // Restart the timer to send the batch when the timer fires.
-    batch_timer_->Reset();
+    RestartBatchTimer();
   }
 }
 
@@ -168,23 +171,46 @@ void DriveNotificationManager::RestartPollingTimer() {
   const int interval_secs = (push_notification_enabled_ ?
                              kSlowPollingIntervalInSecs :
                              kFastPollingIntervalInSecs);
+
+  int jitter = base::RandInt(0, interval_secs);
+
   polling_timer_.Stop();
   polling_timer_.Start(
-      FROM_HERE, base::TimeDelta::FromSeconds(interval_secs),
+      FROM_HERE, base::TimeDelta::FromSeconds(interval_secs + jitter),
       base::BindOnce(&DriveNotificationManager::NotifyObserversToUpdate,
                      weak_ptr_factory_.GetWeakPtr(), NOTIFICATION_POLLING,
-                     std::set<std::string>()));
+                     std::map<std::string, int64_t>()));
+}
+
+void DriveNotificationManager::RestartBatchTimer() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  int jitter = base::RandInt(0, kInvalidationBatchIntervalSecs);
+
+  batch_timer_.Stop();
+  batch_timer_.Start(
+      FROM_HERE,
+      base::TimeDelta::FromSeconds(kInvalidationBatchIntervalSecs + jitter),
+      base::BindOnce(&DriveNotificationManager::OnBatchTimerExpired,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void DriveNotificationManager::NotifyObserversToUpdate(
     NotificationSource source,
-    const std::set<std::string> ids) {
+    std::map<std::string, int64_t> invalidations) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(1) << "Notifying observers: " << NotificationSourceToString(source);
 
   if (source == NOTIFICATION_XMPP) {
+    auto my_drive_invalidation = invalidations.find("");
+    if (my_drive_invalidation != invalidations.end() &&
+        my_drive_invalidation->second != -1) {
+      // The invalidation version for My Drive is smaller than what's expected
+      // for fetch requests by 1. Increment it unless it hasn't been set.
+      ++my_drive_invalidation->second;
+    }
     for (auto& observer : observers_)
-      observer.OnNotificationReceived(ids);
+      observer.OnNotificationReceived(invalidations);
   } else {
     for (auto& observer : observers_)
       observer.OnNotificationTimerFired();
@@ -240,10 +266,10 @@ void DriveNotificationManager::UpdateRegisteredDriveNotifications() {
 void DriveNotificationManager::OnBatchTimerExpired() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  std::set<std::string> change_ids_to_update;
+  std::map<std::string, int64_t> change_ids_to_update;
   invalidated_change_ids_.swap(change_ids_to_update);
   if (!change_ids_to_update.empty()) {
-    NotifyObserversToUpdate(NOTIFICATION_XMPP, change_ids_to_update);
+    NotifyObserversToUpdate(NOTIFICATION_XMPP, std::move(change_ids_to_update));
   }
 }
 

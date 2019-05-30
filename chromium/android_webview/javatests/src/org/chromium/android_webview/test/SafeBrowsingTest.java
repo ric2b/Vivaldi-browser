@@ -27,7 +27,7 @@ import org.chromium.android_webview.AwBrowserContext;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwContents.DependencyFactory;
 import org.chromium.android_webview.AwContents.InternalAccessDelegate;
-import org.chromium.android_webview.AwContents.NativeDrawGLFunctorFactory;
+import org.chromium.android_webview.AwContents.NativeDrawFunctorFactory;
 import org.chromium.android_webview.AwContentsClient;
 import org.chromium.android_webview.AwContentsStatics;
 import org.chromium.android_webview.AwSafeBrowsingConfigHelper;
@@ -40,8 +40,10 @@ import org.chromium.android_webview.ErrorCodeConversionHelper;
 import org.chromium.android_webview.SafeBrowsingAction;
 import org.chromium.android_webview.test.TestAwContentsClient.OnReceivedError2Helper;
 import org.chromium.android_webview.test.util.GraphicsTestUtils;
+import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
@@ -50,9 +52,10 @@ import org.chromium.base.test.util.InMemorySharedPreferences;
 import org.chromium.components.safe_browsing.SafeBrowsingApiBridge;
 import org.chromium.components.safe_browsing.SafeBrowsingApiHandler;
 import org.chromium.components.safe_browsing.SafeBrowsingApiHandler.Observer;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.net.test.EmbeddedTestServer;
 
@@ -101,6 +104,7 @@ public class SafeBrowsingTest {
     private static final int PHISHING_PAGE_BACKGROUND_COLOR = Color.rgb(0, 0, 255);
     private static final int MALWARE_PAGE_BACKGROUND_COLOR = Color.rgb(0, 0, 255);
     private static final int UNWANTED_SOFTWARE_PAGE_BACKGROUND_COLOR = Color.rgb(0, 0, 255);
+    private static final int BILLING_PAGE_BACKGROUND_COLOR = Color.rgb(0, 0, 255);
     private static final int IFRAME_EMBEDDER_BACKGROUND_COLOR = Color.rgb(10, 10, 10);
 
     private static final String RESOURCE_PATH = "/android_webview/test/data";
@@ -114,6 +118,7 @@ public class SafeBrowsingTest {
     private static final String MALWARE_HTML_PATH = RESOURCE_PATH + "/malware.html";
     private static final String UNWANTED_SOFTWARE_HTML_PATH =
             RESOURCE_PATH + "/unwanted_software.html";
+    private static final String BILLING_HTML_PATH = RESOURCE_PATH + "/billing.html";
 
     // A gray page with an iframe to MALWARE_HTML_PATH
     private static final String IFRAME_HTML_PATH = RESOURCE_PATH + "/iframe.html";
@@ -130,15 +135,28 @@ public class SafeBrowsingTest {
     public static class MockSafeBrowsingApiHandler implements SafeBrowsingApiHandler {
         private Observer mObserver;
         private static final String SAFE_METADATA = "{}";
+
+        // These codes are defined in "safebrowsing.proto".
         private static final int PHISHING_CODE = 5;
         private static final int MALWARE_CODE = 4;
         private static final int UNWANTED_SOFTWARE_CODE = 3;
+        private static final int BILLING_CODE = 15;
 
         // Mock time it takes for a lookup request to complete.
         private static final long CHECK_DELTA_US = 10;
 
         @Override
+        public String getSafetyNetId() {
+            return "";
+        }
+
+        @Override
         public boolean init(Observer result) {
+            return init(result, false);
+        }
+
+        @Override
+        public boolean init(Observer result, boolean enableLocalBlacklists) {
             mObserver = result;
             return true;
         }
@@ -161,14 +179,17 @@ public class SafeBrowsingTest {
             } else if (uri.endsWith(UNWANTED_SOFTWARE_HTML_PATH)
                     && Arrays.binarySearch(threatsOfInterest, UNWANTED_SOFTWARE_CODE) >= 0) {
                 metadata = buildMetadataFromCode(UNWANTED_SOFTWARE_CODE);
+            } else if (uri.endsWith(BILLING_HTML_PATH)
+                    && Arrays.binarySearch(threatsOfInterest, BILLING_CODE) >= 0) {
+                metadata = buildMetadataFromCode(BILLING_CODE);
             } else {
                 metadata = SAFE_METADATA;
             }
 
             // clang-format off
-            ThreadUtils.runOnUiThread(
+            PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT,
                     (Runnable) () -> mObserver.onUrlCheckDone(
-                        callbackId, STATUS_SUCCESS, metadata, CHECK_DELTA_US));
+                        callbackId, SafeBrowsingResult.SUCCESS, metadata, CHECK_DELTA_US));
             // clang-format on
         }
     }
@@ -220,11 +241,10 @@ public class SafeBrowsingTest {
 
         public MockAwContents(AwBrowserContext browserContext, ViewGroup containerView,
                 Context context, InternalAccessDelegate internalAccessAdapter,
-                NativeDrawGLFunctorFactory nativeDrawGLFunctorFactory,
-                AwContentsClient contentsClient, AwSettings settings,
-                DependencyFactory dependencyFactory) {
+                NativeDrawFunctorFactory nativeDrawFunctorFactory, AwContentsClient contentsClient,
+                AwSettings settings, DependencyFactory dependencyFactory) {
             super(browserContext, containerView, context, internalAccessAdapter,
-                    nativeDrawGLFunctorFactory, contentsClient, settings, dependencyFactory);
+                    nativeDrawFunctorFactory, contentsClient, settings, dependencyFactory);
             mCanShowInterstitial = true;
             mCanShowBigInterstitial = true;
         }
@@ -287,11 +307,10 @@ public class SafeBrowsingTest {
         @Override
         public AwContents createAwContents(AwBrowserContext browserContext, ViewGroup containerView,
                 Context context, InternalAccessDelegate internalAccessAdapter,
-                NativeDrawGLFunctorFactory nativeDrawGLFunctorFactory,
-                AwContentsClient contentsClient, AwSettings settings,
-                DependencyFactory dependencyFactory) {
+                NativeDrawFunctorFactory nativeDrawFunctorFactory, AwContentsClient contentsClient,
+                AwSettings settings, DependencyFactory dependencyFactory) {
             return new MockAwContents(browserContext, containerView, context, internalAccessAdapter,
-                    nativeDrawGLFunctorFactory, contentsClient, settings, dependencyFactory);
+                    nativeDrawFunctorFactory, contentsClient, settings, dependencyFactory);
         }
     }
 
@@ -354,7 +373,7 @@ public class SafeBrowsingTest {
 
     private void evaluateJavaScriptOnInterstitialOnUiThread(
             final String script, final Callback<String> callback) {
-        ThreadUtils.runOnUiThread(
+        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT,
                 () -> mAwContents.evaluateJavaScriptOnInterstitialForTesting(script, callback));
     }
 
@@ -481,6 +500,36 @@ public class SafeBrowsingTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    public void testSafeBrowsingBlocksBillingPages() throws Throwable {
+        loadGreenPage();
+        loadPathAndWaitForInterstitial(BILLING_HTML_PATH);
+        assertGreenPageNotShowing();
+        assertTargetPageNotShowing(BILLING_PAGE_BACKGROUND_COLOR);
+        // Assume that we are rendering the interstitial, since we see neither the previous page nor
+        // the target page
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testSafeBrowsingOnSafeBrowsingHitBillingCode() throws Throwable {
+        loadGreenPage();
+        loadPathAndWaitForInterstitial(BILLING_HTML_PATH);
+
+        // Check onSafeBrowsingHit arguments
+        final String responseUrl = mTestServer.getURL(BILLING_HTML_PATH);
+        Assert.assertEquals(responseUrl, mContentsClient.getLastRequest().url);
+        // The expectedCode intentionally depends on targetSdk (and is disconnected from SDK_INT).
+        // This is for backwards compatibility with apps with a lower targetSdk.
+        int expectedCode = BuildInfo.targetsAtLeastQ()
+                ? AwSafeBrowsingConversionHelper.SAFE_BROWSING_THREAT_BILLING
+                : AwSafeBrowsingConversionHelper.SAFE_BROWSING_THREAT_UNKNOWN;
+        Assert.assertEquals(expectedCode, mContentsClient.getLastThreatType());
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
     public void testSafeBrowsingBlocksPhishingPages() throws Throwable {
         loadGreenPage();
         loadPathAndWaitForInterstitial(PHISHING_HTML_PATH);
@@ -502,7 +551,6 @@ public class SafeBrowsingTest {
         assertTargetPageHasLoaded(MALWARE_PAGE_BACKGROUND_COLOR);
     }
 
-    @DisabledTest(message = "crbug.com/855732")
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
@@ -742,6 +790,17 @@ public class SafeBrowsingTest {
         loadPathAndWaitForInterstitial(UNWANTED_SOFTWARE_HTML_PATH);
         assertGreenPageNotShowing();
         assertTargetPageNotShowing(UNWANTED_SOFTWARE_PAGE_BACKGROUND_COLOR);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testSafeBrowsingCanShowQuietBillingInterstitial() throws Throwable {
+        mAwContents.setCanShowBigInterstitial(false);
+        loadGreenPage();
+        loadPathAndWaitForInterstitial(BILLING_HTML_PATH);
+        assertGreenPageNotShowing();
+        assertTargetPageNotShowing(BILLING_PAGE_BACKGROUND_COLOR);
     }
 
     @Test

@@ -38,13 +38,12 @@ class MEDIA_EXPORT DecryptingVideoDecoder : public VideoDecoder {
 
   // VideoDecoder implementation.
   std::string GetDisplayName() const override;
-  void Initialize(
-      const VideoDecoderConfig& config,
-      bool low_delay,
-      CdmContext* cdm_context,
-      const InitCB& init_cb,
-      const OutputCB& output_cb,
-      const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) override;
+  void Initialize(const VideoDecoderConfig& config,
+                  bool low_delay,
+                  CdmContext* cdm_context,
+                  const InitCB& init_cb,
+                  const OutputCB& output_cb,
+                  const WaitingCB& waiting_cb) override;
   void Decode(scoped_refptr<DecoderBuffer> buffer,
               const DecodeCB& decode_cb) override;
   void Reset(const base::Closure& closure) override;
@@ -71,8 +70,7 @@ class MEDIA_EXPORT DecryptingVideoDecoder : public VideoDecoder {
   void DecodePendingBuffer();
 
   // Callback for Decryptor::DecryptAndDecodeVideo().
-  void DeliverFrame(int buffer_size,
-                    Decryptor::Status status,
+  void DeliverFrame(Decryptor::Status status,
                     const scoped_refptr<VideoFrame>& frame);
 
   // Callback for the |decryptor_| to notify this object that a new key has been
@@ -82,21 +80,25 @@ class MEDIA_EXPORT DecryptingVideoDecoder : public VideoDecoder {
   // Reset decoder and call |reset_cb_|.
   void DoReset();
 
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  // Completes traces for various pending states.
+  void CompletePendingDecode(Decryptor::Status status);
+  void CompleteWaitingForDecryptionKey();
 
-  MediaLog* media_log_;
+  // Set in constructor.
+  scoped_refptr<base::SingleThreadTaskRunner> const task_runner_;
+  MediaLog* const media_log_;
 
-  State state_;
+  State state_ = kUninitialized;
 
   InitCB init_cb_;
   OutputCB output_cb_;
   DecodeCB decode_cb_;
   base::Closure reset_cb_;
-  base::Closure waiting_for_decryption_key_cb_;
+  WaitingCB waiting_cb_;
 
   VideoDecoderConfig config_;
 
-  Decryptor* decryptor_;
+  Decryptor* decryptor_ = nullptr;
 
   // The buffer that needs decrypting/decoding.
   scoped_refptr<media::DecoderBuffer> pending_buffer_to_decode_;
@@ -106,15 +108,11 @@ class MEDIA_EXPORT DecryptingVideoDecoder : public VideoDecoder {
   // If this variable is true and kNoKey is returned then we need to try
   // decrypting/decoding again in case the newly added key is the correct
   // decryption key.
-  bool key_added_while_decode_pending_;
-
-  // A unique ID to trace Decryptor::DecryptAndDecodeVideo() call and the
-  // matching DecryptCB call (in DoDeliverFrame()).
-  uint32_t trace_id_;
+  bool key_added_while_decode_pending_ = false;
 
   // Once Initialized() with encrypted content support, if the stream changes to
   // clear content, we want to ensure this decoder remains used.
-  bool support_clear_content_;
+  bool support_clear_content_ = false;
 
   base::WeakPtr<DecryptingVideoDecoder> weak_this_;
   base::WeakPtrFactory<DecryptingVideoDecoder> weak_factory_;

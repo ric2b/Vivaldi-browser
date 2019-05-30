@@ -396,10 +396,12 @@ static int fts3SqlStmt(
 
   pStmt = p->aStmt[eStmt];
   if( !pStmt ){
+    int f = SQLITE_PREPARE_PERSISTENT|SQLITE_PREPARE_NO_VTAB;
     char *zSql;
     if( eStmt==SQL_CONTENT_INSERT ){
       zSql = sqlite3_mprintf(azSql[eStmt], p->zDb, p->zName, p->zWriteExprlist);
     }else if( eStmt==SQL_SELECT_CONTENT_BY_ROWID ){
+      f &= ~SQLITE_PREPARE_NO_VTAB;
       zSql = sqlite3_mprintf(azSql[eStmt], p->zReadExprlist);
     }else{
       zSql = sqlite3_mprintf(azSql[eStmt], p->zDb, p->zName);
@@ -407,8 +409,7 @@ static int fts3SqlStmt(
     if( !zSql ){
       rc = SQLITE_NOMEM;
     }else{
-      rc = sqlite3_prepare_v3(p->db, zSql, -1, SQLITE_PREPARE_PERSISTENT,
-                              &pStmt, NULL);
+      rc = sqlite3_prepare_v3(p->db, zSql, -1, f, &pStmt, NULL);
       sqlite3_free(zSql);
       assert( rc==SQLITE_OK || pStmt==0 );
       p->aStmt[eStmt] = pStmt;
@@ -566,7 +567,7 @@ static sqlite3_int64 getAbsoluteLevel(
   int iLevel                      /* Level of segments */
 ){
   sqlite3_int64 iBase;            /* First absolute level for iLangid/iIndex */
-  assert( iLangid>=0 );
+  assert_fts3_nc( iLangid>=0 );
   assert( p->nIndex>0 );
   assert( iIndex>=0 && iIndex<p->nIndex );
 
@@ -1374,15 +1375,19 @@ static int fts3SegReaderNext(
   ** safe (no risk of overread) even if the node data is corrupted. */
   pNext += fts3GetVarint32(pNext, &nPrefix);
   pNext += fts3GetVarint32(pNext, &nSuffix);
-  if( nPrefix<0 || nSuffix<=0
-   || &pNext[nSuffix]>&pReader->aNode[pReader->nNode]
+  if( nSuffix<=0
+   || (&pReader->aNode[pReader->nNode] - pNext)<nSuffix
+   || nPrefix>pReader->nTermAlloc
   ){
     return FTS_CORRUPT_VTAB;
   }
 
-  if( nPrefix+nSuffix>pReader->nTermAlloc ){
-    int nNew = (nPrefix+nSuffix)*2;
-    char *zNew = sqlite3_realloc(pReader->zTerm, nNew);
+  /* Both nPrefix and nSuffix were read by fts3GetVarint32() and so are
+  ** between 0 and 0x7FFFFFFF. But the sum of the two may cause integer
+  ** overflow - hence the (i64) casts.  */
+  if( (i64)nPrefix+nSuffix>(i64)pReader->nTermAlloc ){
+    i64 nNew = ((i64)nPrefix+nSuffix)*2;
+    char *zNew = sqlite3_realloc64(pReader->zTerm, nNew);
     if( !zNew ){
       return SQLITE_NOMEM;
     }
@@ -1404,7 +1409,7 @@ static int fts3SegReaderNext(
   ** b-tree node. And that the final byte of the doclist is 0x00. If either
   ** of these statements is untrue, then the data structure is corrupt.
   */
-  if( &pReader->aDoclist[pReader->nDoclist]>&pReader->aNode[pReader->nNode]
+  if( pReader->nDoclist > pReader->nNode-(pReader->aDoclist-pReader->aNode)
    || (pReader->nPopulate==0 && pReader->aDoclist[pReader->nDoclist-1])
   ){
     return FTS_CORRUPT_VTAB;
@@ -1604,8 +1609,13 @@ int sqlite3Fts3SegReaderNew(
   Fts3SegReader *pReader;         /* Newly allocated SegReader object */
   int nExtra = 0;                 /* Bytes to allocate segment root node */
 
-  assert( iStartLeaf<=iEndLeaf );
+  assert( zRoot!=0 || nRoot==0 );
+#ifdef CORRUPT_DB
+  assert( zRoot!=0 || CORRUPT_DB );
+#endif
+
   if( iStartLeaf==0 ){
+    if( iEndLeaf!=0 ) return FTS_CORRUPT_VTAB;
     nExtra = nRoot + FTS3_NODE_PADDING;
   }
 
@@ -1625,7 +1635,7 @@ int sqlite3Fts3SegReaderNew(
     pReader->aNode = (char *)&pReader[1];
     pReader->rootOnly = 1;
     pReader->nNode = nRoot;
-    memcpy(pReader->aNode, zRoot, nRoot);
+    if( nRoot ) memcpy(pReader->aNode, zRoot, nRoot);
     memset(&pReader->aNode[nRoot], 0, FTS3_NODE_PADDING);
   }else{
     pReader->iCurrentBlock = iStartLeaf-1;
@@ -1740,8 +1750,9 @@ int sqlite3Fts3SegReaderPending(
   }
 
   if( nElem>0 ){
-    int nByte = sizeof(Fts3SegReader) + (nElem+1)*sizeof(Fts3HashElem *);
-    pReader = (Fts3SegReader *)sqlite3_malloc(nByte);
+    sqlite3_int64 nByte;
+    nByte = sizeof(Fts3SegReader) + (nElem+1)*sizeof(Fts3HashElem *);
+    pReader = (Fts3SegReader *)sqlite3_malloc64(nByte);
     if( !pReader ){
       rc = SQLITE_NOMEM;
     }else{
@@ -2244,6 +2255,11 @@ static int fts3SegWriterAdd(
 
   nPrefix = fts3PrefixCompress(pWriter->zTerm, pWriter->nTerm, zTerm, nTerm);
   nSuffix = nTerm-nPrefix;
+
+  /* If nSuffix is zero or less, then zTerm/nTerm must be a prefix of
+  ** pWriter->zTerm/pWriter->nTerm. i.e. must be equal to or less than when
+  ** compared with BINARY collation. This indicates corruption.  */
+  if( nSuffix<=0 ) return FTS_CORRUPT_VTAB;
 
   /* Figure out how many bytes are required by this new entry */
   nReq = sqlite3Fts3VarintLen(nPrefix) +    /* varint containing prefix size */
@@ -2952,7 +2968,9 @@ int sqlite3Fts3SegReaderStep(
           }else{
             iDelta = iDocid - iPrev;
           }
-          assert( iDelta>0 || (nDoclist==0 && iDelta==iDocid) );
+          if( iDelta<=0 && (nDoclist>0 || iDelta!=iDocid) ){
+            return FTS_CORRUPT_VTAB;
+          }
           assert( nDoclist>0 || iDelta==iDocid );
 
           nByte = sqlite3Fts3VarintLen(iDelta) + (isRequirePos?nList+1:0);
@@ -3318,14 +3336,16 @@ static void fts3DecodeIntArray(
   const char *zBuf,  /* The BLOB containing the varints */
   int nBuf           /* size of the BLOB */
 ){
-  int i, j;
-  UNUSED_PARAMETER(nBuf);
-  for(i=j=0; i<N; i++){
-    sqlite3_int64 x;
-    j += sqlite3Fts3GetVarint(&zBuf[j], &x);
-    assert(j<=nBuf);
-    a[i] = (u32)(x & 0xffffffff);
+  int i = 0;
+  if( nBuf && (zBuf[nBuf-1]&0x80)==0 ){
+    int j;
+    for(i=j=0; i<N && j<nBuf; i++){
+      sqlite3_int64 x;
+      j += sqlite3Fts3GetVarint(&zBuf[j], &x);
+      a[i] = (u32)(x & 0xffffffff);
+    }
   }
+  while( i<N ) a[i++] = 0;
 }
 
 /*
@@ -3344,7 +3364,7 @@ static void fts3InsertDocsize(
   int rc;                  /* Result code from subfunctions */
 
   if( *pRC ) return;
-  pBlob = sqlite3_malloc( 10*p->nColumn );
+  pBlob = sqlite3_malloc64( 10*(sqlite3_int64)p->nColumn );
   if( pBlob==0 ){
     *pRC = SQLITE_NOMEM;
     return;
@@ -3394,7 +3414,7 @@ static void fts3UpdateDocTotals(
   const int nStat = p->nColumn+2;
 
   if( *pRC ) return;
-  a = sqlite3_malloc( (sizeof(u32)+10)*nStat );
+  a = sqlite3_malloc64( (sizeof(u32)+10)*(sqlite3_int64)nStat );
   if( a==0 ){
     *pRC = SQLITE_NOMEM;
     return;
@@ -3515,8 +3535,8 @@ static int fts3DoRebuild(Fts3Table *p){
     }
 
     if( rc==SQLITE_OK ){
-      int nByte = sizeof(u32) * (p->nColumn+1)*3;
-      aSz = (u32 *)sqlite3_malloc(nByte);
+      sqlite3_int64 nByte = sizeof(u32) * ((sqlite3_int64)p->nColumn+1)*3;
+      aSz = (u32 *)sqlite3_malloc64(nByte);
       if( aSz==0 ){
         rc = SQLITE_NOMEM;
       }else{
@@ -3582,12 +3602,12 @@ static int fts3IncrmergeCsr(
 ){
   int rc;                         /* Return Code */
   sqlite3_stmt *pStmt = 0;        /* Statement used to read %_segdir entry */
-  int nByte;                      /* Bytes allocated at pCsr->apSegment[] */
+  sqlite3_int64 nByte;            /* Bytes allocated at pCsr->apSegment[] */
 
   /* Allocate space for the Fts3MultiSegReader.aCsr[] array */
   memset(pCsr, 0, sizeof(*pCsr));
   nByte = sizeof(Fts3SegReader *) * nSeg;
-  pCsr->apSegment = (Fts3SegReader **)sqlite3_malloc(nByte);
+  pCsr->apSegment = (Fts3SegReader **)sqlite3_malloc64(nByte);
 
   if( pCsr->apSegment==0 ){
     rc = SQLITE_NOMEM;
@@ -3730,6 +3750,9 @@ static int nodeReaderNext(NodeReader *p){
     }
     p->iOff += fts3GetVarint32(&p->aNode[p->iOff], &nSuffix);
 
+    if( nPrefix>p->iOff || nSuffix>p->nNode-p->iOff ){
+      return FTS_CORRUPT_VTAB;
+    }
     blobGrowBuffer(&p->term, nPrefix+nSuffix, &rc);
     if( rc==SQLITE_OK ){
       memcpy(&p->term.a[nPrefix], &p->aNode[p->iOff], nSuffix);
@@ -3737,6 +3760,9 @@ static int nodeReaderNext(NodeReader *p){
       p->iOff += nSuffix;
       if( p->iChild==0 ){
         p->iOff += fts3GetVarint32(&p->aNode[p->iOff], &p->nDoclist);
+        if( (p->nNode-p->iOff)<p->nDoclist ){
+          return FTS_CORRUPT_VTAB;
+        }
         p->aDoclist = &p->aNode[p->iOff];
         p->iOff += p->nDoclist;
       }
@@ -3744,7 +3770,6 @@ static int nodeReaderNext(NodeReader *p){
   }
 
   assert( p->iOff<=p->nNode );
-
   return rc;
 }
 
@@ -5562,7 +5587,7 @@ int sqlite3Fts3UpdateMethod(
   }
 
   /* Allocate space to hold the change in document sizes */
-  aSzDel = sqlite3_malloc( sizeof(aSzDel[0])*(p->nColumn+1)*2 );
+  aSzDel = sqlite3_malloc64(sizeof(aSzDel[0])*((sqlite3_int64)p->nColumn+1)*2);
   if( aSzDel==0 ){
     rc = SQLITE_NOMEM;
     goto update_out;

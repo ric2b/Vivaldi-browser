@@ -149,7 +149,8 @@ class CC_EXPORT RenderSurfaceImpl {
   bool HasMaskingContributingSurface() const;
 
   const FilterOperations& Filters() const;
-  const FilterOperations& BackgroundFilters() const;
+  const FilterOperations& BackdropFilters() const;
+  const gfx::RRectF& BackdropFilterBounds() const;
   gfx::PointF FiltersOrigin() const;
   gfx::Transform SurfaceScale() const;
 

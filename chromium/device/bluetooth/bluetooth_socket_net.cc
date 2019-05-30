@@ -8,13 +8,13 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/containers/queue.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequenced_task_runner.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "device/bluetooth/bluetooth_socket.h"
 #include "device/bluetooth/bluetooth_socket_thread.h"
 #include "net/base/completion_callback.h"
@@ -124,7 +124,8 @@ void BluetoothSocketNet::PostErrorCompletion(
 
 void BluetoothSocketNet::DoClose() {
   DCHECK(socket_thread_->task_runner()->RunsTasksInCurrentSequence());
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   if (tcp_socket_) {
     tcp_socket_->Close();
@@ -135,7 +136,7 @@ void BluetoothSocketNet::DoClose() {
   // Send/Receive operations, so we can no safely release the state associated
   // to those pending operations.
   read_buffer_ = NULL;
-  base::queue<linked_ptr<WriteRequest>> empty;
+  base::queue<std::unique_ptr<WriteRequest>> empty;
   std::swap(write_queue_, empty);
 
   ResetData();
@@ -143,7 +144,6 @@ void BluetoothSocketNet::DoClose() {
 
 void BluetoothSocketNet::DoDisconnect(const base::Closure& callback) {
   DCHECK(socket_thread_->task_runner()->RunsTasksInCurrentSequence());
-  base::AssertBlockingAllowed();
 
   DoClose();
   callback.Run();
@@ -154,7 +154,8 @@ void BluetoothSocketNet::DoReceive(
     const ReceiveCompletionCallback& success_callback,
     const ReceiveErrorCompletionCallback& error_callback) {
   DCHECK(socket_thread_->task_runner()->RunsTasksInCurrentSequence());
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   if (!tcp_socket_) {
     error_callback.Run(BluetoothSocket::kDisconnected, kSocketNotConnected);
@@ -168,8 +169,7 @@ void BluetoothSocketNet::DoReceive(
     return;
   }
 
-  scoped_refptr<net::IOBufferWithSize> buffer(
-      new net::IOBufferWithSize(buffer_size));
+  auto buffer = base::MakeRefCounted<net::IOBufferWithSize>(buffer_size);
   int read_result =
       tcp_socket_->Read(buffer.get(),
                         buffer->size(),
@@ -188,7 +188,6 @@ void BluetoothSocketNet::OnSocketReadComplete(
     const ReceiveErrorCompletionCallback& error_callback,
     int read_result) {
   DCHECK(socket_thread_->task_runner()->RunsTasksInCurrentSequence());
-  base::AssertBlockingAllowed();
 
   scoped_refptr<net::IOBufferWithSize> buffer;
   buffer.swap(read_buffer_);
@@ -211,20 +210,19 @@ void BluetoothSocketNet::DoSend(
     const SendCompletionCallback& success_callback,
     const ErrorCompletionCallback& error_callback) {
   DCHECK(socket_thread_->task_runner()->RunsTasksInCurrentSequence());
-  base::AssertBlockingAllowed();
 
   if (!tcp_socket_) {
     error_callback.Run(kSocketNotConnected);
     return;
   }
 
-  linked_ptr<WriteRequest> request(new WriteRequest());
+  auto request = std::make_unique<WriteRequest>();
   request->buffer = buffer;
   request->buffer_size = buffer_size;
   request->success_callback = success_callback;
   request->error_callback = error_callback;
 
-  write_queue_.push(request);
+  write_queue_.push(std::move(request));
   if (write_queue_.size() == 1) {
     SendFrontWriteRequest();
   }
@@ -232,7 +230,8 @@ void BluetoothSocketNet::DoSend(
 
 void BluetoothSocketNet::SendFrontWriteRequest() {
   DCHECK(socket_thread_->task_runner()->RunsTasksInCurrentSequence());
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   if (!tcp_socket_)
     return;
@@ -240,7 +239,7 @@ void BluetoothSocketNet::SendFrontWriteRequest() {
   if (write_queue_.size() == 0)
     return;
 
-  linked_ptr<WriteRequest> request = write_queue_.front();
+  WriteRequest* request = write_queue_.front().get();
   net::CompletionCallback callback =
       base::Bind(&BluetoothSocketNet::OnSocketWriteComplete,
                  this,
@@ -283,7 +282,6 @@ void BluetoothSocketNet::OnSocketWriteComplete(
     const ErrorCompletionCallback& error_callback,
     int send_result) {
   DCHECK(socket_thread_->task_runner()->RunsTasksInCurrentSequence());
-  base::AssertBlockingAllowed();
 
   write_queue_.pop();
 

@@ -4,6 +4,7 @@
 
 #include "components/ntp_snippets/remote/remote_suggestions_fetcher_impl.h"
 
+#include "base/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
@@ -115,7 +116,7 @@ Status FetchResultToStatus(FetchResult result) {
 
 int GetMinuteOfTheDay(bool local_time,
                       bool reduced_resolution,
-                      base::Clock* clock) {
+                      const base::Clock* clock) {
   base::Time now(clock->Now());
   base::Time::Exploded now_exploded{};
   local_time ? now.LocalExplode(&now_exploded) : now.UTCExplode(&now_exploded);
@@ -193,6 +194,10 @@ const GURL& RemoteSuggestionsFetcherImpl::GetFetchUrlForDebugging() const {
 void RemoteSuggestionsFetcherImpl::FetchSnippets(
     const RequestParams& params,
     SnippetsAvailableCallback callback) {
+  SnippetsAvailableCallback wrapped_callback = base::BindOnce(
+      &RemoteSuggestionsFetcherImpl::EmitDurationAndInvokeCallback,
+      base::Unretained(this), base::Time::Now(), std::move(callback));
+
   if (!params.interactive_request) {
     base::UmaHistogramSparse(
         "NewTabPage.Snippets.FetchTimeLocal",
@@ -214,11 +219,12 @@ void RemoteSuggestionsFetcherImpl::FetchSnippets(
 
   if (identity_manager_->HasPrimaryAccount()) {
     // Signed-in: get OAuth token --> fetch suggestions.
-    pending_requests_.emplace(std::move(builder), std::move(callback));
+    pending_requests_.emplace(std::move(builder), std::move(wrapped_callback));
     StartTokenRequest();
   } else {
     // Not signed in: fetch suggestions (without authentication).
-    FetchSnippetsNonAuthenticated(std::move(builder), std::move(callback));
+    FetchSnippetsNonAuthenticated(std::move(builder),
+                                  std::move(wrapped_callback));
   }
 }
 
@@ -250,7 +256,7 @@ void RemoteSuggestionsFetcherImpl::FetchSnippetsAuthenticated(
       fetch_url_, builder.is_interactive_request());
 
   builder.SetUrl(url).SetAuthentication(
-      identity_manager_->GetPrimaryAccountInfo().account_id,
+      identity_manager_->GetPrimaryAccountId(),
       base::StringPrintf(kAuthorizationRequestHeaderFormat,
                          oauth_access_token.c_str()));
   StartRequest(std::move(builder), std::move(callback),
@@ -275,19 +281,28 @@ void RemoteSuggestionsFetcherImpl::StartTokenRequest() {
     return;
   }
 
-  OAuth2TokenService::ScopeSet scopes{kContentSuggestionsApiScope};
+  base::Time token_start_time = clock_->Now();
+  identity::ScopeSet scopes{kContentSuggestionsApiScope};
   token_fetcher_ = std::make_unique<identity::PrimaryAccountAccessTokenFetcher>(
       "ntp_snippets", identity_manager_, scopes,
       base::BindOnce(&RemoteSuggestionsFetcherImpl::AccessTokenFetchFinished,
-                     base::Unretained(this)),
+                     base::Unretained(this), token_start_time),
       identity::PrimaryAccountAccessTokenFetcher::Mode::kWaitUntilAvailable);
 }
 
 void RemoteSuggestionsFetcherImpl::AccessTokenFetchFinished(
+    base::Time token_start_time,
     GoogleServiceAuthError error,
     identity::AccessTokenInfo access_token_info) {
   DCHECK(token_fetcher_);
   token_fetcher_.reset();
+
+  UMA_HISTOGRAM_ENUMERATION("ContentSuggestions.Feed.Network.TokenFetchStatus",
+                            error.state(), GoogleServiceAuthError::NUM_STATES);
+
+  base::TimeDelta token_duration = clock_->Now() - token_start_time;
+  UMA_HISTOGRAM_MEDIUM_TIMES("ContentSuggestions.Feed.Network.TokenDuration",
+                             token_duration);
 
   if (error.state() != GoogleServiceAuthError::NONE) {
     AccessTokenError(error);
@@ -309,7 +324,6 @@ void RemoteSuggestionsFetcherImpl::AccessTokenFetchFinished(
 void RemoteSuggestionsFetcherImpl::AccessTokenError(
     const GoogleServiceAuthError& error) {
   DCHECK_NE(error.state(), GoogleServiceAuthError::NONE);
-
   DLOG(ERROR) << "Unable to get token: " << error.ToString();
 
   while (!pending_requests_.empty()) {
@@ -342,7 +356,6 @@ void RemoteSuggestionsFetcherImpl::JsonRequestDone(
 
   UMA_HISTOGRAM_TIMES("NewTabPage.Snippets.FetchTime",
                       request->GetFetchDuration());
-
   if (!result) {
     FetchFinished(OptionalFetchedCategories(), std::move(callback), status_code,
                   error_details, is_authenticated, access_token);
@@ -377,9 +390,8 @@ void RemoteSuggestionsFetcherImpl::FetchFinished(
   DCHECK(fetch_result == FetchResult::SUCCESS || !categories.has_value());
 
   if (fetch_result == FetchResult::HTTP_ERROR_UNAUTHORIZED) {
-    OAuth2TokenService::ScopeSet scopes{kContentSuggestionsApiScope};
-    std::string account_id =
-        identity_manager_->GetPrimaryAccountInfo().account_id;
+    identity::ScopeSet scopes{kContentSuggestionsApiScope};
+    std::string account_id = identity_manager_->GetPrimaryAccountId();
     identity_manager_->RemoveAccessTokenFromCache(account_id, scopes,
                                                   access_token);
   }
@@ -395,6 +407,17 @@ void RemoteSuggestionsFetcherImpl::FetchFinished(
 
   std::move(callback).Run(FetchResultToStatus(fetch_result),
                           std::move(categories));
+}
+
+void RemoteSuggestionsFetcherImpl::EmitDurationAndInvokeCallback(
+    base::Time start_time,
+    SnippetsAvailableCallback callback,
+    Status status,
+    OptionalFetchedCategories fetched_categories) {
+  base::TimeDelta duration = clock_->Now() - start_time;
+  UMA_HISTOGRAM_MEDIUM_TIMES("ContentSuggestions.Feed.Network.Duration",
+                             duration);
+  std::move(callback).Run(status, std::move(fetched_categories));
 }
 
 // static

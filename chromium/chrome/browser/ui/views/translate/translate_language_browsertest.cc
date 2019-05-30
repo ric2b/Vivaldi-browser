@@ -5,6 +5,7 @@
 
 #include <stddef.h>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
@@ -43,6 +44,8 @@ const base::FilePath::CharType kItalianTestPath[] =
     FILE_PATH_LITERAL("italian_page.html");
 const base::FilePath::CharType kFrenchTestPath[] =
     FILE_PATH_LITERAL("french_page.html");
+const base::FilePath::CharType kGermanTestPath[] =
+    FILE_PATH_LITERAL("german_page.html");
 
 static const char kTestValidScript[] =
     "var google = {};"
@@ -73,7 +76,7 @@ using translate::test_utils::GetCurrentModel;
 
 using LanguageInfo = language::UrlLanguageHistogram::LanguageInfo;
 
-};  // namespace
+}  // namespace
 
 class TranslateLanguageBrowserTest : public InProcessBrowserTest {
  public:
@@ -99,8 +102,6 @@ class TranslateLanguageBrowserTest : public InProcessBrowserTest {
             true /*relative_url_is_prefix*/);
     embedded_test_server()->StartAcceptingConnections();
   }
-
-  void TearDown() override { InProcessBrowserTest::TearDown(); }
 
   void TearDownOnMainThread() override {
     EXPECT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
@@ -142,7 +143,7 @@ class TranslateLanguageBrowserTest : public InProcessBrowserTest {
   }
 
   language::UrlLanguageHistogram* GetUrlLanguageHistogram() {
-    const content::WebContents* const web_contents =
+    content::WebContents* const web_contents =
         browser_->tab_strip_model()->GetActiveWebContents();
     EXPECT_TRUE(web_contents);
     content::BrowserContext* const browser_context =
@@ -311,10 +312,10 @@ IN_PROC_BROWSER_TEST_F(TranslateLanguageBrowserTest, RecentTargetLanguage) {
   EXPECT_EQ("zh-CN", GetLanguageState().current_language());
   EXPECT_EQ("es", GetTranslatePrefs()->GetRecentTargetLanguage());
 
-  // Load an English page. This should offer to translate to Spanish, since that
+  // Load a German page. This should offer to translate to Spanish, since that
   // is our recent target language.
-  ASSERT_NO_FATAL_FAILURE(CheckForTranslateUI(kEnglishTestPath, true));
-  EXPECT_EQ("en", GetLanguageState().current_language());
+  ASSERT_NO_FATAL_FAILURE(CheckForTranslateUI(kGermanTestPath, true));
+  EXPECT_EQ("de", GetLanguageState().current_language());
   ASSERT_NO_FATAL_FAILURE(Translate(false));
   EXPECT_EQ("es", GetLanguageState().current_language());
   EXPECT_EQ("es", GetTranslatePrefs()->GetRecentTargetLanguage());

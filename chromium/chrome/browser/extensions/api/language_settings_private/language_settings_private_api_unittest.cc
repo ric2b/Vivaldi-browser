@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
@@ -17,6 +18,7 @@
 #include "chrome/test/base/test_browser_window.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/crx_file/id_util.h"
+#include "components/language/core/browser/pref_names.h"
 #include "extensions/browser/event_router_factory.h"
 #include "extensions/browser/extension_prefs.h"
 
@@ -91,14 +93,12 @@ class LanguageSettingsPrivateApiTest : public ExtensionServiceTestBase {
   void SetUp() override {
     ExtensionServiceTestBase::SetUp();
     ExtensionServiceTestBase::InitializeEmptyExtensionService();
-    EventRouterFactory::GetInstance()->SetTestingFactory(profile(),
-                                                         &BuildEventRouter);
+    EventRouterFactory::GetInstance()->SetTestingFactory(
+        profile(), base::BindRepeating(&BuildEventRouter));
 
     LanguageSettingsPrivateDelegateFactory::GetInstance()->SetTestingFactory(
-        profile(), &BuildLanguageSettingsPrivateDelegate);
+        profile(), base::BindRepeating(&BuildLanguageSettingsPrivateDelegate));
   }
-
-  void TearDown() override { ExtensionServiceTestBase::TearDown(); }
 
   std::unique_ptr<TestBrowserWindow> browser_window_;
   std::unique_ptr<Browser> browser_;
@@ -235,7 +235,8 @@ TEST_F(LanguageSettingsPrivateApiTest, AddInputMethodTest) {
   TestInputMethodManager::Initialize(new TestInputMethodManager);
 
   // Initialize relevant prefs.
-  profile()->GetPrefs()->SetString(prefs::kLanguagePreferredLanguages, "en-US");
+  profile()->GetPrefs()->SetString(language::prefs::kPreferredLanguages,
+                                   "en-US");
   StringPrefMember enabled_imes;
   enabled_imes.Init(prefs::kLanguageEnabledImes, profile()->GetPrefs());
   StringPrefMember preload_engines;

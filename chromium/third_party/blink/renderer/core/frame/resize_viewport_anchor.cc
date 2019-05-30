@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/frame/resize_viewport_anchor.h"
 
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/root_frame_viewport.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
@@ -53,8 +54,8 @@ void ResizeViewportAnchor::EndScope() {
 
 LocalFrameView* ResizeViewportAnchor::RootFrameView() {
   if (Frame* frame = page_->MainFrame()) {
-    if (frame->IsLocalFrame())
-      return ToLocalFrame(frame)->View();
+    if (LocalFrame* local_frame = DynamicTo<LocalFrame>(frame))
+      return local_frame->View();
   }
   return nullptr;
 }

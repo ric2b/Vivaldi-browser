@@ -28,12 +28,12 @@
 #include "third_party/blink/renderer/core/animation/css/css_animation_update.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/css_pending_substitution_value.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
 #include "third_party/blink/renderer/core/css/resolver/css_to_style_map.h"
 #include "third_party/blink/renderer/core/css/resolver/element_resolve_context.h"
 #include "third_party/blink/renderer/core/css/resolver/element_style_resources.h"
 #include "third_party/blink/renderer/core/css/resolver/font_builder.h"
-#include "third_party/blink/renderer/core/css_property_names.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/style/cached_ua_style.h"
@@ -97,6 +97,7 @@ class CORE_EXPORT StyleResolverState {
     return css_to_length_conversion_data_;
   }
   CSSToLengthConversionData FontSizeConversionData() const;
+  CSSToLengthConversionData UnzoomedLengthConversionData() const;
 
   void SetConversionFontSizes(
       const CSSToLengthConversionData::FontSizes& font_sizes) {
@@ -123,14 +124,6 @@ class CORE_EXPORT StyleResolverState {
   }
   void SetIsAnimatingCustomProperties(bool value) {
     is_animating_custom_properties_ = value;
-  }
-
-  HashSet<PropertyHandle>& AnimationPendingCustomProperties() {
-    return animation_pending_custom_properties_;
-  }
-
-  const HashSet<PropertyHandle>& AnimationPendingCustomProperties() const {
-    return animation_pending_custom_properties_;
   }
 
   void SetParentStyle(scoped_refptr<const ComputedStyle>);
@@ -201,6 +194,9 @@ class CORE_EXPORT StyleResolverState {
       const CSSPendingSubstitutionValue&) const;
 
  private:
+  CSSToLengthConversionData UnzoomedLengthConversionData(
+      const ComputedStyle* font_style) const;
+
   ElementResolveContext element_context_;
   Member<Document> document_;
 
@@ -220,7 +216,6 @@ class CORE_EXPORT StyleResolverState {
   CSSAnimationUpdate animation_update_;
   bool is_animation_interpolation_map_ready_;
   bool is_animating_custom_properties_;
-  HashSet<PropertyHandle> animation_pending_custom_properties_;
 
   bool apply_property_to_regular_style_;
   bool apply_property_to_visited_link_style_;

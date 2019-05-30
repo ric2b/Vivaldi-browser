@@ -4,6 +4,8 @@
 
 """Common helper module for working with Chrome's processes and windows."""
 
+import logging
+import os
 import psutil
 import re
 import win32gui
@@ -34,6 +36,54 @@ def GetProcessIDs(process_path):
   """
   return [pid for (pid, path) in GetProcessIDAndPathPairs() if
           path == process_path]
+
+
+def WaitForChromeExit(chrome_path):
+  """Waits for all |chrome_path| processes to exit.
+
+  Args:
+    chrome_path: The path to the chrome.exe on which to wait.
+  """
+  def GetChromeProcesses(chrome_path):
+    """Returns a dict of all |chrome_path| processes indexed by pid."""
+    chrome_processes = dict()
+    for process in psutil.process_iter():
+      try:
+        if process.exe == chrome_path:
+          chrome_processes[process.pid] = process
+          logging.info('Found chrome process %s' % process.exe)
+        elif process.name == os.path.basename(chrome_path):
+          raise Exception('Found other chrome process %s' % process.exe)
+      except psutil.Error:
+        pass
+    return chrome_processes
+
+  def GetBrowserProcess(chrome_processes):
+    """Returns a psutil.Process for the browser process in |chrome_processes|.
+    """
+    # Find the one whose parent isn't a chrome.exe process.
+    for process in chrome_processes.itervalues():
+      try:
+        if process.ppid not in chrome_processes:
+          return process
+      except psutil.Error:
+        pass
+    return None
+
+  chrome_processes = GetChromeProcesses(chrome_path)
+  while chrome_processes:
+    # Prefer waiting on the browser process.
+    process = GetBrowserProcess(chrome_processes)
+    if not process:
+      # Pick any process to wait on if no top-level parent was found.
+      process = next(chrome_processes.itervalues())
+    if process.is_running():
+      logging.info(
+        'Waiting on PID %s for %s %s processes to exit' %
+        (process.pid, len(chrome_processes), process.exe))
+      process.wait()
+    # Check for stragglers and keep waiting until all are gone.
+    chrome_processes = GetChromeProcesses(chrome_path)
 
 
 def GetWindowHandles(process_ids):

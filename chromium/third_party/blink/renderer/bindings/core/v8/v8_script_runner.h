@@ -26,8 +26,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_V8_SCRIPT_RUNNER_H_
 #define THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_V8_SCRIPT_RUNNER_H_
 
+#include "third_party/blink/renderer/bindings/core/v8/sanitize_script_errors.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/platform/loader/fetch/access_control_status.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "v8/include/v8.h"
@@ -42,6 +42,7 @@ class ExecutionContext;
 class ReferrerScriptInfo;
 class ScriptSourceCode;
 class ScriptState;
+class SingleCachedMetadataHandler;
 
 class CORE_EXPORT V8ScriptRunner final {
   STATIC_ONLY(V8ScriptRunner);
@@ -52,16 +53,19 @@ class CORE_EXPORT V8ScriptRunner final {
   static v8::MaybeLocal<v8::Script> CompileScript(
       ScriptState*,
       const ScriptSourceCode&,
-      AccessControlStatus,
+      SanitizeScriptErrors,
       v8::ScriptCompiler::CompileOptions,
       v8::ScriptCompiler::NoCacheReason,
       const ReferrerScriptInfo&);
-  static v8::MaybeLocal<v8::Module> CompileModule(v8::Isolate*,
-                                                  const String& source,
-                                                  const String& file_name,
-                                                  AccessControlStatus,
-                                                  const WTF::TextPosition&,
-                                                  const ReferrerScriptInfo&);
+  static v8::MaybeLocal<v8::Module> CompileModule(
+      v8::Isolate*,
+      const String& source,
+      SingleCachedMetadataHandler*,
+      const String& file_name,
+      const WTF::TextPosition&,
+      v8::ScriptCompiler::CompileOptions,
+      v8::ScriptCompiler::NoCacheReason,
+      const ReferrerScriptInfo&);
   static v8::MaybeLocal<v8::Value> RunCompiledScript(v8::Isolate*,
                                                      v8::Local<v8::Script>,
                                                      ExecutionContext*);
@@ -98,7 +102,7 @@ class CORE_EXPORT V8ScriptRunner final {
                                        const WTF::TextPosition&);
 
   // Calls a function on the V8 extras binding object.
-  template <size_t N>
+  template <uint32_t N>
   static v8::MaybeLocal<v8::Value> CallExtra(ScriptState* script_state,
                                              const char* name,
                                              v8::Local<v8::Value> (&args)[N]) {
@@ -115,7 +119,7 @@ class CORE_EXPORT V8ScriptRunner final {
  private:
   static v8::MaybeLocal<v8::Value> CallExtraHelper(ScriptState*,
                                                    const char* name,
-                                                   size_t num_args,
+                                                   uint32_t num_args,
                                                    v8::Local<v8::Value>* args);
 };
 

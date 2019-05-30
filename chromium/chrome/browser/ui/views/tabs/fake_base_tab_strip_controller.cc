@@ -19,8 +19,11 @@ FakeBaseTabStripController::~FakeBaseTabStripController() {
 void FakeBaseTabStripController::AddTab(int index, bool is_active) {
   num_tabs_++;
   tab_strip_->AddTabAt(index, TabRendererData(), is_active);
+  ui::MouseEvent fake_event =
+      ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::PointF(), gfx::PointF(),
+                     base::TimeTicks::Now(), 0, 0);
   if (is_active)
-    SelectTab(index);
+    SelectTab(index, fake_event);
 }
 
 void FakeBaseTabStripController::AddPinnedTab(int index, bool is_active) {
@@ -75,7 +78,7 @@ bool FakeBaseTabStripController::IsTabPinned(int index) const {
   return false;
 }
 
-void FakeBaseTabStripController::SelectTab(int index) {
+void FakeBaseTabStripController::SelectTab(int index, const ui::Event& event) {
   if (!IsValidIndex(index) || active_index_ == index)
     return;
 
@@ -91,11 +94,13 @@ void FakeBaseTabStripController::ToggleSelected(int index) {
 void FakeBaseTabStripController::AddSelectionFromAnchorTo(int index) {
 }
 
-void FakeBaseTabStripController::CloseTab(int index, CloseTabSource source) {
-  RemoveTab(index);
+bool FakeBaseTabStripController::BeforeCloseTab(int index,
+                                                CloseTabSource source) {
+  return true;
 }
 
-void FakeBaseTabStripController::ToggleTabAudioMute(int index) {
+void FakeBaseTabStripController::CloseTab(int index, CloseTabSource source) {
+  RemoveTab(index);
 }
 
 void FakeBaseTabStripController::ShowContextMenuForTab(
@@ -129,19 +134,7 @@ void FakeBaseTabStripController::CreateNewTabWithLocation(
     const base::string16& location) {
 }
 
-bool FakeBaseTabStripController::IsIncognito() {
-  return false;
-}
-
 void FakeBaseTabStripController::StackedLayoutMaybeChanged() {
-}
-
-bool FakeBaseTabStripController::IsSingleTabModeAvailable() {
-  return false;
-}
-
-bool FakeBaseTabStripController::ShouldDrawStrokes() const {
-  return false;
 }
 
 void FakeBaseTabStripController::OnStartedDraggingTabs() {}
@@ -160,21 +153,20 @@ bool FakeBaseTabStripController::EverHasVisibleBackgroundTabShapes() const {
   return false;
 }
 
-SkColor FakeBaseTabStripController::GetFrameColor() const {
+bool FakeBaseTabStripController::ShouldPaintAsActiveFrame() const {
+  return true;
+}
+
+bool FakeBaseTabStripController::CanDrawStrokes() const {
+  return false;
+}
+
+SkColor FakeBaseTabStripController::GetFrameColor(
+    BrowserNonClientFrameView::ActiveState active_state) const {
   return gfx::kPlaceholderColor;
 }
 
 SkColor FakeBaseTabStripController::GetToolbarTopSeparatorColor() const {
-  return gfx::kPlaceholderColor;
-}
-
-SkColor FakeBaseTabStripController::GetTabBackgroundColor(TabState state,
-                                                          bool opaque) const {
-  return gfx::kPlaceholderColor;
-}
-
-SkColor FakeBaseTabStripController::GetTabForegroundColor(
-    TabState state) const {
   return gfx::kPlaceholderColor;
 }
 

@@ -44,7 +44,6 @@ RecyclableCompositorMac::RecyclableCompositorMac(
                   context_factory,
                   context_factory_private,
                   GetCompositorTaskRunner(),
-                  features::IsSurfaceSynchronizationEnabled(),
                   ui::IsPixelCanvasRecordingEnabled()) {
   g_recyclable_compositor_count += 1;
   compositor_.SetAcceleratedWidget(
@@ -73,8 +72,11 @@ void RecyclableCompositorMac::UpdateSurface(const gfx::Size& size_pixels,
   if (size_pixels != size_pixels_ || scale_factor != scale_factor_) {
     size_pixels_ = size_pixels;
     scale_factor_ = scale_factor;
+    local_surface_id_allocator_.GenerateId();
+    viz::LocalSurfaceIdAllocation local_surface_id_allocation =
+        local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation();
     compositor()->SetScaleAndSize(scale_factor_, size_pixels_,
-                                  local_surface_id_allocator_.GenerateId());
+                                  local_surface_id_allocation);
   }
 }
 
@@ -84,7 +86,7 @@ void RecyclableCompositorMac::InvalidateSurface() {
   local_surface_id_allocator_.Invalidate();
   compositor()->SetScaleAndSize(
       scale_factor_, size_pixels_,
-      local_surface_id_allocator_.GetCurrentLocalSurfaceId());
+      local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation());
 }
 
 void RecyclableCompositorMac::OnCompositingDidCommit(

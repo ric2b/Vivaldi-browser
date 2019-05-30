@@ -379,7 +379,7 @@ Network.RequestHeadersView = class extends UI.VBox {
       statusCodeFragment.createChild('div', 'header-name').textContent = Common.UIString('Status Code') + ': ';
       statusCodeFragment.createChild('span', 'header-separator');
 
-      const statusCodeImage = statusCodeFragment.createChild('label', 'resource-status-image', 'dt-icon-label');
+      const statusCodeImage = statusCodeFragment.createChild('span', 'resource-status-image', 'dt-icon-label');
       statusCodeImage.title = this._request.statusCode + ' ' + this._request.statusText;
 
       if (this._request.statusCode < 300 || this._request.statusCode === 304)
@@ -393,17 +393,19 @@ Network.RequestHeadersView = class extends UI.VBox {
 
       const statusTextElement = statusCodeFragment.createChild('div', 'header-value source-code');
       let statusText = this._request.statusCode + ' ' + this._request.statusText;
-      if (this._request.fetchedViaServiceWorker) {
+      if (this._request.cachedInMemory()) {
+        statusText += ' ' + Common.UIString('(from memory cache)');
+        statusTextElement.classList.add('status-from-cache');
+      } else if (this._request.fetchedViaServiceWorker) {
         statusText += ' ' + Common.UIString('(from ServiceWorker)');
         statusTextElement.classList.add('status-from-cache');
-      } else if (this._request.redirectSource() && this._request.redirectSource().signedExchangeInfo()) {
+      } else if (
+          this._request.redirectSource() && this._request.redirectSource().signedExchangeInfo() &&
+          !this._request.redirectSource().signedExchangeInfo().errors) {
         statusText += ' ' + Common.UIString('(from signed-exchange)');
         statusTextElement.classList.add('status-from-cache');
       } else if (this._request.cached()) {
-        if (this._request.cachedInMemory())
-          statusText += ' ' + Common.UIString('(from memory cache)');
-        else
-          statusText += ' ' + Common.UIString('(from disk cache)');
+        statusText += ' ' + Common.UIString('(from disk cache)');
         statusTextElement.classList.add('status-from-cache');
       }
       statusTextElement.textContent = statusText;
@@ -440,7 +442,7 @@ Network.RequestHeadersView = class extends UI.VBox {
     if (provisionalHeaders) {
       const cautionText = Common.UIString('Provisional headers are shown');
       const cautionFragment = createDocumentFragment();
-      cautionFragment.createChild('label', '', 'dt-icon-label').type = 'smallicon-warning';
+      cautionFragment.createChild('span', '', 'dt-icon-label').type = 'smallicon-warning';
       cautionFragment.createChild('div', 'caution').textContent = cautionText;
       const cautionTreeElement = new UI.TreeElement(cautionFragment);
       cautionTreeElement.selectable = false;

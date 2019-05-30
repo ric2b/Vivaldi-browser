@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
@@ -615,8 +617,8 @@ void HttpProtocolHandlerCore::AllocateReadBuffer(int last_read_data_size) {
     read_buffer_size_ = std::max(read_buffer_size_ / 2, kIOBufferMinSize);
   }
   read_buffer_.reset(static_cast<char*>(malloc(read_buffer_size_)));
-  read_buffer_wrapper_ =
-      new WrappedIOBuffer(static_cast<const char*>(read_buffer_.get()));
+  read_buffer_wrapper_ = base::MakeRefCounted<WrappedIOBuffer>(
+      static_cast<const char*>(read_buffer_.get()));
 }
 
 HttpProtocolHandlerCore::~HttpProtocolHandlerCore() {
@@ -949,7 +951,7 @@ int HttpProtocolHandlerCore::OnRead(char* buffer, int buffer_length) {
   g_protocol_handler_delegate->GetDefaultURLRequestContext()
       ->GetNetworkTaskRunner()
       ->PostTask(FROM_HERE,
-                 base::Bind(&net::HttpProtocolHandlerCore::Cancel, _core));
+                 base::BindOnce(&net::HttpProtocolHandlerCore::Cancel, _core));
 }
 
 @end
@@ -1058,8 +1060,8 @@ int HttpProtocolHandlerCore::OnRead(char* buffer, int buffer_length) {
   DCHECK(_protocolProxy);
   g_protocol_handler_delegate->GetDefaultURLRequestContext()
       ->GetNetworkTaskRunner()
-      ->PostTask(FROM_HERE, base::Bind(&net::HttpProtocolHandlerCore::Start,
-                                       _core, _protocolProxy));
+      ->PostTask(FROM_HERE, base::BindOnce(&net::HttpProtocolHandlerCore::Start,
+                                           _core, _protocolProxy));
 }
 
 - (id<CRNHTTPProtocolHandlerProxy>)getProtocolHandlerProxy {
@@ -1085,7 +1087,7 @@ int HttpProtocolHandlerCore::OnRead(char* buffer, int buffer_length) {
   g_protocol_handler_delegate->GetDefaultURLRequestContext()
       ->GetNetworkTaskRunner()
       ->PostTask(FROM_HERE,
-                 base::Bind(&net::HttpProtocolHandlerCore::Cancel, _core));
+                 base::BindOnce(&net::HttpProtocolHandlerCore::Cancel, _core));
   [_protocolProxy invalidate];
 }
 

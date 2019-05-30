@@ -4,30 +4,41 @@
 
 #include "ui/message_center/views/message_view_factory.h"
 
+#include <vector>
+
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/lazy_instance.h"
 #include "ui/message_center/public/cpp/features.h"
 #include "ui/message_center/public/cpp/notification_types.h"
-#include "ui/message_center/views/notification_view.h"
 #include "ui/message_center/views/notification_view_md.h"
 
-#if defined(OS_WIN)
-#include "ui/base/win/shell.h"
+#if !defined(OS_CHROMEOS)
+#include "ui/message_center/views/notification_view.h"
 #endif
 
 namespace message_center {
 
 namespace {
 
-base::LazyInstance<MessageViewFactory::CustomMessageViewFactoryFunction>::Leaky
-    g_custom_view_factory = LAZY_INSTANCE_INITIALIZER;
+using MessageViewCustomFactoryMap =
+    std::map<std::string, MessageViewFactory::CustomMessageViewFactoryFunction>;
+
+base::LazyInstance<MessageViewCustomFactoryMap>::Leaky g_custom_view_factories =
+    LAZY_INSTANCE_INITIALIZER;
+
+std::unique_ptr<MessageView> GetCustomNotificationView(
+    const Notification& notification) {
+  MessageViewCustomFactoryMap* factories = g_custom_view_factories.Pointer();
+  auto iter = factories->find(notification.custom_view_type());
+  DCHECK(iter != factories->end());
+  return iter->second.Run(notification);
+}
 
 }  // namespace
 
 // static
-MessageView* MessageViewFactory::Create(const Notification& notification,
-                                        bool top_level) {
+MessageView* MessageViewFactory::Create(const Notification& notification) {
   MessageView* notification_view = nullptr;
   switch (notification.type()) {
     case NOTIFICATION_TYPE_BASE_FORMAT:
@@ -35,15 +46,10 @@ MessageView* MessageViewFactory::Create(const Notification& notification,
     case NOTIFICATION_TYPE_MULTIPLE:
     case NOTIFICATION_TYPE_SIMPLE:
     case NOTIFICATION_TYPE_PROGRESS:
-      // All above roads lead to the generic NotificationView.
-      if (base::FeatureList::IsEnabled(message_center::kNewStyleNotifications))
-        notification_view = new NotificationViewMD(notification);
-      else
-        notification_view = new NotificationView(notification);
+      // Rely on default construction after the switch.
       break;
     case NOTIFICATION_TYPE_CUSTOM:
-      notification_view =
-          g_custom_view_factory.Get().Run(notification).release();
+      notification_view = GetCustomNotificationView(notification).release();
       break;
     default:
       // If the caller asks for an unrecognized kind of view (entirely possible
@@ -54,35 +60,44 @@ MessageView* MessageViewFactory::Create(const Notification& notification,
       LOG(WARNING) << "Unable to fulfill request for unrecognized or"
                    << "unsupported notification type " << notification.type()
                    << ". Falling back to simple notification type.";
+      break;
+  }
+
+  if (!notification_view) {
+#if defined(OS_CHROMEOS)
+    notification_view = new NotificationViewMD(notification);
+#else
+    // All above roads lead to the generic NotificationView.
+    if (base::FeatureList::IsEnabled(message_center::kNewStyleNotifications))
+      notification_view = new NotificationViewMD(notification);
+    else
       notification_view = new NotificationView(notification);
-  }
-
-#if defined(OS_LINUX)
-  // Don't create shadows for notification toasts on Linux or CrOS.
-  if (top_level)
-    return notification_view;
 #endif
-
-#if defined(OS_WIN)
-  // Don't create shadows for notifications on Windows under classic theme.
-  if (top_level && !ui::win::IsAeroGlassEnabled()) {
-    return notification_view;
   }
-#endif  // OS_WIN
 
-  notification_view->SetIsNested();
   return notification_view;
 }
 
 // static
 void MessageViewFactory::SetCustomNotificationViewFactory(
+    const std::string& custom_view_type,
     const CustomMessageViewFactoryFunction& factory_function) {
-  g_custom_view_factory.Get() = factory_function;
+  MessageViewCustomFactoryMap* factories = g_custom_view_factories.Pointer();
+  DCHECK(factories->find(custom_view_type) == factories->end());
+  factories->emplace(custom_view_type, factory_function);
 }
 
 // static
-bool MessageViewFactory::HasCustomNotificationViewFactory() {
-  return !g_custom_view_factory.Get().is_null();
+bool MessageViewFactory::HasCustomNotificationViewFactory(
+    const std::string& custom_view_type) {
+  MessageViewCustomFactoryMap* factories = g_custom_view_factories.Pointer();
+  return factories->find(custom_view_type) != factories->end();
+}
+
+// static
+void MessageViewFactory::ClearCustomNotificationViewFactoryForTest(
+    const std::string& custom_view_type) {
+  g_custom_view_factories.Get().erase(custom_view_type);
 }
 
 }  // namespace message_center

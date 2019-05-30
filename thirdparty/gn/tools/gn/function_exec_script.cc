@@ -80,11 +80,15 @@ const char kExecScript_Help[] =
   rebase_path() function to make file names relative to this path (see "gn help
   rebase_path").
 
+  The default script interpreter is Python ("python" on POSIX, "python.exe" or
+  "python.bat" on Windows). This can be configured by the script_executable
+  variable, see "gn help dotfile".
+
 Arguments:
 
   filename:
-      File name of python script to execute. Non-absolute names will be treated
-      as relative to the current build file.
+      File name of script to execute. Non-absolute names will be treated as
+      relative to the current build file.
 
   arguments:
       A list of strings to be passed to the script as arguments. May be
@@ -133,7 +137,7 @@ Value RunExecScript(Scope* scope,
   if (!CheckExecScriptPermissions(build_settings, function, err))
     return Value();
 
-  // Find the python script to run.
+  // Find the script to run.
   std::string script_source_path = cur_dir.ResolveRelativeAs(
       true, args[0], err,
       scope->settings()->build_settings()->root_path_utf8());
@@ -173,8 +177,8 @@ Value RunExecScript(Scope* scope,
   }
 
   // Make the command line.
-  const base::FilePath& python_path = build_settings->python_path();
-  base::CommandLine cmdline(python_path);
+  const base::FilePath& interpreter_path = build_settings->python_path();
+  base::CommandLine cmdline(interpreter_path);
 
   // CommandLine tries to interpret arguments by default.  Disable that so
   // that the arguments will be passed through exactly as specified.
@@ -199,10 +203,10 @@ Value RunExecScript(Scope* scope,
   Ticks begin_exec = 0;
   if (g_scheduler->verbose_logging()) {
 #if defined(OS_WIN)
-    g_scheduler->Log("Pythoning",
+    g_scheduler->Log("Executing",
                      base::UTF16ToUTF8(cmdline.GetCommandLineString()));
 #else
-    g_scheduler->Log("Pythoning", cmdline.GetCommandLineString());
+    g_scheduler->Log("Executing", cmdline.GetCommandLineString());
 #endif
     begin_exec = TicksNow();
   }
@@ -227,14 +231,15 @@ Value RunExecScript(Scope* scope,
     if (!internal::ExecProcess(cmdline, startup_dir, &output, &stderr_output,
                                &exit_code)) {
       *err = Err(
-          function->function(), "Could not execute python.",
-          "I was trying to execute \"" + FilePathToUTF8(python_path) + "\".");
+          function->function(), "Could not execute interpreter.",
+          "I was trying to execute \"" + FilePathToUTF8(interpreter_path) +
+          "\".");
       return Value();
     }
   }
   if (g_scheduler->verbose_logging()) {
     g_scheduler->Log(
-        "Pythoning",
+        "Executing",
         script_source_path + " took " +
             base::Int64ToString(
                 TicksDelta(TicksNow(), begin_exec).InMilliseconds()) +

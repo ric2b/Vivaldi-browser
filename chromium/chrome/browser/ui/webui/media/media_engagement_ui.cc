@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/macros.h"
@@ -77,7 +78,8 @@ class MediaEngagementScoreDetailsProviderImpl
         base::FeatureList::IsEnabled(
             media::kMediaEngagementBypassAutoplayPolicies),
         base::FeatureList::IsEnabled(media::kPreloadMediaEngagementData),
-        base::FeatureList::IsEnabled(media::kAutoplaySoundSettings),
+        base::FeatureList::IsEnabled(media::kAutoplayDisableSettings),
+        base::FeatureList::IsEnabled(media::kAutoplayWhitelistSettings),
         GetBlockAutoplayPref(),
         base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kAutoplayPolicy),
@@ -94,8 +96,6 @@ class MediaEngagementScoreDetailsProviderImpl
         return "no-user-gesture-required";
       case content::AutoplayPolicy::kUserGestureRequired:
         return "user-gesture-required";
-      case content::AutoplayPolicy::kUserGestureRequiredForCrossOrigin:
-        return "user-gesture-required-for-cross-origin";
       case content::AutoplayPolicy::kDocumentUserActivationRequired:
         return "document-user-activation-required";
     }
@@ -143,9 +143,9 @@ MediaEngagementUI::MediaEngagementUI(content::WebUI* web_ui)
       content::WebUIDataSource::Create(chrome::kChromeUIMediaEngagementHost));
   source->AddResourcePath("media-engagement.js", IDR_MEDIA_ENGAGEMENT_JS);
   source->AddResourcePath(
-      "chrome/browser/media/media_engagement_score_details.mojom.js",
-      IDR_MEDIA_ENGAGEMENT_MOJO_JS);
-  source->AddResourcePath("url/mojom/url.mojom.js", IDR_URL_MOJO_JS);
+      "chrome/browser/media/media_engagement_score_details.mojom-lite.js",
+      IDR_MEDIA_ENGAGEMENT_SCORE_DETAILS_MOJOM_LITE_JS);
+  source->AddResourcePath("url/mojom/url.mojom-lite.js", IDR_URL_MOJOM_LITE_JS);
   source->SetDefaultResource(IDR_MEDIA_ENGAGEMENT_HTML);
   source->UseGzip();
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), source.release());

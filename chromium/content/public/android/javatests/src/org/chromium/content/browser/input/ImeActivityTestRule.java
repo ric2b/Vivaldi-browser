@@ -23,15 +23,15 @@ import org.junit.Assert;
 import org.chromium.base.ThreadUtils;
 import org.chromium.content.browser.ViewEventSinkImpl;
 import org.chromium.content.browser.selection.SelectionPopupControllerImpl;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.DOMUtils;
-import org.chromium.content.browser.test.util.JavaScriptUtils;
-import org.chromium.content.browser.test.util.TestCallbackHelperContainer;
-import org.chromium.content.browser.test.util.TestInputMethodManagerWrapper;
-import org.chromium.content.browser.test.util.TestInputMethodManagerWrapper.InputConnectionProvider;
 import org.chromium.content.browser.webcontents.WebContentsImpl;
 import org.chromium.content_public.browser.ImeAdapter;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.DOMUtils;
+import org.chromium.content_public.browser.test.util.JavaScriptUtils;
+import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer;
+import org.chromium.content_public.browser.test.util.TestInputMethodManagerWrapper;
+import org.chromium.content_public.browser.test.util.TestInputMethodManagerWrapper.InputConnectionProvider;
 import org.chromium.content_shell_apk.ContentShellActivityTestRule;
 import org.chromium.ui.base.ime.TextInputType;
 
@@ -60,7 +60,7 @@ class ImeActivityTestRule extends ContentShellActivityTestRule {
 
     public void setUpForUrl(String url) throws Exception {
         launchContentShellWithUrlSync(url);
-        mSelectionPopupController = SelectionPopupControllerImpl.fromWebContents(getWebContents());
+        mSelectionPopupController = getSelectionPopupController();
 
         final ImeAdapter imeAdapter = getImeAdapter();
         InputConnectionProvider provider =
@@ -124,10 +124,6 @@ class ImeActivityTestRule extends ContentShellActivityTestRule {
 
         waitAndVerifyUpdateSelection(0, 0, 0, -1, -1);
         resetAllStates();
-    }
-
-    SelectionPopupControllerImpl getSelectionPopupController() {
-        return mSelectionPopupController;
     }
 
     TestCallbackHelperContainer getTestCallBackHelperContainer() {
@@ -284,10 +280,11 @@ class ImeActivityTestRule extends ContentShellActivityTestRule {
             }
         });
         Pair<Range, Range> selection = states.get(index);
-        Assert.assertEquals(selectionStart, selection.first.start());
-        Assert.assertEquals(selectionEnd, selection.first.end());
-        Assert.assertEquals(compositionStart, selection.second.start());
-        Assert.assertEquals(compositionEnd, selection.second.end());
+        Assert.assertEquals("Mismatched selection start", selectionStart, selection.first.start());
+        Assert.assertEquals("Mismatched selection end", selectionEnd, selection.first.end());
+        Assert.assertEquals(
+                "Mismatched composition start", compositionStart, selection.second.start());
+        Assert.assertEquals("Mismatched composition end", compositionEnd, selection.second.end());
     }
 
     void resetUpdateSelectionList() {
@@ -305,10 +302,6 @@ class ImeActivityTestRule extends ContentShellActivityTestRule {
                         && TextUtils.equals(clip.getItemAt(0).getText(), expectedContents);
             }
         });
-    }
-
-    ImeAdapterImpl getImeAdapter() {
-        return ImeAdapterImpl.fromWebContents(getWebContents());
     }
 
     ChromiumBaseInputConnection getInputConnection() {

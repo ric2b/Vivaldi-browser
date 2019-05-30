@@ -16,8 +16,8 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
 #include "base/path_service.h"
+#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -31,13 +31,11 @@
 #include "chrome/installer/setup/install_worker.h"
 #include "chrome/installer/setup/installer_state.h"
 #include "chrome/installer/setup/setup_constants.h"
-#include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/installer_util_strings.h"
 #include "chrome/installer/util/l10n_string_util.h"
 #include "chrome/installer/util/master_preferences.h"
 #include "chrome/installer/util/master_preferences_constants.h"
-#include "chrome/installer/util/product.h"
 #include "chrome/installer/util/shell_util.h"
 #include "chrome/installer/util/util_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -84,8 +82,8 @@ class CreateVisualElementsManifestTest
   // Creates a dummy test file at |path|.
   void CreateTestFile(const base::FilePath& path) {
     static constexpr char kBlah[] = "blah";
-    ASSERT_EQ(static_cast<int>(arraysize(kBlah) - 1),
-              base::WriteFile(path, &kBlah[0], arraysize(kBlah) - 1));
+    ASSERT_EQ(static_cast<int>(base::size(kBlah) - 1),
+              base::WriteFile(path, &kBlah[0], base::size(kBlah) - 1));
   }
 
   // Creates the VisualElements directory and a light asset, if testing such.
@@ -177,28 +175,28 @@ constexpr char kExpectedCanaryManifest[] =
     "      BackgroundColor='#5F6368'/>\r\n"
     "</Application>\r\n";
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     GoogleChrome,
     CreateVisualElementsManifestTest,
     testing::Combine(testing::Values(install_static::STABLE_INDEX),
                      testing::Values(kExpectedPrimaryManifest)));
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     BetaChrome,
     CreateVisualElementsManifestTest,
     testing::Combine(testing::Values(install_static::BETA_INDEX),
                      testing::Values(kExpectedBetaManifest)));
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     DevChrome,
     CreateVisualElementsManifestTest,
     testing::Combine(testing::Values(install_static::DEV_INDEX),
                      testing::Values(kExpectedDevManifest)));
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     CanaryChrome,
     CreateVisualElementsManifestTest,
     testing::Combine(testing::Values(install_static::CANARY_INDEX),
                      testing::Values(kExpectedCanaryManifest)));
 #else
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     Chromium,
     CreateVisualElementsManifestTest,
     testing::Combine(testing::Values(install_static::CHROMIUM_INDEX),
@@ -210,16 +208,12 @@ class InstallShortcutTest : public testing::Test {
   void SetUp() override {
     EXPECT_EQ(S_OK, CoInitialize(NULL));
 
-    dist_ = BrowserDistribution::GetDistribution();
-    ASSERT_TRUE(dist_ != NULL);
-    product_.reset(new installer::Product(dist_));
-
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     chrome_exe_ = temp_dir_.GetPath().Append(installer::kChromeExe);
     EXPECT_EQ(0, base::WriteFile(chrome_exe_, "", 0));
 
     ShellUtil::ShortcutProperties chrome_properties(ShellUtil::CURRENT_USER);
-    product_->AddDefaultShortcutProperties(chrome_exe_, &chrome_properties);
+    ShellUtil::AddDefaultShortcutProperties(chrome_exe_, &chrome_properties);
 
     expected_properties_.set_target(chrome_exe_);
     expected_properties_.set_icon(chrome_properties.icon,
@@ -248,7 +242,8 @@ class InstallShortcutTest : public testing::Test {
     common_start_menu_override_.reset(new base::ScopedPathOverride(
         base::DIR_COMMON_START_MENU, fake_common_start_menu_.GetPath()));
 
-    base::string16 shortcut_name(dist_->GetShortcutName() + installer::kLnkExt);
+    base::string16 shortcut_name(InstallUtil::GetShortcutName() +
+                                 installer::kLnkExt);
 
     user_desktop_shortcut_ = fake_user_desktop_.GetPath().Append(shortcut_name);
     user_quick_launch_shortcut_ =
@@ -257,8 +252,7 @@ class InstallShortcutTest : public testing::Test {
         fake_start_menu_.GetPath().Append(shortcut_name);
     user_start_menu_subdir_shortcut_ =
         fake_start_menu_.GetPath()
-            .Append(dist_->GetStartMenuShortcutSubfolder(
-                BrowserDistribution::SUBFOLDER_CHROME))
+            .Append(InstallUtil::GetChromeShortcutDirNameDeprecated())
             .Append(shortcut_name);
     system_desktop_shortcut_ =
         fake_common_desktop_.GetPath().Append(shortcut_name);
@@ -266,8 +260,7 @@ class InstallShortcutTest : public testing::Test {
         fake_common_start_menu_.GetPath().Append(shortcut_name);
     system_start_menu_subdir_shortcut_ =
         fake_common_start_menu_.GetPath()
-            .Append(dist_->GetStartMenuShortcutSubfolder(
-                BrowserDistribution::SUBFOLDER_CHROME))
+            .Append(InstallUtil::GetChromeShortcutDirNameDeprecated())
             .Append(shortcut_name);
   }
 
@@ -295,7 +288,7 @@ class InstallShortcutTest : public testing::Test {
     };
 
     std::string master_prefs("{\"distribution\":{");
-    for (size_t i = 0; i < arraysize(desired_prefs); ++i) {
+    for (size_t i = 0; i < base::size(desired_prefs); ++i) {
       master_prefs += (i == 0 ? "\"" : ",\"");
       master_prefs += desired_prefs[i].pref_name;
       master_prefs += "\":";
@@ -309,9 +302,7 @@ class InstallShortcutTest : public testing::Test {
   base::win::ShortcutProperties expected_properties_;
   base::win::ShortcutProperties expected_start_menu_properties_;
 
-  BrowserDistribution* dist_;
   base::FilePath chrome_exe_;
-  std::unique_ptr<installer::Product> product_;
   std::unique_ptr<installer::MasterPreferences> prefs_;
 
   base::ScopedTempDir temp_dir_;
@@ -360,9 +351,9 @@ TEST_P(CreateVisualElementsManifestTest, VisualElementsManifestCreated) {
 }
 
 TEST_F(InstallShortcutTest, CreateAllShortcuts) {
-  installer::CreateOrUpdateShortcuts(
-      chrome_exe_, *product_, *prefs_, installer::CURRENT_USER,
-      installer::INSTALL_SHORTCUT_CREATE_ALL);
+  installer::CreateOrUpdateShortcuts(chrome_exe_, *prefs_,
+                                     installer::CURRENT_USER,
+                                     installer::INSTALL_SHORTCUT_CREATE_ALL);
   base::win::ValidateShortcut(user_desktop_shortcut_, expected_properties_);
   base::win::ValidateShortcut(user_quick_launch_shortcut_,
                               expected_properties_);
@@ -371,9 +362,8 @@ TEST_F(InstallShortcutTest, CreateAllShortcuts) {
 }
 
 TEST_F(InstallShortcutTest, CreateAllShortcutsSystemLevel) {
-  installer::CreateOrUpdateShortcuts(
-      chrome_exe_, *product_, *prefs_, installer::ALL_USERS,
-      installer::INSTALL_SHORTCUT_CREATE_ALL);
+  installer::CreateOrUpdateShortcuts(chrome_exe_, *prefs_, installer::ALL_USERS,
+                                     installer::INSTALL_SHORTCUT_CREATE_ALL);
   base::win::ValidateShortcut(system_desktop_shortcut_, expected_properties_);
   base::win::ValidateShortcut(system_start_menu_shortcut_,
                               expected_start_menu_properties_);
@@ -386,9 +376,9 @@ TEST_F(InstallShortcutTest, CreateAllShortcutsSystemLevel) {
 TEST_F(InstallShortcutTest, CreateAllShortcutsButDesktopShortcut) {
   std::unique_ptr<installer::MasterPreferences> prefs_no_desktop(
       GetFakeMasterPrefs(true, false));
-  installer::CreateOrUpdateShortcuts(
-      chrome_exe_, *product_, *prefs_no_desktop, installer::CURRENT_USER,
-      installer::INSTALL_SHORTCUT_CREATE_ALL);
+  installer::CreateOrUpdateShortcuts(chrome_exe_, *prefs_no_desktop,
+                                     installer::CURRENT_USER,
+                                     installer::INSTALL_SHORTCUT_CREATE_ALL);
   ASSERT_FALSE(base::PathExists(user_desktop_shortcut_));
   base::win::ValidateShortcut(user_quick_launch_shortcut_,
                               expected_properties_);
@@ -399,9 +389,9 @@ TEST_F(InstallShortcutTest, CreateAllShortcutsButDesktopShortcut) {
 TEST_F(InstallShortcutTest, CreateAllShortcutsButQuickLaunchShortcut) {
   std::unique_ptr<installer::MasterPreferences> prefs_no_ql(
       GetFakeMasterPrefs(false, true));
-  installer::CreateOrUpdateShortcuts(
-      chrome_exe_, *product_, *prefs_no_ql, installer::CURRENT_USER,
-      installer::INSTALL_SHORTCUT_CREATE_ALL);
+  installer::CreateOrUpdateShortcuts(chrome_exe_, *prefs_no_ql,
+                                     installer::CURRENT_USER,
+                                     installer::INSTALL_SHORTCUT_CREATE_ALL);
   base::win::ValidateShortcut(user_desktop_shortcut_, expected_properties_);
   ASSERT_FALSE(base::PathExists(user_quick_launch_shortcut_));
   base::win::ValidateShortcut(user_start_menu_shortcut_,
@@ -430,7 +420,7 @@ TEST_F(InstallShortcutTest, ReplaceAll) {
                   base::win::SHORTCUT_CREATE_ALWAYS));
 
   installer::CreateOrUpdateShortcuts(
-      chrome_exe_, *product_, *prefs_, installer::CURRENT_USER,
+      chrome_exe_, *prefs_, installer::CURRENT_USER,
       installer::INSTALL_SHORTCUT_REPLACE_EXISTING);
   base::win::ValidateShortcut(user_desktop_shortcut_, expected_properties_);
   base::win::ValidateShortcut(user_quick_launch_shortcut_,
@@ -455,7 +445,7 @@ TEST_F(InstallShortcutTest, ReplaceExisting) {
   ASSERT_TRUE(base::CreateDirectory(user_start_menu_shortcut_.DirName()));
 
   installer::CreateOrUpdateShortcuts(
-      chrome_exe_, *product_, *prefs_, installer::CURRENT_USER,
+      chrome_exe_, *prefs_, installer::CURRENT_USER,
       installer::INSTALL_SHORTCUT_REPLACE_EXISTING);
   base::win::ValidateShortcut(user_desktop_shortcut_, expected_properties_);
   ASSERT_FALSE(base::PathExists(user_quick_launch_shortcut_));
@@ -507,24 +497,23 @@ TEST_P(MigrateShortcutTest, MigrateAwayFromDeprecatedStartMenuTest) {
   ASSERT_TRUE(base::PathExists(start_menu_subdir_shortcut));
   ASSERT_FALSE(base::PathExists(start_menu_shortcut));
 
-  installer::CreateOrUpdateShortcuts(chrome_exe_, *product_, *prefs_,
-                                     shortcut_level_, shortcut_operation_);
+  installer::CreateOrUpdateShortcuts(chrome_exe_, *prefs_, shortcut_level_,
+                                     shortcut_operation_);
   ASSERT_FALSE(base::PathExists(start_menu_subdir_shortcut));
   ASSERT_TRUE(base::PathExists(start_menu_shortcut));
 }
 
 // Verify that any installer operation for any installation level triggers
 // the migration from sub-folder to root of start-menu.
-INSTANTIATE_TEST_CASE_P(
-    MigrateShortcutTests, MigrateShortcutTest,
+INSTANTIATE_TEST_SUITE_P(
+    MigrateShortcutTests,
+    MigrateShortcutTest,
     testing::Combine(
         testing::Values(
             installer::INSTALL_SHORTCUT_REPLACE_EXISTING,
             installer::INSTALL_SHORTCUT_CREATE_EACH_IF_NO_SYSTEM_LEVEL,
             installer::INSTALL_SHORTCUT_CREATE_ALL),
-        testing::Values(
-            installer::CURRENT_USER,
-            installer::ALL_USERS)));
+        testing::Values(installer::CURRENT_USER, installer::ALL_USERS)));
 
 TEST_F(InstallShortcutTest, CreateIfNoSystemLevelAllSystemShortcutsExist) {
   base::win::ShortcutProperties dummy_properties;
@@ -543,7 +532,7 @@ TEST_F(InstallShortcutTest, CreateIfNoSystemLevelAllSystemShortcutsExist) {
                   base::win::SHORTCUT_CREATE_ALWAYS));
 
   installer::CreateOrUpdateShortcuts(
-      chrome_exe_, *product_, *prefs_, installer::CURRENT_USER,
+      chrome_exe_, *prefs_, installer::CURRENT_USER,
       installer::INSTALL_SHORTCUT_CREATE_EACH_IF_NO_SYSTEM_LEVEL);
   ASSERT_FALSE(base::PathExists(user_desktop_shortcut_));
   ASSERT_FALSE(base::PathExists(user_start_menu_shortcut_));
@@ -554,7 +543,7 @@ TEST_F(InstallShortcutTest, CreateIfNoSystemLevelAllSystemShortcutsExist) {
 
 TEST_F(InstallShortcutTest, CreateIfNoSystemLevelNoSystemShortcutsExist) {
   installer::CreateOrUpdateShortcuts(
-      chrome_exe_, *product_, *prefs_, installer::CURRENT_USER,
+      chrome_exe_, *prefs_, installer::CURRENT_USER,
       installer::INSTALL_SHORTCUT_CREATE_EACH_IF_NO_SYSTEM_LEVEL);
   base::win::ValidateShortcut(user_desktop_shortcut_, expected_properties_);
   base::win::ValidateShortcut(user_quick_launch_shortcut_,
@@ -575,7 +564,7 @@ TEST_F(InstallShortcutTest, CreateIfNoSystemLevelSomeSystemShortcutsExist) {
                   base::win::SHORTCUT_CREATE_ALWAYS));
 
   installer::CreateOrUpdateShortcuts(
-      chrome_exe_, *product_, *prefs_, installer::CURRENT_USER,
+      chrome_exe_, *prefs_, installer::CURRENT_USER,
       installer::INSTALL_SHORTCUT_CREATE_EACH_IF_NO_SYSTEM_LEVEL);
   ASSERT_FALSE(base::PathExists(user_desktop_shortcut_));
   base::win::ValidateShortcut(user_quick_launch_shortcut_,

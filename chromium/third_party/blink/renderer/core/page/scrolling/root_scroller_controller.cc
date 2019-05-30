@@ -9,6 +9,7 @@
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/frame/browser_controls.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/frame/use_counter.h"
 #include "third_party/blink/renderer/core/fullscreen/document_fullscreen.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
@@ -35,15 +36,26 @@ bool FillsViewport(const Element& element) {
   if (!element.GetLayoutObject())
     return false;
 
-  LayoutObject* layout_object = element.GetLayoutObject();
+  DCHECK(element.GetLayoutObject()->IsBox());
+
+  LayoutBox* layout_box = ToLayoutBox(element.GetLayoutObject());
 
   // TODO(bokan): Broken for OOPIF. crbug.com/642378.
   Document& top_document = element.GetDocument().TopDocument();
   if (!top_document.GetLayoutView())
     return false;
 
-  FloatQuad quad = layout_object->LocalToAbsoluteQuad(
-      FloatRect(ToLayoutBox(layout_object)->PhysicalPaddingBoxRect()));
+  // We need to be more strict for iframes and use the content box since the
+  // iframe will use the parent's layout size. Using the padding box would mean
+  // the content would relayout on promotion/demotion. The layout size matching
+  // the parent is done to ensure consistent semantics with respect to how the
+  // mobile URL bar affects layout, which isn't a concern for non-iframe
+  // elements because those semantics will already be applied to the element.
+  LayoutRect rect = layout_box->IsLayoutIFrame()
+                        ? layout_box->PhysicalContentBoxRect()
+                        : layout_box->PhysicalPaddingBoxRect();
+
+  FloatQuad quad = layout_box->LocalToAbsoluteQuad(FloatRect(rect));
 
   if (!quad.IsRectilinear())
     return false;
@@ -66,18 +78,12 @@ bool FillsViewport(const Element& element) {
 // If the element is an iframe this grabs the ScrollableArea for the owned
 // LayoutView.
 PaintLayerScrollableArea* GetScrollableArea(const Element& element) {
-  if (element.IsFrameOwnerElement()) {
-    const HTMLFrameOwnerElement* frame_owner =
-        ToHTMLFrameOwnerElement(&element);
-    if (!frame_owner->ContentFrame())
+  if (const auto* frame_owner = DynamicTo<HTMLFrameOwnerElement>(element)) {
+    EmbeddedContentView* content_view = frame_owner->OwnedEmbeddedContentView();
+    if (!content_view)
       return nullptr;
 
-    if (!frame_owner->ContentFrame()->IsLocalFrame())
-      return nullptr;
-
-    LocalFrameView* frame_view =
-        ToLocalFrameView(frame_owner->OwnedEmbeddedContentView());
-
+    auto* frame_view = DynamicTo<LocalFrameView>(content_view);
     if (!frame_view)
       return nullptr;
 
@@ -88,32 +94,15 @@ PaintLayerScrollableArea* GetScrollableArea(const Element& element) {
   return ToLayoutBox(element.GetLayoutObject())->GetScrollableArea();
 }
 
-bool ScrollsVerticalOverflow(LayoutView& layout_view) {
-  DCHECK(layout_view.GetScrollableArea());
-
-  if (layout_view.Size().IsZero() ||
-      !layout_view.GetScrollableArea()->HasVerticalOverflow() ||
-      !layout_view.ScrollsOverflowY())
-    return false;
-
-  ScrollbarMode h_mode;
-  ScrollbarMode v_mode;
-  layout_view.CalculateScrollbarModes(h_mode, v_mode);
-
-  return v_mode != kScrollbarAlwaysOff;
-}
-
 }  // namespace
 
 // static
 RootScrollerController* RootScrollerController::Create(Document& document) {
-  return new RootScrollerController(document);
+  return MakeGarbageCollected<RootScrollerController>(document);
 }
 
 RootScrollerController::RootScrollerController(Document& document)
-    : document_(&document),
-      effective_root_scroller_(&document),
-      document_has_document_element_(false) {}
+    : document_(&document), effective_root_scroller_(&document) {}
 
 void RootScrollerController::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
@@ -152,9 +141,9 @@ void RootScrollerController::DidResizeFrameView() {
   // If the effective root scroller in this Document is a Frame, it'll match
   // its parent's frame rect. We can't rely on layout to kick it to update its
   // geometry so we do so explicitly here.
-  if (EffectiveRootScroller().IsFrameOwnerElement()) {
-    UpdateIFrameGeometryAndLayoutSize(
-        *ToHTMLFrameOwnerElement(&EffectiveRootScroller()));
+  if (auto* frame_owner =
+          DynamicTo<HTMLFrameOwnerElement>(EffectiveRootScroller())) {
+    UpdateIFrameGeometryAndLayoutSize(*frame_owner);
   }
 }
 
@@ -183,55 +172,45 @@ void RootScrollerController::RecomputeEffectiveRootScroller() {
   if (!DocumentFullscreen::fullscreenElement(*document_)) {
     bool root_scroller_valid =
         root_scroller_ && IsValidRootScroller(*root_scroller_);
-    if (root_scroller_valid)
+    if (root_scroller_valid) {
       new_effective_root_scroller = root_scroller_;
-    else if (implicit_root_scroller_)
+    } else if (implicit_root_scroller_) {
       new_effective_root_scroller = implicit_root_scroller_;
+      UseCounter::Count(document_, WebFeature::kActivatedImplicitRootScroller);
+    }
   }
 
-  // TODO(bokan): This is a terrible hack but required because the viewport
-  // apply scroll works on Elements rather than Nodes. If we're going from
-  // !documentElement to documentElement, we can't early out even if the root
-  // scroller didn't change since the global root scroller didn't have an
-  // Element previously to put it's ViewportScrollCallback onto. We need this
-  // to kick the global root scroller to recompute itself. We can remove this
-  // if ScrollCustomization is moved to the Node rather than Element.
-  bool old_has_document_element = document_has_document_element_;
-  document_has_document_element_ = document_->documentElement();
-
-  if (old_has_document_element || !document_has_document_element_) {
-    if (effective_root_scroller_ == new_effective_root_scroller)
-      return;
-  }
+  if (effective_root_scroller_ == new_effective_root_scroller)
+    return;
 
   Node* old_effective_root_scroller = effective_root_scroller_;
   effective_root_scroller_ = new_effective_root_scroller;
 
-  if (new_effective_root_scroller != old_effective_root_scroller) {
-    if (LayoutBoxModelObject* new_obj =
-            new_effective_root_scroller->GetLayoutBoxModelObject()) {
-      if (new_obj->Layer()) {
-        new_effective_root_scroller->GetLayoutBoxModelObject()
-            ->Layer()
-            ->SetNeedsCompositingInputsUpdate();
-      }
+  DCHECK(new_effective_root_scroller);
+  if (LayoutBoxModelObject* new_obj =
+          new_effective_root_scroller->GetLayoutBoxModelObject()) {
+    if (new_obj->Layer()) {
+      new_effective_root_scroller->GetLayoutBoxModelObject()
+          ->Layer()
+          ->SetNeedsCompositingInputsUpdate();
     }
-    if (old_effective_root_scroller) {
-      if (LayoutBoxModelObject* old_obj =
-              old_effective_root_scroller->GetLayoutBoxModelObject()) {
-        if (old_obj->Layer()) {
-          old_effective_root_scroller->GetLayoutBoxModelObject()
-              ->Layer()
-              ->SetNeedsCompositingInputsUpdate();
-        }
-      }
-    }
-    if (auto* object = old_effective_root_scroller->GetLayoutObject())
-      object->SetIsEffectiveRootScroller(false);
-
-    if (auto* object = new_effective_root_scroller->GetLayoutObject())
-      object->SetIsEffectiveRootScroller(true);
   }
+
+  DCHECK(old_effective_root_scroller);
+  if (LayoutBoxModelObject* old_obj =
+          old_effective_root_scroller->GetLayoutBoxModelObject()) {
+    if (old_obj->Layer()) {
+      old_effective_root_scroller->GetLayoutBoxModelObject()
+          ->Layer()
+          ->SetNeedsCompositingInputsUpdate();
+    }
+  }
+
+  if (auto* object = old_effective_root_scroller->GetLayoutObject())
+    object->SetIsEffectiveRootScroller(false);
+
+  if (auto* object = new_effective_root_scroller->GetLayoutObject())
+    object->SetIsEffectiveRootScroller(true);
 
   ApplyRootScrollerProperties(*old_effective_root_scroller);
   ApplyRootScrollerProperties(*effective_root_scroller_);
@@ -258,13 +237,7 @@ bool RootScrollerController::IsValidRootScroller(const Element& element) const {
       !element.IsFrameOwnerElement())
     return false;
 
-  if (element.IsFrameOwnerElement()) {
-    const HTMLFrameOwnerElement* frame_owner =
-        ToHTMLFrameOwnerElement(&element);
-
-    if (!frame_owner)
-      return false;
-
+  if (const auto* frame_owner = DynamicTo<HTMLFrameOwnerElement>(element)) {
     if (!frame_owner->OwnedEmbeddedContentView())
       return false;
 
@@ -318,7 +291,35 @@ bool RootScrollerController::IsValidImplicit(const Element& element) const {
   if (!scrollable_area)
     return false;
 
-  return scrollable_area->ScrollsOverflow();
+  if (!scrollable_area->ScrollsOverflow())
+    return false;
+
+  // If any of the ancestors clip overflow, don't promote. Promoting a
+  // descendant of an overflow clip means it may not resize when the URL bar
+  // hides so we'd leave a portion of the page hidden/unreachable.
+  for (LayoutBox* ancestor = element.GetLayoutObject()->ContainingBlock();
+       ancestor; ancestor = ancestor->ContainingBlock()) {
+    // The LayoutView is allowed to have a clip (since its clip is resized by
+    // the URL bar movement). Test it for scrolling so that we only promote if
+    // we know we won't block scrolling the main document.
+    if (ancestor->IsLayoutView()) {
+      const ComputedStyle* style = ancestor->Style();
+      DCHECK(style);
+
+      PaintLayerScrollableArea* area = ancestor->GetScrollableArea();
+      DCHECK(area);
+
+      if (style->ScrollsOverflowY() && area->HasVerticalOverflow())
+        return false;
+    } else {
+      if (ancestor->ShouldClipOverflow() || ancestor->HasMask() ||
+          ancestor->HasClip() || ancestor->HasClipPath()) {
+        return false;
+      }
+    }
+  }
+
+  return true;
 }
 
 void RootScrollerController::ApplyRootScrollerProperties(Node& node) {
@@ -330,10 +331,9 @@ void RootScrollerController::ApplyRootScrollerProperties(Node& node) {
   if (!node.IsInTreeScope())
     return;
 
-  if (!node.IsFrameOwnerElement())
+  auto* frame_owner = DynamicTo<HTMLFrameOwnerElement>(node);
+  if (!frame_owner)
     return;
-
-  HTMLFrameOwnerElement* frame_owner = ToHTMLFrameOwnerElement(&node);
 
   // The current effective root scroller may have lost its ContentFrame. If
   // that's the case, there's nothing to be done. https://crbug.com/805317 for
@@ -341,9 +341,9 @@ void RootScrollerController::ApplyRootScrollerProperties(Node& node) {
   if (!frame_owner->ContentFrame())
     return;
 
-  if (frame_owner->ContentFrame()->IsLocalFrame()) {
+  if (IsA<LocalFrame>(frame_owner->ContentFrame())) {
     LocalFrameView* frame_view =
-        ToLocalFrameView(frame_owner->OwnedEmbeddedContentView());
+        To<LocalFrameView>(frame_owner->OwnedEmbeddedContentView());
 
     bool is_root_scroller = &EffectiveRootScroller() == &node;
 
@@ -365,7 +365,7 @@ void RootScrollerController::UpdateIFrameGeometryAndLayoutSize(
   DCHECK(document_->GetFrame()->View());
 
   LocalFrameView* child_view =
-      ToLocalFrameView(frame_owner.OwnedEmbeddedContentView());
+      To<LocalFrameView>(frame_owner.OwnedEmbeddedContentView());
 
   if (!child_view)
     return;
@@ -388,13 +388,7 @@ void RootScrollerController::ProcessImplicitCandidates() {
   if (!document_->GetFrame()->IsMainFrame())
     return;
 
-  // If the main document has vertical scrolling, that's a good sign we
-  // shouldn't implicitly promote anything.
-  if (ScrollsVerticalOverflow(*document_->GetLayoutView()))
-    return;
-
-  Element* highest_z_element = nullptr;
-  bool highest_is_ambiguous = false;
+  bool multiple_matches = false;
 
   HeapHashSet<WeakMember<Element>> copy(implicit_candidates_);
   for (auto& element : copy) {
@@ -404,36 +398,20 @@ void RootScrollerController::ProcessImplicitCandidates() {
       continue;
     }
 
-    if (!highest_z_element) {
-      highest_z_element = element;
-    } else {
-      int element_z = element->GetLayoutObject()->Style()->ZIndex();
-      int highest_z = highest_z_element->GetLayoutObject()->Style()->ZIndex();
+    if (implicit_root_scroller_)
+      multiple_matches = true;
 
-      if (element_z > highest_z) {
-        highest_z_element = element;
-        highest_is_ambiguous = false;
-      } else if (element_z == highest_z) {
-        highest_is_ambiguous = true;
-      }
-    }
+    implicit_root_scroller_ = element;
   }
 
-  if (highest_is_ambiguous)
+  // Only promote an implicit root scroller if we have a unique match.
+  if (multiple_matches)
     implicit_root_scroller_ = nullptr;
-  else
-    implicit_root_scroller_ = highest_z_element;
 }
 
 PaintLayer* RootScrollerController::RootScrollerPaintLayer() const {
-  return RootScrollerUtil::PaintLayerForRootScroller(effective_root_scroller_);
-}
-
-bool RootScrollerController::ScrollsViewport(const Element& element) const {
-  if (effective_root_scroller_->IsDocumentNode())
-    return element == document_->documentElement();
-
-  return element == effective_root_scroller_.Get();
+  return root_scroller_util::PaintLayerForRootScroller(
+      effective_root_scroller_);
 }
 
 void RootScrollerController::ElementRemoved(const Element& element) {
@@ -475,9 +453,10 @@ void RootScrollerController::ForAllNonThrottledLocalControllers(
   LocalFrame* frame = document_->GetFrame();
   for (Frame* child = frame->Tree().FirstChild(); child;
        child = child->Tree().NextSibling()) {
-    if (!child->IsLocalFrame())
+    auto* child_local_frame = DynamicTo<LocalFrame>(child);
+    if (!child_local_frame)
       continue;
-    if (Document* child_document = ToLocalFrame(child)->GetDocument()) {
+    if (Document* child_document = child_local_frame->GetDocument()) {
       child_document->GetRootScrollerController()
           .ForAllNonThrottledLocalControllers(function);
     }

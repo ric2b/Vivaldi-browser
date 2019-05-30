@@ -14,46 +14,44 @@ function FakeDataMaker() {}
  * @param {string=} url
  * @param {string=} username
  * @param {number=} passwordLength
- * @param {number=} index
+ * @param {number=} id
  * @return {chrome.passwordsPrivate.PasswordUiEntry}
  */
-FakeDataMaker.passwordEntry = function(url, username, passwordLength, index) {
+FakeDataMaker.passwordEntry = function(url, username, passwordLength, id) {
   // Generate fake data if param is undefined.
   url = url || FakeDataMaker.patternMaker_('www.xxxxxx.com', 16);
   username = username || FakeDataMaker.patternMaker_('user_xxxxx', 16);
   passwordLength = passwordLength || Math.floor(Math.random() * 15) + 3;
-  index = index || 0;
+  id = id || 0;
 
-  return {
-    loginPair: {
-      urls: {
-        origin: 'http://' + url + '/login',
-        shown: url,
-        link: 'http://' + url + '/login',
-      },
-      username: username,
-    },
-    numCharactersInPassword: passwordLength,
-    index: index,
-  };
-};
-
-/**
- * Creates a single item for the list of password exceptions.
- * @param {string=} url
- * @param {number=} index
- * @return {chrome.passwordsPrivate.ExceptionEntry}
- */
-FakeDataMaker.exceptionEntry = function(url, index) {
-  url = url || FakeDataMaker.patternMaker_('www.xxxxxx.com', 16);
-  index = index || 0;
   return {
     urls: {
       origin: 'http://' + url + '/login',
       shown: url,
       link: 'http://' + url + '/login',
     },
-    index: index,
+    username: username,
+    numCharactersInPassword: passwordLength,
+    id: id,
+  };
+};
+
+/**
+ * Creates a single item for the list of password exceptions.
+ * @param {string=} url
+ * @param {number=} id
+ * @return {chrome.passwordsPrivate.ExceptionEntry}
+ */
+FakeDataMaker.exceptionEntry = function(url, id) {
+  url = url || FakeDataMaker.patternMaker_('www.xxxxxx.com', 16);
+  id = id || 0;
+  return {
+    urls: {
+      origin: 'http://' + url + '/login',
+      shown: url,
+      link: 'http://' + url + '/login',
+    },
+    id: id,
   };
 };
 
@@ -161,106 +159,6 @@ function PasswordManagerExpectations() {
     exceptions: 0,
   };
 }
-
-/**
- * Test implementation
- * @implements {PasswordManager}
- * @constructor
- */
-function TestPasswordManager() {
-  this.actual_ = new PasswordManagerExpectations();
-
-  // Set these to have non-empty data.
-  this.data = {
-    passwords: [],
-    exceptions: [],
-  };
-
-  // Holds the last callbacks so they can be called when needed/
-  this.lastCallback = {
-    addSavedPasswordListChangedListener: null,
-    addExceptionListChangedListener: null,
-    getPlaintextPassword: null,
-  };
-}
-
-TestPasswordManager.prototype = {
-  /** @override */
-  addSavedPasswordListChangedListener: function(listener) {
-    this.actual_.listening.passwords++;
-    this.lastCallback.addSavedPasswordListChangedListener = listener;
-  },
-
-  /** @override */
-  removeSavedPasswordListChangedListener: function(listener) {
-    this.actual_.listening.passwords--;
-  },
-
-  /** @override */
-  getSavedPasswordList: function(callback) {
-    this.actual_.requested.passwords++;
-    callback(this.data.passwords);
-  },
-
-  /** @override */
-  removeSavedPassword: function(index) {
-    this.actual_.removed.passwords++;
-
-    if (this.onRemoveSavedPassword)
-      this.onRemoveSavedPassword(index);
-  },
-
-  /** @override */
-  addExceptionListChangedListener: function(listener) {
-    this.actual_.listening.exceptions++;
-    this.lastCallback.addExceptionListChangedListener = listener;
-  },
-
-  /** @override */
-  removeExceptionListChangedListener: function(listener) {
-    this.actual_.listening.exceptions--;
-  },
-
-  /** @override */
-  getExceptionList: function(callback) {
-    this.actual_.requested.exceptions++;
-    callback(this.data.exceptions);
-  },
-
-  /** @override */
-  removeException: function(index) {
-    this.actual_.removed.exceptions++;
-
-    if (this.onRemoveException)
-      this.onRemoveException(index);
-  },
-
-  /** @override */
-  getPlaintextPassword: function(index, callback) {
-    this.actual_.requested.plaintextPassword++;
-    this.lastCallback.getPlaintextPassword = callback;
-  },
-
-  /**
-   * Verifies expectations.
-   * @param {!PasswordManagerExpectations} expected
-   */
-  assertExpectations: function(expected) {
-    const actual = this.actual_;
-
-    assertEquals(expected.requested.passwords, actual.requested.passwords);
-    assertEquals(expected.requested.exceptions, actual.requested.exceptions);
-    assertEquals(
-        expected.requested.plaintextPassword,
-        actual.requested.plaintextPassword);
-
-    assertEquals(expected.removed.passwords, actual.removed.passwords);
-    assertEquals(expected.removed.exceptions, actual.removed.exceptions);
-
-    assertEquals(expected.listening.passwords, actual.listening.passwords);
-    assertEquals(expected.listening.exceptions, actual.listening.exceptions);
-  },
-};
 
 /** Helper class to track AutofillManager expectations. */
 class AutofillManagerExpectations {

@@ -4,16 +4,18 @@
 
 #include "chrome/browser/chromeos/arc/voice_interaction/voice_interaction_controller_client.h"
 
+#include <string>
 #include <utility>
 
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/interfaces/constants.mojom.h"
 #include "base/bind.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/assistant/assistant_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chromeos/chromeos_switches.h"
+#include "chrome/browser/ui/ash/assistant/assistant_pref_util.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_util.h"
 #include "components/language/core/browser/pref_names.h"
@@ -104,26 +106,28 @@ void VoiceInteractionControllerClient::NotifyContextEnabled() {
 void VoiceInteractionControllerClient::NotifyHotwordEnabled() {
   DCHECK(profile_);
   PrefService* prefs = profile_->GetPrefs();
-  // Make sure voice interaction is enabled.
-  DCHECK(prefs->GetBoolean(prefs::kVoiceInteractionEnabled));
   bool enabled = prefs->GetBoolean(prefs::kVoiceInteractionHotwordEnabled);
   voice_interaction_controller_->NotifyHotwordEnabled(enabled);
 }
 
-void VoiceInteractionControllerClient::NotifySetupCompleted() {
+void VoiceInteractionControllerClient::NotifyHotwordAlwaysOn() {
   DCHECK(profile_);
   PrefService* prefs = profile_->GetPrefs();
-  bool completed =
-      chromeos::switches::IsAssistantEnabled()
-          ? prefs->GetBoolean(prefs::kVoiceInteractionActivityControlAccepted)
-          : prefs->GetBoolean(prefs::kArcVoiceInteractionValuePropAccepted);
-  voice_interaction_controller_->NotifySetupCompleted(completed);
+  bool always_on = prefs->GetBoolean(prefs::kVoiceInteractionHotwordAlwaysOn);
+  voice_interaction_controller_->NotifyHotwordAlwaysOn(always_on);
+}
+
+void VoiceInteractionControllerClient::NotifyConsentStatus() {
+  DCHECK(profile_);
+  PrefService* prefs = profile_->GetPrefs();
+  voice_interaction_controller_->NotifyConsentStatus(
+      assistant::prefs::GetConsentStatus(prefs));
 }
 
 void VoiceInteractionControllerClient::NotifyFeatureAllowed() {
   DCHECK(profile_);
   ash::mojom::AssistantAllowedState state =
-      IsAssistantAllowedForProfile(profile_);
+      assistant::IsAssistantAllowedForProfile(profile_);
   voice_interaction_controller_->NotifyFeatureAllowed(state);
 }
 
@@ -145,15 +149,18 @@ void VoiceInteractionControllerClient::NotifyLocaleChanged() {
   voice_interaction_controller_->NotifyLocaleChanged(out_locale);
 }
 
+void VoiceInteractionControllerClient::NotifyLaunchWithMicOpen() {
+  DCHECK(profile_);
+  PrefService* prefs = profile_->GetPrefs();
+  bool voice_preferred =
+      prefs->GetBoolean(prefs::kVoiceInteractionLaunchWithMicOpen);
+  voice_interaction_controller_->NotifyLaunchWithMicOpen(voice_preferred);
+}
+
 void VoiceInteractionControllerClient::ActiveUserChanged(
     const user_manager::User* active_user) {
   if (active_user && active_user->is_profile_created())
     SetProfile(ProfileManager::GetActiveUserProfile());
-}
-
-void VoiceInteractionControllerClient::OnArcPlayStoreEnabledChanged(
-    bool enabled) {
-  NotifyFeatureAllowed();
 }
 
 void VoiceInteractionControllerClient::SetProfile(Profile* profile) {
@@ -173,20 +180,12 @@ void VoiceInteractionControllerClient::SetProfile(Profile* profile) {
   PrefService* prefs = profile->GetPrefs();
   pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
   pref_change_registrar_->Init(prefs);
-  if (chromeos::switches::IsAssistantEnabled()) {
-    pref_change_registrar_->Add(
-        prefs::kVoiceInteractionActivityControlAccepted,
-        base::BindRepeating(
-            &VoiceInteractionControllerClient::NotifySetupCompleted,
-            base::Unretained(this)));
-  } else {
-    pref_change_registrar_->Add(
-        prefs::kArcVoiceInteractionValuePropAccepted,
-        base::BindRepeating(
-            &VoiceInteractionControllerClient::NotifySetupCompleted,
-            base::Unretained(this)));
-  }
 
+  pref_change_registrar_->Add(
+      assistant::prefs::kAssistantConsentStatus,
+      base::BindRepeating(
+          &VoiceInteractionControllerClient::NotifyConsentStatus,
+          base::Unretained(this)));
   pref_change_registrar_->Add(
       language::prefs::kApplicationLocale,
       base::BindRepeating(
@@ -208,18 +207,29 @@ void VoiceInteractionControllerClient::SetProfile(Profile* profile) {
           &VoiceInteractionControllerClient::NotifyHotwordEnabled,
           base::Unretained(this)));
   pref_change_registrar_->Add(
+      prefs::kVoiceInteractionHotwordAlwaysOn,
+      base::BindRepeating(
+          &VoiceInteractionControllerClient::NotifyHotwordAlwaysOn,
+          base::Unretained(this)));
+  pref_change_registrar_->Add(
       prefs::kVoiceInteractionNotificationEnabled,
       base::BindRepeating(
           &VoiceInteractionControllerClient::NotifyNotificationEnabled,
           base::Unretained(this)));
+  pref_change_registrar_->Add(
+      prefs::kVoiceInteractionLaunchWithMicOpen,
+      base::BindRepeating(
+          &VoiceInteractionControllerClient::NotifyLaunchWithMicOpen,
+          base::Unretained(this)));
 
-  NotifySetupCompleted();
+  NotifyConsentStatus();
   NotifySettingsEnabled();
   NotifyContextEnabled();
   NotifyLocaleChanged();
   NotifyNotificationEnabled();
-  if (prefs->GetBoolean(prefs::kVoiceInteractionEnabled))
-    NotifyHotwordEnabled();
+  NotifyLaunchWithMicOpen();
+  NotifyHotwordEnabled();
+  NotifyHotwordAlwaysOn();
 }
 
 void VoiceInteractionControllerClient::Observe(

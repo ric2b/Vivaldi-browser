@@ -17,17 +17,19 @@
 namespace blink {
 
 BarcodeDetector* BarcodeDetector::Create(ExecutionContext* context) {
-  return new BarcodeDetector(context);
+  return MakeGarbageCollected<BarcodeDetector>(context);
 }
 
 BarcodeDetector::BarcodeDetector(ExecutionContext* context) : ShapeDetector() {
   shape_detection::mojom::blink::BarcodeDetectionProviderPtr provider;
-  auto request = mojo::MakeRequest(&provider);
+  // See https://bit.ly/2S0zRAS for task types.
+  auto task_runner = context->GetTaskRunner(TaskType::kMiscPlatformAPI);
+  auto request = mojo::MakeRequest(&provider, task_runner);
   if (auto* interface_provider = context->GetInterfaceProvider()) {
     interface_provider->GetInterface(std::move(request));
   }
   provider->CreateBarcodeDetection(
-      mojo::MakeRequest(&barcode_service_),
+      mojo::MakeRequest(&barcode_service_, task_runner),
       shape_detection::mojom::blink::BarcodeDetectorOptions::New());
 
   barcode_service_.set_connection_error_handler(
@@ -61,11 +63,11 @@ void BarcodeDetector::OnDetectBarcodes(
 
   HeapVector<Member<DetectedBarcode>> detected_barcodes;
   for (const auto& barcode : barcode_detection_results) {
-    HeapVector<Point2D> corner_points;
+    HeapVector<Member<Point2D>> corner_points;
     for (const auto& corner_point : barcode->corner_points) {
-      Point2D point;
-      point.setX(corner_point.x);
-      point.setY(corner_point.y);
+      Point2D* point = Point2D::Create();
+      point->setX(corner_point.x);
+      point->setY(corner_point.y);
       corner_points.push_back(point);
     }
     detected_barcodes.push_back(DetectedBarcode::Create(

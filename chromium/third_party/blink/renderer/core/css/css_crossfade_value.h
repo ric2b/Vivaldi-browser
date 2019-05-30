@@ -47,9 +47,13 @@ class CORE_EXPORT CSSCrossfadeValue final : public CSSImageGeneratorValue {
   static CSSCrossfadeValue* Create(CSSValue* from_value,
                                    CSSValue* to_value,
                                    CSSPrimitiveValue* percentage_value) {
-    return new CSSCrossfadeValue(from_value, to_value, percentage_value);
+    return MakeGarbageCollected<CSSCrossfadeValue>(from_value, to_value,
+                                                   percentage_value);
   }
 
+  CSSCrossfadeValue(CSSValue* from_value,
+                    CSSValue* to_value,
+                    CSSPrimitiveValue* percentage_value);
   ~CSSCrossfadeValue();
 
   String CustomCSSText() const;
@@ -75,10 +79,6 @@ class CORE_EXPORT CSSCrossfadeValue final : public CSSImageGeneratorValue {
   void TraceAfterDispatch(blink::Visitor*);
 
  private:
-  CSSCrossfadeValue(CSSValue* from_value,
-                    CSSValue* to_value,
-                    CSSPrimitiveValue* percentage_value);
-
   void Dispose();
 
   class CrossfadeSubimageObserverProxy final : public ImageResourceObserver {
@@ -91,9 +91,7 @@ class CORE_EXPORT CSSCrossfadeValue final : public CSSImageGeneratorValue {
     ~CrossfadeSubimageObserverProxy() override = default;
     void Trace(blink::Visitor* visitor) { visitor->Trace(owner_value_); }
 
-    void ImageChanged(ImageResourceContent*,
-                      CanDeferInvalidation,
-                      const IntRect* = nullptr) override;
+    void ImageChanged(ImageResourceContent*, CanDeferInvalidation) override;
     bool WillRenderImage() override;
     String DebugName() const override {
       return "CrossfadeSubimageObserverProxy";
@@ -106,8 +104,7 @@ class CORE_EXPORT CSSCrossfadeValue final : public CSSImageGeneratorValue {
   };
 
   bool WillRenderImage() const;
-  void CrossfadeChanged(const IntRect&,
-                        ImageResourceObserver::CanDeferInvalidation);
+  void CrossfadeChanged(ImageResourceObserver::CanDeferInvalidation);
 
   Member<CSSValue> from_value_;
   Member<CSSValue> to_value_;

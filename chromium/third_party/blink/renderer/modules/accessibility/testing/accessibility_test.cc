@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/modules/accessibility/testing/accessibility_test.h"
 
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
@@ -12,6 +13,7 @@
 #include "third_party/blink/renderer/modules/accessibility/ax_object_cache_impl.h"
 
 namespace blink {
+namespace test {
 
 AccessibilityTest::AccessibilityTest(LocalFrameClient* local_frame_client)
     : RenderingTest(local_frame_client) {}
@@ -26,6 +28,10 @@ AXObjectCacheImpl& AccessibilityTest::GetAXObjectCache() const {
       ToAXObjectCacheImpl(GetDocument().ExistingAXObjectCache());
   DCHECK(ax_object_cache);
   return *ax_object_cache;
+}
+
+AXObject* AccessibilityTest::GetAXObject(const Node& node) const {
+  return GetAXObjectCache().GetOrCreate(&node);
 }
 
 AXObject* AccessibilityTest::GetAXRootObject() const {
@@ -56,11 +62,12 @@ std::ostringstream& AccessibilityTest::PrintAXTreeHelper(
 
   stream << std::string(level * 2, '+');
   stream << *root << std::endl;
-  for (const Member<AXObject> child : root->Children()) {
+  for (const AXObject* child : root->Children()) {
     DCHECK(child);
-    PrintAXTreeHelper(stream, child.Get(), level + 1);
+    PrintAXTreeHelper(stream, child, level + 1);
   }
   return stream;
 }
 
+}  // namespace test
 }  // namespace blink

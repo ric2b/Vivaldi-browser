@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -88,10 +89,11 @@ class RendererClientImpl final : public RendererClient {
   MOCK_METHOD1(OnBufferingStateChange, void(BufferingState state));
   MOCK_METHOD1(OnAudioConfigChange, void(const AudioDecoderConfig& config));
   MOCK_METHOD1(OnVideoConfigChange, void(const VideoDecoderConfig& config));
-  void OnWaitingForDecryptionKey() override {}
+  void OnWaiting(WaitingReason reason) override {}
   MOCK_METHOD1(OnVideoNaturalSizeChange, void(const gfx::Size& size));
   MOCK_METHOD1(OnVideoOpacityChange, void(bool opaque));
   MOCK_METHOD1(OnDurationChange, void(base::TimeDelta duration));
+  MOCK_METHOD1(OnRemotePlayStateChange, void(MediaStatus::State state));
 
   void DelegateOnStatisticsUpdate(const PipelineStatistics& stats) {
     stats_ = stats;

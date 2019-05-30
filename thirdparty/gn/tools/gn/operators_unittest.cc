@@ -40,7 +40,9 @@ class TestParseNode : public ParseNode {
                           const std::string& help) const override {
     return Err(this, msg);
   }
-  void Print(std::ostream& out, int indent) const override {}
+  base::Value GetJSONNode() const override {
+    return base::Value();
+  }
 
  private:
   Value value_;
@@ -230,6 +232,45 @@ TEST(Operators, ListRemove) {
   ASSERT_EQ(1u, new_value->list_value().size());
   ASSERT_EQ(Value::STRING, new_value->list_value()[0].type());
   EXPECT_EQ("bar", new_value->list_value()[0].string_value());
+}
+
+TEST(Operators, ListSubtractWithScope) {
+  Err err;
+  TestWithScope setup;
+
+  Scope* scope_a = new Scope(setup.settings());
+  Value scopeval_a(nullptr, std::unique_ptr<Scope>(scope_a));
+  scope_a->SetValue("a", Value(nullptr, "foo"), nullptr);
+
+  Scope* scope_b = new Scope(setup.settings());
+  Value scopeval_b(nullptr, std::unique_ptr<Scope>(scope_b));
+  scope_b->SetValue("b", Value(nullptr, "bar"), nullptr);
+
+  Value lval(nullptr, Value::LIST);
+  lval.list_value().push_back(scopeval_a);
+  lval.list_value().push_back(scopeval_b);
+
+  Scope* scope_a_other = new Scope(setup.settings());
+  Value scopeval_a_other(nullptr, std::unique_ptr<Scope>(scope_a_other));
+  scope_a_other->SetValue("a", Value(nullptr, "foo"), nullptr);
+
+  Value rval(nullptr, Value::LIST);
+  rval.list_value().push_back(scopeval_a_other);
+
+  TestBinaryOpNode node(Token::MINUS, "-");
+  node.SetLeftToValue(lval);
+  node.SetRightToValue(rval);
+  Value ret = ExecuteBinaryOperator(setup.scope(), &node, node.left(),
+                                    node.right(), &err);
+  ASSERT_FALSE(err.has_error());
+  ASSERT_EQ(Value::LIST, ret.type());
+
+  std::vector<Value> expected;
+  Scope* scope_expected = new Scope(setup.settings());
+  Value scopeval_expected(nullptr, std::unique_ptr<Scope>(scope_expected));
+  scope_expected->SetValue("b", Value(nullptr, "bar"), nullptr);
+  expected.push_back(scopeval_expected);
+  EXPECT_EQ(expected, ret.list_value());
 }
 
 TEST(Operators, IntegerAdd) {

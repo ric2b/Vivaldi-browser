@@ -17,6 +17,7 @@
 #include "tools/gn/ninja_bundle_data_target_writer.h"
 #include "tools/gn/ninja_copy_target_writer.h"
 #include "tools/gn/ninja_create_bundle_target_writer.h"
+#include "tools/gn/ninja_generated_file_target_writer.h"
 #include "tools/gn/ninja_group_target_writer.h"
 #include "tools/gn/ninja_utils.h"
 #include "tools/gn/output_file.h"
@@ -82,6 +83,9 @@ std::string NinjaTargetWriter::RunAndWriteFile(const Target* target) {
     writer.Run();
   } else if (target->output_type() == Target::GROUP) {
     NinjaGroupTargetWriter writer(target, rules);
+    writer.Run();
+  } else if (target->output_type() == Target::GENERATED_FILE) {
+    NinjaGeneratedFileTargetWriter writer(target, rules);
     writer.Run();
   } else if (target->IsBinary()) {
     needs_file_write = true;

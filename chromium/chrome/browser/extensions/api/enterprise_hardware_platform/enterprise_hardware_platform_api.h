@@ -6,7 +6,7 @@
 #define CHROME_BROWSER_EXTENSIONS_API_ENTERPRISE_HARDWARE_PLATFORM_ENTERPRISE_HARDWARE_PLATFORM_API_H_
 
 #include "base/macros.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "extensions/browser/extension_function.h"
 
 namespace extensions {
@@ -24,7 +24,7 @@ class EnterpriseHardwarePlatformGetHardwarePlatformInfoFunction
  private:
   DECLARE_EXTENSION_FUNCTION(
       "enterprise.hardwarePlatform.getHardwarePlatformInfo",
-      ENTERPRISE_HARDWAREPLATFORM_GETHARDWAREPLATFORMINFO);
+      ENTERPRISE_HARDWAREPLATFORM_GETHARDWAREPLATFORMINFO)
 
   void OnHardwarePlatformInfo(base::SysInfo::HardwareInfo info);
 

@@ -96,17 +96,17 @@ class NET_EXPORT NetworkDelegate {
                                           const AuthChallengeInfo& auth_info,
                                           AuthCallback callback,
                                           AuthCredentials* credentials);
-  bool CanGetCookies(const URLRequest& request, const CookieList& cookie_list);
+  bool CanGetCookies(const URLRequest& request,
+                     const CookieList& cookie_list,
+                     bool allowed_from_caller);
   bool CanSetCookie(const URLRequest& request,
                     const net::CanonicalCookie& cookie,
-                    CookieOptions* options);
+                    CookieOptions* options,
+                    bool allowed_from_caller);
   bool CanAccessFile(const URLRequest& request,
                      const base::FilePath& original_path,
                      const base::FilePath& absolute_path) const;
-  bool CanEnablePrivacyMode(const GURL& url,
-                            const GURL& site_for_cookies) const;
-
-  bool AreExperimentalCookieFeaturesEnabled() const;
+  bool ForcePrivacyMode(const GURL& url, const GURL& site_for_cookies) const;
 
   bool CancelURLRequestWithPolicyViolatingReferrerHeader(
       const URLRequest& request,
@@ -286,15 +286,23 @@ class NET_EXPORT NetworkDelegate {
   // Called when reading cookies to allow the network delegate to block access
   // to the cookie. This method will never be invoked when
   // LOAD_DO_NOT_SEND_COOKIES is specified.
+  // The |allowed_from_caller| param is used to pass whether this operation is
+  // allowed from any higher level delegates (for example, in a
+  // LayeredNetworkDelegate). Any custom logic should be ANDed with this bool.
   virtual bool OnCanGetCookies(const URLRequest& request,
-                               const CookieList& cookie_list) = 0;
+                               const CookieList& cookie_list,
+                               bool allowed_from_caller) = 0;
 
   // Called when a cookie is set to allow the network delegate to block access
   // to the cookie. This method will never be invoked when
   // LOAD_DO_NOT_SAVE_COOKIES is specified.
+  // The |allowed_from_caller| param is used to pass whether this operation is
+  // allowed from any higher level delegates (for example, in a
+  // LayeredNetworkDelegate). Any custom logic should be ANDed with this bool.
   virtual bool OnCanSetCookie(const URLRequest& request,
-                              const net::CanonicalCookie& cookie,
-                              CookieOptions* options) = 0;
+                              const CanonicalCookie& cookie,
+                              CookieOptions* options,
+                              bool allowed_from_caller) = 0;
 
   // Called when a file access is attempted to allow the network delegate to
   // allow or block access to the given file path, provided in the original
@@ -308,12 +316,8 @@ class NET_EXPORT NetworkDelegate {
   // Returns true if the given |url| has to be requested over connection that
   // is not tracked by the server. Usually is false, unless user privacy
   // settings block cookies from being get or set.
-  virtual bool OnCanEnablePrivacyMode(const GURL& url,
-                                      const GURL& site_for_cookies) const = 0;
-
-  // Returns true if the embedder has enabled the experimental features, and
-  // false otherwise.
-  virtual bool OnAreExperimentalCookieFeaturesEnabled() const = 0;
+  virtual bool OnForcePrivacyMode(const GURL& url,
+                                  const GURL& site_for_cookies) const = 0;
 
   // Called when the |referrer_url| for requesting |target_url| during handling
   // of the |request| is does not comply with the referrer policy (e.g. a

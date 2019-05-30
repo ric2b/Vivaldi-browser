@@ -63,14 +63,43 @@ std::string GetUniqueId(const void* module_addr) {
 
 }  // namespace
 
+class MacModule : public ModuleCache::Module {
+ public:
+  MacModule(uintptr_t base_address,
+            const std::string& id,
+            const FilePath& debug_basename,
+            size_t size)
+      : base_address_(base_address),
+        id_(id),
+        debug_basename_(debug_basename),
+        size_(size) {}
+
+  MacModule(const MacModule&) = delete;
+  MacModule& operator=(const MacModule&) = delete;
+
+  // ModuleCache::Module
+  uintptr_t GetBaseAddress() const override { return base_address_; }
+  std::string GetId() const override { return id_; }
+  FilePath GetDebugBasename() const override { return debug_basename_; }
+  size_t GetSize() const override { return size_; }
+
+ private:
+  uintptr_t base_address_;
+  std::string id_;
+  FilePath debug_basename_;
+  size_t size_;
+};
+
 // static
-ModuleCache::Module ModuleCache::CreateModuleForAddress(uintptr_t address) {
+std::unique_ptr<ModuleCache::Module> ModuleCache::CreateModuleForAddress(
+    uintptr_t address) {
   Dl_info inf;
   if (!dladdr(reinterpret_cast<const void*>(address), &inf))
-    return Module();
+    return nullptr;
   auto base_module_address = reinterpret_cast<uintptr_t>(inf.dli_fbase);
-  return Module(base_module_address, GetUniqueId(inf.dli_fbase),
-                FilePath(inf.dli_fname), GetModuleTextSize(inf.dli_fbase));
+  return std::make_unique<MacModule>(
+      base_module_address, GetUniqueId(inf.dli_fbase),
+      FilePath(inf.dli_fname).BaseName(), GetModuleTextSize(inf.dli_fbase));
 }
 
 size_t ModuleCache::GetModuleTextSize(const void* module_addr) {

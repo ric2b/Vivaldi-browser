@@ -26,10 +26,12 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/javascript_dialog_manager.h"
+#include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_utils.h"
 #include "extensions/browser/browsertest_util.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/notification_types.h"
@@ -150,8 +152,6 @@ class ContentScriptApiTest : public ExtensionApiTest {
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-
   DISALLOW_COPY_AND_ASSIGN(ContentScriptApiTest);
 };
 
@@ -195,14 +195,7 @@ IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, ContentScriptFragmentNavigation) {
   ASSERT_TRUE(RunExtensionTest(extension_name)) << message_;
 }
 
-// Times out on Linux: http://crbug.com/163097
-#if defined(OS_LINUX)
-#define MAYBE_ContentScriptIsolatedWorlds DISABLED_ContentScriptIsolatedWorlds
-#else
-#define MAYBE_ContentScriptIsolatedWorlds ContentScriptIsolatedWorlds
-#endif
-IN_PROC_BROWSER_TEST_F(ContentScriptApiTest,
-                       MAYBE_ContentScriptIsolatedWorlds) {
+IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, ContentScriptIsolatedWorlds) {
   // This extension runs various bits of script and tests that they all run in
   // the same isolated world.
   ASSERT_TRUE(StartEmbeddedTestServer());
@@ -367,8 +360,14 @@ IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, ContentScriptCSSLocalization) {
 IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, ContentScriptExtensionAPIs) {
   ASSERT_TRUE(StartEmbeddedTestServer());
 
+  // TODO(https://crbug.com/898682): Waiting for content scripts to load should
+  // be done as part of the extension loading process.
+  content::WindowedNotificationObserver scripts_updated_observer(
+      extensions::NOTIFICATION_USER_SCRIPTS_UPDATED,
+      content::NotificationService::AllSources());
   const extensions::Extension* extension = LoadExtension(
       test_data_dir_.AppendASCII("content_scripts/extension_api"));
+  scripts_updated_observer.Wait();
 
   ResultCatcher catcher;
   ui_test_utils::NavigateToURL(
@@ -411,7 +410,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTestWithManagementPolicy,
   ASSERT_TRUE(RunExtensionTest("content_scripts/policy")) << message_;
 }
 
-// Verifies wildcard can be used for effecitve TLD.
+// Verifies wildcard can NOT be used for effective TLD.
 IN_PROC_BROWSER_TEST_F(ExtensionApiTestWithManagementPolicy,
                        ContentScriptPolicyWildcard) {
   // Set enterprise policy to block injection to policy specified hosts.
@@ -420,7 +419,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTestWithManagementPolicy,
     pref.AddPolicyBlockedHost("*", "*://example.*");
   }
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(RunExtensionTest("content_scripts/policy")) << message_;
+  ASSERT_FALSE(RunExtensionTest("content_scripts/policy")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionApiTestWithManagementPolicy,
@@ -569,7 +568,13 @@ IN_PROC_BROWSER_TEST_F(ContentScriptApiTest,
   ext_dir1.WriteManifest(
       base::StringPrintf(kManifest, "ext1", "document_idle"));
   ext_dir1.WriteFile(FILE_PATH_LITERAL("script.js"), kBlockingScript);
+  // TODO(https://crbug.com/898682): Waiting for content scripts to load should
+  // be done as part of the extension loading process.
+  content::WindowedNotificationObserver scripts_updated_observer(
+      extensions::NOTIFICATION_USER_SCRIPTS_UPDATED,
+      content::NotificationService::AllSources());
   const Extension* ext1 = LoadExtension(ext_dir1.UnpackedPath());
+  scripts_updated_observer.Wait();
   ASSERT_TRUE(ext1);
 
   content::WebContents* web_contents =
@@ -613,7 +618,7 @@ IN_PROC_BROWSER_TEST_F(ContentScriptApiTest,
 
   ExtensionTestMessageListener listener("done", false);
   AddTabAtIndex(0, GURL("chrome://newtab"), ui::PAGE_TRANSITION_LINK);
-  browser()->tab_strip_model()->ActivateTabAt(0, false);
+  browser()->tab_strip_model()->ActivateTabAt(0);
   content::WebContents* tab_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
 
@@ -875,6 +880,99 @@ IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, CrossOriginXhr) {
     EXPECT_EQ(R"("Not Fetched")", message);
   }
 }
+
+// Regression test for https://crbug.com/883526.
+IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, InifiniteLoopInGetEffectiveURL) {
+  // Create an extension that injects content scripts into about:blank frames
+  // (and therefore has a chance to trigger an infinite loop in
+  // ScriptContext::GetEffectiveDocumentURL).
+  TestExtensionDir test_dir;
+  test_dir.WriteManifest(
+      R"({
+           "name": "Content scripts everywhere",
+           "description": "Content scripts everywhere",
+           "version": "0.1",
+           "manifest_version": 2,
+           "content_scripts": [{
+             "matches": ["<all_urls>"],
+             "all_frames": true,
+             "match_about_blank": true,
+             "js": ["script.js"]
+           }],
+           "permissions": ["*://*/*"],
+         })");
+  test_dir.WriteFile(FILE_PATH_LITERAL("script.js"), "console.log('blah')");
+
+  // Create an "infinite" loop for hopping over parent/opener:
+  // subframe1 ---parent---> mainFrame ---opener--> subframe1 ...
+  ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(content::ExecJs(web_contents,
+                              R"(
+                                  var iframe = document.createElement('iframe');
+                                  document.body.appendChild(iframe);
+                                  window.name = 'main-frame'; )"));
+  content::RenderFrameHost* subframe1 = web_contents->GetAllFrames()[1];
+  ASSERT_TRUE(
+      content::ExecJs(subframe1, "var w = window.open('', 'main-frame');"));
+  EXPECT_EQ(subframe1, web_contents->GetOpener());
+
+  // Trigger GetEffectiveURL from another subframe:
+  ASSERT_TRUE(content::ExecJs(web_contents,
+                              R"(
+                                  var iframe = document.createElement('iframe');
+                                  document.body.appendChild(iframe); )"));
+
+  // Verify that the renderer is still responsive / that the renderer didn't
+  // enter an infinite loop.
+  EXPECT_EQ(123, content::EvalJs(web_contents, "123"));
+}
+
+namespace {
+
+enum class BindingsType { kNative, kJavaScript };
+
+// Test fixture for testing messaging APIs. Is parameterized to allow testing
+// with and without native (C++-based) extension bindings.
+class ContentScriptMessagingApiTest
+    : public ContentScriptApiTest,
+      public ::testing::WithParamInterface<BindingsType> {
+ protected:
+  ContentScriptMessagingApiTest() {
+    if (GetParam() == BindingsType::kNative) {
+      scoped_feature_list_.InitAndEnableFeature(
+          extensions_features::kNativeCrxBindings);
+    } else {
+      scoped_feature_list_.InitAndDisableFeature(
+          extensions_features::kNativeCrxBindings);
+    }
+  }
+
+  ~ContentScriptMessagingApiTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+}  // namespace
+
+// Verifies how the messaging API works with content scripts.
+IN_PROC_BROWSER_TEST_P(ContentScriptMessagingApiTest, Test) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  ASSERT_TRUE(LoadExtension(test_data_dir_.AppendASCII(
+      "content_scripts/other_extensions/message_echoer_allows_by_default")));
+  ASSERT_TRUE(LoadExtension(test_data_dir_.AppendASCII(
+      "content_scripts/other_extensions/message_echoer_allows")));
+  ASSERT_TRUE(LoadExtension(test_data_dir_.AppendASCII(
+      "content_scripts/other_extensions/message_echoer_denies")));
+  ASSERT_TRUE(RunExtensionTest("content_scripts/messaging")) << message_;
+}
+
+INSTANTIATE_TEST_SUITE_P(,
+                         ContentScriptMessagingApiTest,
+                         testing::Values(BindingsType::kNative,
+                                         BindingsType::kJavaScript));
 
 // Test fixture which sets a custom NTP Page.
 // TODO(karandeepb): Similar logic to set up a custom NTP is used elsewhere as

@@ -8,7 +8,6 @@ action("create_test_main") {
   script = "//ui/file_manager/file_manager/test/scripts/create_test_main.py"
   output = "$target_gen_dir/../test.html"
   sources = [
-    "../../../webui/resources/css/text_defaults.css",
     "../background/js/background_common_scripts.js",
     "../background/js/background_scripts.js",
     "../foreground/elements/elements_bundle.html",
@@ -18,20 +17,21 @@ action("create_test_main") {
     "../foreground/js/elements_importer.js",
     "../foreground/js/main_scripts.js",
     "../main.html",
+    "//chrome/app/file_manager_strings.grdp",
+    "//chrome/browser/chromeos/extensions/file_manager/private_api_strings.cc",
+    "//ui/webui/resources/css/text_defaults.css",
     "check_select.js",
-    "crostini.js",
-    "quick_view.js",
+    "crostini_mount.js",
+    "crostini_share.js",
+    "crostini_tasks.js",
+    "js/strings.js",
+    "menu.js",
+    "progress_center.js",
     "uma.js",
   ]
   args = [ "--output=" + rebase_path(output, root_build_dir) ]
   outputs = [
     output,
-    "$target_gen_dir/gen/css/text_defaults.css",
-    "$target_gen_dir/gen/elements/elements_bundle.html",
-    "$target_gen_dir/gen/elements/files_quick_view.html",
-    "$target_gen_dir/gen/elements/files_safe_media.html",
-    "$target_gen_dir/gen/elements/files_safe_media.js",
-    "$target_gen_dir/gen/js/elements_importer.js",
   ]
 }
 
@@ -39,27 +39,31 @@ js_type_check("closure_compile") {
   deps = [
     ":check_select",
     ":closure_compile_externs",
-    ":crostini",
-    ":quick_view",
+    ":crostini_mount",
+    ":crostini_share",
+    ":crostini_tasks",
+    ":menu",
+    ":progress_center",
     ":uma",
   ]
 }
+
+# Remaining targets in this file are private.
+visibility = [ ":*" ]
 
 js_library("closure_compile_externs") {
   sources = []
   externs_list = [
     "js/externs.js",
     "$externs_path/command_line_private.js",
-    "$externs_path/file_manager_private.js",
-    "$externs_path/file_system_provider.js",
     "$externs_path/metrics_private.js",
-    "../../externs/app_window_common.js",
-    "../../externs/background/file_browser_background.js",
-    "../../externs/entry_location.js",
-    "../../externs/volume_info.js",
-    "../../externs/volume_info_list.js",
-    "../../externs/volume_manager.js",
-    "//third_party/analytics/externs.js",
+    "//ui/file_manager/externs/background/file_browser_background.js",
+    "//ui/file_manager/externs/background/progress_center.js",
+    "//ui/file_manager/externs/background/crostini.js",
+    "//ui/file_manager/externs/entry_location.js",
+    "//ui/file_manager/externs/volume_info.js",
+    "//ui/file_manager/externs/volume_info_list.js",
+    "//ui/file_manager/externs/volume_manager.js",
   ]
 }
 
@@ -70,16 +74,38 @@ js_library("check_select") {
   ]
 }
 
-js_library("crostini") {
+js_library("crostini_mount") {
   deps = [
     "js:test_util",
     "//ui/webui/resources/js:webui_resource_test",
   ]
 }
 
-js_library("quick_view") {
+js_library("crostini_share") {
   deps = [
     "js:test_util",
+    "//ui/webui/resources/js:webui_resource_test",
+  ]
+}
+
+js_library("crostini_tasks") {
+  deps = [
+    "js:test_util",
+    "//ui/webui/resources/js:webui_resource_test",
+  ]
+}
+
+js_library("menu") {
+  deps = [
+    "js:test_util",
+    "//ui/webui/resources/js:webui_resource_test",
+  ]
+}
+
+js_library("progress_center") {
+  deps = [
+    "js:test_util",
+    "//ui/file_manager/file_manager/common/js:progress_center_common",
     "//ui/webui/resources/js:webui_resource_test",
   ]
 }

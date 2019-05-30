@@ -267,7 +267,7 @@ void ShutdownPostThreadsStop(int shutdown_flags) {
     // We can't use prefs since all services are shutdown at this point.
     TimeDelta shutdown_delta = base::Time::Now() - *g_shutdown_started;
     std::string shutdown_ms =
-        base::Int64ToString(shutdown_delta.InMilliseconds());
+        base::NumberToString(shutdown_delta.InMilliseconds());
     int len = static_cast<int>(shutdown_ms.length()) + 1;
     base::FilePath shutdown_ms_file = GetShutdownMsPath();
     // Note: ReadLastShutdownFile() is done as a BLOCK_SHUTDOWN task so there's
@@ -286,7 +286,8 @@ void ShutdownPostThreadsStop(int shutdown_flags) {
 void ReadLastShutdownFile(ShutdownType type,
                           int num_procs,
                           int num_procs_slow) {
-  base::ScopedBlockingCall scoped_blocking_call(base::BlockingType::MAY_BLOCK);
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   base::FilePath shutdown_ms_file = GetShutdownMsPath();
   std::string shutdown_ms_str;

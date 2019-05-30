@@ -22,6 +22,10 @@ KalmanPredictor::KalmanPredictor() = default;
 
 KalmanPredictor::~KalmanPredictor() = default;
 
+const char* KalmanPredictor::GetName() const {
+  return "Kalman";
+}
+
 void KalmanPredictor::Reset() {
   x_predictor_.Reset();
   y_predictor_.Reset();
@@ -47,15 +51,22 @@ bool KalmanPredictor::HasPrediction() const {
   return x_predictor_.Stable() && y_predictor_.Stable();
 }
 
-bool KalmanPredictor::GeneratePrediction(base::TimeTicks frame_time,
+bool KalmanPredictor::GeneratePrediction(base::TimeTicks predict_time,
+                                         bool is_resampling,
                                          InputData* result) const {
   std::vector<InputData> pred_points;
 
-  base::TimeDelta dt = frame_time - last_point_.time_stamp;
+  base::TimeDelta dt = predict_time - last_point_.time_stamp;
   // Kalman filter is not very good when predicting backwards. Besides,
   // predicting backwards means increasing latency. Thus disable prediction when
   // dt < 0.
-  if (!HasPrediction() || dt < base::TimeDelta::Min() || dt > kMaxResampleTime)
+  if (!HasPrediction() || dt < base::TimeDelta())
+    return false;
+
+  // For resampling, we don't want to predict too far away because the result
+  // will likely be inaccurate in that case. But it may be useful for predicted
+  // points.
+  if (is_resampling && dt > kMaxResampleTime)
     return false;
 
   gfx::Vector2dF position(last_point_.pos.x(), last_point_.pos.y());

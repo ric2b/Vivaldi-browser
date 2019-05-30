@@ -134,18 +134,14 @@ class MultizoneBackendTest : public testing::TestWithParam<TestParams> {
   void SetUp() override {
     srand(12345);
     CastMediaShlib::Initialize(base::CommandLine::ForCurrentProcess()->argv());
-    if (VolumeControl::Initialize) {
-      VolumeControl::Initialize(base::CommandLine::ForCurrentProcess()->argv());
-    }
+    VolumeControl::Initialize(base::CommandLine::ForCurrentProcess()->argv());
   }
 
   void TearDown() override {
     // Pipeline must be destroyed before finalizing media shlib.
     audio_feeder_.reset();
     effects_feeders_.clear();
-    if (VolumeControl::Finalize) {
-      VolumeControl::Finalize();
-    }
+    VolumeControl::Finalize();
     CastMediaShlib::Finalize();
   }
 
@@ -388,7 +384,7 @@ TEST_F(MultizoneBackendTest, RenderingDelayWithMultipleRateChanges) {
   Start(1.0f /* playback_rate */);
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     Required,
     MultizoneBackendTest,
     testing::Combine(::testing::Values(8000,
@@ -403,11 +399,12 @@ INSTANTIATE_TEST_CASE_P(
                      ::testing::Values(0.5f, 0.99f, 1.0f, 1.01f, 2.0f),
                      ::testing::Values(true)));
 
-INSTANTIATE_TEST_CASE_P(Optional,
-                        MultizoneBackendTest,
-                        testing::Combine(::testing::Values(64000, 88200, 96000),
-                                         ::testing::Values(1.0f),
-                                         ::testing::Values(false)));
+INSTANTIATE_TEST_SUITE_P(
+    Optional,
+    MultizoneBackendTest,
+    testing::Combine(::testing::Values(64000, 88200, 96000),
+                     ::testing::Values(1.0f),
+                     ::testing::Values(false)));
 
 }  // namespace media
 }  // namespace chromecast

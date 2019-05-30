@@ -35,12 +35,13 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
+#include "services/network/public/mojom/referrer_policy.mojom-shared.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-shared.h"
 #include "third_party/blink/public/platform/web_common.h"
-#include "third_party/blink/public/platform/web_referrer_policy.h"
 
 namespace network {
 namespace mojom {
-enum class CORSPreflightPolicy : int32_t;
+enum class CorsPreflightPolicy : int32_t;
 enum class FetchCredentialsMode : int32_t;
 enum class FetchRedirectMode : int32_t;
 enum class FetchRequestMode : int32_t;
@@ -60,7 +61,6 @@ class WebHTTPHeaderVisitor;
 class WebSecurityOrigin;
 class WebString;
 class WebURL;
-struct WebContentSecurityPolicyList;
 
 class WebURLRequest {
  public:
@@ -75,45 +75,6 @@ class WebURLRequest {
     kVeryHigh,
     kLowest = kVeryLow,
     kHighest = kVeryHigh,
-  };
-
-  // Corresponds to Fetch's "context":
-  // http://fetch.spec.whatwg.org/#concept-request-context
-  enum RequestContext : uint8_t {
-    kRequestContextUnspecified = 0,
-    kRequestContextAudio,
-    kRequestContextBeacon,
-    kRequestContextCSPReport,
-    kRequestContextDownload,
-    kRequestContextEmbed,
-    kRequestContextEventSource,
-    kRequestContextFavicon,
-    kRequestContextFetch,
-    kRequestContextFont,
-    kRequestContextForm,
-    kRequestContextFrame,
-    kRequestContextHyperlink,
-    kRequestContextIframe,
-    kRequestContextImage,
-    kRequestContextImageSet,
-    kRequestContextImport,
-    kRequestContextInternal,
-    kRequestContextLocation,
-    kRequestContextManifest,
-    kRequestContextObject,
-    kRequestContextPing,
-    kRequestContextPlugin,
-    kRequestContextPrefetch,
-    kRequestContextScript,
-    kRequestContextServiceWorker,
-    kRequestContextSharedWorker,
-    kRequestContextSubresource,
-    kRequestContextStyle,
-    kRequestContextTrack,
-    kRequestContextVideo,
-    kRequestContextWorker,
-    kRequestContextXMLHttpRequest,
-    kRequestContextXSLT
   };
 
   typedef int PreviewsState;
@@ -143,7 +104,9 @@ class WebURLRequest {
     kOfflinePageOn = 1 << 8,
     kLitePageRedirectOn = 1 << 9,  // Allow the browser to redirect the resource
                                    // to a Lite Page server.
-    kPreviewsStateLast = kLitePageRedirectOn
+    kLazyImageLoadDeferred = 1 << 10,  // Request the placeholder version of an
+                                       // image that was deferred by lazyload.
+    kPreviewsStateLast = kLazyImageLoadDeferred
   };
 
   class ExtraData {
@@ -166,8 +129,11 @@ class WebURLRequest {
   BLINK_PLATFORM_EXPORT WebURL SiteForCookies() const;
   BLINK_PLATFORM_EXPORT void SetSiteForCookies(const WebURL&);
 
-  // The origin of the execution context which originated the request. Used to
-  // implement First-Party-Only cookie restrictions.
+  BLINK_PLATFORM_EXPORT base::Optional<WebSecurityOrigin> TopFrameOrigin()
+      const;
+  BLINK_PLATFORM_EXPORT void SetTopFrameOrigin(const WebSecurityOrigin&);
+
+  // https://fetch.spec.whatwg.org/#concept-request-origin
   BLINK_PLATFORM_EXPORT WebSecurityOrigin RequestorOrigin() const;
   BLINK_PLATFORM_EXPORT void SetRequestorOrigin(const WebSecurityOrigin&);
 
@@ -190,7 +156,7 @@ class WebURLRequest {
   BLINK_PLATFORM_EXPORT void SetHTTPHeaderField(const WebString& name,
                                                 const WebString& value);
   BLINK_PLATFORM_EXPORT void SetHTTPReferrer(const WebString& referrer,
-                                             WebReferrerPolicy);
+                                             network::mojom::ReferrerPolicy);
   BLINK_PLATFORM_EXPORT void AddHTTPHeaderField(const WebString& name,
                                                 const WebString& value);
   BLINK_PLATFORM_EXPORT void ClearHTTPHeaderField(const WebString& name);
@@ -212,15 +178,16 @@ class WebURLRequest {
   BLINK_PLATFORM_EXPORT bool ReportRawHeaders() const;
   BLINK_PLATFORM_EXPORT void SetReportRawHeaders(bool);
 
-  BLINK_PLATFORM_EXPORT RequestContext GetRequestContext() const;
-  BLINK_PLATFORM_EXPORT void SetRequestContext(RequestContext);
+  BLINK_PLATFORM_EXPORT mojom::RequestContextType GetRequestContext() const;
+  BLINK_PLATFORM_EXPORT void SetRequestContext(mojom::RequestContextType);
 
   BLINK_PLATFORM_EXPORT network::mojom::RequestContextFrameType GetFrameType()
       const;
   BLINK_PLATFORM_EXPORT void SetFrameType(
       network::mojom::RequestContextFrameType);
 
-  BLINK_PLATFORM_EXPORT WebReferrerPolicy GetReferrerPolicy() const;
+  BLINK_PLATFORM_EXPORT network::mojom::ReferrerPolicy GetReferrerPolicy()
+      const;
 
   // Sets an HTTP origin header if it is empty and the HTTP method of the
   // request requires it.
@@ -306,19 +273,19 @@ class WebURLRequest {
   BLINK_PLATFORM_EXPORT ExtraData* GetExtraData() const;
   BLINK_PLATFORM_EXPORT void SetExtraData(std::unique_ptr<ExtraData>);
 
+  // The request is downloaded to the network cache, but not rendered or
+  // executed.
+  BLINK_PLATFORM_EXPORT bool IsDownloadToNetworkCacheOnly() const;
+  BLINK_PLATFORM_EXPORT void SetDownloadToNetworkCacheOnly(bool);
+
   BLINK_PLATFORM_EXPORT Priority GetPriority() const;
   BLINK_PLATFORM_EXPORT void SetPriority(Priority);
-
-  BLINK_PLATFORM_EXPORT bool WasDiscarded() const;
-  BLINK_PLATFORM_EXPORT void SetWasDiscarded(bool);
 
   // https://wicg.github.io/cors-rfc1918/#external-request
   BLINK_PLATFORM_EXPORT bool IsExternalRequest() const;
 
-  BLINK_PLATFORM_EXPORT network::mojom::CORSPreflightPolicy
-  GetCORSPreflightPolicy() const;
-
-  BLINK_PLATFORM_EXPORT void SetNavigationStartTime(base::TimeTicks);
+  BLINK_PLATFORM_EXPORT network::mojom::CorsPreflightPolicy
+  GetCorsPreflightPolicy() const;
 
   // If this request was created from an anchor with a download attribute, this
   // is the value provided there.
@@ -327,11 +294,6 @@ class WebURLRequest {
   // Returns true if this request is tagged as an ad. This is done using various
   // heuristics so it is not expected to be 100% accurate.
   BLINK_PLATFORM_EXPORT bool IsAdResource() const;
-
-  // This is the navigation relevant CSP to be used during request and response
-  // checks.
-  BLINK_PLATFORM_EXPORT const WebContentSecurityPolicyList& GetNavigationCSP()
-      const;
 
   // Should be set to true if this request (including redirects) should be
   // upgraded to HTTPS due to an Upgrade-Insecure-Requests requirement.
@@ -343,13 +305,29 @@ class WebURLRequest {
 
   BLINK_PLATFORM_EXPORT bool SupportsAsyncRevalidation() const;
 
+  // Returns true when the request is for revalidation.
+  BLINK_PLATFORM_EXPORT bool IsRevalidating() const;
+
   // Returns the DevTools ID to throttle the network request.
   BLINK_PLATFORM_EXPORT const base::Optional<base::UnguessableToken>&
   GetDevToolsToken() const;
 
-  // Set the applicable Origin Policy.
-  BLINK_PLATFORM_EXPORT const WebString GetOriginPolicy() const;
-  BLINK_PLATFORM_EXPORT void SetOriginPolicy(const WebString& policy);
+  // Remembers 'X-Requested-With' header value. Blink should not set this header
+  // value until CORS checks are done to avoid running checks even against
+  // headers that are internally set.
+  BLINK_PLATFORM_EXPORT const WebString GetRequestedWithHeader() const;
+  BLINK_PLATFORM_EXPORT void SetRequestedWithHeader(const WebString&);
+
+  // Remembers 'X-Client-Data' header value. Blink should not set this header
+  // value until CORS checks are done to avoid running checks even against
+  // headers that are internally set.
+  BLINK_PLATFORM_EXPORT const WebString GetClientDataHeader() const;
+  BLINK_PLATFORM_EXPORT void SetClientDataHeader(const WebString&);
+
+  // https://fetch.spec.whatwg.org/#concept-request-window
+  // See network::ResourceRequest::fetch_window_id for details.
+  BLINK_PLATFORM_EXPORT const base::UnguessableToken& GetFetchWindowId() const;
+  BLINK_PLATFORM_EXPORT void SetFetchWindowId(const base::UnguessableToken&);
 
 #if INSIDE_BLINK
   BLINK_PLATFORM_EXPORT ResourceRequest& ToMutableResourceRequest();

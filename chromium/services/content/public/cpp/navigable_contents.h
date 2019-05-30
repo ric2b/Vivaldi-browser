@@ -10,9 +10,12 @@
 #include "base/callback.h"
 #include "base/component_export.h"
 #include "base/macros.h"
+#include "base/observer_list.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "services/content/public/cpp/navigable_contents_observer.h"
 #include "services/content/public/mojom/navigable_contents.mojom.h"
 #include "services/content/public/mojom/navigable_contents_factory.mojom.h"
+#include "ui/accessibility/ax_tree_id.h"
 
 namespace content {
 
@@ -28,7 +31,13 @@ class COMPONENT_EXPORT(CONTENT_SERVICE_CPP) NavigableContents
  public:
   // Constructs a new NavigableContents using |factory|.
   explicit NavigableContents(mojom::NavigableContentsFactory* factory);
+  NavigableContents(mojom::NavigableContentsFactory* factory,
+                    mojom::NavigableContentsParamsPtr params);
   ~NavigableContents() override;
+
+  // These methods NavigableContentsObservers registered on this object.
+  void AddObserver(NavigableContentsObserver* observer);
+  void RemoveObserver(NavigableContentsObserver* observer);
 
   // Returns a NavigableContentsView which renders this NavigableContents's
   // currently navigated contents. This widget can be parented and displayed
@@ -39,18 +48,48 @@ class COMPONENT_EXPORT(CONTENT_SERVICE_CPP) NavigableContents
   // objects.
   NavigableContentsView* GetView();
 
+  // Returns the last known ID of the content area's accessibility tree, if any.
+  const ui::AXTreeID& content_ax_tree_id() const { return content_ax_tree_id_; }
+
   // Begins an attempt to asynchronously navigate this NavigableContents to
   // |url|.
   void Navigate(const GURL& url);
+  void NavigateWithParams(const GURL& url, mojom::NavigateParamsPtr params);
 
-  void set_did_stop_loading_callback_for_testing(
-      base::RepeatingClosure callback) {
-    did_stop_loading_callback_ = std::move(callback);
-  }
+  // Attempts to navigate back in the web contents' history stack. The supplied
+  // |callback| is run to indicate success/failure of the navigation attempt.
+  // The navigation attempt will fail if the history stack is empty.
+  void GoBack(content::mojom::NavigableContents::GoBackCallback callback);
+
+  // Attempts to transfer global input focus to the navigated contents if they
+  // have an active visual representation.
+  void Focus();
+
+  // Similar to above but for use specifically when UI element traversal is
+  // being done via Tab-key cycling or a similar mechanism.
+  void FocusThroughTabTraversal(bool reverse);
+
+  // Force NavigableContents to use Window Service for embedding. Note this must
+  // be called before its view is created.
+  void ForceUseWindowService();
+
+  // Whether to use Window Service for embedding.
+  bool ShouldUseWindowService() const;
 
  private:
   // mojom::NavigableContentsClient:
+  void ClearViewFocus() override;
+  void DidFinishNavigation(
+      const GURL& url,
+      bool is_main_frame,
+      bool is_error_page,
+      const scoped_refptr<net::HttpResponseHeaders>& response_headers) override;
   void DidStopLoading() override;
+  void DidAutoResizeView(const gfx::Size& new_size) override;
+  void DidSuppressNavigation(const GURL& url,
+                             WindowOpenDisposition disposition,
+                             bool from_user_gesture) override;
+  void UpdateContentAXTree(const ui::AXTreeID& id) override;
 
   void OnEmbedTokenReceived(const base::UnguessableToken& token);
 
@@ -58,7 +97,11 @@ class COMPONENT_EXPORT(CONTENT_SERVICE_CPP) NavigableContents
   mojo::Binding<mojom::NavigableContentsClient> client_binding_;
   std::unique_ptr<NavigableContentsView> view_;
 
-  base::RepeatingClosure did_stop_loading_callback_;
+  base::ReentrantObserverList<NavigableContentsObserver> observers_;
+
+  ui::AXTreeID content_ax_tree_id_;
+
+  bool force_use_window_service_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(NavigableContents);
 };

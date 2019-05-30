@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
@@ -62,6 +63,26 @@ class PasswordStoreResultsObserver
   DISALLOW_COPY_AND_ASSIGN(PasswordStoreResultsObserver);
 };
 
+// Custom class is required to enable password generation.
+class CustomPasswordManagerClient : public ChromePasswordManagerClient {
+ public:
+  using ChromePasswordManagerClient::ChromePasswordManagerClient;
+
+  static void CreateForWebContentsWithAutofillClient(
+      content::WebContents* contents,
+      autofill::AutofillClient* autofill_client) {
+    ASSERT_FALSE(FromWebContents(contents));
+    contents->SetUserData(UserDataKey(),
+                          base::WrapUnique(new CustomPasswordManagerClient(
+                              contents, autofill_client)));
+  }
+
+  // PasswordManagerClient:
+  password_manager::SyncState GetPasswordSyncState() const override {
+    return password_manager::SYNCING_NORMAL_ENCRYPTION;
+  }
+};
+
 // ManagePasswordsUIController subclass to capture the UI events.
 class CustomManagePasswordsUIController : public ManagePasswordsUIController {
  public:
@@ -71,6 +92,8 @@ class CustomManagePasswordsUIController : public ManagePasswordsUIController {
   void WaitForState(password_manager::ui::State target_state);
 
   void WaitForFallbackForSaving();
+
+  bool WaitForFallbackForSaving(const base::TimeDelta timeout);
 
   bool was_prompt_automatically_shown() {
     return was_prompt_automatically_shown_;
@@ -162,6 +185,25 @@ void CustomManagePasswordsUIController::WaitForFallbackForSaving() {
   wait_for_fallback_ = true;
   run_loop_ = &run_loop;
   run_loop_->Run();
+}
+
+bool CustomManagePasswordsUIController::WaitForFallbackForSaving(
+    const base::TimeDelta timeout = base::TimeDelta::Max()) {
+  // If the browser is currently showing the save fallback, return true
+  // without waiting.
+  if (BubbleIsManualFallbackForSaving())
+    return true;
+
+  base::RunLoop run_loop;
+  wait_for_fallback_ = true;
+  run_loop_ = &run_loop;
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, run_loop_->QuitClosure(), timeout);
+  run_loop_->Run();
+  bool shownFallbackForSaving = !wait_for_fallback_;
+  run_loop_ = nullptr;
+  wait_for_fallback_ = false;
+  return shownFallbackForSaving;
 }
 
 void CustomManagePasswordsUIController::OnPasswordSubmitted(
@@ -324,10 +366,8 @@ bool BubbleObserver::IsUpdatePromptShownAutomatically() const {
       ->was_prompt_automatically_shown();
 }
 
-void BubbleObserver::Dismiss() const  {
+void BubbleObserver::Hide() const {
   passwords_ui_controller_->OnBubbleHidden();
-  ASSERT_EQ(password_manager::ui::INACTIVE_STATE,
-            passwords_ui_controller_->GetState());
 }
 
 void BubbleObserver::AcceptSavePrompt() const {
@@ -371,10 +411,11 @@ void BubbleObserver::WaitForAutomaticSavePrompt() const {
   controller->WaitForState(password_manager::ui::PENDING_PASSWORD_STATE);
 }
 
-void BubbleObserver::WaitForFallbackForSaving() const {
+bool BubbleObserver::WaitForFallbackForSaving(
+    const base::TimeDelta timeout) const {
   CustomManagePasswordsUIController* controller =
       static_cast<CustomManagePasswordsUIController*>(passwords_ui_controller_);
-  controller->WaitForFallbackForSaving();
+  return controller->WaitForFallbackForSaving(timeout);
 }
 
 PasswordManagerBrowserTestBase::PasswordManagerBrowserTestBase()
@@ -384,15 +425,6 @@ PasswordManagerBrowserTestBase::PasswordManagerBrowserTestBase()
 PasswordManagerBrowserTestBase::~PasswordManagerBrowserTestBase() = default;
 
 void PasswordManagerBrowserTestBase::SetUpOnMainThread() {
-  // Use TestPasswordStore to remove a possible race. Normally the
-  // PasswordStore does its database manipulation on the DB thread, which
-  // creates a possible race during navigation. Specifically the
-  // PasswordManager will ignore any forms in a page if the load from the
-  // PasswordStore has not completed.
-  PasswordStoreFactory::GetInstance()->SetTestingFactory(
-      browser()->profile(),
-      password_manager::BuildPasswordStore<
-          content::BrowserContext, password_manager::TestPasswordStore>);
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Setup HTTPS server serving files from standard test directory.
@@ -412,33 +444,7 @@ void PasswordManagerBrowserTestBase::SetUpOnMainThread() {
   verify_result.verified_cert = cert;
   mock_cert_verifier()->AddResultForCert(cert.get(), verify_result, net::OK);
 
-  // Add a tab with a customized ManagePasswordsUIController. Thus, we can
-  // intercept useful UI events.
-  content::WebContents* tab =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  std::unique_ptr<content::WebContents> owned_web_contents =
-      content::WebContents::Create(
-          content::WebContents::CreateParams(tab->GetBrowserContext()));
-  web_contents_ = owned_web_contents.get();
-  ASSERT_TRUE(web_contents_);
-
-  // ManagePasswordsUIController needs ChromePasswordManagerClient for logging.
-  autofill::ChromeAutofillClient::CreateForWebContents(web_contents_);
-  ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
-      web_contents_,
-      autofill::ChromeAutofillClient::FromWebContents(web_contents_));
-  ASSERT_TRUE(ChromePasswordManagerClient::FromWebContents(web_contents_));
-  CustomManagePasswordsUIController* controller =
-      new CustomManagePasswordsUIController(web_contents_);
-  browser()->tab_strip_model()->AppendWebContents(std::move(owned_web_contents),
-                                                  true);
-  browser()->tab_strip_model()->CloseWebContentsAt(0,
-                                                   TabStripModel::CLOSE_NONE);
-  ASSERT_EQ(controller,
-            ManagePasswordsUIController::FromWebContents(web_contents_));
-  ASSERT_EQ(web_contents_,
-            browser()->tab_strip_model()->GetActiveWebContents());
-  ASSERT_FALSE(web_contents_->IsLoading());
+  SetUpOnMainThreadAndGetNewTab(browser(), &web_contents_);
 }
 
 void PasswordManagerBrowserTestBase::TearDownOnMainThread() {
@@ -447,6 +453,57 @@ void PasswordManagerBrowserTestBase::TearDownOnMainThread() {
 
 void PasswordManagerBrowserTestBase::TearDownInProcessBrowserTestFixture() {
   ProfileIOData::SetCertVerifierForTesting(nullptr);
+}
+
+void PasswordManagerBrowserTestBase::SetUpOnMainThreadAndGetNewTab(
+    Browser* browser,
+    content::WebContents** web_contents) {
+  // Use TestPasswordStore to remove a possible race. Normally the
+  // PasswordStore does its database manipulation on a background thread, which
+  // creates a possible race during navigation. Specifically the
+  // PasswordManager will ignore any forms in a page if the load from the
+  // PasswordStore has not completed.
+  PasswordStoreFactory::GetInstance()->SetTestingFactory(
+      browser->profile(),
+      base::BindRepeating(
+          &password_manager::BuildPasswordStore<
+              content::BrowserContext, password_manager::TestPasswordStore>));
+
+  // Add a tab with a customized ManagePasswordsUIController. Thus, we can
+  // intercept useful UI events.
+  content::WebContents* tab =
+      browser->tab_strip_model()->GetActiveWebContents();
+  std::unique_ptr<content::WebContents> owned_web_contents =
+      content::WebContents::Create(
+          content::WebContents::CreateParams(tab->GetBrowserContext()));
+  *web_contents = owned_web_contents.get();
+  ASSERT_TRUE(*web_contents);
+
+  // ManagePasswordsUIController needs ChromePasswordManagerClient for logging.
+  autofill::ChromeAutofillClient::CreateForWebContents(*web_contents);
+  CustomPasswordManagerClient::CreateForWebContentsWithAutofillClient(
+      *web_contents,
+      autofill::ChromeAutofillClient::FromWebContents(*web_contents));
+  ASSERT_TRUE(ChromePasswordManagerClient::FromWebContents(*web_contents));
+  CustomManagePasswordsUIController* controller =
+      new CustomManagePasswordsUIController(*web_contents);
+  browser->tab_strip_model()->AppendWebContents(std::move(owned_web_contents),
+                                                true);
+  browser->tab_strip_model()->CloseWebContentsAt(0, TabStripModel::CLOSE_NONE);
+  ASSERT_EQ(controller,
+            ManagePasswordsUIController::FromWebContents(*web_contents));
+  ASSERT_EQ(*web_contents, browser->tab_strip_model()->GetActiveWebContents());
+  ASSERT_FALSE((*web_contents)->IsLoading());
+}
+
+void PasswordManagerBrowserTestBase::WaitForPasswordStore(Browser* browser) {
+  scoped_refptr<password_manager::PasswordStore> password_store =
+      PasswordStoreFactory::GetForProfile(browser->profile(),
+                                          ServiceAccessType::IMPLICIT_ACCESS);
+  PasswordStoreResultsObserver syncer;
+  password_store->GetAutofillableLoginsWithAffiliationAndBrandingInformation(
+      &syncer);
+  syncer.Wait();
 }
 
 content::WebContents* PasswordManagerBrowserTestBase::WebContents() const {
@@ -583,13 +640,7 @@ void PasswordManagerBrowserTestBase::WaitForJsElementValue(
 }
 
 void PasswordManagerBrowserTestBase::WaitForPasswordStore() {
-  scoped_refptr<password_manager::PasswordStore> password_store =
-      PasswordStoreFactory::GetForProfile(browser()->profile(),
-                                          ServiceAccessType::IMPLICIT_ACCESS);
-  PasswordStoreResultsObserver syncer;
-  password_store->GetAutofillableLoginsWithAffiliationAndBrandingInformation(
-      &syncer);
-  syncer.Wait();
+  WaitForPasswordStore(browser());
 }
 
 void PasswordManagerBrowserTestBase::CheckElementValue(
@@ -625,8 +676,8 @@ void PasswordManagerBrowserTestBase::AddHSTSHost(const std::string& host) {
   base::Time expiry = base::Time::Now() + base::TimeDelta::FromDays(1000);
   bool include_subdomains = false;
   base::RunLoop run_loop;
-  network_context->AddHSTSForTesting(host, expiry, include_subdomains,
-                                     run_loop.QuitClosure());
+  network_context->AddHSTS(host, expiry, include_subdomains,
+                           run_loop.QuitClosure());
   run_loop.Run();
 }
 

@@ -22,7 +22,6 @@
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_request_info.h"
 #include "net/http/http_response_headers.h"
-#include "net/http/proxy_connect_redirect_http_stream.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source_type.h"
 #include "net/spdy/spdy_http_utils.h"
@@ -45,7 +44,6 @@ SpdyProxyClientSocket::SpdyProxyClientSocket(
       user_buffer_len_(0),
       write_buffer_len_(0),
       was_ever_used_(false),
-      redirect_has_load_timing_info_(false),
       net_log_(NetLogWithSource::Make(spdy_stream->net_log().net_log(),
                                       NetLogSourceType::PROXY_CLIENT_SOCKET)),
       source_dependency_(source_net_log.source()),
@@ -82,7 +80,7 @@ int SpdyProxyClientSocket::RestartWithAuth(CompletionOnceCallback callback) {
   // stream may not be reused and a new SpdyProxyClientSocket must be
   // created (possibly on top of the same SPDY Session).
   next_state_ = STATE_DISCONNECTED;
-  return OK;
+  return ERR_UNABLE_TO_REUSE_CONNECTION_FOR_PROXY_AUTH;
 }
 
 bool SpdyProxyClientSocket::IsUsingSpdy() const {
@@ -93,11 +91,13 @@ NextProto SpdyProxyClientSocket::GetProxyNegotiatedProtocol() const {
   return spdy_stream_->GetNegotiatedProtocol();
 }
 
-std::unique_ptr<HttpStream>
-SpdyProxyClientSocket::CreateConnectResponseStream() {
-  return std::make_unique<ProxyConnectRedirectHttpStream>(
-      redirect_has_load_timing_info_ ? &redirect_load_timing_info_ : nullptr);
-}
+// Ignore priority changes, just use priority of initial request. Since multiple
+// requests are pooled on the SpdyProxyClientSocket, reprioritization doesn't
+// really work.
+//
+// TODO(mmenke):  Use a single priority value for all SpdyProxyClientSockets,
+// regardless of what priority they're created with.
+void SpdyProxyClientSocket::SetStreamPriority(RequestPriority priority) {}
 
 // Sends a HEADERS frame to the proxy with a CONNECT request
 // for the specified endpoint.  Waits for the server to send back
@@ -409,12 +409,10 @@ int SpdyProxyClientSocket::DoReadReplyComplete(int result) {
       if (!SanitizeProxyRedirect(&response_))
         return ERR_TUNNEL_CONNECTION_FAILED;
 
-      redirect_has_load_timing_info_ =
-          spdy_stream_->GetLoadTimingInfo(&redirect_load_timing_info_);
       // Note that this triggers a spdy::ERROR_CODE_CANCEL.
       spdy_stream_->DetachDelegate();
       next_state_ = STATE_DISCONNECTED;
-      return ERR_HTTPS_PROXY_TUNNEL_RESPONSE;
+      return ERR_HTTPS_PROXY_TUNNEL_RESPONSE_REDIRECT;
 
     case 407:  // Proxy Authentication Required
       next_state_ = STATE_OPEN;

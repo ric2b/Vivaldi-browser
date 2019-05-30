@@ -15,9 +15,11 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.background_task_scheduler.BackgroundTaskScheduler;
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
 import org.chromium.components.background_task_scheduler.TaskIds;
@@ -29,9 +31,14 @@ import java.util.List;
 /**
  * Unit tests for {@link FeedSchedulerBridge}.
  */
+// TODO(https://crbug.com/894334): Remove format suppression once formatting bug is fixed.
+// clang-format off
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@CommandLineFlags.Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
+@Features.EnableFeatures(ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS)
 public class FeedRefreshTaskTest {
+    // clang-format on
+
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
@@ -77,7 +84,7 @@ public class FeedRefreshTaskTest {
         mActivityTestRule.startMainActivityOnBlankPage();
         ThreadUtils.runOnUiThreadBlocking(() -> {
             // Accessing the bridge will create if needed, and may run initialization logic.
-            FeedProcessScopeFactory.getFeedSchedulerBridge();
+            FeedProcessScopeFactory.getFeedScheduler();
             mTaskScheduler.getTaskInfoList().clear();
         });
     }
@@ -91,7 +98,7 @@ public class FeedRefreshTaskTest {
             Assert.assertEquals(1, mTaskScheduler.getTaskInfoList().size());
             TaskInfo actualInfo = mTaskScheduler.getTaskInfoList().get(0);
             Assert.assertEquals(TaskIds.FEED_REFRESH_JOB_ID, actualInfo.getTaskId());
-            Assert.assertEquals(TaskInfo.NETWORK_TYPE_ANY, actualInfo.getRequiredNetworkType());
+            Assert.assertEquals(TaskInfo.NetworkType.ANY, actualInfo.getRequiredNetworkType());
             Assert.assertEquals(false, actualInfo.requiresCharging());
             Assert.assertEquals(true, actualInfo.isPeriodic());
             Assert.assertEquals(true, actualInfo.isPersisted());
@@ -107,9 +114,10 @@ public class FeedRefreshTaskTest {
     @SmallTest
     public void testCancelWakeUp() {
         ThreadUtils.runOnUiThreadBlocking(() -> {
-            Assert.assertEquals(0, mTaskScheduler.getCanceledTaskIds().size());
+            int initialCanceledTasks = mTaskScheduler.getCanceledTaskIds().size();
             FeedRefreshTask.cancelWakeUp();
-            Assert.assertEquals(1, mTaskScheduler.getCanceledTaskIds().size());
+            Assert.assertEquals(
+                    initialCanceledTasks + 1, mTaskScheduler.getCanceledTaskIds().size());
         });
     }
 

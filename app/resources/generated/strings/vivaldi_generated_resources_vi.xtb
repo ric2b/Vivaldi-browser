@@ -28,13 +28,11 @@
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
 <translation id="1723824996674794290">Cửa sổ &amp;Mới</translation>
 <translation id="1729533290416704613">Tiện ích này cũng điều khiển trang nào được hiển thị khi bạn tìm kiếm từ Thanh địa chỉ.</translation>
-<translation id="1731589410171062430">Tổng số: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /> (<ph name="NUMBER_OF_PAGES" /> <ph name="PAGE_OR_PAGES_LABEL" />)</translation>
 <translation id="1744108098763830590">trang chạy nền</translation>
 <translation id="1828901632669367785">In Bằng Hộp thoại Hệ thống...</translation>
 <translation id="1850508293116537636">Xoay &amp;theo chiều kim đồng hồ</translation>
 <translation id="1901303067676059328">Chọn &amp;tất cả</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
-<translation id="1974060860693918893">Nâng cao</translation>
 <translation id="1989112275319619282">Duyệt</translation>
 <translation id="1992397118740194946">Chưa đặt</translation>
 <translation id="2050339315714019657">Khổ dọc</translation>
@@ -72,16 +70,13 @@
 <translation id="2580924999637585241">Tổng số: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Cửa hàng Chrome Trực tuyến</translation>
 <translation id="2678063897982469759">Kích hoạt lại</translation>
-<translation id="2679385451463308372">In bằng hộp thoại hệ thống…</translation>
 <translation id="2721037002783622288">&amp;Tìm kiếm hình ảnh trên <ph name="SEARCH_ENGINE" /></translation>
-<translation id="2726934403674109201">(Tổng số <ph name="COUNT" />)</translation>
 <translation id="2785873697295365461">Phần mô tả tệp</translation>
 <translation id="2809586584051668049">và <ph name="NUMBER_ADDITIONAL_DISABLED" /> mục khác</translation>
 <translation id="2847759467426165163">Truyền tới</translation>
 <translation id="2850541429955027218">Thêm chủ đề</translation>
 <translation id="2861941300086904918">Trình quản lý bảo mật Native Client</translation>
 <translation id="2889064240420137087">Mở liên kết bằng...</translation>
-<translation id="2890678560483811744">Vượt quá phạm vi trang</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> không thể giao tiếp với máy in này. Hãy đảm bảo rằng bạn đã cắm máy in rồi thử lại.</translation>
 <translation id="2916745397441987255">Tìm tiện ích</translation>
 <translation id="2932883381142163287">Báo cáo lạm dụng</translation>
@@ -101,17 +96,14 @@
 <translation id="3154429428035006212">Ngoại tuyến hơn một tháng</translation>
 <translation id="3222066309010235055">Trình kết xuất trước: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Chọn thư mục gốc của tiện ích để đóng gói. Để cập nhật tiện ích, bạn cũng chọn tệp khóa cá nhân để sử dụng lại.</translation>
-<translation id="3269093882174072735">Tải hình ảnh</translation>
 <translation id="3280237271814976245">Lưu &amp;thành...</translation>
 <translation id="3288047731229977326">Tiện ích chạy ở chế độ nhà phát triển có thể gây hại cho máy tính của bạn. Nếu bạn không phải là nhà phát triển, bạn nên vô hiệu hóa các tiện ích này chạy trong chế độ nhà phát triển để giữ an toàn.</translation>
 <translation id="3303818374450886607">Bản sao</translation>
 <translation id="3305661444342691068">Mở PDF với Preview</translation>
 <translation id="3317459757438853210">Hai mặt</translation>
-<translation id="3319048459796106952">Cửa sổ ẩn &amp;danh mới</translation>
 <translation id="3347086966102161372">S&amp;ao chép địa chỉ hình ảnh</translation>
 <translation id="3360297538363969800">Không in được. Vui lòng kiểm tra máy in và thử lại.</translation>
 <translation id="3378572629723696641">Tiện ích này có thể đã bị hỏng.</translation>
-<translation id="3396331542604645348">Máy in đã chọn không khả dụng hoặc không được cài đặt chính xác.  Hãy kiểm tra máy in của bạn hoặc thử chọn một máy in khác.</translation>
 <translation id="3435896845095436175">Bật</translation>
 <translation id="345693547134384690">Mở &amp;hình ảnh trong tab mới</translation>
 <translation id="3467267818798281173">Yêu cầu Google cung cấp đề xuất</translation>
@@ -160,7 +152,6 @@
 <translation id="4593021220803146968">Đ&amp;i đến <ph name="URL" /></translation>
 <translation id="4595560905247879544">Chỉ người quản lý mới có thể sửa đổi ứng dụng và tiện ích (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Tiện ích đã thay đổi trang nào sẽ được hiển thị khi bạn mở một tab mới.</translation>
-<translation id="4628314759732363424">Thay đổi...</translation>
 <translation id="4677772697204437347">Bộ nhớ GPU</translation>
 <translation id="4681930562518940301">Mở &amp;hình ảnh gốc trong tab mới</translation>
 <translation id="4688541352655220763">Bạn có thể sử dụng tính năng này để hiển thị nội dung từ Vivaldi trên TV hoặc các thiết bị khác của bạn.</translation>
@@ -184,11 +175,9 @@
 <translation id="5233736638227740678">&amp;Dán</translation>
 <translation id="5265562206369321422">Ngoại tuyến hơn một tuần</translation>
 <translation id="5269977353971873915">Lỗi In</translation>
-<translation id="5271549068863921519">Lưu mật khẩu</translation>
 <translation id="52912272896845572">Tệp khóa cá nhân không hợp lệ.</translation>
 <translation id="5301954838959518834">OK</translation>
 <translation id="5317780077021120954">Lưu</translation>
-<translation id="5329858601952122676">&amp;Xoá</translation>
 <translation id="5355926466126177564">Tiện ích "<ph name="EXTENSION_NAME" />" đã thay đổi trang nào được hiển thị khi bạn tìm kiếm từ Thanh địa chỉ.</translation>
 <translation id="5362741141255528695">Chọn tệp khóa cá nhân.</translation>
 <translation id="5370819323174483825">&amp;Tải lại</translation>
@@ -202,7 +191,6 @@
 <translation id="5542132724887566711">Tiểu sử</translation>
 <translation id="5556459405103347317">Tải lại</translation>
 <translation id="5575473780076478375">Tiện ích Ẩn danh: <ph name="EXTENSION_NAME" /></translation>
-<translation id="5581700288664681403">Đang tải <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="5623842676595125836">Nhật ký</translation>
 <translation id="5627086634964711283">Tiện ích cũng điều khiển trang nào sẽ hiển thị khi bạn nhấp vào nút Trang chủ.</translation>
 <translation id="5707185214361380026">Lỗi nạp phần mở rộng từ:</translation>
@@ -213,7 +201,6 @@
 <translation id="5780973441651030252">Mức độ ưu tiên quá trình</translation>
 <translation id="5804241973901381774">Cấp quyền</translation>
 <translation id="5828633471261496623">Đang in...</translation>
-<translation id="5829401023154985950">Quản lý...</translation>
 <translation id="583281660410589416">Không xác định</translation>
 <translation id="5956585768868398362">Đây có phải là trang tìm kiếm bạn muốn không?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (tối đa <ph name="NUM_KILOBYTES_LIVE" />)</translation>
@@ -255,7 +242,6 @@
 <translation id="6786747875388722282">Tiện ích</translation>
 <translation id="6787839852456839824">Phím tắt</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
-<translation id="6807889908376551050">Hiển thị Tất cả...</translation>
 <translation id="6812841287760418429">Lưu thay đổi</translation>
 <translation id="682123305478866682">Truyền màn hình</translation>
 <translation id="6886871292305414135">Mở liên kết trong &amp;tab mới</translation>
@@ -315,7 +301,6 @@ Giữ tệp khóa của bạn ở nơi an toàn. Bạn sẽ cần tệp khóa đ
 <translation id="8294431847097064396">Nguồn</translation>
 <translation id="8351419472474436977">Tiện ích này đã chiếm quyền kiểm soát cài đặt proxy của bạn, điều đó có nghĩa là tiện ích này có thể thay đổi, làm gián đoạn hoặc nghe trộm bất kỳ điều gì bạn thực hiện trực tuyến. Nếu bạn không chắc chắn về lý do thay đổi này diễn ra, bạn có thể không cần tiện ích này.</translation>
 <translation id="8382913212082956454">Sao chép địa chỉ &amp;email</translation>
-<translation id="839736845446313156">Đăng ký</translation>
 <translation id="8523849605371521713">Được thêm vào theo chính sách</translation>
 <translation id="8546306075665861288">Bộ nhớ cache hình ảnh</translation>
 <translation id="8569682776816196752">Không tìm thấy máy in nào</translation>
@@ -323,7 +308,6 @@ Giữ tệp khóa của bạn ở nơi an toàn. Bạn sẽ cần tệp khóa đ
 <translation id="8615618338313291042">Ứng dụng Ẩn danh: <ph name="APP_NAME" /></translation>
 <translation id="8627151598708688654">Chọn nguồn</translation>
 <translation id="862750493060684461">Bộ nhớ cache CSS</translation>
-<translation id="8658595122208653918">Thay đổi tùy chọn máy in...</translation>
 <translation id="8664389313780386848">X&amp;em nguồn trang</translation>
 <translation id="8714838604780058252">Đồ họa nền</translation>
 <translation id="8757090071857742562">Không thể truyền màn hình nền. Kiểm tra xem bạn đã xác nhận lời nhắc để bắt đầu chia sẻ màn hình hay chưa.</translation>

@@ -20,7 +20,6 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #import "ui/base/cocoa/find_pasteboard.h"
 #include "url/gurl.h"
@@ -32,12 +31,9 @@ GURL GetURL(const std::string& filename) {
                                    base::FilePath().AppendASCII(filename));
 }
 
-class FindBarPlatformHelperMacInteractiveUITest
-    : public InProcessBrowserTest,
-      public testing::WithParamInterface<bool> {
+class FindBarPlatformHelperMacInteractiveUITest : public InProcessBrowserTest {
  public:
-  FindBarPlatformHelperMacInteractiveUITest()
-      : scoped_macviews_browser_mode_(GetParam()) {}
+  FindBarPlatformHelperMacInteractiveUITest() {}
   ~FindBarPlatformHelperMacInteractiveUITest() override = default;
 
   void SetUpOnMainThread() override {
@@ -50,25 +46,19 @@ class FindBarPlatformHelperMacInteractiveUITest
     InProcessBrowserTest::TearDownOnMainThread();
   }
 
-  static std::string ParamInfoToString(
-      ::testing::TestParamInfo<bool> param_info) {
-    return param_info.param ? "Views" : "Cocoa";
-  }
-
  private:
-  test::ScopedMacViewsBrowserMode scoped_macviews_browser_mode_;
   NSString* old_find_text_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(FindBarPlatformHelperMacInteractiveUITest);
 };
 
 // Tests that the pasteboard is updated when the find bar is changed.
-IN_PROC_BROWSER_TEST_P(FindBarPlatformHelperMacInteractiveUITest,
+IN_PROC_BROWSER_TEST_F(FindBarPlatformHelperMacInteractiveUITest,
                        PasteboardUpdatedFromFindBar) {
   FindBarController* find_bar_controller = browser()->GetFindBarController();
   ASSERT_NE(nullptr, find_bar_controller);
 
-  base::string16 empty_string(base::ASCIIToUTF16(""));
+  const base::string16 empty_string;
   find_bar_controller->SetText(empty_string);
 
   chrome::Find(browser());
@@ -93,14 +83,14 @@ IN_PROC_BROWSER_TEST_P(FindBarPlatformHelperMacInteractiveUITest,
 }
 
 // Tests that the pasteboard is not updated from an incognito find bar.
-IN_PROC_BROWSER_TEST_P(FindBarPlatformHelperMacInteractiveUITest,
+IN_PROC_BROWSER_TEST_F(FindBarPlatformHelperMacInteractiveUITest,
                        IncognitoPasteboardNotUpdatedFromFindBar) {
   Browser* browser_incognito = CreateIncognitoBrowser();
   FindBarController* find_bar_controller =
       browser_incognito->GetFindBarController();
   ASSERT_NE(nullptr, find_bar_controller);
 
-  base::string16 empty_string(base::ASCIIToUTF16(""));
+  const base::string16 empty_string;
   find_bar_controller->SetText(empty_string);
 
   chrome::Find(browser_incognito);
@@ -132,7 +122,7 @@ IN_PROC_BROWSER_TEST_P(FindBarPlatformHelperMacInteractiveUITest,
 // FindInPageControllerTest.GlobalPasteBoardClearMatches.
 // TODO(http://crbug.com/843878): Remove when referenced bug is fixed.
 // Flaky. crbug.com/864585
-IN_PROC_BROWSER_TEST_P(FindBarPlatformHelperMacInteractiveUITest,
+IN_PROC_BROWSER_TEST_F(FindBarPlatformHelperMacInteractiveUITest,
                        DISABLED_GlobalPasteBoardClearMatches) {
   FindBarController* find_bar_controller = browser()->GetFindBarController();
   ASSERT_NE(nullptr, find_bar_controller);
@@ -140,7 +130,7 @@ IN_PROC_BROWSER_TEST_P(FindBarPlatformHelperMacInteractiveUITest,
   GURL url = GetURL(kSimple);
   ui_test_utils::NavigateToURL(browser(), url);
 
-  base::string16 empty_string(base::ASCIIToUTF16(""));
+  const base::string16 empty_string;
   find_bar_controller->SetText(empty_string);
 
   chrome::Find(browser());
@@ -178,7 +168,7 @@ IN_PROC_BROWSER_TEST_P(FindBarPlatformHelperMacInteractiveUITest,
                                            ->GetMatchCountText());
 
   // Go back to the first tab and verify that the match text is cleared.
-  browser()->tab_strip_model()->ActivateTabAt(0, false);
+  browser()->tab_strip_model()->ActivateTabAt(0);
   EXPECT_EQ(base::ASCIIToUTF16(""), find_bar_controller->find_bar()
                                         ->GetFindBarTesting()
                                         ->GetMatchCountText());
@@ -187,7 +177,7 @@ IN_PROC_BROWSER_TEST_P(FindBarPlatformHelperMacInteractiveUITest,
 // Equivalent to browser_tests
 // FindInPageControllerTest.IncognitoFindNextShared.
 // TODO(http://crbug.com/843878): Remove when referenced bug is fixed.
-IN_PROC_BROWSER_TEST_P(FindBarPlatformHelperMacInteractiveUITest,
+IN_PROC_BROWSER_TEST_F(FindBarPlatformHelperMacInteractiveUITest,
                        IncognitoFindNextShared) {
   chrome::Find(browser());
   ASSERT_TRUE(
@@ -220,7 +210,7 @@ IN_PROC_BROWSER_TEST_P(FindBarPlatformHelperMacInteractiveUITest,
 // Equivalent to browser_tests
 // FindInPageControllerTest.PreferPreviousSearch.
 // TODO(http://crbug.com/843878): Remove when referenced bug is fixed.
-IN_PROC_BROWSER_TEST_P(FindBarPlatformHelperMacInteractiveUITest,
+IN_PROC_BROWSER_TEST_F(FindBarPlatformHelperMacInteractiveUITest,
                        PreferPreviousSearch) {
   FindBarController* find_bar_controller = browser()->GetFindBarController();
   ASSERT_NE(nullptr, find_bar_controller);
@@ -231,7 +221,7 @@ IN_PROC_BROWSER_TEST_P(FindBarPlatformHelperMacInteractiveUITest,
   content::WebContents* first_active_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
 
-  base::string16 empty_string(base::ASCIIToUTF16(""));
+  const base::string16 empty_string;
   find_bar_controller->SetText(empty_string);
 
   chrome::Find(browser());
@@ -265,7 +255,7 @@ IN_PROC_BROWSER_TEST_P(FindBarPlatformHelperMacInteractiveUITest,
                                               false, false, false));
 
   // Go back to the first tab and end the search.
-  browser()->tab_strip_model()->ActivateTabAt(0, false);
+  browser()->tab_strip_model()->ActivateTabAt(0);
   find_bar_controller->EndFindSession(FindBarController::kKeepSelectionOnPage,
                                       FindBarController::kKeepResultsInFindBox);
   // Simulate F3.
@@ -275,9 +265,3 @@ IN_PROC_BROWSER_TEST_P(FindBarPlatformHelperMacInteractiveUITest,
       base::ASCIIToUTF16("given"),
       FindTabHelper::FromWebContents(first_active_web_contents)->find_text());
 }
-
-INSTANTIATE_TEST_CASE_P(
-    ,
-    FindBarPlatformHelperMacInteractiveUITest,
-    ::testing::Bool(),
-    FindBarPlatformHelperMacInteractiveUITest::ParamInfoToString);

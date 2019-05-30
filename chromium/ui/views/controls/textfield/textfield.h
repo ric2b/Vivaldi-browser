@@ -11,17 +11,22 @@
 #include <memory>
 #include <string>
 
+#if defined(OS_WIN)
+#include <vector>
+#endif
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/base/models/simple_menu_model.h"
-#include "ui/base/touch/touch_editing_controller.h"
+#include "ui/base/pointer/touch_editing_controller.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/range/range.h"
@@ -244,6 +249,8 @@ class VIEWS_EXPORT Textfield : public View,
   // Set extra spacing placed between glyphs; used for obscured text styling.
   void SetGlyphSpacing(int spacing);
 
+  int GetPasswordCharRevealIndex() const { return password_char_reveal_index_; }
+
   // View overrides:
   int GetBaseline() const override;
   gfx::Size CalculatePreferredSize() const override;
@@ -262,9 +269,8 @@ class VIEWS_EXPORT Textfield : public View,
   bool CanHandleAccelerators() const override;
   void AboutToRequestFocusFromTabTraversal(bool reverse) override;
   bool SkipDefaultKeyEventProcessing(const ui::KeyEvent& event) override;
-  bool GetDropFormats(
-      int* formats,
-      std::set<ui::Clipboard::FormatType>* format_types) override;
+  bool GetDropFormats(int* formats,
+                      std::set<ui::ClipboardFormatType>* format_types) override;
   bool CanDrop(const ui::OSExchangeData& data) override;
   int OnDragUpdated(const ui::DropTargetEvent& event) override;
   void OnDragExited() override;
@@ -286,9 +292,9 @@ class VIEWS_EXPORT Textfield : public View,
   void OnCompositionTextConfirmedOrCleared() override;
 
   // ContextMenuController overrides:
-  void ShowContextMenuForView(View* source,
-                              const gfx::Point& point,
-                              ui::MenuSourceType source_type) override;
+  void ShowContextMenuForViewImpl(View* source,
+                                  const gfx::Point& point,
+                                  ui::MenuSourceType source_type) override;
 
   // DragController overrides:
   void WriteDragDataForView(View* sender,
@@ -347,8 +353,8 @@ class VIEWS_EXPORT Textfield : public View,
   FocusReason GetFocusReason() const override;
   bool GetTextRange(gfx::Range* range) const override;
   bool GetCompositionTextRange(gfx::Range* range) const override;
-  bool GetSelectionRange(gfx::Range* range) const override;
-  bool SetSelectionRange(const gfx::Range& range) override;
+  bool GetEditableSelectionRange(gfx::Range* range) const override;
+  bool SetEditableSelectionRange(const gfx::Range& range) override;
   bool DeleteRange(const gfx::Range& range) override;
   bool GetTextFromRange(const gfx::Range& range,
                         base::string16* text) const override;
@@ -361,6 +367,13 @@ class VIEWS_EXPORT Textfield : public View,
   void SetTextEditCommandForNextKeyEvent(ui::TextEditCommand command) override;
   ukm::SourceId GetClientSourceForMetrics() const override;
   bool ShouldDoLearning() override;
+
+#if defined(OS_WIN)
+  // Overridden from ui::TextInputClient(Windows only):
+  void SetCompositionFromExistingText(
+      const gfx::Range& range,
+      const std::vector<ui::ImeTextSpan>& ui_ime_text_spans) override;
+#endif
 
  protected:
   // Inserts or appends a character in response to an IME operation.
@@ -470,7 +483,8 @@ class VIEWS_EXPORT Textfield : public View,
 
   // Reveals the password character at |index| for a set duration.
   // If |index| is -1, the existing revealed character will be reset.
-  void RevealPasswordChar(int index);
+  // |duration| is the time to remain the password char to be visible.
+  void RevealPasswordChar(int index, base::TimeDelta duration);
 
   void CreateTouchSelectionControllerAndNotifyIt();
 
@@ -627,6 +641,9 @@ class VIEWS_EXPORT Textfield : public View,
 
   // The focus ring for this TextField.
   std::unique_ptr<FocusRing> focus_ring_;
+
+  // The password char reveal index, for testing only.
+  int password_char_reveal_index_ = -1;
 
   // Used to bind callback functions to this object.
   base::WeakPtrFactory<Textfield> weak_ptr_factory_;

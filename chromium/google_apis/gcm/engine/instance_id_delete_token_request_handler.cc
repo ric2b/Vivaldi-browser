@@ -48,7 +48,7 @@ void InstanceIDDeleteTokenRequestHandler::BuildRequestBody(std::string* body){
   BuildFormEncoding(kSenderKey, authorized_entity_, body);
   BuildFormEncoding(kScopeKey, scope_, body);
   BuildFormEncoding(kExtraScopeKey, scope_, body);
-  BuildFormEncoding(kGMSVersionKey, base::IntToString(gcm_version_), body);
+  BuildFormEncoding(kGMSVersionKey, base::NumberToString(gcm_version_), body);
 }
 
 UnregistrationRequest::Status
@@ -72,7 +72,7 @@ void InstanceIDDeleteTokenRequestHandler::ReportUMAs(
   if (status != UnregistrationRequest::SUCCESS)
     return;
 
-  UMA_HISTOGRAM_COUNTS("InstanceID.DeleteToken.RetryCount", retry_count);
+  UMA_HISTOGRAM_COUNTS_1M("InstanceID.DeleteToken.RetryCount", retry_count);
   UMA_HISTOGRAM_TIMES("InstanceID.DeleteToken.CompleteTime", complete_time);
 }
 

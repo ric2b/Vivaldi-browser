@@ -10,8 +10,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/thread_annotations.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/dom/task_type_traits.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 
@@ -35,6 +35,10 @@ class CORE_EXPORT ParentExecutionContextTaskRunners final
   // tests that don't have a parent frame.
   static ParentExecutionContextTaskRunners* Create();
 
+  // ExecutionContext could be nullptr if the worker is not associated with a
+  // particular context.
+  explicit ParentExecutionContextTaskRunners(ExecutionContext*);
+
   // Might return nullptr for unsupported task types. This can be called from
   // any threads.
   scoped_refptr<base::SingleThreadTaskRunner> Get(TaskType)
@@ -47,10 +51,6 @@ class CORE_EXPORT ParentExecutionContextTaskRunners final
                                     scoped_refptr<base::SingleThreadTaskRunner>,
                                     WTF::IntHash<TaskType>,
                                     TaskTypeTraits>;
-
-  // ExecutionContext could be nullptr if the worker is not associated with a
-  // particular context.
-  explicit ParentExecutionContextTaskRunners(ExecutionContext*);
 
   void ContextDestroyed(ExecutionContext*) LOCKS_EXCLUDED(mutex_) override;
 

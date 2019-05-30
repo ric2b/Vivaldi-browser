@@ -26,7 +26,7 @@ namespace ntp_tiles {
 // modifies the link, it will no longer be considered Most Visited and will not
 // be deleted when history is cleared.
 //
-// TODO(crbug/861831): Add Chrome sync support.
+// The current list of links is kept in sync with any changes from Chrome sync.
 class CustomLinksManager {
  public:
   struct Link {
@@ -69,6 +69,11 @@ class CustomLinksManager {
   virtual bool UpdateLink(const GURL& url,
                           const GURL& new_url,
                           const base::string16& new_title) = 0;
+  // Moves the specified link from its current index and inserts it at
+  // |new_pos|. Returns false and does nothing if custom links is not
+  // initialized, |url| is invalid, |url| does not exist in the list, or
+  // |new_pos| is invalid/already the current index.
+  virtual bool ReorderLink(const GURL& url, size_t new_pos) = 0;
   // Deletes the link with the specified |url|. Returns false and does nothing
   // if custom links is not initialized, |url| is invalid, or |url| does not
   // exist in the list.
@@ -80,7 +85,7 @@ class CustomLinksManager {
 
   // Registers a callback that will be invoked when custom links are updated by
   // sources other than this interface's methods (i.e. when links are deleted by
-  // history clear).
+  // history clear or when links are updated by Chrome sync).
   virtual std::unique_ptr<base::CallbackList<void()>::Subscription>
   RegisterCallbackForOnChanged(base::RepeatingClosure callback) = 0;
 };

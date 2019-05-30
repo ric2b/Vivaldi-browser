@@ -13,14 +13,16 @@ import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
+import org.chromium.chrome.browser.tab.TabThemeColorHelper;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
+import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
+import org.chromium.content_public.browser.NavigationHandle;
 
 import java.util.List;
 
@@ -89,11 +91,9 @@ public class ActivityTabTaskDescriptionHelper {
             }
 
             @Override
-            public void onDidFinishNavigation(Tab tab, String url, boolean isInMainFrame,
-                    boolean isErrorPage, boolean hasCommitted, boolean isSameDocument,
-                    boolean isFragmentNavigation, Integer pageTransition, int errorCode,
-                    int httpStatusCode) {
-                if (hasCommitted && isInMainFrame && !isSameDocument) {
+            public void onDidFinishNavigation(Tab tab, NavigationHandle navigation) {
+                if (navigation.hasCommitted() && navigation.isInMainFrame()
+                        && !navigation.isSameDocument()) {
                     mLargestFavicon = null;
                     updateTaskDescription();
                 }
@@ -159,7 +159,7 @@ public class ActivityTabTaskDescriptionHelper {
             }
 
             @Override
-            public void allTabsPendingClosure(List<Tab> tabs) {
+            public void multipleTabsPendingClosure(List<Tab> tabs, boolean isAllTabs) {
                 refreshSelectedTab();
             }
         };
@@ -224,8 +224,9 @@ public class ActivityTabTaskDescriptionHelper {
      */
     public void updateTaskDescription(String label, Bitmap icon) {
         int color = mDefaultThemeColor;
-        if (mCurrentTab != null && !mCurrentTab.isDefaultThemeColor()) {
-            color = mCurrentTab.getThemeColor();
+        if (mCurrentTab != null) {
+            TabThemeColorHelper tabTheme = TabThemeColorHelper.get(mCurrentTab);
+            if (!tabTheme.isDefaultColor()) color = tabTheme.getColor();
         }
         ApiCompatibilityUtils.setTaskDescription(mActivity, label, icon, color);
     }

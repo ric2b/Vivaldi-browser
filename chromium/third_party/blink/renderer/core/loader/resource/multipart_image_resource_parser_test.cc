@@ -4,12 +4,14 @@
 
 #include "third_party/blink/renderer/core/loader/resource/multipart_image_resource_parser.h"
 
-#include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
-
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+
+#include "base/stl_util.h"
+#include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
+#include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 
 namespace blink {
 namespace multipart_image_resource_parser_test {
@@ -30,7 +32,7 @@ class MockClient final : public GarbageCollectedFinalized<MockClient>,
     data_.push_back(Vector<char>());
   }
   void MultipartDataReceived(const char* bytes, size_t size) override {
-    data_.back().Append(bytes, size);
+    data_.back().Append(bytes, SafeCast<wtf_size_t>(size));
   }
 
   Vector<ResourceResponse> responses_;
@@ -40,17 +42,18 @@ class MockClient final : public GarbageCollectedFinalized<MockClient>,
 TEST(MultipartResponseTest, SkippableLength) {
   struct {
     const char* input;
-    const size_t position;
-    const size_t expected;
+    const wtf_size_t position;
+    const wtf_size_t expected;
   } line_tests[] = {
       {"Line", 0, 0},         {"Line", 2, 0},         {"Line", 10, 0},
       {"\r\nLine", 0, 2},     {"\nLine", 0, 1},       {"\n\nLine", 0, 1},
       {"\rLine", 0, 0},       {"Line\r\nLine", 4, 2}, {"Line\nLine", 4, 1},
       {"Line\n\nLine", 4, 1}, {"Line\rLine", 4, 0},   {"Line\r\rLine", 4, 0},
   };
-  for (size_t i = 0; i < arraysize(line_tests); ++i) {
+  for (size_t i = 0; i < base::size(line_tests); ++i) {
     Vector<char> input;
-    input.Append(line_tests[i].input, strlen(line_tests[i].input));
+    input.Append(line_tests[i].input,
+                 static_cast<wtf_size_t>(strlen(line_tests[i].input)));
     EXPECT_EQ(line_tests[i].expected,
               MultipartImageResourceParser::SkippableLengthForTest(
                   input, line_tests[i].position));
@@ -68,11 +71,12 @@ TEST(MultipartResponseTest, FindBoundary) {
       {"foo", "bound", kNotFound}, {"bound", "--boundbound", 0},
   };
 
-  for (size_t i = 0; i < arraysize(boundary_tests); ++i) {
+  for (size_t i = 0; i < base::size(boundary_tests); ++i) {
     Vector<char> boundary, data;
     boundary.Append(boundary_tests[i].boundary,
-                    strlen(boundary_tests[i].boundary));
-    data.Append(boundary_tests[i].data, strlen(boundary_tests[i].data));
+                    static_cast<uint32_t>(strlen(boundary_tests[i].boundary)));
+    data.Append(boundary_tests[i].data,
+                static_cast<uint32_t>(strlen(boundary_tests[i].data)));
     EXPECT_EQ(
         boundary_tests[i].position,
         MultipartImageResourceParser::FindBoundaryForTest(data, &boundary));
@@ -80,15 +84,17 @@ TEST(MultipartResponseTest, FindBoundary) {
 }
 
 TEST(MultipartResponseTest, NoStartBoundary) {
-  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
+  ResourceResponse response(NullURL());
+  response.SetMimeType("multipart/x-mixed-replace");
   response.SetHTTPHeaderField("Foo", "Bar");
   response.SetHTTPHeaderField("Content-type", "text/plain");
-  MockClient* client = new MockClient;
+  MockClient* client = MakeGarbageCollected<MockClient>();
   Vector<char> boundary;
   boundary.Append("bound", 5);
 
   MultipartImageResourceParser* parser =
-      new MultipartImageResourceParser(response, boundary, client);
+      MakeGarbageCollected<MultipartImageResourceParser>(response, boundary,
+                                                         client);
   const char kData[] =
       "Content-type: text/plain\n\n"
       "This is a sample response\n"
@@ -106,15 +112,17 @@ TEST(MultipartResponseTest, NoStartBoundary) {
 }
 
 TEST(MultipartResponseTest, NoEndBoundary) {
-  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
+  ResourceResponse response(NullURL());
+  response.SetMimeType("multipart/x-mixed-replace");
   response.SetHTTPHeaderField("Foo", "Bar");
   response.SetHTTPHeaderField("Content-type", "text/plain");
-  MockClient* client = new MockClient;
+  MockClient* client = MakeGarbageCollected<MockClient>();
   Vector<char> boundary;
   boundary.Append("bound", 5);
 
   MultipartImageResourceParser* parser =
-      new MultipartImageResourceParser(response, boundary, client);
+      MakeGarbageCollected<MultipartImageResourceParser>(response, boundary,
+                                                         client);
   const char kData[] =
       "bound\nContent-type: text/plain\n\n"
       "This is a sample response\n";
@@ -130,15 +138,17 @@ TEST(MultipartResponseTest, NoEndBoundary) {
 }
 
 TEST(MultipartResponseTest, NoStartAndEndBoundary) {
-  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
+  ResourceResponse response(NullURL());
+  response.SetMimeType("multipart/x-mixed-replace");
   response.SetHTTPHeaderField("Foo", "Bar");
   response.SetHTTPHeaderField("Content-type", "text/plain");
-  MockClient* client = new MockClient;
+  MockClient* client = MakeGarbageCollected<MockClient>();
   Vector<char> boundary;
   boundary.Append("bound", 5);
 
   MultipartImageResourceParser* parser =
-      new MultipartImageResourceParser(response, boundary, client);
+      MakeGarbageCollected<MultipartImageResourceParser>(response, boundary,
+                                                         client);
   const char kData[] =
       "Content-type: text/plain\n\n"
       "This is a sample response\n";
@@ -155,15 +165,17 @@ TEST(MultipartResponseTest, NoStartAndEndBoundary) {
 
 TEST(MultipartResponseTest, MalformedBoundary) {
   // Some servers send a boundary that is prefixed by "--".  See bug 5786.
-  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
+  ResourceResponse response(NullURL());
+  response.SetMimeType("multipart/x-mixed-replace");
   response.SetHTTPHeaderField("Foo", "Bar");
   response.SetHTTPHeaderField("Content-type", "text/plain");
-  MockClient* client = new MockClient;
+  MockClient* client = MakeGarbageCollected<MockClient>();
   Vector<char> boundary;
   boundary.Append("--bound", 7);
 
   MultipartImageResourceParser* parser =
-      new MultipartImageResourceParser(response, boundary, client);
+      MakeGarbageCollected<MultipartImageResourceParser>(response, boundary,
+                                                         client);
   const char kData[] =
       "--bound\n"
       "Content-type: text/plain\n\n"
@@ -203,13 +215,15 @@ void VariousChunkSizesTest(const TestChunk chunks[],
       "foofoofoofoofoo"              // 86-100
       "--bound--";                   // 101-109
 
-  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
-  MockClient* client = new MockClient;
+  ResourceResponse response(NullURL());
+  response.SetMimeType("multipart/x-mixed-replace");
+  MockClient* client = MakeGarbageCollected<MockClient>();
   Vector<char> boundary;
   boundary.Append("bound", 5);
 
   MultipartImageResourceParser* parser =
-      new MultipartImageResourceParser(response, boundary, client);
+      MakeGarbageCollected<MultipartImageResourceParser>(response, boundary,
+                                                         client);
 
   for (int i = 0; i < chunks_size; ++i) {
     ASSERT_LT(chunks[i].start_position, chunks[i].end_position);
@@ -305,14 +319,16 @@ TEST(MultipartResponseTest, BreakInData) {
 }
 
 TEST(MultipartResponseTest, SmallChunk) {
-  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
+  ResourceResponse response(NullURL());
+  response.SetMimeType("multipart/x-mixed-replace");
   response.SetHTTPHeaderField("Content-type", "text/plain");
-  MockClient* client = new MockClient;
+  MockClient* client = MakeGarbageCollected<MockClient>();
   Vector<char> boundary;
   boundary.Append("bound", 5);
 
   MultipartImageResourceParser* parser =
-      new MultipartImageResourceParser(response, boundary, client);
+      MakeGarbageCollected<MultipartImageResourceParser>(response, boundary,
+                                                         client);
 
   // Test chunks of size 1, 2, and 0.
   const char kData[] =
@@ -340,13 +356,15 @@ TEST(MultipartResponseTest, SmallChunk) {
 
 TEST(MultipartResponseTest, MultipleBoundaries) {
   // Test multiple boundaries back to back
-  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
-  MockClient* client = new MockClient;
+  ResourceResponse response(NullURL());
+  response.SetMimeType("multipart/x-mixed-replace");
+  MockClient* client = MakeGarbageCollected<MockClient>();
   Vector<char> boundary;
   boundary.Append("bound", 5);
 
   MultipartImageResourceParser* parser =
-      new MultipartImageResourceParser(response, boundary, client);
+      MakeGarbageCollected<MultipartImageResourceParser>(response, boundary,
+                                                         client);
 
   const char kData[] = "--bound\r\n\r\n--bound\r\n\r\nfoofoo--bound--";
   parser->AppendData(kData, strlen(kData));
@@ -357,8 +375,9 @@ TEST(MultipartResponseTest, MultipleBoundaries) {
 }
 
 TEST(MultipartResponseTest, EatLeadingLF) {
-  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
-  MockClient* client = new MockClient;
+  ResourceResponse response(NullURL());
+  response.SetMimeType("multipart/x-mixed-replace");
+  MockClient* client = MakeGarbageCollected<MockClient>();
   Vector<char> boundary;
   boundary.Append("bound", 5);
 
@@ -367,7 +386,8 @@ TEST(MultipartResponseTest, EatLeadingLF) {
       "\n\n\n--bound\n\ncontent-type: 2\n\n"
       "\n\n\n--bound\ncontent-type: 3\n\n";
   MultipartImageResourceParser* parser =
-      new MultipartImageResourceParser(response, boundary, client);
+      MakeGarbageCollected<MultipartImageResourceParser>(response, boundary,
+                                                         client);
 
   for (size_t i = 0; i < strlen(kData); ++i)
     parser->AppendData(&kData[i], 1);
@@ -386,8 +406,9 @@ TEST(MultipartResponseTest, EatLeadingLF) {
 }
 
 TEST(MultipartResponseTest, EatLeadingCRLF) {
-  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
-  MockClient* client = new MockClient;
+  ResourceResponse response(NullURL());
+  response.SetMimeType("multipart/x-mixed-replace");
+  MockClient* client = MakeGarbageCollected<MockClient>();
   Vector<char> boundary;
   boundary.Append("bound", 5);
 
@@ -396,7 +417,8 @@ TEST(MultipartResponseTest, EatLeadingCRLF) {
       "\r\n\r\n\r\n--bound\r\n\r\ncontent-type: 2\r\n\r\n"
       "\r\n\r\n\r\n--bound\r\ncontent-type: 3\r\n\r\n";
   MultipartImageResourceParser* parser =
-      new MultipartImageResourceParser(response, boundary, client);
+      MakeGarbageCollected<MultipartImageResourceParser>(response, boundary,
+                                                         client);
 
   for (size_t i = 0; i < strlen(kData); ++i)
     parser->AppendData(&kData[i], 1);

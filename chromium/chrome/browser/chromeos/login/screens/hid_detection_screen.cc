@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -70,16 +71,19 @@ const char HIDDetectionScreen::kContextKeyKeyboardLabel[] =
 const char HIDDetectionScreen::kContextKeyContinueButtonEnabled[] =
     "continue-button-enabled";
 
-HIDDetectionScreen::HIDDetectionScreen(BaseScreenDelegate* base_screen_delegate,
-                                       HIDDetectionView* view)
+HIDDetectionScreen::HIDDetectionScreen(
+    BaseScreenDelegate* base_screen_delegate,
+    HIDDetectionView* view,
+    const base::RepeatingClosure& exit_callback)
     : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_OOBE_HID_DETECTION),
       view_(view),
+      exit_callback_(exit_callback),
       binding_(this),
       weak_ptr_factory_(this) {
   if (view_)
     view_->Bind(this);
 
-  device::BluetoothAdapterFactory::GetAdapter(base::Bind(
+  device::BluetoothAdapterFactory::GetAdapter(base::BindOnce(
       &HIDDetectionScreen::InitializeAdapter, weak_ptr_factory_.GetWeakPtr()));
   ConnectToInputDeviceManager();
 }
@@ -115,7 +119,7 @@ void HIDDetectionScreen::OnContinueButtonClicked() {
   if (adapter_is_powered && need_switching_off)
     PowerOff();
 
-  Finish(ScreenExitCode::HID_DETECTION_COMPLETED);
+  exit_callback_.Run();
 }
 
 void HIDDetectionScreen::OnViewDestroyed(HIDDetectionView* view) {
@@ -186,7 +190,7 @@ void HIDDetectionScreen::DisplayPasskey(device::BluetoothDevice* device,
                                         uint32_t passkey) {
   VLOG(1) << "DisplayPassKey id = " << device->GetDeviceID()
           << " name = " << device->GetNameForDisplay();
-  std::string pincode = base::UintToString(passkey);
+  std::string pincode = base::NumberToString(passkey);
   pincode = std::string(kPincodeLength - pincode.length(), '0').append(pincode);
   // No differences in UI for passkey and pincode authentication calls.
   DisplayPinCode(device, pincode);

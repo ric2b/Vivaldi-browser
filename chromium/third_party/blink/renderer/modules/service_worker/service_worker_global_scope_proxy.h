@@ -34,11 +34,12 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/threading/thread_checker.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/modules/service_worker/web_service_worker_context_proxy.h"
 #include "third_party/blink/renderer/core/workers/worker_reporting_proxy.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/heap/heap_allocator.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/time.h"
@@ -48,7 +49,6 @@ namespace blink {
 class FetchEvent;
 class ParentExecutionContextTaskRunners;
 class ServiceWorkerGlobalScope;
-class WebDataConsumerHandle;
 class WebEmbeddedWorkerImpl;
 class WebServiceWorkerContextClient;
 struct WebServiceWorkerError;
@@ -74,12 +74,18 @@ class ServiceWorkerGlobalScopeProxy final
  public:
   static ServiceWorkerGlobalScopeProxy* Create(WebEmbeddedWorkerImpl&,
                                                WebServiceWorkerContextClient&);
+
+  ServiceWorkerGlobalScopeProxy(WebEmbeddedWorkerImpl&,
+                                WebServiceWorkerContextClient&);
   ~ServiceWorkerGlobalScopeProxy() override;
 
   // WebServiceWorkerContextProxy overrides:
+  void BindServiceWorkerHost(
+      mojo::ScopedInterfaceEndpointHandle service_worker_host) override;
+  void SetRegistration(WebServiceWorkerRegistrationObjectInfo info) override;
+  // Must be called after the above BindServiceWorkerHost() and
+  // SetRegistration() got called.
   void ReadyToEvaluateScript() override;
-  void SetRegistration(
-      std::unique_ptr<WebServiceWorkerRegistration::Handle>) override;
   void DispatchActivateEvent(int) override;
   void DispatchBackgroundFetchAbortEvent(
       int event_id,
@@ -102,11 +108,10 @@ class ServiceWorkerGlobalScopeProxy final
       TransferableMessage,
       const WebSecurityOrigin& source_origin,
       const WebServiceWorkerClientInfo&) override;
-  void DispatchExtendableMessageEvent(
-      int event_id,
-      TransferableMessage,
-      const WebSecurityOrigin& source_origin,
-      std::unique_ptr<WebServiceWorker::Handle>) override;
+  void DispatchExtendableMessageEvent(int event_id,
+                                      TransferableMessage,
+                                      const WebSecurityOrigin& source_origin,
+                                      WebServiceWorkerObjectInfo) override;
   void DispatchFetchEvent(int fetch_event_id,
                           const WebServiceWorkerRequest&,
                           bool navigation_preload_sent) override;
@@ -130,7 +135,7 @@ class ServiceWorkerGlobalScopeProxy final
   void OnNavigationPreloadResponse(
       int fetch_event_id,
       std::unique_ptr<WebURLResponse>,
-      std::unique_ptr<WebDataConsumerHandle>) override;
+      mojo::ScopedDataPipeConsumerHandle data_pipe) override;
   void OnNavigationPreloadError(
       int fetch_event_id,
       std::unique_ptr<WebServiceWorkerError>) override;
@@ -147,18 +152,25 @@ class ServiceWorkerGlobalScopeProxy final
                        std::unique_ptr<SourceLocation>,
                        int exception_id) override;
   void ReportConsoleMessage(MessageSource,
-                            MessageLevel,
+                            mojom::ConsoleMessageLevel,
                             const String& message,
                             SourceLocation*) override;
-  void PostMessageToPageInspector(int session_id, const String&) override;
+  void WillInitializeWorkerContext() override;
   void DidCreateWorkerGlobalScope(WorkerOrWorkletGlobalScope*) override;
   void DidInitializeWorkerContext() override;
-  void DidLoadInstalledScript() override;
+  void DidFailToInitializeWorkerContext() override;
+  void DidLoadClassicScript() override;
+  void DidFailToLoadClassicScript() override;
+  void DidFetchScript() override;
+  void DidFailToFetchClassicScript() override;
+  void DidFailToFetchModuleScript() override;
   void WillEvaluateClassicScript(size_t script_size,
                                  size_t cached_metadata_size) override;
   void WillEvaluateImportedClassicScript(size_t script_size,
                                          size_t cached_metadata_size) override;
+  void WillEvaluateModuleScript() override;
   void DidEvaluateClassicScript(bool success) override;
+  void DidEvaluateModuleScript(bool success) override;
   void DidCloseWorkerGlobalScope() override;
   void WillDestroyWorkerGlobalScope() override;
   void DidTerminateWorkerThread() override;
@@ -175,9 +187,6 @@ class ServiceWorkerGlobalScopeProxy final
   void TerminateWorkerContext();
 
  private:
-  ServiceWorkerGlobalScopeProxy(WebEmbeddedWorkerImpl&,
-                                WebServiceWorkerContextClient&);
-
   WebServiceWorkerContextClient& Client() const;
   ServiceWorkerGlobalScope* WorkerGlobalScope() const;
 
@@ -201,6 +210,8 @@ class ServiceWorkerGlobalScopeProxy final
   WebServiceWorkerContextClient* client_;
 
   CrossThreadPersistent<ServiceWorkerGlobalScope> worker_global_scope_;
+
+  THREAD_CHECKER(worker_thread_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerGlobalScopeProxy);
 };

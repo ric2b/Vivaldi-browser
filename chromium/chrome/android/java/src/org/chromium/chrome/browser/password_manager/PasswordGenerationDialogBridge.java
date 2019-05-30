@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.password_manager;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.modaldialog.DialogDismissalCause;
 
 /**
  * JNI call glue between native password generation and Java objects.
@@ -41,7 +42,7 @@ public class PasswordGenerationDialogBridge {
     @CalledByNative
     private void destroy() {
         mNativePasswordGenerationDialogViewAndroid = 0;
-        mPasswordGenerationDialog.dismissDialog();
+        mPasswordGenerationDialog.dismissDialog(DialogDismissalCause.DISMISSED_BY_NATIVE);
     }
 
     private void onPasswordAcceptedOrRejected(boolean accepted) {
@@ -52,7 +53,7 @@ public class PasswordGenerationDialogBridge {
         } else {
             nativePasswordRejected(mNativePasswordGenerationDialogViewAndroid);
         }
-        mPasswordGenerationDialog.dismissDialog();
+        mPasswordGenerationDialog.dismissDialog(DialogDismissalCause.ACTION_ON_CONTENT);
     }
 
     private native void nativePasswordAccepted(

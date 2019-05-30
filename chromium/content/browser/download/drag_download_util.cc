@@ -15,8 +15,10 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "url/gurl.h"
 
@@ -68,9 +70,9 @@ base::File CreateFileForDrop(base::FilePath* file_path) {
     } else {
 #if defined(OS_WIN)
       base::string16 suffix =
-          base::ASCIIToUTF16("-") + base::IntToString16(seq);
+          base::ASCIIToUTF16("-") + base::NumberToString16(seq);
 #else
-      std::string suffix = std::string("-") + base::IntToString(seq);
+      std::string suffix = std::string("-") + base::NumberToString(seq);
 #endif
       new_file_path = file_path->InsertBeforeExtension(suffix);
     }
@@ -96,13 +98,15 @@ PromiseFileFinalizer::PromiseFileFinalizer(
 
 void PromiseFileFinalizer::OnDownloadCompleted(
     const base::FilePath& file_path) {
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::BindOnce(&PromiseFileFinalizer::Cleanup, this));
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
+      base::BindOnce(&PromiseFileFinalizer::Cleanup, this));
 }
 
 void PromiseFileFinalizer::OnDownloadAborted() {
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::BindOnce(&PromiseFileFinalizer::Cleanup, this));
+  base::PostTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
+      base::BindOnce(&PromiseFileFinalizer::Cleanup, this));
 }
 
 PromiseFileFinalizer::~PromiseFileFinalizer() {}

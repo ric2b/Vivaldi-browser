@@ -57,7 +57,7 @@ class IMEFeaturePodControllerTest : public NoSessionAshTestBase {
   void SetActiveIMECount(int count) {
     available_imes_.resize(count);
     for (int i = 0; i < count; ++i)
-      available_imes_[i].id = base::IntToString(i);
+      available_imes_[i].id = base::NumberToString(i);
     RefreshImeController();
   }
 
@@ -97,6 +97,31 @@ TEST_F(IMEFeaturePodControllerTest, ButtonVisibilityIMECount) {
   EXPECT_FALSE(button()->visible());
   SetActiveIMECount(1);
   EXPECT_FALSE(button()->visible());
+  SetActiveIMECount(2);
+  EXPECT_TRUE(button()->visible());
+}
+
+TEST_F(IMEFeaturePodControllerTest, ButtonVisibilityImeMenuActive) {
+  SetUpButton();
+  Shell::Get()->ime_controller()->ShowImeMenuOnShelf(true);
+
+  SetActiveIMECount(0);
+  EXPECT_FALSE(button()->visible());
+  SetActiveIMECount(1);
+  EXPECT_FALSE(button()->visible());
+  SetActiveIMECount(2);
+  EXPECT_FALSE(button()->visible());
+}
+
+TEST_F(IMEFeaturePodControllerTest, ButtonVisibilityPolicy) {
+  SetUpButton();
+
+  Shell::Get()->ime_controller()->SetImesManagedByPolicy(true);
+
+  SetActiveIMECount(0);
+  EXPECT_TRUE(button()->visible());
+  SetActiveIMECount(1);
+  EXPECT_TRUE(button()->visible());
   SetActiveIMECount(2);
   EXPECT_TRUE(button()->visible());
 }

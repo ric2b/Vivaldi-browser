@@ -19,14 +19,9 @@
 
 class KeyedService;
 class Profile;
-class TestingProfile;
 
 namespace content {
 class BrowserContext;
-}
-
-namespace syncer {
-class SyncClient;
 }
 
 ACTION_P(Notify, type) {
@@ -44,14 +39,6 @@ ACTION(QuitUIMessageLoop) {
 // Helper methods for constructing ProfileSyncService mocks.
 browser_sync::ProfileSyncService::InitParams
 CreateProfileSyncServiceParamsForTest(Profile* profile);
-browser_sync::ProfileSyncService::InitParams
-CreateProfileSyncServiceParamsForTest(
-    std::unique_ptr<syncer::SyncClient> sync_client,
-    Profile* profile);
-
-// A utility used by sync tests to create a TestingProfile with a Google
-// Services username stored in a (Testing)PrefService.
-std::unique_ptr<TestingProfile> MakeSignedInTestingProfile();
 
 // Helper routine to be used in conjunction with
 // BrowserContextKeyedServiceFactory::SetTestingFactory().

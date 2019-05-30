@@ -7,18 +7,24 @@
 
 #include <stdint.h>
 
+#include <array>
 #include <memory>
 
 #include "base/files/scoped_file.h"
 #include "base/macros.h"
+#include "ui/gfx/buffer_types.h"
 #include "ui/gfx/client_native_pixmap.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/gfx_export.h"
 #include "ui/gfx/native_pixmap_handle.h"
 
 namespace gfx {
 
 class ClientNativePixmapDmaBuf : public gfx::ClientNativePixmap {
  public:
+  static GFX_EXPORT bool IsConfigurationSupported(gfx::BufferFormat format,
+                                                  gfx::BufferUsage usage);
+
   static std::unique_ptr<gfx::ClientNativePixmap> ImportFromDmabuf(
       const gfx::NativePixmapHandle& handle,
       const gfx::Size& size);
@@ -33,13 +39,25 @@ class ClientNativePixmapDmaBuf : public gfx::ClientNativePixmap {
   int GetStride(size_t plane) const override;
 
  private:
+  static constexpr size_t kMaxPlanes = 4;
+
+  struct PlaneInfo {
+    PlaneInfo();
+    PlaneInfo(PlaneInfo&& plane_info);
+    ~PlaneInfo();
+
+    base::ScopedFD fd;
+    void* data = nullptr;
+    size_t offset = 0;
+    size_t size = 0;
+  };
   ClientNativePixmapDmaBuf(const gfx::NativePixmapHandle& handle,
-                           const gfx::Size& size);
+                           const gfx::Size& size,
+                           std::array<PlaneInfo, kMaxPlanes> plane_info);
 
   const gfx::NativePixmapHandle pixmap_handle_;
   const gfx::Size size_;
-  base::ScopedFD dmabuf_fd_;
-  void* data_;
+  const std::array<PlaneInfo, kMaxPlanes> plane_info_;
 
   DISALLOW_COPY_AND_ASSIGN(ClientNativePixmapDmaBuf);
 };

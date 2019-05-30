@@ -14,7 +14,6 @@
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
-#include "base/memory/linked_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/sessions/session_restore_delegate.h"
@@ -49,7 +48,7 @@ class VivaldiSessionService {
                            content::WebContents* tab,
                            int index_in_window,
                            bool is_pinned);
-  void BuildCommandsForBrowser(Browser* browser);
+  void BuildCommandsForBrowser(Browser* browser, std::vector<int>* ids);
   bool Save(const base::FilePath& file_name);
   bool Load(const base::FilePath& file_name,
             Browser* browser,

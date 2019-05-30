@@ -14,7 +14,7 @@
 #include "base/logging.h"
 #include "base/message_loop/message_loop_current.h"
 #include "base/single_thread_task_runner.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "gin/debug_impl.h"
@@ -71,7 +71,6 @@ IsolateHolder::IsolateHolder(
     DCHECK_EQ(isolate_, snapshot_creator_->GetIsolate());
   } else {
     v8::Isolate::CreateParams params;
-    params.entry_hook = DebugImpl::GetFunctionEntryHook();
     params.code_event_handler = DebugImpl::GetJitCodeEventHandler();
     params.constraints.ConfigureDefaults(
         base::SysInfo::AmountOfPhysicalMemory(),
@@ -120,11 +119,10 @@ IsolateHolder::~IsolateHolder() {
 
 // static
 void IsolateHolder::Initialize(ScriptMode mode,
-                               V8ExtrasMode v8_extras_mode,
                                v8::ArrayBuffer::Allocator* allocator,
                                const intptr_t* reference_table) {
   CHECK(allocator);
-  V8Initializer::Initialize(mode, v8_extras_mode);
+  V8Initializer::Initialize(mode);
   g_array_buffer_allocator = allocator;
   g_reference_table = reference_table;
 }

@@ -37,10 +37,11 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.TouchCommon;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.NavigationHandle;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.base.PageTransition;
 
@@ -96,16 +97,13 @@ public class UrlOverridingTest {
         }
 
         @Override
-        public void onDidFinishNavigation(Tab tab, String url, boolean isInMainFrame,
-                boolean isErrorPage, boolean hasCommitted, boolean isSameDocument,
-                boolean isFragmentNavigation, Integer pageTransition, int errorCode,
-                int httpStatusCode) {
-            if (errorCode == 0) return;
+        public void onDidFinishNavigation(Tab tab, NavigationHandle navigation) {
+            if (navigation.errorCode() == 0) return;
             mFailCallback.notifyCalled();
         }
 
         @Override
-        public void onPageLoadFinished(Tab tab) {
+        public void onPageLoadFinished(Tab tab, String url) {
             mFinishCallback.notifyCalled();
         }
 

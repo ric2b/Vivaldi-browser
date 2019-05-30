@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "base/logging.h"
+#include "base/no_destructor.h"
 #include "base/pickle.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -29,7 +30,7 @@ BrowserActionDragData::BrowserActionDragData(
 }
 
 bool BrowserActionDragData::GetDropFormats(
-    std::set<ui::Clipboard::FormatType>* format_types) {
+    std::set<ui::ClipboardFormatType>* format_types) {
   format_types->insert(GetBrowserActionFormatType());
   return true;
 }
@@ -72,14 +73,12 @@ bool BrowserActionDragData::Read(const ui::OSExchangeData& data) {
 }
 
 // static
-const ui::Clipboard::FormatType&
+const ui::ClipboardFormatType&
 BrowserActionDragData::GetBrowserActionFormatType() {
-  CR_DEFINE_STATIC_LOCAL(
-      ui::Clipboard::FormatType,
-      format,
-      (ui::Clipboard::GetFormatType(kClipboardFormatString)));
+  static base::NoDestructor<ui::ClipboardFormatType> format(
+      ui::ClipboardFormatType::GetType(kClipboardFormatString));
 
-  return format;
+  return *format;
 }
 #endif
 

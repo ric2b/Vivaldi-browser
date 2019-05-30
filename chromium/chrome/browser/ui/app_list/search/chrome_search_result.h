@@ -9,10 +9,10 @@
 #include <string>
 #include <utility>
 
+#include "ash/public/cpp/app_list/app_list_metrics.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/public/interfaces/app_list.mojom.h"
 #include "base/macros.h"
-#include "base/unguessable_token.h"
 #include "chrome/browser/ui/app_list/app_list_model_updater.h"
 
 namespace app_list {
@@ -50,13 +50,17 @@ class ChromeSearchResult {
   const Actions& actions() const { return metadata_->actions; }
   double display_score() const { return metadata_->display_score; }
   bool is_installing() const { return metadata_->is_installing; }
-  const base::UnguessableToken& answer_card_contents_token() const {
-    return metadata_->answer_card_contents_token.value();
+  const base::Optional<GURL>& query_url() const { return metadata_->query_url; }
+  const base::Optional<std::string>& equivalent_result_id() const {
+    return metadata_->equivalent_result_id;
   }
   const gfx::ImageSkia& icon() const { return metadata_->icon; }
+  const gfx::ImageSkia& chip_icon() const { return metadata_->chip_icon; }
   const gfx::ImageSkia& badge_icon() const { return metadata_->badge_icon; }
 
-  const std::string& comparable_id() const { return comparable_id_; }
+  bool notify_visibility_change() const {
+    return metadata_->notify_visibility_change;
+  }
 
   // The following methods set Chrome side data here, and call model updater
   // interface to update Ash.
@@ -64,6 +68,7 @@ class ChromeSearchResult {
   void SetTitleTags(const Tags& tags);
   void SetDetails(const base::string16& details);
   void SetDetailsTags(const Tags& tags);
+  void SetAccessibleName(const base::string16& name);
   void SetRating(float rating);
   void SetFormattedPrice(const base::string16& formatted_price);
   void SetDisplayType(DisplayType display_type);
@@ -71,11 +76,13 @@ class ChromeSearchResult {
   void SetDisplayScore(double display_score);
   void SetActions(const Actions& actions);
   void SetIsOmniboxSearch(bool is_omnibox_search);
-  void SetAnswerCardContentsToken(const base::UnguessableToken& token);
-  void SetAnswerCardSize(const gfx::Size& size);
   void SetIsInstalling(bool is_installing);
+  void SetQueryUrl(const GURL& url);
+  void SetEquivalentResutlId(const std::string& equivlanet_result_id);
   void SetIcon(const gfx::ImageSkia& icon);
+  void SetChipIcon(const gfx::ImageSkia& icon);
   void SetBadgeIcon(const gfx::ImageSkia& badge_icon);
+  void SetNotifyVisibilityChange(bool notify_visibility_change);
 
   // The following methods call model updater to update Ash.
   void SetPercentDownloaded(int percent_downloaded);
@@ -102,6 +109,9 @@ class ChromeSearchResult {
   // Opens the result. Clients should use AppListViewDelegate::OpenSearchResult.
   virtual void Open(int event_flags) = 0;
 
+  // Called if set visible/hidden.
+  virtual void OnVisibilityChanged(bool visibility);
+
   // Updates the result's relevance score, and sets its title and title tags,
   // based on a string match result.
   void UpdateFromMatch(const app_list::TokenizedString& title,
@@ -120,22 +130,23 @@ class ChromeSearchResult {
   static std::string TagsDebugStringForTest(const std::string& text,
                                             const Tags& tags);
 
+  // Subtype of a search result. -1 means no sub type. Derived class
+  // can use this to return useful values for rankers etc. Currently,
+  // OmniboxResult overrides it to return AutocompleteMatch::Type.
+  virtual int GetSubType() const;
+
+  // Get the type of the result, used in metrics.
+  virtual app_list::SearchResultType GetSearchResultType() const = 0;
+
  protected:
   // These id setters should be called in derived class constructors only.
   void set_id(const std::string& id) { metadata_->id = id; }
-  void set_comparable_id(const std::string& comparable_id) {
-    comparable_id_ = comparable_id;
-  }
 
   // Get the context menu of a certain search result. This could be different
   // for different kinds of items.
   virtual app_list::AppContextMenu* GetAppContextMenu();
 
  private:
-  // ID that can be compared across results from different providers to remove
-  // duplicates. May be empty, in which case |id_| will be used for comparison.
-  std::string comparable_id_;
-
   // The relevance of this result to the search, which is determined by the
   // search query. It's used for sorting when we publish the results to the
   // SearchModel in Ash. We'll update metadata_->display_score based on the

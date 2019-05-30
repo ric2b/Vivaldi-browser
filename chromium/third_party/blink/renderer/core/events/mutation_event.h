@@ -37,7 +37,9 @@ class MutationEvent final : public Event {
 
   enum AttrChangeType { kModification = 1, kAddition = 2, kRemoval = 3 };
 
-  static MutationEvent* Create() { return new MutationEvent; }
+  static MutationEvent* Create() {
+    return MakeGarbageCollected<MutationEvent>();
+  }
 
   static MutationEvent* Create(const AtomicString& type,
                                Bubbles bubbles,
@@ -45,31 +47,12 @@ class MutationEvent final : public Event {
                                const String& prev_value = String(),
                                const String& new_value = String(),
                                const String& attr_name = String(),
-                               unsigned short attr_change = 0) {
-    return new MutationEvent(type, bubbles, Cancelable::kNo, related_node,
-                             prev_value, new_value, attr_name, attr_change);
+                               uint16_t attr_change = 0) {
+    return MakeGarbageCollected<MutationEvent>(
+        type, bubbles, Cancelable::kNo, related_node, prev_value, new_value,
+        attr_name, attr_change);
   }
 
-  void initMutationEvent(const AtomicString& type,
-                         bool bubbles,
-                         bool cancelable,
-                         Node* related_node,
-                         const String& prev_value,
-                         const String& new_value,
-                         const String& attr_name,
-                         unsigned short attr_change);
-
-  Node* relatedNode() const { return related_node_.Get(); }
-  String prevValue() const { return prev_value_; }
-  String newValue() const { return new_value_; }
-  String attrName() const { return attr_name_; }
-  unsigned short attrChange() const { return attr_change_; }
-
-  const AtomicString& InterfaceName() const override;
-
-  void Trace(blink::Visitor*) override;
-
- private:
   MutationEvent();
   MutationEvent(const AtomicString& type,
                 Bubbles,
@@ -78,13 +61,33 @@ class MutationEvent final : public Event {
                 const String& prev_value,
                 const String& new_value,
                 const String& attr_name,
-                unsigned short attr_change);
+                uint16_t attr_change);
 
+  void initMutationEvent(const AtomicString& type,
+                         bool bubbles,
+                         bool cancelable,
+                         Node* related_node,
+                         const String& prev_value,
+                         const String& new_value,
+                         const String& attr_name,
+                         uint16_t attr_change);
+
+  Node* relatedNode() const { return related_node_.Get(); }
+  String prevValue() const { return prev_value_; }
+  String newValue() const { return new_value_; }
+  String attrName() const { return attr_name_; }
+  uint16_t attrChange() const { return attr_change_; }
+
+  const AtomicString& InterfaceName() const override;
+
+  void Trace(blink::Visitor*) override;
+
+ private:
   Member<Node> related_node_;
   String prev_value_;
   String new_value_;
   String attr_name_;
-  unsigned short attr_change_;
+  uint16_t attr_change_;
 };
 
 }  // namespace blink

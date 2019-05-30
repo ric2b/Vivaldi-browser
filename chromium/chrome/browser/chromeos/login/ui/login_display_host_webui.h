@@ -14,12 +14,14 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
+#include "chrome/browser/chromeos/login/oobe_configuration.h"
 #include "chrome/browser/chromeos/login/signin_screen_controller.h"
+#include "chrome/browser/chromeos/login/ui/kiosk_app_menu_updater.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_common.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
+#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_client.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "content/public/browser/notification_observer.h"
@@ -28,6 +30,7 @@
 #include "ui/display/display_observer.h"
 #include "ui/events/devices/input_device_event_observer.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/views/widget/widget_observer.h"
 #include "ui/views/widget/widget_removals_observer.h"
 
 namespace ash {
@@ -45,10 +48,12 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
                               public content::WebContentsObserver,
                               public chromeos::SessionManagerClient::Observer,
                               public chromeos::CrasAudioHandler::AudioObserver,
+                              public chromeos::OobeConfiguration::Observer,
                               public display::DisplayObserver,
                               public ui::InputDeviceEventObserver,
                               public views::WidgetRemovalsObserver,
-                              public MultiUserWindowManager::Observer {
+                              public views::WidgetObserver,
+                              public MultiUserWindowManagerClient::Observer {
  public:
   LoginDisplayHostWebUI();
   ~LoginDisplayHostWebUI() override;
@@ -70,8 +75,6 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
   void OnPreferencesChanged() override;
   void OnStartAppLaunch() override;
   void OnStartArcKiosk() override;
-  bool IsVoiceInteractionOobe() override;
-  void StartVoiceInteractionOobe() override;
   void OnBrowserCreated() override;
   void ShowGaiaDialog(
       bool can_close,
@@ -110,6 +113,9 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
   // chromeos::SessionManagerClient::Observer:
   void EmitLoginPromptVisibleCalled() override;
 
+  // chromeos::OobeConfiguration::Observer:
+  void OnOobeConfigurationChanged() override;
+
   // chromeos::CrasAudioHandler::AudioObserver:
   void OnActiveOutputNodeChanged() override;
 
@@ -119,12 +125,15 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
                                uint32_t changed_metrics) override;
 
   // ui::InputDeviceEventObserver
-  void OnTouchscreenDeviceConfigurationChanged() override;
+  void OnInputDeviceConfigurationChanged(uint8_t input_device_types) override;
 
   // views::WidgetRemovalsObserver:
   void OnWillRemoveView(views::Widget* widget, views::View* view) override;
 
-  // chrome::MultiUserWindowManager::Observer:
+  // views::WidgetObserver:
+  void OnWidgetDestroying(views::Widget* widget) override;
+
+  // MultiUserWindowManagerClient::Observer:
   void OnUserSwitchAnimationFinished() override;
 
  private:
@@ -226,6 +235,12 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
   // wallpaper load animation to finish.
   bool waiting_for_wallpaper_load_;
 
+  // True if WebUI is initialized in hidden state, the OOBE is not completed
+  // and we're waiting for OOBE configuration check to finish.
+  bool waiting_for_configuration_ = false;
+
+  static bool disable_restrictive_proxy_check_for_test_;
+
   // How many times renderer has crashed.
   int crash_count_ = 0;
 
@@ -254,10 +269,11 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
   // After OOBE is completed, this is always initialized with true.
   bool oobe_startup_sound_played_ = false;
 
-  bool is_voice_interaction_oobe_ = false;
-
   // True if we need to play startup sound when audio device becomes available.
   bool need_to_play_startup_sound_ = false;
+
+  // Updates shelf kiosk app list.
+  KioskAppMenuUpdater kiosk_updater_;
 
   base::WeakPtrFactory<LoginDisplayHostWebUI> weak_factory_;
 

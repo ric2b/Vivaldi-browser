@@ -33,6 +33,8 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_MEDIASTREAM_MEDIA_STREAM_COMPONENT_H_
 
 #include <memory>
+
+#include "third_party/blink/public/platform/modules/mediastream/web_platform_media_stream_track.h"
 #include "third_party/blink/public/platform/web_media_constraints.h"
 #include "third_party/blink/public/platform/web_media_stream_track.h"
 #include "third_party/blink/renderer/platform/audio/audio_source_provider.h"
@@ -57,18 +59,10 @@ class PLATFORM_EXPORT MediaStreamComponent final
   static int GenerateUniqueId();
 
  public:
-  // This class represents whatever data the Web layer uses to represent
-  // a track. It needs to be able to answer the getSettings question.
-  class TrackData {
-    USING_FAST_MALLOC(TrackData);
-
-   public:
-    virtual void GetSettings(WebMediaStreamTrack::Settings&) = 0;
-    virtual ~TrackData() = default;
-  };
-
   static MediaStreamComponent* Create(MediaStreamSource*);
   static MediaStreamComponent* Create(const String& id, MediaStreamSource*);
+
+  MediaStreamComponent(const String& id, MediaStreamSource*);
 
   MediaStreamComponent* Clone() const;
 
@@ -101,17 +95,18 @@ class PLATFORM_EXPORT MediaStreamComponent final
     source_provider_.Wrap(provider);
   }
 
-  TrackData* GetTrackData() const { return track_data_.get(); }
-  void SetTrackData(std::unique_ptr<TrackData> track_data) {
-    track_data_ = std::move(track_data);
+  WebPlatformMediaStreamTrack* GetPlatformTrack() const {
+    return platform_track_.get();
+  }
+  void SetPlatformTrack(
+      std::unique_ptr<WebPlatformMediaStreamTrack> platform_track) {
+    platform_track_ = std::move(platform_track);
   }
   void GetSettings(WebMediaStreamTrack::Settings&);
 
   void Trace(blink::Visitor*);
 
  private:
-  MediaStreamComponent(const String& id, MediaStreamSource*);
-
   // AudioSourceProviderImpl wraps a WebAudioSourceProvider::provideInput()
   // calls into chromium to get a rendered audio stream.
 
@@ -127,7 +122,7 @@ class PLATFORM_EXPORT MediaStreamComponent final
     void Wrap(WebAudioSourceProvider*);
 
     // blink::AudioSourceProvider
-    void ProvideInput(AudioBus*, size_t frames_to_process) override;
+    void ProvideInput(AudioBus*, uint32_t frames_to_process) override;
 
    private:
     WebAudioSourceProvider* web_audio_source_provider_;
@@ -143,7 +138,7 @@ class PLATFORM_EXPORT MediaStreamComponent final
   WebMediaStreamTrack::ContentHintType content_hint_ =
       WebMediaStreamTrack::ContentHintType::kNone;
   WebMediaConstraints constraints_;
-  std::unique_ptr<TrackData> track_data_;
+  std::unique_ptr<WebPlatformMediaStreamTrack> platform_track_;
 };
 
 typedef HeapVector<Member<MediaStreamComponent>> MediaStreamComponentVector;

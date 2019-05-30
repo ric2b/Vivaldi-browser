@@ -50,8 +50,14 @@ class StyleFetchedImageSet final : public StyleImage,
                                       float image_scale_factor,
                                       CSSImageSetValue* value,
                                       const KURL& url) {
-    return new StyleFetchedImageSet(image, image_scale_factor, value, url);
+    return MakeGarbageCollected<StyleFetchedImageSet>(image, image_scale_factor,
+                                                      value, url);
   }
+
+  StyleFetchedImageSet(ImageResourceContent*,
+                       float image_scale_factor,
+                       CSSImageSetValue*,
+                       const KURL&);
   ~StyleFetchedImageSet() override;
 
   CSSValue* CssValue() const override;
@@ -68,8 +74,7 @@ class StyleFetchedImageSet final : public StyleImage,
   FloatSize ImageSize(const Document&,
                       float multiplier,
                       const LayoutSize& default_object_size) const override;
-  bool ImageHasRelativeSize() const override;
-  bool UsesImageContainerSize() const override;
+  bool HasIntrinsicSize() const override;
   void AddClient(ImageResourceObserver*) override;
   void RemoveClient(ImageResourceObserver*) override;
   scoped_refptr<Image> GetImage(const ImageResourceObserver&,
@@ -83,11 +88,7 @@ class StyleFetchedImageSet final : public StyleImage,
   void Trace(blink::Visitor*) override;
 
  private:
-  StyleFetchedImageSet(ImageResourceContent*,
-                       float image_scale_factor,
-                       CSSImageSetValue*,
-                       const KURL&);
-
+  bool IsEqual(const StyleImage& other) const override;
   void Dispose();
 
   String DebugName() const override { return "StyleFetchedImageSet"; }

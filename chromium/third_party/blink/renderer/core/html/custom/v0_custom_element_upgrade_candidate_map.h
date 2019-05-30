@@ -44,6 +44,8 @@ class V0CustomElementUpgradeCandidateMap final
     : public V0CustomElementObserver {
  public:
   static V0CustomElementUpgradeCandidateMap* Create();
+
+  V0CustomElementUpgradeCandidateMap() = default;
   ~V0CustomElementUpgradeCandidateMap() override;
 
   // API for V0CustomElementRegistrationContext to save and take candidates
@@ -53,11 +55,9 @@ class V0CustomElementUpgradeCandidateMap final
   void Add(const V0CustomElementDescriptor&, Element*);
   ElementSet* TakeUpgradeCandidatesFor(const V0CustomElementDescriptor&);
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
-  V0CustomElementUpgradeCandidateMap() = default;
-
   void ElementWasDestroyed(Element*) override;
 
   typedef HeapHashMap<WeakMember<Element>, V0CustomElementDescriptor>

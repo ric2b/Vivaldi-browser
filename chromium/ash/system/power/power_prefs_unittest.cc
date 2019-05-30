@@ -17,7 +17,6 @@
 #include "ash/test/ash_test_base.h"
 #include "base/macros.h"
 #include "base/test/simple_test_tick_clock.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_power_manager_client.h"
 #include "chromeos/dbus/power_manager/idle.pb.h"
 #include "chromeos/dbus/power_policy_controller.h"
@@ -49,6 +48,9 @@ PrefService* GetUserPrefService(const std::string& user_email) {
 
 std::string GetExpectedPowerPolicyForPrefs(PrefService* prefs,
                                            ScreenLockState screen_lock_state) {
+  const bool is_smart_dim_enabled =
+      prefs->GetBoolean(prefs::kPowerSmartDimEnabled);
+
   power_manager::PowerManagementPolicy expected_policy;
   expected_policy.mutable_ac_delays()->set_screen_dim_ms(
       prefs->GetInteger(screen_lock_state == ScreenLockState::LOCKED
@@ -91,10 +93,17 @@ std::string GetExpectedPowerPolicyForPrefs(PrefService* prefs,
       prefs->GetBoolean(prefs::kPowerUseAudioActivity));
   expected_policy.set_use_video_activity(
       prefs->GetBoolean(prefs::kPowerUseVideoActivity));
-  expected_policy.set_presentation_screen_dim_delay_factor(
-      prefs->GetDouble(prefs::kPowerPresentationScreenDimDelayFactor));
-  expected_policy.set_user_activity_screen_dim_delay_factor(
-      prefs->GetDouble(prefs::kPowerUserActivityScreenDimDelayFactor));
+  if (is_smart_dim_enabled) {
+    // Screen-dim scaling factors are disabled by PowerPolicyController when
+    // smart-dimming is enabled.
+    expected_policy.set_presentation_screen_dim_delay_factor(1.0);
+    expected_policy.set_user_activity_screen_dim_delay_factor(1.0);
+  } else {
+    expected_policy.set_presentation_screen_dim_delay_factor(
+        prefs->GetDouble(prefs::kPowerPresentationScreenDimDelayFactor));
+    expected_policy.set_user_activity_screen_dim_delay_factor(
+        prefs->GetDouble(prefs::kPowerUserActivityScreenDimDelayFactor));
+  }
   expected_policy.set_wait_for_initial_user_activity(
       prefs->GetBoolean(prefs::kPowerWaitForInitialUserActivity));
   expected_policy.set_force_nonzero_brightness_for_user_activity(
@@ -116,10 +125,6 @@ class PowerPrefsTest : public NoSessionAshTestBase {
 
   // NoSessionAshTestBase:
   void SetUp() override {
-    fake_power_manager_client_ = new chromeos::FakePowerManagerClient;
-    chromeos::DBusThreadManager::GetSetterForTesting()->SetPowerManagerClient(
-        base::WrapUnique(fake_power_manager_client_));
-
     NoSessionAshTestBase::SetUp();
 
     power_policy_controller_ = chromeos::PowerPolicyController::Get();
@@ -135,7 +140,7 @@ class PowerPrefsTest : public NoSessionAshTestBase {
 
   std::string GetCurrentPowerPolicy() const {
     return chromeos::PowerPolicyController::GetPolicyDebugString(
-        fake_power_manager_client_->policy());
+        power_manager_client()->policy());
   }
 
   bool GetCurrentAllowScreenWakeLocks() const {
@@ -144,9 +149,9 @@ class PowerPrefsTest : public NoSessionAshTestBase {
 
   std::vector<power_manager::PowerManagementPolicy_Action>
   GetCurrentPowerPolicyActions() const {
-    return {fake_power_manager_client_->policy().ac_idle_action(),
-            fake_power_manager_client_->policy().battery_idle_action(),
-            fake_power_manager_client_->policy().lid_closed_action()};
+    return {power_manager_client()->policy().ac_idle_action(),
+            power_manager_client()->policy().battery_idle_action(),
+            power_manager_client()->policy().lid_closed_action()};
   }
 
   void SetLockedState(ScreenLockState lock_state) {
@@ -158,11 +163,8 @@ class PowerPrefsTest : public NoSessionAshTestBase {
   void NotifyScreenIdleOffChanged(bool off) {
     power_manager::ScreenIdleState proto;
     proto.set_off(off);
-    fake_power_manager_client_->SendScreenIdleStateChanged(proto);
+    power_manager_client()->SendScreenIdleStateChanged(proto);
   }
-
-  // Owned by chromeos::DBusThreadManager.
-  chromeos::FakePowerManagerClient* fake_power_manager_client_;
 
   chromeos::PowerPolicyController* power_policy_controller_ =
       nullptr;                         // Not owned.

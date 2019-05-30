@@ -4,19 +4,18 @@
 
 #include "components/autofill_assistant/browser/actions/wait_for_dom_action.h"
 
+#include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/time/time.h"
 #include "components/autofill_assistant/browser/actions/action_delegate.h"
-#include "content/public/browser/browser_thread.h"
 
 namespace {
-int kCheckPeriodInMilliseconds = 100;
-
-// So it takes about 150*100 milliseconds.
-int kDefaultCheckRounds = 150;
+static constexpr base::TimeDelta kDefaultCheckDuration =
+    base::TimeDelta::FromSeconds(15);
 }  // namespace
 
 namespace autofill_assistant {
@@ -26,58 +25,28 @@ WaitForDomAction::WaitForDomAction(const ActionProto& proto)
 
 WaitForDomAction::~WaitForDomAction() {}
 
-void WaitForDomAction::ProcessAction(ActionDelegate* delegate,
-                                     ProcessActionCallback callback) {
-  int check_rounds = kDefaultCheckRounds;
+void WaitForDomAction::InternalProcessAction(ActionDelegate* delegate,
+                                             ProcessActionCallback callback) {
+  DCHECK_GT(proto_.wait_for_dom().selectors_size(), 0);
+  Selector a_selector;
+  for (const auto& selector : proto_.wait_for_dom().selectors()) {
+    a_selector.selectors.emplace_back(selector);
+  }
 
+  base::TimeDelta max_wait_time = kDefaultCheckDuration;
   int timeout_ms = proto_.wait_for_dom().timeout_ms();
   if (timeout_ms > 0)
-    check_rounds = std::ceil(timeout_ms / kCheckPeriodInMilliseconds);
+    max_wait_time = base::TimeDelta::FromMilliseconds(timeout_ms);
 
-  CheckElementExists(delegate, check_rounds, std::move(callback));
+  delegate->WaitForElementVisible(
+      max_wait_time, proto_.wait_for_dom().allow_interrupt(), a_selector,
+      base::BindOnce(&WaitForDomAction::OnCheckDone,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void WaitForDomAction::CheckElementExists(ActionDelegate* delegate,
-                                          int rounds,
-                                          ProcessActionCallback callback) {
-  DCHECK(rounds > 0);
-  std::vector<std::string> selectors;
-  for (const auto& selector : proto_.wait_for_dom().element().selectors()) {
-    selectors.emplace_back(selector);
-  }
-  delegate->ElementExists(
-      selectors, base::BindOnce(&WaitForDomAction::OnCheckElementExists,
-                                weak_ptr_factory_.GetWeakPtr(), delegate,
-                                rounds, std::move(callback)));
+void WaitForDomAction::OnCheckDone(ProcessActionCallback callback,
+                                   ProcessedActionStatusProto status) {
+  UpdateProcessedAction(status);
+  std::move(callback).Run(std::move(processed_action_proto_));
 }
-
-void WaitForDomAction::OnCheckElementExists(ActionDelegate* delegate,
-                                            int rounds,
-                                            ProcessActionCallback callback,
-                                            bool result) {
-  bool for_absence = proto_.wait_for_dom().check_for_absence();
-  if (for_absence && !result) {
-    std::move(callback).Run(true);
-    return;
-  }
-
-  if (!for_absence && result) {
-    std::move(callback).Run(true);
-    return;
-  }
-
-  if (rounds == 0) {
-    std::move(callback).Run(false);
-    return;
-  }
-
-  --rounds;
-  content::BrowserThread::PostDelayedTask(
-      content::BrowserThread::UI, FROM_HERE,
-      base::BindOnce(&WaitForDomAction::CheckElementExists,
-                     weak_ptr_factory_.GetWeakPtr(), delegate, rounds,
-                     std::move(callback)),
-      base::TimeDelta::FromMilliseconds(kCheckPeriodInMilliseconds));
-}
-
-}  // namespace autofill_assistant.
+}  // namespace autofill_assistant

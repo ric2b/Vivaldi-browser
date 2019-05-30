@@ -11,8 +11,4 @@ std::string GetVivaldiVersionString() {
   return VIVALDI_VERSION;
 }
 
-std::string VivaldiLastChange() {
-  return LAST_CHANGE_VIVALDI;
-}
-
 }  // namespace vivaldi

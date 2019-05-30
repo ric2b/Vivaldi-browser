@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "services/tracing/public/cpp/perfetto/shared_memory.h"
 #include "third_party/perfetto/include/perfetto/tracing/core/commit_data_request.h"
 #include "third_party/perfetto/include/perfetto/tracing/core/data_source_descriptor.h"
@@ -17,19 +18,12 @@ ProducerHost::ProducerHost() = default;
 ProducerHost::~ProducerHost() = default;
 
 void ProducerHost::Initialize(mojom::ProducerClientPtr producer_client,
-                              mojom::ProducerHostRequest producer_host,
                               perfetto::TracingService* service,
                               const std::string& name) {
   DCHECK(service);
   DCHECK(!producer_endpoint_);
-  producer_client_ = std::move(producer_client);
-  producer_client_.set_connection_error_handler(
-      base::BindOnce(&ProducerHost::OnConnectionError, base::Unretained(this)));
 
-  binding_ = std::make_unique<mojo::Binding<mojom::ProducerHost>>(
-      this, std::move(producer_host));
-  binding_->set_connection_error_handler(
-      base::BindOnce(&ProducerHost::OnConnectionError, base::Unretained(this)));
+  producer_client_ = std::move(producer_client);
 
   // TODO(oysteine): Figure out an uid once we need it.
   // TODO(oysteine): Figure out a good buffer size.
@@ -37,19 +31,15 @@ void ProducerHost::Initialize(mojom::ProducerClientPtr producer_client,
       this, 0 /* uid */, name,
       4 * 1024 * 1024 /* shared_memory_size_hint_bytes */);
   DCHECK(producer_endpoint_);
+
+  producer_client_.set_connection_error_handler(
+      base::BindOnce(&ProducerHost::OnConnectionError, base::Unretained(this)));
 }
 
 void ProducerHost::OnConnectionError() {
   // Manually reset to prevent any callbacks from the ProducerEndpoint
   // when we're in a half-destructed state.
   producer_endpoint_.reset();
-  // If the ProducerHost is owned by the PerfettoService, let it know
-  // we're disconnected to let this be cleaned up. Tests manage lifespan
-  // themselves.
-  if (connection_error_handler_) {
-    std::move(connection_error_handler_).Run();
-  }
-  // This object *may* be destroyed at this point.
 }
 
 void ProducerHost::OnConnect() {
@@ -71,23 +61,21 @@ void ProducerHost::OnTracingSetup() {
   producer_client_->OnTracingStart(std::move(shm));
 }
 
-void ProducerHost::CreateDataSourceInstance(
-    perfetto::DataSourceInstanceID id,
-    const perfetto::DataSourceConfig& config) {
-  // TODO(oysteine): Send full DataSourceConfig, not just the name/target_buffer
-  // and Chrome Tracing string.
-  auto data_source_config = mojom::DataSourceConfig::New();
-  data_source_config->name = config.name();
-  data_source_config->target_buffer = config.target_buffer();
-
-  data_source_config->trace_config = config.chrome_config().trace_config();
-  producer_client_->CreateDataSourceInstance(id, std::move(data_source_config));
+void ProducerHost::SetupDataSource(perfetto::DataSourceInstanceID,
+                                   const perfetto::DataSourceConfig&) {
+  // TODO(primiano): plumb call through mojo.
 }
 
-void ProducerHost::TearDownDataSourceInstance(
-    perfetto::DataSourceInstanceID id) {
+void ProducerHost::StartDataSource(perfetto::DataSourceInstanceID id,
+                                   const perfetto::DataSourceConfig& config) {
+  // The type traits will send the base fields in the DataSourceConfig and also
+  // the ChromeConfig other configs are dropped.
+  producer_client_->StartDataSource(id, config);
+}
+
+void ProducerHost::StopDataSource(perfetto::DataSourceInstanceID id) {
   if (producer_client_) {
-    producer_client_->TearDownDataSourceInstance(
+    producer_client_->StopDataSource(
         id,
         base::BindOnce(
             [](ProducerHost* producer_host, perfetto::DataSourceInstanceID id) {
@@ -112,53 +100,29 @@ void ProducerHost::Flush(
 // sanitization here because ProducerEndpoint::CommitData() (And any other
 // ProducerEndpoint methods) are designed to deal with malformed / malicious
 // inputs.
-void ProducerHost::CommitData(mojom::CommitDataRequestPtr data_request) {
-  perfetto::CommitDataRequest native_data_request;
-
-  // TODO(oysteine): Set up a TypeTrait for this instead of manual conversion.
-  native_data_request.set_flush_request_id(data_request->flush_request_id);
-
-  for (auto& chunk : data_request->chunks_to_move) {
-    auto* new_chunk = native_data_request.add_chunks_to_move();
-    new_chunk->set_page(chunk->page);
-    new_chunk->set_chunk(chunk->chunk);
-    new_chunk->set_target_buffer(chunk->target_buffer);
-  }
-
-  for (auto& chunk_patch : data_request->chunks_to_patch) {
-    auto* new_chunk_patch = native_data_request.add_chunks_to_patch();
-    new_chunk_patch->set_target_buffer(chunk_patch->target_buffer);
-    new_chunk_patch->set_writer_id(chunk_patch->writer_id);
-    new_chunk_patch->set_chunk_id(chunk_patch->chunk_id);
-
-    for (auto& patch : chunk_patch->patches) {
-      auto* new_patch = new_chunk_patch->add_patches();
-      new_patch->set_offset(patch->offset);
-      new_patch->set_data(patch->data);
-    }
-
-    new_chunk_patch->set_has_more_patches(chunk_patch->has_more_patches);
-  }
-
+void ProducerHost::CommitData(const perfetto::CommitDataRequest& data_request) {
   if (on_commit_callback_for_testing_) {
-    on_commit_callback_for_testing_.Run(native_data_request);
+    on_commit_callback_for_testing_.Run(data_request);
   }
-
-  // TODO(oysteine): Pass through an optional callback for
-  // tests to know when a commit is completed.
-  producer_endpoint_->CommitData(native_data_request);
+  producer_endpoint_->CommitData(data_request);
 }
 
 void ProducerHost::RegisterDataSource(
-    mojom::DataSourceRegistrationPtr registration_info) {
-  perfetto::DataSourceDescriptor descriptor;
-  descriptor.set_name(registration_info->name);
-  descriptor.set_will_notify_on_stop(registration_info->will_notify_on_stop);
-  producer_endpoint_->RegisterDataSource(descriptor);
+    const perfetto::DataSourceDescriptor& registration_info) {
+  producer_endpoint_->RegisterDataSource(registration_info);
 }
 
 void ProducerHost::NotifyFlushComplete(uint64_t flush_request_id) {
   producer_endpoint_->NotifyFlushComplete(flush_request_id);
+}
+
+void ProducerHost::RegisterTraceWriter(uint32_t writer_id,
+                                       uint32_t target_buffer) {
+  producer_endpoint_->RegisterTraceWriter(writer_id, target_buffer);
+}
+
+void ProducerHost::UnregisterTraceWriter(uint32_t writer_id) {
+  producer_endpoint_->UnregisterTraceWriter(writer_id);
 }
 
 }  // namespace tracing

@@ -32,9 +32,11 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_EXPORTED_WEB_EMBEDDED_WORKER_IMPL_H_
 
 #include <memory>
+
+#include "base/macros.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/public/mojom/interface_provider.mojom-blink.h"
-#include "third_party/blink/public/platform/modules/cache_storage/cache_storage.mojom-blink.h"
+#include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom-blink.h"
 #include "third_party/blink/public/web/web_embedded_worker.h"
 #include "third_party/blink/public/web/web_embedded_worker_start_data.h"
 #include "third_party/blink/renderer/core/exported/worker_shadow_page.h"
@@ -46,20 +48,18 @@
 
 namespace blink {
 
+class FetchClientSettingsObjectSnapshot;
 class ServiceWorkerInstalledScriptsManager;
 class WorkerClassicScriptLoader;
-class WorkerInspectorProxy;
 class WorkerThread;
 
 class MODULES_EXPORT WebEmbeddedWorkerImpl final
     : public WebEmbeddedWorker,
       public WorkerShadowPage::Client {
-  WTF_MAKE_NONCOPYABLE(WebEmbeddedWorkerImpl);
-
  public:
   WebEmbeddedWorkerImpl(
       std::unique_ptr<WebServiceWorkerContextClient>,
-      std::unique_ptr<WebServiceWorkerInstalledScriptsManager>,
+      std::unique_ptr<WebServiceWorkerInstalledScriptsManagerParams>,
       std::unique_ptr<ServiceWorkerContentSettingsProxy>,
       mojom::blink::CacheStoragePtrInfo,
       service_manager::mojom::blink::InterfaceProviderPtrInfo);
@@ -71,14 +71,17 @@ class MODULES_EXPORT WebEmbeddedWorkerImpl final
   void ResumeAfterDownload() override;
   void AddMessageToConsole(const WebConsoleMessage&) override;
   void BindDevToolsAgent(
+      mojo::ScopedInterfaceEndpointHandle devtools_agent_host_ptr_info,
       mojo::ScopedInterfaceEndpointHandle devtools_agent_request) override;
-
-  void PostMessageToPageInspector(int session_id, const WTF::String&);
 
   // WorkerShadowPage::Client overrides.
   std::unique_ptr<WebApplicationCacheHost> CreateApplicationCacheHost(
       WebApplicationCacheHostClient*) override;
   void OnShadowPageInitialized() override;
+
+  static std::unique_ptr<WebEmbeddedWorkerImpl> CreateForTesting(
+      std::unique_ptr<WebServiceWorkerContextClient>,
+      std::unique_ptr<ServiceWorkerInstalledScriptsManager>);
 
  private:
   // WebDevToolsAgentImpl::Client overrides.
@@ -87,6 +90,10 @@ class MODULES_EXPORT WebEmbeddedWorkerImpl final
 
   void OnScriptLoaderFinished();
   void StartWorkerThread();
+
+  // Creates an outside settings object from the worker shadow page for
+  // top-level worker script fetch.
+  FetchClientSettingsObjectSnapshot* CreateFetchClientSettingsObject();
 
   WebEmbeddedWorkerStartData worker_start_data_;
 
@@ -99,10 +106,9 @@ class MODULES_EXPORT WebEmbeddedWorkerImpl final
   std::unique_ptr<ServiceWorkerContentSettingsProxy> content_settings_client_;
 
   // Kept around only while main script loading is ongoing.
-  scoped_refptr<WorkerClassicScriptLoader> main_script_loader_;
+  Persistent<WorkerClassicScriptLoader> main_script_loader_;
 
   std::unique_ptr<WorkerThread> worker_thread_;
-  Persistent<WorkerInspectorProxy> worker_inspector_proxy_;
 
   std::unique_ptr<WorkerShadowPage> shadow_page_;
 
@@ -127,6 +133,8 @@ class MODULES_EXPORT WebEmbeddedWorkerImpl final
 
   service_manager::mojom::blink::InterfaceProviderPtrInfo
       interface_provider_info_;
+
+  DISALLOW_COPY_AND_ASSIGN(WebEmbeddedWorkerImpl);
 };
 
 }  // namespace blink

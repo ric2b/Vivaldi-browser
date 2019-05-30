@@ -70,8 +70,6 @@ class CONTENT_EXPORT DetachableResourceHandler : public ResourceHandler {
       const net::URLRequestStatus& status,
       std::unique_ptr<ResourceController> controller) override;
 
-  void SetOpenFlags(bool open_when_done, bool ask_for_target) override;
-
  private:
   class Controller;
 

@@ -4,6 +4,7 @@
 
 #include "components/exo/keyboard.h"
 
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/shell.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/macros.h"
@@ -305,10 +306,15 @@ TEST_F(KeyboardTest, OnKeyboardTypeChanged) {
   ui::DeviceHotplugEventObserver* device_data_manager =
       ui::DeviceDataManager::GetInstance();
   ASSERT_TRUE(device_data_manager != nullptr);
-  // Make sure that DeviceDataManager has one external keyboard.
-  const std::vector<ui::InputDevice> keyboards{ui::InputDevice(
-      2, ui::InputDeviceType::INPUT_DEVICE_EXTERNAL, "keyboard")};
+  // Make sure that DeviceDataManager has one external keyboard...
+  const std::vector<ui::InputDevice> keyboards{
+      ui::InputDevice(2, ui::InputDeviceType::INPUT_DEVICE_USB, "keyboard")};
   device_data_manager->OnKeyboardDevicesUpdated(keyboards);
+  // and a touch screen.
+  const std::vector<ui::TouchscreenDevice> touch_screen{
+      ui::TouchscreenDevice(3, ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
+                            "touch", gfx::Size(600, 400), 1)};
+  device_data_manager->OnTouchscreenDevicesUpdated(touch_screen);
 
   ash::TabletModeController* tablet_mode_controller =
       ash::Shell::Get()->tablet_mode_controller();
@@ -329,13 +335,57 @@ TEST_F(KeyboardTest, OnKeyboardTypeChanged) {
   device_data_manager->OnKeyboardDevicesUpdated(
       std::vector<ui::InputDevice>({}));
 
-  // Re-adding keyboards calls OnKeyboardTypeChanged() with true;
+  // Re-adding keyboards calls OnKeyboardTypeChanged() with true.
   EXPECT_CALL(configuration_delegate, OnKeyboardTypeChanged(true));
   device_data_manager->OnKeyboardDevicesUpdated(keyboards);
 
   keyboard.reset();
 
   tablet_mode_controller->EnableTabletModeWindowManager(false);
+}
+
+TEST_F(KeyboardTest, OnKeyboardTypeChanged_AccessibilityKeyboard) {
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
+  gfx::Size buffer_size(10, 10);
+  std::unique_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  surface->Attach(buffer.get());
+  surface->Commit();
+
+  aura::client::FocusClient* focus_client =
+      aura::client::GetFocusClient(ash::Shell::GetPrimaryRootWindow());
+  focus_client->FocusWindow(nullptr);
+
+  ui::DeviceHotplugEventObserver* device_data_manager =
+      ui::DeviceDataManager::GetInstance();
+  ASSERT_TRUE(device_data_manager != nullptr);
+  // Make sure that DeviceDataManager has one external keyboard.
+  const std::vector<ui::InputDevice> keyboards{
+      ui::InputDevice(2, ui::InputDeviceType::INPUT_DEVICE_USB, "keyboard")};
+  device_data_manager->OnKeyboardDevicesUpdated(keyboards);
+
+  MockKeyboardDelegate delegate;
+  Seat seat;
+  auto keyboard = std::make_unique<Keyboard>(&delegate, &seat);
+  MockKeyboardDeviceConfigurationDelegate configuration_delegate;
+
+  EXPECT_CALL(configuration_delegate, OnKeyboardTypeChanged(true));
+  keyboard->SetDeviceConfigurationDelegate(&configuration_delegate);
+  EXPECT_TRUE(keyboard->HasDeviceConfigurationDelegate());
+
+  ash::AccessibilityController* accessibility_controller =
+      ash::Shell::Get()->accessibility_controller();
+
+  // Enable a11y keyboard calls OnKeyboardTypeChanged() with false.
+  EXPECT_CALL(configuration_delegate, OnKeyboardTypeChanged(false));
+  accessibility_controller->SetVirtualKeyboardEnabled(true);
+
+  // Disable a11y keyboard calls OnKeyboardTypeChanged() with true.
+  EXPECT_CALL(configuration_delegate, OnKeyboardTypeChanged(true));
+  accessibility_controller->SetVirtualKeyboardEnabled(false);
+
+  keyboard.reset();
 }
 
 TEST_F(KeyboardTest, KeyboardObserver) {
@@ -549,18 +599,27 @@ TEST_F(KeyboardTest, AckKeyboardKeyExpired) {
       ui::DomCode::US_W);
   generator.PressKey(ui::VKEY_W, ui::EF_CONTROL_DOWN);
 
-  // Keyboard processes pending events as if it's not handled if ack isnt' sent.
+  // Keyboard processes pending events as if it is handled when it expires,
+  // so |AcceleratorPressed()| should not be called.
   EXPECT_CALL(*shell_surface.get(), AcceleratorPressed(ui::Accelerator(
                                         ui::VKEY_W, ui::EF_CONTROL_DOWN,
                                         ui::Accelerator::KeyState::PRESSED)))
-      .WillOnce(testing::Return(true));
+      .Times(0);
+
   // Wait until |ProcessExpiredPendingKeyAcks| is fired.
   base::RunLoop run_loop;
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(),
       base::TimeDelta::FromMilliseconds(1000));
   run_loop.Run();
-  RunAllPendingInMessageLoop();
+  base::RunLoop().RunUntilIdle();
+
+  // Send ack for the key press as if it was not handled. In the normal case,
+  // |AcceleratorPressed()| should be called, but since the timeout passed, the
+  // key should have been treated as handled already and removed from the
+  // pending_key_acks_ map. Since the event is no longer in the map,
+  // |AcceleratorPressed()| should not be called.
+  keyboard->AckKeyboardKey(1, false /* handled */);
 
   // Release the key and reset modifier_flags.
   EXPECT_CALL(delegate, OnKeyboardModifiers(0));
@@ -625,16 +684,19 @@ TEST_F(KeyboardTest, AckKeyboardKeyExpiredWithMovingFocusAccelerator) {
       ui::DomCode::US_W);
   generator.PressKey(ui::VKEY_W, ui::EF_CONTROL_DOWN);
 
-  // Wait until |ProcessExpiredPendingKeyAcks| is fired.
-  // |ProcessExpiredPendingKeyAcks| will call |AcceleratorPressed| and focus
-  // will be moved from the surface.
   EXPECT_CALL(delegate, OnKeyboardLeave(surface.get()));
+
+  // Send ack as unhandled. This will call |AcceleratorPressed| and move the
+  // focus.
+  keyboard->AckKeyboardKey(1, false /* handled */);
+
+  // Wait until |ProcessExpiredPendingKeyAcks| is fired.
   base::RunLoop run_loop;
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(),
       base::TimeDelta::FromMilliseconds(1000));
   run_loop.Run();
-  RunAllPendingInMessageLoop();
+  base::RunLoop().RunUntilIdle();
 
   keyboard.reset();
 }

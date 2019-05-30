@@ -46,6 +46,9 @@ class PaymentResponseHelper
       const std::string& stringified_details) override;
   void OnInstrumentDetailsError() override {}
 
+  mojom::PayerDetailPtr GeneratePayerDetail(
+      const autofill::AutofillProfile* selected_contact_profile) const;
+
  private:
   // Generates the Payment Response and sends it to the delegate.
   void GeneratePaymentResponse();

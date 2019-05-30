@@ -66,7 +66,7 @@ TEST_F(SignedExchangeSignatureHeaderFieldTest, ParseSignature) {
             std::string(reinterpret_cast<const char*>(decoded_sig1),
                         sizeof(decoded_sig1)));
   EXPECT_EQ(signatures->at(0).integrity, "mi-draft2");
-  EXPECT_EQ(signatures->at(0).validity_url,
+  EXPECT_EQ(signatures->at(0).validity_url.url,
             "https://example.com/resource.validity.1511128380");
   EXPECT_EQ(signatures->at(0).cert_url, "https://example.com/oldcerts");
   EXPECT_EQ(signatures->at(0).cert_sha256, decoded_cert_sha256_1);
@@ -78,7 +78,7 @@ TEST_F(SignedExchangeSignatureHeaderFieldTest, ParseSignature) {
             std::string(reinterpret_cast<const char*>(decoded_sig2),
                         sizeof(decoded_sig2)));
   EXPECT_EQ(signatures->at(1).integrity, "mi-draft2");
-  EXPECT_EQ(signatures->at(1).validity_url,
+  EXPECT_EQ(signatures->at(1).validity_url.url,
             "https://example.com/resource.validity.1511128380");
   EXPECT_EQ(signatures->at(1).cert_url, "https://example.com/newcerts");
   EXPECT_EQ(signatures->at(1).cert_sha256, decoded_cert_sha256_2);
@@ -272,62 +272,6 @@ TEST_F(SignedExchangeSignatureHeaderFieldTest, AsteriskInTheMiddleOfBinary) {
   auto signatures = SignedExchangeSignatureHeaderField::ParseSignature(
       hdr_string, nullptr /* devtools_proxy */);
   EXPECT_FALSE(signatures.has_value());
-}
-
-TEST_F(SignedExchangeSignatureHeaderFieldTest, VersionParam_None) {
-  const char content_type[] = "application/signed-exchange";
-  base::Optional<SignedExchangeVersion> version;
-  EXPECT_TRUE(
-      SignedExchangeSignatureHeaderField::GetVersionParamFromContentType(
-          content_type, &version));
-  EXPECT_FALSE(version);
-}
-
-TEST_F(SignedExchangeSignatureHeaderFieldTest, VersionParam_NoneWithSemicolon) {
-  const char content_type[] = "application/signed-exchange;";
-  base::Optional<SignedExchangeVersion> version;
-  EXPECT_FALSE(
-      SignedExchangeSignatureHeaderField::GetVersionParamFromContentType(
-          content_type, &version));
-}
-
-TEST_F(SignedExchangeSignatureHeaderFieldTest, VersionParam_EmptyString) {
-  const char content_type[] = "application/signed-exchange;v=";
-  base::Optional<SignedExchangeVersion> version;
-  EXPECT_FALSE(
-      SignedExchangeSignatureHeaderField::GetVersionParamFromContentType(
-          content_type, &version));
-}
-
-TEST_F(SignedExchangeSignatureHeaderFieldTest, VersionParam_Simple) {
-  const char content_type[] = "application/signed-exchange;v=b2";
-  base::Optional<SignedExchangeVersion> version;
-  EXPECT_TRUE(
-      SignedExchangeSignatureHeaderField::GetVersionParamFromContentType(
-          content_type, &version));
-  ASSERT_TRUE(version);
-  EXPECT_EQ(*version, SignedExchangeVersion::kB2);
-}
-
-TEST_F(SignedExchangeSignatureHeaderFieldTest, VersionParam_SimpleWithSpace) {
-  const char content_type[] = "application/signed-exchange; v=b2";
-  base::Optional<SignedExchangeVersion> version;
-  EXPECT_TRUE(
-      SignedExchangeSignatureHeaderField::GetVersionParamFromContentType(
-          content_type, &version));
-  ASSERT_TRUE(version);
-  EXPECT_EQ(*version, SignedExchangeVersion::kB2);
-}
-
-TEST_F(SignedExchangeSignatureHeaderFieldTest,
-       VersionParam_SimpleWithDoublequotes) {
-  const char content_type[] = "application/signed-exchange;v=\"b2\"";
-  base::Optional<SignedExchangeVersion> version;
-  EXPECT_TRUE(
-      SignedExchangeSignatureHeaderField::GetVersionParamFromContentType(
-          content_type, &version));
-  ASSERT_TRUE(version);
-  EXPECT_EQ(*version, SignedExchangeVersion::kB2);
 }
 
 }  // namespace content

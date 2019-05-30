@@ -1,7 +1,14 @@
+; This file is generated from a similarly-named Perl script in the BoringSSL
+; source tree. Do not edit by hand.
+
 default	rel
 %define XMMWORD
 %define YMMWORD
 %define ZMMWORD
+
+%ifdef BORINGSSL_PREFIX
+%include "boringssl_prefix_symbols_nasm.inc"
+%endif
 section	.text code align=64
 
 
@@ -594,6 +601,12 @@ $L$SEH_begin_aesni_gcm_encrypt:
 
 
 
+%ifndef NDEBUG
+%ifndef BORINGSSL_FIPS
+EXTERN	BORINGSSL_function_hit
+	mov	BYTE[((BORINGSSL_function_hit+2))],1
+%endif
+%endif
 	xor	r10,r10
 
 

@@ -4,9 +4,7 @@
 
 #include "chrome/browser/ui/ash/system_tray_client.h"
 
-#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/interfaces/constants.mojom.h"
-#include "ash/shell.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
@@ -20,6 +18,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/set_time_dialog.h"
 #include "chrome/browser/chromeos/system/system_clock.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
@@ -32,7 +31,7 @@
 #include "chrome/browser/ui/webui/chromeos/multidevice_setup/multidevice_setup_dialog.h"
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/common/url_constants.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/network/network_handler.h"
@@ -54,18 +53,13 @@
 #include "net/base/escape.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/ws/public/cpp/property_type_converters.h"
-#include "services/ws/public/mojom/window_manager.mojom.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
-#include "ui/base/ui_base_features.h"
 #include "ui/events/event_constants.h"
-#include "ui/views/widget/widget.h"
-#include "ui/views/window/dialog_delegate.h"
 
 using chromeos::DBusThreadManager;
 using chromeos::UpdateEngineClient;
 using session_manager::SessionManager;
 using session_manager::SessionState;
-using views::Widget;
 
 namespace {
 
@@ -164,35 +158,6 @@ SystemTrayClient* SystemTrayClient::Get() {
   return g_system_tray_client_instance;
 }
 
-// static
-int SystemTrayClient::GetDialogParentContainerId() {
-  return SessionManager::Get()->session_state() == SessionState::ACTIVE
-             ? ash::kShellWindowId_SystemModalContainer
-             : ash::kShellWindowId_LockSystemModalContainer;
-}
-
-// static
-Widget* SystemTrayClient::CreateUnownedDialogWidget(
-    views::WidgetDelegate* widget_delegate) {
-  DCHECK(widget_delegate);
-  Widget::InitParams params = views::DialogDelegate::GetDialogWidgetInitParams(
-      widget_delegate, nullptr, nullptr, gfx::Rect());
-  // Place the dialog in the appropriate modal dialog container, either above
-  // or below the lock screen, based on the login state.
-  int container_id = GetDialogParentContainerId();
-  if (features::IsUsingWindowService()) {
-    using ws::mojom::WindowManager;
-    params.mus_properties[WindowManager::kContainerId_InitProperty] =
-        mojo::ConvertTo<std::vector<uint8_t>>(container_id);
-  } else {
-    params.parent = ash::Shell::GetContainer(
-        ash::Shell::GetRootWindowForNewWindows(), container_id);
-  }
-  Widget* widget = new Widget;  // Owned by native widget.
-  widget->Init(params);
-  return widget;
-}
-
 void SystemTrayClient::SetFlashUpdateAvailable() {
   flash_update_available_ = true;
   HandleUpdateAvailable();
@@ -218,6 +183,12 @@ void SystemTrayClient::SetPrimaryTrayVisible(bool visible) {
 
 void SystemTrayClient::SetPerformanceTracingIconVisible(bool visible) {
   system_tray_->SetPerformanceTracingIconVisible(visible);
+}
+
+void SystemTrayClient::SetLocaleList(
+    std::vector<ash::mojom::LocaleInfoPtr> locale_list,
+    const std::string& current_locale_iso_code) {
+  system_tray_->SetLocaleList(std::move(locale_list), current_locale_iso_code);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -252,7 +223,7 @@ void SystemTrayClient::ShowDateSettings() {
 }
 
 void SystemTrayClient::ShowSetTimeDialog() {
-  chromeos::SetTimeDialog::ShowDialogInContainer(GetDialogParentContainerId());
+  chromeos::SetTimeDialog::ShowDialog();
 }
 
 void SystemTrayClient::ShowDisplaySettings() {
@@ -274,6 +245,10 @@ void SystemTrayClient::ShowChromeSlow() {
 void SystemTrayClient::ShowIMESettings() {
   base::RecordAction(base::UserMetricsAction("OpenLanguageOptionsDialog"));
   ShowSettingsSubPageForActiveUser(chrome::kLanguageOptionsSubPage);
+}
+
+void SystemTrayClient::ShowConnectedDevicesSettings() {
+  ShowSettingsSubPageForActiveUser(chrome::kConnectedDevicesSubPage);
 }
 
 void SystemTrayClient::ShowAboutChromeOS() {
@@ -438,6 +413,12 @@ void SystemTrayClient::RequestRestartForUpdate() {
                               : browser_shutdown::RebootPolicy::kOptionalReboot;
 
   browser_shutdown::NotifyAndTerminate(true /* fast_path */, reboot_policy);
+}
+
+void SystemTrayClient::SetLocaleAndExit(const std::string& locale_iso_code) {
+  ProfileManager::GetActiveUserProfile()->ChangeAppLocale(
+      locale_iso_code, Profile::APP_LOCALE_CHANGED_VIA_SYSTEM_TRAY);
+  chrome::AttemptUserExit();
 }
 
 void SystemTrayClient::HandleUpdateAvailable() {

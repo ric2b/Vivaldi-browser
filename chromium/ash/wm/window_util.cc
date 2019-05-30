@@ -5,20 +5,21 @@
 #include "ash/wm/window_util.h"
 
 #include <memory>
-#include <vector>
 
+#include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/ash_constants.h"
-#include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
+#include "ash/scoped_animation_disabler.h"
 #include "ash/session/session_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
-#include "ash/wm/resize_handle_window_targeter.h"
+#include "ash/wm/splitview/split_view_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_observer.h"
 #include "ash/wm/widget_finder.h"
 #include "ash/wm/window_positioning_utils.h"
-#include "ash/wm/window_properties.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/wm_event.h"
 #include "ash/ws/window_service_owner.h"
@@ -29,8 +30,10 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_event_dispatcher.h"
+#include "ui/aura/window_targeter.h"
 #include "ui/base/hit_test.h"
 #include "ui/compositor/dip_util.h"
+#include "ui/compositor/layer_tree_owner.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/rect.h"
@@ -39,6 +42,7 @@
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/easy_resize_window_targeter.h"
+#include "ui/wm/core/window_animations.h"
 #include "ui/wm/core/window_properties.h"
 #include "ui/wm/core/window_util.h"
 #include "ui/wm/public/activation_client.h"
@@ -69,7 +73,109 @@ bool AskRemoteClientToCloseWindow(aura::Window* window) {
   return window_service && window_service->RequestClose(window);
 }
 
+// This window targeter reserves space for the portion of the resize handles
+// that extend within a top level window.
+class InteriorResizeHandleTargeter : public aura::WindowTargeter {
+ public:
+  InteriorResizeHandleTargeter() {
+    SetInsets(gfx::Insets(kResizeInsideBoundsSize));
+  }
+
+  ~InteriorResizeHandleTargeter() override = default;
+
+  bool GetHitTestRects(aura::Window* target,
+                       gfx::Rect* hit_test_rect_mouse,
+                       gfx::Rect* hit_test_rect_touch) const override {
+    if (target == window() && window()->parent() &&
+        window()->parent()->targeter()) {
+      // Defer to the parent's targeter on whether |window_| should be able to
+      // receive the event. This should be EasyResizeWindowTargeter, which is
+      // installed on the container window, and is necessary for
+      // kResizeOutsideBoundsSize to work.
+      return window()->parent()->targeter()->GetHitTestRects(
+          target, hit_test_rect_mouse, hit_test_rect_touch);
+    }
+
+    return WindowTargeter::GetHitTestRects(target, hit_test_rect_mouse,
+                                           hit_test_rect_touch);
+  }
+
+  bool ShouldUseExtendedBounds(const aura::Window* target) const override {
+    // Fullscreen/maximized windows can't be drag-resized.
+    const WindowState* window_state = GetWindowState(window());
+    const WindowState* target_window_state = GetWindowState(target);
+    if ((window_state && window_state->IsMaximizedOrFullscreenOrPinned()) ||
+        (target_window_state && !target_window_state->CanResize())) {
+      return false;
+    }
+
+    // The shrunken hit region only applies to children of |window()|.
+    return target->parent() == window();
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(InteriorResizeHandleTargeter);
+};
+
+// A class to track immersive and tablet mode state and update
+// kGestureDragFromClientAreaTopMovesWindow accordingly. It is owned by the
+// window it tracks by way of being an owned property.
+class GestureDraggableTracker : public aura::WindowObserver,
+                                public TabletModeObserver {
+ public:
+  explicit GestureDraggableTracker(aura::Window* window)
+      : observed_window_(window) {
+    observed_window_->AddObserver(this);
+    Shell::Get()->tablet_mode_controller()->AddObserver(this);
+  }
+
+  ~GestureDraggableTracker() override {
+    observed_window_->RemoveObserver(this);
+    if (Shell::Get()->tablet_mode_controller())
+      Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
+  }
+
+  // aura::WindowObserver:
+  void OnWindowPropertyChanged(aura::Window* window,
+                               const void* key,
+                               intptr_t old) override {
+    if (key == kImmersiveIsActive)
+      UpdateFlag();
+  }
+
+  // TabletModeObserver:
+  void OnTabletModeStarted() override { UpdateFlag(); }
+  void OnTabletModeEnded() override { UpdateFlag(); }
+
+ private:
+  void UpdateFlag() {
+    observed_window_->SetProperty(
+        aura::client::kGestureDragFromClientAreaTopMovesWindow,
+        observed_window_->GetProperty(kImmersiveIsActive) &&
+            Shell::Get()->tablet_mode_controller() &&
+            Shell::Get()
+                ->tablet_mode_controller()
+                ->IsTabletModeWindowManagerEnabled());
+  }
+
+  // |observed_window_| owns |this|.
+  aura::Window* observed_window_;
+
+  DISALLOW_COPY_AND_ASSIGN(GestureDraggableTracker);
+};
+
+DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(GestureDraggableTracker,
+                                   kGestureDraggableTracker,
+                                   nullptr)
+
 }  // namespace
+}  // namespace wm
+}  // namespace ash
+
+DEFINE_UI_CLASS_PROPERTY_TYPE(ash::wm::GestureDraggableTracker*)
+
+namespace ash {
+namespace wm {
 
 // TODO(beng): replace many of these functions with the corewm versions.
 void ActivateWindow(aura::Window* window) {
@@ -122,7 +228,7 @@ void GetBlockingContainersForRoot(aura::Window* root_window,
 }
 
 bool IsWindowUserPositionable(aura::Window* window) {
-  return GetWindowState(window)->IsUserPositionable();
+  return window->type() == aura::client::WINDOW_TYPE_NORMAL;
 }
 
 void PinWindow(aura::Window* window, bool trusted) {
@@ -196,7 +302,7 @@ void SetChildrenUseExtendedHitRegionForWindow(aura::Window* window) {
   // events to be dispatched to windows outside the windows bounds that this
   // function calls into. http://crbug.com/679056.
   window->SetEventTargeter(std::make_unique<::wm::EasyResizeWindowTargeter>(
-      window, mouse_extend, touch_extend));
+      mouse_extend, touch_extend));
 }
 
 void CloseWidgetForWindow(aura::Window* window) {
@@ -208,26 +314,108 @@ void CloseWidgetForWindow(aura::Window* window) {
   widget->Close();
 }
 
-// TODO(sky): investigate removing this entirely. https://crbug.com/842365
-void AddLimitedPreTargetHandlerForWindow(ui::EventHandler* handler,
-                                         aura::Window* window) {
-  window->AddPreTargetHandler(handler);
+void InstallResizeHandleWindowTargeterForWindow(aura::Window* window) {
+  window->SetEventTargeter(std::make_unique<InteriorResizeHandleTargeter>());
+  // For Mash, ServerWindows will override the event targeter with a
+  // ServerWindowTargeter, so make sure it knows about the resize insets.
+  window->SetProperty(aura::client::kResizeHandleInset,
+                      kResizeInsideBoundsSize);
 }
 
-void RemoveLimitedPreTargetHandlerForWindow(ui::EventHandler* handler,
-                                            aura::Window* window) {
-  window->RemovePreTargetHandler(handler);
-}
+void MakeGestureDraggableInImmersiveMode(aura::Window* frame_window) {
+  // For Browser windows, gesture drags from the top in immersive mode reveal
+  // the frame, so kGestureDragFromClientAreaTopMovesWindow should always be
+  // false.
+  if (static_cast<ash::AppType>(frame_window->GetProperty(
+          aura::client::kAppType)) == AppType::BROWSER) {
+    return;
+  }
 
-void InstallResizeHandleWindowTargeterForWindow(
-    aura::Window* window,
-    ImmersiveFullscreenController* immersive_fullscreen_controller) {
-  window->SetEventTargeter(std::make_unique<ResizeHandleWindowTargeter>(
-      window, immersive_fullscreen_controller));
+  frame_window->SetProperty(kGestureDraggableTracker,
+                            new GestureDraggableTracker(frame_window));
 }
 
 bool IsDraggingTabs(const aura::Window* window) {
   return window->GetProperty(ash::kIsDraggingTabsKey);
+}
+
+bool ShouldExcludeForBothCycleListAndOverview(const aura::Window* window) {
+  // Exclude windows:
+  // - non user positionable windows, such as extension popups.
+  // - windows being dragged
+  // - pip windows
+  const wm::WindowState* state = wm::GetWindowState(window);
+  if (!state->IsUserPositionable() || state->is_dragged() || state->IsPip())
+    return true;
+
+  return window->GetProperty(kHideInOverviewKey);
+}
+
+bool ShouldExcludeForCycleList(const aura::Window* window) {
+  // Exclude the AppList window, which will hide as soon as cycling starts
+  // anyway. It doesn't make sense to count it as a "switchable" window, yet
+  // a lot of code relies on the MRU list returning the app window. If we
+  // don't manually remove it, the window cycling UI won't crash or misbehave,
+  // but there will be a flicker as the target window changes. Also exclude
+  // unselectable windows such as extension popups.
+  // TODO(sammiequon): Investigate if this is needed.
+  for (auto* parent = window->parent(); parent; parent = parent->parent()) {
+    if (parent->id() == kShellWindowId_AppListContainer)
+      return true;
+  }
+
+  return ShouldExcludeForBothCycleListAndOverview(window);
+}
+
+bool ShouldExcludeForOverview(const aura::Window* window) {
+  // Remove the default snapped window from the window list. The default
+  // snapped window occupies one side of the screen, while the other windows
+  // occupy the other side of the screen in overview mode. The default snap
+  // position is the position where the window was first snapped. See
+  // |default_snap_position_| in SplitViewController for more detail.
+  if (Shell::Get()->IsSplitViewModeActive() &&
+      window ==
+          Shell::Get()->split_view_controller()->GetDefaultSnappedWindow()) {
+    return true;
+  }
+
+  return ShouldExcludeForBothCycleListAndOverview(window);
+}
+
+void RemoveTransientDescendants(std::vector<aura::Window*>* out_window_list) {
+  for (auto it = out_window_list->begin(); it != out_window_list->end();) {
+    aura::Window* transient_root = ::wm::GetTransientRoot(*it);
+    if (*it != transient_root &&
+        base::ContainsValue(*out_window_list, transient_root)) {
+      it = out_window_list->erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+void HideAndMaybeMinimizeWithoutAnimation(std::vector<aura::Window*> windows,
+                                          bool minimize) {
+  for (auto* window : windows) {
+    ScopedAnimationDisabler disable(window);
+
+    // ARC windows are minimized asynchronously, so hide here now.
+    // TODO(oshima): Investigate better way to handle ARC apps immediately.
+    window->Hide();
+
+    if (minimize)
+      wm::GetWindowState(window)->Minimize();
+  }
+  if (windows.size()) {
+    // Disable the animations using |disable|. However, doing so will skip
+    // detaching the resources associated with the layer. So we have to trick
+    // the compositor into releasing the resources.
+    // crbug.com/924802.
+    auto* compositor = windows[0]->layer()->GetCompositor();
+    bool was_visible = compositor->IsVisible();
+    compositor->SetVisible(false);
+    compositor->SetVisible(was_visible);
+  }
 }
 
 }  // namespace wm

@@ -7,6 +7,7 @@
 #include <limits>
 #include <memory>
 
+#include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
@@ -27,6 +28,8 @@
 #include "storage/browser/test/mock_bytes_provider.h"
 #include "storage/browser/test/mock_special_storage_policy.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/blob/data_element.mojom.h"
+#include "third_party/blink/public/mojom/blob/serialized_blob.mojom.h"
 
 namespace storage {
 
@@ -73,7 +76,7 @@ class BlobRegistryImplTest : public testing::Test {
     delegate_ptr_ = delegate.get();
     registry_impl_->Bind(MakeRequest(&registry_), std::move(delegate));
 
-    mojo::core::SetDefaultProcessErrorCallback(base::Bind(
+    mojo::core::SetDefaultProcessErrorCallback(base::BindRepeating(
         &BlobRegistryImplTest::OnBadMessage, base::Unretained(this)));
 
     storage::BlobStorageLimits limits;

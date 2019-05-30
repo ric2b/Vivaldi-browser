@@ -43,8 +43,8 @@ WebScopedUserGesture::WebScopedUserGesture(const WebUserGestureToken& token) {
 }
 
 WebScopedUserGesture::WebScopedUserGesture(WebLocalFrame* frame) {
-  indicator_ = Frame::NotifyUserActivation(
-      frame ? ToWebLocalFrameImpl(frame)->GetFrame() : nullptr,
+  indicator_ = LocalFrame::NotifyUserActivation(
+      frame ? To<WebLocalFrameImpl>(frame)->GetFrame() : nullptr,
       UserGestureToken::kNewGesture);
 }
 

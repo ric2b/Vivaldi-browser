@@ -8,10 +8,8 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "base/time/tick_clock.h"
 #include "components/offline_pages/core/prefetch/prefetch_background_task_handler.h"
 
-class PrefRegistrySimple;
 class PrefService;
 
 namespace base {
@@ -41,8 +39,6 @@ namespace offline_pages {
 // The backoff value is controlled by a persisted BackoffEntry.
 class PrefetchBackgroundTaskHandlerImpl : public PrefetchBackgroundTaskHandler {
  public:
-  static void RegisterPrefs(PrefRegistrySimple* registry);
-
   explicit PrefetchBackgroundTaskHandlerImpl(PrefService* profile);
   ~PrefetchBackgroundTaskHandlerImpl() override;
 
@@ -59,14 +55,14 @@ class PrefetchBackgroundTaskHandlerImpl : public PrefetchBackgroundTaskHandler {
   int GetAdditionalBackoffSeconds() const override;
 
   // This is used to construct the backoff value.
-  void SetTickClockForTesting(const base::TickClock* clock);
+  void SetTickClockForTesting(const base::TickClock* tick_clock);
 
  private:
   std::unique_ptr<net::BackoffEntry> GetCurrentBackoff() const;
   void UpdateBackoff(net::BackoffEntry* backoff);
 
   PrefService* prefs_;
-  const base::TickClock* clock_ = nullptr;
+  const base::TickClock* tick_clock_;
 
   DISALLOW_COPY_AND_ASSIGN(PrefetchBackgroundTaskHandlerImpl);
 };

@@ -4,6 +4,8 @@
 
 #include "services/ws/window_service_delegate.h"
 
+#include "services/ws/window_manager_interface.h"
+
 namespace ws {
 
 bool WindowServiceDelegate::StoreAndSetCursor(aura::Window* window,
@@ -14,6 +16,7 @@ bool WindowServiceDelegate::StoreAndSetCursor(aura::Window* window,
 void WindowServiceDelegate::RunWindowMoveLoop(aura::Window* window,
                                               mojom::MoveLoopSource source,
                                               const gfx::Point& cursor,
+                                              int window_component,
                                               DoneCallback callback) {
   std::move(callback).Run(false);
 }
@@ -32,15 +35,18 @@ ui::SystemInputInjector* WindowServiceDelegate::GetSystemInputInjector() {
   return nullptr;
 }
 
-aura::WindowTreeHost* WindowServiceDelegate::GetWindowTreeHostForDisplayId(
-    int64_t display_id) {
-  return nullptr;
-}
-
 aura::Window* WindowServiceDelegate::GetTopmostWindowAtPoint(
     const gfx::Point& location_in_screen,
     const std::set<aura::Window*>& ignore,
     aura::Window** real_topmost) {
+  return nullptr;
+}
+
+std::unique_ptr<WindowManagerInterface>
+WindowServiceDelegate::CreateWindowManagerInterface(
+    WindowTree* window_tree,
+    const std::string& name,
+    mojo::ScopedInterfaceEndpointHandle handle) {
   return nullptr;
 }
 

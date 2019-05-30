@@ -45,6 +45,8 @@ class SliderThumbElement final : public HTMLDivElement {
  public:
   static SliderThumbElement* Create(Document&);
 
+  SliderThumbElement(Document&);
+
   void SetPositionFromValue();
 
   void DragFrom(const LayoutPoint&);
@@ -58,10 +60,9 @@ class SliderThumbElement final : public HTMLDivElement {
   void StopDragging();
 
  private:
-  SliderThumbElement(Document&);
   LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
   scoped_refptr<ComputedStyle> CustomStyleForLayoutObject() final;
-  Element* CloneWithoutAttributesAndChildren(Document&) const override;
+  Element& CloneWithoutAttributesAndChildren(Document&) const override;
   bool IsDisabledFormControl() const override;
   bool MatchesReadOnlyPseudoClass() const override;
   bool MatchesReadWritePseudoClass() const override;
@@ -72,9 +73,9 @@ class SliderThumbElement final : public HTMLDivElement {
       in_drag_mode_;  // Mouse only. Touch is handled by SliderContainerElement.
 };
 
-inline Element* SliderThumbElement::CloneWithoutAttributesAndChildren(
+inline Element& SliderThumbElement::CloneWithoutAttributesAndChildren(
     Document& factory) const {
-  return Create(factory);
+  return *Create(factory);
 }
 
 // FIXME: There are no ways to check if a node is a SliderThumbElement.
@@ -88,6 +89,8 @@ class SliderContainerElement final : public HTMLDivElement {
     kNoMove,
   };
 
+  explicit SliderContainerElement(Document&);
+
   DECLARE_NODE_FACTORY(SliderContainerElement);
   HTMLInputElement* HostInput() const;
   void DefaultEventHandler(Event&) override;
@@ -97,7 +100,6 @@ class SliderContainerElement final : public HTMLDivElement {
   void RemoveAllEventListeners() override;
 
  private:
-  explicit SliderContainerElement(Document&);
   LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
   scoped_refptr<ComputedStyle> CustomStyleForLayoutObject() final;
   const AtomicString& ShadowPseudoId() const override;

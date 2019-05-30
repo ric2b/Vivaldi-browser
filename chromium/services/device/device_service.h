@@ -10,6 +10,10 @@
 
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
+#include "device/usb/mojo/device_manager_impl.h"
+#include "device/usb/mojo/device_manager_test.h"
+#include "device/usb/public/mojom/device_manager.mojom.h"
+#include "device/usb/public/mojom/device_manager_test.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/device/geolocation/geolocation_provider.h"
 #include "services/device/geolocation/geolocation_provider_impl.h"
@@ -29,9 +33,12 @@
 #include "services/device/public/mojom/vibration_manager.mojom.h"
 #include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "services/device/wake_lock/wake_lock_context.h"
+#include "services/device/wake_lock/wake_lock_provider.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/cpp/service_binding.h"
+#include "services/service_manager/public/mojom/service.mojom.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/scoped_java_ref.h"
@@ -41,6 +48,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "services/device/media_transfer_protocol/mtp_device_manager.h"
+#include "services/device/public/mojom/bluetooth_system.mojom.h"
 #endif
 
 #if defined(OS_LINUX) && defined(USE_UDEV)
@@ -59,8 +67,10 @@ namespace device {
 
 #if !defined(OS_ANDROID)
 class HidManagerImpl;
+class SerialPortManagerImpl;
 #endif
 
+class DeviceService;
 class PowerMonitorMessageBroadcaster;
 class PublicIpAddressLocationNotifier;
 class TimeZoneMonitor;
@@ -69,7 +79,7 @@ class TimeZoneMonitor;
 // NOTE: See the comments on the definitions of PublicIpAddressLocationNotifier,
 // |WakeLockContextCallback|, |CustomLocationProviderCallback| and
 // NFCDelegate.java to understand the semantics and usage of these parameters.
-std::unique_ptr<service_manager::Service> CreateDeviceService(
+std::unique_ptr<DeviceService> CreateDeviceService(
     scoped_refptr<base::SingleThreadTaskRunner> file_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
@@ -77,14 +87,16 @@ std::unique_ptr<service_manager::Service> CreateDeviceService(
     bool use_gms_core_location_provider,
     const WakeLockContextCallback& wake_lock_context_callback,
     const CustomLocationProviderCallback& custom_location_provider_callback,
-    const base::android::JavaRef<jobject>& java_nfc_delegate);
+    const base::android::JavaRef<jobject>& java_nfc_delegate,
+    service_manager::mojom::ServiceRequest request);
 #else
-std::unique_ptr<service_manager::Service> CreateDeviceService(
+std::unique_ptr<DeviceService> CreateDeviceService(
     scoped_refptr<base::SingleThreadTaskRunner> file_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const std::string& geolocation_api_key,
-    const CustomLocationProviderCallback& custom_location_provider_callback);
+    const CustomLocationProviderCallback& custom_location_provider_callback,
+    service_manager::mojom::ServiceRequest request);
 #endif
 
 class DeviceService : public service_manager::Service {
@@ -96,13 +108,15 @@ class DeviceService : public service_manager::Service {
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       const std::string& geolocation_api_key,
       const WakeLockContextCallback& wake_lock_context_callback,
-      const base::android::JavaRef<jobject>& java_nfc_delegate);
+      const base::android::JavaRef<jobject>& java_nfc_delegate,
+      service_manager::mojom::ServiceRequest request);
 #else
   DeviceService(
       scoped_refptr<base::SingleThreadTaskRunner> file_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      const std::string& geolocation_api_key);
+      const std::string& geolocation_api_key,
+      service_manager::mojom::ServiceRequest request);
 #endif
   ~DeviceService() override;
 
@@ -130,6 +144,8 @@ class DeviceService : public service_manager::Service {
 #endif
 
 #if defined(OS_CHROMEOS)
+  void BindBluetoothSystemFactoryRequest(
+      mojom::BluetoothSystemFactoryRequest request);
   void BindMtpManagerRequest(mojom::MtpManagerRequest request);
 #endif
 
@@ -147,22 +163,26 @@ class DeviceService : public service_manager::Service {
 
   void BindWakeLockProviderRequest(mojom::WakeLockProviderRequest request);
 
-  void BindSerialDeviceEnumeratorRequest(
-      mojom::SerialDeviceEnumeratorRequest request);
+  void BindUsbDeviceManagerRequest(mojom::UsbDeviceManagerRequest request);
 
-  void BindSerialIoHandlerRequest(mojom::SerialIoHandlerRequest request);
+  void BindUsbDeviceManagerTestRequest(
+      mojom::UsbDeviceManagerTestRequest request);
 
+  service_manager::ServiceBinding service_binding_;
   std::unique_ptr<PowerMonitorMessageBroadcaster>
       power_monitor_message_broadcaster_;
   std::unique_ptr<PublicIpAddressGeolocationProvider>
       public_ip_address_geolocation_provider_;
   std::unique_ptr<TimeZoneMonitor> time_zone_monitor_;
+  std::unique_ptr<usb::DeviceManagerImpl> usb_device_manager_;
+  std::unique_ptr<usb::DeviceManagerTest> usb_device_manager_test_;
   scoped_refptr<base::SingleThreadTaskRunner> file_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
   const std::string geolocation_api_key_;
   WakeLockContextCallback wake_lock_context_callback_;
+  WakeLockProvider wake_lock_provider_;
 
 #if defined(OS_ANDROID)
   // Binds |java_interface_provider_| to an interface registry that exposes
@@ -177,6 +197,15 @@ class DeviceService : public service_manager::Service {
   base::android::ScopedJavaGlobalRef<jobject> java_nfc_delegate_;
 #else
   std::unique_ptr<HidManagerImpl> hid_manager_;
+#endif
+
+#if (defined(OS_LINUX) && defined(USE_UDEV)) || defined(OS_WIN) || \
+    defined(OS_MACOSX)
+  // Requests for the SerialPortManager interface must be bound to
+  // |serial_port_manager_| on |serial_port_manager_task_runner_| and it will
+  // be destroyed on that sequence.
+  std::unique_ptr<SerialPortManagerImpl> serial_port_manager_;
+  scoped_refptr<base::SequencedTaskRunner> serial_port_manager_task_runner_;
 #endif
 
 #if defined(OS_CHROMEOS)

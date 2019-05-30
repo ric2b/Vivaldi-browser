@@ -10,6 +10,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "chrome/browser/after_startup_task_utils.h"
+#include "chrome/browser/search/instant_service.h"
+#include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/themes/theme_service.h"
@@ -86,10 +88,6 @@ enum VoiceError {
 
   VOICE_ERROR_MAX
 };
-
-// Key used in prefs::kNtpCustomBackgroundDict to save a background image URL.
-// TODO(crbug.com/873699): Refactor customization check for better testability.
-const char* kNtpCustomBackgroundURL = "background_url";
 
 // Logs BackgroundCustomization availability on the NTP,
 void LogBackgroundCustomizationAvailability(
@@ -317,8 +315,7 @@ NTPUserDataLogger* NTPUserDataLogger::GetOrCreateFromWebContents(
   // detecting when the user leaves or returns to the NTP. In particular, if the
   // Google URL changes (e.g. google.com -> google.de), then we fall back to the
   // local NTP.
-  const content::NavigationEntry* entry =
-      content->GetController().GetVisibleEntry();
+  content::NavigationEntry* entry = content->GetController().GetVisibleEntry();
   if (entry && (logger->ntp_url_ != entry->GetURL())) {
     DVLOG(1) << "NTP URL changed from \"" << logger->ntp_url_ << "\" to \""
              << entry->GetURL() << "\"";
@@ -490,15 +487,9 @@ bool NTPUserDataLogger::ThemeIsConfigured() const {
 }
 
 bool NTPUserDataLogger::CustomBackgroundIsConfigured() const {
-  const base::DictionaryValue* background_info =
-      profile_->GetPrefs()->GetDictionary(prefs::kNtpCustomBackgroundDict);
-  const base::Value* background_url =
-      background_info->FindKey(kNtpCustomBackgroundURL);
-  if (!background_url) {
-    return false;
-  }
-  GURL custom_background_url(background_url->GetString());
-  return custom_background_url.is_valid();
+  InstantService* instant_service =
+      InstantServiceFactory::GetForProfile(profile_);
+  return instant_service->IsCustomBackgroundSet();
 }
 
 void NTPUserDataLogger::EmitNtpStatistics(base::TimeDelta load_time) {
@@ -582,37 +573,27 @@ void NTPUserDataLogger::EmitNtpStatistics(base::TimeDelta load_time) {
     UMA_HISTOGRAM_LOAD_TIME("NewTabPage.LoadTime.NewTab", load_time);
   }
 
-  if (features::IsCustomBackgroundsEnabled()) {
-    if (!is_google) {
-      // TODO(crbug.com/869931): This is only emitted upon search engine change.
-      LogBackgroundCustomizationAvailability(
-          BackgroundCustomization::
-              BACKGROUND_CUSTOMIZATION_UNAVAILABLE_SEARCH_PROVIDER);
-    } else if (is_theme_configured) {
-      LogBackgroundCustomizationAvailability(
-          BackgroundCustomization::BACKGROUND_CUSTOMIZATION_UNAVAILABLE_THEME);
-    } else {
-      LogBackgroundCustomizationAvailability(
-          BackgroundCustomization::BACKGROUND_CUSTOMIZATION_AVAILABLE);
-    }
+  if (!is_google) {
+    // TODO(crbug.com/869931): This is only emitted upon search engine change.
+    LogBackgroundCustomizationAvailability(
+        BackgroundCustomization::
+            BACKGROUND_CUSTOMIZATION_UNAVAILABLE_SEARCH_PROVIDER);
+  } else if (is_theme_configured) {
+    LogBackgroundCustomizationAvailability(
+        BackgroundCustomization::BACKGROUND_CUSTOMIZATION_UNAVAILABLE_THEME);
   } else {
     LogBackgroundCustomizationAvailability(
-        BackgroundCustomization::BACKGROUND_CUSTOMIZATION_UNAVAILABLE_FEATURE);
+        BackgroundCustomization::BACKGROUND_CUSTOMIZATION_AVAILABLE);
   }
 
-  if (features::IsCustomLinksEnabled()) {
-    if (!is_google) {
-      // TODO(crbug.com/869931): This is only emitted upon search engine change.
-      LogShortcutCustomizationAvailability(
-          ShortcutCustomization::
-              SHORTCUT_CUSTOMIZATION_UNAVAILABLE_SEARCH_PROVIDER);
-    } else {
-      LogShortcutCustomizationAvailability(
-          ShortcutCustomization::SHORTCUT_CUSTOMIZATION_AVAILABLE);
-    }
+  if (!is_google) {
+    // TODO(crbug.com/869931): This is only emitted upon search engine change.
+    LogShortcutCustomizationAvailability(
+        ShortcutCustomization::
+            SHORTCUT_CUSTOMIZATION_UNAVAILABLE_SEARCH_PROVIDER);
   } else {
     LogShortcutCustomizationAvailability(
-        ShortcutCustomization::SHORTCUT_CUSTOMIZATION_UNAVAILABLE_FEATURE);
+        ShortcutCustomization::SHORTCUT_CUSTOMIZATION_AVAILABLE);
   }
 
   if (CustomBackgroundIsConfigured()) {
@@ -644,3 +625,5 @@ void NTPUserDataLogger::RecordDoodleImpression(base::TimeDelta time,
     should_record_doodle_load_time_ = false;
   }
 }
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(NTPUserDataLogger)

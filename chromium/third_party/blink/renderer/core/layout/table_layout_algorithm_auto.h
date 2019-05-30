@@ -22,8 +22,8 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_TABLE_LAYOUT_ALGORITHM_AUTO_H_
 
 #include "third_party/blink/renderer/core/layout/table_layout_algorithm.h"
-#include "third_party/blink/renderer/platform/layout_unit.h"
-#include "third_party/blink/renderer/platform/length.h"
+#include "third_party/blink/renderer/platform/geometry/layout_unit.h"
+#include "third_party/blink/renderer/platform/geometry/length.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
@@ -57,9 +57,9 @@ class TableLayoutAlgorithmAuto final : public TableLayoutAlgorithm {
   void RecalcColumn(unsigned eff_col);
 
   int CalcEffectiveLogicalWidth();
-  void ShrinkColumnWidth(const LengthType&, int& available);
+  void ShrinkColumnWidth(const Length::Type&, int& available);
   template <typename Total,
-            LengthType,
+            Length::Type,
             CellsToProcess,
             DistributionMode,
             DistributionDirection>

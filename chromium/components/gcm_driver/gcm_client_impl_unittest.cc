@@ -21,7 +21,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/test/test_mock_time_task_runner.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/time/clock.h"
 #include "base/timer/timer.h"
 #include "components/gcm_driver/features.h"
@@ -41,6 +41,7 @@
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_test_util.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_network_connection_tracker.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "services/network/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest-spi.h"
@@ -96,9 +97,7 @@ MCSMessage BuildDownstreamMessage(
   mcs_proto::DataMessageStanza data_message;
   data_message.set_from(project_id);
   data_message.set_category(category);
-  for (std::map<std::string, std::string>::const_iterator iter = data.begin();
-       iter != data.end();
-       ++iter) {
+  for (auto iter = data.begin(); iter != data.end(); ++iter) {
     mcs_proto::AppData* app_data = data_message.add_app_data();
     app_data->set_key(iter->first);
     app_data->set_value(iter->second);
@@ -123,8 +122,8 @@ GCMClient::AccountTokenInfo MakeAccountToken(const std::string& email,
 std::map<std::string, std::string> MakeEmailToTokenMap(
     const std::vector<GCMClient::AccountTokenInfo>& account_tokens) {
   std::map<std::string, std::string> email_token_map;
-  for (std::vector<GCMClient::AccountTokenInfo>::const_iterator iter =
-           account_tokens.begin(); iter != account_tokens.end(); ++iter) {
+  for (auto iter = account_tokens.begin(); iter != account_tokens.end();
+       ++iter) {
     email_token_map[iter->email] = iter->access_token;
   }
   return email_token_map;
@@ -234,7 +233,8 @@ class FakeGCMInternalsBuilder : public GCMInternalsBuilder {
       base::RepeatingCallback<
           void(network::mojom::ProxyResolvingSocketFactoryRequest)>
           get_socket_factory_callback,
-      GCMStatsRecorder* recorder) override;
+      GCMStatsRecorder* recorder,
+      network::NetworkConnectionTracker* network_connection_tracker) override;
 
  private:
   AutoAdvancingTestClock clock_;
@@ -266,7 +266,8 @@ FakeGCMInternalsBuilder::BuildConnectionFactory(
     base::RepeatingCallback<
         void(network::mojom::ProxyResolvingSocketFactoryRequest)>
         get_socket_factory_callback,
-    GCMStatsRecorder* recorder) {
+    GCMStatsRecorder* recorder,
+    network::NetworkConnectionTracker* network_connection_tracker) {
   return base::WrapUnique<ConnectionFactory>(new FakeConnectionFactory());
 }
 
@@ -317,12 +318,11 @@ class GCMClientImplTest : public testing::Test,
                        const std::string& registration_id);
 
   // GCMClient::Delegate overrides (for verification).
-  void OnRegisterFinished(const linked_ptr<RegistrationInfo>& registration_info,
+  void OnRegisterFinished(scoped_refptr<RegistrationInfo> registration_info,
                           const std::string& registration_id,
                           GCMClient::Result result) override;
-  void OnUnregisterFinished(
-      const linked_ptr<RegistrationInfo>& registration_info,
-      GCMClient::Result result) override;
+  void OnUnregisterFinished(scoped_refptr<RegistrationInfo> registration_info,
+                            GCMClient::Result result) override;
   void OnSendFinished(const std::string& app_id,
                       const std::string& message_id,
                       GCMClient::Result result) override {}
@@ -413,11 +413,15 @@ class GCMClientImplTest : public testing::Test,
   network::TestURLLoaderFactory* url_loader_factory() {
     return &test_url_loader_factory_;
   }
-  base::TestMockTimeTaskRunner* task_runner() {
-    return task_runner_.get();
+
+  void FastForwardBy(const base::TimeDelta& duration) {
+    scoped_task_environment_.FastForwardBy(duration);
   }
 
  private:
+  base::test::ScopedTaskEnvironment scoped_task_environment_{
+      base::test::ScopedTaskEnvironment::MainThreadType::MOCK_TIME};
+
   // Must be declared first so that it is destroyed last. Injected to
   // GCM client.
   base::ScopedTempDir temp_directory_;
@@ -437,8 +441,6 @@ class GCMClientImplTest : public testing::Test,
 
   net::TestURLFetcherFactory url_fetcher_factory_;
 
-  scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
-
   // Injected to GCM client.
   scoped_refptr<net::TestURLRequestContextGetter> url_request_context_getter_;
   network::TestURLLoaderFactory test_url_loader_factory_;
@@ -450,10 +452,8 @@ class GCMClientImplTest : public testing::Test,
 GCMClientImplTest::GCMClientImplTest()
     : last_event_(NONE),
       last_result_(GCMClient::UNKNOWN_ERROR),
-      task_runner_(new base::TestMockTimeTaskRunner(
-          base::TestMockTimeTaskRunner::Type::kBoundToThread)),
-      url_request_context_getter_(
-          new net::TestURLRequestContextGetter(task_runner_)),
+      url_request_context_getter_(new net::TestURLRequestContextGetter(
+          scoped_task_environment_.GetMainThreadTaskRunner())),
       field_trial_list_(nullptr) {}
 
 GCMClientImplTest::~GCMClientImplTest() {}
@@ -516,7 +516,7 @@ void GCMClientImplTest::InitializeInvalidationFieldTrial() {
 }
 
 void GCMClientImplTest::PumpLoopUntilIdle() {
-  task_runner_->RunUntilIdle();
+  scoped_task_environment_.RunUntilIdle();
 }
 
 bool GCMClientImplTest::CreateUniqueTempDir() {
@@ -557,10 +557,7 @@ void GCMClientImplTest::CompleteCheckinImpl(
   // For testing G-services settings.
   if (!digest.empty()) {
     response.set_digest(digest);
-    for (std::map<std::string, std::string>::const_iterator it =
-             settings.begin();
-         it != settings.end();
-         ++it) {
+    for (auto it = settings.begin(); it != settings.end(); ++it) {
       checkin_proto::GservicesSetting* setting = response.add_setting();
       setting->set_name(it->first);
       setting->set_value(it->second);
@@ -613,10 +610,10 @@ void GCMClientImplTest::AddRegistration(
     const std::string& app_id,
     const std::vector<std::string>& sender_ids,
     const std::string& registration_id) {
-  linked_ptr<GCMRegistrationInfo> registration(new GCMRegistrationInfo);
+  auto registration = base::MakeRefCounted<GCMRegistrationInfo>();
   registration->app_id = app_id;
   registration->sender_ids = sender_ids;
-  gcm_client_->registrations_[registration] = registration_id;
+  gcm_client_->registrations_.emplace(std::move(registration), registration_id);
 }
 
 void GCMClientImplTest::InitializeGCMClient() {
@@ -627,9 +624,11 @@ void GCMClientImplTest::InitializeGCMClient() {
   chrome_build_info.version = kChromeVersion;
   chrome_build_info.product_category_for_subtypes = kProductCategoryForSubtypes;
   gcm_client_->Initialize(
-      chrome_build_info, gcm_store_path(), task_runner_, base::DoNothing(),
+      chrome_build_info, gcm_store_path(),
+      scoped_task_environment_.GetMainThreadTaskRunner(), base::DoNothing(),
       base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
           &test_url_loader_factory_),
+      network::TestNetworkConnectionTracker::GetInstance(),
       base::WrapUnique<Encryptor>(new FakeEncryptor), this);
 }
 
@@ -642,17 +641,16 @@ void GCMClientImplTest::StartGCMClient() {
 
 void GCMClientImplTest::Register(const std::string& app_id,
                                  const std::vector<std::string>& senders) {
-  std::unique_ptr<GCMRegistrationInfo> gcm_info(new GCMRegistrationInfo);
+  auto gcm_info = base::MakeRefCounted<GCMRegistrationInfo>();
   gcm_info->app_id = app_id;
   gcm_info->sender_ids = senders;
-  gcm_client()->Register(make_linked_ptr<RegistrationInfo>(gcm_info.release()));
+  gcm_client()->Register(std::move(gcm_info));
 }
 
 void GCMClientImplTest::Unregister(const std::string& app_id) {
-  std::unique_ptr<GCMRegistrationInfo> gcm_info(new GCMRegistrationInfo);
+  auto gcm_info = base::MakeRefCounted<GCMRegistrationInfo>();
   gcm_info->app_id = app_id;
-  gcm_client()->Unregister(
-      make_linked_ptr<RegistrationInfo>(gcm_info.release()));
+  gcm_client()->Unregister(std::move(gcm_info));
 }
 
 void GCMClientImplTest::ReceiveMessageFromMCS(const MCSMessage& message) {
@@ -684,7 +682,7 @@ void GCMClientImplTest::OnMessageReceived(const std::string& registration_id,
 }
 
 void GCMClientImplTest::OnRegisterFinished(
-    const linked_ptr<RegistrationInfo>& registration_info,
+    scoped_refptr<RegistrationInfo> registration_info,
     const std::string& registration_id,
     GCMClient::Result result) {
   last_event_ = REGISTRATION_COMPLETED;
@@ -694,7 +692,7 @@ void GCMClientImplTest::OnRegisterFinished(
 }
 
 void GCMClientImplTest::OnUnregisterFinished(
-    const linked_ptr<RegistrationInfo>& registration_info,
+    scoped_refptr<RegistrationInfo> registration_info,
     GCMClient::Result result) {
   last_event_ = UNREGISTRATION_COMPLETED;
   last_app_id_ = registration_info->app_id;
@@ -822,7 +820,7 @@ TEST_F(GCMClientImplTest, DestroyStoreWhenNotNeeded) {
   EXPECT_TRUE(device_checkin_info().secret);
 
   // Fast forward the clock to trigger the store destroying logic.
-  task_runner()->FastForwardBy(base::TimeDelta::FromMilliseconds(300000));
+  FastForwardBy(base::TimeDelta::FromMilliseconds(300000));
   PumpLoopUntilIdle();
 
   EXPECT_EQ(GCMClientImpl::INITIALIZED, gcm_client_state());
@@ -832,12 +830,12 @@ TEST_F(GCMClientImplTest, DestroyStoreWhenNotNeeded) {
 
 TEST_F(GCMClientImplTest, SerializeAndDeserialize) {
   std::vector<std::string> senders{"sender"};
-  auto gcm_info = std::make_unique<GCMRegistrationInfo>();
+  auto gcm_info = base::MakeRefCounted<GCMRegistrationInfo>();
   gcm_info->app_id = kExtensionAppId;
   gcm_info->sender_ids = senders;
   gcm_info->last_validated = clock()->Now();
 
-  auto gcm_info_deserialized = std::make_unique<GCMRegistrationInfo>();
+  auto gcm_info_deserialized = base::MakeRefCounted<GCMRegistrationInfo>();
   std::string gcm_registration_id_deserialized;
   {
     std::string serialized_key = gcm_info->GetSerializedKey();
@@ -853,13 +851,14 @@ TEST_F(GCMClientImplTest, SerializeAndDeserialize) {
   EXPECT_EQ(gcm_info->last_validated, gcm_info_deserialized->last_validated);
   EXPECT_EQ(kRegistrationId, gcm_registration_id_deserialized);
 
-  auto instance_id_info = std::make_unique<InstanceIDTokenInfo>();
+  auto instance_id_info = base::MakeRefCounted<InstanceIDTokenInfo>();
   instance_id_info->app_id = kExtensionAppId;
   instance_id_info->last_validated = clock()->Now();
   instance_id_info->authorized_entity = "different_sender";
   instance_id_info->scope = "scope";
 
-  auto instance_id_info_deserialized = std::make_unique<InstanceIDTokenInfo>();
+  auto instance_id_info_deserialized =
+      base::MakeRefCounted<InstanceIDTokenInfo>();
   std::string instance_id_registration_id_deserialized;
   {
     std::string serialized_key = instance_id_info->GetSerializedKey();
@@ -1130,8 +1129,7 @@ TEST_F(GCMClientImplTest, DispatchDownstreamMessageSendError) {
   EXPECT_EQ(kExtensionAppId, last_app_id());
   EXPECT_EQ("007", last_error_details().message_id);
   EXPECT_EQ(1UL, last_error_details().additional_data.size());
-  MessageData::const_iterator iter =
-      last_error_details().additional_data.find("error_details");
+  auto iter = last_error_details().additional_data.find("error_details");
   EXPECT_TRUE(iter != last_error_details().additional_data.end());
   EXPECT_EQ("some details", iter->second);
 }
@@ -1204,7 +1202,7 @@ void GCMClientImplCheckinTest::SetUp() {
 
 TEST_F(GCMClientImplCheckinTest, GServicesSettingsAfterInitialCheckin) {
   std::map<std::string, std::string> settings;
-  settings["checkin_interval"] = base::Int64ToString(kSettingsCheckinInterval);
+  settings["checkin_interval"] = base::NumberToString(kSettingsCheckinInterval);
   settings["checkin_url"] = "http://alternative.url/checkin";
   settings["gcm_hostname"] = "alternative.gcm.host";
   settings["gcm_secure_port"] = "7777";
@@ -1227,7 +1225,7 @@ TEST_F(GCMClientImplCheckinTest, GServicesSettingsAfterInitialCheckin) {
 // This test only checks that periodic checkin happens.
 TEST_F(GCMClientImplCheckinTest, PeriodicCheckin) {
   std::map<std::string, std::string> settings;
-  settings["checkin_interval"] = base::Int64ToString(kSettingsCheckinInterval);
+  settings["checkin_interval"] = base::NumberToString(kSettingsCheckinInterval);
   settings["checkin_url"] = "http://alternative.url/checkin";
   settings["gcm_hostname"] = "alternative.gcm.host";
   settings["gcm_secure_port"] = "7777";
@@ -1246,7 +1244,7 @@ TEST_F(GCMClientImplCheckinTest, PeriodicCheckin) {
 
 TEST_F(GCMClientImplCheckinTest, LoadGSettingsFromStore) {
   std::map<std::string, std::string> settings;
-  settings["checkin_interval"] = base::Int64ToString(kSettingsCheckinInterval);
+  settings["checkin_interval"] = base::NumberToString(kSettingsCheckinInterval);
   settings["checkin_url"] = "http://alternative.url/checkin";
   settings["gcm_hostname"] = "alternative.gcm.host";
   settings["gcm_secure_port"] = "7777";
@@ -1274,7 +1272,7 @@ TEST_F(GCMClientImplCheckinTest, LoadGSettingsFromStore) {
 // This test only checks that periodic checkin happens.
 TEST_F(GCMClientImplCheckinTest, CheckinWithAccounts) {
   std::map<std::string, std::string> settings;
-  settings["checkin_interval"] = base::Int64ToString(kSettingsCheckinInterval);
+  settings["checkin_interval"] = base::NumberToString(kSettingsCheckinInterval);
   settings["checkin_url"] = "http://alternative.url/checkin";
   settings["gcm_hostname"] = "alternative.gcm.host";
   settings["gcm_secure_port"] = "7777";
@@ -1310,7 +1308,7 @@ TEST_F(GCMClientImplCheckinTest, CheckinWithAccounts) {
 // This test only checks that periodic checkin happens.
 TEST_F(GCMClientImplCheckinTest, CheckinWhenAccountRemoved) {
   std::map<std::string, std::string> settings;
-  settings["checkin_interval"] = base::Int64ToString(kSettingsCheckinInterval);
+  settings["checkin_interval"] = base::NumberToString(kSettingsCheckinInterval);
   settings["checkin_url"] = "http://alternative.url/checkin";
   settings["gcm_hostname"] = "alternative.gcm.host";
   settings["gcm_secure_port"] = "7777";
@@ -1352,7 +1350,7 @@ TEST_F(GCMClientImplCheckinTest, CheckinWhenAccountRemoved) {
 // This test only checks that periodic checkin happens.
 TEST_F(GCMClientImplCheckinTest, CheckinWhenAccountReplaced) {
   std::map<std::string, std::string> settings;
-  settings["checkin_interval"] = base::Int64ToString(kSettingsCheckinInterval);
+  settings["checkin_interval"] = base::NumberToString(kSettingsCheckinInterval);
   settings["checkin_url"] = "http://alternative.url/checkin";
   settings["gcm_hostname"] = "alternative.gcm.host";
   settings["gcm_secure_port"] = "7777";
@@ -1685,25 +1683,21 @@ void GCMClientInstanceIDTest::RemoveInstanceID(const std::string& app_id) {
 void GCMClientInstanceIDTest::GetToken(const std::string& app_id,
                                        const std::string& authorized_entity,
                                        const std::string& scope) {
-  std::unique_ptr<InstanceIDTokenInfo> instance_id_info(
-      new InstanceIDTokenInfo);
+  auto instance_id_info = base::MakeRefCounted<InstanceIDTokenInfo>();
   instance_id_info->app_id = app_id;
   instance_id_info->authorized_entity = authorized_entity;
   instance_id_info->scope = scope;
-  gcm_client()->Register(
-      make_linked_ptr<RegistrationInfo>(instance_id_info.release()));
+  gcm_client()->Register(std::move(instance_id_info));
 }
 
 void GCMClientInstanceIDTest::DeleteToken(const std::string& app_id,
                                           const std::string& authorized_entity,
                                           const std::string& scope) {
-  std::unique_ptr<InstanceIDTokenInfo> instance_id_info(
-      new InstanceIDTokenInfo);
+  auto instance_id_info = base::MakeRefCounted<InstanceIDTokenInfo>();
   instance_id_info->app_id = app_id;
   instance_id_info->authorized_entity = authorized_entity;
   instance_id_info->scope = scope;
-  gcm_client()->Unregister(
-      make_linked_ptr<RegistrationInfo>(instance_id_info.release()));
+  gcm_client()->Unregister(std::move(instance_id_info));
 }
 
 void GCMClientInstanceIDTest::CompleteDeleteToken() {
@@ -1720,13 +1714,11 @@ void GCMClientInstanceIDTest::CompleteDeleteToken() {
 bool GCMClientInstanceIDTest::ExistsToken(const std::string& app_id,
                                           const std::string& authorized_entity,
                                           const std::string& scope) const {
-  std::unique_ptr<InstanceIDTokenInfo> instance_id_info(
-      new InstanceIDTokenInfo);
+  auto instance_id_info = base::MakeRefCounted<InstanceIDTokenInfo>();
   instance_id_info->app_id = app_id;
   instance_id_info->authorized_entity = authorized_entity;
   instance_id_info->scope = scope;
-  return gcm_client()->registrations_.count(
-      make_linked_ptr<RegistrationInfo>(instance_id_info.release())) > 0;
+  return gcm_client()->registrations_.count(std::move(instance_id_info)) > 0;
 }
 
 TEST_F(GCMClientInstanceIDTest, GetToken) {

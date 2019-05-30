@@ -148,14 +148,14 @@ void SearchIPCRouter::OnTabDeactivated() {
   is_active_tab_ = false;
 }
 
-void SearchIPCRouter::FocusOmnibox(int page_seq_no, OmniboxFocusState state) {
+void SearchIPCRouter::FocusOmnibox(int page_seq_no, bool focus) {
   if (page_seq_no != commit_counter_)
     return;
 
   if (!policy_->ShouldProcessFocusOmnibox(is_active_tab_))
     return;
 
-  delegate_->FocusOmnibox(state);
+  delegate_->FocusOmnibox(focus);
 }
 
 void SearchIPCRouter::DeleteMostVisitedItem(int page_seq_no, const GURL& url) {
@@ -213,6 +213,18 @@ void SearchIPCRouter::UpdateCustomLink(int page_seq_no,
   }
 
   std::move(callback).Run(result);
+}
+
+void SearchIPCRouter::ReorderCustomLink(int page_seq_no,
+                                        const GURL& url,
+                                        int new_pos) {
+  if (page_seq_no != commit_counter_)
+    return;
+
+  if (!policy_->ShouldProcessReorderCustomLink())
+    return;
+
+  delegate_->OnReorderCustomLink(url, new_pos);
 }
 
 void SearchIPCRouter::DeleteCustomLink(int page_seq_no,
@@ -344,6 +356,48 @@ void SearchIPCRouter::SelectLocalBackgroundImage() {
     return;
 
   delegate_->OnSelectLocalBackgroundImage();
+}
+
+void SearchIPCRouter::BlocklistSearchSuggestion(int32_t task_version,
+                                                int64_t task_id) {
+  if (!policy_->ShouldProcessBlocklistSearchSuggestion())
+    return;
+
+  delegate_->OnBlocklistSearchSuggestion(task_version, task_id);
+}
+
+void SearchIPCRouter::BlocklistSearchSuggestionWithHash(
+    int32_t task_version,
+    int64_t task_id,
+    const std::vector<uint8_t>& hash) {
+  if (!policy_->ShouldProcessBlocklistSearchSuggestionWithHash())
+    return;
+
+  if (hash.size() > 4) {
+    return;
+  }
+  delegate_->OnBlocklistSearchSuggestionWithHash(task_version, task_id,
+                                                 hash.data());
+}
+
+void SearchIPCRouter::SearchSuggestionSelected(
+    int32_t task_version,
+    int64_t task_id,
+    const std::vector<uint8_t>& hash) {
+  if (!policy_->ShouldProcessSearchSuggestionSelected())
+    return;
+
+  if (hash.size() > 4) {
+    return;
+  }
+  delegate_->OnSearchSuggestionSelected(task_version, task_id, hash.data());
+}
+
+void SearchIPCRouter::OptOutOfSearchSuggestions() {
+  if (!policy_->ShouldProcessOptOutOfSearchSuggestions())
+    return;
+
+  delegate_->OnOptOutOfSearchSuggestions();
 }
 
 void SearchIPCRouter::set_delegate_for_testing(Delegate* delegate) {

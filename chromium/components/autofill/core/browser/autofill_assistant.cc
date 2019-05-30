@@ -4,6 +4,7 @@
 
 #include "components/autofill/core/browser/autofill_assistant.h"
 
+#include "base/bind.h"
 #include "base/containers/adapters.h"
 #include "base/strings/string16.h"
 #include "components/autofill/core/browser/autofill_manager.h"
@@ -51,8 +52,8 @@ bool AutofillAssistant::CanShowCreditCardAssist() {
 void AutofillAssistant::ShowAssistForCreditCard(const CreditCard& card) {
   DCHECK(credit_card_form_data_);
   autofill_manager_->client()->ConfirmCreditCardFillAssist(
-      card, base::Bind(&AutofillAssistant::OnUserDidAcceptCreditCardFill,
-                       weak_ptr_factory_.GetWeakPtr(), card));
+      card, base::BindOnce(&AutofillAssistant::OnUserDidAcceptCreditCardFill,
+                           weak_ptr_factory_.GetWeakPtr(), card));
 }
 
 void AutofillAssistant::OnUserDidAcceptCreditCardFill(const CreditCard& card) {

@@ -7,8 +7,8 @@
 namespace proximity_auth {
 
 FakeRemoteDeviceLifeCycle::FakeRemoteDeviceLifeCycle(
-    cryptauth::RemoteDeviceRef remote_device,
-    base::Optional<cryptauth::RemoteDeviceRef> local_device)
+    chromeos::multidevice::RemoteDeviceRef remote_device,
+    base::Optional<chromeos::multidevice::RemoteDeviceRef> local_device)
     : remote_device_(remote_device),
       local_device_(local_device),
       started_(false),
@@ -20,12 +20,9 @@ void FakeRemoteDeviceLifeCycle::Start() {
   started_ = true;
 }
 
-cryptauth::RemoteDeviceRef FakeRemoteDeviceLifeCycle::GetRemoteDevice() const {
+chromeos::multidevice::RemoteDeviceRef
+FakeRemoteDeviceLifeCycle::GetRemoteDevice() const {
   return remote_device_;
-}
-
-cryptauth::Connection* FakeRemoteDeviceLifeCycle::GetConnection() const {
-  return connection_;
 }
 
 chromeos::secure_channel::ClientChannel* FakeRemoteDeviceLifeCycle::GetChannel()

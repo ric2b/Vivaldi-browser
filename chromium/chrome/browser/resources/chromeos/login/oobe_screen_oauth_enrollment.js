@@ -17,7 +17,6 @@ login.createScreen('OAuthEnrollmentScreen', 'oauth-enrollment', function() {
   /** @const */ var STEP_ATTRIBUTE_PROMPT = 'attribute-prompt';
   /** @const */ var STEP_ERROR = 'error';
   /** @const */ var STEP_SUCCESS = 'success';
-  /** @const */ var STEP_ABE_SUCCESS = 'abe-success';
 
   /* TODO(dzhioev): define this step on C++ side.
   /** @const */ var STEP_ATTRIBUTE_PROMPT_ERROR = 'attribute-prompt-error';
@@ -124,19 +123,19 @@ login.createScreen('OAuthEnrollmentScreen', 'oauth-enrollment', function() {
           'authCompleted',
           (function(e) {
             var detail = e.detail;
-            if (!detail.email || !detail.authCode) {
+            if (!detail.email) {
               this.showError(
                   loadTimeData.getString('fatalEnrollmentError'), false);
               return;
             }
-            chrome.send(
-                'oauthEnrollCompleteLogin', [detail.email, detail.authCode]);
+            chrome.send('oauthEnrollCompleteLogin', [detail.email]);
           }).bind(this));
 
       this.offlineAdUi_.addEventListener('authCompleted', function(e) {
         this.offlineAdUi_.disabled = true;
+        this.offlineAdUi_.loading = true;
         chrome.send('oauthEnrollAdCompleteLogin', [
-          e.detail.machinename, e.detail.distinguished_name,
+          e.detail.machine_name, e.detail.distinguished_name,
           e.detail.encryption_types, e.detail.username, e.detail.password
         ]);
       }.bind(this));
@@ -206,8 +205,6 @@ login.createScreen('OAuthEnrollmentScreen', 'oauth-enrollment', function() {
 
       $('enroll-success-done-button')
           .addEventListener('tap', this.onEnrollmentFinished_.bind(this));
-      $('enroll-success-abe-done-button')
-          .addEventListener('tap', this.onEnrollmentFinished_.bind(this));
 
       $('enroll-attributes-skip-button')
           .addEventListener('tap', this.onSkipButtonClicked.bind(this));
@@ -239,7 +236,6 @@ login.createScreen('OAuthEnrollmentScreen', 'oauth-enrollment', function() {
       this.licenseUi_.addEventListener('buttonclick', function() {
         chrome.send('onLicenseTypeSelected', [this.licenseUi_.selected]);
       }.bind(this));
-
     },
 
     /**
@@ -271,7 +267,7 @@ login.createScreen('OAuthEnrollmentScreen', 'oauth-enrollment', function() {
 
       $('oauth-enroll-auth-view').partition = data.webviewPartitionName;
 
-      $('login-header-bar').signinUIState = SIGNIN_UI_STATE.ENROLLMENT;
+      Oobe.getInstance().setSigninUIState(SIGNIN_UI_STATE.ENROLLMENT);
       this.classList.remove('saml');
 
       var gaiaParams = {};
@@ -297,11 +293,13 @@ login.createScreen('OAuthEnrollmentScreen', 'oauth-enrollment', function() {
       this.isManualEnrollment_ = data.enrollment_mode === 'manual';
       this.navigation_.disabled = false;
 
-      this.showStep(data.attestationBased ? STEP_WORKING : STEP_SIGNIN);
+      this.offlineAdUi_.onBeforeShow();
+      if (!this.currentStep_)
+        this.showStep(data.attestationBased ? STEP_WORKING : STEP_SIGNIN);
     },
 
     onBeforeHide: function() {
-      $('login-header-bar').signinUIState = SIGNIN_UI_STATE.HIDDEN;
+      Oobe.getInstance().setSigninUIState(SIGNIN_UI_STATE.HIDDEN);
     },
 
     /**
@@ -320,12 +318,10 @@ login.createScreen('OAuthEnrollmentScreen', 'oauth-enrollment', function() {
      */
     showAttestationBasedEnrollmentSuccess: function(
         device, enterpriseEnrollmentDomain) {
-      $('oauth-enroll-abe-success-comment-no-domain').hidden = true;
-      $('oauth-enroll-abe-success-comment-domain').hidden = false;
-      $('oauth-enroll-abe-success-comment-domain').innerHTML =
-          loadTimeData.getStringF(
-              'oauthEnrollAbeSuccess', device, enterpriseEnrollmentDomain);
-      this.showStep(STEP_ABE_SUCCESS);
+      $('oauth-enroll-success-subtitle').deviceName = device;
+      $('oauth-enroll-success-subtitle').enrollmentDomain =
+          enterpriseEnrollmentDomain;
+      this.showStep(STEP_SUCCESS);
     },
 
     /**
@@ -387,21 +383,20 @@ login.createScreen('OAuthEnrollmentScreen', 'oauth-enrollment', function() {
       if (step == STEP_SIGNIN) {
         $('oauth-enroll-auth-view').focus();
       } else if (step == STEP_LICENSE_TYPE) {
-        $('oauth-enroll-license-ui').submitButton.focus();
+        $('oauth-enroll-license-ui').show();
       } else if (step == STEP_ERROR) {
         $('oauth-enroll-error-card').submitButton.focus();
       } else if (step == STEP_SUCCESS) {
-        $('oauth-enroll-success-card').focus();
-      } else if (step == STEP_ABE_SUCCESS) {
-        $('oauth-enroll-abe-success-card').focus();
+        $('oauth-enroll-success-card').show();
       } else if (step == STEP_ATTRIBUTE_PROMPT) {
-        $('oauth-enroll-step-attribute-prompt').focus();
+        $('oauth-enroll-attribute-prompt-card').show();
       } else if (step == STEP_ATTRIBUTE_PROMPT_ERROR) {
         $('oauth-enroll-attribute-prompt-error-card').submitButton.focus();
       } else if (step == STEP_ACTIVE_DIRECTORY_JOIN_ERROR) {
         $('oauth-enroll-active-directory-join-error-card').submitButton.focus();
       } else if (step == STEP_AD_JOIN) {
         this.offlineAdUi_.disabled = false;
+        this.offlineAdUi_.loading = false;
         this.offlineAdUi_.focus();
       }
 
@@ -450,8 +445,9 @@ login.createScreen('OAuthEnrollmentScreen', 'oauth-enrollment', function() {
     setAdJoinParams: function(
         machineName, userName, errorState, showUnlockConfig) {
       this.offlineAdUi_.disabled = false;
-      this.offlineAdUi_.setUser(userName, machineName);
-      this.offlineAdUi_.setInvalid(errorState);
+      this.offlineAdUi_.machineName = machineName;
+      this.offlineAdUi_.userName = userName;
+      this.offlineAdUi_.errorState = errorState;
       this.offlineAdUi_.unlockPasswordStep = showUnlockConfig;
     },
 
@@ -530,7 +526,6 @@ login.createScreen('OAuthEnrollmentScreen', 'oauth-enrollment', function() {
       this.navigation_.closeVisible =
           (this.currentStep_ == STEP_ERROR && !this.navigation_.refreshVisible)
           || this.currentStep_ == STEP_LICENSE_TYPE;
-      $('login-header-bar').updateUI_();
     },
 
     /**
@@ -538,7 +533,10 @@ login.createScreen('OAuthEnrollmentScreen', 'oauth-enrollment', function() {
      */
     onEnrollmentFinished_: function() {
       chrome.send('oauthEnrollClose', ['done']);
-    }
+    },
 
+    updateLocalizedContent: function() {
+      this.offlineAdUi_.i18nUpdateLocale();
+    },
   };
 });

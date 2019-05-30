@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
 #include "net/nqe/network_quality_estimator_params.h"
@@ -111,72 +112,13 @@ base::Optional<int32_t> ObservationBuffer::GetPercentile(
   return weighted_observations.at(weighted_observations.size() - 1).value;
 }
 
-void ObservationBuffer::GetPercentileForEachHostWithCounts(
-    base::TimeTicks begin_timestamp,
-    int percentile,
-    const base::Optional<std::set<IPHash>>& host_filter,
-    std::map<IPHash, int32_t>* host_keyed_percentiles,
-    std::map<IPHash, size_t>* host_keyed_counts) const {
-  DCHECK_GE(Capacity(), Size());
-  DCHECK_LE(0, percentile);
-  DCHECK_GE(100, percentile);
-
-  host_keyed_percentiles->clear();
-  host_keyed_counts->clear();
-
-  // Filter the observations based on timestamp, and the
-  // presence of a valid host tag. Split the observations into a map keyed by
-  // the remote host to make it easy to calculate percentiles for each host.
-  std::map<IPHash, std::vector<int32_t>> host_keyed_observations;
-  for (const auto& observation : observations_) {
-    // Look at only those observations which have a |host|.
-    if (!observation.host())
-      continue;
-
-    IPHash host = observation.host().value();
-    if (host_filter && (host_filter->find(host) == host_filter->end()))
-      continue;
-
-    // Filter the observations recorded before |begin_timestamp|.
-    if (observation.timestamp() < begin_timestamp)
-      continue;
-
-    // Skip 0 values of RTT.
-    if (observation.value() < 1)
-      continue;
-
-    // Create the map entry if it did not already exist. Does nothing if
-    // |host| was seen before.
-    host_keyed_observations.emplace(host, std::vector<int32_t>());
-    host_keyed_observations[host].push_back(observation.value());
-  }
-
-  if (host_keyed_observations.empty())
-    return;
-
-  // Calculate the percentile values for each host.
-  for (auto& host_observations : host_keyed_observations) {
-    IPHash host = host_observations.first;
-    auto& observations = host_observations.second;
-    std::sort(observations.begin(), observations.end());
-    size_t count = observations.size();
-    DCHECK_GT(count, 0u);
-    (*host_keyed_counts)[host] = count;
-    int percentile_index = ((count - 1) * percentile) / 100;
-    (*host_keyed_percentiles)[host] = observations[percentile_index];
-  }
-}
-
 void ObservationBuffer::RemoveObservationsWithSource(
     bool deleted_observation_sources[NETWORK_QUALITY_OBSERVATION_SOURCE_MAX]) {
-  observations_.erase(
-      std::remove_if(
-          observations_.begin(), observations_.end(),
-          [deleted_observation_sources](const Observation& observation) {
-            return deleted_observation_sources[static_cast<size_t>(
-                observation.source())];
-          }),
-      observations_.end());
+  base::EraseIf(observations_,
+                [deleted_observation_sources](const Observation& observation) {
+                  return deleted_observation_sources[static_cast<size_t>(
+                      observation.source())];
+                });
 }
 
 void ObservationBuffer::ComputeWeightedObservations(

@@ -8,7 +8,8 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
-#include "media/base/cdm_proxy_context.h"
+#include "media/base/media_log.h"
+#include "media/cdm/cdm_proxy_context.h"
 #include "media/gpu/h264_decoder.h"
 #include "media/gpu/h264_dpb.h"
 #include "media/gpu/windows/d3d11_picture_buffer.h"
@@ -62,15 +63,22 @@ D3D11H264Picture::~D3D11H264Picture() {
 
 D3D11H264Accelerator::D3D11H264Accelerator(
     D3D11VideoDecoderClient* client,
+    MediaLog* media_log,
     CdmProxyContext* cdm_proxy_context,
     Microsoft::WRL::ComPtr<ID3D11VideoDecoder> video_decoder,
     Microsoft::WRL::ComPtr<ID3D11VideoDevice> video_device,
-    Microsoft::WRL::ComPtr<ID3D11VideoContext1> video_context)
+    std::unique_ptr<VideoContextWrapper> video_context)
     : client_(client),
+      media_log_(media_log),
       cdm_proxy_context_(cdm_proxy_context),
       video_decoder_(video_decoder),
       video_device_(video_device),
-      video_context_(video_context) {}
+      video_context_(std::move(video_context)) {
+  DCHECK(client);
+  DCHECK(media_log_);
+  // |cdm_proxy_context_| is non-null for encrypted content but can be null for
+  // clear content.
+}
 
 D3D11H264Accelerator::~D3D11H264Accelerator() {}
 
@@ -91,20 +99,17 @@ Status D3D11H264Accelerator::SubmitFrameMetadata(
     const H264Picture::Vector& ref_pic_listb1,
     const scoped_refptr<H264Picture>& pic) {
   const bool is_encrypted = pic->decrypt_config();
-  if (is_encrypted && !cdm_proxy_context_) {
-    DVLOG(1) << "The input is encrypted but there is no proxy context.";
-    return Status::kFail;
-  }
 
   std::unique_ptr<D3D11_VIDEO_DECODER_BEGIN_FRAME_CRYPTO_SESSION> content_key;
   // This decrypt context has to be outside the if block because pKeyInfo in
   // D3D11_VIDEO_DECODER_BEGIN_FRAME_CRYPTO_SESSION is a pointer (to a GUID).
   base::Optional<CdmProxyContext::D3D11DecryptContext> decrypt_context;
   if (is_encrypted) {
+    DCHECK(cdm_proxy_context_) << "No CdmProxyContext but picture is encrypted";
     decrypt_context = cdm_proxy_context_->GetD3D11DecryptContext(
-        pic->decrypt_config()->key_id());
+        CdmProxy::KeyType::kDecryptAndDecode, pic->decrypt_config()->key_id());
     if (!decrypt_context) {
-      DVLOG(1) << "Cannot find decrypt context for the frame.";
+      RecordFailure("Cannot find decrypt context for the frame.");
       return Status::kTryAgain;
     }
 
@@ -132,8 +137,7 @@ Status D3D11H264Accelerator::SubmitFrameMetadata(
       // TODO(liberato): For now, just busy wait.
       ;
     } else if (!SUCCEEDED(hr)) {
-      LOG(ERROR) << "DecoderBeginFrame failed: "
-                 << logging::SystemErrorCodeToString(hr);
+      RecordFailure("DecoderBeginFrame failed", hr);
       return Status::kFail;
     } else {
       break;
@@ -184,13 +188,141 @@ bool D3D11H264Accelerator::RetrieveBitstreamBuffer() {
       video_decoder_.Get(), D3D11_VIDEO_DECODER_BUFFER_BITSTREAM, &buffer_size,
       &buffer);
   if (!SUCCEEDED(hr)) {
-    LOG(ERROR) << "GetDecoderBuffer (Bitstream) failed";
+    RecordFailure("GetDecoderBuffer (Bitstream) failed", hr);
     return false;
   }
   bitstream_buffer_bytes_ = (uint8_t*)buffer;
   bitstream_buffer_size_ = buffer_size;
 
   return true;
+}
+
+void D3D11H264Accelerator::FillPicParamsWithConstants(
+    DXVA_PicParams_H264* pic) {
+  // From "DirectX Video Acceleration Specification for H.264/AVC Decoding":
+  // "The value shall be 1 unless the restricted-mode profile in use
+  // explicitly supports the value 0."
+  pic->MbsConsecutiveFlag = 1;
+
+  // The latest DXVA decoding guide says to set this to 3 if the software
+  // decoder (this class) is following the guide.
+  pic->Reserved16Bits = 3;
+
+  // |ContinuationFlag| indicates that we've filled in the remaining fields.
+  pic->ContinuationFlag = 1;
+
+  // Must be zero unless bit 13 of ConfigDecoderSpecific is set.
+  pic->Reserved8BitsA = 0;
+
+  // Unused, should always be zero.
+  pic->Reserved8BitsB = 0;
+
+  // Should always be 1.
+  pic->StatusReportFeedbackNumber = 1;
+
+  // UNUSED: slice_group_map_type (undocumented)
+  // UNUSED: slice_group_change_rate (undocumented)
+}
+
+#define ARG_SEL(_1, _2, NAME, ...) NAME
+
+#define SPS_TO_PP1(a) pic_param->a = sps->a;
+#define SPS_TO_PP2(a, b) pic_param->a = sps->b;
+#define SPS_TO_PP(...) ARG_SEL(__VA_ARGS__, SPS_TO_PP2, SPS_TO_PP1)(__VA_ARGS__)
+void D3D11H264Accelerator::PicParamsFromSPS(DXVA_PicParams_H264* pic_param,
+                                            const H264SPS* sps,
+                                            bool field_pic) {
+  // The H.264 specification now calls this |max_num_ref_frames|, while
+  // DXVA_PicParams_H264 continues to use the old name, |num_ref_frames|.
+  // See DirectX Video Acceleration for H.264/MPEG-4 AVC Decoding (4.2).
+  SPS_TO_PP(num_ref_frames, max_num_ref_frames);
+  SPS_TO_PP(wFrameWidthInMbsMinus1, pic_width_in_mbs_minus1);
+  SPS_TO_PP(wFrameHeightInMbsMinus1, pic_height_in_map_units_minus1);
+  SPS_TO_PP(residual_colour_transform_flag, separate_colour_plane_flag);
+  SPS_TO_PP(chroma_format_idc);
+  SPS_TO_PP(frame_mbs_only_flag);
+  SPS_TO_PP(bit_depth_luma_minus8);
+  SPS_TO_PP(bit_depth_chroma_minus8);
+  SPS_TO_PP(log2_max_frame_num_minus4);
+  SPS_TO_PP(pic_order_cnt_type);
+  SPS_TO_PP(log2_max_pic_order_cnt_lsb_minus4);
+  SPS_TO_PP(delta_pic_order_always_zero_flag);
+  SPS_TO_PP(direct_8x8_inference_flag);
+
+  pic_param->MbaffFrameFlag = sps->mb_adaptive_frame_field_flag && field_pic;
+  pic_param->field_pic_flag = field_pic;
+
+  pic_param->MinLumaBipredSize8x8Flag = sps->level_idc >= 31;
+}
+#undef SPS_TO_PP
+#undef SPS_TO_PP2
+#undef SPS_TO_PP1
+
+#define PPS_TO_PP1(a) pic_param->a = pps->a;
+#define PPS_TO_PP2(a, b) pic_param->a = pps->b;
+#define PPS_TO_PP(...) ARG_SEL(__VA_ARGS__, PPS_TO_PP2, PPS_TO_PP1)(__VA_ARGS__)
+bool D3D11H264Accelerator::PicParamsFromPPS(DXVA_PicParams_H264* pic_param,
+                                            const H264PPS* pps) {
+  PPS_TO_PP(constrained_intra_pred_flag);
+  PPS_TO_PP(weighted_pred_flag);
+  PPS_TO_PP(weighted_bipred_idc);
+
+  PPS_TO_PP(transform_8x8_mode_flag);
+  PPS_TO_PP(pic_init_qs_minus26);
+  PPS_TO_PP(chroma_qp_index_offset);
+  PPS_TO_PP(second_chroma_qp_index_offset);
+  PPS_TO_PP(pic_init_qp_minus26);
+  PPS_TO_PP(num_ref_idx_l0_active_minus1, num_ref_idx_l0_default_active_minus1);
+  PPS_TO_PP(num_ref_idx_l1_active_minus1, num_ref_idx_l1_default_active_minus1);
+  PPS_TO_PP(entropy_coding_mode_flag);
+  PPS_TO_PP(pic_order_present_flag,
+            bottom_field_pic_order_in_frame_present_flag);
+  PPS_TO_PP(deblocking_filter_control_present_flag);
+  PPS_TO_PP(redundant_pic_cnt_present_flag);
+
+  PPS_TO_PP(num_slice_groups_minus1);
+  if (pic_param->num_slice_groups_minus1) {
+    // TODO(liberato): UMA?
+    // TODO(liberato): media log?
+    LOG(ERROR) << "num_slice_groups_minus1 == "
+               << pic_param->num_slice_groups_minus1;
+    return false;
+  }
+  return true;
+}
+#undef PPS_TO_PP
+#undef PPS_TO_PP2
+#undef PPS_TO_PP1
+
+#undef ARG_SEL
+
+void D3D11H264Accelerator::PicParamsFromSliceHeader(
+    DXVA_PicParams_H264* pic_param,
+    const H264SliceHeader* slice_hdr) {
+  pic_param->sp_for_switch_flag = slice_hdr->sp_for_switch_flag;
+  pic_param->field_pic_flag = slice_hdr->field_pic_flag;
+  pic_param->CurrPic.AssociatedFlag = slice_hdr->bottom_field_flag;
+  pic_param->IntraPicFlag = slice_hdr->IsISlice();
+}
+
+void D3D11H264Accelerator::PicParamsFromPic(
+    DXVA_PicParams_H264* pic_param,
+    const scoped_refptr<H264Picture>& pic) {
+  pic_param->CurrPic.Index7Bits =
+      static_cast<D3D11H264Picture*>(pic.get())->level_;
+  pic_param->RefPicFlag = pic->ref;
+  pic_param->frame_num = pic->frame_num;
+
+  if (pic_param->field_pic_flag && pic_param->CurrPic.AssociatedFlag) {
+    pic_param->CurrFieldOrderCnt[1] = pic->bottom_field_order_cnt;
+    pic_param->CurrFieldOrderCnt[0] = 0;
+  } else if (pic_param->field_pic_flag && !pic_param->CurrPic.AssociatedFlag) {
+    pic_param->CurrFieldOrderCnt[0] = pic->top_field_order_cnt;
+    pic_param->CurrFieldOrderCnt[1] = 0;
+  } else {
+    pic_param->CurrFieldOrderCnt[0] = pic->top_field_order_cnt;
+    pic_param->CurrFieldOrderCnt[1] = pic->bottom_field_order_cnt;
+  }
 }
 
 Status D3D11H264Accelerator::SubmitSlice(
@@ -205,98 +337,24 @@ Status D3D11H264Accelerator::SubmitSlice(
   scoped_refptr<D3D11H264Picture> our_pic(
       static_cast<D3D11H264Picture*>(pic.get()));
   DXVA_PicParams_H264 pic_param = {};
-#define FROM_SPS_TO_PP(a) pic_param.a = sps_.a
-#define FROM_SPS_TO_PP2(a, b) pic_param.a = sps_.b
-#define FROM_PPS_TO_PP(a) pic_param.a = pps->a
-#define FROM_PPS_TO_PP2(a, b) pic_param.a = pps->b
-#define FROM_SLICE_TO_PP(a) pic_param.a = slice_hdr->a
-#define FROM_SLICE_TO_PP2(a, b) pic_param.a = slice_hdr->b
-  FROM_SPS_TO_PP2(wFrameWidthInMbsMinus1, pic_width_in_mbs_minus1);
-  FROM_SPS_TO_PP2(wFrameHeightInMbsMinus1, pic_height_in_map_units_minus1);
-  pic_param.CurrPic.Index7Bits = our_pic->level_;
-  pic_param.CurrPic.AssociatedFlag = slice_hdr->bottom_field_flag;
-  // The H.264 specification now calls this |max_num_ref_frames|, while
-  // DXVA_PicParams_H264 continues to use the old name, |num_ref_frames|.
-  // See DirectX Video Acceleration for H.264/MPEG-4 AVC Decoding (4.2).
-  FROM_SPS_TO_PP2(num_ref_frames, max_num_ref_frames);
+  FillPicParamsWithConstants(&pic_param);
 
-  FROM_SLICE_TO_PP(field_pic_flag);
-  pic_param.MbaffFrameFlag =
-      sps_.mb_adaptive_frame_field_flag && pic_param.field_pic_flag;
-  FROM_SPS_TO_PP2(residual_colour_transform_flag, separate_colour_plane_flag);
-  FROM_SLICE_TO_PP(sp_for_switch_flag);
-  FROM_SPS_TO_PP(chroma_format_idc);
-  pic_param.RefPicFlag = pic->ref;
-  FROM_PPS_TO_PP(constrained_intra_pred_flag);
-  FROM_PPS_TO_PP(weighted_pred_flag);
-  FROM_PPS_TO_PP(weighted_bipred_idc);
-  // From "DirectX Video Acceleration Specification for H.264/AVC Decoding":
-  // "The value shall be 1 unless the restricted-mode profile in use explicitly
-  // supports the value 0."
-  pic_param.MbsConsecutiveFlag = 1;
-  FROM_SPS_TO_PP(frame_mbs_only_flag);
-  FROM_PPS_TO_PP(transform_8x8_mode_flag);
-  pic_param.MinLumaBipredSize8x8Flag = sps_.level_idc >= 31;
-  pic_param.IntraPicFlag = slice_hdr->IsISlice();
-  FROM_SPS_TO_PP(bit_depth_luma_minus8);
-  FROM_SPS_TO_PP(bit_depth_chroma_minus8);
-  // The latest DXVA decoding guide says to set this to 3 if the software
-  // decoder (this class) is following the guide.
-  pic_param.Reserved16Bits = 3;
+  PicParamsFromSPS(&pic_param, &sps_, slice_hdr->field_pic_flag);
+  if (!PicParamsFromPPS(&pic_param, pps))
+    return Status::kFail;
+  PicParamsFromSliceHeader(&pic_param, slice_hdr);
+  PicParamsFromPic(&pic_param, pic);
+
   memcpy(pic_param.RefFrameList, ref_frame_list_,
          sizeof pic_param.RefFrameList);
-  if (pic_param.field_pic_flag && pic_param.CurrPic.AssociatedFlag) {
-    pic_param.CurrFieldOrderCnt[1] = pic->bottom_field_order_cnt;
-    pic_param.CurrFieldOrderCnt[0] = 0;
-  } else if (pic_param.field_pic_flag && !pic_param.CurrPic.AssociatedFlag) {
-    pic_param.CurrFieldOrderCnt[0] = pic->top_field_order_cnt;
-    pic_param.CurrFieldOrderCnt[1] = 0;
-  } else {
-    pic_param.CurrFieldOrderCnt[0] = pic->top_field_order_cnt;
-    pic_param.CurrFieldOrderCnt[1] = pic->bottom_field_order_cnt;
-  }
+
   memcpy(pic_param.FieldOrderCntList, field_order_cnt_list_,
          sizeof pic_param.FieldOrderCntList);
-  FROM_PPS_TO_PP(pic_init_qs_minus26);
-  FROM_PPS_TO_PP(chroma_qp_index_offset);
-  FROM_PPS_TO_PP(second_chroma_qp_index_offset);
-  // |ContinuationFlag| indicates that we've filled in the remaining fields.
-  pic_param.ContinuationFlag = 1;
-  FROM_PPS_TO_PP(pic_init_qp_minus26);
-  FROM_PPS_TO_PP2(num_ref_idx_l0_active_minus1,
-                  num_ref_idx_l0_default_active_minus1);
-  FROM_PPS_TO_PP2(num_ref_idx_l1_active_minus1,
-                  num_ref_idx_l1_default_active_minus1);
-  // UNUSED: Reserved8BitsA.  Must be zero unless bit 13 of
-  // ConfigDecoderSpecific is set.
+
   memcpy(pic_param.FrameNumList, frame_num_list_,
          sizeof pic_param.FrameNumList);
   pic_param.UsedForReferenceFlags = used_for_reference_flags_;
   pic_param.NonExistingFrameFlags = non_existing_frame_flags_;
-  pic_param.frame_num = pic->frame_num;
-  FROM_SPS_TO_PP(log2_max_frame_num_minus4);
-  FROM_SPS_TO_PP(pic_order_cnt_type);
-  FROM_SPS_TO_PP(log2_max_pic_order_cnt_lsb_minus4);
-  FROM_SPS_TO_PP(delta_pic_order_always_zero_flag);
-  FROM_SPS_TO_PP(direct_8x8_inference_flag);
-  FROM_PPS_TO_PP(entropy_coding_mode_flag);
-  FROM_PPS_TO_PP2(pic_order_present_flag,
-                  bottom_field_pic_order_in_frame_present_flag);
-  FROM_PPS_TO_PP(num_slice_groups_minus1);
-  if (pic_param.num_slice_groups_minus1) {
-    // TODO(liberato): UMA?
-    // TODO(liberato): media log?
-    LOG(ERROR) << "num_slice_groups_minus1 == "
-               << pic_param.num_slice_groups_minus1;
-    return Status::kFail;
-  }
-  // UNUSED: slice_group_map_type (undocumented)
-  FROM_PPS_TO_PP(deblocking_filter_control_present_flag);
-  FROM_PPS_TO_PP(redundant_pic_cnt_present_flag);
-  // UNUSED: Reserved8BitsB (unused, should always be zero).
-  // UNUSED: slice_group_change_rate (undocumented)
-
-  pic_param.StatusReportFeedbackNumber = 1;
 
   UINT buffer_size;
   void* buffer;
@@ -304,7 +362,7 @@ Status D3D11H264Accelerator::SubmitSlice(
       video_decoder_.Get(), D3D11_VIDEO_DECODER_BUFFER_PICTURE_PARAMETERS,
       &buffer_size, &buffer);
   if (!SUCCEEDED(hr)) {
-    LOG(ERROR) << "ReleaseDecoderBuffer (PictureParams) failed";
+    RecordFailure("ReleaseDecoderBuffer (PictureParams) failed", hr);
     return Status::kFail;
   }
 
@@ -312,7 +370,7 @@ Status D3D11H264Accelerator::SubmitSlice(
   hr = video_context_->ReleaseDecoderBuffer(
       video_decoder_.Get(), D3D11_VIDEO_DECODER_BUFFER_PICTURE_PARAMETERS);
   if (!SUCCEEDED(hr)) {
-    LOG(ERROR) << "ReleaseDecoderBuffer (PictureParams) failed";
+    RecordFailure("ReleaseDecoderBuffer (PictureParams) failed", hr);
     return Status::kFail;
   }
 
@@ -344,7 +402,7 @@ Status D3D11H264Accelerator::SubmitSlice(
       D3D11_VIDEO_DECODER_BUFFER_INVERSE_QUANTIZATION_MATRIX, &buffer_size,
       &buffer);
   if (!SUCCEEDED(hr)) {
-    LOG(ERROR) << "GetDecoderBuffer (QuantMatrix) failed";
+    RecordFailure("GetDecoderBuffer (QuantMatrix) failed", hr);
     return Status::kFail;
   }
   memcpy(buffer, &iq_matrix_buf, sizeof(iq_matrix_buf));
@@ -352,7 +410,7 @@ Status D3D11H264Accelerator::SubmitSlice(
       video_decoder_.Get(),
       D3D11_VIDEO_DECODER_BUFFER_INVERSE_QUANTIZATION_MATRIX);
   if (!SUCCEEDED(hr)) {
-    LOG(ERROR) << "ReleaseDecoderBuffer (QuantMatrix) failed";
+    RecordFailure("ReleaseDecoderBuffer (QuantMatrix) failed", hr);
     return Status::kFail;
   }
 
@@ -371,9 +429,9 @@ Status D3D11H264Accelerator::SubmitSlice(
     // For now, the entire frame has to fit into the bitstream buffer. This way
     // the subsample ClearSize adjustment below should work.
     if (bitstream_buffer_size_ < remaining_bitstream) {
-      LOG(ERROR) << "Input slice NALU (" << remaining_bitstream
-                 << ") too big to fit in the bistream buffer ("
-                 << bitstream_buffer_size_ << ").";
+      RecordFailure("Input slice NALU (" + std::to_string(remaining_bitstream) +
+                    ") too big to fit in the bistream buffer (" +
+                    std::to_string(bitstream_buffer_size_) + ").");
       return Status::kFail;
     }
 
@@ -394,12 +452,12 @@ Status D3D11H264Accelerator::SubmitSlice(
     if (bitstream_buffer_size_ < remaining_bitstream &&
         slice_info_.size() > 0) {
       if (!SubmitSliceData()) {
-        LOG(ERROR) << "SubmitSliceData failed";
+        RecordFailure("SubmitSliceData failed");
         return Status::kFail;
       }
 
       if (!RetrieveBitstreamBuffer()) {
-        LOG(ERROR) << "RetrieveBitstreamBuffer failed";
+        RecordFailure("RetrieveBitstreamBuffer failed");
         return Status::kFail;
       }
     }
@@ -455,7 +513,7 @@ bool D3D11H264Accelerator::SubmitSliceData() {
       video_decoder_.Get(), D3D11_VIDEO_DECODER_BUFFER_SLICE_CONTROL,
       &buffer_size, &buffer);
   if (!SUCCEEDED(hr)) {
-    LOG(ERROR) << "GetDecoderBuffer (SliceControl) failed";
+    RecordFailure("GetDecoderBuffer (SliceControl) failed", hr);
     return false;
   }
 
@@ -464,18 +522,18 @@ bool D3D11H264Accelerator::SubmitSliceData() {
   hr = video_context_->ReleaseDecoderBuffer(
       video_decoder_.Get(), D3D11_VIDEO_DECODER_BUFFER_SLICE_CONTROL);
   if (!SUCCEEDED(hr)) {
-    LOG(ERROR) << "ReleaseDecoderBuffer (SliceControl) failed";
+    RecordFailure("ReleaseDecoderBuffer (SliceControl) failed", hr);
     return false;
   }
 
   hr = video_context_->ReleaseDecoderBuffer(
       video_decoder_.Get(), D3D11_VIDEO_DECODER_BUFFER_BITSTREAM);
   if (!SUCCEEDED(hr)) {
-    LOG(ERROR) << "ReleaseDecoderBuffer (BitStream) failed";
+    RecordFailure("ReleaseDecoderBuffer (BitStream) failed", hr);
     return false;
   }
 
-  D3D11_VIDEO_DECODER_BUFFER_DESC1 buffers[4] = {};
+  VideoContextWrapper::VideoBufferWrapper buffers[4] = {};
   buffers[0].BufferType = D3D11_VIDEO_DECODER_BUFFER_PICTURE_PARAMETERS;
   buffers[0].DataOffset = 0;
   buffers[0].DataSize = sizeof(DXVA_PicParams_H264);
@@ -500,8 +558,8 @@ bool D3D11H264Accelerator::SubmitSliceData() {
     }
   }
 
-  hr = video_context_->SubmitDecoderBuffers1(video_decoder_.Get(),
-                                             base::size(buffers), buffers);
+  hr = video_context_->SubmitDecoderBuffers(video_decoder_.Get(),
+                                            base::size(buffers), buffers);
   current_offset_ = 0;
   slice_info_.clear();
   bitstream_buffer_bytes_ = nullptr;
@@ -509,8 +567,7 @@ bool D3D11H264Accelerator::SubmitSliceData() {
   frame_iv_.clear();
   subsamples_.clear();
   if (!SUCCEEDED(hr)) {
-    LOG(ERROR) << "SubmitDecoderBuffers failed: "
-               << logging::SystemErrorCodeToString(hr);
+    RecordFailure("SubmitDecoderBuffers failed", hr);
     return false;
   }
 
@@ -520,13 +577,13 @@ bool D3D11H264Accelerator::SubmitSliceData() {
 Status D3D11H264Accelerator::SubmitDecode(
     const scoped_refptr<H264Picture>& pic) {
   if (!SubmitSliceData()) {
-    LOG(ERROR) << "SubmitSliceData failed";
+    RecordFailure("SubmitSliceData failed");
     return Status::kFail;
   }
 
   HRESULT hr = video_context_->DecoderEndFrame(video_decoder_.Get());
   if (!SUCCEEDED(hr)) {
-    LOG(ERROR) << "DecoderEndFrame failed";
+    RecordFailure("DecoderEndFrame failed", hr);
     return Status::kFail;
   }
 
@@ -551,8 +608,19 @@ bool D3D11H264Accelerator::OutputPicture(
   scoped_refptr<D3D11H264Picture> our_pic(
       static_cast<D3D11H264Picture*>(pic.get()));
 
-  client_->OutputResult(our_pic->picture, pic->get_colorspace());
+  client_->OutputResult(pic.get(), our_pic->picture);
   return true;
+}
+
+void D3D11H264Accelerator::RecordFailure(const std::string& reason,
+                                         HRESULT hr) const {
+  std::string hr_string;
+  if (!SUCCEEDED(hr))
+    hr_string = ": " + logging::SystemErrorCodeToString(hr);
+
+  DLOG(ERROR) << reason << hr_string;
+  media_log_->AddEvent(media_log_->CreateStringEvent(
+      MediaLogEvent::MEDIA_ERROR_LOG_ENTRY, "error", hr_string + reason));
 }
 
 }  // namespace media

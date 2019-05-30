@@ -4,10 +4,12 @@
 
 #include "extensions/browser/api/webcam_private/webcam_private_api.h"
 
+#include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/media_device_id.h"
 #include "content/public/browser/resource_context.h"
+#include "extensions/browser/api/serial/serial_port_manager.h"
 #include "extensions/browser/api/webcam_private/v4l2_webcam.h"
 #include "extensions/browser/api/webcam_private/visca_webcam.h"
 #include "extensions/browser/process_manager.h"
@@ -77,9 +79,15 @@ bool WebcamPrivateAPI::OpenSerialWebcam(
   if (webcam_resource)
     return false;
 
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  device::mojom::SerialPortPtrInfo port_ptr_info;
+  auto* port_manager = api::SerialPortManager::Get(browser_context_);
+  DCHECK(port_manager);
+  port_manager->GetPort(device_path, mojo::MakeRequest(&port_ptr_info));
+
   ViscaWebcam* visca_webcam = new ViscaWebcam;
   visca_webcam->Open(
-      device_path, extension_id,
+      extension_id, std::move(port_ptr_info),
       base::Bind(&WebcamPrivateAPI::OnOpenSerialWebcam,
                  weak_ptr_factory_.GetWeakPtr(), extension_id, device_path,
                  base::WrapRefCounted(visca_webcam), callback));
@@ -118,7 +126,7 @@ bool WebcamPrivateAPI::GetDeviceId(const std::string& extension_id,
       extensions::Extension::GetBaseURLFromExtensionId(extension_id));
 
   return content::GetMediaDeviceIDForHMAC(
-      content::MEDIA_DEVICE_VIDEO_CAPTURE,
+      blink::MEDIA_DEVICE_VIDEO_CAPTURE,
       browser_context_->GetMediaDeviceIDSalt(), security_origin, webcam_id,
       device_id);
 }
@@ -137,7 +145,7 @@ WebcamResource* WebcamPrivateAPI::FindWebcamResource(
     const std::string& webcam_id) const {
   DCHECK(webcam_resource_manager_);
 
-  base::hash_set<int>* connection_ids =
+  std::unordered_set<int>* connection_ids =
       webcam_resource_manager_->GetResourceIds(extension_id);
   if (!connection_ids)
     return nullptr;
@@ -156,7 +164,7 @@ bool WebcamPrivateAPI::RemoveWebcamResource(const std::string& extension_id,
                                             const std::string& webcam_id) {
   DCHECK(webcam_resource_manager_);
 
-  base::hash_set<int>* connection_ids =
+  std::unordered_set<int>* connection_ids =
       webcam_resource_manager_->GetResourceIds(extension_id);
   if (!connection_ids)
     return false;
@@ -313,6 +321,31 @@ ExtensionFunction::ResponseAction WebcamPrivateSetFunction::Run() {
         base::Bind(&WebcamPrivateSetFunction::OnSetWebcamParameters, this));
   }
 
+  if (params->config.autofocus_state) {
+    Webcam::AutofocusState state = Webcam::AUTOFOCUS_ON;
+    switch (params->config.autofocus_state) {
+      case webcam_private::AUTOFOCUS_STATE_NONE:
+      case webcam_private::AUTOFOCUS_STATE_OFF:
+        state = Webcam::AUTOFOCUS_OFF;
+        break;
+
+      case webcam_private::AUTOFOCUS_STATE_ON:
+        state = Webcam::AUTOFOCUS_ON;
+        break;
+    }
+    ++pending_num_set_webcam_param_requests_;
+    webcam->SetAutofocusState(
+        state,
+        base::Bind(&WebcamPrivateSetFunction::OnSetWebcamParameters, this));
+  }
+
+  if (params->config.focus) {
+    ++pending_num_set_webcam_param_requests_;
+    webcam->SetFocus(
+        *(params->config.focus),
+        base::Bind(&WebcamPrivateSetFunction::OnSetWebcamParameters, this));
+  }
+
   if (pending_num_set_webcam_param_requests_ == 0)
     return AlreadyResponded();
 
@@ -338,9 +371,13 @@ WebcamPrivateGetFunction::WebcamPrivateGetFunction()
       min_zoom_(0),
       max_zoom_(0),
       zoom_(0),
+      min_focus_(0),
+      max_focus_(0),
+      focus_(0),
       get_pan_(false),
       get_tilt_(false),
       get_zoom_(false),
+      get_focus_(false),
       success_(true) {}
 
 WebcamPrivateGetFunction::~WebcamPrivateGetFunction() {
@@ -362,6 +399,8 @@ ExtensionFunction::ResponseAction WebcamPrivateGetFunction::Run() {
                              this, INQUIRY_TILT));
   webcam->GetZoom(base::Bind(&WebcamPrivateGetFunction::OnGetWebcamParameters,
                              this, INQUIRY_ZOOM));
+  webcam->GetFocus(base::Bind(&WebcamPrivateGetFunction::OnGetWebcamParameters,
+                              this, INQUIRY_FOCUS));
 
   // We might have already responded through OnGetWebcamParameters().
   return did_respond() ? AlreadyResponded() : RespondLater();
@@ -398,8 +437,14 @@ void WebcamPrivateGetFunction::OnGetWebcamParameters(InquiryType type,
         zoom_ = value;
         get_zoom_ = true;
         break;
+      case INQUIRY_FOCUS:
+        min_focus_ = min_value;
+        max_focus_ = max_value;
+        focus_ = value;
+        get_focus_ = true;
+        break;
     }
-    if (get_pan_ && get_tilt_ && get_zoom_) {
+    if (get_pan_ && get_tilt_ && get_zoom_ && get_focus_) {
       webcam_private::WebcamCurrentConfiguration result;
       if (min_pan_ != max_pan_) {
         result.pan_range = std::make_unique<webcam_private::Range>();
@@ -416,10 +461,16 @@ void WebcamPrivateGetFunction::OnGetWebcamParameters(InquiryType type,
         result.zoom_range->min = min_zoom_;
         result.zoom_range->max = max_zoom_;
       }
+      if (min_focus_ != max_focus_) {
+        result.focus_range = std::make_unique<webcam_private::Range>();
+        result.focus_range->min = min_focus_;
+        result.focus_range->max = max_focus_;
+      }
 
       result.pan = pan_;
       result.tilt = tilt_;
       result.zoom = zoom_;
+      result.focus = focus_;
       Respond(OneArgument(result.ToValue()));
     }
   }
